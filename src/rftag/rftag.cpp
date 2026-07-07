@@ -1,10 +1,14 @@
 /**-------------------------------------------------------------------------
 @file	rftag.cpp
 
-@brief	RF tag memory device implementation
+@brief	RF tag device class base implementation
+
+Local memory tag behavior of the RFTag facet: memory image access, NDEF
+container formats over it, engine binding and frame forwarding, write protect
+through the configured board callback.
 
 @author	Hoang Nguyen Hoan
-@date	Jul. 5, 2026
+@date	Jul. 7, 2026
 
 @license
 
@@ -32,368 +36,112 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <string.h>
-#include <algorithm>
-using namespace std;
 
-#include "istddef.h"
-#include "idelay.h"
 #include "rftag/rftag.h"
-#include "iopinctrl.h"
 
-RFTag::RFTag()
+bool RFTag::Init(const RFTagCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
-	memset(&vDevData, 0, sizeof(RFTagDev_t));
-}
+	vCfg = Cfg;
+	vpProto = nullptr;
 
-RFTag::~RFTag()
-{
-}
+	Interface(pIntrf);
 
-static void RFTagAddrEncode(RFTagDev_t * const pDev, uint32_t Addr, uint8_t *pAddr)
-{
-	for (int i = 0; i < pDev->AddrLen; i++)
-	{
-		pAddr[i] = (uint8_t)(Addr >> ((pDev->AddrLen - i - 1) << 3));
-	}
-}
-
-static int RFTagReadLimit(RFTagDev_t * const pDev, uint32_t Addr, int Len)
-{
-	if (Addr >= pDev->Size || Len <= 0)
-	{
-		return 0;
-	}
-
-	int l = min(Len, (int)(pDev->Size - Addr));
-	size_t maxtrx = DeviceIntrfGetMaxTransferLen(pDev->pIntrf);
-
-	if (maxtrx > 0)
-	{
-		l = min(l, (int)maxtrx);
-	}
-
-	return l;
-}
-
-static int RFTagWriteLimit(RFTagDev_t * const pDev, uint32_t Addr, int Len)
-{
-	if (Addr >= pDev->Size || Len <= 0)
-	{
-		return 0;
-	}
-
-	int l = min(Len, (int)(pDev->Size - Addr));
-
-	if (pDev->PageSize > 0)
-	{
-		l = min(l, (int)(pDev->PageSize - (Addr % pDev->PageSize)));
-	}
-
-	size_t maxtrx = DeviceIntrfGetMaxTransferLen(pDev->pIntrf);
-
-	if (maxtrx > 0)
-	{
-		if (maxtrx <= pDev->AddrLen)
-		{
-			return 0;
-		}
-
-		l = min(l, (int)(maxtrx - pDev->AddrLen));
-	}
-
-	return l;
-}
-
-bool RFTagInit(RFTagDev_t * const pDev, const RFTagCfg_t * const pCfg, DevIntrf_t * const pIntrf)
-{
-	if (pDev == nullptr || pCfg == nullptr || pIntrf == nullptr)
+	// The base is a local memory tag. It requires the image and a NDEF area
+	// inside it. A bus tag subclass overrides Init and lifts this.
+	if (vCfg.pMem == nullptr || vCfg.MemSize == 0)
 	{
 		return false;
 	}
 
-	if (pCfg->AddrLen > 4 || pCfg->Size == 0)
+	if (vCfg.NdefAddr + vCfg.NdefMaxLen > vCfg.MemSize)
 	{
 		return false;
 	}
 
-	if (pCfg->pMem && pCfg->MemSize < pCfg->Size)
-	{
-		return false;
-	}
-
-	if (pCfg->NdefAddr > pCfg->Size)
-	{
-		return false;
-	}
-
-	if (pCfg->NdefMaxLen > 0 && pCfg->NdefMaxLen > (pCfg->Size - pCfg->NdefAddr))
-	{
-		return false;
-	}
-
-	if (pCfg->WrDelay > (UINT32_MAX / 1000u))
-	{
-		return false;
-	}
-
-	memset(pDev, 0, sizeof(RFTagDev_t));
-
-	pDev->pIntrf = pIntrf;
-	pDev->Proto = pCfg->Proto;
-	pDev->XCap = pCfg->XCap;
-	pDev->bReadOnly = pCfg->bReadOnly;
-	pDev->IdLen = pCfg->IdLen;
-	memcpy(pDev->NfcId, pCfg->NfcId, sizeof(pDev->NfcId));
-	pDev->pMem = pCfg->pMem;
-	pDev->MemSize = pCfg->MemSize;
-	pDev->DevAddr = pCfg->DevAddr;
-	pDev->PageSize = pCfg->PageSize;
-	pDev->AddrLen = pCfg->AddrLen;
-	pDev->Size = pCfg->Size;
-	pDev->WrDelay = pCfg->WrDelay * 1000u;
-	pDev->NdefAddr = pCfg->NdefAddr;
-	pDev->NdefMaxLen = pCfg->NdefMaxLen ? pCfg->NdefMaxLen : (pCfg->Size - pCfg->NdefAddr);
-	pDev->NdefFmt = pCfg->NdefFmt;
-	pDev->FdPin = pCfg->FdPin;
-	pDev->WrProtPin = pCfg->WrProtPin;
-	pDev->pWaitCB = pCfg->pWaitCB;
-	pDev->pEvtCB = pCfg->pEvtCB;
-	pDev->pCtx = pCfg->pCtx;
-
-	if (pCfg->WrProtPin.PortNo >= 0 && pCfg->WrProtPin.PinNo >= 0)
-	{
-		IOPinCfg(&pCfg->WrProtPin, 1);
-		IOPinClear(pDev->WrProtPin.PortNo, pDev->WrProtPin.PinNo);
-	}
-
-	if (pCfg->FdPin.PortNo >= 0 && pCfg->FdPin.PinNo >= 0)
-	{
-		IOPinCfg(&pCfg->FdPin, 1);
-	}
-
-	// Select the tag behavior from the protocol. Each case references a bind
-	// function so the linker pulls that module object from the archive. A
-	// transport that runs the whole tag itself needs no protocol module.
-	if ((pCfg->XCap & RFTAG_XCAP_TAGFULL) == 0)
-	{
-		switch (pCfg->Proto)
-		{
-#ifdef RFTAG_PROTO_T4T_ENABLE
-			case RFTAG_PROTO_NFC_T4:
-				RFTagProtoT4tBind(pDev);
-				break;
-#else
-			case RFTAG_PROTO_NFC_T4:
-				return false;
-#endif
-#ifdef RFTAG_PROTO_T2T_ENABLE
-			case RFTAG_PROTO_NFC_T2:
-				RFTagProtoT2tBind(pDev);
-				break;
-#else
-			case RFTAG_PROTO_NFC_T2:
-				return false;
-#endif
-#ifdef RFTAG_PROTO_ISO15693_ENABLE
-			case RFTAG_PROTO_ISO15693:
-				RFTagProtoIso15693Bind(pDev);
-				break;
-#else
-			case RFTAG_PROTO_ISO15693:
-				return false;
-#endif
-			default:
-				pDev->pProto = nullptr;
-				break;
-		}
-	}
-
-	if (pDev->pProto && pDev->pProto->Init)
-	{
-		if (pDev->pProto->Init(pDev) == false)
-		{
-			return false;
-		}
-	}
-
-	if (pCfg->pInitCB)
-	{
-		return pCfg->pInitCB(pCfg->DevAddr, pIntrf);
-	}
+	Valid(true);
 
 	return true;
 }
 
-int RFTagProcessFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen)
+void RFTag::Reset()
 {
-	if (pDev == nullptr || pRx == nullptr || RxLen <= 0)
+	if (vpProto)
+	{
+		vpProto->Init(this);
+	}
+}
+
+bool RFTag::Attach(RFTagProto * const pProto)
+{
+	if (pProto == nullptr || Valid() == false)
+	{
+		return false;
+	}
+
+	if (pProto->Init(this) == false)
+	{
+		return false;
+	}
+
+	vpProto = pProto;
+
+	return true;
+}
+
+int RFTag::ProcessFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap)
+{
+	if (vpProto == nullptr)
 	{
 		return 0;
 	}
 
-	if (pDev->pProto == nullptr)
+	return vpProto->OnFrame(pRx, RxLen, pTx, TxCap);
+}
+
+int RFTag::MemRead(uint32_t Addr, uint8_t *pBuff, int Len)
+{
+	if (pBuff == nullptr || Len <= 0 || Addr >= vCfg.MemSize)
 	{
 		return 0;
 	}
 
-	int l = 0;
+	int l = Len;
 
-	// Route by transport capability. A transport that already runs ISO-DEP
-	// hands up bare APDUs, so the frame layer of the module is skipped.
-	if ((pDev->XCap & RFTAG_XCAP_ISODEP) && pDev->pProto->OnApdu)
+	if (Addr + (uint32_t)l > vCfg.MemSize)
 	{
-		l = pDev->pProto->OnApdu(pDev, pRx, RxLen, pDev->TxFrame, sizeof(pDev->TxFrame));
-	}
-	else if (pDev->pProto->OnFrame)
-	{
-		l = pDev->pProto->OnFrame(pDev, pRx, RxLen, pDev->TxFrame, sizeof(pDev->TxFrame));
+		l = (int)(vCfg.MemSize - Addr);
 	}
 
-	if (l > 0 && pDev->pIntrf)
-	{
-		DeviceIntrfTx(pDev->pIntrf, pDev->DevAddr, pDev->TxFrame, l);
-	}
+	memcpy(pBuff, &vCfg.pMem[Addr], l);
 
 	return l;
 }
 
-int RFTagRead(RFTagDev_t * const pDev, uint32_t Addr, uint8_t *pBuff, int Len)
+int RFTag::MemWrite(uint32_t Addr, const uint8_t *pData, int Len)
 {
-	uint8_t ad[4];
-	int count = 0;
-
-	if (pDev == nullptr || pBuff == nullptr || Len <= 0)
+	if (pData == nullptr || Len <= 0 || Addr >= vCfg.MemSize)
 	{
 		return 0;
 	}
 
-	// Target tags keep their memory local. Host access is a direct copy.
-	if (pDev->pMem)
+	int l = Len;
+
+	if (Addr + (uint32_t)l > vCfg.MemSize)
 	{
-		if (Addr >= pDev->MemSize)
-		{
-			return 0;
-		}
-
-		int l = min(Len, (int)(pDev->MemSize - Addr));
-		memcpy(pBuff, &pDev->pMem[Addr], l);
-
-		return l;
+		l = (int)(vCfg.MemSize - Addr);
 	}
 
-	if (pDev->pIntrf == nullptr || pDev->AddrLen > sizeof(ad))
-	{
-		return 0;
-	}
+	memcpy(&vCfg.pMem[Addr], pData, l);
 
-	while (Len > 0 && Addr < pDev->Size)
-	{
-		int l = RFTagReadLimit(pDev, Addr, Len);
-		uint8_t devaddr = pDev->DevAddr;
-
-		if (l <= 0)
-		{
-			break;
-		}
-
-		RFTagAddrEncode(pDev, Addr, ad);
-
-		l = DeviceIntrfRead(pDev->pIntrf, devaddr, ad, pDev->AddrLen, pBuff, l);
-		if (l <= 0)
-		{
-			break;
-		}
-
-		count += l;
-		Addr += l;
-		Len -= l;
-		pBuff += l;
-	}
-
-	return count;
+	return l;
 }
 
-int RFTagWrite(RFTagDev_t * const pDev, uint32_t Addr, const uint8_t *pData, int Len)
-{
-	uint8_t ad[4];
-	int count = 0;
-
-	if (pDev == nullptr || pData == nullptr || Len <= 0)
-	{
-		return 0;
-	}
-
-	// Target tags keep their memory local. Host access is a direct copy.
-	if (pDev->pMem)
-	{
-		if (Addr >= pDev->MemSize)
-		{
-			return 0;
-		}
-
-		int l = min(Len, (int)(pDev->MemSize - Addr));
-		memcpy(&pDev->pMem[Addr], pData, l);
-
-		return l;
-	}
-
-	if (pDev->pIntrf == nullptr || pDev->AddrLen > sizeof(ad))
-	{
-		return 0;
-	}
-
-	while (Len > 0 && Addr < pDev->Size)
-	{
-		uint8_t devaddr = pDev->DevAddr;
-		int l = RFTagWriteLimit(pDev, Addr, Len);
-
-		if (l <= 0)
-		{
-			break;
-		}
-
-		RFTagAddrEncode(pDev, Addr, ad);
-
-		l = DeviceIntrfWrite(pDev->pIntrf, devaddr, ad, pDev->AddrLen, pData, l);
-		if (l <= 0)
-		{
-			break;
-		}
-
-		if (pDev->pWaitCB)
-		{
-			pDev->pWaitCB(devaddr, pDev->pIntrf);
-		}
-		else if (pDev->WrDelay > 0)
-		{
-			usDelay(pDev->WrDelay);
-		}
-
-		Addr += l;
-		Len -= l;
-		pData += l;
-		count += l;
-	}
-
-	return count;
-}
-
-uint32_t RFTagGetSize(RFTagDev_t * const pDev)
-{
-	return pDev ? pDev->Size : 0;
-}
-
-uint16_t RFTagGetPageSize(RFTagDev_t * const pDev)
-{
-	return pDev ? pDev->PageSize : 0;
-}
-
-static bool RFTagSetNdefNLen16(RFTagDev_t * const pDev, const uint8_t *pNdef, uint16_t Len)
+bool RFTag::SetNdefNLen16(const uint8_t *pNdef, uint16_t Len)
 {
 	uint8_t hdr[2];
 
 	// Length prefix plus payload must fit the NDEF area
-	if ((uint32_t)Len + sizeof(hdr) > pDev->NdefMaxLen)
+	if ((uint32_t)Len + sizeof(hdr) > vCfg.NdefMaxLen)
 	{
 		return false;
 	}
@@ -401,22 +149,22 @@ static bool RFTagSetNdefNLen16(RFTagDev_t * const pDev, const uint8_t *pNdef, ui
 	hdr[0] = (uint8_t)(Len >> 8);
 	hdr[1] = (uint8_t)Len;
 
-	if (RFTagWrite(pDev, pDev->NdefAddr, hdr, sizeof(hdr)) != (int)sizeof(hdr))
+	if (MemWrite(vCfg.NdefAddr, hdr, sizeof(hdr)) != (int)sizeof(hdr))
 	{
 		return false;
 	}
 
-	return RFTagWrite(pDev, pDev->NdefAddr + sizeof(hdr), pNdef, Len) == Len;
+	return MemWrite(vCfg.NdefAddr + sizeof(hdr), pNdef, Len) == Len;
 }
 
-static bool RFTagSetNdefTlv(RFTagDev_t * const pDev, const uint8_t *pNdef, uint16_t Len)
+bool RFTag::SetNdefTlv(const uint8_t *pNdef, uint16_t Len)
 {
 	uint8_t hdr[4];
-	uint32_t addr = pDev->NdefAddr;
+	uint32_t addr = vCfg.NdefAddr;
 	int hlen = 0;
 
 	// Short form framing is 0x03, length, payload, 0xFE terminator
-	if ((uint32_t)(Len + 3) > pDev->NdefMaxLen)
+	if ((uint32_t)(Len + 3) > vCfg.NdefMaxLen)
 	{
 		return false;
 	}
@@ -430,7 +178,7 @@ static bool RFTagSetNdefTlv(RFTagDev_t * const pDev, const uint8_t *pNdef, uint1
 	else
 	{
 		// Long form framing adds 0xFF and a 2 byte length ahead of payload
-		if ((uint32_t)(Len + 5) > pDev->NdefMaxLen)
+		if ((uint32_t)(Len + 5) > vCfg.NdefMaxLen)
 		{
 			return false;
 		}
@@ -439,14 +187,14 @@ static bool RFTagSetNdefTlv(RFTagDev_t * const pDev, const uint8_t *pNdef, uint1
 		hdr[hlen++] = (uint8_t)Len;
 	}
 
-	if (RFTagWrite(pDev, addr, hdr, hlen) != hlen)
+	if (MemWrite(addr, hdr, hlen) != hlen)
 	{
 		return false;
 	}
 
 	addr += hlen;
 
-	if (RFTagWrite(pDev, addr, pNdef, Len) != Len)
+	if (MemWrite(addr, pNdef, Len) != Len)
 	{
 		return false;
 	}
@@ -455,51 +203,58 @@ static bool RFTagSetNdefTlv(RFTagDev_t * const pDev, const uint8_t *pNdef, uint1
 
 	uint8_t term = 0xFE;
 
-	return RFTagWrite(pDev, addr, &term, 1) == 1;
+	return MemWrite(addr, &term, 1) == 1;
 }
 
-bool RFTagSetNdef(RFTagDev_t * const pDev, const uint8_t *pNdef, uint16_t Len)
+bool RFTag::SetNdef(const uint8_t *pNdef, uint16_t Len)
 {
-	if (pDev == nullptr)
-	{
-		return false;
-	}
-
 	if (Len > 0 && pNdef == nullptr)
 	{
 		return false;
 	}
 
-	switch (pDev->NdefFmt)
+	bool res;
+
+	switch (vCfg.NdefFmt)
 	{
 		case RFTAG_NDEF_FMT_NLEN16:
-			return RFTagSetNdefNLen16(pDev, pNdef, Len);
+			res = SetNdefNLen16(pNdef, Len);
+			break;
 
 		case RFTAG_NDEF_FMT_TLV:
-			return RFTagSetNdefTlv(pDev, pNdef, Len);
+			res = SetNdefTlv(pNdef, Len);
+			break;
 
 		case RFTAG_NDEF_FMT_NONE:
 		default:
-			if ((uint32_t)Len > pDev->NdefMaxLen)
+			if ((uint32_t)Len > vCfg.NdefMaxLen)
 			{
 				return false;
 			}
-			return RFTagWrite(pDev, pDev->NdefAddr, pNdef, Len) == Len;
+			res = MemWrite(vCfg.NdefAddr, pNdef, Len) == Len;
+			break;
 	}
+
+	if (res)
+	{
+		EvtHandler(RFTAG_EVT_MEM_CHANGED, vCfg.NdefAddr, Len);
+	}
+
+	return res;
 }
 
-static int RFTagGetNdefNLen16(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t Len)
+int RFTag::GetNdefNLen16(uint8_t *pNdef, uint16_t Len)
 {
 	uint8_t hdr[2];
 
-	if (RFTagRead(pDev, pDev->NdefAddr, hdr, sizeof(hdr)) != (int)sizeof(hdr))
+	if (MemRead(vCfg.NdefAddr, hdr, sizeof(hdr)) != (int)sizeof(hdr))
 	{
 		return 0;
 	}
 
 	uint16_t nlen = ((uint16_t)hdr[0] << 8) | hdr[1];
 
-	if ((uint32_t)nlen + sizeof(hdr) > pDev->NdefMaxLen)
+	if ((uint32_t)nlen + sizeof(hdr) > vCfg.NdefMaxLen)
 	{
 		return 0;
 	}
@@ -509,29 +264,31 @@ static int RFTagGetNdefNLen16(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t 
 		nlen = Len;
 	}
 
-	return RFTagRead(pDev, pDev->NdefAddr + sizeof(hdr), pNdef, nlen);
+	return MemRead(vCfg.NdefAddr + sizeof(hdr), pNdef, nlen);
 }
 
-static int RFTagGetNdefTlv(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t Len)
+int RFTag::GetNdefTlv(uint8_t *pNdef, uint16_t Len)
 {
-	uint32_t addr = pDev->NdefAddr;
-	uint32_t end = pDev->NdefAddr + pDev->NdefMaxLen;
+	uint32_t addr = vCfg.NdefAddr;
+	uint32_t end = vCfg.NdefAddr + vCfg.NdefMaxLen;
 	uint8_t b = 0;
 
 	while (addr < end)
 	{
-		if (RFTagRead(pDev, addr++, &b, 1) != 1)
+		if (MemRead(addr++, &b, 1) != 1)
 		{
 			return 0;
 		}
 
 		if (b == 0x00)
 		{
+			// NULL TLV, single byte filler
 			continue;
 		}
 
 		if (b == 0xFE)
 		{
+			// Terminator before any NDEF TLV
 			return 0;
 		}
 
@@ -542,7 +299,8 @@ static int RFTagGetNdefTlv(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t Len
 
 		if (b != 0x03)
 		{
-			if (RFTagRead(pDev, addr++, &b, 1) != 1)
+			// Skip a foreign TLV: 1 byte or 0xFF prefixed 2 byte length
+			if (MemRead(addr++, &b, 1) != 1)
 			{
 				return 0;
 			}
@@ -558,7 +316,7 @@ static int RFTagGetNdefTlv(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t Len
 					return 0;
 				}
 
-				if (RFTagRead(pDev, addr, lbuf, sizeof(lbuf)) != (int)sizeof(lbuf))
+				if (MemRead(addr, lbuf, sizeof(lbuf)) != (int)sizeof(lbuf))
 				{
 					return 0;
 				}
@@ -575,7 +333,8 @@ static int RFTagGetNdefTlv(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t Len
 			continue;
 		}
 
-		if (RFTagRead(pDev, addr++, &b, 1) != 1)
+		// NDEF message TLV, short or long form length
+		if (MemRead(addr++, &b, 1) != 1)
 		{
 			return 0;
 		}
@@ -591,7 +350,7 @@ static int RFTagGetNdefTlv(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t Len
 				return 0;
 			}
 
-			if (RFTagRead(pDev, addr, lbuf, sizeof(lbuf)) != (int)sizeof(lbuf))
+			if (MemRead(addr, lbuf, sizeof(lbuf)) != (int)sizeof(lbuf))
 			{
 				return 0;
 			}
@@ -609,71 +368,49 @@ static int RFTagGetNdefTlv(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t Len
 			nlen = Len;
 		}
 
-		return RFTagRead(pDev, addr, pNdef, nlen);
+		return MemRead(addr, pNdef, nlen);
 	}
 
 	return 0;
 }
 
-int RFTagGetNdef(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t Len)
+int RFTag::GetNdef(uint8_t *pNdef, uint16_t Len)
 {
-	if (pDev == nullptr || pNdef == nullptr || Len == 0)
+	if (pNdef == nullptr || Len == 0)
 	{
 		return 0;
 	}
 
-	switch (pDev->NdefFmt)
+	switch (vCfg.NdefFmt)
 	{
 		case RFTAG_NDEF_FMT_NLEN16:
-			return RFTagGetNdefNLen16(pDev, pNdef, Len);
+			return GetNdefNLen16(pNdef, Len);
 
 		case RFTAG_NDEF_FMT_TLV:
-			return RFTagGetNdefTlv(pDev, pNdef, Len);
+			return GetNdefTlv(pNdef, Len);
 
 		case RFTAG_NDEF_FMT_NONE:
 		default:
 		{
-			uint16_t l = min((uint32_t)Len, pDev->NdefMaxLen);
-			return RFTagRead(pDev, pDev->NdefAddr, pNdef, l);
+			uint16_t l = Len;
+
+			if ((uint32_t)l > vCfg.NdefMaxLen)
+			{
+				l = (uint16_t)vCfg.NdefMaxLen;
+			}
+			return MemRead(vCfg.NdefAddr, pNdef, l);
 		}
 	}
 }
 
-void RFTagSetWriteProt(RFTagDev_t * const pDev, bool bVal)
+bool RFTag::SetWriteProt(bool bVal)
 {
-	if (pDev == nullptr)
+	if (vCfg.WrProtCB)
 	{
-		return;
+		return vCfg.WrProtCB(vCfg.pWrProtCtx, bVal);
 	}
 
-	if (pDev->WrProtPin.PortNo < 0 || pDev->WrProtPin.PinNo < 0)
-	{
-		return;
-	}
-
-	if (bVal)
-	{
-		IOPinSet(pDev->WrProtPin.PortNo, pDev->WrProtPin.PinNo);
-	}
-	else
-	{
-		IOPinClear(pDev->WrProtPin.PortNo, pDev->WrProtPin.PinNo);
-	}
-}
-
-void RFTagEvtDispatch(RFTagDev_t * const pDev, RFTAG_EVT Evt, uint32_t Addr, uint32_t Len, uint32_t Flags)
-{
-	if (pDev == nullptr || pDev->pEvtCB == nullptr)
-	{
-		return;
-	}
-
-	RFTagEvt_t e;
-
-	e.Evt = Evt;
-	e.Addr = Addr;
-	e.Len = Len;
-	e.Flags = Flags;
-
-	pDev->pEvtCB(pDev->pCtx, &e);
+	// No protection mechanism configured. Report unsupported rather than
+	// claiming success on an action that did not happen.
+	return false;
 }

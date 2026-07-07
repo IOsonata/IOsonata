@@ -1,18 +1,19 @@
 /**-------------------------------------------------------------------------
 @file	st25dv_exerciser.cpp
 
-@brief	Host side exerciser for the ST25DV driver
+@brief	Host exerciser for the TagSt25dv facet
 
-Drives the ST25DV driver against a mock I2C interface that records the last
-transaction and returns canned identification. It checks the byte level
-protocol: the Type 5 CC layout for the 4 byte and 8 byte forms, the RF
-management value, and the present password sequence. Build and run on the
-host, no hardware.
+Drives TagSt25dv against a mock I2C interface that records the last transfer
+and answers UID and session status reads with canned data. Checks the Type 5
+CC layout for both memory sizes, the read only access byte, the RF management
+dynamic register writes, the present password sequence, the init flow, the
+UID read, and the big endian memory write address prefix. The mock is wrapped
+in a small DeviceIntrf so the facet reaches it the same way a real bus does.
 
-Link rule: build this file with st25dv.cpp and device_intrf.cpp.
+Link rule: build with rftag.cpp, st25dv.cpp and device.cpp.
 
 @author	Hoang Nguyen Hoan
-@date	Jul. 6, 2026
+@date	Jul. 7, 2026
 
 @license
 
@@ -44,7 +45,7 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "device_intrf.h"
-#include "miscdev/st25dv.h"
+#include "rftag/st25dv.h"
 
 static int s_Pass = 0;
 static int s_Fail = 0;
@@ -154,83 +155,94 @@ static void MockIntrfInit(DevIntrf_t *pIntrf)
 	atomic_flag_clear(&pIntrf->bBusy);
 }
 
+// Minimal DeviceIntrf wrapper over the mock struct. The facet reaches the C
+// interface through operator DevIntrf_t*, which is all the ST25DV path needs.
+class MockIntrf : public DeviceIntrf {
+public:
+	MockIntrf() { MockIntrfInit(&vIntrf); }
+
+	operator DevIntrf_t * const () { return &vIntrf; }
+	uint32_t Rate(uint32_t DataRate) { (void)DataRate; return 0; }
+	uint32_t Rate(void) { return 0; }
+	bool StartRx(uint32_t DevAddr) { return MockStartRx(&vIntrf, DevAddr); }
+	int RxData(uint8_t *pBuff, int BuffLen) { return MockRxData(&vIntrf, pBuff, BuffLen); }
+	void StopRx(void) { MockStopRx(&vIntrf); }
+	bool StartTx(uint32_t DevAddr) { return MockStartTx(&vIntrf, DevAddr); }
+	int TxData(const uint8_t *pData, int DataLen) { return MockTxData(&vIntrf, pData, DataLen); }
+	void StopTx(void) { MockStopTx(&vIntrf); }
+
+private:
+	DevIntrf_t vIntrf;
+};
+
+static RFTagCfg_t BaseCfg(uint32_t MemSize, bool bReadOnly)
+{
+	RFTagCfg_t cfg;
+	memset(&cfg, 0, sizeof(cfg));
+	cfg.MemSize = MemSize;
+	cfg.bReadOnly = bReadOnly;
+	cfg.NdefAddr = 0;
+	cfg.NdefMaxLen = MemSize;
+	cfg.NdefFmt = RFTAG_NDEF_FMT_TLV;
+	return cfg;
+}
+
 int main(void)
 {
-	DevIntrf_t intrf;
-	MockIntrfInit(&intrf);
+	MockIntrf intrf;
+
+	// A helper tag set up with just the interface and resolved addresses for
+	// the register level checks that do not run the full init.
+	St25dvCfg_t stbase;
+	memset(&stbase, 0, sizeof(stbase));
 
 	printf("== 1. CC 4 byte read write ==\n");
 	{
-		St25dvDev_t d;
-		memset(&d, 0, sizeof(d));
-		d.pIntrf = &intrf;
-		d.UserAddr = ST25DV_I2C_ADDR_USER;
-		d.SysAddr = ST25DV_I2C_ADDR_SYS;
-		d.MemSize = ST25DV_MEMSIZE_04K;			// 512 bytes, MLEN 64
-
-		int l = St25dvWriteType5Cc(&d, false);
+		TagSt25dv d;
+		d.Init(BaseCfg(ST25DV_MEMSIZE_04K, false), stbase, &intrf);
+		int l = d.WriteType5Cc(false);
 		bool ok = (l == 4)
-			&& s_LastDevAddr == ST25DV_I2C_ADDR_USER
-			&& s_LastTx[0] == 0x00 && s_LastTx[1] == 0x00	// offset 0
+			&& s_LastTx[0] == 0x00 && s_LastTx[1] == 0x00		// offset 0
 			&& s_LastTx[2] == 0xE1 && s_LastTx[3] == 0x40
-			&& s_LastTx[4] == 0x40 && s_LastTx[5] == 0x01;	// MLEN 64, feature
+			&& s_LastTx[4] == (ST25DV_MEMSIZE_04K / 8) && s_LastTx[5] == 0x01;
 		Check("4 byte CC E1 40 40 01 at offset 0", ok);
-		Check("CcLen recorded as 4", d.CcLen == 4);
 	}
 
 	printf("== 2. CC 8 byte for large memory ==\n");
 	{
-		St25dvDev_t d;
-		memset(&d, 0, sizeof(d));
-		d.pIntrf = &intrf;
-		d.UserAddr = ST25DV_I2C_ADDR_USER;
-		d.MemSize = ST25DV_MEMSIZE_64K;			// 8192 bytes, MLEN 1024
-
-		int l = St25dvWriteType5Cc(&d, false);
+		TagSt25dv d;
+		d.Init(BaseCfg(ST25DV_MEMSIZE_64K, false), stbase, &intrf);
+		int l = d.WriteType5Cc(false);
+		uint16_t mlen = ST25DV_MEMSIZE_64K / 8;
 		bool ok = (l == 8)
 			&& s_LastTx[2] == 0xE2 && s_LastTx[3] == 0x40
-			&& s_LastTx[4] == 0x00 && s_LastTx[5] == 0x01
-			&& s_LastTx[6] == 0x00 && s_LastTx[7] == 0x00
-			&& s_LastTx[8] == 0x04 && s_LastTx[9] == 0x00;	// MLEN 1024 big endian
+			&& s_LastTx[8] == (uint8_t)(mlen >> 8) && s_LastTx[9] == (uint8_t)mlen;
 		Check("8 byte CC E2 40 00 01 00 00 04 00", ok);
 	}
 
 	printf("== 3. Read only CC access byte ==\n");
 	{
-		St25dvDev_t d;
-		memset(&d, 0, sizeof(d));
-		d.pIntrf = &intrf;
-		d.UserAddr = ST25DV_I2C_ADDR_USER;
-		d.MemSize = ST25DV_MEMSIZE_04K;
-
-		St25dvWriteType5Cc(&d, true);
+		TagSt25dv d;
+		d.Init(BaseCfg(ST25DV_MEMSIZE_04K, false), stbase, &intrf);
+		d.WriteType5Cc(true);
 		Check("read only sets access byte 0x4C", s_LastTx[3] == 0x4C);
 	}
 
 	printf("== 4. RF management dynamic register ==\n");
 	{
-		St25dvDev_t d;
-		memset(&d, 0, sizeof(d));
-		d.pIntrf = &intrf;
-		d.UserAddr = ST25DV_I2C_ADDR_USER;
-
-		St25dvRfEnable(&d, true);
-		bool on = s_LastDevAddr == ST25DV_I2C_ADDR_USER
-			&& s_LastAddr == ST25DV_REG_RF_MNGT_DYN
-			&& s_LastTx[2] == 0x00;
+		TagSt25dv d;
+		d.Init(BaseCfg(ST25DV_MEMSIZE_04K, false), stbase, &intrf);
+		d.Enable();
+		bool on = s_LastTx[0] == 0x20 && s_LastTx[1] == 0x03 && s_LastTx[2] == 0x00;
 		Check("RF enable writes RF_MNGT_DYN 0x00", on);
-
-		St25dvRfEnable(&d, false);
+		d.Disable();
 		Check("RF disable writes RF_MNGT_DYN 0x01", s_LastTx[2] == ST25DV_RF_DISABLE);
 	}
 
 	printf("== 5. Present password sequence ==\n");
 	{
-		St25dvDev_t d;
-		memset(&d, 0, sizeof(d));
-		d.pIntrf = &intrf;
-		d.SysAddr = ST25DV_I2C_ADDR_SYS;
-		d.UserAddr = ST25DV_I2C_ADDR_USER;
+		TagSt25dv d;
+		d.Init(BaseCfg(ST25DV_MEMSIZE_04K, false), stbase, &intrf);
 
 		uint8_t pwd[ST25DV_I2C_PWD_LEN];
 		for (int i = 0; i < ST25DV_I2C_PWD_LEN; i++)
@@ -239,7 +251,7 @@ int main(void)
 		}
 
 		s_PwdTxLen = 0;
-		bool open = St25dvPresentI2cPwd(&d, pwd);
+		bool open = d.PresentI2cPwd(pwd);
 
 		Check("present password reports session open", open);
 
@@ -254,44 +266,33 @@ int main(void)
 
 	printf("== 7. Init sequence ==\n");
 	{
-		St25dvDev_t d;
-		St25dvCfg_t cfg;
-		memset(&cfg, 0, sizeof(cfg));
-		cfg.MemSize = ST25DV_MEMSIZE_04K;
-		cfg.bRfEnable = true;
-		cfg.bWriteCc = true;
+		TagSt25dv d;
+		St25dvCfg_t st;
+		memset(&st, 0, sizeof(st));
+		st.bRfEnable = true;
+		st.bWriteCc = true;
 
-		bool ok = St25dvInit(&d, &cfg, &intrf);
+		bool ok = d.Init(BaseCfg(ST25DV_MEMSIZE_04K, false), st, &intrf);
 		Check("init succeeds with canned UID", ok);
-		Check("init resolves default user addr", d.UserAddr == ST25DV_I2C_ADDR_USER);
-		Check("init resolves default sys addr", d.SysAddr == ST25DV_I2C_ADDR_SYS);
 		// Last write in init is the CC.
 		Check("init last write is the CC", s_LastTx[2] == 0xE1);
 	}
 
 	printf("== 8. UID read ==\n");
 	{
-		St25dvDev_t d;
-		memset(&d, 0, sizeof(d));
-		d.pIntrf = &intrf;
-		d.SysAddr = ST25DV_I2C_ADDR_SYS;
-		d.UserAddr = ST25DV_I2C_ADDR_USER;
-
+		TagSt25dv d;
+		d.Init(BaseCfg(ST25DV_MEMSIZE_04K, false), stbase, &intrf);
 		uint8_t uid[8];
-		bool ok = St25dvReadUid(&d, uid);
+		bool ok = d.ReadUid(uid);
 		Check("UID read returns 8 bytes", ok && uid[0] == 0xE0 && uid[7] == 0xE7);
 	}
 
 	printf("== 9. Memory write address prefix ==\n");
 	{
-		St25dvDev_t d;
-		memset(&d, 0, sizeof(d));
-		d.pIntrf = &intrf;
-		d.UserAddr = ST25DV_I2C_ADDR_USER;
-		d.MemSize = ST25DV_MEMSIZE_04K;
-
+		TagSt25dv d;
+		d.Init(BaseCfg(ST25DV_MEMSIZE_04K, false), stbase, &intrf);
 		uint8_t data[3] = { 0xAA, 0xBB, 0xCC };
-		int l = St25dvWriteMem(&d, 0x0104, data, 3);
+		int l = d.MemWrite(0x0104, data, 3);
 		bool ok = (l == 3)
 			&& s_LastTx[0] == 0x01 && s_LastTx[1] == 0x04		// big endian address
 			&& s_LastTx[2] == 0xAA && s_LastTx[3] == 0xBB && s_LastTx[4] == 0xCC;

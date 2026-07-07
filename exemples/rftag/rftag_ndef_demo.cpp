@@ -3,8 +3,13 @@
 
 @brief	Generic RFTag NDEF demo
 
+Shows the RFTag facet writing a NDEF message into a tag, independent of the
+transport. The target project provides RFTagDemoGetIntrf, which can return any
+DeviceIntrf: an I2C dynamic tag such as ST25DV, a SPI or UART reader adapter,
+or an MCU internal NFC target. The facet only sees DeviceIntrf.
+
 @author	Hoang Nguyen Hoan
-@date	Desc   : Generic RFTag NDEF demo
+@date	Jul. 7, 2026
 
 @license
 
@@ -31,71 +36,54 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <string.h>
+
 #include "istddef.h"
 #include "device_intrf.h"
 #include "rftag/rftag.h"
 #include "rftag/rftag_ndef.h"
 
-/*
- * This example is intentionally not tied to I2C, SPI, UART, or Nordic NFCT.
- *
- * The target project provides RFTagDemoGetIntrf(). It can return any
- * DeviceIntrf implementation:
- *
- *      I2C dynamic tag       ST25DV-style memory tag
- *      SPI controller        external NFC/RFID controller
- *      UART controller       PN532-style adapter
- *      API adapter           vendor NFC stack wrapper
- *      Nordic NFCT adapter   MCU internal NFC target
- *
- * RFTag only sees DeviceIntrf.
- */
+// The target project provides the transport. It can return any DeviceIntrf
+// implementation: an I2C dynamic tag, a SPI or UART reader adapter, or an
+// MCU internal NFC target. The facet only sees DeviceIntrf.
 extern DeviceIntrf *RFTagDemoGetIntrf(void);
 
-static RFTag g_RFTag;
+// A tag with an event sink. Override EvtHandler to observe RF side activity.
+class DemoTag : public RFTag {
+public:
+	virtual void EvtHandler(RFTAG_EVT Evt, uint32_t P0, uint32_t P1)
+	{
+		(void)P0; (void)P1;
+
+		switch (Evt)
+		{
+			case RFTAG_EVT_MEM_CHANGED:
+				// RF side changed the tag memory. Call GetNdef here if needed.
+				break;
+
+			case RFTAG_EVT_SELECTED:
+			case RFTAG_EVT_DESELECTED:
+			default:
+				break;
+		}
+	}
+};
+
+static DemoTag g_RFTag;
 static uint8_t s_NdefMem[256];
 
-static void RFTagEvent(void *pCtx, const RFTagEvt_t *pEvt);
-
 static const RFTagCfg_t s_RFTagCfg = {
-	.DevAddr = 0,
-	.AddrLen = 2,
-	.PageSize = 4,
-	.Size = 512,
-	.WrDelay = 5,
+	.NfcId = { 0 },
+	.IdLen = 0,
+	.bReadOnly = false,
+	.pMem = s_NdefMem,
+	.MemSize = sizeof(s_NdefMem),
 	.NdefAddr = 0,
 	.NdefMaxLen = sizeof(s_NdefMem),
 	.NdefFmt = RFTAG_NDEF_FMT_TLV,
-	.FdPin = {-1, -1},
-	.WrProtPin = {-1, -1},
-	.pInitCB = nullptr,
-	.pWaitCB = nullptr,
-	.pEvtCB = RFTagEvent,
-	.pCtx = nullptr,
+	.WrProtCB = nullptr,
+	.pWrProtCtx = nullptr,
 };
-
-static void RFTagEvent(void *pCtx, const RFTagEvt_t *pEvt)
-{
-	(void)pCtx;
-
-	switch (pEvt->Evt)
-	{
-		case RFTAG_EVT_WRITE:
-		case RFTAG_EVT_MEM_CHANGED:
-			/*
-			 * RF side changed the tag memory.
-			 * Application can call g_RFTag.GetNdef() here if needed.
-			 */
-			break;
-
-		case RFTAG_EVT_FIELD_ON:
-		case RFTAG_EVT_FIELD_OFF:
-		case RFTAG_EVT_SELECTED:
-		case RFTAG_EVT_DESELECTED:
-		default:
-			break;
-	}
-}
 
 int main()
 {

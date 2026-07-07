@@ -3,23 +3,18 @@
 
 @brief	RFTag NFC Type 4 Tag demo
 
-App side flow:
-	1. The target port builds and configures the frame transport. Any DeviceIntrf
-	   frame transport works: Nordic NFCT for a local tag, RFTagController for a
-	   remote tag, or a bus interface for a chip tag.
-	2. Configure the tag. Proto selects the tag behavior. NFC Type 4 here.
-	   XCap states which layers the transport performs. The values below match
-	   the Nordic NFCT: anticollision, CRC and timing in hardware, ISO-DEP in
-	   the protocol module. An NCI class transport adds RFTAG_XCAP_ISODEP and
-	   the module then receives bare APDUs.
-	3. Drop the transport into the tag Init.
-	4. Read, Write, SetNdef, GetNdef and the event callback.
+Shows the RFTag facet with a Type 4 protocol engine attached. The design has
+three steps:
 
-Build this example with RFTAG_PROTO_T4T_ENABLE defined and link rftag_proto_t4t so the
-Type 4 protocol object is pulled in.
+  1. The target project provides the frame transport as a DeviceIntrf. For a
+     local tag this wraps the Nordic NFCT peripheral, whose RX path calls
+     g_Tag.ProcessFrame on each reader frame and whose TX path sends the
+     response the call returns.
+  2. Attach the protocol engine. RFTagProtoT4 gives the tag Type 4 behavior.
+  3. Fill the NDEF file. The engine serves it to the reader.
 
 @author	Hoang Nguyen Hoan
-@date	Jul. 5, 2026
+@date	Jul. 7, 2026
 
 @license
 
@@ -46,62 +41,61 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <string.h>
+
 #include "istddef.h"
 #include "device_intrf.h"
 #include "rftag/rftag.h"
+#include "rftag/rftag_proto_t4.h"
 #include "rftag/rftag_ndef.h"
 
-// Frame transport provided by the target port. For a local tag this wraps the
-// Nordic NFCT peripheral. Its RX path calls g_Tag.ProcessFrame on each reader
-// frame, and its TX path sends the response frame that ProcessFrame returns.
+// The target project provides the frame transport. For a local tag this wraps
+// the Nordic NFCT peripheral. Its RX path calls g_Tag.ProcessFrame on each
+// reader frame, and its TX path sends the response frame that returns.
 extern DeviceIntrf *RFTagDemoGetTransport(void);
 
-// External linkage, the target port file references this tag object.
-RFTag g_Tag;
+// A tag with an event sink. Override EvtHandler to observe RF side activity.
+class DemoTag : public RFTag {
+public:
+	virtual void EvtHandler(RFTAG_EVT Evt, uint32_t P0, uint32_t P1)
+	{
+		(void)P0; (void)P1;
+
+		switch (Evt)
+		{
+			case RFTAG_EVT_MEM_CHANGED:
+				// A reader updated the NDEF file. Re-read with GetNdef if needed.
+				break;
+
+			case RFTAG_EVT_SELECTED:
+			case RFTAG_EVT_DESELECTED:
+			default:
+				break;
+		}
+	}
+};
+
+// External linkage, the target port file references these objects. The
+// transport RX path feeds frames to g_Tag.ProcessFrame.
+DemoTag g_Tag;
+RFTagProtoT4 g_T4;
 
 // The tag NDEF file. Type 4 layout starts with a 2 byte NLEN field.
 static uint8_t s_NdefFile[512];
 static uint8_t s_NdefMsg[256];
 
-static void TagEvent(void *pCtx, const RFTagEvt_t *pEvt);
-
 static const RFTagCfg_t s_TagCfg = {
-	.Proto = RFTAG_PROTO_NFC_T4,
-	.XCap = RFTAG_XCAP_ANTICOL | RFTAG_XCAP_CRC | RFTAG_XCAP_FDT,
+	.NfcId = { 0 },
+	.IdLen = 0,
+	.bReadOnly = false,
 	.pMem = s_NdefFile,
 	.MemSize = sizeof(s_NdefFile),
-	.DevAddr = 0,
-	.AddrLen = 2,
-	.PageSize = 0,
-	.Size = sizeof(s_NdefFile),
-	.WrDelay = 0,
 	.NdefAddr = 0,
 	.NdefMaxLen = sizeof(s_NdefFile),
 	.NdefFmt = RFTAG_NDEF_FMT_NLEN16,
-	.FdPin = {-1, -1},
-	.WrProtPin = {-1, -1},
-	.pInitCB = nullptr,
-	.pWaitCB = nullptr,
-	.pEvtCB = TagEvent,
-	.pCtx = nullptr,
+	.WrProtCB = nullptr,
+	.pWrProtCtx = nullptr,
 };
-
-static void TagEvent(void *pCtx, const RFTagEvt_t *pEvt)
-{
-	(void)pCtx;
-
-	switch (pEvt->Evt)
-	{
-		case RFTAG_EVT_MEM_CHANGED:
-			// A reader updated the NDEF file. Re-read with g_Tag.GetNdef if needed.
-			break;
-
-		case RFTAG_EVT_SELECTED:
-		case RFTAG_EVT_DESELECTED:
-		default:
-			break;
-	}
-}
 
 int main()
 {
@@ -116,6 +110,10 @@ int main()
 	}
 
 	g_Tag.Init(s_TagCfg, pTransport);
+
+	// Attach the Type 4 engine. Instantiating and attaching the engine is the
+	// protocol selection, the linker pulls exactly this engine object.
+	g_Tag.Attach(&g_T4);
 
 	RFNdefInit(&msg, s_NdefMsg, sizeof(s_NdefMsg));
 	RFNdefAddText(&msg, "en", "IOsonata NFC Type 4 Tag");

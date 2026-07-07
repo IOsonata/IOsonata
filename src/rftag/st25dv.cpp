@@ -1,15 +1,16 @@
 /**-------------------------------------------------------------------------
 @file	st25dv.cpp
 
-@brief	ST25DVxxK dynamic NFC / RFID tag driver
+@brief	ST25DVxxK dynamic NFC / RFID tag driver implementation
 
-Host side driver for the ST25DV family. The chip is a full Type 5 tag on the
-RF side, so the host only manages the memory image and the RF enable over I2C.
-Static system configuration lives behind an I2C password session, the user
-EEPROM and the volatile dynamic registers do not.
+TagSt25dv is an RFTag facet over an ST25DV chip. The chip runs the whole NFC
+Forum Type 5 tag in silicon, so no protocol engine is attached. MemRead and
+MemWrite reach the user EEPROM over I2C with a 16 bit big endian memory
+address, Enable and Disable drive the dynamic RF management register, and
+SetWriteProt sets the RF area 1 security through a password session.
 
 @author	Hoang Nguyen Hoan
-@date	Jul. 6, 2026
+@date	Jul. 7, 2026
 
 @license
 
@@ -36,11 +37,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#include <stdint.h>
 #include <string.h>
 
-#include "device_intrf.h"
 #include "idelay.h"
+#include "device_intrf.h"
 #include "rftag/st25dv.h"
 
 // Largest single memory range covered by a 4 byte Type 5 CC. Above this an
@@ -54,72 +54,65 @@ static void St25dvAddr(uint16_t Addr, uint8_t *pOut)
 	pOut[1] = (uint8_t)Addr;
 }
 
-// Read Len bytes at Addr from the given device code.
-static int St25dvReadAt(St25dvDev_t * const pDev, uint8_t DevAddr, uint16_t Addr, uint8_t *pBuff, int Len)
+int TagSt25dv::ReadAt(uint8_t DevAddr, uint16_t Addr, uint8_t *pBuff, int Len)
 {
 	uint8_t ad[2];
 
-	if (pDev == nullptr || pDev->pIntrf == nullptr || pBuff == nullptr || Len <= 0)
+	if (vpIntrf == nullptr || pBuff == nullptr || Len <= 0)
 	{
 		return -1;
 	}
 
 	St25dvAddr(Addr, ad);
 
-	return DeviceIntrfRead(pDev->pIntrf, DevAddr, ad, sizeof(ad), pBuff, Len);
+	return DeviceIntrfRead((DevIntrf_t *)*vpIntrf, DevAddr, ad, sizeof(ad), pBuff, Len);
 }
 
-// Write Len bytes at Addr to the given device code, then wait the page settle
-// time. The dynamic registers ignore the settle time, it only costs a delay.
-static int St25dvWriteAt(St25dvDev_t * const pDev, uint8_t DevAddr, uint16_t Addr, const uint8_t *pData, int Len)
+int TagSt25dv::WriteAt(uint8_t DevAddr, uint16_t Addr, const uint8_t *pData, int Len)
 {
 	uint8_t ad[2];
 	int l;
 
-	if (pDev == nullptr || pDev->pIntrf == nullptr || pData == nullptr || Len <= 0)
+	if (vpIntrf == nullptr || pData == nullptr || Len <= 0)
 	{
 		return -1;
 	}
 
 	St25dvAddr(Addr, ad);
 
-	l = DeviceIntrfWrite(pDev->pIntrf, DevAddr, ad, sizeof(ad), pData, Len);
+	l = DeviceIntrfWrite((DevIntrf_t *)*vpIntrf, DevAddr, ad, sizeof(ad), pData, Len);
 
+	// The dynamic registers ignore the settle time, it only costs a delay.
 	msDelay(ST25DV_WRITE_DELAY_MS);
 
 	return l;
 }
 
-int St25dvReadMem(St25dvDev_t * const pDev, uint16_t Addr, uint8_t *pBuff, int Len)
+int TagSt25dv::MemRead(uint32_t Addr, uint8_t *pBuff, int Len)
 {
-	return St25dvReadAt(pDev, pDev->UserAddr, Addr, pBuff, Len);
+	return ReadAt(vUserAddr, (uint16_t)Addr, pBuff, Len);
 }
 
-int St25dvWriteMem(St25dvDev_t * const pDev, uint16_t Addr, const uint8_t *pData, int Len)
+int TagSt25dv::MemWrite(uint32_t Addr, const uint8_t *pData, int Len)
 {
-	return St25dvWriteAt(pDev, pDev->UserAddr, Addr, pData, Len);
+	return WriteAt(vUserAddr, (uint16_t)Addr, pData, Len);
 }
 
-bool St25dvReadUid(St25dvDev_t * const pDev, uint8_t *pUid)
+bool TagSt25dv::ReadUid(uint8_t *pUid)
 {
 	if (pUid == nullptr)
 	{
 		return false;
 	}
 
-	return St25dvReadAt(pDev, pDev->SysAddr, ST25DV_REG_UID, pUid, 8) == 8;
+	return ReadAt(vSysAddr, ST25DV_REG_UID, pUid, 8) == 8;
 }
 
-bool St25dvPresentI2cPwd(St25dvDev_t * const pDev, const uint8_t *pPwd)
+bool TagSt25dv::PresentI2cPwd(const uint8_t *pPwd)
 {
 	static const uint8_t s_ZeroPwd[ST25DV_I2C_PWD_LEN] = { 0 };
 	uint8_t seq[ST25DV_I2C_PWD_LEN * 2 + 1];
 	uint8_t sso = 0;
-
-	if (pDev == nullptr)
-	{
-		return false;
-	}
 
 	if (pPwd == nullptr)
 	{
@@ -131,13 +124,13 @@ bool St25dvPresentI2cPwd(St25dvDev_t * const pDev, const uint8_t *pPwd)
 	seq[ST25DV_I2C_PWD_LEN] = ST25DV_I2C_PWD_VALIDATE;
 	memcpy(&seq[ST25DV_I2C_PWD_LEN + 1], pPwd, ST25DV_I2C_PWD_LEN);
 
-	if (St25dvWriteAt(pDev, pDev->SysAddr, ST25DV_REG_I2C_PWD, seq, sizeof(seq)) != (int)sizeof(seq))
+	if (WriteAt(vSysAddr, ST25DV_REG_I2C_PWD, seq, sizeof(seq)) != (int)sizeof(seq))
 	{
 		return false;
 	}
 
 	// I2C_SSO_DYN bit0 reports the session open state.
-	if (St25dvReadAt(pDev, pDev->UserAddr, ST25DV_REG_I2C_SSO_DYN, &sso, 1) != 1)
+	if (ReadAt(vUserAddr, ST25DV_REG_I2C_SSO_DYN, &sso, 1) != 1)
 	{
 		return false;
 	}
@@ -145,28 +138,39 @@ bool St25dvPresentI2cPwd(St25dvDev_t * const pDev, const uint8_t *pPwd)
 	return (sso & 0x01) != 0;
 }
 
-bool St25dvRfEnable(St25dvDev_t * const pDev, bool bEnable)
+bool TagSt25dv::Enable()
 {
-	uint8_t v = bEnable ? 0 : ST25DV_RF_DISABLE;
+	uint8_t v = 0;
 
-	if (pDev == nullptr)
+	// RF_MNGT_DYN is a dynamic register on the user code, no session needed.
+	return WriteAt(vUserAddr, ST25DV_REG_RF_MNGT_DYN, &v, 1) == 1;
+}
+
+void TagSt25dv::Disable()
+{
+	uint8_t v = ST25DV_RF_DISABLE;
+
+	WriteAt(vUserAddr, ST25DV_REG_RF_MNGT_DYN, &v, 1);
+}
+
+bool TagSt25dv::SetWriteProt(bool bVal)
+{
+	uint8_t ss = bVal ? ST25DV_RFSS_RO : ST25DV_RFSS_RW;
+
+	// RF area 1 security is a static system register, needs an open session.
+	if (PresentI2cPwd(vSt.pI2cPwd) == false)
 	{
 		return false;
 	}
 
-	// RF_MNGT_DYN is a dynamic register on the user code, no session needed.
-	return St25dvWriteAt(pDev, pDev->UserAddr, ST25DV_REG_RF_MNGT_DYN, &v, 1) == 1;
+	// RF area 1 covers the memory by default boundaries.
+	return WriteAt(vSysAddr, ST25DV_REG_RFA1SS, &ss, 1) == 1;
 }
 
-int St25dvWriteType5Cc(St25dvDev_t * const pDev, bool bReadOnly)
+int TagSt25dv::WriteType5Cc(bool bReadOnly)
 {
 	uint8_t cc[8];
 	int len;
-
-	if (pDev == nullptr)
-	{
-		return 0;
-	}
 
 	// Access byte, version 1.0. Write access set to never when read only.
 	uint8_t access = bReadOnly ? 0x4C : 0x40;
@@ -174,17 +178,17 @@ int St25dvWriteType5Cc(St25dvDev_t * const pDev, bool bReadOnly)
 	// Feature byte advertises multiple block read support.
 	uint8_t feature = 0x01;
 
-	if (pDev->MemSize <= ST25DV_CC4_MAX_BYTES)
+	if (vCfg.MemSize <= ST25DV_CC4_MAX_BYTES)
 	{
 		cc[0] = 0xE1;						// 4 byte CC magic
 		cc[1] = access;
-		cc[2] = (uint8_t)(pDev->MemSize / 8);	// MLEN in 8 byte blocks
+		cc[2] = (uint8_t)(vCfg.MemSize / 8);	// MLEN in 8 byte blocks
 		cc[3] = feature;
 		len = 4;
 	}
 	else
 	{
-		uint16_t mlen = (uint16_t)(pDev->MemSize / 8);
+		uint16_t mlen = (uint16_t)(vCfg.MemSize / 8);
 
 		cc[0] = 0xE2;						// 8 byte CC magic
 		cc[1] = access;
@@ -197,70 +201,101 @@ int St25dvWriteType5Cc(St25dvDev_t * const pDev, bool bReadOnly)
 		len = 8;
 	}
 
-	if (St25dvWriteMem(pDev, 0, cc, len) != len)
+	if (MemWrite(0, cc, len) != len)
 	{
 		return 0;
 	}
 
-	pDev->CcLen = (uint8_t)len;
+	vCcLen = (uint8_t)len;
 
 	return len;
 }
 
-bool St25dvInit(St25dvDev_t * const pDev, const St25dvCfg_t *pCfg, DevIntrf_t * const pIntrf)
+void TagSt25dv::Reset()
+{
+	WriteType5Cc(vCfg.bReadOnly);
+}
+
+bool TagSt25dv::Init(const RFTagCfg_t &Cfg, const St25dvCfg_t &St, DeviceIntrf * const pIntrf)
 {
 	uint8_t uid[8];
 
-	if (pDev == nullptr || pCfg == nullptr || pIntrf == nullptr)
+	if (pIntrf == nullptr)
 	{
 		return false;
 	}
 
-	pDev->pIntrf = pIntrf;
-	pDev->UserAddr = pCfg->I2cUserAddr != 0 ? pCfg->I2cUserAddr : ST25DV_I2C_ADDR_USER;
-	pDev->SysAddr = pCfg->I2cSysAddr != 0 ? pCfg->I2cSysAddr : ST25DV_I2C_ADDR_SYS;
-	pDev->MemSize = pCfg->MemSize != 0 ? pCfg->MemSize : ST25DV_MEMSIZE_04K;
-	pDev->CcLen = 0;
+	vCfg = Cfg;
+	vSt = St;
+	vpProto = nullptr;
+	vCcLen = 0;
+
+	Interface(pIntrf);
+
+	vUserAddr = vSt.I2cUserAddr != 0 ? vSt.I2cUserAddr : ST25DV_I2C_ADDR_USER;
+	vSysAddr = vSt.I2cSysAddr != 0 ? vSt.I2cSysAddr : ST25DV_I2C_ADDR_SYS;
+
+	if (vCfg.MemSize == 0)
+	{
+		vCfg.MemSize = ST25DV_MEMSIZE_04K;
+	}
 
 	// Presence check. The UID read must complete for the chip to be usable.
-	if (St25dvReadUid(pDev, uid) == false)
+	if (ReadUid(uid) == false)
 	{
 		return false;
 	}
 
-	// A session is only needed to change static system config, used here for
-	// the RF area security when read only is requested.
-	if (pCfg->bRfReadOnly || pCfg->pI2cPwd != nullptr)
+	// RF read only applies the RF area security. This opens a session.
+	if (vCfg.bReadOnly)
 	{
-		if (St25dvPresentI2cPwd(pDev, pCfg->pI2cPwd) == false)
+		if (SetWriteProt(true) == false)
+		{
+			return false;
+		}
+	}
+	else if (vSt.pI2cPwd != nullptr)
+	{
+		if (PresentI2cPwd(vSt.pI2cPwd) == false)
 		{
 			return false;
 		}
 	}
 
-	if (pCfg->bRfReadOnly)
+	if (vSt.bRfEnable)
 	{
-		uint8_t ss = ST25DV_RFSS_RO;
+		if (Enable() == false)
+		{
+			return false;
+		}
+	}
+	else
+	{
+		Disable();
+	}
 
-		// RF area 1 read only. Area 1 covers the memory by default boundaries.
-		if (St25dvWriteAt(pDev, pDev->SysAddr, ST25DV_REG_RFA1SS, &ss, 1) != 1)
+	if (vSt.bWriteCc)
+	{
+		if (WriteType5Cc(vCfg.bReadOnly) == 0)
 		{
 			return false;
 		}
 	}
 
-	if (St25dvRfEnable(pDev, pCfg->bRfEnable) == false)
-	{
-		return false;
-	}
-
-	if (pCfg->bWriteCc)
-	{
-		if (St25dvWriteType5Cc(pDev, pCfg->bRfReadOnly) == 0)
-		{
-			return false;
-		}
-	}
+	Valid(true);
 
 	return true;
+}
+
+bool TagSt25dv::Init(const RFTagCfg_t &Cfg, DeviceIntrf * const pIntrf)
+{
+	St25dvCfg_t st;
+
+	// Default ST25DV configuration: resolve device codes to the defaults,
+	// no password, RF on, write the CC.
+	memset(&st, 0, sizeof(st));
+	st.bRfEnable = true;
+	st.bWriteCc = true;
+
+	return Init(Cfg, st, pIntrf);
 }

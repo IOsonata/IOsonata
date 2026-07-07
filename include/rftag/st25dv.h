@@ -6,22 +6,21 @@
 The ST25DV is a full NFC Forum Type 5 (ISO15693) tag with an I2C side to the
 host and an RF side to the reader. The chip runs the whole tag: RF activation,
 anticollision, protocol and framing are done in hardware. The host only fills
-the tag memory over I2C, so this driver is an RFTAG_XCAP_TAGFULL transport.
+the tag memory over I2C.
+
+Because the protocol lives in silicon, TagSt25dv is an RFTag facet that
+attaches no protocol engine, the same shape as a sensor whose chip runs the
+processing on die. MemRead and MemWrite reach the user EEPROM over I2C, Enable
+and Disable drive the dynamic RF management register, and SetWriteProt uses
+the native RF area security mechanism.
 
 Two I2C device addresses share the same 16 bit memory address space. The user
 address reaches the user EEPROM and the volatile dynamic registers. The system
 address reaches the static system configuration, which is guarded by an I2C
 password session.
 
-Usage with the RFTag object for NFC delivery, for example LE OOB pairing data:
-	St25dvInit fills the CC and enables the RF side.
-	RFTagInit is configured with the same I2C interface, DevAddr set to the
-	user address, AddrLen 2, XCap RFTAG_XCAP_TAGFULL, NdefFmt TLV and NdefAddr
-	past the CC. RFTagSetNdef then writes the record and the chip serves it to
-	the phone.
-
 @author	Hoang Nguyen Hoan
-@date	Jul. 6, 2026
+@date	Jul. 7, 2026
 
 @license
 
@@ -53,7 +52,7 @@ SOFTWARE.
 
 #include <stdint.h>
 
-#include "device_intrf.h"
+#include "rftag/rftag.h"
 
 // Default 7 bit I2C device select codes. The user code reaches the EEPROM and
 // the dynamic registers. The system code reaches the static configuration and
@@ -81,8 +80,8 @@ SOFTWARE.
 #define ST25DV_REG_RFA1SS			0x0004		//!< RF area 1 security status
 #define ST25DV_REG_ENDA1			0x0005		//!< RF area 1 end
 #define ST25DV_REG_LOCK_CCFILE		0x000C
-#define ST25DV_REG_I2C_CFG			0x000E
 #define ST25DV_REG_MB_MODE			0x000D
+#define ST25DV_REG_I2C_CFG			0x000E
 #define ST25DV_REG_I2C_PWD			0x0900		//!< 8 byte I2C password, present sequence
 
 // Read only identification, addressed on the system I2C code.
@@ -106,113 +105,118 @@ SOFTWARE.
 #define ST25DV_RFSS_RW				0x00		//!< RF read and write
 #define ST25DV_RFSS_RO				0x01		//!< RF read only
 
-#pragma pack(push, 1)
+/// ST25DV specific configuration, extends the tag configuration.
 typedef struct __St25dv_Config {
 	uint8_t I2cUserAddr;			//!< 7 bit user area device code, 0 uses ST25DV_I2C_ADDR_USER
 	uint8_t I2cSysAddr;				//!< 7 bit system area device code, 0 uses ST25DV_I2C_ADDR_SYS
-	uint32_t MemSize;				//!< User EEPROM size in bytes, one of ST25DV_MEMSIZE_*
 	const uint8_t *pI2cPwd;			//!< 8 byte I2C password, null uses the all zero default
 	bool bRfEnable;					//!< Turn the RF side on at init
-	bool bRfReadOnly;				//!< Set RF area 1 read only, host still writes over I2C
 	bool bWriteCc;					//!< Write the Type 5 CC at user offset 0 at init
 } St25dvCfg_t;
 
-typedef struct __St25dv_Device {
-	DevIntrf_t *pIntrf;				//!< I2C interface the chip sits on
-	uint8_t UserAddr;				//!< Resolved user area device code
-	uint8_t SysAddr;				//!< Resolved system area device code
-	uint32_t MemSize;				//!< User EEPROM size in bytes
-	uint8_t CcLen;					//!< CC length written, 4 or 8
-} St25dvDev_t;
-#pragma pack(pop)
+class TagSt25dv : public RFTag {
+public:
+	TagSt25dv() : vUserAddr(0), vSysAddr(0), vCcLen(0) {
+		memset(&vSt, 0, sizeof(vSt));
+	}
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+	/**
+	 * @brief	Initialize the ST25DV tag.
+	 *
+	 * Resolves the device codes, checks presence by reading the UID, applies
+	 * the RF read only policy from Cfg.bReadOnly through the native area
+	 * security, sets the RF side and writes the Type 5 CC. The tag runs the
+	 * protocol in silicon, no engine is attached.
+	 *
+	 * @param	Cfg		Tag configuration. bReadOnly drives the RF area
+	 *					security, MemSize the user EEPROM size, NdefAddr and
+	 *					NdefMaxLen and NdefFmt the NDEF container placement.
+	 * @param	pIntrf	I2C interface the chip is on
+	 *
+	 * @return	true on success
+	 */
+	virtual bool Init(const RFTagCfg_t &Cfg, DeviceIntrf * const pIntrf = nullptr);
 
-/**
- * @brief	Initialize the ST25DV.
- *
- * Resolves the device codes, optionally opens the password session, enables
- * the RF side and writes the Type 5 CC. The RFTag object is set up separately
- * against the same interface for NDEF access.
- *
- * @param	pDev	Device state, filled by this call
- * @param	pCfg	Configuration
- * @param	pIntrf	I2C interface the chip is on
- *
- * @return	true on success
- */
-bool St25dvInit(St25dvDev_t * const pDev, const St25dvCfg_t *pCfg, DevIntrf_t * const pIntrf);
+	/**
+	 * @brief	ST25DV specific init taking the chip configuration.
+	 *
+	 * @param	Cfg		Tag configuration, as above
+	 * @param	St		ST25DV specific configuration
+	 * @param	pIntrf	I2C interface the chip is on
+	 *
+	 * @return	true on success
+	 */
+	bool Init(const RFTagCfg_t &Cfg, const St25dvCfg_t &St, DeviceIntrf * const pIntrf);
 
-/**
- * @brief	Read from the user EEPROM.
- *
- * @param	pDev	Device state
- * @param	Addr	User memory offset
- * @param	pBuff	Destination
- * @param	Len		Byte count
- *
- * @return	Bytes read, negative on error
- */
-int St25dvReadMem(St25dvDev_t * const pDev, uint16_t Addr, uint8_t *pBuff, int Len);
+	/**
+	 * @brief	Turn the RF side on through the dynamic RF management register.
+	 */
+	virtual bool Enable();
 
-/**
- * @brief	Write to the user EEPROM. Blocks for the page settle time.
- *
- * @param	pDev	Device state
- * @param	Addr	User memory offset
- * @param	pData	Source
- * @param	Len		Byte count
- *
- * @return	Bytes written, negative on error
- */
-int St25dvWriteMem(St25dvDev_t * const pDev, uint16_t Addr, const uint8_t *pData, int Len);
+	/**
+	 * @brief	Turn the RF side off through the dynamic RF management register.
+	 */
+	virtual void Disable();
 
-/**
- * @brief	Present the I2C password to open the system configuration session.
- *
- * @param	pDev	Device state
- * @param	pPwd	8 byte password, null uses the all zero default
- *
- * @return	true if the session reports open
- */
-bool St25dvPresentI2cPwd(St25dvDev_t * const pDev, const uint8_t *pPwd);
+	/**
+	 * @brief	Reset does not clear the chip. It rewrites the CC.
+	 */
+	virtual void Reset();
 
-/**
- * @brief	Turn the RF side on or off through the dynamic RF management register.
- *
- * @param	pDev	Device state
- * @param	bEnable	true enables RF, false disables it
- *
- * @return	true on success
- */
-bool St25dvRfEnable(St25dvDev_t * const pDev, bool bEnable);
+	/**
+	 * @brief	Read the user EEPROM over I2C.
+	 */
+	virtual int MemRead(uint32_t Addr, uint8_t *pBuff, int Len);
 
-/**
- * @brief	Write the NFC Forum Type 5 CC at user offset 0.
- *
- * Picks a 4 byte CC for memory up to 2040 bytes, an 8 byte CC otherwise.
- *
- * @param	pDev		Device state
- * @param	bReadOnly	Advertise RF read only access in the CC
- *
- * @return	CC length written, 0 on error
- */
-int St25dvWriteType5Cc(St25dvDev_t * const pDev, bool bReadOnly);
+	/**
+	 * @brief	Write the user EEPROM over I2C. Blocks for the page settle time.
+	 */
+	virtual int MemWrite(uint32_t Addr, const uint8_t *pData, int Len);
 
-/**
- * @brief	Read the 8 byte UID from the system area, LSB first.
- *
- * @param	pDev	Device state
- * @param	pUid	8 byte destination
- *
- * @return	true on success
- */
-bool St25dvReadUid(St25dvDev_t * const pDev, uint8_t *pUid);
+	/**
+	 * @brief	Set or clear RF read only through the RF area 1 security.
+	 *
+	 * Needs an open I2C password session. The host still writes over I2C.
+	 *
+	 * @param	bVal	true sets RF read only, false RF read and write
+	 *
+	 * @return	true on success
+	 */
+	virtual bool SetWriteProt(bool bVal);
 
-#ifdef __cplusplus
-}
-#endif
+	/**
+	 * @brief	Present the I2C password to open the system config session.
+	 *
+	 * @param	pPwd	8 byte password, null uses the all zero default
+	 *
+	 * @return	true if the session reports open
+	 */
+	bool PresentI2cPwd(const uint8_t *pPwd);
+
+	/**
+	 * @brief	Read the 8 byte UID from the system area, LSB first.
+	 */
+	bool ReadUid(uint8_t *pUid);
+
+	/**
+	 * @brief	Write the NFC Forum Type 5 CC at user offset 0.
+	 *
+	 * Picks a 4 byte CC for memory up to 2040 bytes, an 8 byte CC otherwise.
+	 *
+	 * @param	bReadOnly	Advertise RF read only access in the CC
+	 *
+	 * @return	CC length written, 0 on error
+	 */
+	int WriteType5Cc(bool bReadOnly);
+
+private:
+	int ReadAt(uint8_t DevAddr, uint16_t Addr, uint8_t *pBuff, int Len);
+	int WriteAt(uint8_t DevAddr, uint16_t Addr, const uint8_t *pData, int Len);
+
+	St25dvCfg_t vSt;				//!< ST25DV specific configuration copy
+	uint8_t vUserAddr;				//!< Resolved user area device code
+	uint8_t vSysAddr;				//!< Resolved system area device code
+	uint8_t vCcLen;					//!< CC length written, 4 or 8
+};
 
 #endif // __ST25DV_H__

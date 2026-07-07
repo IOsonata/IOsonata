@@ -1,12 +1,33 @@
 /**-------------------------------------------------------------------------
 @file	rftag.h
 
-@brief	RF tag memory device
+@brief	RF tag device class
 
-This module provides an EEPROM-like RF tag object. The physical access is provided by DeviceIntrf.
+RFTag is the device class facet for a tag presented to an RF reader, the same
+position Sensor holds for measurement devices. A concrete subclass implements
+the facet for its hardware: a raw frame transport such as the Nordic NFCT
+peripheral serves the tag from a local memory image and binds a protocol
+engine, a chip that runs the protocol in silicon such as the ST25DV maps the
+facet onto its registers and binds no engine. Application code programs the
+facet only and does not depend on which side runs the protocol.
+
+RFTagProto is the base of the protocol engines, the processing layer of this
+subsystem in the position fusion holds for motion. An engine is a device
+independent state machine consuming reader frames and producing responses
+through the tag memory access of the facet. Engines contain no hardware
+knowledge.
+
+The base RFTag implements a local memory tag directly: MemRead and MemWrite
+operate on the configured memory image, SetNdef and GetNdef wrap the NDEF
+formats over it. Bus attached tag chips override MemRead and MemWrite with
+their bus access.
+
+Write protection is board wiring, not tag protocol. The facet exposes
+SetWriteProt which reports unsupported unless the configuration provides a
+control callback or a subclass overrides it with a native mechanism.
 
 @author	Hoang Nguyen Hoan
-@date	Jul. 5, 2026
+@date	Jul. 7, 2026
 
 @license
 
@@ -37,228 +58,254 @@ SOFTWARE.
 #define __RFTAG_H__
 
 #include <stdint.h>
-#include <stdbool.h>
+#include <string.h>
 
-#include "device_intrf.h"
-#include "coredev/iopincfg.h"
+#include "device.h"
 
-#pragma pack(push, 4)
-
-typedef enum {
+/// NDEF container format inside the tag memory
+typedef enum __RFTag_Ndef_Fmt {
 	RFTAG_NDEF_FMT_NONE = 0,		//!< Raw NDEF bytes at NdefAddr
-	RFTAG_NDEF_FMT_NLEN16,		//!< 2-byte big-endian length then NDEF bytes
-	RFTAG_NDEF_FMT_TLV,			//!< NFC Forum TLV: 0x03 LEN DATA 0xFE
+	RFTAG_NDEF_FMT_NLEN16,			//!< 2 byte big endian length then NDEF bytes
+	RFTAG_NDEF_FMT_TLV,				//!< NFC Forum TLV: 0x03 LEN DATA 0xFE
 } RFTAG_NDEF_FMT;
 
-typedef enum {
-	RFTAG_PROTO_NONE = 0,		//!< Raw memory tag, host access over the transport
-	RFTAG_PROTO_NFC_T2 = 1,		//!< NFC Forum Type 2 Tag
-	RFTAG_PROTO_NFC_T4 = 2,		//!< NFC Forum Type 4 Tag
-	RFTAG_PROTO_ISO15693 = 3,	//!< ISO15693 vicinity tag, NFC Forum Type 5
-	RFTAG_PROTO_EPC_GEN2 = 4,	//!< UHF EPC Gen2, ISO18000-63. Remote or chip tag only
-	RFTAG_PROTO_VENDOR = 5,		//!< Vendor specific protocol
-} RFTAG_PROTO;
-
-typedef enum {
-	RFTAG_EVT_FIELD_ON,
-	RFTAG_EVT_FIELD_OFF,
-	RFTAG_EVT_SELECTED,
-	RFTAG_EVT_DESELECTED,
-	RFTAG_EVT_READ,
-	RFTAG_EVT_WRITE,
-	RFTAG_EVT_MEM_CHANGED,
-	RFTAG_EVT_ERROR,
+/// Tag events raised through RFTag::EvtHandler
+typedef enum __RFTag_Evt {
+	RFTAG_EVT_FIELD_ON,				//!< Reader field detected
+	RFTAG_EVT_FIELD_OFF,			//!< Reader field lost
+	RFTAG_EVT_SELECTED,				//!< Tag selected or activated by the reader
+	RFTAG_EVT_DESELECTED,			//!< Tag deselected
+	RFTAG_EVT_READ,					//!< Reader read tag memory
+	RFTAG_EVT_WRITE,				//!< Reader wrote tag memory
+	RFTAG_EVT_MEM_CHANGED,			//!< Tag memory content changed
+	RFTAG_EVT_ERROR,				//!< Protocol or transport error
 } RFTAG_EVT;
 
-typedef struct {
-	RFTAG_EVT Evt;
-	uint32_t Addr;
-	uint32_t Len;
-	uint32_t Flags;
-} RFTagEvt_t;
+/**
+ * @brief	Write protect control callback.
+ *
+ * Board level hook driving whatever realizes protection: a GPIO, an
+ * expander pin, a power latch or a policy. Return true when applied.
+ */
+typedef bool (*RFTAGWRPROTCB)(void *pCtx, bool bVal);
 
-typedef void (*RFTAGCB)(void *pCtx, const RFTagEvt_t *pEvt);
+#define RFTAG_NFCID_MAX_LEN			10
 
-typedef bool (*RFTAGDEVOP)(int DevAddr, DevIntrf_t * const pIntrf);
-
-// Transport capability flags. They state which protocol layers the transport
-// hardware or firmware already performs, so the protocol module can skip them
-// instead of running them again in software.
-#define RFTAG_XCAP_ANTICOL		(1 << 0)	//!< Activation and anticollision in hardware
-#define RFTAG_XCAP_CRC			(1 << 1)	//!< RX frames arrive CRC checked, TX CRC appended
-#define RFTAG_XCAP_FDT			(1 << 2)	//!< Reply timing enforced in hardware
-#define RFTAG_XCAP_ISODEP		(1 << 3)	//!< Transport delivers bare APDUs, ISO-DEP in the chip
-#define RFTAG_XCAP_TAGFULL		(1 << 4)	//!< Chip runs the whole tag, host only syncs memory
-
-// Size of the protocol scratch area kept inside the tag object. Must hold the
-// largest protocol state. Protocol modules verify this at compile time.
-#define RFTAG_PROTO_STATE_SIZE	64
-
-// Largest response frame a protocol may build.
-#define RFTAG_TX_FRAME_MAX		260
-
-typedef struct __RFTag_Device RFTagDev_t;
-
-// Pluggable per protocol behavior, selected by RFTagCfg_t Proto at init.
-// OnFrame and OnApdu are the two target entry levels. The transport XCap
-// decides which one runs: RFTAG_XCAP_ISODEP routes to OnApdu, otherwise
-// OnFrame handles the raw frame including the ISO-DEP layer.
-typedef struct {
-	bool (*Init)(RFTagDev_t * const pDev);	//!< Per protocol setup, may be null
-	// Target path, raw frame level. Process one reader frame in pRx, build a
-	// response in pTx. Returns the response length in bytes, 0 for no response.
-	int (*OnFrame)(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen,
-	               uint8_t *pTx, int TxCap);
-	// Target path, APDU level, for transports that run ISO-DEP themselves.
-	int (*OnApdu)(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen,
-	              uint8_t *pTx, int TxCap);
-} RFTagProto_t;
-
+/// RFTag configuration
 typedef struct __RFTag_Config {
-	RFTAG_PROTO Proto;				//!< Tag protocol, selects the tag behavior
-	uint32_t XCap;					//!< Transport capability flags, RFTAG_XCAP_*
-	bool bReadOnly;					//!< RF side is read only, protocol rejects writes. Host access unaffected
-	uint8_t NfcId[10];				//!< Tag UID or NFCID1. Must match the transport id
-	uint8_t IdLen;					//!< UID length 4, 7 or 10. 0 uses the protocol default
-	uint8_t *pMem;					//!< Local tag memory for target protocols. Null for bus tags
-	uint32_t MemSize;				//!< Local tag memory size in bytes
-	uint8_t DevAddr;				//!< Device address or selection id
-	uint8_t AddrLen;				//!< Memory address length in bytes
-	uint16_t PageSize;				//!< Write page size in bytes
-	uint32_t Size;					//!< Tag memory size in bytes
-	uint32_t WrDelay;				//!< Write delay in msec
-	uint32_t NdefAddr;				//!< NDEF storage offset
-	uint32_t NdefMaxLen;			//!< Max NDEF area in bytes incl format framing. 0 uses Size - NdefAddr
-	RFTAG_NDEF_FMT NdefFmt;			//!< NDEF storage layout
-	IOPinCfg_t FdPin;				//!< Field-detect pin, optional
-	IOPinCfg_t WrProtPin;			//!< Write-protect pin, optional
-	RFTAGDEVOP pInitCB;				//!< Optional target init hook
-	RFTAGDEVOP pWaitCB;				//!< Optional write wait hook
-	RFTAGCB pEvtCB;					//!< Optional RF tag event callback
-	void *pCtx;						//!< Callback context
+	uint8_t NfcId[RFTAG_NFCID_MAX_LEN];	//!< Tag id, protocol defines the valid length
+	int IdLen;						//!< Id length in bytes, 0 selects the engine default
+	bool bReadOnly;					//!< Tag is read only on the RF side
+	uint8_t *pMem;					//!< Local tag memory image, null for bus tag chips
+	uint32_t MemSize;				//!< Tag memory size in bytes
+	uint32_t NdefAddr;				//!< NDEF area offset in tag memory
+	uint32_t NdefMaxLen;			//!< NDEF area size in bytes
+	RFTAG_NDEF_FMT NdefFmt;			//!< NDEF container format
+	RFTAGWRPROTCB WrProtCB;			//!< Optional write protect control, null when unsupported
+	void *pWrProtCtx;				//!< Context for WrProtCB
 } RFTagCfg_t;
 
-struct __RFTag_Device {
-	RFTAG_PROTO Proto;
-	uint32_t XCap;
-	bool bReadOnly;
-	uint8_t NfcId[10];
-	uint8_t IdLen;
-	uint8_t *pMem;
-	uint32_t MemSize;
-	uint8_t DevAddr;
-	uint8_t AddrLen;
-	uint16_t PageSize;
-	uint32_t Size;
-	uint32_t WrDelay;
-	uint32_t NdefAddr;
-	uint32_t NdefMaxLen;
-	RFTAG_NDEF_FMT NdefFmt;
-	IOPinCfg_t FdPin;
-	IOPinCfg_t WrProtPin;
-	DevIntrf_t *pIntrf;
-	RFTAGDEVOP pWaitCB;
-	RFTAGCB pEvtCB;
-	void *pCtx;
-	const RFTagProto_t *pProto;
-	uint8_t ProtoState[RFTAG_PROTO_STATE_SIZE];
-	uint8_t TxFrame[RFTAG_TX_FRAME_MAX];
-};
+class RFTag;
 
-#pragma pack(pop)
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-bool RFTagInit(RFTagDev_t * const pDev, const RFTagCfg_t * const pCfg, DevIntrf_t * const pIntrf);
-int RFTagRead(RFTagDev_t * const pDev, uint32_t Addr, uint8_t *pBuff, int Len);
-int RFTagWrite(RFTagDev_t * const pDev, uint32_t Addr, const uint8_t *pData, int Len);
-
-uint32_t RFTagGetSize(RFTagDev_t * const pDev);
-uint16_t RFTagGetPageSize(RFTagDev_t * const pDev);
-
-bool RFTagSetNdef(RFTagDev_t * const pDev, const uint8_t *pNdef, uint16_t Len);
-int RFTagGetNdef(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t Len);
-
-void RFTagSetWriteProt(RFTagDev_t * const pDev, bool bVal);
-void RFTagEvtDispatch(RFTagDev_t * const pDev, RFTAG_EVT Evt, uint32_t Addr, uint32_t Len, uint32_t Flags);
-
-// Target entry. Feed one reader frame from the transport. Runs the configured
-// protocol and sends the response frame back through the transport.
-int RFTagProcessFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen);
-
-// Protocol bind hook provided by the Type 4 module. Referenced from RFTagInit
-// when Proto is RFTAG_PROTO_NFC_T4 so the module object is pulled from the archive.
-bool RFTagProtoT4tBind(RFTagDev_t * const pDev);
-
-// Protocol bind hook provided by the Type 2 module. Referenced from RFTagInit
-// when Proto is RFTAG_PROTO_NFC_T2 so the module object is pulled from the archive.
-bool RFTagProtoT2tBind(RFTagDev_t * const pDev);
-
-// Type 2 module default UID. The transport NFCID1 should match it.
-const uint8_t *RFTagProtoT2tDefaultUid(void);
-
-// Protocol bind hook provided by the ISO15693 Type 5 module. Referenced from
-// RFTagInit when Proto is RFTAG_PROTO_ISO15693 so the module object is pulled.
-bool RFTagProtoIso15693Bind(RFTagDev_t * const pDev);
-
-// ISO15693 module default 8 byte UID. The transport id should match it.
-const uint8_t *RFTagProtoIso15693DefaultUid(void);
-
-#ifdef __cplusplus
-}
-
-class RFTag {
+/**
+ * @brief	Protocol engine base class.
+ *
+ * A target side tag protocol state machine, bound to an RFTag by Attach. The
+ * engine reaches tag memory only through the facet, it holds no hardware
+ * knowledge. One engine instance serves one tag instance.
+ */
+class RFTagProto {
 public:
-	RFTag();
-	virtual ~RFTag();
-	RFTag(RFTag&);		// copy ctor not allowed
+	RFTagProto() : vpTag(nullptr) {}
+	virtual ~RFTagProto() {}
 
-	virtual bool Init(const RFTagCfg_t &Cfg, DeviceIntrf * const pIntrf) {
-		return pIntrf ? RFTagInit(&vDevData, &Cfg, *pIntrf) : false;
-	}
+	/**
+	 * @brief	Bind and prepare the engine for the given tag.
+	 *
+	 * Validates the tag configuration for the protocol and initializes the
+	 * protocol area of the tag memory.
+	 *
+	 * @param	pTag	Tag the engine serves
+	 *
+	 * @return	true when the tag configuration fits the protocol
+	 */
+	virtual bool Init(RFTag * const pTag) = 0;
 
-	virtual int Read(uint32_t Addr, uint8_t *pBuff, int Len) {
-		return RFTagRead(&vDevData, Addr, pBuff, Len);
-	}
-
-	virtual int Write(uint32_t Addr, const uint8_t *pData, int Len) {
-		return RFTagWrite(&vDevData, Addr, pData, Len);
-	}
-
-	virtual bool SetNdef(const uint8_t *pNdef, uint16_t Len) {
-		return RFTagSetNdef(&vDevData, pNdef, Len);
-	}
-
-	virtual int GetNdef(uint8_t *pNdef, uint16_t Len) {
-		return RFTagGetNdef(&vDevData, pNdef, Len);
-	}
-
-	virtual int ProcessFrame(const uint8_t *pRx, int RxLen) {
-		return RFTagProcessFrame(&vDevData, pRx, RxLen);
-	}
-
-	uint32_t GetSize() {
-		return RFTagGetSize(&vDevData);
-	}
-
-	uint16_t GetPageSize() {
-		return RFTagGetPageSize(&vDevData);
-	}
-
-	void SetWriteProt(bool bVal) {
-		RFTagSetWriteProt(&vDevData, bVal);
-	}
-
-	operator RFTagDev_t* const () {
-		return &vDevData;
-	}
+	/**
+	 * @brief	Handle one reader frame.
+	 *
+	 * @param	pRx		Received frame
+	 * @param	RxLen	Received length in bytes
+	 * @param	pTx		Response buffer
+	 * @param	TxCap	Response buffer capacity
+	 *
+	 * @return	Response length in bytes, 0 for no response
+	 */
+	virtual int OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap) = 0;
 
 protected:
-	RFTagDev_t vDevData;
+	RFTag *vpTag;					//!< Tag served by this engine
 };
 
-#endif
+/**
+ * @brief	RF tag device class facet.
+ *
+ * The base implements a local memory tag. Concrete subclasses map the facet
+ * onto their hardware and override what differs.
+ */
+class RFTag : virtual public Device {
+public:
+	RFTag() : vpProto(nullptr) {
+		memset(&vCfg, 0, sizeof(vCfg));
+	}
+	virtual ~RFTag() {}
 
-#endif	// __RFTAG_H__
+	/**
+	 * @brief	Initialize the tag.
+	 *
+	 * The base requires a local memory image covering the NDEF area. A bus
+	 * tag subclass overrides and uses the interface instead.
+	 *
+	 * @param	pCfg	Tag configuration
+	 * @param	pIntrf	Bus interface for bus tag chips, null for local tags
+	 *
+	 * @return	true on success
+	 */
+	virtual bool Init(const RFTagCfg_t &Cfg, DeviceIntrf * const pIntrf = nullptr);
+
+	/**
+	 * @brief	Turn the RF side on. The base has no RF hardware, no op.
+	 */
+	virtual bool Enable() { return true; }
+
+	/**
+	 * @brief	Turn the RF side off. The base has no RF hardware, no op.
+	 */
+	virtual void Disable() {}
+
+	/**
+	 * @brief	Reset tag state. Reinitializes the bound engine when present.
+	 */
+	virtual void Reset();
+
+	/**
+	 * @brief	Bind a protocol engine and initialize it for this tag.
+	 *
+	 * A tag chip running the protocol in silicon never calls this. A frame
+	 * transport tag binds exactly one engine.
+	 *
+	 * @param	pProto	Engine instance
+	 *
+	 * @return	true when the engine accepts the tag configuration
+	 */
+	virtual bool Attach(RFTagProto * const pProto);
+
+	/**
+	 * @brief	Bound protocol engine, null when the chip runs the protocol.
+	 */
+	RFTagProto *Proto() const { return vpProto; }
+
+	/**
+	 * @brief	Feed one reader frame to the bound engine.
+	 *
+	 * Called by the frame transport on frame reception.
+	 *
+	 * @param	pRx		Received frame
+	 * @param	RxLen	Received length in bytes
+	 * @param	pTx		Response buffer
+	 * @param	TxCap	Response buffer capacity
+	 *
+	 * @return	Response length in bytes, 0 for no response
+	 */
+	virtual int ProcessFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap);
+
+	/**
+	 * @brief	Read tag memory. The base reads the local image.
+	 *
+	 * @param	Addr	Tag memory offset
+	 * @param	pBuff	Destination
+	 * @param	Len		Byte count
+	 *
+	 * @return	Bytes read
+	 */
+	virtual int MemRead(uint32_t Addr, uint8_t *pBuff, int Len);
+
+	/**
+	 * @brief	Write tag memory. The base writes the local image.
+	 *
+	 * Host side write, not subject to the RF read only policy. Engines
+	 * enforce bReadOnly on reader initiated writes.
+	 *
+	 * @param	Addr	Tag memory offset
+	 * @param	pData	Source
+	 * @param	Len		Byte count
+	 *
+	 * @return	Bytes written
+	 */
+	virtual int MemWrite(uint32_t Addr, const uint8_t *pData, int Len);
+
+	/**
+	 * @brief	Store an NDEF message in the configured container format.
+	 *
+	 * @param	pNdef	NDEF message bytes
+	 * @param	Len		Message length in bytes
+	 *
+	 * @return	true on success
+	 */
+	virtual bool SetNdef(const uint8_t *pNdef, uint16_t Len);
+
+	/**
+	 * @brief	Read the NDEF message back from the container format.
+	 *
+	 * @param	pNdef	Destination
+	 * @param	Len		Destination capacity
+	 *
+	 * @return	Message length read, 0 when none
+	 */
+	virtual int GetNdef(uint8_t *pNdef, uint16_t Len);
+
+	/**
+	 * @brief	Apply or release write protection.
+	 *
+	 * The base drives the configured callback. A subclass with a native
+	 * mechanism overrides. Without either, reports unsupported.
+	 *
+	 * @param	bVal	true protects, false releases
+	 *
+	 * @return	true when applied, false when failed or unsupported
+	 */
+	virtual bool SetWriteProt(bool bVal);
+
+	/**
+	 * @brief	Tag event sink, override to observe tag activity.
+	 *
+	 * Called by engines and transports. The base ignores events.
+	 *
+	 * @param	Evt	Event code
+	 * @param	P0	Event parameter, address for memory events
+	 * @param	P1	Event parameter, length for memory events
+	 */
+	virtual void EvtHandler(RFTAG_EVT Evt, uint32_t P0, uint32_t P1) {
+		(void)Evt; (void)P0; (void)P1;
+	}
+
+	uint32_t MemSize() const { return vCfg.MemSize; }
+	bool ReadOnly() const { return vCfg.bReadOnly; }
+	const uint8_t *NfcId() const { return vCfg.NfcId; }
+	int IdLen() const { return vCfg.IdLen; }
+	uint32_t NdefAddr() const { return vCfg.NdefAddr; }
+	uint32_t NdefMaxLen() const { return vCfg.NdefMaxLen; }
+	RFTAG_NDEF_FMT NdefFmt() const { return vCfg.NdefFmt; }
+
+protected:
+	RFTagCfg_t vCfg;				//!< Tag configuration copy
+	RFTagProto *vpProto;			//!< Bound protocol engine
+
+private:
+	bool SetNdefNLen16(const uint8_t *pNdef, uint16_t Len);
+	bool SetNdefTlv(const uint8_t *pNdef, uint16_t Len);
+	int GetNdefNLen16(uint8_t *pNdef, uint16_t Len);
+	int GetNdefTlv(uint8_t *pNdef, uint16_t Len);
+};
+
+#endif // __RFTAG_H__

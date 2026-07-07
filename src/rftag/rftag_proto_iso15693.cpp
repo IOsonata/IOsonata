@@ -1,38 +1,16 @@
 /**-------------------------------------------------------------------------
 @file	rftag_proto_iso15693.cpp
 
-@brief	ISO15693 and NFC Forum Type 5 Tag target protocol for RFTag
+@brief	ISO15693 NFC Forum Type 5 tag protocol engine implementation
 
-RFTag protocol behavior selected when RFTagCfg_t Proto is RFTAG_PROTO_ISO15693.
-ISO15693 is a 13.56 MHz vicinity protocol. This is the tag, VICC, side. After
-the transport finishes activation and anticollision the reader, VCD, sends
-requests and the tag answers. This module answers the mandatory NFC Type 5
-command set against the tag local memory pointed to by RFTagDev_t pMem.
-
-The vicinity air interface is a different transport from the proximity NFC
-used by the Type 2 and Type 4 tags, so this protocol needs an HF vicinity
-frame transport that runs activation and anticollision. The transport moves
-whole ISO15693 requests and replies, the SOF, EOF and CRC are handled below
-the protocol, so RFTAG_XCAP_CRC applies.
-
-Memory image, 4 byte blocks, the whole image is pMem:
-	block 0		Capability Container
-	block 1..	NDEF data area as a TLV, 0x03 LEN DATA 0xFE
-
-Init builds block 0. The NDEF area is written by RFTagSetNdef with NdefFmt
-RFTAG_NDEF_FMT_TLV and NdefAddr 4, which is block 1. The 8 byte UID is not in
-the block memory, it is returned by Inventory and Get System Information. It
-must equal the UID the transport uses for anticollision.
-
-First pass notes, checked on hardware:
-	Inventory answers a single tag in every slot, slot and mask handling for
-	multi tag anticollision is left to the transport or a later pass.
-	The Capability Container MLEN and access bits and the Get System
-	Information geometry are set to common values and tuned on hardware.
-	Only the 1 byte Capability Container is built, memory up to 2040 bytes.
+ISO15693 VICC command set served from the tag memory image through the facet:
+block 0 Capability Container, blocks from 1 hold NDEF. INVENTORY answers the
+UID, STAY QUIET and SELECT switch the tag state under the addressed mode
+rules, READ and WRITE SINGLE BLOCK and READ MULTIPLE BLOCK move block data,
+GET SYSTEM INFO reports the geometry.
 
 @author	Hoang Nguyen Hoan
-@date	Jul. 5, 2026
+@date	Jul. 7, 2026
 
 @license
 
@@ -61,20 +39,18 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "rftag/rftag.h"
+#include "rftag/rftag_proto_iso15693.h"
 
-// Request flag bits, common
+// Request flags
 #define REQ_FLAG_INVENTORY		0x04
 #define REQ_FLAG_PROTEXT		0x08
-// Request flag bits, when the inventory flag is 0
 #define REQ_FLAG_SELECT			0x10
 #define REQ_FLAG_ADDRESS		0x20
 #define REQ_FLAG_OPTION			0x40
 
-// Response error flag
 #define RESP_FLAG_ERROR			0x01
 
-// Mandatory and common Type 5 commands
+// Commands
 #define CMD_INVENTORY			0x01
 #define CMD_STAY_QUIET			0x02
 #define CMD_READ_SINGLE			0x20
@@ -92,7 +68,6 @@ SOFTWARE.
 #define ERR_BLOCK_LOCKED		0x12
 #define ERR_WRITE_FAILED		0x13
 
-#define ISO15693_UID_LEN		8
 #define ISO15693_BLOCK_SIZE		4
 #define ISO15693_HEADER_LEN		4		//!< Block 0, Capability Container
 #define ISO15693_CC_MAGIC		0xE1
@@ -100,43 +75,22 @@ SOFTWARE.
 #define ISO15693_AFI			0x00
 #define ISO15693_IC_REF			0x01
 
-typedef struct {
-	bool bQuiet;
-	bool bSelected;
-	uint8_t Uid[ISO15693_UID_LEN];		//!< Transmission order, low octet first
-} Iso15693State_t;
-
-static_assert(sizeof(Iso15693State_t) <= RFTAG_PROTO_STATE_SIZE, "ISO15693 state too large for RFTag ProtoState");
-
 // Module default UID in transmission order, low octet first. The last octet
 // 0xE0 is the fixed ISO15693 indicator, the next is the manufacturer code.
 static const uint8_t s_Iso15693DefaultUid[ISO15693_UID_LEN] = {
 	0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x04, 0xE0
 };
 
-static bool Iso15693ProtoInit(RFTagDev_t * const pDev);
-static int Iso15693OnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap);
-
-static const RFTagProto_t s_Iso15693Proto = {
-	.Init = Iso15693ProtoInit,
-	.OnFrame = Iso15693OnFrame,
-	.OnApdu = nullptr,
-};
-
-static inline Iso15693State_t *Iso15693GetState(RFTagDev_t * const pDev)
-{
-	return (Iso15693State_t *)pDev->ProtoState;
-}
-
-const uint8_t *RFTagProtoIso15693DefaultUid(void)
+const uint8_t *RFTagProtoIso15693::DefaultUid()
 {
 	return s_Iso15693DefaultUid;
 }
 
-static void Iso15693BuildHeader(RFTagDev_t * const pDev)
+void RFTagProtoIso15693::BuildHeader()
 {
-	uint8_t *p = pDev->pMem;
-	uint32_t units = pDev->MemSize / 8;
+	uint8_t p[ISO15693_HEADER_LEN + 3];
+	uint32_t units = vpTag->MemSize() / 8;
+	int n = ISO15693_HEADER_LEN;
 
 	if (units > 0xFF)
 	{
@@ -146,25 +100,27 @@ static void Iso15693BuildHeader(RFTagDev_t * const pDev)
 	// Block 0, Capability Container, 1 byte form
 	p[0] = ISO15693_CC_MAGIC;
 	// Version 1.0 in the top bits. Write access denied when read only.
-	p[1] = pDev->bReadOnly ? (0x40 | 0x0C) : 0x40;
+	p[1] = vpTag->ReadOnly() ? (0x40 | 0x0C) : 0x40;
 	p[2] = (uint8_t)units;			// memory size in 8 byte units
 	p[3] = 0x01;					// feature, read multiple block supported
 
 	// Block 1, empty NDEF message TLV so the tag reads as a valid empty tag.
-	if (pDev->MemSize >= ISO15693_HEADER_LEN + 3)
+	if (vpTag->MemSize() >= ISO15693_HEADER_LEN + 3)
 	{
 		p[4] = 0x03;
 		p[5] = 0x00;
 		p[6] = 0xFE;
+		n += 3;
 	}
+
+	vpTag->MemWrite(0, p, n);
 }
 
 // Returns the request payload start after flags, command and the optional UID,
 // and reports whether the request is addressed to this tag. When addressed and
 // the UID does not match, bForMe is false and the caller stays silent.
-static int Iso15693ReqStart(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, bool *bForMe)
+int RFTagProtoIso15693::ReqStart(const uint8_t *pRx, int RxLen, bool *bForMe)
 {
-	Iso15693State_t *st = Iso15693GetState(pDev);
 	uint8_t flags = pRx[0];
 	int idx = 2;		// past flags and command
 
@@ -178,7 +134,7 @@ static int Iso15693ReqStart(RFTagDev_t * const pDev, const uint8_t *pRx, int RxL
 			return -1;
 		}
 
-		if (memcmp(&pRx[idx], st->Uid, ISO15693_UID_LEN) != 0)
+		if (memcmp(&pRx[idx], vUid, ISO15693_UID_LEN) != 0)
 		{
 			*bForMe = false;
 		}
@@ -202,15 +158,10 @@ static int Iso15693Error(uint8_t *pTx, int TxCap, uint8_t Err)
 	return 2;
 }
 
-static int Iso15693Inventory(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap)
+int RFTagProtoIso15693::Inventory(uint8_t *pTx, int TxCap)
 {
-	(void)pRx;
-	(void)RxLen;
-
-	Iso15693State_t *st = Iso15693GetState(pDev);
-
 	// A quiet tag does not answer inventory.
-	if (st->bQuiet)
+	if (vbQuiet)
 	{
 		return 0;
 	}
@@ -223,13 +174,13 @@ static int Iso15693Inventory(RFTagDev_t * const pDev, const uint8_t *pRx, int Rx
 	// Flags 0, DSFID, then the UID low octet first.
 	pTx[0] = 0x00;
 	pTx[1] = ISO15693_DSFID;
-	memcpy(&pTx[2], st->Uid, ISO15693_UID_LEN);
+	memcpy(&pTx[2], vUid, ISO15693_UID_LEN);
 
 	return 2 + ISO15693_UID_LEN;
 }
 
-static int Iso15693ReadSingle(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, int Idx,
-                              bool bOption, uint8_t *pTx, int TxCap)
+int RFTagProtoIso15693::ReadSingle(const uint8_t *pRx, int RxLen, int Idx,
+								   bool bOption, uint8_t *pTx, int TxCap)
 {
 	if (RxLen < Idx + 1)
 	{
@@ -239,7 +190,7 @@ static int Iso15693ReadSingle(RFTagDev_t * const pDev, const uint8_t *pRx, int R
 	uint32_t blk = pRx[Idx];
 	uint32_t addr = blk * ISO15693_BLOCK_SIZE;
 
-	if (addr + ISO15693_BLOCK_SIZE > pDev->MemSize)
+	if (addr + ISO15693_BLOCK_SIZE > vpTag->MemSize())
 	{
 		return Iso15693Error(pTx, TxCap, ERR_BLOCK_NA);
 	}
@@ -257,14 +208,14 @@ static int Iso15693ReadSingle(RFTagDev_t * const pDev, const uint8_t *pRx, int R
 		return 0;
 	}
 
-	memcpy(&pTx[n], &pDev->pMem[addr], ISO15693_BLOCK_SIZE);
+	vpTag->MemRead(addr, &pTx[n], ISO15693_BLOCK_SIZE);
 	n += ISO15693_BLOCK_SIZE;
 
 	return n;
 }
 
-static int Iso15693ReadMultiple(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, int Idx,
-                                bool bOption, uint8_t *pTx, int TxCap)
+int RFTagProtoIso15693::ReadMultiple(const uint8_t *pRx, int RxLen, int Idx,
+									 bool bOption, uint8_t *pTx, int TxCap)
 {
 	if (RxLen < Idx + 2)
 	{
@@ -276,7 +227,7 @@ static int Iso15693ReadMultiple(RFTagDev_t * const pDev, const uint8_t *pRx, int
 	uint32_t addr = first * ISO15693_BLOCK_SIZE;
 	uint32_t total = count * ISO15693_BLOCK_SIZE;
 
-	if (addr + total > pDev->MemSize)
+	if (addr + total > vpTag->MemSize())
 	{
 		return Iso15693Error(pTx, TxCap, ERR_BLOCK_NA);
 	}
@@ -301,15 +252,15 @@ static int Iso15693ReadMultiple(RFTagDev_t * const pDev, const uint8_t *pRx, int
 			return 0;
 		}
 
-		memcpy(&pTx[n], &pDev->pMem[addr + b * ISO15693_BLOCK_SIZE], ISO15693_BLOCK_SIZE);
+		vpTag->MemRead(addr + b * ISO15693_BLOCK_SIZE, &pTx[n], ISO15693_BLOCK_SIZE);
 		n += ISO15693_BLOCK_SIZE;
 	}
 
 	return n;
 }
 
-static int Iso15693WriteSingle(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, int Idx,
-                               uint8_t *pTx, int TxCap)
+int RFTagProtoIso15693::WriteSingle(const uint8_t *pRx, int RxLen, int Idx,
+									uint8_t *pTx, int TxCap)
 {
 	if (RxLen < Idx + 1 + ISO15693_BLOCK_SIZE)
 	{
@@ -319,20 +270,20 @@ static int Iso15693WriteSingle(RFTagDev_t * const pDev, const uint8_t *pRx, int 
 	uint32_t blk = pRx[Idx];
 
 	// Block 0 holds the Capability Container. A read only tag rejects writes.
-	if (blk == 0 || pDev->bReadOnly)
+	if (blk == 0 || vpTag->ReadOnly())
 	{
 		return Iso15693Error(pTx, TxCap, ERR_BLOCK_LOCKED);
 	}
 
 	uint32_t addr = blk * ISO15693_BLOCK_SIZE;
 
-	if (addr + ISO15693_BLOCK_SIZE > pDev->MemSize)
+	if (addr + ISO15693_BLOCK_SIZE > vpTag->MemSize())
 	{
 		return Iso15693Error(pTx, TxCap, ERR_BLOCK_NA);
 	}
 
-	memcpy(&pDev->pMem[addr], &pRx[Idx + 1], ISO15693_BLOCK_SIZE);
-	RFTagEvtDispatch(pDev, RFTAG_EVT_MEM_CHANGED, addr, ISO15693_BLOCK_SIZE, 0);
+	vpTag->MemWrite(addr, &pRx[Idx + 1], ISO15693_BLOCK_SIZE);
+	vpTag->EvtHandler(RFTAG_EVT_MEM_CHANGED, addr, ISO15693_BLOCK_SIZE);
 
 	if (TxCap < 1)
 	{
@@ -343,10 +294,9 @@ static int Iso15693WriteSingle(RFTagDev_t * const pDev, const uint8_t *pRx, int 
 	return 1;
 }
 
-static int Iso15693GetSysInfo(RFTagDev_t * const pDev, uint8_t *pTx, int TxCap)
+int RFTagProtoIso15693::GetSysInfo(uint8_t *pTx, int TxCap)
 {
-	Iso15693State_t *st = Iso15693GetState(pDev);
-	uint32_t blocks = pDev->MemSize / ISO15693_BLOCK_SIZE;
+	uint32_t blocks = vpTag->MemSize() / ISO15693_BLOCK_SIZE;
 
 	if (blocks > 256)
 	{
@@ -363,7 +313,7 @@ static int Iso15693GetSysInfo(RFTagDev_t * const pDev, uint8_t *pTx, int TxCap)
 
 	pTx[n++] = 0x00;					// response flags, no error
 	pTx[n++] = 0x0F;					// DSFID, AFI, memory size, IC ref present
-	memcpy(&pTx[n], st->Uid, ISO15693_UID_LEN);
+	memcpy(&pTx[n], vUid, ISO15693_UID_LEN);
 	n += ISO15693_UID_LEN;
 	pTx[n++] = ISO15693_DSFID;
 	pTx[n++] = ISO15693_AFI;
@@ -374,45 +324,44 @@ static int Iso15693GetSysInfo(RFTagDev_t * const pDev, uint8_t *pTx, int TxCap)
 	return n;
 }
 
-static bool Iso15693ProtoInit(RFTagDev_t * const pDev)
+bool RFTagProtoIso15693::Init(RFTag * const pTag)
 {
-	if (pDev->pMem == nullptr || pDev->MemSize < ISO15693_HEADER_LEN + ISO15693_BLOCK_SIZE)
+	if (pTag == nullptr || pTag->MemSize() < ISO15693_HEADER_LEN + ISO15693_BLOCK_SIZE)
 	{
 		return false;
 	}
 
-	// Accept 0, meaning use the module default, or the 8 byte UID from config.
-	if (pDev->IdLen != 0 && pDev->IdLen != ISO15693_UID_LEN)
+	// Accept 0, meaning use the engine default, or the 8 byte UID from config.
+	if (pTag->IdLen() != 0 && pTag->IdLen() != ISO15693_UID_LEN)
 	{
 		return false;
 	}
 
-	Iso15693State_t *st = Iso15693GetState(pDev);
+	vpTag = pTag;
+	vbQuiet = false;
+	vbSelected = false;
 
-	memset(st, 0, sizeof(Iso15693State_t));
-
-	if (pDev->IdLen == ISO15693_UID_LEN)
+	if (pTag->IdLen() == ISO15693_UID_LEN)
 	{
-		memcpy(st->Uid, pDev->NfcId, ISO15693_UID_LEN);
+		memcpy(vUid, pTag->NfcId(), ISO15693_UID_LEN);
 	}
 	else
 	{
-		memcpy(st->Uid, s_Iso15693DefaultUid, ISO15693_UID_LEN);
+		memcpy(vUid, s_Iso15693DefaultUid, ISO15693_UID_LEN);
 	}
 
-	Iso15693BuildHeader(pDev);
+	BuildHeader();
 
 	return true;
 }
 
-static int Iso15693OnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap)
+int RFTagProtoIso15693::OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap)
 {
-	if (RxLen < 2)
+	if (vpTag == nullptr || pRx == nullptr || RxLen < 2)
 	{
 		return 0;
 	}
 
-	Iso15693State_t *st = Iso15693GetState(pDev);
 	uint8_t flags = pRx[0];
 	uint8_t cmd = pRx[1];
 
@@ -420,14 +369,14 @@ static int Iso15693OnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLe
 	{
 		if (cmd == CMD_INVENTORY)
 		{
-			return Iso15693Inventory(pDev, pRx, RxLen, pTx, TxCap);
+			return Inventory(pTx, TxCap);
 		}
 
 		return 0;
 	}
 
 	bool bForMe = true;
-	int idx = Iso15693ReqStart(pDev, pRx, RxLen, &bForMe);
+	int idx = ReqStart(pRx, RxLen, &bForMe);
 
 	if (idx < 0 || bForMe == false)
 	{
@@ -440,13 +389,13 @@ static int Iso15693OnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLe
 	bool bSelectedReq = (flags & REQ_FLAG_SELECT) != 0;
 
 	// A quiet tag answers only addressed or selected requests.
-	if (st->bQuiet && bAddressed == false && bSelectedReq == false)
+	if (vbQuiet && bAddressed == false && bSelectedReq == false)
 	{
 		return 0;
 	}
 
 	// A selected mode request is answered only by the tag in selected state.
-	if (bSelectedReq && st->bSelected == false)
+	if (bSelectedReq && vbSelected == false)
 	{
 		return 0;
 	}
@@ -459,7 +408,7 @@ static int Iso15693OnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLe
 			{
 				return 0;
 			}
-			st->bQuiet = true;
+			vbQuiet = true;
 			return 0;
 
 		case CMD_SELECT:
@@ -468,42 +417,30 @@ static int Iso15693OnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLe
 			{
 				return Iso15693Error(pTx, TxCap, ERR_NOT_RECOGNIZED);
 			}
-			st->bSelected = true;
-			st->bQuiet = false;
+			vbSelected = true;
+			vbQuiet = false;
 			pTx[0] = 0x00;
 			return 1;
 
 		case CMD_RESET_TO_READY:
-			st->bSelected = false;
-			st->bQuiet = false;
+			vbSelected = false;
+			vbQuiet = false;
 			pTx[0] = 0x00;
 			return 1;
 
 		case CMD_READ_SINGLE:
-			return Iso15693ReadSingle(pDev, pRx, RxLen, idx, bOption, pTx, TxCap);
+			return ReadSingle(pRx, RxLen, idx, bOption, pTx, TxCap);
 
 		case CMD_READ_MULTIPLE:
-			return Iso15693ReadMultiple(pDev, pRx, RxLen, idx, bOption, pTx, TxCap);
+			return ReadMultiple(pRx, RxLen, idx, bOption, pTx, TxCap);
 
 		case CMD_WRITE_SINGLE:
-			return Iso15693WriteSingle(pDev, pRx, RxLen, idx, pTx, TxCap);
+			return WriteSingle(pRx, RxLen, idx, pTx, TxCap);
 
 		case CMD_GET_SYS_INFO:
-			return Iso15693GetSysInfo(pDev, pTx, TxCap);
+			return GetSysInfo(pTx, TxCap);
 
 		default:
 			return Iso15693Error(pTx, TxCap, ERR_NOT_SUPPORTED);
 	}
-}
-
-bool RFTagProtoIso15693Bind(RFTagDev_t * const pDev)
-{
-	if (pDev == nullptr)
-	{
-		return false;
-	}
-
-	pDev->pProto = &s_Iso15693Proto;
-
-	return true;
 }
