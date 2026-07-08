@@ -12,15 +12,13 @@ hardware with automatic collision resolution. CRC generation and check and
 the frame delay timer are hardware as well. Nothing above the frame level is
 handled here, no ISO-DEP, no APDU, no tag memory.
 
-Transport capability set for RFTagCfg_t XCap:
-	RFTAG_XCAP_ANTICOL | RFTAG_XCAP_CRC | RFTAG_XCAP_FDT
-
 Usage with RFTag:
 	Each received reader frame is passed to the frame callback set in the
-	configuration. The callback normally calls RFTagProcessFrame, which runs
-	the configured protocol and sends the response back through this
-	transport. The response goes out through DeviceIntrfTx, which maps to
-	nrfx_nfct_tx with the window grid delay mode.
+	configuration. The callback calls RFTag::ProcessFrame, which runs the
+	configured protocol and writes the response into a caller buffer and
+	returns its length. The callback then sends that buffer back through this
+	transport with DeviceIntrfTx, which maps to nrfx_nfct_tx with the window
+	grid delay mode. A zero length result needs no answer.
 
 Integration notes for the target build:
 	HFCLK must run from the crystal before Enable, NFCT is clocked from it.

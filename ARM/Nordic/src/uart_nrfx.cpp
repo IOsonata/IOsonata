@@ -857,9 +857,9 @@ void *nRFUARTGetHandle(DevIntrf_t * const pDev)
 
 static void apply_workaround_for_enable_anomaly(nRFUartDev_t * const pDev)
 {
-#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || defined(NRF9160_XXAA)
+#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || defined(NRF91_SERIES)
     // Apply workaround for anomalies:
-    // - nRF9160 - anomaly 23
+    // - nRF91 series - anomaly 23
     // - nRF5340 - anomaly 44
     volatile uint32_t const * rxenable_reg =
         (volatile uint32_t *)(((uint32_t)pDev->pDmaReg) + 0x564);
@@ -882,7 +882,7 @@ static void apply_workaround_for_enable_anomaly(nRFUartDev_t * const pDev)
 
         pDev->pDmaReg->ENABLE = 0;
     }
-#endif // defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || defined(NRF9160_XXAA)
+#endif // defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || defined(NRF91_SERIES)
 }
 
 bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
@@ -1246,14 +1246,14 @@ extern "C" void UART0_IRQHandler()
 }
 #endif
 
-#if defined(NRF52840_XXAA) || defined(NRF9160_XXAA) || defined(NRF5340_XXAA_App)
+#if defined(NRF52840_XXAA) || defined(NRF5340_XXAA_App)
 extern "C" void UARTE1_IRQHandler()
 {
 	UartIrqHandler(1, &s_nRFxUARTDev[1].pUartDev->DevIntrf);
 }
 #endif
 
-#if defined(NRF9160_XXAA) || defined(NRF5340_XXAA_App)
+#if defined(NRF5340_XXAA_App)
 extern "C" void UARTE2_IRQHandler()
 {
 	UartIrqHandler(2, &s_nRFxUARTDev[2].pUartDev->DevIntrf);

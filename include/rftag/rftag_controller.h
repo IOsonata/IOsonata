@@ -1,12 +1,21 @@
 /**-------------------------------------------------------------------------
 @file	rftag_controller.h
 
-@brief	RF tag controller object
+@brief	RF tag controller facet
 
-The controller is the active RF device used to detect and access remote tags.
+The controller is the active RF device, the reader or PCD side. It detects and
+accesses remote tags over a DeviceIntrf transport, an external reader IC on
+I2C, SPI or UART, or an MCU internal reader peripheral through an adapter.
+
+RFTagController is an RFTag peer on the initiator side. It derives from Device
+like the tag facet, reaches the transport through the DeviceIntrf, and reports
+activity through a per instance EvtHandler override. The adapter command codes
+and the memory command layout describe the IOsonata adapter protocol, not any
+reader IC command format. A reader IC port translates them to its own
+sequences.
 
 @author	Hoang Nguyen Hoan
-@date	Jul. 5, 2026
+@date	Jul. 7, 2026
 
 @license
 
@@ -38,11 +47,14 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 
+#include "device.h"
 #include "device_intrf.h"
 
 #pragma pack(push, 4)
 
+/// RF transport protocol identifiers, one bit per protocol for mask use.
 typedef enum {
 	RF_PROTO_NONE     = 0,
 	RF_PROTO_NFCA     = (1u << 0),
@@ -54,60 +66,42 @@ typedef enum {
 	RF_PROTO_MIFARE   = (1u << 6),
 } RF_PROTO;
 
+/// Controller event codes reported to the EvtHandler.
 typedef enum {
-	RFTAGCTRL_EVT_FIELD_ON,
-	RFTAGCTRL_EVT_FIELD_OFF,
-	RFTAGCTRL_EVT_TAG_DETECTED,
-	RFTAGCTRL_EVT_TAG_REMOVED,
-	RFTAGCTRL_EVT_RX_DATA,
-	RFTAGCTRL_EVT_TX_DONE,
-	RFTAGCTRL_EVT_ERROR,
+	RFTAGCTRL_EVT_FIELD_ON,			//!< RF field turned on
+	RFTAGCTRL_EVT_FIELD_OFF,		//!< RF field turned off
+	RFTAGCTRL_EVT_TAG_DETECTED,		//!< A tag answered detection
+	RFTAGCTRL_EVT_TAG_REMOVED,		//!< A detected tag left the field
+	RFTAGCTRL_EVT_RX_DATA,			//!< Data received from a tag
+	RFTAGCTRL_EVT_TX_DONE,			//!< Data sent to a tag
+	RFTAGCTRL_EVT_ERROR,			//!< Transport or protocol error
 } RFTAGCTRL_EVT;
 
+/// Detected tag description filled by Detect.
 typedef struct {
-	RFTAGCTRL_EVT Evt;
-	uint32_t Flags;
-	const uint8_t *pData;
-	int Len;
-} RFTagCtrlEvt_t;
-
-typedef void (*RFTAGCTRLCB)(void *pCtx, const RFTagCtrlEvt_t *pEvt);
-
-typedef struct {
-	uint32_t Proto;
-	uint8_t Uid[16];
-	uint8_t UidLen;
-	uint8_t Type;
-	uint32_t Size;
-	uint16_t BlockSize;
-	uint32_t Flags;
+	uint32_t Proto;					//!< Tag protocol, one of RF_PROTO
+	uint8_t Uid[16];				//!< Tag UID
+	uint8_t UidLen;					//!< UID length in bytes
+	uint8_t Type;					//!< Protocol specific type code
+	uint32_t Size;					//!< Tag memory size in bytes
+	uint16_t BlockSize;				//!< Tag block size in bytes
+	uint32_t Flags;					//!< Protocol specific flags
 } RFTagInfo_t;
 
+/// Controller configuration.
 typedef struct {
-	uint8_t DevAddr;
-	uint32_t ProtoMask;
-	uint32_t Bitrate;
-	uint32_t TimeoutMs;
-	RFTAGCTRLCB pEvtCB;
-	void *pCtx;
+	uint8_t DevAddr;				//!< Transport device address of the reader adapter
+	uint32_t ProtoMask;				//!< Protocols to scan for, mask of RF_PROTO bits
+	uint32_t Bitrate;				//!< Transport bitrate in Hertz, 0 leaves it unchanged
+	uint32_t TimeoutMs;				//!< Operation timeout in milliseconds
 } RFTagControllerCfg_t;
-
-typedef struct {
-	uint8_t DevAddr;
-	uint32_t ProtoMask;
-	uint32_t Bitrate;
-	uint32_t TimeoutMs;
-	DevIntrf_t *pIntrf;
-	RFTAGCTRLCB pEvtCB;
-	void *pCtx;
-} RFTagControllerDev_t;
 
 /**
  * @brief IOsonata RFTagController adapter command code.
  *
- * These commands are used by adapter implementations that expose an RF tag
- * controller through DeviceIntrf. RFTagControllerTransceive() is raw and does
- * not wrap data with one of these command values.
+ * These commands are used by adapter implementations that expose a reader
+ * through DeviceIntrf. Transceive is raw and does not wrap data with one of
+ * these command values.
  */
 typedef enum {
 	RFTAGCTRL_CMD_DETECT = 1,
@@ -133,96 +127,113 @@ typedef struct {
 
 #pragma pack(pop)
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-bool RFTagControllerInit(RFTagControllerDev_t * const pDev,
-                         const RFTagControllerCfg_t * const pCfg,
-                         DevIntrf_t * const pIntrf);
-
-void RFTagControllerEnable(RFTagControllerDev_t * const pDev);
-void RFTagControllerDisable(RFTagControllerDev_t * const pDev);
-
-bool RFTagControllerDetect(RFTagControllerDev_t * const pDev,
-                           RFTagInfo_t * const pTag);
-
-bool RFTagControllerSelect(RFTagControllerDev_t * const pDev,
-                           const RFTagInfo_t * const pTag);
-
-int RFTagControllerTagRead(RFTagControllerDev_t * const pDev,
-                           const RFTagInfo_t * const pTag,
-                           uint32_t Addr,
-                           uint8_t *pBuff,
-                           int Len);
-
-int RFTagControllerTagWrite(RFTagControllerDev_t * const pDev,
-                            const RFTagInfo_t * const pTag,
-                            uint32_t Addr,
-                            const uint8_t *pData,
-                            int Len);
-
-int RFTagControllerTransceive(RFTagControllerDev_t * const pDev,
-                              const uint8_t *pTx,
-                              int TxLen,
-                              uint8_t *pRx,
-                              int RxLen);
-
-void RFTagControllerEvtDispatch(RFTagControllerDev_t * const pDev,
-                                RFTAGCTRL_EVT Evt,
-                                const uint8_t *pData,
-                                int Len,
-                                uint32_t Flags);
-
-#ifdef __cplusplus
-}
-
-class RFTagController {
+class RFTagController : virtual public Device {
 public:
-	RFTagController();
-	virtual ~RFTagController();
-	RFTagController(RFTagController&);	// copy ctor not allowed
+	RFTagController() {
+		memset(&vCfg, 0, sizeof(vCfg));
+	}
+	virtual ~RFTagController() {}
 
-	virtual bool Init(const RFTagControllerCfg_t &Cfg, DeviceIntrf * const pIntrf) {
-		return pIntrf ? RFTagControllerInit(&vDevData, &Cfg, *pIntrf) : false;
+	/**
+	 * @brief	Initialize the controller.
+	 *
+	 * @param	Cfg		Controller configuration
+	 * @param	pIntrf	Transport interface the reader adapter sits on
+	 *
+	 * @return	true on success
+	 */
+	virtual bool Init(const RFTagControllerCfg_t &Cfg, DeviceIntrf * const pIntrf);
+
+	/**
+	 * @brief	Turn the reader transport on.
+	 *
+	 * @return	true on success
+	 */
+	virtual bool Enable();
+
+	/**
+	 * @brief	Turn the reader transport off.
+	 */
+	virtual void Disable();
+
+	/**
+	 * @brief	Reset the reader transport.
+	 */
+	virtual void Reset();
+
+	/**
+	 * @brief	Scan the field for a tag.
+	 *
+	 * @param	pTag	Filled with the detected tag description on success
+	 *
+	 * @return	true when a tag answered
+	 */
+	virtual bool Detect(RFTagInfo_t * const pTag);
+
+	/**
+	 * @brief	Select a detected tag for access.
+	 *
+	 * @param	pTag	Tag description from Detect
+	 *
+	 * @return	true on success
+	 */
+	virtual bool Select(const RFTagInfo_t * const pTag);
+
+	/**
+	 * @brief	Read remote tag memory.
+	 *
+	 * @param	pTag	Target tag description
+	 * @param	Addr	Tag memory offset
+	 * @param	pBuff	Destination
+	 * @param	Len		Byte count
+	 *
+	 * @return	Bytes read, 0 on error
+	 */
+	virtual int TagRead(const RFTagInfo_t * const pTag, uint32_t Addr, uint8_t *pBuff, int Len);
+
+	/**
+	 * @brief	Write remote tag memory.
+	 *
+	 * @param	pTag	Target tag description
+	 * @param	Addr	Tag memory offset
+	 * @param	pData	Source
+	 * @param	Len		Byte count
+	 *
+	 * @return	Bytes written, 0 on error
+	 */
+	virtual int TagWrite(const RFTagInfo_t * const pTag, uint32_t Addr, const uint8_t *pData, int Len);
+
+	/**
+	 * @brief	Raw transceive over the transport.
+	 *
+	 * Sends TxLen bytes. When pRx is given, reads the response into it. The
+	 * data is not wrapped with an adapter command.
+	 *
+	 * @param	pTx		Bytes to send
+	 * @param	TxLen	Send length
+	 * @param	pRx		Response buffer, null for send only
+	 * @param	RxLen	Response buffer capacity
+	 *
+	 * @return	Bytes received, or bytes sent when pRx is null, 0 on error
+	 */
+	virtual int Transceive(const uint8_t *pTx, int TxLen, uint8_t *pRx, int RxLen);
+
+	/**
+	 * @brief	Controller event sink, override to observe reader activity.
+	 *
+	 * @param	Evt	Event code
+	 * @param	P0	Event parameter, protocol for detect, length for data
+	 * @param	P1	Event parameter, reserved
+	 */
+	virtual void EvtHandler(RFTAGCTRL_EVT Evt, uint32_t P0, uint32_t P1) {
+		(void)Evt; (void)P0; (void)P1;
 	}
 
-	virtual void Enable() {
-		RFTagControllerEnable(&vDevData);
-	}
-
-	virtual void Disable() {
-		RFTagControllerDisable(&vDevData);
-	}
-
-	virtual bool Detect(RFTagInfo_t * const pTag) {
-		return RFTagControllerDetect(&vDevData, pTag);
-	}
-
-	virtual bool Select(const RFTagInfo_t * const pTag) {
-		return RFTagControllerSelect(&vDevData, pTag);
-	}
-
-	virtual int TagRead(const RFTagInfo_t * const pTag, uint32_t Addr, uint8_t *pBuff, int Len) {
-		return RFTagControllerTagRead(&vDevData, pTag, Addr, pBuff, Len);
-	}
-
-	virtual int TagWrite(const RFTagInfo_t * const pTag, uint32_t Addr, const uint8_t *pData, int Len) {
-		return RFTagControllerTagWrite(&vDevData, pTag, Addr, pData, Len);
-	}
-
-	virtual int Transceive(const uint8_t *pTx, int TxLen, uint8_t *pRx, int RxLen) {
-		return RFTagControllerTransceive(&vDevData, pTx, TxLen, pRx, RxLen);
-	}
-
-	operator RFTagControllerDev_t* const () {
-		return &vDevData;
-	}
+	uint8_t DevAddr() const { return vCfg.DevAddr; }
+	uint32_t ProtoMask() const { return vCfg.ProtoMask; }
 
 protected:
-	RFTagControllerDev_t vDevData;
+	RFTagControllerCfg_t vCfg;		//!< Controller configuration copy
 };
-
-#endif
 
 #endif	// __RFTAG_CONTROLLER_H__

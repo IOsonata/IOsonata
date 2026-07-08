@@ -1,39 +1,39 @@
-/*--------------------------------------------------------------------------
-File   : rftag_t4t_demo_port_nrfx.cpp
+/**-------------------------------------------------------------------------
+@file	rftag_t4t_demo_port_nrfx.cpp
 
-Author : Hoang Nguyen Hoan          Jul. 5, 2026
+@brief	Nordic NFCT target port for the RFTag Type 4 demo
 
-Desc   : Nordic NFCT target port for the RFTag Type 4 demo
+Builds the NFCT frame transport and hands it to the demo. Each reader frame is
+fed to RFTag::ProcessFrame, which runs the Type 4 protocol and writes the
+response into a caller buffer. The port sends that buffer back through the
+transport. SEL_RES advertises ISO-DEP so a phone sends RATS after selection.
 
-Builds the NFCT frame transport and hands it to the demo. Each reader frame
-is fed to RFTagProcessFrame, which runs the Type 4 protocol and sends the
-response back through the transport. SEL_RES advertises ISO-DEP so a phone
-sends RATS after selection.
+@author	Hoang Nguyen Hoan
+@date	Jul. 5, 2026
+
+@license
+
+MIT License
 
 Copyright (c) 2026, I-SYST inc., all rights reserved
 
-Permission to use, copy, modify, and distribute this software for any purpose
-with or without fee is hereby granted, provided that the above copyright
-notice and this permission notice appear in all copies, and none of the
-names : I-SYST, I-SYST inc. or its contributors may be used to endorse or
-promote products derived from this software without specific prior written
-permission.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-For info or contributing contact : hnhoan at i-syst dot com
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
-EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-----------------------------------------------------------------------------
-Modified by          Date              Description
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <string.h>
@@ -55,9 +55,17 @@ static void NfctFrameHandler(NfctIntrfDev_t * const pDev, const uint8_t *pFrame,
 {
 	(void)pDev;
 
-	// Runs in the NFCT interrupt. The protocol builds the response and the
-	// tag sends it back through this transport within the reply window.
-	g_Tag.ProcessFrame(pFrame, FrameLen);
+	// Runs in the NFCT interrupt. ProcessFrame runs the protocol and writes
+	// the response into the local buffer. Send it back through this transport
+	// within the reply window. A zero length result needs no answer.
+	uint8_t tx[NFCT_INTRF_FRAME_MAX];
+
+	int n = g_Tag.ProcessFrame(pFrame, FrameLen, tx, sizeof(tx));
+
+	if (n > 0)
+	{
+		DeviceIntrfTx((DevIntrf_t *)s_NfctIntrf, 0, tx, n);
+	}
 }
 
 DeviceIntrf *RFTagDemoGetTransport(void)

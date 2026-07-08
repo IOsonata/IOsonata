@@ -1,44 +1,45 @@
-/*--------------------------------------------------------------------------
-File   : uart_ble_oob_nfc_port_nrfx.cpp
+/**-------------------------------------------------------------------------
+@file	uart_ble_oob_nfc_port_nrfx.cpp
 
-Author : Hoang Nguyen Hoan          Jul. 5, 2026
-
-Desc   : Nordic NFCT port for the uart_ble LESC OOB NFC channel
+@brief	Nordic NFCT port for the uart_ble LESC OOB NFC channel
 
 Provides the NFC frame transport the uart_ble example publishes its LESC OOB
 data on when built with BLE_SC_METHOD == BLE_SC_OOB and BLE_SC_OOB_NFC. Each
 reader frame goes to the tag object in the example, which runs the Type 4
 protocol and answers through this transport.
 
-Build with RFTAG_PROTO_T4T_ENABLE and link nfct_nrfx.cpp, rftag.cpp,
-rftag_ndef.cpp, bt_oob_rftag.cpp and rftag_proto_t4t.cpp. The NFCT interrupt
-vector must reach nrfx_nfct_irq_handler and the high frequency crystal clock
-must be running, which the BLE controller already requires.
+Link nfct_nrfx.cpp, rftag.cpp, rftag_ndef.cpp, bt_oob_rftag.cpp and
+rftag_proto_t4.cpp. Attaching the RFTagProtoT4 engine selects the protocol,
+no enable macro is needed. The NFCT interrupt vector must reach
+nrfx_nfct_irq_handler and the high frequency crystal clock must be running,
+which the BLE controller already requires.
+
+@author	Hoang Nguyen Hoan
+@date	Jul. 5, 2026
+
+@license
+
+MIT License
 
 Copyright (c) 2026, I-SYST inc., all rights reserved
 
-Permission to use, copy, modify, and distribute this software for any purpose
-with or without fee is hereby granted, provided that the above copyright
-notice and this permission notice appear in all copies, and none of the
-names : I-SYST, I-SYST inc. or its contributors may be used to endorse or
-promote products derived from this software without specific prior written
-permission.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-For info or contributing contact : hnhoan at i-syst dot com
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
-EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-----------------------------------------------------------------------------
-Modified by          Date              Description
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <string.h>
@@ -60,7 +61,17 @@ static void BleOobNfcFrameHandler(NfctIntrfDev_t * const pDev, const uint8_t *pF
 	(void)pDev;
 
 	// Runs in the NFCT interrupt. Keep it short, the reply window is timed.
-	g_BleOobTag.ProcessFrame(pFrame, FrameLen);
+	// ProcessFrame runs the protocol and writes the response into the local
+	// buffer. Send it back through this transport. A zero length result, such
+	// as a read only OOB tag ignoring a write, needs no answer.
+	uint8_t tx[NFCT_INTRF_FRAME_MAX];
+
+	int n = g_BleOobTag.ProcessFrame(pFrame, FrameLen, tx, sizeof(tx));
+
+	if (n > 0)
+	{
+		DeviceIntrfTx((DevIntrf_t *)s_BleOobNfct, 0, tx, n);
+	}
 }
 
 DeviceIntrf *BleOobNfcGetTransport(void)

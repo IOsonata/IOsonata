@@ -1,10 +1,15 @@
 /**-------------------------------------------------------------------------
 @file	rftag_controller.cpp
 
-@brief	RF tag controller implementation
+@brief	RF tag controller facet implementation
+
+Reader side over a DeviceIntrf transport. Detect scans the field and fills a
+tag description, Select activates a tag, TagRead and TagWrite move remote tag
+memory through the adapter memory command, Transceive sends raw frames. Reader
+activity is reported through the per instance EvtHandler.
 
 @author	Hoang Nguyen Hoan
-@date	Jul. 5, 2026
+@date	Jul. 7, 2026
 
 @license
 
@@ -36,66 +41,61 @@ SOFTWARE.
 #include "istddef.h"
 #include "rftag/rftag_controller.h"
 
-RFTagController::RFTagController()
+bool RFTagController::Init(const RFTagControllerCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
-	memset(&vDevData, 0, sizeof(RFTagControllerDev_t));
-}
-
-RFTagController::~RFTagController()
-{
-}
-
-bool RFTagControllerInit(RFTagControllerDev_t * const pDev,
-                         const RFTagControllerCfg_t * const pCfg,
-                         DevIntrf_t * const pIntrf)
-{
-	if (pDev == nullptr || pCfg == nullptr || pIntrf == nullptr)
+	if (pIntrf == nullptr)
 	{
 		return false;
 	}
 
-	memset(pDev, 0, sizeof(RFTagControllerDev_t));
+	vCfg = Cfg;
+	Interface(pIntrf);
 
-	pDev->DevAddr = pCfg->DevAddr;
-	pDev->ProtoMask = pCfg->ProtoMask;
-	pDev->Bitrate = pCfg->Bitrate;
-	pDev->TimeoutMs = pCfg->TimeoutMs;
-	pDev->pIntrf = pIntrf;
-	pDev->pEvtCB = pCfg->pEvtCB;
-	pDev->pCtx = pCfg->pCtx;
-
-	if (pCfg->Bitrate > 0)
+	if (vCfg.Bitrate > 0)
 	{
-		DeviceIntrfSetRate(pIntrf, pCfg->Bitrate);
+		DeviceIntrfSetRate((DevIntrf_t *)*pIntrf, vCfg.Bitrate);
 	}
+
+	Valid(true);
 
 	return true;
 }
 
-void RFTagControllerEnable(RFTagControllerDev_t * const pDev)
+bool RFTagController::Enable()
 {
-	if (pDev == nullptr || pDev->pIntrf == nullptr)
+	if (vpIntrf == nullptr)
+	{
+		return false;
+	}
+
+	DeviceIntrfEnable((DevIntrf_t *)*vpIntrf);
+
+	return true;
+}
+
+void RFTagController::Disable()
+{
+	if (vpIntrf == nullptr)
 	{
 		return;
 	}
 
-	DeviceIntrfEnable(pDev->pIntrf);
+	DeviceIntrfDisable((DevIntrf_t *)*vpIntrf);
 }
 
-void RFTagControllerDisable(RFTagControllerDev_t * const pDev)
+void RFTagController::Reset()
 {
-	if (pDev == nullptr || pDev->pIntrf == nullptr)
+	if (vpIntrf == nullptr)
 	{
 		return;
 	}
 
-	DeviceIntrfDisable(pDev->pIntrf);
+	DeviceIntrfReset((DevIntrf_t *)*vpIntrf);
 }
 
-bool RFTagControllerDetect(RFTagControllerDev_t * const pDev,
-                           RFTagInfo_t * const pTag)
+bool RFTagController::Detect(RFTagInfo_t * const pTag)
 {
-	if (pDev == nullptr || pDev->pIntrf == nullptr || pTag == nullptr)
+	if (vpIntrf == nullptr || pTag == nullptr)
 	{
 		return false;
 	}
@@ -103,44 +103,46 @@ bool RFTagControllerDetect(RFTagControllerDev_t * const pDev,
 	uint8_t cmd[5];
 
 	cmd[0] = RFTAGCTRL_CMD_DETECT;
-	cmd[1] = (uint8_t)pDev->ProtoMask;
-	cmd[2] = (uint8_t)(pDev->ProtoMask >> 8);
-	cmd[3] = (uint8_t)(pDev->ProtoMask >> 16);
-	cmd[4] = (uint8_t)(pDev->ProtoMask >> 24);
+	cmd[1] = (uint8_t)vCfg.ProtoMask;
+	cmd[2] = (uint8_t)(vCfg.ProtoMask >> 8);
+	cmd[3] = (uint8_t)(vCfg.ProtoMask >> 16);
+	cmd[4] = (uint8_t)(vCfg.ProtoMask >> 24);
 
 	memset(pTag, 0, sizeof(RFTagInfo_t));
 
-	int l = DeviceIntrfRead(pDev->pIntrf, pDev->DevAddr, cmd, sizeof(cmd), (uint8_t*)pTag, sizeof(RFTagInfo_t));
+	int l = DeviceIntrfRead((DevIntrf_t *)*vpIntrf, vCfg.DevAddr, cmd, sizeof(cmd),
+							(uint8_t *)pTag, sizeof(RFTagInfo_t));
 
 	if (l == (int)sizeof(RFTagInfo_t) && pTag->Proto != RF_PROTO_NONE)
 	{
-		RFTagControllerEvtDispatch(pDev, RFTAGCTRL_EVT_TAG_DETECTED, (const uint8_t*)pTag, sizeof(RFTagInfo_t), pTag->Proto);
+		EvtHandler(RFTAGCTRL_EVT_TAG_DETECTED, pTag->Proto, 0);
 		return true;
 	}
 
 	return false;
 }
 
-bool RFTagControllerSelect(RFTagControllerDev_t * const pDev,
-                           const RFTagInfo_t * const pTag)
+bool RFTagController::Select(const RFTagInfo_t * const pTag)
 {
-	if (pDev == nullptr || pDev->pIntrf == nullptr || pTag == nullptr)
+	if (vpIntrf == nullptr || pTag == nullptr)
 	{
 		return false;
 	}
 
 	uint8_t cmd = RFTAGCTRL_CMD_SELECT;
 
-	int l = DeviceIntrfWrite(pDev->pIntrf, pDev->DevAddr, &cmd, sizeof(cmd), (const uint8_t*)pTag, sizeof(RFTagInfo_t));
+	int l = DeviceIntrfWrite((DevIntrf_t *)*vpIntrf, vCfg.DevAddr, &cmd, sizeof(cmd),
+							 (const uint8_t *)pTag, sizeof(RFTagInfo_t));
 
 	return l == (int)sizeof(RFTagInfo_t);
 }
 
+// Fill the adapter memory command from the target tag and the access range.
 static void RFTagControllerFillMemCmd(RFTagControllerMemCmd_t *pCmd,
-                                      uint8_t Cmd,
-                                      const RFTagInfo_t * const pTag,
-                                      uint32_t Addr,
-                                      uint16_t Len)
+									  uint8_t Cmd,
+									  const RFTagInfo_t * const pTag,
+									  uint32_t Addr,
+									  uint16_t Len)
 {
 	memset(pCmd, 0, sizeof(RFTagControllerMemCmd_t));
 
@@ -156,13 +158,9 @@ static void RFTagControllerFillMemCmd(RFTagControllerMemCmd_t *pCmd,
 	}
 }
 
-int RFTagControllerTagRead(RFTagControllerDev_t * const pDev,
-                           const RFTagInfo_t * const pTag,
-                           uint32_t Addr,
-                           uint8_t *pBuff,
-                           int Len)
+int RFTagController::TagRead(const RFTagInfo_t * const pTag, uint32_t Addr, uint8_t *pBuff, int Len)
 {
-	if (pDev == nullptr || pDev->pIntrf == nullptr || pTag == nullptr || pBuff == nullptr || Len <= 0 || Len > UINT16_MAX)
+	if (vpIntrf == nullptr || pTag == nullptr || pBuff == nullptr || Len <= 0 || Len > UINT16_MAX)
 	{
 		return 0;
 	}
@@ -171,23 +169,20 @@ int RFTagControllerTagRead(RFTagControllerDev_t * const pDev,
 
 	RFTagControllerFillMemCmd(&cmd, RFTAGCTRL_CMD_TAG_READ, pTag, Addr, (uint16_t)Len);
 
-	int l = DeviceIntrfRead(pDev->pIntrf, pDev->DevAddr, (const uint8_t*)&cmd, sizeof(cmd), pBuff, Len);
+	int l = DeviceIntrfRead((DevIntrf_t *)*vpIntrf, vCfg.DevAddr,
+							(const uint8_t *)&cmd, sizeof(cmd), pBuff, Len);
 
 	if (l > 0)
 	{
-		RFTagControllerEvtDispatch(pDev, RFTAGCTRL_EVT_RX_DATA, pBuff, l, 0);
+		EvtHandler(RFTAGCTRL_EVT_RX_DATA, (uint32_t)l, 0);
 	}
 
 	return l;
 }
 
-int RFTagControllerTagWrite(RFTagControllerDev_t * const pDev,
-                            const RFTagInfo_t * const pTag,
-                            uint32_t Addr,
-                            const uint8_t *pData,
-                            int Len)
+int RFTagController::TagWrite(const RFTagInfo_t * const pTag, uint32_t Addr, const uint8_t *pData, int Len)
 {
-	if (pDev == nullptr || pDev->pIntrf == nullptr || pTag == nullptr || pData == nullptr || Len <= 0 || Len > UINT16_MAX)
+	if (vpIntrf == nullptr || pTag == nullptr || pData == nullptr || Len <= 0 || Len > UINT16_MAX)
 	{
 		return 0;
 	}
@@ -196,59 +191,35 @@ int RFTagControllerTagWrite(RFTagControllerDev_t * const pDev,
 
 	RFTagControllerFillMemCmd(&cmd, RFTAGCTRL_CMD_TAG_WRITE, pTag, Addr, (uint16_t)Len);
 
-	int l = DeviceIntrfWrite(pDev->pIntrf, pDev->DevAddr, (const uint8_t*)&cmd, sizeof(cmd), pData, Len);
+	int l = DeviceIntrfWrite((DevIntrf_t *)*vpIntrf, vCfg.DevAddr,
+							 (const uint8_t *)&cmd, sizeof(cmd), pData, Len);
 
 	if (l > 0)
 	{
-		RFTagControllerEvtDispatch(pDev, RFTAGCTRL_EVT_TX_DONE, nullptr, l, 0);
+		EvtHandler(RFTAGCTRL_EVT_TX_DONE, (uint32_t)l, 0);
 	}
 
 	return l;
 }
 
-int RFTagControllerTransceive(RFTagControllerDev_t * const pDev,
-                              const uint8_t *pTx,
-                              int TxLen,
-                              uint8_t *pRx,
-                              int RxLen)
+int RFTagController::Transceive(const uint8_t *pTx, int TxLen, uint8_t *pRx, int RxLen)
 {
-	if (pDev == nullptr || pDev->pIntrf == nullptr || pTx == nullptr || TxLen <= 0)
+	if (vpIntrf == nullptr || pTx == nullptr || TxLen <= 0)
 	{
 		return 0;
 	}
 
 	if (pRx == nullptr || RxLen <= 0)
 	{
-		return DeviceIntrfTx(pDev->pIntrf, pDev->DevAddr, pTx, TxLen);
+		return DeviceIntrfTx((DevIntrf_t *)*vpIntrf, vCfg.DevAddr, pTx, TxLen);
 	}
 
-	int l = DeviceIntrfRead(pDev->pIntrf, pDev->DevAddr, pTx, TxLen, pRx, RxLen);
+	int l = DeviceIntrfRead((DevIntrf_t *)*vpIntrf, vCfg.DevAddr, pTx, TxLen, pRx, RxLen);
 
 	if (l > 0)
 	{
-		RFTagControllerEvtDispatch(pDev, RFTAGCTRL_EVT_RX_DATA, pRx, l, 0);
+		EvtHandler(RFTAGCTRL_EVT_RX_DATA, (uint32_t)l, 0);
 	}
 
 	return l;
-}
-
-void RFTagControllerEvtDispatch(RFTagControllerDev_t * const pDev,
-                                RFTAGCTRL_EVT Evt,
-                                const uint8_t *pData,
-                                int Len,
-                                uint32_t Flags)
-{
-	if (pDev == nullptr || pDev->pEvtCB == nullptr)
-	{
-		return;
-	}
-
-	RFTagCtrlEvt_t e = {
-		.Evt = Evt,
-		.Flags = Flags,
-		.pData = pData,
-		.Len = Len,
-	};
-
-	pDev->pEvtCB(pDev->pCtx, &e);
 }

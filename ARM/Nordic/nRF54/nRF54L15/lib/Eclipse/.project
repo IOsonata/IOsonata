@@ -956,6 +956,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/include/nfct_nrfx.h</locationURI>
 		</link>
 		<link>
+			<name>include/rftag/rfreader_pn532.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rfreader_pn532.h</locationURI>
+		</link>
+		<link>
 			<name>include/rftag/rftag.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rftag.h</locationURI>
@@ -969,6 +974,21 @@
 			<name>include/rftag/rftag_ndef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rftag_ndef.h</locationURI>
+		</link>
+		<link>
+			<name>include/rftag/rftag_proto_iso15693.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rftag_proto_iso15693.h</locationURI>
+		</link>
+		<link>
+			<name>include/rftag/rftag_proto_t2.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rftag_proto_t2.h</locationURI>
+		</link>
+		<link>
+			<name>include/rftag/rftag_proto_t4.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rftag_proto_t4.h</locationURI>
 		</link>
 		<link>
 			<name>include/rftag/st25dv.h</name>
@@ -1441,19 +1461,24 @@
 			<locationURI>$%7BPARENT-4-PROJECT_LOC%7D/src/pwm_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/rng_nrfx.c</name>
+			<name>src/coredev/rng_nrfx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.c</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/shared_intrf.c</name>
+			<name>src/coredev/shared_intrf.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/shared_intrf_nrf5x.c</name>
+			<name>src/coredev/shared_intrf_nrfx.c</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/shared_intrf_nrf5x.c</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/shared_intrf_nrfx.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/shared_intrf_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>$%7BPARENT-4-PROJECT_LOC%7D/src/shared_intrf_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/spi.cpp</name>
@@ -1481,9 +1506,9 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/timer_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/uart.c</name>
+			<name>src/coredev/uart.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/uart_nrf54x.cpp</name>
@@ -1671,6 +1696,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/nfct_nrfx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/rftag/rfreader_pn532.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rfreader_pn532.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/rftag/rftag.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag.cpp</locationURI>
@@ -1691,14 +1721,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_iso15693.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/rftag/rftag_proto_t2t.cpp</name>
+			<name>src/rftag/rftag_proto_t2.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t2t.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t2.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/rftag/rftag_proto_t4t.cpp</name>
+			<name>src/rftag/rftag_proto_t4.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t4t.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t4.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/rftag/st25dv.cpp</name>
