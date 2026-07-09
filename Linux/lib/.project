@@ -356,9 +356,9 @@
 			<locationURI>PARENT-2-PROJECT_LOC/src/timer.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/uart.c</name>
+			<name>src/uart.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/src/coredev/uart.c</locationURI>
+			<locationURI>PARENT-2-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/uart_retarget.c</name>

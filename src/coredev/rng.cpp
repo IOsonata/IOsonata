@@ -1,10 +1,10 @@
 /**-------------------------------------------------------------------------
-@file	rng.c
+@file	rng.cpp
 
 @brief	Default software random number generator.
 
 Weak fallback implementation of the RNG utility (coredev/rng.h). A target with
-a hardware RNG peripheral provides a strong RngGet/RngInit (e.g. rng_nrfx.c on
+a hardware RNG peripheral provides a strong RngGet/RngInit (e.g. rng_nrfx.cpp on
 Nordic) that overrides these at link time. A target with no RNG hardware links
 this software default automatically.
 

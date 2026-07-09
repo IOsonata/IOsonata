@@ -1146,9 +1146,9 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/iosonata_dfu_public_key.c</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/shared_intrf.c</name>
+			<name>src/coredev/shared_intrf.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/shared_intrf_nrf5x.c</name>
@@ -1171,9 +1171,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/uart.c</name>
+			<name>src/coredev/uart.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/uart_nrfx.cpp</name>

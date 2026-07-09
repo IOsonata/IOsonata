@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	uart.c
+@file	uart.cpp
 
 @brief	Generic uart implementation
 

@@ -811,9 +811,9 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/uart.c</name>
+			<name>src/coredev/uart.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/coredev/uart.c</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/eink_intrf.cpp</name>

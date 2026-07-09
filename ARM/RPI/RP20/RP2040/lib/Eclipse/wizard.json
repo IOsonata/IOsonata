@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "mcu": "RP2040",
+  "cpu": "cortex-m0plus",
+  "fpu": false,
+  "defines": [
+    "RP2040"
+  ],
+  "includes": [
+    "${iosonata}/ARM/RPI/RP20/include",
+    "${iosonata}/ARM/RPI/RP20/RP2040/lib/include"
+  ],
+  "linker_script": "${iosonata}/ARM/RPI/RP20/ldscript/gcc_rp2040.ld",
+  "lib_path": "${iosonata}/ARM/RPI/RP20/RP2040/lib/Eclipse/${config}",
+  "lib": "IOsonata_RP2040"
+}

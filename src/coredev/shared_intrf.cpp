@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	shared_inrtf.cpp
+@file	shared_intrf.cpp
 
 @brief	Shared device interface
 

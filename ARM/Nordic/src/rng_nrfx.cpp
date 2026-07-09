@@ -1,10 +1,10 @@
 /**-------------------------------------------------------------------------
-@file	rng_nrfx.c
+@file	rng_nrfx.cpp
 
 @brief	Random number generator implementation on Nordic nRF series.
 
 		Provides the strong (hardware-backed) RngInit/RngGet that overrides the
-		__weak software default in coredev/rng.c. Any code that calls RngGet
+		__weak software default in coredev/rng.cpp. Any code that calls RngGet
 		(crypto engines for key generation, SMP, etc.) gets hardware entropy
 		through this implementation, with no knowledge of the underlying engine.
 

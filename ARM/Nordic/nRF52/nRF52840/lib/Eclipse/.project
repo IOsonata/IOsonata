@@ -1531,19 +1531,19 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/qspi_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/rng.c</name>
+			<name>src/coredev/rng.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/rng.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/rng.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/rng_nrfx.c</name>
+			<name>src/coredev/rng_nrfx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.c</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/shared_intrf.c</name>
+			<name>src/coredev/shared_intrf.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/shared_intrf_nrf5x.c</name>
@@ -1581,9 +1581,9 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/timer_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/uart.c</name>
+			<name>src/coredev/uart.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/uart_nrfx.cpp</name>

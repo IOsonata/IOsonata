@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	shared_intrf_nrfx.c
+@file	shared_intrf_nrfx.cpp
 
 @brief	Shared serial interface dispatch for nRF5x, nRF54L and nRF91 series
 
@@ -54,6 +54,10 @@ SOFTWARE.
 
 const int g_SharedIntrfMaxCnt = MAX_NB_DEV;
 SharedIntrf_t g_SharedIntrf[MAX_NB_DEV] = { {0, 0},};
+
+// Vector table entries are C symbols. Keep C linkage on the handlers below so
+// these definitions override the weak defaults declared in the vector table.
+extern "C" {
 
 #ifdef NRF52805_XXAA
 void TWIM0_TWIS0_TWI0_IRQHandler()
@@ -159,3 +163,5 @@ void UARTE3_SPIM3_SPIS3_TWIM3_TWIS3_IRQHandler(void)
 	NVIC_ClearPendingIRQ(UARTE3_SPIM3_SPIS3_TWIM3_TWIS3_IRQn);
 }
 #endif
+
+} // extern "C"
