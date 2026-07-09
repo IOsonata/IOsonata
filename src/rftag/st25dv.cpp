@@ -220,6 +220,9 @@ bool TagSt25dv::Init(const RFTagCfg_t &Cfg, const St25dvCfg_t &St, DeviceIntrf *
 {
 	uint8_t uid[8];
 
+	// A failed Init must not leave a previously initialized object usable.
+	Valid(false);
+
 	if (pIntrf == nullptr)
 	{
 		return false;

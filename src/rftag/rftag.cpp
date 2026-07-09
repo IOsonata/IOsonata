@@ -41,6 +41,9 @@ SOFTWARE.
 
 bool RFTag::Init(const RFTagCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
+	// A failed Init must not leave a previously initialized object usable.
+	Valid(false);
+
 	vCfg = Cfg;
 	vpProto = nullptr;
 
@@ -53,7 +56,21 @@ bool RFTag::Init(const RFTagCfg_t &Cfg, DeviceIntrf * const pIntrf)
 		return false;
 	}
 
-	if (vCfg.NdefAddr + vCfg.NdefMaxLen > vCfg.MemSize)
+	if (vCfg.NdefAddr >= vCfg.MemSize)
+	{
+		return false;
+	}
+
+	// NdefMaxLen of 0 selects the remainder of the tag memory.
+	uint32_t avail = vCfg.MemSize - vCfg.NdefAddr;
+
+	if (vCfg.NdefMaxLen == 0)
+	{
+		vCfg.NdefMaxLen = avail;
+	}
+
+	// Subtraction form, the additive form can wrap on large offsets.
+	if (vCfg.NdefMaxLen > avail)
 	{
 		return false;
 	}
@@ -107,9 +124,12 @@ int RFTag::MemRead(uint32_t Addr, uint8_t *pBuff, int Len)
 
 	int l = Len;
 
-	if (Addr + (uint32_t)l > vCfg.MemSize)
+	// Addr < MemSize is checked above, so the subtraction cannot wrap.
+	uint32_t avail = vCfg.MemSize - Addr;
+
+	if ((uint32_t)l > avail)
 	{
-		l = (int)(vCfg.MemSize - Addr);
+		l = (int)avail;
 	}
 
 	memcpy(pBuff, &vCfg.pMem[Addr], l);
@@ -126,9 +146,12 @@ int RFTag::MemWrite(uint32_t Addr, const uint8_t *pData, int Len)
 
 	int l = Len;
 
-	if (Addr + (uint32_t)l > vCfg.MemSize)
+	// Addr < MemSize is checked above, so the subtraction cannot wrap.
+	uint32_t avail = vCfg.MemSize - Addr;
+
+	if ((uint32_t)l > avail)
 	{
-		l = (int)(vCfg.MemSize - Addr);
+		l = (int)avail;
 	}
 
 	memcpy(&vCfg.pMem[Addr], pData, l);
@@ -324,7 +347,7 @@ int RFTag::GetNdefTlv(uint8_t *pNdef, uint16_t Len)
 				skip = ((uint16_t)lbuf[0] << 8) | lbuf[1];
 			}
 
-			if (addr + skip > end)
+			if (addr >= end || skip > end - addr)
 			{
 				return 0;
 			}
@@ -358,7 +381,7 @@ int RFTag::GetNdefTlv(uint8_t *pNdef, uint16_t Len)
 			nlen = ((uint16_t)lbuf[0] << 8) | lbuf[1];
 		}
 
-		if (addr + nlen > end)
+		if (addr >= end || nlen > end - addr)
 		{
 			return 0;
 		}

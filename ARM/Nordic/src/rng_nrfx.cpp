@@ -50,6 +50,8 @@ SOFTWARE.
 
 #include "nrf.h"
 
+#include "coredev/rng.h"
+
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #include "nrfx_cracen.h"
 #define RNG_USE_CRACEN		1

@@ -1971,14 +1971,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_iso15693.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/rftag/rftag_proto_t2t.cpp</name>
+			<name>src/rftag/rftag_proto_t2.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t2t.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t2.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/rftag/rftag_proto_t4t.cpp</name>
+			<name>src/rftag/rftag_proto_t4.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t4t.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t4.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/rftag/st25dv.cpp</name>
