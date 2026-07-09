@@ -1151,9 +1151,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/shared_intrf_nrf5x.c</name>
+			<name>src/coredev/shared_intrf_nrfx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/shared_intrf_nrf5x.c</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/shared_intrf_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/spi.cpp</name>
