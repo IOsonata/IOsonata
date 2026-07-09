@@ -15,7 +15,7 @@
     "${external}/nrfx/drivers/include",
     "${external}/nrfx/bsp/stable",
     "${external}/nrfx/bsp/stable/mdk",
-    "${external}/nrfx/hal",
+    "${external}/nrfx/hal"
   ],
   "linker_script": "${iosonata}/ARM/Nordic/nRF54/ldscript/gcc_nrf54l15_xxaa.ld",
   "lib_path": "${iosonata}/ARM/Nordic/nRF54/nRF54L15/lib/Eclipse/${config}",
