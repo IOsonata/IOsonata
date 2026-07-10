@@ -33,6 +33,7 @@ the combined peripheral and central link count.
 
 #include <stdint.h>
 
+#include "ble.h"
 #include "ble_gap.h"
 
 #include "crypto/crypto.h"
