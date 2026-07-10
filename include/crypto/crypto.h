@@ -102,12 +102,12 @@ typedef void (*CryptoEvtHandler_t)(CryptoDev_t * const pDev, uint32_t Op,
 								   CRYPTO_STATUS Status, void *pCtx);
 
 /// Provider selector for the optional config-driven CryptoInit. The explicit
-/// provider inits (CryptoUeccInit, CryptoMbedtlsInit, CryptoHwInit) bypass this
+/// provider inits (CryptoUeccInit, CryptoPsaInit, CryptoHwInit) bypass this
 /// and are the primary path; CryptoInit is sugar that picks one for the App.
 typedef enum __Crypto_Provider {
-	CRYPTO_PROVIDER_AUTO    = 0,	//!< CryptoInit picks: HW, then mbedTLS, then uECC
+	CRYPTO_PROVIDER_AUTO    = 0,	//!< CryptoInit picks: HW, then PSA, then uECC
 	CRYPTO_PROVIDER_HW      = 1,	//!< Architecture hardware engine (CryptoHwInit)
-	CRYPTO_PROVIDER_MBEDTLS = 2,	//!< mbedTLS engine (CryptoMbedtlsInit)
+	CRYPTO_PROVIDER_PSA     = 2,	//!< PSA Crypto engine (CryptoPsaInit)
 	CRYPTO_PROVIDER_UECC    = 3,	//!< micro-ecc engine (CryptoUeccInit)
 } CRYPTO_PROVIDER;
 
@@ -138,12 +138,12 @@ typedef struct __Crypto_Cfg {
 
 // Per-instance state arena sizes, for declaring the App-owned pMem buffer.
 // CRYPTO_MEMSIZE_UECC covers CryptoUeccData_t; a compile-time assert in
-// crypto_uecc.cpp keeps it in sync. CRYPTO_MEMSIZE_MBEDTLS covers the per-instance
-// control structs only; mbedTLS allocates MPI limbs through its own allocator,
-// so the real working set also depends on the mbedTLS heap configuration. Each
+// crypto_uecc.cpp keeps it in sync. CRYPTO_MEMSIZE_PSA covers the per-instance
+// control structs only; a PSA implementation keeps key material in its own
+// keystore, so the real working set also depends on that implementation. Each
 // engine Init re-checks MemSize against its true sizeof and fails closed.
 #define CRYPTO_MEMSIZE_UECC		40U
-#define CRYPTO_MEMSIZE_MBEDTLS	256U
+#define CRYPTO_MEMSIZE_PSA		256U
 #define CRYPTO_MEMSIZE_HW		1024U	// Hardware engine (CryptoHwInit) per-instance arena. Covers the
 									// small PSA key-id context and the large nrf_crypto/CC310 key
 									// object (about 828 bytes measured). A per-engine static_assert
@@ -151,7 +151,9 @@ typedef struct __Crypto_Cfg {
 // Arena for an ECDH engine picked at runtime by CryptoInit(AUTO): sized for
 // whichever engine wins, hardware or software uECC.
 #define CRYPTO_MEMSIZE_ECDH \
-	((CRYPTO_MEMSIZE_HW) > (CRYPTO_MEMSIZE_UECC) ? (CRYPTO_MEMSIZE_HW) : (CRYPTO_MEMSIZE_UECC))
+	((CRYPTO_MEMSIZE_HW) > (CRYPTO_MEMSIZE_PSA) ? \
+	 ((CRYPTO_MEMSIZE_HW) > (CRYPTO_MEMSIZE_UECC) ? (CRYPTO_MEMSIZE_HW) : (CRYPTO_MEMSIZE_UECC)) : \
+	 ((CRYPTO_MEMSIZE_PSA) > (CRYPTO_MEMSIZE_UECC) ? (CRYPTO_MEMSIZE_PSA) : (CRYPTO_MEMSIZE_UECC)))
 
 /// @brief	Crypto engine interface (vtable). Canonical C form, like DevIntrf_t.
 ///
@@ -160,7 +162,7 @@ typedef struct __Crypto_Cfg {
 /// it calls the Crypto* inline wrappers below.
 struct __Crypto_Dev {
 	void       *pDevData;	//!< Private engine data (software ctx, HW handle, or far-side ref for a proxy)
-	const char *pName;		//!< Engine name for trace ("mbedtls", "sdc", "cc3xx", "proxy")
+	const char *pName;		//!< Engine name for trace ("psa", "uecc", "sdc", "cc3xx", "proxy")
 	uint32_t    Cap;		//!< Capability bitmask (CRYPTO_CAP_*), operations only
 	uint32_t    Props;	//!< Provider/context properties (CRYPTO_PROP_*)
 	size_t      KeyCtxSize;	//!< Bytes this engine needs for one per-instance key context in App pMem; 0 if the engine keeps no forwardable key context
@@ -423,7 +425,7 @@ bool RngGet(uint8_t *pBuff, size_t Len);
 // Init returns true on success, false if the engine cannot be brought up or
 // cannot meet pCfg->ReqCaps on this target.
 bool CryptoUeccInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg);		//!< Software ECDH P-256 (micro-ecc)
-bool CryptoMbedtlsInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg);	//!< Software AES+ECDH (mbedTLS); HW-accel via platform mbedTLS
+bool CryptoPsaInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg);	//!< AES+ECDH over the PSA Crypto API (TF-PSA-Crypto, or a platform PSA driver)
 bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg);		//!< Architecture hardware engine; provided by the selected port lib
 bool CryptoInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg);			//!< Config-driven selector over the providers above
 
@@ -503,12 +505,12 @@ CRYPTO_STATUS CryptoHmacSha256(CryptoDev_t * const pDev,
 							   const uint8_t *pMsg, size_t Len, uint8_t Mac[32],
 							   void *pCtx);
 
-// Exact per-instance arena size for the mbedTLS provider on this build, for
-// sizing an App-owned pMem where CRYPTO_MEMSIZE_MBEDTLS would be a guess.
-// Lifecycle: CryptoMbedtlsInit is init-once per pMem. Supply fresh memory that
-// does not already hold an initialized mbedTLS context; in-place reinit over a
+// Exact per-instance arena size for the PSA engine on this build, for
+// sizing an App-owned pMem where CRYPTO_MEMSIZE_PSA would be a guess.
+// Lifecycle: CryptoPsaInit is init-once per pMem. Supply fresh memory that
+// does not already hold an initialized PSA context; in-place reinit over a
 // live context leaks its allocations (there is no Deinit path today).
-size_t CryptoMbedtlsMemSize(void);
+size_t CryptoPsaMemSize(void);
 
 //-----------------------------------------------------------------------------
 // Cryptor: the per-use-case instance, like a motion fusion object over sensors.
@@ -634,25 +636,25 @@ private:
 	uint8_t     vMem[CRYPTO_MEMSIZE_UECC] {};
 };
 
-/// mbedTLS engine object. Owns its per-instance control-struct arena.
-class CryptoMbedtls : public CryptoDevice {
+/// PSA Crypto engine object. Owns its per-instance control-struct arena.
+class CryptoPsa : public CryptoDevice {
 public:
 	bool Init() {
 		CryptoCfg_t c = {};
-		c.Provider = CRYPTO_PROVIDER_MBEDTLS;
+		c.Provider = CRYPTO_PROVIDER_PSA;
 		c.ReqCaps = CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256;
 		c.pMem = vMem; c.MemSize = sizeof(vMem);
-		return CryptoMbedtlsInit(&vDev, &c);
+		return CryptoPsaInit(&vDev, &c);
 	}
 	bool Init(const CryptoCfg_t &Cfg) {
 		CryptoCfg_t c = Cfg;
 		if (c.pMem == nullptr) { c.pMem = vMem; c.MemSize = sizeof(vMem); }
-		return CryptoMbedtlsInit(&vDev, &c);
+		return CryptoPsaInit(&vDev, &c);
 	}
 	operator CryptoDev_t * const () { return &vDev; }
 private:
 	CryptoDev_t vDev {};
-	uint8_t     vMem[CRYPTO_MEMSIZE_MBEDTLS] {};
+	uint8_t     vMem[CRYPTO_MEMSIZE_PSA] {};
 };
 
 /// Use-case instance: references engine(s) and forwards. Pass it where a

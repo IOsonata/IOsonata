@@ -35,14 +35,9 @@ satisfied by nrf_security (CC3xx) or the vanilla mbedtls module.
 
 #include "crypto/crypto.h"
 
-// Platform availability guard (NOT feature selection): this provider needs the
-// mbedTLS headers. On a target whose lib does not ship mbedTLS (e.g. the bare
-// SDC/uECC nRF52832 build) the headers are absent, so the whole file compiles
-// to nothing and CryptoMbedtlsInit returns false there - that target
-// cannot use it regardless. Define CRYPTO_HAS_MBEDTLS to force-require it.
-#if defined(CRYPTO_HAS_MBEDTLS) || \
-	(defined(__has_include) && __has_include("mbedtls/aes.h"))
-
+// This engine is available on a target when this file is added to the MCU lib
+// project. It needs the mbedTLS headers and library; if they do not resolve the
+// build fails and reports it, which is the intended report.
 #include "mbedtls/aes.h"
 #include "mbedtls/ecdh.h"
 #include "mbedtls/ecp.h"
@@ -333,12 +328,3 @@ size_t CryptoMbedtlsMemSize(void)
 	return sizeof(CryptoMbedtlsData_t);
 }
 
-#else  // mbedTLS not available on this target
-
-bool CryptoMbedtlsInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
-{
-	(void)pDev; (void)pCfg;
-	return false;	// mbedTLS not present in this build
-}
-
-#endif // CRYPTO_HAS_MBEDTLS || __has_include("mbedtls/aes.h")

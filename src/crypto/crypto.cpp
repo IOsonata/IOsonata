@@ -13,7 +13,7 @@ This file holds the generic, provider-independent part of the crypto module:
 	several single-capability engines (software ECDH, controller AES).
 
   - Weak fail-closed provider inits. An application links only the providers its
-	target ships (crypto_uecc.cpp, crypto_mbedtls.cpp, a port CryptoHwInit). A
+	target ships (crypto_uecc.cpp, crypto_psa.cpp, a port CryptoHwInit). A
 	reference to a provider that is not linked resolves to the weak definition
 	here, which returns false, so a missing provider fails closed instead of
 	breaking the link. The real provider's strong definition overrides the weak
@@ -29,7 +29,7 @@ collide. The
 arena holds the ECDH private key, the only per-instance secret today; AES is stateless and ignores it. Size the arena with the ECDH engine's
 CRYPTO_MEMSIZE_* macro. The arena must be a plain-byte context that is valid
 when zeroed (the micro-ecc engine, and slot-handle hardware engines). An engine
-whose per-instance context needs structured init (mbedTLS) is composed with
+whose per-instance context needs structured init (PSA) is composed with
 pMem NULL: the Cryptor then forwards NULL and that engine uses its own
 initialized context as a single shared instance.
 
@@ -821,38 +821,29 @@ CRYPTO_STATUS CryptoHmacSha256(CryptoDev_t * const pDev,
 }
 
 //-----------------------------------------------------------------------------
-// Weak fail-closed provider inits. Overridden by the real provider when linked.
+// Provider selection.
+//
+// An engine is available on a target when its source file is added to the MCU
+// lib project, and only then. There is no conditional compilation here and none
+// in the engine files: a linked engine whose dependency is missing is a build
+// error, not a silent stub.
+//
+// Nothing below is declared weak. A weak definition in this object would resolve
+// the call inside this object, the linker would never search the archive, and
+// the engine member would never be extracted: the engine would sit unused in the
+// library while CryptoInit reported that no engine exists.
+//
+// Every lib links exactly one file per engine slot:
+//   hw   : crypto_cc310.cpp   or crypto_hw_none.cpp
+//   psa  : crypto_psa.cpp     or crypto_psa_none.cpp
+//   uecc : crypto_uecc.cpp    or crypto_uecc_none.cpp
 //-----------------------------------------------------------------------------
-
-__attribute__((weak)) bool CryptoUeccInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
-{
-	(void)pDev; (void)pCfg;
-	return false;	// micro-ecc engine not linked
-}
-
-__attribute__((weak)) bool CryptoMbedtlsInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
-{
-	(void)pDev; (void)pCfg;
-	return false;	// mbedTLS engine not linked
-}
-
-__attribute__((weak)) bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
-{
-	(void)pDev; (void)pCfg;
-	return false;	// no hardware engine linked for this target
-}
-
-// Weak: 0 when the mbedTLS provider is not linked. The real provider overrides
-// this with sizeof(CryptoMbedtlsData_t) so an App can size pMem exactly.
-__attribute__((weak)) size_t CryptoMbedtlsMemSize(void)
-{
-	return 0;
-}
 
 // Default selector. AUTO tries hardware first, then software unless the caller
 // set CRYPTO_FLAG_NO_FALLBACK. An explicit Provider selects one directly. Each
-// call resolves to the strong provider init when linked, or the weak false
-// above when not, so an absent provider is simply skipped.
+// call below is an unresolved reference, so the linker extracts the provider
+// member from the archive. A provider whose dependency is absent returns false
+// from its own stub and is simply skipped.
 __attribute__((weak)) bool CryptoInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 {
 	if (pDev == NULL || pCfg == NULL)
@@ -864,8 +855,8 @@ __attribute__((weak)) bool CryptoInit(CryptoDev_t * const pDev, const CryptoCfg_
 	{
 	case CRYPTO_PROVIDER_HW:
 		return CryptoHwInit(pDev, pCfg);
-	case CRYPTO_PROVIDER_MBEDTLS:
-		return CryptoMbedtlsInit(pDev, pCfg);
+	case CRYPTO_PROVIDER_PSA:
+		return CryptoPsaInit(pDev, pCfg);
 	case CRYPTO_PROVIDER_UECC:
 		return CryptoUeccInit(pDev, pCfg);
 	case CRYPTO_PROVIDER_AUTO:
@@ -876,7 +867,7 @@ __attribute__((weak)) bool CryptoInit(CryptoDev_t * const pDev, const CryptoCfg_
 		}
 		if ((pCfg->Flags & CRYPTO_FLAG_NO_FALLBACK) == 0)
 		{
-			if (CryptoMbedtlsInit(pDev, pCfg))
+			if (CryptoPsaInit(pDev, pCfg))
 			{
 				return true;
 			}
@@ -1000,7 +991,7 @@ static bool CryptorBuild(Cryptor_t * const pInst, const CryptoCfg_t *pCfg,
 	// A supplied key arena (pMem) is forwarded to the ECDH engine as its per-
 	// instance key context. That is valid only when the engine key context is
 	// plain zeroable bytes (CRYPTO_PROP_PLAIN_KEYCTX). An engine needing structured
-	// context init (mbedTLS) must be composed with pMem NULL so it uses its own
+	// context init (PSA) must be composed with pMem NULL so it uses its own
 	// initialized context. Fail closed otherwise.
 	if (pCfg->pMem != nullptr)
 	{

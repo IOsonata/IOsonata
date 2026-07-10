@@ -34,9 +34,6 @@ SDC-platform only: guarded on the sdc_hci_cmd_le.h header.
 #include "crypto/crypto.h"
 #include "bluetooth/bt_smp.h"		// declares BtCryptoCtlrSdcInit (C linkage)
 
-#if defined(CRYPTO_HAS_SDC) || \
-	(defined(__has_include) && __has_include("sdc_hci_cmd_le.h"))
-
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_app.h"
 
@@ -97,12 +94,3 @@ bool BtCryptoCtlrSdcInit(CryptoDev_t * const pDev)
 	return true;
 }
 
-#else  // SDC HCI not available on this target
-
-bool BtCryptoCtlrSdcInit(CryptoDev_t * const pDev)
-{
-	(void)pDev;
-	return false;	// SDC controller not present in this build
-}
-
-#endif // CRYPTO_HAS_SDC || __has_include("sdc_hci_cmd_le.h")

@@ -1006,7 +1006,17 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	lescCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
 	lescCfg.pMem     = s_LescEcdhMem;
 	lescCfg.MemSize  = sizeof(s_LescEcdhMem);
-	CryptoInit(&s_LescEcdh, &lescCfg);
+	if (CryptoInit(&s_LescEcdh, &lescCfg))
+	{
+		DEBUG_PRINTF("Crypto ECDH engine: %s\r\n", CryptoName(&s_LescEcdh));
+	}
+	else
+	{
+		// No P-256 engine was linked. LE Secure Connections pairing cannot
+		// run. Report it here rather than at the first pairing attempt.
+		DEBUG_PRINTF("Crypto ECDH engine MISSING, LESC pairing will fail\r\n");
+	}
+
 	BtLescSetCryptoEngine(&s_LescEcdh);
 
 	err_code = pm_init();

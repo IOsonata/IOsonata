@@ -1596,9 +1596,9 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/crypto_cc310.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_mbedtls.cpp</name>
+			<name>src/crypto/crypto_psa_none.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_mbedtls.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_psa_none.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_uecc.cpp</name>

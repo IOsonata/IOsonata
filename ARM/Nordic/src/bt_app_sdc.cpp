@@ -657,7 +657,18 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	ecdhCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
 	ecdhCfg.pMem     = s_CryptoEcdhMem;
 	ecdhCfg.MemSize  = sizeof(s_CryptoEcdhMem);
-	CryptoInit(&s_CryptoEcdh, &ecdhCfg);
+	if (CryptoInit(&s_CryptoEcdh, &ecdhCfg))
+	{
+		DEBUG_PRINTF("Crypto ECDH engine: %s\r\n", CryptoName(&s_CryptoEcdh));
+	}
+	else
+	{
+		// No P-256 engine was linked. LE Secure Connections pairing cannot run:
+		// SmpLocalKeyGen fails and SMP answers every pairing with
+		// BT_SMP_ERR_UNSPECIFIED. Say so here rather than at the first pairing.
+		DEBUG_PRINTF("Crypto ECDH engine MISSING, LESC pairing will fail\r\n");
+	}
+
 	BtCryptoCtlrSdcInit(&s_CryptoAes);
 	BtSmpInit(&s_CryptoEcdh, &s_CryptoAes);
 

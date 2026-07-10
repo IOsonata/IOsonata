@@ -1,21 +1,26 @@
 /**-------------------------------------------------------------------------
 @file	crypto_psa.cpp
 
-@brief	SMP crypto provider: architecture hardware via the PSA Crypto API.
+@brief	Crypto engine: AES-128-ECB and ECDH P-256 over the PSA Crypto API.
 
-		Implements the CryptoHwInit public symbol (CryptoDev_t hardware engine)
-		on top of the ARM PSA Crypto API. This targets Nordic sdk-nrf-bm (the
-		bare-metal SDK, not Zephyr), which ships a PSA Crypto implementation over
-		CRACEN on nRF54L; the stock sdk-nrf-bm nrf_ble_lesc used the same PSA
-		calls. On any platform whose lib provides psa/crypto.h with a hardware
-		driver (e.g. CC3xx), the same source uses that accelerator. The private key stays inside the
-		PSA keystore (a psa_key_id_t handle), so key material never crosses the
-		CryptoDev_t interface and a secure engine can keep it in its own domain.
+		Implements the CryptoPsaInit public symbol on top of the ARM PSA Crypto
+		API. The engine is portable: it calls psa_* only. Which implementation
+		backs it is decided by the MCU lib project.
+
+		  - TF-PSA-Crypto (github.com/Mbed-TLS/TF-PSA-Crypto), software, any
+		    part. This is the crypto half of Mbed TLS 4.x, split out and usable
+		    on its own. The Mbed TLS repository itself is TLS and X.509 and is
+		    not needed here.
+		  - A platform PSA driver: nrf_security over CRACEN on nRF54L, or CC3xx.
+
+		The private key stays inside the PSA keystore (a psa_key_id_t handle),
+		so key material never crosses the CryptoDev_t interface and a secure
+		engine can keep it in its own domain.
 
 		The per-instance key context is a PSA key id plus a valid flag, not
 		plain bytes, so this engine does NOT set CRYPTO_CAP_PLAIN_KEYCTX. A
-		Cryptor composes it with pMem NULL (like the mbedTLS engine) and it then
-		runs on its own single context.
+		Cryptor composes it with pMem NULL and it then runs on its own single
+		context.
 
 		Every hook is SYNCHRONOUS: keygen, ecdh and aes complete in-call. PSA
 		supplies its own DRBG (seeded from the platform TRNG through the PSA
@@ -27,8 +32,12 @@
 		straight through after adding or dropping the 0x04 marker byte. AES ECB
 		is endian-neutral on the block.
 
-		Requires: psa/crypto.h and a linked PSA implementation with a P-256 and
-		AES-128-ECB driver (nrf_security / CRACEN / cc3xx, or mbedTLS PSA).
+		Requires psa/crypto.h and a linked PSA implementation providing P-256
+		and AES-128-ECB. For TF-PSA-Crypto link core/*.c and the needed
+		drivers/builtin/src/*.c, and add include/ and drivers/builtin/include/.
+		Define MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG and implement
+		mbedtls_psa_external_get_random over RngGet, so PSA draws randomness
+		from the target RNG driver instead of its own entropy and DRBG.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -52,8 +61,8 @@ typedef struct {
 	bool         bKeyValid;	// true only while KeyId names a live single-use key
 } CryptoPsaData_t;
 
-static_assert(sizeof(CryptoPsaData_t) <= CRYPTO_MEMSIZE_HW,
-			  "CRYPTO_MEMSIZE_HW too small for CryptoPsaData_t");
+static_assert(sizeof(CryptoPsaData_t) <= CRYPTO_MEMSIZE_PSA,
+			  "CRYPTO_MEMSIZE_PSA too small for CryptoPsaData_t");
 
 // Resolve the key context: the Cryptor-supplied context, else the engine own.
 static inline CryptoPsaData_t *PsaData(CryptoDev_t * const pDev, void *pKeyCtx)
@@ -203,7 +212,7 @@ static CRYPTO_STATUS PsaEcdh(CryptoDev_t * const pDev, void *pKeyCtx,
 	return rc;
 }
 
-bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
+bool CryptoPsaInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 {
 	if (pDev == nullptr || pCfg == nullptr)
 	{
@@ -229,7 +238,7 @@ bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 	pd->bKeyValid = false;
 
 	pDev->pDevData       = pCfg->pMem;
-	pDev->pName          = "psa-hw";
+	pDev->pName          = "psa";
 	pDev->Cap            = CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256;	// structured key ctx: no PLAIN_KEYCTX
 	pDev->KeyCtxSize     = sizeof(CryptoPsaData_t);
 	pDev->Props          = CRYPTO_PROP_HARDWARE | CRYPTO_PROP_SECURE_DOMAIN | CRYPTO_PROP_SYNC;
@@ -241,3 +250,7 @@ bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 	return true;
 }
 
+size_t CryptoPsaMemSize(void)
+{
+	return sizeof(CryptoPsaData_t);
+}

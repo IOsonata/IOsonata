@@ -1516,19 +1516,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_mbedtls.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_mbedtls.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/crypto/crypto_psa.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/crypto_psa.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_psa.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_uecc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_hw_none.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_hw_none.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/display.cpp</name>

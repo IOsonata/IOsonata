@@ -36,19 +36,15 @@
 
 #include "crypto/crypto.h"
 
-// Platform availability guard (NOT feature selection): this provider needs the
-// nRF5 SDK nrf_crypto headers. Where they are absent (sdk-nrf-bm / PSA builds,
-// or a lib without nrf_crypto) the file compiles to nothing and the weak
-// CryptoHwInit in crypto.cpp stays. Define CRYPTO_HAS_NRF_CRYPTO to require it.
+// This engine is available on a target when this file is added to the MCU lib
+// project. It needs the nRF5 SDK nrf_crypto headers; if they do not resolve the
+// build fails and reports it. A lib links exactly one file defining
+// CryptoHwInit: this one, crypto_psa.cpp, or crypto_hw_none.cpp.
 //
 // This engine and crypto_psa.cpp both define CryptoHwInit, so it stays inert
 // whenever PSA is also available: PSA takes precedence (it dispatches to the
 // same CC3xx/CRACEN hardware), and the two files never both emit CryptoHwInit
 // in one build. So both may be added to any Nordic lib without a collision.
-#if (defined(CRYPTO_HAS_NRF_CRYPTO) || \
-	 (defined(__has_include) && __has_include("nrf_crypto.h"))) && \
-	!(defined(CRYPTO_HAS_PSA) || \
-	  (defined(__has_include) && __has_include("psa/crypto.h")))
 #include "nrf_crypto.h"
 
 // Per-instance key context: the nrf_crypto private key object plus a valid flag.
@@ -219,6 +215,3 @@ bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 	return true;
 }
 
-#else	// nrf_crypto absent: leave the weak CryptoHwInit (crypto.cpp) in place.
-
-#endif	// nrf_crypto present and PSA absent

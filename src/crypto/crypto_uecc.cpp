@@ -24,9 +24,6 @@ through with no reversal.
 
 #include "crypto/crypto.h"
 
-#if defined(CRYPTO_HAS_UECC) || \
-	(defined(__has_include) && __has_include("uECC.h"))
-
 #include "uECC.h"
 
 // Per-instance secret state. Lives in App-owned pMem (CryptoCfg_t), reached
@@ -230,12 +227,3 @@ bool CryptoUeccInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 	return true;
 }
 
-#else  // uECC not available on this target
-
-bool CryptoUeccInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
-{
-	(void)pDev; (void)pCfg;
-	return false;	// micro-ecc not present in this build
-}
-
-#endif // CRYPTO_HAS_UECC || __has_include("uECC.h")
