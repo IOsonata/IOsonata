@@ -9,8 +9,16 @@ SoftDevice keeps the SMP state machine and only asks the host for the DH key.
 
 The ECDH is deferred out of the event callback: BtLescOnBleEvt records the peer
 public key, and BtLescRequestHandler, called from the main loop, computes the DH
-key and replies. On failure the reply carries a DHKey-failure status and no key,
+key and replies. On failure the reply reports a DHKey-failure status and no key,
 so the peer's DHKey check fails cleanly rather than the link stalling.
+
+The key pair is single use: every CryptoDev_t engine wipes the private key after
+one ECDH. A fresh pair is generated on BLE_GAP_EVT_AUTH_STATUS, deferred to
+BtLescRequestHandler like the ECDH itself. Regeneration invalidates the local
+OOB data set; the application must generate and deliver a new OOB set before the
+next OOB pairing. One consequence of the single use key: only one LESC pairing
+can be in flight at a time; a second link pairing concurrently fails its DHKey
+check and can retry once the first completes.
 
 Byte order: the SoftDevice holds keys little-endian per coordinate; CryptoDev_t
 works big-endian. ByteOrderInvert reverses each 32 byte coordinate.
@@ -54,6 +62,7 @@ static ble_gap_lesc_dhkey_t		s_LescDhKey __attribute__((aligned(4)));
 
 static bool				s_bInternalError;
 static bool				s_bKeyPairGen;
+static bool				s_bRegenPending;
 static BtLescPeerKey_t	s_PeerKeys[LESC_MAX_LINK];
 
 static bool						s_bOobLocalGen;
@@ -162,6 +171,7 @@ bool BtLescInit(void)
 
 	s_bInternalError = false;
 	s_bKeyPairGen = false;
+	s_bRegenPending = false;
 
 	return BtLescKeyPairGen();
 }
@@ -281,6 +291,30 @@ bool BtLescRequestHandler(void)
 		}
 	}
 
+	if (s_bRegenPending)
+	{
+		// A DHKey request that arrived during the loop above still needs the
+		// current key pair; regenerate on the next pass instead.
+		for (int i = 0; i < LinkCount(); i++)
+		{
+			if (s_PeerKeys[i].bRequested)
+			{
+				return true;
+			}
+		}
+
+		if (!BtLescKeyPairGen())
+		{
+			// Nothing is pending, so this is an engine failure, not the
+			// regenerate-while-busy guard.
+			LESC_TRACE("LESC keypair regenerate failed\r\n");
+			s_bInternalError = true;
+			return false;
+		}
+
+		s_bRegenPending = false;
+	}
+
 	return true;
 }
 
@@ -342,6 +376,14 @@ void BtLescOnBleEvt(const ble_evt_t * pEvt)
 		}
 
 		OnDhKeyRequest(connHdl, &pEvt->evt.gap_evt.params.lesc_dhkey_request);
+		break;
+
+	case BLE_GAP_EVT_AUTH_STATUS:
+		// Pairing ended, with or without success. The engine wiped the private
+		// key after the ECDH, so a fresh pair is needed for the next pairing.
+		// Defer to BtLescRequestHandler; key generation must not run in the
+		// stack callback context.
+		s_bRegenPending = true;
 		break;
 
 	default:

@@ -908,9 +908,11 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 	ble_gap_evt_t const * p_gap_evt = &p_ble_evt->evt.gap_evt;
 	uint16_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 
-	// Let the LESC module observe events (it handles the DHKey request and
-	// replies to the SoftDevice; the heavy ECDH runs in nrf_ble_lesc_request_handler).
-	nrf_ble_lesc_on_ble_evt(p_ble_evt);
+	// The LESC module receives BLE events through the peer_manager path:
+	// security_manager forwards every event to nrf_ble_lesc_on_ble_evt when
+	// PM_LESC_ENABLED is set. Calling it here as well would deliver each event
+	// twice and run sd_ble_gap_lesc_oob_data_set twice on an OOB DHKey
+	// request, which latches the module internal error.
 
 	// Trace security-relevant GAP events to diagnose the pairing flow.
 	switch (p_ble_evt->header.evt_id)
@@ -1203,7 +1205,34 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
     ble_gap_sec_params_t sec_param;
     ret_code_t           err_code;
 
+    // Select the ECDH engine and inject it before pm_init: pm_init runs
+    // sm_init, which calls nrf_ble_lesc_init() with no arguments, so the
+    // engine must already be in place or pm_init fails with
+    // NRF_ERROR_INTERNAL. CryptoInit(AUTO) picks the hardware engine when
+    // linked (CC310 on nRF52840) and falls back to software uECC otherwise.
+    // The App owns the CryptoDev_t, the same model as the SDC pairing path in
+    // bt_app_sdc.cpp. The module owns the key pair, handles the LESC DHKey
+    // request and replies to the SoftDevice; the app only pumps
+    // nrf_ble_lesc_request_handler in the main loop.
+    static CryptoDev_t s_LescEcdh;
+    static uint8_t     s_LescEcdhMem[CRYPTO_MEMSIZE_ECDH];
+    CryptoCfg_t lescCfg = { };
+    lescCfg.Provider = CRYPTO_PROVIDER_AUTO;
+    lescCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
+    lescCfg.pMem     = s_LescEcdhMem;
+    lescCfg.MemSize  = sizeof(s_LescEcdhMem);
+    if (CryptoInit(&s_LescEcdh, &lescCfg))
+    {
+        DEBUG_PRINTF("Crypto ECDH engine: %s\r\n", CryptoName(&s_LescEcdh));
+    }
+    else
+    {
+        DEBUG_PRINTF("Crypto ECDH engine MISSING, LESC pairing will fail\r\n");
+    }
+    BtLescSetCryptoEngine(&s_LescEcdh);
+
     err_code = pm_init();
+    DEBUG_PRINTF("SEC: pm_init=0x%X\r\n", err_code);
     APP_ERROR_CHECK(err_code);
 
     if (bEraseBond)
@@ -1282,36 +1311,6 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
 
     err_code = pm_register(pm_evt_handler);
     DEBUG_PRINTF("SEC: pm_register=0x%X\r\n", err_code);
-    APP_ERROR_CHECK(err_code);
-
-    // Initialise the LESC module. This sets up nrf_crypto (mbedTLS implementation on
-    // this target provides the secp256r1 ECDH) and generates the local ECDH key
-    // pair. The module owns the key pair, handles the LESC DHKey request, and
-    // replies to the SoftDevice; the app only routes BLE events to
-    // nrf_ble_lesc_on_ble_evt and pumps nrf_ble_lesc_request_handler in the loop.
-    // Select the ECDH engine and inject it before the LESC module initialises.
-    // CryptoInit(AUTO) picks the hardware engine when linked (CC310 on nRF52840)
-    // and falls back to software uECC otherwise. The App owns the CryptoDev_t,
-    // the same model as the SDC pairing path in bt_app_sdc.cpp.
-    static CryptoDev_t s_LescEcdh;
-    static uint8_t     s_LescEcdhMem[CRYPTO_MEMSIZE_ECDH];
-    CryptoCfg_t lescCfg = { };
-    lescCfg.Provider = CRYPTO_PROVIDER_AUTO;
-    lescCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
-    lescCfg.pMem     = s_LescEcdhMem;
-    lescCfg.MemSize  = sizeof(s_LescEcdhMem);
-    if (CryptoInit(&s_LescEcdh, &lescCfg))
-    {
-        DEBUG_PRINTF("Crypto ECDH engine: %s\r\n", CryptoName(&s_LescEcdh));
-    }
-    else
-    {
-        DEBUG_PRINTF("Crypto ECDH engine MISSING, LESC pairing will fail\r\n");
-    }
-    BtLescSetCryptoEngine(&s_LescEcdh);
-
-    err_code = nrf_ble_lesc_init();
-    DEBUG_PRINTF("SEC: nrf_ble_lesc_init=0x%X\r\n", err_code);
     APP_ERROR_CHECK(err_code);
 
 	// Route the staged peer OOB data into the pairing when the SoftDevice
@@ -2010,13 +2009,29 @@ __attribute__ ((used)) static uint32_t s_pnrf_hw_backend_info = (uint32_t)&nrf_h
 
 //
 // bt_lesc port hooks. The s132 SoftDevice sd_ble_gap_lesc_dhkey_reply takes no
-// security status: a NULL DH key already signals failure to the peer. The
-// peer-key table is sized from the SoftDevice link configuration.
+// security status and requires a valid key pointer: a NULL key returns
+// NRF_ERROR_INVALID_ADDR and the DHKey request stays unanswered until the SMP
+// transaction timeout. On failure reply with a random key instead, so the
+// pairing fails cleanly at the peer DHKey check, the same way the SDK
+// nrf_ble_lesc does. The peer-key table is sized from the SoftDevice link
+// configuration.
 //
 extern "C" uint32_t BtLescDhKeyReply(uint16_t ConnHdl, uint8_t SecStatus,
 									 const ble_gap_lesc_dhkey_t *pDhKey)
 {
 	(void)SecStatus;
+
+	if (pDhKey == NULL)
+	{
+		// Deliberately wrong DH key: any value that differs from the real ECDH
+		// result fails the peer DHKey check. If RngGet fails the zero filled
+		// key is still wrong, so reply regardless.
+		static ble_gap_lesc_dhkey_t s_BadDhKey;
+
+		(void)RngGet(s_BadDhKey.key, BLE_GAP_LESC_DHKEY_LEN);
+		pDhKey = &s_BadDhKey;
+	}
+
 	return sd_ble_gap_lesc_dhkey_reply(ConnHdl, pDhKey);
 }
 

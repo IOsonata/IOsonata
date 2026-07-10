@@ -50,6 +50,11 @@ SOFTWARE.
 
 #include "nrf.h"
 
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+#include "nrf_sdm.h"
+#include "nrf_soc.h"
+#endif
+
 #include "crypto/crypto.h"
 
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
@@ -109,6 +114,47 @@ bool RngGet(uint8_t *pBuff, size_t Len)
   #endif
  #else
 	NRF_RNG_Type *reg = NRF_RNG;
+ #endif
+
+ #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	// While the SoftDevice is enabled the RNG peripheral is SoftDevice owned;
+	// direct register access asserts the stack. Draw from the SoftDevice
+	// entropy pool instead. The pool refills at a finite rate, so take what is
+	// available and wait for more until the request is filled.
+	uint8_t sdEnabled = 0;
+
+	(void)sd_softdevice_is_enabled(&sdEnabled);
+
+	if (sdEnabled)
+	{
+		size_t idx = 0;
+
+		while (idx < Len)
+		{
+			uint8_t avail = 0;
+
+			(void)sd_rand_application_bytes_available_get(&avail);
+
+			if (avail == 0)
+			{
+				continue;
+			}
+
+			size_t n = Len - idx;
+
+			if (n > avail)
+			{
+				n = avail;
+			}
+
+			if (sd_rand_application_vector_get(&pBuff[idx], (uint8_t)n) == NRF_SUCCESS)
+			{
+				idx += n;
+			}
+		}
+
+		return true;
+	}
  #endif
 
 	// Enable bias correction so the byte stream is unbiased.
