@@ -66,7 +66,7 @@ SOFTWARE.
 
 // Injection point for the LESC crypto engine (defined in the IOsonata
 // nrf_ble_lesc replacement). The App owns the CryptoDev_t and passes it in.
-extern "C" void BtLescSetCryptoEngine(CryptoDev_t *pDev);
+#include "bt_lesc.h"
 #include "nrfx_cracen.h"
 #include "nrf_soc.h"
 
@@ -1740,4 +1740,17 @@ bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CccdHandle)
 	return sd_ble_gattc_write(ConnHandle, &write_params) == NRF_SUCCESS;
 }
 
+//
+// bt_lesc port hooks. sdk-nrf-bm's sd_ble_gap_lesc_dhkey_reply takes a security
+// status; the peer-key table is sized from the configured link count.
+//
+extern "C" uint32_t BtLescDhKeyReply(uint16_t ConnHdl, uint8_t SecStatus,
+									 const ble_gap_lesc_dhkey_t *pDhKey)
+{
+	return sd_ble_gap_lesc_dhkey_reply(ConnHdl, SecStatus, pDhKey);
+}
 
+extern "C" int BtLescLinkCount(void)
+{
+	return CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT;
+}

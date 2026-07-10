@@ -76,6 +76,8 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "bluetooth/bt_uuid.h"
+#include "crypto/crypto.h"
+#include "bt_lesc.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_gatt.h"
@@ -1287,6 +1289,27 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
     // pair. The module owns the key pair, handles the LESC DHKey request, and
     // replies to the SoftDevice; the app only routes BLE events to
     // nrf_ble_lesc_on_ble_evt and pumps nrf_ble_lesc_request_handler in the loop.
+    // Select the ECDH engine and inject it before the LESC module initialises.
+    // CryptoInit(AUTO) picks the hardware engine when linked (CC310 on nRF52840)
+    // and falls back to software uECC otherwise. The App owns the CryptoDev_t,
+    // the same model as the SDC pairing path in bt_app_sdc.cpp.
+    static CryptoDev_t s_LescEcdh;
+    static uint8_t     s_LescEcdhMem[CRYPTO_MEMSIZE_ECDH];
+    CryptoCfg_t lescCfg = { };
+    lescCfg.Provider = CRYPTO_PROVIDER_AUTO;
+    lescCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
+    lescCfg.pMem     = s_LescEcdhMem;
+    lescCfg.MemSize  = sizeof(s_LescEcdhMem);
+    if (CryptoInit(&s_LescEcdh, &lescCfg))
+    {
+        DEBUG_PRINTF("Crypto ECDH engine: %s\r\n", CryptoName(&s_LescEcdh));
+    }
+    else
+    {
+        DEBUG_PRINTF("Crypto ECDH engine MISSING, LESC pairing will fail\r\n");
+    }
+    BtLescSetCryptoEngine(&s_LescEcdh);
+
     err_code = nrf_ble_lesc_init();
     DEBUG_PRINTF("SEC: nrf_ble_lesc_init=0x%X\r\n", err_code);
     APP_ERROR_CHECK(err_code);
@@ -1985,3 +2008,19 @@ __attribute__ ((used)) static uint32_t s_pnrf_hw_backend_info = (uint32_t)&nrf_h
 #endif
 #endif
 
+//
+// bt_lesc port hooks. The s132 SoftDevice sd_ble_gap_lesc_dhkey_reply takes no
+// security status: a NULL DH key already signals failure to the peer. The
+// peer-key table is sized from the SoftDevice link configuration.
+//
+extern "C" uint32_t BtLescDhKeyReply(uint16_t ConnHdl, uint8_t SecStatus,
+									 const ble_gap_lesc_dhkey_t *pDhKey)
+{
+	(void)SecStatus;
+	return sd_ble_gap_lesc_dhkey_reply(ConnHdl, pDhKey);
+}
+
+extern "C" int BtLescLinkCount(void)
+{
+	return NRF_SDH_BLE_PERIPHERAL_LINK_COUNT + NRF_SDH_BLE_CENTRAL_LINK_COUNT;
+}

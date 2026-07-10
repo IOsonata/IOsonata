@@ -77,7 +77,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BLE_SC_OOB				5
 
 #ifndef BLE_SC_METHOD
-#define BLE_SC_METHOD			BLE_SC_OOB
+#define BLE_SC_METHOD			BLE_SC_NUMCOMP
 #endif
 
 #if BLE_SC_METHOD != BLE_SC_NONE
@@ -820,7 +820,7 @@ int main()
 {
 	HardwareInit();
 
-    g_Uart.printf("UART over BLE Demo\r\n");
+    g_Uart.printf("UART over BLE\r\n");
     g_Uart.printf("security    : %s\r\n", BLE_SC_NAME);
 
     //g_Uart.Disable();
