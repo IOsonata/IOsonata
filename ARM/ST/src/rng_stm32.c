@@ -26,7 +26,7 @@
 #include <string.h>
 
 #include "stm32.h"
-#include "coredev/rng.h"
+#include "crypto/crypto.h"
 
 #ifndef RNG_STM32_TIMEOUT
 #define RNG_STM32_TIMEOUT			1000000U

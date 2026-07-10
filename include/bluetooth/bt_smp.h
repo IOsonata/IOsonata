@@ -399,9 +399,9 @@ void BtSmpTimeoutCheck(void);
  * engine lacking it leaves that slot disabled and the corresponding operation
  * fails loud. The same engine pointer may be passed for both slots.
  *
- * Randomness is NOT a slot: it comes from the target RngGet utility
- * (coredev/rng.h) - hardware where the MCU has an RNG peripheral, weak software
- * default otherwise - which SMP calls directly.
+ * Randomness is NOT a slot: it comes from the target RngGet driver
+ * (crypto/crypto.h), backed by the MCU RNG peripheral, which SMP calls directly.
+ * A target without an RNG peripheral does not link.
  *
  * @param	pEcdh	Engine providing CRYPTO_CAP_ECDH_P256.
  * @param	pAes	Engine providing CRYPTO_CAP_AES128_ECB.

@@ -5,7 +5,7 @@
 
 Generic software crypto engine implementing the ECDH capability of CryptoDev_t
 via micro-ecc. ECDH only - no symmetric cipher. uECC needs random bytes for key
-generation and obtains them from the coredev RngGet service (coredev/rng.h);
+generation and obtains them from the RngGet driver (crypto/crypto.h);
 RNG is not a crypto engine or capability.
 
 Like a sensor that supports only one axis-type, this engine advertises only
@@ -23,7 +23,6 @@ through with no reversal.
 #include <string.h>
 
 #include "crypto/crypto.h"
-#include "coredev/rng.h"
 
 #if defined(CRYPTO_HAS_UECC) || \
 	(defined(__has_include) && __has_include("uECC.h"))
@@ -50,7 +49,7 @@ static inline CryptoUeccData_t *UeccData(CryptoDev_t * const pDev, void *pKeyCtx
 
 // RNG source for uECC. micro-ecc requires an RNG before key generation; it is
 // not part of this engine. The application (or the composing consumer) provides
-// one - typically the platform hardware RNG (RngGet), declared in coredev/rng.h.
+// one - the platform hardware RNG (RngGet), declared in crypto/crypto.h.
 
 static int UeccRngAdapter(uint8_t *pDest, unsigned Size)
 {

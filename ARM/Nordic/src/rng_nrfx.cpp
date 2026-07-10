@@ -3,10 +3,10 @@
 
 @brief	Random number generator implementation on Nordic nRF series.
 
-		Provides the strong (hardware-backed) RngInit/RngGet that overrides the
-		__weak software default in coredev/rng.cpp. Any code that calls RngGet
-		(crypto engines for key generation, SMP, etc.) gets hardware entropy
-		through this implementation, with no knowledge of the underlying engine.
+		Provides the RngInit/RngGet declared in crypto/crypto.h. There is no
+		software default: a part without an RNG peripheral does not link. Any
+		code that calls RngGet (crypto engines for key generation, SMP, etc.)
+		gets hardware entropy here, with no knowledge of the underlying engine.
 
 		Two hardware paths:
 		- nRF54L / nRF54H: CRACEN. Random is taken from the NIST SP800-90A
@@ -50,7 +50,7 @@ SOFTWARE.
 
 #include "nrf.h"
 
-#include "coredev/rng.h"
+#include "crypto/crypto.h"
 
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #include "nrfx_cracen.h"

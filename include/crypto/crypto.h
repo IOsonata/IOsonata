@@ -65,7 +65,7 @@ typedef enum __Crypto_Status {
 /// Capability bits. A consumer checks these (CryptoIsCapable) before relying on
 /// an operation. The set grows as consumers need more primitives; today the
 /// SMP consumer needs AES-128 ECB and P-256 ECDH. RNG is not a crypto
-/// capability: it is a coredev service (coredev/rng.h) that crypto engines call.
+/// capability: it is a target driver (RngGet, declared below) that engines call.
 #define CRYPTO_CAP_AES128_ECB		(1U << 0)	//!< Single-block AES-128 ECB encrypt
 #define CRYPTO_CAP_ECDH_P256		(1U << 1)	//!< P-256 key generation + ECDH
 #define CRYPTO_CAP_AES_CMAC			(1U << 3)	//!< AES-CMAC (RFC 4493); available on any AES-128 ECB engine
@@ -366,6 +366,55 @@ static inline int CryptoSelfTest(CryptoDev_t * const pDev) {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+//-----------------------------------------------------------------------------
+// Cryptographic random bit generator.
+//
+// Source of random bits for key material: SMP pairing nonces, IRK, CSRK,
+// passkeys, ECDH scalars and the seeding of the crypto engines. RngGet returns
+// bits that an adversary cannot predict or reproduce. NIST calls this a random
+// bit generator (RBG): either an entropy source feeding a deterministic
+// generator (SP 800-90A/B/C), or a hardware block providing both. The Bluetooth
+// core specification (Vol 2, Part H, section 2) requires a generator compliant
+// with FIPS PUB 140-2 or a later update, and the Security Manager (Vol 3,
+// Part H) refers back to it.
+//
+// The implementation is a per-MCU driver over the RNG peripheral, for example
+// rng_nrfx.cpp on Nordic (legacy RNG block, or CRACEN on nRF54) and rng_stm32.c
+// on ST. There is no generic software default, on purpose. Software alone
+// cannot produce an RBG: a deterministic generator stretches entropy, it never
+// creates it, and entropy comes from physical noise that only the target has. A
+// software fallback would compile on any part and hand every device the same
+// key. A target without an RNG peripheral must supply its own driver, or the
+// link fails and names the missing symbol.
+//
+// Statistical randomness (test patterns, dithering, back-off delays) is a
+// different service with opposite requirements. Use the C library directly:
+// rand_r with a caller owned seed. Never use RngGet for it, and never use the C
+// library for key material.
+//-----------------------------------------------------------------------------
+
+/**
+ * @brief	Initialise the RNG peripheral.
+ *
+ * The drivers seed on first use, so an explicit call is not required.
+ *
+ * @return	true on success.
+ */
+bool RngInit(void);
+
+/**
+ * @brief	Fill a buffer with cryptographically strong random bytes.
+ *
+ * Suitable for key material. A caller on a security path must check the result
+ * and abort on failure rather than proceed with the buffer contents.
+ *
+ * @param	pBuff	Destination buffer.
+ * @param	Len		Number of bytes.
+ *
+ * @return	true on success.
+ */
+bool RngGet(uint8_t *pBuff, size_t Len);
 
 // Engine providers fill a CryptoDev_t. Public names are provider-class, never
 // target-specific: a port implements CryptoHwInit for its architecture (CRACEN,

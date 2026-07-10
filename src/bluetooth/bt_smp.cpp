@@ -48,7 +48,6 @@ SOFTWARE.
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_gatt.h"
 #include "crypto/crypto.h"
-#include "coredev/rng.h"
 
 // SMP handshake trace. Define BT_SMP_TRACE_ENABLE to 1 to print every SMP PDU
 // in/out and the link state over SysLog. Defaults off for release and library
@@ -2447,7 +2446,7 @@ int BtSmpCryptoEcdh(BtHciDevice_t * const pDev,
 
 void BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
 {
-	// RNG is a target utility (coredev/rng.h), not a crypto engine: hardware
+	// RNG is a target driver (crypto/crypto.h), not a crypto engine: hardware
 	// where the MCU has an RNG peripheral, weak software default otherwise.
 	RngGet(pBuf, Len);
 }

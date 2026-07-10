@@ -19,7 +19,7 @@ works with any HCI controller; the SDC dispatch maps it to the typed wrapper.
 It advertises CRYPTO_CAP_AES128_ECB only; no ECDH (the controller has no LE ECDH
 commands), so it composes with an ECDH engine (CryptoUeccInit) to cover the ECDH
 capability the controller lacks. Random bytes are a coredev service
-(coredev/rng.h), not a crypto capability, so this adapter no longer provides RNG;
+(crypto/crypto.h), not a crypto capability, so this adapter no longer provides RNG;
 a target that uses the controller for entropy wires LE Rand into RngGet.
 
 SDC-platform only: guarded on the sdc_hci_cmd_le.h header.

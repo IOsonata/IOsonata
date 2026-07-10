@@ -54,7 +54,7 @@ SOFTWARE.
 #include "bluetooth/bt_hci_ctlr.h"
 #include "bluetooth/bt_gap.h"
 #include "coredev/system_core_clock.h"
-#include "coredev/rng.h"
+#include "crypto/crypto.h"
 
 #if 0
 /******** For DEBUG ************/
@@ -236,11 +236,11 @@ static void BtStackSdcAssert(const char * file, const uint32_t line)
 }
 
 // Controller entropy source. RngGet is the hardware-backed RNG abstraction in
-// coredev/rng.h: CRACEN CTR-DRBG (seeded from the CRACEN TRNG) on nRF54L/H, the
-// NRF_RNG peripheral on nRF52/53/91. Routing every priority through it removes
+// crypto/crypto.h: CRACEN CTR-DRBG (seeded from the CRACEN TRNG) on nRF54L/H,
+// the NRF_RNG peripheral on nRF52/53/91. Routing every priority through it removes
 // the libc rand path so BLE pairing, SMP, OOB and key material never draw from
-// a software PRNG. The build must link the nrfx RngGet (rng_nrfx.c); the weak
-// software default in coredev/rng.c is not for security use.
+// a software PRNG. The build must link the nrfx RngGet (rng_nrfx.cpp); there is no
+// software default, a part without an RNG peripheral does not link.
 static uint8_t BtStackRandPrioLowGet(uint8_t *pBuff, uint8_t Len)
 {
 	DEBUG_PRINTF("BtStackRandPrioLowGet\r\n");

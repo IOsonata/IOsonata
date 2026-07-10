@@ -34,7 +34,6 @@ satisfied by nrf_security (CC3xx) or the vanilla mbedtls module.
 #include <string.h>
 
 #include "crypto/crypto.h"
-#include "coredev/rng.h"
 
 // Platform availability guard (NOT feature selection): this provider needs the
 // mbedTLS headers. On a target whose lib does not ship mbedTLS (e.g. the bare
