@@ -2446,8 +2446,8 @@ int BtSmpCryptoEcdh(BtHciDevice_t * const pDev,
 
 void BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
 {
-	// RNG is a target driver (crypto/crypto.h), not a crypto engine: hardware
-	// where the MCU has an RNG peripheral, weak software default otherwise.
+	// RNG is a target driver (crypto/crypto.h), not a crypto engine. It is
+	// backed by the MCU RNG peripheral; there is no software default.
 	RngGet(pBuf, Len);
 }
 

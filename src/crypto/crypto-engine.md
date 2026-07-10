@@ -116,12 +116,12 @@ consumer is curve-blind and key-blind:
   set the property and is composed with `pMem` NULL. Properties live in
   `Dev.Props`, separate from the operation `Cap`, so nothing is masked out of
   the `Cap` the consumer sees.
-- **Strong RNG required**: RNG is a coredev service (`coredev/rng.h`), not a
-  crypto capability. The P-256 engines call the platform `RngGet` for key
-  generation. The default `RngGet` is weak software randomness for non-security
-  and test use; a target whose `RngGet` is not backed by a hardware TRNG must
-  not run Secure Connections pairing, and must never use the software default
-  for key generation.
+- **Strong RNG required**: RNG is a target driver declared in `crypto/crypto.h`,
+  not a crypto capability. The P-256 engines call `RngGet` for key generation.
+  There is no software default: `RngGet` is implemented by the per-MCU driver
+  over the RNG peripheral, and a part without one does not link. Statistical
+  randomness for test and non-security use comes from the C library `rand_r`,
+  never from `RngGet`, and never the reverse.
 
 ## Engines
 
