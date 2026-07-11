@@ -150,6 +150,7 @@ $repos = @{
     "https://github.com/lvgl/lvgl.git" = "lvgl"
     "https://github.com/lwip-tcpip/lwip.git" = "lwip"
     "https://github.com/hathach/tinyusb.git" = "tinyusb"
+    "https://github.com/Mbed-TLS/TF-PSA-Crypto.git" = "TF-PSA-Crypto"
 }
 
 foreach ($repo in $repos.GetEnumerator()) {

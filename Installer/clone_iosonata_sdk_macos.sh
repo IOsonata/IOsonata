@@ -179,6 +179,7 @@ repos=(
   "https://github.com/lvgl/lvgl.git"
   "https://github.com/lwip-tcpip/lwip.git"
   "https://github.com/hathach/tinyusb.git"
+  "https://github.com/Mbed-TLS/TF-PSA-Crypto.git"
 )
 
 for repo in "${repos[@]}"; do
