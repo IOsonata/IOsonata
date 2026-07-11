@@ -26,6 +26,13 @@ through with no reversal.
 
 #include "uECC.h"
 
+// This engine requires the uECC default byte order (big-endian), matching the
+// crypto.h interface. A micro-ecc build with native little-endian arrays
+// silently breaks every key and DH value, so refuse it at compile time.
+#if defined(uECC_VLI_NATIVE_LITTLE_ENDIAN) && uECC_VLI_NATIVE_LITTLE_ENDIAN
+#error "crypto_uecc requires the uECC default (big-endian) build; remove uECC_VLI_NATIVE_LITTLE_ENDIAN=1 from the project defines"
+#endif
+
 // Per-instance secret state. Lives in App-owned pMem (CryptoCfg_t), reached
 // via pDev->pDevData, or via pKeyCtx when a Cryptor shares one engine across
 // instances. No file-static key: each instance is independent.
