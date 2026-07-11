@@ -46,6 +46,7 @@
 #include "ble_err.h"
 #include "ble_hci.h"
 #include "ble_conn_state.h"
+#include "nrf_sdh_ble.h"			// NRF_SDH_BLE_TOTAL_LINK_COUNT
 
 #include "security_manager.h"		// the sm_* API this module implements
 #include "security_dispatcher.h"	// smd_init, called by pm_init; the rest of
@@ -77,12 +78,36 @@ typedef struct {
 static bool                          s_bInit;
 static ble_gap_sec_params_t          s_SecParams;			// default sec params buffer
 static ble_gap_sec_params_t         *s_pSecParams;			// NULL until sm_sec_params_set
-static bool                          s_bSecParamsSet;
 
-// Static peer public key receive buffer for the keyset (LESC). The value is
-// fed to the bt_lesc module by the SoftDevice DHKey request event, so this
-// buffer only needs to exist for the SoftDevice to fill.
-static ble_gap_lesc_p256_pk_t        s_PeerPk;
+// Per-connection state, indexed by connection handle (SoftDevice handles are
+// 0 .. NRF_SDH_BLE_TOTAL_LINK_COUNT-1). PeerPk is the LESC peer public key
+// receive buffer for the keyset: per link, so concurrent pairings cannot
+// overwrite each other (the SDK dispatcher shares one static buffer here).
+// The pending reply record preserves the exact application answer, including
+// a rejection, across an NRF_ERROR_BUSY retry; the SDK loses it and re-asks.
+typedef struct {
+	ble_gap_lesc_p256_pk_t PeerPk;			// SoftDevice writes the peer key here
+	ble_gap_sec_params_t   ReplyParams;		// pending reply parameters
+	bool                   bReplyValid;		// a reply is pending retry
+	bool                   bReplyReject;	// the pending reply is a rejection
+} BtSecSdLink_t;
+
+static BtSecSdLink_t s_Links[NRF_SDH_BLE_TOTAL_LINK_COUNT];
+
+static inline BtSecSdLink_t *LinkGet(uint16_t ConnHdl)
+{
+	return (ConnHdl < NRF_SDH_BLE_TOTAL_LINK_COUNT) ? &s_Links[ConnHdl] : nullptr;
+}
+
+static void LinkReplyClear(uint16_t ConnHdl)
+{
+	BtSecSdLink_t *pLink = LinkGet(ConnHdl);
+	if (pLink != nullptr)
+	{
+		pLink->bReplyValid  = false;
+		pLink->bReplyReject = false;
+	}
+}
 
 // Procedure bookkeeping and retry flags, one bit per connection.
 static ble_conn_state_user_flag_id_t s_FlagSecProc          = BLE_CONN_STATE_USER_FLAG_INVALID;
@@ -201,7 +226,13 @@ static ret_code_t SecKeysetFill(uint16_t ConnHdl, uint8_t Role,
 	pKeyset->keys_own.p_pk       = BtLescPubKeyGet();
 	pKeyset->keys_peer.p_enc_key = &peerData.p_bonding_data->peer_ltk;
 	pKeyset->keys_peer.p_id_key  = &peerData.p_bonding_data->peer_ble_id;
-	pKeyset->keys_peer.p_pk      = &s_PeerPk;
+
+	BtSecSdLink_t *pLink = LinkGet(ConnHdl);
+	if (pLink == nullptr)
+	{
+		return NRF_ERROR_INVALID_STATE;
+	}
+	pKeyset->keys_peer.p_pk      = &pLink->PeerPk;
 
 	// The address the peer used at connection establishment; overwritten by
 	// the identity if the peer distributes one.
@@ -274,6 +305,33 @@ static ret_code_t ParamsReplyPerform(uint16_t ConnHdl, ble_gap_sec_params_t *pSe
 	return r;
 }
 
+// Perform a reply and keep the exact answer, including a rejection, for the
+// BUSY retry. On a terminal result the pending record is cleared.
+static ret_code_t ReplyAttempt(uint16_t ConnHdl, ble_gap_sec_params_t *pSecParams)
+{
+	ret_code_t r = ParamsReplyPerform(ConnHdl, pSecParams);
+	BtSecSdLink_t *pLink = LinkGet(ConnHdl);
+
+	if (pLink != nullptr)
+	{
+		if (r == NRF_ERROR_BUSY)
+		{
+			pLink->bReplyReject = (pSecParams == NULL);
+			if (pSecParams != NULL)
+			{
+				pLink->ReplyParams = *pSecParams;
+			}
+			pLink->bReplyValid = true;
+		}
+		else
+		{
+			pLink->bReplyValid  = false;
+			pLink->bReplyReject = false;
+		}
+	}
+	return r;
+}
+
 // PM_EVT_CONN_SEC_PARAMS_REQ handling: emit the event with a reply context; if
 // the application does not answer within its handler through
 // sm_sec_params_reply, reply with the context (default) parameters.
@@ -291,7 +349,7 @@ static void ParamsRequestProcess(uint16_t ConnHdl, const ble_gap_sec_params_t *p
 
 	if (!ctx.bReplyCalled)
 	{
-		ret_code_t r = ParamsReplyPerform(ConnHdl, ctx.pSecParams);
+		ret_code_t r = ReplyAttempt(ConnHdl, ctx.pSecParams);
 		if (r != NRF_SUCCESS && r != NRF_ERROR_BUSY)
 		{
 			UnexpectedErrorSend(ConnHdl, r);
@@ -568,8 +626,17 @@ static void AuthStatusSuccessProcess(const ble_gap_evt_t *pGapEvt)
 		peerId = im_find_duplicate_bonding_data(peerData.p_bonding_data, PM_PEER_ID_INVALID);
 		if (peerId != PM_PEER_ID_INVALID)
 		{
-			// Known identity re-pairing. Ask the application unless a
-			// decision was already made for this procedure; default deny.
+			// Known identity re-pairing. Map the connection to the existing
+			// peer first (the SDK does), so peer lookups work even when the
+			// application denies. Then ask unless a decision was already made
+			// for this procedure; default deny. On deny the old bond record is
+			// kept, and the live link stays encrypted with the newly
+			// negotiated key until the application disconnects: the SMP
+			// exchange completed inside the SoftDevice before the peer
+			// identity could be known, so denial after the fact is the only
+			// option this stack offers, matching the SDK.
+			im_new_peer_id(connHdl, peerId);
+
 			if (!ble_conn_state_user_flag_get(connHdl, s_FlagAllowRepairing))
 			{
 				pm_evt_t evt = NewEvt(PM_EVT_CONN_SEC_CONFIG_REQ, connHdl);
@@ -585,7 +652,6 @@ static void AuthStatusSuccessProcess(const ble_gap_evt_t *pGapEvt)
 					return;
 				}
 			}
-			im_new_peer_id(connHdl, peerId);
 		}
 	}
 
@@ -619,6 +685,8 @@ static void AuthStatusSuccessProcess(const ble_gap_evt_t *pGapEvt)
 
 static void AuthStatusProcess(const ble_gap_evt_t *pGapEvt)
 {
+	LinkReplyClear(pGapEvt->conn_handle);
+
 	if (pGapEvt->params.auth_status.auth_status == BLE_GAP_SEC_STATUS_SUCCESS)
 	{
 		AuthStatusSuccessProcess(pGapEvt);
@@ -665,6 +733,7 @@ static void DisconnectProcess(const ble_gap_evt_t *pGapEvt)
 		PM_CONN_SEC_ERROR_MIC_FAILURE : PM_CONN_SEC_ERROR_DISCONNECT;
 
 	SecFailureSend(pGapEvt->conn_handle, error, BLE_GAP_SEC_STATUS_SOURCE_LOCAL);
+	LinkReplyClear(pGapEvt->conn_handle);
 	(void)pdb_write_buf_release(PDB_TEMP_PEER_ID(pGapEvt->conn_handle),
 								PM_PEER_DATA_ID_BONDING);
 }
@@ -674,7 +743,15 @@ static void DisconnectProcess(const ble_gap_evt_t *pGapEvt)
 static void ReplyPendingHandle(uint16_t ConnHdl, void *pCtx)
 {
 	(void)pCtx;
-	(void)ParamsReplyPerform(ConnHdl, s_pSecParams);
+	ble_gap_sec_params_t *pParams = s_pSecParams;
+	BtSecSdLink_t *pLink = LinkGet(ConnHdl);
+
+	if (pLink != nullptr && pLink->bReplyValid)
+	{
+		// Replay the application reply exactly, including a rejection.
+		pParams = pLink->bReplyReject ? NULL : &pLink->ReplyParams;
+	}
+	(void)ReplyAttempt(ConnHdl, pParams);
 }
 
 static void SecurePendingHandle(uint16_t ConnHdl, void *pCtx)
@@ -813,7 +890,6 @@ ret_code_t sm_sec_params_set(ble_gap_sec_params_t * p_sec_params)
 		s_SecParams  = *p_sec_params;
 		s_pSecParams = &s_SecParams;
 	}
-	s_bSecParamsSet = true;
 	return NRF_SUCCESS;
 }
 
@@ -838,7 +914,7 @@ ret_code_t sm_sec_params_reply(uint16_t conn_handle, ble_gap_sec_params_t * p_se
 	}
 	pCtx->bReplyCalled = true;
 
-	ret_code_t r = ParamsReplyPerform(conn_handle, pCtx->pSecParams);
+	ret_code_t r = ReplyAttempt(conn_handle, pCtx->pSecParams);
 	if (r == NRF_ERROR_BUSY)
 	{
 		r = NRF_SUCCESS;	// retried by the pending pump
