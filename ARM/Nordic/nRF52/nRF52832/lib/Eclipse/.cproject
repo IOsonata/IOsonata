@@ -898,6 +898,11 @@
 									<listOptionValue builtIn="false" value="MBEDTLS_NO_PLATFORM_ENTROPY"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="CONFIG_APP_IN_CORE"/>
+									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
+									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
+									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.254220782" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1740812246" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
@@ -911,6 +916,11 @@
 									<listOptionValue builtIn="false" value="MBEDTLS_NO_PLATFORM_ENTROPY"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="CONFIG_APP_IN_CORE"/>
+									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
+									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
+									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.1277008086" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;../src&quot;"/>
@@ -967,7 +977,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/Invn|src/motion/mot_invn_icm20948.cpp|src/sensors/agm_invn_icm20948.cpp|src/rftag/rftag_proto_t4.cpp|src/rftag/rftag_proto_t2.cpp|src/rftag/rftag_proto_iso15693.cpp|src/rftag/rftag_controller.cpp|src/esb_intrf.cpp|src/nrfx|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/uart_bleintrf.cpp|src/motion/ahrs_soft.cpp|src/bluetooth/ble_dev.cpp|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/bluetooth/bt_scan_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/nRF5_SDK_Mesh/external|src/nRF5_SDK_Mesh/bootloader|src/bluetooth/bt_dev_nrf52.cpp|src/sysstatus.c|src/nrfx/soc/nrfx_atomic.c|src/nRF5_SDK/softdevice|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_adv_nrf52.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/nrf_sdh.c|src/mbedtls|src/nRF5_SDK_Mesh/models/proprietary|src/bluetooth/sd_dispatch.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrfthingy_env_service.cpp|src/sysstatus_impl.cpp|src/cli/nrf_cli_uart.c|src/bluetooth/ble_service.cpp|src/bluetooth/blueio_blesrvc.cpp|src/nRF5_SDK|src/bluetooth/ble_app_nrf52.cpp|src/nRF5_SDK_Mesh|src/storage/fds.c|src/sbuffer.c|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/bt_dev_sdc.cpp|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/coredev/timer_nrf_app_timer.cpp|src/nRF5_SDK_Mesh/vendor|src/nrfthingy_conf_service.cpp|src/nrf_log_backend_uart.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sdk5|src/nRF5_SDK_Mesh/serial|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/bluetooth/bt_ctlr_nrf52.cpp|src/nRF5_SDK_Mesh/models/vendor|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/bluetooth/bt_lesc_sd.cpp|src/bluetooth/bt_lesc_pm_shim.cpp|src/Invn|src/motion/mot_invn_icm20948.cpp|src/sensors/agm_invn_icm20948.cpp|src/rftag/rftag_proto_t4.cpp|src/rftag/rftag_proto_t2.cpp|src/rftag/rftag_proto_iso15693.cpp|src/rftag/rftag_controller.cpp|src/esb_intrf.cpp|src/nrfx|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/uart_bleintrf.cpp|src/motion/ahrs_soft.cpp|src/bluetooth/ble_dev.cpp|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/bluetooth/bt_scan_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/nRF5_SDK_Mesh/external|src/nRF5_SDK_Mesh/bootloader|src/bluetooth/bt_dev_nrf52.cpp|src/sysstatus.c|src/nrfx/soc/nrfx_atomic.c|src/nRF5_SDK/softdevice|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_adv_nrf52.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/nrf_sdh.c|src/mbedtls|src/nRF5_SDK_Mesh/models/proprietary|src/bluetooth/sd_dispatch.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrfthingy_env_service.cpp|src/sysstatus_impl.cpp|src/cli/nrf_cli_uart.c|src/bluetooth/ble_service.cpp|src/bluetooth/blueio_blesrvc.cpp|src/nRF5_SDK|src/bluetooth/ble_app_nrf52.cpp|src/nRF5_SDK_Mesh|src/storage/fds.c|src/sbuffer.c|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/bt_dev_sdc.cpp|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/coredev/timer_nrf_app_timer.cpp|src/nRF5_SDK_Mesh/vendor|src/nrfthingy_conf_service.cpp|src/nrf_log_backend_uart.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sdk5|src/nRF5_SDK_Mesh/serial|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/bluetooth/bt_ctlr_nrf52.cpp|src/nRF5_SDK_Mesh/models/vendor|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1069,6 +1079,11 @@
 									<listOptionValue builtIn="false" value="MBEDTLS_NO_PLATFORM_ENTROPY"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="CONFIG_APP_IN_CORE"/>
+									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
+									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
+									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.284773423" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1691716798" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
@@ -1083,6 +1098,11 @@
 									<listOptionValue builtIn="false" value="MBEDTLS_NO_PLATFORM_ENTROPY"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="CONFIG_APP_IN_CORE"/>
+									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
+									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
+									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.768794009" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;../src&quot;"/>
@@ -1138,7 +1158,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/Invn|src/motion/mot_invn_icm20948.cpp|src/sensors/agm_invn_icm20948.cpp|src/rftag/rftag_proto_t4.cpp|src/rftag/rftag_proto_t2.cpp|src/rftag/rftag_proto_iso15693.cpp|src/rftag/rftag_controller.cpp|src/esb_intrf.cpp|src/nrfx|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/uart_bleintrf.cpp|src/motion/ahrs_soft.cpp|src/bluetooth/ble_dev.cpp|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/bluetooth/bt_scan_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/nRF5_SDK_Mesh/external|src/nRF5_SDK_Mesh/bootloader|src/bluetooth/bt_dev_nrf52.cpp|src/sysstatus.c|src/nrfx/soc/nrfx_atomic.c|src/nRF5_SDK/softdevice|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_adv_nrf52.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/nrf_sdh.c|src/mbedtls|src/nRF5_SDK_Mesh/models/proprietary|src/bluetooth/sd_dispatch.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrfthingy_env_service.cpp|src/sysstatus_impl.cpp|src/cli/nrf_cli_uart.c|src/bluetooth/ble_service.cpp|src/bluetooth/blueio_blesrvc.cpp|src/nRF5_SDK|src/bluetooth/ble_app_nrf52.cpp|src/nRF5_SDK_Mesh|src/storage/fds.c|src/sbuffer.c|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/bt_dev_sdc.cpp|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/coredev/timer_nrf_app_timer.cpp|src/nRF5_SDK_Mesh/vendor|src/nrfthingy_conf_service.cpp|src/nrf_log_backend_uart.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sdk5|src/nRF5_SDK_Mesh/serial|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/bluetooth/bt_ctlr_nrf52.cpp|src/nRF5_SDK_Mesh/models/vendor|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/bluetooth/bt_lesc_sd.cpp|src/bluetooth/bt_lesc_pm_shim.cpp|src/Invn|src/motion/mot_invn_icm20948.cpp|src/sensors/agm_invn_icm20948.cpp|src/rftag/rftag_proto_t4.cpp|src/rftag/rftag_proto_t2.cpp|src/rftag/rftag_proto_iso15693.cpp|src/rftag/rftag_controller.cpp|src/esb_intrf.cpp|src/nrfx|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/uart_bleintrf.cpp|src/motion/ahrs_soft.cpp|src/bluetooth/ble_dev.cpp|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/bluetooth/bt_scan_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/nRF5_SDK_Mesh/external|src/nRF5_SDK_Mesh/bootloader|src/bluetooth/bt_dev_nrf52.cpp|src/sysstatus.c|src/nrfx/soc/nrfx_atomic.c|src/nRF5_SDK/softdevice|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_adv_nrf52.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/nrf_sdh.c|src/mbedtls|src/nRF5_SDK_Mesh/models/proprietary|src/bluetooth/sd_dispatch.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrfthingy_env_service.cpp|src/sysstatus_impl.cpp|src/cli/nrf_cli_uart.c|src/bluetooth/ble_service.cpp|src/bluetooth/blueio_blesrvc.cpp|src/nRF5_SDK|src/bluetooth/ble_app_nrf52.cpp|src/nRF5_SDK_Mesh|src/storage/fds.c|src/sbuffer.c|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/bt_dev_sdc.cpp|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/coredev/timer_nrf_app_timer.cpp|src/nRF5_SDK_Mesh/vendor|src/nrfthingy_conf_service.cpp|src/nrf_log_backend_uart.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sdk5|src/nRF5_SDK_Mesh/serial|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/bluetooth/bt_ctlr_nrf52.cpp|src/nRF5_SDK_Mesh/models/vendor|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
