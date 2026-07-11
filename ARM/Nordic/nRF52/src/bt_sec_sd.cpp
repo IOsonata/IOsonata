@@ -933,6 +933,21 @@ void sm_ble_evt_handler(ble_evt_t const * p_ble_evt)
 
 	switch (p_ble_evt->header.evt_id)
 	{
+	case BLE_GAP_EVT_CONNECTED:
+	{
+		// Connection handles are recycled by the SoftDevice. Reset the whole
+		// per-link record so no state from a previous connection on this
+		// handle (pending reply, deferred store, key size, peer key) can leak
+		// into the new one. The structural reset here is the invariant; the
+		// per-event clears elsewhere are then belt and braces.
+		BtSecSdLink_t *pLink = LinkGet(pGapEvt->conn_handle);
+		if (pLink != nullptr)
+		{
+			memset(pLink, 0, sizeof(*pLink));
+		}
+		break;
+	}
+
 	case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
 		SecParamsRequestProcess(pGapEvt);
 		break;
