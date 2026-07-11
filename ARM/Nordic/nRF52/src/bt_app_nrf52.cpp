@@ -61,10 +61,6 @@ SOFTWARE.
 #include "nrf_dfu_settings.h"
 #include "nrf_bootloader_info.h"
 
-#ifndef __ARMCC_VERSION
-#include "nrf_crypto.h"
-#endif
-
 #include "nrf_ble_lesc.h"
 #include "nrf_ble_scan.h"
 #include "nrf_drv_rng.h"
@@ -1990,21 +1986,6 @@ NRF_SDH_STACK_OBSERVER(m_nrf_sdh_soc_evts_poll, NRF_SDH_SOC_STACK_OBSERVER_PRIO)
     .p_context = NULL,
 };
 
-#ifndef __ARMCC_VERSION
-
-#if NRF_MODULE_ENABLED(NRF_CRYPTO) && NRF_MODULE_ENABLED(NRF_CRYPTO_BACKEND_CC310)
-extern nrf_crypto_backend_info_t const cc310_backend;
-// Just to make the linker to keep the nrf_hw_backend
-__attribute__ ((used)) static uint32_t s_pcc310_backend_info = (uint32_t)&cc310_backend;
-#endif
-
-#if NRF_MODULE_ENABLED(NRF_CRYPTO) && NRF_MODULE_ENABLED(NRF_CRYPTO_BACKEND_NRF_HW_RNG)
-extern nrf_crypto_backend_info_t const nrf_hw_backend;
-// Just to make the linker to keep the nrf_hw_backend
-__attribute__ ((used)) static uint32_t s_pnrf_hw_backend_info = (uint32_t)&nrf_hw_backend;
-#endif
-
-#endif
 #endif
 
 //
