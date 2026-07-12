@@ -1,7 +1,11 @@
 /**-------------------------------------------------------------------------
-@file	crypto_psa.cpp
+@file	crypto_psa_bm.cpp
 
 @brief	SMP crypto provider: architecture hardware via the PSA Crypto API.
+
+		Not the portable PSA engine: src/crypto/crypto_psa.cpp implements the
+		CryptoPsaInit provider slot over any PSA implementation; this file is
+		the sdk-nrf-bm hardware slot.
 
 		Implements the CryptoHwInit public symbol (CryptoDev_t hardware engine)
 		on top of the ARM PSA Crypto API. This targets Nordic sdk-nrf-bm (the
@@ -35,6 +39,7 @@
 
 @license MIT, (c) 2026 I-SYST. See bt_smp.h for full text.
 ----------------------------------------------------------------------------*/
+#include <stdint.h>
 #include <string.h>
 
 #include "crypto/crypto.h"
@@ -212,6 +217,10 @@ bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 	if (pCfg->pMem == nullptr || pCfg->MemSize < sizeof(CryptoPsaData_t))
 	{
 		return false;	// caller must supply per-instance state
+	}
+	if (((uintptr_t)pCfg->pMem & (alignof(uint32_t) - 1)) != 0)
+	{
+		return false;	// arena must be word aligned (see CryptoCfg_t pMem)
 	}
 	if ((pCfg->ReqCaps & ~(uint32_t)(CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256)) != 0)
 	{

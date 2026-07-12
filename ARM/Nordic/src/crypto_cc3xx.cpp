@@ -9,7 +9,7 @@
 		with no vendor blob, no PSA core, no nRF5 SDK. It is an alternative
 		to crypto_cc310.cpp (CRYS blob) and to the PSA-over-CC310 path; a lib
 		links exactly one file defining CryptoHwInit: this one,
-		crypto_cc310.cpp, crypto_psa.cpp, or crypto_hw_none.cpp.
+		crypto_cc310.cpp, crypto_psa_bm.cpp, or crypto_hw_none.cpp.
 
 		Key and point byte order: the driver reads and writes its PKA
 		registers with a per-word endianness swap, so its uint32_t buffers
@@ -20,20 +20,33 @@
 		through aligned locals rather than cast, so no unaligned access is
 		assumed on the interface side.
 
-		Randomness: the driver's own TRNG and CTR DRBG produce the private
-		key inside cc3xx_lowlevel_ecdsa_genkey. Parameters (ring oscillator,
-		subsampling rate) are set in cc3xx_config.h from Nordic silicon
-		characterization.
+		Randomness: the driver RNG entry points are provided by the local
+		cc3xx_rng.c over IOsonata RngGet, so the private key scalar drawn
+		inside cc3xx_lowlevel_ecdsa_genkey comes from RngGet. The CC3xx noise
+		source, entropy conditioner and DRBG modules are not built.
+
+		Peer public key validation: the peer point is checked to be on the
+		P-256 curve with cc3xx_lowlevel_ec_allocate_point_from_data (NIST
+		SP800-186 D.1 point check) before the DH, closing the invalid-curve
+		attack (CVE-2018-5383). The driver ECDH itself loads the raw
+		coordinates without validation, so this engine performs the check,
+		the same responsibility crypto_uecc.cpp and crypto_cc310.cpp take.
 
 		Peripheral enable: the CryptoCell wrapper enable register
-		(NRF_CRYPTOCELL->ENABLE) is held on across init and each operation,
-		the same gating crypto_cc310.cpp uses. The driver is polling, so no
-		interrupt setup is needed.
+		(NRF_CRYPTOCELL->ENABLE) is turned on at init and left on. This is a
+		deliberate power tradeoff, not the gating crypto_cc310.cpp uses (that
+		engine disables ENABLE after each operation): the Nordic wrapper has
+		no ready flag and toggling ENABLE per operation raced the block
+		power-up (see Cc3xxOn). Measure the idle current with ENABLE set
+		before shipping; a pairing-scoped enable/disable is the planned
+		refinement. The driver is polling, so no interrupt setup is needed.
 
 		Single instance: the driver holds global engine state (PKA register
-		file, DRBG), so one operation runs at a time. On the nRF52840 SDC
-		path the SoftDevice and SDC use the ECB and CCM peripherals, never
-		the CryptoCell, so there is no contention. The per-instance key
+		file), so one operation runs at a time. A PRIMASK based try-acquire
+		guard enforces this: a second concurrent operation returns
+		CRYPTO_STATUS_FAIL instead of corrupting the engine state. On the
+		nRF52840 SDC path the SoftDevice and SDC use the ECB and CCM
+		peripherals, never the CryptoCell, so there is no contention. The per-instance key
 		context holds only the generated private key bytes and a valid flag,
 		supplied by the caller through the CryptoCfg_t arena, as with the
 		CRYS engine.
@@ -43,6 +56,7 @@
 
 @license MIT, (c) 2026 I-SYST. See bt_smp.h for full text.
 ----------------------------------------------------------------------------*/
+#include <stdint.h>
 #include <string.h>
 
 #include "nrf.h"
@@ -74,6 +88,36 @@ static_assert(sizeof(CryptoCc3xxData_t) <= CRYPTO_MEMSIZE_HW,
 
 static bool s_bCcInit;
 
+// Single-operation guard for the driver global engine state (PKA register
+// file). Try-acquire under PRIMASK: a second concurrent operation fails
+// instead of trampling the engine. Every exit path of an operation that
+// acquired the guard must release it.
+static volatile bool s_bCc3xxBusy;
+
+static bool Cc3xxAcquire(void)
+{
+	uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+
+	bool acquired = (s_bCc3xxBusy == false);
+	if (acquired)
+	{
+		s_bCc3xxBusy = true;
+	}
+
+	if (primask == 0)
+	{
+		__enable_irq();
+	}
+
+	return acquired;
+}
+
+static inline void Cc3xxRelease(void)
+{
+	s_bCc3xxBusy = false;
+}
+
 // Resolve the key context: the Cryptor-supplied context, else the engine own.
 static inline CryptoCc3xxData_t *Cc3xxData(CryptoDev_t * const pDev, void *pKeyCtx)
 {
@@ -100,8 +144,12 @@ static inline void Cc3xxOn(void)
 	}
 }
 
-// One-time driver bring-up. cc3xx_lowlevel_init sets up the PKA, TRNG and
-// DRBG. Guarded by the flag so repeat calls are cheap.
+// One-time driver bring-up: the subset of the upstream cc3xx_lowlevel_init
+// that applies to this build (endian select, engine reset, AHBM setup; the
+// DFA setup returns early on CC310, and no DPA, DMA remap, TRNG or DRBG init
+// is configured). Verified against tf-psa-crypto-drivers commit 27c8ccd;
+// re-check this function against cc3xx_lowlevel_init on every driver update.
+// Guarded by the flag so repeat calls are cheap.
 static CRYPTO_STATUS EnsureCc3xx(void)
 {
 	if (s_bCcInit)
@@ -114,9 +162,12 @@ static CRYPTO_STATUS EnsureCc3xx(void)
 	// CryptoCell bring-up, the subset of cc3xx_lowlevel_init that applies to
 	// this build (CC310, DPA mitigations off, EC/PKA and RNG only).
 
-	// The CC310 must expose a hardware RNG for the private key path.
+	// Mirror of the upstream check_features assert for CC3XX_CONFIG_RNG_ENABLE.
+	// The CC3xx RNG hardware itself is unused (randomness comes from RngGet);
+	// this only confirms the expected CC310 feature set is present.
 	if ((P_CC3XX->host_rgf.host_boot & (1U << 11)) == 0)	// RNG_EXISTS_LOCAL
 	{
+		NRF_CRYPTOCELL->ENABLE = 0;	// do not leave the block powered on failure
 		return CRYPTO_STATUS_FAIL;
 	}
 
@@ -162,6 +213,11 @@ static CRYPTO_STATUS Cc3xxEcdhKeyGen(CryptoDev_t * const pDev, void *pKeyCtx,
 		return CRYPTO_STATUS_FAIL;
 	}
 
+	if (Cc3xxAcquire() == false)
+	{
+		return CRYPTO_STATUS_FAIL;	// engine busy with another operation
+	}
+
 	// Clean start: wipe any prior key so a re-keygen cannot leak key material.
 	Cc3xxKeyReset(pd);
 
@@ -182,9 +238,16 @@ static CRYPTO_STATUS Cc3xxEcdhKeyGen(CryptoDev_t * const pDev, void *pKeyCtx,
 										pubX, sizeof(pubX), &pubXSize,
 										pubY, sizeof(pubY), &pubYSize);
 	}
-	if (r != CC3XX_ERR_SUCCESS)
+	// On success the driver always reports and writes the full P-256 element
+	// size (verified upstream); the size checks guard driver drift the same
+	// way the ECDH path checks secretSize.
+	if (r != CC3XX_ERR_SUCCESS ||
+		privSize != CC3XX_P256_BYTES ||
+		pubXSize != CC3XX_P256_BYTES ||
+		pubYSize != CC3XX_P256_BYTES)
 	{
 		Cc3xxKeyReset(pd);
+		Cc3xxRelease();
 		return CRYPTO_STATUS_FAIL;
 	}
 
@@ -194,6 +257,7 @@ static CRYPTO_STATUS Cc3xxEcdhKeyGen(CryptoDev_t * const pDev, void *pKeyCtx,
 	memcpy(&pPubKey[32], pubY, CC3XX_P256_BYTES);
 
 	pd->bKeyValid = true;
+	Cc3xxRelease();
 	return CRYPTO_STATUS_OK;
 }
 
@@ -210,17 +274,46 @@ static CRYPTO_STATUS Cc3xxEcdhRaw(const uint32_t privKey[CC3XX_P256_WORDS],
 	memcpy(peerX, &pPeerPubKey[0],  CC3XX_P256_BYTES);
 	memcpy(peerY, &pPeerPubKey[32], CC3XX_P256_BYTES);
 
+	if (Cc3xxAcquire() == false)
+	{
+		return CRYPTO_STATUS_FAIL;	// engine busy with another operation
+	}
+
+	Cc3xxOn();
+
+	// Reject a peer public key that is not on the P-256 curve before the DH
+	// (invalid-curve attack, CVE-2018-5383). The driver ECDH does not validate
+	// its input point: cc3xx_lowlevel_ecdh loads the raw coordinates straight
+	// into PKA registers and multiplies. The validating allocator
+	// cc3xx_lowlevel_ec_allocate_point_from_data runs the full NIST SP800-186
+	// D.1 point check (coordinates in range, non zero, on curve).
+	// cc3xx_lowlevel_ec_uninit releases the whole PKA state whether or not the
+	// check passed, so no explicit point free is needed on either path.
+	cc3xx_ec_curve_t curve;
+	cc3xx_ec_point_affine peerPt;
+	cc3xx_err_t r = cc3xx_lowlevel_ec_init(CC3XX_EC_CURVE_SECP_256_R1, &curve);
+	if (r == CC3XX_ERR_SUCCESS)
+	{
+		r = cc3xx_lowlevel_ec_allocate_point_from_data(&curve,
+													   peerX, CC3XX_P256_BYTES,
+													   peerY, CC3XX_P256_BYTES,
+													   &peerPt);
+		cc3xx_lowlevel_ec_uninit();
+	}
+	if (r != CC3XX_ERR_SUCCESS)
+	{
+		Cc3xxRelease();
+		return CRYPTO_STATUS_FAIL;
+	}
+
 	uint32_t secret[CC3XX_P256_WORDS];
 	size_t   secretSize = 0;
 
-	Cc3xxOn();
-	// The driver validates the peer point is on the curve before the multiply
-	// (invalid-curve attack, CVE-2018-5383).
-	cc3xx_err_t r = cc3xx_lowlevel_ecdh(CC3XX_EC_CURVE_SECP_256_R1,
-										privKey, CC3XX_P256_BYTES,
-										peerX, CC3XX_P256_BYTES,
-										peerY, CC3XX_P256_BYTES,
-										secret, sizeof(secret), &secretSize);
+	r = cc3xx_lowlevel_ecdh(CC3XX_EC_CURVE_SECP_256_R1,
+							privKey, CC3XX_P256_BYTES,
+							peerX, CC3XX_P256_BYTES,
+							peerY, CC3XX_P256_BYTES,
+							secret, sizeof(secret), &secretSize);
 	CRYPTO_STATUS rc = (r == CC3XX_ERR_SUCCESS && secretSize == CC3XX_P256_BYTES) ?
 					   CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
 
@@ -231,6 +324,7 @@ static CRYPTO_STATUS Cc3xxEcdhRaw(const uint32_t privKey[CC3XX_P256_WORDS],
 	}
 
 	CryptoSecureWipe(secret, sizeof(secret));
+	Cc3xxRelease();
 	return rc;
 }
 
@@ -327,6 +421,13 @@ extern "C" bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 	if (pCfg->pMem == nullptr || pCfg->MemSize < sizeof(CryptoCc3xxData_t))
 	{
 		return false;	// caller must supply per-instance state
+	}
+	if (((uintptr_t)pCfg->pMem & (alignof(uint32_t) - 1)) != 0)
+	{
+		// The key context holds uint32_t words handed to the driver, and the
+		// driver secret register reads require word aligned buffers. Fail
+		// closed on a misaligned arena (see CryptoCfg_t pMem in crypto.h).
+		return false;
 	}
 	if ((pCfg->ReqCaps & ~(uint32_t)CRYPTO_CAP_ECDH_P256) != 0)
 	{

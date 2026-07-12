@@ -651,7 +651,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// hardware key object or the software uECC key).
 	static CryptoDev_t s_CryptoEcdh;
 	static CryptoDev_t s_CryptoAes;
-	static uint8_t     s_CryptoEcdhMem[CRYPTO_MEMSIZE_ECDH];	// ECDH per-instance key arena (fits HW or uECC)
+	alignas(uint32_t) static uint8_t s_CryptoEcdhMem[CRYPTO_MEMSIZE_ECDH];	// ECDH per-instance key arena (fits HW or uECC), word aligned per CryptoCfg_t pMem
 	CryptoCfg_t ecdhCfg = { };
 	ecdhCfg.Provider = CRYPTO_PROVIDER_AUTO;
 	ecdhCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;

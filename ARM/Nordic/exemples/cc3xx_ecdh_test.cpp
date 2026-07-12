@@ -41,8 +41,10 @@ bool Cc3xxEcdhTest(void)
 {
 	CryptoDev_t ccDev;
 	CryptoDev_t ueccDev;
-	uint8_t     ccArena[CRYPTO_MEMSIZE_HW];
-	uint8_t     ueccArena[CRYPTO_MEMSIZE_UECC];
+	// Arenas hold engine word-typed key state; CryptoCfg_t pMem requires
+	// uint32_t alignment.
+	alignas(uint32_t) uint8_t ccArena[CRYPTO_MEMSIZE_HW];
+	alignas(uint32_t) uint8_t ueccArena[CRYPTO_MEMSIZE_UECC];
 
 	memset(&ccDev, 0, sizeof(ccDev));
 	memset(&ueccDev, 0, sizeof(ueccDev));

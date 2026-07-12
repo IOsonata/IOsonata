@@ -8,7 +8,7 @@
 		directly on the CRYS API of the nrf_cc310 runtime library (SaSi_LibInit,
 		CRYS_ECPKI_*, CRYS_ECDH_SVDP_DH, CRYS_RND_*). The nRF5 SDK nrf_crypto
 		layer is not used; libnrf_cc310 is the only dependency. This is the
-		nRF52840 counterpart of crypto_psa.cpp (sdk-nrf-bm PSA over CRACEN on
+		nRF52840 counterpart of crypto_psa_bm.cpp (sdk-nrf-bm PSA over CRACEN on
 		nRF54L). The CC310 accelerator is only present on nRF52840; parts
 		without it (nRF52832 and smaller) have no ECC hardware, so this file is
 		not added to their lib projects and the software uECC engine is used
@@ -45,6 +45,7 @@
 
 @license MIT, (c) 2026 I-SYST. See bt_smp.h for full text.
 ----------------------------------------------------------------------------*/
+#include <stdint.h>
 #include <string.h>
 
 #include "nrf.h"
@@ -54,7 +55,7 @@
 // This engine is available on a target when this file is added to the MCU lib
 // project. It needs the nrf_cc310 headers; if they do not resolve the build
 // fails and reports it. A lib links exactly one file defining CryptoHwInit:
-// this one, crypto_psa.cpp, or crypto_hw_none.cpp.
+// this one, crypto_psa_bm.cpp, or crypto_hw_none.cpp.
 #include "sns_silib.h"
 #include "crys_rnd.h"
 #include "crys_ecpki_types.h"
@@ -323,6 +324,10 @@ bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 	if (pCfg->pMem == nullptr || pCfg->MemSize < sizeof(CryptoCc310Data_t))
 	{
 		return false;	// caller must supply per-instance state
+	}
+	if (((uintptr_t)pCfg->pMem & (alignof(uint32_t) - 1)) != 0)
+	{
+		return false;	// arena must be word aligned (see CryptoCfg_t pMem)
 	}
 	if ((pCfg->ReqCaps & ~(uint32_t)CRYPTO_CAP_ECDH_P256) != 0)
 	{
