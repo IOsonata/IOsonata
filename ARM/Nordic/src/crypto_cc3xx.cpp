@@ -24,10 +24,12 @@
 		cc3xx_lowlevel_ec_allocate_point_from_data before ECDH, closing the
 		invalid-curve attack described by CVE-2018-5383.
 
-		Target wrapper control is provided through cc3xx_port.h. The wrapper is
-		enabled once during driver initialization and left enabled because the
-		Nordic wrapper has no ready flag. The provider waits briefly before the
-		first core access. The wrapper is disabled if initialization fails.
+		This Nordic hardware provider owns the CryptoCell wrapper lifecycle.
+		cc3xx_nrfx.h selects the wrapper symbol supplied by the active Nordic
+		MDK device header. The wrapper is enabled once during driver
+		initialization and left enabled because it has no ready flag. The
+		provider waits briefly before the first core access and disables the
+		wrapper if initialization fails.
 
 		The driver has global engine state, so one operation runs at a time. A
 		PRIMASK-protected try-acquire guard returns CRYPTO_STATUS_FAIL to a
@@ -43,7 +45,7 @@
 
 #include "nrf.h"
 #include "crypto/crypto.h"
-#include "cc3xx_port.h"
+#include "cc3xx_nrfx.h"
 
 // The CC3xx headers manage their own C linkage.
 #include "cc3xx_ecdh.h"
@@ -106,6 +108,18 @@ static CryptoCc3xxData_t *Cc3xxData(CryptoDev_t * const pDev, void *pKeyCtx)
 	return (CryptoCc3xxData_t *)p;
 }
 
+static bool Cc3xxWrapperEnable(void)
+{
+	CC3XX_NRFX_WRAPPER->ENABLE = 1;
+
+	return CC3XX_NRFX_WRAPPER->ENABLE != 0;
+}
+
+static void Cc3xxWrapperDisable(void)
+{
+	CC3XX_NRFX_WRAPPER->ENABLE = 0;
+}
+
 static void Cc3xxPowerupDelay(void)
 {
 	for (uint32_t i = 0; i < CC3XX_POWERUP_SPINS; i++)
@@ -132,7 +146,7 @@ static CRYPTO_STATUS EnsureCc3xx(void)
 		return CRYPTO_STATUS_OK;
 	}
 
-	if (Cc3xxPortEnable() == false)
+	if (Cc3xxWrapperEnable() == false)
 	{
 		Cc3xxRelease();
 		return CRYPTO_STATUS_FAIL;
@@ -143,7 +157,7 @@ static CRYPTO_STATUS EnsureCc3xx(void)
 	// hardware RNG is not used by this provider; random bytes come from RngGet.
 	if ((P_CC3XX->host_rgf.host_boot & (1U << 11)) == 0)
 	{
-		Cc3xxPortDisable();
+		Cc3xxWrapperDisable();
 		Cc3xxRelease();
 		return CRYPTO_STATUS_FAIL;
 	}
