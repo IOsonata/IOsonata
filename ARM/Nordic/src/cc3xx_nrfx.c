@@ -4,9 +4,9 @@
 @brief	Nordic nrfx port for Arm CC3xx peripheral wrapper control.
 
 		Provides the Nordic-specific CC3xx wrapper enable and disable functions.
-		The selected Nordic device header supplies NRF_CRYPTOCELL for the target
-		MCU. CC3xx core register addressing and revision selection remain in the
-		portable driver configuration.
+		The selected Nordic device header supplies the wrapper definition. The
+		target library selects this source only for a compatible CryptoCell
+		device.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -16,14 +16,22 @@
 #include "nrf.h"
 #include "cc3xx_nrfx.h"
 
+#if defined(NRF_CRYPTOCELL)
+#define CC3XX_NRFX_WRAPPER	NRF_CRYPTOCELL
+#elif defined(NRF_CRYPTOCELL_S)
+#define CC3XX_NRFX_WRAPPER	NRF_CRYPTOCELL_S
+#else
+#error CC3xx wrapper is not defined for the selected Nordic target
+#endif
+
 bool Cc3xxNrfxEnable(void)
 {
-	NRF_CRYPTOCELL->ENABLE = 1;
+	CC3XX_NRFX_WRAPPER->ENABLE = 1;
 
-	return NRF_CRYPTOCELL->ENABLE != 0;
+	return CC3XX_NRFX_WRAPPER->ENABLE != 0;
 }
 
 void Cc3xxNrfxDisable(void)
 {
-	NRF_CRYPTOCELL->ENABLE = 0;
+	CC3XX_NRFX_WRAPPER->ENABLE = 0;
 }
