@@ -1646,6 +1646,11 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/crypto_cc310.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/crypto/crypto_cc310_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/crypto_cc310_sdc.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crypto/crypto_psa_none.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_psa_none.cpp</locationURI>
