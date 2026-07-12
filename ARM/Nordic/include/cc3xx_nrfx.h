@@ -1,12 +1,12 @@
 /**-------------------------------------------------------------------------
 @file	cc3xx_nrfx.h
 
-@brief	Nordic nrfx port for Arm CC3xx peripheral wrapper control.
+@brief	Nordic nrfx integration definitions for the Arm CC3xx driver.
 
-		Provides the Nordic-specific power wrapper functions used by the
-		portable CC3xx driver. Nordic device selection remains in the target
-		library build through the selected device header. This file does not
-		select a CC3xx revision or define the CC3xx register map.
+		Selects the CryptoCell wrapper symbol supplied by the Nordic MDK. The
+		selected target library includes this header only for a compatible
+		CryptoCell device. CC3xx core registers and feature selection remain
+		outside this vendor integration header.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -16,26 +16,12 @@
 #ifndef __CC3XX_NRFX_H__
 #define __CC3XX_NRFX_H__
 
-#include <stdbool.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/**
- * @brief	Enable the Nordic CC3xx peripheral wrapper.
- *
- * @return	true when the wrapper is enabled
- */
-bool Cc3xxNrfxEnable(void);
-
-/**
- * @brief	Disable the Nordic CC3xx peripheral wrapper.
- */
-void Cc3xxNrfxDisable(void);
-
-#ifdef __cplusplus
-}
+#if defined(NRF_CRYPTOCELL)
+#define CC3XX_NRFX_WRAPPER	NRF_CRYPTOCELL
+#elif defined(NRF_CRYPTOCELL_S)
+#define CC3XX_NRFX_WRAPPER	NRF_CRYPTOCELL_S
+#else
+#error CC3xx wrapper is not defined for the selected Nordic target
 #endif
 
 #endif // __CC3XX_NRFX_H__
