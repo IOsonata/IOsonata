@@ -1,26 +1,19 @@
 /**-------------------------------------------------------------------------
 @file	cc3xx_rng.c
 
-@brief	IOsonata RNG and Nordic wrapper hooks for the Arm CC3xx driver.
+@brief	IOsonata RNG adapter for the Arm CC3xx low level driver.
 
 		This file replaces the upstream cc3xx_rng.c from
 		tf-psa-crypto-drivers commit 27c8ccd,
 		vendor/arm/cc3xx/low_level_driver/src. The upstream implementation
 		provides a TRNG noise source, entropy conditioning, and a CTR or HMAC
 		DRBG. IOsonata already provides the RngGet cryptographic random-byte
-		interface, so the three CC3xx RNG entry points are routed to RngGet
-		instead.
+		service, so the three CC3xx RNG entry points are routed to RngGet.
 
 		CC3XX_CONFIG_DPA_MITIGATIONS_ENABLE is disabled in this build. The
 		live random-byte caller is private-key scalar generation in cc3xx_pka.c.
 		The permutation entry point therefore returns the identity permutation,
 		matching the disabled-mitigation path in the upstream implementation.
-
-		This linked translation unit also provides the generic CC3xx wrapper
-		hooks required by crypto_cc3xx.cpp. cc3xx_nrfx.h selects the Nordic MDK
-		wrapper symbol without duplicating a peripheral address. These hooks
-		will move to cc3xx_nrfx.c when that source is added to every nRF52840
-		library configuration.
 
 		Re-check this replacement against the upstream CC3xx RNG interface on
 		every tf-psa-crypto-drivers update.
@@ -32,10 +25,9 @@
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <stddef.h>
-#include <stdbool.h>
 #include <assert.h>
 
-#include "nrf.h"
+#include "crypto/crypto.h"
 
 #ifndef CC3XX_CONFIG_FILE
 #include "cc3xx_config.h"
@@ -45,26 +37,10 @@
 
 #include "cc3xx_rng.h"
 #include "cc3xx_error.h"
-#include "cc3xx_port.h"
-#include "cc3xx_nrfx.h"
-
-extern bool RngGet(uint8_t *pBuff, size_t len);
 
 #ifndef CC3XX_CONFIG_RNG_MAX_ATTEMPTS
 #define CC3XX_CONFIG_RNG_MAX_ATTEMPTS		100U
 #endif
-
-bool Cc3xxPortEnable(void)
-{
-	CC3XX_NRFX_WRAPPER->ENABLE = 1;
-
-	return CC3XX_NRFX_WRAPPER->ENABLE != 0;
-}
-
-void Cc3xxPortDisable(void)
-{
-	CC3XX_NRFX_WRAPPER->ENABLE = 0;
-}
 
 cc3xx_err_t cc3xx_lowlevel_rng_get_random(uint8_t *pBuff, size_t len,
 										  enum cc3xx_rng_quality_t quality)
