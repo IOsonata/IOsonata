@@ -8,8 +8,9 @@
 		open Arm register level driver from tf-psa-crypto-drivers, with no
 		vendor binary or PSA core dependency.
 
-		The selected target supplies cc3xx_port.h. That header implements only
-		the target-specific clock, power, reset, wrapper, and readiness steps.
+		The selected target supplies crypto_cc3xx.h. That header contains the
+		target-specific CC3xx driver configuration and the hardware enable and
+		disable operations required before accessing the CryptoCell registers.
 		CC3xx register initialization, serialization, key handling, and crypto
 		operations remain in this generic ARM source.
 
@@ -43,7 +44,7 @@
 
 #include "crypto/crypto.h"
 #include "coredev/interrupt.h"
-#include "cc3xx_port.h"
+#include "crypto_cc3xx.h"
 
 // The CC3xx headers manage their own C linkage.
 #include "cc3xx_ecdh.h"
@@ -211,7 +212,7 @@ static CRYPTO_STATUS EnsureCc3xx(void)
 		return CRYPTO_STATUS_OK;
 	}
 
-	if (Cc3xxPortEnable() == false)
+	if (Cc3xxEnable() == false)
 	{
 		Cc3xxRelease();
 		return CRYPTO_STATUS_FAIL;
@@ -221,7 +222,7 @@ static CRYPTO_STATUS EnsureCc3xx(void)
 	// hardware RNG is not used by this provider; random bytes come from RngGet.
 	if ((P_CC3XX->host_rgf.host_boot & (1U << 11)) == 0U)
 	{
-		Cc3xxPortDisable();
+		Cc3xxDisable();
 		Cc3xxRelease();
 		return CRYPTO_STATUS_FAIL;
 	}
@@ -387,7 +388,7 @@ static int Cc3xxSelfTest(CryptoDev_t * const pDev)
 		0x1e,0xa1,0xf0,0xf0,0x1f,0xaf,0x1d,0x96,0x09,0x59,0x22,0x84,0xf1,0x9e,0x4c,0x00,
 		0x47,0xb5,0x8a,0xfd,0x86,0x15,0xa6,0x9f,0x55,0x90,0x77,0xb2,0x2f,0xaa,0xa1,0x90,
 		0x4c,0x55,0xf3,0x3e,0x42,0x9d,0xad,0x37,0x73,0x56,0x70,0x3a,0x9a,0xb8,0x51,0x60,
-		0x47,0x2d,0x11,0x30,0xe2,0x8e,0x36,0x76,0x5f,0x89,0xaf,0xf9,0x15,0xb1,0x21,0x4a
+		0x47,0x2d,0x30,0xe2,0x8e,0x36,0x76,0x5f,0x89,0xaf,0xf9,0x15,0xb1,0x21,0x4a
 	};
 	static const uint8_t dhExpect[32] = {
 		0xec,0x02,0x34,0xa3,0x57,0xc8,0xad,0x05,0x34,0x10,0x10,0xa6,0x0a,0x39,0x7d,0x9b,
