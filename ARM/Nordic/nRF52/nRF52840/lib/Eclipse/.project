@@ -1646,11 +1646,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/cc3xx_rng.c</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/cc3xx_rng.c</locationURI>
-		</link>
-		<link>
 			<name>src/crypto/crypto.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
@@ -1658,7 +1653,7 @@
 		<link>
 			<name>src/crypto/crypto_cc3xx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_cc3xx.cpp</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/src/crypto_cc3xx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_psa_none.cpp</name>

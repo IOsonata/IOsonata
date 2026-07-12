@@ -7,26 +7,14 @@
 		on the open Arm CC3xx register level driver over the nRF52840 CC310,
 		with no vendor blob.
 
-		Two independent checks:
-		1. The engine self test (BLE Core spec P-256 known-answer vector),
-		   run through CryptoInit with CRYPTO_FLAG_SELFTEST. This validates
-		   the CC310 PKA path against a fixed spec vector, so a byte-order or
-		   PKA setup fault fails deterministically, independent of any second
-		   engine.
-		2. A cross-derivation against the uECC software engine in both
-		   directions: each engine generates a key pair and derives the
-		   shared secret from the other's public key; both must agree. This
-		   catches point-format or interface mismatches that a single-engine
-		   KAT cannot.
+		The test checks the BLE Core P-256 known-answer vector, the CC3xx
+		plain-key-context property and Cryptor forwarding path, two independent
+		CC3xx/uECC cross-derivations, invalid peer-point rejection, and
+		single-use private-key consumption.
 
-		If the TRNG entropy startup health test fails on a device, CryptoInit
-		returns false at the genkey step (the private key cannot be drawn),
-		which points at the ring oscillator or subsampling parameters in
-		cc3xx_config.h rather than at the EC math.
-
-		Usage: call Cc3xxEcdhTest() from an application on the nRF52840 SDC
-		configuration after system init. Returns true on pass. Test
-		scaffolding, not part of the library build.
+		Usage: call Cc3xxEcdhTest() from an application on the nRF52840 after
+		system initialization. Returns true on pass. Test scaffolding, not part
+		of the library build.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -34,124 +22,172 @@
 @license MIT, (c) 2026 I-SYST. See bt_smp.h for full text.
 ----------------------------------------------------------------------------*/
 #include <string.h>
-#include <stdio.h>
 
-#include "nrf.h"			// __WFE for the post-test halt loop
+#include "nrf.h"
 #include "crypto/crypto.h"
+
+volatile int g_Cc3xxEcdhTestResult;
 
 bool Cc3xxEcdhTest(void)
 {
 	CryptoDev_t ccDev;
 	CryptoDev_t ueccDev;
-	// Arenas hold engine word-typed key state; CryptoCfg_t pMem requires
-	// uint32_t alignment.
-	alignas(uint32_t) uint8_t ccArena[CRYPTO_MEMSIZE_HW];
-	alignas(uint32_t) uint8_t ueccArena[CRYPTO_MEMSIZE_UECC];
-
-	memset(&ccDev, 0, sizeof(ccDev));
-	memset(&ueccDev, 0, sizeof(ueccDev));
-
-	// CC3xx engine with the KAT self test requested at init. A KAT failure
-	// makes CryptoInit return false here.
+	Cryptor_t ccUse;
+	CryptoDev_t *pCc = nullptr;
 	CryptoCfg_t ccCfg;
-	memset(&ccCfg, 0, sizeof(ccCfg));
-	ccCfg.Provider = CRYPTO_PROVIDER_HW;
-	ccCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
-	ccCfg.Flags    = CRYPTO_FLAG_SELFTEST;
-	ccCfg.pMem     = ccArena;
-	ccCfg.MemSize  = sizeof(ccArena);
-
-	if (CryptoHwInit(&ccDev, &ccCfg) == false)
-	{
-		return false;
-	}
-
+	CryptoCfg_t ccUseCfg;
 	CryptoCfg_t ueccCfg;
-	memset(&ueccCfg, 0, sizeof(ueccCfg));
-	ueccCfg.Provider = CRYPTO_PROVIDER_UECC;
-	ueccCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
-	ueccCfg.pMem     = ueccArena;
-	ueccCfg.MemSize  = sizeof(ueccArena);
-
-	if (CryptoUeccInit(&ueccDev, &ueccCfg) == false)
-	{
-		return false;
-	}
-
+	alignas(uint32_t) static uint8_t ccArena[CRYPTO_MEMSIZE_HW];
+	alignas(uint32_t) static uint8_t ccUseArena[CRYPTO_MEMSIZE_HW];
+	alignas(uint32_t) static uint8_t ueccArena[CRYPTO_MEMSIZE_UECC];
 	uint8_t ccPub[64];
 	uint8_t ueccPub[64];
 	uint8_t dhCc[32];
 	uint8_t dhUecc[32];
+	uint8_t zero[64];
+	bool res = false;
 
-	// Direction 1: each engine generates, then each derives from the other.
-	if (CryptoEcdhP256KeyGen(&ccDev, NULL, ccPub, NULL) != CRYPTO_STATUS_OK)
-	{
-		return false;
-	}
-	if (CryptoEcdhP256KeyGen(&ueccDev, NULL, ueccPub, NULL) != CRYPTO_STATUS_OK)
-	{
-		return false;
-	}
-	if (CryptoEcdhP256(&ccDev, NULL, ueccPub, dhCc, NULL) != CRYPTO_STATUS_OK)
-	{
-		return false;
-	}
-	if (CryptoEcdhP256(&ueccDev, NULL, ccPub, dhUecc, NULL) != CRYPTO_STATUS_OK)
-	{
-		return false;
-	}
-	if (memcmp(dhCc, dhUecc, sizeof(dhCc)) != 0)
-	{
-		return false;
-	}
-
-	// Direction 2: fresh keys, roles repeated, to catch state left behind by
-	// the single-use key handling.
-	if (CryptoEcdhP256KeyGen(&ueccDev, NULL, ueccPub, NULL) != CRYPTO_STATUS_OK)
-	{
-		return false;
-	}
-	if (CryptoEcdhP256KeyGen(&ccDev, NULL, ccPub, NULL) != CRYPTO_STATUS_OK)
-	{
-		return false;
-	}
-	if (CryptoEcdhP256(&ueccDev, NULL, ccPub, dhUecc, NULL) != CRYPTO_STATUS_OK)
-	{
-		return false;
-	}
-	if (CryptoEcdhP256(&ccDev, NULL, ueccPub, dhCc, NULL) != CRYPTO_STATUS_OK)
-	{
-		return false;
-	}
-	if (memcmp(dhCc, dhUecc, sizeof(dhCc)) != 0)
-	{
-		return false;
-	}
-
-	// Guard against a degenerate all-zero secret even when both agree.
-	uint8_t zero[32];
+	memset(&ccDev, 0, sizeof(ccDev));
+	memset(&ueccDev, 0, sizeof(ueccDev));
+	memset(&ccUse, 0, sizeof(ccUse));
+	memset(&ccCfg, 0, sizeof(ccCfg));
+	memset(&ccUseCfg, 0, sizeof(ccUseCfg));
+	memset(&ueccCfg, 0, sizeof(ueccCfg));
+	memset(ccPub, 0, sizeof(ccPub));
+	memset(ueccPub, 0, sizeof(ueccPub));
+	memset(dhCc, 0, sizeof(dhCc));
+	memset(dhUecc, 0, sizeof(dhUecc));
 	memset(zero, 0, sizeof(zero));
-	if (memcmp(dhCc, zero, sizeof(zero)) == 0)
-	{
-		return false;
-	}
 
-	return true;
+	do
+	{
+		ccCfg.Provider = CRYPTO_PROVIDER_HW;
+		ccCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
+		ccCfg.Flags    = CRYPTO_FLAG_SELFTEST;
+		ccCfg.pMem     = ccArena;
+		ccCfg.MemSize  = sizeof(ccArena);
+
+		if (CryptoHwInit(&ccDev, &ccCfg) == false)
+		{
+			break;
+		}
+		if (CryptoHasProp(&ccDev, CRYPTO_PROP_PLAIN_KEYCTX) == false)
+		{
+			break;
+		}
+
+		ccUseCfg.ReqCaps = CRYPTO_CAP_ECDH_P256;
+		ccUseCfg.pMem    = ccUseArena;
+		ccUseCfg.MemSize = sizeof(ccUseArena);
+
+		if (CryptorInit(&ccUse, &ccUseCfg, &ccDev) == false)
+		{
+			break;
+		}
+		pCc = CryptorHandle(&ccUse);
+		if (pCc == nullptr)
+		{
+			break;
+		}
+
+		ueccCfg.Provider = CRYPTO_PROVIDER_UECC;
+		ueccCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
+		ueccCfg.pMem     = ueccArena;
+		ueccCfg.MemSize  = sizeof(ueccArena);
+
+		if (CryptoUeccInit(&ueccDev, &ueccCfg) == false)
+		{
+			break;
+		}
+
+		if (CryptoEcdhP256KeyGen(pCc, NULL, ccPub, NULL) != CRYPTO_STATUS_OK)
+		{
+			break;
+		}
+		if (CryptoEcdhP256KeyGen(&ueccDev, NULL, ueccPub, NULL) != CRYPTO_STATUS_OK)
+		{
+			break;
+		}
+		if (CryptoEcdhP256(pCc, NULL, ueccPub, dhCc, NULL) != CRYPTO_STATUS_OK)
+		{
+			break;
+		}
+		if (CryptoEcdhP256(&ueccDev, NULL, ccPub, dhUecc, NULL) != CRYPTO_STATUS_OK)
+		{
+			break;
+		}
+		if (memcmp(dhCc, dhUecc, sizeof(dhCc)) != 0)
+		{
+			break;
+		}
+
+		// The CC3xx private key must be consumed by the successful ECDH.
+		if (CryptoEcdhP256(pCc, NULL, ueccPub, dhCc, NULL) == CRYPTO_STATUS_OK)
+		{
+			break;
+		}
+
+		if (CryptoEcdhP256KeyGen(&ueccDev, NULL, ueccPub, NULL) != CRYPTO_STATUS_OK)
+		{
+			break;
+		}
+		if (CryptoEcdhP256KeyGen(pCc, NULL, ccPub, NULL) != CRYPTO_STATUS_OK)
+		{
+			break;
+		}
+		if (CryptoEcdhP256(&ueccDev, NULL, ccPub, dhUecc, NULL) != CRYPTO_STATUS_OK)
+		{
+			break;
+		}
+		if (CryptoEcdhP256(pCc, NULL, ueccPub, dhCc, NULL) != CRYPTO_STATUS_OK)
+		{
+			break;
+		}
+		if (memcmp(dhCc, dhUecc, sizeof(dhCc)) != 0)
+		{
+			break;
+		}
+		if (memcmp(dhCc, zero, sizeof(dhCc)) == 0)
+		{
+			break;
+		}
+
+		// A zero point is not a valid P-256 public key and must be rejected.
+		if (CryptoEcdhP256KeyGen(pCc, NULL, ccPub, NULL) != CRYPTO_STATUS_OK)
+		{
+			break;
+		}
+		if (CryptoEcdhP256(pCc, NULL, zero, dhCc, NULL) == CRYPTO_STATUS_OK)
+		{
+			break;
+		}
+
+		// The key is consumed even when peer validation fails.
+		if (CryptoEcdhP256(pCc, NULL, ueccPub, dhCc, NULL) == CRYPTO_STATUS_OK)
+		{
+			break;
+		}
+
+		res = true;
+	} while (false);
+
+	CryptoSecureWipe(dhCc, sizeof(dhCc));
+	CryptoSecureWipe(dhUecc, sizeof(dhUecc));
+	CryptoSecureWipe(ccArena, sizeof(ccArena));
+	CryptoSecureWipe(ccUseArena, sizeof(ccUseArena));
+	CryptoSecureWipe(ueccArena, sizeof(ueccArena));
+	return res;
 }
 
 int main(int argc, char **argv)
 {
-	(void)argc; (void)argv;
+	(void)argc;
+	(void)argv;
 
-	bool res = Cc3xxEcdhTest();
+	g_Cc3xxEcdhTestResult = Cc3xxEcdhTest() ? 1 : -1;
 
-	printf(res ? "Passed\r\n" : "Failed\r\n");
-
-	// Halt here: falling out of main on the bare-metal target would run into
-	// the C runtime exit path, which is not meant to execute on this build.
 	while (true)
 	{
 		__WFE();
 	}
 }
-
