@@ -19,9 +19,10 @@
 		big-endian X-coordinate DHKey. Interface byte buffers are copied
 		through aligned local buffers.
 
-		The generic cc3xx_rng.c adapter routes the CC3xx random API to IOsonata
-		RngGet. The CC3xx noise source, entropy conditioner, and DRBG modules
-		are not built.
+		The CC3xx RNG API is implemented here and routed to IOsonata RngGet.
+		The CC3xx noise source, entropy conditioner, and DRBG modules are not
+		built. Re-check the imported RNG entry points whenever the CC3xx driver
+		version is updated.
 
 		Peer public keys are checked to be on the P-256 curve with
 		cc3xx_lowlevel_ec_allocate_point_from_data before ECDH, closing the
@@ -38,6 +39,7 @@
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
+#include <assert.h>
 
 #include "crypto/crypto.h"
 #include "coredev/interrupt.h"
@@ -51,9 +53,15 @@
 #include "cc3xx_dev.h"
 #include "cc3xx_ahbm.h"
 #include "cc3xx_engine_state.h"
+#include "cc3xx_rng.h"
+#include "cc3xx_error.h"
 
 #define CC3XX_P256_BYTES		32
 #define CC3XX_P256_WORDS		(CC3XX_P256_BYTES / sizeof(uint32_t))
+
+#ifndef CC3XX_CONFIG_RNG_MAX_ATTEMPTS
+#define CC3XX_CONFIG_RNG_MAX_ATTEMPTS		100U
+#endif
 
 typedef struct {
 	uint32_t PrivKey[CC3XX_P256_WORDS];
@@ -62,6 +70,93 @@ typedef struct {
 
 static_assert(sizeof(CryptoCc3xxData_t) <= CRYPTO_MEMSIZE_HW,
 			  "CRYPTO_MEMSIZE_HW too small for CryptoCc3xxData_t");
+
+extern "C" {
+
+cc3xx_err_t cc3xx_lowlevel_rng_get_random(uint8_t *pBuff, size_t len,
+										  enum cc3xx_rng_quality_t quality)
+{
+	(void)quality;
+
+	if (pBuff == nullptr)
+	{
+		if (len != 0U)
+		{
+			return CC3XX_ERR_RNG_INVALID_RNG;
+		}
+		return CC3XX_ERR_SUCCESS;
+	}
+
+	if (RngGet(pBuff, len) == false)
+	{
+		return CC3XX_ERR_RNG_INVALID_RNG;
+	}
+
+	return CC3XX_ERR_SUCCESS;
+}
+
+cc3xx_err_t cc3xx_lowlevel_rng_get_random_uint(uint32_t bound,
+										   uint32_t *pValue,
+										   enum cc3xx_rng_quality_t quality)
+{
+	uint32_t value;
+	uint32_t attempts = 0U;
+	uint32_t mask;
+	cc3xx_err_t err;
+
+	assert(bound != 0U);
+	if (bound == 0U || pValue == nullptr)
+	{
+		return CC3XX_ERR_RNG_INVALID_RNG;
+	}
+
+	if ((bound & (bound - 1U)) == 0U)
+	{
+		mask = bound - 1U;
+	}
+	else
+	{
+		mask = UINT32_MAX >> __builtin_clz(bound);
+	}
+
+	do
+	{
+		err = cc3xx_lowlevel_rng_get_random((uint8_t *)&value, sizeof(value),
+											quality);
+		if (err != CC3XX_ERR_SUCCESS)
+		{
+			return err;
+		}
+
+		value &= mask;
+
+		if (attempts++ >= CC3XX_CONFIG_RNG_MAX_ATTEMPTS)
+		{
+			return CC3XX_ERR_RNG_TOO_MANY_ATTEMPTS;
+		}
+	} while (value >= bound);
+
+	*pValue = value;
+	return CC3XX_ERR_SUCCESS;
+}
+
+void cc3xx_lowlevel_rng_get_random_permutation(uint8_t *pPermutation,
+											   size_t len)
+{
+	assert(pPermutation != nullptr);
+	assert(len <= 256U);
+	if (pPermutation == nullptr || len > 256U)
+	{
+		return;
+	}
+
+	for (size_t idx = 0U; idx < len; idx++)
+	{
+		pPermutation[idx] = (uint8_t)idx;
+	}
+}
+
+} // extern "C"
 
 static bool s_bCcInit;
 static volatile bool s_bCc3xxBusy;
