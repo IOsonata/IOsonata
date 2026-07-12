@@ -47,7 +47,7 @@
 // This engine is available on a target when this file is added to the MCU lib
 // project. It needs the PSA Crypto headers; if they do not resolve the build
 // fails and reports it. A lib links exactly one file defining CryptoHwInit:
-// this one, crypto_cc310.cpp, or crypto_hw_none.cpp.
+// this one, crypto_cc3xx.cpp, or crypto_hw_none.cpp.
 #include "psa/crypto.h"
 
 // Per-instance key context: PSA owns the private key inside its keystore, so

@@ -36,6 +36,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "nrf.h"			// __WFE for the post-test halt loop
 #include "crypto/crypto.h"
 
 bool Cc3xxEcdhTest(void)
@@ -140,15 +141,17 @@ bool Cc3xxEcdhTest(void)
 
 int main(int argc, char **argv)
 {
+	(void)argc; (void)argv;
+
 	bool res = Cc3xxEcdhTest();
 
-	if (res == false)
+	printf(res ? "Passed\r\n" : "Failed\r\n");
+
+	// Halt here: falling out of main on the bare-metal target would run into
+	// the C runtime exit path, which is not meant to execute on this build.
+	while (true)
 	{
-		printf("failed\r\n");
-	}
-	else
-	{
-		printf("Passed\r\n");
+		__WFE();
 	}
 }
 

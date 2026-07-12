@@ -834,7 +834,7 @@ CRYPTO_STATUS CryptoHmacSha256(CryptoDev_t * const pDev,
 // library while CryptoInit reported that no engine exists.
 //
 // Every lib links exactly one file per engine slot:
-//   hw   : crypto_cc310.cpp   or crypto_hw_none.cpp
+//   hw   : a port CryptoHwInit (crypto_cc3xx.cpp, crypto_psa_bm.cpp) or crypto_hw_none.cpp
 //   psa  : crypto_psa.cpp     or crypto_psa_none.cpp
 //   uecc : crypto_uecc.cpp    or crypto_uecc_none.cpp
 //-----------------------------------------------------------------------------

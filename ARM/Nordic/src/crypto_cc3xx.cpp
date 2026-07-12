@@ -6,10 +6,10 @@
 		P-256 ECDH for LE Secure Connections on the nRF52840 CryptoCell
 		CC310, built directly on the open Arm register level driver
 		(Mbed-TLS/tf-psa-crypto-drivers, vendor/arm/cc3xx/low_level_driver)
-		with no vendor blob, no PSA core, no nRF5 SDK. It is an alternative
-		to crypto_cc310.cpp (CRYS blob) and to the PSA-over-CC310 path; a lib
-		links exactly one file defining CryptoHwInit: this one,
-		crypto_cc310.cpp, crypto_psa_bm.cpp, or crypto_hw_none.cpp.
+		with no vendor blob, no PSA core, no nRF5 SDK. It replaced the retired
+		crypto_cc310.cpp CRYS blob engine and the PSA-over-CC310 path as the
+		nRF52840 hardware engine; a lib links exactly one file defining
+		CryptoHwInit: this one, crypto_psa_bm.cpp, or crypto_hw_none.cpp.
 
 		Key and point byte order: the driver reads and writes its PKA
 		registers with a per-word endianness swap, so its uint32_t buffers
@@ -30,12 +30,12 @@
 		SP800-186 D.1 point check) before the DH, closing the invalid-curve
 		attack (CVE-2018-5383). The driver ECDH itself loads the raw
 		coordinates without validation, so this engine performs the check,
-		the same responsibility crypto_uecc.cpp and crypto_cc310.cpp take.
+		the same responsibility the crypto_uecc.cpp engine takes.
 
 		Peripheral enable: the CryptoCell wrapper enable register
 		(NRF_CRYPTOCELL->ENABLE) is turned on at init and left on. This is a
-		deliberate power tradeoff, not the gating crypto_cc310.cpp uses (that
-		engine disables ENABLE after each operation): the Nordic wrapper has
+		deliberate power tradeoff, unlike the retired CRYS engine which
+		disabled ENABLE after each operation: the Nordic wrapper has
 		no ready flag and toggling ENABLE per operation raced the block
 		power-up (see Cc3xxOn). Measure the idle current with ENABLE set
 		before shipping; a pairing-scoped enable/disable is the planned

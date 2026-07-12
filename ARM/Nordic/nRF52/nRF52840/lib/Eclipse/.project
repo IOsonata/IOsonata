@@ -1656,11 +1656,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_cc310.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/crypto_cc310.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/crypto/crypto_cc3xx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_cc3xx.cpp</locationURI>

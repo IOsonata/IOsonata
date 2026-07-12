@@ -135,7 +135,7 @@ stub `Init` returns false.
 |---|---|---|---|
 | `CryptoUeccInit` | ECDH P-256 | `src/crypto/crypto_uecc.cpp` | Software (micro-ecc). ECDH only. Borrows `RngGet`. |
 | `CryptoMbedtlsInit` | AES + ECDH | `src/crypto/crypto_mbedtls.cpp` | Software; hardware-accelerated where the platform mbedTLS sits over CC3xx/CRACEN/PKA (nRF52840, nRF54, nRF91). Also serves TLS/DFU. |
-| `CryptoHwInit` | ECDH (+AES on PSA) | `ARM/Nordic/src/crypto_cc3xx.cpp`, `ARM/Nordic/nRF54/src/crypto_psa_bm.cpp`, `ARM/Nordic/nRF52/src/crypto_cc310.cpp` | Architecture hardware engine, one public symbol, one definer per lib project configuration (selection is by source inclusion, not header guards). `crypto_cc3xx.cpp` is the nRF52840 engine on the open Arm CC3xx driver over the CC310, used by all nRF52840 lib configurations (SoftDevice and SDC). `crypto_psa_bm.cpp` uses the PSA Crypto API that sdk-nrf-bm ships bare-metal (CRACEN on nRF54L). `crypto_cc310.cpp` is the legacy CRYS-blob engine, retained as an alternative but excluded from every configuration. A target with none links the crypto_hw_none.cpp stub, and `CryptoInit(AUTO)` then uses software uECC. Other ports (STM32 PKA, ESP) add their own `CryptoHwInit` later. |
+| `CryptoHwInit` | ECDH (+AES on PSA) | `ARM/Nordic/src/crypto_cc3xx.cpp`, `ARM/Nordic/nRF54/src/crypto_psa_bm.cpp` | Architecture hardware engine, one public symbol, one definer per lib project configuration (selection is by source inclusion, not header guards). `crypto_cc3xx.cpp` is the nRF52840 engine on the open Arm CC3xx driver over the CC310, used by all nRF52840 lib configurations (SoftDevice and SDC); it replaced the retired CRYS-blob crypto_cc310.cpp. `crypto_psa_bm.cpp` uses the PSA Crypto API that sdk-nrf-bm ships bare-metal (CRACEN on nRF54L). A target with none links the crypto_hw_none.cpp stub, and `CryptoInit(AUTO)` then uses software uECC. Other ports (STM32 PKA, ESP) add their own `CryptoHwInit` later. |
 
 Public engine names are provider-class, never target-specific. A port implements
 `CryptoHwInit` for its architecture, but the public symbol stays `CryptoHwInit`;
@@ -273,4 +273,3 @@ consumers need them; existing bits are never renumbered.
 | `src/crypto/crypto_mbedtls.cpp` | Software AES + ECDH engine (mbedTLS). |
 | `ARM/Nordic/nRF54/src/crypto_psa_bm.cpp` | Hardware `CryptoHwInit` via PSA Crypto shipped by sdk-nrf-bm (CRACEN on nRF54L). |
 | `ARM/Nordic/src/crypto_cc3xx.cpp` | Hardware `CryptoHwInit` on the open Arm CC3xx driver over CC310 (nRF52840, all lib configurations). |
-| `ARM/Nordic/nRF52/src/crypto_cc310.cpp` | Hardware `CryptoHwInit` on the CRYS API of libnrf_cc310 (nRF52840). Legacy alternative, excluded from every configuration. |
