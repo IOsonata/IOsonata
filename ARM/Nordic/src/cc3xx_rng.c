@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	cc3xx_rng.c
 
-@brief	IOsonata RNG source for the Arm CC3xx low level driver over RngGet
+@brief	Nordic platform hooks for the Arm CC3xx low level driver.
 
 		This is a lean replacement for the upstream cc3xx_rng.c
 		(tf-psa-crypto-drivers, vendor/arm/cc3xx/low_level_driver/src). The
@@ -18,6 +18,10 @@
 		CC3xx RNG entry points to RngGet, so the CC3xx driver reduces to the
 		PKA and elliptic curve arithmetic it uniquely provides, and the whole
 		DRBG and entropy stack drops out of the build under gc-sections.
+
+		The same linked translation unit implements the generic CC3xx target
+		wrapper hooks. cc3xx_nrfx.h selects the verified Nordic MDK wrapper
+		symbol for the target; no numeric peripheral address is duplicated.
 
 		Only these three entry points are part of the CC3xx RNG public API
 		(cc3xx_rng.h). With CC3XX_CONFIG_DPA_MITIGATIONS_ENABLE off, the EC
@@ -48,6 +52,8 @@
 
 #include "cc3xx_rng.h"
 #include "cc3xx_error.h"
+#include "cc3xx_port.h"
+#include "cc3xx_nrfx.h"
 
 // RngGet is the IOsonata crypto RBG interface, declared in crypto.h. It is
 // declared here directly rather than including the C++ crypto.h so this C
@@ -64,6 +70,18 @@ bool RngGet(uint8_t *pBuff, size_t Len);
 #ifndef CC3XX_CONFIG_RNG_MAX_ATTEMPTS
 #define CC3XX_CONFIG_RNG_MAX_ATTEMPTS		100
 #endif
+
+bool Cc3xxPortEnable(void)
+{
+	CC3XX_NRFX_WRAPPER->ENABLE = 1;
+
+	return CC3XX_NRFX_WRAPPER->ENABLE != 0;
+}
+
+void Cc3xxPortDisable(void)
+{
+	CC3XX_NRFX_WRAPPER->ENABLE = 0;
+}
 
 // Fill a buffer with cryptographic random bytes from RngGet. The quality
 // argument from the CC3xx API is ignored: RngGet is always the hardware
@@ -96,7 +114,7 @@ cc3xx_err_t cc3xx_lowlevel_rng_get_random(uint8_t *buf, size_t length,
 // above bound, then discard values at or above bound. Only the byte source
 // differs, RngGet instead of the DRBG.
 cc3xx_err_t cc3xx_lowlevel_rng_get_random_uint(uint32_t bound, uint32_t *uint,
-											   enum cc3xx_rng_quality_t quality)
+										   enum cc3xx_rng_quality_t quality)
 {
 	uint32_t value;
 	uint32_t attempts = 0;
