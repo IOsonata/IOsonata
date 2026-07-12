@@ -1548,7 +1548,7 @@
 		<link>
 			<name>src/cli/nrf_cli_uart.c</name>
 			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF52/src/nrf_cli_uart.c</location>
+			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_cli_uart.c</locationURI>
 		</link>
 		<link>
 			<name>src/converters/adc_ltc2495.cpp</name>
@@ -5563,7 +5563,7 @@
 		<link>
 			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/common/cc3xx_stdlib.c</name>
 			<type>1</type>
-			<location>/Users/hoan/swdev/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/common/cc3xx_stdlib.c</location>
+			<locationURI>PARENT-7-PROJECT_LOC/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/common/cc3xx_stdlib.c</locationURI>
 		</link>
 		<link>
 			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src</name>
@@ -5673,12 +5673,12 @@
 		<link>
 			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_weierstrass.c</name>
 			<type>1</type>
-			<location>/Users/hoan/swdev/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_weierstrass.c</location>
+			<locationURI>PARENT-7-PROJECT_LOC/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_weierstrass.c</locationURI>
 		</link>
 		<link>
 			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_weierstrass.h</name>
 			<type>1</type>
-			<location>/Users/hoan/swdev/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_weierstrass.h</location>
+			<locationURI>PARENT-7-PROJECT_LOC/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_weierstrass.h</locationURI>
 		</link>
 		<link>
 			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ecdh.c</name>

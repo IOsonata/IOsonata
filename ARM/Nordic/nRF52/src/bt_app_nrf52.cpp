@@ -1211,7 +1211,7 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
     // request and replies to the SoftDevice; the app only pumps
     // nrf_ble_lesc_request_handler in the main loop.
     static CryptoDev_t s_LescEcdh;
-    static uint8_t     s_LescEcdhMem[CRYPTO_MEMSIZE_ECDH];
+    alignas(uint32_t) static uint8_t s_LescEcdhMem[CRYPTO_MEMSIZE_ECDH];    // word aligned per CryptoCfg_t pMem
     CryptoCfg_t lescCfg = { };
     lescCfg.Provider = CRYPTO_PROVIDER_AUTO;
     lescCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;

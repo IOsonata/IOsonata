@@ -4,8 +4,8 @@
 @brief	Crypto engine: no hardware engine on this target.
 
 Null implementation of the hardware engine entry point. A part with a hardware
-crypto block links its own engine (crypto_cc310.cpp on nRF52840, crypto_psa.cpp
-on nRF54). A part with none links this file instead, so CryptoHwInit is always
+crypto block links its own engine (crypto_cc3xx.cpp on nRF52840,
+crypto_psa_bm.cpp on nRF54). A part with none links this file instead, so CryptoHwInit is always
 defined exactly once and CryptoInit needs no conditional compilation to know
 which parts have hardware.
 

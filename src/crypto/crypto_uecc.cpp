@@ -20,6 +20,7 @@ through with no reversal.
 
 @license MIT, (c) 2026 I-SYST.
 ----------------------------------------------------------------------------*/
+#include <stdint.h>
 #include <string.h>
 
 #include "crypto/crypto.h"
@@ -200,6 +201,10 @@ bool CryptoUeccInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 	if (pCfg->pMem == nullptr || pCfg->MemSize < sizeof(CryptoUeccData_t))
 	{
 		return false;	// caller must supply per-instance state
+	}
+	if (((uintptr_t)pCfg->pMem & (alignof(uint32_t) - 1)) != 0)
+	{
+		return false;	// arena must be word aligned (see CryptoCfg_t pMem)
 	}
 	uint32_t caps = CRYPTO_CAP_ECDH_P256 | CRYPTO_CAP_SHA256 | CRYPTO_CAP_HMAC_SHA256 |
 					CRYPTO_CAP_ECDSA_P256_SIGN | CRYPTO_CAP_ECDSA_P256_VERIFY;

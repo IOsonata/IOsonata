@@ -146,5 +146,9 @@ int main(int argc, char **argv)
 	{
 		printf("failed\r\n");
 	}
+	else
+	{
+		printf("Passed\r\n");
+	}
 }
 

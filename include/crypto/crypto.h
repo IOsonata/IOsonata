@@ -121,7 +121,10 @@ typedef enum __Crypto_Provider {
 /// Per-instance configuration. The App fills this and passes it to an engine
 /// Init. pMem/MemSize is App-owned RAM that holds the engine's per-instance
 /// secret state (no heap); a separate buffer per instance keeps instances
-/// independent. ReqCaps is validated by the engine at Init (an engine that
+/// independent. pMem must be at least uint32_t (4-byte) aligned: engines keep
+/// word-typed key state in it and hand those words to hardware drivers, so
+/// declare the arena with alignas(uint32_t). Engine Inits fail closed on a
+/// misaligned arena. ReqCaps is validated by the engine at Init (an engine that
 /// cannot meet it returns false); ReqCaps 0 means the provider's full native
 /// set. DevNo selects a hardware block for HW providers and is ignored by the
 /// software providers.
@@ -132,7 +135,7 @@ typedef struct __Crypto_Cfg {
 	uint32_t           Flags;	//!< CRYPTO_FLAG_* policy bits
 	int                IntPrio;	//!< Interrupt priority for an async HW engine (IRQ_PRIO_*)
 	CryptoEvtHandler_t EvtCB;	//!< Completion callback for async ops; NULL for synchronous
-	void              *pMem;	//!< App-owned per-instance state arena (no heap)
+	void              *pMem;	//!< App-owned per-instance state arena (no heap), uint32_t aligned
 	size_t             MemSize;	//!< Size of pMem in bytes
 } CryptoCfg_t;
 

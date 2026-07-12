@@ -44,6 +44,7 @@
 
 @license MIT, (c) 2026 I-SYST. See bt_smp.h for full text.
 ----------------------------------------------------------------------------*/
+#include <stdint.h>
 #include <string.h>
 
 #include "crypto/crypto.h"
@@ -221,6 +222,10 @@ bool CryptoPsaInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 	if (pCfg->pMem == nullptr || pCfg->MemSize < sizeof(CryptoPsaData_t))
 	{
 		return false;	// caller must supply per-instance state
+	}
+	if (((uintptr_t)pCfg->pMem & (alignof(uint32_t) - 1)) != 0)
+	{
+		return false;	// arena must be word aligned (see CryptoCfg_t pMem)
 	}
 	if ((pCfg->ReqCaps & ~(uint32_t)(CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256)) != 0)
 	{
