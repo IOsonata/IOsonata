@@ -47,9 +47,21 @@ static_assert(sizeof(CryptoUeccData_t) <= CRYPTO_MEMSIZE_UECC,
 
 // Resolve the per-instance key context: a caller-supplied pKeyCtx (a Cryptor
 // sharing one engine) overrides this engine's own pDevData (dedicated engine).
-static inline CryptoUeccData_t *UeccData(CryptoDev_t * const pDev, void *pKeyCtx)
+// Resolve the key context: the Cryptor-supplied context, else the engine own.
+// A caller-supplied context is validated like the Init pMem check: non-null
+// and word aligned. Returns nullptr on a bad context so the operation fails
+// closed.
+static CryptoUeccData_t *UeccData(CryptoDev_t * const pDev, void *pKeyCtx)
 {
-	return (CryptoUeccData_t *)(pKeyCtx != nullptr ? pKeyCtx : pDev->pDevData);
+	void *p = pKeyCtx != nullptr ? pKeyCtx :
+			  (pDev != nullptr ? pDev->pDevData : nullptr);
+
+	if (p == nullptr || ((uintptr_t)p & (alignof(CryptoUeccData_t) - 1)) != 0)
+	{
+		return nullptr;
+	}
+
+	return (CryptoUeccData_t *)p;
 }
 
 // RNG source for uECC. micro-ecc requires an RNG before key generation; it is
@@ -66,7 +78,7 @@ static CRYPTO_STATUS UeccEcdhKeyGen(CryptoDev_t * const pDev, void *pKeyCtx,
 {
 	(void)pOpCtx;
 	CryptoUeccData_t *pd = UeccData(pDev, pKeyCtx);
-	if (pd == nullptr)
+	if (pd == nullptr || pPubKey == nullptr)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
@@ -96,7 +108,7 @@ static CRYPTO_STATUS UeccEcdh(CryptoDev_t * const pDev, void *pKeyCtx,
 {
 	(void)pOpCtx;
 	CryptoUeccData_t *pd = UeccData(pDev, pKeyCtx);
-	if (pd == nullptr)
+	if (pd == nullptr || pPeerPubKey == nullptr || pDhKey == nullptr)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}

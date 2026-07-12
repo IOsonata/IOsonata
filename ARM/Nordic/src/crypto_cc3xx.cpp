@@ -119,9 +119,20 @@ static inline void Cc3xxRelease(void)
 }
 
 // Resolve the key context: the Cryptor-supplied context, else the engine own.
-static inline CryptoCc3xxData_t *Cc3xxData(CryptoDev_t * const pDev, void *pKeyCtx)
+// A caller-supplied context is validated the same way Init validates pMem:
+// non-null and word aligned, since it holds the uint32_t key words handed to
+// the driver. Returns nullptr on a bad context so the operation fails closed.
+static CryptoCc3xxData_t *Cc3xxData(CryptoDev_t * const pDev, void *pKeyCtx)
 {
-	return (CryptoCc3xxData_t *)(pKeyCtx != nullptr ? pKeyCtx : pDev->pDevData);
+	void *p = pKeyCtx != nullptr ? pKeyCtx :
+			  (pDev != nullptr ? pDev->pDevData : nullptr);
+
+	if (p == nullptr || ((uintptr_t)p & (alignof(CryptoCc3xxData_t) - 1)) != 0)
+	{
+		return nullptr;
+	}
+
+	return (CryptoCc3xxData_t *)p;
 }
 
 // Enable the CryptoCell subsystem. The Nordic wrapper exposes only an ENABLE
@@ -137,9 +148,12 @@ static inline void Cc3xxOn(void)
 	{
 		NRF_CRYPTOCELL->ENABLE = 1;
 		// Allow the subsystem to settle before first access. There is no
-		// ready flag to poll, so a short fixed spin covers the power-up.
-		for (volatile uint32_t i = 0; i < 256; i++)
+		// ready flag to poll, so a short fixed spin covers the power-up. The
+		// empty asm keeps the loop from being optimized out without a
+		// volatile counter (volatile compound access is deprecated in C++23).
+		for (uint32_t i = 0; i < 256; i++)
 		{
+			__asm volatile("");
 		}
 	}
 }
@@ -157,6 +171,20 @@ static CRYPTO_STATUS EnsureCc3xx(void)
 		return CRYPTO_STATUS_OK;
 	}
 
+	// Serialize bring-up with the same single-operation guard, and re-check
+	// the flag after acquiring so a raced second caller returns without
+	// touching the block. Lock order: this function is never called while the
+	// guard is held; operations call it before their own acquire.
+	if (Cc3xxAcquire() == false)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (s_bCcInit)
+	{
+		Cc3xxRelease();
+		return CRYPTO_STATUS_OK;
+	}
+
 	Cc3xxOn();
 
 	// CryptoCell bring-up, the subset of cc3xx_lowlevel_init that applies to
@@ -168,6 +196,7 @@ static CRYPTO_STATUS EnsureCc3xx(void)
 	if ((P_CC3XX->host_rgf.host_boot & (1U << 11)) == 0)	// RNG_EXISTS_LOCAL
 	{
 		NRF_CRYPTOCELL->ENABLE = 0;	// do not leave the block powered on failure
+		Cc3xxRelease();
 		return CRYPTO_STATUS_FAIL;
 	}
 
@@ -193,6 +222,7 @@ static CRYPTO_STATUS EnsureCc3xx(void)
 
 
 	s_bCcInit = true;
+	Cc3xxRelease();
 	return CRYPTO_STATUS_OK;
 }
 
@@ -208,7 +238,7 @@ static CRYPTO_STATUS Cc3xxEcdhKeyGen(CryptoDev_t * const pDev, void *pKeyCtx,
 {
 	(void)pOpCtx;
 	CryptoCc3xxData_t *pd = Cc3xxData(pDev, pKeyCtx);
-	if (pd == nullptr || EnsureCc3xx() != CRYPTO_STATUS_OK)
+	if (pd == nullptr || pPubKey == nullptr || EnsureCc3xx() != CRYPTO_STATUS_OK)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
@@ -263,21 +293,24 @@ static CRYPTO_STATUS Cc3xxEcdhKeyGen(CryptoDev_t * const pDev, void *pKeyCtx,
 
 // Core ECDH over a supplied private key and SEC1 peer public key. Used by both
 // the interface Ecdh (instance key) and the self test (spec key).
+// Caller must hold the single-operation guard (Cc3xxAcquire) around this call;
+// the guard sits in the public entry points so a busy engine can be reported
+// before any key state is consumed.
 static CRYPTO_STATUS Cc3xxEcdhRaw(const uint32_t privKey[CC3XX_P256_WORDS],
 								  const uint8_t pPeerPubKey[64],
 								  uint8_t pDhKey[32])
 {
+	if (privKey == nullptr || pPeerPubKey == nullptr || pDhKey == nullptr)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+
 	// Peer key halves are SEC1 big-endian X then Y. Copy through aligned
 	// locals so no unaligned word access is assumed on the byte buffer.
 	uint32_t peerX[CC3XX_P256_WORDS];
 	uint32_t peerY[CC3XX_P256_WORDS];
 	memcpy(peerX, &pPeerPubKey[0],  CC3XX_P256_BYTES);
 	memcpy(peerY, &pPeerPubKey[32], CC3XX_P256_BYTES);
-
-	if (Cc3xxAcquire() == false)
-	{
-		return CRYPTO_STATUS_FAIL;	// engine busy with another operation
-	}
 
 	Cc3xxOn();
 
@@ -302,7 +335,6 @@ static CRYPTO_STATUS Cc3xxEcdhRaw(const uint32_t privKey[CC3XX_P256_WORDS],
 	}
 	if (r != CC3XX_ERR_SUCCESS)
 	{
-		Cc3xxRelease();
 		return CRYPTO_STATUS_FAIL;
 	}
 
@@ -324,7 +356,6 @@ static CRYPTO_STATUS Cc3xxEcdhRaw(const uint32_t privKey[CC3XX_P256_WORDS],
 	}
 
 	CryptoSecureWipe(secret, sizeof(secret));
-	Cc3xxRelease();
 	return rc;
 }
 
@@ -346,11 +377,23 @@ static CRYPTO_STATUS Cc3xxEcdh(CryptoDev_t * const pDev, void *pKeyCtx,
 		return CRYPTO_STATUS_FAIL;
 	}
 
+	// Acquire before consuming key state: a transient busy engine returns
+	// FAIL without touching the key, so a retry after the other operation
+	// completes is possible. CRYPTO_STATUS has no BUSY value to distinguish
+	// contention from a hard failure; preserving the key is the deliberate
+	// policy here. Once the operation runs, the key is single use and is
+	// consumed on every outcome.
+	if (Cc3xxAcquire() == false)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+
 	CRYPTO_STATUS rc = Cc3xxEcdhRaw(pd->PrivKey, pPeerPubKey, pDhKey);
 
 	// The private key is single use: consume it whether or not the DH
 	// succeeded, so a stale key cannot be reused.
 	Cc3xxKeyReset(pd);
+	Cc3xxRelease();
 
 	return rc;
 }
@@ -390,7 +433,13 @@ static int Cc3xxSelfTest(CryptoDev_t * const pDev)
 	memcpy(priv, privA, sizeof(privA));
 
 	uint8_t dh[32];
+	if (Cc3xxAcquire() == false)
+	{
+		CryptoSecureWipe(priv, sizeof(priv));
+		return -1;	// engine busy with another operation
+	}
 	CRYPTO_STATUS rc = Cc3xxEcdhRaw(priv, pubB, dh);
+	Cc3xxRelease();
 
 	int ret;
 	if (rc != CRYPTO_STATUS_OK)

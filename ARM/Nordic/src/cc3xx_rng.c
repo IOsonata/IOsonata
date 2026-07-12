@@ -103,7 +103,15 @@ cc3xx_err_t cc3xx_lowlevel_rng_get_random_uint(uint32_t bound, uint32_t *uint,
 	uint32_t mask;
 	cc3xx_err_t err;
 
+	// Runtime validation: with NDEBUG the assert vanishes, and bound == 0
+	// would reach (bound - 1) wraparound and __builtin_clz(0), which is
+	// undefined. The upstream file has only the assert; this replacement
+	// keeps the API safe unconditionally.
 	assert(bound != 0);
+	if (bound == 0 || uint == NULL)
+	{
+		return CC3XX_ERR_RNG_INVALID_RNG;
+	}
 
 	if ((bound & (bound - 1)) == 0)
 	{
@@ -142,6 +150,16 @@ void cc3xx_lowlevel_rng_get_random_permutation(uint8_t *permutation_buf,
 											   size_t len)
 {
 	size_t idx;
+
+	// The entries are uint8_t, so indices past 256 would wrap; the driver
+	// callers stay under 256 words per copy (asserted in cc3xx_pka.c). Guard
+	// here too so this local replacement is safe on its own.
+	assert(permutation_buf != NULL);
+	assert(len <= 256U);
+	if (permutation_buf == NULL || len > 256U)
+	{
+		return;
+	}
 
 	for (idx = 0; idx < len; idx++)
 	{

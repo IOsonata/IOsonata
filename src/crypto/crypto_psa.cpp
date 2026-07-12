@@ -66,9 +66,21 @@ static_assert(sizeof(CryptoPsaData_t) <= CRYPTO_MEMSIZE_PSA,
 			  "CRYPTO_MEMSIZE_PSA too small for CryptoPsaData_t");
 
 // Resolve the key context: the Cryptor-supplied context, else the engine own.
-static inline CryptoPsaData_t *PsaData(CryptoDev_t * const pDev, void *pKeyCtx)
+// Resolve the key context: the Cryptor-supplied context, else the engine own.
+// A caller-supplied context is validated like the Init pMem check: non-null
+// and word aligned. Returns nullptr on a bad context so the operation fails
+// closed.
+static CryptoPsaData_t *PsaData(CryptoDev_t * const pDev, void *pKeyCtx)
 {
-	return (CryptoPsaData_t *)(pKeyCtx != nullptr ? pKeyCtx : pDev->pDevData);
+	void *p = pKeyCtx != nullptr ? pKeyCtx :
+			  (pDev != nullptr ? pDev->pDevData : nullptr);
+
+	if (p == nullptr || ((uintptr_t)p & (alignof(CryptoPsaData_t) - 1)) != 0)
+	{
+		return nullptr;
+	}
+
+	return (CryptoPsaData_t *)p;
 }
 
 // One-time PSA bring-up. psa_crypto_init is idempotent and cheap on repeat.
@@ -101,6 +113,10 @@ static CRYPTO_STATUS PsaAes128Ecb(CryptoDev_t * const pDev, const uint8_t Key[16
 								   const uint8_t In[16], uint8_t Out[16], void *pCtx)
 {
 	(void)pDev; (void)pCtx;
+	if (Key == nullptr || In == nullptr || Out == nullptr)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
 	if (EnsurePsa() != CRYPTO_STATUS_OK)
 	{
 		return CRYPTO_STATUS_FAIL;
@@ -130,7 +146,7 @@ static CRYPTO_STATUS PsaEcdhKeyGen(CryptoDev_t * const pDev, void *pKeyCtx,
 {
 	(void)pOpCtx;
 	CryptoPsaData_t *pd = PsaData(pDev, pKeyCtx);
-	if (pd == nullptr || EnsurePsa() != CRYPTO_STATUS_OK)
+	if (pd == nullptr || pPubKey == nullptr || EnsurePsa() != CRYPTO_STATUS_OK)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
@@ -175,7 +191,7 @@ static CRYPTO_STATUS PsaEcdh(CryptoDev_t * const pDev, void *pKeyCtx,
 {
 	(void)pOpCtx;
 	CryptoPsaData_t *pd = PsaData(pDev, pKeyCtx);
-	if (pd == nullptr)
+	if (pd == nullptr || pPeerPubKey == nullptr || pDhKey == nullptr)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
