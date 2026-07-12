@@ -44,6 +44,8 @@
 #include <stdbool.h>
 #include <assert.h>
 
+#include "nrf.h"
+
 #ifndef CC3XX_CONFIG_FILE
 #include "cc3xx_config.h"
 #else
