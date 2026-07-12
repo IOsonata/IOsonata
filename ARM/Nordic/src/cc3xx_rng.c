@@ -4,11 +4,12 @@
 @brief	IOsonata RNG and Nordic wrapper hooks for the Arm CC3xx driver.
 
 		This file replaces the upstream cc3xx_rng.c from
-		tf-psa-crypto-drivers, vendor/arm/cc3xx/low_level_driver/src. The
-		upstream implementation provides a TRNG noise source, entropy
-		conditioning, and a CTR or HMAC DRBG. IOsonata already provides the
-		RngGet cryptographic random-byte interface, so the three CC3xx RNG
-		entry points are routed to RngGet instead.
+		tf-psa-crypto-drivers commit 27c8ccd,
+		vendor/arm/cc3xx/low_level_driver/src. The upstream implementation
+		provides a TRNG noise source, entropy conditioning, and a CTR or HMAC
+		DRBG. IOsonata already provides the RngGet cryptographic random-byte
+		interface, so the three CC3xx RNG entry points are routed to RngGet
+		instead.
 
 		CC3XX_CONFIG_DPA_MITIGATIONS_ENABLE is disabled in this build. The
 		live random-byte caller is private-key scalar generation in cc3xx_pka.c.
