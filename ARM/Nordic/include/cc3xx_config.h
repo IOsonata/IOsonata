@@ -7,7 +7,7 @@
 		(Mbed-TLS/tf-psa-crypto-drivers, vendor/arm/cc3xx/low_level_driver)
 		against the CC310 instance in the nRF52840, scoped to P-256 ECDH for
 		LE Secure Connections: Weierstrass EC on the PKA and key generation.
-		Randomness comes from IOsonata RngGet through ARM/src/cc3xx_rng.cpp;
+		Randomness comes from IOsonata RngGet through ARM/src/crypto_cc3xx.cpp;
 		the CC3xx TRNG, entropy conditioner and DRBG are not built.
 
 		Integration facts, each from an authoritative source:
@@ -64,13 +64,14 @@
 // Randomness: sourced from IOsonata RngGet, not the CC3xx DRBG
 //----------------------------------------------------------------------------
 
-// The CC3xx RNG entry points are provided by ARM/src/cc3xx_rng.cpp over RngGet,
-// so the driver's own noise source, entropy conditioner and DRBG are not built.
-// CC3XX_CONFIG_RNG_ENABLE stays on so the public RNG API is declared, but no
-// DRBG or AES DRBG engine is selected: none of CC3XX_CONFIG_RNG_DRBG_CTR,
-// CC3XX_CONFIG_DRBG_CTR_ENABLE, CC3XX_CONFIG_AES_*_ENABLE is defined. The TRNG
-// ring oscillator and subsampling parameters are likewise unneeded; RngGet
-// owns the hardware entropy path.
+// The CC3xx RNG entry points are implemented in ARM/src/crypto_cc3xx.cpp over
+// RngGet, so the driver's own noise source, entropy conditioner and DRBG are not
+// built. CC3XX_CONFIG_RNG_ENABLE stays on so the public RNG API is declared,
+// but no DRBG or AES DRBG engine is selected: none of
+// CC3XX_CONFIG_RNG_DRBG_CTR, CC3XX_CONFIG_DRBG_CTR_ENABLE,
+// CC3XX_CONFIG_AES_*_ENABLE is defined. The TRNG ring oscillator and
+// subsampling parameters are likewise unneeded; RngGet owns the hardware
+// entropy path.
 #define CC3XX_CONFIG_RNG_ENABLE
 
 #ifndef CC3XX_CONFIG_RNG_MAX_ATTEMPTS
