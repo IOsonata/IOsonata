@@ -7,7 +7,7 @@
 		(Mbed-TLS/tf-psa-crypto-drivers, vendor/arm/cc3xx/low_level_driver)
 		against the CC310 instance in the nRF52840, scoped to P-256 ECDH for
 		LE Secure Connections: Weierstrass EC on the PKA and key generation.
-		Randomness comes from IOsonata RngGet through ARM/src/cc3xx_rng.c;
+		Randomness comes from IOsonata RngGet through ARM/src/cc3xx_rng.cpp;
 		the CC3xx TRNG, entropy conditioner and DRBG are not built.
 
 		Integration facts, each from an authoritative source:
@@ -64,7 +64,7 @@
 // Randomness: sourced from IOsonata RngGet, not the CC3xx DRBG
 //----------------------------------------------------------------------------
 
-// The CC3xx RNG entry points are provided by ARM/src/cc3xx_rng.c over RngGet,
+// The CC3xx RNG entry points are provided by ARM/src/cc3xx_rng.cpp over RngGet,
 // so the driver's own noise source, entropy conditioner and DRBG are not built.
 // CC3XX_CONFIG_RNG_ENABLE stays on so the public RNG API is declared, but no
 // DRBG or AES DRBG engine is selected: none of CC3XX_CONFIG_RNG_DRBG_CTR,
