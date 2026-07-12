@@ -763,7 +763,7 @@ static bool CoreInit(void)
 	return true;
 }
 
-struct CryptoCc3xxData {
+struct alignas(uint32_t) CryptoCc3xxData {
 	uint8_t PrivKey[P256_BYTES];
 	bool bKeyValid;
 };
