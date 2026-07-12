@@ -1,1 +1,1 @@
-../../src/cc3xx_rng.c
+../../src/cc3xx_rng.cpp
