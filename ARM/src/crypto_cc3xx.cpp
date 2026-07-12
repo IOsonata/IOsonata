@@ -1,37 +1,16 @@
 /**-------------------------------------------------------------------------
 @file	crypto_cc3xx.cpp
 
-@brief	CryptoDev_t hardware engine on the Arm CC3xx low level driver.
+@brief	IOsonata P-256 engine for Arm CryptoCell CC3xx PKA.
 
-		Generic P-256 ECDH provider for Arm targets containing a compatible
-		CryptoCell CC3xx engine. The implementation is built directly on the
-		open Arm register level driver from tf-psa-crypto-drivers, with no
-		vendor binary or PSA core dependency.
+		Implements P-256 key generation, public-key validation, and ECDH
+		directly on the CC3xx public-key accelerator. The implementation is
+		self-contained and does not depend on PSA, tf-psa-crypto-drivers, a
+		vendor binary, dynamic allocation, or a generic multi-curve framework.
 
-		The selected target supplies crypto_cc3xx.h. That header contains the
-		target-specific CC3xx driver configuration and the hardware enable and
-		disable operations required before accessing the CryptoCell registers.
-		CC3xx register initialization, serialization, key handling, and crypto
-		operations remain in this generic ARM source.
-
-		The driver reads and writes PKA registers with a per-word endianness
-		swap, so its uint32_t buffers hold big-endian byte strings. The
-		CryptoDev_t interface uses SEC1 big-endian X||Y public keys and a
-		big-endian X-coordinate DHKey. Interface byte buffers are copied
-		through aligned local buffers.
-
-		The CC3xx RNG API is implemented here and routed to IOsonata RngGet.
-		The CC3xx noise source, entropy conditioner, and DRBG modules are not
-		built. Re-check the imported RNG entry points whenever the CC3xx driver
-		version is updated.
-
-		Peer public keys are checked to be on the P-256 curve with
-		cc3xx_lowlevel_ec_allocate_point_from_data before ECDH, closing the
-		invalid-curve attack described by CVE-2018-5383.
-
-		The driver has global engine state, so one operation runs at a time. A
-		PRIMASK-protected try-acquire guard returns CRYPTO_STATUS_FAIL to a
-		concurrent caller instead of corrupting the PKA state.
+		The selected target supplies crypto_cc3xx.h with the CC3xx register base
+		and the target-specific enable and disable operations. All PKA register
+		handling and P-256 arithmetic remain private to this translation unit.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -39,6 +18,7 @@
 @license MIT, (c) 2026 I-SYST. See bt_smp.h for full text.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
+#include <stddef.h>
 #include <string.h>
 #include <assert.h>
 
@@ -46,152 +26,769 @@
 #include "coredev/interrupt.h"
 #include "crypto_cc3xx.h"
 
-// The CC3xx headers manage their own C linkage.
-#include "cc3xx_ecdh.h"
-#include "cc3xx_ecdsa.h"
-#include "cc3xx_ec.h"
-#include "cc3xx_ec_curve_data.h"
-#include "cc3xx_dev.h"
-#include "cc3xx_ahbm.h"
-#include "cc3xx_engine_state.h"
-#include "cc3xx_rng.h"
-#include "cc3xx_error.h"
-
-#define CC3XX_P256_BYTES		32
-#define CC3XX_P256_WORDS		(CC3XX_P256_BYTES / sizeof(uint32_t))
-
-#ifndef CC3XX_CONFIG_RNG_MAX_ATTEMPTS
-#define CC3XX_CONFIG_RNG_MAX_ATTEMPTS		100U
+#ifndef CC3XX_BASE_ADDRESS
+#error CC3XX_BASE_ADDRESS must be defined by crypto_cc3xx.h
 #endif
 
-typedef struct {
-	uint32_t PrivKey[CC3XX_P256_WORDS];
-	bool     bKeyValid;
-} CryptoCc3xxData_t;
+#ifndef CC3XX_PKA_SRAM_SIZE
+#define CC3XX_PKA_SRAM_SIZE		0x1000U
+#endif
 
-static_assert(sizeof(CryptoCc3xxData_t) <= CRYPTO_MEMSIZE_HW,
-			  "CRYPTO_MEMSIZE_HW too small for CryptoCc3xxData_t");
+namespace {
 
-extern "C" {
+constexpr size_t P256_BYTES = 32U;
+constexpr size_t P256_WORDS = P256_BYTES / sizeof(uint32_t);
+constexpr uint32_t PKA_REG_BYTES = 48U;
+constexpr uint32_t PKA_REG_WORDS = PKA_REG_BYTES / sizeof(uint32_t);
+constexpr uint32_t PKA_PHYS_REG_COUNT = 32U;
 
-cc3xx_err_t cc3xx_lowlevel_rng_get_random(uint8_t *pBuff, size_t len,
-										  enum cc3xx_rng_quality_t quality)
+static_assert(PKA_PHYS_REG_COUNT * PKA_REG_BYTES <= CC3XX_PKA_SRAM_SIZE,
+			  "CC3xx PKA SRAM is too small for the fixed P-256 register map");
+
+typedef uint8_t PkaReg_t;
+
+enum : PkaReg_t {
+	PKA_N = 0,
+	PKA_NP = 1,
+	PKA_N_MASK = 2,
+	P256_P_X = 3,
+	P256_P_Y = 4,
+	P256_P_Z = 5,
+	P256_R_X = 6,
+	P256_R_Y = 7,
+	P256_R_Z = 8,
+	P256_D_X = 9,
+	P256_D_Y = 10,
+	P256_D_Z = 11,
+	P256_A_X = 12,
+	P256_A_Y = 13,
+	P256_A_Z = 14,
+	P256_CONST_A = 15,
+	P256_CONST_B = 16,
+	P256_T0 = 17,
+	P256_T1 = 18,
+	P256_T2 = 19,
+	P256_T3 = 20,
+	P256_T4 = 21,
+	P256_T5 = 22,
+	P256_T6 = 23,
+	P256_T7 = 24,
+	P256_T8 = 25,
+	P256_T9 = 26,
+	P256_T10 = 27,
+	P256_T11 = 28,
+	P256_T12 = 29,
+};
+
+struct PkaPoint {
+	PkaReg_t X;
+	PkaReg_t Y;
+	PkaReg_t Z;
+};
+
+constexpr PkaPoint POINT_P = {P256_P_X, P256_P_Y, P256_P_Z};
+constexpr PkaPoint POINT_R = {P256_R_X, P256_R_Y, P256_R_Z};
+constexpr PkaPoint POINT_D = {P256_D_X, P256_D_Y, P256_D_Z};
+constexpr PkaPoint POINT_A = {P256_A_X, P256_A_Y, P256_A_Z};
+
+enum : uint32_t {
+	REG_PKA_MEMORY_MAP = 0x000U,
+	REG_PKA_OPCODE = 0x080U,
+	REG_PKA_STATUS = 0x088U,
+	REG_PKA_SW_RESET = 0x08CU,
+	REG_PKA_L_N = 0x090U,
+	REG_PKA_L_REGISTER = 0x094U,
+	REG_PKA_PIPE_READY = 0x0B0U,
+	REG_PKA_DONE = 0x0B4U,
+	REG_PKA_SRAM_ADDR = 0x0D4U,
+	REG_PKA_SRAM_WRITE = 0x0D8U,
+	REG_PKA_SRAM_READ = 0x0DCU,
+	REG_PKA_SRAM_READ_ADDR = 0x0E4U,
+	REG_PKA_CLOCK_ENABLE = 0x81CU,
+	REG_DMA_CLOCK_ENABLE = 0x820U,
+	REG_CRYPTO_CTL = 0x900U,
+	REG_HOST_ENDIAN = 0xA0CU,
+	REG_AHB_SINGLE = 0xB00U,
+	REG_AHB_HPROT = 0xB04U,
+	REG_AHB_HNONSEC = 0xB0CU,
+};
+
+enum : uint32_t {
+	PKA_OP_ADD = 0x04U,
+	PKA_OP_SUB = 0x05U,
+	PKA_OP_MOD_ADD = 0x06U,
+	PKA_OP_MOD_SUB = 0x07U,
+	PKA_OP_AND = 0x08U,
+	PKA_OP_COPY = 0x09U,
+	PKA_OP_COMPARE = 0x0AU,
+	PKA_OP_MOD_MUL = 0x11U,
+	PKA_OP_MOD_EXP = 0x13U,
+};
+
+enum : uint32_t {
+	PKA_SIZE_N = 0U,
+	PKA_SIZE_REGISTER = 1U,
+	PKA_STATUS_SIGN = (1U << 8),
+	PKA_STATUS_ZERO = (1U << 12),
+};
+
+static const uint32_t s_P256Field[P256_WORDS] = {
+	0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0x00000000U,
+	0x00000000U, 0x00000000U, 0x00000001U, 0xFFFFFFFFU,
+};
+
+static const uint32_t s_P256FieldBarrett[10] = {
+	0xFFFFFFFFU, 0x0000007FU, 0x00000080U, 0x00000000U,
+	0x00000000U, 0xFFFFFFFFU, 0x0000007FU, 0x00000080U,
+	0x00000000U, 0x00000000U,
+};
+
+static const uint32_t s_P256A[P256_WORDS] = {
+	0xFFFFFFFCU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0x00000000U,
+	0x00000000U, 0x00000000U, 0x00000001U, 0xFFFFFFFFU,
+};
+
+static const uint32_t s_P256B[P256_WORDS] = {
+	0x27D2604BU, 0x3BCE3C3EU, 0xCC53B0F6U, 0x651D06B0U,
+	0x769886BCU, 0xB3EBBD55U, 0xAA3A93E7U, 0x5AC635D8U,
+};
+
+static const uint8_t s_P256Generator[64] = {
+	0x6B,0x17,0xD1,0xF2,0xE1,0x2C,0x42,0x47,0xF8,0xBC,0xE6,0xE5,0x63,0xA4,0x40,0xF2,
+	0x77,0x03,0x7D,0x81,0x2D,0xEB,0x33,0xA0,0xF4,0xA1,0x39,0x45,0xD8,0x98,0xC2,0x96,
+	0x4F,0xE3,0x42,0xE2,0xFE,0x1A,0x7F,0x9B,0x8E,0xE7,0xEB,0x4A,0x7C,0x0F,0x9E,0x16,
+	0x2B,0xCE,0x33,0x57,0x6B,0x31,0x5E,0xCE,0xCB,0xB6,0x40,0x68,0x37,0xBF,0x51,0xF5,
+};
+
+static const uint8_t s_P256Order[32] = {
+	0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+	0xBC,0xE6,0xFA,0xAD,0xA7,0x17,0x9E,0x84,0xF3,0xB9,0xCA,0xC2,0xFC,0x63,0x25,0x51,
+};
+
+static const uint8_t s_P256FieldBe[32] = {
+	0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+	0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+};
+
+static inline volatile uint32_t &Cc3xxReg(uint32_t Offset)
 {
-	(void)quality;
-
-	if (pBuff == nullptr)
-	{
-		if (len != 0U)
-		{
-			return CC3XX_ERR_RNG_INVALID_RNG;
-		}
-		return CC3XX_ERR_SUCCESS;
-	}
-
-	if (RngGet(pBuff, len) == false)
-	{
-		return CC3XX_ERR_RNG_INVALID_RNG;
-	}
-
-	return CC3XX_ERR_SUCCESS;
+	return *(volatile uint32_t *)(uintptr_t)(CC3XX_BASE_ADDRESS + Offset);
 }
 
-cc3xx_err_t cc3xx_lowlevel_rng_get_random_uint(uint32_t bound,
-										   uint32_t *pValue,
-										   enum cc3xx_rng_quality_t quality)
+static inline volatile uint32_t &PkaMap(uint32_t Reg)
 {
-	uint32_t value;
-	uint32_t attempts = 0U;
-	uint32_t mask;
-	cc3xx_err_t err;
-
-	assert(bound != 0U);
-	if (bound == 0U || pValue == nullptr)
-	{
-		return CC3XX_ERR_RNG_INVALID_RNG;
-	}
-
-	if ((bound & (bound - 1U)) == 0U)
-	{
-		mask = bound - 1U;
-	}
-	else
-	{
-		mask = UINT32_MAX >> __builtin_clz(bound);
-	}
-
-	do
-	{
-		err = cc3xx_lowlevel_rng_get_random((uint8_t *)&value, sizeof(value),
-											quality);
-		if (err != CC3XX_ERR_SUCCESS)
-		{
-			return err;
-		}
-
-		value &= mask;
-
-		if (attempts++ >= CC3XX_CONFIG_RNG_MAX_ATTEMPTS)
-		{
-			return CC3XX_ERR_RNG_TOO_MANY_ATTEMPTS;
-		}
-	} while (value >= bound);
-
-	*pValue = value;
-	return CC3XX_ERR_SUCCESS;
+	return Cc3xxReg(REG_PKA_MEMORY_MAP + Reg * sizeof(uint32_t));
 }
 
-void cc3xx_lowlevel_rng_get_random_permutation(uint8_t *pPermutation,
-											   size_t len)
+static inline void PkaWaitDone(void)
 {
-	assert(pPermutation != nullptr);
-	assert(len <= 256U);
-	if (pPermutation == nullptr || len > 256U)
+	while (Cc3xxReg(REG_PKA_DONE) == 0U)
 	{
+	}
+}
+
+static inline void PkaWaitPipe(void)
+{
+	while (Cc3xxReg(REG_PKA_PIPE_READY) == 0U)
+	{
+	}
+}
+
+static inline bool PkaRegValid(PkaReg_t Reg)
+{
+	return Reg <= P256_T12;
+}
+
+static uint32_t PkaOpcode(uint32_t Op, uint32_t Size,
+						 bool AImmediate, uint32_t A,
+						 bool BImmediate, uint32_t B,
+						 bool Discard, PkaReg_t Result)
+{
+	assert(AImmediate || PkaRegValid((PkaReg_t)A));
+	assert(BImmediate || PkaRegValid((PkaReg_t)B));
+	assert(Discard || PkaRegValid(Result));
+
+	uint32_t opcode = Discard ? (1U << 11) : (((uint32_t)Result & 0x1FU) << 6);
+	opcode |= (BImmediate ? (1U << 17) : 0U) | ((B & 0x1FU) << 12);
+	opcode |= (AImmediate ? (1U << 23) : 0U) | ((A & 0x1FU) << 18);
+	opcode |= (Size & 0x7U) << 24;
+	opcode |= (Op & 0x1FU) << 27;
+	PkaWaitPipe();
+	return opcode;
+}
+
+static inline void PkaSubmit(uint32_t Op, uint32_t Size,
+							 bool AImmediate, uint32_t A,
+							 bool BImmediate, uint32_t B,
+							 bool Discard, PkaReg_t Result)
+{
+	Cc3xxReg(REG_PKA_OPCODE) = PkaOpcode(Op, Size, AImmediate, A,
+										 BImmediate, B, Discard, Result);
+}
+
+static inline uint32_t LoadBe32(const uint8_t *pData)
+{
+	return ((uint32_t)pData[0] << 24) | ((uint32_t)pData[1] << 16) |
+		   ((uint32_t)pData[2] << 8) | (uint32_t)pData[3];
+}
+
+static inline void StoreBe32(uint8_t *pData, uint32_t Value)
+{
+	pData[0] = (uint8_t)(Value >> 24);
+	pData[1] = (uint8_t)(Value >> 16);
+	pData[2] = (uint8_t)(Value >> 8);
+	pData[3] = (uint8_t)Value;
+}
+
+static void PkaClear(PkaReg_t Reg)
+{
+	assert(PkaRegValid(Reg));
+	PkaWaitDone();
+	Cc3xxReg(REG_PKA_SRAM_ADDR) = PkaMap(Reg);
+	for (uint32_t idx = 0U; idx < PKA_REG_WORDS; idx++)
+	{
+		Cc3xxReg(REG_PKA_SRAM_WRITE) = 0U;
+		PkaWaitDone();
+	}
+}
+
+static void PkaWrite(PkaReg_t Reg, const uint32_t *pData, size_t Len)
+{
+	assert(PkaRegValid(Reg));
+	assert(pData != nullptr);
+	assert(Len <= PKA_REG_BYTES && (Len & 3U) == 0U);
+	PkaClear(Reg);
+	Cc3xxReg(REG_PKA_SRAM_ADDR) = PkaMap(Reg);
+	for (size_t idx = 0U; idx < Len / sizeof(uint32_t); idx++)
+	{
+		Cc3xxReg(REG_PKA_SRAM_WRITE) = pData[idx];
+		PkaWaitDone();
+	}
+}
+
+static void PkaWriteBe(PkaReg_t Reg, const uint8_t *pData, size_t Len)
+{
+	assert(PkaRegValid(Reg));
+	assert(pData != nullptr);
+	assert(Len <= PKA_REG_BYTES && (Len & 3U) == 0U);
+	PkaClear(Reg);
+	Cc3xxReg(REG_PKA_SRAM_ADDR) = PkaMap(Reg);
+	for (size_t idx = 0U; idx < Len / sizeof(uint32_t); idx++)
+	{
+		const size_t offset = Len - (idx + 1U) * sizeof(uint32_t);
+		Cc3xxReg(REG_PKA_SRAM_WRITE) = LoadBe32(&pData[offset]);
+		PkaWaitDone();
+	}
+}
+
+static void PkaReadBe(PkaReg_t Reg, uint8_t *pData, size_t Len)
+{
+	assert(PkaRegValid(Reg));
+	assert(pData != nullptr);
+	assert(Len <= PKA_REG_BYTES && (Len & 3U) == 0U);
+	PkaWaitDone();
+	for (size_t idx = 0U; idx < Len / sizeof(uint32_t); idx++)
+	{
+		Cc3xxReg(REG_PKA_SRAM_READ_ADDR) = PkaMap(Reg) + (uint32_t)idx;
+		PkaWaitDone();
+		const size_t offset = Len - (idx + 1U) * sizeof(uint32_t);
+		StoreBe32(&pData[offset], Cc3xxReg(REG_PKA_SRAM_READ));
+	}
+}
+
+static inline void PkaCopy(PkaReg_t Src, PkaReg_t Dst)
+{
+	PkaSubmit(PKA_OP_COPY, PKA_SIZE_REGISTER, false, Src, true, 0U, false, Dst);
+}
+
+static inline void PkaAddImm(PkaReg_t A, int32_t Value, PkaReg_t Dst)
+{
+	assert(Value >= -16 && Value <= 15);
+	PkaSubmit(PKA_OP_ADD, PKA_SIZE_REGISTER, false, A, true,
+			  (uint32_t)Value, false, Dst);
+}
+
+static inline void PkaSubImm(PkaReg_t A, int32_t Value, PkaReg_t Dst)
+{
+	assert(Value >= -16 && Value <= 15);
+	PkaSubmit(PKA_OP_SUB, PKA_SIZE_REGISTER, false, A, true,
+			  (uint32_t)Value, false, Dst);
+}
+
+static inline void PkaModAdd(PkaReg_t A, PkaReg_t B, PkaReg_t Dst)
+{
+	PkaSubmit(PKA_OP_MOD_ADD, PKA_SIZE_REGISTER, false, A, false, B, false, Dst);
+}
+
+static inline void PkaModSub(PkaReg_t A, PkaReg_t B, PkaReg_t Dst)
+{
+	PkaSubmit(PKA_OP_MOD_SUB, PKA_SIZE_REGISTER, false, A, false, B, false, Dst);
+}
+
+static inline void PkaMask(PkaReg_t Reg)
+{
+	PkaSubmit(PKA_OP_AND, PKA_SIZE_REGISTER, false, Reg, false, PKA_N_MASK, false, Reg);
+}
+
+static inline void PkaModMul(PkaReg_t A, PkaReg_t B, PkaReg_t Dst)
+{
+	PkaSubmit(PKA_OP_MOD_MUL, PKA_SIZE_N, false, A, false, B, false, Dst);
+	PkaMask(Dst);
+}
+
+static inline void PkaModExp(PkaReg_t A, PkaReg_t Exp, PkaReg_t Dst)
+{
+	PkaSubmit(PKA_OP_MOD_EXP, PKA_SIZE_N, false, A, false, Exp, false, Dst);
+	PkaMask(Dst);
+}
+
+static inline bool PkaEqual(PkaReg_t A, PkaReg_t B)
+{
+	PkaSubmit(PKA_OP_COMPARE, PKA_SIZE_REGISTER, false, A, false, B, true, 0U);
+	PkaWaitDone();
+	return (Cc3xxReg(REG_PKA_STATUS) & PKA_STATUS_ZERO) != 0U;
+}
+
+static inline bool PkaEqualImm(PkaReg_t A, int32_t Value)
+{
+	assert(Value >= -16 && Value <= 15);
+	PkaSubmit(PKA_OP_COMPARE, PKA_SIZE_REGISTER, false, A, true,
+			  (uint32_t)Value, true, 0U);
+	PkaWaitDone();
+	return (Cc3xxReg(REG_PKA_STATUS) & PKA_STATUS_ZERO) != 0U;
+}
+
+static inline bool PkaLess(PkaReg_t A, PkaReg_t B)
+{
+	PkaSubmit(PKA_OP_SUB, PKA_SIZE_REGISTER, false, A, false, B, true, 0U);
+	PkaWaitDone();
+	return (Cc3xxReg(REG_PKA_STATUS) & PKA_STATUS_SIGN) != 0U;
+}
+
+static void PkaSetOne(PkaReg_t Reg)
+{
+	PkaClear(Reg);
+	PkaAddImm(Reg, 1, Reg);
+}
+
+static void PkaSetFieldModulus(void)
+{
+	static const uint32_t mask[12] = {
+		0xFFFFFFFFU,0xFFFFFFFFU,0xFFFFFFFFU,0xFFFFFFFFU,
+		0xFFFFFFFFU,0xFFFFFFFFU,0xFFFFFFFFU,0xFFFFFFFFU,
+		0U,0U,0U,0U,
+	};
+	PkaWrite(PKA_N, s_P256Field, sizeof(s_P256Field));
+	PkaWrite(PKA_NP, s_P256FieldBarrett, sizeof(s_P256FieldBarrett));
+	PkaWrite(PKA_N_MASK, mask, sizeof(mask));
+	Cc3xxReg(REG_PKA_L_N) = 256U;
+}
+
+static bool PkaInit(void)
+{
+	Cc3xxReg(REG_PKA_CLOCK_ENABLE) = 1U;
+	Cc3xxReg(REG_PKA_SW_RESET) = 1U;
+	PkaWaitDone();
+	Cc3xxReg(REG_PKA_L_REGISTER) = PKA_REG_BYTES * 8U;
+	Cc3xxReg(REG_PKA_L_N) = 256U;
+	for (uint32_t reg = 0U; reg < PKA_PHYS_REG_COUNT; reg++)
+	{
+		PkaMap(reg) = reg * PKA_REG_WORDS;
+		PkaWaitDone();
+	}
+	PkaSetFieldModulus();
+	PkaWrite(P256_CONST_A, s_P256A, sizeof(s_P256A));
+	PkaWrite(P256_CONST_B, s_P256B, sizeof(s_P256B));
+	return Cc3xxReg(REG_PKA_CLOCK_ENABLE) != 0U;
+}
+
+static void PkaUninit(void)
+{
+	PkaWaitDone();
+	for (uint32_t slot = 0U; slot < PKA_PHYS_REG_COUNT; slot++)
+	{
+		Cc3xxReg(REG_PKA_SRAM_ADDR) = slot * PKA_REG_WORDS;
+		for (uint32_t idx = 0U; idx < PKA_REG_WORDS; idx++)
+		{
+			Cc3xxReg(REG_PKA_SRAM_WRITE) = 0U;
+			PkaWaitDone();
+		}
+	}
+	Cc3xxReg(REG_PKA_CLOCK_ENABLE) = 0U;
+}
+
+static void PointCopy(const PkaPoint &Src, const PkaPoint &Dst)
+{
+	PkaCopy(Src.X, Dst.X);
+	PkaCopy(Src.Y, Dst.Y);
+	PkaCopy(Src.Z, Dst.Z);
+}
+
+static void PointInfinity(const PkaPoint &P)
+{
+	PkaClear(P.X);
+	PkaSetOne(P.Y);
+	PkaClear(P.Z);
+}
+
+static bool PointIsInfinity(const PkaPoint &P)
+{
+	return PkaEqualImm(P.Z, 0);
+}
+
+static void PointDouble(const PkaPoint &P, const PkaPoint &R)
+{
+	if (PointIsInfinity(P))
+	{
+		PointInfinity(R);
 		return;
 	}
 
-	for (size_t idx = 0U; idx < len; idx++)
-	{
-		pPermutation[idx] = (uint8_t)idx;
-	}
+	const PkaReg_t t0 = P256_T0;
+	const PkaReg_t t1 = P256_T1;
+	const PkaReg_t t2 = P256_T2;
+	const PkaReg_t t3 = P256_T3;
+
+	PkaModMul(P.Y, P.Y, t0);
+	PkaModMul(P.Z, P.Z, t1);
+	PkaModMul(P.X, P.X, t2);
+	PkaModMul(t0, t0, t3);
+	PkaModAdd(P.Y, P.Z, R.Z);
+	PkaModMul(R.Z, R.Z, R.Z);
+	PkaModSub(R.Z, t0, R.Z);
+	PkaModSub(R.Z, t1, R.Z);
+	PkaModAdd(P.X, t0, t0);
+	PkaModMul(t0, t0, t0);
+	PkaModSub(t0, t2, t0);
+	PkaModSub(t0, t3, t0);
+	PkaModAdd(t0, t0, t0);
+	PkaModMul(t1, t1, t1);
+	PkaModMul(P256_CONST_A, t1, t1);
+	PkaModAdd(t1, t2, t1);
+	PkaModAdd(t1, t2, t1);
+	PkaModAdd(t1, t2, t1);
+	PkaModMul(t1, t1, R.X);
+	PkaModSub(R.X, t0, R.X);
+	PkaModSub(R.X, t0, R.X);
+	PkaModSub(t0, R.X, R.Y);
+	PkaModMul(t1, R.Y, R.Y);
+	PkaSetOne(t2);
+	PkaModAdd(t2, t2, t2);
+	PkaModAdd(t2, t2, t2);
+	PkaModAdd(t2, t2, t2);
+	PkaModMul(t2, t3, t3);
+	PkaModSub(R.Y, t3, R.Y);
 }
 
-} // extern "C"
+static void PointAdd(const PkaPoint &P, const PkaPoint &Q, const PkaPoint &R)
+{
+	if (PointIsInfinity(P))
+	{
+		PointCopy(Q, R);
+		return;
+	}
+	if (PointIsInfinity(Q))
+	{
+		PointCopy(P, R);
+		return;
+	}
+
+	const PkaReg_t t0 = P256_T0;
+	const PkaReg_t t1 = P256_T1;
+	const PkaReg_t u1 = P256_T2;
+	const PkaReg_t u2 = P256_T3;
+	const PkaReg_t s1 = P256_T4;
+	const PkaReg_t s2 = P256_T5;
+
+	PkaModMul(P.Z, P.Z, t0);
+	PkaModMul(Q.Z, Q.Z, t1);
+	PkaModMul(P.X, t1, u1);
+	PkaModMul(Q.X, t0, u2);
+	PkaModMul(P.Y, Q.Z, s1);
+	PkaModMul(s1, t1, s1);
+	PkaModMul(Q.Y, P.Z, s2);
+	PkaModMul(s2, t0, s2);
+
+	if (PkaEqual(u1, u2))
+	{
+		if (PkaEqual(s1, s2))
+		{
+			PointDouble(P, R);
+		}
+		else
+		{
+			PointInfinity(R);
+		}
+		return;
+	}
+
+	PkaModSub(u2, u1, u2);
+	PkaModAdd(P.Z, Q.Z, R.Z);
+	PkaModMul(R.Z, R.Z, R.Z);
+	PkaModSub(R.Z, t0, R.Z);
+	PkaModSub(R.Z, t1, R.Z);
+	PkaModMul(R.Z, u2, R.Z);
+	PkaModAdd(u2, u2, t1);
+	PkaModMul(t1, t1, t1);
+	PkaModMul(u1, t1, u1);
+	PkaModMul(u2, t1, t1);
+	PkaModSub(s2, s1, u2);
+	PkaModAdd(u2, u2, u2);
+	PkaModMul(u2, u2, R.X);
+	PkaModSub(R.X, t1, R.X);
+	PkaModSub(R.X, u1, R.X);
+	PkaModSub(R.X, u1, R.X);
+	PkaModMul(t1, s1, t1);
+	PkaModAdd(t1, t1, t1);
+	PkaModSub(u1, R.X, R.Y);
+	PkaModMul(R.Y, u2, R.Y);
+	PkaModSub(R.Y, t1, R.Y);
+}
+
+static bool PointValidate(PkaReg_t X, PkaReg_t Y)
+{
+	if (!PkaLess(X, PKA_N) || !PkaLess(Y, PKA_N))
+	{
+		return false;
+	}
+
+	PkaModMul(Y, Y, P256_T0);
+	PkaModMul(X, X, P256_T1);
+	PkaModMul(P256_T1, X, P256_T1);
+	PkaModMul(P256_CONST_A, X, P256_T2);
+	PkaModAdd(P256_T1, P256_T2, P256_T1);
+	PkaModAdd(P256_T1, P256_CONST_B, P256_T1);
+	return PkaEqual(P256_T0, P256_T1);
+}
+
+static bool BufferIsZero(const uint8_t *pData, size_t Len)
+{
+	uint8_t value = 0U;
+	for (size_t idx = 0U; idx < Len; idx++)
+	{
+		value |= pData[idx];
+	}
+	return value == 0U;
+}
+
+static bool LessBe(const uint8_t *pA, const uint8_t *pB, size_t Len)
+{
+	uint32_t less = 0U;
+	uint32_t greater = 0U;
+	for (size_t idx = 0U; idx < Len; idx++)
+	{
+		const uint32_t a = pA[idx];
+		const uint32_t b = pB[idx];
+		const uint32_t undecided = 1U ^ (less | greater);
+		less |= undecided & ((a - b) >> 31);
+		greater |= undecided & ((b - a) >> 31);
+	}
+	return less != 0U;
+}
+
+static bool RandomScalar(uint8_t Scalar[32])
+{
+	for (uint32_t attempt = 0U; attempt < 100U; attempt++)
+	{
+		if (RngGet(Scalar, P256_BYTES) == false)
+		{
+			return false;
+		}
+		if (!BufferIsZero(Scalar, P256_BYTES) && LessBe(Scalar, s_P256Order, P256_BYTES))
+		{
+			return true;
+		}
+	}
+	CryptoSecureWipe(Scalar, P256_BYTES);
+	return false;
+}
+
+static uint8_t AddBe256(const uint8_t A[32], const uint8_t B[32], uint8_t Out[32])
+{
+	uint32_t carry = 0U;
+	for (int idx = 31; idx >= 0; idx--)
+	{
+		const uint32_t sum = (uint32_t)A[idx] + B[idx] + carry;
+		Out[idx] = (uint8_t)sum;
+		carry = sum >> 8;
+	}
+	return (uint8_t)carry;
+}
+
+static void RegularizeScalar(const uint8_t K[32], uint8_t R[33])
+{
+	uint8_t kPlusN[32];
+	uint8_t kPlus2N[32];
+	const uint8_t carry1 = AddBe256(K, s_P256Order, kPlusN);
+	const uint8_t carry2 = AddBe256(kPlusN, s_P256Order, kPlus2N);
+	assert(carry1 != 0U || carry2 != 0U);
+	const uint8_t mask = (uint8_t)(0U - (uint32_t)carry1);
+	R[0] = 1U;
+	for (size_t idx = 0U; idx < 32U; idx++)
+	{
+		R[idx + 1U] = (uint8_t)((kPlusN[idx] & mask) |
+								  (kPlus2N[idx] & (uint8_t)~mask));
+	}
+	CryptoSecureWipe(kPlusN, sizeof(kPlusN));
+	CryptoSecureWipe(kPlus2N, sizeof(kPlus2N));
+}
+
+static uint32_t ScalarBit(const uint8_t Scalar[33], uint32_t BitNo)
+{
+	const uint32_t byteFromEnd = BitNo / 8U;
+	return (Scalar[32U - byteFromEnd] >> (BitNo & 7U)) & 1U;
+}
+
+static PkaReg_t SelectReg(PkaReg_t Zero, PkaReg_t One, uint32_t Bit)
+{
+	const uint32_t mask = 0U - (Bit & 1U);
+	return (PkaReg_t)((uint32_t)Zero ^ (((uint32_t)Zero ^ One) & mask));
+}
+
+static void PointSelectCopy(const PkaPoint &Zero, const PkaPoint &One,
+							uint32_t Bit, const PkaPoint &Dst)
+{
+	PkaCopy(SelectReg(Zero.X, One.X, Bit), Dst.X);
+	PkaCopy(SelectReg(Zero.Y, One.Y, Bit), Dst.Y);
+	PkaCopy(SelectReg(Zero.Z, One.Z, Bit), Dst.Z);
+}
+
+static bool RandomizePoint(const PkaPoint &P)
+{
+	uint8_t z[32];
+	bool valid = false;
+	for (uint32_t attempt = 0U; attempt < 100U; attempt++)
+	{
+		if (RngGet(z, sizeof(z)) == false)
+		{
+			break;
+		}
+		if (!BufferIsZero(z, sizeof(z)) && LessBe(z, s_P256FieldBe, sizeof(z)))
+		{
+			valid = true;
+			break;
+		}
+	}
+	if (!valid)
+	{
+		CryptoSecureWipe(z, sizeof(z));
+		return false;
+	}
+
+	PkaWriteBe(P.Z, z, sizeof(z));
+	PkaModMul(P.Z, P.Z, P256_T0);
+	PkaModMul(P.X, P256_T0, P.X);
+	PkaModMul(P256_T0, P.Z, P256_T0);
+	PkaModMul(P.Y, P256_T0, P.Y);
+	CryptoSecureWipe(z, sizeof(z));
+	return true;
+}
+
+static bool PointToAffine(const PkaPoint &P, uint8_t Out[64])
+{
+	if (PointIsInfinity(P))
+	{
+		return false;
+	}
+	PkaSubImm(PKA_N, 2, P256_T2);
+	PkaModExp(P.Z, P256_T2, P256_T0);
+	PkaModMul(P256_T0, P256_T0, P256_T1);
+	PkaModMul(P.X, P256_T1, P256_T3);
+	PkaModMul(P256_T1, P256_T0, P256_T1);
+	PkaModMul(P.Y, P256_T1, P256_T4);
+	PkaReadBe(P256_T3, &Out[0], P256_BYTES);
+	PkaReadBe(P256_T4, &Out[32], P256_BYTES);
+	return true;
+}
+
+static bool P256Multiply(const uint8_t Point[64], const uint8_t Scalar[32],
+						 uint8_t Result[64], bool Randomize)
+{
+	if (Point == nullptr || Scalar == nullptr || Result == nullptr ||
+		BufferIsZero(Scalar, P256_BYTES) || !LessBe(Scalar, s_P256Order, P256_BYTES))
+	{
+		return false;
+	}
+	if (!PkaInit())
+	{
+		return false;
+	}
+
+	bool ok = false;
+	uint8_t regular[33] = {};
+	PkaWriteBe(POINT_P.X, &Point[0], P256_BYTES);
+	PkaWriteBe(POINT_P.Y, &Point[32], P256_BYTES);
+	PkaSetOne(POINT_P.Z);
+
+	if (!PointValidate(POINT_P.X, POINT_P.Y))
+	{
+		goto out;
+	}
+	if (Randomize && !RandomizePoint(POINT_P))
+	{
+		goto out;
+	}
+
+	RegularizeScalar(Scalar, regular);
+	PointCopy(POINT_P, POINT_R);
+
+	for (int bit = 255; bit >= 0; bit--)
+	{
+		PointDouble(POINT_R, POINT_D);
+		PointAdd(POINT_D, POINT_P, POINT_A);
+		PointSelectCopy(POINT_D, POINT_A, ScalarBit(regular, (uint32_t)bit), POINT_R);
+	}
+
+	ok = PointToAffine(POINT_R, Result);
+out:
+	CryptoSecureWipe(regular, sizeof(regular));
+	PkaUninit();
+	return ok;
+}
+
+static bool CoreInit(void)
+{
+	if (Cc3xxEnable() == false)
+	{
+		return false;
+	}
+
+	Cc3xxReg(REG_HOST_ENDIAN) = 0U;
+	Cc3xxReg(REG_CRYPTO_CTL) = 0U;
+	Cc3xxReg(REG_DMA_CLOCK_ENABLE) = 1U;
+	Cc3xxReg(REG_AHB_HPROT) = (1U << 0) | (1U << 1) | (1U << 3);
+	Cc3xxReg(REG_AHB_SINGLE) = 0U;
+	Cc3xxReg(REG_AHB_HNONSEC) = 0U;
+	Cc3xxReg(REG_DMA_CLOCK_ENABLE) = 0U;
+	return true;
+}
+
+struct CryptoCc3xxData {
+	uint8_t PrivKey[P256_BYTES];
+	bool bKeyValid;
+};
+
+static_assert(sizeof(CryptoCc3xxData) <= CRYPTO_MEMSIZE_HW,
+			  "CRYPTO_MEMSIZE_HW too small for CryptoCc3xxData");
 
 static bool s_bCcInit;
 static volatile bool s_bCc3xxBusy;
 
 static bool Cc3xxAcquire(void)
 {
-	uint32_t intState = DisableInterrupt();
-
-	bool acquired = (s_bCc3xxBusy == false);
+	const uint32_t state = DisableInterrupt();
+	const bool acquired = !s_bCc3xxBusy;
 	if (acquired)
 	{
 		s_bCc3xxBusy = true;
 	}
-
-	EnableInterrupt(intState);
+	EnableInterrupt(state);
 	return acquired;
 }
 
-static inline void Cc3xxRelease(void)
+static void Cc3xxRelease(void)
 {
 	s_bCc3xxBusy = false;
-}
-
-static CryptoCc3xxData_t *Cc3xxData(CryptoDev_t * const pDev, void *pKeyCtx)
-{
-	void *p = pKeyCtx != nullptr ? pKeyCtx :
-			  (pDev != nullptr ? pDev->pDevData : nullptr);
-
-	if (p == nullptr || ((uintptr_t)p & (alignof(CryptoCc3xxData_t) - 1)) != 0)
-	{
-		return nullptr;
-	}
-
-	return (CryptoCc3xxData_t *)p;
 }
 
 static CRYPTO_STATUS EnsureCc3xx(void)
@@ -200,158 +797,63 @@ static CRYPTO_STATUS EnsureCc3xx(void)
 	{
 		return CRYPTO_STATUS_OK;
 	}
-
-	if (Cc3xxAcquire() == false)
+	if (!Cc3xxAcquire())
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
-
-	if (s_bCcInit)
+	if (!s_bCcInit)
 	{
-		Cc3xxRelease();
-		return CRYPTO_STATUS_OK;
+		s_bCcInit = CoreInit();
 	}
-
-	if (Cc3xxEnable() == false)
-	{
-		Cc3xxRelease();
-		return CRYPTO_STATUS_FAIL;
-	}
-
-	// Mirror the upstream feature check for CC3XX_CONFIG_RNG_ENABLE. The
-	// hardware RNG is not used by this provider; random bytes come from RngGet.
-	if ((P_CC3XX->host_rgf.host_boot & (1U << 11)) == 0U)
-	{
-		Cc3xxDisable();
-		Cc3xxRelease();
-		return CRYPTO_STATUS_FAIL;
-	}
-
-	P_CC3XX->host_rgf.host_rgf_endian = 0x0U;
-
-	cc3xx_engine_in_use = CC3XX_ENGINE_NONE;
-	P_CC3XX->cc_ctl.crypto_ctl = CC3XX_ENGINE_NONE;
-
-	P_CC3XX->misc.dma_clk_enable = 0x1U;
-	P_CC3XX->ahb.ahbm_hprot = CC3XX_AHBM_HPROT_DATA |
-							  CC3XX_AHBM_HPROT_PRIVILEGED |
-							  CC3XX_AHBM_HPROT_CACHEABLE;
-	P_CC3XX->ahb.ahbm_singles = CC3XX_AHBM_BURST_INCR4_TRANSACTIONS;
-	P_CC3XX->ahb.ahbm_hnonsec = CC3XX_AHBM_SECURE_TRANSACTIONS;
-	P_CC3XX->misc.dma_clk_enable = 0x0U;
-
-	s_bCcInit = true;
 	Cc3xxRelease();
-	return CRYPTO_STATUS_OK;
+	return s_bCcInit ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
 }
 
-static void Cc3xxKeyReset(CryptoCc3xxData_t *pd)
+static CryptoCc3xxData *Cc3xxData(CryptoDev_t * const pDev, void *pKeyCtx)
 {
-	CryptoSecureWipe(pd->PrivKey, sizeof(pd->PrivKey));
-	pd->bKeyValid = false;
+	void *p = pKeyCtx != nullptr ? pKeyCtx :
+			  (pDev != nullptr ? pDev->pDevData : nullptr);
+	if (p == nullptr || ((uintptr_t)p & (alignof(CryptoCc3xxData) - 1U)) != 0U)
+	{
+		return nullptr;
+	}
+	return (CryptoCc3xxData *)p;
+}
+
+static void KeyReset(CryptoCc3xxData *pData)
+{
+	CryptoSecureWipe(pData->PrivKey, sizeof(pData->PrivKey));
+	pData->bKeyValid = false;
 }
 
 static CRYPTO_STATUS Cc3xxEcdhKeyGen(CryptoDev_t * const pDev, void *pKeyCtx,
 									 uint8_t pPubKey[64], void *pOpCtx)
 {
 	(void)pOpCtx;
-	CryptoCc3xxData_t *pd = Cc3xxData(pDev, pKeyCtx);
-	if (pd == nullptr || pPubKey == nullptr || EnsureCc3xx() != CRYPTO_STATUS_OK)
+	CryptoCc3xxData *pData = Cc3xxData(pDev, pKeyCtx);
+	if (pData == nullptr || pPubKey == nullptr || EnsureCc3xx() != CRYPTO_STATUS_OK)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (!Cc3xxAcquire())
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
 
-	if (Cc3xxAcquire() == false)
+	KeyReset(pData);
+	CRYPTO_STATUS status = CRYPTO_STATUS_FAIL;
+	if (RandomScalar(pData->PrivKey) &&
+		P256Multiply(s_P256Generator, pData->PrivKey, pPubKey, true))
 	{
-		return CRYPTO_STATUS_FAIL;
+		pData->bKeyValid = true;
+		status = CRYPTO_STATUS_OK;
 	}
-
-	Cc3xxKeyReset(pd);
-
-	uint32_t pubX[CC3XX_P256_WORDS];
-	uint32_t pubY[CC3XX_P256_WORDS];
-	size_t privSize = 0U;
-	size_t pubXSize = 0U;
-	size_t pubYSize = 0U;
-
-	cc3xx_err_t r = cc3xx_lowlevel_ecdsa_genkey(CC3XX_EC_CURVE_SECP_256_R1,
-											pd->PrivKey, sizeof(pd->PrivKey),
-											&privSize);
-	if (r == CC3XX_ERR_SUCCESS)
+	else
 	{
-		r = cc3xx_lowlevel_ecdsa_getpub(CC3XX_EC_CURVE_SECP_256_R1,
-									pd->PrivKey, sizeof(pd->PrivKey),
-									pubX, sizeof(pubX), &pubXSize,
-									pubY, sizeof(pubY), &pubYSize);
+		KeyReset(pData);
 	}
-
-	if (r != CC3XX_ERR_SUCCESS ||
-		privSize != CC3XX_P256_BYTES ||
-		pubXSize != CC3XX_P256_BYTES ||
-		pubYSize != CC3XX_P256_BYTES)
-	{
-		Cc3xxKeyReset(pd);
-		Cc3xxRelease();
-		return CRYPTO_STATUS_FAIL;
-	}
-
-	memcpy(&pPubKey[0], pubX, CC3XX_P256_BYTES);
-	memcpy(&pPubKey[32], pubY, CC3XX_P256_BYTES);
-
-	pd->bKeyValid = true;
 	Cc3xxRelease();
-	return CRYPTO_STATUS_OK;
-}
-
-static CRYPTO_STATUS Cc3xxEcdhRaw(const uint32_t privKey[CC3XX_P256_WORDS],
-								  const uint8_t pPeerPubKey[64],
-								  uint8_t pDhKey[32])
-{
-	if (privKey == nullptr || pPeerPubKey == nullptr || pDhKey == nullptr)
-	{
-		return CRYPTO_STATUS_FAIL;
-	}
-
-	uint32_t peerX[CC3XX_P256_WORDS];
-	uint32_t peerY[CC3XX_P256_WORDS];
-	memcpy(peerX, &pPeerPubKey[0], CC3XX_P256_BYTES);
-	memcpy(peerY, &pPeerPubKey[32], CC3XX_P256_BYTES);
-
-	cc3xx_ec_curve_t curve;
-	cc3xx_ec_point_affine peerPt;
-	cc3xx_err_t r = cc3xx_lowlevel_ec_init(CC3XX_EC_CURVE_SECP_256_R1, &curve);
-	if (r == CC3XX_ERR_SUCCESS)
-	{
-		r = cc3xx_lowlevel_ec_allocate_point_from_data(&curve,
-											   peerX, CC3XX_P256_BYTES,
-											   peerY, CC3XX_P256_BYTES,
-											   &peerPt);
-		cc3xx_lowlevel_ec_uninit();
-	}
-	if (r != CC3XX_ERR_SUCCESS)
-	{
-		return CRYPTO_STATUS_FAIL;
-	}
-
-	uint32_t secret[CC3XX_P256_WORDS];
-	size_t secretSize = 0U;
-
-	r = cc3xx_lowlevel_ecdh(CC3XX_EC_CURVE_SECP_256_R1,
-								privKey, CC3XX_P256_BYTES,
-								peerX, CC3XX_P256_BYTES,
-								peerY, CC3XX_P256_BYTES,
-								secret, sizeof(secret), &secretSize);
-
-	CRYPTO_STATUS rc = (r == CC3XX_ERR_SUCCESS && secretSize == CC3XX_P256_BYTES) ?
-					   CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
-
-	if (rc == CRYPTO_STATUS_OK)
-	{
-		memcpy(pDhKey, secret, CC3XX_P256_BYTES);
-	}
-
-	CryptoSecureWipe(secret, sizeof(secret));
-	return rc;
+	return status;
 }
 
 static CRYPTO_STATUS Cc3xxEcdh(CryptoDev_t * const pDev, void *pKeyCtx,
@@ -359,117 +861,89 @@ static CRYPTO_STATUS Cc3xxEcdh(CryptoDev_t * const pDev, void *pKeyCtx,
 							   void *pOpCtx)
 {
 	(void)pOpCtx;
-	CryptoCc3xxData_t *pd = Cc3xxData(pDev, pKeyCtx);
-	if (pd == nullptr || pd->bKeyValid == false)
+	CryptoCc3xxData *pData = Cc3xxData(pDev, pKeyCtx);
+	if (pData == nullptr || !pData->bKeyValid ||
+		pPeerPubKey == nullptr || pDhKey == nullptr)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (!Cc3xxAcquire())
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
 
-	if (Cc3xxAcquire() == false)
+	uint8_t point[64];
+	const bool ok = P256Multiply(pPeerPubKey, pData->PrivKey, point, true);
+	KeyReset(pData);
+	if (ok)
 	{
-		return CRYPTO_STATUS_FAIL;
+		memcpy(pDhKey, point, P256_BYTES);
 	}
-
-	CRYPTO_STATUS rc = Cc3xxEcdhRaw(pd->PrivKey, pPeerPubKey, pDhKey);
-	Cc3xxKeyReset(pd);
+	CryptoSecureWipe(point, sizeof(point));
 	Cc3xxRelease();
-	return rc;
+	return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
 }
 
 static int Cc3xxSelfTest(CryptoDev_t * const pDev)
 {
 	(void)pDev;
+	static const uint8_t priv[32] = {
+		0x3F,0x49,0xF6,0xD4,0xA3,0xC5,0x5F,0x38,0x74,0xC9,0xB3,0xE3,0xD2,0x10,0x3F,0x50,
+		0x4A,0xFF,0x60,0x7B,0xEB,0x40,0xB7,0x99,0x58,0x99,0xB8,0xA6,0xCD,0x3C,0x1A,0xBD,
+	};
+	static const uint8_t pub[64] = {
+		0x1E,0xA1,0xF0,0xF0,0x1F,0xAF,0x1D,0x96,0x09,0x59,0x22,0x84,0xF1,0x9E,0x4C,0x00,
+		0x47,0xB5,0x8A,0xFD,0x86,0x15,0xA6,0x9F,0x55,0x90,0x77,0xB2,0x2F,0xAA,0xA1,0x90,
+		0x4C,0x55,0xF3,0x3E,0x42,0x9D,0xAD,0x37,0x73,0x56,0x70,0x3A,0x9A,0xB8,0x51,0x60,
+		0x47,0x2D,0x11,0x30,0xE2,0x8E,0x36,0x76,0x5F,0x89,0xAF,0xF9,0x15,0xB1,0x21,0x4A,
+	};
+	static const uint8_t expected[32] = {
+		0xEC,0x02,0x34,0xA3,0x57,0xC8,0xAD,0x05,0x34,0x10,0x10,0xA6,0x0A,0x39,0x7D,0x9B,
+		0x99,0x79,0x6B,0x13,0xB4,0xF8,0x66,0xF1,0x86,0x8D,0x34,0xF3,0x73,0xBF,0xA6,0x98,
+	};
 
-	static const uint8_t privA[32] = {
-		0x3f,0x49,0xf6,0xd4,0xa3,0xc5,0x5f,0x38,0x74,0xc9,0xb3,0xe3,0xd2,0x10,0x3f,0x50,
-		0x4a,0xff,0x60,0x7b,0xeb,0x40,0xb7,0x99,0x58,0x99,0xb8,0xa6,0xcd,0x3c,0x1a,0xbd
-	};
-	static const uint8_t pubB[64] = {
-		0x1e,0xa1,0xf0,0xf0,0x1f,0xaf,0x1d,0x96,0x09,0x59,0x22,0x84,0xf1,0x9e,0x4c,0x00,
-		0x47,0xb5,0x8a,0xfd,0x86,0x15,0xa6,0x9f,0x55,0x90,0x77,0xb2,0x2f,0xaa,0xa1,0x90,
-		0x4c,0x55,0xf3,0x3e,0x42,0x9d,0xad,0x37,0x73,0x56,0x70,0x3a,0x9a,0xb8,0x51,0x60,
-		0x47,0x2d,0x11,0x30,0xe2,0x8e,0x36,0x76,0x5f,0x89,0xaf,0xf9,0x15,0xb1,0x21,0x4a
-	};
-	static const uint8_t dhExpect[32] = {
-		0xec,0x02,0x34,0xa3,0x57,0xc8,0xad,0x05,0x34,0x10,0x10,0xa6,0x0a,0x39,0x7d,0x9b,
-		0x99,0x79,0x6b,0x13,0xb4,0xf8,0x66,0xf1,0x86,0x8d,0x34,0xf3,0x73,0xbf,0xa6,0x98
-	};
-
-	if (EnsureCc3xx() != CRYPTO_STATUS_OK)
+	if (EnsureCc3xx() != CRYPTO_STATUS_OK || !Cc3xxAcquire())
 	{
 		return -1;
 	}
-
-	uint32_t priv[CC3XX_P256_WORDS];
-	uint8_t dh[32];
-	memcpy(priv, privA, sizeof(privA));
-
-	if (Cc3xxAcquire() == false)
-	{
-		CryptoSecureWipe(priv, sizeof(priv));
-		return -1;
-	}
-
-	CRYPTO_STATUS rc = Cc3xxEcdhRaw(priv, pubB, dh);
+	uint8_t result[64];
+	const bool ok = P256Multiply(pub, priv, result, false);
 	Cc3xxRelease();
-
-	int ret;
-	if (rc != CRYPTO_STATUS_OK)
-	{
-		ret = -1;
-	}
-	else
-	{
-		ret = (memcmp(dh, dhExpect, sizeof(dhExpect)) == 0) ? 0 : -2;
-	}
-
-	CryptoSecureWipe(dh, sizeof(dh));
-	CryptoSecureWipe(priv, sizeof(priv));
-	return ret;
+	const int status = ok && memcmp(result, expected, sizeof(expected)) == 0 ? 0 : -1;
+	CryptoSecureWipe(result, sizeof(result));
+	return status;
 }
+
+} // namespace
 
 extern "C" bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 {
-	if (pDev == nullptr || pCfg == nullptr)
-	{
-		return false;
-	}
-	if (pCfg->pMem == nullptr || pCfg->MemSize < sizeof(CryptoCc3xxData_t))
-	{
-		return false;
-	}
-	if (((uintptr_t)pCfg->pMem & (alignof(uint32_t) - 1)) != 0U)
-	{
-		return false;
-	}
-	if ((pCfg->ReqCaps & ~(uint32_t)CRYPTO_CAP_ECDH_P256) != 0U)
-	{
-		return false;
-	}
-	if (EnsureCc3xx() != CRYPTO_STATUS_OK)
+	if (pDev == nullptr || pCfg == nullptr || pCfg->pMem == nullptr ||
+		pCfg->MemSize < sizeof(CryptoCc3xxData) ||
+		((uintptr_t)pCfg->pMem & (alignof(uint32_t) - 1U)) != 0U ||
+		(pCfg->ReqCaps & ~(uint32_t)CRYPTO_CAP_ECDH_P256) != 0U ||
+		EnsureCc3xx() != CRYPTO_STATUS_OK)
 	{
 		return false;
 	}
 
 	memset(pDev, 0, sizeof(*pDev));
-	memset(pCfg->pMem, 0, sizeof(CryptoCc3xxData_t));
-	CryptoCc3xxData_t *pd = (CryptoCc3xxData_t *)pCfg->pMem;
-	pd->bKeyValid = false;
-
+	memset(pCfg->pMem, 0, sizeof(CryptoCc3xxData));
 	pDev->pDevData       = pCfg->pMem;
 	pDev->pName          = "cc3xx-hw";
 	pDev->Cap            = CRYPTO_CAP_ECDH_P256;
-	pDev->KeyCtxSize     = sizeof(CryptoCc3xxData_t);
 	pDev->Props          = CRYPTO_PROP_PLAIN_KEYCTX |
 						   CRYPTO_PROP_HARDWARE | CRYPTO_PROP_SYNC;
+	pDev->KeyCtxSize     = sizeof(CryptoCc3xxData);
 	pDev->EvtCB          = pCfg->EvtCB;
-	pDev->Aes128Ecb      = nullptr;
 	pDev->EcdhP256KeyGen = Cc3xxEcdhKeyGen;
 	pDev->EcdhP256       = Cc3xxEcdh;
 	pDev->SelfTest       = Cc3xxSelfTest;
 
 	if ((pCfg->Flags & CRYPTO_FLAG_SELFTEST) != 0U && Cc3xxSelfTest(pDev) != 0)
 	{
+		memset(pDev, 0, sizeof(*pDev));
+		CryptoSecureWipe(pCfg->pMem, sizeof(CryptoCc3xxData));
 		return false;
 	}
 	return true;
