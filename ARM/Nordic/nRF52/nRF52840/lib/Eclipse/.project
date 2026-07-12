@@ -541,6 +541,11 @@
 			<locationURI>$%7BPARENT-3-PROJECT_LOC%7D/src/system_nrf52.c</locationURI>
 		</link>
 		<link>
+			<name>src/tf-psa-crypto-drivers</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/uart_retarget.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/uart_retarget.c</locationURI>
@@ -1421,6 +1426,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_ctlr.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_hci_ctlr_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_hci_ctlr_sdc.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_hci_host.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_host.cpp</locationURI>
@@ -1636,6 +1646,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/crypto/cc3xx_rng.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/cc3xx_rng.c</locationURI>
+		</link>
+		<link>
 			<name>src/crypto/crypto.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
@@ -1644,6 +1659,11 @@
 			<name>src/crypto/crypto_cc310.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/crypto_cc310.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_cc3xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_cc3xx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_psa_none.cpp</name>
@@ -2226,6 +2246,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/tf-psa-crypto-drivers/vendor</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/usb/usbd_cdc_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_intrf.cpp</locationURI>
@@ -2614,6 +2639,11 @@
 			<name>src/nrfx/soc/nrfx_atomic.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/soc/nrfx_atomic.c</locationURI>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/vqf/cpp/vqf.cpp</name>
@@ -4656,6 +4686,11 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_usbd.c</locationURI>
 		</link>
 		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/Invn/Devices/Drivers/Ak0991x/Ak0991x.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Ak0991x/Ak0991x.c</locationURI>
@@ -5057,6 +5092,16 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/vendor/simple_on_off/src</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/common</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -5516,6 +5561,16 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK_Mesh/models/vendor/simple_on_off/src/simple_on_off_server.c</locationURI>
 		</link>
 		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/common/cc3xx_stdlib.c</name>
+			<type>1</type>
+			<location>/Users/hoan/swdev/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/common/cc3xx_stdlib.c</location>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c</locationURI>
@@ -5589,6 +5644,66 @@
 			<name>src/nRF5_SDK/libraries/usbd/class/hid/mouse/app_usbd_hid_mouse_internal.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/class/hid/mouse/app_usbd_hid_mouse_internal.h</locationURI>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_dma.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_dma.c</locationURI>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec.c</locationURI>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_curve_data.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_curve_data.c</locationURI>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_projective_point.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_projective_point.c</locationURI>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_projective_point.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_projective_point.h</locationURI>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_weierstrass.c</name>
+			<type>1</type>
+			<location>/Users/hoan/swdev/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_weierstrass.c</location>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_weierstrass.h</name>
+			<type>1</type>
+			<location>/Users/hoan/swdev/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ec_weierstrass.h</location>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ecdh.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ecdh.c</locationURI>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ecdsa.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_ecdsa.c</locationURI>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_engine_state.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_engine_state.c</locationURI>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_engine_state.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_engine_state.h</locationURI>
+		</link>
+		<link>
+			<name>src/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_pka.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/tf-psa-crypto-drivers/vendor/arm/cc3xx/low_level_driver/src/cc3xx_pka.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
