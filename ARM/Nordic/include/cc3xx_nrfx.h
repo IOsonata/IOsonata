@@ -1,35 +1,38 @@
 /**-------------------------------------------------------------------------
- @file	cc3xx_nrfx.h
+@file	cc3xx_nrfx.h
 
- @brief	Nordic nrfx port for the generic Arm CC3xx driver
+@brief	Nordic nrfx port for Arm CC3xx peripheral wrapper control.
 
- @author	Hoang Nguyen Hoan
- @date	Jul 2026
+		Provides the Nordic-specific power wrapper functions used by the
+		portable CC3xx driver. Nordic device selection remains in the target
+		library build through the selected device header. This file does not
+		select a CC3xx revision or define the CC3xx register map.
 
- @license MIT, (c) 2026 I-SYST
- ----------------------------------------------------------------------------*/
+@author	Hoang Nguyen Hoan
+@date	Jul 2026
+
+@license MIT, (c) 2026 I-SYST. See bt_smp.h for full text.
+----------------------------------------------------------------------------*/
 #ifndef __CC3XX_NRFX_H__
 #define __CC3XX_NRFX_H__
 
 #include <stdbool.h>
-#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/** Enable the CC3xx peripheral wrapper for the selected Nordic target.
+/**
+ * @brief	Enable the Nordic CC3xx peripheral wrapper.
  *
- * The target MCU library supplies the Nordic device header and selects the
- * appropriate CryptoCell/CC3xx instance at build time.
+ * @return	true when the wrapper is enabled
  */
 bool Cc3xxNrfxEnable(void);
 
-/** Disable the CC3xx peripheral wrapper. */
+/**
+ * @brief	Disable the Nordic CC3xx peripheral wrapper.
+ */
 void Cc3xxNrfxDisable(void);
-
-/** Return the CC3xx register block base address for the selected target. */
-uintptr_t Cc3xxNrfxBaseAddress(void);
 
 #ifdef __cplusplus
 }
