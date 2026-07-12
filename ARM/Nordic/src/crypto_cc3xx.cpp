@@ -395,7 +395,8 @@ extern "C" bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 	pDev->pName          = "cc3xx-hw";
 	pDev->Cap            = CRYPTO_CAP_ECDH_P256;
 	pDev->KeyCtxSize     = sizeof(CryptoCc3xxData_t);
-	pDev->Props          = CRYPTO_PROP_HARDWARE | CRYPTO_PROP_SYNC;
+	pDev->Props          = CRYPTO_PROP_PLAIN_KEYCTX |
+						   CRYPTO_PROP_HARDWARE | CRYPTO_PROP_SYNC;
 	pDev->EvtCB          = pCfg->EvtCB;
 	pDev->Aes128Ecb      = nullptr;
 	pDev->EcdhP256KeyGen = Cc3xxEcdhKeyGen;
