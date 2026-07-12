@@ -34,6 +34,7 @@
 @license MIT, (c) 2026 I-SYST. See bt_smp.h for full text.
 ----------------------------------------------------------------------------*/
 #include <string.h>
+#include <stdio.h>
 
 #include "crypto/crypto.h"
 
@@ -139,6 +140,11 @@ bool Cc3xxEcdhTest(void)
 
 int main(int argc, char **argv)
 {
-	Cc3xxEcdhTest();
+	bool res = Cc3xxEcdhTest();
+
+	if (res == false)
+	{
+		printf("failed\r\n");
+	}
 }
 

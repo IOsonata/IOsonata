@@ -6,8 +6,9 @@
 		Configuration for building the open Arm CC3xx register level driver
 		(Mbed-TLS/tf-psa-crypto-drivers, vendor/arm/cc3xx/low_level_driver)
 		against the CC310 instance in the nRF52840, scoped to P-256 ECDH for
-		LE Secure Connections: Weierstrass EC on the PKA, key generation, and
-		the TRNG feeding a CTR DRBG for private key material.
+		LE Secure Connections: Weierstrass EC on the PKA and key generation.
+		Randomness comes from IOsonata RngGet through the local cc3xx_rng.c;
+		the CC3xx TRNG, entropy conditioner and DRBG are not built.
 
 		Integration facts, each from an authoritative source:
 		- Register file base 0x5002B000 and the wrapper enable register at
@@ -15,13 +16,6 @@
 		  the CC register blocks (CC_PKA, CC_RNG, CC_CTL, ...) at this base.
 		- CC310 hardware variant (4 KiB PKA SRAM, CC310 DMA interrupt
 		  layout): CC3XX_CONFIG_HW_VERSION_CC310.
-		- TRNG characterization: ring oscillator 0 with subsampling rate
-		  1000, the values Nordic ships inside its own CC310 library
-		  (SaSi_PalTrngParameterGet returns {1000, 1000, 500, 0} for ROSC
-		  lengths 0..3). If the entropy startup health tests fail on a given
-		  device, the CRYS escalation ladder is ROSC1 at 1000 then ROSC2 at
-		  500, applied at runtime through
-		  cc3xx_lowlevel_noise_source_set_config.
 
 		The driver is polling (no CRYPTOCELL interrupt use), so it does not
 		conflict with any interrupt vector and needs no NVIC setup.
@@ -40,7 +34,8 @@
 
 // CC310 register file on the nRF52840. The Nordic wrapper enable register
 // (NRF_CRYPTOCELL->ENABLE at 0x5002A500) must be 1 while the block is in
-// use; the engine gates it around init and each operation.
+// use; the engine enables it at init and leaves it on (see the peripheral
+// enable note in crypto_cc3xx.cpp).
 #define CC3XX_CONFIG_BASE_ADDRESS               (0x5002B000UL)
 
 // The nRF52840 integrates the CC310 variant: 4 KiB PKA SRAM, CC310 DMA
