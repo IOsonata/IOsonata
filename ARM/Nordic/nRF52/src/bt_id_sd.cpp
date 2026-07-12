@@ -61,8 +61,11 @@ extern "C" void gcm_im_evt_handler(pm_evt_t * p_event);
 // Connection to peer mapping, indexed by connection handle. Entries are
 // validated with ble_conn_state_valid when read.
 typedef struct {
-	pm_peer_id_t   PeerId;
-	ble_gap_addr_t PeerAddr;
+	// PM_PEER_ID_INVALID is not zero, so the static array below relies on this
+	// member initializer, not on zero initialization. A recycled or not yet
+	// resolved handle must never map to peer id 0, which can be a valid peer.
+	pm_peer_id_t   PeerId = PM_PEER_ID_INVALID;
+	ble_gap_addr_t PeerAddr = {};
 } BtIdConn_t;
 
 static BtIdConn_t   s_Conns[NRF_SDH_BLE_TOTAL_LINK_COUNT];
@@ -185,7 +188,10 @@ void im_ble_evt_handler(ble_evt_t const * ble_evt)
 		case BLE_GAP_ADDR_TYPE_RANDOM_PRIVATE_RESOLVABLE:
 			while (pds_peer_data_iterate(PM_PEER_DATA_ID_BONDING, &peerId, &peerData))
 			{
-				if (im_address_resolve(pAddr,
+				// A bond whose peer distributed no IRK stores an all-zero IRK;
+				// ah() over a zero key can false match, so it never resolves.
+				if (IrkIsValid(&peerData.p_bonding_data->peer_ble_id.id_info) &&
+					im_address_resolve(pAddr,
 									   &peerData.p_bonding_data->peer_ble_id.id_info))
 				{
 					matchId = peerId;
@@ -417,20 +423,23 @@ extern "C" {
 
 ret_code_t im_whitelist_set(pm_peer_id_t const * p_peers, uint32_t peer_cnt)
 {
-	memset(s_WlistPeers, 0, sizeof(s_WlistPeers));
-
+	// The remembered peer list commits only after the SoftDevice accepted the
+	// new whitelist, so im_whitelist_get never reports a list that failed to
+	// install (validation error or BLE_ERROR_GAP_WHITELIST_IN_USE).
 	if (p_peers == NULL || peer_cnt == 0)
 	{
-		s_WlistPeerCnt = 0;
-		return sd_ble_gap_whitelist_set(NULL, 0);
+		ret_code_t r = sd_ble_gap_whitelist_set(NULL, 0);
+		if (r == NRF_SUCCESS)
+		{
+			memset(s_WlistPeers, 0, sizeof(s_WlistPeers));
+			s_WlistPeerCnt = 0;
+		}
+		return r;
 	}
 	if (peer_cnt > BLE_GAP_WHITELIST_ADDR_MAX_COUNT)
 	{
 		return NRF_ERROR_INVALID_PARAM;
 	}
-
-	s_WlistPeerCnt = (uint8_t)peer_cnt;
-	memcpy(s_WlistPeers, p_peers, sizeof(pm_peer_id_t) * peer_cnt);
 
 	uint32_t              addrCnt = 0;
 	ble_gap_addr_t        addrs[BLE_GAP_WHITELIST_ADDR_MAX_COUNT];
@@ -443,11 +452,18 @@ ret_code_t im_whitelist_set(pm_peer_id_t const * p_peers, uint32_t peer_cnt)
 		return r;
 	}
 
-	for (uint32_t i = 0; i < BLE_GAP_WHITELIST_ADDR_MAX_COUNT; i++)
+	for (uint32_t i = 0; i < peer_cnt; i++)
 	{
 		addrPtrs[i] = &addrs[i];
 	}
-	return sd_ble_gap_whitelist_set(addrPtrs, peer_cnt);
+	r = sd_ble_gap_whitelist_set(addrPtrs, peer_cnt);
+	if (r == NRF_SUCCESS)
+	{
+		memset(s_WlistPeers, 0, sizeof(s_WlistPeers));
+		s_WlistPeerCnt = (uint8_t)peer_cnt;
+		memcpy(s_WlistPeers, p_peers, sizeof(pm_peer_id_t) * peer_cnt);
+	}
+	return r;
 }
 
 ret_code_t im_whitelist_get(ble_gap_addr_t * p_addrs, uint32_t * p_addr_cnt,

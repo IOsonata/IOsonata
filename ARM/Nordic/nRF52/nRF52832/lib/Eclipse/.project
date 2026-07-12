@@ -1666,11 +1666,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/uart_bleintrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/uart_bleintrf.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/cli/icli.cpp</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-6-PROJECT_LOC%7D/src/cli/icli.cpp</locationURI>
