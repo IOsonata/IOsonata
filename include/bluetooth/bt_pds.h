@@ -1,80 +1,58 @@
 /**-------------------------------------------------------------------------
 @file	bt_pds.h
 
-@brief	Persistent Data Store for the Bluetooth peer manager.
+@brief	Persistent Data Store for Bluetooth peer data.
 
-		A small, id-keyed, variable length record store over a single
-		non-volatile region. It replaces the sdk-nrf-bm ZMS filesystem
-		(bm_zms / bm_storage) that peer_data_storage.c depended on, removing
-		the Zephyr dependency while keeping peer_manager unchanged above it.
+		A small, id-keyed, variable-length record store over a fixed NVM region.
+		The region is divided into erase sectors. Records are appended inside
+		sectors, and one erased sector is retained for garbage collection.
 
-		The store is generic and platform independent. It performs all record
-		management (lookup, append, tombstone, compaction) and calls a thin
-		BtPdsNvm implementation for the actual medium access. Each target provides an
-		implementation: RRAM through the SoftDevice on the bm port, flash on SDC, etc.
+		Garbage collection is transactional at sector level. Live records are
+		copied to the spare sector one at a time, a completion marker is committed,
+		and only then is the source sector erased. BtPdsInit resumes an interrupted
+		copy or erase. No heap or live-record staging array is used.
 
-		Keying and semantics match what peer_data_storage.c expects from the
-		old bm_zms API:
-		  - Id is a 32-bit key (peer manager packs peer_id<<16 | data_id).
-		  - Read returns the byte count of the stored value, or -ENOENT.
-		  - Write upserts; Delete removes.
-		Operations are synchronous: when a call returns, the medium reflects
-		the result. peer_data_storage.c emits its peer-manager completion
-		events inline after each call rather than via an async callback.
+		The store is platform independent. Medium access is supplied by a
+		BtPdsNvm_t implementation. The current on-medium format requires 4-byte
+		write granularity.
+
+		Operations are synchronous: when a call returns successfully, the medium
+		contains the committed result.
 
 @author	Hoang Nguyen Hoan
-@date	Jun 03, 2026
+@date	Jul 2026
 
-@license
-
-MIT License
-
-Copyright (c) 2016, I-SYST inc., all rights reserved
-
+@license MIT, (c) 2016-2026 I-SYST inc.
 ----------------------------------------------------------------------------*/
 #ifndef __BT_PDS_H__
 #define __BT_PDS_H__
 
 #include <stdint.h>
 #include <stddef.h>
-#include <sys/types.h>		// ssize_t
+#include <sys/types.h>
 
-// Largest value the store must hold. Matches PM_PEER_DATA_MAX_SIZE
-// (PM_PEER_DATA_LOCAL_GATT_DB_MAX_SIZE = 128) in the peer manager.
+// Largest value required by the current Peer Manager data types.
 #define BT_PDS_RECORD_DATA_MAX		128
 
 /**
- * @brief	NVM implementation interface.
+ * @brief NVM implementation used by BtPds.
  *
- * The store accesses the medium only through these calls. A platform supplies
- * one instance describing its region and the read/write/erase primitives.
+ * Offsets passed to Read, Write and Erase are relative to RegionOffset.
+ * RegionSize must be an integral number of SectorSize units and contain at
+ * least two sectors. WriteGran is currently required to be 4 bytes.
  *
- * Offsets are relative to the start of the region (0 .. RegionSize-1), not
- * absolute addresses, so the store logic is medium agnostic.
- *
- * Write must be synchronous from the caller's view: on return the data is
- * committed (the bm implementation pumps sd_flash_write to completion). Len passed to
- * Write is always a multiple of the implementation WriteGran. Erase clears a sector
- * to the erased value (0xFF bytes) if the medium needs it; on rewrite-in-place
- * media such as RRAM it may simply overwrite, in which case Erase can write
- * the sector with the erased pattern or be a documented no-op the store
- * accounts for.
+ * Write and Erase must be synchronous from the caller's view. Write receives
+ * aligned offsets, aligned source buffers and lengths that are multiples of
+ * WriteGran. Erase operates on one SectorSize unit.
  */
 typedef struct __Bt_Pds_Nvm {
-	uint32_t	RegionOffset;	//!< Absolute medium offset of the region start
-	uint32_t	RegionSize;		//!< Region size in bytes
-	uint32_t	SectorSize;		//!< Erase/compaction unit in bytes
-	uint32_t	WriteGran;		//!< Write granularity in bytes (4 for word media)
+	uint32_t	RegionOffset;	//!< Absolute medium address of the region
+	uint32_t	RegionSize;		//!< Total region size in bytes
+	uint32_t	SectorSize;		//!< Erase and garbage-collection unit
+	uint32_t	WriteGran;		//!< Write granularity, currently 4 bytes
 
-	// Read Len bytes from RegionOffset+Off into pBuf. Returns 0 on success.
 	int (*Read)(uint32_t Off, void *pBuf, uint32_t Len);
-
-	// Write Len bytes (multiple of WriteGran) from pData to RegionOffset+Off.
-	// Synchronous: committed on return. Returns 0 on success.
 	int (*Write)(uint32_t Off, const void *pData, uint32_t Len);
-
-	// Erase the sector at RegionOffset+Off (SectorSize bytes). Returns 0 on
-	// success. May overwrite with the erased pattern on RRAM.
 	int (*Erase)(uint32_t Off);
 } BtPdsNvm_t;
 
@@ -82,63 +60,52 @@ typedef struct __Bt_Pds_Nvm {
 extern "C" {
 #endif
 
-
 /**
- * @brief	Initialize the store on the given implementation.
+ * @brief Mount the store on an NVM implementation.
  *
- * Scans the region, rebuilds the in-RAM index of live records, and runs
- * recovery if a prior compaction was interrupted. Synchronous.
+ * Scans every sector, recovers an interrupted garbage collection, and selects
+ * the newest writable sector. The earlier development format without sector
+ * headers is cleared once because it cannot be upgraded in place while
+ * preserving the power-loss guarantee.
  *
- * @param	pNvm	Implementation describing the region and medium primitives.
- *
- * @return	0 on success, negative errno on failure.
+ * @return 0 on success, negative errno on failure.
  */
 int BtPdsInit(const BtPdsNvm_t *pNvm);
 
 /**
- * @brief	Read the value stored under Id.
+ * @brief Read the latest live value stored under Id.
  *
- * @param	Id		32-bit record key.
- * @param	pBuf	Destination buffer.
- * @param	Len		Size of pBuf.
+ * Up to Len bytes are copied. The return value is the full stored length, so a
+ * caller can detect that its destination was smaller than the record.
  *
- * @return	Number of bytes copied (the stored value length) on success,
- *			-ENOENT if no live record exists for Id,
- *			negative errno on error.
+ * @return Stored length, -ENOENT when absent/deleted, or negative errno.
  */
 ssize_t BtPdsRead(uint32_t Id, void *pBuf, size_t Len);
 
 /**
- * @brief	Store (upsert) a value under Id.
+ * @brief Append a new value for Id.
  *
- * Appends a new record version. The previous version for Id becomes stale and
- * is reclaimed at the next compaction. Triggers compaction if the region is
- * too full to hold the new record.
+ * Triggers sector garbage collection when the active sector cannot hold the
+ * record. Id 0xFFFFFFFE is reserved internally.
  *
- * @param	Id		32-bit record key.
- * @param	pData	Value bytes.
- * @param	Len		Value length, 0 .. BT_PDS_RECORD_DATA_MAX.
- *
- * @return	Number of bytes written (Len) on success, negative errno on error
- *			(-ENOMEM if the region is full even after compaction).
+ * @return Len on success or negative errno. -ENOMEM means the live set plus
+ * the requested record cannot fit while retaining a spare sector.
  */
 ssize_t BtPdsWrite(uint32_t Id, const void *pData, size_t Len);
 
 /**
- * @brief	Delete the value stored under Id.
+ * @brief Delete Id by appending a tombstone.
  *
- * Appends a tombstone. Returns 0 even if Id was absent (idempotent).
+ * Deleting an absent value succeeds without writing.
  *
- * @param	Id		32-bit record key.
- *
- * @return	0 on success, negative errno on error.
+ * @return 0 on success or negative errno.
  */
 int BtPdsDelete(uint32_t Id);
 
 /**
- * @brief	Erase the entire store (all records).
+ * @brief Erase all records and create a new empty active sector.
  *
- * @return	0 on success, negative errno on error.
+ * @return 0 on success or negative errno.
  */
 int BtPdsClear(void);
 
