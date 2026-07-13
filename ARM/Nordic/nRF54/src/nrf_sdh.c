@@ -63,6 +63,22 @@ static void CallSoftDeviceResetHandler(void)
 	handler();
 }
 
+void NrfSdhEarlyInit(void)
+{
+	if (softdevice_reset_done)
+	{
+		return;
+	}
+
+	softdevice_vector_forward_address = FIXED_PARTITION_OFFSET(softdevice_partition);
+#ifdef CONFIG_BOOTLOADER_MCUBOOT
+	softdevice_vector_forward_address += CONFIG_ROM_START_OFFSET;
+#endif
+
+	CallSoftDeviceResetHandler();
+	softdevice_reset_done = true;
+}
+
 static atomic_t sdh_is_suspended;	/* Whether the SoftDevice event interrupts are disabled. */
 static atomic_t sdh_transition;		/* Whether enable/disable process was started. */
 
@@ -292,21 +308,12 @@ int nrf_sdh_enable_request(void)
 	 */
 	//memset((void *)0x20000000, 0, 0x4780);
 
-	/* Set the SoftDevice vector base before issuing any SoftDevice SVC.
-	 * The nRF54 SoftDevice reset entry initializes its RAM state and must be
-	 * called once after every application reset. The sdk-nrf-bm irq_connect
-	 * implementation performs the same step during system initialization. */
-	softdevice_vector_forward_address = FIXED_PARTITION_OFFSET(softdevice_partition);
-	SDH_TRACE("sdh: vector base set");
-#ifdef CONFIG_BOOTLOADER_MCUBOOT
-	softdevice_vector_forward_address += CONFIG_ROM_START_OFFSET;
-#endif
-
-	if (!softdevice_reset_done) {
-		SDH_TRACE("sdh: before reset entry");
-		CallSoftDeviceResetHandler();
-		SDH_TRACE("sdh: after reset entry");
-		softdevice_reset_done = true;
+	/* The reset entry must run during early system startup, before UART,
+	 * timers and other application peripherals are initialized. */
+	if (!softdevice_reset_done)
+	{
+		SDH_TRACE("sdh: early reset missing");
+		return -EPERM;
 	}
 
 	SDH_TRACE("sdh: before is_enabled");
