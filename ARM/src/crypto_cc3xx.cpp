@@ -41,7 +41,6 @@
 
 namespace {
 
-// P256_BYTES comes from crypto_p256.h.
 constexpr size_t P256_WORDS = P256_BYTES / sizeof(uint32_t);
 constexpr uint32_t PKA_REG_BYTES = 48U;
 constexpr uint32_t PKA_REG_WORDS = PKA_REG_BYTES / sizeof(uint32_t);
@@ -165,6 +164,8 @@ static const uint32_t s_P256B[P256_WORDS] = {
 static std::atomic<bool> s_bCcInit{false};
 static std::atomic<bool> s_bCc3xxBusy{false};
 static bool s_bPkaFault;
+
+static bool CoreInit(void);
 
 static inline volatile uint32_t &Cc3xxReg(uint32_t Offset)
 {
@@ -454,6 +455,17 @@ static void PkaSetFieldModulus(void)
 static bool PkaInit(void)
 {
 	s_bPkaFault = false;
+
+	if (!s_bCcInit.load(std::memory_order_acquire))
+	{
+		const bool initialized = CoreInit();
+		s_bCcInit.store(initialized, std::memory_order_release);
+		if (!initialized)
+		{
+			return false;
+		}
+	}
+
 	Cc3xxReg(REG_PKA_CLOCK_ENABLE) = 1U;
 	Cc3xxReg(REG_PKA_SW_RESET) = 1U;
 	if (!PkaWaitDone())
@@ -516,9 +528,6 @@ static bool PointIsInfinity(const PkaPoint &P)
 	return PkaEqualImm(P.Z, 0);
 }
 
-// Jacobian doubling formula. It is also evaluated for an infinity input so the
-// PKA command sequence does not depend on point state. Z remains zero for that
-// case, which is sufficient for the infinity representation used here.
 static void PointDouble(const PkaPoint &P, const PkaPoint &R)
 {
 	const PkaReg_t t0 = P256_T0;
@@ -557,9 +566,6 @@ static void PointDouble(const PkaPoint &P, const PkaPoint &R)
 	PkaModSub(R.Y, t3, R.Y);
 }
 
-// Select one of two projective points through a fixed PKA SRAM access sequence.
-// The private bit changes only the CPU byte mask; it never changes a PKA source
-// register number or opcode field.
 static void PointSelectCopy(const PkaPoint &Zero, const PkaPoint &One,
 							uint32_t Bit, const PkaPoint &Dst)
 {
@@ -588,9 +594,6 @@ static void PointSelectCopy(const PkaPoint &Zero, const PkaPoint &One,
 	CryptoSecureWipe(selected, sizeof(selected));
 }
 
-// Jacobian addition with fixed exceptional-case handling. The generic add,
-// doubling candidate, infinity candidate, and all selections are evaluated on
-// every call. Point state therefore does not change the PKA command sequence.
 static void PointAdd(const PkaPoint &P, const PkaPoint &Q, const PkaPoint &R)
 {
 	const PkaReg_t t0 = P256_T0;
@@ -709,10 +712,6 @@ static bool PointToAffine(const PkaPoint &P, uint8_t Out[64])
 	return !infinity && !s_bPkaFault;
 }
 
-// P-256 base point G (SEC1 uncompressed X||Y, big-endian). Kept here, next to
-// the scalar-multiply primitive that consumes it, so it is not exposed outside
-// this engine. crypto_p256 owns the curve math; the base point belongs with the
-// PKA multiply.
 static const uint8_t s_P256Generator[64] = {
 	0x6B,0x17,0xD1,0xF2,0xE1,0x2C,0x42,0x47,0xF8,0xBC,0xE6,0xE5,0x63,0xA4,0x40,0xF2,
 	0x77,0x03,0x7D,0x81,0x2D,0xEB,0x33,0xA0,0xF4,0xA1,0x39,0x45,0xD8,0x98,0xC2,0x96,
