@@ -1,48 +1,35 @@
 /**-------------------------------------------------------------------------
 @file	bt_pds_bm.cpp
 
-@brief	BtPds NVM implementation for the nRF54L bm (sdk-nrf-bm / S145) port.
+@brief	BtPds NVM implementation for the nRF54L bm S145 path.
 
-		Implements the BtPdsNvm_t primitives over RRAM. The region is the
-		peer_manager partition reserved in the linker script. Writes go through
-		the SoftDevice (sd_flash_write) because S145 arbitrates flash access
-		against radio activity; a direct nrfx RRAMC write while the SoftDevice
-		is enabled is unsafe. sd_flash_write is asynchronous: completion arrives
-		as a SoC event (NRF_EVT_FLASH_OPERATION_SUCCESS / _ERROR), so each write
-		is pumped to completion here to present a synchronous interface to the
-		store.
+		RRAM is memory mapped for reads. Writes are submitted through
+		sd_flash_write because the SoftDevice arbitrates NVM access against radio
+		activity. The implementation presents a synchronous interface to BtPds.
 
-		RRAM is memory mapped and byte readable, so Read is a plain memcpy from
-		the absolute address. RRAM is rewrite-in-place, so Erase writes the
-		erased pattern (0xFF) over the sector via the same SoftDevice path.
-
-		Region: must match the peer_manager_partition reserved in
-		gcc_nrf54l15_xxaa_s145.ld. The target owns these constants; adjust here
-		if the flash map changes.
+		A write can be requested while the BLE observer chain is running. In that
+		case the normal SoC poller cannot run until the caller returns, so this
+		module drains pending SoC events itself. Every drained event is forwarded
+		to the complete registered SoC observer list in the same order as
+		nrf_sdh_soc.c; no unrelated event is consumed privately.
 
 @author	Hoang Nguyen Hoan
-@date	Jun 03, 2026
+@date	Jul 2026
 
-@license
-
-MIT License
-
-Copyright (c) 2016, I-SYST inc., all rights reserved
-
+@license MIT, (c) 2016-2026 I-SYST inc.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 #include <errno.h>
+#include <stdint.h>
 
-#include "nrf_soc.h"			// sd_flash_write
+#include "nrf_soc.h"
 #include "nrf_error.h"
-#include "nrf_sdh_soc.h"		// SoC event observer
-#include "nrf.h"				// __WFE
+#include "nrf_sdh_soc.h"
+#include "nrf.h"
 
 #include "bluetooth/bt_pds.h"
+#include "coredev/system_core_clock.h"
 
-// Reserved peer_manager region (see gcc_nrf54l15_xxaa_s145.ld:
-// 0x158800 .. 0x1597FF, 4 KB, modeled as 4 x 1 KB sectors to match the bm SDK
-// PM_BM_ZMS_SECTOR_SIZE of 1024).
 #ifndef BT_PDS_BM_REGION_ADDR
 #define BT_PDS_BM_REGION_ADDR		0x00158800UL
 #endif
@@ -53,15 +40,30 @@ Copyright (c) 2016, I-SYST inc., all rights reserved
 #define BT_PDS_BM_SECTOR_SIZE		0x00000400UL	// 1 KB
 #endif
 
-#define BT_PDS_BM_WRITE_GRAN		4				// sd_flash_write is word based
+#define BT_PDS_BM_WRITE_GRAN		4U
 
-// sd_flash_write completion is signalled through the SoC event path. These
-// flags are set by the SoC observer and polled by the write wait loop.
+#ifndef BT_PDS_BM_BUSY_TIMEOUT_MS
+#define BT_PDS_BM_BUSY_TIMEOUT_MS	250U
+#endif
+#ifndef BT_PDS_BM_WRITE_TIMEOUT_MS
+#define BT_PDS_BM_WRITE_TIMEOUT_MS	2000U
+#endif
+#ifndef BT_PDS_BM_FALLBACK_POLLS
+#define BT_PDS_BM_FALLBACK_POLLS	2000000UL
+#endif
+
+typedef struct __Bt_Pds_Bm_Deadline {
+	bool		UseCycles;
+	uint32_t	Start;
+	uint32_t	Limit;
+	uint32_t	Polls;
+} BtPdsBmDeadline_t;
+
 static volatile bool s_FlashOpDone;
 static volatile bool s_FlashOpOk;
+static bool s_FlashOpActive;
+static int8_t s_CycleCounterAvailable = -1;
 
-// SoC event observer: catch flash operation completion. Registered into the
-// nrf_sdh_soc observer section so soc_evt_poll dispatches here.
 static void BtPdsBmSocEvtHandler(uint32_t SysEvt, void *pCtx)
 {
 	(void)pCtx;
@@ -72,10 +74,12 @@ static void BtPdsBmSocEvtHandler(uint32_t SysEvt, void *pCtx)
 			s_FlashOpOk = true;
 			s_FlashOpDone = true;
 			break;
+
 		case NRF_EVT_FLASH_OPERATION_ERROR:
 			s_FlashOpOk = false;
 			s_FlashOpDone = true;
 			break;
+
 		default:
 			break;
 	}
@@ -83,113 +87,228 @@ static void BtPdsBmSocEvtHandler(uint32_t SysEvt, void *pCtx)
 
 NRF_SDH_SOC_OBSERVER(s_BtPdsBmSocObs, BtPdsBmSocEvtHandler, NULL, HIGH);
 
-// Issue one sd_flash_write and pump SoC events until it completes. p_dst/p_src
-// are word aligned, size is in 32-bit words. Returns 0 on success.
-//
-// This can be called from within the BLE event handler context (gcm writes
-// CENTRAL_ADDR_RES during connection setup, which runs inside nrf_sdh_evts_poll).
-// In that case the normal soc_evt_poll cannot run re-entrantly to deliver the
-// flash completion, so a bare __WFE would deadlock. Drain the SoC event queue
-// directly here via sd_evt_get and feed the same handler, so the flash
-// completion is processed regardless of call context.
-static void PumpSocEvents(void)
+static bool CycleCounterEnable(void)
 {
-	uint32_t evt_id;
-
-	while (sd_evt_get(&evt_id) == NRF_SUCCESS)
+	if (s_CycleCounterAvailable >= 0)
 	{
-		BtPdsBmSocEvtHandler(evt_id, NULL);
+		return s_CycleCounterAvailable != 0;
 	}
+
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	DWT->CYCCNT = 0U;
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+	__NOP();
+	__NOP();
+
+	s_CycleCounterAvailable = DWT->CYCCNT != 0U ? 1 : 0;
+	return s_CycleCounterAvailable != 0;
 }
 
-static int FlashWriteWords(uint32_t *p_dst, const uint32_t *p_src, uint32_t words)
+static BtPdsBmDeadline_t DeadlineStart(uint32_t TimeoutMs)
 {
-	uint32_t err;
+	BtPdsBmDeadline_t deadline = {};
+	uint32_t freq = SystemCoreClockGet();
 
-	do
+	if (freq != 0U && CycleCounterEnable())
+	{
+		uint64_t cycles = ((uint64_t)freq * TimeoutMs) / 1000U;
+		if (cycles == 0U)
+		{
+			cycles = 1U;
+		}
+		if (cycles > 0x7FFFFFFFUL)
+		{
+			cycles = 0x7FFFFFFFUL;
+		}
+
+		deadline.UseCycles = true;
+		deadline.Start = DWT->CYCCNT;
+		deadline.Limit = (uint32_t)cycles;
+	}
+	else
+	{
+		deadline.Polls = BT_PDS_BM_FALLBACK_POLLS;
+	}
+
+	return deadline;
+}
+
+static bool DeadlineExpired(BtPdsBmDeadline_t *pDeadline)
+{
+	if (pDeadline->UseCycles)
+	{
+		return (uint32_t)(DWT->CYCCNT - pDeadline->Start) >=
+			pDeadline->Limit;
+	}
+
+	if (pDeadline->Polls == 0U)
+	{
+		return true;
+	}
+	pDeadline->Polls--;
+	return false;
+}
+
+// Drain the SoftDevice SoC queue and forward every event exactly as the normal
+// sdk-nrf-bm soc_evt_poll does. This function is used only while a synchronous
+// write is blocking the outer event dispatcher.
+static int DispatchSocEvents(void)
+{
+	uint32_t evtId;
+	uint32_t status;
+
+	while ((status = sd_evt_get(&evtId)) == NRF_SUCCESS)
+	{
+		TYPE_SECTION_FOREACH(
+			struct nrf_sdh_soc_evt_observer,
+			nrf_sdh_soc_evt_observers,
+			observer)
+		{
+			observer->handler(evtId, observer->context);
+		}
+	}
+
+	return status == NRF_ERROR_NOT_FOUND ? 0 : -EIO;
+}
+
+static int FlashWriteWords(uint32_t *pDst, const uint32_t *pSrc,
+						   uint32_t WordCount)
+{
+	if (WordCount == 0U)
+	{
+		return 0;
+	}
+	if (s_FlashOpActive)
+	{
+		return -EBUSY;
+	}
+
+	s_FlashOpActive = true;
+	int result = 0;
+	uint32_t status;
+	BtPdsBmDeadline_t busyDeadline = DeadlineStart(BT_PDS_BM_BUSY_TIMEOUT_MS);
+
+	while (true)
 	{
 		s_FlashOpDone = false;
 		s_FlashOpOk = false;
+		__DMB();
 
-		err = sd_flash_write(p_dst, p_src, words);
-
-		if (err == NRF_ERROR_BUSY)
+		status = sd_flash_write(pDst, pSrc, WordCount);
+		if (status == NRF_ERROR_BUSY)
 		{
-			// Controller owns flash this moment; drain SoC events and retry.
-			PumpSocEvents();
+			if (DispatchSocEvents() != 0)
+			{
+				result = -EIO;
+				goto exit;
+			}
+			if (DeadlineExpired(&busyDeadline))
+			{
+				result = -ETIMEDOUT;
+				goto exit;
+			}
+			__NOP();
 			continue;
 		}
-		if (err != NRF_SUCCESS)
+		if (status != NRF_SUCCESS)
 		{
-			return -EIO;
+			result = -EIO;
+			goto exit;
 		}
+		break;
+	}
 
-		// Wait for the completion event. Drain SoC events directly rather than
-		// relying on soc_evt_poll, which cannot run if this call is nested
-		// inside the BLE event pump. __WFE between drains avoids a busy spin;
-		// the flash completion interrupt wakes it.
+	{
+		BtPdsBmDeadline_t writeDeadline =
+			DeadlineStart(BT_PDS_BM_WRITE_TIMEOUT_MS);
+
 		while (!s_FlashOpDone)
 		{
-			PumpSocEvents();
-			if (!s_FlashOpDone)
+			if (DispatchSocEvents() != 0)
 			{
-				__WFE();
+				result = -EIO;
+				goto exit;
 			}
+			if (DeadlineExpired(&writeDeadline))
+			{
+				result = -ETIMEDOUT;
+				goto exit;
+			}
+			__NOP();
 		}
+	}
 
-		if (!s_FlashOpOk)
-		{
-			return -EIO;
-		}
-		return 0;
+	__DMB();
+	if (!s_FlashOpOk)
+	{
+		result = -EIO;
+	}
 
-	} while (true);
+exit:
+	s_FlashOpActive = false;
+	return result;
+}
+
+static bool RangeValid(uint32_t Off, uint32_t Len)
+{
+	return Off <= BT_PDS_BM_REGION_SIZE &&
+		Len <= BT_PDS_BM_REGION_SIZE - Off;
 }
 
 static int BtPdsBmRead(uint32_t Off, void *pBuf, uint32_t Len)
 {
-	// RRAM is memory mapped; read directly.
+	if (!RangeValid(Off, Len) || (Len > 0U && pBuf == nullptr))
+	{
+		return -EINVAL;
+	}
+
 	memcpy(pBuf, (const void *)(BT_PDS_BM_REGION_ADDR + Off), Len);
 	return 0;
 }
 
 static int BtPdsBmWrite(uint32_t Off, const void *pData, uint32_t Len)
 {
-	if ((Off & 3) || (Len & 3))
+	if (!RangeValid(Off, Len) || (Off & 3U) != 0U || (Len & 3U) != 0U ||
+		(Len > 0U && (pData == nullptr ||
+		 ((uintptr_t)pData & 3U) != 0U)))
 	{
-		return -EINVAL;		// store always passes word aligned offset/len
+		return -EINVAL;
 	}
 
-	uint32_t *dst = (uint32_t *)(BT_PDS_BM_REGION_ADDR + Off);
-	const uint32_t *src = (const uint32_t *)pData;
-
-	return FlashWriteWords(dst, src, Len / 4);
+	uint32_t *pDst = (uint32_t *)(BT_PDS_BM_REGION_ADDR + Off);
+	const uint32_t *pSrc = (const uint32_t *)pData;
+	return FlashWriteWords(pDst, pSrc, Len / 4U);
 }
 
 static int BtPdsBmErase(uint32_t Off)
 {
-	// RRAM rewrite-in-place: write the erased pattern over the sector in
-	// word-sized chunks from a small stack block to cut sd_flash_write calls.
-	uint32_t blk[32];
-	memset(blk, 0xFF, sizeof(blk));
-
-	uint32_t *dst = (uint32_t *)(BT_PDS_BM_REGION_ADDR + Off);
-	uint32_t words = BT_PDS_BM_SECTOR_SIZE / 4;
-	uint32_t i = 0;
-
-	while (i < words)
+	if ((Off % BT_PDS_BM_SECTOR_SIZE) != 0U ||
+		!RangeValid(Off, BT_PDS_BM_SECTOR_SIZE))
 	{
-		uint32_t n = words - i;
-		if (n > (uint32_t)(sizeof(blk) / sizeof(blk[0])))
+		return -EINVAL;
+	}
+
+	uint32_t erased[32];
+	memset(erased, 0xFF, sizeof(erased));
+
+	uint32_t *pDst = (uint32_t *)(BT_PDS_BM_REGION_ADDR + Off);
+	uint32_t words = BT_PDS_BM_SECTOR_SIZE / 4U;
+	uint32_t index = 0U;
+
+	while (index < words)
+	{
+		uint32_t count = words - index;
+		if (count > sizeof(erased) / sizeof(erased[0]))
 		{
-			n = sizeof(blk) / sizeof(blk[0]);
+			count = sizeof(erased) / sizeof(erased[0]);
 		}
-		int r = FlashWriteWords(&dst[i], blk, n);
-		if (r != 0)
+
+		int result = FlashWriteWords(&pDst[index], erased, count);
+		if (result != 0)
 		{
-			return r;
+			return result;
 		}
-		i += n;
+		index += count;
 	}
 	return 0;
 }
@@ -204,9 +323,6 @@ static const BtPdsNvm_t s_BtPdsBmNvm = {
 	.Erase        = BtPdsBmErase,
 };
 
-// Convenience init the platform calls instead of building the implementation itself.
-// extern "C" so peer_data_storage.c (compiled as C) links to the unmangled
-// symbol it declares and calls.
 extern "C" int BtPdsBmInit(void)
 {
 	return BtPdsInit(&s_BtPdsBmNvm);
