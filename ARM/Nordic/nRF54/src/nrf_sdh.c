@@ -12,6 +12,9 @@
 #include "coredev/system_core_clock.h"
 #include "idelay.h"
 
+extern void BtAppDebugMarker(const char *pMsg);
+#define SDH_TRACE(Msg) BtAppDebugMarker(Msg)
+
 /**
  * @defgroup nrf_sd_isr_vectors SoftDevice Interrupt Vector Table Offsets
  * @{
@@ -202,6 +205,7 @@ uint8_t nrf_get_lfclk_accuracy(uint32_t ppm)
 static int nrf_sdh_enable(void)
 {
 	int err;
+	SDH_TRACE("sdh: enable enter");
 	OscDesc_t const *lfosc = GetLowFreqOscDesc();
 
 	nrf_clock_lf_cfg_t clock_lf_cfg = {
@@ -213,7 +217,9 @@ static int nrf_sdh_enable(void)
 		.hfint_ctiv = CONFIG_NRF_SDH_CLOCK_HFINT_CALIBRATION_INTERVAL,
 	};
 
+	SDH_TRACE("sdh: before sd_softdevice_enable");
 	err = sd_softdevice_enable(&clock_lf_cfg, softdevice_fault_handler);
+	SDH_TRACE("sdh: after sd_softdevice_enable");
 	if (err) {
 		LOG_ERR("Failed to enable SoftDevice, nrf_error %#x", err);
 		return -EINVAL;
@@ -272,6 +278,7 @@ int nrf_sdh_enable_request(void)
 {
 	bool busy;
 	uint8_t enabled;
+	SDH_TRACE("sdh: request enter");
 
 	/* Handle warm reset (debugger, watchdog): SRAM is retained and
 	 * the SD's "enabled" flag from the previous session survives.
@@ -290,16 +297,21 @@ int nrf_sdh_enable_request(void)
 	 * called once after every application reset. The sdk-nrf-bm irq_connect
 	 * implementation performs the same step during system initialization. */
 	softdevice_vector_forward_address = FIXED_PARTITION_OFFSET(softdevice_partition);
+	SDH_TRACE("sdh: vector base set");
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
 	softdevice_vector_forward_address += CONFIG_ROM_START_OFFSET;
 #endif
 
 	if (!softdevice_reset_done) {
+		SDH_TRACE("sdh: before reset entry");
 		CallSoftDeviceResetHandler();
+		SDH_TRACE("sdh: after reset entry");
 		softdevice_reset_done = true;
 	}
 
+	SDH_TRACE("sdh: before is_enabled");
 	(void)sd_softdevice_is_enabled(&enabled);
+	SDH_TRACE("sdh: after is_enabled");
 	if (enabled) {
 		return -EALREADY;
 	}
@@ -309,18 +321,22 @@ int nrf_sdh_enable_request(void)
 	}
 
 	atomic_set(&sdh_transition, true);
+	SDH_TRACE("sdh: before observer init");
 	/* Assume all observers to be busy */
 	TYPE_SECTION_FOREACH(struct nrf_sdh_state_evt_observer,
 			     nrf_sdh_state_evt_observers, obs) {
 		obs->is_busy = true;
 	}
 
+	SDH_TRACE("sdh: before enable prepare");
 	busy = sdh_state_evt_observer_notify(NRF_SDH_STATE_EVT_ENABLE_PREPARE);
+	SDH_TRACE("sdh: after enable prepare");
 	if (busy) {
 		/* Leave sdh_transition to 1, so process can be continued */
 		return -EBUSY;
 	}
 
+	SDH_TRACE("sdh: before enable");
 	return nrf_sdh_enable();
 }
 

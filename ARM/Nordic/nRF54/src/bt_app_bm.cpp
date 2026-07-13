@@ -97,6 +97,11 @@ extern UART g_Uart;
 #define DEBUG_PRINTF(...)
 #endif
 
+extern "C" void BtAppDebugMarker(const char *pMsg)
+{
+	g_Uart.printf("%s\r\n", pMsg);
+}
+
 extern "C" void softdevice_fault_handler(uint32_t Id, uint32_t Pc, uint32_t Info)
 {
 	DEBUG_PRINTF("SoftDevice fault: id=0x%08lx pc=0x%08lx info=0x%08lx\r\n",
