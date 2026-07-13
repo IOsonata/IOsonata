@@ -59,13 +59,13 @@ SOFTWARE.
 #include "bm/bluetooth/ble_conn_params.h"
 #include "bm/bluetooth/peer_manager/peer_manager.h"
 #include "bm/bluetooth/peer_manager/peer_manager_handler.h"
-#include "bm/bluetooth/peer_manager/nrf_ble_lesc.h"
+#include <modules/conn_state.h>
 #include "bm/bluetooth/services/ble_dis.h"
 
 #include "crypto/crypto.h"
 
 // Injection point for the LESC crypto engine (defined in the IOsonata
-// nrf_ble_lesc replacement). The App owns the CryptoDev_t and passes it in.
+// BtLesc replacement). The App owns the CryptoDev_t and passes it in.
 #include "bt_lesc.h"
 #include "nrfx_cracen.h"
 #include "nrf_soc.h"
@@ -251,7 +251,7 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 }
 
 // LE Secure Connections OOB data (strong overrides of the generic weak API).
-// On this port nrf_ble_lesc owns the SC key pair, so the local OOB set comes
+// On this port BtLesc owns the SC key pair, so the local OOB set comes
 // from it and the peer set is staged here; the peer data handler hands it to
 // the pairing with the link peer address filled in.
 static ble_gap_lesc_oob_data_t s_BtAppPeerOob;
@@ -283,12 +283,12 @@ int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint
 	{
 		return -1;
 	}
-	if (nrf_ble_lesc_own_oob_data_generate() != NRF_SUCCESS)
+	if (!BtLescOobLocalGen())
 	{
 		return -1;
 	}
 
-	ble_gap_lesc_oob_data_t *p = nrf_ble_lesc_own_oob_data_get();
+	ble_gap_lesc_oob_data_t *p = BtLescOobLocalGet();
 	if (p == NULL)
 	{
 		return -1;
@@ -344,8 +344,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 {
 	uint32_t err_code;
 	const ble_gap_evt_t *p_gap_evt = &p_ble_evt->evt.gap_evt;
-	//uint8_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
-	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
+	uint8_t role = pm_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 
 	DEBUG_PRINTF("evt: 0x%x\r\n", p_ble_evt->header.evt_id);
 	switch (p_ble_evt->header.evt_id)
@@ -507,7 +506,8 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 
 	// Forward to central/observer handlers
 	if ((role == BLE_GAP_ROLE_CENTRAL) ||
-		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER)))
+		(role == BLE_GAP_ROLE_INVALID &&
+		 (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))))
 	{
 		switch (p_ble_evt->header.evt_id)
 		{
@@ -577,7 +577,9 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 	}
 
 	// Forward to peripheral handlers
-	if (g_BtAppData.AppDevice.Conn.Role & BTAPP_ROLE_PERIPHERAL)
+	if ((role == BLE_GAP_ROLE_PERIPH) ||
+		(role == BLE_GAP_ROLE_INVALID &&
+		 (g_BtAppData.AppDevice.Conn.Role & BTAPP_ROLE_PERIPHERAL)))
 	{
 		// HVN TX complete gives a count, not a handle. Drain the per-peer
 		// send-order ring once per event.
@@ -890,15 +892,24 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 	err = sd_ble_enable(&ramreq);
 
-	if (ramreq > ramstart)
+	if (err != NRF_SUCCESS)
 	{
-		DEBUG_PRINTF("%x - Insufficient RAM allocated for the SoftDevice need %x", err, ramreq);
+		if (ramreq > ramstart)
+		{
+			DEBUG_PRINTF("%x - Insufficient RAM allocated for the SoftDevice need %x",
+						 err, ramreq);
+		}
+		else
+		{
+			DEBUG_PRINTF("sd_ble_enable failed: 0x%x\r\n", err);
+		}
+		return false;
 	}
 
 	(void)sdh_state_evt_observer_notify(NRF_SDH_STATE_EVT_BLE_ENABLED);
 
 	// 1 s continuous wakeup trigger so a fully silent link still reaches the
-	// SMP/GATT transaction timeout checks in the main loop. Enabled only after
+	// GATT transaction timeout checks in the main loop. Enabled only after
 	// the SoftDevice is up: GRTC3 must be initialized with its interrupt
 	// disabled before nrf_sdh_enable_request. No handler is needed, the GRTC
 	// interrupt itself ends the WFE wait; the ISR tolerates a null handler.
@@ -919,10 +930,10 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 }
 
 // ---------------------------------------------------------------------------
-// Secure Connections: peer_manager + nrf_ble_lesc, mirroring the nRF52
+// Secure Connections: peer_manager + BtLesc, mirroring the nRF52
 // SoftDevice port. The S145 SoftDevice owns the SMP state machine; peer_manager
 // drives it and persists bonds (through the IOsonata bt_pds store), and
-// nrf_ble_lesc performs the LESC ECDH. The application observes link security
+// BtLesc performs the LESC ECDH. The application observes link security
 // through these peer_manager events; no key material is surfaced to the app on
 // this path (peer_manager is the authority), matching nRF52.
 // ---------------------------------------------------------------------------
@@ -989,9 +1000,9 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	uint32_t err_code;
 
 	// Provide the LESC layer its crypto engine BEFORE pm_init. With CONFIG_PM_LESC
-	// defined, pm_init -> sm_init calls nrf_ble_lesc_init, which checks the engine
+	// defined, pm_init -> sm_init calls BtLesc_init, which checks the engine
 	// via CryptoIsCapable. The engine must already be injected at that point, else
-	// nrf_ble_lesc_init fails and pm_init returns an error. The App owns the
+	// BtLesc_init fails and pm_init returns an error. The App owns the
 	// CryptoDev_t and injects it, mirroring the BtSmpInit model on the SDC port.
 	// ECDH goes through CryptoInit with CRYPTO_PROVIDER_AUTO: the hardware
 	// engine (CryptoHwInit, PSA over CRACEN) is selected when it is linked,
@@ -1000,7 +1011,7 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	// AUTO selects. Random bytes come from the PSA DRBG on the hardware path,
 	// or from the CRACEN-backed RngGet on the uECC path.
 	static CryptoDev_t s_LescEcdh;
-	static uint8_t     s_LescEcdhMem[CRYPTO_MEMSIZE_ECDH];	// ECDH per-instance key arena (fits HW or uECC)
+	alignas(uint32_t) static uint8_t s_LescEcdhMem[CRYPTO_MEMSIZE_ECDH];
 	CryptoCfg_t lescCfg = { };
 	lescCfg.Provider = CRYPTO_PROVIDER_AUTO;
 	lescCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
@@ -1105,21 +1116,8 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 		return err_code;
 	}
 
-	// When CONFIG_PM_LESC is defined, pm_init -> sm_init already called
-	// nrf_ble_lesc_init (the engine was injected before pm_init above). Only
-	// call it explicitly when the SDK LESC path is not compiled in.
-#if !defined(CONFIG_PM_LESC)
-	err_code = nrf_ble_lesc_init();
-	if (err_code != NRF_SUCCESS)
-	{
-		DEBUG_PRINTF("nrf_ble_lesc_init failed: 0x%x\r\n", err_code);
-		return err_code;
-	}
-
-	// Route the staged peer OOB data into the pairing when the SoftDevice
-	// asks for it (LESC OOB association model).
-	nrf_ble_lesc_peer_oob_data_handler_set(BtAppOobPeerDataHandler);
-#endif
+	// Route staged peer OOB data into the LESC pairing.
+	BtLescOobPeerHandlerSet(BtAppOobPeerDataHandler);
 
 	return NRF_SUCCESS;
 }
@@ -1325,11 +1323,11 @@ void BtAppRun()
 	while (1)
 	{
 		// Process any pending LESC DHKey computation. Required for LE Secure
-		// Connections: nrf_ble_lesc defers the ECDH to be run from the main
+		// Connections: BtLesc defers the ECDH to be run from the main
 		// loop rather than the BLE event context.
 		if (g_BtAppData.AppDevice.bSecure)
 		{
-			(void)nrf_ble_lesc_request_handler();
+			(void)BtLescRequestHandler();
 		}
 
 		AppEvtHandlerExec();
@@ -1339,8 +1337,7 @@ void BtAppRun()
 		// events, so a link that goes fully silent needs a periodic wake to also
 		// call these - hook them into an existing SDK/SoftDevice periodic callback
 		// (do not add a trigger to GRTC3, which the SoftDevice owns).
-		BtSmpTimeoutCheck();
-		BtGattIndicationTimeoutCheck();
+			BtGattIndicationTimeoutCheck();
 
 		BtAppEvtWait();
 	}

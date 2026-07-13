@@ -13,11 +13,11 @@
 		peer_id and the IOsonata peer_data_storage replacement are used
 		unchanged, so bond records keep their layout.
 
-		LESC runs on the IOsonata nrf_ble_lesc replacement (CryptoDev_t based)
+		LESC runs on the IOsonata BtLesc module (CryptoDev_t based)
 		under CONFIG_PM_LESC, exactly where the stock module called it: init
 		in sm_init, the public key at the params reply, event delivery at the
 		end of sm_ble_evt_handler. DHKey computation stays deferred to
-		nrf_ble_lesc_request_handler in the application main loop.
+		BtLescRequestHandler in the application main loop.
 
 		The keyset handed to sd_ble_gap_sec_params_reply points into the
 		pm_peer_data_bonding inside the peer_database write buffer, so the
@@ -88,7 +88,7 @@
 #endif
 
 #if defined(CONFIG_PM_LESC)
-#include <bm/bluetooth/peer_manager/nrf_ble_lesc.h>
+#include "bt_lesc.h"
 #endif
 
 LOG_MODULE_DECLARE(peer_manager, CONFIG_PEER_MANAGER_LOG_LEVEL);
@@ -261,11 +261,13 @@ static bool AllowRepairing(uint16_t ConnHdl)
 static ble_gap_lesc_p256_pk_t *LescPubKeyGet(void)
 {
 #if defined(CONFIG_PM_LESC)
-	return nrf_ble_lesc_public_key_get();
+	return BtLescPubKeyGet();
 #else
 	return s_pUserLescPk;
 #endif
 }
+
+static void WriteBufRelease(uint16_t ConnHdl);
 
 // ---- Keyset construction ----------------------------------------------------
 
@@ -304,6 +306,7 @@ static uint32_t SecKeysetFill(uint16_t ConnHdl, uint8_t Role,
 	BtSecBmLink_t *pLink = LinkGet(ConnHdl);
 	if (pLink == nullptr)
 	{
+		(void)pdb_write_buf_release(tempPeerId, PM_PEER_DATA_ID_BONDING);
 		return NRF_ERROR_INVALID_STATE;
 	}
 	pKeyset->keys_peer.p_pk      = &pLink->PeerPk;
@@ -313,6 +316,7 @@ static uint32_t SecKeysetFill(uint16_t ConnHdl, uint8_t Role,
 	r = im_ble_addr_get(ConnHdl, &peerData.bonding_data->peer_ble_id.id_addr_info);
 	if (r != NRF_SUCCESS)
 	{
+		(void)pdb_write_buf_release(tempPeerId, PM_PEER_DATA_ID_BONDING);
 		return NRF_ERROR_INVALID_STATE;
 	}
 
@@ -327,6 +331,7 @@ static uint32_t ParamsReplyPerform(uint16_t ConnHdl, ble_gap_sec_params_t *pSecP
 	uint8_t              secStatus = BLE_GAP_SEC_STATUS_SUCCESS;
 	ble_gap_sec_keyset_t keyset;
 	uint32_t             r = NRF_SUCCESS;
+	bool                 bWriteBufHeld = false;
 
 	memset(&keyset, 0, sizeof(keyset));
 
@@ -390,6 +395,7 @@ static uint32_t ParamsReplyPerform(uint16_t ConnHdl, ble_gap_sec_params_t *pSecP
 												r == NRF_ERROR_BUSY);
 					return r;
 				}
+				bWriteBufHeld = true;
 			}
 		}
 	}
@@ -406,6 +412,11 @@ static uint32_t ParamsReplyPerform(uint16_t ConnHdl, ble_gap_sec_params_t *pSecP
 
 	r = sd_ble_gap_sec_params_reply(ConnHdl, secStatus, pReplyParams, &keyset);
 	pm_conn_state_user_flag_set(ConnHdl, s_FlagReplyPendBusy, r == NRF_ERROR_BUSY);
+
+	if (bWriteBufHeld && r != NRF_SUCCESS && r != NRF_ERROR_BUSY)
+	{
+		WriteBufRelease(ConnHdl);
+	}
 
 	if (r == NRF_ERROR_INVALID_STATE && !pm_conn_state_valid(ConnHdl))
 	{
@@ -899,6 +910,7 @@ static void AuthStatusSuccessProcess(const ble_gap_evt_t *pGapEvt)
 		peerId = pds_peer_id_allocate();
 		if (peerId == PM_PEER_ID_INVALID)
 		{
+			WriteBufRelease(connHdl);
 			UnexpectedErrorSend(connHdl, NRF_ERROR_NO_MEM);
 			PairingSuccessSend(pGapEvt, false);
 			return;
@@ -1055,10 +1067,9 @@ uint32_t sm_init(void)
 	}
 
 #if defined(CONFIG_PM_LESC)
-	uint32_t nrfErr = nrf_ble_lesc_init();
-	if (nrfErr != NRF_SUCCESS)
+	if (!BtLescInit())
 	{
-		return nrfErr;
+		return NRF_ERROR_INTERNAL;
 	}
 #endif
 
@@ -1145,9 +1156,9 @@ void sm_ble_evt_handler(const ble_evt_t *ble_evt)
 
 #if defined(CONFIG_PM_LESC)
 	// LESC key handling: single delivery point into the lesc module. DHKey
-	// computation stays deferred to nrf_ble_lesc_request_handler in the
+	// computation stays deferred to BtLescRequestHandler in the
 	// application main loop.
-	nrf_ble_lesc_on_ble_evt(ble_evt);
+	BtLescOnBleEvt(ble_evt);
 #endif
 
 	PendingPumpsRun();

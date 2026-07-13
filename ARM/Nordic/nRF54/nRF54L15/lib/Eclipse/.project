@@ -1251,6 +1251,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/nRF54/src/bt_app_bm.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_id_bm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/nRF54/src/bt_id_bm.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_app_handler.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_handler.c</locationURI>
@@ -1391,16 +1396,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_sdp.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_smp.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_smp_bond.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_smp_bond_sdc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/bt_smp_bond_sdc.cpp</locationURI>
@@ -1469,11 +1464,6 @@
 			<name>src/bluetooth/bt_lesc_sd.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/bt_lesc_sd.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_lesc_pm_shim.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_lesc_pm_shim.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/shared_intrf.cpp</name>
@@ -2864,11 +2854,6 @@
 			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/gatts_cache_manager.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/gatts_cache_manager.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/id_manager.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/id_manager.c</locationURI>
 		</link>
 		<link>
 			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/peer_database.c</name>
