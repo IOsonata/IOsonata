@@ -1613,7 +1613,7 @@
 		<link>
 			<name>src/display/fonts/orkney24pts.c</name>
 			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/src/display/fonts/orkney24pts.c</location>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/orkney24pts.c</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts/orkney8pts.c</name>
