@@ -1,0 +1,36 @@
+name: BM SMP auth fix
+
+on:
+  push:
+    branches:
+      - cc3xx-review-fixes
+    paths:
+      - .github/bm_smp_auth_fix.py
+      - .github/workflows/bm-smp-auth-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cc3xx-review-fixes
+          fetch-depth: 0
+      - name: Apply fix
+        run: python3 .github/bm_smp_auth_fix.py
+      - name: Validate
+        run: |
+          grep -q 'void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)' ARM/Nordic/nRF54/src/bt_app_bm.cpp
+          grep -q 'BmSmpAuthApply(&sec_param);' ARM/Nordic/nRF54/src/bt_app_bm.cpp
+          ! grep -q 'src/bluetooth/bt_smp.cpp' ARM/Nordic/nRF54/nRF54L15/lib/Eclipse/.project
+      - name: Commit fix and remove temporary files
+        run: |
+          rm .github/bm_smp_auth_fix.py .github/workflows/bm-smp-auth-fix.yml
+          git config user.name 'IOsonata automation'
+          git config user.email 'automation@i-syst.com'
+          git add ARM/Nordic/nRF54/src/bt_app_bm.cpp .github
+          git commit -m 'fix S145 BtSmpAuthConfig bridge'
+          git push origin HEAD:cc3xx-review-fixes
