@@ -203,6 +203,61 @@ static void BtAppDiscDescRsp(const ble_gattc_evt_t *pEvt);
 // here; an application strong definition overrides them.
 // ===========================================================================
 
+// Pairing configuration supplied through the common BtSmp API. The S145
+// SoftDevice owns SMP, so this target stores the values until Peer Manager
+// builds its ble_gap_sec_params_t.
+static bool    s_bSmpAuthCfgValid;
+static uint8_t s_SmpIoCaps = BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT;
+static uint8_t s_SmpAuthReq =
+	BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_SC;
+
+void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
+{
+	if (IoCaps > BT_SMP_IOCAPS_KEYBOARD_DISPLAY)
+	{
+		return;
+	}
+
+	s_SmpIoCaps = IoCaps;
+	s_SmpAuthReq = (uint8_t)(AuthReq | BT_SMP_AUTHREQ_SC);
+	s_bSmpAuthCfgValid = true;
+}
+
+static void BmSmpAuthApply(ble_gap_sec_params_t *pSecParams)
+{
+	if (!s_bSmpAuthCfgValid || pSecParams == nullptr)
+	{
+		return;
+	}
+
+	switch (s_SmpIoCaps)
+	{
+		case BT_SMP_IOCAPS_DISPLAY_ONLY:
+			pSecParams->io_caps = BLE_GAP_IO_CAPS_DISPLAY_ONLY;
+			break;
+		case BT_SMP_IOCAPS_DISPLAY_YESNO:
+			pSecParams->io_caps = BLE_GAP_IO_CAPS_DISPLAY_YESNO;
+			break;
+		case BT_SMP_IOCAPS_KEYBOARD_ONLY:
+			pSecParams->io_caps = BLE_GAP_IO_CAPS_KEYBOARD_ONLY;
+			break;
+		case BT_SMP_IOCAPS_KEYBOARD_DISPLAY:
+			pSecParams->io_caps = BLE_GAP_IO_CAPS_KEYBOARD_DISPLAY;
+			break;
+		case BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT:
+		default:
+			pSecParams->io_caps = BLE_GAP_IO_CAPS_NONE;
+			break;
+	}
+
+	pSecParams->bond =
+		(s_SmpAuthReq & BT_SMP_AUTHREQ_BONDING_FLAG_MASK) !=
+		BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING;
+	pSecParams->mitm = (s_SmpAuthReq & BT_SMP_AUTHREQ_MITM) != 0U;
+	pSecParams->lesc = 1;
+	pSecParams->keypress = (s_SmpAuthReq & BT_SMP_AUTHREQ_KEYPRESS) != 0U;
+}
+
 // SoftDevice passkey octets are six ASCII digits, most significant first.
 // Convert to the six digit integer used by the BtSmp interaction API.
 static uint32_t BmPasskeyToVal(const uint8_t *pAscii)
@@ -1101,6 +1156,10 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	{
 		sec_param.oob = 1;
 	}
+
+	// BtSmpAuthConfig is the common application-facing API. On this target it
+	// overrides the association parameters before Peer Manager stores them.
+	BmSmpAuthApply(&sec_param);
 
 	err_code = pm_sec_params_set(&sec_param);
 	if (err_code != NRF_SUCCESS)
