@@ -64,7 +64,7 @@ SOFTWARE.
 #include "nrf_crypto.h"
 #endif
 
-#include "nrf_ble_lesc.h"
+#include "bt_lesc.h"
 #include "nrf_ble_scan.h"
 #include "nrf_drv_rng.h"
 
@@ -1545,7 +1545,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 				;
     }
 
-//    nrf_ble_lesc_init();
+//    BtLescInit();
 
 	err_code = nrf_sdh_enable((nrf_clock_lf_cfg_t *)&pBleAppCfg->ClkCfg);
     APP_ERROR_CHECK(err_code);
@@ -1649,7 +1649,7 @@ void BleAppRun()
 			{
 				app_sched_execute();
 			}
-			nrf_ble_lesc_request_handler();
+			BtLescRequestHandler();
 			sd_app_evt_wait();
 		}
     }
@@ -1693,7 +1693,7 @@ void BleTimerAppRun()
 			{
 				app_sched_execute();
 			}
-			nrf_ble_lesc_request_handler();
+			BtLescRequestHandler();
 			sd_app_evt_wait();
 		}
     }

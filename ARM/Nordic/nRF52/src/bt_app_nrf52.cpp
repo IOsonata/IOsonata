@@ -61,7 +61,6 @@ SOFTWARE.
 #include "nrf_dfu_settings.h"
 #include "nrf_bootloader_info.h"
 
-#include "nrf_ble_lesc.h"
 #include "nrf_ble_scan.h"
 #include "nrf_drv_rng.h"
 
@@ -835,12 +834,12 @@ int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint
 	{
 		return -1;
 	}
-	if (nrf_ble_lesc_own_oob_data_generate() != NRF_SUCCESS)
+	if (!BtLescOobLocalGen())
 	{
 		return -1;
 	}
 
-	ble_gap_lesc_oob_data_t *p = nrf_ble_lesc_own_oob_data_get();
+	ble_gap_lesc_oob_data_t *p = BtLescOobLocalGet();
 	if (p == NULL)
 	{
 		return -1;
@@ -1201,15 +1200,14 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
     ble_gap_sec_params_t sec_param;
     ret_code_t           err_code;
 
-    // Select the ECDH engine and inject it before pm_init: pm_init runs
-    // sm_init, which calls nrf_ble_lesc_init() with no arguments, so the
-    // engine must already be in place or pm_init fails with
-    // NRF_ERROR_INTERNAL. CryptoInit(AUTO) picks the hardware engine when
-    // linked (CC310 on nRF52840) and falls back to software uECC otherwise.
-    // The App owns the CryptoDev_t, the same model as the SDC pairing path in
-    // bt_app_sdc.cpp. The module owns the key pair, handles the LESC DHKey
-    // request and replies to the SoftDevice; the app only pumps
-    // nrf_ble_lesc_request_handler in the main loop.
+    // Select the ECDH engine and inject it before pm_init: the IOsonata
+    // security manager (bt_sec_sd) calls BtLescInit() during init, so the
+    // engine must already be in place or init fails. CryptoInit(AUTO) picks
+    // the hardware engine when linked (CC310 on nRF52840) and falls back to
+    // software uECC otherwise. The App owns the CryptoDev_t, the same model as
+    // the SDC pairing path in bt_app_sdc.cpp. The module owns the key pair,
+    // handles the LESC DHKey request and replies to the SoftDevice; the app
+    // only pumps BtLescRequestHandler in the main loop.
     static CryptoDev_t s_LescEcdh;
     alignas(uint32_t) static uint8_t s_LescEcdhMem[CRYPTO_MEMSIZE_ECDH];    // word aligned per CryptoCfg_t pMem
     CryptoCfg_t lescCfg = { };
@@ -1311,7 +1309,7 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
 
 	// Route the staged peer OOB data into the pairing when the SoftDevice
 	// asks for it (LESC OOB association model).
-	nrf_ble_lesc_peer_oob_data_handler_set(BtAppOobPeerDataHandler);
+	BtLescOobPeerHandlerSet(BtAppOobPeerDataHandler);
 }
 
 /**@brief Function for handling events from the GATT library. */
@@ -1858,7 +1856,7 @@ void BtAppRun()
     {
 		app_sched_execute();
 		AppEvtHandlerExec();
-		nrf_ble_lesc_request_handler();
+		BtLescRequestHandler();
 
 		// Drive the generic transaction timeouts (Core Vol 3 Part H 3.4, Part F
 		// 3.3.3). Cheap no-ops when nothing is pending. NOTE: this loop wakes on
