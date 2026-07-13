@@ -1,0 +1,48 @@
+name: nRF54 Stage 1 cleanup
+
+on:
+  push:
+    branches:
+      - cc3xx-review-fixes
+    paths:
+      - .github/stage1_cleanup.py
+      - .github/workflows/nrf54-stage1-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cc3xx-review-fixes
+          fetch-depth: 0
+
+      - name: Apply and validate cleanup
+        shell: bash
+        run: |
+          set +e
+          python3 .github/stage1_cleanup.py > /tmp/stage1_cleanup.log 2>&1
+          status=$?
+          set -e
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ "$status" -ne 0 ]; then
+            git reset --hard HEAD
+            git clean -fd
+            cp /tmp/stage1_cleanup.log stage1_cleanup_error.log
+            git add stage1_cleanup_error.log
+            git commit -m "record nRF54 Stage 1 cleanup failure"
+            git push origin HEAD:cc3xx-review-fixes
+            cat /tmp/stage1_cleanup.log
+            exit "$status"
+          fi
+
+          git diff --check
+          git add -A
+          git commit -m "complete nRF54 Stage 1 cleanup"
+          git push origin HEAD:cc3xx-review-fixes
