@@ -97,6 +97,27 @@ extern UART g_Uart;
 #define DEBUG_PRINTF(...)
 #endif
 
+extern "C" void softdevice_fault_handler(uint32_t Id, uint32_t Pc, uint32_t Info)
+{
+	DEBUG_PRINTF("SoftDevice fault: id=0x%08lx pc=0x%08lx info=0x%08lx\r\n",
+				 (unsigned long)Id, (unsigned long)Pc, (unsigned long)Info);
+	while (true)
+	{
+		__NOP();
+	}
+}
+
+extern "C" void HardFault_Handler(void)
+{
+	DEBUG_PRINTF("HardFault: CFSR=0x%08lx HFSR=0x%08lx MMFAR=0x%08lx BFAR=0x%08lx\r\n",
+				 (unsigned long)SCB->CFSR, (unsigned long)SCB->HFSR,
+				 (unsigned long)SCB->MMFAR, (unsigned long)SCB->BFAR);
+	while (true)
+	{
+		__NOP();
+	}
+}
+
 /*******************************/
 
 /// Unit conversion macros (same as old nRF5_SDK definitions)
@@ -925,27 +946,35 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 	// Enable SoftDevice
 	err = nrf_sdh_enable_request();
+	DEBUG_PRINTF("BtAppStackInit: nrf_sdh_enable_request returned %d\r\n", err);
 	if (err && err != -EALREADY)
 	{
 		DEBUG_PRINTF("nrf_sdh_enable_request failed: %d\r\n", err);
 		return false;
 	}
 
+	DEBUG_PRINTF("BtAppStackInit: SDBleDefaultCfgSet\r\n");
 	err = SDBleDefaultCfgSet(pCfg, BTAPP_CONN_CFG_TAG, ramstart);
+	DEBUG_PRINTF("BtAppStackInit: SDBleDefaultCfgSet returned 0x%lx\r\n",
+				 (unsigned long)err);
 
 	if (err != NRF_SUCCESS)
 	{
 		return false;
 	}
 
-	// Require before call to nrf_sdh_ble_enable
+	// Required before calling sd_ble_enable.
+	DEBUG_PRINTF("BtAppStackInit: SDBleRandSeed\r\n");
 	SDBleRandSeed(NRF_EVT_RAND_SEED_REQUEST, NULL);
+	DEBUG_PRINTF("BtAppStackInit: SDBleRandSeed done\r\n");
 
-	DEBUG_PRINTF("BtAppStackInit: nrf_sdh_ble_enable\r\n");
+	DEBUG_PRINTF("BtAppStackInit: sd_ble_enable\r\n");
 
 	uint32_t ramreq = ramstart;
 
 	err = sd_ble_enable(&ramreq);
+	DEBUG_PRINTF("BtAppStackInit: sd_ble_enable returned 0x%lx ram=0x%08lx\r\n",
+				 (unsigned long)err, (unsigned long)ramreq);
 
 	if (err != NRF_SUCCESS)
 	{
@@ -1085,7 +1114,10 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 
 	BtLescSetCryptoEngine(&s_LescEcdh);
 
+	DEBUG_PRINTF("BtAppPeerMngrInit: pm_init\r\n");
 	err_code = pm_init();
+	DEBUG_PRINTF("BtAppPeerMngrInit: pm_init returned 0x%lx\r\n",
+				 (unsigned long)err_code);
 	if (err_code != NRF_SUCCESS)
 	{
 		DEBUG_PRINTF("pm_init failed: 0x%x\r\n", err_code);
@@ -1241,7 +1273,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		DEBUG_PRINTF("BtAppStackInit failed\r\n");
 		return false;
 	}
-
+	DEBUG_PRINTF("BtAppInit: stack initialized\r\n");
 
 	// Set GAP appearance
 	err_code = sd_ble_gap_appearance_set(pCfg->Appearance);
