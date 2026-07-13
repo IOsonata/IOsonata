@@ -106,9 +106,9 @@ extern UART g_Uart;
 
 #define BTAPP_CONN_CFG_TAG				CONFIG_NRF_SDH_BLE_CONN_TAG
 
-// Bare-metal fallback polling interval while connected. This guarantees generic
-// SMP/GATT transaction timeouts advance even when the peer goes fully silent.
-// RTOS ports should override BtAppEvtWait with a blocking primitive plus timer.
+// Bare-metal fallback polling interval while connected. This guarantees GATT
+// transaction timeouts advance even when the peer goes fully silent. RTOS
+// targets should override BtAppEvtWait with a blocking primitive plus timer.
 #define BTAPP_TIMEOUT_POLL_MS			100U
 
 #define BTAPP_OBSERVER_PRIO				USER		/**< Application's BLE observer priority. */
@@ -251,7 +251,7 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 }
 
 // LE Secure Connections OOB data (strong overrides of the generic weak API).
-// On this port BtLesc owns the SC key pair, so the local OOB set comes
+// On this target BtLesc owns the SC key pair, so the local OOB set comes
 // from it and the peer set is staged here; the peer data handler hands it to
 // the pairing with the link peer address filled in.
 static ble_gap_lesc_oob_data_t s_BtAppPeerOob;
@@ -931,7 +931,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 // ---------------------------------------------------------------------------
 // Secure Connections: peer_manager + BtLesc, mirroring the nRF52
-// SoftDevice port. The S145 SoftDevice owns the SMP state machine; peer_manager
+// SoftDevice implementation. The S145 SoftDevice owns the SMP state machine; peer_manager
 // drives it and persists bonds (through the IOsonata bt_pds store), and
 // BtLesc performs the LESC ECDH. The application observes link security
 // through these peer_manager events; no key material is surfaced to the app on
@@ -992,7 +992,7 @@ static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 }
 
 // Initialize peer_manager and LESC. Maps the app SecType / key-exchange config
-// onto ble_gap_sec_params_t exactly as the nRF52 port does (the BTAPP_SECTYPE_*
+// onto ble_gap_sec_params_t exactly as the nRF52 implementation does (the BTAPP_SECTYPE_*
 // values alias the same BT_GAP_SECTYPE_* the nRF52 BLEAPP_SECTYPE_* use).
 static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool bEraseBond)
 {
@@ -1000,9 +1000,9 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	uint32_t err_code;
 
 	// Provide the LESC layer its crypto engine BEFORE pm_init. With CONFIG_PM_LESC
-	// defined, pm_init -> sm_init calls BtLesc_init, which checks the engine
+	// defined, pm_init -> sm_init calls BtLescInit, which checks the engine
 	// via CryptoIsCapable. The engine must already be injected at that point, else
-	// BtLesc_init fails and pm_init returns an error. The App owns the
+	// BtLescInit fails and pm_init returns an error. The App owns the
 	// CryptoDev_t and injects it, mirroring the BtSmpInit model on the SDC port.
 	// ECDH goes through CryptoInit with CRYPTO_PROVIDER_AUTO: the hardware
 	// engine (CryptoHwInit, PSA over CRACEN) is selected when it is linked,
@@ -1235,7 +1235,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	if (g_BtAppData.AppDevice.bSecure)
 	{
 		// No erase-bond flag in BtAppCfg_t; bonds are preserved across init.
-		// A dedicated clear (pm_peers_delete / BtSmpBondClearAll) can be added
+		// A dedicated clear (pm_peers_delete) can be added
 		// as a separate API if forced re-bonding is needed.
 		if (BtAppPeerMngrInit(pCfg->SecType, pCfg->SecExchg, false) != NRF_SUCCESS)
 		{
@@ -1282,17 +1282,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
  * main event loop.  SoftDevice events are dispatched through the
  * observer infrastructure triggered by the SD_EVT interrupt.
  */
-// Millisecond clock for the generic SMP/GATT transaction timeouts, overriding
-// the weak BtSmpMsTick/BtGattMsTick defaults. The RTC/timer is owned by the
-// SDK + SoftDevice; this reads the free-running GRTC3 count via the s_BtAppSdGrtc3
-// handle the port enables as a SoftDevice prerequisite (a read is
-// non-destructive). Declared in bt_smp.h / bt_gatt.h, so no linkage specifier is
-// needed here.
-uint32_t BtSmpMsTick(void)
-{
-	return s_BtAppSdGrtc3.mSecond();
-}
-
+// Millisecond clock for GATT transaction timeouts. The SDK and SoftDevice
+// own the timer; this reads the free-running GRTC3 count through the target
+// timer object.
 uint32_t BtGattMsTick(void)
 {
 	return s_BtAppSdGrtc3.mSecond();
@@ -1332,18 +1324,16 @@ void BtAppRun()
 
 		AppEvtHandlerExec();
 
-		// Drive the generic transaction timeouts (Core Vol 3 Part H 3.4, Part F
-		// 3.3.3). Cheap no-ops when nothing is pending. NOTE: this loop wakes on
-		// events, so a link that goes fully silent needs a periodic wake to also
-		// call these - hook them into an existing SDK/SoftDevice periodic callback
-		// (do not add a trigger to GRTC3, which the SoftDevice owns).
-			BtGattIndicationTimeoutCheck();
+		// Drive the GATT indication transaction timeout. The continuous trigger
+		// configured after SoftDevice enable supplies the periodic wake when the
+		// peer is otherwise silent.
+		BtGattIndicationTimeoutCheck();
 
 		BtAppEvtWait();
 	}
 }
 
-// Port-level weak default for BtAppEvtWait. Bare-metal apps use __WFE.
+// Target-level weak default for BtAppEvtWait. Bare-metal apps use __WFE.
 // RTOS apps override with sem take in their bridge code.
 __attribute__((weak)) void BtAppEvtWait(void)
 {

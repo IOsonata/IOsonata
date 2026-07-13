@@ -5,7 +5,7 @@
 
 		Replaces the sdk-nrf-bm peer_manager modules security_manager.c and
 		security_dispatcher.c with one module, the same shape as the nRF52
-		port bt_sec_sd.cpp. It implements the sm_* API surface peer_manager.c
+		implementation bt_sec_sd.cpp. It implements the sm_* API surface peer_manager.c
 		calls (security_manager.h), provides smd_init (peer_manager.c calls it
 		right after sm_init), emits the same struct pm_evt events through
 		pm_sm_evt_handler, and drives the S145 SoftDevice GAP security
@@ -24,7 +24,7 @@
 		SoftDevice writes the distributed keys straight into the structure the
 		store commits at AUTH_STATUS with pdb_write_buf_store.
 
-		Fixes carried over from the nRF52 port, all applying here too:
+		Fixes carried over from the nRF52 implementation, all applying here too:
 		- Per-connection state record. The stock dispatcher shares one static
 		  LESC peer public key buffer across links, so concurrent pairings
 		  overwrite each other. Here each link owns its receive buffer.
@@ -49,7 +49,7 @@
 
 		Divergence from stock kept on purpose: a central securing a link with
 		a known peer id but no readable bond data (NRF_ERROR_NOT_FOUND) falls
-		back to pairing instead of failing, matching the nRF52 port.
+		back to pairing instead of failing, matching the nRF52 implementation.
 
 		Both roles are implemented, each gated by its SoftDevice variant
 		option (CONFIG_SOFTDEVICE_PERIPHERAL / CONFIG_SOFTDEVICE_CENTRAL).
