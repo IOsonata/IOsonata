@@ -1,0 +1,39 @@
+name: nRF54 Startup Diagnostics
+
+on:
+  push:
+    branches:
+      - cc3xx-review-fixes
+    paths:
+      - .github/nrf54_startup_diag.py
+      - .github/workflows/nrf54-startup-diag.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cc3xx-review-fixes
+          fetch-depth: 0
+
+      - name: Apply diagnostics
+        run: python3 .github/nrf54_startup_diag.py
+
+      - name: Validate
+        run: |
+          grep -q 'SoftDevice fault: id=' ARM/Nordic/nRF54/src/bt_app_bm.cpp
+          grep -q 'nrf_sdh_enable_request returned' ARM/Nordic/nRF54/src/bt_app_bm.cpp
+          grep -q 'BtAppPeerMngrInit: pm_init returned' ARM/Nordic/nRF54/src/bt_app_bm.cpp
+
+      - name: Commit diagnostics and remove temporary files
+        run: |
+          rm .github/nrf54_startup_diag.py .github/workflows/nrf54-startup-diag.yml
+          git config user.name 'IOsonata automation'
+          git config user.email 'automation@i-syst.com'
+          git add ARM/Nordic/nRF54/src/bt_app_bm.cpp .github
+          git commit -m 'add nRF54 startup diagnostics'
+          git push origin HEAD:cc3xx-review-fixes
