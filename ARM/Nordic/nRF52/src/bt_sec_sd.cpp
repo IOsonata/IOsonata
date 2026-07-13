@@ -242,6 +242,8 @@ static ret_code_t SecKeysetFill(uint16_t ConnHdl, uint8_t Role,
 	BtSecSdLink_t *pLink = LinkGet(ConnHdl);
 	if (pLink == nullptr)
 	{
+		(void)pdb_write_buf_release(PDB_TEMP_PEER_ID(ConnHdl),
+									 PM_PEER_DATA_ID_BONDING);
 		return NRF_ERROR_INVALID_STATE;
 	}
 	pKeyset->keys_peer.p_pk      = &pLink->PeerPk;
@@ -251,6 +253,8 @@ static ret_code_t SecKeysetFill(uint16_t ConnHdl, uint8_t Role,
 	r = im_ble_addr_get(ConnHdl, &peerData.p_bonding_data->peer_ble_id.id_addr_info);
 	if (r != NRF_SUCCESS)
 	{
+		(void)pdb_write_buf_release(PDB_TEMP_PEER_ID(ConnHdl),
+									 PM_PEER_DATA_ID_BONDING);
 		return NRF_ERROR_INVALID_STATE;
 	}
 
@@ -266,6 +270,7 @@ static ret_code_t ParamsReplyPerform(uint16_t ConnHdl, ble_gap_sec_params_t *pSe
 	ble_gap_sec_params_t *pReplyParams = pSecParams;
 	ble_gap_sec_keyset_t keyset;
 	ret_code_t           r = NRF_SUCCESS;
+	bool                 bKeysetPrepared = false;
 
 	memset(&keyset, 0, sizeof(keyset));
 
@@ -297,6 +302,7 @@ static ret_code_t ParamsReplyPerform(uint16_t ConnHdl, ble_gap_sec_params_t *pSe
 										 r == NRF_ERROR_BUSY);
 			return r;
 		}
+		bKeysetPrepared = true;
 	}
 
 	if (role == BLE_GAP_ROLE_CENTRAL)
@@ -309,6 +315,12 @@ static ret_code_t ParamsReplyPerform(uint16_t ConnHdl, ble_gap_sec_params_t *pSe
 									(secStatus == BLE_GAP_SEC_STATUS_SUCCESS) ?
 									&keyset : NULL);
 	ble_conn_state_user_flag_set(ConnHdl, s_FlagReplyPendBusy, r == NRF_ERROR_BUSY);
+
+	if (bKeysetPrepared && r != NRF_SUCCESS && r != NRF_ERROR_BUSY)
+	{
+		(void)pdb_write_buf_release(PDB_TEMP_PEER_ID(ConnHdl),
+									 PM_PEER_DATA_ID_BONDING);
+	}
 
 	if (r == NRF_ERROR_INVALID_STATE && !ble_conn_state_valid(ConnHdl))
 	{
@@ -740,6 +752,8 @@ static void AuthStatusSuccessProcess(const ble_gap_evt_t *pGapEvt)
 		peerId = pds_peer_id_allocate();
 		if (peerId == PM_PEER_ID_INVALID)
 		{
+			(void)pdb_write_buf_release(PDB_TEMP_PEER_ID(connHdl),
+										 PM_PEER_DATA_ID_BONDING);
 			UnexpectedErrorSend(connHdl, NRF_ERROR_NO_MEM);
 			PairingSuccessSend(pGapEvt, false);
 			return;
@@ -863,9 +877,9 @@ static void SecurePendingHandle(uint16_t ConnHdl, void *pCtx)
 static void PendingPumpsRun(void)
 {
 	(void)ble_conn_state_for_each_set_user_flag(s_FlagReplyPendBusy,
-												ReplyPendingHandle, NULL);
+											ReplyPendingHandle, NULL);
 	(void)ble_conn_state_for_each_set_user_flag(s_FlagSecurePendBusy,
-												SecurePendingHandle, NULL);
+											SecurePendingHandle, NULL);
 
 	for (uint16_t h = 0; h < NRF_SDH_BLE_TOTAL_LINK_COUNT; h++)
 	{
