@@ -128,7 +128,7 @@ enum : uint32_t {
 	PKA_OP_MOD_SUB = 0x07U,
 	PKA_OP_AND = 0x08U,
 	PKA_OP_COPY = 0x09U,
-	PKA_OP_COMPARE = 0x0AU,
+	PKA_OP_XOR_COMPARE = 0x0AU,
 	PKA_OP_MOD_MUL = 0x11U,
 	PKA_OP_MOD_EXP = 0x13U,
 };
@@ -381,9 +381,20 @@ static inline void PkaModSub(PkaReg_t A, PkaReg_t B, PkaReg_t Dst)
 	PkaSubmit(PKA_OP_MOD_SUB, PKA_SIZE_REGISTER, false, A, false, B, false, Dst);
 }
 
+static inline void PkaAnd(PkaReg_t A, PkaReg_t B, PkaReg_t Dst)
+{
+	PkaSubmit(PKA_OP_AND, PKA_SIZE_REGISTER, false, A, false, B, false, Dst);
+}
+
+static inline void PkaXor(PkaReg_t A, PkaReg_t B, PkaReg_t Dst)
+{
+	PkaSubmit(PKA_OP_XOR_COMPARE, PKA_SIZE_REGISTER,
+			  false, A, false, B, false, Dst);
+}
+
 static inline void PkaMask(PkaReg_t Reg)
 {
-	PkaSubmit(PKA_OP_AND, PKA_SIZE_REGISTER, false, Reg, false, PKA_N_MASK, false, Reg);
+	PkaAnd(Reg, PKA_N_MASK, Reg);
 }
 
 static inline void PkaModMul(PkaReg_t A, PkaReg_t B, PkaReg_t Dst)
@@ -400,7 +411,8 @@ static inline void PkaModExp(PkaReg_t A, PkaReg_t Exp, PkaReg_t Dst)
 
 static inline bool PkaEqual(PkaReg_t A, PkaReg_t B)
 {
-	PkaSubmit(PKA_OP_COMPARE, PKA_SIZE_REGISTER, false, A, false, B, true, 0U);
+	PkaSubmit(PKA_OP_XOR_COMPARE, PKA_SIZE_REGISTER,
+			  false, A, false, B, true, 0U);
 	if (!PkaWaitDone())
 	{
 		return false;
@@ -411,8 +423,8 @@ static inline bool PkaEqual(PkaReg_t A, PkaReg_t B)
 static inline bool PkaEqualImm(PkaReg_t A, int32_t Value)
 {
 	assert(Value >= -16 && Value <= 15);
-	PkaSubmit(PKA_OP_COMPARE, PKA_SIZE_REGISTER, false, A, true,
-			  (uint32_t)Value, true, 0U);
+	PkaSubmit(PKA_OP_XOR_COMPARE, PKA_SIZE_REGISTER,
+			  false, A, true, (uint32_t)Value, true, 0U);
 	if (!PkaWaitDone())
 	{
 		return false;
@@ -566,32 +578,37 @@ static void PointDouble(const PkaPoint &P, const PkaPoint &R)
 	PkaModSub(R.Y, t3, R.Y);
 }
 
+// Select one of two projective points through fixed PKA registers. The private
+// bit changes only the value loaded into the fixed mask register. The opcode
+// stream and all source and destination register numbers remain unchanged.
 static void PointSelectCopy(const PkaPoint &Zero, const PkaPoint &One,
 							uint32_t Bit, const PkaPoint &Dst)
 {
+	uint32_t mask[PKA_REG_WORDS];
+	const uint32_t value = 0U - (Bit & 1U);
+
+	for (size_t idx = 0U; idx < P256_WORDS; idx++)
+	{
+		mask[idx] = value;
+	}
+	for (size_t idx = P256_WORDS; idx < PKA_REG_WORDS; idx++)
+	{
+		mask[idx] = 0U;
+	}
+	PkaWrite(P256_T12, mask, sizeof(mask));
+
 	const PkaReg_t zeroReg[3] = {Zero.X, Zero.Y, Zero.Z};
 	const PkaReg_t oneReg[3] = {One.X, One.Y, One.Z};
 	const PkaReg_t dstReg[3] = {Dst.X, Dst.Y, Dst.Z};
-	uint8_t zero[PKA_REG_BYTES];
-	uint8_t one[PKA_REG_BYTES];
-	uint8_t selected[PKA_REG_BYTES];
-	const uint8_t mask = (uint8_t)(0U - (Bit & 1U));
 
 	for (size_t coord = 0U; coord < 3U; coord++)
 	{
-		PkaReadBe(zeroReg[coord], zero, sizeof(zero));
-		PkaReadBe(oneReg[coord], one, sizeof(one));
-		for (size_t idx = 0U; idx < sizeof(selected); idx++)
-		{
-			selected[idx] = (uint8_t)((zero[idx] & (uint8_t)~mask) |
-									  (one[idx] & mask));
-		}
-		PkaWriteBe(dstReg[coord], selected, sizeof(selected));
+		PkaXor(zeroReg[coord], oneReg[coord], P256_T0);
+		PkaAnd(P256_T0, P256_T12, P256_T0);
+		PkaXor(zeroReg[coord], P256_T0, dstReg[coord]);
 	}
 
-	CryptoSecureWipe(zero, sizeof(zero));
-	CryptoSecureWipe(one, sizeof(one));
-	CryptoSecureWipe(selected, sizeof(selected));
+	CryptoSecureWipe(mask, sizeof(mask));
 }
 
 static void PointAdd(const PkaPoint &P, const PkaPoint &Q, const PkaPoint &R)
