@@ -811,13 +811,8 @@ static CRYPTO_STATUS EnsureCc3xx(void)
 
 static CryptoCc3xxData *Cc3xxData(CryptoDev_t * const pDev, void *pKeyCtx)
 {
-	void *p = pKeyCtx != nullptr ? pKeyCtx :
-			  (pDev != nullptr ? pDev->pDevData : nullptr);
-	if (p == nullptr || ((uintptr_t)p & (alignof(CryptoCc3xxData) - 1U)) != 0U)
-	{
-		return nullptr;
-	}
-	return (CryptoCc3xxData *)p;
+	return (CryptoCc3xxData *)CryptoResolveKeyCtx(pDev, pKeyCtx,
+													  alignof(CryptoCc3xxData));
 }
 
 static void KeyReset(CryptoCc3xxData *pData)
@@ -918,10 +913,8 @@ static int Cc3xxSelfTest(CryptoDev_t * const pDev)
 
 extern "C" bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 {
-	if (pDev == nullptr || pCfg == nullptr || pCfg->pMem == nullptr ||
-		pCfg->MemSize < sizeof(CryptoCc3xxData) ||
-		((uintptr_t)pCfg->pMem & (alignof(uint32_t) - 1U)) != 0U ||
-		(pCfg->ReqCaps & ~(uint32_t)CRYPTO_CAP_ECDH_P256) != 0U ||
+	if (!CryptoCfgValidate(pDev, pCfg, sizeof(CryptoCc3xxData),
+						   CRYPTO_CAP_ECDH_P256) ||
 		EnsureCc3xx() != CRYPTO_STATUS_OK)
 	{
 		return false;

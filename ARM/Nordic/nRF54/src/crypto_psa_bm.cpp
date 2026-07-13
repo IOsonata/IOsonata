@@ -67,15 +67,8 @@ static_assert(sizeof(CryptoPsaData_t) <= CRYPTO_MEMSIZE_HW,
 // closed.
 static CryptoPsaData_t *PsaData(CryptoDev_t * const pDev, void *pKeyCtx)
 {
-	void *p = pKeyCtx != nullptr ? pKeyCtx :
-			  (pDev != nullptr ? pDev->pDevData : nullptr);
-
-	if (p == nullptr || ((uintptr_t)p & (alignof(CryptoPsaData_t) - 1)) != 0)
-	{
-		return nullptr;
-	}
-
-	return (CryptoPsaData_t *)p;
+	return (CryptoPsaData_t *)CryptoResolveKeyCtx(pDev, pKeyCtx,
+													 alignof(CryptoPsaData_t));
 }
 
 // One-time PSA bring-up. psa_crypto_init is idempotent and cheap on repeat.
@@ -226,21 +219,10 @@ static CRYPTO_STATUS PsaEcdh(CryptoDev_t * const pDev, void *pKeyCtx,
 
 bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 {
-	if (pDev == nullptr || pCfg == nullptr)
+	if (!CryptoCfgValidate(pDev, pCfg, sizeof(CryptoPsaData_t),
+						   CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256))
 	{
 		return false;
-	}
-	if (pCfg->pMem == nullptr || pCfg->MemSize < sizeof(CryptoPsaData_t))
-	{
-		return false;	// caller must supply per-instance state
-	}
-	if (((uintptr_t)pCfg->pMem & (alignof(uint32_t) - 1)) != 0)
-	{
-		return false;	// arena must be word aligned (see CryptoCfg_t pMem)
-	}
-	if ((pCfg->ReqCaps & ~(uint32_t)(CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256)) != 0)
-	{
-		return false;	// this engine provides AES-128 ECB and P-256 ECDH only
 	}
 	if (EnsurePsa() != CRYPTO_STATUS_OK)
 	{

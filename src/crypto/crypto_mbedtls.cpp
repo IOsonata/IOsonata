@@ -82,9 +82,10 @@ typedef struct {
 	bool              bInit;	// keygen has run for this instance
 } CryptoMbedtlsData_t;
 
-static inline CryptoMbedtlsData_t *MbedData(CryptoDev_t * const pDev, void *pKeyCtx)
+static CryptoMbedtlsData_t *MbedData(CryptoDev_t * const pDev, void *pKeyCtx)
 {
-	return (CryptoMbedtlsData_t *)(pKeyCtx != nullptr ? pKeyCtx : pDev->pDevData);
+	return (CryptoMbedtlsData_t *)CryptoResolveKeyCtx(pDev, pKeyCtx,
+														 alignof(CryptoMbedtlsData_t));
 }
 
 // Free and reinit an instance key context (private key d and public point Q)
@@ -276,17 +277,10 @@ static int MbedSelfTest(CryptoDev_t * const pDev)
 
 bool CryptoMbedtlsInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 {
-	if (pDev == nullptr || pCfg == nullptr)
+	if (!CryptoCfgValidate(pDev, pCfg, sizeof(CryptoMbedtlsData_t),
+						   CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256))
 	{
 		return false;
-	}
-	if (pCfg->pMem == nullptr || pCfg->MemSize < sizeof(CryptoMbedtlsData_t))
-	{
-		return false;	// caller must supply per-instance state
-	}
-	if ((pCfg->ReqCaps & ~(uint32_t)(CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256)) != 0)
-	{
-		return false;	// requested a capability this engine does not provide
 	}
 
 	memset(pDev, 0, sizeof(*pDev));

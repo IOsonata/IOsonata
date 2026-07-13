@@ -436,6 +436,21 @@ bool CryptoInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg);			//!< Confi
 // material and intermediate secret buffers instead of plain memset.
 void CryptoSecureWipe(void *pData, size_t Len);
 
+// Resolve the per-instance key context an engine operation should use: the
+// Cryptor-supplied context when non-null, else the engine's own pDevData. The
+// resolved pointer is validated non-null and aligned to Align (the key context
+// struct alignment), so an engine fails closed on a bad or misaligned context
+// instead of faulting. Returns nullptr on failure. Align must be a power of two.
+void *CryptoResolveKeyCtx(CryptoDev_t * const pDev, void *pKeyCtx, size_t Align);
+
+// Validate an engine Init configuration: non-null pDev and pCfg, a per-instance
+// arena of at least CtxSize bytes aligned to at least uint32_t, and a requested
+// capability set within CapMask (the engine's supported CRYPTO_CAP_* bits).
+// Returns true when the configuration is usable. Every Crypto*Init runs this
+// first so the boundary checks live in one place.
+bool CryptoCfgValidate(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg,
+					   size_t CtxSize, uint32_t CapMask);
+
 /**
  * @brief	AES-CMAC (RFC 4493) with a 16-byte key over Len bytes; writes
  *			the 16-byte MAC. Uses the engine native Cmac if present, else

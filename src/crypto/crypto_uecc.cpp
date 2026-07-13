@@ -53,15 +53,8 @@ static_assert(sizeof(CryptoUeccData_t) <= CRYPTO_MEMSIZE_UECC,
 // closed.
 static CryptoUeccData_t *UeccData(CryptoDev_t * const pDev, void *pKeyCtx)
 {
-	void *p = pKeyCtx != nullptr ? pKeyCtx :
-			  (pDev != nullptr ? pDev->pDevData : nullptr);
-
-	if (p == nullptr || ((uintptr_t)p & (alignof(CryptoUeccData_t) - 1)) != 0)
-	{
-		return nullptr;
-	}
-
-	return (CryptoUeccData_t *)p;
+	return (CryptoUeccData_t *)CryptoResolveKeyCtx(pDev, pKeyCtx,
+													  alignof(CryptoUeccData_t));
 }
 
 // RNG source for uECC. micro-ecc requires an RNG before key generation; it is
@@ -206,23 +199,11 @@ static CRYPTO_STATUS UeccEcdsaSign(CryptoDev_t * const pDev, const uint8_t PrivK
 
 bool CryptoUeccInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 {
-	if (pDev == nullptr || pCfg == nullptr)
-	{
-		return false;
-	}
-	if (pCfg->pMem == nullptr || pCfg->MemSize < sizeof(CryptoUeccData_t))
-	{
-		return false;	// caller must supply per-instance state
-	}
-	if (((uintptr_t)pCfg->pMem & (alignof(uint32_t) - 1)) != 0)
-	{
-		return false;	// arena must be word aligned (see CryptoCfg_t pMem)
-	}
 	uint32_t caps = CRYPTO_CAP_ECDH_P256 | CRYPTO_CAP_SHA256 | CRYPTO_CAP_HMAC_SHA256 |
 					CRYPTO_CAP_ECDSA_P256_SIGN | CRYPTO_CAP_ECDSA_P256_VERIFY;
-	if ((pCfg->ReqCaps & ~caps) != 0)
+	if (!CryptoCfgValidate(pDev, pCfg, sizeof(CryptoUeccData_t), caps))
 	{
-		return false;	// requested capability not provided by this engine
+		return false;
 	}
 
 	memset(pDev, 0, sizeof(*pDev));

@@ -73,6 +73,41 @@ void CryptoSecureWipe(void *pData, size_t Len)
 	}
 }
 
+void *CryptoResolveKeyCtx(CryptoDev_t * const pDev, void *pKeyCtx, size_t Align)
+{
+	void *p = pKeyCtx != nullptr ? pKeyCtx :
+			  (pDev != nullptr ? pDev->pDevData : nullptr);
+
+	if (p == nullptr || (Align != 0 && ((uintptr_t)p & (Align - 1)) != 0))
+	{
+		return nullptr;
+	}
+
+	return p;
+}
+
+bool CryptoCfgValidate(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg,
+					   size_t CtxSize, uint32_t CapMask)
+{
+	if (pDev == nullptr || pCfg == nullptr)
+	{
+		return false;
+	}
+	if (pCfg->pMem == nullptr || pCfg->MemSize < CtxSize)
+	{
+		return false;			// caller must supply per-instance state
+	}
+	if (((uintptr_t)pCfg->pMem & (alignof(uint32_t) - 1)) != 0)
+	{
+		return false;			// arena must be word aligned (see CryptoCfg_t pMem)
+	}
+	if ((pCfg->ReqCaps & ~CapMask) != 0)
+	{
+		return false;			// requested capability not provided by this engine
+	}
+	return true;
+}
+
 //-----------------------------------------------------------------------------
 // AES-CMAC (RFC 4493) computed over an engine Aes128Ecb. Any engine that
 // provides AES-128 ECB gets CMAC through this path; an engine with a native
