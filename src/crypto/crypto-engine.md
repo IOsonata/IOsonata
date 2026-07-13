@@ -268,7 +268,8 @@ consumers need them; existing bits are never renumbered.
 | File | Role |
 |---|---|
 | `include/crypto/crypto.h` | Interface: `CryptoDev_t`, `CryptoCfg_t`, capability/flag bits, engine `Init` declarations, `Cryptor`, and the C++ wrappers. |
-| `src/crypto/crypto.cpp` | Base layer: the Cryptor instance, weak fail-closed provider inits, and the `CryptoInit` selector. |
+| `src/crypto/crypto.cpp` | Base layer: the Cryptor instance, weak fail-closed provider inits, the `CryptoInit` selector, and the shared boundary helpers (`CryptoResolveKeyCtx`, `CryptoCfgValidate`, `CryptoSecureWipe`). |
+| `src/crypto/crypto_p256.cpp` | Generic P-256 math: constant-time byte helpers (`P256IsZero`, `P256LessBe`, `P256AddBe`, `P256RandomScalar`), scalar/field range checks (`P256ScalarInRange`, `P256FieldValid`), and the ladder scalar regularization (`P256RegularizeScalar`, `P256RegularBit`). Exports functions only: the order and field prime are file-local, and the base point stays in the engine next to its scalar-multiply. No hardware dependency; the curve point arithmetic stays in each engine. |
 | `src/crypto/crypto_uecc.cpp` | Software ECDH P-256 engine (micro-ecc). |
 | `src/crypto/crypto_mbedtls.cpp` | Software AES + ECDH engine (mbedTLS). |
 | `ARM/Nordic/nRF54/src/crypto_psa_bm.cpp` | Hardware `CryptoHwInit` via PSA Crypto shipped by sdk-nrf-bm (CRACEN on nRF54L). |

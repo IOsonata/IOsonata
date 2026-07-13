@@ -21,9 +21,10 @@
 #include <stddef.h>
 #include <string.h>
 #include <assert.h>
+#include <atomic>
 
 #include "crypto/crypto.h"
-#include "coredev/interrupt.h"
+#include "crypto/crypto_p256.h"
 #include "crypto_cc3xx.h"
 
 #ifndef CC3XX_BASE_ADDRESS
@@ -36,7 +37,7 @@
 
 namespace {
 
-constexpr size_t P256_BYTES = 32U;
+// P256_BYTES comes from crypto_p256.h.
 constexpr size_t P256_WORDS = P256_BYTES / sizeof(uint32_t);
 constexpr uint32_t PKA_REG_BYTES = 48U;
 constexpr uint32_t PKA_REG_WORDS = PKA_REG_BYTES / sizeof(uint32_t);
@@ -151,23 +152,6 @@ static const uint32_t s_P256A[P256_WORDS] = {
 static const uint32_t s_P256B[P256_WORDS] = {
 	0x27D2604BU, 0x3BCE3C3EU, 0xCC53B0F6U, 0x651D06B0U,
 	0x769886BCU, 0xB3EBBD55U, 0xAA3A93E7U, 0x5AC635D8U,
-};
-
-static const uint8_t s_P256Generator[64] = {
-	0x6B,0x17,0xD1,0xF2,0xE1,0x2C,0x42,0x47,0xF8,0xBC,0xE6,0xE5,0x63,0xA4,0x40,0xF2,
-	0x77,0x03,0x7D,0x81,0x2D,0xEB,0x33,0xA0,0xF4,0xA1,0x39,0x45,0xD8,0x98,0xC2,0x96,
-	0x4F,0xE3,0x42,0xE2,0xFE,0x1A,0x7F,0x9B,0x8E,0xE7,0xEB,0x4A,0x7C,0x0F,0x9E,0x16,
-	0x2B,0xCE,0x33,0x57,0x6B,0x31,0x5E,0xCE,0xCB,0xB6,0x40,0x68,0x37,0xBF,0x51,0xF5,
-};
-
-static const uint8_t s_P256Order[32] = {
-	0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
-	0xBC,0xE6,0xFA,0xAD,0xA7,0x17,0x9E,0x84,0xF3,0xB9,0xCA,0xC2,0xFC,0x63,0x25,0x51,
-};
-
-static const uint8_t s_P256FieldBe[32] = {
-	0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-	0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
 };
 
 static inline volatile uint32_t &Cc3xxReg(uint32_t Offset)
@@ -561,84 +545,6 @@ static bool PointValidate(PkaReg_t X, PkaReg_t Y)
 	return PkaEqual(P256_T0, P256_T1);
 }
 
-static bool BufferIsZero(const uint8_t *pData, size_t Len)
-{
-	uint8_t value = 0U;
-	for (size_t idx = 0U; idx < Len; idx++)
-	{
-		value |= pData[idx];
-	}
-	return value == 0U;
-}
-
-static bool LessBe(const uint8_t *pA, const uint8_t *pB, size_t Len)
-{
-	uint32_t less = 0U;
-	uint32_t greater = 0U;
-	for (size_t idx = 0U; idx < Len; idx++)
-	{
-		const uint32_t a = pA[idx];
-		const uint32_t b = pB[idx];
-		const uint32_t undecided = 1U ^ (less | greater);
-		less |= undecided & ((a - b) >> 31);
-		greater |= undecided & ((b - a) >> 31);
-	}
-	return less != 0U;
-}
-
-static bool RandomScalar(uint8_t Scalar[32])
-{
-	for (uint32_t attempt = 0U; attempt < 100U; attempt++)
-	{
-		if (RngGet(Scalar, P256_BYTES) == false)
-		{
-			return false;
-		}
-		if (!BufferIsZero(Scalar, P256_BYTES) && LessBe(Scalar, s_P256Order, P256_BYTES))
-		{
-			return true;
-		}
-	}
-	CryptoSecureWipe(Scalar, P256_BYTES);
-	return false;
-}
-
-static uint8_t AddBe256(const uint8_t A[32], const uint8_t B[32], uint8_t Out[32])
-{
-	uint32_t carry = 0U;
-	for (int idx = 31; idx >= 0; idx--)
-	{
-		const uint32_t sum = (uint32_t)A[idx] + B[idx] + carry;
-		Out[idx] = (uint8_t)sum;
-		carry = sum >> 8;
-	}
-	return (uint8_t)carry;
-}
-
-static void RegularizeScalar(const uint8_t K[32], uint8_t R[33])
-{
-	uint8_t kPlusN[32];
-	uint8_t kPlus2N[32];
-	const uint8_t carry1 = AddBe256(K, s_P256Order, kPlusN);
-	const uint8_t carry2 = AddBe256(kPlusN, s_P256Order, kPlus2N);
-	assert(carry1 != 0U || carry2 != 0U);
-	const uint8_t mask = (uint8_t)(0U - (uint32_t)carry1);
-	R[0] = 1U;
-	for (size_t idx = 0U; idx < 32U; idx++)
-	{
-		R[idx + 1U] = (uint8_t)((kPlusN[idx] & mask) |
-								  (kPlus2N[idx] & (uint8_t)~mask));
-	}
-	CryptoSecureWipe(kPlusN, sizeof(kPlusN));
-	CryptoSecureWipe(kPlus2N, sizeof(kPlus2N));
-}
-
-static uint32_t ScalarBit(const uint8_t Scalar[33], uint32_t BitNo)
-{
-	const uint32_t byteFromEnd = BitNo / 8U;
-	return (Scalar[32U - byteFromEnd] >> (BitNo & 7U)) & 1U;
-}
-
 static PkaReg_t SelectReg(PkaReg_t Zero, PkaReg_t One, uint32_t Bit)
 {
 	const uint32_t mask = 0U - (Bit & 1U);
@@ -663,7 +569,7 @@ static bool RandomizePoint(const PkaPoint &P)
 		{
 			break;
 		}
-		if (!BufferIsZero(z, sizeof(z)) && LessBe(z, s_P256FieldBe, sizeof(z)))
+		if (P256FieldValid(z))
 		{
 			valid = true;
 			break;
@@ -701,11 +607,22 @@ static bool PointToAffine(const PkaPoint &P, uint8_t Out[64])
 	return true;
 }
 
+// P-256 base point G (SEC1 uncompressed X||Y, big-endian). Kept here, next to
+// the scalar-multiply primitive that consumes it, so it is not exposed outside
+// this engine. crypto_p256 owns the curve math; the base point belongs with the
+// PKA multiply.
+static const uint8_t s_P256Generator[64] = {
+	0x6B,0x17,0xD1,0xF2,0xE1,0x2C,0x42,0x47,0xF8,0xBC,0xE6,0xE5,0x63,0xA4,0x40,0xF2,
+	0x77,0x03,0x7D,0x81,0x2D,0xEB,0x33,0xA0,0xF4,0xA1,0x39,0x45,0xD8,0x98,0xC2,0x96,
+	0x4F,0xE3,0x42,0xE2,0xFE,0x1A,0x7F,0x9B,0x8E,0xE7,0xEB,0x4A,0x7C,0x0F,0x9E,0x16,
+	0x2B,0xCE,0x33,0x57,0x6B,0x31,0x5E,0xCE,0xCB,0xB6,0x40,0x68,0x37,0xBF,0x51,0xF5,
+};
+
 static bool P256Multiply(const uint8_t Point[64], const uint8_t Scalar[32],
 						 uint8_t Result[64], bool Randomize)
 {
 	if (Point == nullptr || Scalar == nullptr || Result == nullptr ||
-		BufferIsZero(Scalar, P256_BYTES) || !LessBe(Scalar, s_P256Order, P256_BYTES))
+		!P256ScalarInRange(Scalar))
 	{
 		return false;
 	}
@@ -729,14 +646,14 @@ static bool P256Multiply(const uint8_t Point[64], const uint8_t Scalar[32],
 		goto out;
 	}
 
-	RegularizeScalar(Scalar, regular);
+	P256RegularizeScalar(Scalar, regular);
 	PointCopy(POINT_P, POINT_R);
 
 	for (int bit = 255; bit >= 0; bit--)
 	{
 		PointDouble(POINT_R, POINT_D);
 		PointAdd(POINT_D, POINT_P, POINT_A);
-		PointSelectCopy(POINT_D, POINT_A, ScalarBit(regular, (uint32_t)bit), POINT_R);
+		PointSelectCopy(POINT_D, POINT_A, P256RegularBit(regular, (uint32_t)bit), POINT_R);
 	}
 
 	ok = PointToAffine(POINT_R, Result);
@@ -772,23 +689,21 @@ static_assert(sizeof(CryptoCc3xxData) <= CRYPTO_MEMSIZE_HW,
 			  "CRYPTO_MEMSIZE_HW too small for CryptoCc3xxData");
 
 static bool s_bCcInit;
-static volatile bool s_bCc3xxBusy;
+// Single-operation guard for the CC3xx block (PKA plus shared engine state).
+// One atomic test-and-set: exchange returns the prior value, so a false return
+// means the flag was already clear and this caller now owns the block. A second
+// concurrent operation (another instance, or an interrupt against a foreground
+// operation) sees true and fails the acquire. Zero-initialized to free.
+static std::atomic<bool> s_bCc3xxBusy{false};
 
 static bool Cc3xxAcquire(void)
 {
-	const uint32_t state = DisableInterrupt();
-	const bool acquired = !s_bCc3xxBusy;
-	if (acquired)
-	{
-		s_bCc3xxBusy = true;
-	}
-	EnableInterrupt(state);
-	return acquired;
+	return s_bCc3xxBusy.exchange(true) == false;
 }
 
 static void Cc3xxRelease(void)
 {
-	s_bCc3xxBusy = false;
+	s_bCc3xxBusy.store(false);
 }
 
 static CRYPTO_STATUS EnsureCc3xx(void)
@@ -837,7 +752,7 @@ static CRYPTO_STATUS Cc3xxEcdhKeyGen(CryptoDev_t * const pDev, void *pKeyCtx,
 
 	KeyReset(pData);
 	CRYPTO_STATUS status = CRYPTO_STATUS_FAIL;
-	if (RandomScalar(pData->PrivKey) &&
+	if (P256RandomScalar(pData->PrivKey) &&
 		P256Multiply(s_P256Generator, pData->PrivKey, pPubKey, true))
 	{
 		pData->bKeyValid = true;

@@ -791,6 +791,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
 		</link>
 		<link>
+			<name>include/crypto/crypto_p256.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_p256.h</locationURI>
+		</link>
+		<link>
 			<name>include/display/display.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/display.h</locationURI>
@@ -1649,6 +1654,11 @@
 			<name>src/crypto/crypto_cc3xx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/crypto_cc3xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_p256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_psa_none.cpp</name>
