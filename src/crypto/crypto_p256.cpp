@@ -73,6 +73,7 @@ bool P256RandomScalar(uint8_t Scalar[P256_BYTES])
 	{
 		if (RngGet(Scalar, P256_BYTES) == false)
 		{
+			CryptoSecureWipe(Scalar, P256_BYTES);
 			return false;
 		}
 		if (!P256IsZero(Scalar, P256_BYTES) &&
@@ -91,7 +92,7 @@ bool P256ScalarInRange(const uint8_t Scalar[P256_BYTES])
 		   P256LessBe(Scalar, s_P256Order, P256_BYTES);
 }
 
-bool P256FieldValid(const uint8_t Coord[P256_BYTES])
+bool P256NonzeroFieldElement(const uint8_t Coord[P256_BYTES])
 {
 	return !P256IsZero(Coord, P256_BYTES) &&
 		   P256LessBe(Coord, s_P256Field, P256_BYTES);
