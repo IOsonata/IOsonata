@@ -268,10 +268,41 @@ struct __Crypto_Dev {
 // exported engine and Cryptor functions further down take C linkage.
 
 /**
- * @brief	True if the engine provides every capability in Mask.
+ * @brief	Capabilities callable through this handle.
+ *
+ * Derived operations are included when their required primitive is present.
+ * SHA-256 and HMAC-SHA-256 use the built-in software implementation when the
+ * handle has no native SHA function.
+ */
+static inline uint32_t CryptoEffectiveCaps(CryptoDev_t * const pDev) {
+	if (pDev == NULL)
+	{
+		return 0;
+	}
+
+	uint32_t cap = CRYPTO_CAP_SHA256 | CRYPTO_CAP_HMAC_SHA256;
+	if (pDev->Aes128Ecb != NULL)
+	{
+		cap |= CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_AES_CMAC |
+			   CRYPTO_CAP_AES_CCM | CRYPTO_CAP_AES_GCM;
+	}
+	if (pDev->Cmac != NULL) { cap |= CRYPTO_CAP_AES_CMAC; }
+	if (pDev->Ccm != NULL) { cap |= CRYPTO_CAP_AES_CCM; }
+	if (pDev->Gcm != NULL) { cap |= CRYPTO_CAP_AES_GCM; }
+	if (pDev->EcdhP256KeyGen != NULL && pDev->EcdhP256 != NULL)
+	{
+		cap |= CRYPTO_CAP_ECDH_P256;
+	}
+	if (pDev->EcdsaP256Sign != NULL) { cap |= CRYPTO_CAP_ECDSA_P256_SIGN; }
+	if (pDev->EcdsaP256Verify != NULL) { cap |= CRYPTO_CAP_ECDSA_P256_VERIFY; }
+	return cap;
+}
+
+/**
+ * @brief	True if every capability in Mask is callable through the handle.
  */
 static inline bool CryptoIsCapable(CryptoDev_t * const pDev, uint32_t Mask) {
-	return pDev != NULL && (pDev->Cap & Mask) == Mask;
+	return pDev != NULL && (CryptoEffectiveCaps(pDev) & Mask) == Mask;
 }
 
 /**
@@ -291,6 +322,10 @@ static inline CRYPTO_STATUS CryptoAes128Ecb(CryptoDev_t * const pDev,
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
+	if (Key == NULL || In == NULL || Out == NULL)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
 	return pDev->Aes128Ecb(pDev, Key, In, Out, pCtx);
 }
 
@@ -299,6 +334,10 @@ static inline CRYPTO_STATUS CryptoEcdhP256KeyGen(CryptoDev_t * const pDev,
 	if (pDev == NULL || pDev->EcdhP256KeyGen == NULL)
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	if (pPubKey == NULL)
+	{
+		return CRYPTO_STATUS_FAIL;
 	}
 	return pDev->EcdhP256KeyGen(pDev, pKeyCtx, pPubKey, pOpCtx);
 }
@@ -309,6 +348,10 @@ static inline CRYPTO_STATUS CryptoEcdhP256(CryptoDev_t * const pDev,
 	if (pDev == NULL || pDev->EcdhP256 == NULL)
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	if (pPeerPubKey == NULL || pDhKey == NULL)
+	{
+		return CRYPTO_STATUS_FAIL;
 	}
 	return pDev->EcdhP256(pDev, pKeyCtx, pPeerPubKey, pDhKey, pOpCtx);
 }
@@ -324,6 +367,10 @@ static inline CRYPTO_STATUS CryptoEcdsaP256Verify(CryptoDev_t * const pDev,
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
+	if (PubKey == NULL || Hash == NULL || Sig == NULL)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
 	return pDev->EcdsaP256Verify(pDev, PubKey, Hash, Sig, pCtx);
 }
 
@@ -337,6 +384,10 @@ static inline CRYPTO_STATUS CryptoEcdsaP256Sign(CryptoDev_t * const pDev,
 	if (pDev == NULL || pDev->EcdsaP256Sign == NULL)
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	if (PrivKey == NULL || Hash == NULL || Sig == NULL)
+	{
+		return CRYPTO_STATUS_FAIL;
 	}
 	return pDev->EcdsaP256Sign(pDev, PrivKey, Hash, Sig, pCtx);
 }

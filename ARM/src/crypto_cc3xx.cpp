@@ -21,11 +21,11 @@
 #include <stddef.h>
 #include <string.h>
 #include <assert.h>
-#include <atomic>
 
 #include "crypto/crypto.h"
 #include "crypto/crypto_p256.h"
 #include "crypto_cc3xx.h"
+#include "coredev/interrupt.h"
 
 #ifndef CC3XX_BASE_ADDRESS
 #error CC3XX_BASE_ADDRESS must be defined by crypto_cc3xx.h
@@ -39,6 +39,10 @@
 #define CC3XX_PKA_WAIT_SPINS		10000000U
 #endif
 
+#ifndef CC3XX_ACQUIRE_SPINS
+#define CC3XX_ACQUIRE_SPINS		100000U
+#endif
+
 namespace {
 
 constexpr size_t P256_WORDS = P256_BYTES / sizeof(uint32_t);
@@ -48,9 +52,6 @@ constexpr uint32_t PKA_PHYS_REG_COUNT = 32U;
 
 static_assert(PKA_PHYS_REG_COUNT * PKA_REG_BYTES <= CC3XX_PKA_SRAM_SIZE,
 			  "CC3xx PKA SRAM is too small for the fixed P-256 register map");
-static_assert(ATOMIC_BOOL_LOCK_FREE == 2,
-			  "CC3xx ownership guard requires a lock-free atomic bool");
-
 typedef uint8_t PkaReg_t;
 
 enum : PkaReg_t {
@@ -161,8 +162,8 @@ static const uint32_t s_P256B[P256_WORDS] = {
 	0x769886BCU, 0xB3EBBD55U, 0xAA3A93E7U, 0x5AC635D8U,
 };
 
-static std::atomic<bool> s_bCcInit{false};
-static std::atomic<bool> s_bCc3xxBusy{false};
+static bool s_bCcInit;
+static bool s_bCc3xxBusy;
 static bool s_bPkaFault;
 
 static bool CoreInit(void);
@@ -182,7 +183,7 @@ static void PkaFault(void)
 	s_bPkaFault = true;
 	Cc3xxReg(REG_PKA_CLOCK_ENABLE) = 0U;
 	Cc3xxDisable();
-	s_bCcInit.store(false, std::memory_order_release);
+	s_bCcInit = false;
 }
 
 static bool PkaWait(uint32_t Offset)
@@ -468,11 +469,10 @@ static bool PkaInit(void)
 {
 	s_bPkaFault = false;
 
-	if (!s_bCcInit.load(std::memory_order_acquire))
+	if (s_bCcInit == false)
 	{
-		const bool initialized = CoreInit();
-		s_bCcInit.store(initialized, std::memory_order_release);
-		if (!initialized)
+		s_bCcInit = CoreInit();
+		if (s_bCcInit == false)
 		{
 			return false;
 		}
@@ -821,31 +821,45 @@ static_assert(sizeof(CryptoCc3xxData) <= CRYPTO_MEMSIZE_HW,
 
 static bool Cc3xxAcquire(void)
 {
-	return s_bCc3xxBusy.exchange(true, std::memory_order_acquire) == false;
+	uint32_t attempts = __get_IPSR() == 0U ? CC3XX_ACQUIRE_SPINS : 1U;
+	while (attempts-- > 0U)
+	{
+		uint32_t intState = DisableInterrupt();
+		bool acquired = s_bCc3xxBusy == false;
+		if (acquired)
+		{
+			s_bCc3xxBusy = true;
+		}
+		EnableInterrupt(intState);
+
+		if (acquired)
+		{
+			return true;
+		}
+		__asm volatile("" ::: "memory");
+	}
+	return false;
 }
 
 static void Cc3xxRelease(void)
 {
-	s_bCc3xxBusy.store(false, std::memory_order_release);
+	uint32_t intState = DisableInterrupt();
+	s_bCc3xxBusy = false;
+	EnableInterrupt(intState);
 }
 
 static CRYPTO_STATUS EnsureCc3xx(void)
 {
-	if (s_bCcInit.load(std::memory_order_acquire))
-	{
-		return CRYPTO_STATUS_OK;
-	}
 	if (!Cc3xxAcquire())
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
 
-	bool initialized = s_bCcInit.load(std::memory_order_relaxed);
-	if (!initialized)
+	if (s_bCcInit == false)
 	{
-		initialized = CoreInit();
-		s_bCcInit.store(initialized, std::memory_order_release);
+		s_bCcInit = CoreInit();
 	}
+	bool initialized = s_bCcInit;
 	Cc3xxRelease();
 	return initialized ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
 }
