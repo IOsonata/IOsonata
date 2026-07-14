@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  issues: write
 
 jobs:
   apply:
@@ -19,9 +18,8 @@ jobs:
           ref: fix/bluetooth-crypto-rftag-review
 
       - name: Apply edits
+        id: apply_edits
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -31,15 +29,15 @@ jobs:
           Path('/tmp/rftag_fixes.b64').write_text(text[start:end])
           PY
           base64 -d /tmp/rftag_fixes.b64 | gzip -d > /tmp/apply_rftag_fixes.py
-          set +e
           python3 /tmp/apply_rftag_fixes.py > /tmp/rftag-fix.log 2>&1
-          status=$?
-          set -e
-          if test $status -ne 0; then
-            body=$(printf 'RFTag edit script failed:\n\n```text\n%s\n```' "$(cat /tmp/rftag-fix.log)")
-            gh api repos/${GITHUB_REPOSITORY}/issues/21/comments -f body="$body"
-            exit 1
-          fi
+
+      - name: Upload edit log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rftag-fix-log
+          path: /tmp/rftag-fix.log
+          if-no-files-found: error
 
       - name: Validate edits
         shell: bash
