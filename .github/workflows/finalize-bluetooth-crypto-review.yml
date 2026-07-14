@@ -77,15 +77,15 @@ jobs:
             src/bluetooth/bt_smp.cpp -o /tmp/bt_smp.o
           g++ -std=gnu++23 -fno-exceptions -fno-rtti -Iinclude -fsyntax-only \
             src/crypto/crypto.cpp
-          test "$(nm -C /tmp/bt_smp.o | awk '/ BtSmpAuthConfig\(/ {print $2}')" = W
+          test "$(nm /tmp/bt_smp.o | awk '$3 == \"BtSmpAuthConfig\" {print $2}')" = W
 
           cat > /tmp/bt_smp_auth_override.cpp <<'CPP'
           #include <stdint.h>
-          void BtSmpAuthConfig(uint8_t, uint8_t) {}
+          extern "C" void BtSmpAuthConfig(uint8_t, uint8_t) {}
           CPP
           g++ -std=gnu++23 -c /tmp/bt_smp_auth_override.cpp -o /tmp/bt_smp_auth_override.o
           g++ -r /tmp/bt_smp.o /tmp/bt_smp_auth_override.o -o /tmp/bt_smp_combined.o
-          test "$(nm -C /tmp/bt_smp_combined.o | awk '/ BtSmpAuthConfig\(/ {print $2}')" = T
+          test "$(nm /tmp/bt_smp_combined.o | awk '$3 == \"BtSmpAuthConfig\" {print $2}')" = T
 
       - name: Remove temporary files
         shell: bash
