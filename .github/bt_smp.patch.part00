@@ -1,0 +1,219 @@
+diff --git a/src/bluetooth/bt_smp.cpp b/src/bluetooth/bt_smp.cpp
+index d99dacd..4974c86 100644
+--- a/src/bluetooth/bt_smp.cpp
++++ b/src/bluetooth/bt_smp.cpp
+@@ -92,11 +92,13 @@ static const char *SmpCodeName(uint8_t c);
+ 
+ typedef struct __Bt_Smp_Link {
+ 	uint16_t    ConnHdl;
++	uint32_t    Generation;
+ 	BtSmpCtx_t  Ctx;
+ 	BtSmpKeys_t Keys;
+ } BtSmpLink_t;
+ 
+ static BtSmpLink_t s_SmpLink[BT_SMP_MAX_LINK];
++static uint32_t s_SmpGeneration;
+ 
+ //-----------------------------------------------------------------------------
+ // Crypto primitives
+@@ -116,12 +118,30 @@ static uint8_t s_SmpAuthReq = BT_SMP_LOCAL_AUTHREQ;
+ static struct {
+ 	bool bLocalValid;
+ 	bool bPeerValid;
++	bool bReserved;
++	uint16_t ConnHdl;
++	uint32_t Generation;
+ 	uint8_t LocalRand[16];
+ 	uint8_t LocalPubKey[64];
+ 	uint8_t PeerRand[16];
+ 	uint8_t PeerConfirm[16];
+ } s_SmpOob = {};
+ 
++typedef enum __Bt_Smp_Crypto_Op {
++	BT_SMP_CRYPTO_OP_NONE = 0,
++	BT_SMP_CRYPTO_OP_PUBKEY,
++	BT_SMP_CRYPTO_OP_DHKEY,
++} BT_SMP_CRYPTO_OP;
++
++typedef struct __Bt_Smp_Crypto_Pending {
++	BT_SMP_CRYPTO_OP Op;
++	uint16_t ConnHdl;
++	uint32_t Generation;
++	BtHciDevice_t *pDev;
++} BtSmpCryptoPending_t;
++
++static BtSmpCryptoPending_t s_SmpCryptoPending = {};
++
+ // Map the local and peer IO capabilities to an SC association model. Core
+ // spec Vol 3 Part H, 2.3.5.1, Table 2.8 (LE Secure Connections). Rows index
+ // the initiator IO capability, columns the responder, both using the
+@@ -142,7 +162,13 @@ static const uint8_t s_SmpModelMap[5][5] = {
+ static CryptoDev_t *s_pCryptoEcdh = nullptr;	// CRYPTO_CAP_ECDH_P256
+ static CryptoDev_t *s_pCryptoAes  = nullptr;	// CRYPTO_CAP_AES128_ECB
+ 
+-
++static int SmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64],
++								   void *pOpCtx);
++static int SmpCryptoEcdh(BtHciDevice_t * const pDev,
++						 const uint8_t pPeerPubKey[64], uint8_t pDhKey[32],
++						 void *pOpCtx);
++static void SmpCryptoEvtHandler(CryptoDev_t * const pDev, uint32_t Op,
++								CRYPTO_STATUS Status, void *pCtx);
+ static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t Reason);
+ 
+ #if BT_SMP_TRACE_ENABLE
+@@ -185,6 +211,95 @@ static BtSmpLink_t *SmpLinkFind(uint16_t ConnHdl)
+ 	return nullptr;
+ }
+ 
++static void SmpOobClear(void)
++{
++	CryptoSecureWipe(&s_SmpOob, sizeof(s_SmpOob));
++}
++
++static bool SmpOobReservedFor(const BtSmpLink_t *pLink)
++{
++	return pLink != nullptr && s_SmpOob.bReserved &&
++		s_SmpOob.ConnHdl == pLink->ConnHdl &&
++		s_SmpOob.Generation == pLink->Generation;
++}
++
++static bool SmpOobAvailable(const BtSmpLink_t *pLink)
++{
++	return s_SmpOob.bReserved == false || SmpOobReservedFor(pLink);
++}
++
++static bool SmpOobLocalReady(const BtSmpLink_t *pLink)
++{
++	return s_SmpOob.bLocalValid && SmpOobAvailable(pLink);
++}
++
++static bool SmpOobPeerReady(const BtSmpLink_t *pLink)
++{
++	return s_SmpOob.bPeerValid && SmpOobAvailable(pLink);
++}
++
++static bool SmpOobReserve(BtSmpLink_t *pLink)
++{
++	if (pLink == nullptr || SmpOobAvailable(pLink) == false)
++	{
++		return false;
++	}
++	s_SmpOob.bReserved = true;
++	s_SmpOob.ConnHdl = pLink->ConnHdl;
++	s_SmpOob.Generation = pLink->Generation;
++	return true;
++}
++
++static void SmpOobRelease(BtSmpLink_t *pLink)
++{
++	if (SmpOobReservedFor(pLink))
++	{
++		SmpOobClear();
++	}
++}
++
++static void SmpCryptoPendingClear(void)
++{
++	memset(&s_SmpCryptoPending, 0, sizeof(s_SmpCryptoPending));
++}
++
++static bool SmpCryptoPendingBegin(BtSmpLink_t *pLink, BtHciDevice_t *pDev,
++								  BT_SMP_CRYPTO_OP Op)
++{
++	if (pLink == nullptr || Op == BT_SMP_CRYPTO_OP_NONE ||
++		s_SmpCryptoPending.Op != BT_SMP_CRYPTO_OP_NONE)
++	{
++		return false;
++	}
++	s_SmpCryptoPending.Op = Op;
++	s_SmpCryptoPending.ConnHdl = pLink->ConnHdl;
++	s_SmpCryptoPending.Generation = pLink->Generation;
++	s_SmpCryptoPending.pDev = pDev;
++	return true;
++}
++
++static BtSmpLink_t *SmpCryptoPendingFind(BT_SMP_CRYPTO_OP Op)
++{
++	if (s_SmpCryptoPending.Op != Op)
++	{
++		return nullptr;
++	}
++	BtSmpLink_t *pLink = SmpLinkFind(s_SmpCryptoPending.ConnHdl);
++	return pLink != nullptr && pLink->Generation == s_SmpCryptoPending.Generation ?
++		pLink : nullptr;
++}
++
++static BtSmpLink_t *SmpCryptoPendingTake(BT_SMP_CRYPTO_OP Op)
++{
++	if (s_SmpCryptoPending.Op != Op)
++	{
++		return nullptr;
++	}
++	BtSmpLink_t *pLink = SmpCryptoPendingFind(Op);
++	SmpCryptoPendingClear();
++	return pLink;
++}
++
+ static BtSmpLink_t *SmpLinkAlloc(uint16_t ConnHdl)
+ {
+ 	BtSmpLink_t *p = SmpLinkFind(ConnHdl);
+@@ -198,7 +313,10 @@ static BtSmpLink_t *SmpLinkAlloc(uint16_t ConnHdl)
+ 		if (s_SmpLink[i].ConnHdl == BT_CONN_HDL_INVALID)
+ 		{
+ 			memset(&s_SmpLink[i], 0, sizeof(BtSmpLink_t));
++			s_SmpGeneration++;
++			if (s_SmpGeneration == 0) { s_SmpGeneration++; }
+ 			s_SmpLink[i].ConnHdl = ConnHdl;
++			s_SmpLink[i].Generation = s_SmpGeneration;
+ 			s_SmpLink[i].Ctx.State = BT_SMP_STATE_IDLE;
+ 			return &s_SmpLink[i];
+ 		}
+@@ -212,6 +330,7 @@ static void SmpLinkFree(uint16_t ConnHdl)
+ 	BtSmpLink_t *p = SmpLinkFind(ConnHdl);
+ 	if (p != nullptr)
+ 	{
++		SmpOobRelease(p);
+ 		memset(p, 0, sizeof(BtSmpLink_t));
+ 		p->ConnHdl = BT_CONN_HDL_INVALID;
+ 	}
+@@ -224,14 +343,17 @@ static void SmpLinkFree(uint16_t ConnHdl)
+ // SmpLinkFree - no key material survives - without losing the counter.
+ static void SmpLinkResetKeepCount(BtSmpLink_t *pLink)
+ {
+-	uint16_t hdl    = pLink->ConnHdl;
+-	uint8_t  fc     = pLink->Ctx.FailCount;
+-	bool     locked = pLink->Ctx.bLocked;
++	uint16_t hdl       = pLink->ConnHdl;
++	uint32_t generation = pLink->Generation;
++	uint8_t  fc        = pLink->Ctx.FailCount;
++	bool     locked    = pLink->Ctx.bLocked;
+ 
++	SmpOobRelease(pLink);
+ 	memset(&pLink->Ctx, 0, sizeof(pLink->Ctx));
+ 	memset(&pLink->Keys, 0, sizeof(pLink->Keys));
+ 
+ 	pLink->ConnHdl       = hdl;
++	pLink->Generation    = generation;
+ 	pLink->Ctx.FailCount = fc;
+ 	pLink->Ctx.bLocked   = locked;
+ 	pLink->Ctx.State     = BT_SMP_STATE_IDLE;
+@@ -320,6 +442,7 @@ static void SmpSend(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+ 
+ static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t Reason)
+ {
++	SmpOobRelease(SmpLinkFind(ConnHdl));
+ 	BtSmpPairingFailed_t f;
+ 	f.Code = BT_SMP_CODE_PAIRING_FAILED;
+ 	f.Reason = Reason;
+@@ -642,8 +765,12 @@ static uint8_t SmpSelectModel(uint8_t InitIo, uint8_t RespIo, bool Mitm, bool Oo
+ }
+ 
+ // Copy the pending OOB material into the link context of an OOB pairing.
+-static void SmpOobCtxLoad(BtSmpLink_t *pLink)
++static bool SmpOobCtxLoad(BtSmpLink_t *pLink)
+ {
++	if (SmpOobReserve(pLink) == false)
++	{
++		return false;
++	}
