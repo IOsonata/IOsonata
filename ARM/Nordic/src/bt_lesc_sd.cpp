@@ -40,7 +40,9 @@ differs between s132 and sdk-nrf-bm) and BtLescLinkCount.
 #include "bt_lesc.h"
 #include "syslog.h"
 
-#if defined(BT_LESC_TRACE_ENABLE) && BT_LESC_TRACE_ENABLE
+#define BT_LESC_TRACE_ENABLE
+
+#if defined(BT_LESC_TRACE_ENABLE)// && BT_LESC_TRACE_ENABLE
 #define LESC_TRACE(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define LESC_TRACE(...)

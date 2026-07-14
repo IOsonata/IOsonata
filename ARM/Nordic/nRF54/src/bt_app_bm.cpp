@@ -59,13 +59,13 @@ SOFTWARE.
 #include "bm/bluetooth/ble_conn_params.h"
 #include "bm/bluetooth/peer_manager/peer_manager.h"
 #include "bm/bluetooth/peer_manager/peer_manager_handler.h"
-#include <modules/conn_state.h>
+#include "bm/bluetooth/peer_manager/nrf_ble_lesc.h"
 #include "bm/bluetooth/services/ble_dis.h"
 
 #include "crypto/crypto.h"
 
 // Injection point for the LESC crypto engine (defined in the IOsonata
-// BtLesc replacement). The App owns the CryptoDev_t and passes it in.
+// nrf_ble_lesc replacement). The App owns the CryptoDev_t and passes it in.
 #include "bt_lesc.h"
 #include "nrfx_cracen.h"
 #include "nrf_soc.h"
@@ -73,6 +73,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "idelay.h"
 #include "coredev/system_core_clock.h"
+#include "coredev/interrupt.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "bluetooth/bt_uuid.h"
@@ -97,27 +98,6 @@ extern UART g_Uart;
 #define DEBUG_PRINTF(...)
 #endif
 
-extern "C" void softdevice_fault_handler(uint32_t Id, uint32_t Pc, uint32_t Info)
-{
-	DEBUG_PRINTF("SoftDevice fault: id=0x%08lx pc=0x%08lx info=0x%08lx\r\n",
-				 (unsigned long)Id, (unsigned long)Pc, (unsigned long)Info);
-	while (true)
-	{
-		__NOP();
-	}
-}
-
-extern "C" void HardFault_Handler(void)
-{
-	DEBUG_PRINTF("HardFault: CFSR=0x%08lx HFSR=0x%08lx MMFAR=0x%08lx BFAR=0x%08lx\r\n",
-				 (unsigned long)SCB->CFSR, (unsigned long)SCB->HFSR,
-				 (unsigned long)SCB->MMFAR, (unsigned long)SCB->BFAR);
-	while (true)
-	{
-		__NOP();
-	}
-}
-
 /*******************************/
 
 /// Unit conversion macros (same as old nRF5_SDK definitions)
@@ -127,9 +107,9 @@ extern "C" void HardFault_Handler(void)
 
 #define BTAPP_CONN_CFG_TAG				CONFIG_NRF_SDH_BLE_CONN_TAG
 
-// Bare-metal fallback polling interval while connected. This guarantees GATT
-// transaction timeouts advance even when the peer goes fully silent. RTOS
-// targets should override BtAppEvtWait with a blocking primitive plus timer.
+// Bare-metal fallback polling interval while connected. This guarantees generic
+// SMP/GATT transaction timeouts advance even when the peer goes fully silent.
+// RTOS ports should override BtAppEvtWait with a blocking primitive plus timer.
 #define BTAPP_TIMEOUT_POLL_MS			100U
 
 #define BTAPP_OBSERVER_PRIO				USER		/**< Application's BLE observer priority. */
@@ -168,14 +148,13 @@ const static TimerCfg_t s_BtAppSdTimerCfg = {
     .DevNo = 3,	// GRTC3 needed for Softdevice
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default frequency
-	.IntPrio = 6,		// App-level priority. 0, 1 and 4 are reserved by the SoftDevice;
-						// priority 0 here would fault the interrupt configuration check
-						// once the wakeup trigger below enables the GRTC IRQ.
+	.IntPrio = 6,		// GRTC3 interrupt remains disabled; the SoftDevice owns the IRQ.
 	.EvtHandler = nullptr,
 	.bTickInt = false,
 };
 
 static Timer s_BtAppSdGrtc3;
+static volatile uint16_t s_SecurePendingHdl = BLE_CONN_HANDLE_INVALID;
 
 // --- Helper functions ---
 
@@ -217,67 +196,10 @@ static void BtAppDiscDescRsp(const ble_gattc_evt_t *pEvt);
 // events: BLE_GAP_EVT_PASSKEY_DISPLAY (Numeric Comparison when match_request is
 // set, otherwise Passkey Entry display) and BLE_GAP_EVT_AUTH_KEY_REQUEST
 // (Passkey Entry input). These are bridged to the same BtSmp* interaction API
-// the generic SMP host exposes, so an application sees one set of callbacks
-// across ports. The reply functions route the user answer back through
 // sd_ble_gap_auth_key_reply. The generic weak defaults live in bt_smp.cpp,
 // which is not linked on this port, so equivalent weak defaults are provided
 // here; an application strong definition overrides them.
 // ===========================================================================
-
-// Pairing configuration supplied through the common BtSmp API. The S145
-// SoftDevice owns SMP, so this target stores the values until Peer Manager
-// builds its ble_gap_sec_params_t.
-static bool    s_bSmpAuthCfgValid;
-static uint8_t s_SmpIoCaps = BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT;
-static uint8_t s_SmpAuthReq =
-	BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_SC;
-
-void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
-{
-	if (IoCaps > BT_SMP_IOCAPS_KEYBOARD_DISPLAY)
-	{
-		return;
-	}
-
-	s_SmpIoCaps = IoCaps;
-	s_SmpAuthReq = (uint8_t)(AuthReq | BT_SMP_AUTHREQ_SC);
-	s_bSmpAuthCfgValid = true;
-}
-
-static void BmSmpAuthApply(ble_gap_sec_params_t *pSecParams)
-{
-	if (!s_bSmpAuthCfgValid || pSecParams == nullptr)
-	{
-		return;
-	}
-
-	switch (s_SmpIoCaps)
-	{
-		case BT_SMP_IOCAPS_DISPLAY_ONLY:
-			pSecParams->io_caps = BLE_GAP_IO_CAPS_DISPLAY_ONLY;
-			break;
-		case BT_SMP_IOCAPS_DISPLAY_YESNO:
-			pSecParams->io_caps = BLE_GAP_IO_CAPS_DISPLAY_YESNO;
-			break;
-		case BT_SMP_IOCAPS_KEYBOARD_ONLY:
-			pSecParams->io_caps = BLE_GAP_IO_CAPS_KEYBOARD_ONLY;
-			break;
-		case BT_SMP_IOCAPS_KEYBOARD_DISPLAY:
-			pSecParams->io_caps = BLE_GAP_IO_CAPS_KEYBOARD_DISPLAY;
-			break;
-		case BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT:
-		default:
-			pSecParams->io_caps = BLE_GAP_IO_CAPS_NONE;
-			break;
-	}
-
-	pSecParams->bond =
-		(s_SmpAuthReq & BT_SMP_AUTHREQ_BONDING_FLAG_MASK) !=
-		BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING;
-	pSecParams->mitm = (s_SmpAuthReq & BT_SMP_AUTHREQ_MITM) != 0U;
-	pSecParams->lesc = 1;
-	pSecParams->keypress = (s_SmpAuthReq & BT_SMP_AUTHREQ_KEYPRESS) != 0U;
-}
 
 // SoftDevice passkey octets are six ASCII digits, most significant first.
 // Convert to the six digit integer used by the BtSmp interaction API.
@@ -327,7 +249,7 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 }
 
 // LE Secure Connections OOB data (strong overrides of the generic weak API).
-// On this target BtLesc owns the SC key pair, so the local OOB set comes
+// On this port nrf_ble_lesc owns the SC key pair, so the local OOB set comes
 // from it and the peer set is staged here; the peer data handler hands it to
 // the pairing with the link peer address filled in.
 static ble_gap_lesc_oob_data_t s_BtAppPeerOob;
@@ -359,12 +281,12 @@ int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint
 	{
 		return -1;
 	}
-	if (!BtLescOobLocalGen())
+	if (nrf_ble_lesc_own_oob_data_generate() != NRF_SUCCESS)
 	{
 		return -1;
 	}
 
-	ble_gap_lesc_oob_data_t *p = BtLescOobLocalGet();
+	ble_gap_lesc_oob_data_t *p = nrf_ble_lesc_own_oob_data_get();
 	if (p == NULL)
 	{
 		return -1;
@@ -420,7 +342,8 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 {
 	uint32_t err_code;
 	const ble_gap_evt_t *p_gap_evt = &p_ble_evt->evt.gap_evt;
-	uint8_t role = pm_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
+	//uint8_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
+	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
 
 	DEBUG_PRINTF("evt: 0x%x\r\n", p_ble_evt->header.evt_id);
 	switch (p_ble_evt->header.evt_id)
@@ -433,12 +356,11 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			g_BtAppData.State = BTAPP_STATE_CONNECTED;
 			BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 
-			// Initiate link security if the app is configured secure. For an
-			// already-bonded peer this encrypts with the stored LTK; otherwise
-			// it starts pairing. peer_manager drives the procedure.
+			// Start security from the main loop. Peer Manager and LESC work
+			// must not run in the SoftDevice event interrupt.
 			if (g_BtAppData.AppDevice.bSecure)
 			{
-				(void)pm_conn_secure(p_gap_evt->conn_handle, false);
+				s_SecurePendingHdl = p_gap_evt->conn_handle;
 			}
 			break;
 
@@ -582,8 +504,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 
 	// Forward to central/observer handlers
 	if ((role == BLE_GAP_ROLE_CENTRAL) ||
-		(role == BLE_GAP_ROLE_INVALID &&
-		 (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))))
+		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER)))
 	{
 		switch (p_ble_evt->header.evt_id)
 		{
@@ -653,9 +574,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 	}
 
 	// Forward to peripheral handlers
-	if ((role == BLE_GAP_ROLE_PERIPH) ||
-		(role == BLE_GAP_ROLE_INVALID &&
-		 (g_BtAppData.AppDevice.Conn.Role & BTAPP_ROLE_PERIPHERAL)))
+	if (g_BtAppData.AppDevice.Conn.Role & BTAPP_ROLE_PERIPHERAL)
 	{
 		// HVN TX complete gives a count, not a handle. Drain the per-peer
 		// send-order ring once per event.
@@ -939,66 +858,54 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 	uint32_t ramstart = (uint32_t)SystemRamStart();
 
-	/* NrfSdhEarlyInit already cleared the reserved SoftDevice RAM and then
-	 * initialized it through the S145 reset entry. Do not erase it here. */
+	memset((void *)0x20000000, 0, ramstart - 0x20000000);
 
 	// GRTC3 must be enabled with interrupt disbled before calling nrf_sdh_enable_request
 	s_BtAppSdGrtc3.Init(s_BtAppSdTimerCfg);
 
 	// Enable SoftDevice
 	err = nrf_sdh_enable_request();
-	DEBUG_PRINTF("BtAppStackInit: nrf_sdh_enable_request returned %d\r\n", err);
 	if (err && err != -EALREADY)
 	{
 		DEBUG_PRINTF("nrf_sdh_enable_request failed: %d\r\n", err);
 		return false;
 	}
 
-	DEBUG_PRINTF("BtAppStackInit: SDBleDefaultCfgSet\r\n");
 	err = SDBleDefaultCfgSet(pCfg, BTAPP_CONN_CFG_TAG, ramstart);
-	DEBUG_PRINTF("BtAppStackInit: SDBleDefaultCfgSet returned 0x%lx\r\n",
-				 (unsigned long)err);
 
 	if (err != NRF_SUCCESS)
 	{
 		return false;
 	}
 
-	// Required before calling sd_ble_enable.
-	DEBUG_PRINTF("BtAppStackInit: SDBleRandSeed\r\n");
+	// Require before call to nrf_sdh_ble_enable
 	SDBleRandSeed(NRF_EVT_RAND_SEED_REQUEST, NULL);
-	DEBUG_PRINTF("BtAppStackInit: SDBleRandSeed done\r\n");
 
-	DEBUG_PRINTF("BtAppStackInit: sd_ble_enable\r\n");
+	DEBUG_PRINTF("BtAppStackInit: nrf_sdh_ble_enable\r\n");
 
 	uint32_t ramreq = ramstart;
 
 	err = sd_ble_enable(&ramreq);
-	DEBUG_PRINTF("BtAppStackInit: sd_ble_enable returned 0x%lx ram=0x%08lx\r\n",
-				 (unsigned long)err, (unsigned long)ramreq);
 
 	if (err != NRF_SUCCESS)
 	{
-		if (ramreq > ramstart)
-		{
-			DEBUG_PRINTF("%x - Insufficient RAM allocated for the SoftDevice need %x",
-						 err, ramreq);
-		}
-		else
-		{
-			DEBUG_PRINTF("sd_ble_enable failed: 0x%x\r\n", err);
-		}
+		DEBUG_PRINTF("sd_ble_enable failed: 0x%x ramstart=0x%x ramreq=0x%x\r\n",
+			err, ramstart, ramreq);
 		return false;
 	}
 
-	(void)sdh_state_evt_observer_notify(NRF_SDH_STATE_EVT_BLE_ENABLED);
+	if (ramreq > ramstart)
+	{
+		DEBUG_PRINTF("Insufficient RAM allocated for the SoftDevice need 0x%x\r\n", ramreq);
+		return false;
+	}
 
-	// 1 s continuous wakeup trigger so a fully silent link still reaches the
-	// GATT transaction timeout checks in the main loop. Enabled only after
-	// the SoftDevice is up: GRTC3 must be initialized with its interrupt
-	// disabled before nrf_sdh_enable_request. No handler is needed, the GRTC
-	// interrupt itself ends the WFE wait; the ISR tolerates a null handler.
-	s_BtAppSdGrtc3.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, nullptr);
+	// Pull nrf_sdh_ble.c from the static library. Its object contains the
+	// ble_evt_poll stack observer that drains sd_ble_evt_get and dispatches
+	// BLE events to Peer Manager and IOsonata observers.
+	(void)nrf_sdh_ble_idx_get(BLE_CONN_HANDLE_INVALID);
+
+	(void)sdh_state_evt_observer_notify(NRF_SDH_STATE_EVT_BLE_ENABLED);
 
 	// Enable BLE stack (cfg_set from CONFIG_ defaults, handled in nrf_sdh_ble.c)
 	//err = nrf_sdh_ble_enable(BTAPP_CONN_CFG_TAG);
@@ -1015,10 +922,10 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 }
 
 // ---------------------------------------------------------------------------
-// Secure Connections: peer_manager + BtLesc, mirroring the nRF52
-// SoftDevice implementation. The S145 SoftDevice owns the SMP state machine; peer_manager
+// Secure Connections: peer_manager + nrf_ble_lesc, mirroring the nRF52
+// SoftDevice port. The S145 SoftDevice owns the SMP state machine; peer_manager
 // drives it and persists bonds (through the IOsonata bt_pds store), and
-// BtLesc performs the LESC ECDH. The application observes link security
+// nrf_ble_lesc performs the LESC ECDH. The application observes link security
 // through these peer_manager events; no key material is surfaced to the app on
 // this path (peer_manager is the authority), matching nRF52.
 // ---------------------------------------------------------------------------
@@ -1077,7 +984,7 @@ static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 }
 
 // Initialize peer_manager and LESC. Maps the app SecType / key-exchange config
-// onto ble_gap_sec_params_t exactly as the nRF52 implementation does (the BTAPP_SECTYPE_*
+// onto ble_gap_sec_params_t exactly as the nRF52 port does (the BTAPP_SECTYPE_*
 // values alias the same BT_GAP_SECTYPE_* the nRF52 BLEAPP_SECTYPE_* use).
 static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool bEraseBond)
 {
@@ -1085,9 +992,9 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	uint32_t err_code;
 
 	// Provide the LESC layer its crypto engine BEFORE pm_init. With CONFIG_PM_LESC
-	// defined, pm_init -> sm_init calls BtLescInit, which checks the engine
+	// defined, pm_init -> sm_init calls nrf_ble_lesc_init, which checks the engine
 	// via CryptoIsCapable. The engine must already be injected at that point, else
-	// BtLescInit fails and pm_init returns an error. The App owns the
+	// nrf_ble_lesc_init fails and pm_init returns an error. The App owns the
 	// CryptoDev_t and injects it, mirroring the BtSmpInit model on the SDC port.
 	// ECDH goes through CryptoInit with CRYPTO_PROVIDER_AUTO: the hardware
 	// engine (CryptoHwInit, PSA over CRACEN) is selected when it is linked,
@@ -1096,7 +1003,7 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	// AUTO selects. Random bytes come from the PSA DRBG on the hardware path,
 	// or from the CRACEN-backed RngGet on the uECC path.
 	static CryptoDev_t s_LescEcdh;
-	alignas(uint32_t) static uint8_t s_LescEcdhMem[CRYPTO_MEMSIZE_ECDH];
+	static uint8_t     s_LescEcdhMem[CRYPTO_MEMSIZE_ECDH];	// ECDH per-instance key arena (fits HW or uECC)
 	CryptoCfg_t lescCfg = { };
 	lescCfg.Provider = CRYPTO_PROVIDER_AUTO;
 	lescCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
@@ -1115,10 +1022,7 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 
 	BtLescSetCryptoEngine(&s_LescEcdh);
 
-	DEBUG_PRINTF("BtAppPeerMngrInit: pm_init\r\n");
 	err_code = pm_init();
-	DEBUG_PRINTF("BtAppPeerMngrInit: pm_init returned 0x%lx\r\n",
-				 (unsigned long)err_code);
 	if (err_code != NRF_SUCCESS)
 	{
 		DEBUG_PRINTF("pm_init failed: 0x%x\r\n", err_code);
@@ -1190,10 +1094,6 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 		sec_param.oob = 1;
 	}
 
-	// BtSmpAuthConfig is the common application-facing API. On this target it
-	// overrides the association parameters before Peer Manager stores them.
-	BmSmpAuthApply(&sec_param);
-
 	err_code = pm_sec_params_set(&sec_param);
 	if (err_code != NRF_SUCCESS)
 	{
@@ -1208,8 +1108,21 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 		return err_code;
 	}
 
-	// Route staged peer OOB data into the LESC pairing.
-	BtLescOobPeerHandlerSet(BtAppOobPeerDataHandler);
+	// When CONFIG_PM_LESC is defined, pm_init -> sm_init already called
+	// nrf_ble_lesc_init (the engine was injected before pm_init above). Only
+	// call it explicitly when the SDK LESC path is not compiled in.
+#if !defined(CONFIG_PM_LESC)
+	err_code = nrf_ble_lesc_init();
+	if (err_code != NRF_SUCCESS)
+	{
+		DEBUG_PRINTF("nrf_ble_lesc_init failed: 0x%x\r\n", err_code);
+		return err_code;
+	}
+
+	// Route the staged peer OOB data into the pairing when the SoftDevice
+	// asks for it (LESC OOB association model).
+	nrf_ble_lesc_peer_oob_data_handler_set(BtAppOobPeerDataHandler);
+#endif
 
 	return NRF_SUCCESS;
 }
@@ -1274,7 +1187,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		DEBUG_PRINTF("BtAppStackInit failed\r\n");
 		return false;
 	}
-	DEBUG_PRINTF("BtAppInit: stack initialized\r\n");
+
 
 	// Set GAP appearance
 	err_code = sd_ble_gap_appearance_set(pCfg->Appearance);
@@ -1327,7 +1240,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	if (g_BtAppData.AppDevice.bSecure)
 	{
 		// No erase-bond flag in BtAppCfg_t; bonds are preserved across init.
-		// A dedicated clear (pm_peers_delete) can be added
+		// A dedicated clear (pm_peers_delete / BtSmpBondClearAll) can be added
 		// as a separate API if forced re-bonding is needed.
 		if (BtAppPeerMngrInit(pCfg->SecType, pCfg->SecExchg, false) != NRF_SUCCESS)
 		{
@@ -1374,9 +1287,17 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
  * main event loop.  SoftDevice events are dispatched through the
  * observer infrastructure triggered by the SD_EVT interrupt.
  */
-// Millisecond clock for GATT transaction timeouts. The SDK and SoftDevice
-// own the timer; this reads the free-running GRTC3 count through the target
-// timer object.
+// Millisecond clock for the generic SMP/GATT transaction timeouts, overriding
+// the weak BtSmpMsTick/BtGattMsTick defaults. The RTC/timer is owned by the
+// SDK + SoftDevice; this reads the free-running GRTC3 count via the s_BtAppSdGrtc3
+// handle the port enables as a SoftDevice prerequisite (a read is
+// non-destructive). Declared in bt_smp.h / bt_gatt.h, so no linkage specifier is
+// needed here.
+uint32_t BtSmpMsTick(void)
+{
+	return s_BtAppSdGrtc3.mSecond();
+}
+
 uint32_t BtGattMsTick(void)
 {
 	return s_BtAppSdGrtc3.mSecond();
@@ -1406,8 +1327,26 @@ void BtAppRun()
 
 	while (1)
 	{
+		uint16_t connHdl = BLE_CONN_HANDLE_INVALID;
+		uint32_t intState = DisableInterrupt();
+
+		if (s_SecurePendingHdl != BLE_CONN_HANDLE_INVALID)
+		{
+			connHdl = s_SecurePendingHdl;
+			s_SecurePendingHdl = BLE_CONN_HANDLE_INVALID;
+		}
+
+		EnableInterrupt(intState);
+
+		if (connHdl != BLE_CONN_HANDLE_INVALID)
+		{
+			uint32_t err = pm_conn_secure(connHdl, false);
+			DEBUG_PRINTF("pm_conn_secure hdl=%u returned 0x%08" PRIx32 "\r\n",
+				connHdl, err);
+		}
+
 		// Process any pending LESC DHKey computation. Required for LE Secure
-		// Connections: BtLesc defers the ECDH to be run from the main
+		// Connections: nrf_ble_lesc defers the ECDH to be run from the main
 		// loop rather than the BLE event context.
 		if (g_BtAppData.AppDevice.bSecure)
 		{
@@ -1416,16 +1355,15 @@ void BtAppRun()
 
 		AppEvtHandlerExec();
 
-		// Drive the GATT indication transaction timeout. The continuous trigger
-		// configured after SoftDevice enable supplies the periodic wake when the
-		// peer is otherwise silent.
+		// The S145 port uses Peer Manager for SMP. Only the generic GATT
+		// indication timeout remains here.
 		BtGattIndicationTimeoutCheck();
 
 		BtAppEvtWait();
 	}
 }
 
-// Target-level weak default for BtAppEvtWait. Bare-metal apps use __WFE.
+// Port-level weak default for BtAppEvtWait. Bare-metal apps use __WFE.
 // RTOS apps override with sem take in their bridge code.
 __attribute__((weak)) void BtAppEvtWait(void)
 {

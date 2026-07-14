@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 #include <stdint.h>
-#include <string.h>
 #include <nrf_sdm.h>
 #include <nrf_soc.h>
 #include <bm/softdevice_handler/nrf_sdh.h>
@@ -50,55 +49,7 @@
 
 
 uint32_t softdevice_vector_forward_address;
-static bool softdevice_reset_done;
 
-static void CallSoftDeviceResetHandler(void)
-{
-	const uint32_t handler_addr = *(const uint32_t *)(
-		softdevice_vector_forward_address + NRF_SD_ISR_OFFSET_RESET);
-	void (*handler)(void) = (void (*)(void))handler_addr;
-
-	handler();
-}
-
-void NrfSdhEarlyInit(void)
-{
-	if (softdevice_reset_done)
-	{
-		return;
-	}
-
-	/* The reset entry initializes the SoftDevice static and dynamic RAM.
-	 * Clear that reserved range before calling it. This function runs from an
-	 * early constructor, after the C runtime initialized .data/.bss but before
-	 * main() initializes UART, timers, or other application peripherals. */
-	const uintptr_t app_ram_start = (uintptr_t)SystemRamStart();
-	if (app_ram_start > 0x20000000UL)
-	{
-		memset((void *)0x20000000UL, 0,
-			   app_ram_start - 0x20000000UL);
-	}
-
-	softdevice_vector_forward_address = FIXED_PARTITION_OFFSET(softdevice_partition);
-#ifdef CONFIG_BOOTLOADER_MCUBOOT
-	softdevice_vector_forward_address += CONFIG_ROM_START_OFFSET;
-#endif
-
-	CallSoftDeviceResetHandler();
-	softdevice_reset_done = true;
-}
-
-#if defined(__GNUC__)
-/* ResetEntry calls the C runtime before main(). Constructor priority 101 runs
- * before normal C++ static constructors and before application HardwareInit().
- * SystemInit is too early because the following .bss initialization clears the
- * vector address and softdevice_reset_done flag. */
-static void NrfSdhRuntimeInit(void) __attribute__((constructor(101)));
-static void NrfSdhRuntimeInit(void)
-{
-	NrfSdhEarlyInit();
-}
-#endif
 
 static atomic_t sdh_is_suspended;	/* Whether the SoftDevice event interrupts are disabled. */
 static atomic_t sdh_transition;		/* Whether enable/disable process was started. */
@@ -325,12 +276,16 @@ int nrf_sdh_enable_request(void)
 	 */
 	//memset((void *)0x20000000, 0, 0x4780);
 
-	/* The reset entry must run during early system startup, before UART,
-	 * timers and other application peripherals are initialized. */
-	if (!softdevice_reset_done)
-	{
-		return -EPERM;
-	}
+	/* 2. Set SD base address so SVC forwarding knows where to jump.
+	 *    Do NOT call CallSoftDeviceResetHandler() here — it makes
+	 *    sd_softdevice_is_enabled() return true, which causes
+	 *    nrf_sdh_enable_request() to skip sd_softdevice_enable().
+	 *    The reset handler is called in nrf_sdh_enable() instead. */
+	softdevice_vector_forward_address = FIXED_PARTITION_OFFSET(softdevice_partition);
+#ifdef CONFIG_BOOTLOADER_MCUBOOT
+	softdevice_vector_forward_address += CONFIG_ROM_START_OFFSET;
+#endif
+
 
 	(void)sd_softdevice_is_enabled(&enabled);
 	if (enabled) {
