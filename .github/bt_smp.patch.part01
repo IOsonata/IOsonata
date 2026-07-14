@@ -1,0 +1,157 @@
+ 	if (s_SmpOob.bLocalValid)
+ 	{
+ 		memcpy(pLink->Ctx.OobLocalRand, s_SmpOob.LocalRand, 16);
+@@ -654,6 +781,7 @@ static void SmpOobCtxLoad(BtSmpLink_t *pLink)
+ 		memcpy(pLink->Ctx.OobPeerRand, s_SmpOob.PeerRand, 16);
+ 		memcpy(pLink->Ctx.OobPeerConfirm, s_SmpOob.PeerConfirm, 16);
+ 	}
++	return true;
+ }
+ 
+ // Generate the local SC key pair, or reuse the pair the pending local OOB
+@@ -661,12 +789,20 @@ static void SmpOobCtxLoad(BtSmpLink_t *pLink)
+ // generation done at BtSmpOobLocalDataGen.
+ static int SmpLocalKeyGen(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
+ {
+-	if (s_SmpOob.bLocalValid)
++	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB && SmpOobLocalReady(pLink))
+ 	{
+ 		memcpy(pLink->Ctx.LocalPubKey, s_SmpOob.LocalPubKey, 64);
+ 		return BT_SMP_CRYPTO_OK;
+ 	}
+-	return BtSmpCryptoP256KeyGen(pDev, pLink->Ctx.LocalPubKey);
++	if (s_SmpOob.bLocalValid ||
++		SmpCryptoPendingBegin(pLink, pDev, BT_SMP_CRYPTO_OP_PUBKEY) == false)
++	{
++		return BT_SMP_CRYPTO_FAIL;
++	}
++	int rc = SmpCryptoP256KeyGen(pDev, pLink->Ctx.LocalPubKey,
++								&s_SmpCryptoPending);
++	if (rc != BT_SMP_CRYPTO_PENDING) { SmpCryptoPendingClear(); }
++	return rc;
+ }
+ 
+ // g2 -> 6 digit Numeric Comparison value.
+@@ -837,14 +973,14 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+ 	pLink->Ctx.PeerAuthReq = pReq->AuthReq;
+ 	pLink->Ctx.bInitiator = false;
+ 	pLink->Ctx.bSc = (pReq->AuthReq & BT_SMP_AUTHREQ_SC) &&
+-					 (BT_SMP_LOCAL_AUTHREQ & BT_SMP_AUTHREQ_SC);
++					 (s_SmpAuthReq & BT_SMP_AUTHREQ_SC);
+ 
+ 	// This build requires LE Secure Connections. If the peer requests legacy
+ 	// pairing (no SC bit), reject with Authentication Requirements rather than
+ 	// entering the legacy flow. A central that opens with legacy (e.g. nRF
+ 	// Connect Desktop) then retries with SC. Accepting legacy here and failing
+ 	// later at the confirm/random step leaves such a central unable to pair.
+-	if ((BT_SMP_LOCAL_AUTHREQ & BT_SMP_AUTHREQ_SC) &&
++	if ((s_SmpAuthReq & BT_SMP_AUTHREQ_SC) &&
+ 		!(pReq->AuthReq & BT_SMP_AUTHREQ_SC))
+ 	{
+ 		SMP_TRACE("SMP reject legacy (peer auth=0x%02x), require SC\r\n",
+@@ -859,28 +995,29 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+ 
+ 	// Select the association model now both IO capabilities are known: the peer
+ 	// is the initiator, the local device is the responder. MITM applies when
+-	// either side sets the flag. Only Just Works is wired so far; any MITM model
+-	// fails closed rather than continuing to an unauthenticated link the peer
+-	// would treat as authenticated.
++	// either side sets the flag. The IO capability table selects Numeric
++	// Comparison or Passkey Entry when MITM is required.
+ 	bool mitm = (s_SmpAuthReq & BT_SMP_AUTHREQ_MITM) ||
+ 				(pReq->AuthReq & BT_SMP_AUTHREQ_MITM);
+ 	bool oob = pLink->Ctx.bSc &&
+-			   ((pReq->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT) || s_SmpOob.bPeerValid);
++			   ((pReq->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT) || SmpOobPeerReady(pLink));
+ 	// The peer's OOB flag asserts it received our OOB data. Without a local
+ 	// data set backing that claim the ra/rb inputs fall back to zero, so a
+ 	// peer that merely set the flag would finish a Just-Works-equivalent
+ 	// pairing that gets reported as authenticated. Fail closed instead.
+ 	if (pLink->Ctx.bSc && pReq->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT &&
+-		!s_SmpOob.bLocalValid)
++		!SmpOobLocalReady(pLink))
+ 	{
+ 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
+ 		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+ 		return;
+ 	}
+ 	pLink->Ctx.Model = SmpSelectModel(pReq->IOCaps, s_SmpIoCaps, mitm, oob);
+-	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
++	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB && SmpOobCtxLoad(pLink) == false)
+ 	{
+-		SmpOobCtxLoad(pLink);
++		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
++		pLink->Ctx.State = BT_SMP_STATE_IDLE;
++		return;
+ 	}
+ 	SMP_TRACE("SMP model=%d init_io=%d resp_io=%d mitm=%d\r\n",
+ 			  pLink->Ctx.Model, pReq->IOCaps, s_SmpIoCaps, mitm ? 1 : 0);
+@@ -930,6 +1067,27 @@ static bool SmpKeyPresent(const uint8_t *pKey, size_t Len)
+ 	return false;
+ }
+ 
++static bool SmpStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
++{
++	if (SmpCryptoPendingBegin(pLink, pDev, BT_SMP_CRYPTO_OP_DHKEY) == false)
++	{
++		return false;
++	}
++	pLink->Ctx.State = BT_SMP_STATE_DHKEY_WAIT;
++	int rc = SmpCryptoEcdh(pDev, pLink->Ctx.PeerPubKey, pLink->Ctx.DhKey,
++						  &s_SmpCryptoPending);
++	if (rc == BT_SMP_CRYPTO_OK)
++	{
++		BtSmpDhKeyReady(pDev, 0, pLink->Ctx.DhKey);
++	}
++	else if (rc == BT_SMP_CRYPTO_FAIL)
++	{
++		SmpCryptoPendingClear();
++		return false;
++	}
++	return true;
++}
++
+ static bool SmpTryStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+ 							 uint16_t ConnHdl)
+ {
+@@ -951,18 +1109,7 @@ static bool SmpTryStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+ 
+ 	SmpSend(pDev, ConnHdl, &pk, sizeof(pk));
+ 
+-	pLink->Ctx.State = BT_SMP_STATE_DHKEY_WAIT;
+-	int rc = BtSmpCryptoEcdh(pDev, pLink->Ctx.PeerPubKey, pLink->Ctx.DhKey);
+-	if (rc == BT_SMP_CRYPTO_OK)
+-	{
+-		BtSmpDhKeyReady(pDev, 0, pLink->Ctx.DhKey);
+-	}
+-	else if (rc == BT_SMP_CRYPTO_FAIL)
+-	{
+-		return false;
+-	}
+-
+-	return true;
++	return SmpStartDhKey(pDev, pLink);
+ }
+ 
+ // Send the local SC public key PDU (coordinates little-endian on air).
+@@ -1018,27 +1165,28 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+ 
+ 	// Select the association model now both IO capabilities are known: the local
+ 	// device is the initiator, the peer is the responder. MITM applies when
+-	// either side sets the flag. Only Just Works is wired so far; any MITM model
+-	// fails closed rather than continuing to an unauthenticated link the peer
+-	// would treat as authenticated.
++	// either side sets the flag. The IO capability table selects Numeric
++	// Comparison or Passkey Entry when MITM is required.
+ 	bool mitm = (s_SmpAuthReq & BT_SMP_AUTHREQ_MITM) ||
+ 				(pRsp->AuthReq & BT_SMP_AUTHREQ_MITM);
+ 	bool oob = pLink->Ctx.bSc &&
+-			   ((pRsp->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT) || s_SmpOob.bPeerValid);
++			   ((pRsp->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT) || SmpOobPeerReady(pLink));
+ 	// Same guard as the responder side: the peer may not claim receipt of
+ 	// local OOB data that was never generated, else zero ra/rb turn this
+ 	// into Just Works reported as authenticated.
+ 	if (pLink->Ctx.bSc && pRsp->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT &&
+-		!s_SmpOob.bLocalValid)
++		!SmpOobLocalReady(pLink))
+ 	{
