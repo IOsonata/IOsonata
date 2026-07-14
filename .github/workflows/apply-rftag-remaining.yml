@@ -1,0 +1,81 @@
+name: Apply remaining RFTag fixes
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'fix/bluetooth-crypto-rftag-review' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/bluetooth-crypto-rftag-review
+
+      - name: Apply patches
+        shell: bash
+        run: |
+          git apply --check .github/rftag_protocols.patch
+          git apply --check .github/rftag_devices.patch
+          git apply --check .github/rftag_nordic.patch
+          git apply .github/rftag_protocols.patch
+          git apply .github/rftag_devices.patch
+          git apply .github/rftag_nordic.patch
+
+      - name: Validate source
+        shell: bash
+        run: |
+          git diff --check
+          if git diff -U0 -- '*.c' '*.cpp' '*.h' | grep '^+' | grep -v '^+++' | grep -inE '\bbackend\b|\bcontract\b|source of truth|\bcarries\b|resting value'; then
+            exit 1
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          files = [
+              'ARM/Nordic/exemples/rftag_t4t_demo_port_nrfx.cpp',
+              'ARM/Nordic/include/nfct_nrfx.h',
+              'ARM/Nordic/src/nfct_nrfx.cpp',
+              'include/rftag/rftag_proto_t2.h',
+              'src/rftag/rfreader_pn532.cpp',
+              'src/rftag/rftag_controller.cpp',
+              'src/rftag/rftag_proto_iso15693.cpp',
+              'src/rftag/rftag_proto_t2.cpp',
+              'src/rftag/rftag_proto_t4.cpp',
+              'src/rftag/st25dv.cpp',
+          ]
+          for name in files:
+              text = Path(name).read_text(encoding='ascii')
+              assert text.count('{') == text.count('}'), name
+          PY
+          g++ -std=gnu++23 -fno-exceptions -fno-rtti -Iinclude -fsyntax-only \
+            src/rftag/rftag.cpp \
+            src/rftag/rftag_proto_t2.cpp \
+            src/rftag/rftag_proto_t4.cpp \
+            src/rftag/rftag_proto_iso15693.cpp \
+            src/rftag/rftag_controller.cpp \
+            src/rftag/rfreader_pn532.cpp \
+            src/rftag/st25dv.cpp
+
+      - name: Commit source
+        shell: bash
+        run: |
+          git add \
+            ARM/Nordic/exemples/rftag_t4t_demo_port_nrfx.cpp \
+            ARM/Nordic/include/nfct_nrfx.h \
+            ARM/Nordic/src/nfct_nrfx.cpp \
+            include/rftag/rftag_proto_t2.h \
+            src/rftag/rfreader_pn532.cpp \
+            src/rftag/rftag_controller.cpp \
+            src/rftag/rftag_proto_iso15693.cpp \
+            src/rftag/rftag_proto_t2.cpp \
+            src/rftag/rftag_proto_t4.cpp \
+            src/rftag/st25dv.cpp
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Fix RFTag protocol and device handling'
+          git push origin HEAD:fix/bluetooth-crypto-rftag-review
