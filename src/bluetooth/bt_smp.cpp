@@ -2526,6 +2526,9 @@ void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes)
 	BtSmpBondLoad();
 }
 
+// Weak: a port whose underlying stack owns pairing overrides this and
+// routes the values into that stack security parameters instead.
+__attribute__((weak))
 void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 {
 	// Force the Secure Connections bit: this build does not pair with legacy,
@@ -2712,6 +2715,9 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 // without it a central has no indication to pair (and apps like nRF Connect
 // show no security/bond action), and any pairing the user forces has no
 // natural begin/end in the central security flow.
+// Weak: a port whose underlying stack owns pairing overrides this and
+// maps it to that stack security request instead.
+__attribute__((weak))
 void BtSmpRequestSecurity(uint16_t ConnHdl)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
