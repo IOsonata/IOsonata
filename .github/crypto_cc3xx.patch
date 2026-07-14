@@ -1,0 +1,505 @@
+diff --git a/ARM/src/crypto_cc3xx.cpp b/ARM/src/crypto_cc3xx.cpp
+index 7304370..e66d8e6 100644
+--- a/ARM/src/crypto_cc3xx.cpp
++++ b/ARM/src/crypto_cc3xx.cpp
+@@ -21,11 +21,11 @@
+ #include <stddef.h>
+ #include <string.h>
+ #include <assert.h>
+-#include <atomic>
+ 
+ #include "crypto/crypto.h"
+ #include "crypto/crypto_p256.h"
+ #include "crypto_cc3xx.h"
++#include "coredev/interrupt.h"
+ 
+ #ifndef CC3XX_BASE_ADDRESS
+ #error CC3XX_BASE_ADDRESS must be defined by crypto_cc3xx.h
+@@ -39,6 +39,10 @@
+ #define CC3XX_PKA_WAIT_SPINS		10000000U
+ #endif
+ 
++#ifndef CC3XX_ACQUIRE_SPINS
++#define CC3XX_ACQUIRE_SPINS		100000U
++#endif
++
+ namespace {
+ 
+ constexpr size_t P256_WORDS = P256_BYTES / sizeof(uint32_t);
+@@ -48,9 +52,6 @@ constexpr uint32_t PKA_PHYS_REG_COUNT = 32U;
+ 
+ static_assert(PKA_PHYS_REG_COUNT * PKA_REG_BYTES <= CC3XX_PKA_SRAM_SIZE,
+ 			  "CC3xx PKA SRAM is too small for the fixed P-256 register map");
+-static_assert(ATOMIC_BOOL_LOCK_FREE == 2,
+-			  "CC3xx ownership guard requires a lock-free atomic bool");
+-
+ typedef uint8_t PkaReg_t;
+ 
+ enum : PkaReg_t {
+@@ -161,8 +162,8 @@ static const uint32_t s_P256B[P256_WORDS] = {
+ 	0x769886BCU, 0xB3EBBD55U, 0xAA3A93E7U, 0x5AC635D8U,
+ };
+ 
+-static std::atomic<bool> s_bCcInit{false};
+-static std::atomic<bool> s_bCc3xxBusy{false};
++static bool s_bCcInit;
++static bool s_bCc3xxBusy;
+ static bool s_bPkaFault;
+ 
+ static bool CoreInit(void);
+@@ -182,7 +183,7 @@ static void PkaFault(void)
+ 	s_bPkaFault = true;
+ 	Cc3xxReg(REG_PKA_CLOCK_ENABLE) = 0U;
+ 	Cc3xxDisable();
+-	s_bCcInit.store(false, std::memory_order_release);
++	s_bCcInit = false;
+ }
+ 
+ static bool PkaWait(uint32_t Offset)
+@@ -468,11 +469,10 @@ static bool PkaInit(void)
+ {
+ 	s_bPkaFault = false;
+ 
+-	if (!s_bCcInit.load(std::memory_order_acquire))
++	if (s_bCcInit == false)
+ 	{
+-		const bool initialized = CoreInit();
+-		s_bCcInit.store(initialized, std::memory_order_release);
+-		if (!initialized)
++		s_bCcInit = CoreInit();
++		if (s_bCcInit == false)
+ 		{
+ 			return false;
+ 		}
+@@ -821,31 +821,45 @@ static_assert(sizeof(CryptoCc3xxData) <= CRYPTO_MEMSIZE_HW,
+ 
+ static bool Cc3xxAcquire(void)
+ {
+-	return s_bCc3xxBusy.exchange(true, std::memory_order_acquire) == false;
++	uint32_t attempts = __get_IPSR() == 0U ? CC3XX_ACQUIRE_SPINS : 1U;
++	while (attempts-- > 0U)
++	{
++		uint32_t intState = DisableInterrupt();
++		bool acquired = s_bCc3xxBusy == false;
++		if (acquired)
++		{
++			s_bCc3xxBusy = true;
++		}
++		EnableInterrupt(intState);
++
++		if (acquired)
++		{
++			return true;
++		}
++		__asm volatile("" ::: "memory");
++	}
++	return false;
+ }
+ 
+ static void Cc3xxRelease(void)
+ {
+-	s_bCc3xxBusy.store(false, std::memory_order_release);
++	uint32_t intState = DisableInterrupt();
++	s_bCc3xxBusy = false;
++	EnableInterrupt(intState);
+ }
+ 
+ static CRYPTO_STATUS EnsureCc3xx(void)
+ {
+-	if (s_bCcInit.load(std::memory_order_acquire))
+-	{
+-		return CRYPTO_STATUS_OK;
+-	}
+ 	if (!Cc3xxAcquire())
+ 	{
+ 		return CRYPTO_STATUS_FAIL;
+ 	}
+ 
+-	bool initialized = s_bCcInit.load(std::memory_order_relaxed);
+-	if (!initialized)
++	if (s_bCcInit == false)
+ 	{
+-		initialized = CoreInit();
+-		s_bCcInit.store(initialized, std::memory_order_release);
++		s_bCcInit = CoreInit();
+ 	}
++	bool initialized = s_bCcInit;
+ 	Cc3xxRelease();
+ 	return initialized ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+ }
+diff --git a/include/crypto/crypto.h b/include/crypto/crypto.h
+index 8844724..48e95cc 100644
+--- a/include/crypto/crypto.h
++++ b/include/crypto/crypto.h
+@@ -268,10 +268,41 @@ struct __Crypto_Dev {
+ // exported engine and Cryptor functions further down take C linkage.
+ 
+ /**
+- * @brief	True if the engine provides every capability in Mask.
++ * @brief	Capabilities callable through this handle.
++ *
++ * Derived operations are included when their required primitive is present.
++ * SHA-256 and HMAC-SHA-256 use the built-in software implementation when the
++ * handle has no native SHA function.
++ */
++static inline uint32_t CryptoEffectiveCaps(CryptoDev_t * const pDev) {
++	if (pDev == NULL)
++	{
++		return 0;
++	}
++
++	uint32_t cap = CRYPTO_CAP_SHA256 | CRYPTO_CAP_HMAC_SHA256;
++	if (pDev->Aes128Ecb != NULL)
++	{
++		cap |= CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_AES_CMAC |
++			   CRYPTO_CAP_AES_CCM | CRYPTO_CAP_AES_GCM;
++	}
++	if (pDev->Cmac != NULL) { cap |= CRYPTO_CAP_AES_CMAC; }
++	if (pDev->Ccm != NULL) { cap |= CRYPTO_CAP_AES_CCM; }
++	if (pDev->Gcm != NULL) { cap |= CRYPTO_CAP_AES_GCM; }
++	if (pDev->EcdhP256KeyGen != NULL && pDev->EcdhP256 != NULL)
++	{
++		cap |= CRYPTO_CAP_ECDH_P256;
++	}
++	if (pDev->EcdsaP256Sign != NULL) { cap |= CRYPTO_CAP_ECDSA_P256_SIGN; }
++	if (pDev->EcdsaP256Verify != NULL) { cap |= CRYPTO_CAP_ECDSA_P256_VERIFY; }
++	return cap;
++}
++
++/**
++ * @brief	True if every capability in Mask is callable through the handle.
+  */
+ static inline bool CryptoIsCapable(CryptoDev_t * const pDev, uint32_t Mask) {
+-	return pDev != NULL && (pDev->Cap & Mask) == Mask;
++	return pDev != NULL && (CryptoEffectiveCaps(pDev) & Mask) == Mask;
+ }
+ 
+ /**
+@@ -291,6 +322,10 @@ static inline CRYPTO_STATUS CryptoAes128Ecb(CryptoDev_t * const pDev,
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (Key == NULL || In == NULL || Out == NULL)
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	return pDev->Aes128Ecb(pDev, Key, In, Out, pCtx);
+ }
+ 
+@@ -300,6 +335,10 @@ static inline CRYPTO_STATUS CryptoEcdhP256KeyGen(CryptoDev_t * const pDev,
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (pPubKey == NULL)
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	return pDev->EcdhP256KeyGen(pDev, pKeyCtx, pPubKey, pOpCtx);
+ }
+ 
+@@ -310,6 +349,10 @@ static inline CRYPTO_STATUS CryptoEcdhP256(CryptoDev_t * const pDev,
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (pPeerPubKey == NULL || pDhKey == NULL)
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	return pDev->EcdhP256(pDev, pKeyCtx, pPeerPubKey, pDhKey, pOpCtx);
+ }
+ 
+@@ -324,6 +367,10 @@ static inline CRYPTO_STATUS CryptoEcdsaP256Verify(CryptoDev_t * const pDev,
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (PubKey == NULL || Hash == NULL || Sig == NULL)
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	return pDev->EcdsaP256Verify(pDev, PubKey, Hash, Sig, pCtx);
+ }
+ 
+@@ -338,6 +385,10 @@ static inline CRYPTO_STATUS CryptoEcdsaP256Sign(CryptoDev_t * const pDev,
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (PrivKey == NULL || Hash == NULL || Sig == NULL)
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	return pDev->EcdsaP256Sign(pDev, PrivKey, Hash, Sig, pCtx);
+ }
+ 
+diff --git a/src/crypto/crypto.cpp b/src/crypto/crypto.cpp
+index 3012de5..c717b13 100644
+--- a/src/crypto/crypto.cpp
++++ b/src/crypto/crypto.cpp
+@@ -101,9 +101,14 @@ bool CryptoCfgValidate(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg,
+ 	{
+ 		return false;			// arena must be word aligned (see CryptoCfg_t pMem)
+ 	}
+-	if ((pCfg->ReqCaps & ~CapMask) != 0)
++	uint32_t effective = CapMask | CRYPTO_CAP_SHA256 | CRYPTO_CAP_HMAC_SHA256;
++	if ((CapMask & CRYPTO_CAP_AES128_ECB) != 0)
+ 	{
+-		return false;			// requested capability not provided by this engine
++		effective |= CRYPTO_CAP_AES_CMAC | CRYPTO_CAP_AES_CCM | CRYPTO_CAP_AES_GCM;
++	}
++	if ((pCfg->ReqCaps & ~effective) != 0)
++	{
++		return false;			// requested capability is not callable through this engine
+ 	}
+ 	return true;
+ }
+@@ -144,6 +149,10 @@ CRYPTO_STATUS CryptoCmac(CryptoDev_t * const pDev, const uint8_t Key[16],
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (Key == NULL || Mac == NULL || (Len > 0 && pMsg == NULL))
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	if (pDev->Cmac != NULL)
+ 	{
+ 		return pDev->Cmac(pDev, Key, pMsg, Len, Mac, pCtx);
+@@ -389,6 +398,13 @@ CRYPTO_STATUS CryptoCcmEncrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (Key == NULL || pNonce == NULL || pTag == NULL ||
++		(AadLen > 0 && pAad == NULL) ||
++		(Len > 0 && (pPlain == NULL || pCipher == NULL)) ||
++		CcmValidate(NonceLen, TagLen, Len, AadLen) != CRYPTO_STATUS_OK)
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	if (pDev->Ccm != NULL)
+ 	{
+ 		return pDev->Ccm(pDev, 1, Key, pNonce, NonceLen, pAad, AadLen,
+@@ -398,11 +414,6 @@ CRYPTO_STATUS CryptoCcmEncrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
+-	if (CcmValidate(NonceLen, TagLen, Len, AadLen) != CRYPTO_STATUS_OK)
+-	{
+-		return CRYPTO_STATUS_FAIL;
+-	}
+-
+ 	uint8_t T[16], S0[16];
+ 	CRYPTO_STATUS st = CcmMac(pDev, Key, pNonce, NonceLen, pAad, AadLen,
+ 							  pPlain, Len, TagLen, T, pCtx);
+@@ -432,6 +443,13 @@ CRYPTO_STATUS CryptoCcmDecrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (Key == NULL || pNonce == NULL || pTag == NULL ||
++		(AadLen > 0 && pAad == NULL) ||
++		(Len > 0 && (pCipher == NULL || pPlain == NULL)) ||
++		CcmValidate(NonceLen, TagLen, Len, AadLen) != CRYPTO_STATUS_OK)
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	if (pDev->Ccm != NULL)
+ 	{
+ 		return pDev->Ccm(pDev, 0, Key, pNonce, NonceLen, pAad, AadLen,
+@@ -441,11 +459,6 @@ CRYPTO_STATUS CryptoCcmDecrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
+-	if (CcmValidate(NonceLen, TagLen, Len, AadLen) != CRYPTO_STATUS_OK)
+-	{
+-		return CRYPTO_STATUS_FAIL;
+-	}
+-
+ 	uint8_t T[16], S0[16];
+ 	CRYPTO_STATUS st = CcmCtr(pDev, Key, pNonce, NonceLen, pCipher, Len, pPlain, S0, pCtx);
+ 	if (st == CRYPTO_STATUS_OK)
+@@ -652,6 +665,12 @@ CRYPTO_STATUS CryptoGcmEncrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (Key == NULL || pIv == NULL || pTag == NULL || IvLen == 0 ||
++		TagLen < 4 || TagLen > 16 || (AadLen > 0 && pAad == NULL) ||
++		(Len > 0 && (pPlain == NULL || pCipher == NULL)))
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	if (pDev->Gcm != NULL)
+ 	{
+ 		return pDev->Gcm(pDev, 1, Key, pIv, IvLen, pAad, AadLen,
+@@ -675,6 +694,12 @@ CRYPTO_STATUS CryptoGcmDecrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (Key == NULL || pIv == NULL || pTag == NULL || IvLen == 0 ||
++		TagLen < 4 || TagLen > 16 || (AadLen > 0 && pAad == NULL) ||
++		(Len > 0 && (pCipher == NULL || pPlain == NULL)))
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	if (pDev->Gcm != NULL)
+ 	{
+ 		return pDev->Gcm(pDev, 0, Key, pIv, IvLen, pAad, AadLen,
+@@ -798,6 +823,10 @@ static void Sha256Sw(const uint8_t *pMsg, size_t Len, uint8_t Digest[32])
+ CRYPTO_STATUS CryptoSha256(CryptoDev_t * const pDev, const uint8_t *pMsg,
+ 						   size_t Len, uint8_t Digest[32], void *pCtx)
+ {
++	if (Digest == NULL || (Len > 0 && pMsg == NULL))
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	if (pDev != NULL && pDev->Sha256 != NULL)
+ 	{
+ 		return pDev->Sha256(pDev, pMsg, Len, Digest, pCtx);
+@@ -811,6 +840,11 @@ CRYPTO_STATUS CryptoHmacSha256(CryptoDev_t * const pDev,
+ 							   const uint8_t *pMsg, size_t Len, uint8_t Mac[32],
+ 							   void *pCtx)
+ {
++	if (Mac == NULL || (KeyLen > 0 && pKey == NULL) || (Len > 0 && pMsg == NULL))
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
++
+ 	uint8_t k0[64];
+ 	if (KeyLen > 64)
+ 	{
+@@ -925,7 +959,7 @@ static CryptoDev_t *CryptorPick(Cryptor_t * const pInst, uint32_t Cap)
+ 	for (int i = 0; i < pInst->NbEng; i++)
+ 	{
+ 		CryptoDev_t *pEng = pInst->pEng[i];
+-		if (pEng != nullptr && (pEng->Cap & Cap) == Cap)
++		if (pEng != nullptr && CryptoIsCapable(pEng, Cap))
+ 		{
+ 			return pEng;
+ 		}
+@@ -946,6 +980,61 @@ static CRYPTO_STATUS CryptorAes128Ecb(CryptoDev_t * const pDev,
+ 	return CryptoAes128Ecb(pEng, Key, In, Out, pCtx);
+ }
+ 
++static CRYPTO_STATUS CryptorCmac(CryptoDev_t * const pDev, const uint8_t Key[16],
++								 const uint8_t *pMsg, size_t Len, uint8_t Mac[16],
++								 void *pCtx)
++{
++	Cryptor_t *pInst = (Cryptor_t *)pDev->pDevData;
++	CryptoDev_t *pEng = CryptorPick(pInst, CRYPTO_CAP_AES_CMAC);
++	return pEng != nullptr ? CryptoCmac(pEng, Key, pMsg, Len, Mac, pCtx) :
++						   CRYPTO_STATUS_UNSUPPORTED;
++}
++
++static CRYPTO_STATUS CryptorCcm(CryptoDev_t * const pDev, int bEncrypt,
++								const uint8_t Key[16], const uint8_t *pNonce,
++								size_t NonceLen, const uint8_t *pAad, size_t AadLen,
++								const uint8_t *pIn, size_t Len, uint8_t *pOut,
++								uint8_t *pTag, size_t TagLen, void *pCtx)
++{
++	Cryptor_t *pInst = (Cryptor_t *)pDev->pDevData;
++	CryptoDev_t *pEng = CryptorPick(pInst, CRYPTO_CAP_AES_CCM);
++	if (pEng == nullptr)
++	{
++		return CRYPTO_STATUS_UNSUPPORTED;
++	}
++	return bEncrypt ? CryptoCcmEncrypt(pEng, Key, pNonce, NonceLen, pAad, AadLen,
++								 pIn, Len, pOut, pTag, TagLen, pCtx) :
++					 CryptoCcmDecrypt(pEng, Key, pNonce, NonceLen, pAad, AadLen,
++								 pIn, Len, pOut, pTag, TagLen, pCtx);
++}
++
++static CRYPTO_STATUS CryptorGcm(CryptoDev_t * const pDev, int bEncrypt,
++								const uint8_t Key[16], const uint8_t *pIv, size_t IvLen,
++								const uint8_t *pAad, size_t AadLen,
++								const uint8_t *pIn, size_t Len, uint8_t *pOut,
++								uint8_t *pTag, size_t TagLen, void *pCtx)
++{
++	Cryptor_t *pInst = (Cryptor_t *)pDev->pDevData;
++	CryptoDev_t *pEng = CryptorPick(pInst, CRYPTO_CAP_AES_GCM);
++	if (pEng == nullptr)
++	{
++		return CRYPTO_STATUS_UNSUPPORTED;
++	}
++	return bEncrypt ? CryptoGcmEncrypt(pEng, Key, pIv, IvLen, pAad, AadLen,
++								 pIn, Len, pOut, pTag, TagLen, pCtx) :
++					 CryptoGcmDecrypt(pEng, Key, pIv, IvLen, pAad, AadLen,
++								 pIn, Len, pOut, pTag, TagLen, pCtx);
++}
++
++static CRYPTO_STATUS CryptorSha256(CryptoDev_t * const pDev, const uint8_t *pMsg,
++								  size_t Len, uint8_t Digest[32], void *pCtx)
++{
++	Cryptor_t *pInst = (Cryptor_t *)pDev->pDevData;
++	CryptoDev_t *pEng = CryptorPick(pInst, CRYPTO_CAP_SHA256);
++	return pEng != nullptr ? CryptoSha256(pEng, pMsg, Len, Digest, pCtx) :
++						   CRYPTO_STATUS_UNSUPPORTED;
++}
++
+ static CRYPTO_STATUS CryptorEcdhP256KeyGen(CryptoDev_t * const pDev,
+ 										   void *pKeyCtx, uint8_t pPubKey[64],
+ 										   void *pOpCtx)
+@@ -974,6 +1063,26 @@ static CRYPTO_STATUS CryptorEcdhP256(CryptoDev_t * const pDev, void *pKeyCtx,
+ 	return CryptoEcdhP256(pEng, pKey, pPeerPubKey, pDhKey, pOpCtx);
+ }
+ 
++static CRYPTO_STATUS CryptorEcdsaP256Verify(CryptoDev_t * const pDev,
++										 const uint8_t PubKey[64], const uint8_t Hash[32],
++										 const uint8_t Sig[64], void *pCtx)
++{
++	Cryptor_t *pInst = (Cryptor_t *)pDev->pDevData;
++	CryptoDev_t *pEng = CryptorPick(pInst, CRYPTO_CAP_ECDSA_P256_VERIFY);
++	return pEng != nullptr ? CryptoEcdsaP256Verify(pEng, PubKey, Hash, Sig, pCtx) :
++						   CRYPTO_STATUS_UNSUPPORTED;
++}
++
++static CRYPTO_STATUS CryptorEcdsaP256Sign(CryptoDev_t * const pDev,
++									   const uint8_t PrivKey[32], const uint8_t Hash[32],
++									   uint8_t Sig[64], void *pCtx)
++{
++	Cryptor_t *pInst = (Cryptor_t *)pDev->pDevData;
++	CryptoDev_t *pEng = CryptorPick(pInst, CRYPTO_CAP_ECDSA_P256_SIGN);
++	return pEng != nullptr ? CryptoEcdsaP256Sign(pEng, PrivKey, Hash, Sig, pCtx) :
++						   CRYPTO_STATUS_UNSUPPORTED;
++}
++
+ static int CryptorSelfTest(CryptoDev_t * const pDev)
+ {
+ 	Cryptor_t *pInst = (Cryptor_t *)pDev->pDevData;
+@@ -999,7 +1108,7 @@ static uint32_t CryptorCapUnion(CryptoDev_t * const pEng[], int NbEng)
+ 	{
+ 		if (pEng[i] != nullptr)
+ 		{
+-			cap |= pEng[i]->Cap;
++			cap |= CryptoEffectiveCaps(pEng[i]);
+ 		}
+ 	}
+ 	return cap;
+@@ -1033,7 +1142,7 @@ static bool CryptorBuild(Cryptor_t * const pInst, const CryptoCfg_t *pCfg,
+ 		CryptoDev_t *pEcdh = nullptr;
+ 		for (int i = 0; i < NbEng; i++)
+ 		{
+-			if (pEng[i] != nullptr && (pEng[i]->Cap & CRYPTO_CAP_ECDH_P256) != 0)
++			if (pEng[i] != nullptr && CryptoIsCapable(pEng[i], CRYPTO_CAP_ECDH_P256))
+ 			{
+ 				pEcdh = pEng[i];
+ 				break;
+@@ -1076,12 +1185,18 @@ static bool CryptorBuild(Cryptor_t * const pInst, const CryptoCfg_t *pCfg,
+ 	CryptoDev_t *d = &pInst->Dev;
+ 	d->pDevData       = pInst;
+ 	d->pName          = "cryptor";
+-	d->Cap            = have;	// operations only; PLAIN_KEYCTX is a Props bit, never in Cap
+-	d->EvtCB          = pCfg->EvtCB;
+-	d->Aes128Ecb      = (CryptorPick(pInst, CRYPTO_CAP_AES128_ECB) != nullptr) ? CryptorAes128Ecb : nullptr;
+-	d->EcdhP256KeyGen = (CryptorPick(pInst, CRYPTO_CAP_ECDH_P256) != nullptr) ? CryptorEcdhP256KeyGen : nullptr;
+-	d->EcdhP256       = (CryptorPick(pInst, CRYPTO_CAP_ECDH_P256) != nullptr) ? CryptorEcdhP256 : nullptr;
+-	d->SelfTest       = CryptorSelfTest;
++	d->Cap              = have;
++	d->EvtCB            = pCfg->EvtCB;
++	d->Aes128Ecb        = (CryptorPick(pInst, CRYPTO_CAP_AES128_ECB) != nullptr) ? CryptorAes128Ecb : nullptr;
++	d->Cmac             = (CryptorPick(pInst, CRYPTO_CAP_AES_CMAC) != nullptr) ? CryptorCmac : nullptr;
++	d->Ccm              = (CryptorPick(pInst, CRYPTO_CAP_AES_CCM) != nullptr) ? CryptorCcm : nullptr;
++	d->Gcm              = (CryptorPick(pInst, CRYPTO_CAP_AES_GCM) != nullptr) ? CryptorGcm : nullptr;
++	d->Sha256           = (CryptorPick(pInst, CRYPTO_CAP_SHA256) != nullptr) ? CryptorSha256 : nullptr;
++	d->EcdhP256KeyGen   = (CryptorPick(pInst, CRYPTO_CAP_ECDH_P256) != nullptr) ? CryptorEcdhP256KeyGen : nullptr;
++	d->EcdhP256         = (CryptorPick(pInst, CRYPTO_CAP_ECDH_P256) != nullptr) ? CryptorEcdhP256 : nullptr;
++	d->EcdsaP256Verify  = (CryptorPick(pInst, CRYPTO_CAP_ECDSA_P256_VERIFY) != nullptr) ? CryptorEcdsaP256Verify : nullptr;
++	d->EcdsaP256Sign    = (CryptorPick(pInst, CRYPTO_CAP_ECDSA_P256_SIGN) != nullptr) ? CryptorEcdsaP256Sign : nullptr;
++	d->SelfTest         = CryptorSelfTest;
+ 	return true;
+ }
