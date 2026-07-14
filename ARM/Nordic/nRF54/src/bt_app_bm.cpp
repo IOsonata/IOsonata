@@ -97,11 +97,6 @@ extern UART g_Uart;
 #define DEBUG_PRINTF(...)
 #endif
 
-extern "C" void BtAppDebugMarker(const char *pMsg)
-{
-	g_Uart.printf("%s\r\n", pMsg);
-}
-
 extern "C" void softdevice_fault_handler(uint32_t Id, uint32_t Pc, uint32_t Info)
 {
 	DEBUG_PRINTF("SoftDevice fault: id=0x%08lx pc=0x%08lx info=0x%08lx\r\n",
@@ -944,7 +939,8 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 	uint32_t ramstart = (uint32_t)SystemRamStart();
 
-	memset((void *)0x20000000, 0, ramstart - 0x20000000);
+	/* NrfSdhEarlyInit already cleared the reserved SoftDevice RAM and then
+	 * initialized it through the S145 reset entry. Do not erase it here. */
 
 	// GRTC3 must be enabled with interrupt disbled before calling nrf_sdh_enable_request
 	s_BtAppSdGrtc3.Init(s_BtAppSdTimerCfg);
