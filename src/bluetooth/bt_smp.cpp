@@ -92,11 +92,13 @@ static const char *SmpCodeName(uint8_t c);
 
 typedef struct __Bt_Smp_Link {
 	uint16_t    ConnHdl;
+	uint32_t    Generation;
 	BtSmpCtx_t  Ctx;
 	BtSmpKeys_t Keys;
 } BtSmpLink_t;
 
 static BtSmpLink_t s_SmpLink[BT_SMP_MAX_LINK];
+static uint32_t s_SmpGeneration;
 
 //-----------------------------------------------------------------------------
 // Crypto primitives
@@ -116,11 +118,29 @@ static uint8_t s_SmpAuthReq = BT_SMP_LOCAL_AUTHREQ;
 static struct {
 	bool bLocalValid;
 	bool bPeerValid;
+	bool bReserved;
+	uint16_t ConnHdl;
+	uint32_t Generation;
 	uint8_t LocalRand[16];
 	uint8_t LocalPubKey[64];
 	uint8_t PeerRand[16];
 	uint8_t PeerConfirm[16];
 } s_SmpOob = {};
+
+typedef enum __Bt_Smp_Crypto_Op {
+	BT_SMP_CRYPTO_OP_NONE = 0,
+	BT_SMP_CRYPTO_OP_PUBKEY,
+	BT_SMP_CRYPTO_OP_DHKEY,
+} BT_SMP_CRYPTO_OP;
+
+typedef struct __Bt_Smp_Crypto_Pending {
+	BT_SMP_CRYPTO_OP Op;
+	uint16_t ConnHdl;
+	uint32_t Generation;
+	BtHciDevice_t *pDev;
+} BtSmpCryptoPending_t;
+
+static BtSmpCryptoPending_t s_SmpCryptoPending = {};
 
 // Map the local and peer IO capabilities to an SC association model. Core
 // spec Vol 3 Part H, 2.3.5.1, Table 2.8 (LE Secure Connections). Rows index
@@ -142,7 +162,13 @@ static const uint8_t s_SmpModelMap[5][5] = {
 static CryptoDev_t *s_pCryptoEcdh = nullptr;	// CRYPTO_CAP_ECDH_P256
 static CryptoDev_t *s_pCryptoAes  = nullptr;	// CRYPTO_CAP_AES128_ECB
 
-
+static int SmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64],
+								   void *pOpCtx);
+static int SmpCryptoEcdh(BtHciDevice_t * const pDev,
+						 const uint8_t pPeerPubKey[64], uint8_t pDhKey[32],
+						 void *pOpCtx);
+static void SmpCryptoEvtHandler(CryptoDev_t * const pDev, uint32_t Op,
+								CRYPTO_STATUS Status, void *pCtx);
 static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t Reason);
 
 #if BT_SMP_TRACE_ENABLE
@@ -185,6 +211,95 @@ static BtSmpLink_t *SmpLinkFind(uint16_t ConnHdl)
 	return nullptr;
 }
 
+static void SmpOobClear(void)
+{
+	CryptoSecureWipe(&s_SmpOob, sizeof(s_SmpOob));
+}
+
+static bool SmpOobReservedFor(const BtSmpLink_t *pLink)
+{
+	return pLink != nullptr && s_SmpOob.bReserved &&
+		s_SmpOob.ConnHdl == pLink->ConnHdl &&
+		s_SmpOob.Generation == pLink->Generation;
+}
+
+static bool SmpOobAvailable(const BtSmpLink_t *pLink)
+{
+	return s_SmpOob.bReserved == false || SmpOobReservedFor(pLink);
+}
+
+static bool SmpOobLocalReady(const BtSmpLink_t *pLink)
+{
+	return s_SmpOob.bLocalValid && SmpOobAvailable(pLink);
+}
+
+static bool SmpOobPeerReady(const BtSmpLink_t *pLink)
+{
+	return s_SmpOob.bPeerValid && SmpOobAvailable(pLink);
+}
+
+static bool SmpOobReserve(BtSmpLink_t *pLink)
+{
+	if (pLink == nullptr || SmpOobAvailable(pLink) == false)
+	{
+		return false;
+	}
+	s_SmpOob.bReserved = true;
+	s_SmpOob.ConnHdl = pLink->ConnHdl;
+	s_SmpOob.Generation = pLink->Generation;
+	return true;
+}
+
+static void SmpOobRelease(BtSmpLink_t *pLink)
+{
+	if (SmpOobReservedFor(pLink))
+	{
+		SmpOobClear();
+	}
+}
+
+static void SmpCryptoPendingClear(void)
+{
+	memset(&s_SmpCryptoPending, 0, sizeof(s_SmpCryptoPending));
+}
+
+static bool SmpCryptoPendingBegin(BtSmpLink_t *pLink, BtHciDevice_t *pDev,
+								  BT_SMP_CRYPTO_OP Op)
+{
+	if (pLink == nullptr || Op == BT_SMP_CRYPTO_OP_NONE ||
+		s_SmpCryptoPending.Op != BT_SMP_CRYPTO_OP_NONE)
+	{
+		return false;
+	}
+	s_SmpCryptoPending.Op = Op;
+	s_SmpCryptoPending.ConnHdl = pLink->ConnHdl;
+	s_SmpCryptoPending.Generation = pLink->Generation;
+	s_SmpCryptoPending.pDev = pDev;
+	return true;
+}
+
+static BtSmpLink_t *SmpCryptoPendingFind(BT_SMP_CRYPTO_OP Op)
+{
+	if (s_SmpCryptoPending.Op != Op)
+	{
+		return nullptr;
+	}
+	BtSmpLink_t *pLink = SmpLinkFind(s_SmpCryptoPending.ConnHdl);
+	return pLink != nullptr && pLink->Generation == s_SmpCryptoPending.Generation ?
+		pLink : nullptr;
+}
+
+static BtSmpLink_t *SmpCryptoPendingTake(BT_SMP_CRYPTO_OP Op)
+{
+	if (s_SmpCryptoPending.Op != Op)
+	{
+		return nullptr;
+	}
+	BtSmpLink_t *pLink = SmpCryptoPendingFind(Op);
+	SmpCryptoPendingClear();
+	return pLink;
+}
+
 static BtSmpLink_t *SmpLinkAlloc(uint16_t ConnHdl)
 {
 	BtSmpLink_t *p = SmpLinkFind(ConnHdl);
@@ -198,7 +313,10 @@ static BtSmpLink_t *SmpLinkAlloc(uint16_t ConnHdl)
 		if (s_SmpLink[i].ConnHdl == BT_CONN_HDL_INVALID)
 		{
 			memset(&s_SmpLink[i], 0, sizeof(BtSmpLink_t));
+			s_SmpGeneration++;
+			if (s_SmpGeneration == 0) { s_SmpGeneration++; }
 			s_SmpLink[i].ConnHdl = ConnHdl;
+			s_SmpLink[i].Generation = s_SmpGeneration;
 			s_SmpLink[i].Ctx.State = BT_SMP_STATE_IDLE;
 			return &s_SmpLink[i];
 		}
@@ -212,6 +330,7 @@ static void SmpLinkFree(uint16_t ConnHdl)
 	BtSmpLink_t *p = SmpLinkFind(ConnHdl);
 	if (p != nullptr)
 	{
+		SmpOobRelease(p);
 		memset(p, 0, sizeof(BtSmpLink_t));
 		p->ConnHdl = BT_CONN_HDL_INVALID;
 	}
@@ -224,14 +343,17 @@ static void SmpLinkFree(uint16_t ConnHdl)
 // SmpLinkFree - no key material survives - without losing the counter.
 static void SmpLinkResetKeepCount(BtSmpLink_t *pLink)
 {
-	uint16_t hdl    = pLink->ConnHdl;
-	uint8_t  fc     = pLink->Ctx.FailCount;
-	bool     locked = pLink->Ctx.bLocked;
+	uint16_t hdl       = pLink->ConnHdl;
+	uint32_t generation = pLink->Generation;
+	uint8_t  fc        = pLink->Ctx.FailCount;
+	bool     locked    = pLink->Ctx.bLocked;
 
+	SmpOobRelease(pLink);
 	memset(&pLink->Ctx, 0, sizeof(pLink->Ctx));
 	memset(&pLink->Keys, 0, sizeof(pLink->Keys));
 
 	pLink->ConnHdl       = hdl;
+	pLink->Generation    = generation;
 	pLink->Ctx.FailCount = fc;
 	pLink->Ctx.bLocked   = locked;
 	pLink->Ctx.State     = BT_SMP_STATE_IDLE;
@@ -320,6 +442,7 @@ static void SmpSend(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t Reason)
 {
+	SmpOobRelease(SmpLinkFind(ConnHdl));
 	BtSmpPairingFailed_t f;
 	f.Code = BT_SMP_CODE_PAIRING_FAILED;
 	f.Reason = Reason;
@@ -642,8 +765,12 @@ static uint8_t SmpSelectModel(uint8_t InitIo, uint8_t RespIo, bool Mitm, bool Oo
 }
 
 // Copy the pending OOB material into the link context of an OOB pairing.
-static void SmpOobCtxLoad(BtSmpLink_t *pLink)
+static bool SmpOobCtxLoad(BtSmpLink_t *pLink)
 {
+	if (SmpOobReserve(pLink) == false)
+	{
+		return false;
+	}
 	if (s_SmpOob.bLocalValid)
 	{
 		memcpy(pLink->Ctx.OobLocalRand, s_SmpOob.LocalRand, 16);
@@ -654,6 +781,7 @@ static void SmpOobCtxLoad(BtSmpLink_t *pLink)
 		memcpy(pLink->Ctx.OobPeerRand, s_SmpOob.PeerRand, 16);
 		memcpy(pLink->Ctx.OobPeerConfirm, s_SmpOob.PeerConfirm, 16);
 	}
+	return true;
 }
 
 // Generate the local SC key pair, or reuse the pair the pending local OOB
@@ -661,12 +789,20 @@ static void SmpOobCtxLoad(BtSmpLink_t *pLink)
 // generation done at BtSmpOobLocalDataGen.
 static int SmpLocalKeyGen(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 {
-	if (s_SmpOob.bLocalValid)
+	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB && SmpOobLocalReady(pLink))
 	{
 		memcpy(pLink->Ctx.LocalPubKey, s_SmpOob.LocalPubKey, 64);
 		return BT_SMP_CRYPTO_OK;
 	}
-	return BtSmpCryptoP256KeyGen(pDev, pLink->Ctx.LocalPubKey);
+	if (s_SmpOob.bLocalValid ||
+		SmpCryptoPendingBegin(pLink, pDev, BT_SMP_CRYPTO_OP_PUBKEY) == false)
+	{
+		return BT_SMP_CRYPTO_FAIL;
+	}
+	int rc = SmpCryptoP256KeyGen(pDev, pLink->Ctx.LocalPubKey,
+								&s_SmpCryptoPending);
+	if (rc != BT_SMP_CRYPTO_PENDING) { SmpCryptoPendingClear(); }
+	return rc;
 }
 
 // g2 -> 6 digit Numeric Comparison value.
@@ -837,14 +973,14 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	pLink->Ctx.PeerAuthReq = pReq->AuthReq;
 	pLink->Ctx.bInitiator = false;
 	pLink->Ctx.bSc = (pReq->AuthReq & BT_SMP_AUTHREQ_SC) &&
-					 (BT_SMP_LOCAL_AUTHREQ & BT_SMP_AUTHREQ_SC);
+					 (s_SmpAuthReq & BT_SMP_AUTHREQ_SC);
 
 	// This build requires LE Secure Connections. If the peer requests legacy
 	// pairing (no SC bit), reject with Authentication Requirements rather than
 	// entering the legacy flow. A central that opens with legacy (e.g. nRF
 	// Connect Desktop) then retries with SC. Accepting legacy here and failing
 	// later at the confirm/random step leaves such a central unable to pair.
-	if ((BT_SMP_LOCAL_AUTHREQ & BT_SMP_AUTHREQ_SC) &&
+	if ((s_SmpAuthReq & BT_SMP_AUTHREQ_SC) &&
 		!(pReq->AuthReq & BT_SMP_AUTHREQ_SC))
 	{
 		SMP_TRACE("SMP reject legacy (peer auth=0x%02x), require SC\r\n",
@@ -859,28 +995,29 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 
 	// Select the association model now both IO capabilities are known: the peer
 	// is the initiator, the local device is the responder. MITM applies when
-	// either side sets the flag. Only Just Works is wired so far; any MITM model
-	// fails closed rather than continuing to an unauthenticated link the peer
-	// would treat as authenticated.
+	// either side sets the flag. The IO capability table selects Numeric
+	// Comparison or Passkey Entry when MITM is required.
 	bool mitm = (s_SmpAuthReq & BT_SMP_AUTHREQ_MITM) ||
 				(pReq->AuthReq & BT_SMP_AUTHREQ_MITM);
 	bool oob = pLink->Ctx.bSc &&
-			   ((pReq->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT) || s_SmpOob.bPeerValid);
+			   ((pReq->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT) || SmpOobPeerReady(pLink));
 	// The peer's OOB flag asserts it received our OOB data. Without a local
 	// data set backing that claim the ra/rb inputs fall back to zero, so a
 	// peer that merely set the flag would finish a Just-Works-equivalent
 	// pairing that gets reported as authenticated. Fail closed instead.
 	if (pLink->Ctx.bSc && pReq->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT &&
-		!s_SmpOob.bLocalValid)
+		!SmpOobLocalReady(pLink))
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
 		pLink->Ctx.State = BT_SMP_STATE_IDLE;
 		return;
 	}
 	pLink->Ctx.Model = SmpSelectModel(pReq->IOCaps, s_SmpIoCaps, mitm, oob);
-	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
+	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB && SmpOobCtxLoad(pLink) == false)
 	{
-		SmpOobCtxLoad(pLink);
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
+		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		return;
 	}
 	SMP_TRACE("SMP model=%d init_io=%d resp_io=%d mitm=%d\r\n",
 			  pLink->Ctx.Model, pReq->IOCaps, s_SmpIoCaps, mitm ? 1 : 0);
@@ -930,6 +1067,27 @@ static bool SmpKeyPresent(const uint8_t *pKey, size_t Len)
 	return false;
 }
 
+static bool SmpStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
+{
+	if (SmpCryptoPendingBegin(pLink, pDev, BT_SMP_CRYPTO_OP_DHKEY) == false)
+	{
+		return false;
+	}
+	pLink->Ctx.State = BT_SMP_STATE_DHKEY_WAIT;
+	int rc = SmpCryptoEcdh(pDev, pLink->Ctx.PeerPubKey, pLink->Ctx.DhKey,
+						  &s_SmpCryptoPending);
+	if (rc == BT_SMP_CRYPTO_OK)
+	{
+		BtSmpDhKeyReady(pDev, 0, pLink->Ctx.DhKey);
+	}
+	else if (rc == BT_SMP_CRYPTO_FAIL)
+	{
+		SmpCryptoPendingClear();
+		return false;
+	}
+	return true;
+}
+
 static bool SmpTryStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 							 uint16_t ConnHdl)
 {
@@ -951,18 +1109,7 @@ static bool SmpTryStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 
 	SmpSend(pDev, ConnHdl, &pk, sizeof(pk));
 
-	pLink->Ctx.State = BT_SMP_STATE_DHKEY_WAIT;
-	int rc = BtSmpCryptoEcdh(pDev, pLink->Ctx.PeerPubKey, pLink->Ctx.DhKey);
-	if (rc == BT_SMP_CRYPTO_OK)
-	{
-		BtSmpDhKeyReady(pDev, 0, pLink->Ctx.DhKey);
-	}
-	else if (rc == BT_SMP_CRYPTO_FAIL)
-	{
-		return false;
-	}
-
-	return true;
+	return SmpStartDhKey(pDev, pLink);
 }
 
 // Send the local SC public key PDU (coordinates little-endian on air).
@@ -1018,27 +1165,28 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 
 	// Select the association model now both IO capabilities are known: the local
 	// device is the initiator, the peer is the responder. MITM applies when
-	// either side sets the flag. Only Just Works is wired so far; any MITM model
-	// fails closed rather than continuing to an unauthenticated link the peer
-	// would treat as authenticated.
+	// either side sets the flag. The IO capability table selects Numeric
+	// Comparison or Passkey Entry when MITM is required.
 	bool mitm = (s_SmpAuthReq & BT_SMP_AUTHREQ_MITM) ||
 				(pRsp->AuthReq & BT_SMP_AUTHREQ_MITM);
 	bool oob = pLink->Ctx.bSc &&
-			   ((pRsp->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT) || s_SmpOob.bPeerValid);
+			   ((pRsp->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT) || SmpOobPeerReady(pLink));
 	// Same guard as the responder side: the peer may not claim receipt of
 	// local OOB data that was never generated, else zero ra/rb turn this
 	// into Just Works reported as authenticated.
 	if (pLink->Ctx.bSc && pRsp->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT &&
-		!s_SmpOob.bLocalValid)
+		!SmpOobLocalReady(pLink))
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
 		pLink->Ctx.State = BT_SMP_STATE_IDLE;
 		return;
 	}
 	pLink->Ctx.Model = SmpSelectModel(s_SmpIoCaps, pRsp->IOCaps, mitm, oob);
-	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
+	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB && SmpOobCtxLoad(pLink) == false)
 	{
-		SmpOobCtxLoad(pLink);
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
+		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		return;
 	}
 	SMP_TRACE("SMP model=%d init_io=%d resp_io=%d mitm=%d\r\n",
 			  pLink->Ctx.Model, s_SmpIoCaps, pRsp->IOCaps, mitm ? 1 : 0);
@@ -1079,13 +1227,7 @@ static void SmpHandlePublicKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	{
 		// Initiator already sent its public key (after Pairing Response). On the
 		// responder's public key, just start ECDH; do not resend.
-		pLink->Ctx.State = BT_SMP_STATE_DHKEY_WAIT;
-		int rc = BtSmpCryptoEcdh(pDev, pLink->Ctx.PeerPubKey, pLink->Ctx.DhKey);
-		if (rc == BT_SMP_CRYPTO_OK)
-		{
-			BtSmpDhKeyReady(pDev, 0, pLink->Ctx.DhKey);
-		}
-		else if (rc == BT_SMP_CRYPTO_FAIL)
+		if (SmpStartDhKey(pDev, pLink) == false)
 		{
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
 			pLink->Ctx.State = BT_SMP_STATE_IDLE;
@@ -1976,6 +2118,7 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 						  ((const BtSmpPairingFailed_t*)pSmp)->Reason);
 			}
 			pLink->Ctx.State = BT_SMP_STATE_IDLE;
+			SmpOobRelease(pLink);
 			BtSmpPairingComplete(ConnHdl, false, nullptr);
 
 			// H5 repeated attempts (Core Vol 3 Part H 2.3.6): count the failure
@@ -2012,22 +2155,17 @@ void BtSmpLocalPubKeyReady(BtHciDevice_t * const pDev, uint8_t Status,
 	s_pSmpActiveDev = pDev;
 	SMP_TRACE("SMP LocalPubKeyReady status=%d\r\n", Status);
 
-	for (int i = 0; i < BT_SMP_MAX_LINK; i++)
+	BtSmpLink_t *pLink = SmpCryptoPendingTake(BT_SMP_CRYPTO_OP_PUBKEY);
+	if (pLink == nullptr ||
+		(pLink->Ctx.State != BT_SMP_STATE_PUBKEY_WAIT &&
+		 pLink->Ctx.State != BT_SMP_STATE_PUBKEY_LOCAL_WAIT))
 	{
-		BtSmpLink_t *pLink = &s_SmpLink[i];
+		return;
+	}
+	do
+	{
 
-		if (pLink->ConnHdl == BT_CONN_HDL_INVALID)
-		{
-			continue;
-		}
-
-		if (pLink->Ctx.State != BT_SMP_STATE_PUBKEY_WAIT &&
-			pLink->Ctx.State != BT_SMP_STATE_PUBKEY_LOCAL_WAIT)
-		{
-			continue;
-		}
-
-		if (Status != 0)
+		if (Status != 0 || pKeyX == nullptr || pKeyY == nullptr)
 		{
 			SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_UNSPECIFIED);
 			pLink->Ctx.State = BT_SMP_STATE_IDLE;
@@ -2054,7 +2192,7 @@ void BtSmpLocalPubKeyReady(BtHciDevice_t * const pDev, uint8_t Status,
 			SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
 			pLink->Ctx.State = BT_SMP_STATE_IDLE;
 		}
-	}
+	} while (false);
 }
 
 void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *pDhKey)
@@ -2062,17 +2200,15 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 	s_pSmpActiveDev = pDev;
 	SMP_TRACE("SMP DhKeyReady status=%d\r\n", Status);
 
-	for (int i = 0; i < BT_SMP_MAX_LINK; i++)
+	BtSmpLink_t *pLink = SmpCryptoPendingTake(BT_SMP_CRYPTO_OP_DHKEY);
+	if (pLink == nullptr || pLink->Ctx.State != BT_SMP_STATE_DHKEY_WAIT)
 	{
-		BtSmpLink_t *pLink = &s_SmpLink[i];
+		return;
+	}
+	do
+	{
 
-		if (pLink->ConnHdl == BT_CONN_HDL_INVALID ||
-			pLink->Ctx.State != BT_SMP_STATE_DHKEY_WAIT)
-		{
-			continue;
-		}
-
-		if (Status != 0)
+		if (Status != 0 || pDhKey == nullptr)
 		{
 			SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
 			pLink->Ctx.State = BT_SMP_STATE_IDLE;
@@ -2163,7 +2299,7 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 
 		// After responder Confirm, SC Just Works waits for initiator Random Na.
 		pLink->Ctx.State = BT_SMP_STATE_RANDOM_WAIT;
-	}
+	} while (false);
 }
 
 void BtSmpProcessLtkRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
@@ -2332,16 +2468,10 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		BtSmpBondAdd(ConnHdl, &pLink->Keys);
 		BtSmpPairingComplete(ConnHdl, true, &pLink->Keys);
 
-		// Single use OOB material: a successful OOB pairing consumes the
-		// pending random and confirm, the peer commitment they bind to is
-		// spent. The application generates fresh data with
-		// BtSmpOobLocalDataGen before the next OOB pairing. A failed pairing
-		// keeps the material so a retry against the same out of band exchange
-		// still works.
+		// OOB material is single use and is wiped after the link is secured.
 		if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
 		{
-			s_SmpOob.bLocalValid = false;
-			s_SmpOob.bPeerValid = false;
+			SmpOobRelease(pLink);
 		}
 
 		pLink->Ctx.State = (peerKeyDist != 0) ? BT_SMP_STATE_KEYDIST
@@ -2431,17 +2561,56 @@ void BtSmpCryptoAes128(BtHciDevice_t * const pDev,
 	}
 }
 
-int BtSmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64])
+static int SmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64],
+								   void *pOpCtx)
 {
 	(void)pDev;
-	return CryptoStatusToSmp(CryptoEcdhP256KeyGen(s_pCryptoEcdh, nullptr, pPubKey, nullptr));
+	return CryptoStatusToSmp(CryptoEcdhP256KeyGen(s_pCryptoEcdh, nullptr,
+											  pPubKey, pOpCtx));
+}
+
+int BtSmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64])
+{
+	return SmpCryptoP256KeyGen(pDev, pPubKey, nullptr);
+}
+
+static int SmpCryptoEcdh(BtHciDevice_t * const pDev,
+						 const uint8_t pPeerPubKey[64], uint8_t pDhKey[32],
+						 void *pOpCtx)
+{
+	(void)pDev;
+	return CryptoStatusToSmp(CryptoEcdhP256(s_pCryptoEcdh, nullptr,
+										 pPeerPubKey, pDhKey, pOpCtx));
 }
 
 int BtSmpCryptoEcdh(BtHciDevice_t * const pDev,
 							   const uint8_t pPeerPubKey[64], uint8_t pDhKey[32])
 {
+	return SmpCryptoEcdh(pDev, pPeerPubKey, pDhKey, nullptr);
+}
+
+static void SmpCryptoEvtHandler(CryptoDev_t * const pDev, uint32_t Op,
+								CRYPTO_STATUS Status, void *pCtx)
+{
 	(void)pDev;
-	return CryptoStatusToSmp(CryptoEcdhP256(s_pCryptoEcdh, nullptr, pPeerPubKey, pDhKey, nullptr));
+	if (pCtx != &s_SmpCryptoPending || Op != CRYPTO_CAP_ECDH_P256)
+	{
+		return;
+	}
+	uint8_t status = Status == CRYPTO_STATUS_OK ? 0 : 1;
+	if (s_SmpCryptoPending.Op == BT_SMP_CRYPTO_OP_PUBKEY)
+	{
+		BtSmpLink_t *pLink = SmpCryptoPendingFind(BT_SMP_CRYPTO_OP_PUBKEY);
+		const uint8_t *pKey = pLink != nullptr ? pLink->Ctx.LocalPubKey : nullptr;
+		BtSmpLocalPubKeyReady(s_SmpCryptoPending.pDev, status, pKey,
+							  pKey != nullptr ? pKey + 32 : nullptr);
+	}
+	else if (s_SmpCryptoPending.Op == BT_SMP_CRYPTO_OP_DHKEY)
+	{
+		BtSmpLink_t *pLink = SmpCryptoPendingFind(BT_SMP_CRYPTO_OP_DHKEY);
+		BtSmpDhKeyReady(s_SmpCryptoPending.pDev, status,
+						 pLink != nullptr ? pLink->Ctx.DhKey : nullptr);
+	}
 }
 
 void BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
@@ -2514,6 +2683,9 @@ void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes)
 	// slot - it is the target RngGet utility, called directly by BtSmpCryptoRand.
 	s_pCryptoEcdh = CryptoIsCapable(pEcdh, CRYPTO_CAP_ECDH_P256) ? pEcdh : nullptr;
 	s_pCryptoAes  = CryptoIsCapable(pAes,  CRYPTO_CAP_AES128_ECB) ? pAes  : nullptr;
+	if (s_pCryptoEcdh != nullptr) { s_pCryptoEcdh->EvtCB = SmpCryptoEvtHandler; }
+	SmpCryptoPendingClear();
+	SmpOobClear();
 
 	for (int i = 0; i < BT_SMP_MAX_LINK; i++)
 	{
@@ -2810,7 +2982,7 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 	BtSmpPairingReq_t req;
 	req.Code = BT_SMP_CODE_PAIRING_REQ;
 	req.IOCaps = s_SmpIoCaps;
-	req.OOBFlag = (s_SmpOob.bPeerValid && (s_SmpAuthReq & BT_SMP_AUTHREQ_SC)) ?
+	req.OOBFlag = (SmpOobPeerReady(pLink) && (s_SmpAuthReq & BT_SMP_AUTHREQ_SC)) ?
 				  BT_SMP_OOB_AUTH_PRESENT : BT_SMP_OOB_AUTH_NOT_PRESENT;
 	req.AuthReq = (uint8_t)(s_SmpAuthReq & ~BT_SMP_AUTHREQ_KEYPRESS);
 	req.MaxKeySize = BT_SMP_MAX_ENC_KEY_SIZE;
@@ -2836,40 +3008,38 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 __attribute__((weak))
 int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint8_t * const pConf)
 {
-	if (pRand == nullptr || pConf == nullptr)
+	if (pRand == nullptr || pConf == nullptr || s_SmpOob.bReserved ||
+		s_SmpCryptoPending.Op != BT_SMP_CRYPTO_OP_NONE ||
+		CryptoHasProp(s_pCryptoEcdh, CRYPTO_PROP_SYNC) == false)
 	{
 		return -1;
 	}
-
-	// The confirm commits to the public key, so the key pair is generated here
-	// and reused by the next pairing (SmpLocalKeyGen). Asynchronous providers
-	// are not supported on this path.
+	SmpOobClear();
 	int rc = BtSmpCryptoP256KeyGen(pDev, s_SmpOob.LocalPubKey);
-	if (rc != BT_SMP_CRYPTO_OK)
+	if (rc != BT_SMP_CRYPTO_OK ||
+		RngGet(s_SmpOob.LocalRand, sizeof(s_SmpOob.LocalRand)) == false)
 	{
-		s_SmpOob.bLocalValid = false;
+		SmpOobClear();
 		return -1;
 	}
-
-	BtSmpCryptoRand(s_SmpOob.LocalRand, 16);
-
 	uint8_t x[32];
 	SmpP256CoordBeToSmpLe(&s_SmpOob.LocalPubKey[0], x);
 	SmpF4(x, x, s_SmpOob.LocalRand, 0, pConf);
-
+	CryptoSecureWipe(x, sizeof(x));
 	memcpy(pRand, s_SmpOob.LocalRand, 16);
 	s_SmpOob.bLocalValid = true;
-
 	return 0;
 }
 
 __attribute__((weak))
 void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pConf)
 {
-	if (pRand == nullptr || pConf == nullptr)
+	if (pRand == nullptr || pConf == nullptr || s_SmpOob.bReserved)
 	{
 		return;
 	}
+	CryptoSecureWipe(s_SmpOob.PeerRand, sizeof(s_SmpOob.PeerRand));
+	CryptoSecureWipe(s_SmpOob.PeerConfirm, sizeof(s_SmpOob.PeerConfirm));
 	memcpy(s_SmpOob.PeerRand, pRand, 16);
 	memcpy(s_SmpOob.PeerConfirm, pConf, 16);
 	s_SmpOob.bPeerValid = true;
@@ -2878,7 +3048,7 @@ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pCon
 __attribute__((weak))
 void BtSmpOobDataClear(void)
 {
-	memset(&s_SmpOob, 0, sizeof(s_SmpOob));
+	if (s_SmpOob.bReserved == false) { SmpOobClear(); }
 }
 
 void BtSmpDisconnected(uint16_t ConnHdl)
