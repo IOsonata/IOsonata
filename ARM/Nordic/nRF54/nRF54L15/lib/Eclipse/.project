@@ -1251,11 +1251,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/nRF54/src/bt_app_bm.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_id_bm.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/nRF54/src/bt_id_bm.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_app_handler.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_handler.c</locationURI>
@@ -1331,6 +1326,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_host.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_id_bm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/nRF54/src/bt_id_bm.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
@@ -1339,6 +1339,11 @@
 			<name>src/bluetooth/bt_l2cap.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_l2cap.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_lesc_sd.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_lesc_sd.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_oob_rftag.cpp</name>
@@ -1396,6 +1401,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_sdp.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_sec_bm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_sec_bm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_smp.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_smp_bond_sdc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/bt_smp_bond_sdc.cpp</locationURI>
@@ -1419,11 +1434,6 @@
 			<name>src/bluetooth/peer_data_storage.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/peer_data_storage.c</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_sec_bm.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/bt_sec_bm.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/services</name>
@@ -1454,16 +1464,6 @@
 			<name>src/coredev/pwm_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/pwm_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/rng_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_lesc_sd.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_lesc_sd.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/shared_intrf.cpp</name>
@@ -1516,6 +1516,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/crypto/crypto_hw_none.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_hw_none.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crypto/crypto_psa_none.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_psa_none.cpp</locationURI>
@@ -1526,9 +1531,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_hw_none.cpp</name>
+			<name>src/crypto/rng_nrfx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_hw_none.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/display.cpp</name>

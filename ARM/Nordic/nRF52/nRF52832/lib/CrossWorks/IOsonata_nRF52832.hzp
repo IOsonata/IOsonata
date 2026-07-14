@@ -7,12 +7,14 @@
       arm_core_type="Cortex-M4"
       build_intermediate_directory="$(Configuration)"
       build_output_directory="$(Configuration)"
+      build_toolchain_directory="$(ARMGCCDIR)"
       c_preprocessor_definitions="NRF52832_XXAA"
-      c_user_include_directories="../include;../../../../include;../../../../../include;../../../../../../include;../../../../../CMSIS/Core/Include;../../../../../../../external/nRF5_SDK/modules/nrfx/mdk"
+      c_user_include_directories="../../lib/include;../../../include;../../../../include;../../../../../include;../../../../../../include;../../../../../CMSIS/Core/Include"
       gcc_c_language_standard="gnu11"
       gcc_cplusplus_language_standard="gnu++11"
       project_directory=""
-      project_type="Library" />
+      project_type="Library"
+      use_external_gcc="Yes" />
     <folder Name="src">
       <file file_name="../../../../../../src/base64.c" />
       <file file_name="../../../../../../src/cfifo.c" />
