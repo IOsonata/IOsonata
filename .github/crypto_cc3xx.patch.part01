@@ -1,0 +1,175 @@
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	return pDev->EcdsaP256Verify(pDev, PubKey, Hash, Sig, pCtx);
+ }
+ 
+@@ -338,6 +385,10 @@ static inline CRYPTO_STATUS CryptoEcdsaP256Sign(CryptoDev_t * const pDev,
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (PrivKey == NULL || Hash == NULL || Sig == NULL)
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	return pDev->EcdsaP256Sign(pDev, PrivKey, Hash, Sig, pCtx);
+ }
+ 
+diff --git a/src/crypto/crypto.cpp b/src/crypto/crypto.cpp
+index 3012de5..c717b13 100644
+--- a/src/crypto/crypto.cpp
++++ b/src/crypto/crypto.cpp
+@@ -101,9 +101,14 @@ bool CryptoCfgValidate(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg,
+ 	{
+ 		return false;			// arena must be word aligned (see CryptoCfg_t pMem)
+ 	}
+-	if ((pCfg->ReqCaps & ~CapMask) != 0)
++	uint32_t effective = CapMask | CRYPTO_CAP_SHA256 | CRYPTO_CAP_HMAC_SHA256;
++	if ((CapMask & CRYPTO_CAP_AES128_ECB) != 0)
+ 	{
+-		return false;			// requested capability not provided by this engine
++		effective |= CRYPTO_CAP_AES_CMAC | CRYPTO_CAP_AES_CCM | CRYPTO_CAP_AES_GCM;
++	}
++	if ((pCfg->ReqCaps & ~effective) != 0)
++	{
++		return false;			// requested capability is not callable through this engine
+ 	}
+ 	return true;
+ }
+@@ -144,6 +149,10 @@ CRYPTO_STATUS CryptoCmac(CryptoDev_t * const pDev, const uint8_t Key[16],
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (Key == NULL || Mac == NULL || (Len > 0 && pMsg == NULL))
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	if (pDev->Cmac != NULL)
+ 	{
+ 		return pDev->Cmac(pDev, Key, pMsg, Len, Mac, pCtx);
+@@ -389,6 +398,13 @@ CRYPTO_STATUS CryptoCcmEncrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (Key == NULL || pNonce == NULL || pTag == NULL ||
++		(AadLen > 0 && pAad == NULL) ||
++		(Len > 0 && (pPlain == NULL || pCipher == NULL)) ||
++		CcmValidate(NonceLen, TagLen, Len, AadLen) != CRYPTO_STATUS_OK)
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	if (pDev->Ccm != NULL)
+ 	{
+ 		return pDev->Ccm(pDev, 1, Key, pNonce, NonceLen, pAad, AadLen,
+@@ -398,11 +414,6 @@ CRYPTO_STATUS CryptoCcmEncrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
+-	if (CcmValidate(NonceLen, TagLen, Len, AadLen) != CRYPTO_STATUS_OK)
+-	{
+-		return CRYPTO_STATUS_FAIL;
+-	}
+-
+ 	uint8_t T[16], S0[16];
+ 	CRYPTO_STATUS st = CcmMac(pDev, Key, pNonce, NonceLen, pAad, AadLen,
+ 							  pPlain, Len, TagLen, T, pCtx);
+@@ -432,6 +443,13 @@ CRYPTO_STATUS CryptoCcmDecrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (Key == NULL || pNonce == NULL || pTag == NULL ||
++		(AadLen > 0 && pAad == NULL) ||
++		(Len > 0 && (pCipher == NULL || pPlain == NULL)) ||
++		CcmValidate(NonceLen, TagLen, Len, AadLen) != CRYPTO_STATUS_OK)
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	if (pDev->Ccm != NULL)
+ 	{
+ 		return pDev->Ccm(pDev, 0, Key, pNonce, NonceLen, pAad, AadLen,
+@@ -441,11 +459,6 @@ CRYPTO_STATUS CryptoCcmDecrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
+-	if (CcmValidate(NonceLen, TagLen, Len, AadLen) != CRYPTO_STATUS_OK)
+-	{
+-		return CRYPTO_STATUS_FAIL;
+-	}
+-
+ 	uint8_t T[16], S0[16];
+ 	CRYPTO_STATUS st = CcmCtr(pDev, Key, pNonce, NonceLen, pCipher, Len, pPlain, S0, pCtx);
+ 	if (st == CRYPTO_STATUS_OK)
+@@ -652,6 +665,12 @@ CRYPTO_STATUS CryptoGcmEncrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (Key == NULL || pIv == NULL || pTag == NULL || IvLen == 0 ||
++		TagLen < 4 || TagLen > 16 || (AadLen > 0 && pAad == NULL) ||
++		(Len > 0 && (pPlain == NULL || pCipher == NULL)))
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	if (pDev->Gcm != NULL)
+ 	{
+ 		return pDev->Gcm(pDev, 1, Key, pIv, IvLen, pAad, AadLen,
+@@ -675,6 +694,12 @@ CRYPTO_STATUS CryptoGcmDecrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+ 	{
+ 		return CRYPTO_STATUS_UNSUPPORTED;
+ 	}
++	if (Key == NULL || pIv == NULL || pTag == NULL || IvLen == 0 ||
++		TagLen < 4 || TagLen > 16 || (AadLen > 0 && pAad == NULL) ||
++		(Len > 0 && (pCipher == NULL || pPlain == NULL)))
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	if (pDev->Gcm != NULL)
+ 	{
+ 		return pDev->Gcm(pDev, 0, Key, pIv, IvLen, pAad, AadLen,
+@@ -798,6 +823,10 @@ static void Sha256Sw(const uint8_t *pMsg, size_t Len, uint8_t Digest[32])
+ CRYPTO_STATUS CryptoSha256(CryptoDev_t * const pDev, const uint8_t *pMsg,
+ 						   size_t Len, uint8_t Digest[32], void *pCtx)
+ {
++	if (Digest == NULL || (Len > 0 && pMsg == NULL))
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
+ 	if (pDev != NULL && pDev->Sha256 != NULL)
+ 	{
+ 		return pDev->Sha256(pDev, pMsg, Len, Digest, pCtx);
+@@ -811,6 +840,11 @@ CRYPTO_STATUS CryptoHmacSha256(CryptoDev_t * const pDev,
+ 							   const uint8_t *pMsg, size_t Len, uint8_t Mac[32],
+ 							   void *pCtx)
+ {
++	if (Mac == NULL || (KeyLen > 0 && pKey == NULL) || (Len > 0 && pMsg == NULL))
++	{
++		return CRYPTO_STATUS_FAIL;
++	}
++
+ 	uint8_t k0[64];
+ 	if (KeyLen > 64)
+ 	{
+@@ -925,7 +959,7 @@ static CryptoDev_t *CryptorPick(Cryptor_t * const pInst, uint32_t Cap)
+ 	for (int i = 0; i < pInst->NbEng; i++)
+ 	{
+ 		CryptoDev_t *pEng = pInst->pEng[i];
+-		if (pEng != nullptr && (pEng->Cap & Cap) == Cap)
++		if (pEng != nullptr && CryptoIsCapable(pEng, Cap))
+ 		{
+ 			return pEng;
+ 		}
+@@ -946,6 +980,61 @@ static CRYPTO_STATUS CryptorAes128Ecb(CryptoDev_t * const pDev,
+ 	return CryptoAes128Ecb(pEng, Key, In, Out, pCtx);
+ }
+ 
++static CRYPTO_STATUS CryptorCmac(CryptoDev_t * const pDev, const uint8_t Key[16],
++								 const uint8_t *pMsg, size_t Len, uint8_t Mac[16],
++								 void *pCtx)
++{
++	Cryptor_t *pInst = (Cryptor_t *)pDev->pDevData;
++	CryptoDev_t *pEng = CryptorPick(pInst, CRYPTO_CAP_AES_CMAC);
++	return pEng != nullptr ? CryptoCmac(pEng, Key, pMsg, Len, Mac, pCtx) :
++						   CRYPTO_STATUS_UNSUPPORTED;
++}
++
++static CRYPTO_STATUS CryptorCcm(CryptoDev_t * const pDev, int bEncrypt,
++								const uint8_t Key[16], const uint8_t *pNonce,
++								size_t NonceLen, const uint8_t *pAad, size_t AadLen,
