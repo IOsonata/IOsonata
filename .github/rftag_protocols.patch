@@ -1,0 +1,364 @@
+diff --git a/include/rftag/rftag_proto_t2.h b/include/rftag/rftag_proto_t2.h
+index 8c7ed33..3584769 100644
+--- a/include/rftag/rftag_proto_t2.h
++++ b/include/rftag/rftag_proto_t2.h
+@@ -13,9 +13,8 @@ NFCID1, SENS_RES and SEL_RES. This engine starts at the first tag command
+ after activation.
+ 
+ Type 2 WRITE and SECTOR SELECT acknowledge with a 4 bit ACK or NAK per the
+-specification. The engine returns them as a single byte, a byte frame
+-transport sends 8 bits. Proper hardware behavior needs a bit frame response
+-path in the transport.
++specification. The engine stores the response in one byte and reports the
++exact bit count through ResponseBits.
+ 
+ @author	Hoang Nguyen Hoan
+ @date	Jul. 7, 2026
+@@ -52,7 +51,7 @@ SOFTWARE.
+ 
+ class RFTagProtoT2 : public RFTagProto {
+ public:
+-	RFTagProtoT2() : vSector(0), vbSecSelPending(false) {}
++	RFTagProtoT2() : vSector(0), vbSecSelPending(false), vLastTxBits(0) {}
+ 
+ 	/**
+ 	 * @brief	Validate the tag for Type 2 and build the tag header.
+@@ -72,6 +71,7 @@ public:
+ 	 * @brief	Handle one Type 2 command frame.
+ 	 */
+ 	virtual int OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap);
++	virtual int ResponseBits(int TxLen) const { return TxLen > 0 ? vLastTxBits : 0; }
+ 
+ 	/**
+ 	 * @brief	Engine default 7 byte UID, NXP manufacturer prefix.
+@@ -85,6 +85,7 @@ private:
+ 
+ 	uint8_t vSector;				//!< Current sector from SECTOR SELECT
+ 	bool vbSecSelPending;			//!< First frame of a SECTOR SELECT seen
++	int vLastTxBits;				//!< Exact response length from the last frame
+ };
+ 
+ #endif // __RFTAG_PROTO_T2_H__
+diff --git a/src/rftag/rftag_proto_iso15693.cpp b/src/rftag/rftag_proto_iso15693.cpp
+index 9080475..ed42221 100644
+--- a/src/rftag/rftag_proto_iso15693.cpp
++++ b/src/rftag/rftag_proto_iso15693.cpp
+@@ -147,7 +147,7 @@ int RFTagProtoIso15693::ReqStart(const uint8_t *pRx, int RxLen, bool *bForMe)
+ 
+ static int Iso15693Error(uint8_t *pTx, int TxCap, uint8_t Err)
+ {
+-	if (TxCap < 2)
++	if (pTx == nullptr || TxCap < 2)
+ 	{
+ 		return 0;
+ 	}
+@@ -166,7 +166,7 @@ int RFTagProtoIso15693::Inventory(uint8_t *pTx, int TxCap)
+ 		return 0;
+ 	}
+ 
+-	if (TxCap < 2 + ISO15693_UID_LEN)
++	if (pTx == nullptr || TxCap < 2 + ISO15693_UID_LEN)
+ 	{
+ 		return 0;
+ 	}
+@@ -195,23 +195,25 @@ int RFTagProtoIso15693::ReadSingle(const uint8_t *pRx, int RxLen, int Idx,
+ 		return Iso15693Error(pTx, TxCap, ERR_BLOCK_NA);
+ 	}
+ 
+-	int n = 0;
++	int n = bOption ? 2 : 1;
+ 
+-	pTx[n++] = 0x00;					// response flags, no error
++	if (pTx == nullptr || n + ISO15693_BLOCK_SIZE > TxCap)
++	{
++		return 0;
++	}
++
++	pTx[0] = 0x00;					// response flags, no error
+ 	if (bOption)
+ 	{
+-		pTx[n++] = 0x00;				// block security status
++		pTx[1] = 0x00;				// block security status
+ 	}
+ 
+-	if (n + ISO15693_BLOCK_SIZE > TxCap)
++	if (vpTag->MemRead(addr, &pTx[n], ISO15693_BLOCK_SIZE) != ISO15693_BLOCK_SIZE)
+ 	{
+ 		return 0;
+ 	}
+ 
+-	vpTag->MemRead(addr, &pTx[n], ISO15693_BLOCK_SIZE);
+-	n += ISO15693_BLOCK_SIZE;
+-
+-	return n;
++	return n + ISO15693_BLOCK_SIZE;
+ }
+ 
+ int RFTagProtoIso15693::ReadMultiple(const uint8_t *pRx, int RxLen, int Idx,
+@@ -232,27 +234,27 @@ int RFTagProtoIso15693::ReadMultiple(const uint8_t *pRx, int RxLen, int Idx,
+ 		return Iso15693Error(pTx, TxCap, ERR_BLOCK_NA);
+ 	}
+ 
+-	int n = 0;
++	uint32_t need = 1U + total + (bOption ? count : 0U);
++	if (pTx == nullptr || TxCap < 0 || need > (uint32_t)TxCap)
++	{
++		return 0;
++	}
+ 
++	int n = 0;
+ 	pTx[n++] = 0x00;
+ 
+ 	for (uint32_t b = 0; b < count; b++)
+ 	{
+ 		if (bOption)
+ 		{
+-			if (n + 1 > TxCap)
+-			{
+-				return 0;
+-			}
+ 			pTx[n++] = 0x00;			// block security status
+ 		}
+ 
+-		if (n + ISO15693_BLOCK_SIZE > TxCap)
++		if (vpTag->MemRead(addr + b * ISO15693_BLOCK_SIZE, &pTx[n],
++						   ISO15693_BLOCK_SIZE) != ISO15693_BLOCK_SIZE)
+ 		{
+ 			return 0;
+ 		}
+-
+-		vpTag->MemRead(addr + b * ISO15693_BLOCK_SIZE, &pTx[n], ISO15693_BLOCK_SIZE);
+ 		n += ISO15693_BLOCK_SIZE;
+ 	}
+ 
+@@ -282,14 +284,18 @@ int RFTagProtoIso15693::WriteSingle(const uint8_t *pRx, int RxLen, int Idx,
+ 		return Iso15693Error(pTx, TxCap, ERR_BLOCK_NA);
+ 	}
+ 
+-	vpTag->MemWrite(addr, &pRx[Idx + 1], ISO15693_BLOCK_SIZE);
+-	vpTag->EvtHandler(RFTAG_EVT_MEM_CHANGED, addr, ISO15693_BLOCK_SIZE);
++	if (vpTag->MemWrite(addr, &pRx[Idx + 1], ISO15693_BLOCK_SIZE) !=
++		ISO15693_BLOCK_SIZE)
++	{
++		return Iso15693Error(pTx, TxCap, ERR_WRITE_FAILED);
++	}
+ 
+-	if (TxCap < 1)
++	if (pTx == nullptr || TxCap < 1)
+ 	{
+ 		return 0;
+ 	}
+ 
++	vpTag->EvtHandler(RFTAG_EVT_MEM_CHANGED, addr, ISO15693_BLOCK_SIZE);
+ 	pTx[0] = 0x00;		// response flags, no error
+ 	return 1;
+ }
+@@ -304,7 +310,7 @@ int RFTagProtoIso15693::GetSysInfo(uint8_t *pTx, int TxCap)
+ 	}
+ 
+ 	// Flags, info flags, UID, DSFID, AFI, block count and size, IC reference
+-	if (TxCap < 2 + ISO15693_UID_LEN + 4)
++	if (pTx == nullptr || TxCap < 2 + ISO15693_UID_LEN + 4)
+ 	{
+ 		return 0;
+ 	}
+@@ -417,12 +423,20 @@ int RFTagProtoIso15693::OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int
+ 			{
+ 				return Iso15693Error(pTx, TxCap, ERR_NOT_RECOGNIZED);
+ 			}
++			if (pTx == nullptr || TxCap < 1)
++			{
++				return 0;
++			}
+ 			vbSelected = true;
+ 			vbQuiet = false;
+ 			pTx[0] = 0x00;
+ 			return 1;
+ 
+ 		case CMD_RESET_TO_READY:
++			if (pTx == nullptr || TxCap < 1)
++			{
++				return 0;
++			}
+ 			vbSelected = false;
+ 			vbQuiet = false;
+ 			pTx[0] = 0x00;
+diff --git a/src/rftag/rftag_proto_t2.cpp b/src/rftag/rftag_proto_t2.cpp
+index 0bc0bce..b06cb8f 100644
+--- a/src/rftag/rftag_proto_t2.cpp
++++ b/src/rftag/rftag_proto_t2.cpp
+@@ -121,7 +121,8 @@ void RFTagProtoT2::BuildHeader()
+ 
+ int RFTagProtoT2::CmdRead(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap)
+ {
+-	if (RxLen < 2 || TxCap < T2T_READ_BLOCKS * T2T_BLOCK_SIZE)
++	vLastTxBits = 0;
++	if (RxLen < 2 || pTx == nullptr || TxCap < 1)
+ 	{
+ 		return 0;
+ 	}
+@@ -132,26 +133,37 @@ int RFTagProtoT2::CmdRead(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap
+ 	if (addr >= vpTag->MemSize())
+ 	{
+ 		pTx[0] = T2T_NAK;
++		vLastTxBits = 4;
+ 		return 1;
+ 	}
+ 
+ 	// 16 bytes from the image, zero filled past the end of memory.
+ 	int n = T2T_READ_BLOCKS * T2T_BLOCK_SIZE;
++	if (TxCap < n)
++	{
++		return 0;
++	}
+ 
+ 	memset(pTx, 0, n);
+ 
+ 	int avail = vpTag->MemRead(addr, pTx, n);
+-
+-	(void)avail;
++	if (avail <= 0)
++	{
++		pTx[0] = T2T_NAK;
++		vLastTxBits = 4;
++		return 1;
++	}
+ 
+ 	vpTag->EvtHandler(RFTAG_EVT_READ, addr, n);
++	vLastTxBits = n * 8;
+ 
+ 	return n;
+ }
+ 
+ int RFTagProtoT2::CmdWrite(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap)
+ {
+-	if (RxLen < 6 || TxCap < 1)
++	vLastTxBits = 0;
++	if (RxLen < 6 || pTx == nullptr || TxCap < 1)
+ 	{
+ 		return 0;
+ 	}
+@@ -164,6 +176,7 @@ int RFTagProtoT2::CmdWrite(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCa
+ 	if (blk < 4 || vpTag->ReadOnly())
+ 	{
+ 		pTx[0] = T2T_NAK;
++		vLastTxBits = 4;
+ 		return 1;
+ 	}
+ 
+@@ -172,18 +185,21 @@ int RFTagProtoT2::CmdWrite(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCa
+ 	if (addr + T2T_BLOCK_SIZE > vpTag->MemSize())
+ 	{
+ 		pTx[0] = T2T_NAK;
++		vLastTxBits = 4;
+ 		return 1;
+ 	}
+ 
+ 	if (vpTag->MemWrite(addr, &pRx[2], T2T_BLOCK_SIZE) != T2T_BLOCK_SIZE)
+ 	{
+ 		pTx[0] = T2T_NAK;
++		vLastTxBits = 4;
+ 		return 1;
+ 	}
+ 
+ 	vpTag->EvtHandler(RFTAG_EVT_MEM_CHANGED, addr, T2T_BLOCK_SIZE);
+ 
+ 	pTx[0] = T2T_ACK;
++	vLastTxBits = 4;
+ 	return 1;
+ }
+ 
+@@ -202,6 +218,7 @@ bool RFTagProtoT2::Init(RFTag * const pTag)
+ 	vpTag = pTag;
+ 	vSector = 0;
+ 	vbSecSelPending = false;
++	vLastTxBits = 0;
+ 
+ 	BuildHeader();
+ 
+@@ -210,6 +227,7 @@ bool RFTagProtoT2::Init(RFTag * const pTag)
+ 
+ int RFTagProtoT2::OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap)
+ {
++	vLastTxBits = 0;
+ 	if (vpTag == nullptr || pRx == nullptr || RxLen < 1)
+ 	{
+ 		return 0;
+@@ -229,9 +247,10 @@ int RFTagProtoT2::OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap
+ 
+ 		if ((uint32_t)pRx[0] * 256u * T2T_BLOCK_SIZE >= vpTag->MemSize())
+ 		{
+-			if (TxCap >= 1)
++			if (pTx != nullptr && TxCap >= 1)
+ 			{
+ 				pTx[0] = T2T_NAK;
++				vLastTxBits = 4;
+ 				return 1;
+ 			}
+ 			return 0;
+@@ -252,15 +271,17 @@ int RFTagProtoT2::OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap
+ 
+ 		case T2T_CMD_SECTOR_SELECT:
+ 			// First frame, 0xC2 0xFF. Acknowledge and wait for the number.
+-			if (RxLen >= 2 && pRx[1] == 0xFF && TxCap >= 1)
++			if (RxLen >= 2 && pRx[1] == 0xFF && pTx != nullptr && TxCap >= 1)
+ 			{
+ 				vbSecSelPending = true;
+ 				pTx[0] = T2T_ACK;
++				vLastTxBits = 4;
+ 				return 1;
+ 			}
+-			if (TxCap >= 1)
++			if (pTx != nullptr && TxCap >= 1)
+ 			{
+ 				pTx[0] = T2T_NAK;
++				vLastTxBits = 4;
+ 				return 1;
+ 			}
+ 			return 0;
+@@ -270,9 +291,10 @@ int RFTagProtoT2::OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap
+ 			return 0;
+ 
+ 		default:
+-			if (TxCap >= 1)
++			if (pTx != nullptr && TxCap >= 1)
+ 			{
+ 				pTx[0] = T2T_NAK;
++				vLastTxBits = 4;
+ 				return 1;
+ 			}
+ 			return 0;
+diff --git a/src/rftag/rftag_proto_t4.cpp b/src/rftag/rftag_proto_t4.cpp
+index 466feeb..f6df94c 100644
+--- a/src/rftag/rftag_proto_t4.cpp
++++ b/src/rftag/rftag_proto_t4.cpp
+@@ -54,6 +54,7 @@ using namespace std;
+ #define ISO7816_SW_WRONG_LEN	0x6700
+ #define ISO7816_SW_NOT_ALLOWED	0x6982
+ #define ISO7816_SW_FILE_NOT_FOUND	0x6A82
++#define ISO7816_SW_MEMORY_FAILURE	0x6581
+ #define ISO7816_SW_NO_SPACE		0x6A84
+ #define ISO7816_SW_WRONG_P1P2	0x6A86
+ #define ISO7816_SW_INS_NOT_SUPP	0x6D00
+@@ -92,7 +93,8 @@ static int T4tRespSw(uint8_t *pTx, int TxCap, uint16_t Sw)
+ 
+ static int T4tRespData(uint8_t *pTx, int TxCap, const uint8_t *pData, int DataLen, uint16_t Sw)
+ {
+-	if (pTx == nullptr || TxCap < 2)
++	if (pTx == nullptr || TxCap < 2 || DataLen < 0 ||
++		(DataLen > 0 && pData == nullptr))
+ 	{
+ 		return 0;
+ 	}
+@@ -266,7 +268,10 @@ int RFTagProtoT4::UpdateBinary(const uint8_t *pRx, int RxLen, uint8_t *pTx, int
+ 
+ 	if (lc > 0)
+ 	{
+-		vpTag->MemWrite(off, &pRx[5], lc);
++		if (vpTag->MemWrite(off, &pRx[5], lc) != lc)
++		{
++			return T4tRespSw(pTx, TxCap, ISO7816_SW_MEMORY_FAILURE);
++		}
+ 		vpTag->EvtHandler(RFTAG_EVT_MEM_CHANGED, off, lc);
+ 	}
+ 
