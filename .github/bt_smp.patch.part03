@@ -1,0 +1,87 @@
++		BtSmpLink_t *pLink = SmpCryptoPendingFind(BT_SMP_CRYPTO_OP_DHKEY);
++		BtSmpDhKeyReady(s_SmpCryptoPending.pDev, status,
++						 pLink != nullptr ? pLink->Ctx.DhKey : nullptr);
++	}
+ }
+ 
+ void BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
+@@ -2514,6 +2683,9 @@ void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes)
+ 	// slot - it is the target RngGet utility, called directly by BtSmpCryptoRand.
+ 	s_pCryptoEcdh = CryptoIsCapable(pEcdh, CRYPTO_CAP_ECDH_P256) ? pEcdh : nullptr;
+ 	s_pCryptoAes  = CryptoIsCapable(pAes,  CRYPTO_CAP_AES128_ECB) ? pAes  : nullptr;
++	if (s_pCryptoEcdh != nullptr) { s_pCryptoEcdh->EvtCB = SmpCryptoEvtHandler; }
++	SmpCryptoPendingClear();
++	SmpOobClear();
+ 
+ 	for (int i = 0; i < BT_SMP_MAX_LINK; i++)
+ 	{
+@@ -2810,7 +2982,7 @@ void BtSmpStartPairing(uint16_t ConnHdl)
+ 	BtSmpPairingReq_t req;
+ 	req.Code = BT_SMP_CODE_PAIRING_REQ;
+ 	req.IOCaps = s_SmpIoCaps;
+-	req.OOBFlag = (s_SmpOob.bPeerValid && (s_SmpAuthReq & BT_SMP_AUTHREQ_SC)) ?
++	req.OOBFlag = (SmpOobPeerReady(pLink) && (s_SmpAuthReq & BT_SMP_AUTHREQ_SC)) ?
+ 				  BT_SMP_OOB_AUTH_PRESENT : BT_SMP_OOB_AUTH_NOT_PRESENT;
+ 	req.AuthReq = (uint8_t)(s_SmpAuthReq & ~BT_SMP_AUTHREQ_KEYPRESS);
+ 	req.MaxKeySize = BT_SMP_MAX_ENC_KEY_SIZE;
+@@ -2836,40 +3008,38 @@ void BtSmpStartPairing(uint16_t ConnHdl)
+ __attribute__((weak))
+ int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint8_t * const pConf)
+ {
+-	if (pRand == nullptr || pConf == nullptr)
++	if (pRand == nullptr || pConf == nullptr || s_SmpOob.bReserved ||
++		s_SmpCryptoPending.Op != BT_SMP_CRYPTO_OP_NONE ||
++		CryptoHasProp(s_pCryptoEcdh, CRYPTO_PROP_SYNC) == false)
+ 	{
+ 		return -1;
+ 	}
+-
+-	// The confirm commits to the public key, so the key pair is generated here
+-	// and reused by the next pairing (SmpLocalKeyGen). Asynchronous providers
+-	// are not supported on this path.
++	SmpOobClear();
+ 	int rc = BtSmpCryptoP256KeyGen(pDev, s_SmpOob.LocalPubKey);
+-	if (rc != BT_SMP_CRYPTO_OK)
++	if (rc != BT_SMP_CRYPTO_OK ||
++		RngGet(s_SmpOob.LocalRand, sizeof(s_SmpOob.LocalRand)) == false)
+ 	{
+-		s_SmpOob.bLocalValid = false;
++		SmpOobClear();
+ 		return -1;
+ 	}
+-
+-	BtSmpCryptoRand(s_SmpOob.LocalRand, 16);
+-
+ 	uint8_t x[32];
+ 	SmpP256CoordBeToSmpLe(&s_SmpOob.LocalPubKey[0], x);
+ 	SmpF4(x, x, s_SmpOob.LocalRand, 0, pConf);
+-
++	CryptoSecureWipe(x, sizeof(x));
+ 	memcpy(pRand, s_SmpOob.LocalRand, 16);
+ 	s_SmpOob.bLocalValid = true;
+-
+ 	return 0;
+ }
+ 
+ __attribute__((weak))
+ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pConf)
+ {
+-	if (pRand == nullptr || pConf == nullptr)
++	if (pRand == nullptr || pConf == nullptr || s_SmpOob.bReserved)
+ 	{
+ 		return;
+ 	}
++	CryptoSecureWipe(s_SmpOob.PeerRand, sizeof(s_SmpOob.PeerRand));
++	CryptoSecureWipe(s_SmpOob.PeerConfirm, sizeof(s_SmpOob.PeerConfirm));
+ 	memcpy(s_SmpOob.PeerRand, pRand, 16);
+ 	memcpy(s_SmpOob.PeerConfirm, pConf, 16);
+ 	s_SmpOob.bPeerValid = true;
+@@ -2878,7 +3048,7 @@ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pCon
+ __attribute__((weak))
+ void BtSmpOobDataClear(void)
+ {
+-	memset(&s_SmpOob, 0, sizeof(s_SmpOob));
++	if (s_SmpOob.bReserved == false) { SmpOobClear(); }
+ }
+ 
+ void BtSmpDisconnected(uint16_t ConnHdl)
