@@ -825,10 +825,23 @@ int main()
 
     //g_Uart.Disable();
 
-    BtAppInit(&s_BleAppCfg);
-    UartBleOobInit();
+    if (!BtAppInit(&s_BleAppCfg))
+    {
+        g_Uart.printf("BtAppInit failed\r\n");
+        while (true)
+        {
+            __NOP();
+        }
+    }
 
+    UartBleOobInit();
     BtAppRun();
 
-	return 0;
+    // BtAppRun is not expected to return. Keep embedded startup from falling
+    // through newlib exit if a target implementation does return.
+    g_Uart.printf("BtAppRun returned\r\n");
+    while (true)
+    {
+        __NOP();
+    }
 }
