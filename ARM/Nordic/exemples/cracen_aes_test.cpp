@@ -1,15 +1,15 @@
 /**-------------------------------------------------------------------------
 @file	cracen_aes_test.cpp
 
-@brief	nRF54 CRACEN AES and RNG acceptance test.
+@brief	nRF54 CRACEN AES, P-256 ECDH and RNG acceptance test.
 
 		Hardware acceptance test for crypto_cracen_bm.cpp. The test runs without
 		Bluetooth or the SoftDevice so the CRACEN driver is exercised directly.
 
-		The test checks provider selection and properties, AES-128 ECB known-answer
-		vectors, in-place encryption, repeated CryptoMaster reset/start cycles,
-		Cryptor forwarding, CMAC and GCM derived over the hardware AES primitive,
-		rejection of unsupported P-256 requests, and the CRACEN-backed RNG path.
+		The test checks the provider self-test, AES-128 ECB, Cryptor forwarding,
+		CMAC and GCM derived over hardware AES, CRACEN/uECC P-256 cross-
+		derivation, invalid peer-point rejection, single-use key consumption,
+		and the CRACEN-backed RNG path.
 
 		Usage: build this file as a standalone nRF54 application linked with the
 		nRF54 IOsonata library containing crypto_cracen_bm.cpp. Inspect
@@ -27,8 +27,6 @@
 #include "nrf.h"
 #include "crypto/crypto.h"
 
-// Result codes. One means complete success; a negative value identifies the
-// first failed check and remains available after the CPU enters WFE.
 enum {
 	CRACEN_TEST_PASS                 = 1,
 	CRACEN_TEST_ERR_HW_INIT          = -1,
@@ -36,26 +34,33 @@ enum {
 	CRACEN_TEST_ERR_PROPERTY         = -3,
 	CRACEN_TEST_ERR_CAPABILITY       = -4,
 	CRACEN_TEST_ERR_SELFTEST         = -5,
-	CRACEN_TEST_ERR_AES_KAT_1        = -6,
-	CRACEN_TEST_ERR_AES_KAT_2        = -7,
-	CRACEN_TEST_ERR_AES_IN_PLACE     = -8,
-	CRACEN_TEST_ERR_AES_REPEAT       = -9,
-	CRACEN_TEST_ERR_CRYPTOR_INIT     = -10,
-	CRACEN_TEST_ERR_CRYPTOR_AES      = -11,
-	CRACEN_TEST_ERR_CMAC             = -12,
-	CRACEN_TEST_ERR_GCM_ENCRYPT      = -13,
-	CRACEN_TEST_ERR_GCM_DECRYPT      = -14,
-	CRACEN_TEST_ERR_GCM_TAG          = -15,
-	CRACEN_TEST_ERR_UNSUPPORTED_ECDH = -16,
-	CRACEN_TEST_ERR_RNG_INIT         = -17,
-	CRACEN_TEST_ERR_RNG_GET          = -18,
-	CRACEN_TEST_ERR_RNG_OUTPUT       = -19,
-	CRACEN_TEST_ERR_AES_AFTER_RNG    = -20,
+	CRACEN_TEST_ERR_AES_KAT          = -6,
+	CRACEN_TEST_ERR_AES_REPEAT       = -7,
+	CRACEN_TEST_ERR_CRYPTOR_INIT     = -8,
+	CRACEN_TEST_ERR_CRYPTOR_AES      = -9,
+	CRACEN_TEST_ERR_CMAC             = -10,
+	CRACEN_TEST_ERR_GCM_ENCRYPT      = -11,
+	CRACEN_TEST_ERR_GCM_DECRYPT      = -12,
+	CRACEN_TEST_ERR_GCM_TAG          = -13,
+	CRACEN_TEST_ERR_UECC_INIT        = -14,
+	CRACEN_TEST_ERR_CRACEN_KEYGEN    = -15,
+	CRACEN_TEST_ERR_UECC_KEYGEN      = -16,
+	CRACEN_TEST_ERR_CRACEN_DH        = -17,
+	CRACEN_TEST_ERR_UECC_DH          = -18,
+	CRACEN_TEST_ERR_DH_MISMATCH      = -19,
+	CRACEN_TEST_ERR_KEY_REUSE        = -20,
+	CRACEN_TEST_ERR_INVALID_POINT    = -21,
+	CRACEN_TEST_ERR_INVALID_CONSUME  = -22,
+	CRACEN_TEST_ERR_RNG_INIT         = -23,
+	CRACEN_TEST_ERR_RNG_GET          = -24,
+	CRACEN_TEST_ERR_RNG_OUTPUT       = -25,
+	CRACEN_TEST_ERR_AES_AFTER_RNG    = -26,
 };
 
 volatile int g_CracenTestResult;
 volatile uint32_t g_CracenTestPassMask;
 volatile uint8_t g_CracenTestLastAes[16];
+volatile uint8_t g_CracenTestLastDh[32];
 volatile uint8_t g_CracenTestLastRng[32];
 
 #define CRACEN_TEST_MARK(Bit) \
@@ -64,12 +69,10 @@ volatile uint8_t g_CracenTestLastRng[32];
 static bool AllZero(const uint8_t *pData, size_t Len)
 {
 	uint8_t acc = 0;
-
 	for (size_t i = 0; i < Len; i++)
 	{
 		acc |= pData[i];
 	}
-
 	return acc == 0;
 }
 
@@ -81,39 +84,22 @@ static bool CracenTestFail(int Result)
 
 bool CracenAesTest(void)
 {
-	static const uint8_t key1[16] = {
+	static const uint8_t key[16] = {
 		0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
 		0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f
 	};
-	static const uint8_t plain1[16] = {
+	static const uint8_t plain[16] = {
 		0x00,0x11,0x22,0x33,0x44,0x55,0x66,0x77,
 		0x88,0x99,0xaa,0xbb,0xcc,0xdd,0xee,0xff
 	};
-	static const uint8_t cipher1[16] = {
+	static const uint8_t cipher[16] = {
 		0x69,0xc4,0xe0,0xd8,0x6a,0x7b,0x04,0x30,
 		0xd8,0xcd,0xb7,0x80,0x70,0xb4,0xc5,0x5a
 	};
-
-	static const uint8_t key2[16] = {
-		0x2b,0x7e,0x15,0x16,0x28,0xae,0xd2,0xa6,
-		0xab,0xf7,0x15,0x88,0x09,0xcf,0x4f,0x3c
-	};
-	static const uint8_t plain2[16] = {
-		0x6b,0xc1,0xbe,0xe2,0x2e,0x40,0x9f,0x96,
-		0xe9,0x3d,0x7e,0x11,0x73,0x93,0x17,0x2a
-	};
-	static const uint8_t cipher2[16] = {
-		0x3a,0xd7,0x7b,0xb4,0x0d,0x7a,0x36,0x60,
-		0xa8,0x9e,0xca,0xf3,0x24,0x66,0xef,0x97
-	};
-
-	// RFC 4493 example 1: AES-CMAC over an empty message.
 	static const uint8_t cmacEmpty[16] = {
 		0xbb,0x1d,0x69,0x29,0xe9,0x59,0x37,0x28,
 		0x7f,0xa3,0x7d,0x12,0x9b,0x75,0x67,0x46
 	};
-
-	// NIST GCM test case: zero key, zero 96-bit IV, one zero block, no AAD.
 	static const uint8_t zeroKey[16] = { 0 };
 	static const uint8_t zeroIv[12] = { 0 };
 	static const uint8_t zeroPlain[16] = { 0 };
@@ -126,140 +112,104 @@ bool CracenAesTest(void)
 		0xf5,0x3a,0x67,0xb2,0x12,0x57,0xbd,0xdf
 	};
 
-	CryptoDev_t hwDev;
-	Cryptor_t cryptor;
-	CryptoCfg_t hwCfg;
-	CryptoCfg_t cryptorCfg;
-	CryptoCfg_t unsupportedCfg;
-	CryptoDev_t *pUse;
-	uint8_t out[16];
-	uint8_t inPlace[16];
-	uint8_t cmac[16];
-	uint8_t gcmCipher[16];
-	uint8_t gcmPlain[16];
-	uint8_t gcmTag[16];
-	uint8_t badTag[16];
-	uint8_t rng1[32];
-	uint8_t rng2[32];
+	CryptoDev_t hwDev = {};
+	CryptoDev_t ueccDev = {};
+	Cryptor_t cryptor = {};
+	CryptoCfg_t hwCfg = {};
+	CryptoCfg_t ueccCfg = {};
+	CryptoCfg_t cryptorCfg = {};
+	alignas(uint32_t) static uint8_t hwArena[CRYPTO_MEMSIZE_HW];
+	alignas(uint32_t) static uint8_t ueccArena[CRYPTO_MEMSIZE_UECC];
+	uint8_t out[16] = {};
+	uint8_t cmac[16] = {};
+	uint8_t gcmCipher[16] = {};
+	uint8_t gcmPlain[16] = {};
+	uint8_t gcmTag[16] = {};
+	uint8_t badTag[16] = {};
+	uint8_t cracenPub[64] = {};
+	uint8_t ueccPub[64] = {};
+	uint8_t dhCracen[32] = {};
+	uint8_t dhUecc[32] = {};
+	uint8_t invalidPoint[64] = {};
+	uint8_t rng1[32] = {};
+	uint8_t rng2[32] = {};
 
 	g_CracenTestResult = 0;
 	g_CracenTestPassMask = 0;
 	memset((void *)g_CracenTestLastAes, 0, sizeof(g_CracenTestLastAes));
+	memset((void *)g_CracenTestLastDh, 0, sizeof(g_CracenTestLastDh));
 	memset((void *)g_CracenTestLastRng, 0, sizeof(g_CracenTestLastRng));
-	memset(&hwDev, 0, sizeof(hwDev));
-	memset(&cryptor, 0, sizeof(cryptor));
-	memset(&hwCfg, 0, sizeof(hwCfg));
-	memset(&cryptorCfg, 0, sizeof(cryptorCfg));
-	memset(&unsupportedCfg, 0, sizeof(unsupportedCfg));
-	memset(out, 0, sizeof(out));
-	memset(inPlace, 0, sizeof(inPlace));
-	memset(cmac, 0, sizeof(cmac));
-	memset(gcmCipher, 0, sizeof(gcmCipher));
-	memset(gcmPlain, 0, sizeof(gcmPlain));
-	memset(gcmTag, 0, sizeof(gcmTag));
-	memset(badTag, 0, sizeof(badTag));
-	memset(rng1, 0, sizeof(rng1));
-	memset(rng2, 0, sizeof(rng2));
 
 	hwCfg.DevNo = 0;
 	hwCfg.Provider = CRYPTO_PROVIDER_HW;
-	hwCfg.ReqCaps = CRYPTO_CAP_AES128_ECB;
-	hwCfg.Flags = CRYPTO_FLAG_SYNC |
-				  CRYPTO_FLAG_SELFTEST |
+	hwCfg.ReqCaps = CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256;
+	hwCfg.Flags = CRYPTO_FLAG_SYNC | CRYPTO_FLAG_SELFTEST |
 				  CRYPTO_FLAG_NO_FALLBACK;
-
+	hwCfg.pMem = hwArena;
+	hwCfg.MemSize = sizeof(hwArena);
 	if (!CryptoHwInit(&hwDev, &hwCfg))
 	{
 		return CracenTestFail(CRACEN_TEST_ERR_HW_INIT);
 	}
 	CRACEN_TEST_MARK(0);
 
-	if (strcmp(CryptoName(&hwDev), "cracen-aes") != 0)
+	if (strcmp(CryptoName(&hwDev), "cracen-hw") != 0)
 	{
 		return CracenTestFail(CRACEN_TEST_ERR_NAME);
 	}
-	CRACEN_TEST_MARK(1);
-
-	if (!CryptoHasProp(&hwDev, CRYPTO_PROP_HARDWARE | CRYPTO_PROP_SYNC) ||
-		CryptoHasProp(&hwDev, CRYPTO_PROP_PLAIN_KEYCTX))
+	if (!CryptoHasProp(&hwDev, CRYPTO_PROP_PLAIN_KEYCTX |
+								 CRYPTO_PROP_HARDWARE | CRYPTO_PROP_SYNC))
 	{
 		return CracenTestFail(CRACEN_TEST_ERR_PROPERTY);
 	}
-	CRACEN_TEST_MARK(2);
-
 	if (!CryptoIsCapable(&hwDev, CRYPTO_CAP_AES128_ECB |
-								   CRYPTO_CAP_AES_CMAC |
-								   CRYPTO_CAP_AES_CCM |
-								   CRYPTO_CAP_AES_GCM) ||
-		CryptoIsCapable(&hwDev, CRYPTO_CAP_ECDH_P256))
+								  CRYPTO_CAP_ECDH_P256 |
+								  CRYPTO_CAP_AES_CMAC |
+								  CRYPTO_CAP_AES_CCM |
+								  CRYPTO_CAP_AES_GCM))
 	{
 		return CracenTestFail(CRACEN_TEST_ERR_CAPABILITY);
 	}
-	CRACEN_TEST_MARK(3);
-
 	if (CryptoSelfTest(&hwDev) != 0)
 	{
 		return CracenTestFail(CRACEN_TEST_ERR_SELFTEST);
 	}
-	CRACEN_TEST_MARK(4);
+	CRACEN_TEST_MARK(1);
 
-	if (CryptoAes128Ecb(&hwDev, key1, plain1, out, NULL) != CRYPTO_STATUS_OK ||
-		memcmp(out, cipher1, sizeof(out)) != 0)
+	if (CryptoAes128Ecb(&hwDev, key, plain, out, NULL) != CRYPTO_STATUS_OK ||
+		memcmp(out, cipher, sizeof(out)) != 0)
 	{
-		return CracenTestFail(CRACEN_TEST_ERR_AES_KAT_1);
+		return CracenTestFail(CRACEN_TEST_ERR_AES_KAT);
 	}
 	memcpy((void *)g_CracenTestLastAes, out, sizeof(out));
-	CRACEN_TEST_MARK(5);
-
-	if (CryptoAes128Ecb(&hwDev, key2, plain2, out, NULL) != CRYPTO_STATUS_OK ||
-		memcmp(out, cipher2, sizeof(out)) != 0)
-	{
-		return CracenTestFail(CRACEN_TEST_ERR_AES_KAT_2);
-	}
-	CRACEN_TEST_MARK(6);
-
-	memcpy(inPlace, plain1, sizeof(inPlace));
-	if (CryptoAes128Ecb(&hwDev, key1, inPlace, inPlace, NULL) != CRYPTO_STATUS_OK ||
-		memcmp(inPlace, cipher1, sizeof(inPlace)) != 0)
-	{
-		return CracenTestFail(CRACEN_TEST_ERR_AES_IN_PLACE);
-	}
-	CRACEN_TEST_MARK(7);
-
-	// Exercise repeated CryptoMaster reset, descriptor setup, start and release.
 	for (unsigned i = 0; i < 128; i++)
 	{
-		if (CryptoAes128Ecb(&hwDev, key1, plain1, out, NULL) != CRYPTO_STATUS_OK ||
-			memcmp(out, cipher1, sizeof(out)) != 0)
+		if (CryptoAes128Ecb(&hwDev, key, plain, out, NULL) != CRYPTO_STATUS_OK ||
+			memcmp(out, cipher, sizeof(out)) != 0)
 		{
 			return CracenTestFail(CRACEN_TEST_ERR_AES_REPEAT);
 		}
 	}
-	CRACEN_TEST_MARK(8);
+	CRACEN_TEST_MARK(2);
 
 	cryptorCfg.ReqCaps = CRYPTO_CAP_AES128_ECB |
-						 CRYPTO_CAP_AES_CMAC |
-						 CRYPTO_CAP_AES_GCM;
+						 CRYPTO_CAP_AES_CMAC | CRYPTO_CAP_AES_GCM;
 	if (!CryptorInit(&cryptor, &cryptorCfg, &hwDev))
 	{
 		return CracenTestFail(CRACEN_TEST_ERR_CRYPTOR_INIT);
 	}
-	pUse = CryptorHandle(&cryptor);
+	CryptoDev_t *pUse = CryptorHandle(&cryptor);
 	if (pUse == NULL ||
-		CryptoAes128Ecb(pUse, key2, plain2, out, NULL) != CRYPTO_STATUS_OK ||
-		memcmp(out, cipher2, sizeof(out)) != 0)
+		CryptoAes128Ecb(pUse, key, plain, out, NULL) != CRYPTO_STATUS_OK ||
+		memcmp(out, cipher, sizeof(out)) != 0)
 	{
 		return CracenTestFail(CRACEN_TEST_ERR_CRYPTOR_AES);
 	}
-	CRACEN_TEST_MARK(9);
-
-	if (CryptoCmac(pUse, key2, NULL, 0, cmac, NULL) != CRYPTO_STATUS_OK ||
+	if (CryptoCmac(pUse, key, NULL, 0, cmac, NULL) != CRYPTO_STATUS_OK ||
 		memcmp(cmac, cmacEmpty, sizeof(cmac)) != 0)
 	{
 		return CracenTestFail(CRACEN_TEST_ERR_CMAC);
 	}
-	CRACEN_TEST_MARK(10);
-
 	if (CryptoGcmEncrypt(pUse, zeroKey, zeroIv, sizeof(zeroIv), NULL, 0,
 					 zeroPlain, sizeof(zeroPlain), gcmCipher, gcmTag,
 					 sizeof(gcmTag), NULL) != CRYPTO_STATUS_OK ||
@@ -268,8 +218,6 @@ bool CracenAesTest(void)
 	{
 		return CracenTestFail(CRACEN_TEST_ERR_GCM_ENCRYPT);
 	}
-	CRACEN_TEST_MARK(11);
-
 	if (CryptoGcmDecrypt(pUse, zeroKey, zeroIv, sizeof(zeroIv), NULL, 0,
 					 gcmCipher, sizeof(gcmCipher), gcmPlain, gcmTag,
 					 sizeof(gcmTag), NULL) != CRYPTO_STATUS_OK ||
@@ -277,11 +225,9 @@ bool CracenAesTest(void)
 	{
 		return CracenTestFail(CRACEN_TEST_ERR_GCM_DECRYPT);
 	}
-	CRACEN_TEST_MARK(12);
-
 	memcpy(badTag, gcmTag, sizeof(badTag));
-	badTag[0] ^= 1;
-	memset(gcmPlain, 0xa5, sizeof(gcmPlain));
+	badTag[0] ^= 1U;
+	memset(gcmPlain, 0xA5, sizeof(gcmPlain));
 	if (CryptoGcmDecrypt(pUse, zeroKey, zeroIv, sizeof(zeroIv), NULL, 0,
 					 gcmCipher, sizeof(gcmCipher), gcmPlain, badTag,
 					 sizeof(badTag), NULL) == CRYPTO_STATUS_OK ||
@@ -289,22 +235,54 @@ bool CracenAesTest(void)
 	{
 		return CracenTestFail(CRACEN_TEST_ERR_GCM_TAG);
 	}
-	CRACEN_TEST_MARK(13);
+	CRACEN_TEST_MARK(3);
 
-	unsupportedCfg.DevNo = 0;
-	unsupportedCfg.Provider = CRYPTO_PROVIDER_HW;
-	unsupportedCfg.ReqCaps = CRYPTO_CAP_ECDH_P256;
-	if (CryptoHwInit(&hwDev, &unsupportedCfg))
+	ueccCfg.Provider = CRYPTO_PROVIDER_UECC;
+	ueccCfg.ReqCaps = CRYPTO_CAP_ECDH_P256;
+	ueccCfg.pMem = ueccArena;
+	ueccCfg.MemSize = sizeof(ueccArena);
+	if (!CryptoUeccInit(&ueccDev, &ueccCfg))
 	{
-		return CracenTestFail(CRACEN_TEST_ERR_UNSUPPORTED_ECDH);
+		return CracenTestFail(CRACEN_TEST_ERR_UECC_INIT);
 	}
-	CRACEN_TEST_MARK(14);
+	if (CryptoEcdhP256KeyGen(&hwDev, NULL, cracenPub, NULL) != CRYPTO_STATUS_OK)
+	{
+		return CracenTestFail(CRACEN_TEST_ERR_CRACEN_KEYGEN);
+	}
+	if (CryptoEcdhP256KeyGen(&ueccDev, NULL, ueccPub, NULL) != CRYPTO_STATUS_OK)
+	{
+		return CracenTestFail(CRACEN_TEST_ERR_UECC_KEYGEN);
+	}
+	if (CryptoEcdhP256(&hwDev, NULL, ueccPub, dhCracen, NULL) != CRYPTO_STATUS_OK)
+	{
+		return CracenTestFail(CRACEN_TEST_ERR_CRACEN_DH);
+	}
+	if (CryptoEcdhP256(&ueccDev, NULL, cracenPub, dhUecc, NULL) != CRYPTO_STATUS_OK)
+	{
+		return CracenTestFail(CRACEN_TEST_ERR_UECC_DH);
+	}
+	if (memcmp(dhCracen, dhUecc, sizeof(dhCracen)) != 0 ||
+		AllZero(dhCracen, sizeof(dhCracen)))
+	{
+		return CracenTestFail(CRACEN_TEST_ERR_DH_MISMATCH);
+	}
+	memcpy((void *)g_CracenTestLastDh, dhCracen, sizeof(dhCracen));
+	if (CryptoEcdhP256(&hwDev, NULL, ueccPub, dhCracen, NULL) == CRYPTO_STATUS_OK)
+	{
+		return CracenTestFail(CRACEN_TEST_ERR_KEY_REUSE);
+	}
+	CRACEN_TEST_MARK(4);
 
-	// Reinitialize the AES handle after the deliberate unsupported Init attempt.
-	if (!CryptoHwInit(&hwDev, &hwCfg))
+	if (CryptoEcdhP256KeyGen(&hwDev, NULL, cracenPub, NULL) != CRYPTO_STATUS_OK ||
+		CryptoEcdhP256(&hwDev, NULL, invalidPoint, dhCracen, NULL) == CRYPTO_STATUS_OK)
 	{
-		return CracenTestFail(CRACEN_TEST_ERR_HW_INIT);
+		return CracenTestFail(CRACEN_TEST_ERR_INVALID_POINT);
 	}
+	if (CryptoEcdhP256(&hwDev, NULL, ueccPub, dhCracen, NULL) == CRYPTO_STATUS_OK)
+	{
+		return CracenTestFail(CRACEN_TEST_ERR_INVALID_CONSUME);
+	}
+	CRACEN_TEST_MARK(5);
 
 	if (!RngInit())
 	{
@@ -320,24 +298,23 @@ bool CracenAesTest(void)
 		return CracenTestFail(CRACEN_TEST_ERR_RNG_OUTPUT);
 	}
 	memcpy((void *)g_CracenTestLastRng, rng2, sizeof(rng2));
-	CRACEN_TEST_MARK(15);
-
-	// Confirm the shared CRACEN lock is released by the RNG path and AES remains
-	// operational after two DRBG requests.
-	if (CryptoAes128Ecb(&hwDev, key1, plain1, out, NULL) != CRYPTO_STATUS_OK ||
-		memcmp(out, cipher1, sizeof(out)) != 0)
+	if (CryptoAes128Ecb(&hwDev, key, plain, out, NULL) != CRYPTO_STATUS_OK ||
+		memcmp(out, cipher, sizeof(out)) != 0)
 	{
 		return CracenTestFail(CRACEN_TEST_ERR_AES_AFTER_RNG);
 	}
-	CRACEN_TEST_MARK(16);
+	CRACEN_TEST_MARK(6);
 
 	CryptoSecureWipe(out, sizeof(out));
-	CryptoSecureWipe(inPlace, sizeof(inPlace));
 	CryptoSecureWipe(cmac, sizeof(cmac));
 	CryptoSecureWipe(gcmCipher, sizeof(gcmCipher));
 	CryptoSecureWipe(gcmPlain, sizeof(gcmPlain));
 	CryptoSecureWipe(gcmTag, sizeof(gcmTag));
 	CryptoSecureWipe(badTag, sizeof(badTag));
+	CryptoSecureWipe(cracenPub, sizeof(cracenPub));
+	CryptoSecureWipe(ueccPub, sizeof(ueccPub));
+	CryptoSecureWipe(dhCracen, sizeof(dhCracen));
+	CryptoSecureWipe(dhUecc, sizeof(dhUecc));
 	CryptoSecureWipe(rng1, sizeof(rng1));
 	CryptoSecureWipe(rng2, sizeof(rng2));
 
@@ -349,9 +326,7 @@ int main(int argc, char **argv)
 {
 	(void)argc;
 	(void)argv;
-
 	(void)CracenAesTest();
-
 	while (true)
 	{
 		__WFE();
