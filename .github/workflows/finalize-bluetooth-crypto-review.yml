@@ -1,3 +1,4 @@
+# Registered before this pull request synchronization.
 name: Finalize Bluetooth and crypto review fixes
 
 on:
@@ -27,20 +28,20 @@ jobs:
           text = path.read_text(encoding='ascii')
 
           old = '''void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
-{
-'''
+          {
+          '''
           new = '''__attribute__((weak))
-void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
-{
-'''
+          void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
+          {
+          '''
           if text.count(old) != 1:
               raise RuntimeError('BtSmpAuthConfig definition anchor mismatch')
           text = text.replace(old, new, 1)
 
           old = '''\tpRsp->OOBFlag = (s_SmpOob.bPeerValid && pLink->Ctx.bSc) ?
-'''
+          '''
           new = '''\tpRsp->OOBFlag = (SmpOobPeerReady(pLink) && pLink->Ctx.bSc) ?
-'''
+          '''
           if text.count(old) != 1:
               raise RuntimeError('OOB response anchor mismatch')
           text = text.replace(old, new, 1)
