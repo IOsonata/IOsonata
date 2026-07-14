@@ -85,7 +85,7 @@ typedef struct {
 static CryptoMbedtlsData_t *MbedData(CryptoDev_t * const pDev, void *pKeyCtx)
 {
 	return (CryptoMbedtlsData_t *)CryptoResolveKeyCtx(pDev, pKeyCtx,
-														 alignof(CryptoMbedtlsData_t));
+												 alignof(CryptoMbedtlsData_t));
 }
 
 // Free and reinit an instance key context (private key d and public point Q)
@@ -278,7 +278,8 @@ static int MbedSelfTest(CryptoDev_t * const pDev)
 bool CryptoMbedtlsInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 {
 	if (!CryptoCfgValidate(pDev, pCfg, sizeof(CryptoMbedtlsData_t),
-						   CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256))
+						   CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256) ||
+		((uintptr_t)pCfg->pMem & (alignof(CryptoMbedtlsData_t) - 1U)) != 0U)
 	{
 		return false;
 	}
@@ -321,4 +322,3 @@ size_t CryptoMbedtlsMemSize(void)
 {
 	return sizeof(CryptoMbedtlsData_t);
 }
-

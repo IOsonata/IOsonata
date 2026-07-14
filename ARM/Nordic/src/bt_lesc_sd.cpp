@@ -40,7 +40,9 @@ differs between s132 and sdk-nrf-bm) and BtLescLinkCount.
 #include "bt_lesc.h"
 #include "syslog.h"
 
-#if defined(BT_LESC_TRACE_ENABLE) && BT_LESC_TRACE_ENABLE
+#define BT_LESC_TRACE_ENABLE
+
+#if defined(BT_LESC_TRACE_ENABLE)// && BT_LESC_TRACE_ENABLE
 #define LESC_TRACE(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define LESC_TRACE(...)
@@ -147,12 +149,14 @@ bool BtLescKeyPairGen(void)
 	// ECDH and never crosses the CryptoDev_t interface.
 	if (CryptoEcdhP256KeyGen(s_pLescCrypto, NULL, pubBe, NULL) != CRYPTO_STATUS_OK)
 	{
+		CryptoSecureWipe(pubBe, sizeof(pubBe));
 		LESC_TRACE("LESC keypair generate failed\r\n");
 		return false;
 	}
 
 	// The SoftDevice wants the public key little-endian per coordinate.
 	ByteOrderInvert(pubBe, s_LescPubKey.pk);
+	CryptoSecureWipe(pubBe, sizeof(pubBe));
 
 	s_bKeyPairGen = true;
 
@@ -162,6 +166,7 @@ bool BtLescKeyPairGen(void)
 bool BtLescInit(void)
 {
 	memset(s_PeerKeys, 0, sizeof(s_PeerKeys));
+	CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
 
 	if (!CryptoIsCapable(s_pLescCrypto, CRYPTO_CAP_ECDH_P256))
 	{
@@ -236,6 +241,9 @@ static bool ComputeAndReply(BtLescPeerKey_t *pPeer)
 		return false;
 	}
 
+	memset(dhBe, 0, sizeof(dhBe));
+	CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
+
 	// Reject a peer presenting our own public key (reflection). Compare the X
 	// coordinate only; both little-endian here.
 	if (memcmp(s_LescPubKey.pk, pPeer->Value, LESC_COORD_SIZE) == 0)
@@ -266,7 +274,10 @@ static bool ComputeAndReply(BtLescPeerKey_t *pPeer)
 
 	LESC_TRACE("LESC dhkey reply status=0x%x hdl=%d\r\n", secStatus, pPeer->ConnHdl);
 
-	return BtLescDhKeyReply(pPeer->ConnHdl, secStatus, pDh) == NRF_SUCCESS;
+	const uint32_t result = BtLescDhKeyReply(pPeer->ConnHdl, secStatus, pDh);
+	CryptoSecureWipe(dhBe, sizeof(dhBe));
+	CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
+	return result == NRF_SUCCESS;
 }
 
 bool BtLescRequestHandler(void)
@@ -362,6 +373,7 @@ void BtLescOnBleEvt(const ble_evt_t * pEvt)
 			{
 				s_PeerKeys[idx].bRequested = false;
 			}
+			CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
 		}
 		break;
 

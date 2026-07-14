@@ -57,9 +57,9 @@ bool P256RandomScalar(uint8_t Scalar[P256_BYTES]);
 // n. Constant-time.
 bool P256ScalarInRange(const uint8_t Scalar[P256_BYTES]);
 
-// True when Coord is a valid field element: non-zero and less than the field
-// prime p. Constant-time. Used to range-check a projective coordinate.
-bool P256FieldValid(const uint8_t Coord[P256_BYTES]);
+// True when Coord is a non-zero field element: 0 < Coord < p. Constant-time.
+// Used for a projective randomization factor, which must not be zero.
+bool P256NonzeroFieldElement(const uint8_t Coord[P256_BYTES]);
 
 // Regularize a scalar to a fixed-length representation for a constant-time
 // ladder: R is 33 bytes, R[0] is always 1, and R[1..32] hold K + n or K + 2n

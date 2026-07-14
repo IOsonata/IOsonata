@@ -1063,6 +1063,11 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 
 uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int ReqLen, BtAttReqRsp_t * const pRspAtt)
 {
+	if (pReqAtt == nullptr || pRspAtt == nullptr || ReqLen < 1)
+	{
+		return 0;
+	}
+
 	uint32_t retval = 0;
 
 	DEBUG_PRINTF("ATT OpCode %x, L2Cap len %d\n", pReqAtt->OpCode, ReqLen);

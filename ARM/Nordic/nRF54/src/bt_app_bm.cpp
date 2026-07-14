@@ -73,6 +73,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "idelay.h"
 #include "coredev/system_core_clock.h"
+#include "coredev/interrupt.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "bluetooth/bt_uuid.h"
@@ -147,14 +148,13 @@ const static TimerCfg_t s_BtAppSdTimerCfg = {
     .DevNo = 3,	// GRTC3 needed for Softdevice
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default frequency
-	.IntPrio = 6,		// App-level priority. 0, 1 and 4 are reserved by the SoftDevice;
-						// priority 0 here would fault the interrupt configuration check
-						// once the wakeup trigger below enables the GRTC IRQ.
+	.IntPrio = 6,		// GRTC3 interrupt remains disabled; the SoftDevice owns the IRQ.
 	.EvtHandler = nullptr,
 	.bTickInt = false,
 };
 
 static Timer s_BtAppSdGrtc3;
+static volatile uint16_t s_SecurePendingHdl = BLE_CONN_HANDLE_INVALID;
 
 // --- Helper functions ---
 
@@ -196,8 +196,6 @@ static void BtAppDiscDescRsp(const ble_gattc_evt_t *pEvt);
 // events: BLE_GAP_EVT_PASSKEY_DISPLAY (Numeric Comparison when match_request is
 // set, otherwise Passkey Entry display) and BLE_GAP_EVT_AUTH_KEY_REQUEST
 // (Passkey Entry input). These are bridged to the same BtSmp* interaction API
-// the generic SMP host exposes, so an application sees one set of callbacks
-// across ports. The reply functions route the user answer back through
 // sd_ble_gap_auth_key_reply. The generic weak defaults live in bt_smp.cpp,
 // which is not linked on this port, so equivalent weak defaults are provided
 // here; an application strong definition overrides them.
@@ -358,12 +356,11 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			g_BtAppData.State = BTAPP_STATE_CONNECTED;
 			BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 
-			// Initiate link security if the app is configured secure. For an
-			// already-bonded peer this encrypts with the stored LTK; otherwise
-			// it starts pairing. peer_manager drives the procedure.
+			// Start security from the main loop. Peer Manager and LESC work
+			// must not run in the SoftDevice event interrupt.
 			if (g_BtAppData.AppDevice.bSecure)
 			{
-				(void)pm_conn_secure(p_gap_evt->conn_handle, false);
+				s_SecurePendingHdl = p_gap_evt->conn_handle;
 			}
 			break;
 
@@ -890,19 +887,25 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 	err = sd_ble_enable(&ramreq);
 
-	if (ramreq > ramstart)
+	if (err != NRF_SUCCESS)
 	{
-		DEBUG_PRINTF("%x - Insufficient RAM allocated for the SoftDevice need %x", err, ramreq);
+		DEBUG_PRINTF("sd_ble_enable failed: 0x%x ramstart=0x%x ramreq=0x%x\r\n",
+			err, ramstart, ramreq);
+		return false;
 	}
 
-	(void)sdh_state_evt_observer_notify(NRF_SDH_STATE_EVT_BLE_ENABLED);
+	if (ramreq > ramstart)
+	{
+		DEBUG_PRINTF("Insufficient RAM allocated for the SoftDevice need 0x%x\r\n", ramreq);
+		return false;
+	}
 
-	// 1 s continuous wakeup trigger so a fully silent link still reaches the
-	// SMP/GATT transaction timeout checks in the main loop. Enabled only after
-	// the SoftDevice is up: GRTC3 must be initialized with its interrupt
-	// disabled before nrf_sdh_enable_request. No handler is needed, the GRTC
-	// interrupt itself ends the WFE wait; the ISR tolerates a null handler.
-	s_BtAppSdGrtc3.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, nullptr);
+	// Pull nrf_sdh_ble.c from the static library. Its object contains the
+	// ble_evt_poll stack observer that drains sd_ble_evt_get and dispatches
+	// BLE events to Peer Manager and IOsonata observers.
+	(void)nrf_sdh_ble_idx_get(BLE_CONN_HANDLE_INVALID);
+
+	(void)sdh_state_evt_observer_notify(NRF_SDH_STATE_EVT_BLE_ENABLED);
 
 	// Enable BLE stack (cfg_set from CONFIG_ defaults, handled in nrf_sdh_ble.c)
 	//err = nrf_sdh_ble_enable(BTAPP_CONN_CFG_TAG);
@@ -1324,22 +1327,36 @@ void BtAppRun()
 
 	while (1)
 	{
+		uint16_t connHdl = BLE_CONN_HANDLE_INVALID;
+		uint32_t intState = DisableInterrupt();
+
+		if (s_SecurePendingHdl != BLE_CONN_HANDLE_INVALID)
+		{
+			connHdl = s_SecurePendingHdl;
+			s_SecurePendingHdl = BLE_CONN_HANDLE_INVALID;
+		}
+
+		EnableInterrupt(intState);
+
+		if (connHdl != BLE_CONN_HANDLE_INVALID)
+		{
+			uint32_t err = pm_conn_secure(connHdl, false);
+			DEBUG_PRINTF("pm_conn_secure hdl=%u returned 0x%08" PRIx32 "\r\n",
+				connHdl, err);
+		}
+
 		// Process any pending LESC DHKey computation. Required for LE Secure
 		// Connections: nrf_ble_lesc defers the ECDH to be run from the main
 		// loop rather than the BLE event context.
 		if (g_BtAppData.AppDevice.bSecure)
 		{
-			(void)nrf_ble_lesc_request_handler();
+			(void)BtLescRequestHandler();
 		}
 
 		AppEvtHandlerExec();
 
-		// Drive the generic transaction timeouts (Core Vol 3 Part H 3.4, Part F
-		// 3.3.3). Cheap no-ops when nothing is pending. NOTE: this loop wakes on
-		// events, so a link that goes fully silent needs a periodic wake to also
-		// call these - hook them into an existing SDK/SoftDevice periodic callback
-		// (do not add a trigger to GRTC3, which the SoftDevice owns).
-		BtSmpTimeoutCheck();
+		// The S145 port uses Peer Manager for SMP. Only the generic GATT
+		// indication timeout remains here.
 		BtGattIndicationTimeoutCheck();
 
 		BtAppEvtWait();

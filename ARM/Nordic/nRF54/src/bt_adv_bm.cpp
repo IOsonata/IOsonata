@@ -38,6 +38,8 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_appearance.h"
 
+#define BM_DEBUG_ENABLE
+
 // Debug printf: mirrors the guard in bt_app_bm.cpp.
 #ifdef BM_DEBUG_ENABLE
 #include "coredev/uart.h"
