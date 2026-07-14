@@ -870,7 +870,7 @@ static void SmpBuildPairingRsp(BtSmpLink_t *pLink, BtSmpPairingRsp_t *pRsp)
 {
 	pRsp->Code = BT_SMP_CODE_PAIRING_RSP;
 	pRsp->IOCaps = s_SmpIoCaps;
-	pRsp->OOBFlag = (s_SmpOob.bPeerValid && pLink->Ctx.bSc) ?
+	pRsp->OOBFlag = (SmpOobPeerReady(pLink) && pLink->Ctx.bSc) ?
 					BT_SMP_OOB_AUTH_PRESENT : BT_SMP_OOB_AUTH_NOT_PRESENT;
 	pRsp->AuthReq = (uint8_t)(s_SmpAuthReq & ~BT_SMP_AUTHREQ_KEYPRESS);
 	pRsp->MaxKeySize = BT_SMP_MAX_ENC_KEY_SIZE;
@@ -2700,6 +2700,7 @@ void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes)
 
 // Weak: a port whose underlying stack owns pairing overrides this and
 // routes the values into that stack security parameters instead.
+__attribute__((weak))
 __attribute__((weak))
 void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 {
