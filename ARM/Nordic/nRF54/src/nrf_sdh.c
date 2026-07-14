@@ -69,9 +69,9 @@ void NrfSdhEarlyInit(void)
 	}
 
 	/* The reset entry initializes the SoftDevice static and dynamic RAM.
-	 * Clear that reserved range before calling it. Clearing the range later,
-	 * immediately before the first SVC, destroys the state just initialized by
-	 * the reset entry. */
+	 * Clear that reserved range before calling it. This function runs from an
+	 * early constructor, after the C runtime initialized .data/.bss but before
+	 * main() initializes UART, timers, or other application peripherals. */
 	const uintptr_t app_ram_start = (uintptr_t)SystemRamStart();
 	if (app_ram_start > 0x20000000UL)
 	{
@@ -87,6 +87,18 @@ void NrfSdhEarlyInit(void)
 	CallSoftDeviceResetHandler();
 	softdevice_reset_done = true;
 }
+
+#if defined(__GNUC__)
+/* ResetEntry calls the C runtime before main(). Constructor priority 101 runs
+ * before normal C++ static constructors and before application HardwareInit().
+ * SystemInit is too early because the following .bss initialization clears the
+ * vector address and softdevice_reset_done flag. */
+static void NrfSdhRuntimeInit(void) __attribute__((constructor(101)));
+static void NrfSdhRuntimeInit(void)
+{
+	NrfSdhEarlyInit();
+}
+#endif
 
 static atomic_t sdh_is_suspended;	/* Whether the SoftDevice event interrupts are disabled. */
 static atomic_t sdh_transition;		/* Whether enable/disable process was started. */

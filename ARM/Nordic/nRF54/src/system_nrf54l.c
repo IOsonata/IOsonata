@@ -34,10 +34,6 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 
 #include "coredev/system_core_clock.h"
 
-#if defined(S145)
-extern void NrfSdhEarlyInit(void);
-#endif
-
 /*lint ++flb "Enter library region" */
 
 #define __SYSTEM_CLOCK_DEFAULT      (64000000ul)
@@ -112,13 +108,6 @@ void SystemCoreClockUpdate(void)
 
 void SystemInit(void)
 {
-    #if defined(S145)
-        /* Initialize the SoftDevice image before clocks, UART, timers or any
-         * other application peripheral. The reset entry may change peripheral
-         * and clock state, so it must not be called later from BtAppInit. */
-        NrfSdhEarlyInit();
-    #endif
-
     #ifdef __CORTEX_M
         #ifndef NRF_SKIP_CLOCK_CONFIGURATION
             #if defined(NRF_CONFIG_CPU_FREQ_MHZ) && (NRF_CONFIG_CPU_FREQ_MHZ==64)
