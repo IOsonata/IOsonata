@@ -1,4 +1,4 @@
-name: Apply RFTag core patch with recount
+name: Apply RFTag core edits
 
 on:
   pull_request:
@@ -17,20 +17,9 @@ jobs:
         with:
           ref: fix/bluetooth-crypto-rftag-review
 
-      - name: Extract and apply patch
+      - name: Apply edits
         shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          text = Path('.github/workflows/apply-rftag-review-pr.yml').read_text()
-          start = text.index('          diff --git a/include/rftag/rftag.h')
-          end = text.index('          PATCH', start)
-          lines = text[start:end].splitlines()
-          patch = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
-          Path('/tmp/rftag-core.patch').write_text(patch)
-          PY
-          git apply --check --recount /tmp/rftag-core.patch
-          git apply --recount /tmp/rftag-core.patch
+        run: python3 .github/apply_rftag_core.py
 
       - name: Validate
         shell: bash
@@ -39,12 +28,6 @@ jobs:
           if git diff -U0 -- '*.c' '*.cpp' '*.h' | grep '^+' | grep -v '^+++' | grep -inE '\bbackend\b|\bcontract\b|source of truth|\bcarries\b|resting value'; then
             exit 1
           fi
-          python3 - <<'PY'
-          from pathlib import Path
-          for name in ['include/rftag/rftag.h', 'src/rftag/rftag.cpp']:
-              text = Path(name).read_text(encoding='ascii')
-              assert text.count('{') == text.count('}')
-          PY
           g++ -std=gnu++23 -fno-exceptions -fno-rtti -Iinclude -fsyntax-only src/rftag/rftag.cpp
 
       - name: Commit
