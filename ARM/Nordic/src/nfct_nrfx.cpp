@@ -234,6 +234,30 @@ static int NfctIntrfTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int 
 	return DataLen;
 }
 
+int NfctIntrfBitsTx(NfctIntrfDev_t * const pDev, const uint8_t *pData, int BitLen)
+{
+	if (pDev == nullptr || pData == nullptr || BitLen <= 0 ||
+		BitLen > (int)sizeof(pDev->TxFrame) * 8)
+	{
+		return 0;
+	}
+
+	int dataLen = (BitLen + 7) / 8;
+	memcpy(pDev->TxFrame, pData, dataLen);
+
+	nrfx_nfct_data_desc_t desc;
+	desc.p_data = pDev->TxFrame;
+	desc.data_size = BitLen;
+
+	if (nrfx_nfct_bits_tx(&desc, NRF_NFCT_FRAME_DELAY_MODE_WINDOWGRID) != 0)
+	{
+		return 0;
+	}
+
+	pDev->bTxPending = true;
+	return BitLen;
+}
+
 static void NfctIntrfStopTx(DevIntrf_t * const pIntrf)
 {
 	(void)pIntrf;

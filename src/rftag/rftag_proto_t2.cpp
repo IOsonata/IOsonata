@@ -121,7 +121,8 @@ void RFTagProtoT2::BuildHeader()
 
 int RFTagProtoT2::CmdRead(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap)
 {
-	if (RxLen < 2 || TxCap < T2T_READ_BLOCKS * T2T_BLOCK_SIZE)
+	vLastTxBits = 0;
+	if (RxLen < 2 || pTx == nullptr || TxCap < 1)
 	{
 		return 0;
 	}
@@ -132,26 +133,37 @@ int RFTagProtoT2::CmdRead(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap
 	if (addr >= vpTag->MemSize())
 	{
 		pTx[0] = T2T_NAK;
+		vLastTxBits = 4;
 		return 1;
 	}
 
 	// 16 bytes from the image, zero filled past the end of memory.
 	int n = T2T_READ_BLOCKS * T2T_BLOCK_SIZE;
+	if (TxCap < n)
+	{
+		return 0;
+	}
 
 	memset(pTx, 0, n);
 
 	int avail = vpTag->MemRead(addr, pTx, n);
-
-	(void)avail;
+	if (avail <= 0)
+	{
+		pTx[0] = T2T_NAK;
+		vLastTxBits = 4;
+		return 1;
+	}
 
 	vpTag->EvtHandler(RFTAG_EVT_READ, addr, n);
+	vLastTxBits = n * 8;
 
 	return n;
 }
 
 int RFTagProtoT2::CmdWrite(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap)
 {
-	if (RxLen < 6 || TxCap < 1)
+	vLastTxBits = 0;
+	if (RxLen < 6 || pTx == nullptr || TxCap < 1)
 	{
 		return 0;
 	}
@@ -164,6 +176,7 @@ int RFTagProtoT2::CmdWrite(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCa
 	if (blk < 4 || vpTag->ReadOnly())
 	{
 		pTx[0] = T2T_NAK;
+		vLastTxBits = 4;
 		return 1;
 	}
 
@@ -172,18 +185,21 @@ int RFTagProtoT2::CmdWrite(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCa
 	if (addr + T2T_BLOCK_SIZE > vpTag->MemSize())
 	{
 		pTx[0] = T2T_NAK;
+		vLastTxBits = 4;
 		return 1;
 	}
 
 	if (vpTag->MemWrite(addr, &pRx[2], T2T_BLOCK_SIZE) != T2T_BLOCK_SIZE)
 	{
 		pTx[0] = T2T_NAK;
+		vLastTxBits = 4;
 		return 1;
 	}
 
 	vpTag->EvtHandler(RFTAG_EVT_MEM_CHANGED, addr, T2T_BLOCK_SIZE);
 
 	pTx[0] = T2T_ACK;
+	vLastTxBits = 4;
 	return 1;
 }
 
@@ -202,6 +218,7 @@ bool RFTagProtoT2::Init(RFTag * const pTag)
 	vpTag = pTag;
 	vSector = 0;
 	vbSecSelPending = false;
+	vLastTxBits = 0;
 
 	BuildHeader();
 
@@ -210,6 +227,7 @@ bool RFTagProtoT2::Init(RFTag * const pTag)
 
 int RFTagProtoT2::OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap)
 {
+	vLastTxBits = 0;
 	if (vpTag == nullptr || pRx == nullptr || RxLen < 1)
 	{
 		return 0;
@@ -229,9 +247,10 @@ int RFTagProtoT2::OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap
 
 		if ((uint32_t)pRx[0] * 256u * T2T_BLOCK_SIZE >= vpTag->MemSize())
 		{
-			if (TxCap >= 1)
+			if (pTx != nullptr && TxCap >= 1)
 			{
 				pTx[0] = T2T_NAK;
+				vLastTxBits = 4;
 				return 1;
 			}
 			return 0;
@@ -252,15 +271,17 @@ int RFTagProtoT2::OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap
 
 		case T2T_CMD_SECTOR_SELECT:
 			// First frame, 0xC2 0xFF. Acknowledge and wait for the number.
-			if (RxLen >= 2 && pRx[1] == 0xFF && TxCap >= 1)
+			if (RxLen >= 2 && pRx[1] == 0xFF && pTx != nullptr && TxCap >= 1)
 			{
 				vbSecSelPending = true;
 				pTx[0] = T2T_ACK;
+				vLastTxBits = 4;
 				return 1;
 			}
-			if (TxCap >= 1)
+			if (pTx != nullptr && TxCap >= 1)
 			{
 				pTx[0] = T2T_NAK;
+				vLastTxBits = 4;
 				return 1;
 			}
 			return 0;
@@ -270,9 +291,10 @@ int RFTagProtoT2::OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap
 			return 0;
 
 		default:
-			if (TxCap >= 1)
+			if (pTx != nullptr && TxCap >= 1)
 			{
 				pTx[0] = T2T_NAK;
+				vLastTxBits = 4;
 				return 1;
 			}
 			return 0;

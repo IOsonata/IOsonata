@@ -1,0 +1,49 @@
+name: Apply RFTag review fixes
+
+on:
+  push:
+    branches:
+      - fix/bluetooth-crypto-rftag-review
+    paths:
+      - .github/workflows/apply-rftag-review-fixes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/bluetooth-crypto-rftag-review
+
+      - name: Apply edits
+        shell: bash
+        run: |
+          printf '%s' 'H4sICJcGVmoCA2FwcGx5X3JmdGFnX2ZpeGVzLnB5AO0d/XPaOPZ3/gptbiYLDSUkTXO9pMktBbLNNF8DdHt7TcZjbJF4a2yvLZPkevnf7z1JtmVjwMSQ3szd7mwAfTy9T+np6Uk78t0x8XR2Z1tDYo0912fkCn5WKhWTjohPPVs3qOY6tIqtDkjA/DpxbVN+c+g9/1Yjr4/JBTQ7qBD4xyNHHAzvVONFjD4wKPUaPtVNDX9VqWO4puXcHm3ogWFZG6Kh4YYOtsQmDf6jCuOJOmskq386IjtiKPzH162Akh5UWGPa9X3Xr442vuPYTweEPnjUYNQkgB0Z68y4q5MRADHJdw7rSY7rNe59i1GBGh9cUo/Dc0rrZKdWJ1mseZVtOfRo49oBWIJzxh01vmkjy6YBZ0JwQGwrYF+BVzcZZo1cn4uAWA4RTWPCTJ3pKVYK7g0fGYCtpZo1TAp40WqKlwrj57YBvm5ch7vNnb0NxAK7JEgs5vAYoAd3aXiK+Da+b9RQYmoRcH2JEYY+yAH0c6rbumNQzmVVNzmkDcsx7NCk2/6I6bfib+Nuoy4qr9nE8lmo20AgI5fOia+PadVwnYCREIreaYy88noPdV7fezijTl2pGMiKwUNb92rAz+bhtXPteL7LuHYdgOzXOtI12371Cj/IK/LL0Lfo6JpdhOMh9YmLhhp4MAAlQ4sFBLAyQwNUfvhI2B0lth7EiBBDt+2GACTBfQB1IiOsNLErcw3XDkgI0LAzaLMe2ogPIAqt3+FgUNAgV3Hbe4vdSWDBHc4hET4BcSfU9y0TYVkBGVN255py+G38UHnVk70+ABFVwQMYs0YE774DVBb6jsTkmDTJ3xWsDoBR5ClHKLWSugJkGjQISolxpgh7YM8EBgfOjF3/sUEGwPKhDrxHSw+E+FwDURnrt7QxS83WiuRSeqZioiobl3YBKWOzayZFPfG4kuHs4YS27TEfZC4LXx+nIEkoB8Je2NNKOZ6rQ4FvpPTH8DwpnJ9//nnoujbpnQz024ODU8diUii8pD26BfZvwkeddOjEMuipw/wRICkaefxnrfK9AgRskxYZ6bCQmAThkHEILRyXEZvqE0p0kAKAcMPAfgRZWszSbetfuNwN/wAjADPWhzZtAKTfoMKsjnQ7oLXDChRMAAGYX+DvIf6SrI45zdsAJtQf4SookeKlgFTMNbBqXTJMcBSZ2yCnOAn8GVqgMZylnJlEh2VXJxed7gnRgd0ClOUEOEFYMKW0yDAMuHSCcGiAPiUTSCDIRwi2NWIBn1CQLlhsqkhKwzuHlego0ZR//5vwcijuA0uwqlmDDsjWWMM4P5D+p4oK6wKmvZZp+uT4KAVkQX+gBnue63xaAoNpkoDaIAfBBJ+OdcsxhS1hgaKH0BsN880uqIY+AYGT9MjkNUlhdjiFrxw1TeZUrQCuYtwPhwwWWGa5Djoj4zpHTTdNUCbQMCwCQ3bIva974EWBmfsgSnc0CihLS0AZ51iMs4BfQieZH0qVlI2w4LDyVAE7WrlBpc1A1XCpN7UZ1nDNQFJAcnVzwgdq1kkAcnFHnPaaIEBBx0is68ebzASp1sFtJDhxu/eOonYoPiPffoyM+URlqnkYha1jSr+NlHobedptzFNuY75u5/QvppZyZjTEzJgzBxbT3OVXjYlrmZGSw+oGyiaUlluYUEnFtKN1kJsDToc1QUHacArAVNfXzU2SAxgZL2wmO3zaRK5Zd8I+gsbZ1K/CoK1fte5vA63b6132uMk00zguzyLuQghqVuH0TLEiMYApJWnGCpJ2T14fR14+H1WOyAeSnlVGJOuiQShlIiy+BE7RhaUAOlPCxyDvhZFzqjlw8l5YfVX8Qq8bNAQQUBm1Bk6VUgyYU9DNq8YTDk4pKv8+hKOR4CA6jTH/eHmGLwpXSL5HMEOyz0UiV4gz/JschLkYCiJdlslfMGKSJTCrxB2d6Xm87vDgxsp4XQaXpVg+jfd6Wa46Pn3KcDG7gMF29qemC6wSCrazrykkRi3uTP/r7k3kjkD1LbvD7cPIeiCeDV6Epz/aLmyP+B5jBK4DuiGq64HMinlcQ5K3IicIgNdgesj4gQsWWsSoeQNLSFXiWKvyVfqYvOPrBNbvpOqhOvYNYqmnHOM60llX0eLRJ9xq1tTC+ZjJwvwh0lTDBCY4zzegoBkcx9ne6yqECCz5zpdT8hSzY5WCAf24Coe2FdyB+0jo2GOP4DEGAXqk93ewG+WqEekLOLShh+6lKbbTI8sB39bmCiYd1oBgeJVRR0QJAhfh9k74phv2Qw4FnxX2SuCgQrnlGO7YsylLhtAD4cM2XkD2CD8KMW1u8nbL68FPR2Sd+j9XP/PYcDTNhhKLbUYIejLonS2p51/mk69zHoqm01YtgC7N0whoxKnIcMCJH2M49eGkm8tBMdwmNsNIPzJs5zBlxAksbhBf96QZPjTf1PFvU/2LhikIQuoQ2l6CuOjPJQv4nKhm94lSjxvX4Ow3aUJEZ+Rf1HcJRsftlOXh3g4xBoNjro/TNAngC522E0EeH3gFQkrMg7yIvHKJSWSF50FlJvSU7h5FtK5uwS48y2d4y9ultiQLFpWlBspze+aOPs+HyYmoa/w0QWO7cWgdug8ePUp2yZfe6aDL1bffbQ8ue/BxBl+Ibnxz3HubmrjQWKj7ZA+jzaTV/kRAwy9an4gHSwUYQSXwqGGNLEPH0JVYecBeLIfKkwIeRhnj0qHDXOjcwqqFR2d1+DmMzzwqzNedgJ98BtQxA/KOB7f58QYOdKf75j3a1ZDe6RPLxbWKmggSseIg4rB4JTrH47G9CG4jJbT10a+Gw/HoFoYWgST6oBuMAxGnp7D4YrHAPUazgjE+ZMHUGQ7i4YYMJh0TTz4FV2FLiSeqyMjGCtRChs74LnGwW8VA/qRPDZjLqk1YWSdD+NGn9hXgByjI+B35/pSZoJ8BBMoHD/wIoZkALEnLCk8Ahbv+6lWG0JWOsMQxXBqdkmyKMJJCOsTJG//d3v7pPWmHvk9RW3kdaKs7TtsKIMJnwIxYDxUYJ5YfREbqjsCW0sYG/qYzY4X/oSiJgzKpljEKEsCH2I7lIQJ3qOMpqPCilcgkx7PTox2sB/b0+ljuYauK5wxKJFzXwe5Ag1npUF16d8Sym2ZtGbiSF1C8N3OgUkRLhHKjl71uq1MnwudwUuFeJ+sgLgNGpYqfYedBLi3Jof2NvIc1hIcCOXIYlbp07Mfy0iwDe+0SjdVtiw/84eyy/Unrn/6zi5vhdaj1CsZ5EaYkSKWcaVguvu7e1DNEcN86U1SSWesef+1MTA0LftlhRR0DdhuJYy5dEXFkmWZFHpQM6oWBlpv6xFLHU40Qh/TaRY6ijRTUfQgt2/zIQzbV2tTcVxCOSmZzJtgSJMWB4ZhRJT0k5ZAIoBY9SsEtaW68OkZrrqfFB81JeYqYh5kuqBfroTYromdQ/5xzpPLanI2F4rQCZvaK7L7dD+EjO0fn+yLRDCOgSZxlkEGtnTUHZacd/PepkipvivLsDPnfg//UPLo0USDIv4iAsGvb7j3OAriNxV0v7mOHtmt8C4hrGKEPm0kDdqq6ATveERMb3MjPFik0JIB9qHHXKKUbnK6piUmc2udyRE7MWeKzMisHdwGnV2EU61VkkY2BuS3YuX3e0T62zgYHOWx6cXWci1pJpsrc2IM1TBVZzq1sqIJsnM2eVu98+8L1TcvYjnb6zshgmuOPHtTtPfdXLqCGJ83wVJL4V4dOcOGJ0rPgZ3RWGzcRSVRxE0yxOpyOfq4YfgUjG0qy6ACDY2PMoZJBsYuTtty7i+Cckw2uNaA7QvgcUJOn9kOP1y0lmBaEOMWJwJyI7MmIoDozTnQ7pEEE6xchHvCT4q3/nyENqVnHiGATc/IwQzT0KfbY5h5BTCcKe/BQhDV5x+TQGz2SwxXoQzrINHjAQaqzR8Zv3BlKxfSV7D4JYXMCZfitAZ+8ok4kmAhEktclEeApUX3mgpVU8TsOMju89kNQlcxH0S2UTnrcrOTjUePBYqEWZcsiueOMmcg8NU0GTGeWIUDHmMkxIi6o+qhkagocREleBtVqVVxJTKGTxTkfslsqYUoWHYuD1qo8aUV4r48HD9wnr2Gc5/O8hClECYPqIqGxKmFukb/WyDaGiHgaquE9puHGspVdRZQKxaFxweD1H82kgQHE4wfCwc+Gp8lLRilwcTXvF/D0T5L4pAKpeF+QDIMnJxoDncPOdXLRO9Fg/htoJ73WeVfrdM9av2vnl52u9uX0onP55dfeaYdv8JtzGCIQGw4epv0q2TZCB5qvWt2WcRD28oIttoF7HTVrMh38cDEHjMc+3t7UiW3UDtVmuXHE8+651v7Yuvi126kT3l92U885B3sMd5f9+2qSXVcnp/3Lv77b2df6X7TLT1Mb+Dx88wI2UzijCOEjte8oisfFpda/arW7tWjn8NLkLyFiK3B33u7/7U3uFIeGeyobiAtsMzbYyc4bmiXzTrRN3k1HDVYEPb3TxgksO15pPmTIgDkL+M3baZ9PO9pZ96KWo3BzEJsNYRW4AsOcOLyB/rKztSUSMprN1JlLcutpZOu3QZ04LqEoAsna4aWHB7DpsGQeMADFt7y4rw3Bkh4JCjcM1LwjRyU6FUuWwZn8eTLDV6SNUhNcUNgdAMQIR/J3+HkA9p0/yuFCZRFQFyxfThQC/PFcXaVmyyA/cxn4SvNi+5IpaXNV56Furye5ftGq5bEuh3ezTx3Wh9BcVdh5rhasTChzDhJOzQfgzM5NPU/N5Q2fgkuMgJoPJjN179SWO+6YjyWsqpy7eXXLiZYnm2gnrdOzbkeKd7UMmKslL7W6QNFe+RVGgVIa53RoPpLRjzqO2J13HPHDkVPlEu+oVnBaELDdt+Ykq0t4+0zZoAvLTO0Qaq8mntyjQ7FIEtTNOKlWN2vxniveb8lLfuajo4/BZ/PprRUw6gfEunVcn8qYNmOYPm3hps1ixHXsR9iNBAxTykxq6/xO3jjo4Ndqf7D7tvObNGC5f+qnUhDs7MqwHtL43iC9NViEY9ojtw+fLS6uXPptn1c972KNRAL7tWCn9zmgvuhVjVIja+K37Czolqdr6bGfe9FEosC7L8BB5f103KMkK2Zlfi64/MRFnnexJbnwQj6fXgyAjvPWP+b4BotuOYvrn0o7E3RUNk1CEMlQuIJ+Vvpxz4i3P467JuhEg0Y1KZclPYRyXxT8Zh7TET8ORK7y8lplr1qnZspy/uWq/8typiyLm6dd+P5E/hK0xpcduNcjrsDPyh0vdRF+0jZEeLK5cLhnsSbzMkUfHzDqs6Lo5NzXzgT3Z4Cf0/dZZMTvIuS/QJGuInIZBdcbfWutufdpZgJVaZg5cI5nG+S8mxXFHWWYzpjv2rDRmHVdoh23yHniIa5b5rGHAoawzuGLmViBZyVKWNhzmN91cGpJvRPwHCZOgcm/n/5ydHUoPgxV5eWnzshVTwKgaB69fFVNb2iKsKDwiMVYMxuLNXCrz9NuVCt4GZ4tOe4KOPcX0vI8WGU5KPF2X4AXXJI3e/DcKeEewZtB/NZN0KjgIX/0RCDe/RG8r24swZUC7jcRHozilcVPgZGNkoyAIvHq1nNwqNWfSe+C+/8vQu8zcChI73TIKQJcjpD5cAE5+a6iOhksnAdi/V04i4jr2prnvH2Tm1vuiXff0jgmRwf4S6Y6RAmhtkhsfTg5yY3dlYAXB5GiFlEYKSP1wmmns4nncbFRj9dfYfXBQdsdj3XHjI/p2mNz3pZO4livJGck1wyAK/G3wJMBuMCLA21RNc9J+np1AUNHh+2tQSvy4PDRh6Stb85tWHDJ/58gmUco+dhx/rL8GekS/FytKgEqeBt691Dlijzn8vCmFw8iMt3HVDB846vZJCcn0aaXb4OAWmtrizMAPvMABd8sj5y1+3FkL4nBwujShvzpZ7Je76QOh+RAePwv2Mv/Di4/XvYHCGuqvte/0tqXnW4VVKM2Ze8rpDsSvG0EaoX6UgZ/bcHmuTXQSqShRBNIhhdb8HMRP6IRg3AcHXyhZ8DT+v/gJfDxHsHBl62tBJTokKCEv7c4yvDxx01N3bHNaAVAb2ICBH5xBT9gUiQEommdfzjrvohsS9iB8A3TE0yxXZlsoHaV1VfZyWZl+8cfjGeRjWbZbeSipX8ywHchGc9mPYqU4kNv8Lu209z/pA1+v+q2cMr0bYw67isxiwFGY/Chk0N50I/nklGcp3eiXfUuB5eYSNYSDdCkQssUMR//69sbmeWNWMjy49RjJwLiZ8vM3I2IgeQ3jjKSYuD7YEyyD3hcYj5IoMUdJczIVkWPKLU6yt6LGtfJpv91/6YuAStpUPgfRXdwPnejA8ylGRp1jM0+exTcHvTO+HEwHgt3uoNue4DnwQo48Z5f9vnDnIjVc3UjR9QZSUe+uiKb4ynRZONWUZ7ZWjVmab0uokBF1GdJxUkYv1tSh8Sw899hea6S5enYipeXJQIP4JScOmdWwK70ILAmVDCZ6DaO+EjwNd0JvoclX/nFSnygw3B9tWjhQrKCUMhU0GPRu18rowukw/8HCKAvXwu8uj77TZ1iL0oUubdT7LJCkdT2IknAxXNF5h0lFIviLVL7m4r6v6Tgf2uV/wAcbmBu/2MAAA==' | base64 -d | gzip -d > /tmp/apply_rftag_fixes.py
+          python3 /tmp/apply_rftag_fixes.py
+
+      - name: Validate edits
+        shell: bash
+        run: |
+          git diff --check
+          if git diff -U0 -- '*.c' '*.cpp' '*.h' | grep '^+' | grep -v '^+++' | grep -inE '\bbackend\b|\bcontract\b|source of truth|\bcarries\b|resting value'; then
+            exit 1
+          fi
+          g++ -std=gnu++23 -fno-exceptions -fno-rtti -Iinclude -fsyntax-only \
+            src/rftag/rftag.cpp \
+            src/rftag/rftag_proto_t2.cpp \
+            src/rftag/rftag_proto_t4.cpp \
+            src/rftag/rftag_proto_iso15693.cpp
+
+      - name: Commit edits
+        shell: bash
+        run: |
+          git rm .github/workflows/apply-rftag-review-fixes.yml
+          git add -A
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Fix RFTag validation and frame handling'
+          git push origin HEAD:fix/bluetooth-crypto-rftag-review

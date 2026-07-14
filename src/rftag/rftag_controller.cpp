@@ -43,6 +43,10 @@ SOFTWARE.
 
 bool RFTagController::Init(const RFTagControllerCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
+	Valid(false);
+	Interface(nullptr);
+	memset(&vCfg, 0, sizeof(vCfg));
+
 	if (pIntrf == nullptr)
 	{
 		return false;
@@ -63,7 +67,7 @@ bool RFTagController::Init(const RFTagControllerCfg_t &Cfg, DeviceIntrf * const 
 
 bool RFTagController::Enable()
 {
-	if (vpIntrf == nullptr)
+	if (Valid() == false || vpIntrf == nullptr)
 	{
 		return false;
 	}
@@ -75,7 +79,7 @@ bool RFTagController::Enable()
 
 void RFTagController::Disable()
 {
-	if (vpIntrf == nullptr)
+	if (Valid() == false || vpIntrf == nullptr)
 	{
 		return;
 	}
@@ -85,7 +89,7 @@ void RFTagController::Disable()
 
 void RFTagController::Reset()
 {
-	if (vpIntrf == nullptr)
+	if (Valid() == false || vpIntrf == nullptr)
 	{
 		return;
 	}
@@ -95,7 +99,7 @@ void RFTagController::Reset()
 
 bool RFTagController::Detect(RFTagInfo_t * const pTag)
 {
-	if (vpIntrf == nullptr || pTag == nullptr)
+	if (Valid() == false || vpIntrf == nullptr || pTag == nullptr)
 	{
 		return false;
 	}
@@ -124,7 +128,7 @@ bool RFTagController::Detect(RFTagInfo_t * const pTag)
 
 bool RFTagController::Select(const RFTagInfo_t * const pTag)
 {
-	if (vpIntrf == nullptr || pTag == nullptr)
+	if (Valid() == false || vpIntrf == nullptr || pTag == nullptr)
 	{
 		return false;
 	}
@@ -160,7 +164,7 @@ static void RFTagControllerFillMemCmd(RFTagControllerMemCmd_t *pCmd,
 
 int RFTagController::TagRead(const RFTagInfo_t * const pTag, uint32_t Addr, uint8_t *pBuff, int Len)
 {
-	if (vpIntrf == nullptr || pTag == nullptr || pBuff == nullptr || Len <= 0 || Len > UINT16_MAX)
+	if (Valid() == false || vpIntrf == nullptr || pTag == nullptr || pBuff == nullptr || Len <= 0 || Len > UINT16_MAX)
 	{
 		return 0;
 	}
@@ -182,7 +186,7 @@ int RFTagController::TagRead(const RFTagInfo_t * const pTag, uint32_t Addr, uint
 
 int RFTagController::TagWrite(const RFTagInfo_t * const pTag, uint32_t Addr, const uint8_t *pData, int Len)
 {
-	if (vpIntrf == nullptr || pTag == nullptr || pData == nullptr || Len <= 0 || Len > UINT16_MAX)
+	if (Valid() == false || vpIntrf == nullptr || pTag == nullptr || pData == nullptr || Len <= 0 || Len > UINT16_MAX)
 	{
 		return 0;
 	}
@@ -204,7 +208,7 @@ int RFTagController::TagWrite(const RFTagInfo_t * const pTag, uint32_t Addr, con
 
 int RFTagController::Transceive(const uint8_t *pTx, int TxLen, uint8_t *pRx, int RxLen)
 {
-	if (vpIntrf == nullptr || pTx == nullptr || TxLen <= 0)
+	if (Valid() == false || vpIntrf == nullptr || pTx == nullptr || TxLen <= 0)
 	{
 		return 0;
 	}

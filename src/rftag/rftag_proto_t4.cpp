@@ -54,6 +54,7 @@ using namespace std;
 #define ISO7816_SW_WRONG_LEN	0x6700
 #define ISO7816_SW_NOT_ALLOWED	0x6982
 #define ISO7816_SW_FILE_NOT_FOUND	0x6A82
+#define ISO7816_SW_MEMORY_FAILURE	0x6581
 #define ISO7816_SW_NO_SPACE		0x6A84
 #define ISO7816_SW_WRONG_P1P2	0x6A86
 #define ISO7816_SW_INS_NOT_SUPP	0x6D00
@@ -92,7 +93,8 @@ static int T4tRespSw(uint8_t *pTx, int TxCap, uint16_t Sw)
 
 static int T4tRespData(uint8_t *pTx, int TxCap, const uint8_t *pData, int DataLen, uint16_t Sw)
 {
-	if (pTx == nullptr || TxCap < 2)
+	if (pTx == nullptr || TxCap < 2 || DataLen < 0 ||
+		(DataLen > 0 && pData == nullptr))
 	{
 		return 0;
 	}
@@ -266,7 +268,10 @@ int RFTagProtoT4::UpdateBinary(const uint8_t *pRx, int RxLen, uint8_t *pTx, int 
 
 	if (lc > 0)
 	{
-		vpTag->MemWrite(off, &pRx[5], lc);
+		if (vpTag->MemWrite(off, &pRx[5], lc) != lc)
+		{
+			return T4tRespSw(pTx, TxCap, ISO7816_SW_MEMORY_FAILURE);
+		}
 		vpTag->EvtHandler(RFTAG_EVT_MEM_CHANGED, off, lc);
 	}
 

@@ -147,7 +147,7 @@ int RFTagProtoIso15693::ReqStart(const uint8_t *pRx, int RxLen, bool *bForMe)
 
 static int Iso15693Error(uint8_t *pTx, int TxCap, uint8_t Err)
 {
-	if (TxCap < 2)
+	if (pTx == nullptr || TxCap < 2)
 	{
 		return 0;
 	}
@@ -166,7 +166,7 @@ int RFTagProtoIso15693::Inventory(uint8_t *pTx, int TxCap)
 		return 0;
 	}
 
-	if (TxCap < 2 + ISO15693_UID_LEN)
+	if (pTx == nullptr || TxCap < 2 + ISO15693_UID_LEN)
 	{
 		return 0;
 	}
@@ -195,23 +195,25 @@ int RFTagProtoIso15693::ReadSingle(const uint8_t *pRx, int RxLen, int Idx,
 		return Iso15693Error(pTx, TxCap, ERR_BLOCK_NA);
 	}
 
-	int n = 0;
+	int n = bOption ? 2 : 1;
 
-	pTx[n++] = 0x00;					// response flags, no error
-	if (bOption)
-	{
-		pTx[n++] = 0x00;				// block security status
-	}
-
-	if (n + ISO15693_BLOCK_SIZE > TxCap)
+	if (pTx == nullptr || n + ISO15693_BLOCK_SIZE > TxCap)
 	{
 		return 0;
 	}
 
-	vpTag->MemRead(addr, &pTx[n], ISO15693_BLOCK_SIZE);
-	n += ISO15693_BLOCK_SIZE;
+	pTx[0] = 0x00;					// response flags, no error
+	if (bOption)
+	{
+		pTx[1] = 0x00;				// block security status
+	}
 
-	return n;
+	if (vpTag->MemRead(addr, &pTx[n], ISO15693_BLOCK_SIZE) != ISO15693_BLOCK_SIZE)
+	{
+		return 0;
+	}
+
+	return n + ISO15693_BLOCK_SIZE;
 }
 
 int RFTagProtoIso15693::ReadMultiple(const uint8_t *pRx, int RxLen, int Idx,
@@ -232,27 +234,27 @@ int RFTagProtoIso15693::ReadMultiple(const uint8_t *pRx, int RxLen, int Idx,
 		return Iso15693Error(pTx, TxCap, ERR_BLOCK_NA);
 	}
 
-	int n = 0;
+	uint32_t need = 1U + total + (bOption ? count : 0U);
+	if (pTx == nullptr || TxCap < 0 || need > (uint32_t)TxCap)
+	{
+		return 0;
+	}
 
+	int n = 0;
 	pTx[n++] = 0x00;
 
 	for (uint32_t b = 0; b < count; b++)
 	{
 		if (bOption)
 		{
-			if (n + 1 > TxCap)
-			{
-				return 0;
-			}
 			pTx[n++] = 0x00;			// block security status
 		}
 
-		if (n + ISO15693_BLOCK_SIZE > TxCap)
+		if (vpTag->MemRead(addr + b * ISO15693_BLOCK_SIZE, &pTx[n],
+						   ISO15693_BLOCK_SIZE) != ISO15693_BLOCK_SIZE)
 		{
 			return 0;
 		}
-
-		vpTag->MemRead(addr + b * ISO15693_BLOCK_SIZE, &pTx[n], ISO15693_BLOCK_SIZE);
 		n += ISO15693_BLOCK_SIZE;
 	}
 
@@ -282,14 +284,18 @@ int RFTagProtoIso15693::WriteSingle(const uint8_t *pRx, int RxLen, int Idx,
 		return Iso15693Error(pTx, TxCap, ERR_BLOCK_NA);
 	}
 
-	vpTag->MemWrite(addr, &pRx[Idx + 1], ISO15693_BLOCK_SIZE);
-	vpTag->EvtHandler(RFTAG_EVT_MEM_CHANGED, addr, ISO15693_BLOCK_SIZE);
+	if (vpTag->MemWrite(addr, &pRx[Idx + 1], ISO15693_BLOCK_SIZE) !=
+		ISO15693_BLOCK_SIZE)
+	{
+		return Iso15693Error(pTx, TxCap, ERR_WRITE_FAILED);
+	}
 
-	if (TxCap < 1)
+	if (pTx == nullptr || TxCap < 1)
 	{
 		return 0;
 	}
 
+	vpTag->EvtHandler(RFTAG_EVT_MEM_CHANGED, addr, ISO15693_BLOCK_SIZE);
 	pTx[0] = 0x00;		// response flags, no error
 	return 1;
 }
@@ -304,7 +310,7 @@ int RFTagProtoIso15693::GetSysInfo(uint8_t *pTx, int TxCap)
 	}
 
 	// Flags, info flags, UID, DSFID, AFI, block count and size, IC reference
-	if (TxCap < 2 + ISO15693_UID_LEN + 4)
+	if (pTx == nullptr || TxCap < 2 + ISO15693_UID_LEN + 4)
 	{
 		return 0;
 	}
@@ -417,12 +423,20 @@ int RFTagProtoIso15693::OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int
 			{
 				return Iso15693Error(pTx, TxCap, ERR_NOT_RECOGNIZED);
 			}
+			if (pTx == nullptr || TxCap < 1)
+			{
+				return 0;
+			}
 			vbSelected = true;
 			vbQuiet = false;
 			pTx[0] = 0x00;
 			return 1;
 
 		case CMD_RESET_TO_READY:
+			if (pTx == nullptr || TxCap < 1)
+			{
+				return 0;
+			}
 			vbSelected = false;
 			vbQuiet = false;
 			pTx[0] = 0x00;

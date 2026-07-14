@@ -1,0 +1,40 @@
+name: Apply RFTag core edits
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'fix/bluetooth-crypto-rftag-review' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/bluetooth-crypto-rftag-review
+
+      - name: Apply edits
+        shell: bash
+        run: python3 .github/apply_rftag_core.py
+
+      - name: Validate
+        shell: bash
+        run: |
+          git diff --check
+          if git diff -U0 -- '*.c' '*.cpp' '*.h' | grep '^+' | grep -v '^+++' | grep -inE '\bbackend\b|\bcontract\b|source of truth|\bcarries\b|resting value'; then
+            exit 1
+          fi
+          g++ -std=gnu++23 -fno-exceptions -fno-rtti -Iinclude -fsyntax-only src/rftag/rftag.cpp
+
+      - name: Commit
+        shell: bash
+        run: |
+          git add include/rftag/rftag.h src/rftag/rftag.cpp
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Fix RFTag state and NDEF updates'
+          git push origin HEAD:fix/bluetooth-crypto-rftag-review

@@ -1,0 +1,332 @@
+diff --git a/src/rftag/rfreader_pn532.cpp b/src/rftag/rfreader_pn532.cpp
+index 9211c61..29db41e 100644
+--- a/src/rftag/rfreader_pn532.cpp
++++ b/src/rftag/rfreader_pn532.cpp
+@@ -50,7 +50,8 @@ int RfReaderPn532::BuildFrame(uint8_t Cmd, const uint8_t *pData, int DataLen,
+ 	int len = 2 + DataLen;			// TFI and command, plus data
+ 	int need = 7 + DataLen + 2;		// header 6, LEN body, DCS, postamble
+ 
+-	if (pFrame == nullptr || Cap < need || DataLen < 0 || len > 0xFF)
++	if (pFrame == nullptr || Cap < need || DataLen < 0 || len > 0xFF ||
++		(DataLen > 0 && pData == nullptr))
+ 	{
+ 		return -1;
+ 	}
+@@ -135,9 +136,21 @@ int RfReaderPn532::Command(uint8_t Cmd, const uint8_t *pData, int DataLen,
+ 
+ 	i += 2;								// past the start codes 00 FF
+ 	int len = rd[i++];
+-	i++;								// skip LCS
++	uint8_t lcs = rd[i++];
+ 
+-	if (len < 2 || i + len > rl)
++	if ((uint8_t)(len + lcs) != 0 || len < 2 || i + len + 2 > rl)
++	{
++		return -1;
++	}
++
++	int body = i;
++	uint8_t sum = 0;
++	for (int j = 0; j < len; j++)
++	{
++		sum = (uint8_t)(sum + rd[body + j]);
++	}
++	if ((uint8_t)(sum + rd[body + len]) != 0 ||
++		rd[body + len + 1] != PN532_POSTAMBLE)
+ 	{
+ 		return -1;
+ 	}
+@@ -149,8 +162,12 @@ int RfReaderPn532::Command(uint8_t Cmd, const uint8_t *pData, int DataLen,
+ 
+ 	int dl = len - 2;				// data after TFI and response command
+ 
+-	if (pRsp != nullptr && dl > 0)
++	if (dl > 0 && pRsp != nullptr)
+ 	{
++		if (RspCap <= 0)
++		{
++			return -1;
++		}
+ 		int c = dl < RspCap ? dl : RspCap;
+ 		memcpy(pRsp, &rd[i], c);
+ 		return c;
+@@ -201,6 +218,9 @@ int RfReaderPn532::DataExchange(const uint8_t *pTx, int TxLen, uint8_t *pRx, int
+ bool RfReaderPn532::Init(const RFTagControllerCfg_t &Cfg, const RfReaderPn532Cfg_t &Pn,
+ 						 DeviceIntrf * const pIntrf)
+ {
++	Valid(false);
++	Interface(nullptr);
++
+ 	if (pIntrf == nullptr)
+ 	{
+ 		return false;
+@@ -256,7 +276,7 @@ bool RfReaderPn532::Init(const RFTagControllerCfg_t &Cfg, DeviceIntrf * const pI
+ 
+ bool RfReaderPn532::Enable()
+ {
+-	if (vpIntrf == nullptr)
++	if (Valid() == false || vpIntrf == nullptr)
+ 	{
+ 		return false;
+ 	}
+@@ -268,7 +288,7 @@ bool RfReaderPn532::Enable()
+ 
+ void RfReaderPn532::Disable()
+ {
+-	if (vpIntrf == nullptr)
++	if (Valid() == false || vpIntrf == nullptr)
+ 	{
+ 		return;
+ 	}
+@@ -278,7 +298,7 @@ void RfReaderPn532::Disable()
+ 
+ void RfReaderPn532::Reset()
+ {
+-	if (vpIntrf == nullptr)
++	if (Valid() == false || vpIntrf == nullptr)
+ 	{
+ 		return;
+ 	}
+@@ -291,7 +311,7 @@ bool RfReaderPn532::Detect(RFTagInfo_t * const pTag)
+ 	uint8_t d[2];
+ 	uint8_t r[PN532_FRAME_DATA_MAX];
+ 
+-	if (pTag == nullptr)
++	if (Valid() == false || pTag == nullptr)
+ 	{
+ 		return false;
+ 	}
+@@ -315,26 +335,26 @@ bool RfReaderPn532::Detect(RFTagInfo_t * const pTag)
+ 	// is the Type A case.
+ 	if (vTargetType == PN532_BRTY_106K_TYPEA && rl >= 6)
+ 	{
+-		vTg = r[1];
+-		pTag->Proto = RF_PROTO_NFCA;
+ 		int uidLen = r[5];
+-
+-		if (uidLen > (int)sizeof(pTag->Uid))
++		if (uidLen <= 0 || uidLen > (int)sizeof(pTag->Uid) || 6 + uidLen > rl)
+ 		{
+-			uidLen = (int)sizeof(pTag->Uid);
++			return false;
+ 		}
+ 
+-		if (6 + uidLen <= rl)
+-		{
+-			pTag->UidLen = (uint8_t)uidLen;
+-			memcpy(pTag->Uid, &r[6], uidLen);
+-		}
++		vTg = r[1];
++		pTag->Proto = RF_PROTO_NFCA;
++		pTag->UidLen = (uint8_t)uidLen;
++		memcpy(pTag->Uid, &r[6], uidLen);
+ 	}
+-	else if (vTargetType == PN532_BRTY_ISO15693)
++	else if (vTargetType == PN532_BRTY_ISO15693 && rl >= 2)
+ 	{
+ 		vTg = r[1];
+ 		pTag->Proto = RF_PROTO_ISO15693;
+ 	}
++	else
++	{
++		return false;
++	}
+ 
+ 	EvtHandler(RFTAGCTRL_EVT_TAG_DETECTED, pTag->Proto, 0);
+ 
+@@ -343,12 +363,9 @@ bool RfReaderPn532::Detect(RFTagInfo_t * const pTag)
+ 
+ bool RfReaderPn532::Select(const RFTagInfo_t * const pTag)
+ {
+-	// InListPassiveTarget already activated the target. Record the target
+-	// number for InDataExchange. A multi target port would match pTag to a
+-	// stored list, this single target port uses the last activated one.
+-	(void)pTag;
+-
+-	return vTg != 0;
++	// InListPassiveTarget already activated the target. A multi target port
++	// would match pTag to a stored list; this port uses the last target.
++	return Valid() && pTag != nullptr && pTag->Proto != RF_PROTO_NONE && vTg != 0;
+ }
+ 
+ int RfReaderPn532::TagRead(const RFTagInfo_t * const pTag, uint32_t Addr, uint8_t *pBuff, int Len)
+diff --git a/src/rftag/rftag_controller.cpp b/src/rftag/rftag_controller.cpp
+index 6e317f4..dd67fda 100644
+--- a/src/rftag/rftag_controller.cpp
++++ b/src/rftag/rftag_controller.cpp
+@@ -43,6 +43,10 @@ SOFTWARE.
+ 
+ bool RFTagController::Init(const RFTagControllerCfg_t &Cfg, DeviceIntrf * const pIntrf)
+ {
++	Valid(false);
++	Interface(nullptr);
++	memset(&vCfg, 0, sizeof(vCfg));
++
+ 	if (pIntrf == nullptr)
+ 	{
+ 		return false;
+@@ -63,7 +67,7 @@ bool RFTagController::Init(const RFTagControllerCfg_t &Cfg, DeviceIntrf * const
+ 
+ bool RFTagController::Enable()
+ {
+-	if (vpIntrf == nullptr)
++	if (Valid() == false || vpIntrf == nullptr)
+ 	{
+ 		return false;
+ 	}
+@@ -75,7 +79,7 @@ bool RFTagController::Enable()
+ 
+ void RFTagController::Disable()
+ {
+-	if (vpIntrf == nullptr)
++	if (Valid() == false || vpIntrf == nullptr)
+ 	{
+ 		return;
+ 	}
+@@ -85,7 +89,7 @@ void RFTagController::Disable()
+ 
+ void RFTagController::Reset()
+ {
+-	if (vpIntrf == nullptr)
++	if (Valid() == false || vpIntrf == nullptr)
+ 	{
+ 		return;
+ 	}
+@@ -95,7 +99,7 @@ void RFTagController::Reset()
+ 
+ bool RFTagController::Detect(RFTagInfo_t * const pTag)
+ {
+-	if (vpIntrf == nullptr || pTag == nullptr)
++	if (Valid() == false || vpIntrf == nullptr || pTag == nullptr)
+ 	{
+ 		return false;
+ 	}
+@@ -124,7 +128,7 @@ bool RFTagController::Detect(RFTagInfo_t * const pTag)
+ 
+ bool RFTagController::Select(const RFTagInfo_t * const pTag)
+ {
+-	if (vpIntrf == nullptr || pTag == nullptr)
++	if (Valid() == false || vpIntrf == nullptr || pTag == nullptr)
+ 	{
+ 		return false;
+ 	}
+@@ -160,7 +164,7 @@ static void RFTagControllerFillMemCmd(RFTagControllerMemCmd_t *pCmd,
+ 
+ int RFTagController::TagRead(const RFTagInfo_t * const pTag, uint32_t Addr, uint8_t *pBuff, int Len)
+ {
+-	if (vpIntrf == nullptr || pTag == nullptr || pBuff == nullptr || Len <= 0 || Len > UINT16_MAX)
++	if (Valid() == false || vpIntrf == nullptr || pTag == nullptr || pBuff == nullptr || Len <= 0 || Len > UINT16_MAX)
+ 	{
+ 		return 0;
+ 	}
+@@ -182,7 +186,7 @@ int RFTagController::TagRead(const RFTagInfo_t * const pTag, uint32_t Addr, uint
+ 
+ int RFTagController::TagWrite(const RFTagInfo_t * const pTag, uint32_t Addr, const uint8_t *pData, int Len)
+ {
+-	if (vpIntrf == nullptr || pTag == nullptr || pData == nullptr || Len <= 0 || Len > UINT16_MAX)
++	if (Valid() == false || vpIntrf == nullptr || pTag == nullptr || pData == nullptr || Len <= 0 || Len > UINT16_MAX)
+ 	{
+ 		return 0;
+ 	}
+@@ -204,7 +208,7 @@ int RFTagController::TagWrite(const RFTagInfo_t * const pTag, uint32_t Addr, con
+ 
+ int RFTagController::Transceive(const uint8_t *pTx, int TxLen, uint8_t *pRx, int RxLen)
+ {
+-	if (vpIntrf == nullptr || pTx == nullptr || TxLen <= 0)
++	if (Valid() == false || vpIntrf == nullptr || pTx == nullptr || TxLen <= 0)
+ 	{
+ 		return 0;
+ 	}
+diff --git a/src/rftag/st25dv.cpp b/src/rftag/st25dv.cpp
+index 14412f0..6e4fde5 100644
+--- a/src/rftag/st25dv.cpp
++++ b/src/rftag/st25dv.cpp
+@@ -82,20 +82,42 @@ int TagSt25dv::WriteAt(uint8_t DevAddr, uint16_t Addr, const uint8_t *pData, int
+ 
+ 	l = DeviceIntrfWrite((DevIntrf_t *)*vpIntrf, DevAddr, ad, sizeof(ad), pData, Len);
+ 
+-	// The dynamic registers ignore the settle time, it only costs a delay.
+-	msDelay(ST25DV_WRITE_DELAY_MS);
++	if (l > 0)
++	{
++		// Static EEPROM writes need the device programming interval. The delay is
++		// harmless for dynamic registers and is skipped after a failed transfer.
++		msDelay(ST25DV_WRITE_DELAY_MS);
++	}
+ 
+ 	return l;
+ }
+ 
+ int TagSt25dv::MemRead(uint32_t Addr, uint8_t *pBuff, int Len)
+ {
+-	return ReadAt(vUserAddr, (uint16_t)Addr, pBuff, Len);
++	if (Valid() == false || pBuff == nullptr || Len <= 0 || Addr >= vCfg.MemSize ||
++		Addr > UINT16_MAX)
++	{
++		return 0;
++	}
++
++	uint32_t avail = vCfg.MemSize - Addr;
++	int len = (uint32_t)Len > avail ? (int)avail : Len;
++
++	return ReadAt(vUserAddr, (uint16_t)Addr, pBuff, len);
+ }
+ 
+ int TagSt25dv::MemWrite(uint32_t Addr, const uint8_t *pData, int Len)
+ {
+-	return WriteAt(vUserAddr, (uint16_t)Addr, pData, Len);
++	if (Valid() == false || pData == nullptr || Len <= 0 || Addr >= vCfg.MemSize ||
++		Addr > UINT16_MAX)
++	{
++		return 0;
++	}
++
++	uint32_t avail = vCfg.MemSize - Addr;
++	int len = (uint32_t)Len > avail ? (int)avail : Len;
++
++	return WriteAt(vUserAddr, (uint16_t)Addr, pData, len);
+ }
+ 
+ bool TagSt25dv::ReadUid(uint8_t *pUid)
+@@ -201,7 +223,7 @@ int TagSt25dv::WriteType5Cc(bool bReadOnly)
+ 		len = 8;
+ 	}
+ 
+-	if (MemWrite(0, cc, len) != len)
++	if (WriteAt(vUserAddr, 0, cc, len) != len)
+ 	{
+ 		return 0;
+ 	}
+@@ -220,8 +242,8 @@ bool TagSt25dv::Init(const RFTagCfg_t &Cfg, const St25dvCfg_t &St, DeviceIntrf *
+ {
+ 	uint8_t uid[8];
+ 
+-	// A failed Init must not leave a previously initialized object usable.
+ 	Valid(false);
++	Interface(nullptr);
+ 
+ 	if (pIntrf == nullptr)
+ 	{
+@@ -243,6 +265,22 @@ bool TagSt25dv::Init(const RFTagCfg_t &Cfg, const St25dvCfg_t &St, DeviceIntrf *
+ 		vCfg.MemSize = ST25DV_MEMSIZE_04K;
+ 	}
+ 
++	if (vCfg.MemSize > (uint32_t)UINT16_MAX + 1U ||
++		vCfg.NdefAddr >= vCfg.MemSize)
++	{
++		return false;
++	}
++
++	uint32_t avail = vCfg.MemSize - vCfg.NdefAddr;
++	if (vCfg.NdefMaxLen == 0)
++	{
++		vCfg.NdefMaxLen = avail;
++	}
++	else if (vCfg.NdefMaxLen > avail)
++	{
++		return false;
++	}
++
+ 	// Presence check. The UID read must complete for the chip to be usable.
+ 	if (ReadUid(uid) == false)
+ 	{

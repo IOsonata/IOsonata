@@ -16,9 +16,9 @@ Usage with RFTag:
 	Each received reader frame is passed to the frame callback set in the
 	configuration. The callback calls RFTag::ProcessFrame, which runs the
 	configured protocol and writes the response into a caller buffer and
-	returns its length. The callback then sends that buffer back through this
-	transport with DeviceIntrfTx, which maps to nrfx_nfct_tx with the window
-	grid delay mode. A zero length result needs no answer.
+	returns its length. Byte frames use DeviceIntrfTx. Short responses use
+	NfctIntrfBitsTx with the exact bit count from RFTag::ResponseBits. Both paths
+	use the window grid delay mode. A zero length result needs no answer.
 
 Integration notes for the target build:
 	HFCLK must run from the crystal before Enable, NFCT is clocked from it.
@@ -127,6 +127,13 @@ extern "C" {
  */
 bool NfctIntrfInit(NfctIntrfDev_t * const pDev, const NfctIntrfCfg_t * const pCfg);
 
+/**
+ * @brief	Transmit an NFCT response with an exact bit length.
+ *
+ * @return	Bit count queued, or 0 on failure
+ */
+int NfctIntrfBitsTx(NfctIntrfDev_t * const pDev, const uint8_t *pData, int BitLen);
+
 #ifdef __cplusplus
 }
 
@@ -174,6 +181,10 @@ public:
 
 	virtual void StopTx(void) {
 		DeviceIntrfStopTx(&vDevData.DevIntrf);
+	}
+
+	int BitsTx(const uint8_t *pData, int BitLen) {
+		return NfctIntrfBitsTx(&vDevData, pData, BitLen);
 	}
 
 protected:
