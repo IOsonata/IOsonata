@@ -1,0 +1,39 @@
+name: Fix UART BLE Init Exit
+
+on:
+  push:
+    branches:
+      - cc3xx-review-fixes
+    paths:
+      - .github/fix_uart_ble_init_exit.py
+      - .github/workflows/fix-uart-ble-init-exit.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cc3xx-review-fixes
+          fetch-depth: 0
+
+      - name: Apply fix
+        run: python3 .github/fix_uart_ble_init_exit.py
+
+      - name: Validate
+        run: |
+          grep -q 'if (!BtAppInit(&s_BleAppCfg))' exemples/bluetooth/uart_ble.cpp
+          grep -q 'BtAppInit failed' exemples/bluetooth/uart_ble.cpp
+          grep -q 'BtAppRun returned' exemples/bluetooth/uart_ble.cpp
+
+      - name: Commit and remove temporary files
+        run: |
+          rm .github/fix_uart_ble_init_exit.py .github/workflows/fix-uart-ble-init-exit.yml
+          git config user.name 'IOsonata automation'
+          git config user.email 'automation@i-syst.com'
+          git add exemples/bluetooth/uart_ble.cpp .github
+          git commit -m 'report UART BLE initialization failure'
+          git push origin HEAD:cc3xx-review-fixes
