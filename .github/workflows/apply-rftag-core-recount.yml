@@ -1,0 +1,57 @@
+name: Apply RFTag core patch with recount
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'fix/bluetooth-crypto-rftag-review' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/bluetooth-crypto-rftag-review
+
+      - name: Extract and apply patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('.github/workflows/apply-rftag-review-pr.yml').read_text()
+          start = text.index('          diff --git a/include/rftag/rftag.h')
+          end = text.index('          PATCH', start)
+          lines = text[start:end].splitlines()
+          patch = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+          Path('/tmp/rftag-core.patch').write_text(patch)
+          PY
+          git apply --check --recount /tmp/rftag-core.patch
+          git apply --recount /tmp/rftag-core.patch
+
+      - name: Validate
+        shell: bash
+        run: |
+          git diff --check
+          if git diff -U0 -- '*.c' '*.cpp' '*.h' | grep '^+' | grep -v '^+++' | grep -inE '\bbackend\b|\bcontract\b|source of truth|\bcarries\b|resting value'; then
+            exit 1
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ['include/rftag/rftag.h', 'src/rftag/rftag.cpp']:
+              text = Path(name).read_text(encoding='ascii')
+              assert text.count('{') == text.count('}')
+          PY
+          g++ -std=gnu++23 -fno-exceptions -fno-rtti -Iinclude -fsyntax-only src/rftag/rftag.cpp
+
+      - name: Commit
+        shell: bash
+        run: |
+          git add include/rftag/rftag.h src/rftag/rftag.cpp
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Fix RFTag state and NDEF updates'
+          git push origin HEAD:fix/bluetooth-crypto-rftag-review
