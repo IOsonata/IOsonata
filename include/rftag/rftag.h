@@ -143,6 +143,14 @@ public:
 	 */
 	virtual int OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap) = 0;
 
+	/**
+	 * @brief	Number of response bits from the last OnFrame call.
+	 *
+	 * Byte framed protocols use TxLen * 8. A protocol with a short
+	 * response overrides this method.
+	 */
+	virtual int ResponseBits(int TxLen) const { return TxLen > 0 ? TxLen * 8 : 0; }
+
 protected:
 	RFTag *vpTag;					//!< Tag served by this engine
 };
@@ -218,6 +226,13 @@ public:
 	 * @return	Response length in bytes, 0 for no response
 	 */
 	virtual int ProcessFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap);
+
+	/**
+	 * @brief	Number of response bits from the last ProcessFrame call.
+	 */
+	int ResponseBits(int TxLen) const {
+		return vpProto != nullptr ? vpProto->ResponseBits(TxLen) : 0;
+	}
 
 	/**
 	 * @brief	Read tag memory. The base reads the local image.
