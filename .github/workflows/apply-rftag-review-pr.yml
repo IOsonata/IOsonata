@@ -20,6 +20,9 @@ jobs:
       - name: Apply edits
         shell: bash
         run: |
+          if test -f .github/rftag-fix-error.txt; then
+            exit 0
+          fi
           python3 - <<'PY'
           from pathlib import Path
           text = Path('.github/workflows/apply-rftag-review-fixes.yml').read_text()
@@ -28,11 +31,27 @@ jobs:
           Path('/tmp/rftag_fixes.b64').write_text(text[start:end])
           PY
           base64 -d /tmp/rftag_fixes.b64 | gzip -d > /tmp/apply_rftag_fixes.py
-          python3 /tmp/apply_rftag_fixes.py
+          set +e
+          python3 /tmp/apply_rftag_fixes.py > /tmp/rftag-fix.log 2>&1
+          status=$?
+          set -e
+          if test $status -ne 0; then
+            git reset --hard HEAD
+            cp /tmp/rftag-fix.log .github/rftag-fix-error.txt
+            git add .github/rftag-fix-error.txt
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'Record RFTag edit failure'
+            git push origin HEAD:fix/bluetooth-crypto-rftag-review
+            exit 1
+          fi
 
       - name: Validate edits
         shell: bash
         run: |
+          if test -f .github/rftag-fix-error.txt; then
+            exit 0
+          fi
           git diff --check
           if git diff -U0 -- '*.c' '*.cpp' '*.h' | grep '^+' | grep -v '^+++' | grep -inE '\bbackend\b|\bcontract\b|source of truth|\bcarries\b|resting value'; then
             exit 1
@@ -46,6 +65,9 @@ jobs:
       - name: Commit edits
         shell: bash
         run: |
+          if test -f .github/rftag-fix-error.txt; then
+            exit 0
+          fi
           git rm .github/workflows/apply-rftag-review-fixes.yml
           git rm .github/workflows/apply-rftag-review-pr.yml
           git add -A
