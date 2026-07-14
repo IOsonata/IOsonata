@@ -1,0 +1,125 @@
+diff --git a/ARM/Nordic/nRF54/src/bt_app_bm.cpp b/ARM/Nordic/nRF54/src/bt_app_bm.cpp
+index 2181001..82cbfa0 100644
+--- a/ARM/Nordic/nRF54/src/bt_app_bm.cpp
++++ b/ARM/Nordic/nRF54/src/bt_app_bm.cpp
+@@ -196,9 +196,8 @@ static void BtAppDiscDescRsp(const ble_gattc_evt_t *pEvt);
+ // events: BLE_GAP_EVT_PASSKEY_DISPLAY (Numeric Comparison when match_request is
+ // set, otherwise Passkey Entry display) and BLE_GAP_EVT_AUTH_KEY_REQUEST
+ // (Passkey Entry input). These are bridged to the same BtSmp* interaction API
+-// sd_ble_gap_auth_key_reply. The generic weak defaults live in bt_smp.cpp,
+-// which is not linked on this port, so equivalent weak defaults are provided
+-// here; an application strong definition overrides them.
++// through sd_ble_gap_auth_key_reply. Strong reply functions below replace the
++// generic weak implementations; an application replaces the weak UI functions.
+ // ===========================================================================
+ 
+ // SoftDevice passkey octets are six ASCII digits, most significant first.
+@@ -255,6 +254,25 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
+ static ble_gap_lesc_oob_data_t s_BtAppPeerOob;
+ static bool s_BtAppPeerOobValid = false;
+ 
++typedef struct __Bt_Smp_Bm_Auth_Cfg {
++	uint8_t IoCaps;
++	uint8_t AuthReq;
++	bool bSet;
++} BtSmpBmAuthCfg_t;
++
++static BtSmpBmAuthCfg_t s_BtSmpAuthCfg;
++
++void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
++{
++	if (IoCaps > BT_SMP_IOCAPS_KEYBOARD_DISPLAY)
++	{
++		return;
++	}
++	s_BtSmpAuthCfg.IoCaps = IoCaps;
++	s_BtSmpAuthCfg.AuthReq = (uint8_t)(AuthReq | BT_SMP_AUTHREQ_SC);
++	s_BtSmpAuthCfg.bSet = true;
++}
++
+ static ble_gap_lesc_oob_data_t *BtAppOobPeerDataHandler(uint16_t ConnHdl)
+ {
+ 	if (!s_BtAppPeerOobValid)
+@@ -304,7 +322,7 @@ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pCon
+ 	{
+ 		return;
+ 	}
+-	memset(&s_BtAppPeerOob, 0, sizeof(s_BtAppPeerOob));
++	CryptoSecureWipe(&s_BtAppPeerOob, sizeof(s_BtAppPeerOob));
+ 	memcpy(s_BtAppPeerOob.r, pRand, 16);
+ 	memcpy(s_BtAppPeerOob.c, pConf, 16);
+ 	s_BtAppPeerOobValid = true;
+@@ -313,7 +331,7 @@ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pCon
+ void BtSmpOobDataClear(void)
+ {
+ 	s_BtAppPeerOobValid = false;
+-	memset(&s_BtAppPeerOob, 0, sizeof(s_BtAppPeerOob));
++	CryptoSecureWipe(&s_BtAppPeerOob, sizeof(s_BtAppPeerOob));
+ }
+ 
+ // Weak defaults. With no application override the only safe action is to reject,
+@@ -369,6 +387,11 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
+ 			uint16_t connHdl = p_ble_evt->evt.gap_evt.conn_handle;
+ 			BtDevice_t *pPeer = BtPeerFindByHdl(connHdl);
+ 
++			if (s_SecurePendingHdl == connHdl)
++			{
++				s_SecurePendingHdl = BLE_CONN_HANDLE_INVALID;
++			}
++			BtSmpOobDataClear();
+ 			BtAppConnLedOff();
+ 			BtPeerFree(pPeer);
+ 
+@@ -944,6 +967,7 @@ static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
+ 	switch (p_evt->evt_id)
+ 	{
+ 		case PM_EVT_CONN_SEC_SUCCEEDED:
++			BtSmpOobDataClear();
+ 			// Link is encrypted. peer_manager holds the bond. Notify the app so
+ 			// it can run work that needs an encrypted link (e.g. a central
+ 			// reading protected characteristics). (nRF52 optionally enforces
+@@ -952,6 +976,7 @@ static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
+ 			break;
+ 
+ 		case PM_EVT_CONN_SEC_FAILED:
++			BtSmpOobDataClear();
+ 			// Security setup failed. pm_handler_disconnect_on_sec_failure above
+ 			// already tears the link down when required.
+ 			break;
+@@ -1089,6 +1114,36 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
+ 			break;
+ 	}
+ 
++	if (s_BtSmpAuthCfg.bSet)
++	{
++		sec_param.bond = (s_BtSmpAuthCfg.AuthReq &
++						  BT_SMP_AUTHREQ_BONDING_FLAG_MASK) !=
++						 BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING;
++		sec_param.mitm = (s_BtSmpAuthCfg.AuthReq & BT_SMP_AUTHREQ_MITM) != 0;
++		sec_param.lesc = (s_BtSmpAuthCfg.AuthReq & BT_SMP_AUTHREQ_SC) != 0;
++		sec_param.keypress = (s_BtSmpAuthCfg.AuthReq & BT_SMP_AUTHREQ_KEYPRESS) != 0;
++
++		switch (s_BtSmpAuthCfg.IoCaps)
++		{
++			case BT_SMP_IOCAPS_DISPLAY_ONLY:
++				sec_param.io_caps = BLE_GAP_IO_CAPS_DISPLAY_ONLY;
++				break;
++			case BT_SMP_IOCAPS_DISPLAY_YESNO:
++				sec_param.io_caps = BLE_GAP_IO_CAPS_DISPLAY_YESNO;
++				break;
++			case BT_SMP_IOCAPS_KEYBOARD_ONLY:
++				sec_param.io_caps = BLE_GAP_IO_CAPS_KEYBOARD_ONLY;
++				break;
++			case BT_SMP_IOCAPS_KEYBOARD_DISPLAY:
++				sec_param.io_caps = BLE_GAP_IO_CAPS_KEYBOARD_DISPLAY;
++				break;
++			case BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT:
++			default:
++				sec_param.io_caps = BLE_GAP_IO_CAPS_NONE;
++				break;
++		}
++	}
++
+ 	if (SecKeyExchg & BTAPP_SECEXCHG_OOB)
+ 	{
+ 		sec_param.oob = 1;
