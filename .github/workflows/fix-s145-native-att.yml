@@ -1,0 +1,43 @@
+name: Fix S145 Native ATT
+
+on:
+  push:
+    branches:
+      - cc3xx-review-fixes
+    paths:
+      - .github/fix_s145_native_att.py
+      - .github/workflows/fix-s145-native-att.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cc3xx-review-fixes
+          fetch-depth: 0
+
+      - name: Apply fix
+        run: python3 .github/fix_s145_native_att.py
+
+      - name: Validate
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          ET.parse('ARM/Nordic/nRF54/nRF54L15/lib/Eclipse/.cproject')
+          PY
+          test "$(grep -o 'src/bluetooth/bt_att.cpp' ARM/Nordic/nRF54/nRF54L15/lib/Eclipse/.cproject | wc -l)" -eq 2
+          test "$(grep -o 'src/bluetooth/bt_l2cap.cpp' ARM/Nordic/nRF54/nRF54L15/lib/Eclipse/.cproject | wc -l)" -eq 2
+          grep -q 'pReqAtt == nullptr' src/bluetooth/bt_att.cpp
+
+      - name: Commit and remove temporary files
+        run: |
+          rm .github/fix_s145_native_att.py .github/workflows/fix-s145-native-att.yml
+          git config user.name 'IOsonata automation'
+          git config user.email 'automation@i-syst.com'
+          git add ARM/Nordic/nRF54/nRF54L15/lib/Eclipse/.cproject src/bluetooth/bt_att.cpp .github
+          git commit -m 'exclude native ATT host from S145 build'
+          git push origin HEAD:cc3xx-review-fixes
