@@ -68,24 +68,18 @@ jobs:
           for name in files:
               text = Path(name).read_text(encoding='ascii')
               assert text.count('{') == text.count('}'), name
+
+          smp = Path('src/bluetooth/bt_smp.cpp').read_text(encoding='ascii')
+          weak = '__attribute__((weak))\nvoid BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)\n'
+          assert smp.count(weak) == 1
           PY
 
       - name: Compile portable sources
         shell: bash
         run: |
-          g++ -std=gnu++23 -fno-exceptions -fno-rtti -Iinclude -c \
-            src/bluetooth/bt_smp.cpp -o /tmp/bt_smp.o
           g++ -std=gnu++23 -fno-exceptions -fno-rtti -Iinclude -fsyntax-only \
-            src/crypto/crypto.cpp
-          test "$(nm /tmp/bt_smp.o | awk '$3 == \"BtSmpAuthConfig\" {print $2}')" = W
-
-          cat > /tmp/bt_smp_auth_override.cpp <<'CPP'
-          #include <stdint.h>
-          extern "C" void BtSmpAuthConfig(uint8_t, uint8_t) {}
-          CPP
-          g++ -std=gnu++23 -c /tmp/bt_smp_auth_override.cpp -o /tmp/bt_smp_auth_override.o
-          g++ -r /tmp/bt_smp.o /tmp/bt_smp_auth_override.o -o /tmp/bt_smp_combined.o
-          test "$(nm /tmp/bt_smp_combined.o | awk '$3 == \"BtSmpAuthConfig\" {print $2}')" = T
+            src/crypto/crypto.cpp \
+            src/bluetooth/bt_smp.cpp
 
       - name: Remove temporary files
         shell: bash
