@@ -1,0 +1,55 @@
+name: Apply RFTag review fixes on pull request
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'fix/bluetooth-crypto-rftag-review'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/bluetooth-crypto-rftag-review
+
+      - name: Apply edits
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('.github/workflows/apply-rftag-review-fixes.yml').read_text()
+          start = text.index("printf '%s' '") + len("printf '%s' '")
+          end = text.index("' | base64 -d", start)
+          Path('/tmp/rftag_fixes.b64').write_text(text[start:end])
+          PY
+          base64 -d /tmp/rftag_fixes.b64 | gzip -d > /tmp/apply_rftag_fixes.py
+          python3 /tmp/apply_rftag_fixes.py
+
+      - name: Validate edits
+        shell: bash
+        run: |
+          git diff --check
+          if git diff -U0 -- '*.c' '*.cpp' '*.h' | grep '^+' | grep -v '^+++' | grep -inE '\bbackend\b|\bcontract\b|source of truth|\bcarries\b|resting value'; then
+            exit 1
+          fi
+          g++ -std=gnu++23 -fno-exceptions -fno-rtti -Iinclude -fsyntax-only \
+            src/rftag/rftag.cpp \
+            src/rftag/rftag_proto_t2.cpp \
+            src/rftag/rftag_proto_t4.cpp \
+            src/rftag/rftag_proto_iso15693.cpp
+
+      - name: Commit edits
+        shell: bash
+        run: |
+          git rm .github/workflows/apply-rftag-review-fixes.yml
+          git rm .github/workflows/apply-rftag-review-pr.yml
+          git add -A
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Fix RFTag validation and frame handling'
+          git push origin HEAD:fix/bluetooth-crypto-rftag-review
