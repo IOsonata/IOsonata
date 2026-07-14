@@ -82,20 +82,42 @@ int TagSt25dv::WriteAt(uint8_t DevAddr, uint16_t Addr, const uint8_t *pData, int
 
 	l = DeviceIntrfWrite((DevIntrf_t *)*vpIntrf, DevAddr, ad, sizeof(ad), pData, Len);
 
-	// The dynamic registers ignore the settle time, it only costs a delay.
-	msDelay(ST25DV_WRITE_DELAY_MS);
+	if (l > 0)
+	{
+		// Static EEPROM writes need the device programming interval. The delay is
+		// harmless for dynamic registers and is skipped after a failed transfer.
+		msDelay(ST25DV_WRITE_DELAY_MS);
+	}
 
 	return l;
 }
 
 int TagSt25dv::MemRead(uint32_t Addr, uint8_t *pBuff, int Len)
 {
-	return ReadAt(vUserAddr, (uint16_t)Addr, pBuff, Len);
+	if (Valid() == false || pBuff == nullptr || Len <= 0 || Addr >= vCfg.MemSize ||
+		Addr > UINT16_MAX)
+	{
+		return 0;
+	}
+
+	uint32_t avail = vCfg.MemSize - Addr;
+	int len = (uint32_t)Len > avail ? (int)avail : Len;
+
+	return ReadAt(vUserAddr, (uint16_t)Addr, pBuff, len);
 }
 
 int TagSt25dv::MemWrite(uint32_t Addr, const uint8_t *pData, int Len)
 {
-	return WriteAt(vUserAddr, (uint16_t)Addr, pData, Len);
+	if (Valid() == false || pData == nullptr || Len <= 0 || Addr >= vCfg.MemSize ||
+		Addr > UINT16_MAX)
+	{
+		return 0;
+	}
+
+	uint32_t avail = vCfg.MemSize - Addr;
+	int len = (uint32_t)Len > avail ? (int)avail : Len;
+
+	return WriteAt(vUserAddr, (uint16_t)Addr, pData, len);
 }
 
 bool TagSt25dv::ReadUid(uint8_t *pUid)
@@ -201,7 +223,7 @@ int TagSt25dv::WriteType5Cc(bool bReadOnly)
 		len = 8;
 	}
 
-	if (MemWrite(0, cc, len) != len)
+	if (WriteAt(vUserAddr, 0, cc, len) != len)
 	{
 		return 0;
 	}
@@ -220,8 +242,8 @@ bool TagSt25dv::Init(const RFTagCfg_t &Cfg, const St25dvCfg_t &St, DeviceIntrf *
 {
 	uint8_t uid[8];
 
-	// A failed Init must not leave a previously initialized object usable.
 	Valid(false);
+	Interface(nullptr);
 
 	if (pIntrf == nullptr)
 	{
@@ -241,6 +263,22 @@ bool TagSt25dv::Init(const RFTagCfg_t &Cfg, const St25dvCfg_t &St, DeviceIntrf *
 	if (vCfg.MemSize == 0)
 	{
 		vCfg.MemSize = ST25DV_MEMSIZE_04K;
+	}
+
+	if (vCfg.MemSize > (uint32_t)UINT16_MAX + 1U ||
+		vCfg.NdefAddr >= vCfg.MemSize)
+	{
+		return false;
+	}
+
+	uint32_t avail = vCfg.MemSize - vCfg.NdefAddr;
+	if (vCfg.NdefMaxLen == 0)
+	{
+		vCfg.NdefMaxLen = avail;
+	}
+	else if (vCfg.NdefMaxLen > avail)
+	{
+		return false;
 	}
 
 	// Presence check. The UID read must complete for the chip to be usable.

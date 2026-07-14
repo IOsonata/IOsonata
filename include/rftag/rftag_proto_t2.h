@@ -13,9 +13,8 @@ NFCID1, SENS_RES and SEL_RES. This engine starts at the first tag command
 after activation.
 
 Type 2 WRITE and SECTOR SELECT acknowledge with a 4 bit ACK or NAK per the
-specification. The engine returns them as a single byte, a byte frame
-transport sends 8 bits. Proper hardware behavior needs a bit frame response
-path in the transport.
+specification. The engine stores the response in one byte and reports the
+exact bit count through ResponseBits.
 
 @author	Hoang Nguyen Hoan
 @date	Jul. 7, 2026
@@ -52,7 +51,7 @@ SOFTWARE.
 
 class RFTagProtoT2 : public RFTagProto {
 public:
-	RFTagProtoT2() : vSector(0), vbSecSelPending(false) {}
+	RFTagProtoT2() : vSector(0), vbSecSelPending(false), vLastTxBits(0) {}
 
 	/**
 	 * @brief	Validate the tag for Type 2 and build the tag header.
@@ -72,6 +71,7 @@ public:
 	 * @brief	Handle one Type 2 command frame.
 	 */
 	virtual int OnFrame(const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap);
+	virtual int ResponseBits(int TxLen) const { return TxLen > 0 ? vLastTxBits : 0; }
 
 	/**
 	 * @brief	Engine default 7 byte UID, NXP manufacturer prefix.
@@ -85,6 +85,7 @@ private:
 
 	uint8_t vSector;				//!< Current sector from SECTOR SELECT
 	bool vbSecSelPending;			//!< First frame of a SECTOR SELECT seen
+	int vLastTxBits;				//!< Exact response length from the last frame
 };
 
 #endif // __RFTAG_PROTO_T2_H__

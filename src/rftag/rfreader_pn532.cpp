@@ -50,7 +50,8 @@ int RfReaderPn532::BuildFrame(uint8_t Cmd, const uint8_t *pData, int DataLen,
 	int len = 2 + DataLen;			// TFI and command, plus data
 	int need = 7 + DataLen + 2;		// header 6, LEN body, DCS, postamble
 
-	if (pFrame == nullptr || Cap < need || DataLen < 0 || len > 0xFF)
+	if (pFrame == nullptr || Cap < need || DataLen < 0 || len > 0xFF ||
+		(DataLen > 0 && pData == nullptr))
 	{
 		return -1;
 	}
@@ -135,9 +136,21 @@ int RfReaderPn532::Command(uint8_t Cmd, const uint8_t *pData, int DataLen,
 
 	i += 2;								// past the start codes 00 FF
 	int len = rd[i++];
-	i++;								// skip LCS
+	uint8_t lcs = rd[i++];
 
-	if (len < 2 || i + len > rl)
+	if ((uint8_t)(len + lcs) != 0 || len < 2 || i + len + 2 > rl)
+	{
+		return -1;
+	}
+
+	int body = i;
+	uint8_t sum = 0;
+	for (int j = 0; j < len; j++)
+	{
+		sum = (uint8_t)(sum + rd[body + j]);
+	}
+	if ((uint8_t)(sum + rd[body + len]) != 0 ||
+		rd[body + len + 1] != PN532_POSTAMBLE)
 	{
 		return -1;
 	}
@@ -149,8 +162,12 @@ int RfReaderPn532::Command(uint8_t Cmd, const uint8_t *pData, int DataLen,
 
 	int dl = len - 2;				// data after TFI and response command
 
-	if (pRsp != nullptr && dl > 0)
+	if (dl > 0 && pRsp != nullptr)
 	{
+		if (RspCap <= 0)
+		{
+			return -1;
+		}
 		int c = dl < RspCap ? dl : RspCap;
 		memcpy(pRsp, &rd[i], c);
 		return c;
@@ -201,6 +218,9 @@ int RfReaderPn532::DataExchange(const uint8_t *pTx, int TxLen, uint8_t *pRx, int
 bool RfReaderPn532::Init(const RFTagControllerCfg_t &Cfg, const RfReaderPn532Cfg_t &Pn,
 						 DeviceIntrf * const pIntrf)
 {
+	Valid(false);
+	Interface(nullptr);
+
 	if (pIntrf == nullptr)
 	{
 		return false;
@@ -256,7 +276,7 @@ bool RfReaderPn532::Init(const RFTagControllerCfg_t &Cfg, DeviceIntrf * const pI
 
 bool RfReaderPn532::Enable()
 {
-	if (vpIntrf == nullptr)
+	if (Valid() == false || vpIntrf == nullptr)
 	{
 		return false;
 	}
@@ -268,7 +288,7 @@ bool RfReaderPn532::Enable()
 
 void RfReaderPn532::Disable()
 {
-	if (vpIntrf == nullptr)
+	if (Valid() == false || vpIntrf == nullptr)
 	{
 		return;
 	}
@@ -278,7 +298,7 @@ void RfReaderPn532::Disable()
 
 void RfReaderPn532::Reset()
 {
-	if (vpIntrf == nullptr)
+	if (Valid() == false || vpIntrf == nullptr)
 	{
 		return;
 	}
@@ -291,7 +311,7 @@ bool RfReaderPn532::Detect(RFTagInfo_t * const pTag)
 	uint8_t d[2];
 	uint8_t r[PN532_FRAME_DATA_MAX];
 
-	if (pTag == nullptr)
+	if (Valid() == false || pTag == nullptr)
 	{
 		return false;
 	}
@@ -315,25 +335,25 @@ bool RfReaderPn532::Detect(RFTagInfo_t * const pTag)
 	// is the Type A case.
 	if (vTargetType == PN532_BRTY_106K_TYPEA && rl >= 6)
 	{
+		int uidLen = r[5];
+		if (uidLen <= 0 || uidLen > (int)sizeof(pTag->Uid) || 6 + uidLen > rl)
+		{
+			return false;
+		}
+
 		vTg = r[1];
 		pTag->Proto = RF_PROTO_NFCA;
-		int uidLen = r[5];
-
-		if (uidLen > (int)sizeof(pTag->Uid))
-		{
-			uidLen = (int)sizeof(pTag->Uid);
-		}
-
-		if (6 + uidLen <= rl)
-		{
-			pTag->UidLen = (uint8_t)uidLen;
-			memcpy(pTag->Uid, &r[6], uidLen);
-		}
+		pTag->UidLen = (uint8_t)uidLen;
+		memcpy(pTag->Uid, &r[6], uidLen);
 	}
-	else if (vTargetType == PN532_BRTY_ISO15693)
+	else if (vTargetType == PN532_BRTY_ISO15693 && rl >= 2)
 	{
 		vTg = r[1];
 		pTag->Proto = RF_PROTO_ISO15693;
+	}
+	else
+	{
+		return false;
 	}
 
 	EvtHandler(RFTAGCTRL_EVT_TAG_DETECTED, pTag->Proto, 0);
@@ -343,12 +363,9 @@ bool RfReaderPn532::Detect(RFTagInfo_t * const pTag)
 
 bool RfReaderPn532::Select(const RFTagInfo_t * const pTag)
 {
-	// InListPassiveTarget already activated the target. Record the target
-	// number for InDataExchange. A multi target port would match pTag to a
-	// stored list, this single target port uses the last activated one.
-	(void)pTag;
-
-	return vTg != 0;
+	// InListPassiveTarget already activated the target. A multi target port
+	// would match pTag to a stored list; this port uses the last target.
+	return Valid() && pTag != nullptr && pTag->Proto != RF_PROTO_NONE && vTg != 0;
 }
 
 int RfReaderPn532::TagRead(const RFTagInfo_t * const pTag, uint32_t Addr, uint8_t *pBuff, int Len)
