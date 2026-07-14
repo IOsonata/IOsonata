@@ -21,15 +21,22 @@ jobs:
         id: apply_edits
         shell: bash
         run: |
-          python3 - <<'PY'
+          set +e
+          {
+            python3 - <<'PY'
           from pathlib import Path
           text = Path('.github/workflows/apply-rftag-review-fixes.yml').read_text()
           start = text.index("printf '%s' '") + len("printf '%s' '")
           end = text.index("' | base64 -d", start)
           Path('/tmp/rftag_fixes.b64').write_text(text[start:end])
           PY
-          base64 -d /tmp/rftag_fixes.b64 | gzip -d > /tmp/apply_rftag_fixes.py
-          python3 /tmp/apply_rftag_fixes.py > /tmp/rftag-fix.log 2>&1
+            base64 -d /tmp/rftag_fixes.b64 | gzip -d > /tmp/apply_rftag_fixes.py
+            python3 /tmp/apply_rftag_fixes.py
+          } > /tmp/rftag-fix.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/rftag-fix.log
+          exit $status
 
       - name: Upload edit log
         if: failure()
