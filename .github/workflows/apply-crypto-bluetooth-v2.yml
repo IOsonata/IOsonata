@@ -1,0 +1,142 @@
+name: Apply corrected crypto and Bluetooth fixes
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'fix/bluetooth-crypto-rftag-review' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/bluetooth-crypto-rftag-review
+
+      - name: Build patch files
+        shell: bash
+        run: |
+          cat .github/crypto_cc3xx.patch.part00 \
+              .github/crypto_cc3xx.patch.part01 \
+              .github/crypto_cc3xx.patch.part02 > /tmp/crypto.patch
+          cat .github/bt_smp.patch.part00 \
+              .github/bt_smp.patch.part01 \
+              .github/bt_smp.patch.part02 \
+              .github/bt_smp.patch.part03 > /tmp/bt_smp.patch
+          git apply --check /tmp/crypto.patch
+          git apply --check .github/bt_app_bm.patch
+          git apply --check /tmp/bt_smp.patch
+          git apply /tmp/crypto.patch
+          git apply .github/bt_app_bm.patch
+          git apply /tmp/bt_smp.patch
+
+      - name: Check source
+        shell: bash
+        run: |
+          git diff --check
+          if git diff -U0 -- '*.c' '*.cpp' '*.h' | grep '^+' | grep -v '^+++' | grep -inE '\bbackend\b|\bcontract\b|source of truth|\bcarries\b|resting value'; then
+            exit 1
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          files = [
+              'ARM/Nordic/nRF54/src/bt_app_bm.cpp',
+              'ARM/src/crypto_cc3xx.cpp',
+              'include/crypto/crypto.h',
+              'src/bluetooth/bt_smp.cpp',
+              'src/crypto/crypto.cpp',
+          ]
+          for name in files:
+              text = Path(name).read_text(encoding='ascii')
+              assert text.count('{') == text.count('}'), name
+          PY
+
+      - name: Compile portable sources
+        shell: bash
+        run: |
+          g++ -std=gnu++23 -fno-exceptions -fno-rtti -Iinclude -fsyntax-only \
+            src/crypto/crypto.cpp \
+            src/bluetooth/bt_smp.cpp
+
+      - name: Test crypto dispatch
+        shell: bash
+        run: |
+          cat > /tmp/crypto_dispatch_test.cpp <<'CPP'
+          #include "crypto/crypto.h"
+
+          extern "C" bool RngGet(uint8_t *pData, size_t Len)
+          {
+              if (pData == nullptr) { return false; }
+              for (size_t i = 0; i < Len; i++) { pData[i] = (uint8_t)(i + 1U); }
+              return true;
+          }
+
+          extern "C" bool CryptoHwInit(CryptoDev_t *, const CryptoCfg_t *) { return false; }
+          extern "C" bool CryptoPsaInit(CryptoDev_t *, const CryptoCfg_t *) { return false; }
+          extern "C" bool CryptoUeccInit(CryptoDev_t *, const CryptoCfg_t *) { return false; }
+
+          static CRYPTO_STATUS Aes(CryptoDev_t *, const uint8_t Key[16],
+                                   const uint8_t In[16], uint8_t Out[16], void *)
+          {
+              if (Key == nullptr || In == nullptr || Out == nullptr) { return CRYPTO_STATUS_FAIL; }
+              for (int i = 0; i < 16; i++) { Out[i] = (uint8_t)(In[i] ^ Key[i]); }
+              return CRYPTO_STATUS_OK;
+          }
+
+          static CRYPTO_STATUS Verify(CryptoDev_t *, const uint8_t Pub[64],
+                                      const uint8_t Hash[32], const uint8_t Sig[64], void *)
+          {
+              return Pub != nullptr && Hash != nullptr && Sig != nullptr ?
+                  CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+          }
+
+          int main()
+          {
+              CryptoDev_t aes = {};
+              aes.Cap = CRYPTO_CAP_AES128_ECB;
+              aes.Aes128Ecb = Aes;
+              CryptoDev_t sig = {};
+              sig.Cap = CRYPTO_CAP_ECDSA_P256_VERIFY;
+              sig.EcdsaP256Verify = Verify;
+              CryptoDev_t *engines[2] = { &aes, &sig };
+              Cryptor_t cryptor = {};
+              CryptoCfg_t cfg = {};
+              cfg.ReqCaps = CRYPTO_CAP_AES_CMAC | CRYPTO_CAP_SHA256 |
+                            CRYPTO_CAP_ECDSA_P256_VERIFY;
+              if (!CryptorComposeInit(&cryptor, &cfg, engines, 2)) { return 1; }
+              CryptoDev_t *dev = CryptorHandle(&cryptor);
+              if (!CryptoIsCapable(dev, cfg.ReqCaps)) { return 2; }
+              uint8_t key[16] = {};
+              uint8_t mac[16] = {};
+              uint8_t digest[32] = {};
+              uint8_t pub[64] = {};
+              uint8_t hash[32] = {};
+              uint8_t signature[64] = {};
+              if (CryptoCmac(dev, key, nullptr, 0, mac, nullptr) != CRYPTO_STATUS_OK) { return 3; }
+              if (CryptoSha256(dev, nullptr, 0, digest, nullptr) != CRYPTO_STATUS_OK) { return 4; }
+              if (CryptoEcdsaP256Verify(dev, pub, hash, signature, nullptr) != CRYPTO_STATUS_OK) { return 5; }
+              if (CryptoAes128Ecb(dev, nullptr, key, mac, nullptr) != CRYPTO_STATUS_FAIL) { return 6; }
+              return 0;
+          }
+          CPP
+          g++ -std=gnu++23 -fno-exceptions -fno-rtti -Iinclude \
+            /tmp/crypto_dispatch_test.cpp src/crypto/crypto.cpp -o /tmp/crypto_dispatch_test
+          /tmp/crypto_dispatch_test
+
+      - name: Commit source
+        shell: bash
+        run: |
+          git add \
+            ARM/Nordic/nRF54/src/bt_app_bm.cpp \
+            ARM/src/crypto_cc3xx.cpp \
+            include/crypto/crypto.h \
+            src/bluetooth/bt_smp.cpp \
+            src/crypto/crypto.cpp
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Fix crypto dispatch and SMP operation handling'
+          git push origin HEAD:fix/bluetooth-crypto-rftag-review
