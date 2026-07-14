@@ -24,12 +24,29 @@ jobs:
               .github/bt_smp.patch.part01 \
               .github/bt_smp.patch.part02 \
               .github/bt_smp.patch.part03 > /tmp/bt_smp.patch
-          git apply --check .github/crypto_cc3xx.patch
-          git apply --check .github/bt_app_bm.patch
-          git apply --check /tmp/bt_smp.patch
+          set +e
+          {
+            git apply --check --verbose .github/crypto_cc3xx.patch
+            git apply --check --verbose .github/bt_app_bm.patch
+            git apply --check --verbose /tmp/bt_smp.patch
+          } > /tmp/apply-patches.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/apply-patches.log
+          if test $status -ne 0; then
+            exit $status
+          fi
           git apply .github/crypto_cc3xx.patch
           git apply .github/bt_app_bm.patch
           git apply /tmp/bt_smp.patch
+
+      - name: Upload patch log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crypto-bluetooth-patch-log
+          path: /tmp/apply-patches.log
+          if-no-files-found: error
 
       - name: Check source
         shell: bash
