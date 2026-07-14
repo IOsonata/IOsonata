@@ -1,0 +1,45 @@
+name: Diagnose RFTag core patch
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    if: github.head_ref == 'fix/bluetooth-crypto-rftag-review' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/bluetooth-crypto-rftag-review
+
+      - name: Extract and check patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('.github/workflows/apply-rftag-review-pr.yml').read_text()
+          start = text.index('          diff --git a/include/rftag/rftag.h')
+          end = text.index('          PATCH', start)
+          lines = text[start:end].splitlines()
+          patch = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+          Path('/tmp/rftag-core.patch').write_text(patch)
+          PY
+          set +e
+          git apply --check --verbose /tmp/rftag-core.patch > /tmp/rftag-core.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/rftag-core.log
+          exit $status
+
+      - name: Upload diagnostic
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rftag-core-diagnostic
+          path: /tmp/rftag-core.log
+          if-no-files-found: error
