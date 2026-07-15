@@ -185,6 +185,13 @@ bool P256NonzeroFieldElement(const uint8_t Coord[P256_BYTES]);
 /// Regularize a scalar to a fixed bit length for a constant-time ladder.
 void P256RegularizeScalar(const uint8_t K[P256_BYTES], uint8_t R[P256_BYTES + 1U]);
 
+/// Platform random source: fill pBuff with Len cryptographically strong bytes.
+/// Provided by the target random driver (Nordic rng_nrfx, ST rng_stm32). A
+/// security-path caller must check the result and abort on failure. This is the
+/// same free function the RngEngine facet wraps; it is kept here so portable
+/// crypto and SMP code can draw randomness without a platform header.
+bool RngGet(uint8_t *pBuff, size_t Len);
+
 #ifdef __cplusplus
 }
 #endif
@@ -197,6 +204,37 @@ void P256RegularizeScalar(const uint8_t K[P256_BYTES], uint8_t R[P256_BYTES + 1U
 // A software engine implements Enable/Disable/Reset trivially; a hardware
 // engine powers its block.
 //-----------------------------------------------------------------------------
+/// @brief	Which operation a completion callback is reporting.
+///
+/// An engine that returns CRYPTO_STATUS_PENDING from a facet op signals its
+/// completion later through the CryptoEngine completion handler, tagging the
+/// event with the operation that finished so a consumer driving several
+/// operations (for example SMP running key generation then key agreement) can
+/// tell them apart.
+typedef enum __Crypto_Op {
+	CRYPTO_OP_NONE = 0,			//!< No operation
+	CRYPTO_OP_CIPHER,			//!< CipherEngine::Cipher completed
+	CRYPTO_OP_MAC,				//!< MacEngine::Mac completed
+	CRYPTO_OP_KEYGEN,			//!< KeyAgreeEngine::KeyGen completed
+	CRYPTO_OP_AGREE,			//!< KeyAgreeEngine::Agree completed
+	CRYPTO_OP_SIGN,				//!< SignEngine::Sign completed
+	CRYPTO_OP_VERIFY,			//!< SignEngine::Verify completed
+	CRYPTO_OP_RANDOM			//!< RngEngine::Random completed
+} CRYPTO_OP;
+
+class CryptoEngine;
+
+/// @brief	Completion callback for an asynchronous crypto operation.
+///
+/// Called by the engine when an operation that returned CRYPTO_STATUS_PENDING
+/// finishes (from the engine's interrupt or worker context). Op identifies the
+/// finished operation, Status is CRYPTO_STATUS_OK or a failure, and pCtx is the
+/// caller context handed to the facet call. The output buffer the facet call
+/// named holds the result on OK.
+typedef void (*CryptoCompleteHandler_t)(CryptoEngine * const pEngine,
+										CRYPTO_OP Op, CRYPTO_STATUS Status,
+										void *pCtx);
+
 class CryptoEngine : virtual public Device {
 public:
 	virtual ~CryptoEngine() {}
@@ -207,8 +245,45 @@ public:
 	 */
 	virtual int SelfTest() { return 0; }
 
+	/**
+	 * @brief	Bind the completion handler for asynchronous operations.
+	 *
+	 * A synchronous engine ignores this: its facet ops return OK or FAIL
+	 * directly and never call the handler. An asynchronous engine (a hardware
+	 * block driven under interrupt, or an off-die secure element) returns
+	 * CRYPTO_STATUS_PENDING and calls this handler on completion. Binding is
+	 * optional; an engine with no handler runs an operation to completion
+	 * before returning even if it could have deferred.
+	 */
+	void SetCompleteHandler(CryptoCompleteHandler_t Handler, void *pCtx)
+	{
+		vCompleteHandler = Handler;
+		vpCompleteCtx = pCtx;
+	}
+
+	/**
+	 * @brief	True if this engine may return CRYPTO_STATUS_PENDING. A
+	 *			synchronous engine returns false; a consumer that requires a
+	 *			synchronous result (no event loop) checks this before use.
+	 */
+	virtual bool IsAsync() const { return false; }
+
 	// Enable(), Disable(), Reset(), PowerOff(), EvtHandler(), Interface() are
 	// inherited from Device.
+
+protected:
+	/// Engines call this to report an async completion to the bound handler.
+	/// A synchronous engine never calls it. Safe to call with no handler bound.
+	void Complete(CRYPTO_OP Op, CRYPTO_STATUS Status)
+	{
+		if (vCompleteHandler != nullptr)
+		{
+			vCompleteHandler(this, Op, Status, vpCompleteCtx);
+		}
+	}
+
+	CryptoCompleteHandler_t vCompleteHandler = nullptr;	//!< Async completion callback
+	void                   *vpCompleteCtx    = nullptr;	//!< Caller context for the callback
 };
 
 //-----------------------------------------------------------------------------
