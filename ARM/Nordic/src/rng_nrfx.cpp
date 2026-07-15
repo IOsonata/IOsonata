@@ -10,9 +10,8 @@
 
 		Two hardware paths:
 		- nRF54L / nRF54H: CRACEN. Random is taken from the NIST SP800-90A
-		  CTR-DRBG that nrfx seeds from the CRACEN TRNG. This is the correct
-		  cryptographic construction (conditioned, reseeding) rather than raw
-		  TRNG bytes, and it is the supported nrfx entry point.
+		  CTR-DRBG that nrfx seeds from the CRACEN TRNG. The CRACEN lock is
+		  shared with the direct hardware crypto provider.
 		- nRF51/52/53/91: the legacy RNG peripheral with bias correction
 		  (DERCEN) enabled.
 
@@ -59,7 +58,44 @@ SOFTWARE.
 
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #include "nrfx_cracen.h"
+#include "cracen_bm.h"
 #define RNG_USE_CRACEN		1
+
+static volatile bool s_CracenBusy;
+
+bool CracenTryAcquire(void)
+{
+	uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+
+	bool acquired = !s_CracenBusy;
+	if (acquired)
+	{
+		s_CracenBusy = true;
+		__DMB();
+	}
+
+	if (primask == 0)
+	{
+		__enable_irq();
+	}
+
+	return acquired;
+}
+
+void CracenRelease(void)
+{
+	uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+
+	__DMB();
+	s_CracenBusy = false;
+
+	if (primask == 0)
+	{
+		__enable_irq();
+	}
+}
 #endif
 
 static bool s_RngReady;
@@ -67,16 +103,22 @@ static bool s_RngReady;
 bool RngInit(void)
 {
 #if defined(RNG_USE_CRACEN)
-	// Bring up the CRACEN CTR-DRBG (this also initializes the underlying TRNG
-	// that seeds it). nrfx_cracen_init returns 0 on success or -EALREADY if it
-	// was already brought up (by the SoftDevice or an earlier caller); both
-	// mean CRACEN is usable, so treat -EALREADY as success.
+	if (!CracenTryAcquire())
+	{
+		return false;
+	}
+
+	// Bring up the CRACEN CTR-DRBG. nrfx_cracen_init returns 0 on success or
+	// -EALREADY when it was initialized by an earlier caller.
 	int r = nrfx_cracen_init();
+	CracenRelease();
+
 	if (r != 0 && r != -EALREADY)
 	{
 		s_RngReady = false;
 		return false;
 	}
+
 	s_RngReady = true;
 	return true;
 #else
@@ -102,9 +144,15 @@ bool RngGet(uint8_t *pBuff, size_t Len)
 		}
 	}
 
-	// CTR-DRBG output, seeded/reseeded from the CRACEN hardware TRNG. Returns
-	// 0 on success.
-	return nrfx_cracen_ctr_drbg_random_get(pBuff, Len) == 0;
+	if (!CracenTryAcquire())
+	{
+		return false;
+	}
+
+	// CTR-DRBG output, seeded and reseeded from the CRACEN hardware TRNG.
+	int r = nrfx_cracen_ctr_drbg_random_get(pBuff, Len);
+	CracenRelease();
+	return r == 0;
 #else
  #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
   #ifdef NRF5340_XXAA_NETWORK
