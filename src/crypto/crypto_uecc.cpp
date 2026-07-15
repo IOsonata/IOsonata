@@ -39,10 +39,6 @@
 #error "crypto_uecc requires the uECC default (big-endian) build; remove uECC_VLI_NATIVE_LITTLE_ENDIAN=1 from the project defines"
 #endif
 
-// RngGet is the platform entropy seam (per-MCU driver). Declared here for the
-// micro-ecc adapter; it will move onto the RngEngine facet as that lands.
-extern "C" bool RngGet(uint8_t *pBuff, size_t Len);
-
 // Zeroize helper. Volatile-through so the wipe is not optimized away.
 static void UeccWipe(void *pData, size_t Len)
 {
@@ -53,10 +49,33 @@ static void UeccWipe(void *pData, size_t Len)
 	}
 }
 
-// RNG source for micro-ecc: key generation and signing draw from RngGet.
+// micro-ecc takes a global RNG hook, not a per-call context, so the active
+// engine's secure random source is pointed at by this file-scope handle for the
+// duration of a make_key or sign call. Only a security-grade engine is ever
+// installed here; the callers below enforce IsSecure() before binding it.
+static RngEngine *s_pActiveRng;
+
 static int UeccRngAdapter(uint8_t *pDest, unsigned Size)
 {
-	return RngGet(pDest, Size) ? 1 : 0;
+	if (s_pActiveRng == nullptr)
+	{
+		return 0;
+	}
+	return (s_pActiveRng->Random(pDest, (size_t)Size) == CRYPTO_STATUS_OK) ? 1 : 0;
+}
+
+// Install the bound RNG as the micro-ecc source for one operation. Returns false
+// when no secure RNG is bound, so key generation and signing fail closed rather
+// than emit key material from a non-secure or absent source.
+static bool UeccArmSecureRng(RngEngine *pRng)
+{
+	if (pRng == nullptr || !pRng->IsSecure())
+	{
+		return false;
+	}
+	s_pActiveRng = pRng;
+	uECC_set_rng(UeccRngAdapter);
+	return true;
 }
 
 CRYPTO_STATUS CryptoUecc::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
@@ -72,9 +91,11 @@ CRYPTO_STATUS CryptoUecc::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 	pk->bKeyValid = false;
 	UeccWipe(pk->PrivKey, sizeof(pk->PrivKey));
 
-	if (uECC_get_rng() == nullptr)
+	// Fail closed unless a security-grade RNG is bound: a PRNG-derived private
+	// scalar is a broken key.
+	if (!UeccArmSecureRng(vpRng))
 	{
-		uECC_set_rng(UeccRngAdapter);
+		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
 	if (uECC_make_key(pPubKey, pk->PrivKey, uECC_secp256r1()) != 1)
@@ -141,9 +162,11 @@ CRYPTO_STATUS CryptoUecc::Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-	if (uECC_get_rng() == nullptr)
+	// The ECDSA per-signature nonce must come from a security-grade RNG; a weak
+	// nonce leaks the private key. Fail closed otherwise.
+	if (!UeccArmSecureRng(vpRng))
 	{
-		uECC_set_rng(UeccRngAdapter);
+		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 	int ok = uECC_sign(Key.Plain.pData, pHash, (unsigned)HashLen, pSig,
 					   uECC_secp256r1());
@@ -193,13 +216,14 @@ int CryptoUecc::SelfTest()
 	return rc;
 }
 
-CryptoUecc *CryptoUeccCreate(void *pMem, size_t MemSize)
+CryptoUecc *CryptoUeccCreate(void *pMem, size_t MemSize, RngEngine *pRng)
 {
 	if (pMem == nullptr || MemSize < sizeof(CryptoUecc))
 	{
 		return nullptr;
 	}
 	CryptoUecc *p = new (pMem) CryptoUecc();
+	p->SetRng(pRng);
 	p->Enable();
 	return p;
 }

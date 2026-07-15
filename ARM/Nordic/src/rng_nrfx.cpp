@@ -54,7 +54,7 @@ SOFTWARE.
 #include "nrf_soc.h"
 #endif
 
-#include "crypto/crypto.h"
+#include "crypto_rng_nrf.h"
 
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #include "nrfx_cracen.h"
@@ -128,7 +128,7 @@ bool RngInit(void)
 #endif
 }
 
-bool RngGet(uint8_t *pBuff, size_t Len)
+static bool RngHwGet(uint8_t *pBuff, size_t Len)
 {
 	if (pBuff == NULL || Len == 0)
 	{
@@ -221,4 +221,42 @@ bool RngGet(uint8_t *pBuff, size_t Len)
 
 	return true;
 #endif
+}
+
+
+//-----------------------------------------------------------------------------
+// OO engine wrapper. CryptoRngNrf presents the hardware RNG as a security-grade
+// RngEngine; the raw draw and init above are unchanged. The singleton lives in
+// internal static storage so there is no allocation.
+//-----------------------------------------------------------------------------
+bool CryptoRngNrf::Enable(void)
+{
+	vbValid = RngInit();
+	return vbValid;
+}
+
+CRYPTO_STATUS CryptoRngNrf::Random(uint8_t *pOut, size_t Len)
+{
+	if (pOut == nullptr)
+	{
+		return (Len == 0) ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+	}
+	return RngHwGet(pOut, Len) ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+}
+
+CryptoRngNrf *CryptoRngNrfInstance(void)
+{
+	static CryptoRngNrf s_Instance;
+	return &s_Instance;
+}
+
+//-----------------------------------------------------------------------------
+// Compatibility shim. Existing callers (SMP, the direct hardware crypto
+// providers) call the free function RngGet; it forwards to the singleton engine
+// so there is one hardware path. Retire these shims as callers move to the
+// RngEngine facet.
+//-----------------------------------------------------------------------------
+bool RngGet(uint8_t *pBuff, size_t Len)
+{
+	return RngHwGet(pBuff, Len);
 }

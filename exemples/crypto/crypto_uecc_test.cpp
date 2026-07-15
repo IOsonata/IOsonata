@@ -27,8 +27,19 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <new>
 
 #include "crypto/crypto_uecc.h"		// engine under test - only header needed
+#include "crypto/crypto_softrng.h"		// RNG source for the engine
+
+// A security-grade RNG stand-in for the host, where no hardware RNG exists. It
+// is a deterministic PRNG that reports IsSecure() true so KeyGen/Sign will run;
+// on target the real CryptoRngNrf is used instead. Do not ship this: it exists
+// only so the host harness can exercise the key-generating paths.
+class TestSecureRng : public CryptoSoftRng {
+public:
+	bool IsSecure() const override { return true; }
+};
 
 // Test entropy source standing in for the per-MCU RngGet. A fixed-seed xorshift
 // keeps the run reproducible; this is a test stub, not a security generator.
@@ -63,8 +74,14 @@ int main(void)
 
 	// Construct two engines in caller storage (no allocation).
 	static uint8_t memA[128], memB[128];
-	CryptoUecc *ea = CryptoUeccCreate(memA, sizeof(memA));
-	CryptoUecc *eb = CryptoUeccCreate(memB, sizeof(memB));
+	// A secure RNG stand-in (host has no hardware RNG). Engines bound to it can
+	// generate keys; an engine bound to a non-secure RNG must refuse.
+	static uint8_t rngMem[128];
+	TestSecureRng *secRng = new (rngMem) TestSecureRng();
+	secRng->Enable();
+
+	CryptoUecc *ea = CryptoUeccCreate(memA, sizeof(memA), secRng);
+	CryptoUecc *eb = CryptoUeccCreate(memB, sizeof(memB), secRng);
 	check("factory constructs engines", ea != nullptr && eb != nullptr);
 	if (ea == nullptr || eb == nullptr) { printf("abort\n"); return 1; }
 
@@ -146,6 +163,23 @@ int main(void)
 	CRYPTO_STATUS rvBad = sa->Verify(CRYPTO_CURVE_P256, kSignPub, hash, 32, badSig);
 	check("ECDSA Verify rejects a tampered signature (facet)",
 		  rvBad == CRYPTO_STATUS_FAIL);
+
+	// Safety: an engine bound to a non-secure RNG (a plain PRNG, IsSecure false)
+	// must refuse to generate a key rather than emit one from a weak source.
+	{
+		static uint8_t prngMem[128], ueMem[128], ctx[64];
+		CryptoSoftRng *prng = CryptoSoftRngCreate(prngMem, sizeof(prngMem));
+		CryptoUecc *ue = CryptoUeccCreate(ueMem, sizeof(ueMem), prng);
+		uint8_t pub[64];
+		CRYPTO_STATUS rk = ((KeyAgreeEngine *)ue)->KeyGen(CRYPTO_CURVE_P256, ctx, pub);
+		check("KeyGen fails closed on a non-secure RNG (PRNG)",
+			  rk == CRYPTO_STATUS_UNSUPPORTED);
+		// And the same engine, rebound to a secure RNG, then succeeds.
+		ue->SetRng(secRng);
+		CRYPTO_STATUS rk2 = ((KeyAgreeEngine *)ue)->KeyGen(CRYPTO_CURVE_P256, ctx, pub);
+		check("KeyGen succeeds once a secure RNG is bound",
+			  rk2 == CRYPTO_STATUS_OK);
+	}
 
 	printf("\n%d passed, %d failed\n", s_pass, s_fail);
 	return s_fail == 0 ? 0 : 1;

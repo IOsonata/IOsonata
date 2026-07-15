@@ -766,9 +766,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
 		</link>
 		<link>
+			<name>include/crypto/crypto_softrng.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softrng.h</locationURI>
+		</link>
+		<link>
 			<name>include/crypto/crypto_uecc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_uecc.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/cryptomaster.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/cryptomaster.h</locationURI>
 		</link>
 		<link>
 			<name>include/crypto/icrypto.h</name>
@@ -1536,9 +1546,24 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softaes.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/crypto/crypto_softrng.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crypto/crypto_uecc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/cryptomaster.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/cryptomaster.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/cryptomaster_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/cryptomaster_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/rng_nrfx.cpp</name>

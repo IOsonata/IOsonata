@@ -64,15 +64,7 @@ static void NfctFrameHandler(NfctIntrfDev_t * const pDev, const uint8_t *pFrame,
 
 	if (n > 0)
 	{
-		int bits = g_Tag.ResponseBits(n);
-		if (bits == n * 8)
-		{
-			DeviceIntrfTx((DevIntrf_t *)s_NfctIntrf, 0, tx, n);
-		}
-		else
-		{
-			s_NfctIntrf.BitsTx(tx, bits);
-		}
+		DeviceIntrfTx((DevIntrf_t *)s_NfctIntrf, 0, tx, n);
 	}
 }
 
