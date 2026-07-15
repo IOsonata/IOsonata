@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	cracen_aes_test.cpp
+@example	cracen_aes_test.cpp
 
 @brief	nRF54 CRACEN AES, P-256 ECDH and RNG acceptance test.
 

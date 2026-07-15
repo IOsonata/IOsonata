@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	cracen.h
+@file	crypto_cracen.h
 
 @brief	Bare-metal CRACEN ownership helpers for nRF54.
 
@@ -12,8 +12,8 @@
 
 @license MIT, (c) 2026 I-SYST.
 ----------------------------------------------------------------------------*/
-#ifndef __CRACEN_H__
-#define __CRACEN_H__
+#ifndef __CRYPTO_CRACEN_H__
+#define __CRYPTO_CRACEN_H__
 
 #include <stdbool.h>
 
@@ -28,4 +28,4 @@ void CracenRelease(void);
 }
 #endif
 
-#endif // __CRACEN_H__
+#endif // __CRYPTO_CRACEN_H__

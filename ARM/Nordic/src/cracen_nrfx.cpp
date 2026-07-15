@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	crypto_cracen.cpp
+@file	cracen_nrfx.cpp
 
 @brief	Direct nRF54 CRACEN hardware crypto provider.
 
