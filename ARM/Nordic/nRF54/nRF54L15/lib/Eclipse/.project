@@ -756,19 +756,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
 		</link>
 		<link>
-			<name>include/crypto/crypto.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
-		</link>
-		<link>
 			<name>include/crypto/crypto_cracen.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_cracen.h</locationURI>
 		</link>
 		<link>
-			<name>include/crypto/crypto_p256.h</name>
+			<name>include/crypto/crypto_softaes.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_p256.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
 		</link>
 		<link>
 			<name>include/crypto/crypto_uecc.h</name>
@@ -1536,24 +1531,9 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/cracen_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto.cpp</name>
+			<name>src/crypto/crypto_softaes.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_hw_none.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_hw_none.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_p256.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_psa_none.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_psa_none.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softaes.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_uecc.cpp</name>
