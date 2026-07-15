@@ -1,151 +1,172 @@
 /**-------------------------------------------------------------------------
 @file	crypto_uecc.cpp
 
-@brief	Crypto engine: micro-ecc (uECC) software ECDH over P-256.
+@brief	Software P-256 crypto engine over micro-ecc, on the OO engine tree.
 
-Generic software crypto engine implementing the ECDH capability of CryptoDev_t
-via micro-ecc. ECDH only - no symmetric cipher. uECC needs random bytes for key
-generation and obtains them from the RngGet driver (crypto/crypto.h);
-RNG is not a crypto engine or capability.
+		Implements the KeyAgreeEngine (ECDH) and SignEngine (ECDSA) facets in
+		software with micro-ecc. This is the software base of the public-key
+		facets: a hardware engine (Silex BA414EP, Arm CryptoCell) inherits the
+		same facets and overrides these operations, while a build with no
+		accelerator uses this class directly.
 
-Like a sensor that supports only one axis-type, this engine advertises only
-CRYPTO_CAP_ECDH_P256. A consumer needing AES composes it with an AES engine.
+		micro-ecc needs random bytes for key generation and signing; it obtains
+		them from RngGet, the per-MCU entropy seam. RngGet is not a crypto
+		capability and is not part of this engine.
 
-Byte order: built with uECC defaults (big-endian), matching the SMP toolbox
-(f4/f5/f6) and the over-the-air Public Key PDU, so keys/secret pass straight
-through with no reversal.
+		Byte order: built with the micro-ecc defaults (big-endian), matching the
+		SMP toolbox (f4/f5/f6) and the over-the-air Public Key PDU, so keys and
+		shared secret pass through with no reversal. A native little-endian
+		micro-ecc build silently breaks every value and is refused below.
+
+		The private key is retained between KeyGen and Agree in caller storage
+		and is single-use: it is wiped on Agree and on every failure path, so no
+		private material survives a completed or failed exchange.
 
 @author	Hoang Nguyen Hoan
-@date	May 2026
+@date	Jul 2026
 
-@license MIT, (c) 2026 I-SYST.
+@license MIT, (c) 2026 I-SYST. See bt_smp.h for full text.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
+#include <new>
 
-#include "crypto/crypto.h"
+#include "crypto/crypto_uecc.h"
 
 #include "uECC.h"
 
-// This engine requires the uECC default byte order (big-endian), matching the
-// crypto.h interface. A micro-ecc build with native little-endian arrays
-// silently breaks every key and DH value, so refuse it at compile time.
 #if defined(uECC_VLI_NATIVE_LITTLE_ENDIAN) && uECC_VLI_NATIVE_LITTLE_ENDIAN
 #error "crypto_uecc requires the uECC default (big-endian) build; remove uECC_VLI_NATIVE_LITTLE_ENDIAN=1 from the project defines"
 #endif
 
-// Per-instance secret state. Lives in App-owned pMem (CryptoCfg_t), reached
-// via pDev->pDevData, or via pKeyCtx when a Cryptor shares one engine across
-// instances. No file-static key: each instance is independent.
-typedef struct {
-	uint8_t PrivKey[32];	// P-256 private key, retained between keygen and DH
-	bool    bKeyValid;	// true only while PrivKey holds a usable single-use key
-} CryptoUeccData_t;
+// RngGet is the platform entropy seam (per-MCU driver). Declared here for the
+// micro-ecc adapter; it will move onto the RngEngine facet as that lands.
+extern "C" bool RngGet(uint8_t *pBuff, size_t Len);
 
-static_assert(sizeof(CryptoUeccData_t) <= CRYPTO_MEMSIZE_UECC,
-			  "CRYPTO_MEMSIZE_UECC too small for CryptoUeccData_t");
-
-// Resolve the per-instance key context: a caller-supplied pKeyCtx (a Cryptor
-// sharing one engine) overrides this engine's own pDevData (dedicated engine).
-// Resolve the key context: the Cryptor-supplied context, else the engine own.
-// A caller-supplied context is validated like the Init pMem check: non-null
-// and word aligned. Returns nullptr on a bad context so the operation fails
-// closed.
-static CryptoUeccData_t *UeccData(CryptoDev_t * const pDev, void *pKeyCtx)
+// Zeroize helper. Volatile-through so the wipe is not optimized away.
+static void UeccWipe(void *pData, size_t Len)
 {
-	return (CryptoUeccData_t *)CryptoResolveKeyCtx(pDev, pKeyCtx,
-													  alignof(CryptoUeccData_t));
+	volatile uint8_t *p = (volatile uint8_t *)pData;
+	while (Len-- > 0)
+	{
+		*p++ = 0;
+	}
 }
 
-// RNG source for uECC. micro-ecc requires an RNG before key generation; it is
-// not part of this engine. The application (or the composing consumer) provides
-// one - the platform hardware RNG (RngGet), declared in crypto/crypto.h.
-
+// RNG source for micro-ecc: key generation and signing draw from RngGet.
 static int UeccRngAdapter(uint8_t *pDest, unsigned Size)
 {
 	return RngGet(pDest, Size) ? 1 : 0;
 }
 
-static CRYPTO_STATUS UeccEcdhKeyGen(CryptoDev_t * const pDev, void *pKeyCtx,
-									uint8_t pPubKey[64], void *pOpCtx)
+CRYPTO_STATUS CryptoUecc::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
+								 uint8_t *pPubKey)
 {
-	(void)pOpCtx;
-	CryptoUeccData_t *pd = UeccData(pDev, pKeyCtx);
-	if (pd == nullptr || pPubKey == nullptr)
+	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr || pPubKey == nullptr)
 	{
-		return CRYPTO_STATUS_FAIL;
+		return CRYPTO_STATUS_UNSUPPORTED;
 	}
+	KeyCtx *pk = (KeyCtx *)pKeyCtx;
 
-	// Start from a clean state: no valid key until make_key succeeds.
-	pd->bKeyValid = false;
-	CryptoSecureWipe(pd->PrivKey, sizeof(pd->PrivKey));
+	// Clean state: no valid key until make_key succeeds.
+	pk->bKeyValid = false;
+	UeccWipe(pk->PrivKey, sizeof(pk->PrivKey));
 
 	if (uECC_get_rng() == nullptr)
 	{
 		uECC_set_rng(UeccRngAdapter);
 	}
 
-	if (uECC_make_key(pPubKey, pd->PrivKey, uECC_secp256r1()) != 1)
+	if (uECC_make_key(pPubKey, pk->PrivKey, uECC_secp256r1()) != 1)
 	{
-		// make_key may have written partial data into PrivKey; wipe it.
-		CryptoSecureWipe(pd->PrivKey, sizeof(pd->PrivKey));
+		UeccWipe(pk->PrivKey, sizeof(pk->PrivKey));
 		return CRYPTO_STATUS_FAIL;
 	}
-	pd->bKeyValid = true;
+	pk->bKeyValid = true;
 	return CRYPTO_STATUS_OK;
 }
 
-static CRYPTO_STATUS UeccEcdh(CryptoDev_t * const pDev, void *pKeyCtx,
-								  const uint8_t pPeerPubKey[64], uint8_t pDhKey[32],
-								  void *pOpCtx)
+CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
+								const uint8_t *pPeerPubKey, uint8_t *pSharedX)
 {
-	(void)pOpCtx;
-	CryptoUeccData_t *pd = UeccData(pDev, pKeyCtx);
-	if (pd == nullptr || pPeerPubKey == nullptr || pDhKey == nullptr)
+	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr ||
+		pPeerPubKey == nullptr || pSharedX == nullptr)
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	KeyCtx *pk = (KeyCtx *)pKeyCtx;
+
+	// Fail closed: Agree before KeyGen, or a second Agree after the single-use
+	// key was consumed and wiped.
+	if (!pk->bKeyValid)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
 
-	// Fail closed when no valid private key is present: Ecdh called before
-	// KeyGen, or a second Ecdh after the single-use key was consumed and wiped.
-	if (!pd->bKeyValid)
-	{
-		return CRYPTO_STATUS_FAIL;
-	}
-
-	// Reject a peer public key that is not on the P-256 curve before the DH.
-	// Without this the engine is open to the invalid-curve attack (CVE-2018-5383).
-	// The private key is single-use, so wipe it on this exit path too.
+	// Reject a peer public key not on the P-256 curve before the DH, closing the
+	// invalid-curve attack (CVE-2018-5383). Single-use key: wipe here too.
 	if (uECC_valid_public_key(pPeerPubKey, uECC_secp256r1()) != 1)
 	{
-		CryptoSecureWipe(pd->PrivKey, sizeof(pd->PrivKey));
-		pd->bKeyValid = false;
+		UeccWipe(pk->PrivKey, sizeof(pk->PrivKey));
+		pk->bKeyValid = false;
 		return CRYPTO_STATUS_FAIL;
 	}
 
 	uint8_t secret[32];
 	CRYPTO_STATUS st = CRYPTO_STATUS_OK;
-	if (uECC_shared_secret(pPeerPubKey, pd->PrivKey, secret, uECC_secp256r1()) != 1)
+	if (uECC_shared_secret(pPeerPubKey, pk->PrivKey, secret,
+						   uECC_secp256r1()) != 1)
 	{
 		st = CRYPTO_STATUS_FAIL;
 	}
 	else
 	{
-		memcpy(pDhKey, secret, 32);	// DHKey = X coordinate, big-endian
+		memcpy(pSharedX, secret, 32);	// shared X coordinate, big-endian
 	}
 
-	// Ephemeral key is single-use: wipe the shared secret and the private key
-	// on every exit so no secret material survives the call.
-	CryptoSecureWipe(secret, sizeof(secret));
-	CryptoSecureWipe(pd->PrivKey, sizeof(pd->PrivKey));
-	pd->bKeyValid = false;
+	// Single-use: wipe the shared secret and the private key on every exit.
+	UeccWipe(secret, sizeof(secret));
+	UeccWipe(pk->PrivKey, sizeof(pk->PrivKey));
+	pk->bKeyValid = false;
 	return st;
 }
 
-// Self-test: BLE spec P-256 DH known vector (Vol 3 Part H 2.3.5.6.1).
-static int UeccSelfTest(CryptoDev_t * const pDev)
+CRYPTO_STATUS CryptoUecc::Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
+							   const uint8_t *pHash, size_t HashLen,
+							   uint8_t *pSig)
 {
-	(void)pDev;
+	if (Curve != CRYPTO_CURVE_P256 || Key.Loc != CRYPTO_KEY_LOC_PLAIN ||
+		(Key.Usage & CRYPTO_KEY_USE_SIGN) == 0 ||
+		pHash == nullptr || pSig == nullptr || Key.Plain.pData == nullptr)
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	if (uECC_get_rng() == nullptr)
+	{
+		uECC_set_rng(UeccRngAdapter);
+	}
+	int ok = uECC_sign(Key.Plain.pData, pHash, (unsigned)HashLen, pSig,
+					   uECC_secp256r1());
+	return (ok == 1) ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+}
+
+CRYPTO_STATUS CryptoUecc::Verify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
+								 const uint8_t *pHash, size_t HashLen,
+								 const uint8_t *pSig)
+{
+	if (Curve != CRYPTO_CURVE_P256 || pPubKey == nullptr ||
+		pHash == nullptr || pSig == nullptr)
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	int ok = uECC_verify(pPubKey, pHash, (unsigned)HashLen, pSig,
+						 uECC_secp256r1());
+	return (ok == 1) ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+}
+
+int CryptoUecc::SelfTest()
+{
+	// BLE spec P-256 DH known vector (Vol 3 Part H 2.3.5.6.1).
 	static const uint8_t privA[32] = {
 		0x3f,0x49,0xf6,0xd4,0xa3,0xc5,0x5f,0x38,0x74,0xc9,0xb3,0xe3,0xd2,0x10,0x3f,0x50,
 		0x4a,0xff,0x60,0x7b,0xeb,0x40,0xb7,0x99,0x58,0x99,0xb8,0xa6,0xcd,0x3c,0x1a,0xbd };
@@ -168,67 +189,17 @@ static int UeccSelfTest(CryptoDev_t * const pDev)
 	{
 		rc = (memcmp(dh, dhExpect, 32) == 0) ? 0 : -2;
 	}
-	CryptoSecureWipe(dh, sizeof(dh));	// wipe the test shared secret
+	UeccWipe(dh, sizeof(dh));
 	return rc;
 }
 
-static CRYPTO_STATUS UeccEcdsaVerify(CryptoDev_t * const pDev, const uint8_t PubKey[64],
-									const uint8_t Hash[32], const uint8_t Sig[64],
-									void *pCtx)
+CryptoUecc *CryptoUeccCreate(void *pMem, size_t MemSize)
 {
-	(void)pDev;
-	(void)pCtx;
-	// uECC_verify returns 1 for a valid signature. PubKey is X||Y and Sig is
-	// r||s, both big-endian, matching the interface byte order.
-	int ok = uECC_verify(PubKey, Hash, 32, Sig, uECC_secp256r1());
-	return (ok == 1) ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
-}
-
-static CRYPTO_STATUS UeccEcdsaSign(CryptoDev_t * const pDev, const uint8_t PrivKey[32],
-								  const uint8_t Hash[32], uint8_t Sig[64], void *pCtx)
-{
-	(void)pDev;
-	(void)pCtx;
-	if (uECC_get_rng() == nullptr)
+	if (pMem == nullptr || MemSize < sizeof(CryptoUecc))
 	{
-		uECC_set_rng(UeccRngAdapter);	// per-signature nonce from RngGet
+		return nullptr;
 	}
-	int ok = uECC_sign(PrivKey, Hash, 32, Sig, uECC_secp256r1());
-	return (ok == 1) ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+	CryptoUecc *p = new (pMem) CryptoUecc();
+	p->Enable();
+	return p;
 }
-
-bool CryptoUeccInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
-{
-	uint32_t caps = CRYPTO_CAP_ECDH_P256 | CRYPTO_CAP_SHA256 | CRYPTO_CAP_HMAC_SHA256 |
-					CRYPTO_CAP_ECDSA_P256_SIGN | CRYPTO_CAP_ECDSA_P256_VERIFY;
-	if (!CryptoCfgValidate(pDev, pCfg, sizeof(CryptoUeccData_t), caps))
-	{
-		return false;
-	}
-
-	memset(pDev, 0, sizeof(*pDev));
-	memset(pCfg->pMem, 0, sizeof(CryptoUeccData_t));
-	pDev->pDevData       = pCfg->pMem;
-	pDev->pName          = "uecc";
-	pDev->Cap            = caps;					// ECDH + ECDSA verify; SHA/HMAC via base
-	pDev->Props          = CRYPTO_PROP_PLAIN_KEYCTX | CRYPTO_PROP_SYNC;	// plain zeroable key ctx; synchronous
-	pDev->KeyCtxSize     = sizeof(CryptoUeccData_t);
-	pDev->EvtCB          = pCfg->EvtCB;
-	pDev->Aes128Ecb      = nullptr;					// not provided
-	pDev->Cmac           = nullptr;					// no AES, no CMAC
-	pDev->Ccm            = nullptr;					// no AES, no CCM
-	pDev->Gcm            = nullptr;					// no AES, no GCM
-	pDev->Sha256         = nullptr;					// software SHA-256 in the base
-	pDev->EcdhP256KeyGen = UeccEcdhKeyGen;
-	pDev->EcdhP256       = UeccEcdh;
-	pDev->EcdsaP256Verify = UeccEcdsaVerify;
-	pDev->EcdsaP256Sign  = UeccEcdsaSign;
-	pDev->SelfTest       = UeccSelfTest;
-
-	if ((pCfg->Flags & CRYPTO_FLAG_SELFTEST) && UeccSelfTest(pDev) != 0)
-	{
-		return false;
-	}
-	return true;
-}
-
