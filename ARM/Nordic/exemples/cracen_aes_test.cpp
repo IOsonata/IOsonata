@@ -3,7 +3,7 @@
 
 @brief	nRF54 CRACEN AES, P-256 ECDH and RNG acceptance test.
 
-		Hardware acceptance test for crypto_cracen_bm.cpp. The test runs without
+		Hardware acceptance test for crypto_cracen.cpp. The test runs without
 		Bluetooth or the SoftDevice so the CRACEN driver is exercised directly.
 
 		The test checks the provider self-test, AES-128 ECB, Cryptor forwarding,
@@ -12,7 +12,7 @@
 		and the CRACEN-backed RNG path.
 
 		Usage: build this file as a standalone nRF54 application linked with the
-		nRF54 IOsonata library containing crypto_cracen_bm.cpp. Inspect
+		nRF54 IOsonata library containing crypto_cracen.cpp. Inspect
 		g_CracenTestResult in the debugger: 1 is PASS; a negative value identifies
 		the failed stage. Test scaffolding, not part of the library build.
 
