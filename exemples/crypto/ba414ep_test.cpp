@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cracen_intrf.h"
 #include "crypto/ba414ep.h"			// hardware engine under test
 #include "crypto/crypto_uecc.h"		// software oracle
 #include "crypto_rng_nrf.h"			// hardware RNG
@@ -55,8 +56,9 @@ int main(void)
 	RngEngine *rng = CryptoRngNrfInstance();
 	rng->Enable();
 
-	static uint8_t hwMem[128], swMem[256];
-	Ba414ep   *hw = Ba414epCreate(hwMem, sizeof(hwMem), rng);
+	static uint8_t swMem[256];
+	static Ba414ep hwEngine;
+	Ba414ep   *hw = hwEngine.Init(CracenIntrfInstance(), rng) ? &hwEngine : nullptr;
 	CryptoUecc *sw = CryptoUeccCreate(swMem, sizeof(swMem), rng);
 	check("hardware and software engines construct", hw != nullptr && sw != nullptr);
 	if (hw == nullptr || sw == nullptr) { printf("abort\n"); return 1; }

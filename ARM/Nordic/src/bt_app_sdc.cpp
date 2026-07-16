@@ -57,6 +57,7 @@ SOFTWARE.
 #include "crypto/crypto_uecc.h"
 #include "crypto_rng_nrf.h"
 #if defined(NRF54L15_XXAA) || defined(NRF54H20_XXAA)
+#include "cracen_intrf.h"
 #include "crypto/ba414ep.h"
 #elif defined(NRF52840_XXAA)
 #include "crypto/crypto_cc3xx_engine.h"
@@ -663,11 +664,10 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// (CryptoCtlrSdc). SMP composes the ECDH engine and the AES engine.
 	KeyAgreeEngine *pEcdh = nullptr;
 #if defined(NRF54L15_XXAA) || defined(NRF54H20_XXAA)
-	static uint8_t s_CryptoEcdhMem[BA414EP_MEMSIZE];		// CRACEN engine object
-	pEcdh = Ba414epCreate(s_CryptoEcdhMem, sizeof(s_CryptoEcdhMem),
-						  CryptoRngNrfInstance());
-	if (pEcdh != nullptr)
+	static Ba414ep s_Ecdh;								// CRACEN engine object
+	if (s_Ecdh.Init(CracenIntrfInstance(), CryptoRngNrfInstance()))
 	{
+		pEcdh = &s_Ecdh;
 		DEBUG_PRINTF("Crypto ECDH engine: Ba414ep (CRACEN hardware P-256)\r\n");
 	}
 #elif defined(NRF52840_XXAA)

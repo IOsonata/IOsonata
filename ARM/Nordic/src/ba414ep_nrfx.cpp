@@ -54,34 +54,17 @@ void Ba414epModuleDisable(void)
 	NRF_CRACEN->ENABLE &= ~CRACEN_ENABLE_PKEIKG_Msk;
 }
 
-// Shared engine lock. Non-recursive test and set under an interrupt mask. The
-// random number driver and the symmetric engine take the same lock, so a
-// public-key operation serializes against an RNG draw and an AES operation on
-// this block.
-static volatile bool s_PkBusy;
-
+// Public-key engine lock. The Nordic crypto core is one block shared by the RNG, this
+// public-key accelerator and the symmetric engine, so all three must serialize
+// against one another. These forward to the single shared crypto core lock
+// (crypto_core_lock.h) rather than a private state variable, so a public-key
+// operation actually excludes a concurrent RNG draw or AES operation.
 bool Ba414epTryAcquire(void)
 {
-	uint32_t primask = __get_PRIMASK();
-	__disable_irq();
-
-	bool acquired = !s_PkBusy;
-	if (acquired)
-	{
-		s_PkBusy = true;
-		__DMB();
-	}
-
-	if (primask == 0)
-	{
-		__enable_irq();
-	}
-
-	return acquired;
+	return CryptoCoreTryLock();
 }
 
 void Ba414epRelease(void)
 {
-	__DMB();
-	s_PkBusy = false;
+	CryptoCoreUnlock();
 }

@@ -54,47 +54,12 @@ SOFTWARE.
 #include "nrf_soc.h"
 #endif
 
+#include "cracen_intrf.h"
 #include "crypto_rng_nrf.h"
 
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #include "nrfx_cracen.h"
 #define RNG_USE_CRACEN		1
-
-static volatile bool s_CracenBusy;
-
-bool CracenTryAcquire(void)
-{
-	uint32_t primask = __get_PRIMASK();
-	__disable_irq();
-
-	bool acquired = !s_CracenBusy;
-	if (acquired)
-	{
-		s_CracenBusy = true;
-		__DMB();
-	}
-
-	if (primask == 0)
-	{
-		__enable_irq();
-	}
-
-	return acquired;
-}
-
-void CracenRelease(void)
-{
-	uint32_t primask = __get_PRIMASK();
-	__disable_irq();
-
-	__DMB();
-	s_CracenBusy = false;
-
-	if (primask == 0)
-	{
-		__enable_irq();
-	}
-}
 #endif
 
 static bool s_RngReady;
@@ -102,7 +67,7 @@ static bool s_RngReady;
 bool RngInit(void)
 {
 #if defined(RNG_USE_CRACEN)
-	if (!CracenTryAcquire())
+	if (!CracenIntrfInstance()->ModuleHold(CRACEN_MODULE_RNG))
 	{
 		return false;
 	}
@@ -110,7 +75,7 @@ bool RngInit(void)
 	// Bring up the CRACEN CTR-DRBG. nrfx_cracen_init returns 0 on success or
 	// -EALREADY when it was initialized by an earlier caller.
 	int r = nrfx_cracen_init();
-	CracenRelease();
+	CracenIntrfInstance()->ModuleRelease();
 
 	if (r != 0 && r != -EALREADY)
 	{
@@ -143,14 +108,14 @@ static bool RngHwGet(uint8_t *pBuff, size_t Len)
 		}
 	}
 
-	if (!CracenTryAcquire())
+	if (!CracenIntrfInstance()->ModuleHold(CRACEN_MODULE_RNG))
 	{
 		return false;
 	}
 
 	// CTR-DRBG output, seeded and reseeded from the CRACEN hardware TRNG.
 	int r = nrfx_cracen_ctr_drbg_random_get(pBuff, Len);
-	CracenRelease();
+	CracenIntrfInstance()->ModuleRelease();
 	return r == 0;
 #else
  #if defined(NRF91_SERIES) || defined(NRF53_SERIES)

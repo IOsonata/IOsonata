@@ -761,6 +761,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/ba414ep.h</locationURI>
 		</link>
 		<link>
+			<name>include/crypto/cracen_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/cracen_intrf.h</locationURI>
+		</link>
+		<link>
 			<name>include/crypto/crypto_softaes.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
@@ -1541,9 +1546,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/ba414ep.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/ba414ep_nrfx.cpp</name>
+			<name>src/crypto/cracen_intrf.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/ba414ep_nrfx.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/cracen_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_p256.cpp</name>

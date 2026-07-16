@@ -26,8 +26,8 @@
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
-#include <new>
 
+#include "cracen_intrf.h"
 #include "crypto/ba414ep.h"
 
 #ifndef __DMB
@@ -47,54 +47,52 @@ static void PkWipe(void *pData, size_t Len)
 	}
 }
 
-static inline volatile uint32_t *PkReg(void)
+// Register and operand access uses the interface direct accessors inside a held
+// operation. Offsets are the Silex IP layout; the interface adds the base.
+static uint32_t PkRegRead(CracenIntrf *pIntrf, uint32_t Offset)
 {
-	return (volatile uint32_t *)((uintptr_t)Ba414epBase());
+	return pIntrf->RegRead(Offset);
 }
 
-// Address of a 32-byte P-256 operand inside its slot. Big-endian operands are
-// placed at the end of the slot, so the value occupies the last P256_SZ bytes.
-static inline volatile uint8_t *PkOperand(uint32_t Slot)
+static void PkRegWrite(CracenIntrf *pIntrf, uint32_t Offset, uint32_t Value)
 {
-	uintptr_t base = (uintptr_t)Ba414epOperandRam();
-	return (volatile uint8_t *)(base + Slot * BA414EP_SLOT_SIZE +
-								BA414EP_SLOT_SIZE - P256_SZ);
+	pIntrf->RegWrite(Offset, Value);
 }
 
-static void PkWrite(volatile uint8_t *pDst, const uint8_t *pSrc, size_t Len)
+// Byte offset of a 32-byte P-256 operand inside its slot, relative to the
+// operand memory base. Big-endian operands sit at the end of the slot.
+static uint32_t PkOperandOffset(uint32_t Slot)
 {
-	for (size_t i = 0; i < Len; i++)
-	{
-		pDst[i] = pSrc[i];
-	}
+	return Slot * BA414EP_SLOT_SIZE + BA414EP_SLOT_SIZE - P256_SZ;
 }
 
-static void PkRead(uint8_t *pDst, const volatile uint8_t *pSrc, size_t Len)
+static void PkWriteOperand(CracenIntrf *pIntrf, uint32_t Slot,
+						   const uint8_t *pSrc, size_t Len)
 {
-	for (size_t i = 0; i < Len; i++)
-	{
-		pDst[i] = pSrc[i];
-	}
+	pIntrf->MemWrite(PkOperandOffset(Slot), pSrc, Len);
 }
 
-static void PkClearSlot(uint32_t Slot)
+static void PkReadOperand(CracenIntrf *pIntrf, uint32_t Slot, uint8_t *pDst,
+						  size_t Len)
 {
-	volatile uint8_t *p = PkOperand(Slot);
-	for (size_t i = 0; i < P256_SZ; i++)
-	{
-		p[i] = 0;
-	}
+	pIntrf->MemRead(PkOperandOffset(Slot), pDst, Len);
+}
+
+static void PkClearSlot(CracenIntrf *pIntrf, uint32_t Slot)
+{
+	uint8_t zero[P256_SZ];
+	memset(zero, 0, sizeof(zero));
+	PkWriteOperand(pIntrf, Slot, zero, P256_SZ);
 }
 
 // Wait for the core to leave busy. Returns false on timeout. Does not treat a
 // lingering error bit from a previous operation as a failure: the current
 // operation's status is read after it runs, in PkWaitResult.
-static bool PkWaitNotBusy(void)
+static bool PkWaitNotBusy(CracenIntrf *pIntrf)
 {
-	volatile uint32_t *reg = PkReg();
 	for (uint32_t i = 0; i < BA414EP_POLL_LIMIT; i++)
 	{
-		if ((reg[BA414EP_REG_STATUS / sizeof(uint32_t)] & BA414EP_STATUS_BUSY) == 0U)
+		if ((PkRegRead(pIntrf, BA414EP_REG_STATUS) & BA414EP_STATUS_BUSY) == 0U)
 		{
 			return true;
 		}
@@ -104,12 +102,11 @@ static bool PkWaitNotBusy(void)
 
 // Wait for the core to leave busy, then return the masked error bits of the
 // completed operation (0 = success).
-static bool PkWaitIdle(uint32_t *pStatus)
+static bool PkWaitIdle(CracenIntrf *pIntrf, uint32_t *pStatus)
 {
-	volatile uint32_t *reg = PkReg();
 	for (uint32_t i = 0; i < BA414EP_POLL_LIMIT; i++)
 	{
-		uint32_t status = reg[BA414EP_REG_STATUS / sizeof(uint32_t)];
+		uint32_t status = PkRegRead(pIntrf, BA414EP_REG_STATUS);
 		if ((status & BA414EP_STATUS_BUSY) == 0U)
 		{
 			*pStatus = status & BA414EP_STATUS_ERROR_MASK;
@@ -122,33 +119,37 @@ static bool PkWaitIdle(uint32_t *pStatus)
 
 // Power the core and wait until it is not busy. A stale error bit from a prior
 // operation is not a bring-up failure; only readiness (not busy) matters here.
-static bool PkPrepare(void)
+static bool PkPrepare(CracenIntrf *pIntrf)
 {
-	Ba414epModuleEnable();
-	return PkWaitNotBusy();
+	// Enable the public-key module for the whole operation. It stays enabled
+	// across every register and operand access until PkCleanup disables it,
+	// matching the reference driver that enables once and disables once.
+	pIntrf->ModuleHold(CRACEN_MODULE_PKEIKG);
+	return PkWaitNotBusy(pIntrf);
 }
 
 // Clear the operand slots the multiply touched, clear the completion flag, and
 // power the core down.
-static void PkCleanup(void)
+static void PkCleanup(CracenIntrf *pIntrf)
 {
-	PkClearSlot(BA414EP_SLOT_SCALAR);
-	PkClearSlot(BA414EP_SLOT_RESULT_X);
-	PkClearSlot(BA414EP_SLOT_RESULT_Y);
-	PkClearSlot(BA414EP_SLOT_POINT_X);
-	PkClearSlot(BA414EP_SLOT_POINT_Y);
+	PkClearSlot(pIntrf, BA414EP_SLOT_SCALAR);
+	PkClearSlot(pIntrf, BA414EP_SLOT_RESULT_X);
+	PkClearSlot(pIntrf, BA414EP_SLOT_RESULT_Y);
+	PkClearSlot(pIntrf, BA414EP_SLOT_POINT_X);
+	PkClearSlot(pIntrf, BA414EP_SLOT_POINT_Y);
 	__DMB();
 
-	volatile uint32_t *reg = PkReg();
-	reg[BA414EP_REG_CONTROL / sizeof(uint32_t)] = BA414EP_CONTROL_CLEAR_IRQ;
-	Ba414epModuleDisable();
+	PkRegWrite(pIntrf, BA414EP_REG_CONTROL, BA414EP_CONTROL_CLEAR_IRQ);
+	// Power the module down at the end of the operation.
+	pIntrf->ModuleRelease();
 }
 
 // Result = Scalar * Point on P-256, with scalar blinding. The scalar must be in
 // range; the point is supplied by the caller. The core rejects an off-curve
 // point with a point-error status. A non-invertible intermediate is retried
 // with a fresh blinding factor. Returns true and a valid result on success.
-static bool PkPointMultiply(const uint8_t Point[64], const uint8_t Scalar[32],
+static bool PkPointMultiply(CracenIntrf *pIntrf,
+							const uint8_t Point[64], const uint8_t Scalar[32],
 							uint8_t Result[64], RngEngine *pRng)
 {
 	if (Point == nullptr || Scalar == nullptr || Result == nullptr ||
@@ -160,43 +161,35 @@ static bool PkPointMultiply(const uint8_t Point[64], const uint8_t Scalar[32],
 	memset(Result, 0, 64U);
 	for (uint32_t attempt = 0; attempt < BA414EP_RETRY_COUNT; attempt++)
 	{
-		if (!Ba414epTryAcquire())
-		{
-			return false;
-		}
-
-		bool prepared = PkPrepare();
+		bool prepared = PkPrepare(pIntrf);
 		uint32_t status = BA414EP_STATUS_BUSY;
 
 		if (prepared)
 		{
-			volatile uint32_t *reg = PkReg();
-
 			// Order matches the reference driver: command (with operand size),
 			// then operands, then the slot-pointer config, then start.
-			reg[BA414EP_REG_COMMAND / sizeof(uint32_t)] = BA414EP_CMD_P256_PTMUL;
+			PkRegWrite(pIntrf, BA414EP_REG_COMMAND, BA414EP_CMD_P256_PTMUL);
 
-			PkWrite(PkOperand(BA414EP_SLOT_SCALAR),  Scalar,     P256_SZ);
-			PkWrite(PkOperand(BA414EP_SLOT_POINT_X), &Point[0],  P256_SZ);
-			PkWrite(PkOperand(BA414EP_SLOT_POINT_Y), &Point[32], P256_SZ);
+			PkWriteOperand(pIntrf, BA414EP_SLOT_SCALAR,  Scalar,     P256_SZ);
+			PkWriteOperand(pIntrf, BA414EP_SLOT_POINT_X, &Point[0],  P256_SZ);
+			PkWriteOperand(pIntrf, BA414EP_SLOT_POINT_Y, &Point[32], P256_SZ);
 
-			reg[BA414EP_REG_CONFIG / sizeof(uint32_t)] = BA414EP_CONFIG_PTMUL;
+			PkRegWrite(pIntrf, BA414EP_REG_CONFIG, BA414EP_CONFIG_PTMUL);
 
 			__DMB();
-			reg[BA414EP_REG_CONTROL / sizeof(uint32_t)] =
-				BA414EP_CONTROL_START | BA414EP_CONTROL_CLEAR_IRQ;
-			(void)PkWaitIdle(&status);
+			PkRegWrite(pIntrf, BA414EP_REG_CONTROL,
+					   BA414EP_CONTROL_START | BA414EP_CONTROL_CLEAR_IRQ);
+			(void)PkWaitIdle(pIntrf, &status);
 			__DMB();
 
 			if (status == 0U)
 			{
-				PkRead(&Result[0],  PkOperand(BA414EP_SLOT_RESULT_X), P256_SZ);
-				PkRead(&Result[32], PkOperand(BA414EP_SLOT_RESULT_Y), P256_SZ);
+				PkReadOperand(pIntrf, BA414EP_SLOT_RESULT_X, &Result[0],  P256_SZ);
+				PkReadOperand(pIntrf, BA414EP_SLOT_RESULT_Y, &Result[32], P256_SZ);
 			}
 		}
 
-		PkCleanup();
-		Ba414epRelease();
+		PkCleanup(pIntrf);
 
 		if (prepared && status == 0U &&
 			!P256IsZero(&Result[0], P256_SZ) &&
@@ -223,22 +216,26 @@ static const uint8_t s_P256Generator[64] = {
 	0x4F,0xE3,0x42,0xE2,0xFE,0x1A,0x7F,0x9B,0x8E,0xE7,0xEB,0x4A,0x7C,0x0F,0x9E,0x16,
 	0x2B,0xCE,0x33,0x57,0x6B,0x31,0x5E,0xCE,0xCB,0xB6,0x40,0x68,0x37,0xBF,0x51,0xF5 };
 
-bool Ba414ep::Enable()
+bool Ba414ep::Init(DeviceIntrf * const pIntrf, RngEngine *pRng)
 {
-	if (!Ba414epTryAcquire())
+	if (pIntrf == nullptr)
 	{
 		return false;
 	}
-	bool ok = PkPrepare();
+	Interface(pIntrf);
+	vpRng = pRng;
+	return Enable();
+}
+
+bool Ba414ep::Enable()
+{
+	// Probe the core: a prepare/cleanup round confirms the public-key module
+	// responds. Register and operand access run through the bound interface.
+	bool ok = PkPrepare((CracenIntrf *)Interface());
 	if (ok)
 	{
-		PkCleanup();
+		PkCleanup((CracenIntrf *)Interface());
 	}
-	else
-	{
-		Ba414epModuleDisable();
-	}
-	Ba414epRelease();
 	vbValid = ok;
 	return ok;
 }
@@ -260,7 +257,7 @@ CRYPTO_STATUS Ba414ep::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKe
 
 	// Public key = generator * private scalar.
 	if (P256RandomScalar(pk->PrivKey) &&
-		PkPointMultiply(s_P256Generator, pk->PrivKey, pPubKey, vpRng))
+		PkPointMultiply((CracenIntrf *)Interface(), s_P256Generator, pk->PrivKey, pPubKey, vpRng))
 	{
 		pk->bKeyValid = true;
 		return CRYPTO_STATUS_OK;
@@ -292,7 +289,7 @@ CRYPTO_STATUS Ba414ep::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	// Shared secret = peer point * private scalar. The core rejects an off-curve
 	// peer point (CVE-2018-5383) as a point error, surfaced as failure here.
 	uint8_t point[64];
-	bool ok = PkPointMultiply(pPeerPubKey, pk->PrivKey, point, vpRng);
+	bool ok = PkPointMultiply((CracenIntrf *)Interface(), pPeerPubKey, pk->PrivKey, point, vpRng);
 
 	// Wipe the private scalar unless the caller asked to keep it after a success
 	// (bKeepKey), for one ephemeral key pair against several peers. A failure
@@ -313,19 +310,4 @@ CRYPTO_STATUS Ba414ep::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	}
 	PkWipe(point, sizeof(point));
 	return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
-}
-
-Ba414ep *Ba414epCreate(void *pMem, size_t MemSize, RngEngine *pRng)
-{
-	if (pMem == nullptr || MemSize < sizeof(Ba414ep))
-	{
-		return nullptr;
-	}
-	Ba414ep *p = new (pMem) Ba414ep();
-	p->SetRng(pRng);
-	if (!p->Enable())
-	{
-		return nullptr;		// core absent or no P-256 support
-	}
-	return p;
 }

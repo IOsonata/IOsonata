@@ -17,10 +17,10 @@
 		are hardware facts of the core, restated here in this project own form.
 
 		This unit is silicon independent: it reaches the core only through the
-		injected base pointer and the vendor hooks below. The absolute base, the
-		wrapper module power, and the shared engine lock live in the target port
-		(for the nRF54 family, ba414ep_nrfx.cpp), which is the only file that
-		names the vendor wrapper.
+		crypto interface it is given at Init, using Device Read / Write with the
+		base selector and IP offset. The absolute base addresses and the module
+		enable live in the interface (for the nRF54 family, CracenIntrf), which
+		is the only file that names the vendor wrapper.
 
 		Randomness for the private scalar and the scalar-blinding countermeasure
 		comes from an injected RngEngine and must be security grade; the engine
@@ -37,6 +37,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#include "device_intrf.h"
 #include "crypto/icrypto.h"
 
 #ifdef __cplusplus
@@ -100,24 +101,23 @@ extern "C" {
 #define BA414EP_CONFIG_PTMUL		BA414EP_CONFIG_PTRS(12U, 8U, 10U)
 
 //-----------------------------------------------------------------------------
-// Vendor binding (implemented by the target port). The engine reaches the core
-// only through these hooks; only the port names the vendor wrapper.
+// Silex BA414EP IP layout. Register offsets are relative to the register
+// sub-block; operand offsets start at the operand memory sub-block, which the
+// crypto interface presents at BA414EP_CRYPTORAM_OFFSET so the engine addresses
+// registers and operands in one offset space. These are IP-fixed constants, not
+// MCU addresses; the interface holds the actual bases.
 //-----------------------------------------------------------------------------
 
-// Absolute base of the BA414EP register block.
-volatile void *Ba414epBase(void);
+// Operand memory sub-block offset. Register offsets are below it; operand
+// offsets are at or above it. The two ranges are disjoint, so the interface
+// routes an access to the right sub-block by the offset alone.
+#define BA414EP_CRYPTORAM_OFFSET	0x8000U
 
-// Base of the operand (crypto-RAM) region.
-volatile void *Ba414epOperandRam(void);
-
-// Enable/disable the public-key module in the wrapper for one operation.
-void Ba414epModuleEnable(void);
-void Ba414epModuleDisable(void);
-
-// Non-blocking ownership lock for the shared core (shared with the RNG and the
-// symmetric engine). Must not touch a register until acquire succeeds.
-bool Ba414epTryAcquire(void);
-void Ba414epRelease(void);
+// Interface base selector (Device DeviceAddress / DevAddr), chosen by the engine
+// per access the way an SPI device picks a chip-select. The crypto interface
+// maps these two spaces to the register and operand memory sub-block bases.
+#define BA414EP_ADDR_REG	0U		//!< Engine register space
+#define BA414EP_ADDR_MEM	1U		//!< Operand memory space
 
 #ifdef __cplusplus
 }
@@ -145,6 +145,22 @@ public:
 
 	Ba414ep() { vbValid = false; vpRng = nullptr; }
 
+	/**
+	 * @brief	Initialise the engine on a crypto interface.
+	 *
+	 * Sensor-style construction: the interface is created separately (like an
+	 * SPI or I2C bus) and its pointer passed here. Register and operand access
+	 * then go through the inherited Device Read / Write over that interface. The
+	 * engine holds no base address and no MCU-specific knowledge.
+	 *
+	 * @param	pIntrf	The crypto core interface the engine sits on.
+	 * @param	pRng	Security-grade random source for key generation and
+	 *					blinding. Verify may run without it.
+	 *
+	 * @return	true on success.
+	 */
+	bool Init(DeviceIntrf * const pIntrf, RngEngine *pRng);
+
 	/// Bind the security-grade random source for key generation and blinding.
 	void SetRng(RngEngine *pRng) { vpRng = pRng; }
 
@@ -165,15 +181,8 @@ private:
 	RngEngine *vpRng;			//!< Security-grade random source
 };
 
-/// Bytes of storage Ba414epCreate needs.
-#define BA414EP_MEMSIZE		sizeof(Ba414ep)
-
-/// @brief	Construct a Ba414ep in caller-provided storage (no allocation).
-/// @param	pMem	Buffer of at least BA414EP_MEMSIZE bytes, aligned.
-/// @param	MemSize	Size of pMem.
-/// @param	pRng	Security-grade random source.
-/// @return	Ready engine pointer, or nullptr on a too-small buffer or absent core.
-Ba414ep *Ba414epCreate(void *pMem, size_t MemSize, RngEngine *pRng);
+// Construct a Ba414ep as a plain object and call Init(pIntrf, pRng), the same
+// way a sensor is constructed and given its bus interface.
 
 /** @} */
 

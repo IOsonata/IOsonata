@@ -165,9 +165,13 @@ CRYPTO_STATUS CryptoUecc::Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
 							   uint8_t *pSig)
 {
 	if (Curve != CRYPTO_CURVE_P256 || Key.Loc != CRYPTO_KEY_LOC_PLAIN ||
+		Key.Type != CRYPTO_KEY_ECC_P256 ||
 		(Key.Usage & CRYPTO_KEY_USE_SIGN) == 0 ||
-		pHash == nullptr || pSig == nullptr || Key.Plain.pData == nullptr)
+		pHash == nullptr || pSig == nullptr || Key.Plain.pData == nullptr ||
+		Key.Plain.Len != 32)
 	{
+		// Reject a malformed descriptor: uECC_sign reads a fixed 32 byte scalar
+		// from pData, so a short buffer would read past the declared key storage.
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 	// The ECDSA per-signature nonce must come from a security-grade RNG; a weak

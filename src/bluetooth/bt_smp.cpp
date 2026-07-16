@@ -1325,7 +1325,11 @@ static void SmpPasskeySendInitiatorConfirm(BtHciDevice_t * const pDev,
 	SmpP256CoordBeToSmpLe(&pLink->Ctx.LocalPubKey[0], localX);	// PKax
 	SmpP256CoordBeToSmpLe(&pLink->Ctx.PeerPubKey[0], peerX);		// PKbx
 
-	BtSmpCryptoRand(pLink->Ctx.LocalRand, 16);					// Nai
+	if (!BtSmpCryptoRand(pLink->Ctx.LocalRand, 16))				// Nai
+	{
+		SmpFailAndLock(pDev, pLink->ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
+		return;
+	}
 	uint8_t ra = SmpPasskeyRa(pLink->Ctx.Passkey, pLink->Ctx.PkRound);
 
 	BtSmpPairingConfirm_t cf;
@@ -1347,7 +1351,11 @@ static void SmpPasskeyResponderConfirm(BtHciDevice_t * const pDev,
 	SmpP256CoordBeToSmpLe(&pLink->Ctx.LocalPubKey[0], localX);	// PKbx
 	SmpP256CoordBeToSmpLe(&pLink->Ctx.PeerPubKey[0], peerX);		// PKax
 
-	BtSmpCryptoRand(pLink->Ctx.LocalRand, 16);					// Nbi
+	if (!BtSmpCryptoRand(pLink->Ctx.LocalRand, 16))				// Nbi
+	{
+		SmpFailAndLock(pDev, pLink->ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
+		return;
+	}
 	uint8_t rb = SmpPasskeyRa(pLink->Ctx.Passkey, pLink->Ctx.PkRound);
 
 	BtSmpPairingConfirm_t cf;
@@ -1527,7 +1535,11 @@ static void SmpPasskeyBegin(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	if (pLink->Ctx.bPkDisplay)
 	{
 		uint8_t rnd[4];
-		BtSmpCryptoRand(rnd, 4);
+		if (!BtSmpCryptoRand(rnd, 4))
+		{
+			SmpFailAndLock(pDev, ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
+			return;
+		}
 		uint32_t v = ((uint32_t)rnd[0] | ((uint32_t)rnd[1] << 8) |
 					  ((uint32_t)rnd[2] << 16) | ((uint32_t)rnd[3] << 24)) % 1000000u;
 		pLink->Ctx.Passkey = v;
@@ -1579,7 +1591,11 @@ static void SmpHandlePairingConfirm(BtHciDevice_t * const pDev, BtSmpLink_t *pLi
 		return;
 	}
 
-	BtSmpCryptoRand(pLink->Ctx.LocalRand, 16);
+	if (!BtSmpCryptoRand(pLink->Ctx.LocalRand, 16))
+	{
+		SmpFailAndLock(pDev, ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
+		return;
+	}
 
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	uint8_t ra[6] = {0};
@@ -2242,7 +2258,12 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 				}
 			}
 
-			BtSmpCryptoRand(pLink->Ctx.LocalRand, 16);
+			if (!BtSmpCryptoRand(pLink->Ctx.LocalRand, 16))
+			{
+				SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+				pLink->Ctx.State = BT_SMP_STATE_IDLE;
+				continue;
+			}
 
 			if (pLink->Ctx.bInitiator)
 			{
@@ -2262,7 +2283,12 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 		{
 			// Initiator (SC Just Works): generate our nonce Na and wait for the
 			// responder Confirm Cb. The initiator does not send a Confirm.
-			BtSmpCryptoRand(pLink->Ctx.LocalRand, 16);
+			if (!BtSmpCryptoRand(pLink->Ctx.LocalRand, 16))
+			{
+				SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+				pLink->Ctx.State = BT_SMP_STATE_IDLE;
+				continue;
+			}
 			pLink->Ctx.State = BT_SMP_STATE_CONFIRM_WAIT;
 			continue;
 		}
@@ -2271,7 +2297,12 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 		// Cb = f4(PKbx, PKax, Nb, 0)
 		// Public keys are stored big-endian for ECDH; f4 uses the SMP
 		// little-endian X-coordinate byte order.
-		BtSmpCryptoRand(pLink->Ctx.LocalRand, 16);
+		if (!BtSmpCryptoRand(pLink->Ctx.LocalRand, 16))
+		{
+			SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+			pLink->Ctx.State = BT_SMP_STATE_IDLE;
+			continue;
+		}
 
 		uint8_t localX[32];
 		uint8_t peerX[32];
@@ -2427,7 +2458,14 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		if (localKeyDist & BT_SMP_KEYDIST_IDKEY)
 		{
 			uint8_t irk[16];
-			BtSmpCryptoRand(irk, 16);
+			if (!BtSmpCryptoRand(irk, 16))
+			{
+				// Do not distribute a key drawn from a failed RNG. Skip the
+				// identity key; the peer simply receives no IRK.
+				SMP_TRACE("SMP IRK RNG failed, skipping id key\r\n");
+			}
+			else
+			{
 			BtSmpIdInfo_t idi;
 			idi.Code = BT_SMP_CODE_PAIRING_ID_INFO;
 			memcpy(idi.Irk, irk, 16);
@@ -2440,16 +2478,26 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			iai.AddrType = localAddrType;
 			memcpy(iai.Addr, localAddr, 6);
 			SmpSend(pDev, ConnHdl, &iai, sizeof(iai));
+			CryptoSecureWipe(irk, sizeof(irk));
+			}
 		}
 
 		if (localKeyDist & BT_SMP_KEYDIST_SIGNKEY)
 		{
 			uint8_t csrk[16];
-			BtSmpCryptoRand(csrk, 16);
+			if (!BtSmpCryptoRand(csrk, 16))
+			{
+				// Do not distribute a signing key drawn from a failed RNG.
+				SMP_TRACE("SMP CSRK RNG failed, skipping sign key\r\n");
+			}
+			else
+			{
 			BtSmpSigningInfo_t si;
 			si.Code = BT_SMP_CODE_PAIRING_SIGNING_INFO;
 			memcpy(si.Csrk, csrk, 16);
 			SmpSend(pDev, ConnHdl, &si, sizeof(si));
+			CryptoSecureWipe(csrk, sizeof(csrk));
+			}
 		}
 
 		// Compute which keys the peer will distribute in return. The negotiated
@@ -2656,11 +2704,19 @@ static void SmpCryptoComplete(CryptoEngine * const pEngine, CRYPTO_OP Op,
 	}
 }
 
-void BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
+bool BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
 {
 	// RNG is a target driver (crypto/icrypto.h), not a crypto engine. It is
-	// backed by the MCU RNG peripheral; there is no software default.
-	RngGet(pBuf, Len);
+	// backed by the MCU RNG peripheral; there is no software default. The result
+	// must be checked: on nRF54 the non-blocking CRACEN lock can be held, so a
+	// draw can fail, and a security-path caller must abort rather than proceed
+	// with an unrandomized buffer.
+	if (!RngGet(pBuf, Len))
+	{
+		CryptoSecureWipe(pBuf, Len);
+		return false;
+	}
+	return true;
 }
 
 int BtSmpCryptoSelfTest(void)

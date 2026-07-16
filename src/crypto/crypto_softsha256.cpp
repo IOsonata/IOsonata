@@ -192,5 +192,7 @@ CryptoSoftSha256 *CryptoSoftSha256Create(void *pMem, size_t MemSize)
 	{
 		return nullptr;
 	}
-	return new (pMem) CryptoSoftSha256();
+	CryptoSoftSha256 *p = new (pMem) CryptoSoftSha256();
+	p->Enable();			// return an enabled, valid engine like the other factories
+	return p;
 }

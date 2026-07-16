@@ -23,7 +23,7 @@
 #include <assert.h>
 
 #include "crypto/icrypto.h"
-#include "crypto_cc3xx_engine.h"
+#include "crypto/crypto_cc3xx_engine.h"
 #include "crypto_cc3xx.h"
 #include "coredev/interrupt.h"
 #include <new>
@@ -996,5 +996,7 @@ CryptoCc3xx *CryptoCc3xxCreate(void *pMem, size_t MemSize)
 	{
 		return nullptr;
 	}
-	return new (pMem) CryptoCc3xx();
+	CryptoCc3xx *p = new (pMem) CryptoCc3xx();
+	p->Enable();			// return an enabled, valid engine like the other factories
+	return p;
 }

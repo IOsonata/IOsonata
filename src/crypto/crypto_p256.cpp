@@ -117,6 +117,9 @@ bool P256RandomScalar(uint8_t Scalar[P256_BYTES])
 	{
 		if (!RngGet(Scalar, P256_BYTES))
 		{
+			// RngGet may have partially filled the buffer with real entropy;
+			// wipe it so no key material leaks on failure.
+			CryptoSecureWipe(Scalar, P256_BYTES);
 			return false;
 		}
 		if (P256ScalarInRange(Scalar))
@@ -124,29 +127,50 @@ bool P256RandomScalar(uint8_t Scalar[P256_BYTES])
 			return true;
 		}
 	}
-	memset(Scalar, 0, P256_BYTES);
+	// Exhausted attempts. Wipe through volatile so the clear is not optimized
+	// away (a plain memset here is dead-store eliminable).
+	CryptoSecureWipe(Scalar, P256_BYTES);
 	return false;
 }
 
-// Regularize a scalar for a fixed-length window multiply: produce R such that
-// its top bit is set, so the multiply runs a constant number of iterations
-// independent of the scalar bit length. R is one byte wider than K. When K is
-// odd, R = K; when K is even, R = K + n, which is odd because n is odd. The
-// multiply routine accounts for the added order.
-void P256RegularizeScalar(const uint8_t K[P256_BYTES], uint8_t R[P256_BYTES + 1U])
+// Big-endian add: Out = A + B, returns the carry out of the top byte.
+static uint8_t P256AddBe(const uint8_t A[P256_BYTES], const uint8_t B[P256_BYTES],
+						 uint8_t Out[P256_BYTES])
 {
-	int carry = 0;
-	int odd = K[P256_BYTES - 1U] & 1;
-
-	// R = K, or R = K + n when K is even. Add n conditionally, constant time.
-	for (int i = (int)P256_BYTES - 1; i >= 0; i--)
+	uint32_t carry = 0U;
+	for (int idx = (int)P256_BYTES - 1; idx >= 0; idx--)
 	{
-		int addend = odd ? 0 : s_P256Order[i];
-		int sum = (int)K[i] + addend + carry;
-		R[i + 1] = (uint8_t)(sum & 0xFF);
+		const uint32_t sum = (uint32_t)A[idx] + B[idx] + carry;
+		Out[idx] = (uint8_t)sum;
 		carry = sum >> 8;
 	}
-	R[0] = (uint8_t)carry;
+	return (uint8_t)carry;
+}
+
+// Regularize a scalar to a fixed 257-bit length with bit 256 always set, for a
+// constant-time fixed-position ladder that seeds its accumulator with P (the
+// implicit set bit 256). For a scalar k in [1, n), exactly one of k+n and k+2n
+// lands in [2^256, 2^257): add n once, and if that did not carry into bit 256,
+// add n again. R holds the low 256 bits of the chosen value with R[0] = 1
+// marking the set bit 256, so the ladder computes k*P and not (2^256 + k)*P.
+// Constant time: both sums are always computed and selected by a mask.
+void P256RegularizeScalar(const uint8_t K[P256_BYTES], uint8_t R[P256_BYTES + 1U])
+{
+	uint8_t kPlusN[P256_BYTES];
+	uint8_t kPlus2N[P256_BYTES];
+	const uint8_t carry1 = P256AddBe(K, s_P256Order, kPlusN);
+	(void)P256AddBe(kPlusN, s_P256Order, kPlus2N);
+	// For k in [1, n) one of the two sums always carries into bit 256; carry1
+	// selects k+n, otherwise k+2n.
+	const uint8_t mask = (uint8_t)(0U - (uint32_t)carry1);
+	R[0] = 1U;
+	for (size_t idx = 0U; idx < P256_BYTES; idx++)
+	{
+		R[idx + 1U] = (uint8_t)((kPlusN[idx] & mask) |
+								(kPlus2N[idx] & (uint8_t)~mask));
+	}
+	CryptoSecureWipe(kPlusN, sizeof(kPlusN));
+	CryptoSecureWipe(kPlus2N, sizeof(kPlus2N));
 }
 
 // Extract bit BitNo of a regularized big-endian scalar (one extra leading byte).

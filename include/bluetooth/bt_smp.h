@@ -511,7 +511,7 @@ void BtSmpCryptoAes128(BtHciDevice_t * const pDev,
 int  BtSmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64]);
 int  BtSmpCryptoEcdh(BtHciDevice_t * const pDev,
 					 const uint8_t pPeerPubKey[64], uint8_t pDhKey[32]);
-void BtSmpCryptoRand(uint8_t *pBuf, size_t Len);
+bool BtSmpCryptoRand(uint8_t *pBuf, size_t Len);
 int  BtSmpCryptoSelfTest(void);
 
 /**
