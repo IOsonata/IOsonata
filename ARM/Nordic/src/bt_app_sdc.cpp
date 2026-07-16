@@ -59,7 +59,7 @@ SOFTWARE.
 #if defined(NRF54L15_XXAA) || defined(NRF54H20_XXAA)
 #include "crypto/ba414ep.h"
 #elif defined(NRF52840_XXAA)
-#include "crypto_cc3xx.h"
+#include "crypto/crypto_cc3xx_engine.h"
 #endif
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hcievt.h"
@@ -656,7 +656,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// at compile time:
 	//   nRF54L15 / nRF54H20 : CRACEN            -> Ba414ep (hardware)
 	//   nRF52840            : CryptoCell CC310  -> CryptoCc3xx (hardware)
-	//   nRF52832, nRF5340   : no wired P-256 OO driver -> CryptoUecc (software)
+	//   nRF52832            : no accelerator    -> CryptoUecc (software)
+	//   nRF5340 (net core)  : CC312 is on the app core secure domain, not
+	//                         reachable from the network core -> CryptoUecc
 	// The controller supplies AES-128 ECB through the HCI LE Encrypt path
 	// (CryptoCtlrSdc). SMP composes the ECDH engine and the AES engine.
 	KeyAgreeEngine *pEcdh = nullptr;

@@ -8,8 +8,8 @@
 		image hash offline with the matching private key; only the public key
 		and the signature reach the device.
 
-		The engine comes from CryptoInit with CRYPTO_PROVIDER_AUTO, so a part
-		with a hardware accelerator uses it and a part without falls back to the
+		The check composes a HashEngine (SHA-256) and a SignEngine (ECDSA
+		verify); software engines suffice since only public values are used. The
 		software uECC engine. SHA-256 is always available from the base core.
 
 		The vendor public key and the signature below are a valid example pair
@@ -24,7 +24,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "crypto/crypto.h"
+#include "crypto/crypto_softsha256.h"
+#include "crypto/crypto_uecc.h"
 
 // Vendor signing public key (X||Y, big-endian), provisioned in firmware.
 static const uint8_t s_VendorPubKey[64] = {
@@ -46,33 +47,33 @@ static const uint8_t s_ImageSignature[64] = {
 
 // On-device check: true when the signature over SHA-256(image) is valid for the
 // vendor public key. VendorPubKey is 64 bytes (X||Y), Signature is 64 (r||s).
-bool DfuImageVerify(CryptoDev_t *pCrypto, const uint8_t VendorPubKey[64],
+// The caller supplies the hash and verify engines; this composes them.
+bool DfuImageVerify(HashEngine *pHash, SignEngine *pVerify,
+					const uint8_t VendorPubKey[64],
 					const uint8_t *pImage, size_t ImageLen,
 					const uint8_t Signature[64])
 {
 	uint8_t hash[32];
-	if (CryptoSha256(pCrypto, pImage, ImageLen, hash, NULL) != CRYPTO_STATUS_OK)
+	if (pHash->Hash(CRYPTO_HASH_SHA256, pImage, ImageLen, hash) != CRYPTO_STATUS_OK)
 	{
 		return false;
 	}
-	return CryptoEcdsaP256Verify(pCrypto, VendorPubKey, hash, Signature, NULL)
-		   == CRYPTO_STATUS_OK;
+	return pVerify->Verify(CRYPTO_CURVE_P256, VendorPubKey, hash, sizeof(hash),
+						   Signature) == CRYPTO_STATUS_OK;
 }
 
 int main(void)
 {
-	// Bring up the crypto engine: hardware where available, else software uECC.
-	static uint8_t s_CryptoMem[CRYPTO_MEMSIZE_ECDH];
-	CryptoDev_t crypto;
-	CryptoCfg_t cfg;
-	memset(&cfg, 0, sizeof(cfg));
-	cfg.Provider = CRYPTO_PROVIDER_AUTO;
-	cfg.ReqCaps  = CRYPTO_CAP_ECDSA_P256_VERIFY | CRYPTO_CAP_SHA256;
-	cfg.pMem     = s_CryptoMem;
-	cfg.MemSize  = sizeof(s_CryptoMem);
-	if (!CryptoInit(&crypto, &cfg))
+	// Bring up the hash and verify engines. Software is enough for a signature
+	// check: SHA-256 has no key and ECDSA verify uses only public values.
+	static uint8_t s_HashMem[CRYPTO_SOFTSHA256_MEMSIZE];
+	alignas(uint64_t) static uint8_t s_VerifyMem[CRYPTO_UECC_MEMSIZE];
+	HashEngine *pHash = CryptoSoftSha256Create(s_HashMem, sizeof(s_HashMem));
+	// Verify needs no RNG (deterministic); pass nullptr.
+	SignEngine *pVerify = CryptoUeccCreate(s_VerifyMem, sizeof(s_VerifyMem), nullptr);
+	if (pHash == nullptr || pVerify == nullptr)
 	{
-		printf("crypto init failed\n");
+		printf("crypto engine init failed\n");
 		return 1;
 	}
 
@@ -81,13 +82,13 @@ int main(void)
 	for (int i = 0; i < 256; i++) { image[i] = (uint8_t)(i * 3 + 1); }
 
 	// Genuine image: signature must verify.
-	bool ok = DfuImageVerify(&crypto, s_VendorPubKey, image, sizeof(image),
+	bool ok = DfuImageVerify(pHash, pVerify, s_VendorPubKey, image, sizeof(image),
 							 s_ImageSignature);
 	printf("genuine image accepted: %s\n", ok ? "yes" : "NO");
 
 	// Tampered image: one byte changed, signature must be rejected.
 	image[100] ^= 0x01;
-	bool bad = DfuImageVerify(&crypto, s_VendorPubKey, image, sizeof(image),
+	bool bad = DfuImageVerify(pHash, pVerify, s_VendorPubKey, image, sizeof(image),
 							  s_ImageSignature);
 	printf("tampered image rejected: %s\n", bad ? "NO" : "yes");
 

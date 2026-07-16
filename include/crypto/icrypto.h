@@ -144,6 +144,11 @@ typedef enum __Crypto_Mac_Alg {
 	CRYPTO_MAC_GMAC				//!< GMAC (GHASH-based)
 } CRYPTO_MAC_ALG;
 
+/// Hash algorithm (HashEngine).
+typedef enum __Crypto_Hash_Alg {
+	CRYPTO_HASH_SHA256			//!< SHA-256 (FIPS 180-4), 32 byte digest
+} CRYPTO_HASH_ALG;
+
 /// Elliptic curve (KeyAgreeEngine, SignEngine).
 typedef enum __Crypto_Curve {
 	CRYPTO_CURVE_P256,			//!< NIST P-256 (secp256r1)
@@ -230,6 +235,7 @@ typedef enum __Crypto_Op {
 	CRYPTO_OP_AGREE,			//!< KeyAgreeEngine::Agree completed
 	CRYPTO_OP_SIGN,				//!< SignEngine::Sign completed
 	CRYPTO_OP_VERIFY,			//!< SignEngine::Verify completed
+	CRYPTO_OP_HASH,				//!< HashEngine::Hash completed
 	CRYPTO_OP_RANDOM			//!< RngEngine::Random completed
 } CRYPTO_OP;
 
@@ -351,6 +357,32 @@ public:
 							  const uint8_t *pMsg, size_t Len,
 							  uint8_t *pMac, size_t MacLen) {
 		(void)Alg; (void)Key; (void)pMsg; (void)Len; (void)pMac; (void)MacLen;
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+};
+
+//-----------------------------------------------------------------------------
+// HashEngine: unkeyed message digest facet (SHA-256). Base declines; a software
+// or hardware digest engine overrides Hash. Separate from MacEngine because a
+// hash takes no key. A one-shot interface covers the DFU and signature-verify
+// use; a streaming interface can be added if a caller needs it.
+//-----------------------------------------------------------------------------
+class HashEngine : virtual public CryptoEngine {
+public:
+	/**
+	 * @brief	One-shot digest over a full message.
+	 *
+	 * @param	Alg		Hash algorithm (CRYPTO_HASH_*).
+	 * @param	pMsg	Message buffer of Len bytes.
+	 * @param	Len		Message length in bytes.
+	 * @param	pDigest	Output buffer for the digest; must hold the algorithm
+	 *					digest size (32 bytes for SHA-256).
+	 *
+	 * @return	CRYPTO_STATUS_OK on success.
+	 */
+	virtual CRYPTO_STATUS Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg,
+							   size_t Len, uint8_t *pDigest) {
+		(void)Alg; (void)pMsg; (void)Len; (void)pDigest;
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 };
