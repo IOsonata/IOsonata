@@ -391,17 +391,17 @@ void BtSmpTimeoutCheck(void);
 /**
  * @brief	Initialise the SMP layer and compose its crypto from engines.
  *
- * SMP needs two composed primitives - ECDH (P-256) and AES-128 ECB - each
- * supplied by a CryptoDev_t engine (crypto/crypto.h).
- * The application passes the engine that fills each slot from whatever its
- * target provides: one engine may fill both (mbedtls, CC310), or they compose
- * from two (e.g. uECC for ECDH, the BLE controller for AES, on a part with no
- * CryptoCell). Each slot is validated against the required capability; an
- * engine lacking it leaves that slot disabled and the corresponding operation
- * fails loud. The same engine pointer may be passed for both slots.
+ * SMP needs two primitives - ECDH (P-256) and AES-128 ECB - each supplied by an
+ * OO crypto engine (crypto/icrypto.h): a KeyAgreeEngine and a CipherEngine.
+ * The application constructs the engine that fills each slot from whatever its
+ * target provides: hardware P-256 (Ba414ep on CRACEN, CryptoCc3xx on CC310) or
+ * software (CryptoUecc), and AES from the BLE controller (CryptoCtlrSdc). A null
+ * or incapable engine leaves that slot disabled and the corresponding operation
+ * fails loud. The same engine pointer may be passed for both slots if one engine
+ * implements both facets.
  *
  * Randomness is NOT a slot: it comes from the target RngGet driver
- * (crypto/crypto.h), backed by the MCU RNG peripheral, which SMP calls directly.
+ * (crypto/icrypto.h), backed by the MCU RNG peripheral, which SMP calls directly.
  * A target without an RNG peripheral does not link.
  *
  * @param	pEcdh	KeyAgreeEngine providing P-256 ECDH.

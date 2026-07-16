@@ -2658,7 +2658,7 @@ static void SmpCryptoComplete(CryptoEngine * const pEngine, CRYPTO_OP Op,
 
 void BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
 {
-	// RNG is a target driver (crypto/crypto.h), not a crypto engine. It is
+	// RNG is a target driver (crypto/icrypto.h), not a crypto engine. It is
 	// backed by the MCU RNG peripheral; there is no software default.
 	RngGet(pBuf, Len);
 }

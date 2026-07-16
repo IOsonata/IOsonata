@@ -3,7 +3,7 @@
 
 @brief	Random number generator implementation on Nordic nRF series.
 
-		Provides the RngInit/RngGet declared in crypto/crypto.h. There is no
+		Provides the RngInit/RngGet declared in crypto_rng_nrf.h. There is no
 		software default: a part without an RNG peripheral does not link. Any
 		code that calls RngGet (crypto engines for key generation, SMP, etc.)
 		gets hardware entropy here, with no knowledge of the underlying engine.
