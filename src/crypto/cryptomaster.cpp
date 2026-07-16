@@ -17,8 +17,8 @@
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
-#include <new>
 
+#include "cracen_intrf.h"
 #include "crypto/cryptomaster.h"
 
 #ifndef __DMB
@@ -37,45 +37,59 @@ static void CmWipe(void *pData, size_t Len)
 	}
 }
 
-static inline volatile uint32_t *CmReg(uint32_t Offset)
-{
-	return (volatile uint32_t *)((uintptr_t)CryptoMasterBase() + Offset);
-}
-
 // Soft reset the DMA and clear pending interrupt status. The reset is a pulse:
 // assert the enable bit, hold briefly, then clear it, and only then wait for the
 // reset-busy bit to drop. Clearing the enable is required; without it the block
 // stays held in reset.
-static bool CmReset(void)
+// Register access through the inherited Device Read / Write, with DevAddr
+// selecting the symmetric engine register base. The module is held for the
+// operation by the caller.
+static uint32_t CmRegRead(Device *pDev, uint32_t Offset)
 {
-	*CmReg(CRYPTOMASTER_CONFIG) = CRYPTOMASTER_SOFTRESET_ENABLE;
+	uint8_t off[4] = { (uint8_t)Offset, (uint8_t)(Offset >> 8),
+					   (uint8_t)(Offset >> 16), (uint8_t)(Offset >> 24) };
+	pDev->DeviceAddress(CRACEN_ADDR_REG);
+	return pDev->Read32(off, 4);
+}
+
+static void CmRegWrite(Device *pDev, uint32_t Offset, uint32_t Value)
+{
+	uint8_t off[4] = { (uint8_t)Offset, (uint8_t)(Offset >> 8),
+					   (uint8_t)(Offset >> 16), (uint8_t)(Offset >> 24) };
+	pDev->DeviceAddress(CRACEN_ADDR_REG);
+	pDev->Write32(off, 4, Value);
+}
+
+static bool CmReset(Device *pDev)
+{
+	CmRegWrite(pDev, CRYPTOMASTER_CONFIG, CRYPTOMASTER_SOFTRESET_ENABLE);
 
 	// Brief hold so the reset takes on all MCUs, then clear it.
 	for (volatile uint32_t d = 0; d < 64; d++) { }
-	*CmReg(CRYPTOMASTER_CONFIG) = 0;
+	CmRegWrite(pDev, CRYPTOMASTER_CONFIG, 0);
 
 	for (uint32_t i = 0; i < CM_POLL_LIMIT; i++)
 	{
-		if ((*CmReg(CRYPTOMASTER_STATUS) & CRYPTOMASTER_STATUS_RESET_BUSY) == 0U)
+		if ((CmRegRead(pDev, CRYPTOMASTER_STATUS) & CRYPTOMASTER_STATUS_RESET_BUSY) == 0U)
 		{
-			*CmReg(CRYPTOMASTER_INT_STATCLR) = 0xFFFFFFFFU;
+			CmRegWrite(pDev, CRYPTOMASTER_INT_STATCLR, 0xFFFFFFFFU);
 			return true;
 		}
 	}
-	*CmReg(CRYPTOMASTER_INT_STATCLR) = 0xFFFFFFFFU;
+	CmRegWrite(pDev, CRYPTOMASTER_INT_STATCLR, 0xFFFFFFFFU);
 	return false;
 }
 
 // Wait for both DMA channels; false on a bus error or timeout.
-static bool CmWait(void)
+static bool CmWait(Device *pDev)
 {
 	for (uint32_t i = 0; i < CM_POLL_LIMIT; i++)
 	{
-		if ((*CmReg(CRYPTOMASTER_INT_STATRAW) & CRYPTOMASTER_INT_ERROR) != 0U)
+		if ((CmRegRead(pDev, CRYPTOMASTER_INT_STATRAW) & CRYPTOMASTER_INT_ERROR) != 0U)
 		{
 			return false;
 		}
-		if ((*CmReg(CRYPTOMASTER_STATUS) & CRYPTOMASTER_STATUS_BUSY) == 0U)
+		if ((CmRegRead(pDev, CRYPTOMASTER_STATUS) & CRYPTOMASTER_STATUS_BUSY) == 0U)
 		{
 			return true;
 		}
@@ -85,8 +99,8 @@ static bool CmWait(void)
 
 // One AES-128-ECB block in hardware: config + key + input fetch chain, output
 // push. The caller holds the lock and has enabled the module.
-static bool CmAesBlock(const uint8_t Key[16], const uint8_t In[16],
-					   uint8_t Out[16])
+static bool CmAesBlock(Device *pDev, const uint8_t Key[16],
+					   const uint8_t In[16], uint8_t Out[16])
 {
 	alignas(uint32_t) uint32_t config = CRYPTOMASTER_BA411_MODE_ECB;
 	alignas(uint32_t) uint8_t key[AES_BLOCK];
@@ -123,22 +137,22 @@ static bool CmAesBlock(const uint8_t Key[16], const uint8_t In[16],
 	outDesc.Size  = sizeof(output) | CRYPTOMASTER_DMA_REALIGN;
 	outDesc.Tag   = CRYPTOMASTER_TAG_LAST;
 
-	bool ok = CmReset();
+	bool ok = CmReset(pDev);
 	if (ok)
 	{
-		*CmReg(CRYPTOMASTER_FETCH_ADDR) = (uint32_t)(uintptr_t)inDesc;
-		*CmReg(CRYPTOMASTER_PUSH_ADDR)  = (uint32_t)(uintptr_t)&outDesc;
-		*CmReg(CRYPTOMASTER_CONFIG)     = CRYPTOMASTER_CONFIG_SCATTERGATHER;
+		CmRegWrite(pDev, CRYPTOMASTER_FETCH_ADDR, (uint32_t)(uintptr_t)inDesc);
+		CmRegWrite(pDev, CRYPTOMASTER_PUSH_ADDR, (uint32_t)(uintptr_t)&outDesc);
+		CmRegWrite(pDev, CRYPTOMASTER_CONFIG, CRYPTOMASTER_CONFIG_SCATTERGATHER);
 		__DMB();
-		*CmReg(CRYPTOMASTER_START) = CRYPTOMASTER_START_BOTH;
-		ok = CmWait();
+		CmRegWrite(pDev, CRYPTOMASTER_START, CRYPTOMASTER_START_BOTH);
+		ok = CmWait(pDev);
 		__DMB();
 	}
 	if (ok)
 	{
 		memcpy(Out, output, sizeof(output));
 	}
-	(void)CmReset();
+	(void)CmReset(pDev);
 
 	CmWipe(key, sizeof(key));
 	CmWipe(input, sizeof(input));
@@ -150,31 +164,41 @@ static bool CmAesBlock(const uint8_t Key[16], const uint8_t In[16],
 }
 
 // Acquire the lock, power the module, run one hardware block, release.
-static bool CmAesBlockLocked(const uint8_t Key[16], const uint8_t In[16],
+static bool CmAesBlockLocked(Device *pDev, CracenIntrf *pIntrf,
+							 const uint8_t Key[16], const uint8_t In[16],
 							 uint8_t Out[16])
 {
-	if (!CryptoMasterTryAcquire())
+	// Hold the symmetric module for the block, then release. Matches the
+	// reference driver: enable once, run one block, disable once.
+	if (!pIntrf->ModuleHold(CRACEN_MODULE_CRYPTOMASTER))
 	{
 		return false;
 	}
-	CryptoMasterModuleEnable();
-	bool ok = CmAesBlock(Key, In, Out);
-	CryptoMasterModuleDisable();
-	CryptoMasterRelease();
+	bool ok = CmAesBlock(pDev, Key, In, Out);
+	pIntrf->ModuleRelease();
 	return ok;
+}
+
+bool CryptoMaster::Init(DeviceIntrf * const pIntrf)
+{
+	if (pIntrf == nullptr)
+	{
+		return false;
+	}
+	Interface(pIntrf);
+	return Enable();
 }
 
 bool CryptoMaster::Enable()
 {
 	// Probe the AES presence bit; the block must be powered to read it.
-	if (!CryptoMasterTryAcquire())
+	CracenIntrf *pIntrf = (CracenIntrf *)Interface();
+	if (!pIntrf->ModuleHold(CRACEN_MODULE_CRYPTOMASTER))
 	{
 		return false;
 	}
-	CryptoMasterModuleEnable();
-	uint32_t present = *CmReg(CRYPTOMASTER_HW_PRESENCE);
-	CryptoMasterModuleDisable();
-	CryptoMasterRelease();
+	uint32_t present = CmRegRead(this, CRYPTOMASTER_HW_PRESENCE);
+	pIntrf->ModuleRelease();
 
 	vbValid = (present & CRYPTOMASTER_PRESENT_AES) != 0U;
 	return vbValid;
@@ -206,7 +230,7 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		}
 		for (size_t off = 0; off < Len && st == CRYPTO_STATUS_OK; off += AES_BLOCK)
 		{
-			if (!CmAesBlockLocked(k, pIn + off, pOut + off))
+			if (!CmAesBlockLocked(this, (CracenIntrf *)Interface(), k, pIn + off, pOut + off))
 			{
 				st = CRYPTO_STATUS_FAIL;
 			}
@@ -223,7 +247,7 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		size_t off = 0;
 		while (off < Len && st == CRYPTO_STATUS_OK)
 		{
-			if (!CmAesBlockLocked(k, ctr, ks))
+			if (!CmAesBlockLocked(this, (CracenIntrf *)Interface(), k, ctr, ks))
 			{
 				st = CRYPTO_STATUS_FAIL;
 				break;
@@ -257,7 +281,7 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 			{
 				blk[j] = (uint8_t)(pIn[off + j] ^ chain[j]);
 			}
-			if (!CmAesBlockLocked(k, blk, pOut + off))
+			if (!CmAesBlockLocked(this, (CracenIntrf *)Interface(), k, blk, pOut + off))
 			{
 				st = CRYPTO_STATUS_FAIL;
 			}
@@ -275,18 +299,4 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	}
 
 	return st;
-}
-
-CryptoMaster *CryptoMasterCreate(void *pMem, size_t MemSize)
-{
-	if (pMem == nullptr || MemSize < sizeof(CryptoMaster))
-	{
-		return nullptr;
-	}
-	CryptoMaster *p = new (pMem) CryptoMaster();
-	if (!p->Enable())
-	{
-		return nullptr;		// AES sub-engine absent
-	}
-	return p;
 }

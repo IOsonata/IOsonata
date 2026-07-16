@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cracen_intrf.h"
 #include "crypto/cryptomaster.h"
 #include "crypto/crypto_softaes.h"
 
@@ -56,8 +57,9 @@ int main(void)
 {
 	printf("CryptoMaster hardware AES validation\n");
 
-	static uint8_t hwMem[128], swMem[128];
-	CryptoMaster *hw = CryptoMasterCreate(hwMem, sizeof(hwMem));
+	static uint8_t swMem[128];
+	static CryptoMaster hwEngine;
+	CryptoMaster *hw = hwEngine.Init(CracenIntrfInstance()) ? &hwEngine : nullptr;
 	CryptoSoftAes *sw = CryptoSoftAesCreate(swMem, sizeof(swMem));
 	check("engine constructs, AES sub-engine present", hw != nullptr);
 	if (hw == nullptr) { printf("abort: no CryptoMaster\n"); return 1; }

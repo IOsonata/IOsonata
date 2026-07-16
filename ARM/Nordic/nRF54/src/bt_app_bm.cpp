@@ -62,6 +62,7 @@ SOFTWARE.
 #include "bm/bluetooth/peer_manager/nrf_ble_lesc.h"
 #include "bm/bluetooth/services/ble_dis.h"
 
+#include "cracen_intrf.h"
 #include "crypto/ba414ep.h"
 #include "crypto_rng_nrf.h"
 
@@ -1021,13 +1022,14 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	// defined, pm_init -> sm_init calls nrf_ble_lesc_init, which requires the
 	// engine to be injected at that point, else pm_init returns an error. The
 	// App owns the engine and injects it. On nRF54L15 the P-256 hardware is the
-	// Silex BA414EP (Ba414ep); its randomness for key generation and blinding
-	// comes from the security-grade hardware RNG (CryptoRngNrf).
-	static uint8_t s_LescEcdhMem[BA414EP_MEMSIZE];		// engine object storage
-	Ba414ep *pLescEcdh = Ba414epCreate(s_LescEcdhMem, sizeof(s_LescEcdhMem),
-									   CryptoRngNrfInstance());
-	if (pLescEcdh != nullptr)
+	// Silex BA414EP (Ba414ep), reached through the CRACEN crypto interface the
+	// same way a sensor reaches its bus. Its randomness for key generation and
+	// blinding comes from the security-grade hardware RNG (CryptoRngNrf).
+	static Ba414ep s_LescEcdh;
+	Ba414ep *pLescEcdh = nullptr;
+	if (s_LescEcdh.Init(CracenIntrfInstance(), CryptoRngNrfInstance()))
 	{
+		pLescEcdh = &s_LescEcdh;
 		DEBUG_PRINTF("Crypto ECDH engine: Ba414ep (hardware P-256)\r\n");
 	}
 	else

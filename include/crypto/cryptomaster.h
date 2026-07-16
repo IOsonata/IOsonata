@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#include "device_intrf.h"
 #include "crypto/crypto_softaes.h"
 
 #ifdef __cplusplus
@@ -94,21 +95,11 @@ struct __CryptoMaster_Desc {
 #define CRYPTOMASTER_BA411_MODE_ECB		(1U << 8)	//!< ECB mode select
 
 //-----------------------------------------------------------------------------
-// Vendor binding (implemented by the target port). The engine reaches the
-// block only through these hooks; only the port names the vendor wrapper.
+// Silex CryptoMaster (BA411e) IP layout. Register offsets are IP-fixed; the
+// crypto interface holds the block base. The engine passes offsets only and
+// reaches the block through the interface, so it names no vendor wrapper and
+// holds no MCU address.
 //-----------------------------------------------------------------------------
-
-// Absolute base of the CryptoMaster register block.
-volatile void *CryptoMasterBase(void);
-
-// Enable/disable the CryptoMaster module in the wrapper for one operation.
-void CryptoMasterModuleEnable(void);
-void CryptoMasterModuleDisable(void);
-
-// Non-blocking ownership lock for the shared block (shared with the RNG). Must
-// not touch a register until acquire succeeds; release once after the op.
-bool CryptoMasterTryAcquire(void);
-void CryptoMasterRelease(void);
 
 #ifdef __cplusplus
 }
@@ -129,6 +120,19 @@ class CryptoMaster : public CryptoSoftAes {
 public:
 	CryptoMaster() { vbValid = false; }
 
+	/**
+	 * @brief	Initialise the engine on a crypto interface.
+	 *
+	 * Sensor-style construction: the interface is created separately (like an
+	 * SPI or I2C bus) and its pointer passed here. Register access then goes
+	 * through the interface. The engine holds no base address.
+	 *
+	 * @param	pIntrf	The crypto core interface the engine sits on.
+	 *
+	 * @return	true on success.
+	 */
+	bool Init(DeviceIntrf * const pIntrf);
+
 	// Device lifecycle. Enable probes the AES presence bit and self-tests.
 	bool Enable() override;
 	void Disable() override {}
@@ -142,12 +146,8 @@ public:
 						 const uint8_t *pIn, size_t Len, uint8_t *pOut) override;
 };
 
-/// Bytes of storage CryptoMasterCreate needs.
-#define CRYPTO_CRYPTOMASTER_MEMSIZE		sizeof(CryptoMaster)
-
-/// @brief	Construct a CryptoMaster in caller-provided storage (no allocation).
-/// @return	Ready engine pointer, or nullptr on a too-small buffer or absent AES.
-CryptoMaster *CryptoMasterCreate(void *pMem, size_t MemSize);
+// Construct a CryptoMaster as a plain object and call Init(pIntrf), the same way
+// a sensor is constructed and given its bus interface.
 
 /** @} */
 

@@ -37,9 +37,9 @@ typedef enum __Cracen_Module {
 } CRACEN_MODULE;
 
 /// DevAddr base selector, used the way SPI uses a chip-select index. Picks which
-/// base a Device Read / Write transfer lands in; the transfer address is the
-/// byte offset within it.
-#define CRACEN_ADDR_REG		0U		//!< Engine register base
+/// sub-block a Read / Write transfer lands in; the transfer address (pAdCmd) is
+/// the byte offset within it.
+#define CRACEN_ADDR_REG		0U		//!< Held module register base
 #define CRACEN_ADDR_MEM		1U		//!< Operand memory base
 
 #ifdef __cplusplus
@@ -57,50 +57,44 @@ public:
 	uint32_t Rate(uint32_t RateHz) override { (void)RateHz; return 0; }
 	uint32_t Rate(void) override { return 0; }
 
-	// A crypto transaction has no separate address/data stream: the module is
-	// the DevAddr, and acquire/release is the whole point. Rx and Tx are the
-	// same acquire/release on this interface.
-	bool StartRx(uint32_t Module) override {
-		return DeviceIntrfStartRx(&vDevIntrf, Module);
-	}
+	// Memory-mapped register and operand access. Override the Device transfer
+	// virtuals directly: this core is not a serial bus, so a transfer is a
+	// direct access at the selected sub-block base plus the offset carried in
+	// pAdCmd. Registers are accessed as 32-bit words and operand memory
+	// byte-wise, matching the access the hardware expects. DevAddr selects the
+	// base the way SPI uses a chip-select index: CRACEN_ADDR_REG for the held
+	// module's registers, CRACEN_ADDR_MEM for the operand memory. The engine
+	// reaches these through the inherited Device::Read / Write, exactly as a
+	// sensor reaches its bus.
+	int Read(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
+			 uint8_t *pBuff, int BuffLen) override;
+	int Write(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
+			  const uint8_t *pData, int DataLen) override;
+
+	// Required DeviceIntrf surface. Register and operand transfers are done in
+	// the overridden Read / Write above, so the start/stop and streaming hooks
+	// carry no serial data phase.
+	bool StartRx(uint32_t DevAddr) override { (void)DevAddr; return true; }
 	int RxData(uint8_t *pBuff, int BuffLen) override {
 		(void)pBuff; (void)BuffLen; return 0;
 	}
-	void StopRx(void) override { DeviceIntrfStopRx(&vDevIntrf); }
-
-	bool StartTx(uint32_t Module) override {
-		return DeviceIntrfStartTx(&vDevIntrf, Module);
-	}
+	void StopRx(void) override {}
+	bool StartTx(uint32_t DevAddr) override { (void)DevAddr; return true; }
 	int TxData(const uint8_t *pData, int DataLen) override {
 		(void)pData; (void)DataLen; return 0;
 	}
-	void StopTx(void) override { DeviceIntrfStopTx(&vDevIntrf); }
-
-	// Direct register and operand access, used inside a held operation
-	// (between ModuleHold and ModuleRelease). These do not take the busy flag,
-	// because the operation already holds it; they are plain word accesses at
-	// the sub-block base plus the Silex IP offset. Registers and operand memory
-	// are two sub-blocks selected by the accessor, so the engine passes offsets
-	// only and never a base.
-	uint32_t RegRead(uint32_t Offset) const;
-	void RegWrite(uint32_t Offset, uint32_t Value);
-	void MemRead(uint32_t Offset, uint8_t *pDst, size_t Len) const;
-	void MemWrite(uint32_t Offset, const uint8_t *pSrc, size_t Len);
+	void StopTx(void) override {}
 
 	// Hold a crypto module enabled for the duration of an operation and take the
 	// busy flag so the engines serialize against one another. The engine calls
-	// ModuleHold once before its work and ModuleRelease once after. An engine
-	// that reaches registers and operands (the public-key engine) then uses the
-	// Device Read / Write path within the held operation; an engine that drives
-	// its own hardware or a vendor driver (RNG, symmetric) just holds and
-	// releases. Returns false if another engine holds the core.
+	// ModuleHold once before its work and ModuleRelease once after; register
+	// access between them lands in the held module's sub-block. Returns false if
+	// another engine holds the core.
 	bool ModuleHold(uint32_t Module);
 	void ModuleRelease(void);
 
 protected:
 	DevIntrf_t vDevIntrf;
-	volatile uint8_t *vpRegBase;	//!< Engine register sub-block base (per MCU)
-	volatile uint8_t *vpMemBase;	//!< Operand memory sub-block base (per MCU)
 };
 
 /// @brief	Return the single per-die CRACEN interface instance.

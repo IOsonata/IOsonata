@@ -1576,11 +1576,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/cryptomaster.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/cryptomaster_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/cryptomaster_nrfx.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/crypto/rng_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.cpp</locationURI>
