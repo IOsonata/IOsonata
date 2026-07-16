@@ -57,33 +57,28 @@ public:
 	uint32_t Rate(uint32_t RateHz) override { (void)RateHz; return 0; }
 	uint32_t Rate(void) override { return 0; }
 
-	// Memory-mapped register and operand access. Override the Device transfer
-	// virtuals directly: this core is not a serial bus, so a transfer is a
-	// direct access at the selected sub-block base plus the offset carried in
-	// pAdCmd. Registers are accessed as 32-bit words and operand memory
-	// byte-wise, matching the access the hardware expects. DevAddr selects the
-	// base the way SPI uses a chip-select index: CRACEN_ADDR_REG for the held
-	// module's registers, CRACEN_ADDR_MEM for the operand memory. The engine
-	// reaches these through the inherited Device::Read / Write, exactly as a
+	// Transfer follows the SPI and I2C pattern: the inherited Device Read /
+	// Write drive StartTx / TxSrData / TxData / StartRx / RxData / StopTx below.
+	// StartTx and StartRx save the DevAddr (which sub-block base the access lands
+	// in, the way SPI saves the chip-select); the address phase latches the byte
+	// offset; TxData and RxData transfer at the saved base plus the offset.
+	// Registers are word accessed and operand memory byte accessed. The engine
+	// reaches all of this through the inherited Device Read / Write, exactly as a
 	// sensor reaches its bus.
-	int Read(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
-			 uint8_t *pBuff, int BuffLen) override;
-	int Write(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
-			  const uint8_t *pData, int DataLen) override;
-
-	// Required DeviceIntrf surface. Register and operand transfers are done in
-	// the overridden Read / Write above, so the start/stop and streaming hooks
-	// carry no serial data phase.
-	bool StartRx(uint32_t DevAddr) override { (void)DevAddr; return true; }
+	bool StartRx(uint32_t DevAddr) override {
+		return DeviceIntrfStartRx(&vDevIntrf, DevAddr);
+	}
 	int RxData(uint8_t *pBuff, int BuffLen) override {
-		(void)pBuff; (void)BuffLen; return 0;
+		return vDevIntrf.RxData(&vDevIntrf, pBuff, BuffLen);
 	}
-	void StopRx(void) override {}
-	bool StartTx(uint32_t DevAddr) override { (void)DevAddr; return true; }
+	void StopRx(void) override { DeviceIntrfStopRx(&vDevIntrf); }
+	bool StartTx(uint32_t DevAddr) override {
+		return DeviceIntrfStartTx(&vDevIntrf, DevAddr);
+	}
 	int TxData(const uint8_t *pData, int DataLen) override {
-		(void)pData; (void)DataLen; return 0;
+		return vDevIntrf.TxData(&vDevIntrf, pData, DataLen);
 	}
-	void StopTx(void) override {}
+	void StopTx(void) override { DeviceIntrfStopTx(&vDevIntrf); }
 
 	// Hold a crypto module enabled for the duration of an operation and take the
 	// busy flag so the engines serialize against one another. The engine calls

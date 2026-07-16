@@ -5,16 +5,19 @@
 
 		Leaf DeviceIntrf that owns the CRACENCORE register and operand memory
 		access. CRACEN is not a crypto engine; it is the access path the Silex
-		engines sit on. The public-key engine, the symmetric engine and the
-		random generator each reach the die through it, and it holds the shared
-		enable and the base addresses.
+		engines sit on. An engine reaches it through the inherited Device Read /
+		Write, exactly as a sensor reaches an SPI or I2C bus.
 
-		An engine holds its module for the duration of an operation with
-		ModuleHold and releases it with ModuleRelease. ModuleHold takes the busy
-		flag so the engines serialize against one another, enables the module,
-		and points register access at that module's sub-block. Within the held
-		operation the engine reaches registers and operand memory through the
-		direct offset accessors, which do not re-take the busy flag.
+		The transfer follows the same pattern as SPI and I2C: StartTx or StartRx
+		receives the DevAddr and saves it (here, which sub-block base the access
+		lands in, the way SPI saves the chip-select). TxSrData latches the byte
+		offset from the address phase; TxData writes and RxData reads at the saved
+		base plus the latched offset. Registers are accessed as 32-bit words and
+		operand memory byte-wise, matching the hardware.
+
+		ModuleHold enables a module for the whole operation and takes the busy
+		flag so the engines serialize; ModuleRelease disables and releases. The
+		held module also selects which register sub-block the register base is.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -31,51 +34,114 @@
 // Operand memory sub-block offset from the CRACENCORE base.
 #define BA414EP_CRYPTORAM_OFFSET	0x8000U
 
-// Active register base (the held module's sub-block), the operand memory base,
-// and the two fixed sub-block register bases.
-static volatile uint8_t *s_pRegBase;
-static volatile uint8_t *s_pMemBase;
+// The two fixed register sub-block bases and the operand memory base.
 static volatile uint8_t *s_pPkeRegBase;
 static volatile uint8_t *s_pCmRegBase;
+static volatile uint8_t *s_pMemBase;
 
-// Resolve the base a transfer addresses: operand memory, or the held module's
-// register sub-block.
-static volatile uint8_t *CracenBase(uint32_t DevAddr)
+// Active register base (the held module's sub-block).
+static volatile uint8_t *s_pRegBase;
+
+// Saved transfer state, set by StartTx / StartRx and the address phase, used by
+// TxData / RxData. This mirrors how SPI saves the chip-select in StartTx.
+static volatile uint8_t *s_pXferBase;	// base saved from DevAddr
+static bool s_bXferMem;					// operand memory space (byte access)
+static uint32_t s_Offset;				// byte offset latched from address phase
+static bool s_bAddrLatched;
+
+static void CracenSelectBase(uint32_t DevAddr)
 {
-	return (DevAddr == CRACEN_ADDR_MEM) ? s_pMemBase : s_pRegBase;
+	s_bXferMem = (DevAddr == CRACEN_ADDR_MEM);
+	s_pXferBase = s_bXferMem ? s_pMemBase : s_pRegBase;
 }
 
-// Byte offset carried in the address bytes (little-endian), as the engine sends
-// it through Device Read / Write.
-static uint32_t CracenOffset(const uint8_t *pAdCmd, int AdCmdLen)
+static bool CracenStartTx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 {
-	uint32_t off = 0U;
-	for (int i = 0; i < AdCmdLen && i < 4; i++)
+	(void)pIntrf;
+	// Save which sub-block this transfer lands in, and start a fresh address
+	// phase. The module is already held enabled by ModuleHold.
+	CracenSelectBase(DevAddr);
+	s_bAddrLatched = false;
+	return true;
+}
+
+static bool CracenStartRx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
+{
+	(void)pIntrf;
+	// Restart condition inside a read: keep the offset latched by the preceding
+	// address phase; only re-select the saved base.
+	CracenSelectBase(DevAddr);
+	return true;
+}
+
+// Address phase: latch the byte offset (little-endian) the engine sends before
+// the data. Used for both the read address phase (TxSrData) and a write where
+// the address leads the data in one buffer.
+static int CracenTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int DataLen)
+{
+	(void)pIntrf;
+	if (pData == nullptr || DataLen <= 0)
 	{
-		off |= (uint32_t)pAdCmd[i] << (8 * i);
+		return 0;
 	}
-	return off;
-}
-
-// Memory-mapped read. The two working paths access registers as 32-bit words
-// and operand memory byte-wise; both are proven on hardware, so this reproduces
-// them per space. DevAddr selects which.
-int CracenIntrf::Read(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
-					  uint8_t *pBuff, int BuffLen)
-{
-	volatile uint8_t *base = CracenBase(DevAddr);
-	uint32_t off = CracenOffset(pAdCmd, AdCmdLen);
-	if (DevAddr == CRACEN_ADDR_MEM)
+	int consumed = 0;
+	if (!s_bAddrLatched)
 	{
-		const volatile uint8_t *p = base + off;
-		for (int i = 0; i < BuffLen; i++)
+		int n = (DataLen < 4) ? DataLen : 4;
+		uint32_t off = 0U;
+		for (int i = 0; i < n; i++)
 		{
-			pBuff[i] = p[i];
+			off |= (uint32_t)pData[i] << (8 * i);
+		}
+		s_Offset = off;
+		s_bAddrLatched = true;
+		consumed = n;
+	}
+	int len = DataLen - consumed;
+	const uint8_t *p = &pData[consumed];
+	if (s_bXferMem)
+	{
+		volatile uint8_t *d = s_pXferBase + s_Offset;
+		for (int i = 0; i < len; i++)
+		{
+			d[i] = p[i];
 		}
 	}
 	else
 	{
-		const volatile uint32_t *w = (const volatile uint32_t *)(base + off);
+		volatile uint32_t *w = (volatile uint32_t *)(s_pXferBase + s_Offset);
+		for (int i = 0; i + 4 <= len; i += 4)
+		{
+			w[i / 4] = (uint32_t)p[i] | ((uint32_t)p[i + 1] << 8) |
+					   ((uint32_t)p[i + 2] << 16) | ((uint32_t)p[i + 3] << 24);
+		}
+	}
+	return DataLen;
+}
+
+static int CracenTxSrData(DevIntrf_t * const pIntrf, const uint8_t *pData, int DataLen)
+{
+	return CracenTxData(pIntrf, pData, DataLen);
+}
+
+static int CracenRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
+{
+	(void)pIntrf;
+	if (pBuff == nullptr || BuffLen <= 0 || !s_bAddrLatched)
+	{
+		return 0;
+	}
+	if (s_bXferMem)
+	{
+		const volatile uint8_t *d = s_pXferBase + s_Offset;
+		for (int i = 0; i < BuffLen; i++)
+		{
+			pBuff[i] = d[i];
+		}
+	}
+	else
+	{
+		const volatile uint32_t *w = (const volatile uint32_t *)(s_pXferBase + s_Offset);
 		for (int i = 0; i + 4 <= BuffLen; i += 4)
 		{
 			uint32_t v = w[i / 4];
@@ -88,30 +154,16 @@ int CracenIntrf::Read(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
 	return BuffLen;
 }
 
-int CracenIntrf::Write(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
-					   const uint8_t *pData, int DataLen)
+static void CracenStopTx(DevIntrf_t * const pIntrf)
 {
-	volatile uint8_t *base = CracenBase(DevAddr);
-	uint32_t off = CracenOffset(pAdCmd, AdCmdLen);
-	if (DevAddr == CRACEN_ADDR_MEM)
-	{
-		volatile uint8_t *p = base + off;
-		for (int i = 0; i < DataLen; i++)
-		{
-			p[i] = pData[i];
-		}
-	}
-	else
-	{
-		volatile uint32_t *w = (volatile uint32_t *)(base + off);
-		for (int i = 0; i + 4 <= DataLen; i += 4)
-		{
-			w[i / 4] = (uint32_t)pData[i] | ((uint32_t)pData[i + 1] << 8) |
-					   ((uint32_t)pData[i + 2] << 16) |
-					   ((uint32_t)pData[i + 3] << 24);
-		}
-	}
-	return DataLen;
+	(void)pIntrf;
+	s_bAddrLatched = false;
+}
+
+static void CracenStopRx(DevIntrf_t * const pIntrf)
+{
+	(void)pIntrf;
+	s_bAddrLatched = false;
 }
 
 // Map a CRACEN_MODULE to its enable bit.
@@ -130,6 +182,12 @@ static uint32_t CracenModuleMask(uint32_t Module)
 	}
 }
 
+// Operation-level hold, separate from the per-transfer busy flag. ModuleHold
+// takes this for the whole operation so the engines serialize against one
+// another; each Device Read / Write inside the operation still takes and
+// releases the transfer busy flag through StartTx / StopTx.
+static atomic_flag s_HoldFlag;
+
 bool CracenIntrf::ModuleHold(uint32_t Module)
 {
 	const uint32_t mask = CracenModuleMask(Module);
@@ -137,7 +195,7 @@ bool CracenIntrf::ModuleHold(uint32_t Module)
 	{
 		return false;
 	}
-	if (atomic_flag_test_and_set(&vDevIntrf.bBusy))
+	if (atomic_flag_test_and_set(&s_HoldFlag))
 	{
 		return false;
 	}
@@ -154,12 +212,9 @@ void CracenIntrf::ModuleRelease(void)
 	NRF_CRACEN->ENABLE &= ~(CRACEN_ENABLE_CRYPTOMASTER_Msk |
 							CRACEN_ENABLE_PKEIKG_Msk |
 							CRACEN_ENABLE_RNG_Msk);
-	atomic_flag_clear(&vDevIntrf.bBusy);
+	atomic_flag_clear(&s_HoldFlag);
 }
 
-// The DeviceIntrf table below is the leaf interface plumbing. Register and
-// operand access uses the direct accessors above, so the byte-stream transfer
-// hooks are minimal: the interface carries no serial data phase.
 static void CracenDummyDisable(DevIntrf_t * const pIntrf) { (void)pIntrf; }
 static void CracenDummyEnable(DevIntrf_t * const pIntrf) { (void)pIntrf; }
 static uint32_t CracenGetRate(DevIntrf_t * const pIntrf) { (void)pIntrf; return 0U; }
@@ -167,24 +222,6 @@ static uint32_t CracenSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 {
 	(void)pIntrf; (void)Rate; return 0U;
 }
-static bool CracenStartTx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
-{
-	(void)pIntrf; (void)DevAddr; return true;
-}
-static int CracenTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int DataLen)
-{
-	(void)pIntrf; (void)pData; return DataLen;
-}
-static void CracenStopTx(DevIntrf_t * const pIntrf) { (void)pIntrf; }
-static bool CracenStartRx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
-{
-	(void)pIntrf; (void)DevAddr; return true;
-}
-static int CracenRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
-{
-	(void)pIntrf; (void)pBuff; (void)BuffLen; return 0;
-}
-static void CracenStopRx(DevIntrf_t * const pIntrf) { (void)pIntrf; }
 
 bool CracenIntrf::Init(void)
 {
@@ -195,6 +232,7 @@ bool CracenIntrf::Init(void)
 	s_pMemBase = (volatile uint8_t *)((uintptr_t)NRF_CRACENCORE +
 									 BA414EP_CRYPTORAM_OFFSET);
 	s_pRegBase = s_pPkeRegBase;
+	s_bAddrLatched = false;
 
 	vDevIntrf.pDevData = this;
 	vDevIntrf.IntPrio = 0;
@@ -205,6 +243,7 @@ bool CracenIntrf::Init(void)
 	vDevIntrf.bIntEn = false;
 	vDevIntrf.MaxTrxLen = 0;
 	atomic_flag_clear(&vDevIntrf.bBusy);
+	atomic_flag_clear(&s_HoldFlag);
 	atomic_store(&vDevIntrf.EnCnt, 0);
 
 	vDevIntrf.Disable = CracenDummyDisable;
@@ -216,6 +255,7 @@ bool CracenIntrf::Init(void)
 	vDevIntrf.StopRx = CracenStopRx;
 	vDevIntrf.StartTx = CracenStartTx;
 	vDevIntrf.TxData = CracenTxData;
+	vDevIntrf.TxSrData = CracenTxSrData;
 	vDevIntrf.StopTx = CracenStopTx;
 	return true;
 }
