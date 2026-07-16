@@ -53,6 +53,14 @@ SOFTWARE.
 #include "coredev/timer.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_smp.h"		// BtSmpLocalAddrGet override
+
+#include "crypto/crypto_uecc.h"
+#include "crypto_rng_nrf.h"
+#if defined(NRF54L15_XXAA) || defined(NRF54H20_XXAA)
+#include "crypto/ba414ep.h"
+#elif defined(NRF52840_XXAA)
+#include "crypto_cc3xx.h"
+#endif
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hcievt.h"
 #include "bluetooth/bt_l2cap.h"
@@ -642,35 +650,50 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// The SDC path owns its SMP crypto: P-256 ECDH and the BLE controller
 	// (HCI LE Encrypt) for AES. These are internal to this path - the
 	// application does not supply or see them; it only requests security via
-	// SecType. Randomness comes from the RngGet utility.
+	// SecType. Randomness comes from the Nordic hardware RNG.
 	//
-	// ECDH goes through CryptoInit with CRYPTO_PROVIDER_AUTO: the hardware
-	// engine (CryptoHwInit, PSA over CRACEN or cc3xx) is selected when it is
-	// linked, otherwise it falls back to software uECC. The arena is sized for
-	// CRYPTO_MEMSIZE_ECDH, which fits whichever engine AUTO selects (the
-	// hardware key object or the software uECC key).
-	static CryptoDev_t s_CryptoEcdh;
-	static CryptoDev_t s_CryptoAes;
-	alignas(uint32_t) static uint8_t s_CryptoEcdhMem[CRYPTO_MEMSIZE_ECDH];	// ECDH per-instance key arena (fits HW or uECC), word aligned per CryptoCfg_t pMem
-	CryptoCfg_t ecdhCfg = { };
-	ecdhCfg.Provider = CRYPTO_PROVIDER_AUTO;
-	ecdhCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
-	ecdhCfg.pMem     = s_CryptoEcdhMem;
-	ecdhCfg.MemSize  = sizeof(s_CryptoEcdhMem);
-	if (CryptoInit(&s_CryptoEcdh, &ecdhCfg))
+	// The SDC runs on several families with different P-256 hardware, selected
+	// at compile time:
+	//   nRF54L15 / nRF54H20 : CRACEN            -> Ba414ep (hardware)
+	//   nRF52840            : CryptoCell CC310  -> CryptoCc3xx (hardware)
+	//   nRF52832, nRF5340   : no wired P-256 OO driver -> CryptoUecc (software)
+	// The controller supplies AES-128 ECB through the HCI LE Encrypt path
+	// (CryptoCtlrSdc). SMP composes the ECDH engine and the AES engine.
+	KeyAgreeEngine *pEcdh = nullptr;
+#if defined(NRF54L15_XXAA) || defined(NRF54H20_XXAA)
+	static uint8_t s_CryptoEcdhMem[BA414EP_MEMSIZE];		// CRACEN engine object
+	pEcdh = Ba414epCreate(s_CryptoEcdhMem, sizeof(s_CryptoEcdhMem),
+						  CryptoRngNrfInstance());
+	if (pEcdh != nullptr)
 	{
-		DEBUG_PRINTF("Crypto ECDH engine: %s\r\n", CryptoName(&s_CryptoEcdh));
+		DEBUG_PRINTF("Crypto ECDH engine: Ba414ep (CRACEN hardware P-256)\r\n");
 	}
-	else
+#elif defined(NRF52840_XXAA)
+	alignas(uint32_t) static uint8_t s_CryptoEcdhMem[CRYPTO_CC3XX_MEMSIZE];
+	pEcdh = CryptoCc3xxCreate(s_CryptoEcdhMem, sizeof(s_CryptoEcdhMem));
+	if (pEcdh != nullptr)
 	{
-		// No P-256 engine was linked. LE Secure Connections pairing cannot run:
+		DEBUG_PRINTF("Crypto ECDH engine: CryptoCc3xx (CC310 hardware P-256)\r\n");
+	}
+#else
+	alignas(uint64_t) static uint8_t s_CryptoEcdhMem[CRYPTO_UECC_MEMSIZE];
+	pEcdh = CryptoUeccCreate(s_CryptoEcdhMem, sizeof(s_CryptoEcdhMem),
+							 CryptoRngNrfInstance());
+	if (pEcdh != nullptr)
+	{
+		DEBUG_PRINTF("Crypto ECDH engine: CryptoUecc (software P-256)\r\n");
+	}
+#endif
+	if (pEcdh == nullptr)
+	{
+		// No P-256 engine came up. LE Secure Connections pairing cannot run:
 		// SmpLocalKeyGen fails and SMP answers every pairing with
 		// BT_SMP_ERR_UNSPECIFIED. Say so here rather than at the first pairing.
 		DEBUG_PRINTF("Crypto ECDH engine MISSING, LESC pairing will fail\r\n");
 	}
 
-	BtCryptoCtlrSdcInit(&s_CryptoAes);
-	BtSmpInit(&s_CryptoEcdh, &s_CryptoAes);
+	CipherEngine *pAes = BtCryptoCtlrSdcInit();
+	BtSmpInit(pEcdh, pAes);
 
 	// Translate the application security configuration into the SMP IO
 	// capability, authentication requirements and association-model callbacks.

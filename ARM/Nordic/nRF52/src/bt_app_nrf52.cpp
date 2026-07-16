@@ -71,7 +71,11 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "bluetooth/bt_uuid.h"
-#include "crypto/crypto.h"
+#include "crypto/crypto_uecc.h"
+#include "crypto_rng_nrf.h"
+#if defined(NRF52840_XXAA)
+#include "crypto_cc3xx.h"
+#endif
 #include "bt_lesc.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_appearance.h"
@@ -1202,28 +1206,35 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
 
     // Select the ECDH engine and inject it before pm_init: the IOsonata
     // security manager (bt_sec_sd) calls BtLescInit() during init, so the
-    // engine must already be in place or init fails. CryptoInit(AUTO) picks
-    // the hardware engine when linked (CC310 on nRF52840) and falls back to
-    // software uECC otherwise. The App owns the CryptoDev_t, the same model as
-    // the SDC pairing path in bt_app_sdc.cpp. The module owns the key pair,
-    // handles the LESC DHKey request and replies to the SoftDevice; the app
-    // only pumps BtLescRequestHandler in the main loop.
-    static CryptoDev_t s_LescEcdh;
-    alignas(uint32_t) static uint8_t s_LescEcdhMem[CRYPTO_MEMSIZE_ECDH];    // word aligned per CryptoCfg_t pMem
-    CryptoCfg_t lescCfg = { };
-    lescCfg.Provider = CRYPTO_PROVIDER_AUTO;
-    lescCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
-    lescCfg.pMem     = s_LescEcdhMem;
-    lescCfg.MemSize  = sizeof(s_LescEcdhMem);
-    if (CryptoInit(&s_LescEcdh, &lescCfg))
+    // engine must already be in place or init fails. The nRF52840 has the
+    // CryptoCell CC310 hardware P-256 (CryptoCc3xx); the nRF52832 has no
+    // accelerator and uses software P-256 (CryptoUecc) over the SoftDevice and
+    // peripheral RNG. The App owns the engine, the same model as the SDC
+    // pairing path. The module owns the key pair, handles the LESC DHKey
+    // request and replies to the SoftDevice; the app only pumps
+    // BtLescRequestHandler in the main loop.
+    KeyAgreeEngine *pLescEcdh = nullptr;
+#if defined(NRF52840_XXAA)
+    alignas(uint32_t) static uint8_t s_LescEcdhMem[CRYPTO_CC3XX_MEMSIZE];    // CC310 engine object
+    pLescEcdh = CryptoCc3xxCreate(s_LescEcdhMem, sizeof(s_LescEcdhMem));
+    if (pLescEcdh != nullptr)
     {
-        DEBUG_PRINTF("Crypto ECDH engine: %s\r\n", CryptoName(&s_LescEcdh));
+        DEBUG_PRINTF("Crypto ECDH engine: CryptoCc3xx (CC310 hardware P-256)\r\n");
     }
-    else
+#else
+    alignas(uint64_t) static uint8_t s_LescEcdhMem[CRYPTO_UECC_MEMSIZE];
+    pLescEcdh = CryptoUeccCreate(s_LescEcdhMem, sizeof(s_LescEcdhMem),
+                                 CryptoRngNrfInstance());
+    if (pLescEcdh != nullptr)
+    {
+        DEBUG_PRINTF("Crypto ECDH engine: CryptoUecc (software P-256)\r\n");
+    }
+#endif
+    if (pLescEcdh == nullptr)
     {
         DEBUG_PRINTF("Crypto ECDH engine MISSING, LESC pairing will fail\r\n");
     }
-    BtLescSetCryptoEngine(&s_LescEcdh);
+    BtLescSetCryptoEngine(pLescEcdh);
 
     err_code = pm_init();
     DEBUG_PRINTF("SEC: pm_init=0x%X\r\n", err_code);

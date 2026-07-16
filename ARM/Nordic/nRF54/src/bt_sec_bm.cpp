@@ -13,7 +13,7 @@
 		peer_id and the IOsonata peer_data_storage replacement are used
 		unchanged, so bond records keep their layout.
 
-		LESC runs on the IOsonata BtLesc module (CryptoDev_t based)
+		LESC runs on the IOsonata BtLesc module (OO KeyAgreeEngine based)
 		under CONFIG_PM_LESC, exactly where the stock module called it: init
 		in sm_init, the public key at the params reply, event delivery at the
 		end of sm_ble_evt_handler. DHKey computation stays deferred to

@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	rng_stm32.c
+@file	rng_stm32.cpp
 
-@brief	STM32 hardware RNG provider using direct CMSIS register access.
+@brief	STM32 hardware RNG provider: CryptoRngStm32 (RngEngine) plus C-shim.
 
 		One implementation for STM32 families that have the RNG peripheral.
 		This file does not call the STM32 HAL or LL drivers. It includes the
@@ -25,15 +25,17 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include <new>
+
 #include "stm32.h"
-#include "crypto/crypto.h"
+#include "crypto_rng_stm32.h"
 
 #ifndef RNG_STM32_TIMEOUT
 #define RNG_STM32_TIMEOUT			1000000U
 #endif
 
 #if (IOSONATA_STM32_HAS_RNG != 1)
-#error "rng_stm32.c: selected STM32 device does not have a hardware RNG"
+#error "rng_stm32.cpp: selected STM32 device does not have a hardware RNG"
 #endif
 
 #ifndef RNG_SR_CECS
@@ -69,7 +71,7 @@ static void RngClockEnable(void)
 	RCC->AHB3ENR |= RCC_AHB3ENR_RNGEN;
 	(void)RCC->AHB3ENR;
 #else
-#error "rng_stm32.c: selected STM32 device header does not define RNG clock enable bit"
+#error "rng_stm32.cpp: selected STM32 device header does not define RNG clock enable bit"
 #endif
 }
 
@@ -127,7 +129,7 @@ static void RngRecoverSeedError(void)
 	RngEnable();
 }
 
-bool RngInit(void)
+extern "C" bool RngInit(void)
 {
 	if (s_RngInited && ((RNG->CR & RNG_CR_RNGEN) != 0U))
 	{
@@ -178,23 +180,10 @@ static bool RngReadWord(uint32_t *pWord)
 	return false;
 }
 
-bool RngGet(uint8_t *pBuff, size_t Len)
+// Core fill: assumes RngInit has succeeded. Fills pBuff with Len random bytes,
+// returns false on a hardware error (clock error or persistent seed error).
+static bool RngFill(uint8_t *pBuff, size_t Len)
 {
-	if (Len == 0U)
-	{
-		return true;
-	}
-
-	if (pBuff == NULL)
-	{
-		return false;
-	}
-
-	if (RngInit() == false)
-	{
-		return false;
-	}
-
 	while (Len >= sizeof(uint32_t))
 	{
 		uint32_t w;
@@ -222,4 +211,47 @@ bool RngGet(uint8_t *pBuff, size_t Len)
 	}
 
 	return true;
+}
+
+//-----------------------------------------------------------------------------
+// OO engine.
+//-----------------------------------------------------------------------------
+bool CryptoRngStm32::Enable()
+{
+	bool ok = RngInit();
+	vbValid = ok;
+	return ok;
+}
+
+CRYPTO_STATUS CryptoRngStm32::Random(uint8_t *pOut, size_t Len)
+{
+	if (Len == 0U)
+	{
+		return CRYPTO_STATUS_OK;
+	}
+	if (pOut == nullptr)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (RngInit() == false)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	return RngFill(pOut, Len) ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+}
+
+CryptoRngStm32 *CryptoRngStm32Instance(void)
+{
+	// Singleton in internal static storage (no allocation). The peripheral holds
+	// the hardware state; the engine object is stateless.
+	static CryptoRngStm32 s_Instance;
+	return &s_Instance;
+}
+
+//-----------------------------------------------------------------------------
+// C-shim: forward the free functions to the singleton so there is one path.
+//-----------------------------------------------------------------------------
+extern "C" bool RngGet(uint8_t *pBuff, size_t Len)
+{
+	return CryptoRngStm32Instance()->Random(pBuff, Len) == CRYPTO_STATUS_OK;
 }

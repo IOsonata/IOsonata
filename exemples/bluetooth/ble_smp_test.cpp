@@ -42,8 +42,7 @@ What each provider does here:
 
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gatt.h"
-#include "bluetooth/bt_smp.h"			// BtSmpPairingComplete hook + BtSmpKeys_t
-#include "crypto/crypto.h"				// crypto engine instances + BtSmpCrypto self-test
+#include "bluetooth/bt_smp.h"			// BtSmpPairingComplete hook + BtSmpKeys_t, BtSmpCrypto* helpers
 #include "bluetooth/blueio_blesrvc.h"	// BLUEIO_UUID_BASE / service uuids
 #include "bluetooth/bt_appearance.h"
 

@@ -185,11 +185,18 @@ bool P256NonzeroFieldElement(const uint8_t Coord[P256_BYTES]);
 /// Regularize a scalar to a fixed bit length for a constant-time ladder.
 void P256RegularizeScalar(const uint8_t K[P256_BYTES], uint8_t R[P256_BYTES + 1U]);
 
+/// Extract bit BitNo of a regularized scalar (from P256RegularizeScalar), for a
+/// constant-time Montgomery ladder step. The scalar is big-endian with one
+/// extra leading byte.
+uint32_t P256RegularBit(const uint8_t Scalar[P256_BYTES + 1U], uint32_t BitNo);
+
 /// Platform random source: fill pBuff with Len cryptographically strong bytes.
 /// Provided by the target random driver (Nordic rng_nrfx, ST rng_stm32). A
 /// security-path caller must check the result and abort on failure. This is the
 /// same free function the RngEngine facet wraps; it is kept here so portable
-/// crypto and SMP code can draw randomness without a platform header.
+/// crypto and SMP code can draw randomness without a platform header. The
+/// per-platform RNG headers (crypto_rng_nrf.h, crypto_rng_stm32.h) redeclare it
+/// identically in their own extern "C" block.
 bool RngGet(uint8_t *pBuff, size_t Len);
 
 /// Zeroize a buffer so the write is not optimized away. Use to clear key

@@ -22,10 +22,11 @@
 #include <string.h>
 #include <assert.h>
 
-#include "crypto/crypto.h"
-#include "crypto/crypto_p256.h"
+#include "crypto/icrypto.h"
+#include "crypto_cc3xx_engine.h"
 #include "crypto_cc3xx.h"
 #include "coredev/interrupt.h"
+#include <new>
 
 #ifndef CC3XX_BASE_ADDRESS
 #error CC3XX_BASE_ADDRESS must be defined by crypto_cc3xx.h
@@ -43,7 +44,7 @@
 #define CC3XX_ACQUIRE_SPINS		100000U
 #endif
 
-namespace {
+// Internal PKA driver: file-static helpers and constants (like ba414ep.cpp).
 
 constexpr size_t P256_WORDS = P256_BYTES / sizeof(uint32_t);
 constexpr uint32_t PKA_REG_BYTES = 48U;
@@ -811,13 +812,8 @@ static bool CoreInit(void)
 	return true;
 }
 
-struct alignas(uint32_t) CryptoCc3xxData {
-	uint8_t PrivKey[P256_BYTES];
-	bool bKeyValid;
-};
-
-static_assert(sizeof(CryptoCc3xxData) <= CRYPTO_MEMSIZE_HW,
-			  "CRYPTO_MEMSIZE_HW too small for CryptoCc3xxData");
+// The per-instance key context is CryptoCc3xx::KeyCtx (declared with the class
+// below); the private scalar lives there, single use by default.
 
 static bool Cc3xxAcquire(void)
 {
@@ -864,88 +860,106 @@ static CRYPTO_STATUS EnsureCc3xx(void)
 	return initialized ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
 }
 
-static CryptoCc3xxData *Cc3xxData(CryptoDev_t * const pDev, void *pKeyCtx)
+// @brief	nRF52840 CryptoCell CC310 P-256 ECDH as a KeyAgreeEngine. The
+//			private scalar lives in caller key context (single use by default,
+//			multi-peer with bKeepKey). The class is declared in the engine
+//			header; its methods are defined below, after the anonymous namespace
+//			closes, and still reach the internal PKA helpers in this same file.
+
+
+bool CryptoCc3xx::Enable()
 {
-	return (CryptoCc3xxData *)CryptoResolveKeyCtx(pDev, pKeyCtx,
-											  alignof(CryptoCc3xxData));
+	bool ok = (EnsureCc3xx() == CRYPTO_STATUS_OK);
+	vbValid = ok;
+	return ok;
 }
 
-static void KeyReset(CryptoCc3xxData *pData)
+void CryptoCc3xx::Disable() {}
+void CryptoCc3xx::Reset() {}
+
+static void KeyReset(CryptoCc3xx::KeyCtx *pk)
 {
-	CryptoSecureWipe(pData->PrivKey, sizeof(pData->PrivKey));
-	pData->bKeyValid = false;
+	CryptoSecureWipe(pk->PrivKey, sizeof(pk->PrivKey));
+	pk->bKeyValid = false;
 }
 
-static CRYPTO_STATUS Cc3xxEcdhKeyGen(CryptoDev_t * const pDev, void *pKeyCtx,
-									 uint8_t pPubKey[64], void *pOpCtx)
+CRYPTO_STATUS CryptoCc3xx::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
+								  uint8_t *pPubKey)
 {
-	(void)pOpCtx;
-	CryptoCc3xxData *pData = Cc3xxData(pDev, pKeyCtx);
-	if (pData == nullptr || pPubKey == nullptr || EnsureCc3xx() != CRYPTO_STATUS_OK)
+	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr || pPubKey == nullptr ||
+		EnsureCc3xx() != CRYPTO_STATUS_OK)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
+	KeyCtx *pk = (KeyCtx *)pKeyCtx;
 	if (!Cc3xxAcquire())
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
 
-	KeyReset(pData);
+	KeyReset(pk);
 	CRYPTO_STATUS status = CRYPTO_STATUS_FAIL;
-	if (P256RandomScalar(pData->PrivKey) &&
-		P256Multiply(s_P256Generator, pData->PrivKey, pPubKey, true))
+	if (P256RandomScalar(pk->PrivKey) &&
+		P256Multiply(s_P256Generator, pk->PrivKey, pPubKey, true))
 	{
-		pData->bKeyValid = true;
+		pk->bKeyValid = true;
 		status = CRYPTO_STATUS_OK;
 	}
 	else
 	{
-		KeyReset(pData);
+		KeyReset(pk);
 	}
 	Cc3xxRelease();
 	return status;
 }
 
-static CRYPTO_STATUS Cc3xxEcdh(CryptoDev_t * const pDev, void *pKeyCtx,
-							   const uint8_t pPeerPubKey[64], uint8_t pDhKey[32],
-							   void *pOpCtx)
+CRYPTO_STATUS CryptoCc3xx::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
+								 const uint8_t *pPeerPubKey, uint8_t *pSharedX,
+								 bool bKeepKey)
 {
-	(void)pOpCtx;
-	CryptoCc3xxData *pData = Cc3xxData(pDev, pKeyCtx);
-	if (pData == nullptr || pPeerPubKey == nullptr || pDhKey == nullptr ||
+	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr ||
+		pPeerPubKey == nullptr || pSharedX == nullptr ||
 		EnsureCc3xx() != CRYPTO_STATUS_OK)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
+	KeyCtx *pk = (KeyCtx *)pKeyCtx;
 	if (!Cc3xxAcquire())
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (!pData->bKeyValid)
+	if (!pk->bKeyValid)
 	{
 		Cc3xxRelease();
 		return CRYPTO_STATUS_FAIL;
 	}
 
 	uint8_t point[64];
-	const bool ok = P256Multiply(pPeerPubKey, pData->PrivKey, point, true);
-	KeyReset(pData);
+	const bool ok = P256Multiply(pPeerPubKey, pk->PrivKey, point, true);
+
+	// Wipe the private scalar unless the caller asked to keep it after a success
+	// (bKeepKey), for one ephemeral key pair against several peers. A failure
+	// always wipes.
+	if (!bKeepKey || !ok)
+	{
+		KeyReset(pk);
+	}
+
 	if (ok)
 	{
-		memcpy(pDhKey, point, P256_BYTES);
+		memcpy(pSharedX, point, P256_BYTES);
 	}
 	else
 	{
-		memset(pDhKey, 0, P256_BYTES);
+		memset(pSharedX, 0, P256_BYTES);
 	}
 	CryptoSecureWipe(point, sizeof(point));
 	Cc3xxRelease();
 	return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
 }
 
-static int Cc3xxSelfTest(CryptoDev_t * const pDev)
+int CryptoCc3xx::SelfTest()
 {
-	(void)pDev;
 	static const uint8_t priv[32] = {
 		0x3F,0x49,0xF6,0xD4,0xA3,0xC5,0x5F,0x38,0x74,0xC9,0xB3,0xE3,0xD2,0x10,0x3F,0x50,
 		0x4A,0xFF,0x60,0x7B,0xEB,0x40,0xB7,0x99,0x58,0x99,0xB8,0xA6,0xCD,0x3C,0x1A,0xBD,
@@ -973,36 +987,14 @@ static int Cc3xxSelfTest(CryptoDev_t * const pDev)
 	return status;
 }
 
-} // namespace
 
-extern "C" bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
+CryptoCc3xx *CryptoCc3xxCreate(void *pMem, size_t MemSize)
 {
-	if (!CryptoCfgValidate(pDev, pCfg, sizeof(CryptoCc3xxData),
-						   CRYPTO_CAP_ECDH_P256) ||
-		((uintptr_t)pCfg->pMem & (alignof(CryptoCc3xxData) - 1U)) != 0U ||
+	if (pMem == nullptr || MemSize < sizeof(CryptoCc3xx) ||
+		((uintptr_t)pMem & (alignof(CryptoCc3xx) - 1U)) != 0U ||
 		EnsureCc3xx() != CRYPTO_STATUS_OK)
 	{
-		return false;
+		return nullptr;
 	}
-
-	memset(pDev, 0, sizeof(*pDev));
-	memset(pCfg->pMem, 0, sizeof(CryptoCc3xxData));
-	pDev->pDevData       = pCfg->pMem;
-	pDev->pName          = "cc3xx-hw";
-	pDev->Cap            = CRYPTO_CAP_ECDH_P256;
-	pDev->Props          = CRYPTO_PROP_PLAIN_KEYCTX |
-						   CRYPTO_PROP_HARDWARE | CRYPTO_PROP_SYNC;
-	pDev->KeyCtxSize     = sizeof(CryptoCc3xxData);
-	pDev->EvtCB          = pCfg->EvtCB;
-	pDev->EcdhP256KeyGen = Cc3xxEcdhKeyGen;
-	pDev->EcdhP256       = Cc3xxEcdh;
-	pDev->SelfTest       = Cc3xxSelfTest;
-
-	if ((pCfg->Flags & CRYPTO_FLAG_SELFTEST) != 0U && Cc3xxSelfTest(pDev) != 0)
-	{
-		memset(pDev, 0, sizeof(*pDev));
-		CryptoSecureWipe(pCfg->pMem, sizeof(CryptoCc3xxData));
-		return false;
-	}
-	return true;
+	return new (pMem) CryptoCc3xx();
 }

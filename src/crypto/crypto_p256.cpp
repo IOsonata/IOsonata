@@ -149,4 +149,11 @@ void P256RegularizeScalar(const uint8_t K[P256_BYTES], uint8_t R[P256_BYTES + 1U
 	R[0] = (uint8_t)carry;
 }
 
+// Extract bit BitNo of a regularized big-endian scalar (one extra leading byte).
+uint32_t P256RegularBit(const uint8_t Scalar[P256_BYTES + 1U], uint32_t BitNo)
+{
+	const uint32_t byteFromEnd = BitNo / 8U;
+	return (Scalar[P256_BYTES - byteFromEnd] >> (BitNo & 7U)) & 1U;
+}
+
 } // extern "C"

@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	crypto_cc3xx.h
+@file	crypto_cc3xx_engine.h
 
 @brief	nRF52840 CryptoCell CC310 target configuration.
 
@@ -13,8 +13,8 @@
 
 @license MIT, (c) 2026 I-SYST. See bt_smp.h for full text.
 ----------------------------------------------------------------------------*/
-#ifndef __CRYPTO_CC3XX_H__
-#define __CRYPTO_CC3XX_H__
+#ifndef __CRYPTO_CC3XX_ENGINE_H__
+#define __CRYPTO_CC3XX_ENGINE_H__
 
 #include <stdint.h>
 #ifndef __cplusplus
@@ -56,4 +56,4 @@ static inline void Cc3xxDisable(void)
 	CC3XX_WRAPPER->ENABLE = 0U;
 }
 
-#endif // __CRYPTO_CC3XX_H__
+#endif // __CRYPTO_CC3XX_ENGINE_H__
