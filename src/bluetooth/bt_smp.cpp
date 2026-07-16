@@ -47,7 +47,9 @@ SOFTWARE.
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_gatt.h"
-#include "crypto/crypto.h"
+// SMP uses the OO crypto engine facets (KeyAgreeEngine, CipherEngine) and the
+// shared CRYPTO_STATUS, all from icrypto.h via bt_smp.h. RngGet is declared
+// there too. The legacy crypto.h is intentionally not included here.
 
 // SMP handshake trace. Define BT_SMP_TRACE_ENABLE to 1 to print every SMP PDU
 // in/out and the link state over SysLog. Defaults off for release and library
@@ -123,6 +125,7 @@ static struct {
 	uint32_t Generation;
 	uint8_t LocalRand[16];
 	uint8_t LocalPubKey[64];
+	uint8_t EcdhKeyCtx[64];		//!< OOB local key pair private-scalar context
 	uint8_t PeerRand[16];
 	uint8_t PeerConfirm[16];
 } s_SmpOob = {};
@@ -158,17 +161,15 @@ static const uint8_t s_SmpModelMap[5][5] = {
 	/* init KD  */ {  2,   1,   2,   0,   1 },
 };
 
-// Crypto engine slots, bound by BtSmpInit before first use.
-static CryptoDev_t *s_pCryptoEcdh = nullptr;	// CRYPTO_CAP_ECDH_P256
-static CryptoDev_t *s_pCryptoAes  = nullptr;	// CRYPTO_CAP_AES128_ECB
+// Crypto engine slots, bound by BtSmpInit before first use. The engines are on
+// the OO tree: a KeyAgreeEngine for P-256 ECDH (CryptoUecc or Ba414ep) and a
+// CipherEngine for AES-128 (CryptoSoftAes, CryptoMaster, or the controller AES).
+static KeyAgreeEngine *s_pCryptoEcdh = nullptr;
+static CipherEngine   *s_pCryptoAes  = nullptr;
 
-static int SmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64],
-								   void *pOpCtx);
-static int SmpCryptoEcdh(BtHciDevice_t * const pDev,
-						 const uint8_t pPeerPubKey[64], uint8_t pDhKey[32],
-						 void *pOpCtx);
-static void SmpCryptoEvtHandler(CryptoDev_t * const pDev, uint32_t Op,
-								CRYPTO_STATUS Status, void *pCtx);
+static int SmpCryptoP256KeyGen(BtSmpLink_t *pLink, uint8_t pPubKey[64]);
+static int SmpCryptoEcdh(BtSmpLink_t *pLink,
+						 const uint8_t pPeerPubKey[64], uint8_t pDhKey[32]);
 static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t Reason);
 
 #if BT_SMP_TRACE_ENABLE
@@ -799,8 +800,7 @@ static int SmpLocalKeyGen(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 	{
 		return BT_SMP_CRYPTO_FAIL;
 	}
-	int rc = SmpCryptoP256KeyGen(pDev, pLink->Ctx.LocalPubKey,
-								&s_SmpCryptoPending);
+	int rc = SmpCryptoP256KeyGen(pLink, pLink->Ctx.LocalPubKey);
 	if (rc != BT_SMP_CRYPTO_PENDING) { SmpCryptoPendingClear(); }
 	return rc;
 }
@@ -1074,8 +1074,7 @@ static bool SmpStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 		return false;
 	}
 	pLink->Ctx.State = BT_SMP_STATE_DHKEY_WAIT;
-	int rc = SmpCryptoEcdh(pDev, pLink->Ctx.PeerPubKey, pLink->Ctx.DhKey,
-						  &s_SmpCryptoPending);
+	int rc = SmpCryptoEcdh(pLink, pLink->Ctx.PeerPubKey, pLink->Ctx.DhKey);
 	if (rc == BT_SMP_CRYPTO_OK)
 	{
 		BtSmpDhKeyReady(pDev, 0, pLink->Ctx.DhKey);
@@ -2527,18 +2526,17 @@ void BtSmpBondClearAll(void)
 }
 
 //-----------------------------------------------------------------------------
-// Crypto composition (three capability slots: ECDH, AES, RNG)
+// Crypto composition (two engine slots: ECDH and AES; RNG is a target utility)
 //
-// SMP needs three primitives. The slots are
-// filled by whatever chips a board has), bt_smp holds three CryptoDev_t slots
-// and routes each operation to the engine in that slot. The application fills
-// the slots via BtSmpInit from whatever engines its target provides: one engine
-// may fill all three (mbedtls / CC310), or they compose from several (uECC for
-// ECDH + controller for AES + hardware RNG on a BLE-only part with no
-// CryptoCell). Each engine advertises only the capabilities it has; BtSmpInit
-// validates each slot before use. The five BtSmpCrypto* wrappers keep their
-// existing signatures so the state machine is unchanged; they translate
-// CRYPTO_STATUS to the BT_SMP_CRYPTO_* codes the state machine expects.
+// SMP needs P-256 ECDH and AES-128. bt_smp holds a KeyAgreeEngine and a
+// CipherEngine, bound by BtSmpInit from whatever engines the target provides:
+// software (CryptoUecc + CryptoSoftAes), hardware (Ba414ep + CryptoMaster), or
+// a mix (CryptoUecc for ECDH + the controller AES on a BLE-only part with no
+// CryptoCell). Randomness is the RngGet target utility, called directly. The
+// five BtSmpCrypto* wrappers keep their existing signatures so the state machine
+// is unchanged; they translate CRYPTO_STATUS to the BT_SMP_CRYPTO_* codes the
+// state machine expects. An async ECDH engine reports completion through the
+// CryptoEngine completion handler, bound in BtSmpInit.
 //-----------------------------------------------------------------------------
 
 static int CryptoStatusToSmp(CRYPTO_STATUS st)
@@ -2554,58 +2552,103 @@ static int CryptoStatusToSmp(CRYPTO_STATUS st)
 void BtSmpCryptoAes128(BtHciDevice_t * const pDev,
 								  const uint8_t Key[16], const uint8_t In[16], uint8_t Out[16])
 {
-	(void)pDev;		// the engine holds whatever handle it needs in pDevData
-	if (CryptoAes128Ecb(s_pCryptoAes, Key, In, Out, nullptr) != CRYPTO_STATUS_OK)
+	(void)pDev;
+	if (s_pCryptoAes == nullptr)
+	{
+		memset(Out, 0, 16);
+		return;
+	}
+
+	// Build a plaintext AES-128 key for one ECB block. SMP always encrypts a
+	// single 16-byte block (e, c1, s1, f4..f6 all reduce to AES-128-ECB). The
+	// plain key points at the caller key buffer.
+	CryptoKey key;
+	key.Type       = CRYPTO_KEY_AES_128;
+	key.Loc        = CRYPTO_KEY_LOC_PLAIN;
+	key.Usage      = CRYPTO_KEY_USE_ENCRYPT;
+	key.Plain.pData = Key;
+	key.Plain.Len   = 16;
+
+	if (s_pCryptoAes->Cipher(CRYPTO_CIPHER_ECB, 1, key,
+							 nullptr, 0, In, 16, Out) != CRYPTO_STATUS_OK)
 	{
 		memset(Out, 0, 16);		// fail loud: confirm check will mismatch
 	}
 }
 
-static int SmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64],
-								   void *pOpCtx)
+static int SmpCryptoP256KeyGen(BtSmpLink_t *pLink, uint8_t pPubKey[64])
 {
-	(void)pDev;
-	return CryptoStatusToSmp(CryptoEcdhP256KeyGen(s_pCryptoEcdh, nullptr,
-											  pPubKey, pOpCtx));
+	if (s_pCryptoEcdh == nullptr || pLink == nullptr)
+	{
+		return BT_SMP_CRYPTO_FAIL;
+	}
+	// The private scalar lives in the per-link key context, held from KeyGen
+	// until the matching Agree, then wiped by the engine.
+	return CryptoStatusToSmp(s_pCryptoEcdh->KeyGen(CRYPTO_CURVE_P256,
+												   pLink->Ctx.EcdhKeyCtx, pPubKey));
 }
 
 int BtSmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64])
 {
-	return SmpCryptoP256KeyGen(pDev, pPubKey, nullptr);
+	(void)pDev;
+	// The public wrapper serves the OOB path, which keeps its own key pair. The
+	// private scalar goes to the OOB key context, held until the OOB Agree.
+	if (s_pCryptoEcdh == nullptr)
+	{
+		return BT_SMP_CRYPTO_FAIL;
+	}
+	return CryptoStatusToSmp(s_pCryptoEcdh->KeyGen(CRYPTO_CURVE_P256,
+												   s_SmpOob.EcdhKeyCtx, pPubKey));
 }
 
-static int SmpCryptoEcdh(BtHciDevice_t * const pDev,
-						 const uint8_t pPeerPubKey[64], uint8_t pDhKey[32],
-						 void *pOpCtx)
+static int SmpCryptoEcdh(BtSmpLink_t *pLink,
+						 const uint8_t pPeerPubKey[64], uint8_t pDhKey[32])
 {
-	(void)pDev;
-	return CryptoStatusToSmp(CryptoEcdhP256(s_pCryptoEcdh, nullptr,
-										 pPeerPubKey, pDhKey, pOpCtx));
+	if (s_pCryptoEcdh == nullptr || pLink == nullptr)
+	{
+		return BT_SMP_CRYPTO_FAIL;
+	}
+	return CryptoStatusToSmp(s_pCryptoEcdh->Agree(CRYPTO_CURVE_P256,
+												  pLink->Ctx.EcdhKeyCtx,
+												  pPeerPubKey, pDhKey));
 }
 
 int BtSmpCryptoEcdh(BtHciDevice_t * const pDev,
 							   const uint8_t pPeerPubKey[64], uint8_t pDhKey[32])
 {
-	return SmpCryptoEcdh(pDev, pPeerPubKey, pDhKey, nullptr);
+	(void)pDev;
+	if (s_pCryptoEcdh == nullptr)
+	{
+		return BT_SMP_CRYPTO_FAIL;
+	}
+	return CryptoStatusToSmp(s_pCryptoEcdh->Agree(CRYPTO_CURVE_P256,
+												  s_SmpOob.EcdhKeyCtx,
+												  pPeerPubKey, pDhKey));
 }
 
-static void SmpCryptoEvtHandler(CryptoDev_t * const pDev, uint32_t Op,
-								CRYPTO_STATUS Status, void *pCtx)
+// Completion callback for an asynchronous ECDH engine. A synchronous engine
+// never calls this; its KeyGen/Agree return OK and the caller drives the ready
+// path inline. An async engine returns PENDING and calls this on completion,
+// where the pending record identifies the link and the operation.
+static void SmpCryptoComplete(CryptoEngine * const pEngine, CRYPTO_OP Op,
+							  CRYPTO_STATUS Status, void *pCtx)
 {
-	(void)pDev;
-	if (pCtx != &s_SmpCryptoPending || Op != CRYPTO_CAP_ECDH_P256)
+	(void)pEngine;
+	if (pCtx != &s_SmpCryptoPending)
 	{
 		return;
 	}
 	uint8_t status = Status == CRYPTO_STATUS_OK ? 0 : 1;
-	if (s_SmpCryptoPending.Op == BT_SMP_CRYPTO_OP_PUBKEY)
+	if (Op == CRYPTO_OP_KEYGEN &&
+		s_SmpCryptoPending.Op == BT_SMP_CRYPTO_OP_PUBKEY)
 	{
 		BtSmpLink_t *pLink = SmpCryptoPendingFind(BT_SMP_CRYPTO_OP_PUBKEY);
 		const uint8_t *pKey = pLink != nullptr ? pLink->Ctx.LocalPubKey : nullptr;
 		BtSmpLocalPubKeyReady(s_SmpCryptoPending.pDev, status, pKey,
 							  pKey != nullptr ? pKey + 32 : nullptr);
 	}
-	else if (s_SmpCryptoPending.Op == BT_SMP_CRYPTO_OP_DHKEY)
+	else if (Op == CRYPTO_OP_AGREE &&
+			 s_SmpCryptoPending.Op == BT_SMP_CRYPTO_OP_DHKEY)
 	{
 		BtSmpLink_t *pLink = SmpCryptoPendingFind(BT_SMP_CRYPTO_OP_DHKEY);
 		BtSmpDhKeyReady(s_SmpCryptoPending.pDev, status,
@@ -2625,7 +2668,7 @@ int BtSmpCryptoSelfTest(void)
 	// Run the ECDH engine's self-test (the security-critical path). AES/RNG
 	// engines may have their own; the ECDH known-answer vector is the one that
 	// matters for SC pairing.
-	return CryptoSelfTest(s_pCryptoEcdh);
+	return s_pCryptoEcdh != nullptr ? s_pCryptoEcdh->SelfTest() : -1;
 }
 
 // LTK Request Reply hooks. The port implementation overrides these to route the
@@ -2675,15 +2718,20 @@ void BtSmpHciLtkNegReply(BtHciDevice_t * const pDev, uint16_t ConnHdl)
 	SmpSendHciCmd(pDev, BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_NEG_REPLY, param, sizeof(param));
 }
 
-void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes)
+void BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes)
 {
-	// Compose the crypto from the engines the target provides. Each slot must
-	// advertise the capability it is being used for; a mismatch leaves the slot
-	// null so the corresponding BtSmpCrypto* wrapper fails loud. RNG is not a
+	// Compose the crypto from the engines the target provides. RNG is not a
 	// slot - it is the target RngGet utility, called directly by BtSmpCryptoRand.
-	s_pCryptoEcdh = CryptoIsCapable(pEcdh, CRYPTO_CAP_ECDH_P256) ? pEcdh : nullptr;
-	s_pCryptoAes  = CryptoIsCapable(pAes,  CRYPTO_CAP_AES128_ECB) ? pAes  : nullptr;
-	if (s_pCryptoEcdh != nullptr) { s_pCryptoEcdh->EvtCB = SmpCryptoEvtHandler; }
+	s_pCryptoEcdh = pEcdh;
+	s_pCryptoAes  = pAes;
+
+	// Bind the async completion handler. A synchronous ECDH engine never calls
+	// it; an async engine (interrupt-driven hardware) reports KeyGen and Agree
+	// completion through it, which drives BtSmpLocalPubKeyReady/BtSmpDhKeyReady.
+	if (s_pCryptoEcdh != nullptr)
+	{
+		s_pCryptoEcdh->SetCompleteHandler(SmpCryptoComplete, &s_SmpCryptoPending);
+	}
 	SmpCryptoPendingClear();
 	SmpOobClear();
 
@@ -3011,7 +3059,7 @@ int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint
 {
 	if (pRand == nullptr || pConf == nullptr || s_SmpOob.bReserved ||
 		s_SmpCryptoPending.Op != BT_SMP_CRYPTO_OP_NONE ||
-		CryptoHasProp(s_pCryptoEcdh, CRYPTO_PROP_SYNC) == false)
+		s_pCryptoEcdh == nullptr || s_pCryptoEcdh->IsAsync())
 	{
 		return -1;
 	}

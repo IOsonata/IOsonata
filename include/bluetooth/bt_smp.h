@@ -43,7 +43,7 @@ SOFTWARE.
 
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_hci.h"
-#include "crypto/crypto.h"
+#include "crypto/icrypto.h"
 
 // SMP-internal crypto return codes used by the state machine. Mapped from the
 // generic CRYPTO_STATUS by the dispatch wrappers in bt_smp.cpp. PENDING parks
@@ -215,6 +215,7 @@ typedef struct __Bt_Smp_Ctx {
 	uint8_t  LocalPubKey[64];		//!< SC: local P-256 public key (X||Y)
 	uint8_t  PeerPubKey[64];		//!< SC: peer P-256 public key (X||Y)
 	uint8_t  DhKey[32];				//!< SC: computed DHKey
+	uint8_t  EcdhKeyCtx[64];		//!< SC: ECDH private-key context, KeyGen to Agree (per-link, wiped after)
 	uint8_t  Mackey[16];			//!< SC: MacKey from f5
 	uint8_t  Ltk[16];				//!< Derived/working LTK
 	uint32_t Passkey;				//!< Passkey Entry: 6 digit value 0..999999
@@ -403,10 +404,10 @@ void BtSmpTimeoutCheck(void);
  * (crypto/crypto.h), backed by the MCU RNG peripheral, which SMP calls directly.
  * A target without an RNG peripheral does not link.
  *
- * @param	pEcdh	Engine providing CRYPTO_CAP_ECDH_P256.
- * @param	pAes	Engine providing CRYPTO_CAP_AES128_ECB.
+ * @param	pEcdh	KeyAgreeEngine providing P-256 ECDH.
+ * @param	pAes	CipherEngine providing AES-128 ECB.
  */
-void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes);
+void BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes);
 
 /// Configure the local IO capability and authentication requirements. Call
 /// after BtSmpInit. When never called the defaults are NoInputNoOutput /
@@ -484,28 +485,23 @@ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pCon
 void BtSmpOobDataClear(void);
 
 /**
- * @brief	Bring up the Bluetooth-owned controller CryptoDev_t (SDC).
+ * @brief	Bring up the Bluetooth-owned controller AES engine (SDC).
  *
- * Populates a caller-owned CryptoDev_t whose AES-128 ECB is served by the BLE
- * SoftDevice Controller's HCI LE Encrypt. This is a Bluetooth helper, NOT a
- * generic crypto engine - it requires a running BLE controller and is only
- * valid for the SMP AES slot. On a part with no CryptoCell, compose it with a
- * software ECDH engine (randomness comes from the RngGet utility):
+ * Returns a CipherEngine whose AES-128 ECB is served by the BLE SoftDevice
+ * Controller's HCI LE Encrypt. This is a Bluetooth helper, NOT a generic crypto
+ * engine - it requires a running BLE controller and is only valid for the SMP
+ * AES slot. On a part with no CryptoCell, compose it with a software ECDH engine
+ * (randomness comes from the RngGet utility):
  *
- *   CryptoDev_t ecdh, aes;
- *   static uint8_t ecdhMem[CRYPTO_MEMSIZE_UECC];
- *   CryptoCfg_t cfg = { };
- *   cfg.Provider = CRYPTO_PROVIDER_UECC;
- *   cfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
- *   cfg.pMem     = ecdhMem;
- *   cfg.MemSize  = sizeof(ecdhMem);
- *   CryptoUeccInit(&ecdh, &cfg);
- *   BtCryptoCtlrSdcInit(&aes);   // controller AES
- *   BtSmpInit(&ecdh, &aes);
+ *   static uint8_t ecdhMem[CRYPTO_UECC_MEMSIZE];
+ *   CryptoUecc *ecdh = CryptoUeccCreate(ecdhMem, sizeof(ecdhMem),
+ *                                       CryptoRngNrfInstance());
+ *   CipherEngine *aes = BtCryptoCtlrSdcInit();   // controller AES
+ *   BtSmpInit(ecdh, aes);
  *
- * @return	true on success, false if the SDC HCI is not present in this build.
+ * @return	The controller AES engine, or nullptr if the SDC HCI is not present.
  */
-bool BtCryptoCtlrSdcInit(CryptoDev_t * const pDev);
+CipherEngine *BtCryptoCtlrSdcInit(void);
 
 // SMP crypto entry points used by the state machine (dispatch to the composed
 // engines). Kept as functions so the toolbox (c1/f4/f5/f6, AES-CMAC) calls a

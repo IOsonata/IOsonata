@@ -108,7 +108,8 @@ CRYPTO_STATUS CryptoUecc::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 }
 
 CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
-								const uint8_t *pPeerPubKey, uint8_t *pSharedX)
+								const uint8_t *pPeerPubKey, uint8_t *pSharedX,
+								bool bKeepKey)
 {
 	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr ||
 		pPeerPubKey == nullptr || pSharedX == nullptr)
@@ -125,7 +126,8 @@ CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	}
 
 	// Reject a peer public key not on the P-256 curve before the DH, closing the
-	// invalid-curve attack (CVE-2018-5383). Single-use key: wipe here too.
+	// invalid-curve attack (CVE-2018-5383). A failure always wipes the key, even
+	// when bKeepKey was requested: a rejected exchange does not preserve state.
 	if (uECC_valid_public_key(pPeerPubKey, uECC_secp256r1()) != 1)
 	{
 		UeccWipe(pk->PrivKey, sizeof(pk->PrivKey));
@@ -145,10 +147,16 @@ CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 		memcpy(pSharedX, secret, 32);	// shared X coordinate, big-endian
 	}
 
-	// Single-use: wipe the shared secret and the private key on every exit.
+	// Always wipe the transient shared secret. Wipe the private key too unless
+	// the caller asked to keep it (bKeepKey) after a success: a caller running
+	// one ephemeral key pair against several peers keeps it and regenerates the
+	// pair itself. A failure always wipes.
 	UeccWipe(secret, sizeof(secret));
-	UeccWipe(pk->PrivKey, sizeof(pk->PrivKey));
-	pk->bKeyValid = false;
+	if (!bKeepKey || st != CRYPTO_STATUS_OK)
+	{
+		UeccWipe(pk->PrivKey, sizeof(pk->PrivKey));
+		pk->bKeyValid = false;
+	}
 	return st;
 }
 

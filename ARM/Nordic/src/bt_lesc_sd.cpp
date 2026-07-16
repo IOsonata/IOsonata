@@ -1,10 +1,10 @@
 /**-------------------------------------------------------------------------
 @file	bt_lesc_sd.cpp
 
-@brief	LE Secure Connections ECDH over CryptoDev_t for the SoftDevice stacks.
+@brief	LE Secure Connections ECDH over the OO KeyAgreeEngine for the SoftDevice stacks.
 
 Replaces the SDK nrf_ble_lesc module. The local key pair and the ECDH shared
-secret come from the injected CryptoDev_t engine (BtLescSetCryptoEngine); the
+secret come from the injected KeyAgreeEngine (BtLescSetCryptoEngine); the
 SoftDevice keeps the SMP state machine and only asks the host for the DH key.
 
 The ECDH is deferred out of the event callback: BtLescOnBleEvt records the peer
@@ -12,7 +12,7 @@ public key, and BtLescRequestHandler, called from the main loop, computes the DH
 key and replies. On failure the reply reports a DHKey-failure status and no key,
 so the peer's DHKey check fails cleanly rather than the link stalling.
 
-The key pair is single use: every CryptoDev_t engine wipes the private key after
+The key pair serves several concurrent peers: each Agree keeps the private key
 one ECDH. A fresh pair is generated on BLE_GAP_EVT_AUTH_STATUS, deferred to
 BtLescRequestHandler like the ECDH itself. Regeneration invalidates the local
 OOB data set; the application must generate and deliver a new OOB set before the
@@ -20,7 +20,7 @@ next OOB pairing. One consequence of the single use key: only one LESC pairing
 can be in flight at a time; a second link pairing concurrently fails its DHKey
 check and can retry once the first completes.
 
-Byte order: the SoftDevice holds keys little-endian per coordinate; CryptoDev_t
+Byte order: the SoftDevice holds keys little-endian per coordinate; the engine
 works big-endian. ByteOrderInvert reverses each 32 byte coordinate.
 
 Two per-stack operations are supplied by the port: BtLescDhKeyReply (reply arity
@@ -36,7 +36,7 @@ differs between s132 and sdk-nrf-bm) and BtLescLinkCount.
 #include "ble_gap.h"
 #include "nrf_error.h"
 
-#include "crypto/crypto.h"
+#include "crypto/icrypto.h"
 #include "bt_lesc.h"
 #include "syslog.h"
 
@@ -71,7 +71,14 @@ static bool						s_bOobLocalGen;
 static ble_gap_lesc_oob_data_t	s_OobLocal;
 static BtLescOobPeerHandler_t	s_OobPeerHandler;
 
-static CryptoDev_t		*s_pLescCrypto;
+static KeyAgreeEngine	*s_pLescCrypto;
+
+// One ephemeral key pair serves all concurrent pairings. The private scalar
+// lives in this key context from BtLescKeyPairGen until it is regenerated; each
+// per-peer Agree keeps the key (bKeepKey) so several peers derive against the
+// same pair, and BtLescKeyPairGen replaces it. Sized for the largest engine key
+// context (32 byte scalar plus a validity flag, aligned).
+static uint8_t			s_LescEcdhKeyCtx[64];
 
 // Reverse each 32 byte coordinate of a secp256r1 key between big and little
 // endian. Used both directions.
@@ -124,14 +131,14 @@ static int SlotFind(uint16_t ConnHdl)
 	return free;
 }
 
-void BtLescSetCryptoEngine(CryptoDev_t * const pEcdh)
+void BtLescSetCryptoEngine(KeyAgreeEngine *pEcdh)
 {
 	s_pLescCrypto = pEcdh;
 }
 
 bool BtLescKeyPairGen(void)
 {
-	uint8_t pubBe[BLE_GAP_LESC_P256_PK_LEN];		// big-endian X||Y from CryptoDev_t
+	uint8_t pubBe[BLE_GAP_LESC_P256_PK_LEN];		// big-endian X||Y from the engine
 
 	// Do not regenerate while a DH computation is pending on any link.
 	for (int i = 0; i < LinkCount(); i++)
@@ -145,9 +152,11 @@ bool BtLescKeyPairGen(void)
 	s_bKeyPairGen = false;
 	s_bOobLocalGen = false;
 
-	// Fresh key pair. The private key stays inside the engine for the matching
-	// ECDH and never crosses the CryptoDev_t interface.
-	if (CryptoEcdhP256KeyGen(s_pLescCrypto, NULL, pubBe, NULL) != CRYPTO_STATUS_OK)
+	// Fresh key pair. The private key stays in the module key context for the
+	// matching per-peer Agree calls and never crosses the engine interface.
+	if (s_pLescCrypto == nullptr ||
+		s_pLescCrypto->KeyGen(CRYPTO_CURVE_P256, s_LescEcdhKeyCtx, pubBe)
+			!= CRYPTO_STATUS_OK)
 	{
 		CryptoSecureWipe(pubBe, sizeof(pubBe));
 		LESC_TRACE("LESC keypair generate failed\r\n");
@@ -168,7 +177,7 @@ bool BtLescInit(void)
 	memset(s_PeerKeys, 0, sizeof(s_PeerKeys));
 	CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
 
-	if (!CryptoIsCapable(s_pLescCrypto, CRYPTO_CAP_ECDH_P256))
+	if (s_pLescCrypto == nullptr)
 	{
 		LESC_TRACE("LESC crypto engine missing or lacks ECDH P-256\r\n");
 		return false;
@@ -232,7 +241,7 @@ void BtLescOobPeerHandlerSet(BtLescOobPeerHandler_t Handler)
 static bool ComputeAndReply(BtLescPeerKey_t *pPeer)
 {
 	uint8_t peerBe[BLE_GAP_LESC_P256_PK_LEN];	// peer public key, big-endian
-	uint8_t dhBe[BLE_GAP_LESC_DHKEY_LEN];		// DH key, big-endian from CryptoDev_t
+	uint8_t dhBe[BLE_GAP_LESC_DHKEY_LEN];		// DH key, big-endian from the engine
 	const ble_gap_lesc_dhkey_t *pDh = NULL;
 	uint8_t secStatus = BLE_GAP_SEC_STATUS_DHKEY_FAILURE;
 
@@ -252,12 +261,16 @@ static bool ComputeAndReply(BtLescPeerKey_t *pPeer)
 	}
 	else
 	{
-		// Peer key arrives little-endian; CryptoDev_t wants big-endian.
+		// Peer key arrives little-endian; the engine wants big-endian.
 		ByteOrderInvert(pPeer->Value, peerBe);
 
-		if (CryptoEcdhP256(s_pLescCrypto, NULL, peerBe, dhBe, NULL) == CRYPTO_STATUS_OK)
+		// Keep the key pair: several concurrent peers derive against the same
+		// ephemeral pair, and BtLescKeyPairGen replaces it. bKeepKey stops the
+		// engine wiping the private scalar after this Agree.
+		if (s_pLescCrypto->Agree(CRYPTO_CURVE_P256, s_LescEcdhKeyCtx,
+								 peerBe, dhBe, true) == CRYPTO_STATUS_OK)
 		{
-			// CryptoDev_t returns the DH key big-endian; BLE wants it little-endian.
+			// The engine returns the DH key big-endian; BLE wants it little-endian.
 			for (int i = 0; i < BLE_GAP_LESC_DHKEY_LEN; i++)
 			{
 				s_LescDhKey.key[i] = dhBe[BLE_GAP_LESC_DHKEY_LEN - 1 - i];

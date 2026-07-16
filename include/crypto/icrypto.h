@@ -192,6 +192,10 @@ void P256RegularizeScalar(const uint8_t K[P256_BYTES], uint8_t R[P256_BYTES + 1U
 /// crypto and SMP code can draw randomness without a platform header.
 bool RngGet(uint8_t *pBuff, size_t Len);
 
+/// Zeroize a buffer so the write is not optimized away. Use to clear key
+/// material, shared secrets, and other secrets on every exit path.
+void CryptoSecureWipe(void *pData, size_t Len);
+
 #ifdef __cplusplus
 }
 #endif
@@ -392,13 +396,21 @@ public:
 	 * @param	pKeyCtx		Same storage passed to KeyGen.
 	 * @param	pPeerPubKey	Peer public key, 64 bytes for P-256 (X||Y).
 	 * @param	pSharedX	Output shared X coordinate, 32 bytes for P-256.
+	 * @param	bKeepKey	When false (default) the private key is single use:
+	 *						it is wiped after this call, so a second Agree fails.
+	 *						When true the key survives for another Agree, which a
+	 *						caller running one ephemeral key pair against several
+	 *						concurrent peers (LE Secure Connections) needs; that
+	 *						caller wipes the key itself by generating a new pair.
 	 *
 	 * @return	CRYPTO_STATUS_OK on success, CRYPTO_STATUS_FAIL on an invalid
 	 *			peer point.
 	 */
 	virtual CRYPTO_STATUS Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
-								const uint8_t *pPeerPubKey, uint8_t *pSharedX) {
+								const uint8_t *pPeerPubKey, uint8_t *pSharedX,
+								bool bKeepKey = false) {
 		(void)Curve; (void)pKeyCtx; (void)pPeerPubKey; (void)pSharedX;
+		(void)bKeepKey;
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 };

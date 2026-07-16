@@ -58,7 +58,6 @@ SOFTWARE.
 
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #include "nrfx_cracen.h"
-#include "crypto_cracen.h"
 #define RNG_USE_CRACEN		1
 
 static volatile bool s_CracenBusy;

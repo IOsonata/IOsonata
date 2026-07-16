@@ -62,10 +62,11 @@ SOFTWARE.
 #include "bm/bluetooth/peer_manager/nrf_ble_lesc.h"
 #include "bm/bluetooth/services/ble_dis.h"
 
-#include "crypto/crypto.h"
+#include "crypto/ba414ep.h"
+#include "crypto_rng_nrf.h"
 
 // Injection point for the LESC crypto engine (defined in the IOsonata
-// nrf_ble_lesc replacement). The App owns the CryptoDev_t and passes it in.
+// nrf_ble_lesc replacement). The App owns the KeyAgreeEngine and passes it in.
 #include "bt_lesc.h"
 #include "nrfx_cracen.h"
 #include "nrf_soc.h"
@@ -1016,36 +1017,27 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	ble_gap_sec_params_t sec_param;
 	uint32_t err_code;
 
-	// Provide the LESC layer its crypto engine BEFORE pm_init. With CONFIG_PM_LESC
-	// defined, pm_init -> sm_init calls nrf_ble_lesc_init, which checks the engine
-	// via CryptoIsCapable. The engine must already be injected at that point, else
-	// nrf_ble_lesc_init fails and pm_init returns an error. The App owns the
-	// CryptoDev_t and injects it, mirroring the BtSmpInit model on the SDC port.
-	// ECDH goes through CryptoInit with CRYPTO_PROVIDER_AUTO: the hardware
-	// engine (CryptoHwInit, PSA over CRACEN) is selected when it is linked,
-	// otherwise it falls back to software uECC, with no change to the LESC
-	// code. The arena is sized CRYPTO_MEMSIZE_ECDH, which fits whichever engine
-	// AUTO selects. Random bytes come from the PSA DRBG on the hardware path,
-	// or from the CRACEN-backed RngGet on the uECC path.
-	static CryptoDev_t s_LescEcdh;
-	static uint8_t     s_LescEcdhMem[CRYPTO_MEMSIZE_ECDH];	// ECDH per-instance key arena (fits HW or uECC)
-	CryptoCfg_t lescCfg = { };
-	lescCfg.Provider = CRYPTO_PROVIDER_AUTO;
-	lescCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
-	lescCfg.pMem     = s_LescEcdhMem;
-	lescCfg.MemSize  = sizeof(s_LescEcdhMem);
-	if (CryptoInit(&s_LescEcdh, &lescCfg))
+	// Provide the LESC layer its ECDH engine BEFORE pm_init. With CONFIG_PM_LESC
+	// defined, pm_init -> sm_init calls nrf_ble_lesc_init, which requires the
+	// engine to be injected at that point, else pm_init returns an error. The
+	// App owns the engine and injects it. On nRF54L15 the P-256 hardware is the
+	// Silex BA414EP (Ba414ep); its randomness for key generation and blinding
+	// comes from the security-grade hardware RNG (CryptoRngNrf).
+	static uint8_t s_LescEcdhMem[BA414EP_MEMSIZE];		// engine object storage
+	Ba414ep *pLescEcdh = Ba414epCreate(s_LescEcdhMem, sizeof(s_LescEcdhMem),
+									   CryptoRngNrfInstance());
+	if (pLescEcdh != nullptr)
 	{
-		DEBUG_PRINTF("Crypto ECDH engine: %s\r\n", CryptoName(&s_LescEcdh));
+		DEBUG_PRINTF("Crypto ECDH engine: Ba414ep (hardware P-256)\r\n");
 	}
 	else
 	{
-		// No P-256 engine was linked. LE Secure Connections pairing cannot
-		// run. Report it here rather than at the first pairing attempt.
+		// The P-256 engine did not come up. LE Secure Connections pairing
+		// cannot run. Report it here rather than at the first pairing attempt.
 		DEBUG_PRINTF("Crypto ECDH engine MISSING, LESC pairing will fail\r\n");
 	}
 
-	BtLescSetCryptoEngine(&s_LescEcdh);
+	BtLescSetCryptoEngine(pLescEcdh);
 
 	err_code = pm_init();
 	if (err_code != NRF_SUCCESS)

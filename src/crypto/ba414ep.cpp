@@ -272,7 +272,8 @@ CRYPTO_STATUS Ba414ep::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKe
 }
 
 CRYPTO_STATUS Ba414ep::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
-							 const uint8_t *pPeerPubKey, uint8_t *pSharedX)
+							 const uint8_t *pPeerPubKey, uint8_t *pSharedX,
+							 bool bKeepKey)
 {
 	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr ||
 		pPeerPubKey == nullptr || pSharedX == nullptr)
@@ -293,9 +294,14 @@ CRYPTO_STATUS Ba414ep::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	uint8_t point[64];
 	bool ok = PkPointMultiply(pPeerPubKey, pk->PrivKey, point, vpRng);
 
-	// Single use: wipe the private scalar on every exit.
-	PkWipe(pk->PrivKey, sizeof(pk->PrivKey));
-	pk->bKeyValid = false;
+	// Wipe the private scalar unless the caller asked to keep it after a success
+	// (bKeepKey), for one ephemeral key pair against several peers. A failure
+	// always wipes.
+	if (!bKeepKey || !ok)
+	{
+		PkWipe(pk->PrivKey, sizeof(pk->PrivKey));
+		pk->bKeyValid = false;
+	}
 
 	if (ok)
 	{

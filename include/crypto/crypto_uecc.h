@@ -61,7 +61,8 @@ public:
 	CRYPTO_STATUS KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 						 uint8_t *pPubKey) override;
 	CRYPTO_STATUS Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
-						const uint8_t *pPeerPubKey, uint8_t *pSharedX) override;
+						const uint8_t *pPeerPubKey, uint8_t *pSharedX,
+						bool bKeepKey = false) override;
 
 	// SignEngine.
 	CRYPTO_STATUS Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,

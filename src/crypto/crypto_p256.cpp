@@ -45,6 +45,16 @@ static const uint8_t s_P256Prime[P256_BYTES] = {
 
 extern "C" {
 
+// Zeroize helper. Volatile-through so the compiler cannot drop the writes.
+void CryptoSecureWipe(void *pData, size_t Len)
+{
+	volatile uint8_t *p = (volatile uint8_t *)pData;
+	while (Len-- > 0)
+	{
+		*p++ = 0;
+	}
+}
+
 // True when every byte is zero. Reads all bytes so the timing does not reveal
 // the position of the first non-zero byte.
 bool P256IsZero(const uint8_t *pData, size_t Len)

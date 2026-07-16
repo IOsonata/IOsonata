@@ -6,16 +6,16 @@
 The SoftDevice (nRF52) and sdk-nrf-bm (nRF54) own the SMP state machine but
 delegate the P-256 work to the host: the local key pair, the ECDH shared
 secret, and the LESC OOB confirm value. This module supplies that work over the
-IOsonata CryptoDev_t engine, replacing the SDK nrf_ble_lesc module and its
+IOsonata KeyAgreeEngine, replacing the SDK nrf_ble_lesc module and its
 dependency on nrf_crypto.
 
 The engine is injected by the application before the stack initialises its
 security layer (BtLescSetCryptoEngine, then the stack's security init). The
-application owns the CryptoDev_t and chooses the engine through CryptoInit,
+application owns the engine and constructs it (Ba414ep or CryptoUecc),
 exactly as it does for the SDC pairing path in bt_app_sdc.cpp.
 
 Byte order: the SoftDevice holds public keys and the DH key little-endian, one
-32 byte coordinate at a time. CryptoDev_t works big-endian. This module does the
+32 byte coordinate at a time. The engine works big-endian. This module does the
 per-coordinate inversion in both directions.
 
 Two operations differ per stack and are supplied by the port (bt_app_nrf52.cpp,
@@ -36,24 +36,24 @@ the combined peripheral and central link count.
 #include "ble.h"
 #include "ble_gap.h"
 
-#include "crypto/crypto.h"
+#include "crypto/icrypto.h"
 
 /// Peer OOB data lookup. The stack calls this on an OOB DHKey request to obtain
 /// the peer OOB set for a connection; return NULL when none is held.
 typedef ble_gap_lesc_oob_data_t * (*BtLescOobPeerHandler_t)(uint16_t ConnHdl);
 
+/**
+ * @brief	Inject the P-256 ECDH engine before the stack security layer
+ *			initialises. The application owns it. C++ linkage: the engine is a
+ *			KeyAgreeEngine on the OO crypto tree (CryptoUecc or Ba414ep).
+ *
+ * @param	pEcdh	KeyAgreeEngine providing P-256 ECDH.
+ */
+void BtLescSetCryptoEngine(KeyAgreeEngine *pEcdh);
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/**
- * @brief	Inject the ECDH engine before the stack security layer initialises.
- *
- * The engine must provide CRYPTO_CAP_ECDH_P256. The application owns it.
- *
- * @param	pEcdh	Engine from CryptoInit.
- */
-void BtLescSetCryptoEngine(CryptoDev_t * const pEcdh);
 
 /**
  * @brief	Initialise the module and generate the local key pair.
