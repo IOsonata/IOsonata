@@ -149,7 +149,10 @@ bool Cc3xxIntrf::Init(void)
 	vDevIntrf.EvtCB = nullptr;
 	atomic_flag_clear(&vDevIntrf.bBusy);
 	vDevIntrf.MaxRetry = 5;
-	atomic_store(&vDevIntrf.EnCnt, 1);
+	// The user count starts at zero: engines are the users. The first engine
+	// Enable powers the wrapper (0 to 1) and the last engine Disable powers
+	// it off, through the DeviceIntrf reference count.
+	atomic_store(&vDevIntrf.EnCnt, 0);
 	vDevIntrf.Type = DEVINTRF_TYPE_CRYPTO;
 	vDevIntrf.bDma = false;
 	vDevIntrf.bIntEn = false;
@@ -171,9 +174,9 @@ bool Cc3xxIntrf::Init(void)
 	vDevIntrf.PowerOff = Cc3xxPowerOff;
 	vDevIntrf.GetHandle = Cc3xxGetHandle;
 
-	// Cache the target base and bring the wrapper up for the first user.
+	// Wiring only: cache the target base and leave the wrapper unpowered.
+	// Power follows the user count.
 	s_Base = Cc3xxBase();
-	(void)Cc3xxEnable();
 	return true;
 }
 

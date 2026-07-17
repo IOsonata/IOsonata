@@ -244,6 +244,19 @@ static void CmacSubkey(const uint8_t In[16], uint8_t Out[16])
 	if (msb != 0U) Out[15] ^= 0x87U;
 }
 
+// One software AES-128 ECB block for the inherited CMAC. A hardware subclass
+// overrides this with its block primitive and brackets the whole CMAC in one
+// acquisition through AesOpBegin/AesOpEnd.
+bool CryptoSoftAes::AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16],
+								uint8_t Out[16])
+{
+	uint8_t rk[AES128_RK_WORDS * 4U];
+	AesKeyExpand(Key, rk);
+	AesEncryptBlock(rk, In, Out);
+	AesWipe(rk, sizeof(rk));
+	return true;
+}
+
 CRYPTO_STATUS CryptoSoftAes::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 								 const uint8_t *pMsg, size_t Len,
 								 uint8_t *pMac, size_t MacLen)
@@ -255,70 +268,72 @@ CRYPTO_STATUS CryptoSoftAes::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
-	// Cipher enforces ENCRYPT usage. CMAC has already authorized SIGN, so use an
-	// internal descriptor for the block primitive while retaining virtual dispatch.
-	CryptoKey blockKey = Key;
-	blockKey.Usage |= CRYPTO_KEY_USE_ENCRYPT;
-
-	uint8_t zero[AES_BLOCK] = {};
-	uint8_t L[AES_BLOCK], K1[AES_BLOCK], K2[AES_BLOCK];
-	if (Cipher(CRYPTO_CIPHER_ECB, 1, blockKey, nullptr, 0,
-			   zero, AES_BLOCK, L) != CRYPTO_STATUS_OK)
+	// One acquisition for the whole CMAC: the block primitive runs between
+	// AesOpBegin and AesOpEnd, so a hardware subclass holds its operation once
+	// instead of once per block and no other user interleaves mid-MAC.
+	if (!AesOpBegin())
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
-	CmacSubkey(L, K1);
-	CmacSubkey(K1, K2);
 
-	size_t blocks = (Len + AES_BLOCK - 1U) / AES_BLOCK;
-	bool complete = Len != 0U && (Len & (AES_BLOCK - 1U)) == 0U;
-	if (blocks == 0U) blocks = 1U;
-
+	const uint8_t *key = Key.Plain.pData;
+	uint8_t zero[AES_BLOCK] = {};
+	uint8_t L[AES_BLOCK] = {}, K1[AES_BLOCK] = {}, K2[AES_BLOCK] = {};
 	uint8_t X[AES_BLOCK] = {};
-	uint8_t Y[AES_BLOCK];
-	CRYPTO_STATUS st = CRYPTO_STATUS_OK;
-	for (size_t i = 0; i + 1U < blocks; i++)
-	{
-		for (size_t j = 0; j < AES_BLOCK; j++) Y[j] = X[j] ^ pMsg[i*AES_BLOCK+j];
-		if (Cipher(CRYPTO_CIPHER_ECB, 1, blockKey, nullptr, 0,
-				   Y, AES_BLOCK, X) != CRYPTO_STATUS_OK)
-		{
-			st = CRYPTO_STATUS_FAIL;
-			break;
-		}
-	}
-
+	uint8_t Y[AES_BLOCK] = {};
+	CRYPTO_STATUS st = AesEcbEncrypt(key, zero, L) ? CRYPTO_STATUS_OK
+												 : CRYPTO_STATUS_FAIL;
 	if (st == CRYPTO_STATUS_OK)
 	{
-		uint8_t last[AES_BLOCK];
-		size_t base = (blocks - 1U) * AES_BLOCK;
-		if (complete)
+		CmacSubkey(L, K1);
+		CmacSubkey(K1, K2);
+
+		size_t blocks = (Len + AES_BLOCK - 1U) / AES_BLOCK;
+		bool complete = Len != 0U && (Len & (AES_BLOCK - 1U)) == 0U;
+		if (blocks == 0U) blocks = 1U;
+
+		for (size_t i = 0; i + 1U < blocks; i++)
 		{
-			for (size_t j = 0; j < AES_BLOCK; j++) last[j] = pMsg[base+j] ^ K1[j];
-		}
-		else
-		{
-			size_t rem = Len - base;
-			for (size_t j = 0; j < AES_BLOCK; j++)
+			for (size_t j = 0; j < AES_BLOCK; j++) Y[j] = X[j] ^ pMsg[i*AES_BLOCK+j];
+			if (!AesEcbEncrypt(key, Y, X))
 			{
-				uint8_t value = j < rem ? pMsg[base+j] : (j == rem ? 0x80U : 0U);
-				last[j] = value ^ K2[j];
+				st = CRYPTO_STATUS_FAIL;
+				break;
 			}
 		}
-		for (size_t j = 0; j < AES_BLOCK; j++) Y[j] = X[j] ^ last[j];
-		uint8_t full[AES_BLOCK];
-		if (Cipher(CRYPTO_CIPHER_ECB, 1, blockKey, nullptr, 0,
-				   Y, AES_BLOCK, full) != CRYPTO_STATUS_OK)
+
+		if (st == CRYPTO_STATUS_OK)
 		{
-			st = CRYPTO_STATUS_FAIL;
+			uint8_t last[AES_BLOCK];
+			size_t base = (blocks - 1U) * AES_BLOCK;
+			if (complete)
+			{
+				for (size_t j = 0; j < AES_BLOCK; j++) last[j] = pMsg[base+j] ^ K1[j];
+			}
+			else
+			{
+				size_t rem = Len - base;
+				for (size_t j = 0; j < AES_BLOCK; j++)
+				{
+					uint8_t value = j < rem ? pMsg[base+j] : (j == rem ? 0x80U : 0U);
+					last[j] = value ^ K2[j];
+				}
+			}
+			for (size_t j = 0; j < AES_BLOCK; j++) Y[j] = X[j] ^ last[j];
+			uint8_t full[AES_BLOCK];
+			if (!AesEcbEncrypt(key, Y, full))
+			{
+				st = CRYPTO_STATUS_FAIL;
+			}
+			else
+			{
+				memcpy(pMac, full, MacLen);
+			}
+			AesWipe(last, sizeof(last));
+			AesWipe(full, sizeof(full));
 		}
-		else
-		{
-			memcpy(pMac, full, MacLen);
-		}
-		AesWipe(last, sizeof(last));
-		AesWipe(full, sizeof(full));
 	}
+	AesOpEnd();
 
 	AesWipe(L, sizeof(L));
 	AesWipe(K1, sizeof(K1));
@@ -326,6 +341,429 @@ CRYPTO_STATUS CryptoSoftAes::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 	AesWipe(X, sizeof(X));
 	AesWipe(Y, sizeof(Y));
 	return st;
+}
+
+// AES-CCM (RFC 3610). One AesOpBegin/AesOpEnd bracket wraps the whole seal
+// or open, the CBC-MAC and CTR streams both running on the AesEcbEncrypt
+// primitive so a hardware subclass provides every block operation.
+
+// GHASH (SP 800-38D): constant-time bit-serial GF(2^128) multiply. No table,
+// no data-dependent branch; the per-bit select is a mask. Software on every
+// engine: a hardware AES subclass supplies the block cipher through
+// AesEcbEncrypt while the field multiply stays here.
+static void GhashMul(uint8_t Z[16], const uint8_t H[16])
+{
+	uint8_t v[16], z[16];
+	memcpy(v, H, 16);
+	memset(z, 0, 16);
+	for (int i = 0; i < 128; i++)
+	{
+		uint8_t bit = (uint8_t)((Z[i >> 3] >> (7 - (i & 7))) & 1U);
+		uint8_t mask = (uint8_t)(0U - bit);
+		for (int j = 0; j < 16; j++)
+		{
+			z[j] ^= (uint8_t)(v[j] & mask);
+		}
+		uint8_t lsb = (uint8_t)(v[15] & 1U);
+		for (int j = 15; j > 0; j--)
+		{
+			v[j] = (uint8_t)((v[j] >> 1) | (v[j - 1] << 7));
+		}
+		v[0] >>= 1;
+		v[0] ^= (uint8_t)((0U - lsb) & 0xE1U);
+	}
+	memcpy(Z, z, 16);
+	AesWipe(v, sizeof(v));
+	AesWipe(z, sizeof(z));
+}
+
+// Absorb a byte string into the GHASH state, zero padded to full blocks.
+static void GhashAbsorb(uint8_t Y[16], const uint8_t H[16],
+						const uint8_t *pData, size_t Len)
+{
+	for (size_t idx = 0; idx < Len; idx += 16U)
+	{
+		size_t count = Len - idx < 16U ? Len - idx : 16U;
+		for (size_t i = 0; i < count; i++)
+		{
+			Y[i] ^= pData[idx + i];
+		}
+		GhashMul(Y, H);
+	}
+}
+
+static bool GcmParamsOk(size_t NonceLen, size_t TagLen)
+{
+	// The 96 bit IV form only (J0 = IV | 0x00000001). Tag lengths per
+	// SP 800-38D: 96 to 128 bits, plus the 32 and 64 bit special sizes.
+	return NonceLen == 12U &&
+		   ((TagLen >= 12U && TagLen <= 16U) || TagLen == 8U || TagLen == 4U);
+}
+
+static bool CcmParamsOk(size_t NonceLen, size_t TagLen, size_t AadLen,
+						size_t Len)
+{
+	size_t l = 15U - NonceLen;
+	if (NonceLen < 7U || NonceLen > 13U ||
+		TagLen < 4U || TagLen > 16U || (TagLen & 1U) != 0U ||
+		AadLen >= 65280U)
+	{
+		return false;
+	}
+	// The message length must fit in the L length octets.
+	if (l < (size_t)sizeof(size_t) && (Len >> (8U * l)) != 0U)
+	{
+		return false;
+	}
+	return true;
+}
+
+// T = CBC-MAC(B0 | encoded AAD | message), Tag = T xor E(K, A0). The full
+// 16 byte masked block is written; the first TagLen bytes are the tag.
+// Assumes validated parameters and an owned AesOpBegin bracket.
+bool CryptoSoftAes::CcmMacTag(const uint8_t *pKey, const uint8_t *pNonce,
+							  size_t NonceLen, const uint8_t *pAad,
+							  size_t AadLen, const uint8_t *pMsg, size_t Len,
+							  size_t TagLen, uint8_t Tag[16])
+{
+	size_t l = 15U - NonceLen;
+	uint8_t x[AES_BLOCK], b[AES_BLOCK];
+	bool ok;
+
+	// B0: flags, nonce, message length.
+	b[0] = (uint8_t)(((AadLen != 0U) ? 0x40U : 0U) |
+					 (((TagLen - 2U) / 2U) << 3) | (l - 1U));
+	memcpy(&b[1], pNonce, NonceLen);
+	for (size_t i = 0; i < l; i++)
+	{
+		b[15U - i] = (uint8_t)(Len >> (8U * i));
+	}
+	ok = AesEcbEncrypt(pKey, b, x);
+
+	// AAD: two byte length then the data, zero padded to the block.
+	if (ok && AadLen != 0U)
+	{
+		memset(b, 0, sizeof(b));
+		b[0] = (uint8_t)(AadLen >> 8);
+		b[1] = (uint8_t)AadLen;
+		size_t fill = AadLen < 14U ? AadLen : 14U;
+		memcpy(&b[2], pAad, fill);
+		size_t idx = fill;
+		for (size_t i = 0; i < AES_BLOCK; i++) b[i] ^= x[i];
+		ok = AesEcbEncrypt(pKey, b, x);
+		while (ok && idx < AadLen)
+		{
+			memset(b, 0, sizeof(b));
+			size_t count = AadLen - idx < AES_BLOCK ? AadLen - idx : AES_BLOCK;
+			memcpy(b, &pAad[idx], count);
+			idx += count;
+			for (size_t i = 0; i < AES_BLOCK; i++) b[i] ^= x[i];
+			ok = AesEcbEncrypt(pKey, b, x);
+		}
+	}
+
+	// Message into the CBC-MAC.
+	for (size_t idx = 0; ok && idx < Len; idx += AES_BLOCK)
+	{
+		memset(b, 0, sizeof(b));
+		size_t count = Len - idx < AES_BLOCK ? Len - idx : AES_BLOCK;
+		memcpy(b, &pMsg[idx], count);
+		for (size_t i = 0; i < AES_BLOCK; i++) b[i] ^= x[i];
+		ok = AesEcbEncrypt(pKey, b, x);
+	}
+
+	// Mask with the A0 keystream.
+	if (ok)
+	{
+		memset(b, 0, sizeof(b));
+		b[0] = (uint8_t)(l - 1U);
+		memcpy(&b[1], pNonce, NonceLen);
+		uint8_t s0[AES_BLOCK];
+		ok = AesEcbEncrypt(pKey, b, s0);
+		if (ok)
+		{
+			for (size_t i = 0; i < AES_BLOCK; i++)
+			{
+				Tag[i] = x[i] ^ s0[i];
+			}
+		}
+		AesWipe(s0, sizeof(s0));
+	}
+	AesWipe(x, sizeof(x));
+	AesWipe(b, sizeof(b));
+	return ok;
+}
+
+CRYPTO_STATUS CryptoSoftAes::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+								  const uint8_t *pNonce, size_t NonceLen,
+								  const uint8_t *pAad, size_t AadLen,
+								  const uint8_t *pMsg, size_t Len,
+								  uint8_t *pOut, uint8_t *pTag, size_t TagLen)
+{
+	if (Alg == CRYPTO_AEAD_AES_GCM)
+	{
+		if (!AesKeyMaterialOk(Key) ||
+			(Key.Usage & CRYPTO_KEY_USE_ENCRYPT) == 0U ||
+			pNonce == nullptr || pTag == nullptr ||
+			(pMsg == nullptr && Len != 0U) || (pOut == nullptr && Len != 0U) ||
+			(pAad == nullptr && AadLen != 0U) ||
+			!GcmParamsOk(NonceLen, TagLen))
+		{
+			return CRYPTO_STATUS_UNSUPPORTED;
+		}
+		if (!AesOpBegin())
+		{
+			return CRYPTO_STATUS_FAIL;
+		}
+		const uint8_t *key = Key.Plain.pData;
+		uint8_t h[16] = {}, j0[16], ej0[16], a[16], stream[16], y[16] = {};
+		bool ok = AesEcbEncrypt(key, h, h);
+		memcpy(j0, pNonce, 12U);
+		j0[12] = 0U; j0[13] = 0U; j0[14] = 0U; j0[15] = 1U;
+		ok = ok && AesEcbEncrypt(key, j0, ej0);
+		for (size_t idx = 0, ctr = 2; ok && idx < Len; idx += 16U, ctr++)
+		{
+			memcpy(a, j0, 12U);
+			a[12] = (uint8_t)(ctr >> 24);
+			a[13] = (uint8_t)(ctr >> 16);
+			a[14] = (uint8_t)(ctr >> 8);
+			a[15] = (uint8_t)ctr;
+			ok = AesEcbEncrypt(key, a, stream);
+			size_t count = Len - idx < 16U ? Len - idx : 16U;
+			for (size_t i = 0; ok && i < count; i++)
+			{
+				pOut[idx + i] = pMsg[idx + i] ^ stream[i];
+			}
+		}
+		AesOpEnd();
+		if (ok)
+		{
+			GhashAbsorb(y, h, pAad, AadLen);
+			GhashAbsorb(y, h, pOut, Len);
+			uint64_t abits = (uint64_t)AadLen * 8U;
+			uint64_t cbits = (uint64_t)Len * 8U;
+			uint8_t lens[16];
+			for (int i = 0; i < 8; i++)
+			{
+				lens[i] = (uint8_t)(abits >> (56 - 8 * i));
+				lens[8 + i] = (uint8_t)(cbits >> (56 - 8 * i));
+			}
+			GhashAbsorb(y, h, lens, sizeof(lens));
+			for (size_t i = 0; i < TagLen; i++)
+			{
+				pTag[i] = y[i] ^ ej0[i];
+			}
+		}
+		else
+		{
+			if (Len > 0U) memset(pOut, 0, Len);
+			memset(pTag, 0, TagLen);
+		}
+		AesWipe(h, sizeof(h));
+		AesWipe(j0, sizeof(j0));
+		AesWipe(ej0, sizeof(ej0));
+		AesWipe(a, sizeof(a));
+		AesWipe(stream, sizeof(stream));
+		AesWipe(y, sizeof(y));
+		return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+	}
+	if (Alg != CRYPTO_AEAD_AES_CCM || !AesKeyMaterialOk(Key) ||
+		(Key.Usage & CRYPTO_KEY_USE_ENCRYPT) == 0U ||
+		pNonce == nullptr || pTag == nullptr ||
+		(pMsg == nullptr && Len != 0U) || (pOut == nullptr && Len != 0U) ||
+		(pAad == nullptr && AadLen != 0U) ||
+		!CcmParamsOk(NonceLen, TagLen, AadLen, Len))
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	if (!AesOpBegin())
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+
+	const uint8_t *key = Key.Plain.pData;
+	size_t l = 15U - NonceLen;
+	uint8_t tag[AES_BLOCK];
+	uint8_t a[AES_BLOCK], stream[AES_BLOCK];
+	bool ok = CcmMacTag(key, pNonce, NonceLen, pAad, AadLen, pMsg, Len,
+						TagLen, tag);
+
+	// Payload: CTR with counters A1 onward.
+	for (size_t idx = 0, ctr = 1; ok && idx < Len; idx += AES_BLOCK, ctr++)
+	{
+		memset(a, 0, sizeof(a));
+		a[0] = (uint8_t)(l - 1U);
+		memcpy(&a[1], pNonce, NonceLen);
+		for (size_t i = 0; i < l; i++)
+		{
+			a[15U - i] = (uint8_t)(ctr >> (8U * i));
+		}
+		ok = AesEcbEncrypt(key, a, stream);
+		size_t count = Len - idx < AES_BLOCK ? Len - idx : AES_BLOCK;
+		for (size_t i = 0; ok && i < count; i++)
+		{
+			pOut[idx + i] = pMsg[idx + i] ^ stream[i];
+		}
+	}
+	AesOpEnd();
+
+	if (ok)
+	{
+		memcpy(pTag, tag, TagLen);
+	}
+	else
+	{
+		if (Len > 0U) memset(pOut, 0, Len);
+		memset(pTag, 0, TagLen);
+	}
+	AesWipe(tag, sizeof(tag));
+	AesWipe(a, sizeof(a));
+	AesWipe(stream, sizeof(stream));
+	return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+}
+
+CRYPTO_STATUS CryptoSoftAes::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+								  const uint8_t *pNonce, size_t NonceLen,
+								  const uint8_t *pAad, size_t AadLen,
+								  const uint8_t *pMsg, size_t Len,
+								  uint8_t *pOut, const uint8_t *pTag,
+								  size_t TagLen)
+{
+	if (Alg == CRYPTO_AEAD_AES_GCM)
+	{
+		if (!AesKeyMaterialOk(Key) ||
+			(Key.Usage & CRYPTO_KEY_USE_DECRYPT) == 0U ||
+			pNonce == nullptr || pTag == nullptr ||
+			(pMsg == nullptr && Len != 0U) || (pOut == nullptr && Len != 0U) ||
+			(pAad == nullptr && AadLen != 0U) ||
+			!GcmParamsOk(NonceLen, TagLen))
+		{
+			return CRYPTO_STATUS_UNSUPPORTED;
+		}
+		if (!AesOpBegin())
+		{
+			return CRYPTO_STATUS_FAIL;
+		}
+
+		// Verify first over the received ciphertext, decrypt only on an
+		// authentic tag, constant-time compare.
+		const uint8_t *key = Key.Plain.pData;
+		uint8_t h[16] = {}, j0[16], ej0[16], a[16], stream[16], y[16] = {};
+		bool ok = AesEcbEncrypt(key, h, h);
+		memcpy(j0, pNonce, 12U);
+		j0[12] = 0U; j0[13] = 0U; j0[14] = 0U; j0[15] = 1U;
+		ok = ok && AesEcbEncrypt(key, j0, ej0);
+		if (ok)
+		{
+			GhashAbsorb(y, h, pAad, AadLen);
+			GhashAbsorb(y, h, pMsg, Len);
+			uint64_t abits = (uint64_t)AadLen * 8U;
+			uint64_t cbits = (uint64_t)Len * 8U;
+			uint8_t lens[16];
+			for (int i = 0; i < 8; i++)
+			{
+				lens[i] = (uint8_t)(abits >> (56 - 8 * i));
+				lens[8 + i] = (uint8_t)(cbits >> (56 - 8 * i));
+			}
+			GhashAbsorb(y, h, lens, sizeof(lens));
+			uint8_t diff = 0U;
+			for (size_t i = 0; i < TagLen; i++)
+			{
+				diff |= (uint8_t)((y[i] ^ ej0[i]) ^ pTag[i]);
+			}
+			ok = diff == 0U;
+		}
+		for (size_t idx = 0, ctr = 2; ok && idx < Len; idx += 16U, ctr++)
+		{
+			memcpy(a, j0, 12U);
+			a[12] = (uint8_t)(ctr >> 24);
+			a[13] = (uint8_t)(ctr >> 16);
+			a[14] = (uint8_t)(ctr >> 8);
+			a[15] = (uint8_t)ctr;
+			ok = AesEcbEncrypt(key, a, stream);
+			size_t count = Len - idx < 16U ? Len - idx : 16U;
+			for (size_t i = 0; ok && i < count; i++)
+			{
+				pOut[idx + i] = pMsg[idx + i] ^ stream[i];
+			}
+		}
+		AesOpEnd();
+		if (!ok && Len > 0U)
+		{
+			memset(pOut, 0, Len);
+		}
+		AesWipe(h, sizeof(h));
+		AesWipe(j0, sizeof(j0));
+		AesWipe(ej0, sizeof(ej0));
+		AesWipe(a, sizeof(a));
+		AesWipe(stream, sizeof(stream));
+		AesWipe(y, sizeof(y));
+		return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+	}
+	if (Alg != CRYPTO_AEAD_AES_CCM || !AesKeyMaterialOk(Key) ||
+		(Key.Usage & CRYPTO_KEY_USE_DECRYPT) == 0U ||
+		pNonce == nullptr || pTag == nullptr ||
+		(pMsg == nullptr && Len != 0U) || (pOut == nullptr && Len != 0U) ||
+		(pAad == nullptr && AadLen != 0U) ||
+		!CcmParamsOk(NonceLen, TagLen, AadLen, Len))
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	if (!AesOpBegin())
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+
+	const uint8_t *key = Key.Plain.pData;
+	size_t l = 15U - NonceLen;
+	uint8_t a[AES_BLOCK], stream[AES_BLOCK];
+	bool ok = true;
+
+	// Recover the plaintext with the CTR stream, counters A1 onward.
+	for (size_t idx = 0, ctr = 1; ok && idx < Len; idx += AES_BLOCK, ctr++)
+	{
+		memset(a, 0, sizeof(a));
+		a[0] = (uint8_t)(l - 1U);
+		memcpy(&a[1], pNonce, NonceLen);
+		for (size_t i = 0; i < l; i++)
+		{
+			a[15U - i] = (uint8_t)(ctr >> (8U * i));
+		}
+		ok = AesEcbEncrypt(key, a, stream);
+		size_t count = Len - idx < AES_BLOCK ? Len - idx : AES_BLOCK;
+		for (size_t i = 0; ok && i < count; i++)
+		{
+			pOut[idx + i] = pMsg[idx + i] ^ stream[i];
+		}
+	}
+
+	// Recompute the seal tag over the recovered plaintext and compare in
+	// constant time.
+	uint8_t tag[AES_BLOCK];
+	if (ok)
+	{
+		ok = CcmMacTag(key, pNonce, NonceLen, pAad, AadLen, pOut, Len,
+					   TagLen, tag);
+	}
+	AesOpEnd();
+
+	if (ok)
+	{
+		uint8_t diff = 0U;
+		for (size_t i = 0; i < TagLen; i++)
+		{
+			diff |= (uint8_t)(tag[i] ^ pTag[i]);
+		}
+		ok = diff == 0U;
+	}
+	AesWipe(tag, sizeof(tag));
+	AesWipe(a, sizeof(a));
+	AesWipe(stream, sizeof(stream));
+	if (!ok && Len > 0U)
+	{
+		memset(pOut, 0, Len);
+	}
+	return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
 }
 
 int CryptoSoftAes::SelfTest()

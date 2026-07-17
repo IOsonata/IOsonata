@@ -47,9 +47,9 @@ SOFTWARE.
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_gatt.h"
-// SMP uses the OO crypto engine facets (KeyAgreeEngine, CipherEngine) and the
-// shared CRYPTO_STATUS, all from icrypto.h via bt_smp.h. RngGet is declared
-// there too. The legacy crypto.h is intentionally not included here.
+// SMP uses the OO crypto engine facets (KeyAgreeEngine, CipherEngine,
+// RngEngine) and the shared CRYPTO_STATUS, all from icrypto.h via bt_smp.h.
+// The legacy crypto.h is intentionally not included here.
 
 // SMP handshake trace. Define BT_SMP_TRACE_ENABLE to 1 to print every SMP PDU
 // in/out and the link state over SysLog. Defaults off for release and library
@@ -125,7 +125,7 @@ static struct {
 	uint32_t Generation;
 	uint8_t LocalRand[16];
 	uint8_t LocalPubKey[64];
-	uint8_t EcdhKeyCtx[64];		//!< OOB local key pair private-scalar context
+	uint8_t EcdhKeyCtx[CRYPTO_KEYCTX_MAX];	//!< OOB local key pair private-scalar context
 	uint8_t PeerRand[16];
 	uint8_t PeerConfirm[16];
 } s_SmpOob = {};
@@ -167,6 +167,18 @@ static const uint8_t s_SmpModelMap[5][5] = {
 static KeyAgreeEngine *s_pCryptoEcdh = nullptr;
 static RngEngine *s_pCryptoRng = nullptr;
 static CipherEngine   *s_pCryptoAes  = nullptr;
+
+// Destroy the ECDH private key held in a key context. KeyReset reaches a
+// provider-side handle (an accelerator slot or an opaque key) that a raw wipe
+// of the context bytes cannot; the caller's following wipe covers the plain
+// bytes.
+static void SmpEcdhCtxReset(uint8_t *pCtx)
+{
+	if (s_pCryptoEcdh != nullptr)
+	{
+		s_pCryptoEcdh->KeyReset(pCtx);
+	}
+}
 
 static int SmpCryptoP256KeyGen(BtSmpLink_t *pLink, uint8_t pPubKey[64]);
 static int SmpCryptoEcdh(BtSmpLink_t *pLink,
@@ -215,6 +227,7 @@ static BtSmpLink_t *SmpLinkFind(uint16_t ConnHdl)
 
 static void SmpOobClear(void)
 {
+	SmpEcdhCtxReset(s_SmpOob.EcdhKeyCtx);
 	CryptoSecureWipe(&s_SmpOob, sizeof(s_SmpOob));
 }
 
@@ -333,6 +346,7 @@ static void SmpLinkFree(uint16_t ConnHdl)
 	if (p != nullptr)
 	{
 		SmpOobRelease(p);
+		SmpEcdhCtxReset(p->Ctx.EcdhKeyCtx);
 		memset(p, 0, sizeof(BtSmpLink_t));
 		p->ConnHdl = BT_CONN_HDL_INVALID;
 	}
@@ -351,6 +365,7 @@ static void SmpLinkResetKeepCount(BtSmpLink_t *pLink)
 	bool     locked    = pLink->Ctx.bLocked;
 
 	SmpOobRelease(pLink);
+	SmpEcdhCtxReset(pLink->Ctx.EcdhKeyCtx);
 	memset(&pLink->Ctx, 0, sizeof(pLink->Ctx));
 	memset(&pLink->Keys, 0, sizeof(pLink->Keys));
 
@@ -2575,17 +2590,17 @@ void BtSmpBondClearAll(void)
 }
 
 //-----------------------------------------------------------------------------
-// Crypto composition (two engine slots: ECDH and AES; RNG is a target utility)
+// Crypto composition (three engine slots: ECDH, AES and RNG)
 //
-// SMP needs P-256 ECDH and AES-128. bt_smp holds a KeyAgreeEngine and a
-// CipherEngine, bound by BtSmpInit from whatever engines the target provides:
-// software (CryptoUecc + CryptoSoftAes), hardware (Ba414ep + CryptoMaster), or
-// a mix (CryptoUecc for ECDH + the controller AES on a BLE-only part with no
-// CryptoCell). Randomness is the RngGet target utility, called directly. The
-// five BtSmpCrypto* wrappers keep their existing signatures so the state machine
-// is unchanged; they translate CRYPTO_STATUS to the BT_SMP_CRYPTO_* codes the
-// state machine expects. An async ECDH engine reports completion through the
-// CryptoEngine completion handler, bound in BtSmpInit.
+// SMP needs P-256 ECDH, AES-128 and security-grade randomness. bt_smp holds a
+// KeyAgreeEngine, a CipherEngine and an RngEngine, bound by BtSmpInit from
+// whatever engines the target provides: software (CryptoUecc + CryptoSoftAes),
+// hardware (Ba414ep + CryptoMaster), or a mix (CryptoUecc for ECDH + the
+// controller AES on a BLE-only part with no CryptoCell). The five BtSmpCrypto*
+// wrappers keep their existing signatures so the state machine is unchanged;
+// they translate CRYPTO_STATUS to the BT_SMP_CRYPTO_* codes the state machine
+// expects. An async ECDH engine reports completion through the CryptoEngine
+// completion handler, bound in BtSmpInit.
 //-----------------------------------------------------------------------------
 
 static int CryptoStatusToSmp(CRYPTO_STATUS st)
@@ -2778,8 +2793,16 @@ void BtSmpHciLtkNegReply(BtHciDevice_t * const pDev, uint16_t ConnHdl)
 
 void BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)
 {
-	// Compose the crypto from the engines the target provides. RNG is not a
-	// slot - it is the target RngGet utility, called directly by BtSmpCryptoRand.
+	// Compose the crypto from the engines the target provides. The per-link
+	// and OOB key contexts are fixed CRYPTO_KEYCTX_MAX byte buffers; an
+	// engine whose context does not fit is refused here so pairing fails
+	// cleanly at the first Secure Connections attempt instead of overrunning
+	// caller storage.
+	if (pEcdh != nullptr &&
+		(pEcdh->KeyCtxSize() == 0U || pEcdh->KeyCtxSize() > CRYPTO_KEYCTX_MAX))
+	{
+		pEcdh = nullptr;
+	}
 	s_pCryptoEcdh = pEcdh;
 	s_pCryptoRng = pRng;
 	s_pCryptoAes  = pAes;

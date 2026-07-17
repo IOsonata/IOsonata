@@ -192,9 +192,15 @@ static void PkaFault(Device *pDev)
 {
 	s_bPkaFault = true;
 	CcRegWrite(pDev, REG_PKA_CLOCK_ENABLE, 0U);
-	// Fault kill: power the wrapper off directly, bypassing the interface
-	// reference count. The hardware is considered dead until re-init.
-	Cc3xxDisable();
+	// Fault kill: unconditional power-off through the interface PowerOff
+	// escape hatch. The user count is intentionally untouched; counted users
+	// re-assert power on their next operation through EnsureCc3xx, which
+	// reruns the core bring-up because s_bCcInit is cleared here.
+	Cc3xxIntrf *pIntrf = Cc3xxIntrfInstance();
+	if (pIntrf != nullptr)
+	{
+		pIntrf->PowerOff();
+	}
 	s_bCcInit = false;
 }
 
@@ -858,6 +864,15 @@ static CRYPTO_STATUS EnsureCc3xx(Device *pDev, Cc3xxIntrf *pIntrf)
 
 	if (s_bCcInit == false)
 	{
+		// The caller is a counted user of the interface. A fault kill or a
+		// sibling engine Disable can have dropped wrapper power or the core
+		// setup since; re-assert power for the owned count (idempotent) and
+		// gate a wrapper that does not come up, then rerun the bring-up.
+		if (!Cc3xxEnable())
+		{
+			Cc3xxRelease(pIntrf);
+			return CRYPTO_STATUS_FAIL;
+		}
 		s_bCcInit = CoreInit(pDev);
 	}
 	bool initialized = s_bCcInit;
@@ -887,20 +902,63 @@ bool CryptoCc3xx::Enable()
 {
 	Device *pDev = this;
 	Cc3xxIntrf *pIntrf = (Cc3xxIntrf *)Interface();
+	if (pIntrf == nullptr)
+	{
+		vbValid = false;
+		return false;
+	}
+
+	// Count this engine as one interface user. The first user powers the
+	// wrapper through the DeviceIntrf reference count. A failed bring-up
+	// releases the count so the wrapper does not stay powered for a dead
+	// engine.
+	bool counted = vbValid;
+	if (!counted)
+	{
+		pIntrf->Enable();
+	}
 	bool ok = (EnsureCc3xx(pDev, pIntrf) == CRYPTO_STATUS_OK);
+	if (!ok && !counted)
+	{
+		pIntrf->Disable();
+	}
 	vbValid = ok;
 	return ok;
 }
 
-void CryptoCc3xx::Disable() {}
-void CryptoCc3xx::Reset() {}
+void CryptoCc3xx::Disable()
+{
+	if (!vbValid)
+	{
+		return;
+	}
+	vbValid = false;
+	// Force the next user through the core bring-up: if this release powers
+	// the wrapper off, the core setup is lost. A sibling engine still
+	// counted re-establishes it through EnsureCc3xx at its next operation.
+	s_bCcInit = false;
+	DeviceIntrf *pIntrf = Interface();
+	if (pIntrf != nullptr)
+	{
+		pIntrf->Disable();
+	}
+}
+
+void CryptoCc3xx::Reset()
+{
+	// Power-cycle recovery: release this engine's count (last user powers
+	// the wrapper off), then bring it back up through the normal path.
+	Disable();
+	(void)Enable();
+}
 
 CRYPTO_STATUS CryptoCc3xx::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 								  uint8_t *pPubKey)
 {
 	Device *pDev = this;
 	Cc3xxIntrf *pIntrf = (Cc3xxIntrf *)Interface();
-	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr || pPubKey == nullptr)
+	if (!vbValid || Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr ||
+		pPubKey == nullptr)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
@@ -939,7 +997,7 @@ CRYPTO_STATUS CryptoCc3xx::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 {
 	Device *pDev = this;
 	Cc3xxIntrf *pIntrf = (Cc3xxIntrf *)Interface();
-	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr ||
+	if (!vbValid || Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr ||
 		pPeerPubKey == nullptr || pSharedX == nullptr ||
 		EnsureCc3xx(pDev, pIntrf) != CRYPTO_STATUS_OK)
 	{
@@ -984,6 +1042,10 @@ int CryptoCc3xx::SelfTest()
 {
 	Device *pDev = this;
 	Cc3xxIntrf *pIntrf = (Cc3xxIntrf *)Interface();
+	if (!vbValid)
+	{
+		return -1;
+	}
 	static const uint8_t priv[32] = {
 		0x3F,0x49,0xF6,0xD4,0xA3,0xC5,0x5F,0x38,0x74,0xC9,0xB3,0xE3,0xD2,0x10,0x3F,0x50,
 		0x4A,0xFF,0x60,0x7B,0xEB,0x40,0xB7,0x99,0x58,0x99,0xB8,0xA6,0xCD,0x3C,0x1A,0xBD,

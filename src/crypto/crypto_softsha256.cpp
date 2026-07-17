@@ -151,6 +151,133 @@ CRYPTO_STATUS CryptoSoftSha256::Hash(CRYPTO_HASH_ALG Alg,
 	return CRYPTO_STATUS_OK;
 }
 
+// Streaming facet: the caller context is a Sha256Ctx. The static_assert in
+// this file keeps the class HashCtxSize claim in step with the struct.
+static_assert(sizeof(Sha256Ctx) <= CRYPTO_HASHCTX_MAX,
+			  "SHA-256 context exceeds the common consumer storage");
+
+size_t CryptoSoftSha256::HashCtxSize() const
+{
+	return sizeof(Sha256Ctx);
+}
+
+CRYPTO_STATUS CryptoSoftSha256::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
+{
+	if (Alg != CRYPTO_HASH_SHA256 || pHashCtx == nullptr)
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	Sha256Init((Sha256Ctx *)pHashCtx);
+	return CRYPTO_STATUS_OK;
+}
+
+CRYPTO_STATUS CryptoSoftSha256::HashUpdate(void *pHashCtx,
+										   const uint8_t *pMsg, size_t Len)
+{
+	if (pHashCtx == nullptr || (pMsg == nullptr && Len != 0U))
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	if (Len > 0U)
+	{
+		Sha256Update((Sha256Ctx *)pHashCtx, pMsg, Len);
+	}
+	return CRYPTO_STATUS_OK;
+}
+
+CRYPTO_STATUS CryptoSoftSha256::HashFinal(void *pHashCtx, uint8_t *pDigest)
+{
+	if (pHashCtx == nullptr || pDigest == nullptr)
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	Sha256Final((Sha256Ctx *)pHashCtx, pDigest);
+	Sha256Wipe(pHashCtx, sizeof(Sha256Ctx));
+	return CRYPTO_STATUS_OK;
+}
+
+#define HMAC_BLOCK			64U
+#define SHA256_DIGEST		32U
+
+// HMAC-SHA-256 (RFC 2104) over the virtual streaming hash calls, so a
+// hardware subclass that overrides the streaming trio provides the digest
+// work. The key context storage is bounded by CRYPTO_HASHCTX_MAX, the same
+// bound every in-tree consumer reserves.
+CRYPTO_STATUS CryptoSoftSha256::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+									const uint8_t *pMsg, size_t Len,
+									uint8_t *pMac, size_t MacLen)
+{
+	if (Alg != CRYPTO_MAC_HMAC || Key.Type != CRYPTO_KEY_HMAC ||
+		Key.Loc != CRYPTO_KEY_LOC_PLAIN ||
+		(Key.Usage & CRYPTO_KEY_USE_SIGN) == 0U ||
+		(Key.Plain.pData == nullptr && Key.Plain.Len != 0U) ||
+		pMac == nullptr || MacLen == 0U || MacLen > SHA256_DIGEST ||
+		(pMsg == nullptr && Len != 0U) ||
+		HashCtxSize() > CRYPTO_HASHCTX_MAX)
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+
+	// Block-sized key: a longer key is first hashed (RFC 2104), a shorter
+	// one zero padded.
+	uint8_t key[HMAC_BLOCK] = {};
+	alignas(uint64_t) uint8_t ctx[CRYPTO_HASHCTX_MAX];
+	CRYPTO_STATUS st = CRYPTO_STATUS_OK;
+	if (Key.Plain.Len > HMAC_BLOCK)
+	{
+		if (HashInit(CRYPTO_HASH_SHA256, ctx) != CRYPTO_STATUS_OK ||
+			HashUpdate(ctx, Key.Plain.pData, Key.Plain.Len) !=
+				CRYPTO_STATUS_OK ||
+			HashFinal(ctx, key) != CRYPTO_STATUS_OK)
+		{
+			st = CRYPTO_STATUS_FAIL;
+		}
+	}
+	else if (Key.Plain.Len > 0U)
+	{
+		memcpy(key, Key.Plain.pData, Key.Plain.Len);
+	}
+
+	uint8_t pad[HMAC_BLOCK];
+	uint8_t inner[SHA256_DIGEST];
+	if (st == CRYPTO_STATUS_OK)
+	{
+		// Inner digest: H((K xor ipad) || message).
+		for (size_t i = 0; i < HMAC_BLOCK; i++) pad[i] = key[i] ^ 0x36U;
+		if (HashInit(CRYPTO_HASH_SHA256, ctx) != CRYPTO_STATUS_OK ||
+			HashUpdate(ctx, pad, sizeof(pad)) != CRYPTO_STATUS_OK ||
+			HashUpdate(ctx, pMsg, Len) != CRYPTO_STATUS_OK ||
+			HashFinal(ctx, inner) != CRYPTO_STATUS_OK)
+		{
+			st = CRYPTO_STATUS_FAIL;
+		}
+	}
+	if (st == CRYPTO_STATUS_OK)
+	{
+		// Outer digest: H((K xor opad) || inner).
+		uint8_t full[SHA256_DIGEST];
+		for (size_t i = 0; i < HMAC_BLOCK; i++) pad[i] = key[i] ^ 0x5CU;
+		if (HashInit(CRYPTO_HASH_SHA256, ctx) != CRYPTO_STATUS_OK ||
+			HashUpdate(ctx, pad, sizeof(pad)) != CRYPTO_STATUS_OK ||
+			HashUpdate(ctx, inner, sizeof(inner)) != CRYPTO_STATUS_OK ||
+			HashFinal(ctx, full) != CRYPTO_STATUS_OK)
+		{
+			st = CRYPTO_STATUS_FAIL;
+		}
+		else
+		{
+			memcpy(pMac, full, MacLen);
+		}
+		Sha256Wipe(full, sizeof(full));
+	}
+
+	Sha256Wipe(key, sizeof(key));
+	Sha256Wipe(pad, sizeof(pad));
+	Sha256Wipe(inner, sizeof(inner));
+	Sha256Wipe(ctx, sizeof(ctx));
+	return st;
+}
+
 int CryptoSoftSha256::SelfTest()
 {
 	static const uint8_t msg[3] = {'a','b','c'};
@@ -172,6 +299,26 @@ int CryptoSoftSha256::SelfTest()
 		memcmp(digest, empty, sizeof(digest)) != 0)
 	{
 		return -2;
+	}
+
+	// RFC 4231 test case 2: key "Jefe", message "what do ya want for nothing?".
+	static const uint8_t hmacKey[4] = {'J','e','f','e'};
+	static const uint8_t hmacMsg[28] = {
+		'w','h','a','t',' ','d','o',' ','y','a',' ','w','a','n','t',' ',
+		'f','o','r',' ','n','o','t','h','i','n','g','?'
+	};
+	static const uint8_t hmacExpected[32] = {
+		0x5b,0xdc,0xc1,0x46,0xbf,0x60,0x75,0x4e,0x6a,0x04,0x24,0x26,0x08,0x95,0x75,0xc7,
+		0x5a,0x00,0x3f,0x08,0x9d,0x27,0x39,0x83,0x9d,0xec,0x58,0xb9,0x64,0xec,0x38,0x43
+	};
+	CryptoKey mk{CRYPTO_KEY_HMAC, CRYPTO_KEY_LOC_PLAIN, CRYPTO_KEY_USE_SIGN, {}};
+	mk.Plain.pData = hmacKey;
+	mk.Plain.Len = sizeof(hmacKey);
+	if (Mac(CRYPTO_MAC_HMAC, mk, hmacMsg, sizeof(hmacMsg), digest, 32U) !=
+			CRYPTO_STATUS_OK ||
+		memcmp(digest, hmacExpected, sizeof(hmacExpected)) != 0)
+	{
+		return -3;
 	}
 	return 0;
 }

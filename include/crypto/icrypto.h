@@ -80,6 +80,11 @@ typedef enum __Crypto_Hash_Alg {
 	CRYPTO_HASH_SHA256
 } CRYPTO_HASH_ALG;
 
+typedef enum __Crypto_Aead_Alg {
+	CRYPTO_AEAD_AES_CCM,
+	CRYPTO_AEAD_AES_GCM
+} CRYPTO_AEAD_ALG;
+
 typedef enum __Crypto_Curve {
 	CRYPTO_CURVE_P256,
 	CRYPTO_CURVE_P384
@@ -87,12 +92,14 @@ typedef enum __Crypto_Curve {
 
 #define P256_BYTES	32U
 #define CRYPTO_KEYCTX_MAX	64U
+#define CRYPTO_HASHCTX_MAX	128U
 
 #ifdef __cplusplus
 class CryptoEngine;
 class CipherEngine;
 class MacEngine;
 class HashEngine;
+class AeadEngine;
 class KeyAgreeEngine;
 class SignEngine;
 class RngEngine;
@@ -102,6 +109,7 @@ typedef struct CryptoEngine CryptoEngine;
 typedef struct CipherEngine CipherEngine;
 typedef struct MacEngine MacEngine;
 typedef struct HashEngine HashEngine;
+typedef struct AeadEngine AeadEngine;
 typedef struct KeyAgreeEngine KeyAgreeEngine;
 typedef struct SignEngine SignEngine;
 typedef struct RngEngine RngEngine;
@@ -130,7 +138,9 @@ typedef enum __Crypto_Op {
 	CRYPTO_OP_SIGN,
 	CRYPTO_OP_VERIFY,
 	CRYPTO_OP_HASH,
-	CRYPTO_OP_RANDOM
+	CRYPTO_OP_RANDOM,
+	CRYPTO_OP_SEAL,
+	CRYPTO_OP_OPEN
 } CRYPTO_OP;
 
 typedef void (*CryptoCompleteHandler_t)(CryptoEngine * const pEngine,
@@ -175,6 +185,37 @@ public:
 	}
 };
 
+class AeadEngine : virtual public CryptoEngine {
+public:
+	// Authenticated encryption with associated data. Seal encrypts pMsg and
+	// emits the tag; Open decrypts, verifies the tag in constant time, and
+	// zeroes pOut on any failure. Seal enforces CRYPTO_KEY_USE_ENCRYPT and
+	// Open CRYPTO_KEY_USE_DECRYPT. pOut may equal pMsg for in-place work.
+	virtual CRYPTO_STATUS Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+							   const uint8_t *pNonce, size_t NonceLen,
+							   const uint8_t *pAad, size_t AadLen,
+							   const uint8_t *pMsg, size_t Len,
+							   uint8_t *pOut, uint8_t *pTag, size_t TagLen)
+	{
+		(void)Alg; (void)Key; (void)pNonce; (void)NonceLen; (void)pAad;
+		(void)AadLen; (void)pMsg; (void)Len; (void)pOut; (void)pTag;
+		(void)TagLen;
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	virtual CRYPTO_STATUS Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+							   const uint8_t *pNonce, size_t NonceLen,
+							   const uint8_t *pAad, size_t AadLen,
+							   const uint8_t *pMsg, size_t Len,
+							   uint8_t *pOut, const uint8_t *pTag,
+							   size_t TagLen)
+	{
+		(void)Alg; (void)Key; (void)pNonce; (void)NonceLen; (void)pAad;
+		(void)AadLen; (void)pMsg; (void)Len; (void)pOut; (void)pTag;
+		(void)TagLen;
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+};
+
 class MacEngine : virtual public CryptoEngine {
 public:
 	virtual CRYPTO_STATUS Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
@@ -192,6 +233,29 @@ public:
 							  size_t Len, uint8_t *pDigest)
 	{
 		(void)Alg; (void)pMsg; (void)Len; (void)pDigest;
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+
+	// Streaming digest over caller-provided context storage of HashCtxSize()
+	// bytes (all in-tree consumers reserve CRYPTO_HASHCTX_MAX). HashInit
+	// begins, HashUpdate appends any number of times, HashFinal emits the
+	// digest and invalidates the context. HMAC and multi-part consumers
+	// (signatures over large images, TLS transcripts) build on these.
+	virtual size_t HashCtxSize() const { return 0; }
+	virtual CRYPTO_STATUS HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
+	{
+		(void)Alg; (void)pHashCtx;
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	virtual CRYPTO_STATUS HashUpdate(void *pHashCtx, const uint8_t *pMsg,
+									 size_t Len)
+	{
+		(void)pHashCtx; (void)pMsg; (void)Len;
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	virtual CRYPTO_STATUS HashFinal(void *pHashCtx, uint8_t *pDigest)
+	{
+		(void)pHashCtx; (void)pDigest;
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 };

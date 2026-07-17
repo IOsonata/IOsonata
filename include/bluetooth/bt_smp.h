@@ -215,7 +215,7 @@ typedef struct __Bt_Smp_Ctx {
 	uint8_t  LocalPubKey[64];		//!< SC: local P-256 public key (X||Y)
 	uint8_t  PeerPubKey[64];		//!< SC: peer P-256 public key (X||Y)
 	uint8_t  DhKey[32];				//!< SC: computed DHKey
-	uint8_t  EcdhKeyCtx[64];		//!< SC: ECDH private-key context, KeyGen to Agree (per-link, wiped after)
+	uint8_t  EcdhKeyCtx[CRYPTO_KEYCTX_MAX];	//!< SC: ECDH private-key context, KeyGen to Agree (per-link, wiped after)
 	uint8_t  Mackey[16];			//!< SC: MacKey from f5
 	uint8_t  Ltk[16];				//!< Derived/working LTK
 	uint32_t Passkey;				//!< Passkey Entry: 6 digit value 0..999999
@@ -400,12 +400,18 @@ void BtSmpTimeoutCheck(void);
  * fails loud. The same engine pointer may be passed for both slots if one engine
  * implements both facets.
  *
- * Randomness is NOT a slot: it comes from the target RngGet driver
- * (crypto/icrypto.h), backed by the MCU RNG peripheral, which SMP calls directly.
- * A target without an RNG peripheral does not link.
+ * Randomness is the third slot: an injected RngEngine (crypto/icrypto.h),
+ * normally the MCU hardware RNG (CryptoRngNrfInstance and equivalents). SMP
+ * treats a draw failure as a pairing failure.
+ *
+ * The per-link and OOB key contexts are CRYPTO_KEYCTX_MAX bytes. An ECDH
+ * engine whose KeyCtxSize() is zero or exceeds that bound is refused and the
+ * slot left disabled, so Secure Connections pairing fails cleanly instead of
+ * overrunning caller storage.
  *
  * @param	pEcdh	KeyAgreeEngine providing P-256 ECDH.
  * @param	pAes	CipherEngine providing AES-128 ECB.
+ * @param	pRng	RngEngine providing security-grade randomness.
  */
 void BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng);
 
@@ -491,13 +497,13 @@ void BtSmpOobDataClear(void);
  * Controller's HCI LE Encrypt. This is a Bluetooth helper, NOT a generic crypto
  * engine - it requires a running BLE controller and is only valid for the SMP
  * AES slot. On a part with no CryptoCell, compose it with a software ECDH engine
- * (randomness comes from the RngGet utility):
+ * (randomness is the injected RngEngine):
  *
- *   static uint8_t ecdhMem[CRYPTO_UECC_MEMSIZE];
+ *   alignas(CryptoUecc) static uint8_t ecdhMem[CRYPTO_UECC_MEMSIZE];
  *   CryptoUecc *ecdh = CryptoUeccCreate(ecdhMem, sizeof(ecdhMem),
  *                                       CryptoRngNrfInstance());
  *   CipherEngine *aes = BtCryptoCtlrSdcInit();   // controller AES
- *   BtSmpInit(ecdh, aes);
+ *   BtSmpInit(ecdh, aes, CryptoRngNrfInstance());
  *
  * @return	The controller AES engine, or nullptr if the SDC HCI is not present.
  */

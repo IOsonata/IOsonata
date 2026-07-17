@@ -50,6 +50,7 @@ enum CC3XX_ECDH_TEST_ERR {
 	CC3XX_ECDH_TEST_ERR_SW_CREATE   = -10,	// software oracle failed to construct
 	CC3XX_ECDH_TEST_ERR_CONTEND     = -11,	// lock contention was not honored
 	CC3XX_ECDH_TEST_ERR_STALE_KEY   = -12,	// old key survived a rejected KeyGen
+	CC3XX_ECDH_TEST_ERR_LIFECYCLE   = -13,	// disable/enable lifecycle broken
 };
 
 volatile int g_Cc3xxEcdhTestResult;
@@ -272,6 +273,27 @@ bool Cc3xxEcdhTest(void)
 		}
 		printf("PASS\r\n");
 		CC3XX_ECDH_TEST_MARK(9);
+
+		// Step 10 : device lifecycle through the interface reference count.
+		// A disabled engine must refuse every operation (and must not
+		// silently repower the wrapper); Enable must bring it back.
+		printf("[10] disable/enable lifecycle    : ");
+		pCc->Disable();
+		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) !=
+			CRYPTO_STATUS_FAIL || pCc->SelfTest() == 0)
+		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_LIFECYCLE);
+			break;
+		}
+		if (!pCc->Enable() ||
+			pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_OK ||
+			pCc->SelfTest() != 0)
+		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_LIFECYCLE);
+			break;
+		}
+		printf("PASS\r\n");
+		CC3XX_ECDH_TEST_MARK(10);
 
 		printf("\r\nAll steps passed. Result 0, pass mask 0x%02X\r\n",
 			   (unsigned)g_Cc3xxEcdhTestPassMask);

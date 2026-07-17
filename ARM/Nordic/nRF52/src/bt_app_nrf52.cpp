@@ -2015,8 +2015,8 @@ extern "C" uint32_t BtLescDhKeyReply(uint16_t ConnHdl, uint8_t SecStatus,
 	if (pDhKey == NULL)
 	{
 		// Deliberately wrong DH key: any value that differs from the real ECDH
-		// result fails the peer DHKey check. If RngGet fails the zero filled
-		// key is still wrong, so reply regardless.
+		// result fails the peer DHKey check. If the RNG draw fails the zero
+		// filled key is still wrong, so reply regardless.
 		static ble_gap_lesc_dhkey_t s_BadDhKey;
 
 		(void)CryptoRngNrfInstance()->Random(s_BadDhKey.key, BLE_GAP_LESC_DHKEY_LEN);

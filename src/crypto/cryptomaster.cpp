@@ -294,3 +294,22 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	}
 	return status;
 }
+
+// Inherited CMAC bracket: one module hold for the whole MAC. AesOpEnd is only
+// called after a successful AesOpBegin, so vpCracen is set here.
+bool CryptoMaster::AesOpBegin()
+{
+	return vpCracen != nullptr &&
+		vpCracen->ModuleHold(CRACEN_MODULE_CRYPTOMASTER);
+}
+
+void CryptoMaster::AesOpEnd()
+{
+	vpCracen->ModuleRelease();
+}
+
+bool CryptoMaster::AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16],
+							   uint8_t Out[16])
+{
+	return CmAesBlock(this, Key, In, Out);
+}

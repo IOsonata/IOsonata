@@ -87,6 +87,14 @@ public:
 						 const uint8_t *pIn, size_t Len,
 						 uint8_t *pOut) override;
 
+protected:
+	// Inherited CMAC bracket: hold the CryptoMaster module once for the
+	// whole MAC and run each block on the hardware without reacquiring.
+	bool AesOpBegin() override;
+	void AesOpEnd() override;
+	bool AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16],
+					 uint8_t Out[16]) override;
+
 private:
 	CracenIntrf *vpCracen;
 };

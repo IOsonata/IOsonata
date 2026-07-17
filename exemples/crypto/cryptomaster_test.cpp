@@ -134,6 +134,10 @@ int main(void)
 	check("cipher fails while CRACEN is held",
 		held && cipher->Cipher(CRYPTO_CIPHER_ECB, 1, kat, nullptr, 0,
 							   katIn, 16, result) == CRYPTO_STATUS_FAIL);
+	uint8_t heldTag[16];
+	check("CMAC fails while CRACEN is held",
+		held && macEngine->Mac(CRYPTO_MAC_CMAC, signKey, message, 16,
+							   heldTag, 16) == CRYPTO_STATUS_FAIL);
 	check("foreign hold survives the rejected cipher",
 		held && !cracen->ModuleHold(CRACEN_MODULE_CRYPTOMASTER));
 	if (held)
@@ -144,6 +148,53 @@ int main(void)
 		cipher->Cipher(CRYPTO_CIPHER_ECB, 1, kat, nullptr, 0,
 					   katIn, 16, result) == CRYPTO_STATUS_OK &&
 		memcmp(result, katExpected, 16) == 0);
+	check("CMAC recovers after release",
+		macEngine->Mac(CRYPTO_MAC_CMAC, signKey, message, 16,
+					   heldTag, 16) == CRYPTO_STATUS_OK &&
+		memcmp(heldTag, mac16, 16) == 0);
+
+	// Inherited AES-CCM: the hardware block primitive serves the whole seal
+	// and open under one hold; hardware output must equal software.
+	AeadEngine *hwAead = hardware;
+	AeadEngine *swAead = software;
+	static const uint8_t ccmNonce[13] = {0,0,0,3,2,1,0,0xA0,0xA1,0xA2,0xA3,
+										 0xA4,0xA5};
+	uint8_t ccmAad[8], ccmMsg[23];
+	for (int i = 0; i < 8; i++) ccmAad[i] = (uint8_t)i;
+	for (int i = 0; i < 23; i++) ccmMsg[i] = (uint8_t)(i + 8);
+	CryptoKey ak = kat;
+	ak.Usage = CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT;
+	uint8_t hwCt[23], swCt[23], hwT[8], swT[8], back[23];
+	check("hardware CCM equals software CCM",
+		hwAead->Seal(CRYPTO_AEAD_AES_CCM, ak, ccmNonce, 13, ccmAad, 8,
+					 ccmMsg, 23, hwCt, hwT, 8) == CRYPTO_STATUS_OK &&
+		swAead->Seal(CRYPTO_AEAD_AES_CCM, ak, ccmNonce, 13, ccmAad, 8,
+					 ccmMsg, 23, swCt, swT, 8) == CRYPTO_STATUS_OK &&
+		memcmp(hwCt, swCt, 23) == 0 && memcmp(hwT, swT, 8) == 0);
+	check("hardware CCM open roundtrip and tamper rejection",
+		hwAead->Open(CRYPTO_AEAD_AES_CCM, ak, ccmNonce, 13, ccmAad, 8,
+					 hwCt, 23, back, hwT, 8) == CRYPTO_STATUS_OK &&
+		memcmp(back, ccmMsg, 23) == 0 &&
+		(hwT[0] ^= 1U, hwAead->Open(CRYPTO_AEAD_AES_CCM, ak, ccmNonce, 13,
+									ccmAad, 8, hwCt, 23, back, hwT, 8) ==
+			CRYPTO_STATUS_FAIL));
+
+	uint8_t gcmIv[12];
+	for (int i = 0; i < 12; i++) gcmIv[i] = (uint8_t)(0x10 + i);
+	uint8_t hwGT[16], swGT[16];
+	check("hardware GCM equals software GCM",
+		hwAead->Seal(CRYPTO_AEAD_AES_GCM, ak, gcmIv, 12, ccmAad, 8,
+					 ccmMsg, 23, hwCt, hwGT, 16) == CRYPTO_STATUS_OK &&
+		swAead->Seal(CRYPTO_AEAD_AES_GCM, ak, gcmIv, 12, ccmAad, 8,
+					 ccmMsg, 23, swCt, swGT, 16) == CRYPTO_STATUS_OK &&
+		memcmp(hwCt, swCt, 23) == 0 && memcmp(hwGT, swGT, 16) == 0);
+	check("hardware GCM open roundtrip and tamper rejection",
+		hwAead->Open(CRYPTO_AEAD_AES_GCM, ak, gcmIv, 12, ccmAad, 8,
+					 hwCt, 23, back, hwGT, 16) == CRYPTO_STATUS_OK &&
+		memcmp(back, ccmMsg, 23) == 0 &&
+		(hwGT[0] ^= 1U, hwAead->Open(CRYPTO_AEAD_AES_GCM, ak, gcmIv, 12,
+									 ccmAad, 8, hwCt, 23, back, hwGT, 16) ==
+			CRYPTO_STATUS_FAIL));
 
 	printf("\n%d passed, %d failed\n", s_pass, s_fail);
 	return s_fail == 0 ? 0 : 1;

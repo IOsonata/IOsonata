@@ -4,11 +4,13 @@
 @brief	Software AES-128 crypto engine: cipher and CMAC.
 
 		Declares CryptoSoftAes, the software implementation of the CipherEngine
-		(AES-128 ECB/CTR/CBC) and MacEngine (AES-CMAC) facets. It is the software
+		(AES-128 ECB/CTR/CBC), MacEngine (AES-CMAC) and AeadEngine (AES-CCM)
+		facets. It is the software
 		base of the symmetric facets: a hardware AES block (Silex CryptoMaster,
-		Arm CryptoCell) inherits the same facets and overrides Cipher, and the
-		inherited software CMAC then runs over that hardware AES through the
-		virtual Cipher call. A build with no accelerator uses this class directly.
+		Arm CryptoCell) inherits the same facets, overrides Cipher and the
+		AesEcbEncrypt block primitive, and the inherited software CMAC then runs
+		over that hardware AES inside one AesOpBegin/AesOpEnd bracket. A build with
+		no accelerator uses this class directly.
 
 		AES-128 only. All values are byte strings in the natural order (the AES
 		state is column-major per FIPS-197), matching the SMP toolbox and the
@@ -35,9 +37,11 @@
 ///
 /// Stateless beyond the Device lifecycle: the key travels with each call in the
 /// CryptoKey, so one engine object serves any number of keys. CMAC is computed
-/// over the virtual Cipher call, so a subclass that overrides Cipher with
-/// hardware AES gets hardware-backed CMAC with no further code.
-class CryptoSoftAes : public CipherEngine, public MacEngine {
+/// over the virtual AesEcbEncrypt primitive between the AesOpBegin/AesOpEnd hooks,
+/// so a hardware subclass gets hardware-backed CMAC under one operation-level
+/// acquisition by overriding those three.
+class CryptoSoftAes : public CipherEngine, public MacEngine,
+					  public AeadEngine {
 public:
 	CryptoSoftAes() { vbValid = false; }
 
@@ -57,8 +61,47 @@ public:
 					  const uint8_t *pMsg, size_t Len,
 					  uint8_t *pMac, size_t MacLen) override;
 
+	// AeadEngine: AES-CCM (RFC 3610) over the AesEcbEncrypt primitive inside
+	// one AesOpBegin/AesOpEnd bracket, so a hardware subclass runs the whole
+	// seal or open under one acquisition. Nonce 7..13 bytes, tag an even
+	// 4..16 bytes, AAD shorter than 65280 bytes.
+	CRYPTO_STATUS Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+					   const uint8_t *pNonce, size_t NonceLen,
+					   const uint8_t *pAad, size_t AadLen,
+					   const uint8_t *pMsg, size_t Len,
+					   uint8_t *pOut, uint8_t *pTag, size_t TagLen) override;
+	CRYPTO_STATUS Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+					   const uint8_t *pNonce, size_t NonceLen,
+					   const uint8_t *pAad, size_t AadLen,
+					   const uint8_t *pMsg, size_t Len,
+					   uint8_t *pOut, const uint8_t *pTag,
+					   size_t TagLen) override;
+
 	// Known-answer self-test: FIPS-197 AES-128 ECB and RFC 4493 CMAC vectors.
 	int SelfTest() override;
+
+private:
+	// CCM authentication: the CBC-MAC over B0, AAD and message, masked with
+	// the A0 keystream. Runs inside the caller's AesOpBegin/AesOpEnd bracket.
+	bool CcmMacTag(const uint8_t *pKey, const uint8_t *pNonce, size_t NonceLen,
+				   const uint8_t *pAad, size_t AadLen,
+				   const uint8_t *pMsg, size_t Len, size_t TagLen,
+				   uint8_t Tag[16]);
+
+protected:
+	// Hooks for a hardware subclass to bracket the whole CMAC in one
+	// operation-level acquisition. Mac calls AesOpBegin once before any block,
+	// AesOpEnd once on every exit after a successful AesOpBegin. The software
+	// base needs neither.
+	virtual bool AesOpBegin() { return true; }
+	virtual void AesOpEnd() {}
+
+	// One AES-128 ECB block encrypt for the inherited CMAC, called only
+	// between AesOpBegin and AesOpEnd. The base encrypts in software; a hardware
+	// subclass overrides it and may assume the acquisition its AesOpBegin took
+	// is still owned.
+	virtual bool AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16],
+							 uint8_t Out[16]);
 };
 
 /// Bytes of storage CryptoSoftAesCreate needs.
