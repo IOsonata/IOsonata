@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	rng_stm32.cpp
 
-@brief	STM32 hardware RNG provider: CryptoRngStm32 (RngEngine) plus C-shim.
+@brief	STM32 hardware RNG provider: CryptoRngStm32 on the RngEngine facet.
 
 		One implementation for STM32 families that have the RNG peripheral.
 		This file does not call the STM32 HAL or LL drivers. It includes the
@@ -12,7 +12,7 @@
 
 		This code enables the RNG peripheral clock and the RNG block. It does not
 		rebuild the system clock tree. If the RNG kernel clock is not valid, the
-		status register reports a clock error and RngGet returns false. Configure
+		status register reports a clock error and Random reports failure. Configure
 		the RNG clock source in the board/system clock code.
 
 @author	Hoang Nguyen Hoan
@@ -129,7 +129,7 @@ static void RngRecoverSeedError(void)
 	RngEnable();
 }
 
-extern "C" bool RngInit(void)
+static bool RngInit(void)
 {
 	if (s_RngInited && ((RNG->CR & RNG_CR_RNGEN) != 0U))
 	{
@@ -248,10 +248,3 @@ CryptoRngStm32 *CryptoRngStm32Instance(void)
 	return &s_Instance;
 }
 
-//-----------------------------------------------------------------------------
-// C-shim: forward the free functions to the singleton so there is one path.
-//-----------------------------------------------------------------------------
-extern "C" bool RngGet(uint8_t *pBuff, size_t Len)
-{
-	return CryptoRngStm32Instance()->Random(pBuff, Len) == CRYPTO_STATUS_OK;
-}

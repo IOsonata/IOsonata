@@ -5,7 +5,7 @@
 
 		OO engine over the STM32 RNG peripheral, direct CMSIS register access
 		(no STM32 HAL or LL). Mirrors the Nordic CryptoRngNrf: a singleton
-		engine plus a C-shim (RngGet) for callers not yet on the facet.
+		engine on the RngEngine facet; entropy is drawn through Random.
 
 		STM32F0/F030 has no hardware RNG and must not link the implementation.
 
@@ -53,29 +53,17 @@ public:
 /// @brief	Singleton accessor for the STM32 hardware RNG engine. Constructs on
 ///			first use in internal static storage (no allocation) and returns the
 ///			same instance thereafter. Returns the engine even before Enable; the
-///			caller or RngGet enables it on first draw.
+///			caller or the first Random draw enables it.
 CryptoRngStm32 *CryptoRngStm32Instance(void);
 
 #endif // __cplusplus
 
 //-----------------------------------------------------------------------------
-// Compatibility C-shim. Callers that have not moved to the engine facet use
-// these free functions; they forward to the singleton engine so there is one
-// hardware path.
+// The RNG is reached through the RngEngine facet: hold a CryptoRngStm32 (or
+// the singleton CryptoRngStm32Instance) and call Random. Consumers that need
+// entropy take an injected RngEngine pointer, so a software generator can
+// stand in for the hardware one. There is no free-function entropy shim.
 //-----------------------------------------------------------------------------
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/// Bring up the hardware RNG. Idempotent. Returns false when unavailable.
-bool RngInit(void);
-
-/// Fill pBuff with Len hardware random bytes. Returns false on failure.
-bool RngGet(uint8_t *pBuff, size_t Len);
-
-#ifdef __cplusplus
-}
-#endif
 
 /** @} */
 
