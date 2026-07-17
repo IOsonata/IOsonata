@@ -126,6 +126,25 @@ int main(void)
 		cipher->Cipher(CRYPTO_CIPHER_ECB, 1, denied, nullptr, 0,
 					   katIn, 16, result) == CRYPTO_STATUS_UNSUPPORTED);
 
+	// CRACEN contention. While another operation owns the core the cipher
+	// must fail cleanly, leave the foreign hold in place, and recover after
+	// release.
+	CracenIntrf *cracen = CracenIntrfInstance();
+	bool held = cracen->ModuleHold(CRACEN_MODULE_RNG);
+	check("cipher fails while CRACEN is held",
+		held && cipher->Cipher(CRYPTO_CIPHER_ECB, 1, kat, nullptr, 0,
+							   katIn, 16, result) == CRYPTO_STATUS_FAIL);
+	check("foreign hold survives the rejected cipher",
+		held && !cracen->ModuleHold(CRACEN_MODULE_CRYPTOMASTER));
+	if (held)
+	{
+		cracen->ModuleRelease();
+	}
+	check("cipher recovers after release",
+		cipher->Cipher(CRYPTO_CIPHER_ECB, 1, kat, nullptr, 0,
+					   katIn, 16, result) == CRYPTO_STATUS_OK &&
+		memcmp(result, katExpected, 16) == 0);
+
 	printf("\n%d passed, %d failed\n", s_pass, s_fail);
 	return s_fail == 0 ? 0 : 1;
 }

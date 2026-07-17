@@ -102,6 +102,39 @@ int main(void)
 		hardware->Agree(CRYPTO_CURVE_P256, singleCtx, pubA, ignored) ==
 			CRYPTO_STATUS_FAIL);
 
+	// CRACEN contention. Take the operation hold the way another engine
+	// would, then confirm every crypto path fails cleanly, the foreign hold
+	// is neither stolen nor released, and normal operation resumes after
+	// release. The engines draw their entropy before taking the public-key
+	// hold, so under a whole-core hold the failure surfaces at the entropy
+	// draw; the observable fail-closed outcome is the same.
+	CracenIntrf *cracen = CracenIntrfInstance();
+	alignas(Ba414ep::KeyCtx) uint8_t contCtx[64];
+	hardware->KeyReset(contCtx);
+	memcpy(((Ba414ep::KeyCtx *)contCtx)->PrivKey, privA, sizeof(privA));
+	((Ba414ep::KeyCtx *)contCtx)->bKeyValid = true;
+	bool held = cracen->ModuleHold(CRACEN_MODULE_RNG);
+	check("interface accepts one owner and rejects a second",
+		held && !cracen->ModuleHold(CRACEN_MODULE_PKEIKG));
+	uint8_t entropy[16];
+	check("entropy draw fails while CRACEN is held",
+		held && rng->Random(entropy, sizeof(entropy)) != CRYPTO_STATUS_OK);
+	check("Agree fails while CRACEN is held",
+		held && hardware->Agree(CRYPTO_CURVE_P256, contCtx, pubA, ignored) !=
+			CRYPTO_STATUS_OK);
+	check("KeyGen fails while CRACEN is held",
+		held && hardware->KeyGen(CRYPTO_CURVE_P256, contCtx, generatedPub) ==
+			CRYPTO_STATUS_FAIL);
+	check("foreign hold survives the rejected operations",
+		held && !cracen->ModuleHold(CRACEN_MODULE_RNG));
+	if (held)
+	{
+		cracen->ModuleRelease();
+	}
+	check("KeyGen recovers after release",
+		hardware->KeyGen(CRYPTO_CURVE_P256, contCtx, generatedPub) ==
+			CRYPTO_STATUS_OK);
+
 	printf("\n%d passed, %d failed\n", s_pass, s_fail);
 	return s_fail == 0 ? 0 : 1;
 }

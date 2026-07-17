@@ -48,6 +48,8 @@ enum CC3XX_ECDH_TEST_ERR {
 	CC3XX_ECDH_TEST_ERR_BAD_POINT   = -8,	// invalid peer point was accepted
 	CC3XX_ECDH_TEST_ERR_REUSE_AFTER = -9,	// key survived a failed validation
 	CC3XX_ECDH_TEST_ERR_SW_CREATE   = -10,	// software oracle failed to construct
+	CC3XX_ECDH_TEST_ERR_CONTEND     = -11,	// lock contention was not honored
+	CC3XX_ECDH_TEST_ERR_STALE_KEY   = -12,	// old key survived a rejected KeyGen
 };
 
 volatile int g_Cc3xxEcdhTestResult;
@@ -221,6 +223,55 @@ bool Cc3xxEcdhTest(void)
 		}
 		printf("PASS\r\n");
 		CC3XX_ECDH_TEST_MARK(7);
+
+		// Step 8 : operation-lock contention. Hold the CC3xx operation lock
+		// the way a concurrent operation would. KeyGen must fail cleanly,
+		// must not steal or release the foreign hold, and the engine must
+		// recover once the lock is released.
+		printf("[8] KeyGen fails while lock held : ");
+		Cc3xxIntrf *pLock = Cc3xxIntrfInstance();
+		if (pLock == nullptr || !pLock->OpHold())
+		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_CONTEND);
+			break;
+		}
+		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_FAIL ||
+			pLock->OpHold())
+		{
+			pLock->OpRelease();
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_CONTEND);
+			break;
+		}
+		pLock->OpRelease();
+		printf("PASS\r\n");
+		CC3XX_ECDH_TEST_MARK(8);
+
+		// Step 9 : a KeyGen rejected at acquisition must not leave the
+		// previous key usable in the reused context. Generate a valid key,
+		// fail one KeyGen under the lock, then Agree with that context must
+		// fail because the context was reset before the acquisition attempt.
+		printf("[9] no stale key after failed gen: ");
+		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_OK ||
+			!pLock->OpHold())
+		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_STALE_KEY);
+			break;
+		}
+		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_FAIL)
+		{
+			pLock->OpRelease();
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_STALE_KEY);
+			break;
+		}
+		pLock->OpRelease();
+		if (pCc->Agree(CRYPTO_CURVE_P256, ccCtx, ueccPub, dhCc) !=
+			CRYPTO_STATUS_FAIL)
+		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_STALE_KEY);
+			break;
+		}
+		printf("PASS\r\n");
+		CC3XX_ECDH_TEST_MARK(9);
 
 		printf("\r\nAll steps passed. Result 0, pass mask 0x%02X\r\n",
 			   (unsigned)g_Cc3xxEcdhTestPassMask);

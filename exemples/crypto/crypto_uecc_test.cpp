@@ -114,6 +114,31 @@ int main(void)
 		weakEngine != nullptr && weakEngine->KeyGen(CRYPTO_CURVE_P256,
 			weakCtx, pubA) == CRYPTO_STATUS_UNSUPPORTED);
 
+	// Agree runs the private scalar against a caller-supplied point. The
+	// engine binds its RNG so micro-ecc applies the initial-Z randomization,
+	// and refuses to run without a security-grade source.
+	CryptoUecc::KeyCtx *weakKey = (CryptoUecc::KeyCtx *)weakCtx;
+	memcpy(weakKey->PrivKey, privateKey, sizeof(privateKey));
+	weakKey->bKeyValid = true;
+	check("Agree refuses a non-secure PRNG",
+		weakEngine != nullptr &&
+		weakEngine->Agree(CRYPTO_CURVE_P256, weakCtx, publicKey, sharedA) ==
+			CRYPTO_STATUS_FAIL);
+	check("refused Agree wipes the retained key", weakKey->bKeyValid == false);
+
+	alignas(CryptoUecc) static uint8_t noRngMem[CRYPTO_UECC_MEMSIZE];
+	CryptoUecc *noRngEngine = CryptoUeccCreate(noRngMem, sizeof(noRngMem),
+											   nullptr);
+	alignas(CryptoUecc::KeyCtx) uint8_t noRngCtx[64];
+	memset(noRngCtx, 0, sizeof(noRngCtx));
+	CryptoUecc::KeyCtx *noRngKey = (CryptoUecc::KeyCtx *)noRngCtx;
+	memcpy(noRngKey->PrivKey, privateKey, sizeof(privateKey));
+	noRngKey->bKeyValid = true;
+	check("Agree refuses without an RNG",
+		noRngEngine != nullptr &&
+		noRngEngine->Agree(CRYPTO_CURVE_P256, noRngCtx, publicKey, sharedA) ==
+			CRYPTO_STATUS_FAIL);
+
 	printf("\n%d passed, %d failed\n", s_pass, s_fail);
 	return s_fail == 0 ? 0 : 1;
 }
