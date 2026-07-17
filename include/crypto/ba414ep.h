@@ -113,6 +113,10 @@ public:
 
 	size_t KeyCtxSize() const override { return sizeof(KeyCtx); }
 	void KeyReset(void *pKeyCtx) override;
+
+	// Known-answer self-test: LESC debug key point multiplication on the
+	// hardware, including the blinding countermeasure path.
+	int SelfTest() override;
 	CRYPTO_STATUS KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 						 uint8_t *pPubKey) override;
 	CRYPTO_STATUS Agree(CRYPTO_CURVE Curve, void *pKeyCtx,

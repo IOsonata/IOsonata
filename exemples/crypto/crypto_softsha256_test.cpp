@@ -179,6 +179,27 @@ int main(void)
 		counting->InitCalls == 3 && counting->FinalCalls == 3 &&
 		counting->UpdateCalls >= 5);
 
+	// Context lifecycle hardening: misaligned storage refused, an
+	// uninitialized context refused, a finalized context dead until re-init.
+	check("streaming rejects misaligned context",
+		engine->HashInit(CRYPTO_HASH_SHA256, ctx + 1) ==
+			CRYPTO_STATUS_UNSUPPORTED);
+	alignas(uint64_t) uint8_t coldCtx[CRYPTO_HASHCTX_MAX];
+	memset(coldCtx, 0x5A, sizeof(coldCtx));
+	check("update before init refused",
+		engine->HashUpdate(coldCtx, (const uint8_t *)kMsg56, 8) ==
+			CRYPTO_STATUS_UNSUPPORTED);
+	bool dbl =
+		engine->HashInit(CRYPTO_HASH_SHA256, coldCtx) == CRYPTO_STATUS_OK &&
+		engine->HashUpdate(coldCtx, (const uint8_t *)kMsg56,
+						   sizeof(kMsg56) - 1U) == CRYPTO_STATUS_OK &&
+		engine->HashFinal(coldCtx, digest) == CRYPTO_STATUS_OK &&
+		memcmp(digest, kDigest56, sizeof(digest)) == 0 &&
+		engine->HashFinal(coldCtx, digest2) == CRYPTO_STATUS_UNSUPPORTED;
+	check("second final on a finalized context refused", dbl);
+	check("context alignment surfaced by the facet",
+		engine->HashCtxAlign() == alignof(uint64_t));
+
 	printf("\n%d passed, %d failed\n", s_pass, s_fail);
 	return s_fail == 0 ? 0 : 1;
 }

@@ -22,12 +22,19 @@ a `Cap` bit and the backing function pointer disagree.
 
 | Facet | Operation | Algorithm argument | Values today |
 |---|---|---|---|
-| `CipherEngine` | `Cipher` | `CRYPTO_CIPHER_ALG` | `CRYPTO_CIPHER_ECB` (AES-128); CTR / CBC / XTS reserved |
-| `MacEngine` | `Mac` | `CRYPTO_MAC_ALG` | `CRYPTO_MAC_CMAC`; HMAC / GMAC reserved |
-| `HashEngine` | `Hash` | `CRYPTO_HASH_ALG` | `CRYPTO_HASH_SHA256` |
+| `CipherEngine` | `Cipher` | `CRYPTO_CIPHER_ALG` | `CRYPTO_CIPHER_ECB`, `CRYPTO_CIPHER_CTR`, `CRYPTO_CIPHER_CBC` (AES-128); XTS reserved |
+| `MacEngine` | `Mac` | `CRYPTO_MAC_ALG` | `CRYPTO_MAC_CMAC` (AES engines), `CRYPTO_MAC_HMAC` (SHA-256 engine); GMAC reserved |
+| `AeadEngine` | `Seal`, `Open` | `CRYPTO_AEAD_ALG` | `CRYPTO_AEAD_AES_CCM` (RFC 3610), `CRYPTO_AEAD_AES_GCM` (SP 800-38D, 96 bit IV) |
+| `HashEngine` | `Hash`; `HashInit` / `HashUpdate` / `HashFinal` | `CRYPTO_HASH_ALG` | `CRYPTO_HASH_SHA256`, one-shot and streaming |
 | `KeyAgreeEngine` | `KeyGen`, `Agree` | `CRYPTO_CURVE` | `CRYPTO_CURVE_P256` |
 | `SignEngine` | `Sign`, `Verify` | `CRYPTO_CURVE` | `CRYPTO_CURVE_P256` (ECDSA) |
 | `RngEngine` | `Random` | none | hardware or software source |
+
+Streaming hash contexts are caller storage of `HashCtxSize()` bytes aligned to
+`HashCtxAlign()`; every in-tree consumer reserves `CRYPTO_HASHCTX_MAX` with
+`alignas(uint64_t)`. `CRYPTO_STATUS_BUSY` marks transient accelerator
+contention: outputs are cleared and a caller-held single-use key survives for
+retry, while `CRYPTO_STATUS_FAIL` always consumes it.
 
 New primitives are added by extending an algorithm enum (a new
 `CRYPTO_CIPHER_*` or `CRYPTO_HASH_*` value) or, for a new primitive family, by
@@ -44,9 +51,9 @@ The object exposes a few descriptive predicates instead of a `Props` word:
   statistical PRNG. A security-path caller must use a secure source.
 
 Whether an engine is hardware-backed or keeps its key in a secure keystore is a
-property of which concrete class was constructed (`Ba414ep`, `CryptoCc3xx`,
-`CryptoPsa`), known at the point of construction, so it does not need a runtime
-property bit.
+property of which concrete class was constructed (`Ba414ep`, `CryptoCc3xx`),
+known at the point of construction, so it does not need a runtime property
+bit.
 
 ## Which engine implements which facet
 
@@ -55,21 +62,25 @@ property bit.
 | `CryptoUecc` | `KeyAgreeEngine`, `SignEngine` |
 | `Ba414ep` | `KeyAgreeEngine` |
 | `CryptoCc3xx` | `KeyAgreeEngine` |
-| `CryptoSoftAes` | `CipherEngine`, `MacEngine` |
-| `CryptoMaster` | `CipherEngine`, `MacEngine` |
-| `CryptoSoftSha256` | `HashEngine` |
+| `CryptoSoftAes` | `CipherEngine`, `MacEngine`, `AeadEngine` |
+| `CryptoMaster` | `CipherEngine`, `MacEngine`, `AeadEngine` |
+| `CryptoSoftSha256` | `HashEngine`, `MacEngine` (HMAC-SHA-256) |
 | `CryptoSoftRng`, `CryptoRngNrf`, `CryptoRngStm32` | `RngEngine` |
-| `CryptoPsa` | `CipherEngine`, `KeyAgreeEngine` |
 | `CryptoCtlrSdc` | `CipherEngine` (Bluetooth-owned, controller AES) |
 
-## The software AES base and derived MACs
+## The software AES base and derived constructions
 
-`CryptoSoftAes` implements both `CipherEngine` (AES-128) and `MacEngine`
-(AES-CMAC). CMAC is computed over the virtual `Cipher` call, so a hardware AES
-engine that overrides `Cipher` (for example `CryptoMaster`) gets hardware-backed
-CMAC with no further code: the inherited software CMAC dispatches through the
-overridden cipher. AEAD modes (CCM, GCM) follow the same pattern when added:
-generic constructions over `Cipher`, so they run on any AES engine.
+`CryptoSoftAes` implements `CipherEngine` (AES-128 ECB/CTR/CBC), `MacEngine`
+(AES-CMAC) and `AeadEngine` (AES-CCM, AES-GCM). CMAC, CCM and GCM are computed
+over the protected virtual block primitive `AesEcbEncrypt` inside one
+`AesOpBegin` / `AesOpEnd` bracket per operation, so a hardware AES engine that
+overrides those three (`CryptoMaster`) gets hardware-backed CMAC, CCM and GCM
+under a single accelerator acquisition with no further code. The GCM GHASH
+field multiply is constant-time software on every engine. HMAC-SHA-256
+follows the same pattern on the hash side: the generic RFC 2104 construction
+in `CryptoSoftSha256` chains the virtual streaming hash calls, so a hardware
+digest block that overrides them provides the digest work. The generic HMAC
+requires a synchronous hash engine (`!IsAsync()`).
 
 ## Note on the DFU SHA-256 utility
 

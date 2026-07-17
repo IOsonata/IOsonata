@@ -69,6 +69,9 @@ int main(void)
 	CryptoUecc *software = CryptoUeccCreate(swMem, sizeof(swMem), rng);
 	check("hardware and software engines construct",
 		hardware != nullptr && software != nullptr);
+
+	check("hardware self-test (LESC debug key KAT)",
+		hardware->SelfTest() == 0);
 	if (hardware == nullptr || software == nullptr) return 1;
 
 	alignas(Ba414ep::KeyCtx) uint8_t hwCtx[64];

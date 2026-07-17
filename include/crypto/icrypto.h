@@ -176,7 +176,10 @@ typedef void (*CryptoCompleteHandler_t)(CryptoEngine * const pEngine,
 class CryptoEngine : virtual public Device {
 public:
 	virtual ~CryptoEngine() {}
-	virtual int SelfTest() { return 0; }
+	// Known-answer self-test: 0 on pass. The default reports not implemented
+	// as a failure, so an engine that claims a facet without providing its
+	// own test cannot report healthy hardware it never exercised.
+	virtual int SelfTest() { return -1; }
 	void SetCompleteHandler(CryptoCompleteHandler_t Handler, void *pCtx)
 	{
 		vCompleteHandler = Handler;
@@ -262,11 +265,14 @@ public:
 	}
 
 	// Streaming digest over caller-provided context storage of HashCtxSize()
-	// bytes (all in-tree consumers reserve CRYPTO_HASHCTX_MAX). HashInit
-	// begins, HashUpdate appends any number of times, HashFinal emits the
-	// digest and invalidates the context. HMAC and multi-part consumers
-	// (signatures over large images, TLS transcripts) build on these.
+	// bytes aligned to HashCtxAlign() (all in-tree consumers reserve
+	// CRYPTO_HASHCTX_MAX with alignas(uint64_t)). HashInit begins, HashUpdate
+	// appends any number of times, HashFinal emits the digest and
+	// invalidates the context; an uninitialized, finalized or misaligned
+	// context is rejected. HMAC and multi-part consumers (signatures over
+	// large images, TLS transcripts) build on these.
 	virtual size_t HashCtxSize() const { return 0; }
+	virtual size_t HashCtxAlign() const { return alignof(uint64_t); }
 	virtual CRYPTO_STATUS HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
 	{
 		(void)Alg; (void)pHashCtx;

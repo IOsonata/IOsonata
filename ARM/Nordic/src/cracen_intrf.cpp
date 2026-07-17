@@ -314,7 +314,9 @@ bool CracenIntrf::ModuleHold(uint32_t Module)
 	return true;
 }
 
-void CracenIntrf::ModuleRelease(void)
+// Release the single-owner hold and restore the module enable state. Shared
+// by the normal ModuleRelease and the owner-aware reset abort below.
+static void CracenHoldRelease(void)
 {
 	const uint32_t mask = s_HeldMask;
 	if (mask == 0U)
@@ -331,6 +333,11 @@ void CracenIntrf::ModuleRelease(void)
 	s_HeldMask = 0U;
 	s_PreviousEnable = 0U;
 	atomic_flag_clear(&s_HoldFlag);
+}
+
+void CracenIntrf::ModuleRelease(void)
+{
+	CracenHoldRelease();
 }
 
 static void CracenDummyDisable(DevIntrf_t * const pIntrf) { (void)pIntrf; }
@@ -351,7 +358,15 @@ static void CracenReset(DevIntrf_t * const pIntrf)
 	(void)pIntrf;
 	s_bAddrLatched = false;
 	s_bRngXfer = false;
-	s_bRngHeld = false;
+	// Owner-aware abort: when the interface's own RNG transfer holds the
+	// module, that hold must be released here, or the single-owner flag and
+	// mask would be stranded with no owner left to release them. A hold
+	// owned by another component (an operation-level user) is not touched.
+	if (s_bRngHeld)
+	{
+		s_bRngHeld = false;
+		CracenHoldRelease();
+	}
 }
 static void CracenPowerOff(DevIntrf_t * const pIntrf)
 {

@@ -94,15 +94,29 @@ static void Sha256Block(uint32_t H[8], const uint8_t block[64])
 	Sha256Wipe(W, sizeof(W));
 }
 
+// The magic marks an initialized, not yet finalized context: HashUpdate and
+// HashFinal on arbitrary caller memory must not trust an uninitialized
+// BufLen, and a finalized context must not be reusable.
+#define SHA256_CTX_MAGIC	0x35326853UL
+
 typedef struct {
+	uint32_t Magic;
 	uint32_t H[8];
 	uint64_t Total;
 	uint8_t Buf[64];
 	size_t BufLen;
 } Sha256Ctx;
 
+static bool Sha256CtxLive(const void *pCtx)
+{
+	return pCtx != nullptr &&
+		   ((uintptr_t)pCtx & (alignof(Sha256Ctx) - 1U)) == 0U &&
+		   ((const Sha256Ctx *)pCtx)->Magic == SHA256_CTX_MAGIC;
+}
+
 static void Sha256Init(Sha256Ctx *c)
 {
+	c->Magic = SHA256_CTX_MAGIC;
 	static const uint32_t initial[8] = {
 		0x6a09e667u,0xbb67ae85u,0x3c6ef372u,0xa54ff53au,
 		0x510e527fu,0x9b05688cu,0x1f83d9abu,0x5be0cd19u
@@ -185,7 +199,8 @@ size_t CryptoSoftSha256::HashCtxSize() const
 
 CRYPTO_STATUS CryptoSoftSha256::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
 {
-	if (Alg != CRYPTO_HASH_SHA256 || pHashCtx == nullptr)
+	if (Alg != CRYPTO_HASH_SHA256 || pHashCtx == nullptr ||
+		((uintptr_t)pHashCtx & (alignof(Sha256Ctx) - 1U)) != 0U)
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
@@ -196,7 +211,7 @@ CRYPTO_STATUS CryptoSoftSha256::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
 CRYPTO_STATUS CryptoSoftSha256::HashUpdate(void *pHashCtx,
 										   const uint8_t *pMsg, size_t Len)
 {
-	if (pHashCtx == nullptr || (pMsg == nullptr && Len != 0U))
+	if (!Sha256CtxLive(pHashCtx) || (pMsg == nullptr && Len != 0U))
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
@@ -209,11 +224,13 @@ CRYPTO_STATUS CryptoSoftSha256::HashUpdate(void *pHashCtx,
 
 CRYPTO_STATUS CryptoSoftSha256::HashFinal(void *pHashCtx, uint8_t *pDigest)
 {
-	if (pHashCtx == nullptr || pDigest == nullptr)
+	if (!Sha256CtxLive(pHashCtx) || pDigest == nullptr)
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 	Sha256Final((Sha256Ctx *)pHashCtx, pDigest);
+	// The wipe clears the magic: a finalized context is dead until the next
+	// HashInit.
 	Sha256Wipe(pHashCtx, sizeof(Sha256Ctx));
 	return CRYPTO_STATUS_OK;
 }
@@ -229,7 +246,9 @@ CRYPTO_STATUS CryptoSoftSha256::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 									const uint8_t *pMsg, size_t Len,
 									uint8_t *pMac, size_t MacLen)
 {
-	if (Alg != CRYPTO_MAC_HMAC || Key.Type != CRYPTO_KEY_HMAC ||
+	// The generic construction chains the streaming hash synchronously on
+	// stack storage; an asynchronous hash engine must provide its own HMAC.
+	if (IsAsync() || Alg != CRYPTO_MAC_HMAC || Key.Type != CRYPTO_KEY_HMAC ||
 		Key.Loc != CRYPTO_KEY_LOC_PLAIN ||
 		(Key.Usage & CRYPTO_KEY_USE_SIGN) == 0U ||
 		(Key.Plain.pData == nullptr && Key.Plain.Len != 0U) ||

@@ -136,21 +136,54 @@ static bool PkWaitIdle(Device *pDev, uint32_t *pStatus)
 	return false;
 }
 
-// Acquire the shared CRACEN operation hold before any register or operand
-// access. If the core does not become ready, release immediately; callers must
-// only call PkCleanup after this function returns true.
-static bool PkPrepare(Device *pDev, CracenIntrf *pIntrf)
+// A timed-out operation left the engine possibly still executing. Crypto RAM
+// must not be touched until the engine is confirmed idle again; the flag
+// defers the operand wipe to the next successful PkPrepare.
+static bool s_bPkAborted = false;
+
+// Abort a still-busy operation: no register or operand access, only the
+// module release. Dropping the module enable stops the engine; the next hold
+// re-enables it fresh, and the next PkPrepare wipes the operand RAM the
+// aborted operation left behind.
+static void PkAbort(CracenIntrf *pIntrf)
 {
-	if (pIntrf == nullptr || !pIntrf->ModuleHold(CRACEN_MODULE_PKEIKG))
+	s_bPkAborted = true;
+	pIntrf->ModuleRelease();
+}
+
+// Acquire the shared CRACEN operation hold before any register or operand
+// access. OK with the hold owned and the engine idle; BUSY when the hold or
+// the engine is owned elsewhere (retryable); FAIL only for a missing
+// interface. Callers only call PkCleanup after OK.
+static CRYPTO_STATUS PkPrepare(Device *pDev, CracenIntrf *pIntrf)
+{
+	if (pIntrf == nullptr)
 	{
-		return false;
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (!pIntrf->ModuleHold(CRACEN_MODULE_PKEIKG))
+	{
+		return CRYPTO_STATUS_BUSY;
 	}
 	if (!PkWaitNotBusy(pDev))
 	{
 		pIntrf->ModuleRelease();
-		return false;
+		return CRYPTO_STATUS_BUSY;
 	}
-	return true;
+	if (s_bPkAborted)
+	{
+		// The engine is idle again after an abort: wipe the operand RAM the
+		// aborted operation left, then proceed normally.
+		PkClearSlot(pDev, BA414EP_SLOT_SCALAR, P256_SZ);
+		PkClearSlot(pDev, BA414EP_SLOT_RESULT_X, P256_SZ);
+		PkClearSlot(pDev, BA414EP_SLOT_RESULT_Y, P256_SZ);
+		PkClearSlot(pDev, BA414EP_SLOT_POINT_X, P256_SZ);
+		PkClearSlot(pDev, BA414EP_SLOT_POINT_Y, P256_SZ);
+		PkClearSlot(pDev, BA414EP_SLOT_BLIND, P256_SZ);
+		__DMB();
+		s_bPkAborted = false;
+	}
+	return CRYPTO_STATUS_OK;
 }
 
 static void PkCleanup(Device *pDev, CracenIntrf *pIntrf)
@@ -167,7 +200,7 @@ static void PkCleanup(Device *pDev, CracenIntrf *pIntrf)
 	pIntrf->ModuleRelease();
 }
 
-static bool PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
+static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 							const uint8_t Point[64], const uint8_t Scalar[32],
 							uint8_t Result[64], RngEngine *pRng)
 {
@@ -175,7 +208,7 @@ static bool PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 		Scalar == nullptr || Result == nullptr || pRng == nullptr ||
 		!pRng->IsSecure() || !P256ScalarInRange(Scalar))
 	{
-		return false;
+		return CRYPTO_STATUS_FAIL;
 	}
 
 	memset(Result, 0, 64U);
@@ -187,17 +220,18 @@ static bool PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 		if (pRng->Random(blind, sizeof(blind)) != CRYPTO_STATUS_OK)
 		{
 			PkWipe(blind, sizeof(blind));
-			return false;
+			return CRYPTO_STATUS_FAIL;
 		}
 
 		// BA414e countermeasure factor requirements in big-endian mode.
 		blind[0] = (uint8_t)((blind[0] & 0x3FU) | 0x20U);
 		blind[sizeof(blind) - 1U] |= 1U;
 
-		if (!PkPrepare(pDev, pIntrf))
+		CRYPTO_STATUS ready = PkPrepare(pDev, pIntrf);
+		if (ready != CRYPTO_STATUS_OK)
 		{
 			PkWipe(blind, sizeof(blind));
-			return false;
+			return ready;
 		}
 
 		uint32_t status = BA414EP_STATUS_BUSY;
@@ -216,7 +250,15 @@ static bool PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 		__DMB();
 		PkRegWrite(pDev, BA414EP_REG_CONTROL,
 				   BA414EP_CONTROL_START | BA414EP_CONTROL_CLEAR_IRQ);
-		(void)PkWaitIdle(pDev, &status);
+		if (!PkWaitIdle(pDev, &status))
+		{
+			// The operation is still executing past the poll limit: abort
+			// without touching crypto RAM. The scalar is wiped from RAM by
+			// the deferred cleanup at the next successful PkPrepare.
+			PkAbort(pIntrf);
+			PkWipe(blind, sizeof(blind));
+			return CRYPTO_STATUS_FAIL;
+		}
 		__DMB();
 
 		if (status == 0U)
@@ -231,16 +273,16 @@ static bool PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 		if (status == 0U && !P256IsZero(&Result[0], P256_SZ) &&
 			!P256IsZero(&Result[32], P256_SZ))
 		{
-			return true;
+			return CRYPTO_STATUS_OK;
 		}
 		memset(Result, 0, 64U);
 
 		if (status != BA414EP_STATUS_NOT_INVERTIBLE)
 		{
-			return false;
+			return CRYPTO_STATUS_FAIL;
 		}
 	}
-	return false;
+	return CRYPTO_STATUS_FAIL;
 }
 
 static const uint8_t s_P256Generator[64] = {
@@ -264,7 +306,7 @@ bool Ba414ep::Init(CracenIntrf * const pIntrf, RngEngine *pRng)
 
 bool Ba414ep::Enable()
 {
-	bool ok = PkPrepare(this, vpCracen);
+	bool ok = PkPrepare(this, vpCracen) == CRYPTO_STATUS_OK;
 	if (ok)
 	{
 		PkCleanup(this, vpCracen);
@@ -297,9 +339,14 @@ CRYPTO_STATUS Ba414ep::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKe
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
-	if (P256RandomScalar(vpRng, pk->PrivKey) &&
-		PkPointMultiply(this, vpCracen, s_P256Generator, pk->PrivKey,
-						pPubKey, vpRng))
+	if (!P256RandomScalar(vpRng, pk->PrivKey))
+	{
+		KeyReset(pk);
+		return CRYPTO_STATUS_FAIL;
+	}
+	CRYPTO_STATUS st = PkPointMultiply(this, vpCracen, s_P256Generator,
+									   pk->PrivKey, pPubKey, vpRng);
+	if (st == CRYPTO_STATUS_OK)
 	{
 		pk->bKeyValid = true;
 		return CRYPTO_STATUS_OK;
@@ -307,7 +354,36 @@ CRYPTO_STATUS Ba414ep::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKe
 
 	KeyReset(pk);
 	memset(pPubKey, 0, 64U);
-	return CRYPTO_STATUS_FAIL;
+	return st;
+}
+
+// Known-answer self-test: the Bluetooth LESC debug key pair (Core spec Vol 3
+// Part H 2.3.5.6.1). The generator multiplied by the debug private scalar
+// must yield the debug public key, exercising the full blinded hardware
+// multiply path.
+int Ba414ep::SelfTest()
+{
+	static const uint8_t priv[32] = {
+		0x3F,0x49,0xF6,0xD4,0xA3,0xC5,0x5F,0x38,0x74,0xC9,0xB3,0xE3,0xD2,0x10,0x3F,0x50,
+		0x4A,0xFF,0x60,0x7B,0xEB,0x40,0xB7,0x99,0x58,0x99,0xB8,0xA6,0xCD,0x3C,0x1A,0xBD,
+	};
+	static const uint8_t pub[64] = {
+		0x1E,0xA1,0xF0,0xF0,0x1F,0xAF,0x1D,0x96,0x09,0x59,0x22,0x84,0xF1,0x9E,0x4C,0x00,
+		0x47,0xB5,0x8A,0xFD,0x86,0x15,0xA6,0x9F,0x55,0x90,0x77,0xB2,0x2F,0xAA,0xA1,0x90,
+		0x4C,0x55,0xF3,0x3E,0x42,0x9D,0xAD,0x37,0x73,0x56,0x70,0x3A,0x9A,0xB8,0x51,0x60,
+		0x47,0x2D,0x11,0x30,0xE2,0x8E,0x36,0x76,0x5F,0x89,0xAF,0xF9,0x15,0xB1,0x21,0x4A,
+	};
+	if (!vbValid)
+	{
+		return -1;
+	}
+	uint8_t result[64];
+	CRYPTO_STATUS st = PkPointMultiply(this, vpCracen, s_P256Generator, priv,
+									   result, vpRng);
+	int rc = (st == CRYPTO_STATUS_OK &&
+			  memcmp(result, pub, sizeof(pub)) == 0) ? 0 : -2;
+	PkWipe(result, sizeof(result));
+	return rc;
 }
 
 CRYPTO_STATUS Ba414ep::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
@@ -328,22 +404,27 @@ CRYPTO_STATUS Ba414ep::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	}
 
 	uint8_t point[64];
-	bool ok = PkPointMultiply(this, vpCracen, pPeerPubKey, pk->PrivKey,
-							 point, vpRng);
+	CRYPTO_STATUS st = PkPointMultiply(this, vpCracen, pPeerPubKey,
+									   pk->PrivKey, point, vpRng);
 
-	if (!bKeepKey || !ok)
+	// BUSY is transient contention: the shared secret is cleared and the
+	// single-use key survives for retry. Every other failure consumes it.
+	if (st == CRYPTO_STATUS_OK)
 	{
-		KeyReset(pk);
-	}
-
-	if (ok)
-	{
+		if (!bKeepKey)
+		{
+			KeyReset(pk);
+		}
 		memcpy(pSharedX, point, P256_SZ);
 	}
 	else
 	{
+		if (st != CRYPTO_STATUS_BUSY)
+		{
+			KeyReset(pk);
+		}
 		memset(pSharedX, 0, P256_SZ);
 	}
 	PkWipe(point, sizeof(point));
-	return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+	return st;
 }
