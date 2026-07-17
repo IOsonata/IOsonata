@@ -308,6 +308,20 @@ static void SmpAbortPairing(BtSmpLink_t *pLink)
 	pLink->Ctx.FailCount = failCount;
 }
 
+// H5 repeated attempts (Core Vol 3 Part H 2.3.6): an authentication failure
+// caused by the peer (wrong confirm value, wrong DHKey check, wrong passkey
+// round, invalid OOB confirmation) counts toward the lockout and locks the
+// link at the threshold. Internal crypto or resource failures never count:
+// they are not attack attempts.
+static void SmpAuthFailCount(BtSmpLink_t *pLink)
+{
+	pLink->Ctx.FailCount++;
+	if (pLink->Ctx.FailCount >= BT_SMP_MAX_PAIR_ATTEMPTS)
+	{
+		pLink->Ctx.bLocked = true;
+	}
+}
+
 static bool SmpCryptoPendingBegin(BtSmpLink_t *pLink, BtHciDevice_t *pDev,
 								  BT_SMP_CRYPTO_OP Op)
 {
@@ -1539,6 +1553,7 @@ static void SmpPasskeyHandleRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 		if (!SmpEqualCT(cb, pLink->Ctx.PeerConfirm, 16))
 		{
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
+			SmpAuthFailCount(pLink);
 			SmpAbortPairing(pLink);
 			return;
 		}
@@ -1559,6 +1574,7 @@ static void SmpPasskeyHandleRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 	if (!SmpEqualCT(ca, pLink->Ctx.PeerConfirm, 16))
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
+		SmpAuthFailCount(pLink);
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -1723,6 +1739,7 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 			if (!SmpEqualCT(cb, pLink->Ctx.PeerConfirm, 16))
 			{
 				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
+				SmpAuthFailCount(pLink);
 				SmpAbortPairing(pLink);
 				return;
 			}
@@ -1826,6 +1843,7 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 	if (!SmpEqualCT(calc, pLink->Ctx.PeerConfirm, 16))
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
+		SmpAuthFailCount(pLink);
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -1873,6 +1891,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		if (!SmpEqualCT(eb, pChk->Value, 16))
 		{
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
+			SmpAuthFailCount(pLink);
 			SmpAbortPairing(pLink);
 			return;
 		}
@@ -1918,6 +1937,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		if (!SmpEqualCT(altEa, pChk->Value, 16))
 		{
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
+			SmpAuthFailCount(pLink);
 			SmpAbortPairing(pLink);
 			return;
 		}
@@ -1929,6 +1949,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		SMP_TRACE("Ea matched with raw DHKey f5 input\r\n");
 #else
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
+		SmpAuthFailCount(pLink);
 		SmpAbortPairing(pLink);
 		return;
 #endif
@@ -2294,6 +2315,7 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 				if (!SmpEqualCT(c, pLink->Ctx.OobPeerConfirm, 16))
 				{
 					SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
+					SmpAuthFailCount(pLink);
 					SmpAbortPairing(pLink);
 					continue;
 				}
