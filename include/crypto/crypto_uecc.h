@@ -24,11 +24,10 @@ class CryptoUecc : public KeyAgreeEngine, public SignEngine {
 public:
 	struct KeyCtx {
 		uint8_t PrivKey[32];
-		bool    bKeyValid;
+		bool bKeyValid;
 	};
 
 	CryptoUecc() { vbValid = false; vpRng = nullptr; }
-
 	void SetRng(RngEngine *pRng) { vpRng = pRng; }
 
 	bool Enable() override { vbValid = true; return true; }
@@ -55,6 +54,9 @@ public:
 private:
 	RngEngine *vpRng;
 };
+
+static_assert(sizeof(CryptoUecc::KeyCtx) <= CRYPTO_KEYCTX_MAX,
+			  "CryptoUecc key context exceeds the common consumer storage");
 
 #define CRYPTO_UECC_MEMSIZE		sizeof(CryptoUecc)
 
