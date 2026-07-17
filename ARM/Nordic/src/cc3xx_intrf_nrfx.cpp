@@ -1,31 +1,25 @@
 /**-------------------------------------------------------------------------
-@file	crypto_cc3xx_engine.h
+@file	cc3xx_intrf_nrfx.cpp
 
-@brief	nRF52840 CryptoCell CC310 target configuration.
+@brief	Nordic implementation of the CC3xx interface vendor surface.
 
-		Defines the CC310 register base, PKA SRAM size, and target-specific
-		hardware enable and disable operations used by ARM/src/crypto_cc3xx.cpp.
-		The P-256 driver itself is target-independent and contains no Nordic
-		register dependency.
+		Supplies the register file base and the CryptoCell wrapper power
+		operations for Nordic targets (nRF52840 CC310, nRF5340 application
+		core CC312). This is the only CC3xx file that touches Nordic
+		registers.
 
 @author	Hoang Nguyen Hoan
-@date	Jul 2026
+@date	Jul. 17, 2026
 
-@license MIT, (c) 2026 I-SYST. See bt_smp.h for full text.
+@license MIT, (c) 2026 I-SYST. See crypto.h for full text.
 ----------------------------------------------------------------------------*/
-#ifndef __CRYPTO_CC3XX_ENGINE_H__
-#define __CRYPTO_CC3XX_ENGINE_H__
-
 #include <stdint.h>
 #ifndef __cplusplus
 #include <stdbool.h>
 #endif
 
 #include "nrf.h"
-
-// CC310 core register file and PKA SRAM on the nRF52840.
-#define CC3XX_BASE_ADDRESS			(0x5002B000UL)
-#define CC3XX_PKA_SRAM_SIZE			(0x1000UL)
+#include "cc3xx_intrf.h"
 
 #if defined(NRF_CRYPTOCELL)
 #define CC3XX_WRAPPER				NRF_CRYPTOCELL
@@ -39,7 +33,12 @@
 #define CC3XX_POWERUP_SPINS			256U
 #endif
 
-static inline bool Cc3xxEnable(void)
+uintptr_t Cc3xxBase(void)
+{
+	return 0x5002B000UL;
+}
+
+bool Cc3xxEnable(void)
 {
 	CC3XX_WRAPPER->ENABLE = 1U;
 
@@ -51,9 +50,7 @@ static inline bool Cc3xxEnable(void)
 	return CC3XX_WRAPPER->ENABLE != 0U;
 }
 
-static inline void Cc3xxDisable(void)
+void Cc3xxDisable(void)
 {
 	CC3XX_WRAPPER->ENABLE = 0U;
 }
-
-#endif // __CRYPTO_CC3XX_ENGINE_H__

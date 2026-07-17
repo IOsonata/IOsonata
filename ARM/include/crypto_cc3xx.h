@@ -5,7 +5,7 @@
 
 		A KeyAgreeEngine on the OO crypto tree, driving the CC3xx public-key
 		accelerator directly (no vendor runtime blob). The current target is the
-		nRF52840 CryptoCell CC310; the target supplies crypto_cc3xx.h with the
+		nRF52840 CryptoCell CC310; the vendor implements the cc3xx_intrf.h surface with the
 		register base and the enable and disable operations.
 
 		The private scalar lives in caller key context (KeyCtxSize() bytes),
@@ -45,6 +45,12 @@ public:
 	/// blinding draw from it; without a secure engine those operations fail
 	/// closed.
 	void SetRng(RngEngine *pRng) { vpRng = pRng; }
+
+	/// @brief	Initialise the engine on a crypto interface.
+	///
+	/// Binds the transport (normally Cc310IntrfInstance) and the random
+	/// source, then enables the hardware.
+	bool Init(DeviceIntrf * const pIntrf, RngEngine *pRng);
 
 	bool Enable() override;
 	void Disable() override;

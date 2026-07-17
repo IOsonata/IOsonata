@@ -32,9 +32,7 @@
 
 #include "nrf.h"
 #include "crypto_cc3xx.h"
-#if defined(NRF52840_XXAA)
-#include "crypto_cc3xx_engine.h"
-#endif
+#include "cc3xx_intrf.h"
 #include "crypto/crypto_uecc.h"
 #include "crypto_rng_nrf.h"
 
@@ -115,14 +113,10 @@ bool Cc3xxEcdhTest(void)
 												CryptoRngNrfInstance());
 		if (pCc == nullptr)
 		{
-#if defined(NRF52840_XXAA)
 			// Discriminate the bring-up state for the report. The wrapper
-			// enable readback is the CoreInit gate.
-			CC3XX_WRAPPER->ENABLE = 1U;
-			printf("[wrapper ENABLE readback %u] ",
-				   (unsigned)CC3XX_WRAPPER->ENABLE);
-			CC3XX_WRAPPER->ENABLE = 0U;
-#endif
+			// power-on readback is the CoreInit gate.
+			printf("[wrapper enable readback %u] ", (unsigned)Cc3xxEnable());
+			Cc3xxDisable();
 			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_CREATE);
 			break;
 		}
