@@ -407,7 +407,7 @@ void BtSmpTimeoutCheck(void);
  * @param	pEcdh	KeyAgreeEngine providing P-256 ECDH.
  * @param	pAes	CipherEngine providing AES-128 ECB.
  */
-void BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes);
+void BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng);
 
 /// Configure the local IO capability and authentication requirements. Call
 /// after BtSmpInit. When never called the defaults are NoInputNoOutput /

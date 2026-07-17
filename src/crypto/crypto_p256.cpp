@@ -9,7 +9,7 @@
 		regularization for a fixed-window multiply. These are plain byte-array
 		operations against the P-256 group order; they hold no engine state.
 
-		Randomness for a private scalar comes from the platform RngGet, provided
+		Randomness for a private scalar comes from an injected RngEngine, provided
 		by the target random driver. A scalar is accepted only when it is a
 		valid private key: non-zero and strictly less than the group order n.
 
@@ -28,7 +28,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-bool RngGet(uint8_t *pBuff, size_t Len);
 #ifdef __cplusplus
 }
 #endif
@@ -111,13 +110,19 @@ bool P256ScalarInRange(const uint8_t Scalar[P256_BYTES])
 // Draw a uniform private scalar in [1, n-1] by rejection sampling: pull 32 fresh
 // bytes and keep the first that is in range. Bounded attempts; the rejection
 // probability per draw is far below one half.
-bool P256RandomScalar(uint8_t Scalar[P256_BYTES])
+bool P256RandomScalar(RngEngine *pRng, uint8_t Scalar[P256_BYTES])
 {
+	if (pRng == nullptr || !pRng->IsSecure())
+	{
+		// Key material must come from a security-grade source. Fail closed.
+		CryptoSecureWipe(Scalar, P256_BYTES);
+		return false;
+	}
 	for (int attempt = 0; attempt < 64; attempt++)
 	{
-		if (!RngGet(Scalar, P256_BYTES))
+		if (pRng->Random(Scalar, P256_BYTES) != CRYPTO_STATUS_OK)
 		{
-			// RngGet may have partially filled the buffer with real entropy;
+			// A partial draw may have left real entropy in the buffer;
 			// wipe it so no key material leaks on failure.
 			CryptoSecureWipe(Scalar, P256_BYTES);
 			return false;

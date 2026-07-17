@@ -6,7 +6,7 @@
 		Exercises CryptoUecc through the KeyAgreeEngine and SignEngine facet
 		interfaces only. It includes just crypto_uecc.h: no micro-ecc header and
 		no direct library call, so it tests the port, not the library. Runs on
-		the build host; provides a test RngGet so no MCU driver is needed.
+		the build host; provides a test RngEngine so no MCU driver is needed.
 
 		The ECDSA test uses a fixed known key pair (the BLE spec private key A
 		and its matching P-256 public key) so the harness needs no key
@@ -40,21 +40,6 @@ class TestSecureRng : public CryptoSoftRng {
 public:
 	bool IsSecure() const override { return true; }
 };
-
-// Test entropy source standing in for the per-MCU RngGet. A fixed-seed xorshift
-// keeps the run reproducible; this is a test stub, not a security generator.
-static uint64_t s_rng = 0x123456789abcdef0ULL;
-extern "C" bool RngGet(uint8_t *pBuff, size_t Len)
-{
-	for (size_t i = 0; i < Len; i++)
-	{
-		s_rng ^= s_rng << 13;
-		s_rng ^= s_rng >> 7;
-		s_rng ^= s_rng << 17;
-		pBuff[i] = (uint8_t)(s_rng & 0xFF);
-	}
-	return true;
-}
 
 static int s_pass = 0, s_fail = 0;
 static void check(const char *name, bool ok)

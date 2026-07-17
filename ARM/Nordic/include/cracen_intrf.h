@@ -38,9 +38,11 @@ typedef enum __Cracen_Module {
 
 /// DevAddr base selector, used the way SPI uses a chip-select index. Picks which
 /// sub-block a Read / Write transfer lands in; the transfer address (pAdCmd) is
-/// the byte offset within it.
+/// the byte offset within it. CRACEN_ADDR_RNG selects the random generator: an
+/// Rx transfer on it fills the buffer with entropy (no address phase).
 #define CRACEN_ADDR_REG		0U		//!< Held module register base
 #define CRACEN_ADDR_MEM		1U		//!< Operand memory base
+#define CRACEN_ADDR_RNG		2U		//!< Random generator entropy read
 
 #ifdef __cplusplus
 

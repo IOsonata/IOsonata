@@ -268,7 +268,7 @@ CRYPTO_STATUS Ba414ep::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKe
 	PkWipe(pk->PrivKey, sizeof(pk->PrivKey));
 
 	// Public key = generator * private scalar.
-	if (P256RandomScalar(pk->PrivKey) &&
+	if (P256RandomScalar(vpRng, pk->PrivKey) &&
 		PkPointMultiply(this, (CracenIntrf *)Interface(), s_P256Generator, pk->PrivKey, pPubKey, vpRng))
 	{
 		pk->bKeyValid = true;

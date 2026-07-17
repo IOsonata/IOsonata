@@ -31,6 +31,15 @@
 
 #include "cracen_intrf.h"
 
+// The random generator is drawn through the vendor CTR-DRBG driver. When a
+// SoftDevice (S115/S145) is enabled it owns the entropy hardware; draws must
+// then go through the SoftDevice entropy pool instead of the driver.
+#include "nrfx_cracen.h"
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+#include "nrf_sdm.h"
+#include "nrf_soc.h"
+#endif
+
 // Operand memory sub-block offset from the CRACENCORE base.
 #define BA414EP_CRYPTORAM_OFFSET	0x8000U
 
@@ -48,6 +57,9 @@ static volatile uint8_t *s_pXferBase;	// base saved from DevAddr
 static bool s_bXferMem;					// operand memory space (byte access)
 static uint32_t s_Offset;				// byte offset latched from address phase
 static bool s_bAddrLatched;
+static bool s_bRngXfer;					// current Rx is an entropy read
+static bool s_bRngHeld;					// RNG module held for this entropy read
+static bool s_bDrbgInit;				// CTR-DRBG brought up once
 
 static void CracenSelectBase(uint32_t DevAddr)
 {
@@ -65,11 +77,45 @@ static bool CracenStartTx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 	return true;
 }
 
+// True when a SoftDevice is present in the build and enabled at run time. The
+// SoftDevice owns the entropy hardware while enabled; direct access would
+// assert the stack, so draws must go through its entropy pool.
+static bool CracenSdEnabled(void)
+{
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	uint8_t en = 0;
+	(void)sd_softdevice_is_enabled(&en);
+	return en != 0;
+#else
+	return false;
+#endif
+}
+
 static bool CracenStartRx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 {
 	(void)pIntrf;
+	if (DevAddr == CRACEN_ADDR_RNG)
+	{
+		// Entropy read. With the SoftDevice enabled the draw goes through its
+		// pool and no module hold is needed. Otherwise hold the RNG module for
+		// the transfer; when another engine holds the core this fails and the
+		// framework retry (MaxRetry) reattempts the whole transfer.
+		s_bRngXfer = true;
+		s_bRngHeld = false;
+		if (!CracenSdEnabled())
+		{
+			CracenIntrf *p = (CracenIntrf *)pIntrf->pDevData;
+			if (!p->ModuleHold(CRACEN_MODULE_RNG))
+			{
+				return false;
+			}
+			s_bRngHeld = true;
+		}
+		return true;
+	}
 	// Restart condition inside a read: keep the offset latched by the preceding
 	// address phase; only re-select the saved base.
+	s_bRngXfer = false;
 	CracenSelectBase(DevAddr);
 	return true;
 }
@@ -124,10 +170,66 @@ static int CracenTxSrData(DevIntrf_t * const pIntrf, const uint8_t *pData, int D
 	return CracenTxData(pIntrf, pData, DataLen);
 }
 
+// Fill the buffer from the SoftDevice entropy pool. The pool refills at a
+// finite rate, so take what is available until the request is filled.
+static int CracenSdRandFill(uint8_t *pBuff, int BuffLen)
+{
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	int idx = 0;
+	while (idx < BuffLen)
+	{
+		uint8_t avail = 0;
+		(void)sd_rand_application_bytes_available_get(&avail);
+		if (avail == 0)
+		{
+			continue;
+		}
+		int n = BuffLen - idx;
+		if (n > (int)avail)
+		{
+			n = avail;
+		}
+		if (sd_rand_application_vector_get(&pBuff[idx], (uint8_t)n) == NRF_SUCCESS)
+		{
+			idx += n;
+		}
+	}
+	return BuffLen;
+#else
+	(void)pBuff; (void)BuffLen;
+	return 0;
+#endif
+}
+
 static int CracenRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
 {
 	(void)pIntrf;
-	if (pBuff == nullptr || BuffLen <= 0 || !s_bAddrLatched)
+	if (pBuff == nullptr || BuffLen <= 0)
+	{
+		return 0;
+	}
+	if (s_bRngXfer)
+	{
+		if (!s_bRngHeld)
+		{
+			return CracenSdRandFill(pBuff, BuffLen);
+		}
+		// Bring the CTR-DRBG up once, then draw.
+		if (!s_bDrbgInit)
+		{
+			if (nrfx_cracen_init() != 0)
+			{
+				return 0;
+			}
+			s_bDrbgInit = true;
+		}
+		if (nrfx_cracen_ctr_drbg_random_get(pBuff, (size_t)BuffLen) != 0)
+		{
+			return 0;
+		}
+		return BuffLen;
+	}
+	if (!s_bAddrLatched)
 	{
 		return 0;
 	}
@@ -162,7 +264,17 @@ static void CracenStopTx(DevIntrf_t * const pIntrf)
 
 static void CracenStopRx(DevIntrf_t * const pIntrf)
 {
-	(void)pIntrf;
+	if (s_bRngXfer)
+	{
+		if (s_bRngHeld)
+		{
+			CracenIntrf *p = (CracenIntrf *)pIntrf->pDevData;
+			p->ModuleRelease();
+			s_bRngHeld = false;
+		}
+		s_bRngXfer = false;
+		return;
+	}
 	s_bAddrLatched = false;
 }
 

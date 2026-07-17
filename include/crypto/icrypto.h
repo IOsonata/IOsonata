@@ -179,7 +179,8 @@ bool P256IsZero(const uint8_t *pData, size_t Len);
 bool P256LessBe(const uint8_t *pA, const uint8_t *pB, size_t Len);
 
 /// Draw a uniform private scalar in [1, n-1] via the RNG with rejection.
-bool P256RandomScalar(uint8_t Scalar[P256_BYTES]);
+class RngEngine;	// forward decl; defined below
+bool P256RandomScalar(RngEngine *pRng, uint8_t Scalar[P256_BYTES]);
 
 /// True when Scalar is a valid private scalar: non-zero and less than the order.
 bool P256ScalarInRange(const uint8_t Scalar[P256_BYTES]);
@@ -195,14 +196,6 @@ void P256RegularizeScalar(const uint8_t K[P256_BYTES], uint8_t R[P256_BYTES + 1U
 /// extra leading byte.
 uint32_t P256RegularBit(const uint8_t Scalar[P256_BYTES + 1U], uint32_t BitNo);
 
-/// Platform random source: fill pBuff with Len cryptographically strong bytes.
-/// Provided by the target random driver (Nordic rng_nrfx, ST rng_stm32). A
-/// security-path caller must check the result and abort on failure. This is the
-/// same free function the RngEngine facet wraps; it is kept here so portable
-/// crypto and SMP code can draw randomness without a platform header. The
-/// per-platform RNG headers (crypto_rng_nrf.h, crypto_rng_stm32.h) redeclare it
-/// identically in their own extern "C" block.
-bool RngGet(uint8_t *pBuff, size_t Len);
 
 /// Zeroize a buffer so the write is not optimized away. Use to clear key
 /// material, shared secrets, and other secrets on every exit path.

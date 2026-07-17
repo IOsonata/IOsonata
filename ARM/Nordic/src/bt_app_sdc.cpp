@@ -672,7 +672,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 #elif defined(NRF52840_XXAA)
 	alignas(uint32_t) static uint8_t s_CryptoEcdhMem[CRYPTO_CC3XX_MEMSIZE];
-	pEcdh = CryptoCc3xxCreate(s_CryptoEcdhMem, sizeof(s_CryptoEcdhMem));
+	pEcdh = CryptoCc3xxCreate(s_CryptoEcdhMem, sizeof(s_CryptoEcdhMem),
+							 CryptoRngNrfInstance());
 	if (pEcdh != nullptr)
 	{
 		DEBUG_PRINTF("Crypto ECDH engine: CryptoCc3xx (CC310 hardware P-256)\r\n");
@@ -695,7 +696,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 
 	CipherEngine *pAes = BtCryptoCtlrSdcInit();
-	BtSmpInit(pEcdh, pAes);
+	BtSmpInit(pEcdh, pAes, CryptoRngNrfInstance());
 
 	// Translate the application security configuration into the SMP IO
 	// capability, authentication requirements and association-model callbacks.

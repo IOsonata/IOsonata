@@ -165,6 +165,7 @@ static const uint8_t s_SmpModelMap[5][5] = {
 // the OO tree: a KeyAgreeEngine for P-256 ECDH (CryptoUecc or Ba414ep) and a
 // CipherEngine for AES-128 (CryptoSoftAes, CryptoMaster, or the controller AES).
 static KeyAgreeEngine *s_pCryptoEcdh = nullptr;
+static RngEngine *s_pCryptoRng = nullptr;
 static CipherEngine   *s_pCryptoAes  = nullptr;
 
 static int SmpCryptoP256KeyGen(BtSmpLink_t *pLink, uint8_t pPubKey[64]);
@@ -2711,7 +2712,8 @@ bool BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
 	// must be checked: on nRF54 the non-blocking CRACEN lock can be held, so a
 	// draw can fail, and a security-path caller must abort rather than proceed
 	// with an unrandomized buffer.
-	if (!RngGet(pBuf, Len))
+	if (s_pCryptoRng == nullptr ||
+		s_pCryptoRng->Random(pBuf, Len) != CRYPTO_STATUS_OK)
 	{
 		CryptoSecureWipe(pBuf, Len);
 		return false;
@@ -2774,11 +2776,12 @@ void BtSmpHciLtkNegReply(BtHciDevice_t * const pDev, uint16_t ConnHdl)
 	SmpSendHciCmd(pDev, BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_NEG_REPLY, param, sizeof(param));
 }
 
-void BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes)
+void BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)
 {
 	// Compose the crypto from the engines the target provides. RNG is not a
 	// slot - it is the target RngGet utility, called directly by BtSmpCryptoRand.
 	s_pCryptoEcdh = pEcdh;
+	s_pCryptoRng = pRng;
 	s_pCryptoAes  = pAes;
 
 	// Bind the async completion handler. A synchronous ECDH engine never calls
@@ -3122,7 +3125,7 @@ int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint
 	SmpOobClear();
 	int rc = BtSmpCryptoP256KeyGen(pDev, s_SmpOob.LocalPubKey);
 	if (rc != BT_SMP_CRYPTO_OK ||
-		RngGet(s_SmpOob.LocalRand, sizeof(s_SmpOob.LocalRand)) == false)
+		(s_pCryptoRng == nullptr || s_pCryptoRng->Random(s_SmpOob.LocalRand, sizeof(s_SmpOob.LocalRand)) != CRYPTO_STATUS_OK))
 	{
 		SmpOobClear();
 		return -1;

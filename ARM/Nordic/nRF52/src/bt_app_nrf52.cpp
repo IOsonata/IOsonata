@@ -74,7 +74,7 @@ SOFTWARE.
 #include "crypto/crypto_uecc.h"
 #include "crypto_rng_nrf.h"
 #if defined(NRF52840_XXAA)
-#include "crypto_cc3xx.h"
+#include "crypto/crypto_cc3xx_engine.h"
 #endif
 #include "bt_lesc.h"
 #include "bluetooth/bt_app.h"
@@ -2018,7 +2018,7 @@ extern "C" uint32_t BtLescDhKeyReply(uint16_t ConnHdl, uint8_t SecStatus,
 		// key is still wrong, so reply regardless.
 		static ble_gap_lesc_dhkey_t s_BadDhKey;
 
-		(void)RngGet(s_BadDhKey.key, BLE_GAP_LESC_DHKEY_LEN);
+		(void)CryptoRngNrfInstance()->Random(s_BadDhKey.key, BLE_GAP_LESC_DHKEY_LEN);
 		pDhKey = &s_BadDhKey;
 	}
 
