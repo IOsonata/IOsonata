@@ -45,6 +45,9 @@ SOFTWARE.
 typedef enum __Crypto_Status {
 	CRYPTO_STATUS_OK          = 0,
 	CRYPTO_STATUS_PENDING     = 1,
+	CRYPTO_STATUS_BUSY        = 2,	//!< Transient contention: outputs are
+									//!< cleared, a caller-held single-use key
+									//!< is preserved for retry
 	CRYPTO_STATUS_FAIL        = -1,
 	CRYPTO_STATUS_UNSUPPORTED = -2
 } CRYPTO_STATUS;

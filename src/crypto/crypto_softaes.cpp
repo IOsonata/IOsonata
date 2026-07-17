@@ -295,7 +295,10 @@ CRYPTO_STATUS CryptoSoftAes::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 	// instead of once per block and no other user interleaves mid-MAC.
 	if (!AesOpBegin())
 	{
-		return CRYPTO_STATUS_FAIL;
+		// Fail closed on a refused bracket (hardware contention): the caller
+		// must never read a stale tag, and BUSY marks the refusal retryable.
+		memset(pMac, 0, MacLen);
+		return CRYPTO_STATUS_BUSY;
 	}
 
 	const uint8_t *key = Key.Plain.pData;
@@ -535,7 +538,10 @@ CRYPTO_STATUS CryptoSoftAes::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
 		}
 		if (!AesOpBegin())
 		{
-			return CRYPTO_STATUS_FAIL;
+			// Refused bracket: fail closed and retryable.
+			if (Len > 0U) memset(pOut, 0, Len);
+			memset(pTag, 0, TagLen);
+			return CRYPTO_STATUS_BUSY;
 		}
 		const uint8_t *key = Key.Plain.pData;
 		uint8_t h[16] = {}, j0[16], ej0[16], a[16], stream[16], y[16] = {};
@@ -600,7 +606,10 @@ CRYPTO_STATUS CryptoSoftAes::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
 	}
 	if (!AesOpBegin())
 	{
-		return CRYPTO_STATUS_FAIL;
+		// Refused bracket: fail closed and retryable.
+		if (Len > 0U) memset(pOut, 0, Len);
+		memset(pTag, 0, TagLen);
+		return CRYPTO_STATUS_BUSY;
 	}
 
 	const uint8_t *key = Key.Plain.pData;
@@ -664,7 +673,9 @@ CRYPTO_STATUS CryptoSoftAes::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
 		}
 		if (!AesOpBegin())
 		{
-			return CRYPTO_STATUS_FAIL;
+			// Refused bracket: fail closed and retryable.
+			if (Len > 0U) memset(pOut, 0, Len);
+			return CRYPTO_STATUS_BUSY;
 		}
 
 		// Verify first over the received ciphertext, decrypt only on an
@@ -733,7 +744,9 @@ CRYPTO_STATUS CryptoSoftAes::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
 	}
 	if (!AesOpBegin())
 	{
-		return CRYPTO_STATUS_FAIL;
+		// Refused bracket: fail closed and retryable.
+		if (Len > 0U) memset(pOut, 0, Len);
+		return CRYPTO_STATUS_BUSY;
 	}
 
 	const uint8_t *key = Key.Plain.pData;

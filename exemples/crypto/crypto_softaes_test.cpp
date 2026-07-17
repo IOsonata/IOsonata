@@ -74,7 +74,7 @@ protected:
 	bool AesOpBegin() override
 	{
 		BeginCalls++;
-		return true;
+		return !RefuseBracket;
 	}
 	void AesOpEnd() override
 	{
@@ -86,6 +86,9 @@ protected:
 		BlockCalls++;
 		return CryptoSoftAes::AesEcbEncrypt(Key, In, Out);
 	}
+
+public:
+	bool RefuseBracket = false;
 };
 
 int main(void)
@@ -316,6 +319,29 @@ int main(void)
 		memcmp(gt, gtag, 16) == 0 &&
 		counting->BlockCalls >= 6 &&
 		counting->BeginCalls == 1 && counting->EndCalls == 1);
+
+	// Refused bracket (hardware contention stand-in): BUSY, outputs zeroed.
+	counting->RefuseBracket = true;
+	memset(gout, 0xA5, sizeof(gout));
+	memset(gt, 0xA5, sizeof(gt));
+	bool sealZero = counting->Seal(CRYPTO_AEAD_AES_GCM, gkd, giv, 12, gaad,
+								   20, gmsg, 60, gout, gt, 16) ==
+					CRYPTO_STATUS_BUSY;
+	for (int i = 0; i < 60 && sealZero; i++) sealZero = gout[i] == 0U;
+	for (int i = 0; i < 16 && sealZero; i++) sealZero = gt[i] == 0U;
+	check("GCM seal on refused bracket: BUSY and zeroed", sealZero);
+	memset(gback, 0xA5, sizeof(gback));
+	bool openZero = counting->Open(CRYPTO_AEAD_AES_CCM, ak, ccmNonce, 13,
+								   ccmAad, 8, ccmCt, 23, gback, ccmTag, 8) ==
+					CRYPTO_STATUS_BUSY;
+	for (int i = 0; i < 23 && openZero; i++) openZero = gback[i] == 0U;
+	check("CCM open on refused bracket: BUSY and zeroed", openZero);
+	memset(tag, 0xA5, 16);
+	bool macZero = counting->Mac(CRYPTO_MAC_CMAC, signKey, kMsg, 16, tag,
+								 16) == CRYPTO_STATUS_BUSY;
+	for (int i = 0; i < 16 && macZero; i++) macZero = tag[i] == 0U;
+	check("CMAC on refused bracket: BUSY and zeroed", macZero);
+	counting->RefuseBracket = false;
 
 	printf("\n%d passed, %d failed\n", s_pass, s_fail);
 	return s_fail == 0 ? 0 : 1;

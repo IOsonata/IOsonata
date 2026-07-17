@@ -20,7 +20,12 @@
 
 class CryptoCc3xx : public KeyAgreeEngine {
 public:
-	CryptoCc3xx() { vbValid = false; vpRng = nullptr; }
+	CryptoCc3xx()
+	{
+		vbValid = false;
+		vbIntrfEnabled = false;
+		vpRng = nullptr;
+	}
 
 	struct KeyCtx {
 		uint8_t PrivKey[32];
@@ -55,6 +60,10 @@ public:
 
 protected:
 	RngEngine *vpRng;
+	// Whether this engine owns one interface user count. Separate from
+	// vbValid: a failed re-Enable leaves the engine non-operational while
+	// the count is still owned, and the count must be released exactly once.
+	bool vbIntrfEnabled;
 
 private:
 	bool Init(DeviceIntrf * const pIntrf, RngEngine *pRng);

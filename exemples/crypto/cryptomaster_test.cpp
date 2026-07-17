@@ -158,13 +158,20 @@ int main(void)
 	// release.
 	CracenIntrf *cracen = CracenIntrfInstance();
 	bool held = cracen->ModuleHold(CRACEN_MODULE_RNG);
-	check("cipher fails while CRACEN is held",
+	check("cipher busy while CRACEN is held",
 		held && cipher->Cipher(CRYPTO_CIPHER_ECB, 1, kat, nullptr, 0,
-							   katIn, 16, result) == CRYPTO_STATUS_FAIL);
+							   katIn, 16, result) == CRYPTO_STATUS_BUSY);
 	uint8_t heldTag[16];
-	check("CMAC fails while CRACEN is held",
-		held && macEngine->Mac(CRYPTO_MAC_CMAC, signKey, message, 16,
-							   heldTag, 16) == CRYPTO_STATUS_FAIL);
+	memset(heldTag, 0xA5, sizeof(heldTag));
+	CRYPTO_STATUS heldMac = macEngine->Mac(CRYPTO_MAC_CMAC, signKey, message,
+										   16, heldTag, 16);
+	bool heldTagZero = true;
+	for (int i = 0; i < 16; i++)
+	{
+		heldTagZero = heldTagZero && heldTag[i] == 0U;
+	}
+	check("CMAC busy while CRACEN is held, tag zeroed",
+		held && heldMac == CRYPTO_STATUS_BUSY && heldTagZero);
 	check("foreign hold survives the rejected cipher",
 		held && !cracen->ModuleHold(CRACEN_MODULE_CRYPTOMASTER));
 	if (held)

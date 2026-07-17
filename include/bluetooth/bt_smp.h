@@ -409,11 +409,20 @@ void BtSmpTimeoutCheck(void);
  * slot left disabled, so Secure Connections pairing fails cleanly instead of
  * overrunning caller storage.
  *
+ * Reinitialization tears the previous composition down through the OLD
+ * provider first: pending operations are dropped, the old completion handler
+ * is detached, and every link and OOB key context is destroyed by the engine
+ * that created it before the new engines are installed.
+ *
  * @param	pEcdh	KeyAgreeEngine providing P-256 ECDH.
  * @param	pAes	CipherEngine providing AES-128 ECB.
  * @param	pRng	RngEngine providing security-grade randomness.
+ *
+ * @return	true when the provided engines were accepted; false when a
+ * 			non-null ECDH engine was refused for an unusable key context size
+ * 			(the slot is left disabled and SC pairing will fail cleanly).
  */
-void BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng);
+bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng);
 
 /// Configure the local IO capability and authentication requirements. Call
 /// after BtSmpInit. When never called the defaults are NoInputNoOutput /

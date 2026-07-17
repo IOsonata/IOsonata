@@ -881,7 +881,8 @@ static CRYPTO_STATUS EnsureCc3xx(Device *pDev, Cc3xxIntrf *pIntrf)
 {
 	if (!Cc3xxAcquire(pIntrf))
 	{
-		return CRYPTO_STATUS_FAIL;
+		// The operation lock is owned elsewhere: transient, retryable.
+		return CRYPTO_STATUS_BUSY;
 	}
 
 	if (s_bCcInit == false)
@@ -930,19 +931,23 @@ bool CryptoCc3xx::Enable()
 		return false;
 	}
 
-	// Count this engine as one interface user. The first user powers the
-	// wrapper through the DeviceIntrf reference count. A failed bring-up
-	// releases the count so the wrapper does not stay powered for a dead
-	// engine.
-	bool counted = vbValid;
-	if (!counted)
+	// Count this engine as one interface user, owned through vbIntrfEnabled
+	// and nothing else: vbValid can go false on a failed re-Enable while the
+	// count is still owned, and the count must be released exactly once. On
+	// a first bring-up failure the fresh count is released so the wrapper
+	// does not stay powered for a dead engine; on a failed re-Enable the
+	// original count is kept for the eventual Disable.
+	bool fresh = !vbIntrfEnabled;
+	if (fresh)
 	{
 		pIntrf->Enable();
+		vbIntrfEnabled = true;
 	}
 	bool ok = (EnsureCc3xx(pDev, pIntrf) == CRYPTO_STATUS_OK);
-	if (!ok && !counted)
+	if (!ok && fresh)
 	{
 		pIntrf->Disable();
+		vbIntrfEnabled = false;
 	}
 	vbValid = ok;
 	return ok;
@@ -950,11 +955,12 @@ bool CryptoCc3xx::Enable()
 
 void CryptoCc3xx::Disable()
 {
-	if (!vbValid)
+	vbValid = false;
+	if (!vbIntrfEnabled)
 	{
 		return;
 	}
-	vbValid = false;
+	vbIntrfEnabled = false;
 	// Force the next user through the core bring-up: if this release powers
 	// the wrapper off, the core setup is lost. A sibling engine still
 	// counted re-establishes it through EnsureCc3xx at its next operation.
@@ -979,22 +985,30 @@ CRYPTO_STATUS CryptoCc3xx::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 {
 	Device *pDev = this;
 	Cc3xxIntrf *pIntrf = (Cc3xxIntrf *)Interface();
-	if (!vbValid || Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr ||
-		pPubKey == nullptr)
+	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr || pPubKey == nullptr)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
 
-	// Reset the context before any hardware step. A failed bring-up or a busy
-	// accelerator must not leave a previous private key usable in a reused
-	// context.
+	// Reset the context and output before any gate, including the lifecycle
+	// gate. A disabled engine, a failed bring-up or a busy accelerator must
+	// not leave a previous private key usable in a reused context.
 	KeyCtx *pk = (KeyCtx *)pKeyCtx;
 	KeyReset(pk);
 	memset(pPubKey, 0, 64U);
 
-	if (EnsureCc3xx(pDev, pIntrf) != CRYPTO_STATUS_OK || !Cc3xxAcquire(pIntrf))
+	if (!vbValid)
 	{
 		return CRYPTO_STATUS_FAIL;
+	}
+	CRYPTO_STATUS ready = EnsureCc3xx(pDev, pIntrf);
+	if (ready != CRYPTO_STATUS_OK)
+	{
+		return ready;
+	}
+	if (!Cc3xxAcquire(pIntrf))
+	{
+		return CRYPTO_STATUS_BUSY;
 	}
 
 	CRYPTO_STATUS status = CRYPTO_STATUS_FAIL;
@@ -1019,20 +1033,39 @@ CRYPTO_STATUS CryptoCc3xx::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 {
 	Device *pDev = this;
 	Cc3xxIntrf *pIntrf = (Cc3xxIntrf *)Interface();
-	if (!vbValid || Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr ||
-		pPeerPubKey == nullptr || pSharedX == nullptr ||
-		EnsureCc3xx(pDev, pIntrf) != CRYPTO_STATUS_OK)
+	if (pKeyCtx == nullptr || pPeerPubKey == nullptr || pSharedX == nullptr)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
+
+	// Disposition on every path: the shared secret is cleared up front and
+	// only written on success. A transient contention returns BUSY and
+	// preserves the single-use key for retry; any other failure consumes it.
+	memset(pSharedX, 0, P256_BYTES);
 	KeyCtx *pk = (KeyCtx *)pKeyCtx;
+	if (Curve != CRYPTO_CURVE_P256 || !vbValid)
+	{
+		KeyReset(pk);
+		return CRYPTO_STATUS_FAIL;
+	}
+	CRYPTO_STATUS ready = EnsureCc3xx(pDev, pIntrf);
+	if (ready == CRYPTO_STATUS_BUSY)
+	{
+		return CRYPTO_STATUS_BUSY;
+	}
+	if (ready != CRYPTO_STATUS_OK)
+	{
+		KeyReset(pk);
+		return CRYPTO_STATUS_FAIL;
+	}
 	if (!Cc3xxAcquire(pIntrf))
 	{
-		return CRYPTO_STATUS_FAIL;
+		return CRYPTO_STATUS_BUSY;
 	}
 	if (!pk->bKeyValid)
 	{
 		Cc3xxRelease(pIntrf);
+		KeyReset(pk);
 		return CRYPTO_STATUS_FAIL;
 	}
 

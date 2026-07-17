@@ -73,6 +73,8 @@ enum CC3XX_ECDH_TEST_ERR {
 	CC3XX_ECDH_TEST_ERR_CONTEND     = -11,	// lock contention was not honored
 	CC3XX_ECDH_TEST_ERR_STALE_KEY   = -12,	// old key survived a rejected KeyGen
 	CC3XX_ECDH_TEST_ERR_LIFECYCLE   = -13,	// disable/enable lifecycle broken
+	CC3XX_ECDH_TEST_ERR_STALE_DIS   = -14,	// key survived a disabled KeyGen
+	CC3XX_ECDH_TEST_ERR_BUSY_SEM    = -15,	// contention semantics broken
 };
 
 volatile int g_Cc3xxEcdhTestResult;
@@ -258,7 +260,7 @@ bool Cc3xxEcdhTest(void)
 			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_CONTEND);
 			break;
 		}
-		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_FAIL ||
+		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_BUSY ||
 			pLock->OpHold())
 		{
 			pLock->OpRelease();
@@ -280,7 +282,7 @@ bool Cc3xxEcdhTest(void)
 			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_STALE_KEY);
 			break;
 		}
-		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_FAIL)
+		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_BUSY)
 		{
 			pLock->OpRelease();
 			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_STALE_KEY);
@@ -316,6 +318,70 @@ bool Cc3xxEcdhTest(void)
 		}
 		printf("PASS\r\n");
 		CC3XX_ECDH_TEST_MARK(10);
+
+		// Step 11 : a KeyGen refused by the lifecycle gate must still consume
+		// the previous key in the reused context. Generate a valid key,
+		// disable, fail a KeyGen on the same context, re-enable: Agree must
+		// reject the context.
+		printf("[11] no stale key across disable: ");
+		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_OK)
+		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_STALE_DIS);
+			break;
+		}
+		pCc->Disable();
+		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) == CRYPTO_STATUS_OK ||
+			!pCc->Enable() ||
+			pCc->Agree(CRYPTO_CURVE_P256, ccCtx, ueccPub, dhCc) ==
+				CRYPTO_STATUS_OK)
+		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_STALE_DIS);
+			break;
+		}
+		printf("PASS\r\n");
+		CC3XX_ECDH_TEST_MARK(11);
+
+		// Step 12 : contention semantics. While the operation lock is owned
+		// elsewhere, Agree returns BUSY, clears the shared secret and keeps
+		// the single-use key; after release the same key completes the
+		// derivation.
+		printf("[12] BUSY preserves key, clears out: ");
+		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_OK)
+		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_BUSY_SEM);
+			break;
+		}
+		memset(dhCc, 0xA5, sizeof(dhCc));
+		if (!pLock->OpHold())
+		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_BUSY_SEM);
+			break;
+		}
+		CRYPTO_STATUS busy = pCc->Agree(CRYPTO_CURVE_P256, ccCtx, ueccPub,
+										dhCc, false);
+		pLock->OpRelease();
+		bool cleared = true;
+		for (size_t i = 0; i < sizeof(dhCc); i++)
+		{
+			cleared = cleared && dhCc[i] == 0U;
+		}
+		bool nonzero = false;
+		if (busy == CRYPTO_STATUS_BUSY && cleared &&
+			pCc->Agree(CRYPTO_CURVE_P256, ccCtx, ueccPub, dhCc) ==
+				CRYPTO_STATUS_OK)
+		{
+			for (size_t i = 0; i < sizeof(dhCc); i++)
+			{
+				nonzero = nonzero || dhCc[i] != 0U;
+			}
+		}
+		if (!nonzero)
+		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_BUSY_SEM);
+			break;
+		}
+		printf("PASS\r\n");
+		CC3XX_ECDH_TEST_MARK(12);
 
 		printf("\r\nAll steps passed. Result 0, pass mask 0x%02X\r\n",
 			   (unsigned)g_Cc3xxEcdhTestPassMask);

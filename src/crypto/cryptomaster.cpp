@@ -241,10 +241,16 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-	if (vpCracen == nullptr ||
-		!vpCracen->ModuleHold(CRACEN_MODULE_CRYPTOMASTER))
+	if (vpCracen == nullptr)
 	{
+		if (Len > 0U) memset(pOut, 0, Len);
 		return CRYPTO_STATUS_FAIL;
+	}
+	if (!vpCracen->ModuleHold(CRACEN_MODULE_CRYPTOMASTER))
+	{
+		// Refused hold: fail closed and retryable.
+		if (Len > 0U) memset(pOut, 0, Len);
+		return CRYPTO_STATUS_BUSY;
 	}
 
 	const uint8_t *key = Key.Plain.pData;
