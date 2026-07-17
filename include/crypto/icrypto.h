@@ -86,10 +86,25 @@ typedef enum __Crypto_Curve {
 } CRYPTO_CURVE;
 
 #define P256_BYTES	32U
+#define CRYPTO_KEYCTX_MAX	64U
 
 #ifdef __cplusplus
+class CryptoEngine;
+class CipherEngine;
+class MacEngine;
+class HashEngine;
+class KeyAgreeEngine;
+class SignEngine;
 class RngEngine;
 extern "C" {
+#else
+typedef struct CryptoEngine CryptoEngine;
+typedef struct CipherEngine CipherEngine;
+typedef struct MacEngine MacEngine;
+typedef struct HashEngine HashEngine;
+typedef struct KeyAgreeEngine KeyAgreeEngine;
+typedef struct SignEngine SignEngine;
+typedef struct RngEngine RngEngine;
 #endif
 
 bool P256IsZero(const uint8_t *pData, size_t Len);
@@ -101,11 +116,10 @@ void P256RegularizeScalar(const uint8_t K[P256_BYTES],
 uint32_t P256RegularBit(const uint8_t Scalar[P256_BYTES + 1U],
 						uint32_t BitNo);
 void CryptoSecureWipe(void *pData, size_t Len);
+bool P256RandomScalar(RngEngine *pRng, uint8_t Scalar[P256_BYTES]);
 
 #ifdef __cplusplus
 }
-
-bool P256RandomScalar(RngEngine *pRng, uint8_t Scalar[P256_BYTES]);
 
 typedef enum __Crypto_Op {
 	CRYPTO_OP_NONE = 0,
@@ -119,7 +133,6 @@ typedef enum __Crypto_Op {
 	CRYPTO_OP_RANDOM
 } CRYPTO_OP;
 
-class CryptoEngine;
 typedef void (*CryptoCompleteHandler_t)(CryptoEngine * const pEngine,
 										CRYPTO_OP Op,
 										CRYPTO_STATUS Status,
@@ -185,6 +198,8 @@ public:
 
 class KeyAgreeEngine : virtual public CryptoEngine {
 public:
+	// All in-tree consumers reserve CRYPTO_KEYCTX_MAX bytes. A provider that
+	// needs more storage is not compatible with those fixed embedded consumers.
 	virtual size_t KeyCtxSize() const { return 0; }
 	virtual void KeyReset(void *pKeyCtx) { (void)pKeyCtx; }
 	virtual CRYPTO_STATUS KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
@@ -232,18 +247,6 @@ public:
 	}
 	virtual bool IsSecure() const { return false; }
 };
-
-#else
-
-// Public C headers may carry engine pointers without exposing the C++ object
-// layout. The matching functions are implemented in C++ with C linkage.
-typedef struct CryptoEngine CryptoEngine;
-typedef struct CipherEngine CipherEngine;
-typedef struct MacEngine MacEngine;
-typedef struct HashEngine HashEngine;
-typedef struct KeyAgreeEngine KeyAgreeEngine;
-typedef struct SignEngine SignEngine;
-typedef struct RngEngine RngEngine;
 
 #endif // __cplusplus
 
