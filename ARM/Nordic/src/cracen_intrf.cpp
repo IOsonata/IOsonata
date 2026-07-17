@@ -9,21 +9,21 @@
 		Write, exactly as a sensor reaches an SPI or I2C bus.
 
 		The transfer follows the same pattern as SPI and I2C: StartTx or StartRx
-		receives the DevAddr and saves it (here, which sub-block base the access
-		lands in, the way SPI saves the chip-select). TxSrData latches the byte
-		offset from the address phase; TxData writes and RxData reads at the saved
-		base plus the latched offset. Registers are accessed as 32-bit words and
-		operand memory byte-wise, matching the hardware.
+		receives the DevAddr and saves it. TxSrData latches the byte offset from
+		the address phase; TxData writes and RxData reads at the saved base plus
+		the latched offset. Registers are accessed as 32-bit words and operand
+		memory byte-wise, matching the hardware.
 
-		ModuleHold enables a module for the whole operation and takes the busy
-		flag so the engines serialize; ModuleRelease disables and releases. The
-		held module also selects which register sub-block the register base is.
+		ModuleHold provides operation-level exclusion across CryptoMaster,
+		BA414EP and the RNG. It is separate from the DeviceIntrf transfer busy
+		flag because one crypto operation contains many register transfers.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
 
 @license MIT, (c) 2026 I-SYST.
 ----------------------------------------------------------------------------*/
+#include <errno.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -31,35 +31,38 @@
 
 #include "cracen_intrf.h"
 
-// The random generator is drawn through the vendor CTR-DRBG driver. When a
-// SoftDevice (S115/S145) is enabled it owns the entropy hardware; draws must
-// then go through the SoftDevice entropy pool instead of the driver.
 #include "nrfx_cracen.h"
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 #include "nrf_sdm.h"
 #include "nrf_soc.h"
 #endif
 
-// Operand memory sub-block offset from the CRACENCORE base.
 #define BA414EP_CRYPTORAM_OFFSET	0x8000U
 
-// The two fixed register sub-block bases and the operand memory base.
+#ifndef CRACEN_SD_RNG_POLL_LIMIT
+#define CRACEN_SD_RNG_POLL_LIMIT	1000000U
+#endif
+
 static volatile uint8_t *s_pPkeRegBase;
 static volatile uint8_t *s_pCmRegBase;
 static volatile uint8_t *s_pMemBase;
-
-// Active register base (the held module's sub-block).
 static volatile uint8_t *s_pRegBase;
 
-// Saved transfer state, set by StartTx / StartRx and the address phase, used by
-// TxData / RxData. This mirrors how SPI saves the chip-select in StartTx.
-static volatile uint8_t *s_pXferBase;	// base saved from DevAddr
-static bool s_bXferMem;					// operand memory space (byte access)
-static uint32_t s_Offset;				// byte offset latched from address phase
+static volatile uint8_t *s_pXferBase;
+static bool s_bXferMem;
+static uint32_t s_Offset;
 static bool s_bAddrLatched;
-static bool s_bRngXfer;					// current Rx is an entropy read
-static bool s_bRngHeld;					// RNG module held for this entropy read
-static bool s_bDrbgInit;				// CTR-DRBG brought up once
+static bool s_bRngXfer;
+static bool s_bRngHeld;
+static bool s_bDrbgInit;
+
+// One operation may own CRACEN at a time. s_HeldMask is zero when there is no
+// owner. s_PreviousEnable remembers whether the selected module was already
+// enabled before the hold, so release does not power down another subsystem's
+// pre-existing setup.
+static atomic_flag s_HoldFlag = ATOMIC_FLAG_INIT;
+static uint32_t s_HeldMask;
+static uint32_t s_PreviousEnable;
 
 static void CracenSelectBase(uint32_t DevAddr)
 {
@@ -70,16 +73,11 @@ static void CracenSelectBase(uint32_t DevAddr)
 static bool CracenStartTx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 {
 	(void)pIntrf;
-	// Save which sub-block this transfer lands in, and start a fresh address
-	// phase. The module is already held enabled by ModuleHold.
 	CracenSelectBase(DevAddr);
 	s_bAddrLatched = false;
 	return true;
 }
 
-// True when a SoftDevice is present in the build and enabled at run time. The
-// SoftDevice owns the entropy hardware while enabled; direct access would
-// assert the stack, so draws must go through its entropy pool.
 static bool CracenSdEnabled(void)
 {
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
@@ -93,36 +91,31 @@ static bool CracenSdEnabled(void)
 
 static bool CracenStartRx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 {
-	(void)pIntrf;
 	if (DevAddr == CRACEN_ADDR_RNG)
 	{
-		// Entropy read. With the SoftDevice enabled the draw goes through its
-		// pool and no module hold is needed. Otherwise hold the RNG module for
-		// the transfer; when another engine holds the core this fails and the
-		// framework retry (MaxRetry) reattempts the whole transfer.
-		s_bRngXfer = true;
-		s_bRngHeld = false;
+		bool held = false;
 		if (!CracenSdEnabled())
 		{
 			CracenIntrf *p = (CracenIntrf *)pIntrf->pDevData;
-			if (!p->ModuleHold(CRACEN_MODULE_RNG))
+			if (p == nullptr || !p->ModuleHold(CRACEN_MODULE_RNG))
 			{
 				return false;
 			}
-			s_bRngHeld = true;
+			held = true;
 		}
+
+		// Publish transfer state only after acquisition succeeds. A failed
+		// StartRx is not followed by StopRx, so stale state must not be left.
+		s_bRngHeld = held;
+		s_bRngXfer = true;
 		return true;
 	}
-	// Restart condition inside a read: keep the offset latched by the preceding
-	// address phase; only re-select the saved base.
+
 	s_bRngXfer = false;
 	CracenSelectBase(DevAddr);
 	return true;
 }
 
-// Address phase: latch the byte offset (little-endian) the engine sends before
-// the data. Used for both the read address phase (TxSrData) and a write where
-// the address leads the data in one buffer.
 static int CracenTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int DataLen)
 {
 	(void)pIntrf;
@@ -130,6 +123,7 @@ static int CracenTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int Dat
 	{
 		return 0;
 	}
+
 	int consumed = 0;
 	if (!s_bAddrLatched)
 	{
@@ -143,6 +137,7 @@ static int CracenTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int Dat
 		s_bAddrLatched = true;
 		consumed = n;
 	}
+
 	int len = DataLen - consumed;
 	const uint8_t *p = &pData[consumed];
 	if (s_bXferMem)
@@ -170,20 +165,20 @@ static int CracenTxSrData(DevIntrf_t * const pIntrf, const uint8_t *pData, int D
 	return CracenTxData(pIntrf, pData, DataLen);
 }
 
-// Fill the buffer from the SoftDevice entropy pool. The pool refills at a
-// finite rate, so take what is available until the request is filled.
 static int CracenSdRandFill(uint8_t *pBuff, int BuffLen)
 {
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 	int idx = 0;
-	while (idx < BuffLen)
+	uint32_t polls = CRACEN_SD_RNG_POLL_LIMIT;
+	while (idx < BuffLen && polls-- > 0U)
 	{
 		uint8_t avail = 0;
-		(void)sd_rand_application_bytes_available_get(&avail);
-		if (avail == 0)
+		if (sd_rand_application_bytes_available_get(&avail) != NRF_SUCCESS ||
+			avail == 0U)
 		{
 			continue;
 		}
+
 		int n = BuffLen - idx;
 		if (n > (int)avail)
 		{
@@ -194,9 +189,10 @@ static int CracenSdRandFill(uint8_t *pBuff, int BuffLen)
 			idx += n;
 		}
 	}
-	return BuffLen;
+	return idx == BuffLen ? BuffLen : 0;
 #else
-	(void)pBuff; (void)BuffLen;
+	(void)pBuff;
+	(void)BuffLen;
 	return 0;
 #endif
 }
@@ -208,31 +204,36 @@ static int CracenRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
 	{
 		return 0;
 	}
+
 	if (s_bRngXfer)
 	{
 		if (!s_bRngHeld)
 		{
 			return CracenSdRandFill(pBuff, BuffLen);
 		}
-		// Bring the CTR-DRBG up once, then draw.
+
 		if (!s_bDrbgInit)
 		{
-			if (nrfx_cracen_init() != 0)
+			int rc = nrfx_cracen_init();
+			if (rc != 0 && rc != -EALREADY)
 			{
 				return 0;
 			}
 			s_bDrbgInit = true;
 		}
+
 		if (nrfx_cracen_ctr_drbg_random_get(pBuff, (size_t)BuffLen) != 0)
 		{
 			return 0;
 		}
 		return BuffLen;
 	}
+
 	if (!s_bAddrLatched)
 	{
 		return 0;
 	}
+
 	if (s_bXferMem)
 	{
 		const volatile uint8_t *d = s_pXferBase + s_Offset;
@@ -243,7 +244,8 @@ static int CracenRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
 	}
 	else
 	{
-		const volatile uint32_t *w = (const volatile uint32_t *)(s_pXferBase + s_Offset);
+		const volatile uint32_t *w =
+			(const volatile uint32_t *)(s_pXferBase + s_Offset);
 		for (int i = 0; i + 4 <= BuffLen; i += 4)
 		{
 			uint32_t v = w[i / 4];
@@ -269,7 +271,10 @@ static void CracenStopRx(DevIntrf_t * const pIntrf)
 		if (s_bRngHeld)
 		{
 			CracenIntrf *p = (CracenIntrf *)pIntrf->pDevData;
-			p->ModuleRelease();
+			if (p != nullptr)
+			{
+				p->ModuleRelease();
+			}
 			s_bRngHeld = false;
 		}
 		s_bRngXfer = false;
@@ -278,7 +283,6 @@ static void CracenStopRx(DevIntrf_t * const pIntrf)
 	s_bAddrLatched = false;
 }
 
-// Map a CRACEN_MODULE to its enable bit.
 static uint32_t CracenModuleMask(uint32_t Module)
 {
 	switch (Module)
@@ -294,62 +298,94 @@ static uint32_t CracenModuleMask(uint32_t Module)
 	}
 }
 
-// Operation-level hold, separate from the per-transfer busy flag. ModuleHold
-// takes this for the whole operation so the engines serialize against one
-// another; each Device Read / Write inside the operation still takes and
-// releases the transfer busy flag through StartTx / StopTx.
-static atomic_flag s_HoldFlag;
-
 bool CracenIntrf::ModuleHold(uint32_t Module)
 {
 	const uint32_t mask = CracenModuleMask(Module);
-	if (mask == 0U)
+	if (mask == 0U || atomic_flag_test_and_set(&s_HoldFlag))
 	{
 		return false;
 	}
-	if (atomic_flag_test_and_set(&s_HoldFlag))
-	{
-		return false;
-	}
-	// Point register access at the held module's sub-block. The public-key and
-	// symmetric engines are separate register sub-blocks on this die.
+
+	s_HeldMask = mask;
+	s_PreviousEnable = NRF_CRACEN->ENABLE & mask;
 	s_pRegBase = (Module == CRACEN_MODULE_CRYPTOMASTER) ? s_pCmRegBase
-													    : s_pPkeRegBase;
+												 : s_pPkeRegBase;
 	NRF_CRACEN->ENABLE |= mask;
 	return true;
 }
 
 void CracenIntrf::ModuleRelease(void)
 {
-	NRF_CRACEN->ENABLE &= ~(CRACEN_ENABLE_CRYPTOMASTER_Msk |
-							CRACEN_ENABLE_PKEIKG_Msk |
-							CRACEN_ENABLE_RNG_Msk);
+	const uint32_t mask = s_HeldMask;
+	if (mask == 0U)
+	{
+		return;
+	}
+
+	// Restore only the module owned by this hold. Do not disable modules that
+	// were already enabled before acquisition and do not touch unrelated bits.
+	if (s_PreviousEnable == 0U)
+	{
+		NRF_CRACEN->ENABLE &= ~mask;
+	}
+	s_HeldMask = 0U;
+	s_PreviousEnable = 0U;
 	atomic_flag_clear(&s_HoldFlag);
 }
 
 static void CracenDummyDisable(DevIntrf_t * const pIntrf) { (void)pIntrf; }
 static void CracenDummyEnable(DevIntrf_t * const pIntrf) { (void)pIntrf; }
-static uint32_t CracenGetRate(DevIntrf_t * const pIntrf) { (void)pIntrf; return 0U; }
+static uint32_t CracenGetRate(DevIntrf_t * const pIntrf)
+{
+	(void)pIntrf;
+	return 0U;
+}
 static uint32_t CracenSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 {
-	(void)pIntrf; (void)Rate; return 0U;
+	(void)pIntrf;
+	(void)Rate;
+	return 0U;
+}
+static void CracenReset(DevIntrf_t * const pIntrf)
+{
+	(void)pIntrf;
+	s_bAddrLatched = false;
+	s_bRngXfer = false;
+	s_bRngHeld = false;
+}
+static void CracenPowerOff(DevIntrf_t * const pIntrf)
+{
+	(void)pIntrf;
+	// Operation owners control module power through ModuleHold/ModuleRelease.
+}
+static void *CracenGetHandle(DevIntrf_t * const pIntrf)
+{
+	(void)pIntrf;
+	return (void *)NRF_CRACENCORE;
 }
 
 bool CracenIntrf::Init(void)
 {
-	// Register sub-block bases: the public-key engine and the symmetric engine
-	// are separate register blocks; operand memory is the public-key operand RAM.
 	s_pPkeRegBase = (volatile uint8_t *)&NRF_CRACENCORE->PK;
 	s_pCmRegBase = (volatile uint8_t *)NRF_CRACENCORE;
 	s_pMemBase = (volatile uint8_t *)((uintptr_t)NRF_CRACENCORE +
 									 BA414EP_CRYPTORAM_OFFSET);
 	s_pRegBase = s_pPkeRegBase;
+	s_pXferBase = s_pPkeRegBase;
+	s_bXferMem = false;
+	s_Offset = 0U;
 	s_bAddrLatched = false;
+	s_bRngXfer = false;
+	s_bRngHeld = false;
+	s_bDrbgInit = false;
+	s_HeldMask = 0U;
+	s_PreviousEnable = 0U;
 
+	memset(&vDevIntrf, 0, sizeof(vDevIntrf));
 	vDevIntrf.pDevData = this;
 	vDevIntrf.IntPrio = 0;
 	vDevIntrf.EvtCB = nullptr;
-	vDevIntrf.MaxRetry = 0;
+	vDevIntrf.MaxRetry = 5;
 	vDevIntrf.Type = DEVINTRF_TYPE_CRYPTO;
 	vDevIntrf.bDma = false;
 	vDevIntrf.bIntEn = false;
@@ -357,6 +393,8 @@ bool CracenIntrf::Init(void)
 	atomic_flag_clear(&vDevIntrf.bBusy);
 	atomic_flag_clear(&s_HoldFlag);
 	atomic_store(&vDevIntrf.EnCnt, 0);
+	atomic_store(&vDevIntrf.bTxReady, true);
+	atomic_store(&vDevIntrf.bNoStop, false);
 
 	vDevIntrf.Disable = CracenDummyDisable;
 	vDevIntrf.Enable = CracenDummyEnable;
@@ -369,6 +407,9 @@ bool CracenIntrf::Init(void)
 	vDevIntrf.TxData = CracenTxData;
 	vDevIntrf.TxSrData = CracenTxSrData;
 	vDevIntrf.StopTx = CracenStopTx;
+	vDevIntrf.Reset = CracenReset;
+	vDevIntrf.PowerOff = CracenPowerOff;
+	vDevIntrf.GetHandle = CracenGetHandle;
 	return true;
 }
 
@@ -378,8 +419,7 @@ CracenIntrf *CracenIntrfInstance(void)
 	static bool s_bInit = false;
 	if (!s_bInit)
 	{
-		s_Instance.Init();
-		s_bInit = true;
+		s_bInit = s_Instance.Init();
 	}
-	return &s_Instance;
+	return s_bInit ? &s_Instance : nullptr;
 }
