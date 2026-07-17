@@ -1,2 +1,17 @@
-# IOsonata headers are primarily C++
+# Normalize text files
+* text=auto
+
+# IOsonata uses .h for its C++ classes and implementation interfaces
 *.h linguist-language=C++
+
+# Explicit C sources remain C
+*.c linguist-language=C
+
+# Add actual C-only header directories here
+# src/c_component/** linguist-language=C
+
+# Third-party code does not represent the IOsonata implementation
+external/**  linguist-vendored
+fatfs/**     linguist-vendored
+littlefs/**  linguist-vendored
+micro-ecc/** linguist-vendored
