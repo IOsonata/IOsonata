@@ -3,20 +3,6 @@
 
 @brief	Silex BA414EP hardware P-256 engine on the OO engine tree.
 
-		Ba414ep drives the Silex BA414EP public-key core to perform P-256 ECDH.
-		It implements the KeyAgreeEngine facet: a hardware override of the same
-		operations CryptoUecc provides in software.
-
-		The BA414EP is fixed function for the standard curves. Operands live in
-		numbered crypto-RAM slots. Register offsets, command opcodes and slot
-		indices are hardware facts of the core, restated here in project form.
-
-		Register and operand access goes through the injected CracenIntrf. The
-		absolute base addresses and module enable remain in that interface.
-
-		Randomness for the private scalar and the hardware scalar/projective
-		randomization comes from an injected security-grade RngEngine.
-
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
 
@@ -84,21 +70,14 @@ extern "C" {
 
 #ifdef __cplusplus
 }
-#endif
-
-#ifdef __cplusplus
 
 class CracenIntrf;
-
-/** @addtogroup Crypto
-  * @{
-  */
 
 class Ba414ep : public KeyAgreeEngine {
 public:
 	struct KeyCtx {
 		uint8_t PrivKey[32];
-		bool    bKeyValid;
+		bool bKeyValid;
 	};
 
 	Ba414ep() { vbValid = false; vpRng = nullptr; vpCracen = nullptr; }
@@ -119,11 +98,12 @@ public:
 						bool bKeepKey = false) override;
 
 private:
-	RngEngine  *vpRng;
+	RngEngine *vpRng;
 	CracenIntrf *vpCracen;
 };
 
-/** @} */
+static_assert(sizeof(Ba414ep::KeyCtx) <= CRYPTO_KEYCTX_MAX,
+			  "BA414EP key context exceeds the common consumer storage");
 
 #endif // __cplusplus
 
