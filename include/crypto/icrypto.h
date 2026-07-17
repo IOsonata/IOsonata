@@ -3,11 +3,6 @@
 
 @brief	Object-oriented crypto engine facets, key descriptor and status values.
 
-		Crypto engines inherit Device for lifecycle and one or more operation
-		facets. A combined hardware block may override only the operations it
-		accelerates while retaining software implementations from a base class.
-		No heap, templates or RTTI are required.
-
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
 
@@ -55,13 +50,13 @@ typedef enum __Crypto_Key_Location {
 #define CRYPTO_KEY_USE_AGREE		(1U << 5)
 
 typedef struct __Crypto_Key {
-	CRYPTO_KEY_TYPE      Type;
-	CRYPTO_KEY_LOCATION  Loc;
-	uint32_t             Usage;
+	CRYPTO_KEY_TYPE Type;
+	CRYPTO_KEY_LOCATION Loc;
+	uint32_t Usage;
 	union {
 		struct {
 			const uint8_t *pData;
-			size_t         Len;
+			size_t Len;
 		} Plain;
 		uint32_t SlotIndex;
 		uint32_t OpaqueId;
@@ -90,7 +85,7 @@ typedef enum __Crypto_Curve {
 	CRYPTO_CURVE_P384
 } CRYPTO_CURVE;
 
-#define P256_BYTES		32U
+#define P256_BYTES	32U
 
 #ifdef __cplusplus
 class RngEngine;
@@ -125,7 +120,6 @@ typedef enum __Crypto_Op {
 } CRYPTO_OP;
 
 class CryptoEngine;
-
 typedef void (*CryptoCompleteHandler_t)(CryptoEngine * const pEngine,
 										CRYPTO_OP Op,
 										CRYPTO_STATUS Status,
@@ -135,13 +129,11 @@ class CryptoEngine : virtual public Device {
 public:
 	virtual ~CryptoEngine() {}
 	virtual int SelfTest() { return 0; }
-
 	void SetCompleteHandler(CryptoCompleteHandler_t Handler, void *pCtx)
 	{
 		vCompleteHandler = Handler;
 		vpCompleteCtx = pCtx;
 	}
-
 	virtual bool IsAsync() const { return false; }
 
 protected:
@@ -152,7 +144,6 @@ protected:
 			vCompleteHandler(this, Op, Status, vpCompleteCtx);
 		}
 	}
-
 	CryptoCompleteHandler_t vCompleteHandler = nullptr;
 	void *vpCompleteCtx = nullptr;
 };
@@ -195,21 +186,13 @@ public:
 class KeyAgreeEngine : virtual public CryptoEngine {
 public:
 	virtual size_t KeyCtxSize() const { return 0; }
-
-	// Destroy any private key or provider-side handle represented by pKeyCtx.
-	// Call on cancellation, timeout, disconnect and before reusing a context.
-	virtual void KeyReset(void *pKeyCtx)
-	{
-		(void)pKeyCtx;
-	}
-
+	virtual void KeyReset(void *pKeyCtx) { (void)pKeyCtx; }
 	virtual CRYPTO_STATUS KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 								 uint8_t *pPubKey)
 	{
 		(void)Curve; (void)pKeyCtx; (void)pPubKey;
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-
 	virtual CRYPTO_STATUS Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 								const uint8_t *pPeerPubKey,
 								uint8_t *pSharedX,
@@ -230,7 +213,6 @@ public:
 		(void)Curve; (void)Key; (void)pHash; (void)HashLen; (void)pSig;
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-
 	virtual CRYPTO_STATUS Verify(CRYPTO_CURVE Curve,
 								const uint8_t *pPubKey,
 								const uint8_t *pHash, size_t HashLen,
@@ -248,9 +230,20 @@ public:
 		(void)pOut; (void)Len;
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-
 	virtual bool IsSecure() const { return false; }
 };
+
+#else
+
+// Public C headers may carry engine pointers without exposing the C++ object
+// layout. The matching functions are implemented in C++ with C linkage.
+typedef struct CryptoEngine CryptoEngine;
+typedef struct CipherEngine CipherEngine;
+typedef struct MacEngine MacEngine;
+typedef struct HashEngine HashEngine;
+typedef struct KeyAgreeEngine KeyAgreeEngine;
+typedef struct SignEngine SignEngine;
+typedef struct RngEngine RngEngine;
 
 #endif // __cplusplus
 
