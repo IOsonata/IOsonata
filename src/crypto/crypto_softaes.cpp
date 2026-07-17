@@ -1,15 +1,12 @@
 /**-------------------------------------------------------------------------
 @file	crypto_softaes.cpp
 
-@brief	Software AES-128 crypto engine on the OO engine tree.
+@brief	Software AES-128 cipher and CMAC engine.
 
-		Implements CipherEngine (AES-128 ECB/CTR/CBC) and MacEngine (AES-CMAC)
-		in software. The AES-128 block cipher follows FIPS-197. CMAC follows
-		RFC 4493 and is computed over the virtual Cipher call, so a hardware
-		subclass that overrides Cipher gets hardware-backed CMAC for free.
-
-		AES-128 only: a key that is not 16 bytes, or a non-plain key, is declined.
-		Round keys and intermediate state are wiped on every operation exit.
+		CMAC is computed through the virtual Cipher operation. A hardware subclass
+		therefore accelerates inherited CMAC without duplicating the MAC code. The
+		public operations enforce CryptoKey usage policy; CMAC uses an internal key
+		descriptor for its block-cipher calls after validating SIGN permission.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -24,22 +21,17 @@
 
 #define AES_BLOCK		16U
 #define AES128_ROUNDS	10U
-#define AES128_RK_WORDS	44U		// (Rounds + 1) * 4
+#define AES128_RK_WORDS	44U
 
-// Zeroize helper; volatile-through so the wipe is not optimized away.
 static void AesWipe(void *pData, size_t Len)
 {
 	volatile uint8_t *p = (volatile uint8_t *)pData;
-	while (Len-- > 0)
+	while (Len-- > 0U)
 	{
-		*p++ = 0;
+		*p++ = 0U;
 	}
 }
 
-//-----------------------------------------------------------------------------
-// FIPS-197 AES-128 block cipher (encrypt path only; ECB/CTR/CBC-encrypt and
-// CMAC use only the forward cipher).
-//-----------------------------------------------------------------------------
 static const uint8_t s_SBox[256] = {
 	0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,
 	0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0,
@@ -59,133 +51,117 @@ static const uint8_t s_SBox[256] = {
 	0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16
 };
 
-// Round constants for the key schedule.
 static const uint8_t s_Rcon[AES128_ROUNDS] = {
 	0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0x1b,0x36
 };
 
-// Multiply by x (0x02) in GF(2^8) with the AES modulus 0x11b.
 static inline uint8_t AesXtime(uint8_t a)
 {
 	return (uint8_t)((a << 1) ^ ((a >> 7) * 0x1b));
 }
 
-// Expand a 16-byte key into 44 round-key words (176 bytes).
 static void AesKeyExpand(const uint8_t Key[16], uint8_t Rk[AES128_RK_WORDS * 4])
 {
 	memcpy(Rk, Key, AES_BLOCK);
 	for (uint32_t i = 4; i < AES128_RK_WORDS; i++)
 	{
-		uint8_t t[4];
-		t[0] = Rk[(i - 1) * 4 + 0];
-		t[1] = Rk[(i - 1) * 4 + 1];
-		t[2] = Rk[(i - 1) * 4 + 2];
-		t[3] = Rk[(i - 1) * 4 + 3];
-		if ((i & 3) == 0)
+		uint8_t t[4] = {
+			Rk[(i - 1U) * 4U], Rk[(i - 1U) * 4U + 1U],
+			Rk[(i - 1U) * 4U + 2U], Rk[(i - 1U) * 4U + 3U]
+		};
+		if ((i & 3U) == 0U)
 		{
-			uint8_t tmp = t[0];		// RotWord
+			uint8_t first = t[0];
 			t[0] = s_SBox[t[1]];
 			t[1] = s_SBox[t[2]];
 			t[2] = s_SBox[t[3]];
-			t[3] = s_SBox[tmp];
-			t[0] ^= s_Rcon[(i / 4) - 1];
+			t[3] = s_SBox[first];
+			t[0] ^= s_Rcon[(i / 4U) - 1U];
 		}
-		Rk[i * 4 + 0] = (uint8_t)(Rk[(i - 4) * 4 + 0] ^ t[0]);
-		Rk[i * 4 + 1] = (uint8_t)(Rk[(i - 4) * 4 + 1] ^ t[1]);
-		Rk[i * 4 + 2] = (uint8_t)(Rk[(i - 4) * 4 + 2] ^ t[2]);
-		Rk[i * 4 + 3] = (uint8_t)(Rk[(i - 4) * 4 + 3] ^ t[3]);
+		for (uint32_t j = 0; j < 4U; j++)
+		{
+			Rk[i * 4U + j] = (uint8_t)(Rk[(i - 4U) * 4U + j] ^ t[j]);
+		}
 	}
 }
 
-// Encrypt one 16-byte block in place-safe form (In and Out may alias).
 static void AesEncryptBlock(const uint8_t Rk[AES128_RK_WORDS * 4],
 							const uint8_t In[16], uint8_t Out[16])
 {
 	uint8_t st[16];
 	for (int i = 0; i < 16; i++)
 	{
-		st[i] = (uint8_t)(In[i] ^ Rk[i]);	// AddRoundKey, round 0
+		st[i] = (uint8_t)(In[i] ^ Rk[i]);
 	}
 
 	for (uint32_t round = 1; round < AES128_ROUNDS; round++)
 	{
 		uint8_t t[16];
-		// SubBytes.
-		for (int i = 0; i < 16; i++)
-		{
-			st[i] = s_SBox[st[i]];
-		}
-		// ShiftRows (state is column-major: byte r + 4c).
+		for (int i = 0; i < 16; i++) st[i] = s_SBox[st[i]];
 		t[0]=st[0];  t[4]=st[4];  t[8]=st[8];   t[12]=st[12];
 		t[1]=st[5];  t[5]=st[9];  t[9]=st[13];  t[13]=st[1];
 		t[2]=st[10]; t[6]=st[14]; t[10]=st[2];  t[14]=st[6];
 		t[3]=st[15]; t[7]=st[3];  t[11]=st[7];  t[15]=st[11];
-		// MixColumns.
 		for (int c = 0; c < 4; c++)
 		{
 			uint8_t *p = &t[c * 4];
-			uint8_t a0 = p[0], a1 = p[1], a2 = p[2], a3 = p[3];
-			st[c*4+0] = (uint8_t)(AesXtime(a0) ^ (AesXtime(a1) ^ a1) ^ a2 ^ a3);
-			st[c*4+1] = (uint8_t)(a0 ^ AesXtime(a1) ^ (AesXtime(a2) ^ a2) ^ a3);
-			st[c*4+2] = (uint8_t)(a0 ^ a1 ^ AesXtime(a2) ^ (AesXtime(a3) ^ a3));
-			st[c*4+3] = (uint8_t)((AesXtime(a0) ^ a0) ^ a1 ^ a2 ^ AesXtime(a3));
+			uint8_t a0=p[0], a1=p[1], a2=p[2], a3=p[3];
+			st[c*4]   = (uint8_t)(AesXtime(a0) ^ (AesXtime(a1)^a1) ^ a2 ^ a3);
+			st[c*4+1] = (uint8_t)(a0 ^ AesXtime(a1) ^ (AesXtime(a2)^a2) ^ a3);
+			st[c*4+2] = (uint8_t)(a0 ^ a1 ^ AesXtime(a2) ^ (AesXtime(a3)^a3));
+			st[c*4+3] = (uint8_t)((AesXtime(a0)^a0) ^ a1 ^ a2 ^ AesXtime(a3));
 		}
-		// AddRoundKey.
-		for (int i = 0; i < 16; i++)
-		{
-			st[i] ^= Rk[round * 16 + i];
-		}
+		for (int i = 0; i < 16; i++) st[i] ^= Rk[round * 16U + (uint32_t)i];
 	}
 
-	// Final round: SubBytes, ShiftRows, AddRoundKey (no MixColumns).
 	uint8_t t[16];
-	for (int i = 0; i < 16; i++)
-	{
-		st[i] = s_SBox[st[i]];
-	}
+	for (int i = 0; i < 16; i++) st[i] = s_SBox[st[i]];
 	t[0]=st[0];  t[4]=st[4];  t[8]=st[8];   t[12]=st[12];
 	t[1]=st[5];  t[5]=st[9];  t[9]=st[13];  t[13]=st[1];
 	t[2]=st[10]; t[6]=st[14]; t[10]=st[2];  t[14]=st[6];
 	t[3]=st[15]; t[7]=st[3];  t[11]=st[7];  t[15]=st[11];
 	for (int i = 0; i < 16; i++)
 	{
-		Out[i] = (uint8_t)(t[i] ^ Rk[AES128_ROUNDS * 16 + i]);
+		Out[i] = (uint8_t)(t[i] ^ Rk[AES128_ROUNDS * 16U + (uint32_t)i]);
 	}
 	AesWipe(st, sizeof(st));
 	AesWipe(t, sizeof(t));
 }
 
-//-----------------------------------------------------------------------------
-// CipherEngine.
-//-----------------------------------------------------------------------------
-static bool AesKeyOk(const CryptoKey &Key)
+static bool AesKeyMaterialOk(const CryptoKey &Key)
 {
 	return Key.Type == CRYPTO_KEY_AES_128 &&
-		   Key.Loc == CRYPTO_KEY_LOC_PLAIN &&
-		   Key.Plain.pData != nullptr && Key.Plain.Len == AES_BLOCK;
+		Key.Loc == CRYPTO_KEY_LOC_PLAIN &&
+		Key.Plain.pData != nullptr && Key.Plain.Len == AES_BLOCK;
 }
 
 CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 									const CryptoKey &Key,
 									const uint8_t *pIv, size_t IvLen,
-									const uint8_t *pIn, size_t Len, uint8_t *pOut)
+									const uint8_t *pIn, size_t Len,
+									uint8_t *pOut)
 {
-	if (!AesKeyOk(Key) || pIn == nullptr || pOut == nullptr)
+	uint32_t required = bEncrypt != 0 ? CRYPTO_KEY_USE_ENCRYPT :
+									 CRYPTO_KEY_USE_DECRYPT;
+	if (!AesKeyMaterialOk(Key) || (Key.Usage & required) == 0U ||
+		pIn == nullptr || pOut == nullptr)
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
-	uint8_t rk[AES128_RK_WORDS * 4];
+	uint8_t rk[AES128_RK_WORDS * 4U];
 	AesKeyExpand(Key.Plain.pData, rk);
 	CRYPTO_STATUS st = CRYPTO_STATUS_OK;
 
 	if (Alg == CRYPTO_CIPHER_ECB)
 	{
-		if ((Len & (AES_BLOCK - 1)) != 0 || bEncrypt == 0)
+		if ((Len & (AES_BLOCK - 1U)) != 0U)
 		{
-			// Decrypt path is not provided by this forward-only core; ECB
-			// encrypt only (all IOsonata symmetric use is CTR or CMAC based).
-			st = (bEncrypt == 0) ? CRYPTO_STATUS_UNSUPPORTED : CRYPTO_STATUS_FAIL;
+			st = CRYPTO_STATUS_FAIL;
+		}
+		else if (bEncrypt == 0)
+		{
+			st = CRYPTO_STATUS_UNSUPPORTED;
 		}
 		else
 		{
@@ -205,18 +181,14 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		{
 			uint8_t ctr[AES_BLOCK], ks[AES_BLOCK];
 			memcpy(ctr, pIv, AES_BLOCK);
-			size_t off = 0;
-			while (off < Len)
+			for (size_t off = 0; off < Len; )
 			{
 				AesEncryptBlock(rk, ctr, ks);
-				size_t n = (Len - off < AES_BLOCK) ? (Len - off) : AES_BLOCK;
-				for (size_t j = 0; j < n; j++)
+				size_t n = Len - off < AES_BLOCK ? Len - off : AES_BLOCK;
+				for (size_t j = 0; j < n; j++) pOut[off+j] = pIn[off+j] ^ ks[j];
+				for (int j = AES_BLOCK - 1; j >= 0; j--)
 				{
-					pOut[off + j] = (uint8_t)(pIn[off + j] ^ ks[j]);
-				}
-				for (int j = AES_BLOCK - 1; j >= 0; j--)	// increment counter
-				{
-					if (++ctr[j] != 0) break;
+					if (++ctr[j] != 0U) break;
 				}
 				off += n;
 			}
@@ -227,9 +199,13 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	else if (Alg == CRYPTO_CIPHER_CBC)
 	{
 		if (pIv == nullptr || IvLen != AES_BLOCK ||
-			(Len & (AES_BLOCK - 1)) != 0 || bEncrypt == 0)
+			(Len & (AES_BLOCK - 1U)) != 0U)
 		{
-			st = (bEncrypt == 0) ? CRYPTO_STATUS_UNSUPPORTED : CRYPTO_STATUS_FAIL;
+			st = CRYPTO_STATUS_FAIL;
+		}
+		else if (bEncrypt == 0)
+		{
+			st = CRYPTO_STATUS_UNSUPPORTED;
 		}
 		else
 		{
@@ -237,14 +213,11 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 			memcpy(chain, pIv, AES_BLOCK);
 			for (size_t off = 0; off < Len; off += AES_BLOCK)
 			{
-				uint8_t blk[AES_BLOCK];
-				for (int j = 0; j < AES_BLOCK; j++)
-				{
-					blk[j] = (uint8_t)(pIn[off + j] ^ chain[j]);
-				}
-				AesEncryptBlock(rk, blk, pOut + off);
+				uint8_t block[AES_BLOCK];
+				for (size_t j = 0; j < AES_BLOCK; j++) block[j] = pIn[off+j] ^ chain[j];
+				AesEncryptBlock(rk, block, pOut + off);
 				memcpy(chain, pOut + off, AES_BLOCK);
-				AesWipe(blk, sizeof(blk));
+				AesWipe(block, sizeof(block));
 			}
 			AesWipe(chain, sizeof(chain));
 		}
@@ -258,66 +231,57 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	return st;
 }
 
-//-----------------------------------------------------------------------------
-// MacEngine: AES-CMAC (RFC 4493) over this->Cipher. Because Cipher is virtual,
-// a hardware subclass that overrides it makes this CMAC run over hardware AES.
-//-----------------------------------------------------------------------------
 static void CmacSubkey(const uint8_t In[16], uint8_t Out[16])
 {
-	uint8_t carry = 0;
-	uint8_t msb = (uint8_t)(In[0] >> 7);
+	uint8_t carry = 0U;
+	uint8_t msb = In[0] >> 7;
 	for (int i = 15; i >= 0; i--)
 	{
 		uint8_t b = In[i];
 		Out[i] = (uint8_t)((b << 1) | carry);
-		carry = (uint8_t)((b >> 7) & 1);
+		carry = (b >> 7) & 1U;
 	}
-	if (msb)
-	{
-		Out[15] ^= 0x87;
-	}
+	if (msb != 0U) Out[15] ^= 0x87U;
 }
 
 CRYPTO_STATUS CryptoSoftAes::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 								 const uint8_t *pMsg, size_t Len,
 								 uint8_t *pMac, size_t MacLen)
 {
-	if (Alg != CRYPTO_MAC_CMAC || !AesKeyOk(Key) || pMac == nullptr ||
-		MacLen > AES_BLOCK || (Len > 0 && pMsg == nullptr))
+	if (Alg != CRYPTO_MAC_CMAC || !AesKeyMaterialOk(Key) ||
+		(Key.Usage & CRYPTO_KEY_USE_SIGN) == 0U || pMac == nullptr ||
+		MacLen == 0U || MacLen > AES_BLOCK || (Len > 0U && pMsg == nullptr))
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
-	// One AES-ECB block through the virtual Cipher: hardware if overridden.
-	uint8_t zero[AES_BLOCK] = { 0 };
+	// Cipher enforces ENCRYPT usage. CMAC has already authorized SIGN, so use an
+	// internal descriptor for the block primitive while retaining virtual dispatch.
+	CryptoKey blockKey = Key;
+	blockKey.Usage |= CRYPTO_KEY_USE_ENCRYPT;
+
+	uint8_t zero[AES_BLOCK] = {};
 	uint8_t L[AES_BLOCK], K1[AES_BLOCK], K2[AES_BLOCK];
-	if (Cipher(CRYPTO_CIPHER_ECB, 1, Key, nullptr, 0, zero, AES_BLOCK, L)
-		!= CRYPTO_STATUS_OK)
+	if (Cipher(CRYPTO_CIPHER_ECB, 1, blockKey, nullptr, 0,
+			   zero, AES_BLOCK, L) != CRYPTO_STATUS_OK)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
 	CmacSubkey(L, K1);
 	CmacSubkey(K1, K2);
 
-	size_t nBlocks = (Len + 15) / 16;
-	bool lastComplete = (Len != 0) && ((Len & 15) == 0);
-	if (nBlocks == 0)
-	{
-		nBlocks = 1;		// empty message: one padded block
-	}
+	size_t blocks = (Len + AES_BLOCK - 1U) / AES_BLOCK;
+	bool complete = Len != 0U && (Len & (AES_BLOCK - 1U)) == 0U;
+	if (blocks == 0U) blocks = 1U;
 
-	uint8_t X[AES_BLOCK] = { 0 };
+	uint8_t X[AES_BLOCK] = {};
 	uint8_t Y[AES_BLOCK];
 	CRYPTO_STATUS st = CRYPTO_STATUS_OK;
-
-	for (size_t i = 0; i + 1 < nBlocks; i++)
+	for (size_t i = 0; i + 1U < blocks; i++)
 	{
-		for (int j = 0; j < AES_BLOCK; j++)
-		{
-			Y[j] = (uint8_t)(X[j] ^ pMsg[i * 16 + j]);
-		}
-		if (Cipher(CRYPTO_CIPHER_ECB, 1, Key, nullptr, 0, Y, AES_BLOCK, X)
-			!= CRYPTO_STATUS_OK)
+		for (size_t j = 0; j < AES_BLOCK; j++) Y[j] = X[j] ^ pMsg[i*AES_BLOCK+j];
+		if (Cipher(CRYPTO_CIPHER_ECB, 1, blockKey, nullptr, 0,
+				   Y, AES_BLOCK, X) != CRYPTO_STATUS_OK)
 		{
 			st = CRYPTO_STATUS_FAIL;
 			break;
@@ -327,31 +291,24 @@ CRYPTO_STATUS CryptoSoftAes::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 	if (st == CRYPTO_STATUS_OK)
 	{
 		uint8_t last[AES_BLOCK];
-		size_t base = (nBlocks - 1) * 16;
-		if (lastComplete)
+		size_t base = (blocks - 1U) * AES_BLOCK;
+		if (complete)
 		{
-			for (int j = 0; j < AES_BLOCK; j++)
-			{
-				last[j] = (uint8_t)(pMsg[base + j] ^ K1[j]);
-			}
+			for (size_t j = 0; j < AES_BLOCK; j++) last[j] = pMsg[base+j] ^ K1[j];
 		}
 		else
 		{
-			size_t rem = Len - base;		// 0 for empty, else 1..15
-			for (int j = 0; j < AES_BLOCK; j++)
+			size_t rem = Len - base;
+			for (size_t j = 0; j < AES_BLOCK; j++)
 			{
-				uint8_t mb = ((size_t)j < rem) ? pMsg[base + j] :
-							 ((size_t)j == rem ? 0x80 : 0x00);
-				last[j] = (uint8_t)(mb ^ K2[j]);
+				uint8_t value = j < rem ? pMsg[base+j] : (j == rem ? 0x80U : 0U);
+				last[j] = value ^ K2[j];
 			}
 		}
+		for (size_t j = 0; j < AES_BLOCK; j++) Y[j] = X[j] ^ last[j];
 		uint8_t full[AES_BLOCK];
-		for (int j = 0; j < AES_BLOCK; j++)
-		{
-			Y[j] = (uint8_t)(X[j] ^ last[j]);
-		}
-		if (Cipher(CRYPTO_CIPHER_ECB, 1, Key, nullptr, 0, Y, AES_BLOCK, full)
-			!= CRYPTO_STATUS_OK)
+		if (Cipher(CRYPTO_CIPHER_ECB, 1, blockKey, nullptr, 0,
+				   Y, AES_BLOCK, full) != CRYPTO_STATUS_OK)
 		{
 			st = CRYPTO_STATUS_FAIL;
 		}
@@ -371,12 +328,8 @@ CRYPTO_STATUS CryptoSoftAes::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 	return st;
 }
 
-//-----------------------------------------------------------------------------
-// Self-test: FIPS-197 AES-128 ECB vector and RFC 4493 CMAC vector.
-//-----------------------------------------------------------------------------
 int CryptoSoftAes::SelfTest()
 {
-	// FIPS-197 Appendix B / C.1 AES-128 ECB single block.
 	static const uint8_t aesKey[16] = {
 		0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
 		0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f };
@@ -386,30 +339,32 @@ int CryptoSoftAes::SelfTest()
 	static const uint8_t aesExp[16] = {
 		0x69,0xc4,0xe0,0xd8,0x6a,0x7b,0x04,0x30,
 		0xd8,0xcd,0xb7,0x80,0x70,0xb4,0xc5,0x5a };
-	// RFC 4493 example: key, and CMAC over the empty message.
 	static const uint8_t cmacKey[16] = {
 		0x2b,0x7e,0x15,0x16,0x28,0xae,0xd2,0xa6,
 		0xab,0xf7,0x15,0x88,0x09,0xcf,0x4f,0x3c };
-	static const uint8_t cmacEmptyExp[16] = {
+	static const uint8_t cmacExp[16] = {
 		0xbb,0x1d,0x69,0x29,0xe9,0x59,0x37,0x28,
 		0x7f,0xa3,0x7d,0x12,0x9b,0x75,0x67,0x46 };
 
-	CryptoKey ak{ CRYPTO_KEY_AES_128, CRYPTO_KEY_LOC_PLAIN,
-				  CRYPTO_KEY_USE_ENCRYPT, {} };
-	ak.Plain.pData = aesKey; ak.Plain.Len = 16;
+	CryptoKey cipherKey{CRYPTO_KEY_AES_128, CRYPTO_KEY_LOC_PLAIN,
+						CRYPTO_KEY_USE_ENCRYPT, {}};
+	cipherKey.Plain.pData = aesKey;
+	cipherKey.Plain.Len = sizeof(aesKey);
 	uint8_t out[16];
-	if (Cipher(CRYPTO_CIPHER_ECB, 1, ak, nullptr, 0, aesIn, 16, out)
-		!= CRYPTO_STATUS_OK || memcmp(out, aesExp, 16) != 0)
+	if (Cipher(CRYPTO_CIPHER_ECB, 1, cipherKey, nullptr, 0,
+			   aesIn, sizeof(aesIn), out) != CRYPTO_STATUS_OK ||
+		memcmp(out, aesExp, sizeof(out)) != 0)
 	{
 		return -1;
 	}
 
-	CryptoKey mk{ CRYPTO_KEY_AES_128, CRYPTO_KEY_LOC_PLAIN,
-				  CRYPTO_KEY_USE_SIGN, {} };
-	mk.Plain.pData = cmacKey; mk.Plain.Len = 16;
+	CryptoKey macKey{CRYPTO_KEY_AES_128, CRYPTO_KEY_LOC_PLAIN,
+					 CRYPTO_KEY_USE_SIGN, {}};
+	macKey.Plain.pData = cmacKey;
+	macKey.Plain.Len = sizeof(cmacKey);
 	uint8_t mac[16];
-	if (Mac(CRYPTO_MAC_CMAC, mk, nullptr, 0, mac, 16) != CRYPTO_STATUS_OK ||
-		memcmp(mac, cmacEmptyExp, 16) != 0)
+	if (Mac(CRYPTO_MAC_CMAC, macKey, nullptr, 0, mac, sizeof(mac)) !=
+		CRYPTO_STATUS_OK || memcmp(mac, cmacExp, sizeof(mac)) != 0)
 	{
 		return -2;
 	}
@@ -418,7 +373,8 @@ int CryptoSoftAes::SelfTest()
 
 CryptoSoftAes *CryptoSoftAesCreate(void *pMem, size_t MemSize)
 {
-	if (pMem == nullptr || MemSize < sizeof(CryptoSoftAes))
+	if (pMem == nullptr || MemSize < sizeof(CryptoSoftAes) ||
+		((uintptr_t)pMem & (alignof(CryptoSoftAes) - 1U)) != 0U)
 	{
 		return nullptr;
 	}
