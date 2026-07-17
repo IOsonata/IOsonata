@@ -1,25 +1,47 @@
 /**-------------------------------------------------------------------------
 @file	crypto_softaes.h
 
-@brief	Software AES-128 crypto engine: cipher and CMAC.
+@brief	Software AES-128 crypto engine: cipher, CMAC, CCM and GCM.
 
 		Declares CryptoSoftAes, the software implementation of the CipherEngine
-		(AES-128 ECB/CTR/CBC), MacEngine (AES-CMAC) and AeadEngine (AES-CCM)
-		facets. It is the software
-		base of the symmetric facets: a hardware AES block (Silex CryptoMaster,
-		Arm CryptoCell) inherits the same facets, overrides Cipher and the
-		AesEcbEncrypt block primitive, and the inherited software CMAC then runs
-		over that hardware AES inside one AesOpBegin/AesOpEnd bracket. A build with
-		no accelerator uses this class directly.
+		(AES-128 ECB/CTR/CBC), MacEngine (AES-CMAC) and AeadEngine (AES-CCM,
+		AES-GCM) facets. It is the software base of the symmetric facets: a
+		hardware AES block (Silex CryptoMaster, Arm CryptoCell) inherits the
+		same facets, overrides Cipher and the AesEcbEncrypt block primitive,
+		and the inherited CMAC, CCM and GCM then run over that hardware AES
+		inside one AesOpBegin/AesOpEnd bracket per operation. A build with no
+		accelerator uses this class directly.
 
 		AES-128 only. All values are byte strings in the natural order (the AES
 		state is column-major per FIPS-197), matching the SMP toolbox and the
 		other engines so keys and blocks pass through with no reordering.
 
 @author	Hoang Nguyen Hoan
-@date	Jul 2026
+@date	Jul. 15, 2026
 
-@license MIT, (c) 2026 I-SYST. See bt_smp.h for full text.
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST, all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ----------------------------------------------------------------------------*/
 #ifndef __CRYPTO_SOFTAES_H__
 #define __CRYPTO_SOFTAES_H__
