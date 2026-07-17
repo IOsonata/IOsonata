@@ -23,7 +23,7 @@
 #include <assert.h>
 
 #include "crypto/icrypto.h"
-#include "crypto/crypto_cc3xx_engine.h"
+#include "crypto_cc3xx_engine.h"
 #include "crypto_cc3xx.h"
 #include "coredev/interrupt.h"
 #include <new>
@@ -685,13 +685,14 @@ static bool PointValidate(PkaReg_t X, PkaReg_t Y)
 	return !s_bPkaFault && PkaEqual(P256_T0, P256_T1);
 }
 
-static bool RandomizePoint(const PkaPoint &P)
+static bool RandomizePoint(RngEngine *pRng, const PkaPoint &P)
 {
 	uint8_t z[P256_BYTES];
 	bool valid = false;
 	for (uint32_t attempt = 0U; attempt < 100U; attempt++)
 	{
-		if (RngGet(z, sizeof(z)) == false)
+		if (pRng == nullptr || !pRng->IsSecure() ||
+			pRng->Random(z, sizeof(z)) != CRYPTO_STATUS_OK)
 		{
 			break;
 		}
@@ -737,8 +738,9 @@ static const uint8_t s_P256Generator[64] = {
 	0x2B,0xCE,0x33,0x57,0x6B,0x31,0x5E,0xCE,0xCB,0xB6,0x40,0x68,0x37,0xBF,0x51,0xF5,
 };
 
-static bool P256Multiply(const uint8_t Point[64], const uint8_t Scalar[32],
-						 uint8_t Result[64], bool Randomize)
+static bool P256Multiply(RngEngine *pRng, const uint8_t Point[64],
+						 const uint8_t Scalar[32], uint8_t Result[64],
+						 bool Randomize)
 {
 	if (Point == nullptr || Scalar == nullptr || Result == nullptr ||
 		!P256ScalarInRange(Scalar))
@@ -761,7 +763,7 @@ static bool P256Multiply(const uint8_t Point[64], const uint8_t Scalar[32],
 	{
 		goto out;
 	}
-	if (Randomize && !RandomizePoint(POINT_P))
+	if (Randomize && !RandomizePoint(pRng, POINT_P))
 	{
 		goto out;
 	}
@@ -899,8 +901,8 @@ CRYPTO_STATUS CryptoCc3xx::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 
 	KeyReset(pk);
 	CRYPTO_STATUS status = CRYPTO_STATUS_FAIL;
-	if (P256RandomScalar(pk->PrivKey) &&
-		P256Multiply(s_P256Generator, pk->PrivKey, pPubKey, true))
+	if (P256RandomScalar(vpRng, pk->PrivKey) &&
+		P256Multiply(vpRng, s_P256Generator, pk->PrivKey, pPubKey, true))
 	{
 		pk->bKeyValid = true;
 		status = CRYPTO_STATUS_OK;
@@ -935,7 +937,7 @@ CRYPTO_STATUS CryptoCc3xx::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	}
 
 	uint8_t point[64];
-	const bool ok = P256Multiply(pPeerPubKey, pk->PrivKey, point, true);
+	const bool ok = P256Multiply(vpRng, pPeerPubKey, pk->PrivKey, point, true);
 
 	// Wipe the private scalar unless the caller asked to keep it after a success
 	// (bKeepKey), for one ephemeral key pair against several peers. A failure
@@ -980,7 +982,7 @@ int CryptoCc3xx::SelfTest()
 		return -1;
 	}
 	uint8_t result[64];
-	const bool ok = P256Multiply(pub, priv, result, false);
+	const bool ok = P256Multiply(nullptr, pub, priv, result, false);
 	Cc3xxRelease();
 	const int status = ok && memcmp(result, expected, sizeof(expected)) == 0 ? 0 : -1;
 	CryptoSecureWipe(result, sizeof(result));
@@ -988,7 +990,7 @@ int CryptoCc3xx::SelfTest()
 }
 
 
-CryptoCc3xx *CryptoCc3xxCreate(void *pMem, size_t MemSize)
+CryptoCc3xx *CryptoCc3xxCreate(void *pMem, size_t MemSize, RngEngine *pRng)
 {
 	if (pMem == nullptr || MemSize < sizeof(CryptoCc3xx) ||
 		((uintptr_t)pMem & (alignof(CryptoCc3xx) - 1U)) != 0U ||
@@ -997,6 +999,6 @@ CryptoCc3xx *CryptoCc3xxCreate(void *pMem, size_t MemSize)
 		return nullptr;
 	}
 	CryptoCc3xx *p = new (pMem) CryptoCc3xx();
-	p->Enable();			// return an enabled, valid engine like the other factories
+	p->SetRng(pRng);
 	return p;
 }

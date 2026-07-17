@@ -74,7 +74,7 @@ SOFTWARE.
 #include "crypto/crypto_uecc.h"
 #include "crypto_rng_nrf.h"
 #if defined(NRF52840_XXAA)
-#include "crypto/crypto_cc3xx_engine.h"
+#include "crypto_cc3xx.h"
 #endif
 #include "bt_lesc.h"
 #include "bluetooth/bt_app.h"
@@ -1215,8 +1215,9 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
     // BtLescRequestHandler in the main loop.
     KeyAgreeEngine *pLescEcdh = nullptr;
 #if defined(NRF52840_XXAA)
-    alignas(uint32_t) static uint8_t s_LescEcdhMem[CRYPTO_CC3XX_MEMSIZE];    // CC310 engine object
-    pLescEcdh = CryptoCc3xxCreate(s_LescEcdhMem, sizeof(s_LescEcdhMem));
+    alignas(CryptoCc3xx) static uint8_t s_LescEcdhMem[CRYPTO_CC3XX_MEMSIZE];    // CC310 engine object
+    pLescEcdh = CryptoCc3xxCreate(s_LescEcdhMem, sizeof(s_LescEcdhMem),
+                                  CryptoRngNrfInstance());
     if (pLescEcdh != nullptr)
     {
         DEBUG_PRINTF("Crypto ECDH engine: CryptoCc3xx (CC310 hardware P-256)\r\n");

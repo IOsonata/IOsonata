@@ -60,7 +60,7 @@ SOFTWARE.
 #include "cracen_intrf.h"
 #include "crypto/ba414ep.h"
 #elif defined(NRF52840_XXAA)
-#include "crypto/crypto_cc3xx_engine.h"
+#include "crypto_cc3xx.h"
 #endif
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hcievt.h"
@@ -671,7 +671,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		DEBUG_PRINTF("Crypto ECDH engine: Ba414ep (CRACEN hardware P-256)\r\n");
 	}
 #elif defined(NRF52840_XXAA)
-	alignas(uint32_t) static uint8_t s_CryptoEcdhMem[CRYPTO_CC3XX_MEMSIZE];
+	alignas(CryptoCc3xx) static uint8_t s_CryptoEcdhMem[CRYPTO_CC3XX_MEMSIZE];
 	pEcdh = CryptoCc3xxCreate(s_CryptoEcdhMem, sizeof(s_CryptoEcdhMem),
 							 CryptoRngNrfInstance());
 	if (pEcdh != nullptr)

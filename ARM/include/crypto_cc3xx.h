@@ -24,11 +24,6 @@
 
 #include "crypto/icrypto.h"
 
-/// Storage the caller reserves for a CryptoCc3xx engine object (placement-new
-/// target for CryptoCc3xxCreate). A static assert in the implementation checks
-/// it against the real object size.
-#define CRYPTO_CC3XX_MEMSIZE		64U
-
 #ifdef __cplusplus
 
 /// @brief	CryptoCell CC3xx P-256 ECDH as a KeyAgreeEngine.
@@ -68,10 +63,15 @@ protected:
 	RngEngine *vpRng;			//!< Security-grade random source
 };
 
+/// Storage the caller reserves for a CryptoCc3xx engine object (placement-new
+/// target for CryptoCc3xxCreate). Defined from the class itself so it can
+/// never fall behind the real object size.
+#define CRYPTO_CC3XX_MEMSIZE		sizeof(CryptoCc3xx)
+
 /// @brief	Construct a CryptoCc3xx engine in caller storage (no allocation).
 ///
-/// @param	pMem	Caller storage, at least CRYPTO_CC3XX_MEMSIZE bytes, uint32_t
-///					aligned.
+/// @param	pMem	Caller storage, at least CRYPTO_CC3XX_MEMSIZE bytes, aligned
+///					to alignof(CryptoCc3xx): declare the arena alignas(CryptoCc3xx).
 /// @param	MemSize	Size of pMem in bytes.
 /// @param	pRng	Security-grade random source for key generation and blinding.
 ///

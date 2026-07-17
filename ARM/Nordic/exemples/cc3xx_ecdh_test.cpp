@@ -12,27 +12,72 @@
 		CC3xx/uECC cross-derivations, invalid peer-point rejection, and
 		single-use private-key consumption.
 
+		The test prints each step and previews of the derived values to
+		stdout: semihosting console or wherever the project retargets printf.
+		Result is also left in g_Cc3xxEcdhTestResult (0 pass, negative fail
+		code) and g_Cc3xxEcdhTestPassMask for debugger inspection.
+
 		Usage: call Cc3xxEcdhTest() from an application on the nRF52840 after
-		system initialization. Returns true on pass. Test scaffolding, not part
-		of the library build.
+		system initialization, or build standalone (main included). Returns
+		true on pass. Test scaffolding, not part of the library build.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
 
 @license MIT, (c) 2026 I-SYST. See bt_smp.h for full text.
 ----------------------------------------------------------------------------*/
+#include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "nrf.h"
-#include "crypto/crypto_cc3xx_engine.h"
+#include "crypto_cc3xx.h"
+#if defined(NRF52840_XXAA)
+#include "crypto_cc3xx_engine.h"
+#endif
 #include "crypto/crypto_uecc.h"
 #include "crypto_rng_nrf.h"
 
+enum CC3XX_ECDH_TEST_ERR {
+	CC3XX_ECDH_TEST_ERR_NONE        = 0,
+	CC3XX_ECDH_TEST_ERR_CREATE      = -1,	// an engine failed to construct
+	CC3XX_ECDH_TEST_ERR_SELFTEST    = -2,	// CC3xx known-answer self test failed
+	CC3XX_ECDH_TEST_ERR_KEYGEN      = -3,	// a key generation failed
+	CC3XX_ECDH_TEST_ERR_AGREE       = -4,	// a derivation failed
+	CC3XX_ECDH_TEST_ERR_MISMATCH    = -5,	// engines derived different secrets
+	CC3XX_ECDH_TEST_ERR_ZERO_SECRET = -6,	// derived secret is all zero
+	CC3XX_ECDH_TEST_ERR_KEY_REUSE   = -7,	// consumed key accepted a second Agree
+	CC3XX_ECDH_TEST_ERR_BAD_POINT   = -8,	// invalid peer point was accepted
+	CC3XX_ECDH_TEST_ERR_REUSE_AFTER = -9,	// key survived a failed validation
+	CC3XX_ECDH_TEST_ERR_SW_CREATE   = -10,	// software oracle failed to construct
+};
+
 volatile int g_Cc3xxEcdhTestResult;
+volatile uint32_t g_Cc3xxEcdhTestPassMask;
+
+#define CC3XX_ECDH_TEST_MARK(Bit) \
+	do { g_Cc3xxEcdhTestPassMask |= (1UL << (Bit)); } while (0)
+
+static bool Cc3xxEcdhTestFail(int Result)
+{
+	g_Cc3xxEcdhTestResult = Result;
+	printf("FAIL (code %d)\r\n", Result);
+	return false;
+}
+
+static void Cc3xxEcdhTestHex(const char *pLabel, const uint8_t *pData, int Len)
+{
+	printf("    %s : ", pLabel);
+	for (int i = 0; i < Len; i++)
+	{
+		printf("%02X", pData[i]);
+	}
+	printf("...\r\n");
+}
 
 bool Cc3xxEcdhTest(void)
 {
-	alignas(uint32_t) static uint8_t ccMem[CRYPTO_CC3XX_MEMSIZE];
+	alignas(CryptoCc3xx) static uint8_t ccMem[CRYPTO_CC3XX_MEMSIZE];
 	alignas(uint64_t) static uint8_t ueccMem[CRYPTO_UECC_MEMSIZE];
 	uint8_t ccCtx[64];
 	uint8_t ueccCtx[128];
@@ -43,6 +88,9 @@ bool Cc3xxEcdhTest(void)
 	uint8_t zero[64];
 	bool res = false;
 
+	g_Cc3xxEcdhTestResult = CC3XX_ECDH_TEST_ERR_NONE;
+	g_Cc3xxEcdhTestPassMask = 0;
+
 	memset(ccCtx, 0, sizeof(ccCtx));
 	memset(ueccCtx, 0, sizeof(ueccCtx));
 	memset(ccPub, 0, sizeof(ccPub));
@@ -51,63 +99,137 @@ bool Cc3xxEcdhTest(void)
 	memset(dhUecc, 0, sizeof(dhUecc));
 	memset(zero, 0, sizeof(zero));
 
-	// Hardware CC310 engine and the software oracle. Both take randomness from
-	// the security-grade RNG.
-	KeyAgreeEngine *pCc = CryptoCc3xxCreate(ccMem, sizeof(ccMem));
-	KeyAgreeEngine *pUecc = CryptoUeccCreate(ueccMem, sizeof(ueccMem),
-											 CryptoRngNrfInstance());
+	printf("\r\n--- CC3xx P-256 ECDH acceptance test ---\r\n");
+	printf("Hardware engine   : CryptoCc3xx (CC310 register driver, no vendor blob)\r\n");
+	printf("Software oracle   : CryptoUecc (uECC P-256)\r\n");
+	printf("Randomness        : CryptoRngNrfInstance (security-grade)\r\n\r\n");
 
 	do
 	{
-		if (pCc == nullptr || pUecc == nullptr)
+		// Step 0a : hardware engine constructs, with the injected RNG.
+		printf("[0a] CC3xx engine construction   : ");
+		printf("(object %u bytes align %u, arena %u at %%8=%u) ",
+			   (unsigned)sizeof(CryptoCc3xx), (unsigned)alignof(CryptoCc3xx),
+			   (unsigned)sizeof(ccMem), (unsigned)((uintptr_t)ccMem & 7U));
+		KeyAgreeEngine *pCc = CryptoCc3xxCreate(ccMem, sizeof(ccMem),
+												CryptoRngNrfInstance());
+		if (pCc == nullptr)
 		{
+#if defined(NRF52840_XXAA)
+			// Discriminate the bring-up state for the report. The wrapper
+			// enable readback is the CoreInit gate.
+			CC3XX_WRAPPER->ENABLE = 1U;
+			printf("[wrapper ENABLE readback %u] ",
+				   (unsigned)CC3XX_WRAPPER->ENABLE);
+			CC3XX_WRAPPER->ENABLE = 0U;
+#endif
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_CREATE);
 			break;
 		}
+		printf("PASS\r\n");
+		CC3XX_ECDH_TEST_MARK(0);
+
+		// Step 0b : software oracle constructs.
+		printf("[0b] uECC oracle construction    : ");
+		KeyAgreeEngine *pUecc = CryptoUeccCreate(ueccMem, sizeof(ueccMem),
+												 CryptoRngNrfInstance());
+		if (pUecc == nullptr)
+		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_SW_CREATE);
+			break;
+		}
+		printf("PASS\r\n");
+
+		// Step 1 : CC3xx known-answer self test (BLE Core P-256 vector).
+		printf("[1] CC3xx self test (P-256 KAT)  : ");
 		if (pCc->SelfTest() != 0)
 		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_SELFTEST);
 			break;
 		}
+		printf("PASS\r\n");
+		CC3XX_ECDH_TEST_MARK(1);
 
-		// Cross ECDH: both engines must derive the same shared secret.
+		// Step 2 : key generation on both engines.
+		printf("[2] key generation (hw and sw)   : ");
 		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_OK ||
 			pUecc->KeyGen(CRYPTO_CURVE_P256, ueccCtx, ueccPub) != CRYPTO_STATUS_OK)
 		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_KEYGEN);
 			break;
 		}
+		printf("PASS\r\n");
+		Cc3xxEcdhTestHex("CC3xx pub X", ccPub, 8);
+		Cc3xxEcdhTestHex("uECC  pub X", ueccPub, 8);
+		CC3XX_ECDH_TEST_MARK(2);
+
+		// Step 3 : cross ECDH, both directions.
+		printf("[3] cross derivation             : ");
 		if (pCc->Agree(CRYPTO_CURVE_P256, ccCtx, ueccPub, dhCc) != CRYPTO_STATUS_OK ||
 			pUecc->Agree(CRYPTO_CURVE_P256, ueccCtx, ccPub, dhUecc) != CRYPTO_STATUS_OK)
 		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_AGREE);
 			break;
 		}
-		if (memcmp(dhCc, dhUecc, sizeof(dhCc)) != 0 ||
-			memcmp(dhCc, zero, sizeof(dhCc)) == 0)
-		{
-			break;
-		}
+		printf("PASS\r\n");
+		Cc3xxEcdhTestHex("hw secret  ", dhCc, 8);
+		Cc3xxEcdhTestHex("sw secret  ", dhUecc, 8);
+		CC3XX_ECDH_TEST_MARK(3);
 
-		// Single use: the private key is consumed by the successful Agree, so a
-		// second Agree on the same context must fail.
+		// Step 4 : the secrets agree and are not zero.
+		printf("[4] secrets match, non zero      : ");
+		if (memcmp(dhCc, dhUecc, sizeof(dhCc)) != 0)
+		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_MISMATCH);
+			break;
+		}
+		if (memcmp(dhCc, zero, sizeof(dhCc)) == 0)
+		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_ZERO_SECRET);
+			break;
+		}
+		printf("PASS\r\n");
+		CC3XX_ECDH_TEST_MARK(4);
+
+		// Step 5 : single use. The private key is consumed by the successful
+		// Agree, so a second Agree on the same context must fail.
+		printf("[5] key consumed after use       : ");
 		if (pCc->Agree(CRYPTO_CURVE_P256, ccCtx, ueccPub, dhCc) == CRYPTO_STATUS_OK)
 		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_KEY_REUSE);
 			break;
 		}
+		printf("PASS\r\n");
+		CC3XX_ECDH_TEST_MARK(5);
 
-		// A zero point is not a valid P-256 public key and must be rejected.
+		// Step 6 : a zero point is not a valid P-256 public key and must be
+		// rejected (invalid-curve attack defense).
+		printf("[6] invalid peer point rejected  : ");
 		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_OK)
 		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_KEYGEN);
 			break;
 		}
 		if (pCc->Agree(CRYPTO_CURVE_P256, ccCtx, zero, dhCc) == CRYPTO_STATUS_OK)
 		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_BAD_POINT);
 			break;
 		}
+		printf("PASS\r\n");
+		CC3XX_ECDH_TEST_MARK(6);
 
-		// The key is consumed even when peer validation fails.
+		// Step 7 : the key is consumed even when peer validation fails.
+		printf("[7] key consumed on failed check : ");
 		if (pCc->Agree(CRYPTO_CURVE_P256, ccCtx, ueccPub, dhCc) == CRYPTO_STATUS_OK)
 		{
+			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_REUSE_AFTER);
 			break;
 		}
+		printf("PASS\r\n");
+		CC3XX_ECDH_TEST_MARK(7);
 
+		printf("\r\nAll steps passed. Result 0, pass mask 0x%02X\r\n",
+			   (unsigned)g_Cc3xxEcdhTestPassMask);
 		res = true;
 	} while (false);
 
@@ -118,15 +240,17 @@ bool Cc3xxEcdhTest(void)
 	return res;
 }
 
+#ifndef CC3XX_ECDH_TEST_NO_MAIN
 int main(int argc, char **argv)
 {
 	(void)argc;
 	(void)argv;
 
-	g_Cc3xxEcdhTestResult = Cc3xxEcdhTest() ? 1 : -1;
+	(void)Cc3xxEcdhTest();
 
 	while (true)
 	{
 		__WFE();
 	}
 }
+#endif
