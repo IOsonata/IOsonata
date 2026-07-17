@@ -29,8 +29,6 @@ public:
 
 	void SetRng(RngEngine *pRng) { vpRng = pRng; }
 
-	// The engine needs OpHold/OpRelease in addition to the DeviceIntrf transfer
-	// operations, so construction accepts only the concrete CC3xx interface.
 	bool Init(Cc3xxIntrf * const pIntrf, RngEngine *pRng)
 	{
 		return Init((DeviceIntrf *)pIntrf, pRng);
@@ -59,10 +57,11 @@ protected:
 	RngEngine *vpRng;
 
 private:
-	// Implementation entry retained for the translation unit. External callers
-	// cannot pass an unrelated DeviceIntrf and rely on an unchecked downcast.
 	bool Init(DeviceIntrf * const pIntrf, RngEngine *pRng);
 };
+
+static_assert(sizeof(CryptoCc3xx::KeyCtx) <= CRYPTO_KEYCTX_MAX,
+			  "CC3xx key context exceeds the common consumer storage");
 
 #define CRYPTO_CC3XX_MEMSIZE		sizeof(CryptoCc3xx)
 
