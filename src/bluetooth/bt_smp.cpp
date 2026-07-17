@@ -473,6 +473,20 @@ static void SmpFailAndLock(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	BtSmpPairingComplete(ConnHdl, false, nullptr);
 }
 
+// Terminate the current attempt on an out-of-sequence PDU. Unlike a peer
+// authentication mismatch this does not touch the repeated-attempts counter,
+// and unlike an internal fault it does not lock the link: a protocol ordering
+// error is neither a wrong passkey guess nor a hardware failure. The attempt
+// state is wiped so no half-built context (for example an uncomputed DHKey)
+// survives into a later PDU.
+static void SmpAbortOffPhase(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+							 BtSmpLink_t *pLink)
+{
+	SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+	SmpAbortPairing(pLink);
+	BtSmpPairingComplete(ConnHdl, false, nullptr);
+}
+
 //-----------------------------------------------------------------------------
 // Outbound packet helpers
 //-----------------------------------------------------------------------------
@@ -979,6 +993,17 @@ static void SmpBuildPairingRsp(BtSmpLink_t *pLink, BtSmpPairingRsp_t *pRsp)
 //-----------------------------------------------------------------------------
 // Inbound SMP PDU handling
 //-----------------------------------------------------------------------------
+
+// True if the whole buffer is zero. Used to detect an uncomputed DHKey.
+static bool SmpIsAllZero(const uint8_t *p, size_t len)
+{
+	uint8_t acc = 0;
+	for (size_t i = 0; i < len; i++)
+	{
+		acc |= p[i];
+	}
+	return acc == 0;
+}
 
 // Constant-time comparison of two 16-byte buffers. Used for authentication
 // values (Confirm, Ea/Eb MACs) which are attacker-supplied: a data-dependent
@@ -1743,6 +1768,17 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 		peerAddrType = pPeer->Conn.PeerAddrType;
 	}
 
+	// Defense in depth behind the phase gate: an SC Pairing Random must never be
+	// processed before the DHKey has been computed. A valid P-256 DHKey is never
+	// all zero, so an all-zero value means the public-key/ECDH phase was skipped;
+	// running f5/f4 over it would derive a peer-known LTK. Legacy pairing does
+	// not use the DHKey.
+	if (pLink->Ctx.bSc && SmpIsAllZero(pLink->Ctx.DhKey, 32))
+	{
+		SmpAbortOffPhase(pDev, ConnHdl, pLink);
+		return;
+	}
+
 	if (pLink->Ctx.Model == BT_SMP_MODEL_PASSKEY_ENTRY)
 	{
 		SmpPasskeyHandleRandom(pDev, pLink, ConnHdl, peerAddr, peerAddrType);
@@ -2175,14 +2211,13 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			break;
 	}
 
-	// Phase gate: a pairing PDU is only valid at the point in the exchange where
-	// it is expected. Without this an unsolicited Confirm, Random, Public Key or
-	// DHKey Check on an idle link would run a handler with a zero context (Just
-	// Works, legacy, empty Pairing Request/Response caches) and could complete a
-	// pairing the peer never requested, sidestepping the Secure Connections
-	// policy enforced when a real Pairing Request is processed.
-	// Key-distribution PDUs are gated above. Reject an off-phase PDU here without
-	// entering a new phase.
+	// Phase gate: each pairing PDU is accepted only in the exact state where it
+	// is expected. The coarse idle-vs-active check this replaces let an SC
+	// responder in PUBKEY_WAIT accept a Pairing Random, run f5 over an
+	// uncomputed DHKey and complete a Secure Connections pairing with no
+	// public-key exchange. Key-distribution PDUs are gated above. An off-phase
+	// PDU terminates the attempt (SmpAbortOffPhase) rather than entering a
+	// handler on half-built state.
 	switch (pSmp->Code)
 	{
 		case BT_SMP_CODE_PAIRING_REQ:
@@ -2197,16 +2232,54 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			break;
 
 		case BT_SMP_CODE_PAIRING_RSP:
-		case BT_SMP_CODE_PAIRING_PUBLIC_KEY:
-		case BT_SMP_CODE_PAIRING_CONFIRM:
-		case BT_SMP_CODE_PAIRING_RANDOM:
-		case BT_SMP_CODE_PAIRING_DHKEY_CHECK:
-			// These occur only once a pairing is in progress. On an idle link
-			// they are unsolicited; reject rather than start a phase from a
-			// zero context.
-			if (pLink->Ctx.State == BT_SMP_STATE_IDLE)
+			// Initiator only, and only right after it sent the Pairing Request.
+			if (!pLink->Ctx.bInitiator ||
+				pLink->Ctx.State != BT_SMP_STATE_PUBKEY_LOCAL_WAIT)
 			{
-				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+				SmpAbortOffPhase(pDev, ConnHdl, pLink);
+				return;
+			}
+			break;
+
+		case BT_SMP_CODE_PAIRING_PUBLIC_KEY:
+			// Public-key exchange phase. The peer key can arrive before the
+			// local controller key is ready, so PUBKEY_LOCAL_WAIT is valid too.
+			if (pLink->Ctx.State != BT_SMP_STATE_PUBKEY_WAIT &&
+				pLink->Ctx.State != BT_SMP_STATE_PUBKEY_LOCAL_WAIT)
+			{
+				SmpAbortOffPhase(pDev, ConnHdl, pLink);
+				return;
+			}
+			break;
+
+		case BT_SMP_CODE_PAIRING_CONFIRM:
+			// Confirm phase. Passkey Entry buffers a peer Confirm that arrives
+			// while the input side still waits for the user passkey, so
+			// PASSKEY_WAIT is also a valid arrival state.
+			if (pLink->Ctx.State != BT_SMP_STATE_CONFIRM_WAIT &&
+				pLink->Ctx.State != BT_SMP_STATE_PASSKEY_WAIT)
+			{
+				SmpAbortOffPhase(pDev, ConnHdl, pLink);
+				return;
+			}
+			break;
+
+		case BT_SMP_CODE_PAIRING_RANDOM:
+			// Random is valid only once the confirm exchange advanced the link
+			// to RANDOM_WAIT. Accepting it earlier (e.g. in PUBKEY_WAIT) would
+			// run f5 over an uncomputed, zero DHKey and complete a Secure
+			// Connections pairing with no public-key exchange or ECDH.
+			if (pLink->Ctx.State != BT_SMP_STATE_RANDOM_WAIT)
+			{
+				SmpAbortOffPhase(pDev, ConnHdl, pLink);
+				return;
+			}
+			break;
+
+		case BT_SMP_CODE_PAIRING_DHKEY_CHECK:
+			if (pLink->Ctx.State != BT_SMP_STATE_DHKEY_CHECK_WAIT)
+			{
+				SmpAbortOffPhase(pDev, ConnHdl, pLink);
 				return;
 			}
 			break;
