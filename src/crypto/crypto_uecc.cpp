@@ -157,12 +157,15 @@ CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	CRYPTO_STATUS begin = UeccBegin(vpRng, true);
 	if (begin != CRYPTO_STATUS_OK)
 	{
-		if (begin != CRYPTO_STATUS_BUSY)
-		{
-			KeyReset(pk);
-		}
 		memset(pSharedX, 0, 32U);
-		return begin;
+		if (begin == CRYPTO_STATUS_BUSY)
+		{
+			return CRYPTO_STATUS_BUSY;
+		}
+		// The refusal consumed the single-use key, so the status is FAIL:
+		// UNSUPPORTED is reserved for refusals that touch nothing.
+		KeyReset(pk);
+		return CRYPTO_STATUS_FAIL;
 	}
 
 	uint8_t secret[32] = {};

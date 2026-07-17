@@ -245,9 +245,10 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 				   BA414EP_CONTROL_START | BA414EP_CONTROL_CLEAR_IRQ);
 		if (!PkWaitIdle(pDev, &status))
 		{
-			// The operation is still executing past the poll limit: abort
-			// without touching crypto RAM. The scalar is wiped from RAM by
-			// the deferred cleanup at the next successful PkPrepare.
+			// The operation is still executing past the poll limit: hard
+			// reset the module under the retained hold and wipe the operand
+			// RAM once idle. A failed reset quarantines the PKE hold with
+			// the scalar deliberately unreachable behind it.
 			(void)PkAbortAndReset(pDev, pIntrf);
 			PkWipe(blind, sizeof(blind));
 			return CRYPTO_STATUS_FAIL;

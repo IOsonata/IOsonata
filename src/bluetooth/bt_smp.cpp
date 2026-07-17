@@ -297,10 +297,15 @@ static void SmpAbortPairing(BtSmpLink_t *pLink)
 		SmpCryptoPendingClear();
 	}
 	SmpEcdhCtxReset(pLink->Ctx.EcdhKeyCtx);
+	// The lock flag and the H5 repeated-attempts counter survive the wipe:
+	// a locally detected failure (for example a wrong confirm from a peer
+	// brute-forcing a passkey) must keep counting toward the lockout.
 	bool locked = pLink->Ctx.bLocked;
+	uint8_t failCount = pLink->Ctx.FailCount;
 	CryptoSecureWipe(&pLink->Ctx, sizeof(pLink->Ctx));
 	pLink->Ctx.State = BT_SMP_STATE_IDLE;
 	pLink->Ctx.bLocked = locked;
+	pLink->Ctx.FailCount = failCount;
 }
 
 static bool SmpCryptoPendingBegin(BtSmpLink_t *pLink, BtHciDevice_t *pDev,
@@ -2175,15 +2180,15 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		{
 			if (Len >= sizeof(BtSmpPairingFailed_t))
 			{
-				SMP_TRACE("SMP RX Failed reason=0x%02x
-",
+				SMP_TRACE("SMP RX Failed reason=0x%02x\r\n",
 						  ((const BtSmpPairingFailed_t*)pSmp)->Reason);
 			}
-			uint8_t failures = (uint8_t)(pLink->Ctx.FailCount + 1U);
-			bool locked = failures >= BT_SMP_MAX_PAIR_ATTEMPTS;
 			SmpAbortPairing(pLink);
-			pLink->Ctx.FailCount = failures;
-			pLink->Ctx.bLocked = locked;
+			pLink->Ctx.FailCount++;
+			if (pLink->Ctx.FailCount >= BT_SMP_MAX_PAIR_ATTEMPTS)
+			{
+				pLink->Ctx.bLocked = true;
+			}
 			BtSmpPairingComplete(ConnHdl, false, nullptr);
 			break;
 		}
