@@ -112,6 +112,7 @@ public:
 	void Reset() override {}
 
 	size_t KeyCtxSize() const override { return sizeof(KeyCtx); }
+	size_t KeyCtxAlign() const override { return alignof(KeyCtx); }
 	void KeyReset(void *pKeyCtx) override;
 
 	// Known-answer self-test: LESC debug key point multiplication on the

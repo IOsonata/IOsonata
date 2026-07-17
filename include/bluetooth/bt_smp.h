@@ -50,6 +50,7 @@ SOFTWARE.
 // the state machine for a controller/secure async completion.
 #define BT_SMP_CRYPTO_OK		0
 #define BT_SMP_CRYPTO_PENDING	1
+#define BT_SMP_CRYPTO_BUSY		2
 #define BT_SMP_CRYPTO_FAIL		(-1)
 
 /** @addtogroup Bluetooth
@@ -205,6 +206,8 @@ typedef struct __Bt_Smp_Ctx {
 	uint8_t  AuthReq;				//!< Negotiated AuthReq
 	uint8_t  PeerAuthReq;			//!< Peer-requested AuthReq
 	uint8_t  Model;					//!< Selected association model (BT_SMP_MODEL_*)
+	uint8_t  EncKeySize;			//!< Pending negotiated key size until commit
+	bool     bAuthenticated;		//!< Pending MITM result until encryption succeeds
 	bool     bSc;					//!< true if SC negotiated for this pairing
 	bool     bInitiator;			//!< true if local device is the SMP initiator (central)
 	uint8_t  Tk[16];				//!< Temporary Key (legacy) / 0 for Just Works
@@ -215,7 +218,7 @@ typedef struct __Bt_Smp_Ctx {
 	uint8_t  LocalPubKey[64];		//!< SC: local P-256 public key (X||Y)
 	uint8_t  PeerPubKey[64];		//!< SC: peer P-256 public key (X||Y)
 	uint8_t  DhKey[32];				//!< SC: computed DHKey
-	uint8_t  EcdhKeyCtx[CRYPTO_KEYCTX_MAX];	//!< SC: ECDH private-key context, KeyGen to Agree (per-link, wiped after)
+	uint8_t  EcdhKeyCtx[CRYPTO_KEYCTX_MAX] CRYPTO_ALIGNED(CRYPTO_KEYCTX_ALIGN_MAX);	//!< SC: provider key context
 	uint8_t  Mackey[16];			//!< SC: MacKey from f5
 	uint8_t  Ltk[16];				//!< Derived/working LTK
 	uint32_t Passkey;				//!< Passkey Entry: 6 digit value 0..999999

@@ -84,6 +84,10 @@ static const char *SmpCodeName(uint8_t c);
 #define BT_SMP_MAX_LINK		4
 #endif
 
+#ifndef BT_SMP_CRYPTO_BUSY_RETRIES
+#define BT_SMP_CRYPTO_BUSY_RETRIES	32U
+#endif
+
 #ifndef BT_SMP_LOCAL_IOCAPS
 #define BT_SMP_LOCAL_IOCAPS		BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT
 #endif
@@ -125,7 +129,7 @@ static struct {
 	uint32_t Generation;
 	uint8_t LocalRand[16];
 	uint8_t LocalPubKey[64];
-	uint8_t EcdhKeyCtx[CRYPTO_KEYCTX_MAX];	//!< OOB local key pair private-scalar context
+	uint8_t EcdhKeyCtx[CRYPTO_KEYCTX_MAX] CRYPTO_ALIGNED(CRYPTO_KEYCTX_ALIGN_MAX);	//!< OOB provider key context
 	uint8_t PeerRand[16];
 	uint8_t PeerConfirm[16];
 } s_SmpOob = {};
@@ -141,6 +145,7 @@ typedef struct __Bt_Smp_Crypto_Pending {
 	uint16_t ConnHdl;
 	uint32_t Generation;
 	BtHciDevice_t *pDev;
+	bool bRetryBusy;
 } BtSmpCryptoPending_t;
 
 static BtSmpCryptoPending_t s_SmpCryptoPending = {};
@@ -284,6 +289,7 @@ static void SmpCryptoPendingClear(void)
 // flag survives so an abort inside a lockout keeps the link locked.
 static void SmpAbortPairing(BtSmpLink_t *pLink)
 {
+	SmpOobRelease(pLink);
 	if (s_SmpCryptoPending.Op != BT_SMP_CRYPTO_OP_NONE &&
 		s_SmpCryptoPending.ConnHdl == pLink->ConnHdl &&
 		s_SmpCryptoPending.Generation == pLink->Generation)
@@ -309,6 +315,7 @@ static bool SmpCryptoPendingBegin(BtSmpLink_t *pLink, BtHciDevice_t *pDev,
 	s_SmpCryptoPending.ConnHdl = pLink->ConnHdl;
 	s_SmpCryptoPending.Generation = pLink->Generation;
 	s_SmpCryptoPending.pDev = pDev;
+	s_SmpCryptoPending.bRetryBusy = false;
 	return true;
 }
 
@@ -366,7 +373,7 @@ static void SmpLinkFree(uint16_t ConnHdl)
 	{
 		SmpOobRelease(p);
 		SmpEcdhCtxReset(p->Ctx.EcdhKeyCtx);
-		memset(p, 0, sizeof(BtSmpLink_t));
+		CryptoSecureWipe(p, sizeof(BtSmpLink_t));
 		p->ConnHdl = BT_CONN_HDL_INVALID;
 	}
 }
@@ -385,8 +392,7 @@ static void SmpLinkResetKeepCount(BtSmpLink_t *pLink)
 
 	SmpOobRelease(pLink);
 	SmpEcdhCtxReset(pLink->Ctx.EcdhKeyCtx);
-	memset(&pLink->Ctx, 0, sizeof(pLink->Ctx));
-	memset(&pLink->Keys, 0, sizeof(pLink->Keys));
+	CryptoSecureWipe(&pLink->Ctx, sizeof(pLink->Ctx));
 
 	pLink->ConnHdl       = hdl;
 	pLink->Generation    = generation;
@@ -836,6 +842,11 @@ static int SmpLocalKeyGen(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 		return BT_SMP_CRYPTO_FAIL;
 	}
 	int rc = SmpCryptoP256KeyGen(pLink, pLink->Ctx.LocalPubKey);
+	if (rc == BT_SMP_CRYPTO_BUSY)
+	{
+		s_SmpCryptoPending.bRetryBusy = true;
+		return BT_SMP_CRYPTO_PENDING;
+	}
 	if (rc != BT_SMP_CRYPTO_PENDING) { SmpCryptoPendingClear(); }
 	return rc;
 }
@@ -961,17 +972,31 @@ static bool SmpEqualCT(const uint8_t *a, const uint8_t *b, size_t len)
 // 2.4.4). The LTK is stored little-endian (HCI order), so the most
 // significant octets are at the high indices. Without this a peer that
 // negotiated a short key would still receive a full-strength key on our side.
-static void SmpApplyKeySize(BtSmpKeys_t *pKeys)
+static void SmpApplyKeySize(uint8_t Ltk[16], uint8_t EncKeySize)
 {
-	int ks = pKeys->EncKeySize;
+	int ks = EncKeySize;
 	if (ks < BT_SMP_MIN_ENC_KEY_SIZE)
 	{
-		ks = BT_SMP_MIN_ENC_KEY_SIZE;	// defensive; negotiation already enforced the floor
+		ks = BT_SMP_MIN_ENC_KEY_SIZE;
 	}
 	for (int i = ks; i < 16; i++)
 	{
-		pKeys->Ltk[i] = 0;
+		Ltk[i] = 0;
 	}
+}
+
+// Promote the pending key only after authentication and controller encryption
+// succeed. Until then Ctx owns all new material and an abort cannot overwrite a
+// previously committed bond.
+static void SmpCommitPendingKeys(BtSmpLink_t *pLink)
+{
+	BtSmpKeys_t keys = {};
+	memcpy(keys.Ltk, pLink->Ctx.Ltk, sizeof(keys.Ltk));
+	keys.EncKeySize = pLink->Ctx.EncKeySize;
+	keys.bAuthenticated = pLink->Ctx.bAuthenticated;
+	keys.bSc = pLink->Ctx.bSc;
+	keys.bValid = true;
+	pLink->Keys = keys;
 }
 
 static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
@@ -1025,7 +1050,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		return;
 	}
 
-	pLink->Keys.EncKeySize = pReq->MaxKeySize < BT_SMP_MAX_ENC_KEY_SIZE ?
+	pLink->Ctx.EncKeySize = pReq->MaxKeySize < BT_SMP_MAX_ENC_KEY_SIZE ?
 							 pReq->MaxKeySize : BT_SMP_MAX_ENC_KEY_SIZE;
 
 	// Select the association model now both IO capabilities are known: the peer
@@ -1114,6 +1139,10 @@ static bool SmpStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 	{
 		BtSmpDhKeyReady(pDev, 0, pLink->Ctx.DhKey);
 	}
+	else if (rc == BT_SMP_CRYPTO_BUSY)
+	{
+		s_SmpCryptoPending.bRetryBusy = true;
+	}
 	else if (rc == BT_SMP_CRYPTO_FAIL)
 	{
 		SmpCryptoPendingClear();
@@ -1194,7 +1223,7 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	memcpy(pLink->Ctx.PRsp, pRsp, 7);
 	pLink->Ctx.PeerAuthReq = pRsp->AuthReq;
 	pLink->Ctx.bSc = true;
-	pLink->Keys.EncKeySize = pRsp->MaxKeySize < BT_SMP_MAX_ENC_KEY_SIZE ?
+	pLink->Ctx.EncKeySize = pRsp->MaxKeySize < BT_SMP_MAX_ENC_KEY_SIZE ?
 							 pRsp->MaxKeySize : BT_SMP_MAX_ENC_KEY_SIZE;
 
 	// Select the association model now both IO capabilities are known: the local
@@ -1419,11 +1448,8 @@ static void SmpPasskeyInitiatorFinish(BtHciDevice_t * const pDev, BtSmpLink_t *p
 		  localAddrType, localAddr, PeerAddrType, PeerAddr,
 		  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
 
-	memcpy(pLink->Keys.Ltk, pLink->Ctx.Ltk, 16);
-	pLink->Keys.bSc = true;
-	pLink->Keys.bValid = true;
-	pLink->Keys.bAuthenticated = true;
-	SmpApplyKeySize(&pLink->Keys);
+	pLink->Ctx.bAuthenticated = true;
+	SmpApplyKeySize(pLink->Ctx.Ltk, pLink->Ctx.EncKeySize);
 
 	uint8_t iocapA[3] = { pLink->Ctx.PReq[1], pLink->Ctx.PReq[2], pLink->Ctx.PReq[3] };
 	uint8_t rChk[16];
@@ -1457,11 +1483,8 @@ static void SmpPasskeyResponderFinish(BtSmpLink_t *pLink, const uint8_t *PeerAdd
 		  PeerAddrType, PeerAddr, localAddrType, localAddr,
 		  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
 
-	memcpy(pLink->Keys.Ltk, pLink->Ctx.Ltk, 16);
-	pLink->Keys.bSc = true;
-	pLink->Keys.bValid = true;
-	pLink->Keys.bAuthenticated = true;
-	SmpApplyKeySize(&pLink->Keys);
+	pLink->Ctx.bAuthenticated = true;
+	SmpApplyKeySize(pLink->Ctx.Ltk, pLink->Ctx.EncKeySize);
 
 	pLink->Ctx.State = BT_SMP_STATE_DHKEY_CHECK_WAIT;
 }
@@ -1712,14 +1735,11 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 			  localAddrType, localAddr, peerAddrType, peerAddr,
 			  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
 
-		memcpy(pLink->Keys.Ltk, pLink->Ctx.Ltk, 16);
-		pLink->Keys.bSc = true;
-		pLink->Keys.bValid = true;
 		if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
 		{
-			pLink->Keys.bAuthenticated = true;
+			pLink->Ctx.bAuthenticated = true;
 		}
-		SmpApplyKeySize(&pLink->Keys);
+		SmpApplyKeySize(pLink->Ctx.Ltk, pLink->Ctx.EncKeySize);
 
 		if (pLink->Ctx.Model == BT_SMP_MODEL_NUMERIC_COMPARISON)
 		{
@@ -1769,14 +1789,11 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 			  peerAddrType, peerAddr, localAddrType, localAddr,
 			  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
 
-		memcpy(pLink->Keys.Ltk, pLink->Ctx.Ltk, 16);
-		pLink->Keys.bSc = true;
-		pLink->Keys.bValid = true;
 		if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
 		{
-			pLink->Keys.bAuthenticated = true;
+			pLink->Ctx.bAuthenticated = true;
 		}
-		SmpApplyKeySize(&pLink->Keys);
+		SmpApplyKeySize(pLink->Ctx.Ltk, pLink->Ctx.EncKeySize);
 		// Park in DHKEY_CHECK_WAIT before the user callback. A synchronous
 		// reject inside BtSmpNumericComparison takes the reply path and sets
 		// the state to IDLE; do not overwrite it afterward.
@@ -1814,12 +1831,7 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 	SmpSend(pDev, ConnHdl, &rnd, sizeof(rnd));
 
 	SmpS1(pLink->Ctx.Tk, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand, pLink->Ctx.Ltk);
-	memcpy(pLink->Keys.Ltk, pLink->Ctx.Ltk, 16);
-	pLink->Keys.Rand = 0;
-	pLink->Keys.Ediv = 0;
-	pLink->Keys.bSc = false;
-	pLink->Keys.bValid = true;
-	SmpApplyKeySize(&pLink->Keys);
+	SmpApplyKeySize(pLink->Ctx.Ltk, pLink->Ctx.EncKeySize);
 
 	pLink->Ctx.State = BT_SMP_STATE_LTK_WAIT;
 }
@@ -1863,7 +1875,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		// Authentication complete. As the central, start link encryption from
 		// the derived LTK (SC: Rand and EDIV are zero).
 		pLink->Ctx.State = BT_SMP_STATE_LTK_WAIT;
-		BtSmpHciEnableEncryption(pDev, ConnHdl, 0, 0, pLink->Keys.Ltk);
+		BtSmpHciEnableEncryption(pDev, ConnHdl, 0, 0, pLink->Ctx.Ltk);
 		return;
 	}
 
@@ -1907,8 +1919,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 
 		memcpy(pLink->Ctx.Mackey, altMackey, 16);
 		memcpy(pLink->Ctx.Ltk, altLtk, 16);
-		memcpy(pLink->Keys.Ltk, altLtk, 16);
-		SmpApplyKeySize(&pLink->Keys);
+		SmpApplyKeySize(pLink->Ctx.Ltk, pLink->Ctx.EncKeySize);
 		memcpy(ea, altEa, 16);
 		SMP_TRACE("Ea matched with raw DHKey f5 input\r\n");
 #else
@@ -1919,7 +1930,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	}
 
 	if (pLink->Ctx.Model == BT_SMP_MODEL_NUMERIC_COMPARISON &&
-		!pLink->Keys.bAuthenticated)
+		!pLink->Ctx.bAuthenticated)
 	{
 		// Ea verified. Hold the responder DHKey Check (Eb) until the user
 		// confirms the displayed value through BtSmpNumericComparisonReply.
@@ -2164,26 +2175,16 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		{
 			if (Len >= sizeof(BtSmpPairingFailed_t))
 			{
-				SMP_TRACE("SMP RX Failed reason=0x%02x\r\n",
+				SMP_TRACE("SMP RX Failed reason=0x%02x
+",
 						  ((const BtSmpPairingFailed_t*)pSmp)->Reason);
 			}
-			pLink->Ctx.State = BT_SMP_STATE_IDLE;
-			SmpOobRelease(pLink);
+			uint8_t failures = (uint8_t)(pLink->Ctx.FailCount + 1U);
+			bool locked = failures >= BT_SMP_MAX_PAIR_ATTEMPTS;
+			SmpAbortPairing(pLink);
+			pLink->Ctx.FailCount = failures;
+			pLink->Ctx.bLocked = locked;
 			BtSmpPairingComplete(ConnHdl, false, nullptr);
-
-			// H5 repeated attempts (Core Vol 3 Part H 2.3.6): count the failure
-			// and, once too many have occurred on this connection, lock the link
-			// so further pairing is refused until it disconnects. Otherwise keep
-			// the slot (with the counter) so the next attempt is still counted.
-			pLink->Ctx.FailCount++;
-			if (pLink->Ctx.FailCount >= BT_SMP_MAX_PAIR_ATTEMPTS)
-			{
-				pLink->Ctx.bLocked = true;
-			}
-			else
-			{
-				SmpLinkResetKeepCount(pLink);
-			}
 			break;
 		}
 
@@ -2375,8 +2376,14 @@ void BtSmpProcessLtkRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
 
-	if (pLink != nullptr && pLink->Keys.bValid &&
-		(pLink->Ctx.State == BT_SMP_STATE_LTK_WAIT || Ediv == 0))
+	if (pLink != nullptr && pLink->Ctx.State == BT_SMP_STATE_LTK_WAIT &&
+		SmpKeyPresent(pLink->Ctx.Ltk, sizeof(pLink->Ctx.Ltk)))
+	{
+		memcpy(key, pLink->Ctx.Ltk, 16);
+		have = true;
+	}
+	else if (pLink != nullptr && pLink->Ctx.State == BT_SMP_STATE_DONE &&
+		pLink->Keys.bValid)
 	{
 		memcpy(key, pLink->Keys.Ltk, 16);
 		have = true;
@@ -2412,6 +2419,13 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 							uint8_t Status, uint8_t Enabled)
 {
 	SMP_TRACE("SMP EncChange status=%d enabled=%d\r\n", Status, Enabled);
+
+	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
+	if (Status == 0 && Enabled != 0 && pLink != nullptr &&
+		pLink->Ctx.State == BT_SMP_STATE_LTK_WAIT)
+	{
+		SmpCommitPendingKeys(pLink);
+	}
 
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer != nullptr)
@@ -2454,13 +2468,11 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		BtGapConnSecSet(ConnHdl, &sec);
 	}
 
-	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
-
 	if (Status != 0 || Enabled == 0)
 	{
 		if (pLink != nullptr)
 		{
-			pLink->Ctx.State = BT_SMP_STATE_IDLE;
+			SmpAbortPairing(pLink);
 		}
 		BtSmpPairingComplete(ConnHdl, false, nullptr);
 		return;
@@ -2628,6 +2640,7 @@ static int CryptoStatusToSmp(CRYPTO_STATUS st)
 	{
 	case CRYPTO_STATUS_OK:      return BT_SMP_CRYPTO_OK;
 	case CRYPTO_STATUS_PENDING: return BT_SMP_CRYPTO_PENDING;
+	case CRYPTO_STATUS_BUSY:    return BT_SMP_CRYPTO_BUSY;
 	default:                    return BT_SMP_CRYPTO_FAIL;
 	}
 }
@@ -2652,10 +2665,17 @@ void BtSmpCryptoAes128(BtHciDevice_t * const pDev,
 	key.Plain.pData = Key;
 	key.Plain.Len   = 16;
 
-	if (s_pCryptoAes->Cipher(CRYPTO_CIPHER_ECB, 1, key,
-							 nullptr, 0, In, 16, Out) != CRYPTO_STATUS_OK)
+	CRYPTO_STATUS st = CRYPTO_STATUS_BUSY;
+	for (uint32_t attempt = 0; attempt < BT_SMP_CRYPTO_BUSY_RETRIES &&
+		 st == CRYPTO_STATUS_BUSY; attempt++)
 	{
-		memset(Out, 0, 16);		// fail loud: confirm check will mismatch
+		st = s_pCryptoAes->Cipher(CRYPTO_CIPHER_ECB, 1, key,
+								 nullptr, 0, In, 16, Out);
+		__asm volatile("" ::: "memory");
+	}
+	if (st != CRYPTO_STATUS_OK)
+	{
+		memset(Out, 0, 16);
 	}
 }
 
@@ -2739,6 +2759,59 @@ static void SmpCryptoComplete(CryptoEngine * const pEngine, CRYPTO_OP Op,
 	}
 }
 
+static void SmpCryptoRetryPending(void)
+{
+	if (!s_SmpCryptoPending.bRetryBusy)
+	{
+		return;
+	}
+	BtSmpCryptoPending_t pending = s_SmpCryptoPending;
+	BtSmpLink_t *pLink = SmpCryptoPendingFind(pending.Op);
+	if (pLink == nullptr)
+	{
+		SmpCryptoPendingClear();
+		return;
+	}
+	s_SmpCryptoPending.bRetryBusy = false;
+	int rc = BT_SMP_CRYPTO_FAIL;
+	if (pending.Op == BT_SMP_CRYPTO_OP_PUBKEY)
+	{
+		rc = SmpCryptoP256KeyGen(pLink, pLink->Ctx.LocalPubKey);
+		if (rc == BT_SMP_CRYPTO_OK)
+		{
+			BtSmpLocalPubKeyReady(pending.pDev, 0,
+							 pLink->Ctx.LocalPubKey, pLink->Ctx.LocalPubKey + 32);
+			return;
+		}
+	}
+	else if (pending.Op == BT_SMP_CRYPTO_OP_DHKEY)
+	{
+		rc = SmpCryptoEcdh(pLink, pLink->Ctx.PeerPubKey, pLink->Ctx.DhKey);
+		if (rc == BT_SMP_CRYPTO_OK)
+		{
+			BtSmpDhKeyReady(pending.pDev, 0, pLink->Ctx.DhKey);
+			return;
+		}
+	}
+	if (rc == BT_SMP_CRYPTO_BUSY)
+	{
+		s_SmpCryptoPending.bRetryBusy = true;
+		return;
+	}
+	if (rc == BT_SMP_CRYPTO_PENDING)
+	{
+		return;
+	}
+	if (pending.Op == BT_SMP_CRYPTO_OP_PUBKEY)
+	{
+		BtSmpLocalPubKeyReady(pending.pDev, 1, nullptr, nullptr);
+	}
+	else if (pending.Op == BT_SMP_CRYPTO_OP_DHKEY)
+	{
+		BtSmpDhKeyReady(pending.pDev, 1, nullptr);
+	}
+}
+
 bool BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
 {
 	// RNG is a target driver (crypto/icrypto.h), not a crypto engine. It is
@@ -2746,8 +2819,19 @@ bool BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
 	// must be checked: on nRF54 the non-blocking CRACEN lock can be held, so a
 	// draw can fail, and a security-path caller must abort rather than proceed
 	// with an unrandomized buffer.
-	if (s_pCryptoRng == nullptr ||
-		s_pCryptoRng->Random(pBuf, Len) != CRYPTO_STATUS_OK)
+	if (s_pCryptoRng == nullptr)
+	{
+		CryptoSecureWipe(pBuf, Len);
+		return false;
+	}
+	CRYPTO_STATUS st = CRYPTO_STATUS_BUSY;
+	for (uint32_t attempt = 0; attempt < BT_SMP_CRYPTO_BUSY_RETRIES &&
+		 st != CRYPTO_STATUS_OK; attempt++)
+	{
+		st = s_pCryptoRng->Random(pBuf, Len);
+		__asm volatile("" ::: "memory");
+	}
+	if (st != CRYPTO_STATUS_OK)
 	{
 		CryptoSecureWipe(pBuf, Len);
 		return false;
@@ -2837,7 +2921,10 @@ bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)
 	// caller storage. The refusal is reported to the caller.
 	bool accepted = true;
 	if (pEcdh != nullptr &&
-		(pEcdh->KeyCtxSize() == 0U || pEcdh->KeyCtxSize() > CRYPTO_KEYCTX_MAX))
+		(pEcdh->IsAsync() || pEcdh->KeyCtxSize() == 0U ||
+		 pEcdh->KeyCtxSize() > CRYPTO_KEYCTX_MAX ||
+		 pEcdh->KeyCtxAlign() == 0U ||
+		 pEcdh->KeyCtxAlign() > CRYPTO_KEYCTX_ALIGN_MAX))
 	{
 		pEcdh = nullptr;
 		accepted = false;
@@ -2917,7 +3004,7 @@ void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 	}
 
 	// Values matched: the link is MITM authenticated.
-	pLink->Keys.bAuthenticated = true;
+	pLink->Ctx.bAuthenticated = true;
 
 	uint8_t peerAddr[6];
 	uint8_t peerAddrType;
@@ -3222,6 +3309,7 @@ void BtSmpDisconnected(uint16_t ConnHdl)
 
 void BtSmpTimeoutCheck(void)
 {
+	SmpCryptoRetryPending();
 	for (int i = 0; i < BT_SMP_MAX_LINK; i++)
 	{
 		BtSmpLink_t *pLink = &s_SmpLink[i];

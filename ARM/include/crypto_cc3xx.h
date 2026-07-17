@@ -45,6 +45,7 @@ public:
 	int SelfTest() override;
 
 	size_t KeyCtxSize() const override { return sizeof(KeyCtx); }
+	size_t KeyCtxAlign() const override { return alignof(KeyCtx); }
 	void KeyReset(void *pKeyCtx) override
 	{
 		if (pKeyCtx != nullptr)

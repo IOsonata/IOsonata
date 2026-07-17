@@ -197,6 +197,11 @@ size_t CryptoSoftSha256::HashCtxSize() const
 	return sizeof(Sha256Ctx);
 }
 
+size_t CryptoSoftSha256::HashCtxAlign() const
+{
+	return alignof(Sha256Ctx);
+}
+
 CRYPTO_STATUS CryptoSoftSha256::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
 {
 	if (Alg != CRYPTO_HASH_SHA256 || pHashCtx == nullptr ||
@@ -254,7 +259,8 @@ CRYPTO_STATUS CryptoSoftSha256::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 		(Key.Plain.pData == nullptr && Key.Plain.Len != 0U) ||
 		pMac == nullptr || MacLen == 0U || MacLen > SHA256_DIGEST ||
 		(pMsg == nullptr && Len != 0U) ||
-		HashCtxSize() > CRYPTO_HASHCTX_MAX)
+		HashCtxSize() > CRYPTO_HASHCTX_MAX || HashCtxAlign() == 0U ||
+		HashCtxAlign() > CRYPTO_HASHCTX_ALIGN_MAX)
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
@@ -262,7 +268,7 @@ CRYPTO_STATUS CryptoSoftSha256::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 	// Block-sized key: a longer key is first hashed (RFC 2104), a shorter
 	// one zero padded.
 	uint8_t key[HMAC_BLOCK] = {};
-	alignas(uint64_t) uint8_t ctx[CRYPTO_HASHCTX_MAX];
+	alignas(CRYPTO_HASHCTX_ALIGN_MAX) uint8_t ctx[CRYPTO_HASHCTX_MAX];
 	CRYPTO_STATUS st = CRYPTO_STATUS_OK;
 	if (Key.Plain.Len > HMAC_BLOCK)
 	{
@@ -316,6 +322,10 @@ CRYPTO_STATUS CryptoSoftSha256::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 	Sha256Wipe(pad, sizeof(pad));
 	Sha256Wipe(inner, sizeof(inner));
 	Sha256Wipe(ctx, sizeof(ctx));
+	if (st != CRYPTO_STATUS_OK)
+	{
+		memset(pMac, 0, MacLen);
+	}
 	return st;
 }
 

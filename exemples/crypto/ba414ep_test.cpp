@@ -70,9 +70,9 @@ int main(void)
 	check("hardware and software engines construct",
 		hardware != nullptr && software != nullptr);
 
+	if (hardware == nullptr || software == nullptr) return 1;
 	check("hardware self-test (LESC debug key KAT)",
 		hardware->SelfTest() == 0);
-	if (hardware == nullptr || software == nullptr) return 1;
 
 	alignas(Ba414ep::KeyCtx) uint8_t hwCtx[64];
 	alignas(CryptoUecc::KeyCtx) uint8_t swCtx[64];
@@ -143,9 +143,9 @@ int main(void)
 	hardware->KeyReset(contCtx);
 	memcpy(((Ba414ep::KeyCtx *)contCtx)->PrivKey, privA, sizeof(privA));
 	((Ba414ep::KeyCtx *)contCtx)->bKeyValid = true;
-	bool held = cracen->ModuleHold(CRACEN_MODULE_RNG);
+	bool held = cracen->ModuleHold(CRACEN_MODULE_RNG, cracen);
 	check("interface accepts one owner and rejects a second",
-		held && !cracen->ModuleHold(CRACEN_MODULE_PKEIKG));
+		held && !cracen->ModuleHold(CRACEN_MODULE_PKEIKG, cracen));
 	uint8_t entropy[16];
 	check("entropy draw fails while CRACEN is held",
 		held && rng->Random(entropy, sizeof(entropy)) != CRYPTO_STATUS_OK);
@@ -156,10 +156,10 @@ int main(void)
 		held && hardware->KeyGen(CRYPTO_CURVE_P256, contCtx, generatedPub) ==
 			CRYPTO_STATUS_FAIL);
 	check("foreign hold survives the rejected operations",
-		held && !cracen->ModuleHold(CRACEN_MODULE_RNG));
+		held && !cracen->ModuleHold(CRACEN_MODULE_RNG, cracen));
 	if (held)
 	{
-		cracen->ModuleRelease();
+		(void)cracen->ModuleRelease(cracen);
 	}
 	check("KeyGen recovers after release",
 		hardware->KeyGen(CRYPTO_CURVE_P256, contCtx, generatedPub) ==

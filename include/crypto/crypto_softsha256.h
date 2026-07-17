@@ -73,6 +73,7 @@ public:
 
 	// HashEngine: streaming SHA-256 over caller context storage.
 	size_t HashCtxSize() const override;
+	size_t HashCtxAlign() const override;
 	CRYPTO_STATUS HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx) override;
 	CRYPTO_STATUS HashUpdate(void *pHashCtx, const uint8_t *pMsg,
 							 size_t Len) override;

@@ -118,6 +118,14 @@ typedef enum __Crypto_Curve {
 #define P256_BYTES	32U
 #define CRYPTO_KEYCTX_MAX	64U
 #define CRYPTO_HASHCTX_MAX	128U
+#define CRYPTO_KEYCTX_ALIGN_MAX	16U
+#define CRYPTO_HASHCTX_ALIGN_MAX	16U
+
+#if defined(__GNUC__)
+#define CRYPTO_ALIGNED(n)	__attribute__((aligned(n)))
+#else
+#define CRYPTO_ALIGNED(n)
+#endif
 
 #ifdef __cplusplus
 class CryptoEngine;
@@ -296,6 +304,7 @@ public:
 	// All in-tree consumers reserve CRYPTO_KEYCTX_MAX bytes. A provider that
 	// needs more storage is not compatible with those fixed embedded consumers.
 	virtual size_t KeyCtxSize() const { return 0; }
+	virtual size_t KeyCtxAlign() const { return 1U; }
 	virtual void KeyReset(void *pKeyCtx) { (void)pKeyCtx; }
 	virtual CRYPTO_STATUS KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 								 uint8_t *pPubKey)

@@ -255,19 +255,19 @@ bool Cc3xxEcdhTest(void)
 		// recover once the lock is released.
 		printf("[8] KeyGen fails while lock held : ");
 		Cc3xxIntrf *pLock = Cc3xxIntrfInstance();
-		if (pLock == nullptr || !pLock->OpHold())
+		if (pLock == nullptr || !pLock->OpHold(pLock))
 		{
 			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_CONTEND);
 			break;
 		}
 		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_BUSY ||
-			pLock->OpHold())
+			pLock->OpHold(pLock))
 		{
-			pLock->OpRelease();
+			(void)pLock->OpRelease(pLock);
 			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_CONTEND);
 			break;
 		}
-		pLock->OpRelease();
+		(void)pLock->OpRelease(pLock);
 		printf("PASS\r\n");
 		CC3XX_ECDH_TEST_MARK(8);
 
@@ -277,18 +277,18 @@ bool Cc3xxEcdhTest(void)
 		// fail because the context was reset before the acquisition attempt.
 		printf("[9] no stale key after failed gen: ");
 		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_OK ||
-			!pLock->OpHold())
+			!pLock->OpHold(pLock))
 		{
 			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_STALE_KEY);
 			break;
 		}
 		if (pCc->KeyGen(CRYPTO_CURVE_P256, ccCtx, ccPub) != CRYPTO_STATUS_BUSY)
 		{
-			pLock->OpRelease();
+			(void)pLock->OpRelease(pLock);
 			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_STALE_KEY);
 			break;
 		}
-		pLock->OpRelease();
+		(void)pLock->OpRelease(pLock);
 		if (pCc->Agree(CRYPTO_CURVE_P256, ccCtx, ueccPub, dhCc) !=
 			CRYPTO_STATUS_FAIL)
 		{
@@ -352,14 +352,14 @@ bool Cc3xxEcdhTest(void)
 			break;
 		}
 		memset(dhCc, 0xA5, sizeof(dhCc));
-		if (!pLock->OpHold())
+		if (!pLock->OpHold(pLock))
 		{
 			(void)Cc3xxEcdhTestFail(CC3XX_ECDH_TEST_ERR_BUSY_SEM);
 			break;
 		}
 		CRYPTO_STATUS busy = pCc->Agree(CRYPTO_CURVE_P256, ccCtx, ueccPub,
 										dhCc, false);
-		pLock->OpRelease();
+		(void)pLock->OpRelease(pLock);
 		bool cleared = true;
 		for (size_t i = 0; i < sizeof(dhCc); i++)
 		{

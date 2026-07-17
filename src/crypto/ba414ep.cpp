@@ -136,20 +136,10 @@ static bool PkWaitIdle(Device *pDev, uint32_t *pStatus)
 	return false;
 }
 
-// A timed-out operation left the engine possibly still executing. Crypto RAM
-// must not be touched until the engine is confirmed idle again; the flag
-// defers the operand wipe to the next successful PkPrepare.
-static bool s_bPkAborted = false;
-
-// Abort a still-busy operation: no register or operand access, only the
-// module release. Dropping the module enable stops the engine; the next hold
-// re-enables it fresh, and the next PkPrepare wipes the operand RAM the
-// aborted operation left behind.
-static void PkAbort(CracenIntrf *pIntrf)
-{
-	s_bPkAborted = true;
-	pIntrf->ModuleRelease();
-}
+// A failed hard reset quarantines the shared PKE hold. Leaving the hold
+// owned is intentional: another CRACEN user must not enter a core whose
+// public-key engine may still be executing with private operands resident.
+static bool s_bPkQuarantined = false;
 
 // Acquire the shared CRACEN operation hold before any register or operand
 // access. OK with the hold owned and the engine idle; BUSY when the hold or
@@ -157,31 +147,18 @@ static void PkAbort(CracenIntrf *pIntrf)
 // interface. Callers only call PkCleanup after OK.
 static CRYPTO_STATUS PkPrepare(Device *pDev, CracenIntrf *pIntrf)
 {
-	if (pIntrf == nullptr)
+	if (pIntrf == nullptr || s_bPkQuarantined)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (!pIntrf->ModuleHold(CRACEN_MODULE_PKEIKG))
+	if (!pIntrf->ModuleHold(CRACEN_MODULE_PKEIKG, pDev))
 	{
 		return CRYPTO_STATUS_BUSY;
 	}
 	if (!PkWaitNotBusy(pDev))
 	{
-		pIntrf->ModuleRelease();
+		(void)pIntrf->ModuleRelease(pDev);
 		return CRYPTO_STATUS_BUSY;
-	}
-	if (s_bPkAborted)
-	{
-		// The engine is idle again after an abort: wipe the operand RAM the
-		// aborted operation left, then proceed normally.
-		PkClearSlot(pDev, BA414EP_SLOT_SCALAR, P256_SZ);
-		PkClearSlot(pDev, BA414EP_SLOT_RESULT_X, P256_SZ);
-		PkClearSlot(pDev, BA414EP_SLOT_RESULT_Y, P256_SZ);
-		PkClearSlot(pDev, BA414EP_SLOT_POINT_X, P256_SZ);
-		PkClearSlot(pDev, BA414EP_SLOT_POINT_Y, P256_SZ);
-		PkClearSlot(pDev, BA414EP_SLOT_BLIND, P256_SZ);
-		__DMB();
-		s_bPkAborted = false;
 	}
 	return CRYPTO_STATUS_OK;
 }
@@ -197,7 +174,23 @@ static void PkCleanup(Device *pDev, CracenIntrf *pIntrf)
 	__DMB();
 
 	PkRegWrite(pDev, BA414EP_REG_CONTROL, BA414EP_CONTROL_CLEAR_IRQ);
-	pIntrf->ModuleRelease();
+	(void)pIntrf->ModuleRelease(pDev);
+}
+
+// The poll limit expired while the module was still busy. Keep ownership,
+// force the selected PKE module through a hard off/on reset, verify idle,
+// then wipe every operand before release. A failed reset quarantines the
+// hold so no sibling CRACEN engine can enter an unknown hardware state.
+static bool PkAbortAndReset(Device *pDev, CracenIntrf *pIntrf)
+{
+	if (pIntrf == nullptr || !pIntrf->ModuleReset(pDev) ||
+		!PkWaitNotBusy(pDev))
+	{
+		s_bPkQuarantined = true;
+		return false;
+	}
+	PkCleanup(pDev, pIntrf);
+	return true;
 }
 
 static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
@@ -255,7 +248,7 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 			// The operation is still executing past the poll limit: abort
 			// without touching crypto RAM. The scalar is wiped from RAM by
 			// the deferred cleanup at the next successful PkPrepare.
-			PkAbort(pIntrf);
+			(void)PkAbortAndReset(pDev, pIntrf);
 			PkWipe(blind, sizeof(blind));
 			return CRYPTO_STATUS_FAIL;
 		}
@@ -399,6 +392,7 @@ CRYPTO_STATUS Ba414ep::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	KeyCtx *pk = (KeyCtx *)pKeyCtx;
 	if (!pk->bKeyValid || vpRng == nullptr || !vpRng->IsSecure())
 	{
+		KeyReset(pk);
 		memset(pSharedX, 0, P256_SZ);
 		return CRYPTO_STATUS_FAIL;
 	}

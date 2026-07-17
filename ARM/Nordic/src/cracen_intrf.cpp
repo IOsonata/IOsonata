@@ -63,6 +63,7 @@ static bool s_bDrbgInit;
 static atomic_flag s_HoldFlag = ATOMIC_FLAG_INIT;
 static uint32_t s_HeldMask;
 static uint32_t s_PreviousEnable;
+static const void *s_pHoldOwner;
 
 static void CracenSelectBase(uint32_t DevAddr)
 {
@@ -97,7 +98,7 @@ static bool CracenStartRx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 		if (!CracenSdEnabled())
 		{
 			CracenIntrf *p = (CracenIntrf *)pIntrf->pDevData;
-			if (p == nullptr || !p->ModuleHold(CRACEN_MODULE_RNG))
+			if (p == nullptr || !p->ModuleHold(CRACEN_MODULE_RNG, pIntrf))
 			{
 				return false;
 			}
@@ -273,7 +274,7 @@ static void CracenStopRx(DevIntrf_t * const pIntrf)
 			CracenIntrf *p = (CracenIntrf *)pIntrf->pDevData;
 			if (p != nullptr)
 			{
-				p->ModuleRelease();
+				(void)p->ModuleRelease(pIntrf);
 			}
 			s_bRngHeld = false;
 		}
@@ -298,46 +299,66 @@ static uint32_t CracenModuleMask(uint32_t Module)
 	}
 }
 
-bool CracenIntrf::ModuleHold(uint32_t Module)
+bool CracenIntrf::ModuleHold(uint32_t Module, const void *pOwner)
 {
 	const uint32_t mask = CracenModuleMask(Module);
-	if (mask == 0U || atomic_flag_test_and_set(&s_HoldFlag))
+	if (mask == 0U || pOwner == nullptr || atomic_flag_test_and_set(&s_HoldFlag))
 	{
 		return false;
 	}
 
 	s_HeldMask = mask;
 	s_PreviousEnable = NRF_CRACEN->ENABLE & mask;
+	s_pHoldOwner = pOwner;
 	s_pRegBase = (Module == CRACEN_MODULE_CRYPTOMASTER) ? s_pCmRegBase
-												 : s_pPkeRegBase;
+											 : s_pPkeRegBase;
 	NRF_CRACEN->ENABLE |= mask;
+	__DMB();
 	return true;
 }
 
-// Release the single-owner hold and restore the module enable state. Shared
-// by the normal ModuleRelease and the owner-aware reset abort below.
-static void CracenHoldRelease(void)
+// Release only the hold owned by pOwner and restore the prior module-enable
+// state. A stray release can no longer clear another engine's exclusion flag.
+static bool CracenHoldRelease(const void *pOwner)
 {
 	const uint32_t mask = s_HeldMask;
-	if (mask == 0U)
+	if (mask == 0U || pOwner == nullptr || s_pHoldOwner != pOwner)
 	{
-		return;
+		return false;
 	}
 
-	// Restore only the module owned by this hold. Do not disable modules that
-	// were already enabled before acquisition and do not touch unrelated bits.
 	if (s_PreviousEnable == 0U)
 	{
 		NRF_CRACEN->ENABLE &= ~mask;
+		__DMB();
 	}
 	s_HeldMask = 0U;
 	s_PreviousEnable = 0U;
+	s_pHoldOwner = nullptr;
 	atomic_flag_clear(&s_HoldFlag);
+	return true;
 }
 
-void CracenIntrf::ModuleRelease(void)
+bool CracenIntrf::ModuleRelease(const void *pOwner)
 {
-	CracenHoldRelease();
+	return CracenHoldRelease(pOwner);
+}
+
+bool CracenIntrf::ModuleReset(const void *pOwner)
+{
+	const uint32_t mask = s_HeldMask;
+	if (mask == 0U || pOwner == nullptr || s_pHoldOwner != pOwner)
+	{
+		return false;
+	}
+
+	// The caller retains the global hold while the selected module is forced
+	// off and back on. No sibling engine can enter during timeout recovery.
+	NRF_CRACEN->ENABLE &= ~mask;
+	__DMB();
+	NRF_CRACEN->ENABLE |= mask;
+	__DMB();
+	return true;
 }
 
 static void CracenDummyDisable(DevIntrf_t * const pIntrf) { (void)pIntrf; }
@@ -365,7 +386,7 @@ static void CracenReset(DevIntrf_t * const pIntrf)
 	if (s_bRngHeld)
 	{
 		s_bRngHeld = false;
-		CracenHoldRelease();
+		(void)CracenHoldRelease(pIntrf);
 	}
 }
 static void CracenPowerOff(DevIntrf_t * const pIntrf)

@@ -365,6 +365,10 @@ CRYPTO_STATUS CryptoSoftAes::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 	AesWipe(K2, sizeof(K2));
 	AesWipe(X, sizeof(X));
 	AesWipe(Y, sizeof(Y));
+	if (st != CRYPTO_STATUS_OK)
+	{
+		memset(pMac, 0, MacLen);
+	}
 	return st;
 }
 

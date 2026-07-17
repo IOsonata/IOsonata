@@ -98,8 +98,8 @@ public:
 	/// Hold the CC3xx for an operation spanning several transfers. Fails when
 	/// another engine holds it; the caller retries or reports busy. Interrupt
 	/// context gets a single attempt.
-	bool OpHold(void);
-	void OpRelease(void);
+	bool OpHold(const void *pOwner);
+	bool OpRelease(const void *pOwner);
 
 	operator DevIntrf_t * const () override { return &vDevIntrf; }
 	uint32_t Rate(uint32_t DataRate) override { (void)DataRate; return 0; }

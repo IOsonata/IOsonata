@@ -3,10 +3,10 @@
 In the object model an engine's capability is not a bitfield. It is expressed
 two ways:
 
-1. **Which facets the engine implements.** A `KeyAgreeEngine` does P-256
-   agreement; a `CipherEngine` does AES; a `HashEngine` does a digest. A
-   consumer that needs agreement holds a `KeyAgreeEngine *`, and the type system
-   already guarantees the operation exists.
+1. **Which operation family the engine exposes.** A `KeyAgreeEngine *`,
+   `CipherEngine *`, or `HashEngine *` selects the relevant API surface. The
+   call result still decides whether that concrete engine implements the
+   requested operation and algorithm; a facet pointer is not a capability bit.
 2. **Which algorithm value the facet method accepts.** Within a facet the
    algorithm is an argument (`CRYPTO_CIPHER_ALG`, `CRYPTO_MAC_ALG`,
    `CRYPTO_HASH_ALG`, `CRYPTO_CURVE`). An engine that does not implement a given
@@ -14,8 +14,8 @@ two ways:
    simply does not override.
 
 There is no `Cap` word to query and no `CryptoIsCapable`. "Can this engine do X"
-is answered by the pointer type plus a non-null check, and "does it support this
-algorithm" is answered by the return status. This removes the class of bug where
+is answered by a non-null facet pointer followed by the operation return status.
+Algorithm support is also answered by that return status. This removes the class of bug where
 a `Cap` bit and the backing function pointer disagree.
 
 ## Facets
@@ -31,8 +31,9 @@ a `Cap` bit and the backing function pointer disagree.
 | `RngEngine` | `Random` | none | hardware or software source |
 
 Streaming hash contexts are caller storage of `HashCtxSize()` bytes aligned to
-`HashCtxAlign()`; every in-tree consumer reserves `CRYPTO_HASHCTX_MAX` with
-`alignas(uint64_t)`. `CRYPTO_STATUS_BUSY` marks transient accelerator
+`HashCtxAlign()`; generic consumers reserve `CRYPTO_HASHCTX_MAX` aligned to
+`CRYPTO_HASHCTX_ALIGN_MAX`. Key-agreement contexts follow the same size/alignment
+rule through `KeyCtxSize()` and `KeyCtxAlign()`. `CRYPTO_STATUS_BUSY` marks transient accelerator
 contention: outputs are cleared and a caller-held single-use key survives for
 retry, while `CRYPTO_STATUS_FAIL` always consumes it.
 

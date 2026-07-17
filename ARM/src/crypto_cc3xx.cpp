@@ -856,12 +856,12 @@ static bool CoreInit(Device *pDev)
 // The per-instance key context is CryptoCc3xx::KeyCtx (declared with the class
 // below); the private scalar lives there, single use by default.
 
-static bool Cc3xxAcquire(Cc3xxIntrf *pIntrf)
+static bool Cc3xxAcquire(Device *pDev, Cc3xxIntrf *pIntrf)
 {
 	uint32_t attempts = __get_IPSR() == 0U ? CC3XX_ACQUIRE_SPINS : 1U;
 	while (attempts-- > 0U)
 	{
-		bool acquired = pIntrf->OpHold();
+		bool acquired = pIntrf->OpHold(pDev);
 
 		if (acquired)
 		{
@@ -872,14 +872,14 @@ static bool Cc3xxAcquire(Cc3xxIntrf *pIntrf)
 	return false;
 }
 
-static void Cc3xxRelease(Cc3xxIntrf *pIntrf)
+static void Cc3xxRelease(Device *pDev, Cc3xxIntrf *pIntrf)
 {
-	pIntrf->OpRelease();
+	(void)pIntrf->OpRelease(pDev);
 }
 
 static CRYPTO_STATUS EnsureCc3xx(Device *pDev, Cc3xxIntrf *pIntrf)
 {
-	if (!Cc3xxAcquire(pIntrf))
+	if (!Cc3xxAcquire(pDev, pIntrf))
 	{
 		// The operation lock is owned elsewhere: transient, retryable.
 		return CRYPTO_STATUS_BUSY;
@@ -893,13 +893,13 @@ static CRYPTO_STATUS EnsureCc3xx(Device *pDev, Cc3xxIntrf *pIntrf)
 		// gate a wrapper that does not come up, then rerun the bring-up.
 		if (!Cc3xxEnable())
 		{
-			Cc3xxRelease(pIntrf);
+			Cc3xxRelease(pDev, pIntrf);
 			return CRYPTO_STATUS_FAIL;
 		}
 		s_bCcInit = CoreInit(pDev);
 	}
 	bool initialized = s_bCcInit;
-	Cc3xxRelease(pIntrf);
+	Cc3xxRelease(pDev, pIntrf);
 	return initialized ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
 }
 
@@ -1006,7 +1006,7 @@ CRYPTO_STATUS CryptoCc3xx::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 	{
 		return ready;
 	}
-	if (!Cc3xxAcquire(pIntrf))
+	if (!Cc3xxAcquire(pDev, pIntrf))
 	{
 		return CRYPTO_STATUS_BUSY;
 	}
@@ -1023,7 +1023,7 @@ CRYPTO_STATUS CryptoCc3xx::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 		KeyReset(pk);
 		memset(pPubKey, 0, 64U);
 	}
-	Cc3xxRelease(pIntrf);
+	Cc3xxRelease(pDev, pIntrf);
 	return status;
 }
 
@@ -1058,13 +1058,13 @@ CRYPTO_STATUS CryptoCc3xx::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 		KeyReset(pk);
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (!Cc3xxAcquire(pIntrf))
+	if (!Cc3xxAcquire(pDev, pIntrf))
 	{
 		return CRYPTO_STATUS_BUSY;
 	}
 	if (!pk->bKeyValid)
 	{
-		Cc3xxRelease(pIntrf);
+		Cc3xxRelease(pDev, pIntrf);
 		KeyReset(pk);
 		return CRYPTO_STATUS_FAIL;
 	}
@@ -1089,7 +1089,7 @@ CRYPTO_STATUS CryptoCc3xx::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 		memset(pSharedX, 0, P256_BYTES);
 	}
 	CryptoSecureWipe(point, sizeof(point));
-	Cc3xxRelease(pIntrf);
+	Cc3xxRelease(pDev, pIntrf);
 	return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
 }
 
@@ -1116,13 +1116,13 @@ int CryptoCc3xx::SelfTest()
 		0x99,0x79,0x6B,0x13,0xB4,0xF8,0x66,0xF1,0x86,0x8D,0x34,0xF3,0x73,0xBF,0xA6,0x98,
 	};
 
-	if (EnsureCc3xx(pDev, pIntrf) != CRYPTO_STATUS_OK || !Cc3xxAcquire(pIntrf))
+	if (EnsureCc3xx(pDev, pIntrf) != CRYPTO_STATUS_OK || !Cc3xxAcquire(pDev, pIntrf))
 	{
 		return -1;
 	}
 	uint8_t result[64];
 	const bool ok = P256Multiply(pDev, nullptr, pub, priv, result, false);
-	Cc3xxRelease(pIntrf);
+	Cc3xxRelease(pDev, pIntrf);
 	const int status = ok && memcmp(result, expected, sizeof(expected)) == 0 ? 0 : -1;
 	CryptoSecureWipe(result, sizeof(result));
 	return status;

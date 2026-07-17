@@ -57,6 +57,7 @@ public:
 	void Reset() override {}
 
 	size_t KeyCtxSize() const override { return sizeof(KeyCtx); }
+	size_t KeyCtxAlign() const override { return alignof(KeyCtx); }
 	void KeyReset(void *pKeyCtx) override;
 	CRYPTO_STATUS KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 						 uint8_t *pPubKey) override;

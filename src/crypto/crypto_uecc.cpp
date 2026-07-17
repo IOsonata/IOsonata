@@ -57,6 +57,7 @@ static void UeccWipe(void *pData, size_t Len)
 
 static atomic_flag s_UeccBusy = ATOMIC_FLAG_INIT;
 static RngEngine *s_pActiveRng;
+static uECC_RNG_Function s_PreviousRng;
 
 static int UeccRngAdapter(uint8_t *pDest, unsigned Size)
 {
@@ -64,34 +65,30 @@ static int UeccRngAdapter(uint8_t *pDest, unsigned Size)
 		s_pActiveRng->Random(pDest, (size_t)Size) == CRYPTO_STATUS_OK ? 1 : 0;
 }
 
-static bool UeccBegin(RngEngine *pRng, bool bNeedRng)
+static CRYPTO_STATUS UeccBegin(RngEngine *pRng, bool bNeedRng)
 {
 	if (atomic_flag_test_and_set(&s_UeccBusy))
 	{
-		return false;
+		return CRYPTO_STATUS_BUSY;
 	}
 
-	if (bNeedRng)
+	s_PreviousRng = uECC_get_rng();
+	if (bNeedRng && (pRng == nullptr || !pRng->IsSecure()))
 	{
-		if (pRng == nullptr || !pRng->IsSecure())
-		{
-			atomic_flag_clear(&s_UeccBusy);
-			return false;
-		}
-		s_pActiveRng = pRng;
-		uECC_set_rng(UeccRngAdapter);
+		s_PreviousRng = nullptr;
+		atomic_flag_clear(&s_UeccBusy);
+		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-	else
-	{
-		s_pActiveRng = nullptr;
-		uECC_set_rng(nullptr);
-	}
-	return true;
+
+	s_pActiveRng = bNeedRng ? pRng : nullptr;
+	uECC_set_rng(bNeedRng ? UeccRngAdapter : nullptr);
+	return CRYPTO_STATUS_OK;
 }
 
 static void UeccEnd(void)
 {
-	uECC_set_rng(nullptr);
+	uECC_set_rng(s_PreviousRng);
+	s_PreviousRng = nullptr;
 	s_pActiveRng = nullptr;
 	atomic_flag_clear(&s_UeccBusy);
 }
@@ -120,9 +117,10 @@ CRYPTO_STATUS CryptoUecc::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-	if (!UeccBegin(vpRng, true))
+	CRYPTO_STATUS begin = UeccBegin(vpRng, true);
+	if (begin != CRYPTO_STATUS_OK)
 	{
-		return CRYPTO_STATUS_FAIL;
+		return begin;
 	}
 
 	int ok = uECC_make_key(pPubKey, pk->PrivKey, uECC_secp256r1());
@@ -156,11 +154,15 @@ CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	// micro-ecc applies its random initial-Z point randomization only while an
 	// RNG callback is bound. Bind the engine RNG so the multiply over the
 	// private scalar runs with that protection; fail closed without it.
-	if (!UeccBegin(vpRng, true))
+	CRYPTO_STATUS begin = UeccBegin(vpRng, true);
+	if (begin != CRYPTO_STATUS_OK)
 	{
-		KeyReset(pk);
+		if (begin != CRYPTO_STATUS_BUSY)
+		{
+			KeyReset(pk);
+		}
 		memset(pSharedX, 0, 32U);
-		return CRYPTO_STATUS_FAIL;
+		return begin;
 	}
 
 	uint8_t secret[32] = {};
@@ -203,9 +205,10 @@ CRYPTO_STATUS CryptoUecc::Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-	if (!UeccBegin(vpRng, true))
+	CRYPTO_STATUS begin = UeccBegin(vpRng, true);
+	if (begin != CRYPTO_STATUS_OK)
 	{
-		return CRYPTO_STATUS_FAIL;
+		return begin;
 	}
 	int ok = uECC_sign(Key.Plain.pData, pHash, (unsigned)HashLen, pSig,
 					   uECC_secp256r1());
@@ -222,9 +225,10 @@ CRYPTO_STATUS CryptoUecc::Verify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-	if (!UeccBegin(nullptr, false))
+	CRYPTO_STATUS begin = UeccBegin(nullptr, false);
+	if (begin != CRYPTO_STATUS_OK)
 	{
-		return CRYPTO_STATUS_FAIL;
+		return begin;
 	}
 	int ok = uECC_verify(pPubKey, pHash, (unsigned)HashLen, pSig,
 						 uECC_secp256r1());
@@ -246,7 +250,7 @@ int CryptoUecc::SelfTest()
 		0xec,0x02,0x34,0xa3,0x57,0xc8,0xad,0x05,0x34,0x10,0x10,0xa6,0x0a,0x39,0x7d,0x9b,
 		0x99,0x79,0x6b,0x13,0xb4,0xf8,0x66,0xf1,0x86,0x8d,0x34,0xf3,0x73,0xbf,0xa6,0x98 };
 
-	if (!UeccBegin(nullptr, false))
+	if (UeccBegin(nullptr, false) != CRYPTO_STATUS_OK)
 	{
 		return -1;
 	}

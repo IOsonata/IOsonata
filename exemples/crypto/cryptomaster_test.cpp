@@ -157,7 +157,7 @@ int main(void)
 	// must fail cleanly, leave the foreign hold in place, and recover after
 	// release.
 	CracenIntrf *cracen = CracenIntrfInstance();
-	bool held = cracen->ModuleHold(CRACEN_MODULE_RNG);
+	bool held = cracen->ModuleHold(CRACEN_MODULE_RNG, cracen);
 	check("cipher busy while CRACEN is held",
 		held && cipher->Cipher(CRYPTO_CIPHER_ECB, 1, kat, nullptr, 0,
 							   katIn, 16, result) == CRYPTO_STATUS_BUSY);
@@ -173,10 +173,10 @@ int main(void)
 	check("CMAC busy while CRACEN is held, tag zeroed",
 		held && heldMac == CRYPTO_STATUS_BUSY && heldTagZero);
 	check("foreign hold survives the rejected cipher",
-		held && !cracen->ModuleHold(CRACEN_MODULE_CRYPTOMASTER));
+		held && !cracen->ModuleHold(CRACEN_MODULE_CRYPTOMASTER, cracen));
 	if (held)
 	{
-		cracen->ModuleRelease();
+		(void)cracen->ModuleRelease(cracen);
 	}
 	check("cipher recovers after release",
 		cipher->Cipher(CRYPTO_CIPHER_ECB, 1, kat, nullptr, 0,

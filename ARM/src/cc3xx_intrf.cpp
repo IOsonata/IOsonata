@@ -46,6 +46,7 @@ SOFTWARE.
 #include "cc3xx_intrf.h"
 
 static atomic_flag s_HoldFlag = ATOMIC_FLAG_INIT;
+static const void *s_pHoldOwner;
 static uint32_t s_Offset;				// byte offset latched from address phase
 static bool s_bAddrLatched;
 
@@ -202,18 +203,25 @@ bool Cc3xxIntrf::Init(void)
 	return true;
 }
 
-bool Cc3xxIntrf::OpHold(void)
+bool Cc3xxIntrf::OpHold(const void *pOwner)
 {
-	if (atomic_flag_test_and_set(&s_HoldFlag))
+	if (pOwner == nullptr || atomic_flag_test_and_set(&s_HoldFlag))
 	{
 		return false;
 	}
+	s_pHoldOwner = pOwner;
 	return true;
 }
 
-void Cc3xxIntrf::OpRelease(void)
+bool Cc3xxIntrf::OpRelease(const void *pOwner)
 {
+	if (pOwner == nullptr || s_pHoldOwner != pOwner)
+	{
+		return false;
+	}
+	s_pHoldOwner = nullptr;
 	atomic_flag_clear(&s_HoldFlag);
+	return true;
 }
 
 Cc3xxIntrf *Cc3xxIntrfInstance(void)

@@ -87,8 +87,9 @@ public:
 	// ModuleHold once before its work and ModuleRelease once after; register
 	// access between them lands in the held module's sub-block. Returns false if
 	// another engine holds the core.
-	bool ModuleHold(uint32_t Module);
-	void ModuleRelease(void);
+	bool ModuleHold(uint32_t Module, const void *pOwner);
+	bool ModuleRelease(const void *pOwner);
+	bool ModuleReset(const void *pOwner);
 
 protected:
 	DevIntrf_t vDevIntrf;
