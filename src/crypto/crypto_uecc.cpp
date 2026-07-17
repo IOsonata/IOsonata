@@ -131,7 +131,10 @@ CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 		memset(pSharedX, 0, 32U);
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (!UeccBegin(nullptr, false))
+	// micro-ecc applies its random initial-Z point randomization only while an
+	// RNG callback is bound. Bind the engine RNG so the multiply over the
+	// private scalar runs with that protection; fail closed without it.
+	if (!UeccBegin(vpRng, true))
 	{
 		KeyReset(pk);
 		memset(pSharedX, 0, 32U);

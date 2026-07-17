@@ -138,7 +138,7 @@ static void PkCleanup(Device *pDev, CracenIntrf *pIntrf)
 	PkClearSlot(pDev, BA414EP_SLOT_RESULT_Y, P256_SZ);
 	PkClearSlot(pDev, BA414EP_SLOT_POINT_X, P256_SZ);
 	PkClearSlot(pDev, BA414EP_SLOT_POINT_Y, P256_SZ);
-	PkClearSlot(pDev, BA414EP_SLOT_BLIND, BA414EP_BLIND_SIZE);
+	PkClearSlot(pDev, BA414EP_SLOT_BLIND, P256_SZ);
 	__DMB();
 
 	PkRegWrite(pDev, BA414EP_REG_CONTROL, BA414EP_CONTROL_CLEAR_IRQ);
@@ -183,6 +183,11 @@ static bool PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 		PkWriteOperand(pDev, BA414EP_SLOT_SCALAR, Scalar, P256_SZ);
 		PkWriteOperand(pDev, BA414EP_SLOT_POINT_X, &Point[0], P256_SZ);
 		PkWriteOperand(pDev, BA414EP_SLOT_POINT_Y, &Point[32], P256_SZ);
+
+		// The countermeasure factor is one full 32 byte operand in slot 15
+		// with the 8 byte value at the big-endian tail. Zero the window first
+		// so power-on crypto RAM content cannot enter the factor.
+		PkClearSlot(pDev, BA414EP_SLOT_BLIND, P256_SZ);
 		PkWriteOperand(pDev, BA414EP_SLOT_BLIND, blind, sizeof(blind));
 		PkRegWrite(pDev, BA414EP_REG_CONFIG, BA414EP_CONFIG_PTMUL);
 

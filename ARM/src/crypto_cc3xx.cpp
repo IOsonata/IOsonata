@@ -895,29 +895,28 @@ bool CryptoCc3xx::Enable()
 void CryptoCc3xx::Disable() {}
 void CryptoCc3xx::Reset() {}
 
-static void KeyReset(CryptoCc3xx::KeyCtx *pk)
-{
-	CryptoSecureWipe(pk->PrivKey, sizeof(pk->PrivKey));
-	pk->bKeyValid = false;
-}
-
 CRYPTO_STATUS CryptoCc3xx::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 								  uint8_t *pPubKey)
 {
 	Device *pDev = this;
 	Cc3xxIntrf *pIntrf = (Cc3xxIntrf *)Interface();
-	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr || pPubKey == nullptr ||
-		EnsureCc3xx(pDev, pIntrf) != CRYPTO_STATUS_OK)
-	{
-		return CRYPTO_STATUS_FAIL;
-	}
-	KeyCtx *pk = (KeyCtx *)pKeyCtx;
-	if (!Cc3xxAcquire(pIntrf))
+	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr || pPubKey == nullptr)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
 
+	// Reset the context before any hardware step. A failed bring-up or a busy
+	// accelerator must not leave a previous private key usable in a reused
+	// context.
+	KeyCtx *pk = (KeyCtx *)pKeyCtx;
 	KeyReset(pk);
+	memset(pPubKey, 0, 64U);
+
+	if (EnsureCc3xx(pDev, pIntrf) != CRYPTO_STATUS_OK || !Cc3xxAcquire(pIntrf))
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+
 	CRYPTO_STATUS status = CRYPTO_STATUS_FAIL;
 	if (P256RandomScalar(vpRng, pk->PrivKey) &&
 		P256Multiply(pDev, vpRng, s_P256Generator, pk->PrivKey, pPubKey, true))
@@ -928,6 +927,7 @@ CRYPTO_STATUS CryptoCc3xx::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 	else
 	{
 		KeyReset(pk);
+		memset(pPubKey, 0, 64U);
 	}
 	Cc3xxRelease(pIntrf);
 	return status;
