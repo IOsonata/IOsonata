@@ -114,6 +114,19 @@ void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
 		return;
 	}
 
+	// A persisted record can be torn or corrupted (partial flash write, layout
+	// change). Reject anything whose fields are out of range before it reaches
+	// the active table, where NbCccd is used as a loop bound and the key size
+	// gates encryption. A bad record is dropped, leaving the slot empty.
+	if (!p->Keys.bValid ||
+		p->NbCccd > BT_GATT_CCCD_STATE_MAX ||
+		p->PeerAddrType > BTADDR_TYPE_RANDOM_STATIC ||
+		p->Keys.EncKeySize < BT_SMP_CFG_MIN_ENC_KEY_SIZE ||
+		p->Keys.EncKeySize > BT_SMP_MAX_ENC_KEY_SIZE)
+	{
+		return;
+	}
+
 	memcpy(&s_BtSmpBondTable[Slot], p, sizeof(BtSmpBond_t));
 }
 
@@ -209,6 +222,13 @@ void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 	{
 		slot = BtSmpBondAllocSlot();
 	}
+
+	// Clear the slot before populating it. A reused slot (same peer re-pairing
+	// with a fresh CSRK, or a recycled slot when the table is full) must not
+	// keep the previous SignCounter: signed-write verification rejects a counter
+	// below the stored value, so a stale counter would block the new signing
+	// relationship from starting at zero.
+	memset(&s_BtSmpBondTable[slot], 0, sizeof(s_BtSmpBondTable[slot]));
 
 	s_BtSmpBondTable[slot].bValid = true;
 	s_BtSmpBondTable[slot].PeerAddrType = addrType;

@@ -173,6 +173,15 @@ static KeyAgreeEngine *s_pCryptoEcdh = nullptr;
 static RngEngine *s_pCryptoRng = nullptr;
 static CipherEngine   *s_pCryptoAes  = nullptr;
 
+// Set true when an AES-128 block operation fails. A failed block leaves a zeroed
+// result, so any confirm, key or check derived from it is unusable and must not
+// drive a compare, a stored key or link encryption. Cleared at each entry point
+// that starts a fresh crypto sequence, checked where a result is consumed. This
+// is an internal failure, not a peer authentication attempt.
+static bool s_SmpAesFault = false;
+
+static inline void SmpAesFaultClear(void) { s_SmpAesFault = false; }
+
 // Destroy the ECDH private key held in a key context. KeyReset reaches a
 // provider-side handle (an accelerator slot or an opaque key) that a raw wipe
 // of the context bytes cannot; the caller's following wipe covers the plain
@@ -977,6 +986,14 @@ static void SmpBuildPairingRsp(BtSmpLink_t *pLink, BtSmpPairingRsp_t *pRsp)
 // remote peer brute-force the value byte-by-byte across retries.
 static bool SmpEqualCT(const uint8_t *a, const uint8_t *b, size_t len)
 {
+	// A faulted AES produces a zeroed operand; treat the compare as a mismatch
+	// so a peer that submits a matching zero value cannot pass a confirm or
+	// DHKey check built on a failed block. Every confirm and DHKey verification
+	// runs through here, so one guard covers all of them.
+	if (s_SmpAesFault)
+	{
+		return false;
+	}
 	uint8_t diff = 0;
 	for (size_t i = 0; i < len; i++)
 	{
@@ -993,6 +1010,17 @@ static bool SmpEqualCT(const uint8_t *a, const uint8_t *b, size_t len)
 // negotiated a short key would still receive a full-strength key on our side.
 static void SmpApplyKeySize(uint8_t Ltk[16], uint8_t EncKeySize)
 {
+	// A faulted AES makes the derived key material unusable. Zero the whole key
+	// so SmpKeyPresent reports it absent: the responder LTK request then sends a
+	// negative reply and the initiator hands the controller a zero key, so the
+	// link never encrypts with material a failed block produced. The zero value
+	// persists in the context into the later LTK request, which runs in a
+	// separate pass from the derivation, so this guard covers both.
+	if (s_SmpAesFault)
+	{
+		memset(Ltk, 0, 16);
+		return;
+	}
 	int ks = EncKeySize;
 	if (ks < BT_SMP_MIN_ENC_KEY_SIZE)
 	{
@@ -2044,6 +2072,7 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	}
 
 	s_pSmpActiveDev = pDev;
+	SmpAesFaultClear();
 
 	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
 	SMP_TRACE_PDU("RX", pSmp->Code, pLink ? (int)pLink->Ctx.State : -1);
@@ -2146,6 +2175,46 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			break;
 	}
 
+	// Phase gate: a pairing PDU is only valid at the point in the exchange where
+	// it is expected. Without this an unsolicited Confirm, Random, Public Key or
+	// DHKey Check on an idle link would run a handler with a zero context (Just
+	// Works, legacy, empty Pairing Request/Response caches) and could complete a
+	// pairing the peer never requested, sidestepping the Secure Connections
+	// policy enforced when a real Pairing Request is processed.
+	// Key-distribution PDUs are gated above. Reject an off-phase PDU here without
+	// entering a new phase.
+	switch (pSmp->Code)
+	{
+		case BT_SMP_CODE_PAIRING_REQ:
+			// Responder side, and only when no pairing runs on the link. A
+			// request that arrives mid-pairing or after completion is rejected
+			// (the handler also refuses a re-pair on an encrypted link).
+			if (pLink->Ctx.State != BT_SMP_STATE_IDLE)
+			{
+				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+				return;
+			}
+			break;
+
+		case BT_SMP_CODE_PAIRING_RSP:
+		case BT_SMP_CODE_PAIRING_PUBLIC_KEY:
+		case BT_SMP_CODE_PAIRING_CONFIRM:
+		case BT_SMP_CODE_PAIRING_RANDOM:
+		case BT_SMP_CODE_PAIRING_DHKEY_CHECK:
+			// These occur only once a pairing is in progress. On an idle link
+			// they are unsolicited; reject rather than start a phase from a
+			// zero context.
+			if (pLink->Ctx.State == BT_SMP_STATE_IDLE)
+			{
+				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+				return;
+			}
+			break;
+
+		default:
+			break;
+	}
+
 	switch (pSmp->Code)
 	{
 		case BT_SMP_CODE_PAIRING_REQ:
@@ -2204,13 +2273,19 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 				SMP_TRACE("SMP RX Failed reason=0x%02x\r\n",
 						  ((const BtSmpPairingFailed_t*)pSmp)->Reason);
 			}
-			SmpAbortPairing(pLink);
-			pLink->Ctx.FailCount++;
-			if (pLink->Ctx.FailCount >= BT_SMP_MAX_PAIR_ATTEMPTS)
+			// A Pairing Failed is only meaningful during an active pairing. On
+			// an idle link it is unsolicited; ignore it so a peer cannot drive
+			// the repeated-attempts counter to lockout without pairing.
+			if (pLink->Ctx.State != BT_SMP_STATE_IDLE)
 			{
-				pLink->Ctx.bLocked = true;
+				SmpAbortPairing(pLink);
+				pLink->Ctx.FailCount++;
+				if (pLink->Ctx.FailCount >= BT_SMP_MAX_PAIR_ATTEMPTS)
+				{
+					pLink->Ctx.bLocked = true;
+				}
+				BtSmpPairingComplete(ConnHdl, false, nullptr);
 			}
-			BtSmpPairingComplete(ConnHdl, false, nullptr);
 			break;
 		}
 
@@ -2231,6 +2306,7 @@ void BtSmpLocalPubKeyReady(BtHciDevice_t * const pDev, uint8_t Status,
 {
 	s_pSmpActiveDev = pDev;
 	SMP_TRACE("SMP LocalPubKeyReady status=%d\r\n", Status);
+	SmpAesFaultClear();
 
 	BtSmpLink_t *pLink = SmpCryptoPendingTake(BT_SMP_CRYPTO_OP_PUBKEY);
 	if (pLink == nullptr ||
@@ -2276,6 +2352,7 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 {
 	s_pSmpActiveDev = pDev;
 	SMP_TRACE("SMP DhKeyReady status=%d\r\n", Status);
+	SmpAesFaultClear();
 
 	BtSmpLink_t *pLink = SmpCryptoPendingTake(BT_SMP_CRYPTO_OP_DHKEY);
 	if (pLink == nullptr || pLink->Ctx.State != BT_SMP_STATE_DHKEY_WAIT)
@@ -2679,6 +2756,7 @@ void BtSmpCryptoAes128(BtHciDevice_t * const pDev,
 	if (s_pCryptoAes == nullptr)
 	{
 		memset(Out, 0, 16);
+		s_SmpAesFault = true;
 		return;
 	}
 
@@ -2703,6 +2781,7 @@ void BtSmpCryptoAes128(BtHciDevice_t * const pDev,
 	if (st != CRYPTO_STATUS_OK)
 	{
 		memset(Out, 0, 16);
+		s_SmpAesFault = true;
 	}
 }
 
@@ -2846,8 +2925,11 @@ bool BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
 	// must be checked: on nRF54 the non-blocking CRACEN lock can be held, so a
 	// draw can fail, and a security-path caller must abort rather than proceed
 	// with an unrandomized buffer.
-	if (s_pCryptoRng == nullptr)
+	if (s_pCryptoRng == nullptr || !s_pCryptoRng->IsSecure())
 	{
+		// SMP nonces, passkeys, OOB randoms, IRK and CSRK need a secure RBG. A
+		// deterministic engine (IsSecure() false) would make these predictable,
+		// so refuse to draw and fail the pairing rather than weaken it.
 		CryptoSecureWipe(pBuf, Len);
 		return false;
 	}
@@ -2956,6 +3038,26 @@ bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)
 		pEcdh = nullptr;
 		accepted = false;
 	}
+
+	// AES-128-ECB is mandatory for SMP (e, c1, s1, f4..f6). A build with no AES
+	// provider cannot pair; report the refusal so the caller fails at init
+	// rather than silently at the first Secure Connections attempt. The runtime
+	// AES fault guard still stops any pairing that reaches BtSmpCryptoAes128
+	// with no provider.
+	if (pAes == nullptr)
+	{
+		accepted = false;
+	}
+
+	// The RNG must be a secure RBG. A deterministic engine (IsSecure() false)
+	// would make nonces, passkeys and distributed keys predictable, so refuse it
+	// here and leave the slot empty; BtSmpCryptoRand then fails closed.
+	if (pRng != nullptr && !pRng->IsSecure())
+	{
+		pRng = nullptr;
+		accepted = false;
+	}
+
 	s_pCryptoEcdh = pEcdh;
 	s_pCryptoRng = pRng;
 	s_pCryptoAes  = pAes;
@@ -2977,7 +3079,6 @@ bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)
 
 // Weak: a port whose underlying stack owns pairing overrides this and
 // routes the values into that stack security parameters instead.
-__attribute__((weak))
 __attribute__((weak))
 void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 {
@@ -3012,6 +3113,8 @@ void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 	{
 		return;
 	}
+
+	SmpAesFaultClear();
 
 	// Derive the HCI device from this connection rather than the global active
 	// device: the user reply is asynchronous and a concurrent link could have

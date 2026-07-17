@@ -235,9 +235,19 @@ CRYPTO_STATUS CryptoRngStm32::Random(uint8_t *pOut, size_t Len)
 	}
 	if (RngInit() == false)
 	{
+		CryptoSecureWipe(pOut, Len);
 		return CRYPTO_STATUS_FAIL;
 	}
-	return RngFill(pOut, Len) ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+	if (RngFill(pOut, Len) == false)
+	{
+		// RngFill writes words in place and can stop part way on a hardware
+		// error, leaving some words of the output filled. Wipe the whole
+		// requested range so a failed draw never exposes a partial result to a
+		// caller that forgets to clear it.
+		CryptoSecureWipe(pOut, Len);
+		return CRYPTO_STATUS_FAIL;
+	}
+	return CRYPTO_STATUS_OK;
 }
 
 CryptoRngStm32 *CryptoRngStm32Instance(void)

@@ -50,7 +50,10 @@ static bool s_bOobLocalGen;
 static ble_gap_lesc_oob_data_t s_OobLocal;
 static BtLescOobPeerHandler_t s_OobPeerHandler;
 static KeyAgreeEngine *s_pLescCrypto;
-alignas(uint64_t) static uint8_t s_LescEcdhKeyCtx[LESC_KEYCTX_SIZE];
+// Aligned to the maximum any provider can request so a provider that needs
+// wider alignment than 8 bytes still gets conforming storage. Provider
+// acceptance also checks KeyCtxAlign against this bound.
+alignas(CRYPTO_KEYCTX_ALIGN_MAX) static uint8_t s_LescEcdhKeyCtx[LESC_KEYCTX_SIZE];
 
 static void ByteOrderInvert(const uint8_t *pIn, uint8_t *pOut)
 {
@@ -106,7 +109,9 @@ void BtLescSetCryptoEngine(KeyAgreeEngine *pEcdh)
 	LocalKeyReset();
 	s_pLescCrypto = pEcdh != nullptr &&
 		pEcdh->KeyCtxSize() > 0U &&
-		pEcdh->KeyCtxSize() <= sizeof(s_LescEcdhKeyCtx) ? pEcdh : nullptr;
+		pEcdh->KeyCtxSize() <= sizeof(s_LescEcdhKeyCtx) &&
+		pEcdh->KeyCtxAlign() > 0U &&
+		pEcdh->KeyCtxAlign() <= CRYPTO_KEYCTX_ALIGN_MAX ? pEcdh : nullptr;
 }
 
 bool BtLescKeyPairGen(void)
@@ -121,7 +126,9 @@ bool BtLescKeyPairGen(void)
 
 	if (s_pLescCrypto == nullptr ||
 		s_pLescCrypto->KeyCtxSize() == 0U ||
-		s_pLescCrypto->KeyCtxSize() > sizeof(s_LescEcdhKeyCtx))
+		s_pLescCrypto->KeyCtxSize() > sizeof(s_LescEcdhKeyCtx) ||
+		s_pLescCrypto->KeyCtxAlign() == 0U ||
+		s_pLescCrypto->KeyCtxAlign() > CRYPTO_KEYCTX_ALIGN_MAX)
 	{
 		return false;
 	}

@@ -1603,7 +1603,7 @@
 		<link>
 			<name>src/bluetooth/bt_lesc_sd.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_lesc_sd.cpp</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_lesc_sd.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_oob_rftag.cpp</name>
