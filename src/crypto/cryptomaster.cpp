@@ -1,14 +1,11 @@
 /**-------------------------------------------------------------------------
 @file	cryptomaster.cpp
 
-@brief	Silex CryptoMaster hardware AES engine on the OO engine tree.
+@brief	Silex CryptoMaster hardware AES engine.
 
-		Overrides CipherEngine::Cipher with the BA411e hardware AES. All access
-		is raw register read/write at the offsets in cryptomaster.h, reached
-		through the injected base and the vendor hooks; no vendor HAL and no
-		architecture register name here. ECB, CTR and CBC are built on one
-		hardware single-block primitive. The inherited CMAC (CryptoSoftAes) runs
-		over this hardware AES through the virtual Cipher call.
+		The CRACEN CryptoMaster module is held once for the complete one-shot
+		cipher call. This prevents another CRACEN user from interleaving between
+		blocks and avoids releasing and reacquiring the shared core for every block.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -25,25 +22,18 @@
 #define __DMB()		((void)0)
 #endif
 
-#define AES_BLOCK			16U
-#define CM_POLL_LIMIT		100000U
+#define AES_BLOCK		16U
+#define CM_POLL_LIMIT	100000U
 
 static void CmWipe(void *pData, size_t Len)
 {
 	volatile uint8_t *p = (volatile uint8_t *)pData;
-	while (Len-- > 0)
+	while (Len-- > 0U)
 	{
-		*p++ = 0;
+		*p++ = 0U;
 	}
 }
 
-// Soft reset the DMA and clear pending interrupt status. The reset is a pulse:
-// assert the enable bit, hold briefly, then clear it, and only then wait for the
-// reset-busy bit to drop. Clearing the enable is required; without it the block
-// stays held in reset.
-// Register access through the inherited Device Read / Write, with DevAddr
-// selecting the symmetric engine register base. The module is held for the
-// operation by the caller.
 static uint32_t CmRegRead(Device *pDev, uint32_t Offset)
 {
 	uint8_t off[4] = { (uint8_t)Offset, (uint8_t)(Offset >> 8),
@@ -63,14 +53,13 @@ static void CmRegWrite(Device *pDev, uint32_t Offset, uint32_t Value)
 static bool CmReset(Device *pDev)
 {
 	CmRegWrite(pDev, CRYPTOMASTER_CONFIG, CRYPTOMASTER_SOFTRESET_ENABLE);
-
-	// Brief hold so the reset takes on all MCUs, then clear it.
-	for (volatile uint32_t d = 0; d < 64; d++) { }
-	CmRegWrite(pDev, CRYPTOMASTER_CONFIG, 0);
+	for (volatile uint32_t delay = 0; delay < 64U; delay++) { }
+	CmRegWrite(pDev, CRYPTOMASTER_CONFIG, 0U);
 
 	for (uint32_t i = 0; i < CM_POLL_LIMIT; i++)
 	{
-		if ((CmRegRead(pDev, CRYPTOMASTER_STATUS) & CRYPTOMASTER_STATUS_RESET_BUSY) == 0U)
+		if ((CmRegRead(pDev, CRYPTOMASTER_STATUS) &
+			 CRYPTOMASTER_STATUS_RESET_BUSY) == 0U)
 		{
 			CmRegWrite(pDev, CRYPTOMASTER_INT_STATCLR, 0xFFFFFFFFU);
 			return true;
@@ -80,16 +69,17 @@ static bool CmReset(Device *pDev)
 	return false;
 }
 
-// Wait for both DMA channels; false on a bus error or timeout.
 static bool CmWait(Device *pDev)
 {
 	for (uint32_t i = 0; i < CM_POLL_LIMIT; i++)
 	{
-		if ((CmRegRead(pDev, CRYPTOMASTER_INT_STATRAW) & CRYPTOMASTER_INT_ERROR) != 0U)
+		if ((CmRegRead(pDev, CRYPTOMASTER_INT_STATRAW) &
+			 CRYPTOMASTER_INT_ERROR) != 0U)
 		{
 			return false;
 		}
-		if ((CmRegRead(pDev, CRYPTOMASTER_STATUS) & CRYPTOMASTER_STATUS_BUSY) == 0U)
+		if ((CmRegRead(pDev, CRYPTOMASTER_STATUS) &
+			 CRYPTOMASTER_STATUS_BUSY) == 0U)
 		{
 			return true;
 		}
@@ -97,10 +87,9 @@ static bool CmWait(Device *pDev)
 	return false;
 }
 
-// One AES-128-ECB block in hardware: config + key + input fetch chain, output
-// push. The caller holds the lock and has enabled the module.
+// The caller owns the CRACEN module hold.
 static bool CmAesBlock(Device *pDev, const uint8_t Key[16],
-					   const uint8_t In[16], uint8_t Out[16])
+						const uint8_t In[16], uint8_t Out[16])
 {
 	alignas(uint32_t) uint32_t config = CRYPTOMASTER_BA411_MODE_ECB;
 	alignas(uint32_t) uint8_t key[AES_BLOCK];
@@ -117,32 +106,33 @@ static bool CmAesBlock(Device *pDev, const uint8_t Key[16],
 
 	inDesc[0].pAddr = (uint8_t *)&config;
 	inDesc[0].pNext = &inDesc[1];
-	inDesc[0].Size  = sizeof(config) | CRYPTOMASTER_DMA_REALIGN;
-	inDesc[0].Tag   = CRYPTOMASTER_TAG_ENGINE_AES |
-					  CRYPTOMASTER_TAG_CONFIG(CRYPTOMASTER_BA411_CFG_OFFSET);
+	inDesc[0].Size = sizeof(config) | CRYPTOMASTER_DMA_REALIGN;
+	inDesc[0].Tag = CRYPTOMASTER_TAG_ENGINE_AES |
+		CRYPTOMASTER_TAG_CONFIG(CRYPTOMASTER_BA411_CFG_OFFSET);
 
 	inDesc[1].pAddr = key;
 	inDesc[1].pNext = &inDesc[2];
-	inDesc[1].Size  = sizeof(key) | CRYPTOMASTER_DMA_REALIGN;
-	inDesc[1].Tag   = CRYPTOMASTER_TAG_ENGINE_AES |
-					  CRYPTOMASTER_TAG_CONFIG(CRYPTOMASTER_BA411_KEY_OFFSET);
+	inDesc[1].Size = sizeof(key) | CRYPTOMASTER_DMA_REALIGN;
+	inDesc[1].Tag = CRYPTOMASTER_TAG_ENGINE_AES |
+		CRYPTOMASTER_TAG_CONFIG(CRYPTOMASTER_BA411_KEY_OFFSET);
 
 	inDesc[2].pAddr = input;
 	inDesc[2].pNext = CRYPTOMASTER_DMA_STOP;
-	inDesc[2].Size  = sizeof(input) | CRYPTOMASTER_DMA_REALIGN;
-	inDesc[2].Tag   = CRYPTOMASTER_TAG_ENGINE_AES | CRYPTOMASTER_TAG_LAST;
+	inDesc[2].Size = sizeof(input) | CRYPTOMASTER_DMA_REALIGN;
+	inDesc[2].Tag = CRYPTOMASTER_TAG_ENGINE_AES | CRYPTOMASTER_TAG_LAST;
 
 	outDesc.pAddr = output;
 	outDesc.pNext = CRYPTOMASTER_DMA_STOP;
-	outDesc.Size  = sizeof(output) | CRYPTOMASTER_DMA_REALIGN;
-	outDesc.Tag   = CRYPTOMASTER_TAG_LAST;
+	outDesc.Size = sizeof(output) | CRYPTOMASTER_DMA_REALIGN;
+	outDesc.Tag = CRYPTOMASTER_TAG_LAST;
 
 	bool ok = CmReset(pDev);
 	if (ok)
 	{
 		CmRegWrite(pDev, CRYPTOMASTER_FETCH_ADDR, (uint32_t)(uintptr_t)inDesc);
 		CmRegWrite(pDev, CRYPTOMASTER_PUSH_ADDR, (uint32_t)(uintptr_t)&outDesc);
-		CmRegWrite(pDev, CRYPTOMASTER_CONFIG, CRYPTOMASTER_CONFIG_SCATTERGATHER);
+		CmRegWrite(pDev, CRYPTOMASTER_CONFIG,
+				   CRYPTOMASTER_CONFIG_SCATTERGATHER);
 		__DMB();
 		CmRegWrite(pDev, CRYPTOMASTER_START, CRYPTOMASTER_START_BOTH);
 		ok = CmWait(pDev);
@@ -159,47 +149,31 @@ static bool CmAesBlock(Device *pDev, const uint8_t Key[16],
 	CmWipe(output, sizeof(output));
 	CmWipe(inDesc, sizeof(inDesc));
 	CmWipe(&outDesc, sizeof(outDesc));
-	config = 0;
+	config = 0U;
 	return ok;
 }
 
-// Acquire the lock, power the module, run one hardware block, release.
-static bool CmAesBlockLocked(Device *pDev, CracenIntrf *pIntrf,
-							 const uint8_t Key[16], const uint8_t In[16],
-							 uint8_t Out[16])
-{
-	// Hold the symmetric module for the block, then release. Matches the
-	// reference driver: enable once, run one block, disable once.
-	if (!pIntrf->ModuleHold(CRACEN_MODULE_CRYPTOMASTER))
-	{
-		return false;
-	}
-	bool ok = CmAesBlock(pDev, Key, In, Out);
-	pIntrf->ModuleRelease();
-	return ok;
-}
-
-bool CryptoMaster::Init(DeviceIntrf * const pIntrf)
+bool CryptoMaster::Init(CracenIntrf * const pIntrf)
 {
 	if (pIntrf == nullptr)
 	{
 		return false;
 	}
+	vpCracen = pIntrf;
 	Interface(pIntrf);
 	return Enable();
 }
 
 bool CryptoMaster::Enable()
 {
-	// Probe the AES presence bit; the block must be powered to read it.
-	CracenIntrf *pIntrf = (CracenIntrf *)Interface();
-	if (!pIntrf->ModuleHold(CRACEN_MODULE_CRYPTOMASTER))
+	if (vpCracen == nullptr ||
+		!vpCracen->ModuleHold(CRACEN_MODULE_CRYPTOMASTER))
 	{
+		vbValid = false;
 		return false;
 	}
 	uint32_t present = CmRegRead(this, CRYPTOMASTER_HW_PRESENCE);
-	pIntrf->ModuleRelease();
-
+	vpCracen->ModuleRelease();
 	vbValid = (present & CRYPTOMASTER_PRESENT_AES) != 0U;
 	return vbValid;
 }
@@ -207,96 +181,116 @@ bool CryptoMaster::Enable()
 CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 								   const CryptoKey &Key,
 								   const uint8_t *pIv, size_t IvLen,
-								   const uint8_t *pIn, size_t Len, uint8_t *pOut)
+								   const uint8_t *pIn, size_t Len,
+								   uint8_t *pOut)
 {
+	uint32_t required = bEncrypt != 0 ? CRYPTO_KEY_USE_ENCRYPT :
+									 CRYPTO_KEY_USE_DECRYPT;
 	if (Key.Type != CRYPTO_KEY_AES_128 || Key.Loc != CRYPTO_KEY_LOC_PLAIN ||
 		Key.Plain.pData == nullptr || Key.Plain.Len != AES_BLOCK ||
-		pIn == nullptr || pOut == nullptr || bEncrypt == 0)
+		(Key.Usage & required) == 0U || pIn == nullptr || pOut == nullptr)
 	{
-		// Decrypt and non-AES-128 are not on the hardware forward path; defer to
-		// the software base, which declines what it cannot do.
-		return CryptoSoftAes::Cipher(Alg, bEncrypt, Key, pIv, IvLen,
-									 pIn, Len, pOut);
+		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
-	const uint8_t *k = Key.Plain.pData;
-	CRYPTO_STATUS st = CRYPTO_STATUS_OK;
+	// ECB and CBC decryption need the inverse cipher, which this hardware path
+	// does not implement. CTR uses the forward block operation for both directions.
+	if (bEncrypt == 0 && Alg != CRYPTO_CIPHER_CTR)
+	{
+		return CryptoSoftAes::Cipher(Alg, bEncrypt, Key, pIv, IvLen,
+								 pIn, Len, pOut);
+	}
+
+	if (Alg == CRYPTO_CIPHER_ECB && (Len & (AES_BLOCK - 1U)) != 0U)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	if ((Alg == CRYPTO_CIPHER_CTR || Alg == CRYPTO_CIPHER_CBC) &&
+		(pIv == nullptr || IvLen != AES_BLOCK))
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (Alg == CRYPTO_CIPHER_CBC && (Len & (AES_BLOCK - 1U)) != 0U)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (Alg != CRYPTO_CIPHER_ECB && Alg != CRYPTO_CIPHER_CTR &&
+		Alg != CRYPTO_CIPHER_CBC)
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	if (vpCracen == nullptr ||
+		!vpCracen->ModuleHold(CRACEN_MODULE_CRYPTOMASTER))
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+
+	const uint8_t *key = Key.Plain.pData;
+	CRYPTO_STATUS status = CRYPTO_STATUS_OK;
 
 	if (Alg == CRYPTO_CIPHER_ECB)
 	{
-		if ((Len & (AES_BLOCK - 1)) != 0)
+		for (size_t off = 0; off < Len; off += AES_BLOCK)
 		{
-			return CRYPTO_STATUS_FAIL;
-		}
-		for (size_t off = 0; off < Len && st == CRYPTO_STATUS_OK; off += AES_BLOCK)
-		{
-			if (!CmAesBlockLocked(this, (CracenIntrf *)Interface(), k, pIn + off, pOut + off))
+			if (!CmAesBlock(this, key, pIn + off, pOut + off))
 			{
-				st = CRYPTO_STATUS_FAIL;
+				status = CRYPTO_STATUS_FAIL;
+				break;
 			}
 		}
 	}
 	else if (Alg == CRYPTO_CIPHER_CTR)
 	{
-		if (pIv == nullptr || IvLen != AES_BLOCK)
-		{
-			return CRYPTO_STATUS_FAIL;
-		}
-		uint8_t ctr[AES_BLOCK], ks[AES_BLOCK];
+		uint8_t ctr[AES_BLOCK], stream[AES_BLOCK];
 		memcpy(ctr, pIv, AES_BLOCK);
-		size_t off = 0;
-		while (off < Len && st == CRYPTO_STATUS_OK)
+		for (size_t off = 0; off < Len; )
 		{
-			if (!CmAesBlockLocked(this, (CracenIntrf *)Interface(), k, ctr, ks))
+			if (!CmAesBlock(this, key, ctr, stream))
 			{
-				st = CRYPTO_STATUS_FAIL;
+				status = CRYPTO_STATUS_FAIL;
 				break;
 			}
-			size_t n = (Len - off < AES_BLOCK) ? (Len - off) : AES_BLOCK;
-			for (size_t j = 0; j < n; j++)
+			size_t count = Len - off < AES_BLOCK ? Len - off : AES_BLOCK;
+			for (size_t i = 0; i < count; i++)
 			{
-				pOut[off + j] = (uint8_t)(pIn[off + j] ^ ks[j]);
+				pOut[off + i] = pIn[off + i] ^ stream[i];
 			}
-			for (int j = AES_BLOCK - 1; j >= 0; j--)
+			for (int i = AES_BLOCK - 1; i >= 0; i--)
 			{
-				if (++ctr[j] != 0) break;
+				if (++ctr[i] != 0U) break;
 			}
-			off += n;
+			off += count;
 		}
 		CmWipe(ctr, sizeof(ctr));
-		CmWipe(ks, sizeof(ks));
-	}
-	else if (Alg == CRYPTO_CIPHER_CBC)
-	{
-		if (pIv == nullptr || IvLen != AES_BLOCK || (Len & (AES_BLOCK - 1)) != 0)
-		{
-			return CRYPTO_STATUS_FAIL;
-		}
-		uint8_t chain[AES_BLOCK];
-		memcpy(chain, pIv, AES_BLOCK);
-		for (size_t off = 0; off < Len && st == CRYPTO_STATUS_OK; off += AES_BLOCK)
-		{
-			uint8_t blk[AES_BLOCK];
-			for (int j = 0; j < AES_BLOCK; j++)
-			{
-				blk[j] = (uint8_t)(pIn[off + j] ^ chain[j]);
-			}
-			if (!CmAesBlockLocked(this, (CracenIntrf *)Interface(), k, blk, pOut + off))
-			{
-				st = CRYPTO_STATUS_FAIL;
-			}
-			else
-			{
-				memcpy(chain, pOut + off, AES_BLOCK);
-			}
-			CmWipe(blk, sizeof(blk));
-		}
-		CmWipe(chain, sizeof(chain));
+		CmWipe(stream, sizeof(stream));
 	}
 	else
 	{
-		st = CRYPTO_STATUS_UNSUPPORTED;
+		uint8_t chain[AES_BLOCK];
+		memcpy(chain, pIv, AES_BLOCK);
+		for (size_t off = 0; off < Len; off += AES_BLOCK)
+		{
+			uint8_t block[AES_BLOCK];
+			for (size_t i = 0; i < AES_BLOCK; i++)
+			{
+				block[i] = pIn[off + i] ^ chain[i];
+			}
+			if (!CmAesBlock(this, key, block, pOut + off))
+			{
+				status = CRYPTO_STATUS_FAIL;
+				CmWipe(block, sizeof(block));
+				break;
+			}
+			memcpy(chain, pOut + off, AES_BLOCK);
+			CmWipe(block, sizeof(block));
+		}
+		CmWipe(chain, sizeof(chain));
 	}
 
-	return st;
+	vpCracen->ModuleRelease();
+	if (status != CRYPTO_STATUS_OK && Len > 0U)
+	{
+		memset(pOut, 0, Len);
+	}
+	return status;
 }
