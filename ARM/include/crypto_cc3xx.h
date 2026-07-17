@@ -14,6 +14,7 @@
 #include <stdint.h>
 
 #include "crypto/icrypto.h"
+#include "cc3xx_intrf.h"
 
 #ifdef __cplusplus
 
@@ -23,11 +24,17 @@ public:
 
 	struct KeyCtx {
 		uint8_t PrivKey[32];
-		bool    bKeyValid;
+		bool bKeyValid;
 	};
 
 	void SetRng(RngEngine *pRng) { vpRng = pRng; }
-	bool Init(DeviceIntrf * const pIntrf, RngEngine *pRng);
+
+	// The engine needs OpHold/OpRelease in addition to the DeviceIntrf transfer
+	// operations, so construction accepts only the concrete CC3xx interface.
+	bool Init(Cc3xxIntrf * const pIntrf, RngEngine *pRng)
+	{
+		return Init((DeviceIntrf *)pIntrf, pRng);
+	}
 
 	bool Enable() override;
 	void Disable() override;
@@ -50,6 +57,11 @@ public:
 
 protected:
 	RngEngine *vpRng;
+
+private:
+	// Implementation entry retained for the translation unit. External callers
+	// cannot pass an unrelated DeviceIntrf and rely on an unchecked downcast.
+	bool Init(DeviceIntrf * const pIntrf, RngEngine *pRng);
 };
 
 #define CRYPTO_CC3XX_MEMSIZE		sizeof(CryptoCc3xx)
