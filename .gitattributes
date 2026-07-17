@@ -1,0 +1,2 @@
+# IOsonata headers are primarily C++
+*.h linguist-language=C++
