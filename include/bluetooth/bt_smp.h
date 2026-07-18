@@ -591,6 +591,17 @@ void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmpKeys_t *pKe
  */
 void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys);
 bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, uint8_t Ltk[16]);
+
+/**
+ * @brief	Restore the complete stored key set for the peer on ConnHdl.
+ *
+ * A legacy key is matched by EDIV/Rand; an SC key (EDIV and Rand zero) by the
+ * peer address on the link. On a bonded reconnect the record supplies the
+ * security properties of the LTK that encrypted the link.
+ *
+ * @return	true when a valid record was copied to pKeys.
+ */
+bool BtSmpBondKeysLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, BtSmpKeys_t *pKeys);
 void BtSmpBondClearAll(void);
 
 // True if a stored bond exists for the peer on ConnHdl (matched on link address).

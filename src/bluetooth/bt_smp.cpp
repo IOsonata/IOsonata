@@ -2656,8 +2656,6 @@ void BtSmpProcessLtkRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	}
 	else
 	{
-		extern bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
-									   uint16_t Ediv, uint8_t Ltk[16]);
 		have = BtSmpBondLtkLookup(ConnHdl, Rand, Ediv, key);
 	}
 
@@ -2681,6 +2679,31 @@ void BtSmpProcessLtkRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	}
 }
 
+// Map a key record to the generic connection security state the ATT
+// permission checks consume. An authenticated association model (numeric
+// comparison; passkey / OOB when added) raises the level above ENC_UNAUTH.
+// Authenticated Secure Connections is LESC_AUTH; authenticated legacy is
+// ENC_AUTH.
+static void SmpConnSecFromKeys(BtConnSec_t *pSec, const BtSmpKeys_t *pKeys)
+{
+	pSec->KeySize = pKeys->EncKeySize;
+	pSec->Level = pKeys->bAuthenticated ?
+		(pKeys->bSc ? BT_GAP_SEC_LEVEL_LESC_AUTH : BT_GAP_SEC_LEVEL_ENC_AUTH) :
+		BT_GAP_SEC_LEVEL_ENC_UNAUTH;
+	if (pKeys->bSc)
+	{
+		pSec->Flags |= BT_GAP_SEC_FLAG_SC;
+	}
+	for (int i = 0; i < 16; i++)
+	{
+		if (pKeys->Csrk[i] != 0U)
+		{
+			pSec->Flags |= BT_GAP_SEC_FLAG_SIGNED;
+			break;
+		}
+	}
+}
+
 void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 							uint8_t Status, uint8_t Enabled)
 {
@@ -2699,32 +2722,34 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		pPeer->bSecure = (Status == 0) && (Enabled != 0);
 
 		// Produce the generic security state the ATT permission checks consume.
-		// An authenticated association model (numeric comparison; passkey / OOB
-		// when added) raises the level above ENC_UNAUTH. Authenticated Secure
-		// Connections is LESC_AUTH; authenticated legacy would be ENC_AUTH.
+		// A fresh pairing has a populated per-link key record by this point
+		// (SmpCommitPendingKeys ran above). A bonded reconnect on the responder
+		// side exchanges no SMP PDU and has no link record, so the properties
+		// come from the stored bond whose LTK encrypted the link.
 		BtConnSec_t sec;
 		memset(&sec, 0, sizeof(sec));
 		if (pPeer->bSecure)
 		{
 			BtSmpLink_t *pSecLink = SmpLinkFind(ConnHdl);
-			sec.KeySize = (pSecLink != nullptr) ? pSecLink->Keys.EncKeySize
-												: BT_SMP_MAX_ENC_KEY_SIZE;
-
-			bool authd = (pSecLink != nullptr) && pSecLink->Keys.bAuthenticated;
-			bool sc    = (pSecLink != nullptr) && pSecLink->Keys.bSc;
-
-			if (authd)
+			if (pSecLink != nullptr && pSecLink->Keys.bValid)
 			{
-				sec.Level = sc ? BT_GAP_SEC_LEVEL_LESC_AUTH
-							   : BT_GAP_SEC_LEVEL_ENC_AUTH;
+				SmpConnSecFromKeys(&sec, &pSecLink->Keys);
 			}
 			else
 			{
-				sec.Level = BT_GAP_SEC_LEVEL_ENC_UNAUTH;
-			}
-			if (sc)
-			{
-				sec.Flags |= BT_GAP_SEC_FLAG_SC;
+				BtSmpKeys_t keys;
+				if (BtSmpBondKeysLookup(ConnHdl, 0U, 0U, &keys))
+				{
+					SmpConnSecFromKeys(&sec, &keys);
+				}
+				else
+				{
+					// Encrypted with no key record and no stored bond. The
+					// key properties are unknown; report the floor.
+					sec.Level = BT_GAP_SEC_LEVEL_ENC_UNAUTH;
+					sec.KeySize = BT_SMP_MAX_ENC_KEY_SIZE;
+				}
+				CryptoSecureWipe(&keys, sizeof(keys));
 			}
 			if (BtSmpBonded(ConnHdl))
 			{
@@ -3502,22 +3527,21 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 		return;
 	}
 
-	// Bonded reconnect: re-encrypt from a stored SC bond, matched by the peer
-	// address (SC bonds carry EDIV/Rand zero), instead of pairing again. No key
-	// distribution runs on reconnect, so go straight to DONE before enabling
-	// encryption; BtSmpEncryptionChanged completes it.
-	extern bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
-								   uint16_t Ediv, uint8_t Ltk[16]);
-	uint8_t ltk[16];
-	if (BtSmpBondLtkLookup(ConnHdl, 0, 0, ltk))
+	// Bonded reconnect: re-encrypt from a stored bond instead of pairing
+	// again. An SC bond is matched by the peer address (its EDIV and Rand are
+	// zero); a legacy bond supplies the EDIV/Rand for the encryption request.
+	// The complete key record is restored so the link reports the stored
+	// security properties (key size, authentication, SC) and the identity and
+	// signing keys remain available. No key distribution runs on reconnect, so
+	// go straight to DONE before enabling encryption; BtSmpEncryptionChanged
+	// completes it.
+	if (BtSmpBondKeysLookup(ConnHdl, 0U, 0U, &pLink->Keys))
 	{
-		memcpy(pLink->Keys.Ltk, ltk, 16);
-		pLink->Keys.bValid = true;
-		pLink->Keys.bSc = true;
 		pLink->Ctx.bInitiator = true;
 		pLink->Ctx.State = BT_SMP_STATE_DONE;
 		SMP_TRACE("SMP central reconnect, encrypt from bond\r\n");
-		BtSmpHciEnableEncryption(pDev, ConnHdl, 0, 0, ltk);
+		BtSmpHciEnableEncryption(pDev, ConnHdl, pLink->Keys.Rand,
+								 pLink->Keys.Ediv, pLink->Keys.Ltk);
 		return;
 	}
 

@@ -52,9 +52,6 @@ SOFTWARE.
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_smp.h"
 
-bool BtSmpBondKeysLookup(uint16_t ConnHdl, uint64_t Rand,
-						 uint16_t Ediv, BtSmpKeys_t *pKeys);
-
 #ifndef BT_GAP_DEVNAME_MAX_LEN
 #define BT_GAP_DEVNAME_MAX_LEN			64
 #endif
@@ -181,37 +178,8 @@ __attribute__((weak)) void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *
 	}
 
 	BtDevice_t *p = BtPeerFindByHdl(ConnHdl);
-	if (p == nullptr)
+	if (p != nullptr)
 	{
-		return;
+		p->Conn.Sec = *pSec;
 	}
-
-	BtConnSec_t sec = *pSec;
-	if (sec.Level != BT_GAP_SEC_LEVEL_NONE && sec.KeySize == 0U)
-	{
-		BtSmpKeys_t keys;
-		if (BtSmpBondKeysLookup(ConnHdl, 0U, 0U, &keys))
-		{
-			sec.KeySize = keys.EncKeySize;
-			sec.Level = keys.bAuthenticated ?
-				(keys.bSc ? BT_GAP_SEC_LEVEL_LESC_AUTH :
-							BT_GAP_SEC_LEVEL_ENC_AUTH) :
-				BT_GAP_SEC_LEVEL_ENC_UNAUTH;
-			sec.Flags |= BT_GAP_SEC_FLAG_BONDED;
-			if (keys.bSc)
-			{
-				sec.Flags |= BT_GAP_SEC_FLAG_SC;
-			}
-			for (int i = 0; i < 16; i++)
-			{
-				if (keys.Csrk[i] != 0U)
-				{
-					sec.Flags |= BT_GAP_SEC_FLAG_SIGNED;
-					break;
-				}
-			}
-		}
-		CryptoSecureWipe(&keys, sizeof(keys));
-	}
-	p->Conn.Sec = sec;
 }

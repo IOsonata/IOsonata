@@ -246,18 +246,7 @@ ble_gap_lesc_p256_pk_t *BtLescPubKeyGet(void)
 	return &s_LescPubKey;
 }
 
-ble_gap_lesc_p256_pk_t *BtLescPubKeyGetForLink(uint16_t ConnHdl)
-{
-	if (!s_bKeyPairGen || SlotAlloc(ConnHdl) < 0)
-	{
-		LESC_TRACE("LESC public key unavailable for link 0x%04x\r\n",
-				   (unsigned)ConnHdl);
-		return NULL;
-	}
-	return &s_LescPubKey;
-}
-
-void BtLescLinkRelease(uint16_t ConnHdl)
+static void LinkRelease(uint16_t ConnHdl)
 {
 	SlotRelease(SlotFind(ConnHdl));
 }
@@ -448,7 +437,7 @@ void BtLescOnBleEvt(const ble_evt_t *pEvt)
 		break;
 
 	case BLE_GAP_EVT_DISCONNECTED:
-		BtLescLinkRelease(connHdl);
+		LinkRelease(connHdl);
 		CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
 		break;
 
@@ -467,7 +456,7 @@ void BtLescOnBleEvt(const ble_evt_t *pEvt)
 		break;
 
 	case BLE_GAP_EVT_AUTH_STATUS:
-		BtLescLinkRelease(connHdl);
+		LinkRelease(connHdl);
 		break;
 
 	default:

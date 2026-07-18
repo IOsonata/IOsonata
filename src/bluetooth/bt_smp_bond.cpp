@@ -250,7 +250,9 @@ static int BtSmpBondAllocSlot(void)
 			return i;
 		}
 	}
-	return 0;
+	// Table full. Refuse rather than silently evicting a stored bond; the
+	// application clears bonds when it wants space back.
+	return -1;
 }
 
 void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
@@ -275,6 +277,10 @@ void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 	if (freshSlot)
 	{
 		slot = BtSmpBondAllocSlot();
+		if (slot < 0)
+		{
+			return;
+		}
 	}
 
 	uint32_t keepCounter = 0U;
