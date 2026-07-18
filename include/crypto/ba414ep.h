@@ -49,6 +49,13 @@ extern "C" {
 #define BA414EP_REG_STATUS			0x0CU
 #define BA414EP_REG_HWCONFIG		0x18U
 
+#define BA414EP_HWCONFIG_MAX_OPSIZE_Msk	0x00000FFFU
+#define BA414EP_HWCONFIG_PRIME_FIELD_Msk	(1U << 16)
+#define BA414EP_HWCONFIG_CM_DISABLED_Msk	(1UL << 31)
+
+#define BA414EP_OPERAND_SLOT_4096	0x200U
+#define BA414EP_OPERAND_SLOT_8192	0x400U
+
 #define BA414EP_CONTROL_START		0x00000001U
 #define BA414EP_CONTROL_CLEAR_IRQ	0x00000002U
 
@@ -85,7 +92,6 @@ extern "C" {
 #define BA414EP_CONFIG_PTRS(a, b, c) \
 	((uint32_t)(a) | ((uint32_t)(b) << 8) | ((uint32_t)(c) << 16))
 
-#define BA414EP_SLOT_SIZE			0x200U
 #define BA414EP_SLOT_SCALAR			8U
 #define BA414EP_SLOT_RESULT_X		10U
 #define BA414EP_SLOT_RESULT_Y		11U
@@ -146,10 +152,9 @@ public:
 	bool Init(DeviceIntrf * const pIntrf, RngEngine *pRng);
 	void SetRng(RngEngine *pRng) { vpRng = pRng; }
 
-	// First Enable brings the engine to a proven-ready state: wait out the
-	// IK side of the module, then run a self-checking modular add that also
-	// absorbs the post-reset IK to PK handover of the ba414e_with_ik
-	// configuration.
+	// First Enable brings the engine to a proven-ready state: read and validate
+	// the BA414E hardware geometry, wait out the IK side of the module, then run
+	// the self-checking handover probe.
 	bool Enable() override;
 	void Disable() override;
 
