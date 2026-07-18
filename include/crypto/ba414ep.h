@@ -151,11 +151,10 @@ public:
 	// absorbs the post-reset IK to PK handover of the ba414e_with_ik
 	// configuration.
 	bool Enable() override;
-	void Disable() override { if (Interface() != nullptr) { Interface()->Disable(); } }
+	void Disable() override;
 
-	// Hard reset through the interface Reset, then operand memory wipe.
-	// The engine has no self-reset register; the transport reset is the
-	// mechanism.
+	// Reset the selected PKE module, then prove the IK-to-PK handover and wipe
+	// the operand slots before accepting another operation.
 	void Reset() override;
 
 	// Operation lock for the multi-transfer computation. bBusy in the
@@ -179,6 +178,7 @@ public:
 private:
 	bool WaitIkIdle();
 	bool HandoverProbe();
+	bool Recover();
 	CRYPTO_STATUS PkPrepare();
 	void PkCleanup();
 	bool PkAbortAndReset();
@@ -189,6 +189,7 @@ private:
 	RngEngine *vpRng;
 	atomic_flag vOpBusy;
 	bool vbReady;
+	bool vbIntrfEnabled;
 };
 
 static_assert(sizeof(Ba414ep::KeyCtx) <= CRYPTO_KEYCTX_MAX,
