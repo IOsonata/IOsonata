@@ -786,14 +786,49 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
 		</link>
 		<link>
-			<name>include/crypto/crypto.h</name>
+			<name>include/crypto/cc310_intrf.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/cc310_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>include/crypto/crypto_p256.h</name>
+			<name>include/crypto/cc3xx_intrf.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_p256.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/include/cc3xx_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_cc3xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/crypto_cc3xx.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_rng_nrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_rng_nrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softaes.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softrng.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softrng.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softsha256.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softsha256.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_uecc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_uecc.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/icrypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/icrypto.h</locationURI>
 		</link>
 		<link>
 			<name>include/display/display.h</name>
@@ -1641,9 +1676,14 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto.cpp</name>
+			<name>src/crypto/cc3xx_intrf.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/src/cc3xx_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/cc3xx_intrf_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/cc3xx_intrf_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_cc3xx.cpp</name>
@@ -1656,9 +1696,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_psa_none.cpp</name>
+			<name>src/crypto/crypto_softaes.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_psa_none.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softaes.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softrng.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softsha256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softsha256.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_uecc.cpp</name>

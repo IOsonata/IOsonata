@@ -43,13 +43,14 @@ SOFTWARE.
 
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_hci.h"
-#include "crypto/crypto.h"
+#include "crypto/icrypto.h"
 
 // SMP-internal crypto return codes used by the state machine. Mapped from the
 // generic CRYPTO_STATUS by the dispatch wrappers in bt_smp.cpp. PENDING parks
 // the state machine for a controller/secure async completion.
 #define BT_SMP_CRYPTO_OK		0
 #define BT_SMP_CRYPTO_PENDING	1
+#define BT_SMP_CRYPTO_BUSY		2
 #define BT_SMP_CRYPTO_FAIL		(-1)
 
 /** @addtogroup Bluetooth
@@ -205,6 +206,8 @@ typedef struct __Bt_Smp_Ctx {
 	uint8_t  AuthReq;				//!< Negotiated AuthReq
 	uint8_t  PeerAuthReq;			//!< Peer-requested AuthReq
 	uint8_t  Model;					//!< Selected association model (BT_SMP_MODEL_*)
+	uint8_t  EncKeySize;			//!< Pending negotiated key size until commit
+	bool     bAuthenticated;		//!< Pending MITM result until encryption succeeds
 	bool     bSc;					//!< true if SC negotiated for this pairing
 	bool     bInitiator;			//!< true if local device is the SMP initiator (central)
 	uint8_t  Tk[16];				//!< Temporary Key (legacy) / 0 for Just Works
@@ -215,6 +218,7 @@ typedef struct __Bt_Smp_Ctx {
 	uint8_t  LocalPubKey[64];		//!< SC: local P-256 public key (X||Y)
 	uint8_t  PeerPubKey[64];		//!< SC: peer P-256 public key (X||Y)
 	uint8_t  DhKey[32];				//!< SC: computed DHKey
+	uint8_t  EcdhKeyCtx[CRYPTO_KEYCTX_MAX] CRYPTO_ALIGNED(CRYPTO_KEYCTX_ALIGN_MAX);	//!< SC: provider key context
 	uint8_t  Mackey[16];			//!< SC: MacKey from f5
 	uint8_t  Ltk[16];				//!< Derived/working LTK
 	uint32_t Passkey;				//!< Passkey Entry: 6 digit value 0..999999
@@ -390,23 +394,38 @@ void BtSmpTimeoutCheck(void);
 /**
  * @brief	Initialise the SMP layer and compose its crypto from engines.
  *
- * SMP needs two composed primitives - ECDH (P-256) and AES-128 ECB - each
- * supplied by a CryptoDev_t engine (crypto/crypto.h).
- * The application passes the engine that fills each slot from whatever its
- * target provides: one engine may fill both (mbedtls, CC310), or they compose
- * from two (e.g. uECC for ECDH, the BLE controller for AES, on a part with no
- * CryptoCell). Each slot is validated against the required capability; an
- * engine lacking it leaves that slot disabled and the corresponding operation
- * fails loud. The same engine pointer may be passed for both slots.
+ * SMP needs two primitives - ECDH (P-256) and AES-128 ECB - each supplied by an
+ * OO crypto engine (crypto/icrypto.h): a KeyAgreeEngine and a CipherEngine.
+ * The application constructs the engine that fills each slot from whatever its
+ * target provides: hardware P-256 (Ba414ep on CRACEN, CryptoCc3xx on CC310) or
+ * software (CryptoUecc), and AES from the BLE controller (CryptoCtlrSdc). A null
+ * or incapable engine leaves that slot disabled and the corresponding operation
+ * fails loud. The same engine pointer may be passed for both slots if one engine
+ * implements both facets.
  *
- * Randomness is NOT a slot: it comes from the target RngGet driver
- * (crypto/crypto.h), backed by the MCU RNG peripheral, which SMP calls directly.
- * A target without an RNG peripheral does not link.
+ * Randomness is the third slot: an injected RngEngine (crypto/icrypto.h),
+ * normally the MCU hardware RNG (CryptoRngNrfInstance and equivalents). SMP
+ * treats a draw failure as a pairing failure.
  *
- * @param	pEcdh	Engine providing CRYPTO_CAP_ECDH_P256.
- * @param	pAes	Engine providing CRYPTO_CAP_AES128_ECB.
+ * The per-link and OOB key contexts are CRYPTO_KEYCTX_MAX bytes. An ECDH
+ * engine whose KeyCtxSize() is zero or exceeds that bound is refused and the
+ * slot left disabled, so Secure Connections pairing fails cleanly instead of
+ * overrunning caller storage.
+ *
+ * Reinitialization tears the previous composition down through the OLD
+ * provider first: pending operations are dropped, the old completion handler
+ * is detached, and every link and OOB key context is destroyed by the engine
+ * that created it before the new engines are installed.
+ *
+ * @param	pEcdh	KeyAgreeEngine providing P-256 ECDH.
+ * @param	pAes	CipherEngine providing AES-128 ECB.
+ * @param	pRng	RngEngine providing security-grade randomness.
+ *
+ * @return	true when the provided engines were accepted; false when a
+ * 			non-null ECDH engine was refused for an unusable key context size
+ * 			(the slot is left disabled and SC pairing will fail cleanly).
  */
-void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes);
+bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng);
 
 /// Configure the local IO capability and authentication requirements. Call
 /// after BtSmpInit. When never called the defaults are NoInputNoOutput /
@@ -484,28 +503,23 @@ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pCon
 void BtSmpOobDataClear(void);
 
 /**
- * @brief	Bring up the Bluetooth-owned controller CryptoDev_t (SDC).
+ * @brief	Bring up the Bluetooth-owned controller AES engine (SDC).
  *
- * Populates a caller-owned CryptoDev_t whose AES-128 ECB is served by the BLE
- * SoftDevice Controller's HCI LE Encrypt. This is a Bluetooth helper, NOT a
- * generic crypto engine - it requires a running BLE controller and is only
- * valid for the SMP AES slot. On a part with no CryptoCell, compose it with a
- * software ECDH engine (randomness comes from the RngGet utility):
+ * Returns a CipherEngine whose AES-128 ECB is served by the BLE SoftDevice
+ * Controller's HCI LE Encrypt. This is a Bluetooth helper, NOT a generic crypto
+ * engine - it requires a running BLE controller and is only valid for the SMP
+ * AES slot. On a part with no CryptoCell, compose it with a software ECDH engine
+ * (randomness is the injected RngEngine):
  *
- *   CryptoDev_t ecdh, aes;
- *   static uint8_t ecdhMem[CRYPTO_MEMSIZE_UECC];
- *   CryptoCfg_t cfg = { };
- *   cfg.Provider = CRYPTO_PROVIDER_UECC;
- *   cfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
- *   cfg.pMem     = ecdhMem;
- *   cfg.MemSize  = sizeof(ecdhMem);
- *   CryptoUeccInit(&ecdh, &cfg);
- *   BtCryptoCtlrSdcInit(&aes);   // controller AES
- *   BtSmpInit(&ecdh, &aes);
+ *   alignas(CryptoUecc) static uint8_t ecdhMem[CRYPTO_UECC_MEMSIZE];
+ *   CryptoUecc *ecdh = CryptoUeccCreate(ecdhMem, sizeof(ecdhMem),
+ *                                       CryptoRngNrfInstance());
+ *   CipherEngine *aes = BtCryptoCtlrSdcInit();   // controller AES
+ *   BtSmpInit(ecdh, aes, CryptoRngNrfInstance());
  *
- * @return	true on success, false if the SDC HCI is not present in this build.
+ * @return	The controller AES engine, or nullptr if the SDC HCI is not present.
  */
-bool BtCryptoCtlrSdcInit(CryptoDev_t * const pDev);
+CipherEngine *BtCryptoCtlrSdcInit(void);
 
 // SMP crypto entry points used by the state machine (dispatch to the composed
 // engines). Kept as functions so the toolbox (c1/f4/f5/f6, AES-CMAC) calls a
@@ -515,7 +529,7 @@ void BtSmpCryptoAes128(BtHciDevice_t * const pDev,
 int  BtSmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64]);
 int  BtSmpCryptoEcdh(BtHciDevice_t * const pDev,
 					 const uint8_t pPeerPubKey[64], uint8_t pDhKey[32]);
-void BtSmpCryptoRand(uint8_t *pBuf, size_t Len);
+bool BtSmpCryptoRand(uint8_t *pBuf, size_t Len);
 int  BtSmpCryptoSelfTest(void);
 
 /**
@@ -577,6 +591,17 @@ void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmpKeys_t *pKe
  */
 void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys);
 bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, uint8_t Ltk[16]);
+
+/**
+ * @brief	Restore the complete stored key set for the peer on ConnHdl.
+ *
+ * A legacy key is matched by EDIV/Rand; an SC key (EDIV and Rand zero) by the
+ * peer address on the link. On a bonded reconnect the record supplies the
+ * security properties of the LTK that encrypted the link.
+ *
+ * @return	true when a valid record was copied to pKeys.
+ */
+bool BtSmpBondKeysLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, BtSmpKeys_t *pKeys);
 void BtSmpBondClearAll(void);
 
 // True if a stored bond exists for the peer on ConnHdl (matched on link address).

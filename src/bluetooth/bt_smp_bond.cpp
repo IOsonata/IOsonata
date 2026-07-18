@@ -4,21 +4,44 @@
 @brief	Simple bond store for the SMP layer.
 
 Persists the keys produced by a successful pairing so a later reconnection
-can re-encrypt the link with the stored LTK instead of pairing again. The
-store overrides the weak BtSmpPairingComplete and BtSmpBondLtkLookup hooks in
-bt_smp.cpp.
+can re-encrypt the link with the stored LTK instead of pairing again.
 
 This implementation keeps the bond table in RAM. A platform that wants the
-bonds to survive a reset can replace BtSmpBondSave / BtSmpBondLoad (declared
-weak below) with a flash-backed version; the lookup and capture logic above
-them does not change.
+bonds to survive a reset replaces BtSmpBondSave / BtSmpBondLoad with a
+flash-backed implementation. The stored blob is versioned and protected by a
+CRC, and the restore path copies it into aligned storage before validation.
 
 For LE Secure Connections the LTK is derived (EDIV and Rand are zero), so a
 bond is matched by the peer address used on the link. Legacy bonds carry the
 distributed EDIV/Rand and are matched on those first.
 
-@author	Hoan
--------------------------------------------------------------------------*/
+@author	Hoang Nguyen Hoan
+@date	Jul. 17, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST, all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
 
@@ -30,23 +53,29 @@ distributed EDIV/Rand and are matched on those first.
 #define BT_SMP_BOND_MAX		8
 #endif
 
+#define BT_SMP_BOND_RECORD_MAGIC	0x424D5053U	// "SMPB" little-endian
+#define BT_SMP_BOND_RECORD_VERSION	1U
+
 typedef struct __Bt_Smp_Bond {
 	bool		bValid;			//!< Slot in use
 	uint8_t		PeerAddrType;	//!< Peer address type used on the link
 	uint8_t		PeerAddr[6];	//!< Peer address used on the link (match key)
 	BtSmpKeys_t	Keys;			//!< Stored key set (LTK, IRK, identity, ...)
 	uint8_t		NbCccd;			//!< Number of persisted CCCD entries
-	BtGattCccdState_t Cccd[BT_GATT_CCCD_STATE_MAX];	//!< CCCD set persisted for this bond (spec: bonded clients keep CCCD across connections)
-	uint32_t	SignCounter;	//!< Last accepted signed-write SignCounter (replay guard)
+	BtGattCccdState_t Cccd[BT_GATT_CCCD_STATE_MAX];
+	uint32_t	SignCounter;	//!< Last accepted signed-write SignCounter
 } BtSmpBond_t;
+
+typedef struct __Bt_Smp_Bond_Record {
+	uint32_t	Magic;
+	uint16_t	Version;
+	uint16_t	Length;
+	uint32_t	Crc;
+	BtSmpBond_t	Bond;
+} BtSmpBondRecord_t;
 
 static BtSmpBond_t s_BtSmpBondTable[BT_SMP_BOND_MAX];
 
-// Constant-time byte compare: returns true iff the buffers are equal, with no
-// early-out on the first differing byte. Used for the signed-write MAC, which
-// is attacker-supplied: a data-dependent memcmp leaks how many leading bytes
-// matched and lets a remote peer forge the tag byte-by-byte across retries.
-// Mirrors SmpEqualCT in bt_smp.cpp (static there, so duplicated here).
 static bool BtSmpBondEqualCT(const uint8_t *a, const uint8_t *b, size_t len)
 {
 	uint8_t diff = 0;
@@ -57,16 +86,25 @@ static bool BtSmpBondEqualCT(const uint8_t *a, const uint8_t *b, size_t len)
 	return diff == 0;
 }
 
-// Weak persistence hooks. Default is RAM only. A flash-backed port overrides
-// these to mirror the table to non-volatile storage.
-//
-// BtSmpBondSave  : called by the generic layer whenever a slot changes, so the
-//                  platform can write that one slot to NVM.
-// BtSmpBondLoad  : called once by the generic layer at init (BtSmpBondInit), so
-//                  the platform can read NVM back and repopulate the RAM table
-//                  through BtSmpBondRestore.
-// BtSmpBondErase : called by BtSmpBondClearAll, so the platform can wipe NVM and
-//                  stale bonds do not reappear on the next BtSmpBondLoad.
+static uint32_t BtSmpBondCrc32(const void *pData, size_t Len)
+{
+	const uint8_t *p = (const uint8_t *)pData;
+	uint32_t crc = 0xFFFFFFFFU;
+	for (size_t i = 0; i < Len; i++)
+	{
+		crc ^= p[i];
+		for (int bit = 0; bit < 8; bit++)
+		{
+			uint32_t mask = 0U - (crc & 1U);
+			crc = (crc >> 1) ^ (0xEDB88320U & mask);
+		}
+	}
+	return ~crc;
+}
+
+// Weak persistence hooks. The default is RAM only. The blob passed to Save is
+// a BtSmpBondRecord_t, but the platform treats it as opaque and obtains its
+// size from BtSmpBondRecordSize.
 __attribute__((weak)) void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 {
 	(void)Slot;
@@ -82,59 +120,81 @@ __attribute__((weak)) void BtSmpBondErase(void)
 {
 }
 
-// Number of bond slots the table holds. Lets a platform size its NVM region and
-// iterate slots without knowing BT_SMP_BOND_MAX at compile time.
 int BtSmpBondSlotCount(void)
 {
 	return BT_SMP_BOND_MAX;
 }
 
-// Size of one stored bond record. The platform persists/loads opaque blobs of
-// this size; it does not need the BtSmpBond_t layout.
 size_t BtSmpBondRecordSize(void)
 {
-	return sizeof(BtSmpBond_t);
+	return sizeof(BtSmpBondRecord_t);
 }
 
-// Restore one slot from a previously saved blob. Called by a platform
-// BtSmpBondLoad override for each persisted slot. pBond must point at Len bytes
-// previously produced by BtSmpBondSave for that slot. A record whose bValid is
-// false is ignored, so erased slots stay empty.
+static void BtSmpBondPersist(int Slot)
+{
+	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX)
+	{
+		return;
+	}
+
+	BtSmpBondRecord_t record;
+	memset(&record, 0, sizeof(record));
+	record.Magic = BT_SMP_BOND_RECORD_MAGIC;
+	record.Version = BT_SMP_BOND_RECORD_VERSION;
+	record.Length = (uint16_t)sizeof(record);
+	memcpy(&record.Bond, &s_BtSmpBondTable[Slot], sizeof(record.Bond));
+	record.Crc = 0U;
+	record.Crc = BtSmpBondCrc32(&record, sizeof(record));
+	BtSmpBondSave(Slot, &record, sizeof(record));
+	CryptoSecureWipe(&record, sizeof(record));
+}
+
+static bool BtSmpBondFieldsValid(const BtSmpBond_t *p)
+{
+	return p != nullptr && p->bValid && p->Keys.bValid &&
+		p->NbCccd <= BT_GATT_CCCD_STATE_MAX &&
+		p->PeerAddrType <= BTADDR_TYPE_RANDOM_STATIC &&
+		p->Keys.EncKeySize >= BT_SMP_CFG_MIN_ENC_KEY_SIZE &&
+		p->Keys.EncKeySize <= BT_SMP_MAX_ENC_KEY_SIZE;
+}
+
 void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
 {
 	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX || pBond == nullptr ||
-		Len != sizeof(BtSmpBond_t))
+		Len != sizeof(BtSmpBondRecord_t))
 	{
 		return;
 	}
 
-	const BtSmpBond_t *p = (const BtSmpBond_t *)pBond;
-	if (!p->bValid)
-	{
-		return;
-	}
+	BtSmpBondRecord_t record;
+	memcpy(&record, pBond, sizeof(record));
+	uint32_t savedCrc = record.Crc;
+	record.Crc = 0U;
+	bool valid = record.Magic == BT_SMP_BOND_RECORD_MAGIC &&
+		record.Version == BT_SMP_BOND_RECORD_VERSION &&
+		record.Length == sizeof(record) &&
+		savedCrc == BtSmpBondCrc32(&record, sizeof(record)) &&
+		BtSmpBondFieldsValid(&record.Bond);
 
-	memcpy(&s_BtSmpBondTable[Slot], p, sizeof(BtSmpBond_t));
+	memset(&s_BtSmpBondTable[Slot], 0, sizeof(s_BtSmpBondTable[Slot]));
+	if (valid)
+	{
+		memcpy(&s_BtSmpBondTable[Slot], &record.Bond, sizeof(record.Bond));
+	}
+	CryptoSecureWipe(&record, sizeof(record));
 }
 
-// Find a bond slot matching the peer address, or -1.
-// True if Addr is a resolvable private address: a random address whose most
-// significant byte has its top two bits set to 0b01 (Core spec Vol 6 Part B
-// 1.3.2.2). The bit pattern is valid only for random addresses; do not run
-// public addresses through IRK resolution.
 static bool BtSmpAddrIsRpa(uint8_t AddrType, const uint8_t Addr[6])
 {
 	if (Addr == nullptr || AddrType != BTADDR_TYPE_RAND)
 	{
 		return false;
 	}
-
 	return (Addr[5] & 0xC0) == 0x40;
 }
 
 static int BtSmpBondFindByAddr(uint8_t AddrType, const uint8_t Addr[6])
 {
-	// Identity match: a public or static-random address used as the bond key.
 	for (int i = 0; i < BT_SMP_BOND_MAX; i++)
 	{
 		if (s_BtSmpBondTable[i].bValid &&
@@ -145,11 +205,6 @@ static int BtSmpBondFindByAddr(uint8_t AddrType, const uint8_t Addr[6])
 		}
 	}
 
-	// No identity match. A central that rotates its resolvable private address
-	// presents a new random address on every connection, so resolve it against
-	// each bond's distributed IRK with ah (Core spec Vol 3 Part H 2.2.2).
-	// Without this a bonded phone re-pairs on every reconnect and its persisted
-	// CCCDs are never restored.
 	if (BtSmpAddrIsRpa(AddrType, Addr))
 	{
 		for (int i = 0; i < BT_SMP_BOND_MAX; i++)
@@ -161,11 +216,31 @@ static int BtSmpBondFindByAddr(uint8_t AddrType, const uint8_t Addr[6])
 			}
 		}
 	}
-
 	return -1;
 }
 
-// Pick a free slot, or recycle the first one (simple wrap).
+static int BtSmpBondFind(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv)
+{
+	if (Ediv != 0U || Rand != 0U)
+	{
+		for (int i = 0; i < BT_SMP_BOND_MAX; i++)
+		{
+			if (s_BtSmpBondTable[i].bValid &&
+				!s_BtSmpBondTable[i].Keys.bSc &&
+				s_BtSmpBondTable[i].Keys.Ediv == Ediv &&
+				s_BtSmpBondTable[i].Keys.Rand == Rand)
+			{
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	return pPeer != nullptr ?
+		BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType, pPeer->Conn.PeerAddr) : -1;
+}
+
 static int BtSmpBondAllocSlot(void)
 {
 	for (int i = 0; i < BT_SMP_BOND_MAX; i++)
@@ -175,12 +250,11 @@ static int BtSmpBondAllocSlot(void)
 			return i;
 		}
 	}
-	return 0;
+	// Table full. Refuse rather than silently evicting a stored bond; the
+	// application clears bonds when it wants space back.
+	return -1;
 }
 
-// Capture keys on a successful pairing. Called from the SMP core right before
-// the application BtSmpPairingComplete notification, so bonding works
-// regardless of whether the application overrides that callback.
 void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 {
 	if (pKeys == nullptr || !pKeys->bValid)
@@ -188,35 +262,41 @@ void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 		return;
 	}
 
-	// The match key on reconnection must be the address the lookup uses,
-	// which is the connection address of the link (see BtSmpBondLtkLookup).
-	// The distributed identity address is kept inside Keys as data only - it
-	// must NOT become the slot key, or a peer that connects with a resolvable
-	// private address (e.g. iOS) will never match its bond on reconnect.
-	uint8_t addrType;
-	uint8_t addr[6];
-
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr)
 	{
 		return;
 	}
-	addrType = pPeer->Conn.PeerAddrType;
-	memcpy(addr, pPeer->Conn.PeerAddr, 6);
+
+	uint8_t addrType = pPeer->Conn.PeerAddrType;
+	uint8_t addr[6];
+	memcpy(addr, pPeer->Conn.PeerAddr, sizeof(addr));
 
 	int slot = BtSmpBondFindByAddr(addrType, addr);
-	if (slot < 0)
+	const bool freshSlot = slot < 0;
+	if (freshSlot)
 	{
 		slot = BtSmpBondAllocSlot();
+		if (slot < 0)
+		{
+			return;
+		}
 	}
 
+	uint32_t keepCounter = 0U;
+	if (!freshSlot && s_BtSmpBondTable[slot].bValid &&
+		memcmp(s_BtSmpBondTable[slot].Keys.Csrk, pKeys->Csrk, 16) == 0)
+	{
+		keepCounter = s_BtSmpBondTable[slot].SignCounter;
+	}
+
+	memset(&s_BtSmpBondTable[slot], 0, sizeof(s_BtSmpBondTable[slot]));
+	s_BtSmpBondTable[slot].SignCounter = keepCounter;
 	s_BtSmpBondTable[slot].bValid = true;
 	s_BtSmpBondTable[slot].PeerAddrType = addrType;
-	memcpy(s_BtSmpBondTable[slot].PeerAddr, addr, 6);
+	memcpy(s_BtSmpBondTable[slot].PeerAddr, addr, sizeof(addr));
 	memcpy(&s_BtSmpBondTable[slot].Keys, pKeys, sizeof(BtSmpKeys_t));
 
-	// Snapshot any CCCD subscriptions already active on this link so a client
-	// that subscribed before bonding keeps them across reconnects.
 	uint8_t nc = pPeer->Conn.NbCccd;
 	if (nc > BT_GATT_CCCD_STATE_MAX)
 	{
@@ -227,14 +307,9 @@ void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 		s_BtSmpBondTable[slot].Cccd[i] = pPeer->Conn.Cccd[i];
 	}
 	s_BtSmpBondTable[slot].NbCccd = nc;
-
-	BtSmpBondSave(slot, &s_BtSmpBondTable[slot], sizeof(BtSmpBond_t));
+	BtSmpBondPersist(slot);
 }
 
-// Persist a CCCD value into the bond for the peer on ConnHdl. No-op when the
-// peer is not bonded: CCCD stays volatile for unbonded clients (Core spec Vol 3
-// Part G 3.3.3.3). Value 0 removes the entry. Save is skipped when the stored
-// value is unchanged, so replaying the set on reconnect costs no NVM writes.
 void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
@@ -246,7 +321,7 @@ void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 	int slot = BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType, pPeer->Conn.PeerAddr);
 	if (slot < 0)
 	{
-		return;					// not bonded
+		return;
 	}
 
 	BtSmpBond_t *p = &s_BtSmpBondTable[slot];
@@ -260,20 +335,20 @@ void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 		}
 	}
 
-	if (Value == 0)
+	if (Value == 0U)
 	{
 		if (idx < 0)
 		{
-			return;				// nothing stored for this handle
+			return;
 		}
-		p->Cccd[idx] = p->Cccd[p->NbCccd - 1];
+		p->Cccd[idx] = p->Cccd[p->NbCccd - 1U];
 		p->NbCccd--;
 	}
 	else if (idx >= 0)
 	{
 		if (p->Cccd[idx].Value == Value)
 		{
-			return;				// unchanged: no NVM write
+			return;
 		}
 		p->Cccd[idx].Value = Value;
 	}
@@ -281,19 +356,17 @@ void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 	{
 		if (p->NbCccd >= BT_GATT_CCCD_STATE_MAX)
 		{
-			return;				// set full
+			return;
 		}
 		idx = p->NbCccd++;
 		p->Cccd[idx].Hdl = CccdHdl;
 		p->Cccd[idx].Value = Value;
 	}
-
-	BtSmpBondSave(slot, p, sizeof(BtSmpBond_t));
+	BtSmpBondPersist(slot);
 }
 
-// Copy the persisted CCCD set for the peer on ConnHdl out as handle/value
-// arrays. Returns the entry count, 0 when the peer is not bonded.
-uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl, uint16_t *pValue, uint8_t Max)
+uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl, uint16_t *pValue,
+							 uint8_t Max)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr || pHdl == nullptr || pValue == nullptr)
@@ -318,72 +391,56 @@ uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl, uint16_t *pValue, uin
 		pHdl[i] = p->Cccd[i].Hdl;
 		pValue[i] = p->Cccd[i].Value;
 	}
-
 	return n;
 }
 
-// Override: look up an LTK for an incoming controller LTK request.
-bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
-								   uint16_t Ediv, uint8_t Ltk[16])
+bool BtSmpBondKeysLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv,
+							BtSmpKeys_t *pKeys)
 {
-	// Legacy bond: match on the distributed EDIV/Rand first.
-	if (Ediv != 0 || Rand != 0)
+	if (pKeys == nullptr)
 	{
-		for (int i = 0; i < BT_SMP_BOND_MAX; i++)
-		{
-			if (s_BtSmpBondTable[i].bValid &&
-				!s_BtSmpBondTable[i].Keys.bSc &&
-				s_BtSmpBondTable[i].Keys.Ediv == Ediv &&
-				s_BtSmpBondTable[i].Keys.Rand == Rand)
-			{
-				memcpy(Ltk, s_BtSmpBondTable[i].Keys.Ltk, 16);
-				return true;
-			}
-		}
 		return false;
 	}
-
-	// SC bond (EDIV/Rand zero): match on the peer address of this link.
-	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
-	if (pPeer != nullptr)
+	CryptoSecureWipe(pKeys, sizeof(*pKeys));
+	int slot = BtSmpBondFind(ConnHdl, Rand, Ediv);
+	if (slot < 0)
 	{
-		int slot = BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType,
-									   pPeer->Conn.PeerAddr);
-		if (slot >= 0)
-		{
-			memcpy(Ltk, s_BtSmpBondTable[slot].Keys.Ltk, 16);
-			return true;
-		}
+		return false;
 	}
-
-	// No address match. A central that reconnects with a rotating resolvable
-	// private address presents a different address each time; if its IRK was
-	// not distributed the RPA cannot be resolved and the bond cannot be
-	// associated with this link. There is NO safe fallback here: returning any
-	// stored LTK without a positive address/EDIV+Rand match would hand the
-	// bonded key to an unauthenticated peer (authentication bypass). Refuse,
-	// and let the controller report no LTK so the link stays unencrypted.
-	return false;
+	memcpy(pKeys, &s_BtSmpBondTable[slot].Keys, sizeof(*pKeys));
+	return pKeys->bValid;
 }
 
-// True if a stored bond exists for the peer on ConnHdl, matched on its link
-// address. Lets the ATT security check tell "encrypt from the existing key"
-// (Insufficient Encryption) from "pair first" (Insufficient Authentication).
-bool BtSmpBonded(uint16_t ConnHdl)
+bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
+							   uint16_t Ediv, uint8_t Ltk[16])
 {
-	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
-	if (pPeer == nullptr)
+	if (Ltk == nullptr)
 	{
 		return false;
 	}
+	BtSmpKeys_t keys;
+	bool found = BtSmpBondKeysLookup(ConnHdl, Rand, Ediv, &keys);
+	if (found)
+	{
+		memcpy(Ltk, keys.Ltk, 16);
+	}
+	else
+	{
+		CryptoSecureWipe(Ltk, 16);
+	}
+	CryptoSecureWipe(&keys, sizeof(keys));
+	return found;
+}
 
-	return BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType, pPeer->Conn.PeerAddr) >= 0;
+bool BtSmpBonded(uint16_t ConnHdl)
+{
+	return BtSmpBondFind(ConnHdl, 0U, 0U) >= 0;
 }
 
 bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
 					 const uint8_t *pSig)
 {
-	if (pSig == nullptr || (pMsg == nullptr && MsgLen > 0))
+	if (pSig == nullptr || (pMsg == nullptr && MsgLen > 0U))
 	{
 		return false;
 	}
@@ -401,52 +458,43 @@ bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
 	}
 
 	BtSmpBond_t *pBond = &s_BtSmpBondTable[slot];
-
-	// A signing relationship needs a CSRK distributed by the peer.
 	bool csrk = false;
 	for (int i = 0; i < 16; i++)
 	{
-		if (pBond->Keys.Csrk[i] != 0)
+		if (pBond->Keys.Csrk[i] != 0U)
 		{
 			csrk = true;
 			break;
 		}
 	}
-	if (csrk == false)
+	if (!csrk)
 	{
 		return false;
 	}
 
-	// SignCounter replay guard: the received counter must not be below the last
-	// accepted value (Core spec Vol 3 Part C 10.4.2).
 	uint32_t cnt = (uint32_t)pSig[0] | ((uint32_t)pSig[1] << 8) |
 				   ((uint32_t)pSig[2] << 16) | ((uint32_t)pSig[3] << 24);
-	if (cnt < pBond->SignCounter)
+	if (cnt < pBond->SignCounter || cnt == UINT32_MAX)
 	{
-		return false;
-	}
-
-	if (cnt == UINT32_MAX)
-	{
-		// Accepting this value would wrap the stored next counter back to 0.
 		return false;
 	}
 
 	uint8_t mac[8];
 	BtSmpSignMac(pBond->Keys.Csrk, pMsg, MsgLen, mac);
-	if (BtSmpBondEqualCT(mac, &pSig[4], 8) == false)
+	if (!BtSmpBondEqualCT(mac, &pSig[4], sizeof(mac)))
 	{
+		CryptoSecureWipe(mac, sizeof(mac));
 		return false;
 	}
+	CryptoSecureWipe(mac, sizeof(mac));
 
-	pBond->SignCounter = cnt + 1;	// next accepted counter must be higher
-	BtSmpBondSave(slot, pBond, sizeof(BtSmpBond_t));	// persist so it survives reset
+	pBond->SignCounter = cnt + 1U;
+	BtSmpBondPersist(slot);
 	return true;
 }
 
-// Remove all stored bonds, RAM table and non-volatile copy.
 void BtSmpBondClearAll(void)
 {
-	memset(s_BtSmpBondTable, 0, sizeof(s_BtSmpBondTable));
+	CryptoSecureWipe(s_BtSmpBondTable, sizeof(s_BtSmpBondTable));
 	BtSmpBondErase();
 }

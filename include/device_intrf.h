@@ -86,6 +86,7 @@ typedef enum __Dev_Intrf_Type {
 	DEVINTRF_TYPE_PDM,			//!< PDM
 	DEVINTRF_TYPE_OSPI,			//!< Octo SPI
     DEVINTRF_TYPE_I3C,         	//!< I3C
+	DEVINTRF_TYPE_CRYPTO,		//!< On-die crypto core access path (e.g. Nordic CRACEN)
 } DEVINTRF_TYPE;
 
 /// @brief	Device Interface forward data structure type definition.
@@ -323,7 +324,9 @@ extern "C" {
  */
 static inline void DeviceIntrfDisable(DevIntrf_t * const pDev) {
 //	if (atomic_exchange(&pDev->EnCnt, pDev->EnCnt - 1) < 1)	{
-	if (atomic_fetch_sub(&pDev->EnCnt, 1) < 1) {
+	// atomic_fetch_sub returns the count before the subtract, so the last
+	// release (count was 1, becomes 0) must be detected with <= 1, not < 1.
+	if (atomic_fetch_sub(&pDev->EnCnt, 1) <= 1) {
     	pDev->Disable(pDev);
     	atomic_store(&pDev->EnCnt, 0);
 	}

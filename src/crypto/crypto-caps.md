@@ -1,122 +1,93 @@
-# Crypto capability and property plan
+# Crypto capabilities in the object model
 
-Status: the Cap/Props split is implemented (`Props` word, `PLAIN_KEYCTX` moved
-out of `Cap`, bit 31 free), AES-CMAC (bit 3), AES-CCM (bit 4), AES-GCM
-(bit 5), SHA-256 (bit 6), HMAC-SHA-256 (bit 7), ECDSA-P256 sign (bit 8), and
-ECDSA-P256 verify (bit 9) are all implemented. An engine advertises only what
-it provides.
+In the object model an engine's capability is not a bitfield. It is expressed
+two ways:
 
-## Operation capabilities (Cap)
+1. **Which operation family the engine exposes.** A `KeyAgreeEngine *`,
+   `CipherEngine *`, or `HashEngine *` selects the relevant API surface. The
+   call result still decides whether that concrete engine implements the
+   requested operation and algorithm; a facet pointer is not a capability bit.
+2. **Which algorithm value the facet method accepts.** Within a facet the
+   algorithm is an argument (`CRYPTO_CIPHER_ALG`, `CRYPTO_MAC_ALG`,
+   `CRYPTO_HASH_ALG`, `CRYPTO_CURVE`). An engine that does not implement a given
+   value returns `CRYPTO_STATUS_UNSUPPORTED` from the base facet method, which it
+   simply does not override.
 
-`CryptoDev_t.Cap` (uint32_t) holds operations only:
+There is no `Cap` word to query and no `CryptoIsCapable`. "Can this engine do X"
+is answered by a non-null facet pointer followed by the operation return status.
+Algorithm support is also answered by that return status. This removes the class of bug where
+a `Cap` bit and the backing function pointer disagree.
 
-```text
-bit 0   CRYPTO_CAP_AES128_ECB     single-block AES-128 ECB (implemented)
-bit 1   CRYPTO_CAP_ECDH_P256      P-256 keygen + ECDH (implemented)
-bit 2   reserved                  (freed when RNG was removed; RNG is coredev)
-bit 3   CRYPTO_CAP_AES_CMAC       AES-CMAC RFC 4493 (implemented; over any AES-128 ECB engine)
-bit 4   CRYPTO_CAP_AES_CCM        AES-CCM AEAD RFC 3610 (implemented; over any AES-128 ECB engine)
-bit 5   CRYPTO_CAP_AES_GCM        AES-GCM AEAD SP 800-38D (implemented; over any AES-128 ECB engine)
-bit 6   CRYPTO_CAP_SHA256         SHA-256 FIPS 180-4 (implemented; base software core)
-bit 7   CRYPTO_CAP_HMAC_SHA256    HMAC-SHA-256 RFC 2104 (implemented; over SHA-256)
-bit 8   CRYPTO_CAP_ECDSA_P256_SIGN    ECDSA P-256 sign (implemented; native per EC engine)
-bit 9   CRYPTO_CAP_ECDSA_P256_VERIFY  ECDSA P-256 verify (implemented; native per EC engine)
-```
+## Facets
 
-Proposed additions, grouped by primitive family. Append only; do not renumber:
+| Facet | Operation | Algorithm argument | Values today |
+|---|---|---|---|
+| `CipherEngine` | `Cipher` | `CRYPTO_CIPHER_ALG` | `CRYPTO_CIPHER_ECB`, `CRYPTO_CIPHER_CTR`, `CRYPTO_CIPHER_CBC` (AES-128); XTS reserved |
+| `MacEngine` | `Mac` | `CRYPTO_MAC_ALG` | `CRYPTO_MAC_CMAC` (AES engines), `CRYPTO_MAC_HMAC` (SHA-256 engine); GMAC reserved |
+| `AeadEngine` | `Seal`, `Open` | `CRYPTO_AEAD_ALG` | `CRYPTO_AEAD_AES_CCM` (RFC 3610), `CRYPTO_AEAD_AES_GCM` (SP 800-38D, 96 bit IV) |
+| `HashEngine` | `Hash`; `HashInit` / `HashUpdate` / `HashFinal` | `CRYPTO_HASH_ALG` | `CRYPTO_HASH_SHA256`, one-shot and streaming |
+| `KeyAgreeEngine` | `KeyGen`, `Agree` | `CRYPTO_CURVE` | `CRYPTO_CURVE_P256` |
+| `SignEngine` | `Sign`, `Verify` | `CRYPTO_CURVE` | `CRYPTO_CURVE_P256` (ECDSA) |
+| `RngEngine` | `Random` | none | hardware or software source |
 
-```text
-bit 10  SHA512              reserved
-bit 11  X25519              reserved (Curve25519 ECDH)
-bit 12  ED25519_VERIFY      reserved (Ed25519 verify)
-bits 13..31                 free for future operations
-```
+Streaming hash contexts are caller storage of `HashCtxSize()` bytes aligned to
+`HashCtxAlign()`; generic consumers reserve `CRYPTO_HASHCTX_MAX` aligned to
+`CRYPTO_HASHCTX_ALIGN_MAX`. Key-agreement contexts follow the same size/alignment
+rule through `KeyCtxSize()` and `KeyCtxAlign()`. `CRYPTO_STATUS_BUSY` marks transient accelerator
+contention: outputs are cleared and a caller-held single-use key survives for
+retry, while `CRYPTO_STATUS_FAIL` always consumes it.
 
-## Properties (Props)
+New primitives are added by extending an algorithm enum (a new
+`CRYPTO_CIPHER_*` or `CRYPTO_HASH_*` value) or, for a new primitive family, by
+adding a facet. Existing values are never renumbered.
 
-`CryptoDev_t.Props` (uint32_t) describes the engine, not its operations, and is
-never part of the `Cap` a consumer queries. A Cryptor and the selector read it
-through `CryptoHasProp`:
+## Engine descriptive properties
 
-```text
-bit 0   CRYPTO_PROP_PLAIN_KEYCTX    key context is plain zeroable bytes (Cryptor may hand it pMem)
-bit 1   CRYPTO_PROP_HARDWARE        backed by a hardware accelerator
-bit 2   CRYPTO_PROP_SECURE_DOMAIN   key stays inside a secure domain / keystore
-bit 3   CRYPTO_PROP_SYNC            engine is always synchronous (no PENDING completion)
-bits 4..31                          reserved
-```
+The object exposes a few descriptive predicates instead of a `Props` word:
 
-`CRYPTO_PROP_SYNC` (the engine is synchronous) is the descriptive counterpart of
-`CryptoCfg_t.Flags` `CRYPTO_FLAG_SYNC` (the App requires synchronous). The
-selector can match the request against the property.
+- `IsAsync()` : the engine completes later through the completion handler rather
+  than in-call. Default false. A consumer that must have synchronous behavior
+  checks `!IsAsync()`.
+- `IsSecure()` (on `RngEngine`) : the source is hardware-grade entropy, not a
+  statistical PRNG. A security-path caller must use a secure source.
 
-Property values the engines set today:
+Whether an engine is hardware-backed or keeps its key in a secure keystore is a
+property of which concrete class was constructed (`Ba414ep`, `CryptoCc3xx`),
+known at the point of construction, so it does not need a runtime property
+bit.
 
-```text
-uECC        PLAIN_KEYCTX | SYNC
-mbedTLS     SYNC
-PSA         HARDWARE | SECURE_DOMAIN | SYNC
-CC310       HARDWARE | SYNC
-SDC AES     HARDWARE | SYNC
-```
+## Which engine implements which facet
 
-A Cryptor advertises no properties of its own (`Props` is 0 on the composed
-handle); it is a composition over engines, and its ECDH engine keeps the
-`PLAIN_KEYCTX` property that `CryptorBuild` checks before forwarding `pMem`.
+| Engine | Facets |
+|---|---|
+| `CryptoUecc` | `KeyAgreeEngine`, `SignEngine` |
+| `Ba414ep` | `KeyAgreeEngine` |
+| `CryptoCc3xx` | `KeyAgreeEngine` |
+| `CryptoSoftAes` | `CipherEngine`, `MacEngine`, `AeadEngine` |
+| `CryptoMaster` | `CipherEngine`, `MacEngine`, `AeadEngine` |
+| `CryptoSoftSha256` | `HashEngine`, `MacEngine` (HMAC-SHA-256) |
+| `CryptoSoftRng`, `CryptoRngNrf`, `CryptoRngStm32` | `RngEngine` |
+| `CryptoCtlrSdc` | `CipherEngine` (Bluetooth-owned, controller AES) |
 
-## Note on the existing SHA-256 utility
+## The software AES base and derived constructions
 
-IOsonata already has a software SHA-256, `Sha256()` in `src/isha256.c` and
-`include/isha256.h` (with `isha1` alongside). It was written for download / DFU
-key checking, not as a general crypto primitive: it returns a hex string and
-keeps global static state (one hash at a time). It stays as is for that use and
-is not shared with the crypto layer.
+`CryptoSoftAes` implements `CipherEngine` (AES-128 ECB/CTR/CBC), `MacEngine`
+(AES-CMAC) and `AeadEngine` (AES-CCM, AES-GCM). CMAC, CCM and GCM are computed
+over the protected virtual block primitive `AesEcbEncrypt` inside one
+`AesOpBegin` / `AesOpEnd` bracket per operation, so a hardware AES engine that
+overrides those three (`CryptoMaster`) gets hardware-backed CMAC, CCM and GCM
+under a single accelerator acquisition with no further code. The GCM GHASH
+field multiply is constant-time software on every engine. HMAC-SHA-256
+follows the same pattern on the hash side: the generic RFC 2104 construction
+in `CryptoSoftSha256` chains the virtual streaming hash calls, so a hardware
+digest block that overrides them provides the digest work. The generic HMAC
+requires a synchronous hash engine (`!IsAsync()`).
 
-A crypto-layer SHA-256 (`CRYPTO_CAP_SHA256`) is a separate, independent
-operation: raw 32-byte digest, per-instance, and hardware-capable through PSA or
-CC310. The crypto wrapper is `CryptoSha256`; the existing global `Sha256()`
-keeps its name, so the two do not collide.
+## Note on the DFU SHA-256 utility
 
-## Vtable growth for new operations
-
-Each new operation adds one function pointer to the `CryptoDev_t` vtable and one
-inline wrapper, matching the existing `Aes128Ecb` / `EcdhP256KeyGen` /
-`EcdhP256` pattern:
-
-```text
-Cmac        (*Cmac)(pDev, key, msg, len, mac16, pCtx)
-Ccm         (*CcmEncrypt/Decrypt)(pDev, key, nonce, aad, in, out, tag, pCtx)
-Sha256      (*Sha256)(pDev, msg, len, digest32, pCtx)
-Hmac        (*HmacSha256)(pDev, key, klen, msg, len, mac32, pCtx)
-EcdsaSign   (*EcdsaP256Sign)(pDev, pKeyCtx, hash32, sig64, pOpCtx)
-EcdsaVerify (*EcdsaP256Verify)(pDev, pubKey64, hash32, sig64, pOpCtx)
-```
-
-An engine sets only the pointers it implements and the matching `Cap` bits;
-unset pointers stay NULL and the inline wrapper returns
-`CRYPTO_STATUS_UNSUPPORTED`. Operations that keep no per-instance secret take a
-single `pCtx`; operations with per-use-case key state take the `pKeyCtx` /
-`pOpCtx` split, the rule ECDH already follows.
-
-## Order of work
-
-All roadmap primitives below are implemented and validated against
-known-answer vectors (uECC path in-sandbox; hardware engines on-target).
-
-
-1. Cap/Props split and free bit 31 (done).
-2. AES-CMAC (bit 3): done. Generic over `Aes128Ecb` (RFC 4493), so it works on
-   the controller AES, PSA, and mbedTLS engines; a native `pDev->Cmac` can be
-   slotted in later for hardware MAC. Unblocks the SMP toolbox and LoRaWAN MIC.
-3. AES-CCM (bit 4): done. Generic AEAD (RFC 3610) over `Aes128Ecb`, with AAD,
-   tag verify, and no plaintext release on tag mismatch. For LoRaWAN payloads
-   and application-layer AEAD (BLE LE link encryption is done by the radio).
-4. SHA-256 (bit 6) and HMAC-SHA-256 (bit 7): done. Built-in FIPS 180-4 core,
-   always available through any handle; native via the Sha256 slot later. HMAC
-   (RFC 2104) over the core.
-5. ECDSA verify (bit 9): done. Native per EC engine (uECC uECC_verify, mbedTLS,
-   PSA psa_verify_hash, CC310 nrf_crypto). Verifies a 64-byte r||s signature
-   over a 32-byte hash with a 64-byte X||Y public key. For DFU image signatures.
-6. AES-GCM (bit 5): done. Generic AEAD (SP 800-38D) over Aes128Ecb: CTR plus
-   GHASH, 96-bit IV fast path and general IV, AAD, tag verify, no plaintext
-   release on mismatch. For TLS records and application-layer AEAD.
+`Sha256()` in `src/isha256.c` / `include/isha256.h` is a separate, purpose-built
+utility for download / DFU key checking: it returns a hex string and keeps global
+state (one hash at a time). It is not part of the crypto engine tree and is not
+shared with it. The crypto-layer digest is `CryptoSoftSha256` (the `HashEngine`
+facet), which returns a raw 32-byte digest and is per-instance. The two do not
+collide and serve different purposes.

@@ -1,225 +1,281 @@
 /**-------------------------------------------------------------------------
 @file	bt_lesc_sd.cpp
 
-@brief	LE Secure Connections ECDH over CryptoDev_t for the SoftDevice stacks.
+@brief	LE Secure Connections ECDH over an injected KeyAgreeEngine.
 
-Replaces the SDK nrf_ble_lesc module. The local key pair and the ECDH shared
-secret come from the injected CryptoDev_t engine (BtLescSetCryptoEngine); the
-SoftDevice keeps the SMP state machine and only asks the host for the DH key.
-
-The ECDH is deferred out of the event callback: BtLescOnBleEvt records the peer
-public key, and BtLescRequestHandler, called from the main loop, computes the DH
-key and replies. On failure the reply reports a DHKey-failure status and no key,
-so the peer's DHKey check fails cleanly rather than the link stalling.
-
-The key pair is single use: every CryptoDev_t engine wipes the private key after
-one ECDH. A fresh pair is generated on BLE_GAP_EVT_AUTH_STATUS, deferred to
-BtLescRequestHandler like the ECDH itself. Regeneration invalidates the local
-OOB data set; the application must generate and deliver a new OOB set before the
-next OOB pairing. One consequence of the single use key: only one LESC pairing
-can be in flight at a time; a second link pairing concurrently fails its DHKey
-check and can retry once the first completes.
-
-Byte order: the SoftDevice holds keys little-endian per coordinate; CryptoDev_t
-works big-endian. ByteOrderInvert reverses each 32 byte coordinate.
-
-Two per-stack operations are supplied by the port: BtLescDhKeyReply (reply arity
-differs between s132 and sdk-nrf-bm) and BtLescLinkCount.
+		The SoftDevice owns the SMP state machine and delegates P-256 work to this
+		module. Peer requests are deferred from the stack callback to the main loop.
+		One local key pair may serve several simultaneous peers. Each connection
+		that receives the public key is tracked until authentication completes or
+		the link is released, so the shared private key cannot be replaced early.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
 
-@license MIT, (c) 2026 I-SYST.
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST, all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ----------------------------------------------------------------------------*/
+#include <stdint.h>
 #include <string.h>
 
 #include "ble_gap.h"
 #include "nrf_error.h"
 
-#include "crypto/crypto.h"
+#include "crypto/icrypto.h"
 #include "bt_lesc.h"
 #include "syslog.h"
 
 #define BT_LESC_TRACE_ENABLE
-
-#if defined(BT_LESC_TRACE_ENABLE)// && BT_LESC_TRACE_ENABLE
-#define LESC_TRACE(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#if defined(BT_LESC_TRACE_ENABLE)
+#define LESC_TRACE(...)	SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define LESC_TRACE(...)
 #endif
 
-#define LESC_COORD_SIZE		(BLE_GAP_LESC_P256_PK_LEN / 2)	//!< 32, one P-256 coordinate
-#define LESC_MAX_LINK		8								//!< Peer-key table cap; BtLescLinkCount clamps to this
+#define LESC_COORD_SIZE		(BLE_GAP_LESC_P256_PK_LEN / 2)
+#define LESC_MAX_LINK		8
+#define LESC_KEYCTX_SIZE	64U
 
-// Per-link peer public key awaiting a deferred DH computation.
 typedef struct {
-	uint8_t  Value[BLE_GAP_LESC_P256_PK_LEN];	// peer public key, little-endian
+	uint8_t Value[BLE_GAP_LESC_P256_PK_LEN];
 	uint16_t ConnHdl;
-	bool     bRequested;
+	bool bAssigned;
+	bool bRequested;
+	bool bForceFail;
 } BtLescPeerKey_t;
 
-// Local key material, held little-endian as the SoftDevice wants it.
-static ble_gap_lesc_p256_pk_t	s_LescPubKey __attribute__((aligned(4)));
-static ble_gap_lesc_dhkey_t		s_LescDhKey __attribute__((aligned(4)));
+static ble_gap_lesc_p256_pk_t s_LescPubKey __attribute__((aligned(4)));
+static ble_gap_lesc_dhkey_t s_LescDhKey __attribute__((aligned(4)));
+static bool s_bKeyPairGen;
+static bool s_bRegenPending;
+static BtLescPeerKey_t s_PeerKeys[LESC_MAX_LINK];
+static bool s_bOobLocalGen;
+static ble_gap_lesc_oob_data_t s_OobLocal;
+static BtLescOobPeerHandler_t s_OobPeerHandler;
+static KeyAgreeEngine *s_pLescCrypto;
+alignas(CRYPTO_KEYCTX_ALIGN_MAX) static uint8_t s_LescEcdhKeyCtx[LESC_KEYCTX_SIZE];
 
-static bool				s_bInternalError;
-static bool				s_bKeyPairGen;
-static bool				s_bRegenPending;
-static BtLescPeerKey_t	s_PeerKeys[LESC_MAX_LINK];
-
-static bool						s_bOobLocalGen;
-static ble_gap_lesc_oob_data_t	s_OobLocal;
-static BtLescOobPeerHandler_t	s_OobPeerHandler;
-
-static CryptoDev_t		*s_pLescCrypto;
-
-// Reverse each 32 byte coordinate of a secp256r1 key between big and little
-// endian. Used both directions.
 static void ByteOrderInvert(const uint8_t *pIn, uint8_t *pOut)
 {
 	for (int i = 0; i < LESC_COORD_SIZE; i++)
 	{
-		pOut[i]                    = pIn[LESC_COORD_SIZE - 1 - i];
-		pOut[LESC_COORD_SIZE + i]  = pIn[2 * LESC_COORD_SIZE - 1 - i];
+		pOut[i] = pIn[LESC_COORD_SIZE - 1 - i];
+		pOut[LESC_COORD_SIZE + i] = pIn[2 * LESC_COORD_SIZE - 1 - i];
 	}
 }
 
 static int LinkCount(void)
 {
-	int n = BtLescLinkCount();
-
-	if (n < 1)
-	{
-		n = 1;
-	}
-
-	if (n > LESC_MAX_LINK)
-	{
-		n = LESC_MAX_LINK;
-	}
-
-	return n;
+	int count = BtLescLinkCount();
+	if (count < 1) count = 1;
+	if (count > LESC_MAX_LINK) count = LESC_MAX_LINK;
+	return count;
 }
 
-// Table slot for a connection handle: the slot already holding it, else a free
-// slot. Returns -1 when full.
 static int SlotFind(uint16_t ConnHdl)
 {
-	int n = LinkCount();
-	int free = -1;
-
-	for (int i = 0; i < n; i++)
+	for (int i = 0; i < LinkCount(); i++)
 	{
-		if (s_PeerKeys[i].bRequested && s_PeerKeys[i].ConnHdl == ConnHdl)
+		if (s_PeerKeys[i].bAssigned && s_PeerKeys[i].ConnHdl == ConnHdl)
 		{
 			return i;
 		}
-
-		if (free < 0 && !s_PeerKeys[i].bRequested)
-		{
-			free = i;
-		}
 	}
-
-	return free;
+	return -1;
 }
 
-void BtLescSetCryptoEngine(CryptoDev_t * const pEcdh)
+static int SlotAlloc(uint16_t ConnHdl)
 {
-	s_pLescCrypto = pEcdh;
+	int index = SlotFind(ConnHdl);
+	if (index >= 0)
+	{
+		return index;
+	}
+	for (int i = 0; i < LinkCount(); i++)
+	{
+		if (!s_PeerKeys[i].bAssigned)
+		{
+			CryptoSecureWipe(&s_PeerKeys[i], sizeof(s_PeerKeys[i]));
+			s_PeerKeys[i].ConnHdl = ConnHdl;
+			s_PeerKeys[i].bAssigned = true;
+			return i;
+		}
+	}
+	return -1;
+}
+
+static bool KeyInUse(void)
+{
+	for (int i = 0; i < LinkCount(); i++)
+	{
+		if (s_PeerKeys[i].bAssigned)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+static void SlotRelease(int Index)
+{
+	if (Index < 0 || Index >= LinkCount() || !s_PeerKeys[Index].bAssigned)
+	{
+		return;
+	}
+	CryptoSecureWipe(&s_PeerKeys[Index], sizeof(s_PeerKeys[Index]));
+	s_bRegenPending = true;
+}
+
+static void LocalKeyReset(void)
+{
+	if (s_pLescCrypto != nullptr)
+	{
+		s_pLescCrypto->KeyReset(s_LescEcdhKeyCtx);
+	}
+	else
+	{
+		CryptoSecureWipe(s_LescEcdhKeyCtx, sizeof(s_LescEcdhKeyCtx));
+	}
+	s_bKeyPairGen = false;
+	s_bOobLocalGen = false;
+	CryptoSecureWipe(&s_LescPubKey, sizeof(s_LescPubKey));
+	CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
+	CryptoSecureWipe(&s_OobLocal, sizeof(s_OobLocal));
+}
+
+void BtLescSetCryptoEngine(KeyAgreeEngine *pEcdh)
+{
+	LocalKeyReset();
+	CryptoSecureWipe(s_PeerKeys, sizeof(s_PeerKeys));
+	s_bRegenPending = false;
+	s_pLescCrypto = pEcdh != nullptr && !pEcdh->IsAsync() &&
+		pEcdh->KeyCtxSize() > 0U &&
+		pEcdh->KeyCtxSize() <= sizeof(s_LescEcdhKeyCtx) &&
+		pEcdh->KeyCtxAlign() > 0U &&
+		pEcdh->KeyCtxAlign() <= CRYPTO_KEYCTX_ALIGN_MAX ? pEcdh : nullptr;
+}
+
+CRYPTO_STATUS BtLescKeyPairGenStatus(void)
+{
+	if (KeyInUse())
+	{
+		return CRYPTO_STATUS_BUSY;
+	}
+	if (s_pLescCrypto == nullptr)
+	{
+		LESC_TRACE("LESC keygen: no synchronous crypto engine bound\r\n");
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	if (s_pLescCrypto->KeyCtxSize() == 0U ||
+		s_pLescCrypto->KeyCtxSize() > sizeof(s_LescEcdhKeyCtx) ||
+		s_pLescCrypto->KeyCtxAlign() == 0U ||
+		s_pLescCrypto->KeyCtxAlign() > CRYPTO_KEYCTX_ALIGN_MAX)
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+
+	LocalKeyReset();
+	uint8_t pubBe[BLE_GAP_LESC_P256_PK_LEN] = {};
+	CRYPTO_STATUS status = s_pLescCrypto->KeyGen(CRYPTO_CURVE_P256,
+											 s_LescEcdhKeyCtx, pubBe);
+	if (status == CRYPTO_STATUS_PENDING)
+	{
+		status = CRYPTO_STATUS_FAIL;
+	}
+	if (status == CRYPTO_STATUS_OK)
+	{
+		ByteOrderInvert(pubBe, s_LescPubKey.pk);
+		s_bKeyPairGen = true;
+	}
+	else
+	{
+		s_pLescCrypto->KeyReset(s_LescEcdhKeyCtx);
+		CryptoSecureWipe(&s_LescPubKey, sizeof(s_LescPubKey));
+		LESC_TRACE("LESC keypair generate failed st=%d\r\n", (int)status);
+	}
+	CryptoSecureWipe(pubBe, sizeof(pubBe));
+	return status;
 }
 
 bool BtLescKeyPairGen(void)
 {
-	uint8_t pubBe[BLE_GAP_LESC_P256_PK_LEN];		// big-endian X||Y from CryptoDev_t
-
-	// Do not regenerate while a DH computation is pending on any link.
-	for (int i = 0; i < LinkCount(); i++)
-	{
-		if (s_PeerKeys[i].bRequested)
-		{
-			return false;
-		}
-	}
-
-	s_bKeyPairGen = false;
-	s_bOobLocalGen = false;
-
-	// Fresh key pair. The private key stays inside the engine for the matching
-	// ECDH and never crosses the CryptoDev_t interface.
-	if (CryptoEcdhP256KeyGen(s_pLescCrypto, NULL, pubBe, NULL) != CRYPTO_STATUS_OK)
-	{
-		CryptoSecureWipe(pubBe, sizeof(pubBe));
-		LESC_TRACE("LESC keypair generate failed\r\n");
-		return false;
-	}
-
-	// The SoftDevice wants the public key little-endian per coordinate.
-	ByteOrderInvert(pubBe, s_LescPubKey.pk);
-	CryptoSecureWipe(pubBe, sizeof(pubBe));
-
-	s_bKeyPairGen = true;
-
-	return true;
+	return BtLescKeyPairGenStatus() == CRYPTO_STATUS_OK;
 }
 
 bool BtLescInit(void)
 {
-	memset(s_PeerKeys, 0, sizeof(s_PeerKeys));
-	CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
-
-	if (!CryptoIsCapable(s_pLescCrypto, CRYPTO_CAP_ECDH_P256))
+	CryptoSecureWipe(s_PeerKeys, sizeof(s_PeerKeys));
+	LocalKeyReset();
+	s_bRegenPending = false;
+	if (s_pLescCrypto == nullptr)
 	{
-		LESC_TRACE("LESC crypto engine missing or lacks ECDH P-256\r\n");
+		LESC_TRACE("LESC crypto engine missing or unsupported\r\n");
 		return false;
 	}
-
-	s_bInternalError = false;
-	s_bKeyPairGen = false;
-	s_bRegenPending = false;
-
-	return BtLescKeyPairGen();
+	return BtLescKeyPairGenStatus() == CRYPTO_STATUS_OK;
 }
 
-ble_gap_lesc_p256_pk_t * BtLescPubKeyGet(void)
+ble_gap_lesc_p256_pk_t *BtLescPubKeyGet(void)
 {
 	if (!s_bKeyPairGen)
 	{
 		LESC_TRACE("LESC public key accessed before generation\r\n");
 		return NULL;
 	}
-
 	return &s_LescPubKey;
+}
+
+static void LinkRelease(uint16_t ConnHdl)
+{
+	SlotRelease(SlotFind(ConnHdl));
 }
 
 bool BtLescOobLocalGen(void)
 {
 	s_bOobLocalGen = false;
-
+	CryptoSecureWipe(&s_OobLocal, sizeof(s_OobLocal));
 	if (!s_bKeyPairGen)
 	{
 		return false;
 	}
-
-	if (sd_ble_gap_lesc_oob_data_get(BLE_CONN_HANDLE_INVALID, &s_LescPubKey,
-									 &s_OobLocal) != NRF_SUCCESS)
+	if (sd_ble_gap_lesc_oob_data_get(BLE_CONN_HANDLE_INVALID,
+		&s_LescPubKey, &s_OobLocal) != NRF_SUCCESS)
 	{
+		CryptoSecureWipe(&s_OobLocal, sizeof(s_OobLocal));
 		return false;
 	}
-
 	s_bOobLocalGen = true;
-
 	return true;
 }
 
-ble_gap_lesc_oob_data_t * BtLescOobLocalGet(void)
+ble_gap_lesc_oob_data_t *BtLescOobLocalGet(void)
 {
 	if (!s_bOobLocalGen)
 	{
 		LESC_TRACE("LESC OOB data accessed before generation\r\n");
 		return NULL;
 	}
-
 	return &s_OobLocal;
 }
 
@@ -228,174 +284,179 @@ void BtLescOobPeerHandlerSet(BtLescOobPeerHandler_t Handler)
 	s_OobPeerHandler = Handler;
 }
 
-// Compute the DH key for one pending peer key and answer its DHKey request.
-static bool ComputeAndReply(BtLescPeerKey_t *pPeer)
+static CRYPTO_STATUS ReplyStatus(uint16_t ConnHdl, uint8_t SecStatus,
+								 const ble_gap_lesc_dhkey_t *pDhKey)
 {
-	uint8_t peerBe[BLE_GAP_LESC_P256_PK_LEN];	// peer public key, big-endian
-	uint8_t dhBe[BLE_GAP_LESC_DHKEY_LEN];		// DH key, big-endian from CryptoDev_t
-	const ble_gap_lesc_dhkey_t *pDh = NULL;
-	uint8_t secStatus = BLE_GAP_SEC_STATUS_DHKEY_FAILURE;
-
-	if (!s_bKeyPairGen)
+	uint32_t result = BtLescDhKeyReply(ConnHdl, SecStatus, pDhKey);
+	if (result == NRF_SUCCESS)
 	{
-		return false;
+		return CRYPTO_STATUS_OK;
 	}
+	return result == NRF_ERROR_BUSY ? CRYPTO_STATUS_BUSY : CRYPTO_STATUS_FAIL;
+}
 
-	memset(dhBe, 0, sizeof(dhBe));
-	CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
-
-	// Reject a peer presenting our own public key (reflection). Compare the X
-	// coordinate only; both little-endian here.
-	if (memcmp(s_LescPubKey.pk, pPeer->Value, LESC_COORD_SIZE) == 0)
+static CRYPTO_STATUS ComputeAndReply(BtLescPeerKey_t *pPeer)
+{
+	if (pPeer == nullptr || !pPeer->bAssigned || !pPeer->bRequested)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (pPeer->bForceFail || !s_bKeyPairGen || s_pLescCrypto == nullptr)
+	{
+		return ReplyStatus(pPeer->ConnHdl, BLE_GAP_SEC_STATUS_DHKEY_FAILURE, NULL);
+	}
+	if (memcmp(s_LescPubKey.pk, pPeer->Value,
+		BLE_GAP_LESC_P256_PK_LEN) == 0)
 	{
 		LESC_TRACE("LESC peer used identical public key\r\n");
+		return ReplyStatus(pPeer->ConnHdl, BLE_GAP_SEC_STATUS_DHKEY_FAILURE, NULL);
 	}
-	else
+
+	uint8_t peerBe[BLE_GAP_LESC_P256_PK_LEN] = {};
+	uint8_t dhBe[BLE_GAP_LESC_DHKEY_LEN] = {};
+	ByteOrderInvert(pPeer->Value, peerBe);
+	CRYPTO_STATUS status = s_pLescCrypto->Agree(CRYPTO_CURVE_P256,
+		s_LescEcdhKeyCtx, peerBe, dhBe, true);
+	if (status == CRYPTO_STATUS_OK)
 	{
-		// Peer key arrives little-endian; CryptoDev_t wants big-endian.
-		ByteOrderInvert(pPeer->Value, peerBe);
-
-		if (CryptoEcdhP256(s_pLescCrypto, NULL, peerBe, dhBe, NULL) == CRYPTO_STATUS_OK)
+		for (int i = 0; i < BLE_GAP_LESC_DHKEY_LEN; i++)
 		{
-			// CryptoDev_t returns the DH key big-endian; BLE wants it little-endian.
-			for (int i = 0; i < BLE_GAP_LESC_DHKEY_LEN; i++)
-			{
-				s_LescDhKey.key[i] = dhBe[BLE_GAP_LESC_DHKEY_LEN - 1 - i];
-			}
-
-			pDh = &s_LescDhKey;
-			secStatus = BLE_GAP_SEC_STATUS_SUCCESS;
+			s_LescDhKey.key[i] = dhBe[BLE_GAP_LESC_DHKEY_LEN - 1 - i];
 		}
-		else
-		{
-			LESC_TRACE("LESC ECDH failed\r\n");
-		}
+		status = ReplyStatus(pPeer->ConnHdl, BLE_GAP_SEC_STATUS_SUCCESS,
+			&s_LescDhKey);
+	}
+	else if (status == CRYPTO_STATUS_PENDING)
+	{
+		status = ReplyStatus(pPeer->ConnHdl,
+			BLE_GAP_SEC_STATUS_DHKEY_FAILURE, NULL);
+	}
+	else if (status != CRYPTO_STATUS_BUSY)
+	{
+		LESC_TRACE("LESC ECDH failed st=%d\r\n", (int)status);
+		status = ReplyStatus(pPeer->ConnHdl,
+			BLE_GAP_SEC_STATUS_DHKEY_FAILURE, NULL);
 	}
 
-	LESC_TRACE("LESC dhkey reply status=0x%x hdl=%d\r\n", secStatus, pPeer->ConnHdl);
-
-	const uint32_t result = BtLescDhKeyReply(pPeer->ConnHdl, secStatus, pDh);
+	CryptoSecureWipe(peerBe, sizeof(peerBe));
 	CryptoSecureWipe(dhBe, sizeof(dhBe));
 	CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
-	return result == NRF_SUCCESS;
+	return status;
 }
 
 bool BtLescRequestHandler(void)
 {
-	if (s_bInternalError)
-	{
-		return false;
-	}
-
+	bool result = true;
 	for (int i = 0; i < LinkCount(); i++)
 	{
-		if (s_PeerKeys[i].bRequested)
+		if (!s_PeerKeys[i].bRequested)
 		{
-			bool ok = ComputeAndReply(&s_PeerKeys[i]);
+			continue;
+		}
+		CRYPTO_STATUS status = ComputeAndReply(&s_PeerKeys[i]);
+		if (status == CRYPTO_STATUS_BUSY)
+		{
+			continue;
+		}
 
-			s_PeerKeys[i].bRequested = false;
-
-			if (!ok)
-			{
-				return false;
-			}
+		CryptoSecureWipe(s_PeerKeys[i].Value,
+			sizeof(s_PeerKeys[i].Value));
+		s_PeerKeys[i].bRequested = false;
+		s_PeerKeys[i].bForceFail = false;
+		if (status != CRYPTO_STATUS_OK)
+		{
+			SlotRelease(i);
+			result = false;
 		}
 	}
 
-	if (s_bRegenPending)
+	if (s_bRegenPending && !KeyInUse())
 	{
-		// A DHKey request that arrived during the loop above still needs the
-		// current key pair; regenerate on the next pass instead.
-		for (int i = 0; i < LinkCount(); i++)
+		CRYPTO_STATUS status = BtLescKeyPairGenStatus();
+		if (status == CRYPTO_STATUS_OK)
 		{
-			if (s_PeerKeys[i].bRequested)
-			{
-				return true;
-			}
+			s_bRegenPending = false;
 		}
-
-		if (!BtLescKeyPairGen())
+		else if (status != CRYPTO_STATUS_BUSY)
 		{
-			// Nothing is pending, so this is an engine failure, not the
-			// regenerate-while-busy guard.
-			LESC_TRACE("LESC keypair regenerate failed\r\n");
-			s_bInternalError = true;
-			return false;
+			LESC_TRACE("LESC keypair regenerate failed st=%d\r\n", (int)status);
+			result = false;
 		}
-
-		s_bRegenPending = false;
 	}
-
-	return true;
+	return result;
 }
 
-// Record the peer public key from a DHKey request for deferred computation.
 static void OnDhKeyRequest(uint16_t ConnHdl,
-						   const ble_gap_evt_lesc_dhkey_request_t *pReq)
+						   const ble_gap_evt_lesc_dhkey_request_t *pReq,
+						   bool bForceFail)
 {
-	int idx = SlotFind(ConnHdl);
-
-	if (idx < 0)
+	int index = SlotAlloc(ConnHdl);
+	if (index < 0)
 	{
-		s_bInternalError = true;
+		(void)BtLescDhKeyReply(ConnHdl, BLE_GAP_SEC_STATUS_DHKEY_FAILURE, NULL);
 		return;
 	}
 
-	memcpy(s_PeerKeys[idx].Value, pReq->p_pk_peer->pk, BLE_GAP_LESC_P256_PK_LEN);
-	s_PeerKeys[idx].ConnHdl = ConnHdl;
-	s_PeerKeys[idx].bRequested = true;
+	BtLescPeerKey_t *pPeer = &s_PeerKeys[index];
+	pPeer->bRequested = true;
+	pPeer->bForceFail = bForceFail || pReq == nullptr ||
+		pReq->p_pk_peer == nullptr;
+	CryptoSecureWipe(pPeer->Value, sizeof(pPeer->Value));
+	if (!pPeer->bForceFail)
+	{
+		memcpy(pPeer->Value, pReq->p_pk_peer->pk,
+			BLE_GAP_LESC_P256_PK_LEN);
+	}
 }
 
 static uint32_t OobDataSet(uint16_t ConnHdl)
 {
 	ble_gap_lesc_oob_data_t *pOwn = s_bOobLocalGen ? &s_OobLocal : NULL;
-	ble_gap_lesc_oob_data_t *pPeer = s_OobPeerHandler ? s_OobPeerHandler(ConnHdl) : NULL;
-
+	ble_gap_lesc_oob_data_t *pPeer = s_OobPeerHandler != nullptr ?
+		s_OobPeerHandler(ConnHdl) : NULL;
 	return sd_ble_gap_lesc_oob_data_set(ConnHdl, pOwn, pPeer);
 }
 
-void BtLescOnBleEvt(const ble_evt_t * pEvt)
+void BtLescOnBleEvt(const ble_evt_t *pEvt)
 {
 	if (pEvt == NULL)
 	{
 		return;
 	}
-
 	uint16_t connHdl = pEvt->evt.gap_evt.conn_handle;
-
 	switch (pEvt->header.evt_id)
 	{
-	case BLE_GAP_EVT_DISCONNECTED:
+	case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
+		// The security manager has just placed s_LescPubKey in this link's
+		// keyset. Register the user before any other BLE event can complete a
+		// different pairing and request key regeneration.
+		if (s_bKeyPairGen)
 		{
-			int idx = SlotFind(connHdl);
-
-			if (idx >= 0)
-			{
-				s_PeerKeys[idx].bRequested = false;
-			}
-			CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
+			(void)SlotAlloc(connHdl);
 		}
+		break;
+
+	case BLE_GAP_EVT_DISCONNECTED:
+		LinkRelease(connHdl);
+		CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
 		break;
 
 	case BLE_GAP_EVT_LESC_DHKEY_REQUEST:
-		if (pEvt->evt.gap_evt.params.lesc_dhkey_request.oobd_req)
 		{
-			if (OobDataSet(connHdl) != NRF_SUCCESS)
+			bool forceFail = false;
+			if (pEvt->evt.gap_evt.params.lesc_dhkey_request.oobd_req &&
+				OobDataSet(connHdl) != NRF_SUCCESS)
 			{
 				LESC_TRACE("LESC oob_data_set failed\r\n");
-				s_bInternalError = true;
+				forceFail = true;
 			}
+			OnDhKeyRequest(connHdl,
+				&pEvt->evt.gap_evt.params.lesc_dhkey_request, forceFail);
 		}
-
-		OnDhKeyRequest(connHdl, &pEvt->evt.gap_evt.params.lesc_dhkey_request);
 		break;
 
 	case BLE_GAP_EVT_AUTH_STATUS:
-		// Pairing ended, with or without success. The engine wiped the private
-		// key after the ECDH, so a fresh pair is needed for the next pairing.
-		// Defer to BtLescRequestHandler; key generation must not run in the
-		// stack callback context.
-		s_bRegenPending = true;
+		LinkRelease(connHdl);
 		break;
 
 	default:
