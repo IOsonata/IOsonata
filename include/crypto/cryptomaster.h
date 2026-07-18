@@ -85,8 +85,6 @@ struct __CryptoMaster_Desc {
 #define CRYPTOMASTER_TAG_CONFIG(RegOff)	((1U << 4) | ((uint32_t)(RegOff) << 8))
 #define CRYPTOMASTER_TAG_LAST			(1U << 5)
 #define CRYPTOMASTER_BA411_CFG_OFFSET	0x00U
-// DevAddr sub-block selector of this engine. On an interface shared with
-// the BA414EP (which uses 0 and 1) the values must not collide.
 #define CRYPTOMASTER_ADDR_REG			2U
 
 #define CRYPTOMASTER_BA411_KEY_OFFSET	0x08U
@@ -97,18 +95,19 @@ struct __CryptoMaster_Desc {
 
 class CryptoMaster : public CryptoSoftAes {
 public:
-	CryptoMaster() { vbValid = false; atomic_flag_clear(&vOpBusy); }
+	CryptoMaster() : vbIntrfEnabled(false) {
+		vbValid = false;
+		atomic_flag_clear(&vOpBusy);
+	}
 
 	bool Init(DeviceIntrf * const pIntrf);
 
-	// Operation lock for a multi-transfer computation. bBusy in the
-	// interface is per transfer; this is per operation, owned by the device.
 	bool OpAcquire() { return atomic_flag_test_and_set(&vOpBusy) == false; }
 	void OpRelease() { atomic_flag_clear(&vOpBusy); }
 
 	bool Enable() override;
-	void Disable() override { if (Interface() != nullptr) { Interface()->Disable(); } }
-	void Reset() override {}
+	void Disable() override;
+	void Reset() override;
 
 	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 						 const CryptoKey &Key,
@@ -117,8 +116,6 @@ public:
 						 uint8_t *pOut) override;
 
 protected:
-	// Inherited CMAC bracket: hold the CryptoMaster module once for the
-	// whole MAC and run each block on the hardware without reacquiring.
 	bool AesOpBegin() override;
 	void AesOpEnd() override;
 	bool AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16],
@@ -126,6 +123,7 @@ protected:
 
 private:
 	atomic_flag vOpBusy;
+	bool vbIntrfEnabled;
 };
 
 #endif // __cplusplus
