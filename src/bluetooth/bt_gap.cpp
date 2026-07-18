@@ -52,14 +52,12 @@ SOFTWARE.
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_smp.h"
 
+extern "C" bool BtSmpBondKeysLookup(uint16_t ConnHdl, uint64_t Rand,
+									 uint16_t Ediv, BtSmpKeys_t *pKeys);
+
 #ifndef BT_GAP_DEVNAME_MAX_LEN
 #define BT_GAP_DEVNAME_MAX_LEN			64
 #endif
-
-// The connection table now lives in the peer manager (bt_peer): bt_dev
-// owns one pool of BtDevice_t, each embedding a BtGapConnection_t as its
-// first member. GAP no longer keeps its own pool; code that needs link
-// state receives a borrowed &pPeer->Conn from the high layer.
 
 static BtGattChar_t s_BtGapChar[] = {
 	BT_CHAR(BT_UUID_CHARACTERISTIC_DEVICE_NAME,
@@ -96,16 +94,12 @@ __attribute__((weak)) void BtGapSetDevName(const char *pName)
 
 	BtGattChar_t *p = &s_BtGapChar[0];
 	size_t l = strlen(pName);
-
-	// Reserve one byte so the stored value stays a valid C string for
-	// BtGapGetDevName(); the GATT value length still excludes the terminator.
 	if (p->MaxDataLen > 0 && l > (size_t)(p->MaxDataLen - 1))
 	{
 		l = p->MaxDataLen - 1;
 	}
 
 	BtGattCharSetValue(p, (void*)pName, l);
-
 	if (p->pValue != nullptr)
 	{
 		((uint8_t*)p->pValue)[p->ValueLen] = '\0';
@@ -119,8 +113,6 @@ __attribute__((weak)) const char *BtGapGetDevName()
 
 __attribute__((weak)) void BtGapSetAppearance(uint16_t Val)
 {
-	// BLE wire format is little-endian; assemble byte-by-byte instead of
-	// passing &Val so the value is not host-byte-order dependent.
 	uint8_t buf[2];
 	buf[0] = (uint8_t)(Val & 0xFF);
 	buf[1] = (uint8_t)(Val >> 8);
@@ -133,12 +125,12 @@ __attribute__((weak)) void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t 
 	{
 		return;
 	}
-
 	BtGattCharSetValue(&s_BtGapChar[2], pVal, sizeof(BtGattPreferedConnParams_t));
 }
 
 __attribute__((weak)) void BtGapParamInit(const BtGapCfg_t *pCfg)
 {
+	(void)pCfg;
 }
 
 void BtGapInit(const BtGapCfg_t *pCfg)
@@ -160,11 +152,6 @@ void BtGapInit(const BtGapCfg_t *pCfg)
 	}
 }
 
-// Generic connection-security accessors over the per-connection store. The
-// security layer (generic SMP, or a vendor port mapping its stack) writes the
-// state with BtGapConnSecSet; the ATT permission checks read it with
-// BtGapConnSecGet. An arch overrides these only when the vendor stack owns the
-// security database. Weak so a host-side build can substitute its own.
 __attribute__((weak)) bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
 {
 	if (pSec == nullptr)
@@ -179,15 +166,10 @@ __attribute__((weak)) bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
 	}
 
 	*pSec = p->Conn.Sec;
-
-	// Bond existence is always current and is needed before this link has
-	// re-encrypted, so the ATT gate can answer INSUF_ENCRYPT (re-encrypt from
-	// the stored key) rather than INSUF_AUTHEN (pair first).
 	if (BtSmpBonded(ConnHdl))
 	{
 		pSec->Flags |= BT_GAP_SEC_FLAG_BONDED;
 	}
-
 	return true;
 }
 
@@ -199,8 +181,37 @@ __attribute__((weak)) void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *
 	}
 
 	BtDevice_t *p = BtPeerFindByHdl(ConnHdl);
-	if (p != nullptr)
+	if (p == nullptr)
 	{
-		p->Conn.Sec = *pSec;
+		return;
 	}
+
+	BtConnSec_t sec = *pSec;
+	if (sec.Level != BT_GAP_SEC_LEVEL_NONE)
+	{
+		BtSmpKeys_t keys;
+		if (BtSmpBondKeysLookup(ConnHdl, 0U, 0U, &keys))
+		{
+			sec.KeySize = keys.EncKeySize;
+			sec.Level = keys.bAuthenticated ?
+				(keys.bSc ? BT_GAP_SEC_LEVEL_LESC_AUTH :
+							BT_GAP_SEC_LEVEL_ENC_AUTH) :
+				BT_GAP_SEC_LEVEL_ENC_UNAUTH;
+			sec.Flags |= BT_GAP_SEC_FLAG_BONDED;
+			if (keys.bSc)
+			{
+				sec.Flags |= BT_GAP_SEC_FLAG_SC;
+			}
+			for (int i = 0; i < 16; i++)
+			{
+				if (keys.Csrk[i] != 0U)
+				{
+					sec.Flags |= BT_GAP_SEC_FLAG_SIGNED;
+					break;
+				}
+			}
+		}
+		CryptoSecureWipe(&keys, sizeof(keys));
+	}
+	p->Conn.Sec = sec;
 }
