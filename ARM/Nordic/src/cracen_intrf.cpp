@@ -507,6 +507,73 @@ static void *CracenGetHandle(DevIntrf_t * const pIntrf)
 	return (void *)NRF_CRACENCORE;
 }
 
+// Registers used by the handover probe. Offsets match the Silex BA414EP
+// register file (silexpk regs_addr.h).
+#define CRACEN_PK_REG_CONFIG		0x00U
+#define CRACEN_PK_REG_COMMAND		0x04U
+#define CRACEN_PK_REG_CONTROL		0x08U
+#define CRACEN_PK_CTRL_START		0x00000001UL
+#define CRACEN_PK_CTRL_CLEAR_IRQ	0x00000002UL
+
+// After a reset the PKEIKG module comes up on its identity-key side: the
+// first public-key START is consumed by the IK to PK handover and completes
+// instantly with a bogus error and the IK activity bit (bit 17, the
+// SX_PK_OP_IK marker) raised in the status word. The next START runs clean.
+// The old lazy-load flow masked this because its first acquire performed the
+// full code RAM load and the operation in one powered session, and retained
+// state hid it across warm debugger restarts. Run one small self-checking
+// operation here, retrying once to absorb the handover, so the engine is
+// proven to be computing in PK mode before Init returns: (7 + 8) mod 13,
+// modular add, 4 byte operands, expected result 2.
+static bool CracenPkeHandoverProbe(void)
+{
+	volatile uint32_t *cfg = (volatile uint32_t *)(s_pPkeRegBase + CRACEN_PK_REG_CONFIG);
+	volatile uint32_t *cmd = (volatile uint32_t *)(s_pPkeRegBase + CRACEN_PK_REG_COMMAND);
+	volatile uint32_t *ctrl = (volatile uint32_t *)(s_pPkeRegBase + CRACEN_PK_REG_CONTROL);
+	const volatile uint32_t *stat =
+		(const volatile uint32_t *)(s_pPkeRegBase + CRACEN_PK_REG_STATUS);
+
+	// Big-endian operands sit at the end of their 0x200 slot. Modular add
+	// uses the modulus in slot 0 and the default A, B, C pointers 6, 8, 10.
+	volatile uint8_t *n = s_pMemBase + 0x200U - 4U;
+	volatile uint8_t *a = s_pMemBase + 6U * 0x200U + 0x200U - 4U;
+	volatile uint8_t *b = s_pMemBase + 8U * 0x200U + 0x200U - 4U;
+	const volatile uint8_t *c = s_pMemBase + 10U * 0x200U + 0x200U - 4U;
+
+	// Command 0x01 modular add, operand size 4 (3 in bits 8-15), big-endian
+	// operands (bit 28), recompute r square (bit 31).
+	const uint32_t probecmd = 0x01UL | (3UL << 8) | (1UL << 28) | (1UL << 31);
+
+	for (uint32_t attempt = 0U; attempt < 2U; attempt++)
+	{
+		n[0] = 0U; n[1] = 0U; n[2] = 0U; n[3] = 13U;
+		a[0] = 0U; a[1] = 0U; a[2] = 0U; a[3] = 7U;
+		b[0] = 0U; b[1] = 0U; b[2] = 0U; b[3] = 8U;
+		*cfg = (6UL) | (8UL << 8) | (10UL << 16);
+		*cmd = probecmd;
+		__DMB();
+		*ctrl = CRACEN_PK_CTRL_START | CRACEN_PK_CTRL_CLEAR_IRQ;
+
+		uint32_t st = CRACEN_PK_STATUS_BUSY;
+		for (uint32_t i = 0U; i < CRACEN_PKEIKG_READY_POLL_LIMIT; i++)
+		{
+			st = *stat;
+			if ((st & CRACEN_PK_STATUS_BUSY) == 0U)
+			{
+				break;
+			}
+		}
+		*ctrl = CRACEN_PK_CTRL_CLEAR_IRQ;
+
+		if ((st & (CRACEN_PK_STATUS_BUSY | 0xFFF0UL)) == 0U &&
+			c[0] == 0U && c[1] == 0U && c[2] == 0U && c[3] == 2U)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 bool CracenIntrf::Init(void)
 {
 	s_pPkeRegBase = (volatile uint8_t *)&NRF_CRACENCORE->PK;
@@ -523,7 +590,11 @@ bool CracenIntrf::Init(void)
 	const uint32_t prev = NRF_CRACEN->ENABLE & CRACEN_ENABLE_PKEIKG_Msk;
 	NRF_CRACEN->ENABLE |= CRACEN_ENABLE_PKEIKG_Msk;
 	__DMB();
-	const bool bUcodeOk = CracenLoadPkeMicrocode();
+	bool bUcodeOk = CracenLoadPkeMicrocode();
+	if (bUcodeOk)
+	{
+		bUcodeOk = CracenPkeIkgWaitReady() && CracenPkeHandoverProbe();
+	}
 	if (prev == 0U)
 	{
 		NRF_CRACEN->ENABLE &= ~CRACEN_ENABLE_PKEIKG_Msk;
