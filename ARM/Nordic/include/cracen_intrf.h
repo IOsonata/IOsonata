@@ -60,7 +60,9 @@ SOFTWARE.
 /// @brief	Device interface to the CRACEN crypto core.
 ///
 /// One instance per die. The three crypto engines hold a pointer to it and go
-/// through StartTx/StopTx (or StartRx/StopRx) to acquire and release the core.
+/// through StartTx/StopTx (or StartRx/StopRx) to acquire and release one
+/// transport transaction. Engine operation serialization remains in the
+/// individual engine object.
 class CracenIntrf : public DeviceIntrf {
 public:
 	bool Init(void);
@@ -70,13 +72,21 @@ public:
 	uint32_t Rate(uint32_t RateHz) override { (void)RateHz; return 0; }
 	uint32_t Rate(void) override { return 0; }
 
-	// The transfer methods are the DeviceIntrf defaults. StartTx and StartRx
-	// save the DevAddr (which sub-block base the access lands in, the way SPI
-	// saves the chip-select); the address phase latches the byte offset;
-	// TxData and RxData transfer at the saved base plus the offset. Registers
-	// are word accessed and operand memory byte accessed. The engine reaches
-	// all of this through the inherited Device Read / Write, exactly as a
-	// sensor reaches its bus.
+	bool StartRx(uint32_t DevAddr) override {
+		return DeviceIntrfStartRx(&vDevIntrf, DevAddr);
+	}
+	int RxData(uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRxData(&vDevIntrf, pBuff, BuffLen);
+	}
+	void StopRx(void) override { DeviceIntrfStopRx(&vDevIntrf); }
+
+	bool StartTx(uint32_t DevAddr) override {
+		return DeviceIntrfStartTx(&vDevIntrf, DevAddr);
+	}
+	int TxData(const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTxData(&vDevIntrf, pData, DataLen);
+	}
+	void StopTx(void) override { DeviceIntrfStopTx(&vDevIntrf); }
 
 protected:
 	DevIntrf_t vDevIntrf;
