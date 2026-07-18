@@ -46,14 +46,6 @@ SOFTWARE.
 
 #include "crypto/icrypto.h"
 
-// Platform random driver. Provided by the target (Nordic rng_nrfx, ST rng_stm32).
-#ifdef __cplusplus
-extern "C" {
-#endif
-#ifdef __cplusplus
-}
-#endif
-
 // P-256 group order n, big-endian (SEC2 secp256r1). Public constant.
 static const uint8_t s_P256Order[P256_BYTES] = {
 	0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
@@ -129,35 +121,36 @@ bool P256ScalarInRange(const uint8_t Scalar[P256_BYTES])
 	return P256LessBe(Scalar, s_P256Order, P256_BYTES);
 }
 
-// Draw a uniform private scalar in [1, n-1] by rejection sampling: pull 32 fresh
-// bytes and keep the first that is in range. Bounded attempts; the rejection
-// probability per draw is far below one half.
-bool P256RandomScalar(RngEngine *pRng, uint8_t Scalar[P256_BYTES])
+// Draw a uniform private scalar in [1, n-1] by rejection sampling. Preserve a
+// retryable RNG status so callers do not consume a single-use operation on
+// temporary contention.
+CRYPTO_STATUS P256RandomScalar(RngEngine *pRng,
+							  uint8_t Scalar[P256_BYTES])
 {
+	if (Scalar == nullptr)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
 	if (pRng == nullptr || !pRng->IsSecure())
 	{
-		// Key material must come from a security-grade source. Fail closed.
 		CryptoSecureWipe(Scalar, P256_BYTES);
-		return false;
+		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 	for (int attempt = 0; attempt < 64; attempt++)
 	{
-		if (pRng->Random(Scalar, P256_BYTES) != CRYPTO_STATUS_OK)
+		CRYPTO_STATUS status = pRng->Random(Scalar, P256_BYTES);
+		if (status != CRYPTO_STATUS_OK)
 		{
-			// A partial draw may have left real entropy in the buffer;
-			// wipe it so no key material leaks on failure.
 			CryptoSecureWipe(Scalar, P256_BYTES);
-			return false;
+			return status;
 		}
 		if (P256ScalarInRange(Scalar))
 		{
-			return true;
+			return CRYPTO_STATUS_OK;
 		}
 	}
-	// Exhausted attempts. Wipe through volatile so the clear is not optimized
-	// away (a plain memset here is dead-store eliminable).
 	CryptoSecureWipe(Scalar, P256_BYTES);
-	return false;
+	return CRYPTO_STATUS_FAIL;
 }
 
 // Big-endian add: Out = A + B, returns the carry out of the top byte.
