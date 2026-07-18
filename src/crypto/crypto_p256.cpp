@@ -46,19 +46,16 @@ SOFTWARE.
 
 #include "crypto/icrypto.h"
 
-// P-256 group order n, big-endian (SEC2 secp256r1). Public constant.
 static const uint8_t s_P256Order[P256_BYTES] = {
 	0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
 	0xBC,0xE6,0xFA,0xAD,0xA7,0x17,0x9E,0x84,0xF3,0xB9,0xCA,0xC2,0xFC,0x63,0x25,0x51 };
 
-// P-256 field prime p, big-endian. Public constant.
 static const uint8_t s_P256Prime[P256_BYTES] = {
 	0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 	0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF };
 
 extern "C" {
 
-// Zeroize helper. Volatile-through so the compiler cannot drop the writes.
 void CryptoSecureWipe(void *pData, size_t Len)
 {
 	volatile uint8_t *p = (volatile uint8_t *)pData;
@@ -68,8 +65,6 @@ void CryptoSecureWipe(void *pData, size_t Len)
 	}
 }
 
-// True when every byte is zero. Reads all bytes so the timing does not reveal
-// the position of the first non-zero byte.
 bool P256IsZero(const uint8_t *pData, size_t Len)
 {
 	uint8_t acc = 0;
@@ -80,8 +75,6 @@ bool P256IsZero(const uint8_t *pData, size_t Len)
 	return acc == 0;
 }
 
-// True when big-endian A < B. Constant-time over the full width: it does not
-// stop at the first differing byte.
 bool P256LessBe(const uint8_t *pA, const uint8_t *pB, size_t Len)
 {
 	int lt = 0;
@@ -92,8 +85,6 @@ bool P256LessBe(const uint8_t *pA, const uint8_t *pB, size_t Len)
 		int b = pB[i];
 		int curLt = (a < b) & 1;
 		int curGt = (a > b) & 1;
-		// Take the most significant differing byte: only update while equal so
-		// far (neither lt nor gt yet decided).
 		int decided = lt | gt;
 		lt |= curLt & (decided ^ 1);
 		gt |= curGt & (decided ^ 1);
@@ -101,7 +92,6 @@ bool P256LessBe(const uint8_t *pA, const uint8_t *pB, size_t Len)
 	return lt != 0;
 }
 
-// True when Coord is a valid non-zero field element: non-zero and less than p.
 bool P256NonzeroFieldElement(const uint8_t Coord[P256_BYTES])
 {
 	if (P256IsZero(Coord, P256_BYTES))
@@ -111,7 +101,6 @@ bool P256NonzeroFieldElement(const uint8_t Coord[P256_BYTES])
 	return P256LessBe(Coord, s_P256Prime, P256_BYTES);
 }
 
-// True when Scalar is a valid private scalar: non-zero and strictly less than n.
 bool P256ScalarInRange(const uint8_t Scalar[P256_BYTES])
 {
 	if (P256IsZero(Scalar, P256_BYTES))
@@ -121,11 +110,8 @@ bool P256ScalarInRange(const uint8_t Scalar[P256_BYTES])
 	return P256LessBe(Scalar, s_P256Order, P256_BYTES);
 }
 
-// Draw a uniform private scalar in [1, n-1] by rejection sampling. Preserve a
-// retryable RNG status so callers do not consume a single-use operation on
-// temporary contention.
-CRYPTO_STATUS P256RandomScalar(RngEngine *pRng,
-							  uint8_t Scalar[P256_BYTES])
+CRYPTO_STATUS P256RandomScalarStatus(RngEngine *pRng,
+									uint8_t Scalar[P256_BYTES])
 {
 	if (Scalar == nullptr)
 	{
@@ -153,7 +139,11 @@ CRYPTO_STATUS P256RandomScalar(RngEngine *pRng,
 	return CRYPTO_STATUS_FAIL;
 }
 
-// Big-endian add: Out = A + B, returns the carry out of the top byte.
+bool P256RandomScalar(RngEngine *pRng, uint8_t Scalar[P256_BYTES])
+{
+	return P256RandomScalarStatus(pRng, Scalar) == CRYPTO_STATUS_OK;
+}
+
 static uint8_t P256AddBe(const uint8_t A[P256_BYTES], const uint8_t B[P256_BYTES],
 						 uint8_t Out[P256_BYTES])
 {
@@ -167,21 +157,12 @@ static uint8_t P256AddBe(const uint8_t A[P256_BYTES], const uint8_t B[P256_BYTES
 	return (uint8_t)carry;
 }
 
-// Regularize a scalar to a fixed 257-bit length with bit 256 always set, for a
-// constant-time fixed-position ladder that seeds its accumulator with P (the
-// implicit set bit 256). For a scalar k in [1, n), exactly one of k+n and k+2n
-// lands in [2^256, 2^257): add n once, and if that did not carry into bit 256,
-// add n again. R holds the low 256 bits of the chosen value with R[0] = 1
-// marking the set bit 256, so the ladder computes k*P and not (2^256 + k)*P.
-// Constant time: both sums are always computed and selected by a mask.
 void P256RegularizeScalar(const uint8_t K[P256_BYTES], uint8_t R[P256_BYTES + 1U])
 {
 	uint8_t kPlusN[P256_BYTES];
 	uint8_t kPlus2N[P256_BYTES];
 	const uint8_t carry1 = P256AddBe(K, s_P256Order, kPlusN);
 	(void)P256AddBe(kPlusN, s_P256Order, kPlus2N);
-	// For k in [1, n) one of the two sums always produces a carry out of bit
-	// 255; carry1 selects k+n, otherwise k+2n.
 	const uint8_t mask = (uint8_t)(0U - (uint32_t)carry1);
 	R[0] = 1U;
 	for (size_t idx = 0U; idx < P256_BYTES; idx++)
@@ -193,7 +174,6 @@ void P256RegularizeScalar(const uint8_t K[P256_BYTES], uint8_t R[P256_BYTES + 1U
 	CryptoSecureWipe(kPlus2N, sizeof(kPlus2N));
 }
 
-// Extract bit BitNo of a regularized big-endian scalar (one extra leading byte).
 uint32_t P256RegularBit(const uint8_t Scalar[P256_BYTES + 1U], uint32_t BitNo)
 {
 	const uint32_t byteFromEnd = BitNo / 8U;
