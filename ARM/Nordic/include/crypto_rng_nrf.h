@@ -53,18 +53,8 @@ SOFTWARE.
   * @{
   */
 
-/// @brief	Nordic hardware random generator implementing RngEngine.
-///
-/// Security grade: IsSecure() is true. Random draws hardware entropy through
-/// the per-part path selected at build time. Stateless beyond the Device
-/// lifecycle; the underlying peripheral holds the state.
 #if !defined(NRF54H20_XXAA) && !defined(NRF54L15_XXAA)
 /// @brief	Entropy interface over the RNG peripheral (nRF52 / nRF53).
-///
-/// An Rx transfer fills the buffer with hardware entropy; there is no address
-/// phase and no Tx direction. While a SoftDevice is enabled it owns the RNG
-/// peripheral, so the draw goes through the SoftDevice entropy pool instead;
-/// the check is made at run time on every draw.
 class RngPeriphIntrf : public DeviceIntrf {
 public:
 	bool Init(void);
@@ -91,55 +81,27 @@ private:
 	DevIntrf_t vDevIntrf;
 };
 
-/// Interface singleton for the standard construction path.
 RngPeriphIntrf *RngPeriphIntrfInstance(void);
 #endif
 
 class CryptoRngNrf : public RngEngine {
 public:
-	CryptoRngNrf() { vbValid = false; }
+	CryptoRngNrf() : vbIntrfEnabled(false) { vbValid = false; }
 
-	/**
-	 * @brief	Initialise the engine on a crypto interface.
-	 *
-	 * Sensor-style construction, like the other crypto engines: the interface is
-	 * created separately and its pointer passed here, held in the inherited
-	 * Device interface pointer. On the CRACEN parts the RNG module is enabled and
-	 * released through it; on parts with a standalone RNG peripheral the engine
-	 * drives that directly and the interface is unused.
-	 *
-	 * @param	pIntrf	The crypto core interface, or nullptr on parts with a
-	 *					standalone RNG peripheral.
-	 *
-	 * @return	true on success.
-	 */
 	bool Init(DeviceIntrf * const pIntrf);
 
-	// Device lifecycle. Enable brings up the hardware RNG (CTR-DRBG init on the
-	// CRACEN parts); it is idempotent.
 	bool Enable() override;
-	void Disable() override {}
-	void Reset() override {}
+	void Disable() override;
+	void Reset() override;
 
-	// RngEngine: fill pOut with Len hardware random bytes.
 	CRYPTO_STATUS Random(uint8_t *pOut, size_t Len) override;
-
-	// Hardware entropy: security grade.
 	bool IsSecure() const override { return true; }
+
+private:
+	bool vbIntrfEnabled;
 };
 
-/// @brief	Singleton accessor for the Nordic hardware RNG engine. Constructs on
-///			first use in internal static storage (no allocation) and returns the
-///			same instance thereafter. Returns the engine even before Enable; the
-///			caller or the first Random draw enables it.
 CryptoRngNrf *CryptoRngNrfInstance(void);
-
-//-----------------------------------------------------------------------------
-// The RNG is reached through the RngEngine facet: hold a CryptoRngNrf (or the
-// singleton CryptoRngNrfInstance) and call Random. Consumers that need entropy
-// take an injected RngEngine pointer, so a software generator can stand in for
-// the hardware one. There is no free-function entropy shim.
-//-----------------------------------------------------------------------------
 
 /** @} */
 
