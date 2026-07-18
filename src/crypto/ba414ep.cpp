@@ -62,10 +62,21 @@ SOFTWARE.
 #define BA414EP_RETRY_COUNT	10U
 #define BA414EP_BLIND_SIZE	8U
 
-// A failed hard reset quarantines the engine. Leaving the lock owned is
-// intentional: no operation may enter while the public-key engine may still
-// be executing with private operands resident.
+// A failed selected-module reset quarantines the engine. No later operation may
+// enter while the public-key engine can still be active with private operands.
 static bool s_bPkQuarantined = false;
+
+// A target with a selective PKE reset overrides this hook. The default uses the
+// complete interface reset, which is the only generic mechanism available.
+extern "C" __attribute__((weak)) bool Ba414epPlatformReset(DeviceIntrf *pIntrf)
+{
+	if (pIntrf == nullptr)
+	{
+		return false;
+	}
+	pIntrf->Reset();
+	return true;
+}
 
 // NIST P-256 domain parameters and generator, big endian.
 static const uint8_t s_P256Prime[32] = {
@@ -173,16 +184,13 @@ static bool PkWaitIdle(Device *pDev, uint32_t *pStatus)
 	return false;
 }
 
-// Take the engine operation lock before any register or operand access. OK
-// with the lock owned and the engine idle; BUSY when the lock or the engine
-// is owned elsewhere (retryable); FAIL only for a missing interface or a
-// quarantined engine. Callers only call PkCleanup after OK.
 CRYPTO_STATUS Ba414ep::PkPrepare()
 {
-	if (Interface() == nullptr || s_bPkQuarantined)
+	if (!vbValid || !vbIntrfEnabled || Interface() == nullptr || s_bPkQuarantined)
 	{
-		BA414EP_TRACE("Ba414ep PkPrepare: intrf=%p quarantined=%d -> FAIL\r\n",
-					  (void *)Interface(), (int)s_bPkQuarantined);
+		BA414EP_TRACE("Ba414ep PkPrepare: valid=%d enabled=%d intrf=%p quarantined=%d -> FAIL\r\n",
+					  (int)vbValid, (int)vbIntrfEnabled, (void *)Interface(),
+					  (int)s_bPkQuarantined);
 		return CRYPTO_STATUS_FAIL;
 	}
 	if (!OpAcquire())
@@ -199,9 +207,6 @@ CRYPTO_STATUS Ba414ep::PkPrepare()
 	return CRYPTO_STATUS_OK;
 }
 
-// Wipe every generic-mode slot that held secret material before the shared
-// core is released: the private scalar (14), the result point (6,7) and the
-// blinding factor (15). The domain parameters and the peer point are public.
 void Ba414ep::PkCleanup()
 {
 	PkClearSlot(this, BA414EP_SLOT_SCALAR_GEN, P256_SZ);
@@ -214,24 +219,35 @@ void Ba414ep::PkCleanup()
 	OpRelease();
 }
 
-// The poll limit expired while the module was still busy. Keep ownership,
-// force the selected PKE module through a hard off/on reset, verify idle,
-// then wipe every operand before release. A failed reset quarantines the
-// hold so no sibling engine can enter an unknown hardware state.
+bool Ba414ep::Recover()
+{
+	vbReady = false;
+	if (!Ba414epPlatformReset(Interface()) || !WaitIkIdle() || !HandoverProbe() ||
+		!PkWaitNotBusy(this))
+	{
+		return false;
+	}
+
+	PkClearSlot(this, BA414EP_SLOT_SCALAR_GEN, P256_SZ);
+	PkClearSlot(this, BA414EP_SLOT_RESULT_GX, P256_SZ);
+	PkClearSlot(this, BA414EP_SLOT_RESULT_GY, P256_SZ);
+	PkClearSlot(this, BA414EP_SLOT_BLIND, P256_SZ);
+	PkRegWrite(this, BA414EP_REG_CONTROL, BA414EP_CONTROL_CLEAR_IRQ);
+	__DMB();
+	vbReady = true;
+	s_bPkQuarantined = false;
+	return true;
+}
+
 bool Ba414ep::PkAbortAndReset()
 {
-	if (Interface() == nullptr)
+	if (Interface() == nullptr || !Recover())
 	{
+		vbValid = false;
 		s_bPkQuarantined = true;
 		return false;
 	}
-	Interface()->Reset();
-	if (!PkWaitNotBusy(this))
-	{
-		s_bPkQuarantined = true;
-		return false;
-	}
-	PkCleanup();
+	OpRelease();
 	return true;
 }
 
@@ -239,29 +255,33 @@ CRYPTO_STATUS Ba414ep::PkPointMultiply(const uint8_t Point[64],
 							const uint8_t Scalar[32], uint8_t Result[64],
 							bool bValidatePoint)
 {
-	if (Point == nullptr || Scalar == nullptr || Result == nullptr ||
-		vpRng == nullptr || !vpRng->IsSecure() || !P256ScalarInRange(Scalar))
+	const bool argsOk = Point != nullptr && Scalar != nullptr && Result != nullptr;
+	const bool rngOk = vpRng != nullptr && vpRng->IsSecure();
+	const bool scalarOk = Scalar != nullptr && P256ScalarInRange(Scalar);
+	if (!argsOk || !rngOk || !scalarOk)
 	{
-		BA414EP_TRACE("Ba414ep PkMul: bad args rng=%p secure=%d scalarok=%d -> FAIL\r\n",
-					  (void *)vpRng, (int)(vpRng != nullptr && vpRng->IsSecure()),
-					  (int)P256ScalarInRange(Scalar));
+		BA414EP_TRACE("Ba414ep PkMul: args=%d rng=%p secure=%d scalarok=%d -> FAIL\r\n",
+					  (int)argsOk, (void *)vpRng, (int)rngOk, (int)scalarOk);
+		if (Result != nullptr)
+		{
+			memset(Result, 0, 64U);
+		}
 		return CRYPTO_STATUS_FAIL;
 	}
 
 	memset(Result, 0, 64U);
 	for (uint32_t attempt = 0; attempt < BA414EP_RETRY_COUNT; attempt++)
 	{
-		// Draw before taking the core: the injected RNG may itself use the same
-		// interface. Drawing while the PKE hold is owned would deadlock or fail.
 		uint8_t blind[BA414EP_BLIND_SIZE];
-		if (vpRng->Random(blind, sizeof(blind)) != CRYPTO_STATUS_OK)
+		CRYPTO_STATUS rngStatus = vpRng->Random(blind, sizeof(blind));
+		if (rngStatus != CRYPTO_STATUS_OK)
 		{
-			BA414EP_TRACE("Ba414ep PkMul: blinding RNG draw failed -> FAIL\r\n");
+			BA414EP_TRACE("Ba414ep PkMul: blinding RNG draw failed st=%d\r\n",
+						  (int)rngStatus);
 			PkWipe(blind, sizeof(blind));
-			return CRYPTO_STATUS_FAIL;
+			return rngStatus;
 		}
 
-		// BA414e countermeasure factor requirements in big-endian mode.
 		blind[0] = (uint8_t)((blind[0] & 0x3FU) | 0x20U);
 		blind[sizeof(blind) - 1U] |= 1U;
 
@@ -273,9 +293,6 @@ CRYPTO_STATUS Ba414ep::PkPointMultiply(const uint8_t Point[64],
 		}
 
 		uint32_t status = BA414EP_STATUS_BUSY;
-		// Generic mode: load the full P-256 domain (SELCUR zero, built-in
-		// curve constants unused). p,n,a,b to slots 0,1,4,5; base point to
-		// 2,3; scalar to 14; result read from 6,7.
 		PkWriteOperand(this, BA414EP_SLOT_P, s_P256Prime, P256_SZ);
 		PkWriteOperand(this, BA414EP_SLOT_N, s_P256Order, P256_SZ);
 		PkWriteOperand(this, BA414EP_SLOT_GX, &Point[0], P256_SZ);
@@ -290,9 +307,6 @@ CRYPTO_STATUS Ba414ep::PkPointMultiply(const uint8_t Point[64],
 		PkRegWrite(this, BA414EP_REG_CONFIG, BA414EP_CONFIG_PTMUL_GEN);
 		__DMB();
 
-		// Explicit on-curve validation of an externally supplied point before
-		// the multiply (x < p, y < p, curve equation), the same order the
-		// Nordic ECDH path uses. A failure is deterministic: no retry.
 		if (bValidatePoint)
 		{
 			PkRegWrite(this, BA414EP_REG_COMMAND, BA414EP_CMD_P256_PTONCURVE);
@@ -334,10 +348,6 @@ CRYPTO_STATUS Ba414ep::PkPointMultiply(const uint8_t Point[64],
 		{
 			BA414EP_TRACE("Ba414ep PkMul: PkWaitIdle timeout, status=0x%x -> FAIL\r\n",
 						  (unsigned)status);
-			// The operation is still executing past the poll limit: hard
-			// reset the module under the retained hold and wipe the operand
-			// RAM once idle. A failed reset quarantines the PKE hold with
-			// the scalar deliberately unreachable behind it.
 			(void)PkAbortAndReset();
 			PkWipe(blind, sizeof(blind));
 			return CRYPTO_STATUS_FAIL;
@@ -367,14 +377,12 @@ CRYPTO_STATUS Ba414ep::PkPointMultiply(const uint8_t Point[64],
 		PkCleanup();
 		PkWipe(blind, sizeof(blind));
 
-		if (status == 0U && !P256IsZero(&Result[0], P256_SZ) &&
-			!P256IsZero(&Result[32], P256_SZ))
+		if (status == 0U && !P256IsZero(Result, 64U))
 		{
 			return CRYPTO_STATUS_OK;
 		}
-		BA414EP_TRACE("Ba414ep PkMul: reject status=0x%x rx_zero=%d ry_zero=%d\r\n",
-					  (unsigned)status, (int)P256IsZero(&Result[0], P256_SZ),
-					  (int)P256IsZero(&Result[32], P256_SZ));
+		BA414EP_TRACE("Ba414ep PkMul: reject status=0x%x point_zero=%d\r\n",
+					  (unsigned)status, (int)P256IsZero(Result, 64U));
 		memset(Result, 0, 64U);
 
 		if (status != BA414EP_STATUS_NOT_INVERTIBLE)
@@ -392,6 +400,7 @@ Ba414ep::Ba414ep()
 	vbValid = false;
 	vpRng = nullptr;
 	vbReady = false;
+	vbIntrfEnabled = false;
 	atomic_flag_clear(&vOpBusy);
 }
 
@@ -405,9 +414,6 @@ void Ba414ep::OpRelease()
 	atomic_flag_clear(&vOpBusy);
 }
 
-// Wait for both halves of the ba414e_with_ik module to go idle. After a
-// reset the IK side runs a startup sequence on the shared engine and its
-// operand memory; nothing may be issued until it finishes.
 bool Ba414ep::WaitIkIdle()
 {
 	for (uint32_t i = 0; i < BA414EP_POLL_LIMIT; i++)
@@ -422,10 +428,6 @@ bool Ba414ep::WaitIkIdle()
 	return false;
 }
 
-// Self-checking bring-up operation: (7 + 8) mod 13 with 4 byte big-endian
-// operands, expected result 2. The first command after a reset is consumed
-// by the IK to PK handover and completes with a bogus error; the retry
-// absorbs it, and a clean pass proves the engine is computing in PK mode.
 bool Ba414ep::HandoverProbe()
 {
 	static const uint8_t mod[4] = { 0, 0, 0, 13 };
@@ -473,52 +475,85 @@ bool Ba414ep::Init(DeviceIntrf * const pIntrf, RngEngine *pRng)
 
 bool Ba414ep::Enable()
 {
-	if (Interface() == nullptr)
+	if (Interface() == nullptr || s_bPkQuarantined)
 	{
 		vbValid = false;
 		return false;
 	}
-	// Bring up the transport; the interface owns the core power model. On
-	// the first enable, prove the engine ready: wait out the IK side and run
-	// the handover probe. Retained module state makes this a one-time cost
-	// per reset.
-	Interface()->Enable();
-	if (!vbReady)
+	if (vbIntrfEnabled && vbValid)
 	{
-		if (!OpAcquire())
-		{
-			vbValid = false;
-			return false;
-		}
-		const bool ok = WaitIkIdle() && HandoverProbe();
-		OpRelease();
-		if (!ok)
-		{
-			vbValid = false;
-			return false;
-		}
-		vbReady = true;
+		return true;
 	}
+
+	bool acquiredRef = false;
+	if (!vbIntrfEnabled)
+	{
+		Interface()->Enable();
+		vbIntrfEnabled = true;
+		acquiredRef = true;
+	}
+
+	if (!OpAcquire())
+	{
+		vbValid = false;
+		if (acquiredRef)
+		{
+			Interface()->Disable();
+			vbIntrfEnabled = false;
+		}
+		return false;
+	}
+
+	const bool ok = vbReady || (WaitIkIdle() && HandoverProbe());
+	OpRelease();
+	if (!ok)
+	{
+		vbValid = false;
+		vbReady = false;
+		if (acquiredRef)
+		{
+			Interface()->Disable();
+			vbIntrfEnabled = false;
+		}
+		return false;
+	}
+
+	vbReady = true;
 	vbValid = true;
 	return true;
 }
 
-void Ba414ep::Reset()
+void Ba414ep::Disable()
 {
-	if (Interface() == nullptr || !OpAcquire())
+	if (!vbIntrfEnabled || Interface() == nullptr)
+	{
+		vbValid = false;
+		return;
+	}
+	if (!OpAcquire())
 	{
 		return;
 	}
-	Interface()->Reset();
-	if (PkWaitNotBusy(this))
+	vbValid = false;
+	Interface()->Disable();
+	vbIntrfEnabled = false;
+	OpRelease();
+}
+
+void Ba414ep::Reset()
+{
+	if (Interface() == nullptr || !vbIntrfEnabled || !OpAcquire())
 	{
-		// Wipes the sensitive operand slots and releases the lock.
-		PkCleanup();
+		return;
+	}
+	vbValid = false;
+	if (Recover())
+	{
+		vbValid = true;
+		OpRelease();
 	}
 	else
 	{
-		// Keep the lock: the module did not come back verifiably idle and
-		// no operation may enter with private operands possibly resident.
 		s_bPkQuarantined = true;
 	}
 }
@@ -542,6 +577,10 @@ CRYPTO_STATUS Ba414ep::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKe
 	KeyReset(pk);
 	memset(pPubKey, 0, 64U);
 
+	if (!vbValid)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
 	if (vpRng == nullptr || !vpRng->IsSecure())
 	{
 		BA414EP_TRACE("Ba414ep KeyGen: rng=%p secure=%d -> UNSUPPORTED\r\n",
@@ -549,11 +588,13 @@ CRYPTO_STATUS Ba414ep::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKe
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
-	if (!P256RandomScalar(vpRng, pk->PrivKey))
+	CRYPTO_STATUS rngStatus = P256RandomScalar(vpRng, pk->PrivKey);
+	if (rngStatus != CRYPTO_STATUS_OK)
 	{
-		BA414EP_TRACE("Ba414ep KeyGen: P256RandomScalar (private key draw) failed -> FAIL\r\n");
+		BA414EP_TRACE("Ba414ep KeyGen: private key draw failed st=%d\r\n",
+					  (int)rngStatus);
 		KeyReset(pk);
-		return CRYPTO_STATUS_FAIL;
+		return rngStatus;
 	}
 	CRYPTO_STATUS st = PkPointMultiply(s_P256Generator, pk->PrivKey, pPubKey,
 									   false);
@@ -569,13 +610,6 @@ CRYPTO_STATUS Ba414ep::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKe
 	return st;
 }
 
-// Known-answer self-test: the Bluetooth LESC debug key pair (Core spec Vol 3
-// Part H 2.3.5.6.1). The generator multiplied by the debug private scalar
-// must yield the debug public key, exercising the full blinded hardware
-// multiply path. Return codes pinpoint the failure: 0 pass, -1 engine not
-// enabled, -2 multiply reported failure, -6 core busy at prepare, -3 X
-// mismatch, -4 Y mismatch. Y is compared as well as X because every other
-// consumer of this engine uses only the X coordinate.
 int Ba414ep::SelfTest()
 {
 	static const uint8_t priv[32] = {
@@ -626,10 +660,10 @@ CRYPTO_STATUS Ba414ep::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	}
 
 	KeyCtx *pk = (KeyCtx *)pKeyCtx;
-	if (!pk->bKeyValid || vpRng == nullptr || !vpRng->IsSecure())
+	if (!vbValid || !pk->bKeyValid || vpRng == nullptr || !vpRng->IsSecure())
 	{
-		BA414EP_TRACE("Ba414ep Agree: keyvalid=%d rng=%p secure=%d -> FAIL\r\n",
-					  (int)pk->bKeyValid, (void *)vpRng,
+		BA414EP_TRACE("Ba414ep Agree: valid=%d keyvalid=%d rng=%p secure=%d -> FAIL\r\n",
+					  (int)vbValid, (int)pk->bKeyValid, (void *)vpRng,
 					  (int)(vpRng != nullptr && vpRng->IsSecure()));
 		KeyReset(pk);
 		memset(pSharedX, 0, P256_SZ);
@@ -637,12 +671,8 @@ CRYPTO_STATUS Ba414ep::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	}
 
 	uint8_t point[64];
-	// The peer point is untrusted input: PkPointMultiply runs the hardware
-	// on-curve check before the multiply.
 	CRYPTO_STATUS st = PkPointMultiply(pPeerPubKey, pk->PrivKey, point, true);
 
-	// BUSY is transient contention: the shared secret is cleared and the
-	// single-use key survives for retry. Every other failure consumes it.
 	if (st == CRYPTO_STATUS_OK)
 	{
 		if (!bKeepKey)
