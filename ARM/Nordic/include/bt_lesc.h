@@ -77,29 +77,15 @@ bool BtLescKeyPairGen(void);
 CRYPTO_STATUS BtLescKeyPairGenStatus(void);
 
 /**
- * @brief	Local public key, little-endian, without registering a link user.
+ * @brief	Local public key, little-endian.
+ *
+ * Each connection that receives this key in a security-params reply is
+ * registered as a user from its BLE_GAP_EVT_SEC_PARAMS_REQUEST event; the key
+ * pair is not replaced while any registered connection is still pairing.
  *
  * @return	Pointer to the key, or NULL if none has been generated.
  */
 ble_gap_lesc_p256_pk_t *BtLescPubKeyGet(void);
-
-/**
- * @brief	Local public key for a connection security-params reply.
- *
- * Registers ConnHdl as a user of the current private key. The key is not
- * replaced until every registered connection completes or is released.
- * Repeated calls for the same connection are idempotent.
- *
- * @return	Pointer to the key, or NULL when no key or link slot is available.
- */
-ble_gap_lesc_p256_pk_t *BtLescPubKeyGetForLink(uint16_t ConnHdl);
-
-/**
- * @brief	Release a connection's use of the current local key pair.
- *
- * Use when a prepared security-params reply fails before the stack accepts it.
- */
-void BtLescLinkRelease(uint16_t ConnHdl);
 
 /**
  * @brief	Generate the local LESC OOB data set for OOB pairing.
