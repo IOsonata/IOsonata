@@ -157,7 +157,8 @@ void P256RegularizeScalar(const uint8_t K[P256_BYTES],
 uint32_t P256RegularBit(const uint8_t Scalar[P256_BYTES + 1U],
 						uint32_t BitNo);
 void CryptoSecureWipe(void *pData, size_t Len);
-bool P256RandomScalar(RngEngine *pRng, uint8_t Scalar[P256_BYTES]);
+CRYPTO_STATUS P256RandomScalar(RngEngine *pRng,
+							  uint8_t Scalar[P256_BYTES]);
 
 #ifdef __cplusplus
 }
