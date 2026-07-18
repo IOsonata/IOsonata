@@ -86,7 +86,10 @@ RngPeriphIntrf *RngPeriphIntrfInstance(void);
 
 class CryptoRngNrf : public RngEngine {
 public:
-	CryptoRngNrf() : vbIntrfEnabled(false) { vbValid = false; }
+	CryptoRngNrf() : vbIntrfEnabled(false) {
+		vbValid = false;
+		atomic_flag_clear(&vOpBusy);
+	}
 
 	bool Init(DeviceIntrf * const pIntrf);
 
@@ -98,6 +101,7 @@ public:
 	bool IsSecure() const override { return true; }
 
 private:
+	atomic_flag vOpBusy;
 	bool vbIntrfEnabled;
 };
 
