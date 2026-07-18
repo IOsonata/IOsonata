@@ -187,7 +187,7 @@ __attribute__((weak)) void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *
 	}
 
 	BtConnSec_t sec = *pSec;
-	if (sec.Level != BT_GAP_SEC_LEVEL_NONE)
+	if (sec.Level != BT_GAP_SEC_LEVEL_NONE && sec.KeySize == 0U)
 	{
 		BtSmpKeys_t keys;
 		if (BtSmpBondKeysLookup(ConnHdl, 0U, 0U, &keys))
