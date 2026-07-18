@@ -69,6 +69,10 @@ SOFTWARE.
 #define CRACEN_SD_RNG_POLL_LIMIT	1000000U
 #endif
 
+#ifndef CRACEN_RESET_LOCK_SPINS
+#define CRACEN_RESET_LOCK_SPINS		100000U
+#endif
+
 #define CRACEN_ENABLE_ALL_Msk	(CRACEN_ENABLE_CRYPTOMASTER_Msk | \
 								 CRACEN_ENABLE_PKEIKG_Msk | \
 								 CRACEN_ENABLE_RNG_Msk)
@@ -377,15 +381,27 @@ static bool CracenResetModule(DevIntrf_t * const pIntrf, uint32_t Mask)
 		return false;
 	}
 
+	uint32_t attempts = __get_IPSR() == 0U ? CRACEN_RESET_LOCK_SPINS : 1U;
+	while (atomic_flag_test_and_set(&pIntrf->bBusy))
+	{
+		if (attempts-- == 0U)
+		{
+			return false;
+		}
+		__asm volatile("" ::: "memory");
+	}
+
+	bool ok = true;
 	NRF_CRACEN->ENABLE &= ~Mask;
 	__DMB();
 	if (atomic_load(&pIntrf->EnCnt) > 0)
 	{
 		NRF_CRACEN->ENABLE |= Mask;
 		__DMB();
-		if ((NRF_CRACEN->ENABLE & Mask) != Mask)
+		ok = (NRF_CRACEN->ENABLE & Mask) == Mask;
+		if (ok && (Mask & CRACEN_ENABLE_PKEIKG_Msk) != 0U)
 		{
-			return false;
+			ok = CracenLoadPkeMicrocode();
 		}
 	}
 
@@ -395,7 +411,8 @@ static bool CracenResetModule(DevIntrf_t * const pIntrf, uint32_t Mask)
 	{
 		s_bDrbgInit = false;
 	}
-	return true;
+	atomic_flag_clear(&pIntrf->bBusy);
+	return ok;
 }
 
 // Interface reset is the wrapper-level escape hatch. Engine drivers use the
@@ -500,8 +517,7 @@ extern "C" bool Ba414epPlatformReset(DeviceIntrf *pIntrf)
 		return false;
 	}
 	DevIntrf_t *pHandle = *pCracen;
-	return CracenResetModule(pHandle, CRACEN_ENABLE_PKEIKG_Msk) &&
-		CracenLoadPkeMicrocode();
+	return CracenResetModule(pHandle, CRACEN_ENABLE_PKEIKG_Msk);
 }
 
 extern "C" bool CryptoMasterPlatformReset(DeviceIntrf *pIntrf)
