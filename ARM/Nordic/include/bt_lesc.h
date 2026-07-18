@@ -47,7 +47,7 @@ typedef ble_gap_lesc_oob_data_t * (*BtLescOobPeerHandler_t)(uint16_t ConnHdl);
  *			initialises. The application owns it. C++ linkage: the engine is a
  *			KeyAgreeEngine on the OO crypto tree (CryptoUecc or Ba414ep).
  *
- * @param	pEcdh	KeyAgreeEngine providing P-256 ECDH.
+ * @param	pEcdh	KeyAgreeEngine providing synchronous P-256 ECDH.
  */
 void BtLescSetCryptoEngine(KeyAgreeEngine *pEcdh);
 
@@ -70,11 +70,36 @@ bool BtLescInit(void);
 bool BtLescKeyPairGen(void);
 
 /**
- * @brief	Local public key, little-endian, for the security-params reply.
+ * @brief	Generate a fresh local P-256 key pair and preserve retryable status.
+ *
+ * @return	CRYPTO_STATUS_OK, BUSY, or a permanent failure status.
+ */
+CRYPTO_STATUS BtLescKeyPairGenStatus(void);
+
+/**
+ * @brief	Local public key, little-endian, without registering a link user.
  *
  * @return	Pointer to the key, or NULL if none has been generated.
  */
-ble_gap_lesc_p256_pk_t * BtLescPubKeyGet(void);
+ble_gap_lesc_p256_pk_t *BtLescPubKeyGet(void);
+
+/**
+ * @brief	Local public key for a connection security-params reply.
+ *
+ * Registers ConnHdl as a user of the current private key. The key is not
+ * replaced until every registered connection completes or is released.
+ * Repeated calls for the same connection are idempotent.
+ *
+ * @return	Pointer to the key, or NULL when no key or link slot is available.
+ */
+ble_gap_lesc_p256_pk_t *BtLescPubKeyGetForLink(uint16_t ConnHdl);
+
+/**
+ * @brief	Release a connection's use of the current local key pair.
+ *
+ * Use when a prepared security-params reply fails before the stack accepts it.
+ */
+void BtLescLinkRelease(uint16_t ConnHdl);
 
 /**
  * @brief	Generate the local LESC OOB data set for OOB pairing.
@@ -88,7 +113,7 @@ bool BtLescOobLocalGen(void);
  *
  * @return	Pointer to the set, or NULL if none has been generated.
  */
-ble_gap_lesc_oob_data_t * BtLescOobLocalGet(void);
+ble_gap_lesc_oob_data_t *BtLescOobLocalGet(void);
 
 /**
  * @brief	Set the peer OOB data lookup used on an OOB DHKey request.
@@ -101,9 +126,9 @@ void BtLescOobPeerHandlerSet(BtLescOobPeerHandler_t Handler);
  * @brief	Run any deferred DHKey computation. Call from the main loop.
  *
  * The ECDH is deferred out of the event handler so it does not run in the
- * stack callback context.
+ * stack callback context. BUSY operations remain queued for the next call.
  *
- * @return	true on success.
+ * @return	true when processing may continue; false on a permanent local error.
  */
 bool BtLescRequestHandler(void);
 
@@ -112,7 +137,7 @@ bool BtLescRequestHandler(void);
  *
  * @param	pEvt	The BLE event.
  */
-void BtLescOnBleEvt(const ble_evt_t * pEvt);
+void BtLescOnBleEvt(const ble_evt_t *pEvt);
 
 //
 // Port-supplied. Implemented per stack in bt_app_nrf52.cpp / bt_app_bm.cpp.
@@ -124,13 +149,13 @@ void BtLescOnBleEvt(const ble_evt_t * pEvt);
  *
  * @param	ConnHdl		Connection handle.
  * @param	SecStatus	BLE_GAP_SEC_STATUS_* result. Ignored on stacks whose
- * 						reply takes no status argument.
+ * 					reply takes no status argument.
  * @param	pDhKey		DH key (little-endian), or NULL to fail the request.
  *
  * @return	NRF_SUCCESS on success.
  */
 uint32_t BtLescDhKeyReply(uint16_t ConnHdl, uint8_t SecStatus,
-						  const ble_gap_lesc_dhkey_t * pDhKey);
+						  const ble_gap_lesc_dhkey_t *pDhKey);
 
 /**
  * @brief	Combined peripheral and central link count for this build.
