@@ -17,7 +17,8 @@
 		Every transfer is self-addressing through the DevAddr module
 		selector, so no cross-operation state lives here. Module power is
 		owned by the transport Enable/Disable through the enable reference
-		count; the interface Reset hard-resets the core by a power cycle.
+		count. Normal engine recovery toggles only the selected engine; the
+		interface Reset remains the whole-wrapper recovery path.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -301,20 +302,29 @@ static void CracenStopRx(DevIntrf_t * const pIntrf)
 
 // PKE code RAM lives at NRF_CRACENCORE + BA414EP_CODE_OFFSET. The Silex
 // BA414EP on this die is the microcoded configuration: the engine cannot
-// sequence any operation until its code RAM is filled. Init owns the load;
-// the fast path here is the two-word verify passing. The full copy reruns
-// only if the RAM was cleared.
+// sequence any operation until its code RAM is filled. Initialization verifies
+// the complete retained image before taking the fast path, so corruption in a
+// middle word cannot be accepted as a valid program.
 static bool CracenLoadPkeMicrocode(void)
 {
 	volatile uint32_t *pCode = (volatile uint32_t *)
 		((uintptr_t)NRF_CRACENCORE + BA414EP_CODE_OFFSET);
 	const size_t words = CRACEN_BA414E_UCODE_WORDS;
 
-	if (pCode[0] == s_CracenBa414eUcode[0] &&
-		pCode[words - 1U] == s_CracenBa414eUcode[words - 1U])
+	bool match = true;
+	for (size_t i = 0; i < words; i++)
+	{
+		if (pCode[i] != s_CracenBa414eUcode[i])
+		{
+			match = false;
+			break;
+		}
+	}
+	if (match)
 	{
 		return true;
 	}
+
 	for (size_t i = 0; i < words; i++)
 	{
 		pCode[i] = s_CracenBa414eUcode[i];
@@ -359,22 +369,41 @@ static uint32_t CracenSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 	(void)Rate;
 	return 0U;
 }
-// Interface reset: hard reset the whole core by a power cycle, the only
-// reset mechanism the wrapper provides, then clear the transfer state.
-// Retained state (microcode RAM, handover, DRBG seed) survives; the caller
-// re-runs any in-flight operation. Leaves the core powered only when the
-// enable reference count says an engine is using it.
-static void CracenReset(DevIntrf_t * const pIntrf)
+
+static bool CracenResetModule(DevIntrf_t * const pIntrf, uint32_t Mask)
 {
-	NRF_CRACEN->ENABLE &= ~CRACEN_ENABLE_ALL_Msk;
+	if (pIntrf == nullptr || Mask == 0U)
+	{
+		return false;
+	}
+
+	NRF_CRACEN->ENABLE &= ~Mask;
 	__DMB();
 	if (atomic_load(&pIntrf->EnCnt) > 0)
 	{
-		NRF_CRACEN->ENABLE |= CRACEN_ENABLE_ALL_Msk;
+		NRF_CRACEN->ENABLE |= Mask;
 		__DMB();
+		if ((NRF_CRACEN->ENABLE & Mask) != Mask)
+		{
+			return false;
+		}
 	}
+
 	s_bAddrLatched = false;
 	s_bRngXfer = false;
+	if ((Mask & CRACEN_ENABLE_RNG_Msk) != 0U)
+	{
+		s_bDrbgInit = false;
+	}
+	return true;
+}
+
+// Interface reset is the wrapper-level escape hatch. Engine drivers use the
+// strong platform hooks below so normal recovery does not disturb another
+// engine that is operating concurrently.
+static void CracenReset(DevIntrf_t * const pIntrf)
+{
+	(void)CracenResetModule(pIntrf, CRACEN_ENABLE_ALL_Msk);
 }
 static void CracenPowerOff(DevIntrf_t * const pIntrf)
 {
@@ -461,4 +490,27 @@ CracenIntrf *CracenIntrfInstance(void)
 		s_bInit = s_Instance.Init();
 	}
 	return s_bInit ? &s_Instance : nullptr;
+}
+
+extern "C" bool Ba414epPlatformReset(DeviceIntrf *pIntrf)
+{
+	CracenIntrf *pCracen = CracenIntrfInstance();
+	if (pIntrf == nullptr || pCracen == nullptr || pIntrf != pCracen)
+	{
+		return false;
+	}
+	DevIntrf_t *pHandle = *pCracen;
+	return CracenResetModule(pHandle, CRACEN_ENABLE_PKEIKG_Msk) &&
+		CracenLoadPkeMicrocode();
+}
+
+extern "C" bool CryptoMasterPlatformReset(DeviceIntrf *pIntrf)
+{
+	CracenIntrf *pCracen = CracenIntrfInstance();
+	if (pIntrf == nullptr || pCracen == nullptr || pIntrf != pCracen)
+	{
+		return false;
+	}
+	DevIntrf_t *pHandle = *pCracen;
+	return CracenResetModule(pHandle, CRACEN_ENABLE_CRYPTOMASTER_Msk);
 }
