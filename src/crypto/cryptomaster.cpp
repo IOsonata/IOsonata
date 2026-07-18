@@ -47,6 +47,18 @@ SOFTWARE.
 #define AES_BLOCK		16U
 #define CM_POLL_LIMIT	100000U
 
+static bool s_bCmQuarantined;
+
+extern "C" __attribute__((weak)) bool CryptoMasterPlatformReset(DeviceIntrf *pIntrf)
+{
+	if (pIntrf == nullptr)
+	{
+		return false;
+	}
+	pIntrf->Reset();
+	return true;
+}
+
 static void CmWipe(void *pData, size_t Len)
 {
 	volatile uint8_t *p = (volatile uint8_t *)pData;
@@ -109,8 +121,16 @@ static bool CmWait(Device *pDev)
 	return false;
 }
 
-// The caller owns the module hold.
-static bool CmAesBlock(Device *pDev, const uint8_t Key[16],
+static bool CmRecover(CryptoMaster *pDev)
+{
+	return pDev != nullptr &&
+		CryptoMasterPlatformReset(pDev->Interface()) &&
+		CmReset(pDev) &&
+		(CmRegRead(pDev, CRYPTOMASTER_HW_PRESENCE) &
+		 CRYPTOMASTER_PRESENT_AES) != 0U;
+}
+
+static bool CmAesBlock(CryptoMaster *pDev, const uint8_t Key[16],
 						const uint8_t In[16], uint8_t Out[16])
 {
 	alignas(uint32_t) uint32_t config = CRYPTOMASTER_BA411_MODE_ECB;
@@ -148,7 +168,11 @@ static bool CmAesBlock(Device *pDev, const uint8_t Key[16],
 	outDesc.Size = sizeof(output) | CRYPTOMASTER_DMA_REALIGN;
 	outDesc.Tag = CRYPTOMASTER_TAG_LAST;
 
-	bool ok = CmReset(pDev);
+	bool ok = !s_bCmQuarantined && CmReset(pDev);
+	if (!ok && !s_bCmQuarantined)
+	{
+		ok = CmRecover(pDev);
+	}
 	if (ok)
 	{
 		CmRegWrite(pDev, CRYPTOMASTER_FETCH_ADDR, (uint32_t)(uintptr_t)inDesc);
@@ -160,11 +184,26 @@ static bool CmAesBlock(Device *pDev, const uint8_t Key[16],
 		ok = CmWait(pDev);
 		__DMB();
 	}
+
+	bool resetOk = CmReset(pDev);
+	if (!resetOk)
+	{
+		resetOk = CmRecover(pDev);
+		if (!resetOk)
+		{
+			s_bCmQuarantined = true;
+		}
+	}
+	ok = ok && resetOk;
+
 	if (ok)
 	{
 		memcpy(Out, output, sizeof(output));
 	}
-	(void)CmReset(pDev);
+	else
+	{
+		memset(Out, 0, AES_BLOCK);
+	}
 
 	CmWipe(key, sizeof(key));
 	CmWipe(input, sizeof(input));
@@ -187,23 +226,85 @@ bool CryptoMaster::Init(DeviceIntrf * const pIntrf)
 
 bool CryptoMaster::Enable()
 {
-	if (Interface() == nullptr)
+	if (Interface() == nullptr || s_bCmQuarantined)
 	{
 		vbValid = false;
 		return false;
 	}
-	// Bring up the transport (the interface owns core power), then take the
-	// operation lock only for the presence read.
-	Interface()->Enable();
+	if (vbIntrfEnabled && vbValid)
+	{
+		return true;
+	}
+
+	bool acquiredRef = false;
+	if (!vbIntrfEnabled)
+	{
+		Interface()->Enable();
+		vbIntrfEnabled = true;
+		acquiredRef = true;
+	}
 	if (!OpAcquire())
 	{
+		if (acquiredRef)
+		{
+			Interface()->Disable();
+			vbIntrfEnabled = false;
+		}
 		vbValid = false;
 		return false;
 	}
-	uint32_t present = CmRegRead(this, CRYPTOMASTER_HW_PRESENCE);
+
+	bool ok = (CmRegRead(this, CRYPTOMASTER_HW_PRESENCE) &
+				 CRYPTOMASTER_PRESENT_AES) != 0U && CmReset(this);
+	if (!ok)
+	{
+		ok = CmRecover(this);
+	}
 	OpRelease();
-	vbValid = (present & CRYPTOMASTER_PRESENT_AES) != 0U;
-	return vbValid;
+	if (!ok)
+	{
+		if (acquiredRef)
+		{
+			Interface()->Disable();
+			vbIntrfEnabled = false;
+		}
+		vbValid = false;
+		return false;
+	}
+
+	s_bCmQuarantined = false;
+	vbValid = true;
+	return true;
+}
+
+void CryptoMaster::Disable()
+{
+	if (!vbIntrfEnabled || Interface() == nullptr)
+	{
+		vbValid = false;
+		return;
+	}
+	if (!OpAcquire())
+	{
+		return;
+	}
+	vbValid = false;
+	Interface()->Disable();
+	vbIntrfEnabled = false;
+	OpRelease();
+}
+
+void CryptoMaster::Reset()
+{
+	if (!vbIntrfEnabled || Interface() == nullptr || !OpAcquire())
+	{
+		return;
+	}
+	vbValid = false;
+	bool ok = CmRecover(this);
+	s_bCmQuarantined = !ok;
+	vbValid = ok;
+	OpRelease();
 }
 
 CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
@@ -220,9 +321,12 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
+	if (!vbValid || !vbIntrfEnabled || Interface() == nullptr || s_bCmQuarantined)
+	{
+		if (Len > 0U) memset(pOut, 0, Len);
+		return CRYPTO_STATUS_FAIL;
+	}
 
-	// ECB and CBC decryption need the inverse cipher, which this hardware path
-	// does not implement. CTR uses the forward block operation for both directions.
 	if (bEncrypt == 0 && Alg != CRYPTO_CIPHER_CTR)
 	{
 		return CryptoSoftAes::Cipher(Alg, bEncrypt, Key, pIv, IvLen,
@@ -247,14 +351,8 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-	if (Interface() == nullptr)
-	{
-		if (Len > 0U) memset(pOut, 0, Len);
-		return CRYPTO_STATUS_FAIL;
-	}
 	if (!OpAcquire())
 	{
-		// Refused hold: fail closed and retryable.
 		if (Len > 0U) memset(pOut, 0, Len);
 		return CRYPTO_STATUS_BUSY;
 	}
@@ -321,6 +419,11 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		CmWipe(chain, sizeof(chain));
 	}
 
+	if (s_bCmQuarantined)
+	{
+		vbValid = false;
+		status = CRYPTO_STATUS_FAIL;
+	}
 	OpRelease();
 	if (status != CRYPTO_STATUS_OK && Len > 0U)
 	{
@@ -329,11 +432,10 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	return status;
 }
 
-// Inherited CMAC bracket: one module hold for the whole MAC. AesOpEnd is only
-// called after a successful AesOpBegin, so the interface is set here.
 bool CryptoMaster::AesOpBegin()
 {
-	return Interface() != nullptr && OpAcquire();
+	return vbValid && vbIntrfEnabled && !s_bCmQuarantined &&
+		Interface() != nullptr && OpAcquire();
 }
 
 void CryptoMaster::AesOpEnd()
