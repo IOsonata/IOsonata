@@ -17,8 +17,10 @@
 		Every transfer is self-addressing through the DevAddr module
 		selector, so no cross-operation state lives here. Module power is
 		owned by the transport Enable/Disable through the enable reference
-		count. Normal engine recovery toggles only the selected engine; the
-		interface Reset remains the whole-wrapper recovery path.
+		count. The interface Reset is address-selected: it recovers only the
+		module of the DevAddr latched by the surrounding StartTx, the same
+		way a transfer selects its module. The whole core resets only when
+		no module was ever selected.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -69,16 +71,15 @@ SOFTWARE.
 #define CRACEN_SD_RNG_POLL_LIMIT	1000000U
 #endif
 
-#ifndef CRACEN_RESET_LOCK_SPINS
-#define CRACEN_RESET_LOCK_SPINS		100000U
-#endif
-
 #define CRACEN_ENABLE_ALL_Msk	(CRACEN_ENABLE_CRYPTOMASTER_Msk | \
 								 CRACEN_ENABLE_PKEIKG_Msk | \
 								 CRACEN_ENABLE_RNG_Msk)
 
 // PKE code RAM offset from the CRACENCORE base.
 #define BA414EP_CODE_OFFSET		0xC000U
+
+// No module selected yet; an interface Reset in this state resets the core.
+#define CRACEN_ADDR_NONE		0xFFFFFFFFU
 
 static volatile uint8_t *s_pPkeRegBase;
 static volatile uint8_t *s_pCmRegBase;
@@ -90,10 +91,12 @@ static uint32_t s_Offset;
 static bool s_bAddrLatched;
 static bool s_bRngXfer;
 static bool s_bDrbgInit;
+static uint32_t s_SelDevAddr = CRACEN_ADDR_NONE;
 
 
 static void CracenSelectBase(uint32_t DevAddr)
 {
+	s_SelDevAddr = DevAddr;
 	s_bXferMem = (DevAddr == BA414EP_ADDR_MEM);
 	s_pXferBase = s_bXferMem ? s_pMemBase :
 				  (DevAddr == CRYPTOMASTER_ADDR_REG) ? s_pCmRegBase : s_pPkeRegBase;
@@ -123,6 +126,7 @@ static bool CracenStartRx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 	(void)pIntrf;
 	if (DevAddr == CRACEN_ADDR_RNG)
 	{
+		s_SelDevAddr = DevAddr;
 		s_bRngXfer = true;
 		return true;
 	}
@@ -374,53 +378,52 @@ static uint32_t CracenSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 	return 0U;
 }
 
-static bool CracenResetModule(DevIntrf_t * const pIntrf, uint32_t Mask)
+// Interface reset, selected by the DevAddr the transport last latched. An
+// engine resets its own module by opening a transfer on its DevAddr, calling
+// Reset, then closing the transfer: the StartTx/StopTx pair serializes the
+// reset against the other engines and makes the module selection explicit.
+// Only the selected module power-cycles; the other engines are untouched.
+// A failed restore surfaces through the readiness probes the engine runs
+// after every reset, so this stays a void interface function.
+static void CracenReset(DevIntrf_t * const pIntrf)
 {
-	if (pIntrf == nullptr || Mask == 0U)
+	uint32_t mask;
+
+	switch (s_SelDevAddr)
 	{
-		return false;
+		case BA414EP_ADDR_REG:
+		case BA414EP_ADDR_MEM:
+			mask = CRACEN_ENABLE_PKEIKG_Msk;
+			break;
+		case CRYPTOMASTER_ADDR_REG:
+			mask = CRACEN_ENABLE_CRYPTOMASTER_Msk;
+			break;
+		case CRACEN_ADDR_RNG:
+			mask = CRACEN_ENABLE_RNG_Msk;
+			break;
+		default:
+			mask = CRACEN_ENABLE_ALL_Msk;
+			break;
 	}
 
-	uint32_t attempts = __get_IPSR() == 0U ? CRACEN_RESET_LOCK_SPINS : 1U;
-	while (atomic_flag_test_and_set(&pIntrf->bBusy))
-	{
-		if (attempts-- == 0U)
-		{
-			return false;
-		}
-		__asm volatile("" ::: "memory");
-	}
-
-	bool ok = true;
-	NRF_CRACEN->ENABLE &= ~Mask;
+	NRF_CRACEN->ENABLE &= ~mask;
 	__DMB();
 	if (atomic_load(&pIntrf->EnCnt) > 0)
 	{
-		NRF_CRACEN->ENABLE |= Mask;
+		NRF_CRACEN->ENABLE |= mask;
 		__DMB();
-		ok = (NRF_CRACEN->ENABLE & Mask) == Mask;
-		if (ok && (Mask & CRACEN_ENABLE_PKEIKG_Msk) != 0U)
+		if ((mask & CRACEN_ENABLE_PKEIKG_Msk) != 0U)
 		{
-			ok = CracenLoadPkeMicrocode();
+			(void)CracenLoadPkeMicrocode();
 		}
 	}
 
 	s_bAddrLatched = false;
 	s_bRngXfer = false;
-	if ((Mask & CRACEN_ENABLE_RNG_Msk) != 0U)
+	if ((mask & CRACEN_ENABLE_RNG_Msk) != 0U)
 	{
 		s_bDrbgInit = false;
 	}
-	atomic_flag_clear(&pIntrf->bBusy);
-	return ok;
-}
-
-// Interface reset is the wrapper-level escape hatch. Engine drivers use the
-// strong platform hooks below so normal recovery does not disturb another
-// engine that is operating concurrently.
-static void CracenReset(DevIntrf_t * const pIntrf)
-{
-	(void)CracenResetModule(pIntrf, CRACEN_ENABLE_ALL_Msk);
 }
 static void CracenPowerOff(DevIntrf_t * const pIntrf)
 {
@@ -466,6 +469,7 @@ bool CracenIntrf::Init(void)
 	s_bAddrLatched = false;
 	s_bRngXfer = false;
 	s_bDrbgInit = false;
+	s_SelDevAddr = CRACEN_ADDR_NONE;
 
 	memset(&vDevIntrf, 0, sizeof(vDevIntrf));
 	vDevIntrf.pDevData = this;
@@ -507,26 +511,4 @@ CracenIntrf *CracenIntrfInstance(void)
 		s_bInit = s_Instance.Init();
 	}
 	return s_bInit ? &s_Instance : nullptr;
-}
-
-extern "C" bool Ba414epPlatformReset(DeviceIntrf *pIntrf)
-{
-	CracenIntrf *pCracen = CracenIntrfInstance();
-	if (pIntrf == nullptr || pCracen == nullptr || pIntrf != pCracen)
-	{
-		return false;
-	}
-	DevIntrf_t *pHandle = *pCracen;
-	return CracenResetModule(pHandle, CRACEN_ENABLE_PKEIKG_Msk);
-}
-
-extern "C" bool CryptoMasterPlatformReset(DeviceIntrf *pIntrf)
-{
-	CracenIntrf *pCracen = CracenIntrfInstance();
-	if (pIntrf == nullptr || pCracen == nullptr || pIntrf != pCracen)
-	{
-		return false;
-	}
-	DevIntrf_t *pHandle = *pCracen;
-	return CracenResetModule(pHandle, CRACEN_ENABLE_CRYPTOMASTER_Msk);
 }

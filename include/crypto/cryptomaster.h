@@ -109,6 +109,11 @@ public:
 	void Disable() override;
 	void Reset() override;
 
+	// Power-cycle this engine through the interface, rerun the local soft
+	// reset and re-verify presence. Public because the AES helper recovers
+	// the engine from outside the class.
+	bool Recover();
+
 	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 						 const CryptoKey &Key,
 						 const uint8_t *pIv, size_t IvLen,

@@ -66,18 +66,6 @@ SOFTWARE.
 // enter while the public-key engine can still be active with private operands.
 static bool s_bPkQuarantined = false;
 
-// A target with a selective PKE reset overrides this hook. The default uses the
-// complete interface reset, which is the only generic mechanism available.
-extern "C" __attribute__((weak)) bool Ba414epPlatformReset(DeviceIntrf *pIntrf)
-{
-	if (pIntrf == nullptr)
-	{
-		return false;
-	}
-	pIntrf->Reset();
-	return true;
-}
-
 // NIST P-256 domain parameters and generator, big endian.
 static const uint8_t s_P256Prime[32] = {
 	0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
@@ -221,9 +209,27 @@ void Ba414ep::PkCleanup()
 
 bool Ba414ep::Recover()
 {
+	DeviceIntrf *pIntrf = Interface();
+
 	vbReady = false;
-	if (!Ba414epPlatformReset(Interface()) || !WaitIkIdle() || !HandoverProbe() ||
-		!PkWaitNotBusy(this))
+	if (pIntrf == nullptr)
+	{
+		return false;
+	}
+
+	// Reset through the interface with the PKE selected. The StartTx/StopTx
+	// pair serializes the reset against other engines sharing the transport
+	// and latches the module an address-selective interface reset acts on.
+	// A transport that cannot even open a transfer is unusable; the engine
+	// stays down rather than resetting an unselected module.
+	if (!pIntrf->StartTx(BA414EP_ADDR_REG))
+	{
+		return false;
+	}
+	pIntrf->Reset();
+	pIntrf->StopTx();
+
+	if (!WaitIkIdle() || !HandoverProbe() || !PkWaitNotBusy(this))
 	{
 		return false;
 	}

@@ -62,7 +62,9 @@ SOFTWARE.
 /// One instance per die. The three crypto engines hold a pointer to it and go
 /// through StartTx/StopTx (or StartRx/StopRx) to acquire and release one
 /// transport transaction. Engine operation serialization remains in the
-/// individual engine object.
+/// individual engine object. Reset is address-selected: called inside a
+/// StartTx/StopTx pair it power-cycles only the module of the latched
+/// DevAddr, so one engine recovers without disturbing the others.
 class CracenIntrf : public DeviceIntrf {
 public:
 	bool Init(void);

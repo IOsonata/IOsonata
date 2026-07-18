@@ -49,16 +49,6 @@ SOFTWARE.
 
 static bool s_bCmQuarantined;
 
-extern "C" __attribute__((weak)) bool CryptoMasterPlatformReset(DeviceIntrf *pIntrf)
-{
-	if (pIntrf == nullptr)
-	{
-		return false;
-	}
-	pIntrf->Reset();
-	return true;
-}
-
 static void CmWipe(void *pData, size_t Len)
 {
 	volatile uint8_t *p = (volatile uint8_t *)pData;
@@ -121,12 +111,30 @@ static bool CmWait(Device *pDev)
 	return false;
 }
 
-static bool CmRecover(CryptoMaster *pDev)
+bool CryptoMaster::Recover()
 {
-	return pDev != nullptr &&
-		CryptoMasterPlatformReset(pDev->Interface()) &&
-		CmReset(pDev) &&
-		(CmRegRead(pDev, CRYPTOMASTER_HW_PRESENCE) &
+	DeviceIntrf *pIntrf = Interface();
+
+	if (pIntrf == nullptr)
+	{
+		return false;
+	}
+
+	// Reset through the interface with this engine selected. The
+	// StartTx/StopTx pair serializes the reset against other engines
+	// sharing the transport and latches the module an address-selective
+	// interface reset acts on. A transport that cannot even open a
+	// transfer is unusable; the engine stays down rather than resetting
+	// an unselected module.
+	if (!pIntrf->StartTx(CRYPTOMASTER_ADDR_REG))
+	{
+		return false;
+	}
+	pIntrf->Reset();
+	pIntrf->StopTx();
+
+	return CmReset(this) &&
+		(CmRegRead(this, CRYPTOMASTER_HW_PRESENCE) &
 		 CRYPTOMASTER_PRESENT_AES) != 0U;
 }
 
@@ -171,7 +179,7 @@ static bool CmAesBlock(CryptoMaster *pDev, const uint8_t Key[16],
 	bool ok = !s_bCmQuarantined && CmReset(pDev);
 	if (!ok && !s_bCmQuarantined)
 	{
-		ok = CmRecover(pDev);
+		ok = pDev->Recover();
 	}
 	if (ok)
 	{
@@ -188,7 +196,7 @@ static bool CmAesBlock(CryptoMaster *pDev, const uint8_t Key[16],
 	bool resetOk = CmReset(pDev);
 	if (!resetOk)
 	{
-		resetOk = CmRecover(pDev);
+		resetOk = pDev->Recover();
 		if (!resetOk)
 		{
 			s_bCmQuarantined = true;
@@ -258,7 +266,7 @@ bool CryptoMaster::Enable()
 				 CRYPTOMASTER_PRESENT_AES) != 0U && CmReset(this);
 	if (!ok)
 	{
-		ok = CmRecover(this);
+		ok = Recover();
 	}
 	OpRelease();
 	if (!ok)
@@ -301,7 +309,7 @@ void CryptoMaster::Reset()
 		return;
 	}
 	vbValid = false;
-	bool ok = CmRecover(this);
+	bool ok = Recover();
 	s_bCmQuarantined = !ok;
 	vbValid = ok;
 	OpRelease();
