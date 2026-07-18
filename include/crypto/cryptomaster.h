@@ -38,6 +38,7 @@ SOFTWARE.
 
 #include "device_intrf.h"
 #include "crypto/crypto_softaes.h"
+#include "crypto/silex_intrf.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -91,13 +92,11 @@ struct __CryptoMaster_Desc {
 #ifdef __cplusplus
 }
 
-class CracenIntrf;
-
 class CryptoMaster : public CryptoSoftAes {
 public:
-	CryptoMaster() { vbValid = false; vpCracen = nullptr; }
+	CryptoMaster() { vbValid = false; vpSilex = nullptr; }
 
-	bool Init(CracenIntrf * const pIntrf);
+	bool Init(SilexIntrf * const pIntrf);
 
 	bool Enable() override;
 	void Disable() override { if (Interface() != nullptr) { Interface()->Disable(); } }
@@ -118,7 +117,7 @@ protected:
 					 uint8_t Out[16]) override;
 
 private:
-	CracenIntrf *vpCracen;
+	SilexIntrf *vpSilex;
 };
 
 #endif // __cplusplus

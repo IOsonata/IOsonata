@@ -38,6 +38,7 @@ SOFTWARE.
 
 #include "device_intrf.h"
 #include "crypto/icrypto.h"
+#include "crypto/silex_intrf.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,6 +60,7 @@ extern "C" {
 
 #define BA414EP_CMD_ECC_PTMUL		0x22U
 #define BA414EP_CMD_CHECK_XY		0x25U
+#define BA414EP_CMD_ECC_PTONCURVE	0x26U
 #define BA414EP_CMD_OPSIZE(bytes)	(((uint32_t)((bytes) - 1U)) << 8)
 #define BA414EP_CMD_SELCUR_P256		0x00100000U
 #define BA414EP_CMD_RANDOM_SCALAR	(1U << 24)
@@ -86,10 +88,10 @@ extern "C" {
 
 #define BA414EP_CONFIG_PTMUL		BA414EP_CONFIG_PTRS(12U, 8U, 10U)
 
-// Generic (Silex reference) point-multiply: SELCUR stays zero (no built-in
-// curve accelerator, hence no microcode curve table). The full P-256 domain is
-// loaded into slots: p,n at 0,1; base point at 2,3; a,b at 4,5; scalar at 14;
-// result point at 6,7.
+// Generic (Silex reference) point-multiply: SELCUR stays zero, so the built-in
+// curve constants are not used and the full P-256 domain is loaded into slots:
+// p,n at 0,1; base point at 2,3; a,b at 4,5; scalar at 14; result point at 6,7.
+// The PKE microcode is still required; the interface loads it on acquisition.
 #define BA414EP_SLOT_P				0U
 #define BA414EP_SLOT_N				1U
 #define BA414EP_SLOT_GX				2U
@@ -104,19 +106,20 @@ extern "C" {
 	(BA414EP_CMD_ECC_PTMUL | BA414EP_CMD_OPSIZE(32U) | \
 	 BA414EP_CMD_RANDOM_SCALAR | BA414EP_CMD_RANDOM_PROJECTIVE | \
 	 BA414EP_CMD_BIG_ENDIAN)
-#define BA414EP_CMD_P256_PTMUL_GEN_NOCM \
-	(BA414EP_CMD_ECC_PTMUL | BA414EP_CMD_OPSIZE(32U) | BA414EP_CMD_BIG_ENDIAN)
+
+// On-curve check of the point in the operand A slots: x < p, y < p and the
+// curve equation. Run before the multiply on a peer supplied point, the same
+// order the Nordic sdk-nrf ECDH path uses (sx_ec_ptoncurve then sx_ecp_ptmult).
+#define BA414EP_CMD_P256_PTONCURVE \
+	(BA414EP_CMD_ECC_PTONCURVE | BA414EP_CMD_OPSIZE(32U) | \
+	 BA414EP_CMD_BIG_ENDIAN)
 
 #define BA414EP_CONFIG_PTMUL_GEN	BA414EP_CONFIG_PTRS(2U, 14U, 6U)
 
 #define BA414EP_CRYPTORAM_OFFSET	0x8000U
-#define BA414EP_ADDR_REG			0U
-#define BA414EP_ADDR_MEM			1U
 
 #ifdef __cplusplus
 }
-
-class CracenIntrf;
 
 class Ba414ep : public KeyAgreeEngine {
 public:
@@ -125,9 +128,9 @@ public:
 		bool bKeyValid;
 	};
 
-	Ba414ep() { vbValid = false; vpRng = nullptr; vpCracen = nullptr; }
+	Ba414ep() { vbValid = false; vpRng = nullptr; vpSilex = nullptr; }
 
-	bool Init(CracenIntrf * const pIntrf, RngEngine *pRng);
+	bool Init(SilexIntrf * const pIntrf, RngEngine *pRng);
 	void SetRng(RngEngine *pRng) { vpRng = pRng; }
 
 	bool Enable() override;
@@ -149,7 +152,7 @@ public:
 
 private:
 	RngEngine *vpRng;
-	CracenIntrf *vpCracen;
+	SilexIntrf *vpSilex;
 };
 
 static_assert(sizeof(Ba414ep::KeyCtx) <= CRYPTO_KEYCTX_MAX,

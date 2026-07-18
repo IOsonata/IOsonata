@@ -187,8 +187,8 @@ void P256RegularizeScalar(const uint8_t K[P256_BYTES], uint8_t R[P256_BYTES + 1U
 	uint8_t kPlus2N[P256_BYTES];
 	const uint8_t carry1 = P256AddBe(K, s_P256Order, kPlusN);
 	(void)P256AddBe(kPlusN, s_P256Order, kPlus2N);
-	// For k in [1, n) one of the two sums always carries into bit 256; carry1
-	// selects k+n, otherwise k+2n.
+	// For k in [1, n) one of the two sums always produces a carry out of bit
+	// 255; carry1 selects k+n, otherwise k+2n.
 	const uint8_t mask = (uint8_t)(0U - (uint32_t)carry1);
 	R[0] = 1U;
 	for (size_t idx = 0U; idx < P256_BYTES; idx++)

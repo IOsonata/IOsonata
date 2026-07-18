@@ -3,8 +3,8 @@
 
 @brief	Silex CryptoMaster hardware AES engine.
 
-		The CRACEN CryptoMaster module is held once for the complete one-shot
-		cipher call. This prevents another CRACEN user from interleaving between
+		The CryptoMaster module is held once for the complete one-shot
+		cipher call. This prevents another core user from interleaving between
 		blocks and avoids releasing and reacquiring the shared core for every block.
 
 @author	Hoang Nguyen Hoan
@@ -37,7 +37,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <string.h>
 
-#include "cracen_intrf.h"
+#include "crypto/silex_intrf.h"
 #include "crypto/cryptomaster.h"
 
 #ifndef __DMB
@@ -60,7 +60,7 @@ static uint32_t CmRegRead(Device *pDev, uint32_t Offset)
 {
 	uint8_t off[4] = { (uint8_t)Offset, (uint8_t)(Offset >> 8),
 					   (uint8_t)(Offset >> 16), (uint8_t)(Offset >> 24) };
-	pDev->DeviceAddress(CRACEN_ADDR_REG);
+	pDev->DeviceAddress(SILEX_ADDR_REG);
 	return pDev->Read32(off, 4);
 }
 
@@ -68,7 +68,7 @@ static void CmRegWrite(Device *pDev, uint32_t Offset, uint32_t Value)
 {
 	uint8_t off[4] = { (uint8_t)Offset, (uint8_t)(Offset >> 8),
 					   (uint8_t)(Offset >> 16), (uint8_t)(Offset >> 24) };
-	pDev->DeviceAddress(CRACEN_ADDR_REG);
+	pDev->DeviceAddress(SILEX_ADDR_REG);
 	pDev->Write32(off, 4, Value);
 }
 
@@ -109,7 +109,7 @@ static bool CmWait(Device *pDev)
 	return false;
 }
 
-// The caller owns the CRACEN module hold.
+// The caller owns the module hold.
 static bool CmAesBlock(Device *pDev, const uint8_t Key[16],
 						const uint8_t In[16], uint8_t Out[16])
 {
@@ -175,34 +175,34 @@ static bool CmAesBlock(Device *pDev, const uint8_t Key[16],
 	return ok;
 }
 
-bool CryptoMaster::Init(CracenIntrf * const pIntrf)
+bool CryptoMaster::Init(SilexIntrf * const pIntrf)
 {
 	if (pIntrf == nullptr)
 	{
 		return false;
 	}
-	vpCracen = pIntrf;
+	vpSilex = pIntrf;
 	Interface(pIntrf);
 	return Enable();
 }
 
 bool CryptoMaster::Enable()
 {
-	if (vpCracen == nullptr)
+	if (vpSilex == nullptr)
 	{
 		vbValid = false;
 		return false;
 	}
-	// Bring up the transport (powers the whole CRACEN core), then take the
+	// Bring up the transport (the interface owns core power), then take the
 	// operation lock only for the presence read.
 	Interface()->Enable();
-	if (!vpCracen->CoreAcquire(CRACEN_MODULE_CRYPTOMASTER, this))
+	if (!vpSilex->CoreAcquire(SILEX_MODULE_CRYPTOMASTER, this))
 	{
 		vbValid = false;
 		return false;
 	}
 	uint32_t present = CmRegRead(this, CRYPTOMASTER_HW_PRESENCE);
-	(void)vpCracen->CoreRelease(this);
+	(void)vpSilex->CoreRelease(this);
 	vbValid = (present & CRYPTOMASTER_PRESENT_AES) != 0U;
 	return vbValid;
 }
@@ -248,12 +248,12 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-	if (vpCracen == nullptr)
+	if (vpSilex == nullptr)
 	{
 		if (Len > 0U) memset(pOut, 0, Len);
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (!vpCracen->CoreAcquire(CRACEN_MODULE_CRYPTOMASTER, this))
+	if (!vpSilex->CoreAcquire(SILEX_MODULE_CRYPTOMASTER, this))
 	{
 		// Refused hold: fail closed and retryable.
 		if (Len > 0U) memset(pOut, 0, Len);
@@ -322,7 +322,7 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		CmWipe(chain, sizeof(chain));
 	}
 
-	(void)vpCracen->CoreRelease(this);
+	(void)vpSilex->CoreRelease(this);
 	if (status != CRYPTO_STATUS_OK && Len > 0U)
 	{
 		memset(pOut, 0, Len);
@@ -331,16 +331,16 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 }
 
 // Inherited CMAC bracket: one module hold for the whole MAC. AesOpEnd is only
-// called after a successful AesOpBegin, so vpCracen is set here.
+// called after a successful AesOpBegin, so vpSilex is set here.
 bool CryptoMaster::AesOpBegin()
 {
-	return vpCracen != nullptr &&
-		vpCracen->CoreAcquire(CRACEN_MODULE_CRYPTOMASTER, this);
+	return vpSilex != nullptr &&
+		vpSilex->CoreAcquire(SILEX_MODULE_CRYPTOMASTER, this);
 }
 
 void CryptoMaster::AesOpEnd()
 {
-	(void)vpCracen->CoreRelease(this);
+	(void)vpSilex->CoreRelease(this);
 }
 
 bool CryptoMaster::AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16],

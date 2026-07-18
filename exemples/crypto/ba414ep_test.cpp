@@ -71,8 +71,9 @@ int main(void)
 		hardware != nullptr && software != nullptr);
 
 	if (hardware == nullptr || software == nullptr) return 1;
-	check("hardware self-test (LESC debug key KAT)",
-		hardware->SelfTest() == 0);
+	int kat = hardware->SelfTest();
+	printf("  self-test rc=%d (0 ok, -2 mul fail, -6 busy, -3 X, -4 Y, -5 Y=p-Y)\n", kat);
+	check("hardware self-test (LESC debug key KAT)", kat == 0);
 
 	// Deterministic diagnostic: priv*G via Agree(debug key, generator). Prints
 	// the raw hardware and software results on RTT so the actual computed point

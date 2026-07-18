@@ -22,15 +22,36 @@
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
 
-@license MIT, (c) 2026 I-SYST.
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST, all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ----------------------------------------------------------------------------*/
-#include <errno.h>
 #include <stdint.h>
+#include <stddef.h>
+#include <errno.h>
 #include <string.h>
 
 #include "nrf.h"
-
-#include <stddef.h>
 
 #include "cracen_intrf.h"
 #include "cracen_ba414e_ucode.h"
@@ -302,10 +323,45 @@ static uint32_t CracenModuleMask(uint32_t Module)
 	}
 }
 
+// The nRF54L15 pairs the BA414EP with the identity key generator in one
+// PKEIKG module. After the first power-on following a reset the IKG runs a
+// startup sequence on the shared public-key engine and its operand memory; a
+// command issued before it finishes executes against clobbered operands
+// (observed as an instant INVALID_MODULUS on the first operation, with the
+// IK activity bit raised in the status word). Wait for both the PKE and the
+// IK busy flags the way the sdk-nrf acquire does before handing the module
+// to an engine. Once the startup has completed the wait costs two reads.
+#define CRACEN_PK_REG_STATUS			0x0CU
+#define CRACEN_PK_STATUS_BUSY			(1UL << 16)
+#define CRACEN_IK_REG_PK_STATUS			0x1024U
+#define CRACEN_IK_PK_BUSY_MSK			0x00050000UL
+
+#ifndef CRACEN_PKEIKG_READY_POLL_LIMIT
+#define CRACEN_PKEIKG_READY_POLL_LIMIT	4000000U
+#endif
+
+static bool CracenPkeIkgWaitReady(void)
+{
+	const volatile uint32_t *pkstat =
+		(const volatile uint32_t *)(s_pPkeRegBase + CRACEN_PK_REG_STATUS);
+	const volatile uint32_t *ikstat =
+		(const volatile uint32_t *)(s_pPkeRegBase + CRACEN_IK_REG_PK_STATUS);
+
+	for (uint32_t i = 0; i < CRACEN_PKEIKG_READY_POLL_LIMIT; i++)
+	{
+		if ((*pkstat & CRACEN_PK_STATUS_BUSY) == 0U &&
+			(*ikstat & CRACEN_IK_PK_BUSY_MSK) == 0U)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 // PKE code RAM lives at NRF_CRACENCORE + 0xC000. The Silex BA414EP on this die
 // is the microcoded configuration: the engine cannot sequence any operation
-// until its code RAM is filled. Idempotent and verified; reloads if the RAM was
-// cleared by a power cycle of the module.
+// until its code RAM is filled. Init owns the load; the fast path here is the
+// two-word verify passing. The full copy reruns only if the RAM was cleared.
 #define BA414EP_CODE_OFFSET 0xC000U
 static bool CracenLoadPkeMicrocode(void)
 {
@@ -351,7 +407,8 @@ bool CracenIntrf::CoreAcquire(uint32_t Module, const void *pOwner)
 	NRF_CRACEN->ENABLE |= mask;
 	__DMB();
 
-	if (Module == CRACEN_MODULE_PKEIKG && !CracenLoadPkeMicrocode())
+	if (Module == CRACEN_MODULE_PKEIKG &&
+		(!CracenPkeIkgWaitReady() || !CracenLoadPkeMicrocode()))
 	{
 		NRF_CRACEN->ENABLE &= ~mask;
 		s_HeldMask = 0U;
@@ -456,6 +513,27 @@ bool CracenIntrf::Init(void)
 	s_pCmRegBase = (volatile uint8_t *)NRF_CRACENCORE;
 	s_pMemBase = (volatile uint8_t *)((uintptr_t)NRF_CRACENCORE +
 									 BA414EP_CRYPTORAM_OFFSET);
+
+	// Load the BA414EP microcode once here, the way the Nordic power-up init
+	// does (cracen_init in sdk-nrf hardware.c): power the PKE module, fill
+	// the code RAM, restore the module power state. The code RAM retains its
+	// content across the ENABLE cycles that CoreAcquire and CoreRelease
+	// perform; a chip reset clears it and also re-runs Init. CoreAcquire
+	// keeps a cheap two-word verify with reload as a guard.
+	const uint32_t prev = NRF_CRACEN->ENABLE & CRACEN_ENABLE_PKEIKG_Msk;
+	NRF_CRACEN->ENABLE |= CRACEN_ENABLE_PKEIKG_Msk;
+	__DMB();
+	const bool bUcodeOk = CracenLoadPkeMicrocode();
+	if (prev == 0U)
+	{
+		NRF_CRACEN->ENABLE &= ~CRACEN_ENABLE_PKEIKG_Msk;
+		__DMB();
+	}
+	if (!bUcodeOk)
+	{
+		return false;
+	}
+
 	s_pRegBase = s_pPkeRegBase;
 	s_pXferBase = s_pPkeRegBase;
 	s_bXferMem = false;

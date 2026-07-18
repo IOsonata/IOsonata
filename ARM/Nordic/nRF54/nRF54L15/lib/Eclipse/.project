@@ -761,9 +761,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/ba414ep.h</locationURI>
 		</link>
 		<link>
+			<name>include/crypto/cracen_ba414e_ucode.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/cracen_ba414e_ucode.h</locationURI>
+		</link>
+		<link>
 			<name>include/crypto/cracen_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/cracen_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/silex_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/silex_intrf.h</locationURI>
 		</link>
 		<link>
 			<name>include/crypto/crypto_softaes.h</name>

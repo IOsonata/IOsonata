@@ -19,7 +19,29 @@
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
 
-@license MIT, (c) 2026 I-SYST.
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST, all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ----------------------------------------------------------------------------*/
 #ifndef __CRACEN_INTRF_H__
 #define __CRACEN_INTRF_H__
@@ -27,22 +49,22 @@
 #include <stdint.h>
 
 #include "device_intrf.h"
+#include "crypto/silex_intrf.h"
 
-/// Module address passed as the transaction DevAddr. Selects which CRACEN
-/// module is enabled for the duration of the acquired transaction.
-typedef enum __Cracen_Module {
-	CRACEN_MODULE_CRYPTOMASTER = 0,	//!< Symmetric engine (AES, digest)
-	CRACEN_MODULE_PKEIKG,			//!< Public-key engine and key generator
-	CRACEN_MODULE_RNG				//!< Random generator
-} CRACEN_MODULE;
+/// The CRACEN module ids are the generic Silex module ids: CRACEN is the
+/// Nordic wrapper around the same engines. PKEIKG names the Nordic pairing of
+/// the public-key engine with the identity key generator; the engines only
+/// ever use the public-key half.
+#define CRACEN_MODULE_CRYPTOMASTER	SILEX_MODULE_CRYPTOMASTER
+#define CRACEN_MODULE_PKEIKG		SILEX_MODULE_PKE
+#define CRACEN_MODULE_RNG			SILEX_MODULE_RNG
 
-/// DevAddr base selector, used the way SPI uses a chip-select index. Picks which
-/// sub-block a Read / Write transfer lands in; the transfer address (pAdCmd) is
-/// the byte offset within it. CRACEN_ADDR_RNG selects the random generator: an
-/// Rx transfer on it fills the buffer with entropy (no address phase).
-#define CRACEN_ADDR_REG		0U		//!< Held module register base
-#define CRACEN_ADDR_MEM		1U		//!< Operand memory base
-#define CRACEN_ADDR_RNG		2U		//!< Random generator entropy read
+/// DevAddr base selectors are the generic Silex ones. CRACEN_ADDR_RNG is a
+/// Nordic addition: an Rx transfer on it fills the buffer with entropy (no
+/// address phase).
+#define CRACEN_ADDR_REG		SILEX_ADDR_REG	//!< Held module register base
+#define CRACEN_ADDR_MEM		SILEX_ADDR_MEM	//!< Operand memory base
+#define CRACEN_ADDR_RNG		2U				//!< Random generator entropy read
 
 #ifdef __cplusplus
 
@@ -50,7 +72,7 @@ typedef enum __Cracen_Module {
 ///
 /// One instance per die. The three crypto engines hold a pointer to it and go
 /// through StartTx/StopTx (or StartRx/StopRx) to acquire and release the core.
-class CracenIntrf : public DeviceIntrf {
+class CracenIntrf : public SilexIntrf {
 public:
 	bool Init(void);
 
@@ -86,9 +108,9 @@ public:
 	// per transfer; see devintrf-implementer-notes). Acquire once before the
 	// operation, release once after. This does NOT power the module; the
 	// transport Enable/Disable own NRF_CRACEN->ENABLE.
-	bool CoreAcquire(uint32_t Module, const void *pOwner);
-	bool CoreRelease(const void *pOwner);
-	bool CoreReset(const void *pOwner);
+	bool CoreAcquire(uint32_t Module, const void *pOwner) override;
+	bool CoreRelease(const void *pOwner) override;
+	bool CoreReset(const void *pOwner) override;
 
 protected:
 	DevIntrf_t vDevIntrf;
