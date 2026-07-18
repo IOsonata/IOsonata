@@ -153,12 +153,11 @@ int main(void)
 		cipher->Cipher(CRYPTO_CIPHER_ECB, 1, denied, nullptr, 0,
 					   katIn, 16, result) == CRYPTO_STATUS_UNSUPPORTED);
 
-	// CRACEN contention. While another operation owns the core the cipher
-	// must fail cleanly, leave the foreign hold in place, and recover after
-	// release.
-	CracenIntrf *cracen = CracenIntrfInstance();
-	bool held = cracen->CoreAcquire(CRACEN_MODULE_RNG, cracen);
-	check("cipher busy while CRACEN is held",
+	// Engine contention. The operation lock is owned by the engine device:
+	// while it is held the cipher must fail cleanly, leave the lock in
+	// place, and recover after release.
+	bool held = hardware->OpAcquire();
+	check("cipher busy while the engine is held",
 		held && cipher->Cipher(CRYPTO_CIPHER_ECB, 1, kat, nullptr, 0,
 							   katIn, 16, result) == CRYPTO_STATUS_BUSY);
 	uint8_t heldTag[16];
@@ -170,13 +169,13 @@ int main(void)
 	{
 		heldTagZero = heldTagZero && heldTag[i] == 0U;
 	}
-	check("CMAC busy while CRACEN is held, tag zeroed",
+	check("CMAC busy while the engine is held, tag zeroed",
 		held && heldMac == CRYPTO_STATUS_BUSY && heldTagZero);
-	check("foreign hold survives the rejected cipher",
-		held && !cracen->CoreAcquire(CRACEN_MODULE_CRYPTOMASTER, cracen));
+	check("the lock survives the rejected cipher",
+		held && !hardware->OpAcquire());
 	if (held)
 	{
-		(void)cracen->CoreRelease(cracen);
+		hardware->OpRelease();
 	}
 	check("cipher recovers after release",
 		cipher->Cipher(CRYPTO_CIPHER_ECB, 1, kat, nullptr, 0,

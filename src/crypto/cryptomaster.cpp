@@ -37,7 +37,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <string.h>
 
-#include "crypto/silex_intrf.h"
+#include "idelay.h"
 #include "crypto/cryptomaster.h"
 
 #ifndef __DMB
@@ -60,7 +60,7 @@ static uint32_t CmRegRead(Device *pDev, uint32_t Offset)
 {
 	uint8_t off[4] = { (uint8_t)Offset, (uint8_t)(Offset >> 8),
 					   (uint8_t)(Offset >> 16), (uint8_t)(Offset >> 24) };
-	pDev->DeviceAddress(SILEX_ADDR_REG);
+	pDev->DeviceAddress(CRYPTOMASTER_ADDR_REG);
 	return pDev->Read32(off, 4);
 }
 
@@ -68,14 +68,14 @@ static void CmRegWrite(Device *pDev, uint32_t Offset, uint32_t Value)
 {
 	uint8_t off[4] = { (uint8_t)Offset, (uint8_t)(Offset >> 8),
 					   (uint8_t)(Offset >> 16), (uint8_t)(Offset >> 24) };
-	pDev->DeviceAddress(SILEX_ADDR_REG);
+	pDev->DeviceAddress(CRYPTOMASTER_ADDR_REG);
 	pDev->Write32(off, 4, Value);
 }
 
 static bool CmReset(Device *pDev)
 {
 	CmRegWrite(pDev, CRYPTOMASTER_CONFIG, CRYPTOMASTER_SOFTRESET_ENABLE);
-	for (volatile uint32_t delay = 0; delay < 64U; delay++) { }
+	usDelay(2);
 	CmRegWrite(pDev, CRYPTOMASTER_CONFIG, 0U);
 
 	for (uint32_t i = 0; i < CM_POLL_LIMIT; i++)
@@ -175,20 +175,19 @@ static bool CmAesBlock(Device *pDev, const uint8_t Key[16],
 	return ok;
 }
 
-bool CryptoMaster::Init(SilexIntrf * const pIntrf)
+bool CryptoMaster::Init(DeviceIntrf * const pIntrf)
 {
 	if (pIntrf == nullptr)
 	{
 		return false;
 	}
-	vpSilex = pIntrf;
 	Interface(pIntrf);
 	return Enable();
 }
 
 bool CryptoMaster::Enable()
 {
-	if (vpSilex == nullptr)
+	if (Interface() == nullptr)
 	{
 		vbValid = false;
 		return false;
@@ -196,13 +195,13 @@ bool CryptoMaster::Enable()
 	// Bring up the transport (the interface owns core power), then take the
 	// operation lock only for the presence read.
 	Interface()->Enable();
-	if (!vpSilex->CoreAcquire(SILEX_MODULE_CRYPTOMASTER, this))
+	if (!OpAcquire())
 	{
 		vbValid = false;
 		return false;
 	}
 	uint32_t present = CmRegRead(this, CRYPTOMASTER_HW_PRESENCE);
-	(void)vpSilex->CoreRelease(this);
+	OpRelease();
 	vbValid = (present & CRYPTOMASTER_PRESENT_AES) != 0U;
 	return vbValid;
 }
@@ -248,12 +247,12 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-	if (vpSilex == nullptr)
+	if (Interface() == nullptr)
 	{
 		if (Len > 0U) memset(pOut, 0, Len);
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (!vpSilex->CoreAcquire(SILEX_MODULE_CRYPTOMASTER, this))
+	if (!OpAcquire())
 	{
 		// Refused hold: fail closed and retryable.
 		if (Len > 0U) memset(pOut, 0, Len);
@@ -322,7 +321,7 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		CmWipe(chain, sizeof(chain));
 	}
 
-	(void)vpSilex->CoreRelease(this);
+	OpRelease();
 	if (status != CRYPTO_STATUS_OK && Len > 0U)
 	{
 		memset(pOut, 0, Len);
@@ -331,16 +330,15 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 }
 
 // Inherited CMAC bracket: one module hold for the whole MAC. AesOpEnd is only
-// called after a successful AesOpBegin, so vpSilex is set here.
+// called after a successful AesOpBegin, so the interface is set here.
 bool CryptoMaster::AesOpBegin()
 {
-	return vpSilex != nullptr &&
-		vpSilex->CoreAcquire(SILEX_MODULE_CRYPTOMASTER, this);
+	return Interface() != nullptr && OpAcquire();
 }
 
 void CryptoMaster::AesOpEnd()
 {
-	(void)vpSilex->CoreRelease(this);
+	OpRelease();
 }
 
 bool CryptoMaster::AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16],

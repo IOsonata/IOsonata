@@ -10,11 +10,11 @@
 		state. It is therefore modeled as a DeviceIntrf, the same way an SPI or
 		I2C controller is the interface a sensor sits on.
 
-		An engine acquires the core by starting a transaction addressed to its
-		module and releases it by stopping. The base DeviceIntrf supplies the
-		busy flag (mutual exclusion between the engines) and the enable reference
-		count (the core is not powered down under an engine still using it), so
-		no separate lock is needed.
+		Every transfer is self-addressing through the DevAddr module selector,
+		so the interface keeps no cross-operation state. The base DeviceIntrf
+		supplies the per-transfer busy flag and the enable reference count
+		(the core is not powered down under an engine still using it); the
+		per-operation lock belongs to each engine device.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -49,22 +49,11 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "device_intrf.h"
-#include "crypto/silex_intrf.h"
 
-/// The CRACEN module ids are the generic Silex module ids: CRACEN is the
-/// Nordic wrapper around the same engines. PKEIKG names the Nordic pairing of
-/// the public-key engine with the identity key generator; the engines only
-/// ever use the public-key half.
-#define CRACEN_MODULE_CRYPTOMASTER	SILEX_MODULE_CRYPTOMASTER
-#define CRACEN_MODULE_PKEIKG		SILEX_MODULE_PKE
-#define CRACEN_MODULE_RNG			SILEX_MODULE_RNG
-
-/// DevAddr base selectors are the generic Silex ones. CRACEN_ADDR_RNG is a
-/// Nordic addition: an Rx transfer on it fills the buffer with entropy (no
-/// address phase).
-#define CRACEN_ADDR_REG		SILEX_ADDR_REG	//!< Held module register base
-#define CRACEN_ADDR_MEM		SILEX_ADDR_MEM	//!< Operand memory base
-#define CRACEN_ADDR_RNG		2U				//!< Random generator entropy read
+/// DevAddr base selectors are the engines' own (BA414EP 0 and 1,
+/// CryptoMaster 2). CRACEN_ADDR_RNG is a Nordic addition: an Rx transfer on
+/// it fills the buffer with entropy (no address phase).
+#define CRACEN_ADDR_RNG		3U				//!< Random generator entropy read
 
 #ifdef __cplusplus
 
@@ -72,45 +61,22 @@ SOFTWARE.
 ///
 /// One instance per die. The three crypto engines hold a pointer to it and go
 /// through StartTx/StopTx (or StartRx/StopRx) to acquire and release the core.
-class CracenIntrf : public SilexIntrf {
+class CracenIntrf : public DeviceIntrf {
 public:
 	bool Init(void);
 
-	operator DevIntrf_t * const () { return &vDevIntrf; }
+	operator DevIntrf_t * const () override { return &vDevIntrf; }
 
 	uint32_t Rate(uint32_t RateHz) override { (void)RateHz; return 0; }
 	uint32_t Rate(void) override { return 0; }
 
-	// Transfer follows the SPI and I2C pattern: the inherited Device Read /
-	// Write drive StartTx / TxSrData / TxData / StartRx / RxData / StopTx below.
-	// StartTx and StartRx save the DevAddr (which sub-block base the access lands
-	// in, the way SPI saves the chip-select); the address phase latches the byte
-	// offset; TxData and RxData transfer at the saved base plus the offset.
-	// Registers are word accessed and operand memory byte accessed. The engine
-	// reaches all of this through the inherited Device Read / Write, exactly as a
+	// The transfer methods are the DeviceIntrf defaults. StartTx and StartRx
+	// save the DevAddr (which sub-block base the access lands in, the way SPI
+	// saves the chip-select); the address phase latches the byte offset;
+	// TxData and RxData transfer at the saved base plus the offset. Registers
+	// are word accessed and operand memory byte accessed. The engine reaches
+	// all of this through the inherited Device Read / Write, exactly as a
 	// sensor reaches its bus.
-	bool StartRx(uint32_t DevAddr) override {
-		return DeviceIntrfStartRx(&vDevIntrf, DevAddr);
-	}
-	int RxData(uint8_t *pBuff, int BuffLen) override {
-		return vDevIntrf.RxData(&vDevIntrf, pBuff, BuffLen);
-	}
-	void StopRx(void) override { DeviceIntrfStopRx(&vDevIntrf); }
-	bool StartTx(uint32_t DevAddr) override {
-		return DeviceIntrfStartTx(&vDevIntrf, DevAddr);
-	}
-	int TxData(const uint8_t *pData, int DataLen) override {
-		return vDevIntrf.TxData(&vDevIntrf, pData, DataLen);
-	}
-	void StopTx(void) override { DeviceIntrfStopTx(&vDevIntrf); }
-
-	// Operation-level lock for a multi-transfer engine computation (bBusy is
-	// per transfer; see devintrf-implementer-notes). Acquire once before the
-	// operation, release once after. This does NOT power the module; the
-	// transport Enable/Disable own NRF_CRACEN->ENABLE.
-	bool CoreAcquire(uint32_t Module, const void *pOwner) override;
-	bool CoreRelease(const void *pOwner) override;
-	bool CoreReset(const void *pOwner) override;
 
 protected:
 	DevIntrf_t vDevIntrf;

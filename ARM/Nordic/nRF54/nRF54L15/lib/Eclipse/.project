@@ -771,11 +771,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/include/cracen_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>include/crypto/silex_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/silex_intrf.h</locationURI>
-		</link>
-		<link>
 			<name>include/crypto/crypto_softaes.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>

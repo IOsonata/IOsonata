@@ -72,7 +72,7 @@ int main(void)
 
 	if (hardware == nullptr || software == nullptr) return 1;
 	int kat = hardware->SelfTest();
-	printf("  self-test rc=%d (0 ok, -2 mul fail, -6 busy, -3 X, -4 Y, -5 Y=p-Y)\n", kat);
+	printf("  self-test rc=%d (0 ok, -2 mul fail, -6 busy, -3 X, -4 Y)\n", kat);
 	check("hardware self-test (LESC debug key KAT)", kat == 0);
 
 	// Deterministic diagnostic: priv*G via Agree(debug key, generator). Prints
@@ -160,34 +160,31 @@ int main(void)
 		hardware->Agree(CRYPTO_CURVE_P256, singleCtx, pubA, ignored) ==
 			CRYPTO_STATUS_FAIL);
 
-	// CRACEN contention. Take the operation hold the way another engine
-	// would, then confirm every crypto path fails cleanly, the foreign hold
-	// is neither stolen nor released, and normal operation resumes after
-	// release. The engines draw their entropy before taking the public-key
-	// hold, so under a whole-core hold the failure surfaces at the entropy
-	// draw; the observable fail-closed outcome is the same.
-	CracenIntrf *cracen = CracenIntrfInstance();
+	// Engine contention. The operation lock is owned by the engine device:
+	// while it is held, public-key operations fail cleanly, the lock is not
+	// stolen or released by the rejected calls, and other modules keep
+	// working (the entropy path is independent of the public-key lock).
 	alignas(Ba414ep::KeyCtx) uint8_t contCtx[64];
 	hardware->KeyReset(contCtx);
 	memcpy(((Ba414ep::KeyCtx *)contCtx)->PrivKey, privA, sizeof(privA));
 	((Ba414ep::KeyCtx *)contCtx)->bKeyValid = true;
-	bool held = cracen->CoreAcquire(CRACEN_MODULE_RNG, cracen);
-	check("interface accepts one owner and rejects a second",
-		held && !cracen->CoreAcquire(CRACEN_MODULE_PKEIKG, cracen));
+	bool held = hardware->OpAcquire();
+	check("engine accepts one owner and rejects a second",
+		held && !hardware->OpAcquire());
 	uint8_t entropy[16];
-	check("entropy draw fails while CRACEN is held",
-		held && rng->Random(entropy, sizeof(entropy)) != CRYPTO_STATUS_OK);
-	check("Agree fails while CRACEN is held",
+	check("entropy draw works while the engine is held",
+		held && rng->Random(entropy, sizeof(entropy)) == CRYPTO_STATUS_OK);
+	check("Agree fails while the engine is held",
 		held && hardware->Agree(CRYPTO_CURVE_P256, contCtx, pubA, ignored) !=
 			CRYPTO_STATUS_OK);
-	check("KeyGen fails while CRACEN is held",
-		held && hardware->KeyGen(CRYPTO_CURVE_P256, contCtx, generatedPub) ==
-			CRYPTO_STATUS_FAIL);
-	check("foreign hold survives the rejected operations",
-		held && !cracen->CoreAcquire(CRACEN_MODULE_RNG, cracen));
+	check("KeyGen fails while the engine is held",
+		held && hardware->KeyGen(CRYPTO_CURVE_P256, contCtx, generatedPub) !=
+			CRYPTO_STATUS_OK);
+	check("the lock survives the rejected operations",
+		held && !hardware->OpAcquire());
 	if (held)
 	{
-		(void)cracen->CoreRelease(cracen);
+		hardware->OpRelease();
 	}
 	check("KeyGen recovers after release",
 		hardware->KeyGen(CRYPTO_CURVE_P256, contCtx, generatedPub) ==

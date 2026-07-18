@@ -38,7 +38,6 @@ SOFTWARE.
 
 #include "device_intrf.h"
 #include "crypto/icrypto.h"
-#include "crypto/silex_intrf.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,10 +53,17 @@ extern "C" {
 #define BA414EP_CONTROL_CLEAR_IRQ	0x00000002U
 
 #define BA414EP_STATUS_BUSY			(1U << 16)	//!< Operation in progress
+#define BA414EP_STATUS_IK_ACTIVE	(1U << 17)	//!< IK side of the module active
+
+// Identity key bank of the Silex ba414e_with_ik configuration. Offsets are
+// from the same register base as the public-key registers.
+#define BA414EP_IK_REG_PK_STATUS	0x1024U
+#define BA414EP_IK_PK_BUSY_MASK		0x00050000U
 #define BA414EP_STATUS_POINT_ERROR		(1U << 4)
 #define BA414EP_STATUS_NOT_INVERTIBLE	(1U << 11)
 #define BA414EP_STATUS_ERROR_MASK	0x0000FFF0U
 
+#define BA414EP_CMD_MOD_ADD			0x01U
 #define BA414EP_CMD_ECC_PTMUL		0x22U
 #define BA414EP_CMD_CHECK_XY		0x25U
 #define BA414EP_CMD_ECC_PTONCURVE	0x26U
@@ -66,6 +72,7 @@ extern "C" {
 #define BA414EP_CMD_RANDOM_SCALAR	(1U << 24)
 #define BA414EP_CMD_RANDOM_PROJECTIVE	(1U << 25)
 #define BA414EP_CMD_BIG_ENDIAN		(1U << 28)
+#define BA414EP_CMD_RESQUARE		(1U << 31)	//!< Recompute r square constant
 
 #define BA414EP_CMD_P256_PTMUL \
 	(BA414EP_CMD_ECC_PTMUL | BA414EP_CMD_OPSIZE(32U) | \
@@ -118,6 +125,12 @@ extern "C" {
 
 #define BA414EP_CRYPTORAM_OFFSET	0x8000U
 
+// DevAddr sub-block selectors of this engine, used the way SPI uses a chip
+// select. On an interface shared with other Silex engines the values must
+// not collide: CryptoMaster uses 2, vendor additions start at 3.
+#define BA414EP_ADDR_REG			0U	//!< Register base
+#define BA414EP_ADDR_MEM			1U	//!< Operand memory base
+
 #ifdef __cplusplus
 }
 
@@ -128,14 +141,27 @@ public:
 		bool bKeyValid;
 	};
 
-	Ba414ep() { vbValid = false; vpRng = nullptr; vpSilex = nullptr; }
+	Ba414ep();
 
-	bool Init(SilexIntrf * const pIntrf, RngEngine *pRng);
+	bool Init(DeviceIntrf * const pIntrf, RngEngine *pRng);
 	void SetRng(RngEngine *pRng) { vpRng = pRng; }
 
+	// First Enable brings the engine to a proven-ready state: wait out the
+	// IK side of the module, then run a self-checking modular add that also
+	// absorbs the post-reset IK to PK handover of the ba414e_with_ik
+	// configuration.
 	bool Enable() override;
 	void Disable() override { if (Interface() != nullptr) { Interface()->Disable(); } }
-	void Reset() override {}
+
+	// Hard reset through the interface Reset, then operand memory wipe.
+	// The engine has no self-reset register; the transport reset is the
+	// mechanism.
+	void Reset() override;
+
+	// Operation lock for the multi-transfer computation. bBusy in the
+	// interface is per transfer; this is per operation, owned by the device.
+	bool OpAcquire();
+	void OpRelease();
 
 	size_t KeyCtxSize() const override { return sizeof(KeyCtx); }
 	size_t KeyCtxAlign() const override { return alignof(KeyCtx); }
@@ -151,8 +177,18 @@ public:
 						bool bKeepKey = false) override;
 
 private:
+	bool WaitIkIdle();
+	bool HandoverProbe();
+	CRYPTO_STATUS PkPrepare();
+	void PkCleanup();
+	bool PkAbortAndReset();
+	CRYPTO_STATUS PkPointMultiply(const uint8_t Point[64],
+								  const uint8_t Scalar[32], uint8_t Result[64],
+								  bool bValidatePoint);
+
 	RngEngine *vpRng;
-	SilexIntrf *vpSilex;
+	atomic_flag vOpBusy;
+	bool vbReady;
 };
 
 static_assert(sizeof(Ba414ep::KeyCtx) <= CRYPTO_KEYCTX_MAX,

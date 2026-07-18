@@ -38,7 +38,6 @@ SOFTWARE.
 
 #include "device_intrf.h"
 #include "crypto/crypto_softaes.h"
-#include "crypto/silex_intrf.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -86,6 +85,10 @@ struct __CryptoMaster_Desc {
 #define CRYPTOMASTER_TAG_CONFIG(RegOff)	((1U << 4) | ((uint32_t)(RegOff) << 8))
 #define CRYPTOMASTER_TAG_LAST			(1U << 5)
 #define CRYPTOMASTER_BA411_CFG_OFFSET	0x00U
+// DevAddr sub-block selector of this engine. On an interface shared with
+// the BA414EP (which uses 0 and 1) the values must not collide.
+#define CRYPTOMASTER_ADDR_REG			2U
+
 #define CRYPTOMASTER_BA411_KEY_OFFSET	0x08U
 #define CRYPTOMASTER_BA411_MODE_ECB		(1U << 8)
 
@@ -94,9 +97,14 @@ struct __CryptoMaster_Desc {
 
 class CryptoMaster : public CryptoSoftAes {
 public:
-	CryptoMaster() { vbValid = false; vpSilex = nullptr; }
+	CryptoMaster() { vbValid = false; atomic_flag_clear(&vOpBusy); }
 
-	bool Init(SilexIntrf * const pIntrf);
+	bool Init(DeviceIntrf * const pIntrf);
+
+	// Operation lock for a multi-transfer computation. bBusy in the
+	// interface is per transfer; this is per operation, owned by the device.
+	bool OpAcquire() { return atomic_flag_test_and_set(&vOpBusy) == false; }
+	void OpRelease() { atomic_flag_clear(&vOpBusy); }
 
 	bool Enable() override;
 	void Disable() override { if (Interface() != nullptr) { Interface()->Disable(); } }
@@ -117,7 +125,7 @@ protected:
 					 uint8_t Out[16]) override;
 
 private:
-	SilexIntrf *vpSilex;
+	atomic_flag vOpBusy;
 };
 
 #endif // __cplusplus
