@@ -86,6 +86,29 @@ extern "C" {
 
 #define BA414EP_CONFIG_PTMUL		BA414EP_CONFIG_PTRS(12U, 8U, 10U)
 
+// Generic (Silex reference) point-multiply: SELCUR stays zero (no built-in
+// curve accelerator, hence no microcode curve table). The full P-256 domain is
+// loaded into slots: p,n at 0,1; base point at 2,3; a,b at 4,5; scalar at 14;
+// result point at 6,7.
+#define BA414EP_SLOT_P				0U
+#define BA414EP_SLOT_N				1U
+#define BA414EP_SLOT_GX				2U
+#define BA414EP_SLOT_GY				3U
+#define BA414EP_SLOT_A				4U
+#define BA414EP_SLOT_B				5U
+#define BA414EP_SLOT_RESULT_GX		6U
+#define BA414EP_SLOT_RESULT_GY		7U
+#define BA414EP_SLOT_SCALAR_GEN		14U
+
+#define BA414EP_CMD_P256_PTMUL_GEN \
+	(BA414EP_CMD_ECC_PTMUL | BA414EP_CMD_OPSIZE(32U) | \
+	 BA414EP_CMD_RANDOM_SCALAR | BA414EP_CMD_RANDOM_PROJECTIVE | \
+	 BA414EP_CMD_BIG_ENDIAN)
+#define BA414EP_CMD_P256_PTMUL_GEN_NOCM \
+	(BA414EP_CMD_ECC_PTMUL | BA414EP_CMD_OPSIZE(32U) | BA414EP_CMD_BIG_ENDIAN)
+
+#define BA414EP_CONFIG_PTMUL_GEN	BA414EP_CONFIG_PTRS(2U, 14U, 6U)
+
 #define BA414EP_CRYPTORAM_OFFSET	0x8000U
 #define BA414EP_ADDR_REG			0U
 #define BA414EP_ADDR_MEM			1U

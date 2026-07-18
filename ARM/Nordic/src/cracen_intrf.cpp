@@ -30,7 +30,10 @@
 
 #include "nrf.h"
 
+#include <stddef.h>
+
 #include "cracen_intrf.h"
+#include "cracen_ba414e_ucode.h"
 
 #include "nrfx_cracen.h"
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
@@ -299,6 +302,37 @@ static uint32_t CracenModuleMask(uint32_t Module)
 	}
 }
 
+// PKE code RAM lives at NRF_CRACENCORE + 0xC000. The Silex BA414EP on this die
+// is the microcoded configuration: the engine cannot sequence any operation
+// until its code RAM is filled. Idempotent and verified; reloads if the RAM was
+// cleared by a power cycle of the module.
+#define BA414EP_CODE_OFFSET 0xC000U
+static bool CracenLoadPkeMicrocode(void)
+{
+	volatile uint32_t *pCode = (volatile uint32_t *)
+		((uintptr_t)NRF_CRACENCORE + BA414EP_CODE_OFFSET);
+	const size_t words = CRACEN_BA414E_UCODE_WORDS;
+
+	if (pCode[0] == s_CracenBa414eUcode[0] &&
+		pCode[words - 1U] == s_CracenBa414eUcode[words - 1U])
+	{
+		return true;
+	}
+	for (size_t i = 0; i < words; i++)
+	{
+		pCode[i] = s_CracenBa414eUcode[i];
+	}
+	__DSB();
+	for (size_t i = 0; i < words; i++)
+	{
+		if (pCode[i] != s_CracenBa414eUcode[i])
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
 bool CracenIntrf::CoreAcquire(uint32_t Module, const void *pOwner)
 {
 	const uint32_t mask = CracenModuleMask(Module);
@@ -316,6 +350,16 @@ bool CracenIntrf::CoreAcquire(uint32_t Module, const void *pOwner)
 											 : s_pPkeRegBase;
 	NRF_CRACEN->ENABLE |= mask;
 	__DMB();
+
+	if (Module == CRACEN_MODULE_PKEIKG && !CracenLoadPkeMicrocode())
+	{
+		NRF_CRACEN->ENABLE &= ~mask;
+		s_HeldMask = 0U;
+		s_PreviousEnable = 0U;
+		s_pHoldOwner = nullptr;
+		atomic_flag_clear(&s_HoldFlag);
+		return false;
+	}
 	return true;
 }
 

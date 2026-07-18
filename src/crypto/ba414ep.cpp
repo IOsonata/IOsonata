@@ -213,6 +213,23 @@ static bool PkAbortAndReset(Device *pDev, CracenIntrf *pIntrf)
 	return true;
 }
 
+static const uint8_t s_P256Prime[32] = {
+	0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+	0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+};
+static const uint8_t s_P256Order[32] = {
+	0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+	0xBC,0xE6,0xFA,0xAD,0xA7,0x17,0x9E,0x84,0xF3,0xB9,0xCA,0xC2,0xFC,0x63,0x25,0x51,
+};
+static const uint8_t s_P256CoeffA[32] = {
+	0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+	0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFC,
+};
+static const uint8_t s_P256CoeffB[32] = {
+	0x5A,0xC6,0x35,0xD8,0xAA,0x3A,0x93,0xE7,0xB3,0xEB,0xBD,0x55,0x76,0x98,0x86,0xBC,
+	0x65,0x1D,0x06,0xB0,0xCC,0x53,0xB0,0xF6,0x3B,0xCE,0x3C,0x3E,0x27,0xD2,0x60,0x4B,
+};
+
 static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 							const uint8_t Point[64], const uint8_t Scalar[32],
 							uint8_t Result[64], RngEngine *pRng)
@@ -253,28 +270,30 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 
 		uint32_t status = BA414EP_STATUS_BUSY;
 #if defined(BA414EP_BLIND_DISABLE)
-		PkRegWrite(pDev, BA414EP_REG_COMMAND,
-				   BA414EP_CMD_ECC_PTMUL | BA414EP_CMD_OPSIZE(32U) |
-				   BA414EP_CMD_SELCUR_P256 | BA414EP_CMD_BIG_ENDIAN);
+		PkRegWrite(pDev, BA414EP_REG_COMMAND, BA414EP_CMD_P256_PTMUL_GEN_NOCM);
 #else
-		PkRegWrite(pDev, BA414EP_REG_COMMAND, BA414EP_CMD_P256_PTMUL);
+		PkRegWrite(pDev, BA414EP_REG_COMMAND, BA414EP_CMD_P256_PTMUL_GEN);
 #endif
-		PkWriteOperand(pDev, BA414EP_SLOT_SCALAR, Scalar, P256_SZ);
-		PkWriteOperand(pDev, BA414EP_SLOT_POINT_X, &Point[0], P256_SZ);
-		PkWriteOperand(pDev, BA414EP_SLOT_POINT_Y, &Point[32], P256_SZ);
+		// Generic mode: load the full P-256 domain (SELCUR zero, no built-in curve
+		// table, no microcode). p,n,a,b to slots 0,1,4,5; base point to 2,3;
+		// scalar to 14; result read from 6,7.
+		PkWriteOperand(pDev, BA414EP_SLOT_P, s_P256Prime, P256_SZ);
+		PkWriteOperand(pDev, BA414EP_SLOT_N, s_P256Order, P256_SZ);
+		PkWriteOperand(pDev, BA414EP_SLOT_GX, &Point[0], P256_SZ);
+		PkWriteOperand(pDev, BA414EP_SLOT_GY, &Point[32], P256_SZ);
+		PkWriteOperand(pDev, BA414EP_SLOT_A, s_P256CoeffA, P256_SZ);
+		PkWriteOperand(pDev, BA414EP_SLOT_B, s_P256CoeffB, P256_SZ);
+		PkWriteOperand(pDev, BA414EP_SLOT_SCALAR_GEN, Scalar, P256_SZ);
 
-		// The countermeasure factor is one full 32 byte operand in slot 15
-		// with the 8 byte value at the big-endian tail. Zero the window first
-		// so power-on crypto RAM content cannot enter the factor.
 #if !defined(BA414EP_BLIND_DISABLE)
 		PkClearSlot(pDev, BA414EP_SLOT_BLIND, P256_SZ);
 		PkWriteOperand(pDev, BA414EP_SLOT_BLIND, blind, sizeof(blind));
 #endif
-		PkRegWrite(pDev, BA414EP_REG_CONFIG, BA414EP_CONFIG_PTMUL);
+		PkRegWrite(pDev, BA414EP_REG_CONFIG, BA414EP_CONFIG_PTMUL_GEN);
 
 		__DMB();
 #if defined(BA414EP_TRACE_ENABLE)
-		BA414EP_TRACE("Ba414ep PkMul: rd cmd=0x%x cfg=0x%x (cfg want 0x0a080c)\r\n",
+		BA414EP_TRACE("Ba414ep PkMul: rd cmd=0x%x cfg=0x%x (cfg want 0x060e02)\r\n",
 					  (unsigned)PkRegRead(pDev, BA414EP_REG_COMMAND),
 					  (unsigned)PkRegRead(pDev, BA414EP_REG_CONFIG));
 #endif
@@ -284,19 +303,6 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 		BA414EP_TRACE("Ba414ep PkMul: post-START status=0x%x ctrl=0x%x\r\n",
 					  (unsigned)PkRegRead(pDev, BA414EP_REG_STATUS),
 					  (unsigned)PkRegRead(pDev, BA414EP_REG_CONTROL));
-		{
-			uint32_t prev = 0xFFFFFFFFU;
-			for (uint32_t k = 0; k < 100000U; k++)
-			{
-				uint32_t st = PkRegRead(pDev, BA414EP_REG_STATUS);
-				if (st != prev)
-				{
-					BA414EP_TRACE("Ba414ep PkMul: poll k=%u status=0x%x\r\n",
-								  (unsigned)k, (unsigned)st);
-					prev = st;
-				}
-			}
-		}
 #endif
 		if (!PkWaitIdle(pDev, &status))
 		{
@@ -316,14 +322,14 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 
 		if (status == 0U)
 		{
-			PkReadOperand(pDev, BA414EP_SLOT_RESULT_X, &Result[0], P256_SZ);
-			PkReadOperand(pDev, BA414EP_SLOT_RESULT_Y, &Result[32], P256_SZ);
+			PkReadOperand(pDev, BA414EP_SLOT_RESULT_GX, &Result[0], P256_SZ);
+			PkReadOperand(pDev, BA414EP_SLOT_RESULT_GY, &Result[32], P256_SZ);
 #if defined(BA414EP_TRACE_ENABLE)
 			{
 				uint8_t p12[P256_SZ], p13[P256_SZ];
-				PkReadOperand(pDev, BA414EP_SLOT_POINT_X, p12, P256_SZ);
-				PkReadOperand(pDev, BA414EP_SLOT_POINT_Y, p13, P256_SZ);
-				BA414EP_TRACE("Ba414ep PkMul: s10 %02x%02x%02x%02x s11 %02x%02x%02x%02x s12 %02x%02x%02x%02x s13 %02x%02x%02x%02x\r\n",
+				PkReadOperand(pDev, BA414EP_SLOT_GX, p12, P256_SZ);
+				PkReadOperand(pDev, BA414EP_SLOT_GY, p13, P256_SZ);
+				BA414EP_TRACE("Ba414ep PkMul: rX %02x%02x%02x%02x rY %02x%02x%02x%02x bX %02x%02x%02x%02x bY %02x%02x%02x%02x\r\n",
 							  Result[0], Result[1], Result[2], Result[3],
 							  Result[32], Result[33], Result[34], Result[35],
 							  p12[0], p12[1], p12[2], p12[3],
