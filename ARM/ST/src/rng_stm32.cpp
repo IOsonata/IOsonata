@@ -47,8 +47,6 @@ SOFTWARE.
 #include <stdbool.h>
 #include <string.h>
 
-#include <new>
-
 #include "stm32.h"
 #include "crypto_rng_stm32.h"
 
@@ -131,7 +129,6 @@ static void RngEnable(void)
 static void RngClearLatchedErrors(void)
 {
 #if (RNG_SR_CEIS != 0U) || (RNG_SR_SEIS != 0U)
-	// STM32 RNG error interrupt flags are cleared by writing 0 to the flag bits.
 	RNG->SR &= ~(RNG_SR_CEIS | RNG_SR_SEIS);
 #else
 	(void)RNG->SR;
@@ -180,15 +177,12 @@ static bool RngReadWord(uint32_t *pWord)
 
 		if ((sr & RNG_SR_SECS) != 0U)
 		{
-			// A seed error invalidates the current output stream. Restart RNG and
-			// wait for a new valid word.
 			RngRecoverSeedError();
 			continue;
 		}
 
 		if ((sr & RNG_SR_CECS) != 0U)
 		{
-			// Clock error means the RNG source clock is not valid for output.
 			return false;
 		}
 
@@ -202,8 +196,6 @@ static bool RngReadWord(uint32_t *pWord)
 	return false;
 }
 
-// Core fill: assumes RngInit has succeeded. Fills pBuff with Len random bytes,
-// returns false on a hardware error (clock error or persistent seed error).
 static bool RngFill(uint8_t *pBuff, size_t Len)
 {
 	while (Len >= sizeof(uint32_t))
@@ -235,14 +227,51 @@ static bool RngFill(uint8_t *pBuff, size_t Len)
 	return true;
 }
 
-//-----------------------------------------------------------------------------
-// OO engine.
-//-----------------------------------------------------------------------------
 bool CryptoRngStm32::Enable()
 {
+	if (vbEnabled && vbValid)
+	{
+		return true;
+	}
+	if (atomic_flag_test_and_set(&vOpBusy))
+	{
+		return false;
+	}
 	bool ok = RngInit();
+	vbEnabled = ok;
 	vbValid = ok;
+	atomic_flag_clear(&vOpBusy);
 	return ok;
+}
+
+void CryptoRngStm32::Disable()
+{
+	if (atomic_flag_test_and_set(&vOpBusy))
+	{
+		return;
+	}
+	vbValid = false;
+	if (vbEnabled)
+	{
+		RngDisable();
+		vbEnabled = false;
+	}
+	atomic_flag_clear(&vOpBusy);
+}
+
+void CryptoRngStm32::Reset()
+{
+	if (atomic_flag_test_and_set(&vOpBusy))
+	{
+		return;
+	}
+	vbValid = false;
+	RngDisable();
+	s_RngInited = false;
+	bool ok = RngInit();
+	vbEnabled = ok;
+	vbValid = ok;
+	atomic_flag_clear(&vOpBusy);
 }
 
 CRYPTO_STATUS CryptoRngStm32::Random(uint8_t *pOut, size_t Len)
@@ -251,21 +280,24 @@ CRYPTO_STATUS CryptoRngStm32::Random(uint8_t *pOut, size_t Len)
 	{
 		return CRYPTO_STATUS_OK;
 	}
-	if (pOut == nullptr)
+	if (!vbValid || !vbEnabled || pOut == nullptr)
 	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (RngInit() == false)
+	if (atomic_flag_test_and_set(&vOpBusy))
 	{
 		CryptoSecureWipe(pOut, Len);
-		return CRYPTO_STATUS_FAIL;
+		return CRYPTO_STATUS_BUSY;
 	}
-	if (RngFill(pOut, Len) == false)
+
+	bool ok = RngFill(pOut, Len);
+	atomic_flag_clear(&vOpBusy);
+	if (!ok)
 	{
-		// RngFill writes words in place and can stop part way on a hardware
-		// error, leaving some words of the output filled. Wipe the whole
-		// requested range so a failed draw never exposes a partial result to a
-		// caller that forgets to clear it.
 		CryptoSecureWipe(pOut, Len);
 		return CRYPTO_STATUS_FAIL;
 	}
@@ -274,9 +306,11 @@ CRYPTO_STATUS CryptoRngStm32::Random(uint8_t *pOut, size_t Len)
 
 CryptoRngStm32 *CryptoRngStm32Instance(void)
 {
-	// Singleton in internal static storage (no allocation). The peripheral holds
-	// the hardware state; the engine object is stateless.
 	static CryptoRngStm32 s_Instance;
-	return &s_Instance;
+	static bool s_Initialized = false;
+	if (!s_Initialized)
+	{
+		s_Initialized = s_Instance.Enable();
+	}
+	return s_Initialized ? &s_Instance : nullptr;
 }
-
