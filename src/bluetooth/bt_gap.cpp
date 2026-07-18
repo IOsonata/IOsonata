@@ -52,8 +52,8 @@ SOFTWARE.
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_smp.h"
 
-extern "C" bool BtSmpBondKeysLookup(uint16_t ConnHdl, uint64_t Rand,
-									 uint16_t Ediv, BtSmpKeys_t *pKeys);
+bool BtSmpBondKeysLookup(uint16_t ConnHdl, uint64_t Rand,
+						 uint16_t Ediv, BtSmpKeys_t *pKeys);
 
 #ifndef BT_GAP_DEVNAME_MAX_LEN
 #define BT_GAP_DEVNAME_MAX_LEN			64
