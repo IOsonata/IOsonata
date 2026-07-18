@@ -66,6 +66,11 @@ SOFTWARE.
 // enter while the public-key engine can still be active with private operands.
 static bool s_bPkQuarantined = false;
 
+// Operand slot stride in CryptoRAM, derived from the hardware geometry at the
+// first Enable. The default matches the 4096-bit configuration until HWCONFIG
+// has been read.
+static uint32_t s_PkSlotSize = BA414EP_OPERAND_SLOT_4096;
+
 // NIST P-256 domain parameters and generator, big endian.
 static const uint8_t s_P256Prime[32] = {
 	0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
@@ -117,7 +122,7 @@ static void PkRegWrite(Device *pDev, uint32_t Offset, uint32_t Value)
 
 static uint32_t PkOperandOffset(uint32_t Slot, size_t Len)
 {
-	return Slot * BA414EP_SLOT_SIZE + BA414EP_SLOT_SIZE - (uint32_t)Len;
+	return Slot * s_PkSlotSize + s_PkSlotSize - (uint32_t)Len;
 }
 
 static void PkWriteOperand(Device *pDev, uint32_t Slot, const uint8_t *pSrc,
@@ -143,6 +148,32 @@ static void PkClearSlot(Device *pDev, uint32_t Slot, size_t Len)
 {
 	uint8_t zero[P256_SZ] = {};
 	PkWriteOperand(pDev, Slot, zero, Len);
+}
+
+// Read and validate the hardware geometry from HWCONFIG: bits [11:0] hold the
+// maximum prime field operand size in bytes, bit 16 prime field support, bit 31
+// countermeasures disabled. P-256 with the blinding this driver always applies
+// needs prime field support, at least a 32 byte operand, and the
+// countermeasures present. The slot stride follows the operand size the same
+// way the Silex driver sizes it: 4096-bit slots unless the maximum operand
+// exceeds them. Reject a configuration that fails these requirements instead
+// of computing CryptoRAM offsets from an unverified geometry.
+static bool PkGeometryValid(Device *pDev)
+{
+	uint32_t cfg = PkRegRead(pDev, BA414EP_REG_HWCONFIG);
+	uint32_t maxOpSize = cfg & BA414EP_HWCONFIG_MAX_OPSIZE_Msk;
+
+	if (maxOpSize < P256_SZ ||
+		(cfg & BA414EP_HWCONFIG_PRIME_FIELD_Msk) == 0U ||
+		(cfg & BA414EP_HWCONFIG_CM_DISABLED_Msk) != 0U)
+	{
+		BA414EP_TRACE("Ba414ep geometry rejected: hwconfig=%08x\r\n",
+					  (unsigned)cfg);
+		return false;
+	}
+	s_PkSlotSize = maxOpSize > BA414EP_OPERAND_SLOT_4096 ?
+		BA414EP_OPERAND_SLOT_8192 : BA414EP_OPERAND_SLOT_4096;
+	return true;
 }
 
 static bool PkWaitNotBusy(Device *pDev)
@@ -510,7 +541,8 @@ bool Ba414ep::Enable()
 		return false;
 	}
 
-	const bool ok = vbReady || (WaitIkIdle() && HandoverProbe());
+	const bool ok = vbReady ||
+		(PkGeometryValid(this) && WaitIkIdle() && HandoverProbe());
 	OpRelease();
 	if (!ok)
 	{
