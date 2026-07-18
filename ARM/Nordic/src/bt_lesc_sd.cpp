@@ -199,6 +199,10 @@ CRYPTO_STATUS BtLescKeyPairGenStatus(void)
 	uint8_t pubBe[BLE_GAP_LESC_P256_PK_LEN] = {};
 	CRYPTO_STATUS status = s_pLescCrypto->KeyGen(CRYPTO_CURVE_P256,
 											 s_LescEcdhKeyCtx, pubBe);
+	if (status == CRYPTO_STATUS_PENDING)
+	{
+		status = CRYPTO_STATUS_FAIL;
+	}
 	if (status == CRYPTO_STATUS_OK)
 	{
 		ByteOrderInvert(pubBe, s_LescPubKey.pk);
@@ -333,7 +337,12 @@ static CRYPTO_STATUS ComputeAndReply(BtLescPeerKey_t *pPeer)
 		status = ReplyStatus(pPeer->ConnHdl, BLE_GAP_SEC_STATUS_SUCCESS,
 			&s_LescDhKey);
 	}
-	else if (status != CRYPTO_STATUS_BUSY && status != CRYPTO_STATUS_PENDING)
+	else if (status == CRYPTO_STATUS_PENDING)
+	{
+		status = ReplyStatus(pPeer->ConnHdl,
+			BLE_GAP_SEC_STATUS_DHKEY_FAILURE, NULL);
+	}
+	else if (status != CRYPTO_STATUS_BUSY)
 	{
 		LESC_TRACE("LESC ECDH failed st=%d\r\n", (int)status);
 		status = ReplyStatus(pPeer->ConnHdl,
@@ -356,7 +365,7 @@ bool BtLescRequestHandler(void)
 			continue;
 		}
 		CRYPTO_STATUS status = ComputeAndReply(&s_PeerKeys[i]);
-		if (status == CRYPTO_STATUS_BUSY || status == CRYPTO_STATUS_PENDING)
+		if (status == CRYPTO_STATUS_BUSY)
 		{
 			continue;
 		}
@@ -379,8 +388,7 @@ bool BtLescRequestHandler(void)
 		{
 			s_bRegenPending = false;
 		}
-		else if (status != CRYPTO_STATUS_BUSY &&
-				 status != CRYPTO_STATUS_PENDING)
+		else if (status != CRYPTO_STATUS_BUSY)
 		{
 			LESC_TRACE("LESC keypair regenerate failed st=%d\r\n", (int)status);
 			result = false;
@@ -429,6 +437,16 @@ void BtLescOnBleEvt(const ble_evt_t *pEvt)
 	uint16_t connHdl = pEvt->evt.gap_evt.conn_handle;
 	switch (pEvt->header.evt_id)
 	{
+	case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
+		// The security manager has just placed s_LescPubKey in this link's
+		// keyset. Register the user before any other BLE event can complete a
+		// different pairing and request key regeneration.
+		if (s_bKeyPairGen)
+		{
+			(void)SlotAlloc(connHdl);
+		}
+		break;
+
 	case BLE_GAP_EVT_DISCONNECTED:
 		BtLescLinkRelease(connHdl);
 		CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
