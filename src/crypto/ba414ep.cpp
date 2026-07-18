@@ -588,7 +588,7 @@ CRYPTO_STATUS Ba414ep::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKe
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
-	CRYPTO_STATUS rngStatus = P256RandomScalar(vpRng, pk->PrivKey);
+	CRYPTO_STATUS rngStatus = P256RandomScalarStatus(vpRng, pk->PrivKey);
 	if (rngStatus != CRYPTO_STATUS_OK)
 	{
 		BA414EP_TRACE("Ba414ep KeyGen: private key draw failed st=%d\r\n",
