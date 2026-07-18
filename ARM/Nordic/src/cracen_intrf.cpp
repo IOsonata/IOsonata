@@ -62,6 +62,7 @@ static bool s_bDrbgInit;
 // lock below only serializes the engines and selects the sub-block base.
 static atomic_flag s_HoldFlag = ATOMIC_FLAG_INIT;
 static uint32_t s_HeldMask;
+static uint32_t s_PreviousEnable;
 static const void *s_pHoldOwner;
 
 static void CracenSelectBase(uint32_t DevAddr)
@@ -306,10 +307,14 @@ bool CracenIntrf::CoreAcquire(uint32_t Module, const void *pOwner)
 		return false;
 	}
 
+	// Power only this sub-block for the operation (the hardware runs one module
+	// at a time), serialize against the other engines, select the register base.
 	s_HeldMask = mask;
+	s_PreviousEnable = NRF_CRACEN->ENABLE & mask;
 	s_pHoldOwner = pOwner;
 	s_pRegBase = (Module == CRACEN_MODULE_CRYPTOMASTER) ? s_pCmRegBase
 											 : s_pPkeRegBase;
+	NRF_CRACEN->ENABLE |= mask;
 	__DMB();
 	return true;
 }
@@ -324,7 +329,13 @@ static bool CracenHoldRelease(const void *pOwner)
 		return false;
 	}
 
+	if (s_PreviousEnable == 0U)
+	{
+		NRF_CRACEN->ENABLE &= ~mask;
+		__DMB();
+	}
 	s_HeldMask = 0U;
+	s_PreviousEnable = 0U;
 	s_pHoldOwner = nullptr;
 	atomic_flag_clear(&s_HoldFlag);
 	return true;
@@ -352,26 +363,12 @@ bool CracenIntrf::CoreReset(const void *pOwner)
 	return true;
 }
 
-// Transport enable/disable (EnCnt gated): power the whole CRACEN core on the
-// first device up, off on the last release. NRF_CRACEN is the Nordic wrapper
-// and lives only here in the interface; the Silex engines never touch it. The
-// per-operation lock is a separate concern, see CoreAcquire.
-static void CracenCoreDisable(DevIntrf_t * const pIntrf)
-{
-	(void)pIntrf;
-	NRF_CRACEN->ENABLE &= ~(CRACEN_ENABLE_CRYPTOMASTER_Msk |
-							CRACEN_ENABLE_PKEIKG_Msk |
-							CRACEN_ENABLE_RNG_Msk);
-	__DMB();
-}
-static void CracenCoreEnable(DevIntrf_t * const pIntrf)
-{
-	(void)pIntrf;
-	NRF_CRACEN->ENABLE |= (CRACEN_ENABLE_CRYPTOMASTER_Msk |
-						   CRACEN_ENABLE_PKEIKG_Msk |
-						   CRACEN_ENABLE_RNG_Msk);
-	__DMB();
-}
+// Transport enable/disable placeholders. On this silicon only one CRACEN
+// sub-block may be powered at a time, so module power is owned by the operation
+// lock (CoreAcquire/CoreRelease), not a whole-core enable. NRF_CRACEN is the
+// Nordic wrapper and lives only here; the Silex engines never touch it.
+static void CracenCoreDisable(DevIntrf_t * const pIntrf) { (void)pIntrf; }
+static void CracenCoreEnable(DevIntrf_t * const pIntrf) { (void)pIntrf; }
 static uint32_t CracenGetRate(DevIntrf_t * const pIntrf)
 {
 	(void)pIntrf;

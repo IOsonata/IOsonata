@@ -41,6 +41,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "cracen_intrf.h"
 #include "crypto/ba414ep.h"
@@ -49,7 +50,7 @@ SOFTWARE.
 // Diagnostic tracing. Comment out BA414EP_TRACE_ENABLE to silence.
 #define BA414EP_TRACE_ENABLE
 #if defined(BA414EP_TRACE_ENABLE)
-#define BA414EP_TRACE(...)	SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#define BA414EP_TRACE(...)	printf(__VA_ARGS__)
 #else
 #define BA414EP_TRACE(...)
 #endif
@@ -220,7 +221,9 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 		Scalar == nullptr || Result == nullptr || pRng == nullptr ||
 		!pRng->IsSecure() || !P256ScalarInRange(Scalar))
 	{
-		BA414EP_TRACE("Ba414ep PkMul: bad args/rng/scalar -> FAIL\r\n");
+		BA414EP_TRACE("Ba414ep PkMul: bad args rng=%p secure=%d scalarok=%d -> FAIL\r\n",
+					  (void *)pRng, (int)(pRng != nullptr && pRng->IsSecure()),
+					  (int)P256ScalarInRange(Scalar));
 		return CRYPTO_STATUS_FAIL;
 	}
 
@@ -270,8 +273,31 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 		PkRegWrite(pDev, BA414EP_REG_CONFIG, BA414EP_CONFIG_PTMUL);
 
 		__DMB();
+#if defined(BA414EP_TRACE_ENABLE)
+		BA414EP_TRACE("Ba414ep PkMul: rd cmd=0x%x cfg=0x%x (cfg want 0x0a080c)\r\n",
+					  (unsigned)PkRegRead(pDev, BA414EP_REG_COMMAND),
+					  (unsigned)PkRegRead(pDev, BA414EP_REG_CONFIG));
+#endif
 		PkRegWrite(pDev, BA414EP_REG_CONTROL,
 				   BA414EP_CONTROL_START | BA414EP_CONTROL_CLEAR_IRQ);
+#if defined(BA414EP_TRACE_ENABLE)
+		BA414EP_TRACE("Ba414ep PkMul: post-START status=0x%x ctrl=0x%x\r\n",
+					  (unsigned)PkRegRead(pDev, BA414EP_REG_STATUS),
+					  (unsigned)PkRegRead(pDev, BA414EP_REG_CONTROL));
+		{
+			uint32_t prev = 0xFFFFFFFFU;
+			for (uint32_t k = 0; k < 100000U; k++)
+			{
+				uint32_t st = PkRegRead(pDev, BA414EP_REG_STATUS);
+				if (st != prev)
+				{
+					BA414EP_TRACE("Ba414ep PkMul: poll k=%u status=0x%x\r\n",
+								  (unsigned)k, (unsigned)st);
+					prev = st;
+				}
+			}
+		}
+#endif
 		if (!PkWaitIdle(pDev, &status))
 		{
 			BA414EP_TRACE("Ba414ep PkMul: PkWaitIdle timeout, status=0x%x -> FAIL\r\n",
@@ -292,11 +318,18 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 		{
 			PkReadOperand(pDev, BA414EP_SLOT_RESULT_X, &Result[0], P256_SZ);
 			PkReadOperand(pDev, BA414EP_SLOT_RESULT_Y, &Result[32], P256_SZ);
-			BA414EP_TRACE("Ba414ep PkMul: Rx %02x%02x%02x%02x z=%d Ry %02x%02x%02x%02x z=%d\r\n",
-						  Result[0], Result[1], Result[2], Result[3],
-						  (int)P256IsZero(&Result[0], P256_SZ),
-						  Result[32], Result[33], Result[34], Result[35],
-						  (int)P256IsZero(&Result[32], P256_SZ));
+#if defined(BA414EP_TRACE_ENABLE)
+			{
+				uint8_t p12[P256_SZ], p13[P256_SZ];
+				PkReadOperand(pDev, BA414EP_SLOT_POINT_X, p12, P256_SZ);
+				PkReadOperand(pDev, BA414EP_SLOT_POINT_Y, p13, P256_SZ);
+				BA414EP_TRACE("Ba414ep PkMul: s10 %02x%02x%02x%02x s11 %02x%02x%02x%02x s12 %02x%02x%02x%02x s13 %02x%02x%02x%02x\r\n",
+							  Result[0], Result[1], Result[2], Result[3],
+							  Result[32], Result[33], Result[34], Result[35],
+							  p12[0], p12[1], p12[2], p12[3],
+							  p13[0], p13[1], p13[2], p13[3]);
+			}
+#endif
 		}
 
 		PkCleanup(pDev, pIntrf);
@@ -414,10 +447,10 @@ int Ba414ep::SelfTest()
 		0x4A,0xFF,0x60,0x7B,0xEB,0x40,0xB7,0x99,0x58,0x99,0xB8,0xA6,0xCD,0x3C,0x1A,0xBD,
 	};
 	static const uint8_t pub[64] = {
-		0x1E,0xA1,0xF0,0xF0,0x1F,0xAF,0x1D,0x96,0x09,0x59,0x22,0x84,0xF1,0x9E,0x4C,0x00,
-		0x47,0xB5,0x8A,0xFD,0x86,0x15,0xA6,0x9F,0x55,0x90,0x77,0xB2,0x2F,0xAA,0xA1,0x90,
-		0x4C,0x55,0xF3,0x3E,0x42,0x9D,0xAD,0x37,0x73,0x56,0x70,0x3A,0x9A,0xB8,0x51,0x60,
-		0x47,0x2D,0x11,0x30,0xE2,0x8E,0x36,0x76,0x5F,0x89,0xAF,0xF9,0x15,0xB1,0x21,0x4A,
+		0x20,0xB0,0x03,0xD2,0xF2,0x97,0xBE,0x2C,0x5E,0x2C,0x83,0xA7,0xE9,0xF9,0xA5,0xB9,
+		0xEF,0xF4,0x91,0x11,0xAC,0xF4,0xFD,0xDB,0xCC,0x03,0x01,0x48,0x0E,0x35,0x9D,0xE6,
+		0xDC,0x80,0x9C,0x49,0x65,0x2A,0xEB,0x6D,0x63,0x32,0x9A,0xBF,0x5A,0x52,0x15,0x5C,
+		0x76,0x63,0x45,0xC2,0x8F,0xED,0x30,0x24,0x74,0x1C,0x8E,0xD0,0x15,0x89,0xD2,0x8B,
 	};
 	if (!vbValid)
 	{
@@ -445,6 +478,9 @@ CRYPTO_STATUS Ba414ep::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	KeyCtx *pk = (KeyCtx *)pKeyCtx;
 	if (!pk->bKeyValid || vpRng == nullptr || !vpRng->IsSecure())
 	{
+		BA414EP_TRACE("Ba414ep Agree: keyvalid=%d rng=%p secure=%d -> FAIL\r\n",
+					  (int)pk->bKeyValid, (void *)vpRng,
+					  (int)(vpRng != nullptr && vpRng->IsSecure()));
 		KeyReset(pk);
 		memset(pSharedX, 0, P256_SZ);
 		return CRYPTO_STATUS_FAIL;

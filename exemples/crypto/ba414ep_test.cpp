@@ -74,6 +74,33 @@ int main(void)
 	check("hardware self-test (LESC debug key KAT)",
 		hardware->SelfTest() == 0);
 
+	// Deterministic diagnostic: priv*G via Agree(debug key, generator). Prints
+	// the raw hardware and software results on RTT so the actual computed point
+	// is visible. Expected X for the debug key is 20b003d2 f297be2c ...
+	{
+		static const uint8_t generator[64] = {
+			0x6b,0x17,0xd1,0xf2,0xe1,0x2c,0x42,0x47,0xf8,0xbc,0xe6,0xe5,0x63,0xa4,0x40,0xf2,
+			0x77,0x03,0x7d,0x81,0x2d,0xeb,0x33,0xa0,0xf4,0xa1,0x39,0x45,0xd8,0x98,0xc2,0x96,
+			0x4f,0xe3,0x42,0xe2,0xfe,0x1a,0x7f,0x9b,0x8e,0xe7,0xeb,0x4a,0x7c,0x0f,0x9e,0x16,
+			0x2b,0xce,0x33,0x57,0x6b,0x31,0x5e,0xce,0xcb,0xb6,0x40,0x68,0x37,0xbf,0x51,0xf5 };
+		alignas(Ba414ep::KeyCtx) uint8_t dHw[64];
+		alignas(CryptoUecc::KeyCtx) uint8_t dSw[64];
+		hardware->KeyReset(dHw);
+		software->KeyReset(dSw);
+		memcpy(((Ba414ep::KeyCtx *)dHw)->PrivKey, privA, sizeof(privA));
+		((Ba414ep::KeyCtx *)dHw)->bKeyValid = true;
+		memcpy(((CryptoUecc::KeyCtx *)dSw)->PrivKey, privA, sizeof(privA));
+		((CryptoUecc::KeyCtx *)dSw)->bKeyValid = true;
+		uint8_t xHw[32] = {0}, xSw[32] = {0};
+		CRYPTO_STATUS sHw = hardware->Agree(CRYPTO_CURVE_P256, dHw, generator, xHw);
+		CRYPTO_STATUS sSw = software->Agree(CRYPTO_CURVE_P256, dSw, generator, xSw);
+		printf("  diag priv*G HW st=%d X=%02x%02x%02x%02x%02x%02x%02x%02x\n",
+			(int)sHw, xHw[0],xHw[1],xHw[2],xHw[3],xHw[4],xHw[5],xHw[6],xHw[7]);
+		printf("  diag priv*G SW st=%d X=%02x%02x%02x%02x%02x%02x%02x%02x\n",
+			(int)sSw, xSw[0],xSw[1],xSw[2],xSw[3],xSw[4],xSw[5],xSw[6],xSw[7]);
+		printf("  diag expected    X=20b003d2f297be2c\n");
+	}
+
 	alignas(Ba414ep::KeyCtx) uint8_t hwCtx[64];
 	alignas(CryptoUecc::KeyCtx) uint8_t swCtx[64];
 	uint8_t hwPub[64], swPub[64], hwShared[32], swShared[32];
