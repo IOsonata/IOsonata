@@ -207,7 +207,7 @@ bool RngPeriphIntrf::Init(void)
 	vDevIntrf.EvtCB = nullptr;
 	atomic_flag_clear(&vDevIntrf.bBusy);
 	vDevIntrf.MaxRetry = 5;
-	atomic_store(&vDevIntrf.EnCnt, 1);
+	atomic_store(&vDevIntrf.EnCnt, 0);
 	vDevIntrf.Type = DEVINTRF_TYPE_CRYPTO;
 	vDevIntrf.bDma = false;
 	vDevIntrf.bIntEn = false;
@@ -266,11 +266,54 @@ bool CryptoRngNrf::Enable(void)
 		vbValid = false;
 		return false;
 	}
-	// Bring up the transport (on CRACEN this powers the whole core; on the
-	// nRF52 RNG peripheral it enables that interface).
-	Interface()->Enable();
+	if (vbIntrfEnabled && vbValid)
+	{
+		return true;
+	}
+	if (atomic_flag_test_and_set(&vOpBusy))
+	{
+		return false;
+	}
+	if (!vbIntrfEnabled)
+	{
+		Interface()->Enable();
+		vbIntrfEnabled = true;
+	}
 	vbValid = true;
+	atomic_flag_clear(&vOpBusy);
 	return true;
+}
+
+void CryptoRngNrf::Disable(void)
+{
+	if (atomic_flag_test_and_set(&vOpBusy))
+	{
+		return;
+	}
+	vbValid = false;
+	if (vbIntrfEnabled && Interface() != nullptr)
+	{
+		Interface()->Disable();
+		vbIntrfEnabled = false;
+	}
+	atomic_flag_clear(&vOpBusy);
+}
+
+void CryptoRngNrf::Reset(void)
+{
+	if (atomic_flag_test_and_set(&vOpBusy))
+	{
+		return;
+	}
+	vbValid = false;
+	if (vbIntrfEnabled && Interface() != nullptr)
+	{
+#if !defined(RNG_USE_CRACEN)
+		Interface()->Reset();
+#endif
+		vbValid = true;
+	}
+	atomic_flag_clear(&vOpBusy);
 }
 
 CRYPTO_STATUS CryptoRngNrf::Random(uint8_t *pOut, size_t Len)
@@ -279,16 +322,32 @@ CRYPTO_STATUS CryptoRngNrf::Random(uint8_t *pOut, size_t Len)
 	{
 		return CRYPTO_STATUS_OK;
 	}
-	if (!vbValid || pOut == nullptr || Len > (size_t)INT_MAX)
+	if (!vbValid || !vbIntrfEnabled || Interface() == nullptr || pOut == nullptr ||
+		Len > (size_t)INT_MAX)
 	{
-		RNGNRF_TRACE("RngNrf Random: valid=%d out=%p len=%u -> FAIL\r\n",
-					 (int)vbValid, (void *)pOut, (unsigned)Len);
+		RNGNRF_TRACE("RngNrf Random: valid=%d enabled=%d out=%p len=%u -> FAIL\r\n",
+					 (int)vbValid, (int)vbIntrfEnabled, (void *)pOut,
+					 (unsigned)Len);
 		return CRYPTO_STATUS_FAIL;
 	}
-	int count = Interface()->Rx(DeviceAddress(), pOut, (int)Len);
+	if (atomic_flag_test_and_set(&vOpBusy))
+	{
+		CryptoSecureWipe(pOut, Len);
+		return CRYPTO_STATUS_BUSY;
+	}
+	if (!Interface()->StartRx(DeviceAddress()))
+	{
+		atomic_flag_clear(&vOpBusy);
+		CryptoSecureWipe(pOut, Len);
+		return CRYPTO_STATUS_BUSY;
+	}
+
+	int count = Interface()->RxData(pOut, (int)Len);
+	Interface()->StopRx();
+	atomic_flag_clear(&vOpBusy);
 	if (count != (int)Len)
 	{
-		RNGNRF_TRACE("RngNrf Random: Rx returned %d of %u -> FAIL\r\n",
+		RNGNRF_TRACE("RngNrf Random: RxData returned %d of %u -> FAIL\r\n",
 					 count, (unsigned)Len);
 		CryptoSecureWipe(pOut, Len);
 		return CRYPTO_STATUS_FAIL;
