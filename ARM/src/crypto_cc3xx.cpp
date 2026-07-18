@@ -60,8 +60,6 @@ SOFTWARE.
 #define CC3XX_ACQUIRE_SPINS		100000U
 #endif
 
-// Internal PKA driver: file-static helpers and constants (like ba414ep.cpp).
-
 constexpr size_t P256_WORDS = P256_BYTES / sizeof(uint32_t);
 constexpr uint32_t PKA_REG_BYTES = 48U;
 constexpr uint32_t PKA_REG_WORDS = PKA_REG_BYTES / sizeof(uint32_t);
@@ -214,10 +212,6 @@ static void PkaFault(Device *pDev)
 {
 	s_bPkaFault = true;
 	CcRegWrite(pDev, REG_PKA_CLOCK_ENABLE, 0U);
-	// Fault kill: unconditional power-off through the interface PowerOff
-	// escape hatch. The user count is intentionally untouched; counted users
-	// re-assert power on their next operation through EnsureCc3xx, which
-	// reruns the core bring-up because s_bCcInit is cleared here.
 	Cc3xxIntrf *pIntrf = Cc3xxIntrfInstance();
 	if (pIntrf != nullptr)
 	{
@@ -618,9 +612,6 @@ static void PointDouble(Device *pDev, const PkaPoint &P, const PkaPoint &R)
 	PkaModSub(pDev, R.Y, t3, R.Y);
 }
 
-// Select one of two projective points through fixed PKA registers. The private
-// bit changes only the value loaded into the fixed mask register. The opcode
-// stream and all source and destination register numbers remain unchanged.
 static void PointSelectCopy(Device *pDev, const PkaPoint &Zero, const PkaPoint &One,
 							uint32_t Bit, const PkaPoint &Dst)
 {
@@ -724,35 +715,47 @@ static bool PointValidate(Device *pDev, PkaReg_t X, PkaReg_t Y)
 	return !s_bPkaFault && PkaEqual(pDev, P256_T0, P256_T1);
 }
 
-static bool RandomizePoint(Device *pDev, RngEngine *pRng, const PkaPoint &P)
+static CRYPTO_STATUS P256RandomFieldElementStatus(RngEngine *pRng,
+											 uint8_t Value[P256_BYTES])
 {
-	uint8_t z[P256_BYTES];
-	bool valid = false;
+	if (Value == nullptr)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (pRng == nullptr || !pRng->IsSecure())
+	{
+		CryptoSecureWipe(Value, P256_BYTES);
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
 	for (uint32_t attempt = 0U; attempt < 100U; attempt++)
 	{
-		if (pRng == nullptr || !pRng->IsSecure() ||
-			pRng->Random(z, sizeof(z)) != CRYPTO_STATUS_OK)
+		CRYPTO_STATUS status = pRng->Random(Value, P256_BYTES);
+		if (status != CRYPTO_STATUS_OK)
 		{
-			break;
+			CryptoSecureWipe(Value, P256_BYTES);
+			return status;
 		}
-		if (P256NonzeroFieldElement(z))
+		if (P256NonzeroFieldElement(Value))
 		{
-			valid = true;
-			break;
+			return CRYPTO_STATUS_OK;
 		}
 	}
-	if (!valid)
+	CryptoSecureWipe(Value, P256_BYTES);
+	return CRYPTO_STATUS_FAIL;
+}
+
+static bool RandomizePoint(Device *pDev, const uint8_t Z[P256_BYTES],
+						   const PkaPoint &P)
+{
+	if (Z == nullptr || !P256NonzeroFieldElement(Z))
 	{
-		CryptoSecureWipe(z, sizeof(z));
 		return false;
 	}
-
-	PkaWriteBe(pDev, P.Z, z, sizeof(z));
+	PkaWriteBe(pDev, P.Z, Z, P256_BYTES);
 	PkaModMul(pDev, P.Z, P.Z, P256_T0);
 	PkaModMul(pDev, P.X, P256_T0, P.X);
 	PkaModMul(pDev, P256_T0, P.Z, P256_T0);
 	PkaModMul(pDev, P.Y, P256_T0, P.Y);
-	CryptoSecureWipe(z, sizeof(z));
 	return !s_bPkaFault;
 }
 
@@ -777,12 +780,14 @@ static const uint8_t s_P256Generator[64] = {
 	0x2B,0xCE,0x33,0x57,0x6B,0x31,0x5E,0xCE,0xCB,0xB6,0x40,0x68,0x37,0xBF,0x51,0xF5,
 };
 
-static bool P256Multiply(Device *pDev, RngEngine *pRng, const uint8_t Point[64],
+static bool P256Multiply(Device *pDev, const uint8_t Point[64],
 						 const uint8_t Scalar[32], uint8_t Result[64],
-						 bool Randomize)
+						 const uint8_t ProjectiveZ[P256_BYTES], bool Randomize)
 {
 	if (Point == nullptr || Scalar == nullptr || Result == nullptr ||
-		!P256ScalarInRange(Scalar))
+		!P256ScalarInRange(Scalar) ||
+		(Randomize && (ProjectiveZ == nullptr ||
+						!P256NonzeroFieldElement(ProjectiveZ))))
 	{
 		return false;
 	}
@@ -802,7 +807,7 @@ static bool P256Multiply(Device *pDev, RngEngine *pRng, const uint8_t Point[64],
 	{
 		goto out;
 	}
-	if (Randomize && !RandomizePoint(pDev, pRng, POINT_P))
+	if (Randomize && !RandomizePoint(pDev, ProjectiveZ, POINT_P))
 	{
 		goto out;
 	}
@@ -853,9 +858,6 @@ static bool CoreInit(Device *pDev)
 	return true;
 }
 
-// The per-instance key context is CryptoCc3xx::KeyCtx (declared with the class
-// below); the private scalar lives there, single use by default.
-
 static bool Cc3xxAcquire(Device *pDev, Cc3xxIntrf *pIntrf)
 {
 	uint32_t attempts = __get_IPSR() == 0U ? CC3XX_ACQUIRE_SPINS : 1U;
@@ -881,16 +883,11 @@ static CRYPTO_STATUS EnsureCc3xx(Device *pDev, Cc3xxIntrf *pIntrf)
 {
 	if (!Cc3xxAcquire(pDev, pIntrf))
 	{
-		// The operation lock is owned elsewhere: transient, retryable.
 		return CRYPTO_STATUS_BUSY;
 	}
 
 	if (s_bCcInit == false)
 	{
-		// The caller is a counted user of the interface. A fault kill or a
-		// sibling engine Disable can have dropped wrapper power or the core
-		// setup since; re-assert power for the owned count (idempotent) and
-		// gate a wrapper that does not come up, then rerun the bring-up.
 		if (!Cc3xxEnable())
 		{
 			Cc3xxRelease(pDev, pIntrf);
@@ -902,13 +899,6 @@ static CRYPTO_STATUS EnsureCc3xx(Device *pDev, Cc3xxIntrf *pIntrf)
 	Cc3xxRelease(pDev, pIntrf);
 	return initialized ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
 }
-
-// @brief	nRF52840 CryptoCell CC310 P-256 ECDH as a KeyAgreeEngine. The
-//			private scalar lives in caller key context (single use by default,
-//			multi-peer with bKeepKey). The class is declared in the engine
-//			header; its methods are defined below, after the anonymous namespace
-//			closes, and still reach the internal PKA helpers in this same file.
-
 
 bool CryptoCc3xx::Init(DeviceIntrf * const pIntrf, RngEngine *pRng)
 {
@@ -931,12 +921,6 @@ bool CryptoCc3xx::Enable()
 		return false;
 	}
 
-	// Count this engine as one interface user, owned through vbIntrfEnabled
-	// and nothing else: vbValid can go false on a failed re-Enable while the
-	// count is still owned, and the count must be released exactly once. On
-	// a first bring-up failure the fresh count is released so the wrapper
-	// does not stay powered for a dead engine; on a failed re-Enable the
-	// original count is kept for the eventual Disable.
 	bool fresh = !vbIntrfEnabled;
 	if (fresh)
 	{
@@ -961,9 +945,6 @@ void CryptoCc3xx::Disable()
 		return;
 	}
 	vbIntrfEnabled = false;
-	// Force the next user through the core bring-up: if this release powers
-	// the wrapper off, the core setup is lost. A sibling engine still
-	// counted re-establishes it through EnsureCc3xx at its next operation.
 	s_bCcInit = false;
 	DeviceIntrf *pIntrf = Interface();
 	if (pIntrf != nullptr)
@@ -974,8 +955,6 @@ void CryptoCc3xx::Disable()
 
 void CryptoCc3xx::Reset()
 {
-	// Power-cycle recovery: release this engine's count (last user powers
-	// the wrapper off), then bring it back up through the normal path.
 	Disable();
 	(void)Enable();
 }
@@ -990,30 +969,49 @@ CRYPTO_STATUS CryptoCc3xx::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 		return CRYPTO_STATUS_FAIL;
 	}
 
-	// Reset the context and output before any gate, including the lifecycle
-	// gate. A disabled engine, a failed bring-up or a busy accelerator must
-	// not leave a previous private key usable in a reused context.
 	KeyCtx *pk = (KeyCtx *)pKeyCtx;
 	KeyReset(pk);
 	memset(pPubKey, 0, 64U);
 
-	if (!vbValid)
+	if (!vbValid || pIntrf == nullptr)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
+
+	CRYPTO_STATUS status = P256RandomScalarStatus(vpRng, pk->PrivKey);
+	if (status != CRYPTO_STATUS_OK)
+	{
+		KeyReset(pk);
+		return status;
+	}
+
+	uint8_t projectiveZ[P256_BYTES];
+	status = P256RandomFieldElementStatus(vpRng, projectiveZ);
+	if (status != CRYPTO_STATUS_OK)
+	{
+		KeyReset(pk);
+		CryptoSecureWipe(projectiveZ, sizeof(projectiveZ));
+		return status;
+	}
+
 	CRYPTO_STATUS ready = EnsureCc3xx(pDev, pIntrf);
 	if (ready != CRYPTO_STATUS_OK)
 	{
+		KeyReset(pk);
+		CryptoSecureWipe(projectiveZ, sizeof(projectiveZ));
 		return ready;
 	}
 	if (!Cc3xxAcquire(pDev, pIntrf))
 	{
+		KeyReset(pk);
+		CryptoSecureWipe(projectiveZ, sizeof(projectiveZ));
 		return CRYPTO_STATUS_BUSY;
 	}
 
-	CRYPTO_STATUS status = CRYPTO_STATUS_FAIL;
-	if (P256RandomScalar(vpRng, pk->PrivKey) &&
-		P256Multiply(pDev, vpRng, s_P256Generator, pk->PrivKey, pPubKey, true))
+	const bool ok = P256Multiply(pDev, s_P256Generator, pk->PrivKey,
+		pPubKey, projectiveZ, true);
+	CryptoSecureWipe(projectiveZ, sizeof(projectiveZ));
+	if (ok)
 	{
 		pk->bKeyValid = true;
 		status = CRYPTO_STATUS_OK;
@@ -1022,6 +1020,7 @@ CRYPTO_STATUS CryptoCc3xx::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 	{
 		KeyReset(pk);
 		memset(pPubKey, 0, 64U);
+		status = CRYPTO_STATUS_FAIL;
 	}
 	Cc3xxRelease(pDev, pIntrf);
 	return status;
@@ -1038,43 +1037,53 @@ CRYPTO_STATUS CryptoCc3xx::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 		return CRYPTO_STATUS_FAIL;
 	}
 
-	// Disposition on every path: the shared secret is cleared up front and
-	// only written on success. A transient contention returns BUSY and
-	// preserves the single-use key for retry; any other failure consumes it.
 	memset(pSharedX, 0, P256_BYTES);
 	KeyCtx *pk = (KeyCtx *)pKeyCtx;
-	if (Curve != CRYPTO_CURVE_P256 || !vbValid)
+	if (Curve != CRYPTO_CURVE_P256 || !vbValid || pIntrf == nullptr ||
+		!pk->bKeyValid)
 	{
 		KeyReset(pk);
 		return CRYPTO_STATUS_FAIL;
 	}
+
+	uint8_t projectiveZ[P256_BYTES];
+	CRYPTO_STATUS randomStatus =
+		P256RandomFieldElementStatus(vpRng, projectiveZ);
+	if (randomStatus == CRYPTO_STATUS_BUSY)
+	{
+		CryptoSecureWipe(projectiveZ, sizeof(projectiveZ));
+		return CRYPTO_STATUS_BUSY;
+	}
+	if (randomStatus != CRYPTO_STATUS_OK)
+	{
+		CryptoSecureWipe(projectiveZ, sizeof(projectiveZ));
+		KeyReset(pk);
+		return randomStatus;
+	}
+
 	CRYPTO_STATUS ready = EnsureCc3xx(pDev, pIntrf);
 	if (ready == CRYPTO_STATUS_BUSY)
 	{
+		CryptoSecureWipe(projectiveZ, sizeof(projectiveZ));
 		return CRYPTO_STATUS_BUSY;
 	}
 	if (ready != CRYPTO_STATUS_OK)
 	{
+		CryptoSecureWipe(projectiveZ, sizeof(projectiveZ));
 		KeyReset(pk);
 		return CRYPTO_STATUS_FAIL;
 	}
 	if (!Cc3xxAcquire(pDev, pIntrf))
 	{
+		CryptoSecureWipe(projectiveZ, sizeof(projectiveZ));
 		return CRYPTO_STATUS_BUSY;
-	}
-	if (!pk->bKeyValid)
-	{
-		Cc3xxRelease(pDev, pIntrf);
-		KeyReset(pk);
-		return CRYPTO_STATUS_FAIL;
 	}
 
 	uint8_t point[64];
-	const bool ok = P256Multiply(pDev, vpRng, pPeerPubKey, pk->PrivKey, point, true);
+	const bool ok = P256Multiply(pDev, pPeerPubKey, pk->PrivKey, point,
+		projectiveZ, true);
+	CryptoSecureWipe(projectiveZ, sizeof(projectiveZ));
 
-	// Wipe the private scalar unless the caller asked to keep it after a success
-	// (bKeepKey), for one ephemeral key pair against several peers. A failure
-	// always wipes.
 	if (!bKeepKey || !ok)
 	{
 		KeyReset(pk);
@@ -1116,18 +1125,18 @@ int CryptoCc3xx::SelfTest()
 		0x99,0x79,0x6B,0x13,0xB4,0xF8,0x66,0xF1,0x86,0x8D,0x34,0xF3,0x73,0xBF,0xA6,0x98,
 	};
 
-	if (EnsureCc3xx(pDev, pIntrf) != CRYPTO_STATUS_OK || !Cc3xxAcquire(pDev, pIntrf))
+	if (EnsureCc3xx(pDev, pIntrf) != CRYPTO_STATUS_OK ||
+		!Cc3xxAcquire(pDev, pIntrf))
 	{
 		return -1;
 	}
 	uint8_t result[64];
-	const bool ok = P256Multiply(pDev, nullptr, pub, priv, result, false);
+	const bool ok = P256Multiply(pDev, pub, priv, result, nullptr, false);
 	Cc3xxRelease(pDev, pIntrf);
 	const int status = ok && memcmp(result, expected, sizeof(expected)) == 0 ? 0 : -1;
 	CryptoSecureWipe(result, sizeof(result));
 	return status;
 }
-
 
 CryptoCc3xx *CryptoCc3xxCreate(void *pMem, size_t MemSize, RngEngine *pRng)
 {
