@@ -108,7 +108,7 @@ public:
 	void SetRng(RngEngine *pRng) { vpRng = pRng; }
 
 	bool Enable() override;
-	void Disable() override {}
+	void Disable() override { if (Interface() != nullptr) { Interface()->Disable(); } }
 	void Reset() override {}
 
 	size_t KeyCtxSize() const override { return sizeof(KeyCtx); }

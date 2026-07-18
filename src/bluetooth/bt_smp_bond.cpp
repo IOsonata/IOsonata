@@ -243,17 +243,30 @@ void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 	memcpy(addr, pPeer->Conn.PeerAddr, 6);
 
 	int slot = BtSmpBondFindByAddr(addrType, addr);
-	if (slot < 0)
+	const bool freshSlot = (slot < 0);
+	if (freshSlot)
 	{
 		slot = BtSmpBondAllocSlot();
 	}
 
-	// Clear the slot before populating it. A reused slot (same peer re-pairing
-	// with a fresh CSRK, or a recycled slot when the table is full) must not
-	// keep the previous SignCounter: signed-write verification rejects a counter
-	// below the stored value, so a stale counter would block the new signing
-	// relationship from starting at zero.
+	// Preserve the signed-write SignCounter across the repeated BtSmpBondAdd
+	// calls of a single pairing. It runs again as the peer Identity and Signing
+	// PDUs arrive, so wiping the counter on every call would let a peer send
+	// Signing Information, issue a signed write at counter zero, then trigger
+	// another BtSmpBondAdd that rolls the counter back and replays that write.
+	// Keep the counter only for an existing slot whose CSRK is unchanged. Reset
+	// it (to zero, through the wipe below) for a newly allocated or recycled
+	// slot, or when the CSRK differs: that is a new signing relationship which
+	// legitimately starts at zero.
+	uint32_t keepCounter = 0;
+	if (!freshSlot && s_BtSmpBondTable[slot].bValid &&
+		memcmp(s_BtSmpBondTable[slot].Keys.Csrk, pKeys->Csrk, 16) == 0)
+	{
+		keepCounter = s_BtSmpBondTable[slot].SignCounter;
+	}
+
 	memset(&s_BtSmpBondTable[slot], 0, sizeof(s_BtSmpBondTable[slot]));
+	s_BtSmpBondTable[slot].SignCounter = keepCounter;
 
 	s_BtSmpBondTable[slot].bValid = true;
 	s_BtSmpBondTable[slot].PeerAddrType = addrType;

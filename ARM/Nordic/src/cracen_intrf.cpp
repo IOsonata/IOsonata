@@ -14,9 +14,10 @@
 		the latched offset. Registers are accessed as 32-bit words and operand
 		memory byte-wise, matching the hardware.
 
-		ModuleHold provides operation-level exclusion across CryptoMaster,
+		CoreAcquire provides operation-level exclusion across CryptoMaster,
 		BA414EP and the RNG. It is separate from the DeviceIntrf transfer busy
 		flag because one crypto operation contains many register transfers.
+		Module power is owned by the transport Enable/Disable, not the lock.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -57,12 +58,10 @@ static bool s_bRngHeld;
 static bool s_bDrbgInit;
 
 // One operation may own CRACEN at a time. s_HeldMask is zero when there is no
-// owner. s_PreviousEnable remembers whether the selected module was already
-// enabled before the hold, so release does not power down another subsystem's
-// pre-existing setup.
+// owner. Module power is held on by the transport Enable (whole core on); the
+// lock below only serializes the engines and selects the sub-block base.
 static atomic_flag s_HoldFlag = ATOMIC_FLAG_INIT;
 static uint32_t s_HeldMask;
-static uint32_t s_PreviousEnable;
 static const void *s_pHoldOwner;
 
 static void CracenSelectBase(uint32_t DevAddr)
@@ -98,7 +97,7 @@ static bool CracenStartRx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 		if (!CracenSdEnabled())
 		{
 			CracenIntrf *p = (CracenIntrf *)pIntrf->pDevData;
-			if (p == nullptr || !p->ModuleHold(CRACEN_MODULE_RNG, pIntrf))
+			if (p == nullptr || !p->CoreAcquire(CRACEN_MODULE_RNG, pIntrf))
 			{
 				return false;
 			}
@@ -274,7 +273,7 @@ static void CracenStopRx(DevIntrf_t * const pIntrf)
 			CracenIntrf *p = (CracenIntrf *)pIntrf->pDevData;
 			if (p != nullptr)
 			{
-				(void)p->ModuleRelease(pIntrf);
+				(void)p->CoreRelease(pIntrf);
 			}
 			s_bRngHeld = false;
 		}
@@ -299,7 +298,7 @@ static uint32_t CracenModuleMask(uint32_t Module)
 	}
 }
 
-bool CracenIntrf::ModuleHold(uint32_t Module, const void *pOwner)
+bool CracenIntrf::CoreAcquire(uint32_t Module, const void *pOwner)
 {
 	const uint32_t mask = CracenModuleMask(Module);
 	if (mask == 0U || pOwner == nullptr || atomic_flag_test_and_set(&s_HoldFlag))
@@ -308,11 +307,9 @@ bool CracenIntrf::ModuleHold(uint32_t Module, const void *pOwner)
 	}
 
 	s_HeldMask = mask;
-	s_PreviousEnable = NRF_CRACEN->ENABLE & mask;
 	s_pHoldOwner = pOwner;
 	s_pRegBase = (Module == CRACEN_MODULE_CRYPTOMASTER) ? s_pCmRegBase
 											 : s_pPkeRegBase;
-	NRF_CRACEN->ENABLE |= mask;
 	__DMB();
 	return true;
 }
@@ -327,24 +324,18 @@ static bool CracenHoldRelease(const void *pOwner)
 		return false;
 	}
 
-	if (s_PreviousEnable == 0U)
-	{
-		NRF_CRACEN->ENABLE &= ~mask;
-		__DMB();
-	}
 	s_HeldMask = 0U;
-	s_PreviousEnable = 0U;
 	s_pHoldOwner = nullptr;
 	atomic_flag_clear(&s_HoldFlag);
 	return true;
 }
 
-bool CracenIntrf::ModuleRelease(const void *pOwner)
+bool CracenIntrf::CoreRelease(const void *pOwner)
 {
 	return CracenHoldRelease(pOwner);
 }
 
-bool CracenIntrf::ModuleReset(const void *pOwner)
+bool CracenIntrf::CoreReset(const void *pOwner)
 {
 	const uint32_t mask = s_HeldMask;
 	if (mask == 0U || pOwner == nullptr || s_pHoldOwner != pOwner)
@@ -361,8 +352,26 @@ bool CracenIntrf::ModuleReset(const void *pOwner)
 	return true;
 }
 
-static void CracenDummyDisable(DevIntrf_t * const pIntrf) { (void)pIntrf; }
-static void CracenDummyEnable(DevIntrf_t * const pIntrf) { (void)pIntrf; }
+// Transport enable/disable (EnCnt gated): power the whole CRACEN core on the
+// first device up, off on the last release. NRF_CRACEN is the Nordic wrapper
+// and lives only here in the interface; the Silex engines never touch it. The
+// per-operation lock is a separate concern, see CoreAcquire.
+static void CracenCoreDisable(DevIntrf_t * const pIntrf)
+{
+	(void)pIntrf;
+	NRF_CRACEN->ENABLE &= ~(CRACEN_ENABLE_CRYPTOMASTER_Msk |
+							CRACEN_ENABLE_PKEIKG_Msk |
+							CRACEN_ENABLE_RNG_Msk);
+	__DMB();
+}
+static void CracenCoreEnable(DevIntrf_t * const pIntrf)
+{
+	(void)pIntrf;
+	NRF_CRACEN->ENABLE |= (CRACEN_ENABLE_CRYPTOMASTER_Msk |
+						   CRACEN_ENABLE_PKEIKG_Msk |
+						   CRACEN_ENABLE_RNG_Msk);
+	__DMB();
+}
 static uint32_t CracenGetRate(DevIntrf_t * const pIntrf)
 {
 	(void)pIntrf;
@@ -392,7 +401,7 @@ static void CracenReset(DevIntrf_t * const pIntrf)
 static void CracenPowerOff(DevIntrf_t * const pIntrf)
 {
 	(void)pIntrf;
-	// Operation owners control module power through ModuleHold/ModuleRelease.
+	// Module power is owned by the transport Enable/Disable (whole core on).
 }
 static void *CracenGetHandle(DevIntrf_t * const pIntrf)
 {
@@ -415,7 +424,6 @@ bool CracenIntrf::Init(void)
 	s_bRngHeld = false;
 	s_bDrbgInit = false;
 	s_HeldMask = 0U;
-	s_PreviousEnable = 0U;
 
 	memset(&vDevIntrf, 0, sizeof(vDevIntrf));
 	vDevIntrf.pDevData = this;
@@ -432,8 +440,8 @@ bool CracenIntrf::Init(void)
 	atomic_store(&vDevIntrf.bTxReady, true);
 	atomic_store(&vDevIntrf.bNoStop, false);
 
-	vDevIntrf.Disable = CracenDummyDisable;
-	vDevIntrf.Enable = CracenDummyEnable;
+	vDevIntrf.Disable = CracenCoreDisable;
+	vDevIntrf.Enable = CracenCoreEnable;
 	vDevIntrf.GetRate = CracenGetRate;
 	vDevIntrf.SetRate = CracenSetRate;
 	vDevIntrf.StartRx = CracenStartRx;

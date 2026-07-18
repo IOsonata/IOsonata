@@ -44,6 +44,15 @@ SOFTWARE.
 
 #include "cracen_intrf.h"
 #include "crypto/ba414ep.h"
+#include "syslog.h"
+
+// Diagnostic tracing. Comment out BA414EP_TRACE_ENABLE to silence.
+#define BA414EP_TRACE_ENABLE
+#if defined(BA414EP_TRACE_ENABLE)
+#define BA414EP_TRACE(...)	SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define BA414EP_TRACE(...)
+#endif
 
 #ifndef __DMB
 #define __DMB()		((void)0)
@@ -53,6 +62,12 @@ SOFTWARE.
 #define BA414EP_POLL_LIMIT	10000000U
 #define BA414EP_RETRY_COUNT	10U
 #define BA414EP_BLIND_SIZE	8U
+
+// Bring-up bisect only: define to run the point multiply WITHOUT the DPA
+// blinding countermeasures (no RANDOM_SCALAR/RANDOM_PROJECTIVE, no slot-15
+// factor), to isolate whether the blinded path is the fault. This removes side
+// channel protection and MUST be commented out for any real build.
+#define BA414EP_BLIND_DISABLE
 
 static void PkWipe(void *pData, size_t Len)
 {
@@ -149,15 +164,19 @@ static CRYPTO_STATUS PkPrepare(Device *pDev, CracenIntrf *pIntrf)
 {
 	if (pIntrf == nullptr || s_bPkQuarantined)
 	{
+		BA414EP_TRACE("Ba414ep PkPrepare: intrf=%p quarantined=%d -> FAIL\r\n",
+					  (void *)pIntrf, (int)s_bPkQuarantined);
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (!pIntrf->ModuleHold(CRACEN_MODULE_PKEIKG, pDev))
+	if (!pIntrf->CoreAcquire(CRACEN_MODULE_PKEIKG, pDev))
 	{
+		BA414EP_TRACE("Ba414ep PkPrepare: CoreAcquire(PKEIKG) failed -> BUSY\r\n");
 		return CRYPTO_STATUS_BUSY;
 	}
 	if (!PkWaitNotBusy(pDev))
 	{
-		(void)pIntrf->ModuleRelease(pDev);
+		BA414EP_TRACE("Ba414ep PkPrepare: PkWaitNotBusy timeout -> BUSY\r\n");
+		(void)pIntrf->CoreRelease(pDev);
 		return CRYPTO_STATUS_BUSY;
 	}
 	return CRYPTO_STATUS_OK;
@@ -174,7 +193,7 @@ static void PkCleanup(Device *pDev, CracenIntrf *pIntrf)
 	__DMB();
 
 	PkRegWrite(pDev, BA414EP_REG_CONTROL, BA414EP_CONTROL_CLEAR_IRQ);
-	(void)pIntrf->ModuleRelease(pDev);
+	(void)pIntrf->CoreRelease(pDev);
 }
 
 // The poll limit expired while the module was still busy. Keep ownership,
@@ -183,7 +202,7 @@ static void PkCleanup(Device *pDev, CracenIntrf *pIntrf)
 // hold so no sibling CRACEN engine can enter an unknown hardware state.
 static bool PkAbortAndReset(Device *pDev, CracenIntrf *pIntrf)
 {
-	if (pIntrf == nullptr || !pIntrf->ModuleReset(pDev) ||
+	if (pIntrf == nullptr || !pIntrf->CoreReset(pDev) ||
 		!PkWaitNotBusy(pDev))
 	{
 		s_bPkQuarantined = true;
@@ -201,6 +220,7 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 		Scalar == nullptr || Result == nullptr || pRng == nullptr ||
 		!pRng->IsSecure() || !P256ScalarInRange(Scalar))
 	{
+		BA414EP_TRACE("Ba414ep PkMul: bad args/rng/scalar -> FAIL\r\n");
 		return CRYPTO_STATUS_FAIL;
 	}
 
@@ -212,6 +232,7 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 		uint8_t blind[BA414EP_BLIND_SIZE];
 		if (pRng->Random(blind, sizeof(blind)) != CRYPTO_STATUS_OK)
 		{
+			BA414EP_TRACE("Ba414ep PkMul: blinding RNG draw failed -> FAIL\r\n");
 			PkWipe(blind, sizeof(blind));
 			return CRYPTO_STATUS_FAIL;
 		}
@@ -228,7 +249,13 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 		}
 
 		uint32_t status = BA414EP_STATUS_BUSY;
+#if defined(BA414EP_BLIND_DISABLE)
+		PkRegWrite(pDev, BA414EP_REG_COMMAND,
+				   BA414EP_CMD_ECC_PTMUL | BA414EP_CMD_OPSIZE(32U) |
+				   BA414EP_CMD_SELCUR_P256 | BA414EP_CMD_BIG_ENDIAN);
+#else
 		PkRegWrite(pDev, BA414EP_REG_COMMAND, BA414EP_CMD_P256_PTMUL);
+#endif
 		PkWriteOperand(pDev, BA414EP_SLOT_SCALAR, Scalar, P256_SZ);
 		PkWriteOperand(pDev, BA414EP_SLOT_POINT_X, &Point[0], P256_SZ);
 		PkWriteOperand(pDev, BA414EP_SLOT_POINT_Y, &Point[32], P256_SZ);
@@ -236,8 +263,10 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 		// The countermeasure factor is one full 32 byte operand in slot 15
 		// with the 8 byte value at the big-endian tail. Zero the window first
 		// so power-on crypto RAM content cannot enter the factor.
+#if !defined(BA414EP_BLIND_DISABLE)
 		PkClearSlot(pDev, BA414EP_SLOT_BLIND, P256_SZ);
 		PkWriteOperand(pDev, BA414EP_SLOT_BLIND, blind, sizeof(blind));
+#endif
 		PkRegWrite(pDev, BA414EP_REG_CONFIG, BA414EP_CONFIG_PTMUL);
 
 		__DMB();
@@ -245,6 +274,8 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 				   BA414EP_CONTROL_START | BA414EP_CONTROL_CLEAR_IRQ);
 		if (!PkWaitIdle(pDev, &status))
 		{
+			BA414EP_TRACE("Ba414ep PkMul: PkWaitIdle timeout, status=0x%x -> FAIL\r\n",
+						  (unsigned)status);
 			// The operation is still executing past the poll limit: hard
 			// reset the module under the retained hold and wipe the operand
 			// RAM once idle. A failed reset quarantines the PKE hold with
@@ -254,11 +285,18 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 			return CRYPTO_STATUS_FAIL;
 		}
 		__DMB();
+		BA414EP_TRACE("Ba414ep PkMul: attempt %u hw status=0x%x\r\n",
+					  (unsigned)attempt, (unsigned)status);
 
 		if (status == 0U)
 		{
 			PkReadOperand(pDev, BA414EP_SLOT_RESULT_X, &Result[0], P256_SZ);
 			PkReadOperand(pDev, BA414EP_SLOT_RESULT_Y, &Result[32], P256_SZ);
+			BA414EP_TRACE("Ba414ep PkMul: Rx %02x%02x%02x%02x z=%d Ry %02x%02x%02x%02x z=%d\r\n",
+						  Result[0], Result[1], Result[2], Result[3],
+						  (int)P256IsZero(&Result[0], P256_SZ),
+						  Result[32], Result[33], Result[34], Result[35],
+						  (int)P256IsZero(&Result[32], P256_SZ));
 		}
 
 		PkCleanup(pDev, pIntrf);
@@ -269,6 +307,9 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 		{
 			return CRYPTO_STATUS_OK;
 		}
+		BA414EP_TRACE("Ba414ep PkMul: reject status=0x%x rx_zero=%d ry_zero=%d\r\n",
+					  (unsigned)status, (int)P256IsZero(&Result[0], P256_SZ),
+					  (int)P256IsZero(&Result[32], P256_SZ));
 		memset(Result, 0, 64U);
 
 		if (status != BA414EP_STATUS_NOT_INVERTIBLE)
@@ -276,6 +317,8 @@ static CRYPTO_STATUS PkPointMultiply(Device *pDev, CracenIntrf *pIntrf,
 			return CRYPTO_STATUS_FAIL;
 		}
 	}
+	BA414EP_TRACE("Ba414ep PkMul: all %u attempts exhausted -> FAIL\r\n",
+				  (unsigned)BA414EP_RETRY_COUNT);
 	return CRYPTO_STATUS_FAIL;
 }
 
@@ -300,13 +343,18 @@ bool Ba414ep::Init(CracenIntrf * const pIntrf, RngEngine *pRng)
 
 bool Ba414ep::Enable()
 {
-	bool ok = PkPrepare(this, vpCracen) == CRYPTO_STATUS_OK;
-	if (ok)
+	if (vpCracen == nullptr)
 	{
-		PkCleanup(this, vpCracen);
+		vbValid = false;
+		return false;
 	}
-	vbValid = ok;
-	return ok;
+	// Bring up the transport; the interface powers the whole CRACEN core. The
+	// BA414EP is a generic Silex engine with no enable register of its own, so
+	// there is nothing device-specific to write here. Validity is proven by the
+	// first operation.
+	Interface()->Enable();
+	vbValid = true;
+	return true;
 }
 
 void Ba414ep::KeyReset(void *pKeyCtx)
@@ -330,11 +378,14 @@ CRYPTO_STATUS Ba414ep::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKe
 
 	if (vpRng == nullptr || !vpRng->IsSecure())
 	{
+		BA414EP_TRACE("Ba414ep KeyGen: rng=%p secure=%d -> UNSUPPORTED\r\n",
+					  (void *)vpRng, vpRng != nullptr ? (int)vpRng->IsSecure() : -1);
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
 	if (!P256RandomScalar(vpRng, pk->PrivKey))
 	{
+		BA414EP_TRACE("Ba414ep KeyGen: P256RandomScalar (private key draw) failed -> FAIL\r\n");
 		KeyReset(pk);
 		return CRYPTO_STATUS_FAIL;
 	}
@@ -346,6 +397,7 @@ CRYPTO_STATUS Ba414ep::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKe
 		return CRYPTO_STATUS_OK;
 	}
 
+	BA414EP_TRACE("Ba414ep KeyGen: PkPointMultiply -> st=%d\r\n", (int)st);
 	KeyReset(pk);
 	memset(pPubKey, 0, 64U);
 	return st;

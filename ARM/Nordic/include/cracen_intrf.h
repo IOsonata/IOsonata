@@ -82,14 +82,13 @@ public:
 	}
 	void StopTx(void) override { DeviceIntrfStopTx(&vDevIntrf); }
 
-	// Hold a crypto module enabled for the duration of an operation and take the
-	// busy flag so the engines serialize against one another. The engine calls
-	// ModuleHold once before its work and ModuleRelease once after; register
-	// access between them lands in the held module's sub-block. Returns false if
-	// another engine holds the core.
-	bool ModuleHold(uint32_t Module, const void *pOwner);
-	bool ModuleRelease(const void *pOwner);
-	bool ModuleReset(const void *pOwner);
+	// Operation-level lock for a multi-transfer engine computation (bBusy is
+	// per transfer; see devintrf-implementer-notes). Acquire once before the
+	// operation, release once after. This does NOT power the module; the
+	// transport Enable/Disable own NRF_CRACEN->ENABLE.
+	bool CoreAcquire(uint32_t Module, const void *pOwner);
+	bool CoreRelease(const void *pOwner);
+	bool CoreReset(const void *pOwner);
 
 protected:
 	DevIntrf_t vDevIntrf;

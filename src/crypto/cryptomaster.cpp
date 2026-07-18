@@ -188,14 +188,21 @@ bool CryptoMaster::Init(CracenIntrf * const pIntrf)
 
 bool CryptoMaster::Enable()
 {
-	if (vpCracen == nullptr ||
-		!vpCracen->ModuleHold(CRACEN_MODULE_CRYPTOMASTER, this))
+	if (vpCracen == nullptr)
+	{
+		vbValid = false;
+		return false;
+	}
+	// Bring up the transport (powers the whole CRACEN core), then take the
+	// operation lock only for the presence read.
+	Interface()->Enable();
+	if (!vpCracen->CoreAcquire(CRACEN_MODULE_CRYPTOMASTER, this))
 	{
 		vbValid = false;
 		return false;
 	}
 	uint32_t present = CmRegRead(this, CRYPTOMASTER_HW_PRESENCE);
-	(void)vpCracen->ModuleRelease(this);
+	(void)vpCracen->CoreRelease(this);
 	vbValid = (present & CRYPTOMASTER_PRESENT_AES) != 0U;
 	return vbValid;
 }
@@ -246,7 +253,7 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		if (Len > 0U) memset(pOut, 0, Len);
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (!vpCracen->ModuleHold(CRACEN_MODULE_CRYPTOMASTER, this))
+	if (!vpCracen->CoreAcquire(CRACEN_MODULE_CRYPTOMASTER, this))
 	{
 		// Refused hold: fail closed and retryable.
 		if (Len > 0U) memset(pOut, 0, Len);
@@ -315,7 +322,7 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		CmWipe(chain, sizeof(chain));
 	}
 
-	(void)vpCracen->ModuleRelease(this);
+	(void)vpCracen->CoreRelease(this);
 	if (status != CRYPTO_STATUS_OK && Len > 0U)
 	{
 		memset(pOut, 0, Len);
@@ -328,12 +335,12 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 bool CryptoMaster::AesOpBegin()
 {
 	return vpCracen != nullptr &&
-		vpCracen->ModuleHold(CRACEN_MODULE_CRYPTOMASTER, this);
+		vpCracen->CoreAcquire(CRACEN_MODULE_CRYPTOMASTER, this);
 }
 
 void CryptoMaster::AesOpEnd()
 {
-	(void)vpCracen->ModuleRelease(this);
+	(void)vpCracen->CoreRelease(this);
 }
 
 bool CryptoMaster::AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16],

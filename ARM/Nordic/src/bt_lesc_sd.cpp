@@ -142,26 +142,38 @@ bool BtLescKeyPairGen(void)
 	{
 		if (s_PeerKeys[i].bRequested)
 		{
+			LESC_TRACE("LESC keygen: link %d has a pending request\r\n", i);
 			return false;
 		}
 	}
 
-	if (s_pLescCrypto == nullptr ||
-		s_pLescCrypto->KeyCtxSize() == 0U ||
+	if (s_pLescCrypto == nullptr)
+	{
+		LESC_TRACE("LESC keygen: no crypto engine bound\r\n");
+		return false;
+	}
+	LESC_TRACE("LESC keygen: ctxsize=%u align=%u (buf=%u alignmax=%u)\r\n",
+			   (unsigned)s_pLescCrypto->KeyCtxSize(),
+			   (unsigned)s_pLescCrypto->KeyCtxAlign(),
+			   (unsigned)sizeof(s_LescEcdhKeyCtx),
+			   (unsigned)CRYPTO_KEYCTX_ALIGN_MAX);
+	if (s_pLescCrypto->KeyCtxSize() == 0U ||
 		s_pLescCrypto->KeyCtxSize() > sizeof(s_LescEcdhKeyCtx) ||
 		s_pLescCrypto->KeyCtxAlign() == 0U ||
 		s_pLescCrypto->KeyCtxAlign() > CRYPTO_KEYCTX_ALIGN_MAX)
 	{
+		LESC_TRACE("LESC keygen: engine key context rejected\r\n");
 		return false;
 	}
 
 	LocalKeyReset();
 	uint8_t pubBe[BLE_GAP_LESC_P256_PK_LEN];
-	if (s_pLescCrypto->KeyGen(CRYPTO_CURVE_P256, s_LescEcdhKeyCtx, pubBe) !=
-		CRYPTO_STATUS_OK)
+	CRYPTO_STATUS st = s_pLescCrypto->KeyGen(CRYPTO_CURVE_P256,
+											 s_LescEcdhKeyCtx, pubBe);
+	if (st != CRYPTO_STATUS_OK)
 	{
 		CryptoSecureWipe(pubBe, sizeof(pubBe));
-		LESC_TRACE("LESC keypair generate failed\r\n");
+		LESC_TRACE("LESC keypair generate failed st=%d\r\n", (int)st);
 		return false;
 	}
 	ByteOrderInvert(pubBe, s_LescPubKey.pk);

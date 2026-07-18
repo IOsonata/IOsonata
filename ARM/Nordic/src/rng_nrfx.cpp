@@ -21,6 +21,14 @@
 
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #include "cracen_intrf.h"
+#include "syslog.h"
+
+#define RNGNRF_TRACE_ENABLE
+#if defined(RNGNRF_TRACE_ENABLE)
+#define RNGNRF_TRACE(...)	SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define RNGNRF_TRACE(...)
+#endif
 #define RNG_USE_CRACEN	1
 #else
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
@@ -253,8 +261,16 @@ bool CryptoRngNrf::Init(DeviceIntrf * const pIntrf)
 
 bool CryptoRngNrf::Enable(void)
 {
-	vbValid = Interface() != nullptr;
-	return vbValid;
+	if (Interface() == nullptr)
+	{
+		vbValid = false;
+		return false;
+	}
+	// Bring up the transport (on CRACEN this powers the whole core; on the
+	// nRF52 RNG peripheral it enables that interface).
+	Interface()->Enable();
+	vbValid = true;
+	return true;
 }
 
 CRYPTO_STATUS CryptoRngNrf::Random(uint8_t *pOut, size_t Len)
@@ -265,11 +281,15 @@ CRYPTO_STATUS CryptoRngNrf::Random(uint8_t *pOut, size_t Len)
 	}
 	if (!vbValid || pOut == nullptr || Len > (size_t)INT_MAX)
 	{
+		RNGNRF_TRACE("RngNrf Random: valid=%d out=%p len=%u -> FAIL\r\n",
+					 (int)vbValid, (void *)pOut, (unsigned)Len);
 		return CRYPTO_STATUS_FAIL;
 	}
 	int count = Interface()->Rx(DeviceAddress(), pOut, (int)Len);
 	if (count != (int)Len)
 	{
+		RNGNRF_TRACE("RngNrf Random: Rx returned %d of %u -> FAIL\r\n",
+					 count, (unsigned)Len);
 		CryptoSecureWipe(pOut, Len);
 		return CRYPTO_STATUS_FAIL;
 	}

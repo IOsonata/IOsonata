@@ -100,7 +100,7 @@ public:
 	bool Init(CracenIntrf * const pIntrf);
 
 	bool Enable() override;
-	void Disable() override {}
+	void Disable() override { if (Interface() != nullptr) { Interface()->Disable(); } }
 	void Reset() override {}
 
 	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,

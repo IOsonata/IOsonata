@@ -1446,6 +1446,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_smp_bond.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_smp_bond_sdc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/bt_smp_bond_sdc.cpp</locationURI>
