@@ -96,11 +96,25 @@ static const char *SmpCodeName(uint8_t c);
 #define BT_SMP_LOCAL_AUTHREQ	(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_SC)
 #endif
 
+typedef enum __Bt_Smp_Crypto_Op {
+	BT_SMP_CRYPTO_OP_NONE = 0,
+	BT_SMP_CRYPTO_OP_PUBKEY,
+	BT_SMP_CRYPTO_OP_DHKEY,
+} BT_SMP_CRYPTO_OP;
+
 typedef struct __Bt_Smp_Link {
 	uint16_t    ConnHdl;
 	uint32_t    Generation;
 	BtSmpCtx_t  Ctx;
 	BtSmpKeys_t Keys;
+	// Per-link crypto request. Each link tracks the operation it is waiting
+	// on so several links can queue for the one ECDH engine instead of one
+	// link blocking the others. Op is BT_SMP_CRYPTO_OP_NONE when the link has
+	// nothing outstanding.
+	BT_SMP_CRYPTO_OP CryptoOp;
+	bool             bCryptoWait;   // request placed, engine not yet started
+	bool             bRetryBusy;    // engine returned BUSY, retry from the loop
+	BtHciDevice_t   *pCryptoDev;
 } BtSmpLink_t;
 
 static BtSmpLink_t s_SmpLink[BT_SMP_MAX_LINK];
@@ -134,21 +148,19 @@ static struct {
 	uint8_t PeerConfirm[16];
 } s_SmpOob = {};
 
-typedef enum __Bt_Smp_Crypto_Op {
-	BT_SMP_CRYPTO_OP_NONE = 0,
-	BT_SMP_CRYPTO_OP_PUBKEY,
-	BT_SMP_CRYPTO_OP_DHKEY,
-} BT_SMP_CRYPTO_OP;
-
-typedef struct __Bt_Smp_Crypto_Pending {
+// The ECDH engine runs one operation at a time. This marks the link that
+// currently owns it (ConnHdl plus Generation identify the exact pairing
+// attempt, so a completion for a disconnected-and-reused handle is dropped).
+// Op is BT_SMP_CRYPTO_OP_NONE when the engine is free. Waiting links keep their
+// request in the per-link fields and are started when the engine frees up.
+typedef struct __Bt_Smp_Crypto_Inflight {
 	BT_SMP_CRYPTO_OP Op;
 	uint16_t ConnHdl;
 	uint32_t Generation;
 	BtHciDevice_t *pDev;
-	bool bRetryBusy;
-} BtSmpCryptoPending_t;
+} BtSmpCryptoInflight_t;
 
-static BtSmpCryptoPending_t s_SmpCryptoPending = {};
+static BtSmpCryptoInflight_t s_CryptoInflight = {};
 
 // Map the local and peer IO capabilities to an SC association model. Core
 // spec Vol 3 Part H, 2.3.5.1, Table 2.8 (LE Secure Connections). Rows index
@@ -285,24 +297,101 @@ static void SmpOobRelease(BtSmpLink_t *pLink)
 	}
 }
 
-static void SmpCryptoPendingClear(void)
+// Forward for the dispatcher used by the request and completion paths.
+static void SmpCryptoPump(void);
+static int SmpCryptoStart(BtSmpLink_t *pLink);
+
+// Drop this link's crypto request. If it owned the engine, free the engine so
+// a waiting link can start.
+static void SmpCryptoLinkClear(BtSmpLink_t *pLink)
 {
-	memset(&s_SmpCryptoPending, 0, sizeof(s_SmpCryptoPending));
+	if (pLink == nullptr)
+	{
+		return;
+	}
+	if (s_CryptoInflight.Op != BT_SMP_CRYPTO_OP_NONE &&
+		s_CryptoInflight.ConnHdl == pLink->ConnHdl &&
+		s_CryptoInflight.Generation == pLink->Generation)
+	{
+		memset(&s_CryptoInflight, 0, sizeof(s_CryptoInflight));
+	}
+	pLink->CryptoOp = BT_SMP_CRYPTO_OP_NONE;
+	pLink->bCryptoWait = false;
+	pLink->bRetryBusy = false;
+	pLink->pCryptoDev = nullptr;
 }
 
-// Abort a pairing attempt on one link: drop a pending crypto operation that
-// belongs to it, destroy the ECDH private key through the provider, wipe the
-// whole transient pairing context, and return the link to idle. The lock
-// flag survives so an abort inside a lockout keeps the link locked.
+// The link that currently owns the engine for the given operation, or nullptr.
+static BtSmpLink_t *SmpCryptoInflightLink(BT_SMP_CRYPTO_OP Op)
+{
+	if (s_CryptoInflight.Op != Op)
+	{
+		return nullptr;
+	}
+	BtSmpLink_t *pLink = SmpLinkFind(s_CryptoInflight.ConnHdl);
+	return pLink != nullptr && pLink->Generation == s_CryptoInflight.Generation ?
+		pLink : nullptr;
+}
+
+// Consume the in-flight completion: return the owning link, clear its request
+// and free the engine so the same link can issue its next operation (pubkey
+// then dhkey) and other waiting links can start. The caller pumps waiters once
+// it has finished handling this completion.
+static BtSmpLink_t *SmpCryptoInflightTake(BT_SMP_CRYPTO_OP Op)
+{
+	BtSmpLink_t *pLink = SmpCryptoInflightLink(Op);
+	memset(&s_CryptoInflight, 0, sizeof(s_CryptoInflight));
+	if (pLink != nullptr)
+	{
+		pLink->CryptoOp = BT_SMP_CRYPTO_OP_NONE;
+		pLink->bCryptoWait = false;
+		pLink->bRetryBusy = false;
+		pLink->pCryptoDev = nullptr;
+	}
+	return pLink;
+}
+
+// Record a crypto request on the link. The engine is not started here; the
+// caller drives it through SmpCryptoPump so a single path owns dispatch. A
+// link already holding a request is refused (it cannot need two at once).
+static bool SmpCryptoRequest(BtSmpLink_t *pLink, BtHciDevice_t *pDev,
+							  BT_SMP_CRYPTO_OP Op)
+{
+	if (pLink == nullptr || Op == BT_SMP_CRYPTO_OP_NONE ||
+		pLink->CryptoOp != BT_SMP_CRYPTO_OP_NONE)
+	{
+		return false;
+	}
+	pLink->CryptoOp = Op;
+	pLink->bCryptoWait = true;
+	pLink->bRetryBusy = false;
+	pLink->pCryptoDev = pDev;
+	return true;
+}
+
+static void SmpCryptoPendingClear(void)
+{
+	memset(&s_CryptoInflight, 0, sizeof(s_CryptoInflight));
+	for (int i = 0; i < BT_SMP_MAX_LINK; i++)
+	{
+		s_SmpLink[i].CryptoOp = BT_SMP_CRYPTO_OP_NONE;
+		s_SmpLink[i].bCryptoWait = false;
+		s_SmpLink[i].bRetryBusy = false;
+		s_SmpLink[i].pCryptoDev = nullptr;
+	}
+}
+
+// Abort a pairing attempt on one link: drop its crypto request (freeing the
+// engine if it owned it), destroy the ECDH private key through the provider,
+// wipe the whole transient pairing context, and return the link to idle. The
+// lock flag survives so an abort inside a lockout keeps the link locked.
 static void SmpAbortPairing(BtSmpLink_t *pLink)
 {
 	SmpOobRelease(pLink);
-	if (s_SmpCryptoPending.Op != BT_SMP_CRYPTO_OP_NONE &&
-		s_SmpCryptoPending.ConnHdl == pLink->ConnHdl &&
-		s_SmpCryptoPending.Generation == pLink->Generation)
-	{
-		SmpCryptoPendingClear();
-	}
+	bool ownedEngine = s_CryptoInflight.Op != BT_SMP_CRYPTO_OP_NONE &&
+		s_CryptoInflight.ConnHdl == pLink->ConnHdl &&
+		s_CryptoInflight.Generation == pLink->Generation;
+	SmpCryptoLinkClear(pLink);
 	SmpEcdhCtxReset(pLink->Ctx.EcdhKeyCtx);
 	// The lock flag and the H5 repeated-attempts counter survive the wipe:
 	// a locally detected failure (for example a wrong confirm from a peer
@@ -313,6 +402,12 @@ static void SmpAbortPairing(BtSmpLink_t *pLink)
 	pLink->Ctx.State = BT_SMP_STATE_IDLE;
 	pLink->Ctx.bLocked = locked;
 	pLink->Ctx.FailCount = failCount;
+	// Freeing the engine here lets a link that was waiting behind this one
+	// start now.
+	if (ownedEngine)
+	{
+		SmpCryptoPump();
+	}
 }
 
 // H5 repeated attempts (Core Vol 3 Part H 2.3.6): an authentication failure
@@ -327,44 +422,6 @@ static void SmpAuthFailCount(BtSmpLink_t *pLink)
 	{
 		pLink->Ctx.bLocked = true;
 	}
-}
-
-static bool SmpCryptoPendingBegin(BtSmpLink_t *pLink, BtHciDevice_t *pDev,
-								  BT_SMP_CRYPTO_OP Op)
-{
-	if (pLink == nullptr || Op == BT_SMP_CRYPTO_OP_NONE ||
-		s_SmpCryptoPending.Op != BT_SMP_CRYPTO_OP_NONE)
-	{
-		return false;
-	}
-	s_SmpCryptoPending.Op = Op;
-	s_SmpCryptoPending.ConnHdl = pLink->ConnHdl;
-	s_SmpCryptoPending.Generation = pLink->Generation;
-	s_SmpCryptoPending.pDev = pDev;
-	s_SmpCryptoPending.bRetryBusy = false;
-	return true;
-}
-
-static BtSmpLink_t *SmpCryptoPendingFind(BT_SMP_CRYPTO_OP Op)
-{
-	if (s_SmpCryptoPending.Op != Op)
-	{
-		return nullptr;
-	}
-	BtSmpLink_t *pLink = SmpLinkFind(s_SmpCryptoPending.ConnHdl);
-	return pLink != nullptr && pLink->Generation == s_SmpCryptoPending.Generation ?
-		pLink : nullptr;
-}
-
-static BtSmpLink_t *SmpCryptoPendingTake(BT_SMP_CRYPTO_OP Op)
-{
-	if (s_SmpCryptoPending.Op != Op)
-	{
-		return nullptr;
-	}
-	BtSmpLink_t *pLink = SmpCryptoPendingFind(Op);
-	SmpCryptoPendingClear();
-	return pLink;
 }
 
 static BtSmpLink_t *SmpLinkAlloc(uint16_t ConnHdl)
@@ -397,10 +454,21 @@ static void SmpLinkFree(uint16_t ConnHdl)
 	BtSmpLink_t *p = SmpLinkFind(ConnHdl);
 	if (p != nullptr)
 	{
+		// If this link owned the ECDH engine, release it so waiting links can
+		// run. A pending async completion for it is dropped once the slot is
+		// invalid, but the engine ownership must be cleared explicitly.
+		bool ownedEngine = s_CryptoInflight.Op != BT_SMP_CRYPTO_OP_NONE &&
+			s_CryptoInflight.ConnHdl == p->ConnHdl &&
+			s_CryptoInflight.Generation == p->Generation;
 		SmpOobRelease(p);
 		SmpEcdhCtxReset(p->Ctx.EcdhKeyCtx);
 		CryptoSecureWipe(p, sizeof(BtSmpLink_t));
 		p->ConnHdl = BT_CONN_HDL_INVALID;
+		if (ownedEngine)
+		{
+			memset(&s_CryptoInflight, 0, sizeof(s_CryptoInflight));
+			SmpCryptoPump();
+		}
 	}
 }
 
@@ -914,18 +982,16 @@ static int SmpLocalKeyGen(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 		return BT_SMP_CRYPTO_OK;
 	}
 	if (s_SmpOob.bLocalValid ||
-		SmpCryptoPendingBegin(pLink, pDev, BT_SMP_CRYPTO_OP_PUBKEY) == false)
+		SmpCryptoRequest(pLink, pDev, BT_SMP_CRYPTO_OP_PUBKEY) == false)
 	{
 		return BT_SMP_CRYPTO_FAIL;
 	}
-	int rc = SmpCryptoP256KeyGen(pLink, pLink->Ctx.LocalPubKey);
-	if (rc == BT_SMP_CRYPTO_BUSY)
-	{
-		s_SmpCryptoPending.bRetryBusy = true;
-		return BT_SMP_CRYPTO_PENDING;
-	}
-	if (rc != BT_SMP_CRYPTO_PENDING) { SmpCryptoPendingClear(); }
-	return rc;
+	// The request is queued. Dispatch drives the engine; if it is busy with
+	// another link this one waits and is started from SmpCryptoPump later.
+	int rc = SmpCryptoStart(pLink);
+	// OK completes synchronously; PENDING and a queued (still waiting) request
+	// both keep the pairing running until the completion or retry path fires.
+	return rc == BT_SMP_CRYPTO_FAIL ? BT_SMP_CRYPTO_FAIL : BT_SMP_CRYPTO_PENDING;
 }
 
 // g2 -> 6 digit Numeric Comparison value.
@@ -1219,26 +1285,15 @@ static bool SmpKeyPresent(const uint8_t *pKey, size_t Len)
 
 static bool SmpStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 {
-	if (SmpCryptoPendingBegin(pLink, pDev, BT_SMP_CRYPTO_OP_DHKEY) == false)
+	if (SmpCryptoRequest(pLink, pDev, BT_SMP_CRYPTO_OP_DHKEY) == false)
 	{
 		return false;
 	}
 	pLink->Ctx.State = BT_SMP_STATE_DHKEY_WAIT;
-	int rc = SmpCryptoEcdh(pLink, pLink->Ctx.PeerPubKey, pLink->Ctx.DhKey);
-	if (rc == BT_SMP_CRYPTO_OK)
-	{
-		BtSmpDhKeyReady(pDev, 0, pLink->Ctx.DhKey);
-	}
-	else if (rc == BT_SMP_CRYPTO_BUSY)
-	{
-		s_SmpCryptoPending.bRetryBusy = true;
-	}
-	else if (rc == BT_SMP_CRYPTO_FAIL)
-	{
-		SmpCryptoPendingClear();
-		return false;
-	}
-	return true;
+	// Dispatch. OK finishes synchronously through BtSmpDhKeyReady inside the
+	// start path; PENDING and a queued-behind-another-link request keep the
+	// pairing running. Only an immediate FAIL aborts here.
+	return SmpCryptoStart(pLink) != BT_SMP_CRYPTO_FAIL;
 }
 
 static bool SmpTryStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
@@ -2483,7 +2538,7 @@ void BtSmpLocalPubKeyReady(BtHciDevice_t * const pDev, uint8_t Status,
 	s_pSmpActiveDev = pDev;
 	SMP_TRACE("SMP LocalPubKeyReady status=%d\r\n", Status);
 
-	BtSmpLink_t *pLink = SmpCryptoPendingTake(BT_SMP_CRYPTO_OP_PUBKEY);
+	BtSmpLink_t *pLink = SmpCryptoInflightTake(BT_SMP_CRYPTO_OP_PUBKEY);
 	if (pLink == nullptr ||
 		(pLink->Ctx.State != BT_SMP_STATE_PUBKEY_WAIT &&
 		 pLink->Ctx.State != BT_SMP_STATE_PUBKEY_LOCAL_WAIT))
@@ -2528,7 +2583,7 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 	s_pSmpActiveDev = pDev;
 	SMP_TRACE("SMP DhKeyReady status=%d\r\n", Status);
 
-	BtSmpLink_t *pLink = SmpCryptoPendingTake(BT_SMP_CRYPTO_OP_DHKEY);
+	BtSmpLink_t *pLink = SmpCryptoInflightTake(BT_SMP_CRYPTO_OP_DHKEY);
 	if (pLink == nullptr || pLink->Ctx.State != BT_SMP_STATE_DHKEY_WAIT)
 	{
 		return;
@@ -3049,87 +3104,164 @@ int BtSmpCryptoEcdh(BtHciDevice_t * const pDev,
 												  pPeerPubKey, pDhKey));
 }
 
+// Start the crypto operation the link requested, if the engine is free. Marks
+// the link as the engine owner and dispatches. A synchronous engine returns OK
+// and the ready path runs inline (driving BtSmp*Ready); an async engine returns
+// PENDING and reports through SmpCryptoComplete. BUSY leaves the request queued
+// for a retry from the loop. Returns the low-level status, or BT_SMP_CRYPTO_OK
+// with no dispatch when the engine is busy with another link (the request stays
+// queued and starts later from SmpCryptoPump).
+static int SmpCryptoStart(BtSmpLink_t *pLink)
+{
+	if (pLink == nullptr || pLink->CryptoOp == BT_SMP_CRYPTO_OP_NONE)
+	{
+		return BT_SMP_CRYPTO_FAIL;
+	}
+	// Engine busy with another link: stay queued, no error.
+	if (s_CryptoInflight.Op != BT_SMP_CRYPTO_OP_NONE)
+	{
+		return BT_SMP_CRYPTO_OK;
+	}
+
+	s_CryptoInflight.Op = pLink->CryptoOp;
+	s_CryptoInflight.ConnHdl = pLink->ConnHdl;
+	s_CryptoInflight.Generation = pLink->Generation;
+	s_CryptoInflight.pDev = pLink->pCryptoDev;
+	pLink->bCryptoWait = false;
+
+	int rc = pLink->CryptoOp == BT_SMP_CRYPTO_OP_PUBKEY ?
+		SmpCryptoP256KeyGen(pLink, pLink->Ctx.LocalPubKey) :
+		SmpCryptoEcdh(pLink, pLink->Ctx.PeerPubKey, pLink->Ctx.DhKey);
+
+	BtHciDevice_t *pDev = pLink->pCryptoDev;
+	BT_SMP_CRYPTO_OP op = pLink->CryptoOp;
+
+	if (rc == BT_SMP_CRYPTO_OK)
+	{
+		// Synchronous completion. The take inside the ready path frees the
+		// engine and clears the link request.
+		if (op == BT_SMP_CRYPTO_OP_PUBKEY)
+		{
+			BtSmpLocalPubKeyReady(pDev, 0, pLink->Ctx.LocalPubKey,
+								  pLink->Ctx.LocalPubKey + 32);
+		}
+		else
+		{
+			BtSmpDhKeyReady(pDev, 0, pLink->Ctx.DhKey);
+		}
+		return rc;
+	}
+	if (rc == BT_SMP_CRYPTO_PENDING)
+	{
+		// Async engine owns the operation; completion arrives later.
+		return rc;
+	}
+	if (rc == BT_SMP_CRYPTO_BUSY)
+	{
+		// Engine momentarily busy: keep the request, free the ownership so a
+		// retry re-acquires it, and flag for the loop.
+		memset(&s_CryptoInflight, 0, sizeof(s_CryptoInflight));
+		pLink->bCryptoWait = true;
+		pLink->bRetryBusy = true;
+		return rc;
+	}
+	// Hard failure: free the engine, clear the request.
+	SmpCryptoLinkClear(pLink);
+	return BT_SMP_CRYPTO_FAIL;
+}
+
+// Start the next waiting link when the engine is free. One operation runs at a
+// time; the first link with a queued request (and no BUSY backoff pending) is
+// dispatched. Called after a completion frees the engine.
+static void SmpCryptoPump(void)
+{
+	if (s_CryptoInflight.Op != BT_SMP_CRYPTO_OP_NONE)
+	{
+		return;
+	}
+	for (int i = 0; i < BT_SMP_MAX_LINK; i++)
+	{
+		BtSmpLink_t *pLink = &s_SmpLink[i];
+		if (pLink->ConnHdl != BT_CONN_HDL_INVALID &&
+			pLink->CryptoOp != BT_SMP_CRYPTO_OP_NONE &&
+			pLink->bCryptoWait && !pLink->bRetryBusy)
+		{
+			SmpCryptoStart(pLink);
+			return;
+		}
+	}
+}
+
 // Completion callback for an asynchronous ECDH engine. A synchronous engine
-// never calls this; its KeyGen/Agree return OK and the caller drives the ready
-// path inline. An async engine returns PENDING and calls this on completion,
-// where the pending record identifies the link and the operation.
+// never calls this; its KeyGen/Agree return OK and SmpCryptoStart drives the
+// ready path inline. An async engine returns PENDING and calls this on
+// completion; the in-flight record identifies the link and the operation.
 static void SmpCryptoComplete(CryptoEngine * const pEngine, CRYPTO_OP Op,
 							  CRYPTO_STATUS Status, void *pCtx)
 {
 	(void)pEngine;
-	if (pCtx != &s_SmpCryptoPending)
+	if (pCtx != &s_CryptoInflight)
 	{
 		return;
 	}
 	uint8_t status = Status == CRYPTO_STATUS_OK ? 0 : 1;
 	if (Op == CRYPTO_OP_KEYGEN &&
-		s_SmpCryptoPending.Op == BT_SMP_CRYPTO_OP_PUBKEY)
+		s_CryptoInflight.Op == BT_SMP_CRYPTO_OP_PUBKEY)
 	{
-		BtSmpLink_t *pLink = SmpCryptoPendingFind(BT_SMP_CRYPTO_OP_PUBKEY);
+		BtSmpLink_t *pLink = SmpCryptoInflightLink(BT_SMP_CRYPTO_OP_PUBKEY);
+		BtHciDevice_t *pDev = s_CryptoInflight.pDev;
 		const uint8_t *pKey = pLink != nullptr ? pLink->Ctx.LocalPubKey : nullptr;
-		BtSmpLocalPubKeyReady(s_SmpCryptoPending.pDev, status, pKey,
+		BtSmpLocalPubKeyReady(pDev, status, pKey,
 							  pKey != nullptr ? pKey + 32 : nullptr);
+		SmpCryptoPump();
 	}
 	else if (Op == CRYPTO_OP_AGREE &&
-			 s_SmpCryptoPending.Op == BT_SMP_CRYPTO_OP_DHKEY)
+			 s_CryptoInflight.Op == BT_SMP_CRYPTO_OP_DHKEY)
 	{
-		BtSmpLink_t *pLink = SmpCryptoPendingFind(BT_SMP_CRYPTO_OP_DHKEY);
-		BtSmpDhKeyReady(s_SmpCryptoPending.pDev, status,
-						 pLink != nullptr ? pLink->Ctx.DhKey : nullptr);
+		BtSmpLink_t *pLink = SmpCryptoInflightLink(BT_SMP_CRYPTO_OP_DHKEY);
+		BtHciDevice_t *pDev = s_CryptoInflight.pDev;
+		BtSmpDhKeyReady(pDev, status,
+						pLink != nullptr ? pLink->Ctx.DhKey : nullptr);
+		SmpCryptoPump();
 	}
 }
 
+// Retry links whose engine call returned BUSY, and start any link still waiting
+// for the engine. Driven from the periodic BtSmpTimeoutCheck.
 static void SmpCryptoRetryPending(void)
 {
-	if (!s_SmpCryptoPending.bRetryBusy)
+	// Retry a BUSY link first: clear the flag, re-request the engine. A link
+	// with an outstanding BUSY owns no engine slot, so this competes fairly
+	// with fresh waiters.
+	for (int i = 0; i < BT_SMP_MAX_LINK; i++)
 	{
-		return;
-	}
-	BtSmpCryptoPending_t pending = s_SmpCryptoPending;
-	BtSmpLink_t *pLink = SmpCryptoPendingFind(pending.Op);
-	if (pLink == nullptr)
-	{
-		SmpCryptoPendingClear();
-		return;
-	}
-	s_SmpCryptoPending.bRetryBusy = false;
-	int rc = BT_SMP_CRYPTO_FAIL;
-	if (pending.Op == BT_SMP_CRYPTO_OP_PUBKEY)
-	{
-		rc = SmpCryptoP256KeyGen(pLink, pLink->Ctx.LocalPubKey);
-		if (rc == BT_SMP_CRYPTO_OK)
+		BtSmpLink_t *pLink = &s_SmpLink[i];
+		if (pLink->ConnHdl == BT_CONN_HDL_INVALID ||
+			pLink->CryptoOp == BT_SMP_CRYPTO_OP_NONE || !pLink->bRetryBusy)
 		{
-			BtSmpLocalPubKeyReady(pending.pDev, 0,
-							 pLink->Ctx.LocalPubKey, pLink->Ctx.LocalPubKey + 32);
-			return;
+			continue;
 		}
-	}
-	else if (pending.Op == BT_SMP_CRYPTO_OP_DHKEY)
-	{
-		rc = SmpCryptoEcdh(pLink, pLink->Ctx.PeerPubKey, pLink->Ctx.DhKey);
-		if (rc == BT_SMP_CRYPTO_OK)
+		pLink->bRetryBusy = false;
+		pLink->bCryptoWait = true;
+		BtHciDevice_t *pDev = pLink->pCryptoDev;
+		BT_SMP_CRYPTO_OP op = pLink->CryptoOp;
+		int rc = SmpCryptoStart(pLink);
+		if (rc == BT_SMP_CRYPTO_FAIL)
 		{
-			BtSmpDhKeyReady(pending.pDev, 0, pLink->Ctx.DhKey);
-			return;
+			if (op == BT_SMP_CRYPTO_OP_PUBKEY)
+			{
+				BtSmpLocalPubKeyReady(pDev, 1, nullptr, nullptr);
+			}
+			else
+			{
+				BtSmpDhKeyReady(pDev, 1, nullptr);
+			}
 		}
-	}
-	if (rc == BT_SMP_CRYPTO_BUSY)
-	{
-		s_SmpCryptoPending.bRetryBusy = true;
+		// One dispatch per pass keeps the single engine fair across links.
 		return;
 	}
-	if (rc == BT_SMP_CRYPTO_PENDING)
-	{
-		return;
-	}
-	if (pending.Op == BT_SMP_CRYPTO_OP_PUBKEY)
-	{
-		BtSmpLocalPubKeyReady(pending.pDev, 1, nullptr, nullptr);
-	}
-	else if (pending.Op == BT_SMP_CRYPTO_OP_DHKEY)
-	{
-		BtSmpDhKeyReady(pending.pDev, 1, nullptr);
-	}
+	// No BUSY retry outstanding: give the engine to a plain waiter.
+	SmpCryptoPump();
 }
 
 bool BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
@@ -3241,14 +3373,19 @@ bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)
 	// and OOB key contexts are fixed CRYPTO_KEYCTX_MAX byte buffers; an
 	// engine whose context does not fit is refused here so pairing fails
 	// cleanly at the first Secure Connections attempt instead of overrunning
-	// caller storage. The refusal is reported to the caller.
+	// caller storage. The refusal is reported to the caller. An async engine
+	// (IsAsync) is accepted: the state machine holds a per-link pending record
+	// and completes from SmpCryptoComplete.
 	bool accepted = true;
-	if (pEcdh != nullptr &&
-		(pEcdh->IsAsync() || pEcdh->KeyCtxSize() == 0U ||
-		 pEcdh->KeyCtxSize() > CRYPTO_KEYCTX_MAX ||
-		 pEcdh->KeyCtxAlign() == 0U ||
-		 pEcdh->KeyCtxAlign() > CRYPTO_KEYCTX_ALIGN_MAX))
+	if (pEcdh == nullptr ||
+		pEcdh->KeyCtxSize() == 0U ||
+		pEcdh->KeyCtxSize() > CRYPTO_KEYCTX_MAX ||
+		pEcdh->KeyCtxAlign() == 0U ||
+		pEcdh->KeyCtxAlign() > CRYPTO_KEYCTX_ALIGN_MAX)
 	{
+		// P-256 ECDH is mandatory for Secure Connections. A missing or
+		// unsuitable engine fails init rather than deferring to the first
+		// pairing attempt.
 		pEcdh = nullptr;
 		accepted = false;
 	}
@@ -3263,10 +3400,11 @@ bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)
 		accepted = false;
 	}
 
-	// The RNG must be a secure RBG. A deterministic engine (IsSecure() false)
-	// would make nonces, passkeys and distributed keys predictable, so refuse it
-	// here and leave the slot empty; BtSmpCryptoRand then fails closed.
-	if (pRng != nullptr && !pRng->IsSecure())
+	// The RNG must be present and a secure RBG. It is mandatory: SMP nonces,
+	// passkeys and distributed keys need it. A missing engine, or a
+	// deterministic one (IsSecure() false), fails init; BtSmpCryptoRand also
+	// fails closed at runtime with no secure RNG.
+	if (pRng == nullptr || !pRng->IsSecure())
 	{
 		pRng = nullptr;
 		accepted = false;
@@ -3281,7 +3419,7 @@ bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)
 	// completion through it, which drives BtSmpLocalPubKeyReady/BtSmpDhKeyReady.
 	if (s_pCryptoEcdh != nullptr)
 	{
-		s_pCryptoEcdh->SetCompleteHandler(SmpCryptoComplete, &s_SmpCryptoPending);
+		s_pCryptoEcdh->SetCompleteHandler(SmpCryptoComplete, &s_CryptoInflight);
 	}
 
 	// Repopulate the RAM bond table from non-volatile storage. The default
@@ -3609,8 +3747,12 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 __attribute__((weak))
 int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint8_t * const pConf)
 {
+	// This is a synchronous API: it generates the key pair and computes the
+	// confirm before returning, with no completion path. An async ECDH engine
+	// (KeyGen returns PENDING) cannot satisfy it, so it is refused here even
+	// though BtSmpInit now accepts async engines for the main pairing flow.
 	if (pRand == nullptr || pConf == nullptr || s_SmpOob.bReserved ||
-		s_SmpCryptoPending.Op != BT_SMP_CRYPTO_OP_NONE ||
+		s_CryptoInflight.Op != BT_SMP_CRYPTO_OP_NONE ||
 		s_pCryptoEcdh == nullptr || s_pCryptoEcdh->IsAsync())
 	{
 		return -1;

@@ -696,7 +696,14 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 
 	CipherEngine *pAes = BtCryptoCtlrSdcInit();
-	BtSmpInit(pEcdh, pAes, CryptoRngNrfInstance());
+	if (!BtSmpInit(pEcdh, pAes, CryptoRngNrfInstance()))
+	{
+		// A mandatory crypto provider (ECDH, AES or secure RNG) is missing or
+		// unsuitable. Secure Connections pairing cannot run; fail init here
+		// rather than at the first pairing attempt.
+		DEBUG_PRINTF("BtAppInit: BtSmpInit rejected a crypto provider\r\n");
+		return false;
+	}
 
 	// Verify the SMP crypto toolbox against the specification sample data
 	// before any pairing can run. These exercise the AES-CMAC based SC
