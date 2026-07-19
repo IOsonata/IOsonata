@@ -1,7 +1,64 @@
-// Host test harness for bt_pds. RAM medium with power-cut injection.
-// Cut model: the Nth programming operation (write or erase) is torn at a
-// chosen byte offset, then every following operation fails until reboot.
+/**-------------------------------------------------------------------------
+@example	pds_test.cpp
 
+@brief	Host test harness for the bt_pds peer data store.
+
+Builds and runs on a PC, not on a target board. It mounts the store on a
+RAM medium with NOR semantics (programming only clears bits, ascending
+order) and drives it through a reference model plus power-cut injection:
+the Nth programming operation (write or erase) is torn at a chosen byte
+offset, then every following operation fails until reboot.
+
+Build and run on the host:
+
+  g++ -std=gnu++23 -O1 -I include -o test_pds \
+      exemples/bluetooth/test_pds.cpp src/bluetooth/bt_pds.cpp
+  ./test_pds
+
+Coverage:
+  - Basic semantics: write/read/update/delete, tombstone vs zero length,
+    truncated read reporting, reserved id, oversize rejection.
+  - Churn: 20K writes over 2 sectors and 100K over 4 sectors against a
+    reference model, with remount checks.
+  - Fill to -ENOMEM and update behavior at capacity.
+  - Garbage collection cut sweep: a power cut at every programming
+    operation of a collecting write, three tear sizes each. After reboot
+    the store must mount and every committed value must read back.
+  - Clear cut sweep: a power cut at every programming operation of
+    BtPdsClear. After reboot the store must hold all records or none.
+
+The harness prints RESULT: ALL PASS on success and a FAIL line per
+violated check otherwise. This file is host-only and is not referenced
+by any board project.
+
+@author	Hoang Nguyen Hoan
+@date	Jul 19, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST, all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------------------------------------------*/
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
