@@ -806,7 +806,7 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 }
 
 // LE Secure Connections OOB data (strong overrides of the generic weak API).
-// On this port nrf_ble_lesc owns the SC key pair, so the local OOB set comes
+// The IOsonata BtLesc module owns the SC key pair, so the local OOB set comes
 // from it and the peer set is staged here; the peer data handler hands it to
 // the pairing with the link peer address filled in.
 static ble_gap_lesc_oob_data_t s_BtAppPeerOob;
@@ -908,9 +908,9 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 	uint16_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 
 	// The LESC module receives BLE events through the peer_manager path:
-	// security_manager forwards every event to nrf_ble_lesc_on_ble_evt when
-	// PM_LESC_ENABLED is set. Calling it here as well would deliver each event
-	// twice and run sd_ble_gap_lesc_oob_data_set twice on an OOB DHKey
+	// sm_ble_evt_handler (bt_sec_sd.cpp) forwards every event to BtLescOnBleEvt
+	// as its single delivery point. Calling it here as well would deliver each
+	// event twice and run sd_ble_gap_lesc_oob_data_set twice on an OOB DHKey
 	// request, which latches the module internal error.
 
 	// Trace security-relevant GAP events to diagnose the pairing flow.
@@ -2003,9 +2003,8 @@ NRF_SDH_STACK_OBSERVER(m_nrf_sdh_soc_evts_poll, NRF_SDH_SOC_STACK_OBSERVER_PRIO)
 // security status and requires a valid key pointer: a NULL key returns
 // NRF_ERROR_INVALID_ADDR and the DHKey request stays unanswered until the SMP
 // transaction timeout. On failure reply with a random key instead, so the
-// pairing fails cleanly at the peer DHKey check, the same way the SDK
-// nrf_ble_lesc does. The peer-key table is sized from the SoftDevice link
-// configuration.
+// pairing fails cleanly at the peer DHKey check. The peer-key table is sized
+// from the SoftDevice link configuration.
 //
 extern "C" uint32_t BtLescDhKeyReply(uint16_t ConnHdl, uint8_t SecStatus,
 									 const ble_gap_lesc_dhkey_t *pDhKey)
