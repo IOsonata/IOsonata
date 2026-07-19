@@ -10,8 +10,17 @@
 		Garbage collection copies only the globally newest records from one
 		victim sector into the erased destination sector. The victim is erased
 		only after a completion marker is committed. If power is lost during the
-		copy or erase, BtPdsInit resumes the interrupted operation before the
-		store accepts new writes.
+		copy or erase, BtPdsInit resumes or safely discards the interrupted
+		operation before the store accepts new writes. Until the completion
+		marker commits, the victim still owns every record, so an unusable
+		destination is simply erased and the collection retried later.
+
+		Format 3. Record sequence numbers are 32 bit and never wrap within the
+		endurance of any supported medium, so newest-record selection is a plain
+		compare. Record and sector headers are protected by CRC16. Each sector
+		header records a clear epoch: BtPdsClear commits by writing one sector
+		header under the next epoch, and sectors under an older epoch are
+		ignored and erased at the next init.
 
 		The implementation uses a single record-sized scratch buffer. It does
 		not allocate a live-record table or use the heap.
@@ -30,7 +39,7 @@
 #define BT_PDS_REC_MAGIC			0x53445042UL	// "BPDS"
 #define BT_PDS_SECTOR_MAGIC		0x32534450UL	// "PDS2"
 #define BT_PDS_TOMBSTONE			0xFFFFU
-#define BT_PDS_FORMAT_VERSION		2U
+#define BT_PDS_FORMAT_VERSION		3U
 #define BT_PDS_NO_SECTOR			0xFFFFU
 #define BT_PDS_CTRL_GC_DONE_ID		0xFFFFFFFEUL
 #define BT_PDS_ERASED_U32			0xFFFFFFFFUL
@@ -44,21 +53,24 @@ typedef struct __Bt_Pds_Sector_Hdr {
 	uint32_t	Magic;
 	uint32_t	Generation;
 	uint32_t	SourceGeneration;
+	uint32_t	Epoch;
 	uint16_t	SourceSector;
 	uint16_t	Version;
-	uint8_t		Crc;
-	uint8_t		Rsvd[3];
+	uint16_t	Crc;
+	uint8_t		Rsvd[2];
 } BtPdsSectorHdr_t;
 
 typedef struct __Bt_Pds_Rec_Hdr {
 	uint32_t	Magic;
 	uint32_t	Id;
+	uint32_t	Seq;
 	uint16_t	Len;
-	uint16_t	Seq;
-	uint8_t		Crc;
-	uint8_t		Rsvd[3];
+	uint16_t	Crc;
 } BtPdsRecHdr_t;
 #pragma pack(pop)
+
+static_assert(sizeof(BtPdsSectorHdr_t) == 24, "sector header layout");
+static_assert(sizeof(BtPdsRecHdr_t) == 16, "record header layout");
 
 #define BT_PDS_SECTOR_HDR_SIZE	((uint32_t)sizeof(BtPdsSectorHdr_t))
 #define BT_PDS_REC_HDR_SIZE		((uint32_t)sizeof(BtPdsRecHdr_t))
@@ -77,7 +89,7 @@ typedef struct __Bt_Pds_Sector_Info {
 typedef struct __Bt_Pds_Latest {
 	bool		Found;
 	bool		Tombstone;
-	uint16_t	Seq;
+	uint32_t	Seq;
 	uint16_t	Len;
 	uint16_t	Sector;
 	uint32_t	Off;
@@ -87,10 +99,11 @@ static const BtPdsNvm_t *s_pNvm;
 static BtPdsSectorInfo_t s_Sectors[BT_PDS_MAX_SECTORS];
 static uint16_t s_SectorCount;
 static uint16_t s_ActiveSector;
-static uint16_t s_NextSeq;
+static uint32_t s_NextSeq;
 static uint32_t s_NextGeneration;
+static uint32_t s_Epoch;
 static bool s_SeqFound;
-static uint16_t s_MaxSeq;
+static uint32_t s_MaxSeq;
 
 static inline uint32_t WordPad(uint32_t x)
 {
@@ -112,47 +125,43 @@ static inline uint32_t SectorDataStart(uint16_t Sector)
 	return SectorBase(Sector) + BT_PDS_SECTOR_HDR_SIZE;
 }
 
-static inline bool SeqNewer(uint16_t A, uint16_t B)
+static uint16_t Crc16(const void *pData, uint32_t Len, uint16_t Seed)
 {
-	uint16_t d = (uint16_t)(A - B);
-	return d != 0U && d < 0x8000U;
-}
-
-static uint8_t Crc8(const void *pData, uint32_t Len, uint8_t Seed)
-{
+	// CRC16-CCITT, polynomial 0x1021.
 	const uint8_t *p = (const uint8_t *)pData;
-	uint8_t crc = Seed;
+	uint16_t crc = Seed;
 
 	for (uint32_t i = 0; i < Len; i++)
 	{
-		crc ^= p[i];
+		crc ^= (uint16_t)((uint16_t)p[i] << 8);
 		for (int b = 0; b < 8; b++)
 		{
-			crc = (crc & 0x80U) ?
-				(uint8_t)((crc << 1) ^ 0x07U) :
-				(uint8_t)(crc << 1);
+			crc = (crc & 0x8000U) ?
+				(uint16_t)((crc << 1) ^ 0x1021U) :
+				(uint16_t)(crc << 1);
 		}
 	}
 	return crc;
 }
 
-static uint8_t SectorHdrCrc(const BtPdsSectorHdr_t *pHdr)
+static uint16_t SectorHdrCrc(const BtPdsSectorHdr_t *pHdr)
 {
-	uint8_t crc = Crc8(&pHdr->Generation, sizeof(pHdr->Generation), 0xFFU);
-	crc = Crc8(&pHdr->SourceGeneration, sizeof(pHdr->SourceGeneration), crc);
-	crc = Crc8(&pHdr->SourceSector, sizeof(pHdr->SourceSector), crc);
-	crc = Crc8(&pHdr->Version, sizeof(pHdr->Version), crc);
+	uint16_t crc = Crc16(&pHdr->Generation, sizeof(pHdr->Generation), 0xFFFFU);
+	crc = Crc16(&pHdr->SourceGeneration, sizeof(pHdr->SourceGeneration), crc);
+	crc = Crc16(&pHdr->Epoch, sizeof(pHdr->Epoch), crc);
+	crc = Crc16(&pHdr->SourceSector, sizeof(pHdr->SourceSector), crc);
+	crc = Crc16(&pHdr->Version, sizeof(pHdr->Version), crc);
 	return crc;
 }
 
-static uint8_t RecCrc(const BtPdsRecHdr_t *pHdr, const void *pData)
+static uint16_t RecCrc(const BtPdsRecHdr_t *pHdr, const void *pData)
 {
-	uint8_t crc = Crc8(&pHdr->Id, sizeof(pHdr->Id), 0xFFU);
-	crc = Crc8(&pHdr->Len, sizeof(pHdr->Len), crc);
-	crc = Crc8(&pHdr->Seq, sizeof(pHdr->Seq), crc);
+	uint16_t crc = Crc16(&pHdr->Id, sizeof(pHdr->Id), 0xFFFFU);
+	crc = Crc16(&pHdr->Len, sizeof(pHdr->Len), crc);
+	crc = Crc16(&pHdr->Seq, sizeof(pHdr->Seq), crc);
 	if (pHdr->Len != BT_PDS_TOMBSTONE && pHdr->Len > 0U)
 	{
-		crc = Crc8(pData, pHdr->Len, crc);
+		crc = Crc16(pData, pHdr->Len, crc);
 	}
 	return crc;
 }
@@ -258,6 +267,17 @@ static int ScanSector(uint16_t Sector)
 		return 0;
 	}
 
+	if (sectorHdr.Epoch != s_Epoch)
+	{
+		// Sector under an earlier epoch: cleared by BtPdsClear but not yet
+		// erased. Its records are ignored and it is erased at init.
+		pInfo->Valid = false;
+		pInfo->Erased = false;
+		pInfo->Writable = false;
+		pInfo->Head = SectorEnd(Sector);
+		return 0;
+	}
+
 	pInfo->Valid = true;
 	pInfo->Erased = false;
 	pInfo->Writable = true;
@@ -297,7 +317,7 @@ static int ScanSector(uint16_t Sector)
 			pInfo->GcDone = true;
 		}
 
-		if (!s_SeqFound || SeqNewer(hdr.Seq, s_MaxSeq))
+		if (!s_SeqFound || hdr.Seq > s_MaxSeq)
 		{
 			s_SeqFound = true;
 			s_MaxSeq = hdr.Seq;
@@ -331,9 +351,10 @@ static int WriteSectorHdr(uint16_t Sector, uint16_t SourceSector,
 	hdr.Magic = BT_PDS_SECTOR_MAGIC;
 	hdr.Generation = s_NextGeneration++;
 	hdr.SourceGeneration = SourceGeneration;
+	hdr.Epoch = s_Epoch;
 	hdr.SourceSector = SourceSector;
 	hdr.Version = BT_PDS_FORMAT_VERSION;
-	hdr.Rsvd[0] = hdr.Rsvd[1] = hdr.Rsvd[2] = 0U;
+	hdr.Rsvd[0] = hdr.Rsvd[1] = 0U;
 	hdr.Crc = SectorHdrCrc(&hdr);
 
 	if (s_pNvm->Write(SectorBase(Sector), &hdr, sizeof(hdr)) != 0)
@@ -418,7 +439,7 @@ static bool FindLatest(uint32_t Id, BtPdsLatest_t *pLatest)
 			}
 
 			if (hdr.Id == Id && hdr.Id != BT_PDS_CTRL_GC_DONE_ID &&
-				(!latest.Found || SeqNewer(hdr.Seq, latest.Seq)))
+				(!latest.Found || hdr.Seq > latest.Seq))
 			{
 				latest.Found = true;
 				latest.Tombstone = hdr.Len == BT_PDS_TOMBSTONE;
@@ -510,7 +531,11 @@ static int CopyLatestFromSector(uint16_t Victim, uint16_t Destination)
 		BtPdsRecHdr_t hdr;
 		if (!ReadRecord(Victim, off, &hdr, data))
 		{
-			return -EIO;
+			// An unreadable record ends the sector log, exactly as it does
+			// for ScanSector, FindLatest and SectorCopyBytes. A victim that
+			// was closed by a torn append ends this way and everything
+			// after the tear is uncommitted, so the copy is complete here.
+			break;
 		}
 
 		uint32_t next = off + RecSize(hdr.Len);
@@ -550,16 +575,32 @@ static int CompleteGc(uint16_t Destination)
 
 	if (!pDest->GcDone)
 	{
-		int result = CopyLatestFromSector(source, Destination);
-		if (result != 0)
+		int result;
+
+		if (!pDest->Writable)
 		{
-			return result;
+			// A torn record from the interrupted copy closed the destination.
+			result = -EIO;
+		}
+		else
+		{
+			result = CopyLatestFromSector(source, Destination);
+			if (result == 0)
+			{
+				result = AppendToSector(Destination, BT_PDS_CTRL_GC_DONE_ID,
+										0U, nullptr);
+			}
 		}
 
-		result = AppendToSector(Destination, BT_PDS_CTRL_GC_DONE_ID, 0U, nullptr);
 		if (result != 0)
 		{
-			return result;
+			// Until the completion marker commits, the source sector still
+			// owns every record and the destination holds only value-identical
+			// duplicates. No user write can land in the destination before the
+			// collection completes, so it is erased and the collection is
+			// retried later instead of leaving the store unmountable.
+			result = EraseSector(Destination);
+			return result != 0 ? result : -EAGAIN;
 		}
 		pDest->GcDone = true;
 	}
@@ -572,6 +613,19 @@ static int ScanAll(void)
 	s_SeqFound = false;
 	s_MaxSeq = 0U;
 	s_NextGeneration = 1U;
+	s_Epoch = 0U;
+
+	// The current epoch is the highest one present on the medium. Sectors
+	// under an earlier epoch were cleared by BtPdsClear before power was
+	// lost and must stay invisible.
+	for (uint16_t sector = 0; sector < s_SectorCount; sector++)
+	{
+		BtPdsSectorHdr_t hdr;
+		if (ReadSectorHdr(sector, &hdr) && hdr.Epoch > s_Epoch)
+		{
+			s_Epoch = hdr.Epoch;
+		}
+	}
 
 	for (uint16_t sector = 0; sector < s_SectorCount; sector++)
 	{
@@ -602,7 +656,7 @@ static int RecoverGc(void)
 			s_Sectors[sector].SourceSector != BT_PDS_NO_SECTOR)
 		{
 			int result = CompleteGc(sector);
-			if (result != 0)
+			if (result != 0 && result != -EAGAIN)
 			{
 				return result;
 			}
@@ -730,7 +784,9 @@ static int GarbageCollect(uint32_t Need)
 	result = CompleteGc(destination);
 	if (result != 0)
 	{
-		return result;
+		// -EAGAIN reports an aborted copy. The destination was erased and the
+		// store stays consistent, but the requested write did not happen.
+		return result == -EAGAIN ? -EIO : result;
 	}
 
 	s_ActiveSector = destination;
@@ -775,6 +831,7 @@ static int FormatStore(void)
 
 	s_NextSeq = 0U;
 	s_NextGeneration = 1U;
+	s_Epoch = 0U;
 	return StartSector(0U);
 }
 
@@ -800,9 +857,11 @@ int BtPdsInit(const BtPdsNvm_t *pNvm)
 	s_SectorCount = (uint16_t)sectorCount;
 	s_ActiveSector = BT_PDS_NO_SECTOR;
 
-	// Format 1 began directly with a record and had no recoverable sector
-	// transaction. It cannot be upgraded in place while preserving the power
-	// loss guarantee, so clear that development format once.
+	// Development format 1 began directly with a record and had no
+	// recoverable sector transaction; it is detected here and cleared once.
+	// Development format 2 sectors fail header validation (layout and
+	// version changed) and are erased by the sweep below. Neither can be
+	// upgraded in place while preserving the power loss guarantee.
 	uint32_t firstWord = BT_PDS_ERASED_U32;
 	if (s_pNvm->Read(0U, &firstWord, sizeof(firstWord)) != 0)
 	{
@@ -819,8 +878,10 @@ int BtPdsInit(const BtPdsNvm_t *pNvm)
 		return result;
 	}
 
-	// A partial sector header contains no committed records. Its source sector
-	// still owns the data, so the partial destination can be erased safely.
+	// A partial sector header contains no committed records and its source
+	// sector still owns the data, so the partial destination can be erased
+	// safely. Sectors under an earlier epoch were cleared by BtPdsClear and
+	// are erased here as well.
 	for (uint16_t sector = 0; sector < s_SectorCount; sector++)
 	{
 		if (!s_Sectors[sector].Valid && !s_Sectors[sector].Erased)
@@ -921,5 +982,37 @@ int BtPdsClear(void)
 	{
 		return -EINVAL;
 	}
-	return FormatStore();
+
+	uint16_t spare = FindErasedSector();
+	if (spare == BT_PDS_NO_SECTOR)
+	{
+		// No erased spare exists only in an already-degraded state. Fall back
+		// to the sequential format, which is not power-loss atomic.
+		return FormatStore();
+	}
+
+	// Commit point of the clear. Once a sector header under the next epoch
+	// is on the medium, every sector under an earlier epoch is ignored and
+	// erased at the next init, so a power loss after this write cannot bring
+	// cleared records back. A power loss before it leaves the store
+	// unchanged.
+	s_Epoch++;
+	int result = StartSector(spare);
+	if (result != 0)
+	{
+		return result;
+	}
+
+	for (uint16_t sector = 0; sector < s_SectorCount; sector++)
+	{
+		if (sector != spare && !s_Sectors[sector].Erased)
+		{
+			result = EraseSector(sector);
+			if (result != 0)
+			{
+				return result;
+			}
+		}
+	}
+	return 0;
 }

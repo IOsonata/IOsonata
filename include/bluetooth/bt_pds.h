@@ -63,9 +63,9 @@ extern "C" {
 /**
  * @brief Mount the store on an NVM implementation.
  *
- * Scans every sector, recovers an interrupted garbage collection, and selects
- * the newest writable sector. The earlier development format without sector
- * headers is cleared once because it cannot be upgraded in place while
+ * Scans every sector, recovers or safely discards an interrupted garbage
+ * collection, and selects the newest writable sector. Earlier development
+ * formats are cleared once because they cannot be upgraded in place while
  * preserving the power-loss guarantee.
  *
  * @return 0 on success, negative errno on failure.
@@ -104,6 +104,10 @@ int BtPdsDelete(uint32_t Id);
 
 /**
  * @brief Erase all records and create a new empty active sector.
+ *
+ * The clear commits when one sector header under a new clear epoch reaches
+ * the medium. A power loss after that point cannot bring cleared records
+ * back; a power loss before it leaves the store unchanged.
  *
  * @return 0 on success or negative errno.
  */
