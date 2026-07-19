@@ -13,10 +13,10 @@
 		peer_id and the IOsonata peer_data_storage replacement are used
 		unchanged, so bond records keep their layout.
 
-		LESC runs on the IOsonata BtLesc module (OO KeyAgreeEngine based)
-		under CONFIG_PM_LESC, exactly where the stock module called it: init
-		in sm_init, the public key at the params reply, event delivery at the
-		end of sm_ble_evt_handler. DHKey computation stays deferred to
+		LESC runs on the IOsonata BtLesc module (OO KeyAgreeEngine based),
+		wired where the stock module called the lesc layer: init in sm_init,
+		the public key at the params reply, event delivery at the end of
+		sm_ble_evt_handler. DHKey computation stays deferred to
 		BtLescRequestHandler in the application main loop.
 
 		The keyset handed to sd_ble_gap_sec_params_reply points into the
@@ -109,9 +109,7 @@ SOFTWARE.
 #include <modules/auth_status_tracker.h>
 #endif
 
-#if defined(CONFIG_PM_LESC)
 #include "bt_lesc.h"
-#endif
 
 LOG_MODULE_DECLARE(peer_manager, CONFIG_PEER_MANAGER_LOG_LEVEL);
 
@@ -130,12 +128,6 @@ typedef struct {
 static bool                  s_bInit;
 static ble_gap_sec_params_t  s_SecParams;	// default sec params buffer
 static ble_gap_sec_params_t *s_pSecParams;	// NULL until sm_sec_params_set
-
-#if !defined(CONFIG_PM_LESC)
-// Application supplied LESC public key, stock behavior when the lesc module
-// is not part of the build.
-static ble_gap_lesc_p256_pk_t *s_pUserLescPk;
-#endif
 
 // SIG policy the stock module never offered. See the file header.
 static bool    s_bScOnly;
@@ -282,11 +274,7 @@ static bool AllowRepairing(uint16_t ConnHdl)
 
 static ble_gap_lesc_p256_pk_t *LescPubKeyGet(void)
 {
-#if defined(CONFIG_PM_LESC)
 	return BtLescPubKeyGet();
-#else
-	return s_pUserLescPk;
-#endif
 }
 
 static void WriteBufRelease(uint16_t ConnHdl);
@@ -1088,12 +1076,10 @@ uint32_t sm_init(void)
 		return NRF_ERROR_INVALID_STATE;
 	}
 
-#if defined(CONFIG_PM_LESC)
 	if (!BtLescInit())
 	{
 		return NRF_ERROR_INTERNAL;
 	}
-#endif
 
 	s_FlagSecProc           = pm_conn_state_user_flag_acquire();
 	s_FlagSecProcPairing    = pm_conn_state_user_flag_acquire();
@@ -1176,12 +1162,10 @@ void sm_ble_evt_handler(const ble_evt_t *ble_evt)
 		break;
 	}
 
-#if defined(CONFIG_PM_LESC)
 	// LESC key handling: single delivery point into the lesc module. DHKey
 	// computation stays deferred to BtLescRequestHandler in the
 	// application main loop.
 	BtLescOnBleEvt(ble_evt);
-#endif
 
 	PendingPumpsRun();
 }
@@ -1272,15 +1256,10 @@ void sm_conn_sec_config_reply(uint16_t conn_handle, struct pm_conn_sec_config *c
 
 uint32_t sm_lesc_public_key_set(ble_gap_lesc_p256_pk_t *public_key)
 {
-#if defined(CONFIG_PM_LESC)
 	// The LESC key pair is owned by the lesc module; an externally supplied
 	// key is not supported.
 	(void)public_key;
 	return NRF_ERROR_FORBIDDEN;
-#else
-	s_pUserLescPk = public_key;
-	return NRF_SUCCESS;
-#endif
 }
 
 uint32_t sm_conn_sec_status_get(uint16_t conn_handle, struct pm_conn_sec_status *conn_sec_status)

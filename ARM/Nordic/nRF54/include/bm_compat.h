@@ -60,9 +60,8 @@ extern "C" {
 #define LOG_MODULE_DECLARE(...)
 
 /*
- * Temporary diagnostic routing: surface peer_manager / nrf_ble_lesc internal
- * logs through SysLog so the SC pairing flow is visible. These were no-ops.
- * Revert to ((void)0) once pairing is verified. DBG stays off to limit noise.
+ * peer_manager internal logs are compiled out. Define these to route through
+ * SysLog if the SC pairing flow needs to be traced during bring-up.
  */
 #define LOG_ERR(...)    ((void)0)
 #define LOG_WRN(...)    ((void)0)

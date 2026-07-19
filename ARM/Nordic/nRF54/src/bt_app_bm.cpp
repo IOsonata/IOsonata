@@ -59,15 +59,14 @@ SOFTWARE.
 #include "bm/bluetooth/ble_conn_params.h"
 #include "bm/bluetooth/peer_manager/peer_manager.h"
 #include "bm/bluetooth/peer_manager/peer_manager_handler.h"
-#include "bm/bluetooth/peer_manager/nrf_ble_lesc.h"
 #include "bm/bluetooth/services/ble_dis.h"
 
 #include "cracen_intrf.h"
 #include "crypto/ba414ep.h"
 #include "crypto_rng_nrf.h"
 
-// Injection point for the LESC crypto engine (defined in the IOsonata
-// nrf_ble_lesc replacement). The App owns the KeyAgreeEngine and passes it in.
+// Injection point for the LESC crypto engine. The IOsonata BtLesc module owns
+// the SC key pair and ECDH; the App owns the KeyAgreeEngine and passes it in.
 #include "bt_lesc.h"
 #include "nrfx_cracen.h"
 #include "nrf_soc.h"
@@ -250,7 +249,7 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 }
 
 // LE Secure Connections OOB data (strong overrides of the generic weak API).
-// On this port nrf_ble_lesc owns the SC key pair, so the local OOB set comes
+// The IOsonata BtLesc module owns the SC key pair, so the local OOB set comes
 // from it and the peer set is staged here; the peer data handler hands it to
 // the pairing with the link peer address filled in.
 static ble_gap_lesc_oob_data_t s_BtAppPeerOob;
@@ -301,12 +300,12 @@ int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint
 	{
 		return -1;
 	}
-	if (nrf_ble_lesc_own_oob_data_generate() != NRF_SUCCESS)
+	if (!BtLescOobLocalGen())
 	{
 		return -1;
 	}
 
-	ble_gap_lesc_oob_data_t *p = nrf_ble_lesc_own_oob_data_get();
+	ble_gap_lesc_oob_data_t *p = BtLescOobLocalGet();
 	if (p == NULL)
 	{
 		return -1;
@@ -947,10 +946,10 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 }
 
 // ---------------------------------------------------------------------------
-// Secure Connections: peer_manager + nrf_ble_lesc, mirroring the nRF52
-// SoftDevice port. The S145 SoftDevice owns the SMP state machine; peer_manager
-// drives it and persists bonds (through the IOsonata bt_pds store), and
-// nrf_ble_lesc performs the LESC ECDH. The application observes link security
+// Secure Connections: peer_manager + BtLesc, mirroring the nRF52 SoftDevice
+// port. The S145 SoftDevice owns the SMP state machine; peer_manager drives it
+// and persists bonds (through the IOsonata bt_pds store), and the IOsonata
+// BtLesc module performs the LESC ECDH. The application observes link security
 // through these peer_manager events; no key material is surfaced to the app on
 // this path (peer_manager is the authority), matching nRF52.
 // ---------------------------------------------------------------------------
@@ -1018,11 +1017,12 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	ble_gap_sec_params_t sec_param;
 	uint32_t err_code;
 
-	// Provide the LESC layer its ECDH engine BEFORE pm_init. With CONFIG_PM_LESC
-	// defined, pm_init -> sm_init calls nrf_ble_lesc_init, which requires the
-	// engine to be injected at that point, else pm_init returns an error. The
-	// App owns the engine and injects it. On nRF54L15 the P-256 hardware is the
-	// Silex BA414EP (Ba414ep), reached through the CRACEN crypto interface the
+	// Provide the LESC layer its ECDH engine BEFORE pm_init. pm_init ->
+	// sm_init (the IOsonata bt_sec_bm security manager) calls BtLescInit, which
+	// requires the engine to be injected at that point, else pairing has no
+	// P-256 provider. The App owns the engine and injects it. On nRF54L15 the
+	// P-256 hardware is the Silex BA414EP (Ba414ep), reached through the CRACEN
+	// crypto interface the
 	// same way a sensor reaches its bus. Its randomness for key generation and
 	// blinding comes from the security-grade hardware RNG (CryptoRngNrf).
 	static Ba414ep s_LescEcdh;
@@ -1157,21 +1157,11 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 		return err_code;
 	}
 
-	// When CONFIG_PM_LESC is defined, pm_init -> sm_init already called
-	// nrf_ble_lesc_init (the engine was injected before pm_init above). Only
-	// call it explicitly when the SDK LESC path is not compiled in.
-#if !defined(CONFIG_PM_LESC)
-	err_code = nrf_ble_lesc_init();
-	if (err_code != NRF_SUCCESS)
-	{
-		DEBUG_PRINTF("nrf_ble_lesc_init failed: 0x%x\r\n", err_code);
-		return err_code;
-	}
-
-	// Route the staged peer OOB data into the pairing when the SoftDevice
-	// asks for it (LESC OOB association model).
-	nrf_ble_lesc_peer_oob_data_handler_set(BtAppOobPeerDataHandler);
-#endif
+	// LESC is initialized by the IOsonata security manager (bt_sec_bm.cpp)
+	// inside pm_init -> sm_init, which owns the BtLesc key pair and injected
+	// crypto engine. Only the staged peer OOB data routing is set up here, so
+	// the SoftDevice receives it when it asks (LESC OOB association model).
+	BtLescOobPeerHandlerSet(BtAppOobPeerDataHandler);
 
 	return NRF_SUCCESS;
 }
@@ -1395,8 +1385,8 @@ void BtAppRun()
 		}
 
 		// Process any pending LESC DHKey computation. Required for LE Secure
-		// Connections: nrf_ble_lesc defers the ECDH to be run from the main
-		// loop rather than the BLE event context.
+		// Connections: BtLesc defers the ECDH to be run from the main loop
+		// rather than the BLE event context.
 		if (g_BtAppData.AppDevice.bSecure)
 		{
 			(void)BtLescRequestHandler();
