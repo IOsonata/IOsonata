@@ -2244,13 +2244,17 @@ static void SmpHandleSigningInfo(BtSmpLink_t *pLink, const BtSmpSigningInfo_t *p
 
 // Mark one key type of the peer's Phase-3 key distribution as received and, once
 // every negotiated key has arrived, close the key-distribution window by moving
-// the link to DONE. This bounds how long the H4 gate stays open on the link.
+// the link to DONE. This bounds how long the link accepts inbound
+// key-distribution PDUs. The application completion is raised here, not at
+// encryption change, so the record it receives holds the peer IRK, identity
+// address and CSRK.
 static void SmpKeyDistReceived(BtSmpLink_t *pLink, uint8_t KeyBit)
 {
 	pLink->Ctx.KeyDistExp &= (uint8_t)~KeyBit;
 	if (pLink->Ctx.KeyDistExp == 0)
 	{
 		pLink->Ctx.State = BT_SMP_STATE_DONE;
+		BtSmpPairingComplete(pLink->ConnHdl, true, &pLink->Keys);
 	}
 }
 
@@ -2880,12 +2884,14 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			uint8_t irk[16];
 			if (!BtSmpCryptoRand(irk, 16))
 			{
-				// Do not distribute a key drawn from a failed RNG. Skip the
-				// identity key; the peer simply receives no IRK.
-				SMP_TRACE("SMP IRK RNG failed, skipping id key\r\n");
+				// The IDKEY was negotiated, so the peer expects an Identity
+				// Information PDU. A key drawn from a failed RNG must not be
+				// sent, and omitting the PDU would leave the peer waiting for
+				// one that never arrives. Fail the pairing instead.
+				SMP_TRACE("SMP IRK RNG failed, fail pairing\r\n");
+				SmpFailAndLock(pDev, ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
+				return;
 			}
-			else
-			{
 			BtSmpIdInfo_t idi;
 			idi.Code = BT_SMP_CODE_PAIRING_ID_INFO;
 			memcpy(idi.Irk, irk, 16);
@@ -2899,7 +2905,6 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			memcpy(iai.Addr, localAddr, 6);
 			SmpSend(pDev, ConnHdl, &iai, sizeof(iai));
 			CryptoSecureWipe(irk, sizeof(irk));
-			}
 		}
 
 		if (localKeyDist & BT_SMP_KEYDIST_SIGNKEY)
@@ -2907,17 +2912,18 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			uint8_t csrk[16];
 			if (!BtSmpCryptoRand(csrk, 16))
 			{
-				// Do not distribute a signing key drawn from a failed RNG.
-				SMP_TRACE("SMP CSRK RNG failed, skipping sign key\r\n");
+				// The SIGNKEY was negotiated, so the peer expects a Signing
+				// Information PDU. As with the IRK, fail the pairing rather
+				// than leave the peer waiting for a PDU that never arrives.
+				SMP_TRACE("SMP CSRK RNG failed, fail pairing\r\n");
+				SmpFailAndLock(pDev, ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
+				return;
 			}
-			else
-			{
 			BtSmpSigningInfo_t si;
 			si.Code = BT_SMP_CODE_PAIRING_SIGNING_INFO;
 			memcpy(si.Csrk, csrk, 16);
 			SmpSend(pDev, ConnHdl, &si, sizeof(si));
 			CryptoSecureWipe(csrk, sizeof(csrk));
-			}
 		}
 
 		// Compute which keys the peer will distribute in return. The negotiated
@@ -2932,8 +2938,14 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 							   (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY);
 		pLink->Ctx.KeyDistExp = peerKeyDist;
 
+		// Store the bond now so the controller LTK request on an immediate
+		// reconnect is answered, but do not report pairing complete to the
+		// application until phase-3 key distribution has finished. When the
+		// peer still owes its IRK, identity address or CSRK, the record here
+		// is incomplete; reporting it now would let an application persist a
+		// bond missing those keys. The completion is raised from
+		// SmpKeyDistReceived once every negotiated peer key has arrived.
 		BtSmpBondAdd(ConnHdl, &pLink->Keys);
-		BtSmpPairingComplete(ConnHdl, true, &pLink->Keys);
 
 		// OOB material is single use and is wiped after the link is secured.
 		if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
@@ -2941,8 +2953,20 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			SmpOobRelease(pLink);
 		}
 
-		pLink->Ctx.State = (peerKeyDist != 0) ? BT_SMP_STATE_KEYDIST
-											  : BT_SMP_STATE_DONE;
+		if (peerKeyDist != 0)
+		{
+			// Bound the wait for the peer keys. The link is already encrypted
+			// and the LTK bond is stored, so a stuck distribution is completed
+			// with the record so far rather than failed (see BtSmpTimeoutCheck).
+			pLink->Ctx.TmrStart = BtSmpMsTick();
+			pLink->Ctx.State = BT_SMP_STATE_KEYDIST;
+		}
+		else
+		{
+			// No peer keys expected: the record is already complete.
+			pLink->Ctx.State = BT_SMP_STATE_DONE;
+			BtSmpPairingComplete(ConnHdl, true, &pLink->Keys);
+		}
 	}
 	else if (pLink->Ctx.State == BT_SMP_STATE_DONE)
 	{
@@ -3822,6 +3846,20 @@ void BtSmpTimeoutCheck(void)
 			SMP_TRACE("SMP pairing timed out on hdl %d\r\n", pLink->ConnHdl);
 			pLink->Ctx.FailCount++;
 			SmpFailAndLock(pDev, pLink->ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
+		}
+		else if (pLink->Ctx.State == BT_SMP_STATE_KEYDIST &&
+				 (uint32_t)(BtSmpMsTick() - pLink->Ctx.TmrStart) >= BT_SMP_TIMEOUT_MS)
+		{
+			// The peer secured the link but did not finish sending its keys
+			// within the window. The link is encrypted and the LTK bond is
+			// valid, so this is not a pairing failure: close the window,
+			// complete with the record collected so far, and let the app
+			// persist a bond that simply lacks the missing peer key.
+			SMP_TRACE("SMP key distribution timed out on hdl %d\r\n",
+					  pLink->ConnHdl);
+			pLink->Ctx.KeyDistExp = 0;
+			pLink->Ctx.State = BT_SMP_STATE_DONE;
+			BtSmpPairingComplete(pLink->ConnHdl, true, &pLink->Keys);
 		}
 	}
 }
