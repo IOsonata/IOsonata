@@ -95,7 +95,7 @@ typedef struct __Bt_Pds_Latest {
 	uint32_t	Off;
 } BtPdsLatest_t;
 
-static const BtPdsNvm_t *s_pNvm;
+static NvmIO *s_pNvm;
 static BtPdsSectorInfo_t s_Sectors[BT_PDS_MAX_SECTORS];
 static uint16_t s_SectorCount;
 static uint16_t s_ActiveSector;
@@ -112,12 +112,12 @@ static inline uint32_t WordPad(uint32_t x)
 
 static inline uint32_t SectorBase(uint16_t Sector)
 {
-	return (uint32_t)Sector * s_pNvm->SectorSize;
+	return (uint32_t)Sector * s_pNvm->EraseSize();
 }
 
 static inline uint32_t SectorEnd(uint16_t Sector)
 {
-	return SectorBase(Sector) + s_pNvm->SectorSize;
+	return SectorBase(Sector) + s_pNvm->EraseSize();
 }
 
 static inline uint32_t SectorDataStart(uint16_t Sector)
@@ -188,7 +188,7 @@ static bool IsErased(const void *pData, uint32_t Len)
 
 static bool ReadSectorHdr(uint16_t Sector, BtPdsSectorHdr_t *pHdr)
 {
-	if (s_pNvm->Read(SectorBase(Sector), pHdr, sizeof(*pHdr)) != 0)
+	if (s_pNvm->Read(SectorBase(Sector), pHdr, sizeof(*pHdr)) < 0)
 	{
 		return false;
 	}
@@ -207,7 +207,7 @@ static bool ReadRecord(uint16_t Sector, uint32_t Off, BtPdsRecHdr_t *pHdr,
 
 	if (Off < SectorDataStart(Sector) ||
 		Off + BT_PDS_REC_HDR_SIZE > end ||
-		s_pNvm->Read(Off, pHdr, BT_PDS_REC_HDR_SIZE) != 0 ||
+		s_pNvm->Read(Off, pHdr, BT_PDS_REC_HDR_SIZE) < 0 ||
 		pHdr->Magic != BT_PDS_REC_MAGIC)
 	{
 		return false;
@@ -221,7 +221,7 @@ static bool ReadRecord(uint16_t Sector, uint32_t Off, BtPdsRecHdr_t *pHdr,
 	}
 
 	if (dataLen > 0U &&
-		s_pNvm->Read(Off + BT_PDS_REC_HDR_SIZE, pData, dataLen) != 0)
+		s_pNvm->Read(Off + BT_PDS_REC_HDR_SIZE, pData, dataLen) < 0)
 	{
 		return false;
 	}
@@ -247,7 +247,7 @@ static int ScanSector(uint16_t Sector)
 	pInfo->SourceSector = BT_PDS_NO_SECTOR;
 	pInfo->Head = SectorBase(Sector);
 
-	if (s_pNvm->Read(SectorBase(Sector), &sectorHdr, sizeof(sectorHdr)) != 0)
+	if (s_pNvm->Read(SectorBase(Sector), &sectorHdr, sizeof(sectorHdr)) < 0)
 	{
 		return -EIO;
 	}
@@ -292,7 +292,7 @@ static int ScanSector(uint16_t Sector)
 	while (off + BT_PDS_REC_HDR_SIZE <= SectorEnd(Sector))
 	{
 		uint32_t word;
-		if (s_pNvm->Read(off, &word, sizeof(word)) != 0)
+		if (s_pNvm->Read(off, &word, sizeof(word)) < 0)
 		{
 			return -EIO;
 		}
@@ -334,7 +334,7 @@ static int ScanSector(uint16_t Sector)
 
 static int EraseSector(uint16_t Sector)
 {
-	if (s_pNvm->Erase(SectorBase(Sector)) != 0)
+	if (s_pNvm->Erase(SectorBase(Sector), s_pNvm->EraseSize()) != 0)
 	{
 		return -EIO;
 	}
@@ -357,7 +357,7 @@ static int WriteSectorHdr(uint16_t Sector, uint16_t SourceSector,
 	hdr.Rsvd[0] = hdr.Rsvd[1] = 0U;
 	hdr.Crc = SectorHdrCrc(&hdr);
 
-	if (s_pNvm->Write(SectorBase(Sector), &hdr, sizeof(hdr)) != 0)
+	if (s_pNvm->Write(SectorBase(Sector), &hdr, sizeof(hdr)) < 0)
 	{
 		return -EIO;
 	}
@@ -404,7 +404,7 @@ static int AppendToSector(uint16_t Sector, uint32_t Id, uint16_t Len,
 		memcpy(rec + BT_PDS_REC_HDR_SIZE, pData, dataLen);
 	}
 
-	if (s_pNvm->Write(pInfo->Head, rec, total) != 0)
+	if (s_pNvm->Write(pInfo->Head, rec, total) < 0)
 	{
 		pInfo->Writable = false;
 		return -EIO;
@@ -748,7 +748,7 @@ static int GarbageCollect(uint32_t Need)
 		return -ENOMEM;
 	}
 
-	uint32_t capacity = s_pNvm->SectorSize - BT_PDS_SECTOR_HDR_SIZE;
+	uint32_t capacity = s_pNvm->EraseSize() - BT_PDS_SECTOR_HDR_SIZE;
 	uint32_t doneSize = RecSize(0U);
 	uint16_t victim = BT_PDS_NO_SECTOR;
 	uint32_t bestBytes = UINT_MAX;
@@ -795,7 +795,7 @@ static int GarbageCollect(uint32_t Need)
 
 static int EnsureSpace(uint32_t Need)
 {
-	if (Need > s_pNvm->SectorSize - BT_PDS_SECTOR_HDR_SIZE)
+	if (Need > s_pNvm->EraseSize() - BT_PDS_SECTOR_HDR_SIZE)
 	{
 		return -ENOMEM;
 	}
@@ -835,19 +835,24 @@ static int FormatStore(void)
 	return StartSector(0U);
 }
 
-int BtPdsInit(const BtPdsNvm_t *pNvm)
+int BtPdsInit(NvmIO * const pNvm)
 {
-	if (pNvm == nullptr || pNvm->Read == nullptr ||
-		pNvm->Write == nullptr || pNvm->Erase == nullptr ||
-		pNvm->SectorSize <= BT_PDS_SECTOR_HDR_SIZE ||
-		pNvm->RegionSize < pNvm->SectorSize * 2U ||
-		(pNvm->RegionSize % pNvm->SectorSize) != 0U ||
-		pNvm->WriteGran != 4U)
+	if (pNvm == nullptr)
 	{
 		return -EINVAL;
 	}
 
-	uint32_t sectorCount = pNvm->RegionSize / pNvm->SectorSize;
+	uint32_t sectorSize = pNvm->EraseSize();
+	uint64_t regionSize = pNvm->Size();
+	if (sectorSize <= BT_PDS_SECTOR_HDR_SIZE ||
+		regionSize < (uint64_t)sectorSize * 2U ||
+		(regionSize % sectorSize) != 0U ||
+		pNvm->WriteGran() != 4U)
+	{
+		return -EINVAL;
+	}
+
+	uint32_t sectorCount = (uint32_t)(regionSize / sectorSize);
 	if (sectorCount > BT_PDS_MAX_SECTORS)
 	{
 		return -EINVAL;
@@ -863,7 +868,7 @@ int BtPdsInit(const BtPdsNvm_t *pNvm)
 	// version changed) and are erased by the sweep below. Neither can be
 	// upgraded in place while preserving the power loss guarantee.
 	uint32_t firstWord = BT_PDS_ERASED_U32;
-	if (s_pNvm->Read(0U, &firstWord, sizeof(firstWord)) != 0)
+	if (s_pNvm->Read(0U, &firstWord, sizeof(firstWord)) < 0)
 	{
 		return -EIO;
 	}
@@ -926,7 +931,7 @@ ssize_t BtPdsRead(uint32_t Id, void *pBuf, size_t Len)
 	{
 		if (pBuf == nullptr ||
 			s_pNvm->Read(latest.Off + BT_PDS_REC_HDR_SIZE,
-						 pBuf, copyLen) != 0)
+						 pBuf, copyLen) < 0)
 		{
 			return -EIO;
 		}

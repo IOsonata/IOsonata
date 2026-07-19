@@ -78,57 +78,70 @@ static uint32_t s_CutKeep;		// bytes of the cut op that still land
 static bool s_Dead;
 static int s_OpCount;
 
-static int NvmRead(uint32_t Off, void *pBuf, uint32_t Len)
-{
-	if (s_Dead || Off + Len > s_RegionSize) return -EIO;
-	memcpy(pBuf, &s_Flash[Off], Len);
-	return 0;
-}
+// NOR model medium as an NvmIO. Programming only clears bits, writes land in
+// ascending order, and a cut at the Nth program or erase tears that operation
+// and kills the medium until the next PowerOn.
+class MockNvm : public NvmIO {
+public:
+	MockNvm() { Region(0, 0); }
+	bool Enable(void) override { return true; }
+	void Disable(void) override {}
+	void Reset(void) override {}
+	uint32_t EraseSize(void) const override { return SECTOR_SIZE; }
+	uint32_t WriteGran(void) const override { return 4; }
 
-static int NvmWrite(uint32_t Off, const void *pData, uint32_t Len)
-{
-	if (s_Dead || Off + Len > s_RegionSize) return -EIO;
-	s_OpCount++;
-	uint32_t n = Len;
-	if (s_CutCountdown == 0)
+	int Read(uint64_t Off, void *pBuf, uint32_t Len) override
 	{
-		n = s_CutKeep < Len ? s_CutKeep : Len;
-		s_Dead = true;
+		if (s_Dead || Off + Len > s_RegionSize) return -EIO;
+		memcpy(pBuf, &s_Flash[Off], Len);
+		return (int)Len;
 	}
-	else if (s_CutCountdown > 0)
-	{
-		s_CutCountdown--;
-	}
-	// NOR model: programming can only clear bits. Ascending order.
-	const uint8_t *p = (const uint8_t *)pData;
-	for (uint32_t i = 0; i < n; i++)
-	{
-		s_Flash[Off + i] &= p[i];
-	}
-	return s_Dead ? -EIO : 0;
-}
 
-static int NvmErase(uint32_t Off)
-{
-	if (s_Dead || Off + SECTOR_SIZE > s_RegionSize) return -EIO;
-	s_OpCount++;
-	uint32_t n = SECTOR_SIZE;
-	if (s_CutCountdown == 0)
+	int Write(uint64_t Off, const void *pData, uint32_t Len) override
 	{
-		n = s_CutKeep < SECTOR_SIZE ? s_CutKeep : SECTOR_SIZE;
-		s_Dead = true;
+		if (s_Dead || Off + Len > s_RegionSize) return -EIO;
+		s_OpCount++;
+		uint32_t n = Len;
+		if (s_CutCountdown == 0)
+		{
+			n = s_CutKeep < Len ? s_CutKeep : Len;
+			s_Dead = true;
+		}
+		else if (s_CutCountdown > 0)
+		{
+			s_CutCountdown--;
+		}
+		const uint8_t *p = (const uint8_t *)pData;
+		for (uint32_t i = 0; i < n; i++)
+		{
+			s_Flash[Off + i] &= p[i];
+		}
+		return s_Dead ? -EIO : (int)Len;
 	}
-	else if (s_CutCountdown > 0)
-	{
-		s_CutCountdown--;
-	}
-	memset(&s_Flash[Off], 0xFF, n);
-	return s_Dead ? -EIO : 0;
-}
 
-static BtPdsNvm_t s_Nvm = {
-	0, 0, SECTOR_SIZE, 4, NvmRead, NvmWrite, NvmErase
+	int Erase(uint64_t Off, uint32_t Len) override
+	{
+		// bt_pds erases exactly one sector at a time.
+		if (s_Dead || Off + Len > s_RegionSize) return -EIO;
+		s_OpCount++;
+		uint32_t n = Len;
+		if (s_CutCountdown == 0)
+		{
+			n = s_CutKeep < Len ? s_CutKeep : Len;
+			s_Dead = true;
+		}
+		else if (s_CutCountdown > 0)
+		{
+			s_CutCountdown--;
+		}
+		memset(&s_Flash[Off], 0xFF, n);
+		return s_Dead ? -EIO : 0;
+	}
+
+	void SetRegion(uint32_t Size) { Region(0, Size); }
 };
+
+static MockNvm s_Nvm;
 
 static void PowerOn(void)
 {
@@ -139,7 +152,7 @@ static void PowerOn(void)
 static void FreshFlash(uint32_t Sectors)
 {
 	s_RegionSize = Sectors * SECTOR_SIZE;
-	s_Nvm.RegionSize = s_RegionSize;
+	s_Nvm.SetRegion(s_RegionSize);
 	memset(s_Flash, 0xFF, sizeof(s_Flash));
 	PowerOn();
 }

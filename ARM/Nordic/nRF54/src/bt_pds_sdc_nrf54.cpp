@@ -131,52 +131,87 @@ static uint32_t RramcFillStep(void *pv)
 
 // ---- BtPdsNvm_t primitives -------------------------------------------------
 
-static int RramcNvmRead(uint32_t Off, void *pBuf, uint32_t Len)
-{
-	// RRAM is memory mapped; read directly.
-	memcpy(pBuf, (const void *)(BT_PDS_RRAMC_REGION_ADDR + Off), Len);
-	return 0;
-}
+// nRF54L RRAM bond region as an NvmIO, serialized against the radio through
+// the MPSL timeslot core. Write and Erase run as timeslot Steps.
+class BtPdsRramcSdcNvm : public NvmIO {
+public:
+	BtPdsRramcSdcNvm()
+	{
+		Region(BT_PDS_RRAMC_REGION_ADDR, BT_PDS_RRAMC_REGION_SIZE);
+	}
+	bool Enable(void) override { return true; }
+	void Disable(void) override {}
+	void Reset(void) override {}
+	uint32_t EraseSize(void) const override { return BT_PDS_RRAMC_SECTOR_SIZE; }
+	uint32_t WriteGran(void) const override { return BT_PDS_RRAMC_WRITE_GRAN; }
 
-static int RramcNvmWrite(uint32_t Off, const void *pData, uint32_t Len)
-{
-	// Len is a multiple of WriteGran (4) per the BtPdsNvm_t contract.
-	RramcWriteCtx_t ctx;
-	ctx.DstAddr = BT_PDS_RRAMC_REGION_ADDR + Off;
-	ctx.pSrc    = (const uint32_t *)pData;
-	ctx.Words   = Len / BT_PDS_RRAMC_WRITE_GRAN;
+	int Read(uint64_t Off, void *pBuf, uint32_t Len) override
+	{
+		if (!RangeValid(Off, Len))
+		{
+			return -EINVAL;
+		}
+		// RRAM is memory mapped; read directly.
+		memcpy(pBuf, (const void *)(BT_PDS_RRAMC_REGION_ADDR + Off), Len);
+		return (int)Len;
+	}
 
-	BtPdsMpslOp_t op;
-	op.Step         = RramcWriteStep;
-	op.StepBudgetUs = BT_PDS_RRAMC_STEP_BUDGET_US;
-	op.pCtx         = &ctx;
+	int Write(uint64_t Off, const void *pData, uint32_t Len) override
+	{
+		if (!RangeValid(Off, Len) || (Off & 3U) != 0U || (Len & 3U) != 0U)
+		{
+			return -EINVAL;
+		}
 
-	return BtPdsMpslRun(&op);
-}
+		RramcWriteCtx_t ctx;
+		ctx.DstAddr = BT_PDS_RRAMC_REGION_ADDR + (uint32_t)Off;
+		ctx.pSrc    = (const uint32_t *)pData;
+		ctx.Words   = Len / BT_PDS_RRAMC_WRITE_GRAN;
 
-static int RramcNvmErase(uint32_t Off)
-{
-	RramcFillCtx_t ctx;
-	ctx.Addr  = BT_PDS_RRAMC_REGION_ADDR + Off;
-	ctx.Words = BT_PDS_RRAMC_SECTOR_SIZE / BT_PDS_RRAMC_WRITE_GRAN;
+		BtPdsMpslOp_t op;
+		op.Step         = RramcWriteStep;
+		op.StepBudgetUs = BT_PDS_RRAMC_STEP_BUDGET_US;
+		op.pCtx         = &ctx;
 
-	BtPdsMpslOp_t op;
-	op.Step         = RramcFillStep;
-	op.StepBudgetUs = BT_PDS_RRAMC_STEP_BUDGET_US;
-	op.pCtx         = &ctx;
+		int result = BtPdsMpslRun(&op);
+		return result != 0 ? result : (int)Len;
+	}
 
-	return BtPdsMpslRun(&op);
-}
+	int Erase(uint64_t Off, uint32_t Len) override
+	{
+		if ((Off % BT_PDS_RRAMC_SECTOR_SIZE) != 0U ||
+			(Len % BT_PDS_RRAMC_SECTOR_SIZE) != 0U ||
+			!RangeValid(Off, Len))
+		{
+			return -EINVAL;
+		}
 
-static const BtPdsNvm_t s_BtPdsRramcSdcNvm = {
-	.RegionOffset = BT_PDS_RRAMC_REGION_ADDR,
-	.RegionSize   = BT_PDS_RRAMC_REGION_SIZE,
-	.SectorSize   = BT_PDS_RRAMC_SECTOR_SIZE,
-	.WriteGran    = BT_PDS_RRAMC_WRITE_GRAN,
-	.Read         = RramcNvmRead,
-	.Write        = RramcNvmWrite,
-	.Erase        = RramcNvmErase,
+		uint32_t off = (uint32_t)Off;
+		uint32_t remain = Len;
+		while (remain > 0U)
+		{
+			RramcFillCtx_t ctx;
+			ctx.Addr  = BT_PDS_RRAMC_REGION_ADDR + off;
+			ctx.Words = BT_PDS_RRAMC_SECTOR_SIZE / BT_PDS_RRAMC_WRITE_GRAN;
+
+			BtPdsMpslOp_t op;
+			op.Step         = RramcFillStep;
+			op.StepBudgetUs = BT_PDS_RRAMC_STEP_BUDGET_US;
+			op.pCtx         = &ctx;
+
+			int result = BtPdsMpslRun(&op);
+			if (result != 0)
+			{
+				return result;
+			}
+			off += BT_PDS_RRAMC_SECTOR_SIZE;
+			remain -= BT_PDS_RRAMC_SECTOR_SIZE;
+		}
+		return 0;
+	}
 };
+
+static BtPdsRramcSdcNvm s_BtPdsRramcSdcNvm;
 
 // Init entry: bring up the MPSL timeslot session, then mount the store.
 int BtPdsSdcNvmInit(void)

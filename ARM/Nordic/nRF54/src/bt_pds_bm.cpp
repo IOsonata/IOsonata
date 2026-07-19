@@ -249,79 +249,86 @@ exit:
 	return result;
 }
 
-static bool RangeValid(uint32_t Off, uint32_t Len)
-{
-	return Off <= BT_PDS_BM_REGION_SIZE &&
-		Len <= BT_PDS_BM_REGION_SIZE - Off;
-}
+// nRF54L RRAM bond region as an NvmIO. RRAM is byte addressable and written
+// in words; a sector erase is a word fill with the erased pattern.
+class BtPdsBmNvm : public NvmIO {
+public:
+	BtPdsBmNvm() { Region(BT_PDS_BM_REGION_ADDR, BT_PDS_BM_REGION_SIZE); }
+	bool Enable(void) override { return true; }
+	void Disable(void) override {}
+	void Reset(void) override {}
+	uint32_t EraseSize(void) const override { return BT_PDS_BM_SECTOR_SIZE; }
+	uint32_t WriteGran(void) const override { return BT_PDS_BM_WRITE_GRAN; }
 
-static int BtPdsBmRead(uint32_t Off, void *pBuf, uint32_t Len)
-{
-	if (!RangeValid(Off, Len) || (Len > 0U && pBuf == nullptr))
+	int Read(uint64_t Off, void *pBuf, uint32_t Len) override
 	{
-		return -EINVAL;
-	}
-
-	memcpy(pBuf, (const void *)(BT_PDS_BM_REGION_ADDR + Off), Len);
-	return 0;
-}
-
-static int BtPdsBmWrite(uint32_t Off, const void *pData, uint32_t Len)
-{
-	if (!RangeValid(Off, Len) || (Off & 3U) != 0U || (Len & 3U) != 0U ||
-		(Len > 0U && (pData == nullptr ||
-		 ((uintptr_t)pData & 3U) != 0U)))
-	{
-		return -EINVAL;
-	}
-
-	uint32_t *pDst = (uint32_t *)(BT_PDS_BM_REGION_ADDR + Off);
-	const uint32_t *pSrc = (const uint32_t *)pData;
-	return FlashWriteWords(pDst, pSrc, Len / 4U);
-}
-
-static int BtPdsBmErase(uint32_t Off)
-{
-	if ((Off % BT_PDS_BM_SECTOR_SIZE) != 0U ||
-		!RangeValid(Off, BT_PDS_BM_SECTOR_SIZE))
-	{
-		return -EINVAL;
-	}
-
-	uint32_t erased[32];
-	memset(erased, 0xFF, sizeof(erased));
-
-	uint32_t *pDst = (uint32_t *)(BT_PDS_BM_REGION_ADDR + Off);
-	uint32_t words = BT_PDS_BM_SECTOR_SIZE / 4U;
-	uint32_t index = 0U;
-
-	while (index < words)
-	{
-		uint32_t count = words - index;
-		if (count > sizeof(erased) / sizeof(erased[0]))
+		if (!RangeValid(Off, Len) || (Len > 0U && pBuf == nullptr))
 		{
-			count = sizeof(erased) / sizeof(erased[0]);
+			return -EINVAL;
 		}
 
-		int result = FlashWriteWords(&pDst[index], erased, count);
-		if (result != 0)
-		{
-			return result;
-		}
-		index += count;
+		memcpy(pBuf, (const void *)(BT_PDS_BM_REGION_ADDR + Off), Len);
+		return (int)Len;
 	}
-	return 0;
-}
 
-static const BtPdsNvm_t s_BtPdsBmNvm = {
-	.RegionOffset = BT_PDS_BM_REGION_ADDR,
-	.RegionSize   = BT_PDS_BM_REGION_SIZE,
-	.SectorSize   = BT_PDS_BM_SECTOR_SIZE,
-	.WriteGran    = BT_PDS_BM_WRITE_GRAN,
-	.Read         = BtPdsBmRead,
-	.Write        = BtPdsBmWrite,
-	.Erase        = BtPdsBmErase,
+	int Write(uint64_t Off, const void *pData, uint32_t Len) override
+	{
+		if (!RangeValid(Off, Len) || (Off & 3U) != 0U || (Len & 3U) != 0U ||
+			(Len > 0U && (pData == nullptr ||
+			 ((uintptr_t)pData & 3U) != 0U)))
+		{
+			return -EINVAL;
+		}
+
+		uint32_t *pDst = (uint32_t *)(BT_PDS_BM_REGION_ADDR + Off);
+		const uint32_t *pSrc = (const uint32_t *)pData;
+		int result = FlashWriteWords(pDst, pSrc, Len / 4U);
+		return result != 0 ? result : (int)Len;
+	}
+
+	int Erase(uint64_t Off, uint32_t Len) override
+	{
+		if ((Off % BT_PDS_BM_SECTOR_SIZE) != 0U ||
+			(Len % BT_PDS_BM_SECTOR_SIZE) != 0U ||
+			!RangeValid(Off, Len))
+		{
+			return -EINVAL;
+		}
+
+		uint32_t erased[32];
+		memset(erased, 0xFF, sizeof(erased));
+
+		uint32_t off = (uint32_t)Off;
+		uint32_t remain = Len;
+		while (remain > 0U)
+		{
+			uint32_t *pDst = (uint32_t *)(BT_PDS_BM_REGION_ADDR + off);
+			uint32_t words = BT_PDS_BM_SECTOR_SIZE / 4U;
+			uint32_t index = 0U;
+
+			while (index < words)
+			{
+				uint32_t count = words - index;
+				if (count > sizeof(erased) / sizeof(erased[0]))
+				{
+					count = sizeof(erased) / sizeof(erased[0]);
+				}
+
+				int result = FlashWriteWords(&pDst[index], erased, count);
+				if (result != 0)
+				{
+					return result;
+				}
+				index += count;
+			}
+			off += BT_PDS_BM_SECTOR_SIZE;
+			remain -= BT_PDS_BM_SECTOR_SIZE;
+		}
+		return 0;
+	}
 };
+
+static BtPdsBmNvm s_BtPdsBmNvm;
 
 extern "C" int BtPdsBmInit(void)
 {

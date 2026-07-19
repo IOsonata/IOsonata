@@ -176,54 +176,91 @@ static uint32_t NvmcEraseStep(void *pv)
 	return BT_PDS_NVMC_ERASE_SLICE_MS * 1000UL;			// not done, keep polling
 }
 
-// ---- BtPdsNvm_t primitives -------------------------------------------------
-static int NvmcNvmRead(uint32_t Off, void *pBuf, uint32_t Len)
-{
-	// Flash is memory mapped; read directly.
-	memcpy(pBuf, (const void *)(BT_PDS_NVMC_REGION_ADDR + Off), Len);
-	return 0;
-}
+// ---- NvmIO implementation --------------------------------------------------
+// nRF52 internal flash bond region as an NvmIO, serialized against the radio
+// through the MPSL timeslot core. A word write completes in one Step; a page
+// erase is started then polled across timeslots (see NvmcEraseStep).
+class BtPdsNvmcSdcNvm : public NvmIO {
+public:
+	BtPdsNvmcSdcNvm()
+	{
+		Region(BT_PDS_NVMC_REGION_ADDR, BT_PDS_NVMC_REGION_SIZE);
+	}
+	bool Enable(void) override { return true; }
+	void Disable(void) override {}
+	void Reset(void) override {}
+	uint32_t EraseSize(void) const override { return BT_PDS_NVMC_PAGE_SIZE; }
+	uint32_t WriteGran(void) const override { return BT_PDS_NVMC_WRITE_GRAN; }
 
-static int NvmcNvmWrite(uint32_t Off, const void *pData, uint32_t Len)
-{
-	// Len is a multiple of WriteGran (4) per the BtPdsNvm_t contract. The store
-	// only writes into previously erased (0xFF) space, so no erase is implied.
-	NvmcWriteCtx_t ctx;
-	ctx.Addr  = BT_PDS_NVMC_REGION_ADDR + Off;
-	ctx.pSrc  = (const uint32_t *)pData;
-	ctx.Words = Len / BT_PDS_NVMC_WRITE_GRAN;
+	int Read(uint64_t Off, void *pBuf, uint32_t Len) override
+	{
+		if (!RangeValid(Off, Len))
+		{
+			return -EINVAL;
+		}
+		// Flash is memory mapped; read directly.
+		memcpy(pBuf, (const void *)(BT_PDS_NVMC_REGION_ADDR + Off), Len);
+		return (int)Len;
+	}
 
-	BtPdsMpslOp_t op;
-	op.Step         = NvmcWriteStep;
-	op.StepBudgetUs = BT_PDS_NVMC_STEP_BUDGET_US;
-	op.pCtx         = &ctx;
+	int Write(uint64_t Off, const void *pData, uint32_t Len) override
+	{
+		if (!RangeValid(Off, Len) || (Off & 3U) != 0U || (Len & 3U) != 0U)
+		{
+			return -EINVAL;
+		}
 
-	return BtPdsMpslRun(&op);
-}
+		// The store only writes into previously erased space, so no erase is
+		// implied.
+		NvmcWriteCtx_t ctx;
+		ctx.Addr  = BT_PDS_NVMC_REGION_ADDR + (uint32_t)Off;
+		ctx.pSrc  = (const uint32_t *)pData;
+		ctx.Words = Len / BT_PDS_NVMC_WRITE_GRAN;
 
-static int NvmcNvmErase(uint32_t Off)
-{
-	NvmcEraseCtx_t ctx;
-	ctx.Addr    = BT_PDS_NVMC_REGION_ADDR + Off;
-	ctx.Started = false;
+		BtPdsMpslOp_t op;
+		op.Step         = NvmcWriteStep;
+		op.StepBudgetUs = BT_PDS_NVMC_STEP_BUDGET_US;
+		op.pCtx         = &ctx;
 
-	BtPdsMpslOp_t op;
-	op.Step         = NvmcEraseStep;
-	op.StepBudgetUs = BT_PDS_NVMC_STEP_BUDGET_US;
-	op.pCtx         = &ctx;
+		int result = BtPdsMpslRun(&op);
+		return result != 0 ? result : (int)Len;
+	}
 
-	return BtPdsMpslRun(&op);
-}
+	int Erase(uint64_t Off, uint32_t Len) override
+	{
+		if ((Off % BT_PDS_NVMC_PAGE_SIZE) != 0U ||
+			(Len % BT_PDS_NVMC_PAGE_SIZE) != 0U ||
+			!RangeValid(Off, Len))
+		{
+			return -EINVAL;
+		}
 
-static const BtPdsNvm_t s_BtPdsNvmcSdcNvm = {
-	.RegionOffset = BT_PDS_NVMC_REGION_ADDR,
-	.RegionSize   = BT_PDS_NVMC_REGION_SIZE,
-	.SectorSize   = BT_PDS_NVMC_PAGE_SIZE,
-	.WriteGran    = BT_PDS_NVMC_WRITE_GRAN,
-	.Read         = NvmcNvmRead,
-	.Write        = NvmcNvmWrite,
-	.Erase        = NvmcNvmErase,
+		uint32_t off = (uint32_t)Off;
+		uint32_t remain = Len;
+		while (remain > 0U)
+		{
+			NvmcEraseCtx_t ctx;
+			ctx.Addr    = BT_PDS_NVMC_REGION_ADDR + off;
+			ctx.Started = false;
+
+			BtPdsMpslOp_t op;
+			op.Step         = NvmcEraseStep;
+			op.StepBudgetUs = BT_PDS_NVMC_STEP_BUDGET_US;
+			op.pCtx         = &ctx;
+
+			int result = BtPdsMpslRun(&op);
+			if (result != 0)
+			{
+				return result;
+			}
+			off += BT_PDS_NVMC_PAGE_SIZE;
+			remain -= BT_PDS_NVMC_PAGE_SIZE;
+		}
+		return 0;
+	}
 };
+
+static BtPdsNvmcSdcNvm s_BtPdsNvmcSdcNvm;
 
 // Init entry: bring up the MPSL timeslot session, then mount the store. Name
 // matches the bond glue (bt_smp_bond_sdc.cpp) so the same glue serves this and

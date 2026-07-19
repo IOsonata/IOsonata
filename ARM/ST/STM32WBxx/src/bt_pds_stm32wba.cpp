@@ -3,7 +3,7 @@
 
 @brief	bt_pds NVM implementation over STM32WBA on-chip flash.
 
-	Provides the BtPdsNvm_t medium primitives (Read/Write/Erase) that the
+	Provides the NvmIO medium primitives (Read/Write/Erase) that the
 	generic log-structured KV store (src/bluetooth/bt_pds.cpp) uses to
 	persist bond records. This is the WBA equivalent of the Nordic
 	bt_pds_nvm_nvmc_sdc.cpp implementation.
@@ -12,7 +12,7 @@
 	    bt_smp_bond.cpp (RAM table, weak hooks)
 	      -> bt_smp_bond_stm32wba.cpp (strong hooks: slot <-> bt_pds key)
 	        -> bt_pds.cpp (log structured KV over a region)
-	          -> THIS FILE (BtPdsNvm_t over WBA flash)
+	          -> THIS FILE (NvmIO over WBA flash)
 
 	STATUS:
 	  [VERIFIED] BtPdsNvm_t layout + BtPdsInit signature: IOsonata
@@ -64,116 +64,109 @@
 static const uint32_t s_RegionBase = WBA_BOND_REGION_ADDR;
 
 // ---------------------------------------------------------------------------
-// Read: flash is memory-mapped, so a read is a memcpy from the linear address.
-// [VERIFIED] signature matches BtPdsNvm_t::Read.
+// STM32WBA internal flash bond region as an NvmIO. Flash is memory mapped for
+// read; programming is quad-word (16 byte) and erase is page based.
 // ---------------------------------------------------------------------------
-static int WbaFlashRead(uint32_t Off, void *pBuf, uint32_t Len)
-{
-	if (pBuf == NULL || (Off + Len) > WBA_BOND_REGION_SIZE)
-	{
-		return -EINVAL;
-	}
-	memcpy(pBuf, (const void *)(s_RegionBase + Off), Len);
-	return 0;
-}
+class BtPdsWbaNvm : public NvmIO {
+public:
+	BtPdsWbaNvm() { Region(s_RegionBase, WBA_BOND_REGION_SIZE); }
+	bool Enable(void) override { return true; }
+	void Disable(void) override {}
+	void Reset(void) override {}
+	uint32_t EraseSize(void) const override { return WBA_FLASH_PAGE_SIZE; }
+	uint32_t WriteGran(void) const override { return WBA_FLASH_WRITE_GRAN; }
 
-// ---------------------------------------------------------------------------
-// Write: program Len bytes (a multiple of WriteGran) at region+Off.
-// [HARDWARE] uses HAL_FLASH_Program in quad-word mode. Confirm the program
-// type constant name for WBA HAL (FLASH_TYPEPROGRAM_QUADWORD) and that the
-// source address alignment requirement is met. Synchronous: committed on
-// return, per BtPdsNvm_t contract.
-// ---------------------------------------------------------------------------
-static int WbaFlashWrite(uint32_t Off, const void *pData, uint32_t Len)
-{
-	if (pData == NULL ||
-		(Off % WBA_FLASH_WRITE_GRAN) != 0 ||
-		(Len % WBA_FLASH_WRITE_GRAN) != 0 ||
-		(Off + Len) > WBA_BOND_REGION_SIZE)
+	int Read(uint64_t Off, void *pBuf, uint32_t Len) override
 	{
-		return -EINVAL;
-	}
-
-	int rc = 0;
-	HAL_FLASH_Unlock();
-
-	const uint8_t *src = (const uint8_t *)pData;
-	for (uint32_t i = 0; i < Len; i += WBA_FLASH_WRITE_GRAN)
-	{
-		// [HARDWARE][TODO] confirm constant + that the data argument is the
-		// ADDRESS of the source quad-word on WBA HAL (it is, for QUADWORD).
-		uint32_t dst = s_RegionBase + Off + i;
-		if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_QUADWORD, dst,
-							   (uint32_t)(uintptr_t)(src + i)) != HAL_OK)
+		if (pBuf == NULL || !RangeValid(Off, Len))
 		{
-			rc = -EIO;
-			break;
+			return -EINVAL;
 		}
+		memcpy(pBuf, (const void *)(s_RegionBase + (uint32_t)Off), Len);
+		return (int)Len;
 	}
 
-	HAL_FLASH_Lock();
-	return rc;
-}
-
-// ---------------------------------------------------------------------------
-// Erase: erase the page at region+Off.
-// [HARDWARE] uses HAL_FLASHEx_Erase page mode. Confirm the WBA page-number
-// computation: HAL wants a page index, not an address. The index base may be
-// relative to flash start, and on dual-bank parts the bank must be selected.
-// Confirm bank layout for the target WBA part.
-// ---------------------------------------------------------------------------
-static int WbaFlashErase(uint32_t Off)
-{
-	if ((Off % WBA_FLASH_PAGE_SIZE) != 0 || Off >= WBA_BOND_REGION_SIZE)
+	// [HARDWARE] HAL_FLASH_Program in quad-word mode. Confirm the program type
+	// constant name for WBA HAL (FLASH_TYPEPROGRAM_QUADWORD) and the source
+	// alignment. Synchronous: committed on return.
+	int Write(uint64_t Off, const void *pData, uint32_t Len) override
 	{
-		return -EINVAL;
+		if (pData == NULL ||
+			(Off % WBA_FLASH_WRITE_GRAN) != 0 ||
+			(Len % WBA_FLASH_WRITE_GRAN) != 0 ||
+			!RangeValid(Off, Len))
+		{
+			return -EINVAL;
+		}
+
+		int rc = (int)Len;
+		HAL_FLASH_Unlock();
+
+		const uint8_t *src = (const uint8_t *)pData;
+		for (uint32_t i = 0; i < Len; i += WBA_FLASH_WRITE_GRAN)
+		{
+			// [HARDWARE][TODO] confirm the data argument is the ADDRESS of the
+			// source quad-word on WBA HAL (it is, for QUADWORD).
+			uint32_t dst = s_RegionBase + (uint32_t)Off + i;
+			if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_QUADWORD, dst,
+								   (uint32_t)(uintptr_t)(src + i)) != HAL_OK)
+			{
+				rc = -EIO;
+				break;
+			}
+		}
+
+		HAL_FLASH_Lock();
+		return rc;
 	}
 
-	// [HARDWARE][TODO] page index relative to flash base. Confirm FLASH_BASE
-	// and whether WBA uses a single bank for this density.
-	uint32_t absAddr = s_RegionBase + Off;
-	uint32_t pageIdx = (absAddr - FLASH_BASE) / WBA_FLASH_PAGE_SIZE;
-
-	FLASH_EraseInitTypeDef ei;
-	memset(&ei, 0, sizeof(ei));
-	ei.TypeErase = FLASH_TYPEERASE_PAGES;
-	ei.Page      = pageIdx;			// TODO confirm field name/semantics
-	ei.NbPages   = 1;
-	// ei.Banks  = FLASH_BANK_1;	// TODO set if part is multi-bank
-
-	uint32_t pageError = 0;
-	int rc = 0;
-	HAL_FLASH_Unlock();
-	if (HAL_FLASHEx_Erase(&ei, &pageError) != HAL_OK)
+	// [HARDWARE] HAL_FLASHEx_Erase page mode. HAL wants a page index, not an
+	// address; confirm FLASH_BASE and the bank layout for the target part.
+	int Erase(uint64_t Off, uint32_t Len) override
 	{
-		rc = -EIO;
-	}
-	HAL_FLASH_Lock();
-	return rc;
-}
+		if ((Off % WBA_FLASH_PAGE_SIZE) != 0 ||
+			(Len % WBA_FLASH_PAGE_SIZE) != 0 ||
+			!RangeValid(Off, Len))
+		{
+			return -EINVAL;
+		}
 
-// ---------------------------------------------------------------------------
-// Backend descriptor. [VERIFIED] field set matches BtPdsNvm_t in bt_pds.h:
-//   RegionOffset, RegionSize, SectorSize, WriteGran, Read, Write, Erase.
-//
-// RegionOffset is the medium offset of the region start. Because our Read/
-// Write/Erase already add s_RegionBase internally and take a region-relative
-// Off, RegionOffset is 0 here (the region is self-contained).
-// ---------------------------------------------------------------------------
-static const BtPdsNvm_t s_WbaPdsNvm = {
-	.RegionOffset = 0,
-	.RegionSize   = WBA_BOND_REGION_SIZE,
-	.SectorSize   = WBA_FLASH_PAGE_SIZE,
-	.WriteGran    = WBA_FLASH_WRITE_GRAN,
-	.Read         = WbaFlashRead,
-	.Write        = WbaFlashWrite,
-	.Erase        = WbaFlashErase,
+		uint32_t off = (uint32_t)Off;
+		uint32_t remain = Len;
+		int rc = 0;
+		HAL_FLASH_Unlock();
+		while (remain > 0U)
+		{
+			// [HARDWARE][TODO] page index relative to flash base.
+			uint32_t absAddr = s_RegionBase + off;
+			uint32_t pageIdx = (absAddr - FLASH_BASE) / WBA_FLASH_PAGE_SIZE;
+
+			FLASH_EraseInitTypeDef ei;
+			memset(&ei, 0, sizeof(ei));
+			ei.TypeErase = FLASH_TYPEERASE_PAGES;
+			ei.Page      = pageIdx;		// TODO confirm field name/semantics
+			ei.NbPages   = 1;
+			// ei.Banks  = FLASH_BANK_1;	// TODO set if part is multi-bank
+
+			uint32_t pageError = 0;
+			if (HAL_FLASHEx_Erase(&ei, &pageError) != HAL_OK)
+			{
+				rc = -EIO;
+				break;
+			}
+			off += WBA_FLASH_PAGE_SIZE;
+			remain -= WBA_FLASH_PAGE_SIZE;
+		}
+		HAL_FLASH_Lock();
+		return rc;
+	}
 };
+
+static BtPdsWbaNvm s_WbaPdsNvm;
 
 // ---------------------------------------------------------------------------
 // One-time init entry point. Called from the WBA bond glue (bt_smp_bond_wba)
-// before the first bond access. [VERIFIED] BtPdsInit signature: bt_pds.h.
-// Mirrors the Nordic BtPdsSdcNvmInit role.
+// before the first bond access. Mirrors the Nordic BtPdsSdcNvmInit role.
 // ---------------------------------------------------------------------------
 extern "C" int BtPdsWbaInit(void)
 {

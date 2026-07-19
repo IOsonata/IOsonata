@@ -13,7 +13,7 @@
 		copy or erase. No heap or live-record staging array is used.
 
 		The store is platform independent. Medium access is supplied by a
-		BtPdsNvm_t implementation. The current on-medium format requires 4-byte
+		NvmIO implementation. The current on-medium format requires 4-byte
 		write granularity.
 
 		Operations are synchronous: when a call returns successfully, the medium
@@ -31,46 +31,37 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+#ifdef __cplusplus
+#include "storage/nvmio.h"
+#endif
+
 // Largest value required by the current Peer Manager data types.
 #define BT_PDS_RECORD_DATA_MAX		128
 
 /**
- * @brief NVM implementation used by BtPds.
+ * @brief Mount the store on a persistent memory device.
  *
- * Offsets passed to Read, Write and Erase are relative to RegionOffset.
- * RegionSize must be an integral number of SectorSize units and contain at
- * least two sectors. WriteGran is currently required to be 4 bytes.
- *
- * Write and Erase must be synchronous from the caller's view. Write receives
- * aligned offsets, aligned source buffers and lengths that are multiples of
- * WriteGran. Erase operates on one SectorSize unit.
- */
-typedef struct __Bt_Pds_Nvm {
-	uint32_t	RegionOffset;	//!< Absolute medium address of the region
-	uint32_t	RegionSize;		//!< Total region size in bytes
-	uint32_t	SectorSize;		//!< Erase and garbage-collection unit
-	uint32_t	WriteGran;		//!< Write granularity, currently 4 bytes
-
-	int (*Read)(uint32_t Off, void *pBuf, uint32_t Len);
-	int (*Write)(uint32_t Off, const void *pData, uint32_t Len);
-	int (*Erase)(uint32_t Off);
-} BtPdsNvm_t;
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/**
- * @brief Mount the store on an NVM implementation.
+ * The device is an NvmIO whose region is the store area. Its EraseSize is the
+ * sector and garbage-collection unit; the region must be an integral number of
+ * sectors and contain at least two. WriteGran must be 4. Read, Write and Erase
+ * must be synchronous from the caller's view: Write programs previously erased
+ * cells at aligned offsets with lengths that are multiples of WriteGran, and
+ * Erase clears whole sectors.
  *
  * Scans every sector, recovers or safely discards an interrupted garbage
  * collection, and selects the newest writable sector. Earlier development
  * formats are cleared once because they cannot be upgraded in place while
  * preserving the power-loss guarantee.
  *
+ * @param pNvm : Persistent memory device holding the store region.
+ *
  * @return 0 on success, negative errno on failure.
  */
-int BtPdsInit(const BtPdsNvm_t *pNvm);
+#ifdef __cplusplus
+int BtPdsInit(NvmIO * const pNvm);
+
+extern "C" {
+#endif
 
 /**
  * @brief Read the latest live value stored under Id.
