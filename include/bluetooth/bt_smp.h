@@ -667,6 +667,12 @@ void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6]);
  */
 int BtSmpF4SelfTest(void);
 
+/**
+ * @brief	Legacy c1/s1 self-test against the BLE spec sample data. Returns 0
+ *			on PASS. For bring-up verification of the legacy pairing crypto.
+ */
+int BtSmpC1S1SelfTest(void);
+
 // Resolve a resolvable private address (6-byte BD_ADDR) against a peer IRK.
 bool BtSmpRpaResolve(const uint8_t Irk[16], const uint8_t Rpa[6]);
 

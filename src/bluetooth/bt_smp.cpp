@@ -641,16 +641,27 @@ static void SmpAesCmac(const uint8_t Key[16], const uint8_t *pMsg, size_t Len,
 	SmpAes(Key, y, Mac);
 }
 
-// c1(k, r, preq, pres, iat, ia, rat, ra)
+static void SmpReverse16(const uint8_t in[16], uint8_t out[16]);
+
+// c1(k, r, preq, pres, iat, ia, rat, ra). Core spec Vol 3 Part H, 2.2.3.
+//
+// The confirm is AES-128, and like e/f4..f6 the cipher works on the big-endian
+// crypto form while SMP sends r, the addresses and the confirm in wire (little
+// endian) order. p1 = pres || preq || rat || iat and p2 = 0..0 || ia || ra as a
+// big-endian value; assembling the fields in wire order and reversing each block
+// across the cipher produces that value and a wire-order confirm. Verified by
+// BtSmpC1S1SelfTest against the specification sample data.
 static bool SmpC1(const uint8_t k[16], const uint8_t r[16],
 				  const uint8_t preq[7], const uint8_t pres[7],
 				  uint8_t iat, const uint8_t ia[6],
 				  uint8_t rat, const uint8_t ra[6], uint8_t out[16])
 {
 	s_SmpAesFault = false;
+	uint8_t ks[16];
 	uint8_t p1[16];
 	uint8_t p2[16];
 	uint8_t tmp[16];
+	uint8_t blk[16];
 
 	p1[0] = iat;
 	p1[1] = rat;
@@ -661,30 +672,46 @@ static bool SmpC1(const uint8_t k[16], const uint8_t r[16],
 	memcpy(&p2[0], ra, 6);
 	memcpy(&p2[6], ia, 6);
 
+	SmpReverse16(k, ks);
+
+	// e(k, r XOR p1)
 	for (int i = 0; i < 16; i++)
 	{
 		tmp[i] = r[i] ^ p1[i];
 	}
-	SmpAes(k, tmp, tmp);
+	SmpReverse16(tmp, blk);
+	SmpAes(ks, blk, blk);
+	SmpReverse16(blk, tmp);
 
+	// e(k, that XOR p2)
 	for (int i = 0; i < 16; i++)
 	{
 		tmp[i] ^= p2[i];
 	}
-	SmpAes(k, tmp, out);
+	SmpReverse16(tmp, blk);
+	SmpAes(ks, blk, blk);
+	SmpReverse16(blk, out);
 	return !s_SmpAesFault;
 }
 
-// s1(k, r1, r2)
+// s1(k, r1, r2). Core spec Vol 3 Part H, 2.2.4. r' = r1 low 64 || r2 low 64 as a
+// big-endian value; in wire order the low 64 bits are the first eight octets, so
+// r' = r2[0..7] || r1[0..7], reversed across the cipher like c1.
 static bool SmpS1(const uint8_t k[16], const uint8_t r1[16],
 				  const uint8_t r2[16], uint8_t out[16])
 {
 	s_SmpAesFault = false;
+	uint8_t ks[16];
 	uint8_t r[16];
+	uint8_t blk[16];
 
 	memcpy(&r[0], &r2[0], 8);
 	memcpy(&r[8], &r1[0], 8);
-	SmpAes(k, r, out);
+
+	SmpReverse16(k, ks);
+	SmpReverse16(r, blk);
+	SmpAes(ks, blk, blk);
+	SmpReverse16(blk, out);
 	return !s_SmpAesFault;
 }
 
@@ -3681,6 +3708,51 @@ int BtSmpF4SelfTest(void)
 		return -1;
 	}
 	return memcmp(out, expect, 16) == 0 ? 0 : -1;
+}
+
+// Legacy c1 and s1 self-test against the Core spec sample data (Vol 3 Part H,
+// D.1). c1/s1 take wire-order inputs and return wire-order output; the spec
+// prints the sample as big-endian numbers, so the vectors below are reversed
+// into wire order and the expected results are reversed the same way.
+int BtSmpC1S1SelfTest(void)
+{
+	static const uint8_t k[16] = {0};
+
+	// c1 sample. r is a 128-bit value; preq/pres are the 7-octet command
+	// values; ia/ra are the device addresses; all reversed to wire order.
+	static const uint8_t r[16] = {
+		0xe0,0x2e,0x70,0xc6,0x4e,0x27,0x88,0x63,0x0e,0x6f,0xad,0x56,0x21,0xd5,0x83,0x57 };
+	static const uint8_t preq[7] = { 0x01,0x01,0x00,0x00,0x10,0x07,0x07 };
+	static const uint8_t pres[7] = { 0x02,0x03,0x00,0x00,0x08,0x00,0x05 };
+	static const uint8_t ia[6] = { 0xa6,0xa5,0xa4,0xa3,0xa2,0xa1 };
+	static const uint8_t ra[6] = { 0xb6,0xb5,0xb4,0xb3,0xb2,0xb1 };
+	static const uint8_t c1Expect[16] = {	// reversed spec c1
+		0x86,0x3b,0xf1,0xbe,0xc5,0x4d,0xa7,0xd2,0xea,0x88,0x89,0x87,0xef,0x3f,0x1e,0x1e };
+
+	uint8_t c1[16];
+	if (!SmpC1(k, r, preq, pres, 0x01, ia, 0x00, ra, c1))
+	{
+		return -1;
+	}
+	if (memcmp(c1, c1Expect, 16) != 0)
+	{
+		return -1;
+	}
+
+	// s1 sample, r1 and r2 reversed to wire order.
+	static const uint8_t r1[16] = {
+		0x88,0x77,0x66,0x55,0x44,0x33,0x22,0x11,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x00 };
+	static const uint8_t r2[16] = {
+		0x88,0x77,0x66,0x55,0x44,0x33,0x22,0x11,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01 };
+	static const uint8_t s1Expect[16] = {	// reversed spec s1
+		0x84,0x0c,0xa8,0x42,0x3e,0x54,0x3c,0x82,0x53,0x37,0x65,0x88,0xed,0x47,0xbb,0x42 };
+
+	uint8_t s1[16];
+	if (!SmpS1(k, r1, r2, s1))
+	{
+		return -1;
+	}
+	return memcmp(s1, s1Expect, 16) == 0 ? 0 : -1;
 }
 
 // Resolve a resolvable private address against a peer IRK with the ah function
