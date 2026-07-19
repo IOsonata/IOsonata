@@ -14,12 +14,12 @@ Example of defining Flash device info :
 -----
 MX25R1635F :
 
-static const FlashDiskIOCfg_t s_FlashDiskCfg = {
+static const FlashCfg_t s_FlashDiskCfg = {
     .DevNo = 0,
     .TotalSize = 16 * 1024 / 8,		// 16 Mbits in KBytes
 	.SectSize = 4 * 1024,					// 4K
     .BlkSize = 64 * 1024,					// 64K
-    .WriteSize = 256,				// Write page size
+    .PageSize = 256,				// Write page size
     .AddrSize = 3,              	// 3 bytes addressing
 	.pInitCB = NULL.				// no special init require.
     .pWaitCB = NULL,				// blocking, no wait callback
@@ -28,7 +28,7 @@ static const FlashDiskIOCfg_t s_FlashDiskCfg = {
 -----
 S25FS :
 
-static const FlashDiskIOCfg_t s_FlashDiskCfg = {
+static const FlashCfg_t s_FlashDiskCfg = {
     .DevNo = 0,
     .TotalSize = 128 * 1024 / 8,	// 128 Mbits
 	.SectSize = 4 * 1024,					// 4K
@@ -75,7 +75,7 @@ bool s25fs_init(int DevNo, DeviceIntrf *pInterf)
 -----
 MX66U51235F :
 
-static const FlashDiskIOCfg_t s_FlashDiskCfg = {
+static const FlashCfg_t s_FlashDiskCfg = {
     .DevNo = 0,
     .TotalSize = 256 * 1024 / 8,	// 256 Mbits in KBytes
 	.SectSize = 4 * 1024,					// 4K
@@ -88,12 +88,12 @@ static const FlashDiskIOCfg_t s_FlashDiskCfg = {
 
 
 // Quad SPI Flash Micron N25Q128A
-static FlashDiskIOCfg_t s_N25Q128A_QFlashCfg = {
+static FlashCfg_t s_N25Q128A_QFlashCfg = {
     .DevNo = 0,
     .TotalSize = 128 * 1024 / 8,	// 128 Mbits in KBytes
 	.SectSize = 4 * 1024,
     .BlkSize = 32 * 1024,
-    .WriteSize = 256,
+    .PageSize = 256,
     .AddrSize = 3,					// 3 bytes addressing
     .pInitCB = NULL,//MX25U1635E_init,
     .pWaitCB = NULL,//FlashWriteDelayCallback,
@@ -102,12 +102,12 @@ static FlashDiskIOCfg_t s_N25Q128A_QFlashCfg = {
 };
 
 // Quad SPI Flash Macronix MX25R3235F
-static FlashDiskIOCfg_t s_MX25R3235F_QFlashCfg = {
+static FlashCfg_t s_MX25R3235F_QFlashCfg = {
     .DevNo = 0,
     .TotalSize = 32 * 1024 / 8,		// 16 Mbits
 	.SectSize = 4 * 1024,
     .BlkSize = 64 * 1024,
-    .WriteSize = 256,
+    .PageSize = 256,
     .AddrSize = 3,					// 3 bytes addressing
     .pInitCB = NULL,//MX25U1635E_init,
     .pWaitCB = NULL,//FlashWriteDelayCallback,
@@ -176,7 +176,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "storage/diskio.h"
-#include "storage/flash.h"
+#include "storage/nvm_flash.h"
 #include "device_intrf.h"
 
 /** @addtogroup Storage
@@ -185,181 +185,140 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
-/// @brief	Flash disk base class
+/// @brief	Flash disk block adapter.
 ///
-/// Most Flash devices work in MSB bit order. This implementation
-/// only supports MSB mode. Make sure that the Flash is configured
-/// for MSB mode.
+/// Presents a NOR Flash as a rewritable block device for filesystem use
+/// (FatFS, USB MSC). SectWrite performs erase then program of the whole
+/// sector; combined with the DiskIO write back cache this is a read modify
+/// write presentation and is not power loss safe. Log structured consumers
+/// (littlefs, bt_pds) must use the NvmFlash device directly instead.
 class FlashDiskIO : public DiskIO {
 public:
 	FlashDiskIO();
 	virtual ~FlashDiskIO() {}
 
-	operator FlashDev_t * const () { return &vDevData; }
-
 	/**
-	 * @brief	Initialize Flash Disk.
+	 * @brief	Initialize the Flash and the sector cache.
 	 *
-	 * @param	Cfg		: Flash disk configuration data
-	 * @param	pInterf	: Pointer to device interface to access flash device
-	 * @param	pCacheBlk	: Pointer to static cache block (optional)
-	 * @param	NbCacheBlk	: Size of cache block (Number of cache sector)
+	 * @param	Cfg			: Flash device configuration
+	 * @param	pInterf		: Interface to access the device (SPI/QSPI)
+	 * @param	pCacheBlk	: Sector cache block array, NULL : no cache
+	 * @param	NbCacheBlk	: Number of cache blocks
 	 *
-	 * @return
-	 * 			- true 	: Success
-	 * 			- false	: Failed
+	 * @return	true on success.
 	 */
 	bool Init(const FlashCfg_t &Cfg, DeviceIntrf * const pInterf,
 			  DiskIOCache_t * const pCacheBlk = NULL, int NbCacheBlk = 0);
 
 	/**
-	 * @brief	Get total disk size in bytes.
-	 *
-	 * @return	Total size in KBytes
+	 * @brief	Device size in KBytes.
 	 */
-	virtual uint32_t GetSize(void) { return vDevData.TotalSize; }
-
-    /**
-	 * @brief	Device specific minimum erasable block size in bytes.
-	 *
-	 * @return	Block size in bytes
-	 */
-	virtual uint16_t GetSectSize(void) { return vDevData.SectSize; }
+	virtual uint32_t GetSize(void) { return (uint32_t)(vFlash.Size() / 1024ULL); }
 
 	/**
-	 * @brief	Device specific minimum write size in bytes
-	 *
-	 * @return	Size in bytes
+	 * @brief	Sector size in bytes.
 	 */
-	virtual uint32_t GetPageSize() { return vDevData.PageSize; }
+	virtual uint16_t GetSectSize(void) { return (uint16_t)vFlash.EraseSize(); }
 
 	/**
-	 * @brief	Perform mass erase (ERASE ALL).
-	 *
-	 * This function may take a long time to complete. If task switching is require, add delay
-	 * callback function to the configuration at initialization.
+	 * @brief	Program page size in bytes.
 	 */
-	virtual void Erase() { FlashErase(&vDevData); }
+	virtual uint32_t GetPageSize(void) { return vFlash.PageSize(); }
+
+	/**
+	 * @brief	Erase the entire device.
+	 */
+	virtual void Erase(void) { vFlash.MassErase(); }
 
 	/**
 	 * @brief	Erase Flash block.
 	 *
-	 * @param	BlkNo	: Starting block number to erase.
-	 * @param	NbBlk	: Number of consecutive blocks to erase
+	 * @param	BlkNo	: Starting block number to erase
+	 * @param	NbBlk	: Number of blocks to erase
 	 */
-	virtual void EraseBlock(uint32_t BlkNo, int NbBlk) { FlashEraseBlock(&vDevData, BlkNo, NbBlk); }
+	virtual void EraseBlock(uint32_t BlkNo, int NbBlk) {
+		vFlash.Erase((uint64_t)BlkNo * BlockEraseSize(),
+					 (uint32_t)NbBlk * BlockEraseSize());
+	}
 
 	/**
-	 * @brief	Erase Flash block.
+	 * @brief	Erase Flash sector.
 	 *
-	 * @param	BlkNo	: Starting block number to erase.
-	 * @param	NbBlk	: Number of consecutive blocks to erase
+	 * @param	SectNo	: Starting sector number to erase
+	 * @param	NbSect	: Number of sectors to erase
 	 */
-	virtual void EraseSector(uint32_t SectNo, int NbSect) { FlashEraseSector(&vDevData, SectNo, NbSect); }
+	virtual void EraseSector(uint32_t SectNo, int NbSect) {
+		vFlash.Erase((uint64_t)SectNo * vFlash.EraseSize(),
+					 (uint32_t)NbSect * vFlash.EraseSize());
+	}
 
 	/**
-	 * @brief	Read one sector from physical device.
+	 * @brief	Read one sector.
 	 *
 	 * @param	SectNo	: Sector number to read
-	 * @param	pBuff	: Pointer to buffer to receive sector data. Must be at least
-	 * 					  1 sector size
+	 * @param	pBuff	: Buffer of at least one sector size
 	 *
-	 * @return
-	 * 			- true	: Success
-	 * 			- false	: Failed
+	 * @return	true on success.
 	 */
-	virtual bool SectRead(uint32_t SectNo, uint8_t *pBuff) { return FlashSectRead(&vDevData, SectNo, pBuff); }
+	virtual bool SectRead(uint32_t SectNo, uint8_t *pBuff) {
+		uint32_t ss = vFlash.EraseSize();
+		return vFlash.Read((uint64_t)SectNo * ss, pBuff, ss) == (int)ss;
+	}
 
 	/**
-	 * @brief	Write one sector to physical device
+	 * @brief	Write one sector: erase then program.
 	 *
-	 * @param	SectNo	: Sector number to read
-	 * @param	pData	: Pointer to sector data to write. Must be at least
-	 * 					  1 sector size
+	 * @param	SectNo	: Sector number to write
+	 * @param	pData	: Buffer of one sector size to write
 	 *
-	 * @return
-	 * 			- true	: Success
-	 * 			- false	: Failed
+	 * @return	true on success.
 	 */
 	virtual bool SectWrite(uint32_t SectNo, uint8_t *pData) {
-		EraseSector(SectNo, 1);
-		return FlashSectWrite(&vDevData, SectNo, pData); }
+		uint32_t ss = vFlash.EraseSize();
+		if (vFlash.Erase((uint64_t)SectNo * ss, ss) != 0)
+		{
+			return false;
+		}
+		return vFlash.Write((uint64_t)SectNo * ss, pData, ss) == (int)ss;
+	}
 
 	/**
-	 * @brief	Read Flash ID
-	 *
-	 * @param	Len : Length of id to read in bytes
-	 *
-	 * @return	Flash ID
+	 * @brief	Read Flash JEDEC id.
 	 */
-	uint32_t ReadId(int Len) { return FlashReadId(&vDevData, Len); }
+	uint32_t ReadId(int Len) { return vFlash.ReadId(Len); }
 
 	/**
-	 * @brief	Read Flash status.
-	 *
-	 * @return	Flash status
+	 * @brief	Read Flash status register.
 	 */
-	uint8_t ReadStatus() { return FlashReadStatus(&vDevData); }
+	uint8_t ReadStatus(void) { return vFlash.ReadStatus(); }
 
 	/**
-	 * @brief	Get the sector erase size
-	 *
-	 * The return value is normally set via configuration structure at init
-	 *
-	 * @return	Size in KBytes
+	 * @brief	Sector erase size in bytes.
 	 */
-	uint16_t SectEraseSize() { return vDevData.SectSize; }
+	uint32_t SectEraseSize(void) { return vFlash.EraseSize(); }
 
 	/**
-	 * @brief	Get the block erase size
-	 *
-	 * The return value is normally set via configuration structure at init
-	 *
-	 * @return	Size in KBytes
+	 * @brief	Block erase size in bytes.
 	 */
-	uint16_t BlockEraseSize() { return vDevData.BlkSize; }
+	uint32_t BlockEraseSize(void) { return vBlkSize; }
 
 	/**
-	 * @brief	Reset DiskIO to its default state
+	 * @brief	Access the underlying NvmFlash device.
 	 */
-	virtual void Reset();
-
-protected:
+	NvmFlash &Memory(void) { return vFlash; }
 
 	/**
-	 * @brief	Disable Flash write
+	 * @brief	Reset DiskIO to its default state.
 	 */
-	void WriteDisable();
-
-	/**
-	 * @brief	Enable Flash write
-	 *
-	 * @param	Timeout : Timeout counter
-	 *
-	 * @return
-	 * 			- true	: Success
-	 * 			- false	: Failed
-	 */
-	bool WriteEnable(uint32_t Timeout = 100000);
-
-	/**
-	 * @brief	Wait for Flash ready flag
-	 *
-	 * @param	Timeout : Timeout counter
-	 * @param	usRtyDelay	: Timeout in us before retry (optional)
-	 *
-	 * @return
-	 * 			- true	: Success
-	 * 			- false	: Failed
-	 */
-	bool WaitReady(uint32_t Timeout = 100000, uint32_t usRtyDelay = 0);
+	virtual void Reset(void);
 
 private:
-	FlashDev_t vDevData;		//!< Flash device data
+	NvmFlash vFlash;	//!< Underlying Flash device
+	uint32_t vBlkSize;	//!< Block erase size in bytes
 };
 
 extern "C" {
-#endif
+#endif	// __cplusplus
 
 #ifdef __cplusplus
 }
@@ -368,4 +327,3 @@ extern "C" {
 /** @} End of group Storage */
 
 #endif	// __DISKIO_FLASH_H__
-

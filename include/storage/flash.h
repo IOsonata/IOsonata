@@ -1,13 +1,16 @@
 /**--------------------------------------------------------------------------
 @file	flash.h
 
-@brief	Generic flash driver class
+@brief	Generic flash device configuration.
 
-Most Flash devices work in MSB bit order. This implementation only support MSB.
-Make sure that the Flash is configure for MSB mode
+This header holds the Flash command set, the configuration structure and the
+predefined part configurations. The driver itself is the NvmFlash class in
+storage/nvm_flash.h; the FlashDiskIO block adapter in storage/diskio_flash.h
+sits on top of it for filesystem use.
 
-This implementation works with most Flash devices.  There is no need to implement
-for each device, just fill the config data struct and pass it to init function
+Most Flash devices work in MSB bit order. Only MSB mode is supported. There is
+no need to implement a driver per device, just fill the config data struct and
+pass it to NvmFlash::Init
 
 Example of defining Flash device info :
 
@@ -122,17 +125,17 @@ Usage in C++ :
 SPI g_Spi;
 
 // Declare device instance
-Flash g_Flash;
+NvmFlash g_Flash;
 
-// Initialize
+// Initialize covering the whole device
 g_Flash.Init(s_FlashCfg, &g_Spi);
 
-// Read/Write
-uint8_t buff[s_FlashCfg.vSectSize];
+// Byte addressed access
+uint8_t buff[256];
 
-g_FlashDisk.SectRead(1, buff);	// Read sector 1
-g_FlashDisk.SectWrite(2, buff);	// Write sector 2
-g_FlashDisk.Erase();			// Mass erase flash
+g_Flash.Read(0, buff, sizeof(buff));
+g_Flash.Erase(0, g_Flash.EraseSize());
+g_Flash.Write(0, buff, sizeof(buff));
 
 
 @author	Hoang Nguyen Hoan
@@ -207,6 +210,8 @@ SOFTWARE.
 
 #define FLASH_CMD_RESET_ENABLE		0x66	//!< Enable reset
 #define FLASH_CMD_RESET_DEVICE		0x99	//!< Reset
+#define FLASH_CMD_DPD				0xB9	//!< Enter deep power down
+#define FLASH_CMD_RDPD				0xAB	//!< Release deep power down
 
 #define FLASH_STATUS_WIP            (1<<0)  // Write In Progress
 #define FLASH_STATUS_WEL			(1<<1)	// Write enable
@@ -255,171 +260,9 @@ typedef struct __Flash_Config {
     CmdCycle_t	WrCmd;			//!< QSPI write cmd and dummy cycle
 } FlashCfg_t;
 
-typedef struct __Flash_Device {
-	uint32_t    TotalSize;		//!< Total Flash size in KBytes
-	uint32_t    BlkSize;		//!< Erasable block size in Bytes
-	uint16_t    SectSize;		//!< Erasable sector size in Bytes
-	uint16_t    PageSize;		//!< Min writable size in bytes
-	int         AddrSize;		//!< Address size in bytes
-	int         DevNo;			//!< Device No
-	DevIntrf_t	*pDevIntrf;		//!< Device interface to access Flash
-	FlaskCb_t	pWaitCB;		//!< User wait callback when long wait time is required. This is to allows
-								//!< user application to perform task switch or other thing while waiting.
-	CmdCycle_t	RdCmd;			//!< QSPI read/write and dummy cycle
-	CmdCycle_t	WrCmd;			//!< QSPI read/write and dummy cycle
-} FlashDev_t;
 
 #pragma pack(pop)
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/**
- * @brief	Initialize Flash Disk.
- *
- * @param	pDev	: Pointer flash device private data
- * @param	pCfg	: Pointer to flash disk configuration data
- * @param	pInterf	: Pointer to device interface to access flash device
- * @param	pCacheBlk	: Pointer to static cache block (optional)
- * @param	NbCacheBlk	: Size of cache block (Number of cache sector)
- *
- * @return
- * 			- true 	: Success
- * 			- false	: Failed
- */
-bool FlashInit(FlashDev_t * const pDev, const FlashCfg_t * pCfg, DevIntrf_t * const pDevIntrf);
-
-/**
- * @brief	Get total disk size in bytes.
- *
- * @return	Total size in KBytes
- */
-static inline uint32_t FlashGetSize(FlashDev_t * const pDev) { return pDev->TotalSize; }
-
-/**
- * @brief	Device specific minimum erasable block size in bytes.
- *
- * @return	Block size in bytes
- */
-static inline uint32_t FlashGetBlockSize(FlashDev_t * const pDev) { return pDev->BlkSize; }
-
-/**
- * @brief	Device specific minimum erasable block size in bytes.
- *
- * @return	Block size in bytes
- */
-static inline uint16_t FlashGetSectorSize(FlashDev_t * const pDev) { return pDev->SectSize; }
-
-/**
- * @brief	Device specific page size in bytes
- *
- * @return	Size in bytes
- */
-static inline uint16_t FlashGetPageSize(FlashDev_t * const pDev) { return pDev->PageSize; }
-
-/**
- * @brief	Perform mass erase (ERASE ALL).
- *
- * This function may take a long time to complete. If task switching is require, add delay
- * callback function to the configuration at initialization.
- */
-void FlashErase(FlashDev_t * const pDev);
-
-/**
- * @brief	Erase Flash block.
- *
- * @param	BlkNo	: Starting block number to erase.
- * @param	NbBlk	: Number of consecutive blocks to erase
- */
-void FlashEraseBlock(FlashDev_t * const pDev, uint32_t BlkNo, int NbBlk);
-
-/**
- * @brief	Erase Flash sector.
- *
- * @param	BlkNo	: Starting block number to erase.
- * @param	NbBlk	: Number of consecutive blocks to erase
- */
-void FlashEraseSector(FlashDev_t * const pDev, uint32_t SectNo, int NbSect);
-
-/**
- * @brief	Read one sector from physical device.
- *
- * @param	SectNo	: Sector number to read
- * @param	pBuff	: Pointer to buffer to receive sector data. Must be at least
- * 					  1 sector size
- *
- * @return
- * 			- true	: Success
- * 			- false	: Failed
- */
-bool FlashSectRead(FlashDev_t * const pDev, uint32_t SectNo, uint8_t *pBuff);
-
-/**
- * @brief	Write one sector to physical device
- *
- * @param	SectNo	: Sector number to read
- * @param	pData	: Pointer to sector data to write. Must be at least
- * 					  1 sector size
- *
- * @return
- * 			- true	: Success
- * 			- false	: Failed
- */
-bool FlashSectWrite(FlashDev_t * const pDev, uint32_t SectNo, uint8_t *pData);
-
-/**
- * @brief	Read Flash ID
- *
- * @param	Len : Length of id to read in bytes
- *
- * @return	Flash ID
- */
-uint32_t FlashReadId(FlashDev_t * const pDev, int Len);
-
-/**
- * @brief	Read Flash status.
- *
- * @return	Flash status
- */
-uint8_t FlashReadStatus(FlashDev_t * const pDev);
-
-/**
- * @brief	Reset Flash to its default state
- */
-void FlashReset(FlashDev_t * const pDev);
-
-/**
- * @brief	Wait for Flash ready flag
- *
- * @param	Timeout : Timeout counter
- * @param	usRtyDelay	: Timeout in us before retry (optional)
- *
- * @return
- * 			- true	: Success
- * 			- false	: Failed
- */
-bool FlashWaitReady(FlashDev_t * const pDev, uint32_t Timeout, uint32_t usRtyDelay);
-
-/**
- * @brief	Disable Flash write
- */
-void FlashWriteDisable(FlashDev_t * const pDev);
-
-/**
- * @brief	Enable Flash write
- *
- * @param	Timeout : Timeout counter
- *
- * @return
- * 			- true	: Success
- * 			- false	: Failed
- */
-bool FlashWriteEnable(FlashDev_t * const pDev, uint32_t Timeout);
-
-#ifdef __cplusplus
-}
-#endif
 
 /// 512Mb MT25QL512 Flash definition
 #define FLASH_MT25QL512_SECTSIZE		FLASH_SECTOR_ERASE_SIZE
