@@ -698,6 +698,19 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	CipherEngine *pAes = BtCryptoCtlrSdcInit();
 	BtSmpInit(pEcdh, pAes, CryptoRngNrfInstance());
 
+	// Verify the SMP crypto toolbox against the specification sample data
+	// before any pairing can run. These exercise the AES-CMAC based SC
+	// functions (f4) and the legacy c1/s1 confirm functions, plus the RPA and
+	// signing helpers, catching a byte-order or AES engine fault at startup
+	// rather than as a confirm mismatch against a peer. A failure here means
+	// the composed AES engine is wrong; refuse to continue.
+	if (BtSmpF4SelfTest() != 0 || BtSmpC1S1SelfTest() != 0 ||
+		BtSmpRpaSelfTest() != 0 || BtSmpSignSelfTest() != 0)
+	{
+		DEBUG_PRINTF("BtAppInit: SMP crypto self-test FAILED\r\n");
+		return false;
+	}
+
 	// Translate the application security configuration into the SMP IO
 	// capability, authentication requirements and association-model callbacks.
 	// SecExchg selects the IO capability; SecType selects bonding and MITM. The
