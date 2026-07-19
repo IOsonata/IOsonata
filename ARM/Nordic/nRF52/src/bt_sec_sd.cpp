@@ -180,6 +180,16 @@ static void UnexpectedErrorSend(uint16_t ConnHdl, ret_code_t ErrCode)
 	EvtSend(&evt);
 }
 
+// The bond store found no room in flash. The write buffer is kept by
+// peer_database and reattempted after the next garbage collection, so this is
+// reported as a distinct, recoverable event rather than an unexpected error.
+static void StorageFullSend(uint16_t ConnHdl)
+{
+	pm_evt_t evt = NewEvt(PM_EVT_STORAGE_FULL, ConnHdl);
+
+	EvtSend(&evt);
+}
+
 // ---- Procedure bookkeeping --------------------------------------------------
 
 static void SecProcStart(uint16_t ConnHdl, bool bSuccess, pm_conn_sec_procedure_t Procedure)
@@ -656,7 +666,10 @@ static void PairingSuccessSend(const ble_gap_evt_t *pGapEvt, bool bDataStored)
 
 // Commit the bond. NRF_ERROR_BUSY (peer data queue full) defers the store and
 // the retry pumps repeat it; the terminal pairing event is emitted only when
-// the store reaches a terminal result, so data_stored is truthful.
+// the store reaches a terminal result, so data_stored is accurate.
+// NRF_ERROR_STORAGE_FULL is not a failure: peer_database keeps the buffer and
+// reattempts after garbage collection, so the bond is reported stored and a
+// STORAGE_FULL event tells the application to make room.
 static void BondStoreAttempt(uint16_t ConnHdl, pm_peer_id_t PeerId, bool bNewPeer)
 {
 	BtSecSdLink_t *pLink = LinkGet(ConnHdl);
@@ -674,6 +687,16 @@ static void BondStoreAttempt(uint16_t ConnHdl, pm_peer_id_t PeerId, bool bNewPee
 	if (pLink != nullptr)
 	{
 		pLink->bStorePending = false;
+	}
+
+	// Flash is full. peer_database keeps the write buffer (store_flash_full)
+	// and reattempts after the next garbage collection, so the bond is not
+	// lost: report it stored, emit the recoverable STORAGE_FULL event, and do
+	// not free the peer id. Matches the SDK security_dispatcher behavior.
+	if (r == NRF_ERROR_STORAGE_FULL)
+	{
+		StorageFullSend(ConnHdl);
+		r = NRF_SUCCESS;
 	}
 
 	ble_conn_state_user_flag_set(ConnHdl, s_FlagSecProc, false);
