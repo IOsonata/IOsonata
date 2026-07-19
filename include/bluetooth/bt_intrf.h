@@ -120,27 +120,10 @@ public:
 	virtual void Enable(void) { DeviceIntrfEnable(&vBtDevIntrf.DevIntrf); }
 
 	// Initiate receive
-	virtual bool StartRx(uint32_t DevAddr) { return DeviceIntrfStartRx(&vBtDevIntrf.DevIntrf, DevAddr); }
-	// Receive Data only, no Start/Stop condition
-	virtual int RxData(uint8_t *pBuff, int BuffLen) {
-		return DeviceIntrfRxData(&vBtDevIntrf.DevIntrf, pBuff, BuffLen);
-	}
 	// Stop receive
 	// BEWARE !!!!!
-	// This functions MUST ONLY be called if StartRx returns true.
-	virtual void StopRx(void) { DeviceIntrfStopRx(&vBtDevIntrf.DevIntrf); }
-	// Initiate transmit
-	virtual bool StartTx(uint32_t DevAddr) {
-		return DeviceIntrfStartTx(&vBtDevIntrf.DevIntrf, DevAddr);
-	}
-	// Transmit Data only, no Start/Stop condition
-	virtual int TxData(const uint8_t *pData, int DataLen) {
-		return DeviceIntrfTxData(&vBtDevIntrf.DevIntrf, pData, DataLen);
-	}
 	// Stop transmit
 	// BEWARE !!!!!
-	// This functions MUST ONLY be called if StartTx returns true.
-	virtual void StopTx(void) { DeviceIntrfStopTx(&vBtDevIntrf.DevIntrf); }
 
 	virtual bool RequestToSend(int NbBytes);
 

@@ -773,7 +773,15 @@ public:
      * @return 	true - Success\n
      * 			false - failed.
      */
-	virtual bool StartRx(uint32_t DevAddr) = 0;
+	// The default implementations below route through the DeviceIntrf C
+	// helpers, which own the busy flag protocol. The DevIntrf_t function
+	// pointers of an implementation must never call back into these C++
+	// methods: default -> helper -> function pointer -> method would
+	// recurse forever. Function pointers are the implementation layer;
+	// these methods are the caller layer.
+	virtual bool StartRx(uint32_t DevAddr) {
+		return DeviceIntrfStartRx(*this, DevAddr);
+	}
 
 	/**
 	 * @brief	Receive data into pBuff passed in parameter.
@@ -789,7 +797,9 @@ public:
 	 * 			-1	special case for interrupt driven without waiting for completion
 	 * 				for example I2C where stop condition is handled asynchronously
 	 */
-	virtual int RxData(uint8_t *pBuff, int BuffLen) = 0;
+	virtual int RxData(uint8_t *pBuff, int BuffLen) {
+		return DeviceIntrfRxData(*this, pBuff, BuffLen);
+	}
 
 	/**
 	 * @brief	Completion of read data phase.
@@ -801,7 +811,7 @@ public:
 	 * WARNING !!!!!
 	 * NOTE: This functions MUST ONLY be called if StartRx returns true.
 	 */
-	virtual void StopRx(void) = 0;
+	virtual void StopRx(void) { DeviceIntrfStopRx(*this); }
 
 	// Initiate transmit
     // WARNING this function must be used in pair with StopTx
@@ -822,7 +832,9 @@ public:
 	 * @return 	true - Success\n
 	 * 			false - failed
 	 */
-	virtual bool StartTx(uint32_t DevAddr) = 0;
+	virtual bool StartTx(uint32_t DevAddr) {
+		return DeviceIntrfStartTx(*this, DevAddr);
+	}
 
 	/**
 	 * @brief	Transfer data from pData passed in parameter.  Assuming StartTx was
@@ -833,7 +845,9 @@ public:
 	 *
 	 * @return	Number of bytes sent
 	 */
-	virtual int TxData(const uint8_t *pData, int DataLen) = 0;
+	virtual int TxData(const uint8_t *pData, int DataLen) {
+		return DeviceIntrfTxData(*this, pData, DataLen);
+	}
 
 	// Stop transmit
 	// WARNING !!!!!
@@ -847,7 +861,7 @@ public:
 	 * NOTE: This function must clear the busy state for re-entrancy
 	 * Call this function only if StartTx was successful.
 	 */
-	virtual void StopTx(void) = 0;
+	virtual void StopTx(void) { DeviceIntrfStopTx(*this); }
 
 	virtual bool RequestToSend(int NbBytes) { (void)NbBytes; return true; }
 

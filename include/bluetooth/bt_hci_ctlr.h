@@ -186,22 +186,7 @@ public:
     void Disable(void) { DeviceIntrfDisable(&vDevData.DevIntrf); }
 	virtual int Rx(uint8_t *pBuff, int Len) { return DeviceIntrfRx(&vDevData.DevIntrf, 0, pBuff, Len); }
 	// Initiate receive
-	virtual bool StartRx(uint32_t DevAddr) { return DeviceIntrfStartRx(&vDevData.DevIntrf, DevAddr); }
-	// Receive Data only, no Start/Stop condition
-	virtual int RxData(uint8_t *pBuff, int BuffLen) {
-		return DeviceIntrfRxData(&vDevData.DevIntrf, pBuff, BuffLen);
-	}
-	// Stop receive
-	virtual void StopRx(void) { DeviceIntrfStopRx(&vDevData.DevIntrf); }
 	virtual int Tx(uint8_t *pData, uint32_t Len) { return DeviceIntrfTx(&vDevData.DevIntrf, 0, pData, Len); }
-	// Initiate transmit
-	virtual bool StartTx(uint32_t DevAddr) { return DeviceIntrfStartTx(&vDevData.DevIntrf, DevAddr); }
-	// Transmit Data only, no Start/Stop condition
-	virtual int TxData(uint8_t *pData, int DataLen) {
-		return DeviceIntrfTxData(&vDevData.DevIntrf, pData, DataLen);
-	}
-	// Stop transmit
-	virtual void StopTx(void) { DeviceIntrfStopTx(&vDevData.DevIntrf); }
 
 protected:
 private:

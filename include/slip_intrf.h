@@ -126,7 +126,6 @@ public:
      * @return 	true - Success\n
      * 			false - failed.
      */
-	virtual bool StartRx(uint32_t DevAddr) { return DeviceIntrfStartRx(*this, DevAddr); }
 
 	/**
 	 * @brief	Receive data into pBuff passed in parameter.  Assuming StartRx was
@@ -137,7 +136,6 @@ public:
 	 *
 	 * @return	Number of bytes read
 	 */
-	virtual int RxData(uint8_t *pBuff, int BuffLen)  { return DeviceIntrfRxData(*this, pBuff, BuffLen); }
 
 	// Stop receive
 	// WARNING !!!!!
@@ -149,7 +147,6 @@ public:
 	 * This function must clear the busy state for re-entrancy.\n
 	 * Call this function only if StartRx was successful.
 	 */
-	virtual void StopRx(void) { DeviceIntrfStopTx(*this); }
 
 	// Initiate transmit
     // WARNING this function must be used in pair with StopTx
@@ -170,7 +167,6 @@ public:
 	 * @return 	true - Success\n
 	 * 			false - failed
 	 */
-	virtual bool StartTx(uint32_t DevAddr) { return DeviceIntrfStartTx(*this, DevAddr); }
 
 	/**
 	 * @brief	Transfer data from pData passed in parameter.  Assuming StartTx was
@@ -181,7 +177,6 @@ public:
 	 *
 	 * @return	Number of bytes sent
 	 */
-	virtual int TxData(uint8_t *pData, int DataLen) { return DeviceIntrfTxData(*this, pData, DataLen); }
 
 	// Stop transmit
 	// WARNING !!!!!
@@ -195,7 +190,6 @@ public:
 	 * NOTE: This function must clear the busy state for re-entrancy
 	 * Call this function only if StartTx was successful.
 	 */
-	virtual void StopTx(void) { DeviceIntrfStopTx(*this); }
 
 	bool RxCompleted() { return vDevData.bSlipEnd; }
 

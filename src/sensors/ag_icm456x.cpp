@@ -1130,6 +1130,7 @@ int AgIcm456x::Write(uint16_t IRegAddr, const uint8_t *pData, int DataLen)
 bool AuxIntrfIcm456x::Init(AgIcm456x * const pIcm)
 {
 	vIntrfData.pDevData = pIcm;
+	atomic_flag_clear(&vIntrfData.bBusy);
 
 	uint8_t reg = ICM456X_IOC_PAD_SCENARIO_AUX_OVRD_REG;
 	uint8_t d = ICM456X_IOC_PAD_SCENARIO_AUX_OVRD_AUX1_OVRDEN | ICM456X_IOC_PAD_SCENARIO_AUX_OVRD_AUX1_EN |
@@ -1163,6 +1164,11 @@ void AuxIntrfIcm456x::Disable(void)
 
 bool AuxIntrfIcm456x::StartRx(uint32_t DevAddr)
 {
+	if (atomic_flag_test_and_set(&vIntrfData.bBusy))
+	{
+		return false;
+	}
+
 	AgIcm456x *icm = (AgIcm456x*)vIntrfData.pDevData;
 	uint16_t regaddr = ICM456X_I2CM_DEV0_DEVADDR_REG;
 	uint8_t d = DevAddr;
@@ -1224,11 +1230,16 @@ int AuxIntrfIcm456x::RxData(uint8_t *pBuff, int BuffLen)
 
 void AuxIntrfIcm456x::StopRx(void)
 {
-
+	atomic_flag_clear(&vIntrfData.bBusy);
 }
 
 bool AuxIntrfIcm456x::StartTx(uint32_t DevAddr)
 {
+	if (atomic_flag_test_and_set(&vIntrfData.bBusy))
+	{
+		return false;
+	}
+
 	AgIcm456x *icm = (AgIcm456x*)vIntrfData.pDevData;
 	uint16_t regaddr = ICM456X_I2CM_DEV0_DEVADDR_REG;
 	uint8_t d = DevAddr;
@@ -1287,6 +1298,7 @@ void AuxIntrfIcm456x::StopTx(void)
 		vAuxCmdIdx = 0;
 	}
 
+	atomic_flag_clear(&vIntrfData.bBusy);
 }
 
 int AuxIntrfIcm456x::Read(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen, uint8_t *pBuff, int BuffLen)
