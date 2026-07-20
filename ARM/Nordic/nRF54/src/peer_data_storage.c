@@ -23,6 +23,9 @@
 // owns its region constants in its platform backend (BtPdsBmInit), so no
 // devicetree partition macros are needed here.
 #include "bluetooth/bt_pds.h"
+#ifdef BT_PDS_TRACE
+#include "syslog.h"
+#endif
 
 // Platform backend init (e.g. BtPdsBmInit for the bm RRAM backend). Declared
 // here; defined by the target's bt_pds_nvm_*.c.
@@ -249,12 +252,7 @@ uint32_t pds_init(void)
 	if (err) {
 		LOG_ERR("Could not initialize NVM storage. BtPdsBmInit() returned %d.", err);
 #ifdef BT_PDS_TRACE
-		{
-			extern void BtPdsTraceOut(const char *pStr);
-			char b[64];
-			snprintf(b, sizeof(b), "pds_init: BtPdsBmInit failed %d\r\n", err);
-			BtPdsTraceOut(b);
-		}
+		SysLogPrintf(SysLogGet(), "pds_init: BtPdsBmInit failed %d\r\n", err);
 #endif
 		return NRF_ERROR_RESOURCES;
 	}
@@ -318,13 +316,8 @@ uint32_t pds_peer_data_store(uint16_t peer_id, const struct pm_peer_data_const *
 
 	ret = BtPdsWrite(entry_id, peer_data->all_data, peer_data->length);
 #ifdef BT_PDS_TRACE
-	{
-		extern void BtPdsTraceOut(const char *pStr);
-		char b[80];
-		snprintf(b, sizeof(b), "pds_store: entry=0x%lx len=%u BtPdsWrite=%d\r\n",
+	SysLogPrintf(SysLogGet(), "pds_store: entry=0x%lx len=%u BtPdsWrite=%d\r\n",
 				 (unsigned long)entry_id, (unsigned)peer_data->length, ret);
-		BtPdsTraceOut(b);
-	}
 #endif
 	if (ret < 0) {
 		LOG_ERR("Could not write data to NVM. BtPdsWrite() returned %d. "

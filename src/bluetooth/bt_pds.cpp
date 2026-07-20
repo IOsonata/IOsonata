@@ -37,22 +37,12 @@
 
 #include "bluetooth/bt_pds.h"
 
-// Mount and scan tracing. Define BT_PDS_TRACE to route the store's mount
-// decisions to a sink. The application provides BtPdsTraceOut to print; the
-// default sink discards. Nothing is emitted unless BT_PDS_TRACE is defined.
+// Mount and scan tracing. Define BT_PDS_TRACE (a library build symbol) to
+// route the store's mount decisions to the SysLog sink. Nothing is emitted
+// unless BT_PDS_TRACE is defined.
 #ifdef BT_PDS_TRACE
-extern "C" void BtPdsTraceOut(const char *pStr);
-
-static void BtPdsTrace(const char *pFmt, ...)
-{
-	char buf[96];
-	va_list ap;
-	va_start(ap, pFmt);
-	vsnprintf(buf, sizeof(buf), pFmt, ap);
-	va_end(ap);
-	BtPdsTraceOut(buf);
-}
-#define BT_PDS_TRC(...)		BtPdsTrace(__VA_ARGS__)
+#include "syslog.h"
+#define BT_PDS_TRC(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define BT_PDS_TRC(...)		((void)0)
 #endif

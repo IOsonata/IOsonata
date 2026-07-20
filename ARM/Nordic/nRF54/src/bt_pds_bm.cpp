@@ -30,6 +30,9 @@
 
 #include "bluetooth/bt_pds.h"
 #include "coredev/system_core_clock.h"
+#ifdef BT_PDS_TRACE
+#include "syslog.h"
+#endif
 
 #ifndef BT_PDS_BM_REGION_ADDR
 #define BT_PDS_BM_REGION_ADDR		0x00158800UL
@@ -334,26 +337,16 @@ static BtPdsBmNvm s_BtPdsBmNvm;
 extern "C" int BtPdsBmInit(void)
 {
 #ifdef BT_PDS_TRACE
-	{
-		extern void BtPdsTraceOut(const char *pStr);
-		char b[96];
-		snprintf(b, sizeof(b),
+	SysLogPrintf(SysLogGet(),
 				 "bm pds: addr=0x%08lx size=0x%lx sect=0x%lx gran=%u\r\n",
 				 (unsigned long)BT_PDS_BM_REGION_ADDR,
 				 (unsigned long)BT_PDS_BM_REGION_SIZE,
 				 (unsigned long)BT_PDS_BM_SECTOR_SIZE,
 				 (unsigned)BT_PDS_BM_WRITE_GRAN);
-		BtPdsTraceOut(b);
-	}
 #endif
 	int r = BtPdsInit(&s_BtPdsBmNvm);
 #ifdef BT_PDS_TRACE
-	{
-		extern void BtPdsTraceOut(const char *pStr);
-		char b[48];
-		snprintf(b, sizeof(b), "bm pds: BtPdsInit=%d\r\n", r);
-		BtPdsTraceOut(b);
-	}
+	SysLogPrintf(SysLogGet(), "bm pds: BtPdsInit=%d\r\n", r);
 #endif
 	return r;
 }

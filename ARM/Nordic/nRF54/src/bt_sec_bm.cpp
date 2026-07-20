@@ -112,6 +112,14 @@ SOFTWARE.
 
 #include "bt_lesc.h"
 
+#ifdef BT_PDS_TRACE
+#include "syslog.h"
+#define BTBM_TRACE(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define BTBM_TRACE(...)
+#endif
+
+
 LOG_MODULE_DECLARE(peer_manager, CONFIG_PEER_MANAGER_LOG_LEVEL);
 
 // Event sink in peer_manager.c; the same extern hookup the stock sm uses.
@@ -589,28 +597,12 @@ static uint32_t LinkSecure(uint16_t ConnHdl, bool bNullParams, bool bForceRepair
 		if (!bForceRepairing)
 		{
 			uint16_t peerId = im_peer_id_get_by_conn_handle(ConnHdl);
-#ifdef BT_PDS_TRACE
-			{
-				extern void BtPdsTraceOut(const char *pStr);
-				char b[72];
-				snprintf(b, sizeof(b),
-						 "central secure: hdl=%u peerId=%u\r\n", ConnHdl, peerId);
-				BtPdsTraceOut(b);
-			}
-#endif
+			BTBM_TRACE("central secure: hdl=%u peerId=%u\r\n", ConnHdl, peerId);
 
 			if (peerId != PM_PEER_ID_INVALID)
 			{
 				r = LinkSecureCentralEncrypt(ConnHdl, peerId);
-#ifdef BT_PDS_TRACE
-				{
-					extern void BtPdsTraceOut(const char *pStr);
-					char b[64];
-					snprintf(b, sizeof(b),
-							 "central encrypt: r=0x%lx\r\n", (unsigned long)r);
-					BtPdsTraceOut(b);
-				}
-#endif
+				BTBM_TRACE("central encrypt: r=0x%lx\r\n", (unsigned long)r);
 				if (r != NRF_ERROR_NOT_FOUND)
 				{
 					goto done;
@@ -631,15 +623,7 @@ static uint32_t LinkSecure(uint16_t ConnHdl, bool bNullParams, bool bForceRepair
 	if (role == BLE_GAP_ROLE_PERIPH && !bForceRepairing)
 	{
 		uint16_t peerId = im_peer_id_get_by_conn_handle(ConnHdl);
-#ifdef BT_PDS_TRACE
-		{
-			extern void BtPdsTraceOut(const char *pStr);
-			char b[72];
-			snprintf(b, sizeof(b),
-					 "periph secure: hdl=%u peerId=%u\r\n", ConnHdl, peerId);
-			BtPdsTraceOut(b);
-		}
-#endif
+		BTBM_TRACE("periph secure: hdl=%u peerId=%u\r\n", ConnHdl, peerId);
 		if (peerId != PM_PEER_ID_INVALID)
 		{
 			// Already bonded: wait for the central to encrypt.
@@ -726,25 +710,11 @@ static void SecInfoRequestProcess(const ble_gap_evt_t *pGapEvt)
 
 	uint16_t peerId = im_peer_id_get_by_master_id(
 						&pGapEvt->params.sec_info_request.master_id);
-#ifdef BT_PDS_TRACE
-	{
-		extern void BtPdsTraceOut(const char *pStr);
-		char b[64];
-		snprintf(b, sizeof(b), "sec_info_req: by_master_id=%u\r\n", peerId);
-		BtPdsTraceOut(b);
-	}
-#endif
+	BTBM_TRACE("sec_info_req: by_master_id=%u\r\n", peerId);
 	if (peerId == PM_PEER_ID_INVALID)
 	{
 		peerId = im_peer_id_get_by_conn_handle(pGapEvt->conn_handle);
-#ifdef BT_PDS_TRACE
-		{
-			extern void BtPdsTraceOut(const char *pStr);
-			char b[64];
-			snprintf(b, sizeof(b), "sec_info_req: by_conn_handle=%u\r\n", peerId);
-			BtPdsTraceOut(b);
-		}
-#endif
+		BTBM_TRACE("sec_info_req: by_conn_handle=%u\r\n", peerId);
 	}
 	else
 	{
@@ -784,17 +754,9 @@ static void SecInfoRequestProcess(const ble_gap_evt_t *pGapEvt)
 		}
 	}
 
-#ifdef BT_PDS_TRACE
-	{
-		extern void BtPdsTraceOut(const char *pStr);
-		char b[96];
-		snprintf(b, sizeof(b),
-				 "sec_info_req: peerId=%u enc_req=%u key=%s\r\n",
-				 peerId, pGapEvt->params.sec_info_request.enc_info,
-				 pEncInfo ? "yes" : "NULL");
-		BtPdsTraceOut(b);
-	}
-#endif
+	BTBM_TRACE("sec_info_req: peerId=%u enc_req=%u key=%s\r\n",
+			 peerId, pGapEvt->params.sec_info_request.enc_info,
+			 pEncInfo ? "yes" : "NULL");
 	// S145 copies the enc info during the call; the stack buffer is fine.
 	uint32_t r = sd_ble_gap_sec_info_reply(pGapEvt->conn_handle, pEncInfo);
 	if (r == NRF_ERROR_INVALID_STATE)

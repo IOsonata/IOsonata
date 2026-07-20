@@ -62,6 +62,14 @@ SOFTWARE.
 
 #include <zephyr/logging/log.h>
 
+#ifdef BT_PDS_TRACE
+#include "syslog.h"
+#define BTBM_TRACE(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define BTBM_TRACE(...)
+#endif
+
+
 LOG_MODULE_DECLARE(peer_manager, CONFIG_PEER_MANAGER_LOG_LEVEL);
 
 #define BT_ID_ADDR_HASH_LEN		3U
@@ -325,16 +333,8 @@ void im_ble_evt_handler(const ble_evt_t *bleEvt)
 		}
 	}
 
-#ifdef BT_PDS_TRACE
-	{
-		extern void BtPdsTraceOut(const char *pStr);
-		char b[80];
-		snprintf(b, sizeof(b),
-				 "im connect: hdl=%u addr_type=%u resolved peerId=%u\r\n",
-				 pGapEvt->conn_handle, pAddr->addr_type, matchId);
-		BtPdsTraceOut(b);
-	}
-#endif
+	BTBM_TRACE("im connect: hdl=%u addr_type=%u resolved peerId=%u\r\n",
+			 pGapEvt->conn_handle, pAddr->addr_type, matchId);
 	s_Conns[idx].ConnHdl = pGapEvt->conn_handle;
 	s_Conns[idx].PeerId = matchId;
 	s_Conns[idx].PeerAddr = *pAddr;
