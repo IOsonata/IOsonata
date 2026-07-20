@@ -138,12 +138,18 @@ public:
 	virtual uint32_t LogicalSectorSize(void) const { return EraseSize(); }
 
 	/**
-	 * @brief	Get the maximum single program chunk in bytes.
+	 * @brief	Get the page size in bytes.
 	 *
-	 * NOR Flash page program is bound by the page size. Implementations
-	 * split larger writes internally, preserving ascending address order.
+	 * The page is the address auto increment window of the medium. During a
+	 * write burst the address counter advances only within the current page;
+	 * on reaching the page boundary it wraps to the start of the same page
+	 * rather than moving to the next page. A single write must therefore not
+	 * cross a page boundary. Reads and writes may be any size; the
+	 * implementation splits a burst at page boundaries and reissues the
+	 * address for each page. EEPROM and NOR Flash have a page; RAM based
+	 * media and byte addressable media report 0 (no page boundary).
 	 *
-	 * @return	Page size in bytes. 0 : no chunk limit.
+	 * @return	Page size in bytes. 0 : no page boundary.
 	 */
 	virtual uint32_t PageSize(void) const { return 0; }
 

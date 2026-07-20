@@ -86,6 +86,14 @@ static_assert(sizeof(BtPdsRecHdr_t) == 16, "record header layout");
 #define BT_PDS_SECTOR_HDR_SIZE	((uint32_t)sizeof(BtPdsSectorHdr_t))
 #define BT_PDS_REC_HDR_SIZE		((uint32_t)sizeof(BtPdsRecHdr_t))
 
+// Largest write unit the format supports. STM32WBA programs 16 byte quad
+// words; flash and RRAM use 4. The record scratch buffer is padded to this
+// so a record rounded up to any supported write unit still fits.
+#define BT_PDS_WRITE_UNIT_MAX	16U
+
+// Compile-time round up, for sizing scratch buffers.
+#define BT_PDS_ALIGN_UP(x, u)	(((x) + (u) - 1U) & ~((u) - 1U))
+
 typedef struct __Bt_Pds_Sector_Info {
 	bool		Valid;
 	bool		Erased;
@@ -116,9 +124,9 @@ static uint32_t s_Epoch;
 static bool s_SeqFound;
 static uint32_t s_MaxSeq;
 
-static inline uint32_t WordPad(uint32_t x)
+static inline uint32_t AlignUp(uint32_t x, uint32_t unit)
 {
-	return (x + 3U) & ~3UL;
+	return (x + unit - 1U) & ~(unit - 1U);
 }
 
 static inline uint32_t SectorBase(uint16_t Sector)
@@ -133,7 +141,7 @@ static inline uint32_t SectorEnd(uint16_t Sector)
 
 static inline uint32_t SectorDataStart(uint16_t Sector)
 {
-	return SectorBase(Sector) + BT_PDS_SECTOR_HDR_SIZE;
+	return SectorBase(Sector) + AlignUp(BT_PDS_SECTOR_HDR_SIZE, s_pNvm->WriteGran());
 }
 
 static uint16_t Crc16(const void *pData, uint32_t Len, uint16_t Seed)
@@ -180,7 +188,8 @@ static uint16_t RecCrc(const BtPdsRecHdr_t *pHdr, const void *pData)
 static uint32_t RecSize(uint16_t Len)
 {
 	uint32_t dataLen = Len == BT_PDS_TOMBSTONE ? 0U : Len;
-	return BT_PDS_REC_HDR_SIZE + WordPad(dataLen);
+	uint32_t gran = s_pNvm->WriteGran();
+	return AlignUp(BT_PDS_REC_HDR_SIZE + dataLen, gran);
 }
 
 static bool IsErased(const void *pData, uint32_t Len)
@@ -380,7 +389,14 @@ static int WriteSectorHdr(uint16_t Sector, uint16_t SourceSector,
 	hdr.Rsvd[0] = hdr.Rsvd[1] = 0U;
 	hdr.Crc = SectorHdrCrc(&hdr);
 
-	if (s_pNvm->Write(SectorBase(Sector), &hdr, sizeof(hdr)) < 0)
+	// Round the sector header up to the write unit so the write lands on a
+	// whole number of write units. The pad bytes stay erased.
+	uint32_t hdrLen = AlignUp(BT_PDS_SECTOR_HDR_SIZE, s_pNvm->WriteGran());
+	alignas(uint32_t) uint8_t shdr[
+		BT_PDS_ALIGN_UP(BT_PDS_SECTOR_HDR_SIZE, BT_PDS_WRITE_UNIT_MAX)];
+	memset(shdr, 0xFF, sizeof(shdr));
+	memcpy(shdr, &hdr, sizeof(hdr));
+	if (s_pNvm->Write(SectorBase(Sector), shdr, hdrLen) < 0)
 	{
 		return -EIO;
 	}
@@ -419,7 +435,7 @@ static int AppendToSector(uint16_t Sector, uint32_t Id, uint16_t Len,
 	hdr.Crc = RecCrc(&hdr, pData);
 
 	alignas(uint32_t) uint8_t rec[
-		BT_PDS_REC_HDR_SIZE + WordPad(BT_PDS_RECORD_DATA_MAX)];
+		BT_PDS_ALIGN_UP(BT_PDS_REC_HDR_SIZE + BT_PDS_RECORD_DATA_MAX, BT_PDS_WRITE_UNIT_MAX)];
 	memset(rec, 0xFF, sizeof(rec));
 	memcpy(rec, &hdr, sizeof(hdr));
 	if (dataLen > 0U && pData != nullptr)
@@ -884,7 +900,10 @@ int BtPdsInit(NvmIO * const pNvm)
 		(regionSize % sectorSize) != 0U ||
 		eraseSize == 0U ||
 		(sectorSize % eraseSize) != 0U ||
-		pNvm->WriteGran() != 4U)
+		pNvm->WriteGran() == 0U ||
+		(pNvm->WriteGran() & (pNvm->WriteGran() - 1U)) != 0U ||
+		pNvm->WriteGran() > BT_PDS_WRITE_UNIT_MAX ||
+		(sectorSize % pNvm->WriteGran()) != 0U)
 	{
 		BT_PDS_TRC("pds init: geometry rejected -EINVAL\r\n");
 		return -EINVAL;
