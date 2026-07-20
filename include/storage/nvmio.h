@@ -121,6 +121,23 @@ public:
 	virtual uint32_t WriteGran(void) const = 0;
 
 	/**
+	 * @brief	Get the logical sector size in bytes.
+	 *
+	 * A log-structured consumer partitions the region into sectors for
+	 * garbage collection. On erase-write media the sector is the physical
+	 * erase unit, so this defaults to EraseSize(). On a rewritable medium
+	 * whose physical unit is smaller than the sector a consumer wants
+	 * (for example RRAM programmed in words but collected in kilobyte
+	 * sectors), the subclass reports the larger logical sector here while
+	 * EraseSize() reports the physical erase or program unit. The logical
+	 * sector must be a whole multiple of EraseSize() so a sector spans
+	 * complete physical erase units.
+	 *
+	 * @return	Logical sector size in bytes.
+	 */
+	virtual uint32_t LogicalSectorSize(void) const { return EraseSize(); }
+
+	/**
 	 * @brief	Get the maximum single program chunk in bytes.
 	 *
 	 * NOR Flash page program is bound by the page size. Implementations

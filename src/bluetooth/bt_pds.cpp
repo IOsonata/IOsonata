@@ -123,12 +123,12 @@ static inline uint32_t WordPad(uint32_t x)
 
 static inline uint32_t SectorBase(uint16_t Sector)
 {
-	return (uint32_t)Sector * s_pNvm->EraseSize();
+	return (uint32_t)Sector * s_pNvm->LogicalSectorSize();
 }
 
 static inline uint32_t SectorEnd(uint16_t Sector)
 {
-	return SectorBase(Sector) + s_pNvm->EraseSize();
+	return SectorBase(Sector) + s_pNvm->LogicalSectorSize();
 }
 
 static inline uint32_t SectorDataStart(uint16_t Sector)
@@ -357,7 +357,7 @@ static int ScanSector(uint16_t Sector)
 
 static int EraseSector(uint16_t Sector)
 {
-	if (s_pNvm->Erase(SectorBase(Sector), s_pNvm->EraseSize()) != 0)
+	if (s_pNvm->Erase(SectorBase(Sector), s_pNvm->LogicalSectorSize()) != 0)
 	{
 		return -EIO;
 	}
@@ -771,7 +771,7 @@ static int GarbageCollect(uint32_t Need)
 		return -ENOMEM;
 	}
 
-	uint32_t capacity = s_pNvm->EraseSize() - BT_PDS_SECTOR_HDR_SIZE;
+	uint32_t capacity = s_pNvm->LogicalSectorSize() - BT_PDS_SECTOR_HDR_SIZE;
 	uint32_t doneSize = RecSize(0U);
 	uint16_t victim = BT_PDS_NO_SECTOR;
 	uint32_t bestBytes = UINT_MAX;
@@ -818,7 +818,7 @@ static int GarbageCollect(uint32_t Need)
 
 static int EnsureSpace(uint32_t Need)
 {
-	if (Need > s_pNvm->EraseSize() - BT_PDS_SECTOR_HDR_SIZE)
+	if (Need > s_pNvm->LogicalSectorSize() - BT_PDS_SECTOR_HDR_SIZE)
 	{
 		return -ENOMEM;
 	}
@@ -865,15 +865,25 @@ int BtPdsInit(NvmIO * const pNvm)
 		return -EINVAL;
 	}
 
-	uint32_t sectorSize = pNvm->EraseSize();
+	// The engine partitions the region into logical sectors for garbage
+	// collection. On erase-write media the logical sector equals the physical
+	// erase unit; on a rewritable medium it may be a larger multiple of it.
+	uint32_t sectorSize = pNvm->LogicalSectorSize();
+	uint32_t eraseSize = pNvm->EraseSize();
 	uint64_t regionSize = pNvm->Size();
-	BT_PDS_TRC("pds init: region=%lu sector=%lu gran=%lu hdr=%lu\r\n",
+	BT_PDS_TRC("pds init: region=%lu sector=%lu erase=%lu gran=%lu hdr=%lu\r\n",
 			   (unsigned long)regionSize, (unsigned long)sectorSize,
-			   (unsigned long)pNvm->WriteGran(),
+			   (unsigned long)eraseSize, (unsigned long)pNvm->WriteGran(),
 			   (unsigned long)BT_PDS_SECTOR_HDR_SIZE);
+	// A logical sector must hold a header, the region must fit at least two
+	// sectors and divide evenly, the write unit must be a word, and a logical
+	// sector must span whole physical erase units so erasing one sector is a
+	// valid erase range.
 	if (sectorSize <= BT_PDS_SECTOR_HDR_SIZE ||
 		regionSize < (uint64_t)sectorSize * 2U ||
 		(regionSize % sectorSize) != 0U ||
+		eraseSize == 0U ||
+		(sectorSize % eraseSize) != 0U ||
 		pNvm->WriteGran() != 4U)
 	{
 		BT_PDS_TRC("pds init: geometry rejected -EINVAL\r\n");

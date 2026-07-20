@@ -142,8 +142,12 @@ public:
 	bool Enable(void) override { return true; }
 	void Disable(void) override {}
 	void Reset(void) override {}
-	uint32_t EraseSize(void) const override { return BT_PDS_RRAMC_SECTOR_SIZE; }
+	// RRAMC is word rewritable: the physical program and erase unit is one
+	// word. The engine partitions the region into larger logical sectors for
+	// garbage collection; a logical sector is a whole multiple of the word.
+	uint32_t EraseSize(void) const override { return BT_PDS_RRAMC_WRITE_GRAN; }
 	uint32_t WriteGran(void) const override { return BT_PDS_RRAMC_WRITE_GRAN; }
+	uint32_t LogicalSectorSize(void) const override { return BT_PDS_RRAMC_SECTOR_SIZE; }
 
 	int Read(uint64_t Off, void *pBuf, uint32_t Len) override
 	{

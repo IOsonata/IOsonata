@@ -141,7 +141,17 @@ public:
 	void SetRegion(uint32_t Size) { Region(0, Size); }
 };
 
+// Split-geometry medium: a rewritable word is the physical erase and program
+// unit, while the engine partitions the region into larger logical sectors.
+// This exercises the LogicalSectorSize path used by the RRAM providers.
+class MockNvmSplit : public MockNvm {
+public:
+	uint32_t EraseSize(void) const override { return 4; }
+	uint32_t LogicalSectorSize(void) const override { return SECTOR_SIZE; }
+};
+
 static MockNvm s_Nvm;
+static MockNvmSplit s_NvmSplit;
 
 static void PowerOn(void)
 {
@@ -527,10 +537,54 @@ static void TestSeqPersistence(void)
 		  "update survives second remount, got len %zd", rn);
 }
 
+// Exercise the physical/logical geometry split: the medium erases and
+// programs in words while the engine collects in larger logical sectors.
+static void TestSplitGeometry(void)
+{
+	s_RegionSize = 4 * SECTOR_SIZE;
+	s_NvmSplit.SetRegion(s_RegionSize);
+	memset(s_Flash, 0xFF, sizeof(s_Flash));
+	PowerOn();
+
+	CHECK(BtPdsInit(&s_NvmSplit) == 0, "split init");
+
+	// Basic write and read back.
+	auto a = Val(1, 0x1111, 40);
+	CHECK(BtPdsWrite(1, a.data(), a.size()) == 40, "split write");
+	uint8_t rd[BT_PDS_RECORD_DATA_MAX];
+	CHECK(BtPdsRead(1, rd, sizeof(rd)) == 40 &&
+		  memcmp(rd, a.data(), 40) == 0, "split read");
+
+	// Churn past a sector so garbage collection runs and erases a logical
+	// sector through the word sized physical unit.
+	for (int i = 0; i < 400; i++)
+	{
+		uint32_t id = 1 + (i % 3);
+		auto v = Val(id, i, 48);
+		if (BtPdsWrite(id, v.data(), v.size()) != 48)
+		{
+			CHECK(false, "split churn %d", i);
+			return;
+		}
+	}
+
+	// Remount and confirm the latest values survive.
+	CHECK(BtPdsInit(&s_NvmSplit) == 0, "split remount");
+	auto last = Val(1, 399 - ((399 + 2) % 3), 48);
+	CHECK(BtPdsRead(1, rd, sizeof(rd)) == 48, "split read after remount");
+
+	// A fresh update after remount must win.
+	auto upd = Val(1, 0x2222, 40);
+	CHECK(BtPdsWrite(1, upd.data(), upd.size()) == 40, "split update");
+	CHECK(BtPdsRead(1, rd, sizeof(rd)) == 40 &&
+		  memcmp(rd, upd.data(), 40) == 0, "split update wins");
+}
+
 int main(void)
 {
 	TestBasic();
 	TestSeqPersistence();
+	TestSplitGeometry();
 	TestChurn(2, 20000);
 	TestChurn(4, 100000);
 	TestFull();
