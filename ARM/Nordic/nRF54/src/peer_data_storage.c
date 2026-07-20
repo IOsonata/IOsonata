@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
+#include <stdio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/util.h>
@@ -247,6 +248,14 @@ uint32_t pds_init(void)
 	err = BtPdsBmInit();
 	if (err) {
 		LOG_ERR("Could not initialize NVM storage. BtPdsBmInit() returned %d.", err);
+#ifdef BT_PDS_TRACE
+		{
+			extern void BtPdsTraceOut(const char *pStr);
+			char b[64];
+			snprintf(b, sizeof(b), "pds_init: BtPdsBmInit failed %d\r\n", err);
+			BtPdsTraceOut(b);
+		}
+#endif
 		return NRF_ERROR_RESOURCES;
 	}
 
@@ -308,6 +317,15 @@ uint32_t pds_peer_data_store(uint16_t peer_id, const struct pm_peer_data_const *
 	uint32_t entry_id = peer_id_peer_data_id_to_entry_id(peer_id, peer_data->data_id);
 
 	ret = BtPdsWrite(entry_id, peer_data->all_data, peer_data->length);
+#ifdef BT_PDS_TRACE
+	{
+		extern void BtPdsTraceOut(const char *pStr);
+		char b[80];
+		snprintf(b, sizeof(b), "pds_store: entry=0x%lx len=%u BtPdsWrite=%d\r\n",
+				 (unsigned long)entry_id, (unsigned)peer_data->length, ret);
+		BtPdsTraceOut(b);
+	}
+#endif
 	if (ret < 0) {
 		LOG_ERR("Could not write data to NVM. BtPdsWrite() returned %d. "
 			"peer_id: %d",

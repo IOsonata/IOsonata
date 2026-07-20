@@ -28,10 +28,10 @@ also exercises those defaults over the C helper busy protocol.
 Build and run on the host:
 
   g++ -std=gnu++23 -O1 -I include -I include/storage -I Linux/include \
-      exemples/storage/test_nvm_flash.cpp src/storage/nvm_flash.cpp \
+      exemples/storage/nvm_flash_test.cpp src/storage/nvm_flash.cpp \
       src/storage/diskio_flash.cpp src/storage/diskio_impl.cpp \
-      src/device.cpp src/device_intrf.cpp -o test_nvm_flash
-  ./test_nvm_flash
+      src/device.cpp src/device_intrf.cpp -o nvm_flash_test
+  ./nvm_flash_test
 
 The harness prints RESULT: ALL PASS on success and a FAIL line per
 violated check otherwise. This file is host-only and is not referenced
@@ -646,12 +646,98 @@ static void TestFlashDiskIO(MockSpi &Spi)
 	CHECK(s_Mem[3 * NOR_SECT] == 0xFF, "erase sector");
 }
 
+// The synchronous NvmIO contract requires Write to return only after the
+// medium holds the committed result. With the mock modelling several status
+// polls of write in progress after each page program, the device must no
+// longer be busy by the time Write returns.
+static void TestWriteIsSynchronous(MockSpi &Spi)
+{
+	MockPowerOn();
+	NvmFlash flash;
+	CHECK(flash.Init(s_Cfg, &Spi), "init");
+
+	// Every program keeps write in progress asserted for several polls.
+	s_BusyPolls = 8;
+
+	// A multi page write: the final page must also be waited for.
+	uint8_t wr[700];
+	Fill(wr, sizeof(wr), 21);
+	CHECK(flash.Write(0, wr, sizeof(wr)) == (int)sizeof(wr), "write");
+	CHECK(!MockBusy(), "device still busy after Write returned");
+
+	// A single page write ending exactly on a page boundary.
+	uint8_t wr2[NOR_PAGE];
+	Fill(wr2, sizeof(wr2), 22);
+	CHECK(flash.Write(NOR_PAGE * 3, wr2, sizeof(wr2)) == (int)sizeof(wr2),
+		  "aligned write");
+	CHECK(!MockBusy(), "device busy after aligned write");
+
+	// Erase must be synchronous as well.
+	CHECK(flash.Erase(0, NOR_SECT) == 0, "erase");
+	CHECK(!MockBusy(), "device busy after Erase returned");
+
+	s_BusyPolls = 0;
+}
+
+// Region arithmetic must reject an offset past the device and any region
+// whose end overflows, not wrap into an accepted range. Config with an out of
+// range address or id size must be rejected before any access.
+static void TestInitValidation(MockSpi &Spi)
+{
+	MockPowerOn();
+
+	// Offset past the device.
+	{
+		NvmFlash f;
+		CHECK(f.Init(s_Cfg, &Spi, NOR_SIZE + NOR_SECT, 0) == false,
+			  "offset past device");
+	}
+	// Region end past the device (would overflow the old check).
+	{
+		NvmFlash f;
+		CHECK(f.Init(s_Cfg, &Spi, NOR_SIZE - NOR_SECT, NOR_SECT * 4) == false,
+			  "region end past device");
+	}
+	// A huge size that wraps when added to the offset.
+	{
+		NvmFlash f;
+		uint64_t huge = (uint64_t)0 - NOR_SECT;	// wraps if added to offset
+		CHECK(f.Init(s_Cfg, &Spi, NOR_SECT, huge) == false,
+			  "overflow region size");
+	}
+	// Address size out of range.
+	{
+		FlashCfg_t bad = s_Cfg;
+		bad.AddrSize = 5;
+		NvmFlash f;
+		CHECK(f.Init(bad, &Spi) == false, "addr size too large");
+		bad.AddrSize = 0;
+		NvmFlash f2;
+		CHECK(f2.Init(bad, &Spi) == false, "addr size zero");
+	}
+	// Id size out of range.
+	{
+		FlashCfg_t bad = s_Cfg;
+		bad.DevIdSize = 5;
+		NvmFlash f;
+		CHECK(f.Init(bad, &Spi) == false, "id size too large");
+	}
+	// A valid whole-device init still works.
+	{
+		NvmFlash f;
+		CHECK(f.Init(s_Cfg, &Spi), "valid whole device");
+		CHECK(f.Size() == NOR_SIZE, "size");
+	}
+}
+
 int main(void)
 {
 	MockSpi spi;
 
 	TestInitProbe(spi);
+	TestInitValidation(spi);
 	TestWriteRead(spi);
+	TestWriteIsSynchronous(spi);
 	TestErase(spi);
 	TestRegion(spi);
 	TestBusyAndWel(spi);

@@ -1211,6 +1211,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/flash.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/nvm_flash.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm_flash.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/nvmio.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvmio.h</locationURI>
+		</link>
+		<link>
 			<name>include/storage/sdcard.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/sdcard.h</locationURI>
@@ -1971,9 +1981,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/ff_diskio.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/storage/flash.cpp</name>
+			<name>src/storage/nvm_flash.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/storage/flash.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_flash.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/storage/sdcard_impl.cpp</name>

@@ -361,7 +361,6 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 {
 	uint32_t err_code;
 	const ble_gap_evt_t *p_gap_evt = &p_ble_evt->evt.gap_evt;
-	//uint8_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
 
 	DEBUG_PRINTF("evt: 0x%x\r\n", p_ble_evt->header.evt_id);
@@ -1380,8 +1379,15 @@ void BtAppRun()
 		if (connHdl != BLE_CONN_HANDLE_INVALID)
 		{
 			uint32_t err = pm_conn_secure(connHdl, false);
-			DEBUG_PRINTF("pm_conn_secure hdl=%u returned 0x%08" PRIx32 "\r\n",
-				connHdl, err);
+
+			// sm_link_secure returns success without starting a procedure when
+			// one is already in flight or the link is encrypted, so a nonzero
+			// return here is a real failure worth logging.
+			if (err != NRF_SUCCESS)
+			{
+				DEBUG_PRINTF("pm_conn_secure hdl=%u failed 0x%08" PRIx32 "\r\n",
+					connHdl, err);
+			}
 		}
 
 		// Process any pending LESC DHKey computation. Required for LE Secure

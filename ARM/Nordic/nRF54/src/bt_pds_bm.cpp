@@ -21,6 +21,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "nrf_soc.h"
 #include "nrf_error.h"
@@ -332,5 +333,27 @@ static BtPdsBmNvm s_BtPdsBmNvm;
 
 extern "C" int BtPdsBmInit(void)
 {
-	return BtPdsInit(&s_BtPdsBmNvm);
+#ifdef BT_PDS_TRACE
+	{
+		extern void BtPdsTraceOut(const char *pStr);
+		char b[96];
+		snprintf(b, sizeof(b),
+				 "bm pds: addr=0x%08lx size=0x%lx sect=0x%lx gran=%u\r\n",
+				 (unsigned long)BT_PDS_BM_REGION_ADDR,
+				 (unsigned long)BT_PDS_BM_REGION_SIZE,
+				 (unsigned long)BT_PDS_BM_SECTOR_SIZE,
+				 (unsigned)BT_PDS_BM_WRITE_GRAN);
+		BtPdsTraceOut(b);
+	}
+#endif
+	int r = BtPdsInit(&s_BtPdsBmNvm);
+#ifdef BT_PDS_TRACE
+	{
+		extern void BtPdsTraceOut(const char *pStr);
+		char b[48];
+		snprintf(b, sizeof(b), "bm pds: BtPdsInit=%d\r\n", r);
+		BtPdsTraceOut(b);
+	}
+#endif
+	return r;
 }

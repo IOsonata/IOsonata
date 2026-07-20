@@ -18,24 +18,23 @@
 #include "istddef.h"
 #include "crypto/icrypto.h"
 #include "crypto_rng_nrf.h"
-#include "syslog.h"
 
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #include "cracen_intrf.h"
-
-#define RNG_USE_CRACEN	1
-#else
-#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
-#include "nrf_sdm.h"
-#include "nrf_soc.h"
-#endif
-#endif
+#include "syslog.h"
 
 #define RNGNRF_TRACE_ENABLE
 #if defined(RNGNRF_TRACE_ENABLE)
 #define RNGNRF_TRACE(...)	SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define RNGNRF_TRACE(...)
+#endif
+#define RNG_USE_CRACEN	1
+#else
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+#include "nrf_sdm.h"
+#include "nrf_soc.h"
+#endif
 #endif
 
 #ifndef RNG_NRF_POLL_LIMIT

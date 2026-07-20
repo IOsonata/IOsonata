@@ -44,6 +44,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
+#include <stdio.h>
 
 #include <nrf_error.h>
 #include <nrf_soc.h>
@@ -258,7 +259,30 @@ void im_ble_evt_handler(const ble_evt_t *bleEvt)
 
 	uint16_t matchId = PM_PEER_ID_INVALID;
 
-	if (pAddr->addr_type != BLE_GAP_ADDR_TYPE_RANDOM_PRIVATE_NON_RESOLVABLE)
+	if (pAddr->addr_id_peer)
+	{
+		// The SoftDevice resolved this peer against the device identity list
+		// and delivered its stored identity address. Match that identity to
+		// its peer id directly so a bonded reconnect finds the existing bond.
+		uint16_t peerId;
+		uint16_t iter;
+		struct pm_peer_data_const peerData;
+		uint8_t buffer[PM_PEER_DATA_MAX_SIZE];
+
+		BondIterPrepare(&peerData, buffer, &iter);
+
+		while (pds_peer_data_iterate(PM_PEER_DATA_ID_BONDING, &peerId,
+									 &peerData, &iter))
+		{
+			if (AddrCompare(pAddr,
+							&peerData.bonding_data->peer_ble_id.id_addr_info))
+			{
+				matchId = peerId;
+				break;
+			}
+		}
+	}
+	else if (pAddr->addr_type != BLE_GAP_ADDR_TYPE_RANDOM_PRIVATE_NON_RESOLVABLE)
 	{
 		uint16_t peerId;
 		uint16_t iter;
@@ -301,6 +325,16 @@ void im_ble_evt_handler(const ble_evt_t *bleEvt)
 		}
 	}
 
+#ifdef BT_PDS_TRACE
+	{
+		extern void BtPdsTraceOut(const char *pStr);
+		char b[80];
+		snprintf(b, sizeof(b),
+				 "im connect: hdl=%u addr_type=%u resolved peerId=%u\r\n",
+				 pGapEvt->conn_handle, pAddr->addr_type, matchId);
+		BtPdsTraceOut(b);
+	}
+#endif
 	s_Conns[idx].ConnHdl = pGapEvt->conn_handle;
 	s_Conns[idx].PeerId = matchId;
 	s_Conns[idx].PeerAddr = *pAddr;

@@ -33,8 +33,29 @@
 #include <string.h>
 #include <errno.h>
 #include <limits.h>
+#include <stdarg.h>
 
 #include "bluetooth/bt_pds.h"
+
+// Mount and scan tracing. Define BT_PDS_TRACE to route the store's mount
+// decisions to a sink. The application provides BtPdsTraceOut to print; the
+// default sink discards. Nothing is emitted unless BT_PDS_TRACE is defined.
+#ifdef BT_PDS_TRACE
+extern "C" void BtPdsTraceOut(const char *pStr);
+
+static void BtPdsTrace(const char *pFmt, ...)
+{
+	char buf[96];
+	va_list ap;
+	va_start(ap, pFmt);
+	vsnprintf(buf, sizeof(buf), pFmt, ap);
+	va_end(ap);
+	BtPdsTraceOut(buf);
+}
+#define BT_PDS_TRC(...)		BtPdsTrace(__VA_ARGS__)
+#else
+#define BT_PDS_TRC(...)		((void)0)
+#endif
 
 #define BT_PDS_REC_MAGIC			0x53445042UL	// "BPDS"
 #define BT_PDS_SECTOR_MAGIC		0x32534450UL	// "PDS2"
@@ -249,17 +270,20 @@ static int ScanSector(uint16_t Sector)
 
 	if (s_pNvm->Read(SectorBase(Sector), &sectorHdr, sizeof(sectorHdr)) < 0)
 	{
+		BT_PDS_TRC("scan %u: hdr read -EIO\r\n", Sector);
 		return -EIO;
 	}
 
 	if (IsErased(&sectorHdr, sizeof(sectorHdr)))
 	{
+		BT_PDS_TRC("scan %u: erased\r\n", Sector);
 		SectorInfoReset(Sector);
 		return 0;
 	}
 
 	if (!ReadSectorHdr(Sector, &sectorHdr))
 	{
+		BT_PDS_TRC("scan %u: hdr invalid (magic/ver/crc)\r\n", Sector);
 		pInfo->Valid = false;
 		pInfo->Erased = false;
 		pInfo->Writable = false;
@@ -269,6 +293,8 @@ static int ScanSector(uint16_t Sector)
 
 	if (sectorHdr.Epoch != s_Epoch)
 	{
+		BT_PDS_TRC("scan %u: epoch %lu != cur %lu\r\n", Sector,
+				   (unsigned long)sectorHdr.Epoch, (unsigned long)s_Epoch);
 		// Sector under an earlier epoch: cleared by BtPdsClear but not yet
 		// erased. Its records are ignored and it is erased at init.
 		pInfo->Valid = false;
@@ -285,6 +311,9 @@ static int ScanSector(uint16_t Sector)
 	pInfo->SourceGeneration = sectorHdr.SourceGeneration;
 	pInfo->SourceSector = sectorHdr.SourceSector;
 	pInfo->Head = SectorDataStart(Sector);
+	BT_PDS_TRC("scan %u: valid gen=%lu src=%u epoch=%lu\r\n", Sector,
+			   (unsigned long)sectorHdr.Generation, sectorHdr.SourceSector,
+			   (unsigned long)sectorHdr.Epoch);
 
 	uint32_t off = pInfo->Head;
 	uint8_t data[BT_PDS_RECORD_DATA_MAX];
@@ -307,6 +336,8 @@ static int ScanSector(uint16_t Sector)
 		if (!ReadRecord(Sector, off, &hdr, data))
 		{
 			// Never append over a partial record on one-way programmable media.
+			BT_PDS_TRC("scan %u: torn record at off=%lu, sector closed\r\n",
+					   Sector, (unsigned long)off);
 			pInfo->Writable = false;
 			pInfo->Head = SectorEnd(Sector);
 			return 0;
@@ -327,6 +358,8 @@ static int ScanSector(uint16_t Sector)
 		pInfo->Head = off;
 	}
 
+	BT_PDS_TRC("scan %u: full, head at end, records=%lu\r\n", Sector,
+			   (unsigned long)((pInfo->Head - SectorDataStart(Sector))));
 	pInfo->Writable = false;
 	pInfo->Head = SectorEnd(Sector);
 	return 0;
@@ -641,7 +674,7 @@ static int ScanAll(void)
 		}
 	}
 
-	s_NextSeq = s_SeqFound ? (uint16_t)(s_MaxSeq + 1U) : 0U;
+	s_NextSeq = s_SeqFound ? s_MaxSeq + 1U : 0U;
 	return 0;
 }
 
@@ -844,19 +877,27 @@ int BtPdsInit(NvmIO * const pNvm)
 
 	uint32_t sectorSize = pNvm->EraseSize();
 	uint64_t regionSize = pNvm->Size();
+	BT_PDS_TRC("pds init: region=%lu sector=%lu gran=%lu hdr=%lu\r\n",
+			   (unsigned long)regionSize, (unsigned long)sectorSize,
+			   (unsigned long)pNvm->WriteGran(),
+			   (unsigned long)BT_PDS_SECTOR_HDR_SIZE);
 	if (sectorSize <= BT_PDS_SECTOR_HDR_SIZE ||
 		regionSize < (uint64_t)sectorSize * 2U ||
 		(regionSize % sectorSize) != 0U ||
 		pNvm->WriteGran() != 4U)
 	{
+		BT_PDS_TRC("pds init: geometry rejected -EINVAL\r\n");
 		return -EINVAL;
 	}
 
 	uint32_t sectorCount = (uint32_t)(regionSize / sectorSize);
 	if (sectorCount > BT_PDS_MAX_SECTORS)
 	{
+		BT_PDS_TRC("pds init: sectorCount=%lu > max=%lu -EINVAL\r\n",
+				   (unsigned long)sectorCount, (unsigned long)BT_PDS_MAX_SECTORS);
 		return -EINVAL;
 	}
+	BT_PDS_TRC("pds init: sectorCount=%lu\r\n", (unsigned long)sectorCount);
 
 	s_pNvm = pNvm;
 	s_SectorCount = (uint16_t)sectorCount;
@@ -870,16 +911,20 @@ int BtPdsInit(NvmIO * const pNvm)
 	uint32_t firstWord = BT_PDS_ERASED_U32;
 	if (s_pNvm->Read(0U, &firstWord, sizeof(firstWord)) < 0)
 	{
+		BT_PDS_TRC("pds init: read word0 failed -EIO\r\n");
 		return -EIO;
 	}
+	BT_PDS_TRC("pds init: word0=0x%08lx\r\n", (unsigned long)firstWord);
 	if (firstWord == BT_PDS_REC_MAGIC)
 	{
+		BT_PDS_TRC("pds init: format1 detected, formatting\r\n");
 		return FormatStore();
 	}
 
 	int result = ScanAll();
 	if (result != 0)
 	{
+		BT_PDS_TRC("pds init: ScanAll failed %d\r\n", result);
 		return result;
 	}
 
@@ -891,9 +936,12 @@ int BtPdsInit(NvmIO * const pNvm)
 	{
 		if (!s_Sectors[sector].Valid && !s_Sectors[sector].Erased)
 		{
+			BT_PDS_TRC("pds init: erase invalid sector %u\r\n", sector);
 			result = EraseSector(sector);
 			if (result != 0)
 			{
+				BT_PDS_TRC("pds init: EraseSector %u failed %d\r\n",
+						   sector, result);
 				return result;
 			}
 		}
@@ -902,14 +950,18 @@ int BtPdsInit(NvmIO * const pNvm)
 	result = RecoverGc();
 	if (result != 0)
 	{
+		BT_PDS_TRC("pds init: RecoverGc failed %d\r\n", result);
 		return result;
 	}
 
 	SelectActiveSector();
 	if (s_ActiveSector == BT_PDS_NO_SECTOR)
 	{
-		return StartSector(FindErasedSector());
+		uint16_t spare = FindErasedSector();
+		BT_PDS_TRC("pds init: no active sector, StartSector(%u)\r\n", spare);
+		return StartSector(spare);
 	}
+	BT_PDS_TRC("pds init: ok, active sector=%u\r\n", s_ActiveSector);
 	return 0;
 }
 
@@ -991,9 +1043,13 @@ int BtPdsClear(void)
 	uint16_t spare = FindErasedSector();
 	if (spare == BT_PDS_NO_SECTOR)
 	{
-		// No erased spare exists only in an already-degraded state. Fall back
-		// to the sequential format, which is not power-loss atomic.
-		return FormatStore();
+		// The atomic clear needs one erased spare to commit the new epoch
+		// onto. Without it the only option is a sequential format, which is
+		// not power-loss atomic, so the documented all-or-nothing guarantee
+		// cannot be met. Report the degraded state instead of silently
+		// weakening the guarantee. BtPdsForceFormat performs the non-atomic
+		// wipe when the caller accepts that risk.
+		return -ENOSPC;
 	}
 
 	// Commit point of the clear. Once a sector header under the next epoch
@@ -1020,4 +1076,17 @@ int BtPdsClear(void)
 		}
 	}
 	return 0;
+}
+
+int BtPdsForceFormat(void)
+{
+	if (s_pNvm == nullptr)
+	{
+		return -EINVAL;
+	}
+
+	// Explicitly destructive: erases sectors sequentially and is not power
+	// loss atomic. For use only when BtPdsClear returned -ENOSPC and the
+	// caller accepts a non-atomic wipe.
+	return FormatStore();
 }

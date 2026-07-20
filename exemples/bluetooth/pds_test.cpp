@@ -474,9 +474,63 @@ static void TestClearCutSweep(uint32_t Sectors)
 	}
 }
 
+// After more than 65535 lifetime record writes, a reboot must not truncate
+// the sequence counter. If it does, a record written after the reboot gets a
+// sequence number below the surviving records and loses to a stale copy.
+static void TestSeqPersistence(void)
+{
+	FreshFlash(4);
+	CHECK(BtPdsInit(&s_Nvm) == 0, "init");
+
+	// Drive the lifetime write count past the 16 bit boundary. A cold id
+	// keeps at least one live record in the oldest sector so collection has
+	// something to copy.
+	auto cold = Val(500, 0, 40);
+	CHECK(BtPdsWrite(500, cold.data(), cold.size()) == 40, "cold");
+
+	const int writes = 70000;
+	for (int i = 0; i < writes; i++)
+	{
+		uint32_t id = 1 + (i % 3);
+		auto v = Val(id, i, 32);
+		if (BtPdsWrite(id, v.data(), v.size()) != 32)
+		{
+			CHECK(false, "seq write %d", i);
+			return;
+		}
+	}
+	// Snapshot the final value of id 1 before the reboot.
+	auto last1 = Val(1, writes - 1 - ((writes - 1 + 2) % 3), 32);
+	uint8_t before[BT_PDS_RECORD_DATA_MAX];
+	ssize_t bn = BtPdsRead(1, before, sizeof(before));
+	CHECK(bn == 32, "pre-remount read");
+
+	// Reboot and mount. The next sequence number must continue above the
+	// surviving records, not restart low.
+	CHECK(BtPdsInit(&s_Nvm) == 0, "remount");
+	uint8_t after[BT_PDS_RECORD_DATA_MAX];
+	CHECK(BtPdsRead(1, after, sizeof(after)) == bn &&
+		  memcmp(before, after, bn) == 0, "value survives remount");
+
+	// Update id 1 after the reboot; the new version must win.
+	auto upd = Val(1, 0xABCD, 40);
+	CHECK(BtPdsWrite(1, upd.data(), upd.size()) == 40, "post-remount update");
+	uint8_t rd[BT_PDS_RECORD_DATA_MAX];
+	ssize_t rn = BtPdsRead(1, rd, sizeof(rd));
+	CHECK(rn == 40 && memcmp(rd, upd.data(), 40) == 0,
+		  "post-remount update must win, got len %zd", rn);
+
+	// A second reboot must still see the updated value.
+	CHECK(BtPdsInit(&s_Nvm) == 0, "remount 2");
+	rn = BtPdsRead(1, rd, sizeof(rd));
+	CHECK(rn == 40 && memcmp(rd, upd.data(), 40) == 0,
+		  "update survives second remount, got len %zd", rn);
+}
+
 int main(void)
 {
 	TestBasic();
+	TestSeqPersistence();
 	TestChurn(2, 20000);
 	TestChurn(4, 100000);
 	TestFull();

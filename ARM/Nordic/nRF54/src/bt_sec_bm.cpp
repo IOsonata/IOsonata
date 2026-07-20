@@ -84,6 +84,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
+#include <stdio.h>
 
 #include <nrf_error.h>
 #include <ble.h>
@@ -588,10 +589,28 @@ static uint32_t LinkSecure(uint16_t ConnHdl, bool bNullParams, bool bForceRepair
 		if (!bForceRepairing)
 		{
 			uint16_t peerId = im_peer_id_get_by_conn_handle(ConnHdl);
+#ifdef BT_PDS_TRACE
+			{
+				extern void BtPdsTraceOut(const char *pStr);
+				char b[72];
+				snprintf(b, sizeof(b),
+						 "central secure: hdl=%u peerId=%u\r\n", ConnHdl, peerId);
+				BtPdsTraceOut(b);
+			}
+#endif
 
 			if (peerId != PM_PEER_ID_INVALID)
 			{
 				r = LinkSecureCentralEncrypt(ConnHdl, peerId);
+#ifdef BT_PDS_TRACE
+				{
+					extern void BtPdsTraceOut(const char *pStr);
+					char b[64];
+					snprintf(b, sizeof(b),
+							 "central encrypt: r=0x%lx\r\n", (unsigned long)r);
+					BtPdsTraceOut(b);
+				}
+#endif
 				if (r != NRF_ERROR_NOT_FOUND)
 				{
 					goto done;
@@ -604,11 +623,37 @@ static uint32_t LinkSecure(uint16_t ConnHdl, bool bNullParams, bool bForceRepair
 	(void)bForceRepairing;
 #endif
 
+	// A bonded peripheral must not send a Security Request on reconnect. The
+	// central re-establishes encryption with the stored LTK; the peripheral
+	// answers the SEC_INFO_REQUEST. Sending a Security Request here instead
+	// races that encryption and the SoftDevice rejects it with NO_MEM. Only
+	// an unbonded peripheral initiates, to prompt the central to pair.
+	if (role == BLE_GAP_ROLE_PERIPH && !bForceRepairing)
+	{
+		uint16_t peerId = im_peer_id_get_by_conn_handle(ConnHdl);
+#ifdef BT_PDS_TRACE
+		{
+			extern void BtPdsTraceOut(const char *pStr);
+			char b[72];
+			snprintf(b, sizeof(b),
+					 "periph secure: hdl=%u peerId=%u\r\n", ConnHdl, peerId);
+			BtPdsTraceOut(b);
+		}
+#endif
+		if (peerId != PM_PEER_ID_INVALID)
+		{
+			// Already bonded: wait for the central to encrypt.
+			r = NRF_SUCCESS;
+			goto done_periph;
+		}
+	}
+
 	r = LinkSecureAuthenticate(ConnHdl, pParams);
 
 #if defined(CONFIG_SOFTDEVICE_CENTRAL)
 done:
 #endif
+done_periph:
 	// Track retry state for BUSY; remember the call shape for the retry.
 	pm_conn_state_user_flag_set(ConnHdl, s_FlagSecurePendBusy, r == NRF_ERROR_BUSY);
 	if (r == NRF_ERROR_BUSY)
@@ -681,9 +726,25 @@ static void SecInfoRequestProcess(const ble_gap_evt_t *pGapEvt)
 
 	uint16_t peerId = im_peer_id_get_by_master_id(
 						&pGapEvt->params.sec_info_request.master_id);
+#ifdef BT_PDS_TRACE
+	{
+		extern void BtPdsTraceOut(const char *pStr);
+		char b[64];
+		snprintf(b, sizeof(b), "sec_info_req: by_master_id=%u\r\n", peerId);
+		BtPdsTraceOut(b);
+	}
+#endif
 	if (peerId == PM_PEER_ID_INVALID)
 	{
 		peerId = im_peer_id_get_by_conn_handle(pGapEvt->conn_handle);
+#ifdef BT_PDS_TRACE
+		{
+			extern void BtPdsTraceOut(const char *pStr);
+			char b[64];
+			snprintf(b, sizeof(b), "sec_info_req: by_conn_handle=%u\r\n", peerId);
+			BtPdsTraceOut(b);
+		}
+#endif
 	}
 	else
 	{
@@ -723,6 +784,17 @@ static void SecInfoRequestProcess(const ble_gap_evt_t *pGapEvt)
 		}
 	}
 
+#ifdef BT_PDS_TRACE
+	{
+		extern void BtPdsTraceOut(const char *pStr);
+		char b[96];
+		snprintf(b, sizeof(b),
+				 "sec_info_req: peerId=%u enc_req=%u key=%s\r\n",
+				 peerId, pGapEvt->params.sec_info_request.enc_info,
+				 pEncInfo ? "yes" : "NULL");
+		BtPdsTraceOut(b);
+	}
+#endif
 	// S145 copies the enc info during the call; the stack buffer is fine.
 	uint32_t r = sd_ble_gap_sec_info_reply(pGapEvt->conn_handle, pEncInfo);
 	if (r == NRF_ERROR_INVALID_STATE)
@@ -1328,6 +1400,7 @@ uint32_t sm_link_secure(uint16_t conn_handle, bool force_repairing)
 	{
 		return NRF_ERROR_INVALID_STATE;
 	}
+
 	return LinkSecure(conn_handle, s_pSecParams == NULL, force_repairing, false);
 }
 

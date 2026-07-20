@@ -44,6 +44,16 @@ SOFTWARE.
 #include "coredev/spi.h"
 #include "storage/nvm_flash.h"
 
+// Bounded wait for a page program or the write enable latch. The poll count is
+// large enough for the slowest supported page program; the caller yields
+// through the configured wait callback between polls when one is set.
+#ifndef NVM_FLASH_WIP_TIMEOUT
+#define NVM_FLASH_WIP_TIMEOUT		1000000U
+#endif
+#ifndef NVM_FLASH_WIP_POLL_US
+#define NVM_FLASH_WIP_POLL_US		1U
+#endif
+
 NvmFlash::NvmFlash()
 {
 	vpDevIntrf = nullptr;
@@ -77,6 +87,14 @@ bool NvmFlash::Init(const FlashCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		}
 	}
 
+	// The address is packed into a uint32_t and the id is read into a
+	// uint32_t, so both must fit. A zero address size cannot frame a command.
+	if (Cfg.AddrSize < 1 || Cfg.AddrSize > (int)sizeof(uint32_t) ||
+		Cfg.DevIdSize < 0 || Cfg.DevIdSize > (int)sizeof(uint32_t))
+	{
+		return false;
+	}
+
 	vpWaitCB = Cfg.pWaitCB;
 	vSectSize = Cfg.SectSize;
 	vBlkSize = Cfg.BlkSize;
@@ -86,12 +104,17 @@ bool NvmFlash::Init(const FlashCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	vWrCmd = Cfg.WrCmd;
 	vDevSize = (uint64_t)Cfg.TotalSize * 1024ULL;	// TotalSize is in KBytes
 
+	// Region arithmetic without unsigned underflow or overflow.
+	if (RegionOffset > vDevSize)
+	{
+		return false;
+	}
 	if (RegionSize == 0)
 	{
 		RegionSize = vDevSize - RegionOffset;
 	}
 	if (vSectSize == 0 || vPageSize == 0 ||
-		RegionOffset + RegionSize > vDevSize ||
+		RegionSize > vDevSize - RegionOffset ||
 		(RegionOffset % vSectSize) != 0 || (RegionSize % vSectSize) != 0)
 	{
 		return false;
@@ -107,18 +130,19 @@ bool NvmFlash::Init(const FlashCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 	if (Cfg.DevIdSize > 0 && Cfg.DevId != 0)
 	{
-		int rtry = 5;
+		bool found = false;
 
-		do {
+		for (int rtry = 0; rtry < 5 && !found; rtry++)
+		{
 			uint32_t d = ReadId(Cfg.DevIdSize);
 			if (d == Cfg.DevId)
 			{
 				DeviceID(d);
-				break;
+				found = true;
 			}
-		} while (rtry-- > 0);
+		}
 
-		if (rtry <= 0)
+		if (!found)
 		{
 			return false;
 		}
@@ -459,6 +483,14 @@ int NvmFlash::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len)
 			pData += l;
 		}
 		DeviceIntrfStopTx(vpDevIntrf);
+	}
+
+	// The page is committed only when the write in progress flag clears. Wait
+	// here so a page program is synchronous by the time Program returns; the
+	// caller must not report success while a program is still running.
+	if (WaitReady(NVM_FLASH_WIP_TIMEOUT, NVM_FLASH_WIP_POLL_US) == false)
+	{
+		return -ETIMEDOUT;
 	}
 
 	return (int)Len;

@@ -104,6 +104,17 @@ int BtPdsDelete(uint32_t Id);
  */
 int BtPdsClear(void);
 
+/**
+ * @brief Erase all records with a non-atomic sequential format.
+ *
+ * Explicitly destructive and not power-loss atomic. BtPdsClear is the atomic
+ * clear; it returns -ENOSPC when no erased spare is available to commit onto.
+ * This entry performs the wipe anyway for callers that accept that risk.
+ *
+ * @return 0 on success, negative errno on failure.
+ */
+int BtPdsForceFormat(void);
+
 #ifdef __cplusplus
 }
 #endif
