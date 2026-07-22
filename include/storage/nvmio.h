@@ -1,4 +1,4 @@
-/**--------------------------------------------------------------------------
+/**-------------------------------------------------------------------------
 @file	nvmio.h
 
 @brief	Non volatile memory input output device base class.
@@ -48,7 +48,7 @@ Design points:
 
 @license
 
-MIT License
+MIT license
 
 Copyright (c) 2026, I-SYST, all rights reserved
 

@@ -1,4 +1,4 @@
-/**--------------------------------------------------------------------------
+/**-------------------------------------------------------------------------
 @file	nvm_flash.cpp
 
 @brief	Serial NOR and QSPI flash driver on the NvmIO base.
@@ -8,7 +8,7 @@
 
 @license
 
-MIT License
+MIT license
 
 Copyright (c) 2026, I-SYST, all rights reserved
 

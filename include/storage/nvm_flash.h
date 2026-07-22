@@ -1,4 +1,4 @@
-/**--------------------------------------------------------------------------
+/**-------------------------------------------------------------------------
 @file	nvm_flash.h
 
 @brief	Serial NOR and QSPI flash driver on the NvmIO base.
@@ -18,7 +18,7 @@ flash.h and Flash driver, which remain for backward compatibility.
 
 @license
 
-MIT License
+MIT license
 
 Copyright (c) 2026, I-SYST, all rights reserved
 
