@@ -19,16 +19,24 @@
 #include "crypto/icrypto.h"
 #include "crypto_rng_nrf.h"
 
+/******** For DEBUG Trace ************/
+// Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
+// SysLog transport the a configured (UART, USB, RTT, BLE, or any other
+// DeviceIntrf); the trace does not assume a transport. A release build
+// defines NDEBUG, which strips all trace regardless of DEBUG_ENABLE.
+//#define DEBUG_ENABLE
+
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define DEBUG_PRINTF(...)
+#endif
+/*******************************/
+
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #include "cracen_intrf.h"
-#include "syslog.h"
 
-#define RNGNRF_TRACE_ENABLE
-#if defined(RNGNRF_TRACE_ENABLE)
-#define RNGNRF_TRACE(...)	SysLogPrintf(SysLogGet(), __VA_ARGS__)
-#else
-#define RNGNRF_TRACE(...)
-#endif
 #define RNG_USE_CRACEN	1
 #else
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
@@ -325,7 +333,7 @@ CRYPTO_STATUS CryptoRngNrf::Random(uint8_t *pOut, size_t Len)
 	if (!vbValid || !vbIntrfEnabled || Interface() == nullptr || pOut == nullptr ||
 		Len > (size_t)INT_MAX)
 	{
-		RNGNRF_TRACE("RngNrf Random: valid=%d enabled=%d out=%p len=%u -> FAIL\r\n",
+		DEBUG_PRINTF("RngNrf Random: valid=%d enabled=%d out=%p len=%u -> FAIL\r\n",
 					 (int)vbValid, (int)vbIntrfEnabled, (void *)pOut,
 					 (unsigned)Len);
 		return CRYPTO_STATUS_FAIL;
@@ -347,7 +355,7 @@ CRYPTO_STATUS CryptoRngNrf::Random(uint8_t *pOut, size_t Len)
 	atomic_flag_clear(&vOpBusy);
 	if (count != (int)Len)
 	{
-		RNGNRF_TRACE("RngNrf Random: RxData returned %d of %u -> FAIL\r\n",
+		DEBUG_PRINTF("RngNrf Random: RxData returned %d of %u -> FAIL\r\n",
 					 count, (unsigned)Len);
 		CryptoSecureWipe(pOut, Len);
 		return CRYPTO_STATUS_FAIL;
