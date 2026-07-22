@@ -27,13 +27,20 @@ Copyright (c) 2024 I-SYST inc. All rights reserved.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_gap.h"
 
-// Debug printf via SysLog. Enable to trace command status.
-#if 0
+/******** For DEBUG Trace ************/
+// Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
+// SysLog transport the app configured (UART, USB, RTT, BLE, or any other
+// DeviceIntrf); the trace does not assume a transport. A release build
+// defines NDEBUG, which strips all trace regardless of DEBUG_ENABLE.
+//#define DEBUG_ENABLE
+
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 #include "syslog.h"
 #define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define DEBUG_PRINTF(...)
 #endif
+/*******************************/
 
 // --- Packed standard HCI command parameter layouts (Core Vol 4 Part E) ---
 
