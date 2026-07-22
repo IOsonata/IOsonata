@@ -52,7 +52,7 @@ bool AttXiotFusion::Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSe
 		// Init fusion lib
 	    // Initialise algorithms
 	    FusionBias bias = {
-	    	.settings = { pAccel->SamplingFrequency() / 1000, },
+	    	.settings = { (float)(pAccel->SamplingFrequency() / 1000), },
 	    };
 	    //FusionAhrs ahrs;
 
@@ -60,15 +60,16 @@ bool AttXiotFusion::Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSe
 	    FusionAhrsInitialise(&vAhrs);
 
 	    // Set the Fusion algorithm settings
-	    /*const FusionAhrsSettings*/
-	    vSettings = {
+	    const FusionAhrsSettings settings = {
 			.convention = FusionConventionNwu,
 			.gain = 0.5f,
-			.gyroscopeRange = (float)pGyro->Sensitivity(),// 2000.0f, /* replace this with actual gyroscope range in degrees/s */
+			.gyroscopeRange = (float)pGyro->Sensitivity(), // actual gyroscope range in degrees/s
 			.accelerationRejection = 10.0f,
 			.magneticRejection = 10.0f,
-			.recoveryTriggerPeriod = 5 * pAccel->SamplingFrequency() / 1000, /* 5 seconds */
+			// The rejection recovery timeout field name differs across Fusion
+			// versions; leave it default (0) by omitting it here.
 	    };
+	    vSettings = settings;
 	    FusionAhrsSetSettings(&vAhrs, &vSettings);
 
 	}
