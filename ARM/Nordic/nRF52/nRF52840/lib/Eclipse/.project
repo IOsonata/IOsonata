@@ -1226,6 +1226,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_flash.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/diskio_nvm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_nvm.h</locationURI>
+		</link>
+		<link>
 			<name>include/storage/fatfs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
@@ -2274,6 +2279,11 @@
 			<name>src/storage/diskio_impl.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_impl.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/diskio_nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_nvm.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/storage/fatfs.cpp</name>
