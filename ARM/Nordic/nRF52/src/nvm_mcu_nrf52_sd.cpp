@@ -21,7 +21,7 @@
 
 MIT License
 
-Copyright (c) 2026, I-SYST inc., all rights reserved
+Copyright (c) 2026, I-SYST, all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -72,6 +72,9 @@ static volatile bool s_OpDone;
 static volatile bool s_OpOk;
 static NvmMcuSdIdle_t s_pIdle = nullptr;
 static uint32_t s_TimeoutMs = NVM_MCU_SD_TIMEOUT_MS;
+static uint32_t s_BusyCnt;
+static uint32_t s_EvtCnt;
+static uint32_t s_SyncCnt;
 
 // True when the SoftDevice is running. When it is not, the memory calls
 // complete before they return and no SoC event is produced.
@@ -94,11 +97,13 @@ void NvmMcuSdSocEvt(uint32_t SysEvt)
 		case NRF_EVT_FLASH_OPERATION_SUCCESS:
 			s_OpOk = true;
 			s_OpDone = true;
+			s_EvtCnt++;
 			break;
 
 		case NRF_EVT_FLASH_OPERATION_ERROR:
 			s_OpOk = false;
 			s_OpDone = true;
+			s_EvtCnt++;
 			break;
 
 		default:
@@ -115,11 +120,11 @@ void NvmMcuSdSetIdle(NvmMcuSdIdle_t pIdle, uint32_t TimeoutMs)
 	}
 }
 
-// Submit one request. Returns the SoftDevice status.
+/// Submit one request. Returns the SoftDevice status.
 typedef uint32_t (*NvmMcuSdSubmit_t)(void *pArg);
 
-// Let the application run for about a msec, so its event dispatch can deliver
-// the completion event and the radio can release the memory.
+/// Let the application run for about a msec, so its event dispatch can deliver
+/// the completion event and the radio can release the memory.
 static void SdIdleStep(void)
 {
 	if (s_pIdle != nullptr)
@@ -129,7 +134,7 @@ static void SdIdleStep(void)
 	msDelay(1);
 }
 
-// Submit, retry while the radio holds the memory, then wait for the result.
+/// Submit, retry while the radio holds the memory, then wait for the result.
 static int SdRun(NvmMcuSdSubmit_t Submit, void *pArg)
 {
 	uint32_t elapsed = 0;
@@ -148,6 +153,7 @@ static int SdRun(NvmMcuSdSubmit_t Submit, void *pArg)
 			// sends no event, so there is nothing to wait for.
 			if (SdIsEnabled() == false)
 			{
+				s_SyncCnt++;
 				return 0;
 			}
 			break;
@@ -158,6 +164,7 @@ static int SdRun(NvmMcuSdSubmit_t Submit, void *pArg)
 		}
 
 		// The radio holds the memory. Let the application run and try again.
+		s_BusyCnt++;
 		SdIdleStep();
 		if (++elapsed >= s_TimeoutMs)
 		{
@@ -242,6 +249,21 @@ static const NvmMcuOp_t s_NvmMcuSdOp = {
 	.MaxProgWords = NVM_MCU_SD_MAX_PROG_WORDS,
 	.pCtx = nullptr
 };
+
+uint32_t NvmMcuSdBusyCount(void)
+{
+	return s_BusyCnt;
+}
+
+uint32_t NvmMcuSdEvtCount(void)
+{
+	return s_EvtCnt;
+}
+
+uint32_t NvmMcuSdSyncCount(void)
+{
+	return s_SyncCnt;
+}
 
 const NvmMcuOp_t & NvmMcuSdOp(void)
 {
