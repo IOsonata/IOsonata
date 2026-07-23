@@ -1246,6 +1246,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm_mcu.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/nvm_mcu_nvmc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/nvm_mcu_nvmc.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/nvm_mcu_sd.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/nvm_mcu_sd.h</locationURI>
+		</link>
+		<link>
 			<name>include/storage/nvm_seep.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm_seep.h</locationURI>
@@ -2299,6 +2309,16 @@
 			<name>src/storage/nvm_mcu.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_mcu.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm_mcu_nrf52_nvmc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/nvm_mcu_nrf52_nvmc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm_mcu_nrf52_sd.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/nvm_mcu_nrf52_sd.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/storage/nvm_seep.cpp</name>
