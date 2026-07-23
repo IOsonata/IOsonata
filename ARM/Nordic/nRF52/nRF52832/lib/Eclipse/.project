@@ -1391,6 +1391,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm_flash.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/nvm_mcu.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm_mcu.h</locationURI>
+		</link>
+		<link>
 			<name>include/storage/nvm_seep.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm_seep.h</locationURI>
@@ -2399,6 +2404,11 @@
 			<name>src/storage/nvm_flash.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_flash.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm_mcu.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_mcu.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/storage/nvm_seep.cpp</name>

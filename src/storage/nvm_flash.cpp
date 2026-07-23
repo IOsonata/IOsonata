@@ -8,7 +8,7 @@
 
 @license
 
-MIT license
+MIT License
 
 Copyright (c) 2026, I-SYST, all rights reserved
 

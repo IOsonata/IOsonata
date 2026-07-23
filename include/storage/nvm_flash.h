@@ -18,7 +18,7 @@ flash.h and Flash driver, which remain for backward compatibility.
 
 @license
 
-MIT license
+MIT License
 
 Copyright (c) 2026, I-SYST, all rights reserved
 
