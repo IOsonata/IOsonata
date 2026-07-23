@@ -23,7 +23,7 @@
 
 MIT License
 
-Copyright (c) 2026, I-SYST, all rights reserved
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -65,10 +65,10 @@ const NvmMcuOp_t & NvmMcuNvmcOp(void);
 /**
  * @brief	Fill the geometry fields of a config from the device itself.
  *
- * Reads the page size and page count from the factory information registers
- * and sets BaseAddr, TotalSize, EraseSize and WriteGran. The remaining fields
- * are left untouched so the caller can set the mode and the callbacks either
- * before or after this call.
+ * Reads the page size and the page count from the factory information
+ * registers and sets BaseAddr, TotalSize, EraseSize and WriteGran. The
+ * remaining fields are left untouched, so the mode and the callbacks may be
+ * set either before or after this call.
  *
  * @param	Cfg	: Config to fill
  */

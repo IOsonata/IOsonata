@@ -24,7 +24,7 @@ seep.h and Seep driver, which remain for backward compatibility.
 
 MIT License
 
-Copyright (c) 2026, I-SYST, all rights reserved
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

@@ -21,7 +21,7 @@
 
 MIT License
 
-Copyright (c) 2026, I-SYST, all rights reserved
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -46,6 +46,7 @@ SOFTWARE.
 #include <errno.h>
 
 #include "nrf_soc.h"
+#include "nrf_sdm.h"
 #include "nrf_error.h"
 
 #include "idelay.h"
@@ -71,6 +72,20 @@ static volatile bool s_OpDone;
 static volatile bool s_OpOk;
 static NvmMcuSdIdle_t s_pIdle = nullptr;
 static uint32_t s_TimeoutMs = NVM_MCU_SD_TIMEOUT_MS;
+
+// True when the SoftDevice is running. When it is not, the memory calls
+// complete before they return and no SoC event is produced.
+static bool SdIsEnabled(void)
+{
+	uint8_t en = 0;
+
+	if (sd_softdevice_is_enabled(&en) != NRF_SUCCESS)
+	{
+		return false;
+	}
+
+	return en != 0;
+}
 
 void NvmMcuSdSocEvt(uint32_t SysEvt)
 {
@@ -100,11 +115,11 @@ void NvmMcuSdSetIdle(NvmMcuSdIdle_t pIdle, uint32_t TimeoutMs)
 	}
 }
 
-/// Submit one request. Returns the SoftDevice status.
+// Submit one request. Returns the SoftDevice status.
 typedef uint32_t (*NvmMcuSdSubmit_t)(void *pArg);
 
-/// Let the application run for about a msec, so its event dispatch can deliver
-/// the completion event and the radio can release the memory.
+// Let the application run for about a msec, so its event dispatch can deliver
+// the completion event and the radio can release the memory.
 static void SdIdleStep(void)
 {
 	if (s_pIdle != nullptr)
@@ -114,7 +129,7 @@ static void SdIdleStep(void)
 	msDelay(1);
 }
 
-/// Submit, retry while the radio holds the memory, then wait for the result.
+// Submit, retry while the radio holds the memory, then wait for the result.
 static int SdRun(NvmMcuSdSubmit_t Submit, void *pArg)
 {
 	uint32_t elapsed = 0;
@@ -129,6 +144,12 @@ static int SdRun(NvmMcuSdSubmit_t Submit, void *pArg)
 
 		if (status == NRF_SUCCESS)
 		{
+			// With the SoftDevice stopped the call is already finished and
+			// sends no event, so there is nothing to wait for.
+			if (SdIsEnabled() == false)
+			{
+				return 0;
+			}
 			break;
 		}
 		if (status != NRF_ERROR_BUSY)

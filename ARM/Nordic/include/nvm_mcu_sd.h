@@ -29,7 +29,7 @@
 
 MIT License
 
-Copyright (c) 2026, I-SYST, all rights reserved
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -81,10 +81,10 @@ void NvmMcuSdSocEvt(uint32_t SysEvt);
  * @brief	Set the idle callback and the operation timeout.
  *
  * @param	pIdle		: Called repeatedly while an operation is pending. NULL
- *						  when the SoftDevice event dispatch runs from an
- *						  interrupt and needs no help.
+ * 					  when the SoftDevice event dispatch runs from an
+ * 					  interrupt and needs no help.
  * @param	TimeoutMs	: Give up on one submitted operation after this many
- *						  msec. 0 keeps the current value.
+ * 					  msec. 0 keeps the current value.
  */
 void NvmMcuSdSetIdle(NvmMcuSdIdle_t pIdle, uint32_t TimeoutMs);
 
@@ -98,9 +98,9 @@ const NvmMcuOp_t & NvmMcuSdOp(void);
 /**
  * @brief	Fill the geometry fields of a config from the device itself.
  *
- * Reads the page size and page count from the factory information registers
- * and sets BaseAddr, TotalSize, EraseSize and WriteGran. The remaining fields
- * are left untouched.
+ * Reads the page size and the page count from the factory information
+ * registers and sets BaseAddr, TotalSize, EraseSize and WriteGran. The
+ * remaining fields are left untouched.
  *
  * @param	Cfg	: Config to fill
  */
