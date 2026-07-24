@@ -431,6 +431,27 @@ bool nrf_sdh_is_suspended(void)
 	return sdh_is_suspended;
 }
 
+/* Storage arbitration for nvm_nrfx.cpp. The driver holds a weak default that
+ * answers false and drives the controller directly; this override, present in
+ * any application that links the SoftDevice handler, reports whether the
+ * SoftDevice is enabled and owns the memory. */
+bool NvmIntrfSdRunning(void);
+bool NvmIntrfSdRunning(void)
+{
+	uint8_t enabled = 0;
+
+	if (softdevice_vector_forward_address == 0) {
+		/* SVC forwarding is not set up, no SoftDevice call can be made. */
+		return false;
+	}
+
+	if (sd_softdevice_is_enabled(&enabled) != NRF_SUCCESS) {
+		return false;
+	}
+
+	return enabled != 0;
+}
+
 void nrf_sdh_evts_poll(void)
 {
 	/* Notify observers about pending SoftDevice event. */

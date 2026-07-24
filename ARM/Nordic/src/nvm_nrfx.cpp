@@ -56,6 +56,17 @@ SOFTWARE.
 #if defined(SOFTDEVICE_PRESENT) || defined(S112) || defined(S113) || \
 	defined(S132) || defined(S140) || defined(S145)
 #define NVM_INTRF_SOFTDEVICE		1
+#elif defined(NRF54L_SERIES) || defined(NRF54L15_XXAA)
+// The nRF54L library is built with no SoftDevice define at all, because one
+// archive serves SoftDevice, link controller and plain bare metal
+// applications alike. A compile time test can therefore never be right here:
+// it compiled this path out and the demo drove the controller directly under
+// a live S145. The path is compiled in instead and the choice is made at run
+// time through NvmIntrfSdRunning(): weak below, answering false, overridden
+// in nrf_sdh.c, which only an application that enables a SoftDevice pulls
+// from the archive.
+#define NVM_INTRF_SOFTDEVICE		1
+#define NVM_INTRF_SD_RUNTIME		1
 #endif
 
 #ifdef NVM_INTRF_SOFTDEVICE
@@ -269,6 +280,22 @@ static volatile bool s_OpOk;
 // handler knows whether the event it was handed belongs to it.
 static volatile bool s_OpPending;
 
+#ifdef NVM_INTRF_SD_RUNTIME
+
+// Weak: an application with no SoftDevice support linked runs on this answer
+// and drives the controller itself. nrf_sdh.c has the real answer.
+extern "C" __attribute__((weak)) bool NvmIntrfSdRunning(void)
+{
+	return false;
+}
+
+static bool SdRunning(void)
+{
+	return NvmIntrfSdRunning();
+}
+
+#else
+
 static bool SdRunning(void)
 {
 	uint8_t en = 0;
@@ -280,6 +307,8 @@ static bool SdRunning(void)
 
 	return en != 0;
 }
+
+#endif	// NVM_INTRF_SD_RUNTIME
 
 void NvmIntrfSocEvt(uint32_t SysEvt)
 {

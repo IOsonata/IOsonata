@@ -152,6 +152,17 @@ protected:
 void NvmIntrfSetWait(NvmIntrfWait_t pWait, uint32_t TimeoutMs);
 
 /**
+ * @brief	Report whether a SoftDevice is enabled and owns the memory.
+ *
+ * Weak, answers false, so a library archive built without any SoftDevice
+ * define still serves every application. nrf_sdh.c provides the real answer
+ * in an application that enables a SoftDevice.
+ *
+ * @return	true when a SoftDevice is enabled.
+ */
+extern "C" bool NvmIntrfSdRunning(void);
+
+/**
  * @brief	Pass a SoftDevice SoC event to the interface.
  *
  * Needed only on a build running a SoftDevice. Every observer is called for
