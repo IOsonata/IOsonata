@@ -1,20 +1,22 @@
 /**-------------------------------------------------------------------------
-@file	rramc_intrf.h
+@file	nvm_nrfx.h
 
-@brief	The nRF54L internal RRAM controller as a DeviceIntrf.
+@brief	The nRF on die memory controller as a DeviceIntrf.
 
-The internal memory is a device like any other: it takes a command, an address
-and data. It simply has no wire, so this interface is the adapter between that
-and the controller registers. With it the ordinary Nvm driver serves internal
-memory with no code of its own, the same way it serves a NOR flash on SPI or an
-EEPROM on I2C.
+Internal memory is a device like any other: it takes a command, an address and
+data. It simply has no wire, so this is the adapter between that and the
+controller registers. With it the ordinary Nvm driver serves internal memory
+with no code of its own, the same way it serves a NOR flash on SPI or an EEPROM
+on I2C.
 
-The commands use the same opcodes a serial flash does, so a config reads the
-same whichever memory it describes. RRAM has no erase command and rewrites in
-place, so the erase writes the erased pattern over the unit; nothing above sees
-the difference.
+One file covers every part. Which controller is behind it, and what erase means
+on it, follow from the MCU model the build already defines:
 
-Where the work runs is decided here, not by the application:
+	nRF52   NVMC, a page erase command, geometry from FICR
+	nRF54L  RRAMC, no erase command, so an erase writes the erased pattern
+
+Everything else is the same whatever the memory is made of, above all the
+arbitration:
 
 	no stack running    the controller is driven directly
 	link controller     the same work runs inside an MPSL timeslot
@@ -24,26 +26,25 @@ Where the work runs is decided here, not by the application:
 A SoftDevice that is present but stopped arbitrates nothing, so the controller
 is driven directly in that case as well.
 
-The long wait is handed to the application through RramcIntrfSetWait, the same
-idea as the wait callback the flash and EEPROM configs take. On a SoftDevice
-build the application must also pass SoC events to RramcIntrfSocEvt.
+The commands use the same opcodes a serial flash does, so a config for internal
+memory reads like one for a chip.
 
-The memory size cannot be read from the device the way the nRF52 page size
-comes from FICR, so it is a build value. Override RRAMC_INTRF_TOTAL_SIZE for a
-part other than the nRF54L15.
+The long wait is handed to the application through NvmIntrfSetWait, the same
+idea as the wait callback the flash and EEPROM configs take. On a SoftDevice
+build the application must also pass SoC events to NvmIntrfSocEvt.
 
 Example :
 
-	RramcIntrf g_Rramc;
+	NvmIntrf g_NvmIntrf;
 	NvmCfg_t cfg;
 
-	g_Rramc.Init();
+	g_NvmIntrf.Init();
 
 	memset(&cfg, 0, sizeof(cfg));
-	RramcIntrfCfg(cfg);
+	NvmIntrfCfg(cfg);
 
 	Nvm g_Nvm;
-	g_Nvm.Init(cfg, &g_Rramc, RegionAddr, RegionSize);
+	g_Nvm.Init(cfg, &g_NvmIntrf, RegionAddr, RegionSize);
 
 @author	Hoang Nguyen Hoan
 @date	July 24, 2026
@@ -73,8 +74,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __RRAMC_INTRF_H__
-#define __RRAMC_INTRF_H__
+#ifndef __NVM_NRFX_H__
+#define __NVM_NRFX_H__
 
 #include "device_intrf.h"
 #include "storage/nvm.h"
@@ -85,29 +86,33 @@ SOFTWARE.
 
 // The command set, using the opcodes a serial flash uses so a config for
 // internal memory reads like one for a flash chip.
-#define RRAMC_CMD_READ			0x03		//!< Read
-#define RRAMC_CMD_WRITE			0x02		//!< Program words
-#define RRAMC_CMD_ERASE			0x20		//!< Clear one unit
+#define NVM_INTRF_CMD_READ		0x03		//!< Read
+#define NVM_INTRF_CMD_WRITE		0x02		//!< Program words
+#define NVM_INTRF_CMD_ERASE		0x20		//!< Erase or clear one unit
 
-// Address bytes on the frame. The internal memory is 32 bit addressed.
-#define RRAMC_ADDR_SIZE			4
+// Address bytes on the frame. Internal memory is 32 bit addressed.
+#define NVM_INTRF_ADDR_SIZE		4
+
+// The controller writes 32 bit words.
+#define NVM_INTRF_WRITE_GRAN	4
 
 #ifdef __cplusplus
 
 /// Called repeatedly while an operation is waiting, so the application can run
 /// its event dispatch or yield to a scheduler. Returning false asks the
 /// interface to give up on the wait.
-typedef bool (*RramcIntrfWait_t)(void);
+typedef bool (*NvmIntrfWait_t)(void);
 
 /// Counts of what the interface did, for a test to show which path ran.
-typedef struct __Rramc_Intrf_Stat {
+typedef struct __Nvm_Intrf_Stat {
 	uint32_t	Ops;		//!< Operations completed
 	uint32_t	Busy;		//!< Refused while the radio held the memory
 	uint32_t	Evt;		//!< Results delivered as a SoC event
-} RramcIntrfStat_t;
+	uint32_t	Skipped;	//!< Erases skipped, the unit already erased
+} NvmIntrfStat_t;
 
-/// @brief	The nRF54L RRAM controller as a device interface.
-class RramcIntrf : public DeviceIntrf {
+/// @brief	The nRF memory controller as a device interface.
+class NvmIntrf : public DeviceIntrf {
 public:
 	bool Init(void);
 
@@ -144,24 +149,24 @@ protected:
  * @param	TimeoutMs	: Give up on one operation after this many msec.
  * \t\t\t\t\t\t  0 keeps the current value.
  */
-void RramcIntrfSetWait(RramcIntrfWait_t pWait, uint32_t TimeoutMs);
+void NvmIntrfSetWait(NvmIntrfWait_t pWait, uint32_t TimeoutMs);
 
 /**
  * @brief	Pass a SoftDevice SoC event to the interface.
  *
- * Needed only on a build running a SoftDevice. Anything that is not a memory
- * result is ignored, so passing every event is safe.
+ * Needed only on a build running a SoftDevice. Every observer is called for
+ * every event, so one that is not a result of ours is ignored.
  *
  * @param	SysEvt : SoC event id
  */
-void RramcIntrfSocEvt(uint32_t SysEvt);
+void NvmIntrfSocEvt(uint32_t SysEvt);
 
 /**
  * @brief	Read the operation counts.
  *
  * @param	pStat : Filled with the counts since reset
  */
-void RramcIntrfGetStat(RramcIntrfStat_t *pStat);
+void NvmIntrfGetStat(NvmIntrfStat_t *pStat);
 
 /**
  * @brief	Fill a config for the internal memory.
@@ -171,10 +176,10 @@ void RramcIntrfGetStat(RramcIntrfStat_t *pStat);
  *
  * @param	Cfg	: Config to fill
  */
-void RramcIntrfCfg(NvmCfg_t &Cfg);
+void NvmIntrfCfg(NvmCfg_t &Cfg);
 
 #endif	// __cplusplus
 
 /** @} End of group Storage */
 
-#endif	// __RRAMC_INTRF_H__
+#endif	// __NVM_NRFX_H__

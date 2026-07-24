@@ -1,14 +1,17 @@
 /**-------------------------------------------------------------------------
-@example	nvm_nrf52_demo.cpp
+@example	nvm_nrfx_demo.cpp
 
-@brief	Nvm demo on the nRF52 internal memory.
+@brief	Nvm demo on the nRF internal memory.
 
 		Runs the checks that only real memory can answer: a page erases to all
 		ones, a write crossing a page boundary lands correctly, programming
 		clears bits and never sets them back, and a stamp survives a power
 		cycle.
 
-		The memory is reached through NvmcIntrf, which works out for itself
+		The part follows from the MCU model the build defines, the same as the
+		driver underneath, so this runs on an nRF52 or an nRF54L unchanged.
+
+		The memory is reached through NvmIntrf, which works out for itself
 		whether the access goes to a SoftDevice, into a timeslot, or straight
 		at the controller, so there is nothing here to select. Above it sits
 		the ordinary Nvm driver, the same one a SPI flash or an I2C EEPROM
@@ -62,7 +65,7 @@ SOFTWARE.
 #include "board.h"
 
 #include "storage/nvm.h"
-#include "nvmc_intrf.h"
+#include "nvm_nrfx.h"
 
 // 1 : bring up a BLE stack and repeat the exercise while advertising.
 #ifndef NVM_MCU_DEMO_BLE
@@ -73,9 +76,11 @@ SOFTWARE.
 #include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_appearance.h"
-#include "syslog.h"
 #include "nrf_sdh_soc.h"
+#else
 #endif
+
+#include "syslog.h"
 
 #ifdef MCU_OSC
 McuOsc_t g_McuOsc = MCU_OSC;
@@ -118,7 +123,7 @@ static const UARTCfg_t s_UartCfg = {
 
 UART g_Uart;
 
-static NvmcIntrf s_Nvmc;
+static NvmIntrf s_NvmIntrf;
 static Nvm s_Nvm;
 static uintptr_t s_RegionAddr = 0;
 static int s_Fail = 0;
@@ -247,7 +252,9 @@ static void NvmDemoVerify(Nvm &Mem, uintptr_t RegionAddr)
 	Check(memcmp(pattern, readback, sizeof(pattern)) == 0,
 		  "data matches across the boundary");
 
-	// Programming clears bits and cannot set them back without an erase.
+	// Programming either clears bits only, as a NOR flash and the nRF52
+	// internal memory do, or replaces the word, as a memory that rewrites in
+	// place does. Report which this one is rather than assume either.
 	uint32_t half = 0x0000FFFFUL;
 	uint32_t ones = 0xFFFFFFFFUL;
 	uint32_t rd = 0;
@@ -257,7 +264,19 @@ static void NvmDemoVerify(Nvm &Mem, uintptr_t RegionAddr)
 	Check(rd == half, "word holds what was programmed");
 	Check(Mem.Write(0x100, &ones, 4) == 4, "program all ones over it");
 	Mem.Read(0x100, &rd, 4);
-	Check(rd == half, "bits did not come back without an erase");
+
+	if (rd == half)
+	{
+		g_Uart.printf("medium  : clears bits only, an erase is needed to set them\r\n");
+	}
+	else if (rd == ones)
+	{
+		g_Uart.printf("medium  : replaces the word, it rewrites in place\r\n");
+	}
+	else
+	{
+		Check(false, "programming left the word in neither state");
+	}
 
 	// The driver rejects what the memory cannot do.
 	Check(Mem.Write(1, &ones, 4) == -EINVAL, "unaligned write rejected");
@@ -265,8 +284,8 @@ static void NvmDemoVerify(Nvm &Mem, uintptr_t RegionAddr)
 	Check(Mem.Erase(1, page) == -EINVAL, "unaligned erase rejected");
 	Check(Mem.Read(Mem.Size(), &rd, 4) == -EINVAL, "read past the end rejected");
 
-	NvmcIntrfStat_t st;
-	NvmcIntrfGetStat(&st);
+	NvmIntrfStat_t st;
+	NvmIntrfGetStat(&st);
 
 	g_Uart.printf("\r\n%s | ops %lu busy %lu evt %lu skipped %lu\r\n",
 				  s_Fail == 0 ? "ALL PASS" : "FAILURES",
@@ -280,7 +299,7 @@ static bool NvmDemoSetup(void)
 	NvmCfg_t cfg;
 
 	memset(&cfg, 0, sizeof(cfg));
-	NvmcIntrfCfg(cfg);
+	NvmIntrfCfg(cfg);
 
 	g_Uart.printf("device  : %lu bytes, page %lu\r\n",
 				  (unsigned long)cfg.TotalSize, (unsigned long)cfg.EraseSize);
@@ -291,13 +310,13 @@ static bool NvmDemoSetup(void)
 
 	uint64_t regionsize = (uint64_t)cfg.EraseSize * NVM_MCU_DEMO_REGION_PAGES;
 
-	if (s_Nvmc.Init() == false)
+	if (s_NvmIntrf.Init() == false)
 	{
 		g_Uart.printf("memory interface init failed\r\n");
 		return false;
 	}
 
-	if (s_Nvm.Init(cfg, &s_Nvmc, s_RegionAddr, regionsize) == false)
+	if (s_Nvm.Init(cfg, &s_NvmIntrf, s_RegionAddr, regionsize) == false)
 	{
 		g_Uart.printf("Nvm init failed\r\n");
 		return false;
@@ -352,10 +371,17 @@ static void NvmDemoSocObserver(uint32_t SysEvt, void *pCtx)
 {
 	(void)pCtx;
 
-	NvmcIntrfSocEvt(SysEvt);
+	NvmIntrfSocEvt(SysEvt);
 }
 
+#if defined(NRF52_SERIES)
 NRF_SDH_SOC_OBSERVER(s_NvmDemoSocObs, 0, NvmDemoSocObserver, NULL);
+#else
+// The bare metal SDK orders the arguments differently and takes a symbolic
+// priority level rather than a number; the macro rejects anything else. HIGH
+// is what the bond store observer uses.
+NRF_SDH_SOC_OBSERVER(s_NvmDemoSocObs, NvmDemoSocObserver, NULL, HIGH);
+#endif
 
 // Runs from the BtAppRun loop, so blocking here is safe while advertising
 // continues.
@@ -400,8 +426,8 @@ static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 
 	if ((s_Cycles % 5) == 0)
 	{
-		NvmcIntrfStat_t st;
-		NvmcIntrfGetStat(&st);
+		NvmIntrfStat_t st;
+		NvmIntrfGetStat(&st);
 
 		// evt is the one that matters: a result only arrives as an event while
 		// the SoftDevice is running.
@@ -416,7 +442,7 @@ void BtAppInitUserData()
 {
 	// The SoftDevice handler delivers the completion from an interrupt, so the
 	// wait needs no help.
-	NvmcIntrfSetWait(NULL, 5000);
+	NvmIntrfSetWait(NULL, 5000);
 
 	if (NvmDemoSetup() == false)
 	{
@@ -448,7 +474,7 @@ int main()
 {
 	g_Uart.Init(s_UartCfg);
 
-	g_Uart.printf("\r\nNvm demo on nRF52 internal memory, with a stack up\r\n");
+	g_Uart.printf("\r\nNvm demo on the internal memory, with a stack up\r\n");
 
 	SysLogGetInstance()->Init(g_Uart);
 
@@ -469,7 +495,7 @@ int main()
 {
 	g_Uart.Init(s_UartCfg);
 
-	g_Uart.printf("\r\nNvm demo on nRF52 internal memory\r\n");
+	g_Uart.printf("\r\nNvm demo on the internal memory\r\n");
 
 	if (NvmDemoSetup())
 	{
