@@ -138,9 +138,18 @@ typedef struct __Nvm_Cfg {
 	// Device probe (serial flash).
 	uint32_t	DevId;			//!< Expected JEDEC id, 0 to skip the check
 	uint8_t		DevIdSize;		//!< Id length in bytes
-	// Command table (serial QSPI). Unused by other media.
-	NvmCmd_t	RdCmd;			//!< Read command and dummy cycles
-	NvmCmd_t	WrCmd;			//!< Program command and dummy cycles
+	// Command set. A command of 0 means the medium does not have it, which is
+	// how one driver serves a flash that needs commands and an EEPROM that
+	// needs none.
+	NvmCmd_t	RdCmd;			//!< Read. 0 : address only, no command byte
+	NvmCmd_t	WrCmd;			//!< Program. 0 : address only
+	NvmCmd_t	WrEnCmd;		//!< Write enable latch. 0 : not needed
+	NvmCmd_t	WrDisCmd;		//!< Write disable. 0 : not needed
+	NvmCmd_t	EraseCmd;		//!< Erase one unit. 0 : medium has no erase
+	NvmCmd_t	MassEraseCmd;	//!< Erase the whole device. 0 : not offered
+	NvmCmd_t	RdStatusCmd;	//!< Read status. 0 : wait by WriteDelayUs
+	NvmCmd_t	WrStatusCmd;	//!< Write status. 0 : no block protect
+	uint8_t		WrProtMask;		//!< Status bits that hold the block protect
 	// Write protect. Meaning is per family: EEPROM drives WrProtPin, serial
 	// flash uses status register block protect, MCU uses controller region
 	// protect.

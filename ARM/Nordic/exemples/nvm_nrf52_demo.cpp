@@ -1,16 +1,18 @@
 /**-------------------------------------------------------------------------
-@example	nvm_mcu_nrf52_demo.cpp
+@example	nvm_nrf52_demo.cpp
 
-@brief	NvmMcu demo on the nRF52 internal memory.
+@brief	Nvm demo on the nRF52 internal memory.
 
 		Runs the checks that only real memory can answer: a page erases to all
 		ones, a write crossing a page boundary lands correctly, programming
 		clears bits and never sets them back, and a stamp survives a power
 		cycle.
 
-		The driver works out for itself whether the access goes to a
-		SoftDevice, into a timeslot, or straight at the controller, so there is
-		nothing here to select. Build with NVM_MCU_DEMO_BLE set to 1 to run the
+		The memory is reached through NvmcIntrf, which works out for itself
+		whether the access goes to a SoftDevice, into a timeslot, or straight
+		at the controller, so there is nothing here to select. Above it sits
+		the ordinary Nvm driver, the same one a SPI flash or an I2C EEPROM
+		uses. Build with NVM_MCU_DEMO_BLE set to 1 to run the
 		same checks with a stack up and advertising, which is what puts the
 		radio in contention for the memory. Everything above the main function
 		is shared between the two.
@@ -59,7 +61,8 @@ SOFTWARE.
 #include "idelay.h"
 #include "board.h"
 
-#include "nvm_mcu_nrf52.h"
+#include "storage/nvm.h"
+#include "nvmc_intrf.h"
 
 // 1 : bring up a BLE stack and repeat the exercise while advertising.
 #ifndef NVM_MCU_DEMO_BLE
@@ -115,7 +118,8 @@ static const UARTCfg_t s_UartCfg = {
 
 UART g_Uart;
 
-static NvmMcu s_Nvm;
+static NvmcIntrf s_Nvmc;
+static Nvm s_Nvm;
 static uintptr_t s_RegionAddr = 0;
 static int s_Fail = 0;
 
@@ -261,8 +265,8 @@ static void NvmDemoVerify(NvmIO &Mem, uintptr_t RegionAddr)
 	Check(Mem.Erase(1, page) == -EINVAL, "unaligned erase rejected");
 	Check(Mem.Read(Mem.Size(), &rd, 4) == -EINVAL, "read past the end rejected");
 
-	NvmMcuNrf52Stat_t st;
-	NvmMcuNrf52GetStat(&st);
+	NvmcIntrfStat_t st;
+	NvmcIntrfGetStat(&st);
 
 	g_Uart.printf("\r\n%s | ops %lu busy %lu evt %lu skipped %lu\r\n",
 				  s_Fail == 0 ? "ALL PASS" : "FAILURES",
@@ -276,7 +280,7 @@ static bool NvmDemoSetup(void)
 	NvmCfg_t cfg;
 
 	memset(&cfg, 0, sizeof(cfg));
-	NvmMcuNrf52Cfg(cfg);
+	NvmcIntrfCfg(cfg);
 
 	g_Uart.printf("device  : %lu bytes, page %lu\r\n",
 				  (unsigned long)cfg.TotalSize, (unsigned long)cfg.EraseSize);
@@ -287,9 +291,15 @@ static bool NvmDemoSetup(void)
 
 	uint64_t regionsize = (uint64_t)cfg.EraseSize * NVM_MCU_DEMO_REGION_PAGES;
 
-	if (s_Nvm.Init(cfg, NvmMcuNrf52Op(), s_RegionAddr, regionsize) == false)
+	if (s_Nvmc.Init() == false)
 	{
-		g_Uart.printf("NvmMcu init failed\r\n");
+		g_Uart.printf("memory interface init failed\r\n");
+		return false;
+	}
+
+	if (s_Nvm.Init(cfg, &s_Nvmc, s_RegionAddr, regionsize) == false)
+	{
+		g_Uart.printf("Nvm init failed\r\n");
 		return false;
 	}
 
@@ -303,7 +313,7 @@ static bool NvmDemoSetup(void)
 // so the radio is contending for the memory.
 // ---------------------------------------------------------------------------
 
-#define DEVICE_NAME					"NvmMcu"
+#define DEVICE_NAME					"NvmDemo"
 #define APP_ADV_INTERVAL_MSEC		50
 #define APP_ADV_TIMEOUT_MSEC		1000
 
@@ -342,7 +352,7 @@ static void NvmDemoSocObserver(uint32_t SysEvt, void *pCtx)
 {
 	(void)pCtx;
 
-	NvmMcuNrf52SocEvt(SysEvt);
+	NvmcIntrfSocEvt(SysEvt);
 }
 
 NRF_SDH_SOC_OBSERVER(s_NvmDemoSocObs, 0, NvmDemoSocObserver, NULL);
@@ -390,8 +400,8 @@ static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 
 	if ((s_Cycles % 5) == 0)
 	{
-		NvmMcuNrf52Stat_t st;
-		NvmMcuNrf52GetStat(&st);
+		NvmcIntrfStat_t st;
+		NvmcIntrfGetStat(&st);
 
 		// evt is the one that matters: a result only arrives as an event while
 		// the SoftDevice is running.
@@ -406,7 +416,7 @@ void BtAppInitUserData()
 {
 	// The SoftDevice handler delivers the completion from an interrupt, so the
 	// wait needs no help.
-	NvmMcuNrf52SetWait(NULL, 5000);
+	NvmcIntrfSetWait(NULL, 5000);
 
 	if (NvmDemoSetup() == false)
 	{
@@ -438,7 +448,7 @@ int main()
 {
 	g_Uart.Init(s_UartCfg);
 
-	g_Uart.printf("\r\nNvmMcu demo on nRF52 internal memory, with a stack up\r\n");
+	g_Uart.printf("\r\nNvm demo on nRF52 internal memory, with a stack up\r\n");
 
 	SysLogGetInstance()->Init(g_Uart);
 
@@ -459,7 +469,7 @@ int main()
 {
 	g_Uart.Init(s_UartCfg);
 
-	g_Uart.printf("\r\nNvmMcu demo on nRF52 internal memory\r\n");
+	g_Uart.printf("\r\nNvm demo on nRF52 internal memory\r\n");
 
 	if (NvmDemoSetup())
 	{

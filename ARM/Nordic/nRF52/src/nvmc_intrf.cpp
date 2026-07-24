@@ -1,10 +1,11 @@
 /**-------------------------------------------------------------------------
-@file	nvm_mcu_nrf52.cpp
+@file	nvmc_intrf.cpp
 
-@brief	NvmMcu operations for the nRF52 internal memory.
+@brief	The nRF52 internal memory controller as a DeviceIntrf.
 
-		The controller mechanics appear once. Everything else in this file
-		decides where that work runs and how the wait is spent.
+		A frame arrives as command, address and data, exactly as it would on a
+		wire. The frame is collected during the transfer and acted on when it
+		completes, which is where the controller work and its arbitration live.
 
 @author	Hoang Nguyen Hoan
 @date	July 23, 2026
@@ -35,6 +36,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
+#include <string.h>
 #include <errno.h>
 
 #include "hal/nrf_nvmc.h"
@@ -50,34 +52,47 @@ SOFTWARE.
 #include "bt_pds_sdc.h"
 #endif
 
-#include "nvm_mcu_nrf52.h"
+#include "nvmc_intrf.h"
 
 // The controller programs 32 bit words.
-#define NVM_MCU_NRF52_WRITE_GRAN	4
+#define NVMC_WRITE_GRAN				4
 
-// Words one program request may take. A word write is a few hundred usec, and
-// on a timeslot build the whole request has to fit one slot, which is the
-// tightest limit of the three cases. NvmMcu splits a longer write to match.
-#ifndef NVM_MCU_NRF52_MAX_PROG_WORDS
-#define NVM_MCU_NRF52_MAX_PROG_WORDS	8
+// Largest bytes one transfer may take. A word write is a few hundred usec, and
+// on a timeslot build the whole transfer has to fit one slot, which is the
+// tightest limit of the three cases. The Nvm driver splits at this.
+#ifndef NVMC_INTRF_MAX_XFER
+#define NVMC_INTRF_MAX_XFER			32
 #endif
 
 // Erase slice per timeslot, in msec, and the worst case for one step.
-#ifndef NVM_MCU_NRF52_ERASE_SLICE_MS
-#define NVM_MCU_NRF52_ERASE_SLICE_MS	2
+#ifndef NVMC_INTRF_ERASE_SLICE_MS
+#define NVMC_INTRF_ERASE_SLICE_MS	2
 #endif
 
-#ifndef NVM_MCU_NRF52_STEP_BUDGET_US
-#define NVM_MCU_NRF52_STEP_BUDGET_US	((NVM_MCU_NRF52_ERASE_SLICE_MS + 1) * 1000UL)
+#ifndef NVMC_INTRF_STEP_BUDGET_US
+#define NVMC_INTRF_STEP_BUDGET_US	((NVMC_INTRF_ERASE_SLICE_MS + 1) * 1000UL)
 #endif
 
-#ifndef NVM_MCU_NRF52_TIMEOUT_MS
-#define NVM_MCU_NRF52_TIMEOUT_MS	5000
+#ifndef NVMC_INTRF_TIMEOUT_MS
+#define NVMC_INTRF_TIMEOUT_MS		5000
 #endif
 
-static NvmMcuNrf52Wait_t s_pWait = nullptr;
-static uint32_t s_TimeoutMs = NVM_MCU_NRF52_TIMEOUT_MS;
-static NvmMcuNrf52Stat_t s_Stat;
+// The command and address are collected apart from the data, so the data
+// buffer stays word aligned. Reading it as words from an odd frame offset
+// would be an unaligned access, and the SoftDevice rejects an unaligned
+// source outright.
+#define NVMC_FRAME_HDR				(1 + NVMC_ADDR_SIZE)
+#define NVMC_FRAME_MAX				(NVMC_FRAME_HDR + NVMC_INTRF_MAX_XFER)
+
+static uint8_t s_Hdr[NVMC_FRAME_HDR];
+static int s_HdrLen;
+alignas(4) static uint8_t s_Data[NVMC_INTRF_MAX_XFER];
+static int s_DataLen;
+static bool s_Rx;
+
+static NvmcIntrfWait_t s_pWait = nullptr;
+static uint32_t s_TimeoutMs = NVMC_INTRF_TIMEOUT_MS;
+static NvmcIntrfStat_t s_Stat;
 
 // ---------------------------------------------------------------------------
 // The controller mechanics. One copy, used by every path below.
@@ -170,7 +185,7 @@ static bool SdIsEnabled(void)
 	return en != 0;
 }
 
-void NvmMcuNrf52SocEvt(uint32_t SysEvt)
+void NvmcIntrfSocEvt(uint32_t SysEvt)
 {
 	switch (SysEvt)
 	{
@@ -259,7 +274,7 @@ static uint32_t SdEraseSubmit(void *pArg)
 
 #else
 
-void NvmMcuNrf52SocEvt(uint32_t SysEvt)
+void NvmcIntrfSocEvt(uint32_t SysEvt)
 {
 	(void)SysEvt;
 }
@@ -329,7 +344,7 @@ static uint32_t MpslEraseStep(void *pv)
 		NvmcEraseBegin(c->Addr);
 		c->Started = true;
 
-		return NVM_MCU_NRF52_ERASE_SLICE_MS * 1000UL;
+		return NVMC_INTRF_ERASE_SLICE_MS * 1000UL;
 	}
 
 	if (NvmcIsReady())
@@ -338,40 +353,23 @@ static uint32_t MpslEraseStep(void *pv)
 		return 0;
 	}
 
-	return NVM_MCU_NRF52_ERASE_SLICE_MS * 1000UL;
+	return NVMC_INTRF_ERASE_SLICE_MS * 1000UL;
 }
 
 #endif	// NRFXLIB_SDC
 
 // ---------------------------------------------------------------------------
-// The one operation set.
+// The work, chosen by what is running rather than by the application.
 // ---------------------------------------------------------------------------
 
-static int Nrf52Program(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt,
-						void *pCtx)
+static int NvmcWrite(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 {
-	(void)pCtx;
-
-	if ((Addr & (NVM_MCU_NRF52_WRITE_GRAN - 1)) != 0)
-	{
-		return -EINVAL;
-	}
-	if (WordCnt == 0)
-	{
-		return 0;
-	}
-
 #ifdef SOFTDEVICE_PRESENT
 	if (SdIsEnabled())
 	{
 		SdWrArg_t arg = { (uint32_t *)Addr, pSrc, WordCnt };
 
-		int res = SdRun(SdWriteSubmit, &arg);
-		if (res == 0)
-		{
-			s_Stat.Ops++;
-		}
-		return res;
+		return SdRun(SdWriteSubmit, &arg);
 	}
 	// Present but stopped: nothing arbitrates, so drive the controller.
 #endif
@@ -387,27 +385,19 @@ static int Nrf52Program(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt,
 	BtPdsMpslOp_t op;
 
 	op.Step = MpslWriteStep;
-	op.StepBudgetUs = NVM_MCU_NRF52_STEP_BUDGET_US;
+	op.StepBudgetUs = NVMC_INTRF_STEP_BUDGET_US;
 	op.pCtx = &ctx;
 
-	res = BtPdsMpslRun(&op);
-	if (res == 0)
-	{
-		s_Stat.Ops++;
-	}
-	return res;
+	return BtPdsMpslRun(&op);
 #else
 	NvmcProgramWords(Addr, pSrc, WordCnt);
-	s_Stat.Ops++;
 
 	return 0;
 #endif
 }
 
-static int Nrf52ErasePage(uintptr_t Addr, void *pCtx)
+static int NvmcErase(uintptr_t Addr)
 {
-	(void)pCtx;
-
 	uint32_t pagesize = NRF_FICR->CODEPAGESIZE;
 
 	if (pagesize == 0)
@@ -420,12 +410,7 @@ static int Nrf52ErasePage(uintptr_t Addr, void *pCtx)
 	{
 		uint32_t page = (uint32_t)(Addr / pagesize);
 
-		int res = SdRun(SdEraseSubmit, &page);
-		if (res == 0)
-		{
-			s_Stat.Ops++;
-		}
-		return res;
+		return SdRun(SdEraseSubmit, &page);
 	}
 #endif
 
@@ -440,15 +425,10 @@ static int Nrf52ErasePage(uintptr_t Addr, void *pCtx)
 	BtPdsMpslOp_t op;
 
 	op.Step = MpslEraseStep;
-	op.StepBudgetUs = NVM_MCU_NRF52_STEP_BUDGET_US;
+	op.StepBudgetUs = NVMC_INTRF_STEP_BUDGET_US;
 	op.pCtx = &ctx;
 
-	res = BtPdsMpslRun(&op);
-	if (res == 0)
-	{
-		s_Stat.Ops++;
-	}
-	return res;
+	return BtPdsMpslRun(&op);
 #else
 	if (NvmcPageIsErased(Addr, pagesize))
 	{
@@ -471,32 +451,199 @@ static int Nrf52ErasePage(uintptr_t Addr, void *pCtx)
 	}
 
 	NvmcRelease();
-	s_Stat.Ops++;
 
 	return 0;
 #endif
 }
 
-// Region write protect is left out. The nRF52 block protect only clears on
-// reset, which cannot implement unprotect, so NvmMcu reports it unsupported.
-static const NvmMcuOp_t s_NvmMcuNrf52Op = {
-	.Program = Nrf52Program,
-	.ErasePage = Nrf52ErasePage,
-	.SetProtect = nullptr,
-	.MaxProgWords = NVM_MCU_NRF52_MAX_PROG_WORDS,
-	.pCtx = nullptr
-};
+// ---------------------------------------------------------------------------
+// The interface. A frame is collected, then acted on when the transfer ends.
+// ---------------------------------------------------------------------------
 
-int NvmMcuNrf52Init(void)
+static uintptr_t FrameAddr(void)
 {
+	uintptr_t a = 0;
+
+	for (int i = 0; i < NVMC_ADDR_SIZE; i++)
+	{
+		a = (a << 8) | s_Hdr[1 + i];
+	}
+
+	return a;
+}
+
+// Put whatever whole words have been collected into the memory.
+static int NvmcFlush(void)
+{
+	if (s_DataLen < (int)NVMC_WRITE_GRAN)
+	{
+		return 0;
+	}
+
+	uint32_t words = (uint32_t)s_DataLen / NVMC_WRITE_GRAN;
+	int res = NvmcWrite(FrameAddr(), (const uint32_t *)s_Data, words);
+
+	if (res == 0)
+	{
+		s_Stat.Ops++;
+	}
+
+	s_DataLen = 0;
+
+	return res;
+}
+
+extern "C" {
+
+static bool NvmcStartRx(DevIntrf_t *, uint32_t)
+{
+	// A restart after the command and address were sent, so keep the frame.
+	s_Rx = true;
+
+	return true;
+}
+
+static bool NvmcStartTx(DevIntrf_t *, uint32_t)
+{
+	s_HdrLen = 0;
+	s_DataLen = 0;
+	s_Rx = false;
+
+	return true;
+}
+
+// The work is done here rather than at the end of the transfer, because this
+// is the only place a failure can be reported: returning short tells the
+// driver the memory did not take the data.
+static int NvmcTxData(DevIntrf_t *, const uint8_t *pData, int Len)
+{
+	int n = 0;
+
+	while (n < Len && s_HdrLen < NVMC_FRAME_HDR)
+	{
+		s_Hdr[s_HdrLen++] = pData[n++];
+	}
+
+	if (s_HdrLen < NVMC_FRAME_HDR)
+	{
+		return n;
+	}
+
+	// An erase needs the address only.
+	if (s_Hdr[0] == NVMC_CMD_ERASE)
+	{
+		if (NvmcErase(FrameAddr()) != 0)
+		{
+			return 0;
+		}
+		s_Stat.Ops++;
+		return Len;
+	}
+
+	if (s_Hdr[0] != NVMC_CMD_WRITE)
+	{
+		return Len;				// a read frame, served by RxData
+	}
+
+	while (n < Len)
+	{
+		s_Data[s_DataLen++] = pData[n++];
+
+		if (s_DataLen == (int)sizeof(s_Data))
+		{
+			if (NvmcFlush() != 0)
+			{
+				return n - (int)sizeof(s_Data);
+			}
+		}
+	}
+
+	// The driver bounds a transfer to the page size, so the whole frame
+	// arrives together and this is where it completes.
+	if (NvmcFlush() != 0)
+	{
+		return 0;
+	}
+
+	return n;
+}
+
+static int NvmcTxSrData(DevIntrf_t *pDev, const uint8_t *pData, int Len)
+{
+	return NvmcTxData(pDev, pData, Len);
+}
+
+// The memory is mapped, so a read is a copy from the address in the frame.
+static int NvmcRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
+{
+	if (s_HdrLen < NVMC_FRAME_HDR || s_Hdr[0] != NVMC_CMD_READ)
+	{
+		return 0;
+	}
+
+	memcpy(pBuff, (const void *)FrameAddr(), (size_t)Len);
+
+	return Len;
+}
+
+static void NvmcStopRx(DevIntrf_t *)
+{
+	s_Rx = false;
+	s_HdrLen = 0;
+}
+
+// Everything was done in TxData, where a failure could be reported.
+static void NvmcStopTx(DevIntrf_t *)
+{
+	s_HdrLen = 0;
+	s_DataLen = 0;
+}
+
+static void NvmcIntrfDisable(DevIntrf_t *) {}
+static void NvmcIntrfEnable(DevIntrf_t *) {}
+static uint32_t NvmcGetRate(DevIntrf_t *) { return 0; }
+static uint32_t NvmcSetRate(DevIntrf_t *, uint32_t Rate) { return Rate; }
+static void NvmcPowerOff(DevIntrf_t *) {}
+static void *NvmcGetHandle(DevIntrf_t *pDev) { return pDev->pDevData; }
+
+}	// extern "C"
+
+bool NvmcIntrf::Init(void)
+{
+	memset(&vDevIntrf, 0, sizeof(vDevIntrf));
+
+	vDevIntrf.pDevData = this;
+	vDevIntrf.Type = DEVINTRF_TYPE_UNKOWN;
+	vDevIntrf.Disable = NvmcIntrfDisable;
+	vDevIntrf.Enable = NvmcIntrfEnable;
+	vDevIntrf.GetRate = NvmcGetRate;
+	vDevIntrf.SetRate = NvmcSetRate;
+	vDevIntrf.StartRx = NvmcStartRx;
+	vDevIntrf.RxData = NvmcRxData;
+	vDevIntrf.StopRx = NvmcStopRx;
+	vDevIntrf.StartTx = NvmcStartTx;
+	vDevIntrf.TxData = NvmcTxData;
+	vDevIntrf.TxSrData = NvmcTxSrData;
+	vDevIntrf.StopTx = NvmcStopTx;
+	vDevIntrf.PowerOff = NvmcPowerOff;
+	vDevIntrf.GetHandle = NvmcGetHandle;
+	vDevIntrf.MaxRetry = 1;
+	vDevIntrf.MaxTrxLen = NVMC_FRAME_MAX;
+	vDevIntrf.EnCnt = 1;
+	atomic_flag_clear(&vDevIntrf.bBusy);
+
+	s_HdrLen = 0;
+	s_DataLen = 0;
+	s_Rx = false;
+
 #ifdef NRFXLIB_SDC
-	return MpslStart();
+	return MpslStart() == 0;
 #else
-	return 0;
+	return true;
 #endif
 }
 
-void NvmMcuNrf52SetWait(NvmMcuNrf52Wait_t pWait, uint32_t TimeoutMs)
+void NvmcIntrfSetWait(NvmcIntrfWait_t pWait, uint32_t TimeoutMs)
 {
 	s_pWait = pWait;
 
@@ -506,7 +653,7 @@ void NvmMcuNrf52SetWait(NvmMcuNrf52Wait_t pWait, uint32_t TimeoutMs)
 	}
 }
 
-void NvmMcuNrf52GetStat(NvmMcuNrf52Stat_t *pStat)
+void NvmcIntrfGetStat(NvmcIntrfStat_t *pStat)
 {
 	if (pStat != nullptr)
 	{
@@ -514,19 +661,19 @@ void NvmMcuNrf52GetStat(NvmMcuNrf52Stat_t *pStat)
 	}
 }
 
-const NvmMcuOp_t & NvmMcuNrf52Op(void)
-{
-	return s_NvmMcuNrf52Op;
-}
-
-void NvmMcuNrf52Cfg(NvmCfg_t &Cfg)
+void NvmcIntrfCfg(NvmCfg_t &Cfg)
 {
 	// Geometry from the device itself rather than a build time constant.
 	uint32_t pagesize = NRF_FICR->CODEPAGESIZE;
 	uint32_t pagecnt = NRF_FICR->CODESIZE;
 
-	Cfg.BaseAddr = 0;
+	Cfg.DevNo = 0;
 	Cfg.TotalSize = (uint64_t)pagesize * (uint64_t)pagecnt;
 	Cfg.EraseSize = pagesize;
-	Cfg.WriteGran = NVM_MCU_NRF52_WRITE_GRAN;
+	Cfg.PageSize = NVMC_INTRF_MAX_XFER;		// largest bytes per transfer
+	Cfg.WriteGran = NVMC_WRITE_GRAN;
+	Cfg.AddrSize = NVMC_ADDR_SIZE;
+	Cfg.RdCmd = { NVMC_CMD_READ, 0 };
+	Cfg.WrCmd = { NVMC_CMD_WRITE, 0 };
+	Cfg.EraseCmd = { NVMC_CMD_ERASE, 0 };
 }
