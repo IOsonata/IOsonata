@@ -212,6 +212,16 @@ int CFifoUsed(hCFifo_t const hFifo);
  */
 static inline uint32_t CFifoBlockSize(hCFifo_t const hFifo) { return hFifo->BlkSize; }
 
+/**
+ * @brief	Get the full behavior of the FIFO
+ *
+ * @param	hFifo : CFIFO handle
+ *
+ * @return	true when a full FIFO refuses data and the caller is expected to
+ * 			wait, false when a full FIFO pushes out the oldest data instead
+ */
+static inline bool CFifoIsBlocking(hCFifo_t const hFifo) { return hFifo->bBlocking; }
+
 int CFifoRead(hCFifo_t const pFifo, uint8_t *pBuff, int BuffLen);
 int CFifoWrite(hCFifo_t const pFifo, uint8_t *pData, int DataLen);
 
