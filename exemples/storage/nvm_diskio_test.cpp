@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @example	nvm_diskio_test.cpp
 
-@brief	Host test for NvmDiskIO, the block device over any NvmIO.
+@brief	Host test for NvmDiskIO, the block device over any Nvm.
 
 		The point of the adapter is that a filesystem cannot tell what it is
 		sitting on. This test runs the same block sequence over two media that
@@ -52,6 +52,14 @@ SOFTWARE.
 
 #include "storage/diskio_nvm.h"
 
+
+// The pin driver is per architecture; the driver only toggles a protect pin.
+extern "C" {
+void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
+void IOPinSet(int, int) {}
+void IOPinClear(int, int) {}
+}
+
 #define DISK_SIZE		(64u * 1024u)
 #define DISK_SECT		4096u
 
@@ -71,15 +79,11 @@ static int g_Checks = 0;
 // ---------------------------------------------------------------------------
 // A medium with an erase step, programming by clearing bits, like NOR flash.
 // ---------------------------------------------------------------------------
-class EraseNvm : public NvmIO {
+class EraseNvm : public Nvm {
 public:
 	uint8_t vBuf[DISK_SIZE];
 
 	EraseNvm() { memset(vBuf, 0xFF, sizeof(vBuf)); Region(0, sizeof(vBuf)); }
-
-	bool Enable(void) override { return true; }
-	void Disable(void) override {}
-	void Reset(void) override {}
 
 	uint32_t EraseSize(void) const override { return DISK_SECT; }
 	uint32_t WriteGran(void) const override { return 1; }
@@ -114,15 +118,11 @@ public:
 // ---------------------------------------------------------------------------
 // A medium that overwrites directly and has no erase, like an EEPROM.
 // ---------------------------------------------------------------------------
-class DirectNvm : public NvmIO {
+class DirectNvm : public Nvm {
 public:
 	uint8_t vBuf[DISK_SIZE];
 
 	DirectNvm() { memset(vBuf, 0xFF, sizeof(vBuf)); Region(0, sizeof(vBuf)); }
-
-	bool Enable(void) override { return true; }
-	void Disable(void) override {}
-	void Reset(void) override {}
 
 	uint32_t EraseSize(void) const override { return 0; }	// no erase step
 	uint32_t WriteGran(void) const override { return 1; }

@@ -77,7 +77,7 @@ SOFTWARE.
 #define __RRAMC_INTRF_H__
 
 #include "device_intrf.h"
-#include "storage/nvmio.h"
+#include "storage/nvm.h"
 
 /** @addtogroup Storage
   * @{

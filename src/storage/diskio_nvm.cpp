@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	diskio_nvm.cpp
 
-@brief	Block device over any NvmIO.
+@brief	Block device over any Nvm.
 
 @author	Hoang Nguyen Hoan
 @date	July 23, 2026
@@ -41,7 +41,7 @@ NvmDiskIO::NvmDiskIO()
 	vSectSize = 0;
 }
 
-bool NvmDiskIO::Init(NvmIO &Nvm, uint32_t SectSize)
+bool NvmDiskIO::Init(Nvm &Mem, uint32_t SectSize)
 {
 	uint32_t sect = SectSize;
 
@@ -49,7 +49,7 @@ bool NvmDiskIO::Init(NvmIO &Nvm, uint32_t SectSize)
 	{
 		// A medium with an erase step reports a logical sector. One that
 		// overwrites directly reports none, so it needs a size given.
-		sect = Nvm.LogicalSectorSize();
+		sect = Mem.LogicalSectorSize();
 	}
 
 	if (sect == 0 || sect > 0xFFFF)
@@ -59,18 +59,18 @@ bool NvmDiskIO::Init(NvmIO &Nvm, uint32_t SectSize)
 
 	// The sector has to be a whole number of erase units, or an erase would
 	// take out more than the sector being written.
-	uint32_t esize = Nvm.EraseSize();
+	uint32_t esize = Mem.EraseSize();
 	if (esize != 0 && (sect % esize) != 0)
 	{
 		return false;
 	}
 
-	if (Nvm.Size() < sect)
+	if (Mem.Size() < sect)
 	{
 		return false;
 	}
 
-	vpNvm = &Nvm;
+	vpNvm = &Mem;
 	vSectSize = sect;
 
 	return true;

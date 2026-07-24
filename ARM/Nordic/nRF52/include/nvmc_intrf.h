@@ -73,7 +73,7 @@ SOFTWARE.
 #define __NVMC_INTRF_H__
 
 #include "device_intrf.h"
-#include "storage/nvmio.h"
+#include "storage/nvm.h"
 
 /** @addtogroup Storage
   * @{

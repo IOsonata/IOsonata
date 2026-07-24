@@ -1,9 +1,9 @@
 /**-------------------------------------------------------------------------
 @file	diskio_nvm.h
 
-@brief	Block device over any NvmIO.
+@brief	Block device over any Nvm.
 
-		A filesystem wants sectors. NvmIO offers byte addressed read, write and
+		A filesystem wants sectors. Nvm offers byte addressed read, write and
 		erase plus its geometry, which is all a sector needs, so this adapter
 		is thin and knows nothing about the medium underneath. The same FatFS
 		or littlefs volume therefore runs on serial flash, on an EEPROM, on the
@@ -16,7 +16,7 @@
 		only where EraseSize is non zero. And a medium with no erase step
 		reports no logical sector, so those need a sector size given to Init.
 
-		This is new development on the NvmIO API. It does not replace
+		This is new development on the Nvm API. It does not replace
 		diskio_flash.h and FlashDiskIO, which remain for existing applications.
 
 @author	Hoang Nguyen Hoan
@@ -51,7 +51,7 @@ SOFTWARE.
 #define __DISKIO_NVM_H__
 
 #include "storage/diskio.h"
-#include "storage/nvmio.h"
+#include "storage/nvm.h"
 
 /** @addtogroup Storage
   * @{
@@ -59,7 +59,7 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
-/// @brief	Block device over any NvmIO.
+/// @brief	Block device over any Nvm.
 class NvmDiskIO : public DiskIO {
 public:
 	NvmDiskIO();
@@ -77,7 +77,7 @@ public:
 	 * @return	true on success. Fails when the sector size is absent, does not
 	 * 			divide the region, or is not a whole number of erase units.
 	 */
-	bool Init(NvmIO &Nvm, uint32_t SectSize = 0);
+	bool Init(Nvm &Mem, uint32_t SectSize = 0);
 
 	// *** DiskIO ***
 
@@ -90,7 +90,7 @@ public:
 	void EraseSector(uint32_t SectNo, int NbSect) override;
 
 private:
-	NvmIO		*vpNvm;			//!< The memory this disk sits on
+	Nvm			*vpNvm;			//!< The memory this disk sits on
 	uint32_t	vSectSize;		//!< Sector size in bytes
 };
 

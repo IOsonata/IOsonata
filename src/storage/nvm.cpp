@@ -68,7 +68,13 @@ int Nvm::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 
 Nvm::Nvm()
 {
+	vRegionOffset = 0;
+	vRegionSize = 0;
+	vbIntEn = false;
+	vEvtHandler = nullptr;
+	vpWaitCB = nullptr;
 	vDevSize = 0;
+	vSectSize = 0;
 	vEraseSize = 0;
 	vPageSize = 0;
 	vWrGran = 1;
@@ -230,6 +236,7 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 	vDevSize = Cfg.TotalSize;
 	vEraseSize = Cfg.EraseSize;
+	vSectSize = Cfg.SectorSize;
 	vPageSize = Cfg.PageSize;
 	vWrGran = (Cfg.WriteGran != 0) ? Cfg.WriteGran : 1;
 	vAddrSize = (Cfg.AddrSize != 0) ? Cfg.AddrSize : 3;
@@ -261,7 +268,9 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		vAddrSpan = 0;			// the address bytes cover the whole device
 	}
 
-	SetMode(Cfg.bIntEn, Cfg.EvtHandler, Cfg.pWaitCB);
+	vbIntEn = Cfg.bIntEn;
+	vEvtHandler = Cfg.EvtHandler;
+	vpWaitCB = Cfg.pWaitCB;
 
 	// Configure the write protect pin and start unprotected.
 	if (vWrProtPin.PortNo >= 0 && vWrProtPin.PinNo >= 0)

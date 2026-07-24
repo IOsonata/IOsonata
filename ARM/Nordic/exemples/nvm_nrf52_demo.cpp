@@ -144,7 +144,7 @@ static void Check(bool Cond, const char *pMsg)
 }
 
 // Report whether the scratch pages read erased.
-static bool ScratchIsErased(NvmIO &Mem)
+static bool ScratchIsErased(Nvm &Mem)
 {
 	uint32_t buf[64];
 	uint64_t end = (uint64_t)Mem.EraseSize() * NVM_MCU_DEMO_SCRATCH_PAGES;
@@ -175,7 +175,7 @@ static bool ScratchIsErased(NvmIO &Mem)
 }
 
 // The stamp lives on the page after the scratch, so the checks never erase it.
-static void StampCheck(NvmIO &Mem, uintptr_t RegionAddr)
+static void StampCheck(Nvm &Mem, uintptr_t RegionAddr)
 {
 	uint32_t page = Mem.EraseSize();
 	uint64_t off = (uint64_t)page * NVM_MCU_DEMO_SCRATCH_PAGES;
@@ -219,7 +219,7 @@ static void StampCheck(NvmIO &Mem, uintptr_t RegionAddr)
 }
 
 // The checks that need real memory. Uses the scratch pages only.
-static void NvmDemoVerify(NvmIO &Mem, uintptr_t RegionAddr)
+static void NvmDemoVerify(Nvm &Mem, uintptr_t RegionAddr)
 {
 	uint32_t page = Mem.EraseSize();
 	uint32_t scratch = page * NVM_MCU_DEMO_SCRATCH_PAGES;
