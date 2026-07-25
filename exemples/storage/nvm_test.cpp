@@ -380,8 +380,6 @@ static NvmCfg_t NorCfg(void)
 	cfg.AddrSize = NOR_ADDR;
 	cfg.DevId = NOR_ID;
 	cfg.DevIdSize = 3;
-	cfg.RdCmd = { FLASH_CMD_READ, 0 };
-	cfg.WrCmd = { FLASH_CMD_WRITE, 0 };
 	cfg.WrProtMask = 0x3C;
 	cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
 

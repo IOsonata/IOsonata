@@ -52,7 +52,7 @@ SOFTWARE.
 //     opcodes until the QSPI path lands in Nvm; the legacy driver keeps
 //     quad in mode 0.
 #ifndef NVM_MODE
-#define NVM_MODE			1
+#define NVM_MODE			0
 #endif
 
 #if NVM_MODE != 0
@@ -154,8 +154,6 @@ static const NvmCfg_t s_NvmCfg = {
 	.AddrSize = (uint8_t)s_FlashCfg.AddrSize,
 	.DevId = s_FlashCfg.DevId,
 	.DevIdSize = (uint8_t)s_FlashCfg.DevIdSize,
-	.RdCmd = { FLASH_CMD_READ, 0 },
-	.WrCmd = { FLASH_CMD_WRITE, 0 },
 	.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },
 };
 

@@ -45,24 +45,32 @@ static const NvmCfg_t s_FlashCfg = {
 	.WrProtPin = { -1, -1, },		// no pin on this part
 };
 
-A nonzero EraseSize says this is an erase medium, and everything the JEDEC
-standard fixed follows from that alone: write enable and disable, the status
-poll, block protect, the erase opcode chosen by the granule (4K, 32K or 64K),
-chip erase, the reset pair, the id read, and 4 byte address mode for a part
-larger than 16 MBytes. None of it is configuration, because none of it varies.
-At Init the driver resets the device first, because the chip does not reset
-when the MCU does and can be left in a state where every other command is
-misread; the id probe then retries to cover the recovery time, and 4 byte
-mode, which the reset cleared, is entered last.
+Almost no command is configuration, because almost no command varies. Two
+things the driver already holds decide them. The bus, from the interface
+type: an I2C memory takes a bare address and no command byte, and waits by
+WriteDelayUs; everything serial speaks the standard protocol, read 0x03,
+program 0x02, the write latch and the status poll, which SPI EEPROMs and
+FRAMs speak just as a NOR does, so their busy wait is real. The kind, from
+EraseSize: an erase medium adds what the JEDEC standard fixed on top, the
+erase opcode chosen by the granule (4K, 32K or 64K), chip erase, block
+protect, the reset pair, the id read, and 4 byte address mode past 16
+MBytes. At Init the driver resets an erase medium first, because the chip
+does not reset when the MCU does and can be left in a state where every
+other command is misread; the id probe then retries to cover the recovery
+time, and 4 byte mode, which the reset cleared, is entered last.
 
-A direct read write medium, EEPROM, FRAM or RAM based, has none of that
-protocol. The one part that still varies is the write latch: a SPI FRAM
-overwrites like an EEPROM but latches writes, so WrEnCmd set on a direct
-medium enables it.
+The one place parts genuinely differ is the read and program pair once the
+bus is wider than plain SPI: the fast, dual, quad or octal command and,
+above all, its dummy cycles, which are the part's own and can depend on the
+operating frequency. That pair is therefore the only command configuration:
+zero derives the plain bus standard, set is the part's wide bus command,
+the same mechanism that made the legacy flash driver universal across SPI,
+DSPI, QSPI and OSPI.
 
 -----
-Quad SPI Micron N25Q128A : the chip's quad command and dummy cycles are config,
-so the same code drives any quad part.
+Quad SPI Micron N25Q128A : the quad command and dummy cycles are the part's,
+so they are the config; everything else stays derived. The quad transfer
+path is not wired yet.
 
 	.RdCmd = { FLASH_CMD_QREAD, 10 },
 	.WrCmd = { FLASH_CMD_QWRITE, 0 },
@@ -232,14 +240,13 @@ typedef struct __Nvm_Cfg {
 	// Command set. A command of 0 means the medium does not have it, which is
 	// how one driver serves a flash that needs commands and an EEPROM that
 	// needs none.
-	NvmCmd_t	RdCmd;			//!< Read. 0 : address only, no command byte.
-								//!< This is where fast and quad reads with
-								//!< their dummy cycles differ between parts
-	NvmCmd_t	WrCmd;			//!< Program. 0 : address only
-	NvmCmd_t	WrEnCmd;		//!< Write enable latch. On an erase medium 0
-								//!< means the standard 0x06; on a direct
-								//!< medium nonzero says the part latches
-								//!< writes, as a SPI FRAM does
+	NvmCmd_t	RdCmd;			//!< Read. 0 : derived from the interface
+								//!< type, bare address on I2C, 0x03 serial.
+								//!< Set for a wide bus part: the fast, quad
+								//!< or octal command with its dummy cycles is
+								//!< the one place parts genuinely differ
+	NvmCmd_t	WrCmd;			//!< Program. 0 : derived, bare on I2C, 0x02
+								//!< serial. Set for a wide bus part
 	uint8_t		WrProtMask;		//!< Status bits that hold the block protect
 	// Write protect. A pin that is not used must say so with { -1, -1, }.
 	IOPinCfg_t	WrProtPin;		//!< Write protect pin

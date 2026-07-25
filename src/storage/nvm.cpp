@@ -61,6 +61,8 @@ SOFTWARE.
 
 // The serial NOR protocol the JEDEC standard fixed. An erase medium speaks
 // all of it; none of it is configuration, because none of it varies.
+#define NVM_CMD_READ		0x03U
+#define NVM_CMD_WRITE		0x02U
 #define NVM_CMD_WRENABLE	0x06U
 #define NVM_CMD_WRDISABLE	0x04U
 #define NVM_CMD_RDSR		0x05U
@@ -256,19 +258,39 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	vAddrSize = (Cfg.AddrSize != 0) ? Cfg.AddrSize : 3;
 	vWrDelayUs = Cfg.WriteDelayUs;
 	vWrProtMask = Cfg.WrProtMask;
-	vRdCmd = Cfg.RdCmd;
-	vWrCmd = Cfg.WrCmd;
-
-	// The kind falls out of the geometry: an erase medium speaks the
-	// standard serial NOR protocol, so those commands are derived, not
-	// configured. A direct read write medium has none of them; the one
-	// survivor is the write latch, which a SPI FRAM needs without erasing.
-	if (vEraseSize != 0)
+	// Almost no command is configuration: the bus and the kind decide them.
+	// An I2C memory takes a bare address and no command byte, and waits by
+	// WriteDelayUs. Everything serial speaks the standard protocol, which
+	// SPI EEPROMs and FRAMs speak just as a NOR does, and which the
+	// internal memory interface emulates. The one exception is the read and
+	// program pair, where a wide bus part has its own command and dummy
+	// cycles: zero derives the plain bus standard, set overrides.
+	if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
 	{
-		vWrEnCmd = (Cfg.WrEnCmd.Cmd != 0) ? Cfg.WrEnCmd
-										   : NvmCmd_t{ NVM_CMD_WRENABLE, 0 };
+		vRdCmd = Cfg.RdCmd;
+		vWrCmd = Cfg.WrCmd;
+		vWrEnCmd = { 0, 0 };
+		vWrDisCmd = { 0, 0 };
+		vRdStatusCmd = { 0, 0 };
+	}
+	else
+	{
+		vRdCmd = (Cfg.RdCmd.Cmd != 0) ? Cfg.RdCmd
+									  : NvmCmd_t{ NVM_CMD_READ, 0 };
+		vWrCmd = (Cfg.WrCmd.Cmd != 0) ? Cfg.WrCmd
+									  : NvmCmd_t{ NVM_CMD_WRITE, 0 };
+		vWrEnCmd = { NVM_CMD_WRENABLE, 0 };
 		vWrDisCmd = { NVM_CMD_WRDISABLE, 0 };
 		vRdStatusCmd = { NVM_CMD_RDSR, 0 };
+	}
+
+	// The kind adds what the JEDEC standard fixed for an erase medium.
+	vWrStatusCmd = { 0, 0 };
+	vEraseCmd = { 0, 0 };
+	vMassEraseCmd = { 0, 0 };
+
+	if (vEraseSize != 0)
+	{
 		vWrStatusCmd = { NVM_CMD_WRSR, 0 };
 		vMassEraseCmd = { NVM_CMD_CHIP_ERASE, 0 };
 
@@ -284,15 +306,6 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 				vEraseCmd = { NVM_CMD_SECT_ERASE, 0 };
 				break;
 		}
-	}
-	else
-	{
-		vWrEnCmd = Cfg.WrEnCmd;
-		vWrDisCmd = { 0, 0 };
-		vEraseCmd = { 0, 0 };
-		vMassEraseCmd = { 0, 0 };
-		vRdStatusCmd = { 0, 0 };
-		vWrStatusCmd = { 0, 0 };
 	}
 	vWrProtPin = Cfg.WrProtPin;
 

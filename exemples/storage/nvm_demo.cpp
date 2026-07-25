@@ -192,8 +192,6 @@ static const NvmCfg_t s_ChipCfg = {
 	.EraseSize = 4 * 1024,
 	.PageSize = 256,
 	.AddrSize = 3,
-	.RdCmd = { FLASH_CMD_READ, 0 },
-	.WrCmd = { FLASH_CMD_WRITE, 0 },
 	.WrProtMask = 0x3C,				// BP0..BP3
 	.WrProtPin = { -1, -1, },		// no pin on this part
 };
