@@ -59,6 +59,20 @@ SOFTWARE.
 // Read the device id where the medium has the usual JEDEC command.
 #define NVM_CMD_READID		0x9FU
 
+// The serial NOR protocol the JEDEC standard fixed. An erase medium speaks
+// all of it; none of it is configuration, because none of it varies.
+#define NVM_CMD_WRENABLE	0x06U
+#define NVM_CMD_WRDISABLE	0x04U
+#define NVM_CMD_RDSR		0x05U
+#define NVM_CMD_WRSR		0x01U
+#define NVM_CMD_SECT_ERASE	0x20U		// 4K granule
+#define NVM_CMD_BLK32_ERASE	0x52U		// 32K granule
+#define NVM_CMD_BLK64_ERASE	0xD8U		// 64K granule
+#define NVM_CMD_CHIP_ERASE	0xC7U
+#define NVM_CMD_RESET_EN	0x66U
+#define NVM_CMD_RESET		0x99U
+#define NVM_CMD_EN4B		0xB7U
+
 int Nvm::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 {
 	// Straight through; a memory command is not a sensor register address.
@@ -244,12 +258,42 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	vWrProtMask = Cfg.WrProtMask;
 	vRdCmd = Cfg.RdCmd;
 	vWrCmd = Cfg.WrCmd;
-	vWrEnCmd = Cfg.WrEnCmd;
-	vWrDisCmd = Cfg.WrDisCmd;
-	vEraseCmd = Cfg.EraseCmd;
-	vMassEraseCmd = Cfg.MassEraseCmd;
-	vRdStatusCmd = Cfg.RdStatusCmd;
-	vWrStatusCmd = Cfg.WrStatusCmd;
+
+	// The kind falls out of the geometry: an erase medium speaks the
+	// standard serial NOR protocol, so those commands are derived, not
+	// configured. A direct read write medium has none of them; the one
+	// survivor is the write latch, which a SPI FRAM needs without erasing.
+	if (vEraseSize != 0)
+	{
+		vWrEnCmd = (Cfg.WrEnCmd.Cmd != 0) ? Cfg.WrEnCmd
+										   : NvmCmd_t{ NVM_CMD_WRENABLE, 0 };
+		vWrDisCmd = { NVM_CMD_WRDISABLE, 0 };
+		vRdStatusCmd = { NVM_CMD_RDSR, 0 };
+		vWrStatusCmd = { NVM_CMD_WRSR, 0 };
+		vMassEraseCmd = { NVM_CMD_CHIP_ERASE, 0 };
+
+		switch (vEraseSize)
+		{
+			case 32 * 1024:
+				vEraseCmd = { NVM_CMD_BLK32_ERASE, 0 };
+				break;
+			case 64 * 1024:
+				vEraseCmd = { NVM_CMD_BLK64_ERASE, 0 };
+				break;
+			default:
+				vEraseCmd = { NVM_CMD_SECT_ERASE, 0 };
+				break;
+		}
+	}
+	else
+	{
+		vWrEnCmd = Cfg.WrEnCmd;
+		vWrDisCmd = { 0, 0 };
+		vEraseCmd = { 0, 0 };
+		vMassEraseCmd = { 0, 0 };
+		vRdStatusCmd = { 0, 0 };
+		vWrStatusCmd = { 0, 0 };
+	}
 	vWrProtPin = Cfg.WrProtPin;
 
 	if (vDevSize == 0 || vPageSize == 0 || vAddrSize < 1 || vAddrSize > 4)
@@ -279,23 +323,53 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		IOPinClear(vWrProtPin.PortNo, vWrProtPin.PinNo);
 	}
 
-	// Probe the device id where the config asked for it.
-	if (Cfg.DevId != 0 && Cfg.DevIdSize > 0)
-	{
-		if (ReadId(Cfg.DevIdSize) != Cfg.DevId)
-		{
-			DEBUG_PRINTF("Nvm id mismatch\r\n");
-			return false;
-		}
-	}
-
-	// Chip quirks, such as a sector architecture that has to be selected.
+	// Chip quirks first, such as releasing a power down state or selecting a
+	// sector architecture, before the driver talks to the device.
 	if (Cfg.pInitCB != nullptr)
 	{
 		if (Cfg.pInitCB(this, pIntrf) == false)
 		{
 			return false;
 		}
+	}
+
+	// Reset an erase medium. The chip does not reset when the MCU does:
+	// across a soft reset or a debugger restart it can be left in power
+	// down, in a continuous read or quad mode where commands are misread,
+	// in 4 byte address mode, or mid operation. Reset is the one command
+	// honored from any of those states, so it goes before anything that
+	// assumes a sane device.
+	if (vEraseSize != 0)
+	{
+		SendCmd({ NVM_CMD_RESET_EN, 0 });
+		SendCmd({ NVM_CMD_RESET, 0 });
+	}
+
+	// Probe the device id where the config asked for it. The retries cover
+	// the device's recovery time after the reset above.
+	if (Cfg.DevId != 0 && Cfg.DevIdSize > 0)
+	{
+		int rtry = 5;
+
+		do {
+			if (ReadId(Cfg.DevIdSize) == Cfg.DevId)
+			{
+				break;
+			}
+		} while (rtry-- > 0);
+
+		if (rtry <= 0)
+		{
+			DEBUG_PRINTF("Nvm id mismatch\r\n");
+			return false;
+		}
+	}
+
+	// A part larger than 16 MBytes takes its addresses in 4 bytes; the
+	// reset above cleared the mode, so it is entered last.
+	if (vEraseSize != 0 && vAddrSize > 3)
+	{
+		SendCmd({ NVM_CMD_EN4B, 0 });
 	}
 
 	uint64_t rsize = (RegionSize != 0) ? RegionSize : (vDevSize - RegionOff);

@@ -41,14 +41,24 @@ static const NvmCfg_t s_FlashCfg = {
 	.AddrSize = 3,
 	.RdCmd = { FLASH_CMD_READ, 0 },
 	.WrCmd = { FLASH_CMD_WRITE, 0 },
-	.WrEnCmd = { FLASH_CMD_WRENABLE, 0 },
-	.WrDisCmd = { FLASH_CMD_WRDISABLE, 0 },
-	.EraseCmd = { FLASH_CMD_SECTOR_ERASE, 0 },
-	.RdStatusCmd = { FLASH_CMD_READSTATUS, 0 },
-	.WrStatusCmd = { FLASH_CMD_WRSR, 0 },
 	.WrProtMask = 0x3C,				// BP0..BP3
 	.WrProtPin = { -1, -1, },		// no pin on this part
 };
+
+A nonzero EraseSize says this is an erase medium, and everything the JEDEC
+standard fixed follows from that alone: write enable and disable, the status
+poll, block protect, the erase opcode chosen by the granule (4K, 32K or 64K),
+chip erase, the reset pair, the id read, and 4 byte address mode for a part
+larger than 16 MBytes. None of it is configuration, because none of it varies.
+At Init the driver resets the device first, because the chip does not reset
+when the MCU does and can be left in a state where every other command is
+misread; the id probe then retries to cover the recovery time, and 4 byte
+mode, which the reset cleared, is entered last.
+
+A direct read write medium, EEPROM, FRAM or RAM based, has none of that
+protocol. The one part that still varies is the write latch: a SPI FRAM
+overwrites like an EEPROM but latches writes, so WrEnCmd set on a direct
+medium enables it.
 
 -----
 Quad SPI Micron N25Q128A : the chip's quad command and dummy cycles are config,
@@ -206,7 +216,12 @@ typedef struct __Nvm_Cfg {
 	// Geometry. Set by the user, or filled by the driver from a device query
 	// (a JEDEC id, or an interface that knows its own memory).
 	uint64_t	TotalSize;		//!< Total usable size in bytes
-	uint32_t	EraseSize;		//!< Erase unit. 0 : the medium overwrites directly.
+	uint32_t	EraseSize;		//!< Erase unit. 0 : a direct read write
+								//!< medium that overwrites in place, EEPROM,
+								//!< FRAM, RAM based. This is the one property
+								//!< that decides the kind: an erase medium
+								//!< speaks the standard serial NOR protocol,
+								//!< which is driver knowledge, not config
 	uint32_t	SectorSize;		//!< Logical sector. 0 : equals EraseSize.
 	uint32_t	PageSize;		//!< Largest bytes one transfer may take
 	uint32_t	WriteGran;		//!< Minimum aligned write unit. 0 : treat as 1.
@@ -217,14 +232,14 @@ typedef struct __Nvm_Cfg {
 	// Command set. A command of 0 means the medium does not have it, which is
 	// how one driver serves a flash that needs commands and an EEPROM that
 	// needs none.
-	NvmCmd_t	RdCmd;			//!< Read. 0 : address only, no command byte
+	NvmCmd_t	RdCmd;			//!< Read. 0 : address only, no command byte.
+								//!< This is where fast and quad reads with
+								//!< their dummy cycles differ between parts
 	NvmCmd_t	WrCmd;			//!< Program. 0 : address only
-	NvmCmd_t	WrEnCmd;		//!< Write enable latch. 0 : not needed
-	NvmCmd_t	WrDisCmd;		//!< Write disable. 0 : not needed
-	NvmCmd_t	EraseCmd;		//!< Erase one unit. 0 : medium has no erase
-	NvmCmd_t	MassEraseCmd;	//!< Erase the whole device. 0 : not offered
-	NvmCmd_t	RdStatusCmd;	//!< Read status. 0 : wait by WriteDelayUs
-	NvmCmd_t	WrStatusCmd;	//!< Write status. 0 : no block protect
+	NvmCmd_t	WrEnCmd;		//!< Write enable latch. On an erase medium 0
+								//!< means the standard 0x06; on a direct
+								//!< medium nonzero says the part latches
+								//!< writes, as a SPI FRAM does
 	uint8_t		WrProtMask;		//!< Status bits that hold the block protect
 	// Write protect. A pin that is not used must say so with { -1, -1, }.
 	IOPinCfg_t	WrProtPin;		//!< Write protect pin
@@ -480,8 +495,8 @@ private:
 	NvmCmd_t	vWrDisCmd;		//!< Write disable
 	NvmCmd_t	vEraseCmd;		//!< Erase one unit
 	NvmCmd_t	vMassEraseCmd;	//!< Erase the whole device
-	NvmCmd_t	vRdStatusCmd;	//!< Read status
-	NvmCmd_t	vWrStatusCmd;	//!< Write status
+	NvmCmd_t	vRdStatusCmd;	//!< Read status, derived from the kind
+	NvmCmd_t	vWrStatusCmd;	//!< Write status, derived from the kind
 	IOPinCfg_t	vWrProtPin;		//!< Write protect pin, PortNo < 0 if unused
 };
 

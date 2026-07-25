@@ -169,6 +169,35 @@ SOFTWARE.
 static uint8_t s_Hdr[NVM_INTRF_FRAME_HDR];
 static int s_HdrLen;
 alignas(4) static uint8_t s_Data[NVM_INTRF_MAX_XFER];
+
+#if defined(NRF52_SERIES)
+// The internal flash is an erase medium, so the generic driver speaks the
+// standard serial NOR protocol at it: write enable before a program, a
+// status poll, a reset at init. The frame convention already uses the
+// standard opcodes; this emulates the little of the protocol that expects
+// an answer, so a config for internal memory truly reads like one for a
+// chip. Chip erase and 4 byte mode are accepted and ignored: addressing is
+// 4 bytes natively and a whole device erase of the running flash would be
+// wrong.
+static bool s_Wel;
+
+static void NvmProtocolByte(uint8_t Cmd)
+{
+	switch (Cmd)
+	{
+		case 0x06U:				// write enable
+			s_Wel = true;
+			break;
+
+		case 0x04U:				// write disable
+			s_Wel = false;
+			break;
+
+		default:				// reset pair, chip erase, 4 byte mode
+			break;
+	}
+}
+#endif
 static int s_DataLen;
 
 static NvmIntrfWait_t s_pWait = nullptr;
@@ -894,6 +923,15 @@ static int NvmTxSrData(DevIntrf_t *pDev, const uint8_t *pData, int Len)
 // The memory is mapped, so a read is a copy from the address in the frame.
 static int NvmRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
 {
+#if defined(NRF52_SERIES)
+	// The status poll: never busy by the time a call returns, the write
+	// enable latch as tracked.
+	if (s_HdrLen == 1 && s_Hdr[0] == 0x05U && Len > 0)
+	{
+		pBuff[0] = s_Wel ? 0x02U : 0;
+		return 1;
+	}
+#endif
 	if (s_HdrLen < NVM_INTRF_FRAME_HDR || s_Hdr[0] != NVM_INTRF_CMD_READ)
 	{
 		return 0;
@@ -912,6 +950,12 @@ static void NvmStopRx(DevIntrf_t *)
 // Everything was done in TxData, where a failure could be reported.
 static void NvmStopTx(DevIntrf_t *)
 {
+#if defined(NRF52_SERIES)
+	if (s_HdrLen == 1)
+	{
+		NvmProtocolByte(s_Hdr[0]);
+	}
+#endif
 	s_HdrLen = 0;
 	s_DataLen = 0;
 }
@@ -993,15 +1037,17 @@ void NvmIntrfCfg(NvmCfg_t &Cfg)
 	Cfg.TotalSize = (uint64_t)pagesize * (uint64_t)pagecnt;
 	Cfg.EraseSize = pagesize;
 #else
+	// RRAM overwrites in place: a direct read write medium with no erase.
+	// The logical sector is what a block consumer replaces at once.
 	Cfg.TotalSize = NVM_INTRF_TOTAL_SIZE;
-	Cfg.EraseSize = NVM_INTRF_ERASE_SIZE;
+	Cfg.EraseSize = 0;
+	Cfg.SectorSize = NVM_INTRF_ERASE_SIZE;
 #endif
 	Cfg.PageSize = NVM_INTRF_MAX_XFER;		// largest bytes per transfer
 	Cfg.WriteGran = NVM_INTRF_WRITE_GRAN;
 	Cfg.AddrSize = NVM_INTRF_ADDR_SIZE;
 	Cfg.RdCmd = { NVM_INTRF_CMD_READ, 0 };
 	Cfg.WrCmd = { NVM_INTRF_CMD_WRITE, 0 };
-	Cfg.EraseCmd = { NVM_INTRF_CMD_ERASE, 0 };
 	Cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
 }
 

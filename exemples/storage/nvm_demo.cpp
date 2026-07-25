@@ -85,7 +85,7 @@ SOFTWARE.
 #include "storage/nvm_intrf.h"
 #elif NVM_DEMO_MEDIUM == 1
 #include "coredev/spi.h"
-#include "storage/flash.h"		// for the FLASH_CMD_* opcodes
+#include "storage/flash.h"		// for the FLASH_CMD_READ/WRITE opcodes
 #elif NVM_DEMO_MEDIUM == 2
 #include "coredev/i2c.h"
 #endif
@@ -194,11 +194,6 @@ static const NvmCfg_t s_ChipCfg = {
 	.AddrSize = 3,
 	.RdCmd = { FLASH_CMD_READ, 0 },
 	.WrCmd = { FLASH_CMD_WRITE, 0 },
-	.WrEnCmd = { FLASH_CMD_WRENABLE, 0 },
-	.WrDisCmd = { FLASH_CMD_WRDISABLE, 0 },
-	.EraseCmd = { FLASH_CMD_SECTOR_ERASE, 0 },
-	.RdStatusCmd = { FLASH_CMD_READSTATUS, 0 },
-	.WrStatusCmd = { FLASH_CMD_WRSR, 0 },
 	.WrProtMask = 0x3C,				// BP0..BP3
 	.WrProtPin = { -1, -1, },		// no pin on this part
 };

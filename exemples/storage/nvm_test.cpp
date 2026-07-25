@@ -94,6 +94,7 @@ void IOPinClear(int, int) {}
 
 static uint8_t s_Nor[NOR_SIZE];
 static bool s_NorWel;
+static uint32_t s_NorRstCnt;
 static uint8_t s_NorBp;
 static int s_NorVioNoWel;
 static int s_NorVioPageCross;
@@ -172,6 +173,8 @@ static void NorStopTx(DevIntrf_t *)
 	{
 		case FLASH_CMD_WRENABLE:  s_NorWel = true;  break;
 		case FLASH_CMD_WRDISABLE: s_NorWel = false; break;
+
+		case FLASH_CMD_RESET_DEVICE: s_NorRstCnt++; break;
 
 		case FLASH_CMD_WRSR:
 			if (!s_NorWel) { s_NorVioNoWel++; break; }
@@ -379,12 +382,6 @@ static NvmCfg_t NorCfg(void)
 	cfg.DevIdSize = 3;
 	cfg.RdCmd = { FLASH_CMD_READ, 0 };
 	cfg.WrCmd = { FLASH_CMD_WRITE, 0 };
-	cfg.WrEnCmd = { FLASH_CMD_WRENABLE, 0 };
-	cfg.WrDisCmd = { FLASH_CMD_WRDISABLE, 0 };
-	cfg.EraseCmd = { FLASH_CMD_SECTOR_ERASE, 0 };
-	cfg.MassEraseCmd = { FLASH_CMD_BULK_ERASE, 0 };
-	cfg.RdStatusCmd = { FLASH_CMD_READSTATUS, 0 };
-	cfg.WrStatusCmd = { FLASH_CMD_WRSR, 0 };
 	cfg.WrProtMask = 0x3C;
 	cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
 
@@ -445,6 +442,7 @@ static void TestNorFlash(MockIntrf &Bus)
 
 	Nvm mem;
 	CHECK(mem.Init(NorCfg(), &Bus), "flash init");
+	CHECK(s_NorRstCnt == 1, "reset sent once at init, before the id probe");
 	CHECK(mem.ReadId(3) == NOR_ID, "flash id");
 	CHECK(mem.EraseSize() == NOR_SECT, "flash erase unit");
 
