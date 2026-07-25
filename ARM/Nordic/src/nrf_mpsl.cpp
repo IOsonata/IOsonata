@@ -111,7 +111,13 @@ bool MpslInit(void)
 	res = mpsl_clock_hfclk_latency_set(MPSL_CLOCK_HF_LATENCY_TYPICAL);
 //	mpsl_pan_rfu();
 #else
-	res = mpsl_init(&lfclk, PendSV_IRQn, MpslAssert);
+	// The low priority line must be a real NVIC interrupt: MPSL pends it
+	// through the NVIC, and CMSIS silently ignores that for a system
+	// exception, so with PendSV the low priority processing never ran. Every
+	// signal delivered through it starved: BLOCKED, CANCELLED and the session
+	// idle transition, which is why a timeslot session worked exactly once
+	// and every request after the first failed.
+	res = mpsl_init(&lfclk, SWI5_EGU5_IRQn, MpslAssert);
 #endif
 	DEBUG_PRINTF("mpsl_init res = %x\r\n", res);
 
@@ -138,8 +144,8 @@ bool MpslInit(void)
 	NVIC_SetPriority(RADIO_0_IRQn, MPSL_HIGH_IRQ_PRIORITY);
 	NVIC_EnableIRQ(RADIO_0_IRQn);
 #else
-	NVIC_SetPriority(PendSV_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
-	NVIC_EnableIRQ(PendSV_IRQn);
+	NVIC_SetPriority(SWI5_EGU5_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
+	NVIC_EnableIRQ(SWI5_EGU5_IRQn);
 #endif
 
 
@@ -151,10 +157,10 @@ extern "C" {
 #ifdef NRF54L_SERIES
 void SWI00_IRQHandler(void)
 #else
-void PendSV_Handler(void)
+void SWI5_EGU5_IRQHandler(void)
 #endif
 {
-	DEBUG_PRINTF("SWI00_IRQHandler\r\n");
+	DEBUG_PRINTF("mpsl_low_priority_process\r\n");
 	mpsl_low_priority_process();
 }
 

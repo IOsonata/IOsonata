@@ -45,9 +45,20 @@
 
 static bool s_PdsReady;
 
+// Set by BtSmpBondSdcInit, which the application layer calls only when the
+// device is secure. Linking this file overrides the weak RAM-only bond hooks
+// for every build, so without this arming a broadcaster or an unsecured
+// application would still mount the store, and format a blank region, the
+// first time BtSmpInit loads bonds.
+static bool s_PdsArmed;
+
 // Bring up the KV store and its implementation once. Returns 0 on success.
 static int PdsEnsureReady(void)
 {
+	if (s_PdsArmed == false)
+	{
+		return -EPERM;
+	}
 	if (s_PdsReady)
 	{
 		return 0;
@@ -126,6 +137,8 @@ void BtSmpBondErase(void)
 // Returns 0 on success, negative errno on implementation init failure.
 int BtSmpBondSdcInit(void)
 {
+	s_PdsArmed = true;
+
 	int r = PdsEnsureReady();
 	if (r != 0)
 	{

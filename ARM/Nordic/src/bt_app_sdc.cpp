@@ -75,6 +75,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
 
+
 #define BT_SDC_RX_MAX_PACKET_COUNT			2
 #define BT_SDC_TX_MAX_PACKET_COUNT			3
 
@@ -499,7 +500,10 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	res = mpsl_clock_hfclk_latency_set(MPSL_CLOCK_HF_LATENCY_TYPICAL);
 	mpsl_pan_rfu();
 #else
-	res = mpsl_init(&lfclk, PendSV_IRQn, BtStackMpslAssert);
+	// The low priority line must be a real NVIC interrupt; PendSV cannot be
+	// pended through the NVIC, so MPSL's low priority processing never ran
+	// with it. The handler lives in nrf_mpsl.cpp.
+	res = mpsl_init(&lfclk, SWI5_EGU5_IRQn, BtStackMpslAssert);
 #endif
 
 	if (res < 0)
@@ -513,8 +517,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 //	NVIC_SetPriority(RADIO_0_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
 //	NVIC_EnableIRQ(RADIO_0_IRQn);
 #else
-	NVIC_SetPriority(PendSV_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
-	NVIC_EnableIRQ(PendSV_IRQn);
+	NVIC_SetPriority(SWI5_EGU5_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
+	NVIC_EnableIRQ(SWI5_EGU5_IRQn);
 #endif
 #endif
 

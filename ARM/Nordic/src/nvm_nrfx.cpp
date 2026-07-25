@@ -69,6 +69,17 @@ SOFTWARE.
 #define NVM_INTRF_SD_RUNTIME		1
 #endif
 
+// The same reasoning holds for the link controller: the nRF54L library does
+// not define NRFXLIB_SDC either, so the timeslot path is compiled in and the
+// choice is made at run time on a weak reference to the MPSL wrapper. An
+// application with the link controller in it defines the wrapper through its
+// own chain; one without links nothing extra, the reference resolves null,
+// and the operation goes to the controller. The flash arbitration therefore
+// lives entirely here; the timeslot mechanics stay MPSL's, in bt_pds_sdc.
+#if !defined(NRFXLIB_SDC) && (defined(NRF54L_SERIES) || defined(NRF54L15_XXAA))
+#define NVM_INTRF_SLOT_RUNTIME		1
+#endif
+
 #ifdef NVM_INTRF_SOFTDEVICE
 #include "nrf_soc.h"
 #include "nrf_sdm.h"
@@ -80,7 +91,7 @@ SOFTWARE.
 #endif
 #endif
 
-#ifdef NRFXLIB_SDC
+#if defined(NRFXLIB_SDC) || defined(NVM_INTRF_SLOT_RUNTIME)
 #include "bt_pds_sdc.h"
 #endif
 
@@ -313,9 +324,26 @@ static bool SdRunning(void)
 
 #else
 
+// One library serves SoftDevice and link controller applications, so the
+// SoftDevice is not always in the flash. Its info structure magic says
+// whether it is; calling into one that is not there faults.
+static bool SdPresent(void)
+{
+#if defined(SD_MAGIC_NUMBER) && defined(MBR_SIZE)
+	return SD_MAGIC_NUMBER_GET(MBR_SIZE) == SD_MAGIC_NUMBER;
+#else
+	return true;
+#endif
+}
+
 static bool SdRunning(void)
 {
 	uint8_t en = 0;
+
+	if (SdPresent() == false)
+	{
+		return false;
+	}
 
 	if (sd_softdevice_is_enabled(&en) != NRF_SUCCESS)
 	{
@@ -458,27 +486,7 @@ static bool SdRunning(void) { return false; }
 // ---------------------------------------------------------------------------
 // Timeslot path. The controller is ours, but the radio needs its slots.
 // ---------------------------------------------------------------------------
-#ifdef NRFXLIB_SDC
-
-static bool s_SlotUp = false;
-
-static int SlotStart(void)
-{
-	if (s_SlotUp)
-	{
-		return 0;
-	}
-
-	int res = BtPdsMpslInit();
-	if (res != 0)
-	{
-		return res;
-	}
-
-	s_SlotUp = true;
-
-	return 0;
-}
+#if defined(NRFXLIB_SDC) || defined(NVM_INTRF_SLOT_RUNTIME)
 
 typedef struct {
 	uintptr_t		Addr;
@@ -531,11 +539,45 @@ static uint32_t SlotEraseStep(void *pv)
 }
 #endif
 
+#endif	// NRFXLIB_SDC || NVM_INTRF_SLOT_RUNTIME
+
+#ifdef NRFXLIB_SDC
+
+static bool s_SlotUp = false;
+
+static int SlotStart(void)
+{
+	if (s_SlotUp)
+	{
+		return 0;
+	}
+
+	int res = BtPdsMpslInit();
+	if (res != 0)
+	{
+		return res;
+	}
+
+	s_SlotUp = true;
+
+	return 0;
+}
+
 #else
 
 static int SlotStart(void) { return 0; }
 
 #endif	// NRFXLIB_SDC
+
+#ifdef NVM_INTRF_SLOT_RUNTIME
+
+// Weak references to the MPSL wrapper. A weak undefined reference extracts
+// nothing from the archive: with no link controller in the application both
+// resolve null and the operation goes straight at the controller.
+extern "C" __attribute__((weak)) int BtPdsMpslInit(void);
+extern "C" __attribute__((weak)) int BtPdsMpslRun(BtPdsMpslOp_t *pOp);
+
+#endif	// NVM_INTRF_SLOT_RUNTIME
 
 // ---------------------------------------------------------------------------
 // The one place that knows which of the three cases we are in.
@@ -549,16 +591,35 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 	}
 
 #ifdef NVM_INTRF_SOFTDEVICE
+#ifdef NVM_INTRF_SD_RUNTIME
 	if (SdRunning())
 	{
 		SdWrArg_t arg = { (uint32_t *)Addr, pSrc, WordCnt };
 
 		return SdRun(SdWriteSubmit, &arg);
 	}
-	// Present but stopped: nothing arbitrates, so drive the controller.
+	// Not running, or no SoftDevice support linked: fall through.
+#else
+	if (SdPresent())
+	{
+		if (SdRunning())
+		{
+			SdWrArg_t arg = { (uint32_t *)Addr, pSrc, WordCnt };
+
+			return SdRun(SdWriteSubmit, &arg);
+		}
+
+		// Present but stopped: neither the stack nor the radio runs, so
+		// drive the controller.
+		CtrlWriteWords(Addr, pSrc, WordCnt);
+
+		return 0;
+	}
+	// No SoftDevice in the flash: a link controller build arbitrates below.
+#endif
 #endif
 
-#ifdef NRFXLIB_SDC
+#if defined(NRFXLIB_SDC)
 	int res = SlotStart();
 	if (res != 0)
 	{
@@ -573,6 +634,28 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 	op.pCtx = &ctx;
 
 	return BtPdsMpslRun(&op);
+#elif defined(NVM_INTRF_SLOT_RUNTIME)
+	if (BtPdsMpslRun != nullptr && BtPdsMpslInit != nullptr)
+	{
+		int res = BtPdsMpslInit();
+		if (res != 0)
+		{
+			return res;
+		}
+
+		SlotWrCtx_t ctx = { Addr, pSrc, WordCnt };
+		BtPdsMpslOp_t op;
+
+		op.Step = SlotWriteStep;
+		op.StepBudgetUs = NVM_INTRF_STEP_BUDGET_US;
+		op.pCtx = &ctx;
+
+		return BtPdsMpslRun(&op);
+	}
+	// No link controller in this application: the memory is ours.
+	CtrlWriteWords(Addr, pSrc, WordCnt);
+
+	return 0;
 #else
 	CtrlWriteWords(Addr, pSrc, WordCnt);
 
@@ -580,44 +663,14 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 #endif
 }
 
-// What erase means differs with the memory, so this is the second thing the
-// MCU model decides.
-static int NvmEraseUnit(uintptr_t Addr)
-{
 #if defined(NRF52_SERIES)
-	uint32_t page = CtrlEraseSize();
+// Erase with the memory all ours: start the page erase and wait it out. The
+// wait is handed to the application, since the erase stalls instruction fetch.
+static int NvmEraseBare(uintptr_t Addr, uint32_t page)
+{
+	(void)page;
 
-	if (page == 0)
-	{
-		return -EINVAL;
-	}
-
-#ifdef NVM_INTRF_SOFTDEVICE
-	if (SdRunning())
-	{
-		uint32_t no = (uint32_t)(Addr / page);
-
-		return SdRun(SdEraseSubmit, &no);
-	}
-#endif
-
-#ifdef NRFXLIB_SDC
-	int res = SlotStart();
-	if (res != 0)
-	{
-		return res;
-	}
-
-	SlotErCtx_t ctx = { Addr, false };
-	BtPdsMpslOp_t op;
-
-	op.Step = SlotEraseStep;
-	op.StepBudgetUs = NVM_INTRF_STEP_BUDGET_US;
-	op.pCtx = &ctx;
-
-	return BtPdsMpslRun(&op);
-#else
-	if (CtrlIsErased(Addr, page))
+	if (CtrlIsErased(Addr, CtrlEraseSize()))
 	{
 		s_Stat.Skipped++;
 		return 0;
@@ -640,6 +693,55 @@ static int NvmEraseUnit(uintptr_t Addr)
 	CtrlRelease();
 
 	return 0;
+}
+#endif
+
+// What erase means differs with the memory, so this is the second thing the
+// MCU model decides.
+static int NvmEraseUnit(uintptr_t Addr)
+{
+#if defined(NRF52_SERIES)
+	uint32_t page = CtrlEraseSize();
+
+	if (page == 0)
+	{
+		return -EINVAL;
+	}
+
+#ifdef NVM_INTRF_SOFTDEVICE
+	if (SdPresent())
+	{
+		if (SdRunning())
+		{
+			uint32_t no = (uint32_t)(Addr / page);
+
+			return SdRun(SdEraseSubmit, &no);
+		}
+
+		// Present but stopped: neither the stack nor the radio runs, so
+		// erase in place.
+		return NvmEraseBare(Addr, page);
+	}
+	// No SoftDevice in the flash: a link controller build arbitrates below.
+#endif
+
+#ifdef NRFXLIB_SDC
+	int res = SlotStart();
+	if (res != 0)
+	{
+		return res;
+	}
+
+	SlotErCtx_t ctx = { Addr, false };
+	BtPdsMpslOp_t op;
+
+	op.Step = SlotEraseStep;
+	op.StepBudgetUs = NVM_INTRF_STEP_BUDGET_US;
+	op.pCtx = &ctx;
+
+	return BtPdsMpslRun(&op);
+#else
+	return NvmEraseBare(Addr, page);
 #endif
 
 #else	// nRF54L
@@ -850,6 +952,15 @@ bool NvmIntrf::Init(void)
 
 	s_HdrLen = 0;
 	s_DataLen = 0;
+
+#if defined(NRFXLIB_SDC) && defined(NVM_INTRF_SOFTDEVICE) && !defined(NVM_INTRF_SD_RUNTIME)
+	if (SdPresent())
+	{
+		// The SoftDevice arbitrates; the timeslot session is not needed and
+		// MPSL must not be brought up beside it.
+		return true;
+	}
+#endif
 
 	return SlotStart() == 0;
 }
