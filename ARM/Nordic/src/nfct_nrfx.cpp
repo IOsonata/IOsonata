@@ -360,7 +360,6 @@ bool NfctIntrfInit(NfctIntrfDev_t * const pDev, const NfctIntrfCfg_t * const pCf
 	p->PowerOff = NfctIntrfDisable;
 	p->GetHandle = NfctIntrfGetHandle;
 	p->EvtCB = nullptr;
-	p->MaxTrxLen = NFCT_INTRF_FRAME_MAX;
 	atomic_flag_clear(&p->bBusy);
 	atomic_store(&p->EnCnt, 0);
 	atomic_store(&p->bTxReady, true);

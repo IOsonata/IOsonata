@@ -380,18 +380,13 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 #endif
 
 	dev->pDmaReg->RXD.PTR = (uint32_t)pBuff;
-	if (BuffLen >= NRFX_SPI_DMA_MAXCNT)
-	{
-		dev->pDmaReg->RXD.LIST = SPIM_RXD_LIST_LIST_ArrayList << SPIM_RXD_LIST_LIST_Pos;
-		dev->pDmaReg->RXD.MAXCNT = NRFX_SPI_DMA_MAXCNT;
-	}
+	dev->pDmaReg->RXD.LIST = SPIM_RXD_LIST_LIST_ArrayList << SPIM_RXD_LIST_LIST_Pos;
 
 	while (BuffLen > 0)
 	{
-		if (BuffLen < NRFX_SPI_DMA_MAXCNT)
-		{
-			dev->pDmaReg->RXD.MAXCNT = BuffLen;
-		}
+		int l = min(BuffLen, NRFX_SPI_DMA_MAXCNT);
+
+		dev->pDmaReg->RXD.MAXCNT = l;
 		dev->pDmaReg->EVENTS_END = 0;
 		dev->pDmaReg->EVENTS_ENDRX = 0;
 		dev->pDmaReg->TASKS_START = 1;
@@ -399,8 +394,9 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		if (nRFxSPIWaitRX(dev, NRFSPI_TIMEOUT) == false)
 			break;
 
-		size_t l = dev->pDmaReg->RXD.AMOUNT;
+		l = dev->pDmaReg->RXD.AMOUNT;
 		BuffLen -= l;
+		pBuff += l;
 		cnt += l;
 	}
 #endif
@@ -523,20 +519,12 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 	}
 #endif
 	dev->pDmaReg->TXD.PTR = (uint32_t)pData;
-
-	if (DataLen >= NRFX_SPI_DMA_MAXCNT)
-	{
-		dev->pDmaReg->TXD.LIST = SPIM_TXD_LIST_LIST_ArrayList << SPIM_TXD_LIST_LIST_Pos;
-		dev->pDmaReg->TXD.MAXCNT = NRFX_SPI_DMA_MAXCNT;
-	}
+	dev->pDmaReg->TXD.LIST = SPIM_TXD_LIST_LIST_ArrayList << SPIM_TXD_LIST_LIST_Pos;
 
 	while (DataLen > 0)
 	{
-		if (DataLen < NRFX_SPI_DMA_MAXCNT)
-		{
-			dev->pDmaReg->TXD.MAXCNT = DataLen;
-		}
-
+		int l = min(DataLen, NRFX_SPI_DMA_MAXCNT);
+		dev->pDmaReg->TXD.MAXCNT = l;
 		dev->pDmaReg->EVENTS_END = 0;
 		dev->pDmaReg->EVENTS_ENDTX = 0;
 		dev->pDmaReg->TASKS_START = 1;
@@ -546,10 +534,10 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 			break;
 		}
 
-		size_t l = dev->pDmaReg->TXD.AMOUNT;
+		l = dev->pDmaReg->TXD.AMOUNT;
 		DataLen -= l;
+		pData += l;
 		cnt += l;
-
 	}
 #endif
 
@@ -963,7 +951,6 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	g_nRFxSPIDev[pCfgData->DevNo].pTxData = NULL;
 
 	pDev->DevIntrf.pDevData = (void*)&g_nRFxSPIDev[pCfgData->DevNo];
-	pDev->DevIntrf.MaxTrxLen = NRFX_SPI_DMA_MAXCNT;
 
 #if defined(NRF52840) || defined(NRF5340_XXAA_APPLICATION)
 	if (pCfgData->DevNo < NRFX_SPI_MAXDEV - 1)
