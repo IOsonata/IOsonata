@@ -29,97 +29,81 @@ jobs:
           import re
 
           root = Path('.')
-
-          def replace_once(path: Path, old: str, new: str) -> None:
-              text = path.read_text()
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{path}: expected one matching block, found {count}')
-              path.write_text(text.replace(old, new, 1))
+          workflow = root / '.github/workflows/remove-invalid-maxtrxlen.yml'
+          tokens = ('MaxTrxLen', 'GetMaxTransferLen', 'DeviceIntrfGetMaxTransferLen')
 
           header = root / 'include/device_intrf.h'
           text = header.read_text()
 
-          text, count = re.subn(
-              r'^\s*size_t MaxTrxLen;[^\n]*\n',
-              '',
-              text,
-              count=1,
-              flags=re.MULTILINE,
-          )
-          if count != 1:
-              raise SystemExit('include/device_intrf.h: MaxTrxLen member not found exactly once')
+          text, member_count = re.subn(
+              r'^\s*size_t\s+MaxTrxLen\s*;[^\n]*\n',
+              '', text, flags=re.MULTILINE)
+          text, c_getter_count = re.subn(
+              r'\nstatic inline size_t DeviceIntrfGetMaxTransferLen\([^\n]*\)\s*\{.*?\n\}\n',
+              '\n', text, flags=re.DOTALL)
+          text, cpp_getter_count = re.subn(
+              r'^\s*size_t\s+GetMaxTransferLen\([^\n]*\)[^\n]*\n',
+              '', text, flags=re.MULTILINE)
 
-          text, count = re.subn(
-              r'\nstatic inline size_t DeviceIntrfGetMaxTransferLen\(DevIntrf_t \* const pDev\) \{\n\s*return pDev->MaxTrxLen;\n\}\n',
-              '\n',
-              text,
-              count=1,
-          )
-          if count != 1:
-              raise SystemExit('include/device_intrf.h: C getter not found exactly once')
-
-          text, count = re.subn(
-              r'\n\s*size_t GetMaxTransferLen\(void\) \{ return DeviceIntrfGetMaxTransferLen\(\*this\); \}\n',
-              '\n',
-              text,
-              count=1,
-          )
-          if count != 1:
-              raise SystemExit('include/device_intrf.h: C++ getter not found exactly once')
+          if (member_count, c_getter_count, cpp_getter_count) != (1, 1, 1):
+              raise SystemExit(
+                  'unexpected DeviceIntrf API counts: '
+                  f'member={member_count}, C getter={c_getter_count}, '
+                  f'C++ getter={cpp_getter_count}')
 
           if 'size_t' not in text:
-              text, count = re.subn(r'^#include <stddef\.h>\n', '', text, count=1, flags=re.MULTILINE)
-              if count != 1:
-                  raise SystemExit('include/device_intrf.h: stddef include not found exactly once')
+              text, include_count = re.subn(
+                  r'^#include <stddef\.h>\n', '', text,
+                  count=1, flags=re.MULTILINE)
+              if include_count != 1:
+                  raise SystemExit('expected stddef include was not found')
 
           header.write_text(text)
 
-          # Remove later port initializers and documentation that depended on the invalid field.
+          # Remove every initializer, use and documentation line added around this API.
           for path in root.rglob('*'):
-              if not path.is_file() or '.git' in path.parts or path == header:
+              if not path.is_file() or '.git' in path.parts or path in (header, workflow):
                   continue
               try:
                   text = path.read_text()
               except UnicodeDecodeError:
                   continue
-              if not any(token in text for token in (
-                  'MaxTrxLen', 'GetMaxTransferLen', 'DeviceIntrfGetMaxTransferLen')):
+              if not any(token in text for token in tokens):
                   continue
               lines = text.splitlines(keepends=True)
-              lines = [line for line in lines if not any(token in line for token in (
-                  'MaxTrxLen', 'GetMaxTransferLen', 'DeviceIntrfGetMaxTransferLen'))]
-              path.write_text(''.join(lines))
+              filtered = [
+                  line for line in lines
+                  if not any(token in line for token in tokens)
+              ]
+              path.write_text(''.join(filtered))
 
           spi = root / 'ARM/Nordic/src/spi_nrfx.cpp'
+          text = spi.read_text()
 
-          rx_bad = '''\tdev->pDmaReg->RXD.PTR = (uint32_t)pBuff;
-          \tif (BuffLen >= NRFX_SPI_DMA_MAXCNT)
-          \t{
-          \t\tdev->pDmaReg->RXD.LIST = SPIM_RXD_LIST_LIST_ArrayList << SPIM_RXD_LIST_LIST_Pos;
-          \t\tdev->pDmaReg->RXD.MAXCNT = NRFX_SPI_DMA_MAXCNT;
-          \t}
+          rx_function = '''int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
+          {
+          \tnRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
+          \tint cnt = 0;
           
-          \twhile (BuffLen > 0)
+          #ifdef SPIM_PRESENT
+          \tdev->pDmaReg->TXD.PTR = 0;
+          \tdev->pDmaReg->TXD.MAXCNT = 0;
+          \tdev->pDmaReg->TXD.LIST = 0;
+          #ifdef NRF52_SERIES
+          \t// Anomaly 109
+          \tif (BuffLen < 2)
           \t{
-          \t\tif (BuffLen < NRFX_SPI_DMA_MAXCNT)
-          \t\t{
-          \t\t\tdev->pDmaReg->RXD.MAXCNT = BuffLen;
-          \t\t}
-          \t\tdev->pDmaReg->EVENTS_END = 0;
-          \t\tdev->pDmaReg->EVENTS_ENDRX = 0;
+          \t\tdev->pDmaReg->RXD.MAXCNT = 0;
+          \t\tdev->pDmaReg->RXD.PTR = 0;
+          \t\tdev->pDmaReg->RXD.LIST = 0;
+          \t\tdev->pDmaReg->EVENTS_STARTED = 0;
           \t\tdev->pDmaReg->TASKS_START = 1;
-          
-          \t\tif (nRFxSPIWaitRX(dev, NRFSPI_TIMEOUT) == false)
-          \t\t\tbreak;
-          
-          \t\tsize_t l = dev->pDmaReg->RXD.AMOUNT;
-          \t\tBuffLen -= l;
-          \t\tcnt += l;
+          \t\twhile (dev->pDmaReg->EVENTS_STARTED == 0);
+          \t\tdev->pDmaReg->EVENTS_STARTED = 0;
           \t}
-          '''
-
-          rx_good = '''\tdev->pDmaReg->RXD.PTR = (uint32_t)pBuff;
+          #endif
+          
+          \tdev->pDmaReg->RXD.PTR = (uint32_t)pBuff;
           \tdev->pDmaReg->RXD.LIST = SPIM_RXD_LIST_LIST_ArrayList << SPIM_RXD_LIST_LIST_Pos;
           
           \twhile (BuffLen > 0)
@@ -139,40 +123,35 @@ jobs:
           \t\tpBuff += l;
           \t\tcnt += l;
           \t}
-          '''
+          #endif
+          
+          \treturn cnt;
+          }'''
 
-          tx_bad = '''\tdev->pDmaReg->TXD.PTR = (uint32_t)pData;
+          tx_function = '''int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
+          {
+          \tnRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
+          \tint cnt = 0;
           
-          \tif (DataLen >= NRFX_SPI_DMA_MAXCNT)
+          #ifdef SPIM_PRESENT
+          \tdev->pDmaReg->RXD.PTR = 0;
+          \tdev->pDmaReg->RXD.MAXCNT = 0;
+          \tdev->pDmaReg->RXD.LIST = 0;
+          
+          #ifdef NRF52_SERIES
+          \t// Anomaly 109
+          \tif (DataLen < 2)
           \t{
-          \t\tdev->pDmaReg->TXD.LIST = SPIM_TXD_LIST_LIST_ArrayList << SPIM_TXD_LIST_LIST_Pos;
-          \t\tdev->pDmaReg->TXD.MAXCNT = NRFX_SPI_DMA_MAXCNT;
-          \t}
-          
-          \twhile (DataLen > 0)
-          \t{
-          \t\tif (DataLen < NRFX_SPI_DMA_MAXCNT)
-          \t\t{
-          \t\t\tdev->pDmaReg->TXD.MAXCNT = DataLen;
-          \t\t}
-          
-          \t\tdev->pDmaReg->EVENTS_END = 0;
-          \t\tdev->pDmaReg->EVENTS_ENDTX = 0;
+          \t\tdev->pDmaReg->TXD.MAXCNT = 0;
+          \t\tdev->pDmaReg->TXD.PTR = 0;
+          \t\tdev->pDmaReg->TXD.LIST = 0;
+          \t\tdev->pDmaReg->EVENTS_STARTED = 0;
           \t\tdev->pDmaReg->TASKS_START = 1;
-          
-          \t\tif (nRFxSPIWaitDMA(dev, NRFSPI_TIMEOUT) == false)
-          \t\t{
-          \t\t\tbreak;
-          \t\t}
-          
-          \t\tsize_t l = dev->pDmaReg->TXD.AMOUNT;
-          \t\tDataLen -= l;
-          \t\tcnt += l;
-          
+          \t\twhile (dev->pDmaReg->EVENTS_STARTED == 0);
+          \t\tdev->pDmaReg->EVENTS_STARTED = 0;
           \t}
-          '''
-
-          tx_good = '''\tdev->pDmaReg->TXD.PTR = (uint32_t)pData;
+          #endif
+          \tdev->pDmaReg->TXD.PTR = (uint32_t)pData;
           \tdev->pDmaReg->TXD.LIST = SPIM_TXD_LIST_LIST_ArrayList << SPIM_TXD_LIST_LIST_Pos;
           
           \twhile (DataLen > 0)
@@ -193,13 +172,24 @@ jobs:
           \t\tpData += l;
           \t\tcnt += l;
           \t}
-          '''
+          #endif
+          
+          \treturn cnt;
+          }'''
 
-          replace_once(spi, rx_bad, rx_good)
-          replace_once(spi, tx_bad, tx_good)
+          text, rx_count = re.subn(
+              r'int nRFxSPIRxDataDma\(DevIntrf_t \* const pDev, uint8_t \*pBuff, int BuffLen\)\n\{.*?\n\}\n\n// Stop receive',
+              rx_function + '\n\n// Stop receive', text, count=1, flags=re.DOTALL)
+          text, tx_count = re.subn(
+              r'int nRFxSPITxDataDma\(DevIntrf_t \* const pDev, const uint8_t \*pData, int DataLen\)\n\{.*?\n\}\n\n// Stop transmit',
+              tx_function + '\n\n// Stop transmit', text, count=1, flags=re.DOTALL)
 
-          # The temporary workflow removes itself in the same corrective commit.
-          (root / '.github/workflows/remove-invalid-maxtrxlen.yml').unlink()
+          if (rx_count, tx_count) != (1, 1):
+              raise SystemExit(
+                  f'unexpected Nordic SPI function counts: rx={rx_count}, tx={tx_count}')
+
+          spi.write_text(text)
+          workflow.unlink()
 
           remaining = []
           for path in root.rglob('*'):
@@ -209,7 +199,7 @@ jobs:
                   text = path.read_text()
               except UnicodeDecodeError:
                   continue
-              for token in ('MaxTrxLen', 'GetMaxTransferLen', 'DeviceIntrfGetMaxTransferLen'):
+              for token in tokens:
                   if token in text:
                       remaining.append(f'{path}: {token}')
           if remaining:
@@ -218,7 +208,7 @@ jobs:
 
           git diff --check
           git grep -nE 'MaxTrxLen|GetMaxTransferLen|DeviceIntrfGetMaxTransferLen' -- . ':!.git' && exit 1 || true
-          git diff --stat
+          git diff --name-only
 
       - name: Commit corrected implementation
         shell: bash
