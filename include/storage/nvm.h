@@ -3,10 +3,9 @@
 
 @brief	Serial non volatile memory driver.
 
-One driver for any addressed serial memory: NOR flash over SPI or QSPI, I2C
-EEPROM, FRAM, and anything else that answers to an address on a bus. There is
-no need to write code for each family, only to fill a config and pass it to
-Init.
+One driver for any addressed serial memory: NOR flash over SPI, I2C EEPROM,
+FRAM, and anything else that answers to an address on a bus. There is no need
+to write code for each family, only to fill a config and pass it to Init.
 
 They are the same device to this driver. Every access is an address framed on
 the wire followed by data, split at the page boundary, and a wait until the
@@ -110,8 +109,9 @@ M24C64S with a write protect pin, adds only :
 	.WrProtPin = { 0, 12, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },
 
 -----
-A chip needing special setup puts it in pInitCB, written against the generic
-interface. The S25FS has to be told to use a uniform sector architecture :
+A chip needing preparation before the generic reset or ID probe puts it in
+pInitCB, written against the generic interface. The S25FS has to be told to
+use a uniform sector architecture before the normal command sequence :
 
 	.pInitCB = s25fs_init,
 
@@ -205,9 +205,9 @@ typedef void (*NvmEvtHandler_t)(Nvm * const pDev, NVM_EVT Evt,
 /// driver to abort the wait where the medium allows it.
 typedef bool (*NvmWaitCb_t)(Nvm * const pDev);
 
-/// Custom device init callback for chip or medium specific setup such as
-/// enabling quad mode or writing configuration registers. Returns true on
-/// success. Runs at the end of Init with the transport available.
+/// Custom pre-initialization callback for device-specific preparation needed
+/// before the generic reset or device-ID probe. Returns true on success. The
+/// transport and configured device address are available when it is called.
 typedef bool (*NvmInitCb_t)(Nvm * const pDev, DeviceIntrf * const pIntrf);
 
 /// A command plus dummy cycle pair. A command of 0 means the medium does not
@@ -221,7 +221,7 @@ typedef struct __Nvm_Cmd {
 typedef struct __Nvm_Cfg {
 	// Identity and placement on the transport.
 	int			DevNo;			//!< Device index, or I2C address for EEPROM
-	uint64_t	BaseAddr;		//!< Region base, where the medium needs one
+	uint64_t	BaseAddr;		//!< Reserved for a future memory-mapped transport
 	// Geometry. Set by the user, or filled by the driver from a device query
 	// (a JEDEC id, or an interface that knows its own memory).
 	uint64_t	TotalSize;		//!< Total usable size in bytes
@@ -237,7 +237,7 @@ typedef struct __Nvm_Cfg {
 	uint8_t		AddrSize;		//!< Address bytes on the wire (1..4)
 	// Device probe.
 	uint32_t	DevId;			//!< Expected device id, 0 to skip the check
-	uint8_t		DevIdSize;		//!< Id length in bytes
+	uint8_t		DevIdSize;		//!< Id length in bytes, maximum 4
 	// The read and program pair, the one command configuration: 0 derives
 	// the plain bus standard from the interface type, set is a wide bus
 	// part's own command with its dummy cycles, which is
@@ -256,11 +256,10 @@ typedef struct __Nvm_Cfg {
 	// Timing.
 	uint32_t	WriteDelayUs;	//!< Write cycle time where there is no status
 	// Operation mode and callbacks.
-	bool			bIntEn;			//!< true : interrupt driven, completion via
-									//!< EvtHandler. false : polling, calls block.
-	NvmEvtHandler_t	EvtHandler;	//!< Completion handler, used when bIntEn
+	bool			bIntEn;			//!< Reserved; must be false in the polling driver
+	NvmEvtHandler_t	EvtHandler;	//!< Reserved for asynchronous completion
 	NvmWaitCb_t		pWaitCB;	//!< Cooperative wait, used when polling
-	NvmInitCb_t		pInitCB;	//!< Custom device init, may be NULL
+	NvmInitCb_t		pInitCB;	//!< Pre-initialization callback, may be NULL
 } NvmCfg_t;
 
 /// @brief	Non volatile memory device.
@@ -399,6 +398,10 @@ public:
 
 	/**
 	 * @brief	Read the status register, where the medium has one.
+	 *
+	 * This compatibility helper returns zero when the medium has no status
+	 * register or when the status transaction fails. Driver operations use an
+	 * internal error-returning form so a bus failure is never treated as ready.
 	 */
 	uint8_t ReadStatus(void);
 
@@ -484,6 +487,7 @@ private:
 	int Program(uint32_t Addr, const uint8_t *pData, uint32_t Len);
 	int EraseUnit(uint32_t Addr);
 	int SendCmd(const NvmCmd_t &Cmd);
+	int ReadStatus(uint8_t &Status);
 
 	uint64_t		vRegionOffset;	//!< Absolute region offset on the medium
 	uint64_t		vRegionSize;	//!< Region size in bytes
