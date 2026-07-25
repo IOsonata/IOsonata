@@ -218,8 +218,14 @@ bool Nvm::WriteEnable(uint32_t Timeout)
 		return true;
 	}
 
-	WaitReady(Timeout);
-	SendCmd({ NVM_CMD_WRENABLE, 0 });
+	if (WaitReady(Timeout) == false)
+	{
+		return false;
+	}
+	if (SendCmd({ NVM_CMD_WRENABLE, 0 }) != 0)
+	{
+		return false;
+	}
 
 	do {
 		if ((ReadStatus() & NVM_SR_WEL) != 0)
@@ -307,6 +313,16 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		DEBUG_PRINTF("Nvm geometry invalid: size=%lu page=%lu addr=%d\r\n",
 					 (unsigned long)vDevSize, (unsigned long)vPageSize,
 					 vAddrSize);
+		return false;
+	}
+
+	// Only these standard erase commands are implemented. Accepting another
+	// granule would issue a 4K command while advancing by the configured size.
+	if (vEraseSize != 0 && vEraseSize != 4 * 1024 &&
+		vEraseSize != 32 * 1024 && vEraseSize != 64 * 1024)
+	{
+		DEBUG_PRINTF("Nvm erase size unsupported: %lu\r\n",
+					 (unsigned long)vEraseSize);
 		return false;
 	}
 
@@ -597,7 +613,10 @@ int Nvm::Erase(uint64_t Off, uint32_t Len)
 
 int Nvm::MassErase(void)
 {
-	if (vEraseSize == 0)
+	// The internal memory adapter reports UNKNOWN because it emulates the
+	// serial command frame. It supports unit erase, but never chip erase of the
+	// device executing this code.
+	if (vEraseSize == 0 || Interface()->Type() == DEVINTRF_TYPE_UNKOWN)
 	{
 		return -ENOTSUP;
 	}
