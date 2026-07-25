@@ -1,31 +1,39 @@
 /**-------------------------------------------------------------------------
-@example	nvm_nrfx_demo.cpp
+@example	nvm_demo.cpp
 
-@brief	Nvm demo on the nRF internal memory.
+@brief	Nvm demo, the medium chosen by a define.
 
 		Runs the checks that only real memory can answer: a page erases to all
 		ones, a write crossing a page boundary lands correctly, programming
 		clears bits and never sets them back, and a stamp survives a power
 		cycle.
 
-		The part follows from the MCU model the build defines, the same as the
-		driver underneath, so this runs on an nRF52 or an nRF54L unchanged.
+		One driver serves every byte addressed memory, so one demo does too.
+		NVM_DEMO_MEDIUM picks what is underneath: 0 the MCU internal memory
+		through NvmIntrf, 1 a SPI NOR flash, 2 an I2C EEPROM. Only the
+		construction block below differs; every check is shared, and the
+		checks that need an erase condition themselves on the config, not on
+		the medium, because that is the driver model: a command value of 0
+		means the medium does not have it.
 
-		The memory is reached through NvmIntrf, which works out for itself
-		whether the access goes to a SoftDevice, into a timeslot, or straight
-		at the controller, so there is nothing here to select. Above it sits
-		the ordinary Nvm driver, the same one a SPI flash or an I2C EEPROM
-		uses. Build with NVM_MCU_DEMO_BLE set to 1 to run the
-		same checks with a stack up and advertising, which is what puts the
-		radio in contention for the memory. Everything above the main function
-		is shared between the two.
+		For the internal memory the interface works out for itself whether
+		the access goes to a stack, into a timeslot, or straight at the
+		controller, so there is nothing here to select. Above it sits the ordinary Nvm driver, the same one a SPI
+		flash or an I2C EEPROM uses. Build with NVM_DEMO_BLE set to 1 to
+		run the same checks with a BLE stack up and advertising, which is what
+		puts the radio in contention for the memory. Everything above the main
+		function is shared between the two.
 
-		The region is three pages worked out from the device at run time and
-		placed below the pages a bond store would take. The first two are the
-		scratch the checks use, so a write can cross a boundary; the third
-		holds the stamp and is never erased by the checks. It must still hold
-		nothing else: check it against the application image end in the map
-		file. The demo prints the region before it erases anything.
+		The region is three pages placed at the top of the memory the
+		application owns, below a few reserved pages. The ceiling comes from
+		NvmIntrfCeiling(), because the application area does not always run to
+		the end of the device: a stack image or a reserved partition can sit
+		at the top, and the target implementation knows where. The first two
+		pages are the scratch the checks use, so a write can cross a
+		boundary; the third holds the stamp and is never erased by the
+		checks. The region must hold nothing else: check it against the
+		application image end in the map file. The demo prints the region
+		before it erases anything.
 
 @author	Hoang Nguyen Hoan
 @date	July 23, 2026
@@ -65,18 +73,32 @@ SOFTWARE.
 #include "board.h"
 
 #include "storage/nvm.h"
-#include "nvm_nrfx.h"
 
-// 1 : bring up a BLE stack and repeat the exercise while advertising.
-#ifndef NVM_MCU_DEMO_BLE
-#define NVM_MCU_DEMO_BLE			1
+// What is underneath: 0 the MCU internal memory, 1 a SPI NOR flash
+// (MX25R3235F), 2 an I2C EEPROM (CAT24C32). Everything below the
+// construction blocks is shared.
+#ifndef NVM_DEMO_MEDIUM
+#define NVM_DEMO_MEDIUM			0
 #endif
 
-#if NVM_MCU_DEMO_BLE
+#if NVM_DEMO_MEDIUM == 0
+#include "storage/nvm_intrf.h"
+#elif NVM_DEMO_MEDIUM == 1
+#include "coredev/spi.h"
+#include "storage/flash.h"		// for the FLASH_CMD_* opcodes
+#elif NVM_DEMO_MEDIUM == 2
+#include "coredev/i2c.h"
+#endif
+
+// 1 : bring up a BLE stack and repeat the exercise while advertising.
+#ifndef NVM_DEMO_BLE
+#define NVM_DEMO_BLE			1
+#endif
+
+#if NVM_DEMO_BLE
 #include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_appearance.h"
-#include "nrf_sdh_soc.h"
 #else
 #endif
 
@@ -87,20 +109,26 @@ McuOsc_t g_McuOsc = MCU_OSC;
 #endif
 
 // Two scratch pages the checks use, plus one for the stamp.
-#ifndef NVM_MCU_DEMO_SCRATCH_PAGES
-#define NVM_MCU_DEMO_SCRATCH_PAGES	2
+#ifndef NVM_DEMO_SCRATCH_PAGES
+#define NVM_DEMO_SCRATCH_PAGES	2
 #endif
 
-#define NVM_MCU_DEMO_REGION_PAGES	(NVM_MCU_DEMO_SCRATCH_PAGES + 1)
+#define NVM_DEMO_REGION_PAGES	(NVM_DEMO_SCRATCH_PAGES + 1)
 
 // Pages at the top of the memory the demo stays away from.
-#ifndef NVM_MCU_DEMO_TOP_RESERVE_PAGES
-#define NVM_MCU_DEMO_TOP_RESERVE_PAGES	3
+#ifndef NVM_DEMO_TOP_RESERVE_PAGES
+#define NVM_DEMO_TOP_RESERVE_PAGES	3
 #endif
 
-#define NVM_MCU_DEMO_MAGIC			0x4E564D31UL	// "NVM1"
+#define NVM_DEMO_MAGIC			0x4E564D31UL	// "NVM1"
 
 static const IOPinCfg_t s_UartPins[] = UART_PINS;
+
+// TX FIFO large enough for the burst of check results printed back to back;
+// the driver's built in fallback is only 32 bytes.
+#define UART_TXFIFO_MEMSIZE			CFIFO_MEMSIZE(256)
+
+alignas(4) static uint8_t s_UartTxFifoMem[UART_TXFIFO_MEMSIZE];
 
 static const UARTCfg_t s_UartCfg = {
 	.DevNo = 0,
@@ -116,23 +144,125 @@ static const UARTCfg_t s_UartCfg = {
 	.bFifoBlocking = true,
 	.RxMemSize = 0,
 	.pRxMem = NULL,
-	.TxMemSize = 0,
-	.pTxMem = NULL,
+	.TxMemSize = UART_TXFIFO_MEMSIZE,
+	.pTxMem = s_UartTxFifoMem,
 	.bDMAMode = true,
 };
 
 UART g_Uart;
 
-static NvmIntrf s_NvmIntrf;
+#if NVM_DEMO_MEDIUM == 0
+
+static const char s_MediumName[] = "internal memory";
+
+static NvmIntrf s_MemIntrf;
+
+#elif NVM_DEMO_MEDIUM == 1
+
+static const char s_MediumName[] = "SPI NOR flash";
+
+static const IOPinCfg_t s_SpiPins[] = SPI_PINS_CFG;
+
+static const SPICfg_t s_SpiCfg = {
+	.DevNo = SPI_DEVNO,
+	.Phy = SPI_PHY,
+	.Mode = SPIMODE_MASTER,
+	.pIOPinMap = s_SpiPins,
+	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
+	.Rate = 8000000,
+	.DataSize = 8,
+	.MaxRetry = 5,
+	.BitOrder = SPIDATABIT_MSB,
+	.DataPhase = SPIDATAPHASE_FIRST_CLK,
+	.ClkPol = SPICLKPOL_HIGH,
+	.ChipSel = SPICSEL_AUTO,
+	.bDmaEn = false,
+	.bIntEn = true,
+	.IntPrio = 6,
+	.EvtCB = NULL
+};
+
+static SPI s_MemIntrf;
+
+// MX25R3235F : 32 Mbits NOR flash, 4K sector, 256 byte page. From the
+// device database in nvm.h; another part is another entry here.
+static const NvmCfg_t s_ChipCfg = {
+	.DevNo = 0,
+	.TotalSize = 32 * 1024 * 1024 / 8,
+	.EraseSize = 4 * 1024,
+	.PageSize = 256,
+	.AddrSize = 3,
+	.RdCmd = { FLASH_CMD_READ, 0 },
+	.WrCmd = { FLASH_CMD_WRITE, 0 },
+	.WrEnCmd = { FLASH_CMD_WRENABLE, 0 },
+	.WrDisCmd = { FLASH_CMD_WRDISABLE, 0 },
+	.EraseCmd = { FLASH_CMD_SECTOR_ERASE, 0 },
+	.RdStatusCmd = { FLASH_CMD_READSTATUS, 0 },
+	.WrStatusCmd = { FLASH_CMD_WRSR, 0 },
+	.WrProtMask = 0x3C,				// BP0..BP3
+	.WrProtPin = { -1, -1, },		// no pin on this part
+};
+
+#elif NVM_DEMO_MEDIUM == 2
+
+static const char s_MediumName[] = "I2C EEPROM";
+
+static const IOPinCfg_t s_I2cPins[] = I2C_PINS_CFG;
+
+static const I2CCfg_t s_I2cCfg = {
+	.DevNo = I2C_DEVNO,
+	.Type = I2CTYPE_STANDARD,
+	.Mode = I2CMODE_MASTER,
+	.pIOPinMap = s_I2cPins,
+	.NbIOPins = sizeof(s_I2cPins) / sizeof(IOPinCfg_t),
+	.Rate = 100000,
+	.MaxRetry = 5,
+	.AddrType = I2CADDR_TYPE_NORMAL,
+	.NbSlaveAddr = 0,
+	.SlaveAddr = {0,},
+	.bDmaEn = false,
+	.bIntEn = false,
+	.IntPrio = 6,
+	.EvtCB = NULL
+};
+
+static I2C s_MemIntrf;
+
+// CAT24C32 : 32 Kbits I2C EEPROM, 2 byte address, 32 byte page, 5 ms write.
+// No erase: a command value of 0 means the medium does not have it.
+static const NvmCfg_t s_ChipCfg = {
+	.DevNo = 0x50,					// I2C device address
+	.TotalSize = 32 * 1024 / 8,
+	.EraseSize = 0,					// overwrites directly
+	.PageSize = 32,
+	.AddrSize = 2,
+	.WrProtPin = { -1, -1, },		// no pin on this part
+	.WriteDelayUs = 5000,			// Twr
+};
+
+#endif
+
 static Nvm s_Nvm;
 static uintptr_t s_RegionAddr = 0;
 static int s_Fail = 0;
 
+#if NVM_DEMO_MEDIUM == 0
 // Read the memory directly, bypassing the driver. If this disagrees with what
 // the driver returns, the driver is not working on the memory it claims to.
+// Only the internal memory is mapped; a chip on a bus has no address to read.
 static uint32_t RawWord(uintptr_t Addr)
 {
 	return *(volatile uint32_t *)Addr;
+}
+#endif
+
+// The erase unit is the natural granule for the region. A medium with no
+// erase has none, so a fixed granule stands in for it.
+static uint32_t UnitSize(Nvm &Mem)
+{
+	uint32_t u = Mem.EraseSize();
+
+	return u != 0 ? u : 256;
 }
 
 static void Check(bool Cond, const char *pMsg)
@@ -152,7 +282,7 @@ static void Check(bool Cond, const char *pMsg)
 static bool ScratchIsErased(Nvm &Mem)
 {
 	uint32_t buf[64];
-	uint64_t end = (uint64_t)Mem.EraseSize() * NVM_MCU_DEMO_SCRATCH_PAGES;
+	uint64_t end = (uint64_t)UnitSize(Mem) * NVM_DEMO_SCRATCH_PAGES;
 	uint64_t off = 0;
 
 	while (off < end)
@@ -182,22 +312,26 @@ static bool ScratchIsErased(Nvm &Mem)
 // The stamp lives on the page after the scratch, so the checks never erase it.
 static void StampCheck(Nvm &Mem, uintptr_t RegionAddr)
 {
-	uint32_t page = Mem.EraseSize();
-	uint64_t off = (uint64_t)page * NVM_MCU_DEMO_SCRATCH_PAGES;
+	uint32_t page = UnitSize(Mem);
+	uint64_t off = (uint64_t)page * NVM_DEMO_SCRATCH_PAGES;
 	uintptr_t raw = RegionAddr + (uintptr_t)off;
 	uint32_t stamp[2] = { 0, 0 };
 
 	Mem.Read(off, stamp, sizeof(stamp));
 
+#if NVM_DEMO_MEDIUM == 0
 	g_Uart.printf("raw     : [0x%08lX] = 0x%08lX 0x%08lX before anything is touched\r\n",
 				  (unsigned long)raw, (unsigned long)RawWord(raw),
 				  (unsigned long)RawWord(raw + 4));
 
 	Check(stamp[0] == RawWord(raw), "driver reads the same memory as a direct read");
+#else
+	(void)raw;
+#endif
 
 	uint32_t boots = 1;
 
-	if (stamp[0] == NVM_MCU_DEMO_MAGIC)
+	if (stamp[0] == NVM_DEMO_MAGIC)
 	{
 		boots = stamp[1] + 1;
 		g_Uart.printf("persist : stamp found, previous boot %lu, data survived\r\n",
@@ -208,16 +342,22 @@ static void StampCheck(Nvm &Mem, uintptr_t RegionAddr)
 		g_Uart.printf("persist : no stamp yet, first run on this region\r\n");
 	}
 
-	uint32_t ns[2] = { NVM_MCU_DEMO_MAGIC, boots };
+	uint32_t ns[2] = { NVM_DEMO_MAGIC, boots };
 	uint32_t rb[2] = { 0, 0 };
 
-	Check(Mem.Erase(off, page) == 0, "erase the stamp page");
+	if (Mem.EraseSize() != 0)
+	{
+		// A clears-bits medium needs the erase before the rewrite.
+		Check(Mem.Erase(off, page) == 0, "erase the stamp page");
+	}
 	Check(Mem.Write(off, ns, sizeof(ns)) == (int)sizeof(ns), "write the stamp");
 	Mem.Read(off, rb, sizeof(rb));
-	Check(rb[0] == NVM_MCU_DEMO_MAGIC && rb[1] == boots,
+	Check(rb[0] == NVM_DEMO_MAGIC && rb[1] == boots,
 		  "stamp reads back through the driver");
-	Check(RawWord(raw) == NVM_MCU_DEMO_MAGIC,
+#if NVM_DEMO_MEDIUM == 0
+	Check(RawWord(raw) == NVM_DEMO_MAGIC,
 		  "the stamp is in the memory, not only in the driver view");
+#endif
 
 	g_Uart.printf("persist : boot %lu stamped, power cycle and it must rise\r\n",
 				  (unsigned long)boots);
@@ -226,18 +366,40 @@ static void StampCheck(Nvm &Mem, uintptr_t RegionAddr)
 // The checks that need real memory. Uses the scratch pages only.
 static void NvmDemoVerify(Nvm &Mem, uintptr_t RegionAddr)
 {
-	uint32_t page = Mem.EraseSize();
-	uint32_t scratch = page * NVM_MCU_DEMO_SCRATCH_PAGES;
+	uint32_t page = UnitSize(Mem);
+	uint32_t scratch = page * NVM_DEMO_SCRATCH_PAGES;
 
-	g_Uart.printf("region  : 0x%08lX size %lu, page %lu, write unit %lu\r\n",
+	g_Uart.printf("region  : 0x%08lX size %lu, unit %lu, write unit %lu\r\n",
 				  (unsigned long)RegionAddr, (unsigned long)Mem.Size(),
 				  (unsigned long)page, (unsigned long)Mem.WriteGran());
 
 	StampCheck(Mem, RegionAddr);
 
-	// Erase, then the scratch must read all ones.
-	Check(Mem.Erase(0, scratch) == 0, "erase the scratch pages");
-	Check(ScratchIsErased(Mem), "scratch reads all ones after erase");
+	if (Mem.EraseSize() != 0)
+	{
+		// Erase, then the scratch must read all ones.
+		Check(Mem.Erase(0, scratch) == 0, "erase the scratch pages");
+		Check(ScratchIsErased(Mem), "scratch reads all ones after erase");
+	}
+	else
+	{
+		// No erase on this medium: writing all ones puts the scratch in the
+		// same known state an erase would.
+		alignas(4) uint8_t ff[64];
+		bool ok = true;
+
+		memset(ff, 0xFF, sizeof(ff));
+		for (uint32_t o = 0; o < scratch; o += sizeof(ff))
+		{
+			if (Mem.Write(o, ff, sizeof(ff)) != (int)sizeof(ff))
+			{
+				ok = false;
+				break;
+			}
+		}
+		Check(ok, "write ones over the scratch");
+		Check(ScratchIsErased(Mem), "scratch reads all ones after writing ones");
+	}
 
 	// A write that crosses a page boundary.
 	uint32_t pattern[32], readback[32];
@@ -278,12 +440,21 @@ static void NvmDemoVerify(Nvm &Mem, uintptr_t RegionAddr)
 		Check(false, "programming left the word in neither state");
 	}
 
-	// The driver rejects what the memory cannot do.
-	Check(Mem.Write(1, &ones, 4) == -EINVAL, "unaligned write rejected");
-	Check(Mem.Write(0, &ones, 3) == -EINVAL, "partial word write rejected");
-	Check(Mem.Erase(1, page) == -EINVAL, "unaligned erase rejected");
+	// The driver rejects what the memory cannot do. What that is comes from
+	// the config: a byte granular medium takes an unaligned write, one with
+	// no erase has no erase to misalign.
+	if (Mem.WriteGran() > 1)
+	{
+		Check(Mem.Write(1, &ones, 4) == -EINVAL, "unaligned write rejected");
+		Check(Mem.Write(0, &ones, 3) == -EINVAL, "partial word write rejected");
+	}
+	if (Mem.EraseSize() != 0)
+	{
+		Check(Mem.Erase(1, page) == -EINVAL, "unaligned erase rejected");
+	}
 	Check(Mem.Read(Mem.Size(), &rd, 4) == -EINVAL, "read past the end rejected");
 
+#if NVM_DEMO_MEDIUM == 0
 	NvmIntrfStat_t st;
 	NvmIntrfGetStat(&st);
 
@@ -291,6 +462,9 @@ static void NvmDemoVerify(Nvm &Mem, uintptr_t RegionAddr)
 				  s_Fail == 0 ? "ALL PASS" : "FAILURES",
 				  (unsigned long)st.Ops, (unsigned long)st.Busy,
 				  (unsigned long)st.Evt, (unsigned long)st.Skipped);
+#else
+	g_Uart.printf("\r\n%s\r\n", s_Fail == 0 ? "ALL PASS" : "FAILURES");
+#endif
 }
 
 // Work out the region and mount it. Shared by both builds.
@@ -299,24 +473,44 @@ static bool NvmDemoSetup(void)
 	NvmCfg_t cfg;
 
 	memset(&cfg, 0, sizeof(cfg));
+
+#if NVM_DEMO_MEDIUM == 0
 	NvmIntrfCfg(cfg);
 
-	g_Uart.printf("device  : %lu bytes, page %lu\r\n",
-				  (unsigned long)cfg.TotalSize, (unsigned long)cfg.EraseSize);
+	// The application area does not always run to the end of the device; the
+	// target implementation knows where it ends.
+	uint64_t ceiling = NvmIntrfCeiling();
+#else
+	cfg = s_ChipCfg;
 
-	s_RegionAddr = (uintptr_t)(cfg.TotalSize
-			- (uint64_t)cfg.EraseSize * (NVM_MCU_DEMO_TOP_RESERVE_PAGES
-										 + NVM_MCU_DEMO_REGION_PAGES));
+	// A chip is all ours; the region rides at its top.
+	uint64_t ceiling = cfg.TotalSize;
+#endif
 
-	uint64_t regionsize = (uint64_t)cfg.EraseSize * NVM_MCU_DEMO_REGION_PAGES;
+	uint32_t unit = cfg.EraseSize != 0 ? cfg.EraseSize : 256;
 
-	if (s_NvmIntrf.Init() == false)
+	g_Uart.printf("device  : %lu bytes, unit %lu\r\n",
+				  (unsigned long)cfg.TotalSize, (unsigned long)unit);
+
+	s_RegionAddr = (uintptr_t)(ceiling
+			- (uint64_t)unit * (NVM_DEMO_TOP_RESERVE_PAGES
+								 + NVM_DEMO_REGION_PAGES));
+
+	uint64_t regionsize = (uint64_t)unit * NVM_DEMO_REGION_PAGES;
+
+#if NVM_DEMO_MEDIUM == 0
+	if (s_MemIntrf.Init() == false)
+#elif NVM_DEMO_MEDIUM == 1
+	if (s_MemIntrf.Init(s_SpiCfg) == false)
+#else
+	if (s_MemIntrf.Init(s_I2cCfg) == false)
+#endif
 	{
 		g_Uart.printf("memory interface init failed\r\n");
 		return false;
 	}
 
-	if (s_Nvm.Init(cfg, &s_NvmIntrf, s_RegionAddr, regionsize) == false)
+	if (s_Nvm.Init(cfg, &s_MemIntrf, s_RegionAddr, regionsize) == false)
 	{
 		g_Uart.printf("Nvm init failed\r\n");
 		return false;
@@ -325,7 +519,7 @@ static bool NvmDemoSetup(void)
 	return true;
 }
 
-#if NVM_MCU_DEMO_BLE
+#if NVM_DEMO_BLE
 
 // ---------------------------------------------------------------------------
 // With a stack up: the same checks once, then a cycle per advertising timeout
@@ -336,12 +530,12 @@ static bool NvmDemoSetup(void)
 #define APP_ADV_INTERVAL_MSEC		50
 #define APP_ADV_TIMEOUT_MSEC		1000
 
-#ifndef NVM_MCU_DEMO_WRITES_PER_CYCLE
-#define NVM_MCU_DEMO_WRITES_PER_CYCLE	16
+#ifndef NVM_DEMO_WRITES_PER_CYCLE
+#define NVM_DEMO_WRITES_PER_CYCLE	16
 #endif
 
-#ifndef NVM_MCU_DEMO_SLOTS
-#define NVM_MCU_DEMO_SLOTS			64
+#ifndef NVM_DEMO_SLOTS
+#define NVM_DEMO_SLOTS			64
 #endif
 
 static uint32_t g_AdvCnt = 0;
@@ -366,23 +560,6 @@ const BtAppCfg_t s_BtAppCfg = {
 	.TxPower = 0,
 };
 
-// SoC events arrive through the SoftDevice handler; hand every one over.
-static void NvmDemoSocObserver(uint32_t SysEvt, void *pCtx)
-{
-	(void)pCtx;
-
-	NvmIntrfSocEvt(SysEvt);
-}
-
-#if defined(NRF52_SERIES)
-NRF_SDH_SOC_OBSERVER(s_NvmDemoSocObs, 0, NvmDemoSocObserver, NULL);
-#else
-// The bare metal SDK orders the arguments differently and takes a symbolic
-// priority level rather than a number; the macro rejects anything else. HIGH
-// is what the bond store observer uses.
-NRF_SDH_SOC_OBSERVER(s_NvmDemoSocObs, NvmDemoSocObserver, NULL, HIGH);
-#endif
-
 // Runs from the BtAppRun loop, so blocking here is safe while advertising
 // continues.
 static void NvmCycleHandler(uint32_t Evt, void *pCtx)
@@ -395,13 +572,14 @@ static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 		return;
 	}
 
-	uint32_t page = s_Nvm.EraseSize();
+	uint32_t page = UnitSize(s_Nvm);
 
-	for (int i = 0; i < NVM_MCU_DEMO_WRITES_PER_CYCLE; i++)
+	for (int i = 0; i < NVM_DEMO_WRITES_PER_CYCLE; i++)
 	{
-		if (s_Slot >= NVM_MCU_DEMO_SLOTS)
+		if (s_Slot >= NVM_DEMO_SLOTS)
 		{
-			if (s_Nvm.Erase(0, page) != 0)
+			// A rewrite in place medium wraps by overwriting.
+			if (s_Nvm.EraseSize() != 0 && s_Nvm.Erase(0, page) != 0)
 			{
 				s_Fail++;
 			}
@@ -409,7 +587,7 @@ static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 		}
 
 		uint32_t off = s_Slot * 4;
-		uint32_t val = NVM_MCU_DEMO_MAGIC ^ s_Writes;
+		uint32_t val = NVM_DEMO_MAGIC ^ s_Writes;
 		uint32_t rd = 0;
 
 		if (s_Nvm.Write(off, &val, 4) != 4 ||
@@ -426,23 +604,31 @@ static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 
 	if ((s_Cycles % 5) == 0)
 	{
+#if NVM_DEMO_MEDIUM == 0
 		NvmIntrfStat_t st;
 		NvmIntrfGetStat(&st);
 
-		// evt is the one that matters: a result only arrives as an event while
-		// the SoftDevice is running.
+		// evt is the one that matters: a result only arrives as an event
+		// while an arbitrating stack is running.
 		g_Uart.printf("cycles %lu writes %lu fails %lu | ops %lu busy %lu evt %lu\r\n",
 					  (unsigned long)s_Cycles, (unsigned long)s_Writes,
 					  (unsigned long)s_Fail, (unsigned long)st.Ops,
 					  (unsigned long)st.Busy, (unsigned long)st.Evt);
+#else
+		g_Uart.printf("cycles %lu writes %lu fails %lu\r\n",
+					  (unsigned long)s_Cycles, (unsigned long)s_Writes,
+					  (unsigned long)s_Fail);
+#endif
 	}
 }
 
 void BtAppInitUserData()
 {
-	// The SoftDevice handler delivers the completion from an interrupt, so the
-	// wait needs no help.
+#if NVM_DEMO_MEDIUM == 0
+	// The target implementation delivers completions on its own, so the wait
+	// needs no help; NULL spends it in a short delay.
 	NvmIntrfSetWait(NULL, 5000);
+#endif
 
 	if (NvmDemoSetup() == false)
 	{
@@ -457,10 +643,10 @@ void BtAppInitUserData()
 	s_Ready = true;
 
 	g_Uart.printf("advertising now, %d writes per cycle\r\n",
-				  NVM_MCU_DEMO_WRITES_PER_CYCLE);
+				  NVM_DEMO_WRITES_PER_CYCLE);
 }
 
-// Runs inside the SoftDevice event dispatch, so it only queues the work.
+// Runs inside the stack event dispatch, so it only queues the work.
 void BtAppAdvTimeoutHandler()
 {
 	g_AdvCnt++;
@@ -474,7 +660,7 @@ int main()
 {
 	g_Uart.Init(s_UartCfg);
 
-	g_Uart.printf("\r\nNvm demo on the internal memory, with a stack up\r\n");
+	g_Uart.printf("\r\nNvm demo on the %s, with a stack up\r\n", s_MediumName);
 
 	SysLogGetInstance()->Init(g_Uart);
 
@@ -495,7 +681,7 @@ int main()
 {
 	g_Uart.Init(s_UartCfg);
 
-	g_Uart.printf("\r\nNvm demo on the internal memory\r\n");
+	g_Uart.printf("\r\nNvm demo on the %s\r\n", s_MediumName);
 
 	if (NvmDemoSetup())
 	{
@@ -508,4 +694,4 @@ int main()
 	}
 }
 
-#endif	// NVM_MCU_DEMO_BLE
+#endif	// NVM_DEMO_BLE

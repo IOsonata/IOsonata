@@ -1396,9 +1396,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm.h</locationURI>
 		</link>
 		<link>
-			<name>include/storage/nvm_nrfx.h</name>
+			<name>include/storage/nvm_intrf.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/nvm_nrfx.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm_intrf.h</locationURI>
 		</link>
 		<link>
 			<name>include/storage/sdcard.h</name>

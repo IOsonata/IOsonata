@@ -73,13 +73,30 @@ SOFTWARE.
 #include "nrf_soc.h"
 #include "nrf_sdm.h"
 #include "nrf_error.h"
+#if defined(NRF52_SERIES)
+#include "nrf_sdh_soc.h"
+#else
+#include "bm/softdevice_handler/nrf_sdh_soc.h"
+#endif
 #endif
 
 #ifdef NRFXLIB_SDC
 #include "bt_pds_sdc.h"
 #endif
 
-#include "nvm_nrfx.h"
+#include "storage/nvm_intrf.h"
+
+// The command set, using the opcodes a serial flash uses so a config for
+// internal memory reads like one for a flash chip.
+#define NVM_INTRF_CMD_READ		0x03		//!< Read
+#define NVM_INTRF_CMD_WRITE		0x02		//!< Program words
+#define NVM_INTRF_CMD_ERASE		0x20		//!< Erase or clear one unit
+
+// Address bytes on the frame. Internal memory is 32 bit addressed.
+#define NVM_INTRF_ADDR_SIZE		4
+
+// The controller writes 32 bit words.
+#define NVM_INTRF_WRITE_GRAN	4
 
 // ---------------------------------------------------------------------------
 // What follows from the MCU model
@@ -310,7 +327,7 @@ static bool SdRunning(void)
 
 #endif	// NVM_INTRF_SD_RUNTIME
 
-void NvmIntrfSocEvt(uint32_t SysEvt)
+static void NvmIntrfSocEvt(uint32_t SysEvt)
 {
 	if (s_OpPending == false)
 	{
@@ -338,6 +355,24 @@ void NvmIntrfSocEvt(uint32_t SysEvt)
 			break;
 	}
 }
+
+// The SoC flash events are broadcast to every observer, so the interface
+// registers its own and the application has nothing to do. NvmIntrfSocEvt
+// stays public for an application with its own event dispatch.
+static void NvmIntrfSocObserver(uint32_t SysEvt, void *pCtx)
+{
+	(void)pCtx;
+
+	NvmIntrfSocEvt(SysEvt);
+}
+
+#if defined(NRF52_SERIES)
+NRF_SDH_SOC_OBSERVER(s_NvmIntrfSocObs, 0, NvmIntrfSocObserver, NULL);
+#else
+// The bare metal SDK orders the arguments differently and takes a symbolic
+// priority level rather than a number.
+NRF_SDH_SOC_OBSERVER(s_NvmIntrfSocObs, NvmIntrfSocObserver, NULL, HIGH);
+#endif
 
 typedef uint32_t (*SdSubmit_t)(void *pArg);
 
@@ -415,11 +450,6 @@ static uint32_t SdEraseSubmit(void *pArg)
 #endif
 
 #else
-
-void NvmIntrfSocEvt(uint32_t SysEvt)
-{
-	(void)SysEvt;
-}
 
 static bool SdRunning(void) { return false; }
 
@@ -863,4 +893,17 @@ void NvmIntrfCfg(NvmCfg_t &Cfg)
 	Cfg.WrCmd = { NVM_INTRF_CMD_WRITE, 0 };
 	Cfg.EraseCmd = { NVM_INTRF_CMD_ERASE, 0 };
 	Cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+}
+
+// Where the memory the application owns ends. The default is the whole
+// device. Weak: an S145 application overrides it from nrf_sdh.c, because the
+// SoftDevice image sits at the top of the RRAM there and the application
+// slot ends at the storage partition.
+extern "C" __attribute__((weak)) uint64_t NvmIntrfCeiling(void)
+{
+#if defined(NRF52_SERIES)
+	return (uint64_t)NRF_FICR->CODEPAGESIZE * (uint64_t)NRF_FICR->CODESIZE;
+#else
+	return NVM_INTRF_TOTAL_SIZE;
+#endif
 }

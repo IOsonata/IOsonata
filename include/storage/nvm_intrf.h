@@ -1,50 +1,36 @@
 /**-------------------------------------------------------------------------
-@file	nvm_nrfx.h
+@file	nvm_intrf.h
 
-@brief	The nRF on die memory controller as a DeviceIntrf.
+@brief	The MCU internal memory as a DeviceIntrf.
 
 Internal memory is a device like any other: it takes a command, an address and
-data. It simply has no wire, so this is the adapter between that and the
-controller registers. With it the ordinary Nvm driver serves internal memory
-with no code of its own, the same way it serves a NOR flash on SPI or an EEPROM
-on I2C.
+data. It simply has no wire, so this interface stands in the position a SPI or
+an I2C occupies for a flash or an EEPROM chip, and the same Nvm driver serves
+it with no code of its own.
 
-One file covers every part. Which controller is behind it, and what erase means
-on it, follow from the MCU model the build already defines:
+There is one class, here, and one implementation per target in its own file
+(nvm_nrfx.cpp on the nRF). An application declares the interface the way it
+declares a UART or a SPI, and names nothing target specific. The target
+implementation owns the controller access and the arbitration with whatever
+stack runs.
 
-	nRF52   NVMC, a page erase command, geometry from FICR
-	nRF54L  RRAMC, no erase command, so an erase writes the erased pattern
+Usage :
 
-Everything else is the same whatever the memory is made of, above all the
-arbitration:
-
-	no stack running    the controller is driven directly
-	link controller     the same work runs inside an MPSL timeslot
-	SoftDevice running  the work is submitted to the SoftDevice and the result
-	                    arrives as a SoC event
-
-A SoftDevice that is present but stopped arbitrates nothing, so the controller
-is driven directly in that case as well.
-
-The commands use the same opcodes a serial flash does, so a config for internal
-memory reads like one for a chip.
-
-The long wait is handed to the application through NvmIntrfSetWait, the same
-idea as the wait callback the flash and EEPROM configs take. On a SoftDevice
-build the application must also pass SoC events to NvmIntrfSocEvt.
-
-Example :
-
-	NvmIntrf g_NvmIntrf;
+	NvmIntrf g_MemIntrf;
 	NvmCfg_t cfg;
 
-	g_NvmIntrf.Init();
+	g_MemIntrf.Init();
 
 	memset(&cfg, 0, sizeof(cfg));
 	NvmIntrfCfg(cfg);
 
 	Nvm g_Nvm;
-	g_Nvm.Init(cfg, &g_NvmIntrf, RegionAddr, RegionSize);
+	g_Nvm.Init(cfg, &g_MemIntrf, RegionAddr, RegionSize);
+
+The region placement is the application's decision. NvmIntrfCeiling() reports
+where the memory the application owns ends, which is not always the device
+size: a stack image or a reserved partition can sit at the top, and writing
+there destroys it.
 
 @author	Hoang Nguyen Hoan
 @date	July 24, 2026
@@ -74,8 +60,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __NVM_NRFX_H__
-#define __NVM_NRFX_H__
+#ifndef __NVM_INTRF_H__
+#define __NVM_INTRF_H__
 
 #include "device_intrf.h"
 #include "storage/nvm.h"
@@ -83,18 +69,6 @@ SOFTWARE.
 /** @addtogroup Storage
   * @{
   */
-
-// The command set, using the opcodes a serial flash uses so a config for
-// internal memory reads like one for a flash chip.
-#define NVM_INTRF_CMD_READ		0x03		//!< Read
-#define NVM_INTRF_CMD_WRITE		0x02		//!< Program words
-#define NVM_INTRF_CMD_ERASE		0x20		//!< Erase or clear one unit
-
-// Address bytes on the frame. Internal memory is 32 bit addressed.
-#define NVM_INTRF_ADDR_SIZE		4
-
-// The controller writes 32 bit words.
-#define NVM_INTRF_WRITE_GRAN	4
 
 #ifdef __cplusplus
 
@@ -106,12 +80,12 @@ typedef bool (*NvmIntrfWait_t)(void);
 /// Counts of what the interface did, for a test to show which path ran.
 typedef struct __Nvm_Intrf_Stat {
 	uint32_t	Ops;		//!< Operations completed
-	uint32_t	Busy;		//!< Refused while the radio held the memory
-	uint32_t	Evt;		//!< Results delivered as a SoC event
+	uint32_t	Busy;		//!< Refused while a stack held the memory
+	uint32_t	Evt;		//!< Results delivered as a stack event
 	uint32_t	Skipped;	//!< Erases skipped, the unit already erased
 } NvmIntrfStat_t;
 
-/// @brief	The nRF memory controller as a device interface.
+/// @brief	The MCU memory controller as a device interface.
 class NvmIntrf : public DeviceIntrf {
 public:
 	bool Init(void);
@@ -145,32 +119,11 @@ protected:
  * @brief	Set the wait callback and the operation timeout.
  *
  * @param	pWait		: Called repeatedly while an operation waits. NULL to
- * \t\t\t\t\t\t  spend the wait in a short delay instead.
+ * 						  spend the wait in a short delay instead.
  * @param	TimeoutMs	: Give up on one operation after this many msec.
- * \t\t\t\t\t\t  0 keeps the current value.
+ * 						  0 keeps the current value.
  */
 void NvmIntrfSetWait(NvmIntrfWait_t pWait, uint32_t TimeoutMs);
-
-/**
- * @brief	Report whether a SoftDevice is enabled and owns the memory.
- *
- * Weak, answers false, so a library archive built without any SoftDevice
- * define still serves every application. nrf_sdh.c provides the real answer
- * in an application that enables a SoftDevice.
- *
- * @return	true when a SoftDevice is enabled.
- */
-extern "C" bool NvmIntrfSdRunning(void);
-
-/**
- * @brief	Pass a SoftDevice SoC event to the interface.
- *
- * Needed only on a build running a SoftDevice. Every observer is called for
- * every event, so one that is not a result of ours is ignored.
- *
- * @param	SysEvt : SoC event id
- */
-void NvmIntrfSocEvt(uint32_t SysEvt);
 
 /**
  * @brief	Read the operation counts.
@@ -182,15 +135,28 @@ void NvmIntrfGetStat(NvmIntrfStat_t *pStat);
 /**
  * @brief	Fill a config for the internal memory.
  *
- * Sets the geometry and the command set this interface understands. The
+ * Sets the geometry and the command set the interface understands. The
  * remaining fields are left untouched.
  *
  * @param	Cfg	: Config to fill
  */
 void NvmIntrfCfg(NvmCfg_t &Cfg);
 
+/**
+ * @brief	Where the memory the application owns ends.
+ *
+ * On most targets this is the device size. Where a stack image or a reserved
+ * partition sits at the top, it is that boundary instead: on the nRF54L the
+ * S145 image occupies the top of the RRAM and the application slot ends at
+ * the storage partition. C linkage so a target can override the weak default
+ * from a C file.
+ *
+ * @return	First byte past the application owned memory.
+ */
+extern "C" uint64_t NvmIntrfCeiling(void);
+
 #endif	// __cplusplus
 
 /** @} End of group Storage */
 
-#endif	// __NVM_NRFX_H__
+#endif	// __NVM_INTRF_H__
