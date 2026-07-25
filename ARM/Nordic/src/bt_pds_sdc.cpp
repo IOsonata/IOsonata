@@ -26,6 +26,22 @@
 #include "mpsl_timeslot.h"
 
 #include "bt_pds_sdc.h"
+#include "idelay.h"
+
+/******** For DEBUG Trace ************/
+// Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
+// SysLog transport the app configured (UART, USB, RTT, BLE, or any other
+// DeviceIntrf); the trace does not assume a transport. A release build
+// defines NDEBUG, which strips all trace regardless of DEBUG_ENABLE.
+//#define DEBUG_ENABLE
+
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define DEBUG_PRINTF(...)
+#endif
+/*******************************/
 
 // Timeslot session memory. MPSL_TIMESLOT_CONTEXT_SIZE bytes per session, one
 // session. Word aligned as MPSL requires.
@@ -43,6 +59,19 @@ static volatile int s_Result;
 // reads it after the callback returns.
 static mpsl_timeslot_signal_return_param_t s_RetParam;
 static mpsl_timeslot_request_t s_NextReq;
+
+// Signal counts, kept so a failure report can say what the callback saw
+// without printing from interrupt context.
+static volatile uint32_t s_SigStart;
+static volatile uint32_t s_SigBlocked;
+static volatile uint32_t s_SigOther;
+
+// Give up on one operation after this long. The longest legitimate operation
+// is an nRF52 page erase spread across timeslots, well under a second; a wait
+// past this means the grant machinery is not delivering.
+#ifndef BT_PDS_MPSL_RUN_TIMEOUT_MS
+#define BT_PDS_MPSL_RUN_TIMEOUT_MS	2000
+#endif
 
 // Build an EARLIEST request sized for one Step budget. A radio-idle window of
 // length_us is requested as soon as possible. Length is clamped to the MPSL
@@ -77,6 +106,8 @@ static mpsl_timeslot_signal_return_param_t *s_TimeslotCb(
 	{
 		case MPSL_TIMESLOT_SIGNAL_START:
 		{
+			s_SigStart++;
+
 			// Radio is idle for the granted window. Advance the operation.
 			uint32_t remainUs = 0;
 
@@ -105,6 +136,7 @@ static mpsl_timeslot_signal_return_param_t *s_TimeslotCb(
 
 		case MPSL_TIMESLOT_SIGNAL_BLOCKED:
 		case MPSL_TIMESLOT_SIGNAL_CANCELLED:
+			s_SigBlocked++;
 			// The request could not be scheduled. Retry once with another
 			// earliest request; persistent failure surfaces as a timeout in the
 			// caller (it will give up after its bounded wait).
@@ -122,6 +154,7 @@ static mpsl_timeslot_signal_return_param_t *s_TimeslotCb(
 		case MPSL_TIMESLOT_SIGNAL_OVERSTAYED:
 		case MPSL_TIMESLOT_SIGNAL_INVALID_RETURN:
 		default:
+			s_SigOther++;
 			// Abnormal. End and report error so the caller does not hang.
 			s_Result = -EIO;
 			s_Done = true;
@@ -149,12 +182,14 @@ int BtPdsMpslInit(void)
 	int32_t r = mpsl_timeslot_session_count_set(s_SessionMem, 1);
 	if (r != 0)
 	{
+		DEBUG_PRINTF("BtPdsMpslInit: session_count_set %ld\r\n", (long)r);
 		return -EIO;
 	}
 
 	r = mpsl_timeslot_session_open(s_TimeslotCb, &s_SessionId);
 	if (r != 0)
 	{
+		DEBUG_PRINTF("BtPdsMpslInit: session_open %ld\r\n", (long)r);
 		return -EIO;
 	}
 
@@ -189,16 +224,31 @@ int BtPdsMpslRun(BtPdsMpslOp_t *pOp)
 	int32_t r = mpsl_timeslot_request(s_SessionId, &req);
 	if (r != 0)
 	{
+		DEBUG_PRINTF("BtPdsMpslRun: request %ld\r\n", (long)r);
 		s_pOp = NULL;
 		return -EIO;
 	}
 
-	// Block until the timeslot callback completes the operation. The callback
-	// runs in IRQ context and SEVs on completion; WFE wakes on that or any
-	// interrupt, then we re-check the flag.
+	// Block until the timeslot callback completes the operation, but only for
+	// so long: the BLOCKED path relies on this wait being bounded. A grant
+	// that never comes (scheduler not ticking, persistent blocking) must
+	// surface as an error, never as a hang.
+	uint32_t elapsed = 0;
+
 	while (!s_Done)
 	{
-		__WFE();
+		if (elapsed >= BT_PDS_MPSL_RUN_TIMEOUT_MS * 1000UL)
+		{
+			// Detach the operation first: a late grant then finds no work,
+			// reports done and ends its slot, touching nothing of ours.
+			s_pOp = NULL;
+			DEBUG_PRINTF("BtPdsMpslRun: timeout, start %lu blocked %lu other %lu\r\n",
+						 (unsigned long)s_SigStart, (unsigned long)s_SigBlocked,
+						 (unsigned long)s_SigOther);
+			return -ETIMEDOUT;
+		}
+		usDelay(100);
+		elapsed += 100;
 	}
 
 	int result = s_Result;

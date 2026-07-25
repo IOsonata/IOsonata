@@ -46,7 +46,7 @@ SOFTWARE.
 
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
-// SysLog transport the a configured (UART, USB, RTT, BLE, or any other
+// SysLog transport the app configured (UART, USB, RTT, BLE, or any other
 // DeviceIntrf); the trace does not assume a transport. A release build
 // defines NDEBUG, which strips all trace regardless of DEBUG_ENABLE.
 //#define DEBUG_ENABLE

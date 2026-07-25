@@ -3,6 +3,13 @@
 
 @brief	Example code using SPI Flash memory
 
+		Runs the same sector test flow on either storage driver, selected by
+		NVM_MODE below: the legacy Flash driver, or the new unified Nvm behind
+		NvmDiskIO. The board's FLASH_CFG is translated at run time in the new
+		mode, so no board change is needed, and the per part init callbacks
+		become unnecessary there: reset, the id probe and 4 byte address mode
+		are config driven in Nvm.
+
 @author	Hoang Nguyen Hoan
 @date	Mars 8, 2019
 
@@ -36,6 +43,22 @@ SOFTWARE.
 #include "coredev/uart.h"
 #include "coredev/spi.h"
 #include "storage/diskio_flash.h"
+
+// Select the driver underneath. Both run the same test flow through the
+// common DiskIO sector api.
+// 0 : the legacy Flash driver (storage/flash.h), original behavior
+// 1 : the new unified Nvm driver behind NvmDiskIO. The board's FLASH_CFG is
+//     translated at run time. Quad commands fall back to the standard
+//     opcodes until the QSPI path lands in Nvm; the legacy driver keeps
+//     quad in mode 0.
+#ifndef NVM_MODE
+#define NVM_MODE			0
+#endif
+
+#if NVM_MODE != 0
+#include "storage/nvm.h"
+#include "storage/diskio_nvm.h"
+#endif
 #include "stddev.h"
 #include "idelay.h"
 
@@ -108,7 +131,33 @@ bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf);
 
 static const FlashCfg_t s_FlashCfg = FLASH_CFG(NULL, NULL);
 
+#if NVM_MODE == 0
+
 FlashDiskIO g_Flash;
+
+#else
+
+static Nvm g_Nvm;
+static NvmDiskIO g_Flash;
+
+// The board's legacy FLASH_CFG expressed as the unified config: the values
+// that vary come over, and everything the legacy driver hardcoded or did in
+// code, the protocol, the reset, the id retry, EN4B, is driver knowledge in
+// Nvm, derived from the erase kind. Legacy TotalSize is in KBytes. The quad
+// opcodes of a legacy quad config wait for the QSPI path in Nvm; the legacy
+// driver keeps quad in mode 0.
+static const NvmCfg_t s_NvmCfg = {
+	.DevNo = 0,
+	.TotalSize = (uint64_t)s_FlashCfg.TotalSize * 1024ULL,	// legacy: KBytes
+	.EraseSize = s_FlashCfg.SectSize,
+	.PageSize = s_FlashCfg.PageSize,
+	.AddrSize = (uint8_t)s_FlashCfg.AddrSize,
+	.DevId = s_FlashCfg.DevId,
+	.DevIdSize = (uint8_t)s_FlashCfg.DevIdSize,
+	.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },
+};
+
+#endif	// NVM_MODE
 
 static uint8_t s_FlashCacheMem[4096];
 DiskIOCache_t g_FlashCache = {
@@ -250,7 +299,11 @@ int main()
 	//UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 	//UARTRetargetEnable(g_Uart, STDIN_FILENO);
 
-	printf("Flash Memory Demo\r\n");
+#if NVM_MODE == 0
+	printf("Flash Memory Demo, legacy Flash driver\r\n");
+#else
+	printf("Flash Memory Demo, unified Nvm driver\r\n");
+#endif
 	//getchar();
 
 	g_Spi.Init(s_SpiCfg);
@@ -265,7 +318,12 @@ int main()
 
 	//if (g_FlashDiskIO.Init(s_MX25R6435F_QFlashCfg, &g_Spi, &g_FlashCache, 1) == false)
 //	if (g_Flash.Init(s_MX25L25645G_FlashCfg, &g_Spi)==false)//, &g_FlashCache, 1) == false)
-	if (g_Flash.Init(s_FlashCfg, &g_Spi)==false)//, &g_FlashCache, 1) == false)
+#if NVM_MODE == 0
+	if (g_Flash.Init(s_FlashCfg, &g_Spi) == false)
+#else
+	if (g_Nvm.Init(s_NvmCfg, &g_Spi) == false ||
+		g_Flash.Init(g_Nvm) == false)
+#endif
 	{
 		printf("Init Flash failed\r\n");
 	}

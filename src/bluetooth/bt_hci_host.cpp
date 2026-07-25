@@ -47,17 +47,23 @@ SOFTWARE.
 
 void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
 
-#if 0
-/******** For DEBUG ************/
+/******** For DEBUG Trace ************/
+// Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
+// SysLog transport the app configured (UART, USB, RTT, BLE, or any other
+// DeviceIntrf); the trace does not assume a transport. A release build
+// defines NDEBUG, which strips all trace regardless of DEBUG_ENABLE.
+//#define DEBUG_ENABLE
+
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 #include "syslog.h"
 #define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
-/*******************************/
 #else
 // The disabled form keeps the arguments in an unevaluated sizeof so variables
 // used only in debug prints do not raise unused warnings. No code and no call
 // is generated, the expression is never evaluated.
 #define DEBUG_PRINTF(...)	((void)sizeof(SysLogPrintf(SysLogGet(), __VA_ARGS__)))
 #endif
+/*******************************/
 
 //alignas(4) static BtHciDevice_t s_HciDevice = {0,};
 

@@ -88,16 +88,20 @@ SOFTWARE.
 
 extern "C" bool sdh_state_evt_observer_notify(enum nrf_sdh_state_evt state);
 
-/******** For DEBUG ************/
-#define BM_DEBUG_ENABLE
+/******** For DEBUG Trace ************/
+// Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
+// SysLog transport the app configured (UART, USB, RTT, BLE, or any other
+// DeviceIntrf); the trace does not assume a transport. A release build
+// defines NDEBUG, which strips all trace regardless of DEBUG_ENABLE.
+//#define DEBUG_ENABLE
 
-#ifdef BM_DEBUG_ENABLE
-#include "coredev/uart.h"
-extern UART g_Uart;
-#define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define DEBUG_PRINTF(...)
 #endif
+/*******************************/
 
 /*******************************/
 
@@ -1430,7 +1434,8 @@ static void soc_evt_poll(void *context)
 	uint32_t nrf_err;
 	uint32_t evt_id;
 
-	DEBUG_PRINTF("soc_evt_poll\r\n");
+	// No trace on entry: this runs on every SoftDevice event interrupt, and
+	// flash completions alone raise one per submit, which floods the output.
 	while (true) {
 		nrf_err = sd_evt_get(&evt_id);
 		if (nrf_err) {

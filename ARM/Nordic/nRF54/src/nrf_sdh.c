@@ -11,6 +11,7 @@
 
 #include "coredev/system_core_clock.h"
 #include "idelay.h"
+#include "bm_config_defaults.h"
 
 /**
  * @defgroup nrf_sd_isr_vectors SoftDevice Interrupt Vector Table Offsets
@@ -429,6 +430,37 @@ void nrf_sdh_resume(void)
 bool nrf_sdh_is_suspended(void)
 {
 	return sdh_is_suspended;
+}
+
+/* Storage arbitration for nvm_nrfx.cpp. The driver holds a weak default that
+ * answers false and drives the controller directly; this override, present in
+ * any application that links the SoftDevice handler, reports whether the
+ * SoftDevice is enabled and owns the memory. */
+bool NvmIntrfSdRunning(void);
+bool NvmIntrfSdRunning(void)
+{
+	uint8_t enabled = 0;
+
+	if (softdevice_vector_forward_address == 0) {
+		/* SVC forwarding is not set up, no SoftDevice call can be made. */
+		return false;
+	}
+
+	if (sd_softdevice_is_enabled(&enabled) != NRF_SUCCESS) {
+		return false;
+	}
+
+	return enabled != 0;
+}
+
+/* Where the memory the application owns ends. The S145 image sits at the top
+ * of the RRAM and the application slot runs up to the storage partition, so
+ * the device size the weak default in nvm_nrfx.cpp reports would place a
+ * region inside the live SoftDevice image. */
+uint64_t NvmIntrfCeiling(void);
+uint64_t NvmIntrfCeiling(void)
+{
+	return CONFIG_STORAGE0_PARTITION_OFFSET;
 }
 
 void nrf_sdh_evts_poll(void)

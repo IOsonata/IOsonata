@@ -1986,6 +1986,8 @@
 		<configuration configurationName="Debug_FPU">
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52832"/>
 		</configuration>
+		<configuration configurationName="Release_NoNFC"/>
+		<configuration configurationName="Debug_NoNFC"/>
 		<configuration configurationName="Debug">
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52832"/>
 		</configuration>

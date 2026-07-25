@@ -1201,6 +1201,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_flash.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/diskio_nvm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_nvm.h</locationURI>
+		</link>
+		<link>
 			<name>include/storage/fatfs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
@@ -1209,6 +1214,16 @@
 			<name>include/storage/flash.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/flash.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/nvm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/nvm_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm_intrf.h</locationURI>
 		</link>
 		<link>
 			<name>include/storage/sdcard.h</name>
@@ -1956,6 +1971,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_impl.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/storage/diskio_nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_nvm.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/storage/fatfs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/fatfs.cpp</locationURI>
@@ -1974,6 +1994,16 @@
 			<name>src/storage/flash.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/flash.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/nvm_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/storage/sdcard_impl.cpp</name>
