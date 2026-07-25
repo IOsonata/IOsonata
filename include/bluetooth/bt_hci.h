@@ -769,7 +769,7 @@ static inline int BtHciSendData(BtHciDevice_t * const pDev, void * const pData, 
  * @return	HCI status, 0 on success. 0xFF when no executor is wired.
  */
 static inline uint8_t BtHciCommand(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen) {
-	return pDev->Command != NULL ? pDev->Command(pDev, OpCode, pParam, ParamLen, pRet, RetLen) : 0xFF;
+	return pDev->Command ? pDev->Command(pDev, OpCode, pParam, ParamLen, pRet, RetLen) : 0xFF;
 }
 //void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len);
 
