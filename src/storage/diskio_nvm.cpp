@@ -65,7 +65,9 @@ bool NvmDiskIO::Init(Nvm &Mem, uint32_t SectSize)
 		return false;
 	}
 
-	if (Mem.Size() < sect)
+	// DiskIO exposes only whole sectors. A tail shorter than one sector would
+	// be unreachable and would make the reported geometry ambiguous.
+	if (Mem.Size() < sect || (Mem.Size() % sect) != 0)
 	{
 		return false;
 	}
