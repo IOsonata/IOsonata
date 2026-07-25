@@ -1,0 +1,229 @@
+name: Remove invalid DeviceIntrf transfer limit
+
+on:
+  push:
+    branches:
+      - nvmio_design2_review_fixes
+    paths:
+      - .github/workflows/remove-invalid-maxtrxlen.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: nvmio_design2_review_fixes
+          fetch-depth: 0
+
+      - name: Remove invalid API and restore affected implementations
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('.')
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one matching block, found {count}')
+              path.write_text(text.replace(old, new, 1))
+
+          header = root / 'include/device_intrf.h'
+          text = header.read_text()
+
+          text, count = re.subn(
+              r'^\s*size_t MaxTrxLen;[^\n]*\n',
+              '',
+              text,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          if count != 1:
+              raise SystemExit('include/device_intrf.h: MaxTrxLen member not found exactly once')
+
+          text, count = re.subn(
+              r'\nstatic inline size_t DeviceIntrfGetMaxTransferLen\(DevIntrf_t \* const pDev\) \{\n\s*return pDev->MaxTrxLen;\n\}\n',
+              '\n',
+              text,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit('include/device_intrf.h: C getter not found exactly once')
+
+          text, count = re.subn(
+              r'\n\s*size_t GetMaxTransferLen\(void\) \{ return DeviceIntrfGetMaxTransferLen\(\*this\); \}\n',
+              '\n',
+              text,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit('include/device_intrf.h: C++ getter not found exactly once')
+
+          if 'size_t' not in text:
+              text, count = re.subn(r'^#include <stddef\.h>\n', '', text, count=1, flags=re.MULTILINE)
+              if count != 1:
+                  raise SystemExit('include/device_intrf.h: stddef include not found exactly once')
+
+          header.write_text(text)
+
+          # Remove later port initializers and documentation that depended on the invalid field.
+          for path in root.rglob('*'):
+              if not path.is_file() or '.git' in path.parts or path == header:
+                  continue
+              try:
+                  text = path.read_text()
+              except UnicodeDecodeError:
+                  continue
+              if not any(token in text for token in (
+                  'MaxTrxLen', 'GetMaxTransferLen', 'DeviceIntrfGetMaxTransferLen')):
+                  continue
+              lines = text.splitlines(keepends=True)
+              lines = [line for line in lines if not any(token in line for token in (
+                  'MaxTrxLen', 'GetMaxTransferLen', 'DeviceIntrfGetMaxTransferLen'))]
+              path.write_text(''.join(lines))
+
+          spi = root / 'ARM/Nordic/src/spi_nrfx.cpp'
+
+          rx_bad = '''\tdev->pDmaReg->RXD.PTR = (uint32_t)pBuff;
+          \tif (BuffLen >= NRFX_SPI_DMA_MAXCNT)
+          \t{
+          \t\tdev->pDmaReg->RXD.LIST = SPIM_RXD_LIST_LIST_ArrayList << SPIM_RXD_LIST_LIST_Pos;
+          \t\tdev->pDmaReg->RXD.MAXCNT = NRFX_SPI_DMA_MAXCNT;
+          \t}
+          
+          \twhile (BuffLen > 0)
+          \t{
+          \t\tif (BuffLen < NRFX_SPI_DMA_MAXCNT)
+          \t\t{
+          \t\t\tdev->pDmaReg->RXD.MAXCNT = BuffLen;
+          \t\t}
+          \t\tdev->pDmaReg->EVENTS_END = 0;
+          \t\tdev->pDmaReg->EVENTS_ENDRX = 0;
+          \t\tdev->pDmaReg->TASKS_START = 1;
+          
+          \t\tif (nRFxSPIWaitRX(dev, NRFSPI_TIMEOUT) == false)
+          \t\t\tbreak;
+          
+          \t\tsize_t l = dev->pDmaReg->RXD.AMOUNT;
+          \t\tBuffLen -= l;
+          \t\tcnt += l;
+          \t}
+          '''
+
+          rx_good = '''\tdev->pDmaReg->RXD.PTR = (uint32_t)pBuff;
+          \tdev->pDmaReg->RXD.LIST = SPIM_RXD_LIST_LIST_ArrayList << SPIM_RXD_LIST_LIST_Pos;
+          
+          \twhile (BuffLen > 0)
+          \t{
+          \t\tint l = min(BuffLen, NRFX_SPI_DMA_MAXCNT);
+          
+          \t\tdev->pDmaReg->RXD.MAXCNT = l;
+          \t\tdev->pDmaReg->EVENTS_END = 0;
+          \t\tdev->pDmaReg->EVENTS_ENDRX = 0;
+          \t\tdev->pDmaReg->TASKS_START = 1;
+          
+          \t\tif (nRFxSPIWaitRX(dev, NRFSPI_TIMEOUT) == false)
+          \t\t\tbreak;
+          
+          \t\tl = dev->pDmaReg->RXD.AMOUNT;
+          \t\tBuffLen -= l;
+          \t\tpBuff += l;
+          \t\tcnt += l;
+          \t}
+          '''
+
+          tx_bad = '''\tdev->pDmaReg->TXD.PTR = (uint32_t)pData;
+          
+          \tif (DataLen >= NRFX_SPI_DMA_MAXCNT)
+          \t{
+          \t\tdev->pDmaReg->TXD.LIST = SPIM_TXD_LIST_LIST_ArrayList << SPIM_TXD_LIST_LIST_Pos;
+          \t\tdev->pDmaReg->TXD.MAXCNT = NRFX_SPI_DMA_MAXCNT;
+          \t}
+          
+          \twhile (DataLen > 0)
+          \t{
+          \t\tif (DataLen < NRFX_SPI_DMA_MAXCNT)
+          \t\t{
+          \t\t\tdev->pDmaReg->TXD.MAXCNT = DataLen;
+          \t\t}
+          
+          \t\tdev->pDmaReg->EVENTS_END = 0;
+          \t\tdev->pDmaReg->EVENTS_ENDTX = 0;
+          \t\tdev->pDmaReg->TASKS_START = 1;
+          
+          \t\tif (nRFxSPIWaitDMA(dev, NRFSPI_TIMEOUT) == false)
+          \t\t{
+          \t\t\tbreak;
+          \t\t}
+          
+          \t\tsize_t l = dev->pDmaReg->TXD.AMOUNT;
+          \t\tDataLen -= l;
+          \t\tcnt += l;
+          
+          \t}
+          '''
+
+          tx_good = '''\tdev->pDmaReg->TXD.PTR = (uint32_t)pData;
+          \tdev->pDmaReg->TXD.LIST = SPIM_TXD_LIST_LIST_ArrayList << SPIM_TXD_LIST_LIST_Pos;
+          
+          \twhile (DataLen > 0)
+          \t{
+          \t\tint l = min(DataLen, NRFX_SPI_DMA_MAXCNT);
+          \t\tdev->pDmaReg->TXD.MAXCNT = l;
+          \t\tdev->pDmaReg->EVENTS_END = 0;
+          \t\tdev->pDmaReg->EVENTS_ENDTX = 0;
+          \t\tdev->pDmaReg->TASKS_START = 1;
+          
+          \t\tif (nRFxSPIWaitDMA(dev, NRFSPI_TIMEOUT) == false)
+          \t\t{
+          \t\t\tbreak;
+          \t\t}
+          
+          \t\tl = dev->pDmaReg->TXD.AMOUNT;
+          \t\tDataLen -= l;
+          \t\tpData += l;
+          \t\tcnt += l;
+          \t}
+          '''
+
+          replace_once(spi, rx_bad, rx_good)
+          replace_once(spi, tx_bad, tx_good)
+
+          # The temporary workflow removes itself in the same corrective commit.
+          (root / '.github/workflows/remove-invalid-maxtrxlen.yml').unlink()
+
+          remaining = []
+          for path in root.rglob('*'):
+              if not path.is_file() or '.git' in path.parts:
+                  continue
+              try:
+                  text = path.read_text()
+              except UnicodeDecodeError:
+                  continue
+              for token in ('MaxTrxLen', 'GetMaxTransferLen', 'DeviceIntrfGetMaxTransferLen'):
+                  if token in text:
+                      remaining.append(f'{path}: {token}')
+          if remaining:
+              raise SystemExit('remaining invalid API references:\n' + '\n'.join(remaining))
+          PY
+
+          git diff --check
+          git grep -nE 'MaxTrxLen|GetMaxTransferLen|DeviceIntrfGetMaxTransferLen' -- . ':!.git' && exit 1 || true
+          git diff --stat
+
+      - name: Commit corrected implementation
+        shell: bash
+        run: |
+          git config user.name "OpenAI"
+          git config user.email "noreply@openai.com"
+          git add -A
+          git commit -m "Remove invalid DeviceIntrf transfer limit"
+          git push origin HEAD:nvmio_design2_review_fixes
