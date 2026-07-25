@@ -84,6 +84,7 @@ int Nvm::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 
 Nvm::Nvm()
 {
+	Valid(false);
 	vRegionOffset = 0;
 	vRegionSize = 0;
 	vbIntEn = false;
@@ -100,6 +101,8 @@ Nvm::Nvm()
 	vWrProtMask = 0;
 	memset(&vRdCmd, 0, sizeof(vRdCmd));
 	memset(&vWrCmd, 0, sizeof(vWrCmd));
+	vbBare = true;
+	vBaseDevAddr = 0;
 	vWrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
 }
 
@@ -152,17 +155,25 @@ int Nvm::SendCmd(const NvmCmd_t &Cmd)
 	return (Interface()->Tx(DeviceAddress(), &c, 1) == 1) ? 0 : -EIO;
 }
 
-uint8_t Nvm::ReadStatus(void)
+int Nvm::ReadStatus(uint8_t &Status)
 {
+	Status = 0;
+
 	if (vbBare)
 	{
 		return 0;
 	}
 
 	uint8_t cmd = NVM_CMD_RDSR;
+
+	return Read(&cmd, 1, &Status, 1) == 1 ? 0 : -EIO;
+}
+
+uint8_t Nvm::ReadStatus(void)
+{
 	uint8_t sr = 0;
 
-	Read(&cmd, 1, &sr, 1);
+	(void)ReadStatus(sr);
 
 	return sr;
 }
@@ -172,9 +183,15 @@ uint32_t Nvm::ReadId(int Len)
 	uint32_t id = 0;
 	uint8_t cmd = NVM_CMD_READID;
 
-	if (Len > 4) { Len = 4; }
+	if (Len < 1 || Len > 4)
+	{
+		return 0;
+	}
 
-	Read(&cmd, 1, (uint8_t*)&id, Len);
+	if (Read(&cmd, 1, (uint8_t*)&id, Len) != Len)
+	{
+		return 0;
+	}
 
 	return id;
 }
@@ -196,8 +213,15 @@ bool Nvm::WaitReady(uint32_t Timeout)
 		return true;
 	}
 
-	do {
-		if ((ReadStatus() & NVM_SR_WIP) == 0)
+	while (Timeout-- > 0)
+	{
+		uint8_t sr;
+
+		if (ReadStatus(sr) != 0)
+		{
+			return false;
+		}
+		if ((sr & NVM_SR_WIP) == 0)
 		{
 			return true;
 		}
@@ -205,7 +229,7 @@ bool Nvm::WaitReady(uint32_t Timeout)
 		{
 			return false;
 		}
-	} while (--Timeout > 0);
+	}
 
 	return false;
 }
@@ -227,12 +251,23 @@ bool Nvm::WriteEnable(uint32_t Timeout)
 		return false;
 	}
 
-	do {
-		if ((ReadStatus() & NVM_SR_WEL) != 0)
+	while (Timeout-- > 0)
+	{
+		uint8_t sr;
+
+		if (ReadStatus(sr) != 0)
+		{
+			return false;
+		}
+		if ((sr & NVM_SR_WEL) != 0)
 		{
 			return true;
 		}
-	} while (--Timeout > 0);
+		if (WaitPoll() == false)
+		{
+			return false;
+		}
+	}
 
 	return false;
 }
@@ -248,6 +283,11 @@ void Nvm::WriteDisable(void)
 bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 			   uint64_t RegionOff, uint64_t RegionSize)
 {
+	// A failed reinitialization must not leave a previously working instance
+	// marked ready.
+	Valid(false);
+	Region(0, 0);
+
 	if (pIntrf == nullptr)
 	{
 		return false;
@@ -265,28 +305,28 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	vBaseDevAddr = (uint32_t)Cfg.DevNo;
 	vWrDelayUs = Cfg.WriteDelayUs;
 	vWrProtMask = Cfg.WrProtMask;
-	// Almost no command is configuration: the bus and the kind decide them.
-	// An I2C memory takes a bare address and no command byte, and waits by
-	// WriteDelayUs. Everything serial speaks the standard protocol, which
-	// SPI EEPROMs and FRAMs speak just as a NOR does, and which the
-	// internal memory interface emulates. The one exception is the read and
-	// program pair, where a wide bus part has its own command and dummy
-	// cycles: zero derives the plain bus standard, set overrides.
-	// The buses this driver understands: I2C takes bare addresses, the SPI
-	// family speaks the serial protocol, and UNKNOWN is a command emulating
-	// adapter such as the internal memory interface. Anything else is not a
-	// memory bus.
+
+	// The current implementation is the polling SPI/I2C path plus the internal
+	// command-emulating adapter. QSPI/OSPI need their command, phase-width and
+	// dummy-cycle transfer path before they can be accepted here.
 	switch (pIntrf->Type())
 	{
 		case DEVINTRF_TYPE_I2C:
 		case DEVINTRF_TYPE_SPI:
-		case DEVINTRF_TYPE_QSPI:
-		case DEVINTRF_TYPE_OSPI:
 		case DEVINTRF_TYPE_UNKOWN:
 			break;
 
+		case DEVINTRF_TYPE_QSPI:
+		case DEVINTRF_TYPE_OSPI:
 		default:
 			return false;
+	}
+
+	if (Cfg.bIntEn)
+	{
+		// Asynchronous state and completion are not implemented yet. Refuse the
+		// mode instead of silently running synchronously.
+		return false;
 	}
 
 	// The bus is one of the two facts every command follows from; the kind,
@@ -308,11 +348,12 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	}
 	vWrProtPin = Cfg.WrProtPin;
 
-	if (vDevSize == 0 || vPageSize == 0 || vAddrSize < 1 || vAddrSize > 4)
+	if (vDevSize == 0 || vPageSize == 0 || vAddrSize < 1 || vAddrSize > 4 ||
+		Cfg.DevIdSize > 4)
 	{
-		DEBUG_PRINTF("Nvm geometry invalid: size=%lu page=%lu addr=%d\r\n",
+		DEBUG_PRINTF("Nvm geometry invalid: size=%lu page=%lu addr=%d id=%u\r\n",
 					 (unsigned long)vDevSize, (unsigned long)vPageSize,
-					 vAddrSize);
+					 vAddrSize, Cfg.DevIdSize);
 		return false;
 	}
 
@@ -334,7 +375,7 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		vAddrSpan = 0;			// the address bytes cover the whole device
 	}
 
-	vbIntEn = Cfg.bIntEn;
+	vbIntEn = false;
 	vEvtHandler = Cfg.EvtHandler;
 	vpWaitCB = Cfg.pWaitCB;
 
@@ -345,8 +386,9 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		IOPinClear(vWrProtPin.PortNo, vWrProtPin.PinNo);
 	}
 
-	// Chip quirks first, such as releasing a power down state or selecting a
-	// sector architecture, before the driver talks to the device.
+	// Device-specific preparation comes first, matching the legacy Flash
+	// driver. Some parts must be released or put into a command mode before
+	// the generic reset and ID probe can be understood.
 	if (Cfg.pInitCB != nullptr)
 	{
 		if (Cfg.pInitCB(this, pIntrf) == false)
@@ -355,12 +397,9 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		}
 	}
 
-	// Reset an erase medium. The chip does not reset when the MCU does:
-	// across a soft reset or a debugger restart it can be left in power
-	// down, in a continuous read or quad mode where commands are misread,
-	// in 4 byte address mode, or mid operation. Reset is the one command
-	// honored from any of those states, so it goes before anything that
-	// assumes a sane device.
+	// Reset an erase medium before the normal status and ID transactions. The
+	// chip does not reset when the MCU does and can be left in power down,
+	// continuous read, quad mode, 4 byte address mode, or mid operation.
 	if (vEraseSize != 0)
 	{
 		if (SendCmd({ NVM_CMD_RESET_EN, 0 }) != 0 ||
@@ -370,20 +409,22 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		}
 	}
 
-	// Probe the device id where the config asked for it. The retries cover
-	// the device's recovery time after the reset above.
+	// Probe the device id where the config asked for it. The retries cover the
+	// device's recovery time after the reset above.
 	if (Cfg.DevId != 0 && Cfg.DevIdSize > 0)
 	{
-		int rtry = 5;
+		bool found = false;
 
-		do {
+		for (int rtry = 0; rtry < 6; rtry++)
+		{
 			if (ReadId(Cfg.DevIdSize) == Cfg.DevId)
 			{
+				found = true;
 				break;
 			}
-		} while (rtry-- > 0);
+		}
 
-		if (rtry <= 0)
+		if (found == false)
 		{
 			DEBUG_PRINTF("Nvm id mismatch\r\n");
 			return false;
@@ -443,7 +484,10 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 		return 0;
 	}
 
-	WaitReady();
+	if (WaitReady() == false)
+	{
+		return -EIO;
+	}
 
 	uint32_t addr = (uint32_t)(RegionOffset() + Off);
 	uint8_t *pb = (uint8_t*)pBuf;
@@ -466,9 +510,9 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 
 		DeviceAddress(devaddr);
 		int rd = Read(frame, flen, pb, (int)l);
-		if (rd <= 0)
+		if (rd != (int)l)
 		{
-			return (cnt == Len) ? -EIO : (int)(Len - cnt);
+			return -EIO;
 		}
 		addr += rd;
 		pb += rd;
@@ -490,10 +534,10 @@ int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len)
 	int flen = FrameAddr(frame, vWrCmd.Cmd, Addr, &devaddr);
 
 	DeviceAddress(devaddr);
+	// Device::Write returns payload bytes; the command/address frame is not
+	// included in this count.
 	int wr = Device::Write(frame, flen, pData, (int)Len);
-	// The interface reports the whole transfer, frame included; the caller
-	// only wants to know how much of its data went.
-	if (wr < (int)Len)
+	if (wr != (int)Len)
 	{
 		return -EIO;
 	}
@@ -672,7 +716,11 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 		return -ENOTSUP;
 	}
 
-	uint8_t sr = ReadStatus();
+	uint8_t sr;
+	if (ReadStatus(sr) != 0)
+	{
+		return -EIO;
+	}
 
 	if (bEnable)
 	{
@@ -690,10 +738,15 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 
 	uint8_t wrsr = NVM_CMD_WRSR;
 
-	Device::Write(&wrsr, 1, &sr, 1);
+	if (Device::Write(&wrsr, 1, &sr, 1) != 1)
+	{
+		WriteDisable();
+		return -EIO;
+	}
 
 	if (WaitReady() == false)
 	{
+		WriteDisable();
 		return -EBUSY;
 	}
 	WriteDisable();
