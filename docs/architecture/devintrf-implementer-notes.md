@@ -29,7 +29,6 @@ include/device_intrf.h; this is the condensed map.
 | `EnCnt` | Enable reference count. Interfaces are shared by several devices; the `Enable` hook fires only on 0 to 1, the `Disable` hook only on the last release. Initialize to 0. |
 | `bDma`, `bIntEn` | Transfer mode flags. When `bIntEn` is set, `RxData` may return -1: transfer started, completion arrives later through `EvtCB` as `DEVINTRF_EVT_COMPLETED`. |
 | `bNoStop` | Continuous transfer: command/response phases without a stop condition between them. Relevant for interrupt driven restart reads. |
-| `MaxTrxLen` | Per transaction byte cap, typically the DMA limit. Long transfers are chunked against it by the caller. |
 | `Type` | Set the correct `DEVINTRF_TYPE_*`. Devices may branch on it (the Device base adjusts SPI read/write address conventions by it). |
 
 All function pointers in the table are mandatory. Implement unused ones as

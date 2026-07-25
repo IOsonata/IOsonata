@@ -946,7 +946,6 @@ bool NvmIntrf::Init(void)
 	vDevIntrf.PowerOff = NvmPowerOff;
 	vDevIntrf.GetHandle = NvmGetHandle;
 	vDevIntrf.MaxRetry = 1;
-	vDevIntrf.MaxTrxLen = NVM_INTRF_FRAME_HDR + NVM_INTRF_MAX_XFER;
 	vDevIntrf.EnCnt = 1;
 	atomic_flag_clear(&vDevIntrf.bBusy);
 

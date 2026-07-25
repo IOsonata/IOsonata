@@ -1444,7 +1444,6 @@ bool AgIcm456x::AuxIntrfInit(void)
 	bool retval = false;
 
 	vAuxIntrf.DevIntrf.pDevData = this;
-	vAuxIntrf.DevIntrf.MaxTrxLen = 32;
 	vAuxIntrf.DevIntrf.EnCnt = 1;
 	vAuxIntrf.DevIntrf.Type = DEVINTRF_TYPE_I2C;
 	vAuxIntrf.DevIntrf.bDma = false;

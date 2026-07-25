@@ -221,7 +221,6 @@ bool RngPeriphIntrf::Init(void)
 	vDevIntrf.bIntEn = false;
 	atomic_store(&vDevIntrf.bTxReady, true);
 	atomic_store(&vDevIntrf.bNoStop, false);
-	vDevIntrf.MaxTrxLen = 0;
 	vDevIntrf.Disable = RngPeriphDisable;
 	vDevIntrf.Enable = RngPeriphEnable;
 	vDevIntrf.GetRate = RngPeriphGetRate;

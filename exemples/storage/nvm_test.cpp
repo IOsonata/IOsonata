@@ -353,7 +353,6 @@ public:
 		vDev.PowerOff = MockPowerOff;
 		vDev.GetHandle = MockGetHandle;
 		vDev.MaxRetry = 5;
-		vDev.MaxTrxLen = 65536;
 		vDev.EnCnt = 1;
 		atomic_flag_clear(&vDev.bBusy);
 	}

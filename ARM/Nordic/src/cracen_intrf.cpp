@@ -479,7 +479,6 @@ bool CracenIntrf::Init(void)
 	vDevIntrf.Type = DEVINTRF_TYPE_CRYPTO;
 	vDevIntrf.bDma = false;
 	vDevIntrf.bIntEn = false;
-	vDevIntrf.MaxTrxLen = 0;
 	atomic_flag_clear(&vDevIntrf.bBusy);
 	atomic_store(&vDevIntrf.EnCnt, 0);
 	atomic_store(&vDevIntrf.bTxReady, true);

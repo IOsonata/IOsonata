@@ -181,7 +181,6 @@ bool Cc3xxIntrf::Init(void)
 	vDevIntrf.bIntEn = false;
 	atomic_store(&vDevIntrf.bTxReady, true);
 	atomic_store(&vDevIntrf.bNoStop, false);
-	vDevIntrf.MaxTrxLen = 0;
 	vDevIntrf.Disable = Cc3xxIntrfDisable;
 	vDevIntrf.Enable = Cc3xxIntrfEnable;
 	vDevIntrf.GetRate = Cc3xxGetRate;
