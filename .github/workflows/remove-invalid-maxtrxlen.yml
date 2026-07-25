@@ -1,11 +1,12 @@
 name: Remove invalid DeviceIntrf transfer limit
 
 on:
-  push:
+  pull_request:
     branches:
-      - nvmio_design2_review_fixes
+      - nvmio_design2
     paths:
       - .github/workflows/remove-invalid-maxtrxlen.yml
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
