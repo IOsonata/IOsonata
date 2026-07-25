@@ -161,6 +161,126 @@ static int NorRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
 	return Len;
 }
 
+
+// ---------------------------------------------------------------------------
+// Simulated SPI FRAM: a direct read write medium on a serial bus. It
+// overwrites in place and has no erase, but speaks the serial protocol: it
+// latches writes behind WREN, answers the status poll, and holds block
+// protect bits. This is the branch the command derivation exists for.
+// ---------------------------------------------------------------------------
+
+#define FRAM_SIZE		(32 * 1024)
+#define FRAM_PAGE		256			// transfer chunk, FRAM has no real page
+#define FRAM_ADDR		2
+#define FRAM_ID			0x017F04
+
+static uint8_t s_Fram[FRAM_SIZE];
+static std::vector<uint8_t> s_FramTx;
+static bool s_FramWel;
+static uint8_t s_FramBp;
+static uint32_t s_FramWrsrCnt;
+static uint32_t s_FramRstCnt;
+static uint32_t s_FramVioNoWel;
+
+static void FramPowerOn(void)
+{
+	memset(s_Fram, 0, sizeof(s_Fram));
+	s_FramTx.clear();
+	s_FramWel = false;
+	s_FramBp = 0;
+	s_FramWrsrCnt = 0;
+	s_FramRstCnt = 0;
+	s_FramVioNoWel = 0;
+}
+
+static uint32_t FramAddr(const uint8_t *p)
+{
+	return ((uint32_t)p[0] << 8) | p[1];
+}
+
+static bool FramStartRx(DevIntrf_t *, uint32_t) { return true; }
+static bool FramStartTx(DevIntrf_t *, uint32_t) { s_FramTx.clear(); return true; }
+
+static int FramTxData(DevIntrf_t *, const uint8_t *pData, int Len)
+{
+	for (int i = 0; i < Len; i++) { s_FramTx.push_back(pData[i]); }
+	return Len;
+}
+static int FramTxSrData(DevIntrf_t *d, const uint8_t *p, int n)
+{
+	return FramTxData(d, p, n);
+}
+
+static int FramRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
+{
+	uint8_t cmd = s_FramTx.empty() ? 0 : s_FramTx[0];
+
+	if (cmd == FLASH_CMD_READID)
+	{
+		for (int i = 0; i < Len; i++) { pBuff[i] = (uint8_t)(FRAM_ID >> (8 * i)); }
+		return Len;
+	}
+	if (cmd == FLASH_CMD_READSTATUS)
+	{
+		uint8_t st = s_FramBp;
+		if (s_FramWel) { st |= 0x02u; }
+		for (int i = 0; i < Len; i++) { pBuff[i] = st; }
+		return Len;
+	}
+	if ((int)s_FramTx.size() < 1 + FRAM_ADDR)
+	{
+		for (int i = 0; i < Len; i++) { pBuff[i] = 0xFF; }
+		return Len;
+	}
+
+	uint32_t addr = FramAddr(&s_FramTx[1]);
+	for (int i = 0; i < Len; i++) { pBuff[i] = s_Fram[(addr + i) % FRAM_SIZE]; }
+	return Len;
+}
+
+static void FramStopRx(DevIntrf_t *) {}
+
+static void FramStopTx(DevIntrf_t *)
+{
+	if (s_FramTx.empty()) { return; }
+
+	uint8_t cmd = s_FramTx[0];
+
+	switch (cmd)
+	{
+		case FLASH_CMD_WRENABLE:  s_FramWel = true;  break;
+		case FLASH_CMD_WRDISABLE: s_FramWel = false; break;
+
+		case FLASH_CMD_RESET_DEVICE: s_FramRstCnt++; break;
+
+		case FLASH_CMD_WRSR:
+			if (s_FramTx.size() >= 2) { s_FramBp = s_FramTx[1]; }
+			s_FramWrsrCnt++;
+			s_FramWel = false;
+			break;
+
+		case FLASH_CMD_WRITE:
+			if ((int)s_FramTx.size() > 1 + FRAM_ADDR)
+			{
+				if (!s_FramWel)
+				{
+					s_FramVioNoWel++;
+					break;
+				}
+				uint32_t addr = FramAddr(&s_FramTx[1]);
+				for (size_t i = 1 + FRAM_ADDR; i < s_FramTx.size(); i++)
+				{
+					// Overwrites in place: no erase, no bit clearing rule.
+					s_Fram[(addr + i - 1 - FRAM_ADDR) % FRAM_SIZE] = s_FramTx[i];
+				}
+				s_FramWel = false;
+			}
+			break;
+
+		default: break;
+	}
+}
+
 static void NorStopRx(DevIntrf_t *) {}
 
 static void NorStopTx(DevIntrf_t *)
@@ -532,15 +652,61 @@ static void TestEeprom(MockIntrf &Bus)
 	CHECK(pinned.SetWriteProtect(0, 1, false) == 0, "eeprom: unprotect through the pin");
 }
 
+static void TestFram(MockIntrf &Bus)
+{
+	FramPowerOn();
+
+	Nvm mem;
+	NvmCfg_t cfg;
+	memset(&cfg, 0, sizeof(cfg));
+	cfg.DevNo = 0;
+	cfg.TotalSize = FRAM_SIZE;
+	cfg.EraseSize = 0;					// direct read write
+	cfg.PageSize = FRAM_PAGE;
+	cfg.AddrSize = FRAM_ADDR;
+	cfg.DevId = FRAM_ID;
+	cfg.DevIdSize = 3;
+	cfg.WrProtMask = 0x0C;				// BP0..BP1
+	cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+
+	CHECK(mem.Init(cfg, &Bus), "fram init");
+	CHECK(s_FramRstCnt == 0, "fram: no reset for a direct medium");
+	CHECK(mem.ReadId(3) == FRAM_ID, "fram id");
+	CHECK(mem.EraseSize() == 0, "fram has no erase unit");
+
+	RunCommon(mem, "SPI FRAM", FRAM_SIZE, FRAM_PAGE);
+
+	// Every program went through the derived write latch.
+	CHECK(s_FramVioNoWel == 0, "fram: every program held the write latch");
+
+	// Overwrites in place, no erase between.
+	uint8_t a[8], b[8], rd[8];
+	memset(a, 0xAA, sizeof(a));
+	memset(b, 0x55, sizeof(b));
+	mem.Write(100, a, sizeof(a));
+	mem.Write(100, b, sizeof(b));
+	mem.Read(100, rd, sizeof(rd));
+	CHECK(memcmp(b, rd, sizeof(b)) == 0, "fram: overwrites without an erase");
+	CHECK(mem.Erase(0, 64) == 0, "fram: erase is a no-op success");
+
+	// Status register block protect on a direct serial part.
+	CHECK(mem.SetWriteProtect(0, 1, true) == 0, "fram: protect through the status bits");
+	CHECK(s_FramWrsrCnt >= 1, "fram: the write status command was used");
+	CHECK(mem.SetWriteProtect(0, 1, false) == 0, "fram: unprotect through the status bits");
+}
+
 int main(void)
 {
 	MockIntrf nor(DEVINTRF_TYPE_SPI, NorStartRx, NorRxData, NorStopRx,
 				  NorStartTx, NorTxData, NorTxSrData, NorStopTx);
+	MockIntrf fram(DEVINTRF_TYPE_SPI, FramStartRx, FramRxData, FramStopRx,
+				   FramStartTx, FramTxData, FramTxSrData, FramStopTx);
 	MockIntrf eep(DEVINTRF_TYPE_I2C, EepStartRx, EepRxData, EepStopRx,
 				  EepStartTx, EepTxData, EepTxSrData, EepStopTx);
 
 	TestNorFlash(nor);
 	TestEeprom(eep);
+	TestFram(fram);
 
 	printf("\nChecks run: %d\n", g_Checks);
 	if (g_Fail == 0)

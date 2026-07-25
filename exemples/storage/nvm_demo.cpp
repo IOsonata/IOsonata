@@ -485,9 +485,16 @@ static bool NvmDemoSetup(void)
 	g_Uart.printf("device  : %lu bytes, unit %lu\r\n",
 				  (unsigned long)cfg.TotalSize, (unsigned long)unit);
 
-	s_RegionAddr = (uintptr_t)(ceiling
-			- (uint64_t)unit * (NVM_DEMO_TOP_RESERVE_PAGES
-								 + NVM_DEMO_REGION_PAGES));
+	uint64_t below = (uint64_t)unit * (NVM_DEMO_TOP_RESERVE_PAGES
+									   + NVM_DEMO_REGION_PAGES);
+
+	if (ceiling < below)
+	{
+		g_Uart.printf("device too small for the region\r\n");
+		return false;
+	}
+
+	s_RegionAddr = (uintptr_t)(ceiling - below);
 
 	uint64_t regionsize = (uint64_t)unit * NVM_DEMO_REGION_PAGES;
 

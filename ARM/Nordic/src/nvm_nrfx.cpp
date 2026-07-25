@@ -824,9 +824,17 @@ static uintptr_t FrameAddr(void)
 // Put whatever whole words have been collected into the memory.
 static int NvmFlush(void)
 {
-	if (s_DataLen < (int)NVM_INTRF_WRITE_GRAN)
+	if (s_DataLen == 0)
 	{
 		return 0;
+	}
+
+	// A payload that is not whole words cannot be programmed; trimming it
+	// silently would report bytes written that never were.
+	if ((s_DataLen % (int)NVM_INTRF_WRITE_GRAN) != 0)
+	{
+		s_DataLen = 0;
+		return -EINVAL;
 	}
 
 	uint32_t words = (uint32_t)s_DataLen / NVM_INTRF_WRITE_GRAN;

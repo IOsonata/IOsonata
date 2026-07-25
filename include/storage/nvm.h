@@ -10,15 +10,15 @@ Init.
 
 They are the same device to this driver. Every access is an address framed on
 the wire followed by data, split at the page boundary, and a wait until the
-memory has taken it. What differs between a flash and an EEPROM is only which
-commands exist, and a command of 0 means the medium does not have it:
+memory has taken it. What differs between a flash and an EEPROM the driver
+works out for itself, from the bus and from EraseSize:
 
-	                  flash                EEPROM
-	command byte      RdCmd, WrCmd         0, address only
-	write enable      WrEnCmd              0, not needed
-	wait for commit   RdStatusCmd polled   0, WriteDelayUs instead
-	erase             EraseCmd             0, overwrites directly
-	write protect     WrStatusCmd bits     WrProtPin
+	                  serial (SPI family)     I2C
+	command byte      0x03 read, 0x02 write   none, address only
+	write enable      0x06, latch polled      not needed
+	wait for commit   status 0x05 polled      WriteDelayUs
+	erase             from the granule        EraseSize 0, overwrites
+	write protect     status bits or pin      WrProtPin
 
 Addresses too wide for the address bytes are folded into the device address,
 the way small EEPROMs select a block. The driver works that out from TotalSize
@@ -39,8 +39,6 @@ static const NvmCfg_t s_FlashCfg = {
 	.EraseSize = 4 * 1024,
 	.PageSize = 256,
 	.AddrSize = 3,
-	.RdCmd = { FLASH_CMD_READ, 0 },
-	.WrCmd = { FLASH_CMD_WRITE, 0 },
 	.WrProtMask = 0x3C,				// BP0..BP3
 	.WrProtPin = { -1, -1, },		// no pin on this part
 };
@@ -57,7 +55,10 @@ protect, the reset pair, the id read, and 4 byte address mode past 16
 MBytes. At Init the driver resets an erase medium first, because the chip
 does not reset when the MCU does and can be left in a state where every
 other command is misread; the id probe then retries to cover the recovery
-time, and 4 byte mode, which the reset cleared, is entered last.
+time, and 4 byte mode, which the reset cleared, is entered last. Past 16
+MBytes the policy is EN4B mode with the standard opcodes taking 4 address
+bytes, not the dedicated 4 byte opcodes the legacy driver issues; both are
+JEDEC defined, but no 4 byte part has run in this mode yet.
 
 The one place parts genuinely differ is the read and program pair once the
 bus is wider than plain SPI: the fast, dual, quad or octal command and,
@@ -237,7 +238,9 @@ typedef struct __Nvm_Cfg {
 	// Device probe.
 	uint32_t	DevId;			//!< Expected device id, 0 to skip the check
 	uint8_t		DevIdSize;		//!< Id length in bytes
-	// Command set. A command of 0 means the medium does not have it, which is
+	// The read and program pair, the one command configuration: 0 derives
+	// the plain bus standard from the interface type, set is a wide bus
+	// part's own command with its dummy cycles, which is
 	// how one driver serves a flash that needs commands and an EEPROM that
 	// needs none.
 	NvmCmd_t	RdCmd;			//!< Read. 0 : derived from the interface
@@ -480,7 +483,7 @@ private:
 				  uint32_t *pDevAddr);
 	int Program(uint32_t Addr, const uint8_t *pData, uint32_t Len);
 	int EraseUnit(uint32_t Addr);
-	void SendCmd(const NvmCmd_t &Cmd);
+	int SendCmd(const NvmCmd_t &Cmd);
 
 	uint64_t		vRegionOffset;	//!< Absolute region offset on the medium
 	uint64_t		vRegionSize;	//!< Region size in bytes
@@ -504,6 +507,9 @@ private:
 	NvmCmd_t	vMassEraseCmd;	//!< Erase the whole device
 	NvmCmd_t	vRdStatusCmd;	//!< Read status, derived from the kind
 	NvmCmd_t	vWrStatusCmd;	//!< Write status, derived from the kind
+	uint32_t	vBaseDevAddr;	//!< Configured device address, immutable;
+								//!< the banked address derives from it per
+								//!< frame so bank bits never stick
 	IOPinCfg_t	vWrProtPin;		//!< Write protect pin, PortNo < 0 if unused
 };
 
