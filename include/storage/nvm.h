@@ -501,12 +501,8 @@ private:
 	uint8_t		vWrProtMask;	//!< Status bits holding the block protect
 	NvmCmd_t	vRdCmd;			//!< Read command
 	NvmCmd_t	vWrCmd;			//!< Program command
-	NvmCmd_t	vWrEnCmd;		//!< Write enable
-	NvmCmd_t	vWrDisCmd;		//!< Write disable
-	NvmCmd_t	vEraseCmd;		//!< Erase one unit
-	NvmCmd_t	vMassEraseCmd;	//!< Erase the whole device
-	NvmCmd_t	vRdStatusCmd;	//!< Read status, derived from the kind
-	NvmCmd_t	vWrStatusCmd;	//!< Write status, derived from the kind
+	bool		vbBare;			//!< Bare address bus (I2C): no command
+								//!< bytes, no latch, no status register
 	uint32_t	vBaseDevAddr;	//!< Configured device address, immutable;
 								//!< the banked address derives from it per
 								//!< frame so bank bits never stick

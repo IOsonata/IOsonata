@@ -100,12 +100,6 @@ Nvm::Nvm()
 	vWrProtMask = 0;
 	memset(&vRdCmd, 0, sizeof(vRdCmd));
 	memset(&vWrCmd, 0, sizeof(vWrCmd));
-	memset(&vWrEnCmd, 0, sizeof(vWrEnCmd));
-	memset(&vWrDisCmd, 0, sizeof(vWrDisCmd));
-	memset(&vEraseCmd, 0, sizeof(vEraseCmd));
-	memset(&vMassEraseCmd, 0, sizeof(vMassEraseCmd));
-	memset(&vRdStatusCmd, 0, sizeof(vRdStatusCmd));
-	memset(&vWrStatusCmd, 0, sizeof(vWrStatusCmd));
 	vWrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
 }
 
@@ -113,7 +107,7 @@ int Nvm::FrameAddr(uint8_t *pFrame, uint8_t Cmd, uint32_t Addr,
 				   uint32_t *pDevAddr)
 {
 	int len = 0;
-	uint32_t devaddr = DeviceAddress();
+	uint32_t devaddr = vBaseDevAddr;
 
 	// A command byte where the medium has one. An EEPROM has none and the
 	// frame is the address alone.
@@ -143,26 +137,29 @@ int Nvm::FrameAddr(uint8_t *pFrame, uint8_t Cmd, uint32_t Addr,
 	return len;
 }
 
-void Nvm::SendCmd(const NvmCmd_t &Cmd)
+int Nvm::SendCmd(const NvmCmd_t &Cmd)
 {
 	if (Cmd.Cmd == 0)
-	{
-		return;
-	}
-
-	uint8_t c = Cmd.Cmd;
-
-	Device::Write(&c, 1, nullptr, 0);
-}
-
-uint8_t Nvm::ReadStatus(void)
-{
-	if (vRdStatusCmd.Cmd == 0)
 	{
 		return 0;
 	}
 
-	uint8_t cmd = vRdStatusCmd.Cmd;
+	uint8_t c = Cmd.Cmd;
+
+	// A command only transaction has no payload, so Device::Write's payload
+	// count is zero whether it worked or not. Only the full transfer count
+	// distinguishes the two.
+	return (Interface()->Tx(DeviceAddress(), &c, 1) == 1) ? 0 : -EIO;
+}
+
+uint8_t Nvm::ReadStatus(void)
+{
+	if (vbBare)
+	{
+		return 0;
+	}
+
+	uint8_t cmd = NVM_CMD_RDSR;
 	uint8_t sr = 0;
 
 	Read(&cmd, 1, &sr, 1);
@@ -186,7 +183,7 @@ bool Nvm::WaitReady(uint32_t Timeout)
 {
 	// A medium with a status register says when it is done. One without takes
 	// a known time, which the config gives.
-	if (vRdStatusCmd.Cmd == 0)
+	if (vbBare)
 	{
 		if (WaitPoll() == false)
 		{
@@ -215,14 +212,14 @@ bool Nvm::WaitReady(uint32_t Timeout)
 
 bool Nvm::WriteEnable(uint32_t Timeout)
 {
-	// A medium that needs no latch is always writable.
-	if (vWrEnCmd.Cmd == 0)
+	// A bare bus has no latch: always writable.
+	if (vbBare)
 	{
 		return true;
 	}
 
 	WaitReady(Timeout);
-	SendCmd(vWrEnCmd);
+	SendCmd({ NVM_CMD_WRENABLE, 0 });
 
 	do {
 		if ((ReadStatus() & NVM_SR_WEL) != 0)
@@ -236,7 +233,10 @@ bool Nvm::WriteEnable(uint32_t Timeout)
 
 void Nvm::WriteDisable(void)
 {
-	SendCmd(vWrDisCmd);
+	if (vbBare == false)
+	{
+		SendCmd({ NVM_CMD_WRDISABLE, 0 });
+	}
 }
 
 bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
@@ -256,6 +256,7 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	vPageSize = Cfg.PageSize;
 	vWrGran = (Cfg.WriteGran != 0) ? Cfg.WriteGran : 1;
 	vAddrSize = (Cfg.AddrSize != 0) ? Cfg.AddrSize : 3;
+	vBaseDevAddr = (uint32_t)Cfg.DevNo;
 	vWrDelayUs = Cfg.WriteDelayUs;
 	vWrProtMask = Cfg.WrProtMask;
 	// Almost no command is configuration: the bus and the kind decide them.
@@ -265,13 +266,32 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	// internal memory interface emulates. The one exception is the read and
 	// program pair, where a wide bus part has its own command and dummy
 	// cycles: zero derives the plain bus standard, set overrides.
-	if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
+	// The buses this driver understands: I2C takes bare addresses, the SPI
+	// family speaks the serial protocol, and UNKNOWN is a command emulating
+	// adapter such as the internal memory interface. Anything else is not a
+	// memory bus.
+	switch (pIntrf->Type())
+	{
+		case DEVINTRF_TYPE_I2C:
+		case DEVINTRF_TYPE_SPI:
+		case DEVINTRF_TYPE_QSPI:
+		case DEVINTRF_TYPE_OSPI:
+		case DEVINTRF_TYPE_UNKOWN:
+			break;
+
+		default:
+			return false;
+	}
+
+	// The bus is one of the two facts every command follows from; the kind,
+	// from EraseSize, is the other. Nothing else is stored: each operation
+	// decides its command where it runs.
+	vbBare = (pIntrf->Type() == DEVINTRF_TYPE_I2C);
+
+	if (vbBare)
 	{
 		vRdCmd = Cfg.RdCmd;
 		vWrCmd = Cfg.WrCmd;
-		vWrEnCmd = { 0, 0 };
-		vWrDisCmd = { 0, 0 };
-		vRdStatusCmd = { 0, 0 };
 	}
 	else
 	{
@@ -279,33 +299,6 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 									  : NvmCmd_t{ NVM_CMD_READ, 0 };
 		vWrCmd = (Cfg.WrCmd.Cmd != 0) ? Cfg.WrCmd
 									  : NvmCmd_t{ NVM_CMD_WRITE, 0 };
-		vWrEnCmd = { NVM_CMD_WRENABLE, 0 };
-		vWrDisCmd = { NVM_CMD_WRDISABLE, 0 };
-		vRdStatusCmd = { NVM_CMD_RDSR, 0 };
-	}
-
-	// The kind adds what the JEDEC standard fixed for an erase medium.
-	vWrStatusCmd = { 0, 0 };
-	vEraseCmd = { 0, 0 };
-	vMassEraseCmd = { 0, 0 };
-
-	if (vEraseSize != 0)
-	{
-		vWrStatusCmd = { NVM_CMD_WRSR, 0 };
-		vMassEraseCmd = { NVM_CMD_CHIP_ERASE, 0 };
-
-		switch (vEraseSize)
-		{
-			case 32 * 1024:
-				vEraseCmd = { NVM_CMD_BLK32_ERASE, 0 };
-				break;
-			case 64 * 1024:
-				vEraseCmd = { NVM_CMD_BLK64_ERASE, 0 };
-				break;
-			default:
-				vEraseCmd = { NVM_CMD_SECT_ERASE, 0 };
-				break;
-		}
 	}
 	vWrProtPin = Cfg.WrProtPin;
 
@@ -354,8 +347,11 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	// assumes a sane device.
 	if (vEraseSize != 0)
 	{
-		SendCmd({ NVM_CMD_RESET_EN, 0 });
-		SendCmd({ NVM_CMD_RESET, 0 });
+		if (SendCmd({ NVM_CMD_RESET_EN, 0 }) != 0 ||
+			SendCmd({ NVM_CMD_RESET, 0 }) != 0)
+		{
+			return false;
+		}
 	}
 
 	// Probe the device id where the config asked for it. The retries cover
@@ -382,11 +378,34 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	// reset above cleared the mode, so it is entered last.
 	if (vEraseSize != 0 && vAddrSize > 3)
 	{
-		SendCmd({ NVM_CMD_EN4B, 0 });
+		if (SendCmd({ NVM_CMD_EN4B, 0 }) != 0)
+		{
+			return false;
+		}
 	}
 
-	uint64_t rsize = (RegionSize != 0) ? RegionSize : (vDevSize - RegionOff);
-	if (RegionOff + rsize > vDevSize)
+	if (RegionOff > vDevSize)
+	{
+		return false;
+	}
+
+	uint64_t avail = vDevSize - RegionOff;
+
+	if (RegionSize > avail)
+	{
+		return false;
+	}
+
+	uint64_t rsize = (RegionSize != 0) ? RegionSize : avail;
+
+	// The physical placement must respect the write granularity, or a frame
+	// starting mid word would silently lose its tail; and an erase region
+	// must start on an erase unit.
+	if ((RegionOff % vWrGran) != 0 || (vPageSize % vWrGran) != 0)
+	{
+		return false;
+	}
+	if (vEraseSize != 0 && (RegionOff % vEraseSize) != 0)
 	{
 		return false;
 	}
@@ -519,12 +538,19 @@ int Nvm::EraseUnit(uint32_t Addr)
 		return -EBUSY;
 	}
 
+	uint8_t op = NVM_CMD_SECT_ERASE;
+	if (vEraseSize == 32 * 1024) { op = NVM_CMD_BLK32_ERASE; }
+	else if (vEraseSize == 64 * 1024) { op = NVM_CMD_BLK64_ERASE; }
+
 	uint8_t frame[8];
 	uint32_t devaddr;
-	int flen = FrameAddr(frame, vEraseCmd.Cmd, Addr, &devaddr);
+	int flen = FrameAddr(frame, op, Addr, &devaddr);
 
 	DeviceAddress(devaddr);
-	Device::Write(frame, flen, nullptr, 0);
+	if (Interface()->Tx(devaddr, frame, flen) != flen)
+	{
+		return -EIO;
+	}
 
 	if (WaitReady() == false)
 	{
@@ -542,7 +568,7 @@ int Nvm::Erase(uint64_t Off, uint32_t Len)
 	}
 
 	// A medium that overwrites directly has nothing to erase.
-	if (vEraseSize == 0 || vEraseCmd.Cmd == 0)
+	if (vEraseSize == 0)
 	{
 		return 0;
 	}
@@ -571,7 +597,7 @@ int Nvm::Erase(uint64_t Off, uint32_t Len)
 
 int Nvm::MassErase(void)
 {
-	if (vMassEraseCmd.Cmd == 0)
+	if (vEraseSize == 0)
 	{
 		return -ENOTSUP;
 	}
@@ -587,7 +613,10 @@ int Nvm::MassErase(void)
 		return -EBUSY;
 	}
 
-	SendCmd(vMassEraseCmd);
+	if (SendCmd({ NVM_CMD_CHIP_ERASE, 0 }) != 0)
+	{
+		return -EIO;
+	}
 
 	if (WaitReady((uint32_t)-1) == false)
 	{
@@ -605,7 +634,7 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 
 	// Block protect bits where the medium has them. Checked first because a
 	// config left at zero would otherwise look like it had a pin on port 0.
-	if (vWrStatusCmd.Cmd == 0 || vWrProtMask == 0)
+	if (vbBare || vWrProtMask == 0)
 	{
 		// No status bits, so a pin if one is configured.
 		if (vWrProtPin.PortNo >= 0 && vWrProtPin.PinNo >= 0)
@@ -640,7 +669,9 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 		return -EBUSY;
 	}
 
-	Device::Write(&vWrStatusCmd.Cmd, 1, &sr, 1);
+	uint8_t wrsr = NVM_CMD_WRSR;
+
+	Device::Write(&wrsr, 1, &sr, 1);
 
 	if (WaitReady() == false)
 	{
