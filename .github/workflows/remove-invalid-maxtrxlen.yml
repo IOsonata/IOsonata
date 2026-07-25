@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           git diff --check
-          if git grep -nE 'MaxTrxLen|GetMaxTransferLen|DeviceIntrfGetMaxTransferLen' -- . ':!.git'; then
+          if git grep -InE 'MaxTrxLen|GetMaxTransferLen|DeviceIntrfGetMaxTransferLen' -- . ':!.git'; then
             exit 1
           fi
           git diff --name-only
