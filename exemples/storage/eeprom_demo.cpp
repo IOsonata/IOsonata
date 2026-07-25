@@ -1,10 +1,11 @@
 /**-------------------------------------------------------------------------
-@example	i2c_eeprom.cpp
+@example	eeprom_demo.cpp
 
 @brief		I2C EEPROM example
 
-This example shows how to use I2C driver to read/write EEPROM
-Demo showing how to use Eprom with i2c interface in both C and C++
+Runs the same real EEPROM write/read test with either the legacy Seep driver or
+the unified Nvm driver, selected by NVM_MODE below. Both modes use the same I2C
+configuration, EEPROM geometry, test address, data pattern and validation flow.
 
 @author		Hoang Nguyen Hoan
 @date		Sep. 19, 2020
@@ -36,15 +37,43 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "coredev/i2c.h"
 #include "coredev/iopincfg.h"
 #include "idelay.h"
+
+// Select the EEPROM implementation underneath the common test flow.
+// 0 : legacy Seep driver
+// 1 : unified Nvm driver
+#ifndef NVM_MODE
+#define NVM_MODE			0
+#endif
+
+#if NVM_MODE == 0
 #include "storage/seep.h"
+#elif NVM_MODE == 1
+#include "storage/nvm.h"
+#else
+#error NVM_MODE must be 0 or 1
+#endif
 
 #include "board.h"
 
-//#define C_CODE	// Define for C code, comment out for C++ object
+// Define for the legacy C API. Unified Nvm is a C++ class.
+//#define C_CODE
+
+#if NVM_MODE != 0 && defined(C_CODE)
+#error C_CODE is supported only with the legacy Seep mode
+#endif
+
+static const uint8_t EEPROM_DEV_ADDR = 0x50;
+static const uint8_t EEPROM_ADDR_SIZE = 2;
+static const uint32_t EEPROM_PAGE_SIZE = 32;
+static const uint32_t EEPROM_SIZE = 128 * 32;
+static const uint32_t EEPROM_WRITE_DELAY_MS = 100;
+static const uint32_t EEPROM_TEST_OFFSET = 256;
+static const uint32_t EEPROM_TEST_SIZE = 512;
 
 static const IOPinCfg_t s_Pins[] = {
 	{I2C_SDA_PORT, I2C_SDA_PIN, I2C_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// SDA
@@ -68,96 +97,156 @@ static const I2CCfg_t s_I2cCfg = {
 	.EvtCB = NULL				// Event callback
 };
 
-#ifdef C_CODE
-I2CDev_t g_I2CDev;
-#else
-I2C g_I2c;
-#endif
+#if NVM_MODE == 0
 
 static const SeepCfg_t s_SeepCfg = {
-	.DevAddr = 0x50,
-	.AddrLen = 2,
-	.PageSize = 32,
-	.Size = 128 * 32,
-	.WrDelay = 100,
+	.DevAddr = EEPROM_DEV_ADDR,
+	.AddrLen = EEPROM_ADDR_SIZE,
+	.PageSize = EEPROM_PAGE_SIZE,
+	.Size = EEPROM_SIZE,
+	.WrDelay = EEPROM_WRITE_DELAY_MS,
 	.WrProtPin = {-1, -1,},
 };
 
 #ifdef C_CODE
-SeepDev_t g_SeepDev;
+static I2CDev_t g_I2CDev;
+static SeepDev_t g_SeepDev;
 #else
-Seep g_Seep;
+static I2C g_I2c;
+static Seep g_Seep;
 #endif
 
-bool EepromTest()
+#else
+
+static const NvmCfg_t s_NvmCfg = {
+	.DevNo = EEPROM_DEV_ADDR,
+	.TotalSize = EEPROM_SIZE,
+	.EraseSize = 0,				// EEPROM overwrites directly
+	.PageSize = EEPROM_PAGE_SIZE,
+	.AddrSize = EEPROM_ADDR_SIZE,
+	.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },
+	.WriteDelayUs = EEPROM_WRITE_DELAY_MS * 1000UL,
+};
+
+static I2C g_I2c;
+static Nvm g_Nvm;
+
+#endif
+
+static bool EepromInit(void)
 {
-	uint8_t x[512], y[512];
-	bool retval = true;
-
-	for (int i = 0; i < 256; i++)
+#if NVM_MODE == 0 && defined(C_CODE)
+	if (I2CInit(&g_I2CDev, &s_I2cCfg) == false)
 	{
-		x[i] = i;
-		x[256+i] = 256-i;
+		return false;
 	}
-
-#ifdef C_CODE
-	SeepWrite(&g_SeepDev, 256, x, 512);
+	return SeepInit(&g_SeepDev, &s_SeepCfg, &g_I2CDev.DevIntrf);
 #else
-	g_Seep.Write(0, x, 512);
-#endif
+	if (g_I2c.Init(s_I2cCfg) == false)
+	{
+		return false;
+	}
 
-	memset(y, 0xa5, 512);
-
-#ifdef C_CODE
-	SeepRead(&g_SeepDev, 256, y, 512);
+#if NVM_MODE == 0
+	return g_Seep.Init(s_SeepCfg, &g_I2c);
 #else
-	g_Seep.Read(0, y, 512);
+	return g_Nvm.Init(s_NvmCfg, &g_I2c);
 #endif
-
-	if (memcmp(x, y, 512) != 0)
-	{
-		printf("Failed\r\n");
-		retval = false;
-	}
-	else
-	{
-		printf("Eeprom test passed.\n");
-		retval = true;
-	}
-
-	return retval;
+#endif
 }
 
-//
-// Print a greeting message on standard output and exit.
-//
-// On embedded platforms this might require semi-hosting or similar.
-//
-// For example, for toolchains derived from GNU Tools for Embedded,
-// to enable semi-hosting, the following was added to the linker:
-//
-// --specs=rdimon.specs -Wl,--start-group -lgcc -lc -lm -lrdimon -Wl,--end-group
-//
-// Adjust it for other toolchains.
-//
+static int EepromWrite(uint32_t Addr, uint8_t *pData, uint32_t Len)
+{
+#if NVM_MODE == 0 && defined(C_CODE)
+	return SeepWrite(&g_SeepDev, Addr, pData, (int)Len);
+#elif NVM_MODE == 0
+	return g_Seep.Write(Addr, pData, (int)Len);
+#else
+	return g_Nvm.Write(Addr, pData, Len);
+#endif
+}
+
+static int EepromRead(uint32_t Addr, uint8_t *pData, uint32_t Len)
+{
+#if NVM_MODE == 0 && defined(C_CODE)
+	return SeepRead(&g_SeepDev, Addr, pData, (int)Len);
+#elif NVM_MODE == 0
+	return g_Seep.Read(Addr, pData, (int)Len);
+#else
+	return g_Nvm.Read(Addr, pData, Len);
+#endif
+}
+
+static bool EepromTest(void)
+{
+	uint8_t x[EEPROM_TEST_SIZE];
+	uint8_t y[EEPROM_TEST_SIZE];
+
+	for (uint32_t i = 0; i < EEPROM_TEST_SIZE / 2; i++)
+	{
+		x[i] = (uint8_t)i;
+		x[EEPROM_TEST_SIZE / 2 + i] = (uint8_t)(256 - i);
+	}
+
+	printf("Writing %lu bytes at 0x%lx...\r\n",
+		   (unsigned long)EEPROM_TEST_SIZE,
+		   (unsigned long)EEPROM_TEST_OFFSET);
+
+	int cnt = EepromWrite(EEPROM_TEST_OFFSET, x, EEPROM_TEST_SIZE);
+	if (cnt != (int)EEPROM_TEST_SIZE)
+	{
+		printf("EEPROM write failed: %d of %lu bytes\r\n", cnt,
+			   (unsigned long)EEPROM_TEST_SIZE);
+		return false;
+	}
+
+	memset(y, 0xA5, sizeof(y));
+
+	printf("Validate readback...\r\n");
+	cnt = EepromRead(EEPROM_TEST_OFFSET, y, EEPROM_TEST_SIZE);
+	if (cnt != (int)EEPROM_TEST_SIZE)
+	{
+		printf("EEPROM read failed: %d of %lu bytes\r\n", cnt,
+			   (unsigned long)EEPROM_TEST_SIZE);
+		return false;
+	}
+
+	if (memcmp(x, y, sizeof(x)) != 0)
+	{
+		for (uint32_t i = 0; i < EEPROM_TEST_SIZE; i++)
+		{
+			if (x[i] != y[i])
+			{
+				printf("EEPROM verify failed at 0x%lx: wrote 0x%02x read 0x%02x\r\n",
+					   (unsigned long)(EEPROM_TEST_OFFSET + i), x[i], y[i]);
+				break;
+			}
+		}
+		return false;
+	}
+
+	printf("EEPROM test passed.\r\n");
+	return true;
+}
 
 int main()
 {
-	// Configure
-
-#ifdef C_CODE
-	I2CInit(&g_I2CDev, &s_I2cCfg);
-	SeepInit(&g_SeepDev, &s_SeepCfg, &g_I2CDev.DevIntrf);
+#if NVM_MODE == 0
+	printf("EEPROM Demo, legacy Seep driver\r\n");
 #else
-	g_I2c.Init(s_I2cCfg);
-	g_Seep.Init(s_SeepCfg, &g_I2c);
+	printf("EEPROM Demo, unified Nvm driver\r\n");
 #endif
 
-	EepromTest();
+	if (EepromInit() == false)
+	{
+		printf("EEPROM init failed\r\n");
+	}
+	else
+	{
+		EepromTest();
+	}
 
 	while (1);
 
 	return 0;
 }
-
-
