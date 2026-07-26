@@ -83,6 +83,14 @@ typedef struct __Nvm_Intrf_Stat {
 	uint32_t	Busy;		//!< Refused while a stack held the memory
 	uint32_t	Evt;		//!< Results delivered as a stack event
 	uint32_t	Skipped;	//!< Erases skipped, the unit already erased
+
+	// Which of the three arbitration paths carried the operation. Ops counts
+	// them all together, so on its own it cannot tell an operation that went
+	// through a stack from one that drove the controller with the radio up,
+	// and those two are the pair worth telling apart.
+	uint32_t	Sd;			//!< Submitted to the SoftDevice
+	uint32_t	Slot;		//!< Run inside an MPSL timeslot
+	uint32_t	Direct;		//!< Drove the controller, the memory was ours
 } NvmIntrfStat_t;
 
 /// @brief	The MCU memory controller as a device interface.

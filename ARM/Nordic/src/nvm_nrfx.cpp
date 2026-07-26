@@ -291,7 +291,9 @@ static uint32_t CtrlEraseSize(void)
 
 #endif
 
-// True when the unit already reads erased, so it can be left alone. Saves the
+#if defined(NRF52_SERIES)
+
+// True when the page already reads erased, so it can be left alone. Saves the
 // work and the wear that goes with it.
 static bool CtrlIsErased(uintptr_t Addr, uint32_t Len)
 {
@@ -308,6 +310,8 @@ static bool CtrlIsErased(uintptr_t Addr, uint32_t Len)
 
 	return true;
 }
+
+#endif	// NRF52_SERIES
 
 // Spend one unit of a long wait in the application, or in a short delay when
 // it supplied nothing. Returns false when the application asked to give up.
@@ -624,6 +628,8 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 	{
 		SdWrArg_t arg = { (uint32_t *)Addr, pSrc, WordCnt };
 
+		s_Stat.Sd++;
+
 		return SdRun(SdWriteSubmit, &arg);
 	}
 	// Not running, or no SoftDevice support linked: fall through.
@@ -634,11 +640,14 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 		{
 			SdWrArg_t arg = { (uint32_t *)Addr, pSrc, WordCnt };
 
+			s_Stat.Sd++;
+
 			return SdRun(SdWriteSubmit, &arg);
 		}
 
 		// Present but stopped: neither the stack nor the radio runs, so
 		// drive the controller.
+		s_Stat.Direct++;
 		CtrlWriteWords(Addr, pSrc, WordCnt);
 
 		return 0;
@@ -661,6 +670,8 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 	op.StepBudgetUs = NVM_INTRF_STEP_BUDGET_US;
 	op.pCtx = &ctx;
 
+	s_Stat.Slot++;
+
 	return BtPdsMpslRun(&op);
 #elif defined(NVM_INTRF_SLOT_RUNTIME)
 	if (BtPdsMpslRun != nullptr && BtPdsMpslInit != nullptr)
@@ -678,13 +689,17 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 		op.StepBudgetUs = NVM_INTRF_STEP_BUDGET_US;
 		op.pCtx = &ctx;
 
+		s_Stat.Slot++;
+
 		return BtPdsMpslRun(&op);
 	}
 	// No link controller in this application: the memory is ours.
+	s_Stat.Direct++;
 	CtrlWriteWords(Addr, pSrc, WordCnt);
 
 	return 0;
 #else
+	s_Stat.Direct++;
 	CtrlWriteWords(Addr, pSrc, WordCnt);
 
 	return 0;
@@ -743,11 +758,15 @@ static int NvmEraseUnit(uintptr_t Addr)
 		{
 			uint32_t no = (uint32_t)(Addr / page);
 
+			s_Stat.Sd++;
+
 			return SdRun(SdEraseSubmit, &no);
 		}
 
 		// Present but stopped: neither the stack nor the radio runs, so
 		// erase in place.
+		s_Stat.Direct++;
+
 		return NvmEraseBare(Addr, page);
 	}
 	// No SoftDevice in the flash: a link controller build arbitrates below.
@@ -767,41 +786,24 @@ static int NvmEraseUnit(uintptr_t Addr)
 	op.StepBudgetUs = NVM_INTRF_STEP_BUDGET_US;
 	op.pCtx = &ctx;
 
+	s_Stat.Slot++;
+
 	return BtPdsMpslRun(&op);
 #else
+	s_Stat.Direct++;
+
 	return NvmEraseBare(Addr, page);
 #endif
 
 #else	// nRF54L
 
-	// RRAM has no erase command and rewrites in place, so the erased pattern
-	// is written over the unit. It goes the same way as any other write.
-	alignas(4) static uint8_t ones[NVM_INTRF_MAX_XFER];
-	uint32_t left = CtrlEraseSize();
+	// RRAM rewrites in place, so it has no erase and the config reports none.
+	// Nvm answers an erase on such a medium itself and never frames one, so
+	// this is unreachable. An application that wants the region to read as
+	// ones writes ones, the way it would on an EEPROM or an FRAM.
+	(void)Addr;
 
-	if (CtrlIsErased(Addr, left))
-	{
-		s_Stat.Skipped++;
-		return 0;
-	}
-
-	memset(ones, 0xFF, sizeof(ones));
-
-	while (left > 0)
-	{
-		uint32_t n = left < sizeof(ones) ? left : (uint32_t)sizeof(ones);
-
-		int res = NvmSubmit(Addr, (const uint32_t *)ones,
-							n / NVM_INTRF_WRITE_GRAN);
-		if (res != 0)
-		{
-			return res;
-		}
-		Addr += n;
-		left -= n;
-	}
-
-	return 0;
+	return -ENOTSUP;
 #endif
 }
 
@@ -1032,6 +1034,12 @@ void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
 void NvmIntrfCfg(NvmCfg_t &Cfg)
 {
 	Cfg.DevNo = 0;
+
+	// Both parts map their memory from 0, so the frame address and the offset
+	// within the device are the same number here. A part mapped elsewhere
+	// puts its base in here and the driver adds it.
+	Cfg.BaseAddr = 0;
+
 #if defined(NRF52_SERIES)
 	// Geometry from the device itself.
 	uint32_t pagesize = NRF_FICR->CODEPAGESIZE;

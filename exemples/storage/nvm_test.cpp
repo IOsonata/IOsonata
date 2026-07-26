@@ -99,6 +99,7 @@ static uint32_t s_NorBusyCnt;	// status polls left before WIP clears
 static bool s_NorIntrfAsync;	// interface returns -1 and reports by event
 static uint32_t s_NorRstCnt;
 static uint8_t s_NorBp;
+static uint32_t s_NorPgmOk;		// programs accepted before the part refuses
 static int s_NorVioNoWel;
 static int s_NorVioPageCross;
 static std::vector<uint8_t> s_NorTx;
@@ -110,6 +111,7 @@ static void NorPowerOn(void)
 	s_NorBusyCnt = 0;
 	s_NorIntrfAsync = false;
 	s_NorBp = 0;
+	s_NorPgmOk = 0xFFFFFFFFUL;
 	s_NorVioNoWel = 0;
 	s_NorVioPageCross = 0;
 	s_NorTx.clear();
@@ -134,6 +136,18 @@ static void NorApply(void);
 static int NorTxData(DevIntrf_t *pDev, const uint8_t *pData, int Len)
 {
 	for (int i = 0; i < Len; i++) { s_NorTx.push_back(pData[i]); }
+
+	// The part stops accepting programs after so many, so a chunk part way
+	// through a multi page operation can be made to fail.
+	if (!s_NorTx.empty() && s_NorTx[0] == FLASH_CMD_WRITE
+		&& s_NorTx.size() > (size_t)(1 + NOR_ADDR))
+	{
+		if (s_NorPgmOk == 0)
+		{
+			return 0;
+		}
+		s_NorPgmOk--;
+	}
 
 	// Interrupt driven interface: a data bearing program transfer starts,
 	// reports -1, applies, and completes through the event, the way the
@@ -807,9 +821,9 @@ static void TestNorFlash(MockIntrf &Bus)
 	CHECK(one == half, "flash: bits do not come back without an erase");
 
 	// Write protect through the status block protect bits.
-	CHECK(m2.SetWriteProtect(0, (uint32_t)m2.Size(), true) == 0, "flash: protect");
+	CHECK(m2.SetWriteProtect(true) == 0, "flash: protect");
 	CHECK((m2.ReadStatus() & 0x3Cu) == 0x3Cu, "flash: protect bits set");
-	CHECK(m2.SetWriteProtect(0, (uint32_t)m2.Size(), false) == 0, "flash: unprotect");
+	CHECK(m2.SetWriteProtect(false) == 0, "flash: unprotect");
 	CHECK((m2.ReadStatus() & 0x3Cu) == 0x00u, "flash: protect bits clear");
 
 	// Chip erase, and only on an instance covering the whole device.
@@ -824,6 +838,8 @@ static void TestNorFlash(MockIntrf &Bus)
 	CHECK(r == 0xFF, "flash: device erased");
 	win.Init(NorCfg(), &Bus, NOR_SECT, NOR_SECT);
 	CHECK(win.MassErase() == -EPERM, "flash: mass erase refused on a window");
+	CHECK(win.SetWriteProtect(true) == -EPERM,
+		  "flash: write protect refused on a window");
 }
 
 static void TestEeprom(MockIntrf &Bus)
@@ -850,14 +866,17 @@ static void TestEeprom(MockIntrf &Bus)
 	CHECK(mem.Erase(0, 64) == 0, "eeprom: erase is a no-op success");
 
 	// No status register and no protect bits, so write protect needs a pin.
-	CHECK(mem.SetWriteProtect(0, 1, true) == -ENOTSUP, "eeprom: no pin, unsupported");
+	CHECK(mem.SetWriteProtect(true) == -ENOTSUP,
+		  "eeprom: no pin, unsupported");
 
 	NvmCfg_t pincfg = EepCfg();
 	pincfg.WrProtPin = { 0, 12, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
 	Nvm pinned;
 	pinned.Init(pincfg, &Bus);
-	CHECK(pinned.SetWriteProtect(0, 1, true) == 0, "eeprom: protect through the pin");
-	CHECK(pinned.SetWriteProtect(0, 1, false) == 0, "eeprom: unprotect through the pin");
+	CHECK(pinned.SetWriteProtect(true) == 0,
+		  "eeprom: protect through the pin");
+	CHECK(pinned.SetWriteProtect(false) == 0,
+		  "eeprom: unprotect through the pin");
 }
 
 static void TestFram(MockIntrf &Bus)
@@ -898,9 +917,11 @@ static void TestFram(MockIntrf &Bus)
 	CHECK(mem.Erase(0, 64) == 0, "fram: erase is a no-op success");
 
 	// Status register block protect on a direct serial part.
-	CHECK(mem.SetWriteProtect(0, 1, true) == 0, "fram: protect through the status bits");
+	CHECK(mem.SetWriteProtect(true) == 0,
+		  "fram: protect through the status bits");
 	CHECK(s_FramWrsrCnt >= 1, "fram: the write status command was used");
-	CHECK(mem.SetWriteProtect(0, 1, false) == 0, "fram: unprotect through the status bits");
+	CHECK(mem.SetWriteProtect(false) == 0,
+		  "fram: unprotect through the status bits");
 }
 
 static void TestQspi(MockIntrf &Bus)
@@ -944,9 +965,11 @@ static void TestQspi(MockIntrf &Bus)
 	CHECK(ff, "qspi: erased unit reads all ones");
 	CHECK(mem.MassErase() == 0, "qspi: chip erase as a phase");
 
-	CHECK(mem.SetWriteProtect(0, 1, true) == 0, "qspi: protect through the status bits");
+	CHECK(mem.SetWriteProtect(true) == 0,
+		  "qspi: protect through the status bits");
 	CHECK(s_QWrsrCnt >= 1, "qspi: the write status command was used");
-	CHECK(mem.SetWriteProtect(0, 1, false) == 0, "qspi: unprotect through the status bits");
+	CHECK(mem.SetWriteProtect(false) == 0,
+		  "qspi: unprotect through the status bits");
 }
 
 // ---------------------------------------------------------------------------
@@ -1123,6 +1146,82 @@ static void TestNorAsyncIntrf(MockIntrf &Bus)
 	// mem and amem unhook in their destructors at return.
 }
 
+// A memory that is not mapped at 0. The frame has to hold the address the
+// part answers at, so an offset of 0 in the region has to land at the base.
+static void TestBaseAddr(MockIntrf &Bus)
+{
+	NorPowerOn();
+
+	printf("--- base address\n");
+
+	NvmCfg_t cfg = NorCfg();
+	cfg.BaseAddr = 0x1000;
+
+	Nvm mem;
+	CHECK(mem.Init(cfg, &Bus), "base: init");
+	CHECK(mem.BaseAddress() == 0x1000, "base: reported back");
+
+	uint8_t wr[4] = { 0x11, 0x22, 0x33, 0x44 };
+	uint8_t rd[4] = { 0, 0, 0, 0 };
+
+	CHECK(mem.Write(0, wr, sizeof(wr)) == (int)sizeof(wr), "base: write at offset 0");
+	CHECK(memcmp(&s_Nor[0x1000], wr, sizeof(wr)) == 0,
+		  "base: the data landed at the base, not at 0");
+	CHECK(s_Nor[0] == 0xFF, "base: nothing was written at 0");
+	CHECK(mem.Read(0, rd, sizeof(rd)) == (int)sizeof(rd) &&
+		  memcmp(rd, wr, sizeof(wr)) == 0, "base: read comes back from the base");
+
+	// A base that is not a whole write unit would break every program.
+	NvmCfg_t bad = NorCfg();
+	bad.BaseAddr = 0x1000;
+	bad.WriteGran = 4;
+	Nvm ok4;
+	CHECK(ok4.Init(bad, &Bus), "base: aligned base with a write unit");
+	bad.BaseAddr = 0x1002;
+	Nvm bad4;
+	CHECK(bad4.Init(bad, &Bus) == false, "base: unaligned base refused");
+}
+
+// A program that fails while IsBusy is doing the polling. The result has to
+// survive that call, so Sync or the next operation still reports it.
+static void TestHeldResult(MockIntrf &Bus)
+{
+	NorPowerOn();
+	s_EvtCnt = 0;
+
+	printf("--- held result\n");
+
+	NvmCfg_t cfg = NorCfg();
+	cfg.bIntEn = true;
+	cfg.EvtHandler = AsyncEvtHandler;
+
+	Nvm mem;
+	CHECK(mem.Init(cfg, &Bus), "held: init");
+
+	// A write over three pages, with the part refusing the second chunk. The
+	// first chunk goes out from Write, so the failure happens on a later step,
+	// and that step is driven by IsBusy rather than by the call that asked.
+	static uint8_t wr[NOR_PAGE * 3];
+	memset(wr, 0x5A, sizeof(wr));
+
+	s_NorPgmOk = 1;
+	CHECK(mem.Write(0, wr, sizeof(wr)) == (int)sizeof(wr), "held: write starts");
+
+	// Step until the medium is done. IsBusy is what sees the refusal.
+	int guard = 64;
+	while (mem.IsBusy() && guard-- > 0) {}
+	CHECK(guard > 0, "held: the operation ended");
+	CHECK(s_EvtCnt == 1 && s_LastEvt == NVM_EVT_ERROR,
+		  "held: the failure was reported as an event");
+
+	// The call that observed the failure was IsBusy, which has no way to
+	// report it. Sync still has to.
+	CHECK(mem.Sync() == -EIO, "held: Sync reports the failure IsBusy saw");
+	CHECK(mem.Sync() == 0, "held: reported once, then clean");
+
+	s_NorPgmOk = 0xFFFFFFFFUL;
+}
+
 static void TestHookLifetime(MockIntrf &Bus)
 {
 	printf("--- completion hook lifetime\n");
@@ -1165,7 +1264,9 @@ int main(void)
 	qspi.vDev.pDevData = &s_QDev;
 	TestQspi(qspi);
 	TestNorAsync(nor);
+	TestBaseAddr(nor);
 	TestNorAsyncIntrf(nor);
+	TestHeldResult(nor);
 	TestHookLifetime(nor);
 
 	printf("\nChecks run: %d\n", g_Checks);

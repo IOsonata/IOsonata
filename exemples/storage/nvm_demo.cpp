@@ -303,8 +303,9 @@ static bool ScratchIsErased(Nvm &Mem)
 }
 
 // The stamp lives on the page after the scratch, so the checks never erase it.
-static void StampCheck(Nvm &Mem, uintptr_t RegionAddr)
+static void StampCheck(Nvm &Mem)
 {
+	uintptr_t RegionAddr = (uintptr_t)(Mem.BaseAddress() + Mem.RegionOffset());
 	uint32_t page = UnitSize(Mem);
 	uint64_t off = (uint64_t)page * NVM_DEMO_SCRATCH_PAGES;
 	uintptr_t raw = RegionAddr + (uintptr_t)off;
@@ -357,8 +358,9 @@ static void StampCheck(Nvm &Mem, uintptr_t RegionAddr)
 }
 
 // The checks that need real memory. Uses the scratch pages only.
-static void NvmDemoVerify(Nvm &Mem, uintptr_t RegionAddr)
+static void NvmDemoVerify(Nvm &Mem)
 {
+	uintptr_t RegionAddr = (uintptr_t)(Mem.BaseAddress() + Mem.RegionOffset());
 	uint32_t page = UnitSize(Mem);
 	uint32_t scratch = page * NVM_DEMO_SCRATCH_PAGES;
 
@@ -366,7 +368,7 @@ static void NvmDemoVerify(Nvm &Mem, uintptr_t RegionAddr)
 				  (unsigned long)RegionAddr, (unsigned long)Mem.Size(),
 				  (unsigned long)page, (unsigned long)Mem.WriteGran());
 
-	StampCheck(Mem, RegionAddr);
+	StampCheck(Mem);
 
 	if (Mem.EraseSize() != 0)
 	{
@@ -455,6 +457,10 @@ static void NvmDemoVerify(Nvm &Mem, uintptr_t RegionAddr)
 				  s_Fail == 0 ? "ALL PASS" : "FAILURES",
 				  (unsigned long)st.Ops, (unsigned long)st.Busy,
 				  (unsigned long)st.Evt, (unsigned long)st.Skipped);
+
+	g_Uart.printf("path    : sd %lu slot %lu direct %lu\r\n",
+				  (unsigned long)st.Sd, (unsigned long)st.Slot,
+				  (unsigned long)st.Direct);
 #else
 	g_Uart.printf("\r\n%s\r\n", s_Fail == 0 ? "ALL PASS" : "FAILURES");
 #endif
@@ -608,12 +614,15 @@ static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 		NvmIntrfStat_t st;
 		NvmIntrfGetStat(&st);
 
-		// evt is the one that matters: a result only arrives as an event
-		// while an arbitrating stack is running.
-		g_Uart.printf("cycles %lu writes %lu fails %lu | ops %lu busy %lu evt %lu\r\n",
+		// With the radio up, direct is the count that must stay still: it
+		// means the controller was driven while the stack owned the memory.
+		g_Uart.printf("cycles %lu writes %lu fails %lu | ops %lu busy %lu evt %lu"
+					  " | sd %lu slot %lu direct %lu\r\n",
 					  (unsigned long)s_Cycles, (unsigned long)s_Writes,
 					  (unsigned long)s_Fail, (unsigned long)st.Ops,
-					  (unsigned long)st.Busy, (unsigned long)st.Evt);
+					  (unsigned long)st.Busy, (unsigned long)st.Evt,
+					  (unsigned long)st.Sd, (unsigned long)st.Slot,
+					  (unsigned long)st.Direct);
 #else
 		g_Uart.printf("cycles %lu writes %lu fails %lu\r\n",
 					  (unsigned long)s_Cycles, (unsigned long)s_Writes,
@@ -635,7 +644,7 @@ void BtAppInitUserData()
 		return;
 	}
 
-	NvmDemoVerify(s_Nvm, s_RegionAddr);
+	NvmDemoVerify(s_Nvm);
 
 	// The checks left the scratch in a known state; start the cycle after it.
 	s_Slot = 0;
@@ -685,7 +694,7 @@ int main()
 
 	if (NvmDemoSetup())
 	{
-		NvmDemoVerify(s_Nvm, s_RegionAddr);
+		NvmDemoVerify(s_Nvm);
 	}
 
 	while (true)

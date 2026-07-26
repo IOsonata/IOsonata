@@ -79,7 +79,12 @@ typedef struct __Nvm_Cmd {
 
 typedef struct __Nvm_Cfg {
 	int			DevNo;
+
+	/// Where the memory is mapped. An internal memory adapter hands the frame
+	/// address to the controller, so the frame address has to be the address
+	/// the part answers at. A chip on a bus addresses from 0 and leaves this 0.
 	uint64_t	BaseAddr;
+
 	uint64_t	TotalSize;
 	uint32_t	EraseSize;
 	uint32_t	SectorSize;
@@ -137,17 +142,36 @@ public:
 	/// completion or timeout only; it never completes an NVM program or erase.
 	void IntrfEvent(DEVINTRF_EVT EvtId);
 
-	/// The available status-register and write-protect-pin mechanisms protect
-	/// the complete physical device. Partial ranges are not represented.
-	/// Returns -EPERM for a windowed Nvm instance and -ENOTSUP for a partial
-	/// request or a device with no configured protection mechanism.
-	virtual int SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable);
+	/// Protect or release the whole device.
+	///
+	/// The parts themselves can usually do more than this. Serial NOR block
+	/// protect bits cover a range anchored at one end of the array in coarse
+	/// power of two steps, and some parts carry a per sector lock bitmap
+	/// behind its own commands. Representing that would need the bit layout,
+	/// the top or bottom bit and the step size in the config, for a mechanism
+	/// almost nothing asks for. The whole device is what this driver offers.
+	///
+	/// Uses the status register bits when WrProtMask is set, otherwise the
+	/// write protect pin. Note that on a serial NOR the pin guards the status
+	/// register rather than the array, so it is an EEPROM mechanism; do not
+	/// configure it as an array protect on a flash.
+	///
+	/// Returns -EPERM for a windowed Nvm instance, and -ENOTSUP for a device
+	/// with no protection mechanism configured.
+	virtual int SetWriteProtect(bool bEnable);
 
 	int MassErase(void);
+
+	/// True while the medium is still working. A failure seen here is held
+	/// and reported by Sync() or by the next operation.
 	virtual bool IsBusy(void) const;
+
+	/// Drain any operation in flight. Returns 0, or the error of the last
+	/// operation to finish if it failed and nothing has reported it yet.
 	virtual int Sync(void);
 
 	uint64_t RegionOffset(void) const { return vRegionOffset; }
+	uint64_t BaseAddress(void) const { return vBaseAddr; }
 	uint32_t ReadId(int Len);
 	uint8_t ReadStatus(void);
 
@@ -188,10 +212,15 @@ private:
 	void XferBegin(void);
 	bool XferShort(int Count, int Expect);
 	bool XferWait(uint32_t Timeout);
+	int XferFrame(uint32_t DevAddr, const uint8_t *pFrame, int FrameLen,
+				  const uint8_t *pData, int DataLen);
 
+	/// 1 while the medium is still working, 0 otherwise. A failure ends the
+	/// operation and leaves its result in vOpRes for TakeResult to report.
 	int ServiceStep(void);
 	int ServiceRun(uint32_t Timeout);
 	int IssueNext(void);
+	int TakeResult(void);
 
 	bool FinishOpLocked(int Res, NVM_EVT &Evt, uint64_t &Off, uint32_t &Len);
 	void Notify(NVM_EVT Evt, uint64_t Off, uint32_t Len, int Res);
@@ -204,6 +233,10 @@ private:
 	NvmEvtHandler_t	vEvtHandler;
 
 	NVM_EVT			vOpEvt;
+
+	/// Result of the last operation to finish, held until a call reports it.
+	/// Without this a failure observed by IsBusy would be gone by the time
+	/// Sync or the next operation asks.
 	int				vOpRes;
 	uint64_t		vOpOff;
 	uint32_t		vOpLen;
@@ -217,6 +250,7 @@ private:
 
 	bool		vbInitialized;
 	bool		vbEnabled;
+	uint64_t	vBaseAddr;
 	uint64_t	vDevSize;
 	uint32_t	vEraseSize;
 	uint32_t	vSectSize;
