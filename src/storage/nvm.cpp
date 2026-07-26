@@ -934,18 +934,14 @@ int Nvm::Sync(void)
 	return ServiceRun(NVM_OP_TMOUT);
 }
 
-// Send the command and address frame, then the payload, as one transaction.
-// DeviceIntrfWrite cannot be used here: it folds a negative count into 0, so
-// an interface that starts the transfer and reports -1 would look like a
-// failure. The proven flash driver drives the transfer the same way.
-int Nvm::XferFrame(uint32_t DevAddr, const uint8_t *pFrame, int FrameLen,
-				   const uint8_t *pData, int DataLen)
+int Nvm::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData,
+			   int DataLen)
 {
 	DevIntrf_t *ip = *Interface();
 
 	XferBegin();
 
-	if (DeviceIntrfStartTx(ip, DevAddr) == false)
+	if (DeviceIntrfStartTx(ip, DeviceAddress()) == false)
 	{
 		vbXferWaiting = false;
 		return -EBUSY;
@@ -954,7 +950,7 @@ int Nvm::XferFrame(uint32_t DevAddr, const uint8_t *pFrame, int FrameLen,
 	// The frame and the payload are one transaction, so no stop between them.
 	ip->bNoStop = true;
 
-	int n = DeviceIntrfTxData(ip, pFrame, FrameLen);
+	int n = DeviceIntrfTxData(ip, pCmdAddr, CmdAddrLen);
 
 	if (n < 0 && ip->bIntEn)
 	{
@@ -965,11 +961,11 @@ int Nvm::XferFrame(uint32_t DevAddr, const uint8_t *pFrame, int FrameLen,
 			DeviceIntrfStopTx(ip);
 			return -EIO;
 		}
-		n = FrameLen;
+		n = CmdAddrLen;
 		XferBegin();
 	}
 
-	if (n != FrameLen)
+	if (n != CmdAddrLen)
 	{
 		ip->bNoStop = false;
 		DeviceIntrfStopTx(ip);
@@ -1026,7 +1022,7 @@ int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len,
 		int flen = FrameAddr(frame, vWrCmd.Cmd, Addr, &devaddr);
 
 		DeviceAddress(devaddr);
-		wr = XferFrame(devaddr, frame, flen, pData, (int)Len);
+		wr = Write(frame, flen, pData, (int)Len);
 	}
 
 	if (wr != (int)Len)
@@ -1143,7 +1139,7 @@ int Nvm::EraseUnit(uint32_t Addr, bool bDefer)
 
 		DeviceAddress(devaddr);
 
-		int r = XferFrame(devaddr, frame, flen, nullptr, 0);
+		int r = Write(frame, flen, nullptr, 0);
 		if (r < 0)
 		{
 			return r;
@@ -1327,7 +1323,7 @@ int Nvm::SetWriteProtect(bool bEnable)
 	{
 		uint8_t wrsr = NVM_CMD_WRSR;
 
-		if (XferFrame(DeviceAddress(), &wrsr, 1, &sr, 1) != 1)
+		if (Write(&wrsr, 1, &sr, 1) != 1)
 		{
 			WriteDisable();
 			return -EIO;

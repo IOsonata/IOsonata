@@ -178,6 +178,14 @@ public:
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff,
 			 int BuffLen) override;
 
+	/// Sends the command and address frame and the payload as one transaction.
+	/// The base implementation gathers both into a local buffer and flattens a
+	/// negative count to 0, so it can neither keep the data alive nor report an
+	/// interface that started the transfer and completes through the event.
+	/// Returns payload bytes written, or a negative errno.
+	int Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData,
+			  int DataLen) override;
+
 	bool Enable(void) override;
 	void Disable(void) override;
 	void Reset(void) override;
@@ -212,8 +220,6 @@ private:
 	void XferBegin(void);
 	bool XferShort(int Count, int Expect);
 	bool XferWait(uint32_t Timeout);
-	int XferFrame(uint32_t DevAddr, const uint8_t *pFrame, int FrameLen,
-				  const uint8_t *pData, int DataLen);
 
 	/// 1 while the medium is still working, 0 otherwise. A failure ends the
 	/// operation and leaves its result in vOpRes for TakeResult to report.
