@@ -271,9 +271,12 @@ typedef struct __Nvm_Cfg {
 	// constraint. Completion arrives once per call through EvtHandler: from
 	// the interface event where the medium's machinery raises one (an
 	// internal memory controller, a SoC flash event), otherwise from the
-	// next status poll (Busy(), Complete(), or any following operation),
+	// next status poll (IsBusy(), Sync(), or any following operation),
 	// since a serial part has no completion line. The same verbs behave per
-	// bIntEn; there are no separate asynchronous method names.
+	// bIntEn; there are no separate asynchronous method names. Command
+	// frames and each chunk's data transfer complete within their call even
+	// on an interrupt driven interface; the medium's internal program or
+	// erase time is what runs in the background.
 	bool			bIntEn;			//!< Interrupt driven when true, else polling
 	NvmEvtHandler_t	EvtHandler;	//!< Completion handler for interrupt mode
 	NvmWaitCb_t		pWaitCB;	//!< Cooperative wait during a long operation
@@ -287,7 +290,7 @@ typedef struct __Nvm_Cfg {
 class Nvm : virtual public Device {
 public:
 	Nvm();
-	virtual ~Nvm() {}
+	virtual ~Nvm();
 	Nvm(Nvm&) = delete;
 
 	// Keep the Device register access overloads visible alongside the byte
@@ -375,35 +378,16 @@ public:
 	virtual int Erase(uint64_t Off, uint32_t Len);
 
 	/**
-	 * @brief	True while a deferred operation still runs in the medium.
+	 * @brief	Interface event entry.
 	 *
-	 * Meaningful in asynchronous mode. One status poll, no waiting.
-	 */
-	bool Busy(void);
-
-	/**
-	 * @brief	Finish the deferred operation and report it.
-	 *
-	 * Waits for the medium, calls the completion handler once, and clears
-	 * the deferred state. Any Read, Write, Erase, MassErase or protect call
-	 * does the same before its own work, so calling this is only needed when
-	 * the application wants the completion without another operation.
-	 *
-	 * @param	Timeout : Status poll count before giving up
-	 *
-	 * @return	The deferred operation's result, 0 when nothing is deferred.
-	 */
-	int Complete(uint32_t Timeout = 100000);
-
-	/**
-	 * @brief	Interface event entry for interrupt driven completion.
-	 *
-	 * Called from the interface event callback when the underlying transfer
-	 * or operation completes. On DEVINTRF_EVT_COMPLETED, a deferred Write or
-	 * Erase whose medium reports ready is finished and reported through the
-	 * completion handler, from the event context. Init installs this on the
-	 * interface callback when bIntEn is set and the callback is free; an
-	 * application that owns the interface callback calls this from it.
+	 * Called from the interface event callback, normally interrupt context.
+	 * It records the event and advances only work that is safe there: a
+	 * transfer completion is flagged for the waiting call, a timeout fails
+	 * it, and a medium completion from an adapter that raises one finishes
+	 * the running operation when nothing remains to transfer. It never
+	 * starts a bus transaction. Init installs this on the interface callback
+	 * when bIntEn is set and the callback is free; an application that owns
+	 * the interface callback calls this from it.
 	 */
 	void IntrfEvent(DEVINTRF_EVT EvtId);
 
@@ -429,13 +413,22 @@ public:
 
 	/**
 	 * @brief	Report whether an operation is in progress.
+	 *
+	 * In interrupt mode this is also the polling service: it advances the
+	 * running operation one step, issuing the next page or erase unit when
+	 * the medium is ready, and reports the completion event when the last
+	 * one finishes. On a serial part with no completion line this call,
+	 * Sync(), or the next operation is how completion is discovered.
 	 */
-	virtual bool IsBusy(void) const { return false; }
+	virtual bool IsBusy(void) const;
 
 	/**
-	 * @brief	Flush buffered state, or drain a pending operation.
+	 * @brief	Drain the running operation, or flush buffered state.
+	 *
+	 * Runs the operation to completion, reporting its one event, and
+	 * returns its result. Idle or polling mode returns 0.
 	 */
-	virtual int Sync(void) { return 0; }
+	virtual int Sync(void);
 
 	/**
 	 * @brief	Get the region offset on the physical medium.
@@ -521,23 +514,47 @@ private:
 	// the high address bits on a part whose address bytes cannot hold them.
 	int FrameAddr(uint8_t *pFrame, uint8_t Cmd, uint32_t Addr,
 				  uint32_t *pDevAddr);
-	// bDefer skips the trailing wait: the medium keeps working after the
-	// call returns, and FinishDeferred picks the result up later.
+	// bDefer skips the trailing medium wait: the transfer completes within
+	// the call, the medium keeps working, and the service picks it up.
 	int Program(uint32_t Addr, const uint8_t *pData, uint32_t Len,
 				bool bDefer);
 	int EraseUnit(uint32_t Addr, bool bDefer);
 	int SendCmd(const NvmCmd_t &Cmd);
 	int ReadStatus(uint8_t &Status);
-	int FinishDeferred(uint32_t Timeout = 100000);
+	// Short transfer accounting: every bus transfer completes within its
+	// call. On an interrupt driven interface the count comes back short with
+	// the transfer started; the interface event ends the wait.
+	void XferBegin(void);
+	bool XferShort(int Count, int Expect);
+	bool XferWait(uint32_t Timeout);
+	// The operation state machine, interrupt mode. One step: check the
+	// medium, issue the next chunk or complete. Returns 1 while running,
+	// 0 when idle or just completed, negative on failure.
+	int ServiceStep(void);
+	int ServiceRun(uint32_t Timeout);
+	int IssueNext(void);
+	void OpComplete(int Res);
+	void Unhook(void);
 
 	uint64_t		vRegionOffset;	//!< Absolute region offset on the medium
 	uint64_t		vRegionSize;	//!< Region size in bytes
 	NvmWaitCb_t		vpWaitCB;		//!< Cooperative wait during a long operation
 	bool			vbIntEn;		//!< Interrupt driven when true, else polling
 	NvmEvtHandler_t	vEvtHandler;	//!< Completion handler for interrupt mode
-	NVM_EVT			vDefEvt;		//!< Deferred event, NVM_EVT_NONE when idle
-	uint64_t		vDefOff;		//!< Deferred call's region offset
-	uint32_t		vDefLen;		//!< Deferred call's length
+	// The running operation, interrupt mode. Established before the first
+	// transfer starts; the event context only reads it under the lock.
+	NVM_EVT			vOpEvt;			//!< Running operation, NVM_EVT_NONE idle
+	int				vOpRes;			//!< First failure, 0 while clean
+	uint64_t		vOpOff;			//!< Report range: region offset
+	uint32_t		vOpLen;			//!< Report range: length
+	uint32_t		vOpAddr;		//!< Next chunk's physical address
+	const uint8_t	*vpOpData;		//!< Next chunk's data, write only
+	uint32_t		vOpRemain;		//!< Bytes not yet issued
+	atomic_flag		vOpLock;		//!< Excludes event and service contexts
+	volatile bool	vbXferWaiting;	//!< A call awaits its transfer end
+	volatile bool	vbXferDone;		//!< The interface reported the transfer
+	volatile bool	vbXferFail;		//!< The interface reported a failure
+	volatile bool	vbMediumDone;	//!< An adapter reported the medium done
 	uint64_t	vDevSize;		//!< Whole device size in bytes
 	uint32_t	vEraseSize;		//!< Erase unit, 0 : overwrites directly
 	uint32_t	vSectSize;		//!< Logical sector where there is no erase unit

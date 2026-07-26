@@ -96,6 +96,7 @@ void IOPinClear(int, int) {}
 static uint8_t s_Nor[NOR_SIZE];
 static bool s_NorWel;
 static uint32_t s_NorBusyCnt;	// status polls left before WIP clears
+static bool s_NorIntrfAsync;	// interface returns -1 and reports by event
 static uint32_t s_NorRstCnt;
 static uint8_t s_NorBp;
 static int s_NorVioNoWel;
@@ -107,6 +108,7 @@ static void NorPowerOn(void)
 	memset(s_Nor, 0xFF, sizeof(s_Nor));
 	s_NorWel = false;
 	s_NorBusyCnt = 0;
+	s_NorIntrfAsync = false;
 	s_NorBp = 0;
 	s_NorVioNoWel = 0;
 	s_NorVioPageCross = 0;
@@ -127,9 +129,30 @@ extern "C" {
 static bool NorStartRx(DevIntrf_t *, uint32_t) { return true; }
 static bool NorStartTx(DevIntrf_t *, uint32_t) { s_NorTx.clear(); return true; }
 
-static int NorTxData(DevIntrf_t *, const uint8_t *pData, int Len)
+static void NorApply(void);
+
+static int NorTxData(DevIntrf_t *pDev, const uint8_t *pData, int Len)
 {
 	for (int i = 0; i < Len; i++) { s_NorTx.push_back(pData[i]); }
+
+	// Interrupt driven interface: a data bearing program transfer starts,
+	// reports -1, applies, and completes through the event, the way the
+	// real ports do. Command frames stay synchronous, as the real ports
+	// wait for a no stop command phase.
+	if (s_NorIntrfAsync && !s_NorTx.empty() && s_NorTx[0] == FLASH_CMD_WRITE
+		&& s_NorTx.size() > (size_t)(1 + NOR_ADDR))
+	{
+		NorApply();
+		if (pDev->EvtCB)
+		{
+			pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, nullptr, 0);
+		}
+		// The real ports release the interface busy latch from the interrupt
+		// at completion, since the framework skips Stop on this path.
+		atomic_flag_clear(&pDev->bBusy);
+		return -1;
+	}
+
 	return Len;
 }
 static int NorTxSrData(DevIntrf_t *d, const uint8_t *p, int n)
@@ -137,7 +160,7 @@ static int NorTxSrData(DevIntrf_t *d, const uint8_t *p, int n)
 	return NorTxData(d, p, n);
 }
 
-static int NorRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
+static int NorRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Len)
 {
 	uint8_t cmd = s_NorTx.empty() ? 0 : s_NorTx[0];
 
@@ -167,6 +190,19 @@ static int NorRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
 
 	uint32_t addr = NorAddr(&s_NorTx[1]);
 	for (int i = 0; i < Len; i++) { pBuff[i] = s_Nor[(addr + i) % NOR_SIZE]; }
+
+	if (s_NorIntrfAsync && cmd == FLASH_CMD_READ)
+	{
+		// The data landed in the caller's buffer; completion comes through
+		// the event, the way an interrupt driven receive works.
+		if (pDev->EvtCB)
+		{
+			pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, nullptr, 0);
+		}
+		atomic_flag_clear(&pDev->bBusy);
+		return -1;
+	}
+
 	return Len;
 }
 
@@ -294,6 +330,11 @@ static void NorStopRx(DevIntrf_t *) {}
 
 static void NorStopTx(DevIntrf_t *)
 {
+	NorApply();
+}
+
+static void NorApply(void)
+{
 	if (s_NorTx.empty()) { return; }
 
 	uint8_t cmd = s_NorTx[0];
@@ -368,6 +409,7 @@ static void NorStopTx(DevIntrf_t *)
 #define EEP_DEVNO	0x50
 
 static uint8_t s_Eep[EEP_SIZE];
+static uint32_t s_EepBusyCnt;	// acknowledge polls left before the cycle ends
 static int s_EepVioPageCross;
 static uint32_t s_EepDevAddr;
 static bool s_EepRx;
@@ -376,6 +418,7 @@ static std::vector<uint8_t> s_EepBuf;
 static void EepPowerOn(void)
 {
 	memset(s_Eep, 0xFF, sizeof(s_Eep));
+	s_EepBusyCnt = 0;
 	s_EepVioPageCross = 0;
 	s_EepBuf.clear();
 }
@@ -415,7 +458,19 @@ static int EepTxSrData(DevIntrf_t *d, const uint8_t *p, int n)
 
 static int EepRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
 {
-	if (s_EepBuf.size() < EEP_ADDR) { return 0; }
+	// During the write cycle the part does not acknowledge: every access
+	// fails. This is what the acknowledge poll detects.
+	if (s_EepBusyCnt > 0)
+	{
+		s_EepBusyCnt--;
+		return 0;
+	}
+	if (s_EepBuf.size() < EEP_ADDR)
+	{
+		// Current address read, no address frame: the acknowledge poll.
+		for (int i = 0; i < Len; i++) { pBuff[i] = s_Eep[i % EEP_SIZE]; }
+		return Len;
+	}
 
 	uint32_t addr = EepAddr();
 	for (int i = 0; i < Len; i++) { pBuff[i] = s_Eep[(addr + i) % EEP_SIZE]; }
@@ -437,11 +492,13 @@ static void EepStopTx(DevIntrf_t *)
 	{
 		s_EepVioPageCross++;
 	}
-	// Overwrites directly, no erase.
+	// Overwrites directly, no erase. The write cycle follows: the part
+	// stops acknowledging for a while.
 	for (uint32_t i = 0; i < n; i++)
 	{
 		s_Eep[(addr + i) % EEP_SIZE] = s_EepBuf[EEP_ADDR + i];
 	}
+	s_EepBusyCnt = 3;
 }
 
 }	// extern "C"
@@ -939,85 +996,167 @@ static void TestNorAsync(MockIntrf &Bus)
 	s_LastLen = 0;
 	s_LastRes = -1;
 
-	printf("--- NOR flash, asynchronous\n");
+	printf("--- NOR flash, interrupt driven\n");
 
 	Nvm mem;
 	NvmCfg_t cfg = NorCfg();
+
 	cfg.bIntEn = true;
 	cfg.EvtHandler = AsyncEvtHandler;
 
-	CHECK(mem.Init(cfg, &Bus), "async init");
+	CHECK(mem.Init(cfg, &Bus), "intdrv: init");
+	CHECK(Bus.vDev.EvtCB != nullptr, "intdrv: completion hook installed at init");
 
-	uint8_t wr[16];
-	uint8_t rd[NOR_PAGE + 8];
-	for (size_t i = 0; i < sizeof(wr); i++) { wr[i] = (uint8_t)(0xA0 + i); }
-
-	CHECK(mem.Write(0, wr, 16) == 16, "async: write returns at transfer end");
-	CHECK(s_EvtCnt == 0, "async: no event before completion");
-	CHECK(mem.Busy(), "async: the medium reports busy");
-	CHECK(mem.Complete() == 0, "async: complete finishes the operation");
-	CHECK(s_EvtCnt == 1 && s_LastEvt == NVM_EVT_WRITE_DONE
-		  && s_LastOff == 0 && s_LastLen == 16 && s_LastRes == 0,
-		  "async: one write event with the call's range");
-	CHECK(mem.Busy() == false, "async: idle after completion");
-	CHECK(mem.Read(0, rd, 16) == 16 && memcmp(rd, wr, 16) == 0,
-		  "async: data landed");
-
-	// The next operation completes the deferred one first.
-	CHECK(mem.Write(100, wr, 8) == 8, "async: second write");
-	CHECK(mem.Read(100, rd, 8) == 8, "async: read runs after the write");
-	CHECK(s_EvtCnt == 2 && s_LastEvt == NVM_EVT_WRITE_DONE
-		  && s_LastOff == 100 && s_LastLen == 8,
-		  "async: the read reported the deferred write first");
-	CHECK(memcmp(rd, wr, 8) == 0, "async: chained data landed");
-
-	// A page crossing call: intermediate chunks wait, only the last defers,
-	// so a single event covers the whole call.
+	// Start and return: a page crossing write returns after issuing only
+	// the first chunk; the second page has not been touched yet.
 	uint8_t big[NOR_PAGE + 4];
+	uint8_t rd[NOR_PAGE + 8];
+
 	for (size_t i = 0; i < sizeof(big); i++) { big[i] = (uint8_t)(i * 7 + 1); }
+
 	CHECK(mem.Write(NOR_PAGE - 4, big, NOR_PAGE + 4) == (int)(NOR_PAGE + 4),
-		  "async: page crossing write");
-	CHECK(mem.Complete() == 0 && s_EvtCnt == 3
-		  && s_LastOff == NOR_PAGE - 4 && s_LastLen == NOR_PAGE + 4,
-		  "async: one event covers every chunk");
+		  "intdrv: write returns after the first chunk");
+	CHECK(s_Nor[NOR_PAGE] == 0xFF, "intdrv: later chunks not issued yet");
+	CHECK(s_EvtCnt == 0, "intdrv: no event before completion");
+	CHECK(mem.IsBusy(), "intdrv: IsBusy while the operation runs");
+	CHECK(mem.Sync() == 0, "intdrv: Sync drains the operation");
+	CHECK(s_EvtCnt == 1 && s_LastEvt == NVM_EVT_WRITE_DONE
+		  && s_LastOff == NOR_PAGE - 4 && s_LastLen == NOR_PAGE + 4
+		  && s_LastRes == 0,
+		  "intdrv: one event with the call's range");
+	CHECK(mem.IsBusy() == false, "intdrv: idle after completion");
 	CHECK(mem.Read(NOR_PAGE - 4, rd, NOR_PAGE + 4) == (int)(NOR_PAGE + 4)
 		  && memcmp(rd, big, NOR_PAGE + 4) == 0,
-		  "async: page crossing data landed");
+		  "intdrv: every chunk landed");
 
-	// Erase: the command goes out, the medium erases in the background.
-	CHECK(mem.Erase(0, 2 * NOR_SECT) == 0, "async: erase returns at command end");
-	CHECK(mem.Busy(), "async: erase runs in the background");
-	CHECK(mem.Complete() == 0 && s_LastEvt == NVM_EVT_ERASE_DONE
-		  && s_LastOff == 0 && s_LastLen == 2 * NOR_SECT,
-		  "async: one erase event with the call's range");
-	bool ff = true;
-	CHECK(mem.Read(0, rd, 32) == 32, "async: read after erase");
-	for (int i = 0; i < 32; i++) { if (rd[i] != 0xFF) { ff = false; } }
-	CHECK(ff, "async: erase landed");
+	// The polling service alone advances the operation: IsBusy clears by
+	// itself as the medium finishes, and the completing step reports.
+	CHECK(mem.Write(0, big, 16) == 16, "intdrv: single chunk write");
 
-	// Busy clears by itself as the medium finishes.
-	CHECK(mem.Write(64, wr, 4) == 4, "async: last write");
 	int spins = 0;
-	while (mem.Busy() && spins < 10) { spins++; }
-	CHECK(spins > 0 && spins < 10, "async: busy clears as the medium finishes");
-	CHECK(mem.Complete() == 0 && s_LastRes == 0,
-		  "async: completion after the busy poll");
 
-	// Interrupt driven completion: the interface event finishes the deferred
-	// operation from the event context, with no caller side poll.
-	CHECK(Bus.vDev.EvtCB != nullptr, "async: completion hook installed at init");
+	while (mem.IsBusy() && spins < 20) { spins++; }
+	CHECK(spins > 0 && spins < 20, "intdrv: IsBusy clears as the medium finishes");
+	CHECK(s_EvtCnt == 2 && s_LastLen == 16, "intdrv: the completing step reported");
+
+	// The next operation drains the previous one first.
+	CHECK(mem.Write(100, big, 8) == 8, "intdrv: chained write");
+	CHECK(mem.Read(100, rd, 8) == 8, "intdrv: read runs after the write");
+	CHECK(s_EvtCnt == 3 && s_LastOff == 100 && s_LastLen == 8,
+		  "intdrv: the read drained and reported it");
+	CHECK(memcmp(rd, big, 8) == 0, "intdrv: chained data landed");
+
+	// Erase returns after the first unit; the second is untouched until the
+	// service reaches it.
+	CHECK(mem.Write(NOR_SECT, big, 4) == 4, "intdrv: marker in the second unit");
+	CHECK(mem.Sync() == 0, "intdrv: marker done");
+	CHECK(mem.Erase(0, 2 * NOR_SECT) == 0, "intdrv: erase returns after one unit");
+	CHECK(s_Nor[NOR_SECT] != 0xFF, "intdrv: second unit not erased yet");
+	CHECK(mem.Sync() == 0 && s_LastEvt == NVM_EVT_ERASE_DONE
+		  && s_LastOff == 0 && s_LastLen == 2 * NOR_SECT,
+		  "intdrv: one erase event with the call's range");
+	CHECK(s_Nor[NOR_SECT] == 0xFF, "intdrv: both units erased");
+
+	// Timeout: the medium never finishes. The next call drains, reports the
+	// failure as an error event, and does not start.
+	CHECK(mem.Write(64, big, 4) == 4, "intdrv: write that will not finish");
+	s_NorBusyCnt = 0x7FFFFFFF;
+
 	uint32_t evts = s_EvtCnt;
-	CHECK(mem.Write(200, wr, 8) == 8, "async: write for event completion");
-	Bus.vDev.EvtCB(&Bus.vDev, DEVINTRF_EVT_COMPLETED, nullptr, 0);
-	CHECK(s_EvtCnt == evts, "async: a transfer event alone does not report");
-	s_NorBusyCnt = 0;				// the medium finishes
-	Bus.vDev.EvtCB(&Bus.vDev, DEVINTRF_EVT_COMPLETED, nullptr, 0);
-	CHECK(s_EvtCnt == evts + 1 && s_LastEvt == NVM_EVT_WRITE_DONE
-		  && s_LastOff == 200 && s_LastLen == 8 && s_LastRes == 0,
-		  "async: completion reported from the event context");
-	CHECK(mem.Complete() == 0 && s_EvtCnt == evts + 1,
-		  "async: nothing left after the event reported");
+
+	CHECK(mem.Write(80, big, 4) == -ETIMEDOUT,
+		  "intdrv: a failed previous operation stops the next call");
+	CHECK(s_EvtCnt == evts + 1 && s_LastEvt == NVM_EVT_ERROR
+		  && s_LastRes == -ETIMEDOUT,
+		  "intdrv: the failure was reported as an error event");
+	s_NorBusyCnt = 0;
+	CHECK(mem.Write(80, big, 4) == 4 && mem.Sync() == 0,
+		  "intdrv: the retried call runs");
 }
+
+static Nvm *s_pAppNvm;
+
+// The application owned interface callback: forwards events to the driver,
+// the path the header documents for an application that keeps EvtCB.
+static int AppIntrfCB(DevIntrf_t * const, DEVINTRF_EVT EvtId, uint8_t *, int)
+{
+	if (s_pAppNvm != nullptr)
+	{
+		s_pAppNvm->IntrfEvent(EvtId);
+	}
+
+	return 0;
+}
+
+static void TestNorAsyncIntrf(MockIntrf &Bus)
+{
+	NorPowerOn();
+	s_EvtCnt = 0;
+
+	printf("--- NOR flash, interrupt driven interface\n");
+
+	// The interface starts transfers and reports -1; data and completion
+	// arrive through the event, the way the real ports behave.
+	s_NorIntrfAsync = true;
+	Bus.vDev.bIntEn = true;
+
+	// Polling driver over the interrupt driven interface: the application
+	// owns the interface callback and forwards events.
+	Nvm mem;
+	NvmCfg_t cfg = NorCfg();
+
+	Bus.vDev.EvtCB = AppIntrfCB;
+	s_pAppNvm = &mem;
+	CHECK(mem.Init(cfg, &Bus), "aintrf: polling driver init");
+
+	uint8_t wr[16];
+	uint8_t rd[16];
+
+	for (size_t i = 0; i < sizeof(wr); i++) { wr[i] = (uint8_t)(0xC0 + i); }
+	CHECK(mem.Write(0, wr, 16) == 16,
+		  "aintrf: polling write over a started transfer");
+	CHECK(mem.Read(0, rd, 16) == 16 && memcmp(rd, wr, 16) == 0,
+		  "aintrf: polling read, the data landed with the event");
+
+	// Interrupt driven driver over the same interface, hook from init.
+	s_pAppNvm = nullptr;
+	Bus.vDev.EvtCB = nullptr;
+
+	Nvm amem;
+
+	cfg.bIntEn = true;
+	cfg.EvtHandler = AsyncEvtHandler;
+	s_EvtCnt = 0;
+	CHECK(amem.Init(cfg, &Bus), "aintrf: interrupt driven init");
+	CHECK(amem.Write(64, wr, 16) == 16, "aintrf: write starts and returns");
+	CHECK(amem.Sync() == 0 && s_EvtCnt == 1 && s_LastEvt == NVM_EVT_WRITE_DONE,
+		  "aintrf: drained with one event");
+	CHECK(amem.Read(64, rd, 16) == 16 && memcmp(rd, wr, 16) == 0,
+		  "aintrf: readback over the started receive");
+
+	s_NorIntrfAsync = false;
+	Bus.vDev.bIntEn = false;
+	// mem and amem unhook in their destructors at return.
+}
+
+static void TestHookLifetime(MockIntrf &Bus)
+{
+	printf("--- completion hook lifetime\n");
+
+	Bus.vDev.EvtCB = nullptr;
+
+	{
+		Nvm tmp;
+		NvmCfg_t cfg = NorCfg();
+
+		cfg.bIntEn = true;
+		NorPowerOn();
+		CHECK(tmp.Init(cfg, &Bus), "hook: init installs");
+		CHECK(Bus.vDev.EvtCB != nullptr, "hook: callback taken");
+	}
+	CHECK(Bus.vDev.EvtCB == nullptr, "hook: destructor released the callback");
+}
+
 
 int main(void)
 {
@@ -1042,6 +1181,8 @@ int main(void)
 	qspi.vDev.pDevData = &s_QDev;
 	TestQspi(qspi);
 	TestNorAsync(nor);
+	TestNorAsyncIntrf(nor);
+	TestHookLifetime(nor);
 
 	printf("\nChecks run: %d\n", g_Checks);
 	if (g_Fail == 0)

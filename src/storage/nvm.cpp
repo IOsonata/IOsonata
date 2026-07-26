@@ -74,6 +74,11 @@ SOFTWARE.
 #define NVM_CMD_CHIP_ERASE	0xC7U
 #define NVM_CMD_RESET_EN	0x66U
 #define NVM_CMD_RESET		0x99U
+
+// Bounds for an in-call interface transfer wait and for draining a running
+// operation, in cooperative wait iterations.
+#define NVM_XFER_TMOUT		100000
+#define NVM_OP_TMOUT		100000
 #define NVM_CMD_EN4B		0xB7U
 
 int Nvm::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
@@ -91,9 +96,18 @@ Nvm::Nvm()
 	vpWaitCB = nullptr;
 	vbIntEn = false;
 	vEvtHandler = nullptr;
-	vDefEvt = NVM_EVT_NONE;
-	vDefOff = 0;
-	vDefLen = 0;
+	vOpEvt = NVM_EVT_NONE;
+	vOpRes = 0;
+	vOpOff = 0;
+	vOpLen = 0;
+	vOpAddr = 0;
+	vpOpData = nullptr;
+	vOpRemain = 0;
+	vbXferWaiting = false;
+	vbXferDone = false;
+	vbXferFail = false;
+	vbMediumDone = false;
+	atomic_flag_clear(&vOpLock);
 	vDevSize = 0;
 	vSectSize = 0;
 	vEraseSize = 0;
@@ -109,6 +123,11 @@ Nvm::Nvm()
 	vbPhased = false;
 	vBaseDevAddr = 0;
 	vWrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+}
+
+Nvm::~Nvm()
+{
+	Unhook();
 }
 
 int Nvm::FrameAddr(uint8_t *pFrame, uint8_t Cmd, uint32_t Addr,
@@ -169,7 +188,10 @@ int Nvm::SendCmd(const NvmCmd_t &Cmd)
 	// A command only transaction has no payload, so Device::Write's payload
 	// count is zero whether it worked or not. Only the full transfer count
 	// distinguishes the two.
-	return (Interface()->Tx(DeviceAddress(), &c, 1) == 1) ? 0 : -EIO;
+	XferBegin();
+	int n = Interface()->Tx(DeviceAddress(), &c, 1);
+
+	return XferShort(n, 1) ? 0 : -EIO;
 }
 
 int Nvm::ReadStatus(uint8_t &Status)
@@ -195,7 +217,10 @@ int Nvm::ReadStatus(uint8_t &Status)
 
 	uint8_t cmd = NVM_CMD_RDSR;
 
-	return Read(&cmd, 1, &Status, 1) == 1 ? 0 : -EIO;
+	XferBegin();
+	int n = Read(&cmd, 1, &Status, 1);
+
+	return XferShort(n, 1) ? 0 : -EIO;
 }
 
 uint8_t Nvm::ReadStatus(void)
@@ -229,7 +254,10 @@ uint32_t Nvm::ReadId(int Len)
 		return (rd == Len) ? id : 0;
 	}
 
-	if (Read(&cmd, 1, (uint8_t*)&id, Len) != Len)
+	XferBegin();
+	int n = Read(&cmd, 1, (uint8_t*)&id, Len);
+
+	if (XferShort(n, Len) == false)
 	{
 		return 0;
 	}
@@ -243,15 +271,26 @@ bool Nvm::WaitReady(uint32_t Timeout)
 	// a known time, which the config gives.
 	if (vbBare)
 	{
-		if (WaitPoll() == false)
-		{
-			return false;
-		}
-		if (vWrDelayUs > 0)
-		{
-			usDelay(vWrDelayUs);
-		}
-		return true;
+		// No status register. An EEPROM in its write cycle does not
+		// acknowledge its address, so a one byte current address read
+		// answers only when the cycle is over. This is the standard
+		// acknowledge poll; it also spends no time when the medium is
+		// already idle.
+		do {
+			uint8_t b;
+
+			XferBegin();
+			if (XferShort(Interface()->Rx((uint32_t)vBaseDevAddr, &b, 1), 1))
+			{
+				return true;
+			}
+			if (WaitPoll() == false)
+			{
+				return false;
+			}
+		} while (Timeout-- > 0);
+
+		return false;
 	}
 
 	while (Timeout-- > 0)
@@ -345,6 +384,36 @@ static int NvmIntrfEvtCB(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 	}
 
 	return 0;
+}
+
+void Nvm::Unhook(void)
+{
+	for (int i = 0; i < NVM_HOOK_MAX; i++)
+	{
+		if (s_NvmHook[i].pNvm != this)
+		{
+			continue;
+		}
+
+		DevIntrf_t *ip = s_NvmHook[i].pIntrf;
+
+		s_NvmHook[i].pNvm = nullptr;
+		s_NvmHook[i].pIntrf = nullptr;
+
+		bool used = false;
+
+		for (int j = 0; j < NVM_HOOK_MAX; j++)
+		{
+			if (s_NvmHook[j].pIntrf == ip && s_NvmHook[j].pNvm != nullptr)
+			{
+				used = true;
+			}
+		}
+		if (used == false && ip != nullptr && ip->EvtCB == NvmIntrfEvtCB)
+		{
+			ip->EvtCB = nullptr;
+		}
+	}
 }
 
 bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
@@ -446,7 +515,13 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 	vbIntEn = Cfg.bIntEn;
 	vEvtHandler = Cfg.EvtHandler;
-	vDefEvt = NVM_EVT_NONE;
+	vOpEvt = NVM_EVT_NONE;
+	vOpRes = 0;
+	vOpRemain = 0;
+	vbXferWaiting = false;
+	vbXferDone = false;
+	vbXferFail = false;
+	vbMediumDone = false;
 	vpWaitCB = Cfg.pWaitCB;
 
 	// Configure the write protect pin and start unprotected.
@@ -538,6 +613,10 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	}
 	Region(RegionOff, rsize);
 
+	// Any registration from a previous initialization, possibly on another
+	// interface, is dropped first.
+	Unhook();
+
 	if (vbIntEn)
 	{
 		// Interrupt driven: completion arrives through the interface event.
@@ -548,21 +627,20 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 		for (int i = 0; i < NVM_HOOK_MAX; i++)
 		{
-			if (s_NvmHook[i].pIntrf == ip && s_NvmHook[i].pNvm == this)
-			{
-				slot = -1;
-				break;
-			}
-			if (slot < 0 && s_NvmHook[i].pNvm == nullptr)
+			if (s_NvmHook[i].pNvm == nullptr)
 			{
 				slot = i;
+				break;
 			}
 		}
-		if (slot >= 0)
+		if (slot < 0)
 		{
-			s_NvmHook[slot].pIntrf = ip;
-			s_NvmHook[slot].pNvm = this;
+			// A full table would run with no completion path: fail here
+			// rather than silently.
+			return false;
 		}
+		s_NvmHook[slot].pIntrf = ip;
+		s_NvmHook[slot].pNvm = this;
 		if (ip->EvtCB == nullptr)
 		{
 			ip->EvtCB = NvmIntrfEvtCB;
@@ -585,7 +663,16 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 		return 0;
 	}
 
-	FinishDeferred();
+	{
+		int sr = ServiceRun(NVM_OP_TMOUT);
+
+		if (sr < 0)
+		{
+			// The previous operation's completion failed and was reported;
+			// this call does not start on top of it.
+			return sr;
+		}
+	}
 
 	if (WaitReady() == false)
 	{
@@ -626,7 +713,14 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 		else
 		{
 			DeviceAddress(devaddr);
+			XferBegin();
 			rd = Read(frame, flen, pb, (int)l);
+			if (XferShort(rd, (int)l))
+			{
+				// On an interrupt driven interface the data landed in the
+				// buffer by the time the event ended the wait.
+				rd = (int)l;
+			}
 		}
 		if (rd != (int)l)
 		{
@@ -642,77 +736,247 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 
 void Nvm::IntrfEvent(DEVINTRF_EVT EvtId)
 {
-	if (EvtId != DEVINTRF_EVT_COMPLETED)
+	switch (EvtId)
 	{
-		return;
-	}
+		case DEVINTRF_EVT_COMPLETED:
+		case DEVINTRF_EVT_TX_READY:
+		case DEVINTRF_EVT_TX_FIFO_EMPTY:
+			if (vbXferWaiting)
+			{
+				// A call waits on its transfer: this event ends the wait.
+				vbXferDone = true;
+				return;
+			}
+			if (vOpEvt != NVM_EVT_NONE)
+			{
+				// No transfer is waited on: an adapter whose machinery knows
+				// the medium reports the operation itself done. A serial
+				// transfer end never lands here. Finish from this context
+				// only when nothing remains to transfer; otherwise the flag
+				// lets the service advance without a status transaction.
+				vbMediumDone = true;
+				if (vOpRemain == 0
+					&& atomic_flag_test_and_set(&vOpLock) == false)
+				{
+					if (vOpEvt != NVM_EVT_NONE && vOpRemain == 0)
+					{
+						OpComplete(vOpRes);
+					}
+					atomic_flag_clear(&vOpLock);
+				}
+			}
+			return;
 
-	if (vDefEvt == NVM_EVT_NONE || Busy())
-	{
-		// Nothing deferred, or the medium itself is still working: this
-		// event marked a transfer, not the operation. A later event or
-		// status poll finishes it.
-		return;
-	}
+		case DEVINTRF_EVT_TX_TIMEOUT:
+		case DEVINTRF_EVT_RX_TIMEOUT:
+			if (vbXferWaiting)
+			{
+				vbXferFail = true;
+			}
+			return;
 
-	FinishDeferred(1);
+		default:
+			return;
+	}
 }
 
-int Nvm::FinishDeferred(uint32_t Timeout)
+void Nvm::XferBegin(void)
 {
-	if (vDefEvt == NVM_EVT_NONE)
+	vbXferDone = false;
+	vbXferFail = false;
+	vbXferWaiting = true;
+}
+
+bool Nvm::XferWait(uint32_t Timeout)
+{
+	while (Timeout-- > 0)
+	{
+		if (vbXferFail)
+		{
+			vbXferWaiting = false;
+			return false;
+		}
+		if (vbXferDone)
+		{
+			vbXferWaiting = false;
+			return true;
+		}
+		if (WaitPoll() == false)
+		{
+			break;
+		}
+	}
+
+	vbXferWaiting = false;
+
+	return false;
+}
+
+bool Nvm::XferShort(int Count, int Expect)
+{
+	if (Count == Expect)
+	{
+		vbXferWaiting = false;
+		return true;
+	}
+	if (((DevIntrf_t*)*Interface())->bIntEn == false)
+	{
+		vbXferWaiting = false;
+		return false;
+	}
+
+	// The interface started the transfer: the ports report -1 or a short
+	// count in interrupt mode, and the event ends the wait.
+	return XferWait(NVM_XFER_TMOUT);
+}
+
+void Nvm::OpComplete(int Res)
+{
+	NVM_EVT evt = (Res == 0) ? vOpEvt : NVM_EVT_ERROR;
+	uint64_t off = vOpOff;
+	uint32_t len = vOpLen;
+
+	vOpEvt = NVM_EVT_NONE;
+	vbMediumDone = false;
+
+	if (vEvtHandler != nullptr)
+	{
+		vEvtHandler(this, evt, off, len, Res);
+	}
+}
+
+int Nvm::IssueNext(void)
+{
+	if (vOpEvt == NVM_EVT_ERASE_DONE)
+	{
+		int r = EraseUnit(vOpAddr, true);
+		if (r < 0)
+		{
+			return r;
+		}
+		vOpAddr += vEraseSize;
+		vOpRemain -= vEraseSize;
+
+		return 0;
+	}
+
+	uint32_t room = vPageSize - (vOpAddr % vPageSize);
+	uint32_t l = vOpRemain < room ? vOpRemain : room;
+	int r = Program(vOpAddr, vpOpData, l, true);
+
+	if (r < 0)
+	{
+		return r;
+	}
+	vOpAddr += l;
+	vpOpData += l;
+	vOpRemain -= l;
+
+	return 0;
+}
+
+int Nvm::ServiceStep(void)
+{
+	if (vOpEvt == NVM_EVT_NONE)
 	{
 		return 0;
 	}
 
-	NVM_EVT evt = vDefEvt;
-	uint64_t off = vDefOff;
-	uint32_t len = vDefLen;
-	int res = 0;
+	while (atomic_flag_test_and_set(&vOpLock)) {}
 
-	vDefEvt = NVM_EVT_NONE;
-
-	if (WaitReady(Timeout) == false)
+	if (vOpEvt == NVM_EVT_NONE)
 	{
-		evt = NVM_EVT_ERROR;
-		res = -ETIMEDOUT;
+		atomic_flag_clear(&vOpLock);
+		return 0;
 	}
 
-	if (vEvtHandler != nullptr)
+	bool ready;
+
+	if (vbMediumDone)
 	{
-		vEvtHandler(this, evt, off, len, res);
+		ready = true;
+		vbMediumDone = false;
+	}
+	else if (vbBare)
+	{
+		// Acknowledge poll, one attempt: an EEPROM in its write cycle does
+		// not acknowledge, so a one byte current address read answers only
+		// when the cycle is over.
+		uint8_t b;
+
+		XferBegin();
+		ready = XferShort(Interface()->Rx((uint32_t)vBaseDevAddr, &b, 1), 1);
+	}
+	else
+	{
+		uint8_t sr;
+
+		ready = (ReadStatus(sr) == 0 && (sr & NVM_SR_WIP) == 0);
 	}
 
-	return res;
+	if (ready == false)
+	{
+		atomic_flag_clear(&vOpLock);
+		return 1;
+	}
+
+	if (vOpRemain == 0)
+	{
+		int res = vOpRes;
+
+		OpComplete(res);
+		atomic_flag_clear(&vOpLock);
+		return res;
+	}
+
+	int r = IssueNext();
+
+	if (r < 0)
+	{
+		OpComplete(r);
+		atomic_flag_clear(&vOpLock);
+		return r;
+	}
+
+	atomic_flag_clear(&vOpLock);
+
+	return 1;
 }
 
-bool Nvm::Busy(void)
+int Nvm::ServiceRun(uint32_t Timeout)
 {
-	if (vDefEvt == NVM_EVT_NONE)
+	for (;;)
 	{
-		return false;
+		int r = ServiceStep();
+
+		if (r <= 0)
+		{
+			return r;
+		}
+		if (Timeout-- == 0 || WaitPoll() == false)
+		{
+			while (atomic_flag_test_and_set(&vOpLock)) {}
+			if (vOpEvt != NVM_EVT_NONE)
+			{
+				OpComplete(-ETIMEDOUT);
+			}
+			atomic_flag_clear(&vOpLock);
+
+			return -ETIMEDOUT;
+		}
 	}
-
-	if (vbBare)
-	{
-		// No status register: the write cycle time has not been spent yet.
-		return true;
-	}
-
-	uint8_t sr;
-
-	if (ReadStatus(sr) != 0)
-	{
-		// Not known done.
-		return true;
-	}
-
-	return (sr & NVM_SR_WIP) != 0;
 }
 
-int Nvm::Complete(uint32_t Timeout)
+bool Nvm::IsBusy(void) const
 {
-	return FinishDeferred(Timeout);
+	// The polling service: one step. Const to match the storage verb; the
+	// step is the service this call provides.
+	return const_cast<Nvm *>(this)->ServiceStep() > 0;
+}
+
+int Nvm::Sync(void)
+{
+	return ServiceRun(NVM_OP_TMOUT);
 }
 
 int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len,
@@ -744,7 +1008,12 @@ int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len,
 		DeviceAddress(devaddr);
 		// Device::Write returns payload bytes; the command/address frame is
 		// not included in this count.
+		XferBegin();
 		wr = Device::Write(frame, flen, pData, (int)Len);
+		if (XferShort(wr, (int)Len))
+		{
+			wr = (int)Len;
+		}
 	}
 	if (wr != (int)Len)
 	{
@@ -781,24 +1050,59 @@ int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 		return -EINVAL;
 	}
 
-	FinishDeferred();
+	{
+		int sr = ServiceRun(NVM_OP_TMOUT);
+
+		if (sr < 0)
+		{
+			// The previous operation's completion failed and was reported;
+			// this call does not start on top of it.
+			return sr;
+		}
+	}
 
 	uint32_t addr = (uint32_t)(RegionOffset() + Off);
 	const uint8_t *p = (const uint8_t*)pData;
+
+	if (vbIntEn)
+	{
+		// The whole call is one operation: its state is established before
+		// the first transfer starts, then one chunk goes out and the call
+		// returns. The service and the interface event advance the rest and
+		// report one event for the call.
+		while (atomic_flag_test_and_set(&vOpLock)) {}
+		vOpEvt = NVM_EVT_WRITE_DONE;
+		vOpRes = 0;
+		vOpOff = Off;
+		vOpLen = Len;
+		vOpAddr = addr;
+		vpOpData = p;
+		vOpRemain = Len;
+
+		int r = IssueNext();
+
+		if (r < 0)
+		{
+			vOpEvt = NVM_EVT_NONE;
+			atomic_flag_clear(&vOpLock);
+			return r;
+		}
+		atomic_flag_clear(&vOpLock);
+
+		return (int)Len;
+	}
+
 	uint32_t cnt = Len;
 
 	// Split at page boundaries. The address counter auto increments only
 	// within a page and wraps at the boundary, so one transfer must stay
-	// inside a page. Each chunk reissues the address for its page. In
-	// asynchronous mode only the last chunk defers, so one event covers
-	// the whole call.
+	// inside a page. Each chunk reissues the address for its page.
 	while (cnt > 0)
 	{
 		uint32_t r = vPageSize - (addr % vPageSize);
 		uint32_t l = cnt < r ? cnt : r;
-		bool last = (l == cnt);
 
-		int res = Program(addr, p, l, vbIntEn && last);
+		int res = Program(addr, p, l, false);
 		if (res < 0)
 		{
 			return res;
@@ -806,13 +1110,6 @@ int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 		cnt -= res;
 		addr += res;
 		p += res;
-	}
-
-	if (vbIntEn)
-	{
-		vDefEvt = NVM_EVT_WRITE_DONE;
-		vDefOff = Off;
-		vDefLen = Len;
 	}
 
 	return (int)Len;
@@ -849,7 +1146,8 @@ int Nvm::EraseUnit(uint32_t Addr, bool bDefer)
 		int flen = FrameAddr(frame, op, Addr, &devaddr);
 
 		DeviceAddress(devaddr);
-		if (Interface()->Tx(devaddr, frame, flen) != flen)
+		XferBegin();
+		if (XferShort(Interface()->Tx(devaddr, frame, flen), flen) == false)
 		{
 			return -EIO;
 		}
@@ -887,31 +1185,55 @@ int Nvm::Erase(uint64_t Off, uint32_t Len)
 		return -EINVAL;
 	}
 
-	FinishDeferred();
+	{
+		int sr = ServiceRun(NVM_OP_TMOUT);
+
+		if (sr < 0)
+		{
+			// The previous operation's completion failed and was reported;
+			// this call does not start on top of it.
+			return sr;
+		}
+	}
 
 	uint32_t addr = (uint32_t)(RegionOffset() + Off);
+
+	if (vbIntEn)
+	{
+		// One operation for the call, state first, one unit out, return.
+		while (atomic_flag_test_and_set(&vOpLock)) {}
+		vOpEvt = NVM_EVT_ERASE_DONE;
+		vOpRes = 0;
+		vOpOff = Off;
+		vOpLen = Len;
+		vOpAddr = addr;
+		vpOpData = nullptr;
+		vOpRemain = Len;
+
+		int r = IssueNext();
+
+		if (r < 0)
+		{
+			vOpEvt = NVM_EVT_NONE;
+			atomic_flag_clear(&vOpLock);
+			return r;
+		}
+		atomic_flag_clear(&vOpLock);
+
+		return 0;
+	}
+
 	uint32_t cnt = Len;
 
-	// In asynchronous mode only the last unit defers, so one event covers
-	// the whole call.
 	while (cnt > 0)
 	{
-		bool last = (cnt == vEraseSize);
-
-		int res = EraseUnit(addr, vbIntEn && last);
+		int res = EraseUnit(addr, false);
 		if (res < 0)
 		{
 			return res;
 		}
 		addr += vEraseSize;
 		cnt -= vEraseSize;
-	}
-
-	if (vbIntEn)
-	{
-		vDefEvt = NVM_EVT_ERASE_DONE;
-		vDefOff = Off;
-		vDefLen = Len;
 	}
 
 	return 0;
@@ -927,7 +1249,16 @@ int Nvm::MassErase(void)
 		return -ENOTSUP;
 	}
 
-	FinishDeferred();
+	{
+		int sr = ServiceRun(NVM_OP_TMOUT);
+
+		if (sr < 0)
+		{
+			// The previous operation's completion failed and was reported;
+			// this call does not start on top of it.
+			return sr;
+		}
+	}
 	if (RegionOffset() != 0 || Size() != vDevSize)
 	{
 		// The command wipes the whole device, so only an instance covering all
@@ -959,7 +1290,16 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 	(void)Off;
 	(void)Len;
 
-	FinishDeferred();
+	{
+		int sr = ServiceRun(NVM_OP_TMOUT);
+
+		if (sr < 0)
+		{
+			// The previous operation's completion failed and was reported;
+			// this call does not start on top of it.
+			return sr;
+		}
+	}
 
 	// Block protect bits where the medium has them. Checked first because a
 	// config left at zero would otherwise look like it had a pin on port 0.
@@ -1021,7 +1361,8 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 	{
 		uint8_t wrsr = NVM_CMD_WRSR;
 
-		if (Device::Write(&wrsr, 1, &sr, 1) != 1)
+		XferBegin();
+		if (XferShort(Device::Write(&wrsr, 1, &sr, 1), 1) == false)
 		{
 			WriteDisable();
 			return -EIO;
