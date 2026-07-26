@@ -38,6 +38,10 @@ SOFTWARE.
 #include "storage/nvm.h"
 
 /******** For DEBUG Trace ************/
+// Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
+// SysLog transport the app configured (UART, USB, RTT, BLE, or any other
+// DeviceIntrf); the trace does not assume a transport. A release build
+// defines NDEBUG, which strips all trace regardless of DEBUG_ENABLE.
 //#define DEBUG_ENABLE
 
 #if !defined(NDEBUG) && defined(DEBUG_ENABLE)
@@ -48,19 +52,24 @@ SOFTWARE.
 #endif
 /*******************************/
 
-#define NVM_SR_WIP			0x01U
-#define NVM_SR_WEL			0x02U
+// Status register bits common to serial flash.
+#define NVM_SR_WIP			0x01U		// write in progress
+#define NVM_SR_WEL			0x02U		// write enable latch
 
+// Read the device id where the medium has the usual JEDEC command.
 #define NVM_CMD_READID		0x9FU
+
+// The serial NOR protocol the JEDEC standard fixed. An erase medium speaks
+// all of it; none of it is configuration, because none of it varies.
 #define NVM_CMD_READ		0x03U
 #define NVM_CMD_WRITE		0x02U
 #define NVM_CMD_WRENABLE	0x06U
 #define NVM_CMD_WRDISABLE	0x04U
 #define NVM_CMD_RDSR		0x05U
 #define NVM_CMD_WRSR		0x01U
-#define NVM_CMD_SECT_ERASE	0x20U
-#define NVM_CMD_BLK32_ERASE	0x52U
-#define NVM_CMD_BLK64_ERASE	0xD8U
+#define NVM_CMD_SECT_ERASE	0x20U		// 4K granule
+#define NVM_CMD_BLK32_ERASE	0x52U		// 32K granule
+#define NVM_CMD_BLK64_ERASE	0xD8U		// 64K granule
 #define NVM_CMD_CHIP_ERASE	0xC7U
 #define NVM_CMD_RESET_EN	0x66U
 #define NVM_CMD_RESET		0x99U
@@ -68,6 +77,7 @@ SOFTWARE.
 
 int Nvm::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 {
+	// Straight through; a memory command is not a sensor register address.
 	return Interface()->Read(DeviceAddress(), pCmdAddr, CmdAddrLen,
 							 pBuff, BuffLen);
 }
@@ -80,7 +90,6 @@ Nvm::Nvm()
 	vbIntEn = false;
 	vEvtHandler = nullptr;
 	vpWaitCB = nullptr;
-	vInitCB = nullptr;
 	vDevSize = 0;
 	vSectSize = 0;
 	vEraseSize = 0;
@@ -93,11 +102,7 @@ Nvm::Nvm()
 	memset(&vRdCmd, 0, sizeof(vRdCmd));
 	memset(&vWrCmd, 0, sizeof(vWrCmd));
 	vbBare = true;
-	vbEnabled = false;
-	vbIntrfEnabled = false;
 	vBaseDevAddr = 0;
-	vExpectedDevId = 0;
-	vExpectedDevIdSize = 0;
 	vWrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
 }
 
@@ -107,16 +112,21 @@ int Nvm::FrameAddr(uint8_t *pFrame, uint8_t Cmd, uint32_t Addr,
 	int len = 0;
 	uint32_t devaddr = vBaseDevAddr;
 
+	// A command byte where the medium has one. An EEPROM has none and the
+	// frame is the address alone.
 	if (Cmd != 0)
 	{
 		pFrame[len++] = Cmd;
 	}
 
+	// Address MSB first on the wire.
 	for (int i = 0; i < vAddrSize; i++)
 	{
 		pFrame[len++] = (uint8_t)(Addr >> (8 * (vAddrSize - 1 - i)));
 	}
 
+	// Bits the address bytes cannot hold go into the device selection, the way
+	// a small EEPROM selects a memory block.
 	if (vAddrSpan != 0 && Addr >= vAddrSpan)
 	{
 		devaddr |= (Addr / vAddrSpan) & 7;
@@ -139,6 +149,9 @@ int Nvm::SendCmd(const NvmCmd_t &Cmd)
 
 	uint8_t c = Cmd.Cmd;
 
+	// A command only transaction has no payload, so Device::Write's payload
+	// count is zero whether it worked or not. Only the full transfer count
+	// distinguishes the two.
 	return (Interface()->Tx(DeviceAddress(), &c, 1) == 1) ? 0 : -EIO;
 }
 
@@ -160,10 +173,7 @@ uint8_t Nvm::ReadStatus(void)
 {
 	uint8_t sr = 0;
 
-	if (Ready())
-	{
-		(void)ReadStatus(sr);
-	}
+	(void)ReadStatus(sr);
 
 	return sr;
 }
@@ -173,7 +183,7 @@ uint32_t Nvm::ReadId(int Len)
 	uint32_t id = 0;
 	uint8_t cmd = NVM_CMD_READID;
 
-	if (Len < 1 || Len > 4 || Interface() == nullptr || !vbEnabled)
+	if (Len < 1 || Len > 4)
 	{
 		return 0;
 	}
@@ -188,6 +198,8 @@ uint32_t Nvm::ReadId(int Len)
 
 bool Nvm::WaitReady(uint32_t Timeout)
 {
+	// A medium with a status register says when it is done. One without takes
+	// a known time, which the config gives.
 	if (vbBare)
 	{
 		if (WaitPoll() == false)
@@ -224,6 +236,7 @@ bool Nvm::WaitReady(uint32_t Timeout)
 
 bool Nvm::WriteEnable(uint32_t Timeout)
 {
+	// A bare bus has no latch: always writable.
 	if (vbBare)
 	{
 		return true;
@@ -261,90 +274,17 @@ bool Nvm::WriteEnable(uint32_t Timeout)
 
 void Nvm::WriteDisable(void)
 {
-	if (vbBare == false && Interface() != nullptr && vbEnabled)
+	if (vbBare == false)
 	{
-		(void)SendCmd({ NVM_CMD_WRDISABLE, 0 });
+		SendCmd({ NVM_CMD_WRDISABLE, 0 });
 	}
-}
-
-bool Nvm::ConfigureDevice(void)
-{
-	DeviceAddress(vBaseDevAddr);
-
-	if (vInitCB != nullptr && vInitCB(this, Interface()) == false)
-	{
-		return false;
-	}
-
-	if (vEraseSize != 0)
-	{
-		if (SendCmd({ NVM_CMD_RESET_EN, 0 }) != 0 ||
-			SendCmd({ NVM_CMD_RESET, 0 }) != 0)
-		{
-			return false;
-		}
-	}
-
-	if (vExpectedDevId != 0 && vExpectedDevIdSize > 0)
-	{
-		bool found = false;
-
-		for (int rtry = 0; rtry < 6; rtry++)
-		{
-			if (ReadId(vExpectedDevIdSize) == vExpectedDevId)
-			{
-				found = true;
-				break;
-			}
-		}
-
-		if (found == false)
-		{
-			DEBUG_PRINTF("Nvm id mismatch\r\n");
-			return false;
-		}
-	}
-
-	if (vEraseSize != 0 && vAddrSize > 3)
-	{
-		if (SendCmd({ NVM_CMD_EN4B, 0 }) != 0)
-		{
-			return false;
-		}
-	}
-
-	return true;
-}
-
-bool Nvm::FailInit(void)
-{
-	if (vbEnabled)
-	{
-		WriteDisable();
-	}
-	vbEnabled = false;
-
-	if (vbIntrfEnabled && Interface() != nullptr)
-	{
-		Interface()->Disable();
-		vbIntrfEnabled = false;
-	}
-
-	Valid(false);
-	Region(0, 0);
-	return false;
 }
 
 bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 			   uint64_t RegionOff, uint64_t RegionSize)
 {
-	if (vbIntrfEnabled && Interface() != nullptr)
-	{
-		Interface()->Disable();
-	}
-
-	vbIntrfEnabled = false;
-	vbEnabled = false;
+	// A failed reinitialization must not leave a previously working instance
+	// marked ready.
 	Valid(false);
 	Region(0, 0);
 
@@ -365,13 +305,10 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	vBaseDevAddr = (uint32_t)Cfg.DevNo;
 	vWrDelayUs = Cfg.WriteDelayUs;
 	vWrProtMask = Cfg.WrProtMask;
-	vExpectedDevId = Cfg.DevId;
-	vExpectedDevIdSize = Cfg.DevIdSize;
-	vInitCB = Cfg.pInitCB;
-	vEvtHandler = Cfg.EvtHandler;
-	vpWaitCB = Cfg.pWaitCB;
-	vWrProtPin = Cfg.WrProtPin;
 
+	// The current implementation is the polling SPI/I2C path plus the internal
+	// command-emulating adapter. QSPI/OSPI need their command, phase-width and
+	// dummy-cycle transfer path before they can be accepted here.
 	switch (pIntrf->Type())
 	{
 		case DEVINTRF_TYPE_I2C:
@@ -387,9 +324,14 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 	if (Cfg.bIntEn)
 	{
+		// Asynchronous state and completion are not implemented yet. Refuse the
+		// mode instead of silently running synchronously.
 		return false;
 	}
 
+	// The bus is one of the two facts every command follows from; the kind,
+	// from EraseSize, is the other. Nothing else is stored: each operation
+	// decides its command where it runs.
 	vbBare = (pIntrf->Type() == DEVINTRF_TYPE_I2C);
 
 	if (vbBare)
@@ -404,6 +346,7 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		vWrCmd = (Cfg.WrCmd.Cmd != 0) ? Cfg.WrCmd
 									  : NvmCmd_t{ NVM_CMD_WRITE, 0 };
 	}
+	vWrProtPin = Cfg.WrProtPin;
 
 	if (vDevSize == 0 || vPageSize == 0 || vAddrSize < 1 || vAddrSize > 4 ||
 		Cfg.DevIdSize > 4)
@@ -414,6 +357,8 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		return false;
 	}
 
+	// Only these standard erase commands are implemented. Accepting another
+	// granule would issue a 4K command while advancing by the configured size.
 	if (vEraseSize != 0 && vEraseSize != 4 * 1024 &&
 		vEraseSize != 32 * 1024 && vEraseSize != 64 * 1024)
 	{
@@ -422,10 +367,78 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		return false;
 	}
 
+	// What the address bytes can reach. Anything beyond has to go into the
+	// device selection.
 	vAddrSpan = (vAddrSize >= 4) ? 0 : (1UL << (8 * vAddrSize));
 	if (vAddrSpan != 0 && vDevSize <= vAddrSpan)
 	{
-		vAddrSpan = 0;
+		vAddrSpan = 0;			// the address bytes cover the whole device
+	}
+
+	vbIntEn = false;
+	vEvtHandler = Cfg.EvtHandler;
+	vpWaitCB = Cfg.pWaitCB;
+
+	// Configure the write protect pin and start unprotected.
+	if (vWrProtPin.PortNo >= 0 && vWrProtPin.PinNo >= 0)
+	{
+		IOPinCfg(&vWrProtPin, 1);
+		IOPinClear(vWrProtPin.PortNo, vWrProtPin.PinNo);
+	}
+
+	// Device-specific preparation comes first, matching the legacy Flash
+	// driver. Some parts must be released or put into a command mode before
+	// the generic reset and ID probe can be understood.
+	if (Cfg.pInitCB != nullptr)
+	{
+		if (Cfg.pInitCB(this, pIntrf) == false)
+		{
+			return false;
+		}
+	}
+
+	// Reset an erase medium before the normal status and ID transactions. The
+	// chip does not reset when the MCU does and can be left in power down,
+	// continuous read, quad mode, 4 byte address mode, or mid operation.
+	if (vEraseSize != 0)
+	{
+		if (SendCmd({ NVM_CMD_RESET_EN, 0 }) != 0 ||
+			SendCmd({ NVM_CMD_RESET, 0 }) != 0)
+		{
+			return false;
+		}
+	}
+
+	// Probe the device id where the config asked for it. The retries cover the
+	// device's recovery time after the reset above.
+	if (Cfg.DevId != 0 && Cfg.DevIdSize > 0)
+	{
+		bool found = false;
+
+		for (int rtry = 0; rtry < 6; rtry++)
+		{
+			if (ReadId(Cfg.DevIdSize) == Cfg.DevId)
+			{
+				found = true;
+				break;
+			}
+		}
+
+		if (found == false)
+		{
+			DEBUG_PRINTF("Nvm id mismatch\r\n");
+			return false;
+		}
+	}
+
+	// A part larger than 16 MBytes takes its addresses in 4 bytes; the
+	// reset above cleared the mode, so it is entered last.
+	if (vEraseSize != 0 && vAddrSize > 3)
+	{
+		if (SendCmd({ NVM_CMD_EN4B, 0 }) != 0)
+		{
+			return false;
+		}
 	}
 
 	if (RegionOff > vDevSize)
@@ -442,6 +455,9 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 	uint64_t rsize = (RegionSize != 0) ? RegionSize : avail;
 
+	// The physical placement must respect the write granularity, or a frame
+	// starting mid word would silently lose its tail; and an erase region
+	// must start on an erase unit.
 	if ((RegionOff % vWrGran) != 0 || (vPageSize % vWrGran) != 0)
 	{
 		return false;
@@ -450,25 +466,8 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	{
 		return false;
 	}
-
-	vbIntEn = false;
-
-	pIntrf->Enable();
-	vbIntrfEnabled = true;
-	vbEnabled = true;
-
-	if (vWrProtPin.PortNo >= 0 && vWrProtPin.PinNo >= 0)
-	{
-		IOPinCfg(&vWrProtPin, 1);
-		IOPinClear(vWrProtPin.PortNo, vWrProtPin.PinNo);
-	}
-
-	if (ConfigureDevice() == false)
-	{
-		return FailInit();
-	}
-
 	Region(RegionOff, rsize);
+
 	Valid(true);
 
 	return true;
@@ -476,11 +475,7 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 {
-	if (!Ready())
-	{
-		return Valid() ? -EACCES : -ENODEV;
-	}
-	if (!RangeValid(Off, Len) || (Len > 0 && pBuf == nullptr))
+	if (!RangeValid(Off, Len))
 	{
 		return -EINVAL;
 	}
@@ -503,8 +498,10 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 		uint8_t frame[8];
 		uint32_t devaddr;
 		int flen = FrameAddr(frame, vRdCmd.Cmd, addr, &devaddr);
-		uint32_t l = cnt;
 
+		// Split only where the device selection holds part of the address,
+		// so a read does not run past what this selection reaches.
+		uint32_t l = cnt;
 		if (vAddrSpan != 0)
 		{
 			uint32_t r = vAddrSpan - (addr % vAddrSpan);
@@ -537,6 +534,8 @@ int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len)
 	int flen = FrameAddr(frame, vWrCmd.Cmd, Addr, &devaddr);
 
 	DeviceAddress(devaddr);
+	// Device::Write returns payload bytes; the command/address frame is not
+	// included in this count.
 	int wr = Device::Write(frame, flen, pData, (int)Len);
 	if (wr != (int)Len)
 	{
@@ -553,11 +552,7 @@ int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len)
 
 int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 {
-	if (!Ready())
-	{
-		return Valid() ? -EACCES : -ENODEV;
-	}
-	if (!RangeValid(Off, Len) || (Len > 0 && pData == nullptr))
+	if (!RangeValid(Off, Len))
 	{
 		return -EINVAL;
 	}
@@ -565,6 +560,7 @@ int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 	{
 		return 0;
 	}
+	// A memory that programs whole words cannot take a part of one.
 	if (vWrGran > 1 && ((Off % vWrGran) != 0 || (Len % vWrGran) != 0))
 	{
 		return -EINVAL;
@@ -574,6 +570,9 @@ int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 	const uint8_t *p = (const uint8_t*)pData;
 	uint32_t cnt = Len;
 
+	// Split at page boundaries. The address counter auto increments only
+	// within a page and wraps at the boundary, so one transfer must stay
+	// inside a page. Each chunk reissues the address for its page.
 	while (cnt > 0)
 	{
 		uint32_t r = vPageSize - (addr % vPageSize);
@@ -623,15 +622,12 @@ int Nvm::EraseUnit(uint32_t Addr)
 
 int Nvm::Erase(uint64_t Off, uint32_t Len)
 {
-	if (!Ready())
-	{
-		return Valid() ? -EACCES : -ENODEV;
-	}
 	if (!RangeValid(Off, Len))
 	{
 		return -EINVAL;
 	}
 
+	// A medium that overwrites directly has nothing to erase.
 	if (vEraseSize == 0)
 	{
 		return 0;
@@ -661,16 +657,17 @@ int Nvm::Erase(uint64_t Off, uint32_t Len)
 
 int Nvm::MassErase(void)
 {
-	if (!Ready())
-	{
-		return Valid() ? -EACCES : -ENODEV;
-	}
+	// The internal memory adapter reports UNKNOWN because it emulates the
+	// serial command frame. It supports unit erase, but never chip erase of the
+	// device executing this code.
 	if (vEraseSize == 0 || Interface()->Type() == DEVINTRF_TYPE_UNKOWN)
 	{
 		return -ENOTSUP;
 	}
 	if (RegionOffset() != 0 || Size() != vDevSize)
 	{
+		// The command wipes the whole device, so only an instance covering all
+		// of it may issue one.
 		return -EPERM;
 	}
 
@@ -695,25 +692,14 @@ int Nvm::MassErase(void)
 
 int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 {
-	if (!Ready())
-	{
-		return Valid() ? -EACCES : -ENODEV;
-	}
-	if (!RangeValid(Off, Len) || Len == 0)
-	{
-		return -EINVAL;
-	}
-	if (Off != 0 || (uint64_t)Len != Size())
-	{
-		return -ENOTSUP;
-	}
-	if (RegionOffset() != 0 || Size() != vDevSize)
-	{
-		return -EPERM;
-	}
+	(void)Off;
+	(void)Len;
 
+	// Block protect bits where the medium has them. Checked first because a
+	// config left at zero would otherwise look like it had a pin on port 0.
 	if (vbBare || vWrProtMask == 0)
 	{
+		// No status bits, so a pin if one is configured.
 		if (vWrProtPin.PortNo >= 0 && vWrProtPin.PinNo >= 0)
 		{
 			if (bEnable)
@@ -768,54 +754,12 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 	return 0;
 }
 
-bool Nvm::Enable(void)
-{
-	if (!Valid() || Interface() == nullptr)
-	{
-		return false;
-	}
-	if (vbEnabled)
-	{
-		return true;
-	}
-
-	Interface()->Enable();
-	vbIntrfEnabled = true;
-	vbEnabled = true;
-	return true;
-}
-
 void Nvm::Disable(void)
 {
-	if (!vbEnabled)
-	{
-		return;
-	}
-
-	(void)Sync();
 	WriteDisable();
-	vbEnabled = false;
-
-	if (vbIntrfEnabled && Interface() != nullptr)
-	{
-		Interface()->Disable();
-		vbIntrfEnabled = false;
-	}
 }
 
 void Nvm::Reset(void)
 {
-	if (!Ready())
-	{
-		return;
-	}
-
-	(void)Sync();
 	WriteDisable();
-	Valid(false);
-
-	if (ConfigureDevice())
-	{
-		Valid(true);
-	}
 }
