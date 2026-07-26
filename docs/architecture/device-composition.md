@@ -1,8 +1,8 @@
 # Device inheritance and polymorphic composition
 
 `DeviceIntrf` defines how a transfer is opened, selected, moved, and closed.
-`Device` defines what a hardware or software device is and how device behaviour
-is assembled.
+`Device` defines what a hardware or software device is and what behaviour it
+provides.
 
 These are separate axes:
 
@@ -12,8 +12,12 @@ DeviceIntrf injection  how that object is reached
 ```
 
 A sensor does not become an I2C sensor or an SPI sensor through inheritance. It
-remains a sensor device and receives the required `DeviceIntrf` at initialization.
-The same device implementation can therefore use different transports.
+remains the same sensor and receives the required `DeviceIntrf` during
+initialization.
+
+Inheritance is also not required merely because several hardware technologies
+implement the same behaviour. Derive only when a separate polymorphic device
+behaviour exists.
 
 ## Device as the shared base
 
@@ -26,12 +30,14 @@ The same device implementation can therefore use different transports.
 - timer and event integration.
 
 Derived families add behaviour appropriate to the device type. `Sensor`, for
-example, adds sampling, data update, operating mode, and interrupt handling.
-`CryptoEngine` adds crypto completion and engine health behaviour.
+example, adds sampling and data update. `CryptoEngine` adds crypto operation and
+completion behaviour.
 
 ## Capability branches
 
-A branch represents a usable device capability, not only a code-sharing helper.
+A branch represents a distinct usable device behaviour, not an implementation
+variant and not only a code-sharing helper.
+
 Examples include:
 
 - `AccelSensor`;
@@ -42,21 +48,23 @@ Examples include:
 - `HashEngine`;
 - `KeyAgreeEngine`.
 
-Application and library code can accept the capability base it needs. It does
-not need to know the concrete chip or every other capability implemented by the
-same object.
+Application and library code can accept only the behaviour it needs:
 
 ```cpp
 void ProcessAcceleration(AccelSensor &Sensor);
 void EstablishKey(KeyAgreeEngine &Engine);
 ```
 
-Any concrete device implementing the requested branch can be supplied.
+Any concrete device implementing that branch can be supplied.
 
-## One physical device, several polymorphic views
+## One physical component, several device behaviours
 
-A physical component can implement several capabilities. IOsonata represents
-that directly with multiple inheritance.
+Some physical components combine different devices and behaviours. An IMU can
+contain an accelerometer, gyroscope, magnetometer, and temperature sensor. An
+environmental sensor can combine temperature, humidity, and pressure devices.
+Motion processing can combine several sensor or fusion behaviours.
+
+IOsonata can represent those distinct behaviours through multiple inheritance.
 
 `AgmMpu9250`, for example, inherits the accelerometer, gyroscope, magnetometer,
 and temperature branches:
@@ -68,13 +76,12 @@ class AgmMpu9250 :
 	public MagMpu9250,
 	public TempSensor
 {
-	// One physical MPU-9250 implementation
+	// One physical package containing several sensor devices
 };
 ```
 
-The same object can therefore be passed as an `AccelSensor`, `GyroSensor`,
-`MagSensor`, `TempSensor`, `Sensor`, or `Device`, depending on what the caller
-needs.
+The same object can then be passed through the particular device view required
+by a caller:
 
 ```cpp
 AgmMpu9250 Imu;
@@ -86,8 +93,9 @@ TempSensor  *pTemp  = &Imu;
 Device      *pDev   = &Imu;
 ```
 
-These pointers do not identify separate physical devices. They are different
-polymorphic views of one composite object.
+These pointers are different polymorphic views of the same composite object.
+The concrete implementation coordinates the shared package, register map,
+interface, power state, FIFO, and sampling.
 
 ## Why virtual inheritance is used
 
@@ -104,22 +112,62 @@ This preserves one shared set of:
 - `DeviceIntrf` pointer;
 - timer and event state.
 
-Without the shared virtual base, a multi-function sensor could contain several
-independent `Device` bases with conflicting interface pointers, validity, and
-lifecycle state.
+Without the shared virtual base, a multi-function device could contain several
+conflicting `Device` bases.
 
-## Polymorphism is the purpose
+## NVM is deliberately not a composite device hierarchy
 
-Inheritance is not used merely to reuse implementation. Its main value is that
-generic code can work with the narrow device behaviour it needs.
+Flash, EEPROM, FRAM, MRAM, RRAM, and other non-volatile memory technologies all
+provide the same device behaviour to the application: store and retrieve an
+array of bytes.
 
-A processing algorithm requiring acceleration accepts `AccelSensor`. A storage
-consumer accepts the storage branch it needs. A Bluetooth security operation can
-accept `KeyAgreeEngine` or `RngEngine`. The concrete device may implement one
-capability or many.
+Their differences are properties of the memory implementation:
 
-The composite object owns the relationships between its branches and coordinates
-shared hardware behaviour. The caller sees only the selected base interface.
+- transport or internal controller;
+- command set;
+- addressing format;
+- page and erase geometry;
+- write-enable and status behaviour;
+- write protection;
+- timing and transfer mode.
+
+Those differences belong in `NvmCfg_t`, the injected `DeviceIntrf`, and the NVM
+implementation. They do not justify separate polymorphic device branches.
+
+One `Nvm` class therefore represents all supported memory types:
+
+```text
+Nvm
+  + NvmCfg_t describes memory technology and geometry
+  + DeviceIntrf selects SPI, I2C, QSPI, OSPI, or an internal adapter
+  + the same Read, Write, Erase, Sync, and lifecycle behaviour
+```
+
+Do not create `FlashNvm`, `EepromNvm`, `FramNvm`, or similar subclasses when the
+only difference is memory technology or command protocol. That would duplicate
+one behaviour across unnecessary classes and reduce the value of the generic
+configuration-driven implementation.
+
+`NvmDiskIO` is different: it adapts an `Nvm` object to the `DiskIO` behaviour
+required by filesystems. It does not represent another memory technology.
+
+## Polymorphism is the purpose, not the default
+
+Inheritance is useful when callers need to use an object through different
+behavioural bases. It should not be added simply because implementations differ.
+
+Use inheritance when:
+
+- the object provides a distinct device behaviour;
+- callers need polymorphic substitution through that behaviour;
+- a composite physical component genuinely contains several device functions.
+
+Do not use inheritance when:
+
+- implementations provide the same behaviour with different commands or
+  hardware technology;
+- configuration and an injected interface fully describe the variation;
+- a derived class would only rename or specialize the same operations.
 
 ## Composition is case by case
 
@@ -128,30 +176,34 @@ IOsonata uses several forms of composition where each fits:
 1. **Transport composition**
    A `Device` holds an injected `DeviceIntrf` describing how it is reached.
 
-2. **Capability composition through inheritance**
-   One concrete physical device combines several polymorphic device branches.
+2. **Device-behaviour composition through inheritance**
+   One physical component combines several distinct polymorphic device
+   behaviours, such as accelerometer, gyroscope, magnetometer, and temperature.
 
 3. **Object composition**
-   A higher-level device may contain or reference other device objects when the
-   hardware is genuinely made of separate controllable parts.
+   A higher-level device contains or references separate device objects when the
+   hardware or algorithm is genuinely assembled from separate objects.
 
-These forms are not interchangeable. A capability belonging to one physical
-component is often best represented as a branch of the same object. A separate
-component is normally held as another object. A communication path remains a
-`DeviceIntrf`, not a device capability.
+4. **Configuration-driven variation**
+   One device class represents several hardware technologies that expose the
+   same behaviour, as `Nvm` does.
+
+These forms are not interchangeable. Use the smallest design that accurately
+represents the hardware and its behaviour.
 
 ## Design review rule
 
-Before changing a `Device`-derived class, inspect:
+Before adding a `Device`-derived class, determine:
 
-- every base branch;
-- whether the base uses virtual inheritance;
-- every polymorphic view used by callers;
-- which state belongs to the one physical device;
-- which operations coordinate several branches;
-- the injected `DeviceIntrf` and its selector semantics;
-- examples using the object through different base pointers.
+- whether it introduces a genuinely different device behaviour;
+- whether callers need a new polymorphic base;
+- whether the hardware contains several independent device functions;
+- whether configuration and `DeviceIntrf` injection already model the
+  variation;
+- which state belongs to the one physical component;
+- which operations coordinate several branches.
 
-Do not flatten a multi-capability device into unrelated per-capability driver
-objects unless the hardware actually contains independently controlled devices.
-Do not move transport behaviour into the device inheritance tree.
+Do not derive merely to represent a different chip, memory technology, command
+set, transport, or register layout. Do not flatten a true multi-device component
+into unrelated objects when its behaviours must share one physical state. Do not
+move transport behaviour into the device inheritance tree.
