@@ -68,20 +68,40 @@ Physical implementations include:
 - USB;
 - network transports.
 
-Software and protocol implementations can also be `DeviceIntrf` objects:
+Software and internal implementations can also be `DeviceIntrf` objects:
 
 - `Slip`, which layers framing over another `DeviceIntrf`;
 - `BtIntrf`, which presents a GATT service as a serial-style interface;
-- internal controller adapters such as `NvmIntrf`.
+- internal controller access paths such as `CracenIntrf` and `NvmIntrf`.
 
-The common transfer sequence is:
+The generic transfer shape is:
 
 ```text
-StartRx -> RxData -> StopRx
-StartTx -> TxData -> StopTx
-Read    -> command/address phase -> receive phase
-Write   -> command/address phase -> transmit phase
+StartRx(selector) -> RxData -> StopRx
+StartTx(selector) -> TxData -> StopTx
+Read              -> command/address phase -> receive phase
+Write             -> command/address phase -> transmit phase
 ```
+
+`StartRx` and `StartTx` open a transfer and pass a target-defined selector. They
+are not universally physical bus START conditions. `StopRx` and `StopTx` close
+the corresponding transfer and release its interface-level serialization.
+
+The selector meaning depends on the interface:
+
+- SPI uses it as a zero-based chip-select index;
+- I2C uses it as the 7-bit device address;
+- CRACEN uses it to select the PKE register block, PKE operand memory,
+  CryptoMaster, or RNG engine;
+- UART normally ignores it because the stream endpoint is already selected by
+  the UART instance;
+- another interface may define another selector meaning.
+
+The start and stop hooks also perform interface-specific work. SPI may assert and
+deassert chip select. I2C may generate bus START, repeated START, and STOP
+conditions. CRACEN selects an engine or memory window and clears the transfer
+selection when the operation closes. UART implementations commonly use no-op
+start and stop hooks.
 
 `DevIntrf_t::bBusy` protects one transfer. The framework acquires it in
 `DeviceIntrfStartRx()` or `DeviceIntrfStartTx()` and releases it in the matching
@@ -93,39 +113,52 @@ interface is enabled on the 0 to 1 transition and disabled on the last release.
 Older ports may initialize or use this field differently; inspect them before
 changing lifecycle behavior.
 
-### Synchronous and asynchronous transfer
+### Polling, interrupt, and DMA use
 
-IOsonata supports both modes through the same `DeviceIntrf` API, but asynchronous
-behavior is not represented by one universal return pattern.
+Execution mode is selected case by case. It is not a fixed property of UART,
+I2C, SPI, master mode, or slave mode.
 
-For a direct transaction interface such as I2C or SPI:
+UART is normally interrupt driven because its main use is continuous streaming.
+RX data can arrive at any time, and blocking until an entire stream is complete
+is not useful. UART ports therefore commonly use interrupt-driven CFIFO
+producers and consumers, with optional DMA for larger TX bursts.
 
-- synchronous `RxData()` and `TxData()` return the number of bytes moved;
-- an interrupt or DMA transfer may return `-1` to indicate that the transfer has
-  started and completion will arrive later through `DevIntrf_t::EvtCB`;
-- the target ISR completes the transfer and emits the applicable
-  `DEVINTRF_EVT_*` event.
+I2C and SPI master operations are commonly short, bounded transactions. Polling
+is often the simplest and fastest implementation because interrupt setup,
+context switching, and completion handling can cost more than the transfer.
+Interrupt or DMA operation is still appropriate for long transfers, strict CPU
+latency requirements, concurrent work, or controller-specific reasons.
 
-For a FIFO-backed streaming interface such as UART:
+I2C and SPI slave operation usually needs interrupts because the external master
+controls when the transaction starts and advances. The slave cannot choose a
+convenient polling window without risking lost protocol events.
 
-- `TxData()` commonly returns the number of bytes accepted into the software
-  FIFO;
-- the ISR or DMA engine drains that FIFO later;
-- RX-data and TX-ready callbacks report stream progress;
-- returning a positive byte count does not mean that every byte is already on
-  the wire.
+The actual device, transfer length, direction, controller, power requirement,
+latency requirement, and application usage determine the mode. Do not infer it
+from the interface type alone, and do not add a generic rule that all master
+transfers are polling or all enabled interrupt fields imply asynchronous
+completion.
+
+Return behavior also depends on the interface implementation:
+
+- a synchronous direct transfer normally returns the number of bytes moved;
+- a direct interrupt or DMA transfer may return `-1` to indicate that completion
+  will arrive later through `DevIntrf_t::EvtCB`;
+- a FIFO-backed UART `TxData()` commonly returns the number of bytes accepted
+  into the software FIFO while the ISR or DMA engine drains the FIFO later;
+- a positive UART return therefore does not mean every byte is already on the
+  wire.
 
 Some target ports are intentionally polling-only. Some expose interrupt fields
 but have incomplete interrupt or DMA paths. `bIntEn` alone does not prove that a
 specific asynchronous completion pattern is implemented.
 
-Before changing asynchronous behavior, read:
+Before changing polling, interrupt, DMA, or completion behavior, read:
 
 - `src/device_intrf.cpp`;
-- Nordic direct-transaction I2C and SPI implementations;
-- FIFO-backed UART implementations from STM32, Renesas, Microchip, and
-  Espressif;
-- any other MCU port used by the subsystem being changed.
+- the complete target implementation for the interface being changed;
+- representative UART, I2C, and SPI ports from other MCU families;
+- the actual device driver and usage pattern that depend on the transfer.
 
 A device operation may span multiple interface transfers. Such a device needs
 its own operation state in addition to the interface's per-transfer busy flag.
@@ -230,8 +263,8 @@ reference port.
 
 Read the applicable nRF52, nRF54, or nRF91 implementation, including shared
 peripheral arbitration and SoftDevice or stack integration where relevant.
-Nordic I2C and SPI are important examples of direct asynchronous transfers that
-may return `-1` and later emit `DEVINTRF_EVT_COMPLETED`.
+Nordic ports provide examples of polling, interrupt, and DMA operation, but the
+selected mode must be evaluated against the actual device and transfer usage.
 
 ### ST STM32
 
@@ -300,9 +333,10 @@ Read together:
   being changed;
 - a device example that can use either interface.
 
-These ports show polling and interrupt operation, DMA chunking, repeated-start
-handling, device selection, specialized QSPI/OSPI command phases, and completion
-events. They also show that not every port supports every mode.
+These ports show polling master transfers, interrupt-driven slave operation,
+DMA chunking, repeated-start handling, device selection, specialized QSPI/OSPI
+command phases, and completion events. They also show that the selected execution
+mode is determined by the controller and usage, not just by the bus name.
 
 ### Layered interfaces
 
@@ -348,6 +382,14 @@ Crypto engines are devices, not transports. Read the complete generic crypto
 object tree, provider selection, each target provider, Bluetooth security
 callers, and hardware tests before changing it.
 
+The BA414EP and CryptoMaster drivers demonstrate that `DeviceIntrf` selectors are
+not limited to bus addresses. `CracenIntrf::StartTx()` and `StartRx()` use
+`DevAddr` to select the PKE register block, PKE operand memory, CryptoMaster, or
+RNG path. BA414EP and CryptoMaster recovery open a transfer on their selector,
+call the address-selected interface reset, and close the transfer. The start and
+stop pair both serializes the shared CRACEN access and makes the selected engine
+explicit.
+
 Software capability bases are working implementations. Hardware providers
 replace only supported operations. Operation storage is static or
 caller-provided, secrets are wiped, and security failures must fail closed.
@@ -368,11 +410,12 @@ Read together:
 and internal memory adapters share the generic NVM object, while controller
 arbitration remains in the target interface.
 
-For asynchronous NVM work, preserve the normal `DeviceIntrf` behavior of the
-injected interface and add NVM operation state for multi-transfer sequencing.
-Do not assume that every interface reports asynchronous progress in the same
-way, and do not remove the async configuration merely because the current NVM
-implementation is polling.
+For NVM interrupt or DMA work, preserve the normal `DeviceIntrf` behavior of the
+injected interface and add NVM operation state only when a device operation spans
+multiple interface transfers. Decide polling, interrupt, or DMA operation from
+the actual memory, transfer length, controller, and application requirements.
+Do not remove an existing configuration capability merely because the current
+NVM implementation uses polling.
 
 ## Repository work rules
 
