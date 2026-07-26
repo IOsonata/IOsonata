@@ -95,6 +95,7 @@ void IOPinClear(int, int) {}
 
 static uint8_t s_Nor[NOR_SIZE];
 static bool s_NorWel;
+static uint32_t s_NorBusyCnt;	// status polls left before WIP clears
 static uint32_t s_NorRstCnt;
 static uint8_t s_NorBp;
 static int s_NorVioNoWel;
@@ -105,6 +106,7 @@ static void NorPowerOn(void)
 {
 	memset(s_Nor, 0xFF, sizeof(s_Nor));
 	s_NorWel = false;
+	s_NorBusyCnt = 0;
 	s_NorBp = 0;
 	s_NorVioNoWel = 0;
 	s_NorVioPageCross = 0;
@@ -148,6 +150,12 @@ static int NorRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
 	{
 		uint8_t st = s_NorBp;
 		if (s_NorWel) { st |= 0x02u; }
+		if (s_NorBusyCnt > 0)
+		{
+			// The medium is still programming or erasing.
+			st |= 0x01u;
+			s_NorBusyCnt--;
+		}
 		for (int i = 0; i < Len; i++) { pBuff[i] = st; }
 		return Len;
 	}
@@ -309,6 +317,7 @@ static void NorStopTx(DevIntrf_t *)
 			uint32_t a = NorAddr(&s_NorTx[1]) & ~(NOR_SECT - 1);
 			memset(&s_Nor[a % NOR_SIZE], 0xFF, NOR_SECT);
 			s_NorWel = false;
+			s_NorBusyCnt = 3;
 			break;
 		}
 
@@ -316,6 +325,7 @@ static void NorStopTx(DevIntrf_t *)
 			if (!s_NorWel) { s_NorVioNoWel++; break; }
 			memset(s_Nor, 0xFF, NOR_SIZE);
 			s_NorWel = false;
+			s_NorBusyCnt = 3;
 			break;
 
 		case FLASH_CMD_WRITE:
@@ -335,6 +345,7 @@ static void NorStopTx(DevIntrf_t *)
 				{
 					s_Nor[(a + i) % NOR_SIZE] &= s_NorTx[hdr + i];
 				}
+				s_NorBusyCnt = 3;
 			}
 			s_NorWel = false;
 			break;
@@ -897,6 +908,117 @@ static void TestQspi(MockIntrf &Bus)
 	CHECK(mem.SetWriteProtect(0, 1, false) == 0, "qspi: unprotect through the status bits");
 }
 
+// ---------------------------------------------------------------------------
+// Asynchronous mode. Write and Erase return once the transfer is done; the
+// medium keeps working. One completion event per call, reported by
+// Complete() or by the next operation.
+// ---------------------------------------------------------------------------
+
+static uint32_t s_EvtCnt;
+static NVM_EVT s_LastEvt;
+static uint64_t s_LastOff;
+static uint32_t s_LastLen;
+static int s_LastRes;
+
+static void AsyncEvtHandler(Nvm * const, NVM_EVT Evt, uint64_t Off,
+							uint32_t Len, int Res)
+{
+	s_EvtCnt++;
+	s_LastEvt = Evt;
+	s_LastOff = Off;
+	s_LastLen = Len;
+	s_LastRes = Res;
+}
+
+static void TestNorAsync(MockIntrf &Bus)
+{
+	NorPowerOn();
+	s_EvtCnt = 0;
+	s_LastEvt = NVM_EVT_NONE;
+	s_LastOff = 0;
+	s_LastLen = 0;
+	s_LastRes = -1;
+
+	printf("--- NOR flash, asynchronous\n");
+
+	Nvm mem;
+	NvmCfg_t cfg = NorCfg();
+	cfg.bIntEn = true;
+	cfg.EvtHandler = AsyncEvtHandler;
+
+	CHECK(mem.Init(cfg, &Bus), "async init");
+
+	uint8_t wr[16];
+	uint8_t rd[NOR_PAGE + 8];
+	for (size_t i = 0; i < sizeof(wr); i++) { wr[i] = (uint8_t)(0xA0 + i); }
+
+	CHECK(mem.Write(0, wr, 16) == 16, "async: write returns at transfer end");
+	CHECK(s_EvtCnt == 0, "async: no event before completion");
+	CHECK(mem.Busy(), "async: the medium reports busy");
+	CHECK(mem.Complete() == 0, "async: complete finishes the operation");
+	CHECK(s_EvtCnt == 1 && s_LastEvt == NVM_EVT_WRITE_DONE
+		  && s_LastOff == 0 && s_LastLen == 16 && s_LastRes == 0,
+		  "async: one write event with the call's range");
+	CHECK(mem.Busy() == false, "async: idle after completion");
+	CHECK(mem.Read(0, rd, 16) == 16 && memcmp(rd, wr, 16) == 0,
+		  "async: data landed");
+
+	// The next operation completes the deferred one first.
+	CHECK(mem.Write(100, wr, 8) == 8, "async: second write");
+	CHECK(mem.Read(100, rd, 8) == 8, "async: read runs after the write");
+	CHECK(s_EvtCnt == 2 && s_LastEvt == NVM_EVT_WRITE_DONE
+		  && s_LastOff == 100 && s_LastLen == 8,
+		  "async: the read reported the deferred write first");
+	CHECK(memcmp(rd, wr, 8) == 0, "async: chained data landed");
+
+	// A page crossing call: intermediate chunks wait, only the last defers,
+	// so a single event covers the whole call.
+	uint8_t big[NOR_PAGE + 4];
+	for (size_t i = 0; i < sizeof(big); i++) { big[i] = (uint8_t)(i * 7 + 1); }
+	CHECK(mem.Write(NOR_PAGE - 4, big, NOR_PAGE + 4) == (int)(NOR_PAGE + 4),
+		  "async: page crossing write");
+	CHECK(mem.Complete() == 0 && s_EvtCnt == 3
+		  && s_LastOff == NOR_PAGE - 4 && s_LastLen == NOR_PAGE + 4,
+		  "async: one event covers every chunk");
+	CHECK(mem.Read(NOR_PAGE - 4, rd, NOR_PAGE + 4) == (int)(NOR_PAGE + 4)
+		  && memcmp(rd, big, NOR_PAGE + 4) == 0,
+		  "async: page crossing data landed");
+
+	// Erase: the command goes out, the medium erases in the background.
+	CHECK(mem.Erase(0, 2 * NOR_SECT) == 0, "async: erase returns at command end");
+	CHECK(mem.Busy(), "async: erase runs in the background");
+	CHECK(mem.Complete() == 0 && s_LastEvt == NVM_EVT_ERASE_DONE
+		  && s_LastOff == 0 && s_LastLen == 2 * NOR_SECT,
+		  "async: one erase event with the call's range");
+	bool ff = true;
+	CHECK(mem.Read(0, rd, 32) == 32, "async: read after erase");
+	for (int i = 0; i < 32; i++) { if (rd[i] != 0xFF) { ff = false; } }
+	CHECK(ff, "async: erase landed");
+
+	// Busy clears by itself as the medium finishes.
+	CHECK(mem.Write(64, wr, 4) == 4, "async: last write");
+	int spins = 0;
+	while (mem.Busy() && spins < 10) { spins++; }
+	CHECK(spins > 0 && spins < 10, "async: busy clears as the medium finishes");
+	CHECK(mem.Complete() == 0 && s_LastRes == 0,
+		  "async: completion after the busy poll");
+
+	// Interrupt driven completion: the interface event finishes the deferred
+	// operation from the event context, with no caller side poll.
+	CHECK(Bus.vDev.EvtCB != nullptr, "async: completion hook installed at init");
+	uint32_t evts = s_EvtCnt;
+	CHECK(mem.Write(200, wr, 8) == 8, "async: write for event completion");
+	Bus.vDev.EvtCB(&Bus.vDev, DEVINTRF_EVT_COMPLETED, nullptr, 0);
+	CHECK(s_EvtCnt == evts, "async: a transfer event alone does not report");
+	s_NorBusyCnt = 0;				// the medium finishes
+	Bus.vDev.EvtCB(&Bus.vDev, DEVINTRF_EVT_COMPLETED, nullptr, 0);
+	CHECK(s_EvtCnt == evts + 1 && s_LastEvt == NVM_EVT_WRITE_DONE
+		  && s_LastOff == 200 && s_LastLen == 8 && s_LastRes == 0,
+		  "async: completion reported from the event context");
+	CHECK(mem.Complete() == 0 && s_EvtCnt == evts + 1,
+		  "async: nothing left after the event reported");
+}
+
 int main(void)
 {
 	MockIntrf nor(DEVINTRF_TYPE_SPI, NorStartRx, NorRxData, NorStopRx,
@@ -919,6 +1041,7 @@ int main(void)
 	atomic_flag_clear(&s_QDev.DevIntrf.bBusy);
 	qspi.vDev.pDevData = &s_QDev;
 	TestQspi(qspi);
+	TestNorAsync(nor);
 
 	printf("\nChecks run: %d\n", g_Checks);
 	if (g_Fail == 0)

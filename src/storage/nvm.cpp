@@ -88,9 +88,12 @@ Nvm::Nvm()
 	Valid(false);
 	vRegionOffset = 0;
 	vRegionSize = 0;
+	vpWaitCB = nullptr;
 	vbIntEn = false;
 	vEvtHandler = nullptr;
-	vpWaitCB = nullptr;
+	vDefEvt = NVM_EVT_NONE;
+	vDefOff = 0;
+	vDefLen = 0;
 	vDevSize = 0;
 	vSectSize = 0;
 	vEraseSize = 0;
@@ -318,6 +321,32 @@ void Nvm::WriteDisable(void)
 	}
 }
 
+// The interface event callback has no user context slot, so the instances
+// running interrupt driven register here. The trampoline dispatches to every
+// instance on the reporting interface; each checks its own deferred state.
+#define NVM_HOOK_MAX		4
+
+typedef struct {
+	DevIntrf_t	*pIntrf;
+	Nvm			*pNvm;
+} NvmHook_t;
+
+static NvmHook_t s_NvmHook[NVM_HOOK_MAX];
+
+static int NvmIntrfEvtCB(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
+						 uint8_t *, int)
+{
+	for (int i = 0; i < NVM_HOOK_MAX; i++)
+	{
+		if (s_NvmHook[i].pIntrf == pDev && s_NvmHook[i].pNvm != nullptr)
+		{
+			s_NvmHook[i].pNvm->IntrfEvent(EvtId);
+		}
+	}
+
+	return 0;
+}
+
 bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 			   uint64_t RegionOff, uint64_t RegionSize)
 {
@@ -359,13 +388,6 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 		default:
 			return false;
-	}
-
-	if (Cfg.bIntEn)
-	{
-		// Asynchronous state and completion are not implemented yet. Refuse the
-		// mode instead of silently running synchronously.
-		return false;
 	}
 
 	// The bus is one of the two facts every command follows from; the kind,
@@ -422,8 +444,9 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		vAddrSpan = 0;			// the address bytes cover the whole device
 	}
 
-	vbIntEn = false;
+	vbIntEn = Cfg.bIntEn;
 	vEvtHandler = Cfg.EvtHandler;
+	vDefEvt = NVM_EVT_NONE;
 	vpWaitCB = Cfg.pWaitCB;
 
 	// Configure the write protect pin and start unprotected.
@@ -515,6 +538,37 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	}
 	Region(RegionOff, rsize);
 
+	if (vbIntEn)
+	{
+		// Interrupt driven: completion arrives through the interface event.
+		// Take the interface callback when it is free; an application that
+		// owns it calls IntrfEvent from its own handler instead.
+		DevIntrf_t *ip = *pIntrf;
+		int slot = -1;
+
+		for (int i = 0; i < NVM_HOOK_MAX; i++)
+		{
+			if (s_NvmHook[i].pIntrf == ip && s_NvmHook[i].pNvm == this)
+			{
+				slot = -1;
+				break;
+			}
+			if (slot < 0 && s_NvmHook[i].pNvm == nullptr)
+			{
+				slot = i;
+			}
+		}
+		if (slot >= 0)
+		{
+			s_NvmHook[slot].pIntrf = ip;
+			s_NvmHook[slot].pNvm = this;
+		}
+		if (ip->EvtCB == nullptr)
+		{
+			ip->EvtCB = NvmIntrfEvtCB;
+		}
+	}
+
 	Valid(true);
 
 	return true;
@@ -530,6 +584,8 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 	{
 		return 0;
 	}
+
+	FinishDeferred();
 
 	if (WaitReady() == false)
 	{
@@ -584,7 +640,83 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 	return (int)Len;
 }
 
-int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len)
+void Nvm::IntrfEvent(DEVINTRF_EVT EvtId)
+{
+	if (EvtId != DEVINTRF_EVT_COMPLETED)
+	{
+		return;
+	}
+
+	if (vDefEvt == NVM_EVT_NONE || Busy())
+	{
+		// Nothing deferred, or the medium itself is still working: this
+		// event marked a transfer, not the operation. A later event or
+		// status poll finishes it.
+		return;
+	}
+
+	FinishDeferred(1);
+}
+
+int Nvm::FinishDeferred(uint32_t Timeout)
+{
+	if (vDefEvt == NVM_EVT_NONE)
+	{
+		return 0;
+	}
+
+	NVM_EVT evt = vDefEvt;
+	uint64_t off = vDefOff;
+	uint32_t len = vDefLen;
+	int res = 0;
+
+	vDefEvt = NVM_EVT_NONE;
+
+	if (WaitReady(Timeout) == false)
+	{
+		evt = NVM_EVT_ERROR;
+		res = -ETIMEDOUT;
+	}
+
+	if (vEvtHandler != nullptr)
+	{
+		vEvtHandler(this, evt, off, len, res);
+	}
+
+	return res;
+}
+
+bool Nvm::Busy(void)
+{
+	if (vDefEvt == NVM_EVT_NONE)
+	{
+		return false;
+	}
+
+	if (vbBare)
+	{
+		// No status register: the write cycle time has not been spent yet.
+		return true;
+	}
+
+	uint8_t sr;
+
+	if (ReadStatus(sr) != 0)
+	{
+		// Not known done.
+		return true;
+	}
+
+	return (sr & NVM_SR_WIP) != 0;
+}
+
+int Nvm::Complete(uint32_t Timeout)
+{
+	return FinishDeferred(Timeout);
+}
+
+int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len,
+				 bool bDefer)
 {
 	if (WriteEnable() == false)
 	{
@@ -619,6 +751,12 @@ int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len)
 		return -EIO;
 	}
 
+	if (bDefer)
+	{
+		// The transfer is done; the medium programs in the background.
+		return (int)Len;
+	}
+
 	if (WaitReady() == false)
 	{
 		return -EIO;
@@ -643,19 +781,24 @@ int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 		return -EINVAL;
 	}
 
+	FinishDeferred();
+
 	uint32_t addr = (uint32_t)(RegionOffset() + Off);
 	const uint8_t *p = (const uint8_t*)pData;
 	uint32_t cnt = Len;
 
 	// Split at page boundaries. The address counter auto increments only
 	// within a page and wraps at the boundary, so one transfer must stay
-	// inside a page. Each chunk reissues the address for its page.
+	// inside a page. Each chunk reissues the address for its page. In
+	// asynchronous mode only the last chunk defers, so one event covers
+	// the whole call.
 	while (cnt > 0)
 	{
 		uint32_t r = vPageSize - (addr % vPageSize);
 		uint32_t l = cnt < r ? cnt : r;
+		bool last = (l == cnt);
 
-		int res = Program(addr, p, l);
+		int res = Program(addr, p, l, vbIntEn && last);
 		if (res < 0)
 		{
 			return res;
@@ -665,10 +808,17 @@ int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 		p += res;
 	}
 
+	if (vbIntEn)
+	{
+		vDefEvt = NVM_EVT_WRITE_DONE;
+		vDefOff = Off;
+		vDefLen = Len;
+	}
+
 	return (int)Len;
 }
 
-int Nvm::EraseUnit(uint32_t Addr)
+int Nvm::EraseUnit(uint32_t Addr, bool bDefer)
 {
 	if (WriteEnable() == false)
 	{
@@ -705,6 +855,12 @@ int Nvm::EraseUnit(uint32_t Addr)
 		}
 	}
 
+	if (bDefer)
+	{
+		// The command is out; the medium erases in the background.
+		return 0;
+	}
+
 	if (WaitReady() == false)
 	{
 		return -EIO;
@@ -731,18 +887,31 @@ int Nvm::Erase(uint64_t Off, uint32_t Len)
 		return -EINVAL;
 	}
 
+	FinishDeferred();
+
 	uint32_t addr = (uint32_t)(RegionOffset() + Off);
 	uint32_t cnt = Len;
 
+	// In asynchronous mode only the last unit defers, so one event covers
+	// the whole call.
 	while (cnt > 0)
 	{
-		int res = EraseUnit(addr);
+		bool last = (cnt == vEraseSize);
+
+		int res = EraseUnit(addr, vbIntEn && last);
 		if (res < 0)
 		{
 			return res;
 		}
 		addr += vEraseSize;
 		cnt -= vEraseSize;
+	}
+
+	if (vbIntEn)
+	{
+		vDefEvt = NVM_EVT_ERASE_DONE;
+		vDefOff = Off;
+		vDefLen = Len;
 	}
 
 	return 0;
@@ -757,6 +926,8 @@ int Nvm::MassErase(void)
 	{
 		return -ENOTSUP;
 	}
+
+	FinishDeferred();
 	if (RegionOffset() != 0 || Size() != vDevSize)
 	{
 		// The command wipes the whole device, so only an instance covering all
@@ -787,6 +958,8 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 {
 	(void)Off;
 	(void)Len;
+
+	FinishDeferred();
 
 	// Block protect bits where the medium has them. Checked first because a
 	// config left at zero would otherwise look like it had a pin on port 0.

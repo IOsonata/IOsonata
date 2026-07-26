@@ -189,17 +189,18 @@ SOFTWARE.
 
 class Nvm;
 
-/// Event notification for interrupt driven operation.
+/// Completion event for asynchronous mode. One event is reported per Write
+/// or Erase call, when the medium finishes its internal program or erase.
 typedef enum __Nvm_Evt {
-	NVM_EVT_UNKNOWN,
-	NVM_EVT_WRITE_DONE,			//!< An interrupt driven Write completed
-	NVM_EVT_ERASE_DONE,			//!< An interrupt driven Erase completed
-	NVM_EVT_READ_DONE,			//!< An interrupt driven Read completed
-	NVM_EVT_ERROR				//!< The pending operation failed
+	NVM_EVT_NONE,				//!< No operation is deferred
+	NVM_EVT_WRITE_DONE,			//!< A deferred Write completed
+	NVM_EVT_ERASE_DONE,			//!< A deferred Erase completed
+	NVM_EVT_ERROR				//!< The deferred operation failed
 } NVM_EVT;
 
-/// Completion handler for interrupt driven operation. Res is 0 on success or a
-/// negative errno on failure. Off and Len identify the completed request.
+/// Completion handler for asynchronous mode. Res is 0 on success or a
+/// negative errno on failure. Off and Len are the region relative range of
+/// the completed call.
 typedef void (*NvmEvtHandler_t)(Nvm * const pDev, NVM_EVT Evt,
 								uint64_t Off, uint32_t Len, int Res);
 
@@ -258,10 +259,24 @@ typedef struct __Nvm_Cfg {
 	IOPinCfg_t	WrProtPin;		//!< Write protect pin
 	// Timing.
 	uint32_t	WriteDelayUs;	//!< Write cycle time where there is no status
-	// Operation mode and callbacks.
-	bool			bIntEn;			//!< Reserved; must be false in the polling driver
-	NvmEvtHandler_t	EvtHandler;	//!< Reserved for asynchronous completion
-	NvmWaitCb_t		pWaitCB;	//!< Cooperative wait, used when polling
+	// Operation mode and callbacks: sync or async by the bIntEn convention,
+	// as everywhere in IOsonata.
+	//
+	// bIntEn false : polling. Write and Erase block until the medium is
+	// done, calling pWaitCB during a long wait so the caller can do other
+	// work or abort. bIntEn true : interrupt driven. Write and Erase start
+	// and return once the transfer to the medium is done; the medium runs
+	// its internal program or erase in the background and the caller keeps
+	// the CPU, which matters under a SoftDevice, an RTOS, or any timing
+	// constraint. Completion arrives once per call through EvtHandler: from
+	// the interface event where the medium's machinery raises one (an
+	// internal memory controller, a SoC flash event), otherwise from the
+	// next status poll (Busy(), Complete(), or any following operation),
+	// since a serial part has no completion line. The same verbs behave per
+	// bIntEn; there are no separate asynchronous method names.
+	bool			bIntEn;			//!< Interrupt driven when true, else polling
+	NvmEvtHandler_t	EvtHandler;	//!< Completion handler for interrupt mode
+	NvmWaitCb_t		pWaitCB;	//!< Cooperative wait during a long operation
 	NvmInitCb_t		pInitCB;	//!< Pre-initialization callback, may be NULL
 } NvmCfg_t;
 
@@ -360,6 +375,39 @@ public:
 	virtual int Erase(uint64_t Off, uint32_t Len);
 
 	/**
+	 * @brief	True while a deferred operation still runs in the medium.
+	 *
+	 * Meaningful in asynchronous mode. One status poll, no waiting.
+	 */
+	bool Busy(void);
+
+	/**
+	 * @brief	Finish the deferred operation and report it.
+	 *
+	 * Waits for the medium, calls the completion handler once, and clears
+	 * the deferred state. Any Read, Write, Erase, MassErase or protect call
+	 * does the same before its own work, so calling this is only needed when
+	 * the application wants the completion without another operation.
+	 *
+	 * @param	Timeout : Status poll count before giving up
+	 *
+	 * @return	The deferred operation's result, 0 when nothing is deferred.
+	 */
+	int Complete(uint32_t Timeout = 100000);
+
+	/**
+	 * @brief	Interface event entry for interrupt driven completion.
+	 *
+	 * Called from the interface event callback when the underlying transfer
+	 * or operation completes. On DEVINTRF_EVT_COMPLETED, a deferred Write or
+	 * Erase whose medium reports ready is finished and reported through the
+	 * completion handler, from the event context. Init installs this on the
+	 * interface callback when bIntEn is set and the callback is free; an
+	 * application that owns the interface callback calls this from it.
+	 */
+	void IntrfEvent(DEVINTRF_EVT EvtId);
+
+	/**
 	 * @brief	Set or clear write protection.
 	 *
 	 * Uses the status register block protect bits where the medium has them,
@@ -434,15 +482,6 @@ protected:
 	}
 
 	/**
-	 * @brief	Report completion of an interrupt driven operation.
-	 */
-	void NotifyDone(NVM_EVT Evt, uint64_t Off, uint32_t Len, int Res) {
-		if (vEvtHandler != nullptr) {
-			vEvtHandler(this, Evt, Off, Len, Res);
-		}
-	}
-
-	/**
 	 * @brief	Invoke the cooperative wait during a long operation.
 	 *
 	 * @return	false when the caller asked to abort.
@@ -450,11 +489,6 @@ protected:
 	bool WaitPoll(void) {
 		return vpWaitCB != nullptr ? vpWaitCB(this) : true;
 	}
-
-	/**
-	 * @brief	True when the device is configured interrupt driven.
-	 */
-	bool IntEn(void) const { return vbIntEn; }
 
 	/**
 	 * @brief	Validate a region relative range.
@@ -487,16 +521,23 @@ private:
 	// the high address bits on a part whose address bytes cannot hold them.
 	int FrameAddr(uint8_t *pFrame, uint8_t Cmd, uint32_t Addr,
 				  uint32_t *pDevAddr);
-	int Program(uint32_t Addr, const uint8_t *pData, uint32_t Len);
-	int EraseUnit(uint32_t Addr);
+	// bDefer skips the trailing wait: the medium keeps working after the
+	// call returns, and FinishDeferred picks the result up later.
+	int Program(uint32_t Addr, const uint8_t *pData, uint32_t Len,
+				bool bDefer);
+	int EraseUnit(uint32_t Addr, bool bDefer);
 	int SendCmd(const NvmCmd_t &Cmd);
 	int ReadStatus(uint8_t &Status);
+	int FinishDeferred(uint32_t Timeout = 100000);
 
 	uint64_t		vRegionOffset;	//!< Absolute region offset on the medium
 	uint64_t		vRegionSize;	//!< Region size in bytes
+	NvmWaitCb_t		vpWaitCB;		//!< Cooperative wait during a long operation
 	bool			vbIntEn;		//!< Interrupt driven when true, else polling
 	NvmEvtHandler_t	vEvtHandler;	//!< Completion handler for interrupt mode
-	NvmWaitCb_t		vpWaitCB;		//!< Cooperative wait for polling mode
+	NVM_EVT			vDefEvt;		//!< Deferred event, NVM_EVT_NONE when idle
+	uint64_t		vDefOff;		//!< Deferred call's region offset
+	uint32_t		vDefLen;		//!< Deferred call's length
 	uint64_t	vDevSize;		//!< Whole device size in bytes
 	uint32_t	vEraseSize;		//!< Erase unit, 0 : overwrites directly
 	uint32_t	vSectSize;		//!< Logical sector where there is no erase unit
