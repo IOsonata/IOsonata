@@ -409,7 +409,6 @@ static void NorApply(void)
 #define EEP_DEVNO	0x50
 
 static uint8_t s_Eep[EEP_SIZE];
-static uint32_t s_EepBusyCnt;	// acknowledge polls left before the cycle ends
 static int s_EepVioPageCross;
 static uint32_t s_EepDevAddr;
 static bool s_EepRx;
@@ -418,7 +417,6 @@ static std::vector<uint8_t> s_EepBuf;
 static void EepPowerOn(void)
 {
 	memset(s_Eep, 0xFF, sizeof(s_Eep));
-	s_EepBusyCnt = 0;
 	s_EepVioPageCross = 0;
 	s_EepBuf.clear();
 }
@@ -458,19 +456,7 @@ static int EepTxSrData(DevIntrf_t *d, const uint8_t *p, int n)
 
 static int EepRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
 {
-	// During the write cycle the part does not acknowledge: every access
-	// fails. This is what the acknowledge poll detects.
-	if (s_EepBusyCnt > 0)
-	{
-		s_EepBusyCnt--;
-		return 0;
-	}
-	if (s_EepBuf.size() < EEP_ADDR)
-	{
-		// Current address read, no address frame: the acknowledge poll.
-		for (int i = 0; i < Len; i++) { pBuff[i] = s_Eep[i % EEP_SIZE]; }
-		return Len;
-	}
+	if (s_EepBuf.size() < EEP_ADDR) { return 0; }
 
 	uint32_t addr = EepAddr();
 	for (int i = 0; i < Len; i++) { pBuff[i] = s_Eep[(addr + i) % EEP_SIZE]; }
@@ -492,13 +478,11 @@ static void EepStopTx(DevIntrf_t *)
 	{
 		s_EepVioPageCross++;
 	}
-	// Overwrites directly, no erase. The write cycle follows: the part
-	// stops acknowledging for a while.
+	// Overwrites directly, no erase.
 	for (uint32_t i = 0; i < n; i++)
 	{
 		s_Eep[(addr + i) % EEP_SIZE] = s_EepBuf[EEP_ADDR + i];
 	}
-	s_EepBusyCnt = 3;
 }
 
 }	// extern "C"

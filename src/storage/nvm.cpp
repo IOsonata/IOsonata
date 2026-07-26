@@ -271,26 +271,15 @@ bool Nvm::WaitReady(uint32_t Timeout)
 	// a known time, which the config gives.
 	if (vbBare)
 	{
-		// No status register. An EEPROM in its write cycle does not
-		// acknowledge its address, so a one byte current address read
-		// answers only when the cycle is over. This is the standard
-		// acknowledge poll; it also spends no time when the medium is
-		// already idle.
-		do {
-			uint8_t b;
-
-			XferBegin();
-			if (XferShort(Interface()->Rx((uint32_t)vBaseDevAddr, &b, 1), 1))
-			{
-				return true;
-			}
-			if (WaitPoll() == false)
-			{
-				return false;
-			}
-		} while (Timeout-- > 0);
-
-		return false;
+		if (WaitPoll() == false)
+		{
+			return false;
+		}
+		if (vWrDelayUs > 0)
+		{
+			usDelay(vWrDelayUs);
+		}
+		return true;
 	}
 
 	while (Timeout-- > 0)
@@ -899,13 +888,14 @@ int Nvm::ServiceStep(void)
 	}
 	else if (vbBare)
 	{
-		// Acknowledge poll, one attempt: an EEPROM in its write cycle does
-		// not acknowledge, so a one byte current address read answers only
-		// when the cycle is over.
-		uint8_t b;
-
-		XferBegin();
-		ready = XferShort(Interface()->Rx((uint32_t)vBaseDevAddr, &b, 1), 1);
+		// No status register: the write cycle takes the configured time and
+		// the medium has no way to answer earlier. Spend it in this one
+		// step.
+		if (vWrDelayUs > 0)
+		{
+			usDelay(vWrDelayUs);
+		}
+		ready = true;
 	}
 	else
 	{
