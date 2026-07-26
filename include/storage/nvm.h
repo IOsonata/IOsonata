@@ -186,331 +186,159 @@ SOFTWARE.
 
 class Nvm;
 
-/// Event notification for interrupt driven operation.
 typedef enum __Nvm_Evt {
 	NVM_EVT_UNKNOWN,
-	NVM_EVT_WRITE_DONE,			//!< An interrupt driven Write completed
-	NVM_EVT_ERASE_DONE,			//!< An interrupt driven Erase completed
-	NVM_EVT_READ_DONE,			//!< An interrupt driven Read completed
-	NVM_EVT_ERROR				//!< The pending operation failed
+	NVM_EVT_WRITE_DONE,
+	NVM_EVT_ERASE_DONE,
+	NVM_EVT_READ_DONE,
+	NVM_EVT_ERROR
 } NVM_EVT;
 
-/// Completion handler for interrupt driven operation. Res is 0 on success or a
-/// negative errno on failure. Off and Len identify the completed request.
 typedef void (*NvmEvtHandler_t)(Nvm * const pDev, NVM_EVT Evt,
 								uint64_t Off, uint32_t Len, int Res);
-
-/// Cooperative wait callback, called during a long blocking operation when
-/// polling so the caller can do other work. Returning false requests the
-/// driver to abort the wait where the medium allows it.
 typedef bool (*NvmWaitCb_t)(Nvm * const pDev);
-
-/// Custom pre-initialization callback for device-specific preparation needed
-/// before the generic reset or device-ID probe. Returns true on success. The
-/// transport and configured device address are available when it is called.
 typedef bool (*NvmInitCb_t)(Nvm * const pDev, DeviceIntrf * const pIntrf);
 
-/// A command plus dummy cycle pair. A command of 0 means the medium does not
-/// have it.
 typedef struct __Nvm_Cmd {
-	uint8_t	Cmd;			//!< Command byte
-	uint8_t	DummyCycle;		//!< Dummy cycles after the address phase
+	uint8_t	Cmd;
+	uint8_t	DummyCycle;
 } NvmCmd_t;
 
-/// Device configuration. A given memory uses the fields that apply to it.
 typedef struct __Nvm_Cfg {
-	// Identity and placement on the transport.
-	int			DevNo;			//!< Device index, or I2C address for EEPROM
-	uint64_t	BaseAddr;		//!< Reserved for a future memory-mapped transport
-	// Geometry. Set by the user, or filled by the driver from a device query
-	// (a JEDEC id, or an interface that knows its own memory).
-	uint64_t	TotalSize;		//!< Total usable size in bytes
-	uint32_t	EraseSize;		//!< Erase unit. 0 : a direct read write
-								//!< medium that overwrites in place, EEPROM,
-								//!< FRAM, RAM based. This is the one property
-								//!< that decides the kind: an erase medium
-								//!< speaks the standard serial NOR protocol,
-								//!< which is driver knowledge, not config
-	uint32_t	SectorSize;		//!< Logical sector. 0 : equals EraseSize.
-	uint32_t	PageSize;		//!< Largest bytes one transfer may take
-	uint32_t	WriteGran;		//!< Minimum aligned write unit. 0 : treat as 1.
-	uint8_t		AddrSize;		//!< Address bytes on the wire (1..4)
-	// Device probe.
-	uint32_t	DevId;			//!< Expected device id, 0 to skip the check
-	uint8_t		DevIdSize;		//!< Id length in bytes, maximum 4
-	// The read and program pair, the one command configuration: 0 derives
-	// the plain bus standard from the interface type, set is a wide bus
-	// part's own command with its dummy cycles, which is
-	// how one driver serves a flash that needs commands and an EEPROM that
-	// needs none.
-	NvmCmd_t	RdCmd;			//!< Read. 0 : derived from the interface
-								//!< type, bare address on I2C, 0x03 serial.
-								//!< Set for a wide bus part: the fast, quad
-								//!< or octal command with its dummy cycles is
-								//!< the one place parts genuinely differ
-	NvmCmd_t	WrCmd;			//!< Program. 0 : derived, bare on I2C, 0x02
-								//!< serial. Set for a wide bus part
-	uint8_t		WrProtMask;		//!< Status bits that hold the block protect
-	// Write protect. A pin that is not used must say so with { -1, -1, }.
-	IOPinCfg_t	WrProtPin;		//!< Write protect pin
-	// Timing.
-	uint32_t	WriteDelayUs;	//!< Write cycle time where there is no status
-	// Operation mode and callbacks.
-	bool			bIntEn;			//!< Reserved; must be false in the polling driver
-	NvmEvtHandler_t	EvtHandler;	//!< Reserved for asynchronous completion
-	NvmWaitCb_t		pWaitCB;	//!< Cooperative wait, used when polling
-	NvmInitCb_t		pInitCB;	//!< Pre-initialization callback, may be NULL
+	int			DevNo;
+	uint64_t	BaseAddr;
+	uint64_t	TotalSize;
+	uint32_t	EraseSize;
+	uint32_t	SectorSize;
+	uint32_t	PageSize;
+	uint32_t	WriteGran;
+	uint8_t		AddrSize;
+	uint32_t	DevId;
+	uint8_t		DevIdSize;
+	NvmCmd_t	RdCmd;
+	NvmCmd_t	WrCmd;
+	uint8_t		WrProtMask;
+	IOPinCfg_t	WrProtPin;
+	uint32_t	WriteDelayUs;
+	bool			bIntEn;
+	NvmEvtHandler_t	EvtHandler;
+	NvmWaitCb_t		pWaitCB;
+	NvmInitCb_t		pInitCB;
 } NvmCfg_t;
 
-/// @brief	Non volatile memory device.
-///
-/// One driver for any addressed memory. The medium is described by the config;
-/// the transport is the DeviceIntrf passed to Init.
 class Nvm : virtual public Device {
 public:
 	Nvm();
 	virtual ~Nvm() {}
 	Nvm(Nvm&) = delete;
 
-	// Keep the Device register access overloads visible alongside the byte
-	// addressed overloads declared here.
 	using Device::Read;
 	using Device::Write;
 
-	/**
-	 * @brief	Initialize the memory and set the region window.
-	 *
-	 * @param	Cfg			: Device configuration
-	 * @param	pIntrf		: Interface to reach the device
-	 * @param	RegionOff	: Region start on the device in bytes
-	 * @param	RegionSize	: Region size in bytes, 0 : to the end of device
-	 *
-	 * @return	true on success.
-	 */
 	bool Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 			  uint64_t RegionOff = 0, uint64_t RegionSize = 0);
 
-	/**
-	 * @brief	Get the region size in bytes.
-	 */
 	virtual uint64_t Size(void) const { return vRegionSize; }
-
-	/**
-	 * @brief	Get the erase unit in bytes.
-	 *
-	 * @return	0 : the medium overwrites directly and has no erase step.
-	 */
 	virtual uint32_t EraseSize(void) const { return vEraseSize; }
-
-	/**
-	 * @brief	Get the minimum aligned write unit in bytes.
-	 */
 	virtual uint32_t WriteGran(void) const { return vWrGran; }
-
-	/**
-	 * @brief	Get the logical sector size in bytes.
-	 *
-	 * A log structured consumer partitions the region into sectors. On an
-	 * erase write medium that is the erase unit. A medium that overwrites
-	 * directly has no erase unit and reports whatever sector the config asked
-	 * for. The logical sector must be a whole multiple of EraseSize.
-	 */
 	virtual uint32_t LogicalSectorSize(void) const {
-		// Through EraseSize so a subclass that overrides it is honoured.
 		return vSectSize != 0 ? vSectSize : EraseSize();
 	}
-
-	/**
-	 * @brief	Get the largest bytes one transfer may take.
-	 *
-	 * On a medium with an address auto increment window this is the page: the
-	 * address counter advances only within it and wraps at the boundary, so a
-	 * single transfer must stay inside one. On a medium reached through a
-	 * controller it is whatever the controller accepts at once. Either way the
-	 * driver splits a longer request here.
-	 */
 	virtual uint32_t PageSize(void) const { return vPageSize; }
 
-	/**
-	 * @brief	Read data from the region.
-	 *
-	 * @return	Len on success, negative errno on failure.
-	 */
 	virtual int Read(uint64_t Off, void *pBuf, uint32_t Len);
-
-	/**
-	 * @brief	Write data to the region.
-	 *
-	 * On an erase write medium the destination must be erased. Off and Len are
-	 * multiples of WriteGran.
-	 *
-	 * @return	Len on success, negative errno on failure.
-	 */
 	virtual int Write(uint64_t Off, const void *pData, uint32_t Len);
-
-	/**
-	 * @brief	Erase a range. Off and Len are multiples of EraseSize.
-	 *
-	 * @return	0 on success, negative errno on failure. A medium that
-	 * 			overwrites directly returns success without doing anything.
-	 */
 	virtual int Erase(uint64_t Off, uint32_t Len);
 
 	/**
-	 * @brief	Set or clear write protection.
+	 * @brief Set or clear whole-device write protection.
 	 *
-	 * Uses the status register block protect bits where the medium has them,
-	 * otherwise the configured pin. The mechanism is per medium; the caller
-	 * sees one verb.
+	 * The current mechanisms, status block-protect bits or a WP pin, affect the
+	 * whole physical medium. Off must be zero, Len must equal Size(), and this
+	 * instance must cover the whole device. Partial protection is not implied.
 	 *
-	 * @return	0 on success, -ENOTSUP where the medium has neither.
+	 * @return 0 on success, -ENOTSUP for a partial range or where the medium has
+	 *         no mechanism, -EPERM for a windowed instance.
 	 */
 	virtual int SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable);
 
-	/**
-	 * @brief	Erase the whole device, where the medium offers it. Only an
-	 * 			instance whose region covers the whole device may use it.
-	 *
-	 * @return	0 on success, -EPERM on a windowed instance, -ENOTSUP where the
-	 * 			medium has no such command.
-	 */
 	int MassErase(void);
 
-	/**
-	 * @brief	Report whether an operation is in progress.
-	 */
 	virtual bool IsBusy(void) const { return false; }
-
-	/**
-	 * @brief	Flush buffered state, or drain a pending operation.
-	 */
 	virtual int Sync(void) { return 0; }
 
-	/**
-	 * @brief	Get the region offset on the physical medium.
-	 */
 	uint64_t RegionOffset(void) const { return vRegionOffset; }
-
-	/**
-	 * @brief	Read the device id, where the medium has an id command.
-	 */
 	uint32_t ReadId(int Len);
-
-	/**
-	 * @brief	Read the status register, where the medium has one.
-	 *
-	 * This compatibility helper returns zero when the medium has no status
-	 * register or when the status transaction fails. Driver operations use an
-	 * internal error-returning form so a bus failure is never treated as ready.
-	 */
 	uint8_t ReadStatus(void);
 
-	// *** Device ***
-
-	/**
-	 * @brief	Framed read, without the sensor register convention.
-	 *
-	 * Device::Read sets the top bit of the command for SPI because that is how
-	 * most sensors mark a register read. A memory command is not a register
-	 * address, so it has to go out untouched.
-	 */
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff,
 			 int BuffLen) override;
 
-	bool Enable(void) override { return true; }
+	bool Enable(void) override;
 	void Disable(void) override;
 	void Reset(void) override;
 
 protected:
-	/**
-	 * @brief	Set the region window. Init calls this once geometry is known.
-	 */
 	void Region(uint64_t Offset, uint64_t Size) {
 		vRegionOffset = Offset;
 		vRegionSize = Size;
 	}
 
-	/**
-	 * @brief	Report completion of an interrupt driven operation.
-	 */
 	void NotifyDone(NVM_EVT Evt, uint64_t Off, uint32_t Len, int Res) {
 		if (vEvtHandler != nullptr) {
 			vEvtHandler(this, Evt, Off, Len, Res);
 		}
 	}
 
-	/**
-	 * @brief	Invoke the cooperative wait during a long operation.
-	 *
-	 * @return	false when the caller asked to abort.
-	 */
 	bool WaitPoll(void) {
 		return vpWaitCB != nullptr ? vpWaitCB(this) : true;
 	}
 
-	/**
-	 * @brief	True when the device is configured interrupt driven.
-	 */
 	bool IntEn(void) const { return vbIntEn; }
 
-	/**
-	 * @brief	Validate a region relative range.
-	 */
 	bool RangeValid(uint64_t Off, uint32_t Len) const {
 		return Off <= vRegionSize && Len <= vRegionSize - Off;
 	}
 
-	/**
-	 * @brief	Wait until the memory has taken the data.
-	 *
-	 * Polls the status register where the medium has one, otherwise waits the
-	 * configured write time.
-	 */
 	bool WaitReady(uint32_t Timeout = 100000);
-
-	/**
-	 * @brief	Set the write enable latch, where the medium has one.
-	 */
 	bool WriteEnable(uint32_t Timeout = 100000);
-
-	/**
-	 * @brief	Clear the write enable latch, where the medium has one.
-	 */
 	void WriteDisable(void);
 
 private:
-	// Frame the command, where there is one, and the address. Returns the
-	// frame length and fills pDevAddr with the device selection, which takes
-	// the high address bits on a part whose address bytes cannot hold them.
 	int FrameAddr(uint8_t *pFrame, uint8_t Cmd, uint32_t Addr,
 				  uint32_t *pDevAddr);
 	int Program(uint32_t Addr, const uint8_t *pData, uint32_t Len);
 	int EraseUnit(uint32_t Addr);
 	int SendCmd(const NvmCmd_t &Cmd);
 	int ReadStatus(uint8_t &Status);
+	bool ConfigureDevice(void);
+	bool FailInit(void);
+	bool Ready(void) { return Valid() && vbEnabled && Interface() != nullptr; }
 
-	uint64_t		vRegionOffset;	//!< Absolute region offset on the medium
-	uint64_t		vRegionSize;	//!< Region size in bytes
-	bool			vbIntEn;		//!< Interrupt driven when true, else polling
-	NvmEvtHandler_t	vEvtHandler;	//!< Completion handler for interrupt mode
-	NvmWaitCb_t		vpWaitCB;		//!< Cooperative wait for polling mode
-	uint64_t	vDevSize;		//!< Whole device size in bytes
-	uint32_t	vEraseSize;		//!< Erase unit, 0 : overwrites directly
-	uint32_t	vSectSize;		//!< Logical sector where there is no erase unit
-	uint32_t	vPageSize;		//!< Largest bytes one transfer may take
-	uint32_t	vWrGran;		//!< Minimum aligned write unit
-	int			vAddrSize;		//!< Address bytes on the wire
-	uint32_t	vAddrSpan;		//!< What the address bytes can reach
-	uint32_t	vWrDelayUs;		//!< Write cycle time where there is no status
-	uint8_t		vWrProtMask;	//!< Status bits holding the block protect
-	NvmCmd_t	vRdCmd;			//!< Read command
-	NvmCmd_t	vWrCmd;			//!< Program command
-	bool		vbBare;			//!< Bare address bus (I2C): no command
-								//!< bytes, no latch, no status register
-	uint32_t	vBaseDevAddr;	//!< Configured device address, immutable;
-								//!< the banked address derives from it per
-								//!< frame so bank bits never stick
-	IOPinCfg_t	vWrProtPin;		//!< Write protect pin, PortNo < 0 if unused
+	uint64_t		vRegionOffset;
+	uint64_t		vRegionSize;
+	bool			vbIntEn;
+	NvmEvtHandler_t	vEvtHandler;
+	NvmWaitCb_t		vpWaitCB;
+	NvmInitCb_t		vInitCB;
+	uint64_t	vDevSize;
+	uint32_t	vEraseSize;
+	uint32_t	vSectSize;
+	uint32_t	vPageSize;
+	uint32_t	vWrGran;
+	int			vAddrSize;
+	uint32_t	vAddrSpan;
+	uint32_t	vWrDelayUs;
+	uint8_t		vWrProtMask;
+	NvmCmd_t	vRdCmd;
+	NvmCmd_t	vWrCmd;
+	bool		vbBare;
+	bool		vbEnabled;
+	bool		vbIntrfEnabled;
+	uint32_t	vBaseDevAddr;
+	uint32_t	vExpectedDevId;
+	uint8_t		vExpectedDevIdSize;
+	IOPinCfg_t	vWrProtPin;
 };
 
 #endif	// __cplusplus
