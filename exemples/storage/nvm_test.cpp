@@ -59,6 +59,7 @@ SOFTWARE.
 #include "device_intrf.h"
 #include "storage/nvm.h"
 #include "storage/flash.h"		// for the FLASH_CMD_* opcodes
+#include "coredev/spi.h"		// for the phased QSPI path
 
 // ---------------------------------------------------------------------------
 // Test bookkeeping
@@ -94,6 +95,8 @@ void IOPinClear(int, int) {}
 
 static uint8_t s_Nor[NOR_SIZE];
 static bool s_NorWel;
+static uint32_t s_NorBusyCnt;	// status polls left before WIP clears
+static bool s_NorIntrfAsync;	// interface returns -1 and reports by event
 static uint32_t s_NorRstCnt;
 static uint8_t s_NorBp;
 static int s_NorVioNoWel;
@@ -104,6 +107,8 @@ static void NorPowerOn(void)
 {
 	memset(s_Nor, 0xFF, sizeof(s_Nor));
 	s_NorWel = false;
+	s_NorBusyCnt = 0;
+	s_NorIntrfAsync = false;
 	s_NorBp = 0;
 	s_NorVioNoWel = 0;
 	s_NorVioPageCross = 0;
@@ -124,9 +129,30 @@ extern "C" {
 static bool NorStartRx(DevIntrf_t *, uint32_t) { return true; }
 static bool NorStartTx(DevIntrf_t *, uint32_t) { s_NorTx.clear(); return true; }
 
-static int NorTxData(DevIntrf_t *, const uint8_t *pData, int Len)
+static void NorApply(void);
+
+static int NorTxData(DevIntrf_t *pDev, const uint8_t *pData, int Len)
 {
 	for (int i = 0; i < Len; i++) { s_NorTx.push_back(pData[i]); }
+
+	// Interrupt driven interface: a data bearing program transfer starts,
+	// reports -1, applies, and completes through the event, the way the
+	// real ports do. Command frames stay synchronous, as the real ports
+	// wait for a no stop command phase.
+	if (s_NorIntrfAsync && !s_NorTx.empty() && s_NorTx[0] == FLASH_CMD_WRITE
+		&& s_NorTx.size() > (size_t)(1 + NOR_ADDR))
+	{
+		NorApply();
+		if (pDev->EvtCB)
+		{
+			pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, nullptr, 0);
+		}
+		// The real ports release the interface busy latch from the interrupt
+		// at completion, since the framework skips Stop on this path.
+		atomic_flag_clear(&pDev->bBusy);
+		return -1;
+	}
+
 	return Len;
 }
 static int NorTxSrData(DevIntrf_t *d, const uint8_t *p, int n)
@@ -134,7 +160,7 @@ static int NorTxSrData(DevIntrf_t *d, const uint8_t *p, int n)
 	return NorTxData(d, p, n);
 }
 
-static int NorRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
+static int NorRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Len)
 {
 	uint8_t cmd = s_NorTx.empty() ? 0 : s_NorTx[0];
 
@@ -147,6 +173,12 @@ static int NorRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
 	{
 		uint8_t st = s_NorBp;
 		if (s_NorWel) { st |= 0x02u; }
+		if (s_NorBusyCnt > 0)
+		{
+			// The medium is still programming or erasing.
+			st |= 0x01u;
+			s_NorBusyCnt--;
+		}
 		for (int i = 0; i < Len; i++) { pBuff[i] = st; }
 		return Len;
 	}
@@ -158,6 +190,19 @@ static int NorRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
 
 	uint32_t addr = NorAddr(&s_NorTx[1]);
 	for (int i = 0; i < Len; i++) { pBuff[i] = s_Nor[(addr + i) % NOR_SIZE]; }
+
+	if (s_NorIntrfAsync && cmd == FLASH_CMD_READ)
+	{
+		// The data landed in the caller's buffer; completion comes through
+		// the event, the way an interrupt driven receive works.
+		if (pDev->EvtCB)
+		{
+			pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, nullptr, 0);
+		}
+		atomic_flag_clear(&pDev->bBusy);
+		return -1;
+	}
+
 	return Len;
 }
 
@@ -285,6 +330,11 @@ static void NorStopRx(DevIntrf_t *) {}
 
 static void NorStopTx(DevIntrf_t *)
 {
+	NorApply();
+}
+
+static void NorApply(void)
+{
 	if (s_NorTx.empty()) { return; }
 
 	uint8_t cmd = s_NorTx[0];
@@ -308,6 +358,7 @@ static void NorStopTx(DevIntrf_t *)
 			uint32_t a = NorAddr(&s_NorTx[1]) & ~(NOR_SECT - 1);
 			memset(&s_Nor[a % NOR_SIZE], 0xFF, NOR_SECT);
 			s_NorWel = false;
+			s_NorBusyCnt = 3;
 			break;
 		}
 
@@ -315,6 +366,7 @@ static void NorStopTx(DevIntrf_t *)
 			if (!s_NorWel) { s_NorVioNoWel++; break; }
 			memset(s_Nor, 0xFF, NOR_SIZE);
 			s_NorWel = false;
+			s_NorBusyCnt = 3;
 			break;
 
 		case FLASH_CMD_WRITE:
@@ -334,6 +386,7 @@ static void NorStopTx(DevIntrf_t *)
 				{
 					s_Nor[(a + i) % NOR_SIZE] &= s_NorTx[hdr + i];
 				}
+				s_NorBusyCnt = 3;
 			}
 			s_NorWel = false;
 			break;
@@ -445,6 +498,161 @@ static uint32_t MockSetRate(DevIntrf_t *, uint32_t r) { return r; }
 static void MockPowerOff(DevIntrf_t *) {}
 static void *MockGetHandle(DevIntrf_t *pDev) { return pDev->pDevData; }
 }
+
+// ---------------------------------------------------------------------------
+// Simulated quad SPI NOR behind a phased interface. Commands, addresses and
+// dummy cycles arrive through QuadSPISendCmd as phases, never as frame
+// bytes; only data moves through the Rx/Tx handlers. The mock records what
+// reached the interface, so the checks can prove the part's own quad
+// command and dummy cycles were passed through.
+// ---------------------------------------------------------------------------
+
+#define QSPI_SIZE		(256u * 1024u)
+#define QSPI_PAGE		256u
+#define QSPI_ADDR		3
+#define QSPI_ID			0x1628C2
+
+static SPIDev_t s_QDev;
+static uint8_t s_QMem[QSPI_SIZE];
+static bool s_QWel;
+static uint8_t s_QBp;
+static uint8_t s_QCmd;
+static uint32_t s_QAddr;
+static uint8_t s_QLastRdDummy;
+static uint8_t s_QLastWrCmd;
+static uint32_t s_QSetMemSize;
+static uint32_t s_QRstCnt;
+static uint32_t s_QEraseCnt;
+static uint32_t s_QWrsrCnt;
+static uint32_t s_QVioNoWel;
+static uint32_t s_QVioEraseNoWel;
+
+static void QspiPowerOn(void)
+{
+	memset(s_QMem, 0xFF, sizeof(s_QMem));
+	s_QWel = false;
+	s_QBp = 0;
+	s_QCmd = 0;
+	s_QAddr = 0;
+	s_QLastRdDummy = 0xFF;
+	s_QLastWrCmd = 0;
+	s_QSetMemSize = 0;
+	s_QRstCnt = 0;
+	s_QEraseCnt = 0;
+	s_QWrsrCnt = 0;
+	s_QVioNoWel = 0;
+	s_QVioEraseNoWel = 0;
+}
+
+// The two functions a real target defines in its QSPI implementation.
+void QuadSPISetMemSize(SPIDev_t * const, uint32_t Size)
+{
+	s_QSetMemSize = Size;
+}
+
+bool QuadSPISendCmd(SPIDev_t * const, uint8_t Cmd, uint32_t Addr,
+					uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle)
+{
+	(void)AddrLen;
+	(void)DataLen;
+
+	s_QCmd = Cmd;
+	s_QAddr = Addr;
+
+	switch (Cmd)
+	{
+		case FLASH_CMD_WRENABLE:  s_QWel = true;  break;
+		case FLASH_CMD_WRDISABLE: s_QWel = false; break;
+
+		case FLASH_CMD_RESET_DEVICE: s_QRstCnt++; break;
+
+		case FLASH_CMD_SECTOR_ERASE:
+			if (!s_QWel) { s_QVioEraseNoWel++; break; }
+			for (uint32_t i = 0; i < 4096u; i++)
+			{
+				s_QMem[(Addr + i) % QSPI_SIZE] = 0xFF;
+			}
+			s_QEraseCnt++;
+			s_QWel = false;
+			break;
+
+		case FLASH_CMD_BULK_ERASE:
+			if (!s_QWel) { s_QVioEraseNoWel++; break; }
+			memset(s_QMem, 0xFF, sizeof(s_QMem));
+			s_QWel = false;
+			break;
+
+		default: break;
+	}
+
+	if (Cmd == 0x6B)
+	{
+		s_QLastRdDummy = DummyCycle;	// the part's dummies, if they made it
+	}
+
+	return true;
+}
+
+static bool QspiStartRx(DevIntrf_t *, uint32_t) { return true; }
+static void QspiStopRx(DevIntrf_t *) {}
+static bool QspiStartTx(DevIntrf_t *, uint32_t) { return true; }
+
+static int QspiRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
+{
+	if (s_QCmd == FLASH_CMD_READID)
+	{
+		for (int i = 0; i < Len; i++)
+		{
+			pBuff[i] = (uint8_t)(QSPI_ID >> (8 * i));
+		}
+		return Len;
+	}
+	if (s_QCmd == FLASH_CMD_READSTATUS)
+	{
+		uint8_t st = s_QBp;
+		if (s_QWel) { st |= 0x02u; }
+		for (int i = 0; i < Len; i++) { pBuff[i] = st; }
+		return Len;
+	}
+
+	// A data read: the address arrived as a phase.
+	for (int i = 0; i < Len; i++)
+	{
+		pBuff[i] = s_QMem[(s_QAddr + i) % QSPI_SIZE];
+	}
+	return Len;
+}
+
+static int QspiTxData(DevIntrf_t *, const uint8_t *pData, int Len)
+{
+	if (s_QCmd == FLASH_CMD_WRSR)
+	{
+		if (Len >= 1) { s_QBp = pData[0]; }
+		s_QWrsrCnt++;
+		s_QWel = false;
+		return Len;
+	}
+
+	// A program: the command and address arrived as phases.
+	s_QLastWrCmd = s_QCmd;
+	if (!s_QWel)
+	{
+		s_QVioNoWel++;
+		return Len;
+	}
+	for (int i = 0; i < Len; i++)
+	{
+		// Programming clears bits only.
+		s_QMem[(s_QAddr + i) % QSPI_SIZE] &= pData[i];
+	}
+	s_QWel = false;
+	return Len;
+}
+static int QspiTxSrData(DevIntrf_t *d, const uint8_t *p, int n)
+{
+	return QspiTxData(d, p, n);
+}
+static void QspiStopTx(DevIntrf_t *) {}
 
 class MockIntrf : public DeviceIntrf {
 public:
@@ -695,6 +903,245 @@ static void TestFram(MockIntrf &Bus)
 	CHECK(mem.SetWriteProtect(0, 1, false) == 0, "fram: unprotect through the status bits");
 }
 
+static void TestQspi(MockIntrf &Bus)
+{
+	QspiPowerOn();
+
+	Nvm mem;
+	NvmCfg_t cfg;
+	memset(&cfg, 0, sizeof(cfg));
+	cfg.TotalSize = QSPI_SIZE;
+	cfg.EraseSize = 4096;
+	cfg.PageSize = QSPI_PAGE;
+	cfg.AddrSize = QSPI_ADDR;
+	cfg.DevId = QSPI_ID;
+	cfg.DevIdSize = 3;
+	cfg.WrProtMask = 0x3C;
+	cfg.RdCmd = { 0x6B, 8 };			// the part's quad read, 8 dummies
+	cfg.WrCmd = { 0x32, 0 };			// the part's quad page program
+	cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+
+	CHECK(mem.Init(cfg, &Bus), "qspi init");
+	CHECK(s_QSetMemSize == QSPI_SIZE, "qspi: device size handed to the interface");
+	CHECK(s_QRstCnt == 1, "qspi: reset went as a phase, before the id probe");
+	CHECK(mem.ReadId(3) == QSPI_ID, "qspi id");
+
+	RunCommon(mem, "Quad SPI NOR", QSPI_SIZE, QSPI_PAGE);
+
+	// The design's central claim: the part's own quad command and its dummy
+	// cycles reach the interface as phases.
+	CHECK(s_QLastRdDummy == 8, "qspi: the part's dummy cycles reach the interface");
+	CHECK(s_QLastWrCmd == 0x32, "qspi: the part's program command is the one used");
+	CHECK(s_QVioNoWel == 0, "qspi: every program held the latch");
+	CHECK(s_QVioEraseNoWel == 0, "qspi: every erase held the latch");
+
+	// Erase and chip erase as address and command phases.
+	uint8_t rd[16];
+	CHECK(mem.Erase(0, 4096) == 0, "qspi: erase one unit");
+	mem.Read(0, rd, sizeof(rd));
+	bool ff = true;
+	for (size_t i = 0; i < sizeof(rd); i++) { if (rd[i] != 0xFF) { ff = false; } }
+	CHECK(ff, "qspi: erased unit reads all ones");
+	CHECK(mem.MassErase() == 0, "qspi: chip erase as a phase");
+
+	CHECK(mem.SetWriteProtect(0, 1, true) == 0, "qspi: protect through the status bits");
+	CHECK(s_QWrsrCnt >= 1, "qspi: the write status command was used");
+	CHECK(mem.SetWriteProtect(0, 1, false) == 0, "qspi: unprotect through the status bits");
+}
+
+// ---------------------------------------------------------------------------
+// Asynchronous mode. Write and Erase return once the transfer is done; the
+// medium keeps working. One completion event per call, reported by
+// Complete() or by the next operation.
+// ---------------------------------------------------------------------------
+
+static uint32_t s_EvtCnt;
+static NVM_EVT s_LastEvt;
+static uint64_t s_LastOff;
+static uint32_t s_LastLen;
+static int s_LastRes;
+
+static void AsyncEvtHandler(Nvm * const, NVM_EVT Evt, uint64_t Off,
+							uint32_t Len, int Res)
+{
+	s_EvtCnt++;
+	s_LastEvt = Evt;
+	s_LastOff = Off;
+	s_LastLen = Len;
+	s_LastRes = Res;
+}
+
+static void TestNorAsync(MockIntrf &Bus)
+{
+	NorPowerOn();
+	s_EvtCnt = 0;
+	s_LastEvt = NVM_EVT_NONE;
+	s_LastOff = 0;
+	s_LastLen = 0;
+	s_LastRes = -1;
+
+	printf("--- NOR flash, interrupt driven\n");
+
+	Nvm mem;
+	NvmCfg_t cfg = NorCfg();
+
+	cfg.bIntEn = true;
+	cfg.EvtHandler = AsyncEvtHandler;
+
+	CHECK(mem.Init(cfg, &Bus), "intdrv: init");
+	CHECK(Bus.vDev.EvtCB != nullptr, "intdrv: completion hook installed at init");
+
+	// Start and return: a page crossing write returns after issuing only
+	// the first chunk; the second page has not been touched yet.
+	uint8_t big[NOR_PAGE + 4];
+	uint8_t rd[NOR_PAGE + 8];
+
+	for (size_t i = 0; i < sizeof(big); i++) { big[i] = (uint8_t)(i * 7 + 1); }
+
+	CHECK(mem.Write(NOR_PAGE - 4, big, NOR_PAGE + 4) == (int)(NOR_PAGE + 4),
+		  "intdrv: write returns after the first chunk");
+	CHECK(s_Nor[NOR_PAGE] == 0xFF, "intdrv: later chunks not issued yet");
+	CHECK(s_EvtCnt == 0, "intdrv: no event before completion");
+	CHECK(mem.IsBusy(), "intdrv: IsBusy while the operation runs");
+	CHECK(mem.Sync() == 0, "intdrv: Sync drains the operation");
+	CHECK(s_EvtCnt == 1 && s_LastEvt == NVM_EVT_WRITE_DONE
+		  && s_LastOff == NOR_PAGE - 4 && s_LastLen == NOR_PAGE + 4
+		  && s_LastRes == 0,
+		  "intdrv: one event with the call's range");
+	CHECK(mem.IsBusy() == false, "intdrv: idle after completion");
+	CHECK(mem.Read(NOR_PAGE - 4, rd, NOR_PAGE + 4) == (int)(NOR_PAGE + 4)
+		  && memcmp(rd, big, NOR_PAGE + 4) == 0,
+		  "intdrv: every chunk landed");
+
+	// The polling service alone advances the operation: IsBusy clears by
+	// itself as the medium finishes, and the completing step reports.
+	CHECK(mem.Write(0, big, 16) == 16, "intdrv: single chunk write");
+
+	int spins = 0;
+
+	while (mem.IsBusy() && spins < 20) { spins++; }
+	CHECK(spins > 0 && spins < 20, "intdrv: IsBusy clears as the medium finishes");
+	CHECK(s_EvtCnt == 2 && s_LastLen == 16, "intdrv: the completing step reported");
+
+	// The next operation drains the previous one first.
+	CHECK(mem.Write(100, big, 8) == 8, "intdrv: chained write");
+	CHECK(mem.Read(100, rd, 8) == 8, "intdrv: read runs after the write");
+	CHECK(s_EvtCnt == 3 && s_LastOff == 100 && s_LastLen == 8,
+		  "intdrv: the read drained and reported it");
+	CHECK(memcmp(rd, big, 8) == 0, "intdrv: chained data landed");
+
+	// Erase returns after the first unit; the second is untouched until the
+	// service reaches it.
+	CHECK(mem.Write(NOR_SECT, big, 4) == 4, "intdrv: marker in the second unit");
+	CHECK(mem.Sync() == 0, "intdrv: marker done");
+	CHECK(mem.Erase(0, 2 * NOR_SECT) == 0, "intdrv: erase returns after one unit");
+	CHECK(s_Nor[NOR_SECT] != 0xFF, "intdrv: second unit not erased yet");
+	CHECK(mem.Sync() == 0 && s_LastEvt == NVM_EVT_ERASE_DONE
+		  && s_LastOff == 0 && s_LastLen == 2 * NOR_SECT,
+		  "intdrv: one erase event with the call's range");
+	CHECK(s_Nor[NOR_SECT] == 0xFF, "intdrv: both units erased");
+
+	// Timeout: the medium never finishes. The next call drains, reports the
+	// failure as an error event, and does not start.
+	CHECK(mem.Write(64, big, 4) == 4, "intdrv: write that will not finish");
+	s_NorBusyCnt = 0x7FFFFFFF;
+
+	uint32_t evts = s_EvtCnt;
+
+	CHECK(mem.Write(80, big, 4) == -ETIMEDOUT,
+		  "intdrv: a failed previous operation stops the next call");
+	CHECK(s_EvtCnt == evts + 1 && s_LastEvt == NVM_EVT_ERROR
+		  && s_LastRes == -ETIMEDOUT,
+		  "intdrv: the failure was reported as an error event");
+	s_NorBusyCnt = 0;
+	CHECK(mem.Write(80, big, 4) == 4 && mem.Sync() == 0,
+		  "intdrv: the retried call runs");
+}
+
+static Nvm *s_pAppNvm;
+
+// The application owned interface callback: forwards events to the driver,
+// the path the header documents for an application that keeps EvtCB.
+static int AppIntrfCB(DevIntrf_t * const, DEVINTRF_EVT EvtId, uint8_t *, int)
+{
+	if (s_pAppNvm != nullptr)
+	{
+		s_pAppNvm->IntrfEvent(EvtId);
+	}
+
+	return 0;
+}
+
+static void TestNorAsyncIntrf(MockIntrf &Bus)
+{
+	NorPowerOn();
+	s_EvtCnt = 0;
+
+	printf("--- NOR flash, interrupt driven interface\n");
+
+	// The interface starts transfers and reports -1; data and completion
+	// arrive through the event, the way the real ports behave.
+	s_NorIntrfAsync = true;
+	Bus.vDev.bIntEn = true;
+
+	// Polling driver over the interrupt driven interface: the application
+	// owns the interface callback and forwards events.
+	Nvm mem;
+	NvmCfg_t cfg = NorCfg();
+
+	Bus.vDev.EvtCB = AppIntrfCB;
+	s_pAppNvm = &mem;
+	CHECK(mem.Init(cfg, &Bus), "aintrf: polling driver init");
+
+	uint8_t wr[16];
+	uint8_t rd[16];
+
+	for (size_t i = 0; i < sizeof(wr); i++) { wr[i] = (uint8_t)(0xC0 + i); }
+	CHECK(mem.Write(0, wr, 16) == 16,
+		  "aintrf: polling write over a started transfer");
+	CHECK(mem.Read(0, rd, 16) == 16 && memcmp(rd, wr, 16) == 0,
+		  "aintrf: polling read, the data landed with the event");
+
+	// Interrupt driven driver over the same interface, hook from init.
+	s_pAppNvm = nullptr;
+	Bus.vDev.EvtCB = nullptr;
+
+	Nvm amem;
+
+	cfg.bIntEn = true;
+	cfg.EvtHandler = AsyncEvtHandler;
+	s_EvtCnt = 0;
+	CHECK(amem.Init(cfg, &Bus), "aintrf: interrupt driven init");
+	CHECK(amem.Write(64, wr, 16) == 16, "aintrf: write starts and returns");
+	CHECK(amem.Sync() == 0 && s_EvtCnt == 1 && s_LastEvt == NVM_EVT_WRITE_DONE,
+		  "aintrf: drained with one event");
+	CHECK(amem.Read(64, rd, 16) == 16 && memcmp(rd, wr, 16) == 0,
+		  "aintrf: readback over the started receive");
+
+	s_NorIntrfAsync = false;
+	Bus.vDev.bIntEn = false;
+	// mem and amem unhook in their destructors at return.
+}
+
+static void TestHookLifetime(MockIntrf &Bus)
+{
+	printf("--- completion hook lifetime\n");
+
+	Bus.vDev.EvtCB = nullptr;
+
+	{
+		Nvm tmp;
+		NvmCfg_t cfg = NorCfg();
+
+		cfg.bIntEn = true;
+		NorPowerOn();
+		CHECK(tmp.Init(cfg, &Bus), "hook: init installs");
+		CHECK(Bus.vDev.EvtCB != nullptr, "hook: callback taken");
+	}
+	CHECK(Bus.vDev.EvtCB == nullptr, "hook: destructor released the callback");
+}
+
+
 int main(void)
 {
 	MockIntrf nor(DEVINTRF_TYPE_SPI, NorStartRx, NorRxData, NorStopRx,
@@ -707,6 +1154,19 @@ int main(void)
 	TestNorFlash(nor);
 	TestEeprom(eep);
 	TestFram(fram);
+
+	MockIntrf qspi(DEVINTRF_TYPE_QSPI, QspiStartRx, QspiRxData, QspiStopRx,
+				   QspiStartTx, QspiTxData, QspiTxSrData, QspiStopTx);
+	// The phased path reaches the interface through the SPI handle; wire the
+	// handle to the same handlers.
+	memcpy(&s_QDev.DevIntrf, &qspi.vDev, sizeof(DevIntrf_t));
+	s_QDev.DevIntrf.pDevData = &s_QDev;
+	atomic_flag_clear(&s_QDev.DevIntrf.bBusy);
+	qspi.vDev.pDevData = &s_QDev;
+	TestQspi(qspi);
+	TestNorAsync(nor);
+	TestNorAsyncIntrf(nor);
+	TestHookLifetime(nor);
 
 	printf("\nChecks run: %d\n", g_Checks);
 	if (g_Fail == 0)

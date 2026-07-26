@@ -47,7 +47,7 @@ SOFTWARE.
 // 0 : legacy Seep driver
 // 1 : unified Nvm driver
 #ifndef NVM_MODE
-#define NVM_MODE			0
+#define NVM_MODE			1
 #endif
 
 #if NVM_MODE == 0
