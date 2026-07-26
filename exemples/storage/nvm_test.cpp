@@ -59,6 +59,7 @@ SOFTWARE.
 #include "device_intrf.h"
 #include "storage/nvm.h"
 #include "storage/flash.h"		// for the FLASH_CMD_* opcodes
+#include "coredev/spi.h"		// for the phased QSPI path
 
 // ---------------------------------------------------------------------------
 // Test bookkeeping
@@ -446,6 +447,161 @@ static void MockPowerOff(DevIntrf_t *) {}
 static void *MockGetHandle(DevIntrf_t *pDev) { return pDev->pDevData; }
 }
 
+// ---------------------------------------------------------------------------
+// Simulated quad SPI NOR behind a phased interface. Commands, addresses and
+// dummy cycles arrive through QuadSPISendCmd as phases, never as frame
+// bytes; only data moves through the Rx/Tx handlers. The mock records what
+// reached the interface, so the checks can prove the part's own quad
+// command and dummy cycles were passed through.
+// ---------------------------------------------------------------------------
+
+#define QSPI_SIZE		(256u * 1024u)
+#define QSPI_PAGE		256u
+#define QSPI_ADDR		3
+#define QSPI_ID			0x1628C2
+
+static SPIDev_t s_QDev;
+static uint8_t s_QMem[QSPI_SIZE];
+static bool s_QWel;
+static uint8_t s_QBp;
+static uint8_t s_QCmd;
+static uint32_t s_QAddr;
+static uint8_t s_QLastRdDummy;
+static uint8_t s_QLastWrCmd;
+static uint32_t s_QSetMemSize;
+static uint32_t s_QRstCnt;
+static uint32_t s_QEraseCnt;
+static uint32_t s_QWrsrCnt;
+static uint32_t s_QVioNoWel;
+static uint32_t s_QVioEraseNoWel;
+
+static void QspiPowerOn(void)
+{
+	memset(s_QMem, 0xFF, sizeof(s_QMem));
+	s_QWel = false;
+	s_QBp = 0;
+	s_QCmd = 0;
+	s_QAddr = 0;
+	s_QLastRdDummy = 0xFF;
+	s_QLastWrCmd = 0;
+	s_QSetMemSize = 0;
+	s_QRstCnt = 0;
+	s_QEraseCnt = 0;
+	s_QWrsrCnt = 0;
+	s_QVioNoWel = 0;
+	s_QVioEraseNoWel = 0;
+}
+
+// The two functions a real target defines in its QSPI implementation.
+void QuadSPISetMemSize(SPIDev_t * const, uint32_t Size)
+{
+	s_QSetMemSize = Size;
+}
+
+bool QuadSPISendCmd(SPIDev_t * const, uint8_t Cmd, uint32_t Addr,
+					uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle)
+{
+	(void)AddrLen;
+	(void)DataLen;
+
+	s_QCmd = Cmd;
+	s_QAddr = Addr;
+
+	switch (Cmd)
+	{
+		case FLASH_CMD_WRENABLE:  s_QWel = true;  break;
+		case FLASH_CMD_WRDISABLE: s_QWel = false; break;
+
+		case FLASH_CMD_RESET_DEVICE: s_QRstCnt++; break;
+
+		case FLASH_CMD_SECTOR_ERASE:
+			if (!s_QWel) { s_QVioEraseNoWel++; break; }
+			for (uint32_t i = 0; i < 4096u; i++)
+			{
+				s_QMem[(Addr + i) % QSPI_SIZE] = 0xFF;
+			}
+			s_QEraseCnt++;
+			s_QWel = false;
+			break;
+
+		case FLASH_CMD_BULK_ERASE:
+			if (!s_QWel) { s_QVioEraseNoWel++; break; }
+			memset(s_QMem, 0xFF, sizeof(s_QMem));
+			s_QWel = false;
+			break;
+
+		default: break;
+	}
+
+	if (Cmd == 0x6B)
+	{
+		s_QLastRdDummy = DummyCycle;	// the part's dummies, if they made it
+	}
+
+	return true;
+}
+
+static bool QspiStartRx(DevIntrf_t *, uint32_t) { return true; }
+static void QspiStopRx(DevIntrf_t *) {}
+static bool QspiStartTx(DevIntrf_t *, uint32_t) { return true; }
+
+static int QspiRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
+{
+	if (s_QCmd == FLASH_CMD_READID)
+	{
+		for (int i = 0; i < Len; i++)
+		{
+			pBuff[i] = (uint8_t)(QSPI_ID >> (8 * i));
+		}
+		return Len;
+	}
+	if (s_QCmd == FLASH_CMD_READSTATUS)
+	{
+		uint8_t st = s_QBp;
+		if (s_QWel) { st |= 0x02u; }
+		for (int i = 0; i < Len; i++) { pBuff[i] = st; }
+		return Len;
+	}
+
+	// A data read: the address arrived as a phase.
+	for (int i = 0; i < Len; i++)
+	{
+		pBuff[i] = s_QMem[(s_QAddr + i) % QSPI_SIZE];
+	}
+	return Len;
+}
+
+static int QspiTxData(DevIntrf_t *, const uint8_t *pData, int Len)
+{
+	if (s_QCmd == FLASH_CMD_WRSR)
+	{
+		if (Len >= 1) { s_QBp = pData[0]; }
+		s_QWrsrCnt++;
+		s_QWel = false;
+		return Len;
+	}
+
+	// A program: the command and address arrived as phases.
+	s_QLastWrCmd = s_QCmd;
+	if (!s_QWel)
+	{
+		s_QVioNoWel++;
+		return Len;
+	}
+	for (int i = 0; i < Len; i++)
+	{
+		// Programming clears bits only.
+		s_QMem[(s_QAddr + i) % QSPI_SIZE] &= pData[i];
+	}
+	s_QWel = false;
+	return Len;
+}
+static int QspiTxSrData(DevIntrf_t *d, const uint8_t *p, int n)
+{
+	return QspiTxData(d, p, n);
+}
+static void QspiStopTx(DevIntrf_t *) {}
+
 class MockIntrf : public DeviceIntrf {
 public:
 	DevIntrf_t vDev;
@@ -695,6 +851,52 @@ static void TestFram(MockIntrf &Bus)
 	CHECK(mem.SetWriteProtect(0, 1, false) == 0, "fram: unprotect through the status bits");
 }
 
+static void TestQspi(MockIntrf &Bus)
+{
+	QspiPowerOn();
+
+	Nvm mem;
+	NvmCfg_t cfg;
+	memset(&cfg, 0, sizeof(cfg));
+	cfg.TotalSize = QSPI_SIZE;
+	cfg.EraseSize = 4096;
+	cfg.PageSize = QSPI_PAGE;
+	cfg.AddrSize = QSPI_ADDR;
+	cfg.DevId = QSPI_ID;
+	cfg.DevIdSize = 3;
+	cfg.WrProtMask = 0x3C;
+	cfg.RdCmd = { 0x6B, 8 };			// the part's quad read, 8 dummies
+	cfg.WrCmd = { 0x32, 0 };			// the part's quad page program
+	cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+
+	CHECK(mem.Init(cfg, &Bus), "qspi init");
+	CHECK(s_QSetMemSize == QSPI_SIZE, "qspi: device size handed to the interface");
+	CHECK(s_QRstCnt == 1, "qspi: reset went as a phase, before the id probe");
+	CHECK(mem.ReadId(3) == QSPI_ID, "qspi id");
+
+	RunCommon(mem, "Quad SPI NOR", QSPI_SIZE, QSPI_PAGE);
+
+	// The design's central claim: the part's own quad command and its dummy
+	// cycles reach the interface as phases.
+	CHECK(s_QLastRdDummy == 8, "qspi: the part's dummy cycles reach the interface");
+	CHECK(s_QLastWrCmd == 0x32, "qspi: the part's program command is the one used");
+	CHECK(s_QVioNoWel == 0, "qspi: every program held the latch");
+	CHECK(s_QVioEraseNoWel == 0, "qspi: every erase held the latch");
+
+	// Erase and chip erase as address and command phases.
+	uint8_t rd[16];
+	CHECK(mem.Erase(0, 4096) == 0, "qspi: erase one unit");
+	mem.Read(0, rd, sizeof(rd));
+	bool ff = true;
+	for (size_t i = 0; i < sizeof(rd); i++) { if (rd[i] != 0xFF) { ff = false; } }
+	CHECK(ff, "qspi: erased unit reads all ones");
+	CHECK(mem.MassErase() == 0, "qspi: chip erase as a phase");
+
+	CHECK(mem.SetWriteProtect(0, 1, true) == 0, "qspi: protect through the status bits");
+	CHECK(s_QWrsrCnt >= 1, "qspi: the write status command was used");
+	CHECK(mem.SetWriteProtect(0, 1, false) == 0, "qspi: unprotect through the status bits");
+}
+
 int main(void)
 {
 	MockIntrf nor(DEVINTRF_TYPE_SPI, NorStartRx, NorRxData, NorStopRx,
@@ -707,6 +909,16 @@ int main(void)
 	TestNorFlash(nor);
 	TestEeprom(eep);
 	TestFram(fram);
+
+	MockIntrf qspi(DEVINTRF_TYPE_QSPI, QspiStartRx, QspiRxData, QspiStopRx,
+				   QspiStartTx, QspiTxData, QspiTxSrData, QspiStopTx);
+	// The phased path reaches the interface through the SPI handle; wire the
+	// handle to the same handlers.
+	memcpy(&s_QDev.DevIntrf, &qspi.vDev, sizeof(DevIntrf_t));
+	s_QDev.DevIntrf.pDevData = &s_QDev;
+	atomic_flag_clear(&s_QDev.DevIntrf.bBusy);
+	qspi.vDev.pDevData = &s_QDev;
+	TestQspi(qspi);
 
 	printf("\nChecks run: %d\n", g_Checks);
 	if (g_Fail == 0)

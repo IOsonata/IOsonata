@@ -35,6 +35,7 @@ SOFTWARE.
 
 #include "idelay.h"
 #include "iopinctrl.h"
+#include "coredev/spi.h"
 #include "storage/nvm.h"
 
 /******** For DEBUG Trace ************/
@@ -102,6 +103,7 @@ Nvm::Nvm()
 	memset(&vRdCmd, 0, sizeof(vRdCmd));
 	memset(&vWrCmd, 0, sizeof(vWrCmd));
 	vbBare = true;
+	vbPhased = false;
 	vBaseDevAddr = 0;
 	vWrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
 }
@@ -147,6 +149,18 @@ int Nvm::SendCmd(const NvmCmd_t &Cmd)
 		return 0;
 	}
 
+	if (vbPhased)
+	{
+		SPIDev_t *dev = SPIGetHandle(*Interface());
+
+		SPIStartTx(dev, (int)vBaseDevAddr);
+		bool ok = QuadSPISendCmd(dev, Cmd.Cmd, (uint32_t)-1, 0, 0,
+								 Cmd.DummyCycle);
+		SPIStopTx(dev);
+
+		return ok ? 0 : -EIO;
+	}
+
 	uint8_t c = Cmd.Cmd;
 
 	// A command only transaction has no payload, so Device::Write's payload
@@ -162,6 +176,18 @@ int Nvm::ReadStatus(uint8_t &Status)
 	if (vbBare)
 	{
 		return 0;
+	}
+
+	if (vbPhased)
+	{
+		SPIDev_t *dev = SPIGetHandle(*Interface());
+
+		SPIStartRx(dev, (int)vBaseDevAddr);
+		QuadSPISendCmd(dev, NVM_CMD_RDSR, (uint32_t)-1, 0, 1, 0);
+		int rd = SPIRxData(dev, &Status, 1);
+		SPIStopRx(dev);
+
+		return (rd == 1) ? 0 : -EIO;
 	}
 
 	uint8_t cmd = NVM_CMD_RDSR;
@@ -186,6 +212,18 @@ uint32_t Nvm::ReadId(int Len)
 	if (Len < 1 || Len > 4)
 	{
 		return 0;
+	}
+
+	if (vbPhased)
+	{
+		SPIDev_t *dev = SPIGetHandle(*Interface());
+
+		SPIStartRx(dev, (int)vBaseDevAddr);
+		QuadSPISendCmd(dev, cmd, (uint32_t)-1, 0, Len, 0);
+		int rd = SPIRxData(dev, (uint8_t*)&id, Len);
+		SPIStopRx(dev);
+
+		return (rd == Len) ? id : 0;
 	}
 
 	if (Read(&cmd, 1, (uint8_t*)&id, Len) != Len)
@@ -314,10 +352,11 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		case DEVINTRF_TYPE_I2C:
 		case DEVINTRF_TYPE_SPI:
 		case DEVINTRF_TYPE_UNKOWN:
-			break;
-
+		// The phased transaction path serves these two.
 		case DEVINTRF_TYPE_QSPI:
 		case DEVINTRF_TYPE_OSPI:
+			break;
+
 		default:
 			return false;
 	}
@@ -333,6 +372,14 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	// from EraseSize, is the other. Nothing else is stored: each operation
 	// decides its command where it runs.
 	vbBare = (pIntrf->Type() == DEVINTRF_TYPE_I2C);
+	vbPhased = (pIntrf->Type() == DEVINTRF_TYPE_QSPI
+				|| pIntrf->Type() == DEVINTRF_TYPE_OSPI);
+
+	if (vbPhased)
+	{
+		// The phased interface maps the device; it needs the size.
+		QuadSPISetMemSize(SPIGetHandle(*pIntrf), (uint32_t)vDevSize);
+	}
 
 	if (vbBare)
 	{
@@ -508,8 +555,23 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 			if (l > r) { l = r; }
 		}
 
-		DeviceAddress(devaddr);
-		int rd = Read(frame, flen, pb, (int)l);
+		int rd;
+
+		if (vbPhased)
+		{
+			SPIDev_t *dev = SPIGetHandle(*Interface());
+
+			SPIStartRx(dev, (int)vBaseDevAddr);
+			QuadSPISendCmd(dev, vRdCmd.Cmd, addr, vAddrSize, l,
+						   vRdCmd.DummyCycle);
+			rd = SPIRxData(dev, pb, (int)l);
+			SPIStopRx(dev);
+		}
+		else
+		{
+			DeviceAddress(devaddr);
+			rd = Read(frame, flen, pb, (int)l);
+		}
 		if (rd != (int)l)
 		{
 			return -EIO;
@@ -529,14 +591,29 @@ int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len)
 		return -EBUSY;
 	}
 
-	uint8_t frame[8];
-	uint32_t devaddr;
-	int flen = FrameAddr(frame, vWrCmd.Cmd, Addr, &devaddr);
+	int wr;
 
-	DeviceAddress(devaddr);
-	// Device::Write returns payload bytes; the command/address frame is not
-	// included in this count.
-	int wr = Device::Write(frame, flen, pData, (int)Len);
+	if (vbPhased)
+	{
+		SPIDev_t *dev = SPIGetHandle(*Interface());
+
+		SPIStartTx(dev, (int)vBaseDevAddr);
+		QuadSPISendCmd(dev, vWrCmd.Cmd, Addr, vAddrSize, Len,
+					   vWrCmd.DummyCycle);
+		wr = SPITxData(dev, pData, (int)Len);
+		SPIStopTx(dev);
+	}
+	else
+	{
+		uint8_t frame[8];
+		uint32_t devaddr;
+		int flen = FrameAddr(frame, vWrCmd.Cmd, Addr, &devaddr);
+
+		DeviceAddress(devaddr);
+		// Device::Write returns payload bytes; the command/address frame is
+		// not included in this count.
+		wr = Device::Write(frame, flen, pData, (int)Len);
+	}
 	if (wr != (int)Len)
 	{
 		return -EIO;
@@ -602,14 +679,30 @@ int Nvm::EraseUnit(uint32_t Addr)
 	if (vEraseSize == 32 * 1024) { op = NVM_CMD_BLK32_ERASE; }
 	else if (vEraseSize == 64 * 1024) { op = NVM_CMD_BLK64_ERASE; }
 
-	uint8_t frame[8];
-	uint32_t devaddr;
-	int flen = FrameAddr(frame, op, Addr, &devaddr);
-
-	DeviceAddress(devaddr);
-	if (Interface()->Tx(devaddr, frame, flen) != flen)
+	if (vbPhased)
 	{
-		return -EIO;
+		SPIDev_t *dev = SPIGetHandle(*Interface());
+
+		SPIStartTx(dev, (int)vBaseDevAddr);
+		bool ok = QuadSPISendCmd(dev, op, Addr, vAddrSize, 0, 0);
+		SPIStopTx(dev);
+
+		if (ok == false)
+		{
+			return -EIO;
+		}
+	}
+	else
+	{
+		uint8_t frame[8];
+		uint32_t devaddr;
+		int flen = FrameAddr(frame, op, Addr, &devaddr);
+
+		DeviceAddress(devaddr);
+		if (Interface()->Tx(devaddr, frame, flen) != flen)
+		{
+			return -EIO;
+		}
 	}
 
 	if (WaitReady() == false)
@@ -736,12 +829,30 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 		return -EBUSY;
 	}
 
-	uint8_t wrsr = NVM_CMD_WRSR;
-
-	if (Device::Write(&wrsr, 1, &sr, 1) != 1)
+	if (vbPhased)
 	{
-		WriteDisable();
-		return -EIO;
+		SPIDev_t *dev = SPIGetHandle(*Interface());
+
+		SPIStartTx(dev, (int)vBaseDevAddr);
+		QuadSPISendCmd(dev, NVM_CMD_WRSR, (uint32_t)-1, 0, 1, 0);
+		int wr = SPITxData(dev, &sr, 1);
+		SPIStopTx(dev);
+
+		if (wr != 1)
+		{
+			WriteDisable();
+			return -EIO;
+		}
+	}
+	else
+	{
+		uint8_t wrsr = NVM_CMD_WRSR;
+
+		if (Device::Write(&wrsr, 1, &sr, 1) != 1)
+		{
+			WriteDisable();
+			return -EIO;
+		}
 	}
 
 	if (WaitReady() == false)

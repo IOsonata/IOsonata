@@ -69,8 +69,11 @@ DSPI, QSPI and OSPI.
 
 -----
 Quad SPI Micron N25Q128A : the quad command and dummy cycles are the part's,
-so they are the config; everything else stays derived. The quad transfer
-path is not wired yet.
+so they are the config; everything else stays derived and goes through the
+same phased path:
+
+	.RdCmd = { FLASH_CMD_QREAD, 10 },
+	.WrCmd = { FLASH_CMD_QWRITE, 0 },
 
 	.RdCmd = { FLASH_CMD_QREAD, 10 },
 	.WrCmd = { FLASH_CMD_QWRITE, 0 },
@@ -507,6 +510,10 @@ private:
 	NvmCmd_t	vWrCmd;			//!< Program command
 	bool		vbBare;			//!< Bare address bus (I2C): no command
 								//!< bytes, no latch, no status register
+	bool		vbPhased;		//!< Phased command bus (QSPI, OSPI): command,
+								//!< address and dummy cycles go as transaction
+								//!< phases through QuadSPISendCmd, not as
+								//!< frame bytes
 	uint32_t	vBaseDevAddr;	//!< Configured device address, immutable;
 								//!< the banked address derives from it per
 								//!< frame so bank bits never stick
