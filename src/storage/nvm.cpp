@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	nvm.cpp
 
-@brief	Serial non volatile memory driver.
+@brief	Generic addressed non-volatile memory driver.
 
 @author	Hoang Nguyen Hoan
 @date	July 23, 2026
@@ -39,10 +39,6 @@ SOFTWARE.
 #include "storage/nvm.h"
 
 /******** For DEBUG Trace ************/
-// Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
-// SysLog transport the app configured (UART, USB, RTT, BLE, or any other
-// DeviceIntrf); the trace does not assume a transport. A release build
-// defines NDEBUG, which strips all trace regardless of DEBUG_ENABLE.
 //#define DEBUG_ENABLE
 
 #if !defined(NDEBUG) && defined(DEBUG_ENABLE)
@@ -53,37 +49,29 @@ SOFTWARE.
 #endif
 /*******************************/
 
-// Status register bits common to serial flash.
-#define NVM_SR_WIP			0x01U		// write in progress
-#define NVM_SR_WEL			0x02U		// write enable latch
+#define NVM_SR_WIP			0x01U
+#define NVM_SR_WEL			0x02U
 
-// Read the device id where the medium has the usual JEDEC command.
 #define NVM_CMD_READID		0x9FU
-
-// The serial NOR protocol the JEDEC standard fixed. An erase medium speaks
-// all of it; none of it is configuration, because none of it varies.
 #define NVM_CMD_READ		0x03U
 #define NVM_CMD_WRITE		0x02U
 #define NVM_CMD_WRENABLE	0x06U
 #define NVM_CMD_WRDISABLE	0x04U
 #define NVM_CMD_RDSR		0x05U
 #define NVM_CMD_WRSR		0x01U
-#define NVM_CMD_SECT_ERASE	0x20U		// 4K granule
-#define NVM_CMD_BLK32_ERASE	0x52U		// 32K granule
-#define NVM_CMD_BLK64_ERASE	0xD8U		// 64K granule
+#define NVM_CMD_SECT_ERASE	0x20U
+#define NVM_CMD_BLK32_ERASE	0x52U
+#define NVM_CMD_BLK64_ERASE	0xD8U
 #define NVM_CMD_CHIP_ERASE	0xC7U
 #define NVM_CMD_RESET_EN	0x66U
 #define NVM_CMD_RESET		0x99U
-
-// Bounds for an in-call interface transfer wait and for draining a running
-// operation, in cooperative wait iterations.
-#define NVM_XFER_TMOUT		100000
-#define NVM_OP_TMOUT		100000
 #define NVM_CMD_EN4B		0xB7U
+
+#define NVM_XFER_TMOUT		100000U
+#define NVM_OP_TMOUT		100000U
 
 int Nvm::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 {
-	// Straight through; a memory command is not a sensor register address.
 	return Interface()->Read(DeviceAddress(), pCmdAddr, CmdAddrLen,
 							 pBuff, BuffLen);
 }
@@ -91,10 +79,10 @@ int Nvm::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 Nvm::Nvm()
 {
 	Valid(false);
+	InterruptEnabled(false);
 	vRegionOffset = 0;
 	vRegionSize = 0;
 	vpWaitCB = nullptr;
-	vbIntEn = false;
 	vEvtHandler = nullptr;
 	vOpEvt = NVM_EVT_NONE;
 	vOpRes = 0;
@@ -103,14 +91,15 @@ Nvm::Nvm()
 	vOpAddr = 0;
 	vpOpData = nullptr;
 	vOpRemain = 0;
+	atomic_flag_clear(&vOpLock);
 	vbXferWaiting = false;
 	vbXferDone = false;
 	vbXferFail = false;
-	vbMediumDone = false;
-	atomic_flag_clear(&vOpLock);
+	vbInitialized = false;
+	vbEnabled = false;
 	vDevSize = 0;
-	vSectSize = 0;
 	vEraseSize = 0;
+	vSectSize = 0;
 	vPageSize = 0;
 	vWrGran = 1;
 	vAddrSize = 3;
@@ -122,11 +111,18 @@ Nvm::Nvm()
 	vbBare = true;
 	vbPhased = false;
 	vBaseDevAddr = 0;
-	vWrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+	vWrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE,
+				   IOPINTYPE_NORMAL };
 }
 
 Nvm::~Nvm()
 {
+	while (atomic_flag_test_and_set(&vOpLock)) {}
+	vOpEvt = NVM_EVT_NONE;
+	vOpRemain = 0;
+	vpOpData = nullptr;
+	vbXferWaiting = false;
+	atomic_flag_clear(&vOpLock);
 	Unhook();
 }
 
@@ -136,24 +132,19 @@ int Nvm::FrameAddr(uint8_t *pFrame, uint8_t Cmd, uint32_t Addr,
 	int len = 0;
 	uint32_t devaddr = vBaseDevAddr;
 
-	// A command byte where the medium has one. An EEPROM has none and the
-	// frame is the address alone.
 	if (Cmd != 0)
 	{
 		pFrame[len++] = Cmd;
 	}
 
-	// Address MSB first on the wire.
 	for (int i = 0; i < vAddrSize; i++)
 	{
 		pFrame[len++] = (uint8_t)(Addr >> (8 * (vAddrSize - 1 - i)));
 	}
 
-	// Bits the address bytes cannot hold go into the device selection, the way
-	// a small EEPROM selects a memory block.
 	if (vAddrSpan != 0 && Addr >= vAddrSpan)
 	{
-		devaddr |= (Addr / vAddrSpan) & 7;
+		devaddr |= (Addr / vAddrSpan) & 7U;
 	}
 
 	if (pDevAddr != nullptr)
@@ -185,9 +176,6 @@ int Nvm::SendCmd(const NvmCmd_t &Cmd)
 
 	uint8_t c = Cmd.Cmd;
 
-	// A command only transaction has no payload, so Device::Write's payload
-	// count is zero whether it worked or not. Only the full transfer count
-	// distinguishes the two.
 	XferBegin();
 	int n = Interface()->Tx(DeviceAddress(), &c, 1);
 
@@ -212,7 +200,7 @@ int Nvm::ReadStatus(uint8_t &Status)
 		int rd = SPIRxData(dev, &Status, 1);
 		SPIStopRx(dev);
 
-		return (rd == 1) ? 0 : -EIO;
+		return rd == 1 ? 0 : -EIO;
 	}
 
 	uint8_t cmd = NVM_CMD_RDSR;
@@ -225,8 +213,12 @@ int Nvm::ReadStatus(uint8_t &Status)
 
 uint8_t Nvm::ReadStatus(void)
 {
-	uint8_t sr = 0;
+	if (vbEnabled == false)
+	{
+		return 0;
+	}
 
+	uint8_t sr = 0;
 	(void)ReadStatus(sr);
 
 	return sr;
@@ -234,13 +226,13 @@ uint8_t Nvm::ReadStatus(void)
 
 uint32_t Nvm::ReadId(int Len)
 {
-	uint32_t id = 0;
-	uint8_t cmd = NVM_CMD_READID;
-
-	if (Len < 1 || Len > 4)
+	if (vbEnabled == false || Len < 1 || Len > 4)
 	{
 		return 0;
 	}
+
+	uint32_t id = 0;
+	uint8_t cmd = NVM_CMD_READID;
 
 	if (vbPhased)
 	{
@@ -251,24 +243,17 @@ uint32_t Nvm::ReadId(int Len)
 		int rd = SPIRxData(dev, (uint8_t*)&id, Len);
 		SPIStopRx(dev);
 
-		return (rd == Len) ? id : 0;
+		return rd == Len ? id : 0;
 	}
 
 	XferBegin();
 	int n = Read(&cmd, 1, (uint8_t*)&id, Len);
 
-	if (XferShort(n, Len) == false)
-	{
-		return 0;
-	}
-
-	return id;
+	return XferShort(n, Len) ? id : 0;
 }
 
 bool Nvm::WaitReady(uint32_t Timeout)
 {
-	// A medium with a status register says when it is done. One without takes
-	// a known time, which the config gives.
 	if (vbBare)
 	{
 		if (WaitPoll() == false)
@@ -305,17 +290,13 @@ bool Nvm::WaitReady(uint32_t Timeout)
 
 bool Nvm::WriteEnable(uint32_t Timeout)
 {
-	// A bare bus has no latch: always writable.
 	if (vbBare)
 	{
 		return true;
 	}
 
-	if (WaitReady(Timeout) == false)
-	{
-		return false;
-	}
-	if (SendCmd({ NVM_CMD_WRENABLE, 0 }) != 0)
+	if (WaitReady(Timeout) == false ||
+		SendCmd({ NVM_CMD_WRENABLE, 0 }) != 0)
 	{
 		return false;
 	}
@@ -343,15 +324,12 @@ bool Nvm::WriteEnable(uint32_t Timeout)
 
 void Nvm::WriteDisable(void)
 {
-	if (vbBare == false)
+	if (Interface() != nullptr && vbBare == false)
 	{
-		SendCmd({ NVM_CMD_WRDISABLE, 0 });
+		(void)SendCmd({ NVM_CMD_WRDISABLE, 0 });
 	}
 }
 
-// The interface event callback has no user context slot, so the instances
-// running interrupt driven register here. The trampoline dispatches to every
-// instance on the reporting interface; each checks its own deferred state.
 #define NVM_HOOK_MAX		4
 
 typedef struct {
@@ -390,14 +368,15 @@ void Nvm::Unhook(void)
 		s_NvmHook[i].pIntrf = nullptr;
 
 		bool used = false;
-
 		for (int j = 0; j < NVM_HOOK_MAX; j++)
 		{
 			if (s_NvmHook[j].pIntrf == ip && s_NvmHook[j].pNvm != nullptr)
 			{
 				used = true;
+				break;
 			}
 		}
+
 		if (used == false && ip != nullptr && ip->EvtCB == NvmIntrfEvtCB)
 		{
 			ip->EvtCB = nullptr;
@@ -408,9 +387,11 @@ void Nvm::Unhook(void)
 bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 			   uint64_t RegionOff, uint64_t RegionSize)
 {
-	// A failed reinitialization must not leave a previously working instance
-	// marked ready.
+	vbEnabled = false;
 	Valid(false);
+	CancelOp(-ECANCELED);
+	Unhook();
+	vbInitialized = false;
 	Region(0, 0);
 
 	if (pIntrf == nullptr)
@@ -420,44 +401,49 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 	Interface(pIntrf);
 	DeviceAddress(Cfg.DevNo);
+	InterruptEnabled(Cfg.bIntEn);
+	vpWaitCB = Cfg.pWaitCB;
+	vEvtHandler = Cfg.EvtHandler;
+
+	auto fail = [this]() -> bool {
+		Unhook();
+		vbEnabled = false;
+		vbInitialized = false;
+		Valid(false);
+		Region(0, 0);
+		return false;
+	};
 
 	vDevSize = Cfg.TotalSize;
 	vEraseSize = Cfg.EraseSize;
 	vSectSize = Cfg.SectorSize;
 	vPageSize = Cfg.PageSize;
-	vWrGran = (Cfg.WriteGran != 0) ? Cfg.WriteGran : 1;
-	vAddrSize = (Cfg.AddrSize != 0) ? Cfg.AddrSize : 3;
+	vWrGran = Cfg.WriteGran != 0 ? Cfg.WriteGran : 1;
+	vAddrSize = Cfg.AddrSize != 0 ? Cfg.AddrSize : 3;
 	vBaseDevAddr = (uint32_t)Cfg.DevNo;
 	vWrDelayUs = Cfg.WriteDelayUs;
 	vWrProtMask = Cfg.WrProtMask;
+	vWrProtPin = Cfg.WrProtPin;
 
-	// The current implementation is the polling SPI/I2C path plus the internal
-	// command-emulating adapter. QSPI/OSPI need their command, phase-width and
-	// dummy-cycle transfer path before they can be accepted here.
 	switch (pIntrf->Type())
 	{
 		case DEVINTRF_TYPE_I2C:
 		case DEVINTRF_TYPE_SPI:
 		case DEVINTRF_TYPE_UNKOWN:
-		// The phased transaction path serves these two.
 		case DEVINTRF_TYPE_QSPI:
 		case DEVINTRF_TYPE_OSPI:
 			break;
 
 		default:
-			return false;
+			return fail();
 	}
 
-	// The bus is one of the two facts every command follows from; the kind,
-	// from EraseSize, is the other. Nothing else is stored: each operation
-	// decides its command where it runs.
-	vbBare = (pIntrf->Type() == DEVINTRF_TYPE_I2C);
-	vbPhased = (pIntrf->Type() == DEVINTRF_TYPE_QSPI
-				|| pIntrf->Type() == DEVINTRF_TYPE_OSPI);
+	vbBare = pIntrf->Type() == DEVINTRF_TYPE_I2C;
+	vbPhased = pIntrf->Type() == DEVINTRF_TYPE_QSPI ||
+				pIntrf->Type() == DEVINTRF_TYPE_OSPI;
 
 	if (vbPhased)
 	{
-		// The phased interface maps the device; it needs the size.
 		QuadSPISetMemSize(SPIGetHandle(*pIntrf), (uint32_t)vDevSize);
 	}
 
@@ -468,87 +454,65 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	}
 	else
 	{
-		vRdCmd = (Cfg.RdCmd.Cmd != 0) ? Cfg.RdCmd
-									  : NvmCmd_t{ NVM_CMD_READ, 0 };
-		vWrCmd = (Cfg.WrCmd.Cmd != 0) ? Cfg.WrCmd
-									  : NvmCmd_t{ NVM_CMD_WRITE, 0 };
+		vRdCmd = Cfg.RdCmd.Cmd != 0 ? Cfg.RdCmd
+									: NvmCmd_t{ NVM_CMD_READ, 0 };
+		vWrCmd = Cfg.WrCmd.Cmd != 0 ? Cfg.WrCmd
+									: NvmCmd_t{ NVM_CMD_WRITE, 0 };
 	}
-	vWrProtPin = Cfg.WrProtPin;
 
 	if (vDevSize == 0 || vPageSize == 0 || vAddrSize < 1 || vAddrSize > 4 ||
 		Cfg.DevIdSize > 4)
 	{
-		DEBUG_PRINTF("Nvm geometry invalid: size=%lu page=%lu addr=%d id=%u\r\n",
-					 (unsigned long)vDevSize, (unsigned long)vPageSize,
-					 vAddrSize, Cfg.DevIdSize);
-		return false;
+		DEBUG_PRINTF("Nvm geometry invalid\r\n");
+		return fail();
 	}
 
-	// Only these standard erase commands are implemented. Accepting another
-	// granule would issue a 4K command while advancing by the configured size.
-	if (vEraseSize != 0 && vEraseSize != 4 * 1024 &&
-		vEraseSize != 32 * 1024 && vEraseSize != 64 * 1024)
+	if (vEraseSize != 0 && vEraseSize != 4U * 1024U &&
+		vEraseSize != 32U * 1024U && vEraseSize != 64U * 1024U)
 	{
-		DEBUG_PRINTF("Nvm erase size unsupported: %lu\r\n",
-					 (unsigned long)vEraseSize);
-		return false;
+		DEBUG_PRINTF("Nvm erase size unsupported\r\n");
+		return fail();
 	}
 
-	// What the address bytes can reach. Anything beyond has to go into the
-	// device selection.
-	vAddrSpan = (vAddrSize >= 4) ? 0 : (1UL << (8 * vAddrSize));
+	vAddrSpan = vAddrSize >= 4 ? 0 : (1UL << (8 * vAddrSize));
 	if (vAddrSpan != 0 && vDevSize <= vAddrSpan)
 	{
-		vAddrSpan = 0;			// the address bytes cover the whole device
+		vAddrSpan = 0;
 	}
 
-	vbIntEn = Cfg.bIntEn;
-	vEvtHandler = Cfg.EvtHandler;
 	vOpEvt = NVM_EVT_NONE;
 	vOpRes = 0;
 	vOpRemain = 0;
+	vpOpData = nullptr;
 	vbXferWaiting = false;
 	vbXferDone = false;
 	vbXferFail = false;
-	vbMediumDone = false;
-	vpWaitCB = Cfg.pWaitCB;
 
-	// Configure the write protect pin and start unprotected.
 	if (vWrProtPin.PortNo >= 0 && vWrProtPin.PinNo >= 0)
 	{
 		IOPinCfg(&vWrProtPin, 1);
 		IOPinClear(vWrProtPin.PortNo, vWrProtPin.PinNo);
 	}
 
-	// Device-specific preparation comes first, matching the legacy Flash
-	// driver. Some parts must be released or put into a command mode before
-	// the generic reset and ID probe can be understood.
-	if (Cfg.pInitCB != nullptr)
+	vbEnabled = true;
+
+	if (Cfg.pInitCB != nullptr && Cfg.pInitCB(this, pIntrf) == false)
 	{
-		if (Cfg.pInitCB(this, pIntrf) == false)
-		{
-			return false;
-		}
+		return fail();
 	}
 
-	// Reset an erase medium before the normal status and ID transactions. The
-	// chip does not reset when the MCU does and can be left in power down,
-	// continuous read, quad mode, 4 byte address mode, or mid operation.
 	if (vEraseSize != 0)
 	{
 		if (SendCmd({ NVM_CMD_RESET_EN, 0 }) != 0 ||
 			SendCmd({ NVM_CMD_RESET, 0 }) != 0)
 		{
-			return false;
+			return fail();
 		}
 	}
 
-	// Probe the device id where the config asked for it. The retries cover the
-	// device's recovery time after the reset above.
 	if (Cfg.DevId != 0 && Cfg.DevIdSize > 0)
 	{
 		bool found = false;
-
 		for (int rtry = 0; rtry < 6; rtry++)
 		{
 			if (ReadId(Cfg.DevIdSize) == Cfg.DevId)
@@ -557,63 +521,47 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 				break;
 			}
 		}
-
 		if (found == false)
 		{
-			DEBUG_PRINTF("Nvm id mismatch\r\n");
-			return false;
+			return fail();
 		}
 	}
 
-	// A part larger than 16 MBytes takes its addresses in 4 bytes; the
-	// reset above cleared the mode, so it is entered last.
-	if (vEraseSize != 0 && vAddrSize > 3)
+	if (vEraseSize != 0 && vAddrSize > 3 &&
+		SendCmd({ NVM_CMD_EN4B, 0 }) != 0)
 	{
-		if (SendCmd({ NVM_CMD_EN4B, 0 }) != 0)
-		{
-			return false;
-		}
+		return fail();
 	}
 
 	if (RegionOff > vDevSize)
 	{
-		return false;
+		return fail();
 	}
 
 	uint64_t avail = vDevSize - RegionOff;
-
 	if (RegionSize > avail)
 	{
-		return false;
+		return fail();
 	}
 
-	uint64_t rsize = (RegionSize != 0) ? RegionSize : avail;
-
-	// The physical placement must respect the write granularity, or a frame
-	// starting mid word would silently lose its tail; and an erase region
-	// must start on an erase unit.
+	uint64_t rsize = RegionSize != 0 ? RegionSize : avail;
 	if ((RegionOff % vWrGran) != 0 || (vPageSize % vWrGran) != 0)
 	{
-		return false;
+		return fail();
 	}
 	if (vEraseSize != 0 && (RegionOff % vEraseSize) != 0)
 	{
-		return false;
+		return fail();
 	}
+
 	Region(RegionOff, rsize);
 
-	// Any registration from a previous initialization, possibly on another
-	// interface, is dropped first.
-	Unhook();
+	DevIntrf_t *ip = *pIntrf;
+	bool needHook = InterruptEnabled() || ip->bIntEn;
 
-	if (vbIntEn)
+	if (needHook && (ip->EvtCB == nullptr || ip->EvtCB == NvmIntrfEvtCB))
 	{
-		// Interrupt driven: completion arrives through the interface event.
-		// Take the interface callback when it is free; an application that
-		// owns it calls IntrfEvent from its own handler instead.
-		DevIntrf_t *ip = *pIntrf;
 		int slot = -1;
-
 		for (int i = 0; i < NVM_HOOK_MAX; i++)
 		{
 			if (s_NvmHook[i].pNvm == nullptr)
@@ -624,10 +572,9 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		}
 		if (slot < 0)
 		{
-			// A full table would run with no completion path: fail here
-			// rather than silently.
-			return false;
+			return fail();
 		}
+
 		s_NvmHook[slot].pIntrf = ip;
 		s_NvmHook[slot].pNvm = this;
 		if (ip->EvtCB == nullptr)
@@ -636,6 +583,8 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		}
 	}
 
+	vbInitialized = true;
+	vbEnabled = true;
 	Valid(true);
 
 	return true;
@@ -643,6 +592,10 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 {
+	if (vbEnabled == false)
+	{
+		return -ENODEV;
+	}
 	if (!RangeValid(Off, Len))
 	{
 		return -EINVAL;
@@ -652,15 +605,10 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 		return 0;
 	}
 
+	int sr = ServiceRun(NVM_OP_TMOUT);
+	if (sr < 0)
 	{
-		int sr = ServiceRun(NVM_OP_TMOUT);
-
-		if (sr < 0)
-		{
-			// The previous operation's completion failed and was reported;
-			// this call does not start on top of it.
-			return sr;
-		}
+		return sr;
 	}
 
 	if (WaitReady() == false)
@@ -677,22 +625,18 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 		uint8_t frame[8];
 		uint32_t devaddr;
 		int flen = FrameAddr(frame, vRdCmd.Cmd, addr, &devaddr);
-
-		// Split only where the device selection holds part of the address,
-		// so a read does not run past what this selection reaches.
 		uint32_t l = cnt;
+
 		if (vAddrSpan != 0)
 		{
-			uint32_t r = vAddrSpan - (addr % vAddrSpan);
-			if (l > r) { l = r; }
+			uint32_t room = vAddrSpan - (addr % vAddrSpan);
+			if (l > room) { l = room; }
 		}
 
 		int rd;
-
 		if (vbPhased)
 		{
 			SPIDev_t *dev = SPIGetHandle(*Interface());
-
 			SPIStartRx(dev, (int)vBaseDevAddr);
 			QuadSPISendCmd(dev, vRdCmd.Cmd, addr, vAddrSize, l,
 						   vRdCmd.DummyCycle);
@@ -706,18 +650,18 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 			rd = Read(frame, flen, pb, (int)l);
 			if (XferShort(rd, (int)l))
 			{
-				// On an interrupt driven interface the data landed in the
-				// buffer by the time the event ended the wait.
 				rd = (int)l;
 			}
 		}
+
 		if (rd != (int)l)
 		{
 			return -EIO;
 		}
-		addr += rd;
+
+		addr += (uint32_t)rd;
 		pb += rd;
-		cnt -= rd;
+		cnt -= (uint32_t)rd;
 	}
 
 	return (int)Len;
@@ -725,47 +669,26 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 
 void Nvm::IntrfEvent(DEVINTRF_EVT EvtId)
 {
+	if (vbXferWaiting == false)
+	{
+		return;
+	}
+
 	switch (EvtId)
 	{
 		case DEVINTRF_EVT_COMPLETED:
 		case DEVINTRF_EVT_TX_READY:
 		case DEVINTRF_EVT_TX_FIFO_EMPTY:
-			if (vbXferWaiting)
-			{
-				// A call waits on its transfer: this event ends the wait.
-				vbXferDone = true;
-				return;
-			}
-			if (vOpEvt != NVM_EVT_NONE)
-			{
-				// No transfer is waited on: an adapter whose machinery knows
-				// the medium reports the operation itself done. A serial
-				// transfer end never lands here. Finish from this context
-				// only when nothing remains to transfer; otherwise the flag
-				// lets the service advance without a status transaction.
-				vbMediumDone = true;
-				if (vOpRemain == 0
-					&& atomic_flag_test_and_set(&vOpLock) == false)
-				{
-					if (vOpEvt != NVM_EVT_NONE && vOpRemain == 0)
-					{
-						OpComplete(vOpRes);
-					}
-					atomic_flag_clear(&vOpLock);
-				}
-			}
-			return;
+			vbXferDone = true;
+			break;
 
 		case DEVINTRF_EVT_TX_TIMEOUT:
 		case DEVINTRF_EVT_RX_TIMEOUT:
-			if (vbXferWaiting)
-			{
-				vbXferFail = true;
-			}
-			return;
+			vbXferFail = true;
+			break;
 
 		default:
-			return;
+			break;
 	}
 }
 
@@ -797,7 +720,6 @@ bool Nvm::XferWait(uint32_t Timeout)
 	}
 
 	vbXferWaiting = false;
-
 	return false;
 }
 
@@ -808,29 +730,59 @@ bool Nvm::XferShort(int Count, int Expect)
 		vbXferWaiting = false;
 		return true;
 	}
-	if (((DevIntrf_t*)*Interface())->bIntEn == false)
+
+	DevIntrf_t *ip = *Interface();
+	if (Count == -1 && ip->bIntEn)
 	{
-		vbXferWaiting = false;
+		return XferWait(NVM_XFER_TMOUT);
+	}
+
+	vbXferWaiting = false;
+	return false;
+}
+
+bool Nvm::FinishOpLocked(int Res, NVM_EVT &Evt, uint64_t &Off, uint32_t &Len)
+{
+	if (vOpEvt == NVM_EVT_NONE)
+	{
 		return false;
 	}
 
-	// The interface started the transfer: the ports report -1 or a short
-	// count in interrupt mode, and the event ends the wait.
-	return XferWait(NVM_XFER_TMOUT);
+	Evt = Res == 0 ? vOpEvt : NVM_EVT_ERROR;
+	Off = vOpOff;
+	Len = vOpLen;
+	vOpRes = Res;
+	vOpEvt = NVM_EVT_NONE;
+	vOpRemain = 0;
+	vpOpData = nullptr;
+
+	return true;
 }
 
-void Nvm::OpComplete(int Res)
+void Nvm::Notify(NVM_EVT Evt, uint64_t Off, uint32_t Len, int Res)
 {
-	NVM_EVT evt = (Res == 0) ? vOpEvt : NVM_EVT_ERROR;
-	uint64_t off = vOpOff;
-	uint32_t len = vOpLen;
-
-	vOpEvt = NVM_EVT_NONE;
-	vbMediumDone = false;
-
 	if (vEvtHandler != nullptr)
 	{
-		vEvtHandler(this, evt, off, len, Res);
+		vEvtHandler(this, Evt, Off, Len, Res);
+	}
+}
+
+void Nvm::CancelOp(int Res)
+{
+	NVM_EVT evt = NVM_EVT_NONE;
+	uint64_t off = 0;
+	uint32_t len = 0;
+
+	while (atomic_flag_test_and_set(&vOpLock)) {}
+	bool notify = FinishOpLocked(Res, evt, off, len);
+	vbXferWaiting = false;
+	vbXferDone = false;
+	vbXferFail = false;
+	atomic_flag_clear(&vOpLock);
+
+	if (notify)
+	{
+		Notify(evt, off, len, Res);
 	}
 }
 
@@ -845,7 +797,6 @@ int Nvm::IssueNext(void)
 		}
 		vOpAddr += vEraseSize;
 		vOpRemain -= vEraseSize;
-
 		return 0;
 	}
 
@@ -857,6 +808,7 @@ int Nvm::IssueNext(void)
 	{
 		return r;
 	}
+
 	vOpAddr += l;
 	vpOpData += l;
 	vOpRemain -= l;
@@ -871,6 +823,12 @@ int Nvm::ServiceStep(void)
 		return 0;
 	}
 
+	NVM_EVT evt = NVM_EVT_NONE;
+	uint64_t off = 0;
+	uint32_t len = 0;
+	int notifyRes = 0;
+	bool notify = false;
+
 	while (atomic_flag_test_and_set(&vOpLock)) {}
 
 	if (vOpEvt == NVM_EVT_NONE)
@@ -880,17 +838,8 @@ int Nvm::ServiceStep(void)
 	}
 
 	bool ready;
-
-	if (vbMediumDone)
+	if (vbBare)
 	{
-		ready = true;
-		vbMediumDone = false;
-	}
-	else if (vbBare)
-	{
-		// No status register: the write cycle takes the configured time and
-		// the medium has no way to answer earlier. Spend it in this one
-		// step.
 		if (vWrDelayUs > 0)
 		{
 			usDelay(vWrDelayUs);
@@ -900,8 +849,7 @@ int Nvm::ServiceStep(void)
 	else
 	{
 		uint8_t sr;
-
-		ready = (ReadStatus(sr) == 0 && (sr & NVM_SR_WIP) == 0);
+		ready = ReadStatus(sr) == 0 && (sr & NVM_SR_WIP) == 0;
 	}
 
 	if (ready == false)
@@ -912,24 +860,24 @@ int Nvm::ServiceStep(void)
 
 	if (vOpRemain == 0)
 	{
-		int res = vOpRes;
-
-		OpComplete(res);
+		notifyRes = vOpRes;
+		notify = FinishOpLocked(notifyRes, evt, off, len);
 		atomic_flag_clear(&vOpLock);
-		return res;
+		if (notify) { Notify(evt, off, len, notifyRes); }
+		return notifyRes;
 	}
 
 	int r = IssueNext();
-
 	if (r < 0)
 	{
-		OpComplete(r);
+		notifyRes = r;
+		notify = FinishOpLocked(r, evt, off, len);
 		atomic_flag_clear(&vOpLock);
+		if (notify) { Notify(evt, off, len, notifyRes); }
 		return r;
 	}
 
 	atomic_flag_clear(&vOpLock);
-
 	return 1;
 }
 
@@ -938,20 +886,25 @@ int Nvm::ServiceRun(uint32_t Timeout)
 	for (;;)
 	{
 		int r = ServiceStep();
-
 		if (r <= 0)
 		{
 			return r;
 		}
+
 		if (Timeout-- == 0 || WaitPoll() == false)
 		{
+			NVM_EVT evt = NVM_EVT_NONE;
+			uint64_t off = 0;
+			uint32_t len = 0;
+
 			while (atomic_flag_test_and_set(&vOpLock)) {}
-			if (vOpEvt != NVM_EVT_NONE)
-			{
-				OpComplete(-ETIMEDOUT);
-			}
+			bool notify = FinishOpLocked(-ETIMEDOUT, evt, off, len);
 			atomic_flag_clear(&vOpLock);
 
+			if (notify)
+			{
+				Notify(evt, off, len, -ETIMEDOUT);
+			}
 			return -ETIMEDOUT;
 		}
 	}
@@ -959,8 +912,6 @@ int Nvm::ServiceRun(uint32_t Timeout)
 
 bool Nvm::IsBusy(void) const
 {
-	// The polling service: one step. Const to match the storage verb; the
-	// step is the service this call provides.
 	return const_cast<Nvm *>(this)->ServiceStep() > 0;
 }
 
@@ -978,14 +929,12 @@ int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len,
 	}
 
 	int wr;
-
 	if (vbPhased)
 	{
 		SPIDev_t *dev = SPIGetHandle(*Interface());
-
 		SPIStartTx(dev, (int)vBaseDevAddr);
 		QuadSPISendCmd(dev, vWrCmd.Cmd, Addr, vAddrSize, Len,
-					   vWrCmd.DummyCycle);
+						   vWrCmd.DummyCycle);
 		wr = SPITxData(dev, pData, (int)Len);
 		SPIStopTx(dev);
 	}
@@ -996,8 +945,6 @@ int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len,
 		int flen = FrameAddr(frame, vWrCmd.Cmd, Addr, &devaddr);
 
 		DeviceAddress(devaddr);
-		// Device::Write returns payload bytes; the command/address frame is
-		// not included in this count.
 		XferBegin();
 		wr = Device::Write(frame, flen, pData, (int)Len);
 		if (XferShort(wr, (int)Len))
@@ -1005,6 +952,7 @@ int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len,
 			wr = (int)Len;
 		}
 	}
+
 	if (wr != (int)Len)
 	{
 		return -EIO;
@@ -1012,20 +960,18 @@ int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len,
 
 	if (bDefer)
 	{
-		// The transfer is done; the medium programs in the background.
 		return (int)Len;
 	}
 
-	if (WaitReady() == false)
-	{
-		return -EIO;
-	}
-
-	return (int)Len;
+	return WaitReady() ? (int)Len : -EIO;
 }
 
 int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 {
+	if (vbEnabled == false)
+	{
+		return -ENODEV;
+	}
 	if (!RangeValid(Off, Len))
 	{
 		return -EINVAL;
@@ -1034,32 +980,22 @@ int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 	{
 		return 0;
 	}
-	// A memory that programs whole words cannot take a part of one.
 	if (vWrGran > 1 && ((Off % vWrGran) != 0 || (Len % vWrGran) != 0))
 	{
 		return -EINVAL;
 	}
 
+	int sr = ServiceRun(NVM_OP_TMOUT);
+	if (sr < 0)
 	{
-		int sr = ServiceRun(NVM_OP_TMOUT);
-
-		if (sr < 0)
-		{
-			// The previous operation's completion failed and was reported;
-			// this call does not start on top of it.
-			return sr;
-		}
+		return sr;
 	}
 
 	uint32_t addr = (uint32_t)(RegionOffset() + Off);
 	const uint8_t *p = (const uint8_t*)pData;
 
-	if (vbIntEn)
+	if (InterruptEnabled())
 	{
-		// The whole call is one operation: its state is established before
-		// the first transfer starts, then one chunk goes out and the call
-		// returns. The service and the interface event advance the rest and
-		// report one event for the call.
 		while (atomic_flag_test_and_set(&vOpLock)) {}
 		vOpEvt = NVM_EVT_WRITE_DONE;
 		vOpRes = 0;
@@ -1070,35 +1006,32 @@ int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 		vOpRemain = Len;
 
 		int r = IssueNext();
-
 		if (r < 0)
 		{
 			vOpEvt = NVM_EVT_NONE;
+			vOpRemain = 0;
+			vpOpData = nullptr;
 			atomic_flag_clear(&vOpLock);
 			return r;
 		}
 		atomic_flag_clear(&vOpLock);
-
 		return (int)Len;
 	}
 
 	uint32_t cnt = Len;
-
-	// Split at page boundaries. The address counter auto increments only
-	// within a page and wraps at the boundary, so one transfer must stay
-	// inside a page. Each chunk reissues the address for its page.
 	while (cnt > 0)
 	{
-		uint32_t r = vPageSize - (addr % vPageSize);
-		uint32_t l = cnt < r ? cnt : r;
-
+		uint32_t room = vPageSize - (addr % vPageSize);
+		uint32_t l = cnt < room ? cnt : room;
 		int res = Program(addr, p, l, false);
+
 		if (res < 0)
 		{
 			return res;
 		}
-		cnt -= res;
-		addr += res;
+
+		cnt -= (uint32_t)res;
+		addr += (uint32_t)res;
 		p += res;
 	}
 
@@ -1113,17 +1046,15 @@ int Nvm::EraseUnit(uint32_t Addr, bool bDefer)
 	}
 
 	uint8_t op = NVM_CMD_SECT_ERASE;
-	if (vEraseSize == 32 * 1024) { op = NVM_CMD_BLK32_ERASE; }
-	else if (vEraseSize == 64 * 1024) { op = NVM_CMD_BLK64_ERASE; }
+	if (vEraseSize == 32U * 1024U) { op = NVM_CMD_BLK32_ERASE; }
+	else if (vEraseSize == 64U * 1024U) { op = NVM_CMD_BLK64_ERASE; }
 
 	if (vbPhased)
 	{
 		SPIDev_t *dev = SPIGetHandle(*Interface());
-
 		SPIStartTx(dev, (int)vBaseDevAddr);
 		bool ok = QuadSPISendCmd(dev, op, Addr, vAddrSize, 0, 0);
 		SPIStopTx(dev);
-
 		if (ok == false)
 		{
 			return -EIO;
@@ -1145,52 +1076,41 @@ int Nvm::EraseUnit(uint32_t Addr, bool bDefer)
 
 	if (bDefer)
 	{
-		// The command is out; the medium erases in the background.
 		return 0;
 	}
 
-	if (WaitReady() == false)
-	{
-		return -EIO;
-	}
-
-	return 0;
+	return WaitReady() ? 0 : -EIO;
 }
 
 int Nvm::Erase(uint64_t Off, uint32_t Len)
 {
+	if (vbEnabled == false)
+	{
+		return -ENODEV;
+	}
 	if (!RangeValid(Off, Len))
 	{
 		return -EINVAL;
 	}
-
-	// A medium that overwrites directly has nothing to erase.
 	if (vEraseSize == 0)
 	{
 		return 0;
 	}
-
 	if ((Off % vEraseSize) != 0 || (Len % vEraseSize) != 0 || Len == 0)
 	{
 		return -EINVAL;
 	}
 
+	int sr = ServiceRun(NVM_OP_TMOUT);
+	if (sr < 0)
 	{
-		int sr = ServiceRun(NVM_OP_TMOUT);
-
-		if (sr < 0)
-		{
-			// The previous operation's completion failed and was reported;
-			// this call does not start on top of it.
-			return sr;
-		}
+		return sr;
 	}
 
 	uint32_t addr = (uint32_t)(RegionOffset() + Off);
 
-	if (vbIntEn)
+	if (InterruptEnabled())
 	{
-		// One operation for the call, state first, one unit out, return.
 		while (atomic_flag_test_and_set(&vOpLock)) {}
 		vOpEvt = NVM_EVT_ERASE_DONE;
 		vOpRes = 0;
@@ -1201,20 +1121,18 @@ int Nvm::Erase(uint64_t Off, uint32_t Len)
 		vOpRemain = Len;
 
 		int r = IssueNext();
-
 		if (r < 0)
 		{
 			vOpEvt = NVM_EVT_NONE;
+			vOpRemain = 0;
 			atomic_flag_clear(&vOpLock);
 			return r;
 		}
 		atomic_flag_clear(&vOpLock);
-
 		return 0;
 	}
 
 	uint32_t cnt = Len;
-
 	while (cnt > 0)
 	{
 		int res = EraseUnit(addr, false);
@@ -1231,71 +1149,70 @@ int Nvm::Erase(uint64_t Off, uint32_t Len)
 
 int Nvm::MassErase(void)
 {
-	// The internal memory adapter reports UNKNOWN because it emulates the
-	// serial command frame. It supports unit erase, but never chip erase of the
-	// device executing this code.
+	if (vbEnabled == false)
+	{
+		return -ENODEV;
+	}
 	if (vEraseSize == 0 || Interface()->Type() == DEVINTRF_TYPE_UNKOWN)
 	{
 		return -ENOTSUP;
 	}
 
+	int sr = ServiceRun(NVM_OP_TMOUT);
+	if (sr < 0)
 	{
-		int sr = ServiceRun(NVM_OP_TMOUT);
-
-		if (sr < 0)
-		{
-			// The previous operation's completion failed and was reported;
-			// this call does not start on top of it.
-			return sr;
-		}
+		return sr;
 	}
+
 	if (RegionOffset() != 0 || Size() != vDevSize)
 	{
-		// The command wipes the whole device, so only an instance covering all
-		// of it may issue one.
 		return -EPERM;
 	}
-
 	if (WriteEnable() == false)
 	{
 		return -EBUSY;
 	}
-
 	if (SendCmd({ NVM_CMD_CHIP_ERASE, 0 }) != 0)
 	{
 		return -EIO;
 	}
-
 	if (WaitReady((uint32_t)-1) == false)
 	{
 		return -EBUSY;
 	}
-	WriteDisable();
 
+	WriteDisable();
 	return 0;
 }
 
 int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 {
-	(void)Off;
-	(void)Len;
-
+	if (vbEnabled == false)
 	{
-		int sr = ServiceRun(NVM_OP_TMOUT);
-
-		if (sr < 0)
-		{
-			// The previous operation's completion failed and was reported;
-			// this call does not start on top of it.
-			return sr;
-		}
+		return -ENODEV;
+	}
+	if (!RangeValid(Off, Len))
+	{
+		return -EINVAL;
 	}
 
-	// Block protect bits where the medium has them. Checked first because a
-	// config left at zero would otherwise look like it had a pin on port 0.
+	if (RegionOffset() != 0 || Size() != vDevSize)
+	{
+		return -EPERM;
+	}
+	if (Off != 0 || (uint64_t)Len != vDevSize)
+	{
+		return -ENOTSUP;
+	}
+
+	int srvc = ServiceRun(NVM_OP_TMOUT);
+	if (srvc < 0)
+	{
+		return srvc;
+	}
+
 	if (vbBare || vWrProtMask == 0)
 	{
-		// No status bits, so a pin if one is configured.
 		if (vWrProtPin.PortNo >= 0 && vWrProtPin.PinNo >= 0)
 		{
 			if (bEnable)
@@ -1308,7 +1225,6 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 			}
 			return 0;
 		}
-
 		return -ENOTSUP;
 	}
 
@@ -1318,14 +1234,8 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 		return -EIO;
 	}
 
-	if (bEnable)
-	{
-		sr |= vWrProtMask;
-	}
-	else
-	{
-		sr &= (uint8_t)~vWrProtMask;
-	}
+	if (bEnable) { sr |= vWrProtMask; }
+	else { sr &= (uint8_t)~vWrProtMask; }
 
 	if (WriteEnable() == false)
 	{
@@ -1335,12 +1245,10 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 	if (vbPhased)
 	{
 		SPIDev_t *dev = SPIGetHandle(*Interface());
-
 		SPIStartTx(dev, (int)vBaseDevAddr);
 		QuadSPISendCmd(dev, NVM_CMD_WRSR, (uint32_t)-1, 0, 1, 0);
 		int wr = SPITxData(dev, &sr, 1);
 		SPIStopTx(dev);
-
 		if (wr != 1)
 		{
 			WriteDisable();
@@ -1350,7 +1258,6 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 	else
 	{
 		uint8_t wrsr = NVM_CMD_WRSR;
-
 		XferBegin();
 		if (XferShort(Device::Write(&wrsr, 1, &sr, 1), 1) == false)
 		{
@@ -1364,17 +1271,63 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 		WriteDisable();
 		return -EBUSY;
 	}
-	WriteDisable();
 
+	WriteDisable();
 	return 0;
+}
+
+bool Nvm::Enable(void)
+{
+	if (vbInitialized == false)
+	{
+		return false;
+	}
+
+	vbEnabled = true;
+	Valid(true);
+	return true;
 }
 
 void Nvm::Disable(void)
 {
+	if (vbInitialized == false)
+	{
+		return;
+	}
+
+	vbEnabled = false;
+	Valid(false);
+	CancelOp(-ECANCELED);
 	WriteDisable();
 }
 
 void Nvm::Reset(void)
 {
-	WriteDisable();
+	if (vbInitialized == false || Interface() == nullptr)
+	{
+		Valid(false);
+		return;
+	}
+
+	vbEnabled = false;
+	Valid(false);
+	CancelOp(-ECANCELED);
+
+	bool ok = true;
+	if (vEraseSize != 0)
+	{
+		ok = SendCmd({ NVM_CMD_RESET_EN, 0 }) == 0 &&
+			 SendCmd({ NVM_CMD_RESET, 0 }) == 0;
+		if (ok && vAddrSize > 3)
+		{
+			ok = SendCmd({ NVM_CMD_EN4B, 0 }) == 0;
+		}
+	}
+	else
+	{
+		WriteDisable();
+	}
+
+	vbEnabled = ok;
+	Valid(ok);
 }
