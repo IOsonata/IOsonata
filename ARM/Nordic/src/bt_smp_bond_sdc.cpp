@@ -40,7 +40,6 @@
 #include "storage/nvm.h"
 #include "storage/nvm_intrf.h"
 #include "app_evt_handler.h"
-#include "bt_pds_sdc.h"
 
 // Comment out to silence. Deliberately not guarded on NDEBUG: the release
 // build is where the store has to be watched, and a silent mount failure is
@@ -120,19 +119,9 @@ static int PdsEnsureReady(void)
 
 	BOND_PRINTF("PDS: mount, store on Nvm (not fstorage/fds)\r\n");
 
-	// The implementation delivers completions on its own, so the wait needs no
-	// help; NULL spends it in a short delay. Same call nvm_demo makes before it
-	// brings the memory up.
-	NvmIntrfSetWait(NULL, 5000);
-
-	// The memory is arbitrated against the radio through timeslots.
-	int r = BtPdsMpslInit();
-	if (r != 0)
-	{
-		BOND_PRINTF("PDS: mpsl init failed %d\r\n", r);
-		return r;
-	}
-
+	// Nothing is set up here beyond the memory itself. Who may touch it and
+	// when is registered with the interface by whoever owns the radio, and how
+	// long a program takes is the memory's own timing.
 	if (s_BondIntrf.Init() == false)
 	{
 		BOND_PRINTF("PDS: memory interface init failed\r\n");
@@ -169,7 +158,7 @@ static int PdsEnsureReady(void)
 	int rd = s_BondMem.Read(0, &first, sizeof(first));
 	BOND_PRINTF("PDS: raw [0] = %08lX (read %d)\r\n", (unsigned long)first, rd);
 
-	r = BtPdsInit(&s_BondMem);
+	int r = BtPdsInit(&s_BondMem);
 	if (r != 0)
 	{
 		BOND_PRINTF("PDS: store mount failed %d\r\n", r);

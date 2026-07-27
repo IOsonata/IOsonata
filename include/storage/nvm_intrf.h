@@ -72,10 +72,21 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
-/// Called repeatedly while an operation is waiting, so the application can run
-/// its event dispatch or yield to a scheduler. Returning false asks the
-/// interface to give up on the wait.
-typedef bool (*NvmIntrfWait_t)(void);
+/// One unit of a memory operation, run where it is safe to touch the memory.
+/// Returns 0 when the operation is finished, or the microseconds it still
+/// expects to need so the arbiter can size the next window.
+///
+/// It runs wherever the arbiter puts it, which for a radio timeslot is a high
+/// priority interrupt: short, deterministic, no blocking calls.
+typedef struct __Nvm_Intrf_Op {
+	uint32_t (*Step)(void *pCtx);	//!< One unit. 0 when done, else usec left
+	uint32_t	StepBudgetUs;		//!< Worst case for one Step, sizes the window
+	void		*pCtx;				//!< Passed back to Step
+} NvmIntrfOp_t;
+
+/// Runs an operation where the memory is safe to touch. Returns 0 when the
+/// operation was started or completed, negative errno when it could not be.
+typedef int (*NvmIntrfArb_t)(NvmIntrfOp_t *pOp);
 
 /// Counts of what the interface did, for a test to show which path ran.
 typedef struct __Nvm_Intrf_Stat {
@@ -124,14 +135,19 @@ protected:
 };
 
 /**
- * @brief	Set the wait callback and the operation timeout.
+ * @brief	Register who decides when the memory may be touched.
  *
- * @param	pWait		: Called repeatedly while an operation waits. NULL to
- * 						  spend the wait in a short delay instead.
- * @param	TimeoutMs	: Give up on one operation after this many msec.
- * 						  0 keeps the current value.
+ * On a part with a radio, writing the memory has to be arbitrated against it,
+ * and only the stack knows when a window is free. The stack registers its
+ * arbiter here; the interface asks it to run each operation and never learns
+ * what a timeslot is.
+ *
+ * With nothing registered the memory is the application's alone and the
+ * interface drives the controller directly.
+ *
+ * @param	pArb	: The arbiter, or NULL to go back to driving directly.
  */
-void NvmIntrfSetWait(NvmIntrfWait_t pWait, uint32_t TimeoutMs);
+void NvmIntrfSetArbiter(NvmIntrfArb_t pArb);
 
 /**
  * @brief	Read the operation counts.

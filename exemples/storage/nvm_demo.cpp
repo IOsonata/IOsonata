@@ -111,6 +111,15 @@ SOFTWARE.
 
 #include "syslog.h"
 
+// Completion mode. 0 the calls finish in the call, 1 the driver reports
+// through an event and IsBusy/Sync drive the operation. The second is the one
+// a stack sits on top of: a write started from an event handler must not block
+// it, so the operation has to make progress from somewhere else.
+#ifndef NVM_DEMO_ASYNC
+#define NVM_DEMO_ASYNC			1
+#endif
+
+
 #ifdef MCU_OSC
 McuOsc_t g_McuOsc = MCU_OSC;
 #endif
@@ -240,14 +249,6 @@ static const NvmCfg_t s_ChipCfg = {
 	.WriteDelayUs = 5000,			// Twr
 };
 
-#endif
-
-// Completion mode. 0 the calls finish in the call, 1 the driver reports
-// through an event and IsBusy/Sync drive the operation. The second is the one
-// a stack sits on top of: a write started from an event handler must not block
-// it, so the operation has to make progress from somewhere else.
-#ifndef NVM_DEMO_ASYNC
-#define NVM_DEMO_ASYNC			0
 #endif
 
 static Nvm s_Nvm;
@@ -910,12 +911,6 @@ static void NvmCycleReport(void)
 
 void BtAppInitUserData()
 {
-#if NVM_DEMO_MEDIUM == 0
-	// The target implementation delivers completions on its own, so the wait
-	// needs no help; NULL spends it in a short delay.
-	NvmIntrfSetWait(NULL, 5000);
-#endif
-
 	if (NvmDemoSetup() == false)
 	{
 		return;

@@ -1222,6 +1222,134 @@ static void TestHeldResult(MockIntrf &Bus)
 	s_NorPgmOk = 0xFFFFFFFFUL;
 }
 
+// A memory reached through its own controller. It answers to an address and
+// nothing else, so the driver must send no command byte and none of the
+// command traffic a chip on a bus needs.
+static uint8_t s_Mem[16384];
+static std::vector<uint8_t> s_MemTx;
+static uint32_t s_MemAddr;
+static bool s_MemAddrSet;
+static int s_MemCmdBytes;
+
+static bool MemStartTx(DevIntrf_t *, uint32_t)
+{
+	s_MemTx.clear();
+	s_MemAddrSet = false;
+
+	return true;
+}
+
+static void MemStopTx(DevIntrf_t *) {}
+
+// The address phase already latched where to read. Starting the read half of
+// the transaction must not throw it away, the same way CRACEN keeps the offset
+// latched by TxSrData across into RxData.
+static bool MemStartRx(DevIntrf_t *, uint32_t)
+{
+	return true;
+}
+
+static void MemStopRx(DevIntrf_t *) {}
+
+// The frame is the address, four bytes, nothing in front of it. Anything
+// longer means the driver put a command byte on the wire.
+static int MemTxData(DevIntrf_t *, const uint8_t *pData, int Len)
+{
+	for (int i = 0; i < Len; i++) { s_MemTx.push_back(pData[i]); }
+
+	if (s_MemAddrSet == false)
+	{
+		if (s_MemTx.size() < 4)
+		{
+			return Len;
+		}
+		if (s_MemTx.size() > 4)
+		{
+			s_MemCmdBytes += (int)s_MemTx.size() - 4;
+		}
+		s_MemAddr = ((uint32_t)s_MemTx[0] << 24) | ((uint32_t)s_MemTx[1] << 16) |
+					((uint32_t)s_MemTx[2] << 8) | s_MemTx[3];
+		s_MemAddrSet = true;
+		s_MemTx.clear();
+
+		return Len;
+	}
+
+	for (int i = 0; i < Len; i++)
+	{
+		if (s_MemAddr < sizeof(s_Mem))
+		{
+			s_Mem[s_MemAddr++] &= pData[i];
+		}
+	}
+	s_MemTx.clear();
+
+	return Len;
+}
+
+static int MemRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
+{
+	if (s_MemAddrSet == false)
+	{
+		// A status poll would land here. The driver must not make one.
+		s_MemCmdBytes++;
+
+		return 0;
+	}
+
+	for (int i = 0; i < Len; i++)
+	{
+		pBuff[i] = s_MemAddr < sizeof(s_Mem) ? s_Mem[s_MemAddr++] : 0xFF;
+	}
+
+	return Len;
+}
+
+static void TestMemCtrl(void)
+{
+	printf("--- memory controller\n");
+
+	memset(s_Mem, 0xFF, sizeof(s_Mem));
+	s_MemCmdBytes = 0;
+
+	// TxSrData is the address phase; this interface takes it the same way.
+	MockIntrf bus(DEVINTRF_TYPE_MEMCTRL, MemStartRx, MemRxData, MemStopRx,
+				  MemStartTx, MemTxData, MemTxData, MemStopTx);
+
+	NvmCfg_t cfg;
+	memset(&cfg, 0, sizeof(cfg));
+	cfg.TotalSize = sizeof(s_Mem);
+	cfg.EraseSize = 4096;
+	cfg.PageSize = 64;
+	cfg.WriteGran = 4;
+	cfg.AddrSize = 4;
+	cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+
+	Nvm mem;
+	CHECK(mem.Init(cfg, &bus), "memctrl: init");
+	CHECK(s_MemCmdBytes == 0, "memctrl: no command traffic at init");
+
+	uint8_t wr[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+	uint8_t rd[8] = { 0 };
+
+	CHECK(mem.Write(0x40, wr, sizeof(wr)) == (int)sizeof(wr), "memctrl: write");
+	CHECK(s_MemCmdBytes == 0, "memctrl: no command byte on a program");
+	CHECK(memcmp(&s_Mem[0x40], wr, sizeof(wr)) == 0, "memctrl: the data landed");
+
+	CHECK(mem.Read(0x40, rd, sizeof(rd)) == (int)sizeof(rd) &&
+		  memcmp(rd, wr, sizeof(wr)) == 0, "memctrl: read back");
+	CHECK(s_MemCmdBytes == 0, "memctrl: no status poll and no command on a read");
+
+	// A write bigger than one page, so the address is reframed per chunk.
+	static uint8_t big[256];
+	for (uint32_t i = 0; i < sizeof(big); i++) { big[i] = (uint8_t)(i ^ 0x5A); }
+	CHECK(mem.Write(0x400, big, sizeof(big)) == (int)sizeof(big),
+		  "memctrl: write across pages");
+	CHECK(memcmp(&s_Mem[0x400], big, sizeof(big)) == 0,
+		  "memctrl: every chunk landed at its own address");
+	CHECK(s_MemCmdBytes == 0, "memctrl: still no command traffic");
+}
+
 static void TestHookLifetime(MockIntrf &Bus)
 {
 	printf("--- completion hook lifetime\n");
@@ -1267,6 +1395,7 @@ int main(void)
 	TestBaseAddr(nor);
 	TestNorAsyncIntrf(nor);
 	TestHeldResult(nor);
+	TestMemCtrl();
 	TestHookLifetime(nor);
 
 	printf("\nChecks run: %d\n", g_Checks);

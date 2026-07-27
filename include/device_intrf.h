@@ -86,6 +86,7 @@ typedef enum __Dev_Intrf_Type {
 	DEVINTRF_TYPE_OSPI,			//!< Octo SPI
     DEVINTRF_TYPE_I3C,         	//!< I3C
 	DEVINTRF_TYPE_CRYPTO,		//!< On-die crypto core access path (e.g. Nordic CRACEN)
+	DEVINTRF_TYPE_MEMCTRL,		//!< On-die memory controller access path (e.g. Nordic NVMC, RRAMC)
 } DEVINTRF_TYPE;
 
 /// @brief	Device Interface forward data structure type definition.

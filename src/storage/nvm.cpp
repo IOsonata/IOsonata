@@ -447,13 +447,20 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		case DEVINTRF_TYPE_UNKOWN:
 		case DEVINTRF_TYPE_QSPI:
 		case DEVINTRF_TYPE_OSPI:
+		case DEVINTRF_TYPE_MEMCTRL:
 			break;
 
 		default:
 			return fail();
 	}
 
-	vbBare = pIntrf->Type() == DEVINTRF_TYPE_I2C;
+	// Media that answer to an address and nothing else: no command protocol,
+	// so no write enable, no status register, no reset pair and no device id.
+	// An I2C part is one. MCU internal memory reached through its controller
+	// is another: write enable and ready are registers the interface touches,
+	// not commands sent to a chip.
+	vbBare = pIntrf->Type() == DEVINTRF_TYPE_I2C ||
+			 pIntrf->Type() == DEVINTRF_TYPE_MEMCTRL;
 	vbPhased = pIntrf->Type() == DEVINTRF_TYPE_QSPI ||
 				pIntrf->Type() == DEVINTRF_TYPE_OSPI;
 
@@ -516,7 +523,7 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		return fail();
 	}
 
-	if (vEraseSize != 0)
+	if (vbBare == false && vEraseSize != 0)
 	{
 		if (SendCmd({ NVM_CMD_RESET_EN, 0 }) != 0 ||
 			SendCmd({ NVM_CMD_RESET, 0 }) != 0)
@@ -525,7 +532,7 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		}
 	}
 
-	if (Cfg.DevId != 0 && Cfg.DevIdSize > 0)
+	if (vbBare == false && Cfg.DevId != 0 && Cfg.DevIdSize > 0)
 	{
 		bool found = false;
 		for (int rtry = 0; rtry < 6; rtry++)
@@ -542,7 +549,7 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		}
 	}
 
-	if (vEraseSize != 0 && vAddrSize > 3 &&
+	if (vbBare == false && vEraseSize != 0 && vAddrSize > 3 &&
 		SendCmd({ NVM_CMD_EN4B, 0 }) != 0)
 	{
 		return fail();

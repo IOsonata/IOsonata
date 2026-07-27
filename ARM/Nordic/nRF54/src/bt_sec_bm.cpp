@@ -97,7 +97,6 @@ SOFTWARE.
 #include "storage/nvm.h"
 #include "storage/nvm_intrf.h"
 #include "bluetooth/bt_pds.h"
-#include "bt_pds_sdc.h"				// BtPdsMpslInit, the timeslot session
 
 #include <bm/softdevice_handler/nrf_sdh_ble.h>
 #include <bm/bluetooth/peer_manager/peer_manager_types.h>
@@ -1095,17 +1094,9 @@ int BtPdsBmInit(void)
 		return 0;
 	}
 
-	// The implementation delivers completions on its own, so the wait needs
-	// no help; NULL spends it in a short delay.
-	NvmIntrfSetWait(NULL, 5000);
-
-	// The memory is arbitrated against the radio through timeslots.
-	int r = BtPdsMpslInit();
-	if (r != 0)
-	{
-		return r;
-	}
-
+	// Nothing is set up here beyond the memory itself. Who may touch it and
+	// when is registered with the interface by whoever owns the radio, and how
+	// long a program takes is the memory's own timing.
 	if (s_PdsIntrf.Init() == false)
 	{
 		return -EIO;
@@ -1121,7 +1112,7 @@ int BtPdsBmInit(void)
 		return -EIO;
 	}
 
-	r = BtPdsInit(&s_PdsMem);
+	int r = BtPdsInit(&s_PdsMem);
 	if (r != 0)
 	{
 		return r;
