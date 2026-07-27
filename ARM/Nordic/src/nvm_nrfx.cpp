@@ -170,6 +170,29 @@ static uint8_t s_Hdr[NVM_INTRF_FRAME_HDR];
 static int s_HdrLen;
 alignas(4) static uint8_t s_Data[NVM_INTRF_MAX_XFER];
 
+// NvmSubmit and NvmEraseUnit answer this when the operation was started and
+// the flash event will report it. Positive, so the existing checks for a
+// negative errno keep working unchanged.
+#define NVM_INTRF_STARTED			1
+
+// The interface the flash event is reported through. One instance, same as
+// everything else in this file.
+static DevIntrf_t *s_pIntrf = nullptr;
+
+// A submit is outstanding and its completion is owed to the driver.
+static volatile bool s_AsyncPending = false;
+
+// Whether to submit and return rather than submit and wait. This is the
+// bIntEn the application put in NvmCfg_t, handed down by the driver, not a
+// build option. Only the SoftDevice path can honour it: the flash event
+// already arrives by interrupt, so the wait in SdRun is the only thing in the
+// way. The timeslot and direct controller paths finish inside their call
+// whatever this says and report done at once, which the driver copes with.
+static bool AsyncWanted(void)
+{
+	return s_pIntrf != nullptr && s_pIntrf->bIntEn && s_pIntrf->EvtCB != nullptr;
+}
+
 // The generic driver speaks the standard serial protocol at every non I2C
 // interface, and the internal flash is an erase medium besides, so this is
 // standard serial NOR protocol at it: write enable before a program, a
@@ -387,6 +410,29 @@ static bool SdRunning(void)
 
 #endif	// NVM_INTRF_SD_RUNTIME
 
+// Tell the driver the transfer it started has finished. Runs in the SoC event
+// context, so it does nothing but hand over the result.
+static void AsyncReport(bool bOk)
+{
+	if (s_AsyncPending == false || AsyncWanted() == false)
+	{
+		return;
+	}
+
+	s_AsyncPending = false;
+
+	// End the transfer here. The driver returned as soon as the operation was
+	// under way and never sent a stop, because on this interface the stop is
+	// what the completion does: it clears the frame and releases the busy
+	// latch that DeviceIntrfStartTx set. Without it the next StartTx is
+	// refused and nothing works again.
+	DeviceIntrfStopTx(s_pIntrf);
+
+	s_pIntrf->EvtCB(s_pIntrf,
+					bOk ? DEVINTRF_EVT_COMPLETED : DEVINTRF_EVT_TX_TIMEOUT,
+					nullptr, 0);
+}
+
 static void NvmIntrfSocEvt(uint32_t SysEvt)
 {
 	if (s_OpPending == false)
@@ -402,6 +448,7 @@ static void NvmIntrfSocEvt(uint32_t SysEvt)
 			s_OpPending = false;
 			s_OpDone = true;
 			s_Stat.Evt++;
+			AsyncReport(true);
 			break;
 
 		case NRF_EVT_FLASH_OPERATION_ERROR:
@@ -409,6 +456,7 @@ static void NvmIntrfSocEvt(uint32_t SysEvt)
 			s_OpPending = false;
 			s_OpDone = true;
 			s_Stat.Evt++;
+			AsyncReport(false);
 			break;
 
 		default:
@@ -437,6 +485,46 @@ NRF_SDH_SOC_OBSERVER(s_NvmIntrfSocObs, NvmIntrfSocObserver, NULL, HIGH);
 typedef uint32_t (*SdSubmit_t)(void *pArg);
 
 // Submit, retry while the radio holds the memory, then wait for the result.
+// Submit only. Returns 0 when the operation is under way and the flash event
+// will report it, or a negative errno when it could not be started.
+static int SdStart(SdSubmit_t Submit, void *pArg)
+{
+	uint32_t elapsed = 0;
+
+	while (true)
+	{
+		s_OpDone = false;
+		s_OpOk = false;
+		s_OpPending = true;
+		__DMB();
+
+		uint32_t status = Submit(pArg);
+
+		if (status == NRF_SUCCESS)
+		{
+			s_AsyncPending = true;
+
+			return 0;
+		}
+
+		s_OpPending = false;
+
+		if (status != NRF_ERROR_BUSY)
+		{
+			return -EIO;
+		}
+
+		// Busy is the stack holding the memory. Spending the wait here is the
+		// same as the waiting path does; it is short and it is not the flash
+		// operation itself.
+		s_Stat.Busy++;
+		if (WaitStep() == false || ++elapsed >= s_TimeoutMs)
+		{
+			return -ETIMEDOUT;
+		}
+	}
+}
+
 static int SdRun(SdSubmit_t Submit, void *pArg)
 {
 	uint32_t elapsed = 0;
@@ -626,9 +714,17 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 #ifdef NVM_INTRF_SD_RUNTIME
 	if (SdRunning())
 	{
-		SdWrArg_t arg = { (uint32_t *)Addr, pSrc, WordCnt };
+		static SdWrArg_t arg;
+		arg = { (uint32_t *)Addr, pSrc, WordCnt };
 
 		s_Stat.Sd++;
+
+		if (AsyncWanted())
+		{
+			int r = SdStart(SdWriteSubmit, &arg);
+
+			return r != 0 ? r : NVM_INTRF_STARTED;
+		}
 
 		return SdRun(SdWriteSubmit, &arg);
 	}
@@ -638,9 +734,17 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 	{
 		if (SdRunning())
 		{
-			SdWrArg_t arg = { (uint32_t *)Addr, pSrc, WordCnt };
+			static SdWrArg_t arg;
+			arg = { (uint32_t *)Addr, pSrc, WordCnt };
 
 			s_Stat.Sd++;
+
+			if (AsyncWanted())
+			{
+				int r = SdStart(SdWriteSubmit, &arg);
+
+				return r != 0 ? r : NVM_INTRF_STARTED;
+			}
 
 			return SdRun(SdWriteSubmit, &arg);
 		}
@@ -756,9 +860,17 @@ static int NvmEraseUnit(uintptr_t Addr)
 	{
 		if (SdRunning())
 		{
-			uint32_t no = (uint32_t)(Addr / page);
+			static uint32_t no;
+			no = (uint32_t)(Addr / page);
 
 			s_Stat.Sd++;
+
+			if (AsyncWanted())
+			{
+				int r = SdStart(SdEraseSubmit, &no);
+
+				return r != 0 ? r : NVM_INTRF_STARTED;
+			}
 
 			return SdRun(SdEraseSubmit, &no);
 		}
@@ -842,7 +954,9 @@ static int NvmFlush(void)
 	uint32_t words = (uint32_t)s_DataLen / NVM_INTRF_WRITE_GRAN;
 	int res = NvmSubmit(FrameAddr(), (const uint32_t *)s_Data, words);
 
-	if (res == 0)
+	// Started counts as issued. Ops is how many operations the memory was
+	// asked for, not how many finished inside the call.
+	if (res == 0 || res == NVM_INTRF_STARTED)
 	{
 		s_Stat.Ops++;
 	}
@@ -888,7 +1002,17 @@ static int NvmTxData(DevIntrf_t *, const uint8_t *pData, int Len)
 	// An erase needs the address only.
 	if (s_Hdr[0] == NVM_INTRF_CMD_ERASE)
 	{
-		if (NvmEraseUnit(FrameAddr()) != 0)
+		int res = NvmEraseUnit(FrameAddr());
+
+		if (res == NVM_INTRF_STARTED)
+		{
+			// Under way. The driver reads -1 as started and waits for the
+			// event rather than treating it as a short transfer.
+			s_Stat.Ops++;
+
+			return -1;
+		}
+		if (res != 0)
 		{
 			return 0;
 		}
@@ -907,7 +1031,15 @@ static int NvmTxData(DevIntrf_t *, const uint8_t *pData, int Len)
 
 		if (s_DataLen == (int)sizeof(s_Data))
 		{
-			if (NvmFlush() != 0)
+			int res = NvmFlush();
+
+			if (res == NVM_INTRF_STARTED)
+			{
+				// The driver bounds a transfer to the page size, so this
+				// only fires on the last of the buffer.
+				return -1;
+			}
+			if (res != 0)
 			{
 				return n - (int)sizeof(s_Data);
 			}
@@ -916,7 +1048,14 @@ static int NvmTxData(DevIntrf_t *, const uint8_t *pData, int Len)
 
 	// The driver bounds a transfer to the page size, so the whole frame
 	// arrives together and this is where it completes.
-	if (NvmFlush() != 0)
+	int res = NvmFlush();
+
+	if (res == NVM_INTRF_STARTED)
+	{
+		// Under way. The driver reads -1 as started.
+		return -1;
+	}
+	if (res != 0)
 	{
 		return 0;
 	}
@@ -996,6 +1135,11 @@ bool NvmIntrf::Init(void)
 	vDevIntrf.GetHandle = NvmGetHandle;
 	vDevIntrf.MaxRetry = 1;
 	vDevIntrf.EnCnt = 1;
+
+	// bIntEn is left for the driver to set from NvmCfg_t; the flash event is
+	// reported through EvtCB, which Nvm::Init hooks up.
+	s_pIntrf = &vDevIntrf;
+	s_AsyncPending = false;
 	atomic_flag_clear(&vDevIntrf.bBusy);
 
 	s_HdrLen = 0;

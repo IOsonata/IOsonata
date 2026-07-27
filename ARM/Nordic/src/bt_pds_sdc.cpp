@@ -35,6 +35,18 @@
 // defines NDEBUG, which strips all trace regardless of DEBUG_ENABLE.
 //#define DEBUG_ENABLE
 
+// Timeslot trace. Independent of DEBUG_ENABLE and of NDEBUG: an abnormal
+// signal ends the operation with -EIO and the caller only sees the errno, so
+// which signal it was has to be visible in any build.
+#define BT_PDS_MPSL_TRACE
+
+#ifdef BT_PDS_MPSL_TRACE
+#include "syslog.h"
+#define MPSL_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define MPSL_PRINTF(...)
+#endif
+
 #if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 #include "syslog.h"
 #define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
@@ -65,6 +77,11 @@ static mpsl_timeslot_request_t s_NextReq;
 static volatile uint32_t s_SigStart;
 static volatile uint32_t s_SigBlocked;
 static volatile uint32_t s_SigOther;
+
+// Signal that ended the last operation abnormally. Recorded rather than
+// printed: the callback runs at timeslot priority, where sending it to a UART
+// would itself be enough to overstay the window.
+static volatile uint32_t s_SigAbnormal;
 
 // Give up on one operation after this long. The longest legitimate operation
 // is an nRF52 page erase spread across timeslots, well under a second; a wait
@@ -106,7 +123,7 @@ static mpsl_timeslot_signal_return_param_t *s_TimeslotCb(
 	{
 		case MPSL_TIMESLOT_SIGNAL_START:
 		{
-			s_SigStart++;
+			s_SigStart = s_SigStart + 1;
 
 			// Radio is idle for the granted window. Advance the operation.
 			uint32_t remainUs = 0;
@@ -136,7 +153,7 @@ static mpsl_timeslot_signal_return_param_t *s_TimeslotCb(
 
 		case MPSL_TIMESLOT_SIGNAL_BLOCKED:
 		case MPSL_TIMESLOT_SIGNAL_CANCELLED:
-			s_SigBlocked++;
+			s_SigBlocked = s_SigBlocked + 1;
 			// The request could not be scheduled. Retry once with another
 			// earliest request; persistent failure surfaces as a timeout in the
 			// caller (it will give up after its bounded wait).
@@ -154,7 +171,8 @@ static mpsl_timeslot_signal_return_param_t *s_TimeslotCb(
 		case MPSL_TIMESLOT_SIGNAL_OVERSTAYED:
 		case MPSL_TIMESLOT_SIGNAL_INVALID_RETURN:
 		default:
-			s_SigOther++;
+			s_SigOther = s_SigOther + 1;
+			s_SigAbnormal = signal;
 			// Abnormal. End and report error so the caller does not hang.
 			s_Result = -EIO;
 			s_Done = true;
@@ -242,9 +260,9 @@ int BtPdsMpslRun(BtPdsMpslOp_t *pOp)
 			// Detach the operation first: a late grant then finds no work,
 			// reports done and ends its slot, touching nothing of ours.
 			s_pOp = NULL;
-			DEBUG_PRINTF("BtPdsMpslRun: timeout, start %lu blocked %lu other %lu\r\n",
-						 (unsigned long)s_SigStart, (unsigned long)s_SigBlocked,
-						 (unsigned long)s_SigOther);
+			MPSL_PRINTF("MPSL: run timeout, start %lu blocked %lu other %lu\r\n",
+						(unsigned long)s_SigStart, (unsigned long)s_SigBlocked,
+						(unsigned long)s_SigOther);
 			return -ETIMEDOUT;
 		}
 		usDelay(100);
@@ -253,6 +271,18 @@ int BtPdsMpslRun(BtPdsMpslOp_t *pOp)
 
 	int result = s_Result;
 	s_pOp = NULL;
+
+	if (result != 0)
+	{
+		// MPSL_TIMESLOT_SIGNAL_OVERSTAYED is 6 and INVALID_RETURN is 7 in the
+		// nrfxlib headers; anything else means a signal this code does not
+		// handle arrived.
+		MPSL_PRINTF("MPSL: run failed %d, abnormal signal %lu, "
+					"start %lu blocked %lu other %lu\r\n",
+					result, (unsigned long)s_SigAbnormal,
+					(unsigned long)s_SigStart,
+					(unsigned long)s_SigBlocked, (unsigned long)s_SigOther);
+	}
 
 	return result;
 }

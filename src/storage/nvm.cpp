@@ -403,6 +403,19 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	Interface(pIntrf);
 	DeviceAddress(Cfg.DevNo);
 	InterruptEnabled(Cfg.bIntEn);
+
+	// Tell the interface what the application asked for. An interface that can
+	// report completion by interrupt uses this to submit and return instead of
+	// submitting and waiting; one that cannot simply finishes in the call and
+	// reports the full length, which the driver handles either way. Only set,
+	// never cleared: an interface that runs interrupt driven for its own
+	// reasons keeps doing so.
+	if (Cfg.bIntEn)
+	{
+		DevIntrf_t *dip = *pIntrf;
+
+		dip->bIntEn = true;
+	}
 	vpWaitCB = Cfg.pWaitCB;
 	vEvtHandler = Cfg.EvtHandler;
 
@@ -841,6 +854,34 @@ int Nvm::ServiceStep(void)
 		return 0;
 	}
 
+	// A chunk the interface reported as started is not finished until its
+	// event arrives. Asking the medium for status in the meantime is both
+	// wrong and, on a mapped memory, meaningless.
+	if (vbXferWaiting && vbXferDone == false && vbXferFail == false)
+	{
+		atomic_flag_clear(&vOpLock);
+
+		return 1;
+	}
+
+	if (vbXferWaiting)
+	{
+		bool failed = vbXferFail;
+
+		vbXferWaiting = false;
+		vbXferDone = false;
+		vbXferFail = false;
+
+		if (failed)
+		{
+			notify = FinishOpLocked(-EIO, evt, off, len);
+			atomic_flag_clear(&vOpLock);
+			if (notify) { Notify(evt, off, len, -EIO); }
+
+			return 0;
+		}
+	}
+
 	bool ready;
 	if (vbBare)
 	{
@@ -954,6 +995,17 @@ int Nvm::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData,
 
 	if (n < 0 && ip->bIntEn)
 	{
+		// The frame alone started something, which is what an erase looks
+		// like: the command and address are the whole of it.
+		if (InterruptEnabled() && (pData == nullptr || DataLen == 0))
+		{
+			// Under way. Same as a payload chunk: leave it, no stop, and let
+			// IntrfEvent finish it.
+			ip->bNoStop = false;
+
+			return 0;
+		}
+
 		// The frame transfer was started and reports through the event.
 		if (XferWait(NVM_XFER_TMOUT) == false)
 		{
@@ -988,6 +1040,17 @@ int Nvm::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData,
 	{
 		// Started and in flight. The interface releases its own busy latch
 		// from the completion interrupt, so there is no stop to send here.
+		if (InterruptEnabled())
+		{
+			// The operation is driven by the event, so leave the chunk on the
+			// wire and let IntrfEvent finish it. Waiting here would put the
+			// wait back in the caller, which is the whole point of the mode.
+			// No stop is sent: an interface that reports completion this way
+			// ends the transfer itself when it reports, and sending one here
+			// would release the interface while the memory is still working.
+			return DataLen;
+		}
+
 		return XferWait(NVM_XFER_TMOUT) ? DataLen : -EIO;
 	}
 

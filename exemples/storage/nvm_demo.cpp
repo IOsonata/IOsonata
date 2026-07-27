@@ -8,6 +8,13 @@
 		clears bits and never sets them back, and a stamp survives a power
 		cycle.
 
+		NVM_DEMO_ASYNC picks the completion mode: 0 the calls finish in the
+		call, 1 the driver reports through an event and IsBusy drives the
+		operation. The second is what a stack sits on: a write started from an
+		event handler must not block it, so the cycle issues one slot, puts
+		itself back on the application queue and returns. The requeue count in
+		the cycle report is how many times it did that instead of waiting.
+
 		One driver serves every byte addressed memory, so one demo does too.
 		NVM_DEMO_MEDIUM picks what is underneath: 0 the MCU internal memory
 		through NvmIntrf, 1 a SPI NOR flash, 2 an I2C EEPROM. Only the
@@ -73,6 +80,7 @@ SOFTWARE.
 #include "board.h"
 
 #include "storage/nvm.h"
+#include "syslog.h"
 
 // What is underneath: 0 the MCU internal memory, 1 a SPI NOR flash
 // (MX25R3235F), 2 an I2C EEPROM (CAT24C32). Everything below the
@@ -102,7 +110,15 @@ SOFTWARE.
 #else
 #endif
 
-#include "syslog.h"
+
+// Completion mode. 0 the calls finish in the call, 1 the driver reports
+// through an event and IsBusy/Sync drive the operation. The second is the one
+// a stack sits on top of: a write started from an event handler must not block
+// it, so the operation has to make progress from somewhere else.
+#ifndef NVM_DEMO_ASYNC
+#define NVM_DEMO_ASYNC			1
+#endif
+
 
 #ifdef MCU_OSC
 McuOsc_t g_McuOsc = MCU_OSC;
@@ -239,6 +255,73 @@ static Nvm s_Nvm;
 static uintptr_t s_RegionAddr = 0;
 static int s_Fail = 0;
 
+// What the driver reported, and how often. One event per operation, so these
+// counts are checked against the operations the demo issued.
+static volatile uint32_t s_EvtWrite;
+static volatile uint32_t s_EvtErase;
+static volatile uint32_t s_EvtError;
+static volatile int s_EvtLastRes;
+static volatile uint64_t s_EvtLastOff;
+static volatile uint32_t s_EvtLastLen;
+
+static void NvmDemoEvtHandler(Nvm *pMem, NVM_EVT Evt, uint64_t Off,
+							  uint32_t Len, int Res)
+{
+	(void)pMem;
+
+	s_EvtLastRes = Res;
+	s_EvtLastOff = Off;
+	s_EvtLastLen = Len;
+
+	switch (Evt)
+	{
+		case NVM_EVT_WRITE_DONE:
+			s_EvtWrite++;
+			break;
+
+		case NVM_EVT_ERASE_DONE:
+			s_EvtErase++;
+			break;
+
+		case NVM_EVT_ERROR:
+			s_EvtError++;
+			break;
+
+		default:
+			break;
+	}
+}
+
+// The checks read back what they wrote, so an operation has to be finished
+// before the next line looks at it. Sync drains one in flight and returns at
+// once when there is none, so the checks read the same in both modes and the
+// demo needs no second version of them.
+static int DemoWrite(Nvm &Mem, uint64_t Off, const void *pData, uint32_t Len)
+{
+	int r = Mem.Write(Off, pData, Len);
+	if (r < 0)
+	{
+		return r;
+	}
+
+	int sr = Mem.Sync();
+
+	return sr < 0 ? sr : r;
+}
+
+static int DemoErase(Nvm &Mem, uint64_t Off, uint32_t Len)
+{
+	int r = Mem.Erase(Off, Len);
+	if (r < 0)
+	{
+		return r;
+	}
+
+	int sr = Mem.Sync();
+
+	return sr < 0 ? sr : r;
+}
+
 #if NVM_DEMO_MEDIUM == 0
 // Read the memory directly, bypassing the driver. If this disagrees with what
 // the driver returns, the driver is not working on the memory it claims to.
@@ -342,9 +425,10 @@ static void StampCheck(Nvm &Mem)
 	if (Mem.EraseSize() != 0)
 	{
 		// A clears-bits medium needs the erase before the rewrite.
-		Check(Mem.Erase(off, page) == 0, "erase the stamp page");
+		Check(DemoErase(Mem, off, page) == 0, "erase the stamp page");
 	}
-	Check(Mem.Write(off, ns, sizeof(ns)) == (int)sizeof(ns), "write the stamp");
+	Check(DemoWrite(Mem, off, ns, sizeof(ns)) == (int)sizeof(ns),
+		  "write the stamp");
 	Mem.Read(off, rb, sizeof(rb));
 	Check(rb[0] == NVM_DEMO_MAGIC && rb[1] == boots,
 		  "stamp reads back through the driver");
@@ -373,7 +457,7 @@ static void NvmDemoVerify(Nvm &Mem)
 	if (Mem.EraseSize() != 0)
 	{
 		// Erase, then the scratch must read all ones.
-		Check(Mem.Erase(0, scratch) == 0, "erase the scratch pages");
+		Check(DemoErase(Mem, 0, scratch) == 0, "erase the scratch pages");
 		Check(ScratchIsErased(Mem), "scratch reads all ones after erase");
 	}
 	else
@@ -386,7 +470,7 @@ static void NvmDemoVerify(Nvm &Mem)
 		memset(ff, 0xFF, sizeof(ff));
 		for (uint32_t o = 0; o < scratch; o += sizeof(ff))
 		{
-			if (Mem.Write(o, ff, sizeof(ff)) != (int)sizeof(ff))
+			if (DemoWrite(Mem, o, ff, sizeof(ff)) != (int)sizeof(ff))
 			{
 				ok = false;
 				break;
@@ -402,7 +486,7 @@ static void NvmDemoVerify(Nvm &Mem)
 	memset(readback, 0, sizeof(readback));
 
 	uint64_t cross = page - (16 * 4);
-	Check(Mem.Write(cross, pattern, sizeof(pattern)) == (int)sizeof(pattern),
+	Check(DemoWrite(Mem, cross, pattern, sizeof(pattern)) == (int)sizeof(pattern),
 		  "write across a page boundary");
 	Check(Mem.Read(cross, readback, sizeof(readback)) == (int)sizeof(readback),
 		  "read it back");
@@ -416,10 +500,10 @@ static void NvmDemoVerify(Nvm &Mem)
 	uint32_t ones = 0xFFFFFFFFUL;
 	uint32_t rd = 0;
 
-	Check(Mem.Write(0x100, &half, 4) == 4, "program a word");
+	Check(DemoWrite(Mem, 0x100, &half, 4) == 4, "program a word");
 	Mem.Read(0x100, &rd, 4);
 	Check(rd == half, "word holds what was programmed");
-	Check(Mem.Write(0x100, &ones, 4) == 4, "program all ones over it");
+	Check(DemoWrite(Mem, 0x100, &ones, 4) == 4, "program all ones over it");
 	Mem.Read(0x100, &rd, 4);
 
 	if (rd == half)
@@ -440,14 +524,73 @@ static void NvmDemoVerify(Nvm &Mem)
 	// no erase has no erase to misalign.
 	if (Mem.WriteGran() > 1)
 	{
-		Check(Mem.Write(1, &ones, 4) == -EINVAL, "unaligned write rejected");
-		Check(Mem.Write(0, &ones, 3) == -EINVAL, "partial word write rejected");
+		Check(DemoWrite(Mem, 1, &ones, 4) == -EINVAL, "unaligned write rejected");
+		Check(DemoWrite(Mem, 0, &ones, 3) == -EINVAL, "partial word write rejected");
 	}
 	if (Mem.EraseSize() != 0)
 	{
-		Check(Mem.Erase(1, page) == -EINVAL, "unaligned erase rejected");
+		Check(DemoErase(Mem, 1, page) == -EINVAL, "unaligned erase rejected");
 	}
 	Check(Mem.Read(Mem.Size(), &rd, 4) == -EINVAL, "read past the end rejected");
+
+#if NVM_DEMO_ASYNC
+	// What the mode is for: the call establishes the operation and returns,
+	// and something else drives it. A write bigger than one page needs several
+	// steps, so IsBusy has real work to do rather than answering false at once.
+	g_Uart.printf("async   : the call returns, IsBusy drives the rest\r\n");
+
+	if (Mem.EraseSize() != 0)
+	{
+		Check(DemoErase(Mem, 0, scratch) == 0, "async: erase the scratch");
+	}
+
+	static uint8_t big[512];
+	for (uint32_t i = 0; i < sizeof(big); i++)
+	{
+		big[i] = (uint8_t)(0xA0 ^ i);
+	}
+
+	uint32_t evtBefore = s_EvtWrite;
+	uint32_t errBefore = s_EvtError;
+
+	Check(Mem.Write(0, big, sizeof(big)) == (int)sizeof(big),
+		  "async: write accepted and returned");
+
+	// Nothing reported yet: the operation was established, not finished.
+	Check(s_EvtWrite == evtBefore, "async: no event before the work is done");
+
+	uint32_t steps = 0;
+	while (Mem.IsBusy() && steps < 100000UL)
+	{
+		steps++;
+	}
+
+	Check(steps > 0, "async: IsBusy had work to do");
+	Check(Mem.IsBusy() == false, "async: the operation ended");
+	Check(s_EvtWrite == evtBefore + 1, "async: exactly one event");
+	Check(s_EvtError == errBefore, "async: no error reported");
+	Check(s_EvtLastRes == 0, "async: the event says it succeeded");
+	Check(s_EvtLastOff == 0 && s_EvtLastLen == sizeof(big),
+		  "async: the event carried the offset and length asked for");
+	Check(Mem.Sync() == 0, "async: nothing left to drain");
+
+	static uint8_t rback[512];
+	Check(Mem.Read(0, rback, sizeof(rback)) == (int)sizeof(rback) &&
+		  memcmp(rback, big, sizeof(big)) == 0,
+		  "async: the data landed");
+
+	g_Uart.printf("async   : %lu steps, write evt %lu erase evt %lu err %lu\r\n",
+				  (unsigned long)steps, (unsigned long)s_EvtWrite,
+				  (unsigned long)s_EvtErase, (unsigned long)s_EvtError);
+
+	// This block filled the scratch, and the cycle that follows expects it
+	// erased: programming only clears bits, so writing a slot twice without an
+	// erase in between reads back wrong.
+	if (Mem.EraseSize() != 0)
+	{
+		Check(DemoErase(Mem, 0, scratch) == 0, "async: scratch left erased");
+	}
+#endif
 
 #if NVM_DEMO_MEDIUM == 0
 	NvmIntrfStat_t st;
@@ -516,6 +659,11 @@ static bool NvmDemoSetup(void)
 		return false;
 	}
 
+#if NVM_DEMO_ASYNC
+	cfg.bIntEn = true;
+	cfg.EvtHandler = NvmDemoEvtHandler;
+#endif
+
 	if (s_Nvm.Init(cfg, &s_MemIntrf, s_RegionAddr, regionsize) == false)
 	{
 		g_Uart.printf("Nvm init failed\r\n");
@@ -566,6 +714,129 @@ const BtAppCfg_t s_BtAppCfg = {
 	.TxPower = 0,
 };
 
+static void NvmCycleHandler(uint32_t Evt, void *pCtx);
+static void NvmCycleReport(void);
+
+// One slot: erase and wrap when the scratch is full, then write and read back.
+// Shared by both modes so the work being measured is the same.
+static void NvmCycleSlot(void)
+{
+	uint32_t page = UnitSize(s_Nvm);
+
+	if (s_Slot >= NVM_DEMO_SLOTS)
+	{
+		// A rewrite in place medium wraps by overwriting.
+		if (s_Nvm.EraseSize() != 0 && DemoErase(s_Nvm, 0, page) != 0)
+		{
+			s_Fail++;
+		}
+		s_Slot = 0;
+	}
+
+	uint32_t off = s_Slot * 4;
+	uint32_t val = NVM_DEMO_MAGIC ^ s_Writes;
+	uint32_t rd = 0;
+
+	if (DemoWrite(s_Nvm, off, &val, 4) != 4 ||
+		s_Nvm.Read(off, &rd, 4) != 4 || rd != val)
+	{
+		s_Fail++;
+	}
+
+	s_Slot++;
+	s_Writes++;
+}
+
+#if NVM_DEMO_ASYNC
+
+// The async cycle never waits. It starts one operation and returns, and while
+// the memory is still working it puts itself back on the queue, so the loop
+// keeps running and the stack keeps its turn. This is the shape a stack event
+// handler needs: start the write, leave, finish it later.
+//
+// It cannot use NvmCycleSlot: that one drains each write so the checks can
+// read it back, which would leave nothing in flight and nothing to requeue
+// for. The readback happens on the next visit instead, once the memory is
+// idle.
+static uint32_t s_Pending;
+static uint32_t s_Requeues;
+static uint32_t s_PendOff;
+static uint32_t s_PendVal;
+static bool s_PendCheck;
+
+static void NvmCyclePump(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	if (s_Nvm.IsBusy())
+	{
+		s_Requeues++;
+		AppEvtHandlerQue(0, NULL, NvmCyclePump);
+
+		return;
+	}
+
+	// The memory is idle, so whatever was started has finished.
+	if (s_PendCheck)
+	{
+		uint32_t rd = 0;
+
+		if (s_Nvm.Sync() != 0 ||
+			s_Nvm.Read(s_PendOff, &rd, 4) != 4 || rd != s_PendVal)
+		{
+			s_Fail++;
+		}
+
+		s_PendCheck = false;
+	}
+
+	if (s_Pending == 0)
+	{
+		s_Cycles++;
+
+		NvmCycleReport();
+
+		return;
+	}
+
+	s_Pending--;
+
+	if (s_Slot >= NVM_DEMO_SLOTS)
+	{
+		// A rewrite in place medium wraps by overwriting.
+		if (s_Nvm.EraseSize() != 0 && s_Nvm.Erase(0, UnitSize(s_Nvm)) != 0)
+		{
+			s_Fail++;
+		}
+		s_Slot = 0;
+
+		// The erase was started, not finished. Come back for it.
+		AppEvtHandlerQue(0, NULL, NvmCyclePump);
+
+		return;
+	}
+
+	s_PendOff = s_Slot * 4;
+	s_PendVal = NVM_DEMO_MAGIC ^ s_Writes;
+
+	if (s_Nvm.Write(s_PendOff, &s_PendVal, 4) != 4)
+	{
+		s_Fail++;
+	}
+	else
+	{
+		s_PendCheck = true;
+	}
+
+	s_Slot++;
+	s_Writes++;
+
+	AppEvtHandlerQue(0, NULL, NvmCyclePump);
+}
+
+#endif
+
 // Runs from the BtAppRun loop, so blocking here is safe while advertising
 // continues.
 static void NvmCycleHandler(uint32_t Evt, void *pCtx)
@@ -578,36 +849,30 @@ static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 		return;
 	}
 
-	uint32_t page = UnitSize(s_Nvm);
+#if NVM_DEMO_ASYNC
+	if (s_Pending > 0 || s_Nvm.IsBusy())
+	{
+		// The previous cycle has not finished; skip rather than pile up.
+		return;
+	}
 
+	s_Pending = NVM_DEMO_WRITES_PER_CYCLE;
+	AppEvtHandlerQue(0, NULL, NvmCyclePump);
+#else
 	for (int i = 0; i < NVM_DEMO_WRITES_PER_CYCLE; i++)
 	{
-		if (s_Slot >= NVM_DEMO_SLOTS)
-		{
-			// A rewrite in place medium wraps by overwriting.
-			if (s_Nvm.EraseSize() != 0 && s_Nvm.Erase(0, page) != 0)
-			{
-				s_Fail++;
-			}
-			s_Slot = 0;
-		}
-
-		uint32_t off = s_Slot * 4;
-		uint32_t val = NVM_DEMO_MAGIC ^ s_Writes;
-		uint32_t rd = 0;
-
-		if (s_Nvm.Write(off, &val, 4) != 4 ||
-			s_Nvm.Read(off, &rd, 4) != 4 || rd != val)
-		{
-			s_Fail++;
-		}
-
-		s_Slot++;
-		s_Writes++;
+		NvmCycleSlot();
 	}
 
 	s_Cycles++;
 
+	NvmCycleReport();
+#endif
+}
+
+// Every fifth cycle, so the line does not drown the rest.
+static void NvmCycleReport(void)
+{
 	if ((s_Cycles % 5) == 0)
 	{
 #if NVM_DEMO_MEDIUM == 0
@@ -616,6 +881,13 @@ static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 
 		// With the radio up, direct is the count that must stay still: it
 		// means the controller was driven while the stack owned the memory.
+#if NVM_DEMO_ASYNC
+		// requeues is the point of the mode: that many times the cycle left
+		// the loop instead of waiting for the memory.
+		g_Uart.printf("async requeues %lu | write evt %lu erase evt %lu err %lu\r\n",
+					  (unsigned long)s_Requeues, (unsigned long)s_EvtWrite,
+					  (unsigned long)s_EvtErase, (unsigned long)s_EvtError);
+#endif
 		g_Uart.printf("cycles %lu writes %lu fails %lu | ops %lu busy %lu evt %lu"
 					  " | sd %lu slot %lu direct %lu\r\n",
 					  (unsigned long)s_Cycles, (unsigned long)s_Writes,

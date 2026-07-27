@@ -72,11 +72,6 @@ int BtPdsMpslRun(BtPdsMpslOp_t *pOp);
 // the first BtPdsMpslRun, typically from the target implementation's init.
 int BtPdsMpslInit(void);
 
-// Per-target NVM implementation init. Brings up the timeslot session and mounts the
-// bt_pds store over the target medium (NVMC on nRF52, RRAMC on nRF54L). One
-// implementation is linked per build; all expose this same name.
-int BtPdsSdcNvmInit(void);
-
 // SDC bond persistence init. Called internally by the SDC app init when a
 // secure SecType is configured (not by the application). Initializes the NVM
 // implementation, loads stored bonds into the SMP bond table, and pulls in the strong
