@@ -29,7 +29,13 @@ GROUP(-lgcc -lc)
 
 MEMORY
 {
-	FLASH (rx)  : ORIGIN = 0x000000, LENGTH = 0x158800  /* slot0 only, before storage partition */
+	FLASH (rx)  : ORIGIN = 0x000000, LENGTH = 0x158800  /* slot0 only, stops at the store */
+	/* The two storage partitions above, named so the linker owns the
+	   layout: FLASH stops short of them, so an image that grows into a
+	   store fails to link. NvmRegionAddr reads the sections below, so
+	   nothing states the addresses twice. 1 KB RRAM sectors. */
+	NVM0  (rw)  : ORIGIN = 0x158800, LENGTH = 0x1000    /* peer manager */
+	NVM1  (rw)  : ORIGIN = 0x159800, LENGTH = 0x1000    /* application */
 	RAM   (rwx) : ORIGIN = 0x20004900, LENGTH = 0x3B700   /* after S145 reserved (0x4780), spans RAM0+RAM1 */
 }
 
@@ -69,6 +75,33 @@ SECTIONS
 		__stop_nrf_sdh_state_evt_observers = .;
 	} > FLASH
 } INSERT AFTER .rodata;
+
+/* === The storage regions ===
+ *
+ * Same shape as the observer sections above: the bounds arrive as
+ * __start_ and __stop_ symbols, so the size is the distance between them
+ * and the length is stated once, in the MEMORY line. NOLOAD because
+ * nothing is programmed here at flash time; a store writes it at run
+ * time. KEEP lets a variable be placed in one if anything ever wants to.
+ */
+SECTIONS
+{
+	nvm0 (NOLOAD) :
+	{
+		__start_nvm0 = .;
+		KEEP(*(nvm0))
+		. = ORIGIN(NVM0) + LENGTH(NVM0);
+		__stop_nvm0 = .;
+	} > NVM0
+
+	nvm1 (NOLOAD) :
+	{
+		__start_nvm1 = .;
+		KEEP(*(nvm1))
+		. = ORIGIN(NVM1) + LENGTH(NVM1);
+		__stop_nvm1 = .;
+	} > NVM1
+}
 
 /* === RAM observer section ===
  *

@@ -90,6 +90,7 @@ SOFTWARE.
 
 #if NVM_DEMO_MEDIUM == 0
 #include "storage/nvm_intrf.h"
+#include "storage/nvm_region.h"
 #elif NVM_DEMO_MEDIUM == 1
 #include "coredev/spi.h"
 #include "storage/flash.h"		// for the FLASH_CMD_READ/WRITE opcodes
@@ -639,6 +640,25 @@ static bool NvmDemoSetup(void)
 	g_Uart.printf("mode    : %s\r\n",
 				  NVM_DEMO_ASYNC ? "interrupt, IsBusy drives the operation"
 								 : "polling, the call finishes the operation");
+
+	// What the linker script set aside, if anything. The demo carves its own
+	// scratch out of the top of the application area, so it does not use this,
+	// but a store that does needs to see the numbers arrive.
+	for (int i = 0; i < NVM_REGION_MAX; i++)
+	{
+		uintptr_t ra = NvmRegionAddr(i);
+		size_t rs = NvmRegionSize(i);
+
+		if (ra == 0 && rs == 0)
+		{
+			g_Uart.printf("linker  : NVM%d not declared\r\n", i);
+		}
+		else
+		{
+			g_Uart.printf("linker  : NVM%d at %08lX size %08lX\r\n", i,
+						  (unsigned long)ra, (unsigned long)rs);
+		}
+	}
 
 	uint64_t below = (uint64_t)unit * (NVM_DEMO_TOP_RESERVE_PAGES
 									   + NVM_DEMO_REGION_PAGES);

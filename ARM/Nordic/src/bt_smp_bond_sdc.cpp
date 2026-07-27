@@ -39,6 +39,7 @@
 #include "bluetooth/bt_pds.h"
 #include "storage/nvm.h"
 #include "storage/nvm_intrf.h"
+#include "storage/nvm_region.h"
 #include "app_evt_handler.h"
 #include "bt_pds_sdc.h"				// declares BtSmpBondSdcInit with C linkage
 
@@ -67,40 +68,10 @@ static bool s_PdsReady;
 // first time BtSmpInit loads bonds.
 static bool s_PdsArmed;
 
-// Where the bonds live. The only thing that is genuinely per part: the page
-// size, the write unit and the sector size all come off the memory. Moving a
-// region strands the bonds already written to the old one, so these are the
-// addresses the earlier per target code used.
-#if defined(NRF52_SERIES)
-
-// 4 KB pages, two of them: one usable and one compaction spare. The base sits
-// just below the bootloader settings page and must be page aligned. The app
-// linker FLASH region has to be reduced so it does not overlap.
-#ifndef BT_SMP_BOND_REGION_ADDR
-#if defined(NRF52832_XXAA) || defined(NRF52832_XXAB)
-	// 512 KB part. Store 0x7D000..0x7EFFF, bootloader 0x7F000.
-	#define BT_SMP_BOND_REGION_ADDR		0x0007D000UL
-#else
-	// 1 MB part. Store 0xFD000..0xFEFFF, MBR params 0xFF000.
-	#define BT_SMP_BOND_REGION_ADDR		0x000FD000UL
-#endif
-#endif
-
-#ifndef BT_SMP_BOND_REGION_SIZE
-#define BT_SMP_BOND_REGION_SIZE		0x00002000UL
-#endif
-
-#else	// nRF54L
-
-// 1 KB sectors, four of them.
-#ifndef BT_SMP_BOND_REGION_ADDR
-#define BT_SMP_BOND_REGION_ADDR		0x00158800UL
-#endif
-
-#ifndef BT_SMP_BOND_REGION_SIZE
-#define BT_SMP_BOND_REGION_SIZE		0x00001000UL
-#endif
-
+// Which linker declared region the bonds live in. A project that wants them
+// somewhere else moves the region in its linker script, not here.
+#ifndef BT_SMP_BOND_REGION_NO
+#define BT_SMP_BOND_REGION_NO		0
 #endif
 
 static NvmIntrf s_BondIntrf;
@@ -129,20 +100,40 @@ static int PdsEnsureReady(void)
 		return -EIO;
 	}
 
+	// The region the linker set aside is the device: base and size come from
+	// it, and the geometry from the part. Nothing here states an address, so
+	// there is nothing to keep in sync with the linker script.
+	uintptr_t base = NvmRegionAddr(BT_SMP_BOND_REGION_NO);
+	size_t size = NvmRegionSize(BT_SMP_BOND_REGION_NO);
+
+	BOND_PRINTF("PDS: linker NVM%d at %08lX size %08lX\r\n",
+				BT_SMP_BOND_REGION_NO, (unsigned long)base,
+				(unsigned long)size);
+
+	if (base == 0 || size == 0)
+	{
+		BOND_PRINTF("PDS: no NVM%d region in the linker script, "
+					"bonds will not persist\r\n", BT_SMP_BOND_REGION_NO);
+		return -ENODEV;
+	}
+
 	NvmCfg_t cfg;
 	memset(&cfg, 0, sizeof(cfg));
 	NvmIntrfCfg(cfg);
+
+	cfg.BaseAddr = base;
+	cfg.TotalSize = size;
 
 	BOND_PRINTF("PDS: dev %lu bytes, erase %lu, sect %lu, page %lu, wr %lu, addr %lu\r\n",
 				(unsigned long)cfg.TotalSize, (unsigned long)cfg.EraseSize,
 				(unsigned long)cfg.SectorSize, (unsigned long)cfg.PageSize,
 				(unsigned long)cfg.WriteGran, (unsigned long)cfg.AddrSize);
-	BOND_PRINTF("PDS: region %08lX size %08lX\r\n",
-				(unsigned long)BT_SMP_BOND_REGION_ADDR,
-				(unsigned long)BT_SMP_BOND_REGION_SIZE);
+	BOND_PRINTF("PDS: region NVM%d at %08lX size %08lX\r\n",
+				BT_SMP_BOND_REGION_NO, (unsigned long)base,
+				(unsigned long)size);
 
-	if (s_BondMem.Init(cfg, &s_BondIntrf, BT_SMP_BOND_REGION_ADDR,
-					   BT_SMP_BOND_REGION_SIZE) == false)
+	// The region is the whole of this device, so no window inside it.
+	if (s_BondMem.Init(cfg, &s_BondIntrf, 0, 0) == false)
 	{
 		BOND_PRINTF("PDS: Nvm init failed\r\n");
 		return -EIO;
