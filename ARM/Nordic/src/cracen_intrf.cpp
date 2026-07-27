@@ -81,32 +81,39 @@ SOFTWARE.
 // No module selected yet; an interface Reset in this state resets the core.
 #define CRACEN_ADDR_NONE		0xFFFFFFFFU
 
+//---------------------------------------------------------------------------
+// Per die state. There is one CRACEN core, so these describe the hardware
+// rather than a transaction: where its engines sit, and whether the DRBG has
+// been started.
+//---------------------------------------------------------------------------
 static volatile uint8_t *s_pPkeRegBase;
 static volatile uint8_t *s_pCmRegBase;
 static volatile uint8_t *s_pMemBase;
-
-static volatile uint8_t *s_pXferBase;
-static bool s_bXferMem;
-static uint32_t s_Offset;
-static bool s_bAddrLatched;
-static bool s_bRngXfer;
 static bool s_bDrbgInit;
-static uint32_t s_SelDevAddr = CRACEN_ADDR_NONE;
 
-
-static void CracenSelectBase(uint32_t DevAddr)
+// Which engine a transfer addresses and where in it are per transaction, so
+// they live in CracenIntrfXfer_t behind pDevData.
+static inline CracenIntrfXfer_t *CracenXfer(DevIntrf_t * const pIntrf)
 {
-	s_SelDevAddr = DevAddr;
-	s_bXferMem = (DevAddr == BA414EP_ADDR_MEM);
-	s_pXferBase = s_bXferMem ? s_pMemBase :
-				  (DevAddr == CRYPTOMASTER_ADDR_REG) ? s_pCmRegBase : s_pPkeRegBase;
+	return (CracenIntrfXfer_t *)pIntrf->pDevData;
+}
+
+static void CracenSelectBase(CracenIntrfXfer_t *pXfer, uint32_t DevAddr)
+{
+	pXfer->SelDevAddr = DevAddr;
+	pXfer->bXferMem = (DevAddr == BA414EP_ADDR_MEM);
+	pXfer->pXferBase = pXfer->bXferMem ? s_pMemBase :
+					   (DevAddr == CRYPTOMASTER_ADDR_REG) ? s_pCmRegBase
+														: s_pPkeRegBase;
 }
 
 static bool CracenStartTx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 {
-	(void)pIntrf;
-	CracenSelectBase(DevAddr);
-	s_bAddrLatched = false;
+	CracenIntrfXfer_t *xfer = CracenXfer(pIntrf);
+
+	CracenSelectBase(xfer, DevAddr);
+	xfer->bAddrLatched = false;
+
 	return true;
 }
 
@@ -123,29 +130,33 @@ static bool CracenSdEnabled(void)
 
 static bool CracenStartRx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 {
-	(void)pIntrf;
+	CracenIntrfXfer_t *xfer = CracenXfer(pIntrf);
+
 	if (DevAddr == CRACEN_ADDR_RNG)
 	{
-		s_SelDevAddr = DevAddr;
-		s_bRngXfer = true;
+		xfer->SelDevAddr = DevAddr;
+		xfer->bRngXfer = true;
+
 		return true;
 	}
 
-	s_bRngXfer = false;
-	CracenSelectBase(DevAddr);
+	xfer->bRngXfer = false;
+	CracenSelectBase(xfer, DevAddr);
+
 	return true;
 }
 
 static int CracenTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int DataLen)
 {
-	(void)pIntrf;
+	CracenIntrfXfer_t *xfer = CracenXfer(pIntrf);
+
 	if (pData == nullptr || DataLen <= 0)
 	{
 		return 0;
 	}
 
 	int consumed = 0;
-	if (!s_bAddrLatched)
+	if (!xfer->bAddrLatched)
 	{
 		int n = (DataLen < 4) ? DataLen : 4;
 		uint32_t off = 0U;
@@ -153,16 +164,16 @@ static int CracenTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int Dat
 		{
 			off |= (uint32_t)pData[i] << (8 * i);
 		}
-		s_Offset = off;
-		s_bAddrLatched = true;
+		xfer->Offset = off;
+		xfer->bAddrLatched = true;
 		consumed = n;
 	}
 
 	int len = DataLen - consumed;
 	const uint8_t *p = &pData[consumed];
-	if (s_bXferMem)
+	if (xfer->bXferMem)
 	{
-		volatile uint8_t *d = s_pXferBase + s_Offset;
+		volatile uint8_t *d = xfer->pXferBase + xfer->Offset;
 		for (int i = 0; i < len; i++)
 		{
 			d[i] = p[i];
@@ -170,7 +181,8 @@ static int CracenTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int Dat
 	}
 	else
 	{
-		volatile uint32_t *w = (volatile uint32_t *)(s_pXferBase + s_Offset);
+		volatile uint32_t *w =
+				(volatile uint32_t *)(xfer->pXferBase + xfer->Offset);
 		for (int i = 0; i + 4 <= len; i += 4)
 		{
 			w[i / 4] = (uint32_t)p[i] | ((uint32_t)p[i + 1] << 8) |
@@ -219,13 +231,14 @@ static int CracenSdRandFill(uint8_t *pBuff, int BuffLen)
 
 static int CracenRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
 {
-	(void)pIntrf;
+	CracenIntrfXfer_t *xfer = CracenXfer(pIntrf);
+
 	if (pBuff == nullptr || BuffLen <= 0)
 	{
 		return 0;
 	}
 
-	if (s_bRngXfer)
+	if (xfer->bRngXfer)
 	{
 		if (CracenSdEnabled())
 		{
@@ -262,14 +275,14 @@ static int CracenRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
 		return filled;
 	}
 
-	if (!s_bAddrLatched)
+	if (!xfer->bAddrLatched)
 	{
 		return 0;
 	}
 
-	if (s_bXferMem)
+	if (xfer->bXferMem)
 	{
-		const volatile uint8_t *d = s_pXferBase + s_Offset;
+		const volatile uint8_t *d = xfer->pXferBase + xfer->Offset;
 		for (int i = 0; i < BuffLen; i++)
 		{
 			pBuff[i] = d[i];
@@ -278,7 +291,7 @@ static int CracenRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
 	else
 	{
 		const volatile uint32_t *w =
-			(const volatile uint32_t *)(s_pXferBase + s_Offset);
+			(const volatile uint32_t *)(xfer->pXferBase + xfer->Offset);
 		for (int i = 0; i + 4 <= BuffLen; i += 4)
 		{
 			uint32_t v = w[i / 4];
@@ -293,19 +306,21 @@ static int CracenRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
 
 static void CracenStopTx(DevIntrf_t * const pIntrf)
 {
-	(void)pIntrf;
-	s_bAddrLatched = false;
+	CracenXfer(pIntrf)->bAddrLatched = false;
 }
 
 static void CracenStopRx(DevIntrf_t * const pIntrf)
 {
-	(void)pIntrf;
-	if (s_bRngXfer)
+	CracenIntrfXfer_t *xfer = CracenXfer(pIntrf);
+
+	if (xfer->bRngXfer)
 	{
-		s_bRngXfer = false;
+		xfer->bRngXfer = false;
+
 		return;
 	}
-	s_bAddrLatched = false;
+
+	xfer->bAddrLatched = false;
 }
 
 // PKE code RAM lives at NRF_CRACENCORE + BA414EP_CODE_OFFSET. The Silex
@@ -387,9 +402,10 @@ static uint32_t CracenSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 // after every reset, so this stays a void interface function.
 static void CracenReset(DevIntrf_t * const pIntrf)
 {
+	CracenIntrfXfer_t *xfer = CracenXfer(pIntrf);
 	uint32_t mask;
 
-	switch (s_SelDevAddr)
+	switch (xfer->SelDevAddr)
 	{
 		case BA414EP_ADDR_REG:
 		case BA414EP_ADDR_MEM:
@@ -418,8 +434,9 @@ static void CracenReset(DevIntrf_t * const pIntrf)
 		}
 	}
 
-	s_bAddrLatched = false;
-	s_bRngXfer = false;
+	xfer->bAddrLatched = false;
+	xfer->bRngXfer = false;
+
 	if ((mask & CRACEN_ENABLE_RNG_Msk) != 0U)
 	{
 		s_bDrbgInit = false;
@@ -463,16 +480,17 @@ bool CracenIntrf::Init(void)
 		return false;
 	}
 
-	s_pXferBase = s_pPkeRegBase;
-	s_bXferMem = false;
-	s_Offset = 0U;
-	s_bAddrLatched = false;
-	s_bRngXfer = false;
 	s_bDrbgInit = false;
-	s_SelDevAddr = CRACEN_ADDR_NONE;
+
+	memset(&vXfer, 0, sizeof(vXfer));
+	vXfer.pXferBase = s_pPkeRegBase;
+	vXfer.SelDevAddr = CRACEN_ADDR_NONE;
 
 	memset(&vDevIntrf, 0, sizeof(vDevIntrf));
-	vDevIntrf.pDevData = this;
+
+	// pDevData is the transaction state, so a transfer callback reaches it
+	// without knowing anything about this class.
+	vDevIntrf.pDevData = &vXfer;
 	vDevIntrf.IntPrio = 0;
 	vDevIntrf.EvtCB = nullptr;
 	vDevIntrf.MaxRetry = 5;
