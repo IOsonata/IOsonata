@@ -80,7 +80,6 @@ SOFTWARE.
 #include "board.h"
 
 #include "storage/nvm.h"
-#include "syslog.h"
 
 // What is underneath: 0 the MCU internal memory, 1 a SPI NOR flash
 // (MX25R3235F), 2 an I2C EEPROM (CAT24C32). Everything below the
@@ -110,15 +109,7 @@ SOFTWARE.
 #else
 #endif
 
-
-// Completion mode. 0 the calls finish in the call, 1 the driver reports
-// through an event and IsBusy/Sync drive the operation. The second is the one
-// a stack sits on top of: a write started from an event handler must not block
-// it, so the operation has to make progress from somewhere else.
-#ifndef NVM_DEMO_ASYNC
-#define NVM_DEMO_ASYNC			1
-#endif
-
+#include "syslog.h"
 
 #ifdef MCU_OSC
 McuOsc_t g_McuOsc = MCU_OSC;
@@ -249,6 +240,14 @@ static const NvmCfg_t s_ChipCfg = {
 	.WriteDelayUs = 5000,			// Twr
 };
 
+#endif
+
+// Completion mode. 0 the calls finish in the call, 1 the driver reports
+// through an event and IsBusy/Sync drive the operation. The second is the one
+// a stack sits on top of: a write started from an event handler must not block
+// it, so the operation has to make progress from somewhere else.
+#ifndef NVM_DEMO_ASYNC
+#define NVM_DEMO_ASYNC			0
 #endif
 
 static Nvm s_Nvm;
@@ -633,6 +632,12 @@ static bool NvmDemoSetup(void)
 
 	g_Uart.printf("device  : %lu bytes, unit %lu\r\n",
 				  (unsigned long)cfg.TotalSize, (unsigned long)unit);
+
+	// Which completion mode was built, so a log says it rather than the reader
+	// working it out from what is missing.
+	g_Uart.printf("mode    : %s\r\n",
+				  NVM_DEMO_ASYNC ? "interrupt, IsBusy drives the operation"
+								 : "polling, the call finishes the operation");
 
 	uint64_t below = (uint64_t)unit * (NVM_DEMO_TOP_RESERVE_PAGES
 									   + NVM_DEMO_REGION_PAGES);

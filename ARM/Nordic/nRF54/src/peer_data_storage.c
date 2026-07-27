@@ -14,18 +14,45 @@
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/__assert.h>
 #include <bm/bluetooth/peer_manager/peer_manager_types.h>
+
+#include "app_evt_handler.h"
 #include <modules/peer_manager_internal.h>
 #include <modules/peer_id.h>
 #include <modules/peer_data_storage.h>
 
-// IOsonata persistent data store replaces the bm_zms filesystem. The store
-// owns its region constants in its platform backend (BtPdsBmInit), so no
-// devicetree partition macros are needed here.
+// IOsonata persistent data store replaces the bm_zms filesystem. The region
+// is set where the memory is brought up, so no devicetree partition macros
+// are needed here.
 #include "bluetooth/bt_pds.h"
 
-// Platform backend init (e.g. BtPdsBmInit for the bm RRAM backend). Declared
-// here; defined by the target's bt_pds_nvm_*.c.
+// Mounts the store on an Nvm. C entry point defined in bt_sec_bm.cpp, because
+// Nvm is a C++ class and this is C.
 extern int BtPdsBmInit(void);
+
+/* A store or a delete arrives from inside the peer manager's BLE event
+ * dispatch. The memory is arbitrated with an MPSL timeslot, and the wait for
+ * that timeslot cannot make progress from the context the dispatch runs in, so
+ * writing there ends the slot abnormally. The work is queued and runs from the
+ * application event handler instead.
+ *
+ * This is also what the API already says happens: a store is asynchronous and
+ * the caller expects PM_EVT_PEER_DATA_UPDATE_SUCCEEDED or _FAILED to follow.
+ * Sending the success event inline, as this used to, reported a write that had
+ * not happened yet.
+ */
+#define PDS_QUE_DEPTH			4
+
+struct pds_pending {
+	bool				busy;
+	bool				is_delete;
+	uint16_t			peer_id;
+	enum pm_peer_data_id	data_id;
+	uint32_t		entry_id;
+	uint32_t		length;
+	uint8_t			data[BT_PDS_RECORD_DATA_MAX];
+};
+
+static struct pds_pending pds_que[PDS_QUE_DEPTH];
 
 LOG_MODULE_DECLARE(peer_manager, CONFIG_PEER_MANAGER_LOG_LEVEL);
 
@@ -293,47 +320,133 @@ uint32_t pds_peer_data_read(uint16_t peer_id, enum pm_peer_data_id data_id,
 	return NRF_SUCCESS;
 }
 
+/* Report one queued operation, then release its slot. */
+static void pds_pending_report(struct pds_pending *p, bool ok)
+{
+	struct pm_evt evt = {
+		.peer_id = p->peer_id,
+	};
+
+	if (ok) {
+		evt.evt_id = PM_EVT_PEER_DATA_UPDATE_SUCCEEDED;
+		evt.peer_data_update_succeeded.data_id = p->data_id;
+		evt.peer_data_update_succeeded.action =
+			p->is_delete ? PM_PEER_DATA_OP_DELETE : PM_PEER_DATA_OP_UPDATE;
+		evt.peer_data_update_succeeded.token = p->entry_id;
+		evt.peer_data_update_succeeded.flash_changed = true;
+	} else {
+		evt.evt_id = PM_EVT_PEER_DATA_UPDATE_FAILED;
+		evt.peer_data_update_failed.data_id = p->data_id;
+		evt.peer_data_update_failed.action =
+			p->is_delete ? PM_PEER_DATA_OP_DELETE : PM_PEER_DATA_OP_UPDATE;
+		evt.peer_data_update_failed.token = p->entry_id;
+		evt.peer_data_update_failed.error = NRF_ERROR_INTERNAL;
+	}
+
+	p->busy = false;
+
+	pds_evt_send(&evt);
+}
+
+/* Runs from the application event handler, out of the BLE event dispatch. */
+static void pds_work_handler(uint32_t evt, void *ctx)
+{
+	struct pds_pending *p = (struct pds_pending *)ctx;
+
+	(void)evt;
+
+	if (p == NULL || !p->busy) {
+		return;
+	}
+
+	if (p->is_delete) {
+		int err = BtPdsDelete(p->entry_id);
+
+		if (err < 0) {
+			LOG_ERR("Could not delete peer data. BtPdsDelete() returned %d. "
+				"peer_id: %d", err, p->peer_id);
+			pds_pending_report(p, false);
+			return;
+		}
+
+		/* A whole peer delete reports once for the peer, not per entry. */
+		if (peer_id_is_deleted(p->peer_id)) {
+			p->busy = false;
+			return;
+		}
+
+		pds_pending_report(p, true);
+
+		return;
+	}
+
+	ssize_t ret = BtPdsWrite(p->entry_id, p->data, p->length);
+
+	if (ret < 0) {
+		LOG_ERR("Could not write data to NVM. BtPdsWrite() returned %d. "
+			"peer_id: %d", (int)ret, p->peer_id);
+		pds_pending_report(p, false);
+
+		return;
+	}
+
+	pds_pending_report(p, true);
+}
+
+/* Claim a free slot, or NULL when every one is still in flight. */
+static struct pds_pending *pds_pending_claim(void)
+{
+	for (uint32_t i = 0; i < PDS_QUE_DEPTH; i++) {
+		if (!pds_que[i].busy) {
+			pds_que[i].busy = true;
+
+			return &pds_que[i];
+		}
+	}
+
+	return NULL;
+}
+
 uint32_t pds_peer_data_store(uint16_t peer_id, const struct pm_peer_data_const *peer_data,
 			     uint32_t *store_token)
 {
-	ssize_t ret;
-
 	__ASSERT_NO_MSG(module_initialized);
 	__ASSERT_NO_MSG(peer_data != NULL);
 
 	if (peer_id >= PM_PEER_ID_N_AVAILABLE_IDS || !peer_data_id_is_valid(peer_data->data_id)) {
 		return NRF_ERROR_INVALID_PARAM;
 	}
+	if (peer_data->length > sizeof(pds_que[0].data)) {
+		LOG_ERR("Peer data %u exceeds BT_PDS_RECORD_DATA_MAX %u. peer_id: %d",
+			(unsigned)peer_data->length,
+			(unsigned)sizeof(pds_que[0].data), peer_id);
+		return NRF_ERROR_DATA_SIZE;
+	}
+
+	struct pds_pending *p = pds_pending_claim();
+
+	if (p == NULL) {
+		return NRF_ERROR_BUSY;
+	}
 
 	uint32_t entry_id = peer_id_peer_data_id_to_entry_id(peer_id, peer_data->data_id);
 
-	ret = BtPdsWrite(entry_id, peer_data->all_data, peer_data->length);
-	if (ret < 0) {
-		LOG_ERR("Could not write data to NVM. BtPdsWrite() returned %d. "
-			"peer_id: %d",
-			ret, peer_id);
-		return NRF_ERROR_INTERNAL;
+	/* The caller's buffer does not outlive this call. */
+	memcpy(p->data, peer_data->all_data, peer_data->length);
+	p->length = peer_data->length;
+	p->is_delete = false;
+	p->peer_id = peer_id;
+	p->data_id = peer_data->data_id;
+	p->entry_id = entry_id;
+
+	if (!AppEvtHandlerQue(0, p, pds_work_handler)) {
+		p->busy = false;
+
+		return NRF_ERROR_BUSY;
 	}
 
 	if (store_token != NULL) {
-		/* Update the store token. */
 		*store_token = entry_id;
-	}
-
-	/* The store is synchronous: the write is committed now, so emit the
-	 * peer-manager completion event inline (the old bm_zms path delivered this
-	 * asynchronously through bm_zms_evt_handler).
-	 */
-	{
-		struct pm_evt pds_evt = {
-			.evt_id = PM_EVT_PEER_DATA_UPDATE_SUCCEEDED,
-			.peer_id = peer_id,
-		};
-		pds_evt.peer_data_update_succeeded.data_id = peer_data->data_id;
-		pds_evt.peer_data_update_succeeded.action = PM_PEER_DATA_OP_UPDATE;
-		pds_evt.peer_data_update_succeeded.token = entry_id;
-		pds_evt.peer_data_update_succeeded.flash_changed = true;
-		pds_evt_send(&pds_evt);
 	}
 
 	return NRF_SUCCESS;
@@ -341,38 +454,28 @@ uint32_t pds_peer_data_store(uint16_t peer_id, const struct pm_peer_data_const *
 
 uint32_t pds_peer_data_delete(uint16_t peer_id, enum pm_peer_data_id data_id)
 {
-	int err;
-
 	__ASSERT_NO_MSG(module_initialized);
 
 	if (peer_id >= PM_PEER_ID_N_AVAILABLE_IDS || !peer_data_id_is_valid(data_id)) {
 		return NRF_ERROR_INVALID_PARAM;
 	}
 
-	uint32_t entry_id = peer_id_peer_data_id_to_entry_id(peer_id, data_id);
+	struct pds_pending *p = pds_pending_claim();
 
-	err = BtPdsDelete(entry_id);
-	if (err) {
-		LOG_ERR("Could not delete peer data. BtPdsDelete() returned %d. peer_id: %d, "
-			"data_id: %d.",
-			err, peer_id, data_id);
-		return NRF_ERROR_INTERNAL;
+	if (p == NULL) {
+		return NRF_ERROR_BUSY;
 	}
 
-	/* Synchronous store: emit the completion event inline. Mirror the old
-	 * bm_zms_evt_handler DELETE branch, which suppressed the per-entry event
-	 * while a whole-peer delete is in progress (peer_id_is_deleted).
-	 */
-	if (!peer_id_is_deleted(peer_id)) {
-		struct pm_evt pds_evt = {
-			.evt_id = PM_EVT_PEER_DATA_UPDATE_SUCCEEDED,
-			.peer_id = peer_id,
-		};
-		pds_evt.peer_data_update_succeeded.data_id = data_id;
-		pds_evt.peer_data_update_succeeded.action = PM_PEER_DATA_OP_DELETE;
-		pds_evt.peer_data_update_succeeded.token = entry_id;
-		pds_evt.peer_data_update_succeeded.flash_changed = true;
-		pds_evt_send(&pds_evt);
+	p->is_delete = true;
+	p->peer_id = peer_id;
+	p->data_id = data_id;
+	p->entry_id = peer_id_peer_data_id_to_entry_id(peer_id, data_id);
+	p->length = 0;
+
+	if (!AppEvtHandlerQue(0, p, pds_work_handler)) {
+		p->busy = false;
+
+		return NRF_ERROR_BUSY;
 	}
 
 	return NRF_SUCCESS;

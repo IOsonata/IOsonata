@@ -84,6 +84,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
+#include <errno.h>
 
 #include <nrf_error.h>
 #include <ble.h>
@@ -92,6 +93,11 @@ SOFTWARE.
 #include <ble_hci.h>
 
 #include <zephyr/logging/log.h>
+
+#include "storage/nvm.h"
+#include "storage/nvm_intrf.h"
+#include "bluetooth/bt_pds.h"
+#include "bt_pds_sdc.h"				// BtPdsMpslInit, the timeslot session
 
 #include <bm/softdevice_handler/nrf_sdh_ble.h>
 #include <bm/bluetooth/peer_manager/peer_manager_types.h>
@@ -1057,9 +1063,74 @@ static void PendingPumpsRun(void)
 	}
 }
 
+// ---- The bond store ---------------------------------------------------------
+
+// Where the peer data lives. The only thing that is genuinely per part: the
+// sector size, the write unit and the device size all come off the memory.
+// Moving a region strands the peer data already written to the old one, so
+// this is the address the earlier per target file used.
+#ifndef BT_SEC_BM_REGION_ADDR
+#define BT_SEC_BM_REGION_ADDR		0x00158800UL
+#endif
+
+#ifndef BT_SEC_BM_REGION_SIZE
+#define BT_SEC_BM_REGION_SIZE		0x00001000UL
+#endif
+
+static NvmIntrf s_PdsIntrf;
+static Nvm s_PdsMem;
+static bool s_bPdsMounted = false;
+
 // ---- sm_* API surface (called by peer_manager.c) ----------------------------
 
 extern "C" {
+
+// Bring up the memory and mount the store on it. peer_data_storage.c calls
+// this from pds_init; it is C, and Nvm is a C++ class, so the construction
+// lives here and it gets a C entry point. Safe to call more than once.
+int BtPdsBmInit(void)
+{
+	if (s_bPdsMounted)
+	{
+		return 0;
+	}
+
+	// The implementation delivers completions on its own, so the wait needs
+	// no help; NULL spends it in a short delay.
+	NvmIntrfSetWait(NULL, 5000);
+
+	// The memory is arbitrated against the radio through timeslots.
+	int r = BtPdsMpslInit();
+	if (r != 0)
+	{
+		return r;
+	}
+
+	if (s_PdsIntrf.Init() == false)
+	{
+		return -EIO;
+	}
+
+	NvmCfg_t cfg;
+	memset(&cfg, 0, sizeof(cfg));
+	NvmIntrfCfg(cfg);
+
+	if (s_PdsMem.Init(cfg, &s_PdsIntrf, BT_SEC_BM_REGION_ADDR,
+					  BT_SEC_BM_REGION_SIZE) == false)
+	{
+		return -EIO;
+	}
+
+	r = BtPdsInit(&s_PdsMem);
+	if (r != 0)
+	{
+		return r;
+	}
+
+	s_bPdsMounted = true;
+
+	return 0;
+}
 
 // pm_init calls smd_init right after sm_init. Everything the dispatcher
 // initialized lives in this module and is set up in sm_init, so this only

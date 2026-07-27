@@ -1631,16 +1631,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_pds.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_pds_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_pds_sdc.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_pds_sdc_nrf52.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/bt_pds_sdc_nrf52.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_peer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_peer.cpp</locationURI>
