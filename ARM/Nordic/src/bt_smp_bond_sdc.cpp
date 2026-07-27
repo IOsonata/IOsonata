@@ -40,6 +40,7 @@
 #include "storage/nvm.h"
 #include "storage/nvm_intrf.h"
 #include "app_evt_handler.h"
+#include "bt_pds_sdc.h"				// declares BtSmpBondSdcInit with C linkage
 
 // Comment out to silence. Deliberately not guarded on NDEBUG: the release
 // build is where the store has to be watched, and a silent mount failure is

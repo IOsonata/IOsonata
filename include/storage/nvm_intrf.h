@@ -104,6 +104,28 @@ typedef struct __Nvm_Intrf_Stat {
 	uint32_t	Direct;		//!< Drove the controller, the memory was ours
 } NvmIntrfStat_t;
 
+/// Command byte plus a 32 bit address. The frame the driver puts in front of
+/// a transfer, the way FlashEraseSector does.
+#define NVM_INTRF_FRAME_SIZE		5
+
+/// Largest payload one transfer stages. The driver splits at the page size it
+/// was configured with, which no target sets above this.
+#ifndef NVM_INTRF_XFER_SIZE
+#define NVM_INTRF_XFER_SIZE			64
+#endif
+
+/// One transaction's worth of state. It belongs to the instance, not to the
+/// file, the same way nRFSpiDev_t holds a transfer's buffer and index, and it
+/// is what pDevData points at.
+typedef struct __Nvm_Intrf_Xfer {
+	uint8_t		Hdr[NVM_INTRF_FRAME_SIZE];	//!< Command and address frame
+	int			HdrLen;						//!< Frame bytes taken so far
+	int			DataLen;					//!< Payload bytes staged
+	bool volatile bAsyncPending;			//!< A submit is owed a completion
+	DevIntrf_t	*pDevIntrf;					//!< The interface it belongs to
+	alignas(4) uint8_t Data[NVM_INTRF_XFER_SIZE];	//!< Staged payload
+} NvmIntrfXfer_t;
+
 /// @brief	The MCU memory controller as a device interface.
 class NvmIntrf : public DeviceIntrf {
 public:
@@ -131,7 +153,8 @@ public:
 	void StopTx(void) override { DeviceIntrfStopTx(&vDevIntrf); }
 
 protected:
-	DevIntrf_t vDevIntrf;
+	DevIntrf_t		vDevIntrf;
+	NvmIntrfXfer_t	vXfer;
 };
 
 /**

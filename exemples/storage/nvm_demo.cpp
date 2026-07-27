@@ -276,15 +276,15 @@ static void NvmDemoEvtHandler(Nvm *pMem, NVM_EVT Evt, uint64_t Off,
 	switch (Evt)
 	{
 		case NVM_EVT_WRITE_DONE:
-			s_EvtWrite++;
+			s_EvtWrite = s_EvtWrite + 1;
 			break;
 
 		case NVM_EVT_ERASE_DONE:
-			s_EvtErase++;
+			s_EvtErase = s_EvtErase + 1;
 			break;
 
 		case NVM_EVT_ERROR:
-			s_EvtError++;
+			s_EvtError = s_EvtError + 1;
 			break;
 
 		default:

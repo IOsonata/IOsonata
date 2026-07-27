@@ -430,6 +430,17 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		return false;
 	}
 
+	// The radio is about to run, so the memory controller stops being ours
+	// alone. Offer the timeslot session as its arbiter; without this a write
+	// would go straight at the controller while the link is live.
+	int arb = MpslNvmArbiterStart();
+	if (arb != 0)
+	{
+		DEBUG_PRINTF("MpslNvmArbiterStart failed %d\r\n", arb);
+
+		return false;
+	}
+
 	// Enable BLE stack.
 
 	DEBUG_PRINTF("sdc_enable\r\n");

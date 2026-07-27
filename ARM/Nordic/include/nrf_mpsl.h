@@ -43,6 +43,30 @@ extern "C" {
 
 bool MpslInit(void);
 
+/**
+ * @brief	Open the timeslot session and offer it as the memory arbiter.
+ *
+ * The memory controller is shared with the radio, and only MPSL knows when a
+ * window is free. This opens a timeslot session and registers it with the
+ * memory interface, so a write or an erase runs inside a granted window
+ * instead of behind the stack's back.
+ *
+ * Called once the radio is up, from whoever brought MPSL up. Until it is,
+ * the memory interface drives the controller directly, which is correct only
+ * while no radio is running.
+ *
+ * @return	0 on success, negative errno on failure.
+ */
+int MpslNvmArbiterStart(void);
+
+/**
+ * @brief	Stop arbitrating and close the session.
+ *
+ * After this the memory interface goes back to driving the controller
+ * directly, so it must not be called while the radio is running.
+ */
+void MpslNvmArbiterStop(void);
+
 #ifdef __cplusplus
 }
 #endif
