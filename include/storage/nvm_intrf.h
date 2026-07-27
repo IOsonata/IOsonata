@@ -82,10 +82,25 @@ typedef struct __Nvm_Intrf_Op {
 	uint32_t (*Step)(void *pCtx);	//!< One unit. 0 when done, else usec left
 	uint32_t	StepBudgetUs;		//!< Worst case for one Step, sizes the window
 	void		*pCtx;				//!< Passed back to Step
+
+	/// Where to report the result, or NULL to have the arbiter wait for it
+	/// and return it instead. Set it and the arbiter submits and returns, so
+	/// the caller is not held while the memory works. It is called from
+	/// wherever the arbiter finishes, which for a radio timeslot is a high
+	/// priority interrupt: do nothing there but hand the result over.
+	///
+	/// The operation and its context outlive the call in that case, so
+	/// neither may be a local.
+	void (*Done)(void *pCtx, int Res);
 } NvmIntrfOp_t;
 
-/// Runs an operation where the memory is safe to touch. Returns 0 when the
-/// operation was started or completed, negative errno when it could not be.
+/// The arbiter answers this when the operation is under way and Done will
+/// report it. Positive, so a check for a negative errno is unchanged.
+#define NVM_INTRF_OP_STARTED		1
+
+/// Runs an operation where the memory is safe to touch. Returns 0 when it
+/// completed in the call, NVM_INTRF_OP_STARTED when Done will report it, or
+/// a negative errno when it could not be started.
 typedef int (*NvmIntrfArb_t)(NvmIntrfOp_t *pOp);
 
 /// Counts of what the interface did, for a test to show which path ran.
@@ -117,44 +132,82 @@ typedef struct __Nvm_Intrf_Stat {
 /// One transaction's worth of state. It belongs to the instance, not to the
 /// file, the same way nRFSpiDev_t holds a transfer's buffer and index, and it
 /// is what pDevData points at.
-typedef struct __Nvm_Intrf_Xfer {
-	uint8_t		Hdr[NVM_INTRF_FRAME_SIZE];	//!< Command and address frame
-	int			HdrLen;						//!< Frame bytes taken so far
-	int			DataLen;					//!< Payload bytes staged
-	bool volatile bAsyncPending;			//!< A submit is owed a completion
-	DevIntrf_t	*pDevIntrf;					//!< The interface it belongs to
-	alignas(4) uint8_t Data[NVM_INTRF_XFER_SIZE];	//!< Staged payload
-} NvmIntrfXfer_t;
+/// A word write, wherever it is carried out. The address is an integer so one
+/// context serves a controller write and a stack submit that wants a pointer;
+/// there is one write in flight either way.
+typedef struct __Nvm_Intrf_Wr_Ctx {
+	uintptr_t		Addr;			//!< Where the words go
+	const uint32_t	*pSrc;			//!< The words
+	uint32_t		Words;			//!< How many
+} NvmIntrfWrCtx_t;
+
+/// An erase of one unit. Addr is the address, or the page number where the
+/// stack asks for one.
+typedef struct __Nvm_Intrf_Er_Ctx {
+	uintptr_t		Addr;			//!< The unit
+	bool			bStarted;		//!< The erase has been kicked off
+} NvmIntrfErCtx_t;
+
+/// The interface and everything one transaction needs, in one object.
+///
+/// DevIntrf_t is the first member, so pDevData is a handle that casts to
+/// either: a transfer callback gets the state, and a C caller can hold the
+/// whole thing without knowing about the class that owns it.
+///
+/// The state is per transaction, so it belongs here and not at file scope,
+/// the same way nRFSpiDev_t holds a transfer's buffer and index. That takes
+/// in the arbitrated operation and its context: the stack and the arbiter
+/// both report after the call has returned, so both outlive it.
+///
+/// Packed to 4 so the staged payload keeps the alignment word wise transfers
+/// need, without alignas, which C does not have, so the header stays
+/// includable from C.
+#pragma pack(push, 4)
+typedef struct __Nvm_Dev_Intrf {
+	DevIntrf_t		DevIntrf;		//!< First, so the handle casts both ways
+	uint8_t			Hdr[NVM_INTRF_FRAME_SIZE];	//!< Command and address frame
+	int				HdrLen;			//!< Frame bytes taken so far
+	int				DataLen;		//!< Payload bytes staged
+	bool volatile	bAsyncPending;	//!< A submit is owed a completion
+
+	NvmIntrfOp_t	Op;				//!< The arbitrated operation
+	union {
+		NvmIntrfWrCtx_t	Wr;
+		NvmIntrfErCtx_t	Er;
+	} OpCtx;						//!< One operation is in flight at a time
+
+	uint8_t			Data[NVM_INTRF_XFER_SIZE];	//!< Staged payload
+} NvmDevIntrf_t;
+#pragma pack(pop)
 
 /// @brief	The MCU memory controller as a device interface.
 class NvmIntrf : public DeviceIntrf {
 public:
 	bool Init(void);
 
-	operator DevIntrf_t * const () override { return &vDevIntrf; }
+	operator DevIntrf_t * const () override { return &vDevIntrf.DevIntrf; }
 
 	uint32_t Rate(uint32_t RateHz) override { (void)RateHz; return 0; }
 	uint32_t Rate(void) override { return 0; }
 
 	bool StartRx(uint32_t DevAddr) override {
-		return DeviceIntrfStartRx(&vDevIntrf, DevAddr);
+		return DeviceIntrfStartRx(&vDevIntrf.DevIntrf, DevAddr);
 	}
 	int RxData(uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRxData(&vDevIntrf, pBuff, BuffLen);
+		return DeviceIntrfRxData(&vDevIntrf.DevIntrf, pBuff, BuffLen);
 	}
-	void StopRx(void) override { DeviceIntrfStopRx(&vDevIntrf); }
+	void StopRx(void) override { DeviceIntrfStopRx(&vDevIntrf.DevIntrf); }
 
 	bool StartTx(uint32_t DevAddr) override {
-		return DeviceIntrfStartTx(&vDevIntrf, DevAddr);
+		return DeviceIntrfStartTx(&vDevIntrf.DevIntrf, DevAddr);
 	}
 	int TxData(const uint8_t *pData, int DataLen) override {
-		return DeviceIntrfTxData(&vDevIntrf, pData, DataLen);
+		return DeviceIntrfTxData(&vDevIntrf.DevIntrf, pData, DataLen);
 	}
-	void StopTx(void) override { DeviceIntrfStopTx(&vDevIntrf); }
+	void StopTx(void) override { DeviceIntrfStopTx(&vDevIntrf.DevIntrf); }
 
 protected:
-	DevIntrf_t		vDevIntrf;
-	NvmIntrfXfer_t	vXfer;
+	NvmDevIntrf_t	vDevIntrf;
 };
 
 /**

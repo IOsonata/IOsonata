@@ -128,6 +128,26 @@ static void NvmBuildReq(mpsl_timeslot_request_t *pReq, uint32_t LengthUs)
 	pReq->params.earliest.timeout_us = MPSL_TIMESLOT_EARLIEST_TIMEOUT_MAX_US;
 }
 
+// Detach the operation and report it, if it asked to be reported. Runs where
+// the operation finished, which for a granted window is timeslot priority, so
+// it does nothing but hand the result over.
+static void NvmOpFinish(int Res)
+{
+	NvmIntrfOp_t *op = s_pNvmOp;
+
+	if (op == nullptr)
+	{
+		return;
+	}
+
+	s_pNvmOp = nullptr;
+
+	if (op->Done != nullptr)
+	{
+		op->Done(op->pCtx, Res);
+	}
+}
+
 // Runs at timeslot priority with the radio idle. Short, no blocking calls,
 // nothing that touches RADIO or TIMER0.
 static mpsl_timeslot_signal_return_param_t *NvmTimeslotCb(
@@ -152,6 +172,7 @@ static mpsl_timeslot_signal_return_param_t *NvmTimeslotCb(
 			{
 				s_NvmResult = 0;
 				s_bNvmDone = true;
+				NvmOpFinish(0);
 				s_NvmRetParam.callback_action = MPSL_TIMESLOT_SIGNAL_ACTION_END;
 			}
 			else
@@ -188,6 +209,7 @@ static mpsl_timeslot_signal_return_param_t *NvmTimeslotCb(
 			s_NvmSigAbnormal = Signal;
 			s_NvmResult = -EIO;
 			s_bNvmDone = true;
+			NvmOpFinish(-EIO);
 			s_NvmRetParam.callback_action = MPSL_TIMESLOT_SIGNAL_ACTION_END;
 			break;
 	}
@@ -230,6 +252,13 @@ static int NvmArbiterRun(NvmIntrfOp_t *pOp)
 		return -EIO;
 	}
 
+	if (pOp->Done != nullptr)
+	{
+		// Under way. The signal handler runs it and reports it, so the
+		// caller is not held while the memory works.
+		return NVM_INTRF_OP_STARTED;
+	}
+
 	uint32_t elapsed = 0;
 	while (s_bNvmDone == false)
 	{
@@ -238,6 +267,7 @@ static int NvmArbiterRun(NvmIntrfOp_t *pOp)
 			// Detach first: a late grant then finds no work, reports done
 			// and ends its window without touching anything of ours.
 			s_pNvmOp = nullptr;
+
 			DEBUG_PRINTF("MPSL nvm: timeout, start %lu blocked %lu other %lu\r\n",
 						 (unsigned long)s_NvmSigStart,
 						 (unsigned long)s_NvmSigBlocked,
@@ -250,8 +280,6 @@ static int NvmArbiterRun(NvmIntrfOp_t *pOp)
 	}
 
 	int result = s_NvmResult;
-
-	s_pNvmOp = nullptr;
 
 	if (result != 0)
 	{

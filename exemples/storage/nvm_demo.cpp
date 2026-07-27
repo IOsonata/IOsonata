@@ -724,6 +724,17 @@ static uint32_t s_Cycles = 0;
 static uint32_t s_Writes = 0;
 static uint32_t s_Slot = 0;
 
+#if NVM_DEMO_ASYNC
+// The async cycle's own state: how many slots of this cycle are left, how many
+// times it handed the loop back, and the slot it started so the next visit can
+// read it back.
+static uint32_t s_Pending = 0;
+static uint32_t s_Requeues = 0;
+static uint32_t s_PendOff = 0;
+static uint32_t s_PendVal = 0;
+static bool s_PendCheck = false;
+#endif
+
 const BtAppCfg_t s_BtAppCfg = {
 	.Role = BTAPP_ROLE_BROADCASTER,
 	.CentLinkCount = 0,
@@ -784,12 +795,6 @@ static void NvmCycleSlot(void)
 // read it back, which would leave nothing in flight and nothing to requeue
 // for. The readback happens on the next visit instead, once the memory is
 // idle.
-static uint32_t s_Pending;
-static uint32_t s_Requeues;
-static uint32_t s_PendOff;
-static uint32_t s_PendVal;
-static bool s_PendCheck;
-
 static void NvmCyclePump(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
