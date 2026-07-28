@@ -143,14 +143,30 @@ Nvm::~Nvm()
 {
 	uint32_t wait = NVM_OP_TMOUT;
 
-	while (atomic_flag_test_and_set(&vOpLock) && wait-- > 0) {}
+	bool locked = false;
+
+	while (wait-- > 0)
+	{
+		if (atomic_flag_test_and_set(&vOpLock) == false)
+		{
+			locked = true;
+			break;
+		}
+	}
+
+	// Never acquired. Touching the state now would walk over whoever
+	// holds it, and clearing the flag afterwards would release their
+	// lock, which is worse than doing nothing.
+	if (locked == false)
+	{
+		return;
+	}
 	vOpEvt = NVM_EVT_NONE;
 	vOpRemain = 0;
 	vpOpData = nullptr;
 	vOpState = NVM_OPSTATE_IDLE;
 	vXferState = NVM_XFER_NONE;
 	atomic_flag_clear(&vOpLock);
-	Unhook();
 }
 
 int Nvm::FrameAddr(uint8_t *pFrame, uint8_t Cmd, uint32_t Addr,
@@ -381,67 +397,12 @@ void Nvm::WriteDisable(void)
 	}
 }
 
-#define NVM_HOOK_MAX		4
-
-typedef struct {
-	DevIntrf_t	*pIntrf;
-	Nvm			*pNvm;
-} NvmHook_t;
-
-static NvmHook_t s_NvmHook[NVM_HOOK_MAX];
-
-static int NvmIntrfEvtCB(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
-						 uint8_t *, int)
-{
-	for (int i = 0; i < NVM_HOOK_MAX; i++)
-	{
-		if (s_NvmHook[i].pIntrf == pDev && s_NvmHook[i].pNvm != nullptr)
-		{
-			s_NvmHook[i].pNvm->IntrfEvent(EvtId);
-		}
-	}
-
-	return 0;
-}
-
-void Nvm::Unhook(void)
-{
-	for (int i = 0; i < NVM_HOOK_MAX; i++)
-	{
-		if (s_NvmHook[i].pNvm != this)
-		{
-			continue;
-		}
-
-		DevIntrf_t *ip = s_NvmHook[i].pIntrf;
-
-		s_NvmHook[i].pNvm = nullptr;
-		s_NvmHook[i].pIntrf = nullptr;
-
-		bool used = false;
-		for (int j = 0; j < NVM_HOOK_MAX; j++)
-		{
-			if (s_NvmHook[j].pIntrf == ip && s_NvmHook[j].pNvm != nullptr)
-			{
-				used = true;
-				break;
-			}
-		}
-
-		if (used == false && ip != nullptr && ip->EvtCB == NvmIntrfEvtCB)
-		{
-			ip->EvtCB = nullptr;
-		}
-	}
-}
-
 bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 			   uint64_t RegionOff, uint64_t RegionSize)
 {
 	vbEnabled = false;
 	Valid(false);
 	CancelOp(-ECANCELED);
-	Unhook();
 	vbInitialized = false;
 	Region(0, 0);
 
@@ -470,8 +431,7 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	vEvtHandler = Cfg.EvtHandler;
 
 	auto fail = [this]() -> bool {
-		Unhook();
-		vbEnabled = false;
+			vbEnabled = false;
 		vbInitialized = false;
 		Valid(false);
 		Region(0, 0);
@@ -637,32 +597,11 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 	Region(RegionOff, rsize);
 
-	DevIntrf_t *ip = *pIntrf;
-	bool needHook = InterruptEnabled() || ip->bIntEn;
-
-	if (needHook && (ip->EvtCB == nullptr || ip->EvtCB == NvmIntrfEvtCB))
-	{
-		int slot = -1;
-		for (int i = 0; i < NVM_HOOK_MAX; i++)
-		{
-			if (s_NvmHook[i].pNvm == nullptr)
-			{
-				slot = i;
-				break;
-			}
-		}
-		if (slot < 0)
-		{
-			return fail();
-		}
-
-		s_NvmHook[slot].pIntrf = ip;
-		s_NvmHook[slot].pNvm = this;
-		if (ip->EvtCB == nullptr)
-		{
-			ip->EvtCB = NvmIntrfEvtCB;
-		}
-	}
+	// The interface's event callback is not touched here. It belongs to
+	// whoever created the interface, set through its config, one level, and
+	// a device reaching in to replace it takes something it does not own.
+	// An application that wants this Nvm told of interface completions
+	// points that callback at IntrfEvent when it builds the interface.
 
 	vbInitialized = true;
 	vbEnabled = true;
@@ -901,7 +840,24 @@ void Nvm::CancelOp(int Res)
 	// is somehow never released cannot take the application with it.
 	uint32_t wait = NVM_OP_TMOUT;
 
-	while (atomic_flag_test_and_set(&vOpLock) && wait-- > 0) {}
+	bool locked = false;
+
+	while (wait-- > 0)
+	{
+		if (atomic_flag_test_and_set(&vOpLock) == false)
+		{
+			locked = true;
+			break;
+		}
+	}
+
+	// Never acquired. Touching the state now would walk over whoever
+	// holds it, and clearing the flag afterwards would release their
+	// lock, which is worse than doing nothing.
+	if (locked == false)
+	{
+		return;
+	}
 	bool notify = FinishOpLocked(Res, evt, off, len);
 	vOpRes = 0;
 	vOpState = NVM_OPSTATE_IDLE;
@@ -1176,7 +1132,9 @@ int Nvm::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData,
 
 	int n = DeviceIntrfTxData(ip, pCmdAddr, CmdAddrLen);
 
-	if (n < 0 && ip->bIntEn)
+	// Exactly -1, which is what the framework means by started. Any other
+	// negative is an errno and has to reach the caller as one.
+	if (n == -1 && ip->bIntEn)
 	{
 		if (InterruptEnabled() && frameonly)
 		{
@@ -1226,7 +1184,7 @@ int Nvm::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData,
 
 	int wr = DeviceIntrfTxData(ip, pData, DataLen);
 
-	if (wr < 0 && ip->bIntEn)
+	if (wr == -1 && ip->bIntEn)
 	{
 		if (InterruptEnabled())
 		{
@@ -1416,7 +1374,16 @@ int Nvm::EraseUnit(uint32_t Addr, bool bDefer)
 		{
 			// Handed over. No stop is sent, because the completion is what
 			// ends it: it releases the latch DeviceIntrfStartTx took.
-			return bDefer ? 0 : (WaitReady() ? 0 : -EIO);
+			if (bDefer)
+			{
+				return 0;
+			}
+
+			// Waited out here, and on the completion rather than on the
+			// controller. Asking the controller whether it is ready answers
+			// yes while the erase is still queued behind a stack or waiting
+			// for a radio window, because nothing has started yet.
+			return XferWait(NVM_XFER_TMOUT) ? 0 : -EIO;
 		}
 
 		// Finished in the call, so nothing was handed over.

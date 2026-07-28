@@ -163,8 +163,19 @@ static void peer_data_delete_process(void)
 	while (peer_id != PM_PEER_ID_INVALID) {
 		bool failed = false;
 
-		/* Delete every remaining data entry for this peer. */
-		while (find_next_data_entry_in_peer(peer_id, &entry_id) == NRF_SUCCESS) {
+		/* NOT_FOUND ends it; anything else is a read that failed, and taking
+		 * that for the end freed the peer id with its records still there.
+		 */
+		for (;;) {
+			uint32_t look = find_next_data_entry_in_peer(peer_id, &entry_id);
+
+			if (look == NRF_ERROR_NOT_FOUND) {
+				break;
+			}
+			if (look != NRF_SUCCESS) {
+				failed = true;
+				break;
+			}
 			err = BtPdsDelete(entry_id);
 			if (err == -ENOMEM) {
 				/* Store full mid-delete: defer and retry later. */

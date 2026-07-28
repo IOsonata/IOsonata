@@ -1039,6 +1039,21 @@ static void AsyncEvtHandler(Nvm * const, NVM_EVT Evt, uint64_t Off,
 	s_LastRes = Res;
 }
 
+static Nvm *s_pAppNvm;
+
+// The application owned interface callback: forwards events to the driver,
+// the path the header documents for an application that keeps EvtCB.
+static int AppIntrfCB(DevIntrf_t * const, DEVINTRF_EVT EvtId, uint8_t *, int Len)
+{
+	if (s_pAppNvm != nullptr)
+	{
+		(void)Len;
+		s_pAppNvm->IntrfEvent(EvtId);
+	}
+
+	return 0;
+}
+
 static void TestNorAsync(MockIntrf &Bus)
 {
 	NorPowerOn();
@@ -1056,8 +1071,13 @@ static void TestNorAsync(MockIntrf &Bus)
 	cfg.bIntEn = true;
 	cfg.EvtHandler = AsyncEvtHandler;
 
+	// The interface's callback belongs to whoever built the interface, so the
+	// application points it at this memory. Nvm::Init does not take it.
+	Bus.vDev.EvtCB = AppIntrfCB;
+	s_pAppNvm = &mem;
 	CHECK(mem.Init(cfg, &Bus), "intdrv: init");
-	CHECK(Bus.vDev.EvtCB != nullptr, "intdrv: completion hook installed at init");
+	CHECK(Bus.vDev.EvtCB == AppIntrfCB,
+		  "intdrv: init left the application's callback alone");
 
 	// Start and return: a page crossing write returns after issuing only
 	// the first chunk; the second page has not been touched yet.
@@ -1126,20 +1146,6 @@ static void TestNorAsync(MockIntrf &Bus)
 		  "intdrv: the retried call runs");
 }
 
-static Nvm *s_pAppNvm;
-
-// The application owned interface callback: forwards events to the driver,
-// the path the header documents for an application that keeps EvtCB.
-static int AppIntrfCB(DevIntrf_t * const, DEVINTRF_EVT EvtId, uint8_t *, int Len)
-{
-	if (s_pAppNvm != nullptr)
-	{
-		(void)Len;
-		s_pAppNvm->IntrfEvent(EvtId);
-	}
-
-	return 0;
-}
 
 static void TestNorAsyncIntrf(MockIntrf &Bus)
 {
@@ -1171,11 +1177,11 @@ static void TestNorAsyncIntrf(MockIntrf &Bus)
 	CHECK(mem.Read(0, rd, 16) == 16 && memcmp(rd, wr, 16) == 0,
 		  "aintrf: polling read, the data landed with the event");
 
-	// Interrupt driven driver over the same interface, hook from init.
-	s_pAppNvm = nullptr;
-	Bus.vDev.EvtCB = nullptr;
-
+	// Interrupt driven driver over the same interface. The application moves
+	// its callback to the new memory; nothing installs itself.
 	Nvm amem;
+
+	s_pAppNvm = &amem;
 
 	cfg.bIntEn = true;
 	cfg.EvtHandler = AsyncEvtHandler;
@@ -1590,23 +1596,6 @@ static void TestSpuriousComplete(MockIntrf &Bus)
 		  "spurious: the data landed");
 }
 
-static void TestHookLifetime(MockIntrf &Bus)
-{
-	printf("--- completion hook lifetime\n");
-
-	Bus.vDev.EvtCB = nullptr;
-
-	{
-		Nvm tmp;
-		NvmCfg_t cfg = NorCfg();
-
-		cfg.bIntEn = true;
-		NorPowerOn();
-		CHECK(tmp.Init(cfg, &Bus), "hook: init installs");
-		CHECK(Bus.vDev.EvtCB != nullptr, "hook: callback taken");
-	}
-	CHECK(Bus.vDev.EvtCB == nullptr, "hook: destructor released the callback");
-}
 
 
 int main(void)
@@ -1638,7 +1627,6 @@ int main(void)
 	TestMemCtrl();
 	TestLateCompletion(nor);
 	TestSpuriousComplete(nor);
-	TestHookLifetime(nor);
 
 	printf("\nChecks run: %d\n", g_Checks);
 	if (g_Fail == 0)

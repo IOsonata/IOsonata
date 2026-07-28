@@ -256,31 +256,54 @@ int NvmMcuErase(uintptr_t Addr);
 
 }	// extern "C"
 
+/**
+ * @brief	The one controller interface this port owns.
+ *
+ * There is one memory controller, so there is one of these, and it lives
+ * with the port rather than inside an object the application declares. The
+ * completion paths reach it by name; nothing has to record which instance
+ * is in play, because there is only ever the one.
+ *
+ * @return	The controller's interface.
+ */
+DevIntrf_t * const NvmMcuDevIntrf(void);
+
 /// @brief	The MCU memory controller as a device interface.
 class NvmIntrf : public DeviceIntrf {
 public:
-	bool Init(void);
+	/**
+	 * @brief	Bring the controller interface up.
+	 *
+	 * @param	EvtCB : Called from interrupt when a transfer finishes. Set
+	 * 			by whoever creates the interface, which is what owns it. An
+	 * 			application that puts an Nvm on this passes something that
+	 * 			calls its IntrfEvent. Null when nothing needs telling, which
+	 * 			is the case for a driver that polls.
+	 *
+	 * @return	true on success
+	 */
+	bool Init(DevIntrfEvtHandler_t EvtCB = nullptr);
 
-	operator DevIntrf_t * const () override { return &vDevIntrf.DevIntrf; }
+	operator DevIntrf_t * const () override { return NvmMcuDevIntrf(); }
 
 	uint32_t Rate(uint32_t RateHz) override { (void)RateHz; return 0; }
 	uint32_t Rate(void) override { return 0; }
 
 	bool StartRx(uint32_t DevAddr) override {
-		return DeviceIntrfStartRx(&vDevIntrf.DevIntrf, DevAddr);
+		return DeviceIntrfStartRx(NvmMcuDevIntrf(), DevAddr);
 	}
 	int RxData(uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRxData(&vDevIntrf.DevIntrf, pBuff, BuffLen);
+		return DeviceIntrfRxData(NvmMcuDevIntrf(), pBuff, BuffLen);
 	}
-	void StopRx(void) override { DeviceIntrfStopRx(&vDevIntrf.DevIntrf); }
+	void StopRx(void) override { DeviceIntrfStopRx(NvmMcuDevIntrf()); }
 
 	bool StartTx(uint32_t DevAddr) override {
-		return DeviceIntrfStartTx(&vDevIntrf.DevIntrf, DevAddr);
+		return DeviceIntrfStartTx(NvmMcuDevIntrf(), DevAddr);
 	}
 	int TxData(const uint8_t *pData, int DataLen) override {
-		return DeviceIntrfTxData(&vDevIntrf.DevIntrf, pData, DataLen);
+		return DeviceIntrfTxData(NvmMcuDevIntrf(), pData, DataLen);
 	}
-	void StopTx(void) override { DeviceIntrfStopTx(&vDevIntrf.DevIntrf); }
+	void StopTx(void) override { DeviceIntrfStopTx(NvmMcuDevIntrf()); }
 
 	/// Erase one unit. Wraps the C api the same way the transfers above
 	/// wrap theirs.
@@ -289,9 +312,8 @@ public:
 	/// True when the memory has finished what it was given.
 	bool IsReady(void) { return NvmMcuIsReady(); }
 
-protected:
-	NvmDevIntrf_t	vDevIntrf;
 };
+
 
 /**
  * @brief	Register who decides when the memory may be touched.

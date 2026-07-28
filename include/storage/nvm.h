@@ -204,8 +204,10 @@ protected:
 		return Off <= vRegionSize && Len <= vRegionSize - Off;
 	}
 
-	/// Microseconds, not loop iterations. A page erase on internal flash is
-	/// tens of milliseconds and can be spread over several radio timeslots.
+	/// Polling budget, not a duration: the count is decremented once per
+	/// look, so how long it lasts depends on the core, the medium and what
+	/// pWaitCB does. It is a bound so a medium that never answers cannot
+	/// hang, and how long to wait is the application's through pWaitCB.
 	bool WaitReady(uint32_t Timeout = 1000000);
 	bool WriteEnable(uint32_t Timeout = 1000000);
 	void WriteDisable(void);
@@ -237,7 +239,6 @@ private:
 	bool FinishOpLocked(int Res, NVM_EVT &Evt, uint64_t &Off, uint32_t &Len);
 	void Notify(NVM_EVT Evt, uint64_t Off, uint32_t Len, int Res);
 	void CancelOp(int Res);
-	void Unhook(void);
 
 	uint64_t		vRegionOffset;
 	uint64_t		vRegionSize;

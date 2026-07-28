@@ -253,6 +253,16 @@ static const NvmCfg_t s_ChipCfg = {
 #endif
 
 static Nvm s_Nvm;
+
+// The interface reports a finished transfer here. Nvm is told, and nothing
+// else on this interface needs it. The interface does not install this
+// itself: the callback belongs to whoever created the interface.
+static int MemIntrfEvtCB(DevIntrf_t * const, DEVINTRF_EVT EvtId, uint8_t *, int)
+{
+	s_Nvm.IntrfEvent(EvtId);
+
+	return 0;
+}
 static uintptr_t s_RegionAddr = 0;
 static int s_Fail = 0;
 
@@ -674,7 +684,10 @@ static bool NvmDemoSetup(void)
 	uint64_t regionsize = (uint64_t)unit * NVM_DEMO_REGION_PAGES;
 
 #if NVM_DEMO_MEDIUM == 0
-	if (s_MemIntrf.Init() == false)
+	// The interface's callback belongs to whoever builds the interface, which
+	// is this application. An interrupt driven memory needs telling when a
+	// transfer finishes, so point it at the one on this interface.
+	if (s_MemIntrf.Init(MemIntrfEvtCB) == false)
 #elif NVM_DEMO_MEDIUM == 1
 	if (s_MemIntrf.Init(s_SpiCfg) == false)
 #else

@@ -430,6 +430,15 @@ static int WriteSectorHdr(uint16_t Sector, uint16_t SourceSector,
 
 	if (MemWrite(SectorBase(Sector), &hdr, sizeof(hdr)) != 0)
 	{
+		// The header may have been part written. Left marked erased,
+		// FindErasedSector hands it out again, and a second header over a
+		// torn one cannot be read back on a medium that only clears bits.
+		// Not usable until it has been erased.
+		BtPdsSectorInfo_t *pBad = &s_Sectors[Sector];
+
+		memset(pBad, 0, sizeof(*pBad));
+		pBad->Head = SectorEnd(Sector);
+
 		return -EIO;
 	}
 
