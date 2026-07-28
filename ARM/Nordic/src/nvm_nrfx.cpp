@@ -853,6 +853,13 @@ static int NvmEraseBare(uintptr_t Addr, uint32_t page)
 
 // What erase means differs with the memory, so this is the second thing the
 // MCU model decides.
+//
+// Called by Nvm, not by the transfer path. Erasing is the memory's business
+// on every medium: on a serial NOR Nvm frames the command and the bus takes
+// it, and here it calls this instead, because there is no bus. The three
+// routes below are unchanged, and which one applies is still this file's to
+// know. Answers 0 when the erase is finished, NVM_INTRF_OP_STARTED when a
+// completion is owed, or a negative errno.
 static int NvmEraseUnit(uintptr_t Addr)
 {
 #if defined(NRF52_SERIES)
@@ -918,6 +925,21 @@ static int NvmEraseUnit(uintptr_t Addr)
 
 	return -ENOTSUP;
 #endif
+}
+
+// Ops is how many operations the memory was asked for. A write is counted in
+// NvmFlush; an erase is counted here, because it no longer passes through a
+// transfer. Started counts as asked for, a refusal does not.
+extern "C" int NvmMcuErase(uintptr_t Addr)
+{
+	int res = NvmEraseUnit(Addr);
+
+	if (res == 0 || res == NVM_INTRF_OP_STARTED)
+	{
+		s_Stat.Ops++;
+	}
+
+	return res;
 }
 
 // ---------------------------------------------------------------------------
@@ -1004,27 +1026,6 @@ static int NvmTxData(DevIntrf_t *pIntrf, const uint8_t *pData, int Len)
 	if (dev->HdrLen < NVM_INTRF_FRAME_SIZE)
 	{
 		return n;
-	}
-
-	// An erase needs the address only.
-	if (dev->Hdr[0] == NVM_INTRF_CMD_ERASE)
-	{
-		int res = NvmEraseUnit(FrameAddr(dev));
-
-		if (res == NVM_INTRF_STARTED)
-		{
-			// Under way. The driver reads -1 as started and waits for the
-			// event rather than treating it as a short transfer.
-			s_Stat.Ops++;
-
-			return -1;
-		}
-		if (res != 0)
-		{
-			return 0;
-		}
-		s_Stat.Ops++;
-		return Len;
 	}
 
 	if (dev->Hdr[0] != NVM_INTRF_CMD_WRITE)

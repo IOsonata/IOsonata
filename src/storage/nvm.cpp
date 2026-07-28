@@ -37,6 +37,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "coredev/spi.h"
 #include "storage/nvm.h"
+#include "storage/nvm_intrf.h"
 
 /******** For DEBUG Trace ************/
 //#define DEBUG_ENABLE
@@ -78,6 +79,16 @@ SOFTWARE.
 extern "C" __attribute__((weak)) bool NvmMcuIsReady(void)
 {
 	return true;
+}
+
+// An erase on a target that has no internal memory erase to offer. RRAM is the
+// case even where a port exists: it rewrites in place and the nRF54L route
+// answers exactly this. Weak, so a port with an erase overrides it.
+extern "C" __attribute__((weak)) int NvmMcuErase(uintptr_t Addr)
+{
+	(void)Addr;
+
+	return -ENOTSUP;
 }
 
 #define NVM_XFER_TMOUT		100000U
@@ -1375,6 +1386,49 @@ int Nvm::EraseUnit(uint32_t Addr, bool bDefer)
 	if (WriteEnable() == false)
 	{
 		return -EBUSY;
+	}
+
+	// Reached through a controller rather than a bus, so there is no command
+	// to frame. The decision to erase is the same one and it is made here on
+	// every medium; only the way it reaches the hardware differs, the same
+	// way a sensor asks its interface what it is before shaping its access.
+	//
+	// Inside the interface's own start and stop, because that is the
+	// serialisation and an erase needs it like any other access. Armed first
+	// for the same reason a transfer is: the completion can arrive inside the
+	// call.
+	if (Interface()->Type() == DEVINTRF_TYPE_MEMCTRL)
+	{
+		DevIntrf_t *ip = *Interface();
+
+		XferBegin();
+
+		if (DeviceIntrfStartTx(ip, DeviceAddress()) == false)
+		{
+			XferEnd();
+
+			return -EBUSY;
+		}
+
+		int r = NvmMcuErase((uintptr_t)Addr);
+
+		if (r == NVM_INTRF_OP_STARTED)
+		{
+			// Handed over. No stop is sent, because the completion is what
+			// ends it: it releases the latch DeviceIntrfStartTx took.
+			return bDefer ? 0 : (WaitReady() ? 0 : -EIO);
+		}
+
+		// Finished in the call, so nothing was handed over.
+		XferEnd();
+		DeviceIntrfStopTx(ip);
+
+		if (r < 0)
+		{
+			return r;
+		}
+
+		return bDefer ? 0 : (WaitReady() ? 0 : -EIO);
 	}
 
 	uint8_t op = NVM_CMD_SECT_ERASE;

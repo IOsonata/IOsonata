@@ -192,58 +192,6 @@ typedef struct __Nvm_Dev_Intrf {
 } NvmDevIntrf_t;
 #pragma pack(pop)
 
-/// @brief	The MCU memory controller as a device interface.
-class NvmIntrf : public DeviceIntrf {
-public:
-	bool Init(void);
-
-	operator DevIntrf_t * const () override { return &vDevIntrf.DevIntrf; }
-
-	uint32_t Rate(uint32_t RateHz) override { (void)RateHz; return 0; }
-	uint32_t Rate(void) override { return 0; }
-
-	bool StartRx(uint32_t DevAddr) override {
-		return DeviceIntrfStartRx(&vDevIntrf.DevIntrf, DevAddr);
-	}
-	int RxData(uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRxData(&vDevIntrf.DevIntrf, pBuff, BuffLen);
-	}
-	void StopRx(void) override { DeviceIntrfStopRx(&vDevIntrf.DevIntrf); }
-
-	bool StartTx(uint32_t DevAddr) override {
-		return DeviceIntrfStartTx(&vDevIntrf.DevIntrf, DevAddr);
-	}
-	int TxData(const uint8_t *pData, int DataLen) override {
-		return DeviceIntrfTxData(&vDevIntrf.DevIntrf, pData, DataLen);
-	}
-	void StopTx(void) override { DeviceIntrfStopTx(&vDevIntrf.DevIntrf); }
-
-protected:
-	NvmDevIntrf_t	vDevIntrf;
-};
-
-/**
- * @brief	Register who decides when the memory may be touched.
- *
- * On a part with a radio, writing the memory has to be arbitrated against it,
- * and only the stack knows when a window is free. The stack registers its
- * arbiter here; the interface asks it to run each operation and never learns
- * what a timeslot is.
- *
- * With nothing registered the memory is the application's alone and the
- * interface drives the controller directly.
- *
- * @param	pArb	: The arbiter, or NULL to go back to driving directly.
- */
-void NvmIntrfSetArbiter(NvmIntrfArb_t pArb);
-
-/**
- * @brief	Read the operation counts.
- *
- * @param	pStat : Filled with the counts since reset
- */
-void NvmIntrfGetStat(NvmIntrfStat_t *pStat);
-
 // ---------------------------------------------------------------------------
 // What the port knows about the memory itself. Not the interface's: it moves
 // data and arbitrates, and what the memory is doing is none of its business.
@@ -291,7 +239,81 @@ uint64_t NvmMcuCeiling(void);
  */
 bool NvmMcuIsReady(void);
 
+/**
+ * @brief	Erase one unit of the MCU internal memory.
+ *
+ * The same decision Nvm makes on a serial NOR, where it frames the erase
+ * command and the bus takes it. There is no bus here, so it calls this.
+ * Which of the target's routes the erase takes, and whether a stack has to
+ * be asked for it, is the port's business and not the caller's.
+ *
+ * @param	Addr : First address of the unit
+ *
+ * @return	0 when the erase is finished, NVM_INTRF_OP_STARTED when a
+ * 			completion is owed, or a negative errno.
+ */
+int NvmMcuErase(uintptr_t Addr);
+
 }	// extern "C"
+
+/// @brief	The MCU memory controller as a device interface.
+class NvmIntrf : public DeviceIntrf {
+public:
+	bool Init(void);
+
+	operator DevIntrf_t * const () override { return &vDevIntrf.DevIntrf; }
+
+	uint32_t Rate(uint32_t RateHz) override { (void)RateHz; return 0; }
+	uint32_t Rate(void) override { return 0; }
+
+	bool StartRx(uint32_t DevAddr) override {
+		return DeviceIntrfStartRx(&vDevIntrf.DevIntrf, DevAddr);
+	}
+	int RxData(uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRxData(&vDevIntrf.DevIntrf, pBuff, BuffLen);
+	}
+	void StopRx(void) override { DeviceIntrfStopRx(&vDevIntrf.DevIntrf); }
+
+	bool StartTx(uint32_t DevAddr) override {
+		return DeviceIntrfStartTx(&vDevIntrf.DevIntrf, DevAddr);
+	}
+	int TxData(const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTxData(&vDevIntrf.DevIntrf, pData, DataLen);
+	}
+	void StopTx(void) override { DeviceIntrfStopTx(&vDevIntrf.DevIntrf); }
+
+	/// Erase one unit. Wraps the C api the same way the transfers above
+	/// wrap theirs.
+	int Erase(uintptr_t Addr) { return NvmMcuErase(Addr); }
+
+	/// True when the memory has finished what it was given.
+	bool IsReady(void) { return NvmMcuIsReady(); }
+
+protected:
+	NvmDevIntrf_t	vDevIntrf;
+};
+
+/**
+ * @brief	Register who decides when the memory may be touched.
+ *
+ * On a part with a radio, writing the memory has to be arbitrated against it,
+ * and only the stack knows when a window is free. The stack registers its
+ * arbiter here; the interface asks it to run each operation and never learns
+ * what a timeslot is.
+ *
+ * With nothing registered the memory is the application's alone and the
+ * interface drives the controller directly.
+ *
+ * @param	pArb	: The arbiter, or NULL to go back to driving directly.
+ */
+void NvmIntrfSetArbiter(NvmIntrfArb_t pArb);
+
+/**
+ * @brief	Read the operation counts.
+ *
+ * @param	pStat : Filled with the counts since reset
+ */
+void NvmIntrfGetStat(NvmIntrfStat_t *pStat);
 
 #endif	// __cplusplus
 

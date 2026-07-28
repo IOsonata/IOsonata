@@ -1272,6 +1272,23 @@ static void TestHeldResult(MockIntrf &Bus)
 // nothing else, so the driver must send no command byte and none of the
 // command traffic a chip on a bus needs.
 static uint8_t s_Mem[16384];
+static uint32_t s_MemEraseCnt;
+
+// The erase a target port supplies. Nvm calls this rather than framing a
+// command, because a memory reached through a controller has no bus to put
+// one on. Overrides the weak answer in nvm.cpp, the way a real port does.
+extern "C" int NvmMcuErase(uintptr_t Addr)
+{
+	if (Addr + 4096 > sizeof(s_Mem))
+	{
+		return -EINVAL;
+	}
+
+	s_MemEraseCnt++;
+	memset(&s_Mem[Addr], 0xFF, 4096);
+
+	return 0;
+}
 static std::vector<uint8_t> s_MemTx;
 static uint32_t s_MemAddr;
 static bool s_MemAddrSet;
@@ -1399,6 +1416,19 @@ static void TestMemCtrl(void)
 	// there is no way to ask for one. The chip erase opcode went out as a
 	// lone byte, the interface held it as the first byte of a frame that was
 	// never completed, and this answered 0 for an erase that never happened.
+	// Erase reaches the port directly and never becomes a transfer, so no
+	// command byte goes anywhere. Before, the interface read an opcode off
+	// the frame to find the erase, which is the transport reading a command
+	// set it has no business knowing.
+	s_MemEraseCnt = 0;
+	CHECK(mem.Erase(0x1000, 4096) == 0, "memctrl: erase through the port");
+	CHECK(s_MemEraseCnt == 1, "memctrl: the port was asked exactly once");
+	CHECK(s_MemCmdBytes == 0, "memctrl: erase sent no command");
+
+	uint8_t er[4] = { 0 };
+	CHECK(mem.Read(0x1000, er, sizeof(er)) == (int)sizeof(er) &&
+		  er[0] == 0xFF && er[3] == 0xFF, "memctrl: the unit reads erased");
+
 	CHECK(mem.MassErase() == -ENOTSUP, "memctrl: mass erase refused");
 	CHECK(memcmp(&s_Mem[0x40], wr, sizeof(wr)) == 0,
 		  "memctrl: mass erase left the data alone");
