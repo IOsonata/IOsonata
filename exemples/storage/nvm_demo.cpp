@@ -741,6 +741,33 @@ static uint32_t s_Dropped = 0;
 static uint32_t s_PendOff = 0;
 static uint32_t s_PendVal = 0;
 static bool s_PendCheck = false;
+
+// Requeues since the pump last got past IsBusy, and the longest such wait
+// the run has seen. The pump goes round about 675 times a second, and one
+// write costs about one advertising interval, so the ordinary wait is a few
+// tens of visits. Recording the longest and reporting it with the cycle is
+// what says whether that ever got worse; printing at the time turned a slow
+// write into a burst of lines, and the burst is what pushed the report out
+// of the UART.
+static uint32_t s_StallRq = 0;
+static uint32_t s_StallMax = 0;
+
+// Waits longer than NVM_DEMO_STALL_LONG. A count rather than a line each
+// time, for the same reason.
+#ifndef NVM_DEMO_STALL_LONG
+#define NVM_DEMO_STALL_LONG		200UL
+#endif
+static uint32_t s_StallLong = 0;
+
+// A wait this long is not slow scheduling, it is an operation that is not
+// going to finish. About thirty seconds at the rate above.
+#ifndef NVM_DEMO_STALL_STUCK
+#define NVM_DEMO_STALL_STUCK	20000UL
+#endif
+
+// Skips by NvmCycleHandler. A memory that never finishes and an advertising
+// timeout that stopped arriving both show as no output at all otherwise.
+static uint32_t s_Skips = 0;
 #endif
 
 const BtAppCfg_t s_BtAppCfg = {
@@ -835,36 +862,47 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 	if (s_Nvm.IsBusy())
 	{
 		s_Requeues++;
+		s_StallRq++;
 
-		// A cycle that never finishes prints no report, so it would look
-		// exactly like a cycle that never started. Say so periodically: the
-		// count and the slot say whether it is spinning on one operation or
-		// making progress slowly.
-		if ((s_Requeues % 20000UL) == 0)
+		if (s_StallRq > s_StallMax)
+		{
+			s_StallMax = s_StallRq;
+		}
+		if (s_StallRq == NVM_DEMO_STALL_LONG)
+		{
+			s_StallLong++;
+		}
+
+		// Only a wait that is never going to end prints at the time. A slow
+		// one is counted above and reported with the cycle instead.
+		if ((s_StallRq % NVM_DEMO_STALL_STUCK) == 0)
 		{
 			NvmIntrfStat_t st;
 
 			NvmIntrfGetStat(&st);
 
-			// A cycle that never finishes prints no report, so without this
-			// it would look exactly like one that never started. rep is what
-			// became of each completion: passed on, or dropped with nothing
-			// wanting it, or dropped with nothing outstanding. The last two
-			// should stay at 0; either one means the driver is waiting for a
-			// completion that has already been and gone.
-			g_Uart.printf("cycle   : busy rq %lu pend %lu slot %lu ops %lu evt %lu"
-						  " rep %lu/%lu/%lu drv %lu\r\n",
-						  (unsigned long)s_Requeues, (unsigned long)s_Pending,
-						  (unsigned long)s_Slot, (unsigned long)st.Ops,
-						  (unsigned long)st.Evt, (unsigned long)st.RepDone,
-						  (unsigned long)st.RepNoWant, (unsigned long)st.RepNoPend,
-						  (unsigned long)s_EvtWrite);
+			g_Uart.printf("stuck   : rq %lu ops %lu evt %lu\r\n",
+						  (unsigned long)s_StallRq, (unsigned long)st.Ops,
+						  (unsigned long)st.Evt);
+
+			// Passed on, dropped with nothing wanting it, dropped with nothing
+			// outstanding. Either of the last two means the driver is waiting
+			// for a completion that has already been and gone.
+			g_Uart.printf("stuck   : rep %lu/%lu/%lu pend %lu\r\n",
+						  (unsigned long)st.RepDone,
+						  (unsigned long)st.RepNoWant,
+						  (unsigned long)st.RepNoPend,
+						  (unsigned long)s_Pending);
 		}
 
 		(void)NvmCycleRequeue();
 
 		return;
 	}
+
+	// The memory answered, so this wait is over. How long it was is in
+	// s_StallMax and goes out with the cycle report.
+	s_StallRq = 0;
 
 	// The memory is idle, so whatever was started has finished.
 	if (s_PendCheck)
@@ -942,9 +980,24 @@ static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 	if (s_Pending > 0 || s_Nvm.IsBusy())
 	{
 		// The previous cycle has not finished; skip rather than pile up.
+		// Which of the two matters. pend above 0 means the pump is still
+		// going round. pend 0 means it stopped and the memory never
+		// finished, since nothing else can be true here. rq standing still
+		// across two of these says the pump is no longer running at all,
+		// which is different again from the timeout no longer arriving,
+		// and that one prints nothing.
+		s_Skips++;
+		if (s_Skips == 3UL || (s_Skips % 10UL) == 0)
+		{
+			g_Uart.printf("cycle   : skip %lu pend %lu rq %lu\r\n",
+						  (unsigned long)s_Skips, (unsigned long)s_Pending,
+						  (unsigned long)s_StallRq);
+		}
+
 		return;
 	}
 
+	s_Skips = 0;
 	s_Pending = NVM_DEMO_WRITES_PER_CYCLE;
 
 	(void)NvmCycleRequeue();
@@ -977,16 +1030,34 @@ static void NvmCycleReport(void)
 		// dropped is a cycle abandoned because the event queue was full. It
 		// should stay at 0; if it climbs, the queue is too shallow for the
 		// rate the pump asks at.
-		g_Uart.printf("async requeues %lu dropped %lu | write evt %lu erase evt %lu err %lu\r\n",
+		// Split in two. UARTvprintf formats into SPRT_BUFFER_SIZE, which is
+		// 80, so a line past 79 characters loses its tail before the FIFO
+		// sees it. The single line this replaced was already over.
+		g_Uart.printf("async   : requeues %lu dropped %lu txdrop %lu\r\n",
 					  (unsigned long)s_Requeues, (unsigned long)s_Dropped,
+					  (unsigned long)((UARTDev_t*)g_Uart)->TxDropCnt);
+		g_Uart.printf("async   : write evt %lu erase evt %lu err %lu\r\n",
 					  (unsigned long)s_EvtWrite, (unsigned long)s_EvtErase,
 					  (unsigned long)s_EvtError);
+
+		// max is the longest the pump ever waited on one operation, in visits
+		// of about 1.5 msec each. long is how many waits passed the threshold.
+		g_Uart.printf("wait    : max %lu long %lu\r\n",
+					  (unsigned long)s_StallMax, (unsigned long)s_StallLong);
+
 #endif
-		g_Uart.printf("cycles %lu writes %lu fails %lu | ops %lu busy %lu evt %lu"
-					  " | sd %lu slot %lu direct %lu\r\n",
+		g_Uart.printf("cycles %lu writes %lu fails %lu\r\n",
 					  (unsigned long)s_Cycles, (unsigned long)s_Writes,
-					  (unsigned long)s_Fail, (unsigned long)st.Ops,
-					  (unsigned long)st.Busy, (unsigned long)st.Evt,
+					  (unsigned long)s_Fail);
+		// rep, not evt. Evt counts only the SoftDevice flash event, so on a
+		// timeslot build it stays at 0 while every operation completes
+		// normally. RepDone counts what was passed to the driver whichever
+		// path the operation took, so ops against rep is the check that
+		// reads the same on both.
+		g_Uart.printf("intrf   : ops %lu busy %lu rep %lu\r\n",
+					  (unsigned long)st.Ops, (unsigned long)st.Busy,
+					  (unsigned long)st.RepDone);
+		g_Uart.printf("path    : sd %lu slot %lu direct %lu\r\n",
 					  (unsigned long)st.Sd, (unsigned long)st.Slot,
 					  (unsigned long)st.Direct);
 #else

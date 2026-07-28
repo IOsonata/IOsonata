@@ -712,7 +712,11 @@ static int ScanAll(void)
 		}
 	}
 
-	s_NextSeq = s_SeqFound ? (uint16_t)(s_MaxSeq + 1U) : 0U;
+	// Seq is 32 bit in the record header and both comparisons that pick the
+	// newest record use the full width. Narrowing it here restarted the
+	// counter low after 65535 records, and a record written afterwards then
+	// lost to an older one in FindLatest.
+	s_NextSeq = s_SeqFound ? s_MaxSeq + 1U : 0U;
 	return 0;
 }
 

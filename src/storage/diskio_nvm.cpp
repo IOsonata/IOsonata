@@ -134,7 +134,21 @@ bool NvmDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
 		}
 	}
 
-	return vpNvm->Write(off, pData, vSectSize) == (int)vSectSize;
+	if (vpNvm->Write(off, pData, vSectSize) != (int)vSectSize)
+	{
+		return false;
+	}
+
+	// A filesystem reuses its sector buffer the moment this answers, and an
+	// interrupt driven memory returns as soon as the first chunk is handed
+	// over, with the rest still to be read out of pData. Wait for the medium
+	// here so what is reported is what reached it. Sync returns at once on a
+	// memory that finishes in the call.
+	//
+	// The erase above needs no wait of its own: the write that follows it
+	// drains whatever is outstanding before it starts, and answers the
+	// erase's error if it had one.
+	return vpNvm->Sync() == 0;
 }
 
 void NvmDiskIO::Erase(void)
@@ -144,7 +158,12 @@ void NvmDiskIO::Erase(void)
 		return;
 	}
 
-	vpNvm->Erase(0, (uint32_t)vpNvm->Size());
+	if (vpNvm->Erase(0, (uint32_t)vpNvm->Size()) == 0)
+	{
+		// Nothing here answers, so the wait is the only way the caller can
+		// be sure the medium is done before it reads the sectors back.
+		(void)vpNvm->Sync();
+	}
 }
 
 void NvmDiskIO::EraseSector(uint32_t SectNo, int NbSect)
@@ -156,5 +175,8 @@ void NvmDiskIO::EraseSector(uint32_t SectNo, int NbSect)
 
 	uint64_t off = (uint64_t)SectNo * vSectSize;
 
-	vpNvm->Erase(off, vSectSize * (uint32_t)NbSect);
+	if (vpNvm->Erase(off, vSectSize * (uint32_t)NbSect) == 0)
+	{
+		(void)vpNvm->Sync();
+	}
 }

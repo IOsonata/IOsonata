@@ -37,6 +37,7 @@
 
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_pds.h"
+#include "crypto/icrypto.h"
 #include "storage/nvm.h"
 #include "storage/nvm_intrf.h"
 #include "storage/nvm_region.h"
@@ -187,10 +188,16 @@ static int PdsEnsureReady(void)
 //
 // pBond points at a caller stack buffer that is wiped on return, so the copy
 // is not optional.
+// One record is staged at a time. A second save for the same slot is the
+// common case, and it supersedes the first, so one buffer holds it. A
+// second save for a different slot is the case one buffer cannot hold;
+// it is counted so a log says how often it happens rather than the bond
+// simply not being there later.
 static uint8_t s_PendRec[BT_PDS_RECORD_DATA_MAX];
 static size_t s_PendLen;
 static int s_PendSlot;
 static volatile bool s_PendBusy;
+static uint32_t s_PendDropCnt;
 
 static void BondSaveHandler(uint32_t Evt, void *pCtx)
 {
@@ -202,22 +209,38 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 		return;
 	}
 
+	// Take the record before the write, not after. BtSmpBondSave runs at
+	// the priority the stack dispatches at, so it can arrive part way
+	// through the write below. Releasing the staging buffer first means
+	// such a save stages a fresh record instead of overwriting the one
+	// being written.
+	uint8_t rec[BT_PDS_RECORD_DATA_MAX];
+	size_t len = s_PendLen;
+	int slot = s_PendSlot;
+
+	if (len > sizeof(rec))
+	{
+		len = sizeof(rec);
+	}
+	memcpy(rec, s_PendRec, len);
+	s_PendBusy = false;
+
 	int r = PdsEnsureReady();
 	if (r != 0)
 	{
 		BOND_PRINTF("PDS: save slot %d dropped, store not ready %d\r\n",
-					s_PendSlot, r);
-		s_PendBusy = false;
+					slot, r);
+		CryptoSecureWipe(rec, sizeof(rec));
 		return;
 	}
 
-	ssize_t w = BtPdsWrite(BT_SMP_BOND_KEY_BASE + (uint32_t)s_PendSlot,
-						   s_PendRec, s_PendLen);
+	ssize_t w = BtPdsWrite(BT_SMP_BOND_KEY_BASE + (uint32_t)slot,
+						   rec, len);
 
-	BOND_PRINTF("PDS: save slot %d len %u -> %d\r\n", s_PendSlot,
-				(unsigned)s_PendLen, (int)w);
+	BOND_PRINTF("PDS: save slot %d len %u -> %d\r\n", slot,
+				(unsigned)len, (int)w);
 
-	s_PendBusy = false;
+	CryptoSecureWipe(rec, sizeof(rec));
 }
 
 void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
@@ -233,12 +256,20 @@ void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 					(unsigned)Len, (unsigned)sizeof(s_PendRec));
 		return;
 	}
-	if (s_PendBusy)
+	if (s_PendBusy && Slot != s_PendSlot)
 	{
-		BOND_PRINTF("PDS: save slot %d dropped, one already queued\r\n", Slot);
+		// A record for another slot is already staged and one buffer holds
+		// one. Keeping the staged one is the safer of the two, since it has
+		// already been queued.
+		s_PendDropCnt++;
+		BOND_PRINTF("PDS: save slot %d dropped, slot %d staged, %lu so far\r\n",
+					Slot, s_PendSlot, (unsigned long)s_PendDropCnt);
 		return;
 	}
 
+	// Nothing staged, or the same slot again. The later record is the
+	// current state of that bond, so it replaces the earlier one. Refusing
+	// it kept the stale record and wrote that instead.
 	memcpy(s_PendRec, pBond, Len);
 	s_PendLen = Len;
 	s_PendSlot = Slot;
@@ -246,8 +277,10 @@ void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 
 	if (AppEvtHandlerQue(0, NULL, BondSaveHandler) == false)
 	{
-		BOND_PRINTF("PDS: save slot %d dropped, event queue full\r\n", Slot);
-		s_PendBusy = false;
+		// The record stays staged. The next save queues the handler again,
+		// so a queue that is full for a moment does not lose the bond.
+		BOND_PRINTF("PDS: save slot %d not queued yet, event queue full\r\n",
+					Slot);
 	}
 }
 

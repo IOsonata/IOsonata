@@ -700,11 +700,15 @@ void Nvm::IntrfEvent(DEVINTRF_EVT EvtId)
 {
 	bool done;
 
+	// Only COMPLETED ends a transfer. TX_READY asks the handler for more
+	// data and TX_FIFO_EMPTY says a software FIFO drained, and neither
+	// means the transfer finished: the nRF I2C master raises TX_READY on
+	// LASTTX, before the stop condition, and taking that as the end put a
+	// chunk back in the driver's hands while the bus was still on it. An
+	// interface that has its own idea of finished says so with COMPLETED.
 	switch (EvtId)
 	{
 		case DEVINTRF_EVT_COMPLETED:
-		case DEVINTRF_EVT_TX_READY:
-		case DEVINTRF_EVT_TX_FIFO_EMPTY:
 			done = true;
 			break;
 

@@ -97,7 +97,24 @@ static uint8_t s_Nor[NOR_SIZE];
 static bool s_NorWel;
 static uint32_t s_NorBusyCnt;	// status polls left before WIP clears
 static bool s_NorIntrfAsync;	// interface returns -1 and reports by event
-static uint32_t s_NorToken;		// names the transfer left running
+// Start the transfer and report nothing, so the driver is left with a
+// chunk in flight and an event can be delivered by hand.
+static bool s_NorHoldEvt;
+
+// True between StartTx and the transfer that sends the payload.
+// A status read reaches TxSrData with the write frame still in s_NorTx,
+// because StartRx keeps the frame on purpose, and without this the read
+// takes the program path a second time and answers -1 for a transfer
+// nobody started.
+static bool s_NorTxOpen;
+
+// A transfer handed over and not yet reported, and how many times the
+// driver opened a receive while one was outstanding. A driver that has
+// taken something for the end of its transfer goes to the status register
+// next, so this counts the mistake directly rather than inferring it from
+// a state that looks the same either way.
+static bool s_NorHeld;
+static uint32_t s_NorRxWhileHeld;
 static uint32_t s_NorRstCnt;
 static uint8_t s_NorBp;
 static uint32_t s_NorPgmOk;		// programs accepted before the part refuses
@@ -111,7 +128,10 @@ static void NorPowerOn(void)
 	s_NorWel = false;
 	s_NorBusyCnt = 0;
 	s_NorIntrfAsync = false;
-	s_NorToken = 0;
+	s_NorHoldEvt = false;
+	s_NorTxOpen = false;
+	s_NorHeld = false;
+	s_NorRxWhileHeld = 0;
 	s_NorBp = 0;
 	s_NorPgmOk = 0xFFFFFFFFUL;
 	s_NorVioNoWel = 0;
@@ -130,8 +150,22 @@ extern "C" {
 
 // A restart inside a read: the command and address are already sent, so the
 // frame must survive.
-static bool NorStartRx(DevIntrf_t *, uint32_t) { return true; }
-static bool NorStartTx(DevIntrf_t *, uint32_t) { s_NorTx.clear(); return true; }
+static bool NorStartRx(DevIntrf_t *, uint32_t)
+{
+	if (s_NorHeld)
+	{
+		s_NorRxWhileHeld++;
+	}
+
+	return true;
+}
+static bool NorStartTx(DevIntrf_t *, uint32_t)
+{
+	s_NorTx.clear();
+	s_NorTxOpen = true;
+
+	return true;
+}
 
 static void NorApply(void);
 
@@ -155,20 +189,22 @@ static int NorTxData(DevIntrf_t *pDev, const uint8_t *pData, int Len)
 	// reports -1, applies, and completes through the event, the way the
 	// real ports do. Command frames stay synchronous, as the real ports
 	// wait for a no stop command phase.
-	if (s_NorIntrfAsync && !s_NorTx.empty() && s_NorTx[0] == FLASH_CMD_WRITE
+	if (s_NorIntrfAsync && s_NorTxOpen && !s_NorTx.empty()
+		&& s_NorTx[0] == FLASH_CMD_WRITE
 		&& s_NorTx.size() > (size_t)(1 + NOR_ADDR))
 	{
 		NorApply();
+		s_NorTxOpen = false;
 
-		// Name the transfer before reporting it, the way a real interface
-		// does, so the driver can match the completion to its own chunk.
-		uint32_t token = ++s_NorToken;
-
-		pDev->XferToken = token;
-
-		if (pDev->EvtCB)
+		// Held: the transfer is started and nothing is reported, so the test
+		// can deliver events itself and see which of them the driver takes.
+		if (s_NorHoldEvt)
 		{
-			pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, nullptr, (int)token);
+			s_NorHeld = true;
+		}
+		else if (pDev->EvtCB)
+		{
+			pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, nullptr, 0);
 		}
 		// The real ports release the interface busy latch from the interrupt
 		// at completion, since the framework skips Stop on this path.
@@ -1098,7 +1134,8 @@ static int AppIntrfCB(DevIntrf_t * const, DEVINTRF_EVT EvtId, uint8_t *, int Len
 {
 	if (s_pAppNvm != nullptr)
 	{
-		s_pAppNvm->IntrfEvent(EvtId, (uint32_t)Len);
+		(void)Len;
+		s_pAppNvm->IntrfEvent(EvtId);
 	}
 
 	return 0;
@@ -1359,12 +1396,15 @@ static void TestMemCtrl(void)
 	CHECK(s_MemCmdBytes == 0, "memctrl: still no command traffic");
 }
 
-// The memory finishes a write while a read is open on the same interface.
-// The completion belongs to the write, and a read must not be able to take it:
-// if it can, the write never ends and the driver waits for ever.
+// A completion arrives while a read is open on the same interface. Nothing
+// was handed to the interface at that moment, so it belongs to nothing and
+// has to be discarded rather than ending whatever the driver is doing.
+//
+// Note the read cannot overlap an operation on purpose: Nvm::Read drains
+// anything outstanding before it starts. So what is delivered here is a
+// stray event, which is the case the transfer state has to survive.
 static Nvm *s_pLateNvm;
 static uint32_t s_LateAt;
-static uint32_t s_LateToken;
 
 static int NorRxDataLate(DevIntrf_t *pDev, uint8_t *pBuff, int Len)
 {
@@ -1375,8 +1415,9 @@ static int NorRxDataLate(DevIntrf_t *pDev, uint8_t *pBuff, int Len)
 
 		if (s_LateAt == 0)
 		{
-			// The completion of the write that is still outstanding.
-			s_pLateNvm->IntrfEvent(DEVINTRF_EVT_COMPLETED, s_LateToken);
+			// A completion arriving while a read is open. Nothing was handed
+			// over, so it belongs to nothing and must be discarded.
+			s_pLateNvm->IntrfEvent(DEVINTRF_EVT_COMPLETED);
 		}
 	}
 
@@ -1407,7 +1448,6 @@ static void TestLateCompletion(MockIntrf &Bus)
 
 	s_pLateNvm = &mem;
 	s_LateAt = 1;
-	s_LateToken = s_NorToken;	// the write just started
 	Bus.vDev.RxData = NorRxDataLate;
 
 	uint8_t rd[8] = { 0 };
@@ -1428,6 +1468,68 @@ static void TestLateCompletion(MockIntrf &Bus)
 	CHECK(s_EvtCnt >= 1 && s_LastEvt == NVM_EVT_WRITE_DONE,
 		  "late: the write reported done");
 
+}
+
+// TX_READY asks the handler for more data and TX_FIFO_EMPTY says a software
+// FIFO drained. Neither says the transfer finished, and the nRF I2C master
+// raises TX_READY on LASTTX, before the stop condition. Taking either as the
+// end returns a chunk to the driver while the bus is still on it.
+static void TestSpuriousComplete(MockIntrf &Bus)
+{
+	NorPowerOn();
+	s_EvtCnt = 0;
+
+	printf("--- only COMPLETED ends a transfer\n");
+
+	s_NorIntrfAsync = true;
+	s_NorHoldEvt = true;		// start it and report nothing
+	Bus.vDev.bIntEn = true;
+	Bus.vDev.EvtCB = nullptr;
+
+	Nvm mem;
+	NvmCfg_t cfg = NorCfg();
+
+	cfg.bIntEn = true;
+	cfg.EvtHandler = AsyncEvtHandler;
+	CHECK(mem.Init(cfg, &Bus), "spurious: init");
+
+	uint8_t wr[8];
+	memset(wr, 0x5A, sizeof(wr));
+
+	CHECK(mem.Write(0, wr, sizeof(wr)) == (int)sizeof(wr),
+		  "spurious: the write started");
+	CHECK(mem.IsBusy() && s_NorHeld,
+		  "spurious: the chunk is with the interface");
+
+	// A driver that took the event for the end of its transfer moves on to
+	// the medium and reads the status register. Both states look busy from
+	// outside, so the bus is what tells them apart.
+	s_NorRxWhileHeld = 0;
+
+	mem.IntrfEvent(DEVINTRF_EVT_TX_READY);
+	(void)mem.IsBusy();
+	CHECK(s_NorRxWhileHeld == 0 && s_EvtCnt == 0,
+		  "spurious: TX_READY did not end the transfer");
+
+	mem.IntrfEvent(DEVINTRF_EVT_TX_FIFO_EMPTY);
+	(void)mem.IsBusy();
+	CHECK(s_NorRxWhileHeld == 0 && s_EvtCnt == 0,
+		  "spurious: TX_FIFO_EMPTY did not end the transfer");
+
+	s_NorHeld = false;
+	mem.IntrfEvent(DEVINTRF_EVT_COMPLETED);
+	CHECK(mem.Sync() == 0, "spurious: COMPLETED ended it");
+	CHECK(s_EvtCnt == 1 && s_LastEvt == NVM_EVT_WRITE_DONE,
+		  "spurious: one event, the write");
+
+	s_NorHoldEvt = false;
+	s_NorIntrfAsync = false;
+	Bus.vDev.bIntEn = false;
+
+	uint8_t rd[8] = { 0 };
+	CHECK(mem.Read(0, rd, sizeof(rd)) == (int)sizeof(rd) &&
+		  memcmp(rd, wr, sizeof(wr)) == 0,
+		  "spurious: the data landed");
 }
 
 static void TestHookLifetime(MockIntrf &Bus)
@@ -1477,6 +1579,7 @@ int main(void)
 	TestHeldResult(nor);
 	TestMemCtrl();
 	TestLateCompletion(nor);
+	TestSpuriousComplete(nor);
 	TestHookLifetime(nor);
 
 	printf("\nChecks run: %d\n", g_Checks);

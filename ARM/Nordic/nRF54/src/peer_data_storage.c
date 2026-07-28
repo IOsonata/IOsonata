@@ -128,8 +128,11 @@ static uint32_t find_next_data_entry_in_peer(uint16_t peer_id, uint32_t *next_en
 			return NRF_ERROR_INTERNAL;
 		}
 
-		/* Some peer data has been found. */
-		if (ret > 0) {
+		/* Some peer data has been found. BtPdsWrite accepts a zero length
+		 * value, so BtPdsRead answering 0 means present and empty. Absent
+		 * is -ENOENT, which the test above has already let through.
+		 */
+		if (ret >= 0) {
 			*next_entry_id = entry_id;
 			return NRF_SUCCESS;
 		}
@@ -158,6 +161,7 @@ static void peer_data_delete_process(void)
 	peer_id = peer_id_get_next_deleted(PM_PEER_ID_INVALID);
 
 	while (peer_id != PM_PEER_ID_INVALID) {
+		bool failed = false;
 
 		/* Delete every remaining data entry for this peer. */
 		while (find_next_data_entry_in_peer(peer_id, &entry_id) == NRF_SUCCESS) {
@@ -169,26 +173,38 @@ static void peer_data_delete_process(void)
 			} else if (err < 0) {
 				LOG_ERR("Could not delete peer data. BtPdsDelete() returned %d "
 					"for peer_id: %d", err, peer_id);
-				atomic_dec(&delete_counter);
-				struct pm_evt fail_evt = {
-					.evt_id = PM_EVT_PEER_DELETE_FAILED,
-					.peer_id = peer_id,
-				};
-				fail_evt.peer_delete_failed.error = NRF_ERROR_INTERNAL;
-				pds_evt_send(&fail_evt);
+				failed = true;
 				break;
 			}
 		}
 
-		/* All entries gone (or aborted on error): free the id and report. */
+		/* One peer finished, one decrement, whichever way it went. Doing it
+		 * on the failure path as well as here drove delete_counter negative,
+		 * and pds_peer_id_free only starts this loop on the 0 to 1 step, so
+		 * every later delete request was ignored.
+		 */
 		atomic_dec(&delete_counter);
 
-		struct pm_evt done_evt = {
-			.evt_id = PM_EVT_PEER_DELETE_SUCCEEDED,
-			.peer_id = peer_id,
-		};
-		peer_id_free(peer_id);
-		pds_evt_send(&done_evt);
+		if (failed) {
+			/* The peer keeps its id and stays marked deleted, so its data is
+			 * still reachable and the next delete request retries it. Freeing
+			 * the id here handed it back for reuse with records still stored
+			 * under it.
+			 */
+			struct pm_evt fail_evt = {
+				.evt_id = PM_EVT_PEER_DELETE_FAILED,
+				.peer_id = peer_id,
+			};
+			fail_evt.peer_delete_failed.error = NRF_ERROR_INTERNAL;
+			pds_evt_send(&fail_evt);
+		} else {
+			struct pm_evt done_evt = {
+				.evt_id = PM_EVT_PEER_DELETE_SUCCEEDED,
+				.peer_id = peer_id,
+			};
+			peer_id_free(peer_id);
+			pds_evt_send(&done_evt);
+		}
 
 		peer_id = peer_id_get_next_deleted(peer_id);
 	}

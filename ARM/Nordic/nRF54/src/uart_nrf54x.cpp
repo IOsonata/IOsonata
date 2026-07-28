@@ -505,9 +505,14 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Data
         }
     }
 
-    if (rtry <= 0)
+    // Datalen is what is left and cnt is what was accepted, both moved by the
+    // same loop above, so the drop is Datalen. Taking cnt off it underflowed
+    // the unsigned counter whenever more was accepted than remained, and the
+    // old rtry test only ran when the FIFO refused, so with a large FIFO this
+    // reported 0 no matter what was lost.
+    if (Datalen > 0)
     {
-    	dev->pUartDev->TxDropCnt += Datalen- cnt;
+    	dev->pUartDev->TxDropCnt += (uint32_t)Datalen;
     }
 
     return cnt;
