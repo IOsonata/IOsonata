@@ -1078,10 +1078,20 @@ int BtPdsClear(void)
 	// erased at the next init, so a power loss after this write cannot bring
 	// cleared records back. A power loss before it leaves the store
 	// unchanged.
-	s_Epoch++;
+	// Moved on only for as long as the header write needs it. Advancing it
+	// and leaving it advanced meant a failed StartSector returned an error
+	// with the store still under the old epoch, and the next sector header
+	// written for any reason would carry the new one and discard every
+	// sector that had not been cleared.
+	uint32_t prev = s_Epoch;
+
+	s_Epoch = prev + 1U;
+
 	int result = StartSector(spare);
 	if (result != 0)
 	{
+		s_Epoch = prev;
+
 		return result;
 	}
 

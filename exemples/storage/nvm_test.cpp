@@ -1394,6 +1394,34 @@ static void TestMemCtrl(void)
 	CHECK(memcmp(&s_Mem[0x400], big, sizeof(big)) == 0,
 		  "memctrl: every chunk landed at its own address");
 	CHECK(s_MemCmdBytes == 0, "memctrl: still no command traffic");
+
+	// A mass erase is a command and this medium has no command protocol, so
+	// there is no way to ask for one. The chip erase opcode went out as a
+	// lone byte, the interface held it as the first byte of a frame that was
+	// never completed, and this answered 0 for an erase that never happened.
+	CHECK(mem.MassErase() == -ENOTSUP, "memctrl: mass erase refused");
+	CHECK(memcmp(&s_Mem[0x40], wr, sizeof(wr)) == 0,
+		  "memctrl: mass erase left the data alone");
+	CHECK(s_MemCmdBytes == 0, "memctrl: mass erase sent no command");
+
+	// Kept and read from long after the call returns when the memory is
+	// interrupt driven, so a null one has to be refused at the door.
+	CHECK(mem.Write(0x40, nullptr, 4) == -EINVAL,
+		  "memctrl: write refuses a null buffer");
+	CHECK(mem.Read(0x40, nullptr, 4) == -EINVAL,
+		  "memctrl: read refuses a null buffer");
+	CHECK(mem.Write(0x40, nullptr, 0) == 0 && mem.Read(0x40, nullptr, 0) == 0,
+		  "memctrl: nothing asked for is not an error");
+
+	// The frame address is 32 bit the whole way down. A part mapped past
+	// that would be programmed at a wrapped address.
+	NvmCfg_t far = cfg;
+
+	far.BaseAddr = 0xFFFFFF00ULL;
+
+	Nvm farmem;
+	CHECK(farmem.Init(far, &bus) == false,
+		  "memctrl: a region past 32 bits is refused");
 }
 
 // A completion arrives while a read is open on the same interface. Nothing

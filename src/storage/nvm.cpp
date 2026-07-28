@@ -496,6 +496,15 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		return fail();
 	}
 
+	// The frame address is 32 bit the whole way down, so a part mapped past
+	// that would be programmed at a wrapped address. Refuse it here rather
+	// than write somewhere else.
+	if (vBaseAddr + vDevSize > 0x100000000ULL)
+	{
+		DEBUG_PRINTF("Nvm address range exceeds 32 bits\r\n");
+		return fail();
+	}
+
 	vAddrSpan = vAddrSize >= 4 ? 0 : (1UL << (8 * vAddrSize));
 	if (vAddrSpan != 0 && vDevSize <= vAddrSpan)
 	{
@@ -625,6 +634,10 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 	if (Len == 0)
 	{
 		return 0;
+	}
+	if (pBuf == nullptr)
+	{
+		return -EINVAL;
 	}
 
 	int sr = ServiceRun(NVM_OP_TMOUT);
@@ -1202,6 +1215,15 @@ int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 	{
 		return 0;
 	}
+
+	// Checked here rather than at the transfer. In interrupt driven mode the
+	// pointer is kept and read from long after this call has returned, so a
+	// null one turns into a fault in an interrupt with nothing to say where
+	// it came from.
+	if (pData == nullptr)
+	{
+		return -EINVAL;
+	}
 	if (vWrGran > 1 && ((Off % vWrGran) != 0 || (Len % vWrGran) != 0))
 	{
 		return -EINVAL;
@@ -1397,7 +1419,12 @@ int Nvm::MassErase(void)
 	{
 		return -ENODEV;
 	}
-	if (vEraseSize == 0 || Interface()->Type() == DEVINTRF_TYPE_UNKOWN)
+	// A mass erase is a command, so a medium that answers to an address and
+	// nothing else has no way to be told. The one byte went out, the frame
+	// was never completed, and this answered success for an erase that never
+	// happened. Erase() over the whole region is what such a device offers.
+	if (vEraseSize == 0 || vbBare ||
+		Interface()->Type() == DEVINTRF_TYPE_UNKOWN)
 	{
 		return -ENOTSUP;
 	}
