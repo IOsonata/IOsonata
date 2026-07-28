@@ -1169,7 +1169,21 @@ void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
 	}
 }
 
-void NvmIntrfCfg(NvmCfg_t &Cfg)
+// Whether the memory has finished. The same question Nvm asks a serial NOR by
+// reading WIP; here it is a controller register. Nvm polls it, this only
+// answers, and NvmIntrf never sees it.
+//
+// The nRF54L is left on the weak true. RRAM commits inside the transfer, the
+// buffer is drained before CtrlWriteWords returns, and there is no busy period
+// afterwards for anyone to wait on.
+#if defined(NRF52_SERIES)
+extern "C" bool NvmMcuIsReady(void)
+{
+	return nrf_nvmc_ready_check(NRF_NVMC);
+}
+#endif
+
+void NvmMcuCfg(NvmCfg_t &Cfg)
 {
 	Cfg.DevNo = 0;
 
@@ -1212,7 +1226,7 @@ void NvmIntrfCfg(NvmCfg_t &Cfg)
 // device. Weak: an S145 application overrides it from nrf_sdh.c, because the
 // SoftDevice image sits at the top of the RRAM there and the application
 // slot ends at the storage partition.
-extern "C" __attribute__((weak)) uint64_t NvmIntrfCeiling(void)
+extern "C" __attribute__((weak)) uint64_t NvmMcuCeiling(void)
 {
 #if defined(NRF52_SERIES)
 	return (uint64_t)NRF_FICR->CODEPAGESIZE * (uint64_t)NRF_FICR->CODESIZE;

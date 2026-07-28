@@ -457,8 +457,8 @@ bool NvmIntrfSdRunning(void)
  * of the RRAM and the application slot runs up to the storage partition, so
  * the device size the weak default in nvm_nrfx.cpp reports would place a
  * region inside the live SoftDevice image. */
-uint64_t NvmIntrfCeiling(void);
-uint64_t NvmIntrfCeiling(void)
+uint64_t NvmMcuCeiling(void);
+uint64_t NvmMcuCeiling(void)
 {
 	return CONFIG_STORAGE0_PARTITION_OFFSET;
 }

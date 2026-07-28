@@ -33,7 +33,7 @@
 
 		The region is three pages placed at the top of the memory the
 		application owns, below a few reserved pages. The ceiling comes from
-		NvmIntrfCeiling(), because the application area does not always run to
+		NvmMcuCeiling(), because the application area does not always run to
 		the end of the device: a stack image or a reserved partition can sit
 		at the top, and the target implementation knows where. The first two
 		pages are the scratch the checks use, so a write can cross a
@@ -618,11 +618,11 @@ static bool NvmDemoSetup(void)
 	memset(&cfg, 0, sizeof(cfg));
 
 #if NVM_DEMO_MEDIUM == 0
-	NvmIntrfCfg(cfg);
+	NvmMcuCfg(cfg);
 
 	// The application area does not always run to the end of the device; the
 	// target implementation knows where it ends.
-	uint64_t ceiling = NvmIntrfCeiling();
+	uint64_t ceiling = NvmMcuCeiling();
 #else
 	cfg = s_ChipCfg;
 

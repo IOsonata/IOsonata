@@ -22,15 +22,17 @@ Usage :
 	g_MemIntrf.Init();
 
 	memset(&cfg, 0, sizeof(cfg));
-	NvmIntrfCfg(cfg);
+	NvmMcuCfg(cfg);
 
 	Nvm g_Nvm;
 	g_Nvm.Init(cfg, &g_MemIntrf, RegionAddr, RegionSize);
 
-The region placement is the application's decision. NvmIntrfCeiling() reports
-where the memory the application owns ends, which is not always the device
-size: a stack image or a reserved partition can sit at the top, and writing
-there destroys it.
+What the target knows about its own memory is at the end of this file rather
+than in the class: geometry, where the application's slice of it ends, and
+whether the medium is still working. None of that is a data transfer or an
+arbitration, so none of it belongs to the interface, and Nvm and the
+application call those directly. They are here because one header for one
+piece of silicon is one include for whoever uses it.
 
 @author	Hoang Nguyen Hoan
 @date	July 24, 2026
@@ -242,28 +244,54 @@ void NvmIntrfSetArbiter(NvmIntrfArb_t pArb);
  */
 void NvmIntrfGetStat(NvmIntrfStat_t *pStat);
 
+// ---------------------------------------------------------------------------
+// What the port knows about the memory itself. Not the interface's: it moves
+// data and arbitrates, and what the memory is doing is none of its business.
+// Answered by the port that knows the silicon, called by Nvm and by the
+// application.
+// ---------------------------------------------------------------------------
+
 /**
- * @brief	Fill a config for the internal memory.
+ * @brief	Fill a config for the MCU internal memory.
  *
- * Sets the geometry and the command set the interface understands. The
- * remaining fields are left untouched.
+ * Sets the geometry, which the part states or its FICR reports. The remaining
+ * fields are left untouched.
  *
  * @param	Cfg	: Config to fill
  */
-void NvmIntrfCfg(NvmCfg_t &Cfg);
+void NvmMcuCfg(NvmCfg_t &Cfg);
+
+// C linkage: a target can answer either of these from a C file, which is what
+// nrf_sdh.c does for the ceiling on an S145 build.
+extern "C" {
 
 /**
  * @brief	Where the memory the application owns ends.
  *
  * On most targets this is the device size. Where a stack image or a reserved
- * partition sits at the top, it is that boundary instead: on the nRF54L the
- * S145 image occupies the top of the RRAM and the application slot ends at
- * the storage partition. C linkage so a target can override the weak default
- * from a C file.
+ * partition sits at the top, it is that boundary instead. C linkage so a
+ * target can override the weak default from a C file.
  *
  * @return	First byte past the application owned memory.
  */
-extern "C" uint64_t NvmIntrfCeiling(void);
+uint64_t NvmMcuCeiling(void);
+
+/**
+ * @brief	Whether the internal memory has finished what it was given.
+ *
+ * The same question Nvm asks a serial NOR by reading WIP out of its status
+ * register. Reached differently because there is no bus to ask on, so the
+ * port reads whatever its controller offers.
+ *
+ * Weak, answering true. That is not a stand in for a missing implementation:
+ * a medium with nothing to report is a medium that is never busy, and a port
+ * overrides this only when its controller has something to say.
+ *
+ * @return	true when the medium is idle.
+ */
+bool NvmMcuIsReady(void);
+
+}	// extern "C"
 
 #endif	// __cplusplus
 

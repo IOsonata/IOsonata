@@ -1132,7 +1132,7 @@ int BtPdsBmInit(void)
 
 	NvmCfg_t cfg;
 	memset(&cfg, 0, sizeof(cfg));
-	NvmIntrfCfg(cfg);
+	NvmMcuCfg(cfg);
 
 	cfg.BaseAddr = base;
 	cfg.TotalSize = size;

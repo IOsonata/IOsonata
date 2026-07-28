@@ -67,6 +67,19 @@ SOFTWARE.
 #define NVM_CMD_RESET		0x99U
 #define NVM_CMD_EN4B		0xB7U
 
+// Whether the internal memory has finished what it was given, answered by the
+// port that knows the controller. Declared with the interface it sits beside;
+// repeated here because this is the only generic caller and the weak default
+// belongs with it.
+//
+// True, and that is the correct answer rather than a stand in for a missing
+// implementation: a medium with nothing to report is a medium that is never
+// busy. A port overrides it only when its controller has something to say.
+extern "C" __attribute__((weak)) bool NvmMcuIsReady(void)
+{
+	return true;
+}
+
 #define NVM_XFER_TMOUT		100000U
 #define NVM_OP_TMOUT		100000U
 
@@ -117,7 +130,9 @@ Nvm::Nvm()
 
 Nvm::~Nvm()
 {
-	while (atomic_flag_test_and_set(&vOpLock)) {}
+	uint32_t wait = NVM_OP_TMOUT;
+
+	while (atomic_flag_test_and_set(&vOpLock) && wait-- > 0) {}
 	vOpEvt = NVM_EVT_NONE;
 	vOpRemain = 0;
 	vpOpData = nullptr;
@@ -255,6 +270,30 @@ uint32_t Nvm::ReadId(int Len)
 
 bool Nvm::WaitReady(uint32_t Timeout)
 {
+	// Reached through a controller rather than a bus, so the status is a
+	// register the port reads and not a byte fetched with a command. Same
+	// question as the WIP poll below, asked the only way this medium can be
+	// asked. The interface is not involved: it moves data and arbitrates,
+	// and what the memory is doing is none of its business.
+	if (Interface()->Type() == DEVINTRF_TYPE_MEMCTRL)
+	{
+		while (Timeout-- > 0)
+		{
+			if (NvmMcuIsReady())
+			{
+				return true;
+			}
+			if (WaitPoll() == false)
+			{
+				return false;
+			}
+		}
+
+		return false;
+	}
+
+	// No status to read. An EEPROM is the case: it has no ready line, which
+	// is what WriteDelayUs is for.
 	if (vbBare)
 	{
 		if (WaitPoll() == false)
@@ -691,7 +730,12 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 
 		if (rd != (int)l)
 		{
-			return -EIO;
+			// Zero is the framework's retryable answer: DeviceIntrfRead has
+			// already looped MaxRetry times and the interface moved nothing
+			// each time, which is what another device holding it looks like.
+			// Write says -EBUSY for the same condition because it runs its own
+			// transaction; reporting it as a failed transfer here lost that.
+			return rd == 0 ? -EBUSY : -EIO;
 		}
 
 		addr += (uint32_t)rd;
@@ -733,6 +777,10 @@ void Nvm::IntrfEvent(DEVINTRF_EVT EvtId)
 	if (vXferState == NVM_XFER_RUNNING)
 	{
 		vXferState = done ? NVM_XFER_COMPLETE : NVM_XFER_FAILED;
+
+		// Written from an interrupt and read outside one, so the store has to
+		// be visible before this returns to whatever it interrupted.
+		atomic_thread_fence(memory_order_seq_cst);
 	}
 }
 
@@ -742,6 +790,13 @@ void Nvm::IntrfEvent(DEVINTRF_EVT EvtId)
 void Nvm::XferBegin(void)
 {
 	vXferState = NVM_XFER_RUNNING;
+
+	// Ordered against the call that follows, not only against the other
+	// accesses to this variable. volatile keeps the compiler from moving
+	// this past another volatile access; it says nothing about the store
+	// reaching memory before the interface starts something that can
+	// complete from an interrupt. Three faults came from this ordering.
+	atomic_thread_fence(memory_order_seq_cst);
 }
 
 // Stood down when the call turns out to have finished it, so a later event
@@ -830,7 +885,12 @@ void Nvm::CancelOp(int Res)
 	uint64_t off = 0;
 	uint32_t len = 0;
 
-	while (atomic_flag_test_and_set(&vOpLock)) {}
+	// Init, Disable and Reset call this and none of them can decline to do
+	// their work, so it waits rather than refusing. Bounded, so a lock that
+	// is somehow never released cannot take the application with it.
+	uint32_t wait = NVM_OP_TMOUT;
+
+	while (atomic_flag_test_and_set(&vOpLock) && wait-- > 0) {}
 	bool notify = FinishOpLocked(Res, evt, off, len);
 	vOpRes = 0;
 	vOpState = NVM_OPSTATE_IDLE;
@@ -892,7 +952,15 @@ int Nvm::ServiceStep(void)
 	int notifyRes = 0;
 	bool notify = false;
 
-	while (atomic_flag_test_and_set(&vOpLock)) {}
+	// Refused, not waited for, the way DeviceIntrfStartTx refuses a second
+	// transfer. This is held across a status read and a settling delay, so a
+	// spin here holds the caller for the length of somebody else's bus
+	// transaction. Contended means the operation is being advanced
+	// elsewhere, which from here is still work outstanding.
+	if (atomic_flag_test_and_set(&vOpLock))
+	{
+		return 1;
+	}
 
 	switch (vOpState)
 	{
@@ -1005,7 +1073,11 @@ int Nvm::ServiceStep(void)
 // caller starts clean.
 int Nvm::TakeResult(void)
 {
-	while (atomic_flag_test_and_set(&vOpLock)) {}
+	if (atomic_flag_test_and_set(&vOpLock))
+	{
+		// Being reported elsewhere. Whoever holds it takes the result.
+		return 0;
+	}
 
 	int r = vOpRes;
 
@@ -1037,7 +1109,10 @@ int Nvm::ServiceRun(uint32_t Timeout)
 			uint64_t off = 0;
 			uint32_t len = 0;
 
-			while (atomic_flag_test_and_set(&vOpLock)) {}
+			if (atomic_flag_test_and_set(&vOpLock))
+			{
+				return -EBUSY;
+			}
 
 			// Gave up on it. The chunk may still be with the interface, so
 			// drop it: a completion arriving later finds nothing running and
@@ -1240,7 +1315,10 @@ int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 
 	if (InterruptEnabled())
 	{
-		while (atomic_flag_test_and_set(&vOpLock)) {}
+		if (atomic_flag_test_and_set(&vOpLock))
+		{
+			return -EBUSY;
+		}
 		vOpEvt = NVM_EVT_WRITE_DONE;
 		vOpState = NVM_OPSTATE_ISSUING;
 		vXferState = NVM_XFER_NONE;
@@ -1366,7 +1444,10 @@ int Nvm::Erase(uint64_t Off, uint32_t Len)
 
 	if (InterruptEnabled())
 	{
-		while (atomic_flag_test_and_set(&vOpLock)) {}
+		if (atomic_flag_test_and_set(&vOpLock))
+		{
+			return -EBUSY;
+		}
 		vOpEvt = NVM_EVT_ERASE_DONE;
 		vOpState = NVM_OPSTATE_ISSUING;
 		vXferState = NVM_XFER_NONE;

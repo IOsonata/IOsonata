@@ -204,8 +204,10 @@ protected:
 		return Off <= vRegionSize && Len <= vRegionSize - Off;
 	}
 
-	bool WaitReady(uint32_t Timeout = 100000);
-	bool WriteEnable(uint32_t Timeout = 100000);
+	/// Microseconds, not loop iterations. A page erase on internal flash is
+	/// tens of milliseconds and can be spread over several radio timeslots.
+	bool WaitReady(uint32_t Timeout = 1000000);
+	bool WriteEnable(uint32_t Timeout = 1000000);
 	void WriteDisable(void);
 
 private:
