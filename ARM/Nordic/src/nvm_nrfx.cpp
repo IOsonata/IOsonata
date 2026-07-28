@@ -195,6 +195,7 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt);
 // describes the hardware rather than a transaction.
 static NvmDevIntrf_t *s_pXferDev = nullptr;
 
+
 // Whether to submit and return rather than submit and wait. This is the
 // bIntEn the application put in NvmCfg_t, handed down by the driver, not a
 // build option.

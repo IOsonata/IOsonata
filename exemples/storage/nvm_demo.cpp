@@ -143,7 +143,7 @@ static const IOPinCfg_t s_UartPins[] = UART_PINS;
 
 // TX FIFO large enough for the burst of check results printed back to back;
 // the driver's built in fallback is only 32 bytes.
-#define UART_TXFIFO_MEMSIZE			CFIFO_MEMSIZE(256)
+#define UART_TXFIFO_MEMSIZE			CFIFO_MEMSIZE(2048)
 
 alignas(4) static uint8_t s_UartTxFifoMem[UART_TXFIFO_MEMSIZE];
 

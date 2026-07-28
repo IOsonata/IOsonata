@@ -97,6 +97,7 @@ static uint8_t s_Nor[NOR_SIZE];
 static bool s_NorWel;
 static uint32_t s_NorBusyCnt;	// status polls left before WIP clears
 static bool s_NorIntrfAsync;	// interface returns -1 and reports by event
+static uint32_t s_NorToken;		// names the transfer left running
 static uint32_t s_NorRstCnt;
 static uint8_t s_NorBp;
 static uint32_t s_NorPgmOk;		// programs accepted before the part refuses
@@ -110,6 +111,7 @@ static void NorPowerOn(void)
 	s_NorWel = false;
 	s_NorBusyCnt = 0;
 	s_NorIntrfAsync = false;
+	s_NorToken = 0;
 	s_NorBp = 0;
 	s_NorPgmOk = 0xFFFFFFFFUL;
 	s_NorVioNoWel = 0;
@@ -157,9 +159,16 @@ static int NorTxData(DevIntrf_t *pDev, const uint8_t *pData, int Len)
 		&& s_NorTx.size() > (size_t)(1 + NOR_ADDR))
 	{
 		NorApply();
+
+		// Name the transfer before reporting it, the way a real interface
+		// does, so the driver can match the completion to its own chunk.
+		uint32_t token = ++s_NorToken;
+
+		pDev->XferToken = token;
+
 		if (pDev->EvtCB)
 		{
-			pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, nullptr, 0);
+			pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, nullptr, (int)token);
 		}
 		// The real ports release the interface busy latch from the interrupt
 		// at completion, since the framework skips Stop on this path.
@@ -1085,11 +1094,11 @@ static Nvm *s_pAppNvm;
 
 // The application owned interface callback: forwards events to the driver,
 // the path the header documents for an application that keeps EvtCB.
-static int AppIntrfCB(DevIntrf_t * const, DEVINTRF_EVT EvtId, uint8_t *, int)
+static int AppIntrfCB(DevIntrf_t * const, DEVINTRF_EVT EvtId, uint8_t *, int Len)
 {
 	if (s_pAppNvm != nullptr)
 	{
-		s_pAppNvm->IntrfEvent(EvtId);
+		s_pAppNvm->IntrfEvent(EvtId, (uint32_t)Len);
 	}
 
 	return 0;
@@ -1350,6 +1359,77 @@ static void TestMemCtrl(void)
 	CHECK(s_MemCmdBytes == 0, "memctrl: still no command traffic");
 }
 
+// The memory finishes a write while a read is open on the same interface.
+// The completion belongs to the write, and a read must not be able to take it:
+// if it can, the write never ends and the driver waits for ever.
+static Nvm *s_pLateNvm;
+static uint32_t s_LateAt;
+static uint32_t s_LateToken;
+
+static int NorRxDataLate(DevIntrf_t *pDev, uint8_t *pBuff, int Len)
+{
+	// Deliver the outstanding write completion in the middle of this read.
+	if (s_pLateNvm != nullptr && s_LateAt > 0)
+	{
+		s_LateAt--;
+
+		if (s_LateAt == 0)
+		{
+			// The completion of the write that is still outstanding.
+			s_pLateNvm->IntrfEvent(DEVINTRF_EVT_COMPLETED, s_LateToken);
+		}
+	}
+
+	return NorRxData(pDev, pBuff, Len);
+}
+
+static void TestLateCompletion(MockIntrf &Bus)
+{
+	NorPowerOn();
+	s_EvtCnt = 0;
+
+	printf("--- completion during another transfer\n");
+
+	NvmCfg_t cfg = NorCfg();
+	cfg.bIntEn = true;
+	cfg.EvtHandler = AsyncEvtHandler;
+
+	Nvm mem;
+	CHECK(mem.Init(cfg, &Bus), "late: init");
+
+	uint8_t wr[8];
+	memset(wr, 0x3C, sizeof(wr));
+
+	// Leave a write running, then read while it is still outstanding. The
+	// read arms its own transfer flags; the completion must not land on them.
+	s_NorBusyCnt = 4;
+	CHECK(mem.Write(0, wr, sizeof(wr)) == (int)sizeof(wr), "late: write starts");
+
+	s_pLateNvm = &mem;
+	s_LateAt = 1;
+	s_LateToken = s_NorToken;	// the write just started
+	Bus.vDev.RxData = NorRxDataLate;
+
+	uint8_t rd[8] = { 0 };
+	(void)mem.Read(0x200, rd, sizeof(rd));
+
+	Bus.vDev.RxData = NorRxData;
+	s_pLateNvm = nullptr;
+	s_LateAt = 0;
+	s_NorBusyCnt = 0;
+
+	// The write must still finish. Before the chunk had its own completion
+	// flags the read swallowed the event and this never returned.
+	int guard = 1000;
+	while (mem.IsBusy() && guard-- > 0) {}
+
+	CHECK(guard > 0, "late: the write still finished");
+	CHECK(mem.Sync() == 0, "late: nothing left to drain");
+	CHECK(s_EvtCnt >= 1 && s_LastEvt == NVM_EVT_WRITE_DONE,
+		  "late: the write reported done");
+
+}
+
 static void TestHookLifetime(MockIntrf &Bus)
 {
 	printf("--- completion hook lifetime\n");
@@ -1396,6 +1476,7 @@ int main(void)
 	TestNorAsyncIntrf(nor);
 	TestHeldResult(nor);
 	TestMemCtrl();
+	TestLateCompletion(nor);
 	TestHookLifetime(nor);
 
 	printf("\nChecks run: %d\n", g_Checks);

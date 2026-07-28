@@ -238,6 +238,41 @@ private:
 	NvmWaitCb_t	vpWaitCB;
 	NvmEvtHandler_t	vEvtHandler;
 
+	/// Where the operation has got to. One value at a time, so the stages
+	/// cannot contradict each other the way a set of flags can.
+	///
+	///	IDLE      nothing running
+	///	ISSUING   the next chunk is to be handed to the interface
+	///	INFLIGHT  a chunk is with the interface and its completion is owed
+	///	SETTLING  the medium is finishing the chunk it was given
+	///	DONE      finished, result not yet reported
+	///	FAILED    finished badly, result not yet reported
+	///
+	/// DONE and FAILED persist until a call reports them, which is how a
+	/// failure seen by IsBusy survives to the next Sync or operation.
+	typedef enum {
+		NVM_OPSTATE_IDLE = 0,
+		NVM_OPSTATE_ISSUING,
+		NVM_OPSTATE_INFLIGHT,
+		NVM_OPSTATE_SETTLING,
+		NVM_OPSTATE_DONE,
+		NVM_OPSTATE_FAILED
+	} NVM_OPSTATE;
+
+	/// One chunk handed to the interface and left running. A completion is
+	/// only accepted while a chunk is RUNNING, which is what keeps it from
+	/// ending a read or a command frame that happens to be open, or an
+	/// operation that has already consumed its own.
+	typedef enum {
+		NVM_XFER_NONE = 0,		//!< nothing handed over
+		NVM_XFER_RUNNING,		//!< handed over, completion owed
+		NVM_XFER_COMPLETE,		//!< its completion arrived
+		NVM_XFER_FAILED			//!< its completion said it failed
+	} NVM_XFERSTATE;
+
+	NVM_OPSTATE		vOpState;
+	volatile NVM_XFERSTATE	vXferState;
+
 	NVM_EVT			vOpEvt;
 
 	/// Result of the last operation to finish, held until a call reports it.
