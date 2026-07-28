@@ -1071,6 +1071,18 @@ static void PendingPumpsRun(void)
 #define BT_SEC_BM_REGION_NO			0
 #endif
 
+// Store trace. Independent of NDEBUG: a release build is where peer data has
+// to survive a reset, and a mount that silently did not happen looks exactly
+// like data that was written and not found again.
+#define BT_SEC_BM_PDS_TRACE
+
+#ifdef BT_SEC_BM_PDS_TRACE
+#include "syslog.h"
+#define PDS_PRINTF(...)			SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define PDS_PRINTF(...)
+#endif
+
 static NvmIntrf s_PdsIntrf;
 static Nvm s_PdsMem;
 static bool s_bPdsMounted = false;
@@ -1089,22 +1101,33 @@ int BtPdsBmInit(void)
 		return 0;
 	}
 
-	// Nothing is set up here beyond the memory itself. Who may touch it and
-	// when is registered with the interface by whoever owns the radio, and how
-	// long a program takes is the memory's own timing.
-	if (s_PdsIntrf.Init() == false)
-	{
-		return -EIO;
-	}
-
 	// The region the linker set aside is the device: base and size come from
-	// it, and the geometry from the part.
+	// it, and the geometry from the part. Asked for before the interface is
+	// brought up, so a project with no region declared does not leave one
+	// initialised with no store on it.
 	uintptr_t base = NvmRegionAddr(BT_SEC_BM_REGION_NO);
 	size_t size = NvmRegionSize(BT_SEC_BM_REGION_NO);
 
+	PDS_PRINTF("PDS: linker NVM%d at %08lX size %08lX\r\n",
+			   BT_SEC_BM_REGION_NO, (unsigned long)base,
+			   (unsigned long)size);
+
 	if (base == 0 || size == 0)
 	{
+		PDS_PRINTF("PDS: no NVM%d region in the linker script, "
+				   "peer data will not persist\r\n", BT_SEC_BM_REGION_NO);
+
 		return -ENODEV;
+	}
+
+	// Nothing else is set up here beyond the memory itself. Who may touch it
+	// and when is registered with the interface by whoever owns the radio, and
+	// how long a program takes is the memory's own timing.
+	if (s_PdsIntrf.Init() == false)
+	{
+		PDS_PRINTF("PDS: memory interface init failed\r\n");
+
+		return -EIO;
 	}
 
 	NvmCfg_t cfg;
@@ -1117,14 +1140,25 @@ int BtPdsBmInit(void)
 	// The region is the whole of this device, so no window inside it.
 	if (s_PdsMem.Init(cfg, &s_PdsIntrf, 0, 0) == false)
 	{
+		PDS_PRINTF("PDS: Nvm init failed\r\n");
+
 		return -EIO;
 	}
+
+	PDS_PRINTF("PDS: Nvm ok, size %lu, sector %lu, wr %lu\r\n",
+			   (unsigned long)s_PdsMem.Size(),
+			   (unsigned long)s_PdsMem.LogicalSectorSize(),
+			   (unsigned long)s_PdsMem.WriteGran());
 
 	int r = BtPdsInit(&s_PdsMem);
 	if (r != 0)
 	{
+		PDS_PRINTF("PDS: store mount failed %d\r\n", r);
+
 		return r;
 	}
+
+	PDS_PRINTF("PDS: store mounted\r\n");
 
 	s_bPdsMounted = true;
 

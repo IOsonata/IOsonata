@@ -211,11 +211,23 @@ static bool AsyncWanted(void)
 
 static void AsyncReport(bool bOk)
 {
-	if (AsyncWanted() == false || s_pXferDev->bAsyncPending == false)
+	// A completion is counted in Evt before it gets here, so one dropped now
+	// leaves the driver waiting for something that has already been and gone.
+	// Say which way it went rather than leaving it invisible.
+	if (AsyncWanted() == false)
 	{
+		s_Stat.RepNoWant++;
+
+		return;
+	}
+	if (s_pXferDev->bAsyncPending == false)
+	{
+		s_Stat.RepNoPend++;
+
 		return;
 	}
 
+	s_Stat.RepDone++;
 	s_pXferDev->bAsyncPending = false;
 
 	// End the transfer here. The driver returned as soon as the operation was
@@ -533,18 +545,31 @@ static int SdStart(SdSubmit_t Submit, void *pArg)
 	s_OpDone = false;
 	s_OpOk = false;
 	s_OpPending = true;
+
+	// Armed before the submit, not after. The completion can arrive while
+	// Submit is still running, or be dispatched from a higher priority the
+	// moment it returns, and a completion that finds nothing outstanding is
+	// dropped. Setting this afterwards loses that race and leaves the driver
+	// waiting for an event that has already been and gone.
+	bool wanted = AsyncWanted();
+
+	if (wanted)
+	{
+		s_pXferDev->bAsyncPending = true;
+	}
 	__DMB();
 
 	uint32_t status = Submit(pArg);
 
 	if (status == NRF_SUCCESS)
 	{
-		if (s_pXferDev != nullptr)
-		{
-			s_pXferDev->bAsyncPending = true;
-		}
-
 		return 0;
+	}
+
+	// Never started, so nothing is owed a completion.
+	if (wanted)
+	{
+		s_pXferDev->bAsyncPending = false;
 	}
 
 	s_OpPending = false;

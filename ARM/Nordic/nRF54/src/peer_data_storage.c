@@ -26,7 +26,8 @@
 #include "bluetooth/bt_pds.h"
 
 // Mounts the store on an Nvm. C entry point defined in bt_sec_bm.cpp, because
-// Nvm is a C++ class and this is C.
+// Nvm is a C++ class and this is C. Where the store lives comes from the
+// linker script, not from a constant here or there.
 extern int BtPdsBmInit(void);
 
 /* A store or a delete arrives from inside the peer manager's BLE event
@@ -267,9 +268,10 @@ uint32_t pds_init(void)
 	/* Check for re-initialization if debugging. */
 	__ASSERT_NO_MSG(!module_initialized);
 
-	/* Initialize the IOsonata persistent data store. The platform backend
-	 * (BtPdsBmInit on the bm port) owns the NVM region constants. This is
-	 * synchronous: on return the store is mounted and scanned.
+	/* Bring up the memory and mount the IOsonata store on it. Where the store
+	 * lives comes from the linker script, so nothing here states an address.
+	 * Mounting is synchronous: on return the store has been scanned. Storing
+	 * and deleting are not, and report through pds_evt_send when they finish.
 	 */
 	err = BtPdsBmInit();
 	if (err) {

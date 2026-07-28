@@ -718,6 +718,13 @@ static bool NvmDemoSetup(void)
 #define NVM_DEMO_SLOTS			64
 #endif
 
+// The library default is 4 slots. The async cycle puts the pump back on the
+// queue on every visit, thousands of times a cycle, alongside whatever the
+// stack posts, so 4 is not enough and a refusal costs a whole cycle.
+#define APP_EVT_QUE_MEMSIZE			APPEVT_HANDLER_QUE_MEMSIZE(16)
+
+alignas(4) static uint8_t s_AppEvtQueMem[APP_EVT_QUE_MEMSIZE];
+
 static uint32_t g_AdvCnt = 0;
 static bool s_Ready = false;
 static uint32_t s_Cycles = 0;
@@ -730,6 +737,7 @@ static uint32_t s_Slot = 0;
 // read it back.
 static uint32_t s_Pending = 0;
 static uint32_t s_Requeues = 0;
+static uint32_t s_Dropped = 0;
 static uint32_t s_PendOff = 0;
 static uint32_t s_PendVal = 0;
 static bool s_PendCheck = false;
@@ -749,6 +757,8 @@ const BtAppCfg_t s_BtAppCfg = {
 	.AdvInterval = APP_ADV_INTERVAL_MSEC,
 	.AdvTimeout = APP_ADV_TIMEOUT_MSEC,
 	.TxPower = 0,
+	.pEvtHandlerQueMem = s_AppEvtQueMem,
+	.EvtHandlerQueMemSize = APP_EVT_QUE_MEMSIZE,
 };
 
 static void NvmCycleHandler(uint32_t Evt, void *pCtx);
@@ -795,6 +805,28 @@ static void NvmCycleSlot(void)
 // read it back, which would leave nothing in flight and nothing to requeue
 // for. The readback happens on the next visit instead, once the memory is
 // idle.
+static void NvmCyclePump(uint32_t Evt, void *pCtx);
+
+// Put the pump back on the queue, or abandon the cycle. A queue slot is not
+// guaranteed: the stack posts its own work and the pump asks for one on every
+// visit, thousands of times a cycle. Without this the first refusal would end
+// cycling for good, because NvmCycleHandler skips while s_Pending is not 0.
+static bool NvmCycleRequeue(void)
+{
+	if (AppEvtHandlerQue(0, NULL, NvmCyclePump))
+	{
+		return true;
+	}
+
+	// Leave nothing half started, so the next advertising timeout begins a
+	// clean cycle rather than finding one that never finished.
+	s_Pending = 0;
+	s_PendCheck = false;
+	s_Dropped++;
+
+	return false;
+}
+
 static void NvmCyclePump(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
@@ -803,7 +835,33 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 	if (s_Nvm.IsBusy())
 	{
 		s_Requeues++;
-		AppEvtHandlerQue(0, NULL, NvmCyclePump);
+
+		// A cycle that never finishes prints no report, so it would look
+		// exactly like a cycle that never started. Say so periodically: the
+		// count and the slot say whether it is spinning on one operation or
+		// making progress slowly.
+		if ((s_Requeues % 20000UL) == 0)
+		{
+			NvmIntrfStat_t st;
+
+			NvmIntrfGetStat(&st);
+
+			// A cycle that never finishes prints no report, so without this
+			// it would look exactly like one that never started. rep is what
+			// became of each completion: passed on, or dropped with nothing
+			// wanting it, or dropped with nothing outstanding. The last two
+			// should stay at 0; either one means the driver is waiting for a
+			// completion that has already been and gone.
+			g_Uart.printf("cycle   : busy rq %lu pend %lu slot %lu ops %lu evt %lu"
+						  " rep %lu/%lu/%lu drv %lu\r\n",
+						  (unsigned long)s_Requeues, (unsigned long)s_Pending,
+						  (unsigned long)s_Slot, (unsigned long)st.Ops,
+						  (unsigned long)st.Evt, (unsigned long)st.RepDone,
+						  (unsigned long)st.RepNoWant, (unsigned long)st.RepNoPend,
+						  (unsigned long)s_EvtWrite);
+		}
+
+		(void)NvmCycleRequeue();
 
 		return;
 	}
@@ -843,7 +901,7 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 		s_Slot = 0;
 
 		// The erase was started, not finished. Come back for it.
-		AppEvtHandlerQue(0, NULL, NvmCyclePump);
+		(void)NvmCycleRequeue();
 
 		return;
 	}
@@ -863,7 +921,7 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 	s_Slot++;
 	s_Writes++;
 
-	AppEvtHandlerQue(0, NULL, NvmCyclePump);
+	(void)NvmCycleRequeue();
 }
 
 #endif
@@ -888,7 +946,8 @@ static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 	}
 
 	s_Pending = NVM_DEMO_WRITES_PER_CYCLE;
-	AppEvtHandlerQue(0, NULL, NvmCyclePump);
+
+	(void)NvmCycleRequeue();
 #else
 	for (int i = 0; i < NVM_DEMO_WRITES_PER_CYCLE; i++)
 	{
@@ -915,9 +974,13 @@ static void NvmCycleReport(void)
 #if NVM_DEMO_ASYNC
 		// requeues is the point of the mode: that many times the cycle left
 		// the loop instead of waiting for the memory.
-		g_Uart.printf("async requeues %lu | write evt %lu erase evt %lu err %lu\r\n",
-					  (unsigned long)s_Requeues, (unsigned long)s_EvtWrite,
-					  (unsigned long)s_EvtErase, (unsigned long)s_EvtError);
+		// dropped is a cycle abandoned because the event queue was full. It
+		// should stay at 0; if it climbs, the queue is too shallow for the
+		// rate the pump asks at.
+		g_Uart.printf("async requeues %lu dropped %lu | write evt %lu erase evt %lu err %lu\r\n",
+					  (unsigned long)s_Requeues, (unsigned long)s_Dropped,
+					  (unsigned long)s_EvtWrite, (unsigned long)s_EvtErase,
+					  (unsigned long)s_EvtError);
 #endif
 		g_Uart.printf("cycles %lu writes %lu fails %lu | ops %lu busy %lu evt %lu"
 					  " | sd %lu slot %lu direct %lu\r\n",
@@ -959,7 +1022,10 @@ void BtAppAdvTimeoutHandler()
 
 	BtAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
 
-	AppEvtHandlerQue(0, NULL, NvmCycleHandler);
+	if (AppEvtHandlerQue(0, NULL, NvmCycleHandler) == false)
+	{
+		g_Uart.printf("cycle   : event queue refused the cycle\r\n");
+	}
 }
 
 int main()

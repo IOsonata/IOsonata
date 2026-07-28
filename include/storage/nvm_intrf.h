@@ -117,6 +117,13 @@ typedef struct __Nvm_Intrf_Stat {
 	uint32_t	Sd;			//!< Submitted to the SoftDevice
 	uint32_t	Slot;		//!< Run inside an MPSL timeslot
 	uint32_t	Direct;		//!< Drove the controller, the memory was ours
+
+	// Completions the interface saw and what became of them. Passed on plus
+	// dropped should equal Evt; a dropped one leaves the driver waiting for a
+	// completion that has already been and gone.
+	uint32_t	RepDone;	//!< Passed on to the driver
+	uint32_t	RepNoWant;	//!< Dropped, nothing asked to be told
+	uint32_t	RepNoPend;	//!< Dropped, nothing was outstanding
 } NvmIntrfStat_t;
 
 /// Command byte plus a 32 bit address. The frame the driver puts in front of
