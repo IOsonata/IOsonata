@@ -166,6 +166,10 @@ typedef struct __Nvm_Intrf_Er_Ctx {
 /// in the arbitrated operation and its context: the stack and the arbiter
 /// both report after the call has returned, so both outlive it.
 ///
+/// Whether a submit is owed a completion is not in here, because it is not
+/// per transaction. There is one memory controller and one thing holding it
+/// at a time, so who holds it describes the controller and lives beside it.
+///
 /// Packed to 4 so the staged payload keeps the alignment word wise transfers
 /// need, without alignas, which C does not have, so the header stays
 /// includable from C.
@@ -175,7 +179,6 @@ typedef struct __Nvm_Dev_Intrf {
 	uint8_t			Hdr[NVM_INTRF_FRAME_SIZE];	//!< Command and address frame
 	int				HdrLen;			//!< Frame bytes taken so far
 	int				DataLen;		//!< Payload bytes staged
-	bool volatile	bAsyncPending;	//!< A submit is owed a completion
 
 	NvmIntrfOp_t	Op;				//!< The arbitrated operation
 	union {

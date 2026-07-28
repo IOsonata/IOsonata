@@ -195,6 +195,28 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt);
 // describes the hardware rather than a transaction.
 static NvmDevIntrf_t *s_pXferDev = nullptr;
 
+// Where the controller has got to with the operation it was given. One value
+// at a time, so the stages cannot contradict each other the way a set of
+// flags can, and named for the transport's business rather than the memory's:
+// this says who holds the controller, not what the medium is doing.
+//
+//	FREE		nothing submitted
+//	HELD		submitted, the call that submitted it waits for the result
+//	HANDED_OVER	submitted, the driver is to be told when it arrives
+//	DONE		finished, result in s_CtrlRes, not yet taken
+//
+// Per controller, not per transaction: there is one memory controller and one
+// thing holding it at a time, the same reason s_pXferDev lives here.
+typedef enum {
+	NVM_CTRL_FREE = 0,
+	NVM_CTRL_HELD,
+	NVM_CTRL_HANDED_OVER,
+	NVM_CTRL_DONE
+} NVM_CTRLSTATE;
+
+static volatile NVM_CTRLSTATE s_CtrlState = NVM_CTRL_FREE;
+static volatile int s_CtrlRes = 0;
+
 
 // Whether to submit and return rather than submit and wait. This is the
 // bIntEn the application put in NvmCfg_t, handed down by the driver, not a
@@ -210,26 +232,45 @@ static bool AsyncWanted(void)
 		   s_pXferDev->DevIntrf.EvtCB != nullptr;
 }
 
-static void AsyncReport(bool bOk)
+// The controller has finished. Whoever submitted it said how the result was
+// to be taken, so this is the one place that decides between leaving it for
+// that caller and reporting it, and the state is what says which.
+//
+// Runs wherever the operation finished, which for a flash event or a radio
+// timeslot is a high priority interrupt: it does nothing but hand the result
+// over.
+static void CtrlFinish(int Res)
 {
-	// A completion is counted in Evt before it gets here, so one dropped now
-	// leaves the driver waiting for something that has already been and gone.
-	// Say which way it went rather than leaving it invisible.
-	if (AsyncWanted() == false)
-	{
-		s_Stat.RepNoWant++;
+	NVM_CTRLSTATE st = s_CtrlState;
 
-		return;
-	}
-	if (s_pXferDev->bAsyncPending == false)
+	// Nothing of ours was out. A result dropped here leaves the driver waiting
+	// for something that has already been and gone, so say which way it went
+	// rather than leaving it invisible.
+	if (st != NVM_CTRL_HELD && st != NVM_CTRL_HANDED_OVER)
 	{
 		s_Stat.RepNoPend++;
 
 		return;
 	}
 
+	s_CtrlRes = Res;
+	s_CtrlState = NVM_CTRL_DONE;
+
+	if (st == NVM_CTRL_HELD)
+	{
+		// The call that submitted it is spinning on this and takes it there.
+		return;
+	}
+
+	if (AsyncWanted() == false)
+	{
+		s_Stat.RepNoWant++;
+
+		return;
+	}
+
 	s_Stat.RepDone++;
-	s_pXferDev->bAsyncPending = false;
+	s_CtrlState = NVM_CTRL_FREE;
 
 	// End the transfer here. The driver returned as soon as the operation was
 	// under way and never sent a stop, because on this interface the stop is
@@ -239,15 +280,15 @@ static void AsyncReport(bool bOk)
 	DeviceIntrfStopTx(&s_pXferDev->DevIntrf);
 
 	s_pXferDev->DevIntrf.EvtCB(&s_pXferDev->DevIntrf,
-					bOk ? DEVINTRF_EVT_COMPLETED : DEVINTRF_EVT_TX_TIMEOUT,
-					nullptr, 0);
+				Res == 0 ? DEVINTRF_EVT_COMPLETED : DEVINTRF_EVT_TX_TIMEOUT,
+				nullptr, 0);
 }
 
 static void NvmArbDone(void *pCtx, int Res)
 {
 	(void)pCtx;
 
-	AsyncReport(Res == 0);
+	CtrlFinish(Res);
 }
 
 // Issue an operation through the arbiter. Done is set only when the driver
@@ -269,9 +310,14 @@ static int ArbiterIssue(uint32_t (*Step)(void *), void *pCtx)
 
 	s_Stat.Slot++;
 
+	// Marked before the call, not after: the arbiter can finish the operation
+	// and report it from inside s_pArbiter, and a result that finds nothing
+	// outstanding is dropped. With Done unset the arbiter waits for it itself
+	// and answers in the call, so nothing is outstanding to mark.
 	if (op->Done != nullptr)
 	{
-		s_pXferDev->bAsyncPending = true;
+		s_CtrlRes = 0;
+		s_CtrlState = NVM_CTRL_HANDED_OVER;
 	}
 
 	int r = s_pArbiter(op);
@@ -281,7 +327,12 @@ static int ArbiterIssue(uint32_t (*Step)(void *), void *pCtx)
 		return r;
 	}
 
-	s_pXferDev->bAsyncPending = false;
+	// Never started, or finished and reported inside the call. Either way
+	// nothing is owed from here on.
+	if (op->Done != nullptr)
+	{
+		s_CtrlState = NVM_CTRL_FREE;
+	}
 
 	return r;
 }
@@ -433,13 +484,6 @@ static bool CtrlIsErased(uintptr_t Addr, uint32_t Len)
 // ---------------------------------------------------------------------------
 #ifdef NVM_INTRF_SOFTDEVICE
 
-static volatile bool s_OpDone;
-static volatile bool s_OpOk;
-// Set while a request of ours is outstanding. The SoC flash event is broadcast
-// to every observer and has nothing identifying in it, so this is how the
-// handler knows whether the event it was handed belongs to it.
-static volatile bool s_OpPending;
-
 #ifdef NVM_INTRF_SD_RUNTIME
 
 // Weak: an application with no SoftDevice support linked runs on this answer
@@ -489,28 +533,26 @@ static bool SdRunning(void)
 
 static void NvmIntrfSocEvt(uint32_t SysEvt)
 {
-	if (s_OpPending == false)
+	// The SoC flash event is broadcast to every observer and has nothing
+	// identifying in it, so the state is how this knows whether the event it
+	// was handed belongs to it. Evt counts the ones that do.
+	NVM_CTRLSTATE st = s_CtrlState;
+
+	if (st != NVM_CTRL_HELD && st != NVM_CTRL_HANDED_OVER)
 	{
-		// Every observer sees every event; this one is not ours.
 		return;
 	}
 
 	switch (SysEvt)
 	{
 		case NRF_EVT_FLASH_OPERATION_SUCCESS:
-			s_OpOk = true;
-			s_OpPending = false;
-			s_OpDone = true;
 			s_Stat.Evt++;
-			AsyncReport(true);
+			CtrlFinish(0);
 			break;
 
 		case NRF_EVT_FLASH_OPERATION_ERROR:
-			s_OpOk = false;
-			s_OpPending = false;
-			s_OpDone = true;
 			s_Stat.Evt++;
-			AsyncReport(false);
+			CtrlFinish(-EIO);
 			break;
 
 		default:
@@ -538,26 +580,26 @@ NRF_SDH_SOC_OBSERVER(s_NvmIntrfSocObs, NvmIntrfSocObserver, NULL, HIGH);
 
 typedef uint32_t (*SdSubmit_t)(void *pArg);
 
-// Submit, retry while the radio holds the memory, then wait for the result.
-// Submit only. Returns 0 when the operation is under way and the flash event
-// will report it, or a negative errno when it could not be started.
-static int SdStart(SdSubmit_t Submit, void *pArg)
+// Submit only. Returns 0 when the operation is under way, or a negative
+// errno when it could not be started.
+//
+// bHandOver says how the result is to be taken, and the caller is the one
+// that knows: it already chose this function over SdRun on the same answer.
+// Deciding it again in here would let the two disagree, and a submit made as
+// handed over while the caller then waits for it is a wait that never ends.
+static int SdStart(SdSubmit_t Submit, void *pArg, bool bHandOver)
 {
-	s_OpDone = false;
-	s_OpOk = false;
-	s_OpPending = true;
-
-	// Armed before the submit, not after. The completion can arrive while
+	// Marked before the submit, not after. The completion can arrive while
 	// Submit is still running, or be dispatched from a higher priority the
-	// moment it returns, and a completion that finds nothing outstanding is
-	// dropped. Setting this afterwards loses that race and leaves the driver
+	// moment it returns, and a result that finds nothing outstanding is
+	// dropped. Doing this afterwards loses that race and leaves the driver
 	// waiting for an event that has already been and gone.
-	bool wanted = AsyncWanted();
-
-	if (wanted)
-	{
-		s_pXferDev->bAsyncPending = true;
-	}
+	//
+	// Which of the two it is is decided here and nowhere else: the state the
+	// submit is made under is what CtrlFinish reads to know whether to leave
+	// the result for this call or report it.
+	s_CtrlRes = 0;
+	s_CtrlState = bHandOver ? NVM_CTRL_HANDED_OVER : NVM_CTRL_HELD;
 	__DMB();
 
 	uint32_t status = Submit(pArg);
@@ -567,13 +609,8 @@ static int SdStart(SdSubmit_t Submit, void *pArg)
 		return 0;
 	}
 
-	// Never started, so nothing is owed a completion.
-	if (wanted)
-	{
-		s_pXferDev->bAsyncPending = false;
-	}
-
-	s_OpPending = false;
+	// Never started, so nothing is owed a result.
+	s_CtrlState = NVM_CTRL_FREE;
 
 	if (status != NRF_ERROR_BUSY)
 	{
@@ -595,7 +632,8 @@ static int SdStart(SdSubmit_t Submit, void *pArg)
 // live in Nvm.
 static int SdRun(SdSubmit_t Submit, void *pArg)
 {
-	int r = SdStart(Submit, pArg);
+	// Waited out here, so it is held rather than handed over.
+	int r = SdStart(Submit, pArg, false);
 
 	if (r != 0)
 	{
@@ -604,18 +642,21 @@ static int SdRun(SdSubmit_t Submit, void *pArg)
 
 	for (uint32_t i = 0; i < NVM_INTRF_SD_SPIN; i++)
 	{
-		if (s_OpDone)
+		if (s_CtrlState == NVM_CTRL_DONE)
 		{
-			if (s_pXferDev != nullptr)
-			{
-				s_pXferDev->bAsyncPending = false;
-			}
+			int res = s_CtrlRes;
 
-			return s_OpOk ? 0 : -EIO;
+			// Taken, so the controller is free as far as anyone is concerned.
+			s_CtrlState = NVM_CTRL_FREE;
+
+			return res;
 		}
 	}
 
-	s_OpPending = false;
+	// Given up on. Dropping it means a result arriving later finds nothing
+	// outstanding and is discarded, rather than being taken for the next
+	// operation's.
+	s_CtrlState = NVM_CTRL_FREE;
 
 	return -ETIMEDOUT;
 }
@@ -715,7 +756,7 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 
 		if (AsyncWanted())
 		{
-			int r = SdStart(SdWriteSubmit, arg);
+			int r = SdStart(SdWriteSubmit, arg, true);
 
 			return r != 0 ? r : NVM_INTRF_STARTED;
 		}
@@ -738,7 +779,7 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 
 			if (AsyncWanted())
 			{
-				int r = SdStart(SdWriteSubmit, arg);
+				int r = SdStart(SdWriteSubmit, arg, true);
 
 				return r != 0 ? r : NVM_INTRF_STARTED;
 			}
@@ -834,7 +875,7 @@ static int NvmEraseUnit(uintptr_t Addr)
 
 			if (AsyncWanted())
 			{
-				int r = SdStart(SdEraseSubmit, &no);
+				int r = SdStart(SdEraseSubmit, &no, true);
 
 				return r != 0 ? r : NVM_INTRF_STARTED;
 			}

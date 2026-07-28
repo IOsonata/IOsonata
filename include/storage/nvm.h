@@ -217,7 +217,11 @@ private:
 	int SendCmd(const NvmCmd_t &Cmd);
 	int ReadStatus(uint8_t &Status);
 
+	/// Arm a transfer before the call that can complete inside it.
 	void XferBegin(void);
+
+	/// Stand a transfer down when it turns out nothing was handed over.
+	void XferEnd(void);
 	bool XferShort(int Count, int Expect);
 	bool XferWait(uint32_t Timeout);
 
@@ -259,12 +263,18 @@ private:
 		NVM_OPSTATE_FAILED
 	} NVM_OPSTATE;
 
-	/// One chunk handed to the interface and left running. A completion is
-	/// only accepted while a chunk is RUNNING, which is what keeps it from
-	/// ending a read or a command frame that happens to be open, or an
-	/// operation that has already consumed its own.
+	/// One transfer handed to the interface. A completion is only accepted
+	/// while one is RUNNING, which is what keeps it from ending a transfer
+	/// that has already been consumed, or one that never started.
+	///
+	/// There is one of these and not two. Whether the transfer is waited out
+	/// inside the call or left for ServiceStep to pick up is a question of
+	/// who consumes it, not of what state it is in, and the caller already
+	/// knows which it is doing. Keeping a second set of flags for the waited
+	/// case meant one interface completion had two places it could land and
+	/// the arriving event had to choose between them.
 	typedef enum {
-		NVM_XFER_NONE = 0,		//!< nothing handed over
+		NVM_XFER_NONE = 0,		//!< nothing outstanding
 		NVM_XFER_RUNNING,		//!< handed over, completion owed
 		NVM_XFER_COMPLETE,		//!< its completion arrived
 		NVM_XFER_FAILED			//!< its completion said it failed
@@ -285,9 +295,6 @@ private:
 	const uint8_t	*vpOpData;
 	uint32_t		vOpRemain;
 	atomic_flag		vOpLock;
-	volatile bool	vbXferWaiting;
-	volatile bool	vbXferDone;
-	volatile bool	vbXferFail;
 
 	bool		vbInitialized;
 	bool		vbEnabled;

@@ -94,9 +94,6 @@ Nvm::Nvm()
 	atomic_flag_clear(&vOpLock);
 	vOpState = NVM_OPSTATE_IDLE;
 	vXferState = NVM_XFER_NONE;
-	vbXferWaiting = false;
-	vbXferDone = false;
-	vbXferFail = false;
 	vbInitialized = false;
 	vbEnabled = false;
 	vBaseAddr = 0;
@@ -126,7 +123,6 @@ Nvm::~Nvm()
 	vpOpData = nullptr;
 	vOpState = NVM_OPSTATE_IDLE;
 	vXferState = NVM_XFER_NONE;
-	vbXferWaiting = false;
 	atomic_flag_clear(&vOpLock);
 	Unhook();
 }
@@ -512,9 +508,6 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	vpOpData = nullptr;
 	vOpState = NVM_OPSTATE_IDLE;
 	vXferState = NVM_XFER_NONE;
-	vbXferWaiting = false;
-	vbXferDone = false;
-	vbXferFail = false;
 
 	if (vWrProtPin.PortNo >= 0 && vWrProtPin.PinNo >= 0)
 	{
@@ -721,45 +714,41 @@ void Nvm::IntrfEvent(DEVINTRF_EVT EvtId)
 			return;
 	}
 
-	// Only a chunk actually handed over takes it. A read or a command frame
-	// never puts the transfer in RUNNING, and ServiceStep returns it to NONE
-	// the moment it consumes one, so an event arriving at any other time
-	// belongs to nothing here and is discarded.
+	// Only a transfer actually outstanding takes it. Every consumer stands
+	// its transfer down the moment it has taken the answer, so an event
+	// arriving at any other time belongs to nothing here and is discarded.
 	if (vXferState == NVM_XFER_RUNNING)
 	{
 		vXferState = done ? NVM_XFER_COMPLETE : NVM_XFER_FAILED;
-
-		return;
-	}
-
-	// Otherwise it is a transfer this call is waiting on itself.
-	if (vbXferWaiting)
-	{
-		if (done) { vbXferDone = true; }
-		else { vbXferFail = true; }
 	}
 }
 
+// Armed before the call, never after. The completion can arrive while the
+// interface is still inside it, and one that finds nothing outstanding is
+// discarded. Setting this afterwards loses that race.
 void Nvm::XferBegin(void)
 {
-	vbXferDone = false;
-	vbXferFail = false;
-	vbXferWaiting = true;
+	vXferState = NVM_XFER_RUNNING;
+}
+
+// Stood down when the call turns out to have finished it, so a later event
+// has nothing to land on.
+void Nvm::XferEnd(void)
+{
+	vXferState = NVM_XFER_NONE;
 }
 
 bool Nvm::XferWait(uint32_t Timeout)
 {
 	while (Timeout-- > 0)
 	{
-		if (vbXferFail)
+		NVM_XFERSTATE x = vXferState;
+
+		if (x == NVM_XFER_COMPLETE || x == NVM_XFER_FAILED)
 		{
-			vbXferWaiting = false;
-			return false;
-		}
-		if (vbXferDone)
-		{
-			vbXferWaiting = false;
-			return true;
+			XferEnd();
+
+			return x == NVM_XFER_COMPLETE;
 		}
 		if (WaitPoll() == false)
 		{
@@ -767,7 +756,11 @@ bool Nvm::XferWait(uint32_t Timeout)
 		}
 	}
 
-	vbXferWaiting = false;
+	// Given up on. Dropping it means a completion arriving later finds
+	// nothing outstanding and is discarded, rather than ending whatever the
+	// next call has started.
+	XferEnd();
+
 	return false;
 }
 
@@ -775,7 +768,9 @@ bool Nvm::XferShort(int Count, int Expect)
 {
 	if (Count == Expect)
 	{
-		vbXferWaiting = false;
+		// Finished in the call, so nothing was handed over after all.
+		XferEnd();
+
 		return true;
 	}
 
@@ -785,7 +780,8 @@ bool Nvm::XferShort(int Count, int Expect)
 		return XferWait(NVM_XFER_TMOUT);
 	}
 
-	vbXferWaiting = false;
+	XferEnd();
+
 	return false;
 }
 
@@ -826,9 +822,6 @@ void Nvm::CancelOp(int Res)
 	vOpRes = 0;
 	vOpState = NVM_OPSTATE_IDLE;
 	vXferState = NVM_XFER_NONE;
-	vbXferWaiting = false;
-	vbXferDone = false;
-	vbXferFail = false;
 	atomic_flag_clear(&vOpLock);
 
 	if (notify)
@@ -1066,99 +1059,81 @@ int Nvm::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData,
 {
 	DevIntrf_t *ip = *Interface();
 
+	// An erase is command and address with no payload, so the interface can
+	// start the whole of it from the frame alone.
+	bool frameonly = pData == nullptr || DataLen == 0;
+
 	XferBegin();
 
 	if (DeviceIntrfStartTx(ip, DeviceAddress()) == false)
 	{
-		vbXferWaiting = false;
+		XferEnd();
+
 		return -EBUSY;
 	}
 
 	// The frame and the payload are one transaction, so no stop between them.
 	ip->bNoStop = true;
 
-	// An erase is command and address with no payload, so the interface can
-	// hand it over from this transfer. Armed first, same reason as above.
-	if (InterruptEnabled() && (pData == nullptr || DataLen == 0))
-	{
-		vXferState = NVM_XFER_RUNNING;
-	}
-
 	int n = DeviceIntrfTxData(ip, pCmdAddr, CmdAddrLen);
 
 	if (n < 0 && ip->bIntEn)
 	{
-		// The frame alone started something, which is what an erase looks
-		// like: the command and address are the whole of it.
-		if (InterruptEnabled() && (pData == nullptr || DataLen == 0))
+		if (InterruptEnabled() && frameonly)
 		{
-			// An erase is command and address with no payload, so the
-			// interface starts it from this transfer. Handed over the same
-			// way as a payload chunk.
+			// Handed over. No stop is sent, because on such an interface the
+			// completion is what ends the transfer: it releases the busy latch
+			// that DeviceIntrfStartTx took.
 			ip->bNoStop = false;
-
-			vbXferWaiting = false;
 
 			return 0;
 		}
 
-		// The frame transfer was started and reports through the event.
+		// The frame reports through the event and this call waits it out.
 		if (XferWait(NVM_XFER_TMOUT) == false)
 		{
 			ip->bNoStop = false;
 			DeviceIntrfStopTx(ip);
+
 			return -EIO;
 		}
 		n = CmdAddrLen;
-		XferBegin();
 	}
 
 	if (n != CmdAddrLen)
 	{
 		ip->bNoStop = false;
 		DeviceIntrfStopTx(ip);
-		vbXferWaiting = false;
-		vXferState = NVM_XFER_NONE;
+		XferEnd();
 
 		return -EIO;
 	}
 
 	ip->bNoStop = false;
 
-	if (pData == nullptr || DataLen == 0)
+	if (frameonly)
 	{
 		// Finished inside the call, so nothing was handed over.
-		if (vXferState == NVM_XFER_RUNNING)
-		{
-			vXferState = NVM_XFER_NONE;
-		}
-
+		XferEnd();
 		DeviceIntrfStopTx(ip);
-		vbXferWaiting = false;
 
 		return 0;
 	}
 
-	// Armed before the transfer, because the completion can arrive inside it.
-	if (InterruptEnabled())
-	{
-		vXferState = NVM_XFER_RUNNING;
-	}
+	// Armed again for the payload. The frame above either consumed the one
+	// armed at the top or finished without using it, and either way what goes
+	// out next is a transfer of its own.
+	XferBegin();
 
 	int wr = DeviceIntrfTxData(ip, pData, DataLen);
 
 	if (wr < 0 && ip->bIntEn)
 	{
-		// Started and in flight. The interface releases its own busy latch
-		// from the completion interrupt, so there is no stop to send here.
 		if (InterruptEnabled())
 		{
-			// Handed over: the interface kept it and will report. Waiting
-			// here would put the wait back in the caller, which is the whole
-			// point of the mode. No stop is sent either, because on such an
-			// interface the completion is what ends the transfer.
-			vbXferWaiting = false;
-
+			// Handed over: the interface kept it and will report. Waiting here
+			// would put the wait back in the caller, which is the whole point
+			// of the mode. No stop either, for the same reason as above.
 			return DataLen;
 		}
 
@@ -1166,13 +1141,8 @@ int Nvm::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData,
 	}
 
 	// Finished inside the call after all, so nothing was handed over.
-	if (vXferState == NVM_XFER_RUNNING)
-	{
-		vXferState = NVM_XFER_NONE;
-	}
-
+	XferEnd();
 	DeviceIntrfStopTx(ip);
-	vbXferWaiting = false;
 
 	return wr == DataLen ? DataLen : -EIO;
 }
