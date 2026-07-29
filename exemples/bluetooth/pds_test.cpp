@@ -1,35 +1,38 @@
 /**-------------------------------------------------------------------------
 @example	pds_test.cpp
 
-@brief	Host test harness for the bt_pds peer data store.
+@brief	Host test for the bt_pds record store over a real Nvm.
 
-Builds and runs on a PC, not on a target board. It mounts the store on a
-RAM medium with NOR semantics (programming only clears bits, ascending
-order) and drives it through a reference model plus power-cut injection:
-the Nth programming operation (write or erase) is torn at a chosen byte
-offset, then every following operation fails until reboot.
+		The store runs on the same Nvm driver a target uses, over a mock
+		memory controller interface (DEVINTRF_TYPE_MEMCTRL) rather than a
+		fabricated medium layer, so the driver's own chunking, addressing and
+		erase dispatch are in the path.
+
+		The mock enforces what a real controller enforces, so a store mistake
+		shows up as a violation rather than as wrong data: a program that
+		starts off a write unit boundary or is not a whole number of units is
+		refused and counted, and programming can only clear bits.
+
+		The whole suite runs twice, at a write unit of 4 and of 16. Four is
+		what the nRF parts report and keeps the on medium layout that is
+		already in the field. Sixteen is the STM32WBA quad word, where the
+		24 byte sector header no longer fills a whole number of units and the
+		first record therefore moves.
+
+		Power loss is injected at the medium: the Nth programming operation
+		lands only its first few bytes and every operation after it fails
+		until the next mount. The sweeps walk that N across a whole run.
 
 Build and run on the host:
 
-  g++ -std=gnu++23 -O1 -I include -o test_pds \
-      exemples/bluetooth/test_pds.cpp src/bluetooth/bt_pds.cpp
-  ./test_pds
+  g++ -std=gnu++23 -O1 -I include -I include/storage -I Linux/include \
+	  exemples/bluetooth/pds_test.cpp src/bluetooth/bt_pds.cpp \
+	  src/storage/nvm.cpp src/device.cpp src/device_intrf.cpp -o pds_test
+  ./pds_test
 
-Coverage:
-  - Basic semantics: write/read/update/delete, tombstone vs zero length,
-    truncated read reporting, reserved id, oversize rejection.
-  - Churn: 20K writes over 2 sectors and 100K over 4 sectors against a
-    reference model, with remount checks.
-  - Fill to -ENOMEM and update behavior at capacity.
-  - Garbage collection cut sweep: a power cut at every programming
-    operation of a collecting write, three tear sizes each. After reboot
-    the store must mount and every committed value must read back.
-  - Clear cut sweep: a power cut at every programming operation of
-    BtPdsClear. After reboot the store must hold all records or none.
-
-The harness prints RESULT: ALL PASS on success and a FAIL line per
-violated check otherwise. This file is host-only and is not referenced
-by any board project.
+		Like nvm_test.cpp this needs a do nothing iopinctrl.h on the include
+		path, because nvm.cpp includes that per target header for the write
+		protect pin and no host one exists yet.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 19, 2026
@@ -38,7 +41,7 @@ by any board project.
 
 MIT License
 
-Copyright (c) 2026, I-SYST, all rights reserved
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -59,418 +62,981 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <cstdint>
 #include <cerrno>
-#include <vector>
+#include <atomic>
 #include <map>
+#include <vector>
 
+#include "device_intrf.h"
+#include "coredev/spi.h"
+#include "storage/nvm.h"
 #include "bluetooth/bt_pds.h"
 
-#define SECTOR_SIZE		512U
-#define MAX_REGION		(16U * SECTOR_SIZE)
+// ---------------------------------------------------------------------------
+// Test bookkeeping
+// ---------------------------------------------------------------------------
+static int g_Fail = 0;
+static int g_Checks = 0;
 
-static uint8_t s_Flash[MAX_REGION];
-static uint32_t s_RegionSize;
-static int s_CutCountdown = -1;	// -1 disabled; 0 means next op is cut
-static uint32_t s_CutKeep;		// bytes of the cut op that still land
-static bool s_Dead;
-static int s_OpCount;
+#define CHECK(cond, ...) do { \
+	g_Checks++; \
+	if (!(cond)) { \
+		g_Fail++; \
+		printf("FAIL %s:%d: ", __func__, __LINE__); \
+		printf(__VA_ARGS__); \
+		printf("\n"); \
+	} \
+} while (0)
 
-static int NvmRead(uint32_t Off, void *pBuf, uint32_t Len)
+// Where the run has got to. Printed as it goes and flushed, so a long suite
+// and a stalled one do not look the same from outside.
+static void Step(const char *pWhat, uint32_t Done, uint32_t Total)
 {
-	if (s_Dead || Off + Len > s_RegionSize) return -EIO;
-	memcpy(pBuf, &s_Flash[Off], Len);
-	return 0;
+	printf("\r    %-18s %6u / %-6u", pWhat, (unsigned)Done, (unsigned)Total);
+	fflush(stdout);
+
+	if (Done >= Total)
+	{
+		printf("\n");
+	}
 }
 
-static int NvmWrite(uint32_t Off, const void *pData, uint32_t Len)
+// The pin driver is per architecture; the driver only toggles a protect pin.
+extern "C" {
+void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
+void IOPinSet(int, int) {}
+void IOPinClear(int, int) {}
+}
+
+// The two functions a target defines in its QSPI implementation. This memory
+// is not on a bus at all, so neither is ever reached; they are here because
+// the driver serves every transport from one object.
+void QuadSPISetMemSize(SPIDev_t * const, uint32_t) {}
+
+bool QuadSPISendCmd(SPIDev_t * const, uint8_t, uint32_t, uint8_t, uint32_t,
+					uint8_t)
 {
-	if (s_Dead || Off + Len > s_RegionSize) return -EIO;
+	return false;
+}
+
+// ---------------------------------------------------------------------------
+// The medium. NOR semantics: an erase sets every bit, a program can only
+// clear bits, and a unit is programmed whole or not at all in normal running.
+// ---------------------------------------------------------------------------
+#define PDS_SECTOR_SIZE		4096U
+#define PDS_MAX_SECTORS		4U
+#define PDS_MAX_REGION		(PDS_MAX_SECTORS * PDS_SECTOR_SIZE)
+#define PDS_PAGE_SIZE		64U
+
+static uint8_t s_Mem[PDS_MAX_REGION];
+static uint32_t s_RegionSize;
+
+// What the controller takes. Nothing derives this; it is the part talking.
+static uint32_t s_WriteGran;
+
+// Programming operations counted since the medium was wiped. A program of a
+// page chunk is one, an erase of a unit is one. The address phase is not a
+// programming operation and is not counted.
+static uint32_t s_OpCount;
+
+// Power loss. -1 disables it; otherwise the operation this many away lands
+// only s_CutKeep bytes and everything after it fails until the next boot.
+static int s_CutCountdown;
+static uint32_t s_CutKeep;
+static bool s_Dead;
+
+// Programs the controller would have refused. Any of these is a store fault,
+// not a driver one, because the driver passes the store's offsets through.
+static uint32_t s_AlignFault;
+
+static void MediumWipe(uint32_t RegionSize, uint32_t Gran)
+{
+	memset(s_Mem, 0xFF, sizeof(s_Mem));
+	s_RegionSize = RegionSize;
+	s_WriteGran = Gran;
+	s_OpCount = 0;
+	s_CutCountdown = -1;
+	s_CutKeep = 0;
+	s_Dead = false;
+	s_AlignFault = 0;
+}
+
+static void MediumArmCut(uint32_t OpIndex, uint32_t Keep)
+{
+	s_CutCountdown = (int)OpIndex;
+	s_CutKeep = Keep;
+}
+
+static void MediumPowerUp(void)
+{
+	s_CutCountdown = -1;
+	s_Dead = false;
+}
+
+// How much of this operation lands. Everything, unless the cut is due.
+static uint32_t MediumTake(uint32_t Len)
+{
 	s_OpCount++;
-	uint32_t n = Len;
+
 	if (s_CutCountdown == 0)
 	{
-		n = s_CutKeep < Len ? s_CutKeep : Len;
 		s_Dead = true;
+
+		return s_CutKeep < Len ? s_CutKeep : Len;
 	}
-	else if (s_CutCountdown > 0)
+	if (s_CutCountdown > 0)
 	{
 		s_CutCountdown--;
 	}
-	// NOR model: programming can only clear bits. Ascending order.
-	const uint8_t *p = (const uint8_t *)pData;
+
+	return Len;
+}
+
+// The erase a target port supplies. Nvm calls this rather than framing a
+// command, because a memory reached through a controller has no bus to put
+// one on. Overrides the weak answer in nvm.cpp, the way a real port does.
+extern "C" int NvmMcuErase(uintptr_t Addr)
+{
+	if (s_Dead)
+	{
+		return -EIO;
+	}
+	if ((Addr % PDS_SECTOR_SIZE) != 0U || Addr + PDS_SECTOR_SIZE > s_RegionSize)
+	{
+		s_AlignFault++;
+
+		return -EINVAL;
+	}
+
+	memset(&s_Mem[Addr], 0xFF, MediumTake(PDS_SECTOR_SIZE));
+
+	return s_Dead ? -EIO : 0;
+}
+
+// ---------------------------------------------------------------------------
+// The controller as a device interface. The frame is the address and nothing
+// in front of it, the way the memctrl case in nvm_test.cpp takes it.
+// ---------------------------------------------------------------------------
+static std::vector<uint8_t> s_Tx;
+static uint32_t s_Addr;
+static bool s_AddrSet;
+static uint32_t s_CmdBytes;
+
+static bool MemStartTx(DevIntrf_t *, uint32_t)
+{
+	s_Tx.clear();
+	s_AddrSet = false;
+
+	return true;
+}
+
+static void MemStopTx(DevIntrf_t *) {}
+
+// The address phase already latched where to read, so starting the read half
+// of the transaction must not throw it away.
+static bool MemStartRx(DevIntrf_t *, uint32_t)
+{
+	return true;
+}
+
+static void MemStopRx(DevIntrf_t *) {}
+
+static int MemTxData(DevIntrf_t *, const uint8_t *pData, int Len)
+{
+	for (int i = 0; i < Len; i++) { s_Tx.push_back(pData[i]); }
+
+	if (s_AddrSet == false)
+	{
+		if (s_Tx.size() < 4)
+		{
+			return Len;
+		}
+		if (s_Tx.size() > 4)
+		{
+			s_CmdBytes += (uint32_t)s_Tx.size() - 4U;
+		}
+		s_Addr = ((uint32_t)s_Tx[0] << 24) | ((uint32_t)s_Tx[1] << 16) |
+				 ((uint32_t)s_Tx[2] << 8) | s_Tx[3];
+		s_AddrSet = true;
+		s_Tx.clear();
+
+		return Len;
+	}
+
+	s_Tx.clear();
+
+	if (s_Dead)
+	{
+		return -1;
+	}
+
+	// A quad word controller programs whole units on unit boundaries. Anything
+	// else is refused, which is how a store that pads its records wrongly is
+	// caught here rather than by reading the data back.
+	if ((s_Addr % s_WriteGran) != 0U || ((uint32_t)Len % s_WriteGran) != 0U)
+	{
+		s_AlignFault++;
+
+		return -1;
+	}
+
+	uint32_t n = MediumTake((uint32_t)Len);
+
 	for (uint32_t i = 0; i < n; i++)
 	{
-		s_Flash[Off + i] &= p[i];
-	}
-	return s_Dead ? -EIO : 0;
-}
-
-static int NvmErase(uint32_t Off)
-{
-	if (s_Dead || Off + SECTOR_SIZE > s_RegionSize) return -EIO;
-	s_OpCount++;
-	uint32_t n = SECTOR_SIZE;
-	if (s_CutCountdown == 0)
-	{
-		n = s_CutKeep < SECTOR_SIZE ? s_CutKeep : SECTOR_SIZE;
-		s_Dead = true;
-	}
-	else if (s_CutCountdown > 0)
-	{
-		s_CutCountdown--;
-	}
-	memset(&s_Flash[Off], 0xFF, n);
-	return s_Dead ? -EIO : 0;
-}
-
-static BtPdsNvm_t s_Nvm = {
-	0, 0, SECTOR_SIZE, 4, NvmRead, NvmWrite, NvmErase
-};
-
-static void PowerOn(void)
-{
-	s_Dead = false;
-	s_CutCountdown = -1;
-}
-
-static void FreshFlash(uint32_t Sectors)
-{
-	s_RegionSize = Sectors * SECTOR_SIZE;
-	s_Nvm.RegionSize = s_RegionSize;
-	memset(s_Flash, 0xFF, sizeof(s_Flash));
-	PowerOn();
-}
-
-static int g_Fail;
-
-#define CHECK(cond, ...) do { if (!(cond)) { g_Fail++; \
-	printf("FAIL %s:%d: ", __func__, __LINE__); printf(__VA_ARGS__); \
-	printf("\n"); } } while (0)
-
-// Reference model of expected content.
-typedef std::map<uint32_t, std::vector<uint8_t>> Model;
-
-static void VerifyModel(const Model &m, const char *Tag)
-{
-	for (const auto &kv : m)
-	{
-		uint8_t buf[BT_PDS_RECORD_DATA_MAX];
-		ssize_t r = BtPdsRead(kv.first, buf, sizeof(buf));
-		CHECK(r == (ssize_t)kv.second.size(),
-			  "%s id %u len %zd want %zu", Tag, kv.first, r, kv.second.size());
-		if (r == (ssize_t)kv.second.size() && r > 0)
+		if (s_Addr + i < s_RegionSize)
 		{
-			CHECK(memcmp(buf, kv.second.data(), r) == 0,
-				  "%s id %u data mismatch", Tag, kv.first);
+			s_Mem[s_Addr + i] &= pData[i];
 		}
 	}
+	s_Addr += (uint32_t)Len;
+
+	return s_Dead ? -1 : Len;
 }
 
-static std::vector<uint8_t> Val(uint32_t Id, uint32_t Rev, size_t Len)
+static int MemRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
+{
+	if (s_AddrSet == false)
+	{
+		// A status poll would land here. The driver must not make one.
+		s_CmdBytes++;
+
+		return 0;
+	}
+	if (s_Dead)
+	{
+		return -1;
+	}
+
+	for (int i = 0; i < Len; i++)
+	{
+		pBuff[i] = s_Addr < s_RegionSize ? s_Mem[s_Addr] : 0xFF;
+		s_Addr++;
+	}
+
+	return Len;
+}
+
+static void MockEnable(DevIntrf_t *) {}
+static void MockDisable(DevIntrf_t *) {}
+static void MockPowerOff(DevIntrf_t *) {}
+static uint32_t MockGetRate(DevIntrf_t *) { return 0; }
+static uint32_t MockSetRate(DevIntrf_t *, uint32_t r) { return r; }
+static void *MockGetHandle(DevIntrf_t *) { return nullptr; }
+
+class MemCtrlIntrf : public DeviceIntrf {
+public:
+	DevIntrf_t vDev;
+
+	MemCtrlIntrf()
+	{
+		memset(&vDev, 0, sizeof(vDev));
+		vDev.pDevData = this;
+		vDev.Type = DEVINTRF_TYPE_MEMCTRL;
+		vDev.Disable = MockDisable;
+		vDev.Enable = MockEnable;
+		vDev.GetRate = MockGetRate;
+		vDev.SetRate = MockSetRate;
+		vDev.StartRx = MemStartRx;
+		vDev.RxData = MemRxData;
+		vDev.StopRx = MemStopRx;
+		vDev.StartTx = MemStartTx;
+		vDev.TxData = MemTxData;
+		vDev.TxSrData = MemTxData;
+		vDev.StopTx = MemStopTx;
+		vDev.PowerOff = MockPowerOff;
+		vDev.GetHandle = MockGetHandle;
+		vDev.MaxRetry = 5;
+		vDev.EnCnt = 1;
+		atomic_flag_clear(&vDev.bBusy);
+	}
+
+	operator DevIntrf_t * const () override { return &vDev; }
+	uint32_t Rate(uint32_t r) override { return r; }
+	uint32_t Rate(void) override { return 1000000; }
+};
+
+static MemCtrlIntrf s_Bus;
+static Nvm s_Nvm;
+
+static NvmCfg_t MemCfg(uint32_t Gran)
+{
+	NvmCfg_t cfg;
+
+	memset(&cfg, 0, sizeof(cfg));
+	cfg.TotalSize = s_RegionSize;
+	cfg.EraseSize = PDS_SECTOR_SIZE;
+	cfg.PageSize = PDS_PAGE_SIZE;
+	cfg.WriteGran = Gran;
+	cfg.AddrSize = 4;
+	cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+
+	return cfg;
+}
+
+// True when the store mounted. A suite that cannot mount stops there: going
+// on to drive an unmounted store hides the reason behind whatever it does
+// next, and there is nothing left to test.
+static bool Mounted(int Res, const char *pWhat)
+{
+	g_Checks++;
+
+	if (Res != 0)
+	{
+		g_Fail++;
+		printf("FAIL %s: mount returned %d\n", pWhat, Res);
+
+		return false;
+	}
+
+	return true;
+}
+
+// Bring the memory up and mount the store on it, the way a reset does.
+static int Boot(uint32_t Gran)
+{
+	MediumPowerUp();
+
+	NvmCfg_t cfg = MemCfg(Gran);
+
+	if (s_Nvm.Init(cfg, &s_Bus) == false)
+	{
+		return -EIO;
+	}
+
+	return BtPdsInit(&s_Nvm);
+}
+
+// ---------------------------------------------------------------------------
+// The reference model
+// ---------------------------------------------------------------------------
+typedef std::map<uint32_t, std::vector<uint8_t> > Model_t;
+
+static std::vector<uint8_t> MakeVal(uint32_t Seed, uint32_t Len)
 {
 	std::vector<uint8_t> v(Len);
-	for (size_t i = 0; i < Len; i++)
+
+	for (uint32_t i = 0; i < Len; i++)
 	{
-		v[i] = (uint8_t)(Id * 7U + Rev * 13U + i);
+		// Never the record magic, so the layout scan below cannot match data.
+		v[i] = (uint8_t)((Seed * 31U + i * 7U) & 0x7FU);
 	}
+
 	return v;
 }
 
-static void TestBasic(void)
+static bool ModelMatches(const Model_t &Model, const char *pWhat)
 {
-	FreshFlash(2);
-	CHECK(BtPdsInit(&s_Nvm) == 0, "init");
+	uint8_t buf[BT_PDS_RECORD_DATA_MAX];
+	bool ok = true;
+
+	for (Model_t::const_iterator it = Model.begin(); it != Model.end(); ++it)
+	{
+		ssize_t n = BtPdsRead(it->first, buf, sizeof(buf));
+
+		if (n != (ssize_t)it->second.size() ||
+			memcmp(buf, it->second.data(), it->second.size()) != 0)
+		{
+			printf("FAIL %s: id %08X read %d want %u\n", pWhat, it->first,
+				   (int)n, (unsigned)it->second.size());
+			ok = false;
+			break;
+		}
+	}
+
+	return ok;
+}
+
+// ---------------------------------------------------------------------------
+// What the medium should look like. The store keeps these to itself, so a
+// layout test has to restate them; that is the point of the test.
+// ---------------------------------------------------------------------------
+#define PDS_REC_MAGIC		0x53445042UL	// "BPDS"
+#define PDS_SECTOR_MAGIC	0x32534450UL	// "PDS2"
+#define PDS_SECTOR_HDR		24U
+#define PDS_REC_HDR			16U
+
+static uint32_t MemWord(uint32_t Off)
+{
+	uint32_t w;
+
+	memcpy(&w, &s_Mem[Off], sizeof(w));
+
+	return w;
+}
+
+static uint32_t PadTo(uint32_t x, uint32_t u)
+{
+	return (x + u - 1U) & ~(u - 1U);
+}
+
+// Offset of the Nth record in sector 0, or 0 when there is no such record.
+static uint32_t FindRecord(uint32_t Nth, uint32_t Gran)
+{
+	uint32_t off = PadTo(PDS_SECTOR_HDR, Gran);
+	uint32_t seen = 0;
+
+	while (off + PDS_REC_HDR <= PDS_SECTOR_SIZE)
+	{
+		if (MemWord(off) != PDS_REC_MAGIC)
+		{
+			return 0;
+		}
+		if (seen == Nth)
+		{
+			return off;
+		}
+
+		uint16_t len;
+
+		memcpy(&len, &s_Mem[off + 12], sizeof(len));
+
+		uint32_t dataLen = len == 0xFFFFU ? 0U : len;
+
+		off += PadTo(PDS_REC_HDR + dataLen, Gran);
+		seen++;
+	}
+
+	return 0;
+}
+
+// ---------------------------------------------------------------------------
+// The layout the write unit produces. This is the whole of what changes
+// between a 4 byte unit and a 16 byte one, so it is checked directly rather
+// than only through data that happens to read back.
+// ---------------------------------------------------------------------------
+static void TestLayout(uint32_t Gran)
+{
+	printf("--- layout, unit %u\n", Gran);
+
+	MediumWipe(2U * PDS_SECTOR_SIZE, Gran);
+	if (Mounted(Boot(Gran), "layout") == false)
+	{
+		return;
+	}
+
+	CHECK(MemWord(0) == PDS_SECTOR_MAGIC, "layout: sector header at the base");
+
+	std::vector<uint8_t> a = MakeVal(1, 4);
+	std::vector<uint8_t> b = MakeVal(2, 4);
+
+	CHECK(BtPdsWrite(0x11, a.data(), a.size()) == (ssize_t)a.size(),
+		  "layout: first write");
+
+	uint32_t first = FindRecord(0, Gran);
+
+	CHECK(first == PadTo(PDS_SECTOR_HDR, Gran),
+		  "layout: first record at %u, sector header padded to the unit",
+		  (unsigned)PadTo(PDS_SECTOR_HDR, Gran));
+
+	CHECK(BtPdsWrite(0x22, b.data(), b.size()) == (ssize_t)b.size(),
+		  "layout: second write");
+
+	uint32_t second = FindRecord(1, Gran);
+
+	CHECK(second == first + PadTo(PDS_REC_HDR + 4U, Gran),
+		  "layout: record stride is the header plus data padded once, got %u",
+		  (unsigned)(second - first));
+
+	// The bytes between the header and the first record are never programmed.
+	for (uint32_t i = PDS_SECTOR_HDR; i < first; i++)
+	{
+		CHECK(s_Mem[i] == 0xFFU, "layout: padding byte %u left erased",
+			  (unsigned)i);
+		break;
+	}
+
+	CHECK(s_AlignFault == 0, "layout: %u programs the controller refused",
+		  (unsigned)s_AlignFault);
+	CHECK(s_CmdBytes == 0, "layout: no command traffic on a controller");
+}
+
+// ---------------------------------------------------------------------------
+// Basic semantics
+// ---------------------------------------------------------------------------
+static void TestBasics(uint32_t Gran)
+{
+	printf("--- semantics, unit %u\n", Gran);
+
+	MediumWipe(2U * PDS_SECTOR_SIZE, Gran);
+	if (Mounted(Boot(Gran), "basics") == false)
+	{
+		return;
+	}
+
 	uint8_t buf[BT_PDS_RECORD_DATA_MAX];
 
-	CHECK(BtPdsRead(1, buf, sizeof(buf)) == -ENOENT, "absent");
-	auto v = Val(1, 0, 20);
-	CHECK(BtPdsWrite(1, v.data(), v.size()) == 20, "write");
-	CHECK(BtPdsRead(1, buf, sizeof(buf)) == 20, "read len");
-	CHECK(memcmp(buf, v.data(), 20) == 0, "read data");
-	CHECK(BtPdsRead(1, buf, 4) == 20, "truncated read reports full len");
+	CHECK(BtPdsRead(0x10, buf, sizeof(buf)) == -ENOENT, "basics: absent id");
 
-	auto v2 = Val(1, 1, 128);
-	CHECK(BtPdsWrite(1, v2.data(), v2.size()) == 128, "update max len");
-	CHECK(BtPdsRead(1, buf, sizeof(buf)) == 128, "read updated");
-	CHECK(memcmp(buf, v2.data(), 128) == 0, "updated data");
+	std::vector<uint8_t> v1 = MakeVal(7, 40);
 
-	CHECK(BtPdsWrite(2, nullptr, 0) == 0, "zero length write");
-	CHECK(BtPdsRead(2, buf, sizeof(buf)) == 0, "zero length read");
+	CHECK(BtPdsWrite(0x10, v1.data(), v1.size()) == (ssize_t)v1.size(),
+		  "basics: write");
+	CHECK(BtPdsRead(0x10, buf, sizeof(buf)) == (ssize_t)v1.size() &&
+		  memcmp(buf, v1.data(), v1.size()) == 0, "basics: read back");
 
-	CHECK(BtPdsDelete(1) == 0, "delete");
-	CHECK(BtPdsRead(1, buf, sizeof(buf)) == -ENOENT, "deleted");
-	CHECK(BtPdsDelete(1) == 0, "delete absent");
+	// A short destination still reports the stored length.
+	CHECK(BtPdsRead(0x10, buf, 8) == (ssize_t)v1.size(),
+		  "basics: truncated read reports the full length");
 
-	CHECK(BtPdsWrite(3, buf, BT_PDS_RECORD_DATA_MAX + 1) == -EINVAL, "oversize");
-	CHECK(BtPdsWrite(0xFFFFFFFEUL, buf, 4) == -EINVAL, "reserved id");
+	std::vector<uint8_t> v2 = MakeVal(9, 100);
 
-	// Remount keeps everything.
-	CHECK(BtPdsInit(&s_Nvm) == 0, "remount");
-	CHECK(BtPdsRead(1, buf, sizeof(buf)) == -ENOENT, "deleted after remount");
-	CHECK(BtPdsRead(2, buf, sizeof(buf)) == 0, "zero len after remount");
+	CHECK(BtPdsWrite(0x10, v2.data(), v2.size()) == (ssize_t)v2.size(),
+		  "basics: update");
+	CHECK(BtPdsRead(0x10, buf, sizeof(buf)) == (ssize_t)v2.size() &&
+		  memcmp(buf, v2.data(), v2.size()) == 0, "basics: update read back");
+
+	CHECK(BtPdsDelete(0x10) == 0, "basics: delete");
+	CHECK(BtPdsRead(0x10, buf, sizeof(buf)) == -ENOENT, "basics: deleted id");
+	CHECK(BtPdsDelete(0x10) == 0, "basics: deleting an absent id succeeds");
+
+	// Zero length is a value, not a delete.
+	CHECK(BtPdsWrite(0x11, nullptr, 0) == 0, "basics: zero length write");
+	CHECK(BtPdsRead(0x11, buf, sizeof(buf)) == 0,
+		  "basics: zero length is present");
+
+	std::vector<uint8_t> big = MakeVal(3, BT_PDS_RECORD_DATA_MAX + 1U);
+
+	CHECK(BtPdsWrite(0x12, big.data(), big.size()) < 0,
+		  "basics: oversize refused");
+	CHECK(BtPdsWrite(0xFFFFFFFEUL, v1.data(), v1.size()) < 0,
+		  "basics: reserved id refused");
+
+	// Everything survives a mount.
+	if (Mounted(Boot(Gran), "basics remount") == false)
+	{
+		return;
+	}
+	CHECK(BtPdsRead(0x10, buf, sizeof(buf)) == -ENOENT,
+		  "basics: delete survived the remount");
+	CHECK(BtPdsRead(0x11, buf, sizeof(buf)) == 0,
+		  "basics: zero length survived the remount");
+
+	CHECK(s_AlignFault == 0, "basics: %u programs the controller refused",
+		  (unsigned)s_AlignFault);
 }
 
-static void TestChurn(uint32_t Sectors, int Writes)
+// ---------------------------------------------------------------------------
+// The mount refuses what it cannot lay out
+// ---------------------------------------------------------------------------
+static void TestMountRefuses(void)
 {
-	FreshFlash(Sectors);
-	CHECK(BtPdsInit(&s_Nvm) == 0, "init");
-	Model m;
+	printf("--- mount checks\n");
 
-	// One cold id that is written once and rarely touched.
-	auto cold = Val(100, 0, 60);
-	CHECK(BtPdsWrite(100, cold.data(), cold.size()) == 60, "cold write");
-	m[100] = cold;
+	MediumWipe(2U * PDS_SECTOR_SIZE, 4U);
 
-	for (int i = 0; i < Writes; i++)
+	NvmCfg_t cfg = MemCfg(32U);
+
+	CHECK(s_Nvm.Init(cfg, &s_Bus), "refuse: memory init at unit 32");
+	CHECK(BtPdsInit(&s_Nvm) == -EINVAL,
+		  "refuse: a unit past BT_PDS_MAX_WRITE_GRAN");
+
+	// One sector leaves nothing to collect into.
+	MediumWipe(PDS_SECTOR_SIZE, 4U);
+	cfg = MemCfg(4U);
+	CHECK(s_Nvm.Init(cfg, &s_Bus), "refuse: memory init at one sector");
+	CHECK(BtPdsInit(&s_Nvm) == -EINVAL, "refuse: a region of one sector");
+}
+
+// ---------------------------------------------------------------------------
+// Churn and capacity
+// ---------------------------------------------------------------------------
+static void TestChurn(uint32_t Gran)
+{
+	printf("--- churn, unit %u\n", Gran);
+
+	MediumWipe(PDS_MAX_REGION, Gran);
+	if (Mounted(Boot(Gran), "churn") == false)
 	{
-		uint32_t id = 1 + (i % 3);
-		auto v = Val(id, i, 8 + (i % 5) * 24);
-		ssize_t r = BtPdsWrite(id, v.data(), v.size());
-		CHECK(r == (ssize_t)v.size(), "churn write %d ret %zd", i, r);
-		m[id] = v;
-		if (i % 977 == 0)
+		return;
+	}
+
+	Model_t model;
+	bool ok = true;
+
+	const uint32_t rounds = 2000U;
+
+	for (uint32_t i = 0; i < rounds && ok; i++)
+	{
+		if ((i % 100U) == 0U)
 		{
-			VerifyModel(m, "churn");
+			Step("operations", i, rounds);
+		}
+
+		uint32_t id = 0x100U + (i % 9U);
+		uint32_t len = 8U + (i % 11U) * 16U;
+
+		if ((i % 17U) == 16U)
+		{
+			ok = BtPdsDelete(id) == 0;
+			model.erase(id);
+			continue;
+		}
+
+		std::vector<uint8_t> v = MakeVal(i, len);
+		ssize_t w = BtPdsWrite(id, v.data(), v.size());
+
+		if (w != (ssize_t)v.size())
+		{
+			printf("FAIL churn: write %u returned %d\n", (unsigned)i, (int)w);
+			ok = false;
+			break;
+		}
+		model[id] = v;
+
+		if ((i % 250U) == 249U)
+		{
+			ok = Boot(Gran) == 0 && ModelMatches(model, "churn remount");
 		}
 	}
-	VerifyModel(m, "churn end");
-	CHECK(BtPdsInit(&s_Nvm) == 0, "remount");
-	VerifyModel(m, "churn remount");
+
+	Step("operations", rounds, rounds);
+
+	CHECK(ok, "churn: %u operations over %u sectors", (unsigned)rounds,
+		  PDS_MAX_SECTORS);
+	if (Mounted(Boot(Gran), "churn final mount") == false)
+	{
+		return;
+	}
+	CHECK(ModelMatches(model, "churn final"), "churn: every value read back");
+	CHECK(s_AlignFault == 0, "churn: %u programs the controller refused",
+		  (unsigned)s_AlignFault);
 }
 
-// Fill until the store refuses, confirm -ENOMEM behavior is stable.
-static void TestFull(void)
+static void TestFill(uint32_t Gran)
 {
-	FreshFlash(2);
-	CHECK(BtPdsInit(&s_Nvm) == 0, "init");
-	Model m;
-	uint32_t id = 1;
-	for (;;)
+	printf("--- fill, unit %u\n", Gran);
+
+	MediumWipe(2U * PDS_SECTOR_SIZE, Gran);
+	if (Mounted(Boot(Gran), "fill") == false)
 	{
-		auto v = Val(id, 0, 100);
-		ssize_t r = BtPdsWrite(id, v.data(), v.size());
-		if (r == -ENOMEM)
+		return;
+	}
+
+	Model_t model;
+	std::vector<uint8_t> v = MakeVal(5, BT_PDS_RECORD_DATA_MAX);
+	uint32_t id = 0x200U;
+	ssize_t w = 0;
+
+	while (id < 0x300U)
+	{
+		w = BtPdsWrite(id, v.data(), v.size());
+		if (w < 0)
 		{
 			break;
 		}
-		CHECK(r == 100, "fill write ret %zd", r);
-		m[id] = v;
+		model[id] = v;
 		id++;
-		CHECK(id < 100, "no full condition reached");
-		if (id >= 100) return;
+		Step("records", (uint32_t)model.size(), 0x100U);
 	}
-	VerifyModel(m, "full");
-	CHECK(BtPdsInit(&s_Nvm) == 0, "remount full store");
-	VerifyModel(m, "full remount");
-	// At hard capacity an update may not fit either; the store must keep
-	// its data intact in both outcomes.
-	auto v = Val(1, 9, 100);
-	ssize_t ur = BtPdsWrite(1, v.data(), v.size());
-	CHECK(ur == 100 || ur == -ENOMEM, "update at capacity ret %zd", ur);
-	if (ur == 100)
+	Step("records", (uint32_t)model.size(), (uint32_t)model.size());
+
+	CHECK(w == -ENOMEM, "fill: the store fills up and says so, got %d", (int)w);
+	CHECK(model.size() > 4U, "fill: %u records fit", (unsigned)model.size());
+
+	// Updating an existing id at capacity still works, because collecting the
+	// victim sector releases the stale copy.
+	Model_t::iterator it = model.begin();
+	std::vector<uint8_t> u = MakeVal(6, 16);
+
+	CHECK(BtPdsWrite(it->first, u.data(), u.size()) == (ssize_t)u.size(),
+		  "fill: update at capacity");
+	it->second = u;
+
+	if (Mounted(Boot(Gran), "fill remount") == false)
 	{
-		m[1] = v;
+		return;
 	}
-	VerifyModel(m, "full update");
+	CHECK(ModelMatches(model, "fill"), "fill: every value read back");
+	CHECK(s_AlignFault == 0, "fill: %u programs the controller refused",
+		  (unsigned)s_AlignFault);
 }
 
-// Defect 1: cut power at every programming op of a write whose EnsureSpace
-// runs a real garbage collection (op burst >= 5; StartSector costs 2).
-// After reboot, init must succeed and all committed values must read back.
-static void TestGcCutSweep(uint32_t Sectors)
+// ---------------------------------------------------------------------------
+// Power loss sweeps
+//
+// The sequence is driven with the cut armed at one programming operation
+// after another. A write that returns an error is not counted as committed,
+// so what the store must still hold after the next mount is exactly what it
+// told the caller it had taken.
+// ---------------------------------------------------------------------------
+// The write that was in flight when the power went. Its record may be whole
+// on the medium or not, and the store never said which, so the id it names is
+// allowed to read back as either value afterwards.
+typedef struct __Pending {
+	bool					Valid;
+	uint32_t				Id;
+	std::vector<uint8_t>	Val;
+} Pending_t;
+
+static uint32_t RunSequence(uint32_t Count, Model_t &Model, Pending_t &Pend)
 {
-	FreshFlash(Sectors);
-	CHECK(BtPdsInit(&s_Nvm) == 0, "init");
-	Model m;
-	std::vector<uint8_t> snap;
-	Model snapModel;
-	std::vector<uint8_t> trig;
-	uint32_t trigId = 0;
-	int totalOps = 0;
+	Pend.Valid = false;
 
-	// Live set: 3 hot ids + 1 cold id at 72 bytes each keeps the whole set
-	// plus GC overhead inside one sector.
-	uint32_t hotIds = 3;
-	size_t recLen = 72;
-	// A cold id keeps at least one live record in the oldest sector so a
-	// garbage collection always copies something.
-	auto coldV = Val(99, 0, recLen);
-	CHECK(BtPdsWrite(99, coldV.data(), coldV.size()) == (ssize_t)recLen,
-		  "cold write");
-	m[99] = coldV;
-	for (uint32_t i = 1; i <= 400; i++)
+	for (uint32_t i = 0; i < Count; i++)
 	{
-		// A fresh never-updated id every 5th write leaves one live record
-		// in every filled sector, so no victim allows a zero-copy
-		// collection and the swept collection has a real copy phase.
-		uint32_t id = (i % 5) == 0 ? 1000 + i : 1 + (i % hotIds);
-		auto v = Val(id, i, recLen);
-		snap.assign(s_Flash, s_Flash + s_RegionSize);
-		snapModel = m;
-		s_OpCount = 0;
-		ssize_t r = BtPdsWrite(id, v.data(), v.size());
-		CHECK(r == (ssize_t)recLen, "prefill ret %zd", r);
-		m[id] = v;
-		if (s_OpCount >= 5)
-		{
-			trig = v;
-			trigId = id;
-			totalOps = s_OpCount;
-			break;
-		}
-	}
-	CHECK(totalOps >= 5, "gc never triggered");
-	if (totalOps < 5) return;
+		uint32_t id = 0x300U + (i % 5U);
+		uint32_t len = 16U + (i % 7U) * 24U;
+		std::vector<uint8_t> v = MakeVal(i + 1U, len);
 
-	int mountFail = 0;
-	for (int cut = 0; cut < totalOps; cut++)
-	{
-		for (uint32_t keep : {0U, 6U, 12U})
+		if (BtPdsWrite(id, v.data(), v.size()) != (ssize_t)len)
 		{
-			memcpy(s_Flash, snap.data(), s_RegionSize);
-			PowerOn();
-			CHECK(BtPdsInit(&s_Nvm) == 0, "mount before cut run");
-			s_CutCountdown = cut;
-			s_CutKeep = keep;
-			(void)BtPdsWrite(trigId, trig.data(), trig.size());
+			// The medium can take the last unit of a record and lose power
+			// before the result is read, so a refused write is not a write
+			// that certainly did not happen.
+			Pend.Valid = true;
+			Pend.Id = id;
+			Pend.Val = v;
 
-			PowerOn();	// reboot
-			int r = BtPdsInit(&s_Nvm);
-			if (r != 0)
-			{
-				mountFail++;
-				printf("  cut %d keep %u: init %d\n", cut, keep, r);
-				continue;
-			}
-			// Every value committed before the interrupted write must read
-			// back, except the interrupted id, which may be old or new.
-			for (const auto &kv : snapModel)
-			{
-				uint8_t buf[BT_PDS_RECORD_DATA_MAX];
-				ssize_t rr = BtPdsRead(kv.first, buf, sizeof(buf));
-				if (kv.first == trigId)
-				{
-					CHECK(rr == (ssize_t)kv.second.size() ||
-						  rr == (ssize_t)recLen,
-						  "torn id state %zd", rr);
-					continue;
-				}
-				CHECK(rr == (ssize_t)kv.second.size(),
-					  "gc cut id %u len %zd want %zu",
-					  kv.first, rr, kv.second.size());
-				if (rr == (ssize_t)kv.second.size() && rr > 0)
-				{
-					CHECK(memcmp(buf, kv.second.data(), rr) == 0,
-						  "gc cut id %u data", kv.first);
-				}
-			}
-			auto post = Val(777, 1, 40);
-			ssize_t pr = BtPdsWrite(777, post.data(), post.size());
-			CHECK(pr == 40, "post-recovery write cut %d keep %u ret %zd",
-				  cut, keep, pr);
+			return i;
 		}
+		Model[id] = v;
 	}
-	CHECK(mountFail == 0, "%d cut points failed to mount", mountFail);
-	printf("  gc cut sweep %u sectors: %d cut points x 3 tears\n",
-		   Sectors, totalOps);
+
+	return Count;
 }
 
-// Defect 3: cut power at every programming op of BtPdsClear.
-// After reboot the store must hold all old records or none.
-static void TestClearCutSweep(uint32_t Sectors)
+// Every acknowledged record reads back, except the one that was in flight,
+// which may read back as either the acknowledged value or the new one.
+static bool ModelMatchesPend(const Model_t &Model, const Pending_t &Pend)
 {
-	FreshFlash(Sectors);
-	CHECK(BtPdsInit(&s_Nvm) == 0, "init");
-	Model m;
-	for (uint32_t i = 1; i <= 6; i++)
-	{
-		auto v = Val(i, 0, 40);
-		CHECK(BtPdsWrite(i, v.data(), v.size()) == 40, "populate");
-		m[i] = v;
-	}
-	// Force at least one GC so records spread across sectors.
-	for (int i = 0; i < 30; i++)
-	{
-		auto v = Val(3, i + 1, 40);
-		CHECK(BtPdsWrite(3, v.data(), v.size()) == 40, "spread");
-		m[3] = v;
-	}
-	std::vector<uint8_t> snap(s_Flash, s_Flash + s_RegionSize);
+	uint8_t buf[BT_PDS_RECORD_DATA_MAX];
 
-	s_OpCount = 0;
-	CHECK(BtPdsClear() == 0, "clear");
-	int totalOps = s_OpCount;
-	CHECK(totalOps >= 2, "clear ops %d", totalOps);
-
-	int mixed = 0, mountFail = 0;
-	for (int cut = 0; cut < totalOps; cut++)
+	for (Model_t::const_iterator it = Model.begin(); it != Model.end(); ++it)
 	{
-		for (uint32_t keep : {0U, 8U, 200U})
+		ssize_t n = BtPdsRead(it->first, buf, sizeof(buf));
+
+		if (n == (ssize_t)it->second.size() &&
+			memcmp(buf, it->second.data(), it->second.size()) == 0)
 		{
-			memcpy(s_Flash, snap.data(), s_RegionSize);
-			PowerOn();
-			CHECK(BtPdsInit(&s_Nvm) == 0, "mount before clear run");
-			s_CutCountdown = cut;
-			s_CutKeep = keep;
-			(void)BtPdsClear();
+			continue;
+		}
+		if (Pend.Valid && it->first == Pend.Id &&
+			n == (ssize_t)Pend.Val.size() &&
+			memcmp(buf, Pend.Val.data(), Pend.Val.size()) == 0)
+		{
+			continue;
+		}
 
-			PowerOn();
-			int r = BtPdsInit(&s_Nvm);
-			if (r != 0)
+		printf("FAIL cut: id %08X read %d, wanted %u", it->first, (int)n,
+			   (unsigned)it->second.size());
+		if (Pend.Valid && it->first == Pend.Id)
+		{
+			printf(" or the %u in flight", (unsigned)Pend.Val.size());
+		}
+		printf("\n");
+
+		return false;
+	}
+
+	return true;
+}
+
+static void TestCutSweep(uint32_t Gran)
+{
+	printf("--- power cut sweep, unit %u\n", Gran);
+
+	const uint32_t seqLen = 40U;
+	const uint32_t keeps[3] = { 0U, Gran / 2U, Gran };
+
+	// One clean run says how many programming operations there are to walk.
+	MediumWipe(PDS_MAX_REGION, Gran);
+	if (Mounted(Boot(Gran), "cut reference") == false)
+	{
+		return;
+	}
+
+	Model_t ref;
+	Pending_t pend;
+
+	CHECK(RunSequence(seqLen, ref, pend) == seqLen,
+		  "cut: the reference run finishes");
+
+	uint32_t ops = s_OpCount;
+	uint32_t cuts = 0;
+	bool ok = true;
+
+	for (uint32_t at = 0; at < ops && ok; at++)
+	{
+		Step("cut points", at, ops);
+
+		for (uint32_t k = 0; k < 3U && ok; k++)
+		{
+			MediumWipe(PDS_MAX_REGION, Gran);
+			if (Boot(Gran) != 0)
 			{
-				mountFail++;
-				printf("  clear cut %d keep %u: init %d\n", cut, keep, r);
-				continue;
+				printf("FAIL cut: mount before the cut at %u\n", (unsigned)at);
+				ok = false;
+				break;
 			}
-			int present = 0;
-			for (const auto &kv : m)
+
+			Model_t model;
+			Pending_t cutPend;
+
+			MediumArmCut(at, keeps[k]);
+			RunSequence(seqLen, model, cutPend);
+			cuts++;
+
+			// Reboot on to whatever reached the medium.
+			if (Boot(Gran) != 0)
 			{
-				uint8_t buf[BT_PDS_RECORD_DATA_MAX];
-				if (BtPdsRead(kv.first, buf, sizeof(buf)) >= 0)
-				{
-					present++;
-				}
+				printf("FAIL cut: mount after the cut at %u keep %u\n",
+					   (unsigned)at, (unsigned)keeps[k]);
+				ok = false;
+				break;
 			}
-			if (present != 0 && present != (int)m.size())
+			if (ModelMatchesPend(model, cutPend) == false)
 			{
-				mixed++;
-				printf("  clear cut %d keep %u: %d of %zu resurrected\n",
-					   cut, keep, present, m.size());
+				printf("FAIL cut: at %u keep %u lost a committed record\n",
+					   (unsigned)at, (unsigned)keeps[k]);
+				ok = false;
+				break;
+			}
+
+			// The store has to be usable again, not merely readable.
+			std::vector<uint8_t> v = MakeVal(99, 32);
+
+			if (BtPdsWrite(0x400U, v.data(), v.size()) != (ssize_t)v.size())
+			{
+				printf("FAIL cut: at %u keep %u left the store unwritable\n",
+					   (unsigned)at, (unsigned)keeps[k]);
+				ok = false;
 			}
 		}
 	}
-	CHECK(mountFail == 0, "%d clear cuts failed to mount", mountFail);
-	CHECK(mixed == 0, "%d clear cuts resurrected a partial set", mixed);
-	printf("  clear cut sweep %u sectors: %d cut points x 3 tears\n",
-		   Sectors, totalOps);
 
-	// A completed clear stays empty after remount.
-	memcpy(s_Flash, snap.data(), s_RegionSize);
-	PowerOn();
-	CHECK(BtPdsInit(&s_Nvm) == 0, "mount");
-	CHECK(BtPdsClear() == 0, "clean clear");
-	CHECK(BtPdsInit(&s_Nvm) == 0, "remount");
-	for (const auto &kv : m)
+	Step("cut points", ops, ops);
+
+	CHECK(ok, "cut: %u cut points over %u programming operations",
+		  (unsigned)cuts, (unsigned)ops);
+	CHECK(s_AlignFault == 0, "cut: %u programs the controller refused",
+		  (unsigned)s_AlignFault);
+}
+
+static void TestClearCutSweep(uint32_t Gran)
+{
+	printf("--- clear cut sweep, unit %u\n", Gran);
+
+	const uint32_t seqLen = 12U;
+	const uint32_t keeps[3] = { 0U, Gran / 2U, Gran };
+
+	MediumWipe(PDS_MAX_REGION, Gran);
+	if (Mounted(Boot(Gran), "clear reference") == false)
 	{
-		uint8_t buf[BT_PDS_RECORD_DATA_MAX];
-		CHECK(BtPdsRead(kv.first, buf, sizeof(buf)) == -ENOENT,
-			  "id %u after clean clear", kv.first);
+		return;
 	}
+
+	Model_t ref;
+	Pending_t pend;
+
+	CHECK(RunSequence(seqLen, ref, pend) == seqLen,
+		  "clear: the setup run finishes");
+
+	uint32_t before = s_OpCount;
+
+	CHECK(BtPdsClear() == 0, "clear: a clean clear succeeds");
+
+	uint32_t ops = s_OpCount - before;
+	uint32_t cuts = 0;
+	bool ok = true;
+
+	for (uint32_t at = 0; at < ops && ok; at++)
+	{
+		Step("cut points", at, ops);
+
+		for (uint32_t k = 0; k < 3U && ok; k++)
+		{
+			MediumWipe(PDS_MAX_REGION, Gran);
+
+			Model_t model;
+			Pending_t setupPend;
+
+			if (Boot(Gran) != 0 ||
+				RunSequence(seqLen, model, setupPend) != seqLen)
+			{
+				printf("FAIL clear: setup before the cut at %u\n", (unsigned)at);
+				ok = false;
+				break;
+			}
+
+			MediumArmCut(at, keeps[k]);
+			BtPdsClear();
+
+			if (Boot(Gran) != 0)
+			{
+				printf("FAIL clear: mount after the cut at %u keep %u\n",
+					   (unsigned)at, (unsigned)keeps[k]);
+				ok = false;
+				break;
+			}
+			cuts++;
+
+			// All of them or none of them, never a part of the set.
+			uint8_t buf[BT_PDS_RECORD_DATA_MAX];
+			uint32_t found = 0;
+
+			for (Model_t::iterator it = model.begin(); it != model.end(); ++it)
+			{
+				ssize_t n = BtPdsRead(it->first, buf, sizeof(buf));
+
+				if (n == (ssize_t)it->second.size() &&
+					memcmp(buf, it->second.data(), it->second.size()) == 0)
+				{
+					found++;
+				}
+				else if (n != -ENOENT)
+				{
+					printf("FAIL clear: at %u keep %u id %08X read %d\n",
+						   (unsigned)at, (unsigned)keeps[k], it->first, (int)n);
+					ok = false;
+					break;
+				}
+			}
+
+			if (ok && found != 0U && found != model.size())
+			{
+				printf("FAIL clear: at %u keep %u left %u of %u records\n",
+					   (unsigned)at, (unsigned)keeps[k], (unsigned)found,
+					   (unsigned)model.size());
+				ok = false;
+			}
+		}
+	}
+
+	Step("cut points", ops, ops);
+
+	CHECK(ok, "clear: %u cut points over %u programming operations",
+		  (unsigned)cuts, (unsigned)ops);
+	CHECK(s_AlignFault == 0, "clear: %u programs the controller refused",
+		  (unsigned)s_AlignFault);
+}
+
+// ---------------------------------------------------------------------------
+
+static void RunAll(uint32_t Gran)
+{
+	printf("\n=== write unit %u ===\n", Gran);
+
+	TestLayout(Gran);
+	TestBasics(Gran);
+	TestChurn(Gran);
+	TestFill(Gran);
+	TestCutSweep(Gran);
+	TestClearCutSweep(Gran);
 }
 
 int main(void)
 {
-	TestBasic();
-	TestChurn(2, 20000);
-	TestChurn(4, 100000);
-	TestFull();
-	TestGcCutSweep(2);
-	TestGcCutSweep(4);
-	TestClearCutSweep(2);
-	TestClearCutSweep(4);
-	printf(g_Fail ? "RESULT: %d FAILURES\n" : "RESULT: ALL PASS\n", g_Fail);
-	return g_Fail ? 1 : 0;
+	TestMountRefuses();
+
+	RunAll(4U);
+	RunAll(16U);
+
+	printf("\nChecks run: %d\n", g_Checks);
+	printf("RESULT: %s\n", g_Fail == 0 ? "ALL PASS" : "FAIL");
+
+	return g_Fail == 0 ? 0 : 1;
 }

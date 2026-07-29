@@ -130,11 +130,15 @@ size_t BtSmpBondRecordSize(void)
 	return sizeof(BtSmpBondRecord_t);
 }
 
-static void BtSmpBondPersist(int Slot)
+// Build the blob for one slot into a caller buffer. pBuff may be any
+// alignment, so the record is assembled in a local and copied out, the way
+// BtSmpBondRestore copies in before validating.
+size_t BtSmpBondSerialize(int Slot, void *pBuff, size_t BuffLen)
 {
-	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX)
+	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX || pBuff == nullptr ||
+		BuffLen < sizeof(BtSmpBondRecord_t))
 	{
-		return;
+		return 0;
 	}
 
 	BtSmpBondRecord_t record;
@@ -142,10 +146,33 @@ static void BtSmpBondPersist(int Slot)
 	record.Magic = BT_SMP_BOND_RECORD_MAGIC;
 	record.Version = BT_SMP_BOND_RECORD_VERSION;
 	record.Length = (uint16_t)sizeof(record);
+
+	// A platform that defers its write calls this from a different context to
+	// the one that changed the slot. A save landing part way through the copy
+	// below produces a record holding part of each version, with a CRC that
+	// matches it. Such a platform marks the slot again when that save arrives
+	// and writes it a second time, so the mixed record is superseded; what it
+	// is exposed to is a power loss inside the copy itself.
 	memcpy(&record.Bond, &s_BtSmpBondTable[Slot], sizeof(record.Bond));
+
 	record.Crc = 0U;
 	record.Crc = BtSmpBondCrc32(&record, sizeof(record));
-	BtSmpBondSave(Slot, &record, sizeof(record));
+
+	memcpy(pBuff, &record, sizeof(record));
+	CryptoSecureWipe(&record, sizeof(record));
+
+	return sizeof(record);
+}
+
+static void BtSmpBondPersist(int Slot)
+{
+	BtSmpBondRecord_t record;
+
+	size_t len = BtSmpBondSerialize(Slot, &record, sizeof(record));
+	if (len > 0)
+	{
+		BtSmpBondSave(Slot, &record, len);
+	}
 	CryptoSecureWipe(&record, sizeof(record));
 }
 

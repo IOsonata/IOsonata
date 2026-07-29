@@ -49,6 +49,17 @@
 #define BT_PDS_MAX_SECTORS			16U
 #endif
 
+// Widest write unit the store is built for. The staging buffers below are
+// sized at compile time, so this is what BtPdsInit will accept. 16 covers the
+// 128 bit quad word programming on STM32WBA; raise it for a part that
+// programs wider.
+#ifndef BT_PDS_MAX_WRITE_GRAN
+#define BT_PDS_MAX_WRITE_GRAN		16U
+#endif
+
+// Round x up to a multiple of u. u must be a power of two.
+#define BT_PDS_PAD_TO(x, u)			((((x) + (u) - 1U)) & ~((u) - 1U))
+
 #pragma pack(push, 4)
 typedef struct __Bt_Pds_Sector_Hdr {
 	uint32_t	Magic;
@@ -102,6 +113,15 @@ static Nvm *s_pMem;
 // calculation here, and reading it back through a virtual call each time buys
 // nothing.
 static uint32_t s_SectorSize;
+
+// The write unit of the medium, read once at mount. A part that programs 128
+// bit quad words takes neither a shorter write nor an unaligned one, so every
+// record and the sector header are padded up to this.
+static uint32_t s_WriteGran;
+
+// The sector header padded to the write unit. This is what the header costs
+// on the medium and where the first record of the sector starts.
+static uint32_t s_SectorHdrSize;
 
 // Chunk used to write the erased pattern on a medium that has no erase.
 #ifndef BT_PDS_FILL_CHUNK
@@ -176,9 +196,9 @@ static uint32_t s_Epoch;
 static bool s_SeqFound;
 static uint32_t s_MaxSeq;
 
-static inline uint32_t WordPad(uint32_t x)
+static inline uint32_t UnitPad(uint32_t x)
 {
-	return (x + 3U) & ~3UL;
+	return BT_PDS_PAD_TO(x, s_WriteGran);
 }
 
 static inline uint32_t SectorBase(uint16_t Sector)
@@ -193,7 +213,7 @@ static inline uint32_t SectorEnd(uint16_t Sector)
 
 static inline uint32_t SectorDataStart(uint16_t Sector)
 {
-	return SectorBase(Sector) + BT_PDS_SECTOR_HDR_SIZE;
+	return SectorBase(Sector) + s_SectorHdrSize;
 }
 
 static uint16_t Crc16(const void *pData, uint32_t Len, uint16_t Seed)
@@ -240,7 +260,10 @@ static uint16_t RecCrc(const BtPdsRecHdr_t *pHdr, const void *pData)
 static uint32_t RecSize(uint16_t Len)
 {
 	uint32_t dataLen = Len == BT_PDS_TOMBSTONE ? 0U : Len;
-	return BT_PDS_REC_HDR_SIZE + WordPad(dataLen);
+
+	// The header and the data go down in one write, so the whole record is
+	// padded once. The data does not start on a unit boundary of its own.
+	return UnitPad(BT_PDS_REC_HDR_SIZE + dataLen);
 }
 
 static bool IsErased(const void *pData, uint32_t Len)
@@ -428,7 +451,15 @@ static int WriteSectorHdr(uint16_t Sector, uint16_t SourceSector,
 	hdr.Rsvd[0] = hdr.Rsvd[1] = 0U;
 	hdr.Crc = SectorHdrCrc(&hdr);
 
-	if (MemWrite(SectorBase(Sector), &hdr, sizeof(hdr)) != 0)
+	// The header is 24 bytes and the medium may take nothing narrower than
+	// its write unit, so it goes down padded with the erased pattern.
+	alignas(uint32_t) uint8_t buf[
+		BT_PDS_PAD_TO(sizeof(BtPdsSectorHdr_t), BT_PDS_MAX_WRITE_GRAN)];
+
+	memset(buf, 0xFF, sizeof(buf));
+	memcpy(buf, &hdr, sizeof(hdr));
+
+	if (MemWrite(SectorBase(Sector), buf, s_SectorHdrSize) != 0)
 	{
 		// The header may have been part written. Left marked erased,
 		// FindErasedSector hands it out again, and a second header over a
@@ -476,7 +507,8 @@ static int AppendToSector(uint16_t Sector, uint32_t Id, uint16_t Len,
 	hdr.Crc = RecCrc(&hdr, pData);
 
 	alignas(uint32_t) uint8_t rec[
-		BT_PDS_REC_HDR_SIZE + WordPad(BT_PDS_RECORD_DATA_MAX)];
+		BT_PDS_PAD_TO(BT_PDS_REC_HDR_SIZE + BT_PDS_RECORD_DATA_MAX,
+					  BT_PDS_MAX_WRITE_GRAN)];
 	memset(rec, 0xFF, sizeof(rec));
 	memcpy(rec, &hdr, sizeof(hdr));
 	if (dataLen > 0U && pData != nullptr)
@@ -832,7 +864,7 @@ static int GarbageCollect(uint32_t Need)
 		return -ENOMEM;
 	}
 
-	uint32_t capacity = s_SectorSize - BT_PDS_SECTOR_HDR_SIZE;
+	uint32_t capacity = s_SectorSize - s_SectorHdrSize;
 	uint32_t doneSize = RecSize(0U);
 	uint16_t victim = BT_PDS_NO_SECTOR;
 	uint32_t bestBytes = UINT_MAX;
@@ -879,7 +911,7 @@ static int GarbageCollect(uint32_t Need)
 
 static int EnsureSpace(uint32_t Need)
 {
-	if (Need > s_SectorSize - BT_PDS_SECTOR_HDR_SIZE)
+	if (Need > s_SectorSize - s_SectorHdrSize)
 	{
 		return -ENOMEM;
 	}
@@ -928,11 +960,28 @@ int BtPdsInit(Nvm *pMem)
 
 	uint32_t sectorSize = pMem->LogicalSectorSize();
 	uint64_t regionSize = pMem->Size();
+	uint32_t writeGran = pMem->WriteGran();
 
-	if (sectorSize <= BT_PDS_SECTOR_HDR_SIZE ||
+	// A write unit has to be a power of two so the padding is a mask, at
+	// least a word so the erased pattern probe and the header fields land
+	// whole, and no wider than the staging buffers were built for. It also
+	// has to divide the chunk used to write the erased pattern over a medium
+	// that has no erase, or the last chunk of a sector would be short.
+	if (writeGran < 4U || writeGran > BT_PDS_MAX_WRITE_GRAN ||
+		(writeGran & (writeGran - 1U)) != 0U ||
+		(BT_PDS_FILL_CHUNK % writeGran) != 0U)
+	{
+		return -EINVAL;
+	}
+
+	uint32_t sectorHdrSize = BT_PDS_PAD_TO(BT_PDS_SECTOR_HDR_SIZE, writeGran);
+
+	// The sector has to be a whole number of write units, otherwise the last
+	// record in it would end past the sector.
+	if (sectorSize <= sectorHdrSize ||
+		(sectorSize % writeGran) != 0U ||
 		regionSize < (uint64_t)sectorSize * 2U ||
-		(regionSize % sectorSize) != 0U ||
-		pMem->WriteGran() != 4U)
+		(regionSize % sectorSize) != 0U)
 	{
 		return -EINVAL;
 	}
@@ -944,6 +993,8 @@ int BtPdsInit(Nvm *pMem)
 	}
 
 	s_pMem = pMem;
+	s_WriteGran = writeGran;
+	s_SectorHdrSize = sectorHdrSize;
 	s_SectorSize = sectorSize;
 	s_SectorCount = (uint16_t)sectorCount;
 	s_ActiveSector = BT_PDS_NO_SECTOR;

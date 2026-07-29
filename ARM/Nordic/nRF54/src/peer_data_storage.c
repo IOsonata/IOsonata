@@ -11,7 +11,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/util.h>
-#include <zephyr/sys/atomic.h>
 #include <zephyr/sys/__assert.h>
 #include <bm/bluetooth/peer_manager/peer_manager_types.h>
 
@@ -71,10 +70,6 @@ static const pm_evt_handler_internal_t evt_handlers[] = {
 };
 
 static bool module_initialized;
-static volatile bool peer_delete_deferred;
-
-/* Keeps track of the number of peers currently under delete processing. */
-static atomic_t delete_counter;
 
 /* Function for dispatching events to all registered event handlers. */
 static void pds_evt_send(struct pm_evt *event)
@@ -156,8 +151,6 @@ static void peer_data_delete_process(void)
 	uint16_t peer_id;
 	uint32_t entry_id;
 
-	peer_delete_deferred = false;
-
 	peer_id = peer_id_get_next_deleted(PM_PEER_ID_INVALID);
 
 	while (peer_id != PM_PEER_ID_INVALID) {
@@ -178,8 +171,10 @@ static void peer_data_delete_process(void)
 			}
 			err = BtPdsDelete(entry_id);
 			if (err == -ENOMEM) {
-				/* Store full mid-delete: defer and retry later. */
-				peer_delete_deferred = true;
+				/* Store full mid-delete. The peer keeps its id and stays
+				 * marked deleted, so the next delete request walks it
+				 * again once space has been freed.
+				 */
 				return;
 			} else if (err < 0) {
 				LOG_ERR("Could not delete peer data. BtPdsDelete() returned %d "
@@ -188,13 +183,6 @@ static void peer_data_delete_process(void)
 				break;
 			}
 		}
-
-		/* One peer finished, one decrement, whichever way it went. Doing it
-		 * on the failure path as well as here drove delete_counter negative,
-		 * and pds_peer_id_free only starts this loop on the 0 to 1 step, so
-		 * every later delete request was ignored.
-		 */
-		atomic_dec(&delete_counter);
 
 		if (failed) {
 			/* The peer keeps its id and stays marked deleted, so its data is
@@ -528,13 +516,12 @@ uint32_t pds_peer_id_free(uint16_t peer_id)
 		return NRF_ERROR_INVALID_PARAM;
 	}
 
-	/* Only start processing on the first delete request.
-	 * `peer_data_delete_process` will iteratively take care of processing all the peers marked
-	 * for deletion.
+	/* The IOsonata store completes inside the call, so this runs to the end
+	 * before returning, and it restarts its walk from the first peer marked
+	 * for deletion every time. Running it on every request is what retries a
+	 * peer left behind by a store full condition.
 	 */
-	if (atomic_inc(&delete_counter) == 0) {
-		peer_data_delete_process();
-	}
+	peer_data_delete_process();
 
 	return NRF_SUCCESS;
 }

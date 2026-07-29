@@ -57,10 +57,11 @@ class Nvm;
  * preserving the power-loss guarantee.
  *
  * The memory supplies the geometry, so the region is set once where it is
- * initialised. Its write unit must be 4 bytes, its region must hold at least
- * two whole sectors, and the sector size is the erase and garbage collection
- * unit. Either completion mode works; each write and erase is drained before
- * the store moves on.
+ * initialised. Its write unit must be a power of two from 4 up to
+ * BT_PDS_MAX_WRITE_GRAN and must divide the sector, its region must hold at
+ * least two whole sectors, and the sector size is the erase and garbage
+ * collection unit. Either completion mode works; each write and erase is
+ * drained before the store moves on.
  *
  * Only declared for C++ because Nvm is a C++ class. The rest of the store is
  * a flat C API and stays reachable from C.
