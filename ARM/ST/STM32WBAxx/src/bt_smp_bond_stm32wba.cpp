@@ -76,6 +76,14 @@ typedef struct __Bt_Wba_Nvm_Manifest {
 
 static bool s_PdsReady;
 
+/* The stack's NVM cache, captured when the application registers it. The
+ * store call reports a portion pointer and a valid word count that always
+ * counts from the cache's beginning, so persisting needs the beginning,
+ * which only the registration provides.
+ */
+static uint64_t *s_pCache;
+static uint16_t s_CacheMaxWords;
+
 static int PdsEnsureReady(void)
 {
 	if (s_PdsReady)
@@ -94,9 +102,13 @@ static int PdsEnsureReady(void)
 }
 
 // ---------------------------------------------------------------------------
-// BLEPLAT_NvmStore: the ST stack flushing (a prefix of) its NVM cache. The
-// size is in 64 bit words and the valid data starts at the beginning of the
-// cache, per bleplat.h.
+// BLEPLAT_NvmStore: the ST stack flushing its NVM cache. Per bleplat.h, ptr
+// points at the start of the portion that changed, which can be inside the
+// cache, while size counts the valid 64 bit words from the cache's
+// beginning. So what goes to the medium is the cache's first size words,
+// from the base the application registered; ptr only says the call is about
+// that cache. Without a registered base the portion pointer is all there
+// is, which is only right when the stack happened to pass the beginning.
 //
 // Chunks first, manifest last: the manifest is the commit point, so a flush
 // that loses power mid run leaves the previous manifest naming the previous
@@ -114,7 +126,22 @@ extern "C" void BLEPLAT_NvmStore(const uint64_t *ptr, uint16_t size)
 		return;
 	}
 
-	const uint8_t *img = (const uint8_t *)ptr;
+	const uint64_t *base = s_pCache != NULL ? s_pCache : ptr;
+
+	if (s_pCache != NULL &&
+		(ptr < s_pCache || ptr >= s_pCache + s_CacheMaxWords))
+	{
+		// A pointer outside the registered cache is a call this file does
+		// not understand; storing from either address would persist bytes
+		// nobody meant.
+		return;
+	}
+	if (s_CacheMaxWords != 0 && size > s_CacheMaxWords)
+	{
+		return;
+	}
+
+	const uint8_t *img = (const uint8_t *)base;
 	size_t len = (size_t)size * sizeof(uint64_t);
 	uint32_t idx = 0;
 
@@ -205,10 +232,33 @@ extern "C" void BtSmpBondWbaCommit(uint16_t ConnHdl)
 }
 
 // ---------------------------------------------------------------------------
-// Init entry, called from bt_app_stm32wba.cpp when the application asks for
-// security. A referenced entry also pulls this object from the archive, so
-// the strong BLEPLAT_NvmStore here wins over any weak stub.
+// Register the stack's NVM cache and preload it, before BleStack_Init:
+// BleStack_init_t takes the buffer, its capacity and the words already
+// valid, and nvm_cache_size is exactly what this returns. Also the entry
+// that pulls this object from the archive, so the strong BLEPLAT_NvmStore
+// here wins over any weak stub.
+//
+// Returns the preloaded 64 bit words, 0 on a first boot, a torn flush, or
+// a store that would not mount; the stack then starts empty, which is the
+// same recovery either way.
 // ---------------------------------------------------------------------------
+extern "C" uint16_t BtSmpBondWbaCacheInit(uint64_t *pCache, uint16_t MaxWords)
+{
+	if (pCache == NULL || MaxWords == 0)
+	{
+		return 0;
+	}
+
+	s_pCache = pCache;
+	s_CacheMaxWords = MaxWords;
+
+	size_t n = BtSmpBondWbaRestore(pCache, (size_t)MaxWords *
+								   sizeof(uint64_t));
+
+	// Whole words by construction: the image was stored from a word count.
+	return (uint16_t)(n / sizeof(uint64_t));
+}
+
 extern "C" int BtSmpBondWbaInit(void)
 {
 	return PdsEnsureReady();
