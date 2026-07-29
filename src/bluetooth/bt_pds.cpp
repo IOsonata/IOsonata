@@ -1104,6 +1104,20 @@ int BtPdsClear(void)
 		return result;
 	}
 
+	// The clear is committed: the new header is on the medium and a mount
+	// would take its epoch and treat everything older as gone. Say so here
+	// too, before the erasing starts. Left valid, an erase that fails would
+	// return an error with the old records still readable until the next
+	// reboot made them disappear, so the same medium answered two ways.
+	for (uint16_t sector = 0; sector < s_SectorCount; sector++)
+	{
+		if (sector != spare)
+		{
+			s_Sectors[sector].Valid = false;
+			s_Sectors[sector].Writable = false;
+		}
+	}
+
 	for (uint16_t sector = 0; sector < s_SectorCount; sector++)
 	{
 		if (sector != spare && !s_Sectors[sector].Erased)

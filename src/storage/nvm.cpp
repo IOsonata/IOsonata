@@ -499,10 +499,17 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		return fail();
 	}
 
-	if (vEraseSize != 0 && vEraseSize != 4U * 1024U &&
-		vEraseSize != 32U * 1024U && vEraseSize != 64U * 1024U)
+	// A power of two, no smaller than the page, and the whole device made of
+	// them. The list this replaced named three sizes because those are what
+	// the serial NOR commands address, but the erase unit is whatever the
+	// medium reports: a 512 byte or 2 KB page is a real geometry and was
+	// refused. Which command a serial part needs is decided by the size
+	// further down, and a size with no command there is refused there.
+	if (vEraseSize != 0 &&
+		((vEraseSize & (vEraseSize - 1)) != 0 || vEraseSize < vPageSize ||
+		 (vDevSize % vEraseSize) != 0))
 	{
-		DEBUG_PRINTF("Nvm erase size unsupported\r\n");
+		DEBUG_PRINTF("Nvm erase size invalid\r\n");
 		return fail();
 	}
 
@@ -1398,9 +1405,11 @@ int Nvm::EraseUnit(uint32_t Addr, bool bDefer)
 		return bDefer ? 0 : (WaitReady() ? 0 : -EIO);
 	}
 
+	// On a bus the unit has to be one the command set can name.
 	uint8_t op = NVM_CMD_SECT_ERASE;
 	if (vEraseSize == 32U * 1024U) { op = NVM_CMD_BLK32_ERASE; }
 	else if (vEraseSize == 64U * 1024U) { op = NVM_CMD_BLK64_ERASE; }
+	else if (vEraseSize != 4U * 1024U) { return -ENOTSUP; }
 
 	if (vbPhased)
 	{

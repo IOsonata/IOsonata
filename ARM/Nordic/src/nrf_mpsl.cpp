@@ -329,6 +329,11 @@ void MpslNvmArbiterStop(void)
 
 	NvmIntrfSetArbiter(nullptr);
 
+	// Whatever was in flight is not going to finish now. Fail it and say so
+	// before the session goes, or the driver waits for a completion that
+	// nothing is left to deliver.
+	NvmOpFinish(-ECANCELED);
+
 	(void)mpsl_timeslot_session_close(s_NvmSessionId);
 
 	s_bNvmSessionOpen = false;
