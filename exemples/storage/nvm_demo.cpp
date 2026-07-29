@@ -194,7 +194,10 @@ static const SPICfg_t s_SpiCfg = {
 	.ClkPol = SPICLKPOL_HIGH,
 	.ChipSel = SPICSEL_AUTO,
 	.bDmaEn = false,
-	.bIntEn = true,
+	// Polling: the driver runs each bus transfer to completion and paces the
+	// memory operation itself. Interrupt mode here with no callback left the
+	// transfer with nothing to finish it.
+	.bIntEn = false,
 	.IntPrio = 6,
 	.EvtCB = NULL
 };
@@ -684,10 +687,14 @@ static bool NvmDemoSetup(void)
 	uint64_t regionsize = (uint64_t)unit * NVM_DEMO_REGION_PAGES;
 
 #if NVM_DEMO_MEDIUM == 0
-	// The interface's callback belongs to whoever builds the interface, which
-	// is this application. An interrupt driven memory needs telling when a
-	// transfer finishes, so point it at the one on this interface.
+	// The interface's configuration belongs to whoever builds the interface,
+	// which is this application: the callback and the transfer mode are both
+	// said here, once. The driver reads the mode; it does not set it.
+#if NVM_DEMO_ASYNC
+	if (s_MemIntrf.Init(MemIntrfEvtCB, true) == false)
+#else
 	if (s_MemIntrf.Init(MemIntrfEvtCB) == false)
+#endif
 #elif NVM_DEMO_MEDIUM == 1
 	if (s_MemIntrf.Init(s_SpiCfg) == false)
 #else

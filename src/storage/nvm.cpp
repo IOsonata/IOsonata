@@ -415,18 +415,15 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	DeviceAddress(Cfg.DevNo);
 	InterruptEnabled(Cfg.bIntEn);
 
-	// Tell the interface what the application asked for. An interface that can
-	// report completion by interrupt uses this to submit and return instead of
-	// submitting and waiting; one that cannot simply finishes in the call and
-	// reports the full length, which the driver handles either way. Only set,
-	// never cleared: an interface that runs interrupt driven for its own
-	// reasons keeps doing so.
-	if (Cfg.bIntEn)
-	{
-		DevIntrf_t *dip = *pIntrf;
-
-		dip->bIntEn = true;
-	}
+	// NvmCfg_t::bIntEn is this driver's operation mode: whether an operation
+	// is advanced through IsBusy and reported through the event handler, or
+	// finished inside the call. The interface's own bIntEn is its transfer
+	// mode, set by whoever created the interface, and this driver reads it to
+	// know whether a started transfer completes by event; it does not write
+	// it. A device configuring the interface it was handed is the same
+	// mistake as a device installing its own EvtCB, and it broke the demo
+	// configurations that initialised a bus one way and had it changed after
+	// the hardware was already set up.
 	vpWaitCB = Cfg.pWaitCB;
 	vEvtHandler = Cfg.EvtHandler;
 

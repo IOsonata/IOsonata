@@ -274,15 +274,20 @@ public:
 	/**
 	 * @brief	Bring the controller interface up.
 	 *
-	 * @param	EvtCB : Called from interrupt when a transfer finishes. Set
-	 * 			by whoever creates the interface, which is what owns it. An
+	 * Both arguments come from whoever creates the interface, which is what
+	 * owns its configuration. Nothing downstream changes either afterwards.
+	 *
+	 * @param	EvtCB  : Called from interrupt when a transfer finishes. An
 	 * 			application that puts an Nvm on this passes something that
 	 * 			calls its IntrfEvent. Null when nothing needs telling, which
 	 * 			is the case for a driver that polls.
+	 * @param	bIntEn : true when a submitted operation returns at once and
+	 * 			completes through EvtCB; false when it finishes inside the
+	 * 			call. A fact about the interface, set once here.
 	 *
 	 * @return	true on success
 	 */
-	bool Init(DevIntrfEvtHandler_t EvtCB = nullptr);
+	bool Init(DevIntrfEvtHandler_t EvtCB = nullptr, bool bIntEn = false);
 
 	operator DevIntrf_t * const () override { return NvmMcuDevIntrf(); }
 

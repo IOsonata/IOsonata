@@ -282,9 +282,15 @@ static void CtrlFinish(int Res)
 	// refused and nothing works again.
 	DeviceIntrfStopTx(&s_NvmDev.DevIntrf);
 
-	s_NvmDev.DevIntrf.EvtCB(&s_NvmDev.DevIntrf,
-				Res == 0 ? DEVINTRF_EVT_COMPLETED : DEVINTRF_EVT_TX_TIMEOUT,
-				nullptr, 0);
+	// The creator may have asked for interrupt completion with nothing to
+	// tell; the Nvm driver then finds the result through IsBusy. Reporting
+	// to a callback that was never given jumped to null.
+	if (s_NvmDev.DevIntrf.EvtCB)
+	{
+		s_NvmDev.DevIntrf.EvtCB(&s_NvmDev.DevIntrf,
+					Res == 0 ? DEVINTRF_EVT_COMPLETED : DEVINTRF_EVT_TX_TIMEOUT,
+					nullptr, 0);
+	}
 }
 
 static void NvmArbDone(void *pCtx, int Res)
@@ -1118,7 +1124,7 @@ static void *NvmGetHandle(DevIntrf_t *pDev) { return pDev->pDevData; }
 
 }	// extern "C"
 
-bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB)
+bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 {
 	memset(&s_NvmDev, 0, sizeof(s_NvmDev));
 	memset(&s_Stat, 0, sizeof(s_Stat));
@@ -1144,9 +1150,14 @@ bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB)
 	s_NvmDev.DevIntrf.MaxRetry = 1;
 	s_NvmDev.DevIntrf.EnCnt = 1;
 
-	// bIntEn is left for the driver to set from NvmCfg_t. EvtCB comes from
-	// whoever built this, which is what owns it.
+	// Both come from whoever built this, which is what owns the interface
+	// configuration. The Nvm driver reads bIntEn to know whether a started
+	// transfer completes by event; it does not write it. It used to: the
+	// driver copied its own operation mode into the interface it was handed,
+	// which configured somebody else's property and broke a bus that was
+	// initialised the other way.
 	s_NvmDev.DevIntrf.EvtCB = EvtCB;
+	s_NvmDev.DevIntrf.bIntEn = bIntEn;
 	atomic_flag_clear(&s_NvmDev.DevIntrf.bBusy);
 
 	// One controller, so one interface on it, and this is that one. Recorded
