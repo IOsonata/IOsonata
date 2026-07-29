@@ -577,13 +577,19 @@ static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
 // the SoftDevice ports, pm_peers_delete for the BM one.
 static bool UartBleBondTryCommand(const uint8_t *pData, int Len)
 {
-	if (Len < 4 || memcmp(pData, "bond", 4) != 0)
+	// This link is a data bridge, so anything that is not exactly the
+	// command goes on air untouched: "bond" must be followed by whitespace,
+	// the argument must be exactly "del", and nothing but line endings may
+	// follow. "bond delivery data" is payload, not a request to clear the
+	// security state.
+	if (Len < 5 || memcmp(pData, "bond", 4) != 0 ||
+		(pData[4] != ' ' && pData[4] != '\t'))
 	{
 		return false;
 	}
 
-	const uint8_t *p = pData + 4;
-	int l = Len - 4;
+	const uint8_t *p = pData + 5;
+	int l = Len - 5;
 
 	while (l > 0 && (*p == ' ' || *p == '\t'))
 	{
@@ -591,15 +597,30 @@ static bool UartBleBondTryCommand(const uint8_t *pData, int Len)
 		l--;
 	}
 
-	if (l >= 3 && memcmp(p, "del", 3) == 0)
+	if (l < 3 || memcmp(p, "del", 3) != 0)
 	{
-		g_Uart.printf("clearing stored bonds\r\n");
-		BtSmpBondClearAll();
-
-		return true;
+		return false;
 	}
 
-	g_Uart.printf("Commands: bond del\r\n");
+	p += 3;
+	l -= 3;
+
+	while (l > 0 && (*p == '\r' || *p == '\n' || *p == ' ' || *p == '\t'))
+	{
+		p++;
+		l--;
+	}
+
+	if (l != 0)
+	{
+		return false;
+	}
+
+	// Requested, not done: the delete is queued and each peer reports as it
+	// finishes, the PDS trace prints one line per peer, and peer_manager
+	// raises PM_EVT_PEERS_DELETE_SUCCEEDED when the last one is gone.
+	g_Uart.printf("bond deletion requested\r\n");
+	BtSmpBondClearAll();
 
 	return true;
 }
