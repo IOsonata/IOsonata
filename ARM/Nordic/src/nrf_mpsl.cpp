@@ -331,7 +331,13 @@ void MpslNvmArbiterStop(void)
 
 	// Whatever was in flight is not going to finish now. Fail it and say so
 	// before the session goes, or the driver waits for a completion that
-	// nothing is left to deliver.
+	// nothing is left to deliver. Both forms of waiting: NvmOpFinish reports
+	// an operation that asked to be called back, and the result and done
+	// flag release a synchronous submitter sitting in its wait loop, which
+	// NvmOpFinish leaves alone because that operation has no Done. Setting
+	// them when nothing waits is harmless; the next submit resets both.
+	s_NvmResult = -ECANCELED;
+	s_bNvmDone = true;
 	NvmOpFinish(-ECANCELED);
 
 	(void)mpsl_timeslot_session_close(s_NvmSessionId);

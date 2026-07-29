@@ -148,12 +148,37 @@ size_t BtSmpBondSerialize(int Slot, void *pBuff, size_t BuffLen)
 	record.Length = (uint16_t)sizeof(record);
 
 	// A platform that defers its write calls this from a different context to
-	// the one that changed the slot. A save landing part way through the copy
-	// below produces a record holding part of each version, with a CRC that
-	// matches it. Such a platform marks the slot again when that save arrives
-	// and writes it a second time, so the mixed record is superseded; what it
-	// is exposed to is a power loss inside the copy itself.
-	memcpy(&record.Bond, &s_BtSmpBondTable[Slot], sizeof(record.Bond));
+	// the one that changed the slot, so a save can land part way through the
+	// copy and leave it holding part of each version, over which the CRC
+	// below would then be computed as if it were a record anyone ever held.
+	// Copy twice and compare: equal copies mean nothing changed from the
+	// start of the first to the end of the second, which is a snapshot. A
+	// change re-marks the slot anyway, so the retries only have to outlast
+	// the burst that is actively rewriting it; if they do not, the caller
+	// gets nothing now and serializes the settled slot on the re-mark.
+	BtSmpBond_t check;
+	bool stable = false;
+
+	for (int i = 0; i < 4; i++)
+	{
+		memcpy(&record.Bond, &s_BtSmpBondTable[Slot], sizeof(record.Bond));
+		memcpy(&check, &s_BtSmpBondTable[Slot], sizeof(check));
+
+		if (memcmp(&record.Bond, &check, sizeof(check)) == 0)
+		{
+			stable = true;
+			break;
+		}
+	}
+
+	CryptoSecureWipe(&check, sizeof(check));
+
+	if (!stable)
+	{
+		CryptoSecureWipe(&record, sizeof(record));
+
+		return 0;
+	}
 
 	record.Crc = 0U;
 	record.Crc = BtSmpBondCrc32(&record, sizeof(record));

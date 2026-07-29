@@ -1046,8 +1046,10 @@ int Nvm::TakeResult(void)
 {
 	if (atomic_flag_test_and_set(&vOpLock))
 	{
-		// Being reported elsewhere. Whoever holds it takes the result.
-		return 0;
+		// Being advanced or reported elsewhere; whoever holds the lock takes
+		// the result. Refused, not answered: 0 here told the caller the
+		// operation succeeded when its result had not been read at all.
+		return -EBUSY;
 	}
 
 	int r = vOpRes;
