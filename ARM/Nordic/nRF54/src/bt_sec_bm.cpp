@@ -1092,12 +1092,14 @@ static bool s_bPdsMounted = false;
 
 // ---- sm_* API surface (called by peer_manager.c) ----------------------------
 
-extern "C" {
+// The sm_* surface below is declared in modules/security_manager.h and
+// BtSmpBondErase in bt_smp.h, whose C++ guards give those definitions their
+// C linkage. BtPdsBmInit is declared in no header, so it alone is marked.
 
 // Bring up the memory and mount the store on it. peer_data_storage.c calls
 // this from pds_init; it is C, and Nvm is a C++ class, so the construction
 // lives here and it gets a C entry point. Safe to call more than once.
-int BtPdsBmInit(void)
+extern "C" int BtPdsBmInit(void)
 {
 	if (s_bPdsMounted)
 	{
@@ -1455,4 +1457,3 @@ uint32_t sm_link_secure(uint16_t conn_handle, bool force_repairing)
 	return LinkSecure(conn_handle, s_pSecParams == NULL, force_repairing, false);
 }
 
-}	// extern "C"

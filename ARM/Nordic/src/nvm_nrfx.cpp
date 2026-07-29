@@ -942,7 +942,7 @@ static int NvmEraseUnit(uintptr_t Addr)
 // Ops is how many operations the memory was asked for. A write is counted in
 // NvmFlush; an erase is counted here, because it no longer passes through a
 // transfer. Started counts as asked for, a refusal does not.
-extern "C" int NvmMcuErase(uintptr_t Addr)
+int NvmMcuErase(uintptr_t Addr)
 {
 	int res = NvmEraseUnit(Addr);
 
@@ -1000,8 +1000,6 @@ static int NvmFlush(NvmDevIntrf_t *pXfer)
 
 	return res;
 }
-
-extern "C" {
 
 static bool NvmStartRx(DevIntrf_t *, uint32_t)
 {
@@ -1122,8 +1120,6 @@ static uint32_t NvmSetRate(DevIntrf_t *, uint32_t Rate) { return Rate; }
 static void NvmPowerOff(DevIntrf_t *) {}
 static void *NvmGetHandle(DevIntrf_t *pDev) { return pDev->pDevData; }
 
-}	// extern "C"
-
 bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 {
 	memset(&s_NvmDev, 0, sizeof(s_NvmDev));
@@ -1198,7 +1194,7 @@ void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
 // buffer is drained before CtrlWriteWords returns, and there is no busy period
 // afterwards for anyone to wait on.
 #if defined(NRF52_SERIES)
-extern "C" bool NvmMcuIsReady(void)
+bool NvmMcuIsReady(void)
 {
 	return nrf_nvmc_ready_check(NRF_NVMC);
 }
@@ -1247,7 +1243,7 @@ void NvmMcuCfg(NvmCfg_t &Cfg)
 // device. Weak: an S145 application overrides it from nrf_sdh.c, because the
 // SoftDevice image sits at the top of the RRAM there and the application
 // slot ends at the storage partition.
-extern "C" __attribute__((weak)) uint64_t NvmMcuCeiling(void)
+__attribute__((weak)) uint64_t NvmMcuCeiling(void)
 {
 #if defined(NRF52_SERIES)
 	return (uint64_t)NRF_FICR->CODEPAGESIZE * (uint64_t)NRF_FICR->CODESIZE;

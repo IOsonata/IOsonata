@@ -224,7 +224,8 @@ static uint32_t PeersIdKeysGet(const uint16_t *pPeers, uint32_t PeerCnt,
 	return NRF_SUCCESS;
 }
 
-extern "C" {
+// The im_* surface below is declared in modules/id_manager.h, whose C++
+// guard gives every definition its C linkage; nothing is marked here.
 
 bool im_address_resolve(const ble_gap_addr_t *addr, const ble_gap_irk_t *irk)
 {
@@ -634,4 +635,3 @@ uint32_t im_privacy_get(ble_gap_privacy_params_t *privacyParams)
 	return sd_ble_gap_privacy_get(privacyParams);
 }
 
-} // extern "C"
