@@ -439,6 +439,48 @@ static void pds_pending_report(struct pds_pending *p, bool ok)
 	pds_evt_send(&evt);
 }
 
+static void pds_work_handler(uint32_t evt, void *ctx);
+static struct pds_pending *pds_pending_claim(void);
+
+/* Start a walk over the peers marked deleted, if one is needed and none is
+ * running. Called from the delete request and again after every operation
+ * that finished, because a finished store or delete is the moment space may
+ * have appeared for a walk that earlier stopped on a full store. Failing to
+ * start is not an error to anyone: the peers stay marked and the next
+ * operation calls here again.
+ */
+static void peer_delete_kick(void)
+{
+	if (del_peer_running) {
+		return;
+	}
+	if (peer_id_get_next_deleted(PM_PEER_ID_INVALID) == PM_PEER_ID_INVALID) {
+		return;
+	}
+
+	struct pds_pending *p = pds_pending_claim();
+
+	if (p == NULL) {
+		return;
+	}
+
+	p->del_peer = true;
+	p->is_delete = true;
+	p->peer_id = PM_PEER_ID_INVALID;	/* start from the first marked */
+	p->data_id = PM_PEER_DATA_ID_BONDING;
+	p->entry_id = 0;
+	p->length = 0;
+
+	if (!AppEvtHandlerQue(0, p, pds_work_handler)) {
+		p->del_peer = false;
+		p->busy = false;
+
+		return;
+	}
+
+	del_peer_running = true;
+}
+
 /* Runs from the application event handler, out of the BLE event dispatch. */
 static void pds_work_handler(uint32_t evt, void *ctx)
 {
@@ -455,9 +497,10 @@ static void pds_work_handler(uint32_t evt, void *ctx)
 			return;
 		}
 
-		/* Finished, stopped on an error, or the queue would not take it
-		 * back. Anything left is still marked deleted and a later
-		 * pds_peer_id_free walks it.
+		/* Finished, stopped, or the queue would not take it back. Anything
+		 * left is still marked deleted, and the kick after the next finished
+		 * operation starts a new walk; a walk that stopped on a full store
+		 * is resumed by exactly the operations that make room.
 		 */
 		del_peer_running = false;
 		p->busy = false;
@@ -478,10 +521,12 @@ static void pds_work_handler(uint32_t evt, void *ctx)
 		/* A whole peer delete reports once for the peer, not per entry. */
 		if (peer_id_is_deleted(p->peer_id)) {
 			p->busy = false;
-			return;
+		} else {
+			pds_pending_report(p, true);
 		}
 
-		pds_pending_report(p, true);
+		/* This delete freed room. */
+		peer_delete_kick();
 
 		return;
 	}
@@ -497,6 +542,9 @@ static void pds_work_handler(uint32_t evt, void *ctx)
 	}
 
 	pds_pending_report(p, true);
+
+	/* A store that went through may have collected a sector on the way. */
+	peer_delete_kick();
 }
 
 /* Claim a free slot, or NULL when every one is still in flight. */
@@ -606,41 +654,20 @@ uint32_t pds_peer_id_free(uint16_t peer_id)
 		return NRF_ERROR_INVALID_PARAM;
 	}
 
-	/* Marked, and that is what the delete works from. One walk is in flight
-	 * at a time and it takes every marked peer in turn, so a request that
-	 * arrives while one runs needs nothing further.
-	 */
-	if (del_peer_running) {
-		return NRF_SUCCESS;
-	}
-
-	struct pds_pending *p = pds_pending_claim();
-
-	if (p == NULL) {
-		return NRF_ERROR_BUSY;
-	}
-
-	p->del_peer = true;
-	p->is_delete = true;
-	p->peer_id = PM_PEER_ID_INVALID;	/* start from the first marked */
-	p->data_id = PM_PEER_DATA_ID_BONDING;
-	p->entry_id = 0;
-	p->length = 0;
-
-	if (!AppEvtHandlerQue(0, p, pds_work_handler)) {
-		p->del_peer = false;
-		p->busy = false;
-
-		return NRF_ERROR_BUSY;
-	}
-
-	del_peer_running = true;
-
-	/* PM_EVT_PEER_DELETE_SUCCEEDED follows from the handler. peer_manager
+	/* The mark is the commit point, as it is in the stock module, whose
+	 * request cannot fail past this line either. Whether a walk could be
+	 * queued right now changes when the work happens, not whether it will:
+	 * the peer stays marked and the kick after the next finished operation
+	 * starts a walk. Returning an error here instead left the caller told
+	 * nothing happened while the peer stayed marked.
+	 *
+	 * PM_EVT_PEER_DELETE_SUCCEEDED follows from the handler. peer_manager
 	 * expects that: pm_peers_delete returns after requesting every peer and
 	 * raises PM_EVT_PEERS_DELETE_SUCCEEDED later, from the per peer event,
 	 * once nothing allocated or marked is left.
 	 */
+	peer_delete_kick();
+
 	return NRF_SUCCESS;
 }
 
