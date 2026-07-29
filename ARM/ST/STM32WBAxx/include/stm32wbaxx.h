@@ -1,13 +1,13 @@
 /**
   ******************************************************************************
-  * @file    stm32wbxx.h
+  * @file    stm32wbaxx.h
   * @author  MCD Application Team
-  * @brief   CMSIS STM32WBxx Device Peripheral Access Layer Header File.
+  * @brief   CMSIS STM32WBAxx Device Peripheral Access Layer Header File.
   *
   *          The file is the unique include file that the application programmer
   *          is using in the C source code, usually in main.c. This file contains:
   *           - Configuration section that allows to select:
-  *              - The STM32WBxx device used in the target application
+  *              - The STM32WBAxx device used in the target application
   *              - To use or not the peripheral's drivers in application code(i.e.
   *                code will be based on direct access to peripheral's registers
   *                rather than drivers API), this option is controlled by
@@ -16,7 +16,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2019-2021 STMicroelectronics.
+  * Copyright (c) 2022 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -30,15 +30,15 @@
   * @{
   */
 
-/** @addtogroup stm32wbxx
+/** @addtogroup stm32wbaxx
   * @{
   */
 
-#ifndef __STM32WBxx_H
-#define __STM32WBxx_H
+#ifndef STM32WBAxx_H
+#define STM32WBAxx_H
 
 #ifdef __cplusplus
-extern "C" {
+ extern "C" {
 #endif /* __cplusplus */
 
 /** @addtogroup Library_configuration_section
@@ -48,33 +48,56 @@ extern "C" {
 /**
   * @brief STM32 Family
   */
-#if !defined (STM32WB)
-#define STM32WB
-#endif /* STM32WB */
+#if !defined(STM32WBA)
+#define STM32WBA
+#endif /* !STM32WBA */
+
+/* Uncomment the line below according to the target STM32WBA device used in your
+   application
+  */
+
+#if !defined(STM32WBA20xx) && !defined(STM32WBA23xx) && !defined(STM32WBA25xx) && \
+    !defined(STM32WBA50xx) && !defined(STM32WBA52xx) && !defined(STM32WBA54xx) && !defined(STM32WBA55xx) && \
+    !defined(STM32WBA5Mxx) && !defined(STM32WBA62xx) && !defined(STM32WBA63xx) && !defined(STM32WBA64xx) && \
+    !defined(STM32WBA65xx) && !defined(STM32WBA6Mxx)
+  /* #define STM32WBA20xx */   /*!< STM32WBA20xx Devices */
+  /* #define STM32WBA23xx */   /*!< STM32WBA23xx Devices */
+  /* #define STM32WBA25xx */   /*!< STM32WBA25xx Devices */
+  /* #define STM32WBA50xx */   /*!< STM32WBA50xx Devices */
+  /* #define STM32WBA52xx */   /*!< STM32WBA52xx Devices */
+  /* #define STM32WBA54xx */   /*!< STM32WBA54xx Devices */
+  /* #define STM32WBA55xx */   /*!< STM32WBA55xx Devices */
+  /* #define STM32WBA5Mxx */   /*!< STM32WBA5Mxx Devices */
+  /* #define STM32WBA62xx */   /*!< STM32WBA62xx Devices */
+  /* #define STM32WBA63xx */   /*!< STM32WBA63xx Devices */
+  /* #define STM32WBA64xx */   /*!< STM32WBA64xx Devices */
+  /* #define STM32WBA65xx */   /*!< STM32WBA65xx Devices */
+  /* #define STM32WBA6Mxx */   /*!< STM32WBA6Mxx Devices */
+#endif /* !STM32WBA50xx && !STM32WBA52xx ...*/
 
 /*  Tip: To avoid modifying this file each time you need to switch between these
         devices, you can define the device in your toolchain compiler preprocessor.
   */
-#if !defined  (USE_HAL_DRIVER)
+#if !defined(USE_HAL_DRIVER)
 /**
-  * @brief Comment the line below if you will not use the peripherals drivers.
+ * @brief Comment the line below if you will not use the peripherals drivers.
    In this case, these drivers will not be included and the application code will
    be based on direct access to peripherals registers
    */
-/*#define USE_HAL_DRIVER */
+  /*#define USE_HAL_DRIVER */
 #endif /* USE_HAL_DRIVER */
 
 /**
   * @brief CMSIS Device version number
   */
-#define __STM32WBxx_CMSIS_VERSION_MAIN   (0x01U) /*!< [31:24] main version */
-#define __STM32WBxx_CMSIS_VERSION_SUB1   (0x0CU) /*!< [23:16] sub1 version */
-#define __STM32WBxx_CMSIS_VERSION_SUB2   (0x03U) /*!< [15:8]  sub2 version */
-#define __STM32WBxx_CMSIS_VERSION_RC     (0x00U) /*!< [7:0]  release candidate */
-#define __STM32WBxx_CMSIS_DEVICE_VERSION        ((__STM32WBxx_CMSIS_VERSION_MAIN << 24)\
-                                                |(__STM32WBxx_CMSIS_VERSION_SUB1 << 16)\
-                                                |(__STM32WBxx_CMSIS_VERSION_SUB2 << 8 )\
-                                                |(__STM32WBxx_CMSIS_VERSION_RC))
+#define __STM32WBA_CMSIS_VERSION_MAIN   (0x01U) /*!< [31:24] main version */
+#define __STM32WBA_CMSIS_VERSION_SUB1   (0x0AU) /*!< [23:16] sub1 version */
+#define __STM32WBA_CMSIS_VERSION_SUB2   (0x00U) /*!< [15:8]  sub2 version */
+#define __STM32WBA_CMSIS_VERSION_RC     (0x00U) /*!< [7:0]  release candidate */
+#define __STM32WBA_CMSIS_VERSION       ((__STM32WBA_CMSIS_VERSION_MAIN << 24U)\
+                                       |(__STM32WBA_CMSIS_VERSION_SUB1 << 16U)\
+                                       |(__STM32WBA_CMSIS_VERSION_SUB2 << 8U )\
+                                       |(__STM32WBA_CMSIS_VERSION_RC))
 
 /**
   * @}
@@ -84,25 +107,36 @@ extern "C" {
   * @{
   */
 
-#if defined(STM32WB55xx)
-#include "stm32wb55xx.h"
-#elif defined(STM32WB5Mxx)
-#include "stm32wb5mxx.h"
-#elif defined(STM32WB50xx)
-#include "stm32wb50xx.h"
-#elif defined(STM32WB35xx)
-#include "stm32wb35xx.h"
-#elif defined(STM32WB30xx)
-#include "stm32wb30xx.h"
-#elif defined(STM32WB15xx)
-#include "stm32wb15xx.h"
-#elif defined(STM32WB10xx)
-#include "stm32wb10xx.h"
-#elif defined(STM32WB1Mxx)
-#include "stm32wb1mxx.h"
+#if defined(STM32WBA20xx)
+  #include "stm32wba20xx.h"
+#elif defined(STM32WBA23xx)
+  #include "stm32wba23xx.h"
+#elif defined(STM32WBA25xx)
+  #include "stm32wba25xx.h"
+#elif defined(STM32WBA50xx)
+  #include "stm32wba50xx.h"
+#elif defined(STM32WBA52xx)
+  #include "stm32wba52xx.h"
+#elif defined(STM32WBA54xx)
+  #include "stm32wba54xx.h"
+#elif defined(STM32WBA55xx)
+  #include "stm32wba55xx.h"
+#elif defined(STM32WBA5Mxx)
+  #include "stm32wba5mxx.h"
+#elif defined(STM32WBA62xx)
+  #include "stm32wba62xx.h"
+#elif defined(STM32WBA63xx)
+  #include "stm32wba63xx.h"
+#elif defined(STM32WBA64xx)
+  #include "stm32wba64xx.h"
+#elif defined(STM32WBA65xx)
+  #include "stm32wba65xx.h"
+#elif defined(STM32WBA6Mxx)
+  #include "stm32wba6mxx.h"
 #else
-#error "Please select first the target STM32WBxx device used in your application, for instance xxx (in stm32wbxx.h file)"
-#endif
+ #error "Please select first the target STM32WBAxx device used in your application (in stm32wbaxx.h file)"
+#endif /* STM32WBA50xx */
+
 /**
   * @}
   */
@@ -208,19 +242,20 @@ typedef enum
 
 #define POSITION_VAL(VAL)     (__CLZ(__RBIT(VAL)))
 
+
 /**
   * @}
   */
 
 #if defined (USE_HAL_DRIVER)
-#include "stm32wbxx_hal.h"
+ #include "stm32wbaxx_hal.h"
 #endif /* USE_HAL_DRIVER */
 
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
 
-#endif /* __STM32WBxx_H */
+#endif /* STM32WBAxx_H */
 /**
   * @}
   */
@@ -228,3 +263,4 @@ typedef enum
 /**
   * @}
   */
+
