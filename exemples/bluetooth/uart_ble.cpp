@@ -277,7 +277,7 @@ const UARTCfg_t g_UartCfg = {
 	.DevNo = 0,							// Device number zero based
 	.pIOPinMap = s_UartPins,				// UART assigned pins
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),	// Total number of UART pins used
-	.Rate = 1000000,						// Baudrate
+	.Rate = 115200,						// Baudrate
 	.DataBits = 8,						// Data bits
 	.Parity = UART_PARITY_NONE,			// Parity
 	.StopBits = 1,						// Stop bit
@@ -567,6 +567,72 @@ static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
 }
 #endif
 
+#if BLE_SC_METHOD != BLE_SC_NONE
+// Console command: "bond del" wipes every stored bond, so a reset after it has
+// to pair again. Anything else starting with "bond" prints the usage. Returns
+// true when the line was a command and must not go on air.
+//
+// No target conditional here. BtSmpBondClearAll is the generic entry and each
+// port supplies the one that reaches its own bond storage: the RAM table for
+// the SoftDevice ports, pm_peers_delete for the BM one.
+static bool UartBleBondTryCommand(const uint8_t *pData, int Len)
+{
+	// This link is a data bridge, so anything that is not exactly the
+	// command goes on air untouched: "bond" must be followed by whitespace,
+	// the argument must be exactly "del", and nothing but line endings may
+	// follow. "bond delivery data" is payload, not a request to clear the
+	// security state.
+	if (Len < 5 || memcmp(pData, "bond", 4) != 0 ||
+		(pData[4] != ' ' && pData[4] != '\t'))
+	{
+		return false;
+	}
+
+	const uint8_t *p = pData + 5;
+	int l = Len - 5;
+
+	while (l > 0 && (*p == ' ' || *p == '\t'))
+	{
+		p++;
+		l--;
+	}
+
+	if (l < 3 || memcmp(p, "del", 3) != 0)
+	{
+		return false;
+	}
+
+	p += 3;
+	l -= 3;
+
+	while (l > 0 && (*p == '\r' || *p == '\n' || *p == ' ' || *p == '\t'))
+	{
+		p++;
+		l--;
+	}
+
+	if (l != 0)
+	{
+		return false;
+	}
+
+	// Requested, not done: the delete is queued and each peer reports as it
+	// finishes, the PDS trace prints one line per peer, and peer_manager
+	// raises PM_EVT_PEERS_DELETE_SUCCEEDED when the last one is gone.
+	g_Uart.printf("bond deletion requested\r\n");
+	BtSmpBondClearAll();
+
+	return true;
+}
+#else
+static bool UartBleBondTryCommand(const uint8_t *pData, int Len)
+{
+	(void)pData;
+	(void)Len;
+	return false;
+}
+#endif
+
 void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
 {
 	g_Uart.Tx(pData, Len);
@@ -766,6 +832,11 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 	if (flush)
 	{
 		if (UartBleOobTryCommand(buff, bufflen))
+		{
+			bufflen = 0;
+			return;
+		}
+		if (UartBleBondTryCommand(buff, bufflen))
 		{
 			bufflen = 0;
 			return;

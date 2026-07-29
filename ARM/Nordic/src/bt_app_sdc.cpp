@@ -86,6 +86,18 @@ SOFTWARE.
 // defines NDEBUG, which strips all trace regardless of DEBUG_ENABLE.
 //#define DEBUG_ENABLE
 
+// Which persistence the build uses. Deliberately independent of DEBUG_ENABLE
+// and of NDEBUG: the release build is where a bond has to survive a reset, and
+// this one line says whether the store is even in the picture.
+#define STORE_TRACE
+
+#ifdef STORE_TRACE
+#include "syslog.h"
+#define STORE_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define STORE_PRINTF(...)
+#endif
+
 #if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 #include "syslog.h"
 #define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
@@ -777,7 +789,15 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// not call it - persistence follows from the configured SecType.
 	if (g_BtAppData.AppDevice.bSecure)
 	{
+		// This path stores bonds through bt_pds on Nvm, not through the nRF5
+		// SDK peer_manager and fstorage. Printed so a persistence problem is
+		// not chased in the wrong layer.
+		STORE_PRINTF("STORE: bt_pds -> Nvm (SDC, no fstorage)\r\n");
 		BtSmpBondSdcInit();
+	}
+	else
+	{
+		STORE_PRINTF("STORE: none, bSecure is 0 so bonds stay in RAM\r\n");
 	}
 
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)

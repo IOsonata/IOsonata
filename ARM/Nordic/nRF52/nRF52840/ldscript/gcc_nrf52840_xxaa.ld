@@ -87,7 +87,7 @@ SECTIONS
   } > FLASH
 
 } INSERT AFTER .text
-
+/*
 SECTIONS
 {
 	. = ALIGN(4);
@@ -105,5 +105,5 @@ SECTIONS
 	} > RAM AT > FLASH
 	
 } INSERT AFTER .data;
-
+*/
 INCLUDE "gcc_arm_flash.ld"

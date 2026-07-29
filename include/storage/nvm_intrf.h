@@ -22,15 +22,17 @@ Usage :
 	g_MemIntrf.Init();
 
 	memset(&cfg, 0, sizeof(cfg));
-	NvmIntrfCfg(cfg);
+	NvmMcuCfg(cfg);
 
 	Nvm g_Nvm;
 	g_Nvm.Init(cfg, &g_MemIntrf, RegionAddr, RegionSize);
 
-The region placement is the application's decision. NvmIntrfCeiling() reports
-where the memory the application owns ends, which is not always the device
-size: a stack image or a reserved partition can sit at the top, and writing
-there destroys it.
+What the target knows about its own memory is at the end of this file rather
+than in the class: geometry, where the application's slice of it ends, and
+whether the medium is still working. None of that is a data transfer or an
+arbitration, so none of it belongs to the interface, and Nvm and the
+application call those directly. They are here because one header for one
+piece of silicon is one include for whoever uses it.
 
 @author	Hoang Nguyen Hoan
 @date	July 24, 2026
@@ -72,10 +74,36 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
-/// Called repeatedly while an operation is waiting, so the application can run
-/// its event dispatch or yield to a scheduler. Returning false asks the
-/// interface to give up on the wait.
-typedef bool (*NvmIntrfWait_t)(void);
+/// One unit of a memory operation, run where it is safe to touch the memory.
+/// Returns 0 when the operation is finished, or the microseconds it still
+/// expects to need so the arbiter can size the next window.
+///
+/// It runs wherever the arbiter puts it, which for a radio timeslot is a high
+/// priority interrupt: short, deterministic, no blocking calls.
+typedef struct __Nvm_Intrf_Op {
+	uint32_t (*Step)(void *pCtx);	//!< One unit. 0 when done, else usec left
+	uint32_t	StepBudgetUs;		//!< Worst case for one Step, sizes the window
+	void		*pCtx;				//!< Passed back to Step
+
+	/// Where to report the result, or NULL to have the arbiter wait for it
+	/// and return it instead. Set it and the arbiter submits and returns, so
+	/// the caller is not held while the memory works. It is called from
+	/// wherever the arbiter finishes, which for a radio timeslot is a high
+	/// priority interrupt: do nothing there but hand the result over.
+	///
+	/// The operation and its context outlive the call in that case, so
+	/// neither may be a local.
+	void (*Done)(void *pCtx, int Res);
+} NvmIntrfOp_t;
+
+/// The arbiter answers this when the operation is under way and Done will
+/// report it. Positive, so a check for a negative errno is unchanged.
+#define NVM_INTRF_OP_STARTED		1
+
+/// Runs an operation where the memory is safe to touch. Returns 0 when it
+/// completed in the call, NVM_INTRF_OP_STARTED when Done will report it, or
+/// a negative errno when it could not be started.
+typedef int (*NvmIntrfArb_t)(NvmIntrfOp_t *pOp);
 
 /// Counts of what the interface did, for a test to show which path ran.
 typedef struct __Nvm_Intrf_Stat {
@@ -83,47 +111,229 @@ typedef struct __Nvm_Intrf_Stat {
 	uint32_t	Busy;		//!< Refused while a stack held the memory
 	uint32_t	Evt;		//!< Results delivered as a stack event
 	uint32_t	Skipped;	//!< Erases skipped, the unit already erased
+
+	// Which of the three arbitration paths carried the operation. Ops counts
+	// them all together, so on its own it cannot tell an operation that went
+	// through a stack from one that drove the controller with the radio up,
+	// and those two are the pair worth telling apart.
+	uint32_t	Sd;			//!< Submitted to the SoftDevice
+	uint32_t	Slot;		//!< Run inside an MPSL timeslot
+	uint32_t	Direct;		//!< Drove the controller, the memory was ours
+
+	// Completions the interface saw and what became of them. Passed on plus
+	// dropped should equal Evt; a dropped one leaves the driver waiting for a
+	// completion that has already been and gone.
+	uint32_t	RepDone;	//!< Passed on to the driver
+	uint32_t	RepNoWant;	//!< Dropped, nothing asked to be told
+	uint32_t	RepNoPend;	//!< Dropped, nothing was outstanding
 } NvmIntrfStat_t;
+
+/// Command byte plus a 32 bit address. The frame the driver puts in front of
+/// a transfer, the way FlashEraseSector does.
+#define NVM_INTRF_FRAME_SIZE		5
+
+/// Largest payload one transfer stages. The driver splits at the page size it
+/// was configured with, which no target sets above this.
+#ifndef NVM_INTRF_XFER_SIZE
+#define NVM_INTRF_XFER_SIZE			64
+#endif
+
+/// One transaction's worth of state. It belongs to the instance, not to the
+/// file, the same way nRFSpiDev_t holds a transfer's buffer and index, and it
+/// is what pDevData points at.
+/// A word write, wherever it is carried out. The address is an integer so one
+/// context serves a controller write and a stack submit that wants a pointer;
+/// there is one write in flight either way.
+typedef struct __Nvm_Intrf_Wr_Ctx {
+	uintptr_t		Addr;			//!< Where the words go
+	const uint32_t	*pSrc;			//!< The words
+	uint32_t		Words;			//!< How many
+} NvmIntrfWrCtx_t;
+
+/// An erase of one unit. Addr is the address, or the page number where the
+/// stack asks for one.
+typedef struct __Nvm_Intrf_Er_Ctx {
+	uintptr_t		Addr;			//!< The unit
+	bool			bStarted;		//!< The erase has been kicked off
+} NvmIntrfErCtx_t;
+
+/// The interface and everything one transaction needs, in one object.
+///
+/// DevIntrf_t is the first member, so pDevData is a handle that casts to
+/// either: a transfer callback gets the state, and a C caller can hold the
+/// whole thing without knowing about the class that owns it.
+///
+/// The state is per transaction, so it belongs here and not at file scope,
+/// the same way nRFSpiDev_t holds a transfer's buffer and index. That takes
+/// in the arbitrated operation and its context: the stack and the arbiter
+/// both report after the call has returned, so both outlive it.
+///
+/// Whether a submit is owed a completion is not in here, because it is not
+/// per transaction. There is one memory controller and one thing holding it
+/// at a time, so who holds it describes the controller and lives beside it.
+///
+/// Packed to 4 so the staged payload keeps the alignment word wise transfers
+/// need, without alignas, which C does not have, so the header stays
+/// includable from C.
+#pragma pack(push, 4)
+typedef struct __Nvm_Dev_Intrf {
+	DevIntrf_t		DevIntrf;		//!< First, so the handle casts both ways
+	uint8_t			Hdr[NVM_INTRF_FRAME_SIZE];	//!< Command and address frame
+	int				HdrLen;			//!< Frame bytes taken so far
+	int				DataLen;		//!< Payload bytes staged
+
+	NvmIntrfOp_t	Op;				//!< The arbitrated operation
+	union {
+		NvmIntrfWrCtx_t	Wr;
+		NvmIntrfErCtx_t	Er;
+	} OpCtx;						//!< One operation is in flight at a time
+
+	uint8_t			Data[NVM_INTRF_XFER_SIZE];	//!< Staged payload
+} NvmDevIntrf_t;
+#pragma pack(pop)
+
+// ---------------------------------------------------------------------------
+// What the port knows about the memory itself. Not the interface's: it moves
+// data and arbitrates, and what the memory is doing is none of its business.
+// Answered by the port that knows the silicon, called by Nvm and by the
+// application.
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief	Fill a config for the MCU internal memory.
+ *
+ * Sets the geometry, which the part states or its FICR reports. The remaining
+ * fields are left untouched.
+ *
+ * @param	Cfg	: Config to fill
+ */
+void NvmMcuCfg(NvmCfg_t &Cfg);
+
+// C linkage: a target can answer either of these from a C file, which is what
+// nrf_sdh.c does for the ceiling on an S145 build.
+extern "C" {
+
+/**
+ * @brief	Where the memory the application owns ends.
+ *
+ * On most targets this is the device size. Where a stack image or a reserved
+ * partition sits at the top, it is that boundary instead. C linkage so a
+ * target can override the weak default from a C file.
+ *
+ * @return	First byte past the application owned memory.
+ */
+uint64_t NvmMcuCeiling(void);
+
+/**
+ * @brief	Whether the internal memory has finished what it was given.
+ *
+ * The same question Nvm asks a serial NOR by reading WIP out of its status
+ * register. Reached differently because there is no bus to ask on, so the
+ * port reads whatever its controller offers.
+ *
+ * Weak, answering true. That is not a stand in for a missing implementation:
+ * a medium with nothing to report is a medium that is never busy, and a port
+ * overrides this only when its controller has something to say.
+ *
+ * @return	true when the medium is idle.
+ */
+bool NvmMcuIsReady(void);
+
+/**
+ * @brief	Erase one unit of the MCU internal memory.
+ *
+ * The same decision Nvm makes on a serial NOR, where it frames the erase
+ * command and the bus takes it. There is no bus here, so it calls this.
+ * Which of the target's routes the erase takes, and whether a stack has to
+ * be asked for it, is the port's business and not the caller's.
+ *
+ * @param	Addr : First address of the unit
+ *
+ * @return	0 when the erase is finished, NVM_INTRF_OP_STARTED when a
+ * 			completion is owed, or a negative errno.
+ */
+int NvmMcuErase(uintptr_t Addr);
+
+}	// extern "C"
+
+/**
+ * @brief	The one controller interface this port owns.
+ *
+ * There is one memory controller, so there is one of these, and it lives
+ * with the port rather than inside an object the application declares. The
+ * completion paths reach it by name; nothing has to record which instance
+ * is in play, because there is only ever the one.
+ *
+ * @return	The controller's interface.
+ */
+DevIntrf_t * const NvmMcuDevIntrf(void);
 
 /// @brief	The MCU memory controller as a device interface.
 class NvmIntrf : public DeviceIntrf {
 public:
-	bool Init(void);
+	/**
+	 * @brief	Bring the controller interface up.
+	 *
+	 * Both arguments come from whoever creates the interface, which is what
+	 * owns its configuration. Nothing downstream changes either afterwards.
+	 *
+	 * @param	EvtCB  : Called from interrupt when a transfer finishes. An
+	 * 			application that puts an Nvm on this passes something that
+	 * 			calls its IntrfEvent. Null when nothing needs telling, which
+	 * 			is the case for a driver that polls.
+	 * @param	bIntEn : true when a submitted operation returns at once and
+	 * 			completes through EvtCB; false when it finishes inside the
+	 * 			call. A fact about the interface, set once here.
+	 *
+	 * @return	true on success
+	 */
+	bool Init(DevIntrfEvtHandler_t EvtCB = nullptr, bool bIntEn = false);
 
-	operator DevIntrf_t * const () override { return &vDevIntrf; }
+	operator DevIntrf_t * const () override { return NvmMcuDevIntrf(); }
 
 	uint32_t Rate(uint32_t RateHz) override { (void)RateHz; return 0; }
 	uint32_t Rate(void) override { return 0; }
 
 	bool StartRx(uint32_t DevAddr) override {
-		return DeviceIntrfStartRx(&vDevIntrf, DevAddr);
+		return DeviceIntrfStartRx(NvmMcuDevIntrf(), DevAddr);
 	}
 	int RxData(uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRxData(&vDevIntrf, pBuff, BuffLen);
+		return DeviceIntrfRxData(NvmMcuDevIntrf(), pBuff, BuffLen);
 	}
-	void StopRx(void) override { DeviceIntrfStopRx(&vDevIntrf); }
+	void StopRx(void) override { DeviceIntrfStopRx(NvmMcuDevIntrf()); }
 
 	bool StartTx(uint32_t DevAddr) override {
-		return DeviceIntrfStartTx(&vDevIntrf, DevAddr);
+		return DeviceIntrfStartTx(NvmMcuDevIntrf(), DevAddr);
 	}
 	int TxData(const uint8_t *pData, int DataLen) override {
-		return DeviceIntrfTxData(&vDevIntrf, pData, DataLen);
+		return DeviceIntrfTxData(NvmMcuDevIntrf(), pData, DataLen);
 	}
-	void StopTx(void) override { DeviceIntrfStopTx(&vDevIntrf); }
+	void StopTx(void) override { DeviceIntrfStopTx(NvmMcuDevIntrf()); }
 
-protected:
-	DevIntrf_t vDevIntrf;
+	/// Erase one unit. Wraps the C api the same way the transfers above
+	/// wrap theirs.
+	int Erase(uintptr_t Addr) { return NvmMcuErase(Addr); }
+
+	/// True when the memory has finished what it was given.
+	bool IsReady(void) { return NvmMcuIsReady(); }
+
 };
 
+
 /**
- * @brief	Set the wait callback and the operation timeout.
+ * @brief	Register who decides when the memory may be touched.
  *
- * @param	pWait		: Called repeatedly while an operation waits. NULL to
- * 						  spend the wait in a short delay instead.
- * @param	TimeoutMs	: Give up on one operation after this many msec.
- * 						  0 keeps the current value.
+ * On a part with a radio, writing the memory has to be arbitrated against it,
+ * and only the stack knows when a window is free. The stack registers its
+ * arbiter here; the interface asks it to run each operation and never learns
+ * what a timeslot is.
+ *
+ * With nothing registered the memory is the application's alone and the
+ * interface drives the controller directly.
+ *
+ * @param	pArb	: The arbiter, or NULL to go back to driving directly.
  */
-void NvmIntrfSetWait(NvmIntrfWait_t pWait, uint32_t TimeoutMs);
+void NvmIntrfSetArbiter(NvmIntrfArb_t pArb);
 
 /**
  * @brief	Read the operation counts.
@@ -131,29 +341,6 @@ void NvmIntrfSetWait(NvmIntrfWait_t pWait, uint32_t TimeoutMs);
  * @param	pStat : Filled with the counts since reset
  */
 void NvmIntrfGetStat(NvmIntrfStat_t *pStat);
-
-/**
- * @brief	Fill a config for the internal memory.
- *
- * Sets the geometry and the command set the interface understands. The
- * remaining fields are left untouched.
- *
- * @param	Cfg	: Config to fill
- */
-void NvmIntrfCfg(NvmCfg_t &Cfg);
-
-/**
- * @brief	Where the memory the application owns ends.
- *
- * On most targets this is the device size. Where a stack image or a reserved
- * partition sits at the top, it is that boundary instead: on the nRF54L the
- * S145 image occupies the top of the RRAM and the application slot ends at
- * the storage partition. C linkage so a target can override the weak default
- * from a C file.
- *
- * @return	First byte past the application owned memory.
- */
-extern "C" uint64_t NvmIntrfCeiling(void);
 
 #endif	// __cplusplus
 

@@ -34,6 +34,7 @@
 #include <errno.h>
 #include <limits.h>
 
+#include "storage/nvm.h"
 #include "bluetooth/bt_pds.h"
 
 #define BT_PDS_REC_MAGIC			0x53445042UL	// "BPDS"
@@ -47,6 +48,17 @@
 #ifndef BT_PDS_MAX_SECTORS
 #define BT_PDS_MAX_SECTORS			16U
 #endif
+
+// Widest write unit the store is built for. The staging buffers below are
+// sized at compile time, so this is what BtPdsInit will accept. 16 covers the
+// 128 bit quad word programming on STM32WBA; raise it for a part that
+// programs wider.
+#ifndef BT_PDS_MAX_WRITE_GRAN
+#define BT_PDS_MAX_WRITE_GRAN		16U
+#endif
+
+// Round x up to a multiple of u. u must be a power of two.
+#define BT_PDS_PAD_TO(x, u)			((((x) + (u) - 1U)) & ~((u) - 1U))
 
 #pragma pack(push, 4)
 typedef struct __Bt_Pds_Sector_Hdr {
@@ -95,7 +107,86 @@ typedef struct __Bt_Pds_Latest {
 	uint32_t	Off;
 } BtPdsLatest_t;
 
-static const BtPdsNvm_t *s_pNvm;
+static Nvm *s_pMem;
+
+// Cached from the memory at mount. The sector size is in nearly every offset
+// calculation here, and reading it back through a virtual call each time buys
+// nothing.
+static uint32_t s_SectorSize;
+
+// The write unit of the medium, read once at mount. A part that programs 128
+// bit quad words takes neither a shorter write nor an unaligned one, so every
+// record and the sector header are padded up to this.
+static uint32_t s_WriteGran;
+
+// The sector header padded to the write unit. This is what the header costs
+// on the medium and where the first record of the sector starts.
+static uint32_t s_SectorHdrSize;
+
+// Chunk used to write the erased pattern on a medium that has no erase.
+#ifndef BT_PDS_FILL_CHUNK
+#define BT_PDS_FILL_CHUNK		64
+#endif
+
+// The store works in whole results: a transfer either moved everything asked
+// for or it failed. Nvm reports the byte count, so fold that here once.
+static int MemRead(uint32_t Off, void *pBuf, uint32_t Len)
+{
+	int r = s_pMem->Read(Off, pBuf, Len);
+
+	return r < 0 ? r : (r == (int)Len ? 0 : -EIO);
+}
+
+static int MemWrite(uint32_t Off, const void *pData, uint32_t Len)
+{
+	int r = s_pMem->Write(Off, pData, Len);
+	if (r < 0)
+	{
+		return r;
+	}
+	if (r != (int)Len)
+	{
+		return -EIO;
+	}
+
+	// The data has to be on the medium before the store moves on. Sync drains
+	// an interrupt driven memory and returns at once on a polling one.
+	return s_pMem->Sync();
+}
+
+// One sector. A medium with no erase, RRAM, FRAM or EEPROM, gets the erased
+// pattern written over it: Nvm answers such an erase as a no op success,
+// which is right for a driver preparing a write, but the store reads the
+// erased pattern to find free space so the sector has to hold it.
+static int MemErase(uint32_t Off)
+{
+	if (s_pMem->EraseSize() != 0)
+	{
+		int r = s_pMem->Erase(Off, s_SectorSize);
+
+		return r < 0 ? r : s_pMem->Sync();
+	}
+
+	alignas(BT_PDS_MAX_WRITE_GRAN) uint8_t ones[BT_PDS_FILL_CHUNK];
+	memset(ones, 0xFF, sizeof(ones));
+
+	uint32_t left = s_SectorSize;
+	while (left > 0)
+	{
+		uint32_t n = left < sizeof(ones) ? left : (uint32_t)sizeof(ones);
+
+		int r = MemWrite(Off, ones, n);
+		if (r != 0)
+		{
+			return r;
+		}
+
+		Off += n;
+		left -= n;
+	}
+
+	return 0;
+}
 static BtPdsSectorInfo_t s_Sectors[BT_PDS_MAX_SECTORS];
 static uint16_t s_SectorCount;
 static uint16_t s_ActiveSector;
@@ -105,24 +196,24 @@ static uint32_t s_Epoch;
 static bool s_SeqFound;
 static uint32_t s_MaxSeq;
 
-static inline uint32_t WordPad(uint32_t x)
+static inline uint32_t UnitPad(uint32_t x)
 {
-	return (x + 3U) & ~3UL;
+	return BT_PDS_PAD_TO(x, s_WriteGran);
 }
 
 static inline uint32_t SectorBase(uint16_t Sector)
 {
-	return (uint32_t)Sector * s_pNvm->SectorSize;
+	return (uint32_t)Sector * s_SectorSize;
 }
 
 static inline uint32_t SectorEnd(uint16_t Sector)
 {
-	return SectorBase(Sector) + s_pNvm->SectorSize;
+	return SectorBase(Sector) + s_SectorSize;
 }
 
 static inline uint32_t SectorDataStart(uint16_t Sector)
 {
-	return SectorBase(Sector) + BT_PDS_SECTOR_HDR_SIZE;
+	return SectorBase(Sector) + s_SectorHdrSize;
 }
 
 static uint16_t Crc16(const void *pData, uint32_t Len, uint16_t Seed)
@@ -169,7 +260,10 @@ static uint16_t RecCrc(const BtPdsRecHdr_t *pHdr, const void *pData)
 static uint32_t RecSize(uint16_t Len)
 {
 	uint32_t dataLen = Len == BT_PDS_TOMBSTONE ? 0U : Len;
-	return BT_PDS_REC_HDR_SIZE + WordPad(dataLen);
+
+	// The header and the data go down in one write, so the whole record is
+	// padded once. The data does not start on a unit boundary of its own.
+	return UnitPad(BT_PDS_REC_HDR_SIZE + dataLen);
 }
 
 static bool IsErased(const void *pData, uint32_t Len)
@@ -188,7 +282,7 @@ static bool IsErased(const void *pData, uint32_t Len)
 
 static bool ReadSectorHdr(uint16_t Sector, BtPdsSectorHdr_t *pHdr)
 {
-	if (s_pNvm->Read(SectorBase(Sector), pHdr, sizeof(*pHdr)) != 0)
+	if (MemRead(SectorBase(Sector), pHdr, sizeof(*pHdr)) != 0)
 	{
 		return false;
 	}
@@ -207,7 +301,7 @@ static bool ReadRecord(uint16_t Sector, uint32_t Off, BtPdsRecHdr_t *pHdr,
 
 	if (Off < SectorDataStart(Sector) ||
 		Off + BT_PDS_REC_HDR_SIZE > end ||
-		s_pNvm->Read(Off, pHdr, BT_PDS_REC_HDR_SIZE) != 0 ||
+		MemRead(Off, pHdr, BT_PDS_REC_HDR_SIZE) != 0 ||
 		pHdr->Magic != BT_PDS_REC_MAGIC)
 	{
 		return false;
@@ -221,7 +315,7 @@ static bool ReadRecord(uint16_t Sector, uint32_t Off, BtPdsRecHdr_t *pHdr,
 	}
 
 	if (dataLen > 0U &&
-		s_pNvm->Read(Off + BT_PDS_REC_HDR_SIZE, pData, dataLen) != 0)
+		MemRead(Off + BT_PDS_REC_HDR_SIZE, pData, dataLen) != 0)
 	{
 		return false;
 	}
@@ -247,7 +341,7 @@ static int ScanSector(uint16_t Sector)
 	pInfo->SourceSector = BT_PDS_NO_SECTOR;
 	pInfo->Head = SectorBase(Sector);
 
-	if (s_pNvm->Read(SectorBase(Sector), &sectorHdr, sizeof(sectorHdr)) != 0)
+	if (MemRead(SectorBase(Sector), &sectorHdr, sizeof(sectorHdr)) != 0)
 	{
 		return -EIO;
 	}
@@ -292,7 +386,7 @@ static int ScanSector(uint16_t Sector)
 	while (off + BT_PDS_REC_HDR_SIZE <= SectorEnd(Sector))
 	{
 		uint32_t word;
-		if (s_pNvm->Read(off, &word, sizeof(word)) != 0)
+		if (MemRead(off, &word, sizeof(word)) != 0)
 		{
 			return -EIO;
 		}
@@ -334,7 +428,7 @@ static int ScanSector(uint16_t Sector)
 
 static int EraseSector(uint16_t Sector)
 {
-	if (s_pNvm->Erase(SectorBase(Sector)) != 0)
+	if (MemErase(SectorBase(Sector)) != 0)
 	{
 		return -EIO;
 	}
@@ -357,8 +451,25 @@ static int WriteSectorHdr(uint16_t Sector, uint16_t SourceSector,
 	hdr.Rsvd[0] = hdr.Rsvd[1] = 0U;
 	hdr.Crc = SectorHdrCrc(&hdr);
 
-	if (s_pNvm->Write(SectorBase(Sector), &hdr, sizeof(hdr)) != 0)
+	// The header is 24 bytes and the medium may take nothing narrower than
+	// its write unit, so it goes down padded with the erased pattern.
+	alignas(BT_PDS_MAX_WRITE_GRAN) uint8_t buf[
+		BT_PDS_PAD_TO(sizeof(BtPdsSectorHdr_t), BT_PDS_MAX_WRITE_GRAN)];
+
+	memset(buf, 0xFF, sizeof(buf));
+	memcpy(buf, &hdr, sizeof(hdr));
+
+	if (MemWrite(SectorBase(Sector), buf, s_SectorHdrSize) != 0)
 	{
+		// The header may have been part written. Left marked erased,
+		// FindErasedSector hands it out again, and a second header over a
+		// torn one cannot be read back on a medium that only clears bits.
+		// Not usable until it has been erased.
+		BtPdsSectorInfo_t *pBad = &s_Sectors[Sector];
+
+		memset(pBad, 0, sizeof(*pBad));
+		pBad->Head = SectorEnd(Sector);
+
 		return -EIO;
 	}
 
@@ -395,8 +506,9 @@ static int AppendToSector(uint16_t Sector, uint32_t Id, uint16_t Len,
 	hdr.Seq = s_NextSeq;
 	hdr.Crc = RecCrc(&hdr, pData);
 
-	alignas(uint32_t) uint8_t rec[
-		BT_PDS_REC_HDR_SIZE + WordPad(BT_PDS_RECORD_DATA_MAX)];
+	alignas(BT_PDS_MAX_WRITE_GRAN) uint8_t rec[
+		BT_PDS_PAD_TO(BT_PDS_REC_HDR_SIZE + BT_PDS_RECORD_DATA_MAX,
+					  BT_PDS_MAX_WRITE_GRAN)];
 	memset(rec, 0xFF, sizeof(rec));
 	memcpy(rec, &hdr, sizeof(hdr));
 	if (dataLen > 0U && pData != nullptr)
@@ -404,7 +516,7 @@ static int AppendToSector(uint16_t Sector, uint32_t Id, uint16_t Len,
 		memcpy(rec + BT_PDS_REC_HDR_SIZE, pData, dataLen);
 	}
 
-	if (s_pNvm->Write(pInfo->Head, rec, total) != 0)
+	if (MemWrite(pInfo->Head, rec, total) != 0)
 	{
 		pInfo->Writable = false;
 		return -EIO;
@@ -641,7 +753,11 @@ static int ScanAll(void)
 		}
 	}
 
-	s_NextSeq = s_SeqFound ? (uint16_t)(s_MaxSeq + 1U) : 0U;
+	// Seq is 32 bit in the record header and both comparisons that pick the
+	// newest record use the full width. Narrowing it here restarted the
+	// counter low after 65535 records, and a record written afterwards then
+	// lost to an older one in FindLatest.
+	s_NextSeq = s_SeqFound ? s_MaxSeq + 1U : 0U;
 	return 0;
 }
 
@@ -748,7 +864,7 @@ static int GarbageCollect(uint32_t Need)
 		return -ENOMEM;
 	}
 
-	uint32_t capacity = s_pNvm->SectorSize - BT_PDS_SECTOR_HDR_SIZE;
+	uint32_t capacity = s_SectorSize - s_SectorHdrSize;
 	uint32_t doneSize = RecSize(0U);
 	uint16_t victim = BT_PDS_NO_SECTOR;
 	uint32_t bestBytes = UINT_MAX;
@@ -795,7 +911,7 @@ static int GarbageCollect(uint32_t Need)
 
 static int EnsureSpace(uint32_t Need)
 {
-	if (Need > s_pNvm->SectorSize - BT_PDS_SECTOR_HDR_SIZE)
+	if (Need > s_SectorSize - s_SectorHdrSize)
 	{
 		return -ENOMEM;
 	}
@@ -835,25 +951,51 @@ static int FormatStore(void)
 	return StartSector(0U);
 }
 
-int BtPdsInit(const BtPdsNvm_t *pNvm)
+int BtPdsInit(Nvm *pMem)
 {
-	if (pNvm == nullptr || pNvm->Read == nullptr ||
-		pNvm->Write == nullptr || pNvm->Erase == nullptr ||
-		pNvm->SectorSize <= BT_PDS_SECTOR_HDR_SIZE ||
-		pNvm->RegionSize < pNvm->SectorSize * 2U ||
-		(pNvm->RegionSize % pNvm->SectorSize) != 0U ||
-		pNvm->WriteGran != 4U)
+	if (pMem == nullptr)
 	{
 		return -EINVAL;
 	}
 
-	uint32_t sectorCount = pNvm->RegionSize / pNvm->SectorSize;
+	uint32_t sectorSize = pMem->LogicalSectorSize();
+	uint64_t regionSize = pMem->Size();
+	uint32_t writeGran = pMem->WriteGran();
+
+	// A write unit has to be a power of two so the padding is a mask, at
+	// least a word so the erased pattern probe and the header fields land
+	// whole, and no wider than the staging buffers were built for. It also
+	// has to divide the chunk used to write the erased pattern over a medium
+	// that has no erase, or the last chunk of a sector would be short.
+	if (writeGran < 4U || writeGran > BT_PDS_MAX_WRITE_GRAN ||
+		(writeGran & (writeGran - 1U)) != 0U ||
+		(BT_PDS_FILL_CHUNK % writeGran) != 0U)
+	{
+		return -EINVAL;
+	}
+
+	uint32_t sectorHdrSize = BT_PDS_PAD_TO(BT_PDS_SECTOR_HDR_SIZE, writeGran);
+
+	// The sector has to be a whole number of write units, otherwise the last
+	// record in it would end past the sector.
+	if (sectorSize <= sectorHdrSize ||
+		(sectorSize % writeGran) != 0U ||
+		regionSize < (uint64_t)sectorSize * 2U ||
+		(regionSize % sectorSize) != 0U)
+	{
+		return -EINVAL;
+	}
+
+	uint64_t sectorCount = regionSize / sectorSize;
 	if (sectorCount > BT_PDS_MAX_SECTORS)
 	{
 		return -EINVAL;
 	}
 
-	s_pNvm = pNvm;
+	s_pMem = pMem;
+	s_WriteGran = writeGran;
+	s_SectorHdrSize = sectorHdrSize;
+	s_SectorSize = sectorSize;
 	s_SectorCount = (uint16_t)sectorCount;
 	s_ActiveSector = BT_PDS_NO_SECTOR;
 
@@ -863,7 +1005,7 @@ int BtPdsInit(const BtPdsNvm_t *pNvm)
 	// version changed) and are erased by the sweep below. Neither can be
 	// upgraded in place while preserving the power loss guarantee.
 	uint32_t firstWord = BT_PDS_ERASED_U32;
-	if (s_pNvm->Read(0U, &firstWord, sizeof(firstWord)) != 0)
+	if (MemRead(0U, &firstWord, sizeof(firstWord)) != 0)
 	{
 		return -EIO;
 	}
@@ -910,7 +1052,7 @@ int BtPdsInit(const BtPdsNvm_t *pNvm)
 
 ssize_t BtPdsRead(uint32_t Id, void *pBuf, size_t Len)
 {
-	if (s_pNvm == nullptr || Id == BT_PDS_CTRL_GC_DONE_ID)
+	if (s_pMem == nullptr || Id == BT_PDS_CTRL_GC_DONE_ID)
 	{
 		return -EINVAL;
 	}
@@ -925,7 +1067,7 @@ ssize_t BtPdsRead(uint32_t Id, void *pBuf, size_t Len)
 	if (copyLen > 0U)
 	{
 		if (pBuf == nullptr ||
-			s_pNvm->Read(latest.Off + BT_PDS_REC_HDR_SIZE,
+			MemRead(latest.Off + BT_PDS_REC_HDR_SIZE,
 						 pBuf, copyLen) != 0)
 		{
 			return -EIO;
@@ -936,7 +1078,7 @@ ssize_t BtPdsRead(uint32_t Id, void *pBuf, size_t Len)
 
 ssize_t BtPdsWrite(uint32_t Id, const void *pData, size_t Len)
 {
-	if (s_pNvm == nullptr || Id == BT_PDS_CTRL_GC_DONE_ID ||
+	if (s_pMem == nullptr || Id == BT_PDS_CTRL_GC_DONE_ID ||
 		Len > BT_PDS_RECORD_DATA_MAX ||
 		(Len > 0U && pData == nullptr))
 	{
@@ -956,7 +1098,7 @@ ssize_t BtPdsWrite(uint32_t Id, const void *pData, size_t Len)
 
 int BtPdsDelete(uint32_t Id)
 {
-	if (s_pNvm == nullptr || Id == BT_PDS_CTRL_GC_DONE_ID)
+	if (s_pMem == nullptr || Id == BT_PDS_CTRL_GC_DONE_ID)
 	{
 		return -EINVAL;
 	}
@@ -978,7 +1120,7 @@ int BtPdsDelete(uint32_t Id)
 
 int BtPdsClear(void)
 {
-	if (s_pNvm == nullptr)
+	if (s_pMem == nullptr)
 	{
 		return -EINVAL;
 	}
@@ -996,11 +1138,35 @@ int BtPdsClear(void)
 	// erased at the next init, so a power loss after this write cannot bring
 	// cleared records back. A power loss before it leaves the store
 	// unchanged.
-	s_Epoch++;
+	// Moved on only for as long as the header write needs it. Advancing it
+	// and leaving it advanced meant a failed StartSector returned an error
+	// with the store still under the old epoch, and the next sector header
+	// written for any reason would carry the new one and discard every
+	// sector that had not been cleared.
+	uint32_t prev = s_Epoch;
+
+	s_Epoch = prev + 1U;
+
 	int result = StartSector(spare);
 	if (result != 0)
 	{
+		s_Epoch = prev;
+
 		return result;
+	}
+
+	// The clear is committed: the new header is on the medium and a mount
+	// would take its epoch and treat everything older as gone. Say so here
+	// too, before the erasing starts. Left valid, an erase that fails would
+	// return an error with the old records still readable until the next
+	// reboot made them disappear, so the same medium answered two ways.
+	for (uint16_t sector = 0; sector < s_SectorCount; sector++)
+	{
+		if (sector != spare)
+		{
+			s_Sectors[sector].Valid = false;
+			s_Sectors[sector].Writable = false;
+		}
 	}
 
 	for (uint16_t sector = 0; sector < s_SectorCount; sector++)

@@ -639,10 +639,17 @@ void BtSmpBondErase(void);
  *					     BtSmpBondLoad override; records with bValid false are
  *					     ignored. The platform treats the blob as opaque and need
  *					     not know the record layout.
+ * BtSmpBondSerialize  : build the blob for table slot Slot into pBuff. This is
+ *					     the same blob BtSmpBondSave is handed, produced on demand,
+ *					     so a platform that defers its write can read the slot back
+ *					     when it is ready to write instead of keeping a copy of it.
+ *					     Returns the number of bytes written, or 0 if Slot is out of
+ *					     range or pBuff is smaller than BtSmpBondRecordSize().
  */
 int    BtSmpBondSlotCount(void);
 size_t BtSmpBondRecordSize(void);
 void   BtSmpBondRestore(int Slot, const void *pBond, size_t Len);
+size_t BtSmpBondSerialize(int Slot, void *pBuff, size_t BuffLen);
 
 /**
  * @brief	Get the local device address and type used on air.

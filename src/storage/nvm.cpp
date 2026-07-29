@@ -37,6 +37,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "coredev/spi.h"
 #include "storage/nvm.h"
+#include "storage/nvm_intrf.h"
 
 /******** For DEBUG Trace ************/
 //#define DEBUG_ENABLE
@@ -67,6 +68,29 @@ SOFTWARE.
 #define NVM_CMD_RESET		0x99U
 #define NVM_CMD_EN4B		0xB7U
 
+// Whether the internal memory has finished what it was given, answered by the
+// port that knows the controller. Declared with the interface it sits beside;
+// repeated here because this is the only generic caller and the weak default
+// belongs with it.
+//
+// True, and that is the correct answer rather than a stand in for a missing
+// implementation: a medium with nothing to report is a medium that is never
+// busy. A port overrides it only when its controller has something to say.
+extern "C" __attribute__((weak)) bool NvmMcuIsReady(void)
+{
+	return true;
+}
+
+// An erase on a target that has no internal memory erase to offer. RRAM is the
+// case even where a port exists: it rewrites in place and the nRF54L route
+// answers exactly this. Weak, so a port with an erase overrides it.
+extern "C" __attribute__((weak)) int NvmMcuErase(uintptr_t Addr)
+{
+	(void)Addr;
+
+	return -ENOTSUP;
+}
+
 #define NVM_XFER_TMOUT		100000U
 #define NVM_OP_TMOUT		100000U
 
@@ -92,11 +116,11 @@ Nvm::Nvm()
 	vpOpData = nullptr;
 	vOpRemain = 0;
 	atomic_flag_clear(&vOpLock);
-	vbXferWaiting = false;
-	vbXferDone = false;
-	vbXferFail = false;
+	vOpState = NVM_OPSTATE_IDLE;
+	vXferState = NVM_XFER_NONE;
 	vbInitialized = false;
 	vbEnabled = false;
+	vBaseAddr = 0;
 	vDevSize = 0;
 	vEraseSize = 0;
 	vSectSize = 0;
@@ -117,13 +141,32 @@ Nvm::Nvm()
 
 Nvm::~Nvm()
 {
-	while (atomic_flag_test_and_set(&vOpLock)) {}
+	uint32_t wait = NVM_OP_TMOUT;
+
+	bool locked = false;
+
+	while (wait-- > 0)
+	{
+		if (atomic_flag_test_and_set(&vOpLock) == false)
+		{
+			locked = true;
+			break;
+		}
+	}
+
+	// Never acquired. Touching the state now would walk over whoever
+	// holds it, and clearing the flag afterwards would release their
+	// lock, which is worse than doing nothing.
+	if (locked == false)
+	{
+		return;
+	}
 	vOpEvt = NVM_EVT_NONE;
 	vOpRemain = 0;
 	vpOpData = nullptr;
-	vbXferWaiting = false;
+	vOpState = NVM_OPSTATE_IDLE;
+	vXferState = NVM_XFER_NONE;
 	atomic_flag_clear(&vOpLock);
-	Unhook();
 }
 
 int Nvm::FrameAddr(uint8_t *pFrame, uint8_t Cmd, uint32_t Addr,
@@ -254,6 +297,30 @@ uint32_t Nvm::ReadId(int Len)
 
 bool Nvm::WaitReady(uint32_t Timeout)
 {
+	// Reached through a controller rather than a bus, so the status is a
+	// register the port reads and not a byte fetched with a command. Same
+	// question as the WIP poll below, asked the only way this medium can be
+	// asked. The interface is not involved: it moves data and arbitrates,
+	// and what the memory is doing is none of its business.
+	if (Interface()->Type() == DEVINTRF_TYPE_MEMCTRL)
+	{
+		while (Timeout-- > 0)
+		{
+			if (NvmMcuIsReady())
+			{
+				return true;
+			}
+			if (WaitPoll() == false)
+			{
+				return false;
+			}
+		}
+
+		return false;
+	}
+
+	// No status to read. An EEPROM is the case: it has no ready line, which
+	// is what WriteDelayUs is for.
 	if (vbBare)
 	{
 		if (WaitPoll() == false)
@@ -330,67 +397,12 @@ void Nvm::WriteDisable(void)
 	}
 }
 
-#define NVM_HOOK_MAX		4
-
-typedef struct {
-	DevIntrf_t	*pIntrf;
-	Nvm			*pNvm;
-} NvmHook_t;
-
-static NvmHook_t s_NvmHook[NVM_HOOK_MAX];
-
-static int NvmIntrfEvtCB(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
-						 uint8_t *, int)
-{
-	for (int i = 0; i < NVM_HOOK_MAX; i++)
-	{
-		if (s_NvmHook[i].pIntrf == pDev && s_NvmHook[i].pNvm != nullptr)
-		{
-			s_NvmHook[i].pNvm->IntrfEvent(EvtId);
-		}
-	}
-
-	return 0;
-}
-
-void Nvm::Unhook(void)
-{
-	for (int i = 0; i < NVM_HOOK_MAX; i++)
-	{
-		if (s_NvmHook[i].pNvm != this)
-		{
-			continue;
-		}
-
-		DevIntrf_t *ip = s_NvmHook[i].pIntrf;
-
-		s_NvmHook[i].pNvm = nullptr;
-		s_NvmHook[i].pIntrf = nullptr;
-
-		bool used = false;
-		for (int j = 0; j < NVM_HOOK_MAX; j++)
-		{
-			if (s_NvmHook[j].pIntrf == ip && s_NvmHook[j].pNvm != nullptr)
-			{
-				used = true;
-				break;
-			}
-		}
-
-		if (used == false && ip != nullptr && ip->EvtCB == NvmIntrfEvtCB)
-		{
-			ip->EvtCB = nullptr;
-		}
-	}
-}
-
 bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 			   uint64_t RegionOff, uint64_t RegionSize)
 {
 	vbEnabled = false;
 	Valid(false);
 	CancelOp(-ECANCELED);
-	Unhook();
 	vbInitialized = false;
 	Region(0, 0);
 
@@ -402,18 +414,28 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	Interface(pIntrf);
 	DeviceAddress(Cfg.DevNo);
 	InterruptEnabled(Cfg.bIntEn);
+
+	// NvmCfg_t::bIntEn is this driver's operation mode: whether an operation
+	// is advanced through IsBusy and reported through the event handler, or
+	// finished inside the call. The interface's own bIntEn is its transfer
+	// mode, set by whoever created the interface, and this driver reads it to
+	// know whether a started transfer completes by event; it does not write
+	// it. A device configuring the interface it was handed is the same
+	// mistake as a device installing its own EvtCB, and it broke the demo
+	// configurations that initialised a bus one way and had it changed after
+	// the hardware was already set up.
 	vpWaitCB = Cfg.pWaitCB;
 	vEvtHandler = Cfg.EvtHandler;
 
 	auto fail = [this]() -> bool {
-		Unhook();
-		vbEnabled = false;
+			vbEnabled = false;
 		vbInitialized = false;
 		Valid(false);
 		Region(0, 0);
 		return false;
 	};
 
+	vBaseAddr = Cfg.BaseAddr;
 	vDevSize = Cfg.TotalSize;
 	vEraseSize = Cfg.EraseSize;
 	vSectSize = Cfg.SectorSize;
@@ -432,13 +454,20 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		case DEVINTRF_TYPE_UNKOWN:
 		case DEVINTRF_TYPE_QSPI:
 		case DEVINTRF_TYPE_OSPI:
+		case DEVINTRF_TYPE_MEMCTRL:
 			break;
 
 		default:
 			return fail();
 	}
 
-	vbBare = pIntrf->Type() == DEVINTRF_TYPE_I2C;
+	// Media that answer to an address and nothing else: no command protocol,
+	// so no write enable, no status register, no reset pair and no device id.
+	// An I2C part is one. MCU internal memory reached through its controller
+	// is another: write enable and ready are registers the interface touches,
+	// not commands sent to a chip.
+	vbBare = pIntrf->Type() == DEVINTRF_TYPE_I2C ||
+			 pIntrf->Type() == DEVINTRF_TYPE_MEMCTRL;
 	vbPhased = pIntrf->Type() == DEVINTRF_TYPE_QSPI ||
 				pIntrf->Type() == DEVINTRF_TYPE_OSPI;
 
@@ -467,10 +496,26 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		return fail();
 	}
 
-	if (vEraseSize != 0 && vEraseSize != 4U * 1024U &&
-		vEraseSize != 32U * 1024U && vEraseSize != 64U * 1024U)
+	// A power of two, no smaller than the page, and the whole device made of
+	// them. The list this replaced named three sizes because those are what
+	// the serial NOR commands address, but the erase unit is whatever the
+	// medium reports: a 512 byte or 2 KB page is a real geometry and was
+	// refused. Which command a serial part needs is decided by the size
+	// further down, and a size with no command there is refused there.
+	if (vEraseSize != 0 &&
+		((vEraseSize & (vEraseSize - 1)) != 0 || vEraseSize < vPageSize ||
+		 (vDevSize % vEraseSize) != 0))
 	{
-		DEBUG_PRINTF("Nvm erase size unsupported\r\n");
+		DEBUG_PRINTF("Nvm erase size invalid\r\n");
+		return fail();
+	}
+
+	// The frame address is 32 bit the whole way down, so a part mapped past
+	// that would be programmed at a wrapped address. Refuse it here rather
+	// than write somewhere else.
+	if (vBaseAddr + vDevSize > 0x100000000ULL)
+	{
+		DEBUG_PRINTF("Nvm address range exceeds 32 bits\r\n");
 		return fail();
 	}
 
@@ -484,9 +529,8 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	vOpRes = 0;
 	vOpRemain = 0;
 	vpOpData = nullptr;
-	vbXferWaiting = false;
-	vbXferDone = false;
-	vbXferFail = false;
+	vOpState = NVM_OPSTATE_IDLE;
+	vXferState = NVM_XFER_NONE;
 
 	if (vWrProtPin.PortNo >= 0 && vWrProtPin.PinNo >= 0)
 	{
@@ -501,7 +545,7 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		return fail();
 	}
 
-	if (vEraseSize != 0)
+	if (vbBare == false && vEraseSize != 0)
 	{
 		if (SendCmd({ NVM_CMD_RESET_EN, 0 }) != 0 ||
 			SendCmd({ NVM_CMD_RESET, 0 }) != 0)
@@ -510,7 +554,7 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		}
 	}
 
-	if (Cfg.DevId != 0 && Cfg.DevIdSize > 0)
+	if (vbBare == false && Cfg.DevId != 0 && Cfg.DevIdSize > 0)
 	{
 		bool found = false;
 		for (int rtry = 0; rtry < 6; rtry++)
@@ -527,7 +571,7 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		}
 	}
 
-	if (vEraseSize != 0 && vAddrSize > 3 &&
+	if (vbBare == false && vEraseSize != 0 && vAddrSize > 3 &&
 		SendCmd({ NVM_CMD_EN4B, 0 }) != 0)
 	{
 		return fail();
@@ -545,7 +589,8 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	}
 
 	uint64_t rsize = RegionSize != 0 ? RegionSize : avail;
-	if ((RegionOff % vWrGran) != 0 || (vPageSize % vWrGran) != 0)
+	if ((vBaseAddr % vWrGran) != 0 || (RegionOff % vWrGran) != 0 ||
+		(vPageSize % vWrGran) != 0)
 	{
 		return fail();
 	}
@@ -556,32 +601,11 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 	Region(RegionOff, rsize);
 
-	DevIntrf_t *ip = *pIntrf;
-	bool needHook = InterruptEnabled() || ip->bIntEn;
-
-	if (needHook && (ip->EvtCB == nullptr || ip->EvtCB == NvmIntrfEvtCB))
-	{
-		int slot = -1;
-		for (int i = 0; i < NVM_HOOK_MAX; i++)
-		{
-			if (s_NvmHook[i].pNvm == nullptr)
-			{
-				slot = i;
-				break;
-			}
-		}
-		if (slot < 0)
-		{
-			return fail();
-		}
-
-		s_NvmHook[slot].pIntrf = ip;
-		s_NvmHook[slot].pNvm = this;
-		if (ip->EvtCB == nullptr)
-		{
-			ip->EvtCB = NvmIntrfEvtCB;
-		}
-	}
+	// The interface's event callback is not touched here. It belongs to
+	// whoever created the interface, set through its config, one level, and
+	// a device reaching in to replace it takes something it does not own.
+	// An application that wants this Nvm told of interface completions
+	// points that callback at IntrfEvent when it builds the interface.
 
 	vbInitialized = true;
 	vbEnabled = true;
@@ -604,6 +628,10 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 	{
 		return 0;
 	}
+	if (pBuf == nullptr)
+	{
+		return -EINVAL;
+	}
 
 	int sr = ServiceRun(NVM_OP_TMOUT);
 	if (sr < 0)
@@ -616,7 +644,7 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 		return -EIO;
 	}
 
-	uint32_t addr = (uint32_t)(RegionOffset() + Off);
+	uint32_t addr = (uint32_t)(vBaseAddr + RegionOffset() + Off);
 	uint8_t *pb = (uint8_t*)pBuf;
 	uint32_t cnt = Len;
 
@@ -656,7 +684,12 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 
 		if (rd != (int)l)
 		{
-			return -EIO;
+			// Zero is the framework's retryable answer: DeviceIntrfRead has
+			// already looped MaxRetry times and the interface moved nothing
+			// each time, which is what another device holding it looks like.
+			// Write says -EBUSY for the same condition because it runs its own
+			// transaction; reporting it as a failed transfer here lost that.
+			return rd == 0 ? -EBUSY : -EIO;
 		}
 
 		addr += (uint32_t)rd;
@@ -669,49 +702,75 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 
 void Nvm::IntrfEvent(DEVINTRF_EVT EvtId)
 {
-	if (vbXferWaiting == false)
-	{
-		return;
-	}
+	bool done;
 
+	// Only COMPLETED ends a transfer. TX_READY asks the handler for more
+	// data and TX_FIFO_EMPTY says a software FIFO drained, and neither
+	// means the transfer finished: the nRF I2C master raises TX_READY on
+	// LASTTX, before the stop condition, and taking that as the end put a
+	// chunk back in the driver's hands while the bus was still on it. An
+	// interface that has its own idea of finished says so with COMPLETED.
 	switch (EvtId)
 	{
 		case DEVINTRF_EVT_COMPLETED:
-		case DEVINTRF_EVT_TX_READY:
-		case DEVINTRF_EVT_TX_FIFO_EMPTY:
-			vbXferDone = true;
+			done = true;
 			break;
 
 		case DEVINTRF_EVT_TX_TIMEOUT:
 		case DEVINTRF_EVT_RX_TIMEOUT:
-			vbXferFail = true;
+			done = false;
 			break;
 
 		default:
-			break;
+			return;
+	}
+
+	// Only a transfer actually outstanding takes it. Every consumer stands
+	// its transfer down the moment it has taken the answer, so an event
+	// arriving at any other time belongs to nothing here and is discarded.
+	if (vXferState == NVM_XFER_RUNNING)
+	{
+		vXferState = done ? NVM_XFER_COMPLETE : NVM_XFER_FAILED;
+
+		// Written from an interrupt and read outside one, so the store has to
+		// be visible before this returns to whatever it interrupted.
+		atomic_thread_fence(memory_order_seq_cst);
 	}
 }
 
+// Armed before the call, never after. The completion can arrive while the
+// interface is still inside it, and one that finds nothing outstanding is
+// discarded. Setting this afterwards loses that race.
 void Nvm::XferBegin(void)
 {
-	vbXferDone = false;
-	vbXferFail = false;
-	vbXferWaiting = true;
+	vXferState = NVM_XFER_RUNNING;
+
+	// Ordered against the call that follows, not only against the other
+	// accesses to this variable. volatile keeps the compiler from moving
+	// this past another volatile access; it says nothing about the store
+	// reaching memory before the interface starts something that can
+	// complete from an interrupt. Three faults came from this ordering.
+	atomic_thread_fence(memory_order_seq_cst);
+}
+
+// Stood down when the call turns out to have finished it, so a later event
+// has nothing to land on.
+void Nvm::XferEnd(void)
+{
+	vXferState = NVM_XFER_NONE;
 }
 
 bool Nvm::XferWait(uint32_t Timeout)
 {
 	while (Timeout-- > 0)
 	{
-		if (vbXferFail)
+		NVM_XFERSTATE x = vXferState;
+
+		if (x == NVM_XFER_COMPLETE || x == NVM_XFER_FAILED)
 		{
-			vbXferWaiting = false;
-			return false;
-		}
-		if (vbXferDone)
-		{
-			vbXferWaiting = false;
-			return true;
+			XferEnd();
+
+			return x == NVM_XFER_COMPLETE;
 		}
 		if (WaitPoll() == false)
 		{
@@ -719,7 +778,11 @@ bool Nvm::XferWait(uint32_t Timeout)
 		}
 	}
 
-	vbXferWaiting = false;
+	// Given up on. Dropping it means a completion arriving later finds
+	// nothing outstanding and is discarded, rather than ending whatever the
+	// next call has started.
+	XferEnd();
+
 	return false;
 }
 
@@ -727,7 +790,9 @@ bool Nvm::XferShort(int Count, int Expect)
 {
 	if (Count == Expect)
 	{
-		vbXferWaiting = false;
+		// Finished in the call, so nothing was handed over after all.
+		XferEnd();
+
 		return true;
 	}
 
@@ -737,7 +802,8 @@ bool Nvm::XferShort(int Count, int Expect)
 		return XferWait(NVM_XFER_TMOUT);
 	}
 
-	vbXferWaiting = false;
+	XferEnd();
+
 	return false;
 }
 
@@ -773,11 +839,33 @@ void Nvm::CancelOp(int Res)
 	uint64_t off = 0;
 	uint32_t len = 0;
 
-	while (atomic_flag_test_and_set(&vOpLock)) {}
+	// Init, Disable and Reset call this and none of them can decline to do
+	// their work, so it waits rather than refusing. Bounded, so a lock that
+	// is somehow never released cannot take the application with it.
+	uint32_t wait = NVM_OP_TMOUT;
+
+	bool locked = false;
+
+	while (wait-- > 0)
+	{
+		if (atomic_flag_test_and_set(&vOpLock) == false)
+		{
+			locked = true;
+			break;
+		}
+	}
+
+	// Never acquired. Touching the state now would walk over whoever
+	// holds it, and clearing the flag afterwards would release their
+	// lock, which is worse than doing nothing.
+	if (locked == false)
+	{
+		return;
+	}
 	bool notify = FinishOpLocked(Res, evt, off, len);
-	vbXferWaiting = false;
-	vbXferDone = false;
-	vbXferFail = false;
+	vOpRes = 0;
+	vOpState = NVM_OPSTATE_IDLE;
+	vXferState = NVM_XFER_NONE;
 	atomic_flag_clear(&vOpLock);
 
 	if (notify)
@@ -816,9 +904,15 @@ int Nvm::IssueNext(void)
 	return 0;
 }
 
+// One step of the operation. Every stage change happens here and nowhere
+// else, so what an operation can do next is the switch below and not a
+// combination of flags that has to be kept consistent.
+//
+// Returns 1 while there is still work, 0 once the operation has finished.
+// A finished operation stays in DONE or FAILED until TakeResult reports it.
 int Nvm::ServiceStep(void)
 {
-	if (vOpEvt == NVM_EVT_NONE)
+	if (vOpState == NVM_OPSTATE_IDLE)
 	{
 		return 0;
 	}
@@ -829,66 +923,157 @@ int Nvm::ServiceStep(void)
 	int notifyRes = 0;
 	bool notify = false;
 
-	while (atomic_flag_test_and_set(&vOpLock)) {}
-
-	if (vOpEvt == NVM_EVT_NONE)
+	// Refused, not waited for, the way DeviceIntrfStartTx refuses a second
+	// transfer. This is held across a status read and a settling delay, so a
+	// spin here holds the caller for the length of somebody else's bus
+	// transaction. Contended means the operation is being advanced
+	// elsewhere, which from here is still work outstanding.
+	if (atomic_flag_test_and_set(&vOpLock))
 	{
-		atomic_flag_clear(&vOpLock);
-		return 0;
-	}
-
-	bool ready;
-	if (vbBare)
-	{
-		if (vWrDelayUs > 0)
-		{
-			usDelay(vWrDelayUs);
-		}
-		ready = true;
-	}
-	else
-	{
-		uint8_t sr;
-		ready = ReadStatus(sr) == 0 && (sr & NVM_SR_WIP) == 0;
-	}
-
-	if (ready == false)
-	{
-		atomic_flag_clear(&vOpLock);
 		return 1;
 	}
 
-	if (vOpRemain == 0)
+	switch (vOpState)
 	{
-		notifyRes = vOpRes;
-		notify = FinishOpLocked(notifyRes, evt, off, len);
-		atomic_flag_clear(&vOpLock);
-		if (notify) { Notify(evt, off, len, notifyRes); }
-		return notifyRes;
+		case NVM_OPSTATE_IDLE:
+		case NVM_OPSTATE_DONE:
+		case NVM_OPSTATE_FAILED:
+			// Finished. The result waits here for whoever asks.
+			atomic_flag_clear(&vOpLock);
+
+			return 0;
+
+		case NVM_OPSTATE_INFLIGHT:
+		{
+			// A chunk is with the interface. Asking the medium for status
+			// now is wrong, and on a mapped memory meaningless.
+			NVM_XFERSTATE x = vXferState;
+
+			if (x == NVM_XFER_RUNNING)
+			{
+				atomic_flag_clear(&vOpLock);
+
+				return 1;
+			}
+
+			vXferState = NVM_XFER_NONE;
+
+			if (x == NVM_XFER_FAILED)
+			{
+				vOpState = NVM_OPSTATE_FAILED;
+				notify = FinishOpLocked(-EIO, evt, off, len);
+				atomic_flag_clear(&vOpLock);
+				if (notify) { Notify(evt, off, len, -EIO); }
+
+				return 0;
+			}
+
+			// The interface is done with it; the medium may not be.
+			vOpState = NVM_OPSTATE_SETTLING;
+			break;
+		}
+
+		case NVM_OPSTATE_ISSUING:
+		case NVM_OPSTATE_SETTLING:
+			break;
 	}
 
+	if (vOpState == NVM_OPSTATE_SETTLING)
+	{
+		bool ready;
+
+		if (vbBare)
+		{
+			if (vWrDelayUs > 0)
+			{
+				usDelay(vWrDelayUs);
+			}
+			ready = true;
+		}
+		else
+		{
+			uint8_t sr;
+			ready = ReadStatus(sr) == 0 && (sr & NVM_SR_WIP) == 0;
+		}
+
+		if (ready == false)
+		{
+			atomic_flag_clear(&vOpLock);
+
+			return 1;
+		}
+
+		if (vOpRemain == 0)
+		{
+			vOpState = NVM_OPSTATE_DONE;
+			notify = FinishOpLocked(0, evt, off, len);
+			atomic_flag_clear(&vOpLock);
+			if (notify) { Notify(evt, off, len, 0); }
+
+			return 0;
+		}
+
+		vOpState = NVM_OPSTATE_ISSUING;
+	}
+
+	// ISSUING: hand the next chunk over. IssueNext leaves the transfer in
+	// RUNNING when the interface kept it, and in NONE when it finished in
+	// the call.
 	int r = IssueNext();
+
 	if (r < 0)
 	{
+		vOpState = NVM_OPSTATE_FAILED;
 		notifyRes = r;
 		notify = FinishOpLocked(r, evt, off, len);
 		atomic_flag_clear(&vOpLock);
 		if (notify) { Notify(evt, off, len, notifyRes); }
-		return r;
+
+		return 0;
+	}
+
+	vOpState = vXferState == NVM_XFER_NONE ? NVM_OPSTATE_SETTLING
+										   : NVM_OPSTATE_INFLIGHT;
+
+	atomic_flag_clear(&vOpLock);
+
+	return 1;
+}
+
+// Report the held result once. A caller that asks has been told, so the next
+// caller starts clean.
+int Nvm::TakeResult(void)
+{
+	if (atomic_flag_test_and_set(&vOpLock))
+	{
+		// Being advanced or reported elsewhere; whoever holds the lock takes
+		// the result. Refused, not answered: 0 here told the caller the
+		// operation succeeded when its result had not been read at all.
+		return -EBUSY;
+	}
+
+	int r = vOpRes;
+
+	vOpRes = 0;
+
+	// Reported, so the operation is over as far as anyone is concerned.
+	if (vOpState == NVM_OPSTATE_DONE || vOpState == NVM_OPSTATE_FAILED)
+	{
+		vOpState = NVM_OPSTATE_IDLE;
 	}
 
 	atomic_flag_clear(&vOpLock);
-	return 1;
+
+	return r;
 }
 
 int Nvm::ServiceRun(uint32_t Timeout)
 {
 	for (;;)
 	{
-		int r = ServiceStep();
-		if (r <= 0)
+		if (ServiceStep() <= 0)
 		{
-			return r;
+			return TakeResult();
 		}
 
 		if (Timeout-- == 0 || WaitPoll() == false)
@@ -897,7 +1082,17 @@ int Nvm::ServiceRun(uint32_t Timeout)
 			uint64_t off = 0;
 			uint32_t len = 0;
 
-			while (atomic_flag_test_and_set(&vOpLock)) {}
+			if (atomic_flag_test_and_set(&vOpLock))
+			{
+				return -EBUSY;
+			}
+
+			// Gave up on it. The chunk may still be with the interface, so
+			// drop it: a completion arriving later finds nothing running and
+			// is discarded.
+			vOpState = NVM_OPSTATE_FAILED;
+			vXferState = NVM_XFER_NONE;
+
 			bool notify = FinishOpLocked(-ETIMEDOUT, evt, off, len);
 			atomic_flag_clear(&vOpLock);
 
@@ -905,7 +1100,7 @@ int Nvm::ServiceRun(uint32_t Timeout)
 			{
 				Notify(evt, off, len, -ETIMEDOUT);
 			}
-			return -ETIMEDOUT;
+			return TakeResult();
 		}
 	}
 }
@@ -918,6 +1113,101 @@ bool Nvm::IsBusy(void) const
 int Nvm::Sync(void)
 {
 	return ServiceRun(NVM_OP_TMOUT);
+}
+
+int Nvm::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData,
+			   int DataLen)
+{
+	DevIntrf_t *ip = *Interface();
+
+	// An erase is command and address with no payload, so the interface can
+	// start the whole of it from the frame alone.
+	bool frameonly = pData == nullptr || DataLen == 0;
+
+	XferBegin();
+
+	if (DeviceIntrfStartTx(ip, DeviceAddress()) == false)
+	{
+		XferEnd();
+
+		return -EBUSY;
+	}
+
+	// The frame and the payload are one transaction, so no stop between them.
+	ip->bNoStop = true;
+
+	int n = DeviceIntrfTxData(ip, pCmdAddr, CmdAddrLen);
+
+	// Exactly -1, which is what the framework means by started. Any other
+	// negative is an errno and has to reach the caller as one.
+	if (n == -1 && ip->bIntEn)
+	{
+		if (InterruptEnabled() && frameonly)
+		{
+			// Handed over. No stop is sent, because on such an interface the
+			// completion is what ends the transfer: it releases the busy latch
+			// that DeviceIntrfStartTx took.
+			ip->bNoStop = false;
+
+			return 0;
+		}
+
+		// The frame reports through the event and this call waits it out.
+		if (XferWait(NVM_XFER_TMOUT) == false)
+		{
+			ip->bNoStop = false;
+			DeviceIntrfStopTx(ip);
+
+			return -EIO;
+		}
+		n = CmdAddrLen;
+	}
+
+	if (n != CmdAddrLen)
+	{
+		ip->bNoStop = false;
+		DeviceIntrfStopTx(ip);
+		XferEnd();
+
+		return -EIO;
+	}
+
+	ip->bNoStop = false;
+
+	if (frameonly)
+	{
+		// Finished inside the call, so nothing was handed over.
+		XferEnd();
+		DeviceIntrfStopTx(ip);
+
+		return 0;
+	}
+
+	// Armed again for the payload. The frame above either consumed the one
+	// armed at the top or finished without using it, and either way what goes
+	// out next is a transfer of its own.
+	XferBegin();
+
+	int wr = DeviceIntrfTxData(ip, pData, DataLen);
+
+	if (wr == -1 && ip->bIntEn)
+	{
+		if (InterruptEnabled())
+		{
+			// Handed over: the interface kept it and will report. Waiting here
+			// would put the wait back in the caller, which is the whole point
+			// of the mode. No stop either, for the same reason as above.
+			return DataLen;
+		}
+
+		return XferWait(NVM_XFER_TMOUT) ? DataLen : -EIO;
+	}
+
+	// Finished inside the call after all, so nothing was handed over.
+	XferEnd();
+	DeviceIntrfStopTx(ip);
+
+	return wr == DataLen ? DataLen : -EIO;
 }
 
 int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len,
@@ -945,17 +1235,12 @@ int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len,
 		int flen = FrameAddr(frame, vWrCmd.Cmd, Addr, &devaddr);
 
 		DeviceAddress(devaddr);
-		XferBegin();
-		wr = Device::Write(frame, flen, pData, (int)Len);
-		if (XferShort(wr, (int)Len))
-		{
-			wr = (int)Len;
-		}
+		wr = Write(frame, flen, pData, (int)Len);
 	}
 
 	if (wr != (int)Len)
 	{
-		return -EIO;
+		return wr < 0 ? wr : -EIO;
 	}
 
 	if (bDefer)
@@ -980,6 +1265,15 @@ int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 	{
 		return 0;
 	}
+
+	// Checked here rather than at the transfer. In interrupt driven mode the
+	// pointer is kept and read from long after this call has returned, so a
+	// null one turns into a fault in an interrupt with nothing to say where
+	// it came from.
+	if (pData == nullptr)
+	{
+		return -EINVAL;
+	}
 	if (vWrGran > 1 && ((Off % vWrGran) != 0 || (Len % vWrGran) != 0))
 	{
 		return -EINVAL;
@@ -991,14 +1285,18 @@ int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 		return sr;
 	}
 
-	uint32_t addr = (uint32_t)(RegionOffset() + Off);
+	uint32_t addr = (uint32_t)(vBaseAddr + RegionOffset() + Off);
 	const uint8_t *p = (const uint8_t*)pData;
 
 	if (InterruptEnabled())
 	{
-		while (atomic_flag_test_and_set(&vOpLock)) {}
+		if (atomic_flag_test_and_set(&vOpLock))
+		{
+			return -EBUSY;
+		}
 		vOpEvt = NVM_EVT_WRITE_DONE;
-		vOpRes = 0;
+		vOpState = NVM_OPSTATE_ISSUING;
+		vXferState = NVM_XFER_NONE;
 		vOpOff = Off;
 		vOpLen = Len;
 		vOpAddr = addr;
@@ -1008,12 +1306,21 @@ int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 		int r = IssueNext();
 		if (r < 0)
 		{
+			vOpState = NVM_OPSTATE_IDLE;
+			vXferState = NVM_XFER_NONE;
 			vOpEvt = NVM_EVT_NONE;
 			vOpRemain = 0;
 			vpOpData = nullptr;
 			atomic_flag_clear(&vOpLock);
+
 			return r;
 		}
+
+		// The chunk is either with the interface or already back with the
+		// medium, the same reading ServiceStep makes.
+		vOpState = vXferState == NVM_XFER_NONE ? NVM_OPSTATE_SETTLING
+											   : NVM_OPSTATE_INFLIGHT;
+
 		atomic_flag_clear(&vOpLock);
 		return (int)Len;
 	}
@@ -1045,9 +1352,63 @@ int Nvm::EraseUnit(uint32_t Addr, bool bDefer)
 		return -EBUSY;
 	}
 
+	// Reached through a controller rather than a bus, so there is no command
+	// to frame. The decision to erase is the same one and it is made here on
+	// every medium; only the way it reaches the hardware differs, the same
+	// way a sensor asks its interface what it is before shaping its access.
+	//
+	// Inside the interface's own start and stop, because that is the
+	// serialisation and an erase needs it like any other access. Armed first
+	// for the same reason a transfer is: the completion can arrive inside the
+	// call.
+	if (Interface()->Type() == DEVINTRF_TYPE_MEMCTRL)
+	{
+		DevIntrf_t *ip = *Interface();
+
+		XferBegin();
+
+		if (DeviceIntrfStartTx(ip, DeviceAddress()) == false)
+		{
+			XferEnd();
+
+			return -EBUSY;
+		}
+
+		int r = NvmMcuErase((uintptr_t)Addr);
+
+		if (r == NVM_INTRF_OP_STARTED)
+		{
+			// Handed over. No stop is sent, because the completion is what
+			// ends it: it releases the latch DeviceIntrfStartTx took.
+			if (bDefer)
+			{
+				return 0;
+			}
+
+			// Waited out here, and on the completion rather than on the
+			// controller. Asking the controller whether it is ready answers
+			// yes while the erase is still queued behind a stack or waiting
+			// for a radio window, because nothing has started yet.
+			return XferWait(NVM_XFER_TMOUT) ? 0 : -EIO;
+		}
+
+		// Finished in the call, so nothing was handed over.
+		XferEnd();
+		DeviceIntrfStopTx(ip);
+
+		if (r < 0)
+		{
+			return r;
+		}
+
+		return bDefer ? 0 : (WaitReady() ? 0 : -EIO);
+	}
+
+	// On a bus the unit has to be one the command set can name.
 	uint8_t op = NVM_CMD_SECT_ERASE;
 	if (vEraseSize == 32U * 1024U) { op = NVM_CMD_BLK32_ERASE; }
 	else if (vEraseSize == 64U * 1024U) { op = NVM_CMD_BLK64_ERASE; }
+	else if (vEraseSize != 4U * 1024U) { return -ENOTSUP; }
 
 	if (vbPhased)
 	{
@@ -1067,10 +1428,11 @@ int Nvm::EraseUnit(uint32_t Addr, bool bDefer)
 		int flen = FrameAddr(frame, op, Addr, &devaddr);
 
 		DeviceAddress(devaddr);
-		XferBegin();
-		if (XferShort(Interface()->Tx(devaddr, frame, flen), flen) == false)
+
+		int r = Write(frame, flen, nullptr, 0);
+		if (r < 0)
 		{
-			return -EIO;
+			return r;
 		}
 	}
 
@@ -1107,13 +1469,17 @@ int Nvm::Erase(uint64_t Off, uint32_t Len)
 		return sr;
 	}
 
-	uint32_t addr = (uint32_t)(RegionOffset() + Off);
+	uint32_t addr = (uint32_t)(vBaseAddr + RegionOffset() + Off);
 
 	if (InterruptEnabled())
 	{
-		while (atomic_flag_test_and_set(&vOpLock)) {}
+		if (atomic_flag_test_and_set(&vOpLock))
+		{
+			return -EBUSY;
+		}
 		vOpEvt = NVM_EVT_ERASE_DONE;
-		vOpRes = 0;
+		vOpState = NVM_OPSTATE_ISSUING;
+		vXferState = NVM_XFER_NONE;
 		vOpOff = Off;
 		vOpLen = Len;
 		vOpAddr = addr;
@@ -1123,12 +1489,22 @@ int Nvm::Erase(uint64_t Off, uint32_t Len)
 		int r = IssueNext();
 		if (r < 0)
 		{
+			vOpState = NVM_OPSTATE_IDLE;
+			vXferState = NVM_XFER_NONE;
 			vOpEvt = NVM_EVT_NONE;
 			vOpRemain = 0;
 			atomic_flag_clear(&vOpLock);
+
 			return r;
 		}
+
+		// The unit is either with the interface or already back with the
+		// medium, the same reading ServiceStep makes.
+		vOpState = vXferState == NVM_XFER_NONE ? NVM_OPSTATE_SETTLING
+											   : NVM_OPSTATE_INFLIGHT;
+
 		atomic_flag_clear(&vOpLock);
+
 		return 0;
 	}
 
@@ -1153,7 +1529,12 @@ int Nvm::MassErase(void)
 	{
 		return -ENODEV;
 	}
-	if (vEraseSize == 0 || Interface()->Type() == DEVINTRF_TYPE_UNKOWN)
+	// A mass erase is a command, so a medium that answers to an address and
+	// nothing else has no way to be told. The one byte went out, the frame
+	// was never completed, and this answered success for an erase that never
+	// happened. Erase() over the whole region is what such a device offers.
+	if (vEraseSize == 0 || vbBare ||
+		Interface()->Type() == DEVINTRF_TYPE_UNKOWN)
 	{
 		return -ENOTSUP;
 	}
@@ -1185,24 +1566,17 @@ int Nvm::MassErase(void)
 	return 0;
 }
 
-int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
+int Nvm::SetWriteProtect(bool bEnable)
 {
 	if (vbEnabled == false)
 	{
 		return -ENODEV;
 	}
-	if (!RangeValid(Off, Len))
-	{
-		return -EINVAL;
-	}
 
+	// The mechanisms cover the whole part, so a window has no say over it.
 	if (RegionOffset() != 0 || Size() != vDevSize)
 	{
 		return -EPERM;
-	}
-	if (Off != 0 || (uint64_t)Len != vDevSize)
-	{
-		return -ENOTSUP;
 	}
 
 	int srvc = ServiceRun(NVM_OP_TMOUT);
@@ -1258,8 +1632,8 @@ int Nvm::SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable)
 	else
 	{
 		uint8_t wrsr = NVM_CMD_WRSR;
-		XferBegin();
-		if (XferShort(Device::Write(&wrsr, 1, &sr, 1), 1) == false)
+
+		if (Write(&wrsr, 1, &sr, 1) != 1)
 		{
 			WriteDisable();
 			return -EIO;

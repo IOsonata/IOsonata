@@ -130,11 +130,15 @@ size_t BtSmpBondRecordSize(void)
 	return sizeof(BtSmpBondRecord_t);
 }
 
-static void BtSmpBondPersist(int Slot)
+// Build the blob for one slot into a caller buffer. pBuff may be any
+// alignment, so the record is assembled in a local and copied out, the way
+// BtSmpBondRestore copies in before validating.
+size_t BtSmpBondSerialize(int Slot, void *pBuff, size_t BuffLen)
 {
-	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX)
+	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX || pBuff == nullptr ||
+		BuffLen < sizeof(BtSmpBondRecord_t))
 	{
-		return;
+		return 0;
 	}
 
 	BtSmpBondRecord_t record;
@@ -142,10 +146,58 @@ static void BtSmpBondPersist(int Slot)
 	record.Magic = BT_SMP_BOND_RECORD_MAGIC;
 	record.Version = BT_SMP_BOND_RECORD_VERSION;
 	record.Length = (uint16_t)sizeof(record);
-	memcpy(&record.Bond, &s_BtSmpBondTable[Slot], sizeof(record.Bond));
+
+	// A platform that defers its write calls this from a different context to
+	// the one that changed the slot, so a save can land part way through the
+	// copy and leave it holding part of each version, over which the CRC
+	// below would then be computed as if it were a record anyone ever held.
+	// Copy twice and compare: equal copies mean nothing changed from the
+	// start of the first to the end of the second, which is a snapshot. A
+	// change re-marks the slot anyway, so the retries only have to outlast
+	// the burst that is actively rewriting it; if they do not, the caller
+	// gets nothing now and serializes the settled slot on the re-mark.
+	BtSmpBond_t check;
+	bool stable = false;
+
+	for (int i = 0; i < 4; i++)
+	{
+		memcpy(&record.Bond, &s_BtSmpBondTable[Slot], sizeof(record.Bond));
+		memcpy(&check, &s_BtSmpBondTable[Slot], sizeof(check));
+
+		if (memcmp(&record.Bond, &check, sizeof(check)) == 0)
+		{
+			stable = true;
+			break;
+		}
+	}
+
+	CryptoSecureWipe(&check, sizeof(check));
+
+	if (!stable)
+	{
+		CryptoSecureWipe(&record, sizeof(record));
+
+		return 0;
+	}
+
 	record.Crc = 0U;
 	record.Crc = BtSmpBondCrc32(&record, sizeof(record));
-	BtSmpBondSave(Slot, &record, sizeof(record));
+
+	memcpy(pBuff, &record, sizeof(record));
+	CryptoSecureWipe(&record, sizeof(record));
+
+	return sizeof(record);
+}
+
+static void BtSmpBondPersist(int Slot)
+{
+	BtSmpBondRecord_t record;
+
+	size_t len = BtSmpBondSerialize(Slot, &record, sizeof(record));
+	if (len > 0)
+	{
+		BtSmpBondSave(Slot, &record, len);
+	}
 	CryptoSecureWipe(&record, sizeof(record));
 }
 

@@ -75,7 +75,7 @@ SOFTWARE.
 // application with the link controller in it defines the wrapper through its
 // own chain; one without links nothing extra, the reference resolves null,
 // and the operation goes to the controller. The flash arbitration therefore
-// lives entirely here; the timeslot mechanics stay MPSL's, in bt_pds_sdc.
+// lives entirely here; who may touch the memory is registered by the stack.
 #if !defined(NRFXLIB_SDC) && (defined(NRF54L_SERIES) || defined(NRF54L15_XXAA))
 #define NVM_INTRF_SLOT_RUNTIME		1
 #endif
@@ -92,7 +92,6 @@ SOFTWARE.
 #endif
 
 #if defined(NRFXLIB_SDC) || defined(NVM_INTRF_SLOT_RUNTIME)
-#include "bt_pds_sdc.h"
 #endif
 
 #include "storage/nvm_intrf.h"
@@ -160,50 +159,225 @@ SOFTWARE.
 #define NVM_INTRF_TIMEOUT_MS		5000
 #endif
 
-// The command and address are collected apart from the data, so the data
-// buffer stays word aligned. Reading it as words from an odd frame offset
-// would be an unaligned access, and the SoftDevice rejects an unaligned source
-// outright.
-#define NVM_INTRF_FRAME_HDR			(1 + NVM_INTRF_ADDR_SIZE)
+// NvmSubmit and NvmEraseUnit answer this when the operation was started and
+// its completion will be reported later, whether by the flash event or by the
+// arbiter. Same value the arbiter answers with, so there is one meaning.
+#define NVM_INTRF_STARTED			NVM_INTRF_OP_STARTED
 
-static uint8_t s_Hdr[NVM_INTRF_FRAME_HDR];
-static int s_HdrLen;
-alignas(4) static uint8_t s_Data[NVM_INTRF_MAX_XFER];
+// The staging buffer is declared in the header, where the class is, so the
+// per target transfer size cannot exceed it.
+static_assert(NVM_INTRF_MAX_XFER <= NVM_INTRF_XFER_SIZE,
+			  "NVM_INTRF_MAX_XFER exceeds the staging buffer");
 
-// The generic driver speaks the standard serial protocol at every non I2C
-// interface, and the internal flash is an erase medium besides, so this is
-// standard serial NOR protocol at it: write enable before a program, a
-// status poll, a reset at init. The frame convention already uses the
-// standard opcodes; this emulates the little of the protocol that expects
-// an answer, so a config for internal memory truly reads like one for a
-// chip. Chip erase and 4 byte mode are accepted and ignored: addressing is
-// 4 bytes natively and a whole device erase of the running flash would be
-// wrong.
-static bool s_Wel;
+// How long the non interrupt path spins on the flash event flag. A bound so a
+// lost event cannot hang; not a timeout the application configures, because
+// that is the memory's business and lives in Nvm.
+#ifndef NVM_INTRF_SD_SPIN
+#define NVM_INTRF_SD_SPIN			0x02000000UL
+#endif
 
-static void NvmProtocolByte(uint8_t Cmd)
-{
-	switch (Cmd)
-	{
-		case 0x06U:				// write enable
-			s_Wel = true;
-			break;
+//---------------------------------------------------------------------------
+// Per controller state. There is one memory controller and one stack holding
+// it, so these describe the hardware rather than a transaction.
+//---------------------------------------------------------------------------
 
-		case 0x04U:				// write disable
-			s_Wel = false;
-			break;
+// Who decides when the memory may be touched. Registered by the stack that
+// owns the radio; null means the memory is the application's alone.
+static NvmIntrfArb_t s_pArbiter = nullptr;
 
-		default:				// reset pair, chip erase, 4 byte mode
-			break;
-	}
-}
-static int s_DataLen;
-
-static NvmIntrfWait_t s_pWait = nullptr;
-static uint32_t s_TimeoutMs = NVM_INTRF_TIMEOUT_MS;
 static NvmIntrfStat_t s_Stat;
 
 static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt);
+
+// The device a transfer is running on. Set by StartTx and StartRx, read by
+// the flash event and by the arbiter completion, neither of which arrives
+// with an interface argument of its own. One memory controller, so this
+// describes the hardware rather than a transaction.
+// The one controller this port serves. At file scope because there is one
+// memory controller: which device a completion belongs to is not something
+// anything has to look up or remember.
+static NvmDevIntrf_t s_NvmDev;
+
+DevIntrf_t * const NvmMcuDevIntrf(void)
+{
+	return &s_NvmDev.DevIntrf;
+}
+
+// Where the controller has got to with the operation it was given. One value
+// at a time, so the stages cannot contradict each other the way a set of
+// flags can, and named for the transport's business rather than the memory's:
+// this says who holds the controller, not what the medium is doing.
+//
+//	FREE		nothing submitted
+//	HELD		submitted, the call that submitted it waits for the result
+//	HANDED_OVER	submitted, the driver is to be told when it arrives
+//	DONE		finished, result in s_CtrlRes, not yet taken
+//
+// Per controller, not per transaction: there is one memory controller and one
+// thing holding it at a time, the same reason s_NvmDev lives here.
+typedef enum {
+	NVM_CTRL_FREE = 0,
+	NVM_CTRL_HELD,
+	NVM_CTRL_HANDED_OVER,
+	NVM_CTRL_DONE
+} NVM_CTRLSTATE;
+
+static volatile NVM_CTRLSTATE s_CtrlState = NVM_CTRL_FREE;
+static volatile int s_CtrlRes = 0;
+
+
+// Whether to submit and return rather than submit and wait. This is the
+// bIntEn the application put in NvmCfg_t, handed down by the driver, not a
+// build option.
+//
+// The SoftDevice path honours it through the flash event and the timeslot
+// path through the arbiter's Done, both of which arrive by interrupt. The
+// direct controller path finishes inside its call whatever this says and
+// reports done at once, which the driver copes with.
+
+// The controller has finished. Whoever submitted it said how the result was
+// to be taken, so this is the one place that decides between leaving it for
+// that caller and reporting it, and the state is what says which.
+//
+// Runs wherever the operation finished, which for a flash event or a radio
+// timeslot is a high priority interrupt: it does nothing but hand the result
+// over.
+static void CtrlFinish(int Res)
+{
+	NVM_CTRLSTATE st = s_CtrlState;
+
+	// Nothing of ours was out. A result dropped here leaves the driver waiting
+	// for something that has already been and gone, so say which way it went
+	// rather than leaving it invisible.
+	if (st != NVM_CTRL_HELD && st != NVM_CTRL_HANDED_OVER)
+	{
+		s_Stat.RepNoPend++;
+
+		return;
+	}
+
+	s_CtrlRes = Res;
+	s_CtrlState = NVM_CTRL_DONE;
+
+	if (st == NVM_CTRL_HELD)
+	{
+		// The call that submitted it is spinning on this and takes it there.
+		return;
+	}
+
+	if (s_NvmDev.DevIntrf.bIntEn == false)
+	{
+		s_Stat.RepNoWant++;
+
+		return;
+	}
+
+	s_Stat.RepDone++;
+	s_CtrlState = NVM_CTRL_FREE;
+
+	// End the transfer here. The driver returned as soon as the operation was
+	// under way and never sent a stop, because on this interface the stop is
+	// what the completion does: it clears the frame and releases the busy
+	// latch that DeviceIntrfStartTx set. Without it the next StartTx is
+	// refused and nothing works again.
+	DeviceIntrfStopTx(&s_NvmDev.DevIntrf);
+
+	// The creator may have asked for interrupt completion with nothing to
+	// tell; the Nvm driver then finds the result through IsBusy. Reporting
+	// to a callback that was never given jumped to null.
+	if (s_NvmDev.DevIntrf.EvtCB)
+	{
+		s_NvmDev.DevIntrf.EvtCB(&s_NvmDev.DevIntrf,
+					Res == 0 ? DEVINTRF_EVT_COMPLETED : DEVINTRF_EVT_TX_TIMEOUT,
+					nullptr, 0);
+	}
+}
+
+static void NvmArbDone(void *pCtx, int Res)
+{
+	(void)pCtx;
+
+	CtrlFinish(Res);
+}
+
+// Issue an operation through the arbiter. Done is set only when the driver
+// asked for events, so the arbiter waits for it otherwise and returns the
+// result in the call, the same split as SdStart and SdRun.
+static int ArbiterIssue(uint32_t (*Step)(void *), void *pCtx)
+{
+	if (false)
+	{
+		return -EIO;
+	}
+
+	NvmIntrfOp_t *op = &s_NvmDev.Op;
+
+	op->Step = Step;
+	op->StepBudgetUs = NVM_INTRF_STEP_BUDGET_US;
+	op->pCtx = pCtx;
+	op->Done = s_NvmDev.DevIntrf.bIntEn ? NvmArbDone : nullptr;
+
+	s_Stat.Slot++;
+
+	// Marked before the call, not after: the arbiter can finish the operation
+	// and report it from inside s_pArbiter, and a result that finds nothing
+	// outstanding is dropped. With Done unset the arbiter waits for it itself
+	// and answers in the call, so nothing is outstanding to mark.
+	if (op->Done != nullptr)
+	{
+		s_CtrlRes = 0;
+		s_CtrlState = NVM_CTRL_HANDED_OVER;
+	}
+
+	int r = s_pArbiter(op);
+
+	if (r == NVM_INTRF_STARTED)
+	{
+		return r;
+	}
+
+	// Never started, or finished and reported inside the call. Either way
+	// nothing is owed from here on.
+	if (op->Done != nullptr)
+	{
+		s_CtrlState = NVM_CTRL_FREE;
+	}
+
+	return r;
+}
+
+// The operation context, taken from the device so it outlives the call: the
+// stack and the arbiter both report after returning, and a local would be
+// gone by the time the work ran. Null when no transfer is in progress, which
+// means the caller reached here without a StartTx.
+static NvmIntrfWrCtx_t *OpCtxWr(uintptr_t Addr, const uint32_t *pSrc,
+								uint32_t Words)
+{
+	if (false)
+	{
+		return nullptr;
+	}
+
+	s_NvmDev.OpCtx.Wr.Addr = Addr;
+	s_NvmDev.OpCtx.Wr.pSrc = pSrc;
+	s_NvmDev.OpCtx.Wr.Words = Words;
+
+	return &s_NvmDev.OpCtx.Wr;
+}
+
+static NvmIntrfErCtx_t *OpCtxEr(uintptr_t Addr)
+{
+	if (false)
+	{
+		return nullptr;
+	}
+
+	s_NvmDev.OpCtx.Er.Addr = Addr;
+	s_NvmDev.OpCtx.Er.bStarted = false;
+
+	return &s_NvmDev.OpCtx.Er;
+}
+
 
 // ---------------------------------------------------------------------------
 // The controller. One of these two, chosen by the MCU model.
@@ -291,7 +465,9 @@ static uint32_t CtrlEraseSize(void)
 
 #endif
 
-// True when the unit already reads erased, so it can be left alone. Saves the
+#if defined(NRF52_SERIES)
+
+// True when the page already reads erased, so it can be left alone. Saves the
 // work and the wear that goes with it.
 static bool CtrlIsErased(uintptr_t Addr, uint32_t Len)
 {
@@ -309,32 +485,13 @@ static bool CtrlIsErased(uintptr_t Addr, uint32_t Len)
 	return true;
 }
 
-// Spend one unit of a long wait in the application, or in a short delay when
-// it supplied nothing. Returns false when the application asked to give up.
-static bool WaitStep(void)
-{
-	if (s_pWait != nullptr)
-	{
-		return s_pWait();
-	}
-
-	msDelay(1);
-
-	return true;
-}
+#endif	// NRF52_SERIES
 
 // ---------------------------------------------------------------------------
 // SoftDevice path. The memory is not ours to touch while one runs, so the work
 // is submitted and the result arrives as a SoC event.
 // ---------------------------------------------------------------------------
 #ifdef NVM_INTRF_SOFTDEVICE
-
-static volatile bool s_OpDone;
-static volatile bool s_OpOk;
-// Set while a request of ours is outstanding. The SoC flash event is broadcast
-// to every observer and has nothing identifying in it, so this is how the
-// handler knows whether the event it was handed belongs to it.
-static volatile bool s_OpPending;
 
 #ifdef NVM_INTRF_SD_RUNTIME
 
@@ -385,26 +542,26 @@ static bool SdRunning(void)
 
 static void NvmIntrfSocEvt(uint32_t SysEvt)
 {
-	if (s_OpPending == false)
+	// The SoC flash event is broadcast to every observer and has nothing
+	// identifying in it, so the state is how this knows whether the event it
+	// was handed belongs to it. Evt counts the ones that do.
+	NVM_CTRLSTATE st = s_CtrlState;
+
+	if (st != NVM_CTRL_HELD && st != NVM_CTRL_HANDED_OVER)
 	{
-		// Every observer sees every event; this one is not ours.
 		return;
 	}
 
 	switch (SysEvt)
 	{
 		case NRF_EVT_FLASH_OPERATION_SUCCESS:
-			s_OpOk = true;
-			s_OpPending = false;
-			s_OpDone = true;
 			s_Stat.Evt++;
+			CtrlFinish(0);
 			break;
 
 		case NRF_EVT_FLASH_OPERATION_ERROR:
-			s_OpOk = false;
-			s_OpPending = false;
-			s_OpDone = true;
 			s_Stat.Evt++;
+			CtrlFinish(-EIO);
 			break;
 
 		default:
@@ -432,76 +589,103 @@ NRF_SDH_SOC_OBSERVER(s_NvmIntrfSocObs, NvmIntrfSocObserver, NULL, HIGH);
 
 typedef uint32_t (*SdSubmit_t)(void *pArg);
 
-// Submit, retry while the radio holds the memory, then wait for the result.
+// Submit only. Returns 0 when the operation is under way, or a negative
+// errno when it could not be started.
+//
+// How the result is taken is not a question anyone asks: the interface is
+// interrupt driven or it is not, and bIntEn says which, once, set at Init
+// from the config. It used to be re-derived at every submit from bIntEn and
+// a callback pointer together, which let the same operation take a different
+// route depending on whether anything had been wired up yet.
+static int SdStart(SdSubmit_t Submit, void *pArg)
+{
+	// Marked before the submit, not after. The completion can arrive while
+	// Submit is still running, or be dispatched from a higher priority the
+	// moment it returns, and a result that finds nothing outstanding is
+	// dropped. Doing this afterwards loses that race and leaves the driver
+	// waiting for an event that has already been and gone.
+	//
+	// Which of the two it is is decided here and nowhere else: the state the
+	// submit is made under is what CtrlFinish reads to know whether to leave
+	// the result for this call or report it.
+	s_CtrlRes = 0;
+	// The interface is interrupt driven or it is not. Read once, from the
+	// one place that says so.
+	s_CtrlState = s_NvmDev.DevIntrf.bIntEn ? NVM_CTRL_HANDED_OVER : NVM_CTRL_HELD;
+	__DMB();
+
+	uint32_t status = Submit(pArg);
+
+	if (status == NRF_SUCCESS)
+	{
+		return 0;
+	}
+
+	// Never started, so nothing is owed a result.
+	s_CtrlState = NVM_CTRL_FREE;
+
+	if (status != NRF_ERROR_BUSY)
+	{
+		return -EIO;
+	}
+
+	// Busy is the stack holding the memory. That is a refusal, not a wait:
+	// report it and let the driver come back, rather than spinning here on
+	// the caller's time.
+	s_Stat.Busy++;
+
+	return -EBUSY;
+}
+
+// Submit and report the result once the flash event has been seen. Kept for
+// the case where the driver did not ask for interrupt completion: the wait is
+// a tight spin on the event flag, not a callback into the application, because
+// how long to wait and what to do while waiting are the memory's business and
+// live in Nvm.
 static int SdRun(SdSubmit_t Submit, void *pArg)
 {
-	uint32_t elapsed = 0;
+	// Waited out here, so it is held rather than handed over.
+	int r = SdStart(Submit, pArg);
 
-	while (true)
+	if (r != 0)
 	{
-		s_OpDone = false;
-		s_OpOk = false;
-		s_OpPending = true;
-		__DMB();
+		return r;
+	}
 
-		uint32_t status = Submit(pArg);
-
-		if (status == NRF_SUCCESS)
+	for (uint32_t i = 0; i < NVM_INTRF_SD_SPIN; i++)
+	{
+		if (s_CtrlState == NVM_CTRL_DONE)
 		{
-			break;
-		}
+			int res = s_CtrlRes;
 
-		s_OpPending = false;
+			// Taken, so the controller is free as far as anyone is concerned.
+			s_CtrlState = NVM_CTRL_FREE;
 
-		if (status != NRF_ERROR_BUSY)
-		{
-			return -EIO;
-		}
-
-		s_Stat.Busy++;
-		if (WaitStep() == false || ++elapsed >= s_TimeoutMs)
-		{
-			return -ETIMEDOUT;
+			return res;
 		}
 	}
 
-	while (elapsed < s_TimeoutMs)
-	{
-		if (s_OpDone)
-		{
-			return s_OpOk ? 0 : -EIO;
-		}
-		if (WaitStep() == false)
-		{
-			s_OpPending = false;
-			return -ETIMEDOUT;
-		}
-		elapsed++;
-	}
-
-	s_OpPending = false;
+	// Given up on. Dropping it means a result arriving later finds nothing
+	// outstanding and is discarded, rather than being taken for the next
+	// operation's.
+	s_CtrlState = NVM_CTRL_FREE;
 
 	return -ETIMEDOUT;
 }
 
-typedef struct {
-	uint32_t		*pDst;
-	const uint32_t	*pSrc;
-	uint32_t		Words;
-} SdWrArg_t;
-
 static uint32_t SdWriteSubmit(void *pArg)
 {
-	SdWrArg_t *a = (SdWrArg_t *)pArg;
+	NvmIntrfWrCtx_t *a = (NvmIntrfWrCtx_t *)pArg;
 
-	return sd_flash_write(a->pDst, a->pSrc, a->Words);
+	return sd_flash_write((uint32_t *)a->Addr, a->pSrc, a->Words);
 }
 
 #if defined(NRF52_SERIES)
 static uint32_t SdEraseSubmit(void *pArg)
 {
-	// The SoftDevice erase takes a page number, not an address.
-	return sd_flash_page_erase(*(uint32_t *)pArg);
+	// The SoftDevice erase takes a page number, not an address, and the
+	// caller put one in Addr.
+	return sd_flash_page_erase((uint32_t)((NvmIntrfErCtx_t *)pArg)->Addr);
 }
 #endif
 
@@ -512,19 +696,16 @@ static bool SdRunning(void) { return false; }
 #endif	// NVM_INTRF_SOFTDEVICE
 
 // ---------------------------------------------------------------------------
-// Timeslot path. The controller is ours, but the radio needs its slots.
+// One bounded unit of an operation, for an arbiter to run where the memory is
+// safe to touch. Nothing here knows what a timeslot is, and none of it is
+// conditional: whether an arbiter exists is answered at run time, so the steps
+// have to be built whatever the stack is.
 // ---------------------------------------------------------------------------
-#if defined(NRFXLIB_SDC) || defined(NVM_INTRF_SLOT_RUNTIME)
 
-typedef struct {
-	uintptr_t		Addr;
-	const uint32_t	*pSrc;
-	uint32_t		Words;
-} SlotWrCtx_t;
 
 static uint32_t SlotWriteStep(void *pv)
 {
-	SlotWrCtx_t *c = (SlotWrCtx_t *)pv;
+	NvmIntrfWrCtx_t *c = (NvmIntrfWrCtx_t *)pv;
 
 	CtrlWriteWords(c->Addr, c->pSrc, c->Words);
 
@@ -532,18 +713,13 @@ static uint32_t SlotWriteStep(void *pv)
 }
 
 #if defined(NRF52_SERIES)
-typedef struct {
-	uintptr_t	Addr;
-	bool		Started;
-} SlotErCtx_t;
-
 // A page erase is far longer than a timeslot, so it is started in one and
 // polled in later ones while the radio keeps its slots.
 static uint32_t SlotEraseStep(void *pv)
 {
-	SlotErCtx_t *c = (SlotErCtx_t *)pv;
+	NvmIntrfErCtx_t *c = (NvmIntrfErCtx_t *)pv;
 
-	if (c->Started == false)
+	if (c->bStarted == false)
 	{
 		if (CtrlIsErased(c->Addr, CtrlEraseSize()))
 		{
@@ -552,7 +728,7 @@ static uint32_t SlotEraseStep(void *pv)
 		}
 
 		CtrlEraseBegin(c->Addr);
-		c->Started = true;
+		c->bStarted = true;
 
 		return NVM_INTRF_ERASE_SLICE_MS * 1000UL;
 	}
@@ -565,47 +741,7 @@ static uint32_t SlotEraseStep(void *pv)
 
 	return NVM_INTRF_ERASE_SLICE_MS * 1000UL;
 }
-#endif
-
-#endif	// NRFXLIB_SDC || NVM_INTRF_SLOT_RUNTIME
-
-#ifdef NRFXLIB_SDC
-
-static bool s_SlotUp = false;
-
-static int SlotStart(void)
-{
-	if (s_SlotUp)
-	{
-		return 0;
-	}
-
-	int res = BtPdsMpslInit();
-	if (res != 0)
-	{
-		return res;
-	}
-
-	s_SlotUp = true;
-
-	return 0;
-}
-
-#else
-
-static int SlotStart(void) { return 0; }
-
-#endif	// NRFXLIB_SDC
-
-#ifdef NVM_INTRF_SLOT_RUNTIME
-
-// Weak references to the MPSL wrapper. A weak undefined reference extracts
-// nothing from the archive: with no link controller in the application both
-// resolve null and the operation goes straight at the controller.
-extern "C" __attribute__((weak)) int BtPdsMpslInit(void);
-extern "C" __attribute__((weak)) int BtPdsMpslRun(BtPdsMpslOp_t *pOp);
-
-#endif	// NVM_INTRF_SLOT_RUNTIME
+#endif	// NRF52_SERIES
 
 // ---------------------------------------------------------------------------
 // The one place that knows which of the three cases we are in.
@@ -622,9 +758,22 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 #ifdef NVM_INTRF_SD_RUNTIME
 	if (SdRunning())
 	{
-		SdWrArg_t arg = { (uint32_t *)Addr, pSrc, WordCnt };
+		NvmIntrfWrCtx_t *arg = OpCtxWr(Addr, pSrc, WordCnt);
+		if (arg == nullptr)
+		{
+			return -EIO;
+		}
 
-		return SdRun(SdWriteSubmit, &arg);
+		s_Stat.Sd++;
+
+		if (s_NvmDev.DevIntrf.bIntEn)
+		{
+			int r = SdStart(SdWriteSubmit, arg);
+
+			return r != 0 ? r : NVM_INTRF_STARTED;
+		}
+
+		return SdRun(SdWriteSubmit, arg);
 	}
 	// Not running, or no SoftDevice support linked: fall through.
 #else
@@ -632,13 +781,27 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 	{
 		if (SdRunning())
 		{
-			SdWrArg_t arg = { (uint32_t *)Addr, pSrc, WordCnt };
+			NvmIntrfWrCtx_t *arg = OpCtxWr(Addr, pSrc, WordCnt);
+			if (arg == nullptr)
+			{
+				return -EIO;
+			}
 
-			return SdRun(SdWriteSubmit, &arg);
+			s_Stat.Sd++;
+
+			if (s_NvmDev.DevIntrf.bIntEn)
+			{
+				int r = SdStart(SdWriteSubmit, arg);
+
+				return r != 0 ? r : NVM_INTRF_STARTED;
+			}
+
+			return SdRun(SdWriteSubmit, arg);
 		}
 
 		// Present but stopped: neither the stack nor the radio runs, so
 		// drive the controller.
+		s_Stat.Direct++;
 		CtrlWriteWords(Addr, pSrc, WordCnt);
 
 		return 0;
@@ -647,48 +810,23 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 #endif
 #endif
 
-#if defined(NRFXLIB_SDC)
-	int res = SlotStart();
-	if (res != 0)
+	if (s_pArbiter != nullptr)
 	{
-		return res;
-	}
+		NvmIntrfWrCtx_t *ctx = OpCtxWr(Addr, pSrc, WordCnt);
 
-	SlotWrCtx_t ctx = { Addr, pSrc, WordCnt };
-	BtPdsMpslOp_t op;
-
-	op.Step = SlotWriteStep;
-	op.StepBudgetUs = NVM_INTRF_STEP_BUDGET_US;
-	op.pCtx = &ctx;
-
-	return BtPdsMpslRun(&op);
-#elif defined(NVM_INTRF_SLOT_RUNTIME)
-	if (BtPdsMpslRun != nullptr && BtPdsMpslInit != nullptr)
-	{
-		int res = BtPdsMpslInit();
-		if (res != 0)
+		if (ctx == nullptr)
 		{
-			return res;
+			return -EIO;
 		}
 
-		SlotWrCtx_t ctx = { Addr, pSrc, WordCnt };
-		BtPdsMpslOp_t op;
-
-		op.Step = SlotWriteStep;
-		op.StepBudgetUs = NVM_INTRF_STEP_BUDGET_US;
-		op.pCtx = &ctx;
-
-		return BtPdsMpslRun(&op);
+		return ArbiterIssue(SlotWriteStep, ctx);
 	}
-	// No link controller in this application: the memory is ours.
+
+	// Nobody claimed the memory, so it is ours.
+	s_Stat.Direct++;
 	CtrlWriteWords(Addr, pSrc, WordCnt);
 
 	return 0;
-#else
-	CtrlWriteWords(Addr, pSrc, WordCnt);
-
-	return 0;
-#endif
 }
 
 #if defined(NRF52_SERIES)
@@ -709,9 +847,10 @@ static int NvmEraseBare(uintptr_t Addr, uint32_t page)
 	uint32_t elapsed = 0;
 	while (!CtrlIsReady())
 	{
-		// A page erase is tens of msec and stalls instruction fetch. Let the
-		// application spend the wait however it needs to.
-		if (WaitStep() == false || ++elapsed >= s_TimeoutMs)
+		// A page erase is tens of msec and stalls instruction fetch anyway,
+		// so there is nothing useful to do here. Bounded so a controller that
+		// never reports ready cannot hang.
+		if (++elapsed >= NVM_INTRF_SD_SPIN)
 		{
 			CtrlRelease();
 			return -ETIMEDOUT;
@@ -726,6 +865,13 @@ static int NvmEraseBare(uintptr_t Addr, uint32_t page)
 
 // What erase means differs with the memory, so this is the second thing the
 // MCU model decides.
+//
+// Called by Nvm, not by the transfer path. Erasing is the memory's business
+// on every medium: on a serial NOR Nvm frames the command and the bus takes
+// it, and here it calls this instead, because there is no bus. The three
+// routes below are unchanged, and which one applies is still this file's to
+// know. Answers 0 when the erase is finished, NVM_INTRF_OP_STARTED when a
+// completion is owed, or a negative errno.
 static int NvmEraseUnit(uintptr_t Addr)
 {
 #if defined(NRF52_SERIES)
@@ -741,111 +887,116 @@ static int NvmEraseUnit(uintptr_t Addr)
 	{
 		if (SdRunning())
 		{
-			uint32_t no = (uint32_t)(Addr / page);
+			static uint32_t no;
+			no = (uint32_t)(Addr / page);
+
+			s_Stat.Sd++;
+
+			if (s_NvmDev.DevIntrf.bIntEn)
+			{
+				int r = SdStart(SdEraseSubmit, &no);
+
+				return r != 0 ? r : NVM_INTRF_STARTED;
+			}
 
 			return SdRun(SdEraseSubmit, &no);
 		}
 
 		// Present but stopped: neither the stack nor the radio runs, so
 		// erase in place.
+		s_Stat.Direct++;
+
 		return NvmEraseBare(Addr, page);
 	}
 	// No SoftDevice in the flash: a link controller build arbitrates below.
 #endif
 
-#ifdef NRFXLIB_SDC
-	int res = SlotStart();
-	if (res != 0)
+	if (s_pArbiter != nullptr)
 	{
-		return res;
+		NvmIntrfErCtx_t *ctx = OpCtxEr(Addr);
+
+		if (ctx == nullptr)
+		{
+			return -EIO;
+		}
+
+		return ArbiterIssue(SlotEraseStep, ctx);
 	}
 
-	SlotErCtx_t ctx = { Addr, false };
-	BtPdsMpslOp_t op;
+	s_Stat.Direct++;
 
-	op.Step = SlotEraseStep;
-	op.StepBudgetUs = NVM_INTRF_STEP_BUDGET_US;
-	op.pCtx = &ctx;
-
-	return BtPdsMpslRun(&op);
-#else
 	return NvmEraseBare(Addr, page);
-#endif
 
 #else	// nRF54L
 
-	// RRAM has no erase command and rewrites in place, so the erased pattern
-	// is written over the unit. It goes the same way as any other write.
-	alignas(4) static uint8_t ones[NVM_INTRF_MAX_XFER];
-	uint32_t left = CtrlEraseSize();
+	// RRAM rewrites in place, so it has no erase and the config reports none.
+	// Nvm answers an erase on such a medium itself and never frames one, so
+	// this is unreachable. An application that wants the region to read as
+	// ones writes ones, the way it would on an EEPROM or an FRAM.
+	(void)Addr;
 
-	if (CtrlIsErased(Addr, left))
-	{
-		s_Stat.Skipped++;
-		return 0;
-	}
-
-	memset(ones, 0xFF, sizeof(ones));
-
-	while (left > 0)
-	{
-		uint32_t n = left < sizeof(ones) ? left : (uint32_t)sizeof(ones);
-
-		int res = NvmSubmit(Addr, (const uint32_t *)ones,
-							n / NVM_INTRF_WRITE_GRAN);
-		if (res != 0)
-		{
-			return res;
-		}
-		Addr += n;
-		left -= n;
-	}
-
-	return 0;
+	return -ENOTSUP;
 #endif
+}
+
+// Ops is how many operations the memory was asked for. A write is counted in
+// NvmFlush; an erase is counted here, because it no longer passes through a
+// transfer. Started counts as asked for, a refusal does not.
+extern "C" int NvmMcuErase(uintptr_t Addr)
+{
+	int res = NvmEraseUnit(Addr);
+
+	if (res == 0 || res == NVM_INTRF_OP_STARTED)
+	{
+		s_Stat.Ops++;
+	}
+
+	return res;
 }
 
 // ---------------------------------------------------------------------------
 // The interface
 // ---------------------------------------------------------------------------
 
-static uintptr_t FrameAddr(void)
+static uintptr_t FrameAddr(NvmDevIntrf_t *pXfer)
 {
 	uintptr_t a = 0;
 
 	for (int i = 0; i < NVM_INTRF_ADDR_SIZE; i++)
 	{
-		a = (a << 8) | s_Hdr[1 + i];
+		a = (a << 8) | pXfer->Hdr[1 + i];
 	}
 
 	return a;
 }
 
 // Put whatever whole words have been collected into the memory.
-static int NvmFlush(void)
+static int NvmFlush(NvmDevIntrf_t *pXfer)
 {
-	if (s_DataLen == 0)
+	if (pXfer->DataLen == 0)
 	{
 		return 0;
 	}
 
 	// A payload that is not whole words cannot be programmed; trimming it
 	// silently would report bytes written that never were.
-	if ((s_DataLen % (int)NVM_INTRF_WRITE_GRAN) != 0)
+	if ((pXfer->DataLen % (int)NVM_INTRF_WRITE_GRAN) != 0)
 	{
-		s_DataLen = 0;
+		pXfer->DataLen = 0;
 		return -EINVAL;
 	}
 
-	uint32_t words = (uint32_t)s_DataLen / NVM_INTRF_WRITE_GRAN;
-	int res = NvmSubmit(FrameAddr(), (const uint32_t *)s_Data, words);
+	uint32_t words = (uint32_t)pXfer->DataLen / NVM_INTRF_WRITE_GRAN;
+	int res = NvmSubmit(FrameAddr(pXfer), (const uint32_t *)pXfer->Data, words);
 
-	if (res == 0)
+	// Started counts as issued. Ops is how many operations the memory was
+	// asked for, not how many finished inside the call.
+	if (res == 0 || res == NVM_INTRF_STARTED)
 	{
 		s_Stat.Ops++;
 	}
 
-	s_DataLen = 0;
+	pXfer->DataLen = 0;
 
 	return res;
 }
@@ -858,10 +1009,12 @@ static bool NvmStartRx(DevIntrf_t *, uint32_t)
 	return true;
 }
 
-static bool NvmStartTx(DevIntrf_t *, uint32_t)
+static bool NvmStartTx(DevIntrf_t *pIntrf, uint32_t)
 {
-	s_HdrLen = 0;
-	s_DataLen = 0;
+	NvmDevIntrf_t *dev = (NvmDevIntrf_t *)pIntrf->pDevData;
+
+	dev->HdrLen = 0;
+	dev->DataLen = 0;
 
 	return true;
 }
@@ -869,52 +1022,57 @@ static bool NvmStartTx(DevIntrf_t *, uint32_t)
 // The work is done here rather than at the end of the transfer, because this
 // is the only place a failure can be reported: returning short tells the
 // driver the memory did not take the data.
-static int NvmTxData(DevIntrf_t *, const uint8_t *pData, int Len)
+static int NvmTxData(DevIntrf_t *pIntrf, const uint8_t *pData, int Len)
 {
+	NvmDevIntrf_t *dev = (NvmDevIntrf_t *)pIntrf->pDevData;
 	int n = 0;
 
-	while (n < Len && s_HdrLen < NVM_INTRF_FRAME_HDR)
+	while (n < Len && dev->HdrLen < NVM_INTRF_FRAME_SIZE)
 	{
-		s_Hdr[s_HdrLen++] = pData[n++];
+		dev->Hdr[dev->HdrLen++] = pData[n++];
 	}
 
-	if (s_HdrLen < NVM_INTRF_FRAME_HDR)
+	if (dev->HdrLen < NVM_INTRF_FRAME_SIZE)
 	{
 		return n;
 	}
 
-	// An erase needs the address only.
-	if (s_Hdr[0] == NVM_INTRF_CMD_ERASE)
-	{
-		if (NvmEraseUnit(FrameAddr()) != 0)
-		{
-			return 0;
-		}
-		s_Stat.Ops++;
-		return Len;
-	}
-
-	if (s_Hdr[0] != NVM_INTRF_CMD_WRITE)
+	if (dev->Hdr[0] != NVM_INTRF_CMD_WRITE)
 	{
 		return Len;				// a read frame, served by RxData
 	}
 
 	while (n < Len)
 	{
-		s_Data[s_DataLen++] = pData[n++];
+		dev->Data[dev->DataLen++] = pData[n++];
 
-		if (s_DataLen == (int)sizeof(s_Data))
+		if (dev->DataLen == (int)sizeof(dev->Data))
 		{
-			if (NvmFlush() != 0)
+			int res = NvmFlush(dev);
+
+			if (res == NVM_INTRF_STARTED)
 			{
-				return n - (int)sizeof(s_Data);
+				// The driver bounds a transfer to the page size, so this
+				// only fires on the last of the buffer.
+				return -1;
+			}
+			if (res != 0)
+			{
+				return n - (int)sizeof(dev->Data);
 			}
 		}
 	}
 
 	// The driver bounds a transfer to the page size, so the whole frame
 	// arrives together and this is where it completes.
-	if (NvmFlush() != 0)
+	int res = NvmFlush(dev);
+
+	if (res == NVM_INTRF_STARTED)
+	{
+		// Under way. The driver reads -1 as started.
+		return -1;
+	}
+	if (res != 0)
 	{
 		return 0;
 	}
@@ -928,39 +1086,33 @@ static int NvmTxSrData(DevIntrf_t *pDev, const uint8_t *pData, int Len)
 }
 
 // The memory is mapped, so a read is a copy from the address in the frame.
-static int NvmRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
+static int NvmRxData(DevIntrf_t *pIntrf, uint8_t *pBuff, int Len)
 {
-	// The status poll: never busy by the time a call returns, the write
-	// enable latch as tracked.
-	if (s_HdrLen == 1 && s_Hdr[0] == 0x05U && Len > 0)
-	{
-		pBuff[0] = s_Wel ? 0x02U : 0;
-		return 1;
-	}
-	if (s_HdrLen < NVM_INTRF_FRAME_HDR || s_Hdr[0] != NVM_INTRF_CMD_READ)
+	NvmDevIntrf_t *dev = (NvmDevIntrf_t *)pIntrf->pDevData;
+
+	if (dev->HdrLen < NVM_INTRF_FRAME_SIZE ||
+		dev->Hdr[0] != NVM_INTRF_CMD_READ)
 	{
 		return 0;
 	}
 
-	memcpy(pBuff, (const void *)FrameAddr(), (size_t)Len);
+	memcpy(pBuff, (const void *)FrameAddr(dev), (size_t)Len);
 
 	return Len;
 }
 
-static void NvmStopRx(DevIntrf_t *)
+static void NvmStopRx(DevIntrf_t *pIntrf)
 {
-	s_HdrLen = 0;
+	((NvmDevIntrf_t *)pIntrf->pDevData)->HdrLen = 0;
 }
 
 // Everything was done in TxData, where a failure could be reported.
-static void NvmStopTx(DevIntrf_t *)
+static void NvmStopTx(DevIntrf_t *pIntrf)
 {
-	if (s_HdrLen == 1)
-	{
-		NvmProtocolByte(s_Hdr[0]);
-	}
-	s_HdrLen = 0;
-	s_DataLen = 0;
+	NvmDevIntrf_t *dev = (NvmDevIntrf_t *)pIntrf->pDevData;
+
+	dev->HdrLen = 0;
+	dev->DataLen = 0;
 }
 
 static void NvmIntrfDisable(DevIntrf_t *) {}
@@ -972,33 +1124,47 @@ static void *NvmGetHandle(DevIntrf_t *pDev) { return pDev->pDevData; }
 
 }	// extern "C"
 
-bool NvmIntrf::Init(void)
+bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 {
-	memset(&vDevIntrf, 0, sizeof(vDevIntrf));
+	memset(&s_NvmDev, 0, sizeof(s_NvmDev));
 	memset(&s_Stat, 0, sizeof(s_Stat));
 
-	vDevIntrf.pDevData = this;
-	vDevIntrf.Type = DEVINTRF_TYPE_UNKOWN;
-	vDevIntrf.Disable = NvmIntrfDisable;
-	vDevIntrf.Enable = NvmIntrfEnable;
-	vDevIntrf.GetRate = NvmGetRate;
-	vDevIntrf.SetRate = NvmSetRate;
-	vDevIntrf.StartRx = NvmStartRx;
-	vDevIntrf.RxData = NvmRxData;
-	vDevIntrf.StopRx = NvmStopRx;
-	vDevIntrf.StartTx = NvmStartTx;
-	vDevIntrf.TxData = NvmTxData;
-	vDevIntrf.TxSrData = NvmTxSrData;
-	vDevIntrf.StopTx = NvmStopTx;
-	vDevIntrf.PowerOff = NvmPowerOff;
-	vDevIntrf.GetHandle = NvmGetHandle;
-	vDevIntrf.MaxRetry = 1;
-	vDevIntrf.EnCnt = 1;
-	atomic_flag_clear(&vDevIntrf.bBusy);
+	// The whole object is the handle: DevIntrf_t is its first member, so a
+	// transfer callback casts pDevData back to it and reaches the state
+	// without knowing anything about this class.
+	s_NvmDev.DevIntrf.pDevData = &s_NvmDev;
+	s_NvmDev.DevIntrf.Type = DEVINTRF_TYPE_MEMCTRL;
+	s_NvmDev.DevIntrf.Disable = NvmIntrfDisable;
+	s_NvmDev.DevIntrf.Enable = NvmIntrfEnable;
+	s_NvmDev.DevIntrf.GetRate = NvmGetRate;
+	s_NvmDev.DevIntrf.SetRate = NvmSetRate;
+	s_NvmDev.DevIntrf.StartRx = NvmStartRx;
+	s_NvmDev.DevIntrf.RxData = NvmRxData;
+	s_NvmDev.DevIntrf.StopRx = NvmStopRx;
+	s_NvmDev.DevIntrf.StartTx = NvmStartTx;
+	s_NvmDev.DevIntrf.TxData = NvmTxData;
+	s_NvmDev.DevIntrf.TxSrData = NvmTxSrData;
+	s_NvmDev.DevIntrf.StopTx = NvmStopTx;
+	s_NvmDev.DevIntrf.PowerOff = NvmPowerOff;
+	s_NvmDev.DevIntrf.GetHandle = NvmGetHandle;
+	s_NvmDev.DevIntrf.MaxRetry = 1;
+	s_NvmDev.DevIntrf.EnCnt = 1;
 
-	s_HdrLen = 0;
-	s_DataLen = 0;
+	// Both come from whoever built this, which is what owns the interface
+	// configuration. The Nvm driver reads bIntEn to know whether a started
+	// transfer completes by event; it does not write it. It used to: the
+	// driver copied its own operation mode into the interface it was handed,
+	// which configured somebody else's property and broke a bus that was
+	// initialised the other way.
+	s_NvmDev.DevIntrf.EvtCB = EvtCB;
+	s_NvmDev.DevIntrf.bIntEn = bIntEn;
+	atomic_flag_clear(&s_NvmDev.DevIntrf.bBusy);
 
+	// One controller, so one interface on it, and this is that one. Recorded
+	// here and nowhere else: which object the completion belongs to is fixed
+	// for the life of the port, not something a transfer decides. Assigning
+	// it in StartTx made a constant look like transfer state.
+	
 #if defined(NRFXLIB_SDC) && defined(NVM_INTRF_SOFTDEVICE) && !defined(NVM_INTRF_SD_RUNTIME)
 	if (SdPresent())
 	{
@@ -1008,17 +1174,12 @@ bool NvmIntrf::Init(void)
 	}
 #endif
 
-	return SlotStart() == 0;
+	return true;
 }
 
-void NvmIntrfSetWait(NvmIntrfWait_t pWait, uint32_t TimeoutMs)
+void NvmIntrfSetArbiter(NvmIntrfArb_t pArb)
 {
-	s_pWait = pWait;
-
-	if (TimeoutMs != 0)
-	{
-		s_TimeoutMs = TimeoutMs;
-	}
+	s_pArbiter = pArb;
 }
 
 void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
@@ -1029,9 +1190,29 @@ void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
 	}
 }
 
-void NvmIntrfCfg(NvmCfg_t &Cfg)
+// Whether the memory has finished. The same question Nvm asks a serial NOR by
+// reading WIP; here it is a controller register. Nvm polls it, this only
+// answers, and NvmIntrf never sees it.
+//
+// The nRF54L is left on the weak true. RRAM commits inside the transfer, the
+// buffer is drained before CtrlWriteWords returns, and there is no busy period
+// afterwards for anyone to wait on.
+#if defined(NRF52_SERIES)
+extern "C" bool NvmMcuIsReady(void)
+{
+	return nrf_nvmc_ready_check(NRF_NVMC);
+}
+#endif
+
+void NvmMcuCfg(NvmCfg_t &Cfg)
 {
 	Cfg.DevNo = 0;
+
+	// Both parts map their memory from 0, so the frame address and the offset
+	// within the device are the same number here. A part mapped elsewhere
+	// puts its base in here and the driver adds it.
+	Cfg.BaseAddr = 0;
+
 #if defined(NRF52_SERIES)
 	// Geometry from the device itself.
 	uint32_t pagesize = NRF_FICR->CODEPAGESIZE;
@@ -1049,6 +1230,16 @@ void NvmIntrfCfg(NvmCfg_t &Cfg)
 	Cfg.PageSize = NVM_INTRF_MAX_XFER;		// largest bytes per transfer
 	Cfg.WriteGran = NVM_INTRF_WRITE_GRAN;
 	Cfg.AddrSize = NVM_INTRF_ADDR_SIZE;
+
+	// The opcode says which operation the frame is, the way FlashEraseSector
+	// puts one in front of the address. The driver fills these in for a medium
+	// with a command protocol and leaves them alone for one without, and this
+	// medium is the second kind, so state them here. Uniform frames matter:
+	// an erase always has its opcode, so a read and a write must too or
+	// this end cannot tell them apart.
+	Cfg.RdCmd = { NVM_INTRF_CMD_READ, 0 };
+	Cfg.WrCmd = { NVM_INTRF_CMD_WRITE, 0 };
+
 	Cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
 }
 
@@ -1056,7 +1247,7 @@ void NvmIntrfCfg(NvmCfg_t &Cfg)
 // device. Weak: an S145 application overrides it from nrf_sdh.c, because the
 // SoftDevice image sits at the top of the RRAM there and the application
 // slot ends at the storage partition.
-extern "C" __attribute__((weak)) uint64_t NvmIntrfCeiling(void)
+extern "C" __attribute__((weak)) uint64_t NvmMcuCeiling(void)
 {
 #if defined(NRF52_SERIES)
 	return (uint64_t)NRF_FICR->CODEPAGESIZE * (uint64_t)NRF_FICR->CODESIZE;

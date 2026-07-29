@@ -93,7 +93,7 @@ static const UARTCfg_t s_UartCfg = {
 
 UART g_Uart;
 #endif
-#define EXTADV		// Uncomment to enable extended advertisement
+//#define EXTADV		// Uncomment to enable extended advertisement
 
 #ifdef EXTADV
 #define DEVICE_NAME                     "Advertising extra long name"

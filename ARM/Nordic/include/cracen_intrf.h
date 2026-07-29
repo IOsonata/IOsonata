@@ -57,6 +57,20 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
+/// One transaction's worth of state. It belongs to the instance, not to the
+/// file, the same way nRFSpiDev_t holds a transfer's buffer and index, and it
+/// is what pDevData points at. Which engine the transaction addresses and
+/// where in it are per transaction; the register bases and the DRBG state
+/// describe the die and stay in the implementation.
+typedef struct __Cracen_Intrf_Xfer {
+	volatile uint8_t	*pXferBase;		//!< Engine or memory the transfer addresses
+	uint32_t			SelDevAddr;		//!< The DevAddr that selected it
+	uint32_t			Offset;			//!< Byte offset latched by the address phase
+	bool				bXferMem;		//!< Addressing the crypto RAM rather than registers
+	bool				bAddrLatched;	//!< The address phase has been taken
+	bool				bRngXfer;		//!< This read comes from the RNG
+} CracenIntrfXfer_t;
+
 /// @brief	Device interface to the CRACEN crypto core.
 ///
 /// One instance per die. The three crypto engines hold a pointer to it and go
@@ -91,7 +105,8 @@ public:
 	void StopTx(void) override { DeviceIntrfStopTx(&vDevIntrf); }
 
 protected:
-	DevIntrf_t vDevIntrf;
+	DevIntrf_t			vDevIntrf;
+	CracenIntrfXfer_t	vXfer;
 };
 
 /// @brief	Return the single per-die CRACEN interface instance.

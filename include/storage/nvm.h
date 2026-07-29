@@ -79,7 +79,12 @@ typedef struct __Nvm_Cmd {
 
 typedef struct __Nvm_Cfg {
 	int			DevNo;
+
+	/// Where the memory is mapped. An internal memory adapter hands the frame
+	/// address to the controller, so the frame address has to be the address
+	/// the part answers at. A chip on a bus addresses from 0 and leaves this 0.
 	uint64_t	BaseAddr;
+
 	uint64_t	TotalSize;
 	uint32_t	EraseSize;
 	uint32_t	SectorSize;
@@ -137,22 +142,49 @@ public:
 	/// completion or timeout only; it never completes an NVM program or erase.
 	void IntrfEvent(DEVINTRF_EVT EvtId);
 
-	/// The available status-register and write-protect-pin mechanisms protect
-	/// the complete physical device. Partial ranges are not represented.
-	/// Returns -EPERM for a windowed Nvm instance and -ENOTSUP for a partial
-	/// request or a device with no configured protection mechanism.
-	virtual int SetWriteProtect(uint64_t Off, uint32_t Len, bool bEnable);
+	/// Protect or release the whole device.
+	///
+	/// The parts themselves can usually do more than this. Serial NOR block
+	/// protect bits cover a range anchored at one end of the array in coarse
+	/// power of two steps, and some parts carry a per sector lock bitmap
+	/// behind its own commands. Representing that would need the bit layout,
+	/// the top or bottom bit and the step size in the config, for a mechanism
+	/// almost nothing asks for. The whole device is what this driver offers.
+	///
+	/// Uses the status register bits when WrProtMask is set, otherwise the
+	/// write protect pin. Note that on a serial NOR the pin guards the status
+	/// register rather than the array, so it is an EEPROM mechanism; do not
+	/// configure it as an array protect on a flash.
+	///
+	/// Returns -EPERM for a windowed Nvm instance, and -ENOTSUP for a device
+	/// with no protection mechanism configured.
+	virtual int SetWriteProtect(bool bEnable);
 
 	int MassErase(void);
+
+	/// True while the medium is still working. A failure seen here is held
+	/// and reported by Sync() or by the next operation.
 	virtual bool IsBusy(void) const;
+
+	/// Drain any operation in flight. Returns 0, or the error of the last
+	/// operation to finish if it failed and nothing has reported it yet.
 	virtual int Sync(void);
 
 	uint64_t RegionOffset(void) const { return vRegionOffset; }
+	uint64_t BaseAddress(void) const { return vBaseAddr; }
 	uint32_t ReadId(int Len);
 	uint8_t ReadStatus(void);
 
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff,
 			 int BuffLen) override;
+
+	/// Sends the command and address frame and the payload as one transaction.
+	/// The base implementation gathers both into a local buffer and flattens a
+	/// negative count to 0, so it can neither keep the data alive nor report an
+	/// interface that started the transfer and completes through the event.
+	/// Returns payload bytes written, or a negative errno.
+	int Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData,
+			  int DataLen) override;
 
 	bool Enable(void) override;
 	void Disable(void) override;
@@ -172,8 +204,12 @@ protected:
 		return Off <= vRegionSize && Len <= vRegionSize - Off;
 	}
 
-	bool WaitReady(uint32_t Timeout = 100000);
-	bool WriteEnable(uint32_t Timeout = 100000);
+	/// Polling budget, not a duration: the count is decremented once per
+	/// look, so how long it lasts depends on the core, the medium and what
+	/// pWaitCB does. It is a bound so a medium that never answers cannot
+	/// hang, and how long to wait is the application's through pWaitCB.
+	bool WaitReady(uint32_t Timeout = 1000000);
+	bool WriteEnable(uint32_t Timeout = 1000000);
 	void WriteDisable(void);
 
 private:
@@ -185,25 +221,76 @@ private:
 	int SendCmd(const NvmCmd_t &Cmd);
 	int ReadStatus(uint8_t &Status);
 
+	/// Arm a transfer before the call that can complete inside it.
 	void XferBegin(void);
+
+	/// Stand a transfer down when it turns out nothing was handed over.
+	void XferEnd(void);
 	bool XferShort(int Count, int Expect);
 	bool XferWait(uint32_t Timeout);
 
+	/// 1 while the medium is still working, 0 otherwise. A failure ends the
+	/// operation and leaves its result in vOpRes for TakeResult to report.
 	int ServiceStep(void);
 	int ServiceRun(uint32_t Timeout);
 	int IssueNext(void);
+	int TakeResult(void);
 
 	bool FinishOpLocked(int Res, NVM_EVT &Evt, uint64_t &Off, uint32_t &Len);
 	void Notify(NVM_EVT Evt, uint64_t Off, uint32_t Len, int Res);
 	void CancelOp(int Res);
-	void Unhook(void);
 
 	uint64_t		vRegionOffset;
 	uint64_t		vRegionSize;
 	NvmWaitCb_t	vpWaitCB;
 	NvmEvtHandler_t	vEvtHandler;
 
+	/// Where the operation has got to. One value at a time, so the stages
+	/// cannot contradict each other the way a set of flags can.
+	///
+	///	IDLE      nothing running
+	///	ISSUING   the next chunk is to be handed to the interface
+	///	INFLIGHT  a chunk is with the interface and its completion is owed
+	///	SETTLING  the medium is finishing the chunk it was given
+	///	DONE      finished, result not yet reported
+	///	FAILED    finished badly, result not yet reported
+	///
+	/// DONE and FAILED persist until a call reports them, which is how a
+	/// failure seen by IsBusy survives to the next Sync or operation.
+	typedef enum {
+		NVM_OPSTATE_IDLE = 0,
+		NVM_OPSTATE_ISSUING,
+		NVM_OPSTATE_INFLIGHT,
+		NVM_OPSTATE_SETTLING,
+		NVM_OPSTATE_DONE,
+		NVM_OPSTATE_FAILED
+	} NVM_OPSTATE;
+
+	/// One transfer handed to the interface. A completion is only accepted
+	/// while one is RUNNING, which is what keeps it from ending a transfer
+	/// that has already been consumed, or one that never started.
+	///
+	/// There is one of these and not two. Whether the transfer is waited out
+	/// inside the call or left for ServiceStep to pick up is a question of
+	/// who consumes it, not of what state it is in, and the caller already
+	/// knows which it is doing. Keeping a second set of flags for the waited
+	/// case meant one interface completion had two places it could land and
+	/// the arriving event had to choose between them.
+	typedef enum {
+		NVM_XFER_NONE = 0,		//!< nothing outstanding
+		NVM_XFER_RUNNING,		//!< handed over, completion owed
+		NVM_XFER_COMPLETE,		//!< its completion arrived
+		NVM_XFER_FAILED			//!< its completion said it failed
+	} NVM_XFERSTATE;
+
+	NVM_OPSTATE		vOpState;
+	volatile NVM_XFERSTATE	vXferState;
+
 	NVM_EVT			vOpEvt;
+
+	/// Result of the last operation to finish, held until a call reports it.
+	/// Without this a failure observed by IsBusy would be gone by the time
+	/// Sync or the next operation asks.
 	int				vOpRes;
 	uint64_t		vOpOff;
 	uint32_t		vOpLen;
@@ -211,12 +298,10 @@ private:
 	const uint8_t	*vpOpData;
 	uint32_t		vOpRemain;
 	atomic_flag		vOpLock;
-	volatile bool	vbXferWaiting;
-	volatile bool	vbXferDone;
-	volatile bool	vbXferFail;
 
 	bool		vbInitialized;
 	bool		vbEnabled;
+	uint64_t	vBaseAddr;
 	uint64_t	vDevSize;
 	uint32_t	vEraseSize;
 	uint32_t	vSectSize;

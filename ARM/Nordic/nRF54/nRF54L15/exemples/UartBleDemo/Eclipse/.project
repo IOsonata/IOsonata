@@ -26,14 +26,59 @@
 	</natures>
 	<linkedResources>
 		<link>
+			<name>include</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/ba414ep_test.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/crypto/ba414ep_test.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/board.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
+		</link>
+		<link>
+			<name>src/crypto_softaes_test.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/crypto/crypto_softaes_test.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto_softrng_test.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/crypto/crypto_softrng_test.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto_softsha256_test.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/crypto/crypto_softsha256_test.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto_uecc_test.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/crypto/crypto_uecc_test.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/cryptomaster_test.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/crypto/cryptomaster_test.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/nvm_demo.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/storage/nvm_demo.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rng_test.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/crypto/rng_test.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/uart_ble.cpp</name>

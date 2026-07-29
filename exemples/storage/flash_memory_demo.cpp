@@ -52,7 +52,7 @@ SOFTWARE.
 //     opcodes until the QSPI path lands in Nvm; the legacy driver keeps
 //     quad in mode 0.
 #ifndef NVM_MODE
-#define NVM_MODE			0
+#define NVM_MODE			1
 #endif
 
 #if NVM_MODE != 0

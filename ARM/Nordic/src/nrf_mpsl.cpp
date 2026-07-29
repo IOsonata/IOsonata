@@ -54,6 +54,13 @@ SOFTWARE.
 #include "coredev/uart.h"
 #include "coredev/system_core_clock.h"
 
+#include <errno.h>
+
+#include "mpsl_timeslot.h"			// the timeslot session and its signals
+
+#include "idelay.h"
+#include "storage/nvm_intrf.h"
+
 /******** For DEBUG ************/
 //#define DEBUG_ENABLE
 
@@ -64,6 +71,279 @@ SOFTWARE.
 #define DEBUG_PRINTF(...)
 #endif
 /*******************************/
+
+//---------------------------------------------------------------------------
+// Memory arbiter. The memory controller is shared with the radio, so a write
+// or an erase has to run inside a window MPSL says is free. The memory
+// interface hands over one bounded step at a time and knows nothing about
+// timeslots; this end knows nothing about memory.
+//---------------------------------------------------------------------------
+
+// Give up on one operation after this long. The longest legitimate one is an
+// nRF52 page erase spread over several windows, well under a second; longer
+// than this means the grant machinery is not delivering.
+#ifndef MPSL_NVM_TIMEOUT_MS
+#define MPSL_NVM_TIMEOUT_MS			2000
+#endif
+
+// Session memory, word aligned as MPSL requires. One session.
+static uint8_t __attribute__((aligned(4))) s_NvmSessionMem[MPSL_TIMESLOT_CONTEXT_SIZE];
+static mpsl_timeslot_session_id_t s_NvmSessionId;
+static bool s_bNvmSessionOpen = false;
+
+// The operation in flight and how it ended. Written in the timeslot callback,
+// read by the caller waiting on it.
+static NvmIntrfOp_t * volatile s_pNvmOp = nullptr;
+static volatile bool s_bNvmDone = false;
+static volatile int s_NvmResult = 0;
+
+// Handed back to MPSL, which reads it after the callback returns.
+static mpsl_timeslot_signal_return_param_t s_NvmRetParam;
+static mpsl_timeslot_request_t s_NvmNextReq;
+
+// What the callback saw. Recorded rather than printed: it runs at timeslot
+// priority, where sending anything to a UART would overstay the window.
+static volatile uint32_t s_NvmSigStart = 0;
+static volatile uint32_t s_NvmSigBlocked = 0;
+static volatile uint32_t s_NvmSigOther = 0;
+static volatile uint32_t s_NvmSigAbnormal = 0;
+
+// An earliest request one step long. Clamped to what MPSL accepts, and high
+// priority so a bond write is not starved by low priority traffic.
+static void NvmBuildReq(mpsl_timeslot_request_t *pReq, uint32_t LengthUs)
+{
+	if (LengthUs < MPSL_TIMESLOT_LENGTH_MIN_US)
+	{
+		LengthUs = MPSL_TIMESLOT_LENGTH_MIN_US;
+	}
+	if (LengthUs > MPSL_TIMESLOT_LENGTH_MAX_US)
+	{
+		LengthUs = MPSL_TIMESLOT_LENGTH_MAX_US;
+	}
+
+	pReq->request_type = MPSL_TIMESLOT_REQ_TYPE_EARLIEST;
+	pReq->params.earliest.hfclk = MPSL_TIMESLOT_HFCLK_CFG_NO_GUARANTEE;
+	pReq->params.earliest.priority = MPSL_TIMESLOT_PRIORITY_HIGH;
+	pReq->params.earliest.length_us = LengthUs;
+	pReq->params.earliest.timeout_us = MPSL_TIMESLOT_EARLIEST_TIMEOUT_MAX_US;
+}
+
+// Detach the operation and report it, if it asked to be reported. Runs where
+// the operation finished, which for a granted window is timeslot priority, so
+// it does nothing but hand the result over.
+static void NvmOpFinish(int Res)
+{
+	NvmIntrfOp_t *op = s_pNvmOp;
+
+	if (op == nullptr)
+	{
+		return;
+	}
+
+	s_pNvmOp = nullptr;
+
+	if (op->Done != nullptr)
+	{
+		op->Done(op->pCtx, Res);
+	}
+}
+
+// Runs at timeslot priority with the radio idle. Short, no blocking calls,
+// nothing that touches RADIO or TIMER0.
+static mpsl_timeslot_signal_return_param_t *NvmTimeslotCb(
+		mpsl_timeslot_session_id_t SessionId, uint32_t Signal)
+{
+	(void)SessionId;
+
+	switch (Signal)
+	{
+		case MPSL_TIMESLOT_SIGNAL_START:
+		{
+			s_NvmSigStart = s_NvmSigStart + 1;
+
+			uint32_t remainUs = 0;
+
+			if (s_pNvmOp != nullptr && s_pNvmOp->Step != nullptr)
+			{
+				remainUs = s_pNvmOp->Step(s_pNvmOp->pCtx);
+			}
+
+			if (remainUs == 0)
+			{
+				s_NvmResult = 0;
+				s_bNvmDone = true;
+				NvmOpFinish(0);
+				s_NvmRetParam.callback_action = MPSL_TIMESLOT_SIGNAL_ACTION_END;
+			}
+			else
+			{
+				// More to do, an nRF52 page erase for one. Ask for another
+				// window to carry on in.
+				NvmBuildReq(&s_NvmNextReq, remainUs);
+				s_NvmRetParam.callback_action = MPSL_TIMESLOT_SIGNAL_ACTION_REQUEST;
+				s_NvmRetParam.params.request.p_next = &s_NvmNextReq;
+			}
+			break;
+		}
+
+		case MPSL_TIMESLOT_SIGNAL_BLOCKED:
+		case MPSL_TIMESLOT_SIGNAL_CANCELLED:
+			s_NvmSigBlocked = s_NvmSigBlocked + 1;
+			// Could not be scheduled. Ask again; if it keeps failing the
+			// caller gives up on its own bounded wait.
+			NvmBuildReq(&s_NvmNextReq, s_pNvmOp != nullptr ?
+						s_pNvmOp->StepBudgetUs : MPSL_TIMESLOT_LENGTH_MIN_US);
+			s_NvmRetParam.callback_action = MPSL_TIMESLOT_SIGNAL_ACTION_REQUEST;
+			s_NvmRetParam.params.request.p_next = &s_NvmNextReq;
+			break;
+
+		case MPSL_TIMESLOT_SIGNAL_SESSION_IDLE:
+		case MPSL_TIMESLOT_SIGNAL_SESSION_CLOSED:
+			s_NvmRetParam.callback_action = MPSL_TIMESLOT_SIGNAL_ACTION_NONE;
+			break;
+
+		case MPSL_TIMESLOT_SIGNAL_OVERSTAYED:
+		case MPSL_TIMESLOT_SIGNAL_INVALID_RETURN:
+		default:
+			s_NvmSigOther = s_NvmSigOther + 1;
+			s_NvmSigAbnormal = Signal;
+			s_NvmResult = -EIO;
+			s_bNvmDone = true;
+			NvmOpFinish(-EIO);
+			s_NvmRetParam.callback_action = MPSL_TIMESLOT_SIGNAL_ACTION_END;
+			break;
+	}
+
+	// Wake the waiter: this is a higher priority context, so its WFE needs
+	// the event set explicitly.
+	if (s_bNvmDone)
+	{
+		__SEV();
+	}
+
+	return &s_NvmRetParam;
+}
+
+// What the memory interface calls. One operation at a time, which the
+// interface already serialises through its own busy latch.
+static int NvmArbiterRun(NvmIntrfOp_t *pOp)
+{
+	if (pOp == nullptr || pOp->Step == nullptr)
+	{
+		return -EINVAL;
+	}
+	if (s_bNvmSessionOpen == false)
+	{
+		return -ENODEV;
+	}
+
+	s_bNvmDone = false;
+	s_NvmResult = 0;
+	s_pNvmOp = pOp;
+	__DMB();
+
+	NvmBuildReq(&s_NvmNextReq, pOp->StepBudgetUs);
+
+	int32_t r = mpsl_timeslot_request(s_NvmSessionId, &s_NvmNextReq);
+	if (r != 0)
+	{
+		s_pNvmOp = nullptr;
+
+		return -EIO;
+	}
+
+	if (pOp->Done != nullptr)
+	{
+		// Under way. The signal handler runs it and reports it, so the
+		// caller is not held while the memory works.
+		return NVM_INTRF_OP_STARTED;
+	}
+
+	uint32_t elapsed = 0;
+	while (s_bNvmDone == false)
+	{
+		if (elapsed >= MPSL_NVM_TIMEOUT_MS * 1000UL)
+		{
+			// Detach first: a late grant then finds no work, reports done
+			// and ends its window without touching anything of ours.
+			s_pNvmOp = nullptr;
+
+			DEBUG_PRINTF("MPSL nvm: timeout, start %lu blocked %lu other %lu\r\n",
+						 (unsigned long)s_NvmSigStart,
+						 (unsigned long)s_NvmSigBlocked,
+						 (unsigned long)s_NvmSigOther);
+
+			return -ETIMEDOUT;
+		}
+		usDelay(100);
+		elapsed += 100;
+	}
+
+	int result = s_NvmResult;
+
+	if (result != 0)
+	{
+		DEBUG_PRINTF("MPSL nvm: failed %d, abnormal signal %lu\r\n",
+					 result, (unsigned long)s_NvmSigAbnormal);
+	}
+
+	return result;
+}
+
+int MpslNvmArbiterStart(void)
+{
+	if (s_bNvmSessionOpen)
+	{
+		return 0;
+	}
+
+	int32_t r = mpsl_timeslot_session_count_set(s_NvmSessionMem, 1);
+	if (r != 0)
+	{
+		DEBUG_PRINTF("MPSL nvm: session_count_set %ld\r\n", (long)r);
+
+		return -EIO;
+	}
+
+	r = mpsl_timeslot_session_open(NvmTimeslotCb, &s_NvmSessionId);
+	if (r != 0)
+	{
+		DEBUG_PRINTF("MPSL nvm: session_open %ld\r\n", (long)r);
+
+		return -EIO;
+	}
+
+	s_bNvmSessionOpen = true;
+
+	NvmIntrfSetArbiter(NvmArbiterRun);
+
+	return 0;
+}
+
+void MpslNvmArbiterStop(void)
+{
+	if (s_bNvmSessionOpen == false)
+	{
+		return;
+	}
+
+	NvmIntrfSetArbiter(nullptr);
+
+	// Whatever was in flight is not going to finish now. Fail it and say so
+	// before the session goes, or the driver waits for a completion that
+	// nothing is left to deliver. Both forms of waiting: NvmOpFinish reports
+	// an operation that asked to be called back, and the result and done
+	// flag release a synchronous submitter sitting in its wait loop, which
+	// NvmOpFinish leaves alone because that operation has no Done. Setting
+	// them when nothing waits is harmless; the next submit resets both.
+	s_NvmResult = -ECANCELED;
+	s_bNvmDone = true;
+	NvmOpFinish(-ECANCELED);
+
+	(void)mpsl_timeslot_session_close(s_NvmSessionId);
+
+	s_bNvmSessionOpen = false;
+}
 
 static void MpslAssert(const char * const file, const uint32_t line)
 {

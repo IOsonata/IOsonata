@@ -12,9 +12,10 @@
 		and only then is the source sector erased. BtPdsInit resumes an interrupted
 		copy or erase. No heap or live-record staging array is used.
 
-		The store is platform independent. Medium access is supplied by a
-		BtPdsNvm_t implementation. The current on-medium format requires 4-byte
-		write granularity.
+		The store is platform independent. It runs on an Nvm instance, so the
+		same store serves MCU internal memory, serial flash, EEPROM and FRAM,
+		and the arbitration a live radio needs stays inside the memory driver.
+		The current on-medium format requires 4-byte write granularity.
 
 		Operations are synchronous: when a call returns successfully, the medium
 		contains the committed result.
@@ -31,46 +32,46 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-// Largest value required by the current Peer Manager data types.
-#define BT_PDS_RECORD_DATA_MAX		128
-
-/**
- * @brief NVM implementation used by BtPds.
- *
- * Offsets passed to Read, Write and Erase are relative to RegionOffset.
- * RegionSize must be an integral number of SectorSize units and contain at
- * least two sectors. WriteGran is currently required to be 4 bytes.
- *
- * Write and Erase must be synchronous from the caller's view. Write receives
- * aligned offsets, aligned source buffers and lengths that are multiples of
- * WriteGran. Erase operates on one SectorSize unit.
- */
-typedef struct __Bt_Pds_Nvm {
-	uint32_t	RegionOffset;	//!< Absolute medium address of the region
-	uint32_t	RegionSize;		//!< Total region size in bytes
-	uint32_t	SectorSize;		//!< Erase and garbage-collection unit
-	uint32_t	WriteGran;		//!< Write granularity, currently 4 bytes
-
-	int (*Read)(uint32_t Off, void *pBuf, uint32_t Len);
-	int (*Write)(uint32_t Off, const void *pData, uint32_t Len);
-	int (*Erase)(uint32_t Off);
-} BtPdsNvm_t;
-
-#ifdef __cplusplus
-extern "C" {
+// Largest value a record may hold. It has to cover the largest thing any
+// consumer stores: the SMP bond record (BtSmpBondRecordSize(), 136 bytes at
+// the time of writing) is the biggest one today, and it grows whenever a field
+// is added to BtSmpBond_t. A value below that makes every save fail with
+// -EINVAL and nothing is persisted.
+//
+// It sizes six stack buffers in the implementation, so raising it costs stack
+// in the scan and garbage collection paths rather than medium space.
+#ifndef BT_PDS_RECORD_DATA_MAX
+#define BT_PDS_RECORD_DATA_MAX		192
 #endif
 
+#ifdef __cplusplus
+
+class Nvm;
+
 /**
- * @brief Mount the store on an NVM implementation.
+ * @brief Mount the store on a memory.
  *
  * Scans every sector, recovers or safely discards an interrupted garbage
  * collection, and selects the newest writable sector. Earlier development
  * formats are cleared once because they cannot be upgraded in place while
  * preserving the power-loss guarantee.
  *
+ * The memory supplies the geometry, so the region is set once where it is
+ * initialised. Its write unit must be a power of two from 4 up to
+ * BT_PDS_MAX_WRITE_GRAN and must divide the sector, its region must hold at
+ * least two whole sectors, and the sector size is the erase and garbage
+ * collection unit. Either completion mode works; each write and erase is
+ * drained before the store moves on.
+ *
+ * Only declared for C++ because Nvm is a C++ class. The rest of the store is
+ * a flat C API and stays reachable from C.
+ *
  * @return 0 on success, negative errno on failure.
  */
-int BtPdsInit(const BtPdsNvm_t *pNvm);
+int BtPdsInit(Nvm *pMem);
+
+extern "C" {
+#endif
 
 /**
  * @brief Read the latest live value stored under Id.

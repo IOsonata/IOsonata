@@ -1237,6 +1237,31 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
     }
     BtLescSetCryptoEngine(pLescEcdh);
 
+    // Which persistence this build uses. This path is the nRF5 SDK
+    // peer_manager, which stores bonds through FDS on top of fstorage. It
+    // never reaches bt_pds or Nvm; that is the SDC path (bt_app_sdc.cpp,
+    // BtSmpBondSdcInit). Printed so a persistence problem is not chased in
+    // the wrong layer.
+    DEBUG_PRINTF("STORE: nRF5 SDK peer_manager -> fds -> fstorage\r\n");
+#ifdef NRF_SD_BLE_API_VERSION
+    DEBUG_PRINTF("STORE: SD BLE API v%d\r\n", (int)NRF_SD_BLE_API_VERSION);
+#endif
+#ifdef S132
+    DEBUG_PRINTF("STORE: SoftDevice S132\r\n");
+#elif defined(S140)
+    DEBUG_PRINTF("STORE: SoftDevice S140\r\n");
+#endif
+    {
+        ble_version_t ver;
+        memset(&ver, 0, sizeof(ver));
+        if (sd_ble_version_get(&ver) == NRF_SUCCESS)
+        {
+            DEBUG_PRINTF("STORE: SD fwid 0x%04X company 0x%04X ver %d\r\n",
+                         ver.subversion_number, ver.company_id,
+                         ver.version_number);
+        }
+    }
+
     err_code = pm_init();
     DEBUG_PRINTF("SEC: pm_init=0x%X\r\n", err_code);
     APP_ERROR_CHECK(err_code);
