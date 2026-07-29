@@ -1,3 +1,7 @@
+/* Linker script for STM32WBA52/55: 1 MB flash, 128 KB contiguous SRAM,
+ * with the IOsonata NVM storage regions.
+ */
+
 SEARCH_DIR(.)
 SEARCH_DIR("../../../ldscript")
 SEARCH_DIR("../../../../ldscript")
@@ -14,20 +18,19 @@ GROUP( -lstdc++ -lgcc -lc)
 
 MEMORY
 {
-  
-	FLASH (rx) : ORIGIN = 0x8000000, LENGTH = 0xFC000	/* stops at the stores */
+
+	FLASH (rx) : ORIGIN = 0x8000000, LENGTH = 0xF8000	/* stops at the stores */
 	/* The two storage partitions, named so the linker owns the layout:
 	   FLASH stops short of them, so an image that grows into a store
 	   fails to link. NvmRegionAddr reads the sections below, so nothing
-	   states the addresses twice. 2 KB pages, four per region, at the
-	   top of bank 2: an erase there never stalls a core fetching from
-	   bank 1, where an image this size executes. */
-	NVM0 (rw) : ORIGIN = 0x80FC000, LENGTH = 0x2000		/* bond store */
-	NVM1 (rw) : ORIGIN = 0x80FE000, LENGTH = 0x2000		/* application */
-  	RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 96K
-  	RAM2 (rwx) : ORIGIN = 0x10000000, LENGTH = 32K
- }
-
+	   states the addresses twice. 8 KB pages on WBA5x, two per region,
+	   the store's minimum. WBA52/55 are single bank: a program or erase
+	   stalls a core fetching from flash for the operation, which the
+	   storage code accepts and no placement can avoid on these parts. */
+	NVM0 (rw) : ORIGIN = 0x80F8000, LENGTH = 0x4000		/* bond store */
+	NVM1 (rw) : ORIGIN = 0x80FC000, LENGTH = 0x4000		/* application */
+	RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 128K
+}
 
 /* === The storage regions ===
  *
@@ -57,4 +60,3 @@ SECTIONS
 }
 
 INCLUDE "gcc_arm_flash.ld"
-
