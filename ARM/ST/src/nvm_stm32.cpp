@@ -1,24 +1,42 @@
 /**-------------------------------------------------------------------------
-@file	nvm_stm32wba.cpp
+@file	nvm_stm32.cpp
 
-@brief	The STM32WBA on die flash controller as a DeviceIntrf.
+@brief	The STM32 on die flash controller as a DeviceIntrf.
 
-		The frame, the read and the staging are the same as the Nordic port.
-		Only the controller access and the geometry follow from the MCU
-		model: WBA2x programs a 64 bit double word into 4 KB pages, WBA5x a
-		128 bit quad word into 8 KB pages, and the device header says which
-		through FLASH_DOUBLEWORD_SUPPORT. One driver serves the family; the
-		difference is a parameter, not a shape.
+		One file serves the families the way rng_stm32.cpp serves the RNG:
+		stm32.h selects the device header, and the family differences live
+		in a small set of aliases and islands. The frame, the read and the
+		staging are the same everywhere; only the controller access and the
+		geometry follow from the MCU model.
 
-		Every operation finishes inside its call. The flash on this part is
-		the application's alone: the ST link layer keeps its own state in
-		RAM and registers no arbiter over the memory, so there is no
-		SoftDevice or timeslot path here. What a program or erase does cost
-		is core stall: fetching from the bank being written halts the CPU
-		for the operation, up to the page erase time, which delays every
-		interrupt including the link layer's. Place the storage region in
-		the other bank on a dual bank part, or accept the stall on a single
-		bank one; that placement is the linker script's business.
+		Families served and their models, all read from the device headers:
+
+		  WBA5x : 128 bit quad word program, 8 KB pages, NSCR1/NSSR/NSKEYR
+		  WBA2x : 64 bit double word program, 4 KB pages, same registers
+		  L4    : 64 bit double word program, 2 KB pages, CR/SR/KEYR
+		  L4+   : 64 bit double word program, 4 KB pages, dual bank parts
+
+		Not served, deliberately:
+
+		  WB    : the same controller as L4, but the flash is shared with
+		          the M0+ radio core behind HSEM arbitration, which is a
+		          stack coordination problem this port does not own.
+		  F4    : sector erase over non uniform sectors; a store would sit
+		          in 128 KB units, parked until a need shows up.
+		  F0/F3 : parts too small for a flash store to be worth its pages.
+
+		Every operation finishes inside its call; nothing on these parts
+		arbitrates the memory. What an operation does cost is core stall
+		when fetching from the bank being written, up to the page erase
+		time, which delays every interrupt including a link layer's on the
+		wireless parts. Place the storage region in the other bank on a
+		dual bank part; the placement is the linker script's business.
+
+		On L4 the flash data and instruction caches are flushed after a
+		program or erase, the way the HAL flushes them: a memory mapped
+		read through a stale cache line answers with the bytes from before
+		the operation, which for a store means reading back data it never
+		wrote.
 
 @author	Hoang Nguyen Hoan
 @date	July 29, 2026
@@ -52,10 +70,14 @@ SOFTWARE.
 #include <string.h>
 #include <errno.h>
 
-#include "stm32wbaxx.h"
+#include "stm32.h"
 
 #include "coredev/interrupt.h"
 #include "storage/nvm_intrf.h"
+
+#if !defined(IOSONATA_STM32_WBA) && !defined(IOSONATA_STM32_L4)
+#error "nvm_stm32: this STM32 family has no NVM controller support"
+#endif
 
 // The command set, using the opcodes a serial flash uses so a config for
 // internal memory reads like one for a flash chip.
@@ -67,13 +89,44 @@ SOFTWARE.
 #define NVM_INTRF_ADDR_SIZE		4
 
 // ---------------------------------------------------------------------------
-// What follows from the MCU model
+// What follows from the MCU model: the register aliases, the flash word, the
+// page, and the family islands the shared bodies below stand on.
 // ---------------------------------------------------------------------------
+#if defined(IOSONATA_STM32_WBA)
+
+// Every register this port touches is the non secure bank, the same access
+// the HAL makes for a non CMSE build. A secure build owns SECCR1/SECSR and
+// is not this port's business.
+#define ST_FLASH_CR				(FLASH_NS->NSCR1)
+#define ST_FLASH_SR				(FLASH_NS->NSSR)
+#define ST_FLASH_KEYR			(FLASH_NS->NSKEYR)
+
+#define ST_FLASH_CR_PG			FLASH_NSCR1_PG
+#define ST_FLASH_CR_PER			FLASH_NSCR1_PER
+#define ST_FLASH_CR_MER			FLASH_NSCR1_MER
+#define ST_FLASH_CR_PNB_Pos		FLASH_NSCR1_PNB_Pos
+#define ST_FLASH_CR_PNB_Msk		FLASH_NSCR1_PNB_Msk
+#define ST_FLASH_CR_STRT		FLASH_NSCR1_STRT
+#define ST_FLASH_CR_LOCK		FLASH_NSCR1_LOCK
+#ifdef FLASH_NSCR1_BKER
+#define ST_FLASH_CR_BKER		FLASH_NSCR1_BKER
+#endif
+
+#define ST_FLASH_SR_EOP			FLASH_NSSR_EOP
+
+// Busy covers the operation and the write buffer both; the HAL waits on the
+// same pair.
+#define ST_FLASH_SR_BUSY		(FLASH_NSSR_BSY | FLASH_NSSR_WDW)
+
+// The error bits one failed operation can raise, write one to clear.
+#define ST_FLASH_ERR			(FLASH_NSSR_OPERR | FLASH_NSSR_PROGERR | \
+								 FLASH_NSSR_WRPERR | FLASH_NSSR_PGAERR | \
+								 FLASH_NSSR_SIZERR | FLASH_NSSR_PGSERR | \
+								 FLASH_NSSR_OPTWERR)
 
 // The flash word: what one program operation takes, whole, aligned. The
-// device header says which of the two this part is. Nothing narrower and
-// nothing unaligned programs; the driver above pads to WriteGran, so a
-// transfer arrives as whole flash words.
+// device header says which of the two this part is. The driver above pads
+// to WriteGran, so a transfer arrives as whole flash words.
 #if defined(FLASH_DOUBLEWORD_SUPPORT)
 #define NVM_INTRF_WRITE_GRAN	8			//!< 64 bit double word
 #define NVM_INTRF_PAGE_SIZE		0x1000UL	//!< 4 KB
@@ -82,27 +135,80 @@ SOFTWARE.
 #define NVM_INTRF_PAGE_SIZE		0x2000UL	//!< 8 KB
 #endif
 
-// Total flash, from the device's own size register, in the same shape the
-// HAL reads it: KB count at FLASHSIZE_BASE, all ones or zero meaning the
-// full 1 MB.
-static inline uint32_t WbaFlashSize(void)
+#else	// IOSONATA_STM32_L4
+
+#define ST_FLASH_CR				(FLASH->CR)
+#define ST_FLASH_SR				(FLASH->SR)
+#define ST_FLASH_KEYR			(FLASH->KEYR)
+
+#define ST_FLASH_CR_PG			FLASH_CR_PG
+#define ST_FLASH_CR_PER			FLASH_CR_PER
+#define ST_FLASH_CR_MER			(FLASH_CR_MER1)
+#define ST_FLASH_CR_PNB_Pos		FLASH_CR_PNB_Pos
+#define ST_FLASH_CR_PNB_Msk		FLASH_CR_PNB_Msk
+#define ST_FLASH_CR_STRT		FLASH_CR_STRT
+#define ST_FLASH_CR_LOCK		FLASH_CR_LOCK
+#ifdef FLASH_CR_BKER
+#define ST_FLASH_CR_BKER		FLASH_CR_BKER
+#endif
+
+#define ST_FLASH_SR_EOP			FLASH_SR_EOP
+#define ST_FLASH_SR_BUSY		(FLASH_SR_BSY)
+
+// Every error bit this family's header defines. RDERR only exists where
+// PCROP does, so it joins under its own test.
+#ifdef FLASH_SR_RDERR
+#define ST_FLASH_ERR_RD			FLASH_SR_RDERR
+#else
+#define ST_FLASH_ERR_RD			0
+#endif
+#define ST_FLASH_ERR			(FLASH_SR_OPERR | FLASH_SR_PROGERR | \
+								 FLASH_SR_WRPERR | FLASH_SR_PGAERR | \
+								 FLASH_SR_SIZERR | FLASH_SR_PGSERR | \
+								 FLASH_SR_MISERR | FLASH_SR_FASTERR | \
+								 ST_FLASH_ERR_RD)
+
+#define NVM_INTRF_WRITE_GRAN	8			//!< 64 bit double word
+
+// 2 KB pages on classic L4, 4 KB on the L4+ parts, the same part list the
+// HAL keys its FLASH_PAGE_SIZE on. An L4+ part with the DBANK option off
+// runs 8 KB pages in 128 bit mode, which this first cut does not read from
+// the option bytes; note it at bring up if such a part turns up.
+#if defined(STM32L4P5xx) || defined(STM32L4Q5xx) || defined(STM32L4R5xx) || \
+	defined(STM32L4R7xx) || defined(STM32L4R9xx) || defined(STM32L4S5xx) || \
+	defined(STM32L4S7xx) || defined(STM32L4S9xx)
+#define NVM_INTRF_PAGE_SIZE		0x1000UL	//!< 4 KB
+#else
+#define NVM_INTRF_PAGE_SIZE		0x0800UL	//!< 2 KB
+#endif
+
+#endif	// family
+
+// Total flash, from the device's own size register: a KB count, present on
+// both families at their FLASHSIZE_BASE.
+static inline uint32_t StFlashSize(void)
 {
 	uint32_t kb = *(const volatile uint16_t *)FLASHSIZE_BASE;
 
+#if defined(IOSONATA_STM32_WBA)
+	// All ones or zero means the full 1 MB, the same reading the HAL makes.
 	if (kb == 0xFFFFUL || kb == 0UL)
 	{
 		return 0x100000UL;
 	}
+#endif
 
 	return kb << 10;
 }
 
-#if defined(FLASH_DBANK_SUPPORT)
-#define NVM_INTRF_BANK_SIZE()	(WbaFlashSize() / 2UL)
+#ifdef ST_FLASH_CR_BKER
+// Bank size on a dual bank part. On L4 the classic dual bank parts split
+// the device in half, the same arithmetic the HAL uses.
+#define ST_FLASH_BANK_SIZE()	(StFlashSize() / 2UL)
 #endif
 
 // Largest bytes one transfer stages. A multiple of both flash words so one
-// number serves the family.
+// number serves every family here.
 #ifndef NVM_INTRF_MAX_XFER
 #define NVM_INTRF_MAX_XFER		64
 #endif
@@ -112,23 +218,11 @@ static_assert(NVM_INTRF_MAX_XFER <= NVM_INTRF_XFER_SIZE,
 static_assert((NVM_INTRF_MAX_XFER % NVM_INTRF_WRITE_GRAN) == 0,
 			  "NVM_INTRF_MAX_XFER is not whole flash words");
 
-// A bound so a stuck controller cannot hang the caller. A page erase is
-// milliseconds; this is loop passes, not a duration, the way the Nordic
-// port bounds its spin.
+// A bound so a stuck controller cannot hang the caller. Loop passes, not a
+// duration, the way the Nordic port bounds its spin.
 #ifndef NVM_INTRF_SPIN
 #define NVM_INTRF_SPIN			0x00800000UL
 #endif
-
-// Every register this port touches is the non secure bank, the same access
-// the HAL makes for a non CMSE build. A secure build owns SECCR1/SECSR and
-// is not this port's business.
-#define WBA_FLASH				FLASH_NS
-
-// The error bits one failed operation can raise, write one to clear.
-#define WBA_FLASH_ERR			(FLASH_NSSR_OPERR | FLASH_NSSR_PROGERR | \
-								 FLASH_NSSR_WRPERR | FLASH_NSSR_PGAERR | \
-								 FLASH_NSSR_SIZERR | FLASH_NSSR_PGSERR | \
-								 FLASH_NSSR_OPTWERR)
 
 // ---------------------------------------------------------------------------
 // Per controller state. One memory controller, so these describe the
@@ -148,14 +242,12 @@ DevIntrf_t * const NvmMcuDevIntrf(void)
 // The controller
 // ---------------------------------------------------------------------------
 
-// Busy covers the operation and the write buffer both; the HAL waits on the
-// same pair. Bounded, so a controller that never settles reports instead of
-// hanging.
-static bool WbaFlashWait(void)
+// Bounded, so a controller that never settles reports instead of hanging.
+static bool StFlashWait(void)
 {
 	uint32_t spin = NVM_INTRF_SPIN;
 
-	while (WBA_FLASH->NSSR & (FLASH_NSSR_BSY | FLASH_NSSR_WDW))
+	while (ST_FLASH_SR & ST_FLASH_SR_BUSY)
 	{
 		if (spin-- == 0)
 		{
@@ -168,18 +260,18 @@ static bool WbaFlashWait(void)
 
 // Take and report the outcome of the operation that just ran: errors are
 // cleared by writing them back, EOP likewise when it was raised.
-static int WbaFlashResult(void)
+static int StFlashResult(void)
 {
-	uint32_t sr = WBA_FLASH->NSSR;
+	uint32_t sr = ST_FLASH_SR;
 
-	if (sr & FLASH_NSSR_EOP)
+	if (sr & ST_FLASH_SR_EOP)
 	{
-		WBA_FLASH->NSSR = FLASH_NSSR_EOP;
+		ST_FLASH_SR = ST_FLASH_SR_EOP;
 	}
 
-	if (sr & WBA_FLASH_ERR)
+	if (sr & ST_FLASH_ERR)
 	{
-		WBA_FLASH->NSSR = sr & WBA_FLASH_ERR;
+		ST_FLASH_SR = sr & ST_FLASH_ERR;
 
 		return -EIO;
 	}
@@ -187,18 +279,45 @@ static int WbaFlashResult(void)
 	return 0;
 }
 
-static void WbaFlashUnlock(void)
+static void StFlashUnlock(void)
 {
-	if (WBA_FLASH->NSCR1 & FLASH_NSCR1_LOCK)
+	if (ST_FLASH_CR & ST_FLASH_CR_LOCK)
 	{
-		WBA_FLASH->NSKEYR = 0x45670123UL;
-		WBA_FLASH->NSKEYR = 0xCDEF89ABUL;
+		ST_FLASH_KEYR = 0x45670123UL;
+		ST_FLASH_KEYR = 0xCDEF89ABUL;
 	}
 }
 
-static void WbaFlashLock(void)
+static void StFlashLock(void)
 {
-	WBA_FLASH->NSCR1 |= FLASH_NSCR1_LOCK;
+	ST_FLASH_CR |= ST_FLASH_CR_LOCK;
+}
+
+// What runs after the medium changed under the caches. A memory mapped read
+// through a stale line answers with the bytes from before the operation,
+// which for a store means reading back data it never wrote. WBA fetches
+// through its ICACHE peripheral, which snoops nothing either, but data
+// reads there do not cache flash, so only L4 has work to do here.
+static void StFlashCacheFlush(void)
+{
+#if defined(IOSONATA_STM32_L4)
+	uint32_t acr = FLASH->ACR;
+
+	if (acr & FLASH_ACR_DCEN)
+	{
+		FLASH->ACR = acr & ~FLASH_ACR_DCEN;
+		FLASH->ACR |= FLASH_ACR_DCRST;
+		FLASH->ACR &= ~FLASH_ACR_DCRST;
+		FLASH->ACR |= FLASH_ACR_DCEN;
+	}
+	if (acr & FLASH_ACR_ICEN)
+	{
+		FLASH->ACR = FLASH->ACR & ~FLASH_ACR_ICEN;
+		FLASH->ACR |= FLASH_ACR_ICRST;
+		FLASH->ACR &= ~FLASH_ACR_ICRST;
+		FLASH->ACR |= FLASH_ACR_ICEN;
+	}
+#endif
 }
 
 // Program whole flash words at Addr. Addr is the mapped bus address, whole
@@ -208,7 +327,7 @@ static void WbaFlashLock(void)
 // The word's 32 bit writes go out back to back with interrupts held, the
 // way the HAL programs the same word: a fetch from this bank between them
 // stalls anyway, and an interrupt writing flash mid word raises PGSERR.
-static int WbaFlashProgram(uintptr_t Addr, const uint8_t *pData, uint32_t Len)
+static int StFlashProgram(uintptr_t Addr, const uint8_t *pData, uint32_t Len)
 {
 	if ((Addr % NVM_INTRF_WRITE_GRAN) != 0 ||
 		(Len % NVM_INTRF_WRITE_GRAN) != 0)
@@ -216,17 +335,17 @@ static int WbaFlashProgram(uintptr_t Addr, const uint8_t *pData, uint32_t Len)
 		return -EINVAL;
 	}
 
-	if (WbaFlashWait() == false)
+	if (StFlashWait() == false)
 	{
 		return -ETIMEDOUT;
 	}
 
 	// Stale error bits fail the sequence check of the operation being
 	// started, so they go before PG is set.
-	WBA_FLASH->NSSR = WBA_FLASH->NSSR & WBA_FLASH_ERR;
+	ST_FLASH_SR = ST_FLASH_SR & ST_FLASH_ERR;
 
-	WbaFlashUnlock();
-	WBA_FLASH->NSCR1 |= FLASH_NSCR1_PG;
+	StFlashUnlock();
+	ST_FLASH_CR |= ST_FLASH_CR_PG;
 
 	int res = 0;
 	volatile uint32_t *dst = (volatile uint32_t *)Addr;
@@ -237,8 +356,7 @@ static int WbaFlashProgram(uintptr_t Addr, const uint8_t *pData, uint32_t Len)
 		// The controller collects the word's bus writes and wants the flash
 		// word whole; an interrupt touching the flash between them raises
 		// PGSERR or commits a partial word. Held only for the word's few
-		// stores; the busy wait below runs with interrupts live, which is
-		// where the link layer gets serviced between words.
+		// stores; the busy wait below runs with interrupts live.
 		uint32_t state = DisableInterrupt();
 
 		for (int i = 0; i < NVM_INTRF_WRITE_GRAN / 4; i++)
@@ -252,38 +370,38 @@ static int WbaFlashProgram(uintptr_t Addr, const uint8_t *pData, uint32_t Len)
 
 		EnableInterrupt(state);
 
-		if (WbaFlashWait() == false)
+		if (StFlashWait() == false)
 		{
 			res = -ETIMEDOUT;
 			break;
 		}
 
-		res = WbaFlashResult();
+		res = StFlashResult();
 		if (res != 0)
 		{
 			break;
 		}
 	}
 
-	WBA_FLASH->NSCR1 &= ~FLASH_NSCR1_PG;
-	WbaFlashLock();
+	ST_FLASH_CR &= ~ST_FLASH_CR_PG;
+	StFlashLock();
+
+	StFlashCacheFlush();
 
 	return res;
 }
 
 // ---------------------------------------------------------------------------
-// What the port knows about the memory itself
+// What the port knows about the memory itself. The C linkage of NvmMcuErase,
+// NvmMcuIsReady and NvmMcuCeiling comes from their declarations in
+// nvm_intrf.h; the definitions inherit it, so nothing is marked here.
 // ---------------------------------------------------------------------------
-
-// The C linkage of NvmMcuErase, NvmMcuIsReady and NvmMcuCeiling comes from
-// their declarations in nvm_intrf.h; the definitions inherit it, so nothing
-// is marked here.
 
 // Erase the page holding Addr. Addr is the mapped bus address, page aligned;
 // the driver only asks at the erase unit it was configured with.
 int NvmMcuErase(uintptr_t Addr)
 {
-	uint32_t size = WbaFlashSize();
+	uint32_t size = StFlashSize();
 
 	if (Addr < FLASH_BASE || (Addr % NVM_INTRF_PAGE_SIZE) != 0 ||
 		Addr + NVM_INTRF_PAGE_SIZE > FLASH_BASE + size)
@@ -291,44 +409,46 @@ int NvmMcuErase(uintptr_t Addr)
 		return -EINVAL;
 	}
 
-	if (WbaFlashWait() == false)
+	if (StFlashWait() == false)
 	{
 		return -ETIMEDOUT;
 	}
 
-	WBA_FLASH->NSSR = WBA_FLASH->NSSR & WBA_FLASH_ERR;
+	ST_FLASH_SR = ST_FLASH_SR & ST_FLASH_ERR;
 
 	uint32_t page = (uint32_t)((Addr - FLASH_BASE) / NVM_INTRF_PAGE_SIZE);
-	uint32_t cr = WBA_FLASH->NSCR1;
+	uint32_t cr = ST_FLASH_CR;
 
-	cr &= ~(FLASH_NSCR1_PNB_Msk | FLASH_NSCR1_PG | FLASH_NSCR1_MER);
+	cr &= ~(ST_FLASH_CR_PNB_Msk | ST_FLASH_CR_PG | ST_FLASH_CR_MER);
 
-#if defined(FLASH_DBANK_SUPPORT)
+#ifdef ST_FLASH_CR_BKER
 	// The page number counts within the bank; which bank is a bit of its
 	// own.
-	uint32_t bank = NVM_INTRF_BANK_SIZE();
+	uint32_t bank = ST_FLASH_BANK_SIZE();
 
 	if ((Addr - FLASH_BASE) >= bank)
 	{
 		page -= bank / NVM_INTRF_PAGE_SIZE;
-		cr |= FLASH_NSCR1_BKER;
+		cr |= ST_FLASH_CR_BKER;
 	}
 	else
 	{
-		cr &= ~FLASH_NSCR1_BKER;
+		cr &= ~ST_FLASH_CR_BKER;
 	}
 #endif
 
-	cr |= (page << FLASH_NSCR1_PNB_Pos) | FLASH_NSCR1_PER;
+	cr |= (page << ST_FLASH_CR_PNB_Pos) | ST_FLASH_CR_PER;
 
-	WbaFlashUnlock();
-	WBA_FLASH->NSCR1 = cr;
-	WBA_FLASH->NSCR1 = cr | FLASH_NSCR1_STRT;
+	StFlashUnlock();
+	ST_FLASH_CR = cr;
+	ST_FLASH_CR = cr | ST_FLASH_CR_STRT;
 
-	int res = WbaFlashWait() ? WbaFlashResult() : -ETIMEDOUT;
+	int res = StFlashWait() ? StFlashResult() : -ETIMEDOUT;
 
-	WBA_FLASH->NSCR1 &= ~(FLASH_NSCR1_PER | FLASH_NSCR1_PNB_Msk);
-	WbaFlashLock();
+	ST_FLASH_CR &= ~(ST_FLASH_CR_PER | ST_FLASH_CR_PNB_Msk);
+	StFlashLock();
+
+	StFlashCacheFlush();
 
 	if (res == 0)
 	{
@@ -342,7 +462,7 @@ int NvmMcuErase(uintptr_t Addr)
 
 bool NvmMcuIsReady(void)
 {
-	return (WBA_FLASH->NSSR & (FLASH_NSSR_BSY | FLASH_NSSR_WDW)) == 0;
+	return (ST_FLASH_SR & ST_FLASH_SR_BUSY) == 0;
 }
 
 void NvmMcuCfg(NvmCfg_t &Cfg)
@@ -354,7 +474,7 @@ void NvmMcuCfg(NvmCfg_t &Cfg)
 	// that reserves a region through the linker script puts that region's
 	// base and size in instead, the way the Nordic bond stores do.
 	Cfg.BaseAddr = FLASH_BASE;
-	Cfg.TotalSize = WbaFlashSize();
+	Cfg.TotalSize = StFlashSize();
 	Cfg.EraseSize = NVM_INTRF_PAGE_SIZE;
 	Cfg.PageSize = NVM_INTRF_MAX_XFER;		// largest bytes per transfer
 	Cfg.WriteGran = NVM_INTRF_WRITE_GRAN;
@@ -373,7 +493,7 @@ void NvmMcuCfg(NvmCfg_t &Cfg)
 // answer with that boundary instead.
 __attribute__((weak)) uint64_t NvmMcuCeiling(void)
 {
-	return (uint64_t)FLASH_BASE + WbaFlashSize();
+	return (uint64_t)FLASH_BASE + StFlashSize();
 }
 
 // ---------------------------------------------------------------------------
@@ -409,8 +529,8 @@ static int NvmFlush(NvmDevIntrf_t *pXfer)
 		return -EINVAL;
 	}
 
-	int res = WbaFlashProgram(FrameAddr(pXfer), pXfer->Data,
-							  (uint32_t)pXfer->DataLen);
+	int res = StFlashProgram(FrameAddr(pXfer), pXfer->Data,
+							 (uint32_t)pXfer->DataLen);
 
 	s_Stat.Ops++;
 	s_Stat.Direct++;
@@ -570,9 +690,8 @@ bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 	return true;
 }
 
-// The arbiter hook the header declares. Nothing on this part registers one:
-// the ST link layer keeps its state in RAM and does not own the flash. Held
-// so a stack that ever does can, and read nowhere until then.
+// The arbiter hook the header declares. Nothing on these parts registers
+// one; held so a stack that ever does can, and read nowhere until then.
 static NvmIntrfArb_t s_pArbiter = nullptr;
 
 void NvmIntrfSetArbiter(NvmIntrfArb_t pArb)
