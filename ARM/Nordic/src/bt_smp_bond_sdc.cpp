@@ -202,6 +202,7 @@ static int PdsEnsureReady(void)
 
 static std::atomic<uint32_t> s_PendMask;
 static uint32_t s_PendDropCnt;
+static uint32_t s_PendFailCnt;
 
 static void BondSaveHandler(uint32_t Evt, void *pCtx)
 {
@@ -211,10 +212,12 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 	int r = PdsEnsureReady();
 	if (r != 0)
 	{
-		uint32_t left = s_PendMask.exchange(0);
+		// The marks stay. A store that is not ready yet is a reason to write
+		// later, not a reason to forget which slots changed.
+		uint32_t left = s_PendMask.load();
 		if (left != 0)
 		{
-			BOND_PRINTF("PDS: save mask %08lX dropped, store not ready %d\r\n",
+			BOND_PRINTF("PDS: save mask %08lX held, store not ready %d\r\n",
 						(unsigned long)left, r);
 		}
 		return;
@@ -247,6 +250,22 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 		}
 
 		ssize_t w = BtPdsWrite(BT_SMP_BOND_KEY_BASE + (uint32_t)slot, rec, len);
+
+		if (w != (ssize_t)len)
+		{
+			// The slot was marked before the write and the write did not
+			// happen, so mark it again. Leaving it clear threw the update
+			// away on a full or failing store.
+			s_PendMask.fetch_or(bit);
+			s_PendFailCnt++;
+			BOND_PRINTF("PDS: save slot %d len %u failed %d, still marked, "
+						"%lu so far\r\n", slot, (unsigned)len, (int)w,
+						(unsigned long)s_PendFailCnt);
+
+			// Another slot may still be writable, but a store that just
+			// refused is unlikely to take the next one either.
+			break;
+		}
 
 		BOND_PRINTF("PDS: save slot %d len %u -> %d\r\n", slot,
 					(unsigned)len, (int)w);
@@ -331,7 +350,17 @@ void BtSmpBondErase(void)
 	{
 		return;
 	}
-	(void)BtPdsClear();
+
+	// The hook returns nothing, so a failure here cannot reach the caller and
+	// the RAM table is already empty. Say so, because the old bonds are still
+	// in the memory and come back at the next mount.
+	int r = BtPdsClear();
+
+	if (r != 0)
+	{
+		BOND_PRINTF("PDS: clear failed %d, stored bonds will return on the "
+					"next mount\r\n", r);
+	}
 }
 
 // Explicit init entry. The application MUST call this once during setup (after
@@ -348,14 +377,18 @@ int BtSmpBondSdcInit(void)
 {
 	BOND_PRINTF("PDS: BtSmpBondSdcInit, arming the store\r\n");
 
-	s_PdsArmed = true;
-
 	if (BtSmpBondSlotCount() > BT_SMP_BOND_PEND_MAX)
 	{
-		BOND_PRINTF("PDS: %d bond slots but only the first %d can be marked, "
-					"the rest will not persist\r\n", BtSmpBondSlotCount(),
-					BT_SMP_BOND_PEND_MAX);
+		// Returning success here would mean bonds past slot 31 are quietly
+		// never written. Raise BT_SMP_BOND_PEND_MAX and widen s_PendMask to
+		// match if a build really needs more.
+		BOND_PRINTF("PDS: %d bond slots, only %d can be marked, refusing\r\n",
+					BtSmpBondSlotCount(), BT_SMP_BOND_PEND_MAX);
+
+		return -ENOTSUP;
 	}
+
+	s_PdsArmed = true;
 
 	int r = PdsEnsureReady();
 	if (r != 0)

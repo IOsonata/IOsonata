@@ -755,6 +755,13 @@ static void TestFill(uint32_t Gran)
 		  (unsigned)s_AlignFault);
 }
 
+// How much of a torn programming operation is left behind. A programming
+// operation here is a whole page chunk, so the interesting sizes run past one
+// write unit: half a unit tears a unit in the middle, and a whole chunk is
+// the operation that finished and lost power before its result was read.
+#define BT_PDS_TEAR_POINTS	5U
+#define BT_PDS_TEARS(g)		{ 0U, (g) / 2U, (g), (g) * 2U, PDS_PAGE_SIZE }
+
 // ---------------------------------------------------------------------------
 // Power loss sweeps
 //
@@ -840,7 +847,7 @@ static void TestCutSweep(uint32_t Gran)
 	printf("--- power cut sweep, unit %u\n", Gran);
 
 	const uint32_t seqLen = 40U;
-	const uint32_t keeps[3] = { 0U, Gran / 2U, Gran };
+	const uint32_t keeps[BT_PDS_TEAR_POINTS] = BT_PDS_TEARS(Gran);
 
 	// One clean run says how many programming operations there are to walk.
 	MediumWipe(PDS_MAX_REGION, Gran);
@@ -863,7 +870,7 @@ static void TestCutSweep(uint32_t Gran)
 	{
 		Step("cut points", at, ops);
 
-		for (uint32_t k = 0; k < 3U && ok; k++)
+		for (uint32_t k = 0; k < BT_PDS_TEAR_POINTS && ok; k++)
 		{
 			MediumWipe(PDS_MAX_REGION, Gran);
 			if (Boot(Gran) != 0)
@@ -921,7 +928,7 @@ static void TestClearCutSweep(uint32_t Gran)
 	printf("--- clear cut sweep, unit %u\n", Gran);
 
 	const uint32_t seqLen = 12U;
-	const uint32_t keeps[3] = { 0U, Gran / 2U, Gran };
+	const uint32_t keeps[BT_PDS_TEAR_POINTS] = BT_PDS_TEARS(Gran);
 
 	MediumWipe(PDS_MAX_REGION, Gran);
 	if (Mounted(Boot(Gran), "clear reference") == false)
@@ -947,7 +954,7 @@ static void TestClearCutSweep(uint32_t Gran)
 	{
 		Step("cut points", at, ops);
 
-		for (uint32_t k = 0; k < 3U && ok; k++)
+		for (uint32_t k = 0; k < BT_PDS_TEAR_POINTS && ok; k++)
 		{
 			MediumWipe(PDS_MAX_REGION, Gran);
 
@@ -1015,6 +1022,80 @@ static void TestClearCutSweep(uint32_t Gran)
 }
 
 // ---------------------------------------------------------------------------
+// The record sequence past 16 bits
+//
+// A sequence that wraps at 65535 makes an older record compare newer, so a
+// stale value wins and the store hands back data the caller replaced long
+// ago. The field is 32 bits wide; this is what says so. Nothing else in this
+// file writes anywhere near far enough to reach the boundary.
+//
+// The width has nothing to do with the write unit, so this runs once.
+// ---------------------------------------------------------------------------
+static void TestSequenceWidth(void)
+{
+	printf("--- sequence width\n");
+
+	const uint32_t gran = 4U;
+	const uint32_t rounds = 70000U;
+	const uint32_t ids[2] = { 0x500U, 0x501U };
+
+	MediumWipe(PDS_MAX_REGION, gran);
+	if (Mounted(Boot(gran), "sequence") == false)
+	{
+		return;
+	}
+
+	std::vector<uint8_t> last[2];
+	bool ok = true;
+
+	for (uint32_t i = 0; i < rounds && ok; i++)
+	{
+		if ((i % 5000U) == 0U)
+		{
+			Step("writes", i, rounds);
+		}
+
+		uint32_t k = i & 1U;
+		std::vector<uint8_t> v = MakeVal(i + 1U, 32U);
+
+		if (BtPdsWrite(ids[k], v.data(), v.size()) != (ssize_t)v.size())
+		{
+			printf("FAIL sequence: write %u refused\n", (unsigned)i);
+			ok = false;
+			break;
+		}
+		last[k] = v;
+
+		// Straddle the boundary with a mount, because the scan is what has
+		// to pick the newest record out of what is on the medium.
+		if (i == 65540U)
+		{
+			ok = Boot(gran) == 0;
+		}
+	}
+	Step("writes", rounds, rounds);
+
+	CHECK(ok, "sequence: %u writes past the 16 bit boundary", (unsigned)rounds);
+
+	Model_t model;
+
+	model[ids[0]] = last[0];
+	model[ids[1]] = last[1];
+
+	CHECK(ModelMatches(model, "sequence"), "sequence: the newest record wins");
+
+	if (Mounted(Boot(gran), "sequence remount") == false)
+	{
+		return;
+	}
+
+	CHECK(ModelMatches(model, "sequence remount"),
+		  "sequence: the newest record still wins after a mount");
+	CHECK(s_AlignFault == 0, "sequence: %u programs the controller refused",
+		  (unsigned)s_AlignFault);
+}
+
+// ---------------------------------------------------------------------------
 
 static void RunAll(uint32_t Gran)
 {
@@ -1034,6 +1115,7 @@ int main(void)
 
 	RunAll(4U);
 	RunAll(16U);
+	TestSequenceWidth();
 
 	printf("\nChecks run: %d\n", g_Checks);
 	printf("RESULT: %s\n", g_Fail == 0 ? "ALL PASS" : "FAIL");

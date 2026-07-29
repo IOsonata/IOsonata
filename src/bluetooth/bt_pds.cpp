@@ -167,7 +167,7 @@ static int MemErase(uint32_t Off)
 		return r < 0 ? r : s_pMem->Sync();
 	}
 
-	uint8_t ones[BT_PDS_FILL_CHUNK];
+	alignas(BT_PDS_MAX_WRITE_GRAN) uint8_t ones[BT_PDS_FILL_CHUNK];
 	memset(ones, 0xFF, sizeof(ones));
 
 	uint32_t left = s_SectorSize;
@@ -453,7 +453,7 @@ static int WriteSectorHdr(uint16_t Sector, uint16_t SourceSector,
 
 	// The header is 24 bytes and the medium may take nothing narrower than
 	// its write unit, so it goes down padded with the erased pattern.
-	alignas(uint32_t) uint8_t buf[
+	alignas(BT_PDS_MAX_WRITE_GRAN) uint8_t buf[
 		BT_PDS_PAD_TO(sizeof(BtPdsSectorHdr_t), BT_PDS_MAX_WRITE_GRAN)];
 
 	memset(buf, 0xFF, sizeof(buf));
@@ -506,7 +506,7 @@ static int AppendToSector(uint16_t Sector, uint32_t Id, uint16_t Len,
 	hdr.Seq = s_NextSeq;
 	hdr.Crc = RecCrc(&hdr, pData);
 
-	alignas(uint32_t) uint8_t rec[
+	alignas(BT_PDS_MAX_WRITE_GRAN) uint8_t rec[
 		BT_PDS_PAD_TO(BT_PDS_REC_HDR_SIZE + BT_PDS_RECORD_DATA_MAX,
 					  BT_PDS_MAX_WRITE_GRAN)];
 	memset(rec, 0xFF, sizeof(rec));
