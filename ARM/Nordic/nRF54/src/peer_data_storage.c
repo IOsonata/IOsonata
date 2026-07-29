@@ -515,35 +515,33 @@ static void pds_work_handler(uint32_t evt, void *ctx)
 			LOG_ERR("Could not delete peer data. BtPdsDelete() returned %d. "
 				"peer_id: %d", err, p->peer_id);
 			pds_pending_report(p, false);
-			return;
-		}
-
-		/* A whole peer delete reports once for the peer, not per entry. */
-		if (peer_id_is_deleted(p->peer_id)) {
+		} else if (peer_id_is_deleted(p->peer_id)) {
+			/* A whole peer delete reports once for the peer, not per
+			 * entry.
+			 */
 			p->busy = false;
 		} else {
 			pds_pending_report(p, true);
 		}
+	} else {
+		ssize_t ret = BtPdsWrite(p->entry_id, p->data, p->length);
 
-		/* This delete freed room. */
-		peer_delete_kick();
-
-		return;
+		if (ret < 0) {
+			LOG_ERR("Could not write data to NVM. BtPdsWrite() returned %d. "
+				"peer_id: %d", (int)ret, p->peer_id);
+			pds_pending_report(p, false);
+		} else {
+			pds_pending_report(p, true);
+		}
 	}
 
-	ssize_t ret = BtPdsWrite(p->entry_id, p->data, p->length);
-
-	if (ret < 0) {
-		LOG_ERR("Could not write data to NVM. BtPdsWrite() returned %d. "
-			"peer_id: %d", (int)ret, p->peer_id);
-		pds_pending_report(p, false);
-
-		return;
-	}
-
-	pds_pending_report(p, true);
-
-	/* A store that went through may have collected a sector on the way. */
+	/* Whatever this operation did, ask whether a walk is wanted. On success
+	 * because a store or delete that went through may have made room, and on
+	 * failure too: a write can collect a sector on its way to refusing, and
+	 * a walk whose restart waited only on successes was stranded by a queue
+	 * whose every operation failed. This cannot spin against a quiet full
+	 * store; it runs only when an operation actually ran.
+	 */
 	peer_delete_kick();
 }
 
