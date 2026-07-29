@@ -358,8 +358,13 @@ void BtSmpBondErase(void)
 
 	if (r != 0)
 	{
-		BOND_PRINTF("PDS: clear failed %d, stored bonds will return on the "
-					"next mount\r\n", r);
+		// Whether the stored bonds are gone depends on where this failed.
+		// BtPdsClear commits when the new epoch header lands and only then
+		// erases, so a failure can mean either nothing was cleared or the
+		// clear took and the old sectors were left behind. The result does
+		// not say which, and neither does this.
+		BOND_PRINTF("PDS: clear failed %d, the stored bonds may or may not "
+					"be gone\r\n", r);
 	}
 }
 

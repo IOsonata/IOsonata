@@ -15,6 +15,20 @@
 #include <bm/bluetooth/peer_manager/peer_manager_types.h>
 
 #include "app_evt_handler.h"
+
+/* Store trace, on the same output as the PDS trace in bt_sec_bm.cpp rather
+ * than the peer_manager LOG module, so what the store did and what came back
+ * out of it read as one sequence. Independent of NDEBUG for the same reason
+ * that one is: a release build is where peer data has to survive a reset.
+ */
+#define PDS_LOAD_TRACE
+
+#ifdef PDS_LOAD_TRACE
+#include "syslog.h"
+#define PDS_LOAD_PRINTF(...)	SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define PDS_LOAD_PRINTF(...)
+#endif
 #include <modules/peer_manager_internal.h>
 #include <modules/peer_id.h>
 #include <modules/peer_data_storage.h>
@@ -175,6 +189,9 @@ static void peer_data_delete_process(void)
 				 * marked deleted, so the next delete request walks it
 				 * again once space has been freed.
 				 */
+				PDS_LOAD_PRINTF("PDS: peer %u delete out of room, "
+								"still marked\r\n", (unsigned)peer_id);
+
 				return;
 			} else if (err < 0) {
 				LOG_ERR("Could not delete peer data. BtPdsDelete() returned %d "
@@ -195,6 +212,8 @@ static void peer_data_delete_process(void)
 				.peer_id = peer_id,
 			};
 			fail_evt.peer_delete_failed.error = NRF_ERROR_INTERNAL;
+			PDS_LOAD_PRINTF("PDS: peer %u delete failed, id kept\r\n",
+							(unsigned)peer_id);
 			pds_evt_send(&fail_evt);
 		} else {
 			struct pm_evt done_evt = {
@@ -202,6 +221,7 @@ static void peer_data_delete_process(void)
 				.peer_id = peer_id,
 			};
 			peer_id_free(peer_id);
+			PDS_LOAD_PRINTF("PDS: peer %u deleted\r\n", (unsigned)peer_id);
 			pds_evt_send(&done_evt);
 		}
 
@@ -221,10 +241,17 @@ static void peer_ids_load(void)
 	/* Search through existing bonds to look for a duplicate. */
 	pds_peer_data_iterate_prepare(&peer_id_iter);
 
+	unsigned n = 0;
+
 	while (pds_peer_data_iterate(PM_PEER_DATA_ID_BONDING, &peer_id, &peer_data,
 		&peer_id_iter)) {
 		(void)peer_id_allocate(peer_id);
+		PDS_LOAD_PRINTF("PDS: peer %u restored\r\n", (unsigned)peer_id);
+		n++;
 	}
+
+	PDS_LOAD_PRINTF("PDS: load done, %u peer%s restored\r\n", n,
+					n == 1 ? "" : "s");
 }
 
 void pds_peer_data_iterate_prepare(uint16_t *peer_id_iter)

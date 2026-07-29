@@ -100,7 +100,10 @@ SOFTWARE.
 #include "bluetooth/bt_pds.h"
 
 #include <bm/softdevice_handler/nrf_sdh_ble.h>
+#include <bm/bluetooth/peer_manager/peer_manager.h>	// pm_peers_delete
 #include <bm/bluetooth/peer_manager/peer_manager_types.h>
+
+#include "bluetooth/bt_smp.h"				// BtSmpBondErase, overridden below
 
 #include <modules/peer_manager_internal.h>
 #include <modules/security_manager.h>		// the sm_* API this module implements
@@ -1163,6 +1166,23 @@ int BtPdsBmInit(void)
 	s_bPdsMounted = true;
 
 	return 0;
+}
+
+// Wipe the stored bonds. This is the platform half of the seam: the generic
+// BtSmpBondClearAll in bt_smp_bond.cpp clears the RAM table it owns and then
+// calls here for whatever the platform keeps. On this path the S145 stack owns
+// the SMP state machine and peer_manager owns the bonds, so that is
+// pm_peers_delete. bt_app_bm.cpp already named this as the entry that was
+// missing. Overrides the weak answer in bt_smp_bond.cpp.
+//
+// The delete runs through peer_data_storage, which reports each peer with
+// PM_EVT_PEER_DELETE_SUCCEEDED or _FAILED as it finishes.
+void BtSmpBondErase(void)
+{
+	uint32_t err = pm_peers_delete();
+
+	PDS_PRINTF("PDS: clear all peers, pm_peers_delete returned 0x%lX\r\n",
+			   (unsigned long)err);
 }
 
 // pm_init calls smd_init right after sm_init. Everything the dispatcher

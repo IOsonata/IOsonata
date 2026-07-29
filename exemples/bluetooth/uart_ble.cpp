@@ -277,7 +277,7 @@ const UARTCfg_t g_UartCfg = {
 	.DevNo = 0,							// Device number zero based
 	.pIOPinMap = s_UartPins,				// UART assigned pins
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),	// Total number of UART pins used
-	.Rate = 1000000,						// Baudrate
+	.Rate = 115200,						// Baudrate
 	.DataBits = 8,						// Data bits
 	.Parity = UART_PARITY_NONE,			// Parity
 	.StopBits = 1,						// Stop bit
@@ -567,6 +567,51 @@ static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
 }
 #endif
 
+#if BLE_SC_METHOD != BLE_SC_NONE
+// Console command: "bond del" wipes every stored bond, so a reset after it has
+// to pair again. Anything else starting with "bond" prints the usage. Returns
+// true when the line was a command and must not go on air.
+//
+// No target conditional here. BtSmpBondClearAll is the generic entry and each
+// port supplies the one that reaches its own bond storage: the RAM table for
+// the SoftDevice ports, pm_peers_delete for the BM one.
+static bool UartBleBondTryCommand(const uint8_t *pData, int Len)
+{
+	if (Len < 4 || memcmp(pData, "bond", 4) != 0)
+	{
+		return false;
+	}
+
+	const uint8_t *p = pData + 4;
+	int l = Len - 4;
+
+	while (l > 0 && (*p == ' ' || *p == '\t'))
+	{
+		p++;
+		l--;
+	}
+
+	if (l >= 3 && memcmp(p, "del", 3) == 0)
+	{
+		g_Uart.printf("clearing stored bonds\r\n");
+		BtSmpBondClearAll();
+
+		return true;
+	}
+
+	g_Uart.printf("Commands: bond del\r\n");
+
+	return true;
+}
+#else
+static bool UartBleBondTryCommand(const uint8_t *pData, int Len)
+{
+	(void)pData;
+	(void)Len;
+	return false;
+}
+#endif
+
 void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
 {
 	g_Uart.Tx(pData, Len);
@@ -766,6 +811,11 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 	if (flush)
 	{
 		if (UartBleOobTryCommand(buff, bufflen))
+		{
+			bufflen = 0;
+			return;
+		}
+		if (UartBleBondTryCommand(buff, bufflen))
 		{
 			bufflen = 0;
 			return;
