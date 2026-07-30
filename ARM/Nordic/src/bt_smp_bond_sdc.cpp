@@ -61,6 +61,13 @@
 // items (if added later) do not collide with bond slots.
 #define BT_SMP_BOND_KEY_BASE	0x42440000u		// 'B''D' 00 00
 
+// bt_pds key for the device's own identity record (the stable local IRK).
+// Outside the bond slot range (base + 0..31), same 'BD' family. BtPdsClear
+// wipes this key along with the bonds, so a full bond clear also retires the
+// identity and a fresh IRK is generated on the next pairing, which is the
+// intended meaning of a factory clear.
+#define BT_SMP_LOCALID_KEY		(BT_SMP_BOND_KEY_BASE + 0x100u)
+
 static bool s_PdsReady;
 
 // Set by BtSmpBondSdcInit, which the application layer calls only when the
@@ -204,6 +211,11 @@ static std::atomic<uint32_t> s_PendMask;
 static uint32_t s_PendDropCnt;
 static uint32_t s_PendFailCnt;
 
+// The local identity follows the same deferral as the slots: what is marked
+// is the fact that it changed, and the record is serialized on demand when
+// the handler is ready to write it.
+static std::atomic<bool> s_LocalIdPend;
+
 static void BondSaveHandler(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
@@ -224,6 +236,23 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 	}
 
 	uint8_t rec[BT_PDS_RECORD_DATA_MAX];
+
+	if (s_LocalIdPend.exchange(false))
+	{
+		size_t len = BtSmpLocalIdSerialize(rec, sizeof(rec));
+		if (len != 0)
+		{
+			ssize_t w = BtPdsWrite(BT_SMP_LOCALID_KEY, rec, len);
+			if (w != (ssize_t)len)
+			{
+				// Marked before the write and the write did not happen, so
+				// mark it again, as the slot path does.
+				s_LocalIdPend.store(true);
+				BOND_PRINTF("PDS: local id save len %u failed %d, still "
+							"marked\r\n", (unsigned)len, (int)w);
+			}
+		}
+	}
 
 	for (int slot = 0; slot < BT_SMP_BOND_PEND_MAX; slot++)
 	{
@@ -303,6 +332,22 @@ void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 	}
 }
 
+// The local identity changed. A save arrives from the same stack dispatch
+// context as a bond save, so the write is deferred the same way: mark and
+// drain from the application event handler, serializing on demand.
+void BtSmpLocalIdSave(void)
+{
+	s_LocalIdPend.store(true);
+
+	if (AppEvtHandlerQue(0, NULL, BondSaveHandler) == false)
+	{
+		// The mark stays. Any later save or bond save queues the handler
+		// again and the handler drains it.
+		BOND_PRINTF("PDS: local id save not queued yet, event queue "
+					"full\r\n");
+	}
+}
+
 // Load all persisted bonds into the RAM table at init. Reads each slot key and
 // hands the blob to BtSmpBondRestore. Missing slots are skipped.
 void BtSmpBondLoad(void)
@@ -337,6 +382,27 @@ void BtSmpBondLoad(void)
 			BOND_PRINTF("PDS: load slot %d -> %d (want %u)\r\n", s,
 						(int)n, (unsigned)rsz);
 		}
+	}
+
+	// The device's own identity, stored under its own key. A missing record
+	// is a first boot; the IRK is generated on the first pairing instead.
+	size_t isz = BtSmpLocalIdRecordSize();
+	ssize_t n = BtPdsRead(BT_SMP_LOCALID_KEY, blob, isz);
+	if (n == (ssize_t)isz)
+	{
+		if (BtSmpLocalIdRestore(blob, isz))
+		{
+			BOND_PRINTF("PDS: local identity restored\r\n");
+		}
+		else
+		{
+			BOND_PRINTF("PDS: local identity record rejected\r\n");
+		}
+	}
+	else if (n != -ENOENT)
+	{
+		BOND_PRINTF("PDS: local identity load -> %d (want %u)\r\n", (int)n,
+					(unsigned)isz);
 	}
 
 	BOND_PRINTF("PDS: load done, %d of %d slots restored\r\n", found, slots);

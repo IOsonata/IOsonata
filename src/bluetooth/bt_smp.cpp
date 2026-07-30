@@ -42,6 +42,8 @@ SOFTWARE.
 #include <stddef.h>
 #include <string.h>
 
+#include "crc.h"
+
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_peer.h"
@@ -2881,8 +2883,11 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 		if (localKeyDist & BT_SMP_KEYDIST_IDKEY)
 		{
+			// The stable local identity IRK, not a fresh key. Every peer
+			// receives the same IRK so any of them can resolve the
+			// resolvable private addresses this device generates from it.
 			uint8_t irk[16];
-			if (!BtSmpCryptoRand(irk, 16))
+			if (!BtSmpLocalIrkGet(irk))
 			{
 				// The IDKEY was negotiated, so the peer expects an Identity
 				// Information PDU. A key drawn from a failed RNG must not be
@@ -3935,6 +3940,48 @@ int BtSmpC1S1SelfTest(void)
 	return memcmp(s1, s1Expect, 16) == 0 ? 0 : -1;
 }
 
+// The IRK carrying no key material at all is the "nothing was distributed"
+// marker in the bond record, so both the resolve and the generate side treat
+// an all-zero IRK as absent.
+static bool SmpIrkPresent(const uint8_t Irk[16])
+{
+	for (int i = 0; i < 16; i++)
+	{
+		if (Irk[i] != 0)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+// ah (Core spec Vol 3 Part H 2.2.2) in wire byte order. Irk and PrandLe are
+// little-endian as stored and on air; HashLe receives the 3 hash bytes
+// little-endian. SmpAes is standard big-endian, so the IRK is reversed into
+// the key and prand is placed in the low 24 bits most significant byte first.
+static void SmpAh(const uint8_t Irk[16], const uint8_t PrandLe[3],
+				  uint8_t HashLe[3])
+{
+	uint8_t key[16];
+	uint8_t rp[16];
+	uint8_t out[16];
+
+	for (int i = 0; i < 16; i++)
+	{
+		key[i] = Irk[15 - i];
+	}
+	memset(rp, 0, sizeof(rp));
+	rp[13] = PrandLe[2];	// prand, most significant byte first
+	rp[14] = PrandLe[1];
+	rp[15] = PrandLe[0];
+
+	SmpAes(key, rp, out);	// ah = e(IRK, prand'), low 24 bits
+
+	HashLe[0] = out[15];
+	HashLe[1] = out[14];
+	HashLe[2] = out[13];
+}
+
 // Resolve a resolvable private address against a peer IRK with the ah function
 // (Core spec Vol 3 Part H 2.2.2). Rpa is a 6-byte BD_ADDR in little-endian wire
 // order: Rpa[3..5] are prand (random part, top two bits 0b01), Rpa[0..2] are the
@@ -3948,41 +3995,152 @@ bool BtSmpRpaResolve(const uint8_t Irk[16], const uint8_t Rpa[6])
 	}
 
 	// No IRK was distributed for this peer: nothing to resolve against.
-	bool present = false;
-	for (int i = 0; i < 16; i++)
-	{
-		if (Irk[i] != 0)
-		{
-			present = true;
-			break;
-		}
-	}
-	if (present == false)
+	if (SmpIrkPresent(Irk) == false)
 	{
 		return false;
 	}
 
-	uint8_t key[16];
-	uint8_t rp[16];
-	uint8_t out[16];
+	uint8_t hash[3];
 
-	// SmpAes is standard big-endian. The stored IRK and the address are little-
-	// endian (wire order), so reverse the IRK into the key and place prand in the
-	// low 24 bits big-endian.
-	for (int i = 0; i < 16; i++)
+	SmpAh(Irk, &Rpa[3], hash);
+
+	return hash[0] == Rpa[0] && hash[1] == Rpa[1] && hash[2] == Rpa[2];
+}
+
+// Generate a resolvable private address from Irk. prand is drawn from the
+// secure RNG with the top two bits forced to 0b01 (Core spec Vol 6 Part B
+// 1.3.2.2); the hash comes from the same ah as resolution, so a generated
+// address always resolves against the same IRK.
+bool BtSmpRpaGen(const uint8_t Irk[16], uint8_t Rpa[6])
+{
+	if (Irk == nullptr || Rpa == nullptr)
 	{
-		key[i] = Irk[15 - i];
+		return false;
 	}
-	memset(rp, 0, sizeof(rp));
-	rp[13] = Rpa[5];		// prand, most significant byte first
-	rp[14] = Rpa[4];
-	rp[15] = Rpa[3];
 
-	SmpAes(key, rp, out);	// ah = e(IRK, prand'), low 24 bits
+	if (SmpIrkPresent(Irk) == false)
+	{
+		return false;
+	}
 
-	// Hash is the low 24 bits of the address (Rpa[0..2], little-endian); compare
-	// to the cipher's low 24 bits (out[13..15], big-endian).
-	return out[13] == Rpa[2] && out[14] == Rpa[1] && out[15] == Rpa[0];
+	if (!BtSmpCryptoRand(&Rpa[3], 3))
+	{
+		return false;
+	}
+	Rpa[5] = (uint8_t)((Rpa[5] & 0x3F) | 0x40);
+
+	SmpAh(Irk, &Rpa[3], &Rpa[0]);
+
+	return true;
+}
+
+// ===== Local identity =====
+// One stable IRK identifies this device to every bonded peer. It is created
+// from the secure RNG the first time the IDKEY distribution or the privacy
+// layer asks for it, and from then on every peer receives the same key, so
+// any of them can resolve the resolvable private addresses generated from
+// it. The platform persists it across resets through the hooks below, using
+// the same defer-and-serialize-on-demand division as the bond store.
+
+#pragma pack(push, 1)
+typedef struct __Bt_Smp_Local_Id_Record {
+	uint32_t Magic;			//!< BT_SMP_LOCALID_MAGIC
+	uint16_t Version;		//!< BT_SMP_LOCALID_VERSION
+	uint16_t Len;			//!< sizeof(BtSmpLocalIdRecord_t)
+	uint8_t Irk[16];		//!< Local identity IRK, little-endian storage
+	uint32_t Crc;			//!< crc32_ieee over Magic..Irk
+} BtSmpLocalIdRecord_t;
+#pragma pack(pop)
+
+#define BT_SMP_LOCALID_MAGIC	0x49504D53U		// "SMPI" little-endian
+#define BT_SMP_LOCALID_VERSION	1U
+
+static struct {
+	bool bValid;
+	uint8_t Irk[16];
+} s_SmpLocalId;
+
+// Weak default: the identity lives for this boot only. A platform that
+// persists it marks the change and writes later from a safe context, reading
+// the record back with BtSmpLocalIdSerialize when it is ready.
+__attribute__((weak)) void BtSmpLocalIdSave(void)
+{
+}
+
+size_t BtSmpLocalIdRecordSize(void)
+{
+	return sizeof(BtSmpLocalIdRecord_t);
+}
+
+size_t BtSmpLocalIdSerialize(void *pBuff, size_t BuffLen)
+{
+	if (s_SmpLocalId.bValid == false || pBuff == nullptr ||
+		BuffLen < sizeof(BtSmpLocalIdRecord_t))
+	{
+		return 0;
+	}
+
+	BtSmpLocalIdRecord_t rec;
+
+	rec.Magic = BT_SMP_LOCALID_MAGIC;
+	rec.Version = BT_SMP_LOCALID_VERSION;
+	rec.Len = (uint16_t)sizeof(rec);
+	memcpy(rec.Irk, s_SmpLocalId.Irk, 16);
+	rec.Crc = crc32_ieee((uint8_t*)&rec, offsetof(BtSmpLocalIdRecord_t, Crc));
+
+	memcpy(pBuff, &rec, sizeof(rec));
+	CryptoSecureWipe(&rec, sizeof(rec));
+
+	return sizeof(BtSmpLocalIdRecord_t);
+}
+
+bool BtSmpLocalIdRestore(const void *pRec, size_t Len)
+{
+	if (pRec == nullptr || Len != sizeof(BtSmpLocalIdRecord_t))
+	{
+		return false;
+	}
+
+	// Copy into aligned storage before validating, as the bond restore does.
+	BtSmpLocalIdRecord_t rec;
+	memcpy(&rec, pRec, sizeof(rec));
+
+	if (rec.Magic != BT_SMP_LOCALID_MAGIC ||
+		rec.Version != BT_SMP_LOCALID_VERSION ||
+		rec.Len != sizeof(rec) ||
+		rec.Crc != crc32_ieee((uint8_t*)&rec, offsetof(BtSmpLocalIdRecord_t, Crc)))
+	{
+		CryptoSecureWipe(&rec, sizeof(rec));
+		return false;
+	}
+
+	memcpy(s_SmpLocalId.Irk, rec.Irk, 16);
+	s_SmpLocalId.bValid = true;
+	CryptoSecureWipe(&rec, sizeof(rec));
+
+	return true;
+}
+
+bool BtSmpLocalIrkGet(uint8_t Irk[16])
+{
+	if (Irk == nullptr)
+	{
+		return false;
+	}
+
+	if (s_SmpLocalId.bValid == false)
+	{
+		if (!BtSmpCryptoRand(s_SmpLocalId.Irk, 16))
+		{
+			return false;
+		}
+		s_SmpLocalId.bValid = true;
+		BtSmpLocalIdSave();
+	}
+
+	memcpy(Irk, s_SmpLocalId.Irk, 16);
+
+	return true;
 }
 
 int BtSmpRpaSelfTest(void)
@@ -3996,7 +4154,29 @@ int BtSmpRpaSelfTest(void)
 	static const uint8_t rpa[6] = {
 		0xaa,0xfb,0x0d,0x94,0x81,0x70 };
 
-	return BtSmpRpaResolve(irk, rpa) ? 0 : -1;
+	if (BtSmpRpaResolve(irk, rpa) == false)
+	{
+		return -1;
+	}
+
+	// Generate from the same IRK and resolve it back. Checks the RNG path,
+	// the prand bit pattern, and that generation and resolution share one ah.
+	uint8_t gen[6];
+
+	if (BtSmpRpaGen(irk, gen) == false)
+	{
+		return -2;
+	}
+	if ((gen[5] & 0xC0) != 0x40)
+	{
+		return -3;
+	}
+	if (BtSmpRpaResolve(irk, gen) == false)
+	{
+		return -4;
+	}
+
+	return 0;
 }
 
 // Compute the 8-byte data-signing MAC over pMsg (the signed ATT data followed by
