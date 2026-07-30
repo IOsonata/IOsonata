@@ -6,8 +6,9 @@ This index points to the current IOsonata architecture, workflow and implementat
 
 1. [README](../README.md) — project scope, precompiled-library model, benchmarks and supported execution models.
 2. [Getting started](getting-started.md) — install IOcomposer, build an MCU library, open an example, flash and debug.
-3. [Quick reference](quick-reference.md) — commands and common project tasks.
-4. [Supported targets](supported-targets.md) — current MCU and validation status.
+3. [FAQ](FAQ.md) — concise answers about architecture, project layout and the build model.
+4. [Quick reference](quick-reference.md) — commands and common project tasks.
+5. [Supported targets](supported-targets.md) — current MCU and validation status.
 
 ## Architecture
 
@@ -137,9 +138,11 @@ Useful entry points include:
 
 **Beyond Blinky: Object-Oriented C++ Programming — Fun, Fast, and Fearless Embedded Development** explains the orchard model, `DeviceIntrf`, `Device`, device families, runtime polymorphism, MCU porting and measured performance.
 
-- [Free repository edition](Beyond%20Blinky%20Free%20Edition.pdf)
-- [Leanpub](https://leanpub.com/beyondblinky)
+- [Download the free edition or buy the complete book on Leanpub](https://leanpub.com/beyondblinky)
 - [Amazon](https://www.amazon.com/Beyond-Blinky-Object-Oriented-Programming-Development/dp/1069933511)
+- [Machine-readable December 2025 publication snapshot](beyond_blinky_free_edition.md) — retained for repository search and RAG indexing
+
+Current repository architecture and workflow documents take precedence over the December 2025 publication snapshot when procedures or project organization differ.
 
 ## Documentation rules
 
@@ -153,5 +156,6 @@ New documentation must preserve these architectural statements:
 - Target limits stay in target ports; device protocol limits stay in device drivers.
 - Static or caller-owned memory is preferred in driver and real-time paths.
 - Examples must use real repository paths and current public APIs.
+- Published book snapshots must be dated and must not be presented as current workflow authority.
 
 Avoid documenting generated build files, internal project-format names or historical workflows as user-facing architecture.
