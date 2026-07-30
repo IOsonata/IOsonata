@@ -69,6 +69,8 @@ SOFTWARE.
 #include "ble_hci_le.h"
 #include "ble_vs_codes.h"
 #include "host_stack_if.h"
+#include "blestack.h"
+#include "ble_bufsize.h"
 #include "ll_sys.h"
 #include "ll_sys_if.h"
 #include "bpka.h"
@@ -151,6 +153,7 @@ typedef struct __Bt_App_WbaData {
 	uint8_t		IoCapability;		//!< SMP IO cap - mapped from SecType at init
 	uint8_t		AuthRequirement;	//!< SMP auth requirement bits
 	bool		bStackInited;		//!< true after BleStack_Init succeeded
+	uint16_t	NvmCacheWords;		//!< 64 bit words preloaded into the cache
 } BtAppWbaData_t;
 
 static BtAppWbaData_t s_WbaData = {
@@ -714,6 +717,73 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 	return SVCCTL_UserEvtFlowEnable;
 }
 
+// --- Stack sizing ---
+//
+// Every number can come from the application's app_conf.h in ST's own macro
+// names; what is not said gets a default that fits the examples. The buffer
+// sizes then follow from ble_bufsize.h, so the numbers are stated once and
+// the buffers cannot disagree with them.
+
+#ifndef CFG_BLE_NUM_LINK
+#define CFG_BLE_NUM_LINK				2
+#endif
+#ifndef CFG_BLE_NUM_GATT_SERVICES
+#define CFG_BLE_NUM_GATT_SERVICES		8
+#endif
+#ifndef CFG_BLE_NUM_GATT_ATTRIBUTES
+#define CFG_BLE_NUM_GATT_ATTRIBUTES		68
+#endif
+#ifndef CFG_BLE_ATT_VALUE_ARRAY_SIZE
+#define CFG_BLE_ATT_VALUE_ARRAY_SIZE	1344
+#endif
+#ifndef CFG_BLE_ATT_MTU_MAX
+#define CFG_BLE_ATT_MTU_MAX				251
+#endif
+#ifndef CFG_BLE_PREPARE_WRITE_LIST_SIZE
+#define CFG_BLE_PREPARE_WRITE_LIST_SIZE	BLE_DEFAULT_PREP_WRITE_LIST_SIZE
+#endif
+#ifndef CFG_BLE_MBLOCK_COUNT
+#define CFG_BLE_MBLOCK_COUNT			BLE_MBLOCKS_CALC(CFG_BLE_PREPARE_WRITE_LIST_SIZE, \
+										CFG_BLE_ATT_MTU_MAX, CFG_BLE_NUM_LINK)
+#endif
+#ifndef CFG_BLE_OPTIONS
+#define CFG_BLE_OPTIONS					0
+#endif
+
+// The stack's NVM cache: bonds and GATT server state, preloaded from the
+// PDS before init and persisted through BLEPLAT_NvmStore. In 64 bit words,
+// 1..1024 per blestack.h.
+#ifndef CFG_BLE_NVM_MAX_SIZE
+#define CFG_BLE_NVM_MAX_SIZE			512
+#endif
+
+// Host event FIFO, in 16 bit words.
+#ifndef CFG_BLE_HOST_EVT_FIFO_SIZE
+#define CFG_BLE_HOST_EVT_FIFO_SIZE		256
+#endif
+
+// The RAM the stack runs in, sized by the middleware's own arithmetic from
+// the numbers above. 32 bit aligned per blestack.h.
+static uint32_t s_BleStackRam[DIVC(BLE_TOTAL_BUFFER_SIZE(CFG_BLE_NUM_LINK,
+									CFG_BLE_MBLOCK_COUNT, 0), 4)];
+static uint32_t s_BleGattRam[DIVC(BLE_TOTAL_BUFFER_SIZE_GATT(
+									CFG_BLE_NUM_GATT_ATTRIBUTES,
+									CFG_BLE_NUM_GATT_SERVICES,
+									CFG_BLE_ATT_VALUE_ARRAY_SIZE), 4)];
+static uint64_t s_BleNvmCache[CFG_BLE_NVM_MAX_SIZE];
+static uint16_t s_BleHostEvtFifo[CFG_BLE_HOST_EVT_FIFO_SIZE];
+
+// Preload the cache from the PDS and say how many words came back.
+// Implemented in bt_smp_bond_stm32wba.cpp; weak no-op here so a build
+// without security still links and starts with an empty cache.
+extern "C" __attribute__((weak))
+uint16_t BtSmpBondWbaCacheInit(uint64_t *pCache, uint16_t MaxWords)
+{
+	(void)pCache;
+	(void)MaxWords;
+	return 0;
+}
+
 // --- Public API ---
 
 bool BtAppStackInit(const BtAppCfg_t *pCfg)
@@ -736,10 +806,44 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	// isn't enabled; the stack just won't use it.
 	BPKA_Reset();
 
-	// Host stack bring-up. CFG_BLE_NUM_LINK / CFG_BLE_NUM_GATT_SERVICES /
-	// CFG_BLE_ATT_MTU_MAX etc. come from the app's app_conf.h - the port
-	// does not override them. RAM start address is set by the linker.
-	uint8_t ret = BleStack_Init();
+	// The bond store mounts and preloads the stack's NVM cache before the
+	// stack initializes, because BleStack_init_t takes the preloaded word
+	// count: nvm_cache_size is what the restore answered. A first boot, a
+	// torn flush or a store that would not mount all answer 0 and the
+	// stack starts empty. Guarded on the security type the way the Nordic
+	// ports guard on bSecure; without security the weak no-op answers and
+	// nothing is pulled in.
+	if (pCfg->SecType != BTGAP_SECTYPE_NONE)
+	{
+		s_WbaData.NvmCacheWords =
+				BtSmpBondWbaCacheInit(s_BleNvmCache, CFG_BLE_NVM_MAX_SIZE);
+	}
+
+	// Host stack bring-up, sized by the numbers above; an app_conf.h that
+	// says its own CFG_BLE_* wins over every default.
+	BleStack_init_t init;
+
+	memset(&init, 0, sizeof(init));
+
+	init.bleStartRamAddress = (uint8_t *)s_BleStackRam;
+	init.total_buffer_size = sizeof(s_BleStackRam);
+	init.bleStartRamAddress_GATT = (uint8_t *)s_BleGattRam;
+	init.total_buffer_size_GATT = sizeof(s_BleGattRam);
+	init.nvm_cache_buffer = s_BleNvmCache;
+	init.nvm_cache_size = s_WbaData.NvmCacheWords;
+	init.nvm_cache_max_size = CFG_BLE_NVM_MAX_SIZE;
+	init.host_event_fifo_buffer = s_BleHostEvtFifo;
+	init.host_event_fifo_buffer_size = CFG_BLE_HOST_EVT_FIFO_SIZE;
+	init.numAttrRecord = CFG_BLE_NUM_GATT_ATTRIBUTES;
+	init.numAttrServ = CFG_BLE_NUM_GATT_SERVICES;
+	init.attrValueArrSize = CFG_BLE_ATT_VALUE_ARRAY_SIZE;
+	init.numOfLinks = CFG_BLE_NUM_LINK;
+	init.prWriteListSize = CFG_BLE_PREPARE_WRITE_LIST_SIZE;
+	init.mblockCount = CFG_BLE_MBLOCK_COUNT;
+	init.attMtu = CFG_BLE_ATT_MTU_MAX;
+	init.options = CFG_BLE_OPTIONS;
+
+	uint8_t ret = BleStack_Init(&init);
 	if (ret != BLE_STATUS_SUCCESS)
 	{
 		DEBUG_PRINTF("BleStack_Init failed: 0x%02x\r\n", ret);
