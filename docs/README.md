@@ -62,7 +62,9 @@ Reusable example source is under [`../exemples/`](../exemples/). Buildable targe
 
 ## Beyond Blinky
 
-Human readers can [download the free edition or buy the complete book on Leanpub](https://leanpub.com/beyondblinky). The repository keeps [`beyond_blinky_free_edition.md`](beyond_blinky_free_edition.md), a machine-readable extraction of the December 2025 free edition, for search and RAG indexing.
+Human readers can [download the free edition or buy the complete book on Leanpub](https://leanpub.com/beyondblinky).
+
+The repository keeps a [December 2025 publication notice](beyond_blinky_free_edition.md) and the [dated machine-readable extraction](beyond_blinky_free_edition_2025_raw.md) for search and RAG indexing.
 
 Current architecture and workflow documents take precedence when procedures, tools or repository organization differ from the published edition.
 
