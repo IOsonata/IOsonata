@@ -35,6 +35,7 @@ SOFTWARE.
 #ifndef __BT_ADV_H__
 #define __BT_ADV_H__
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "bluetooth/bt_uuid.h"
@@ -222,11 +223,7 @@ void BtAdvStop(void);
  * @brief	Decide whether extended advertising PDUs are required.
  *
  * Legacy advertising PDUs cap both the advertising data and the scan response
- * data at BT_ADV_LEGACY_DATA_MAX (31) octets each. When either assembled
- * payload exceeds that, extended PDUs must be used. This function alone decides
- * the legacy/extended selection; each implementation measures its
- * assembled packets and applies the result to its native advertising type or
- * event-property fields.
+ * data at BT_ADV_LEGACY_DATA_MAX (31) octets each.
  *
  * @param	AdvLen	Assembled advertising data length in octets.
  * @param	SrLen	Assembled scan-response data length in octets.
@@ -234,7 +231,10 @@ void BtAdvStop(void);
  * @return	true if extended advertising PDUs are required, false if the
  * 			payloads fit in legacy advertising PDUs.
  */
-bool BtAdvUseExtended(size_t AdvLen, size_t SrLen);
+static inline bool BtAdvUseExtended(size_t AdvLen, size_t SrLen)
+{
+	return AdvLen > BT_ADV_LEGACY_DATA_MAX || SrLen > BT_ADV_LEGACY_DATA_MAX;
+}
 
 #ifdef __cplusplus
 }
