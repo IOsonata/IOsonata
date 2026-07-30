@@ -177,7 +177,7 @@ Low-level operations that do not benefit from object state remain lightweight C/
 
 Not inherently. IOsonata publishes on-target UART and kernel benchmark results showing that its object-oriented paths can match or exceed the tested C implementations.
 
-See the benchmark section in the [README](../README.md) and [Beyond Blinky Free Edition](Beyond%20Blinky%20Free%20Edition.pdf).
+See the benchmark section in the [README](../README.md) and [Beyond Blinky on Leanpub](https://leanpub.com/beyondblinky).
 
 ## Does IOsonata require dynamic memory?
 
@@ -239,6 +239,12 @@ IOsonata is developed and validated on I-SYST hardware and vendor development ki
 
 See the hardware-reference section in the [README](../README.md) and the current [Supported Targets](supported-targets.md) matrix.
 
+## Why is the book also stored as Markdown?
+
+`beyond_blinky_free_edition.md` is a machine-readable extraction of the December 2025 free edition. It is retained for repository search and RAG indexing, not as the current setup or workflow guide.
+
+Current architecture and workflow documentation takes precedence where the published book differs. Human readers should [download the free edition or buy the complete book on Leanpub](https://leanpub.com/beyondblinky).
+
 ## How do I start?
 
 1. Install IOcomposer.
@@ -259,4 +265,4 @@ The recommended first path uses the nRF52832 Blinky target project. See [Getting
 - [Supported Targets](supported-targets.md)
 - [DeviceIntrf implementer notes](architecture/devintrf-implementer-notes.md)
 - [Device inheritance and composition](architecture/device-composition.md)
-- [Beyond Blinky Free Edition](Beyond%20Blinky%20Free%20Edition.pdf)
+- [Beyond Blinky free and complete editions](https://leanpub.com/beyondblinky)
