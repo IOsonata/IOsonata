@@ -1,6 +1,6 @@
 # Getting Started with IOsonata
 
-This guide walks you through creating your first IOsonata project using the official Eclipse-based workflow.
+This guide walks you through creating your first IOsonata project using the official IOcomposer workflow.
 
 **Time required**: 15-30 minutes  
 **Prerequisites**: None (installer handles everything)
@@ -11,13 +11,13 @@ This guide walks you through creating your first IOsonata project using the offi
 
 ### Step 1: Install the Development Environment
 
-You have two installation paths. Both produce the same Eclipse CDT managed project workflow — the same build system, the same wizard, the same project model. The only difference is AI assistance.
+You have two installation paths. Both produce the same IOcomposer managed project workflow — the same build system, the same wizard, the same project model. The only difference is AI assistance.
 
 #### Option A — IOcomposer (Recommended)
 
 IOcomposer runs the standard IOsonata installer and then adds two things on top:
 
-- **IOcomposer AI plugin** — installed into Eclipse's `dropins/` directory for design-time AI assistance
+- **IOcomposer AI plugin** — installed into the IDE's `dropins/` directory for design-time AI assistance
 - **External SDK index** — builds a searchable index over your installed vendor SDKs for context-aware AI queries
 
 👉 https://iocomposer.io
@@ -34,8 +34,8 @@ IOcomposer runs the standard IOsonata installer and then adds two things on top:
 
 **Windows (PowerShell as Administrator):**
 ```powershell
-$u   = "https://iocomposer.io/install_ioc_win.ps1"
-$dst = "$env:TEMP\install_ioc_win.ps1"
+$u   = "https://iocomposer.io/install_ioc_windows.ps1"
+$dst = "$env:TEMP\install_ioc_windows.ps1"
 irm $u -OutFile $dst
 powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File $dst
 ```
@@ -66,7 +66,7 @@ powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File $dst
 
 #### What both options install
 
-- Eclipse Embedded CDT
+- The IOcomposer IDE platform (Embedded CDT)
 - ARM/RISC-V toolchains
 - OpenOCD debugger
 - IOsonata framework
@@ -76,9 +76,45 @@ powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File $dst
 
 ---
 
-### Step 2: Create Your First Project
+### Step 2: Build the Precompiled MCU Library
 
-1. **Launch Eclipse** (installed by the script)
+After installation, run the platform-specific library builder.
+
+**macOS:**
+```bash
+bash ~/IOcomposer/IOsonata/Installer/build_iosonata_lib_macos.sh
+```
+
+**Linux:**
+```bash
+bash ~/IOcomposer/IOsonata/Installer/build_iosonata_lib_linux.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+& "$env:USERPROFILE\IOcomposer\IOsonata\Installer\build_iosonata_lib_win.ps1"
+```
+
+The builder discovers the supported MCU library projects and presents an interactive menu. Select the MCU used by your board, or choose **Build All**.
+
+For the primary first-run path, select **nRF52832**, then use the `Blinky` project with an IDK-BLYST-NANO/BLYST Nano or Nordic nRF52 DK.
+
+It then runs the IOcomposer managed builder headlessly and produces both configurations:
+
+```text
+<MCU library project>/Debug/libIOsonata_<MCU>.a
+<MCU library project>/Release/libIOsonata_<MCU>.a
+```
+
+Every application using that MCU and build configuration links the same library binary. The library is not rebuilt for the board, application, peripheral selection or RTOS.
+
+When TaktOS is installed, the builder also builds all detected TaktOS ARM and RISC-V libraries. Use `--no-taktos` on macOS/Linux or `-NoTaktos` on Windows to build IOsonata only.
+
+---
+
+### Step 3: Create Your First Project
+
+1. **Launch IOcomposer** (installed by the script)
 
 2. **File → New → Project → IOsonata Project → Next**
 
@@ -128,9 +164,11 @@ my_first_project/
     └── main.c          # Application code (or main.cpp for C++)
 ```
 
+The wizard configures the application project to link the previously built IOsonata MCU library. MCU and peripheral selections configure the application; they do not generate or rebuild a different HAL.
+
 ---
 
-### Step 3: Customize Hardware Pins
+### Step 4: Customize Hardware Pins
 
 **Edit `include/board.h`** to match your actual board:
 
@@ -150,7 +188,7 @@ Look for `TODO:` comments—these show what needs customization.
 
 ---
 
-### Step 4: Build
+### Step 5: Build
 
 1. **Right-click project** in Project Explorer
 2. **Select "Build Project"**
@@ -169,20 +207,20 @@ Build Finished (took 3.2s)
 
 ---
 
-### Step 5: Flash to Hardware
+### Step 6: Flash to Hardware
 
 #### Using IDAP-Link (Recommended)
 
 1. **Connect IDAP-Link** to your board's SWD/JTAG pins
 2. **Right-click project** → Debug As → GDB OpenOCD Debugging
-3. **Eclipse flashes firmware** and halts at `main()`
+3. **IOcomposer flashes firmware** and halts at `main()`
 4. **Press F8** (Resume) to run
 
 **IDAP-Link** is I-SYST's CMSIS-DAP debug probe. It works with OpenOCD and PyOCD, supporting both SWD and JTAG protocols.
 
 #### Using Other Debug Probes
 
-**J-Link or other CMSIS-DAP probes**: Similar workflow, select appropriate debug configuration in Eclipse.
+**J-Link or other CMSIS-DAP probes**: Similar workflow, select appropriate debug configuration in IOcomposer.
 
 **Your firmware is now running on hardware!**
 
@@ -193,60 +231,69 @@ Build Finished (took 3.2s)
 ### Understanding the Project Structure
 
 **Generated files:**
-- `board.h` - Hardware pin definitions (customize this)
+- `board.h` - Board pin, oscillator and external-device configuration
 - `<project>.h` - Application configuration
-- `main.c` - Your application code
-- `.cproject` - Eclipse build configuration
-- `.project` - Eclipse project metadata
+- `main.c` or `main.cpp` - Application code
+- `.cproject` - IOcomposer managed-build configuration
+- `.project` - Project metadata
 
-**Linked resources** (in Project Explorer):
-```
-my_project/
-├── Linked Resources/
-│   ├── IOsonata/       # Framework code
-│   ├── ARM/            # Architecture code
-│   └── Nordic/         # Vendor code (if applicable)
+The application includes IOsonata headers and links the precompiled library for the selected MCU and build profile:
+
+```text
+Application sources
+    + board.h
+    + libIOsonata_<MCU>.a
+    → application firmware
 ```
 
-These link to `~/IOcomposer/IOsonata/` - **not copied**, shared across all projects.
+Some projects also show linked resources for shared example or application source. Those links avoid copying reusable source into every target project. They do not cause the IOsonata MCU implementation to be rebuilt.
 
 **Why this matters:**
-- Framework updates propagate to all projects automatically
-- Zero code duplication
-- Fixes apply everywhere
+- The same IOsonata binary is reused by bare-metal, TaktOS, FreeRTOS and ThreadX applications
+- Board and application changes do not rebuild the HAL
+- Updating IOsonata itself requires rebuilding the MCU library once, not rebuilding a separate HAL variant for every product
 
 ---
 
 ## Learning from Examples
 
-IOsonata includes reference examples showing how to use specific features.
+IOsonata example code is written once and shared by every MCU target.
+The source lives in `exemples/`, organized by category (`uart/`, `i2c/`,
+`spi/`, `storage/`, `bluetooth/`, `sensor/`, `misc/`, ...). What you
+open and build is the per-MCU project under each target's `exemples/`
+directory; it links that shared source. The same example code runs on
+every supported MCU.
 
 ### Opening an Example Project
 
 1. **File** → **Open Projects from File System...**
-2. **Browse** to example folder:
-   - Generic: `~/IOcomposer/IOsonata/exemples/Blink/`
-   - Target-specific: `~/IOcomposer/IOsonata/ARM/Nordic/nRF52/nRF52832/exemples/Blink/Eclipse/`
+2. **Browse** to a target project folder, for example:
+   `~/IOcomposer/IOsonata/ARM/Nordic/nRF52/nRF52832/exemples/Blinky/Eclipse/`
+   (pattern: `ARM/[Vendor]/[Series]/[MCU]/exemples/[Example]/Eclipse/`)
 3. **Enable** "Search for nested projects"
 4. **Click Finish**
 5. **Build and flash** (same as above)
 
 ### Recommended Examples to Try
 
+Project names below are from the nRF52832 target; most exist for the
+other targets too. The shared source file is named beside each.
+
 **Start here:**
-- `exemples/Blink/` - LED toggling
-- `exemples/UartPrintf/` - Serial debugging with printf
+- `Blinky` - LED toggling (`exemples/misc/blinky.c`)
+- `UartRetargetDemo` - printf over UART (`exemples/uart/uart_retarget_demo.cpp`)
 
 **Add peripherals:**
-- `exemples/I2CScanner/` - Scan I2C bus for devices
-- `exemples/SpiFlash/` - SPI flash memory operations
+- `I2CMasterDemo` - I2C master transfers (`exemples/i2c/i2c_master_demo.cpp`)
+- `SPIMasterDemo` - SPI master transfers (`exemples/spi/spi_master_demo.cpp`)
+- `FlashMemoryDemo` - external flash storage (`exemples/storage/flash_memory_demo.cpp`)
 
 **BLE (Nordic only):**
-- `exemples/BleAdvertiser/` - Bluetooth advertising
-- `exemples/BleUart/` - BLE UART service
+- `BleAdvertiser` - Bluetooth advertising (`exemples/bluetooth/ble_advertiser.cpp`)
+- `UartBleDemo` - BLE UART bridge (`exemples/bluetooth/uart_ble.cpp`)
 
 **Sensors:**
-- `exemples/sensor/` - Motion sensors, environmental sensors
+- `MotionSensorDemo`, `TPHDemo` - motion and environmental sensors (`exemples/sensor/`)
 
 ---
 
@@ -262,8 +309,8 @@ IOsonata includes reference examples showing how to use specific features.
 #define I2C0_SCL_PIN     27
 ```
 
-2. **Configure in `main.c`:**
-```c
+2. **Configure in `main.cpp`:**
+```cpp
 #include "coredev/i2c.h"
 
 static const IOPinCfg_t s_I2cPins[] = {
@@ -331,7 +378,7 @@ printf("Error code: 0x%04X\n", error);
 - Connect to board's COM port at 115200 baud
 - Works on macOS, Linux, and Windows
 
-### Eclipse Debugger with IDAP-Link
+### Debugging with IDAP-Link
 
 **IDAP-Link** is I-SYST's CMSIS-DAP debug probe supporting OpenOCD and PyOCD.
 
@@ -354,7 +401,7 @@ printf("Error code: 0x%04X\n", error);
 - Add to "Variables" view
 - Add to "Expressions" view
 
-**Alternative debug probes:** J-Link, ST-Link, and other CMSIS-DAP debuggers also work with Eclipse.
+**Alternative debug probes:** J-Link, ST-Link, and other CMSIS-DAP debuggers also work with IOcomposer.
 
 ---
 
@@ -403,12 +450,12 @@ git clone https://github.com/NordicSemiconductor/nrfx.git
 
 ### Build Errors After Updating IOsonata
 
-**Cause:** Project uses old API
+**Cause:** The application is linking an older MCU library, or the application uses an API that changed.
 
 **Fix:**
-1. Check GitHub issues for breaking changes
-2. Update project code to match new API
-3. See `exemples/` for updated usage patterns
+1. Run the platform library builder again and rebuild the selected MCU library.
+2. Clean and rebuild the application.
+3. If the API changed, update the application using the current examples under `exemples/`.
 
 ---
 
@@ -424,41 +471,29 @@ IOsonata's MCU-centric design makes board variants simple:
 4. **Create `board_boardB.h`** with different pins
 5. **Switch between boards** by including different header
 
-**Application code stays the same.** Only pins change.
+**Application code stays the same.** Board data may change pins, oscillator selection and external-device configuration without rebuilding IOsonata.
 
-### Using with FreeRTOS
+### Using with an RTOS
 
-IOsonata works with bare-metal, event-driven, or RTOS architectures.
+IOsonata works with bare-metal, event-driven, or RTOS architectures,
+and the same precompiled library serves all of them.
 
-See `exemples/FreeRTOS/` for integration examples.
+Real integration examples per target: `UartBleFreeRTOS` and
+`UartPrbsTxTestFreeRTOS` (FreeRTOS), `UartBleTaktOS` and
+`UartPrbsTxTestTaktOS` (TaktOS), under
+`ARM/Nordic/nRF52/[MCU]/exemples/`. The shared sources are
+`exemples/uart/uart_prbs_tx_freertos.cpp` and
+`uart_prbs_tx_taktos.cpp`.
 
 ### Cross-Platform Development
 
 **macOS/Linux/Windows:**
-- Same Eclipse workspace
+- Same IOcomposer workspace
 - Same projects
 - Same builds
 - Portable development
 
 The installer handles platform differences automatically.
-
----
-
-## Alternative Build Systems (Advanced)
-
-**Official support:** Eclipse Embedded CDT (as described above)
-
-**Community alternatives:** Some advanced users have created custom Makefiles or CMake configurations.
-
-**These are not officially supported.** If you need non-Eclipse builds, you'll need to:
-- Understand ARM toolchains deeply
-- Write your own build files
-- Manage dependencies manually
-- Handle linker scripts yourself
-
-**See:** Community build files (if available) or write your own.
-
-**For 99% of users:** Use Eclipse as described in this guide.
 
 ---
 
