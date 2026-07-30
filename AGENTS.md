@@ -442,18 +442,33 @@ Use plain engineering language. Avoid promotional or artificial wording.
   logging mechanism where applicable.
 - Follow the naming and C/C++ wrapper pattern already used by the subsystem.
 
+## Documentation precedence
+
+Current repository documentation and source define the present architecture,
+IOcomposer workflow, project layout and implementation behavior.
+
+`docs/beyond_blinky_free_edition.md` is a machine-readable snapshot of the
+December 2025 publication. It remains useful for the object-design model and
+historical background, but current repository documentation takes precedence
+where tools, procedures, project organization or implementation details differ.
+Human readers should use https://leanpub.com/beyondblinky for the free or
+complete edition.
+
 ## Required first reading for architecture work
 
 1. `README.md`.
-2. `docs/Beyond Blinky Free Edition.pdf`, especially the object-model chapters.
-3. `include/device_intrf.h`.
-4. `src/device_intrf.cpp`.
-5. `docs/architecture/devintrf-implementer-notes.md`.
-6. `include/device.h`.
-7. `src/device.cpp`.
-8. At least three complete subsystem sets from the sections above.
-9. For shared interface work, the cross-MCU port matrix for that interface.
-10. The full subsystem being changed, including generic code, target ports,
+2. `docs/architecture/README.md`.
+3. `docs/architecture/iocomposer-workflow.md`.
+4. `docs/architecture/devintrf-implementer-notes.md`.
+5. `include/device_intrf.h`.
+6. `src/device_intrf.cpp`.
+7. `include/device.h`.
+8. `src/device.cpp`.
+9. `docs/beyond_blinky_free_edition.md` for the December 2025 object-design
+   background, not as current workflow authority.
+10. At least three complete subsystem sets from the sections above.
+11. For shared interface work, the cross-MCU port matrix for that interface.
+12. The full subsystem being changed, including generic code, target ports,
     examples, tests, and recent merged work.
 
 Do not propose a design change until this reading is complete.
