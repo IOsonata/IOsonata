@@ -1336,20 +1336,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				{
 					DEBUG_PRINTF("Entry not found\r\n");
 				}
-#if 0
-				if (entry)
-				{
-					p[0] = entry->Hdl & 0xFF;
-					p[1] = entry->Hdl >> 8;
-					p +=2;
-					pRspAtt->ReadByTypeRsp.Len = BtAttReadValueForConn(ConnHdl, entry, 0, p, rspMtu - 2) + 2;
-
-					retval = 2 + pRspAtt->ReadByTypeRsp.Len;//rsp->Len * c;
-					break;
-				}
-				retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ, BT_ATT_ERROR_ATT_NOT_FOUND);
-
-#else
 				int l = 0;
 				uint8_t permErr = 0;
 				uint16_t permErrHdl = 0;
@@ -1415,7 +1401,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ, BT_ATT_ERROR_ATT_NOT_FOUND);
 				}
 				//DEBUG_PRINTF("retval : %d\r\n", retval);
-#endif
 			}
 			break;
 		case BT_ATT_OPCODE_ATT_READ_REQ:

@@ -125,14 +125,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
 
 uint8_t g_AdvDataBuff[10] = {
-	BLEADV_MANDATA_TYPE_TPH,
+	BT_ADV_MANDATA_TYPE_TPH,
 };
 
-BleAdvManData_t &g_AdvData = *(BleAdvManData_t*)g_AdvDataBuff;
+BtAdvManData_t &g_AdvData = *(BtAdvManData_t*)g_AdvDataBuff;
 
 // Evironmental Sensor Data to advertise
-BleAdvManData_TphSensor_t &g_TPHData = *(BleAdvManData_TphSensor_t *)g_AdvData.Data;
-BleAdvManData_AqSensor_t &g_GasData = *(BleAdvManData_AqSensor_t *)g_AdvData.Data;
+BtAdvManData_TphSensor_t &g_TPHData = *(BtAdvManData_TphSensor_t *)g_AdvData.Data;
+BtAdvManData_AqSensor_t &g_GasData = *(BtAdvManData_AqSensor_t *)g_AdvData.Data;
 
 void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
@@ -455,24 +455,24 @@ void ReadPTHData()
 	if (g_TphSensor.DeviceID() == BME680_ID && (gascnt & 0x3) == 0)
 	{
 		GasSensorData_t gdata;
-		BleAdvManData_AqSensor_t gas;
+		BtAdvManData_AqSensor_t gas;
 
 		g_GasSensor.Read(gdata);
 
-		g_AdvData.Type = BLEADV_MANDATA_TYPE_GAS;
+		g_AdvData.Type = BT_ADV_MANDATA_TYPE_GAS;
 		gas.GasRes = gdata.GasRes[gdata.MeasIdx];
 		gas.AirQIdx = gdata.AirQualIdx;
 
-		memcpy(&g_GasData, &gas, sizeof(BleAdvManData_AqSensor_t));
+		memcpy(&g_GasData, &gas, sizeof(BtAdvManData_AqSensor_t));
 	}
 	else
 	{
-		g_AdvData.Type = BLEADV_MANDATA_TYPE_TPH;
+		g_AdvData.Type = BT_ADV_MANDATA_TYPE_TPH;
 
 		// NOTE : M0 does not access unaligned data
 		// use local 4 bytes align stack variable then mem copy
 		// skip timestamp as advertising pack is limited in size
-		memcpy(&g_TPHData, ((uint8_t*)&data) + sizeof(data.Timestamp), sizeof(BleAdvManData_TphSensor_t));
+		memcpy(&g_TPHData, ((uint8_t*)&data) + sizeof(data.Timestamp), sizeof(BtAdvManData_TphSensor_t));
 	}
 
 
@@ -726,10 +726,10 @@ void HardwareInit()
 
 	g_TphSensor.StartSampling();
 
-	g_AdvData.Type = BLEADV_MANDATA_TYPE_TPH;
+	g_AdvData.Type = BT_ADV_MANDATA_TYPE_TPH;
 	// Do memcpy to adv data. Due to byte alignment, cannot read directly into
 	// adv data
-	memcpy(g_AdvData.Data, ((uint8_t*)&tphdata) + 4, sizeof(BleAdvManData_TphSensor_t));
+	memcpy(g_AdvData.Data, ((uint8_t*)&tphdata) + 4, sizeof(BtAdvManData_TphSensor_t));
 
 //#ifdef USE_TIMER_UPDATE
 	// Only with SDK14
