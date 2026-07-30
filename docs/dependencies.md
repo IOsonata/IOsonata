@@ -1,8 +1,8 @@
 # IOsonata Dependencies
 
-IOcomposer and the IOsonata installers manage the common development tools and repository layout. Additional SDKs and libraries are target- or feature-specific.
+This document defines which tools, SDKs and optional libraries belong to IOcomposer, the MCU target, IOsonata or the application.
 
-## Installation root
+## Installed layout
 
 The default layout is:
 
@@ -15,25 +15,25 @@ The default layout is:
 
 On Windows, use `%USERPROFILE%\IOcomposer`.
 
-## Installed development tools
+## Development tools
 
-The installer provides the tools required by the selected installation profile, including:
+The installed environment provides the tools required by the selected installation profile, including:
 
 - IOcomposer;
 - Arm and RISC-V cross-compilers;
 - OpenOCD;
 - the IOsonata repository;
-- project integration and the project wizard;
-- the MCU-library build scripts;
-- supported SDK checkouts used by the installed targets.
+- project and debug integration;
+- the MCU-library builders;
+- supported SDK checkouts used by installed targets.
 
-The installer output is the source of truth for exact versions and locations.
+The installer output records the exact versions and locations used by that installation.
 
-## Target SDKs
+## MCU-target dependencies
 
-Target projects may use vendor headers, controller libraries, radio stacks or binary components under `~/IOcomposer/external/`.
+A target port may require vendor headers, controller libraries, radio stacks or binary components under `~/IOcomposer/external/`.
 
-Common families include:
+Examples include:
 
 - Nordic nRF5 SDK, nrfx and bare-metal SDK components;
 - ST STM32 device and wireless-stack packages;
@@ -42,11 +42,13 @@ Common families include:
 - Espressif target support;
 - CMSIS components for Arm targets.
 
-Do not assume that every MCU family uses the same vendor package or that one package covers every family generation. Check the selected target project and [`supported-targets.md`](supported-targets.md).
+Different MCU generations from the same vendor may use different packages. Check the selected target project and [Supported Targets](supported-targets.md).
 
-## Optional libraries
+Do not fix a missing target dependency by copying vendor source into an application project.
 
-Applications may add optional libraries according to their features.
+## Application dependencies
+
+Applications may add libraries that are not part of the IOsonata MCU library.
 
 ### Filesystems
 
@@ -57,59 +59,66 @@ IOsonata supplies storage and `DiskIO` integration where supported. The filesyst
 
 ### Networking
 
-- lwIP or another application-selected network stack.
+The application may select lwIP or another network stack.
 
-### Sensor algorithms
+### Sensor and algorithm libraries
 
-Some sensors require vendor algorithm libraries, calibration data or binary components. Examples can include Bosch environmental processing and TDK/InvenSense motion algorithms.
-
-Check the vendor licence before redistribution.
+Some devices require vendor algorithms, calibration data or binary components. Check the vendor licence and redistribution terms before including them in a product.
 
 ### RTOS kernels
 
-IOsonata itself is scheduler-independent.
+IOsonata does not own the scheduler.
 
 - TaktOS can be installed and built by the library builder.
 - FreeRTOS and ThreadX are application/kernel dependencies.
-- All supported execution models link the same selected IOsonata MCU library binary.
+- Bare metal, TaktOS, FreeRTOS and ThreadX can link the same selected IOsonata MCU library binary.
 
-## Dependency ownership
-
-The dependency boundary is:
+## Ownership boundary
 
 ```text
-application and optional kernel
-    + optional filesystem/network/algorithm libraries
+application source and board.h
+    + optional kernel
+    + optional filesystem, network or algorithm libraries
     + vendor components required by the MCU target
     + precompiled libIOsonata_<MCU>.a
 ```
 
-A product does not rebuild IOsonata merely because it selects another optional application library.
+A product does not rebuild IOsonata merely because it selects another board, kernel or optional application library.
+
+Rebuild the affected MCU library when:
+
+- IOsonata source for that MCU changes;
+- a vendor dependency consumed by the target implementation changes;
+- compiler or target-build settings used to produce the library change.
+
+Rebuild only the application when:
+
+- application source changes;
+- `board.h` changes;
+- an application-only library changes;
+- the optional kernel changes;
+- the application memory layout changes.
 
 ## Verify an installation
 
-After installation:
-
 1. launch IOcomposer;
-2. run the IOsonata MCU-library builder;
-3. confirm the selected target builds Debug and Release libraries;
+2. run the MCU-library builder;
+3. build the selected target in Debug and Release;
 4. open a working target example;
-5. build and link the application.
+5. build, link, flash and run the application.
 
-The library builder is the most direct dependency check because it exercises the toolchain, target project and required includes together.
+The MCU-library build checks the compiler, target project, include paths and required target dependencies together.
 
 ## Missing SDK or header
 
 When a target build reports a missing vendor header or unresolved vendor symbol:
 
-1. identify which target project produced the error;
+1. identify the target project that failed;
 2. inspect its include and library paths in IOcomposer;
-3. verify the expected repository or SDK under `~/IOcomposer/external/`;
-4. rerun the installer if the dependency is installer-managed;
+3. verify the expected package under `~/IOcomposer/external/`;
+4. rerun the installer when the package is installer-managed;
 5. rebuild the selected MCU library;
 6. clean and relink the application.
-
-Do not fix a missing target dependency by copying vendor source into an application project.
 
 ## Updating IOsonata
 
@@ -124,36 +133,38 @@ After an IOsonata source update:
 2. rebuild each affected MCU library once;
 3. clean and relink applications using those libraries.
 
-Application, board and RTOS changes do not require another IOsonata library build.
-
 ## Updating external dependencies
 
-Update an external dependency only when the selected target or application requires it. After updating:
+Update an external dependency only when the selected target or application requires it.
 
-- rebuild the affected MCU library if the dependency is consumed by IOsonata target code;
+After updating:
+
+- rebuild the MCU library when IOsonata target code consumes the dependency;
 - otherwise rebuild only the application or optional kernel that consumes it;
-- rerun hardware validation for the affected subsystem.
+- repeat hardware validation for the affected subsystem;
+- record the tested dependency revision.
 
-Do not track an external package's moving default branch in a release product without recording the tested revision.
+Do not rely on a moving default branch for a release product without recording the tested commit or release.
 
 ## Offline use
 
-After installation and dependency checkout, IOcomposer and IOsonata builds are local. Preserve:
+After installation and dependency checkout, normal builds are local. Preserve:
 
 - the IOcomposer installation;
 - `~/IOcomposer/IOsonata`;
 - `~/IOcomposer/external`;
-- the toolchain installation;
+- the installed toolchains;
 - application workspaces.
 
-## Licence review
+## Licences
 
-IOsonata is MIT licensed. External SDKs, radio stacks, filesystems and sensor algorithm libraries retain their own licences. Review those licences before commercial redistribution.
+IOsonata is MIT licensed. Vendor SDKs, radio stacks, filesystems and algorithm libraries retain their own licences. Review those licences before redistribution.
 
 ## Related documentation
 
-- [Getting started](getting-started.md)
-- [Quick reference](quick-reference.md)
+- [Documentation index](README.md)
+- [Getting Started](getting-started.md)
+- [Quick Reference](quick-reference.md)
 - [Architecture overview](architecture/README.md)
 - [IOcomposer workflow](architecture/iocomposer-workflow.md)
-- [Supported targets](supported-targets.md)
+- [Supported Targets](supported-targets.md)
