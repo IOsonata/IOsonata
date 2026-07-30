@@ -8,9 +8,9 @@
 
 IOsonata is an open-source, multi-architecture hardware-abstraction and device-driver library for microcontrollers.
 
-It uses real object-oriented design—encapsulation, inheritance, runtime polymorphism and object composition—while matching or exceeding the measured performance of C-only HALs and frameworks.
+It uses real object-oriented design—encapsulation, inheritance, runtime polymorphism and object composition—while matching or exceeding the performance of tested C-only HALs and frameworks in published on-target benchmarks.
 
-Each MCU target is ported once and compiled into one reusable static library:
+Each MCU target is ported once and compiled into reusable Debug and Release static libraries. Within a selected build profile, every application links the exact same library binary:
 
 ```text
 libIOsonata_<MCU>.a
@@ -22,14 +22,24 @@ Every board, product and execution model using that MCU target links the same va
 - No RTOS-specific HAL build
 - No I2C build, SPI build or sensor-specific build
 - No Kconfig or Devicetree feature matrix
-- No CMake required
+- No CMake in the official build workflow
 - No heap required in the core data paths
 
 The application owns `main()`, its board configuration, its memory layout and its execution model.
 
+### Measured on hardware
+
+- **IOsonata UART on nRF54L15:** 102.2 KB/s, compared with nrfx at 87.0 KB/s and Zephyr at 82.9 KB/s.
+- **TaktOS on nRF54L15 KVB:** up to 3.12× Zephyr and 2.88× ThreadX across the reported scheduler, synchronization and IPC operations.
+- **Controlled kernel comparison:** TaktOS, FreeRTOS and ThreadX all link the exact same precompiled IOsonata library binary.
+
+Detailed benchmark tables, configurations and methodology appear below.
+
 ---
 
 ## One MCU port. One validated binary.
+
+Debug and Release are separate build profiles. For either selected profile, the same IOsonata library binary is reused unchanged across boards, products, applications and supported execution models.
 
 The MCU library contains the complete supported implementation for that target:
 
@@ -98,7 +108,7 @@ MCU
 × boot configuration
 ```
 
-That rapidly creates more than 10,000 possible framework binaries.
+That rapidly creates thousands of possible framework binaries.
 
 IOsonata does not use one compilation macro for I2C, another for SPI, another for BLE, and another for every sensor combination. Supported implementations are compiled into the static library once.
 
@@ -186,7 +196,7 @@ The same precompiled MCU library is used with:
 - event-driven applications
 - [TaktOS](https://github.com/IOsonata/TaktOS)
 - FreeRTOS
-- Eclipse ThreadX
+- ThreadX
 
 TaktOS, FreeRTOS and ThreadX benchmark projects all link the exact same precompiled IOsonata library. IOsonata is not rebuilt with OS-specific macros for any of them. Only the kernel changes at the final application link.
 
@@ -262,8 +272,8 @@ See the [TaktOS on-target benchmark results](https://github.com/IOsonata/TaktOS#
 | Same HAL binary across board variants | Usually no | No | **Yes** |
 | Same HAL binary across RTOSes | Usually no | Zephyr-integrated | **Bare metal, TaktOS, FreeRTOS, ThreadX** |
 | Device Tree required | No | Yes | **No** |
-| CMake required | Varies | Yes | **No** |
-| Application owns `main()` | Usually | Framework-controlled | **Yes** |
+| Official build requires CMake | Varies | Yes | **No** |
+| Startup and application entry | Application-defined | Framework initializes the kernel and devices before application entry | **Application-defined** |
 
 ---
 
@@ -284,11 +294,56 @@ Target support has different validation levels. See [Supported Targets](docs/sup
 
 ---
 
+## Hardware reference platforms
+
+IOsonata is developed and validated on I-SYST reference hardware as well as vendor development kits.
+
+| Platform | MCU / role | IOsonata use |
+|---|---|---|
+| [BLYST Nano](https://www.i-syst.com/products/blyst-nano) / IDK-BLYST-NANO | nRF52832 Cortex-M4F | Primary BLE, UART, sensor and low-power baseline |
+| BLYSTL15 | nRF54L15 Cortex-M33 | nRF54L and `sdk-nrf-bm` bare-metal baseline |
+| BLUEIO-TAG-EVIM | nRF52832 with environmental and motion sensors | Bluetooth and multi-sensor reference platform |
+| [IDAP-Link](https://www.i-syst.com/products/idap-link) | CMSIS-DAP SWD/JTAG probe with USB-UART bridge | Flashing, debugging and serial output |
+| CS-BLYST-06 / IBK-NRF52840 | nRF52832 / nRF52840 breakout boards | MCU bring-up and peripheral development |
+
+### Current hardware-validation baseline
+
+| MCU target | Reference hardware | Status |
+|---|---|---|
+| nRF52832 | IDK-BLYST-NANO, BLUEIO-TAG-EVIM, Nordic nRF52 DK | Hardware validated |
+| nRF54L15 | BLYSTL15, Nordic nRF54L15 DK | Hardware validated |
+| STM32 baseline | STM32 development boards | Hardware-validated baseline |
+
+The detailed and current target matrix remains in [Supported Targets](docs/supported-targets.md).
+
+---
+
+## Built with IOsonata
+
+- [TaktOS](https://github.com/IOsonata/TaktOS), including the KVB and Thread-Metric cross-kernel benchmarks
+- [SlimeVRFirmware](https://github.com/IOsonata/SlimeVRFirmware)
+- Bluetooth UART bridges running bare metal, with FreeRTOS and with TaktOS
+- I-SYST BLYST, BlueIO and sensor reference applications
+- Storage, NVM, crypto, IMU and standard Bluetooth-service implementations in this repository
+
+---
+
 ## Quick start
+
+### Recommended first run
+
+```text
+Install IOcomposer
+    → run the IOsonata library builder
+    → select nRF52832
+    → open ARM/Nordic/nRF52/nRF52832/exemples/Blinky/Eclipse/
+    → use IDK-BLYST-NANO or an nRF52832 DK
+    → build, flash and debug with IDAP-Link, J-Link or another supported probe
+```
 
 ### Install IOcomposer
 
-[IOcomposer](https://iocomposer.io) provides an Eclipse-based embedded development environment with ARM and RISC-V toolchains, OpenOCD, SDK integration and IOsonata project support.
+[IOcomposer](https://iocomposer.io) provides an embedded development environment with ARM and RISC-V toolchains, OpenOCD, SDK integration and IOsonata project support.
 
 **macOS**
 
@@ -334,17 +389,17 @@ bash ~/IOcomposer/IOsonata/Installer/build_iosonata_lib_linux.sh
 
 The builder:
 
-1. Locates IOcomposer or Eclipse Embedded CDT.
+1. Locates the IOcomposer installation.
 2. Discovers the supported IOsonata MCU library projects under `*/lib/Eclipse/`.
 3. Presents an interactive menu to select one MCU target or build all targets.
-4. Runs the Eclipse CDT managed builder headlessly.
+4. Runs the IOcomposer managed builder headlessly.
 5. Builds both Debug and Release configurations and places the libraries in the selected project's `Debug/` and `Release/` directories.
 
 When TaktOS is installed, its ARM and RISC-V library projects are built automatically after the selected IOsonata MCU library. Use `--no-taktos` on macOS/Linux or `-NoTaktos` on Windows to build IOsonata only.
 
 ### Open a working example
 
-In IOcomposer or Eclipse Embedded CDT:
+In IOcomposer:
 
 1. Select **File → Open Projects from File System...**
 2. Open a target project, for example:
