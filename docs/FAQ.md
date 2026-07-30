@@ -241,7 +241,7 @@ See the hardware-reference section in the [README](../README.md) and the current
 
 ## Why is the book also stored as Markdown?
 
-`beyond_blinky_free_edition.md` is a machine-readable extraction of the December 2025 free edition. It is retained for repository search and RAG indexing, not as the current setup or workflow guide.
+`beyond_blinky_free_edition.md` records the publication status and links to `beyond_blinky_free_edition_2025_raw.md`, the machine-readable extraction of the December 2025 free edition. It is retained for repository search and RAG indexing, not as the current setup or workflow guide.
 
 Current architecture and workflow documentation takes precedence where the published book differs. Human readers should [download the free edition or buy the complete book on Leanpub](https://leanpub.com/beyondblinky).
 
