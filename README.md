@@ -215,7 +215,7 @@ PRBS-verified UART throughput on Nordic hardware:
 | nRF54L15 DK | **102.2 KB/s** | 82.9 KB/s | 87.0 KB/s |
 | nRF52832 DK, 2 MBaud | **203 KB/s** | Not supported in the tested configuration | 183.7 KB/s |
 
-The benchmark uses the same IOsonata `DeviceIntrf` path used by normal applications and verifies the received PRBS stream for errors. See [Beyond Blinky — free edition](docs/beyond_blinky_free_edition.md) for the benchmark description and methodology.
+The benchmark uses the same IOsonata `DeviceIntrf` path used by normal applications and verifies the received PRBS stream for errors. See [Beyond Blinky — free edition](https://leanpub.com/beyondblinky) for the benchmark description and methodology.
 
 Object-oriented design is not the performance problem. Poor implementation is.
 
@@ -312,9 +312,8 @@ IOsonata is developed and validated on I-SYST reference hardware as well as vend
 |---|---|---|
 | nRF52832 | IDK-BLYST-NANO, BLUEIO-TAG-EVIM, Nordic nRF52 DK | Hardware validated |
 | nRF54L15 | BLYSTL15, Nordic nRF54L15 DK | Hardware validated |
-| STM32 baseline | STM32 development boards | Hardware-validated baseline |
 
-The detailed and current target matrix remains in [Supported Targets](docs/supported-targets.md).
+STM32 source ports and target projects remain in the repository, but no STM32 target is listed as a current hardware-validation baseline until an exact board and test record are documented. See [Supported Targets](docs/supported-targets.md).
 
 ---
 
@@ -430,9 +429,10 @@ Installer/                       Cross-platform development-environment installe
 
 **Beyond Blinky: Object-Oriented C++ Programming — Fun, Fast, and Fearless Embedded Development**
 
+- [Download the free edition or buy the complete book on Leanpub](https://leanpub.com/beyondblinky)
 - [Amazon](https://www.amazon.com/Beyond-Blinky-Object-Oriented-Programming-Development/dp/1069933511)
-- [Leanpub](https://leanpub.com/beyondblinky)
-- [Free repository edition](docs/beyond_blinky_free_edition.md)
+
+Publication status and retrieval links are kept in `docs/beyond_blinky_free_edition.md`. The dated machine-readable extraction is `docs/beyond_blinky_free_edition_2025_raw.md` for repository search and RAG indexing. Current repository documentation takes precedence for setup, build workflow and project organization.
 
 The book explains the object model, `DeviceIntrf`, `Device`, driver portability, MCU porting and the measured-performance approach used by IOsonata.
 
