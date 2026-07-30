@@ -432,7 +432,7 @@ Installer/                       Cross-platform development-environment installe
 - [Download the free edition or buy the complete book on Leanpub](https://leanpub.com/beyondblinky)
 - [Amazon](https://www.amazon.com/Beyond-Blinky-Object-Oriented-Programming-Development/dp/1069933511)
 
-A machine-readable snapshot of the December 2025 free edition is kept in `docs/beyond_blinky_free_edition.md` for repository search and RAG indexing. Current repository documentation takes precedence for setup, build workflow and project organization.
+Publication status and retrieval links are kept in `docs/beyond_blinky_free_edition.md`. The dated machine-readable extraction is `docs/beyond_blinky_free_edition_2025_raw.md` for repository search and RAG indexing. Current repository documentation takes precedence for setup, build workflow and project organization.
 
 The book explains the object model, `DeviceIntrf`, `Device`, driver portability, MCU porting and the measured-performance approach used by IOsonata.
 
