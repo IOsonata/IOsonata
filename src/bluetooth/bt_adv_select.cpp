@@ -8,6 +8,8 @@ MIT License
 
 Copyright (c) 2026 I-SYST inc., all rights reserved
 ----------------------------------------------------------------------------*/
+#include <stddef.h>
+
 #include "bluetooth/bt_adv.h"
 
 bool BtAdvUseExtended(size_t AdvLen, size_t SrLen)
