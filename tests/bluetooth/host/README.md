@@ -34,19 +34,35 @@ make -C tests/bluetooth/host SANITIZERS=
 - legacy scan-response placement;
 - automatic extended-advertising fallback without name truncation.
 
+`bt_hci_flow_test.cpp` verifies:
+
+- HCI command framing and invalid command parameters;
+- command-complete and command-status credit updates;
+- ACL credit consumption and completed-packet replenishment;
+- outgoing ACL fragmentation and insufficient-credit rejection;
+- single-link and interleaved multi-link ACL reassembly;
+- orphan and oversized continuation handling;
+- bounded malformed legacy and extended advertising events.
+
+`bt_l2cap_signal_test.cpp` verifies:
+
+- unknown and truncated signaling command rejection;
+- connection parameter update validation, acceptance and response callbacks;
+- LE credit-based connection request and response construction;
+- flow-control credit acceptance and invalid-CID rejection;
+- disconnection request and response handling;
+- unsupported enhanced credit-based connection rejection;
+- credit-based reconfiguration requests and response callbacks;
+- multiple commands in one signaling PDU;
+- bounded response construction when input would generate more responses than fit.
+
 ## Planned host layers
 
-The next test targets should use a fake HCI controller and feed the production host
-entry points directly:
-
-1. HCI command credits and ACL buffer credits.
-2. ACL fragmentation and per-connection reassembly.
-3. L2CAP signaling, including malformed command lengths.
-4. ATT server requests, long reads, prepare/execute writes and permissions.
-5. ATT client discovery and transaction completion.
-6. SMP association models, timeout paths and bond restore.
-7. Simultaneous links with disconnect at each protocol state.
-8. Recorded HCI trace replay and mutation fuzzing.
+1. ATT server requests, long reads, prepare/execute writes and permissions.
+2. ATT client discovery and transaction completion.
+3. SMP association models, timeout paths and bond restore.
+4. Simultaneous links with disconnect at each protocol state.
+5. Recorded HCI trace replay and mutation fuzzing.
 
 Host tests must remain independent of an RTOS. Scheduling tests should override only
 the existing wait/notify hooks when an execution model needs to be exercised.
