@@ -445,7 +445,7 @@ Use plain engineering language. Avoid promotional or artificial wording.
 ## Required first reading for architecture work
 
 1. `README.md`.
-2. `docs/beyond_blinky_free_edition.md`, especially the object-model chapters.
+2. `docs/Beyond Blinky Free Edition.pdf`, especially the object-model chapters.
 3. `include/device_intrf.h`.
 4. `src/device_intrf.cpp`.
 5. `docs/architecture/devintrf-implementer-notes.md`.
