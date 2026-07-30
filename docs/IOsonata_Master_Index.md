@@ -5,10 +5,11 @@ This index points to the current IOsonata architecture, workflow and implementat
 ## Start here
 
 1. [README](../README.md) — project scope, precompiled-library model, benchmarks and supported execution models.
-2. [Getting started](getting-started.md) — install IOcomposer, build an MCU library, open an example, flash and debug.
-3. [FAQ](FAQ.md) — concise answers about architecture, project layout and the build model.
-4. [Quick reference](quick-reference.md) — commands and common project tasks.
-5. [Supported targets](supported-targets.md) — current MCU and validation status.
+2. [Why IOsonata](Why-IOsonata.md) — the design and build choices that distinguish IOsonata.
+3. [Getting started](getting-started.md) — install IOcomposer, build an MCU library, open an example, flash and debug.
+4. [FAQ](FAQ.md) — concise answers about architecture, project layout and the build model.
+5. [Quick reference](quick-reference.md) — commands and common project tasks.
+6. [Supported targets](supported-targets.md) — current MCU and validation status.
 
 ## Architecture
 
