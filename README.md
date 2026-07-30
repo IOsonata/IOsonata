@@ -312,9 +312,8 @@ IOsonata is developed and validated on I-SYST reference hardware as well as vend
 |---|---|---|
 | nRF52832 | IDK-BLYST-NANO, BLUEIO-TAG-EVIM, Nordic nRF52 DK | Hardware validated |
 | nRF54L15 | BLYSTL15, Nordic nRF54L15 DK | Hardware validated |
-| STM32 baseline | STM32 development boards | Hardware-validated baseline |
 
-The detailed and current target matrix remains in [Supported Targets](docs/supported-targets.md).
+STM32 source ports and target projects remain in the repository, but no STM32 target is listed as a current hardware-validation baseline until an exact board and test record are documented. See [Supported Targets](docs/supported-targets.md).
 
 ---
 
