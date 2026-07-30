@@ -34,10 +34,7 @@ IOcomposer runs the standard IOsonata installer and then adds two things on top:
 
 **Windows (PowerShell as Administrator):**
 ```powershell
-$u   = "https://iocomposer.io/install_ioc_windows.ps1"
-$dst = "$env:TEMP\install_ioc_windows.ps1"
-irm $u -OutFile $dst
-powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File $dst
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://iocomposer.io/install_ioc_windows.ps1 | iex"
 ```
 
 The default installation root is `~/IOcomposer`. Override with `--home <path>`.
@@ -231,11 +228,11 @@ Build Finished (took 3.2s)
 ### Understanding the Project Structure
 
 **Generated files:**
-- `board.h` - Board pin, oscillator and external-device configuration
+- `board.h` - Hardware pin definitions (customize this)
 - `<project>.h` - Application configuration
-- `main.c` or `main.cpp` - Application code
-- `.cproject` - IOcomposer managed-build configuration
-- `.project` - Project metadata
+- `main.c` - Your application code
+- `.cproject` - managed build configuration
+- `.project` - project metadata
 
 The application includes IOsonata headers and links the precompiled library for the selected MCU and build profile:
 
