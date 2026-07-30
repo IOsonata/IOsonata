@@ -11,7 +11,6 @@ SANITIZERS ?= -fsanitize=address,undefined
 SOURCES := \
 	bt_adv_uuid_test.cpp \
 	$(ROOT)/src/bluetooth/bt_adv.cpp \
-	$(ROOT)/src/bluetooth/bt_adv_select.cpp \
 	$(ROOT)/src/bluetooth/bt_uuid.cpp
 
 .PHONY: all test clean
