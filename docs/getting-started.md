@@ -24,12 +24,12 @@ IOcomposer runs the standard IOsonata installer and then adds two things on top:
 
 **macOS:**
 ```bash
-/bin/bash -c "$(curl -fsSL https://iocomposer.io/install_ioc_macos.sh)"
+curl -fsSL https://iocomposer.io/install_ioc_macos.sh -o /tmp/install_ioc_macos.sh && bash /tmp/install_ioc_macos.sh
 ```
 
 **Linux:**
 ```bash
-/bin/bash -c "$(curl -fsSL https://iocomposer.io/install_ioc_linux.sh)"
+curl -fsSL https://iocomposer.io/install_ioc_linux.sh -o /tmp/install_ioc_linux.sh && bash /tmp/install_ioc_linux.sh
 ```
 
 **Windows (PowerShell as Administrator):**
@@ -45,12 +45,12 @@ If you prefer the development environment without the AI layer:
 
 **macOS:**
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/master/Installer/install_iocdevtools_macos.sh)"
+curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/master/Installer/install_iocdevtools_macos.sh -o /tmp/install_iocdevtools_macos.sh && bash /tmp/install_iocdevtools_macos.sh
 ```
 
 **Linux:**
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/master/Installer/install_iocdevtools_linux.sh)"
+curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/master/Installer/install_iocdevtools_linux.sh -o /tmp/install_iocdevtools_linux.sh && bash /tmp/install_iocdevtools_linux.sh
 ```
 
 **Windows (PowerShell as Administrator):**
@@ -228,11 +228,11 @@ Build Finished (took 3.2s)
 ### Understanding the Project Structure
 
 **Generated files:**
-- `board.h` - Hardware pin definitions (customize this)
+- `board.h` - Board pin, oscillator and external-device configuration
 - `<project>.h` - Application configuration
-- `main.c` - Your application code
-- `.cproject` - managed build configuration
-- `.project` - project metadata
+- `main.c` or `main.cpp` - Application code
+- `.cproject` - IOcomposer managed-build configuration
+- `.project` - Project metadata
 
 The application includes IOsonata headers and links the precompiled library for the selected MCU and build profile:
 
@@ -418,10 +418,14 @@ Add → Archive → Browse to ~/IOcomposer/IOsonata/Installer/eclipse_plugin/*.j
 
 **Cause:** Toolchain not in PATH
 
-**Fix:** Rerun installer, or add manually:
+The installer places the toolchains under `/opt/xPacks` and links the
+compilers into `/usr/local/bin`, which is normally already on PATH.
+
+**Fix:** Rerun the installer. To add the toolchain manually instead:
 ```bash
-export PATH="$HOME/.local/xPacks/@xpack-dev-tools/arm-none-eabi-gcc/.content/bin:$PATH"
+export PATH="/opt/xPacks/arm-none-eabi-gcc/bin:$PATH"
 ```
+(adjust to the actual toolchain folder name under `/opt/xPacks`)
 
 ### "Undefined reference to nrf_xxx"
 
