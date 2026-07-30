@@ -137,7 +137,7 @@ Useful entry points include:
 
 **Beyond Blinky: Object-Oriented C++ Programming — Fun, Fast, and Fearless Embedded Development** explains the orchard model, `DeviceIntrf`, `Device`, device families, runtime polymorphism, MCU porting and measured performance.
 
-- [Free repository edition](beyond_blinky_free_edition.md)
+- [Free repository edition](Beyond%20Blinky%20Free%20Edition.pdf)
 - [Leanpub](https://leanpub.com/beyondblinky)
 - [Amazon](https://www.amazon.com/Beyond-Blinky-Object-Oriented-Programming-Development/dp/1069933511)
 
