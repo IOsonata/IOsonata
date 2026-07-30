@@ -215,7 +215,7 @@ PRBS-verified UART throughput on Nordic hardware:
 | nRF54L15 DK | **102.2 KB/s** | 82.9 KB/s | 87.0 KB/s |
 | nRF52832 DK, 2 MBaud | **203 KB/s** | Not supported in the tested configuration | 183.7 KB/s |
 
-The benchmark uses the same IOsonata `DeviceIntrf` path used by normal applications and verifies the received PRBS stream for errors. See [Beyond Blinky — free edition](docs/beyond_blinky_free_edition.md) for the benchmark description and methodology.
+The benchmark uses the same IOsonata `DeviceIntrf` path used by normal applications and verifies the received PRBS stream for errors. See [Beyond Blinky — free edition](docs/Beyond%20Blinky%20Free%20Edition.pdf) for the benchmark description and methodology.
 
 Object-oriented design is not the performance problem. Poor implementation is.
 
@@ -432,7 +432,7 @@ Installer/                       Cross-platform development-environment installe
 
 - [Amazon](https://www.amazon.com/Beyond-Blinky-Object-Oriented-Programming-Development/dp/1069933511)
 - [Leanpub](https://leanpub.com/beyondblinky)
-- [Free repository edition](docs/beyond_blinky_free_edition.md)
+- [Free repository edition](docs/Beyond%20Blinky%20Free%20Edition.pdf)
 
 The book explains the object model, `DeviceIntrf`, `Device`, driver portability, MCU porting and the measured-performance approach used by IOsonata.
 
