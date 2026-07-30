@@ -72,9 +72,9 @@ The standard linker script also remains the same for boards using the same MCU. 
 Those application memory choices still do not rebuild the IOsonata library.
 
 ```text
-Application A + board A + TaktOS   ─┐
-Application B + board B + FreeRTOS ─┼── same libIOsonata_<MCU>.a
-Application C + board C + ThreadX  ─┤
+Application A + board A + TaktOS    ─┐
+Application B + board B + FreeRTOS  ─┼── same libIOsonata_<MCU>.a
+Application C + board C + ThreadX   ─┤
 Application D + board D + bare metal─┘
 ```
 
@@ -310,20 +310,37 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://iocomposer.i
 
 The repository also contains standalone installation scripts under [`Installer/`](Installer/) for developers who prefer to assemble the environment directly.
 
-### Build an MCU library
+### Build the MCU libraries
 
-Example for nRF52832:
+After installation, run the platform-specific builder from `IOsonata/Installer`.
+
+**macOS**
 
 ```bash
-cd ARM/Nordic/nRF52/nRF52832/lib
-make release
+bash ~/IOcomposer/IOsonata/Installer/build_iosonata_lib_macos.sh
 ```
 
-This produces:
+**Linux**
 
-```text
-Release/libIOsonata_nRF52832.a
+```bash
+bash ~/IOcomposer/IOsonata/Installer/build_iosonata_lib_linux.sh
 ```
+
+**Windows — PowerShell**
+
+```powershell
+& "$env:USERPROFILE\IOcomposer\IOsonata\Installer\build_iosonata_lib_win.ps1"
+```
+
+The builder:
+
+1. Locates IOcomposer or Eclipse Embedded CDT.
+2. Discovers the supported IOsonata MCU library projects under `*/lib/Eclipse/`.
+3. Presents an interactive menu to select one MCU target or build all targets.
+4. Runs the Eclipse CDT managed builder headlessly.
+5. Builds both Debug and Release configurations and places the libraries in the selected project's `Debug/` and `Release/` directories.
+
+When TaktOS is installed, its ARM and RISC-V library projects are built automatically after the selected IOsonata MCU library. Use `--no-taktos` on macOS/Linux or `-NoTaktos` on Windows to build IOsonata only.
 
 ### Open a working example
 
