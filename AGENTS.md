@@ -447,8 +447,9 @@ Use plain engineering language. Avoid promotional or artificial wording.
 Current repository documentation and source define the present architecture,
 IOcomposer workflow, project layout and implementation behavior.
 
-`docs/beyond_blinky_free_edition.md` is a machine-readable snapshot of the
-December 2025 publication. It remains useful for the object-design model and
+`docs/beyond_blinky_free_edition.md` identifies the publication status and links to
+`docs/beyond_blinky_free_edition_2025_raw.md`, the machine-readable extraction of
+the December 2025 publication. It remains useful for the object-design model and
 historical background, but current repository documentation takes precedence
 where tools, procedures, project organization or implementation details differ.
 Human readers should use https://leanpub.com/beyondblinky for the free or
@@ -464,8 +465,9 @@ complete edition.
 6. `src/device_intrf.cpp`.
 7. `include/device.h`.
 8. `src/device.cpp`.
-9. `docs/beyond_blinky_free_edition.md` for the December 2025 object-design
-   background, not as current workflow authority.
+9. `docs/beyond_blinky_free_edition.md`, then
+   `docs/beyond_blinky_free_edition_2025_raw.md`, for the December 2025
+   object-design background, not as current workflow authority.
 10. At least three complete subsystem sets from the sections above.
 11. For shared interface work, the cross-MCU port matrix for that interface.
 12. The full subsystem being changed, including generic code, target ports,
