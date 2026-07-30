@@ -5,12 +5,13 @@ TARGET := $(BUILD_DIR)/bt_adv_uuid_test
 CXX ?= g++
 CPPFLAGS += -I$(ROOT)/include
 CXXFLAGS ?= -O1 -g
-CXXFLAGS += -std=c++17 -Wall -Wextra -Wpedantic -fno-omit-frame-pointer
+CXXFLAGS += -std=gnu++23 -Wall -Wextra -fno-omit-frame-pointer
 SANITIZERS ?= -fsanitize=address,undefined
 
 SOURCES := \
 	bt_adv_uuid_test.cpp \
 	$(ROOT)/src/bluetooth/bt_adv.cpp \
+	$(ROOT)/src/bluetooth/bt_adv_select.cpp \
 	$(ROOT)/src/bluetooth/bt_uuid.cpp
 
 .PHONY: all test clean
