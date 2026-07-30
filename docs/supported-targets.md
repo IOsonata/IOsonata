@@ -17,9 +17,10 @@ The presence of a target port or build project means that implementation source 
 |---|---|---|
 | Nordic nRF52832 | IDK-BLYST-NANO, BLUEIO-TAG-EVIM, Nordic nRF52 DK | Primary Cortex-M4F, Bluetooth, UART, sensor and low-power baseline |
 | Nordic nRF54L15 | BLYSTL15, Nordic nRF54L15 DK | Cortex-M33 and `sdk-nrf-bm` bare-metal baseline |
-| STM32 baseline | STM32 development boards | Current STM32 startup, GPIO, UART and peripheral-port baseline |
 
 These rows identify the active reference targets. Feature coverage still varies by target and subsystem. A hardware-validated MCU does not imply that every optional interface, radio stack, storage mode or crypto provider has the same validation depth.
+
+STM32 source ports and target projects remain in the repository, but the current documentation does not record an exact STM32 board, IOsonata commit and hardware-test result. STM32 is therefore not listed above as a current hardware-validation baseline.
 
 ## Other source ports
 
