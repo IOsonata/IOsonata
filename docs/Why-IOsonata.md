@@ -1,71 +1,203 @@
-# File: docs/Why-IOsonata.md
-# Purpose: concise, factual positioning you can link from README
-
 # Why IOsonata
 
-**Portable = one driver, many targets, no edits.**  
-With IOsonata, the *same source* runs on MCUs **and** host (macOS/Linux/Windows). Per-board differences are **data-only** (`board.h`, `Init(cfg)`), not driver code.
+IOsonata is built around a different reuse boundary from most embedded frameworks.
 
-## What this buys you
-- **Lower risk:** tiny change surface → fewer conflicts, fewer bugs.
-- **Faster hotfixes (MTTR):** host parity CI + small diffs → hours, not weeks.
-- **Predictable ports:** same firmware app compiles for new MCU/board with just `board.h`.
-- **Consistent device model:** UART/I²C/SPI/BLE/storage follow the same `Init(cfg)` + intrf pattern.
+The reusable deliverable is not a source configuration that every application rebuilds. It is a precompiled static library for one MCU target and build profile:
 
-## Reality-based comparison
+```text
+libIOsonata_<MCU>.a
+```
 
-| Dimension | IOsonata | Zephyr | NuttX | RIOT | libopencm3 | Vendor HALs | ESP-IDF |
-|---|---|---|---|---|---|---|---|
-| **Portability (real)** | **One driver + `board.h` (data-only)** | Poly-porting (DTS/Kconfig variants) | Board/SoC ports | Board model | Low-level only | Per-vendor | Vendor-specific |
-| **Driver matrix quality** | Focused, reusable | **Inflated by variants** | Broad, OS-centric | Broad IoT | Minimal | Broad per family | Broad (ESP) |
-| **Operational risk** | **Low** | **High** | Med-High | Med | Low (you build more) | Med | Med |
-| **Host parity (same sources)** | **Yes (macOS/Linux/Windows)** | Native_sim (heavy policy) | Simulator | Native | No | No | Limited |
-| **Integration cost** | **Low (plain C/C++)** | High (west+DTS+Kconfig+kernel) | Med-High | Med | Low (DIY layers) | Med | Med |
-| **Perf/latency** | **Lean; IRQ/DMA friendly** | Variable (layer cost) | OS overhead | OS overhead | Leanest | Varies | Good (ESP) |
-| **LTS practicality** | **Simple: 2 branches + smoke** | Formal but friction | Formal releases | Regular | N/A | Vendor policy | Vendor LTS |
+Debug and Release are separate profiles. Within either selected profile, boards, products, applications and supported execution models using that MCU link the same IOsonata library binary.
 
-## Portable ≠ Poly-porting
-- **Portable:** same driver compiles unmodified across MCUs/host; per-board is data only; single-commit backports.
-- **Poly-porting:** per-SoC/board variants (DTS/Kconfig overlays, init quirks) → duplication, conflicts, longer MTTR.
+## One MCU port, reused unchanged
 
-**Litmus test**
-1. Driver compiles unmodified for ≥3 MCUs **and** host.  
-2. All per-board differences are in `board.h`/config structs.  
-3. Fix backports are single cherry-picks.
+A supported MCU library contains the target implementation for:
 
-## Proof over promises
-- **Examples:** `exemples/` build and run across targets with the same sources.  
-- **Portability Proof Matrix:** auto-generated from CI for Linux/macOS/Windows.  
-- **Benches:** PRBS UART/BLE demos report goodput/BER; CSV + plots kept in repo.
+- startup and interrupt vectors;
+- clock and system initialization;
+- GPIO, UART, I2C, SPI, timers and PWM;
+- Bluetooth, storage, NVM and crypto where supported;
+- device drivers and the common `Device` and `DeviceIntrf` architecture.
 
-> See: [`docs/PORTABILITY_PROOF_MATRIX.md`](../docs/PORTABILITY_PROOF_MATRIX.md)
+Changing the board, application or scheduler does not create another HAL build.
 
-## Migration in one hour
-1) Map pins from your board to `board.h`.  
-2) Build host → fix logic fast.  
-3) Flash MCU. Same app, no driver edits.
+The application supplies board and product data through `board.h`, including pin maps, oscillator configuration, external-device configuration and other board definitions. These values may change without recompiling IOsonata.
 
----
+## Compile once, link only what is used
 
-# File: README snippet (paste into README.md)
-<!-- Badges -->
-<p align="center">
-  <a href="docs/PORTABILITY_PROOF_MATRIX.md"><img alt="Portability Proof" src="https://img.shields.io/badge/portability-proof-green"></a>
-  <a href="docs/Why-IOsonata.md"><img alt="Why IOsonata" src="https://img.shields.io/badge/why-IOsonata-blue"></a>
-  <a href="exemples"><img alt="Examples" src="https://img.shields.io/badge/examples-%F0%9F%9A%80-brightgreen"></a>
-</p>
+Supported implementations are compiled into the MCU static library once. The application references the objects it needs.
 
-## Portability Proof (Real, Not Claims)
-The **same sources** in `exemples/` are built on **Linux**, **macOS**, and **Windows** in CI.  
-See the live table: [`docs/PORTABILITY_PROOF_MATRIX.md`](docs/PORTABILITY_PROOF_MATRIX.md)
+The static linker extracts the required object files, and section garbage collection removes unreferenced functions and data.
 
-- ✅ = built successfully on that OS  
-- ❌ = failed (see per-row logs; PRs welcome)
+```text
+same library + application uses I2C and Sensor A
+    -> I2C and Sensor A are linked
 
-## Why IOsonata (60-second read)
-- **Portable by construction:** one driver spans MCUs and host; per-board is `board.h`.  
-- **Lower operational risk:** fewer moving parts, fewer conflicts.  
-- **Faster hotfixes:** host-parity CI; minimal diffs.  
-- **Uniform device model:** UART/I²C/SPI/BLE/storage share `Init(cfg)` + intrf.
+same library + application uses SPI and Sensor B
+    -> SPI and Sensor B are linked
 
-Read the one-pager: [`docs/Why-IOsonata.md`](docs/Why-IOsonata.md)
+same library + application uses neither
+    -> neither appears in the firmware
+```
+
+The final firmware image changes. The IOsonata library artifact does not.
+
+## Object design instead of configuration-generated types
+
+IOsonata uses ordinary C++ object-oriented design:
+
+- encapsulation;
+- inheritance;
+- runtime polymorphism;
+- object composition.
+
+It does not generate a different driver type for every application configuration, and it does not require template-heavy peripheral abstractions.
+
+The architecture is organized around two primary object families.
+
+### `DeviceIntrf`: how data moves
+
+`DeviceIntrf` represents a transferable data path such as UART, I2C, SPI, Bluetooth, SLIP, USB or an internal controller interface.
+
+A device driver depends on the interface role instead of one concrete controller type.
+
+### `Device`: what the object does
+
+`Device` provides common lifecycle, identity, callback, timer and interface-association state for sensors, displays, storage devices, crypto engines and other hardware or software devices.
+
+Inheritance represents device families. Runtime polymorphism allows application code to use a common behaviour while selecting a concrete implementation at runtime.
+
+## One device driver, any compatible interface
+
+A device supporting both I2C and SPI does not need separate generated driver types.
+
+```cpp
+I2C i2c;
+SPI spi;
+Timer timer;
+AccelLsm303agr accel;
+
+DeviceIntrf *interface = useSpi
+    ? static_cast<DeviceIntrf *>(&spi)
+    : static_cast<DeviceIntrf *>(&i2c);
+
+accel.Init(accelCfg, interface, &timer);
+```
+
+The interface object changes. The sensor-driver implementation does not.
+
+The same principle supports protocol composition. For example, `Slip` can wrap a UART or Bluetooth interface while the application continues to use `DeviceIntrf`.
+
+## C and C++ share the same implementation
+
+Core IOsonata interfaces normally provide:
+
+- a C structure containing state and function pointers;
+- C helper functions operating on that structure;
+- a C++ class wrapping the same implementation.
+
+The C and C++ APIs do not require two independent drivers.
+
+Low-level operations that do not benefit from object state remain lightweight C/C++ functions. GPIO pin control, for example, is not forced into a class hierarchy.
+
+## The application owns the system
+
+IOsonata does not own:
+
+- `main()`;
+- the scheduler;
+- the board configuration;
+- the memory layout;
+- the application execution model.
+
+The same selected MCU library can be linked with:
+
+- bare metal;
+- event-driven applications;
+- TaktOS;
+- FreeRTOS;
+- ThreadX.
+
+Only the application and optional kernel change at the final link. IOsonata is not rebuilt with RTOS-specific macros.
+
+## No mandatory configuration framework
+
+The official IOsonata model does not require:
+
+- CMake;
+- Kconfig;
+- Devicetree;
+- a BSP-generated source tree;
+- a per-product HAL build matrix.
+
+Configuration remains ordinary C/C++ data owned by the application.
+
+[IOcomposer](https://iocomposer.io) is the official IDE. It provides the supported toolchains, project integration, debug environment and MCU-library builders.
+
+Each target normally has an IOcomposer application project containing the MCU build settings, `board.h`, linker and debug configuration, references to shared application source, and the link to the precompiled IOsonata library. The application project compiles the application; it does not rebuild IOsonata.
+
+## Static memory and explicit execution
+
+Core driver and real-time paths are designed around:
+
+- static or caller-owned storage;
+- fixed FIFOs;
+- explicit operation state;
+- bounded interrupt work;
+- no required heap allocation;
+- no required exceptions or RTTI.
+
+Polling, interrupt and DMA operation are selected by the concrete controller, transfer and application requirements rather than imposed globally by the interface type.
+
+## Measured on hardware
+
+IOsonata publishes on-target measurements rather than treating object-oriented overhead as an assumption.
+
+PRBS-verified UART results reported in the repository include:
+
+| Target | IOsonata C++ OOD | Zephyr C | nrfx C |
+|---|---:|---:|---:|
+| nRF54L15 DK | **102.2 KB/s** | 82.9 KB/s | 87.0 KB/s |
+| nRF52832 DK, 2 MBaud | **203 KB/s** | Not supported in the tested configuration | 183.7 KB/s |
+
+The TaktOS, FreeRTOS and ThreadX benchmark applications also link the same precompiled IOsonata MCU library, keeping the HAL constant while the kernel changes.
+
+See the benchmark details in the [README](../README.md) and the published *Beyond Blinky* edition on [Leanpub](https://leanpub.com/beyondblinky).
+
+## What portability means here
+
+IOsonata separates portability into three layers:
+
+1. The MCU port implements controller, interrupt, DMA, clock and hardware details.
+2. `board.h` supplies board and product data.
+3. Generic device and application code uses `Device` and `DeviceIntrf` rather than target-specific controller APIs.
+
+A new board using an already supported MCU normally requires board data and a target application project, not another IOsonata port.
+
+A new MCU requires one MCU port and one reusable library build. Applications for that MCU then share the resulting library artifact.
+
+Host implementations support selected generic logic and interfaces on macOS, Linux and Windows. Hardware-dependent behaviour still requires validation on the target MCU and board.
+
+## When IOsonata is a good fit
+
+IOsonata is intended for projects that value:
+
+- direct control of startup, memory and execution;
+- reusable device drivers across MCU families;
+- one validated MCU library instead of per-product HAL generation;
+- bare-metal and RTOS choice without changing the HAL binary;
+- static memory and explicit interrupt behaviour;
+- C and C++ interoperability;
+- runtime object composition without template-generated driver trees.
+
+Projects that require a large integrated operating-system distribution with its own application lifecycle, package model and configuration language may prefer a different platform.
+
+## Read next
+
+- [Architecture overview](architecture/README.md)
+- [IOcomposer workflow](architecture/iocomposer-workflow.md)
+- [FAQ](FAQ.md)
+- [Getting Started](getting-started.md)
+- [Supported Targets](supported-targets.md)
+- [Device inheritance and composition](architecture/device-composition.md)
