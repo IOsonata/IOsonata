@@ -1,113 +1,262 @@
-# File: docs/FAQ.md
-# Purpose: concise answers you can link/hand to stakeholders
-
 # IOsonata FAQ
 
-## What do you mean by “portable”?
-**Same driver source runs on MCUs and host** (macOS/Linux/Windows). Per-board differences are **data-only** (`board.h`, `Init(cfg)`)—no driver edits.
+Concise answers about the IOsonata architecture, build model and development workflow.
 
-## How is that different from “big matrix portability”?
-A large catalog with per-board/per-SoC variants is **poly-porting**, not portability. It multiplies code paths and conflicts. IOsonata keeps **one driver** and changes only data.
+## What is IOsonata?
 
-## Why is IOsonata “enterprise” for us?
-- **Lower operational risk:** tiny change surface, fewer conflicts.
-- **Faster hotfixes:** host-parity CI, small diffs → hours not weeks.
-- **Predictable ports:** new MCU/board = update `board.h`, rebuild.
+IOsonata is a multi-architecture hardware-abstraction and device-driver library for microcontrollers. It provides generic device and interface objects together with MCU-specific implementations for startup, interrupts, clocks, communication peripherals, storage, Bluetooth, crypto, sensors and other supported hardware.
 
-## Why not just use Zephyr?
-Great breadth, but high ceremony (Devicetree/Kconfig/kernel) and frequent driver variants. If you value **speed, predictability, and true portability**, IOsonata fits better.
+## Is IOsonata a source framework rebuilt by every application?
 
-## Do we need an RTOS?
-No. IOsonata works bare-metal or with FreeRTOS. Same APIs.
+No. IOsonata is compiled as a static library for each supported MCU target and build profile:
 
-## How do we migrate quickly?
-1) Map pins to `board.h`.  
-2) Build and test on host.  
-3) Flash MCU. Same sources, no driver edits.
+```text
+libIOsonata_<MCU>.a
+```
 
-## How do we prove portability?
-See **Portability Proof Matrix**: CI builds `exemples/*` on Linux/macOS/Windows with the **same sources**, publishing ✅/❌ and logs.
+Debug and Release are separate profiles. Within a selected profile, applications using that MCU link the same library binary.
 
----
+## What changes between boards using the same MCU?
 
-# File: scripts/check_matrix_strict.py
-#!/usr/bin/env python3
-"""
-Fail the build if any example failed on any OS, with optional allowlist regex.
-Usage:
-  python3 scripts/check_matrix_strict.py --docs docs --allow "exemples/legacy/.*"
-"""
-from __future__ import annotations
-import argparse, csv, re
-from pathlib import Path
+Board and product differences normally remain application data, primarily in `board.h`:
 
-def read_csvs(docdir: Path):
-    rows = {}  # example -> {os: status}
-    for osname in ("linux", "macos", "windows"):
-        p = docdir / f"PORTABILITY_PROOF_MATRIX.{osname}.csv"
-        if not p.exists(): continue
-        with p.open() as f:
-            r = csv.DictReader(f)
-            for row in r:
-                ex = row["example"].strip()
-                rows.setdefault(ex, {})[osname] = row["status"].strip()
-    return rows
+- pin maps;
+- oscillator configuration;
+- external-device configuration;
+- board-level definitions.
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--docs", default="docs")
-    ap.add_argument("--allow", action="append", default=[], help="Regex of examples allowed to fail")
-    args = ap.parse_args()
-    allow_rx = [re.compile(rx) for rx in args.allow]
-    rows = read_csvs(Path(args.docs))
-    failures = []
-    for ex, statuses in sorted(rows.items()):
-        if any(rx.search(ex) for rx in allow_rx):
-            continue
-        for osname in ("linux","macos","windows"):
-            st = statuses.get(osname, "❌")
-            if st != "✅":
-                failures.append((ex, osname, st))
-    if failures:
-        print("Strict check: failures detected:")
-        for ex, osname, st in failures:
-            print(f"  {ex} @ {osname}: {st}")
-        raise SystemExit(1)
-    print("Strict check: all examples built ✅ across recorded OSes")
+Changing those values does not rebuild the IOsonata MCU library.
 
-if __name__ == "__main__":
-    main()
+## What changes when the MCU changes?
 
----
+Select and build the library for the new MCU target, then use the corresponding target application project. The generic application and device-driver source can remain unchanged when the required interfaces and devices are supported by both targets.
 
-# Edit: .github/workflows/proof-matrix.yml (append strict gate job)
-# Add this new job at the end of the workflow.
+## When must the IOsonata library be rebuilt?
 
-  strict-gate:
-    needs: merge
-    runs-on: ubuntu-latest
-    if: ${{ vars.STRICT == 'true' || env.STRICT == 'true' }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download merged matrices
-        uses: actions/download-artifact@v4
-        with:
-          pattern: matrix-*
-          path: .
-      - name: Rehydrate docs folder
-        run: |
-          mkdir -p docs
-          cp matrix-ubuntu-latest/docs/PORTABILITY_PROOF_MATRIX.linux.csv docs/ || true
-          cp matrix-macos-latest/docs/PORTABILITY_PROOF_MATRIX.macos.csv docs/ || true
-          cp matrix-windows-latest/docs/PORTABILITY_PROOF_MATRIX.windows.csv docs/ || true
-      - name: Run strict check
-        run: |
-          python3 scripts/check_matrix_strict.py --docs docs \
-            --allow "exemples/legacy/.*" || (echo "::error ::Portability regression detected"; exit 1)
+Rebuild the affected MCU library when IOsonata source for that MCU changes.
 
----
+Do not rebuild it merely because you changed:
 
-# README addition (toggle strict mode)
-Add to your README or docs:
+- board pins;
+- an application feature;
+- the selected sensor or interface object;
+- bare metal versus an RTOS;
+- application source.
 
-> **CI strict mode:** set `STRICT=true` (in repo Variables/Secrets or workflow_dispatch) to **fail** the build if any example stops building on Linux/macOS/Windows. Use `--allow` patterns in `check_matrix_strict.py` for known legacy paths.
+## Does the library contain every supported driver for the MCU?
+
+Yes. Supported implementations are compiled into the static library. The application references the objects it uses, the linker extracts the required object files, and section garbage collection removes unreferenced code and data.
+
+The final firmware changes. The library artifact does not.
+
+## Does this create a large firmware image?
+
+No. A static archive is not copied into the firmware as one indivisible block. Only referenced object files and retained sections are linked into the application image.
+
+## Does IOsonata require CMake, Kconfig or Devicetree?
+
+No. They are not part of the official IOsonata build and configuration model.
+
+Configuration is ordinary C/C++ data owned by the application. IOcomposer is the official IDE and supplies the supported managed-build workflow.
+
+## What is IOcomposer?
+
+[IOcomposer](https://iocomposer.io) is the official IDE for IOsonata. Its installer provides the development environment, toolchains, OpenOCD, SDK integration, project support and the MCU-library build scripts.
+
+See the [IOcomposer workflow](architecture/iocomposer-workflow.md).
+
+## How do I build an IOsonata MCU library?
+
+Run the installed platform builder:
+
+**macOS**
+
+```bash
+bash ~/IOcomposer/IOsonata/Installer/build_iosonata_lib_macos.sh
+```
+
+**Linux**
+
+```bash
+bash ~/IOcomposer/IOsonata/Installer/build_iosonata_lib_linux.sh
+```
+
+**Windows**
+
+```powershell
+& "$env:USERPROFILE\IOcomposer\IOsonata\Installer\build_iosonata_lib_win.ps1"
+```
+
+The builder discovers the supported MCU library projects and lets you select one target or build all targets. It builds both Debug and Release libraries.
+
+## Why do project paths still contain an `Eclipse/` directory?
+
+That is the existing repository directory name for the per-target managed-build project. The user-facing IDE is IOcomposer.
+
+For example:
+
+```text
+ARM/Nordic/nRF52/nRF52832/exemples/Blinky/Eclipse/
+```
+
+is the IOcomposer target project used to compile the nRF52832 Blinky application.
+
+The directory name identifies the project format and repository layout. It does not mean users should install or configure a separate IDE.
+
+## What is inside a per-target application project?
+
+A target project normally contains:
+
+- managed-build metadata;
+- MCU and compiler settings;
+- include and library paths;
+- linker and debug configuration;
+- `board.h`;
+- references to shared application source;
+- the link to `libIOsonata_<MCU>.a`.
+
+It normally does not duplicate the shared example source. A target-specific example may contain its own source when the application genuinely depends on that target.
+
+## Where does example source live?
+
+Reusable example source normally lives under the top-level `exemples/` directory. Each supported MCU target has a buildable IOcomposer project that references the shared source and supplies its own board and target configuration.
+
+This lets the same example source be compiled for several MCU targets without copying it into every target project.
+
+## Does an application project compile IOsonata source?
+
+No. It compiles the application and optional kernel, then links the previously built IOsonata MCU library.
+
+A project may reference shared example source, but that does not mean it rebuilds the IOsonata implementation.
+
+## What does portable mean in IOsonata?
+
+Portable means the generic device or application logic is not tied to one MCU, board or concrete bus implementation.
+
+Portability is divided into three parts:
+
+- the MCU port implements the controller and hardware details;
+- `board.h` supplies board and product data;
+- device drivers depend on `DeviceIntrf`, not directly on one target controller.
+
+Not every target supports every feature at the same maturity level. See [Supported Targets](supported-targets.md).
+
+## What is `DeviceIntrf`?
+
+`DeviceIntrf` represents a transferable data path. It can represent a physical controller or a software/internal interface, including:
+
+- UART;
+- I2C;
+- SPI, QSPI or OSPI;
+- USB;
+- Bluetooth GATT through `BtIntrf`;
+- SLIP layered over another interface;
+- internal crypto or memory-controller access paths.
+
+A device driver accepts a `DeviceIntrf *` instead of depending directly on one concrete controller type.
+
+## What is `Device`?
+
+`Device` is the common base for hardware devices, software engines and device capability families. It supplies common lifecycle, identity, interface injection, callback and timer state.
+
+Derived families add behaviour such as sensor sampling, display control, storage access or crypto operations.
+
+## Can one driver use I2C or SPI?
+
+Yes, when the physical device supports both interfaces. The driver receives a `DeviceIntrf *` and uses the selected concrete interface at runtime.
+
+The interface object changes. The device-driver implementation does not.
+
+## Does IOsonata use templates to generate drivers?
+
+No. IOsonata uses ordinary C++ classes, inheritance, runtime polymorphism and object composition. It does not generate a different driver type for every application configuration.
+
+Low-level operations that do not benefit from object state remain lightweight C/C++ functions.
+
+## Does object-oriented C++ make IOsonata slower than C HALs?
+
+Not inherently. IOsonata publishes on-target UART and kernel benchmark results showing that its object-oriented paths can match or exceed the tested C implementations.
+
+See the benchmark section in the [README](../README.md) and [Beyond Blinky Free Edition](Beyond%20Blinky%20Free%20Edition.pdf).
+
+## Does IOsonata require dynamic memory?
+
+No heap is required in the core driver and real-time data paths. IOsonata uses static storage, caller-owned buffers, fixed FIFOs and explicit operation state.
+
+## Does IOsonata require exceptions or RTTI?
+
+No. The library is designed to operate without exceptions or RTTI.
+
+## Can IOsonata be used from C?
+
+Yes. Core interfaces normally provide:
+
+- a C structure containing state and function pointers;
+- C helper functions operating on that structure;
+- a C++ class wrapping the same implementation.
+
+The C and C++ APIs do not require two independent drivers.
+
+## Does IOsonata require an RTOS?
+
+No. IOsonata can be used with:
+
+- bare metal;
+- event-driven applications;
+- TaktOS;
+- FreeRTOS;
+- ThreadX.
+
+IOsonata does not own the scheduler.
+
+## Is the library rebuilt for each RTOS?
+
+No. For a selected MCU and build profile, bare-metal, TaktOS, FreeRTOS and ThreadX applications link the same IOsonata library binary. The application and optional kernel change at the final link.
+
+## Does IOsonata own `main()`?
+
+No. The application owns `main()`, board configuration, memory layout and execution model.
+
+## Does a different linker script require rebuilding IOsonata?
+
+No. An application may use a different memory layout for a bootloader, DFU region, NVM/PDS area, secure/non-secure partition or another deliberate flash/RAM reservation. That changes the final application link, not the IOsonata library.
+
+## Does IOsonata need a CI/CD build matrix for every product?
+
+No. The HAL is not regenerated for every board, RTOS, peripheral and product combination.
+
+CI may still be used to test IOsonata source changes or produce library releases. It is not required to manufacture another HAL binary for every application configuration.
+
+## Can IOsonata be tested on a host computer?
+
+Some generic logic and host-supported interfaces can be built or tested on macOS, Linux or Windows. Host support does not mean every MCU peripheral driver executes unchanged on a desktop operating system.
+
+Hardware-dependent behaviour must still be validated on the target MCU and board.
+
+## Which hardware is used for validation?
+
+IOsonata is developed and validated on I-SYST hardware and vendor development kits. Current reference platforms include BLYST Nano/IDK-BLYST-NANO, BLYSTL15, BLUEIO-TAG-EVIM, IDAP-Link and supported vendor boards.
+
+See the hardware-reference section in the [README](../README.md) and the current [Supported Targets](supported-targets.md) matrix.
+
+## How do I start?
+
+1. Install IOcomposer.
+2. Run the MCU-library builder.
+3. Select a supported MCU.
+4. Open the corresponding target example project in IOcomposer.
+5. Configure `board.h` for the board.
+6. Build, flash and debug.
+
+The recommended first path uses the nRF52832 Blinky target project. See [Getting Started](getting-started.md).
+
+## Where should I read next?
+
+- [Architecture overview](architecture/README.md)
+- [IOcomposer workflow](architecture/iocomposer-workflow.md)
+- [Getting Started](getting-started.md)
+- [Quick Reference](quick-reference.md)
+- [Supported Targets](supported-targets.md)
+- [DeviceIntrf implementer notes](architecture/devintrf-implementer-notes.md)
+- [Device inheritance and composition](architecture/device-composition.md)
+- [Beyond Blinky Free Edition](Beyond%20Blinky%20Free%20Edition.pdf)
