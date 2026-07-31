@@ -527,6 +527,13 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 					pDev->Disconnected(p->ConnHdl, p->Reason);
 				}
 
+				// Free the SMP link record here so cleanup does not depend on
+				// the application callback: without it the four SMP slots leak
+				// as connection handles change, and stale pairing/lockout state
+				// and crypto-engine ownership survive the disconnect. Idempotent
+				// - a port whose callback already called it sees a no-op.
+				BtSmpDisconnected(p->ConnHdl);
+
 				BtHciReasmReset(p->ConnHdl);
 			}
 			break;

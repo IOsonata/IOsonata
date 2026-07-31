@@ -313,6 +313,48 @@ void TestWriteLengthHandling()
 	CHECK(chr.ValueLen == 0);
 }
 
+// ---- Write Command length handling ----------------------------------------
+
+void TestWriteCommandLengthHandling()
+{
+	BtAttDBInit(1024);
+	BtAttSetMtu(BT_ATT_MTU_MIN);
+
+	BtChar_t chr;
+	uint8_t stored[8] = { 0x10, 0x11, 0x12, 0x13, 0, 0, 0, 0 };
+	// Write Command requires the Write-Without-Response property.
+	BtAttDBEntry_t *e =
+		AddCharValue(&chr, stored, 4, 8, BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_WRITE_WORESP);
+	CHECK(e != nullptr);
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+
+	// An over-long Write Command (12 bytes into an 8-byte characteristic) must
+	// be ignored entirely: no response, and the stored value and its length are
+	// unchanged (Vol 3 Part F 3.4.5.3).
+	reqbuf[0] = BT_ATT_OPCODE_ATT_CMD;
+	PutLe16(reqbuf + 1, e->Hdl);
+	for (int i = 0; i < 12; ++i) reqbuf[3 + i] = (uint8_t)(0x80 + i);
+	std::memset(rspbuf, 0xEE, sizeof(rspbuf));		// sentinel: must stay untouched
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 3 + 12,
+								 (BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 0);							// command produces no response
+	CHECK(rspbuf[0] == 0xEE);				// response buffer not written
+	CHECK(chr.ValueLen == 4);				// stored length unchanged
+	CHECK(stored[0] == 0x10 && stored[3] == 0x13);	// stored data unchanged
+
+	// A valid Write Command (6 bytes) replaces the value and length, no response.
+	reqbuf[0] = BT_ATT_OPCODE_ATT_CMD;
+	PutLe16(reqbuf + 1, e->Hdl);
+	for (int i = 0; i < 6; ++i) reqbuf[3 + i] = (uint8_t)(0x90 + i);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 3 + 6,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 0);
+	CHECK(chr.ValueLen == 6);
+	CHECK(stored[0] == 0x90 && stored[5] == 0x95);
+}
+
 // ---- Find By Type Value: permission gate and non-grouping end handle ------
 
 void TestFindByTypeValueOracleAndEndHandle()
@@ -426,6 +468,7 @@ int main()
 	TestReadByTypePacksMultiplePairs();
 	TestReadByTypeRejectsTruncatedPair();
 	TestWriteLengthHandling();
+	TestWriteCommandLengthHandling();
 	TestFindByTypeValueOracleAndEndHandle();
 	TestReadByGroupTypeInvalidStartHandle();
 

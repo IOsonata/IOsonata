@@ -48,6 +48,8 @@ uint16_t s_CompletedHdl = 0;
 uint16_t s_CompletedCount = 0;
 int s_CompletedCallbacks = 0;
 int s_ScanReports = 0;
+int s_SmpDisconnectCount = 0;
+uint16_t s_SmpDisconnectHdl = 0;
 
 void ResetAclCapture()
 {
@@ -357,6 +359,31 @@ void TestInterleavedReassembly()
     CHECK(s_SmpPackets[1].Data[0] == 0x01);
 }
 
+// A Disconnection Complete event must free the SMP link record via
+// BtSmpDisconnected, so cleanup does not depend on the application callback.
+void TestDisconnectFreesSmp()
+{
+    BtHciDevice_t dev = {};
+    s_SmpDisconnectCount = 0;
+    s_SmpDisconnectHdl = 0;
+
+    alignas(4) uint8_t raw[sizeof(BtHciEvtPacketHdr_t) +
+                          sizeof(BtHciEvtDisconComplete_t)] = {};
+    BtHciEvtPacket_t *pEvt = reinterpret_cast<BtHciEvtPacket_t *>(raw);
+    pEvt->Hdr.Evt = BT_HCI_EVT_DISCONN_COMPLETE;
+    pEvt->Hdr.Len = sizeof(BtHciEvtDisconComplete_t);
+    BtHciEvtDisconComplete_t *p =
+        reinterpret_cast<BtHciEvtDisconComplete_t *>(pEvt->Data);
+    p->Status = 0;
+    p->ConnHdl = 0x0042;
+    p->Reason = 0x13;
+
+    BtHciProcessEvent(&dev, pEvt);
+
+    CHECK(s_SmpDisconnectCount == 1);
+    CHECK(s_SmpDisconnectHdl == 0x0042);
+}
+
 void TestMalformedFragmentsAndEvents()
 {
     BtHciDevice_t dev = {};
@@ -449,6 +476,12 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const, uint16_t, uint8_t, uint8_t)
 {
 }
 
+void BtSmpDisconnected(uint16_t ConnHdl)
+{
+    ++s_SmpDisconnectCount;
+    s_SmpDisconnectHdl = ConnHdl;
+}
+
 SysLog_t * const SysLogGet(void)
 {
     static SysLog_t log = {};
@@ -472,6 +505,7 @@ int main()
     TestAclReassembly();
     TestInterleavedReassembly();
     TestMalformedFragmentsAndEvents();
+    TestDisconnectFreesSmp();
 
     if (s_Failures != 0)
     {

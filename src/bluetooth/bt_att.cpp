@@ -1845,17 +1845,22 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					if (BtAttWritePermError(ConnHdl, entry, BT_ATT_OPCODE_ATT_CMD,
 											pReqAtt->WriteCmd.Data, (uint16_t)dlen) == 0)
 					{
-						size_t written = BtAttWriteValueForConn(ConnHdl, entry, 0,
-										pReqAtt->WriteCmd.Data, (uint16_t)dlen);
-						// Write Without Response also replaces the value; set the
-						// current length to what was actually stored (the command
-						// path cannot error, so an over-long value is truncated).
-						if (BtAttEntryIsCharValue(entry))
+						// Write Command has no error response, so a value longer
+						// than the attribute can hold cannot be reported: ignore
+						// the whole command (do not truncate, do not touch the
+						// stored value or its length) per Vol 3 Part F 3.4.5.3.
+						// A valid write replaces the value, so the current length
+						// becomes exactly dlen (shorter and zero-length included).
+						BtGattChar_t *pCmdChar =
+							BtAttEntryIsCharValue(entry) ? BtAttEntryChar(entry) : nullptr;
+
+						if (pCmdChar == nullptr || (uint16_t)dlen <= pCmdChar->MaxDataLen)
 						{
-							BtGattChar_t *pCmdChar = BtAttEntryChar(entry);
+							BtAttWriteValueForConn(ConnHdl, entry, 0,
+											pReqAtt->WriteCmd.Data, (uint16_t)dlen);
 							if (pCmdChar != nullptr)
 							{
-								pCmdChar->ValueLen = (uint16_t)written;
+								pCmdChar->ValueLen = (uint16_t)dlen;
 							}
 						}
 					}
