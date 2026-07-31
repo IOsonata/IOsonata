@@ -246,10 +246,11 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		uint16_t mtu = min(BtAttGetMtu(), pRspAtt->ExchgMtuReqRsp.RxMtu);
 		DEBUG_PRINTF("BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP (0x03): %d %d\r\n", pRspAtt->ExchgMtuReqRsp.RxMtu, mtu);
 
-		// BtAttSetMtu takes a single argument (global/local stack setting).
-		BtAttSetMtu(mtu);
-
-		// Keep per-peer negotiated MTU as well (used by higher layers).
+		// Store the negotiated MTU per-link only. ATT_MTU is per-bearer (Vol 3
+		// Part F 3.4.2.2); do not write it into the stack-wide s_AttMtu via
+		// BtAttSetMtu, or this link's value would become the fallback MTU for
+		// every other link that has not exchanged MTU. The global stays the
+		// local Rx capability advertised on future requests.
 		pPeer->Conn.MaxMtu = mtu;
 	}
 		break;
