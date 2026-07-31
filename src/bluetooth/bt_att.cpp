@@ -1585,7 +1585,8 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 						int cnt = BtAttReadValueForConn(ConnHdl, entry, 0, p, rspMtu - l - sizeof(BtAttHdlRange_t));
 
-						DEBUG_PRINTF("Ble Service UUID16 = 0x%X \r\n", x->Uuid.Uuid16);
+						DEBUG_PRINTF("Ble Service UUID16 = 0x%X \r\n",
+								((BtAttSrvcDeclar_t *)entry->Data)->Uuid.Uuid16);
 
 						if (pRspAtt->ReadByGroupTypeRsp.Len == 0)
 						{
