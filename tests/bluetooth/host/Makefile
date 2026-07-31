@@ -3,7 +3,7 @@ BUILD_DIR := build
 ADV_TARGET := $(BUILD_DIR)/bt_adv_uuid_test
 HCI_TARGET := $(BUILD_DIR)/bt_hci_flow_test
 L2CAP_TARGET := $(BUILD_DIR)/bt_l2cap_signal_test
-ATT_TARGET := $(BUILD_DIR)/bt_att_server_test
+ATT_TARGET := $(BUILD_DIR)/bt_att_db_test
 
 CXX ?= g++
 CPPFLAGS += -I$(ROOT)/include
@@ -28,9 +28,8 @@ L2CAP_SOURCES := \
 	$(ROOT)/src/bluetooth/bt_l2cap.cpp
 
 ATT_SOURCES := \
-	bt_att_server_test.cpp \
-	$(ROOT)/src/bluetooth/bt_att.cpp \
-	$(ROOT)/src/bluetooth/bt_uuid.cpp
+	bt_att_db_test.cpp \
+	$(ROOT)/src/bluetooth/bt_att.cpp
 
 .PHONY: all test clean
 
