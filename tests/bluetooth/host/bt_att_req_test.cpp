@@ -313,6 +313,88 @@ void TestWriteLengthHandling()
 	CHECK(chr.ValueLen == 0);
 }
 
+// ---- Find By Type Value: permission gate and non-grouping end handle ------
+
+void TestFindByTypeValueOracleAndEndHandle()
+{
+	BtAttDBInit(2048);
+	BtAttSetMtu(BT_ATT_MTU_MIN);
+
+	// Two attributes of the same (non-grouping) type carrying the same value:
+	// the first readable, the second read-encrypt-protected. On an unencrypted
+	// link the protected one must not be matched (else its value is confirmed
+	// by comparison), and a matched non-grouping attribute reports End Group
+	// Handle equal to its own handle.
+	const uint16_t type = 0xFFF5;
+	uint8_t vOpen[2] = { 0xAA, 0xBB };
+	uint8_t vProt[2] = { 0xAA, 0xBB };
+
+	BtChar_t chrOpen, chrProt;
+	// Reuse AddCharValue then override the type UUID and permission below.
+	std::memset(&chrOpen, 0, sizeof(chrOpen));
+	std::memset(&chrProt, 0, sizeof(chrProt));
+	chrOpen.Uuid = type; chrOpen.MaxDataLen = 2; chrOpen.Property = BT_GATT_CHAR_PROP_READ;
+	chrOpen.pValue = vOpen; chrOpen.ValueLen = 2;
+	chrProt.Uuid = type; chrProt.MaxDataLen = 2; chrProt.Property = BT_GATT_CHAR_PROP_READ;
+	chrProt.pValue = vProt; chrProt.ValueLen = 2;
+
+	// Layout: eOpen (type), filler (other type), eProt (type). The filler
+	// between the two matches means the grouping heuristic would give eOpen a
+	// group end past its own handle, so the End-Group == found-handle assertion
+	// below also isolates the non-grouping fix.
+	BtChar_t chrFill;
+	uint8_t vFill[2] = { 0, 0 };
+	std::memset(&chrFill, 0, sizeof(chrFill));
+	chrFill.Uuid = 0xFFF6; chrFill.MaxDataLen = 2; chrFill.Property = BT_GATT_CHAR_PROP_READ;
+	chrFill.pValue = vFill; chrFill.ValueLen = 2;
+
+	BtUuid16_t u = { 0, BT_UUID_TYPE_16, type };
+	BtUuid16_t uFill = { 0, BT_UUID_TYPE_16, 0xFFF6 };
+	BtAttDBEntry_t *eOpen = BtAttDBAddEntry(&u, (int)(sizeof(BtAttCharValue_t) + 2));
+	BtAttDBEntry_t *eFill = BtAttDBAddEntry(&uFill, (int)(sizeof(BtAttCharValue_t) + 2));
+	BtAttDBEntry_t *eProt = BtAttDBAddEntry(&u, (int)(sizeof(BtAttCharValue_t) + 2));
+	CHECK(eOpen != nullptr);
+	CHECK(eFill != nullptr);
+	CHECK(eProt != nullptr);
+	((BtAttCharValue_t *)eOpen->Data)->pChar = &chrOpen;
+	((BtAttCharValue_t *)eFill->Data)->pChar = &chrFill;
+	((BtAttCharValue_t *)eProt->Data)->pChar = &chrProt;
+	BtAttDBEntrySetPermission(eOpen, BT_ATT_PERMISSION_READ);
+	BtAttDBEntrySetPermission(eFill, BT_ATT_PERMISSION_READ);
+	BtAttDBEntrySetPermission(eProt, BT_ATT_PERMISSION_READ | BT_ATT_PERMISSION_READ_ENCRYPT);
+
+	// opcode(1) + start(2) + end(2) + type(2) + value(2)
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+	reqbuf[0] = BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ;
+	PutLe16(reqbuf + 1, 0x0001);
+	PutLe16(reqbuf + 3, 0xFFFF);
+	PutLe16(reqbuf + 5, type);
+	reqbuf[7] = 0xAA;
+	reqbuf[8] = 0xBB;
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 9,
+								 (BtAttReqRsp_t *)rspbuf);
+
+	// Only the open attribute matches: one 4-byte handle range.
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_RSP);
+	CHECK(n == 1 + 4);
+	uint16_t foundStart = GetLe16(rspbuf + 1);
+	uint16_t foundEnd = GetLe16(rspbuf + 3);
+	CHECK(foundStart == eOpen->Hdl);
+	CHECK(foundEnd == eOpen->Hdl);			// non-grouping: end == found handle
+
+	// The protected attribute's handle must not appear in the response.
+	bool protPresent = false;
+	for (size_t off = 1; off + 1 < n; off += 2)
+	{
+		if (GetLe16(rspbuf + off) == eProt->Hdl)
+		{
+			protPresent = true;
+		}
+	}
+	CHECK(!protPresent);
+}
+
 // ---- Read By Group Type rejects starting handle 0x0000 --------------------
 
 void TestReadByGroupTypeInvalidStartHandle()
@@ -344,6 +426,7 @@ int main()
 	TestReadByTypePacksMultiplePairs();
 	TestReadByTypeRejectsTruncatedPair();
 	TestWriteLengthHandling();
+	TestFindByTypeValueOracleAndEndHandle();
 	TestReadByGroupTypeInvalidStartHandle();
 
 	if (s_Failures != 0)

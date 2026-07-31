@@ -233,14 +233,19 @@ BtAttDBEntry_t * const BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid
 	{
 		p = (BtAttDBEntry_t*)s_BtAttDBMem;
 	}
-	do {
+	// Stop at the tail sentinel and also guard against null: pStart can be the
+	// sentinel itself (a caller passing lastEntry->pNext), and the sentinel's
+	// pNext is null, so a do/while that only tests the sentinel walks off the
+	// end.
+	while (p != nullptr && p != s_pBtAttDbEntryEnd)
+	{
 		if (memcmp(&p->TypeUuid, pUuid, sizeof(BtUuid16_t)) == 0)
 		{
 			return p;
 		}
 
 		p = p->pNext;
-	} while (p != s_pBtAttDbEntryEnd);
+	}
 
 	return nullptr;
 }
@@ -1326,6 +1331,13 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				uint16_t start = req->StartHdl;
 				int l = 0;
 
+				// Group End Handle is the group end only for a grouping type
+				// (Primary/Secondary Service); for any other type it equals the
+				// found handle (Vol 3 Part F 3.4.3.1).
+				bool grouping =
+					req->Type == BT_UUID_DECLARATIONS_PRIMARY_SERVICE ||
+					req->Type == BT_UUID_DECLARATIONS_SECONDARY_SERVICE;
+
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_RSP;
 
 				while (start <= req->EndHdl &&
@@ -1338,19 +1350,29 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					if (entry == nullptr)
 						break;
 
+					if (!grouping)
+						hdlEnd = entry->Hdl;
+
 					if (hdlEnd > req->EndHdl)
 						hdlEnd = req->EndHdl;
 
-					uint8_t val[BT_ATT_MTU_MAX];
-					size_t rlen = BtAttReadValueForConn(ConnHdl, entry, 0, val, sizeof(val));
-
-					if (rlen == (size_t)valLen &&
-						(valLen == 0 || memcmp(val, req->Val, (size_t)valLen) == 0))
+					// An attribute whose value cannot be read due to permissions
+					// must not be matched: reading and comparing it anyway lets a
+					// peer confirm a protected value by guessing (a comparison
+					// oracle). Treat it as not matching and move on.
+					if (BtAttReadPermError(ConnHdl, entry) == 0)
 					{
-						pOut->StartHdl = entry->Hdl;
-						pOut->EndHdl   = hdlEnd;
-						pOut++;
-						l += sizeof(BtAttHdlRange_t);
+						uint8_t val[BT_ATT_MTU_MAX];
+						size_t rlen = BtAttReadValueForConn(ConnHdl, entry, 0, val, sizeof(val));
+
+						if (rlen == (size_t)valLen &&
+							(valLen == 0 || memcmp(val, req->Val, (size_t)valLen) == 0))
+						{
+							pOut->StartHdl = entry->Hdl;
+							pOut->EndHdl   = hdlEnd;
+							pOut++;
+							l += sizeof(BtAttHdlRange_t);
+						}
 					}
 
 					if (hdlEnd >= req->EndHdl || hdlEnd == 0xFFFF)
