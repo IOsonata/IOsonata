@@ -308,7 +308,8 @@ void BtPeerFreeByHdl(uint16_t Hdl)
 	BtPeerFree(BtPeerFindByHdl(Hdl));
 }
 
-BtDevice_t * BtPeerConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, const uint8_t *pAddr)
+BtDevice_t * BtPeerConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, const uint8_t *pAddr,
+							 uint8_t OwnAddrType, const uint8_t *pOwnAddr)
 {
 	BtDevice_t *p = BtPeerAlloc(ConnHdl);
 	if (p != nullptr)
@@ -318,6 +319,11 @@ BtDevice_t * BtPeerConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, c
 		if (pAddr != nullptr)
 		{
 			memcpy(p->Conn.PeerAddr, pAddr, sizeof(p->Conn.PeerAddr));
+		}
+		p->Conn.OwnAddrType = OwnAddrType;
+		if (pOwnAddr != nullptr)
+		{
+			memcpy(p->Conn.OwnAddr, pOwnAddr, sizeof(p->Conn.OwnAddr));
 		}
 	}
 	return p;

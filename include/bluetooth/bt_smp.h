@@ -693,10 +693,14 @@ bool   BtSmpLocalIdRestore(const void *pRec, size_t Len);
 /**
  * @brief	Get the local device address and type used on air.
  *
- * The SMP toolbox (c1 for legacy, f5/f6 for SC) needs the responder's own
- * address exactly as the peer sees it, including the address TYPE
- * (0 = public, 1 = random). A wrong address or type makes every confirm /
- * check value mismatch and pairing fails with CONFIRM_VALUE / DHKEY_CHECK.
+ * The device's identity address: what the Identity Address Information PDU
+ * distributes, and what the SMP toolbox (c1 for legacy, f5/f6 for SC) falls
+ * back to when the connection record was not stamped with the address in
+ * use on air. The TYPE matters (0 = public, 1 = random): a wrong address or
+ * type makes every confirm / check value mismatch and pairing fails with
+ * CONFIRM_VALUE / DHKEY_CHECK. A link made over a resolvable private
+ * address records that address on the connection instead; the toolbox reads
+ * it from there, never from here.
  *
  * Weak default returns public, all-zero - which is almost never correct, so
  * the active implementation MUST override this. The SDC implementation reports the random

@@ -208,6 +208,10 @@ typedef struct __Bt_Gap_Connection {
 	uint8_t Role;				//!< LL role on this link
 	uint8_t PeerAddrType;		//!< Peer address type
 	uint8_t PeerAddr[6];		//!< Peer BD_ADDR
+	uint8_t OwnAddrType;		//!< Own address type in use on this link
+	uint8_t OwnAddr[6];			//!< Own BD_ADDR as the peer saw it when the link was
+								//!< created (all zero when not stamped; the SMP
+								//!< toolbox then falls back to BtSmpLocalAddrGet)
 	uint16_t MaxMtu;			//!< Negotiated ATT MTU for this link
 	uint8_t *pLongWrBuff;		//!< Per-link long-write reassembly buffer (NULL if none)
 	uint16_t LongWrBuffSize;	//!< Size of pLongWrBuff in bytes

@@ -1586,6 +1586,32 @@ static void SmpPasskeyResponderConfirm(BtHciDevice_t * const pDev,
 	pLink->Ctx.State = BT_SMP_STATE_RANDOM_WAIT;
 }
 
+// Own address as the peer saw it when this connection was created. A link
+// made over a resolvable private address must run f5/f6/c1 with that address;
+// the identity address from BtSmpLocalAddrGet would mismatch every confirm
+// and DHKey check. The connection record is stamped at creation; when it was
+// not (all-zero), fall back to the accessor, which keeps ports that use one
+// fixed address working unchanged.
+static void SmpOwnAddrGet(uint16_t ConnHdl, uint8_t *pType, uint8_t Addr[6])
+{
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+
+	if (pPeer != nullptr)
+	{
+		for (int i = 0; i < 6; i++)
+		{
+			if (pPeer->Conn.OwnAddr[i] != 0)
+			{
+				*pType = pPeer->Conn.OwnAddrType;
+				memcpy(Addr, pPeer->Conn.OwnAddr, 6);
+				return;
+			}
+		}
+	}
+
+	BtSmpLocalAddrGet(pType, Addr);
+}
+
 // Initiator: all rounds verified. Derive keys with f5 from the final nonces and
 // send the DHKey Check Ea = f6(MacKey, Na, Nb, passkey, IOcapA, A, B).
 static void SmpPasskeyInitiatorFinish(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
@@ -1594,7 +1620,7 @@ static void SmpPasskeyInitiatorFinish(BtHciDevice_t * const pDev, BtSmpLink_t *p
 {
 	uint8_t localAddr[6];
 	uint8_t localAddrType = 0;
-	BtSmpLocalAddrGet(&localAddrType, localAddr);
+	SmpOwnAddrGet(ConnHdl, &localAddrType, localAddr);
 
 	uint8_t dhKeySmp[32];
 	SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
@@ -1637,7 +1663,7 @@ static void SmpPasskeyResponderFinish(BtSmpLink_t *pLink, const uint8_t *PeerAdd
 {
 	uint8_t localAddr[6];
 	uint8_t localAddrType = 0;
-	BtSmpLocalAddrGet(&localAddrType, localAddr);
+	SmpOwnAddrGet(pLink->ConnHdl, &localAddrType, localAddr);
 
 	uint8_t dhKeySmp[32];
 	SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
@@ -1922,7 +1948,7 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 
 		uint8_t localAddr[6];
 		uint8_t localAddrType = 0;
-		BtSmpLocalAddrGet(&localAddrType, localAddr);
+		SmpOwnAddrGet(pLink->ConnHdl, &localAddrType, localAddr);
 
 		uint8_t dhKeySmp[32];
 		SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
@@ -1990,7 +2016,7 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 
 		uint8_t localAddr[6];
 		uint8_t localAddrType = 0;
-		BtSmpLocalAddrGet(&localAddrType, localAddr);
+		SmpOwnAddrGet(pLink->ConnHdl, &localAddrType, localAddr);
 
 		uint8_t dhKeySmp[32];
 		SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
@@ -2031,7 +2057,7 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 	uint8_t calc[16];
 	uint8_t localAddr[6];
 	uint8_t localAddrType = 0;
-	BtSmpLocalAddrGet(&localAddrType, localAddr);
+	SmpOwnAddrGet(pLink->ConnHdl, &localAddrType, localAddr);
 
 	if (!SmpC1(pLink->Ctx.Tk, pLink->Ctx.PeerRand,
 		  pLink->Ctx.PReq, pLink->Ctx.PRsp,
@@ -2079,7 +2105,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 
 	uint8_t localAddr[6];
 	uint8_t localAddrType = 0;
-	BtSmpLocalAddrGet(&localAddrType, localAddr);
+	SmpOwnAddrGet(pLink->ConnHdl, &localAddrType, localAddr);
 
 	if (pLink->Ctx.bInitiator)
 	{
@@ -3523,7 +3549,7 @@ void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 
 	uint8_t localAddr[6];
 	uint8_t localAddrType = 0;
-	BtSmpLocalAddrGet(&localAddrType, localAddr);
+	SmpOwnAddrGet(ConnHdl, &localAddrType, localAddr);
 	uint8_t zeroR[16] = {0};
 
 	if (pLink->Ctx.bInitiator)

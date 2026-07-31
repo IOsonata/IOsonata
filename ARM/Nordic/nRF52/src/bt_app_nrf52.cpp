@@ -981,9 +981,13 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
     {
         case BLE_GAP_EVT_CONNECTED:
         	BtAppConnLedOn();
+        	// Own address not stamped: SMP runs in the SoftDevice, not the
+        	// IOsonata toolbox, so the record is left for the
+        	// BtSmpLocalAddrGet fallback.
         	BtPeerConnected(p_gap_evt->conn_handle, role,
         					   p_gap_evt->params.connected.peer_addr.addr_type,
-        					   (uint8_t*)p_gap_evt->params.connected.peer_addr.addr);
+        					   (uint8_t*)p_gap_evt->params.connected.peer_addr.addr,
+        					   0, NULL);
         	g_BtAppData.State = BTAPP_STATE_CONNECTED;
 
         	// If a secure SecType was configured, the SoftDevice implementation requests
