@@ -317,8 +317,10 @@ void TestFlowControlCredit()
     {
         BtL2CapInvalidCidRejData_t rej = {};
         std::memcpy(&rej, &frame->Data[2], sizeof(rej));
-        CHECK(rej.Dcid == ind.Cid);
-        CHECK(rej.Scid == 0);
+        // Local CID (Dcid) then remote CID (Scid). The channel is known only by
+        // the peer's source CID, so the local slot is 0 (Vol 3 Part A 4.1).
+        CHECK(rej.Dcid == 0);
+        CHECK(rej.Scid == ind.Cid);
     }
 
     ResetHooks();
