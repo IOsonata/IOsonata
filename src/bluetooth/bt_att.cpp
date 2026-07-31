@@ -1329,7 +1329,9 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						pReqAtt->ReadByTypeReq.StartHdl, pReqAtt->ReadByTypeReq.EndHdl,
 						req->Uuid.Uuid16);
 
-				if (req->StartHdl > req->EndHdl)
+				// Starting handle 0x0000 is invalid (Vol 3 Part F 3.4.4.1), as
+				// is a start beyond the end.
+				if (req->StartHdl == 0 || req->StartHdl > req->EndHdl)
 				{
 					retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
 					break;
@@ -1354,9 +1356,10 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				int l = 0;
 				uint8_t permErr = 0;
 				uint16_t permErrHdl = 0;
+				uint16_t pairLen = 0;	// handle(2) + value; the common length for this response, 0 = none yet
 				pRspAtt->ReadByTypeRsp.Len = 0;
 
-				while (entry && (rspMtu - l) >= BT_ATT_MTU_MIN)
+				while (entry)
 				{
 					if (entry->Hdl < req->StartHdl || entry->Hdl > req->EndHdl)
 					{
@@ -1376,26 +1379,61 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						break;
 					}
 
-					p[0] = entry->Hdl & 0xFF;
-					p[1] = entry->Hdl >> 8;
-					p +=2;
+					// Read the whole value into a scratch buffer first so its
+					// true length is known before it goes into the response. The
+					// first attribute fixes the common value length; a later one
+					// is included only when its complete value has exactly that
+					// length, never a longer value truncated to match (Vol 3
+					// Part F 3.4.4.1). The first value is itself capped to
+					// (ATT_MTU - 4) per 3.4.4.2; once the length is fixed, the
+					// scratch read takes one extra byte so a longer value shows
+					// up as longer instead of being silently trimmed.
+					uint8_t val[BT_ATT_MTU_MAX];
+					uint16_t readCap;
 
-					// The value must leave room for the opcode + Length header
-					// (2) and this record's handle (2), so the whole response
-					// stays within ATT_MTU (Vol 3 Part F 3.4.4.2). rspMtu - l is
-					// >= BT_ATT_MTU_MIN here, so the cap is always positive.
-					int cnt = BtAttReadValueForConn(ConnHdl, entry, 0, p, rspMtu - l - 4) + 2;
-					if (pRspAtt->ReadByTypeRsp.Len == 0)
+					if (pairLen == 0)
 					{
-						pRspAtt->ReadByTypeRsp.Len = cnt;
+						readCap = (uint16_t)(rspMtu - 4);
 					}
-					else if (cnt != pRspAtt->ReadByTypeRsp.Len)
+					else
+					{
+						readCap = (uint16_t)(pairLen - 2 + 1);
+					}
+					if (readCap > sizeof(val))
+					{
+						readCap = sizeof(val);
+					}
+
+					uint16_t vlen =
+						(uint16_t)BtAttReadValueForConn(ConnHdl, entry, 0, val, readCap);
+					uint16_t thisPair = (uint16_t)(2 + vlen);
+
+					if (pairLen != 0 && thisPair != pairLen)
+					{
+						// Different value length (or a longer value that the cap
+						// above kept from masquerading): not part of this list.
+						break;
+					}
+
+					// Fit check on the actual pair size, not the MTU minimum, so
+					// every pair that fits within ATT_MTU is included.
+					if ((size_t)(2 + l) + thisPair > rspMtu)
 					{
 						break;
 					}
 
-					l += pRspAtt->ReadByTypeRsp.Len;
-					p += pRspAtt->ReadByTypeRsp.Len - 2;
+					if (pairLen == 0)
+					{
+						pairLen = thisPair;
+						pRspAtt->ReadByTypeRsp.Len = pairLen;
+					}
+
+					p[0] = entry->Hdl & 0xFF;
+					p[1] = entry->Hdl >> 8;
+					memcpy(p + 2, val, vlen);
+					p += thisPair;
+					l += thisPair;
+
 					// entry is the last DB node; no next handle to continue the scan
 					if (entry->pNext == nullptr)
 					{
@@ -1535,7 +1573,9 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					DEBUG_PRINTF("%x ", req->Uuid.Uuid128[i]);
 				DEBUG_PRINTF("\r\n");
 
-				if (req->StartHdl > req->EndHdl)
+				// Starting handle 0x0000 is invalid (Vol 3 Part F 3.4.4.9), as
+				// is a start beyond the end.
+				if (req->StartHdl == 0 || req->StartHdl > req->EndHdl)
 				{
 					retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
 					break;
@@ -1676,6 +1716,23 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					{
 						retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, err);
 						break;
+					}
+
+					// A value longer than the attribute can hold must be
+					// rejected with Invalid Attribute Value Length, not written
+					// in part and acknowledged as success (Vol 3 Part F 3.4.5.1).
+					// Check the capacity before the write so a rejected write
+					// leaves the stored value untouched. A zero-length write is
+					// valid. Non-char-value attributes (declarations, the CCCD
+					// checked above) keep their existing handling.
+					if (BtAttEntryIsCharValue(entry))
+					{
+						BtGattChar_t *pChar = BtAttEntryChar(entry);
+						if (pChar == nullptr || (uint16_t)dlen > pChar->MaxDataLen)
+						{
+							retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_INVALID_ATT_VALUE);
+							break;
+						}
 					}
 
 					BtAttWriteValueForConn(ConnHdl, entry, 0, req->Data, (uint16_t)dlen);
