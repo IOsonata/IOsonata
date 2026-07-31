@@ -69,7 +69,7 @@ static uint16_t s_AttMtu = BT_ATT_MTU_MIN;
 
 alignas(4) __attribute__((weak)) uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
 static size_t s_BtAttDBMemSize = sizeof(s_BtAttDBMem);
-static uint32_t s_BtAttDBMemEnd = (uint32_t)s_BtAttDBMem + s_BtAttDBMemSize;
+static size_t s_BtAttDBMemUsed = 0;
 static BtAttDBEntry_t * const s_pBtAttDbEntryFirst = (BtAttDBEntry_t *)s_BtAttDBMem;
 static BtAttDBEntry_t *s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)s_BtAttDBMem;
 static uint16_t s_LastHdl = 0;
@@ -121,8 +121,8 @@ void BtAttSetHandler(AttReadValFct_t ReadFct, AttWriteValFct_t WriteFct)
 void BtAttDBInit(size_t MemSize)
 {
 	s_BtAttDBMemSize = MemSize;
+	s_BtAttDBMemUsed = 0;
 	memset(s_BtAttDBMem, 0, s_BtAttDBMemSize);
-	s_BtAttDBMemEnd = (uint32_t)s_BtAttDBMem + s_BtAttDBMemSize;
 
 	s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)s_BtAttDBMem;
 	s_LastHdl = 0;
@@ -132,34 +132,46 @@ void BtAttDBInit(size_t MemSize)
 
 BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pData, int DataLen)
 {
-	BtAttDBEntry_t *entry = s_pBtAttDbEntryEnd;
-
-	uint32_t l = sizeof(BtAttDBEntry_t) + MaxDataLen;
-
-	l = (l + 3) & 0xFFFFFFFC;
-
-	// We will write pNext/pPrev into the slot at (entry + l) below to seed
-	// the next tail entry. That seed write touches the first few bytes of
-	// a BtAttDBEntry_t at (entry + l), so the bound check must reserve
-	// sizeof(BtAttDBEntry_t) past the end of this entry, not just l bytes.
-	// Without the pad, the seed writes spill past s_BtAttDBMemEnd when the
-	// DB is exactly full.
-	if ((uint32_t)entry + l + sizeof(BtAttDBEntry_t) > s_BtAttDBMemEnd)
+	if (pUuid == nullptr || MaxDataLen < 0 || MaxDataLen > 0xFFFF)
 	{
-		//DEBUG_PRINTF("Out mem. Required %d, Reserved : %d\r\n", ((uint32_t)entry + l + sizeof(BtAttDBEntry_t)) - (uint32_t)s_BtAttDBMem, s_BtAttDBMemEnd - (uint32_t)s_BtAttDBMem);
 		return nullptr;
 	}
 
+	size_t entrySize = sizeof(BtAttDBEntry_t) + (size_t)MaxDataLen;
+	entrySize = (entrySize + 3U) & ~(size_t)3U;
+
+	if (s_BtAttDBMemUsed > s_BtAttDBMemSize)
+	{
+		return nullptr;
+	}
+
+	size_t remaining = s_BtAttDBMemSize - s_BtAttDBMemUsed;
+
+	// We will write pNext/pPrev into the slot after this entry to seed the
+	// next tail entry. That seed write touches the first few bytes of a
+	// BtAttDBEntry_t, so the bound check must reserve a complete tail entry.
+	// Without the pad, the seed writes spill past the pool when it is full.
+	if (entrySize > remaining ||
+		sizeof(BtAttDBEntry_t) > remaining - entrySize)
+	{
+		return nullptr;
+	}
+
+	BtAttDBEntry_t *entry =
+		(BtAttDBEntry_t*)(s_BtAttDBMem + s_BtAttDBMemUsed);
+
 	entry->TypeUuid = *pUuid;
 	entry->Hdl = ++s_LastHdl;
-	entry->DataLen = MaxDataLen;
+	entry->DataLen = (uint16_t)MaxDataLen;
 
-	s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)((uint8_t*)entry + l);
+	s_BtAttDBMemUsed += entrySize;
+
+	s_pBtAttDbEntryEnd =
+		(BtAttDBEntry_t*)(s_BtAttDBMem + s_BtAttDBMemUsed);
 	s_pBtAttDbEntryEnd->pNext = nullptr;
 	s_pBtAttDbEntryEnd->pPrev = entry;
 	entry->pNext = s_pBtAttDbEntryEnd;
 
-//	DEBUG_PRINTF("Entry %p, %x\r\n", entry, s_BtAttDBMemEnd);
 	return entry;
 }
 
@@ -1968,4 +1980,3 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 	return retval;
 }
-
