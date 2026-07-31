@@ -2,6 +2,7 @@ ROOT := ../../..
 BUILD_DIR := build
 ADV_TARGET := $(BUILD_DIR)/bt_adv_uuid_test
 HCI_TARGET := $(BUILD_DIR)/bt_hci_flow_test
+HCI_CTLR_TARGET := $(BUILD_DIR)/bt_hci_ctlr_init_test
 L2CAP_TARGET := $(BUILD_DIR)/bt_l2cap_signal_test
 ATT_TARGET := $(BUILD_DIR)/bt_att_db_test
 
@@ -23,6 +24,11 @@ HCI_SOURCES := \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
+HCI_CTLR_SOURCES := \
+	bt_hci_ctlr_init_test.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp \
+	$(ROOT)/src/cfifo.c
+
 L2CAP_SOURCES := \
 	bt_l2cap_signal_test.cpp \
 	$(ROOT)/src/bluetooth/bt_l2cap.cpp
@@ -35,9 +41,10 @@ ATT_SOURCES := \
 
 all: test
 
-test: $(ADV_TARGET) $(HCI_TARGET) $(L2CAP_TARGET) $(ATT_TARGET)
+test: $(ADV_TARGET) $(HCI_TARGET) $(HCI_CTLR_TARGET) $(L2CAP_TARGET) $(ATT_TARGET)
 	./$(ADV_TARGET)
 	./$(HCI_TARGET)
+	./$(HCI_CTLR_TARGET)
 	./$(L2CAP_TARGET)
 	./$(ATT_TARGET)
 
@@ -48,6 +55,10 @@ $(ADV_TARGET): $(ADV_SOURCES)
 $(HCI_TARGET): $(HCI_SOURCES)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(HCI_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(HCI_CTLR_TARGET): $(HCI_CTLR_SOURCES)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(HCI_CTLR_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(L2CAP_TARGET): $(L2CAP_SOURCES)
 	@mkdir -p $(BUILD_DIR)
