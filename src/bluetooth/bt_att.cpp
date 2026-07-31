@@ -982,6 +982,58 @@ static uint16_t BtAttCurValueLen(BtAttDBEntry_t *pEntry)
 	return 0xFFFF;
 }
 
+// Complete on-air value length of an attribute, without copying it. Read By
+// Type uses this to size and compare handle-value pairs so it does not need a
+// full-value scratch buffer. The lengths MUST match what BtAttReadValue emits
+// for each type (declarations are fixed-format; char values and the user
+// description come from the characteristic).
+static uint16_t BtAttFullValueLen(BtAttDBEntry_t *pEntry)
+{
+	if (pEntry == nullptr)
+	{
+		return 0;
+	}
+
+	if (pEntry->TypeUuid.BaseIdx != 0)
+	{
+		BtGattChar_t *pChar = BtAttEntryChar(pEntry);
+		return pChar != nullptr ? (uint16_t)pChar->ValueLen : 0;
+	}
+
+	switch (pEntry->TypeUuid.Uuid)
+	{
+		case BT_UUID_DECLARATIONS_PRIMARY_SERVICE:
+		case BT_UUID_DECLARATIONS_SECONDARY_SERVICE:
+			return ((BtAttSrvcDeclar_t*)pEntry->Data)->Uuid.BaseIdx > 0 ? 16 : 2;
+
+		case BT_UUID_DECLARATIONS_INCLUDE:
+			return ((BtAttSrvcInclude_t*)pEntry->Data)->SrvcUuid.BaseIdx > 0 ? 4 : 6;
+
+		case BT_UUID_DECLARATIONS_CHARACTERISTIC:
+			return ((BtAttCharDeclar_t*)pEntry->Data)->Uuid.BaseIdx > 0 ? 19 : 5;
+
+		case BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+		{
+			BtGattChar_t *pChar = BtAttEntryChar(pEntry);
+			const char *desc = pChar != nullptr ? pChar->pDesc : nullptr;
+			return desc != nullptr ? (uint16_t)strlen(desc) : 0;
+		}
+
+		case BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+			return 2;
+
+		case BT_UUID_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
+		case BT_UUID_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
+			return 0;
+
+		default:
+		{
+			BtGattChar_t *pChar = BtAttEntryChar(pEntry);
+			return pChar != nullptr ? (uint16_t)pChar->ValueLen : 0;
+		}
+	}
+}
+
 // Apply the queued prepared writes. Returns 0 on success, or an ATT error code
 // with *pFailHdl set to the offending handle (Vol 3 Part F 3.4.6.3). The queue
 // is consumed either way.
@@ -1356,7 +1408,9 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				int l = 0;
 				uint8_t permErr = 0;
 				uint16_t permErrHdl = 0;
-				uint16_t pairLen = 0;	// handle(2) + value; the common length for this response, 0 = none yet
+				uint16_t firstFull = 0;		// complete value length of the first matched attribute
+				uint16_t pairValLen = 0;	// value bytes emitted per pair (first may be truncated)
+				bool havePair = false;
 				pRspAtt->ReadByTypeRsp.Len = 0;
 
 				while (entry)
@@ -1379,60 +1433,44 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						break;
 					}
 
-					// Read the whole value into a scratch buffer first so its
-					// true length is known before it goes into the response. The
-					// first attribute fixes the common value length; a later one
-					// is included only when its complete value has exactly that
-					// length, never a longer value truncated to match (Vol 3
-					// Part F 3.4.4.1). The first value is itself capped to
-					// (ATT_MTU - 4) per 3.4.4.2; once the length is fixed, the
-					// scratch read takes one extra byte so a longer value shows
-					// up as longer instead of being silently trimmed.
-					uint8_t val[BT_ATT_MTU_MAX];
-					uint16_t readCap;
+					// Compare complete value lengths without copying, so a later
+					// value longer than the first is dropped rather than
+					// truncated to masquerade as the common length (Vol 3 Part F
+					// 3.4.4.1). The first attribute fixes that length; its value
+					// is itself capped to (ATT_MTU - 4) per 3.4.4.2.
+					uint16_t full = BtAttFullValueLen(entry);
 
-					if (pairLen == 0)
+					if (!havePair)
 					{
-						readCap = (uint16_t)(rspMtu - 4);
+						firstFull = full;
+						uint16_t cap = (uint16_t)(rspMtu - 4);
+						pairValLen = full < cap ? full : cap;
 					}
-					else
+					else if (full != firstFull)
 					{
-						readCap = (uint16_t)(pairLen - 2 + 1);
-					}
-					if (readCap > sizeof(val))
-					{
-						readCap = sizeof(val);
-					}
-
-					uint16_t vlen =
-						(uint16_t)BtAttReadValueForConn(ConnHdl, entry, 0, val, readCap);
-					uint16_t thisPair = (uint16_t)(2 + vlen);
-
-					if (pairLen != 0 && thisPair != pairLen)
-					{
-						// Different value length (or a longer value that the cap
-						// above kept from masquerading): not part of this list.
 						break;
 					}
 
 					// Fit check on the actual pair size, not the MTU minimum, so
 					// every pair that fits within ATT_MTU is included.
-					if ((size_t)(2 + l) + thisPair > rspMtu)
+					if ((size_t)(2 + l) + 2 + pairValLen > rspMtu)
 					{
 						break;
 					}
 
-					if (pairLen == 0)
-					{
-						pairLen = thisPair;
-						pRspAtt->ReadByTypeRsp.Len = pairLen;
-					}
-
+					// Copy handle + value straight into the response. The value
+					// read is bounded by pairValLen, so no scratch is needed.
 					p[0] = entry->Hdl & 0xFF;
 					p[1] = entry->Hdl >> 8;
-					memcpy(p + 2, val, vlen);
-					p += thisPair;
-					l += thisPair;
+					BtAttReadValueForConn(ConnHdl, entry, 0, p + 2, pairValLen);
+					p += 2 + pairValLen;
+					l += 2 + pairValLen;
+
+					if (!havePair)
+					{
+						havePair = true;
+						pRspAtt->ReadByTypeRsp.Len = (uint8_t)(2 + pairValLen);
+					}
 
 					// entry is the last DB node; no next handle to continue the scan
 					if (entry->pNext == nullptr)
@@ -1725,10 +1763,11 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					// leaves the stored value untouched. A zero-length write is
 					// valid. Non-char-value attributes (declarations, the CCCD
 					// checked above) keep their existing handling.
+					BtGattChar_t *pWrChar = nullptr;
 					if (BtAttEntryIsCharValue(entry))
 					{
-						BtGattChar_t *pChar = BtAttEntryChar(entry);
-						if (pChar == nullptr || (uint16_t)dlen > pChar->MaxDataLen)
+						pWrChar = BtAttEntryChar(entry);
+						if (pWrChar == nullptr || (uint16_t)dlen > pWrChar->MaxDataLen)
 						{
 							retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_INVALID_ATT_VALUE);
 							break;
@@ -1736,6 +1775,17 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					}
 
 					BtAttWriteValueForConn(ConnHdl, entry, 0, req->Data, (uint16_t)dlen);
+
+					// A Write Request replaces the whole attribute value, so the
+					// current length becomes exactly the written length: a
+					// shorter write truncates and a zero-length write clears the
+					// value (Vol 3 Part F 3.4.5.1). BtAttWriteValue only extends
+					// on an offset write (prepared writes rely on that), so the
+					// replacement length is set here for the full-value path.
+					if (pWrChar != nullptr)
+					{
+						pWrChar->ValueLen = (uint16_t)dlen;
+					}
 
 					pRspAtt->OpCode = BT_ATT_OPCODE_ATT_WRITE_RSP;
 
@@ -1773,7 +1823,19 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					if (BtAttWritePermError(ConnHdl, entry, BT_ATT_OPCODE_ATT_CMD,
 											pReqAtt->WriteCmd.Data, (uint16_t)dlen) == 0)
 					{
-						BtAttWriteValueForConn(ConnHdl, entry, 0, pReqAtt->WriteCmd.Data, (uint16_t)dlen);
+						size_t written = BtAttWriteValueForConn(ConnHdl, entry, 0,
+										pReqAtt->WriteCmd.Data, (uint16_t)dlen);
+						// Write Without Response also replaces the value; set the
+						// current length to what was actually stored (the command
+						// path cannot error, so an over-long value is truncated).
+						if (BtAttEntryIsCharValue(entry))
+						{
+							BtGattChar_t *pCmdChar = BtAttEntryChar(entry);
+							if (pCmdChar != nullptr)
+							{
+								pCmdChar->ValueLen = (uint16_t)written;
+							}
+						}
 					}
 
 					retval = 0;

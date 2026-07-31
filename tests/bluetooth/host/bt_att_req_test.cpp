@@ -279,7 +279,7 @@ void TestWriteLengthHandling()
 	CHECK(chr.ValueLen == 4);					// unchanged
 	CHECK(stored[0] == 0x10 && stored[3] == 0x13);	// untouched
 
-	// A write that fits (6 bytes) succeeds and updates the value.
+	// A write that fits (6 bytes) succeeds and grows the value to 6.
 	std::memset(rspbuf, 0, sizeof(rspbuf));
 	uint8_t six[6];
 	for (int i = 0; i < 6; ++i) six[i] = (uint8_t)(0x60 + i);
@@ -291,13 +291,49 @@ void TestWriteLengthHandling()
 	CHECK(chr.ValueLen == 6);
 	CHECK(stored[0] == 0x60 && stored[5] == 0x65);
 
-	// A zero-length write is valid and acknowledged (written == requested == 0).
+	// A shorter write (4 bytes) replaces the value: the length must shrink to
+	// 4, not stay at 6 with stale trailing bytes.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	uint8_t four[4] = { 0x70, 0x71, 0x72, 0x73 };
+	len = BuildWrite(reqbuf, e->Hdl, four, 4);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, len,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 1);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_WRITE_RSP);
+	CHECK(chr.ValueLen == 4);
+	CHECK(stored[0] == 0x70 && stored[3] == 0x73);
+
+	// A zero-length write is valid, acknowledged, and clears the value.
 	std::memset(rspbuf, 0, sizeof(rspbuf));
 	len = BuildWrite(reqbuf, e->Hdl, nullptr, 0);
 	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, len,
 						(BtAttReqRsp_t *)rspbuf);
 	CHECK(n == 1);
 	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_WRITE_RSP);
+	CHECK(chr.ValueLen == 0);
+}
+
+// ---- Read By Group Type rejects starting handle 0x0000 --------------------
+
+void TestReadByGroupTypeInvalidStartHandle()
+{
+	BtAttDBInit(1024);
+	BtAttSetMtu(BT_ATT_MTU_MIN);
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+
+	// opcode(1) + start(2) + end(2) + uuid16(2), start = 0x0000 -> Invalid Handle.
+	reqbuf[0] = BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ;
+	PutLe16(reqbuf + 1, 0x0000);
+	PutLe16(reqbuf + 3, 0xFFFF);
+	PutLe16(reqbuf + 5, 0x2800);		// Primary Service group type
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 7,
+								 (BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 5);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrReqOp] == BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_INVALID_HANDLE);
 }
 
 } // namespace
@@ -308,6 +344,7 @@ int main()
 	TestReadByTypePacksMultiplePairs();
 	TestReadByTypeRejectsTruncatedPair();
 	TestWriteLengthHandling();
+	TestReadByGroupTypeInvalidStartHandle();
 
 	if (s_Failures != 0)
 	{
