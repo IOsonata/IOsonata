@@ -1380,7 +1380,11 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					p[1] = entry->Hdl >> 8;
 					p +=2;
 
-					int cnt = BtAttReadValueForConn(ConnHdl, entry, 0, p, rspMtu - l - 2) + 2;
+					// The value must leave room for the opcode + Length header
+					// (2) and this record's handle (2), so the whole response
+					// stays within ATT_MTU (Vol 3 Part F 3.4.4.2). rspMtu - l is
+					// >= BT_ATT_MTU_MIN here, so the cap is always positive.
+					int cnt = BtAttReadValueForConn(ConnHdl, entry, 0, p, rspMtu - l - 4) + 2;
 					if (pRspAtt->ReadByTypeRsp.Len == 0)
 					{
 						pRspAtt->ReadByTypeRsp.Len = cnt;
@@ -1682,7 +1686,10 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				}
 				else
 				{
-					retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_ATT_NOT_FOUND);
+					// A write to a handle that is not in the database is an
+					// invalid handle, not attribute-not-found (Vol 3 Part F
+					// 3.4.5.1). Attribute Not Found is a discovery-request code.
+					retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
 
 				}
 			}

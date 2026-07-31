@@ -68,6 +68,14 @@ void TestMisalignedCallerPool()
 
 void TestAllocationAndLongWriteSlices()
 {
+	// Establish this test's own pool. The previous test initialized the peer
+	// manager against a buffer on its stack, which is out of scope now; the
+	// long-write and alloc calls below must run against live memory.
+	constexpr size_t kPeerCount = 3;
+	alignas(BtDevice_t) std::array<uint8_t, BT_PEER_POOL_MEMSIZE(kPeerCount)> pool = {};
+	CHECK(BtPeerInit(pool.data(), pool.size()));
+	CHECK(BtPeerCount() == kPeerCount);
+
 	std::array<uint8_t, 96> longWrite = {};
 	BtPeerLongWrInit(longWrite.data(), longWrite.size());
 

@@ -82,7 +82,10 @@ void TestInvalidCustomFifo()
 	cfg.RxFifoMemSize = 0;
 	CHECK(!BtHciCtlrInit(&noSize, &cfg));
 
-	alignas(CFifo_t) std::array<uint8_t, kFifoSize - 1> shortMem = {};
+	// One byte short of a single complete packet, so the FIFO cannot hold even
+	// one element. kFifoSize holds two packets, so kFifoSize - 1 still holds
+	// one and would be accepted; size against the one-packet minimum instead.
+	alignas(CFifo_t) std::array<uint8_t, CFIFO_TOTAL_MEMSIZE(1, kPacketSize) - 1> shortMem = {};
 	BtHciCtlrDev_t tooSmall = {};
 	cfg.pRxFifoMem = shortMem.data();
 	cfg.RxFifoMemSize = static_cast<int>(shortMem.size());
