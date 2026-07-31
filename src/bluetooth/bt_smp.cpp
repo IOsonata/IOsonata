@@ -1175,6 +1175,17 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		return;
 	}
 
+	// Reject reserved field values with Invalid Parameters (Vol 3 Part H
+	// 3.5.5): IO Capability above 0x04 and OOB flag above 0x01 are undefined,
+	// and must not be treated as Just Works / OOB-present respectively.
+	if (pReq->IOCaps > BT_SMP_IOCAPS_KEYBOARD_DISPLAY ||
+		pReq->OOBFlag > BT_SMP_OOB_AUTH_PRESENT)
+	{
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
+		SmpAbortPairing(pLink);
+		return;
+	}
+
 	// Enforce the locally-required minimum key size, not just the spec floor:
 	// rejecting a peer that offers below BT_SMP_CFG_MIN_ENC_KEY_SIZE closes the
 	// KNOB-style downgrade where a MITM forces MaxKeySize down (Core Vol 3 Part
@@ -1287,6 +1298,19 @@ static bool SmpKeyPresent(const uint8_t *pKey, size_t Len)
 
 static bool SmpStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 {
+	// Reject a peer public key identical to our own before starting ECDH. This
+	// is the reflection / debug-key attack against LE Secure Connections,
+	// mandatory to reject since Core 5.1 (CVE-2020-26558). Both keys are always
+	// present at this chokepoint (the initiator has sent its key and the
+	// responder only reaches here once both are in). On-curve validation of the
+	// peer key is done by the key-agreement engine. A false return makes the
+	// caller send Pairing Failed and abort.
+	if (memcmp(pLink->Ctx.PeerPubKey, pLink->Ctx.LocalPubKey,
+			   sizeof(pLink->Ctx.PeerPubKey)) == 0)
+	{
+		return false;
+	}
+
 	if (SmpCryptoRequest(pLink, pDev, BT_SMP_CRYPTO_OP_DHKEY) == false)
 	{
 		return false;
@@ -1345,6 +1369,16 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	{
 		// We are the responder; a Pairing Response is not expected.
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CMD_NOT_SUPPORTED);
+		return;
+	}
+
+	// Reject reserved field values with Invalid Parameters (Vol 3 Part H
+	// 3.5.5): IO Capability above 0x04 and OOB flag above 0x01 are undefined.
+	if (pRsp->IOCaps > BT_SMP_IOCAPS_KEYBOARD_DISPLAY ||
+		pRsp->OOBFlag > BT_SMP_OOB_AUTH_PRESENT)
+	{
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
+		SmpAbortPairing(pLink);
 		return;
 	}
 
