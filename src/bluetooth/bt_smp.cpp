@@ -1874,6 +1874,12 @@ static void SmpHandlePairingConfirm(BtHciDevice_t * const pDev, BtSmpLink_t *pLi
 		iat = pPeer->Conn.PeerAddrType;
 	}
 
+	// c1 folds the same initiator/responder address pair into both confirm
+	// values. The verify path below computes the expected Mconfirm with the
+	// real own address, so the Sconfirm sent here must use it too; a zero
+	// responder address makes every conformant initiator reject the confirm.
+	SmpOwnAddrGet(ConnHdl, &rat, ra);
+
 	if (!SmpC1(pLink->Ctx.Tk, pLink->Ctx.LocalRand,
 		  pLink->Ctx.PReq, pLink->Ctx.PRsp,
 		  iat, ia, rat, ra, pLink->Ctx.LocalConfirm))
