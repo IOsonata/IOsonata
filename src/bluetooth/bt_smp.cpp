@@ -1625,9 +1625,11 @@ static void SmpPasskeyInitiatorFinish(BtHciDevice_t * const pDev, BtSmpLink_t *p
 	uint8_t dhKeySmp[32];
 	SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
 
-	if (!SmpF5(dhKeySmp, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
+	bool f5ok = SmpF5(dhKeySmp, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
 		  localAddrType, localAddr, PeerAddrType, PeerAddr,
-		  pLink->Ctx.Mackey, pLink->Ctx.Ltk))
+		  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
+	CryptoSecureWipe(dhKeySmp, sizeof(dhKeySmp));
+	if (!f5ok)
 	{
 		SmpFailAndLock(s_pSmpActiveDev, pLink->ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
 		return;
@@ -1668,9 +1670,11 @@ static void SmpPasskeyResponderFinish(BtSmpLink_t *pLink, const uint8_t *PeerAdd
 	uint8_t dhKeySmp[32];
 	SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
 
-	if (!SmpF5(dhKeySmp, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
+	bool f5ok = SmpF5(dhKeySmp, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
 		  PeerAddrType, PeerAddr, localAddrType, localAddr,
-		  pLink->Ctx.Mackey, pLink->Ctx.Ltk))
+		  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
+	CryptoSecureWipe(dhKeySmp, sizeof(dhKeySmp));
+	if (!f5ok)
 	{
 		SmpFailAndLock(s_pSmpActiveDev, pLink->ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
 		return;
@@ -1954,9 +1958,11 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 		SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
 
 		// f5(DHKey, Na, Nb, A1=initiator(local), A2=responder(peer)).
-		if (!SmpF5(dhKeySmp, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
+		bool f5ok = SmpF5(dhKeySmp, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
 			  localAddrType, localAddr, peerAddrType, peerAddr,
-			  pLink->Ctx.Mackey, pLink->Ctx.Ltk))
+			  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
+		CryptoSecureWipe(dhKeySmp, sizeof(dhKeySmp));
+		if (!f5ok)
 		{
 			SmpFailAndLock(s_pSmpActiveDev, pLink->ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
 			return;
@@ -2021,9 +2027,11 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 		uint8_t dhKeySmp[32];
 		SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
 
-		if (!SmpF5(dhKeySmp, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
+		bool f5ok = SmpF5(dhKeySmp, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
 			  peerAddrType, peerAddr, localAddrType, localAddr,
-			  pLink->Ctx.Mackey, pLink->Ctx.Ltk))
+			  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
+		CryptoSecureWipe(dhKeySmp, sizeof(dhKeySmp));
+		if (!f5ok)
 		{
 			SmpFailAndLock(s_pSmpActiveDev, pLink->ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
 			return;

@@ -157,8 +157,8 @@ static void Ah(const uint8_t *pK, const uint8_t *pR, uint8_t *pHash)
 }
 
 // ---- im_* API surface -------------------------------------------------------
-
-extern "C" {
+// Declared in id_manager.h, which imposes C linkage on every declaration; the
+// definitions inherit it.
 
 bool im_address_resolve(ble_gap_addr_t const * p_addr, ble_gap_irk_t const * p_irk)
 {
@@ -392,7 +392,6 @@ ret_code_t im_ble_addr_get(uint16_t conn_handle, ble_gap_addr_t * p_ble_addr)
 	return NRF_SUCCESS;
 }
 
-}	// extern "C"
 
 // Collect identity addresses and IRKs for a list of peers from their bond
 // records. Only identity addresses (public or random static) are usable for
@@ -441,7 +440,7 @@ static ret_code_t PeersIdKeysGet(const pm_peer_id_t *pPeers, uint32_t PeerCnt,
 	return NRF_SUCCESS;
 }
 
-extern "C" {
+// Declared in id_manager.h; C linkage inherited from the declarations.
 
 ret_code_t im_whitelist_set(pm_peer_id_t const * p_peers, uint32_t peer_cnt)
 {
@@ -576,6 +575,5 @@ ret_code_t im_privacy_get(pm_privacy_params_t * p_privacy_params)
 	return sd_ble_gap_privacy_get(p_privacy_params);
 }
 
-}	// extern "C"
 
 #endif // NRF_MODULE_ENABLED(PEER_MANAGER)
