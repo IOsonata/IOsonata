@@ -6,9 +6,14 @@ HCI_CTLR_TARGET := $(BUILD_DIR)/bt_hci_ctlr_init_test
 L2CAP_TARGET := $(BUILD_DIR)/bt_l2cap_signal_test
 ATT_TARGET := $(BUILD_DIR)/bt_att_db_test
 PEER_TARGET := $(BUILD_DIR)/bt_peer_pool_test
+CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
 
+CC ?= gcc
 CXX ?= g++
 CPPFLAGS += -I$(ROOT)/include
+CFLAGS ?= -O1 -g
+CFLAGS += -std=gnu11 -Wall -Wextra -fno-omit-frame-pointer \
+	-ffunction-sections -fdata-sections
 CXXFLAGS ?= -O1 -g
 CXXFLAGS += -std=gnu++23 -Wall -Wextra -fno-omit-frame-pointer \
 	-ffunction-sections -fdata-sections
@@ -27,8 +32,7 @@ HCI_SOURCES := \
 
 HCI_CTLR_SOURCES := \
 	bt_hci_ctlr_init_test.cpp \
-	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp \
-	$(ROOT)/src/cfifo.c
+	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
 L2CAP_SOURCES := \
 	bt_l2cap_signal_test.cpp \
@@ -62,9 +66,13 @@ $(HCI_TARGET): $(HCI_SOURCES)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(HCI_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
-$(HCI_CTLR_TARGET): $(HCI_CTLR_SOURCES)
+$(CFIFO_OBJ): $(ROOT)/src/cfifo.c
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(HCI_CTLR_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(HCI_CTLR_TARGET): $(HCI_CTLR_SOURCES) $(CFIFO_OBJ)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(HCI_CTLR_SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(L2CAP_TARGET): $(L2CAP_SOURCES)
 	@mkdir -p $(BUILD_DIR)
