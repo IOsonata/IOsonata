@@ -223,16 +223,6 @@ typedef struct __Bt_Gap_Connection {
 	BtConnSec_t Sec;			//!< Live link security state (produced by the security layer)
 } BtGapConnection_t;
 
-// Read the current security state of ConnHdl into *pSec. Returns false when the
-// connection is unknown. Implemented by the generic host over the connection
-// store; an arch port overrides it only when the vendor stack owns the security
-// database (it then maps the vendor state into BtConnSec_t).
-bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec);
-
-// Record the security state of ConnHdl. Called by the security layer when
-// pairing or encryption completes or is lost.
-void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *pSec);
-
 typedef enum __Bt_Scan_Type {
 	BTSCAN_TYPE_PASSIVE,		//!< without scan/response data
 	BTSCAN_TYPE_PASSIVE_EXT,		//!< without scan/response data
@@ -270,6 +260,16 @@ typedef struct __Bt_Gap_Config {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Read the current security state of ConnHdl into *pSec. Returns false when the
+// connection is unknown. Implemented by the generic host over the connection
+// store; an arch port overrides it only when the vendor stack owns the security
+// database (it then maps the vendor state into BtConnSec_t).
+bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec);
+
+// Record the security state of ConnHdl. Called by the security layer when
+// pairing or encryption completes or is lost.
+void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *pSec);
 
 // Initialise the GAP layer: registers the GAP and GATT services for the
 // peripheral role and configures GAP for peripheral/central per pCfg->Role.

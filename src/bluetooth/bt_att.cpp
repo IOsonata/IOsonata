@@ -67,7 +67,10 @@ SOFTWARE.
 
 static uint16_t s_AttMtu = BT_ATT_MTU_MIN;
 
-alignas(4) __attribute__((weak)) uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
+// The pool must hold BtAttDBEntry_t objects at rounded offsets; align it to
+// the entry type so that holds on any pointer width (a strong override of
+// this array must be aligned at least as strictly).
+alignas(BtAttDBEntry_t) __attribute__((weak)) uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
 static size_t s_BtAttDBMemSize = sizeof(s_BtAttDBMem);
 static size_t s_BtAttDBMemUsed = 0;
 static BtAttDBEntry_t * const s_pBtAttDbEntryFirst = (BtAttDBEntry_t *)s_BtAttDBMem;
@@ -138,7 +141,8 @@ BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, voi
 	}
 
 	size_t entrySize = sizeof(BtAttDBEntry_t) + (size_t)MaxDataLen;
-	entrySize = (entrySize + 3U) & ~(size_t)3U;
+	entrySize = (entrySize + alignof(BtAttDBEntry_t) - 1U) &
+				~(size_t)(alignof(BtAttDBEntry_t) - 1U);
 
 	if (s_BtAttDBMemUsed > s_BtAttDBMemSize)
 	{
