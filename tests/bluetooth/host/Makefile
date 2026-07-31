@@ -5,6 +5,7 @@ HCI_TARGET := $(BUILD_DIR)/bt_hci_flow_test
 HCI_CTLR_TARGET := $(BUILD_DIR)/bt_hci_ctlr_init_test
 L2CAP_TARGET := $(BUILD_DIR)/bt_l2cap_signal_test
 ATT_TARGET := $(BUILD_DIR)/bt_att_db_test
+ATT_REQ_TARGET := $(BUILD_DIR)/bt_att_req_test
 PEER_TARGET := $(BUILD_DIR)/bt_peer_pool_test
 CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
 
@@ -42,6 +43,10 @@ ATT_SOURCES := \
 	bt_att_db_test.cpp \
 	$(ROOT)/src/bluetooth/bt_att.cpp
 
+ATT_REQ_SOURCES := \
+	bt_att_req_test.cpp \
+	$(ROOT)/src/bluetooth/bt_att.cpp
+
 PEER_SOURCES := \
 	bt_peer_pool_test.cpp \
 	$(ROOT)/src/bluetooth/bt_peer.cpp
@@ -50,12 +55,13 @@ PEER_SOURCES := \
 
 all: test
 
-test: $(ADV_TARGET) $(HCI_TARGET) $(HCI_CTLR_TARGET) $(L2CAP_TARGET) $(ATT_TARGET) $(PEER_TARGET)
+test: $(ADV_TARGET) $(HCI_TARGET) $(HCI_CTLR_TARGET) $(L2CAP_TARGET) $(ATT_TARGET) $(ATT_REQ_TARGET) $(PEER_TARGET)
 	./$(ADV_TARGET)
 	./$(HCI_TARGET)
 	./$(HCI_CTLR_TARGET)
 	./$(L2CAP_TARGET)
 	./$(ATT_TARGET)
+	./$(ATT_REQ_TARGET)
 	./$(PEER_TARGET)
 
 $(ADV_TARGET): $(ADV_SOURCES)
@@ -81,6 +87,10 @@ $(L2CAP_TARGET): $(L2CAP_SOURCES)
 $(ATT_TARGET): $(ATT_SOURCES)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(ATT_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(ATT_REQ_TARGET): $(ATT_REQ_SOURCES)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(ATT_REQ_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(PEER_TARGET): $(PEER_SOURCES)
 	@mkdir -p $(BUILD_DIR)

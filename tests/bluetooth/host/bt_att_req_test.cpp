@@ -1,0 +1,321 @@
+// Request-level coverage for BtAttProcessReq: the Read By Type response
+// packing and sizing, invalid starting handle, the Write Request handle and
+// length error codes. The database-layer test in bt_att_db_test.cpp does not
+// drive BtAttProcessReq, so these paths were previously unverified.
+//
+// PDUs are built in plain byte buffers in on-air little-endian order and cast
+// to BtAttReqRsp_t for the call, so the variable-length Data fields are never
+// indexed past their declared [1] size.
+
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+
+#include "bluetooth/bt_att.h"
+#include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_peer.h"
+
+// Minimal externals BtAttProcessReq reaches for. This test drives the ATT
+// server logic directly, so peers, CCCD state, security and signing are stubbed
+// to a plain unencrypted single link with no subscriptions.
+extern "C" {
+
+BtDevice_t *BtPeerFindByHdl(uint16_t) { return nullptr; }
+
+bool BtGapConnSecGet(uint16_t, BtConnSec_t *) { return false; }
+
+uint16_t BtGattCccdGet(uint16_t, uint16_t) { return 0; }
+bool BtGattCccdSet(uint16_t, uint16_t, uint16_t) { return true; }
+void BtGattClientNotified(uint16_t, uint16_t, uint8_t *, uint16_t) {}
+void BtGattHandleValueConfirm(uint16_t) {}
+
+bool BtUuidGetBase(int, uint8_t *) { return false; }
+
+bool BtSmpSignVerify(uint16_t, const uint8_t *, size_t, const uint8_t *)
+{
+	return false;
+}
+
+} // extern "C"
+
+namespace {
+
+int s_Failures = 0;
+int s_Checks = 0;
+
+#define CHECK(expr) do { \
+	++s_Checks; \
+	if (!(expr)) { \
+		std::printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #expr); \
+		++s_Failures; \
+	} \
+} while (0)
+
+constexpr uint16_t kConnHdl = 0x0001;
+constexpr uint16_t kCharUuid = 0xFFF1;
+
+// Response opcode + first scalar are at fixed offsets; the Read By Type data
+// list begins after opcode(1) + length(1).
+constexpr size_t kRbtDataOff = 2;
+// Error Response layout: opcode(1) + reqopcode(1) + handle(2) + error(1).
+constexpr size_t kErrReqOp = 1;
+constexpr size_t kErrCode  = 4;
+
+void PutLe16(uint8_t *p, uint16_t v)
+{
+	p[0] = (uint8_t)(v & 0xFF);
+	p[1] = (uint8_t)(v >> 8);
+}
+
+uint16_t GetLe16(const uint8_t *p)
+{
+	return (uint16_t)(p[0] | (p[1] << 8));
+}
+
+// Add one characteristic-value attribute (type UUID kCharUuid) to the DB and
+// wire it to a caller-owned BtChar_t so reads and writes see a real value.
+BtAttDBEntry_t *AddCharValue(BtChar_t *pChar, uint8_t *pValue, uint16_t ValueLen,
+							 uint16_t MaxLen, uint32_t Property)
+{
+	std::memset(pChar, 0, sizeof(*pChar));
+	pChar->Uuid = kCharUuid;
+	pChar->MaxDataLen = MaxLen;
+	pChar->Property = Property;
+	pChar->pValue = pValue;
+	pChar->ValueLen = ValueLen;
+
+	BtUuid16_t uuid = { 0, BT_UUID_TYPE_16, kCharUuid };
+	BtAttDBEntry_t *entry =
+		BtAttDBAddEntry(&uuid, (int)(sizeof(BtAttCharValue_t) + MaxLen));
+	if (entry == nullptr)
+	{
+		return nullptr;
+	}
+
+	BtAttCharValue_t *cv = (BtAttCharValue_t *)entry->Data;
+	cv->pChar = pChar;
+	BtAttDBEntrySetPermission(entry,
+							  BT_ATT_PERMISSION_READ | BT_ATT_PERMISSION_WRITE);
+	return entry;
+}
+
+// opcode(1) + start(2) + end(2) + uuid16(2)
+int BuildReadByType(uint8_t *pReq, uint16_t Start, uint16_t End, uint16_t Uuid16)
+{
+	pReq[0] = BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ;
+	PutLe16(pReq + 1, Start);
+	PutLe16(pReq + 3, End);
+	PutLe16(pReq + 5, Uuid16);
+	return 7;
+}
+
+// opcode(1) + handle(2) + value(Len)
+int BuildWrite(uint8_t *pReq, uint16_t Hdl, const uint8_t *pVal, int Len)
+{
+	pReq[0] = BT_ATT_OPCODE_ATT_WRITE_REQ;
+	PutLe16(pReq + 1, Hdl);
+	if (Len > 0)
+	{
+		std::memcpy(pReq + 3, pVal, (size_t)Len);
+	}
+	return 3 + Len;
+}
+
+// ---- invalid handles ------------------------------------------------------
+
+void TestInvalidStartHandleAndWriteHandle()
+{
+	BtAttDBInit(1024);
+	BtAttSetMtu(BT_ATT_MTU_MIN);
+
+	BtChar_t chr;
+	uint8_t val[8] = { 0xAA, 0xBB, 0xCC, 0xDD };
+	CHECK(AddCharValue(&chr, val, 4, sizeof(val),
+					   BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_WRITE) != nullptr);
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+	BtAttReqRsp_t *req = (BtAttReqRsp_t *)reqbuf;
+	BtAttReqRsp_t *rsp = (BtAttReqRsp_t *)rspbuf;
+
+	// Read By Type with Starting Handle 0x0000 -> Invalid Handle (0x01).
+	int len = BuildReadByType(reqbuf, 0x0000, 0xFFFF, kCharUuid);
+	uint32_t n = BtAttProcessReq(kConnHdl, req, len, rsp);
+	CHECK(n == 5);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrReqOp] == BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_INVALID_HANDLE);
+
+	// Write Request to a handle that is not in the database -> Invalid Handle,
+	// not Attribute Not Found.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	uint8_t one = 0x01;
+	len = BuildWrite(reqbuf, 0x7000, &one, 1);		// no such attribute
+	n = BtAttProcessReq(kConnHdl, req, len, rsp);
+	CHECK(n == 5);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrReqOp] == BT_ATT_OPCODE_ATT_WRITE_REQ);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_INVALID_HANDLE);
+}
+
+// ---- Read By Type packs every pair that fits ------------------------------
+
+void TestReadByTypePacksMultiplePairs()
+{
+	BtAttDBInit(2048);
+	BtAttSetMtu(BT_ATT_MTU_MIN);		// 23
+
+	// Three attributes of the same type, each a 4-byte value. A pair is
+	// handle(2) + value(4) = 6 bytes; opcode + length + 3 pairs = 20 <= 23, so
+	// all three must appear in one response.
+	BtChar_t chr[3];
+	uint8_t val[3][4] = { {1,1,1,1}, {2,2,2,2}, {3,3,3,3} };
+	BtAttDBEntry_t *e[3];
+	for (int i = 0; i < 3; ++i)
+	{
+		e[i] = AddCharValue(&chr[i], val[i], 4, 4, BT_GATT_CHAR_PROP_READ);
+		CHECK(e[i] != nullptr);
+	}
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+	int len = BuildReadByType(reqbuf, 0x0001, 0xFFFF, kCharUuid);
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, len,
+								 (BtAttReqRsp_t *)rspbuf);
+
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP);
+	CHECK(rspbuf[1] == 6);				// pair length = 2 handle + 4 value
+	CHECK(n == 2 + 3 * 6);				// opcode + length + three pairs = 20
+
+	// Verify the three handle/value pairs are present and in order.
+	const uint8_t *p = rspbuf + kRbtDataOff;
+	for (int i = 0; i < 3; ++i)
+	{
+		CHECK(GetLe16(p) == e[i]->Hdl);
+		CHECK(std::memcmp(p + 2, val[i], 4) == 0);
+		p += 6;
+	}
+}
+
+// ---- Read By Type never truncates a longer value to the common length -----
+
+void TestReadByTypeRejectsTruncatedPair()
+{
+	BtAttDBInit(2048);
+	BtAttSetMtu(38);
+
+	// Two 10-byte values then a 30-byte value, same type, at MTU 38. The first
+	// two pairs (12 bytes each) are packed. For the third, a length-blind
+	// implementation would cap the read at 38 - 24 - 4 = 10 bytes, so the
+	// truncated 10-byte value would match the common pair length and be emitted
+	// as if complete. The response must instead stop at the two full pairs and
+	// leave the longer attribute for the client to fetch separately.
+	BtChar_t chr0, chr1, chr2;
+	uint8_t v0[10], v1[10], v2[30];
+	for (int i = 0; i < 10; ++i) { v0[i] = (uint8_t)(0xA0 + i); v1[i] = (uint8_t)(0xC0 + i); }
+	for (int i = 0; i < 30; ++i) v2[i] = (uint8_t)(0xB0 + i);
+
+	BtAttDBEntry_t *e0 = AddCharValue(&chr0, v0, 10, 10, BT_GATT_CHAR_PROP_READ);
+	BtAttDBEntry_t *e1 = AddCharValue(&chr1, v1, 10, 10, BT_GATT_CHAR_PROP_READ);
+	BtAttDBEntry_t *e2 = AddCharValue(&chr2, v2, 30, 30, BT_GATT_CHAR_PROP_READ);
+	CHECK(e0 != nullptr);
+	CHECK(e1 != nullptr);
+	CHECK(e2 != nullptr);
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+	int len = BuildReadByType(reqbuf, 0x0001, 0xFFFF, kCharUuid);
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, len,
+								 (BtAttReqRsp_t *)rspbuf);
+
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP);
+	CHECK(rspbuf[1] == 12);				// pair length = 2 handle + 10 value
+	CHECK(n == 2 + 2 * 12);				// exactly the two full-length pairs
+	CHECK(GetLe16(rspbuf + kRbtDataOff) == e0->Hdl);
+	CHECK(std::memcmp(rspbuf + kRbtDataOff + 2, v0, 10) == 0);
+	CHECK(GetLe16(rspbuf + kRbtDataOff + 12) == e1->Hdl);
+	CHECK(std::memcmp(rspbuf + kRbtDataOff + 14, v1, 10) == 0);
+
+	// The third attribute's handle must not appear anywhere in the response.
+	bool thirdPresent = false;
+	for (size_t off = kRbtDataOff; off + 1 < n; ++off)
+	{
+		if (GetLe16(rspbuf + off) == e2->Hdl)
+		{
+			thirdPresent = true;
+		}
+	}
+	CHECK(!thirdPresent);
+}
+
+// ---- Write Request length handling ----------------------------------------
+
+void TestWriteLengthHandling()
+{
+	BtAttDBInit(1024);
+	BtAttSetMtu(BT_ATT_MTU_MIN);
+
+	BtChar_t chr;
+	uint8_t stored[8] = { 0x10, 0x11, 0x12, 0x13, 0, 0, 0, 0 };
+	BtAttDBEntry_t *e =
+		AddCharValue(&chr, stored, 4, 8, BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_WRITE);
+	CHECK(e != nullptr);
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+
+	// Oversized write (12 bytes into an 8-byte characteristic) must be rejected
+	// with Invalid Attribute Value Length and must not modify the stored value.
+	uint8_t big[12];
+	for (int i = 0; i < 12; ++i) big[i] = (uint8_t)(0x50 + i);
+	int len = BuildWrite(reqbuf, e->Hdl, big, 12);
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, len,
+								 (BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 5);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_INVALID_ATT_VALUE);
+	CHECK(chr.ValueLen == 4);					// unchanged
+	CHECK(stored[0] == 0x10 && stored[3] == 0x13);	// untouched
+
+	// A write that fits (6 bytes) succeeds and updates the value.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	uint8_t six[6];
+	for (int i = 0; i < 6; ++i) six[i] = (uint8_t)(0x60 + i);
+	len = BuildWrite(reqbuf, e->Hdl, six, 6);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, len,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 1);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_WRITE_RSP);
+	CHECK(chr.ValueLen == 6);
+	CHECK(stored[0] == 0x60 && stored[5] == 0x65);
+
+	// A zero-length write is valid and acknowledged (written == requested == 0).
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	len = BuildWrite(reqbuf, e->Hdl, nullptr, 0);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, len,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 1);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_WRITE_RSP);
+}
+
+} // namespace
+
+int main()
+{
+	TestInvalidStartHandleAndWriteHandle();
+	TestReadByTypePacksMultiplePairs();
+	TestReadByTypeRejectsTruncatedPair();
+	TestWriteLengthHandling();
+
+	if (s_Failures != 0)
+	{
+		std::printf("ATT request host tests: %d failure(s), %d checks\n",
+					s_Failures, s_Checks);
+		return 1;
+	}
+
+	std::printf("ATT request host tests: PASS (%d checks)\n", s_Checks);
+	return 0;
+}
