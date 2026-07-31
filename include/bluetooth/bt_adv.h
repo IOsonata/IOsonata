@@ -170,6 +170,13 @@ extern "C" {
  */
 BtAdvData_t *BtAdvDataAllocate(BtAdvPacket_t * const pAdvPkt, uint8_t Type, int Len);
 
+// Own address currently in use on air for advertising (the address the
+// advertising set was last programmed with). Falls back to the device's
+// configured address when the set was never programmed. A new peripheral
+// connection is stamped with this so the SMP toolbox computes f5/f6/c1 with
+// the address the peer actually saw.
+void BtAdvOwnAddrGet(uint8_t *pType, uint8_t pAddr[6]);
+
 /**
  * @brief	Add advertisement data into the adv packet
  *
@@ -180,13 +187,6 @@ BtAdvData_t *BtAdvDataAllocate(BtAdvPacket_t * const pAdvPkt, uint8_t Type, int 
  *
  * @return	true - success
  */
-// Own address currently in use on air for advertising (the address the
-// advertising set was last programmed with). Falls back to the device's
-// configured address when the set was never programmed. A new peripheral
-// connection is stamped with this so the SMP toolbox computes f5/f6/c1 with
-// the address the peer actually saw.
-void BtAdvOwnAddrGet(uint8_t *pType, uint8_t pAddr[6]);
-
 bool BtAdvDataAdd(BtAdvPacket_t * const pAdvPkt, uint8_t Type, uint8_t *pData, int Len);
 
 /**
