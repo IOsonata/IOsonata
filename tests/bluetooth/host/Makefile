@@ -3,6 +3,7 @@ BUILD_DIR := build
 ADV_TARGET := $(BUILD_DIR)/bt_adv_uuid_test
 HCI_TARGET := $(BUILD_DIR)/bt_hci_flow_test
 L2CAP_TARGET := $(BUILD_DIR)/bt_l2cap_signal_test
+ATT_TARGET := $(BUILD_DIR)/bt_att_server_test
 
 CXX ?= g++
 CPPFLAGS += -I$(ROOT)/include
@@ -26,14 +27,20 @@ L2CAP_SOURCES := \
 	bt_l2cap_signal_test.cpp \
 	$(ROOT)/src/bluetooth/bt_l2cap.cpp
 
+ATT_SOURCES := \
+	bt_att_server_test.cpp \
+	$(ROOT)/src/bluetooth/bt_att.cpp \
+	$(ROOT)/src/bluetooth/bt_uuid.cpp
+
 .PHONY: all test clean
 
 all: test
 
-test: $(ADV_TARGET) $(HCI_TARGET) $(L2CAP_TARGET)
+test: $(ADV_TARGET) $(HCI_TARGET) $(L2CAP_TARGET) $(ATT_TARGET)
 	./$(ADV_TARGET)
 	./$(HCI_TARGET)
 	./$(L2CAP_TARGET)
+	./$(ATT_TARGET)
 
 $(ADV_TARGET): $(ADV_SOURCES)
 	@mkdir -p $(BUILD_DIR)
@@ -46,6 +53,10 @@ $(HCI_TARGET): $(HCI_SOURCES)
 $(L2CAP_TARGET): $(L2CAP_SOURCES)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(L2CAP_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(ATT_TARGET): $(ATT_SOURCES)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(ATT_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 clean:
 	rm -rf $(BUILD_DIR)
