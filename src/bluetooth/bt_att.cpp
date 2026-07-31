@@ -1039,6 +1039,43 @@ static uint16_t BtAttFullValueLen(BtAttDBEntry_t *pEntry)
 	}
 }
 
+// True only when the attribute's complete value equals the Len expected bytes.
+// Used by Find By Type Value so it does not need a full-MTU scratch copy: the
+// length is checked first (a mismatch is not a match and needs no read), then
+// the value is compared in small chunks. Declaration values are at most 19
+// octets and are read in a single offset-0 chunk, which matters because
+// BtAttReadValue ignores the offset for declarations; characteristic values
+// support offset reads, so longer ones compare correctly across chunks.
+static bool BtAttValueEquals(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
+							 const uint8_t *pExpected, uint16_t Len)
+{
+	if (BtAttFullValueLen(pEntry) != Len)
+	{
+		return false;
+	}
+
+	uint8_t chunk[64];		// >= the largest declaration value (19 octets)
+	uint16_t off = 0;
+
+	while (off < Len)
+	{
+		uint16_t want = (uint16_t)(Len - off);
+		if (want > sizeof(chunk))
+		{
+			want = sizeof(chunk);
+		}
+
+		size_t got = BtAttReadValueForConn(ConnHdl, pEntry, off, chunk, want);
+		if (got != want || memcmp(chunk, pExpected + off, want) != 0)
+		{
+			return false;
+		}
+		off = (uint16_t)(off + want);
+	}
+
+	return true;
+}
+
 // Apply the queued prepared writes. Returns 0 on success, or an ATT error code
 // with *pFailHdl set to the offending handle (Vol 3 Part F 3.4.6.3). The queue
 // is consumed either way.
@@ -1360,19 +1397,13 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					// must not be matched: reading and comparing it anyway lets a
 					// peer confirm a protected value by guessing (a comparison
 					// oracle). Treat it as not matching and move on.
-					if (BtAttReadPermError(ConnHdl, entry) == 0)
+					if (BtAttReadPermError(ConnHdl, entry) == 0 &&
+						BtAttValueEquals(ConnHdl, entry, req->Val, (uint16_t)valLen))
 					{
-						uint8_t val[BT_ATT_MTU_MAX];
-						size_t rlen = BtAttReadValueForConn(ConnHdl, entry, 0, val, sizeof(val));
-
-						if (rlen == (size_t)valLen &&
-							(valLen == 0 || memcmp(val, req->Val, (size_t)valLen) == 0))
-						{
-							pOut->StartHdl = entry->Hdl;
-							pOut->EndHdl   = hdlEnd;
-							pOut++;
-							l += sizeof(BtAttHdlRange_t);
-						}
+						pOut->StartHdl = entry->Hdl;
+						pOut->EndHdl   = hdlEnd;
+						pOut++;
+						l += sizeof(BtAttHdlRange_t);
 					}
 
 					if (hdlEnd >= req->EndHdl || hdlEnd == 0xFFFF)

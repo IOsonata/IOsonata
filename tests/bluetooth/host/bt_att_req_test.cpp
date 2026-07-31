@@ -389,14 +389,22 @@ void TestWriteCommandCccdLength()
 
 	uint8_t reqbuf[64] = {};
 
-	// A 1-byte CCCD command is malformed: it must not reach the GATT layer.
+	uint8_t rspbuf[8] = {};
+
+	// A zero-length CCCD command is malformed: it must not reach the GATT layer.
 	g_CccdSetCount = 0;
 	reqbuf[0] = BT_ATT_OPCODE_ATT_CMD;
 	PutLe16(reqbuf + 1, e->Hdl);
-	reqbuf[3] = 0x01;
-	uint8_t rspbuf[8] = {};
-	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 3 + 1,
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 3 + 0,
 								 (BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 0);
+	CHECK(g_CccdSetCount == 0);
+
+	// A 1-byte CCCD command is malformed: it must not reach the GATT layer.
+	g_CccdSetCount = 0;
+	reqbuf[3] = 0x01;
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 3 + 1,
+						(BtAttReqRsp_t *)rspbuf);
 	CHECK(n == 0);
 	CHECK(g_CccdSetCount == 0);
 
@@ -501,6 +509,54 @@ void TestFindByTypeValueOracleAndEndHandle()
 	CHECK(!protPresent);
 }
 
+// ---- Find By Type Value: chunked value comparison (no full-MTU scratch) ----
+
+void TestFindByTypeValueChunkedCompare()
+{
+	BtAttDBInit(2048);
+	BtAttSetMtu(BT_ATT_MTU_MAX);		// room for a 100-byte value in the request
+
+	uint8_t val[100];
+	for (int i = 0; i < 100; ++i) val[i] = (uint8_t)(i * 7 + 3);
+
+	BtChar_t chr;
+	BtAttDBEntry_t *e = AddCharValue(&chr, val, 100, 100, BT_GATT_CHAR_PROP_READ);
+	CHECK(e != nullptr);
+
+	uint8_t reqbuf[128] = {};
+	uint8_t rspbuf[64] = {};
+
+	// Exact 100-byte value matches - exercises multi-chunk comparison (64 + 36).
+	reqbuf[0] = BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ;
+	PutLe16(reqbuf + 1, 0x0001);
+	PutLe16(reqbuf + 3, 0xFFFF);
+	PutLe16(reqbuf + 5, kCharUuid);
+	std::memcpy(reqbuf + 7, val, 100);
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 7 + 100,
+								 (BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_RSP);
+	CHECK(n == 1 + 4);
+	CHECK(GetLe16(rspbuf + 1) == e->Hdl);
+
+	// A value differing only in the last chunk (byte 90) must not match.
+	uint8_t bad[100];
+	std::memcpy(bad, val, 100);
+	bad[90] = (uint8_t)(bad[90] ^ 0xFF);
+	std::memcpy(reqbuf + 7, bad, 100);
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 7 + 100,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_ATT_NOT_FOUND);
+
+	// A shorter prefix (different complete length) must not match either.
+	std::memcpy(reqbuf + 7, val, 50);
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 7 + 50,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+}
+
 // ---- Read By Group Type rejects starting handle 0x0000 --------------------
 
 void TestReadByGroupTypeInvalidStartHandle()
@@ -535,6 +591,7 @@ int main()
 	TestWriteCommandLengthHandling();
 	TestWriteCommandCccdLength();
 	TestFindByTypeValueOracleAndEndHandle();
+	TestFindByTypeValueChunkedCompare();
 	TestReadByGroupTypeInvalidStartHandle();
 
 	if (s_Failures != 0)
