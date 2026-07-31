@@ -122,7 +122,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define BT_ATT_DB_MEMSIZE				(3200)
 
-uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
+// A strong override of the weak pool in bt_att.cpp must carry at least the
+// alignment of the entry type the allocator places in it.
+alignas(BtAttDBEntry_t) uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
 
 uint8_t g_AdvDataBuff[10] = {
 	BT_ADV_MANDATA_TYPE_TPH,
@@ -401,7 +403,7 @@ const UARTCfg_t g_UartCfg = {
 	.Rate = 115200,						// Baudrate
 	.DataBits = 8,						// Data bits
 	.Parity = UART_PARITY_NONE,			// Parity
-	.StopBits = 1,						// Stop bit
+	.StopBits = 1,							// Stop bit
 	.FlowControl = UART_FLWCTRL_NONE,	// Flow control
 	.bIntMode = true,					// Interrupt mode
 	.IntPrio = 6,	// Interrupt priority
