@@ -1132,7 +1132,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 	{
 		case BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ:
 			{
-				BtAttExchgMtuReqRsp_t *req = (BtAttExchgMtuReqRsp_t*)&pReqAtt->ExchgMtuReqRsp;
 
 				DEBUG_PRINTF("ATT_EXCHANGE_MTU_REQ (0x02) \r\n");
 				DEBUG_PRINTF("RxMtu %d %d\r\n", pReqAtt->ExchgMtuReqRsp.RxMtu, s_AttMtu);
@@ -1572,7 +1571,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					baseidx = entry->TypeUuid.BaseIdx;
 				}
 
-				uint8_t prevlen = 0;
 				pRspAtt->ReadByGroupTypeRsp.Len = 0;
 				int temp_cnt = 0;
 
@@ -1587,7 +1585,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 						int cnt = BtAttReadValueForConn(ConnHdl, entry, 0, p, rspMtu - l - sizeof(BtAttHdlRange_t));
 
-						BtAttSrvcDeclar_t *x = (BtAttSrvcDeclar_t *) p;
 						DEBUG_PRINTF("Ble Service UUID16 = 0x%X \r\n", x->Uuid.Uuid16);
 
 						if (pRspAtt->ReadByGroupTypeRsp.Len == 0)
