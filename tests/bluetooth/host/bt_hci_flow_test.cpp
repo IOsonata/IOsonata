@@ -233,6 +233,36 @@ void TestAclCompletionCredits()
     CHECK(dev.AclCredit == 3);
 }
 
+// A Number Of Completed Packets event whose NbHdl count exceeds what the event
+// length can hold must be bounded to the payload; the buffer is sized to exactly
+// one entry so an unbounded walk would run off the end (caught by ASan).
+void TestCompletedPacketsBounded()
+{
+    BtHciDevice_t dev = {};
+    dev.AclCreditMax = 20;
+    dev.AclCredit = 0;
+    dev.SendCompleted = CaptureCompleted;
+    s_CompletedCallbacks = 0;
+
+    // Payload holds NbHdl(1) + exactly one Completed entry (4) = 5 bytes.
+    alignas(4) uint8_t raw[sizeof(BtHciEvtPacketHdr_t) + 5] = {};
+    BtHciEvtPacket_t *pEvt = reinterpret_cast<BtHciEvtPacket_t *>(raw);
+    pEvt->Hdr.Evt = BT_HCI_EVT_NB_COMPLETED_PACKET;
+    pEvt->Hdr.Len = 5;
+    BtHciEvtNbCompletedPkt_t *p =
+        reinterpret_cast<BtHciEvtNbCompletedPkt_t *>(pEvt->Data);
+    p->NbHdl = 10;					// lies: only one entry actually present
+    p->Completed[0].Hdl = 0x321;
+    p->Completed[0].NbPkt = 4;
+
+    BtHciProcessEvent(&dev, pEvt);
+
+    // Only the single in-bounds entry is processed.
+    CHECK(dev.AclCredit == 4);
+    CHECK(s_CompletedCallbacks == 1);
+    CHECK(s_CompletedHdl == 0x321);
+}
+
 void TestCommandCreditsAndCompletion()
 {
     BtHciDevice_t dev = {};
@@ -437,6 +467,7 @@ int main()
     TestCommandFraming();
     TestAclFragmentationAndCredits();
     TestAclCompletionCredits();
+    TestCompletedPacketsBounded();
     TestCommandCreditsAndCompletion();
     TestAclReassembly();
     TestInterleavedReassembly();
