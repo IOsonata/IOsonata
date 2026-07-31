@@ -551,10 +551,14 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 					{
 						g_BtAppData.State = BTAPP_CONNECTED;
 						BtAppConnLedOn();
+						// Own address not stamped: SMP runs in the ST host, not
+						// the IOsonata toolbox, so the record is left for the
+						// BtSmpLocalAddrGet fallback.
 						BtPeerConnected(p->Connection_Handle,
 						                   p->Role,
 						                   p->Peer_Address_Type,
-						                   p->Peer_Address);
+						                   p->Peer_Address,
+						                   0, NULL);
 						BtAppEvtConnected(p->Connection_Handle);
 
 						// Staged LESC OOB peer data must be in the stack before
