@@ -17,6 +17,11 @@
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_peer.h"
 
+// Records CCCD writes reaching the GATT layer, so a test can assert that a
+// malformed CCCD command never gets there.
+int g_CccdSetCount = 0;
+uint16_t g_CccdSetVal = 0;
+
 // Minimal externals BtAttProcessReq reaches for. This test drives the ATT
 // server logic directly, so peers, CCCD state, security and signing are stubbed
 // to a plain unencrypted single link with no subscriptions.
@@ -27,7 +32,12 @@ BtDevice_t *BtPeerFindByHdl(uint16_t) { return nullptr; }
 bool BtGapConnSecGet(uint16_t, BtConnSec_t *) { return false; }
 
 uint16_t BtGattCccdGet(uint16_t, uint16_t) { return 0; }
-bool BtGattCccdSet(uint16_t, uint16_t, uint16_t) { return true; }
+bool BtGattCccdSet(uint16_t, uint16_t, uint16_t Value)
+{
+	++g_CccdSetCount;
+	g_CccdSetVal = Value;
+	return true;
+}
 void BtGattClientNotified(uint16_t, uint16_t, uint8_t *, uint16_t) {}
 void BtGattHandleValueConfirm(uint16_t) {}
 
@@ -355,6 +365,60 @@ void TestWriteCommandLengthHandling()
 	CHECK(stored[0] == 0x90 && stored[5] == 0x95);
 }
 
+// ---- CCCD Write Command: only an exactly-2-octet write reaches GATT --------
+
+void TestWriteCommandCccdLength()
+{
+	BtAttDBInit(1024);
+	BtAttSetMtu(BT_ATT_MTU_MIN);
+
+	// A notifiable characteristic and its CCCD descriptor.
+	BtChar_t chr;
+	std::memset(&chr, 0, sizeof(chr));
+	chr.Uuid = 0xFFF7;
+	chr.Property = BT_GATT_CHAR_PROP_NOTIFY;
+
+	BtUuid16_t cccdUuid = { 0, BT_UUID_TYPE_16,
+						   BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION };
+	BtAttDBEntry_t *e =
+		BtAttDBAddEntry(&cccdUuid, (int)sizeof(BtDescClientCharConfig_t));
+	CHECK(e != nullptr);
+	((BtDescClientCharConfig_t *)e->Data)->pChar = &chr;
+	((BtDescClientCharConfig_t *)e->Data)->CccVal = 0;
+	BtAttDBEntrySetPermission(e, BT_ATT_PERMISSION_READ | BT_ATT_PERMISSION_WRITE);
+
+	uint8_t reqbuf[64] = {};
+
+	// A 1-byte CCCD command is malformed: it must not reach the GATT layer.
+	g_CccdSetCount = 0;
+	reqbuf[0] = BT_ATT_OPCODE_ATT_CMD;
+	PutLe16(reqbuf + 1, e->Hdl);
+	reqbuf[3] = 0x01;
+	uint8_t rspbuf[8] = {};
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 3 + 1,
+								 (BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 0);
+	CHECK(g_CccdSetCount == 0);
+
+	// A 3-byte CCCD command is malformed too.
+	g_CccdSetCount = 0;
+	reqbuf[3] = 0x01; reqbuf[4] = 0x00; reqbuf[5] = 0x00;
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 3 + 3,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 0);
+	CHECK(g_CccdSetCount == 0);
+
+	// A valid 2-byte CCCD command (enable notifications) does reach GATT.
+	g_CccdSetCount = 0;
+	g_CccdSetVal = 0xFFFF;
+	reqbuf[3] = 0x01; reqbuf[4] = 0x00;
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 3 + 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 0);
+	CHECK(g_CccdSetCount == 1);
+	CHECK(g_CccdSetVal == BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION);
+}
+
 // ---- Find By Type Value: permission gate and non-grouping end handle ------
 
 void TestFindByTypeValueOracleAndEndHandle()
@@ -469,6 +533,7 @@ int main()
 	TestReadByTypeRejectsTruncatedPair();
 	TestWriteLengthHandling();
 	TestWriteCommandLengthHandling();
+	TestWriteCommandCccdLength();
 	TestFindByTypeValueOracleAndEndHandle();
 	TestReadByGroupTypeInvalidStartHandle();
 
