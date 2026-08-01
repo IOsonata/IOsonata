@@ -169,8 +169,15 @@ void TestUuidAdvertising()
     pUuid->BaseIdx = 0;
     pUuid->Type = BT_UUID_TYPE_16;
     pUuid->Count = 2;
-    pUuid->Uuid16[0] = BT_UUID_GATT_SERVICE_DEVICE_INFORMATION;
-    pUuid->Uuid16[1] = BT_UUID_GATT_SERVICE_BATTERY;
+    // Uuid16 is a variable-length trailing array declared [1] inside a
+    // pack(1) struct, so it sits at an odd offset. The member expression is
+    // packed-aware but trips older clang's -Warray-bounds on the constant
+    // index past [0]; a decayed uint16_t pointer avoids that warning but
+    // makes the store a misaligned access (UBSan). memcpy at the computed
+    // offsets is correct for both.
+    const uint16_t uuids[2] = { BT_UUID_GATT_SERVICE_DEVICE_INFORMATION,
+                                BT_UUID_GATT_SERVICE_BATTERY };
+    std::memcpy(uuidMem + offsetof(BtUuidArr_t, Uuid16), uuids, sizeof(uuids));
 
     uint8_t data[31] = {};
     BtAdvPacket_t pkt = { static_cast<int>(sizeof(data)), 0, data };
