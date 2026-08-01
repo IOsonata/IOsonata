@@ -50,6 +50,7 @@ int s_CompletedCallbacks = 0;
 int s_ScanReports = 0;
 int s_SmpDisconnectCount = 0;
 uint16_t s_SmpDisconnectHdl = 0;
+int s_LtkRequestCount = 0;
 
 void ResetAclCapture()
 {
@@ -105,9 +106,17 @@ void CaptureCompleted(uint16_t ConnHdl, uint16_t Count)
     ++s_CompletedCallbacks;
 }
 
-bool CaptureScanReport(int8_t, uint8_t, uint8_t[6], size_t, uint8_t *)
+size_t s_LastScanLen = 0;
+uint8_t s_LastScanData[512] = {};
+
+bool CaptureScanReport(int8_t, uint8_t, uint8_t[6], size_t Len, uint8_t *pData)
 {
     ++s_ScanReports;
+    s_LastScanLen = Len;
+    if (Len > 0 && Len <= sizeof(s_LastScanData) && pData != nullptr)
+    {
+        std::memcpy(s_LastScanData, pData, Len);
+    }
     return true;
 }
 
@@ -310,6 +319,28 @@ void TestCommandCreditsAndCompletion()
     CHECK(!dev.CmdDone);
 }
 
+// A Command Complete shorter than NbCmdPacket(1) + CmdCode(2) is malformed and
+// must be dropped without updating credits or reading the status byte (H2).
+void TestCommandCompleteBounds()
+{
+    BtHciDevice_t dev = {};
+    dev.CmdCredit = 7;			// sentinel that must survive a malformed event
+    dev.CmdOpCode = 0x201C;
+    dev.CmdDone = false;
+
+    alignas(4) uint8_t raw[sizeof(BtHciEvtPacketHdr_t) + 6] = {};
+    BtHciEvtPacket_t *pEvt = reinterpret_cast<BtHciEvtPacket_t *>(raw);
+    pEvt->Hdr.Evt = BT_HCI_EVT_COMMAND_COMPLETE;
+    pEvt->Hdr.Len = 2;			// too short for NbCmdPacket + CmdCode
+    BtHciEvtCmdComplete_t *p = reinterpret_cast<BtHciEvtCmdComplete_t *>(pEvt->Data);
+    p->NbCmdPacket = 0x7F;
+    p->CmdCode = 0x201C;
+
+    BtHciProcessEvent(&dev, pEvt);
+    CHECK(dev.CmdCredit == 7);
+    CHECK(!dev.CmdDone);
+}
+
 void TestAclReassembly()
 {
     BtHciDevice_t dev = {};
@@ -423,6 +454,98 @@ void TestMalformedFragmentsAndEvents()
     CHECK(s_ScanReports == 0);
 }
 
+// A fixed-payload LE meta event whose Hdr.Len is too short to contain the
+// declared structure must be dropped, not parsed out of bounds. The LTK
+// request feeds SMP, so an unchecked read there is the worst case (H1).
+void TestTruncatedLeMetaEvents()
+{
+    BtHciDevice_t dev = {};
+
+    // Full-length LE Long Term Key Request: subevent(1) + payload(12) = 13.
+    {
+        alignas(4) uint8_t raw[sizeof(BtHciEvtPacketHdr_t) + 13] = {};
+        BtHciEvtPacket_t *pEvt = reinterpret_cast<BtHciEvtPacket_t *>(raw);
+        pEvt->Hdr.Evt = BT_HCI_EVT_LE;
+        pEvt->Hdr.Len = 13;
+        BtHciLeEvtPacket_t *pLe = reinterpret_cast<BtHciLeEvtPacket_t *>(pEvt->Data);
+        pLe->Evt = BT_HCI_EVT_LE_LONGTERM_KEY_RQST;
+        s_LtkRequestCount = 0;
+        BtHciProcessEvent(&dev, pEvt);
+        CHECK(s_LtkRequestCount == 1);
+    }
+
+    // Truncated: Hdr.Len 8 is shorter than the 12-byte payload. The bound must
+    // stop it before it reaches SMP.
+    {
+        alignas(4) uint8_t raw[sizeof(BtHciEvtPacketHdr_t) + 13] = {};
+        BtHciEvtPacket_t *pEvt = reinterpret_cast<BtHciEvtPacket_t *>(raw);
+        pEvt->Hdr.Evt = BT_HCI_EVT_LE;
+        pEvt->Hdr.Len = 8;
+        BtHciLeEvtPacket_t *pLe = reinterpret_cast<BtHciLeEvtPacket_t *>(pEvt->Data);
+        pLe->Evt = BT_HCI_EVT_LE_LONGTERM_KEY_RQST;
+        s_LtkRequestCount = 0;
+        BtHciProcessEvent(&dev, pEvt);
+        CHECK(s_LtkRequestCount == 0);
+    }
+}
+
+// Multi-fragment Extended Advertising Reports (Data_Status = "more data") are
+// reassembled into one report delivered on the terminating "complete" fragment
+// (G3, Vol 4 Part E 7.7.65.13).
+void FeedExtAdvReport(BtHciDevice_t *pDev, const uint8_t Addr[6], uint8_t Sid,
+                      uint8_t DataStatus, const char *pData, uint8_t DataLen)
+{
+    alignas(4) uint8_t raw[sizeof(BtHciEvtPacketHdr_t) + 1 + 24 + 64] = {};
+    BtHciEvtPacket_t *pEvt = reinterpret_cast<BtHciEvtPacket_t *>(raw);
+    pEvt->Hdr.Evt = BT_HCI_EVT_LE;
+    pEvt->Hdr.Len = static_cast<uint8_t>(1 + 1 + 24 + DataLen);
+    BtHciLeEvtPacket_t *pLe = reinterpret_cast<BtHciLeEvtPacket_t *>(pEvt->Data);
+    pLe->Evt = BT_HCI_EVT_LE_EXT_ADV_REPORT;
+    uint8_t *body = reinterpret_cast<uint8_t *>(pLe->Data);
+    body[0] = 1;                            // NbReport
+    BtExtAdvReport_t *r = reinterpret_cast<BtExtAdvReport_t *>(body + 1);
+    r->Type = static_cast<uint16_t>(DataStatus << 5);
+    r->AddrType = 0;
+    std::memcpy(r->Addr, Addr, 6);
+    r->AdvSid = Sid;
+    r->Rssi = -40;
+    r->DataLen = DataLen;
+    std::memcpy(r->Data, pData, DataLen);
+    BtHciProcessEvent(pDev, pEvt);
+}
+
+void TestExtAdvReassembly()
+{
+    BtHciDevice_t dev = {};
+    dev.ScanReport = CaptureScanReport;
+    const uint8_t addr[6] = { 1, 2, 3, 4, 5, 6 };
+
+    s_ScanReports = 0;
+    s_LastScanLen = 0;
+
+    // Fragment 1 (more data to come): buffered, not delivered.
+    FeedExtAdvReport(&dev, addr, 7, 1, "AB", 2);
+    CHECK(s_ScanReports == 0);
+
+    // Fragment 2 (complete): delivers the reassembled "ABCD".
+    FeedExtAdvReport(&dev, addr, 7, 0, "CD", 2);
+    CHECK(s_ScanReports == 1);
+    CHECK(s_LastScanLen == 4);
+    CHECK(std::memcmp(s_LastScanData, "ABCD", 4) == 0);
+
+    // A standalone complete report is delivered directly.
+    s_ScanReports = 0;
+    FeedExtAdvReport(&dev, addr, 7, 0, "XY", 2);
+    CHECK(s_ScanReports == 1);
+    CHECK(s_LastScanLen == 2);
+    CHECK(std::memcmp(s_LastScanData, "XY", 2) == 0);
+
+    // A truncated fragment (Data_Status 2) is not delivered as complete.
+    s_ScanReports = 0;
+    FeedExtAdvReport(&dev, addr, 7, 2, "ZZ", 2);
+    CHECK(s_ScanReports == 0);
+}
+
 } // namespace
 
 extern "C" {
@@ -461,6 +584,7 @@ void BtProcessSmpData(BtHciDevice_t * const, uint16_t ConnHdl,
 
 void BtSmpProcessLtkRequest(BtHciDevice_t * const, uint16_t, uint64_t, uint16_t)
 {
+    ++s_LtkRequestCount;
 }
 
 void BtSmpLocalPubKeyReady(BtHciDevice_t * const, uint8_t,
@@ -502,9 +626,12 @@ int main()
     TestAclCompletionCredits();
     TestCompletedPacketsBounded();
     TestCommandCreditsAndCompletion();
+    TestCommandCompleteBounds();
     TestAclReassembly();
     TestInterleavedReassembly();
     TestMalformedFragmentsAndEvents();
+    TestTruncatedLeMetaEvents();
+    TestExtAdvReassembly();
     TestDisconnectFreesSmp();
 
     if (s_Failures != 0)

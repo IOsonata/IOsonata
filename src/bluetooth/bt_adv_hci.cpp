@@ -164,7 +164,11 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		{
 			return false;
 		}
-		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
+		// Company identifier is little-endian on air. Write the two octets
+		// directly rather than through a uint16_t cast, which assumes host byte
+		// order and an aligned destination (Core Spec Supplement Part A 1.4).
+		p->Data[0] = (uint8_t)(g_BtAppData.AppDevice.VendorId & 0xFF);
+		p->Data[1] = (uint8_t)(g_BtAppData.AppDevice.VendorId >> 8);
 		memcpy(&p->Data[2], pAdvData, AdvLen);
 
 		s_BtDevExtAdvData.AdvHandle = 0;
@@ -187,7 +191,9 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		{
 			return false;
 		}
-		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
+		// Company identifier is little-endian on air; see the note above.
+		p->Data[0] = (uint8_t)(g_BtAppData.AppDevice.VendorId & 0xFF);
+		p->Data[1] = (uint8_t)(g_BtAppData.AppDevice.VendorId >> 8);
 		memcpy(&p->Data[2], pSrData, SrLen);
 
 		s_BtDevExtSrData.AdvHandle = 0;
@@ -353,7 +359,16 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 	BtAdvWr24(p.PrimIntervalMin, primMin);
 	BtAdvWr24(p.PrimIntervalMax, primMax);
 	p.PrimChanMap  = 7;
-	p.OwnAddrType  = BTADDR_TYPE_RAND;
+	// Own address type follows the configured local identity instead of being
+	// forced to Random. A public identity advertises as public and needs no
+	// random address; a random identity advertises as random with a validated
+	// static random address loaded per set.
+	uint8_t  localType = 0;
+	uint8_t  localAddr[6];
+	BtSmpLocalAddrGet(&localType, localAddr);
+	bool useRandom = (localType == BTADDR_TYPE_RAND ||
+					  localType == BTADDR_TYPE_RANDOM_STATIC);
+	p.OwnAddrType  = useRandom ? BTADDR_TYPE_RAND : BTADDR_TYPE_PUBLIC;
 	p.PeerAddrType = 0;
 	p.FilterPolicy = 0;
 	p.TxPower      = 0;
@@ -370,24 +385,37 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 
 	// Extended advertising with a random own-address type requires the random
 	// address to be set per advertising set; the legacy LE Set Random Address
-	// command does not configure it. Use the device's configured random address.
-	// This write is the single point where the on-air own address is chosen;
-	// a privacy layer that rotates resolvable private addresses replaces the
-	// address here, and the recorded copy below is what a new connection is
-	// stamped with.
+	// command does not configure it. This is the single point where the on-air
+	// own address is chosen; a privacy layer that rotates resolvable private
+	// addresses replaces the address here, and the recorded copy is what a new
+	// connection is stamped with.
+	if (useRandom)
 	{
-		uint8_t atype = 0;
+		// A static random address must have the two most significant bits of
+		// its most significant octet set to 1 (Vol 6 Part B 1.3.2.1). Reject an
+		// invalid address (for example the all-zero default) rather than have
+		// the controller fail the command.
+		if ((localAddr[5] & 0xC0) != 0xC0)
+		{
+			return false;
+		}
+
 		BtHciLeAdvSetRandAddr_t ra;
 		ra.AdvHandle = 0;
-		BtSmpLocalAddrGet(&atype, ra.RandAddr);
+		memcpy(ra.RandAddr, localAddr, 6);
 
 		if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_ADV_SET_RAND_ADDR, &ra, sizeof(ra), NULL, 0) != 0)
 		{
 			return false;
 		}
 
-		s_BtAdvOwnAddrType = atype;
-		memcpy(s_BtAdvOwnAddr, ra.RandAddr, 6);
+		s_BtAdvOwnAddrType = BTADDR_TYPE_RAND;
+		memcpy(s_BtAdvOwnAddr, localAddr, 6);
+	}
+	else
+	{
+		s_BtAdvOwnAddrType = BTADDR_TYPE_PUBLIC;
+		memcpy(s_BtAdvOwnAddr, localAddr, 6);
 	}
 
 	s_BtDevExtAdvData.AdvHandle = 0;

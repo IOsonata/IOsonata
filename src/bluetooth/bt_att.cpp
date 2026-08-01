@@ -1116,10 +1116,13 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 				break;
 			}
 
+			// A gap or overlap ends the current contiguous run; it is not an
+			// error. Queued prepared writes are applied in order and need not
+			// be contiguous (Vol 3 Part F 3.4.6), so a Reliable Write may patch
+			// disjoint regions of one attribute. The discontiguous chunk is
+			// applied as its own write on the next outer iteration.
 			if (noff != (uint16_t)(off + totLen))
 			{
-				*pFailHdl = hdl;
-				err = BT_ATT_ERROR_INVALID_OFFSET;
 				break;
 			}
 
@@ -2156,13 +2159,26 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 					pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_RSP;
 					uint16_t space = (uint16_t)(rspMtu - 1 - l - 2);	// MTU - opcode - existing payload - length field
+					// The Length field carries the complete attribute value
+					// length, even when the value is truncated to fit (Vol 3
+					// Part F 3.4.4.13), so the client can detect that the last
+					// value was cut and re-read it. Only value bytes that fit
+					// are emitted.
+					uint16_t full = BtAttFullValueLen(entry);
 					uint16_t n = BtAttReadValueForConn(ConnHdl, entry, 0, p + 2, space);
-					p[0] = n & 0xFF;
-					p[1] = n >> 8;
+					p[0] = full & 0xFF;
+					p[1] = full >> 8;
 					p += n + 2;
 					l += n + 2;
 					hdl++;
 					hdlBytes -= 2;
+
+					// Only the last tuple may be truncated: once a value did
+					// not fit, stop rather than emitting more tuples.
+					if (n < full)
+					{
+						break;
+					}
 				}
 
 				if (retval != 0 && pRspAtt->OpCode == BT_ATT_OPCODE_ATT_ERROR_RSP)

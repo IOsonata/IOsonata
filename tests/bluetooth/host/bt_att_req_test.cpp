@@ -27,7 +27,24 @@ uint16_t g_CccdSetVal = 0;
 // to a plain unencrypted single link with no subscriptions.
 extern "C" {
 
-BtDevice_t *BtPeerFindByHdl(uint16_t) { return nullptr; }
+// A single stub peer so the Prepare/Execute Write paths (which resolve the
+// link through BtPeerFindByHdl) can queue and apply prepared writes. Enabled
+// per test by g_PeerEnabled; the long-write buffer is a fixed scratch area.
+static BtDevice_t s_StubPeer;
+static uint8_t    s_StubLongWrBuff[512];
+bool              g_PeerEnabled = false;
+
+BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
+{
+	if (!g_PeerEnabled)
+	{
+		return nullptr;
+	}
+	s_StubPeer.Conn.Hdl            = Hdl;
+	s_StubPeer.Conn.pLongWrBuff    = s_StubLongWrBuff;
+	s_StubPeer.Conn.LongWrBuffSize = (uint16_t)sizeof(s_StubLongWrBuff);
+	return &s_StubPeer;
+}
 
 bool BtGapConnSecGet(uint16_t, BtConnSec_t *) { return false; }
 
@@ -676,6 +693,111 @@ void TestReadByGroupTypeInvalidStartHandle()
 	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_INVALID_HANDLE);
 }
 
+// ---- Execute Write applies non-contiguous prepared writes -----------------
+
+// A Reliable Write may patch disjoint regions of one attribute. The queued
+// chunks are applied in order at their own offsets with no contiguity
+// requirement (Vol 3 Part F 3.4.6); the old code rejected a gap with Invalid
+// Offset.
+void TestExecuteWriteNonContiguous()
+{
+	BtAttDBInit(2048);
+	BtAttSetMtu(247);
+
+	BtChar_t chr;
+	uint8_t val[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	BtAttDBEntry_t *e = AddCharValue(&chr, val, sizeof(val), sizeof(val),
+									 BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_WRITE);
+	CHECK(e != nullptr);
+
+	g_PeerEnabled = true;
+	s_StubPeer.Conn.LongWrLen = 0;
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+
+	// Prepare Write at offset 0 = {0xAA, 0xBB}.
+	reqbuf[0] = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
+	PutLe16(reqbuf + 1, e->Hdl);
+	PutLe16(reqbuf + 3, 0);
+	reqbuf[5] = 0xAA;
+	reqbuf[6] = 0xBB;
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 5 + 2,
+								 (BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_PREPARE_WRITE_RSP);
+	(void)n;
+
+	// Prepare Write at offset 6 = {0xCC, 0xDD}: a gap at bytes 2..5.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	reqbuf[0] = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
+	PutLe16(reqbuf + 1, e->Hdl);
+	PutLe16(reqbuf + 3, 6);
+	reqbuf[5] = 0xCC;
+	reqbuf[6] = 0xDD;
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 5 + 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_PREPARE_WRITE_RSP);
+
+	// Execute Write (flag 0x01): both chunks apply, no Invalid Offset error.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	reqbuf[0] = BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ;
+	reqbuf[1] = 0x01;
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 1);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_EXECUTE_WRITE_RSP);
+
+	// Both disjoint regions were written; the gap is untouched.
+	CHECK(val[0] == 0xAA);
+	CHECK(val[1] == 0xBB);
+	CHECK(val[2] == 0x00);
+	CHECK(val[5] == 0x00);
+	CHECK(val[6] == 0xCC);
+	CHECK(val[7] == 0xDD);
+
+	g_PeerEnabled = false;
+}
+
+// ---- Read Multiple Variable reports the full (untruncated) value length ----
+
+// The Length field of each tuple is the complete attribute value length, even
+// when the last value is truncated to fit the MTU (Vol 3 Part F 3.4.4.13). The
+// old code reported the emitted (truncated) count, hiding the truncation.
+void TestReadMultipleVariableFullLength()
+{
+	BtAttDBInit(2048);
+	BtAttSetMtu(BT_ATT_MTU_MIN);		// 23
+
+	BtChar_t chrA;
+	uint8_t valA[4] = { 0x11, 0x22, 0x33, 0x44 };
+	BtAttDBEntry_t *eA = AddCharValue(&chrA, valA, 4, 4, BT_GATT_CHAR_PROP_READ);
+	CHECK(eA != nullptr);
+
+	BtChar_t chrB;
+	uint8_t valB[20];
+	for (int i = 0; i < 20; ++i) valB[i] = (uint8_t)(0xA0 + i);
+	BtAttDBEntry_t *eB = AddCharValue(&chrB, valB, 20, 20, BT_GATT_CHAR_PROP_READ);
+	CHECK(eB != nullptr);
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+	reqbuf[0] = BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ;
+	PutLe16(reqbuf + 1, eA->Hdl);
+	PutLe16(reqbuf + 3, eB->Hdl);
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+								 (BtAttReqRsp_t *)rspbuf);
+
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_RSP);
+	// Tuple A: full length 4, value present in full.
+	CHECK(GetLe16(rspbuf + 1) == 4);
+	CHECK(std::memcmp(rspbuf + 3, valA, 4) == 0);
+	// Tuple B: Length reports the full 20 even though only part of the value
+	// fits in the 23-octet MTU.
+	CHECK(GetLe16(rspbuf + 7) == 20);
+	// The response fills the MTU: opcode + (2+4) + (2 + 14) = 23.
+	CHECK(n == 23);
+}
+
 } // namespace
 
 int main()
@@ -691,6 +813,8 @@ int main()
 	TestFindByTypeValueChunkedCompare();
 	TestReadMultiple();
 	TestReadByGroupTypeInvalidStartHandle();
+	TestExecuteWriteNonContiguous();
+	TestReadMultipleVariableFullLength();
 
 	if (s_Failures != 0)
 	{

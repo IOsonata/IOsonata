@@ -443,15 +443,14 @@ void TestMultipleCommands()
     x.Append(BT_L2CAP_CODE_CONNECTION_PARAMETER_UPDATE_REQ, 0xB1,
              &req, sizeof(req));
     uint32_t len = x.Run();
-    CHECK(len == (kFrameHeaderLen + sizeof(uint16_t)) +
-                 (kFrameHeaderLen + sizeof(BtL2CapConnParamUpdateRsp_t)));
+    // The LE signaling channel carries one command per C-frame (Vol 3 Part A
+    // 4): only the first command (the unknown 0xFE) is processed and rejected;
+    // the trailing Connection Parameter Update is ignored.
+    CHECK(len == kFrameHeaderLen + sizeof(uint16_t));
     const BtL2CapCFrame_t *first = x.Frame();
     CheckReject(first, 0xB0, BT_L2CAP_CMD_REJECT_REASON_NOT_UNDERSTOOD);
-    const BtL2CapCFrame_t *second = x.Frame(FrameTotalLen(first));
-    CHECK(second != nullptr);
-    CHECK(second->Code == BT_L2CAP_CODE_CONNECTION_PARAMETER_UPDATE_RSP);
-    CHECK(second->Id == 0xB1);
-    CHECK(s_Hooks.ConnParamReqCount == 1);
+    CHECK(x.Frame(FrameTotalLen(first)) == nullptr);
+    CHECK(s_Hooks.ConnParamReqCount == 0);
 }
 
 void TestResponseBound()
@@ -466,21 +465,18 @@ void TestResponseBound()
     CHECK(len <= kResponseMax);
     CHECK(x.Rsp->Hdr.Len == len);
 
-    uint16_t offset = 0;
-    while (offset < x.Rsp->Hdr.Len)
+    // However many commands are packed into the C-frame, only the first is
+    // processed, so the response is a single Command Reject and stays well
+    // within the response bound.
+    CHECK(len == kFrameHeaderLen + sizeof(uint16_t));
+    const BtL2CapCFrame_t *frame = x.Frame();
+    CHECK(frame != nullptr);
+    if (frame != nullptr)
     {
-        const BtL2CapCFrame_t *frame = x.Frame(offset);
-        CHECK(frame != nullptr);
-        if (frame == nullptr)
-        {
-            break;
-        }
         CHECK(frame->Code == BT_L2CAP_CODE_COMMAND_REJECT_RSP);
-        uint16_t frameLen = FrameTotalLen(frame);
-        CHECK(frameLen > 0);
-        offset = static_cast<uint16_t>(offset + frameLen);
+        CHECK(frame->Id == 0x01);
     }
-    CHECK(offset == x.Rsp->Hdr.Len);
+    CHECK(x.Frame(FrameTotalLen(frame)) == nullptr);
 }
 
 } // namespace

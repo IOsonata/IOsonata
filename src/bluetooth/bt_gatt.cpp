@@ -513,17 +513,34 @@ bool BtGattIndicationTimedOut(uint16_t ConnHdl, uint32_t TimeoutMs)
 }
 
 // Action taken when an indication is not confirmed within the ATT transaction
-// timeout. Weak default releases the link (clears the outstanding-indication
-// flag) so it is not blocked forever. Core Vol 3 Part F 3.3.3 requires the
-// bearer be closed - i.e. the link disconnected - on transaction timeout; a
-// port overrides this to disconnect for strict conformance. The generic default
-// cannot drive GAP disconnect, hence the release fallback.
+// timeout. Core Vol 3 Part F 3.3.3 requires the bearer be closed on a
+// transaction timeout; for the LE-U fixed ATT bearer that means disconnecting
+// the link. The weak default clears the outstanding-indication flag and issues
+// an HCI Disconnect through the connection's controller command path when one
+// is bound. A port may override this whole function to route the disconnect
+// through its own stack.
 __attribute__((weak)) void BtGattIndicationTimeout(uint16_t ConnHdl)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
-	if (pConn != nullptr)
+	if (pConn == nullptr)
 	{
-		pConn->Conn.bIndCfmPending = false;
+		return;
+	}
+
+	pConn->Conn.bIndCfmPending = false;
+
+	// Reason 0x13 (Remote User Terminated Connection) is the conventional
+	// host-initiated disconnect reason. Guarded so ports with no controller
+	// command path fall back to the flag release without dereferencing null.
+	if (pConn->pHciDev != nullptr && pConn->pHciDev->Command != nullptr)
+	{
+		uint8_t param[3];
+		param[0] = (uint8_t)(ConnHdl & 0xFF);
+		param[1] = (uint8_t)((ConnHdl >> 8) & 0xFF);
+		param[2] = 0x13;
+		pConn->pHciDev->Command(pConn->pHciDev,
+								BT_HCI_CMD_LINKCTRL_DISCONNECT,
+								param, sizeof(param), nullptr, 0);
 	}
 }
 

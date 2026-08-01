@@ -90,6 +90,63 @@ typedef struct __Bt_Hci_Reassembly {
 
 static BtHciReasm_t s_BtHciReasm[BT_L2CAP_REASSEMBLY_COUNT];
 
+// --- Extended advertising report reassembly ----------------------------------
+// A single advertising event can be split across several LE Extended Advertising
+// Report subevents (Data_Status = "incomplete, more data to come"). One context
+// per advertiser, keyed by address type, address and Advertising SID, holds the
+// partial AD until the terminating fragment (Data_Status = "complete") so the
+// application receives one reassembled report instead of disjoint fragments
+// (Core Vol 4 Part E 7.7.65.13).
+#ifndef BT_EXT_ADV_REASSEMBLY_COUNT
+#define BT_EXT_ADV_REASSEMBLY_COUNT		2
+#endif
+#ifndef BT_EXT_ADV_REASSEMBLY_MAX
+#define BT_EXT_ADV_REASSEMBLY_MAX		256
+#endif
+
+typedef struct __Bt_ExtAdv_Reassembly {
+	bool     Active;						//!< Slot holds a partial report
+	uint8_t  AddrType;						//!< Advertiser address type
+	uint8_t  Addr[6];						//!< Advertiser address
+	uint8_t  Sid;							//!< Advertising SID
+	uint16_t Len;							//!< Bytes accumulated so far
+	uint8_t  Buf[BT_EXT_ADV_REASSEMBLY_MAX];//!< Accumulated AD
+} BtExtAdvReasm_t;
+
+static BtExtAdvReasm_t s_BtExtAdvReasm[BT_EXT_ADV_REASSEMBLY_COUNT];
+
+static BtExtAdvReasm_t *BtExtAdvReasmFind(uint8_t AddrType, const uint8_t Addr[6], uint8_t Sid)
+{
+	for (int i = 0; i < BT_EXT_ADV_REASSEMBLY_COUNT; i++)
+	{
+		BtExtAdvReasm_t *c = &s_BtExtAdvReasm[i];
+		if (c->Active && c->AddrType == AddrType && c->Sid == Sid &&
+			memcmp(c->Addr, Addr, 6) == 0)
+		{
+			return c;
+		}
+	}
+	return nullptr;
+}
+
+static BtExtAdvReasm_t *BtExtAdvReasmAlloc(uint8_t AddrType, const uint8_t Addr[6], uint8_t Sid)
+{
+	for (int i = 0; i < BT_EXT_ADV_REASSEMBLY_COUNT; i++)
+	{
+		BtExtAdvReasm_t *c = &s_BtExtAdvReasm[i];
+		if (c->Active == false)
+		{
+			c->Active   = true;
+			c->AddrType = AddrType;
+			c->Sid      = Sid;
+			memcpy(c->Addr, Addr, 6);
+			c->Len      = 0;
+			return c;
+		}
+	}
+	return nullptr;
+}
+
 void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt, int EvtLen)
 {
 	// End of the received event payload; report parsers must not read past it.
@@ -155,6 +212,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_CONN_UPDATE_COMPLETE:
 			{
+				if ((const uint8_t*)pLeEvtPkt->Data + sizeof(BtHciLeEvtConnUpdateComplete_t) > evtEnd)
+				{
+					break;
+				}
 				BtHciLeEvtConnUpdateComplete_t *p = (BtHciLeEvtConnUpdateComplete_t*)pLeEvtPkt->Data;
 				DEBUG_PRINTF("BT_HCI_EVT_LE_CONN_UPDATE_COMPLETE \r\n");
 				DEBUG_PRINTF("Latency = %d, SuperTimeout = %d\r\n", p->Latency, p->SuperTimeout);
@@ -168,6 +229,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_LONGTERM_KEY_RQST:
 			{
+				if ((const uint8_t*)pLeEvtPkt->Data + sizeof(BtHciLeEvtLongtermKeyReq_t) > evtEnd)
+				{
+					break;
+				}
 				BtHciLeEvtLongtermKeyReq_t *p = (BtHciLeEvtLongtermKeyReq_t*)pLeEvtPkt->Data;
 				BtSmpProcessLtkRequest(pDev, p->ConnHdl, p->RandNumber, p->EncryptDivers);
 			}
@@ -180,6 +245,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_DATA_LEN_CHANGE:
 			{
+				if ((const uint8_t*)pLeEvtPkt->Data + sizeof(BtHciLeEvtDataLenChange_t) > evtEnd)
+				{
+					break;
+				}
 				BtHciLeEvtDataLenChange_t *p = (BtHciLeEvtDataLenChange_t*)pLeEvtPkt->Data;
 
 				pDev->RxDataLen = p->MaxRxLen;
@@ -247,6 +316,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_PHY_UPDATE_COMPLETE:
 		{
+			if ((const uint8_t*)pLeEvtPkt->Data + sizeof(BtHciLeEvtPhyUpdateComplete_t) > evtEnd)
+			{
+				break;
+			}
 			BtHciLeEvtPhyUpdateComplete_t *p = (BtHciLeEvtPhyUpdateComplete_t *) pLeEvtPkt->Data;
 			DEBUG_PRINTF("Status = %d, RxPhy = %d, TxPhy = %d \r\n", p->Status, p->RxPhy, p->TxPhy);
 		}
@@ -271,10 +344,69 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 					{
 						break;
 					}
-					if (pDev->ScanReport)
+
+					// Data_Status is bits 5-6 of the Event_Type field: 0 =
+					// complete, 1 = incomplete with more data to come, 2 =
+					// incomplete and truncated (no more data), 3 = reserved.
+					uint8_t dataStatus = (uint8_t)((r->Type >> 5) & 0x03);
+					BtExtAdvReasm_t *ctx =
+						BtExtAdvReasmFind(r->AddrType, r->Addr, r->AdvSid);
+
+					if (dataStatus == 1)
 					{
-						pDev->ScanReport(r->Rssi, r->AddrType, r->Addr, r->DataLen, r->Data);
+						// More data to come: buffer this fragment.
+						if (ctx == nullptr)
+						{
+							ctx = BtExtAdvReasmAlloc(r->AddrType, r->Addr, r->AdvSid);
+						}
+						if (ctx != nullptr)
+						{
+							if ((uint32_t)ctx->Len + r->DataLen <= BT_EXT_ADV_REASSEMBLY_MAX)
+							{
+								memcpy(ctx->Buf + ctx->Len, r->Data, r->DataLen);
+								ctx->Len = (uint16_t)(ctx->Len + r->DataLen);
+							}
+							else
+							{
+								// Reassembly buffer would overflow: drop the
+								// partial report rather than deliver a truncation.
+								ctx->Active = false;
+							}
+						}
 					}
+					else if (dataStatus == 0)
+					{
+						// Complete. Deliver the reassembled AD if this terminates
+						// a multi-fragment report, otherwise deliver directly.
+						if (ctx != nullptr)
+						{
+							if ((uint32_t)ctx->Len + r->DataLen <= BT_EXT_ADV_REASSEMBLY_MAX)
+							{
+								memcpy(ctx->Buf + ctx->Len, r->Data, r->DataLen);
+								ctx->Len = (uint16_t)(ctx->Len + r->DataLen);
+								if (pDev->ScanReport)
+								{
+									pDev->ScanReport(r->Rssi, r->AddrType, r->Addr, ctx->Len, ctx->Buf);
+								}
+							}
+							ctx->Active = false;
+						}
+						else if (pDev->ScanReport)
+						{
+							pDev->ScanReport(r->Rssi, r->AddrType, r->Addr, r->DataLen, r->Data);
+						}
+					}
+					else
+					{
+						// Truncated (2) or reserved (3): no more data is coming
+						// and the report is incomplete. Drop any partial state
+						// and do not deliver a partial report as if complete.
+						if (ctx != nullptr)
+						{
+							ctx->Active = false;
+						}
+					}
+
 					cur += 24 + r->DataLen;
 				}
 			}
@@ -568,6 +700,13 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 			break;
 		case BT_HCI_EVT_COMMAND_COMPLETE:
 			{
+				// NbCmdPacket(1) + CmdCode(2) are the minimum Command Complete
+				// payload; a shorter event is malformed and must not be parsed.
+				if (pEvtPkt->Hdr.Len < 3)
+				{
+					break;
+				}
+
 				BtHciEvtCmdComplete_t *p = (BtHciEvtCmdComplete_t*)pEvtPkt->Data;
 
 				// Num_HCI_Command_Packets is the absolute command allowance per
@@ -578,13 +717,19 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 				// the status; the command return parameters follow it.
 				if (pDev->CmdOpCode != 0 && p->CmdCode == pDev->CmdOpCode)
 				{
-					pDev->CmdStatus = p->RetParam[0];
-
-					int retlen = (int)pEvtPkt->Hdr.Len - 4;		// less NbCmdPacket, CmdCode, status
-					if (retlen > 0 && pDev->pCmdRet != nullptr)
+					// The status byte is present only when Hdr.Len >= 4; a
+					// Command Complete with no return parameters still unblocks
+					// the waiter but carries no status to copy.
+					if (pEvtPkt->Hdr.Len >= 4)
 					{
-						int l = retlen < (int)pDev->CmdRetLen ? retlen : (int)pDev->CmdRetLen;
-						memcpy(pDev->pCmdRet, &p->RetParam[1], l);
+						pDev->CmdStatus = p->RetParam[0];
+
+						int retlen = (int)pEvtPkt->Hdr.Len - 4;		// less NbCmdPacket, CmdCode, status
+						if (retlen > 0 && pDev->pCmdRet != nullptr)
+						{
+							int l = retlen < (int)pDev->CmdRetLen ? retlen : (int)pDev->CmdRetLen;
+							memcpy(pDev->pCmdRet, &p->RetParam[1], l);
+						}
 					}
 
 					pDev->CmdDone = true;
