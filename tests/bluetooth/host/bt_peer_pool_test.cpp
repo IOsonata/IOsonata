@@ -150,6 +150,38 @@ void TestConnectedFieldsAndDefaultPool()
 	BtPeerFree(peer);
 }
 
+// BtPeerRole reports this device's LL role on a link in the HCI encoding, and
+// UNKNOWN for a missing record or an unconverted value (for example a config
+// bitmask stored by a port that has not been fixed), so role gates never
+// misread a foreign encoding as a role.
+void TestPeerRole()
+{
+	CHECK(BtPeerInit(nullptr, 0));
+
+	const uint8_t addr[6] = { 1, 2, 3, 4, 5, 6 };
+
+	BtDevice_t *periph = BtPeerConnected(0x10, BT_CONN_ROLE_PERIPHERAL, 0, addr, 0, nullptr);
+	CHECK(periph != nullptr);
+	CHECK(BtPeerRole(0x10) == BT_CONN_ROLE_PERIPHERAL);
+
+	BtDevice_t *central = BtPeerConnected(0x11, BT_CONN_ROLE_CENTRAL, 0, addr, 0, nullptr);
+	CHECK(central != nullptr);
+	CHECK(BtPeerRole(0x11) == BT_CONN_ROLE_CENTRAL);
+
+	// No record for this handle.
+	CHECK(BtPeerRole(0x77) == BT_CONN_ROLE_UNKNOWN);
+
+	// A value outside the HCI encoding (a BT_GAP_ROLE_* bitmask, 0x0C for
+	// PERIPHERAL|CENTRAL) reports UNKNOWN rather than a role.
+	BtDevice_t *bogus = BtPeerConnected(0x12, 0x0C, 0, addr, 0, nullptr);
+	CHECK(bogus != nullptr);
+	CHECK(BtPeerRole(0x12) == BT_CONN_ROLE_UNKNOWN);
+
+	BtPeerFree(periph);
+	BtPeerFree(central);
+	BtPeerFree(bogus);
+}
+
 void TestInvalidPool()
 {
 	uint8_t tiny[1] = {};
@@ -163,6 +195,7 @@ int main()
 	TestMisalignedCallerPool();
 	TestAllocationAndLongWriteSlices();
 	TestConnectedFieldsAndDefaultPool();
+	TestPeerRole();
 	TestInvalidPool();
 
 	if (s_Failures != 0)

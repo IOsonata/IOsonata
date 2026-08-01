@@ -84,7 +84,8 @@ typedef struct __Bt_Dev_Disc_State {
 ///            bitmask of GAP roles this stack takes, Services = exposed GATT
 ///            DB, Conn.Hdl = unused, pHciDev = the controller in use.
 ///   remote : Name = peer's reported name, Conn.PeerAddr = peer's BD_ADDR,
-///            Conn.Role = LL role peer plays on the active link,
+///            Conn.Role = LOCAL device's LL role on the active link
+///            (BT_CONN_ROLE_* HCI encoding: 0 central, 1 peripheral),
 ///            Services = discovered GATT DB, Conn.Hdl = active link handle,
 ///            pHciDev = the local controller managing this link.
 typedef struct __Bt_Device {

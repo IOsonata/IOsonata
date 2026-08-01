@@ -6,6 +6,8 @@
 
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_l2cap.h"
+#include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_peer.h"
 
 namespace {
 
@@ -69,9 +71,14 @@ struct HookState {
 
 HookState s_Hooks = {};
 
+// Role reported by the BtPeerRole stub below. Defaults to unknown so the
+// existing tests keep the ungated behavior.
+uint8_t s_PeerRole = BT_CONN_ROLE_UNKNOWN;
+
 void ResetHooks()
 {
     std::memset(&s_Hooks, 0, sizeof(s_Hooks));
+    s_PeerRole = BT_CONN_ROLE_UNKNOWN;
     s_Hooks.LeCocRsp.Dcid = 0x0042;
     s_Hooks.LeCocRsp.Mtu = 128;
     s_Hooks.LeCocRsp.Mps = 64;
@@ -236,6 +243,42 @@ void TestConnectionParameterRequest()
         const BtL2CapConnParamUpdateRsp_t *rsp =
             reinterpret_cast<const BtL2CapConnParamUpdateRsp_t *>(rspFrame->Data);
         CHECK(rsp->Result == BT_L2CAP_CONN_PARAM_REJECTED);
+    }
+}
+
+// The Connection Parameter Update Request is peripheral to central only
+// (Vol 3 Part A 4.20). When this device is the peripheral on the link the
+// request gets a Command Reject and never reaches the accept hook; when it is
+// the central (or the role is unknown) the normal update response path runs.
+void TestConnParamRoleGate()
+{
+    BtL2CapConnParamUpdateReq_t req = { 24, 40, 0, 200 };
+
+    // As peripheral: Command Reject, hook not called.
+    ResetHooks();
+    s_PeerRole = BT_CONN_ROLE_PERIPHERAL;
+    s_Hooks.ConnParamAccept = true;
+    SignalExchange periph;
+    periph.Append(BT_L2CAP_CODE_CONNECTION_PARAMETER_UPDATE_REQ, 0x43,
+                  &req, sizeof(req));
+    CHECK(periph.Run(0x0205) == kFrameHeaderLen + sizeof(uint16_t));
+    CheckReject(periph.Frame(), 0x43, BT_L2CAP_CMD_REJECT_REASON_NOT_UNDERSTOOD);
+    CHECK(s_Hooks.ConnParamReqCount == 0);
+
+    // As central: normal accepted response.
+    ResetHooks();
+    s_PeerRole = BT_CONN_ROLE_CENTRAL;
+    s_Hooks.ConnParamAccept = true;
+    SignalExchange central;
+    central.Append(BT_L2CAP_CODE_CONNECTION_PARAMETER_UPDATE_REQ, 0x44,
+                   &req, sizeof(req));
+    CHECK(central.Run(0x0206) == kFrameHeaderLen + sizeof(BtL2CapConnParamUpdateRsp_t));
+    CHECK(s_Hooks.ConnParamReqCount == 1);
+    const BtL2CapCFrame_t *frame = central.Frame();
+    CHECK(frame != nullptr);
+    if (frame != nullptr)
+    {
+        CHECK(frame->Code == BT_L2CAP_CODE_CONNECTION_PARAMETER_UPDATE_RSP);
     }
 }
 
@@ -481,6 +524,11 @@ void TestResponseBound()
 
 } // namespace
 
+uint8_t BtPeerRole(uint16_t)
+{
+    return s_PeerRole;
+}
+
 bool BtL2CapConnParamUpdateAccept(uint16_t ConnHdl,
                                   const BtL2CapConnParamUpdateReq_t *pReq)
 {
@@ -557,6 +605,7 @@ int main()
     TestNullAndShortInput();
     TestUnknownAndTruncatedCommand();
     TestConnectionParameterRequest();
+    TestConnParamRoleGate();
     TestConnectionParameterResponseCallback();
     TestLeCreditBasedConnection();
     TestFlowControlCredit();

@@ -354,3 +354,20 @@ uint16_t BtPeerActiveHdl(void)
 	BtDevice_t *p = BtPeerGetActive();
 	return p != nullptr ? p->Conn.Hdl : BT_CONN_HDL_INVALID;
 }
+
+uint8_t BtPeerRole(uint16_t ConnHdl)
+{
+	BtDevice_t *p = BtPeerFindByHdl(ConnHdl);
+	if (p == nullptr)
+	{
+		return BT_CONN_ROLE_UNKNOWN;
+	}
+	// Only the two HCI values are meaningful; anything else in the field
+	// (an unconverted vendor encoding or an unset record) reports UNKNOWN
+	// rather than being misread as a role.
+	if (p->Conn.Role == BT_CONN_ROLE_CENTRAL || p->Conn.Role == BT_CONN_ROLE_PERIPHERAL)
+	{
+		return p->Conn.Role;
+	}
+	return BT_CONN_ROLE_UNKNOWN;
+}

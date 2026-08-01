@@ -18,8 +18,13 @@ CPPFLAGS += -I$(ROOT)/include
 CFLAGS ?= -O1 -g
 CFLAGS += -std=gnu11 -Wall -Wextra -fno-omit-frame-pointer \
 	-ffunction-sections -fdata-sections
+# C++23 is spelled gnu++23 by gcc and recent clang, gnu++2b by older Apple
+# clang. Probe what this compiler accepts rather than hardcoding one form.
+CXXSTD := $(shell for s in gnu++23 gnu++2b gnu++20; do \
+	if $(CXX) -std=$$s -x c++ -fsyntax-only /dev/null >/dev/null 2>&1; then \
+		echo $$s; break; fi; done)
 CXXFLAGS ?= -O1 -g
-CXXFLAGS += -std=gnu++23 -Wall -Wextra -fno-omit-frame-pointer \
+CXXFLAGS += -std=$(CXXSTD) -Wall -Wextra -fno-omit-frame-pointer \
 	-ffunction-sections -fdata-sections
 # Dead-strip unused sections so a target that pulls in a .cpp but exercises only
 # part of it does not have to satisfy every symbol the unused code references

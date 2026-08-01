@@ -2475,6 +2475,16 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	switch (pSmp->Code)
 	{
 		case BT_SMP_CODE_PAIRING_REQ:
+			// A Pairing Request travels central to peripheral only (Vol 3
+			// Part H 3.5.1). A central receiving one answers Pairing Failed
+			// with Command Not Supported. Gated only when the link role is
+			// known; a port that does not populate the peer pool keeps the
+			// old behavior.
+			if (BtPeerRole(ConnHdl) == BT_CONN_ROLE_CENTRAL)
+			{
+				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CMD_NOT_SUPPORTED);
+				return;
+			}
 			// Responder side, and only when no pairing runs on the link. A
 			// request that arrives mid-pairing or after completion is rejected
 			// (the handler also refuses a re-pair on an encrypted link).
@@ -2617,6 +2627,15 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		}
 
 		case BT_SMP_CODE_PAIRING_SECURITY_REQ:
+			// A Security Request travels peripheral to central only (Vol 3
+			// Part H 3.6.7 / 2.4.6). A peripheral receiving one answers
+			// Pairing Failed with Command Not Supported (S1). Gated only when
+			// the link role is known.
+			if (BtPeerRole(ConnHdl) == BT_CONN_ROLE_PERIPHERAL)
+			{
+				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CMD_NOT_SUPPORTED);
+				break;
+			}
 			// A peripheral is asking us (the central) to secure the link. Start
 			// pairing or re-encrypt from a bond. Idempotent if already running.
 			BtSmpStartPairing(ConnHdl);

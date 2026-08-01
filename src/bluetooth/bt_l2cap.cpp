@@ -37,6 +37,7 @@ SOFTWARE.
 
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_l2cap.h"
+#include "bluetooth/bt_peer.h"
 #include "syslog.h"
 
 #ifndef BT_L2CAP_LE_SIG_RSP_MAX
@@ -271,6 +272,20 @@ uint32_t BtL2CapProcessSignal(BtHciDevice_t * const pDev,
 
 			case BT_L2CAP_CODE_CONNECTION_PARAMETER_UPDATE_REQ:
 			{
+				// The Connection Parameter Update Request travels peripheral
+				// to central only (Vol 3 Part A 4.20). A peripheral receiving
+				// one sends a Command Reject rather than answering with an
+				// Update Response. Gated only when the link role is known
+				// (BtPeerRole returns UNKNOWN on ports that do not populate
+				// the peer pool, keeping their existing behavior).
+				if (BtPeerRole(ConnHdl) == BT_CONN_ROLE_PERIPHERAL)
+				{
+					BtL2CapAppendCmdReject(pOut, &outLen, outMax, pCmd->Id,
+											BT_L2CAP_CMD_REJECT_REASON_NOT_UNDERSTOOD,
+											nullptr, 0);
+					break;
+				}
+
 				BtL2CapConnParamUpdateRsp_t rsp;
 				rsp.Result = BT_L2CAP_CONN_PARAM_REJECTED;
 

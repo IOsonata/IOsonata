@@ -365,8 +365,6 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 {
 	uint32_t err_code;
 	const ble_gap_evt_t *p_gap_evt = &p_ble_evt->evt.gap_evt;
-	//uint8_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
-	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
 
 	DEBUG_PRINTF("evt: 0x%x\r\n", p_ble_evt->header.evt_id);
 	switch (p_ble_evt->header.evt_id)
@@ -376,7 +374,16 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			// Own address not stamped: SMP runs in the S145 host, not the
 			// IOsonata toolbox, so the record is left for the
 			// BtSmpLocalAddrGet fallback.
-			BtPeerConnected(p_gap_evt->conn_handle, role,
+			// The connected event reports this device's role on the new link
+			// (BLE_GAP_ROLE_PERIPH 1, BLE_GAP_ROLE_CENTRAL 2). The peer
+			// record stores it in the HCI encoding (BT_CONN_ROLE_*); the
+			// config bitmask previously stored here is not a link role at
+			// all and made the record unusable on a mixed-role device.
+			BtPeerConnected(p_gap_evt->conn_handle,
+							   p_gap_evt->params.connected.role == BLE_GAP_ROLE_CENTRAL ?
+							   BT_CONN_ROLE_CENTRAL :
+							   p_gap_evt->params.connected.role == BLE_GAP_ROLE_PERIPH ?
+							   BT_CONN_ROLE_PERIPHERAL : BT_CONN_ROLE_UNKNOWN,
 							   p_gap_evt->params.connected.peer_addr.addr_type,
 							   (uint8_t *)p_gap_evt->params.connected.peer_addr.addr,
 							   0, NULL);

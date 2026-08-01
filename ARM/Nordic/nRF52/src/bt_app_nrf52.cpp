@@ -984,7 +984,13 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
         	// Own address not stamped: SMP runs in the SoftDevice, not the
         	// IOsonata toolbox, so the record is left for the
         	// BtSmpLocalAddrGet fallback.
-        	BtPeerConnected(p_gap_evt->conn_handle, role,
+        	// The peer record stores the link role in the HCI encoding
+        	// (BT_CONN_ROLE_*), not the SoftDevice one (BLE_GAP_ROLE_PERIPH 1,
+        	// BLE_GAP_ROLE_CENTRAL 2); convert at this boundary.
+        	BtPeerConnected(p_gap_evt->conn_handle,
+        					   role == BLE_GAP_ROLE_CENTRAL ? BT_CONN_ROLE_CENTRAL
+        					   : role == BLE_GAP_ROLE_PERIPH ? BT_CONN_ROLE_PERIPHERAL
+        					   : BT_CONN_ROLE_UNKNOWN,
         					   p_gap_evt->params.connected.peer_addr.addr_type,
         					   (uint8_t*)p_gap_evt->params.connected.peer_addr.addr,
         					   0, NULL);
