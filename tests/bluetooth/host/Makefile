@@ -35,7 +35,9 @@ LDFLAGS += -Wl,-dead_strip
 else
 LDFLAGS += -Wl,--gc-sections
 endif
-SANITIZERS ?= -fsanitize=address,undefined
+# no-sanitize-recover makes any UBSan finding abort the test run, so a suite
+# cannot print PASS after undefined behavior scrolled by above it.
+SANITIZERS ?= -fsanitize=address,undefined -fno-sanitize-recover=all
 
 ADV_SOURCES := \
 	bt_adv_uuid_test.cpp \
