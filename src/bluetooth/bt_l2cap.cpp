@@ -247,7 +247,7 @@ uint32_t BtL2CapProcessSignal(BtHciDevice_t * const pDev,
 
 	// Vol 3 Part A 4: multiple commands per C-frame are permitted only on the
 	// BR/EDR signaling channel. The LE-U fixed signaling channel (CID 0x0005)
-	// carries exactly one command per C-frame, so the loop below processes the
+	// allows exactly one command per C-frame, so the loop below processes the
 	// first command and then stops, ignoring any trailing bytes.
 	while (remain >= (sizeof(BtL2CapCFrame_t) - 1))
 	{

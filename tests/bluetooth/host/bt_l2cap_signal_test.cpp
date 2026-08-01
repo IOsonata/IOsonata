@@ -486,7 +486,7 @@ void TestMultipleCommands()
     x.Append(BT_L2CAP_CODE_CONNECTION_PARAMETER_UPDATE_REQ, 0xB1,
              &req, sizeof(req));
     uint32_t len = x.Run();
-    // The LE signaling channel carries one command per C-frame (Vol 3 Part A
+    // The LE signaling channel allows one command per C-frame (Vol 3 Part A
     // 4): only the first command (the unknown 0xFE) is processed and rejected;
     // the trailing Connection Parameter Update is ignored.
     CHECK(len == kFrameHeaderLen + sizeof(uint16_t));

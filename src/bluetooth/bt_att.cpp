@@ -2163,7 +2163,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 					pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_RSP;
 					uint16_t space = (uint16_t)(rspMtu - 1 - l - 2);	// MTU - opcode - existing payload - length field
-					// The Length field carries the complete attribute value
+					// The Length field holds the complete attribute value
 					// length, even when the value is truncated to fit (Vol 3
 					// Part F 3.4.4.13), so the client can detect that the last
 					// value was cut and re-read it. Only value bytes that fit

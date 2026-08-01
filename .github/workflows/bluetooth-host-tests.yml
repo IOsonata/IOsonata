@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - bt_update
+      - bt_conformance
     paths:
       - "include/bluetooth/**"
       - "src/bluetooth/**"

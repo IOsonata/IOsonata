@@ -719,7 +719,7 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 				{
 					// The status byte is present only when Hdr.Len >= 4; a
 					// Command Complete with no return parameters still unblocks
-					// the waiter but carries no status to copy.
+					// the waiter but has no status to copy.
 					if (pEvtPkt->Hdr.Len >= 4)
 					{
 						pDev->CmdStatus = p->RetParam[0];
