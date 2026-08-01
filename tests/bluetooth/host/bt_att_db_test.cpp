@@ -190,6 +190,33 @@ void TestReinitialization()
 	}
 }
 
+// Every lookup must be safe on an empty database. The tail sentinel is the
+// only node then, and its pNext is null, so a walk that only tests the
+// sentinel dereferences null on its second pass. Handle 0 is reserved and
+// must not match the zero initialised sentinel either.
+void TestEmptyDatabaseLookups()
+{
+	BtAttDBInit(256);
+
+	BtUuid16_t uuid = { 0, BT_UUID_TYPE_16, 0x2803 };
+
+	CHECK(BtAttDBFindUuidRange(&uuid, 1, 0xFFFF) == nullptr);
+	CHECK(BtAttDBFindUuid(nullptr, &uuid) == nullptr);
+	CHECK(BtAttDBFindHandle(0) == nullptr);
+	CHECK(BtAttDBFindHandle(1) == nullptr);
+	CHECK(BtAttDBFindHandle(0xFFFF) == nullptr);
+
+	uint16_t start = 1;
+	uint16_t end = 0xFFFF;
+	CHECK(BtAttDBFindHdlRange(&uuid, &start, &end) == nullptr);
+
+	// Handle 0 stays rejected once the database has entries.
+	BtAttDBEntry_t *entry = BtAttDBAddEntry(&uuid, 8);
+	CHECK(entry != nullptr);
+	CHECK(BtAttDBFindHandle(0) == nullptr);
+	CHECK(BtAttDBFindHandle(1) == entry);
+}
+
 } // namespace
 
 int main()
@@ -198,6 +225,7 @@ int main()
 	TestNativePointerLinks();
 	TestExhaustionDoesNotCorruptTail();
 	TestReinitialization();
+	TestEmptyDatabaseLookups();
 
 	if (s_Failures != 0)
 	{

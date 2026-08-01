@@ -181,21 +181,26 @@ BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pDat
 
 BtAttDBEntry_t *BtAttDBFindHandle(uint16_t Hdl)
 {
-	if (Hdl > s_LastHdl)
+	// Handle 0x0000 is reserved and never assigned to an attribute (Vol 3
+	// Part F 3.2.2). Rejecting it here matters because the tail sentinel is
+	// zero initialised, so a search for 0 would otherwise match it and hand
+	// back the sentinel as if it were an attribute.
+	if (Hdl == 0 || Hdl > s_LastHdl)
 	{
 		return nullptr;
 	}
 
-	BtAttDBEntry_t *p = (BtAttDBEntry_t *)s_pBtAttDbEntryFirst;
-
-	do {
+	// Walk to the tail sentinel, guarding against null: on an empty database
+	// the first entry is the sentinel and its pNext is null, so a do/while
+	// that only tests the sentinel dereferences null on the second pass.
+	for (BtAttDBEntry_t *p = (BtAttDBEntry_t *)s_pBtAttDbEntryFirst;
+		 p != nullptr && p != s_pBtAttDbEntryEnd; p = p->pNext)
+	{
 		if (p->Hdl == Hdl)
 		{
 			return p;
 		}
-
-		p = p->pNext;
-	} while (p != s_pBtAttDbEntryEnd);
+	}
 
 	return nullptr;
 }
@@ -252,9 +257,12 @@ BtAttDBEntry_t *BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid)
 
 BtAttDBEntry_t *BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart, uint16_t HdlEnd)
 {
-	BtAttDBEntry_t *p = s_pBtAttDbEntryFirst;
-
-	do {
+	// Same guard as BtAttDBFindUuid: stop at the tail sentinel and at null.
+	// On an empty database the first entry is the sentinel and its pNext is
+	// null, so a do/while that only tests the sentinel walks off the end.
+	for (BtAttDBEntry_t *p = s_pBtAttDbEntryFirst;
+		 p != nullptr && p != s_pBtAttDbEntryEnd; p = p->pNext)
+	{
 		if (memcmp(&p->TypeUuid, pUuid, sizeof(BtUuid16_t)) == 0)
 		{
 			if (p->Hdl >= HdlStart && p->Hdl <= HdlEnd)
@@ -262,9 +270,7 @@ BtAttDBEntry_t *BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart, uint1
 				return p;
 			}
 		}
-
-		p = p->pNext;
-	} while (p != s_pBtAttDbEntryEnd);
+	}
 
 	return nullptr;
 }
