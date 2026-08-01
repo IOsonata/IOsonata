@@ -48,7 +48,9 @@ uint8_t CaptureCommand(BtHciDevice_t * const, uint16_t OpCode, const void *pPara
 		CapturedCmd &c = s_Cmds[s_CmdCount++];
 		c.OpCode   = OpCode;
 		c.ParamLen = ParamLen;
-		if (pParam != nullptr && ParamLen <= sizeof(c.Param))
+		// ParamLen is uint8_t (max 255) and Param is 264 bytes, so any
+		// parameter block fits; no size check needed.
+		if (pParam != nullptr)
 		{
 			std::memcpy(c.Param, pParam, ParamLen);
 		}

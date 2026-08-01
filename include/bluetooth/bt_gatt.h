@@ -178,7 +178,7 @@ typedef struct
 extern "C" {
 #endif
 
-BtGattSrvc_t * const BtGattGetSrvcList(void);
+BtGattSrvc_t *BtGattGetSrvcList(void);
 void BtGattInsertSrvcList(BtGattSrvc_t * const pSrvc);
 bool BtGattUpdate(uint16_t Hdl, void * const pAttVal, size_t Len);
 bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar);

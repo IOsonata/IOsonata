@@ -258,7 +258,7 @@ uint16_t BleAppGetConnHandle(void);
 void BtAppGapDeviceNameSet(const char* ppDeviceName);
 
 void BtAppSetDevName(const char *pName);
-char * const BtAppGetDevName(void);
+char *BtAppGetDevName(void);
 bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
 
 /**

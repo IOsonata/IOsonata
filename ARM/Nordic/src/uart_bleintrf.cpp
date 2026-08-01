@@ -295,7 +295,7 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	return cnt;
 }*/
 
-BleIntrf * const NusBleIntrfInit(DevIntrfEvtHandler_t EvtCB)
+BleIntrf *NusBleIntrfInit(DevIntrfEvtHandler_t EvtCB)
 {
     uint32_t err_code = BleSrvcInit(&s_NUSBleSrvc, &s_NUSBleSrvcCfg);
     APP_ERROR_CHECK(err_code);
@@ -310,7 +310,7 @@ BleIntrf * const NusBleIntrfInit(DevIntrfEvtHandler_t EvtCB)
     return NULL;
 }
 
-BleIntrf * const UartBleIntrfInit(DevIntrfEvtHandler_t EvtCB)
+BleIntrf *UartBleIntrfInit(DevIntrfEvtHandler_t EvtCB)
 {
     uint32_t err_code = BleSrvcInit(&s_UartBleSrvc, &s_UartSrvcCfg);
     APP_ERROR_CHECK(err_code);

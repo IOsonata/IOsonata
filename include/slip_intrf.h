@@ -83,8 +83,8 @@ public:
 	 *
 	 * @return	Pointer to internal DEVINTRF to be used with C interface functions
 	 */
-	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
-	operator SlipDev_t * const () { return &vDevData; }
+	operator DevIntrf_t * () { return &vDevData.DevIntrf; }
+	operator SlipDev_t * () { return &vDevData; }
 
 	/**
 	 * @brief	Set data rate of the interface in Hertz.

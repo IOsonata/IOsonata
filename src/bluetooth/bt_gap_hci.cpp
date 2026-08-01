@@ -225,6 +225,9 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 
 bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 {
+	(void)pBuff;
+	(void)Len;
+
 	BtHciDevice_t *pDev = BtGapHciDev();
 	if (pDev == nullptr)
 	{
@@ -259,6 +262,9 @@ void BtGapScanStop()
 
 bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
 {
+	(void)pBuff;
+	(void)Len;
+
 	return true;
 }
 

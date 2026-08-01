@@ -57,10 +57,10 @@ static char SysLogTypeTag(SysStatus_t Status)
 	}
 }
 
-// Append formatted text without ever advancing beyond the usable buffer.
-// Return value is the byte count to transmit, excluding the trailing NUL.
-static int SysLogAppendV(char *pLine, int LineSize, int Pos,
-						 const char *pFormat, va_list Args)
+// Append formatted text at Pos without ever advancing beyond the usable buffer.
+// Returns the new length (bytes to transmit, excluding the trailing NUL).
+static int SysLogAppend(char *pLine, int LineSize, int Pos,
+						const char *pFormat, ...)
 {
 	if (pLine == 0 || pFormat == 0 || LineSize <= 1)
 	{
@@ -77,7 +77,10 @@ static int SysLogAppendV(char *pLine, int LineSize, int Pos,
 		return LineSize - 1;
 	}
 
-	int n = vsnprintf(&pLine[Pos], (size_t)(LineSize - Pos), pFormat, Args);
+	va_list args;
+	va_start(args, pFormat);
+	int n = vsnprintf(&pLine[Pos], (size_t)(LineSize - Pos), pFormat, args);
+	va_end(args);
 
 	if (n < 0)
 	{
@@ -90,19 +93,6 @@ static int SysLogAppendV(char *pLine, int LineSize, int Pos,
 	}
 
 	return Pos + n;
-}
-
-static int SysLogAppend(char *pLine, int LineSize, int Pos,
-						const char *pFormat, ...)
-{
-	va_list args;
-	int len;
-
-	va_start(args, pFormat);
-	len = SysLogAppendV(pLine, LineSize, Pos, pFormat, args);
-	va_end(args);
-
-	return len;
 }
 
 static uintptr_t SysStatusStackLock(void)
@@ -127,15 +117,21 @@ static void SysStatusStackUnlock(uintptr_t State)
 #endif
 }
 
-// Send the whole line to the sink. DeviceIntrfTx returns the number of bytes
-// the sink accepted and only retries internally when it accepted none; a
-// partial write (the sink FIFO filled mid-line) leaves the tail unsent. Resend
+// Validate the logger, then send the whole line to the sink. One place for the
+// guard shared by the printf and status paths. DeviceIntrfTx returns the number
+// of bytes the sink accepted and only retries internally when it accepted none;
+// a partial write (the sink FIFO filled mid-line) leaves the tail unsent. Resend
 // the remainder until the line is out, the way UARTvprintf does. Without this a
 // burst of log lines loses the tail of each line once the FIFO backs up, which
 // reads as truncated or interleaved output. A bounded no-progress spin keeps a
 // stalled sink from hanging the logger.
-static int SysLogTx(SysLog_t * const pLog, const char *pLine, int Len)
+static int SysLogSend(SysLog_t * const pLog, const char *pLine, int Len)
 {
+	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER || pLog->pSink == 0)
+	{
+		return 0;
+	}
+
 	const uint8_t *p = (const uint8_t *)pLine;
 	int remain = Len;
 	int stall  = 5;
@@ -212,21 +208,19 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 
 	len = SysLogAppend(line, sizeof(line), len, "\r\n");
 
-	return SysLogTx(pLog, line, len);
+	return SysLogSend(pLog, line, len);
 }
 
 int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 {
 	char line[SYSLOG_LINE_MAX];
-	int len;
 
-	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER ||
-		pLog->pSink == 0 || pFormat == 0)
+	if (pFormat == 0)
 	{
 		return 0;
 	}
 
-	len = vsnprintf(line, sizeof(line), pFormat, Args);
+	int len = vsnprintf(line, sizeof(line), pFormat, Args);
 
 	if (len < 0)
 	{
@@ -239,7 +233,8 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 		len = (int)sizeof(line) - 1;
 	}
 
-	return SysLogTx(pLog, line, len);
+	// SysLogSend validates the logger before touching the sink.
+	return SysLogSend(pLog, line, len);
 }
 
 int SysLogPrintf(SysLog_t * const pLog, const char *pFormat, ...)
@@ -283,15 +278,15 @@ int SysLog::Printf(const char *pFormat, ...)
 static SysLog g_SysLog;
 
 // C++ direct access to the global object.
-SysLog * const SysLogGetInstance(void)
+SysLog *SysLogGetInstance(void)
 {
 	return &g_SysLog;
 }
 
 // C handle access to the same global object.
-extern "C" SysLog_t * const SysLogGet(void)
+extern "C" SysLog_t *SysLogGet(void)
 {
-	return (SysLog_t * const)g_SysLog;
+	return (SysLog_t *)g_SysLog;
 }
 
 //
@@ -420,7 +415,7 @@ int SysStatusStackCount(SysStatusStack_t * const pStack)
 // startup with no explicit init required.
 static SysStatusStack_t g_SysStatusStack;
 
-SYSSTATUS_WEAK SysStatusStack_t * const SysStatusStackGet(void)
+SYSSTATUS_WEAK SysStatusStack_t *SysStatusStackGet(void)
 {
 	return &g_SysStatusStack;
 }

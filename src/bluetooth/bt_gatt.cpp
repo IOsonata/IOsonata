@@ -46,7 +46,7 @@ SOFTWARE.
 
 static BtGattSrvc_t *s_pBtGattSrvcList = nullptr;
 
-BtGattSrvc_t * const BtGattGetSrvcList()
+BtGattSrvc_t *BtGattGetSrvcList()
 {
 	return s_pBtGattSrvcList;
 }

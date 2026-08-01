@@ -195,7 +195,7 @@ public:
 	FlashDiskIO();
 	virtual ~FlashDiskIO() {}
 
-	operator FlashDev_t * const () { return &vDevData; }
+	operator FlashDev_t * () { return &vDevData; }
 
 	/**
 	 * @brief	Initialize Flash Disk.

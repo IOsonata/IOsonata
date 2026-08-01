@@ -24,7 +24,7 @@ int s_ServiceDisconnectCount = 0;
 
 } // namespace
 
-BtGattSrvc_t * const BtGattGetSrvcList(void)
+BtGattSrvc_t *BtGattGetSrvcList(void)
 {
 	return nullptr;
 }

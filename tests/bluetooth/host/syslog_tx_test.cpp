@@ -51,7 +51,7 @@ int MockTxData(DevIntrf_t * const, const uint8_t *pData, int DataLen)
 
 void MakeIntrf(DevIntrf_t *pIntrf)
 {
-	std::memset(pIntrf, 0, sizeof(*pIntrf));
+	std::memset(static_cast<void *>(pIntrf), 0, sizeof(*pIntrf));
 	pIntrf->StartTx  = MockStartTx;
 	pIntrf->StopTx   = MockStopTx;
 	pIntrf->TxData   = MockTxData;
@@ -116,6 +116,53 @@ void TestOneBytePerCall()
 	CHECK(std::memcmp(s_Captured, msg, 10) == 0);
 }
 
+// SysLogStatus formats a structured record: type tag, module id, code, then an
+// optional detail and CRLF. Status word is Type(4) | ModId(12) | Code(16).
+void TestStatusFormatting()
+{
+	DevIntrf_t intrf;
+	MakeIntrf(&intrf);
+
+	SysLog_t log;
+	std::memset(&log, 0, sizeof(log));
+	SysLogInit(&log, &intrf, 0, nullptr, 0);		// MinType 0 emits all
+
+	SysStatus_t st = SYSSTATUS_TYPE_ERR | (0x0ABu << 16) | 0x1234u;
+	s_CapturedLen = 0;
+	s_ChunkLimit = 64;
+	SysLogStatus(&log, st, nullptr);
+
+	const char *want = "E:0AB:1234\r\n";
+	CHECK(s_CapturedLen == (int)std::strlen(want));
+	CHECK(std::memcmp(s_Captured, want, std::strlen(want)) == 0);
+
+	// With a detail string appended.
+	s_CapturedLen = 0;
+	SysLogStatus(&log, st, "oops");
+	const char *want2 = "E:0AB:1234 oops\r\n";
+	CHECK(s_CapturedLen == (int)std::strlen(want2));
+	CHECK(std::memcmp(s_Captured, want2, std::strlen(want2)) == 0);
+}
+
+// Records below the configured MinType are dropped.
+void TestStatusFilter()
+{
+	DevIntrf_t intrf;
+	MakeIntrf(&intrf);
+
+	SysLog_t log;
+	std::memset(&log, 0, sizeof(log));
+	SysLogInit(&log, &intrf, 0, nullptr, SYSSTATUS_TYPE_ERR);	// errors only
+
+	s_CapturedLen = 0;
+	s_ChunkLimit = 64;
+	SysLogStatus(&log, SYSSTATUS_TYPE_WRN | 0x0001u, nullptr);	// below floor
+	CHECK(s_CapturedLen == 0);
+
+	SysLogStatus(&log, SYSSTATUS_TYPE_ERR | 0x0002u, nullptr);	// at floor
+	CHECK(s_CapturedLen > 0);
+}
+
 } // namespace
 
 int main()
@@ -123,6 +170,8 @@ int main()
 	TestPartialWriteResendsRemainder();
 	TestSingleChunkLine();
 	TestOneBytePerCall();
+	TestStatusFormatting();
+	TestStatusFilter();
 
 	if (s_Failures != 0)
 	{

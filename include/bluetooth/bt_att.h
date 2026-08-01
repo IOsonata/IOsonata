@@ -580,11 +580,11 @@ extern "C" {
 #endif
 
 void BtAttDBInit(size_t MemSize);
-BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen);//, void *pData, int DataLen);
-BtAttDBEntry_t * const BtAttDBFindHandle(uint16_t Hdl);
-BtAttDBEntry_t * const BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid);
-BtAttDBEntry_t * const BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart, uint16_t HdlEnd);
-BtAttDBEntry_t * const BtAttDBFindHdlRange(BtUuid16_t *pUuid, uint16_t *pHdlStart, uint16_t *pHdlEnd);
+BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen);//, void *pData, int DataLen);
+BtAttDBEntry_t *BtAttDBFindHandle(uint16_t Hdl);
+BtAttDBEntry_t *BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid);
+BtAttDBEntry_t *BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart, uint16_t HdlEnd);
+BtAttDBEntry_t *BtAttDBFindHdlRange(BtUuid16_t *pUuid, uint16_t *pHdlStart, uint16_t *pHdlEnd);
 
 void BtAttDBEntrySetPermission(BtAttDBEntry_t *pEntry, uint32_t Permission);
 uint32_t BtAttDBEntryGetPermission(BtAttDBEntry_t *pEntry);

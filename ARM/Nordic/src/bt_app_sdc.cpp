@@ -259,7 +259,7 @@ void BtAppSetDevName(const char *pName)
 	BtGapSetDevName(pName);
 }
 /*
-char * const BleAppGetDevName()
+char *BleAppGetDevName()
 {
 	//return s_BtGapCharDevName;
 }

@@ -133,7 +133,7 @@ void BtAttDBInit(size_t MemSize)
 	s_pBtAttDbEntryEnd->pPrev = nullptr;
 }
 
-BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pData, int DataLen)
+BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pData, int DataLen)
 {
 	if (pUuid == nullptr || MaxDataLen < 0 || MaxDataLen > 0xFFFF)
 	{
@@ -179,7 +179,7 @@ BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, voi
 	return entry;
 }
 
-BtAttDBEntry_t * const BtAttDBFindHandle(uint16_t Hdl)
+BtAttDBEntry_t *BtAttDBFindHandle(uint16_t Hdl)
 {
 	if (Hdl > s_LastHdl)
 	{
@@ -226,7 +226,7 @@ void BtGattCccdDbSync(uint16_t CccdHdl, uint16_t CccVal)
 	}
 }
 
-BtAttDBEntry_t * const BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid)
+BtAttDBEntry_t *BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid)
 {
 	BtAttDBEntry_t *p = pStart;
 	if (p == nullptr)
@@ -250,7 +250,7 @@ BtAttDBEntry_t * const BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid
 	return nullptr;
 }
 
-BtAttDBEntry_t * const BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart, uint16_t HdlEnd)
+BtAttDBEntry_t *BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart, uint16_t HdlEnd)
 {
 	BtAttDBEntry_t *p = s_pBtAttDbEntryFirst;
 
@@ -269,7 +269,7 @@ BtAttDBEntry_t * const BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart
 	return nullptr;
 }
 
-BtAttDBEntry_t * const BtAttDBFindHdlRange(BtUuid16_t *pUuid, uint16_t *pHdlStart, uint16_t *pHdlEnd)
+BtAttDBEntry_t *BtAttDBFindHdlRange(BtUuid16_t *pUuid, uint16_t *pHdlStart, uint16_t *pHdlEnd)
 {
 	BtAttDBEntry_t *first = BtAttDBFindUuidRange(pUuid, *pHdlStart, *pHdlEnd);
 
@@ -1780,12 +1780,11 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				}
 
 				pRspAtt->ReadByGroupTypeRsp.Len = 0;
-				int temp_cnt = 0;
 
 				while (entry && (rspMtu - l) >= BT_ATT_MTU_MIN)
 				{
-					DEBUG_PRINTF("#%d BaseIdx = %d, entry->Hdl = %d, entry->pNext->Hdl = %d, UuidType = %d, uuid16 = 0x%x\r\n",
-							temp_cnt, entry->TypeUuid.BaseIdx, entry->Hdl, (entry->pNext ? entry->pNext->Hdl : 0), entry->TypeUuid.Type, entry->TypeUuid.Uuid);
+					DEBUG_PRINTF("BaseIdx = %d, entry->Hdl = %d, entry->pNext->Hdl = %d, UuidType = %d, uuid16 = 0x%x\r\n",
+							entry->TypeUuid.BaseIdx, entry->Hdl, (entry->pNext ? entry->pNext->Hdl : 0), entry->TypeUuid.Type, entry->TypeUuid.Uuid);
 
 					if (entry->Hdl >= req->StartHdl && entry->Hdl <= req->EndHdl && baseidx == entry->TypeUuid.BaseIdx)
 					{
@@ -1818,7 +1817,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					DEBUG_PRINTF("Next Find Range StartHdl = %d, EndHdl = %d, Uuid16Type = 0x%X\r\n",
 							hu->StartHdl, hu->EndHdl, uid16.Uuid);
 					entry = BtAttDBFindHdlRange(&uid16, &hu->StartHdl, &hu->EndHdl);
-					temp_cnt++;
 				}
 
 				if (l > 0)

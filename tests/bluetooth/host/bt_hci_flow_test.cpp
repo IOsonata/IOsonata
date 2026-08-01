@@ -618,7 +618,7 @@ void BtSmpDisconnected(uint16_t ConnHdl)
     s_SmpDisconnectHdl = ConnHdl;
 }
 
-SysLog_t * const SysLogGet(void)
+SysLog_t *SysLogGet(void)
 {
     static SysLog_t log = {};
     return &log;

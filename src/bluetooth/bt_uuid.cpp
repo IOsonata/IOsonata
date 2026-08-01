@@ -53,7 +53,9 @@ typedef struct __Bt_Base_Uuid_Tbl_Entry {
 #define BT_BASE_UUID_ENTRY_MAX_COUNT		4
 #endif
 
-alignas(4) static BtBaseUuidTblEntry_t s_BtBaseUuidTbl[BT_BASE_UUID_ENTRY_MAX_COUNT] = {{BLUETOOTH_SIG_BASE_UUID, true}, {0, false},};
+// BLUETOOTH_SIG_BASE_UUID carries its own braces for the Uuid[16] member.
+// The remaining table entries are value-initialized (all zero, bValid false).
+alignas(4) static BtBaseUuidTblEntry_t s_BtBaseUuidTbl[BT_BASE_UUID_ENTRY_MAX_COUNT] = {{BLUETOOTH_SIG_BASE_UUID, true},};
 
 /**
  * @brief	Find index of stored base UUID 128 bits

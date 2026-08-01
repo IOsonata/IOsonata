@@ -107,8 +107,8 @@ class BtIntrf : public DeviceIntrf {
 public:
 	bool Init(const BtIntrfCfg_t &Cfg);
 
-	operator DevIntrf_t * const () { return &vBtDevIntrf.DevIntrf; }	// Get device interface data
-	operator BtGattSrvc_t * const () { return vBtDevIntrf.pSrvc; }
+	operator DevIntrf_t * () { return &vBtDevIntrf.DevIntrf; }	// Get device interface data
+	operator BtGattSrvc_t * () { return vBtDevIntrf.pSrvc; }
 	// Set data rate in bits/sec (Hz)
 	virtual uint32_t Rate(uint32_t DataRate) { return DeviceIntrfSetRate(&vBtDevIntrf.DevIntrf, DataRate); }
 	// Get current data rate in bits/sec (Hz)

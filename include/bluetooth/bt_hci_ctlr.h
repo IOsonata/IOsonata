@@ -174,8 +174,8 @@ size_t BtHciCtlrSendCommand(BtHciCtlrDev_t * const pDev, uint16_t OpCode, const 
 
 class BtHciCtlr : public DeviceIntrf {
 public:
-	operator BtHciCtlrDev_t *  const () { return &vDevData; }
-	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
+	operator BtHciCtlrDev_t * () { return &vDevData; }
+	operator DevIntrf_t * () { return &vDevData.DevIntrf; }
 
 	virtual bool Init(const BtHciCtlrCfg_t &Cfg) { return BtHciCtlrInit(&vDevData, &Cfg); }
 	// Set data baudrate
@@ -184,6 +184,10 @@ public:
 	virtual uint32_t Rate(void) { return vDevData.Rate; }
     void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }
     void Disable(void) { DeviceIntrfDisable(&vDevData.DevIntrf); }
+	// Keep the base class 3 argument Rx/Tx visible alongside the 2 argument
+	// convenience forms below, so neither set hides the other.
+	using DeviceIntrf::Rx;
+	using DeviceIntrf::Tx;
 	virtual int Rx(uint8_t *pBuff, int Len) { return DeviceIntrfRx(&vDevData.DevIntrf, 0, pBuff, Len); }
 	// Initiate receive
 	virtual int Tx(uint8_t *pData, uint32_t Len) { return DeviceIntrfTx(&vDevData.DevIntrf, 0, pData, Len); }
