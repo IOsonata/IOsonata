@@ -466,49 +466,10 @@ void BtAppEnterDfu()
 #endif
 }
 
-bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
-{
-	if (pChar == nullptr)
-	{
-		return false;
-	}
-
-	if (DataLen > 0 && pData == nullptr)
-	{
-		return false;
-	}
-
-	if (DataLen > 0 && BtGattCharSetValue(pChar, pData, DataLen) == false)
-	{
-		return false;
-	}
-
-	// Delegate the send to BtGattCharNotify so the notification is tracked in
-	// the TX-pending ring and TxCompleteCB fires on completion.
-	return BtGattCharNotify(BtAppGetConnHandle(), pChar, pData, DataLen);
-}
-
-bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
-{
-	if (pChar == nullptr)
-	{
-		return false;
-	}
-
-	if (DataLen > 0 && pData == nullptr)
-	{
-		return false;
-	}
-
-	if (DataLen > 0 && BtGattCharSetValue(pChar, pData, DataLen) == false)
-	{
-		return false;
-	}
-
-	// Delegate to BtGattCharIndicate so the indication is tracked: pending flag,
-	// transaction timeout, and TX-pending ring.
-	return BtGattCharIndicate(BtAppGetConnHandle(), pChar, pData, DataLen);
-}
+// BtAppNotify/BtAppIndicate, their Conn and All forms are the shared weak
+// implementations in src/bluetooth/bt_app.cpp. This port used to carry a copy
+// that read the active connection handle. What stays here is the disconnect
+// command, which is the one part only this port can issue.
 
 /**@brief Function for assert macro callback.
  *
@@ -527,11 +488,11 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
 }
 #if 1
 
-void BtAppDisconnect()
+void BtAppDisconnectConn(uint16_t ConnHdl)
 {
-	if (BtAppGetConnHandle() != BLE_CONN_HANDLE_INVALID)
+	if (ConnHdl != BLE_CONN_HANDLE_INVALID)
     {
-		uint32_t err_code = sd_ble_gap_disconnect(BtAppGetConnHandle(), BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+		uint32_t err_code = sd_ble_gap_disconnect(ConnHdl, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
 		if (err_code != NRF_SUCCESS && err_code != NRF_ERROR_INVALID_STATE)
 		{
 			APP_ERROR_CHECK(err_code);
@@ -571,7 +532,9 @@ static void on_conn_params_evt(ble_conn_params_evt_t * p_evt)
 
     if (p_evt->evt_type == BLE_CONN_PARAMS_EVT_FAILED)
     {
-        err_code = sd_ble_gap_disconnect(BtAppGetConnHandle(), BLE_HCI_CONN_INTERVAL_UNACCEPTABLE);
+        // The event names the link whose negotiation failed. Reading the active
+        // handle instead dropped whichever link happened to be current.
+        err_code = sd_ble_gap_disconnect(p_evt->conn_handle, BLE_HCI_CONN_INTERVAL_UNACCEPTABLE);
         //APP_ERROR_CHECK(err_code);
     }
 }
@@ -648,9 +611,9 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
 				{
 #if 0
 					// The peer did not use MITM, disconnect.
-					err_code = pm_peer_id_get(BtAppGetConnHandle(), &g_PeerMngrIdToDelete);
+					err_code = pm_peer_id_get(p_evt->conn_handle, &g_PeerMngrIdToDelete);
 					APP_ERROR_CHECK(err_code);
-					err_code = sd_ble_gap_disconnect(BtAppGetConnHandle(),
+					err_code = sd_ble_gap_disconnect(p_evt->conn_handle,
 													 BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
 					APP_ERROR_CHECK(err_code);
 #endif
@@ -667,9 +630,11 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
             		p_evt->conn_handle,
             		p_evt->params.conn_sec_failed.procedure,
             		p_evt->params.conn_sec_failed.error);
-            if (g_BtAppData.AppDevice.bSecure && BtAppGetConnHandle() != BLE_CONN_HANDLE_INVALID)
+            // Drop the link that failed to secure, named by the event, not
+            // whichever link was current.
+            if (g_BtAppData.AppDevice.bSecure && p_evt->conn_handle != BLE_CONN_HANDLE_INVALID)
             {
-                err_code = sd_ble_gap_disconnect(BtAppGetConnHandle(),
+                err_code = sd_ble_gap_disconnect(p_evt->conn_handle,
                                                  BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
                 APP_ERROR_CHECK(err_code);
             }
@@ -1066,8 +1031,9 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 			APP_ERROR_CHECK(err_code);
         } break;
         case BLE_GATTS_EVT_SYS_ATTR_MISSING:
-            // No system attributes have been stored.
-            err_code = sd_ble_gatts_sys_attr_set(BtAppGetConnHandle(), NULL, 0, 0);
+            // No system attributes have been stored. The event names the link
+            // that is missing them; the active handle could be a different one.
+            err_code = sd_ble_gatts_sys_attr_set(p_ble_evt->evt.gatts_evt.conn_handle, NULL, 0, 0);
             APP_ERROR_CHECK(err_code);
             break; // BLE_GATTS_EVT_SYS_ATTR_MISSING
         case BLE_EVT_USER_MEM_REQUEST:
@@ -1362,7 +1328,9 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
 /**@brief Function for handling events from the GATT library. */
 void BtGattEvtHandler(nrf_ble_gatt_t * p_gatt, const nrf_ble_gatt_evt_t * p_evt)
 {
-    if ((BtAppGetConnHandle() == p_evt->conn_handle) && (p_evt->evt_id == NRF_BLE_GATT_EVT_ATT_MTU_UPDATED))
+    // The MTU update belongs to the link the event names, so there is nothing
+    // to compare it against.
+    if (p_evt->evt_id == NRF_BLE_GATT_EVT_ATT_MTU_UPDATED)
     {
     	//g_BleAppData.MaxMtu = p_evt->params.att_mtu_effective - 3;//OPCODE_LENGTH - HANDLE_LENGTH;
        // m_ble_nus_max_data_len = p_evt->params.att_mtu_effective - OPCODE_LENGTH - HANDLE_LENGTH;

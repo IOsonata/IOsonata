@@ -42,6 +42,7 @@ Copyright (c) 2016, I-SYST inc., all rights reserved
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_appearance.h"
+#include "bluetooth/bt_peer.h"
 
 // Port-local: SoftDevice BLE configuration tag. Must match the value used
 // by BtAppStackInit when calling sd_ble_cfg_set / sd_ble_gap_adv_start.
@@ -71,7 +72,9 @@ static ble_gap_adv_data_t s_BtAppAdvData = {
 
 void BtAdvStart()//BLEAPP_ADVMODE AdvMode)
 {
-	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING || BtAppGetConnHandle() != BLE_CONN_HANDLE_INVALID)
+	// The question here is whether any link is up, not which one, so ask that
+	// directly rather than through a handle that has to name one.
+	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING || BtPeerIsConnected())
 		return;
 
 //	g_BleAppData.bAdvertising = true;

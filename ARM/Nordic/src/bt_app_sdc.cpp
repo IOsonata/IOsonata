@@ -400,25 +400,23 @@ void BtAppEnterDfu()
 	/* TODO: implement */
 }
 
-void BtAppDisconnect()
+void BtAppDisconnectConn(uint16_t ConnHdl)
 {
-	uint16_t connHdl = BtPeerActiveHdl();
-
-	if (connHdl == BT_CONN_HDL_INVALID)
+	if (ConnHdl == BT_CONN_HDL_INVALID)
 	{
-		DEBUG_PRINTF("BtAppDisconnect: no active connection\r\n");
+		DEBUG_PRINTF("BtAppDisconnect: invalid handle\r\n");
 		return;
 	}
 
 	// HCI Disconnect, Link Control OGF=0x01/OCF=0x0006.
 	// Reason 0x13 = Remote User Terminated Connection.
 	uint8_t param[3];
-	param[0] = (uint8_t)(connHdl & 0xFF);
-	param[1] = (uint8_t)(connHdl >> 8);
+	param[0] = (uint8_t)(ConnHdl & 0xFF);
+	param[1] = (uint8_t)(ConnHdl >> 8);
 	param[2] = 0x13;
 
 	uint8_t rc = BtHciCommand(&s_BtHciDev, BT_HCI_CMD_LINKCTRL_DISCONNECT, param, sizeof(param), NULL, 0);
-	DEBUG_PRINTF("BtAppDisconnect: hdl=%u rc=%u\r\n", connHdl, rc);
+	DEBUG_PRINTF("BtAppDisconnect: hdl=%u rc=%u\r\n", ConnHdl, rc);
 }
 /*
 void BleAppGapDeviceNameSet(const char* pDeviceName)
@@ -454,10 +452,7 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
 
 
 
-uint16_t BleAppGetConnHandle()
-{
-	return BtAppGetConnHandle();
-}
+
 
 
 
@@ -1015,30 +1010,10 @@ bool BtAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16
 	return BtAttWriteCommand(pPeer->pHciDev, ConnHandle, CharHandle, pData, DataLen);
 }
 
-bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
-{
-	return BtGattCharNotify(BtPeerActiveHdl(), pChar, pData, DataLen);
-	/*
-	if (BtGattCharSetValue(pChar, pData, DataLen) == false)
-	{
-		return false;
-	}
-
-	if (isBtGattCharNotifyEnabled(pChar) == false)
-	{
-		return false;
-	}
-
-	BtHciMotify(&s_HciDevice, g_BleAppData.ConnHdl, pChar->ValHdl, pData, DataLen);
-//	BtHciMotify(g_BleAppData.ConnHdl, pChar->ValHdl, pData, DataLen);
-
-	return true;*/
-}
-
-bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
-{
-	return BtGattCharIndicate(BtPeerActiveHdl(), pChar, pData, DataLen);
-}
+// BtAppNotify/BtAppIndicate, their Conn and All forms are the shared weak
+// implementations in src/bluetooth/bt_app.cpp. This port used to carry a copy
+// that read the active connection handle. What stays here is the disconnect
+// command, which is the one part only this port can issue.
 
 bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DataLen)
 {

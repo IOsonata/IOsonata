@@ -139,7 +139,7 @@ static const int8_t s_TxPowerdBm[] = {
 static const int s_NbTxPowerdBm = sizeof(s_TxPowerdBm) / sizeof(int8_t);
 
 // g_BtAppData definition and helpers (isConnected, BtConnected, BtInitialized,
-// BtAppGetConnHandle, BtAppConnLedOff/On) moved to src/bluetooth/bt_app.cpp.
+// BtAppNotify/BtAppIndicate, BtAppConnLedOff/On) moved to src/bluetooth/bt_app.cpp.
 
 // --- Advertisement packet buffers ---
 
@@ -183,7 +183,9 @@ static void on_conn_params_evt(const struct ble_conn_params_evt *p_evt)
 {
 	if (p_evt->evt_type == BLE_CONN_PARAMS_EVT_ERROR)
 	{
-		sd_ble_gap_disconnect(BtAppGetConnHandle(),
+		// The event names the link whose negotiation failed. Reading the active
+		// handle instead dropped whichever link happened to be current.
+		sd_ble_gap_disconnect(p_evt->conn_handle,
 							  BLE_HCI_CONN_INTERVAL_UNACCEPTABLE);
 	}
 }
@@ -494,8 +496,9 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 		break;
 
 		case BLE_GATTS_EVT_SYS_ATTR_MISSING:
+			// The event names the link that is missing them.
 			err_code = sd_ble_gatts_sys_attr_set(
-				BtAppGetConnHandle(), NULL, 0, 0);
+				p_ble_evt->evt.gatts_evt.conn_handle, NULL, 0, 0);
 			(void)err_code;
 			break;
 
@@ -645,58 +648,19 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 
 // --- Notify ---
 
-bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
-{
-	if (pChar == nullptr)
-	{
-		return false;
-	}
-
-	if (DataLen > 0 && pData == nullptr)
-	{
-		return false;
-	}
-
-	if (DataLen > 0 && BtGattCharSetValue(pChar, pData, DataLen) == false)
-	{
-		return false;
-	}
-
-	// Delegate the send to BtGattCharNotify so the notification is tracked in
-	// the TX-pending ring and TxCompleteCB fires on completion.
-	return BtGattCharNotify(BtAppGetConnHandle(), pChar, pData, DataLen);
-}
-
-bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
-{
-	if (pChar == nullptr)
-	{
-		return false;
-	}
-
-	if (DataLen > 0 && pData == nullptr)
-	{
-		return false;
-	}
-
-	if (DataLen > 0 && BtGattCharSetValue(pChar, pData, DataLen) == false)
-	{
-		return false;
-	}
-
-	// Delegate to BtGattCharIndicate so the indication is tracked: pending flag,
-	// transaction timeout, and TX-pending ring.
-	return BtGattCharIndicate(BtAppGetConnHandle(), pChar, pData, DataLen);
-}
+// BtAppNotify/BtAppIndicate, their Conn and All forms are the shared weak
+// implementations in src/bluetooth/bt_app.cpp. This port used to carry a copy
+// that read the active connection handle. What stays here is the disconnect
+// command, which is the one part only this port can issue.
 
 // --- Disconnect ---
 
-void BtAppDisconnect()
+void BtAppDisconnectConn(uint16_t ConnHdl)
 {
-	if (BtAppGetConnHandle() != BLE_CONN_HANDLE_INVALID)
+	if (ConnHdl != BLE_CONN_HANDLE_INVALID)
 	{
 		uint32_t err_code = sd_ble_gap_disconnect(
-			BtAppGetConnHandle(),
+			ConnHdl,
 			BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
 		if (err_code != NRF_SUCCESS && err_code != NRF_ERROR_INVALID_STATE)
 		{
