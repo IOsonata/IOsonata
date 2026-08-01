@@ -127,6 +127,38 @@ static void SysStatusStackUnlock(uintptr_t State)
 #endif
 }
 
+// Send the whole line to the sink. DeviceIntrfTx returns the number of bytes
+// the sink accepted and only retries internally when it accepted none; a
+// partial write (the sink FIFO filled mid-line) leaves the tail unsent. Resend
+// the remainder until the line is out, the way UARTvprintf does. Without this a
+// burst of log lines loses the tail of each line once the FIFO backs up, which
+// reads as truncated or interleaved output. A bounded no-progress spin keeps a
+// stalled sink from hanging the logger.
+static int SysLogTx(SysLog_t * const pLog, const char *pLine, int Len)
+{
+	const uint8_t *p = (const uint8_t *)pLine;
+	int remain = Len;
+	int stall  = 5;
+
+	while (remain > 0 && stall > 0)
+	{
+		int n = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr, p, remain);
+		if (n < 0)
+		{
+			break;
+		}
+		if (n == 0)
+		{
+			stall--;
+			continue;
+		}
+		p      += n;
+		remain -= n;
+	}
+
+	return Len - remain;
+}
+
 void SysLogInit(SysLog_t * const pLog, DevIntrf_t * const pSink,
 				uint32_t SinkAddr, TimerDev_t * const pTimer, uint32_t MinType)
 {
@@ -180,7 +212,7 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 
 	len = SysLogAppend(line, sizeof(line), len, "\r\n");
 
-	return DeviceIntrfTx(pLog->pSink, pLog->SinkAddr, (const uint8_t *)line, len);
+	return SysLogTx(pLog, line, len);
 }
 
 int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
@@ -207,7 +239,7 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 		len = (int)sizeof(line) - 1;
 	}
 
-	return DeviceIntrfTx(pLog->pSink, pLog->SinkAddr, (const uint8_t *)line, len);
+	return SysLogTx(pLog, line, len);
 }
 
 int SysLogPrintf(SysLog_t * const pLog, const char *pFormat, ...)

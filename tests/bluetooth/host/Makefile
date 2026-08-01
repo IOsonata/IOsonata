@@ -9,6 +9,7 @@ ATT_REQ_TARGET := $(BUILD_DIR)/bt_att_req_test
 PEER_TARGET := $(BUILD_DIR)/bt_peer_pool_test
 GAP_HCI_TARGET := $(BUILD_DIR)/bt_gap_hci_test
 ADV_HCI_TARGET := $(BUILD_DIR)/bt_adv_hci_test
+SYSLOG_TARGET := $(BUILD_DIR)/syslog_tx_test
 CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
 
 CC ?= gcc
@@ -64,11 +65,16 @@ ADV_HCI_SOURCES := \
 	$(ROOT)/src/bluetooth/bt_adv.cpp \
 	$(ROOT)/src/bluetooth/bt_uuid.cpp
 
+SYSLOG_SOURCES := \
+	syslog_tx_test.cpp \
+	$(ROOT)/src/syslog.cpp \
+	$(ROOT)/src/device_intrf.cpp
+
 .PHONY: all test clean
 
 all: test
 
-test: $(ADV_TARGET) $(HCI_TARGET) $(HCI_CTLR_TARGET) $(L2CAP_TARGET) $(ATT_TARGET) $(ATT_REQ_TARGET) $(PEER_TARGET) $(GAP_HCI_TARGET) $(ADV_HCI_TARGET)
+test: $(ADV_TARGET) $(HCI_TARGET) $(HCI_CTLR_TARGET) $(L2CAP_TARGET) $(ATT_TARGET) $(ATT_REQ_TARGET) $(PEER_TARGET) $(GAP_HCI_TARGET) $(ADV_HCI_TARGET) $(SYSLOG_TARGET)
 	./$(ADV_TARGET)
 	./$(HCI_TARGET)
 	./$(HCI_CTLR_TARGET)
@@ -78,6 +84,7 @@ test: $(ADV_TARGET) $(HCI_TARGET) $(HCI_CTLR_TARGET) $(L2CAP_TARGET) $(ATT_TARGE
 	./$(PEER_TARGET)
 	./$(GAP_HCI_TARGET)
 	./$(ADV_HCI_TARGET)
+	./$(SYSLOG_TARGET)
 
 $(ADV_TARGET): $(ADV_SOURCES)
 	@mkdir -p $(BUILD_DIR)
@@ -118,6 +125,10 @@ $(GAP_HCI_TARGET): $(GAP_HCI_SOURCES)
 $(ADV_HCI_TARGET): $(ADV_HCI_SOURCES)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(ADV_HCI_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(SYSLOG_TARGET): $(SYSLOG_SOURCES)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(SYSLOG_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 clean:
 	rm -rf $(BUILD_DIR)
