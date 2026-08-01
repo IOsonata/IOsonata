@@ -274,13 +274,13 @@ void BtAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt)
 void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_t PeerAddr[6])
 {
 	// The own address the peer saw when it made this link. Peripheral role
-	// (HCI role 1) means the peer connected to our advertising, so the
-	// address is whatever the advertising set was programmed with; as the
-	// central (role 0) the initiator address is the device's configured one.
-	// The SMP toolbox computes f5/f6/c1 with the stamped value.
+	// means the peer connected to our advertising, so the address is whatever
+	// the advertising set was programmed with; as the central the initiator
+	// address is the device's configured one. The SMP toolbox computes
+	// f5/f6/c1 with the stamped value.
 	uint8_t ownType = 0;
 	uint8_t ownAddr[6];
-	if (Role != 0)
+	if (Role == BT_CONN_ROLE_PERIPHERAL)
 	{
 		BtAdvOwnAddrGet(&ownType, ownAddr);
 	}
@@ -303,8 +303,9 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 	// Defer MTU exchange until after encryption/service discovery.
 	// BtAttExchangeMtuRequest(&s_BtHciDev, ConnHdl, BtAttGetMtu());
 
-	//DEBUG_PRINTF("This device's Role = %d\r\n", g_BtAppData.AppDevice.Conn.Role);
-	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
+	// Discovery is a per-link decision, so it is gated on this link's role
+	// rather than on the device's configured role bitmask.
+	if (Role == BT_CONN_ROLE_CENTRAL)
 	{
 		// TODO: obtain the connected peripheral device's name and store to pPeer->Name;
 		//BtAppDiscoverDevice(&s_BtHciDev, ConnHdl);
@@ -314,15 +315,27 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 	// initiate pairing (or re-encrypt from a bond); as the peripheral we send a
 	// Security Request. Host-driven SMP, internal so the application stays
 	// SDK-neutral - it does not call any stack-specific function.
+	// Which procedure to run is decided by this link's role, not by the
+	// device's configured role bitmask: a device built for both roles has
+	// both bits set, so the bitmask cannot say what this connection is. The
+	// central starts pairing; the peripheral asks the central to secure the
+	// link with a Security Request (Vol 3 Part H 2.4.6, 3.5.1).
 	if (g_BtAppData.AppDevice.bSecure)
 	{
-		if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
+		switch (Role)
 		{
-			BtSmpStartPairing(ConnHdl);
-		}
-		else
-		{
-			BtSmpRequestSecurity(ConnHdl);
+			case BT_CONN_ROLE_CENTRAL:
+				BtSmpStartPairing(ConnHdl);
+				break;
+
+			case BT_CONN_ROLE_PERIPHERAL:
+				BtSmpRequestSecurity(ConnHdl);
+				break;
+
+			default:
+				// Role not reported: starting the wrong procedure would be
+				// rejected by the peer, so start neither.
+				break;
 		}
 	}
 
