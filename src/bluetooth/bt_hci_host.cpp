@@ -648,6 +648,14 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 			break;
 		case BT_HCI_EVT_DISCONN_COMPLETE:
 			{
+				// Status(1) + ConnHdl(2) + Reason(1); the handler hands the
+				// handle to SMP and the app, so a short event must not reach
+				// them with fields read past the packet.
+				if (pEvtPkt->Hdr.Len < sizeof(BtHciEvtDisconComplete_t))
+				{
+					break;
+				}
+
 				BtHciEvtDisconComplete_t *p = (BtHciEvtDisconComplete_t*)pEvtPkt->Data;
 				SysLogPrintf(SysLogGet(), "HCI disconnect hdl=%d reason=0x%02x\r\n",
 							 p->ConnHdl, p->Reason);
@@ -738,6 +746,14 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 			break;
 		case BT_HCI_EVT_COMMAND_STATUS:
 			{
+				// Status(1) + NbCmdPacket(1) + CmdCode(2). A shorter event
+				// would leave these fields reading bytes the packet does not
+				// contain.
+				if (pEvtPkt->Hdr.Len < sizeof(BtHciEvtCmdStatus_t))
+				{
+					break;
+				}
+
 				BtHciEvtCmdStatus_t *p = (BtHciEvtCmdStatus_t*)pEvtPkt->Data;
 
 				pDev->CmdCredit = p->NbCmdPacket;
@@ -888,6 +904,12 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 			//DEBUG_PRINTF("BT_HCI_EVT_LE\r\n");
 			// Hdr.Len is the event parameter length = bytes of the LE meta
 			// event payload (Evt + Data); pass it so report walks stay bounded.
+			// At least the subevent code byte must be present before the
+			// dispatch below reads it.
+			if (pEvtPkt->Hdr.Len < 1)
+			{
+				break;
+			}
 			BtHciProcessLeEvent(pDev, (BtHciLeEvtPacket_t *)pEvtPkt->Data, pEvtPkt->Hdr.Len);
 			break;
 	}

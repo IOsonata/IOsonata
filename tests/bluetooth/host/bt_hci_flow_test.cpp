@@ -558,6 +558,60 @@ void TestExtAdvReassembly()
 	CHECK(s_ScanReports == 0);
 }
 
+// Events shorter than the fixed structure their handler reads must be dropped.
+// They stay inside the receive buffer, so this is not an out of bounds read;
+// the handler would act on bytes left over from the previous packet.
+void TestShortFixedEventsDropped()
+{
+	BtHciDevice_t dev = {};
+	dev.SendCompleted = CaptureCompleted;
+
+	alignas(4) uint8_t raw[sizeof(BtHciEvtPacketHdr_t) + 8] = {};
+	BtHciEvtPacket_t *pEvt = reinterpret_cast<BtHciEvtPacket_t *>(raw);
+
+	// Command Status: Status(1) + NbCmdPacket(1) + CmdCode(2) = 4.
+	dev.CmdCredit = 7;
+	dev.CmdOpCode = 0x201C;
+	dev.CmdDone = false;
+	pEvt->Hdr.Evt = BT_HCI_EVT_COMMAND_STATUS;
+	pEvt->Hdr.Len = 3;					// one short
+	BtHciEvtCmdStatus_t *pCs = reinterpret_cast<BtHciEvtCmdStatus_t *>(pEvt->Data);
+	pCs->NbCmdPacket = 0x7F;
+	pCs->CmdCode = 0x201C;
+	BtHciProcessEvent(&dev, pEvt);
+	CHECK(dev.CmdCredit == 7);			// credits untouched
+	CHECK(!dev.CmdDone);
+
+	// A full length Command Status still works.
+	pEvt->Hdr.Len = sizeof(BtHciEvtCmdStatus_t);
+	pCs->NbCmdPacket = 2;
+	BtHciProcessEvent(&dev, pEvt);
+	CHECK(dev.CmdCredit == 2);
+
+	// Disconnection Complete: Status(1) + ConnHdl(2) + Reason(1) = 4.
+	s_SmpDisconnectCount = 0;
+	std::memset(raw, 0, sizeof(raw));
+	pEvt->Hdr.Evt = BT_HCI_EVT_DISCONN_COMPLETE;
+	pEvt->Hdr.Len = 3;					// one short
+	BtHciProcessEvent(&dev, pEvt);
+	CHECK(s_SmpDisconnectCount == 0);
+
+	pEvt->Hdr.Len = sizeof(BtHciEvtDisconComplete_t);
+	BtHciEvtDisconComplete_t *pDc =
+		reinterpret_cast<BtHciEvtDisconComplete_t *>(pEvt->Data);
+	pDc->ConnHdl = 0x0042;
+	BtHciProcessEvent(&dev, pEvt);
+	CHECK(s_SmpDisconnectCount == 1);
+
+	// LE meta with no subevent byte at all.
+	s_LtkRequestCount = 0;
+	std::memset(raw, 0, sizeof(raw));
+	pEvt->Hdr.Evt = BT_HCI_EVT_LE;
+	pEvt->Hdr.Len = 0;
+	BtHciProcessEvent(&dev, pEvt);
+	CHECK(s_LtkRequestCount == 0);
+}
+
 } // namespace
 
 extern "C" {
@@ -643,6 +697,7 @@ int main()
 	TestInterleavedReassembly();
 	TestMalformedFragmentsAndEvents();
 	TestTruncatedLeMetaEvents();
+	TestShortFixedEventsDropped();
 	TestExtAdvReassembly();
 	TestDisconnectFreesSmp();
 
