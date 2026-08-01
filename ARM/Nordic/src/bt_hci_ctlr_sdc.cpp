@@ -79,13 +79,26 @@ void BtHciCtlrProcess(BtHciCtlrDev_t * const pDev)
 		return;
 	}
 
+	// HCI_MSG_BUFFER_MAX_SIZE is what sdc_hci_get documents as the minimum
+	// buffer. It does not cover isochronous channels: enabling ISO requires
+	// HCI_MSG_BUFFER_ISO_MAX_SIZE (or the configured rx_sdu_buffer_size)
+	// here, so revisit this buffer if ISO support is ever turned on.
 	uint8_t buf[HCI_MSG_BUFFER_MAX_SIZE];
-	sdc_hci_msg_type_t mtype;
+
+	// sdc_hci_get takes uint8_t *p_msg_type_out and writes exactly one byte.
+	// Passing a sdc_hci_msg_type_t through a uint8_t cast only works while the
+	// enum happens to be one byte wide, which is the arm-none-eabi default
+	// (-fshort-enums, AAPCS) but not guaranteed and not set by any project
+	// file here. With a four byte enum the call fills the low byte and leaves
+	// the other three indeterminate, so the comparison below can fail for a
+	// real event and route every event into the ACL data path. Use the type
+	// the API asks for.
+	uint8_t mtype = SDC_HCI_MSG_TYPE_NONE;
 
 	// Drain every queued message. The controller can queue several at once,
 	// for example a command completion followed by an Encryption Change event
 	// during pairing; stopping after one strands the later packets.
-	while (sdc_hci_get(buf, (uint8_t*)&mtype) == 0)
+	while (sdc_hci_get(buf, &mtype) == 0)
 	{
 		pDev->RxHandler(pDev, mtype == SDC_HCI_MSG_TYPE_EVT, buf);
 	}
