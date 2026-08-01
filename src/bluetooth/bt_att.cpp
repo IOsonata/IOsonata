@@ -1082,9 +1082,109 @@ static bool BtAttValueEquals(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 	return true;
 }
 
+// Measure one run of prepared-write chunks starting at Pos: the first chunk
+// plus every following chunk for the same handle whose offset continues it
+// exactly. Fills the run description and returns an ATT error code, 0 on
+// success. bCompact moves the following chunks' data up against the first
+// chunk so the run forms one contiguous value; pass false to measure the run
+// without touching the buffer.
+static uint8_t BtAttLongWrRun(uint8_t *pBuf, uint16_t Total, uint16_t Pos, bool bCompact,
+							  uint16_t *pHdl, uint16_t *pOff, uint16_t *pLen, uint16_t *pNext)
+{
+	uint16_t hdl, off, len;
+	memcpy(&hdl, pBuf + Pos, 2);
+	memcpy(&off, pBuf + Pos + 2, 2);
+	memcpy(&len, pBuf + Pos + 4, 2);
+
+	uint8_t  *dst    = pBuf + Pos + 6 + len;
+	uint16_t  totLen = len;
+	uint16_t  next   = Pos + 6 + len;
+	uint8_t   err    = 0;
+
+	while (next + 6 <= Total)
+	{
+		uint16_t nhdl, noff, nlen;
+		memcpy(&nhdl, pBuf + next, 2);
+		memcpy(&noff, pBuf + next + 2, 2);
+		memcpy(&nlen, pBuf + next + 4, 2);
+
+		if (nhdl != hdl)
+		{
+			break;
+		}
+
+		// A gap or overlap ends the current contiguous run; it is not an
+		// error. Queued prepared writes are applied in order and need not
+		// be contiguous (Vol 3 Part F 3.4.6), so a Reliable Write may patch
+		// disjoint regions of one attribute. The discontiguous chunk starts
+		// its own run.
+		if (noff != (uint16_t)(off + totLen))
+		{
+			break;
+		}
+
+		if ((uint32_t)next + 6UL + nlen > Total)
+		{
+			err = BT_ATT_ERROR_INVALID_PDU;
+			break;
+		}
+
+		if (bCompact)
+		{
+			memmove(dst, pBuf + next + 6, nlen);
+		}
+		dst    += nlen;
+		totLen += nlen;
+		next   += 6 + nlen;
+	}
+
+	*pHdl  = hdl;
+	*pOff  = off;
+	*pLen  = totLen;
+	*pNext = next;
+
+	return err;
+}
+
+// Value length the attribute will have by the time the run at StopPos is
+// applied: its live length extended by every earlier run for the same handle.
+// A write only ever extends a value, so validating an offset against this
+// projection accepts a queue that extends an attribute and then patches inside
+// the extended region, which applying the queue in order does produce.
+static uint16_t BtAttLongWrProjLen(uint8_t *pBuf, uint16_t Total, uint16_t StopPos,
+								   uint16_t Hdl, uint16_t CurLen)
+{
+	uint16_t projected = CurLen;
+	uint16_t pos = 0;
+
+	while (pos + 6 <= Total && pos < StopPos)
+	{
+		uint16_t hdl, off, len, next;
+
+		// Measure only; the commit pass does the compaction.
+		if (BtAttLongWrRun(pBuf, Total, pos, false, &hdl, &off, &len, &next) != 0)
+		{
+			break;
+		}
+
+		if (hdl == Hdl && (uint32_t)off + len > projected)
+		{
+			projected = (uint16_t)(off + len);
+		}
+
+		pos = next;
+	}
+
+	return projected;
+}
+
 // Apply the queued prepared writes. Returns 0 on success, or an ATT error code
 // with *pFailHdl set to the offending handle (Vol 3 Part F 3.4.6.3). The queue
 // is consumed either way.
+//
+// Two passes, because Execute Write is atomic (Vol 3 Part F 3.4.6): the whole
+// queue is validated before any attribute is touched, so a bad record late in
+// the queue cannot leave earlier records already applied.
 static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 {
 	if (pConn == nullptr || pConn->Conn.pLongWrBuff == nullptr)
@@ -1097,56 +1197,16 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 	uint16_t  pos   = 0;
 	uint8_t   err   = 0;
 
+	// Pass 1: validate every queued write. Nothing is modified here, not the
+	// buffer and not any attribute.
 	while (pos + 6 <= total)
 	{
-		uint16_t hdl, off, len;
-		memcpy(&hdl, buf + pos, 2);
-		memcpy(&off, buf + pos + 2, 2);
-		memcpy(&len, buf + pos + 4, 2);
+		uint16_t hdl, off, totLen, next;
 
-		// Pull any following same-handle chunks up against this chunk's data,
-		// dropping their 6-byte record headers, to form one contiguous value.
-		uint8_t  *dst    = buf + pos + 6 + len;
-		uint16_t  totLen = len;
-		uint16_t  next   = pos + 6 + len;
-
-		while (next + 6 <= total)
-		{
-			uint16_t nhdl, noff, nlen;
-			memcpy(&nhdl, buf + next, 2);
-			memcpy(&noff, buf + next + 2, 2);
-			memcpy(&nlen, buf + next + 4, 2);
-
-			if (nhdl != hdl)
-			{
-				break;
-			}
-
-			// A gap or overlap ends the current contiguous run; it is not an
-			// error. Queued prepared writes are applied in order and need not
-			// be contiguous (Vol 3 Part F 3.4.6), so a Reliable Write may patch
-			// disjoint regions of one attribute. The discontiguous chunk is
-			// applied as its own write on the next outer iteration.
-			if (noff != (uint16_t)(off + totLen))
-			{
-				break;
-			}
-
-			if ((uint32_t)next + 6UL + nlen > total)
-			{
-				*pFailHdl = hdl;
-				err = BT_ATT_ERROR_INVALID_PDU;
-				break;
-			}
-
-			memmove(dst, buf + next + 6, nlen);
-			dst    += nlen;
-			totLen += nlen;
-			next   += 6 + nlen;
-		}
-
+		err = BtAttLongWrRun(buf, total, pos, false, &hdl, &off, &totLen, &next);
 		if (err != 0)
 		{
+			*pFailHdl = hdl;
 			break;
 		}
 
@@ -1158,9 +1218,10 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 			break;
 		}
 
-		// Offset past the current value is INVALID_OFFSET; a reassembled value
-		// beyond the characteristic maximum is INVALID_ATTRIBUTE_VALUE_LENGTH.
-		if (off > BtAttCurValueLen(entry))
+		// Offset past the value this write will land on is INVALID_OFFSET; a
+		// reassembled value beyond the characteristic maximum is
+		// INVALID_ATTRIBUTE_VALUE_LENGTH.
+		if (off > BtAttLongWrProjLen(buf, total, pos, hdl, BtAttCurValueLen(entry)))
 		{
 			*pFailHdl = hdl;
 			err = BT_ATT_ERROR_INVALID_OFFSET;
@@ -1175,13 +1236,35 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 			break;
 		}
 
-		BtAttWriteValueForConn(pConn->Conn.Hdl, entry, off, buf + pos + 6, totLen);
+		pos = next;
+	}
+
+	if (err != 0)
+	{
+		pConn->Conn.LongWrLen = 0;
+		return err;
+	}
+
+	// Pass 2: commit. Every record validated above, so no attribute write in
+	// this loop can fail on a check that pass 1 already made.
+	pos = 0;
+	while (pos + 6 <= total)
+	{
+		uint16_t hdl, off, totLen, next;
+
+		BtAttLongWrRun(buf, total, pos, true, &hdl, &off, &totLen, &next);
+
+		BtAttDBEntry_t *entry = BtAttDBFindHandle(hdl);
+		if (entry != nullptr)
+		{
+			BtAttWriteValueForConn(pConn->Conn.Hdl, entry, off, buf + pos + 6, totLen);
+		}
 
 		pos = next;
 	}
 
 	pConn->Conn.LongWrLen = 0;
-	return err;
+	return 0;
 }
 
 // Resolve the attribute type of a Read By Type / Read By Group Type request

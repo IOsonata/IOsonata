@@ -798,6 +798,66 @@ void TestReadMultipleVariableFullLength()
 	CHECK(n == 23);
 }
 
+// Execute Write is atomic (Vol 3 Part F 3.4.6): if any queued record fails
+// validation, no attribute may have been modified. Queue a valid write to a
+// good handle, then an invalid one, and check the first value is untouched.
+void TestExecuteWriteAtomicFailure()
+{
+	BtAttDBInit(2048);
+	BtAttSetMtu(247);
+
+	BtChar_t chr;
+	uint8_t val[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	BtAttDBEntry_t *e = AddCharValue(&chr, val, sizeof(val), sizeof(val),
+									 BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_WRITE);
+	CHECK(e != nullptr);
+
+	g_PeerEnabled = true;
+	s_StubPeer.Conn.LongWrLen = 0;
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+
+	// Record 1, valid: write {0xAA, 0xBB} at offset 0 of the real handle.
+	reqbuf[0] = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
+	PutLe16(reqbuf + 1, e->Hdl);
+	PutLe16(reqbuf + 3, 0);
+	reqbuf[5] = 0xAA;
+	reqbuf[6] = 0xBB;
+	BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 5 + 2,
+					(BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_PREPARE_WRITE_RSP);
+
+	// Record 2, invalid: offset past the end of the attribute. Queue it
+	// directly, since Prepare Write validates the handle but not the offset.
+	uint8_t *q = s_StubPeer.Conn.pLongWrBuff + s_StubPeer.Conn.LongWrLen;
+	uint16_t badOff = (uint16_t)(sizeof(val) + 4);
+	uint16_t vlen = 1;
+	PutLe16(q, e->Hdl);
+	PutLe16(q + 2, badOff);
+	PutLe16(q + 4, vlen);
+	q[6] = 0xCC;
+	s_StubPeer.Conn.LongWrLen = (uint16_t)(s_StubPeer.Conn.LongWrLen + 6 + vlen);
+
+	// Execute: must fail with Invalid Offset and leave the value untouched.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	reqbuf[0] = BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ;
+	reqbuf[1] = 0x01;
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 2,
+								 (BtAttReqRsp_t *)rspbuf);
+
+	CHECK(n == 5);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrReqOp] == BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_INVALID_OFFSET);
+
+	// The valid record must NOT have been applied.
+	CHECK(val[0] == 0x00);
+	CHECK(val[1] == 0x00);
+
+	g_PeerEnabled = false;
+}
+
 } // namespace
 
 int main()
@@ -814,6 +874,7 @@ int main()
 	TestReadMultiple();
 	TestReadByGroupTypeInvalidStartHandle();
 	TestExecuteWriteNonContiguous();
+	TestExecuteWriteAtomicFailure();
 	TestReadMultipleVariableFullLength();
 
 	if (s_Failures != 0)
