@@ -336,7 +336,11 @@ uint32_t BtL2CapProcessSignal(BtHciDevice_t * const pDev,
 
 				if (BtL2CapFlowControlCreditInd(ConnHdl, ind->Cid, ind->Credits) == false)
 				{
-					BtL2CapInvalidCidRejData_t rej = { ind->Cid, 0 };
+					// Reject data is local CID (Dcid, relative to us) then remote
+					// CID (Scid). The offending channel is known only by the
+					// peer's source CID, so the local slot is 0 (Vol 3 Part A
+					// 4.1, reason 0x0002).
+					BtL2CapInvalidCidRejData_t rej = { 0, ind->Cid };
 					BtL2CapAppendCmdReject(pOut, &outLen, outMax, pCmd->Id,
 											BT_L2CAP_CMD_REJECT_REASON_INVALID_CID,
 											&rej, sizeof(rej));

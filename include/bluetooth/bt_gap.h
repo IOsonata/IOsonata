@@ -208,6 +208,10 @@ typedef struct __Bt_Gap_Connection {
 	uint8_t Role;				//!< LL role on this link
 	uint8_t PeerAddrType;		//!< Peer address type
 	uint8_t PeerAddr[6];		//!< Peer BD_ADDR
+	uint8_t OwnAddrType;		//!< Own address type in use on this link
+	uint8_t OwnAddr[6];			//!< Own BD_ADDR as the peer saw it when the link was
+								//!< created (all zero when not stamped; the SMP
+								//!< toolbox then falls back to BtSmpLocalAddrGet)
 	uint16_t MaxMtu;			//!< Negotiated ATT MTU for this link
 	uint8_t *pLongWrBuff;		//!< Per-link long-write reassembly buffer (NULL if none)
 	uint16_t LongWrBuffSize;	//!< Size of pLongWrBuff in bytes
@@ -218,16 +222,6 @@ typedef struct __Bt_Gap_Connection {
 	BtGattCccdState_t Cccd[BT_GATT_CCCD_STATE_MAX];	//!< Per-peer CCCD values keyed by CCCD handle
 	BtConnSec_t Sec;			//!< Live link security state (produced by the security layer)
 } BtGapConnection_t;
-
-// Read the current security state of ConnHdl into *pSec. Returns false when the
-// connection is unknown. Implemented by the generic host over the connection
-// store; an arch port overrides it only when the vendor stack owns the security
-// database (it then maps the vendor state into BtConnSec_t).
-bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec);
-
-// Record the security state of ConnHdl. Called by the security layer when
-// pairing or encryption completes or is lost.
-void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *pSec);
 
 typedef enum __Bt_Scan_Type {
 	BTSCAN_TYPE_PASSIVE,		//!< without scan/response data
@@ -266,6 +260,16 @@ typedef struct __Bt_Gap_Config {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Read the current security state of ConnHdl into *pSec. Returns false when the
+// connection is unknown. Implemented by the generic host over the connection
+// store; an arch port overrides it only when the vendor stack owns the security
+// database (it then maps the vendor state into BtConnSec_t).
+bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec);
+
+// Record the security state of ConnHdl. Called by the security layer when
+// pairing or encryption completes or is lost.
+void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *pSec);
 
 // Initialise the GAP layer: registers the GAP and GATT services for the
 // peripheral role and configures GAP for peripheral/central per pCfg->Role.

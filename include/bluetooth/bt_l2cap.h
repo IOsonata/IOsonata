@@ -211,13 +211,6 @@ typedef union __Bt_L2Cap_IFrame_Fields {
 		uint8_t Data[1];			//!< Information data
 	} Ext;
 } BtL2CapIFrame_t;
-#if 0
-/// NOTE: Variable length structure
-typedef struct __Bt_L2Cap_Att {
-	uint8_t OpCode;					//!< Attribute protocol Opcode
-	uint8_t Param[1];				//!< Attribute protocol parameters
-} BtL2CapAtt_t;
-#endif
 typedef struct __Bt_L2Cap_Invalid_Cid_Rej_Data {
 	uint16_t Dcid;
 	uint16_t Scid;

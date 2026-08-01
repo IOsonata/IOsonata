@@ -53,6 +53,7 @@ SOFTWARE.
 #include "coredev/timer.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_smp.h"		// BtSmpLocalAddrGet override
+#include "bluetooth/bt_adv.h"		// BtAdvOwnAddrGet for the connection stamp
 
 #include "crypto/crypto_uecc.h"
 #include "crypto_rng_nrf.h"
@@ -272,10 +273,27 @@ void BtAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt)
 
 void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_t PeerAddr[6])
 {
+	// The own address the peer saw when it made this link. Peripheral role
+	// (HCI role 1) means the peer connected to our advertising, so the
+	// address is whatever the advertising set was programmed with; as the
+	// central (role 0) the initiator address is the device's configured one.
+	// The SMP toolbox computes f5/f6/c1 with the stamped value.
+	uint8_t ownType = 0;
+	uint8_t ownAddr[6];
+	if (Role != 0)
+	{
+		BtAdvOwnAddrGet(&ownType, ownAddr);
+	}
+	else
+	{
+		BtSmpLocalAddrGet(&ownType, ownAddr);
+	}
+
 	// Allocate and populate the peer record in one step. BtPeerConnected
 	// allocs (or reuses) the slot for ConnHdl and fills Role/PeerAddr.
 	// The state machine in bt_attrsp.cpp looks the peer up by ConnHdl.
-	BtDevice_t *pPeer = BtPeerConnected(ConnHdl, Role, PeerAddrType, PeerAddr);
+	BtDevice_t *pPeer = BtPeerConnected(ConnHdl, Role, PeerAddrType, PeerAddr,
+										ownType, ownAddr);
 	if (pPeer != NULL)
 	{
 		pPeer->pHciDev = (BtHciDevice_t*) &s_BtHciDev;

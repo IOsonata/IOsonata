@@ -109,14 +109,14 @@ SOFTWARE.
 void TimerHandler(TIMER * const pTimer, uint32_t Evt);
 
 uint8_t g_AdvDataBuff[10] = {
-	BLEADV_MANDATA_TYPE_TPH,
+	BT_ADV_MANDATA_TYPE_TPH,
 };
 
-BleAdvManData_t &g_AdvData = *(BleAdvManData_t*)g_AdvDataBuff;
+BtAdvManData_t &g_AdvData = *(BtAdvManData_t*)g_AdvDataBuff;
 
 // Evironmental Sensor Data to advertise
-BleAdvManData_TphSensor_t &g_TPHData = *(BleAdvManData_TphSensor_t *)g_AdvData.Data;
-BleAdvManData_AqSensor_t &g_GasData = *(BleAdvManData_AqSensor_t *)g_AdvData.Data;
+BtAdvManData_TphSensor_t &g_TPHData = *(BtAdvManData_TphSensor_t *)g_AdvData.Data;
+BtAdvManData_AqSensor_t &g_GasData = *(BtAdvManData_AqSensor_t *)g_AdvData.Data;
 BLUEIO_DATA_BAT &g_AdvBat = *(BLUEIO_DATA_BAT *)g_AdvData.Data;
 
 const static TIMER_CFG s_TimerCfg = {
@@ -395,33 +395,33 @@ void ReadPTHData()
 		g_Adc.OpenChannel(s_ChanCfg, s_NbChan);
 		g_Adc.StartConversion();
 
-		g_AdvData.Type = BLEADV_MANDATA_TYPE_BAT;
+		g_AdvData.Type = BT_ADV_MANDATA_TYPE_BAT;
 
 		memcpy(&g_AdvBat, &g_BatData, sizeof(BLUEIO_DATA_BAT));
 #endif
 	}
 	else if ((gascnt & 0x3) == 0)
 	{
-		BleAdvManData_AqSensor_t gas;
+		BtAdvManData_AqSensor_t gas;
 
 		g_GasSensor.Read(gdata);
 
-		g_AdvData.Type = BLEADV_MANDATA_TYPE_GAS;
+		g_AdvData.Type = BT_ADV_MANDATA_TYPE_GAS;
 		gas.GasRes = gdata.GasRes[gdata.MeasIdx];
 		gas.AirQIdx = gdata.AirQualIdx;
 
-		memcpy(&g_GasData, &gas, sizeof(BleAdvManData_AqSensor_t));
+		memcpy(&g_GasData, &gas, sizeof(BtAdvManData_AqSensor_t));
 
 		g_TphSensor.StartSampling();
 	}
 	else
 	{
-		g_AdvData.Type = BLEADV_MANDATA_TYPE_TPH;
+		g_AdvData.Type = BT_ADV_MANDATA_TYPE_TPH;
 
 		// NOTE : M0 does not access unaligned data
 		// use local 4 bytes align stack variable then mem copy
 		// skip timestamp as advertising pack is limited in size
-		memcpy(&g_TPHData, ((uint8_t*)&data) + sizeof(data.Timestamp), sizeof(BleAdvManData_TphSensor_t));
+		memcpy(&g_TPHData, ((uint8_t*)&data) + sizeof(data.Timestamp), sizeof(BtAdvManData_TphSensor_t));
 	}
 
 //	g_TphSensor.StartSampling();
@@ -549,10 +549,10 @@ void HardwareInit()
 
 	g_TphSensor.StartSampling();
 
-	g_AdvData.Type = BLEADV_MANDATA_TYPE_TPH;
+	g_AdvData.Type = BT_ADV_MANDATA_TYPE_TPH;
 	// Do memcpy to adv data. Due to byte alignment, cannot read directly into
 	// adv data
-	memcpy(g_AdvData.Data, ((uint8_t*)&tphdata) + sizeof(tphdata.Timestamp), sizeof(BleAdvManData_TphSensor_t));
+	memcpy(g_AdvData.Data, ((uint8_t*)&tphdata) + sizeof(tphdata.Timestamp), sizeof(BtAdvManData_TphSensor_t));
 
 
 	g_I2c.Disable();

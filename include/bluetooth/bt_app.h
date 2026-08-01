@@ -42,7 +42,7 @@ SOFTWARE.
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_gatt.h"
-#include "bluetooth/bleadv_mandata.h"
+#include "bluetooth/bt_adv_mandata.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
 
@@ -78,17 +78,6 @@ typedef enum __Bt_App_Role {
 	BTAPP_ROLE_MIXED		= BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_CENTRAL	//!< Mixed central/peripheral
 } BTAPP_ROLE;
 
-#if 0
-// Service connection security types
-typedef enum __Bt_App_Security_Type {
-	BTAPP_SECTYPE_NONE = BT_GAP_SECTYPE_NONE,				//!< open, no security
-	BTAPP_SECTYPE_STATICKEY_NO_MITM = BT_GAP_SECTYPE_STATICKEY_NO_MITM,	//!< Bonding static pass key without Man In The Middle
-	BTAPP_SECTYPE_STATICKEY_MITM = BT_GAP_SECTYPE_STATICKEY_MITM,		//!< Bonding static pass key with MITM
-	BTAPP_SECTYPE_LESC_MITM = BT_GAP_SECTYPE_LESC_MITM,					//!< LE secure encryption
-	BTAPP_SECTYPE_SIGNED_NO_MITM = BT_GAP_SECTYPE_SIGNED_NO_MITM,		//!< AES signed encryption without MITM
-	BTAPP_SECTYPE_SIGNED_MITM = BT_GAP_SECTYPE_SIGNED_MITM,				//!< AES signed encryption with MITM
-} BTAPP_SECTYPE;
-#endif
 
 #define BTAPP_SECEXCHG_NONE				0
 #define BTAPP_SECEXCHG_KEYBOARD			(1<<0)
@@ -175,23 +164,6 @@ typedef struct __Bt_App_Cfg {
 
 #ifdef __cplusplus
 
-#if 0
-class BtApp {
-public:
-	virtual bool Init(BtAppCfg_t &CfgData);
-
-	virtual void InitCustomData() = 0;
-	virtual void InitServices() = 0;
-	//virtual void SrvcEvtDispatch(ble_evt_t * p_ble_evt) = 0;
-
-	virtual void ProcessEvt();
-	virtual void EnterDfu();
-	virtual void Start();
-
-	virtual ~BtApp() {}
-private:
-};
-#endif
 
 extern "C" {
 #endif
@@ -347,14 +319,10 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 		bool *pExtAdv, bool *pScannable);
 void BtAppDisconnect(void);
 
-//bool BleAppScanInit(BleAppScanCfg_t *pCfg);
 bool BtAppScanInit(BtGapScanCfg_t *pCfg);
-//void BleAppScan();
 void BtAppScan(void);
 void BtAppScanStop(void);
-bool BtAppConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam);//, ble_gap_conn_params_t * const pConnParam);
-//bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
-//uint32_t BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
+bool BtAppConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam);
 bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle);
 bool BtAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DatLen);
 int8_t GetValidTxPower(int TxPwr);

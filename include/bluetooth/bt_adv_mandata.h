@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	bleadv_mandata.h
+@file	bt_adv_mandata.h
 
 @brief	Contains definitions for data types to be advertised as manufacturer specific data
 
@@ -32,8 +32,8 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __BLEADV_MANDATA_H__
-#define	__BLEADV_MANDATA_H__
+#ifndef __BT_ADV_MANDATA_H__
+#define	__BT_ADV_MANDATA_H__
 
 #include "iosonata_types.h"
 
@@ -42,22 +42,22 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   */
 
 /// Manufacture specific advertisement data type
-#define BLEADV_MANDATA_TYPE_SN			0xFF						//!< Device Serial Number or UID (8 bytes)
-#define BLEADV_MANDATA_TYPE_APP			IOSONATA_DATA_TYPE_APP		//!< Application private data
-#define BLEADV_MANDATA_TYPE_TPH			IOSONATA_DATA_TYPE_TPH		//!< Environmental sensor data (Temperature, Pressure, Humidity)
-#define BLEADV_MANDATA_TYPE_GAS			IOSONATA_DATA_TYPE_GAS		//!< Gas sensor data
-#define BLEADV_MANDATA_TYPE_ACCEL		IOSONATA_DATA_TYPE_ACCEL		//!< Accelerometer sensor data
-#define BLEADV_MANDATA_TYPE_GYRO		IOSONATA_DATA_TYPE_GYRO		//!< Gyroscope sensor data
-#define BLEADV_MANDATA_TYPE_MAG			IOSONATA_DATA_TYPE_MAG		//!< Magnetometer sensor data
-#define BLEADV_MANDATA_TYPE_PROXY		IOSONATA_DATA_TYPE_PROXY		//!< Proximity sensor data
-#define BLEADV_MANDATA_TYPE_ADC			IOSONATA_DATA_TYPE_ADC		//!< Analog converter data
-#define BLEADV_MANDATA_TYPE_GPIO		IOSONATA_DATA_TYPE_GPIO		//!< GPIO pins state
-#define BLEADV_MANDATA_TYPE_BUT			IOSONATA_DATA_TYPE_BUT		//!< Button/Switch state
-#define BLEADV_MANDATA_TYPE_MOT			IOSONATA_DATA_TYPE_MOT		//!< Motion detection
-#define BLEADV_MANDATA_TYPE_AUDIO		IOSONATA_DATA_TYPE_AUDIO		//!< Audio data
-#define BLEADV_MANDATA_TYPE_BAT			IOSONATA_DATA_TYPE_BAT		//!< Battery level data
+#define BT_ADV_MANDATA_TYPE_SN			0xFF						//!< Device Serial Number or UID (8 bytes)
+#define BT_ADV_MANDATA_TYPE_APP			IOSONATA_DATA_TYPE_APP		//!< Application private data
+#define BT_ADV_MANDATA_TYPE_TPH			IOSONATA_DATA_TYPE_TPH		//!< Environmental sensor data (Temperature, Pressure, Humidity)
+#define BT_ADV_MANDATA_TYPE_GAS			IOSONATA_DATA_TYPE_GAS		//!< Gas sensor data
+#define BT_ADV_MANDATA_TYPE_ACCEL		IOSONATA_DATA_TYPE_ACCEL		//!< Accelerometer sensor data
+#define BT_ADV_MANDATA_TYPE_GYRO		IOSONATA_DATA_TYPE_GYRO		//!< Gyroscope sensor data
+#define BT_ADV_MANDATA_TYPE_MAG			IOSONATA_DATA_TYPE_MAG		//!< Magnetometer sensor data
+#define BT_ADV_MANDATA_TYPE_PROXY		IOSONATA_DATA_TYPE_PROXY		//!< Proximity sensor data
+#define BT_ADV_MANDATA_TYPE_ADC			IOSONATA_DATA_TYPE_ADC		//!< Analog converter data
+#define BT_ADV_MANDATA_TYPE_GPIO		IOSONATA_DATA_TYPE_GPIO		//!< GPIO pins state
+#define BT_ADV_MANDATA_TYPE_BUT			IOSONATA_DATA_TYPE_BUT		//!< Button/Switch state
+#define BT_ADV_MANDATA_TYPE_MOT			IOSONATA_DATA_TYPE_MOT		//!< Motion detection
+#define BT_ADV_MANDATA_TYPE_AUDIO		IOSONATA_DATA_TYPE_AUDIO		//!< Audio data
+#define BT_ADV_MANDATA_TYPE_BAT			IOSONATA_DATA_TYPE_BAT		//!< Battery level data
 
-#define BLEADV_MANDATA_LEN_MAX			8		//!< Max number of bytes of data
+#define BT_ADV_MANDATA_LEN_MAX			8		//!< Max number of bytes of data
 
 #pragma pack(push, 1)
 
@@ -65,52 +65,51 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 typedef struct __BleApp_Advertising_ManData {
 	uint8_t Type;		//!< Data types (see defined code above)
 	uint8_t Data[1];	//!< Type specific data follows can be more than 1 bytes
-} BleAdvManData_t;
+} BtAdvManData_t;
 
-//typedef BleAdvManData_t	BLEADV_MANDATA;
 
 /// Environmental sensor data
 typedef struct __EnvTPHData {
 	uint32_t Pressure;		//!< Barometric pressure in Pa no decimal
 	int16_t  Temperature;	//!< Temperature in degree C, 2 decimals fixed point
 	uint16_t Humidity;		//!< Relative humidity in %, 2 decimals fixed point
-} BleAdvManData_TphSensor_t;
+} BtAdvManData_TphSensor_t;
 
-//BleAdvManData_TphSensor_t	BLEADV_MANDATA_TPHSENSOR;
+//BtAdvManData_TphSensor_t	BT_ADV_MANDATA_TPHSENSOR;
 
 /// Gas sensor data
 typedef struct __EnvAirQualityData {
 	uint32_t GasRes;		//!< Gas resistance
 	uint16_t AirQIdx;		//!< Air quality index
-} BleAdvManData_AqSensor_t;
+} BtAdvManData_AqSensor_t;
 
-//typedef BleAdvManData_GasSensor_t	BLEADV_MANDATA_GASSENSOR;
+//typedef BtAdvManData_GasSensor_t	BT_ADV_MANDATA_GASSENSOR;
 
 /// IMU data
 typedef struct __AGM_Raw_Data {
 	uint16_t x;
 	uint16_t y;
 	uint16_t z;
-} BleAdvManData_ImuSensor_t;
+} BtAdvManData_ImuSensor_t;
 
-//typedef BleAdvManData_ImuSensor_t	BLEADV_MANDATA_IMUSENSOR;
+//typedef BtAdvManData_ImuSensor_t	BT_ADV_MANDATA_IMUSENSOR;
 
 /// I/O pin state
 typedef struct __GPIO_Pin_State {
 	uint32_t State;		//!< Bit field pins state
-} BleAdvManData_Gpio_t;
+} BtAdvManData_Gpio_t;
 
-//typedef BleAdvManData_Gpio_t	BLEADV_MANDATA_GPIO;
+//typedef BtAdvManData_Gpio_t	BT_ADV_MANDATA_GPIO;
 
 /// Button/Switch state
 typedef struct __ButSwitch_State {
 	uint32_t State;		//!< Bit field state state 0 = close, 1 = open
-} BleAdvManData_But_t;
+} BtAdvManData_But_t;
 
-//typedef BleAdvManData_But_t	BLEADV_MANDATA_BUT;
+//typedef BtAdvManData_But_t	BT_ADV_MANDATA_BUT;
 
 #pragma pack(pop)
 
 /** @} End of group Bluetooth */
 
-#endif // __BLEADV_MANDATA_H__
+#endif // __BT_ADV_MANDATA_H__

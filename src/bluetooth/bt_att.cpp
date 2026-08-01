@@ -67,9 +67,12 @@ SOFTWARE.
 
 static uint16_t s_AttMtu = BT_ATT_MTU_MIN;
 
-alignas(4) __attribute__((weak)) uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
+// The pool must hold BtAttDBEntry_t objects at rounded offsets; align it to
+// the entry type so that holds on any pointer width (a strong override of
+// this array must be aligned at least as strictly).
+alignas(BtAttDBEntry_t) __attribute__((weak)) uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
 static size_t s_BtAttDBMemSize = sizeof(s_BtAttDBMem);
-static uint32_t s_BtAttDBMemEnd = (uint32_t)s_BtAttDBMem + s_BtAttDBMemSize;
+static size_t s_BtAttDBMemUsed = 0;
 static BtAttDBEntry_t * const s_pBtAttDbEntryFirst = (BtAttDBEntry_t *)s_BtAttDBMem;
 static BtAttDBEntry_t *s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)s_BtAttDBMem;
 static uint16_t s_LastHdl = 0;
@@ -121,8 +124,8 @@ void BtAttSetHandler(AttReadValFct_t ReadFct, AttWriteValFct_t WriteFct)
 void BtAttDBInit(size_t MemSize)
 {
 	s_BtAttDBMemSize = MemSize;
+	s_BtAttDBMemUsed = 0;
 	memset(s_BtAttDBMem, 0, s_BtAttDBMemSize);
-	s_BtAttDBMemEnd = (uint32_t)s_BtAttDBMem + s_BtAttDBMemSize;
 
 	s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)s_BtAttDBMem;
 	s_LastHdl = 0;
@@ -132,34 +135,47 @@ void BtAttDBInit(size_t MemSize)
 
 BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pData, int DataLen)
 {
-	BtAttDBEntry_t *entry = s_pBtAttDbEntryEnd;
-
-	uint32_t l = sizeof(BtAttDBEntry_t) + MaxDataLen;
-
-	l = (l + 3) & 0xFFFFFFFC;
-
-	// We will write pNext/pPrev into the slot at (entry + l) below to seed
-	// the next tail entry. That seed write touches the first few bytes of
-	// a BtAttDBEntry_t at (entry + l), so the bound check must reserve
-	// sizeof(BtAttDBEntry_t) past the end of this entry, not just l bytes.
-	// Without the pad, the seed writes spill past s_BtAttDBMemEnd when the
-	// DB is exactly full.
-	if ((uint32_t)entry + l + sizeof(BtAttDBEntry_t) > s_BtAttDBMemEnd)
+	if (pUuid == nullptr || MaxDataLen < 0 || MaxDataLen > 0xFFFF)
 	{
-		//DEBUG_PRINTF("Out mem. Required %d, Reserved : %d\r\n", ((uint32_t)entry + l + sizeof(BtAttDBEntry_t)) - (uint32_t)s_BtAttDBMem, s_BtAttDBMemEnd - (uint32_t)s_BtAttDBMem);
 		return nullptr;
 	}
 
+	size_t entrySize = sizeof(BtAttDBEntry_t) + (size_t)MaxDataLen;
+	entrySize = (entrySize + alignof(BtAttDBEntry_t) - 1U) &
+				~(size_t)(alignof(BtAttDBEntry_t) - 1U);
+
+	if (s_BtAttDBMemUsed > s_BtAttDBMemSize)
+	{
+		return nullptr;
+	}
+
+	size_t remaining = s_BtAttDBMemSize - s_BtAttDBMemUsed;
+
+	// We will write pNext/pPrev into the slot after this entry to seed the
+	// next tail entry. That seed write touches the first few bytes of a
+	// BtAttDBEntry_t, so the bound check must reserve a complete tail entry.
+	// Without the pad, the seed writes spill past the pool when it is full.
+	if (entrySize > remaining ||
+		sizeof(BtAttDBEntry_t) > remaining - entrySize)
+	{
+		return nullptr;
+	}
+
+	BtAttDBEntry_t *entry =
+		(BtAttDBEntry_t*)(s_BtAttDBMem + s_BtAttDBMemUsed);
+
 	entry->TypeUuid = *pUuid;
 	entry->Hdl = ++s_LastHdl;
-	entry->DataLen = MaxDataLen;
+	entry->DataLen = (uint16_t)MaxDataLen;
 
-	s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)((uint8_t*)entry + l);
+	s_BtAttDBMemUsed += entrySize;
+
+	s_pBtAttDbEntryEnd =
+		(BtAttDBEntry_t*)(s_BtAttDBMem + s_BtAttDBMemUsed);
 	s_pBtAttDbEntryEnd->pNext = nullptr;
 	s_pBtAttDbEntryEnd->pPrev = entry;
 	entry->pNext = s_pBtAttDbEntryEnd;
 
-//	DEBUG_PRINTF("Entry %p, %x\r\n", entry, s_BtAttDBMemEnd);
 	return entry;
 }
 
@@ -217,14 +233,19 @@ BtAttDBEntry_t * const BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid
 	{
 		p = (BtAttDBEntry_t*)s_BtAttDBMem;
 	}
-	do {
+	// Stop at the tail sentinel and also guard against null: pStart can be the
+	// sentinel itself (a caller passing lastEntry->pNext), and the sentinel's
+	// pNext is null, so a do/while that only tests the sentinel walks off the
+	// end.
+	while (p != nullptr && p != s_pBtAttDbEntryEnd)
+	{
 		if (memcmp(&p->TypeUuid, pUuid, sizeof(BtUuid16_t)) == 0)
 		{
 			return p;
 		}
 
 		p = p->pNext;
-	} while (p != s_pBtAttDbEntryEnd);
+	}
 
 	return nullptr;
 }
@@ -966,6 +987,95 @@ static uint16_t BtAttCurValueLen(BtAttDBEntry_t *pEntry)
 	return 0xFFFF;
 }
 
+// Complete on-air value length of an attribute, without copying it. Read By
+// Type uses this to size and compare handle-value pairs so it does not need a
+// full-value scratch buffer. The lengths MUST match what BtAttReadValue emits
+// for each type (declarations are fixed-format; char values and the user
+// description come from the characteristic).
+static uint16_t BtAttFullValueLen(BtAttDBEntry_t *pEntry)
+{
+	if (pEntry == nullptr)
+	{
+		return 0;
+	}
+
+	if (pEntry->TypeUuid.BaseIdx != 0)
+	{
+		BtGattChar_t *pChar = BtAttEntryChar(pEntry);
+		return pChar != nullptr ? (uint16_t)pChar->ValueLen : 0;
+	}
+
+	switch (pEntry->TypeUuid.Uuid)
+	{
+		case BT_UUID_DECLARATIONS_PRIMARY_SERVICE:
+		case BT_UUID_DECLARATIONS_SECONDARY_SERVICE:
+			return ((BtAttSrvcDeclar_t*)pEntry->Data)->Uuid.BaseIdx > 0 ? 16 : 2;
+
+		case BT_UUID_DECLARATIONS_INCLUDE:
+			return ((BtAttSrvcInclude_t*)pEntry->Data)->SrvcUuid.BaseIdx > 0 ? 4 : 6;
+
+		case BT_UUID_DECLARATIONS_CHARACTERISTIC:
+			return ((BtAttCharDeclar_t*)pEntry->Data)->Uuid.BaseIdx > 0 ? 19 : 5;
+
+		case BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+		{
+			BtGattChar_t *pChar = BtAttEntryChar(pEntry);
+			const char *desc = pChar != nullptr ? pChar->pDesc : nullptr;
+			return desc != nullptr ? (uint16_t)strlen(desc) : 0;
+		}
+
+		case BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+			return 2;
+
+		case BT_UUID_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
+		case BT_UUID_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
+			return 0;
+
+		default:
+		{
+			BtGattChar_t *pChar = BtAttEntryChar(pEntry);
+			return pChar != nullptr ? (uint16_t)pChar->ValueLen : 0;
+		}
+	}
+}
+
+// True only when the attribute's complete value equals the Len expected bytes.
+// Used by Find By Type Value so it does not need a full-MTU scratch copy: the
+// length is checked first (a mismatch is not a match and needs no read), then
+// the value is compared in small chunks. Declaration values are at most 19
+// octets and are read in a single offset-0 chunk, which matters because
+// BtAttReadValue ignores the offset for declarations; characteristic values
+// support offset reads, so longer ones compare correctly across chunks.
+static bool BtAttValueEquals(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
+							 const uint8_t *pExpected, uint16_t Len)
+{
+	if (BtAttFullValueLen(pEntry) != Len)
+	{
+		return false;
+	}
+
+	uint8_t chunk[64];		// >= the largest declaration value (19 octets)
+	uint16_t off = 0;
+
+	while (off < Len)
+	{
+		uint16_t want = (uint16_t)(Len - off);
+		if (want > sizeof(chunk))
+		{
+			want = sizeof(chunk);
+		}
+
+		size_t got = BtAttReadValueForConn(ConnHdl, pEntry, off, chunk, want);
+		if (got != want || memcmp(chunk, pExpected + off, want) != 0)
+		{
+			return false;
+		}
+		off = (uint16_t)(off + want);
+	}
+
+	return true;
+}
+
 // Apply the queued prepared writes. Returns 0 on success, or an ATT error code
 // with *pFailHdl set to the offending handle (Vol 3 Part F 3.4.6.3). The queue
 // is consumed either way.
@@ -1116,7 +1226,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 	{
 		case BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ:
 			{
-				BtAttExchgMtuReqRsp_t *req = (BtAttExchgMtuReqRsp_t*)&pReqAtt->ExchgMtuReqRsp;
 
 				DEBUG_PRINTF("ATT_EXCHANGE_MTU_REQ (0x02) \r\n");
 				DEBUG_PRINTF("RxMtu %d %d\r\n", pReqAtt->ExchgMtuReqRsp.RxMtu, s_AttMtu);
@@ -1259,6 +1368,13 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				uint16_t start = req->StartHdl;
 				int l = 0;
 
+				// Group End Handle is the group end only for a grouping type
+				// (Primary/Secondary Service); for any other type it equals the
+				// found handle (Vol 3 Part F 3.4.3.1).
+				bool grouping =
+					req->Type == BT_UUID_DECLARATIONS_PRIMARY_SERVICE ||
+					req->Type == BT_UUID_DECLARATIONS_SECONDARY_SERVICE;
+
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_RSP;
 
 				while (start <= req->EndHdl &&
@@ -1271,14 +1387,18 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					if (entry == nullptr)
 						break;
 
+					if (!grouping)
+						hdlEnd = entry->Hdl;
+
 					if (hdlEnd > req->EndHdl)
 						hdlEnd = req->EndHdl;
 
-					uint8_t val[BT_ATT_MTU_MAX];
-					size_t rlen = BtAttReadValueForConn(ConnHdl, entry, 0, val, sizeof(val));
-
-					if (rlen == (size_t)valLen &&
-						(valLen == 0 || memcmp(val, req->Val, (size_t)valLen) == 0))
+					// An attribute whose value cannot be read due to permissions
+					// must not be matched: reading and comparing it anyway lets a
+					// peer confirm a protected value by guessing (a comparison
+					// oracle). Treat it as not matching and move on.
+					if (BtAttReadPermError(ConnHdl, entry) == 0 &&
+						BtAttValueEquals(ConnHdl, entry, req->Val, (uint16_t)valLen))
 					{
 						pOut->StartHdl = entry->Hdl;
 						pOut->EndHdl   = hdlEnd;
@@ -1314,7 +1434,9 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						pReqAtt->ReadByTypeReq.StartHdl, pReqAtt->ReadByTypeReq.EndHdl,
 						req->Uuid.Uuid16);
 
-				if (req->StartHdl > req->EndHdl)
+				// Starting handle 0x0000 is invalid (Vol 3 Part F 3.4.4.1), as
+				// is a start beyond the end.
+				if (req->StartHdl == 0 || req->StartHdl > req->EndHdl)
 				{
 					retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
 					break;
@@ -1336,26 +1458,15 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				{
 					DEBUG_PRINTF("Entry not found\r\n");
 				}
-#if 0
-				if (entry)
-				{
-					p[0] = entry->Hdl & 0xFF;
-					p[1] = entry->Hdl >> 8;
-					p +=2;
-					pRspAtt->ReadByTypeRsp.Len = BtAttReadValueForConn(ConnHdl, entry, 0, p, rspMtu - 2) + 2;
-
-					retval = 2 + pRspAtt->ReadByTypeRsp.Len;//rsp->Len * c;
-					break;
-				}
-				retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ, BT_ATT_ERROR_ATT_NOT_FOUND);
-
-#else
 				int l = 0;
 				uint8_t permErr = 0;
 				uint16_t permErrHdl = 0;
+				uint16_t firstFull = 0;		// complete value length of the first matched attribute
+				uint16_t pairValLen = 0;	// value bytes emitted per pair (first may be truncated)
+				bool havePair = false;
 				pRspAtt->ReadByTypeRsp.Len = 0;
 
-				while (entry && (rspMtu - l) >= BT_ATT_MTU_MIN)
+				while (entry)
 				{
 					if (entry->Hdl < req->StartHdl || entry->Hdl > req->EndHdl)
 					{
@@ -1375,22 +1486,45 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						break;
 					}
 
-					p[0] = entry->Hdl & 0xFF;
-					p[1] = entry->Hdl >> 8;
-					p +=2;
+					// Compare complete value lengths without copying, so a later
+					// value longer than the first is dropped rather than
+					// truncated to masquerade as the common length (Vol 3 Part F
+					// 3.4.4.1). The first attribute fixes that length; its value
+					// is itself capped to (ATT_MTU - 4) per 3.4.4.2.
+					uint16_t full = BtAttFullValueLen(entry);
 
-					int cnt = BtAttReadValueForConn(ConnHdl, entry, 0, p, rspMtu - l - 2) + 2;
-					if (pRspAtt->ReadByTypeRsp.Len == 0)
+					if (!havePair)
 					{
-						pRspAtt->ReadByTypeRsp.Len = cnt;
+						firstFull = full;
+						uint16_t cap = (uint16_t)(rspMtu - 4);
+						pairValLen = full < cap ? full : cap;
 					}
-					else if (cnt != pRspAtt->ReadByTypeRsp.Len)
+					else if (full != firstFull)
 					{
 						break;
 					}
 
-					l += pRspAtt->ReadByTypeRsp.Len;
-					p += pRspAtt->ReadByTypeRsp.Len - 2;
+					// Fit check on the actual pair size, not the MTU minimum, so
+					// every pair that fits within ATT_MTU is included.
+					if ((size_t)(2 + l) + 2 + pairValLen > rspMtu)
+					{
+						break;
+					}
+
+					// Copy handle + value straight into the response. The value
+					// read is bounded by pairValLen, so no scratch is needed.
+					p[0] = entry->Hdl & 0xFF;
+					p[1] = entry->Hdl >> 8;
+					BtAttReadValueForConn(ConnHdl, entry, 0, p + 2, pairValLen);
+					p += 2 + pairValLen;
+					l += 2 + pairValLen;
+
+					if (!havePair)
+					{
+						havePair = true;
+						pRspAtt->ReadByTypeRsp.Len = (uint8_t)(2 + pairValLen);
+					}
+
 					// entry is the last DB node; no next handle to continue the scan
 					if (entry->pNext == nullptr)
 					{
@@ -1415,7 +1549,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ, BT_ATT_ERROR_ATT_NOT_FOUND);
 				}
 				//DEBUG_PRINTF("retval : %d\r\n", retval);
-#endif
 			}
 			break;
 		case BT_ATT_OPCODE_ATT_READ_REQ:
@@ -1531,7 +1664,9 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					DEBUG_PRINTF("%x ", req->Uuid.Uuid128[i]);
 				DEBUG_PRINTF("\r\n");
 
-				if (req->StartHdl > req->EndHdl)
+				// Starting handle 0x0000 is invalid (Vol 3 Part F 3.4.4.9), as
+				// is a start beyond the end.
+				if (req->StartHdl == 0 || req->StartHdl > req->EndHdl)
 				{
 					retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
 					break;
@@ -1571,7 +1706,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					baseidx = entry->TypeUuid.BaseIdx;
 				}
 
-				uint8_t prevlen = 0;
 				pRspAtt->ReadByGroupTypeRsp.Len = 0;
 				int temp_cnt = 0;
 
@@ -1586,8 +1720,8 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 						int cnt = BtAttReadValueForConn(ConnHdl, entry, 0, p, rspMtu - l - sizeof(BtAttHdlRange_t));
 
-						BtAttSrvcDeclar_t *x = (BtAttSrvcDeclar_t *) p;
-						DEBUG_PRINTF("Ble Service UUID16 = 0x%X \r\n", x->Uuid.Uuid16);
+						DEBUG_PRINTF("Ble Service UUID16 = 0x%X \r\n",
+								((BtAttSrvcDeclar_t *)entry->Data)->Uuid.Uuid16);
 
 						if (pRspAtt->ReadByGroupTypeRsp.Len == 0)
 						{
@@ -1675,7 +1809,36 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						break;
 					}
 
+					// A value longer than the attribute can hold must be
+					// rejected with Invalid Attribute Value Length, not written
+					// in part and acknowledged as success (Vol 3 Part F 3.4.5.1).
+					// Check the capacity before the write so a rejected write
+					// leaves the stored value untouched. A zero-length write is
+					// valid. Non-char-value attributes (declarations, the CCCD
+					// checked above) keep their existing handling.
+					BtGattChar_t *pWrChar = nullptr;
+					if (BtAttEntryIsCharValue(entry))
+					{
+						pWrChar = BtAttEntryChar(entry);
+						if (pWrChar == nullptr || (uint16_t)dlen > pWrChar->MaxDataLen)
+						{
+							retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_INVALID_ATT_VALUE);
+							break;
+						}
+					}
+
 					BtAttWriteValueForConn(ConnHdl, entry, 0, req->Data, (uint16_t)dlen);
+
+					// A Write Request replaces the whole attribute value, so the
+					// current length becomes exactly the written length: a
+					// shorter write truncates and a zero-length write clears the
+					// value (Vol 3 Part F 3.4.5.1). BtAttWriteValue only extends
+					// on an offset write (prepared writes rely on that), so the
+					// replacement length is set here for the full-value path.
+					if (pWrChar != nullptr)
+					{
+						pWrChar->ValueLen = (uint16_t)dlen;
+					}
 
 					pRspAtt->OpCode = BT_ATT_OPCODE_ATT_WRITE_RSP;
 
@@ -1683,7 +1846,10 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				}
 				else
 				{
-					retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_ATT_NOT_FOUND);
+					// A write to a handle that is not in the database is an
+					// invalid handle, not attribute-not-found (Vol 3 Part F
+					// 3.4.5.1). Attribute Not Found is a discovery-request code.
+					retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
 
 				}
 			}
@@ -1710,7 +1876,42 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					if (BtAttWritePermError(ConnHdl, entry, BT_ATT_OPCODE_ATT_CMD,
 											pReqAtt->WriteCmd.Data, (uint16_t)dlen) == 0)
 					{
-						BtAttWriteValueForConn(ConnHdl, entry, 0, pReqAtt->WriteCmd.Data, (uint16_t)dlen);
+						// Write Command has no error response, so an invalid
+						// length cannot be reported: the whole command is ignored
+						// (do not touch the stored value or its length) per Vol 3
+						// Part F 3.4.5.3. Validate the length in the handler, as
+						// the Write Request path does, rather than relying on the
+						// write helper to reject it: a characteristic value must
+						// fit the attribute maximum, and a CCCD must be exactly
+						// two octets. A valid write replaces the value, so the
+						// current length becomes exactly dlen.
+						BtGattChar_t *pCmdChar =
+							BtAttEntryIsCharValue(entry) ? BtAttEntryChar(entry) : nullptr;
+
+						bool valid;
+						if (pCmdChar != nullptr)
+						{
+							valid = (uint16_t)dlen <= pCmdChar->MaxDataLen;
+						}
+						else if (entry->TypeUuid.BaseIdx == 0 &&
+								 entry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION)
+						{
+							valid = (dlen == 2);
+						}
+						else
+						{
+							valid = true;
+						}
+
+						if (valid)
+						{
+							BtAttWriteValueForConn(ConnHdl, entry, 0,
+											pReqAtt->WriteCmd.Data, (uint16_t)dlen);
+							if (pCmdChar != nullptr)
+							{
+								pCmdChar->ValueLen = (uint16_t)dlen;
+							}
+						}
 					}
 
 					retval = 0;
@@ -1983,4 +2184,3 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 	return retval;
 }
-

@@ -527,6 +527,13 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 					pDev->Disconnected(p->ConnHdl, p->Reason);
 				}
 
+				// Free the SMP link record here so cleanup does not depend on
+				// the application callback: without it the four SMP slots leak
+				// as connection handles change, and stale pairing/lockout state
+				// and crypto-engine ownership survive the disconnect. Idempotent
+				// - a port whose callback already called it sees a no-op.
+				BtSmpDisconnected(p->ConnHdl);
+
 				BtHciReasmReset(p->ConnHdl);
 			}
 			break;
@@ -612,7 +619,17 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 //				{
 //					DEBUG_PRINTF("Hdl: %x - NbPkt: %d\r\n", p->Completed[i].Hdl, p->Completed[i].NbPkt);
 //				}
-				for (int i = 0; i < p->NbHdl; i++)
+				// NbHdl is controller-supplied; bound the walk to the entries the
+				// event length can actually hold (1 count byte + 4 bytes each) so
+				// a malformed event cannot read past the received payload.
+				int nbHdl = p->NbHdl;
+				int maxHdl = pEvtPkt->Hdr.Len >= 1 ?
+							 (pEvtPkt->Hdr.Len - 1) / (int)sizeof(p->Completed[0]) : 0;
+				if (nbHdl > maxHdl)
+				{
+					nbHdl = maxHdl;
+				}
+				for (int i = 0; i < nbHdl; i++)
 				{
 					// Replenish ACL TX credits for completed packets when flow
 					// control is configured. Independent of SendCompleted so
@@ -870,7 +887,11 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 			BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
 			acl->Hdr.ConnHdl = pPkt->Hdr.ConnHdl;
-			acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+			// LE-U host->controller: the first (here only) fragment of a
+			// complete L2CAP PDU uses 0b00 (first non-automatically-flushable).
+			// 0b11 is a controller->host value and is rejected by strict
+			// controllers (Vol 4 Part E 5.4.2).
+			acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 			acl->Hdr.BCFlag = 0;
 
 			l2pdu->Hdr = l2rcv->Hdr;
@@ -908,7 +929,11 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 			BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
 			acl->Hdr.ConnHdl = pPkt->Hdr.ConnHdl;
-			acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+			// LE-U host->controller: the first (here only) fragment of a
+			// complete L2CAP PDU uses 0b00 (first non-automatically-flushable).
+			// 0b11 is a controller->host value and is rejected by strict
+			// controllers (Vol 4 Part E 5.4.2).
+			acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 			acl->Hdr.BCFlag = 0;
 
 			l2pdu->Hdr.Len = BtL2CapProcessSignal(pDev, pPkt->Hdr.ConnHdl,
@@ -970,7 +995,9 @@ void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, 
 //	DEBUG_PRINTF("BtHciMotify : %d %d \r\n", ConnHdl, ValHdl);
 
 	acl->Hdr.ConnHdl = ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	// LE-U host->controller: 0b00 for the first (only) fragment; 0b11 is a
+	// controller->host value (Vol 4 Part E 5.4.2).
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
 
 	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;

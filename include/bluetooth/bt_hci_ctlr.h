@@ -192,7 +192,12 @@ protected:
 private:
 	BtHciCtlrDev_t vDevData;
 
-	BtHciCtlr(&BtHciCtlr);
+public:
+	// vDevData holds interface state the C layer points into; a copied
+	// object would alias it. Not copyable, still default-constructible.
+	BtHciCtlr() = default;
+	BtHciCtlr(const BtHciCtlr&) = delete;
+	BtHciCtlr &operator=(const BtHciCtlr&) = delete;
 };
 
 #endif

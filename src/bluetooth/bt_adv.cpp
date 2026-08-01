@@ -440,37 +440,6 @@ size_t BtAdvDataGetManData(uint8_t *pAdvData, size_t AdvLen, uint8_t *pBuff, siz
 	return retval;
 }
 
-// Compute the total length (2-byte AD header + data) of the service UUID
-// record for the given UUID array, matching BtAdvDataAddUuid's sizing. Returns
-// 0 if there is no UUID record to add.
-static int BtAdvUuidRecordLen(const BtUuidArr_t *pUid)
-{
-	if (pUid == nullptr || pUid->Count <= 0)
-	{
-		return 0;
-	}
-
-	int unit;
-
-	if (pUid->BaseIdx > 0)
-	{
-		// Custom base: 16/32-bit shorthands are expanded to full 128-bit.
-		unit = 16;
-	}
-	else
-	{
-		switch (pUid->Type)
-		{
-			case BT_UUID_TYPE_16:  unit = 2;  break;
-			case BT_UUID_TYPE_32:  unit = 4;  break;
-			case BT_UUID_TYPE_128: unit = 16; break;
-			default: return 0;
-		}
-	}
-
-	return 2 + unit * pUid->Count;
-}
-
 // Place the manufacturer-specific data record (company id + payload) into the
 // target packet. Returns true on success, false if it does not fit.
 static bool BtAdvAddManData(BtAdvPacket_t *pPkt, uint16_t VendorId,

@@ -652,12 +652,55 @@ void   BtSmpBondRestore(int Slot, const void *pBond, size_t Len);
 size_t BtSmpBondSerialize(int Slot, void *pBuff, size_t BuffLen);
 
 /**
+ * @brief	Get the device's stable local identity IRK.
+ *
+ * The same IRK is distributed to every bonded peer, so any of them can
+ * resolve the resolvable private addresses this device generates from it
+ * with BtSmpRpaGen. Created once from the secure RNG on first use and held
+ * for the rest of the boot; a platform persists it across resets with the
+ * BtSmpLocalIdSave / Serialize / Restore set below, following the same
+ * defer-and-serialize-on-demand pattern as the bond hooks above.
+ *
+ * @param	Irk : out: the 16-byte IRK, little-endian storage order.
+ *
+ * @return	true when a valid IRK was copied out. false when the RNG failed
+ *			and no identity exists yet.
+ */
+bool BtSmpLocalIrkGet(uint8_t Irk[16]);
+
+/**
+ * Local identity persistence hooks. Same division of labour as the bond
+ * hooks: the platform is told that the identity changed and reads the
+ * record back on demand when it is ready to write.
+ *
+ * BtSmpLocalIdSave       : weak notification that the identity changed. The
+ *						   default does nothing (identity lives for this boot
+ *						   only). A platform marks it and writes later from a
+ *						   safe context, like a bond save.
+ * BtSmpLocalIdSerialize  : build the versioned identity record into pBuff.
+ *						   Returns the record length, or 0 when no identity
+ *						   exists or pBuff is smaller than
+ *						   BtSmpLocalIdRecordSize().
+ * BtSmpLocalIdRestore    : validate a stored record and adopt it. Returns
+ *						   true on success. Call at load time, before the first
+ *						   pairing can ask for the IRK.
+ */
+void   BtSmpLocalIdSave(void);
+size_t BtSmpLocalIdRecordSize(void);
+size_t BtSmpLocalIdSerialize(void *pBuff, size_t BuffLen);
+bool   BtSmpLocalIdRestore(const void *pRec, size_t Len);
+
+/**
  * @brief	Get the local device address and type used on air.
  *
- * The SMP toolbox (c1 for legacy, f5/f6 for SC) needs the responder's own
- * address exactly as the peer sees it, including the address TYPE
- * (0 = public, 1 = random). A wrong address or type makes every confirm /
- * check value mismatch and pairing fails with CONFIRM_VALUE / DHKEY_CHECK.
+ * The device's identity address: what the Identity Address Information PDU
+ * distributes, and what the SMP toolbox (c1 for legacy, f5/f6 for SC) falls
+ * back to when the connection record was not stamped with the address in
+ * use on air. The TYPE matters (0 = public, 1 = random): a wrong address or
+ * type makes every confirm / check value mismatch and pairing fails with
+ * CONFIRM_VALUE / DHKEY_CHECK. A link made over a resolvable private
+ * address records that address on the connection instead; the toolbox reads
+ * it from there, never from here.
  *
  * Weak default returns public, all-zero - which is almost never correct, so
  * the active implementation MUST override this. The SDC implementation reports the random
@@ -683,7 +726,14 @@ int BtSmpC1S1SelfTest(void);
 // Resolve a resolvable private address (6-byte BD_ADDR) against a peer IRK.
 bool BtSmpRpaResolve(const uint8_t Irk[16], const uint8_t Rpa[6]);
 
-// ah / RPA-resolution self-test against the spec sample. Returns 0 on PASS.
+// Generate a resolvable private address from Irk: 3 bytes of prand from the
+// secure RNG with the top two bits forced to 0b01, hash from the same ah as
+// BtSmpRpaResolve. Rpa is written in wire order (hash in [0..2], prand in
+// [3..5]). Returns false on an RNG failure or an all-zero IRK.
+bool BtSmpRpaGen(const uint8_t Irk[16], uint8_t Rpa[6]);
+
+// ah / RPA self-test: the spec resolution sample, then a generate/resolve
+// round trip with the prand bit pattern checked. Returns 0 on PASS.
 int BtSmpRpaSelfTest(void);
 
 // Compute the 8-byte signed-write MAC over pMsg (signed data || SignCounter, wire

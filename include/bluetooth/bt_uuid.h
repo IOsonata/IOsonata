@@ -921,13 +921,6 @@ typedef struct __Bt_Uuid_Array {
 	};
 } BtUuidArr_t;
 
-#if 0
-typedef struct __Bt_Srvc_Uuid {
-	uint16_t    uuid; /**< 16-bit UUID value or octets 12-13 of 128-bit UUID. */
-	uint8_t     type; /**< UUID type, see @ref BLE_UUID_TYPES. If type is @ref BLE_UUID_TYPE_UNKNOWN, the value of uuid is undefined. */
-} BtSrvcUuid_t;
-#endif
-
 #pragma pack(pop)
 
 #ifdef __cplusplus

@@ -5,11 +5,12 @@
 
 Pool layout in the user-provided buffer:
 
-	[ BtPeerPoolHdr_t | BtDevice_t[0] | BtDevice_t[1] | ... | BtDevice_t[N-1] ]
+	[ optional padding | BtPeerPoolHdr_t | aligned BtDevice_t[0] | ... ]
 
-BtPeerInit stamps the header with the library's sizeof(BtDevice_t) and
-zeroes every slot to "free" (Conn.Hdl == BT_CONN_HDL_INVALID). All other
-ops walk the slot array via the header's Count field.
+BtPeerInit places the header immediately before the aligned slot array,
+stamps it with the library's sizeof(BtDevice_t), and zeroes every slot to
+"free" (Conn.Hdl == BT_CONN_HDL_INVALID). All other ops walk the slot array
+through the aligned pointer retained by the peer manager.
 
 @author	Hoang Nguyen Hoan
 @date	May 2026
@@ -54,8 +55,9 @@ SOFTWARE.
 #define BT_PEER_POOL_DEFAULT_COUNT		4
 #endif
 
-alignas(4) static uint8_t s_DefaultPeerPoolMem[BT_PEER_POOL_MEMSIZE(BT_PEER_POOL_DEFAULT_COUNT)];
+alignas(BtDevice_t) static uint8_t s_DefaultPeerPoolMem[BT_PEER_POOL_MEMSIZE(BT_PEER_POOL_DEFAULT_COUNT)];
 static BtPeerPoolHdr_t *s_pPeerPool = nullptr;
+static BtDevice_t *s_pPeerSlots = nullptr;
 
 // Long-write reassembly pool. Split evenly across the peer slots by
 // BtPeerLongWrInit; each slot's slice is re-assigned in BtPeerAlloc because
@@ -65,7 +67,7 @@ static uint16_t s_LongWrSlotSize  = 0;
 
 static inline BtDevice_t * PeerSlots(void)
 {
-	return s_pPeerPool ? (BtDevice_t*)(s_pPeerPool + 1) : nullptr;
+	return s_pPeerSlots;
 }
 
 bool BtPeerInit(uint8_t *pMem, size_t MemSize)
@@ -84,32 +86,41 @@ bool BtPeerInit(uint8_t *pMem, size_t MemSize)
 		size = MemSize;
 	}
 
-	if (size < BT_PEER_POOL_MEMSIZE(1))
+	const size_t slotAlign = alignof(BtDevice_t);
+	uintptr_t rawAddr = (uintptr_t)mem;
+	uintptr_t slotAddr = rawAddr + sizeof(BtPeerPoolHdr_t);
+	size_t misalignment = slotAddr % slotAlign;
+	if (misalignment != 0)
 	{
-		// Not enough room for the header plus a single slot.
-		return false;
+		slotAddr += slotAlign - misalignment;
 	}
 
-	size_t payload = size - sizeof(BtPeerPoolHdr_t);
-	if (payload % sizeof(BtDevice_t) != 0)
-	{
-		// sizeof(BtDevice_t) differs between the precompiled library and
-		// the application's view of bt_dev.h. Refuse rather than walk off
-		// the end of a slot.
-		return false;
-	}
-
-	uint16_t count = (uint16_t)(payload / sizeof(BtDevice_t));
-	if (count == 0)
+	size_t prefix = (size_t)(slotAddr - rawAddr);
+	if (size < prefix + sizeof(BtDevice_t))
 	{
 		return false;
 	}
 
-	BtPeerPoolHdr_t *hdr = (BtPeerPoolHdr_t*)mem;
+	size_t payload = size - prefix;
+	size_t countValue = payload / sizeof(BtDevice_t);
+	size_t trailing = payload - countValue * sizeof(BtDevice_t);
+
+	// BT_PEER_POOL_MEMSIZE reserves at most alignment-1 trailing bytes after
+	// the slot array. A larger remainder means the caller did not size the
+	// buffer with the current BtDevice_t layout (usually an app/library ABI
+	// mismatch), so refuse it rather than infer the wrong slot count.
+	if (countValue == 0 || countValue > UINT16_MAX || trailing >= slotAlign)
+	{
+		return false;
+	}
+
+	BtPeerPoolHdr_t *hdr =
+		(BtPeerPoolHdr_t*)(slotAddr - sizeof(BtPeerPoolHdr_t));
+	uint16_t count = (uint16_t)countValue;
 	hdr->SlotSize = (uint16_t)sizeof(BtDevice_t);
 	hdr->Count    = count;
 
-	BtDevice_t *slots = (BtDevice_t*)(hdr + 1);
+	BtDevice_t *slots = (BtDevice_t*)slotAddr;
 	for (uint16_t i = 0; i < count; i++)
 	{
 		memset(&slots[i], 0, sizeof(BtDevice_t));
@@ -118,6 +129,7 @@ bool BtPeerInit(uint8_t *pMem, size_t MemSize)
 	}
 
 	s_pPeerPool = hdr;
+	s_pPeerSlots = slots;
 	return true;
 }
 
@@ -136,8 +148,16 @@ void BtPeerLongWrInit(uint8_t *pMem, size_t MemSize)
 	// its own slice via BtPeerAlloc, so concurrent links never share a
 	// reassembly buffer. Any remainder (MemSize not divisible by Count) is
 	// left unused.
+	size_t slotSize = MemSize / s_pPeerPool->Count;
+	if (slotSize == 0 || slotSize > UINT16_MAX)
+	{
+		s_pLongWrPool    = nullptr;
+		s_LongWrSlotSize = 0;
+		return;
+	}
+
 	s_pLongWrPool    = pMem;
-	s_LongWrSlotSize = (uint16_t)(MemSize / s_pPeerPool->Count);
+	s_LongWrSlotSize = (uint16_t)slotSize;
 }
 
 uint16_t BtPeerCount(void)
@@ -308,7 +328,8 @@ void BtPeerFreeByHdl(uint16_t Hdl)
 	BtPeerFree(BtPeerFindByHdl(Hdl));
 }
 
-BtDevice_t * BtPeerConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, const uint8_t *pAddr)
+BtDevice_t * BtPeerConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, const uint8_t *pAddr,
+							 uint8_t OwnAddrType, const uint8_t *pOwnAddr)
 {
 	BtDevice_t *p = BtPeerAlloc(ConnHdl);
 	if (p != nullptr)
@@ -318,6 +339,11 @@ BtDevice_t * BtPeerConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, c
 		if (pAddr != nullptr)
 		{
 			memcpy(p->Conn.PeerAddr, pAddr, sizeof(p->Conn.PeerAddr));
+		}
+		p->Conn.OwnAddrType = OwnAddrType;
+		if (pOwnAddr != nullptr)
+		{
+			memcpy(p->Conn.OwnAddr, pOwnAddr, sizeof(p->Conn.OwnAddr));
 		}
 	}
 	return p;

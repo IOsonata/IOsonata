@@ -366,7 +366,7 @@ static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValH
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
 	acl->Hdr.ConnHdl = ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
 
 	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;

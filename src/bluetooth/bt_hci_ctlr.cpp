@@ -112,18 +112,51 @@ bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		return false;
 	}
 
-	if (pCfg->PacketSize <= 0)
+	if (pCfg->PacketSize == 0)
 	{
 		pDev->PacketSize = BT_HCI_CTLR_MTU_MAX + BTHCICTLR_PKTHDR_LEN;
 	}
 	else
 	{
+		if (pCfg->PacketSize > UINT32_MAX - BTHCICTLR_PKTHDR_LEN)
+		{
+			return false;
+		}
 		pDev->PacketSize = pCfg->PacketSize + BTHCICTLR_PKTHDR_LEN;
 	}
 
-	if (pCfg->pRxFifoMem == NULL)
+	uint8_t *pRxFifoMem = pCfg->pRxFifoMem;
+	uint32_t rxFifoMemSize;
+
+	if (pRxFifoMem == nullptr)
 	{
-		pDev->hRxFifo = CFifoInit(s_BtHciCtlrRxFifoMem, BTHCICTLR_FIFO_MEM_SIZE, pDev->PacketSize, true);
+		pRxFifoMem = s_BtHciCtlrRxFifoMem;
+		rxFifoMemSize = BTHCICTLR_FIFO_MEM_SIZE;
+	}
+	else
+	{
+		if (pCfg->RxFifoMemSize <= 0)
+		{
+			return false;
+		}
+		rxFifoMemSize = (uint32_t)pCfg->RxFifoMemSize;
+	}
+
+	// CFifo stores its header directly in the supplied block and therefore
+	// requires word-aligned memory. It also accepts a block too small for one
+	// element by returning a FIFO with MaxIdxCnt == 0, so enforce one complete
+	// controller packet here before initialization.
+	if (((uintptr_t)pRxFifoMem & (alignof(CFifo_t) - 1U)) != 0 ||
+		rxFifoMemSize < CFIFO_TOTAL_MEMSIZE(1, pDev->PacketSize))
+	{
+		return false;
+	}
+
+	pDev->hRxFifo = CFifoInit(pRxFifoMem, rxFifoMemSize,
+							  (uint32_t)pDev->PacketSize, true);
+	if (pDev->hRxFifo == nullptr)
+	{
+		return false;
 	}
 
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_BT;

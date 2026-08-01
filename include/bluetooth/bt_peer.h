@@ -67,17 +67,22 @@ SOFTWARE.
 // sees it through its own header rather than reaching up to bt_app.h.
 #define BT_CONN_HDL_INVALID		BT_ATT_HANDLE_INVALID
 
-// Header at the start of every peer-pool buffer. Written by BtPeerInit.
-// SlotSize is stamped with the library's sizeof(BtDevice_t) and the init
-// routine refuses buffers whose payload doesn't divide evenly by that
-// size - catches lib/app ABI drift at runtime.
+// Header stored immediately before the aligned peer-slot array. BtPeerInit may
+// leave a few padding bytes at the start of the caller's block so the first
+// BtDevice_t has its native alignment on both MCU and 64-bit host builds.
 typedef struct __Bt_Peer_Pool_Hdr {
 	uint16_t SlotSize;		//!< sizeof(BtDevice_t) at library build time
 	uint16_t Count;			//!< Number of slots in the pool
 } BtPeerPoolHdr_t;
 
-// Bytes the app must reserve to hold N peer slots.
-//
+// Required slot alignment and bytes the app must reserve to hold N peer slots.
+// The alignment-minus-one prefix lets BtPeerInit align the slot array even when
+// the supplied uint8_t buffer itself begins at an arbitrary byte address.
+#define BT_PEER_POOL_ALIGNMENT		((size_t)__alignof__(BtDevice_t))
+#define BT_PEER_POOL_MEMSIZE(N)		(sizeof(BtPeerPoolHdr_t) + \
+								 BT_PEER_POOL_ALIGNMENT - 1U + \
+								 (N) * sizeof(BtDevice_t))
+
 // Typical use:
 //
 //   #define MY_PEER_COUNT  8
@@ -88,7 +93,6 @@ typedef struct __Bt_Peer_Pool_Hdr {
 //       .pPeerPoolMem    = s_PeerPoolMem,
 //       .PeerPoolMemSize = sizeof(s_PeerPoolMem),
 //   };
-#define BT_PEER_POOL_MEMSIZE(N)		(sizeof(BtPeerPoolHdr_t) + (N) * sizeof(BtDevice_t))
 
 // Legacy: CFG_BT_PEER_MAX used to size a fixed library array. The array
 // is gone; the macro is harmless but no longer controls peer count. Emit
@@ -106,8 +110,7 @@ extern "C" {
 // Subsystem init. Called by each port's BtAppInit early, with the cfg's
 // pool fields forwarded straight in. Passing {NULL, 0} selects the small
 // library default (BT_PEER_POOL_DEFAULT_COUNT slots). Returns false if
-// the buffer is too small or if sizeof(BtDevice_t) disagrees between
-// library and app.
+// the buffer cannot hold at least one correctly aligned BtDevice_t slot.
 bool         BtPeerInit(uint8_t *pMem, size_t MemSize);
 
 // Register the long-write reassembly pool. Splits pMem evenly across the
@@ -143,9 +146,14 @@ size_t       BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount);
 void         BtPeerFreeByHdl(uint16_t Hdl);
 
 // Allocate (or reuse) a record for a new link and fill its base connection
-// fields. 1:1 replacement for the old BtGapAddConnection. Returns the record
+// fields (replaces the old BtGapAddConnection). OwnAddrType/pOwnAddr are the
+// device's own address as the peer saw it when the link was created; a link
+// made over a resolvable private address must record that address here so
+// the SMP toolbox computes f5/f6/c1 with it. pOwnAddr NULL leaves the field
+// zero and the toolbox falls back to BtSmpLocalAddrGet. Returns the record
 // or NULL when the pool is full.
-BtDevice_t * BtPeerConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, const uint8_t *pAddr);
+BtDevice_t * BtPeerConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, const uint8_t *pAddr,
+							 uint8_t OwnAddrType, const uint8_t *pOwnAddr);
 
 // Handle of the first live link, or BT_CONN_HDL_INVALID. Convenience for
 // single-link senders (replaces the old BtGapGetConnection).

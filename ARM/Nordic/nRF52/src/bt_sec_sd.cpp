@@ -937,8 +937,10 @@ static void PendingPumpsRun(void)
 }
 
 // ---- sm_* API surface (called by peer_manager.c) ----------------------------
-
-extern "C" {
+// Declared in security_manager.h / security_dispatcher.h, which impose C
+// linkage on every declaration; the definitions inherit it. The one function
+// the SDK reaches through a local extern in peer_database.c instead of a
+// header, sm_pdb_evt_handler, is marked on its definition.
 
 // pm_init calls smd_init right after sm_init. Everything the dispatcher
 // initialized lives in this module and is set up in sm_init, so this only
@@ -1041,7 +1043,7 @@ void sm_ble_evt_handler(ble_evt_t const * p_ble_evt)
 	PendingPumpsRun();
 }
 
-void sm_pdb_evt_handler(pm_evt_t * p_event)
+extern "C" void sm_pdb_evt_handler(pm_evt_t * p_event)
 {
 	switch (p_event->evt_id)
 	{
@@ -1195,6 +1197,5 @@ ret_code_t sm_link_secure(uint16_t conn_handle, bool force_repairing)
 	return LinkSecure(conn_handle, s_pSecParams == NULL, force_repairing, false);
 }
 
-}	// extern "C"
 
 #endif // NRF_MODULE_ENABLED(PEER_MANAGER)

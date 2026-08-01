@@ -96,6 +96,28 @@ alignas(4) static BtAdvPacket_t s_BtDevExtSrPkt = { 251, 0, s_BtDevExtSrData.Dat
 // 0 means no timeout.
 static uint16_t s_BtDevAdvDuration = 0;
 
+// The own address the advertising set was last programmed with. What a new
+// peripheral-role connection is stamped with, so the SMP toolbox computes
+// f5/f6/c1 with the address the peer actually saw.
+static uint8_t s_BtAdvOwnAddrType;
+static uint8_t s_BtAdvOwnAddr[6];
+
+// Own address currently in use on air for advertising. Falls back to the
+// device's configured address when the set was never programmed.
+void BtAdvOwnAddrGet(uint8_t *pType, uint8_t pAddr[6])
+{
+	for (int i = 0; i < 6; i++)
+	{
+		if (s_BtAdvOwnAddr[i] != 0)
+		{
+			*pType = s_BtAdvOwnAddrType;
+			memcpy(pAddr, s_BtAdvOwnAddr, 6);
+			return;
+		}
+	}
+	BtSmpLocalAddrGet(pType, pAddr);
+}
+
 static int BtAppAdvEnable(void);
 static int BtAppAdvDisable(void);
 
@@ -314,8 +336,22 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 	memset(&p, 0, sizeof(p));
 	p.AdvHandle = 0;
 	BtAdvWr16(p.EvtProp, extprop);
-	BtAdvWr24(p.PrimIntervalMin, mSecTo0_625(pCfg->AdvInterval));
-	BtAdvWr24(p.PrimIntervalMax, mSecTo0_625(pCfg->AdvInterval + 50));
+	// Primary_Advertising_Interval_Min has a floor of 0x000020 (20 ms) in the
+	// LE Set Extended Advertising Parameters command; a smaller configured
+	// interval is otherwise rejected by the controller with Invalid HCI Command
+	// Parameters. Clamp up to the floor and keep max >= min.
+	uint32_t primMin = mSecTo0_625(pCfg->AdvInterval);
+	uint32_t primMax = mSecTo0_625(pCfg->AdvInterval + 50);
+	if (primMin < 0x20)
+	{
+		primMin = 0x20;
+	}
+	if (primMax < primMin)
+	{
+		primMax = primMin;
+	}
+	BtAdvWr24(p.PrimIntervalMin, primMin);
+	BtAdvWr24(p.PrimIntervalMax, primMax);
 	p.PrimChanMap  = 7;
 	p.OwnAddrType  = BTADDR_TYPE_RAND;
 	p.PeerAddrType = 0;
@@ -335,6 +371,10 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 	// Extended advertising with a random own-address type requires the random
 	// address to be set per advertising set; the legacy LE Set Random Address
 	// command does not configure it. Use the device's configured random address.
+	// This write is the single point where the on-air own address is chosen;
+	// a privacy layer that rotates resolvable private addresses replaces the
+	// address here, and the recorded copy below is what a new connection is
+	// stamped with.
 	{
 		uint8_t atype = 0;
 		BtHciLeAdvSetRandAddr_t ra;
@@ -345,6 +385,9 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 		{
 			return false;
 		}
+
+		s_BtAdvOwnAddrType = atype;
+		memcpy(s_BtAdvOwnAddr, ra.RandAddr, 6);
 	}
 
 	s_BtDevExtAdvData.AdvHandle = 0;

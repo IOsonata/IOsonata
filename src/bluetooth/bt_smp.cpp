@@ -42,6 +42,8 @@ SOFTWARE.
 #include <stddef.h>
 #include <string.h>
 
+#include "crc.h"
+
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_peer.h"
@@ -51,12 +53,13 @@ SOFTWARE.
 // RngEngine) and the shared CRYPTO_STATUS, all from icrypto.h via bt_smp.h.
 // The legacy crypto.h is intentionally not included here.
 
-// SMP handshake trace. Define BT_SMP_TRACE_ENABLE to 1 to print every SMP PDU
-// in/out and the link state over SysLog. Defaults off for release and library
-// builds.
-#ifndef BT_SMP_TRACE_ENABLE
-#define BT_SMP_TRACE_ENABLE 0
-#endif
+/******** For DEBUG Trace ************/
+// Define DEBUG_ENABLE to turn on the SMP handshake trace for this file: every
+// SMP PDU in/out and the link state. Output goes to the SysLog transport the
+// app configured (UART, USB, RTT, BLE, or any other DeviceIntrf); the trace
+// does not assume a transport. A release build defines NDEBUG, which strips all
+// trace regardless of DEBUG_ENABLE.
+//#define DEBUG_ENABLE
 
 // DHKey byte-order interop fallback. When enabled, a failed Ea verification
 // retries f5 with the raw DHKey order before failing, to tolerate a crypto
@@ -67,18 +70,19 @@ SOFTWARE.
 #define BT_SMP_DHKEY_ORDER_FALLBACK 0
 #endif
 
-#if BT_SMP_TRACE_ENABLE
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 #include "syslog.h"
-#define SMP_TRACE(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 
 static const char *SmpCodeName(uint8_t c);
 
 #define SMP_TRACE_PDU(dir, code, state) \
-		SMP_TRACE("SMP " dir " %s state=%d\r\n", SmpCodeName(code), state)
+		DEBUG_PRINTF("SMP " dir " %s state=%d\r\n", SmpCodeName(code), state)
 #else
-#define SMP_TRACE(...)
+#define DEBUG_PRINTF(...)
 #define SMP_TRACE_PDU(dir, code, state)
 #endif
+/*******************************/
 
 #ifndef BT_SMP_MAX_LINK
 #define BT_SMP_MAX_LINK		4
@@ -209,7 +213,7 @@ static int SmpCryptoEcdh(BtSmpLink_t *pLink,
 						 const uint8_t pPeerPubKey[64], uint8_t pDhKey[32]);
 static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t Reason);
 
-#if BT_SMP_TRACE_ENABLE
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 static const char *SmpCodeName(uint8_t c)
 {
 	switch (c)
@@ -231,7 +235,7 @@ static const char *SmpCodeName(uint8_t c)
 		default:								return "?";
 	}
 }
-#endif	// BT_SMP_TRACE_ENABLE
+#endif
 
 //-----------------------------------------------------------------------------
 // Per-link context lookup
@@ -517,10 +521,10 @@ static inline bool SmpPairingActive(BtSmpState_t State)
 		   State != BT_SMP_STATE_DONE;
 }
 
-// True once the pairing on pLink has exceeded BT_SMP_TIMEOUT_MS. The unsigned
-// subtraction handles counter rollover during the wait. The timer is anchored
-// to the pairing start, so the elapsed time cannot be extended by the peer
-// sending further PDUs.
+// True once more than BT_SMP_TIMEOUT_MS has elapsed since our last transmitted
+// SMP PDU on pLink (Vol 3 Part H 3.4). The unsigned subtraction handles counter
+// rollover during the wait. Only our own transmissions refresh TmrStart (in
+// SmpSend), so a silent or stalled peer still trips the deadline.
 static inline bool SmpPairingTimedOut(const BtSmpLink_t *pLink)
 {
 	return SmpPairingActive(pLink->Ctx.State) &&
@@ -576,7 +580,9 @@ static void SmpSend(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	BtL2CapPdu_t *l2 = (BtL2CapPdu_t*)acl->Data;
 
 	acl->Hdr.ConnHdl = ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	// LE-U host->controller: first (here only) fragment uses 0b00; 0b11 is a
+	// controller->host value strict controllers reject (Vol 4 Part E 5.4.2).
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
 
 	l2->Hdr.Cid = BT_L2CAP_CID_SEC_MNGR;
@@ -586,8 +592,19 @@ static void SmpSend(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	acl->Hdr.Len = (uint16_t)(Len + sizeof(BtL2CapHdr_t));
 	BtHciSendAcl(pDev, acl);
 
+	// Reset the SMP timer on each transmitted PDU (Vol 3 Part H 3.4): the 30 s
+	// deadline runs between our transmissions, so a pairing that keeps making
+	// progress is not cut off mid-exchange (e.g. a multi-round Passkey Entry).
+	// Only our own transmissions refresh it - a silent or stalled peer still
+	// trips the deadline - and the number of SMP PDUs in a pairing is bounded.
+	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
+	if (pLink != nullptr)
+	{
+		pLink->Ctx.TmrStart = BtSmpMsTick();
+	}
+
 	SMP_TRACE_PDU("TX", ((const uint8_t*)pData)[0],
-				  SmpLinkFind(ConnHdl) ? (int)SmpLinkFind(ConnHdl)->Ctx.State : -1);
+				  pLink ? (int)pLink->Ctx.State : -1);
 }
 
 static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t Reason)
@@ -1083,7 +1100,7 @@ static void SmpBuildPairingRsp(BtSmpLink_t *pLink, BtSmpPairingRsp_t *pRsp)
 
 	pRsp->InitiatorKeyDist = reqInitKeyDist & supported;
 	pRsp->ResponderKeyDist = reqRespKeyDist & supported;
-	SMP_TRACE("SMP keydist req ik=%02x rk=%02x -> rsp ik=%02x rk=%02x sc=%d\r\n",
+	DEBUG_PRINTF("SMP keydist req ik=%02x rk=%02x -> rsp ik=%02x rk=%02x sc=%d\r\n",
 			  reqInitKeyDist, reqRespKeyDist,
 			  pRsp->InitiatorKeyDist, pRsp->ResponderKeyDist,
 			  pLink->Ctx.bSc ? 1 : 0);
@@ -1167,9 +1184,20 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	if (pLink->Ctx.State == BT_SMP_STATE_DONE ||
 		(pAlready != nullptr && pAlready->bSecure))
 	{
-		SMP_TRACE("SMP reject re-pair (state=%d already encrypted)\r\n",
+		DEBUG_PRINTF("SMP reject re-pair (state=%d already encrypted)\r\n",
 				  pLink->Ctx.State);
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+		return;
+	}
+
+	// Reject reserved field values with Invalid Parameters (Vol 3 Part H
+	// 3.5.5): IO Capability above 0x04 and OOB flag above 0x01 are undefined,
+	// and must not be treated as Just Works / OOB-present respectively.
+	if (pReq->IOCaps > BT_SMP_IOCAPS_KEYBOARD_DISPLAY ||
+		pReq->OOBFlag > BT_SMP_OOB_AUTH_PRESENT)
+	{
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
+		SmpAbortPairing(pLink);
 		return;
 	}
 
@@ -1199,7 +1227,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	if ((s_SmpAuthReq & BT_SMP_AUTHREQ_SC) &&
 		!(pReq->AuthReq & BT_SMP_AUTHREQ_SC))
 	{
-		SMP_TRACE("SMP reject legacy (peer auth=0x%02x), require SC\r\n",
+		DEBUG_PRINTF("SMP reject legacy (peer auth=0x%02x), require SC\r\n",
 				  pReq->AuthReq);
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
 		SmpAbortPairing(pLink);
@@ -1235,7 +1263,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		SmpAbortPairing(pLink);
 		return;
 	}
-	SMP_TRACE("SMP model=%d init_io=%d resp_io=%d mitm=%d\r\n",
+	DEBUG_PRINTF("SMP model=%d init_io=%d resp_io=%d mitm=%d\r\n",
 			  pLink->Ctx.Model, pReq->IOCaps, s_SmpIoCaps, mitm ? 1 : 0);
 	if (pLink->Ctx.Model != BT_SMP_MODEL_JUST_WORKS &&
 		pLink->Ctx.Model != BT_SMP_MODEL_NUMERIC_COMPARISON &&
@@ -1257,7 +1285,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	{
 		pLink->Ctx.State = BT_SMP_STATE_PUBKEY_WAIT;
 		int rc = SmpLocalKeyGen(pDev, pLink);
-		SMP_TRACE("SMP P256KeyGen rc=%d\r\n", rc);
+		DEBUG_PRINTF("SMP P256KeyGen rc=%d\r\n", rc);
 		if (rc == BT_SMP_CRYPTO_FAIL)
 		{
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
@@ -1285,6 +1313,19 @@ static bool SmpKeyPresent(const uint8_t *pKey, size_t Len)
 
 static bool SmpStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 {
+	// Reject a peer public key identical to our own before starting ECDH. This
+	// is the reflection / debug-key attack against LE Secure Connections,
+	// mandatory to reject since Core 5.1 (CVE-2020-26558). Both keys are always
+	// present at this chokepoint (the initiator has sent its key and the
+	// responder only reaches here once both are in). On-curve validation of the
+	// peer key is done by the key-agreement engine. A false return makes the
+	// caller send Pairing Failed and abort.
+	if (memcmp(pLink->Ctx.PeerPubKey, pLink->Ctx.LocalPubKey,
+			   sizeof(pLink->Ctx.PeerPubKey)) == 0)
+	{
+		return false;
+	}
+
 	if (SmpCryptoRequest(pLink, pDev, BT_SMP_CRYPTO_OP_DHKEY) == false)
 	{
 		return false;
@@ -1346,6 +1387,16 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		return;
 	}
 
+	// Reject reserved field values with Invalid Parameters (Vol 3 Part H
+	// 3.5.5): IO Capability above 0x04 and OOB flag above 0x01 are undefined.
+	if (pRsp->IOCaps > BT_SMP_IOCAPS_KEYBOARD_DISPLAY ||
+		pRsp->OOBFlag > BT_SMP_OOB_AUTH_PRESENT)
+	{
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
+		SmpAbortPairing(pLink);
+		return;
+	}
+
 	// Enforce the locally-required minimum key size (see the responder path):
 	// reject a peer offering below BT_SMP_CFG_MIN_ENC_KEY_SIZE to close the
 	// KNOB-style downgrade. Default floor is 7 (spec) unless the build raises it.
@@ -1396,7 +1447,7 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		SmpAbortPairing(pLink);
 		return;
 	}
-	SMP_TRACE("SMP model=%d init_io=%d resp_io=%d mitm=%d\r\n",
+	DEBUG_PRINTF("SMP model=%d init_io=%d resp_io=%d mitm=%d\r\n",
 			  pLink->Ctx.Model, s_SmpIoCaps, pRsp->IOCaps, mitm ? 1 : 0);
 	if (pLink->Ctx.Model != BT_SMP_MODEL_JUST_WORKS &&
 		pLink->Ctx.Model != BT_SMP_MODEL_NUMERIC_COMPARISON &&
@@ -1584,6 +1635,32 @@ static void SmpPasskeyResponderConfirm(BtHciDevice_t * const pDev,
 	pLink->Ctx.State = BT_SMP_STATE_RANDOM_WAIT;
 }
 
+// Own address as the peer saw it when this connection was created. A link
+// made over a resolvable private address must run f5/f6/c1 with that address;
+// the identity address from BtSmpLocalAddrGet would mismatch every confirm
+// and DHKey check. The connection record is stamped at creation; when it was
+// not (all-zero), fall back to the accessor, which keeps ports that use one
+// fixed address working unchanged.
+static void SmpOwnAddrGet(uint16_t ConnHdl, uint8_t *pType, uint8_t Addr[6])
+{
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+
+	if (pPeer != nullptr)
+	{
+		for (int i = 0; i < 6; i++)
+		{
+			if (pPeer->Conn.OwnAddr[i] != 0)
+			{
+				*pType = pPeer->Conn.OwnAddrType;
+				memcpy(Addr, pPeer->Conn.OwnAddr, 6);
+				return;
+			}
+		}
+	}
+
+	BtSmpLocalAddrGet(pType, Addr);
+}
+
 // Initiator: all rounds verified. Derive keys with f5 from the final nonces and
 // send the DHKey Check Ea = f6(MacKey, Na, Nb, passkey, IOcapA, A, B).
 static void SmpPasskeyInitiatorFinish(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
@@ -1592,14 +1669,16 @@ static void SmpPasskeyInitiatorFinish(BtHciDevice_t * const pDev, BtSmpLink_t *p
 {
 	uint8_t localAddr[6];
 	uint8_t localAddrType = 0;
-	BtSmpLocalAddrGet(&localAddrType, localAddr);
+	SmpOwnAddrGet(ConnHdl, &localAddrType, localAddr);
 
 	uint8_t dhKeySmp[32];
 	SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
 
-	if (!SmpF5(dhKeySmp, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
+	bool f5ok = SmpF5(dhKeySmp, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
 		  localAddrType, localAddr, PeerAddrType, PeerAddr,
-		  pLink->Ctx.Mackey, pLink->Ctx.Ltk))
+		  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
+	CryptoSecureWipe(dhKeySmp, sizeof(dhKeySmp));
+	if (!f5ok)
 	{
 		SmpFailAndLock(s_pSmpActiveDev, pLink->ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
 		return;
@@ -1635,14 +1714,16 @@ static void SmpPasskeyResponderFinish(BtSmpLink_t *pLink, const uint8_t *PeerAdd
 {
 	uint8_t localAddr[6];
 	uint8_t localAddrType = 0;
-	BtSmpLocalAddrGet(&localAddrType, localAddr);
+	SmpOwnAddrGet(pLink->ConnHdl, &localAddrType, localAddr);
 
 	uint8_t dhKeySmp[32];
 	SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
 
-	if (!SmpF5(dhKeySmp, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
+	bool f5ok = SmpF5(dhKeySmp, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
 		  PeerAddrType, PeerAddr, localAddrType, localAddr,
-		  pLink->Ctx.Mackey, pLink->Ctx.Ltk))
+		  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
+	CryptoSecureWipe(dhKeySmp, sizeof(dhKeySmp));
+	if (!f5ok)
 	{
 		SmpFailAndLock(s_pSmpActiveDev, pLink->ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
 		return;
@@ -1842,6 +1923,12 @@ static void SmpHandlePairingConfirm(BtHciDevice_t * const pDev, BtSmpLink_t *pLi
 		iat = pPeer->Conn.PeerAddrType;
 	}
 
+	// c1 folds the same initiator/responder address pair into both confirm
+	// values. The verify path below computes the expected Mconfirm with the
+	// real own address, so the Sconfirm sent here must use it too; a zero
+	// responder address makes every conformant initiator reject the confirm.
+	SmpOwnAddrGet(ConnHdl, &rat, ra);
+
 	if (!SmpC1(pLink->Ctx.Tk, pLink->Ctx.LocalRand,
 		  pLink->Ctx.PReq, pLink->Ctx.PRsp,
 		  iat, ia, rat, ra, pLink->Ctx.LocalConfirm))
@@ -1920,15 +2007,17 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 
 		uint8_t localAddr[6];
 		uint8_t localAddrType = 0;
-		BtSmpLocalAddrGet(&localAddrType, localAddr);
+		SmpOwnAddrGet(pLink->ConnHdl, &localAddrType, localAddr);
 
 		uint8_t dhKeySmp[32];
 		SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
 
 		// f5(DHKey, Na, Nb, A1=initiator(local), A2=responder(peer)).
-		if (!SmpF5(dhKeySmp, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
+		bool f5ok = SmpF5(dhKeySmp, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
 			  localAddrType, localAddr, peerAddrType, peerAddr,
-			  pLink->Ctx.Mackey, pLink->Ctx.Ltk))
+			  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
+		CryptoSecureWipe(dhKeySmp, sizeof(dhKeySmp));
+		if (!f5ok)
 		{
 			SmpFailAndLock(s_pSmpActiveDev, pLink->ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
 			return;
@@ -1988,14 +2077,16 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 
 		uint8_t localAddr[6];
 		uint8_t localAddrType = 0;
-		BtSmpLocalAddrGet(&localAddrType, localAddr);
+		SmpOwnAddrGet(pLink->ConnHdl, &localAddrType, localAddr);
 
 		uint8_t dhKeySmp[32];
 		SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
 
-		if (!SmpF5(dhKeySmp, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
+		bool f5ok = SmpF5(dhKeySmp, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
 			  peerAddrType, peerAddr, localAddrType, localAddr,
-			  pLink->Ctx.Mackey, pLink->Ctx.Ltk))
+			  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
+		CryptoSecureWipe(dhKeySmp, sizeof(dhKeySmp));
+		if (!f5ok)
 		{
 			SmpFailAndLock(s_pSmpActiveDev, pLink->ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
 			return;
@@ -2029,7 +2120,7 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 	uint8_t calc[16];
 	uint8_t localAddr[6];
 	uint8_t localAddrType = 0;
-	BtSmpLocalAddrGet(&localAddrType, localAddr);
+	SmpOwnAddrGet(pLink->ConnHdl, &localAddrType, localAddr);
 
 	if (!SmpC1(pLink->Ctx.Tk, pLink->Ctx.PeerRand,
 		  pLink->Ctx.PReq, pLink->Ctx.PRsp,
@@ -2077,7 +2168,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 
 	uint8_t localAddr[6];
 	uint8_t localAddrType = 0;
-	BtSmpLocalAddrGet(&localAddrType, localAddr);
+	SmpOwnAddrGet(pLink->ConnHdl, &localAddrType, localAddr);
 
 	if (pLink->Ctx.bInitiator)
 	{
@@ -2150,7 +2241,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 			return;
 		}
 
-		SMP_TRACE("Ea mismatch cur0=%02x alt0=%02x peer0=%02x\r\n",
+		DEBUG_PRINTF("Ea mismatch cur0=%02x alt0=%02x peer0=%02x\r\n",
 				  ea[0], altEa[0], pChk->Value[0]);
 
 		if (!SmpEqualCT(altEa, pChk->Value, 16))
@@ -2165,7 +2256,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		memcpy(pLink->Ctx.Ltk, altLtk, 16);
 		SmpApplyKeySize(pLink->Ctx.Ltk, pLink->Ctx.EncKeySize);
 		memcpy(ea, altEa, 16);
-		SMP_TRACE("Ea matched with raw DHKey f5 input\r\n");
+		DEBUG_PRINTF("Ea matched with raw DHKey f5 input\r\n");
 #else
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
 		SmpAuthFailCount(pLink);
@@ -2293,9 +2384,10 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		return;
 	}
 
-	// H5: anchor the pairing timer on the first PDU of an exchange (state still
-	// IDLE). The timer is not refreshed per PDU, so total pairing time is bounded
-	// to BT_SMP_TIMEOUT_MS and the peer cannot extend it by sending further PDUs.
+	// Anchor the pairing timer when the exchange begins (state still IDLE),
+	// before any response is sent. From then on each transmitted PDU refreshes
+	// it in SmpSend, per Vol 3 Part H 3.4 - the 30 s deadline runs between our
+	// transmissions, not over the whole pairing.
 	if (pLink->Ctx.State == BT_SMP_STATE_IDLE)
 	{
 		pLink->Ctx.TmrStart = BtSmpMsTick();
@@ -2361,7 +2453,7 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			if (pKdPeer == nullptr || pKdPeer->bSecure == false ||
 				pLink->Ctx.State != BT_SMP_STATE_KEYDIST)
 			{
-				SMP_TRACE("SMP drop key-dist code 0x%02x (secure=%d state=%d)\r\n",
+				DEBUG_PRINTF("SMP drop key-dist code 0x%02x (secure=%d state=%d)\r\n",
 						  pSmp->Code, (pKdPeer != nullptr) && pKdPeer->bSecure,
 						  (int)pLink->Ctx.State);
 				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
@@ -2505,7 +2597,7 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		{
 			if (Len >= sizeof(BtSmpPairingFailed_t))
 			{
-				SMP_TRACE("SMP RX Failed reason=0x%02x\r\n",
+				DEBUG_PRINTF("SMP RX Failed reason=0x%02x\r\n",
 						  ((const BtSmpPairingFailed_t*)pSmp)->Reason);
 			}
 			// A Pairing Failed is only meaningful during an active pairing. On
@@ -2540,7 +2632,7 @@ void BtSmpLocalPubKeyReady(BtHciDevice_t * const pDev, uint8_t Status,
 						   const uint8_t *pKeyX, const uint8_t *pKeyY)
 {
 	s_pSmpActiveDev = pDev;
-	SMP_TRACE("SMP LocalPubKeyReady status=%d\r\n", Status);
+	DEBUG_PRINTF("SMP LocalPubKeyReady status=%d\r\n", Status);
 
 	BtSmpLink_t *pLink = SmpCryptoInflightTake(BT_SMP_CRYPTO_OP_PUBKEY);
 	if (pLink == nullptr ||
@@ -2585,7 +2677,7 @@ void BtSmpLocalPubKeyReady(BtHciDevice_t * const pDev, uint8_t Status,
 void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *pDhKey)
 {
 	s_pSmpActiveDev = pDev;
-	SMP_TRACE("SMP DhKeyReady status=%d\r\n", Status);
+	DEBUG_PRINTF("SMP DhKeyReady status=%d\r\n", Status);
 
 	BtSmpLink_t *pLink = SmpCryptoInflightTake(BT_SMP_CRYPTO_OP_DHKEY);
 	if (pLink == nullptr || pLink->Ctx.State != BT_SMP_STATE_DHKEY_WAIT)
@@ -2697,7 +2789,7 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 		}
 		memcpy(pLink->Ctx.LocalConfirm, cf.Value, 16);
 
-#if BT_SMP_TRACE_ENABLE
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 		{
 			// Trace-only self-check: recompute Cb to confirm f4 is deterministic.
 			uint8_t cb2[16];
@@ -2708,7 +2800,7 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 				continue;
 			}
 			bool stable = (memcmp(cb2, cf.Value, 16) == 0);
-			SMP_TRACE("Cb stable=%d firstbyte=%02x Nb0=%02x\r\n",
+			DEBUG_PRINTF("Cb stable=%d firstbyte=%02x Nb0=%02x\r\n",
 					  stable ? 1 : 0, cf.Value[0], pLink->Ctx.LocalRand[0]);
 		}
 #endif
@@ -2747,10 +2839,10 @@ void BtSmpProcessLtkRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 	if (have)
 	{
-		SMP_TRACE("SMP LTK rqst -> reply (ediv=0x%04x rand=%08x%08x)\r\n",
+		DEBUG_PRINTF("SMP LTK rqst -> reply (ediv=0x%04x rand=%08x%08x)\r\n",
 				  (unsigned)Ediv,
 				  (unsigned)(Rand >> 32), (unsigned)(Rand & 0xFFFFFFFF));
-		SMP_TRACE("SMP LTK %02x%02x%02x%02x..%02x%02x%02x%02x\r\n",
+		DEBUG_PRINTF("SMP LTK %02x%02x%02x%02x..%02x%02x%02x%02x\r\n",
 				  key[0], key[1], key[2], key[3],
 				  key[12], key[13], key[14], key[15]);
 		// The LTK Request Reply is an HCI COMMAND, not ACL data. On the SDC
@@ -2760,7 +2852,7 @@ void BtSmpProcessLtkRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	}
 	else
 	{
-		SMP_TRACE("SMP LTK rqst -> NEG reply (no key)\r\n");
+		DEBUG_PRINTF("SMP LTK rqst -> NEG reply (no key)\r\n");
 		BtSmpHciLtkNegReply(pDev, ConnHdl);
 	}
 }
@@ -2793,7 +2885,7 @@ static void SmpConnSecFromKeys(BtConnSec_t *pSec, const BtSmpKeys_t *pKeys)
 void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 							uint8_t Status, uint8_t Enabled)
 {
-	SMP_TRACE("SMP EncChange status=%d enabled=%d\r\n", Status, Enabled);
+	DEBUG_PRINTF("SMP EncChange status=%d enabled=%d\r\n", Status, Enabled);
 
 	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
 	if (Status == 0 && Enabled != 0 && pLink != nullptr &&
@@ -2876,19 +2968,22 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		uint8_t localKeyDist = (pLink->Ctx.bInitiator ?
 									pLink->Ctx.PReq[5] : pLink->Ctx.PRsp[6]) &
 							   (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY);
-		SMP_TRACE("SMP encrypted, distribute lk=%02x init=%d\r\n",
+		DEBUG_PRINTF("SMP encrypted, distribute lk=%02x init=%d\r\n",
 				  localKeyDist, pLink->Ctx.bInitiator ? 1 : 0);
 
 		if (localKeyDist & BT_SMP_KEYDIST_IDKEY)
 		{
+			// The stable local identity IRK, not a fresh key. Every peer
+			// receives the same IRK so any of them can resolve the
+			// resolvable private addresses this device generates from it.
 			uint8_t irk[16];
-			if (!BtSmpCryptoRand(irk, 16))
+			if (!BtSmpLocalIrkGet(irk))
 			{
 				// The IDKEY was negotiated, so the peer expects an Identity
 				// Information PDU. A key drawn from a failed RNG must not be
 				// sent, and omitting the PDU would leave the peer waiting for
 				// one that never arrives. Fail the pairing instead.
-				SMP_TRACE("SMP IRK RNG failed, fail pairing\r\n");
+				DEBUG_PRINTF("SMP IRK RNG failed, fail pairing\r\n");
 				SmpFailAndLock(pDev, ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
 				return;
 			}
@@ -2915,7 +3010,7 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 				// The SIGNKEY was negotiated, so the peer expects a Signing
 				// Information PDU. As with the IRK, fail the pairing rather
 				// than leave the peer waiting for a PDU that never arrives.
-				SMP_TRACE("SMP CSRK RNG failed, fail pairing\r\n");
+				DEBUG_PRINTF("SMP CSRK RNG failed, fail pairing\r\n");
 				SmpFailAndLock(pDev, ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
 				return;
 			}
@@ -3518,7 +3613,7 @@ void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 
 	uint8_t localAddr[6];
 	uint8_t localAddrType = 0;
-	BtSmpLocalAddrGet(&localAddrType, localAddr);
+	SmpOwnAddrGet(ConnHdl, &localAddrType, localAddr);
 	uint8_t zeroR[16] = {0};
 
 	if (pLink->Ctx.bInitiator)
@@ -3678,7 +3773,7 @@ void BtSmpRequestSecurity(uint16_t ConnHdl)
 	BtSmpSecurityReq_t req;
 	req.Code = BT_SMP_CODE_PAIRING_SECURITY_REQ;
 	req.AuthReq = (uint8_t)(s_SmpAuthReq & ~BT_SMP_AUTHREQ_KEYPRESS);
-	SMP_TRACE("SMP TX SecurityReq auth=0x%02x\r\n", req.AuthReq);
+	DEBUG_PRINTF("SMP TX SecurityReq auth=0x%02x\r\n", req.AuthReq);
 	SmpSend(pDev, ConnHdl, &req, sizeof(req));
 }
 
@@ -3728,7 +3823,7 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 	{
 		pLink->Ctx.bInitiator = true;
 		pLink->Ctx.State = BT_SMP_STATE_DONE;
-		SMP_TRACE("SMP central reconnect, encrypt from bond\r\n");
+		DEBUG_PRINTF("SMP central reconnect, encrypt from bond\r\n");
 		BtSmpHciEnableEncryption(pDev, ConnHdl, pLink->Keys.Rand,
 								 pLink->Keys.Ediv, pLink->Keys.Ltk);
 		return;
@@ -3756,7 +3851,7 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 	pLink->Ctx.IoCaps = req.IOCaps;
 	pLink->Ctx.AuthReq = req.AuthReq;
 
-	SMP_TRACE("SMP TX PairingReq (initiator) auth=0x%02x\r\n", req.AuthReq);
+	DEBUG_PRINTF("SMP TX PairingReq (initiator) auth=0x%02x\r\n", req.AuthReq);
 	SmpSend(pDev, ConnHdl, &req, sizeof(req));
 
 	pLink->Ctx.State = BT_SMP_STATE_PUBKEY_LOCAL_WAIT;
@@ -3843,7 +3938,7 @@ void BtSmpTimeoutCheck(void)
 			BtDevice_t *pPeer = BtPeerFindByHdl(pLink->ConnHdl);
 			BtHciDevice_t *pDev = (pPeer != nullptr) ?
 									(BtHciDevice_t*)pPeer->pHciDev : s_pSmpActiveDev;
-			SMP_TRACE("SMP pairing timed out on hdl %d\r\n", pLink->ConnHdl);
+			DEBUG_PRINTF("SMP pairing timed out on hdl %d\r\n", pLink->ConnHdl);
 			pLink->Ctx.FailCount++;
 			SmpFailAndLock(pDev, pLink->ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
 		}
@@ -3855,7 +3950,7 @@ void BtSmpTimeoutCheck(void)
 			// valid, so this is not a pairing failure: close the window,
 			// complete with the record collected so far, and let the app
 			// persist a bond that simply lacks the missing peer key.
-			SMP_TRACE("SMP key distribution timed out on hdl %d\r\n",
+			DEBUG_PRINTF("SMP key distribution timed out on hdl %d\r\n",
 					  pLink->ConnHdl);
 			pLink->Ctx.KeyDistExp = 0;
 			pLink->Ctx.State = BT_SMP_STATE_DONE;
@@ -3935,6 +4030,48 @@ int BtSmpC1S1SelfTest(void)
 	return memcmp(s1, s1Expect, 16) == 0 ? 0 : -1;
 }
 
+// The IRK carrying no key material at all is the "nothing was distributed"
+// marker in the bond record, so both the resolve and the generate side treat
+// an all-zero IRK as absent.
+static bool SmpIrkPresent(const uint8_t Irk[16])
+{
+	for (int i = 0; i < 16; i++)
+	{
+		if (Irk[i] != 0)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+// ah (Core spec Vol 3 Part H 2.2.2) in wire byte order. Irk and PrandLe are
+// little-endian as stored and on air; HashLe receives the 3 hash bytes
+// little-endian. SmpAes is standard big-endian, so the IRK is reversed into
+// the key and prand is placed in the low 24 bits most significant byte first.
+static void SmpAh(const uint8_t Irk[16], const uint8_t PrandLe[3],
+				  uint8_t HashLe[3])
+{
+	uint8_t key[16];
+	uint8_t rp[16];
+	uint8_t out[16];
+
+	for (int i = 0; i < 16; i++)
+	{
+		key[i] = Irk[15 - i];
+	}
+	memset(rp, 0, sizeof(rp));
+	rp[13] = PrandLe[2];	// prand, most significant byte first
+	rp[14] = PrandLe[1];
+	rp[15] = PrandLe[0];
+
+	SmpAes(key, rp, out);	// ah = e(IRK, prand'), low 24 bits
+
+	HashLe[0] = out[15];
+	HashLe[1] = out[14];
+	HashLe[2] = out[13];
+}
+
 // Resolve a resolvable private address against a peer IRK with the ah function
 // (Core spec Vol 3 Part H 2.2.2). Rpa is a 6-byte BD_ADDR in little-endian wire
 // order: Rpa[3..5] are prand (random part, top two bits 0b01), Rpa[0..2] are the
@@ -3948,41 +4085,152 @@ bool BtSmpRpaResolve(const uint8_t Irk[16], const uint8_t Rpa[6])
 	}
 
 	// No IRK was distributed for this peer: nothing to resolve against.
-	bool present = false;
-	for (int i = 0; i < 16; i++)
-	{
-		if (Irk[i] != 0)
-		{
-			present = true;
-			break;
-		}
-	}
-	if (present == false)
+	if (SmpIrkPresent(Irk) == false)
 	{
 		return false;
 	}
 
-	uint8_t key[16];
-	uint8_t rp[16];
-	uint8_t out[16];
+	uint8_t hash[3];
 
-	// SmpAes is standard big-endian. The stored IRK and the address are little-
-	// endian (wire order), so reverse the IRK into the key and place prand in the
-	// low 24 bits big-endian.
-	for (int i = 0; i < 16; i++)
+	SmpAh(Irk, &Rpa[3], hash);
+
+	return hash[0] == Rpa[0] && hash[1] == Rpa[1] && hash[2] == Rpa[2];
+}
+
+// Generate a resolvable private address from Irk. prand is drawn from the
+// secure RNG with the top two bits forced to 0b01 (Core spec Vol 6 Part B
+// 1.3.2.2); the hash comes from the same ah as resolution, so a generated
+// address always resolves against the same IRK.
+bool BtSmpRpaGen(const uint8_t Irk[16], uint8_t Rpa[6])
+{
+	if (Irk == nullptr || Rpa == nullptr)
 	{
-		key[i] = Irk[15 - i];
+		return false;
 	}
-	memset(rp, 0, sizeof(rp));
-	rp[13] = Rpa[5];		// prand, most significant byte first
-	rp[14] = Rpa[4];
-	rp[15] = Rpa[3];
 
-	SmpAes(key, rp, out);	// ah = e(IRK, prand'), low 24 bits
+	if (SmpIrkPresent(Irk) == false)
+	{
+		return false;
+	}
 
-	// Hash is the low 24 bits of the address (Rpa[0..2], little-endian); compare
-	// to the cipher's low 24 bits (out[13..15], big-endian).
-	return out[13] == Rpa[2] && out[14] == Rpa[1] && out[15] == Rpa[0];
+	if (!BtSmpCryptoRand(&Rpa[3], 3))
+	{
+		return false;
+	}
+	Rpa[5] = (uint8_t)((Rpa[5] & 0x3F) | 0x40);
+
+	SmpAh(Irk, &Rpa[3], &Rpa[0]);
+
+	return true;
+}
+
+// ===== Local identity =====
+// One stable IRK identifies this device to every bonded peer. It is created
+// from the secure RNG the first time the IDKEY distribution or the privacy
+// layer asks for it, and from then on every peer receives the same key, so
+// any of them can resolve the resolvable private addresses generated from
+// it. The platform persists it across resets through the hooks below, using
+// the same defer-and-serialize-on-demand division as the bond store.
+
+#pragma pack(push, 1)
+typedef struct __Bt_Smp_Local_Id_Record {
+	uint32_t Magic;			//!< BT_SMP_LOCALID_MAGIC
+	uint16_t Version;		//!< BT_SMP_LOCALID_VERSION
+	uint16_t Len;			//!< sizeof(BtSmpLocalIdRecord_t)
+	uint8_t Irk[16];		//!< Local identity IRK, little-endian storage
+	uint32_t Crc;			//!< crc32_ieee over Magic..Irk
+} BtSmpLocalIdRecord_t;
+#pragma pack(pop)
+
+#define BT_SMP_LOCALID_MAGIC	0x49504D53U		// "SMPI" little-endian
+#define BT_SMP_LOCALID_VERSION	1U
+
+static struct {
+	bool bValid;
+	uint8_t Irk[16];
+} s_SmpLocalId;
+
+// Weak default: the identity lives for this boot only. A platform that
+// persists it marks the change and writes later from a safe context, reading
+// the record back with BtSmpLocalIdSerialize when it is ready.
+__attribute__((weak)) void BtSmpLocalIdSave(void)
+{
+}
+
+size_t BtSmpLocalIdRecordSize(void)
+{
+	return sizeof(BtSmpLocalIdRecord_t);
+}
+
+size_t BtSmpLocalIdSerialize(void *pBuff, size_t BuffLen)
+{
+	if (s_SmpLocalId.bValid == false || pBuff == nullptr ||
+		BuffLen < sizeof(BtSmpLocalIdRecord_t))
+	{
+		return 0;
+	}
+
+	BtSmpLocalIdRecord_t rec;
+
+	rec.Magic = BT_SMP_LOCALID_MAGIC;
+	rec.Version = BT_SMP_LOCALID_VERSION;
+	rec.Len = (uint16_t)sizeof(rec);
+	memcpy(rec.Irk, s_SmpLocalId.Irk, 16);
+	rec.Crc = crc32_ieee((uint8_t*)&rec, offsetof(BtSmpLocalIdRecord_t, Crc));
+
+	memcpy(pBuff, &rec, sizeof(rec));
+	CryptoSecureWipe(&rec, sizeof(rec));
+
+	return sizeof(BtSmpLocalIdRecord_t);
+}
+
+bool BtSmpLocalIdRestore(const void *pRec, size_t Len)
+{
+	if (pRec == nullptr || Len != sizeof(BtSmpLocalIdRecord_t))
+	{
+		return false;
+	}
+
+	// Copy into aligned storage before validating, as the bond restore does.
+	BtSmpLocalIdRecord_t rec;
+	memcpy(&rec, pRec, sizeof(rec));
+
+	if (rec.Magic != BT_SMP_LOCALID_MAGIC ||
+		rec.Version != BT_SMP_LOCALID_VERSION ||
+		rec.Len != sizeof(rec) ||
+		rec.Crc != crc32_ieee((uint8_t*)&rec, offsetof(BtSmpLocalIdRecord_t, Crc)))
+	{
+		CryptoSecureWipe(&rec, sizeof(rec));
+		return false;
+	}
+
+	memcpy(s_SmpLocalId.Irk, rec.Irk, 16);
+	s_SmpLocalId.bValid = true;
+	CryptoSecureWipe(&rec, sizeof(rec));
+
+	return true;
+}
+
+bool BtSmpLocalIrkGet(uint8_t Irk[16])
+{
+	if (Irk == nullptr)
+	{
+		return false;
+	}
+
+	if (s_SmpLocalId.bValid == false)
+	{
+		if (!BtSmpCryptoRand(s_SmpLocalId.Irk, 16))
+		{
+			return false;
+		}
+		s_SmpLocalId.bValid = true;
+		BtSmpLocalIdSave();
+	}
+
+	memcpy(Irk, s_SmpLocalId.Irk, 16);
+
+	return true;
 }
 
 int BtSmpRpaSelfTest(void)
@@ -3996,7 +4244,29 @@ int BtSmpRpaSelfTest(void)
 	static const uint8_t rpa[6] = {
 		0xaa,0xfb,0x0d,0x94,0x81,0x70 };
 
-	return BtSmpRpaResolve(irk, rpa) ? 0 : -1;
+	if (BtSmpRpaResolve(irk, rpa) == false)
+	{
+		return -1;
+	}
+
+	// Generate from the same IRK and resolve it back. Checks the RNG path,
+	// the prand bit pattern, and that generation and resolution share one ah.
+	uint8_t gen[6];
+
+	if (BtSmpRpaGen(irk, gen) == false)
+	{
+		return -2;
+	}
+	if ((gen[5] & 0xC0) != 0x40)
+	{
+		return -3;
+	}
+	if (BtSmpRpaResolve(irk, gen) == false)
+	{
+		return -4;
+	}
+
+	return 0;
 }
 
 // Compute the 8-byte data-signing MAC over pMsg (the signed ATT data followed by
