@@ -336,8 +336,22 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 	memset(&p, 0, sizeof(p));
 	p.AdvHandle = 0;
 	BtAdvWr16(p.EvtProp, extprop);
-	BtAdvWr24(p.PrimIntervalMin, mSecTo0_625(pCfg->AdvInterval));
-	BtAdvWr24(p.PrimIntervalMax, mSecTo0_625(pCfg->AdvInterval + 50));
+	// Primary_Advertising_Interval_Min has a floor of 0x000020 (20 ms) in the
+	// LE Set Extended Advertising Parameters command; a smaller configured
+	// interval is otherwise rejected by the controller with Invalid HCI Command
+	// Parameters. Clamp up to the floor and keep max >= min.
+	uint32_t primMin = mSecTo0_625(pCfg->AdvInterval);
+	uint32_t primMax = mSecTo0_625(pCfg->AdvInterval + 50);
+	if (primMin < 0x20)
+	{
+		primMin = 0x20;
+	}
+	if (primMax < primMin)
+	{
+		primMax = primMin;
+	}
+	BtAdvWr24(p.PrimIntervalMin, primMin);
+	BtAdvWr24(p.PrimIntervalMax, primMax);
 	p.PrimChanMap  = 7;
 	p.OwnAddrType  = BTADDR_TYPE_RAND;
 	p.PeerAddrType = 0;
