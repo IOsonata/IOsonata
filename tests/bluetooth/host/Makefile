@@ -21,7 +21,15 @@ CFLAGS += -std=gnu11 -Wall -Wextra -fno-omit-frame-pointer \
 CXXFLAGS ?= -O1 -g
 CXXFLAGS += -std=gnu++23 -Wall -Wextra -fno-omit-frame-pointer \
 	-ffunction-sections -fdata-sections
+# Dead-strip unused sections so a target that pulls in a .cpp but exercises only
+# part of it does not have to satisfy every symbol the unused code references
+# (for example the CFifo calls in bt_hci_ctlr.cpp). The GNU and Apple linkers
+# spell this differently; select by host OS.
+ifeq ($(shell uname -s),Darwin)
+LDFLAGS += -Wl,-dead_strip
+else
 LDFLAGS += -Wl,--gc-sections
+endif
 SANITIZERS ?= -fsanitize=address,undefined
 
 ADV_SOURCES := \

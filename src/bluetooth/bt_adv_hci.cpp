@@ -85,11 +85,13 @@ typedef struct {
 // --- Adv packet buffers (data region overlaid by BtAdvPacket_t) ---
 
 alignas(4) static uint8_t s_BtDevAdvBuff[sizeof(BtHciLeExtAdvData_t)];
-alignas(4) static BtHciLeExtAdvData_t &s_BtDevExtAdvData = *(BtHciLeExtAdvData_t*)s_BtDevAdvBuff;
+// The alignment lives on the backing buffer above; a reference has no storage
+// of its own to align (clang rejects alignas on a reference, g++ ignores it).
+static BtHciLeExtAdvData_t &s_BtDevExtAdvData = *(BtHciLeExtAdvData_t*)s_BtDevAdvBuff;
 alignas(4) static BtAdvPacket_t s_BtDevExtAdvPkt = { 251, 0, s_BtDevExtAdvData.Data };
 
 alignas(4) static uint8_t s_BtDevSrBuff[sizeof(BtHciLeExtAdvData_t)];
-alignas(4) static BtHciLeExtAdvData_t &s_BtDevExtSrData = *(BtHciLeExtAdvData_t*)s_BtDevSrBuff;
+static BtHciLeExtAdvData_t &s_BtDevExtSrData = *(BtHciLeExtAdvData_t*)s_BtDevSrBuff;
 alignas(4) static BtAdvPacket_t s_BtDevExtSrPkt = { 251, 0, s_BtDevExtSrData.Data };
 
 // Advertising duration in 10 ms units, cached at init for the enable command.
