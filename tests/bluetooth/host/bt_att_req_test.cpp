@@ -41,8 +41,6 @@ bool BtGattCccdSet(uint16_t, uint16_t, uint16_t Value)
 void BtGattClientNotified(uint16_t, uint16_t, uint8_t *, uint16_t) {}
 void BtGattHandleValueConfirm(uint16_t) {}
 
-bool BtUuidGetBase(int, uint8_t *) { return false; }
-
 bool BtSmpSignVerify(uint16_t, const uint8_t *, size_t, const uint8_t *)
 {
 	return false;
@@ -258,6 +256,70 @@ void TestReadByTypeRejectsTruncatedPair()
 		}
 	}
 	CHECK(!thirdPresent);
+}
+
+// ---- Read By Type with a 128-bit attribute type ---------------------------
+
+void TestReadByType128Bit()
+{
+	BtAttDBInit(2048);
+	BtAttSetMtu(BT_ATT_MTU_MIN);
+
+	// A characteristic value whose type is a vendor 128-bit UUID. Register its
+	// base and build the packed DB type via the real UUID table. Bytes 12-13
+	// (little-endian) are the 16-bit short id.
+	uint8_t vendor128[16] = {
+		0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
+		0x93, 0xF3, 0xA3, 0xB5, 0x34, 0x12, 0x40, 0x6E };
+	BtUuid16_t vtype;
+	int idx = BtUuid128To16(&vtype, vendor128);
+	CHECK(idx > 0);					// a custom base, not the SIG base
+
+	BtChar_t chr;
+	std::memset(&chr, 0, sizeof(chr));
+	chr.Uuid = vtype.Uuid; chr.MaxDataLen = 4; chr.Property = BT_GATT_CHAR_PROP_READ;
+	uint8_t val[4] = { 0xDE, 0xAD, 0xBE, 0xEF };
+	chr.pValue = val; chr.ValueLen = 4;
+
+	BtAttDBEntry_t *e = BtAttDBAddEntry(&vtype, (int)(sizeof(BtAttCharValue_t) + 4));
+	CHECK(e != nullptr);
+	((BtAttCharValue_t *)e->Data)->pChar = &chr;
+	BtAttDBEntrySetPermission(e, BT_ATT_PERMISSION_READ);
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+
+	// Read By Type carrying the 128-bit type: op + start(2) + end(2) + uuid128(16).
+	reqbuf[0] = BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ;
+	PutLe16(reqbuf + 1, 0x0001);
+	PutLe16(reqbuf + 3, 0xFFFF);
+	std::memcpy(reqbuf + 5, vendor128, 16);
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 5 + 16,
+								 (BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP);
+	CHECK(rspbuf[1] == 6);						// pair = handle(2) + value(4)
+	CHECK(n == 2 + 6);
+	CHECK(GetLe16(rspbuf + 2) == e->Hdl);
+	CHECK(std::memcmp(rspbuf + 4, val, 4) == 0);
+
+	// A well-formed 128-bit type whose base is not registered matches nothing:
+	// Attribute Not Found, no crash.
+	uint8_t unknown128[16] = {
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0A, 0x0B, 0x0C, 0x99, 0x88, 0x0D, 0x0E };
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	std::memcpy(reqbuf + 5, unknown128, 16);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 5 + 16,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_ATT_NOT_FOUND);
+
+	// A malformed type length (neither 2 nor 16) is Invalid PDU.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 5 + 8,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_INVALID_PDU);
 }
 
 // ---- Write Request length handling ----------------------------------------
@@ -557,6 +619,40 @@ void TestFindByTypeValueChunkedCompare()
 	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
 }
 
+// ---- Read Multiple concatenates values and sets the response opcode -------
+
+void TestReadMultiple()
+{
+	BtAttDBInit(2048);
+	BtAttSetMtu(BT_ATT_MTU_MIN);		// 23: the case the old guard broke
+
+	BtChar_t chr[3];
+	uint8_t val[3][4] = { {1,1,1,1}, {2,2,2,2}, {3,3,3,3} };
+	BtAttDBEntry_t *e[3];
+	for (int i = 0; i < 3; ++i)
+	{
+		e[i] = AddCharValue(&chr[i], val[i], 4, 4, BT_GATT_CHAR_PROP_READ);
+		CHECK(e[i] != nullptr);
+	}
+
+	// opcode(1) + three handles(2 each)
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+	reqbuf[0] = BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ;
+	PutLe16(reqbuf + 1, e[0]->Hdl);
+	PutLe16(reqbuf + 3, e[1]->Hdl);
+	PutLe16(reqbuf + 5, e[2]->Hdl);
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 3 * 2,
+								 (BtAttReqRsp_t *)rspbuf);
+
+	// Response is opcode + the three 4-byte values concatenated.
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_READ_MULTIPLE_RSP);
+	CHECK(n == 1 + 3 * 4);
+	CHECK(std::memcmp(rspbuf + 1, val[0], 4) == 0);
+	CHECK(std::memcmp(rspbuf + 1 + 4, val[1], 4) == 0);
+	CHECK(std::memcmp(rspbuf + 1 + 8, val[2], 4) == 0);
+}
+
 // ---- Read By Group Type rejects starting handle 0x0000 --------------------
 
 void TestReadByGroupTypeInvalidStartHandle()
@@ -587,11 +683,13 @@ int main()
 	TestInvalidStartHandleAndWriteHandle();
 	TestReadByTypePacksMultiplePairs();
 	TestReadByTypeRejectsTruncatedPair();
+	TestReadByType128Bit();
 	TestWriteLengthHandling();
 	TestWriteCommandLengthHandling();
 	TestWriteCommandCccdLength();
 	TestFindByTypeValueOracleAndEndHandle();
 	TestFindByTypeValueChunkedCompare();
+	TestReadMultiple();
 	TestReadByGroupTypeInvalidStartHandle();
 
 	if (s_Failures != 0)

@@ -45,7 +45,8 @@ ATT_SOURCES := \
 
 ATT_REQ_SOURCES := \
 	bt_att_req_test.cpp \
-	$(ROOT)/src/bluetooth/bt_att.cpp
+	$(ROOT)/src/bluetooth/bt_att.cpp \
+	$(ROOT)/src/bluetooth/bt_uuid.cpp
 
 PEER_SOURCES := \
 	bt_peer_pool_test.cpp \

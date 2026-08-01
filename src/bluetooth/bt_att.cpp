@@ -1175,6 +1175,48 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 	return err;
 }
 
+// Resolve the attribute type of a Read By Type / Read By Group Type request
+// into the packed DB UUID form. The type is 2 or 16 octets and both are
+// mandatory (Vol 3 Part F 3.4.4.1): TypeLen 2 gives a 16-bit type; TypeLen 16
+// gives a 128-bit type resolved to a registered base (bytes 12-13 are the
+// short id, the rest must match a known base). Returns:
+//   1  = resolved into *pOut
+//   0  = a valid 128-bit type whose base is not registered - nothing can match
+//  -1  = malformed type length
+static int BtAttResolveReqType(const BtUuidVal_t *pReqUuid, int TypeLen,
+							   BtUuid16_t *pOut)
+{
+	if (TypeLen == 2)
+	{
+		pOut->BaseIdx = 0;
+		pOut->Type = BT_UUID_TYPE_16;
+		pOut->Uuid = pReqUuid->Uuid16;
+		return 1;
+	}
+
+	if (TypeLen == 16)
+	{
+		uint8_t base[16];
+		memcpy(base, pReqUuid->Uuid128, 16);
+		uint16_t shortUuid = (uint16_t)base[12] | ((uint16_t)base[13] << 8);
+		base[12] = 0;
+		base[13] = 0;
+
+		int idx = BtUuidFindBase(base);
+		if (idx < 0)
+		{
+			return 0;		// unknown vendor base: no attribute can match
+		}
+
+		pOut->BaseIdx = (uint8_t)idx;
+		pOut->Type = BT_UUID_TYPE_16;
+		pOut->Uuid = shortUuid;
+		return 1;
+	}
+
+	return -1;
+}
+
 uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int ReqLen, BtAttReqRsp_t * const pRspAtt)
 {
 	if (pReqAtt == nullptr || pRspAtt == nullptr || ReqLen < 1)
@@ -1442,14 +1484,26 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					break;
 				}
 
+				// The attribute type is 2 or 16 octets (op + start(2) + end(2) +
+				// type). A 128-bit type is resolved to its registered base so
+				// that "Discover Characteristics by UUID" / "Read using
+				// Characteristic UUID" with a vendor 128-bit UUID works.
+				BtUuid16_t uid16;
+				int typeRes = BtAttResolveReqType(&req->Uuid, ReqLen - 5, &uid16);
+				if (typeRes < 0)
+				{
+					retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ, BT_ATT_ERROR_INVALID_PDU);
+					break;
+				}
+
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP;
 
 				uint8_t *p = (uint8_t*)pRspAtt->ReadByTypeRsp.Data;
 
-				//DEBUG_PRINTF("sHdl: %x, eHdl: %x, Type: %x\r\n", req->StartHdl, req->EndHdl, req->Uuid.Uuid16);
-				BtUuid16_t uid16 = { 0, BT_UUID_TYPE_16, req->Uuid.Uuid16};
-
-				BtAttDBEntry_t *entry = BtAttDBFindUuidRange(&uid16, req->StartHdl, req->EndHdl);
+				// A well-formed 128-bit type with no registered base matches no
+				// attribute: return Attribute Not Found rather than searching.
+				BtAttDBEntry_t *entry = typeRes == 1 ?
+					BtAttDBFindUuidRange(&uid16, req->StartHdl, req->EndHdl) : nullptr;
 				if (entry)
 				{
 					DEBUG_PRINTF("Entry found\r\n");
@@ -1525,12 +1579,15 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						pRspAtt->ReadByTypeRsp.Len = (uint8_t)(2 + pairValLen);
 					}
 
-					// entry is the last DB node; no next handle to continue the scan
-					if (entry->pNext == nullptr)
+					// Advance strictly past the handle just emitted. Continuing
+					// from entry->pNext->Hdl is wrong when pNext is the list-end
+					// sentinel (handle 0): the search would restart at handle 0
+					// and re-match this same entry until the response fills.
+					if (entry->Hdl >= req->EndHdl || entry->Hdl == 0xFFFF)
 					{
 						break;
 					}
-					req->StartHdl = entry->pNext->Hdl;
+					req->StartHdl = entry->Hdl + 1;
 					entry = BtAttDBFindUuidRange(&uid16, req->StartHdl, req->EndHdl);
 				}
 
@@ -1625,9 +1682,15 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				DEBUG_PRINTF("BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ (0x0E)\r\n");
 				int nhdl = (ReqLen - 1) >> 1;
+				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_MULTIPLE_RSP;
 				uint8_t *p = pRspAtt->ReadMultipleRsp.Data;
 				retval = 1;
-				for (int i = 0; i < nhdl && (rspMtu - retval) >= BT_ATT_MTU_MIN; i++)
+				// Concatenate values until the response reaches ATT_MTU or the
+				// handles run out (Vol 3 Part F 3.4.4.7). Each read is capped at
+				// the space remaining (rspMtu - retval), so the last value is
+				// truncated to fit; the previous guard demanded a whole ATT_MTU
+				// of free space and so returned an empty response at MTU 23.
+				for (int i = 0; i < nhdl && retval < rspMtu; i++)
 				{
 					BtAttDBEntry_t *entry = BtAttDBFindHandle(pReqAtt->ReadMultipleReq.Hdl[i]);
 					if (entry == nullptr)
@@ -1674,12 +1737,20 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				// Read By Group Type is defined only for the Primary Service
 				// (0x2800) and Secondary Service (0x2801) group types (Core Vol 3
-				// Part F 3.4.4.9). Any other group type - including a 128-bit type
-				// (ReqLen 21, not 7) - must return Unsupported Group Type rather
-				// than being grouped by the generic handle-range heuristic.
-				if (ReqLen != 7 ||
-					(req->Uuid.Uuid16 != BT_UUID_DECLARATIONS_PRIMARY_SERVICE &&
-					 req->Uuid.Uuid16 != BT_UUID_DECLARATIONS_SECONDARY_SERVICE))
+				// Part F 3.4.4.9). Accept either the 16-bit form or its 128-bit
+				// expansion; a malformed type length is Invalid PDU, and any
+				// other type (including an unknown 128-bit base) is Unsupported
+				// Group Type.
+				BtUuid16_t uid16;
+				int gTypeRes = BtAttResolveReqType(&req->Uuid, ReqLen - 5, &uid16);
+				if (gTypeRes < 0)
+				{
+					retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ, BT_ATT_ERROR_INVALID_PDU);
+					break;
+				}
+				if (gTypeRes != 1 || uid16.BaseIdx != 0 ||
+					(uid16.Uuid != BT_UUID_DECLARATIONS_PRIMARY_SERVICE &&
+					 uid16.Uuid != BT_UUID_DECLARATIONS_SECONDARY_SERVICE))
 				{
 					retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ, BT_ATT_ERROR_UNSUPP_GROUP_TYPE);
 					break;
@@ -1688,7 +1759,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_RSP;
 
 				uint8_t *p = (uint8_t*)pRspAtt->ReadByGroupTypeRsp.Data;
-				BtUuid16_t uid16 = { 0, BT_UUID_TYPE_16, req->Uuid.Uuid16};
 				BtAttHdlRange_t *hu = (BtAttHdlRange_t*)p;
 				int l = 0;
 
