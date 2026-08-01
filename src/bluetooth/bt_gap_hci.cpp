@@ -130,8 +130,7 @@ static inline void BtGapClampScanParams(uint16_t *pInterval, uint16_t *pWindow)
 // Part E 7.8.4); scanning or initiating as Random with an unset (all-zero)
 // controller random address yields an undefined on-air address or Command
 // Disallowed. Returns the HCI Own_Address_Type, or 0xFF if the configured
-// random address is not a valid static random address (top two bits 0b11,
-// Vol 6 Part B 1.3.2.1).
+// random address is not a valid static random address (Vol 6 Part B 1.3.2.1).
 static uint8_t BtGapResolveOwnAddr(BtHciDevice_t *pDev)
 {
 	uint8_t localType = 0;
@@ -143,7 +142,7 @@ static uint8_t BtGapResolveOwnAddr(BtHciDevice_t *pDev)
 		return BTADDR_TYPE_PUBLIC;
 	}
 
-	if ((localAddr[5] & 0xC0) != 0xC0)
+	if (BtAddrIsStaticRandom(localAddr) == false)
 	{
 		return 0xFF;
 	}

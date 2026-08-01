@@ -123,6 +123,27 @@ void BtAttSetHandler(AttReadValFct_t ReadFct, AttWriteValFct_t WriteFct)
 */
 void BtAttDBInit(size_t MemSize)
 {
+	// The database lives in s_BtAttDBMem, a weak array of BT_ATT_DB_MEMSIZE
+	// bytes. MemSize is the caller's claim about how much of it to use, and
+	// this file cannot prove a claim larger than the array it was compiled
+	// against, so clamp to that: a larger value would run the memset below
+	// off the end of the pool. A bigger database comes from raising
+	// BT_ATT_DB_MEMSIZE for the whole build, which resizes the array and this
+	// sizeof together, not from defining a different sized array elsewhere,
+	// which the sizeof here would not see.
+	if (MemSize > sizeof(s_BtAttDBMem))
+	{
+		MemSize = sizeof(s_BtAttDBMem);
+	}
+
+	// The tail sentinel is written immediately below, so the pool has to hold
+	// at least one entry. The clamp above already bounded MemSize by the
+	// array, which is far larger than one entry.
+	if (MemSize < sizeof(BtAttDBEntry_t))
+	{
+		MemSize = sizeof(BtAttDBEntry_t);
+	}
+
 	s_BtAttDBMemSize = MemSize;
 	s_BtAttDBMemUsed = 0;
 	memset(s_BtAttDBMem, 0, s_BtAttDBMemSize);
@@ -177,6 +198,40 @@ BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pDat
 	entry->pNext = s_pBtAttDbEntryEnd;
 
 	return entry;
+}
+
+void BtAttDBMark(BtAttDBMark_t *pMark)
+{
+	if (pMark == nullptr)
+	{
+		return;
+	}
+
+	pMark->MemUsed = s_BtAttDBMemUsed;
+	pMark->LastHdl = s_LastHdl;
+}
+
+void BtAttDBUnwind(const BtAttDBMark_t *pMark)
+{
+	// Only a rewind is allowed. A mark from a database that has since been
+	// reinitialised, or one recorded after the current position, would move
+	// the allocator forward over memory no entry owns.
+	if (pMark == nullptr || pMark->MemUsed > s_BtAttDBMemUsed ||
+		pMark->LastHdl > s_LastHdl)
+	{
+		return;
+	}
+
+	s_BtAttDBMemUsed = pMark->MemUsed;
+	s_LastHdl = pMark->LastHdl;
+
+	// The slot at the mark becomes the tail sentinel again. Its pPrev still
+	// points at the entry before it: BtAttDBAddEntry writes pPrev only when a
+	// slot is seeded as the sentinel, never when it is turned into an entry,
+	// so the link back is the one this position had before the dropped
+	// entries were added.
+	s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)(s_BtAttDBMem + s_BtAttDBMemUsed);
+	s_pBtAttDbEntryEnd->pNext = nullptr;
 }
 
 BtAttDBEntry_t *BtAttDBFindHandle(uint16_t Hdl)
@@ -550,6 +605,12 @@ static bool BtAttEntryIsCharValue(BtAttDBEntry_t *pEntry)
 	}
 }
 
+static bool BtAttEntryIsCccd(BtAttDBEntry_t *pEntry)
+{
+	return pEntry != nullptr && pEntry->TypeUuid.BaseIdx == 0 &&
+		   pEntry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION;
+}
+
 static BtGattChar_t *BtAttEntryChar(BtAttDBEntry_t *pEntry)
 {
 	if (pEntry == nullptr)
@@ -766,8 +827,7 @@ static uint8_t BtAttWritePermError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 		return BtAttAccessSecurityError(ConnHdl, pEntry, false);
 	}
 
-	if (pEntry->TypeUuid.BaseIdx == 0 &&
-		pEntry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION)
+	if (BtAttEntryIsCccd(pEntry))
 	{
 		BtGattChar_t *pChar = BtAttEntryChar(pEntry);
 		if (pChar == nullptr)
@@ -776,21 +836,16 @@ static uint8_t BtAttWritePermError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 		}
 		if (Len >= 2 && pData != nullptr)
 		{
-			uint16_t cccd = (uint16_t)(pData[0] | (pData[1] << 8));
-			if ((cccd & ~(BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION |
-						  BT_DESC_CLIENT_CHAR_CONFIG_INDICATION)) != 0)
+			// One value check for the whole stack, in bt_gatt.cpp, so the ATT
+			// server and direct GATT callers agree on what a characteristic
+			// accepts. A rejected value is Client Characteristic Configuration
+			// Descriptor Improperly Configured, the code GATT clients expect
+			// here (Core Specification Supplement Part B 1.2).
+			uint8_t cerr = BtGattCccdValueError(pChar,
+									(uint16_t)(pData[0] | (pData[1] << 8)));
+			if (cerr != 0)
 			{
-				return BT_ATT_ERROR_VALUE_NOT_ALLOWED;
-			}
-			if ((cccd & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) &&
-				(pChar->Property & BT_GATT_CHAR_PROP_NOTIFY) == 0)
-			{
-				return BT_ATT_ERROR_VALUE_NOT_ALLOWED;
-			}
-			if ((cccd & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) &&
-				(pChar->Property & BT_GATT_CHAR_PROP_INDICATE) == 0)
-			{
-				return BT_ATT_ERROR_VALUE_NOT_ALLOWED;
+				return cerr;
 			}
 		}
 		uint8_t err = BtAttAccessPolicyError(ConnHdl, pEntry, false);
@@ -940,8 +995,7 @@ static size_t BtAttWriteValueForConn(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 		return 0;
 	}
 
-	if (pEntry->TypeUuid.BaseIdx == 0 &&
-		pEntry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION)
+	if (BtAttEntryIsCccd(pEntry))
 	{
 		if (Offset != 0 || Len != 2 || pData == nullptr)
 		{
@@ -1228,12 +1282,47 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 			break;
 		}
 
-		BtGattChar_t *pChar = BtAttEntryChar(entry);
+		// MaxDataLen bounds the characteristic value only. BtAttEntryChar also
+		// resolves the owner of a CCCD or user description entry, so ask it for
+		// a value attribute; otherwise a descriptor write would be measured
+		// against the value maximum of the characteristic it describes.
+		BtGattChar_t *pChar = BtAttEntryIsCharValue(entry) ? BtAttEntryChar(entry) : nullptr;
 		if (pChar != nullptr && (uint32_t)off + totLen > pChar->MaxDataLen)
 		{
 			*pFailHdl = hdl;
 			err = BT_ATT_ERROR_INVALID_ATT_VALUE;
 			break;
+		}
+
+		// A CCCD reassembled from prepared writes has to satisfy the same rules
+		// as a direct Write Request: exactly two octets at offset 0, holding a
+		// value the characteristic supports. The run is measured here, not
+		// compacted, so the two octets are only laid out contiguously when the
+		// run is a single queued record; a CCCD split across records is
+		// rejected rather than reassembled for this check.
+		if (BtAttEntryIsCccd(entry))
+		{
+			uint16_t reclen;
+			memcpy(&reclen, buf + pos + 4, 2);
+
+			if (off != 0 || totLen != 2 || reclen != 2 ||
+				(uint32_t)pos + 8UL > total)
+			{
+				*pFailHdl = hdl;
+				err = BT_ATT_ERROR_INVALID_ATT_VALUE;
+				break;
+			}
+
+			const uint8_t *val = buf + pos + 6;
+			uint8_t cerr = BtGattCccdValueError(BtAttEntryChar(entry),
+									(uint16_t)(val[0] | (val[1] << 8)));
+
+			if (cerr != 0)
+			{
+				*pFailHdl = hdl;
+				err = cerr;
+				break;
+			}
 		}
 
 		pos = next;
@@ -1952,9 +2041,9 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					// 2-octet field. A write of any other length is rejected with
 					// Invalid Attribute Value Length (Core spec Vol 3 Part G,
 					// 3.3.3.3), not silently truncated or accepted.
-					if (entry->TypeUuid.BaseIdx == 0 &&
-						entry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION &&
-						dlen != 2)
+					bool bCccd = BtAttEntryIsCccd(entry);
+
+					if (bCccd && dlen != 2)
 					{
 						retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_INVALID_ATT_VALUE);
 						break;
@@ -2053,9 +2142,11 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						{
 							valid = (uint16_t)dlen <= pCmdChar->MaxDataLen;
 						}
-						else if (entry->TypeUuid.BaseIdx == 0 &&
-								 entry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION)
+						else if (BtAttEntryIsCccd(entry))
 						{
+							// The value itself was already checked by
+							// BtAttWritePermError above; only the fixed length
+							// is left to enforce here.
 							valid = (dlen == 2);
 						}
 						else

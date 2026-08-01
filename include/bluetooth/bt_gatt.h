@@ -191,6 +191,13 @@ void BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar);
 void BtGattHandleValueConfirm(uint16_t ConnHdl);
 
 uint16_t BtGattCccdGet(uint16_t ConnHdl, uint16_t CccdHdl);
+// Check a client supplied CCCD value against the characteristic it belongs to.
+// Returns 0 when the value can be applied, otherwise the ATT error code the
+// server has to answer a Write Request with. The pChar form is for callers that
+// already resolved the owner characteristic, such as the ATT server walking its
+// own database.
+uint8_t BtGattCccdValueError(BtGattChar_t *pChar, uint16_t Value);
+uint8_t BtGattCccdWriteError(uint16_t CccdHdl, uint16_t Value);
 bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value);
 void BtGattCccdClear(uint16_t ConnHdl);
 void BtGattCccdRestoreBonded(uint16_t ConnHdl);

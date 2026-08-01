@@ -209,12 +209,59 @@ uint16_t BtGattCccdGet(uint16_t ConnHdl, uint16_t CccdHdl)
 	return pState != nullptr ? pState->Value : 0;
 }
 
+// A CCCD holds two defined bits and 14 reserved ones, and each defined bit is
+// only meaningful when the characteristic declares the matching property
+// (Vol 3 Part G 3.3.3.3). Anything else is a value the server cannot honour,
+// answered with Client Characteristic Configuration Descriptor Improperly
+// Configured (Core Specification Supplement Part B 1.2). Enabling notification
+// on a characteristic without the Notify property is the case that matters in
+// practice: accepting it leaves the client waiting for packets that never come.
+uint8_t BtGattCccdValueError(BtGattChar_t *pChar, uint16_t Value)
+{
+	if (pChar == nullptr)
+	{
+		return BT_ATT_ERROR_INVALID_HANDLE;
+	}
+
+	if ((Value & (uint16_t)~BT_DESC_CLIENT_CHAR_CONFIG_MASK) != 0)
+	{
+		return BT_ATT_ERROR_CCCD_IMPROPER_CFG;
+	}
+
+	if ((Value & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0 &&
+		(pChar->Property & BT_GATT_CHAR_PROP_NOTIFY) == 0)
+	{
+		return BT_ATT_ERROR_CCCD_IMPROPER_CFG;
+	}
+
+	if ((Value & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0 &&
+		(pChar->Property & BT_GATT_CHAR_PROP_INDICATE) == 0)
+	{
+		return BT_ATT_ERROR_CCCD_IMPROPER_CFG;
+	}
+
+	return 0;
+}
+
+uint8_t BtGattCccdWriteError(uint16_t CccdHdl, uint16_t Value)
+{
+	return BtGattCccdValueError(BtGattFindCharByCccd(CccdHdl), Value);
+}
+
 bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 	BtGattChar_t *pChar = BtGattFindCharByCccd(CccdHdl);
 
 	if (pConn == nullptr || pChar == nullptr)
+	{
+		return false;
+	}
+
+	// Also checked here, not only in the ATT write path, so a bond restore or
+	// a port that reports subscriptions on its own cannot install a value the
+	// characteristic does not support.
+	if (BtGattCccdValueError(pChar, Value) != 0)
 	{
 		return false;
 	}
@@ -558,6 +605,34 @@ void BtGattIndicationTimeoutCheck(void)
 	}
 }
 
+// Undo a partial registration: drop every attribute added since the mark and
+// return the characteristics to the state they had before the attempt, so a
+// caller that retries or gives up is not left with half a service.
+static bool BtGattSrvcAddFailed(BtGattSrvc_t *pSrvc, const BtAttDBMark_t *pMark)
+{
+	BtAttDBUnwind(pMark);
+
+	pSrvc->Hdl = BT_ATT_HANDLE_INVALID;
+
+	for (int i = 0; i < pSrvc->NbChar; i++)
+	{
+		BtGattChar_t *c = &pSrvc->pCharArray[i];
+
+		c->Hdl     = BT_ATT_HANDLE_INVALID;
+		c->ValHdl  = BT_ATT_HANDLE_INVALID;
+		c->DescHdl = BT_ATT_HANDLE_INVALID;
+		c->CccdHdl = BT_ATT_HANDLE_INVALID;
+		c->SccdHdl = BT_ATT_HANDLE_INVALID;
+		c->pValue  = nullptr;
+		c->ValueLen = 0;
+		c->bNotify = false;
+		c->bIndic  = false;
+		c->pSrvc   = nullptr;
+	}
+
+	return false;
+}
+
 __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
 	uint8_t baseidx = 0;
@@ -584,25 +659,25 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		baseidx = BtUuidAddBase(pSrvc->UuidBase);
 	}
 
-	pSrvc->Uuid = { baseidx, BT_UUID_TYPE_16, pSrvc->UuidSrvc };
+	pSrvc->Uuid = { baseidx, BT_UUID_TYPE_16, { pSrvc->UuidSrvc } };
 	pSrvc->Hdl  = BT_ATT_HANDLE_INVALID;
 
 	BtUuid16_t typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_PRIMARY_SERVICE };
 
 	int l = sizeof(BtAttSrvcDeclar_t);
 
+	// Registering a service means adding one attribute per declaration,
+	// value and descriptor. If any of them fails the ones already added are
+	// dropped back to this position, so a failed call leaves the database and
+	// the handle counter as they were.
+	BtAttDBMark_t mark;
+	BtAttDBMark(&mark);
+
 	BtAttDBEntry_t *srvcentry = BtAttDBAddEntry(&typeuuid, l);
 
-	// Note: BtAttDBAddEntry has no rollback. Once any sub-entry succeeds
-	// the bump-pointer and handle counter have advanced; on a later failure
-	// inside this function the partial entries are leaked from the DB. The
-	// service object itself is left with Hdl = BT_ATT_HANDLE_INVALID and
-	// NOT inserted into s_pBtGattSrvcList, so callers walking the list see
-	// only fully-registered services. A proper fix needs a BtAttDBUnwind
-	// API; tracked separately.
 	if (srvcentry == nullptr)
 	{
-		return false;
+		return BtGattSrvcAddFailed(pSrvc, &mark);
 	}
 
 	BtAttSrvcDeclar_t *srvcdec = (BtAttSrvcDeclar_t*) srvcentry->Data;
@@ -624,13 +699,12 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		entry = BtAttDBAddEntry(&typeuuid, l);
 		if (entry == nullptr)
 		{
-			pSrvc->Hdl = BT_ATT_HANDLE_INVALID;
-			return false;
+			return BtGattSrvcAddFailed(pSrvc, &mark);
 		}
 
 		BtAttCharDeclar_t *chardec = (BtAttCharDeclar_t*)entry->Data;
 
-		chardec->Uuid  = {baseidx, BT_UUID_TYPE_16, c->Uuid};
+		chardec->Uuid  = { baseidx, BT_UUID_TYPE_16, { c->Uuid } };
 		chardec->pChar = c;
 
 		c->ValHdl      = BT_ATT_HANDLE_INVALID;
@@ -645,8 +719,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		entry = BtAttDBAddEntry(&typeuuid, c->MaxDataLen + sizeof(BtAttCharValue_t));
 		if (entry == nullptr)
 		{
-			pSrvc->Hdl = BT_ATT_HANDLE_INVALID;
-			return false;
+			return BtGattSrvcAddFailed(pSrvc, &mark);
 		}
 		BtAttCharValue_t *charval = (BtAttCharValue_t*)entry->Data;
 
@@ -676,8 +749,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 			entry = BtAttDBAddEntry(&typeuuid, l);
 			if (entry == nullptr)
 			{
-				pSrvc->Hdl = BT_ATT_HANDLE_INVALID;
-				return false;
+				return BtGattSrvcAddFailed(pSrvc, &mark);
 			}
 
 			BtDescClientCharConfig_t *ccc = (BtDescClientCharConfig_t*)entry->Data;
@@ -695,8 +767,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 			entry = BtAttDBAddEntry(&typeuuid, dl);
 			if (entry == nullptr)
 			{
-				pSrvc->Hdl = BT_ATT_HANDLE_INVALID;
-				return false;
+				return BtGattSrvcAddFailed(pSrvc, &mark);
 			}
 
 			BtDescCharUserDesc_t *dcud = (BtDescCharUserDesc_t*)entry->Data;

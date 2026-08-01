@@ -9,6 +9,8 @@ ATT_REQ_TARGET := $(BUILD_DIR)/bt_att_req_test
 PEER_TARGET := $(BUILD_DIR)/bt_peer_pool_test
 GAP_HCI_TARGET := $(BUILD_DIR)/bt_gap_hci_test
 ADV_HCI_TARGET := $(BUILD_DIR)/bt_adv_hci_test
+GATT_CCCD_TARGET := $(BUILD_DIR)/bt_gatt_cccd_test
+GATT_SRVC_TARGET := $(BUILD_DIR)/bt_gatt_srvc_test
 SYSLOG_TARGET := $(BUILD_DIR)/syslog_tx_test
 CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
 
@@ -38,6 +40,17 @@ endif
 # no-sanitize-recover makes any UBSan finding abort the test run, so a suite
 # cannot print PASS after undefined behavior scrolled by above it.
 SANITIZERS ?= -fsanitize=address,undefined -fno-sanitize-recover=all
+
+# Headers are prerequisites too. Without them a change to an inline function in
+# a header leaves every binary up to date and the suite reruns the old code.
+# Only the directories the suites include from, and not include/*.h as a whole:
+# one file there has a space in its name, which make cannot express in a
+# prerequisite list.
+HEADERS := $(wildcard $(ROOT)/include/bluetooth/*.h) \
+	$(ROOT)/include/istddef.h \
+	$(ROOT)/include/device_intrf.h \
+	$(ROOT)/include/cfifo.h \
+	$(ROOT)/include/syslog.h
 
 ADV_SOURCES := \
 	bt_adv_uuid_test.cpp \
@@ -80,6 +93,16 @@ ADV_HCI_SOURCES := \
 	$(ROOT)/src/bluetooth/bt_adv.cpp \
 	$(ROOT)/src/bluetooth/bt_uuid.cpp
 
+GATT_CCCD_SOURCES := \
+	bt_gatt_cccd_test.cpp \
+	$(ROOT)/src/bluetooth/bt_gatt.cpp
+
+GATT_SRVC_SOURCES := \
+	bt_gatt_srvc_test.cpp \
+	$(ROOT)/src/bluetooth/bt_gatt.cpp \
+	$(ROOT)/src/bluetooth/bt_att.cpp \
+	$(ROOT)/src/bluetooth/bt_uuid.cpp
+
 SYSLOG_SOURCES := \
 	syslog_tx_test.cpp \
 	$(ROOT)/src/syslog.cpp \
@@ -89,7 +112,7 @@ SYSLOG_SOURCES := \
 
 all: test
 
-test: $(ADV_TARGET) $(HCI_TARGET) $(HCI_CTLR_TARGET) $(L2CAP_TARGET) $(ATT_TARGET) $(ATT_REQ_TARGET) $(PEER_TARGET) $(GAP_HCI_TARGET) $(ADV_HCI_TARGET) $(SYSLOG_TARGET)
+test: $(ADV_TARGET) $(HCI_TARGET) $(HCI_CTLR_TARGET) $(L2CAP_TARGET) $(ATT_TARGET) $(ATT_REQ_TARGET) $(PEER_TARGET) $(GAP_HCI_TARGET) $(ADV_HCI_TARGET) $(GATT_CCCD_TARGET) $(GATT_SRVC_TARGET) $(SYSLOG_TARGET)
 	./$(ADV_TARGET)
 	./$(HCI_TARGET)
 	./$(HCI_CTLR_TARGET)
@@ -99,13 +122,15 @@ test: $(ADV_TARGET) $(HCI_TARGET) $(HCI_CTLR_TARGET) $(L2CAP_TARGET) $(ATT_TARGE
 	./$(PEER_TARGET)
 	./$(GAP_HCI_TARGET)
 	./$(ADV_HCI_TARGET)
+	./$(GATT_CCCD_TARGET)
+	./$(GATT_SRVC_TARGET)
 	./$(SYSLOG_TARGET)
 
-$(ADV_TARGET): $(ADV_SOURCES)
+$(ADV_TARGET): $(ADV_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(ADV_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
-$(HCI_TARGET): $(HCI_SOURCES)
+$(HCI_TARGET): $(HCI_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(HCI_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
@@ -113,35 +138,43 @@ $(CFIFO_OBJ): $(ROOT)/src/cfifo.c
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SANITIZERS) -c $< -o $@
 
-$(HCI_CTLR_TARGET): $(HCI_CTLR_SOURCES) $(CFIFO_OBJ)
+$(HCI_CTLR_TARGET): $(HCI_CTLR_SOURCES) $(CFIFO_OBJ) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(HCI_CTLR_SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
 
-$(L2CAP_TARGET): $(L2CAP_SOURCES)
+$(L2CAP_TARGET): $(L2CAP_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(L2CAP_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
-$(ATT_TARGET): $(ATT_SOURCES)
+$(ATT_TARGET): $(ATT_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(ATT_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
-$(ATT_REQ_TARGET): $(ATT_REQ_SOURCES)
+$(ATT_REQ_TARGET): $(ATT_REQ_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(ATT_REQ_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
-$(PEER_TARGET): $(PEER_SOURCES)
+$(PEER_TARGET): $(PEER_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(PEER_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
-$(GAP_HCI_TARGET): $(GAP_HCI_SOURCES)
+$(GAP_HCI_TARGET): $(GAP_HCI_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(GAP_HCI_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
-$(ADV_HCI_TARGET): $(ADV_HCI_SOURCES)
+$(ADV_HCI_TARGET): $(ADV_HCI_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(ADV_HCI_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
-$(SYSLOG_TARGET): $(SYSLOG_SOURCES)
+$(GATT_CCCD_TARGET): $(GATT_CCCD_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(GATT_CCCD_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(GATT_SRVC_TARGET): $(GATT_SRVC_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(GATT_SRVC_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(SYSLOG_TARGET): $(SYSLOG_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) $(SYSLOG_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 

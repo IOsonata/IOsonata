@@ -217,6 +217,32 @@ void TestEmptyDatabaseLookups()
 	CHECK(BtAttDBFindHandle(1) == entry);
 }
 
+// BtAttDBInit takes the caller's word for how much pool to use. A value larger
+// than the compiled-in array would memset past its end, and a value too small
+// for one entry would leave the tail sentinel written outside the usable
+// region. Both are clamped.
+void TestInitMemSizeClamped()
+{
+	// Absurdly large: must clamp, not overrun. ASan would catch an overrun.
+	BtAttDBInit(1024U * 1024U);
+
+	BtUuid16_t uuid = { 0, BT_UUID_TYPE_16, 0xFFF7 };
+	BtAttDBEntry_t *entry = BtAttDBAddEntry(&uuid, 8);
+	CHECK(entry != nullptr);
+	CHECK(BtAttDBFindHandle(1) == entry);
+
+	// Smaller than one entry: still leaves a usable, empty database.
+	BtAttDBInit(1);
+	CHECK(BtAttDBFindHandle(1) == nullptr);
+
+	// And an entry that cannot fit is refused rather than written out of bounds.
+	CHECK(BtAttDBAddEntry(&uuid, 4096) == nullptr);
+
+	// Zero behaves the same way.
+	BtAttDBInit(0);
+	CHECK(BtAttDBFindHandle(1) == nullptr);
+}
+
 } // namespace
 
 int main()
@@ -226,6 +252,7 @@ int main()
 	TestExhaustionDoesNotCorruptTail();
 	TestReinitialization();
 	TestEmptyDatabaseLookups();
+	TestInitMemSizeClamped();
 
 	if (s_Failures != 0)
 	{

@@ -40,6 +40,12 @@ int s_CmdCount = 0;
 uint8_t s_LocalType = 0;
 uint8_t s_LocalAddr[6] = {};
 
+// Opcode the stub controller rejects, and the Enable byte it rejects it for
+// (0 disable, 1 enable, 0xFF either). Lets a test drive the paths where a
+// command comes back with an error status.
+uint16_t s_FailOpCode = 0;
+uint8_t  s_FailEnable = 0xFF;
+
 uint8_t CaptureCommand(BtHciDevice_t * const, uint16_t OpCode, const void *pParam,
 					   uint8_t ParamLen, void *, uint8_t)
 {
@@ -55,6 +61,17 @@ uint8_t CaptureCommand(BtHciDevice_t * const, uint16_t OpCode, const void *pPara
 			std::memcpy(c.Param, pParam, ParamLen);
 		}
 	}
+
+	if (s_FailOpCode != 0 && OpCode == s_FailOpCode)
+	{
+		// LE Set Extended Advertising Enable starts with the Enable octet.
+		const uint8_t *p = (const uint8_t *)pParam;
+		if (s_FailEnable == 0xFF || (p != nullptr && ParamLen >= 1 && p[0] == s_FailEnable))
+		{
+			return 0x0C;		// Command Disallowed
+		}
+	}
+
 	return 0;		// HCI success
 }
 
@@ -63,6 +80,8 @@ BtHciDevice_t s_Dev;
 void Setup(uint8_t LocalType, const uint8_t LocalAddr[6])
 {
 	s_CmdCount = 0;
+	s_FailOpCode = 0;
+	s_FailEnable = 0xFF;
 	std::memset(s_Cmds, 0, sizeof(s_Cmds));
 	std::memset(&s_Dev, 0, sizeof(s_Dev));
 	s_Dev.Command = CaptureCommand;
@@ -156,6 +175,85 @@ void TestAdvInvalidRandomIdentity()
 	CHECK(BtAppAdvInit(&cfg) == false);
 }
 
+// The random part must hold at least one 0 and at least one 1 as well as the
+// type bits (Vol 6 Part B 1.3.2.1), so an identity left all zero or all one
+// with only the type bits forced on is still rejected.
+void TestAdvDegenerateRandomIdentity()
+{
+	uint8_t allZero[6] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0 };
+	Setup(BTADDR_TYPE_RANDOM_STATIC, allZero);
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	CHECK(BtAppAdvInit(&cfg) == false);
+
+	uint8_t allOne[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+	Setup(BTADDR_TYPE_RANDOM_STATIC, allOne);
+	cfg = MakePeripheralCfg();
+	CHECK(BtAppAdvInit(&cfg) == false);
+
+	// A single differing bit makes it valid.
+	uint8_t oneBitSet[6] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0xC1 };
+	Setup(BTADDR_TYPE_RANDOM_STATIC, oneBitSet);
+	cfg = MakePeripheralCfg();
+	CHECK(BtAppAdvInit(&cfg) == true);
+}
+
+// ---- F11: the advertising state follows the controller -------------------
+
+// BtAppAdvStop used to report idle whatever the controller answered. If the
+// disable is rejected the set is still on air, and a later BtAppAdvStart would
+// see IDLE, send an enable and treat the device as freshly advertising when it
+// never stopped.
+void TestAdvStopKeepsStateOnFailure()
+{
+	uint8_t addr[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0xC6 };
+	Setup(BTADDR_TYPE_RANDOM_STATIC, addr);
+
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	CHECK(BtAppAdvInit(&cfg) == true);
+
+	BtAppAdvStart();
+	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+
+	// The controller rejects the disable: the device is still advertising.
+	s_FailOpCode = BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE;
+	s_FailEnable = 0;
+	BtAppAdvStop();
+	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+
+	// Once the disable is accepted the state follows.
+	s_FailOpCode = 0;
+	BtAppAdvStop();
+	CHECK(g_BtAppData.State == BTAPP_STATE_IDLE);
+}
+
+// Updating the manufacturer data while advertising stops and restarts the set.
+// If the restart is rejected the device is off air, so the call reports failure
+// instead of leaving the state claiming it still advertises.
+void TestAdvManDataSetReportsRestartFailure()
+{
+	uint8_t addr[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0xC6 };
+	Setup(BTADDR_TYPE_RANDOM_STATIC, addr);
+
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	CHECK(BtAppAdvInit(&cfg) == true);
+
+	BtAppAdvStart();
+	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+
+	uint8_t data[4] = { 1, 2, 3, 4 };
+
+	// A successful update keeps the device advertising.
+	CHECK(BtAppAdvManDataSet(data, sizeof(data), nullptr, 0) == true);
+	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+
+	// The re-enable is rejected: the device is off air with the new data
+	// loaded, and the state says so.
+	s_FailOpCode = BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE;
+	s_FailEnable = 1;
+	CHECK(BtAppAdvManDataSet(data, sizeof(data), nullptr, 0) == false);
+	CHECK(g_BtAppData.State == BTAPP_STATE_IDLE);
+}
+
 // ---- G5: manufacturer company identifier byte order ----------------------
 
 void TestManDataCompanyIdLittleEndian()
@@ -200,6 +298,9 @@ int main()
 	TestAdvPublicIdentity();
 	TestAdvRandomIdentity();
 	TestAdvInvalidRandomIdentity();
+	TestAdvDegenerateRandomIdentity();
+	TestAdvStopKeepsStateOnFailure();
+	TestAdvManDataSetReportsRestartFailure();
 
 	if (s_Failures != 0)
 	{

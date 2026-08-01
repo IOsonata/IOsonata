@@ -214,8 +214,18 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 	// considered enabled. Mirrors the nRF52 stop-then-start on data update.
 	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)
 	{
+		// The disable result is not decisive: the set may already have been
+		// stopped by the controller, for example on a duration expiry not yet
+		// processed. The enable result is. If it fails the device is off air
+		// with the new data loaded, so report the failure and record IDLE
+		// rather than leave the state claiming the device is advertising.
 		BtAppAdvDisable();
-		BtAppAdvEnable();
+
+		if (BtAppAdvEnable() != 0)
+		{
+			g_BtAppData.State = BTAPP_STATE_IDLE;
+			return false;
+		}
 	}
 
 	return true;
@@ -275,7 +285,14 @@ void BtAppAdvStart()
 
 void BtAppAdvStop()
 {
-	BtAppAdvDisable();
+	// Only report idle once the controller has accepted the disable. If the
+	// command failed the set is still on air, and moving to IDLE would make a
+	// later BtAppAdvStart look like a no-op while the device keeps
+	// advertising with whatever data it had.
+	if (BtAppAdvDisable() != 0)
+	{
+		return;
+	}
 
 	g_BtAppData.State = BTAPP_STATE_IDLE;
 }
@@ -393,11 +410,10 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 	// connection is stamped with.
 	if (useRandom)
 	{
-		// A static random address must have the two most significant bits of
-		// its most significant octet set to 1 (Vol 6 Part B 1.3.2.1). Reject an
-		// invalid address (for example the all-zero default) rather than have
-		// the controller fail the command.
-		if ((localAddr[5] & 0xC0) != 0xC0)
+		// Reject an address that is not a valid static random address (for
+		// example the all-zero default) rather than have the controller fail
+		// the command. See BtAddrIsStaticRandom, Vol 6 Part B 1.3.2.1.
+		if (BtAddrIsStaticRandom(localAddr) == false)
 		{
 			return false;
 		}

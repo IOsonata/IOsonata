@@ -21,6 +21,10 @@
 // malformed CCCD command never gets there.
 int g_CccdSetCount = 0;
 uint16_t g_CccdSetVal = 0;
+// Error the stubbed GATT value check reports. The real check lives in
+// bt_gatt.cpp and has its own suite; here it is forced so the ATT layer's
+// handling of a rejected value can be driven directly.
+uint8_t g_CccdWriteErr = 0;
 
 // Minimal externals BtAttProcessReq reaches for. This test drives the ATT
 // server logic directly, so peers, CCCD state, security and signing are stubbed
@@ -49,6 +53,7 @@ BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 bool BtGapConnSecGet(uint16_t, BtConnSec_t *) { return false; }
 
 uint16_t BtGattCccdGet(uint16_t, uint16_t) { return 0; }
+uint8_t BtGattCccdValueError(BtGattChar_t *, uint16_t) { return g_CccdWriteErr; }
 bool BtGattCccdSet(uint16_t, uint16_t, uint16_t Value)
 {
 	++g_CccdSetCount;
@@ -451,6 +456,8 @@ void TestWriteCommandCccdLength()
 	BtAttDBInit(1024);
 	BtAttSetMtu(BT_ATT_MTU_MIN);
 
+	g_CccdWriteErr = 0;
+
 	// A notifiable characteristic and its CCCD descriptor.
 	BtChar_t chr;
 	std::memset(&chr, 0, sizeof(chr));
@@ -504,6 +511,155 @@ void TestWriteCommandCccdLength()
 	CHECK(n == 0);
 	CHECK(g_CccdSetCount == 1);
 	CHECK(g_CccdSetVal == BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION);
+}
+
+// ---- CCCD value rejection is reported, not stored --------------------------
+
+// A CCCD value the characteristic cannot support (a reserved bit, or a bit
+// whose property is absent) must come back as an Error Response carrying the
+// code the GATT layer chose, and must not reach BtGattCccdSet. The same value
+// arriving as a Write Command is dropped, since a command has no error path.
+void TestWriteRequestCccdValueRejected()
+{
+	BtAttDBInit(1024);
+	BtAttSetMtu(BT_ATT_MTU_MIN);
+
+	BtChar_t chr;
+	std::memset(&chr, 0, sizeof(chr));
+	chr.Uuid = 0xFFF8;
+	chr.Property = BT_GATT_CHAR_PROP_READ;
+
+	BtUuid16_t cccdUuid = { 0, BT_UUID_TYPE_16,
+						   BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION };
+	BtAttDBEntry_t *e =
+		BtAttDBAddEntry(&cccdUuid, (int)sizeof(BtDescClientCharConfig_t));
+	CHECK(e != nullptr);
+	if (e == nullptr)
+	{
+		return;
+	}
+	((BtDescClientCharConfig_t *)e->Data)->pChar = &chr;
+	((BtDescClientCharConfig_t *)e->Data)->CccVal = 0;
+	BtAttDBEntrySetPermission(e, BT_ATT_PERMISSION_READ | BT_ATT_PERMISSION_WRITE);
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[16] = {};
+
+	// Write Request with a value the GATT layer rejects.
+	g_CccdWriteErr = BT_ATT_ERROR_CCCD_IMPROPER_CFG;
+	g_CccdSetCount = 0;
+	reqbuf[0] = BT_ATT_OPCODE_ATT_WRITE_REQ;
+	PutLe16(reqbuf + 1, e->Hdl);
+	PutLe16(reqbuf + 3, BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION);
+
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 3 + 2,
+								 (BtAttReqRsp_t *)rspbuf);
+	CHECK(n == sizeof(BtAttErrorRsp_t) + 1);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrReqOp] == BT_ATT_OPCODE_ATT_WRITE_REQ);
+	CHECK(GetLe16(rspbuf + 2) == e->Hdl);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_CCCD_IMPROPER_CFG);
+	CHECK(g_CccdSetCount == 0);
+
+	// The same value as a Write Command is ignored without a response.
+	g_CccdSetCount = 0;
+	reqbuf[0] = BT_ATT_OPCODE_ATT_CMD;
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 3 + 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 0);
+	CHECK(g_CccdSetCount == 0);
+
+	// With the value accepted, the same Write Request succeeds.
+	g_CccdWriteErr = 0;
+	g_CccdSetCount = 0;
+	reqbuf[0] = BT_ATT_OPCODE_ATT_WRITE_REQ;
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 3 + 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 1);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_WRITE_RSP);
+	CHECK(g_CccdSetCount == 1);
+	CHECK(g_CccdSetVal == BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION);
+}
+
+// A CCCD reached through Prepare Write / Execute Write must still end up
+// exactly two octets at offset 0. A single-octet prepared write slips past the
+// permission check (which only inspects a value of two octets or more), so the
+// execute step is the only place left to reject it. Before this check the
+// execute step reported success while the write was quietly dropped.
+void TestExecuteWriteCccdValueRejected()
+{
+	BtAttDBInit(1024);
+	BtAttSetMtu(BT_ATT_MTU_MIN);
+	g_PeerEnabled = true;
+	g_CccdWriteErr = 0;
+
+	BtChar_t chr;
+	std::memset(&chr, 0, sizeof(chr));
+	chr.Uuid = 0xFFF9;
+	chr.Property = BT_GATT_CHAR_PROP_NOTIFY;
+
+	BtUuid16_t cccdUuid = { 0, BT_UUID_TYPE_16,
+						   BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION };
+	BtAttDBEntry_t *e =
+		BtAttDBAddEntry(&cccdUuid, (int)sizeof(BtDescClientCharConfig_t));
+	CHECK(e != nullptr);
+	if (e == nullptr)
+	{
+		g_PeerEnabled = false;
+		return;
+	}
+	((BtDescClientCharConfig_t *)e->Data)->pChar = &chr;
+	((BtDescClientCharConfig_t *)e->Data)->CccVal = 0;
+	BtAttDBEntrySetPermission(e, BT_ATT_PERMISSION_READ | BT_ATT_PERMISSION_WRITE);
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[16] = {};
+
+	// Prepare Write: opcode(1) handle(2) offset(2) value(1). One octet, so the
+	// permission check leaves the value alone and the record is queued.
+	g_CccdSetCount = 0;
+	reqbuf[0] = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
+	PutLe16(reqbuf + 1, e->Hdl);
+	PutLe16(reqbuf + 3, 0);
+	reqbuf[5] = BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION;
+
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 6,
+								 (BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 6);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_PREPARE_WRITE_RSP);
+
+	// Execute Write: opcode(1) flags(1), flags 1 = write.
+	reqbuf[0] = BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ;
+	reqbuf[1] = 1;
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == sizeof(BtAttErrorRsp_t) + 1);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrReqOp] == BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_INVALID_ATT_VALUE);
+	CHECK(g_CccdSetCount == 0);
+
+	// A well formed two-octet prepared write still goes through.
+	g_CccdSetCount = 0;
+	reqbuf[0] = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
+	PutLe16(reqbuf + 1, e->Hdl);
+	PutLe16(reqbuf + 3, 0);
+	PutLe16(reqbuf + 5, BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 7,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 7);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_PREPARE_WRITE_RSP);
+
+	reqbuf[0] = BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ;
+	reqbuf[1] = 1;
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 1);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_EXECUTE_WRITE_RSP);
+	CHECK(g_CccdSetCount == 1);
+	CHECK(g_CccdSetVal == BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION);
+
+	g_PeerEnabled = false;
 }
 
 // ---- Find By Type Value: permission gate and non-grouping end handle ------
@@ -869,6 +1025,8 @@ int main()
 	TestWriteLengthHandling();
 	TestWriteCommandLengthHandling();
 	TestWriteCommandCccdLength();
+	TestWriteRequestCccdValueRejected();
+	TestExecuteWriteCccdValueRejected();
 	TestFindByTypeValueOracleAndEndHandle();
 	TestFindByTypeValueChunkedCompare();
 	TestReadMultiple();

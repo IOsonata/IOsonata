@@ -160,6 +160,36 @@ void TestScanInvalidRandomIdentity()
 	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM) == nullptr);
 }
 
+// The two type bits are not the whole rule: the 46 bit random part must hold
+// at least one 0 and at least one 1 (Vol 6 Part B 1.3.2.1). An identity left at
+// the all-zero default with only the type bits forced on, or one left all ones,
+// passes the bit pattern check but is not a usable address.
+void TestScanDegenerateRandomIdentity()
+{
+	uint8_t allZero[6] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0 };
+	Setup(BTADDR_TYPE_RANDOM_STATIC, allZero);
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
+	CHECK(BtGapScanInit(&cfg) == false);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM) == nullptr);
+
+	uint8_t allOne[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+	Setup(BTADDR_TYPE_RANDOM_STATIC, allOne);
+	cfg = MakeScanCfg(100, 100);
+	CHECK(BtGapScanInit(&cfg) == false);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM) == nullptr);
+
+	// One bit away from each degenerate case is valid again.
+	uint8_t oneBitSet[6] = { 0x01, 0x00, 0x00, 0x00, 0x00, 0xC0 };
+	Setup(BTADDR_TYPE_RANDOM_STATIC, oneBitSet);
+	cfg = MakeScanCfg(100, 100);
+	CHECK(BtGapScanInit(&cfg) == true);
+
+	uint8_t oneBitClear[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE };
+	Setup(BTADDR_TYPE_RANDOM_STATIC, oneBitClear);
+	cfg = MakeScanCfg(100, 100);
+	CHECK(BtGapScanInit(&cfg) == true);
+}
+
 // ---- G4: interval/window clamping ----------------------------------------
 
 void TestScanClampLower()
@@ -239,6 +269,7 @@ int main()
 	TestScanPublicIdentity();
 	TestScanRandomIdentity();
 	TestScanInvalidRandomIdentity();
+	TestScanDegenerateRandomIdentity();
 	TestScanClampLower();
 	TestScanClampUpper();
 	TestScanClampWindowLeInterval();
