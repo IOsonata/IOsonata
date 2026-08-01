@@ -536,6 +536,24 @@ void BtHciSetLeAclBuffer(BtHciDevice_t * const pDev, uint16_t MaxLen, uint8_t Pk
 	pDev->CmdCredit = 1;
 }
 
+// Terminate a link the host can no longer keep consistent. Reason 0x13 (Remote
+// User Terminated Connection) is the conventional host-initiated code and one
+// of the few the Disconnect command accepts (Vol 4 Part E 7.1.6).
+static void BtHciDropLink(BtHciDevice_t * const pDev, uint16_t ConnHdl)
+{
+	if (pDev == nullptr || pDev->Command == nullptr)
+	{
+		return;
+	}
+
+	uint8_t param[3];
+	param[0] = (uint8_t)(ConnHdl & 0xFF);
+	param[1] = (uint8_t)((ConnHdl >> 8) & 0xFF);
+	param[2] = 0x13;
+
+	pDev->Command(pDev, BT_HCI_CMD_LINKCTRL_DISCONNECT, param, sizeof(param), nullptr, 0);
+}
+
 uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pAcl)
 {
 	if (pDev == nullptr || pDev->SendData == nullptr || pAcl == nullptr)
@@ -573,19 +591,29 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 
 	// Fragmentation path: split the L2CAP PDU across ACL packets of at most
 	// AclMaxLen payload bytes. The first holds a START boundary flag, the rest
-	// CONTINUING. Reserve all credits up front so a partial PDU is never left in
-	// the controller waiting for fragments that cannot be sent.
+	// CONTINUING.
 	uint16_t nFrag = (uint16_t)((l2Len + pDev->AclMaxLen - 1) / pDev->AclMaxLen);
 
-	if (pDev->AclCreditMax > 0 && pDev->AclCredit < (int16_t)nFrag)
+	// Take the credits for the whole PDU before the first fragment goes out.
+	// The earlier code only compared the count and then decremented one
+	// fragment at a time, so anything else sending on this device between
+	// fragments could spend the credits this PDU still needed and leave the
+	// controller holding a START with no way to finish it.
+	if (pDev->AclCreditMax > 0)
 	{
-		return 0;
+		if (pDev->AclCredit < (int16_t)nFrag)
+		{
+			return 0;
+		}
+
+		pDev->AclCredit = (int16_t)(pDev->AclCredit - (int16_t)nFrag);
 	}
 
 	uint8_t fbuf[BT_HCI_BUFFER_MAX_SIZE];
 	BtHciACLDataPacket_t *frag = (BtHciACLDataPacket_t*)fbuf;
 	const uint8_t *src = pAcl->Data;
 	uint16_t off = 0;
+	uint16_t nSent = 0;
 
 	while (off < l2Len)
 	{
@@ -602,25 +630,33 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 		frag->Hdr.Len = chunk;
 		memcpy(frag->Data, src + off, chunk);
 
-		if (pDev->AclCreditMax > 0)
-		{
-			if (pDev->AclCredit <= 0)
-			{
-				return 0;
-			}
-		}
-
 		uint32_t txLen = (uint32_t)chunk + sizeof(frag->Hdr);
 		uint32_t sent = pDev->SendData((uint8_t*)frag, txLen);
 		if (sent != txLen)
 		{
+			// Hand back the credits for the fragments that never went out. The
+			// ones already accepted stay spent; the controller holds those
+			// buffers until it reports them completed.
+			if (pDev->AclCreditMax > 0)
+			{
+				pDev->AclCredit = (int16_t)(pDev->AclCredit + (int16_t)(nFrag - nSent));
+			}
+
+			if (nSent > 0)
+			{
+				// A START fragment is already in the controller and the rest of
+				// this PDU cannot follow it. Nothing completes that PDU, and the
+				// caller cannot resend the whole thing without putting a second
+				// START on a link that is still waiting for the first one to
+				// finish, so drop the link instead (Vol 4 Part E 5.4.2 has no
+				// way to withdraw a fragment already given to the controller).
+				BtHciDropLink(pDev, pAcl->Hdr.ConnHdl);
+			}
+
 			return 0;
 		}
-		if (pDev->AclCreditMax > 0)
-		{
-			pDev->AclCredit--;
-		}
 
+		nSent++;
 		off = (uint16_t)(off + chunk);
 	}
 

@@ -52,9 +52,46 @@ int s_SmpDisconnectCount = 0;
 uint16_t s_SmpDisconnectHdl = 0;
 int s_LtkRequestCount = 0;
 
+// Number of the fragment the stub transport refuses, counted from 1. Zero
+// accepts everything. Lets a test drive a transport that stops accepting part
+// way through a fragmented PDU.
+size_t s_AclFailOnPacket = 0;
+
+// Device the ACL stub reads the credit count from, and what it saw as each
+// fragment arrived. Shows whether the credits for the whole PDU were taken
+// before the first fragment or one at a time as they went out.
+BtHciDevice_t *s_AclObservedDev = nullptr;
+int16_t s_AclCreditAtSend[8] = {};
+
+// Commands the device issues, so a test can see the disconnect a dropped link
+// produces.
+uint16_t s_DevCmdOpCode = 0;
+uint8_t  s_DevCmdParam[8] = {};
+uint8_t  s_DevCmdParamLen = 0;
+int      s_DevCmdCount = 0;
+
+uint8_t CaptureDevCommand(BtHciDevice_t * const, uint16_t OpCode, const void *pParam,
+						  uint8_t ParamLen, void *, uint8_t)
+{
+	s_DevCmdOpCode = OpCode;
+	s_DevCmdParamLen = ParamLen;
+	if (pParam != nullptr && ParamLen <= sizeof(s_DevCmdParam))
+	{
+		std::memcpy(s_DevCmdParam, pParam, ParamLen);
+	}
+	++s_DevCmdCount;
+	return 0;
+}
+
 void ResetAclCapture()
 {
 	s_AclPacketCount = 0;
+	s_AclFailOnPacket = 0;
+	s_AclObservedDev = nullptr;
+	std::memset(s_AclCreditAtSend, 0, sizeof(s_AclCreditAtSend));
+	s_DevCmdCount = 0;
+	s_DevCmdOpCode = 0;
+	s_DevCmdParamLen = 0;
 	for (auto &pkt : s_AclPackets)
 	{
 		pkt.Len = 0;
@@ -79,6 +116,17 @@ uint32_t CaptureAcl(void *pData, uint32_t Len)
 		Len > s_AclPackets[s_AclPacketCount].Data.size())
 	{
 		return 0;
+	}
+
+	if (s_AclFailOnPacket != 0 && s_AclPacketCount + 1 == s_AclFailOnPacket)
+	{
+		return 0;					// transport refused this fragment
+	}
+
+	if (s_AclObservedDev != nullptr &&
+		s_AclPacketCount < (sizeof(s_AclCreditAtSend) / sizeof(s_AclCreditAtSend[0])))
+	{
+		s_AclCreditAtSend[s_AclPacketCount] = s_AclObservedDev->AclCredit;
 	}
 
 	CapturedPacket &pkt = s_AclPackets[s_AclPacketCount++];
@@ -221,6 +269,86 @@ void TestAclFragmentationAndCredits()
 
 	CHECK(BtHciSendAcl(&dev, pAcl) == 0);
 	CHECK(s_AclPacketCount == 3);
+}
+
+// F12: the credit gate and what happens when the transport stops accepting
+// part way through a fragmented PDU.
+//
+// The credits for the whole PDU are taken before the first fragment goes out.
+// Comparing without taking left them available to anything else sending on the
+// device between fragments. If a fragment is refused, the credits for the ones
+// never sent go back, and a PDU already started in the controller cannot be
+// completed or withdrawn, so the link is dropped rather than left holding a
+// START forever.
+void TestAclFragmentSendFailure()
+{
+	BtHciDevice_t dev = {};
+	dev.SendData = CaptureAcl;
+	dev.Command = CaptureDevCommand;
+	ResetAclCapture();
+
+	alignas(4) std::array<uint8_t, 64> raw = {};
+	BtHciACLDataPacket_t *pAcl = reinterpret_cast<BtHciACLDataPacket_t *>(raw.data());
+	pAcl->Hdr.ConnHdl = 0x0123;
+	pAcl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	pAcl->Hdr.BCFlag = BT_HCI_BCFLAG_POINT_TO_POINT;
+	pAcl->Hdr.Len = 25;
+	for (uint16_t i = 0; i < pAcl->Hdr.Len; ++i)
+	{
+		pAcl->Data[i] = static_cast<uint8_t>(i);
+	}
+
+	// 25 bytes over 10-byte fragments is three packets, and eight credits.
+	BtHciSetLeAclBuffer(&dev, 10, 8);
+
+	// The transport refuses the second fragment. One is already in the
+	// controller, so that credit stays spent and the other two come back.
+	s_AclFailOnPacket = 2;
+	CHECK(BtHciSendAcl(&dev, pAcl) == 0);
+	CHECK(s_AclPacketCount == 1);
+	CHECK(dev.AclCredit == 7);
+
+	// The link cannot carry the rest of the PDU, so it is disconnected.
+	CHECK(s_DevCmdCount == 1);
+	CHECK(s_DevCmdOpCode == BT_HCI_CMD_LINKCTRL_DISCONNECT);
+	CHECK(s_DevCmdParamLen == 3);
+	CHECK(s_DevCmdParam[0] == 0x23);
+	CHECK(s_DevCmdParam[1] == 0x01);
+	CHECK(s_DevCmdParam[2] == 0x13);
+
+	// A refusal on the very first fragment puts nothing on the link, so every
+	// credit comes back and there is nothing to disconnect for.
+	ResetAclCapture();
+	BtHciSetLeAclBuffer(&dev, 10, 8);
+	s_AclFailOnPacket = 1;
+	CHECK(BtHciSendAcl(&dev, pAcl) == 0);
+	CHECK(s_AclPacketCount == 0);
+	CHECK(dev.AclCredit == 8);
+	CHECK(s_DevCmdCount == 0);
+
+	// Too few credits for the whole PDU: refused before anything is sent.
+	ResetAclCapture();
+	BtHciSetLeAclBuffer(&dev, 10, 2);
+	CHECK(BtHciSendAcl(&dev, pAcl) == 0);
+	CHECK(s_AclPacketCount == 0);
+	CHECK(dev.AclCredit == 2);
+	CHECK(s_DevCmdCount == 0);
+
+	// With exactly enough, the PDU goes out and the credits are spent. The
+	// count seen by the transport shows they were all taken before the first
+	// fragment rather than one at a time: taking them one at a time would have
+	// left 2 and 1 available while fragments 1 and 2 were being handed over,
+	// which is what another sender could have spent.
+	ResetAclCapture();
+	s_AclObservedDev = &dev;
+	BtHciSetLeAclBuffer(&dev, 10, 3);
+	CHECK(BtHciSendAcl(&dev, pAcl) == pAcl->Hdr.Len + sizeof(pAcl->Hdr));
+	CHECK(s_AclPacketCount == 3);
+	CHECK(dev.AclCredit == 0);
+	CHECK(s_DevCmdCount == 0);
+	CHECK(s_AclCreditAtSend[0] == 0);
+	CHECK(s_AclCreditAtSend[1] == 0);
+	CHECK(s_AclCreditAtSend[2] == 0);
 }
 
 void TestAclCompletionCredits()
@@ -689,6 +817,7 @@ int main()
 {
 	TestCommandFraming();
 	TestAclFragmentationAndCredits();
+	TestAclFragmentSendFailure();
 	TestAclCompletionCredits();
 	TestCompletedPacketsBounded();
 	TestCommandCreditsAndCompletion();
