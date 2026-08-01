@@ -2125,7 +2125,12 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 		case BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ:
 			{
 				DEBUG_PRINTF("BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ (0x20) \r\n");
-				uint16_t *hdl = pReqAtt->ReadMultipleVarReq.Hdl;
+				// The handle list sits one octet into the PDU (after the
+				// opcode), so it is 2-byte misaligned. Walk it with a byte
+				// pointer and assemble each handle little-endian rather than
+				// dereferencing a uint16_t*, which is undefined and faults on
+				// targets without unaligned access (for example Cortex-M0).
+				uint8_t *hdlp = (uint8_t*)pReqAtt->ReadMultipleVarReq.Hdl;
 				uint8_t *p = pRspAtt->ReadMultipleVarRsp.Data;
 				int l = 0;
 				int hdlBytes = ReqLen - 1;	// exclude opcode
@@ -2140,11 +2145,12 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				while (hdlBytes > 0 && l + 3 <= rspMtu)
 				{
-					BtAttDBEntry_t *entry = BtAttDBFindHandle(*hdl);
+					uint16_t curHdl = (uint16_t)(hdlp[0] | (hdlp[1] << 8));
+					BtAttDBEntry_t *entry = BtAttDBFindHandle(curHdl);
 
 					if (entry == nullptr)
 					{
-						retval = BtAttError(pRspAtt, *hdl,
+						retval = BtAttError(pRspAtt, curHdl,
 											BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ,
 											BT_ATT_ERROR_INVALID_HANDLE);
 						break;
@@ -2152,7 +2158,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					uint8_t err = BtAttReadPermError(ConnHdl, entry);
 					if (err != 0)
 					{
-						retval = BtAttError(pRspAtt, *hdl,
+						retval = BtAttError(pRspAtt, curHdl,
 											BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ, err);
 						break;
 					}
@@ -2170,7 +2176,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					p[1] = full >> 8;
 					p += n + 2;
 					l += n + 2;
-					hdl++;
+					hdlp += 2;
 					hdlBytes -= 2;
 
 					// Only the last tuple may be truncated: once a value did

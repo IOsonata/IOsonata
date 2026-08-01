@@ -137,13 +137,21 @@ void FeedAclFragment(BtHciDevice_t *pDev, uint16_t ConnHdl, uint8_t PbFlag,
 
 size_t BuildSmpPdu(uint8_t *pOut, uint8_t Code, const uint8_t *pData, size_t Len)
 {
-    BtL2CapPdu_t *pPdu = reinterpret_cast<BtL2CapPdu_t *>(pOut);
-    pPdu->Hdr.Len = static_cast<uint16_t>(Len + 1U);
-    pPdu->Hdr.Cid = BT_L2CAP_CID_SEC_MNGR;
-    pPdu->Smp.Code = Code;
+    // Write the L2CAP header (Len, Cid) and SMP code as on-air little-endian
+    // bytes rather than casting pOut to the full BtL2CapPdu_t union: the caller
+    // buffers are smaller than that union, so the cast would be an out-of-bounds
+    // object access (flagged by clang UBSan). Byte writes are also alignment
+    // safe.
+    uint16_t l2Len = static_cast<uint16_t>(Len + 1U);
+    uint16_t cid   = BT_L2CAP_CID_SEC_MNGR;
+    pOut[0] = static_cast<uint8_t>(l2Len & 0xFF);
+    pOut[1] = static_cast<uint8_t>(l2Len >> 8);
+    pOut[2] = static_cast<uint8_t>(cid & 0xFF);
+    pOut[3] = static_cast<uint8_t>(cid >> 8);
+    pOut[4] = Code;
     if (Len > 0)
     {
-        std::memcpy(pPdu->Smp.Data, pData, Len);
+        std::memcpy(pOut + 5, pData, Len);
     }
     return sizeof(BtL2CapHdr_t) + Len + 1U;
 }
@@ -439,7 +447,11 @@ void TestMalformedFragmentsAndEvents()
 
     s_ScanReports = 0;
     dev.ScanReport = CaptureScanReport;
-    alignas(4) uint8_t evtRaw[sizeof(BtHciEvtPacketHdr_t) + 11] = {};
+    // Physically size the buffer for the report structs written below; the
+    // event stays malformed via Hdr.Len = 11 (shorter than the claimed report),
+    // which is what the handler bounds against. A buffer only 11 bytes past the
+    // event header would make the struct member writes an out-of-bounds access.
+    alignas(4) uint8_t evtRaw[sizeof(BtHciEvtPacketHdr_t) + 32] = {};
     BtHciEvtPacket_t *pEvt = reinterpret_cast<BtHciEvtPacket_t *>(evtRaw);
     pEvt->Hdr.Evt = BT_HCI_EVT_LE;
     pEvt->Hdr.Len = 11;
