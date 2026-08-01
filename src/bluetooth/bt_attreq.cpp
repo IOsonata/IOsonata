@@ -63,7 +63,7 @@ bool BtAttExchangeMtuRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint1
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
 	acl->Hdr.ConnHdl = ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
 
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ;
@@ -89,7 +89,7 @@ bool BtAttFindInformationRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, u
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
 	acl->Hdr.ConnHdl = ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
 
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_FIND_INFORMATION_REQ;
@@ -116,7 +116,7 @@ bool BtAttFindByTypeValueRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, u
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
 	acl->Hdr.ConnHdl = ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
 
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ;
@@ -143,7 +143,7 @@ bool BtAttReadByTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
 	acl->Hdr.ConnHdl = ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
 
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ;//BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ;
@@ -186,7 +186,7 @@ bool BtAttReadRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
 	acl->Hdr.ConnHdl = ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
 
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_READ_REQ;
@@ -219,7 +219,7 @@ bool BtAttWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hd
 	}
 
 	acl->Hdr.ConnHdl = ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
 
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_WRITE_REQ;
@@ -250,7 +250,7 @@ bool BtAttWriteCommand(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hd
 	}
 
 	acl->Hdr.ConnHdl = ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
 
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_CMD;	// Write without response
@@ -273,7 +273,7 @@ bool BtAttReadBlobRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
 	acl->Hdr.ConnHdl = ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
 
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_READ_BLOB_REQ;
@@ -298,7 +298,7 @@ bool BtAttReadMultipleRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
 	acl->Hdr.ConnHdl = ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
 
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ;
@@ -335,7 +335,7 @@ bool BtAttReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, u
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*) acl->Data;
 
 	acl->Hdr.ConnHdl = ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
 
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ;

@@ -578,7 +578,9 @@ static void SmpSend(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	BtL2CapPdu_t *l2 = (BtL2CapPdu_t*)acl->Data;
 
 	acl->Hdr.ConnHdl = ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	// LE-U host->controller: first (here only) fragment uses 0b00; 0b11 is a
+	// controller->host value strict controllers reject (Vol 4 Part E 5.4.2).
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
 
 	l2->Hdr.Cid = BT_L2CAP_CID_SEC_MNGR;
