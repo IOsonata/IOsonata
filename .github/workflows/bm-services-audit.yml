@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feature/bm-generic-services
+  pull_request:
+    branches:
+      - bt_conformance
 
 permissions:
   contents: read
@@ -14,7 +17,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: feature/bm-generic-services
           fetch-depth: 1
       - name: Report BM service references
         run: |
