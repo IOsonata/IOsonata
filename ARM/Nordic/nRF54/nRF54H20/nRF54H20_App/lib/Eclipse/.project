@@ -450,7 +450,7 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/include/audio/audiodev_pdm.h</locationURI>
 		</link>
-<link>
+		<link>
 			<name>include/bluetooth/blueio_blesrvc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
@@ -485,7 +485,7 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/include/bluetooth/bt_dev.h</locationURI>
 		</link>
-<link>
+		<link>
 			<name>include/bluetooth/bt_gap.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/include/bluetooth/bt_gap.h</locationURI>
@@ -1020,7 +1020,7 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_ctlr.cpp</locationURI>
 		</link>
-<link>
+		<link>
 			<name>src/bluetooth/bt_dev.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_dev.cpp</locationURI>

@@ -1296,7 +1296,12 @@ void sm_ble_evt_handler(const ble_evt_t *ble_evt)
 	PendingPumpsRun();
 }
 
-void sm_pdb_evt_handler(struct pm_evt *event)
+// security_manager.h and security_dispatcher.h impose C linkage on every
+// declaration they carry, so the sm_* and smd_* definitions above inherit it.
+// This one is not in any header. peer_database.c reaches it through a local
+// extern, so the linkage has to be stated here or the definition is mangled
+// and the C caller does not find it.
+extern "C" void sm_pdb_evt_handler(struct pm_evt *event)
 {
 	switch (event->evt_id)
 	{

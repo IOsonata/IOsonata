@@ -150,7 +150,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/crypto_uecc_test.cpp|src/ba414ep_test.cpp|src/uart_ble.cpp|src/cryptomaster_test.cpp|src/crypto_softaes_test.cpp|src/crypto_softsha256_test.cpp|src/rng_test.cpp|src/crypto_softrng_test.cpp|src/ble_app_nrf52.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nvm_demo.cpp|src/crypto_uecc_test.cpp|src/ba414ep_test.cpp|src/cryptomaster_test.cpp|src/crypto_softaes_test.cpp|src/crypto_softsha256_test.cpp|src/rng_test.cpp|src/crypto_softrng_test.cpp|src/ble_app_nrf52.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -304,7 +304,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/crypto_uecc_test.cpp|src/ba414ep_test.cpp|src/uart_ble.cpp|src/cryptomaster_test.cpp|src/crypto_softaes_test.cpp|src/crypto_softsha256_test.cpp|src/rng_test.cpp|src/crypto_softrng_test.cpp|src/ble_app_nrf52.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nvm_demo.cpp|src/crypto_uecc_test.cpp|src/ba414ep_test.cpp|src/cryptomaster_test.cpp|src/crypto_softaes_test.cpp|src/crypto_softsha256_test.cpp|src/rng_test.cpp|src/crypto_softrng_test.cpp|src/ble_app_nrf52.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
