@@ -10,7 +10,7 @@ OPT ?= -O1
 
 CPPFLAGS += -I$(ROOT)/include -Iframework -Icontroller -Ipeer -Ilink -Ioob
 SMP_CPPFLAGS := $(CPPFLAGS) -include smp/bt_l2cap_test_override.h
-SMP_CORE_DEFINES := -DDEBUG_ENABLE
+SMP_CORE_DEFINES := -DDEBUG_ENABLE -DBtSmpInit=BtSmpInitReal
 SMP_TEST_RENAMES := \
 	-DBtSmpLocalIrkGet=BtSmpTestLocalIrkGet \
 	-DBtSmpLocalIdRecordSize=BtSmpTestLocalIdRecordSize \
@@ -49,10 +49,11 @@ HCI_SOURCES := \
 SMP_TEST_OBJ := $(BUILD_DIR)/smp/bt_smp_dual_host_test.o
 SMP_FRAMEWORK_OBJ := $(BUILD_DIR)/smp/bt_compliance.o
 SMP_CORE_OBJ := $(BUILD_DIR)/smp/bt_smp.o
+SMP_AES_OBJ := $(BUILD_DIR)/smp/crypto_softaes.o
 SMP_DEVICE_OBJ := $(BUILD_DIR)/smp/device.o
 SMP_STUB_OBJ := $(BUILD_DIR)/smp/bt_smp_test_stubs.o
 SMP_OBJECTS := $(SMP_TEST_OBJ) $(SMP_FRAMEWORK_OBJ) $(SMP_CORE_OBJ) \
-	$(SMP_DEVICE_OBJ) $(SMP_STUB_OBJ)
+	$(SMP_AES_OBJ) $(SMP_DEVICE_OBJ) $(SMP_STUB_OBJ)
 
 HEADERS := \
 	$(wildcard framework/*.h) \
@@ -111,6 +112,10 @@ $(SMP_FRAMEWORK_OBJ): framework/bt_compliance.cpp $(HEADERS)
 $(SMP_CORE_OBJ): $(ROOT)/src/bluetooth/bt_smp.cpp $(HEADERS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(SMP_CPPFLAGS) $(SMP_CORE_DEFINES) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(SMP_AES_OBJ): $(ROOT)/src/crypto/crypto_softaes.cpp $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
 
 $(SMP_DEVICE_OBJ): $(ROOT)/src/device.cpp $(HEADERS)
 	@mkdir -p $(dir $@)
