@@ -5,9 +5,13 @@
 #include <unistd.h>
 
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_smp.h"
+#include "crypto/crypto_softaes.h"
 #include "syslog.h"
 
 namespace {
+
+CryptoSoftAes s_Aes;
 
 __attribute__((constructor)) void IgnoreBrokenPipeSignal()
 {
@@ -20,6 +24,21 @@ __attribute__((constructor)) void IgnoreBrokenPipeSignal()
 } // namespace
 
 extern "C" {
+
+// bt_smp.cpp is compiled with its initializer renamed for this host test. The
+// wrapper keeps deterministic ECDH and RNG from each worker but replaces the
+// temporary test mixer with IOsonata's production AES-128 implementation.
+bool BtSmpInitReal(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng);
+
+bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)
+{
+	(void)pAes;
+	if (!s_Aes.Enable())
+	{
+		return false;
+	}
+	return BtSmpInitReal(pEcdh, &s_Aes, pRng);
+}
 
 void BtGattCccdRestoreBonded(uint16_t ConnHdl)
 {
