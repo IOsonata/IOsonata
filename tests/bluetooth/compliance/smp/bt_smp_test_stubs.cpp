@@ -1,8 +1,5 @@
 #include <signal.h>
-#include <stdarg.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <unistd.h>
 
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_smp.h"
@@ -54,18 +51,8 @@ SysLog_t *SysLogGet(void)
 int SysLogPrintf(SysLog_t * const pLog, const char *pFormat, ...)
 {
 	(void)pLog;
-	static unsigned count;
-	if (count++ >= 24 || pFormat == nullptr)
-	{
-		return 0;
-	}
-
-	fprintf(stderr, "[smp-worker %ld] ", (long)getpid());
-	va_list args;
-	va_start(args, pFormat);
-	int result = vfprintf(stderr, pFormat, args);
-	va_end(args);
-	return result;
+	(void)pFormat;
+	return 0;
 }
 
 } // extern "C"
