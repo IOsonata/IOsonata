@@ -946,6 +946,8 @@ static bool SmpF6(const uint8_t w[16], const uint8_t n1[16], const uint8_t n2[16
 // Pairing feature negotiation
 //-----------------------------------------------------------------------------
 
+static void SmpSendLocalPubKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink, uint16_t ConnHdl);
+
 // Select the association model for this pairing. OOB takes precedence when
 // present. Without a MITM requirement from either side the result is Just
 // Works. Otherwise the IO capability table decides; a capability value outside
