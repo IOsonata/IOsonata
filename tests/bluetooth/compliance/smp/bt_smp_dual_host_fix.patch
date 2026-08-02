@@ -1,0 +1,106 @@
+diff --git a/src/bluetooth/bt_smp.cpp b/src/bluetooth/bt_smp.cpp
+--- a/src/bluetooth/bt_smp.cpp
++++ b/src/bluetooth/bt_smp.cpp
+@@ -958,11 +958,11 @@ static uint8_t SmpSelectModel(uint8_t InitIo, uint8_t RespIo, bool Mitm, bool Oob)
+ // Copy the pending OOB material into the link context of an OOB pairing.
+ static bool SmpOobCtxLoad(BtSmpLink_t *pLink)
+ {
+-	// This implementation needs both local and peer SC OOB data. A partial
+-	// set cannot complete both f4 verification and the f6 ra/rb inputs, so
+-	// reject it during feature exchange with OOB Not Available rather than
+-	// failing later with an unspecified crypto error.
+-	if (!s_SmpOob.bLocalValid || !s_SmpOob.bPeerValid)
++	// LE Secure Connections supports OOB in either or both directions. The
++	// local set commits our public key; the peer set authenticates the peer.
++	// At least one must exist for this device to select the OOB model, but a
++	// one-direction exchange is valid and uses zero for the absent peer r.
++	if (!s_SmpOob.bLocalValid && !s_SmpOob.bPeerValid)
+ 	{
+ 		return false;
+ 	}
+@@ -468,11 +468,15 @@ static int SmpCryptoEcdh(BtSmpLink_t *pLink,
+ 	{
+ 		return BT_SMP_CRYPTO_FAIL;
+ 	}
++	uint8_t *pKeyCtx = (SmpOobReservedFor(pLink) && s_SmpOob.bLocalValid) ?
++						 s_SmpOob.EcdhKeyCtx : pLink->Ctx.EcdhKeyCtx;
+ 	return CryptoStatusToSmp(s_pCryptoEcdh->Agree(CRYPTO_CURVE_P256,
+-												  pLink->Ctx.EcdhKeyCtx,
++												  pKeyCtx,
+ 												  pPeerPubKey, pDhKey));
+ }
+ 
+diff --git a/tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp b/tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
+--- a/tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
++++ b/tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
+@@ -870,7 +870,13 @@ static PairingRunResult RunPairing(const PairingRunConfig &Config)
+ 
+ 		if (setup && !passkeyReplySent)
+ 		{
+-			if (central.PasskeyDisplaySeen && peripheral.PasskeyRequestSeen)
++			if (central.PasskeyRequestSeen && peripheral.PasskeyRequestSeen)
++			{
++				// KeyboardOnly/KeyboardOnly: the user supplies one external
++				// passkey and enters the same value on both devices.
++				setup = SendPasskeyReply(&central, 123456U) &&
++					SendPasskeyReply(&peripheral, 123456U);
++				passkeyReplySent = true;
++			}
++			else if (central.PasskeyDisplaySeen && peripheral.PasskeyRequestSeen)
+ 			{
+ 				setup = SendPasskeyReply(&peripheral, central.DisplayedPasskey);
+ 				passkeyReplySent = true;
+@@ -1037,28 +1043,39 @@ static void TestPeripheralSecurityRequest(Context &ctx)
+ 	ctx.End();
+ }
+ 
+-static void TestOobFailures(Context &ctx)
++static void TestOobDirectionsAndFailures(Context &ctx)
+ {
+ 	static const Requirement req = {
+-		"SMP-SC-OOB-BI-01", "Core Vol 3 Part H", "2.3.5.6.4",
+-		"missing or corrupted SC OOB data cannot produce an authenticated encrypted link"
++		"SMP-SC-OOB-BV-BI-01", "Core Vol 3 Part H", "2.3.3 and 2.3.5.6.4",
++		"one-direction and bidirectional SC OOB complete, while corrupted authentication data fails"
+ 	};
+ 	ctx.Begin(req);
+ 
+-	PairingRunConfig missing = {
++	PairingRunConfig centralToPeripheral = {
+ 		BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+ 		BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+ 		true, true, false, OobFault::Drop, OobFault::None
+ 	};
+-	PairingRunResult missingResult = RunPairing(missing);
+-	BT_CHECK(ctx, !missingResult.Success);
+-	BT_CHECK(ctx, missingResult.FailureReason == BT_SMP_ERR_OOB_NOT_AVAILABLE);
++	PairingRunResult centralToPeripheralResult = RunPairing(centralToPeripheral);
++	BT_CHECK(ctx, centralToPeripheralResult.TransportOk);
++	BT_CHECK(ctx, centralToPeripheralResult.Complete);
++	BT_CHECK(ctx, centralToPeripheralResult.Success);
++	BT_CHECK(ctx, centralToPeripheralResult.Authenticated);
++	BT_CHECK(ctx, centralToPeripheralResult.Sc);
++
++	PairingRunConfig peripheralToCentral = centralToPeripheral;
++	peripheralToCentral.CentralReceives = OobFault::None;
++	peripheralToCentral.PeripheralReceives = OobFault::Drop;
++	PairingRunResult peripheralToCentralResult = RunPairing(peripheralToCentral);
++	BT_CHECK(ctx, peripheralToCentralResult.TransportOk);
++	BT_CHECK(ctx, peripheralToCentralResult.Complete);
++	BT_CHECK(ctx, peripheralToCentralResult.Success);
++	BT_CHECK(ctx, peripheralToCentralResult.Authenticated);
++	BT_CHECK(ctx, peripheralToCentralResult.Sc);
+ 
+-	PairingRunConfig corrupt = missing;
++	PairingRunConfig corrupt = centralToPeripheral;
+ 	corrupt.CentralReceives = OobFault::CorruptConfirm;
+ 	PairingRunResult corruptResult = RunPairing(corrupt);
+ 	BT_CHECK(ctx, !corruptResult.Success);
+@@ -1162,7 +1179,7 @@ int main()
+ 	TestOobChannelIsolation(ctx);
+ 	TestAssociationMatrix(ctx);
+ 	TestPeripheralSecurityRequest(ctx);
+-	TestOobFailures(ctx);
++	TestOobDirectionsAndFailures(ctx);
+ 	return ctx.Finish(false);
+ }
