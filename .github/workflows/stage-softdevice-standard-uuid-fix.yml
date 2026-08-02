@@ -40,8 +40,9 @@ jobs:
 
               line_start = text.rfind('\n', 0, pos) + 1
               indent = text[line_start:pos]
-              if text[line_start:pos].strip():
+              if indent.strip():
                   raise SystemExit(f'unexpected service UUID line formatting in {path}')
+              body_indent = indent + ('\t' if '\t' in indent else '    ')
 
               insert = (
                   f'{indent}// IOsonata standard service declarations are zero-initialized. '
@@ -49,7 +50,7 @@ jobs:
                   'Bluetooth SIG base type.\n'
                   f'{indent}if (pSrvc->bCustom == false)\n'
                   f'{indent}' + '{\n'
-                  f'{indent}\tpSrvc->Uuid.BaseIdx = BLE_UUID_TYPE_BLE;\n'
+                  f'{body_indent}pSrvc->Uuid.BaseIdx = BLE_UUID_TYPE_BLE;\n'
                   f'{indent}' + '}\n\n'
               )
               text = text[:line_start] + insert + text[line_start:]
