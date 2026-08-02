@@ -1,0 +1,26 @@
+name: Audit nRF54 BM services
+
+on:
+  push:
+    branches:
+      - feature/bm-generic-services
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/bm-generic-services
+          fetch-depth: 1
+      - name: Report BM service references
+        run: |
+          echo '=== Nordic DIS/BAS references ==='
+          git grep -n -E 'ble_(dis|bas)|Bt(Dis|Bas)' -- ARM/Nordic/nRF54 src/bluetooth include/bluetooth || true
+          echo '=== nRF54 project service links ==='
+          grep -n -B2 -A3 -E 'ble_(dis|bas)|bt_(dis|bas)' ARM/Nordic/nRF54/nRF54L15/lib/Eclipse/.project || true
+          echo '=== nRF54 build metadata service references ==='
+          git grep -n -E 'ble_(dis|bas)|bt_(dis|bas)' -- ARM/Nordic/nRF54/nRF54L15/lib/Eclipse ':!ARM/Nordic/nRF54/nRF54L15/lib/Eclipse/.project' || true
