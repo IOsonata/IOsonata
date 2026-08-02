@@ -1303,13 +1303,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		pLink->Ctx.State = BT_SMP_STATE_PUBKEY_WAIT;
 		int rc = SmpLocalKeyGen(pDev, pLink);
 		DEBUG_PRINTF("SMP P256KeyGen rc=%d\r\n", rc);
-		if (rc == BT_SMP_CRYPTO_OK)
-		{
-			// OOB key generation happened before pairing. No crypto completion
-			// callback will fire, so send the committed public key here.
-			SmpSendLocalPubKey(pDev, pLink, ConnHdl);
-		}
-		else if (rc == BT_SMP_CRYPTO_FAIL)
+		if (rc == BT_SMP_CRYPTO_FAIL)
 		{
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
 			SmpAbortPairing(pLink);

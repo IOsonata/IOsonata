@@ -902,7 +902,8 @@ static PairingRunResult RunPairing(const PairingRunConfig &Config)
 	result.Sc = result.Success && central.SecureConnections && peripheral.SecureConnections;
 	result.Numeric = central.NumericSeen && peripheral.NumericSeen;
 	result.Passkey = (central.PasskeyDisplaySeen && peripheral.PasskeyRequestSeen) ||
-		(peripheral.PasskeyDisplaySeen && central.PasskeyRequestSeen);
+		(peripheral.PasskeyDisplaySeen && central.PasskeyRequestSeen) ||
+		(central.PasskeyRequestSeen && peripheral.PasskeyRequestSeen);
 	result.Oob = Config.Oob;
 	result.FailureReason = central.FailureReason != 0 ?
 		central.FailureReason : peripheral.FailureReason;
