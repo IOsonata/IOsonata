@@ -171,6 +171,16 @@ void TestPeerRole()
 	// No record for this handle.
 	CHECK(BtPeerRole(0x77) == BT_CONN_ROLE_UNKNOWN);
 
+	// A slot that has been allocated but whose role has not been filled in
+	// reports UNKNOWN, not CENTRAL. BT_CONN_ROLE_CENTRAL is 0, so a zeroed
+	// record used to read as a central link, and the SMP and L2CAP role gates
+	// refuse a PDU on that reading: a peripheral would answer a Pairing
+	// Request with Command Not Supported.
+	BtDevice_t *raw = BtPeerAlloc(0x13);
+	CHECK(raw != nullptr);
+	CHECK(BtPeerRole(0x13) == BT_CONN_ROLE_UNKNOWN);
+	BtPeerFree(raw);
+
 	// A value outside the HCI encoding (a BT_GAP_ROLE_* bitmask, 0x0C for
 	// PERIPHERAL|CENTRAL) reports UNKNOWN rather than a role.
 	BtDevice_t *bogus = BtPeerConnected(0x12, 0x0C, 0, addr, 0, nullptr);
