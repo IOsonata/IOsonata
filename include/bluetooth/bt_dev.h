@@ -70,6 +70,7 @@ SOFTWARE.
 typedef struct __Bt_Dev_Disc_State {
 	uint8_t			SrvIdx;			//!< Index into Services[] currently being parsed
 	uint8_t			CharIdx;		//!< Index into the current service's char array
+	uint8_t			Phase;			//!< Port-defined discovery phase, 0 = idle
 	uint16_t		Hdl;			//!< Current ATT handle being read/queried
 	BtUuid_t		UuidType;		//!< UUID type the state machine is scanning for
 } BtDevDiscState_t;
