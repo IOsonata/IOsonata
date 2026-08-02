@@ -19,7 +19,14 @@ VirtualController::VirtualController(VirtualClock &Clock) :
 
 VirtualController::~VirtualController()
 {
-	Detach();
+	// BtHciDevice_t is caller-owned and may have gone out of scope before this
+	// controller. Never dereference it from the destructor. A caller that needs
+	// the function pointers cleared while the host is still alive calls Detach().
+	if (spActive == this)
+	{
+		spActive = nullptr;
+	}
+	vpHost = nullptr;
 }
 
 bool VirtualController::Attach(BtHciDevice_t *pHost)
@@ -236,10 +243,14 @@ bool VirtualController::InjectEventHeaderOnly(uint8_t EventCode)
 		return false;
 	}
 
-	alignas(4) uint8_t raw[sizeof(BtHciEvtPacketHdr_t)] = {};
+	// Allocate a complete packet object even though Hdr.Len declares no event
+	// parameters. Casting storage smaller than BtHciEvtPacket_t is undefined in
+	// the test itself and hides the parser result behind an object-size failure.
+	alignas(4) uint8_t raw[sizeof(BtHciEvtPacket_t)] = {};
 	BtHciEvtPacket_t *pEvent = reinterpret_cast<BtHciEvtPacket_t *>(raw);
 	pEvent->Hdr.Evt = EventCode;
 	pEvent->Hdr.Len = 0;
+	pEvent->Data[0] = 0xFF;
 	BtHciProcessEvent(vpHost, pEvent);
 	return true;
 }
@@ -251,11 +262,14 @@ bool VirtualController::InjectLeSubeventOnly(uint8_t SubeventCode)
 		return false;
 	}
 
-	alignas(4) uint8_t raw[sizeof(BtHciEvtPacketHdr_t) + 1] = {};
+	// Keep one sentinel byte after the declared LE subevent. The parser must not
+	// treat it as the list count merely because it exists in the allocation.
+	alignas(4) uint8_t raw[sizeof(BtHciEvtPacket_t) + 1] = {};
 	BtHciEvtPacket_t *pEvent = reinterpret_cast<BtHciEvtPacket_t *>(raw);
 	pEvent->Hdr.Evt = BT_HCI_EVT_LE;
 	pEvent->Hdr.Len = 1;
 	pEvent->Data[0] = SubeventCode;
+	pEvent->Data[1] = 0xFF;
 	BtHciProcessEvent(vpHost, pEvent);
 	return true;
 }
