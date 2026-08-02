@@ -128,10 +128,12 @@ typedef struct __Bt_Smp_Link {
 	BtHciDevice_t   *pCryptoDev;
 	struct {
 		uint8_t Len;
+		bool BlocksRx;
 		uint8_t Data[BT_SMP_TX_PDU_MAX];
 	} TxQueue[BT_SMP_TX_QUEUE_DEPTH];
 	uint8_t TxHead;
 	uint8_t TxCount;
+	uint8_t TxBarrierCount;
 	BtHciDevice_t *pTxDev;
 } BtSmpLink_t;
 
@@ -519,7 +521,11 @@ static inline bool SmpPairingActive(BtSmpState_t State)
 // SmpSend), so a silent or stalled peer still trips the deadline.
 static inline bool SmpPairingTimedOut(const BtSmpLink_t *pLink)
 {
-	return SmpPairingActive(pLink->Ctx.State) &&
+	// A queued handshake PDU has not crossed HCI yet. Its peer response cannot
+	// legitimately exist and the SMP response timer must not run until the
+	// prerequisite packet has actually been accepted by the controller.
+	return pLink->TxBarrierCount == 0 &&
+		   SmpPairingActive(pLink->Ctx.State) &&
 		   (uint32_t)(BtSmpMsTick() - pLink->Ctx.TmrStart) >= BT_SMP_TIMEOUT_MS;
 }
 
@@ -586,6 +592,27 @@ static void SmpTxDropLink(BtHciDevice_t *pDev, uint16_t ConnHdl)
 				 param, sizeof(param), nullptr, 0);
 }
 
+// These phase-1/2 packets establish the state in which the next peer PDU
+// is meaningful. If one is queued but not yet accepted by HCI, an inbound PDU
+// that appears to answer it is early and must not drive the state machine. Key
+// distribution is intentionally excluded: both sides may distribute keys once
+// encryption is enabled and those directions are independent.
+static bool SmpTxPduBlocksRx(uint8_t Code)
+{
+	switch (Code)
+	{
+		case BT_SMP_CODE_PAIRING_REQ:
+		case BT_SMP_CODE_PAIRING_RSP:
+		case BT_SMP_CODE_PAIRING_CONFIRM:
+		case BT_SMP_CODE_PAIRING_RANDOM:
+		case BT_SMP_CODE_PAIRING_PUBLIC_KEY:
+		case BT_SMP_CODE_PAIRING_DHKEY_CHECK:
+			return true;
+		default:
+			return false;
+	}
+}
+
 static void SmpTxPump(BtSmpLink_t *pLink)
 {
 	if (pLink == nullptr || pLink->pTxDev == nullptr)
@@ -621,6 +648,10 @@ static void SmpTxPump(BtSmpLink_t *pLink)
 
 		pLink->Ctx.TmrStart = BtSmpMsTick();
 		SMP_TRACE_PDU("TX", item.Data[0], (int)pLink->Ctx.State);
+		if (item.BlocksRx && pLink->TxBarrierCount > 0)
+		{
+			pLink->TxBarrierCount--;
+		}
 		pLink->TxHead = (uint8_t)((pLink->TxHead + 1) % BT_SMP_TX_QUEUE_DEPTH);
 		pLink->TxCount--;
 	}
@@ -640,6 +671,12 @@ static bool SmpTxEnqueue(BtSmpLink_t *pLink, BtHciDevice_t *pDev,
 						   BT_SMP_TX_QUEUE_DEPTH);
 	pLink->TxQueue[idx].Len = (uint8_t)Len;
 	memcpy(pLink->TxQueue[idx].Data, pData, Len);
+	pLink->TxQueue[idx].BlocksRx =
+		SmpTxPduBlocksRx(pLink->TxQueue[idx].Data[0]);
+	if (pLink->TxQueue[idx].BlocksRx)
+	{
+		pLink->TxBarrierCount++;
+	}
 	pLink->TxCount++;
 	pLink->pTxDev = pDev;
 	return true;
@@ -671,6 +708,7 @@ static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t 
 	{
 		pLink->TxHead = 0;
 		pLink->TxCount = 0;
+		pLink->TxBarrierCount = 0;
 		pLink->pTxDev = pDev;
 	}
 	BtSmpPairingFailed_t f;
@@ -2479,6 +2517,14 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	if (pLink->Ctx.bLocked)
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_REPEATED_ATTEMPTS);
+		return;
+	}
+
+	// The local state may already describe the response expected after a PDU
+	// that is still queued behind HCI flow control. Do not accept a peer PDU
+	// until every prerequisite phase-1/2 packet has actually left this host.
+	if (pLink->TxBarrierCount > 0)
+	{
 		return;
 	}
 

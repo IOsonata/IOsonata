@@ -1051,7 +1051,7 @@ static void TestTxFailureQueuesAndRetries(Context &ctx)
 {
 	static const Requirement req = {
 		"SMP-ACL-FLOW-BI-02", "Core Vol 3 Part H / Vol 4 Part E", "3.4 and 5.4.2",
-		"an SMP PDU refused by the ACL transport is retained and sent after credits return"
+		"a refused SMP PDU is retained, and an early peer response cannot advance the state before transmission"
 	};
 	ctx.Begin(req);
 
@@ -1076,6 +1076,23 @@ static void TestTxFailureQueuesAndRetries(Context &ctx)
 	pollfd pfd = { peer.EventFd, POLLIN, 0 };
 	BT_CHECK(ctx, poll(&pfd, 1, 50) == 0);
 
+	// This looks like a valid answer to the queued Pairing Request, but that
+	// request has not crossed HCI. It must be ignored rather than producing a
+	// Public Key behind the still-unsent request.
+	const uint8_t pairingRsp[] = {
+		BT_SMP_CODE_PAIRING_RSP,
+		BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+		0,
+		(uint8_t)(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_SC),
+		16, 0, 0
+	};
+	WireMessage response = {};
+	response.Type = WIRE_CMD_RX_SMP;
+	response.Length = sizeof(pairingRsp);
+	memcpy(response.Data, pairingRsp, sizeof(pairingRsp));
+	BT_CHECK(ctx, SendWire(peer.CommandFd, response));
+	BT_CHECK(ctx, poll(&pfd, 1, 50) == 0);
+
 	block.Value = 0;
 	BT_CHECK(ctx, SendWire(peer.CommandFd, block));
 	WireMessage pump = {};
@@ -1087,6 +1104,18 @@ static void TestTxFailureQueuesAndRetries(Context &ctx)
 	BT_CHECK(ctx, event.Type == WIRE_EVT_TX_SMP);
 	BT_CHECK(ctx, event.Length > 0);
 	BT_CHECK(ctx, event.Data[0] == BT_SMP_CODE_PAIRING_REQ);
+
+	// The early response was discarded, not deferred. No Public Key may be
+	// waiting after the Pairing Request finally leaves.
+	pfd.revents = 0;
+	BT_CHECK(ctx, poll(&pfd, 1, 50) == 0);
+
+	// The same response is valid now that its prerequisite packet was sent.
+	BT_CHECK(ctx, SendWire(peer.CommandFd, response));
+	BT_CHECK(ctx, ReceiveWire(peer.EventFd, &event));
+	BT_CHECK(ctx, event.Type == WIRE_EVT_TX_SMP);
+	BT_CHECK(ctx, event.Length > 0);
+	BT_CHECK(ctx, event.Data[0] == BT_SMP_CODE_PAIRING_PUBLIC_KEY);
 
 	StopPeer(&peer);
 	ctx.End();
