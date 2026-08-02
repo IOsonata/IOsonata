@@ -59,7 +59,7 @@ SOFTWARE.
 #include "bm/bluetooth/ble_conn_params.h"
 #include "bm/bluetooth/peer_manager/peer_manager.h"
 #include "bm/bluetooth/peer_manager/peer_manager_handler.h"
-#include "bm/bluetooth/services/ble_dis.h"
+#include "bluetooth/services/bt_dis.h"
 
 #include "cracen_intrf.h"
 #include "crypto/ba414ep.h"
@@ -689,35 +689,6 @@ void BtAppEnterDfu()
 	NVIC_SystemReset();
 }
 
-// --- DIS initialization ---
-
-static void BtDisInit(const BtAppCfg_t *pCfg)
-{
-	// sdk-nrf-bm DIS uses Kconfig values for device info strings.
-	// Call ble_dis_init() with security settings based on SecType.
-	// Note: BLE_DIS_CONFIG_SEC_MODE_DEFAULT uses C nested designated
-	// initializers (.device_info_char.read = ...) which are not valid
-	// in C++. Initialize manually.
-	struct ble_dis_config dis_cfg = {};
-	dis_cfg.sec_mode.device_info_char.read.sm = 1;
-	dis_cfg.sec_mode.device_info_char.read.lv = 1;
-
-	switch (pCfg->SecType)
-	{
-		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
-		case BTGAP_SECTYPE_LESC_MITM:
-		case BTGAP_SECTYPE_SIGNED_NO_MITM:
-			// Just works / signed
-			break;
-		case BTGAP_SECTYPE_NONE:
-		default:
-			// Open access
-			break;
-	}
-
-	ble_dis_init(&dis_cfg);
-}
-
 // --- Stack Init ---
 
 
@@ -1251,10 +1222,11 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		BtAppInitUserServices();
 	}
 
-	// Initialize Device Information Service
-	if (pCfg->pDevInfo != NULL)
+	// Register the IOsonata Device Information Service through the
+	// target BtGattSrvcAdd/BtGattCharSetValue implementation.
+	if (pCfg->pDevInfo != NULL && BtDisInit(pCfg) == false)
 	{
-		BtDisInit(pCfg);
+		return false;
 	}
 
 	// Initialize user data

@@ -32,6 +32,7 @@ TEST_ENV := ASAN_OPTIONS=$(ASAN_RUNTIME_OPTIONS) \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
 
 HEADERS := $(wildcard $(ROOT)/include/bluetooth/*.h) \
+	$(wildcard $(ROOT)/include/bluetooth/services/*.h) \
 	$(ROOT)/include/istddef.h \
 	$(ROOT)/include/device_intrf.h \
 	$(ROOT)/include/cfifo.h \
@@ -57,7 +58,8 @@ TEST_NAMES := \
 	bt_gatt_adversarial_test \
 	bt_hci_adversarial_test \
 	bt_l2cap_adversarial_test \
-	bt_app_adversarial_test
+	bt_app_adversarial_test \
+	bt_std_services_test
 
 TARGETS := $(addprefix $(BUILD_DIR)/,$(TEST_NAMES))
 CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
@@ -151,6 +153,11 @@ bt_l2cap_adversarial_test_SOURCES := \
 bt_app_adversarial_test_SOURCES := \
 	bt_app_adversarial_test.cpp \
 	$(ROOT)/src/bluetooth/bt_app.cpp
+
+bt_std_services_test_SOURCES := \
+	bt_std_services_test.cpp \
+	$(ROOT)/src/bluetooth/services/bt_dis.cpp \
+	$(ROOT)/src/bluetooth/services/bt_bas.cpp
 
 .PHONY: all test test-gcc test-clang test-matrix clean
 
