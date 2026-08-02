@@ -36,6 +36,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 
+#include <string.h>
+
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gatt.h"
@@ -251,7 +253,7 @@ static int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPinCfg_t);
 
 int g_DelayCnt = 0;
 volatile bool g_bUartState = false;
-#if BLE_SC_METHOD == BLE_SC_OOB
+#if BLE_SC_METHOD != BLE_SC_NONE
 static volatile bool s_OobRefreshPending = false;
 #endif
 #if BLE_SC_METHOD != BLE_SC_NONE
@@ -295,7 +297,7 @@ const UARTCfg_t g_UartCfg = {
 /// UART object instance
 UART g_Uart;
 
-#if BLE_SC_METHOD == BLE_SC_OOB
+#if BLE_SC_METHOD != BLE_SC_NONE
 static bool s_UartBlePeerOobValid = false;
 
 #ifdef BLE_SC_OOB_NFC
@@ -390,6 +392,96 @@ static void UartBleOobNfcPublish(const uint8_t *pRand, const uint8_t *pConf)
 	g_Uart.printf("OOB data published on NFC tag, tap to pair\r\n");
 }
 #endif
+
+// Runtime association-model selection.
+//
+// BLE_SC_METHOD is the boot default; the console "sec" command switches the
+// method for the next pairing without a rebuild, so one binary covers the whole
+// matrix instead of one build per cell. BtSmpAuthConfig only assigns the local
+// IO capability and the authentication requirements, and those two plus whether
+// OOB data is present are what choose the model at pairing time, so calling it
+// between connections is enough. SecType in the app config stays as built: it
+// arms security and bonding, it does not pick the model.
+typedef struct {
+	const char *pName;			// console keyword
+	uint8_t     IoCaps;			// BT_SMP_IOCAPS_*
+	uint8_t     AuthReq;		// bonding / MITM, SC is forced by BtSmpAuthConfig
+	const char *pDesc;
+} UartBleSecMethod_t;
+
+static const UartBleSecMethod_t s_SecMethods[] = {
+	{ "justworks",		BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING,
+	  "Just Works (bonded, no MITM)" },
+	{ "numcomp",		BT_SMP_IOCAPS_DISPLAY_YESNO,
+	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
+	  "Numeric Comparison" },
+	{ "passkey-disp",	BT_SMP_IOCAPS_DISPLAY_ONLY,
+	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
+	  "Passkey Entry (display)" },
+	{ "passkey-input",	BT_SMP_IOCAPS_KEYBOARD_ONLY,
+	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
+	  "Passkey Entry (keyboard)" },
+	{ "oob",			BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
+	  "LESC OOB" },
+};
+
+#define UART_BLE_SEC_METHOD_CNT		(int)(sizeof(s_SecMethods) / sizeof(s_SecMethods[0]))
+
+static int s_SecMethodIdx = 0;
+
+static bool UartBleSecIsOob(void)
+{
+	return strcmp(s_SecMethods[s_SecMethodIdx].pName, "oob") == 0;
+}
+
+// One line, fixed field order, so a host script can parse it. Printed on every
+// change and on a bare "sec".
+static void UartBleSecPrint(void)
+{
+	const UartBleSecMethod_t *m = &s_SecMethods[s_SecMethodIdx];
+
+	g_Uart.printf("SEC method=%s iocaps=%d authreq=0x%02x desc=%s\r\n",
+				  m->pName, m->IoCaps, m->AuthReq, m->pDesc);
+}
+
+static void UartBleSecApply(int Idx)
+{
+	if (Idx < 0 || Idx >= UART_BLE_SEC_METHOD_CNT)
+	{
+		return;
+	}
+
+	s_SecMethodIdx = Idx;
+	BtSmpAuthConfig(s_SecMethods[Idx].IoCaps, s_SecMethods[Idx].AuthReq);
+	UartBleSecPrint();
+}
+
+// Select the entry whose IO capability and MITM setting match what this build
+// was configured with, so the boot default and BLE_SC_METHOD agree.
+static void UartBleSecInit(void)
+{
+	for (int i = 0; i < UART_BLE_SEC_METHOD_CNT; i++)
+	{
+		if (s_SecMethods[i].IoCaps == BLE_SC_IOCAPS &&
+			s_SecMethods[i].AuthReq == (BLE_SC_AUTHREQ))
+		{
+#if BLE_SC_METHOD == BLE_SC_OOB
+			// Just Works and OOB share NoInputNoOutput; take the OOB row.
+			if (strcmp(s_SecMethods[i].pName, "oob") != 0)
+			{
+				continue;
+			}
+#endif
+			s_SecMethodIdx = i;
+			break;
+		}
+	}
+
+	BtSmpAuthConfig(s_SecMethods[s_SecMethodIdx].IoCaps,
+					s_SecMethods[s_SecMethodIdx].AuthReq);
+}
 
 static int UartBleHexVal(uint8_t c)
 {
@@ -493,8 +585,75 @@ static bool UartBleOobSetPeer(const uint8_t *pText, int Len)
 
 static void UartBleOobInit(void)
 {
-	UartBleOobPrintLocal();
-	g_Uart.printf("Enter peer data before pairing. Commands: oob, oob peer <hex>\r\n");
+	UartBleSecPrint();
+
+	// The local set is only needed for the OOB model, and generating it costs a
+	// P-256 key pair, so a build that boots into another method does not pay
+	// for it. "sec oob" prints it when the method is selected.
+	if (UartBleSecIsOob())
+	{
+		UartBleOobPrintLocal();
+	}
+
+	g_Uart.printf("Commands: sec [method], oob, oob peer <hex>, bond del\r\n");
+}
+
+// "sec" prints the current method, "sec <name>" selects one for the next
+// pairing. Selecting OOB prints the local data set, since that is the point at
+// which the operator needs it.
+static bool UartBleSecTryCommand(const uint8_t *pData, int Len)
+{
+	if (Len < 3 || memcmp(pData, "sec", 3) != 0)
+	{
+		return false;
+	}
+
+	const uint8_t *p = pData + 3;
+	int l = Len - 3;
+
+	while (l > 0 && (*p == ' ' || *p == '\t'))
+	{
+		p++;
+		l--;
+	}
+
+	if (l <= 0 || *p == '\r' || *p == '\n')
+	{
+		UartBleSecPrint();
+		return true;
+	}
+
+	// Trim the line ending before the compare, the console sends CR or LF.
+	while (l > 0 && (p[l - 1] == '\r' || p[l - 1] == '\n' || p[l - 1] == ' '))
+	{
+		l--;
+	}
+
+	for (int i = 0; i < UART_BLE_SEC_METHOD_CNT; i++)
+	{
+		int nl = (int)strlen(s_SecMethods[i].pName);
+
+		if (nl == l && memcmp(p, s_SecMethods[i].pName, nl) == 0)
+		{
+			UartBleSecApply(i);
+
+			if (UartBleSecIsOob())
+			{
+				UartBleOobPrintLocal();
+			}
+
+			return true;
+		}
+	}
+
+	g_Uart.printf("SEC unknown, one of:");
+	for (int i = 0; i < UART_BLE_SEC_METHOD_CNT; i++)
+	{
+		g_Uart.printf(" %s", s_SecMethods[i].pName);
+	}
+	g_Uart.printf("\r\n");
+
+	return true;
 }
 
 static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
@@ -544,6 +703,11 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx);
 
 static void UartBleOobRefresh(void)
 {
+	if (UartBleSecIsOob() == false)
+	{
+		return;			// nothing was consumed, nothing to replace
+	}
+
 	BtSmpOobDataClear();
 	s_UartBlePeerOobValid = false;
 	UartBleOobPrintLocal();
@@ -560,6 +724,12 @@ void BtAppEvtSecured(uint16_t ConnHdl)
 #else
 static void UartBleOobInit(void) {}
 static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
+{
+	(void)pData;
+	(void)Len;
+	return false;
+}
+static bool UartBleSecTryCommand(const uint8_t *pData, int Len)
 {
 	(void)pData;
 	(void)Len;
@@ -703,9 +873,10 @@ void HardwareInit()
 void BtAppInitUserData()
 {
 #if BLE_SC_METHOD != BLE_SC_NONE
-	// Set the local IO capability so the SMP core negotiates the selected
-	// method; the console then fills whatever role that capability implies.
-	BtSmpAuthConfig(BLE_SC_IOCAPS, BLE_SC_AUTHREQ);
+	// Boot default from BLE_SC_METHOD, then the console "sec" command can move
+	// to any other model without a rebuild. The console fills whatever role the
+	// selected IO capability implies.
+	UartBleSecInit();
 #endif
 }
 
@@ -796,7 +967,7 @@ static bool PairInputPoll(void)
 //void UartRxChedHandler(void * p_event_data, uint16_t event_size)
 void UartRxChedHandler(uint32_t Evt, void *pCtx)
 {
-#if BLE_SC_METHOD == BLE_SC_OOB
+#if BLE_SC_METHOD != BLE_SC_NONE
 	if (s_OobRefreshPending)
 	{
 		s_OobRefreshPending = false;
@@ -816,10 +987,26 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 	int l = g_Uart.Rx(&buff[bufflen], PACKET_SIZE - bufflen);
 	if (l > 0)
 	{
+		int start = bufflen;
+
 		bufflen += l;
 		if (bufflen >= PACKET_SIZE)
 		{
 			flush = true;
+		}
+
+		// A console line ends at CR or LF, and a command is far shorter than
+		// PACKET_SIZE. Without this the only ways out were a full 20 byte
+		// buffer or an RX timeout, so "sec" and "bond del" sat in the buffer
+		// and looked like they did nothing, while a pasted OOB line worked
+		// because it is long enough to fill the buffer on its own.
+		for (int i = start; i < bufflen; i++)
+		{
+			if (buff[i] == '\r' || buff[i] == '\n')
+			{
+				flush = true;
+				break;
+			}
 		}
 	}
 	else
@@ -831,6 +1018,11 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 	}
 	if (flush)
 	{
+		if (UartBleSecTryCommand(buff, bufflen))
+		{
+			bufflen = 0;
+			return;
+		}
 		if (UartBleOobTryCommand(buff, bufflen))
 		{
 			bufflen = 0;
@@ -847,6 +1039,12 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 			bufflen = 0;
 		}
 		//app_sched_event_put(NULL, 0, UartRxChedHandler);
+		AppEvtHandlerQue(0, 0, UartRxChedHandler);
+	}
+	else if (bufflen > 0)
+	{
+		// Partial line held. Come back rather than waiting for the next UART
+		// event, which for a line the user stopped typing may never arrive.
 		AppEvtHandlerQue(0, 0, UartRxChedHandler);
 	}
 }

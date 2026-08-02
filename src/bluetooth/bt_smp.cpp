@@ -1196,6 +1196,8 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	if (pReq->IOCaps > BT_SMP_IOCAPS_KEYBOARD_DISPLAY ||
 		pReq->OOBFlag > BT_SMP_OOB_AUTH_PRESENT)
 	{
+		DEBUG_PRINTF("SMP reject PairingReq, reserved field iocaps=%d oob=%d\r\n",
+				  pReq->IOCaps, pReq->OOBFlag);
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
 		SmpAbortPairing(pLink);
 		return;
@@ -1208,6 +1210,9 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	if (pReq->MaxKeySize < BT_SMP_CFG_MIN_ENC_KEY_SIZE ||
 		pReq->MaxKeySize > BT_SMP_MAX_ENC_KEY_SIZE)
 	{
+		DEBUG_PRINTF("SMP reject PairingReq, key size %d outside %d..%d\r\n",
+				  pReq->MaxKeySize, BT_SMP_CFG_MIN_ENC_KEY_SIZE,
+				  BT_SMP_MAX_ENC_KEY_SIZE);
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_ENC_KEY_SIZE);
 		SmpAbortPairing(pLink);
 		return;
@@ -1252,6 +1257,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	if (pLink->Ctx.bSc && pReq->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT &&
 		!SmpOobLocalReady(pLink))
 	{
+		DEBUG_PRINTF("SMP reject PairingReq, peer claims OOB but no local set\r\n");
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
 		SmpAbortPairing(pLink);
 		return;
@@ -1259,6 +1265,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	pLink->Ctx.Model = SmpSelectModel(pReq->IOCaps, s_SmpIoCaps, mitm, oob);
 	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB && SmpOobCtxLoad(pLink) == false)
 	{
+		DEBUG_PRINTF("SMP reject PairingReq, OOB model but context load failed\r\n");
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
 		SmpAbortPairing(pLink);
 		return;
@@ -1446,6 +1453,7 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	pLink->Ctx.Model = SmpSelectModel(s_SmpIoCaps, pRsp->IOCaps, mitm, oob);
 	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB && SmpOobCtxLoad(pLink) == false)
 	{
+		DEBUG_PRINTF("SMP reject PairingReq, OOB model but context load failed\r\n");
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
 		SmpAbortPairing(pLink);
 		return;
@@ -2434,6 +2442,8 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 		if (Len < minLen)
 		{
+			DEBUG_PRINTF("SMP reject short PDU code=0x%02x len=%u need=%u\r\n",
+					  pSmp->Code, (unsigned)Len, (unsigned)minLen);
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
 			return;
 		}
@@ -2485,6 +2495,7 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			// old behavior.
 			if (BtPeerRole(ConnHdl) == BT_CONN_ROLE_CENTRAL)
 			{
+				DEBUG_PRINTF("SMP reject PairingReq, link role is central\r\n");
 				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CMD_NOT_SUPPORTED);
 				return;
 			}
@@ -2493,6 +2504,8 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			// (the handler also refuses a re-pair on an encrypted link).
 			if (pLink->Ctx.State != BT_SMP_STATE_IDLE)
 			{
+				DEBUG_PRINTF("SMP reject PairingReq, pairing already at state=%d\r\n",
+						  (int)pLink->Ctx.State);
 				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
 				return;
 			}

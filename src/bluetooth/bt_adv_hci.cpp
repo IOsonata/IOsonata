@@ -34,6 +34,20 @@ Copyright (c) 2022, I-SYST inc., all rights reserved
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_appearance.h"
 
+/******** For DEBUG Trace ************/
+// Define DEBUG_ENABLE to trace advertising state changes for this file. Output
+// goes to the SysLog transport the app configured. A release build defines
+// NDEBUG, which strips the trace regardless.
+//#define DEBUG_ENABLE
+
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define DEBUG_PRINTF(...)
+#endif
+/*******************************/
+
 // --- Packed standard HCI command parameter layouts (Core Vol 4 Part E) ---
 
 #pragma pack(push, 1)
@@ -277,10 +291,20 @@ void BtAppAdvStart()
 	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)
 		return;
 
-	if (BtAppAdvEnable() == 0)
+	int res = BtAppAdvEnable();
+	if (res == 0)
 	{
 		g_BtAppData.State = BTAPP_STATE_ADVERTISING;
+
+		return;
 	}
+
+	// A refused enable used to leave the device silent with nothing said. The
+	// case that matters is the restart after a disconnect: the application has
+	// no other signal that it stopped being discoverable, and from the outside
+	// it looks like the board died.
+	DEBUG_PRINTF("ADV enable failed, status=0x%02x, not advertising\r\n",
+				 (unsigned)res);
 }
 
 void BtAppAdvStop()
