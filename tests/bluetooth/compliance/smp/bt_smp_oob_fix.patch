@@ -1,0 +1,74 @@
+diff --git a/src/bluetooth/bt_smp.cpp b/src/bluetooth/bt_smp.cpp
+index 557e927..0000000 100644
+--- a/src/bluetooth/bt_smp.cpp
++++ b/src/bluetooth/bt_smp.cpp
+@@ -953,6 +953,12 @@ static uint8_t SmpSelectModel(uint8_t InitIo, uint8_t RespIo, bool Mitm, bool Oo
+ // Copy the pending OOB material into the link context of an OOB pairing.
+ static bool SmpOobCtxLoad(BtSmpLink_t *pLink)
+ {
++	// This implementation needs both local and peer SC OOB data. A partial
++	// set cannot complete both f4 verification and the f6 ra/rb inputs, so
++	// reject it during feature exchange with OOB Not Available rather than
++	// failing later with an unspecified crypto error.
++	if (!s_SmpOob.bLocalValid || !s_SmpOob.bPeerValid)
++	{
++		return false;
++	}
+ 	if (SmpOobReserve(pLink) == false)
+ 	{
+ 		return false;
+@@ -1286,7 +1292,13 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+ 		pLink->Ctx.State = BT_SMP_STATE_PUBKEY_WAIT;
+ 		int rc = SmpLocalKeyGen(pDev, pLink);
+ 		DEBUG_PRINTF("SMP P256KeyGen rc=%d\r\n", rc);
+-		if (rc == BT_SMP_CRYPTO_FAIL)
++		if (rc == BT_SMP_CRYPTO_OK)
++		{
++			// OOB key generation happened before pairing. No crypto completion
++			// callback will fire, so send the committed public key here.
++			SmpSendLocalPubKey(pDev, pLink, ConnHdl);
++		}
++		else if (rc == BT_SMP_CRYPTO_FAIL)
+ 		{
+-			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
++			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
+ 			SmpAbortPairing(pLink);
+ 		}
+ 	}
+@@ -1446,6 +1458,19 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+ 		return;
+ 	}
+ 
++	// The initiator defers key generation when OOB data is pending because the
++	// Pairing Response is what selects the association model. Reuse the key
++	// pair committed by BtSmpOobLocalDataGen now that OOB is selected.
++	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB &&
++		!SmpKeyPresent(pLink->Ctx.LocalPubKey, sizeof(pLink->Ctx.LocalPubKey)))
++	{
++		if (SmpLocalKeyGen(pDev, pLink) != BT_SMP_CRYPTO_OK)
++		{
++			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
++			SmpAbortPairing(pLink);
++			return;
++		}
++	}
++
+ 	// The initiator sends its public key after the Pairing Response. If the
+ 	// local P-256 key is not ready yet, BtSmpLocalPubKeyReady sends it.
+ 	if (SmpKeyPresent(pLink->Ctx.LocalPubKey, sizeof(pLink->Ctx.LocalPubKey)))
+@@ -3931,6 +3956,14 @@ void BtSmpStartPairing(uint16_t ConnHdl)
+ 	SmpSend(pDev, ConnHdl, &req, sizeof(req));
+ 
+ 	pLink->Ctx.State = BT_SMP_STATE_PUBKEY_LOCAL_WAIT;
++	// A generated OOB data set owns a distinct P-256 private-key context. The
++	// response determines whether OOB is actually selected, so do not start a
++	// second per-link key generation before that decision. The response handler
++	// reserves and copies the OOB key when both sides advertise usable data.
++	if (s_SmpOob.bLocalValid)
++	{
++		return;
++	}
++
+ 	int rc = SmpLocalKeyGen(pDev, pLink);
+ 	if (rc == BT_SMP_CRYPTO_FAIL)
+ 	{
