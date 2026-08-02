@@ -1,30 +1,63 @@
-name: Inspect SMP failure test
+name: Validate SMP transmission barrier
 
 on:
   push:
     branches:
       - bt-failure-fix-run
     paths:
+      - "tools/apply_bt_smp_tx_barrier.py"
       - ".github/workflows/apply-bt-final-review-fixes.yml"
   pull_request:
     branches:
       - bt_conformance
     paths:
+      - "tools/apply_bt_smp_tx_barrier.py"
       - ".github/workflows/apply-bt-final-review-fixes.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  inspect:
+  apply-test-commit:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: bt-failure-fix-run
-      - name: Show SMP wire helpers and blocked-TX test
+          fetch-depth: 0
+
+      - name: Apply SMP barrier
+        run: python3 tools/apply_bt_smp_tx_barrier.py
+
+      - name: Check patch
+        run: git diff --check
+
+      - name: GCC O0
         run: |
-          grep -n -B25 -A80 "case WIRE_CMD_RX_SMP" tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
-          grep -n -B20 -A80 "static bool SendInit" tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
-          grep -n -B20 -A100 "TestTxFailureQueuesAndRetries" tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
+          make -C tests/bluetooth/host clean test CC=gcc CXX=g++ OPT=-O0
+          make -C tests/bluetooth/compliance clean strict CC=gcc CXX=g++ OPT=-O0
+
+      - name: GCC O2
+        run: |
+          make -C tests/bluetooth/host clean test CC=gcc CXX=g++ OPT=-O2
+          make -C tests/bluetooth/compliance clean strict CC=gcc CXX=g++ OPT=-O2
+
+      - name: Clang O0
+        run: |
+          make -C tests/bluetooth/host clean test CC=clang CXX=clang++ OPT=-O0
+          make -C tests/bluetooth/compliance clean strict CC=clang CXX=clang++ OPT=-O0
+
+      - name: Clang O2
+        run: |
+          make -C tests/bluetooth/host clean test CC=clang CXX=clang++ OPT=-O2
+          make -C tests/bluetooth/compliance clean strict CC=clang CXX=clang++ OPT=-O2
+
+      - name: Commit SMP barrier
+        run: |
+          rm -f tools/apply_bt_smp_tx_barrier.py
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/bluetooth/bt_smp.cpp tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp tools/apply_bt_smp_tx_barrier.py
+          git commit -m "bt: block early SMP responses behind unsent PDUs"
+          git push origin HEAD:bt-failure-fix-run
