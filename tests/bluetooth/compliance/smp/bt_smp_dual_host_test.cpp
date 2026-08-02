@@ -43,6 +43,8 @@ enum WireType : uint8_t {
 	WIRE_CMD_ENCRYPTED,
 	WIRE_CMD_NUMERIC_REPLY,
 	WIRE_CMD_PASSKEY_REPLY,
+	WIRE_CMD_SET_TX_BLOCK,
+	WIRE_CMD_PUMP_TX,
 	WIRE_CMD_STOP,
 
 	WIRE_EVT_READY = 64,
@@ -116,21 +118,6 @@ static bool ReceiveWire(int Fd, WireMessage *pMessage)
 	return pMessage != nullptr && ReadAll(Fd, pMessage, sizeof(*pMessage));
 }
 
-static uint32_t LoadLe32(const uint8_t *p)
-{
-	return static_cast<uint32_t>(p[0]) |
-		(static_cast<uint32_t>(p[1]) << 8) |
-		(static_cast<uint32_t>(p[2]) << 16) |
-		(static_cast<uint32_t>(p[3]) << 24);
-}
-
-static void StoreLe32(uint8_t *p, uint32_t Value)
-{
-	p[0] = static_cast<uint8_t>(Value);
-	p[1] = static_cast<uint8_t>(Value >> 8);
-	p[2] = static_cast<uint8_t>(Value >> 16);
-	p[3] = static_cast<uint8_t>(Value >> 24);
-}
 
 static uint64_t LoadLe64(const uint8_t *p)
 {
@@ -299,6 +286,7 @@ struct WorkerState {
 	BtDevice_t Peer;
 	TestCrypto Crypto;
 	uint8_t LocalIrk[16];
+	bool TxBlocked;
 };
 
 static WorkerState *s_pWorker = nullptr;
@@ -464,6 +452,14 @@ static int WorkerMain(int CommandFd, int EventFd)
 
 			case WIRE_CMD_PASSKEY_REPLY:
 				BtSmpPasskeyReply(TEST_CONN_HDL, message.Value);
+				break;
+
+			case WIRE_CMD_SET_TX_BLOCK:
+				worker.TxBlocked = message.Value != 0;
+				break;
+
+			case WIRE_CMD_PUMP_TX:
+				BtSmpTimeoutCheck();
 				break;
 
 			case WIRE_CMD_STOP:
@@ -1051,6 +1047,51 @@ static void TestPeripheralSecurityRequest(Context &ctx)
 	ctx.End();
 }
 
+static void TestTxFailureQueuesAndRetries(Context &ctx)
+{
+	static const Requirement req = {
+		"SMP-ACL-FLOW-BI-02", "Core Vol 3 Part H / Vol 4 Part E", "3.4 and 5.4.2",
+		"an SMP PDU refused by the ACL transport is retained and sent after credits return"
+	};
+	ctx.Begin(req);
+
+	ChildPeer peer = {};
+	BT_CHECK(ctx, SpawnPeer(&peer));
+	const uint8_t local[6] = { 1, 2, 3, 4, 5, 0xC0 };
+	const uint8_t remote[6] = { 6, 7, 8, 9, 10, 0xD0 };
+	BT_CHECK(ctx, SendInit(&peer, BT_CONN_ROLE_CENTRAL,
+		BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+		BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_SC,
+		BTADDR_TYPE_RAND, local, BTADDR_TYPE_RAND, remote));
+
+	WireMessage block = {};
+	block.Type = WIRE_CMD_SET_TX_BLOCK;
+	block.Value = 1;
+	BT_CHECK(ctx, SendWire(peer.CommandFd, block));
+
+	WireMessage start = {};
+	start.Type = WIRE_CMD_START_PAIRING;
+	BT_CHECK(ctx, SendWire(peer.CommandFd, start));
+
+	pollfd pfd = { peer.EventFd, POLLIN, 0 };
+	BT_CHECK(ctx, poll(&pfd, 1, 50) == 0);
+
+	block.Value = 0;
+	BT_CHECK(ctx, SendWire(peer.CommandFd, block));
+	WireMessage pump = {};
+	pump.Type = WIRE_CMD_PUMP_TX;
+	BT_CHECK(ctx, SendWire(peer.CommandFd, pump));
+
+	WireMessage event = {};
+	BT_CHECK(ctx, ReceiveWire(peer.EventFd, &event));
+	BT_CHECK(ctx, event.Type == WIRE_EVT_TX_SMP);
+	BT_CHECK(ctx, event.Length > 0);
+	BT_CHECK(ctx, event.Data[0] == BT_SMP_CODE_PAIRING_REQ);
+
+	StopPeer(&peer);
+	ctx.End();
+}
+
 static void TestOobDirectionsAndFailures(Context &ctx)
 {
 	static const Requirement req = {
@@ -1142,6 +1183,10 @@ void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *pSec)
 
 uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const pAcl)
 {
+	if (s_pWorker != nullptr && s_pWorker->TxBlocked)
+	{
+		return 0;
+	}
 	if (pAcl == nullptr || pAcl->Hdr.Len < sizeof(BtL2CapHdr_t))
 	{
 		return 0;
@@ -1250,6 +1295,9 @@ bool BtSmpBonded(uint16_t)
 	return false;
 }
 
+bool BtGattTxPendUntracked(uint16_t, uint16_t) { return true; }
+void BtGattTxPendRelease(uint16_t) {}
+
 void BtSmpBondCccdSave(uint16_t, uint16_t, uint16_t) {}
 uint8_t BtSmpBondCccdGet(uint16_t, uint16_t *, uint16_t *, uint8_t)
 {
@@ -1265,6 +1313,7 @@ int main()
 	TestOobChannelIsolation(ctx);
 	TestAssociationMatrix(ctx);
 	TestPeripheralSecurityRequest(ctx);
+	TestTxFailureQueuesAndRetries(ctx);
 	TestOobDirectionsAndFailures(ctx);
 	return ctx.Finish(false);
 }

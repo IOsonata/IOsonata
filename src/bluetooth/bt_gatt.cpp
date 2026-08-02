@@ -87,7 +87,10 @@ __attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar, void * const 
 	// stored value while still reporting success.
 	size_t l = min(Len, (size_t)pChar->MaxDataLen);
 
-	memcpy(pChar->pValue, pVal, l);
+	if (l > 0)
+	{
+		memcpy(pChar->pValue, pVal, l);
+	}
 	pChar->ValueLen = (uint16_t)l;
 
 	return true;
@@ -276,7 +279,7 @@ bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 	return pConn->Conn.NbCccd < BT_GATT_CCCD_STATE_MAX;
 }
 
-bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
+static bool BtGattCccdStore(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 	BtGattChar_t *pChar = BtGattFindCharByCccd(CccdHdl);
@@ -285,16 +288,10 @@ bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 	{
 		return false;
 	}
-
-	// Also checked here, not only in the ATT write path, so a bond restore or
-	// a port that reports subscriptions on its own cannot install a value the
-	// characteristic does not support.
 	if (BtGattCccdValueError(pChar, Value) != 0)
 	{
 		return false;
 	}
-
-	uint16_t oldValue = BtGattCccdGet(ConnHdl, CccdHdl);
 
 	if (Value == 0)
 	{
@@ -318,25 +315,44 @@ bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 		pState->Value = Value;
 	}
 
+	return true;
+}
+
+void BtGattCccdChanged(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t OldValue)
+{
+	BtGattChar_t *pChar = BtGattFindCharByCccd(CccdHdl);
+	if (pChar == nullptr)
+	{
+		return;
+	}
+
+	uint16_t value = BtGattCccdGet(ConnHdl, CccdHdl);
 	BtGattCccdUpdateMirror(pChar);
+	BtSmpBondCccdSave(ConnHdl, CccdHdl, value);
 
-	// Persist for bonded clients; no-op (volatile) otherwise.
-	BtSmpBondCccdSave(ConnHdl, CccdHdl, Value);
-
-	bool oldNotify = (oldValue & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
-	bool newNotify = (Value & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
+	bool oldNotify = (OldValue & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
+	bool newNotify = (value & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
 	if (oldNotify != newNotify && pChar->SetNotifCB != nullptr)
 	{
 		pChar->SetNotifCB(pChar, newNotify, ConnHdl);
 	}
 
-	bool oldIndic = (oldValue & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
-	bool newIndic = (Value & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
+	bool oldIndic = (OldValue & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
+	bool newIndic = (value & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
 	if (oldIndic != newIndic && pChar->SetIndCB != nullptr)
 	{
 		pChar->SetIndCB(pChar, newIndic, ConnHdl);
 	}
+}
 
+bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
+{
+	uint16_t oldValue = BtGattCccdGet(ConnHdl, CccdHdl);
+	if (BtGattCccdStore(ConnHdl, CccdHdl, Value) == false)
+	{
+		return false;
+	}
+	BtGattCccdChanged(ConnHdl, CccdHdl, oldValue);
 	return true;
 }
 
@@ -556,16 +572,9 @@ void BtGattTxPendRelease(uint16_t ConnHdl)
 //
 // They are counted rather than given ring entries, so ordinary request and
 // response traffic cannot exhaust the ring and refuse a notification.
-void BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
+bool BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
 {
-	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
-
-	if (pConn == nullptr || NbPkt == 0)
-	{
-		return;
-	}
-
-	pConn->TxUntracked = (uint16_t)(pConn->TxUntracked + NbPkt);
+	return BtGattTxPendReserve(ConnHdl, nullptr, NbPkt);
 }
 
 // Single-packet reservation, kept for callers that send one packet and do not
@@ -993,12 +1002,6 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 	// its own completions instead of firing someone else's callback.
 	uint16_t n = NbPktSent;
 
-	// Packets no GATT operation owns come off first. They were sent on this
-	// link and the controller is reporting them; charging them to the head
-	// group is what fired callbacks early.
-	uint16_t foreign = min(n, pConn->TxUntracked);
-	pConn->TxUntracked = (uint16_t)(pConn->TxUntracked - foreign);
-	n = (uint16_t)(n - foreign);
 
 	while (n > 0 && pConn->TxPendCount > 0)
 	{

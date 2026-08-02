@@ -70,7 +70,18 @@ extern "C" {
 
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
-	if (pSrvc == nullptr || s_ServiceCount >= 4)
+	if (pSrvc == nullptr)
+	{
+		return false;
+	}
+	for (int i = 0; i < s_ServiceCount; i++)
+	{
+		if (s_Services[i] == pSrvc)
+		{
+			return true;
+		}
+	}
+	if (s_ServiceCount >= 4)
 	{
 		return false;
 	}
@@ -145,11 +156,16 @@ int main()
 			BT_UUID_CHARACTERISTIC_MANUFACTURER_NAME_STRING);
 		BtGattChar_t *pModel = FindChar(pDis,
 			BT_UUID_CHARACTERISTIC_MODEL_NUMBER_STRING);
+		BtGattChar_t *pSw = FindChar(pDis,
+			BT_UUID_CHARACTERISTIC_SOFTWARE_REVISION_STRING);
 		BtGattChar_t *pPnp = FindChar(pDis,
 			BT_UUID_CHARACTERISTIC_PNP_ID);
 		BT_CHECK(ctx, pManuf != nullptr);
 		BT_CHECK(ctx, pModel != nullptr);
 		BT_CHECK(ctx, pPnp != nullptr);
+		BT_CHECK(ctx, pSw != nullptr);
+		ValueCapture *pSwCap = CaptureFor(pSw);
+		BT_CHECK(ctx, pSwCap != nullptr && pSwCap->Len == 0);
 		BT_CHECK(ctx, ValueEquals(pManuf, "I-SYST", 6));
 		BT_CHECK(ctx, ValueEquals(pModel, "Model-54", 8));
 
@@ -165,6 +181,25 @@ int main()
 		BT_CHECK(ctx, pnp.VendorId == cfg.VendorId);
 		BT_CHECK(ctx, pnp.ProductId == cfg.ProductId);
 		BT_CHECK(ctx, pnp.ProductVer == cfg.ProductVer);
+
+		BtAppDevInfo_t usbInfo = {
+			"", "", nullptr, nullptr, nullptr,
+			BT_DIS_PNP_VENDOR_ID_SRC_USB_IF
+		};
+		cfg.pDevInfo = &usbInfo;
+		BT_CHECK(ctx, BtDisInit(&cfg));
+		BT_CHECK(ctx, s_ServiceCount == 1);
+		ValueCapture *pManufCap = CaptureFor(pManuf);
+		ValueCapture *pModelCap = CaptureFor(pModel);
+		BT_CHECK(ctx, pManufCap != nullptr && pManufCap->Len == 0);
+		BT_CHECK(ctx, pModelCap != nullptr && pModelCap->Len == 0);
+		pCap = CaptureFor(pPnp);
+		std::memset(&pnp, 0, sizeof(pnp));
+		if (pCap != nullptr && pCap->Len == sizeof(pnp))
+		{
+			std::memcpy(&pnp, pCap->Data, sizeof(pnp));
+		}
+		BT_CHECK(ctx, pnp.VendorIdSrc == BT_DIS_PNP_VENDOR_ID_SRC_USB_IF);
 	});
 
 	ctx.Run("generic BAS", [&]() {

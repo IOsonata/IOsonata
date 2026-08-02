@@ -65,6 +65,18 @@ bool BtGattCccdSet(uint16_t, uint16_t, uint16_t Value)
 	g_CccdSetVal = Value;
 	return true;
 }
+void BtGattCccdChanged(uint16_t, uint16_t CccdHdl, uint16_t)
+{
+	++g_CccdSetCount;
+	for (uint8_t i = 0; i < s_StubPeer.Conn.NbCccd; i++)
+	{
+		if (s_StubPeer.Conn.Cccd[i].Hdl == CccdHdl)
+		{
+			g_CccdSetVal = s_StubPeer.Conn.Cccd[i].Value;
+			break;
+		}
+	}
+}
 void BtGattClientNotified(uint16_t, uint16_t, uint8_t *, uint16_t) {}
 void BtGattHandleValueConfirm(uint16_t) {}
 

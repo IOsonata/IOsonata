@@ -248,21 +248,25 @@ bool BtAttPrepareWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		return false;
 	}
 
-	uint8_t buff[BT_HCI_BUFFER_MAX_SIZE];
-	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buff;
-	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
-
-	const size_t maxData = BT_HCI_BUFFER_MAX_SIZE - sizeof(acl->Hdr) -
-			sizeof(BtL2CapHdr_t) - 5U;
-	if (DataLen > maxData)
+	uint16_t mtu = BtAttGetMtu();
+	if (mtu < BT_ATT_MTU_MIN)
+	{
+		mtu = BT_ATT_MTU_MIN;
+	}
+	const size_t bufferMax = BT_HCI_BUFFER_MAX_SIZE -
+			sizeof(BtHciACLDataPacketHdr_t) - sizeof(BtL2CapHdr_t) - 5U;
+	const size_t mtuMax = (size_t)mtu - 5U;
+	if (DataLen > bufferMax || DataLen > mtuMax)
 	{
 		return false;
 	}
 
+	uint8_t buff[BT_HCI_BUFFER_MAX_SIZE];
+	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buff;
+	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 	acl->Hdr.ConnHdl = ConnHdl;
 	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
-
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
 	l2pdu->Att.PrepareWriteReq.Hdl = Hdl;
 	l2pdu->Att.PrepareWriteReq.Offset = Offset;
@@ -274,8 +278,7 @@ bool BtAttPrepareWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
 	acl->Hdr.Len = (uint16_t)(l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t));
 
-	uint32_t total = (uint32_t)(acl->Hdr.Len + sizeof(acl->Hdr));
-	return pDev->SendData((uint8_t*)acl, total) == total;
+	return BtHciSendAcl(pDev, acl) != 0;
 }
 
 // Execute Write Request (opcode 0x18). Execute=true commits every queued
@@ -291,19 +294,16 @@ bool BtAttExecuteWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	uint8_t buff[BT_HCI_BUFFER_MAX_SIZE];
 	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buff;
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
-
 	acl->Hdr.ConnHdl = ConnHdl;
 	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
-
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ;
 	l2pdu->Att.ExecuteWriteReq.Flag = Execute ? 0x01 : 0x00;
 	l2pdu->Hdr.Len = 2;
 	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
 	acl->Hdr.Len = (uint16_t)(l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t));
 
-	uint32_t total = (uint32_t)(acl->Hdr.Len + sizeof(acl->Hdr));
-	return pDev->SendData((uint8_t*)acl, total) == total;
+	return BtHciSendAcl(pDev, acl) != 0;
 }
 
 // Write Command (opcode 0x52), write without response. Use for data streams

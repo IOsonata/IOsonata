@@ -189,7 +189,7 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal
 // BtGattSendCompleted() can fire TxCompleteCB in send order.
 bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar, uint16_t NbPkt);
 void BtGattTxPendRelease(uint16_t ConnHdl);
-void BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt);
+bool BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt);
 void BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar);
 void BtGattHandleValueConfirm(uint16_t ConnHdl);
 
@@ -218,6 +218,7 @@ uint8_t BtGattCccdWriteError(uint16_t CccdHdl, uint16_t Value);
  */
 bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value);
 bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value);
+void BtGattCccdChanged(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t OldValue);
 void BtGattCccdClear(uint16_t ConnHdl);
 void BtGattCccdRestoreBonded(uint16_t ConnHdl);
 // Mirror the aggregate CCCD value into the native ATT DB descriptor so a local

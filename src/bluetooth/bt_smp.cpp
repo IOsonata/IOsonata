@@ -92,6 +92,13 @@ static const char *SmpCodeName(uint8_t c);
 #define BT_SMP_CRYPTO_BUSY_RETRIES	32U
 #endif
 
+#ifndef BT_SMP_TX_QUEUE_DEPTH
+#define BT_SMP_TX_QUEUE_DEPTH		8
+#endif
+#ifndef BT_SMP_TX_PDU_MAX
+#define BT_SMP_TX_PDU_MAX			65
+#endif
+
 #ifndef BT_SMP_LOCAL_IOCAPS
 #define BT_SMP_LOCAL_IOCAPS		BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT
 #endif
@@ -119,6 +126,13 @@ typedef struct __Bt_Smp_Link {
 	bool             bCryptoWait;   // request placed, engine not yet started
 	bool             bRetryBusy;    // engine returned BUSY, retry from the loop
 	BtHciDevice_t   *pCryptoDev;
+	struct {
+		uint8_t Len;
+		uint8_t Data[BT_SMP_TX_PDU_MAX];
+	} TxQueue[BT_SMP_TX_QUEUE_DEPTH];
+	uint8_t TxHead;
+	uint8_t TxCount;
+	BtHciDevice_t *pTxDev;
 } BtSmpLink_t;
 
 static BtSmpLink_t s_SmpLink[BT_SMP_MAX_LINK];
@@ -476,28 +490,6 @@ static void SmpLinkFree(uint16_t ConnHdl)
 	}
 }
 
-// Wipe pairing/key material after a failed attempt but keep the slot bound to
-// the connection along with the repeated-attempts counter and lock flag, so
-// FailCount accumulates across attempts on the same connection (the record is
-// only fully freed by BtSmpDisconnected). Preserves the security property of
-// SmpLinkFree - no key material survives - without losing the counter.
-static void SmpLinkResetKeepCount(BtSmpLink_t *pLink)
-{
-	uint16_t hdl       = pLink->ConnHdl;
-	uint32_t generation = pLink->Generation;
-	uint8_t  fc        = pLink->Ctx.FailCount;
-	bool     locked    = pLink->Ctx.bLocked;
-
-	SmpOobRelease(pLink);
-	SmpEcdhCtxReset(pLink->Ctx.EcdhKeyCtx);
-	CryptoSecureWipe(&pLink->Ctx, sizeof(pLink->Ctx));
-
-	pLink->ConnHdl       = hdl;
-	pLink->Generation    = generation;
-	pLink->Ctx.FailCount = fc;
-	pLink->Ctx.bLocked   = locked;
-	pLink->Ctx.State     = BT_SMP_STATE_IDLE;
-}
 
 //-----------------------------------------------------------------------------
 // Pairing timeout (Core Vol 3 Part H 3.4)
@@ -561,55 +553,126 @@ static void SmpAbortOffPhase(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 // Outbound packet helpers
 //-----------------------------------------------------------------------------
 
-// Weak fallback so builds that exclude the generic HCI host (vendor-owned stacks
-// run their own SMP/GATT and never reach the native ACL send) still link. The
-// strong BtHciSendAcl in bt_hci_host.cpp does the credit-gated ACL fragmentation
-// and replaces this in HCI-host builds.
-__attribute__((weak)) uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pAcl)
+// Weak fallback so builds that exclude the generic HCI host still link.
+__attribute__((weak)) uint32_t BtHciSendAcl(BtHciDevice_t * const pDev,
+											BtHciACLDataPacket_t * const pAcl)
 {
 	(void)pDev;
 	(void)pAcl;
 	return 0;
 }
 
+static uint16_t SmpTxPktCount(BtHciDevice_t *pDev, uint16_t AclLen)
+{
+	if (pDev == nullptr || pDev->AclMaxLen == 0 || AclLen == 0)
+	{
+		return 1;
+	}
+	return (uint16_t)((AclLen + pDev->AclMaxLen - 1) / pDev->AclMaxLen);
+}
+
+static void SmpTxDropLink(BtHciDevice_t *pDev, uint16_t ConnHdl)
+{
+	if (pDev == nullptr || pDev->Command == nullptr)
+	{
+		return;
+	}
+	uint8_t param[3] = {
+		(uint8_t)(ConnHdl & 0xFF),
+		(uint8_t)(ConnHdl >> 8),
+		0x13
+	};
+	BtHciCommand(pDev, BT_HCI_CMD_LINKCTRL_DISCONNECT,
+				 param, sizeof(param), nullptr, 0);
+}
+
+static void SmpTxPump(BtSmpLink_t *pLink)
+{
+	if (pLink == nullptr || pLink->pTxDev == nullptr)
+	{
+		return;
+	}
+
+	while (pLink->TxCount > 0)
+	{
+		auto &item = pLink->TxQueue[pLink->TxHead];
+		uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
+		BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
+		BtL2CapPdu_t *l2 = (BtL2CapPdu_t*)acl->Data;
+
+		acl->Hdr.ConnHdl = pLink->ConnHdl;
+		acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
+		acl->Hdr.BCFlag = 0;
+		l2->Hdr.Cid = BT_L2CAP_CID_SEC_MNGR;
+		l2->Hdr.Len = item.Len;
+		memcpy(&l2->Smp, item.Data, item.Len);
+		acl->Hdr.Len = (uint16_t)(item.Len + sizeof(BtL2CapHdr_t));
+
+		uint16_t nbpkt = SmpTxPktCount(pLink->pTxDev, acl->Hdr.Len);
+		if (BtGattTxPendUntracked(pLink->ConnHdl, nbpkt) == false)
+		{
+			return;
+		}
+		if (BtHciSendAcl(pLink->pTxDev, acl) == 0)
+		{
+			BtGattTxPendRelease(pLink->ConnHdl);
+			return;
+		}
+
+		pLink->Ctx.TmrStart = BtSmpMsTick();
+		SMP_TRACE_PDU("TX", item.Data[0], (int)pLink->Ctx.State);
+		pLink->TxHead = (uint8_t)((pLink->TxHead + 1) % BT_SMP_TX_QUEUE_DEPTH);
+		pLink->TxCount--;
+	}
+}
+
+static bool SmpTxEnqueue(BtSmpLink_t *pLink, BtHciDevice_t *pDev,
+						 const void *pData, size_t Len)
+{
+	if (pLink == nullptr || pDev == nullptr || pData == nullptr ||
+		Len == 0 || Len > BT_SMP_TX_PDU_MAX ||
+		pLink->TxCount >= BT_SMP_TX_QUEUE_DEPTH)
+	{
+		return false;
+	}
+
+	uint8_t idx = (uint8_t)((pLink->TxHead + pLink->TxCount) %
+						   BT_SMP_TX_QUEUE_DEPTH);
+	pLink->TxQueue[idx].Len = (uint8_t)Len;
+	memcpy(pLink->TxQueue[idx].Data, pData, Len);
+	pLink->TxCount++;
+	pLink->pTxDev = pDev;
+	return true;
+}
+
 static void SmpSend(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 					const void *pData, size_t Len)
 {
-	uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
-	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
-	BtL2CapPdu_t *l2 = (BtL2CapPdu_t*)acl->Data;
-
-	acl->Hdr.ConnHdl = ConnHdl;
-	// LE-U host->controller: first (here only) fragment uses 0b00; 0b11 is a
-	// controller->host value strict controllers reject (Vol 4 Part E 5.4.2).
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
-	acl->Hdr.BCFlag = 0;
-
-	l2->Hdr.Cid = BT_L2CAP_CID_SEC_MNGR;
-	l2->Hdr.Len = (uint16_t)Len;
-	memcpy(&l2->Smp, pData, Len);
-
-	acl->Hdr.Len = (uint16_t)(Len + sizeof(BtL2CapHdr_t));
-	BtHciSendAcl(pDev, acl);
-
-	// Reset the SMP timer on each transmitted PDU (Vol 3 Part H 3.4): the 30 s
-	// deadline runs between our transmissions, so a pairing that keeps making
-	// progress is not cut off mid-exchange (e.g. a multi-round Passkey Entry).
-	// Only our own transmissions refresh it - a silent or stalled peer still
-	// trips the deadline - and the number of SMP PDUs in a pairing is bounded.
 	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
-	if (pLink != nullptr)
+	if (pLink == nullptr)
 	{
-		pLink->Ctx.TmrStart = BtSmpMsTick();
+		pLink = SmpLinkAlloc(ConnHdl);
 	}
 
-	SMP_TRACE_PDU("TX", ((const uint8_t*)pData)[0],
-				  pLink ? (int)pLink->Ctx.State : -1);
+	if (SmpTxEnqueue(pLink, pDev, pData, Len) == false)
+	{
+		SmpTxDropLink(pDev, ConnHdl);
+		return;
+	}
+
+	SmpTxPump(pLink);
 }
 
 static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t Reason)
 {
-	SmpOobRelease(SmpLinkFind(ConnHdl));
+	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
+	SmpOobRelease(pLink);
+	if (pLink != nullptr)
+	{
+		pLink->TxHead = 0;
+		pLink->TxCount = 0;
+		pLink->pTxDev = pDev;
+	}
 	BtSmpPairingFailed_t f;
 	f.Code = BT_SMP_CODE_PAIRING_FAILED;
 	f.Reason = Reason;
@@ -4002,6 +4065,8 @@ void BtSmpTimeoutCheck(void)
 		{
 			continue;
 		}
+
+		SmpTxPump(pLink);
 
 		if (SmpPairingTimedOut(pLink))
 		{

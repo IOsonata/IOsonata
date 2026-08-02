@@ -89,7 +89,6 @@ BtAppData_t g_BtAppData = {
 		.TxPend     = {},
 		.TxPendHead = 0,
 		.TxPendCount = 0,
-		.TxUntracked = 0,
 	},
 };
 

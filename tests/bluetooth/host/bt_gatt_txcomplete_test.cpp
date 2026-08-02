@@ -41,6 +41,7 @@ alignas(8) uint8_t s_PeerMem[BT_PEER_POOL_MEMSIZE(2)];
 BtHciDevice_t s_HciDev;
 
 int      s_TxCompleteCount = 0;
+int      s_TxCompleteByChar[2] = { 0, 0 };
 int      s_HciPacketCount = 0;
 uint32_t s_SendResult = 1;
 
@@ -50,9 +51,17 @@ uint8_t s_Value[64];
 
 uint32_t SendDataStub(void *, uint32_t Len) { return Len; }
 
-void TxCompleteCB(BtGattChar_t *, int)
+void TxCompleteCB(BtGattChar_t *pChar, int)
 {
 	++s_TxCompleteCount;
+	if (pChar == &s_Char[0])
+	{
+		++s_TxCompleteByChar[0];
+	}
+	else if (pChar == &s_Char[1])
+	{
+		++s_TxCompleteByChar[1];
+	}
 }
 
 BtDevice_t *Peer()
@@ -107,6 +116,8 @@ void Setup(uint16_t AclMaxLen)
 	BtGattCccdSet(kConnHdl, s_Char[1].CccdHdl, BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION);
 
 	s_TxCompleteCount = 0;
+	s_TxCompleteByChar[0] = 0;
+	s_TxCompleteByChar[1] = 0;
 	s_HciPacketCount = 0;
 	s_SendResult = 1;
 	std::memset(s_Value, 0xA5, sizeof(s_Value));
@@ -122,11 +133,10 @@ void TestUntrackedPacketDoesNotFire()
 	// are counted, not given ring entries, so ordinary request and response
 	// traffic cannot exhaust the ring and refuse a notification.
 	BtGattTxPendUntracked(kConnHdl, 1);
-	CHECK(Peer()->TxPendCount == 0);
-	CHECK(Peer()->TxUntracked == 1);
+	CHECK(Peer()->TxPendCount == 1);
 
 	CHECK(BtGattCharNotify(kConnHdl, &s_Char[0], s_Value, 8));
-	CHECK(Peer()->TxPendCount == 1);
+	CHECK(Peer()->TxPendCount == 2);
 
 	// The controller reports the response. The notification is still in
 	// flight, so nothing fires and its entry stays.
@@ -137,6 +147,7 @@ void TestUntrackedPacketDoesNotFire()
 	// Now the notification completes.
 	BtGattSendCompleted(kConnHdl, 1);
 	CHECK(s_TxCompleteCount == 1);
+	CHECK(s_TxCompleteByChar[0] == 1);
 	CHECK(Peer()->TxPendCount == 0);
 }
 
@@ -148,11 +159,10 @@ void TestUntrackedCoalesces()
 	BtGattTxPendUntracked(kConnHdl, 1);
 	BtGattTxPendUntracked(kConnHdl, 1);
 	BtGattTxPendUntracked(kConnHdl, 1);
-	CHECK(Peer()->TxPendCount == 0);
-	CHECK(Peer()->TxUntracked == 3);
+	CHECK(Peer()->TxPendCount == 3);
 
 	CHECK(BtGattCharNotify(kConnHdl, &s_Char[0], s_Value, 8));
-	CHECK(Peer()->TxPendCount == 1);
+	CHECK(Peer()->TxPendCount == 4);
 
 	BtGattSendCompleted(kConnHdl, 3);
 	CHECK(s_TxCompleteCount == 0);
@@ -262,18 +272,27 @@ void TestSendOrderPreserved()
 	Setup(64);
 
 	CHECK(BtGattCharNotify(kConnHdl, &s_Char[0], s_Value, 8));
-	BtGattTxPendUntracked(kConnHdl, 2);
+	CHECK(BtGattTxPendUntracked(kConnHdl, 2));
 	CHECK(BtGattCharNotify(kConnHdl, &s_Char[1], s_Value, 8));
-	CHECK(Peer()->TxPendCount == 2);
-	CHECK(Peer()->TxUntracked == 2);
+	CHECK(Peer()->TxPendCount == 3);
 
-	// One report covering everything drains the groups in send order and
-	// fires exactly the two notifications.
-	BtGattSendCompleted(kConnHdl, 4);
-	CHECK(s_TxCompleteCount == 2);
+	BtGattSendCompleted(kConnHdl, 1);
+	CHECK(s_TxCompleteByChar[0] == 1);
+	CHECK(s_TxCompleteByChar[1] == 0);
+	CHECK(Peer()->TxPendCount == 2);
+
+	BtGattSendCompleted(kConnHdl, 1);
+	CHECK(s_TxCompleteByChar[0] == 1);
+	CHECK(s_TxCompleteByChar[1] == 0);
+	BtGattSendCompleted(kConnHdl, 1);
+	CHECK(s_TxCompleteByChar[0] == 1);
+	CHECK(s_TxCompleteByChar[1] == 0);
+
+	BtGattSendCompleted(kConnHdl, 1);
+	CHECK(s_TxCompleteByChar[0] == 1);
+	CHECK(s_TxCompleteByChar[1] == 1);
 	CHECK(Peer()->TxPendCount == 0);
 
-	// A report larger than what is outstanding does not underflow the ring.
 	BtGattSendCompleted(kConnHdl, 5);
 	CHECK(s_TxCompleteCount == 2);
 	CHECK(Peer()->TxPendCount == 0);

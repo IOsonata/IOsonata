@@ -231,7 +231,15 @@ void TestCccdFailurePropagation()
 	BT_CHECK(s_Test, s_CccdSetCount == 1);
 
 	ResetPeer();
+	s_CccdSetResult = true;
 	s_CccdSetCount = 0;
+	s_Peer.Conn.NbCccd = BT_GATT_CCCD_STATE_MAX;
+	for (uint8_t i = 0; i < BT_GATT_CCCD_STATE_MAX; i++)
+	{
+		s_Peer.Conn.Cccd[i].Hdl = (uint16_t)(0x3000 + i);
+		s_Peer.Conn.Cccd[i].Value =
+			BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION;
+	}
 	std::memset(rsp, 0, sizeof(rsp));
 	req[0] = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
 	PutLe16(req + 1, pCccd->Hdl);
@@ -251,7 +259,8 @@ void TestCccdFailurePropagation()
 	BT_CHECK(s_Test, rsp[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
 	BT_CHECK(s_Test, rsp[1] == BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ);
 	BT_CHECK(s_Test, rsp[4] == kInsufficientResources);
-	BT_CHECK(s_Test, s_CccdSetCount == 1);
+	BT_CHECK(s_Test, s_CccdSetCount == 0);
+	BT_CHECK(s_Test, s_Peer.Conn.NbCccd == BT_GATT_CCCD_STATE_MAX);
 
 	s_PeerEnabled = false;
 	s_CccdSetResult = true;

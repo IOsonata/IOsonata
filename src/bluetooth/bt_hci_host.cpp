@@ -1064,10 +1064,16 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 //
 // Weak default for builds that do not link bt_gatt.cpp, which the host test
 // harnesses do. bt_gatt.cpp defines the real one and overrides this.
-__attribute__((weak)) void BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
+__attribute__((weak)) bool BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
 {
 	(void)ConnHdl;
 	(void)NbPkt;
+	return true;
+}
+
+__attribute__((weak)) void BtGattTxPendRelease(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
 }
 
 // HCI ACL packets a PDU of AclLen octets goes out as.
@@ -1237,16 +1243,18 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 					l2pdu->Att.OpCode, l2rcv->Att.OpCode, l2pdu->Hdr.Len);
 
 				uint16_t nbpkt = BtHciAclPktCount(pDev, acl->Hdr.Len);
-				uint32_t sent = BtHciSendAcl(pDev, acl);
-				if (sent == 0)
+				if (BtGattTxPendUntracked(pPkt->Hdr.ConnHdl, nbpkt) == false)
 				{
+					SysLogPrintf(SysLogGet(),
+						"ATT TX completion queue full opcode=0x%02x\r\n",
+						l2rcv->Att.OpCode);
+				}
+				else if (BtHciSendAcl(pDev, acl) == 0)
+				{
+					BtGattTxPendRelease(pPkt->Hdr.ConnHdl);
 					SysLogPrintf(SysLogGet(),
 						"ATT TX FAILED opcode=0x%02x rsp=0x%02x len=%u\r\n",
 						l2rcv->Att.OpCode, l2pdu->Att.OpCode, acl->Hdr.Len);
-				}
-				else
-				{
-					BtGattTxPendUntracked(pPkt->Hdr.ConnHdl, nbpkt);
 				}
 			}
 			else
@@ -1281,16 +1289,18 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 				acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
 				uint16_t nbpkt = BtHciAclPktCount(pDev, acl->Hdr.Len);
-				uint32_t sent = BtHciSendAcl(pDev, acl);
-				if (sent == 0)
+				if (BtGattTxPendUntracked(pPkt->Hdr.ConnHdl, nbpkt) == false)
 				{
+					SysLogPrintf(SysLogGet(),
+						"L2CAP SIG TX completion queue full code=0x%02x\r\n",
+						l2rcv->CFrame.Code);
+				}
+				else if (BtHciSendAcl(pDev, acl) == 0)
+				{
+					BtGattTxPendRelease(pPkt->Hdr.ConnHdl);
 					SysLogPrintf(SysLogGet(),
 						"L2CAP SIG TX FAILED code=0x%02x len=%u\r\n",
 						l2rcv->CFrame.Code, acl->Hdr.Len);
-				}
-				else
-				{
-					BtGattTxPendUntracked(pPkt->Hdr.ConnHdl, nbpkt);
 				}
 			}
 		}

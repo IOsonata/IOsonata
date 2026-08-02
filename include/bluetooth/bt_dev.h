@@ -115,12 +115,6 @@ typedef struct __Bt_Device {
 	} TxPend[BT_DEV_TXPEND_MAX];
 	uint8_t			TxPendHead;					//!< Ring read index
 	uint8_t			TxPendCount;				//!< Ring occupancy in entries
-	//!< HCI packets in flight that belong to no GATT operation: ATT responses,
-	//!< SMP, L2CAP signaling. They own no callback but the controller still
-	//!< reports them, so they are counted here and taken off first. Without
-	//!< this their completions drained the ring and fired the next
-	//!< notification's callback before it had gone out.
-	uint16_t		TxUntracked;
 } BtDevice_t;
 
 #ifdef __cplusplus

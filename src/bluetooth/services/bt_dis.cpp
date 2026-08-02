@@ -82,6 +82,7 @@ static void SetStrCharValue(BtGattChar_t *pChar, const char *pStr)
 {
 	if (pStr == NULL || pStr[0] == 0)
 	{
+		BtGattCharSetValue(pChar, NULL, 0);
 		return;
 	}
 
@@ -122,13 +123,22 @@ __attribute__((weak)) bool BtDisInit(const struct __Bt_App_Cfg *pCfgIn)
 		                pCfg->pDevInfo->pFwVerStr);
 		SetStrCharValue(&s_BtDisChar[BT_DIS_CHAR_IDX_HW_REV],
 		                pCfg->pDevInfo->pHwVerStr);
-		// SW Rev currently has no source field; left empty.
+		SetStrCharValue(&s_BtDisChar[BT_DIS_CHAR_IDX_SW_REV], NULL);
+	}
+	else
+	{
+		for (int i = BT_DIS_CHAR_IDX_MANUF_NAME;
+			 i <= BT_DIS_CHAR_IDX_SW_REV; i++)
+		{
+			SetStrCharValue(&s_BtDisChar[i], NULL);
+		}
 	}
 
-	// PnP ID - always populated from the app cfg PnP fields. Source defaults
-	// to BT SIG; apps using a USB-IF vendor ID can override after this call
-	// via BtGattCharSetValue on the PnP ID char.
-	s_BtDisPnpId.VendorIdSrc = BT_DIS_PNP_VENDOR_ID_SRC_BT_SIG;
+	s_BtDisPnpId.VendorIdSrc =
+		(pCfg->pDevInfo != NULL &&
+		 pCfg->pDevInfo->VendorIdSrc == BT_DIS_PNP_VENDOR_ID_SRC_USB_IF) ?
+		BT_DIS_PNP_VENDOR_ID_SRC_USB_IF :
+		BT_DIS_PNP_VENDOR_ID_SRC_BT_SIG;
 	s_BtDisPnpId.VendorId    = pCfg->VendorId;
 	s_BtDisPnpId.ProductId   = pCfg->ProductId;
 	s_BtDisPnpId.ProductVer  = pCfg->ProductVer;

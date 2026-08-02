@@ -117,6 +117,7 @@ typedef struct __Bt_App_Dev_Info {
 	const char *pSerialNoStr;	//!< Serial number string
 	const char *pFwVerStr;		//!< Firmware version string
 	const char *pHwVerStr;		//!< Hardware version string
+	uint8_t VendorIdSrc;		//!< PnP ID source: 0/1 Bluetooth SIG, 2 USB-IF
 } BtAppDevInfo_t;
 
 typedef struct __Bt_App_Cfg {

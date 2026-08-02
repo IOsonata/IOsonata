@@ -161,7 +161,7 @@ void TestMixedPacketCompletionOrdering()
 	BtGattTxPendUntracked(kConnHdl, 1);
 
 	BtGattTxPendingAdd(kConnHdl, &s_SubChar);
-	BT_CHECK(s_Test, s_Peer.TxPendCount == 1);
+	BT_CHECK(s_Test, s_Peer.TxPendCount == 2);
 
 	BtGattSendCompleted(kConnHdl, 1);
 	BT_CHECK(s_Test, s_TxCompleteCount == 0);
@@ -209,6 +209,81 @@ void TestFullCompletionQueueRejectsSend()
 	BT_CHECK(s_Test, !ok);
 	BT_CHECK(s_Test, s_HciPacketCount == 0);
 	BT_CHECK(s_Test, s_Peer.TxPendCount == BT_DEV_TXPEND_MAX);
+}
+
+
+void TestExecuteWriteCccdCapacityIsAtomic()
+{
+	static BtGattChar_t chars[2];
+	static BtGattSrvc_t service;
+	static bool registered = false;
+	static uint8_t queue[64];
+
+	if (!registered)
+	{
+		std::memset(chars, 0, sizeof(chars));
+		std::memset(&service, 0, sizeof(service));
+		for (int i = 0; i < 2; i++)
+		{
+			chars[i].Uuid = (uint16_t)(0xFFD0 + i);
+			chars[i].MaxDataLen = 1;
+			chars[i].Property = BT_GATT_CHAR_PROP_READ |
+							 BT_GATT_CHAR_PROP_NOTIFY;
+			chars[i].SetNotifCB = NotifyChanged;
+		}
+		service.UuidSrvc = 0xFFCF;
+		service.NbChar = 2;
+		service.pCharArray = chars;
+		BT_CHECK(s_Test, BtGattSrvcAdd(&service));
+		registered = true;
+	}
+
+	s_Peer.Conn.pLongWrBuff = queue;
+	s_Peer.Conn.LongWrBuffSize = sizeof(queue);
+	s_Peer.Conn.LongWrLen = 0;
+	s_Peer.Conn.NbCccd = BT_GATT_CCCD_STATE_MAX - 1;
+	for (uint8_t i = 0; i < s_Peer.Conn.NbCccd; i++)
+	{
+		s_Peer.Conn.Cccd[i].Hdl = (uint16_t)(0x7000 + i);
+		s_Peer.Conn.Cccd[i].Value =
+				BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION;
+	}
+	s_NotifyTransitions = 0;
+
+	for (int i = 0; i < 2; i++)
+	{
+		uint8_t request[7] = {};
+		uint8_t response[7] = {};
+		request[0] = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
+		request[1] = (uint8_t)(chars[i].CccdHdl & 0xFF);
+		request[2] = (uint8_t)(chars[i].CccdHdl >> 8);
+		request[3] = 0;
+		request[4] = 0;
+		request[5] = 1;
+		request[6] = 0;
+		uint32_t len = BtAttProcessReq(
+				kConnHdl,
+				(BtAttReqRsp_t *)request,
+				sizeof(request),
+				(BtAttReqRsp_t *)response);
+		BT_CHECK(s_Test, len == sizeof(response));
+		BT_CHECK(s_Test,
+				 response[0] == BT_ATT_OPCODE_ATT_PREPARE_WRITE_RSP);
+	}
+
+	BtAttReqRsp_t execute = {};
+	BtAttReqRsp_t response = {};
+	execute.OpCode = BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ;
+	execute.ExecuteWriteReq.Flag = 1;
+	uint32_t len = BtAttProcessReq(kConnHdl, &execute, 2, &response);
+
+	BT_CHECK(s_Test, len == sizeof(BtAttErrorRsp_t) + 1);
+	BT_CHECK(s_Test, response.OpCode == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	BT_CHECK(s_Test, response.ErrorRsp.Error == BT_ATT_ERROR_INSUF_RESOURCE);
+	BT_CHECK(s_Test, s_Peer.Conn.NbCccd == BT_GATT_CCCD_STATE_MAX - 1);
+	BT_CHECK(s_Test, BtGattCccdGet(kConnHdl, chars[0].CccdHdl) == 0);
+	BT_CHECK(s_Test, BtGattCccdGet(kConnHdl, chars[1].CccdHdl) == 0);
+	BT_CHECK(s_Test, s_NotifyTransitions == 0);
 }
 
 } // namespace
@@ -291,5 +366,7 @@ int main()
 			   TestFragmentCompletionWaitsForFinalPacket);
 	s_Test.Run("completion queue exhaustion",
 			   TestFullCompletionQueueRejectsSend);
+	s_Test.Run("execute write CCCD capacity atomicity",
+			   TestExecuteWriteCccdCapacityIsAtomic);
 	return s_Test.Finish();
 }

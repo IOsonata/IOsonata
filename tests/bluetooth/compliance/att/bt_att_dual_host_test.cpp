@@ -65,6 +65,7 @@ static uint8_t s_OpenValue[kMaxValueLen];
 static uint8_t s_SecureValue[kMaxValueLen];
 static uint8_t s_CapturedAcl[BT_HCI_BUFFER_MAX_SIZE];
 static uint32_t s_CapturedAclLen;
+static bool s_RefuseAcl;
 
 static uint16_t GetLe16(const uint8_t *p)
 {
@@ -674,6 +675,8 @@ static void TestClientRequestBuilders(Context &ctx)
 	uint8_t value[18];
 	FillPattern(value, sizeof(value), 0x39);
 
+	BtAttSetMtu(BT_ATT_MTU_MIN);
+	s_RefuseAcl = false;
 	s_CapturedAclLen = 0;
 	BT_CHECK(ctx, BtAttPrepareWriteRequest(&dev, 0x0123, 0x4567, 0x0089,
 									 value, sizeof(value)));
@@ -704,6 +707,11 @@ static void TestClientRequestBuilders(Context &ctx)
 	s_CapturedAclLen = 0;
 	BT_CHECK(ctx, !BtAttPrepareWriteRequest(&dev, 1, 1, 0,
 									  tooLarge, sizeof(tooLarge)));
+	BT_CHECK(ctx, !BtAttPrepareWriteRequest(&dev, 1, 1, 0, tooLarge, 19));
+	s_RefuseAcl = true;
+	BT_CHECK(ctx, !BtAttPrepareWriteRequest(&dev, 1, 1, 0, value, 1));
+	BT_CHECK(ctx, !BtAttExecuteWriteRequest(&dev, 1, true));
+	s_RefuseAcl = false;
 	BT_CHECK(ctx, s_CapturedAclLen == 0);
 	BT_CHECK(ctx, !BtAttPrepareWriteRequest(nullptr, 1, 1, 0, value, 1));
 	BT_CHECK(ctx, !BtAttExecuteWriteRequest(nullptr, 1, true));
@@ -919,6 +927,18 @@ static void TestSecurityTransition(Context &ctx)
 } // namespace
 
 extern "C" {
+
+uint32_t BtHciSendAcl(BtHciDevice_t * const pDev,
+					  BtHciACLDataPacket_t * const pAcl)
+{
+	if (s_RefuseAcl || pDev == nullptr || pDev->SendData == nullptr ||
+		pAcl == nullptr)
+	{
+		return 0;
+	}
+	uint32_t total = (uint32_t)pAcl->Hdr.Len + sizeof(pAcl->Hdr);
+	return pDev->SendData((uint8_t*)pAcl, total);
+}
 
 BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 {

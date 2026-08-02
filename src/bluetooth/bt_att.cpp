@@ -550,7 +550,12 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 			BtDescClientCharConfig_t *d =
 					(BtDescClientCharConfig_t*) pEntry->Data;
 
-			*(uint16_t*) pBuff = d->CccVal;
+			if (Len < 2)
+			{
+				break;
+			}
+			pBuff[0] = (uint8_t)(d->CccVal & 0xFF);
+			pBuff[1] = (uint8_t)(d->CccVal >> 8);
 			DEBUG_PRINTF("Hdl = %d, CCC val = %d\r\n", pEntry->Hdl, d->CccVal);
 			len = 2;
 		}
@@ -1295,6 +1300,54 @@ static uint16_t BtAttLongWrProjLen(uint8_t *pBuf, uint16_t Total, uint16_t StopP
 // Two passes, because Execute Write is atomic (Vol 3 Part F 3.4.6): the whole
 // queue is validated before any attribute is touched, so a bad record late in
 // the queue cannot leave earlier records already applied.
+static uint16_t BtAttCccdListGet(const BtGattCccdState_t *pList,
+									 uint8_t Count, uint16_t Hdl)
+{
+	for (uint8_t i = 0; i < Count; i++)
+	{
+		if (pList[i].Hdl == Hdl)
+		{
+			return pList[i].Value;
+		}
+	}
+	return 0;
+}
+
+static bool BtAttCccdPlanSet(BtGattCccdState_t *pList, uint8_t *pCount,
+							 uint16_t Hdl, uint16_t Value)
+{
+	for (uint8_t i = 0; i < *pCount; i++)
+	{
+		if (pList[i].Hdl != Hdl)
+		{
+			continue;
+		}
+		if (Value == 0)
+		{
+			pList[i] = pList[*pCount - 1];
+			(*pCount)--;
+		}
+		else
+		{
+			pList[i].Value = Value;
+		}
+		return true;
+	}
+
+	if (Value == 0)
+	{
+		return true;
+	}
+	if (*pCount >= BT_GATT_CCCD_STATE_MAX)
+	{
+		return false;
+	}
+	pList[*pCount].Hdl = Hdl;
+	pList[*pCount].Value = Value;
+	(*pCount)++;
+	return true;
+}
+
 static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 {
 	if (pConn == nullptr || pConn->Conn.pLongWrBuff == nullptr)
@@ -1302,18 +1355,25 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 		return 0;
 	}
 
-	uint8_t  *buf   = pConn->Conn.pLongWrBuff;
-	uint16_t  total = pConn->Conn.LongWrLen;
-	uint16_t  pos   = 0;
-	uint8_t   err   = 0;
+	uint8_t *buf = pConn->Conn.pLongWrBuff;
+	uint16_t total = pConn->Conn.LongWrLen;
+	uint16_t pos = 0;
+	uint8_t err = 0;
 
-	// Pass 1: validate every queued write. Nothing is modified here, not the
-	// buffer and not any attribute.
+	BtGattCccdState_t oldCccd[BT_GATT_CCCD_STATE_MAX];
+	BtGattCccdState_t planCccd[BT_GATT_CCCD_STATE_MAX];
+	uint8_t oldCccdCount = pConn->Conn.NbCccd;
+	uint8_t planCccdCount = oldCccdCount;
+	memcpy(oldCccd, pConn->Conn.Cccd,
+		   oldCccdCount * sizeof(BtGattCccdState_t));
+	memcpy(planCccd, oldCccd,
+		   oldCccdCount * sizeof(BtGattCccdState_t));
+
 	while (pos + 6 <= total)
 	{
 		uint16_t hdl, off, totLen, next;
-
-		err = BtAttLongWrRun(buf, total, pos, false, &hdl, &off, &totLen, &next);
+		err = BtAttLongWrRun(buf, total, pos, false,
+							&hdl, &off, &totLen, &next);
 		if (err != 0)
 		{
 			*pFailHdl = hdl;
@@ -1327,40 +1387,28 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 			err = BT_ATT_ERROR_INVALID_HANDLE;
 			break;
 		}
-
-		// Offset past the value this write will land on is INVALID_OFFSET; a
-		// reassembled value beyond the characteristic maximum is
-		// INVALID_ATTRIBUTE_VALUE_LENGTH.
-		if (off > BtAttLongWrProjLen(buf, total, pos, hdl, BtAttCurValueLen(entry)))
+		if (off > BtAttLongWrProjLen(buf, total, pos, hdl,
+									BtAttCurValueLen(entry)))
 		{
 			*pFailHdl = hdl;
 			err = BT_ATT_ERROR_INVALID_OFFSET;
 			break;
 		}
 
-		// MaxDataLen bounds the characteristic value only. BtAttEntryChar also
-		// resolves the owner of a CCCD or user description entry, so ask it for
-		// a value attribute; otherwise a descriptor write would be measured
-		// against the value maximum of the characteristic it describes.
-		BtGattChar_t *pChar = BtAttEntryIsCharValue(entry) ? BtAttEntryChar(entry) : nullptr;
-		if (pChar != nullptr && (uint32_t)off + totLen > pChar->MaxDataLen)
+		BtGattChar_t *pChar =
+				BtAttEntryIsCharValue(entry) ? BtAttEntryChar(entry) : nullptr;
+		if (pChar != nullptr &&
+			(uint32_t)off + totLen > pChar->MaxDataLen)
 		{
 			*pFailHdl = hdl;
 			err = BT_ATT_ERROR_INVALID_ATT_VALUE;
 			break;
 		}
 
-		// A CCCD reassembled from prepared writes has to satisfy the same rules
-		// as a direct Write Request: exactly two octets at offset 0, holding a
-		// value the characteristic supports. The run is measured here, not
-		// compacted, so the two octets are only laid out contiguously when the
-		// run is a single queued record; a CCCD split across records is
-		// rejected rather than reassembled for this check.
 		if (BtAttEntryIsCccd(entry))
 		{
 			uint16_t reclen;
 			memcpy(&reclen, buf + pos + 4, 2);
-
 			if (off != 0 || totLen != 2 || reclen != 2 ||
 				(uint32_t)pos + 8UL > total)
 			{
@@ -1368,65 +1416,98 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 				err = BT_ATT_ERROR_INVALID_ATT_VALUE;
 				break;
 			}
-
 			const uint8_t *val = buf + pos + 6;
 			uint16_t cccd = (uint16_t)(val[0] | (val[1] << 8));
 			uint8_t cerr = BtGattCccdValueError(BtAttEntryChar(entry), cccd);
-
 			if (cerr != 0)
 			{
 				*pFailHdl = hdl;
 				err = cerr;
 				break;
 			}
-
-			// Capacity is part of validation. Pass 2 cannot fail, so a write it
-			// could not store would still be answered Execute Write Response.
-			if (BtGattCccdCanStore(pConn->Conn.Hdl, hdl, cccd) == false)
+			if (BtAttCccdPlanSet(planCccd, &planCccdCount, hdl, cccd) == false)
 			{
 				*pFailHdl = hdl;
 				err = BT_ATT_ERROR_INSUF_RESOURCE;
 				break;
 			}
 		}
-
 		pos = next;
 	}
 
+	if (err == 0 && pos != total)
+	{
+		err = BT_ATT_ERROR_INVALID_PDU;
+		*pFailHdl = 0;
+	}
 	if (err != 0)
 	{
 		pConn->Conn.LongWrLen = 0;
 		return err;
 	}
 
-	// Pass 2: commit. Every record validated above, so no attribute write in
-	// this loop can fail on a check that pass 1 already made.
+	// Install every characteristic value without callbacks.
 	pos = 0;
 	while (pos + 6 <= total)
 	{
 		uint16_t hdl, off, totLen, next;
-
-		BtAttLongWrRun(buf, total, pos, true, &hdl, &off, &totLen, &next);
-
+		BtAttLongWrRun(buf, total, pos, true,
+					   &hdl, &off, &totLen, &next);
 		BtAttDBEntry_t *entry = BtAttDBFindHandle(hdl);
-		if (entry != nullptr)
+		if (entry != nullptr && BtAttEntryIsCharValue(entry))
 		{
-			size_t wr = BtAttWriteValueForConn(pConn->Conn.Hdl, entry, off,
-											   buf + pos + 6, totLen);
-
-			// A CCCD store can refuse for a reason pass 1 could not ask about,
-			// on a build whose GATT layer answers the capacity question only at
-			// commit time. Report it rather than acknowledging a subscription
-			// that was dropped. Records already committed stay applied: once the
-			// store has been told, there is nothing to take back.
-			if (wr == 0 && BtAttEntryIsCccd(entry))
+			BtGattChar_t *pChar = BtAttEntryChar(entry);
+			if (totLen > 0)
 			{
-				*pFailHdl = hdl;
-				pConn->Conn.LongWrLen = 0;
-				return BT_ATT_ERROR_INSUF_RESOURCE;
+				memcpy((uint8_t*)pChar->pValue + off, buf + pos + 6, totLen);
+			}
+			uint16_t end = (uint16_t)(off + totLen);
+			if (end > pChar->ValueLen)
+			{
+				pChar->ValueLen = end;
 			}
 		}
+		pos = next;
+	}
 
+	// The CCCD plan was fully validated, so this final-state copy cannot fail.
+	pConn->Conn.NbCccd = planCccdCount;
+	memcpy(pConn->Conn.Cccd, planCccd,
+		   planCccdCount * sizeof(BtGattCccdState_t));
+
+	// All values are final before any callback or persistence hook runs.
+	uint16_t doneCccd[BT_GATT_CCCD_STATE_MAX];
+	uint8_t doneCccdCount = 0;
+	pos = 0;
+	while (pos + 6 <= total)
+	{
+		uint16_t hdl, off, totLen, next;
+		BtAttLongWrRun(buf, total, pos, false,
+					   &hdl, &off, &totLen, &next);
+		BtAttDBEntry_t *entry = BtAttDBFindHandle(hdl);
+
+		if (entry != nullptr && BtAttEntryIsCharValue(entry))
+		{
+			BtGattChar_t *pChar = BtAttEntryChar(entry);
+			if (pChar != nullptr && pChar->WrCB != nullptr)
+			{
+				pChar->WrCB(pChar, buf + pos + 6, (int)off, (int)totLen);
+			}
+		}
+		else if (entry != nullptr && BtAttEntryIsCccd(entry))
+		{
+			bool seen = false;
+			for (uint8_t i = 0; i < doneCccdCount; i++)
+			{
+				seen = seen || doneCccd[i] == hdl;
+			}
+			if (!seen)
+			{
+				doneCccd[doneCccdCount++] = hdl;
+				BtGattCccdChanged(pConn->Conn.Hdl, hdl,
+					BtAttCccdListGet(oldCccd, oldCccdCount, hdl));
+			}
+		}
 		pos = next;
 	}
 
@@ -1481,6 +1562,15 @@ static int BtAttResolveReqType(const BtUuidVal_t *pReqUuid, int TypeLen,
 // calls that has a safe default: permit, and let the store report its own
 // refusal, which the Write Request path turns into an error rather than a
 // Write Response. bt_gatt.cpp defines the real one and overrides this.
+__attribute__((weak)) void BtGattCccdChanged(uint16_t ConnHdl,
+                                             uint16_t CccdHdl,
+                                             uint16_t OldValue)
+{
+    (void)ConnHdl;
+    (void)CccdHdl;
+    (void)OldValue;
+}
+
 __attribute__((weak)) bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl,
 											  uint16_t Value)
 {
