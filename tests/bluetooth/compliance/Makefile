@@ -10,6 +10,7 @@ OPT ?= -O1
 
 CPPFLAGS += -I$(ROOT)/include -Iframework -Icontroller -Ipeer -Ilink -Ioob
 SMP_CPPFLAGS := $(CPPFLAGS) -include smp/bt_l2cap_test_override.h
+SMP_CORE_DEFINES := -DDEBUG_ENABLE
 SMP_TEST_RENAMES := \
 	-DBtSmpLocalIrkGet=BtSmpTestLocalIrkGet \
 	-DBtSmpLocalIdRecordSize=BtSmpTestLocalIdRecordSize \
@@ -109,7 +110,7 @@ $(SMP_FRAMEWORK_OBJ): framework/bt_compliance.cpp $(HEADERS)
 
 $(SMP_CORE_OBJ): $(ROOT)/src/bluetooth/bt_smp.cpp $(HEADERS)
 	@mkdir -p $(dir $@)
-	$(CXX) $(SMP_CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
+	$(CXX) $(SMP_CPPFLAGS) $(SMP_CORE_DEFINES) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
 
 $(SMP_DEVICE_OBJ): $(ROOT)/src/device.cpp $(HEADERS)
 	@mkdir -p $(dir $@)
