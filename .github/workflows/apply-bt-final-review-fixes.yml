@@ -6,12 +6,14 @@ on:
       - bt-failure-fix-run
     paths:
       - "tools/apply_bt_final_review_fixes.py"
+      - "tools/adjust_bt_final_test.py"
       - ".github/workflows/apply-bt-final-review-fixes.yml"
   pull_request:
     branches:
       - bt_conformance
     paths:
       - "tools/apply_bt_final_review_fixes.py"
+      - "tools/adjust_bt_final_test.py"
       - ".github/workflows/apply-bt-final-review-fixes.yml"
 
 permissions:
@@ -28,7 +30,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply fixes
-        run: python3 tools/apply_bt_final_review_fixes.py
+        run: |
+          python3 tools/apply_bt_final_review_fixes.py
+          python3 tools/adjust_bt_final_test.py
 
       - name: Check patch
         run: git diff --check
@@ -56,6 +60,7 @@ jobs:
       - name: Commit fixes
         run: |
           rm -f tools/apply_bt_final_review_fixes.py
+          rm -f tools/adjust_bt_final_test.py
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
