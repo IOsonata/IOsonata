@@ -115,6 +115,60 @@ typedef struct __Bt_ExtAdv_Reassembly {
 
 static BtExtAdvReasm_t s_BtExtAdvReasm[BT_EXT_ADV_REASSEMBLY_COUNT];
 
+// Advertisers whose reassembly was abandoned, because no context was free or
+// because the accumulated data overflowed. Their remaining fragments must not
+// be mistaken for standalone reports: the terminating fragment of a dropped
+// reassembly looks exactly like a complete single-fragment report, and
+// delivering it hands the application a truncated suffix as if it were whole
+// advertising data.
+#ifndef BT_EXT_ADV_DROPPED_COUNT
+#define BT_EXT_ADV_DROPPED_COUNT		4
+#endif
+
+typedef struct __Bt_ExtAdv_Dropped {
+	bool    Active;							//!< Slot names a dropped reassembly
+	uint8_t AddrType;						//!< Advertiser address type
+	uint8_t Addr[6];						//!< Advertiser address
+	uint8_t Sid;							//!< Advertising SID
+} BtExtAdvDropped_t;
+
+static BtExtAdvDropped_t s_BtExtAdvDropped[BT_EXT_ADV_DROPPED_COUNT];
+static uint8_t s_BtExtAdvDroppedNext = 0;
+
+static BtExtAdvDropped_t *BtExtAdvDroppedFind(uint8_t AddrType,
+											  const uint8_t Addr[6], uint8_t Sid)
+{
+	for (int i = 0; i < BT_EXT_ADV_DROPPED_COUNT; i++)
+	{
+		BtExtAdvDropped_t *d = &s_BtExtAdvDropped[i];
+		if (d->Active && d->AddrType == AddrType && d->Sid == Sid &&
+			memcmp(d->Addr, Addr, 6) == 0)
+		{
+			return d;
+		}
+	}
+	return nullptr;
+}
+
+// Oldest entry is overwritten. Losing the record of a very old dropped
+// reassembly only risks delivering one stale suffix; holding the table open
+// forever would be worse.
+static void BtExtAdvDroppedMark(uint8_t AddrType, const uint8_t Addr[6], uint8_t Sid)
+{
+	if (BtExtAdvDroppedFind(AddrType, Addr, Sid) != nullptr)
+	{
+		return;
+	}
+
+	BtExtAdvDropped_t *d = &s_BtExtAdvDropped[s_BtExtAdvDroppedNext];
+	s_BtExtAdvDroppedNext = (uint8_t)((s_BtExtAdvDroppedNext + 1) % BT_EXT_ADV_DROPPED_COUNT);
+
+	d->Active = true;
+	d->AddrType = AddrType;
+	d->Sid = Sid;
+	memcpy(d->Addr, Addr, 6);
+}
+
 static BtExtAdvReasm_t *BtExtAdvReasmFind(uint8_t AddrType, const uint8_t Addr[6], uint8_t Sid)
 {
 	for (int i = 0; i < BT_EXT_ADV_REASSEMBLY_COUNT; i++)
@@ -180,6 +234,15 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		case BT_HCI_EVT_LE_ADV_REPORT:
 			{
 				BtHciLeEvtAdvReport_t *report = (BtHciLeEvtAdvReport_t*)pLeEvtPkt->Data;
+
+				// The dispatcher proved the subevent byte exists, not the count
+				// byte after it. Reading NbReport before checking is an
+				// out-of-bounds read on a truncated event.
+				if ((const uint8_t*)pLeEvtPkt->Data + 1 > evtEnd)
+				{
+					break;
+				}
+
 				// Each BtAdvReport_t is variable-length: 9-byte fixed header
 				// (EvtType, AddrType, Addr[6], DataLen) + Data[DataLen] +
 				// 1 byte trailing RSSI. Walk by stride, do not index as
@@ -327,6 +390,14 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		case BT_HCI_EVT_LE_EXT_ADV_REPORT:
 			{
 				BtHciLeEvtExtAdvReport_t *report = (BtHciLeEvtExtAdvReport_t*)pLeEvtPkt->Data;
+
+				// Same as the legacy report: prove the count byte is inside the
+				// event before reading it.
+				if ((const uint8_t*)pLeEvtPkt->Data + 1 > evtEnd)
+				{
+					break;
+				}
+
 				// Each BtExtAdvReport_t is variable-length: 24-byte fixed
 				// header + Data[DataLen]. Walk by stride.
 				uint8_t *cur = (uint8_t*)report->Report;
@@ -355,7 +426,8 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 					if (dataStatus == 1)
 					{
 						// More data to come: buffer this fragment.
-						if (ctx == nullptr)
+						if (ctx == nullptr &&
+							BtExtAdvDroppedFind(r->AddrType, r->Addr, r->AdvSid) == nullptr)
 						{
 							ctx = BtExtAdvReasmAlloc(r->AddrType, r->Addr, r->AdvSid);
 						}
@@ -371,7 +443,15 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 								// Reassembly buffer would overflow: drop the
 								// partial report rather than deliver a truncation.
 								ctx->Active = false;
+								BtExtAdvDroppedMark(r->AddrType, r->Addr, r->AdvSid);
 							}
+						}
+						else
+						{
+							// No context free, or this advertiser is already
+							// abandoned. Either way the report cannot be
+							// reassembled and its tail must not be delivered.
+							BtExtAdvDroppedMark(r->AddrType, r->Addr, r->AdvSid);
 						}
 					}
 					else if (dataStatus == 0)
@@ -391,9 +471,24 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 							}
 							ctx->Active = false;
 						}
-						else if (pDev->ScanReport)
+						else
 						{
-							pDev->ScanReport(r->Rssi, r->AddrType, r->Addr, r->DataLen, r->Data);
+							// No context. Either this is a standalone complete
+							// report, or it is the tail of a reassembly that was
+							// abandoned, which looks identical on the wire.
+							// Delivering the second case hands the application a
+							// truncated suffix as whole advertising data.
+							BtExtAdvDropped_t *d =
+								BtExtAdvDroppedFind(r->AddrType, r->Addr, r->AdvSid);
+
+							if (d != nullptr)
+							{
+								d->Active = false;
+							}
+							else if (pDev->ScanReport)
+							{
+								pDev->ScanReport(r->Rssi, r->AddrType, r->Addr, r->DataLen, r->Data);
+							}
 						}
 					}
 					else
@@ -816,12 +911,20 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 //				{
 //					DEBUG_PRINTF("Hdl: %x - NbPkt: %d\r\n", p->Completed[i].Hdl, p->Completed[i].NbPkt);
 //				}
+				// The count byte has to be inside the event before it can be
+				// read. The clamp below bounded the walk but the read itself
+				// came first, which is an out-of-bounds read on a zero-length
+				// event however the walk then behaves.
+				if (pEvtPkt->Hdr.Len < 1)
+				{
+					break;
+				}
+
 				// NbHdl is controller-supplied; bound the walk to the entries the
 				// event length can actually hold (1 count byte + 4 bytes each) so
 				// a malformed event cannot read past the received payload.
 				int nbHdl = p->NbHdl;
-				int maxHdl = pEvtPkt->Hdr.Len >= 1 ?
-							 (pEvtPkt->Hdr.Len - 1) / (int)sizeof(p->Completed[0]) : 0;
+				int maxHdl = (pEvtPkt->Hdr.Len - 1) / (int)sizeof(p->Completed[0]);
 				if (nbHdl > maxHdl)
 				{
 					nbHdl = maxHdl;
