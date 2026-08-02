@@ -8,9 +8,14 @@ payload = "".join(
     for index in range(13)
 )
 source = zlib.decompress(base64.b64decode(payload)).decode()
-old = 'replace_once(\n    ".github/workflows/bluetooth-host-tests.yml",\n    \'\'\'      - "ARM/Nordic/nRF52/src/bt_gatt_nrf52.cpp"\n      - "ARM/Nordic/nRF54/src/bt_gatt_bm.cpp"\'\'\',\n    \'\'\'      - "ARM/**/src/bt_*.cpp"\'\'\',\n)\nreplace_once(\n    ".github/workflows/bluetooth-host-tests.yml",\n    \'\'\'      - "ARM/Nordic/nRF52/src/bt_gatt_nrf52.cpp"\n      - "ARM/Nordic/nRF54/src/bt_gatt_bm.cpp"\'\'\',\n    \'\'\'      - "ARM/**/src/bt_*.cpp"\'\'\',\n)'
-new = 'path = ".github/workflows/bluetooth-host-tests.yml"\nold = \'\'\'      - "ARM/Nordic/nRF52/src/bt_gatt_nrf52.cpp"\n      - "ARM/Nordic/nRF54/src/bt_gatt_bm.cpp"\'\'\'\nnew = \'\'\'      - "ARM/**/src/bt_*.cpp"\'\'\'\ntext = read(path)\nif text.count(old) != 2:\n    raise RuntimeError(f"{path}: expected two target path blocks, found {text.count(old)}")\nwrite(path, text.replace(old, new))'
-if source.count(old) != 1:
-    raise RuntimeError(f"patch loader: expected workflow replacement block once, found {source.count(old)}")
-source = source.replace(old, new)
+workflow_old = 'replace_once(\n    ".github/workflows/bluetooth-host-tests.yml",\n    \'\'\'      - "ARM/Nordic/nRF52/src/bt_gatt_nrf52.cpp"\n      - "ARM/Nordic/nRF54/src/bt_gatt_bm.cpp"\'\'\',\n    \'\'\'      - "ARM/**/src/bt_*.cpp"\'\'\',\n)\nreplace_once(\n    ".github/workflows/bluetooth-host-tests.yml",\n    \'\'\'      - "ARM/Nordic/nRF52/src/bt_gatt_nrf52.cpp"\n      - "ARM/Nordic/nRF54/src/bt_gatt_bm.cpp"\'\'\',\n    \'\'\'      - "ARM/**/src/bt_*.cpp"\'\'\',\n)'
+workflow_new = 'path = ".github/workflows/bluetooth-host-tests.yml"\nold = \'\'\'      - "ARM/Nordic/nRF52/src/bt_gatt_nrf52.cpp"\n      - "ARM/Nordic/nRF54/src/bt_gatt_bm.cpp"\'\'\'\nnew = \'\'\'      - "ARM/**/src/bt_*.cpp"\'\'\'\ntext = read(path)\nif text.count(old) != 2:\n    raise RuntimeError(f"{path}: expected two target path blocks, found {text.count(old)}")\nwrite(path, text.replace(old, new))'
+if source.count(workflow_old) != 1:
+    raise RuntimeError(f"patch loader: expected workflow replacement block once, found {source.count(workflow_old)}")
+source = source.replace(workflow_old, workflow_new)
+marker = 'print("Bluetooth failure-path fixes applied")'
+replacement = '\nreplace_once(\n    "src/bluetooth/bt_att.cpp",\n    "__attribute__((weak)) bool BtGattCccdCanStore",\n    """__attribute__((weak)) void BtGattCccdChanged(uint16_t ConnHdl,\n                                             uint16_t CccdHdl,\n                                             uint16_t OldValue)\n{\n    (void)ConnHdl;\n    (void)CccdHdl;\n    (void)OldValue;\n}\n\n__attribute__((weak)) bool BtGattCccdCanStore""",\n)\n\n\nprint("Bluetooth failure-path fixes applied")'
+if source.count(marker) != 1:
+    raise RuntimeError(f"patch loader: expected final marker once, found {source.count(marker)}")
+source = source.replace(marker, replacement)
 exec(compile(source, "<bt-fixes>", "exec"))
