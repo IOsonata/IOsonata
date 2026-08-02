@@ -306,7 +306,18 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		return false;
 	}
 
-	BtHciCtlrInit(pDev, pCfg);
+	// Generic init first, and its result is the gate. It rejects an invalid
+	// packet size, a misaligned or undersized RX FIFO buffer, and a CFifoInit
+	// failure, returning before it assigns RxHandler, Receive or the interface
+	// table. Continuing past that reported an enabled controller whose receive
+	// path was never wired, so no HCI packet would ever be delivered and
+	// nothing would say why.
+	if (BtHciCtlrInit(pDev, pCfg) == false)
+	{
+		DEBUG_PRINTF("BtHciCtlrInit failed\r\n");
+		return false;
+	}
+
 	pDev->Send = BtHciCtlrSendData;		// SDC ACL transmit, forwarded by BtHciCtlrSdcSend
 	s_pBtHciCtlrSdc = pDev;
 
