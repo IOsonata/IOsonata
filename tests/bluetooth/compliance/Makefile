@@ -10,6 +10,11 @@ OPT ?= -O1
 
 CPPFLAGS += -I$(ROOT)/include -Iframework -Icontroller -Ipeer -Ilink -Ioob
 SMP_CPPFLAGS := $(CPPFLAGS) -include smp/bt_l2cap_test_override.h
+SMP_TEST_RENAMES := \
+	-DBtSmpLocalIrkGet=BtSmpTestLocalIrkGet \
+	-DBtSmpLocalIdRecordSize=BtSmpTestLocalIdRecordSize \
+	-DBtSmpLocalIdSerialize=BtSmpTestLocalIdSerialize \
+	-DBtSmpLocalIdRestore=BtSmpTestLocalIdRestore
 CXXSTD := $(shell for s in gnu++23 gnu++2b gnu++20; do \
 	if $(CXX) -std=$$s -x c++ -fsyntax-only /dev/null >/dev/null 2>&1; then \
 		echo $$s; break; fi; done)
@@ -40,11 +45,13 @@ HCI_SOURCES := \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
-SMP_SOURCES := \
-	smp/bt_smp_dual_host_test.cpp \
-	framework/bt_compliance.cpp \
-	$(ROOT)/src/bluetooth/bt_smp.cpp \
-	$(ROOT)/src/device.cpp
+SMP_TEST_OBJ := $(BUILD_DIR)/smp/bt_smp_dual_host_test.o
+SMP_FRAMEWORK_OBJ := $(BUILD_DIR)/smp/bt_compliance.o
+SMP_CORE_OBJ := $(BUILD_DIR)/smp/bt_smp.o
+SMP_DEVICE_OBJ := $(BUILD_DIR)/smp/device.o
+SMP_STUB_OBJ := $(BUILD_DIR)/smp/bt_smp_test_stubs.o
+SMP_OBJECTS := $(SMP_TEST_OBJ) $(SMP_FRAMEWORK_OBJ) $(SMP_CORE_OBJ) \
+	$(SMP_DEVICE_OBJ) $(SMP_STUB_OBJ)
 
 HEADERS := \
 	$(wildcard framework/*.h) \
@@ -91,10 +98,30 @@ $(HCI_TARGET): $(HCI_SOURCES) $(HEADERS) $(CFIFO_OBJ)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$(HCI_SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
 
-$(SMP_TARGET): $(SMP_SOURCES) $(HEADERS)
+$(SMP_TEST_OBJ): smp/bt_smp_dual_host_test.cpp $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(SMP_CPPFLAGS) $(SMP_TEST_RENAMES) $(CXXFLAGS) $(SANITIZERS) \
+		-c $< -o $@
+
+$(SMP_FRAMEWORK_OBJ): framework/bt_compliance.cpp $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(SMP_CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(SMP_CORE_OBJ): $(ROOT)/src/bluetooth/bt_smp.cpp $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(SMP_CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(SMP_DEVICE_OBJ): $(ROOT)/src/device.cpp $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(SMP_CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(SMP_STUB_OBJ): smp/bt_smp_test_stubs.cpp $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(SMP_CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(SMP_TARGET): $(SMP_OBJECTS)
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) $(SMP_CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
-		$(SMP_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+	$(CXX) $(SMP_OBJECTS) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 clean:
 	rm -rf $(BUILD_DIR)
