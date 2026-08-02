@@ -143,6 +143,18 @@ replace_once(
 \t}""",
 )
 
+replace_once(
+    "tests/bluetooth/host/bt_gatt_adversarial_test.cpp",
+    """\tBtGattTxPendingAdd(kConnHdl, &s_SubChar);
+\tBT_CHECK(s_Test, s_Peer.TxPendCount == 1);
+
+\tBtGattSendCompleted(kConnHdl, 1);""",
+    """\tBtGattTxPendingAdd(kConnHdl, &s_SubChar);
+\tBT_CHECK(s_Test, s_Peer.TxPendCount == 2);
+
+\tBtGattSendCompleted(kConnHdl, 1);""",
+)
+
 print("Bluetooth failure-path fixes applied")
 '''
 
