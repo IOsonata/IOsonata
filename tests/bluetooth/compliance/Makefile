@@ -51,9 +51,10 @@ SMP_FRAMEWORK_OBJ := $(BUILD_DIR)/smp/bt_compliance.o
 SMP_CORE_OBJ := $(BUILD_DIR)/smp/bt_smp.o
 SMP_AES_OBJ := $(BUILD_DIR)/smp/crypto_softaes.o
 SMP_DEVICE_OBJ := $(BUILD_DIR)/smp/device.o
+SMP_DEVICE_INTRF_OBJ := $(BUILD_DIR)/smp/device_intrf.o
 SMP_STUB_OBJ := $(BUILD_DIR)/smp/bt_smp_test_stubs.o
 SMP_OBJECTS := $(SMP_TEST_OBJ) $(SMP_FRAMEWORK_OBJ) $(SMP_CORE_OBJ) \
-	$(SMP_AES_OBJ) $(SMP_DEVICE_OBJ) $(SMP_STUB_OBJ)
+	$(SMP_AES_OBJ) $(SMP_DEVICE_OBJ) $(SMP_DEVICE_INTRF_OBJ) $(SMP_STUB_OBJ)
 
 HEADERS := \
 	$(wildcard framework/*.h) \
@@ -118,6 +119,10 @@ $(SMP_AES_OBJ): $(ROOT)/src/crypto/crypto_softaes.cpp $(HEADERS)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
 
 $(SMP_DEVICE_OBJ): $(ROOT)/src/device.cpp $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(SMP_CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(SMP_DEVICE_INTRF_OBJ): $(ROOT)/src/device_intrf.cpp $(HEADERS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(SMP_CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
 
