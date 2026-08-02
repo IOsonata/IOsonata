@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - fix/bm-standard-uuid-type
+  pull_request:
+    branches:
+      - bt_conformance
 
 permissions:
   contents: write
 
 jobs:
   stage:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && (github.event_name != 'pull_request' || github.head_ref == 'fix/bm-standard-uuid-type')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,4 +73,5 @@ jobs:
           git add ARM/Nordic/nRF54/src/bt_gatt_bm.cpp \
             ARM/Nordic/nRF52/src/bt_gatt_nrf52.cpp
           git commit -m "bt: use SoftDevice BLE type for standard UUIDs"
+          git pull --rebase origin fix/bm-standard-uuid-type
           git push origin HEAD:fix/bm-standard-uuid-type
