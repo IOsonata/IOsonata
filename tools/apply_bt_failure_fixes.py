@@ -105,6 +105,44 @@ replace_once(
 \ts_CccdSetResult = true;""",
 )
 
+replace_once(
+    "tests/bluetooth/host/bt_gatt_adversarial_test.cpp",
+    """\tfor (int i = 0; i < 2; i++)
+\t{
+\t\tBtAttReqRsp_t request = {};
+\t\tBtAttReqRsp_t response = {};
+\t\trequest.OpCode = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
+\t\trequest.PrepareWriteReq.Hdl = chars[i].CccdHdl;
+\t\trequest.PrepareWriteReq.Offset = 0;
+\t\trequest.PrepareWriteReq.Data[0] = 1;
+\t\trequest.PrepareWriteReq.Data[1] = 0;
+\t\tuint32_t len = BtAttProcessReq(kConnHdl, &request, 7, &response);
+\t\tBT_CHECK(s_Test, len == 7);
+\t\tBT_CHECK(s_Test,
+\t\t\t\t response.OpCode == BT_ATT_OPCODE_ATT_PREPARE_WRITE_RSP);
+\t}""",
+    """\tfor (int i = 0; i < 2; i++)
+\t{
+\t\tuint8_t request[7] = {};
+\t\tuint8_t response[7] = {};
+\t\trequest[0] = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
+\t\trequest[1] = (uint8_t)(chars[i].CccdHdl & 0xFF);
+\t\trequest[2] = (uint8_t)(chars[i].CccdHdl >> 8);
+\t\trequest[3] = 0;
+\t\trequest[4] = 0;
+\t\trequest[5] = 1;
+\t\trequest[6] = 0;
+\t\tuint32_t len = BtAttProcessReq(
+\t\t\t\tkConnHdl,
+\t\t\t\t(BtAttReqRsp_t *)request,
+\t\t\t\tsizeof(request),
+\t\t\t\t(BtAttReqRsp_t *)response);
+\t\tBT_CHECK(s_Test, len == sizeof(response));
+\t\tBT_CHECK(s_Test,
+\t\t\t\t response[0] == BT_ATT_OPCODE_ATT_PREPARE_WRITE_RSP);
+\t}""",
+)
+
 print("Bluetooth failure-path fixes applied")
 '''
 
