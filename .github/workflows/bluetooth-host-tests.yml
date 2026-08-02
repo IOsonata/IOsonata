@@ -9,19 +9,55 @@ on:
       - "include/bluetooth/**"
       - "src/bluetooth/**"
       - "tests/bluetooth/**"
+      - "ARM/Nordic/nRF54/**"
+      - ".github/scripts/stage_bm_generic_services.py"
       - ".github/workflows/bluetooth-host-tests.yml"
   pull_request:
     paths:
       - "include/bluetooth/**"
       - "src/bluetooth/**"
       - "tests/bluetooth/**"
+      - "ARM/Nordic/nRF54/**"
+      - ".github/scripts/stage_bm_generic_services.py"
       - ".github/workflows/bluetooth-host-tests.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  stage-bm-services:
+    if: github.event_name == 'pull_request' && github.head_ref == 'feature/bm-generic-services' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/bm-generic-services
+          fetch-depth: 1
+
+      - name: Apply and validate service migration
+        run: |
+          python3 .github/scripts/stage_bm_generic_services.py
+          if git grep -n -E 'ble_(dis|bas)' -- ARM/Nordic/nRF54; then
+            echo 'Vendor DIS/BAS references remain in the nRF54 port' >&2
+            exit 1
+          fi
+          git diff --check
+          make -C tests/bluetooth/host clean test CC=gcc CXX=g++ OPT=-O0
+
+      - name: Commit migration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ARM/Nordic/nRF54/src/bt_app_bm.cpp \
+            ARM/Nordic/nRF54/include/bm_config_defaults.h \
+            ARM/Nordic/nRF54/nRF54L15/lib/Eclipse/.project \
+            tests/bluetooth/host/Makefile \
+            tests/bluetooth/host/bt_std_services_test.cpp
+          git commit -m "bt: replace nRF54 BM services with IOsonata services"
+          git push origin HEAD:feature/bm-generic-services
+
   host-unit:
     runs-on: ubuntu-latest
     strategy:
