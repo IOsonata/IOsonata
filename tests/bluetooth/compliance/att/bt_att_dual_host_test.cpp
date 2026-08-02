@@ -63,6 +63,8 @@ static BtChar_t s_OpenChar;
 static BtChar_t s_SecureChar;
 static uint8_t s_OpenValue[kMaxValueLen];
 static uint8_t s_SecureValue[kMaxValueLen];
+static uint8_t s_CapturedAcl[BT_HCI_BUFFER_MAX_SIZE];
+static uint32_t s_CapturedAclLen;
 
 static uint16_t GetLe16(const uint8_t *p)
 {
@@ -73,6 +75,17 @@ static void PutLe16(uint8_t *p, uint16_t Value)
 {
 	p[0] = (uint8_t)(Value & 0xFF);
 	p[1] = (uint8_t)(Value >> 8);
+}
+
+static uint32_t CaptureAcl(void *pData, uint32_t Len)
+{
+	if (pData == nullptr || Len > sizeof(s_CapturedAcl))
+	{
+		return 0;
+	}
+	std::memcpy(s_CapturedAcl, pData, Len);
+	s_CapturedAclLen = Len;
+	return Len;
 }
 
 static bool WriteAll(int Fd, const void *pData, size_t Len)
@@ -648,6 +661,55 @@ static bool RunLongWriteMtuCase(uint16_t OfferedMtu)
 	return link.Stop() && ok;
 }
 
+static void TestClientRequestBuilders(Context &ctx)
+{
+	static const Requirement req = {
+		"ATT-LONG-WRITE-CLIENT-BV-05", "Core Vol 3 Part F", "3.4.6.1 and 3.4.6.3",
+		"production ATT client builders emit exact Prepare Write and Execute Write ACL/L2CAP packets"
+	};
+	ctx.Begin(req);
+
+	BtHciDevice_t dev = {};
+	dev.SendData = CaptureAcl;
+	uint8_t value[18];
+	FillPattern(value, sizeof(value), 0x39);
+
+	s_CapturedAclLen = 0;
+	BT_CHECK(ctx, BtAttPrepareWriteRequest(&dev, 0x0123, 0x4567, 0x0089,
+									 value, sizeof(value)));
+	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t *)s_CapturedAcl;
+	BtL2CapPdu_t *l2 = (BtL2CapPdu_t *)acl->Data;
+	BT_CHECK(ctx, s_CapturedAclLen == sizeof(acl->Hdr) + sizeof(BtL2CapHdr_t) + 5 + sizeof(value));
+	BT_CHECK(ctx, acl->Hdr.ConnHdl == 0x0123);
+	BT_CHECK(ctx, acl->Hdr.PBFlag == BT_HCI_PBFLAG_START_NONFLUSHABLE);
+	BT_CHECK(ctx, l2->Hdr.Cid == BT_L2CAP_CID_ATT);
+	BT_CHECK(ctx, l2->Hdr.Len == 5 + sizeof(value));
+	BT_CHECK(ctx, l2->Att.OpCode == BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ);
+	BT_CHECK(ctx, l2->Att.PrepareWriteReq.Hdl == 0x4567);
+	BT_CHECK(ctx, l2->Att.PrepareWriteReq.Offset == 0x0089);
+	BT_CHECK(ctx, std::memcmp(l2->Att.PrepareWriteReq.Data, value, sizeof(value)) == 0);
+
+	s_CapturedAclLen = 0;
+	BT_CHECK(ctx, BtAttExecuteWriteRequest(&dev, 0x0123, true));
+	acl = (BtHciACLDataPacket_t *)s_CapturedAcl;
+	l2 = (BtL2CapPdu_t *)acl->Data;
+	BT_CHECK(ctx, l2->Att.OpCode == BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ);
+	BT_CHECK(ctx, l2->Att.ExecuteWriteReq.Flag == 0x01);
+	BT_CHECK(ctx, BtAttExecuteWriteRequest(&dev, 0x0123, false));
+	acl = (BtHciACLDataPacket_t *)s_CapturedAcl;
+	l2 = (BtL2CapPdu_t *)acl->Data;
+	BT_CHECK(ctx, l2->Att.ExecuteWriteReq.Flag == 0x00);
+
+	uint8_t tooLarge[BT_HCI_BUFFER_MAX_SIZE] = {};
+	s_CapturedAclLen = 0;
+	BT_CHECK(ctx, !BtAttPrepareWriteRequest(&dev, 1, 1, 0,
+									  tooLarge, sizeof(tooLarge)));
+	BT_CHECK(ctx, s_CapturedAclLen == 0);
+	BT_CHECK(ctx, !BtAttPrepareWriteRequest(nullptr, 1, 1, 0, value, 1));
+	BT_CHECK(ctx, !BtAttExecuteWriteRequest(nullptr, 1, true));
+	ctx.End();
+}
+
 static void TestL2capAttTransport(Context &ctx)
 {
 	static const Requirement req = {
@@ -914,6 +976,7 @@ int main()
 	signal(SIGPIPE, SIG_IGN);
 
 	Context ctx("Bluetooth dual-host ATT long-write compliance");
+	TestClientRequestBuilders(ctx);
 	TestL2capAttTransport(ctx);
 	TestLongWriteMtuMatrix(ctx);
 	TestQueueBoundsAndAtomicFailure(ctx);

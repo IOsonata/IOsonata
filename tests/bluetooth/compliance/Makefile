@@ -51,6 +51,7 @@ ATT_SOURCES := \
 	att/bt_att_dual_host_test.cpp \
 	framework/bt_compliance.cpp \
 	$(ROOT)/src/bluetooth/bt_att.cpp \
+	$(ROOT)/src/bluetooth/bt_attreq.cpp \
 	$(ROOT)/src/bluetooth/bt_uuid.cpp
 
 SMP_TEST_OBJ := $(BUILD_DIR)/smp/bt_smp_dual_host_test.o
