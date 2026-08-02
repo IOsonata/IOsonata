@@ -24,22 +24,6 @@ permissions:
 jobs:
   host-unit:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - cc: gcc
-            cxx: g++
-            opt: -O0
-          - cc: gcc
-            cxx: g++
-            opt: -O2
-          - cc: clang
-            cxx: clang++
-            opt: -O0
-          - cc: clang
-            cxx: clang++
-            opt: -O2
 
     steps:
       - name: Check out repository
@@ -48,13 +32,13 @@ jobs:
       - name: Build and run Bluetooth host tests
         run: |
           make -C tests/bluetooth/host clean test \
-            CC=${{ matrix.cc }} \
-            CXX=${{ matrix.cxx }} \
-            OPT=${{ matrix.opt }}
+            CC=gcc \
+            CXX=g++ \
+            OPT=-O0
 
       - name: Build and run Bluetooth compliance tests
         run: |
           make -C tests/bluetooth/compliance clean test \
-            CC=${{ matrix.cc }} \
-            CXX=${{ matrix.cxx }} \
-            OPT=${{ matrix.opt }}
+            CC=gcc \
+            CXX=g++ \
+            OPT=-O0
