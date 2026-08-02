@@ -245,6 +245,26 @@ uint32_t BtL2CapProcessSignal(BtHciDevice_t * const pDev,
 
 	pRspPdu->Hdr.Cid = BT_L2CAP_CID_SIGNAL;
 
+	// Vol 3 Part A 4.1: a signaling packet longer than the signaling MTU of the
+	// channel it arrived on is answered with Command Reject reason 0x0001,
+	// carrying the MTU this side does support so the peer can resize. ReqLen is
+	// the L2CAP payload length on CID 0x0005, which is what the MTU bounds. The
+	// command header is present, checked above, so the Identifier to echo can be
+	// read from it. Nothing in the packet is parsed past that point: the length
+	// is already known to be wrong.
+	if (ReqLen > BT_L2CAP_LE_SIG_MTU)
+	{
+		uint16_t sigMtu = BT_L2CAP_LE_SIG_MTU;
+
+		BtL2CapAppendCmdReject(pOut, &outLen, outMax,
+								((BtL2CapCFrame_t const *)p)->Id,
+								BT_L2CAP_CMD_REJECT_REASON_MTU_EXCEEDED,
+								&sigMtu, sizeof(sigMtu));
+		pRspPdu->Hdr.Len = outLen;
+
+		return outLen;
+	}
+
 	// Vol 3 Part A 4: multiple commands per C-frame are permitted only on the
 	// BR/EDR signaling channel. The LE-U fixed signaling channel (CID 0x0005)
 	// allows exactly one command per C-frame, so the loop below processes the

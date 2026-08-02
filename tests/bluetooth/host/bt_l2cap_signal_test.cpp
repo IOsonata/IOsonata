@@ -508,10 +508,12 @@ void TestResponseBound()
 	CHECK(len <= kResponseMax);
 	CHECK(x.Rsp->Hdr.Len == len);
 
-	// However many commands are packed into the C-frame, only the first is
-	// processed, so the response is a single Command Reject and stays well
-	// within the response bound.
-	CHECK(len == kFrameHeaderLen + sizeof(uint16_t));
+	// A C-frame packed to the response bound is far past the 23 octet signaling
+	// MTU, so it is rejected for the length before any command in it is looked
+	// at. The response is one Command Reject naming the first Identifier, which
+	// is what keeps the reply bounded no matter how much the peer packs in.
+	CHECK(x.ReqLen > BT_L2CAP_LE_SIG_MTU);
+	CHECK(len == kFrameHeaderLen + sizeof(uint16_t) + sizeof(uint16_t));
 	const BtL2CapCFrame_t *frame = x.Frame();
 	CHECK(frame != nullptr);
 	if (frame != nullptr)
@@ -519,6 +521,7 @@ void TestResponseBound()
 		CHECK(frame->Code == BT_L2CAP_CODE_COMMAND_REJECT_RSP);
 		CHECK(frame->Id == 0x01);
 	}
+	CheckReject(frame, 0x01, BT_L2CAP_CMD_REJECT_REASON_MTU_EXCEEDED);
 	CHECK(x.Frame(FrameTotalLen(frame)) == nullptr);
 }
 
@@ -600,10 +603,50 @@ void BtL2CapCreditBasedReconfigureRsp(uint16_t ConnHdl, uint16_t Result)
 	s_Hooks.ReconfigureRspResult = Result;
 }
 
+// Vol 3 Part A 4.1: a signaling packet longer than the LE-U signaling MTU of
+// 23 octets is answered with Command Reject reason 0x0001 carrying the MTU we
+// support, and nothing in it is acted on.
+void TestSignalingMtuExceeded()
+{
+	// One command whose payload pushes the C-frame past 23 octets. A
+	// Connection Parameter Update Request is used because a conforming one of
+	// this size would otherwise be answered with an Update Response, so the
+	// reject shows the MTU check ran before the command did.
+	SignalExchange over;
+	uint8_t pad[24] = {};
+	over.Append(BT_L2CAP_CODE_CONNECTION_PARAMETER_UPDATE_REQ, 0x41,
+				pad, sizeof(pad));
+	CHECK(over.ReqLen > BT_L2CAP_LE_SIG_MTU);
+
+	CHECK(over.Run() == kFrameHeaderLen + sizeof(uint16_t) + sizeof(uint16_t));
+	CheckReject(over.Frame(), 0x41, BT_L2CAP_CMD_REJECT_REASON_MTU_EXCEEDED);
+
+	// The reject carries the supported MTU after the reason.
+	const BtL2CapCFrame_t *rej = over.Frame();
+	CHECK(rej != nullptr);
+	if (rej != nullptr && rej->Len >= 2 * sizeof(uint16_t))
+	{
+		uint16_t mtu = 0;
+		std::memcpy(&mtu, rej->Data + sizeof(uint16_t), sizeof(mtu));
+		CHECK(mtu == BT_L2CAP_LE_SIG_MTU);
+	}
+
+	// Exactly at the MTU the command is processed normally. A Disconnection
+	// Request for a channel that does not exist answers Invalid CID, which is
+	// the un-rejected path and proves the bound is not off by one.
+	SignalExchange atLimit;
+	BtL2CapDisconnReq_t req = { 0x0040, 0x0041 };
+	atLimit.Append(BT_L2CAP_CODE_DISCONNECTION_REQ, 0x42, &req, sizeof(req));
+	CHECK(atLimit.ReqLen <= BT_L2CAP_LE_SIG_MTU);
+	CHECK(atLimit.Run() > 0);
+	CheckReject(atLimit.Frame(), 0x42, BT_L2CAP_CMD_REJECT_REASON_INVALID_CID);
+}
+
 int main()
 {
 	TestNullAndShortInput();
 	TestUnknownAndTruncatedCommand();
+	TestSignalingMtuExceeded();
 	TestConnectionParameterRequest();
 	TestConnParamRoleGate();
 	TestConnectionParameterResponseCallback();

@@ -1318,8 +1318,11 @@ static bool SmpStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 	// mandatory to reject since Core 5.1 (CVE-2020-26558). Both keys are always
 	// present at this chokepoint (the initiator has sent its key and the
 	// responder only reaches here once both are in). On-curve validation of the
-	// peer key is done by the key-agreement engine. A false return makes the
-	// caller send Pairing Failed and abort.
+	// peer key is done by the key-agreement engine, which the KeyAgreeEngine
+	// interface requires of every implementation; SMP has no field arithmetic
+	// to repeat it with. An all-zero key never reaches here either, since
+	// SmpTryStartDhKey only calls in once both keys are present. A false return
+	// makes the caller send Pairing Failed and abort.
 	if (memcmp(pLink->Ctx.PeerPubKey, pLink->Ctx.LocalPubKey,
 			   sizeof(pLink->Ctx.PeerPubKey)) == 0)
 	{

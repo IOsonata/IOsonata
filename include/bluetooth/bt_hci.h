@@ -700,7 +700,16 @@ struct __Bt_Hci_Device {
 	uint16_t AclMaxLen;		//!< Controller LE ACL data packet length. 0 leaves TX fragmentation and flow control disabled (single-packet pass-through).
 	uint8_t  AclCreditMax;	//!< Controller total LE ACL data buffers. 0 disables flow control.
 	int16_t  AclCredit;		//!< Available ACL TX credits (decremented per packet sent, replenished by Number-Of-Completed-Packets).
-	int16_t  CmdCredit;		//!< HCI command credits (Num_HCI_Command_Packets). Set absolute from Command Complete/Status, starts at 1 per spec.
+	//!< HCI command credits (Num_HCI_Command_Packets). Set absolute from
+	//!< Command Complete/Status, starts at 1 per spec. Not enforced on send,
+	//!< and enforcing it would be wrong for the executors that exist today:
+	//!< Command is a synchronous SDK call on every current port, the SDK
+	//!< consumes the Command Complete itself, and nothing routes it back
+	//!< through BtHciProcessEvent. Credits would drop to zero on the first
+	//!< command and never be replenished. A packet-based HCI transport that
+	//!< does feed Command Complete and Command Status to BtHciProcessEvent is
+	//!< the point at which a send-side check becomes both correct and useful.
+	int16_t  CmdCredit;
 	uint16_t CmdOpCode;		//!< Opcode a blocking command is waiting on, 0 when none.
 	uint8_t  CmdStatus;		//!< Status from the matched Command Complete/Status.
 	uint8_t  CmdRetLen;		//!< Size of the pCmdRet buffer in bytes.
