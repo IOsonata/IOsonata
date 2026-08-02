@@ -1369,6 +1369,8 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 	memcpy(planCccd, oldCccd,
 		   oldCccdCount * sizeof(BtGattCccdState_t));
 
+	// Pass 1: validate every run and project the final CCCD table. Nothing
+	// in the attribute database or peer state is changed here.
 	while (pos + 6 <= total)
 	{
 		uint16_t hdl, off, totLen, next;
@@ -1446,28 +1448,60 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 		return err;
 	}
 
-	// Install every characteristic value without callbacks.
-	pos = 0;
-	while (pos + 6 <= total)
+	// Pass 2: turn each contiguous run into one canonical queue record. The
+	// destination never extends beyond the source run, so unread records are
+	// not overwritten. Later passes walk only this canonical layout.
+	uint16_t readPos = 0;
+	uint16_t compactedTotal = 0;
+	while (readPos + 6 <= total)
 	{
 		uint16_t hdl, off, totLen, next;
-		BtAttLongWrRun(buf, total, pos, true,
-					   &hdl, &off, &totLen, &next);
+		err = BtAttLongWrRun(buf, total, readPos, true,
+							&hdl, &off, &totLen, &next);
+		if (err != 0)
+		{
+			*pFailHdl = hdl;
+			pConn->Conn.LongWrLen = 0;
+			return err;
+		}
+
+		uint8_t *dst = buf + compactedTotal;
+		if (compactedTotal != readPos && totLen > 0)
+		{
+			memmove(dst + 6, buf + readPos + 6, totLen);
+		}
+		memcpy(dst, &hdl, 2);
+		memcpy(dst + 2, &off, 2);
+		memcpy(dst + 4, &totLen, 2);
+
+		compactedTotal = (uint16_t)(compactedTotal + 6 + totLen);
+		readPos = next;
+	}
+
+	// Pass 3: install every characteristic value without callbacks.
+	pos = 0;
+	while (pos + 6 <= compactedTotal)
+	{
+		uint16_t hdl, off, len;
+		memcpy(&hdl, buf + pos, 2);
+		memcpy(&off, buf + pos + 2, 2);
+		memcpy(&len, buf + pos + 4, 2);
+
 		BtAttDBEntry_t *entry = BtAttDBFindHandle(hdl);
 		if (entry != nullptr && BtAttEntryIsCharValue(entry))
 		{
 			BtGattChar_t *pChar = BtAttEntryChar(entry);
-			if (totLen > 0)
+			if (len > 0)
 			{
-				memcpy((uint8_t*)pChar->pValue + off, buf + pos + 6, totLen);
+				memcpy((uint8_t*)pChar->pValue + off, buf + pos + 6, len);
 			}
-			uint16_t end = (uint16_t)(off + totLen);
-			if (end > pChar->ValueLen)
+			uint16_t valueEnd = (uint16_t)(off + len);
+			if (valueEnd > pChar->ValueLen)
 			{
-				pChar->ValueLen = end;
+				pChar->ValueLen = valueEnd;
 			}
 		}
-		pos = next;
+		pos = (uint16_t)(pos + 6 + len);
 	}
 
 	// The CCCD plan was fully validated, so this final-state copy cannot fail.
@@ -1475,15 +1509,17 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 	memcpy(pConn->Conn.Cccd, planCccd,
 		   planCccdCount * sizeof(BtGattCccdState_t));
 
-	// All values are final before any callback or persistence hook runs.
+	// Pass 4: all values are final before the first callback or persistence
+	// hook. Each canonical characteristic run produces exactly one callback.
 	uint16_t doneCccd[BT_GATT_CCCD_STATE_MAX];
 	uint8_t doneCccdCount = 0;
 	pos = 0;
-	while (pos + 6 <= total)
+	while (pos + 6 <= compactedTotal)
 	{
-		uint16_t hdl, off, totLen, next;
-		BtAttLongWrRun(buf, total, pos, false,
-					   &hdl, &off, &totLen, &next);
+		uint16_t hdl, off, len;
+		memcpy(&hdl, buf + pos, 2);
+		memcpy(&off, buf + pos + 2, 2);
+		memcpy(&len, buf + pos + 4, 2);
 		BtAttDBEntry_t *entry = BtAttDBFindHandle(hdl);
 
 		if (entry != nullptr && BtAttEntryIsCharValue(entry))
@@ -1491,7 +1527,7 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 			BtGattChar_t *pChar = BtAttEntryChar(entry);
 			if (pChar != nullptr && pChar->WrCB != nullptr)
 			{
-				pChar->WrCB(pChar, buf + pos + 6, (int)off, (int)totLen);
+				pChar->WrCB(pChar, buf + pos + 6, (int)off, (int)len);
 			}
 		}
 		else if (entry != nullptr && BtAttEntryIsCccd(entry))
@@ -1508,7 +1544,7 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 					BtAttCccdListGet(oldCccd, oldCccdCount, hdl));
 			}
 		}
-		pos = next;
+		pos = (uint16_t)(pos + 6 + len);
 	}
 
 	pConn->Conn.LongWrLen = 0;

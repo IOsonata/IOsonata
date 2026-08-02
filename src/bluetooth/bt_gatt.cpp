@@ -566,14 +566,31 @@ void BtGattTxPendRelease(uint16_t ConnHdl)
 }
 
 // Account for HCI packets this link sent that carry no GATT completion: ATT
-// responses, SMP PDUs, L2CAP signaling. They own no callback but the controller
-// still reports them, and without this their completions drain the ring and
-// fire someone else's callback early.
-//
-// They are counted rather than given ring entries, so ordinary request and
-// response traffic cannot exhaust the ring and refuse a notification.
+// responses, SMP PDUs and L2CAP signaling. A null owner is still an ordered
+// ring entry, so its completion cannot be charged to a notification sent
+// before or after it. Adjacent null-owner groups may be coalesced because no
+// callback boundary exists between them.
 bool BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
 {
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+	if (pConn == nullptr || NbPkt == 0)
+	{
+		return false;
+	}
+
+	if (pConn->TxPendCount > 0)
+	{
+		uint8_t idx = (uint8_t)((pConn->TxPendHead +
+								 pConn->TxPendCount - 1) % BT_DEV_TXPEND_MAX);
+		if (pConn->TxPend[idx].pChar == nullptr &&
+			(uint32_t)pConn->TxPend[idx].Remain + NbPkt <= UINT16_MAX)
+		{
+			pConn->TxPend[idx].Remain =
+					(uint16_t)(pConn->TxPend[idx].Remain + NbPkt);
+			return true;
+		}
+	}
+
 	return BtGattTxPendReserve(ConnHdl, nullptr, NbPkt);
 }
 

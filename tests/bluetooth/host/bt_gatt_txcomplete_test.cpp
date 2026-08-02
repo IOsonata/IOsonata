@@ -151,21 +151,29 @@ void TestUntrackedPacketDoesNotFire()
 	CHECK(Peer()->TxPendCount == 0);
 }
 
-// Packets with no owner accumulate in the counter, never in the ring.
+// Consecutive packets with no callback owner share one ordered group. A
+// tracked packet still creates a boundary that later untracked traffic cannot
+// cross.
 void TestUntrackedCoalesces()
 {
 	Setup(64);
 
-	BtGattTxPendUntracked(kConnHdl, 1);
-	BtGattTxPendUntracked(kConnHdl, 1);
-	BtGattTxPendUntracked(kConnHdl, 1);
-	CHECK(Peer()->TxPendCount == 3);
+	CHECK(BtGattTxPendUntracked(kConnHdl, 1));
+	CHECK(BtGattTxPendUntracked(kConnHdl, 1));
+	CHECK(BtGattTxPendUntracked(kConnHdl, 1));
+	CHECK(Peer()->TxPendCount == 1);
+	CHECK(Peer()->TxPend[Peer()->TxPendHead].Remain == 3);
 
 	CHECK(BtGattCharNotify(kConnHdl, &s_Char[0], s_Value, 8));
-	CHECK(Peer()->TxPendCount == 4);
+	CHECK(Peer()->TxPendCount == 2);
+	CHECK(BtGattTxPendUntracked(kConnHdl, 2));
+	CHECK(Peer()->TxPendCount == 3);
 
 	BtGattSendCompleted(kConnHdl, 3);
 	CHECK(s_TxCompleteCount == 0);
+	CHECK(Peer()->TxPendCount == 2);
+	BtGattSendCompleted(kConnHdl, 1);
+	CHECK(s_TxCompleteCount == 1);
 	CHECK(Peer()->TxPendCount == 1);
 }
 

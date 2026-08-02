@@ -29,6 +29,12 @@ int s_NotifyTransitions = 0;
 int s_IndicateTransitions = 0;
 bool s_LastNotifyState = false;
 bool s_LastIndicateState = false;
+int s_LongWriteCallbacks = 0;
+int s_LongWriteOffset = -1;
+int s_LongWriteLen = -1;
+uint8_t s_LongWriteData[16];
+bool s_LongWriteSawPeerFinal = false;
+BtGattChar_t *s_LongWritePeerChar = nullptr;
 
 BtGattChar_t s_InitialChar;
 BtGattSrvc_t s_InitialService;
@@ -56,6 +62,22 @@ void IndicateChanged(BtGattChar_t *, bool Enabled, uint16_t)
 {
 	s_IndicateTransitions++;
 	s_LastIndicateState = Enabled;
+}
+
+void LongWriteChanged(BtGattChar_t *, uint8_t *pData, int Offset, int Len)
+{
+	s_LongWriteCallbacks++;
+	s_LongWriteOffset = Offset;
+	s_LongWriteLen = Len;
+	if (Len > 0 && Len <= (int)sizeof(s_LongWriteData))
+	{
+		std::memcpy(s_LongWriteData, pData, (size_t)Len);
+	}
+	static const uint8_t expected[] = { 0x91, 0x92, 0x93 };
+	s_LongWriteSawPeerFinal = s_LongWritePeerChar != nullptr &&
+		s_LongWritePeerChar->ValueLen == sizeof(expected) &&
+		std::memcmp(s_LongWritePeerChar->pValue,
+					expected, sizeof(expected)) == 0;
 }
 
 void ResetPeer()
@@ -212,6 +234,99 @@ void TestFullCompletionQueueRejectsSend()
 }
 
 
+void TestExecuteWriteCallbacksUseCanonicalRuns()
+{
+	static BtGattChar_t chars[2];
+	static BtGattSrvc_t service;
+	static bool registered = false;
+	static uint8_t queue[96];
+
+	if (!registered)
+	{
+		std::memset(chars, 0, sizeof(chars));
+		std::memset(&service, 0, sizeof(service));
+		for (int i = 0; i < 2; i++)
+		{
+			chars[i].Uuid = (uint16_t)(0xFFC0 + i);
+			chars[i].MaxDataLen = 16;
+			chars[i].Property = BT_GATT_CHAR_PROP_READ |
+							 BT_GATT_CHAR_PROP_WRITE;
+		}
+		chars[0].WrCB = LongWriteChanged;
+		service.UuidSrvc = 0xFFBF;
+		service.NbChar = 2;
+		service.pCharArray = chars;
+		BT_CHECK(s_Test, BtGattSrvcAdd(&service));
+		registered = true;
+	}
+
+	BT_CHECK(s_Test, BtGattCharSetValue(&chars[0], nullptr, 0));
+	BT_CHECK(s_Test, BtGattCharSetValue(&chars[1], nullptr, 0));
+
+	s_Peer.Conn.pLongWrBuff = queue;
+	s_Peer.Conn.LongWrBuffSize = sizeof(queue);
+	s_Peer.Conn.LongWrLen = 0;
+	s_LongWriteCallbacks = 0;
+	s_LongWriteOffset = -1;
+	s_LongWriteLen = -1;
+	std::memset(s_LongWriteData, 0, sizeof(s_LongWriteData));
+	s_LongWriteSawPeerFinal = false;
+	s_LongWritePeerChar = &chars[1];
+
+	static const uint8_t first[] = { 1, 2, 3 };
+	static const uint8_t second[] = { 4, 5, 6, 7 };
+	static const uint8_t peer[] = { 0x91, 0x92, 0x93 };
+	struct Fragment {
+		uint16_t Hdl;
+		uint16_t Offset;
+		const uint8_t *pData;
+		uint16_t Len;
+	};
+	const Fragment fragments[] = {
+		{ chars[0].ValHdl, 0, first, sizeof(first) },
+		{ chars[0].ValHdl, sizeof(first), second, sizeof(second) },
+		{ chars[1].ValHdl, 0, peer, sizeof(peer) },
+	};
+
+	for (const Fragment &f : fragments)
+	{
+		uint8_t request[16] = {};
+		uint8_t response[16] = {};
+		request[0] = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
+		request[1] = (uint8_t)(f.Hdl & 0xFF);
+		request[2] = (uint8_t)(f.Hdl >> 8);
+		request[3] = (uint8_t)(f.Offset & 0xFF);
+		request[4] = (uint8_t)(f.Offset >> 8);
+		std::memcpy(request + 5, f.pData, f.Len);
+		uint32_t len = BtAttProcessReq(kConnHdl,
+			(BtAttReqRsp_t *)request, (uint16_t)(5 + f.Len),
+			(BtAttReqRsp_t *)response);
+		BT_CHECK(s_Test, len == (uint32_t)(5 + f.Len));
+		BT_CHECK(s_Test,
+			response[0] == BT_ATT_OPCODE_ATT_PREPARE_WRITE_RSP);
+	}
+
+	BtAttReqRsp_t execute = {};
+	BtAttReqRsp_t response = {};
+	execute.OpCode = BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ;
+	execute.ExecuteWriteReq.Flag = 1;
+	uint32_t len = BtAttProcessReq(kConnHdl, &execute, 2, &response);
+
+	static const uint8_t expected[] = { 1, 2, 3, 4, 5, 6, 7 };
+	BT_CHECK(s_Test, len == 1);
+	BT_CHECK(s_Test,
+		response.OpCode == BT_ATT_OPCODE_ATT_EXECUTE_WRITE_RSP);
+	BT_CHECK(s_Test, s_LongWriteCallbacks == 1);
+	BT_CHECK(s_Test, s_LongWriteOffset == 0);
+	BT_CHECK(s_Test, s_LongWriteLen == (int)sizeof(expected));
+	BT_CHECK(s_Test,
+		std::memcmp(s_LongWriteData, expected, sizeof(expected)) == 0);
+	BT_CHECK(s_Test, chars[0].ValueLen == sizeof(expected));
+	BT_CHECK(s_Test,
+		std::memcmp(chars[0].pValue, expected, sizeof(expected)) == 0);
+	BT_CHECK(s_Test, s_LongWriteSawPeerFinal);
+}
+
 void TestExecuteWriteCccdCapacityIsAtomic()
 {
 	static BtGattChar_t chars[2];
@@ -366,6 +481,8 @@ int main()
 			   TestFragmentCompletionWaitsForFinalPacket);
 	s_Test.Run("completion queue exhaustion",
 			   TestFullCompletionQueueRejectsSend);
+	s_Test.Run("execute write canonical callback",
+			   TestExecuteWriteCallbacksUseCanonicalRuns);
 	s_Test.Run("execute write CCCD capacity atomicity",
 			   TestExecuteWriteCccdCapacityIsAtomic);
 	return s_Test.Finish();
