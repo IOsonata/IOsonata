@@ -50,7 +50,7 @@ diff --git a/tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp b/tests/bl
  			{
  				setup = SendPasskeyReply(&peripheral, central.DisplayedPasskey);
  				passkeyReplySent = true;
-@@ -1037,28 +1045,41 @@ static void TestPeripheralSecurityRequest(Context &ctx)
+@@ -1037,25 +1045,38 @@ static void TestPeripheralSecurityRequest(Context &ctx)
  	ctx.End();
  }
  
