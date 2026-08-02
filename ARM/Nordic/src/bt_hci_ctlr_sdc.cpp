@@ -56,14 +56,26 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "crypto_rng_nrf.h"
 
-#if 0
-/******** For DEBUG ************/
+/******** For DEBUG Trace ************/
+// Define DEBUG_ENABLE to turn on the SMP handshake trace for this file: every
+// SMP PDU in/out and the link state. Output goes to the SysLog transport the
+// app configured (UART, USB, RTT, BLE, or any other DeviceIntrf); the trace
+// does not assume a transport. A release build defines NDEBUG, which strips all
+// trace regardless of DEBUG_ENABLE.
+//#define DEBUG_ENABLE
+
+// Which persistence the build uses. Deliberately independent of DEBUG_ENABLE
+// and of NDEBUG: the release build is where a bond has to survive a reset, and
+// this one line says whether the store is even in the picture.
+#define STORE_TRACE
+
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 #include "syslog.h"
 #define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
-/*******************************/
 #else
 #define DEBUG_PRINTF(...)
 #endif
+/*******************************/
 
 // PCD-side controller device pointer, set by BtHciCtlrSdcInit.
 static BtHciCtlrDev_t *s_pBtHciCtlrSdc = nullptr;
@@ -298,6 +310,17 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	pDev->Send = BtHciCtlrSendData;		// SDC ACL transmit, forwarded by BtHciCtlrSdcSend
 	s_pBtHciCtlrSdc = pDev;
 
+	// MPSL first. sdc_init answers -NRF_EPERM when MPSL is not up, and it used
+	// to run 188 lines ahead of MpslInit, so it had been returning that error
+	// on every boot. The result was assigned and never read, which is why
+	// nothing showed until the result was checked.
+	if (MpslInit() == false)
+	{
+		DEBUG_PRINTF("MpslInit failed\r\n");
+
+		return false;
+	}
+
 	// sdc_init returns -NRF_EINVAL or -NRF_EPERM (MPSL not up, or the low
 	// frequency clock accuracy is not good enough). Everything below operates
 	// on a controller that was never initialised, so stop here rather than
@@ -379,6 +402,8 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 						  &cfg);
 	if (ram < 0)
 	{
+		DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_BUFFER_CFG failed %d\r\n", (int)ram);
+
 		return false;
 	}
 
@@ -403,6 +428,8 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 						  &cfg);
 	if (ram < 0)
 	{
+		DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_EVENT_LENGTH failed %d\r\n", (int)ram);
+
 		return false;
 	}
 */
@@ -416,6 +443,8 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 		if (ram < 0)
 		{
+			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIPHERAL_COUNT failed %d\r\n", (int)ram);
+
 			return false;
 		}
 
@@ -426,6 +455,8 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 		if (ram < 0)
 		{
+			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_ADV_COUNT failed %d\r\n", (int)ram);
+
 			return false;
 		}
 
@@ -436,6 +467,8 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 		if (ram < 0)
 		{
+			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_ADV_BUFFER_CFG failed %d\r\n", (int)ram);
+
 			return false;
 		}
 	}
@@ -449,6 +482,8 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 		if (ram < 0)
 		{
+			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_CENTRAL_COUNT failed %d\r\n", (int)ram);
+
 			return false;
 		}
 
@@ -460,6 +495,8 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 						  &cfg);
 		if (ram < 0)
 		{
+			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_SCAN_BUFFER_CFG failed %d\r\n", (int)ram);
+
 			return false;
 		}
 	}
@@ -473,11 +510,6 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		DEBUG_PRINTF("sdc mem pool too small: have %d need %d\r\n",
 					 (int)sizeof(s_BtStackSdcMemPool), (int)ram);
 
-		return false;
-	}
-
-	if (MpslInit() == false)
-	{
 		return false;
 	}
 
