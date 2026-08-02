@@ -31,11 +31,57 @@ jobs:
         with:
           ref: ${{ github.head_ref || github.ref_name }}
 
-      - name: Commit dual-host SMP fix
+      - name: Commit dual-host SMP fixes
         if: github.event_name == 'pull_request' && github.head_ref == 'tmp/bt-dual-host-compliance'
         run: |
-          git apply --check tests/bluetooth/compliance/smp/bt_smp_dual_host_fix.patch
-          git apply tests/bluetooth/compliance/smp/bt_smp_dual_host_fix.patch
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(path, old, new):
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one exact match, found {count}")
+              path.write_text(text.replace(old, new, 1))
+
+          smp = Path("src/bluetooth/bt_smp.cpp")
+          replace_once(
+              smp,
+              """static bool SmpOobCtxLoad(BtSmpLink_t *pLink)\n{\n\t// This implementation needs both local and peer SC OOB data. A partial\n\t// set cannot complete both f4 verification and the f6 ra/rb inputs, so\n\t// reject it during feature exchange with OOB Not Available rather than\n\t// failing later with an unspecified crypto error.\n\tif (!s_SmpOob.bLocalValid || !s_SmpOob.bPeerValid)\n""",
+              """static bool SmpOobCtxLoad(BtSmpLink_t *pLink)\n{\n\t// LE Secure Connections supports OOB in either or both directions. The\n\t// local set commits our public key; the peer set authenticates the peer.\n\t// At least one must exist for this device to select the OOB model, but a\n\t// one-direction exchange is valid and uses zero for the absent peer r.\n\tif (!s_SmpOob.bLocalValid && !s_SmpOob.bPeerValid)\n""",
+          )
+          replace_once(
+              smp,
+              """\treturn CryptoStatusToSmp(s_pCryptoEcdh->Agree(CRYPTO_CURVE_P256,\n\t\t\t\t\t\t\t\t\t\t\t\t  pLink->Ctx.EcdhKeyCtx,\n\t\t\t\t\t\t\t\t\t\t\t\t  pPeerPubKey, pDhKey));\n""",
+              """\tuint8_t *pKeyCtx = (SmpOobReservedFor(pLink) && s_SmpOob.bLocalValid) ?\n\t\t\t\t\t\t s_SmpOob.EcdhKeyCtx : pLink->Ctx.EcdhKeyCtx;\n\treturn CryptoStatusToSmp(s_pCryptoEcdh->Agree(CRYPTO_CURVE_P256,\n\t\t\t\t\t\t\t\t\t\t\t\t  pKeyCtx,\n\t\t\t\t\t\t\t\t\t\t\t\t  pPeerPubKey, pDhKey));\n""",
+          )
+
+          test = Path("tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp")
+          replace_once(
+              test,
+              """\t\tif (setup && !passkeyReplySent)\n\t\t{\n\t\t\tif (central.PasskeyDisplaySeen && peripheral.PasskeyRequestSeen)\n""",
+              """\t\tif (setup && !passkeyReplySent)\n\t\t{\n\t\t\tif (central.PasskeyRequestSeen && peripheral.PasskeyRequestSeen)\n\t\t\t{\n\t\t\t\t// KeyboardOnly/KeyboardOnly: the user supplies one external\n\t\t\t\t// passkey and enters the same value on both devices.\n\t\t\t\tsetup = SendPasskeyReply(&central, 123456U) &&\n\t\t\t\t\tSendPasskeyReply(&peripheral, 123456U);\n\t\t\t\tpasskeyReplySent = true;\n\t\t\t}\n\t\t\telse if (central.PasskeyDisplaySeen && peripheral.PasskeyRequestSeen)\n""",
+          )
+
+          text = test.read_text()
+          pattern = re.compile(
+              r"static void TestOobFailures\(Context &ctx\)\n\{.*?\n\}\n\n\} // namespace",
+              re.S,
+          )
+          replacement = """static void TestOobDirectionsAndFailures(Context &ctx)\n{\n\tstatic const Requirement req = {\n\t\t\"SMP-SC-OOB-BV-BI-01\", \"Core Vol 3 Part H\", \"2.3.3 and 2.3.5.6.4\",\n\t\t\"one-direction and bidirectional SC OOB complete, while corrupted authentication data fails\"\n\t};\n\tctx.Begin(req);\n\n\tPairingRunConfig centralToPeripheral = {\n\t\tBT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,\n\t\tBT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,\n\t\ttrue, true, false, OobFault::Drop, OobFault::None\n\t};\n\tPairingRunResult centralToPeripheralResult = RunPairing(centralToPeripheral);\n\tBT_CHECK(ctx, centralToPeripheralResult.TransportOk);\n\tBT_CHECK(ctx, centralToPeripheralResult.Complete);\n\tBT_CHECK(ctx, centralToPeripheralResult.Success);\n\tBT_CHECK(ctx, centralToPeripheralResult.Authenticated);\n\tBT_CHECK(ctx, centralToPeripheralResult.Sc);\n\n\tPairingRunConfig peripheralToCentral = centralToPeripheral;\n\tperipheralToCentral.CentralReceives = OobFault::None;\n\tperipheralToCentral.PeripheralReceives = OobFault::Drop;\n\tPairingRunResult peripheralToCentralResult = RunPairing(peripheralToCentral);\n\tBT_CHECK(ctx, peripheralToCentralResult.TransportOk);\n\tBT_CHECK(ctx, peripheralToCentralResult.Complete);\n\tBT_CHECK(ctx, peripheralToCentralResult.Success);\n\tBT_CHECK(ctx, peripheralToCentralResult.Authenticated);\n\tBT_CHECK(ctx, peripheralToCentralResult.Sc);\n\n\tPairingRunConfig corrupt = centralToPeripheral;\n\tcorrupt.CentralReceives = OobFault::CorruptConfirm;\n\tPairingRunResult corruptResult = RunPairing(corrupt);\n\tBT_CHECK(ctx, !corruptResult.Success);\n\tBT_CHECK(ctx, corruptResult.FailureReason != 0);\n\tctx.End();\n}\n\n} // namespace"""
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f"{test}: OOB test replacement count {count}")
+          if text.count("TestOobFailures(ctx);") != 1:
+              raise SystemExit(f"{test}: main OOB call not unique")
+          text = text.replace(
+              "TestOobFailures(ctx);",
+              "TestOobDirectionsAndFailures(ctx);",
+              1,
+          )
+          test.write_text(text)
+          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/bluetooth/bt_smp.cpp tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
