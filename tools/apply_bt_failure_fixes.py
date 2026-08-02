@@ -155,6 +155,39 @@ replace_once(
 \tBtGattSendCompleted(kConnHdl, 1);""",
 )
 
+replace_once(
+    "tests/bluetooth/host/bt_std_services_test.cpp",
+    """bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
+{
+\tif (pSrvc == nullptr || s_ServiceCount >= 4)
+\t{
+\t\treturn false;
+\t}
+\ts_Services[s_ServiceCount++] = pSrvc;
+\treturn true;
+}""",
+    """bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
+{
+\tif (pSrvc == nullptr)
+\t{
+\t\treturn false;
+\t}
+\tfor (int i = 0; i < s_ServiceCount; i++)
+\t{
+\t\tif (s_Services[i] == pSrvc)
+\t\t{
+\t\t\treturn true;
+\t\t}
+\t}
+\tif (s_ServiceCount >= 4)
+\t{
+\t\treturn false;
+\t}
+\ts_Services[s_ServiceCount++] = pSrvc;
+\treturn true;
+}""",
+)
+
 print("Bluetooth failure-path fixes applied")
 '''
 
