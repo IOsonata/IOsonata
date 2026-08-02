@@ -60,4 +60,6 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add src/bluetooth/bt_smp.cpp tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp tools/apply_bt_smp_tx_barrier.py
           git commit -m "bt: block early SMP responses behind unsent PDUs"
+          git fetch origin bt-failure-fix-run
+          git rebase origin/bt-failure-fix-run
           git push origin HEAD:bt-failure-fix-run
