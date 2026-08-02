@@ -10,7 +10,7 @@ OPT ?= -O1
 
 CPPFLAGS += -I$(ROOT)/include -Iframework -Icontroller -Ipeer -Ilink -Ioob
 SMP_CPPFLAGS := $(CPPFLAGS) -include smp/bt_l2cap_test_override.h
-SMP_CORE_DEFINES := -DDEBUG_ENABLE -DBtSmpInit=BtSmpInitReal
+SMP_CORE_DEFINES := -DBtSmpInit=BtSmpInitReal
 SMP_TEST_RENAMES := \
 	-DBtSmpLocalIrkGet=BtSmpTestLocalIrkGet \
 	-DBtSmpLocalIdRecordSize=BtSmpTestLocalIdRecordSize \
@@ -46,7 +46,6 @@ HCI_SOURCES := \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
-SMP_DIAG_SOURCE := $(BUILD_DIR)/smp/bt_smp_dual_host_diag.cpp
 SMP_TEST_OBJ := $(BUILD_DIR)/smp/bt_smp_dual_host_test.o
 SMP_FRAMEWORK_OBJ := $(BUILD_DIR)/smp/bt_compliance.o
 SMP_CORE_OBJ := $(BUILD_DIR)/smp/bt_smp.o
@@ -102,21 +101,7 @@ $(HCI_TARGET): $(HCI_SOURCES) $(HEADERS) $(CFIFO_OBJ)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$(HCI_SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
 
-$(SMP_DIAG_SOURCE): smp/bt_smp_dual_host_test.cpp
-	@mkdir -p $(dir $@)
-	sed \
-		-e 's/centralIo <= BT_SMP_IOCAPS_KEYBOARD_DISPLAY/centralIo <= 0/' \
-		-e 's/peripheralIo <= BT_SMP_IOCAPS_KEYBOARD_DISPLAY/peripheralIo <= 0/' \
-		-e 's/mode < 3/mode < 1/' \
-		-e '/PairingRunResult result = RunPairing(cfg);/a\
-\t\tfprintf(stderr, "PAIR ci=%u pi=%u mitm=%d oob=%d periph=%d transport=%d complete=%d success=%d auth=%d sc=%d numeric=%d passkey=%d fail=0x%02x steps=%d\\n", cfg.CentralIo, cfg.PeripheralIo, cfg.Mitm, cfg.Oob, cfg.PeripheralStarts, result.TransportOk, result.Complete, result.Success, result.Authenticated, result.Sc, result.Numeric, result.Passkey, result.FailureReason, result.Steps);' \
-		-e '/PairingRunResult missingResult = RunPairing(missing);/a\
-\tfprintf(stderr, "OOB missing transport=%d complete=%d success=%d fail=0x%02x steps=%d\\n", missingResult.TransportOk, missingResult.Complete, missingResult.Success, missingResult.FailureReason, missingResult.Steps);' \
-		-e '/PairingRunResult corruptResult = RunPairing(corrupt);/a\
-\tfprintf(stderr, "OOB corrupt transport=%d complete=%d success=%d fail=0x%02x steps=%d\\n", corruptResult.TransportOk, corruptResult.Complete, corruptResult.Success, corruptResult.FailureReason, corruptResult.Steps);' \
-		$< > $@
-
-$(SMP_TEST_OBJ): $(SMP_DIAG_SOURCE) $(HEADERS)
+$(SMP_TEST_OBJ): smp/bt_smp_dual_host_test.cpp $(HEADERS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(SMP_CPPFLAGS) $(SMP_TEST_RENAMES) $(CXXFLAGS) $(SANITIZERS) \
 		-c $< -o $@
