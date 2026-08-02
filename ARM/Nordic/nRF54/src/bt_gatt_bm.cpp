@@ -555,6 +555,12 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		pSrvc->Uuid.BaseIdx = type;
 	}
 
+	// IOsonata standard service declarations are zero-initialized. SoftDevice UUID type 0 is invalid; adopted 16-bit UUIDs use the Bluetooth SIG base type.
+	if (pSrvc->bCustom == false)
+	{
+		pSrvc->Uuid.BaseIdx = BLE_UUID_TYPE_BLE;
+	}
+
 	ble_uuid.type = pSrvc->Uuid.BaseIdx;
 	ble_uuid.uuid = pSrvc->UuidSrvc;
 
