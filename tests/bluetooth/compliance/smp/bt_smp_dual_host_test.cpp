@@ -874,7 +874,15 @@ static PairingRunResult RunPairing(const PairingRunConfig &Config)
 
 		if (setup && !passkeyReplySent)
 		{
-			if (central.PasskeyDisplaySeen && peripheral.PasskeyRequestSeen)
+			if (central.PasskeyRequestSeen && peripheral.PasskeyRequestSeen)
+			{
+				// KeyboardOnly/KeyboardOnly: the user supplies one external
+				// passkey and enters the same value on both devices.
+				setup = SendPasskeyReply(&central, 123456U) &&
+					SendPasskeyReply(&peripheral, 123456U);
+				passkeyReplySent = true;
+			}
+			else if (central.PasskeyDisplaySeen && peripheral.PasskeyRequestSeen)
 			{
 				setup = SendPasskeyReply(&peripheral, central.DisplayedPasskey);
 				passkeyReplySent = true;
@@ -1042,24 +1050,37 @@ static void TestPeripheralSecurityRequest(Context &ctx)
 	ctx.End();
 }
 
-static void TestOobFailures(Context &ctx)
+static void TestOobDirectionsAndFailures(Context &ctx)
 {
 	static const Requirement req = {
-		"SMP-SC-OOB-BI-01", "Core Vol 3 Part H", "2.3.5.6.4",
-		"missing or corrupted SC OOB data cannot produce an authenticated encrypted link"
+		"SMP-SC-OOB-BV-BI-01", "Core Vol 3 Part H", "2.3.3 and 2.3.5.6.4",
+		"one-direction and bidirectional SC OOB complete, while corrupted authentication data fails"
 	};
 	ctx.Begin(req);
 
-	PairingRunConfig missing = {
+	PairingRunConfig centralToPeripheral = {
 		BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
 		BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
 		true, true, false, OobFault::Drop, OobFault::None
 	};
-	PairingRunResult missingResult = RunPairing(missing);
-	BT_CHECK(ctx, !missingResult.Success);
-	BT_CHECK(ctx, missingResult.FailureReason == BT_SMP_ERR_OOB_NOT_AVAILABLE);
+	PairingRunResult centralToPeripheralResult = RunPairing(centralToPeripheral);
+	BT_CHECK(ctx, centralToPeripheralResult.TransportOk);
+	BT_CHECK(ctx, centralToPeripheralResult.Complete);
+	BT_CHECK(ctx, centralToPeripheralResult.Success);
+	BT_CHECK(ctx, centralToPeripheralResult.Authenticated);
+	BT_CHECK(ctx, centralToPeripheralResult.Sc);
 
-	PairingRunConfig corrupt = missing;
+	PairingRunConfig peripheralToCentral = centralToPeripheral;
+	peripheralToCentral.CentralReceives = OobFault::None;
+	peripheralToCentral.PeripheralReceives = OobFault::Drop;
+	PairingRunResult peripheralToCentralResult = RunPairing(peripheralToCentral);
+	BT_CHECK(ctx, peripheralToCentralResult.TransportOk);
+	BT_CHECK(ctx, peripheralToCentralResult.Complete);
+	BT_CHECK(ctx, peripheralToCentralResult.Success);
+	BT_CHECK(ctx, peripheralToCentralResult.Authenticated);
+	BT_CHECK(ctx, peripheralToCentralResult.Sc);
+
+	PairingRunConfig corrupt = centralToPeripheral;
 	corrupt.CentralReceives = OobFault::CorruptConfirm;
 	PairingRunResult corruptResult = RunPairing(corrupt);
 	BT_CHECK(ctx, !corruptResult.Success);
@@ -1243,6 +1264,6 @@ int main()
 	TestOobChannelIsolation(ctx);
 	TestAssociationMatrix(ctx);
 	TestPeripheralSecurityRequest(ctx);
-	TestOobFailures(ctx);
+	TestOobDirectionsAndFailures(ctx);
 	return ctx.Finish(false);
 }

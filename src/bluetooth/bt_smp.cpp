@@ -973,11 +973,11 @@ static uint8_t SmpSelectModel(uint8_t InitIo, uint8_t RespIo, bool Mitm, bool Oo
 // Copy the pending OOB material into the link context of an OOB pairing.
 static bool SmpOobCtxLoad(BtSmpLink_t *pLink)
 {
-	// This implementation needs both local and peer SC OOB data. A partial
-	// set cannot complete both f4 verification and the f6 ra/rb inputs, so
-	// reject it during feature exchange with OOB Not Available rather than
-	// failing later with an unspecified crypto error.
-	if (!s_SmpOob.bLocalValid || !s_SmpOob.bPeerValid)
+	// LE Secure Connections supports OOB in either or both directions. The
+	// local set commits our public key; the peer set authenticates the peer.
+	// At least one must exist for this device to select the OOB model, but a
+	// one-direction exchange is valid and uses zero for the absent peer r.
+	if (!s_SmpOob.bLocalValid && !s_SmpOob.bPeerValid)
 	{
 		return false;
 	}
@@ -3270,8 +3270,10 @@ static int SmpCryptoEcdh(BtSmpLink_t *pLink,
 	{
 		return BT_SMP_CRYPTO_FAIL;
 	}
+	uint8_t *pKeyCtx = (SmpOobReservedFor(pLink) && s_SmpOob.bLocalValid) ?
+						 s_SmpOob.EcdhKeyCtx : pLink->Ctx.EcdhKeyCtx;
 	return CryptoStatusToSmp(s_pCryptoEcdh->Agree(CRYPTO_CURVE_P256,
-												  pLink->Ctx.EcdhKeyCtx,
+												  pKeyCtx,
 												  pPeerPubKey, pDhKey));
 }
 
