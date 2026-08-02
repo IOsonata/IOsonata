@@ -9,6 +9,7 @@ CXX ?= g++
 OPT ?= -O1
 
 CPPFLAGS += -I$(ROOT)/include -Iframework -Icontroller -Ipeer -Ilink -Ioob
+SMP_CPPFLAGS := $(CPPFLAGS) -include smp/bt_l2cap_test_override.h
 CXXSTD := $(shell for s in gnu++23 gnu++2b gnu++20; do \
 	if $(CXX) -std=$$s -x c++ -fsyntax-only /dev/null >/dev/null 2>&1; then \
 		echo $$s; break; fi; done)
@@ -51,6 +52,7 @@ HEADERS := \
 	$(wildcard peer/*.h) \
 	$(wildcard link/*.h) \
 	$(wildcard oob/*.h) \
+	$(wildcard smp/*.h) \
 	$(wildcard $(ROOT)/include/bluetooth/*.h) \
 	$(wildcard $(ROOT)/include/crypto/*.h) \
 	$(ROOT)/include/device.h \
@@ -91,7 +93,7 @@ $(HCI_TARGET): $(HCI_SOURCES) $(HEADERS) $(CFIFO_OBJ)
 
 $(SMP_TARGET): $(SMP_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
+	$(CXX) $(SMP_CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$(SMP_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 clean:
