@@ -74,23 +74,18 @@ void BtGattClientNotified""",
 
 replace_once(
     "tests/bluetooth/host/bt_att_adversarial_test.cpp",
-    """bool s_PeerEnabled = false;
-bool s_CccdSetResult = true;
-int s_CccdSetCount = 0;""",
-    """bool s_PeerEnabled = false;
-bool s_CccdSetResult = true;
-bool s_CccdCanStore = true;
-int s_CccdSetCount = 0;""",
-)
-
-replace_once(
-    "tests/bluetooth/host/bt_att_adversarial_test.cpp",
     """\ts_CccdSetCount = 0;
 \tstd::memset(rsp, 0, sizeof(rsp));
 \treq[0] = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;""",
     """\ts_CccdSetResult = true;
-\ts_CccdCanStore = false;
 \ts_CccdSetCount = 0;
+\ts_Peer.Conn.NbCccd = BT_GATT_CCCD_STATE_MAX;
+\tfor (uint8_t i = 0; i < BT_GATT_CCCD_STATE_MAX; i++)
+\t{
+\t\ts_Peer.Conn.Cccd[i].Hdl = (uint16_t)(0x3000 + i);
+\t\ts_Peer.Conn.Cccd[i].Value =
+\t\t\tBT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION;
+\t}
 \tstd::memset(rsp, 0, sizeof(rsp));
 \treq[0] = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;""",
 )
@@ -104,33 +99,10 @@ replace_once(
 \ts_CccdSetResult = true;""",
     """\tBT_CHECK(s_Test, rsp[4] == kInsufficientResources);
 \tBT_CHECK(s_Test, s_CccdSetCount == 0);
+\tBT_CHECK(s_Test, s_Peer.Conn.NbCccd == BT_GATT_CCCD_STATE_MAX);
 
 \ts_PeerEnabled = false;
-\ts_CccdCanStore = true;
 \ts_CccdSetResult = true;""",
-)
-
-replace_once(
-    "tests/bluetooth/host/bt_att_adversarial_test.cpp",
-    """bool BtGattCccdSet(uint16_t, uint16_t, uint16_t)
-{
-\ts_CccdSetCount++;
-\treturn s_CccdSetResult;
-}
-
-void BtGattClientNotified""",
-    """bool BtGattCccdSet(uint16_t, uint16_t, uint16_t)
-{
-\ts_CccdSetCount++;
-\treturn s_CccdSetResult;
-}
-
-bool BtGattCccdCanStore(uint16_t, uint16_t, uint16_t)
-{
-\treturn s_CccdCanStore;
-}
-
-void BtGattClientNotified""",
 )
 
 print("Bluetooth failure-path fixes applied")
