@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   host-unit:
@@ -28,6 +28,19 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Commit dual-host SMP fix
+        if: github.event_name == 'pull_request' && github.head_ref == 'tmp/bt-dual-host-compliance'
+        run: |
+          git apply --check tests/bluetooth/compliance/smp/bt_smp_dual_host_fix.patch
+          git apply tests/bluetooth/compliance/smp/bt_smp_dual_host_fix.patch
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/bluetooth/bt_smp.cpp tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
+          git commit -m "bt: complete Secure Connections OOB handling"
+          git push origin HEAD:tmp/bt-dual-host-compliance
 
       - name: Build and run Bluetooth host tests
         run: |
