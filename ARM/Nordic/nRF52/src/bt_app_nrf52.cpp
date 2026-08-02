@@ -1216,7 +1216,7 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
     // Which persistence this build uses. This path is the nRF5 SDK
     // peer_manager, which stores bonds through FDS on top of fstorage. It
     // never reaches bt_pds or Nvm; that is the SDC path (bt_app_sdc.cpp,
-    // BtSmpBondSdcInit). Printed so a persistence problem is not chased in
+    // BtSmpBondNvmInit). Printed so a persistence problem is not chased in
     // the wrong layer.
     DEBUG_PRINTF("STORE: nRF5 SDK peer_manager -> fds -> fstorage\r\n");
 #ifdef NRF_SD_BLE_API_VERSION

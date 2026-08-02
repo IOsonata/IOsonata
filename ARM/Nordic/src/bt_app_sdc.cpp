@@ -71,7 +71,7 @@ SOFTWARE.
 #include "bluetooth/services/bt_dis.h"
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_hci_ctlr.h"
-#include "bt_pds_sdc.h"				// BtSmpBondSdcInit (flash-backed bond persistence)
+#include "bluetooth/bt_pds.h"		// BtSmpBondNvmInit (bond persistence on an Nvm)
 #include "nrf_mpsl.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
@@ -819,7 +819,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		// SDK peer_manager and fstorage. Printed so a persistence problem is
 		// not chased in the wrong layer.
 		STORE_PRINTF("STORE: bt_pds -> Nvm (SDC, no fstorage)\r\n");
-		BtSmpBondSdcInit();
+		BtSmpBondNvmInit();
 	}
 	else
 	{

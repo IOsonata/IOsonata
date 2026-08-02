@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	bt_smp_bond_sdc.cpp
+@file	bt_smp_bond_nvm.cpp
 
-@brief	Persistent bond storage glue for the SoftDevice Controller (SDC) builds.
+@brief	Persistent bond storage glue over an Nvm.
 
 		The generic SMP bond table (src/bluetooth/bt_smp_bond.cpp) keeps bonds
 		in RAM and calls the weak hooks BtSmpBondSave / BtSmpBondLoad /
@@ -13,8 +13,14 @@
 		    bt_smp_bond.cpp (RAM table, weak hooks)
 		      -> these strong hooks (slot <-> bt_pds key)
 		        -> bt_pds.cpp (log structured KV over a region)
-		          -> Nvm (nvm_nrfx.cpp: NVMC on nRF52, RRAMC on nRF54L, and
-		             the radio arbitration that goes with either)
+		          -> Nvm (the part's driver: NVMC on nRF52, RRAMC on nRF54L,
+		             and the radio arbitration that goes with either)
+
+		This file names no vendor and includes no vendor header. It reaches
+		the memory through NvmIntrf and the linker regions, so which driver
+		answers is settled at link time. It lived under ARM/Nordic/src as
+		bt_smp_bond_sdc.cpp until the store itself became generic, and the
+		name outlasted the reason for it.
 
 		The memory is brought up here because this is where the store is
 		mounted. Nothing target specific is left to do beyond saying where the
@@ -43,7 +49,6 @@
 #include "storage/nvm_intrf.h"
 #include "storage/nvm_region.h"
 #include "app_evt_handler.h"
-#include "bt_pds_sdc.h"				// declares BtSmpBondSdcInit with C linkage
 
 // Comment out to silence. Deliberately not guarded on NDEBUG: the release
 // build is where the store has to be watched, and a silent mount failure is
@@ -70,7 +75,7 @@
 
 static bool s_PdsReady;
 
-// Set by BtSmpBondSdcInit, which the application layer calls only when the
+// Set by BtSmpBondNvmInit, which the application layer calls only when the
 // device is secure. Linking this file overrides the weak RAM-only bond hooks
 // for every build, so without this arming a broadcaster or an unsecured
 // application would still mount the store, and format a blank region, the
@@ -444,9 +449,9 @@ void BtSmpBondErase(void)
 //   2. Bring up the NVM implementation and load any stored bonds into the RAM table
 //      now, so a reconnect right after boot finds its LTK.
 // Returns 0 on success, negative errno on implementation init failure.
-int BtSmpBondSdcInit(void)
+int BtSmpBondNvmInit(void)
 {
-	BOND_PRINTF("PDS: BtSmpBondSdcInit, arming the store\r\n");
+	BOND_PRINTF("PDS: BtSmpBondNvmInit, arming the store\r\n");
 
 	if (BtSmpBondSlotCount() > BT_SMP_BOND_PEND_MAX)
 	{

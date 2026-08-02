@@ -641,16 +641,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_pds.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_pds_nvm_mpsl.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/bt_pds_nvm_mpsl.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_pds_sdc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/bt_pds_sdc.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/bt_peer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_peer.h</locationURI>
@@ -1416,16 +1406,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_pds.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_pds_bm.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/bt_pds_bm.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_pds_nvm_rramc_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_pds_nvm_rramc_sdc.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_peer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_peer.cpp</locationURI>
@@ -1466,9 +1446,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_smp_bond_sdc.cpp</name>
+			<name>src/bluetooth/bt_smp_bond_nvm.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_smp_bond_sdc.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond_nvm.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_uuid.cpp</name>
