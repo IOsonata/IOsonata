@@ -18,7 +18,7 @@ diff --git a/src/bluetooth/bt_smp.cpp b/src/bluetooth/bt_smp.cpp
  	{
  		return false;
  	}
-@@ -468,11 +468,15 @@ static int SmpCryptoEcdh(BtSmpLink_t *pLink,
+@@ -3266,11 +3266,14 @@ static int SmpCryptoEcdh(BtSmpLink_t *pLink,
  	{
  		return BT_SMP_CRYPTO_FAIL;
  	}
@@ -33,7 +33,7 @@ diff --git a/src/bluetooth/bt_smp.cpp b/src/bluetooth/bt_smp.cpp
 diff --git a/tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp b/tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
 --- a/tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
 +++ b/tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
-@@ -870,7 +870,13 @@ static PairingRunResult RunPairing(const PairingRunConfig &Config)
+@@ -870,7 +870,15 @@ static PairingRunResult RunPairing(const PairingRunConfig &Config)
  
  		if (setup && !passkeyReplySent)
  		{
@@ -50,7 +50,7 @@ diff --git a/tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp b/tests/bl
  			{
  				setup = SendPasskeyReply(&peripheral, central.DisplayedPasskey);
  				passkeyReplySent = true;
-@@ -1037,28 +1043,39 @@ static void TestPeripheralSecurityRequest(Context &ctx)
+@@ -1037,28 +1045,39 @@ static void TestPeripheralSecurityRequest(Context &ctx)
  	ctx.End();
  }
  
@@ -96,7 +96,7 @@ diff --git a/tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp b/tests/bl
  	corrupt.CentralReceives = OobFault::CorruptConfirm;
  	PairingRunResult corruptResult = RunPairing(corrupt);
  	BT_CHECK(ctx, !corruptResult.Success);
-@@ -1162,7 +1179,7 @@ int main()
+@@ -1162,7 +1181,7 @@ int main()
  	TestOobChannelIsolation(ctx);
  	TestAssociationMatrix(ctx);
  	TestPeripheralSecurityRequest(ctx);
