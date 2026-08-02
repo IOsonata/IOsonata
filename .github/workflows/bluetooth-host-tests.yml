@@ -1,6 +1,15 @@
 name: Bluetooth host tests
 
 on:
+  push:
+    branches:
+      - bt_update
+      - bt_conformance
+    paths:
+      - "include/bluetooth/**"
+      - "src/bluetooth/**"
+      - "tests/bluetooth/**"
+      - ".github/workflows/bluetooth-host-tests.yml"
   pull_request:
     paths:
       - "include/bluetooth/**"
@@ -10,47 +19,42 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   host-unit:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cc: gcc
+            cxx: g++
+            opt: -O0
+          - cc: gcc
+            cxx: g++
+            opt: -O2
+          - cc: clang
+            cxx: clang++
+            opt: -O0
+          - cc: clang
+            cxx: clang++
+            opt: -O2
+
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-      - name: Commit final OOB sequencing fix
-        if: github.event_name == 'pull_request' && github.head_ref == 'tmp/bt-dual-host-compliance'
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build and run Bluetooth host tests
         run: |
-          python3 <<'PY'
-          from pathlib import Path
+          make -C tests/bluetooth/host clean test \
+            CC=${{ matrix.cc }} \
+            CXX=${{ matrix.cxx }} \
+            OPT=${{ matrix.opt }}
 
-          def replace_once(path, old, new):
-              text = path.read_text()
-              if text.count(old) != 1:
-                  raise SystemExit(f"{path}: replacement not unique")
-              path.write_text(text.replace(old, new, 1))
-
-          smp = Path('src/bluetooth/bt_smp.cpp')
-          replace_once(
-              smp,
-              """\t\tif (rc == BT_SMP_CRYPTO_OK)\n\t\t{\n\t\t\t// OOB key generation happened before pairing. No crypto completion\n\t\t\t// callback will fire, so send the committed public key here.\n\t\t\tSmpSendLocalPubKey(pDev, pLink, ConnHdl);\n\t\t}\n\t\telse if (rc == BT_SMP_CRYPTO_FAIL)\n""",
-              """\t\tif (rc == BT_SMP_CRYPTO_FAIL)\n""",
-          )
-
-          test = Path('tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp')
-          replace_once(
-              test,
-              """\tresult.Passkey = (central.PasskeyDisplaySeen && peripheral.PasskeyRequestSeen) ||\n\t\t(peripheral.PasskeyDisplaySeen && central.PasskeyRequestSeen);\n""",
-              """\tresult.Passkey = (central.PasskeyDisplaySeen && peripheral.PasskeyRequestSeen) ||\n\t\t(peripheral.PasskeyDisplaySeen && central.PasskeyRequestSeen) ||\n\t\t(central.PasskeyRequestSeen && peripheral.PasskeyRequestSeen);\n""",
-          )
-          PY
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/bluetooth/bt_smp.cpp tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
-          git commit -m "bt: prevent duplicate OOB public key transmission"
-          git push origin HEAD:tmp/bt-dual-host-compliance
       - name: Build and run Bluetooth compliance tests
         run: |
           make -C tests/bluetooth/compliance clean test \
-            CC=gcc CXX=g++ OPT=-O0
+            CC=${{ matrix.cc }} \
+            CXX=${{ matrix.cxx }} \
+            OPT=${{ matrix.opt }}
