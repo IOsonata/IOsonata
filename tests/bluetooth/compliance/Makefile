@@ -1,12 +1,21 @@
 ROOT := ../../..
 BUILD_DIR := build
-TARGET := $(BUILD_DIR)/bt_hci_compliance_test
+HCI_TARGET := $(BUILD_DIR)/bt_hci_compliance_test
+SMP_TARGET := $(BUILD_DIR)/bt_smp_dual_host_test
+TARGETS := $(HCI_TARGET) $(SMP_TARGET)
 
 CC ?= gcc
 CXX ?= g++
 OPT ?= -O1
 
-CPPFLAGS += -I$(ROOT)/include -Iframework -Icontroller -Ipeer
+CPPFLAGS += -I$(ROOT)/include -Iframework -Icontroller -Ipeer -Ilink -Ioob
+SMP_CPPFLAGS := $(CPPFLAGS) -include smp/bt_l2cap_test_override.h
+SMP_CORE_DEFINES := -DDEBUG_ENABLE -DBtSmpInit=BtSmpInitReal
+SMP_TEST_RENAMES := \
+	-DBtSmpLocalIrkGet=BtSmpTestLocalIrkGet \
+	-DBtSmpLocalIdRecordSize=BtSmpTestLocalIdRecordSize \
+	-DBtSmpLocalIdSerialize=BtSmpTestLocalIdSerialize \
+	-DBtSmpLocalIdRestore=BtSmpTestLocalIdRestore
 CXXSTD := $(shell for s in gnu++23 gnu++2b gnu++20; do \
 	if $(CXX) -std=$$s -x c++ -fsyntax-only /dev/null >/dev/null 2>&1; then \
 		echo $$s; break; fi; done)
@@ -28,7 +37,7 @@ SANITIZERS ?= -fsanitize=address,undefined -fno-sanitize-recover=all
 TEST_ENV := ASAN_OPTIONS=$(ASAN_RUNTIME_OPTIONS) \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
 
-SOURCES := \
+HCI_SOURCES := \
 	hci/bt_hci_compliance_test.cpp \
 	framework/bt_compliance.cpp \
 	framework/bt_virtual_clock.cpp \
@@ -37,11 +46,28 @@ SOURCES := \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
+SMP_DIAG_SOURCE := $(BUILD_DIR)/smp/bt_smp_dual_host_diag.cpp
+SMP_TEST_OBJ := $(BUILD_DIR)/smp/bt_smp_dual_host_test.o
+SMP_FRAMEWORK_OBJ := $(BUILD_DIR)/smp/bt_compliance.o
+SMP_CORE_OBJ := $(BUILD_DIR)/smp/bt_smp.o
+SMP_AES_OBJ := $(BUILD_DIR)/smp/crypto_softaes.o
+SMP_DEVICE_OBJ := $(BUILD_DIR)/smp/device.o
+SMP_DEVICE_INTRF_OBJ := $(BUILD_DIR)/smp/device_intrf.o
+SMP_STUB_OBJ := $(BUILD_DIR)/smp/bt_smp_test_stubs.o
+SMP_OBJECTS := $(SMP_TEST_OBJ) $(SMP_FRAMEWORK_OBJ) $(SMP_CORE_OBJ) \
+	$(SMP_AES_OBJ) $(SMP_DEVICE_OBJ) $(SMP_DEVICE_INTRF_OBJ) $(SMP_STUB_OBJ)
+
 HEADERS := \
 	$(wildcard framework/*.h) \
 	$(wildcard controller/*.h) \
 	$(wildcard peer/*.h) \
+	$(wildcard link/*.h) \
+	$(wildcard oob/*.h) \
+	$(wildcard smp/*.h) \
 	$(wildcard $(ROOT)/include/bluetooth/*.h) \
+	$(wildcard $(ROOT)/include/crypto/*.h) \
+	$(ROOT)/include/device.h \
+	$(ROOT)/include/device_intrf.h \
 	$(ROOT)/include/istddef.h \
 	$(ROOT)/include/syslog.h
 
@@ -49,11 +75,16 @@ HEADERS := \
 
 all: test
 
-test: $(TARGET)
-	$(TEST_ENV) ./$(TARGET)
+test: $(TARGETS)
+	@set -e; \
+	for target in $(TARGETS); do \
+		echo "RUN $$target"; \
+		$(TEST_ENV) ./$$target; \
+	done
 
-strict: $(TARGET)
-	BT_COMPLIANCE_STRICT=1 $(TEST_ENV) ./$(TARGET)
+strict: $(TARGETS)
+	BT_COMPLIANCE_STRICT=1 $(TEST_ENV) ./$(HCI_TARGET)
+	$(TEST_ENV) ./$(SMP_TARGET)
 
 # cfifo is C, not C++: it uses C11 atomics that a C++ compiler rejects. The
 # controller layer needs it, so it is built as C and linked in.
@@ -66,10 +97,57 @@ $(CFIFO_OBJ): $(ROOT)/src/cfifo.c
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SANITIZERS) -c $< -o $@
 
-$(TARGET): $(SOURCES) $(HEADERS) $(CFIFO_OBJ)
+$(HCI_TARGET): $(HCI_SOURCES) $(HEADERS) $(CFIFO_OBJ)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
-		$(SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
+		$(HCI_SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(SMP_DIAG_SOURCE): smp/bt_smp_dual_host_test.cpp
+	@mkdir -p $(dir $@)
+	sed \
+		-e 's/centralIo <= BT_SMP_IOCAPS_KEYBOARD_DISPLAY/centralIo <= 0/' \
+		-e 's/peripheralIo <= BT_SMP_IOCAPS_KEYBOARD_DISPLAY/peripheralIo <= 0/' \
+		-e 's/mode < 3/mode < 1/' \
+		-e '/PairingRunResult result = RunPairing(cfg);/a\
+\t\tfprintf(stderr, "PAIR ci=%u pi=%u mitm=%d oob=%d periph=%d transport=%d complete=%d success=%d auth=%d sc=%d numeric=%d passkey=%d fail=0x%02x steps=%d\\n", cfg.CentralIo, cfg.PeripheralIo, cfg.Mitm, cfg.Oob, cfg.PeripheralStarts, result.TransportOk, result.Complete, result.Success, result.Authenticated, result.Sc, result.Numeric, result.Passkey, result.FailureReason, result.Steps);' \
+		-e '/PairingRunResult missingResult = RunPairing(missing);/a\
+\tfprintf(stderr, "OOB missing transport=%d complete=%d success=%d fail=0x%02x steps=%d\\n", missingResult.TransportOk, missingResult.Complete, missingResult.Success, missingResult.FailureReason, missingResult.Steps);' \
+		-e '/PairingRunResult corruptResult = RunPairing(corrupt);/a\
+\tfprintf(stderr, "OOB corrupt transport=%d complete=%d success=%d fail=0x%02x steps=%d\\n", corruptResult.TransportOk, corruptResult.Complete, corruptResult.Success, corruptResult.FailureReason, corruptResult.Steps);' \
+		$< > $@
+
+$(SMP_TEST_OBJ): $(SMP_DIAG_SOURCE) $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(SMP_CPPFLAGS) $(SMP_TEST_RENAMES) $(CXXFLAGS) $(SANITIZERS) \
+		-c $< -o $@
+
+$(SMP_FRAMEWORK_OBJ): framework/bt_compliance.cpp $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(SMP_CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(SMP_CORE_OBJ): $(ROOT)/src/bluetooth/bt_smp.cpp $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(SMP_CPPFLAGS) $(SMP_CORE_DEFINES) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(SMP_AES_OBJ): $(ROOT)/src/crypto/crypto_softaes.cpp $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(SMP_DEVICE_OBJ): $(ROOT)/src/device.cpp $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(SMP_CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(SMP_DEVICE_INTRF_OBJ): $(ROOT)/src/device_intrf.cpp $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(SMP_CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(SMP_STUB_OBJ): smp/bt_smp_test_stubs.cpp $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(SMP_CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(SMP_TARGET): $(SMP_OBJECTS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(SMP_OBJECTS) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 clean:
 	rm -rf $(BUILD_DIR)
