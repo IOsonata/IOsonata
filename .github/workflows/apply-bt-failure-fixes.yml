@@ -64,3 +64,5 @@ jobs:
           git add -A
           git commit -m "bt: harden failure paths and adversarial tests"
           git push origin HEAD:${TARGET_BRANCH}
+
+# PR trigger for the one-shot validation branch.
