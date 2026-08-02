@@ -128,9 +128,9 @@ bool VirtualPeer::ReadHostL2cap(uint16_t *pCid, void *pPayload, size_t PayloadCa
 				continue;
 			}
 
-			vHostExpected = static_cast<uint16_t>(sizeof(BtL2CapHdr_t) |
-				(static_cast<uint16_t>(pAcl->Data[0]) |
-				 (static_cast<uint16_t>(pAcl->Data[1]) << 8)));
+			uint16_t l2capPayloadLen = static_cast<uint16_t>(pAcl->Data[0]) |
+				(static_cast<uint16_t>(pAcl->Data[1]) << 8);
+			vHostExpected = static_cast<uint16_t>(sizeof(BtL2CapHdr_t) + l2capPayloadLen);
 			if (vHostExpected > sizeof(vHostBuffer) || pAcl->Hdr.Len > vHostExpected)
 			{
 				continue;
