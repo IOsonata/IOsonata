@@ -20,6 +20,7 @@
 // Records CCCD writes reaching the GATT layer, so a test can assert that a
 // malformed CCCD command never gets there.
 int g_CccdSetCount = 0;
+bool g_CccdCanStore = true;
 uint16_t g_CccdSetVal = 0;
 // Error the stubbed GATT value check reports. The real check lives in
 // bt_gatt.cpp and has its own suite; here it is forced so the ATT layer's
@@ -54,6 +55,10 @@ bool BtGapConnSecGet(uint16_t, BtConnSec_t *) { return false; }
 
 uint16_t BtGattCccdGet(uint16_t, uint16_t) { return 0; }
 uint8_t BtGattCccdValueError(BtGattChar_t *, uint16_t) { return g_CccdWriteErr; }
+bool BtGattCccdCanStore(uint16_t, uint16_t, uint16_t)
+{
+	return g_CccdCanStore;
+}
 bool BtGattCccdSet(uint16_t, uint16_t, uint16_t Value)
 {
 	++g_CccdSetCount;

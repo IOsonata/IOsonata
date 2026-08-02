@@ -102,9 +102,19 @@ typedef struct __Bt_Device {
 	int				NbSrvc;						//!< Number of services in the Services array
 	BtGattDBSrvc_t	Services[BT_DEV_SERVICE_MAXCNT];	//!< Services: exposed if local, discovered if remote
 	BtDevDiscState_t Discovery;					//!< Per-peer discovery cursor (remote role only)
-	void			*TxPendCh[BT_DEV_TXPEND_MAX];//!< Ring of chars with a notification/indication in flight (native-host TX-complete attribution)
+	//!< Ring of HCI ACL packet groups in flight on this link, in send order.
+	//!< One entry per operation, not per packet: pChar names the characteristic
+	//!< whose TxCompleteCB is due when the group finishes, or is null for
+	//!< packets another layer sent (ATT responses, SMP, L2CAP signaling) which
+	//!< own no callback but do consume controller completions. Remain counts
+	//!< the HCI packets of that group still outstanding, so a fragmented
+	//!< notification fires once, on its last fragment.
+	struct {
+		void		*pChar;						//!< Owning characteristic, null when untracked
+		uint16_t	Remain;						//!< HCI packets of this group not yet completed
+	} TxPend[BT_DEV_TXPEND_MAX];
 	uint8_t			TxPendHead;					//!< Ring read index
-	uint8_t			TxPendCount;				//!< Ring occupancy
+	uint8_t			TxPendCount;				//!< Ring occupancy in entries
 } BtDevice_t;
 
 #ifdef __cplusplus

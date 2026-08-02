@@ -86,7 +86,7 @@ BtAppData_t g_BtAppData = {
 		.NbSrvc     = 0,
 		.Services   = {},
 		.Discovery  = {},
-		.TxPendCh   = {},
+		.TxPend     = {},
 		.TxPendHead = 0,
 		.TxPendCount = 0,
 	},

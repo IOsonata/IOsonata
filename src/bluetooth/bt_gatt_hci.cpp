@@ -111,12 +111,25 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 		acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
 		uint32_t aclLen = acl->Hdr.Len + sizeof(BtHciACLDataPacketHdr_t);
+
+		// Reserve before the send: a ring with no room refuses the
+		// notification rather than transmitting a value whose completion
+		// cannot be attributed to it.
+		uint16_t max = pPeer->pHciDev->AclMaxLen;
+		uint16_t nbpkt = max > 0 ?
+				(uint16_t)((acl->Hdr.Len + max - 1) / max) : (uint16_t)1;
+
+		if (BtGattTxPendReserve(ConnHdl, pChar, nbpkt) == false)
+		{
+			return false;
+		}
+
 		if (BtHciSendAcl(pPeer->pHciDev, acl) == aclLen)
 		{
-			//acl->Hdr.Len + sizeof(acl->Hdr);
-			BtGattTxPendingAdd(ConnHdl, pChar);
 			return true;
 		}
+
+		BtGattTxPendRelease(ConnHdl);
 	}
 
 	return false;

@@ -248,6 +248,34 @@ uint8_t BtGattCccdWriteError(uint16_t CccdHdl, uint16_t Value)
 	return BtGattCccdValueError(BtGattFindCharByCccd(CccdHdl), Value);
 }
 
+// Whether BtGattCccdSet would be able to store this value, asked before the
+// write is acknowledged. Clearing a subscription always fits, and so does
+// changing one that already has a slot on this link; only a new non-zero
+// subscription can run the per-link table out of room. Answering a Write
+// Response for a subscription that was then dropped leaves the client believing
+// it is subscribed, so the ATT layer asks first and answers Insufficient
+// Resources instead.
+bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
+{
+	if (Value == 0)
+	{
+		return true;
+	}
+
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+	if (pConn == nullptr)
+	{
+		return false;
+	}
+
+	if (BtGattCccdFind(pConn, CccdHdl, false) != nullptr)
+	{
+		return true;
+	}
+
+	return pConn->Conn.NbCccd < BT_GATT_CCCD_STATE_MAX;
+}
+
 bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
@@ -322,17 +350,42 @@ void BtGattCccdClear(uint16_t ConnHdl)
 
 	uint8_t n = pConn->Conn.NbCccd;
 	uint16_t hdl[BT_GATT_CCCD_STATE_MAX];
+	uint16_t val[BT_GATT_CCCD_STATE_MAX];
 
 	for (uint8_t i = 0; i < n; i++)
 	{
 		hdl[i] = pConn->Conn.Cccd[i].Hdl;
+		val[i] = pConn->Conn.Cccd[i].Value;
 	}
 
 	pConn->Conn.NbCccd = 0;
 
 	for (uint8_t i = 0; i < n; i++)
 	{
-		BtGattCccdUpdateMirror(BtGattFindCharByCccd(hdl[i]));
+		BtGattChar_t *pChar = BtGattFindCharByCccd(hdl[i]);
+
+		BtGattCccdUpdateMirror(pChar);
+
+		if (pChar == nullptr)
+		{
+			continue;
+		}
+
+		// Report the disable edge the same way a write to zero would. An
+		// application that starts a producer or takes a per-client resource on
+		// the enable edge has no other way to learn the link is gone, and was
+		// left holding that state after every disconnect.
+		if ((val[i] & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0 &&
+			pChar->SetNotifCB != nullptr)
+		{
+			pChar->SetNotifCB(pChar, false, ConnHdl);
+		}
+
+		if ((val[i] & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0 &&
+			pChar->SetIndCB != nullptr)
+		{
+			pChar->SetIndCB(pChar, false, ConnHdl);
+		}
 	}
 }
 
@@ -375,13 +428,16 @@ bool BtGattCharIndicateEnabled(uint16_t ConnHdl, BtGattChar_t *pChar)
 			BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
 }
 
+// Forward: defined with the TX-pending ring below, used by the send path.
+static uint16_t BtGattTxPktCount(BtDevice_t *pConn, uint16_t AclLen);
+
 // Build and send a server-initiated Handle Value PDU - Notification (0x1B) or
 // Indication (0x1D) - to the peer on ConnHdl. The two PDUs share the same
 // {opcode, value handle, value[]} wire layout. The value is clamped to
 // ATT_MTU - 3 and to the ACL transmit buffer. Returns the number of value
 // bytes sent, or -1 if the link is unknown or the transport refused the packet.
 static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValHdl,
-								 const void *pVal, size_t Len)
+								 const void *pVal, size_t Len, BtGattChar_t *pOwner)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 	if (pConn == nullptr || pConn->pHciDev == nullptr || pConn->pHciDev->SendData == nullptr)
@@ -427,34 +483,119 @@ static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValH
 	l2pdu->Hdr.Len = 1 + 2 + Len;	// opcode + value handle + value
 	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
+	// Reserve the packets this PDU becomes before any of it goes out. A ring
+	// with no room refuses the send outright rather than transmitting a value
+	// whose completion can never be attributed.
+	uint16_t nbpkt = BtGattTxPktCount(pConn, acl->Hdr.Len);
+
+	if (BtGattTxPendReserve(ConnHdl, pOwner, nbpkt) == false)
+	{
+		return -1;
+	}
+
 	uint32_t sent = BtHciSendAcl(pConn->pHciDev, acl);
 	if (sent == 0)
 	{
+		BtGattTxPendRelease(ConnHdl);
 		return -1;
 	}
 
 	return (int)Len;
 }
 
-// Record a characteristic with a notification/indication just handed to the
-// transport, so its TxCompleteCB can be fired in send order when the controller
-// reports the packet complete. Only tracked when the char wants the callback.
-void BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar)
+// Reserve a group of NbPkt HCI packets on this link before they are handed to
+// the transport, owned by pChar. Reservation comes first because a full ring
+// has to stop the send: the old code sent the notification and then dropped the
+// tracking, so the caller was told the value went out and the completion
+// callback never came.
+//
+// A characteristic with no TxCompleteCB still takes a slot. It consumes
+// controller completions like any other traffic, and leaving it out was enough
+// on its own to walk the ring out of step with the link.
+bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar, uint16_t NbPkt)
 {
-	if (pChar == nullptr || pChar->TxCompleteCB == nullptr)
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+
+	if (pConn == nullptr || NbPkt == 0)
 	{
-		return;
+		return false;
 	}
 
-	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
-	if (pConn == nullptr || pConn->TxPendCount >= BT_DEV_TXPEND_MAX)
+	if (pConn->TxPendCount >= BT_DEV_TXPEND_MAX)
 	{
-		return;
+		return false;
 	}
 
 	uint8_t idx = (uint8_t)((pConn->TxPendHead + pConn->TxPendCount) % BT_DEV_TXPEND_MAX);
-	pConn->TxPendCh[idx] = pChar;
+	pConn->TxPend[idx].pChar = pChar;
+	pConn->TxPend[idx].Remain = NbPkt;
 	pConn->TxPendCount++;
+
+	return true;
+}
+
+// Give back the reservation the transport then refused. Only the most recent
+// one can be released, which is all the send paths need: they reserve, send,
+// and release on failure with nothing in between.
+void BtGattTxPendRelease(uint16_t ConnHdl)
+{
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+
+	if (pConn == nullptr || pConn->TxPendCount == 0)
+	{
+		return;
+	}
+
+	pConn->TxPendCount--;
+}
+
+// Account for HCI packets this link sent that carry no GATT completion: ATT
+// responses, SMP PDUs, L2CAP signaling. They own no callback but the controller
+// still reports them, and without an entry of their own their completions drain
+// the ring and fire someone else's callback early.
+//
+// Consecutive untracked packets coalesce into one entry, so ordinary request
+// and response traffic does not consume the ring. If there is no room at all
+// the count is added to the last entry instead of being dropped: that delays a
+// callback rather than firing it early, which is the safe direction to err.
+void BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
+{
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+
+	if (pConn == nullptr || NbPkt == 0)
+	{
+		return;
+	}
+
+	if (pConn->TxPendCount > 0)
+	{
+		uint8_t tail = (uint8_t)((pConn->TxPendHead + pConn->TxPendCount - 1) %
+								 BT_DEV_TXPEND_MAX);
+
+		if (pConn->TxPend[tail].pChar == nullptr ||
+			pConn->TxPendCount >= BT_DEV_TXPEND_MAX)
+		{
+			pConn->TxPend[tail].Remain = (uint16_t)(pConn->TxPend[tail].Remain + NbPkt);
+			return;
+		}
+	}
+
+	BtGattTxPendReserve(ConnHdl, nullptr, NbPkt);
+}
+
+// Number of HCI ACL packets a PDU of AclLen octets is sent as. The controller
+// reports one completion per packet, so this is what a send has to reserve.
+static uint16_t BtGattTxPktCount(BtDevice_t *pConn, uint16_t AclLen)
+{
+	if (pConn == nullptr || pConn->pHciDev == nullptr ||
+		pConn->pHciDev->AclMaxLen == 0 || AclLen == 0)
+	{
+		return 1;
+	}
+
+	uint16_t max = pConn->pHciDev->AclMaxLen;
+
+	return (uint16_t)((AclLen + max - 1) / max);
 }
 
 // Send a Handle Value Notification for pChar to the client on ConnHdl. No-op
@@ -469,14 +610,8 @@ __attribute__((weak)) bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pCha
 		return false;
 	}
 
-	bool ok = BtGattSendHandleValue(ConnHdl, BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF,
-									pChar->ValHdl, pVal, Len) >= 0;
-	if (ok)
-	{
-		BtGattTxPendingAdd(ConnHdl, pChar);
-	}
-
-	return ok;
+	return BtGattSendHandleValue(ConnHdl, BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF,
+								 pChar->ValHdl, pVal, Len, pChar) >= 0;
 }
 
 // Send a Handle Value Indication for pChar to the client on ConnHdl. Only one
@@ -500,14 +635,13 @@ __attribute__((weak)) bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pC
 	}
 
 	if (BtGattSendHandleValue(ConnHdl, BT_ATT_OPCODE_ATT_HANDLE_VALUE_IND,
-							  pChar->ValHdl, pVal, Len) < 0)
+							  pChar->ValHdl, pVal, Len, pChar) < 0)
 	{
 		return false;
 	}
 
 	pConn->Conn.bIndCfmPending = true;
 	pConn->Conn.IndCfmTime = BtGattMsTick();
-	BtGattTxPendingAdd(ConnHdl, pChar);
 	return true;
 }
 
@@ -725,17 +859,43 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 
 		charval->pChar = c;
 		c->ValHdl = entry->Hdl;
+
+		// The caller may have supplied an initial value through pValue and
+		// ValueLen. Read both before pValue is repointed at the database buffer,
+		// or the value is lost: the old code overwrote the pointer and then
+		// tested a ValueLen that no longer described anything reachable.
+		void     *pInitVal = c->pValue;
+		uint16_t  initLen  = c->ValueLen;
+
 		c->pValue = charval->Data;
 
-		// ValueLen is read back by BtAttReadValue for every Read Request. It is
-		// not set anywhere else until the first write or an explicit
-		// BtGattCharSetValue, so without this a discovery-time read returns an
-		// empty (or garbage) value and the central shows the characteristic as
-		// unreadable. If the app did not preset a value, default to the full
-		// fixed size with a zeroed buffer; otherwise leave the preset value.
-		if (c->ValueLen == 0 || c->ValueLen > c->MaxDataLen)
+		// A declared length the attribute cannot hold is a configuration error.
+		// Refusing beats reinterpreting it as a full-size zero value, which is
+		// what happened before and hid the mistake.
+		if (initLen > c->MaxDataLen)
 		{
-			memset(c->pValue, 0, c->MaxDataLen);
+			return BtGattSrvcAddFailed(pSrvc, &mark);
+		}
+
+		// The database buffer is always cleared. BtAttDBUnwind reclaims memory
+		// without wiping it, so a failed registration can leave bytes behind
+		// that a later one would otherwise serve.
+		memset(c->pValue, 0, c->MaxDataLen);
+
+		if (initLen > 0 && pInitVal != nullptr)
+		{
+			memcpy(c->pValue, pInitVal, initLen);
+			c->ValueLen = initLen;
+		}
+		else
+		{
+			// No initial value. ValueLen is read back by BtAttReadValue for
+			// every Read Request and is not set anywhere else until the first
+			// write or an explicit BtGattCharSetValue, so a discovery-time read
+			// would otherwise return nothing and the central would show the
+			// characteristic as unreadable. Default to the full fixed size over
+			// the zeroed buffer. A caller that wants an empty value declares
+			// pValue with ValueLen 0 and calls BtGattCharSetValue.
 			c->ValueLen = c->MaxDataLen;
 		}
 
@@ -834,16 +994,28 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 		return;
 	}
 
-	// Dequeue in send order and fire TxCompleteCB on the originating char.
-	// NbPktSent also counts response/signaling packets that were never ringed,
-	// so drain only up to what the ring holds and never over-fire.
+	// NbPktSent counts HCI ACL packets, which is what the ring is now built
+	// from. Take them off the head group in send order; a group finishes only
+	// when its last packet is reported, so a fragmented notification fires once
+	// and a group with no owner (an ATT response, SMP, L2CAP signaling) absorbs
+	// its own completions instead of firing someone else's callback.
 	uint16_t n = NbPktSent;
 	while (n > 0 && pConn->TxPendCount > 0)
 	{
-		BtGattChar_t *c = (BtGattChar_t*)pConn->TxPendCh[pConn->TxPendHead];
+		uint16_t take = min(n, pConn->TxPend[pConn->TxPendHead].Remain);
+
+		pConn->TxPend[pConn->TxPendHead].Remain =
+				(uint16_t)(pConn->TxPend[pConn->TxPendHead].Remain - take);
+		n = (uint16_t)(n - take);
+
+		if (pConn->TxPend[pConn->TxPendHead].Remain > 0)
+		{
+			break;
+		}
+
+		BtGattChar_t *c = (BtGattChar_t*)pConn->TxPend[pConn->TxPendHead].pChar;
 		pConn->TxPendHead = (uint8_t)((pConn->TxPendHead + 1) % BT_DEV_TXPEND_MAX);
 		pConn->TxPendCount--;
-		n--;
 
 		if (c == nullptr || c->TxCompleteCB == nullptr)
 		{

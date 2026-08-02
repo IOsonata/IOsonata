@@ -187,7 +187,9 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
 // Record a notify/indicate packet accepted by the transport so
 // BtGattSendCompleted() can fire TxCompleteCB in send order.
-void BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar);
+bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar, uint16_t NbPkt);
+void BtGattTxPendRelease(uint16_t ConnHdl);
+void BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt);
 void BtGattHandleValueConfirm(uint16_t ConnHdl);
 
 uint16_t BtGattCccdGet(uint16_t ConnHdl, uint16_t CccdHdl);
@@ -198,6 +200,22 @@ uint16_t BtGattCccdGet(uint16_t ConnHdl, uint16_t CccdHdl);
 // own database.
 uint8_t BtGattCccdValueError(BtGattChar_t *pChar, uint16_t Value);
 uint8_t BtGattCccdWriteError(uint16_t CccdHdl, uint16_t Value);
+
+/**
+ * @brief	Whether a CCCD write could be stored on this link.
+ *
+ * Asked during validation, before the write is acknowledged. A per-link CCCD
+ * table that is full cannot take a new subscription, and a Write Response for
+ * a subscription that was dropped would leave the client believing it is
+ * subscribed.
+ *
+ * @param	ConnHdl : Connection handle
+ * @param	CccdHdl : Handle of the CCCD being written
+ * @param	Value	: Value the client is writing
+ *
+ * @return	true if the value can be stored, false if the table is full
+ */
+bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value);
 bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value);
 void BtGattCccdClear(uint16_t ConnHdl);
 void BtGattCccdRestoreBonded(uint16_t ConnHdl);

@@ -953,6 +953,31 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 }
 
 
+// Packets this link sent that carry no GATT completion. The GATT layer keeps
+// the per-link ring that attributes controller completions to notifications,
+// and an ATT response or L2CAP signaling packet consumes a completion without
+// owning a callback. Telling it here keeps the two in step; without this an
+// ATT response completing would fire the next notification's callback early.
+//
+// Weak default for builds that do not link bt_gatt.cpp, which the host test
+// harnesses do. bt_gatt.cpp defines the real one and overrides this.
+__attribute__((weak)) void BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
+{
+	(void)ConnHdl;
+	(void)NbPkt;
+}
+
+// HCI ACL packets a PDU of AclLen octets goes out as.
+static uint16_t BtHciAclPktCount(BtHciDevice_t * const pDev, uint16_t AclLen)
+{
+	if (pDev == nullptr || pDev->AclMaxLen == 0 || AclLen == 0)
+	{
+		return 1;
+	}
+
+	return (uint16_t)((AclLen + pDev->AclMaxLen - 1) / pDev->AclMaxLen);
+}
+
 void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt)
 {
 	uint16_t connHdl = pPkt->Hdr.ConnHdl;
@@ -1108,12 +1133,17 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 				DEBUG_PRINTF("ATT TX rsp=0x%02x (req=0x%02x) len=%d\r\n",
 					l2pdu->Att.OpCode, l2rcv->Att.OpCode, l2pdu->Hdr.Len);
 
+				uint16_t nbpkt = BtHciAclPktCount(pDev, acl->Hdr.Len);
 				uint32_t sent = BtHciSendAcl(pDev, acl);
 				if (sent == 0)
 				{
 					SysLogPrintf(SysLogGet(),
 						"ATT TX FAILED opcode=0x%02x rsp=0x%02x len=%u\r\n",
 						l2rcv->Att.OpCode, l2pdu->Att.OpCode, acl->Hdr.Len);
+				}
+				else
+				{
+					BtGattTxPendUntracked(pPkt->Hdr.ConnHdl, nbpkt);
 				}
 			}
 			else
@@ -1147,12 +1177,17 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 				l2pdu->Hdr.Cid = BT_L2CAP_CID_SIGNAL;
 				acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
+				uint16_t nbpkt = BtHciAclPktCount(pDev, acl->Hdr.Len);
 				uint32_t sent = BtHciSendAcl(pDev, acl);
 				if (sent == 0)
 				{
 					SysLogPrintf(SysLogGet(),
 						"L2CAP SIG TX FAILED code=0x%02x len=%u\r\n",
 						l2rcv->CFrame.Code, acl->Hdr.Len);
+				}
+				else
+				{
+					BtGattTxPendUntracked(pPkt->Hdr.ConnHdl, nbpkt);
 				}
 			}
 		}
