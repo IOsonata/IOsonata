@@ -2,7 +2,8 @@ ROOT := ../../..
 BUILD_DIR := build
 HCI_TARGET := $(BUILD_DIR)/bt_hci_compliance_test
 SMP_TARGET := $(BUILD_DIR)/bt_smp_dual_host_test
-TARGETS := $(HCI_TARGET) $(SMP_TARGET)
+ATT_TARGET := $(BUILD_DIR)/bt_att_dual_host_test
+TARGETS := $(HCI_TARGET) $(SMP_TARGET) $(ATT_TARGET)
 
 CC ?= gcc
 CXX ?= g++
@@ -46,6 +47,12 @@ HCI_SOURCES := \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
+ATT_SOURCES := \
+	att/bt_att_dual_host_test.cpp \
+	framework/bt_compliance.cpp \
+	$(ROOT)/src/bluetooth/bt_att.cpp \
+	$(ROOT)/src/bluetooth/bt_uuid.cpp
+
 SMP_TEST_OBJ := $(BUILD_DIR)/smp/bt_smp_dual_host_test.o
 SMP_FRAMEWORK_OBJ := $(BUILD_DIR)/smp/bt_compliance.o
 SMP_CORE_OBJ := $(BUILD_DIR)/smp/bt_smp.o
@@ -62,6 +69,7 @@ HEADERS := \
 	$(wildcard peer/*.h) \
 	$(wildcard link/*.h) \
 	$(wildcard oob/*.h) \
+	$(wildcard att/*.h) \
 	$(wildcard smp/*.h) \
 	$(wildcard $(ROOT)/include/bluetooth/*.h) \
 	$(wildcard $(ROOT)/include/crypto/*.h) \
@@ -84,6 +92,7 @@ test: $(TARGETS)
 strict: $(TARGETS)
 	BT_COMPLIANCE_STRICT=1 $(TEST_ENV) ./$(HCI_TARGET)
 	$(TEST_ENV) ./$(SMP_TARGET)
+	$(TEST_ENV) ./$(ATT_TARGET)
 
 # cfifo is C, not C++: it uses C11 atomics that a C++ compiler rejects. The
 # controller layer needs it, so it is built as C and linked in.
@@ -100,6 +109,11 @@ $(HCI_TARGET): $(HCI_SOURCES) $(HEADERS) $(CFIFO_OBJ)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$(HCI_SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(ATT_TARGET): $(ATT_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
+		$(ATT_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(SMP_TEST_OBJ): smp/bt_smp_dual_host_test.cpp $(HEADERS)
 	@mkdir -p $(dir $@)
