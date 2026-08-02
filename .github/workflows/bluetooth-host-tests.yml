@@ -5,7 +5,6 @@ on:
     branches:
       - bt_update
       - bt_conformance
-      - tmp/bt-dual-host-compliance
     paths:
       - "include/bluetooth/**"
       - "src/bluetooth/**"
@@ -45,9 +44,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Commit staged SMP OOB fix
-        if: github.event_name == 'push' && github.ref == 'refs/heads/tmp/bt-dual-host-compliance' && matrix.cc == 'gcc' && matrix.opt == '-O0'
+        if: github.event_name == 'pull_request' && github.head_ref == 'tmp/bt-dual-host-compliance' && matrix.cc == 'gcc' && matrix.opt == '-O0'
         run: |
           if git apply --check tests/bluetooth/compliance/smp/bt_smp_oob_fix.patch; then
             git apply tests/bluetooth/compliance/smp/bt_smp_oob_fix.patch
