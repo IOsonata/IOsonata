@@ -1,0 +1,56 @@
+name: Apply SMP OOB initiator fix
+
+on:
+  push:
+    branches:
+      - bt_conformance
+    paths:
+      - ".github/workflows/bt-smp-oob-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bt_conformance
+      - name: Apply fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/bluetooth/bt_smp.cpp')
+          s = p.read_text()
+          old = '''\tif (pLink->Ctx.Model == BT_SMP_MODEL_OOB && SmpOobLocalReady(pLink))
+\t{
+\t\tmemcpy(pLink->Ctx.LocalPubKey, s_SmpOob.LocalPubKey, 64);
+\t\treturn BT_SMP_CRYPTO_OK;
+\t}
+'''
+          new = '''\t// The initiator generates or selects its P-256 key before the Pairing
+\t// Response arrives, so Ctx.Model is not known yet. When the outgoing
+\t// Pairing Request advertises OOB, reuse the key pair committed by
+\t// BtSmpOobLocalDataGen. Waiting for Model == OOB rejected every valid
+\t// initiator-side OOB pairing before the responder could answer.
+\tbool pairingAdvertisesOob = pLink->Ctx.PReq[2] == BT_SMP_OOB_AUTH_PRESENT;
+\tif ((pLink->Ctx.Model == BT_SMP_MODEL_OOB || pairingAdvertisesOob) &&
+\t\tSmpOobLocalReady(pLink))
+\t{
+\t\tmemcpy(pLink->Ctx.LocalPubKey, s_SmpOob.LocalPubKey, 64);
+\t\treturn BT_SMP_CRYPTO_OK;
+\t}
+'''
+          if old not in s:
+              raise SystemExit('target block not found')
+          p.write_text(s.replace(old, new, 1))
+          Path('.github/workflows/bt-smp-oob-fix.yml').unlink()
+          PY
+      - name: Commit fix
+        run: |
+          git config user.name "IOsonata CI"
+          git config user.email "ci@iosonata.com"
+          git add src/bluetooth/bt_smp.cpp .github/workflows/bt-smp-oob-fix.yml
+          git commit -m "bt: reuse generated key for initiator SC OOB"
+          git push origin HEAD:bt_conformance
