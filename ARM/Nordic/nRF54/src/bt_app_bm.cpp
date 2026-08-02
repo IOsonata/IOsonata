@@ -544,9 +544,18 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			break;
 	}
 
-	// Forward to central/observer handlers
-	if ((role == BLE_GAP_ROLE_CENTRAL) ||
-		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER)))
+	// Forward to central/observer handlers. This asks what the device is
+	// configured to do, not what its role is on one link: the scan report and
+	// the scan timeout below carry no connection handle at all, and the
+	// controller only delivers GATTC events on links where this side is the
+	// client. The local record holds the BTAPP_ROLE_* capability bitmask.
+	//
+	// There used to be a "role == BLE_GAP_ROLE_CENTRAL" term in front of this.
+	// role was a local copy of that same capability bitmask, so comparing it to
+	// a per-link BLE_GAP_ROLE_* value asked nothing meaningful; c47258c5 removed
+	// the local when it gave the connected event its real role and left this
+	// use behind.
+	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
 	{
 		switch (p_ble_evt->header.evt_id)
 		{
