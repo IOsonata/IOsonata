@@ -55,5 +55,6 @@ jobs:
       - name: Build and run Bluetooth compliance tests
         run: |
           make -C tests/bluetooth/compliance clean test \
+            CC=${{ matrix.cc }} \
             CXX=${{ matrix.cxx }} \
             OPT=${{ matrix.opt }}
