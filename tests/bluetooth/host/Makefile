@@ -18,14 +18,17 @@ CXXFLAGS += -std=$(CXXSTD) -Wall -Wextra -fno-omit-frame-pointer \
 	-ffunction-sections -fdata-sections -fstack-protector-strong \
 	-D_GLIBCXX_ASSERTIONS
 
-ifeq ($(shell uname -s),Darwin)
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
 LDFLAGS += -Wl,-dead_strip
+ASAN_RUNTIME_OPTIONS := detect_leaks=0:strict_string_checks=1
 else
 LDFLAGS += -Wl,--gc-sections
+ASAN_RUNTIME_OPTIONS := detect_leaks=1:strict_string_checks=1
 endif
 
 SANITIZERS ?= -fsanitize=address,undefined -fno-sanitize-recover=all
-TEST_ENV := ASAN_OPTIONS=detect_leaks=1:strict_string_checks=1 \
+TEST_ENV := ASAN_OPTIONS=$(ASAN_RUNTIME_OPTIONS) \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
 
 HEADERS := $(wildcard $(ROOT)/include/bluetooth/*.h) \
