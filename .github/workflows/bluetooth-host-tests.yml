@@ -66,6 +66,8 @@ jobs:
             tests/bluetooth/host/Makefile \
             tests/bluetooth/host/bt_std_services_test.cpp
           git commit -m "bt: replace nRF54 BM services with IOsonata services"
+          git fetch origin feature/bm-generic-services
+          git rebase origin/feature/bm-generic-services
           git push origin HEAD:feature/bm-generic-services
 
   host-unit:
