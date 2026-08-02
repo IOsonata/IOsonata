@@ -23,7 +23,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: bt-failure-fix-run
-      - name: Show SMP blocked-TX test and main registration
+      - name: Show SMP wire helpers and blocked-TX test
         run: |
+          grep -n -B25 -A80 "case WIRE_CMD_RX_SMP" tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
+          grep -n -B20 -A80 "static bool SendInit" tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
           grep -n -B20 -A100 "TestTxFailureQueuesAndRetries" tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
-          grep -n -B10 -A40 "int main" tests/bluetooth/compliance/smp/bt_smp_dual_host_test.cpp
