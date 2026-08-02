@@ -3,7 +3,7 @@
 
 @brief	Bluetooth device representation. Same struct for local stack
 		identity and for tracked remote peers. Operations differ by who
-		drives them, factored into separate function namespaces
+	drives them, factored into separate function namespaces
 		(BtApp*() for app driven, BtDevice*() for shared queries).
 
 @author	Hoang Nguyen Hoan
@@ -57,7 +57,7 @@ SOFTWARE.
 
 #define BT_DEV_NAME_MAXLEN			30
 #define BT_DEV_SERVICE_MAXCNT		10
-#define BT_DEV_TXPEND_MAX			8		//!< Depth of the per-link notify/indicate TX-complete ring
+#define BT_DEV_TXPEND_MAX			16		//!< Depth of the per-link ordered ACL TX-complete ring
 
 /// Per-peer discovery state. Used by the central while walking the peer's
 /// GATT table. Previously held as file-scope globals (g_CurIdx, g_UuidType)
@@ -115,12 +115,6 @@ typedef struct __Bt_Device {
 	} TxPend[BT_DEV_TXPEND_MAX];
 	uint8_t			TxPendHead;					//!< Ring read index
 	uint8_t			TxPendCount;				//!< Ring occupancy in entries
-	//!< HCI packets in flight that belong to no GATT operation: ATT responses,
-	//!< SMP, L2CAP signaling. They own no callback but the controller still
-	//!< reports them, so they are counted here and taken off first. Without
-	//!< this their completions drained the ring and fired the next
-	//!< notification's callback before it had gone out.
-	uint16_t		TxUntracked;
 } BtDevice_t;
 
 #ifdef __cplusplus

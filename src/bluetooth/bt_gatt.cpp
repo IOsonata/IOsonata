@@ -87,7 +87,10 @@ __attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar, void * const 
 	// stored value while still reporting success.
 	size_t l = min(Len, (size_t)pChar->MaxDataLen);
 
-	memcpy(pChar->pValue, pVal, l);
+	if (l > 0)
+	{
+		memcpy(pChar->pValue, pVal, l);
+	}
 	pChar->ValueLen = (uint16_t)l;
 
 	return true;
@@ -276,7 +279,34 @@ bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 	return pConn->Conn.NbCccd < BT_GATT_CCCD_STATE_MAX;
 }
 
-bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
+static void BtGattCccdReportChange(uint16_t ConnHdl, uint16_t CccdHdl,
+									 uint16_t OldValue, uint16_t Value)
+{
+	BtGattChar_t *pChar = BtGattFindCharByCccd(CccdHdl);
+	if (pChar == nullptr)
+	{
+		return;
+	}
+
+	BtSmpBondCccdSave(ConnHdl, CccdHdl, Value);
+
+	bool oldNotify = (OldValue & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
+	bool newNotify = (Value & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
+	if (oldNotify != newNotify && pChar->SetNotifCB != nullptr)
+	{
+		pChar->SetNotifCB(pChar, newNotify, ConnHdl);
+	}
+
+	bool oldIndic = (OldValue & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
+	bool newIndic = (Value & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
+	if (oldIndic != newIndic && pChar->SetIndCB != nullptr)
+	{
+		pChar->SetIndCB(pChar, newIndic, ConnHdl);
+	}
+}
+
+static bool BtGattCccdApply(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value,
+								 bool bReport, uint16_t *pOldValue)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 	BtGattChar_t *pChar = BtGattFindCharByCccd(CccdHdl);
@@ -286,9 +316,6 @@ bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 		return false;
 	}
 
-	// Also checked here, not only in the ATT write path, so a bond restore or
-	// a port that reports subscriptions on its own cannot install a value the
-	// characteristic does not support.
 	if (BtGattCccdValueError(pChar, Value) != 0)
 	{
 		return false;
@@ -320,24 +347,33 @@ bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 
 	BtGattCccdUpdateMirror(pChar);
 
-	// Persist for bonded clients; no-op (volatile) otherwise.
-	BtSmpBondCccdSave(ConnHdl, CccdHdl, Value);
-
-	bool oldNotify = (oldValue & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
-	bool newNotify = (Value & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
-	if (oldNotify != newNotify && pChar->SetNotifCB != nullptr)
+	if (pOldValue != nullptr)
 	{
-		pChar->SetNotifCB(pChar, newNotify, ConnHdl);
+		*pOldValue = oldValue;
 	}
-
-	bool oldIndic = (oldValue & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
-	bool newIndic = (Value & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
-	if (oldIndic != newIndic && pChar->SetIndCB != nullptr)
+	if (bReport)
 	{
-		pChar->SetIndCB(pChar, newIndic, ConnHdl);
+		BtGattCccdReportChange(ConnHdl, CccdHdl, oldValue, Value);
 	}
 
 	return true;
+}
+
+bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
+{
+	return BtGattCccdApply(ConnHdl, CccdHdl, Value, true, nullptr);
+}
+
+bool BtGattCccdSetDeferred(uint16_t ConnHdl, uint16_t CccdHdl,
+								 uint16_t Value, uint16_t *pOldValue)
+{
+	return BtGattCccdApply(ConnHdl, CccdHdl, Value, false, pOldValue);
+}
+
+void BtGattCccdCommitDeferred(uint16_t ConnHdl, uint16_t CccdHdl,
+									uint16_t OldValue, uint16_t Value)
+{
+	BtGattCccdReportChange(ConnHdl, CccdHdl, OldValue, Value);
 }
 
 void BtGattCccdClear(uint16_t ConnHdl)
@@ -371,10 +407,6 @@ void BtGattCccdClear(uint16_t ConnHdl)
 			continue;
 		}
 
-		// Report the disable edge the same way a write to zero would. An
-		// application that starts a producer or takes a per-client resource on
-		// the enable edge has no other way to learn the link is gone, and was
-		// left holding that state after every disconnect.
 		if ((val[i] & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0 &&
 			pChar->SetNotifCB != nullptr)
 		{
@@ -389,20 +421,93 @@ void BtGattCccdClear(uint16_t ConnHdl)
 	}
 }
 
-// Restore persisted CCCD subscriptions for a bonded peer once its link is
-// encrypted, replaying each through BtGattCccdSet so the live state, the
-// per-characteristic aggregate, and the notify/indicate re-arm callbacks all
-// run. A no-op for unbonded links and fresh pairings (empty bond CCCD set).
+// Restore persisted CCCD subscriptions atomically. Validate the whole restored
+// set, including projected table occupancy, before changing the live link.
 void BtGattCccdRestoreBonded(uint16_t ConnHdl)
 {
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+	if (pConn == nullptr)
+	{
+		return;
+	}
+
 	uint16_t hdl[BT_GATT_CCCD_STATE_MAX];
 	uint16_t val[BT_GATT_CCCD_STATE_MAX];
+	uint16_t old[BT_GATT_CCCD_STATE_MAX];
+	BtGattCccdState_t snapshot[BT_GATT_CCCD_STATE_MAX];
+	BtGattCccdState_t projected[BT_GATT_CCCD_STATE_MAX];
 
 	uint8_t n = BtSmpBondCccdGet(ConnHdl, hdl, val, BT_GATT_CCCD_STATE_MAX);
+	uint8_t originalCount = pConn->Conn.NbCccd;
+	uint8_t projectedCount = originalCount;
+	memcpy(snapshot, pConn->Conn.Cccd, sizeof(snapshot));
+	memcpy(projected, pConn->Conn.Cccd, sizeof(projected));
 
 	for (uint8_t i = 0; i < n; i++)
 	{
-		BtGattCccdSet(ConnHdl, hdl[i], val[i]);
+		if (BtGattCccdWriteError(hdl[i], val[i]) != 0)
+		{
+			return;
+		}
+		for (uint8_t j = 0; j < i; j++)
+		{
+			if (hdl[j] == hdl[i])
+			{
+				return;
+			}
+		}
+
+		int idx = -1;
+		for (uint8_t j = 0; j < projectedCount; j++)
+		{
+			if (projected[j].Hdl == hdl[i])
+			{
+				idx = j;
+				break;
+			}
+		}
+
+		if (val[i] == 0)
+		{
+			if (idx >= 0)
+			{
+				projected[idx] = projected[projectedCount - 1];
+				projectedCount--;
+			}
+		}
+		else if (idx >= 0)
+		{
+			projected[idx].Value = val[i];
+		}
+		else
+		{
+			if (projectedCount >= BT_GATT_CCCD_STATE_MAX)
+			{
+				return;
+			}
+			projected[projectedCount].Hdl = hdl[i];
+			projected[projectedCount].Value = val[i];
+			projectedCount++;
+		}
+	}
+
+	for (uint8_t i = 0; i < n; i++)
+	{
+		if (BtGattCccdSetDeferred(ConnHdl, hdl[i], val[i], &old[i]) == false)
+		{
+			memcpy(pConn->Conn.Cccd, snapshot, sizeof(snapshot));
+			pConn->Conn.NbCccd = originalCount;
+			for (uint8_t j = 0; j < n; j++)
+			{
+				BtGattCccdUpdateMirror(BtGattFindCharByCccd(hdl[j]));
+			}
+			return;
+		}
+	}
+
+	for (uint8_t i = 0; i < n; i++)
+	{
+		BtGattCccdCommitDeferred(ConnHdl, hdl[i], old[i], val[i]);
 	}
 }
 
@@ -428,14 +533,8 @@ bool BtGattCharIndicateEnabled(uint16_t ConnHdl, BtGattChar_t *pChar)
 			BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
 }
 
-// Forward: defined with the TX-pending ring below, used by the send path.
 static uint16_t BtGattTxPktCount(BtDevice_t *pConn, uint16_t AclLen);
 
-// Build and send a server-initiated Handle Value PDU - Notification (0x1B) or
-// Indication (0x1D) - to the peer on ConnHdl. The two PDUs share the same
-// {opcode, value handle, value[]} wire layout. The value is clamped to
-// ATT_MTU - 3 and to the ACL transmit buffer. Returns the number of value
-// bytes sent, or -1 if the link is unknown or the transport refused the packet.
 static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValHdl,
 								 const void *pVal, size_t Len, BtGattChar_t *pOwner)
 {
@@ -450,8 +549,6 @@ static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValH
 		return -1;
 	}
 
-	// A notifiable/indicatable value holds at most ATT_MTU - 3 bytes (opcode
-	// + value handle). Fall back to the default MTU if none was negotiated.
 	uint16_t mtu = pConn->Conn.MaxMtu >= BT_ATT_MTU_MIN ? pConn->Conn.MaxMtu : BT_ATT_MTU_MIN;
 	size_t maxData = (size_t)mtu - 3;
 	size_t bufMax = BT_HCI_BUFFER_MAX_SIZE - sizeof(BtHciACLDataPacketHdr_t) - sizeof(BtL2CapHdr_t) - 3;
@@ -474,18 +571,14 @@ static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValH
 
 	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
 	l2pdu->Att.OpCode = OpCode;
-	// HandleValueNtf and HandleValueInd overlay the same handle+data layout.
 	l2pdu->Att.HandleValueNtf.ValHdl = ValHdl;
 	if (Len > 0)
 	{
 		memcpy(l2pdu->Att.HandleValueNtf.Data, pVal, Len);
 	}
-	l2pdu->Hdr.Len = 1 + 2 + Len;	// opcode + value handle + value
+	l2pdu->Hdr.Len = 1 + 2 + Len;
 	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-	// Reserve the packets this PDU becomes before any of it goes out. A ring
-	// with no room refuses the send outright rather than transmitting a value
-	// whose completion can never be attributed.
 	uint16_t nbpkt = BtGattTxPktCount(pConn, acl->Hdr.Len);
 
 	if (BtGattTxPendReserve(ConnHdl, pOwner, nbpkt) == false)
@@ -503,15 +596,6 @@ static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValH
 	return (int)Len;
 }
 
-// Reserve a group of NbPkt HCI packets on this link before they are handed to
-// the transport, owned by pChar. Reservation comes first because a full ring
-// has to stop the send: the old code sent the notification and then dropped the
-// tracking, so the caller was told the value went out and the completion
-// callback never came.
-//
-// A characteristic with no TxCompleteCB still takes a slot. It consumes
-// controller completions like any other traffic, and leaving it out was enough
-// on its own to walk the ring out of step with the link.
 bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar, uint16_t NbPkt)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
@@ -534,9 +618,6 @@ bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar, uint16_t NbPkt)
 	return true;
 }
 
-// Give back the reservation the transport then refused. Only the most recent
-// one can be released, which is all the send paths need: they reserve, send,
-// and release on failure with nothing in between.
 void BtGattTxPendRelease(uint16_t ConnHdl)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
@@ -549,34 +630,18 @@ void BtGattTxPendRelease(uint16_t ConnHdl)
 	pConn->TxPendCount--;
 }
 
-// Account for HCI packets this link sent that carry no GATT completion: ATT
-// responses, SMP PDUs, L2CAP signaling. They own no callback but the controller
-// still reports them, and without this their completions drain the ring and
-// fire someone else's callback early.
-//
-// They are counted rather than given ring entries, so ordinary request and
-// response traffic cannot exhaust the ring and refuse a notification.
+// Compatibility helper for callers that own no completion callback. It still
+// occupies its real position in the ordered ring.
 void BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
 {
-	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
-
-	if (pConn == nullptr || NbPkt == 0)
-	{
-		return;
-	}
-
-	pConn->TxUntracked = (uint16_t)(pConn->TxUntracked + NbPkt);
+	(void)BtGattTxPendReserve(ConnHdl, nullptr, NbPkt);
 }
 
-// Single-packet reservation, kept for callers that send one packet and do not
-// care to say so.
 void BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar)
 {
 	BtGattTxPendReserve(ConnHdl, pChar, 1);
 }
 
-// Number of HCI ACL packets a PDU of AclLen octets is sent as. The controller
-// reports one completion per packet, so this is what a send has to reserve.
 static uint16_t BtGattTxPktCount(BtDevice_t *pConn, uint16_t AclLen)
 {
 	if (pConn == nullptr || pConn->pHciDev == nullptr ||
@@ -590,10 +655,6 @@ static uint16_t BtGattTxPktCount(BtDevice_t *pConn, uint16_t AclLen)
 	return (uint16_t)((AclLen + max - 1) / max);
 }
 
-// Send a Handle Value Notification for pChar to the client on ConnHdl. No-op
-// (returns false) unless the client subscribed for notifications via the CCCD.
-// Weak so a vendor port (e.g. SoftDevice sd_ble_gatts_hvx) can override the
-// generic HCI transmit path with a native one.
 __attribute__((weak)) bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID ||
@@ -606,12 +667,6 @@ __attribute__((weak)) bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pCha
 								 pChar->ValHdl, pVal, Len, pChar) >= 0;
 }
 
-// Send a Handle Value Indication for pChar to the client on ConnHdl. Only one
-// indication may be outstanding per link until the client returns a Handle
-// Value Confirmation (Core spec Vol 3 Part F, 3.4.7.2); a second indication
-// while one is pending returns false. No-op unless the client subscribed for
-// indications via the CCCD.
-// Weak so a vendor port can override with a native indication path.
 __attribute__((weak)) bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID ||
@@ -637,10 +692,6 @@ __attribute__((weak)) bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pC
 	return true;
 }
 
-// Clear the outstanding-indication flag for ConnHdl when the peer's Handle
-// Value Confirmation arrives, allowing the next indication to be sent. The ATT
-// transaction timeout for a peer that never confirms is handled by
-// BtGattIndicationTimeoutCheck (call it periodically from the app).
 void BtGattHandleValueConfirm(uint16_t ConnHdl)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
@@ -650,10 +701,6 @@ void BtGattHandleValueConfirm(uint16_t ConnHdl)
 	}
 }
 
-// Client-role receive hook. Weak default does nothing; the application overrides
-// it to consume notified/indicated values. Called from the native-host ATT path
-// and from the vendor GATT-client event handlers, so one override serves every
-// port.
 __attribute__((weak)) void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl,
 												uint8_t *pData, uint16_t Len)
 {
@@ -663,10 +710,6 @@ __attribute__((weak)) void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHd
 	(void)Len;
 }
 
-// Millisecond tick for the indication transaction timeout. Weak default returns
-// 0 so the timeout is inert on ports that do not supply a clock; the elapsed
-// time is then always 0 and BtGattIndicationTimedOut never fires. An app with a
-// running millisecond counter overrides this.
 __attribute__((weak)) uint32_t BtGattMsTick(void)
 {
 	return 0;
@@ -680,18 +723,9 @@ bool BtGattIndicationTimedOut(uint16_t ConnHdl, uint32_t TimeoutMs)
 		return false;
 	}
 
-	// Unsigned subtraction handles counter rollover, so a tick rollover during
-	// the wait does not produce a false timeout.
 	return (uint32_t)(BtGattMsTick() - pConn->Conn.IndCfmTime) >= TimeoutMs;
 }
 
-// Action taken when an indication is not confirmed within the ATT transaction
-// timeout. Core Vol 3 Part F 3.3.3 requires the bearer be closed on a
-// transaction timeout; for the LE-U fixed ATT bearer that means disconnecting
-// the link. The weak default clears the outstanding-indication flag and issues
-// an HCI Disconnect through the connection's controller command path when one
-// is bound. A port may override this whole function to route the disconnect
-// through its own stack.
 __attribute__((weak)) void BtGattIndicationTimeout(uint16_t ConnHdl)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
@@ -702,9 +736,6 @@ __attribute__((weak)) void BtGattIndicationTimeout(uint16_t ConnHdl)
 
 	pConn->Conn.bIndCfmPending = false;
 
-	// Reason 0x13 (Remote User Terminated Connection) is the conventional
-	// host-initiated disconnect reason. Guarded so ports with no controller
-	// command path fall back to the flag release without dereferencing null.
 	if (pConn->pHciDev != nullptr && pConn->pHciDev->Command != nullptr)
 	{
 		uint8_t param[3];
@@ -731,9 +762,6 @@ void BtGattIndicationTimeoutCheck(void)
 	}
 }
 
-// Undo a partial registration: drop every attribute added since the mark and
-// return the characteristics to the state they had before the attempt, so a
-// caller that retries or gives up is not left with half a service.
 static bool BtGattSrvcAddFailed(BtGattSrvc_t *pSrvc, const BtAttDBMark_t *pMark)
 {
 	BtAttDBUnwind(pMark);
@@ -768,9 +796,6 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		return false;
 	}
 
-	// Already registered? Scan the service list; if this exact service is
-	// present, no-op. Guards against duplicate ATT DB entries and a list
-	// cycle if BtGattSrvcAdd (e.g. via BtGapInit) runs more than once.
 	for (BtGattSrvc_t *p = BtGattGetSrvcList(); p != nullptr; p = p->pNext)
 	{
 		if (p == pSrvc)
@@ -779,7 +804,6 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		}
 	}
 
-	// Add base UUID to internal list for custom 128-bit services.
 	if (pSrvc->bCustom)
 	{
 		baseidx = BtUuidAddBase(pSrvc->UuidBase);
@@ -792,10 +816,6 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 
 	int l = sizeof(BtAttSrvcDeclar_t);
 
-	// Registering a service means adding one attribute per declaration,
-	// value and descriptor. If any of them fails the ones already added are
-	// dropped back to this position, so a failed call leaves the database and
-	// the handle counter as they were.
 	BtAttDBMark_t mark;
 	BtAttDBMark(&mark);
 
@@ -840,7 +860,6 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		c->pSrvc       = pSrvc;
 		c->BaseUuidIdx = pSrvc->Uuid.BaseIdx;
 
-		// Characteristic value
 		typeuuid = {baseidx, BT_UUID_TYPE_16, c->Uuid };
 		entry = BtAttDBAddEntry(&typeuuid, c->MaxDataLen + sizeof(BtAttCharValue_t));
 		if (entry == nullptr)
@@ -852,26 +871,16 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		charval->pChar = c;
 		c->ValHdl = entry->Hdl;
 
-		// The caller may have supplied an initial value through pValue and
-		// ValueLen. Read both before pValue is repointed at the database buffer,
-		// or the value is lost: the old code overwrote the pointer and then
-		// tested a ValueLen that no longer described anything reachable.
 		void     *pInitVal = c->pValue;
 		uint16_t  initLen  = c->ValueLen;
 
 		c->pValue = charval->Data;
 
-		// A declared length the attribute cannot hold is a configuration error.
-		// Refusing beats reinterpreting it as a full-size zero value, which is
-		// what happened before and hid the mistake.
 		if (initLen > c->MaxDataLen)
 		{
 			return BtGattSrvcAddFailed(pSrvc, &mark);
 		}
 
-		// The database buffer is always cleared. BtAttDBUnwind reclaims memory
-		// without wiping it, so a failed registration can leave bytes behind
-		// that a later one would otherwise serve.
 		memset(c->pValue, 0, c->MaxDataLen);
 
 		if (initLen > 0 && pInitVal != nullptr)
@@ -881,13 +890,6 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		}
 		else
 		{
-			// No initial value. ValueLen is read back by BtAttReadValue for
-			// every Read Request and is not set anywhere else until the first
-			// write or an explicit BtGattCharSetValue, so a discovery-time read
-			// would otherwise return nothing and the central would show the
-			// characteristic as unreadable. Default to the full fixed size over
-			// the zeroed buffer. A caller that wants an empty value declares
-			// pValue with ValueLen 0 and calls BtGattCharSetValue.
 			c->ValueLen = c->MaxDataLen;
 		}
 
@@ -895,7 +897,6 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		c->bIndic  = false;
 		if (c->Property & (BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_INDICATE))
 		{
-			// Characteristic Descriptor CCC
 			typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION };
 			l = sizeof(BtDescClientCharConfig_t);
 			entry = BtAttDBAddEntry(&typeuuid, l);
@@ -913,7 +914,6 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 
 		if (c->pDesc)
 		{
-			// Characteristic Description
 			typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION };
 			size_t dl = sizeof(BtDescCharUserDesc_t);
 			entry = BtAttDBAddEntry(&typeuuid, dl);
@@ -968,11 +968,6 @@ __attribute__((weak)) void BtGattEvtHandler(uint32_t Evt, void * const pCtx)
 	}
 }
 
-// HCI Number-Of-Completed-Packets hook. The controller reports per-connection
-// packet completions but not which characteristic produced them, so each
-// outgoing notification/indication records its char on a per-peer ring via
-// BtGattTxPendPush. Here we dequeue in send order and fire TxCompleteCB on the
-// originating char.
 void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 {
 	if (NbPktSent == 0)
@@ -986,19 +981,7 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 		return;
 	}
 
-	// NbPktSent counts HCI ACL packets, which is what the ring is now built
-	// from. Take them off the head group in send order; a group finishes only
-	// when its last packet is reported, so a fragmented notification fires once
-	// and a group with no owner (an ATT response, SMP, L2CAP signaling) absorbs
-	// its own completions instead of firing someone else's callback.
 	uint16_t n = NbPktSent;
-
-	// Packets no GATT operation owns come off first. They were sent on this
-	// link and the controller is reporting them; charging them to the head
-	// group is what fired callbacks early.
-	uint16_t foreign = min(n, pConn->TxUntracked);
-	pConn->TxUntracked = (uint16_t)(pConn->TxUntracked - foreign);
-	n = (uint16_t)(n - foreign);
 
 	while (n > 0 && pConn->TxPendCount > 0)
 	{

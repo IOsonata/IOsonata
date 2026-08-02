@@ -185,8 +185,9 @@ bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar);
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
-// Record a notify/indicate packet accepted by the transport so
-// BtGattSendCompleted() can fire TxCompleteCB in send order.
+// Reserve a packet group before sending it so completions are consumed in the
+// exact order accepted by the controller. pChar is null for ATT/SMP/L2CAP
+// traffic that owns no GATT callback.
 bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar, uint16_t NbPkt);
 void BtGattTxPendRelease(uint16_t ConnHdl);
 void BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt);
@@ -218,6 +219,12 @@ uint8_t BtGattCccdWriteError(uint16_t CccdHdl, uint16_t Value);
  */
 bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value);
 bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value);
+// Apply a CCCD value without persistence or callbacks. Execute Write uses this
+// to make the entire transaction visible before application code is called.
+bool BtGattCccdSetDeferred(uint16_t ConnHdl, uint16_t CccdHdl,
+								 uint16_t Value, uint16_t *pOldValue);
+void BtGattCccdCommitDeferred(uint16_t ConnHdl, uint16_t CccdHdl,
+									uint16_t OldValue, uint16_t Value);
 void BtGattCccdClear(uint16_t ConnHdl);
 void BtGattCccdRestoreBonded(uint16_t ConnHdl);
 // Mirror the aggregate CCCD value into the native ATT DB descriptor so a local
