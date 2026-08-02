@@ -116,9 +116,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
 		</link>
 		<link>
-			<name>include/icli.h</name>
+			<name>include/cli/icli.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/icli.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/cli/icli.h</locationURI>
 		</link>
 		<link>
 			<name>include/motion</name>
@@ -171,9 +171,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
 		</link>
 		<link>
-			<name>include/pwm.h</name>
+			<name>include/coredev/pwm.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/pwm.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
 		</link>
 		<link>
 			<name>include/pwrmgnt</name>
@@ -390,17 +390,7 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev_pdm.h</locationURI>
 		</link>
-		<link>
-			<name>include/bluetooth/ble_conn.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_conn.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bleadv_mandata.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bleadv_mandata.h</locationURI>
-		</link>
-		<link>
+<link>
 			<name>include/bluetooth/blueio_blesrvc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
@@ -435,12 +425,7 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dev.h</locationURI>
 		</link>
-		<link>
-			<name>include/bluetooth/bt_devx.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_devx.h</locationURI>
-		</link>
-		<link>
+<link>
 			<name>include/bluetooth/bt_gap.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_gap.h</locationURI>
@@ -554,11 +539,6 @@
 			<name>include/coredev/uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
-		</link>
-		<link>
-			<name>include/display/display copy.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/display/display%20copy.h</locationURI>
 		</link>
 		<link>
 			<name>include/display/display.h</name>

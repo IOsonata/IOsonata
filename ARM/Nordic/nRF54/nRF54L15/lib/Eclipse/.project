@@ -121,9 +121,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
 		</link>
 		<link>
-			<name>include/icli.h</name>
+			<name>include/cli/icli.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/icli.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/cli/icli.h</locationURI>
 		</link>
 		<link>
 			<name>include/intelhex.h</name>
@@ -206,9 +206,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
 		</link>
 		<link>
-			<name>include/pwm.h</name>
+			<name>include/coredev/pwm.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/pwm.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
 		</link>
 		<link>
 			<name>include/pwrmgnt</name>
@@ -525,17 +525,7 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev_pdm.h</locationURI>
 		</link>
-		<link>
-			<name>include/bluetooth/ble_conn.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_conn.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bleadv_mandata.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bleadv_mandata.h</locationURI>
-		</link>
-		<link>
+<link>
 			<name>include/bluetooth/blueio_blesrvc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
@@ -791,11 +781,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/icrypto.h</locationURI>
 		</link>
 		<link>
-			<name>include/display/display copy.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/display/display%20copy.h</locationURI>
-		</link>
-		<link>
 			<name>include/display/display.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/display.h</locationURI>
@@ -849,11 +834,6 @@
 			<name>include/display/eink_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/display/eink_intrf.h.new</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h.new</locationURI>
 		</link>
 		<link>
 			<name>include/display/eink_vb3300.h</name>
@@ -2021,11 +2001,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/services/bt_dis.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/display/fonts/.DS_Store</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/.DS_Store</locationURI>
-		</link>
-		<link>
 			<name>src/display/fonts/CREDITS</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/CREDITS</locationURI>
@@ -2299,11 +2274,6 @@
 			<name>src/display/fonts/FreeSans/FreeSansIta8pt.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSans/FreeSansIta8pt.c</locationURI>
-		</link>
-		<link>
-			<name>src/display/fonts/FreeSerif/.DS_Store</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/.DS_Store</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts/FreeSerif/FreeSerif10pt.c</name>

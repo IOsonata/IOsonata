@@ -121,9 +121,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
 		</link>
 		<link>
-			<name>include/icli.h</name>
+			<name>include/cli/icli.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/icli.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/cli/icli.h</locationURI>
 		</link>
 		<link>
 			<name>include/motion</name>
@@ -461,16 +461,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev_pdm.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/ble_conn.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_conn.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bleadv_mandata.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bleadv_mandata.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/blueio_blesrvc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
@@ -500,22 +490,12 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_ctlr.h</locationURI>
 		</link>
-		<link>
-			<name>include/bluetooth/bt_ctlr_old.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_ctlr_old.h</locationURI>
-		</link>
-		<link>
+<link>
 			<name>include/bluetooth/bt_dev.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dev.h</locationURI>
 		</link>
-		<link>
-			<name>include/bluetooth/bt_devx.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_devx.h</locationURI>
-		</link>
-		<link>
+<link>
 			<name>include/bluetooth/bt_gap.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_gap.h</locationURI>
@@ -566,19 +546,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_smp.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_srvc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_srvc.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/bt_uuid.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_uuid.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_uuid_new.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_uuid_new.h</locationURI>
 		</link>
 		<link>
 			<name>include/converters/adc_device.h</name>
@@ -844,11 +814,6 @@
 			<name>include/pwrmgnt/pwrmgnt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pwrmgnt.h</locationURI>
-		</link>
-		<link>
-			<name>include/sensors/.DS_Store</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/.DS_Store</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_adxl362.h</name>
@@ -1271,11 +1236,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/display/eink_intrf.cpp.new</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp.new</locationURI>
-		</link>
-		<link>
 			<name>src/display/eink_vb3300.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_vb3300.cpp</locationURI>
@@ -1571,11 +1531,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/display/fonts/.DS_Store</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/.DS_Store</locationURI>
-		</link>
-		<link>
 			<name>src/display/fonts/CREDITS</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/CREDITS</locationURI>
@@ -1814,11 +1769,6 @@
 			<name>src/display/fonts/FreeSans/FreeSansIta8pt.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSans/FreeSansIta8pt.c</locationURI>
-		</link>
-		<link>
-			<name>src/display/fonts/FreeSerif/.DS_Store</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/.DS_Store</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts/FreeSerif/FreeSerif10pt.c</name>
