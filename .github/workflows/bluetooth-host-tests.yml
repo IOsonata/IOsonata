@@ -3,22 +3,21 @@ name: Bluetooth host tests
 on:
   push:
     branches:
+      - master
       - bt_update
       - bt_conformance
     paths:
       - "include/bluetooth/**"
       - "src/bluetooth/**"
       - "tests/bluetooth/**"
-      - "ARM/Nordic/nRF52/src/bt_gatt_nrf52.cpp"
-      - "ARM/Nordic/nRF54/src/bt_gatt_bm.cpp"
+      - "ARM/**/src/bt_*.cpp"
       - ".github/workflows/bluetooth-host-tests.yml"
   pull_request:
     paths:
       - "include/bluetooth/**"
       - "src/bluetooth/**"
       - "tests/bluetooth/**"
-      - "ARM/Nordic/nRF52/src/bt_gatt_nrf52.cpp"
-      - "ARM/Nordic/nRF54/src/bt_gatt_bm.cpp"
+      - "ARM/**/src/bt_*.cpp"
       - ".github/workflows/bluetooth-host-tests.yml"
   workflow_dispatch:
 
@@ -58,7 +57,7 @@ jobs:
 
       - name: Build and run Bluetooth compliance tests
         run: |
-          make -C tests/bluetooth/compliance clean test \
+          make -C tests/bluetooth/compliance clean strict \
             CC=${{ matrix.cc }} \
             CXX=${{ matrix.cxx }} \
             OPT=${{ matrix.opt }}
