@@ -7,6 +7,12 @@ on:
     paths:
       - "tools/apply_bt_final_review_fixes.py"
       - ".github/workflows/apply-bt-final-review-fixes.yml"
+  pull_request:
+    branches:
+      - bt_conformance
+    paths:
+      - "tools/apply_bt_final_review_fixes.py"
+      - ".github/workflows/apply-bt-final-review-fixes.yml"
 
 permissions:
   contents: write
