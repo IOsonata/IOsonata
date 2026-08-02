@@ -14,7 +14,7 @@ if source.count(workflow_old) != 1:
     raise RuntimeError(f"patch loader: expected workflow replacement block once, found {source.count(workflow_old)}")
 source = source.replace(workflow_old, workflow_new)
 marker = 'print("Bluetooth failure-path fixes applied")'
-replacement = '\nreplace_once(\n    "src/bluetooth/bt_att.cpp",\n    "__attribute__((weak)) bool BtGattCccdCanStore",\n    """__attribute__((weak)) void BtGattCccdChanged(uint16_t ConnHdl,\n                                             uint16_t CccdHdl,\n                                             uint16_t OldValue)\n{\n    (void)ConnHdl;\n    (void)CccdHdl;\n    (void)OldValue;\n}\n\n__attribute__((weak)) bool BtGattCccdCanStore""",\n)\n\n\nprint("Bluetooth failure-path fixes applied")'
+replacement = '\nreplace_once(\n    "src/bluetooth/bt_att.cpp",\n    "__attribute__((weak)) bool BtGattCccdCanStore",\n    """__attribute__((weak)) void BtGattCccdChanged(uint16_t ConnHdl,\n                                             uint16_t CccdHdl,\n                                             uint16_t OldValue)\n{\n    (void)ConnHdl;\n    (void)CccdHdl;\n    (void)OldValue;\n}\n\n__attribute__((weak)) bool BtGattCccdCanStore""",\n)\n\nreplace_once(\n    "src/bluetooth/bt_app.cpp",\n    "\\n\\t\\t.TxUntracked = 0,",\n    "",\n)\n\nprint("Bluetooth failure-path fixes applied")'
 if source.count(marker) != 1:
     raise RuntimeError(f"patch loader: expected final marker once, found {source.count(marker)}")
 source = source.replace(marker, replacement)
