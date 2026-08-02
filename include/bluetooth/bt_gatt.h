@@ -190,6 +190,7 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal
 bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar, uint16_t NbPkt);
 void BtGattTxPendRelease(uint16_t ConnHdl);
 void BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt);
+void BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar);
 void BtGattHandleValueConfirm(uint16_t ConnHdl);
 
 uint16_t BtGattCccdGet(uint16_t ConnHdl, uint16_t CccdHdl);

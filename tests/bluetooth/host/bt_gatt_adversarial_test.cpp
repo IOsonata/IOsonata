@@ -153,8 +153,12 @@ void TestMixedPacketCompletionOrdering()
 	s_Peer.TxPendCount = 0;
 	s_TxCompleteCount = 0;
 
+	// An ATT response goes out on this link. It owns no GATT completion, so
+	// the layer that sent it reports the packet; bt_hci_host.cpp does this
+	// for real, and the stub below only counts.
 	BtHciACLDataPacket_t untracked = {};
 	BT_CHECK(s_Test, BtHciSendAcl(&s_Hci, &untracked) != 0);
+	BtGattTxPendUntracked(kConnHdl, 1);
 
 	BtGattTxPendingAdd(kConnHdl, &s_SubChar);
 	BT_CHECK(s_Test, s_Peer.TxPendCount == 1);
@@ -174,7 +178,10 @@ void TestFragmentCompletionWaitsForFinalPacket()
 	s_Peer.TxPendCount = 0;
 	s_TxCompleteCount = 0;
 
-	BtGattTxPendingAdd(kConnHdl, &s_SubChar);
+	// One notification that the transport split into three ACL packets. The
+	// send path derives the count from the PDU size and the controller's ACL
+	// length; here it is stated directly.
+	BT_CHECK(s_Test, BtGattTxPendReserve(kConnHdl, &s_SubChar, 3));
 	BT_CHECK(s_Test, s_Peer.TxPendCount == 1);
 
 	BtGattSendCompleted(kConnHdl, 1);

@@ -49,10 +49,15 @@ void TestCompletedEventNeedsCountByte()
 	dev.SendCompleted = Completed;
 	s_CompletedCount = 0;
 
-	alignas(4) std::array<uint8_t, sizeof(BtHciEvtPacketHdr_t)> raw = {};
+	// The storage is a whole BtHciEvtPacket_t: casting a smaller buffer to it
+	// and touching a member is undefined on its own, which is a defect in the
+	// test rather than in the code under test. Hdr.Len is what says the event
+	// is truncated, and that is what the parser has to honour.
+	alignas(4) std::array<uint8_t, sizeof(BtHciEvtPacket_t)> raw = {};
 	BtHciEvtPacket_t *pEvt = (BtHciEvtPacket_t *)raw.data();
 	pEvt->Hdr.Evt = BT_HCI_EVT_NB_COMPLETED_PACKET;
 	pEvt->Hdr.Len = 0;
+	pEvt->Data[0] = 0xFF;			// a count the parser must not read
 
 	BtHciProcessEvent(&dev, pEvt);
 	BT_CHECK(s_Test, s_CompletedCount == 0);
@@ -64,12 +69,16 @@ void TestLegacyAdvEventNeedsCountByte()
 	dev.ScanReport = ScanReport;
 	s_ScanCount = 0;
 
+	// Room for the subevent byte and the count byte after it; Hdr.Len says
+	// only the subevent byte is present, so the count byte is outside the
+	// event even though it is inside the allocation.
 	alignas(4) std::array<uint8_t,
-			sizeof(BtHciEvtPacketHdr_t) + 1> raw = {};
+			sizeof(BtHciEvtPacket_t) + 1> raw = {};
 	BtHciEvtPacket_t *pEvt = (BtHciEvtPacket_t *)raw.data();
 	pEvt->Hdr.Evt = BT_HCI_EVT_LE;
 	pEvt->Hdr.Len = 1;
 	pEvt->Data[0] = BT_HCI_EVT_LE_ADV_REPORT;
+	pEvt->Data[1] = 0xFF;			// a count the parser must not read
 
 	BtHciProcessEvent(&dev, pEvt);
 	BT_CHECK(s_Test, s_ScanCount == 0);
@@ -82,11 +91,12 @@ void TestExtendedAdvEventNeedsCountByte()
 	s_ScanCount = 0;
 
 	alignas(4) std::array<uint8_t,
-			sizeof(BtHciEvtPacketHdr_t) + 1> raw = {};
+			sizeof(BtHciEvtPacket_t) + 1> raw = {};
 	BtHciEvtPacket_t *pEvt = (BtHciEvtPacket_t *)raw.data();
 	pEvt->Hdr.Evt = BT_HCI_EVT_LE;
 	pEvt->Hdr.Len = 1;
 	pEvt->Data[0] = BT_HCI_EVT_LE_EXT_ADV_REPORT;
+	pEvt->Data[1] = 0xFF;			// a count the parser must not read
 
 	BtHciProcessEvent(&dev, pEvt);
 	BT_CHECK(s_Test, s_ScanCount == 0);
@@ -97,7 +107,7 @@ void FeedExtAdv(BtHciDevice_t *pDev, const uint8_t Addr[6],
 				const uint8_t *pData, uint8_t DataLen)
 {
 	alignas(4) std::array<uint8_t,
-			sizeof(BtHciEvtPacketHdr_t) + 1 + 1 + 24 + 32> raw = {};
+			sizeof(BtHciEvtPacket_t) + 1 + 1 + 24 + 32> raw = {};
 	BtHciEvtPacket_t *pEvt = (BtHciEvtPacket_t *)raw.data();
 	pEvt->Hdr.Evt = BT_HCI_EVT_LE;
 	pEvt->Hdr.Len = (uint8_t)(1 + 1 + 24 + DataLen);

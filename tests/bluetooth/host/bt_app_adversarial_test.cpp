@@ -90,6 +90,30 @@ void TestZeroLengthValueReplacesStoredValue()
 
 extern "C" {
 
+// The All forms walk the peer pool rather than copying handles into a fixed
+// local array, so the stub pool has to expose slots.
+BtDevice_t *BtPeerSlot(uint16_t Idx)
+{
+	static BtDevice_t s_Slots[kLinkCount];
+	static bool s_Init = false;
+
+	if (s_Init == false)
+	{
+		for (size_t i = 0; i < kLinkCount; i++)
+		{
+			s_Slots[i].Conn.Hdl = s_Links[i];
+		}
+		s_Init = true;
+	}
+
+	return Idx < kLinkCount ? &s_Slots[Idx] : nullptr;
+}
+
+uint16_t BtPeerCount(void)
+{
+	return (uint16_t)kLinkCount;
+}
+
 size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 {
 	size_t count = kLinkCount < MaxCount ? kLinkCount : MaxCount;

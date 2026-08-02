@@ -118,12 +118,15 @@ void TestUntrackedPacketDoesNotFire()
 {
 	Setup(64);
 
-	// An ATT response goes out first: one packet, no owner.
+	// An ATT response goes out first: one packet, no owner. Foreign packets
+	// are counted, not given ring entries, so ordinary request and response
+	// traffic cannot exhaust the ring and refuse a notification.
 	BtGattTxPendUntracked(kConnHdl, 1);
-	CHECK(Peer()->TxPendCount == 1);
+	CHECK(Peer()->TxPendCount == 0);
+	CHECK(Peer()->TxUntracked == 1);
 
 	CHECK(BtGattCharNotify(kConnHdl, &s_Char[0], s_Value, 8));
-	CHECK(Peer()->TxPendCount == 2);
+	CHECK(Peer()->TxPendCount == 1);
 
 	// The controller reports the response. The notification is still in
 	// flight, so nothing fires and its entry stays.
@@ -137,8 +140,7 @@ void TestUntrackedPacketDoesNotFire()
 	CHECK(Peer()->TxPendCount == 0);
 }
 
-// Consecutive packets with no owner share one entry, so request and response
-// traffic does not consume the ring.
+// Packets with no owner accumulate in the counter, never in the ring.
 void TestUntrackedCoalesces()
 {
 	Setup(64);
@@ -146,10 +148,11 @@ void TestUntrackedCoalesces()
 	BtGattTxPendUntracked(kConnHdl, 1);
 	BtGattTxPendUntracked(kConnHdl, 1);
 	BtGattTxPendUntracked(kConnHdl, 1);
-	CHECK(Peer()->TxPendCount == 1);
+	CHECK(Peer()->TxPendCount == 0);
+	CHECK(Peer()->TxUntracked == 3);
 
 	CHECK(BtGattCharNotify(kConnHdl, &s_Char[0], s_Value, 8));
-	CHECK(Peer()->TxPendCount == 2);
+	CHECK(Peer()->TxPendCount == 1);
 
 	BtGattSendCompleted(kConnHdl, 3);
 	CHECK(s_TxCompleteCount == 0);
@@ -261,7 +264,8 @@ void TestSendOrderPreserved()
 	CHECK(BtGattCharNotify(kConnHdl, &s_Char[0], s_Value, 8));
 	BtGattTxPendUntracked(kConnHdl, 2);
 	CHECK(BtGattCharNotify(kConnHdl, &s_Char[1], s_Value, 8));
-	CHECK(Peer()->TxPendCount == 3);
+	CHECK(Peer()->TxPendCount == 2);
+	CHECK(Peer()->TxUntracked == 2);
 
 	// One report covering everything drains the groups in send order and
 	// fires exactly the two notifications.

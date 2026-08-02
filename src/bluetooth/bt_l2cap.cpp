@@ -96,6 +96,28 @@ static bool BtL2CapAppendCmdReject(uint8_t *pOut, uint16_t *pOutLen, uint16_t Ou
 							  Id, payload, (uint16_t)(sizeof(uint16_t) + DataLen));
 }
 
+// An identified response is not answered with a Command Reject (Vol 3 Part A
+// 4.1). A packet whose first command is one of these is discarded when it
+// cannot be processed, otherwise two implementations that both reject on sight
+// can answer each other's rejects.
+static bool BtL2CapCodeIsResponse(uint8_t Code)
+{
+	switch (Code)
+	{
+		case BT_L2CAP_CODE_COMMAND_REJECT_RSP:
+		case BT_L2CAP_CODE_CONNECTION_PARAMETER_UPDATE_RSP:
+		case BT_L2CAP_CODE_LE_CREDIT_BASED_CONNECTION_RSP:
+		case BT_L2CAP_CODE_DISCONNECTION_RSP:
+		case BT_L2CAP_CODE_CREDIT_BASED_CONNECTION_RSP:
+		case BT_L2CAP_CODE_CREDIT_BASED_RECONFIGURE_RSP:
+			return true;
+		default:
+			break;
+	}
+
+	return false;
+}
+
 static bool BtL2CapConnParamValid(const BtL2CapConnParamUpdateReq_t *pReq)
 {
 	if (pReq == nullptr)
@@ -254,10 +276,21 @@ uint32_t BtL2CapProcessSignal(BtHciDevice_t * const pDev,
 	// is already known to be wrong.
 	if (ReqLen > BT_L2CAP_LE_SIG_MTU)
 	{
+		uint8_t code = ((BtL2CapCFrame_t const *)p)->Code;
+		uint8_t id = ((BtL2CapCFrame_t const *)p)->Id;
+
+		// Identifier 0 is reserved and never valid on a signaling command
+		// (Vol 3 Part A 4). Nothing can be echoed back, so discard.
+		if (BtL2CapCodeIsResponse(code) || id == 0)
+		{
+			pRspPdu->Hdr.Len = 0;
+
+			return 0;
+		}
+
 		uint16_t sigMtu = BT_L2CAP_LE_SIG_MTU;
 
-		BtL2CapAppendCmdReject(pOut, &outLen, outMax,
-								((BtL2CapCFrame_t const *)p)->Id,
+		BtL2CapAppendCmdReject(pOut, &outLen, outMax, id,
 								BT_L2CAP_CMD_REJECT_REASON_MTU_EXCEEDED,
 								&sigMtu, sizeof(sigMtu));
 		pRspPdu->Hdr.Len = outLen;

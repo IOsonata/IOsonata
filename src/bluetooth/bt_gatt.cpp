@@ -551,13 +551,11 @@ void BtGattTxPendRelease(uint16_t ConnHdl)
 
 // Account for HCI packets this link sent that carry no GATT completion: ATT
 // responses, SMP PDUs, L2CAP signaling. They own no callback but the controller
-// still reports them, and without an entry of their own their completions drain
-// the ring and fire someone else's callback early.
+// still reports them, and without this their completions drain the ring and
+// fire someone else's callback early.
 //
-// Consecutive untracked packets coalesce into one entry, so ordinary request
-// and response traffic does not consume the ring. If there is no room at all
-// the count is added to the last entry instead of being dropped: that delays a
-// callback rather than firing it early, which is the safe direction to err.
+// They are counted rather than given ring entries, so ordinary request and
+// response traffic cannot exhaust the ring and refuse a notification.
 void BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
@@ -567,20 +565,14 @@ void BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
 		return;
 	}
 
-	if (pConn->TxPendCount > 0)
-	{
-		uint8_t tail = (uint8_t)((pConn->TxPendHead + pConn->TxPendCount - 1) %
-								 BT_DEV_TXPEND_MAX);
+	pConn->TxUntracked = (uint16_t)(pConn->TxUntracked + NbPkt);
+}
 
-		if (pConn->TxPend[tail].pChar == nullptr ||
-			pConn->TxPendCount >= BT_DEV_TXPEND_MAX)
-		{
-			pConn->TxPend[tail].Remain = (uint16_t)(pConn->TxPend[tail].Remain + NbPkt);
-			return;
-		}
-	}
-
-	BtGattTxPendReserve(ConnHdl, nullptr, NbPkt);
+// Single-packet reservation, kept for callers that send one packet and do not
+// care to say so.
+void BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar)
+{
+	BtGattTxPendReserve(ConnHdl, pChar, 1);
 }
 
 // Number of HCI ACL packets a PDU of AclLen octets is sent as. The controller
@@ -1000,6 +992,14 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 	// and a group with no owner (an ATT response, SMP, L2CAP signaling) absorbs
 	// its own completions instead of firing someone else's callback.
 	uint16_t n = NbPktSent;
+
+	// Packets no GATT operation owns come off first. They were sent on this
+	// link and the controller is reporting them; charging them to the head
+	// group is what fired callbacks early.
+	uint16_t foreign = min(n, pConn->TxUntracked);
+	pConn->TxUntracked = (uint16_t)(pConn->TxUntracked - foreign);
+	n = (uint16_t)(n - foreign);
+
 	while (n > 0 && pConn->TxPendCount > 0)
 	{
 		uint16_t take = min(n, pConn->TxPend[pConn->TxPendHead].Remain);

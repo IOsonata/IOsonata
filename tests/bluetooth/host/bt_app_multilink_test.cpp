@@ -74,6 +74,25 @@ void SetLinks(const uint16_t *pHdl, size_t Count)
 // under test rather than the GATT send itself.
 extern "C" {
 
+BtDevice_t *BtPeerSlot(uint16_t Idx)
+{
+	static BtDevice_t s_Slots[8];
+
+	if (Idx >= s_LinkCount)
+	{
+		return nullptr;
+	}
+
+	s_Slots[Idx].Conn.Hdl = s_Links[Idx];
+
+	return &s_Slots[Idx];
+}
+
+uint16_t BtPeerCount(void)
+{
+	return (uint16_t)s_LinkCount;
+}
+
 size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 {
 	size_t n = s_LinkCount < MaxCount ? s_LinkCount : MaxCount;
