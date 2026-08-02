@@ -46,6 +46,7 @@ HCI_SOURCES := \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
+SMP_DIAG_SOURCE := $(BUILD_DIR)/smp/bt_smp_dual_host_diag.cpp
 SMP_TEST_OBJ := $(BUILD_DIR)/smp/bt_smp_dual_host_test.o
 SMP_FRAMEWORK_OBJ := $(BUILD_DIR)/smp/bt_compliance.o
 SMP_CORE_OBJ := $(BUILD_DIR)/smp/bt_smp.o
@@ -101,7 +102,15 @@ $(HCI_TARGET): $(HCI_SOURCES) $(HEADERS) $(CFIFO_OBJ)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$(HCI_SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
 
-$(SMP_TEST_OBJ): smp/bt_smp_dual_host_test.cpp $(HEADERS)
+$(SMP_DIAG_SOURCE): smp/bt_smp_dual_host_test.cpp
+	@mkdir -p $(dir $@)
+	sed \
+		-e 's/centralIo <= BT_SMP_IOCAPS_KEYBOARD_DISPLAY/centralIo <= 0/' \
+		-e 's/peripheralIo <= BT_SMP_IOCAPS_KEYBOARD_DISPLAY/peripheralIo <= 0/' \
+		-e 's/mode < 3/mode < 1/' \
+		$< > $@
+
+$(SMP_TEST_OBJ): $(SMP_DIAG_SOURCE) $(HEADERS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(SMP_CPPFLAGS) $(SMP_TEST_RENAMES) $(CXXFLAGS) $(SANITIZERS) \
 		-c $< -o $@
