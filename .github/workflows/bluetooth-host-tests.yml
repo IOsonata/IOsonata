@@ -51,3 +51,9 @@ jobs:
             CC=${{ matrix.cc }} \
             CXX=${{ matrix.cxx }} \
             OPT=${{ matrix.opt }}
+
+      - name: Build and run Bluetooth compliance tests
+        run: |
+          make -C tests/bluetooth/compliance clean test \
+            CXX=${{ matrix.cxx }} \
+            OPT=${{ matrix.opt }}
