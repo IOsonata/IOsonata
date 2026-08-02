@@ -235,6 +235,77 @@ bool BtAttWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hd
 	return true;
 }
 
+// Prepare Write Request (opcode 0x16). Reliable/long writes require the
+// server to echo the complete fragment, so an oversize fragment is rejected
+// rather than silently truncated.
+bool BtAttPrepareWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+								 uint16_t Hdl, uint16_t Offset,
+								 const uint8_t *pData, size_t DataLen)
+{
+	if (pDev == nullptr || pDev->SendData == nullptr ||
+		(pData == nullptr && DataLen != 0))
+	{
+		return false;
+	}
+
+	uint8_t buff[BT_HCI_BUFFER_MAX_SIZE];
+	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buff;
+	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+
+	const size_t maxData = BT_HCI_BUFFER_MAX_SIZE - sizeof(acl->Hdr) -
+			sizeof(BtL2CapHdr_t) - 5U;
+	if (DataLen > maxData)
+	{
+		return false;
+	}
+
+	acl->Hdr.ConnHdl = ConnHdl;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
+	acl->Hdr.BCFlag = 0;
+
+	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
+	l2pdu->Att.PrepareWriteReq.Hdl = Hdl;
+	l2pdu->Att.PrepareWriteReq.Offset = Offset;
+	if (DataLen > 0)
+	{
+		memcpy(l2pdu->Att.PrepareWriteReq.Data, pData, DataLen);
+	}
+	l2pdu->Hdr.Len = (uint16_t)(5U + DataLen);
+	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
+	acl->Hdr.Len = (uint16_t)(l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t));
+
+	uint32_t total = (uint32_t)(acl->Hdr.Len + sizeof(acl->Hdr));
+	return pDev->SendData((uint8_t*)acl, total) == total;
+}
+
+// Execute Write Request (opcode 0x18). Execute=true commits every queued
+// prepared write on the connection; false cancels the queue.
+bool BtAttExecuteWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+								 bool Execute)
+{
+	if (pDev == nullptr || pDev->SendData == nullptr)
+	{
+		return false;
+	}
+
+	uint8_t buff[BT_HCI_BUFFER_MAX_SIZE];
+	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buff;
+	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+
+	acl->Hdr.ConnHdl = ConnHdl;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
+	acl->Hdr.BCFlag = 0;
+
+	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ;
+	l2pdu->Att.ExecuteWriteReq.Flag = Execute ? 0x01 : 0x00;
+	l2pdu->Hdr.Len = 2;
+	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
+	acl->Hdr.Len = (uint16_t)(l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t));
+
+	uint32_t total = (uint32_t)(acl->Hdr.Len + sizeof(acl->Hdr));
+	return pDev->SendData((uint8_t*)acl, total) == total;
+}
+
 // Write Command (opcode 0x52), write without response. Use for data streams
 // where per-write acknowledgement is not needed.
 bool BtAttWriteCommand(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl, uint8_t *pData, size_t DataLen)
