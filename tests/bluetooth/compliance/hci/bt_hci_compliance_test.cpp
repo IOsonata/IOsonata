@@ -6,6 +6,7 @@
 
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_hci.h"
+#include "bluetooth/bt_hci_ctlr.h"
 #include "bluetooth/bt_hcievt.h"
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_smp.h"
@@ -33,6 +34,8 @@ int s_ScanReports;
 size_t s_LastScanLength;
 uint8_t s_LastScanData[64];
 int s_AttRequests;
+int s_CtlrStartCalls;
+bool s_CtlrStartResult = true;
 uint16_t s_LastAttHandle;
 int s_LastAttLength;
 uint8_t s_LastAttOpcode;
@@ -508,20 +511,74 @@ void TestPeerReadsHostOutput(Context &ctx)
 	ctx.End();
 }
 
-void RecordTargetPortGap(Context &ctx)
+// The bring-up order is generic now: BtHciCtlrEnable validates, runs
+// BtHciCtlrInit, and reaches BtHciCtlrStart only if that succeeded. The vendor
+// work lives behind BtHciCtlrStart, so the ordering can be checked on the host
+// without the target SDK. The stub below stands in for a port's start hook and
+// records whether it was reached.
+void CheckControllerEnableGatesOnInit(Context &ctx)
 {
 	static const Requirement req = {
 		"HCI-CTLR-INIT-BI-01", "IOsonata controller port", "initialization",
 		"controller enable fails when target controller initialization fails"
 	};
 	ctx.Begin(req);
-	ctx.Skip("requires fake vendor SDK headers and target-port builds for Nordic and STM32 controller integrations");
+
+	BtHciCtlrDev_t dev = {};
+	BtHciCtlrCfg_t cfg = {};
+
+	// Null arguments never reach the port.
+	s_CtlrStartCalls = 0;
+	BT_CHECK(ctx, BtHciCtlrEnable(nullptr, &cfg) == false);
+	BT_CHECK(ctx, BtHciCtlrEnable(&dev, nullptr) == false);
+	BT_CHECK(ctx, s_CtlrStartCalls == 0);
+
+	// A caller-supplied RX FIFO too small for one packet fails BtHciCtlrInit,
+	// which returns before it assigns RxHandler, Receive or the interface
+	// table. Starting the controller anyway would report an enabled controller
+	// with no receive path, delivering nothing and saying nothing.
+	static uint8_t tiny[8];
+	cfg.PacketSize = 64;
+	cfg.pRxFifoMem = tiny;
+	cfg.RxFifoMemSize = sizeof(tiny);
+
+	s_CtlrStartCalls = 0;
+	BT_CHECK(ctx, BtHciCtlrEnable(&dev, &cfg) == false);
+	BT_CHECK(ctx, s_CtlrStartCalls == 0);
+	BT_CHECK(ctx, dev.RxHandler == nullptr);
+
+	// The same configuration with enough room initializes, so the port is
+	// reached and the answer is the port's.
+	static uint8_t room[1024];
+	cfg.pRxFifoMem = room;
+	cfg.RxFifoMemSize = sizeof(room);
+
+	s_CtlrStartCalls = 0;
+	s_CtlrStartResult = true;
+	BT_CHECK(ctx, BtHciCtlrEnable(&dev, &cfg));
+	BT_CHECK(ctx, s_CtlrStartCalls == 1);
+
+	// A port that fails its own bring-up fails the enable.
+	s_CtlrStartCalls = 0;
+	s_CtlrStartResult = false;
+	BT_CHECK(ctx, BtHciCtlrEnable(&dev, &cfg) == false);
+	BT_CHECK(ctx, s_CtlrStartCalls == 1);
+
 	ctx.End();
 }
 
 } // namespace
 
 extern "C" {
+
+// Stands in for a port's controller bring-up. The weak default in
+// bt_hci_ctlr.cpp succeeds; this strong one records whether it was reached and
+// answers what the test asked for.
+bool BtHciCtlrStart(BtHciCtlrDev_t * const, const BtHciCtlrCfg_t *)
+{
+	s_CtlrStartCalls++;
+	return s_CtlrStartResult;
+}
 
 uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReq,
 	int ReqLen, BtAttReqRsp_t * const)
@@ -594,7 +651,7 @@ int main()
 	TestDroppedExtendedAdvertisingReassembly(ctx);
 	TestPeerInputReassembly(ctx);
 	TestPeerReadsHostOutput(ctx);
-	RecordTargetPortGap(ctx);
+	CheckControllerEnableGatesOnInit(ctx);
 
 	const bool strict = std::getenv("BT_COMPLIANCE_STRICT") != nullptr;
 	return ctx.Finish(strict);

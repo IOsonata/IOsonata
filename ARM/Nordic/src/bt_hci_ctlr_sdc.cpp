@@ -299,22 +299,13 @@ static void BtStackSdcCB()
 	BtHciCtlrProcess(s_pBtHciCtlrSdc);
 }
 
-bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
+// SDC bring-up, reached from the generic BtHciCtlrEnable once BtHciCtlrInit
+// has succeeded. The argument checks and the init gate live there now, so this
+// starts from a device that is already wired.
+bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 {
 	if (pDev == nullptr || pCfg == nullptr)
 	{
-		return false;
-	}
-
-	// Generic init first, and its result is the gate. It rejects an invalid
-	// packet size, a misaligned or undersized RX FIFO buffer, and a CFifoInit
-	// failure, returning before it assigns RxHandler, Receive or the interface
-	// table. Continuing past that reported an enabled controller whose receive
-	// path was never wired, so no HCI packet would ever be delivered and
-	// nothing would say why.
-	if (BtHciCtlrInit(pDev, pCfg) == false)
-	{
-		DEBUG_PRINTF("BtHciCtlrInit failed\r\n");
 		return false;
 	}
 

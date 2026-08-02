@@ -128,12 +128,18 @@ size_t BtHciCtlrSdcSend(void *pData, size_t Len);
 uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen);
 
 /**
- * @brief	Bring up the controller: initialize the underlying stack, apply
- *			role and resource configuration, and enable it.
+ * @brief	Bring up the controller.
  *
- * For the SDC controller this runs sdc_init, the role-gated sdc_support_*
- * calls, sdc_cfg_set resource sizing, MpslInit, and sdc_enable, then wires
- * the device through BtHciCtlrInit. Call once at startup before the pump.
+ * Generic, one implementation for every port. Validates the arguments, runs
+ * BtHciCtlrInit and stops if it fails, then hands over to BtHciCtlrStart for
+ * whatever the target's controller needs.
+ *
+ * The order matters and is why this is not left to each port. BtHciCtlrInit
+ * assigns RxHandler, Receive and the interface table, and returns early
+ * without them on a bad packet size, a misaligned or undersized RX FIFO
+ * buffer, or a CFifoInit failure. A port that starts its controller anyway
+ * reports an enabled controller with no receive path, and no HCI packet is
+ * ever delivered.
  *
  * @param	pDev	Controller device.
  * @param	pCfg	Controller configuration.
@@ -141,6 +147,25 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
  * @return	true on success.
  */
 bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
+
+/**
+ * @brief	Target controller bring-up, called by BtHciCtlrEnable.
+ *
+ * Everything vendor specific belongs here: for the SDC port that is sdc_init,
+ * the role-gated sdc_support_* calls, sdc_cfg_set resource sizing, MpslInit
+ * and sdc_enable. A port that needs nothing beyond the generic wiring, such
+ * as a plain HCI transport over UART or USB, can leave the weak default,
+ * which succeeds.
+ *
+ * Called only after BtHciCtlrInit has succeeded, so the device is wired
+ * before any controller traffic can arrive.
+ *
+ * @param	pDev	Controller device, already initialized.
+ * @param	pCfg	Controller configuration.
+ *
+ * @return	true on success.
+ */
+bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
 
 /**
  * @brief	Drain all HCI packets currently queued by the controller.

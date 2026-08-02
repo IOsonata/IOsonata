@@ -213,3 +213,37 @@ size_t BtHciCtlrSendCommand(BtHciCtlrDev_t * const pDev, uint16_t OpCode, const 
 
 	return pDev->SendCommand(pDev, buf, BTHCICTLR_CMD_HDR_LEN + ParamLen);
 }
+
+// Target controller bring-up. The weak default succeeds, which is right for a
+// port whose controller needs nothing beyond the generic wiring: a plain HCI
+// transport over UART or USB has no vendor stack to start.
+__attribute__((weak)) bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev,
+										  const BtHciCtlrCfg_t *pCfg)
+{
+	(void)pDev;
+	(void)pCfg;
+
+	return true;
+}
+
+// One bring-up sequence for every port. The ordering is the point: generic
+// init assigns RxHandler, Receive and the interface table, and returns early
+// without them on a bad packet size, a misaligned or undersized RX FIFO
+// buffer, or a CFifoInit failure. Starting the controller anyway leaves an
+// enabled controller with no receive path, delivering nothing and saying
+// nothing. This used to be each port's own function, and the SDC one
+// discarded the init result.
+bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
+{
+	if (pDev == nullptr || pCfg == nullptr)
+	{
+		return false;
+	}
+
+	if (BtHciCtlrInit(pDev, pCfg) == false)
+	{
+		return false;
+	}
+
+	return BtHciCtlrStart(pDev, pCfg);
+}

@@ -2,6 +2,7 @@ ROOT := ../../..
 BUILD_DIR := build
 TARGET := $(BUILD_DIR)/bt_hci_compliance_test
 
+CC ?= gcc
 CXX ?= g++
 OPT ?= -O1
 
@@ -33,7 +34,8 @@ SOURCES := \
 	framework/bt_virtual_clock.cpp \
 	controller/bt_virtual_controller.cpp \
 	peer/bt_virtual_peer.cpp \
-	$(ROOT)/src/bluetooth/bt_hci_host.cpp
+	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
 HEADERS := \
 	$(wildcard framework/*.h) \
@@ -53,10 +55,21 @@ test: $(TARGET)
 strict: $(TARGET)
 	BT_COMPLIANCE_STRICT=1 $(TEST_ENV) ./$(TARGET)
 
-$(TARGET): $(SOURCES) $(HEADERS)
+# cfifo is C, not C++: it uses C11 atomics that a C++ compiler rejects. The
+# controller layer needs it, so it is built as C and linked in.
+CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
+CFLAGS ?= $(OPT) -g
+CFLAGS += -std=gnu11 -Wall -Wextra -fno-omit-frame-pointer \
+	-ffunction-sections -fdata-sections -fstack-protector-strong
+
+$(CFIFO_OBJ): $(ROOT)/src/cfifo.c
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(TARGET): $(SOURCES) $(HEADERS) $(CFIFO_OBJ)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
-		$(SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+		$(SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 clean:
 	rm -rf $(BUILD_DIR)
