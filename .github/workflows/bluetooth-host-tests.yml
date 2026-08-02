@@ -19,65 +19,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-jobs:
-  patch-oob:
-    if: github.event_name == 'push' && github.ref_name == 'bt_conformance' && github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: bt_conformance
-      - name: Patch initiator OOB key selection
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('src/bluetooth/bt_smp.cpp')
-          s = p.read_text()
-          old = '''\tif (pLink->Ctx.Model == BT_SMP_MODEL_OOB && SmpOobLocalReady(pLink))
-\t{
-\t\tmemcpy(pLink->Ctx.LocalPubKey, s_SmpOob.LocalPubKey, 64);
-\t\treturn BT_SMP_CRYPTO_OK;
-\t}
-'''
-          new = '''\t// The initiator selects its P-256 key before the Pairing Response
-\t// arrives, so Ctx.Model is not known yet. When the outgoing Pairing
-\t// Request advertises OOB, reuse the key committed by
-\t// BtSmpOobLocalDataGen instead of generating a different key pair.
-\tbool pairingAdvertisesOob = pLink->Ctx.PReq[2] == BT_SMP_OOB_AUTH_PRESENT;
-\tif ((pLink->Ctx.Model == BT_SMP_MODEL_OOB || pairingAdvertisesOob) &&
-\t\tSmpOobLocalReady(pLink))
-\t{
-\t\tmemcpy(pLink->Ctx.LocalPubKey, s_SmpOob.LocalPubKey, 64);
-\t\treturn BT_SMP_CRYPTO_OK;
-\t}
-'''
-          if old not in s:
-              raise SystemExit('SMP OOB target block not found')
-          p.write_text(s.replace(old, new, 1))
-          Path('.github/workflows/bt-smp-oob-fix.yml').unlink(missing_ok=True)
-          Path('.github/workflows/bluetooth-host-tests.yml').write_text('''name: Bluetooth host tests
-
-on:
-  push:
-    branches:
-      - bt_update
-      - bt_conformance
-    paths:
-      - "include/bluetooth/**"
-      - "src/bluetooth/**"
-      - "tests/bluetooth/**"
-      - ".github/workflows/bluetooth-host-tests.yml"
-  pull_request:
-    paths:
-      - "include/bluetooth/**"
-      - "src/bluetooth/**"
-      - "tests/bluetooth/**"
-      - ".github/workflows/bluetooth-host-tests.yml"
-  workflow_dispatch:
-
-permissions:
   contents: read
 
 jobs:
@@ -106,24 +47,14 @@ jobs:
 
       - name: Build and run Bluetooth host tests
         run: |
-          make -C tests/bluetooth/host clean test \\
-            CC=${{ matrix.cc }} \\
-            CXX=${{ matrix.cxx }} \\
+          make -C tests/bluetooth/host clean test \
+            CC=${{ matrix.cc }} \
+            CXX=${{ matrix.cxx }} \
             OPT=${{ matrix.opt }}
 
       - name: Build and run Bluetooth compliance tests
         run: |
-          make -C tests/bluetooth/compliance clean test \\
-            CC=${{ matrix.cc }} \\
-            CXX=${{ matrix.cxx }} \\
+          make -C tests/bluetooth/compliance clean test \
+            CC=${{ matrix.cc }} \
+            CXX=${{ matrix.cxx }} \
             OPT=${{ matrix.opt }}
-''')
-          PY
-      - name: Commit production fix
-        run: |
-          git config user.name "IOsonata CI"
-          git config user.email "ci@iosonata.com"
-          git add src/bluetooth/bt_smp.cpp .github/workflows/bluetooth-host-tests.yml
-          git add -u .github/workflows/bt-smp-oob-fix.yml || true
-          git commit -m "bt: reuse generated key for initiator SC OOB"
-          git push origin HEAD:bt_conformance
