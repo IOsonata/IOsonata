@@ -46,7 +46,6 @@ HCI_SOURCES := \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
-SMP_DIAG_SOURCE := $(BUILD_DIR)/smp/bt_smp_dual_host_diag.cpp
 SMP_TEST_OBJ := $(BUILD_DIR)/smp/bt_smp_dual_host_test.o
 SMP_FRAMEWORK_OBJ := $(BUILD_DIR)/smp/bt_compliance.o
 SMP_CORE_OBJ := $(BUILD_DIR)/smp/bt_smp.o
@@ -102,19 +101,7 @@ $(HCI_TARGET): $(HCI_SOURCES) $(HEADERS) $(CFIFO_OBJ)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$(HCI_SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
 
-$(SMP_DIAG_SOURCE): smp/bt_smp_dual_host_test.cpp
-	@mkdir -p $(dir $@)
-	awk '{ \
-		print; \
-		if ($$0 ~ /PairingRunResult result = RunPairing\(cfg\);/) \
-			print "\t\tif (!result.TransportOk || !result.Complete || !result.Success) fprintf(stderr, \"PAIR FAIL ci=%u pi=%u mitm=%d oob=%d periph=%d transport=%d complete=%d success=%d auth=%d sc=%d numeric=%d passkey=%d fail=0x%02x steps=%d\\\\n\", cfg.CentralIo, cfg.PeripheralIo, cfg.Mitm, cfg.Oob, cfg.PeripheralStarts, result.TransportOk, result.Complete, result.Success, result.Authenticated, result.Sc, result.Numeric, result.Passkey, result.FailureReason, result.Steps);"; \
-		if ($$0 ~ /PairingRunResult missingResult = RunPairing\(missing\);/) \
-			print "\tif (missingResult.Success || missingResult.FailureReason != BT_SMP_ERR_OOB_NOT_AVAILABLE) fprintf(stderr, \"OOB MISSING transport=%d complete=%d success=%d fail=0x%02x steps=%d\\\\n\", missingResult.TransportOk, missingResult.Complete, missingResult.Success, missingResult.FailureReason, missingResult.Steps);"; \
-		if ($$0 ~ /PairingRunResult corruptResult = RunPairing\(corrupt\);/) \
-			print "\tif (corruptResult.Success || corruptResult.FailureReason == 0) fprintf(stderr, \"OOB CORRUPT transport=%d complete=%d success=%d fail=0x%02x steps=%d\\\\n\", corruptResult.TransportOk, corruptResult.Complete, corruptResult.Success, corruptResult.FailureReason, corruptResult.Steps);"; \
-	}' $< > $@
-
-$(SMP_TEST_OBJ): $(SMP_DIAG_SOURCE) $(HEADERS)
+$(SMP_TEST_OBJ): smp/bt_smp_dual_host_test.cpp $(HEADERS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(SMP_CPPFLAGS) $(SMP_TEST_RENAMES) $(CXXFLAGS) $(SANITIZERS) \
 		-c $< -o $@
