@@ -7,6 +7,12 @@ on:
     paths:
       - "tools/apply_bt_failure_fixes.py"
       - ".github/workflows/apply-bt-failure-fixes.yml"
+  pull_request:
+    branches:
+      - bt_conformance
+    paths:
+      - "tools/apply_bt_failure_fixes.py"
+      - ".github/workflows/apply-bt-failure-fixes.yml"
 
 permissions:
   contents: write
@@ -15,10 +21,12 @@ jobs:
   apply-and-test:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+    env:
+      TARGET_BRANCH: ${{ github.event.pull_request.head.ref || 'bt_conformance' }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: bt_conformance
+          ref: ${{ env.TARGET_BRANCH }}
           fetch-depth: 0
 
       - name: Apply fixes
@@ -55,4 +63,4 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
           git commit -m "bt: harden failure paths and adversarial tests"
-          git push origin HEAD:bt_conformance
+          git push origin HEAD:${TARGET_BRANCH}
