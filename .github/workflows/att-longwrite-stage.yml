@@ -1,0 +1,239 @@
+name: Stage ATT long-write client builders
+
+on:
+  push:
+    branches:
+      - feature/bt-att-long-write-ci
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/bt-att-long-write-ci
+
+      - name: Add client builders and coverage
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              if new in s:
+                  return
+              if old not in s:
+                  raise SystemExit(f"expected block not found in {path}")
+              p.write_text(s.replace(old, new, 1))
+
+          replace_once(
+              'include/bluetooth/bt_att.h',
+              '''bool BtAttWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl, uint8_t *pData, size_t DataLen);
+          bool BtAttWriteCommand(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl, uint8_t *pData, size_t DataLen);''',
+              '''bool BtAttWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl, uint8_t *pData, size_t DataLen);
+          bool BtAttPrepareWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+          \t\t\t\t\t\t\t\t uint16_t Hdl, uint16_t Offset,
+          \t\t\t\t\t\t\t\t const uint8_t *pData, size_t DataLen);
+          bool BtAttExecuteWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+          \t\t\t\t\t\t\t\t bool Execute);
+          bool BtAttWriteCommand(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl, uint8_t *pData, size_t DataLen);''')
+
+          replace_once(
+              'src/bluetooth/bt_attreq.cpp',
+              '''// Write Command (opcode 0x52), write without response. Use for data streams
+          // where per-write acknowledgement is not needed.
+          bool BtAttWriteCommand''',
+              '''// Prepare Write Request (opcode 0x16). Reliable/long writes require the
+          // server to echo the complete fragment, so an oversize fragment is rejected
+          // rather than silently truncated.
+          bool BtAttPrepareWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+          \t\t\t\t\t\t\t\t uint16_t Hdl, uint16_t Offset,
+          \t\t\t\t\t\t\t\t const uint8_t *pData, size_t DataLen)
+          {
+          \tif (pDev == nullptr || pDev->SendData == nullptr ||
+          \t\t(pData == nullptr && DataLen != 0))
+          \t{
+          \t\treturn false;
+          \t}
+
+          \tuint8_t buff[BT_HCI_BUFFER_MAX_SIZE];
+          \tBtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buff;
+          \tBtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+
+          \tconst size_t maxData = BT_HCI_BUFFER_MAX_SIZE - sizeof(acl->Hdr) -
+          \t\t\tsizeof(BtL2CapHdr_t) - 5U;
+          \tif (DataLen > maxData)
+          \t{
+          \t\treturn false;
+          \t}
+
+          \tacl->Hdr.ConnHdl = ConnHdl;
+          \tacl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
+          \tacl->Hdr.BCFlag = 0;
+
+          \tl2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
+          \tl2pdu->Att.PrepareWriteReq.Hdl = Hdl;
+          \tl2pdu->Att.PrepareWriteReq.Offset = Offset;
+          \tif (DataLen > 0)
+          \t{
+          \t\tmemcpy(l2pdu->Att.PrepareWriteReq.Data, pData, DataLen);
+          \t}
+          \tl2pdu->Hdr.Len = (uint16_t)(5U + DataLen);
+          \tl2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
+          \tacl->Hdr.Len = (uint16_t)(l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t));
+
+          \tuint32_t total = (uint32_t)(acl->Hdr.Len + sizeof(acl->Hdr));
+          \treturn pDev->SendData((uint8_t*)acl, total) == total;
+          }
+
+          // Execute Write Request (opcode 0x18). Execute=true commits every queued
+          // prepared write on the connection; false cancels the queue.
+          bool BtAttExecuteWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+          \t\t\t\t\t\t\t\t bool Execute)
+          {
+          \tif (pDev == nullptr || pDev->SendData == nullptr)
+          \t{
+          \t\treturn false;
+          \t}
+
+          \tuint8_t buff[BT_HCI_BUFFER_MAX_SIZE];
+          \tBtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buff;
+          \tBtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+
+          \tacl->Hdr.ConnHdl = ConnHdl;
+          \tacl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
+          \tacl->Hdr.BCFlag = 0;
+
+          \tl2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ;
+          \tl2pdu->Att.ExecuteWriteReq.Flag = Execute ? 0x01 : 0x00;
+          \tl2pdu->Hdr.Len = 2;
+          \tl2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
+          \tacl->Hdr.Len = (uint16_t)(l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t));
+
+          \tuint32_t total = (uint32_t)(acl->Hdr.Len + sizeof(acl->Hdr));
+          \treturn pDev->SendData((uint8_t*)acl, total) == total;
+          }
+
+          // Write Command (opcode 0x52), write without response. Use for data streams
+          // where per-write acknowledgement is not needed.
+          bool BtAttWriteCommand''')
+
+          replace_once(
+              'tests/bluetooth/compliance/Makefile',
+              '''\t$(ROOT)/src/bluetooth/bt_att.cpp \\
+          \t$(ROOT)/src/bluetooth/bt_uuid.cpp''',
+              '''\t$(ROOT)/src/bluetooth/bt_att.cpp \\
+          \t$(ROOT)/src/bluetooth/bt_attreq.cpp \\
+          \t$(ROOT)/src/bluetooth/bt_uuid.cpp''')
+
+          replace_once(
+              'tests/bluetooth/compliance/att/bt_att_dual_host_test.cpp',
+              '''static uint8_t s_OpenValue[kMaxValueLen];
+          static uint8_t s_SecureValue[kMaxValueLen];''',
+              '''static uint8_t s_OpenValue[kMaxValueLen];
+          static uint8_t s_SecureValue[kMaxValueLen];
+          static uint8_t s_CapturedAcl[BT_HCI_BUFFER_MAX_SIZE];
+          static uint32_t s_CapturedAclLen;''')
+
+          replace_once(
+              'tests/bluetooth/compliance/att/bt_att_dual_host_test.cpp',
+              '''static void PutLe16(uint8_t *p, uint16_t Value)
+          {
+          \tp[0] = (uint8_t)(Value & 0xFF);
+          \tp[1] = (uint8_t)(Value >> 8);
+          }''',
+              '''static void PutLe16(uint8_t *p, uint16_t Value)
+          {
+          \tp[0] = (uint8_t)(Value & 0xFF);
+          \tp[1] = (uint8_t)(Value >> 8);
+          }
+
+          static uint32_t CaptureAcl(void *pData, uint32_t Len)
+          {
+          \tif (pData == nullptr || Len > sizeof(s_CapturedAcl))
+          \t{
+          \t\treturn 0;
+          \t}
+          \tstd::memcpy(s_CapturedAcl, pData, Len);
+          \ts_CapturedAclLen = Len;
+          \treturn Len;
+          }''')
+
+          replace_once(
+              'tests/bluetooth/compliance/att/bt_att_dual_host_test.cpp',
+              '''static void TestL2capAttTransport(Context &ctx)
+          {''',
+              '''static void TestClientRequestBuilders(Context &ctx)
+          {
+          \tstatic const Requirement req = {
+          \t\t"ATT-LONG-WRITE-CLIENT-BV-05", "Core Vol 3 Part F", "3.4.6.1 and 3.4.6.3",
+          \t\t"production ATT client builders emit exact Prepare Write and Execute Write ACL/L2CAP packets"
+          \t};
+          \tctx.Begin(req);
+
+          \tBtHciDevice_t dev = {};
+          \tdev.SendData = CaptureAcl;
+          \tuint8_t value[18];
+          \tFillPattern(value, sizeof(value), 0x39);
+
+          \ts_CapturedAclLen = 0;
+          \tBT_CHECK(ctx, BtAttPrepareWriteRequest(&dev, 0x0123, 0x4567, 0x0089,
+          \t\t\t\t\t\t\t\t\t value, sizeof(value)));
+          \tBtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t *)s_CapturedAcl;
+          \tBtL2CapPdu_t *l2 = (BtL2CapPdu_t *)acl->Data;
+          \tBT_CHECK(ctx, s_CapturedAclLen == sizeof(acl->Hdr) + sizeof(BtL2CapHdr_t) + 5 + sizeof(value));
+          \tBT_CHECK(ctx, acl->Hdr.ConnHdl == 0x0123);
+          \tBT_CHECK(ctx, acl->Hdr.PBFlag == BT_HCI_PBFLAG_START_NONFLUSHABLE);
+          \tBT_CHECK(ctx, l2->Hdr.Cid == BT_L2CAP_CID_ATT);
+          \tBT_CHECK(ctx, l2->Hdr.Len == 5 + sizeof(value));
+          \tBT_CHECK(ctx, l2->Att.OpCode == BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ);
+          \tBT_CHECK(ctx, l2->Att.PrepareWriteReq.Hdl == 0x4567);
+          \tBT_CHECK(ctx, l2->Att.PrepareWriteReq.Offset == 0x0089);
+          \tBT_CHECK(ctx, std::memcmp(l2->Att.PrepareWriteReq.Data, value, sizeof(value)) == 0);
+
+          \ts_CapturedAclLen = 0;
+          \tBT_CHECK(ctx, BtAttExecuteWriteRequest(&dev, 0x0123, true));
+          \tacl = (BtHciACLDataPacket_t *)s_CapturedAcl;
+          \tl2 = (BtL2CapPdu_t *)acl->Data;
+          \tBT_CHECK(ctx, l2->Att.OpCode == BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ);
+          \tBT_CHECK(ctx, l2->Att.ExecuteWriteReq.Flag == 0x01);
+          \tBT_CHECK(ctx, BtAttExecuteWriteRequest(&dev, 0x0123, false));
+          \tacl = (BtHciACLDataPacket_t *)s_CapturedAcl;
+          \tl2 = (BtL2CapPdu_t *)acl->Data;
+          \tBT_CHECK(ctx, l2->Att.ExecuteWriteReq.Flag == 0x00);
+
+          \tuint8_t tooLarge[BT_HCI_BUFFER_MAX_SIZE] = {};
+          \ts_CapturedAclLen = 0;
+          \tBT_CHECK(ctx, !BtAttPrepareWriteRequest(&dev, 1, 1, 0,
+          \t\t\t\t\t\t\t\t\t  tooLarge, sizeof(tooLarge)));
+          \tBT_CHECK(ctx, s_CapturedAclLen == 0);
+          \tBT_CHECK(ctx, !BtAttPrepareWriteRequest(nullptr, 1, 1, 0, value, 1));
+          \tBT_CHECK(ctx, !BtAttExecuteWriteRequest(nullptr, 1, true));
+          \tctx.End();
+          }
+
+          static void TestL2capAttTransport(Context &ctx)
+          {''')
+
+          replace_once(
+              'tests/bluetooth/compliance/att/bt_att_dual_host_test.cpp',
+              '''\tContext ctx("Bluetooth dual-host ATT long-write compliance");
+          \tTestL2capAttTransport(ctx);''',
+              '''\tContext ctx("Bluetooth dual-host ATT long-write compliance");
+          \tTestClientRequestBuilders(ctx);
+          \tTestL2capAttTransport(ctx);''')
+          PY
+
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add include/bluetooth/bt_att.h src/bluetooth/bt_attreq.cpp \
+            tests/bluetooth/compliance/Makefile \
+            tests/bluetooth/compliance/att/bt_att_dual_host_test.cpp
+          git commit -m "bt: add ATT long-write client request builders"
+          git push origin HEAD:feature/bt-att-long-write-ci
