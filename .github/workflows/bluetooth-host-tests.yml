@@ -38,6 +38,16 @@ jobs:
 
       - name: Apply and validate service migration
         run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/scripts/stage_bm_generic_services.py')
+          s = p.read_text()
+          old = 'if re.search(r"ble_(?:dis|bas)\\.(?:h|c)", block):'
+          new = 'if "/services/ble_dis" in block or "/services/ble_bas" in block:'
+          if old not in s:
+              raise SystemExit('staging matcher not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
           python3 .github/scripts/stage_bm_generic_services.py
           if git grep -n -E 'ble_(dis|bas)' -- ARM/Nordic/nRF54; then
             echo 'Vendor DIS/BAS references remain in the nRF54 port' >&2
