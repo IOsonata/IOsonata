@@ -196,13 +196,14 @@ pm_peer_id_t g_PeerMngrIdToDelete = PM_PEER_ID_INVALID;
 // bt_app.cpp, overridden by the app).
 //
 // The nRF52 SoftDevice ble_gattc API is identical to the S145 one used by the
-// nRF54L bm port, so this is the same state machine. Single active discovery
-// at a time; the cursor lives in file-scope statics, not per peer.
+// nRF54L bm port, so this is the same state machine.
+//
+// The cursor lives in the peer record (pDev->Discovery), one per link. It used
+// to be three file-scope statics, so starting discovery on a second connection
+// overwrote the first procedure's position and both walked the survivor's
+// table. Each response resolves its peer from the event's connection handle,
+// which is the only thing that says which procedure the response belongs to.
 // =====================================================================
-
-static BtDevice_t *s_pDiscDev    = NULL;    // peer under discovery
-static uint8_t     s_DiscSrvIdx  = 0;       // service cursor (char and desc phases)
-static uint8_t     s_DiscCharIdx = 0;       // characteristic cursor (desc phase)
 
 static void BtAppDiscStartChar(BtDevice_t *pDev);
 static void BtAppDiscStartDesc(BtDevice_t *pDev);
@@ -214,9 +215,8 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 		return false;
 	}
 
-	s_pDiscDev    = pDev;
-	s_DiscSrvIdx  = 0;
-	s_DiscCharIdx = 0;
+	pDev->Discovery.SrvIdx  = 0;
+	pDev->Discovery.CharIdx = 0;
 
 	pDev->NbSrvc = 0;
 	memset(pDev->Services, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
@@ -227,9 +227,9 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 
 static void BtAppDiscStartChar(BtDevice_t *pDev)
 {
-	while (s_DiscSrvIdx < pDev->NbSrvc)
+	while (pDev->Discovery.SrvIdx < pDev->NbSrvc)
 	{
-		BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
+		BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
 		ble_gattc_handle_range_t range;
 
 		range.start_handle = pSrvc->handle_range.StartHdl + 1;  // skip service declaration
@@ -240,31 +240,31 @@ static void BtAppDiscStartChar(BtDevice_t *pDev)
 		{
 			return;     // wait for BLE_GATTC_EVT_CHAR_DISC_RSP
 		}
-		s_DiscSrvIdx++; // empty service or request rejected; advance
+		pDev->Discovery.SrvIdx++; // empty service or request rejected; advance
 	}
 
 	// All services covered for characteristics. Resolve descriptors (CCCD).
-	s_DiscSrvIdx  = 0;
-	s_DiscCharIdx = 0;
+	pDev->Discovery.SrvIdx  = 0;
+	pDev->Discovery.CharIdx = 0;
 	BtAppDiscStartDesc(pDev);
 }
 
 static void BtAppDiscStartDesc(BtDevice_t *pDev)
 {
-	while (s_DiscSrvIdx < pDev->NbSrvc)
+	while (pDev->Discovery.SrvIdx < pDev->NbSrvc)
 	{
-		BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
+		BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
 
-		while (s_DiscCharIdx < pSrvc->char_count)
+		while (pDev->Discovery.CharIdx < pSrvc->char_count)
 		{
-			BtGattDBChar_t *pCh    = &pSrvc->characteristics[s_DiscCharIdx];
+			BtGattDBChar_t *pCh    = &pSrvc->characteristics[pDev->Discovery.CharIdx];
 			uint16_t        valHdl = pCh->characteristic.handle_value;
 			uint16_t        start  = valHdl + 1;
 			uint16_t        end;
 
-			if ((s_DiscCharIdx + 1) < pSrvc->char_count)
+			if ((pDev->Discovery.CharIdx + 1) < pSrvc->char_count)
 			{
-				end = pSrvc->characteristics[s_DiscCharIdx + 1].characteristic.handle_decl - 1;
+				end = pSrvc->characteristics[pDev->Discovery.CharIdx + 1].characteristic.handle_decl - 1;
 			}
 			else
 			{
@@ -281,10 +281,10 @@ static void BtAppDiscStartDesc(BtDevice_t *pDev)
 					return; // wait for BLE_GATTC_EVT_DESC_DISC_RSP
 				}
 			}
-			s_DiscCharIdx++; // no descriptor range or request rejected
+			pDev->Discovery.CharIdx++; // no descriptor range or request rejected
 		}
-		s_DiscSrvIdx++;
-		s_DiscCharIdx = 0;
+		pDev->Discovery.SrvIdx++;
+		pDev->Discovery.CharIdx = 0;
 	}
 
 	// Every service and characteristic processed. Discovery complete.
@@ -293,7 +293,7 @@ static void BtAppDiscStartDesc(BtDevice_t *pDev)
 
 static void BtAppDiscPrimSrvcRsp(const ble_gattc_evt_t *pEvt)
 {
-	BtDevice_t *pDev = s_pDiscDev;
+	BtDevice_t *pDev = BtPeerFindByHdl(pEvt->conn_handle);
 	if (pDev == NULL)
 	{
 		return;
@@ -331,19 +331,19 @@ static void BtAppDiscPrimSrvcRsp(const ble_gattc_evt_t *pEvt)
 	}
 
 	// ATTRIBUTE_NOT_FOUND, DB end, or table full: service phase done.
-	s_DiscSrvIdx = 0;
+	pDev->Discovery.SrvIdx = 0;
 	BtAppDiscStartChar(pDev);
 }
 
 static void BtAppDiscCharRsp(const ble_gattc_evt_t *pEvt)
 {
-	BtDevice_t *pDev = s_pDiscDev;
-	if (pDev == NULL)
+	BtDevice_t *pDev = BtPeerFindByHdl(pEvt->conn_handle);
+	if (pDev == NULL || pDev->Discovery.SrvIdx >= pDev->NbSrvc)
 	{
 		return;
 	}
 
-	BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
+	BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
 
 	if (pEvt->gatt_status == BLE_GATT_STATUS_SUCCESS)
 	{
@@ -400,23 +400,24 @@ static void BtAppDiscCharRsp(const ble_gattc_evt_t *pEvt)
 	}
 
 	// Service complete (ATTRIBUTE_NOT_FOUND, table full, or error). Advance.
-	s_DiscSrvIdx++;
+	pDev->Discovery.SrvIdx++;
 	BtAppDiscStartChar(pDev);
 }
 
 static void BtAppDiscDescRsp(const ble_gattc_evt_t *pEvt)
 {
-	BtDevice_t *pDev = s_pDiscDev;
-	if (pDev == NULL)
+	BtDevice_t *pDev = BtPeerFindByHdl(pEvt->conn_handle);
+	if (pDev == NULL || pDev->Discovery.SrvIdx >= pDev->NbSrvc)
 	{
 		return;
 	}
 
-	if (pEvt->gatt_status == BLE_GATT_STATUS_SUCCESS)
+	if (pEvt->gatt_status == BLE_GATT_STATUS_SUCCESS &&
+		pDev->Discovery.CharIdx < pDev->Services[pDev->Discovery.SrvIdx].char_count)
 	{
 		const ble_gattc_evt_desc_disc_rsp_t *p = &pEvt->params.desc_disc_rsp;
-		BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
-		BtGattDBChar_t *pCh   = &pSrvc->characteristics[s_DiscCharIdx];
+		BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
+		BtGattDBChar_t *pCh   = &pSrvc->characteristics[pDev->Discovery.CharIdx];
 
 		for (uint16_t i = 0; i < p->count; i++)
 		{
@@ -441,7 +442,7 @@ static void BtAppDiscDescRsp(const ble_gattc_evt_t *pEvt)
 	}
 
 	// Advance to the next characteristic regardless of result.
-	s_DiscCharIdx++;
+	pDev->Discovery.CharIdx++;
 	BtAppDiscStartDesc(pDev);
 }
 
