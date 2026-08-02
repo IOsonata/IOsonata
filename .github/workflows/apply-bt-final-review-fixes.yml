@@ -6,6 +6,11 @@ on:
       - bt-failure-fix-run
     paths:
       - ".github/workflows/apply-bt-final-review-fixes.yml"
+  pull_request:
+    branches:
+      - bt_conformance
+    paths:
+      - ".github/workflows/apply-bt-final-review-fixes.yml"
 
 permissions:
   contents: read
