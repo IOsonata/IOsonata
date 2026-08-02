@@ -1,8 +1,7 @@
 diff --git a/src/bluetooth/bt_smp.cpp b/src/bluetooth/bt_smp.cpp
-index 557e927..0000000 100644
 --- a/src/bluetooth/bt_smp.cpp
 +++ b/src/bluetooth/bt_smp.cpp
-@@ -953,6 +953,12 @@ static uint8_t SmpSelectModel(uint8_t InitIo, uint8_t RespIo, bool Mitm, bool Oo
+@@ -953,6 +953,14 @@ static uint8_t SmpSelectModel(uint8_t InitIo, uint8_t RespIo, bool Mitm, bool Oob)
  // Copy the pending OOB material into the link context of an OOB pairing.
  static bool SmpOobCtxLoad(BtSmpLink_t *pLink)
  {
@@ -17,7 +16,7 @@ index 557e927..0000000 100644
  	if (SmpOobReserve(pLink) == false)
  	{
  		return false;
-@@ -1286,7 +1292,13 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+@@ -1286,9 +1294,15 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
  		pLink->Ctx.State = BT_SMP_STATE_PUBKEY_WAIT;
  		int rc = SmpLocalKeyGen(pDev, pLink);
  		DEBUG_PRINTF("SMP P256KeyGen rc=%d\r\n", rc);
@@ -35,7 +34,7 @@ index 557e927..0000000 100644
  			SmpAbortPairing(pLink);
  		}
  	}
-@@ -1446,6 +1458,19 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+@@ -1446,6 +1460,20 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
  		return;
  	}
  
@@ -56,7 +55,7 @@ index 557e927..0000000 100644
  	// The initiator sends its public key after the Pairing Response. If the
  	// local P-256 key is not ready yet, BtSmpLocalPubKeyReady sends it.
  	if (SmpKeyPresent(pLink->Ctx.LocalPubKey, sizeof(pLink->Ctx.LocalPubKey)))
-@@ -3931,6 +3956,14 @@ void BtSmpStartPairing(uint16_t ConnHdl)
+@@ -3931,6 +3959,15 @@ void BtSmpStartPairing(uint16_t ConnHdl)
  	SmpSend(pDev, ConnHdl, &req, sizeof(req));
  
  	pLink->Ctx.State = BT_SMP_STATE_PUBKEY_LOCAL_WAIT;
