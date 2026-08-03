@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	app_evt_handler.cpp
 
-@brief	Event handler queuing 
+@brief	Event handler queuing
 
 This is an implementation of event handler queuing to schedule event handler
 in firmware application main loop.
@@ -22,8 +22,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -42,45 +42,23 @@ SOFTWARE.
 #include "cfifo.h"
 #include "app_evt_handler.h"
 
-#define APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE	CFIFO_TOTAL_MEMSIZE(APPEVT_HANDLER_QUE_DEFAULT_SIZE, sizeof(AppEvtHandlerQue_t))
+#define APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE \
+	CFIFO_TOTAL_MEMSIZE(APPEVT_HANDLER_QUE_DEFAULT_SIZE, sizeof(AppEvtHandlerQue_t))
 
-alignas(4) static uint8_t s_AppEvtHandlerFifoMem[APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE];
+alignas(4) static uint8_t s_AppEvtHandlerFifoMem[
+	APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE];
 
 static hCFifo_t s_hAppEvtHandlerFifo;
+static AppEvtHandlerIdle_t s_IdleHandler[APPEVT_HANDLER_IDLE_MAX_COUNT];
+static uint8_t s_IdleHandlerCount;
 
-/**
- * @brief	Initialize event handler que
- *
- * Initialize fifo to be used to queue the event handlers. Pass NULL in pFifoMem
- * parameter to use library default APP_EVT_HANDLER_QUE_DEFAULT_SIZE.
- *
- * Use the macro APPEVT_HANDLER_QUE_MEMSIZE(Count) to calculate require memory size
- * for user queue size. Usage example for custom queue size of 10 :
- *
- * #define APPEVT_HANDLER_TOTAL_MEM_SIZE	APPEVT_HANDLER_QUE_MEMSIZE(10)
- *
- * static uint8_t s_Fifomem[APPEVT_HANDLER_TOTAL_MEM_SIZE];
- *
- * ...
- * if (AppEvtHandlerInit(s_Fifomem, APPEVT_HANDLER_TOTAL_MEM_SIZE) == false)
- * {
- *     printf("Failed mem size too small\n");
- * }
- * ...
- *
- * @param	pFifoMem: Pointer to Fifo memory block.
- * 						NULL - use library default
- * @param	Size	: Total memory size in bytes
- *
- * @return	true - success
- */
 bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size)
 {
 	if (pFifoMem == nullptr)
 	{
 		s_hAppEvtHandlerFifo = CFifoInit(s_AppEvtHandlerFifoMem,
-										 APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE,
-										 sizeof(AppEvtHandlerQue_t), true);
+				APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE,
+				sizeof(AppEvtHandlerQue_t), true);
 	}
 	else if (Size < APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE)
 	{
@@ -89,75 +67,100 @@ bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size)
 	else
 	{
 		s_hAppEvtHandlerFifo = CFifoInit(pFifoMem, Size,
-										 sizeof(AppEvtHandlerQue_t), true);
+				sizeof(AppEvtHandlerQue_t), true);
 	}
 
 	return s_hAppEvtHandlerFifo != nullptr;
 }
 
-/**
- * @brief	Add new event to que for execution
- *
- * @param	EvtId	: Event Id number
- * @param	pCtx	: Context data to pass to handler
- * @param 	Handler	: Event handler function to call
- *
- * @return	true - success. false - que full
- */
 bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
 {
-	AppEvtHandlerQue_t *p = (AppEvtHandlerQue_t*)CFifoPut(s_hAppEvtHandlerFifo);
+	if (s_hAppEvtHandlerFifo == nullptr || Handler == nullptr)
+	{
+		return false;
+	}
 
-	if (p)
+	AppEvtHandlerQue_t *p =
+		(AppEvtHandlerQue_t *)CFifoPut(s_hAppEvtHandlerFifo);
+
+	if (p != nullptr)
 	{
 		p->EvtId = EvtId;
 		p->pCtx = pCtx;
 		p->Handler = Handler;
-
 		return true;
 	}
 
 	return false;
 }
 
-/**
- * @brief	Execute next event
- *
- * @param	None
- *
- * @return	None
- */
-void AppEvtHandlerDispatch()
+bool AppEvtHandlerIdleRegister(AppEvtHandlerIdle_t Handler)
 {
-	AppEvtHandlerQue_t *p = (AppEvtHandlerQue_t*)CFifoGet(s_hAppEvtHandlerFifo);
+	if (Handler == nullptr)
+	{
+		return false;
+	}
 
-	if (p != nullptr)
+	for (uint8_t i = 0; i < s_IdleHandlerCount; i++)
+	{
+		if (s_IdleHandler[i] == Handler)
+		{
+			return true;
+		}
+	}
+
+	if (s_IdleHandlerCount >= APPEVT_HANDLER_IDLE_MAX_COUNT)
+	{
+		return false;
+	}
+
+	s_IdleHandler[s_IdleHandlerCount++] = Handler;
+	return true;
+}
+
+void AppEvtHandlerDispatch(void)
+{
+	if (s_hAppEvtHandlerFifo == nullptr)
+	{
+		return;
+	}
+
+	AppEvtHandlerQue_t *p =
+		(AppEvtHandlerQue_t *)CFifoGet(s_hAppEvtHandlerFifo);
+
+	if (p != nullptr && p->Handler != nullptr)
 	{
 		p->Handler(p->EvtId, p->pCtx);
 	}
 }
 
-/**
- * @brief	Execute all events
- *
- * Drains the queue up to APPEVT_HANDLER_EXEC_MAX_COUNT events per call,
- * then relinquishes runtime for other processing.
- *
- * @param	None
- *
- * @return	None
- */
-void AppEvtHandlerExec()
+void AppEvtHandlerExec(void)
 {
-	int cnt = APPEVT_HANDLER_EXEC_MAX_COUNT;
-
-	while (cnt-- > 0)
+	if (s_hAppEvtHandlerFifo != nullptr)
 	{
-		AppEvtHandlerQue_t *p = (AppEvtHandlerQue_t*)CFifoGet(s_hAppEvtHandlerFifo);
+		int cnt = APPEVT_HANDLER_EXEC_MAX_COUNT;
 
-		if (p == nullptr)
-			break;
+		while (cnt-- > 0)
+		{
+			AppEvtHandlerQue_t *p =
+				(AppEvtHandlerQue_t *)CFifoGet(s_hAppEvtHandlerFifo);
 
-		p->Handler(p->EvtId, p->pCtx);
+			if (p == nullptr)
+			{
+				break;
+			}
+
+			if (p->Handler != nullptr)
+			{
+				p->Handler(p->EvtId, p->pCtx);
+			}
+		}
+	}
+
+	// Queued handlers have released their FIFO slots. Deferred subsystems get
+	// one chance to enqueue work that previously lost a race with a full queue.
+	for (uint8_t i = 0; i < s_IdleHandlerCount; i++)
+	{
+		s_IdleHandler[i]();
 	}
 }
