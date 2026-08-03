@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	bt_gatt_hci.cpp
 
-@brief	Bluetooth GATT  
+@brief	Bluetooth GATT
 
 Generic implementation of Bluetooth Generic Attribute Profile over standard HCI.
 
@@ -148,23 +148,6 @@ uint8_t BtAttAccessSecurityError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 	}
 
 	return 0;
-}
-
-// A signed command is replay-safe only when the updated receive counter is
-// durably committed before the write takes effect. The current bond backend
-// defers NVM writes from the stack callback, so reset or power loss can restore
-// an older counter. Reject signed commands on the native host until a monotonic
-// synchronous counter backend is installed; encrypted Write Request/Command
-// remains available and is governed by the SecType checks above.
-bool BtAttSignedWriteVerify(uint16_t ConnHdl,
-							 const BtAttSignedWriteCmd_t *pCmd,
-							 uint16_t ValueLen, const uint8_t *pSignature)
-{
-	(void)ConnHdl;
-	(void)pCmd;
-	(void)ValueLen;
-	(void)pSignature;
-	return false;
 }
 
 static bool BtGattHciSendHandleValue(uint16_t ConnHdl, BtGattChar_t *pChar,
