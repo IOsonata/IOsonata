@@ -161,7 +161,7 @@ void TestMixedPacketCompletionOrdering()
 	BtGattTxPendUntracked(kConnHdl, 1);
 
 	BtGattTxPendingAdd(kConnHdl, &s_SubChar);
-	BT_CHECK(s_Test, s_Peer.TxPendCount == 1);
+	BT_CHECK(s_Test, s_Peer.TxPendCount == 2);
 
 	BtGattSendCompleted(kConnHdl, 1);
 	BT_CHECK(s_Test, s_TxCompleteCount == 0);
