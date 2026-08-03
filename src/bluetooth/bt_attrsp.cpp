@@ -218,10 +218,33 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 	// reads/writes pPeer->Services and fires next requests via pPeer->pHciDev
 	// / pPeer->Conn.Hdl. The cursor lives on pPeer->Discovery.
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
-	if (pPeer == NULL)
+	if (pPeer == NULL || pRspAtt == nullptr || RspLen <= 0 ||
+		pPeer->bAttReqPending == false || pPeer->bAttTimedOut)
 	{
 		return;
 	}
+
+	bool matched = false;
+	if (pRspAtt->OpCode == BT_ATT_OPCODE_ATT_ERROR_RSP)
+	{
+		matched = RspLen >= 5 && pRspAtt->ErrorRsp.ReqOpCode == pPeer->AttReqOpcode;
+	}
+	else
+	{
+		matched = pRspAtt->OpCode == pPeer->AttRspOpcode;
+	}
+
+	if (matched == false)
+	{
+		return;
+	}
+
+	// Release before dispatch. Discovery handlers below can immediately issue
+	// the next request on this bearer without being rejected as overlapping.
+	pPeer->bAttReqPending = false;
+	pPeer->AttReqOpcode = 0;
+	pPeer->AttRspOpcode = 0;
+	pPeer->AttReqTime = 0;
 
 	switch (pRspAtt->OpCode)
 	{
