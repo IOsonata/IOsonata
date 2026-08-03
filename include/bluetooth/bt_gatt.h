@@ -18,8 +18,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -119,7 +119,7 @@ typedef struct
   uint8_t read            :1; /**< Reading the value permitted. */
   uint8_t write_wo_resp   :1; /**< Writing the value with Write Command permitted. */
   uint8_t write           :1; /**< Writing the value with Write Request permitted. */
-  uint8_t notify          :1; /**< Notification of the value permitted. */
+  uint8_t notify          :1; /**< Notifications of the value permitted. */
   uint8_t indicate        :1; /**< Indications of the value permitted. */
   uint8_t auth_signed_wr  :1; /**< Writing the value with Signed Write Command permitted. */
 } BtGattCharProps_t;//ble_gatt_char_props_t;
@@ -190,8 +190,8 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal
 // traffic that owns no GATT callback.
 bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar, uint16_t NbPkt);
 void BtGattTxPendRelease(uint16_t ConnHdl);
-void BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt);
-void BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar);
+bool BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt);
+bool BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar);
 void BtGattHandleValueConfirm(uint16_t ConnHdl);
 
 uint16_t BtGattCccdGet(uint16_t ConnHdl, uint16_t CccdHdl);
@@ -350,4 +350,3 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent);
 	  .pCharArray = (chars_array), __VA_ARGS__ }
 
 #endif // __BT_GATT_H__
-
