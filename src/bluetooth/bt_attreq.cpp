@@ -19,8 +19,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -53,6 +53,10 @@ SOFTWARE.
 #endif
 /*******************************/
 
+#ifndef BT_ATT_TRANSACTION_TIMEOUT_MS
+#define BT_ATT_TRANSACTION_TIMEOUT_MS		30000U
+#endif
+
 static uint16_t BtAttRequestMtu(uint16_t ConnHdl)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
@@ -69,9 +73,41 @@ static uint16_t BtAttAclPacketCount(const BtHciDevice_t *pDev, uint16_t AclLen)
 	return (uint16_t)((AclLen + pDev->AclMaxLen - 1U) / pDev->AclMaxLen);
 }
 
+static uint8_t BtAttExpectedResponse(uint8_t OpCode)
+{
+	switch (OpCode)
+	{
+		case BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ:
+			return BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP;
+		case BT_ATT_OPCODE_ATT_FIND_INFORMATION_REQ:
+			return BT_ATT_OPCODE_ATT_FIND_INFORMATION_RSP;
+		case BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ:
+			return BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_RSP;
+		case BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ:
+			return BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP;
+		case BT_ATT_OPCODE_ATT_READ_REQ:
+			return BT_ATT_OPCODE_ATT_READ_RSP;
+		case BT_ATT_OPCODE_ATT_READ_BLOB_REQ:
+			return BT_ATT_OPCODE_ATT_READ_BLOB_RSP;
+		case BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ:
+			return BT_ATT_OPCODE_ATT_READ_MULTIPLE_RSP;
+		case BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ:
+			return BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_RSP;
+		case BT_ATT_OPCODE_ATT_WRITE_REQ:
+			return BT_ATT_OPCODE_ATT_WRITE_RSP;
+		case BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ:
+			return BT_ATT_OPCODE_ATT_PREPARE_WRITE_RSP;
+		case BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ:
+			return BT_ATT_OPCODE_ATT_EXECUTE_WRITE_RSP;
+		default:
+			return 0;
+	}
+}
+
 // Every ATT request is ACL traffic and must occupy its actual position in the
-// per-link completion queue. Reserve before sending; if credits, fragmentation,
-// or the transport refuse the PDU, release the reservation and report failure.
+// per-link completion queue. A request that expects a response also owns the
+// one ATT transaction slot on that bearer until the matching response or Error
+// Response arrives. Commands do not consume the transaction slot.
 static bool BtAttSendRequest(BtHciDevice_t *pDev, BtHciACLDataPacket_t *pAcl)
 {
 	if (pDev == nullptr || pAcl == nullptr || pDev->SendData == nullptr)
@@ -80,15 +116,56 @@ static bool BtAttSendRequest(BtHciDevice_t *pDev, BtHciACLDataPacket_t *pAcl)
 	}
 
 	uint16_t connHdl = pAcl->Hdr.ConnHdl;
+	BtL2CapPdu_t *pL2 = (BtL2CapPdu_t*)pAcl->Data;
+	uint8_t request = pL2->Att.OpCode;
+	uint8_t response = BtAttExpectedResponse(request);
+	BtDevice_t *pPeer = nullptr;
+
+	if (response != 0)
+	{
+		pPeer = BtPeerFindByHdl(connHdl);
+		if (pPeer == nullptr || pPeer->bAttTimedOut)
+		{
+			return false;
+		}
+
+		if (pPeer->bAttReqPending)
+		{
+			uint32_t now = BtGattMsTick();
+			if (now != 0 &&
+				(uint32_t)(now - pPeer->AttReqTime) >= BT_ATT_TRANSACTION_TIMEOUT_MS)
+			{
+				pPeer->bAttReqPending = false;
+				pPeer->bAttTimedOut = true;
+			}
+			return false;
+		}
+	}
+
 	uint16_t packets = BtAttAclPacketCount(pDev, pAcl->Hdr.Len);
 	if (!BtGattTxPendReserve(connHdl, nullptr, packets))
 	{
 		return false;
 	}
 
+	if (pPeer != nullptr)
+	{
+		pPeer->bAttReqPending = true;
+		pPeer->AttReqOpcode = request;
+		pPeer->AttRspOpcode = response;
+		pPeer->AttReqTime = BtGattMsTick();
+	}
+
 	if (BtHciSendAcl(pDev, pAcl) == 0)
 	{
 		BtGattTxPendRelease(connHdl);
+		if (pPeer != nullptr)
+		{
+			pPeer->bAttReqPending = false;
+			pPeer->AttReqOpcode = 0;
+			pPeer->AttRspOpcode = 0;
+			pPeer->AttReqTime = 0;
+		}
 		return false;
 	}
 
@@ -189,15 +266,13 @@ bool BtAttReadByTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	l2pdu->Att.ReadByTypeReq.StartHdl = StartHdl;
 	l2pdu->Att.ReadByTypeReq.EndHdl = EndHdl;
 	l2pdu->Hdr.Len = 5;
-	if (pUuid->BaseIdx > 0)
+	if (pUuid->BaseIdx > 0 || pUuid->Type == BT_UUID_TYPE_32)
 	{
-		BtUuidTo128(pUuid, l2pdu->Att.ReadByTypeReq.Uuid.Uuid128);
+		if (!BtUuidTo128(pUuid, l2pdu->Att.ReadByTypeReq.Uuid.Uuid128))
+		{
+			return false;
+		}
 		l2pdu->Hdr.Len += 16;
-	}
-	else if (pUuid->Type == BT_UUID_TYPE_32)
-	{
-		l2pdu->Att.ReadByTypeReq.Uuid.Uuid32 = pUuid->Uuid32;
-		l2pdu->Hdr.Len += 4;
 	}
 	else
 	{
@@ -429,15 +504,13 @@ bool BtAttReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	l2pdu->Att.ReadByGroupTypeReq.StartHdl = StartHdl;
 	l2pdu->Att.ReadByGroupTypeReq.EndHdl = EndHdl;
 	l2pdu->Hdr.Len = 5;
-	if (pUuid->BaseIdx > 0)
+	if (pUuid->BaseIdx > 0 || pUuid->Type == BT_UUID_TYPE_32)
 	{
-		BtUuidTo128(pUuid, l2pdu->Att.ReadByGroupTypeReq.Uuid.Uuid128);
+		if (!BtUuidTo128(pUuid, l2pdu->Att.ReadByGroupTypeReq.Uuid.Uuid128))
+		{
+			return false;
+		}
 		l2pdu->Hdr.Len += 16;
-	}
-	else if (pUuid->Type == BT_UUID_TYPE_32)
-	{
-		l2pdu->Att.ReadByGroupTypeReq.Uuid.Uuid32 = pUuid->Uuid32;
-		l2pdu->Hdr.Len += 4;
 	}
 	else
 	{
