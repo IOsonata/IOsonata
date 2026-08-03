@@ -123,8 +123,6 @@ uint8_t BtAttAccessSecurityError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 			break;
 
 		case BT_GAP_SECTYPE_SIGNED_NO_MITM:
-			// The existing Nordic security mapping treats this mode as Secure
-			// Connections without MITM. Keep the native host consistent.
 			minLevel = BT_GAP_SEC_LEVEL_ENC_UNAUTH;
 			requireSc = true;
 			break;
@@ -150,6 +148,23 @@ uint8_t BtAttAccessSecurityError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 	}
 
 	return 0;
+}
+
+// A signed command is replay-safe only when the updated receive counter is
+// durably committed before the write takes effect. The current bond backend
+// defers NVM writes from the stack callback, so reset or power loss can restore
+// an older counter. Reject signed commands on the native host until a monotonic
+// synchronous counter backend is installed; encrypted Write Request/Command
+// remains available and is governed by the SecType checks above.
+bool BtAttSignedWriteVerify(uint16_t ConnHdl,
+							 const BtAttSignedWriteCmd_t *pCmd,
+							 uint16_t ValueLen, const uint8_t *pSignature)
+{
+	(void)ConnHdl;
+	(void)pCmd;
+	(void)ValueLen;
+	(void)pSignature;
+	return false;
 }
 
 static bool BtGattHciSendHandleValue(uint16_t ConnHdl, BtGattChar_t *pChar,
@@ -234,7 +249,8 @@ static bool BtGattHciSendHandleValue(uint16_t ConnHdl, BtGattChar_t *pChar,
 	return false;
 }
 
-bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData, size_t Len)
+bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar,
+						  void * const pData, size_t Len)
 {
 	if (pChar == nullptr ||
 		BtGattCharNotifyEnabled(ConnHdl, pChar) == false)
@@ -247,7 +263,8 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 									pData, Len, pChar);
 }
 
-bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData, size_t Len)
+bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar,
+							void * const pData, size_t Len)
 {
 	if (pChar == nullptr ||
 		BtGattCharIndicateEnabled(ConnHdl, pChar) == false)
@@ -261,9 +278,6 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pDat
 		return false;
 	}
 
-	// The controller completion only releases ACL credit. The characteristic
-	// callback belongs to the peer's Handle Value Confirmation, so reserve a
-	// null-owner completion entry and keep the callback owner on the link.
 	if (BtGattHciSendHandleValue(ConnHdl, pChar,
 									 BT_ATT_OPCODE_ATT_HANDLE_VALUE_IND,
 									 pData, Len, nullptr) == false)
