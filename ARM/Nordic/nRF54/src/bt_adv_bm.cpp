@@ -14,7 +14,7 @@
 
 MIT License
 
-Copyright (c) 2026, I-SYST inc., all rights reserved
+Copyright (c) 2026, I-SYST inc. All rights reserved.
 
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
@@ -36,16 +36,15 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_peer.h"
 
-#define BM_DEBUG_ENABLE
+//#define DEBUG_ENABLE
 
-// Debug printf: mirrors the guard in bt_app_bm.cpp.
-#ifdef BM_DEBUG_ENABLE
-#include "coredev/uart.h"
-extern UART g_Uart;
-#define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define DEBUG_PRINTF(...)
 #endif
@@ -111,6 +110,13 @@ void BtAdvStop()
 
 __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 {
+	if (pCfg == nullptr || !BtGattInitStatusComplete())
+	{
+		DEBUG_PRINTF("BtAppAdvInit refused: GATT init error %u\r\n",
+				(unsigned)BtGattInitStatusErrorGet());
+		return false;
+	}
+
 	BtAdvPacket_t *advpkt = &s_BtAppAdvPkt;
 	BtAdvPacket_t *srpkt  = &s_BtAppSrPkt;
 
