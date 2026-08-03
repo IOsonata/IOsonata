@@ -60,7 +60,8 @@ TEST_NAMES := \
 	bt_hci_adversarial_test \
 	bt_l2cap_adversarial_test \
 	bt_app_adversarial_test \
-	bt_std_services_test
+	bt_std_services_test \
+	bt_smp_sign_counter_test
 
 TARGETS := $(addprefix $(BUILD_DIR)/,$(TEST_NAMES))
 CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
@@ -165,6 +166,10 @@ bt_std_services_test_SOURCES := \
 	bt_std_services_test.cpp \
 	$(ROOT)/src/bluetooth/services/bt_dis.cpp \
 	$(ROOT)/src/bluetooth/services/bt_bas.cpp
+
+bt_smp_sign_counter_test_SOURCES := \
+	bt_smp_sign_counter_test.cpp \
+	$(ROOT)/src/bluetooth/bt_smp_bond.cpp
 
 .PHONY: all test test-gcc test-clang test-matrix clean
 
