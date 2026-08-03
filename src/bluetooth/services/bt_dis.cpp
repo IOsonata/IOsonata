@@ -14,7 +14,7 @@
 
 MIT License
 
-Copyright (c) 2026, I-SYST inc. All rights reserved
+Copyright (c) 2026, I-SYST inc. All rights reserved.
 
 ----------------------------------------------------------------------------*/
 #include <stddef.h>
@@ -30,7 +30,7 @@ Copyright (c) 2026, I-SYST inc. All rights reserved
 #define BT_DIS_STR_MAX_LEN		22
 #endif
 
-static BtDisPnpId_t s_BtDisPnpId = { 0, };
+static BtDisPnpId_t s_BtDisPnpId = {};
 
 enum {
 	BT_DIS_CHAR_IDX_MANUF_NAME = 0,
