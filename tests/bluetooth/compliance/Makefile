@@ -17,6 +17,7 @@ SMP_TEST_RENAMES := \
 	-DBtSmpLocalIdRecordSize=BtSmpTestLocalIdRecordSize \
 	-DBtSmpLocalIdSerialize=BtSmpTestLocalIdSerialize \
 	-DBtSmpLocalIdRestore=BtSmpTestLocalIdRestore
+ATT_TEST_RENAMES := -Dmain=BtAttDualHostMain
 CXXSTD := $(shell for s in gnu++23 gnu++2b gnu++20; do \
 	if $(CXX) -std=$$s -x c++ -fsyntax-only /dev/null >/dev/null 2>&1; then \
 		echo $$s; break; fi; done)
@@ -49,6 +50,7 @@ HCI_SOURCES := \
 
 ATT_SOURCES := \
 	att/bt_att_dual_host_test.cpp \
+	att/bt_att_client_test_stubs.cpp \
 	framework/bt_compliance.cpp \
 	$(ROOT)/src/bluetooth/bt_att.cpp \
 	$(ROOT)/src/bluetooth/bt_attreq.cpp \
@@ -113,7 +115,7 @@ $(HCI_TARGET): $(HCI_SOURCES) $(HEADERS) $(CFIFO_OBJ)
 
 $(ATT_TARGET): $(ATT_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
+	$(CXX) $(CPPFLAGS) $(ATT_TEST_RENAMES) $(CXXFLAGS) $(SANITIZERS) \
 		$(ATT_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(SMP_TEST_OBJ): smp/bt_smp_dual_host_test.cpp $(HEADERS)
