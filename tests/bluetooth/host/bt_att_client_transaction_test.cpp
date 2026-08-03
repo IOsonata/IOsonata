@@ -1,10 +1,11 @@
 // Client-side ATT transaction coverage.
 //
 // ATT permits one outstanding request per bearer. A normal response must match
-// the expected response opcode, and an Error Response must name the outstanding
-// request opcode. The bearer remains unusable after the 30-second transaction
-// timeout. Read By Type and Read By Group Type carry only 16- or 128-bit
-// Attribute Types, so IOsonata 32-bit UUIDs are expanded to the Bluetooth base.
+// the expected response opcode and its complete structure; an Error Response
+// must name the outstanding request opcode and contain all five bytes. The
+// bearer remains unusable after the 30-second transaction timeout. Read By Type
+// and Read By Group Type carry only 16- or 128-bit Attribute Types, so IOsonata
+// 32-bit UUIDs are expanded to the Bluetooth base.
 
 #include <cstddef>
 #include <cstdint>
@@ -130,6 +131,77 @@ void TestMatchingErrorResponseReleasesBearer()
 	CHECK(BtAttReadRequest(&s_Hci, kConnHdl, 0x0021));
 }
 
+void TestMalformedMatchedResponseKeepsBearer()
+{
+	Setup();
+	CHECK(BtAttExchangeMtuRequest(&s_Hci, kConnHdl, 247));
+
+	BtAttReqRsp_t rsp = {};
+	rsp.OpCode = BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP;
+
+	// Matching opcode but no MTU field: do not release the transaction and do
+	// not read outside the declared PDU.
+	BtAttProcessRsp(kConnHdl, &rsp, 1);
+	CHECK(s_Peer.bAttReqPending);
+	CHECK(s_Peer.Conn.MaxMtu == 247);
+
+	// The structure is present but the peer's Rx MTU is below the mandatory
+	// ATT minimum. It is still not a completed transaction.
+	rsp.ExchgMtuReqRsp.RxMtu = BT_ATT_MTU_MIN - 1;
+	BtAttProcessRsp(kConnHdl, &rsp, 3);
+	CHECK(s_Peer.bAttReqPending);
+	CHECK(s_Peer.Conn.MaxMtu == 247);
+
+	rsp.ExchgMtuReqRsp.RxMtu = BT_ATT_MTU_MIN;
+	BtAttProcessRsp(kConnHdl, &rsp, 3);
+	CHECK(s_Peer.bAttReqPending == false);
+	CHECK(s_Peer.Conn.MaxMtu == BT_ATT_MTU_MIN);
+
+	Setup();
+	uint8_t value = 0x31;
+	CHECK(BtAttWriteRequest(&s_Hci, kConnHdl, 0x0020, &value, 1));
+
+	// A one-byte Error Response exposes only the opcode. Reading ReqOpCode
+	// would be outside the PDU, and it cannot complete the outstanding write.
+	std::memset(&rsp, 0, sizeof(rsp));
+	rsp.OpCode = BT_ATT_OPCODE_ATT_ERROR_RSP;
+	BtAttProcessRsp(kConnHdl, &rsp, 1);
+	CHECK(s_Peer.bAttReqPending);
+
+	rsp.ErrorRsp.ReqOpCode = BT_ATT_OPCODE_ATT_WRITE_REQ;
+	rsp.ErrorRsp.Hdl = 0x0020;
+	rsp.ErrorRsp.Error = BT_ATT_ERROR_WRITE_NOT_PERMITTED;
+	BtAttProcessRsp(kConnHdl, &rsp, 5);
+	CHECK(s_Peer.bAttReqPending == false);
+
+	Setup();
+	BtUuid_t charDecl = {};
+	charDecl.BaseIdx = 0;
+	charDecl.Type = BT_UUID_TYPE_16;
+	charDecl.Uuid16 = BT_UUID_DECLARATIONS_CHARACTERISTIC;
+	s_Peer.Discovery.UuidType = charDecl;
+	CHECK(BtAttReadByTypeRequest(&s_Hci, kConnHdl, 1, 0xFFFF, &charDecl));
+
+	// Characteristic declarations are exactly seven or twenty-one bytes per
+	// tuple. An eight-byte tuple previously entered the 128-bit path and read
+	// beyond the element.
+	std::memset(&rsp, 0, sizeof(rsp));
+	rsp.OpCode = BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP;
+	rsp.ReadByTypeRsp.Len = 8;
+	BtAttProcessRsp(kConnHdl, &rsp, 10);
+	CHECK(s_Peer.bAttReqPending);
+	CHECK(s_Peer.NbSrvc == 0);
+
+	// A full matching Error Response can terminate this request.
+	std::memset(&rsp, 0, sizeof(rsp));
+	rsp.OpCode = BT_ATT_OPCODE_ATT_ERROR_RSP;
+	rsp.ErrorRsp.ReqOpCode = BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ;
+	rsp.ErrorRsp.Hdl = 1;
+	rsp.ErrorRsp.Error = BT_ATT_ERROR_ATT_NOT_FOUND;
+	BtAttProcessRsp(kConnHdl, &rsp, 5);
+	CHECK(s_Peer.bAttReqPending == false);
+}
+
 void TestTransactionTimeoutLocksBearer()
 {
 	Setup();
@@ -243,6 +315,7 @@ int main()
 {
 	TestMatchingResponseOwnsBearer();
 	TestMatchingErrorResponseReleasesBearer();
+	TestMalformedMatchedResponseKeepsBearer();
 	TestTransactionTimeoutLocksBearer();
 	TestReservationAndSendRollback();
 	TestUuid32ExpandsTo128();
