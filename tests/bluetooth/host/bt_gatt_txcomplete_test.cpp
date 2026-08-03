@@ -1,16 +1,10 @@
 // Coverage for TX-complete attribution in src/bluetooth/bt_gatt.cpp.
 //
 // The controller reports completed HCI ACL packets, not GATT operations. The
-// per-link ring used to hold one entry per notification and drop one entry per
-// reported packet, so three things went wrong: a packet another layer sent (an
-// ATT response, SMP, L2CAP signaling) drained the ring and fired someone else's
-// callback, a notification split into several ACL fragments fired on its first
-// fragment, and a notification that arrived with the ring full was transmitted
-// anyway while its tracking was silently dropped.
-//
-// The ring now holds one entry per group of packets, with an owner and a count
-// of packets still outstanding, and a send reserves its entry before any of it
-// goes out.
+// per-link ring holds every transmitted packet group in controller acceptance
+// order. A null owner represents ATT, SMP, or L2CAP traffic with no GATT
+// callback; notification owners fire only after their entire packet group has
+// completed.
 
 #include <cstddef>
 #include <cstdint>
@@ -118,15 +112,14 @@ void TestUntrackedPacketDoesNotFire()
 {
 	Setup(64);
 
-	// An ATT response goes out first: one packet, no owner. Foreign packets
-	// are counted, not given ring entries, so ordinary request and response
-	// traffic cannot exhaust the ring and refuse a notification.
-	BtGattTxPendUntracked(kConnHdl, 1);
-	CHECK(Peer()->TxPendCount == 0);
-	CHECK(Peer()->TxUntracked == 1);
+	// An ATT response goes out first: one packet, no owner. It occupies its
+	// actual position in the ordered ring.
+	CHECK(BtGattTxPendUntracked(kConnHdl, 1));
+	CHECK(Peer()->TxPendCount == 1);
+	CHECK(Peer()->TxPend[Peer()->TxPendHead].pChar == nullptr);
 
 	CHECK(BtGattCharNotify(kConnHdl, &s_Char[0], s_Value, 8));
-	CHECK(Peer()->TxPendCount == 1);
+	CHECK(Peer()->TxPendCount == 2);
 
 	// The controller reports the response. The notification is still in
 	// flight, so nothing fires and its entry stays.
@@ -140,19 +133,18 @@ void TestUntrackedPacketDoesNotFire()
 	CHECK(Peer()->TxPendCount == 0);
 }
 
-// Packets with no owner accumulate in the counter, never in the ring.
-void TestUntrackedCoalesces()
+// Separate unowned operations retain separate positions in send order.
+void TestUntrackedGroupsRemainOrdered()
 {
 	Setup(64);
 
-	BtGattTxPendUntracked(kConnHdl, 1);
-	BtGattTxPendUntracked(kConnHdl, 1);
-	BtGattTxPendUntracked(kConnHdl, 1);
-	CHECK(Peer()->TxPendCount == 0);
-	CHECK(Peer()->TxUntracked == 3);
+	CHECK(BtGattTxPendUntracked(kConnHdl, 1));
+	CHECK(BtGattTxPendUntracked(kConnHdl, 1));
+	CHECK(BtGattTxPendUntracked(kConnHdl, 1));
+	CHECK(Peer()->TxPendCount == 3);
 
 	CHECK(BtGattCharNotify(kConnHdl, &s_Char[0], s_Value, 8));
-	CHECK(Peer()->TxPendCount == 1);
+	CHECK(Peer()->TxPendCount == 4);
 
 	BtGattSendCompleted(kConnHdl, 3);
 	CHECK(s_TxCompleteCount == 0);
@@ -207,10 +199,10 @@ void TestReservationRefusesWhenFull()
 	}
 	CHECK(Peer()->TxPendCount == BT_DEV_TXPEND_MAX);
 	CHECK(BtGattTxPendReserve(kConnHdl, &s_Char[0], 1) == false);
+	CHECK(BtGattTxPendUntracked(kConnHdl, 1) == false);
 
 	// A notification now has nowhere to record itself, so it is refused
-	// rather than transmitted untracked. The old code returned true here and
-	// the caller's TxCompleteCB never came.
+	// rather than transmitted untracked.
 	s_HciPacketCount = 0;
 	CHECK(BtGattCharNotify(kConnHdl, &s_Char[1], s_Value, 8) == false);
 	CHECK(s_HciPacketCount == 0);
@@ -235,7 +227,7 @@ void TestFailedSendReleasesReservation()
 // ---- a characteristic with no callback still occupies the ring -------------
 
 // It consumes a controller completion like any other traffic. Leaving it out
-// walked the ring out of step with the link on its own.
+// walks the ring out of step with the link on its own.
 void TestNoCallbackCharStillTracked()
 {
 	Setup(64);
@@ -262,10 +254,9 @@ void TestSendOrderPreserved()
 	Setup(64);
 
 	CHECK(BtGattCharNotify(kConnHdl, &s_Char[0], s_Value, 8));
-	BtGattTxPendUntracked(kConnHdl, 2);
+	CHECK(BtGattTxPendUntracked(kConnHdl, 2));
 	CHECK(BtGattCharNotify(kConnHdl, &s_Char[1], s_Value, 8));
-	CHECK(Peer()->TxPendCount == 2);
-	CHECK(Peer()->TxUntracked == 2);
+	CHECK(Peer()->TxPendCount == 3);
 
 	// One report covering everything drains the groups in send order and
 	// fires exactly the two notifications.
@@ -305,7 +296,7 @@ void BtSmpBondCccdSave(uint16_t, uint16_t, uint16_t) {}
 int main()
 {
 	TestUntrackedPacketDoesNotFire();
-	TestUntrackedCoalesces();
+	TestUntrackedGroupsRemainOrdered();
 	TestFragmentedNotifyFiresOnce();
 	TestFragmentsReportedTogether();
 	TestReservationRefusesWhenFull();
