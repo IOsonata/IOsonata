@@ -66,6 +66,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/cfifo.h</locationURI>
 		</link>
 		<link>
+			<name>include/cli</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/converters</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -119,11 +124,6 @@
 			<name>include/iatomic.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
-		</link>
-		<link>
-			<name>include/cli/icli.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/cli/icli.h</locationURI>
 		</link>
 		<link>
 			<name>include/intelhex.h</name>
@@ -204,11 +204,6 @@
 			<name>include/pulse_train.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
-		</link>
-		<link>
-			<name>include/coredev/pwm.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
 		</link>
 		<link>
 			<name>include/pwrmgnt</name>
@@ -656,6 +651,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/cli/icli.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/cli/icli.h</locationURI>
+		</link>
+		<link>
 			<name>include/converters/adc_device.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_device.h</locationURI>
@@ -704,6 +704,11 @@
 			<name>include/coredev/pdm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/pwm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/shared_intrf.h</name>

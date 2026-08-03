@@ -49,9 +49,6 @@ SOFTWARE.
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_gatt.h"
-// SMP uses the OO crypto engine facets (KeyAgreeEngine, CipherEngine,
-// RngEngine) and the shared CRYPTO_STATUS, all from icrypto.h via bt_smp.h.
-// The legacy crypto.h is intentionally not included here.
 
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on the SMP handshake trace for this file: every
@@ -60,15 +57,6 @@ SOFTWARE.
 // does not assume a transport. A release build defines NDEBUG, which strips all
 // trace regardless of DEBUG_ENABLE.
 //#define DEBUG_ENABLE
-
-// DHKey byte-order interop fallback. When enabled, a failed Ea verification
-// retries f5 with the raw DHKey order before failing, to tolerate a crypto
-// provider that returns the shared secret in the opposite byte order. Leave
-// off for release: it can mask a provider byte-order bug. Enable only for
-// provider bring-up or interop debugging.
-#ifndef BT_SMP_DHKEY_ORDER_FALLBACK
-#define BT_SMP_DHKEY_ORDER_FALLBACK 0
-#endif
 
 #if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 #include "syslog.h"
@@ -83,6 +71,20 @@ static const char *SmpCodeName(uint8_t c);
 #define SMP_TRACE_PDU(dir, code, state)
 #endif
 /*******************************/
+
+// SMP uses the OO crypto engine facets (KeyAgreeEngine, CipherEngine,
+// RngEngine) and the shared CRYPTO_STATUS, all from icrypto.h via bt_smp.h.
+// The legacy crypto.h is intentionally not included here.
+
+// DHKey byte-order interop fallback. When enabled, a failed Ea verification
+// retries f5 with the raw DHKey order before failing, to tolerate a crypto
+// provider that returns the shared secret in the opposite byte order. Leave
+// off for release: it can mask a provider byte-order bug. Enable only for
+// provider bring-up or interop debugging.
+#ifndef BT_SMP_DHKEY_ORDER_FALLBACK
+#define BT_SMP_DHKEY_ORDER_FALLBACK 0
+#endif
+
 
 #ifndef BT_SMP_MAX_LINK
 #define BT_SMP_MAX_LINK		4
