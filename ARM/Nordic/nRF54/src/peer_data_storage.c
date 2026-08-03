@@ -16,11 +16,6 @@
 
 #include "app_evt_handler.h"
 
-/* Store trace, on the same output as the PDS trace in bt_sec_bm.cpp rather
- * than the peer_manager LOG module, so what the store did and what came back
- * out of it read as one sequence. Independent of NDEBUG for the same reason
- * that one is: a release build is where peer data has to survive a reset.
- */
 #define PDS_LOAD_TRACE
 
 #ifdef PDS_LOAD_TRACE
@@ -33,36 +28,15 @@
 #include <modules/peer_id.h>
 #include <modules/peer_data_storage.h>
 
-// IOsonata persistent data store replaces the bm_zms filesystem. The region
-// is set where the memory is brought up, so no devicetree partition macros
-// are needed here.
 #include "bluetooth/bt_pds.h"
 
-// Mounts the store on an Nvm. C entry point defined in bt_sec_bm.cpp, because
-// Nvm is a C++ class and this is C. Where the store lives comes from the
-// linker script, not from a constant here or there.
 extern int BtPdsBmInit(void);
 
-/* A store or a delete arrives from inside the peer manager's BLE event
- * dispatch. The memory is arbitrated with an MPSL timeslot, and the wait for
- * that timeslot cannot make progress from the context the dispatch runs in, so
- * writing there ends the slot abnormally. The work is queued and runs from the
- * application event handler instead.
- *
- * This is also what the API already says happens: a store is asynchronous and
- * the caller expects PM_EVT_PEER_DATA_UPDATE_SUCCEEDED or _FAILED to follow.
- * Sending the success event inline, as this used to, reported a write that had
- * not happened yet.
- */
 #define PDS_QUE_DEPTH			4
 
 struct pds_pending {
 	bool				busy;
 	bool				is_delete;
-	/* Delete every entry belonging to peer_id, then the peer itself, one
-	 * entry per handler invocation. Reports once for the peer rather than
-	 * once per entry, so pds_pending_report is not used for it.
-	 */
 	bool				del_peer;
 	uint16_t			peer_id;
 	enum pm_peer_data_id	data_id;
@@ -72,32 +46,20 @@ struct pds_pending {
 };
 
 static struct pds_pending pds_que[PDS_QUE_DEPTH];
-
-/* One whole-peer delete is in flight at a time. It walks every peer marked
- * deleted before it releases its slot, so pm_peers_delete over more peers
- * than the queue is deep cannot run out of slots, and a request arriving
- * while one runs needs nothing more than the peer being marked.
- */
 static bool del_peer_running;
 
 LOG_MODULE_DECLARE(peer_manager, CONFIG_PEER_MANAGER_LOG_LEVEL);
 
-/* The number of registered event handlers. */
 #define PDS_EVENT_HANDLERS_CNT ARRAY_SIZE(evt_handlers)
 
-/* Peer Data Storage event handler in Peer Database. */
 extern void pdb_pds_evt_handler(struct pm_evt *evt);
 
-/* Peer Data Storage events' handlers.
- * The number of elements in this array is PDS_EVENT_HANDLERS_CNT.
- */
 static const pm_evt_handler_internal_t evt_handlers[] = {
 	pdb_pds_evt_handler,
 };
 
 static bool module_initialized;
 
-/* Function for dispatching events to all registered event handlers. */
 static void pds_evt_send(struct pm_evt *event)
 {
 	event->conn_handle = BLE_CONN_HANDLE_INVALID;
@@ -110,15 +72,11 @@ static void pds_evt_send(struct pm_evt *event)
 #define ENTRY_ID_PEER_ID_OFFSET_BITS 16
 #define ENTRY_ID_DATA_ID_MASK        ((1 << ENTRY_ID_PEER_ID_OFFSET_BITS) - 1)
 
-/**
- * @brief Pack the given peer_id and data_id into a single 32 bit entry_id.
- *
- * @p peer_id is stored in the most significant 16 bits.
- * @p data_id is stored in the least significant 16 bits.
- */
-static uint32_t peer_id_peer_data_id_to_entry_id(uint16_t peer_id, enum pm_peer_data_id data_id)
+static uint32_t peer_id_peer_data_id_to_entry_id(uint16_t peer_id,
+													 enum pm_peer_data_id data_id)
 {
-	return (peer_id << ENTRY_ID_PEER_ID_OFFSET_BITS) | (data_id & ENTRY_ID_DATA_ID_MASK);
+	return (peer_id << ENTRY_ID_PEER_ID_OFFSET_BITS) |
+		(data_id & ENTRY_ID_DATA_ID_MASK);
 }
 
 static bool peer_data_id_is_valid(enum pm_peer_data_id data_id)
@@ -132,8 +90,8 @@ static bool peer_data_id_is_valid(enum pm_peer_data_id data_id)
 		(data_id == PM_PEER_DATA_ID_APPLICATION));
 }
 
-/* Returns the next data entry or a negative errno. */
-static uint32_t find_next_data_entry_in_peer(uint16_t peer_id, uint32_t *next_entry_id)
+static uint32_t find_next_data_entry_in_peer(uint16_t peer_id,
+											 uint32_t *next_entry_id)
 {
 	ssize_t ret;
 	uint8_t temp_buf[PM_PEER_DATA_MAX_SIZE] = { 0 };
@@ -142,46 +100,21 @@ static uint32_t find_next_data_entry_in_peer(uint16_t peer_id, uint32_t *next_en
 		uint32_t entry_id = peer_id_peer_data_id_to_entry_id(peer_id, i);
 
 		ret = BtPdsRead(entry_id, temp_buf, sizeof(temp_buf));
-		/* Unexpected error. */
 		if (ret < 0 && ret != -ENOENT) {
 			LOG_ERR("Could not read entry %d from NVM. bm_zms_read() returned %d. "
 				"peer_id: %d, data_id: %d", entry_id, ret, peer_id, i);
 			return NRF_ERROR_INTERNAL;
 		}
 
-		/* Some peer data has been found. BtPdsWrite accepts a zero length
-		 * value, so BtPdsRead answering 0 means present and empty. Absent
-		 * is -ENOENT, which the test above has already let through.
-		 */
 		if (ret >= 0) {
 			*next_entry_id = entry_id;
 			return NRF_SUCCESS;
 		}
 	}
 
-	/* Every data read for the peer has returned `-ENOENT`. */
 	return NRF_ERROR_NOT_FOUND;
 }
 
-/* One step of the whole-peer delete.
- *
- * The stock bm_zms module is a state machine that deletes a single entry per
- * invocation and is re-entered by the store's completion callback. The
- * IOsonata store finishes inside the call, so there is no such callback and an
- * earlier version of this file collapsed the machine into a straight loop.
- * That put a read and delete of every record of every deleted peer inside the
- * Peer Manager BLE dispatch, where the rest of this module deliberately does
- * not work, and it let a whole-peer delete run ahead of a store already
- * sitting in the queue for that same peer: the delete scanned the memory, did
- * not see the queued record, freed the peer id, and the store then wrote under
- * an id that had been handed back.
- *
- * So the machine is back, re-entered from the application event queue instead
- * of a store callback. Being in the same queue as the stores is what puts it
- * behind them.
- *
- * Returns true when there is more to do and the caller should queue it again.
- */
 static bool peer_delete_step(struct pds_pending *p)
 {
 	uint32_t entry_id;
@@ -190,14 +123,10 @@ static bool peer_delete_step(struct pds_pending *p)
 		p->peer_id = peer_id_get_next_deleted(PM_PEER_ID_INVALID);
 
 		if (p->peer_id == PM_PEER_ID_INVALID) {
-			return false;		/* nothing marked, nothing to do */
+			return false;
 		}
 	}
 
-	/* NOT_FOUND is the end of this peer; anything else is a read that
-	 * failed, and taking that for the end freed the peer id with its
-	 * records still there.
-	 */
 	uint32_t look = find_next_data_entry_in_peer(p->peer_id, &entry_id);
 
 	if (look == NRF_ERROR_NOT_FOUND) {
@@ -210,21 +139,11 @@ static bool peer_delete_step(struct pds_pending *p)
 		PDS_LOAD_PRINTF("PDS: peer %u deleted\r\n", (unsigned)p->peer_id);
 		pds_evt_send(&done_evt);
 
-		/* On to whatever else is marked. Asking from the start is right
-		 * because the id just freed is no longer marked.
-		 */
 		p->peer_id = peer_id_get_next_deleted(PM_PEER_ID_INVALID);
-
 		return p->peer_id != PM_PEER_ID_INVALID;
 	}
 
 	if (look != NRF_SUCCESS) {
-		/* The peer keeps its id and stays marked deleted, so its data is
-		 * still reachable and a later delete request walks it again.
-		 * Freeing the id here handed it back for reuse with records still
-		 * stored under it. Stopping rather than moving on, because the
-		 * peer stays marked and would be picked up again immediately.
-		 */
 		struct pm_evt fail_evt = {
 			.evt_id = PM_EVT_PEER_DELETE_FAILED,
 			.peer_id = p->peer_id,
@@ -234,21 +153,14 @@ static bool peer_delete_step(struct pds_pending *p)
 		PDS_LOAD_PRINTF("PDS: peer %u delete failed, id kept\r\n",
 						(unsigned)p->peer_id);
 		pds_evt_send(&fail_evt);
-
 		return false;
 	}
 
 	int err = BtPdsDelete(entry_id);
 
 	if (err == -ENOMEM) {
-		/* Out of room part way through. The peer keeps its id and stays
-		 * marked, so a later delete request walks it again once something
-		 * has freed space. Nothing here retries: a store with no room and
-		 * no other traffic would have this requeueing against itself.
-		 */
 		PDS_LOAD_PRINTF("PDS: peer %u delete out of room, still marked\r\n",
 						(unsigned)p->peer_id);
-
 		return false;
 	}
 
@@ -265,11 +177,10 @@ static bool peer_delete_step(struct pds_pending *p)
 		PDS_LOAD_PRINTF("PDS: peer %u delete failed, id kept\r\n",
 						(unsigned)p->peer_id);
 		pds_evt_send(&fail_evt);
-
 		return false;
 	}
 
-	return true;			/* one entry gone, come back for the next */
+	return true;
 }
 
 static void peer_ids_load(void)
@@ -280,8 +191,6 @@ static void peer_ids_load(void)
 	uint8_t peer_data_buffer[PM_PEER_DATA_MAX_SIZE] = { 0 };
 
 	peer_data.all_data = peer_data_buffer;
-
-	/* Search through existing bonds to look for a duplicate. */
 	pds_peer_data_iterate_prepare(&peer_id_iter);
 
 	unsigned n = 0;
@@ -306,8 +215,10 @@ void pds_peer_data_iterate_prepare(uint16_t *peer_id_iter)
 	*peer_id_iter = 0;
 }
 
-bool pds_peer_data_iterate(enum pm_peer_data_id data_id, uint16_t *const peer_id,
-			   struct pm_peer_data_const *const data, uint16_t *peer_id_iter)
+bool pds_peer_data_iterate(enum pm_peer_data_id data_id,
+			   uint16_t *const peer_id,
+			   struct pm_peer_data_const *const data,
+			   uint16_t *peer_id_iter)
 {
 	ssize_t ret;
 	uint8_t temp_buf[PM_PEER_DATA_MAX_SIZE] = { 0 };
@@ -316,55 +227,54 @@ bool pds_peer_data_iterate(enum pm_peer_data_id data_id, uint16_t *const peer_id
 		return false;
 	}
 
-	/* Exits the loop when `ret > 0` (it found data), it reached the end of the available peers,
-	 * or the read had a catastrophical failure.
-	 */
 	do {
-		uint32_t entry_id = peer_id_peer_data_id_to_entry_id(*peer_id_iter, data_id);
+		uint32_t entry_id =
+			peer_id_peer_data_id_to_entry_id(*peer_id_iter, data_id);
 
 		ret = BtPdsRead(entry_id, temp_buf, sizeof(temp_buf));
 		if (ret < 0 && ret != -ENOENT) {
 			LOG_ERR("Could not read data from NVM. bm_zms_read() returned %d. "
-				"peer_id: %d",
-				ret, *peer_id_iter);
+				"peer_id: %d", ret, *peer_id_iter);
 			return false;
 		}
 
 		(*peer_id_iter)++;
-	} while ((ret == -ENOENT) && (*peer_id_iter < PM_PEER_ID_N_AVAILABLE_IDS));
+	} while ((ret == -ENOENT) &&
+		 (*peer_id_iter < PM_PEER_ID_N_AVAILABLE_IDS));
 
-	if ((ret == -ENOENT) && (*peer_id_iter == PM_PEER_ID_N_AVAILABLE_IDS)) {
+	if ((ret == -ENOENT) &&
+		(*peer_id_iter == PM_PEER_ID_N_AVAILABLE_IDS)) {
 		return false;
 	}
 
-	/* We found a suitable Peer ID. */
-
-	/* `p_peer_id_iter` counts the iterations, so the Peer ID is iterations minus one. */
 	*peer_id = (*peer_id_iter) - 1;
-
-	/* `ret` is equal the exact amount of data contained in the entry, so copy that amount
-	 * safely.
-	 */
 	memcpy((void *)data->all_data, temp_buf, ret);
-
 	return true;
+}
+
+static void pds_work_handler(uint32_t evt, void *ctx);
+static struct pds_pending *pds_pending_claim(void);
+static void peer_delete_kick(void);
+
+static void pds_idle_pump(void)
+{
+	peer_delete_kick();
 }
 
 uint32_t pds_init(void)
 {
 	int err;
 
-	/* Check for re-initialization if debugging. */
 	__ASSERT_NO_MSG(!module_initialized);
 
-	/* Bring up the memory and mount the IOsonata store on it. Where the store
-	 * lives comes from the linker script, so nothing here states an address.
-	 * Mounting is synchronous: on return the store has been scanned. Storing
-	 * and deleting are not, and report through pds_evt_send when they finish.
-	 */
 	err = BtPdsBmInit();
 	if (err) {
 		LOG_ERR("Could not initialize NVM storage. BtPdsBmInit() returned %d.", err);
+		return NRF_ERROR_RESOURCES;
+	}
+
+	if (!AppEvtHandlerIdleRegister(pds_idle_pump)) {
+		LOG_ERR("Could not register PDS application idle pump.");
 		return NRF_ERROR_RESOURCES;
 	}
 
@@ -372,12 +282,13 @@ uint32_t pds_init(void)
 	peer_ids_load();
 
 	module_initialized = true;
-
 	return NRF_SUCCESS;
 }
 
-uint32_t pds_peer_data_read(uint16_t peer_id, enum pm_peer_data_id data_id,
-			    struct pm_peer_data *const data, const uint32_t *const buf_len)
+uint32_t pds_peer_data_read(uint16_t peer_id,
+			    enum pm_peer_data_id data_id,
+			    struct pm_peer_data *const data,
+			    const uint32_t *const buf_len)
 {
 	ssize_t ret;
 
@@ -385,7 +296,8 @@ uint32_t pds_peer_data_read(uint16_t peer_id, enum pm_peer_data_id data_id,
 	__ASSERT_NO_MSG(data != NULL);
 	__ASSERT_NO_MSG(buf_len != NULL);
 
-	if (peer_id >= PM_PEER_ID_N_AVAILABLE_IDS || !peer_data_id_is_valid(data_id)) {
+	if (peer_id >= PM_PEER_ID_N_AVAILABLE_IDS ||
+		!peer_data_id_is_valid(data_id)) {
 		return NRF_ERROR_INVALID_PARAM;
 	}
 
@@ -399,8 +311,7 @@ uint32_t pds_peer_data_read(uint16_t peer_id, enum pm_peer_data_id data_id,
 		return NRF_ERROR_NOT_FOUND;
 	} else if (ret < 0) {
 		LOG_ERR("Could not read data from NVM. bm_zms_read() returned %d. "
-			"peer_id: %d",
-			ret, peer_id);
+			"peer_id: %d", ret, peer_id);
 		return NRF_ERROR_INTERNAL;
 	}
 
@@ -411,7 +322,6 @@ uint32_t pds_peer_data_read(uint16_t peer_id, enum pm_peer_data_id data_id,
 	return NRF_SUCCESS;
 }
 
-/* Report one queued operation, then release its slot. */
 static void pds_pending_report(struct pds_pending *p, bool ok)
 {
 	struct pm_evt evt = {
@@ -435,20 +345,9 @@ static void pds_pending_report(struct pds_pending *p, bool ok)
 	}
 
 	p->busy = false;
-
 	pds_evt_send(&evt);
 }
 
-static void pds_work_handler(uint32_t evt, void *ctx);
-static struct pds_pending *pds_pending_claim(void);
-
-/* Start a walk over the peers marked deleted, if one is needed and none is
- * running. Called from the delete request and again after every operation
- * that finished, because a finished store or delete is the moment space may
- * have appeared for a walk that earlier stopped on a full store. Failing to
- * start is not an error to anyone: the peers stay marked and the next
- * operation calls here again.
- */
 static void peer_delete_kick(void)
 {
 	if (del_peer_running) {
@@ -466,7 +365,7 @@ static void peer_delete_kick(void)
 
 	p->del_peer = true;
 	p->is_delete = true;
-	p->peer_id = PM_PEER_ID_INVALID;	/* start from the first marked */
+	p->peer_id = PM_PEER_ID_INVALID;
 	p->data_id = PM_PEER_DATA_ID_BONDING;
 	p->entry_id = 0;
 	p->length = 0;
@@ -474,14 +373,12 @@ static void peer_delete_kick(void)
 	if (!AppEvtHandlerQue(0, p, pds_work_handler)) {
 		p->del_peer = false;
 		p->busy = false;
-
 		return;
 	}
 
 	del_peer_running = true;
 }
 
-/* Runs from the application event handler, out of the BLE event dispatch. */
 static void pds_work_handler(uint32_t evt, void *ctx)
 {
 	struct pds_pending *p = (struct pds_pending *)ctx;
@@ -493,18 +390,17 @@ static void pds_work_handler(uint32_t evt, void *ctx)
 	}
 
 	if (p->del_peer) {
-		if (peer_delete_step(p) && AppEvtHandlerQue(0, p, pds_work_handler)) {
+		if (peer_delete_step(p) &&
+			AppEvtHandlerQue(0, p, pds_work_handler)) {
 			return;
 		}
 
-		/* Finished, stopped, or the queue would not take it back. Anything
-		 * left is still marked deleted, and the kick after the next finished
-		 * operation starts a new walk; a walk that stopped on a full store
-		 * is resumed by exactly the operations that make room.
+		/* The peer remains marked when the queue cannot take the next step.
+		 * AppEvtHandlerExec invokes pds_idle_pump after releasing queue slots,
+		 * which starts a new walk without waiting for unrelated storage work.
 		 */
 		del_peer_running = false;
 		p->busy = false;
-
 		return;
 	}
 
@@ -516,9 +412,6 @@ static void pds_work_handler(uint32_t evt, void *ctx)
 				"peer_id: %d", err, p->peer_id);
 			pds_pending_report(p, false);
 		} else if (peer_id_is_deleted(p->peer_id)) {
-			/* A whole peer delete reports once for the peer, not per
-			 * entry.
-			 */
 			p->busy = false;
 		} else {
 			pds_pending_report(p, true);
@@ -535,24 +428,15 @@ static void pds_work_handler(uint32_t evt, void *ctx)
 		}
 	}
 
-	/* Whatever this operation did, ask whether a walk is wanted. On success
-	 * because a store or delete that went through may have made room, and on
-	 * failure too: a write can collect a sector on its way to refusing, and
-	 * a walk whose restart waited only on successes was stranded by a queue
-	 * whose every operation failed. This cannot spin against a quiet full
-	 * store; it runs only when an operation actually ran.
-	 */
 	peer_delete_kick();
 }
 
-/* Claim a free slot, or NULL when every one is still in flight. */
 static struct pds_pending *pds_pending_claim(void)
 {
 	for (uint32_t i = 0; i < PDS_QUE_DEPTH; i++) {
 		if (!pds_que[i].busy) {
 			pds_que[i].busy = true;
 			pds_que[i].del_peer = false;
-
 			return &pds_que[i];
 		}
 	}
@@ -560,13 +444,15 @@ static struct pds_pending *pds_pending_claim(void)
 	return NULL;
 }
 
-uint32_t pds_peer_data_store(uint16_t peer_id, const struct pm_peer_data_const *peer_data,
+uint32_t pds_peer_data_store(uint16_t peer_id,
+			     const struct pm_peer_data_const *peer_data,
 			     uint32_t *store_token)
 {
 	__ASSERT_NO_MSG(module_initialized);
 	__ASSERT_NO_MSG(peer_data != NULL);
 
-	if (peer_id >= PM_PEER_ID_N_AVAILABLE_IDS || !peer_data_id_is_valid(peer_data->data_id)) {
+	if (peer_id >= PM_PEER_ID_N_AVAILABLE_IDS ||
+		!peer_data_id_is_valid(peer_data->data_id)) {
 		return NRF_ERROR_INVALID_PARAM;
 	}
 	if (peer_data->length > sizeof(pds_que[0].data)) {
@@ -582,9 +468,9 @@ uint32_t pds_peer_data_store(uint16_t peer_id, const struct pm_peer_data_const *
 		return NRF_ERROR_BUSY;
 	}
 
-	uint32_t entry_id = peer_id_peer_data_id_to_entry_id(peer_id, peer_data->data_id);
+	uint32_t entry_id =
+		peer_id_peer_data_id_to_entry_id(peer_id, peer_data->data_id);
 
-	/* The caller's buffer does not outlive this call. */
 	memcpy(p->data, peer_data->all_data, peer_data->length);
 	p->length = peer_data->length;
 	p->is_delete = false;
@@ -594,7 +480,6 @@ uint32_t pds_peer_data_store(uint16_t peer_id, const struct pm_peer_data_const *
 
 	if (!AppEvtHandlerQue(0, p, pds_work_handler)) {
 		p->busy = false;
-
 		return NRF_ERROR_BUSY;
 	}
 
@@ -605,11 +490,13 @@ uint32_t pds_peer_data_store(uint16_t peer_id, const struct pm_peer_data_const *
 	return NRF_SUCCESS;
 }
 
-uint32_t pds_peer_data_delete(uint16_t peer_id, enum pm_peer_data_id data_id)
+uint32_t pds_peer_data_delete(uint16_t peer_id,
+			     enum pm_peer_data_id data_id)
 {
 	__ASSERT_NO_MSG(module_initialized);
 
-	if (peer_id >= PM_PEER_ID_N_AVAILABLE_IDS || !peer_data_id_is_valid(data_id)) {
+	if (peer_id >= PM_PEER_ID_N_AVAILABLE_IDS ||
+		!peer_data_id_is_valid(data_id)) {
 		return NRF_ERROR_INVALID_PARAM;
 	}
 
@@ -627,7 +514,6 @@ uint32_t pds_peer_data_delete(uint16_t peer_id, enum pm_peer_data_id data_id)
 
 	if (!AppEvtHandlerQue(0, p, pds_work_handler)) {
 		p->busy = false;
-
 		return NRF_ERROR_BUSY;
 	}
 
@@ -652,20 +538,7 @@ uint32_t pds_peer_id_free(uint16_t peer_id)
 		return NRF_ERROR_INVALID_PARAM;
 	}
 
-	/* The mark is the commit point, as it is in the stock module, whose
-	 * request cannot fail past this line either. Whether a walk could be
-	 * queued right now changes when the work happens, not whether it will:
-	 * the peer stays marked and the kick after the next finished operation
-	 * starts a walk. Returning an error here instead left the caller told
-	 * nothing happened while the peer stayed marked.
-	 *
-	 * PM_EVT_PEER_DELETE_SUCCEEDED follows from the handler. peer_manager
-	 * expects that: pm_peers_delete returns after requesting every peer and
-	 * raises PM_EVT_PEERS_DELETE_SUCCEEDED later, from the per peer event,
-	 * once nothing allocated or marked is left.
-	 */
 	peer_delete_kick();
-
 	return NRF_SUCCESS;
 }
 
