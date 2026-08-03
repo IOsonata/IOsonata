@@ -137,6 +137,11 @@ int main()
 		cfg.ProductId = 0x5678;
 		cfg.ProductVer = 0x0102;
 
+		cfg.Role = BTAPP_ROLE_CENTRAL;
+		BT_CHECK(ctx, BtDisInit(&cfg));
+		BT_CHECK(ctx, s_ServiceCount == 0);
+
+		cfg.Role = BTAPP_ROLE_PERIPHERAL;
 		BT_CHECK(ctx, BtDisInit(&cfg));
 		BT_CHECK(ctx, s_ServiceCount == 1);
 		BtGattSrvc_t *pDis = s_Services[0];
