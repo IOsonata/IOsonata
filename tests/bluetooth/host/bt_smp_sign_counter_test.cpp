@@ -240,6 +240,42 @@ void TestVersionOneRetiresUncertainCsrk()
 	BT_CHECK(s_Test, s_LastRecord[4] == 2 && s_LastRecord[5] == 0);
 }
 
+void TestResolvedIdentityLookup()
+{
+	ResetHarness(true);
+
+	const uint8_t rpa[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0x46 };
+	const uint8_t identity[6] = { 0x61, 0x62, 0x63, 0x64, 0x65, 0xC6 };
+
+	s_Peer.Conn.PeerAddrType = BTADDR_TYPE_RAND;
+	std::memcpy(s_Peer.Conn.PeerAddr, rpa, sizeof(rpa));
+	s_Keys.IdAddrType = BTADDR_TYPE_RAND;
+	std::memcpy(s_Keys.IdAddr, identity, sizeof(identity));
+	for (size_t i = 0; i < sizeof(s_Keys.Irk); ++i)
+	{
+		s_Keys.Irk[i] = static_cast<uint8_t>(0xA0U + i);
+	}
+
+	AddBond();
+
+	uint8_t persisted[sizeof(s_LastRecord)];
+	size_t persistedLen = s_LastRecordLen;
+	std::memcpy(persisted, s_LastRecord, persistedLen);
+
+	BtSmpBondClearAll();
+	s_AutoComplete = true;
+	s_SaveCount = 0;
+	BtSmpBondRestore(0, persisted, persistedLen);
+
+	s_Peer.Conn.PeerAddrType = BTADDR_TYPE_RANDOM_STATIC;
+	std::memcpy(s_Peer.Conn.PeerAddr, identity, sizeof(identity));
+
+	BtSmpKeys_t restored = {};
+	BT_CHECK(s_Test, BtSmpBondKeysLookup(kConnHdl, 0, 0, &restored));
+	BT_CHECK(s_Test, std::memcmp(restored.Ltk, s_Keys.Ltk,
+								sizeof(restored.Ltk)) == 0);
+}
+
 } // namespace
 
 extern "C" {
@@ -321,5 +357,7 @@ int main()
 			   TestFailedReservationStaysClosed);
 	s_Test.Run("version one retires uncertain CSRK",
 			   TestVersionOneRetiresUncertainCsrk);
+	s_Test.Run("resolved identity finds restored bond",
+			   TestResolvedIdentityLookup);
 	return s_Test.Finish();
 }

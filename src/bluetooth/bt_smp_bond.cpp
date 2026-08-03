@@ -173,6 +173,21 @@ static bool BtSmpBondHasCsrk(const BtSmpBond_t *pBond)
 	return nz != 0;
 }
 
+static bool BtSmpBondHasIrk(const BtSmpBond_t *pBond)
+{
+	if (pBond == nullptr)
+	{
+		return false;
+	}
+
+	uint8_t nz = 0;
+	for (int i = 0; i < 16; i++)
+	{
+		nz |= pBond->Keys.Irk[i];
+	}
+	return nz != 0;
+}
+
 static void BtSmpSignStateReset(int Slot, uint32_t Next, uint32_t DurableHigh)
 {
 	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX)
@@ -426,6 +441,40 @@ static bool BtSmpAddrIsRpa(uint8_t AddrType, const uint8_t Addr[6])
 	return (Addr[5] & 0xC0) == 0x40;
 }
 
+static bool BtSmpAddrIdentityType(uint8_t AddrType, const uint8_t Addr[6],
+								 uint8_t *pIdentityType)
+{
+	if (Addr == nullptr || pIdentityType == nullptr)
+	{
+		return false;
+	}
+
+	switch (AddrType)
+	{
+		case BTADDR_TYPE_PUBLIC:
+		case BTADDR_TYPE_RESOLV:
+			*pIdentityType = BTADDR_TYPE_PUBLIC;
+			return true;
+
+		case BTADDR_TYPE_RANDOM_STATIC:
+			*pIdentityType = BTADDR_TYPE_RAND;
+			return true;
+
+		case BTADDR_TYPE_RAND:
+			if ((Addr[5] & 0xC0) == 0xC0)
+			{
+				*pIdentityType = BTADDR_TYPE_RAND;
+				return true;
+			}
+			break;
+
+		default:
+			break;
+	}
+
+	return false;
+}
+
 static int BtSmpBondFindByAddr(uint8_t AddrType, const uint8_t Addr[6])
 {
 	for (int i = 0; i < BT_SMP_BOND_MAX; i++)
@@ -435,6 +484,35 @@ static int BtSmpBondFindByAddr(uint8_t AddrType, const uint8_t Addr[6])
 			memcmp(s_BtSmpBondTable[i].PeerAddr, Addr, 6) == 0)
 		{
 			return i;
+		}
+	}
+
+	uint8_t identityType;
+	if (BtSmpAddrIdentityType(AddrType, Addr, &identityType))
+	{
+		for (int i = 0; i < BT_SMP_BOND_MAX; i++)
+		{
+			BtSmpBond_t *pBond = &s_BtSmpBondTable[i];
+			if (!pBond->bValid)
+			{
+				continue;
+			}
+
+			uint8_t storedType;
+			if (BtSmpAddrIdentityType(pBond->PeerAddrType,
+									  pBond->PeerAddr, &storedType) &&
+				storedType == identityType &&
+				memcmp(pBond->PeerAddr, Addr, 6) == 0)
+			{
+				return i;
+			}
+
+			if (BtSmpBondHasIrk(pBond) &&
+				pBond->Keys.IdAddrType == identityType &&
+				memcmp(pBond->Keys.IdAddr, Addr, 6) == 0)
+			{
+				return i;
+			}
 		}
 	}
 
