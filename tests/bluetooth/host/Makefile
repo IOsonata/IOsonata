@@ -46,6 +46,7 @@ TEST_NAMES := \
 	bt_l2cap_signal_test \
 	bt_att_db_test \
 	bt_att_req_test \
+	bt_att_client_transaction_test \
 	bt_peer_pool_test \
 	bt_gap_hci_test \
 	bt_adv_hci_test \
@@ -90,6 +91,12 @@ bt_att_db_test_SOURCES := \
 bt_att_req_test_SOURCES := \
 	bt_att_req_test.cpp \
 	$(ROOT)/src/bluetooth/bt_att.cpp \
+	$(ROOT)/src/bluetooth/bt_uuid.cpp
+
+bt_att_client_transaction_test_SOURCES := \
+	bt_att_client_transaction_test.cpp \
+	$(ROOT)/src/bluetooth/bt_attreq.cpp \
+	$(ROOT)/src/bluetooth/bt_attrsp.cpp \
 	$(ROOT)/src/bluetooth/bt_uuid.cpp
 
 bt_peer_pool_test_SOURCES := \
