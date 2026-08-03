@@ -1,8 +1,7 @@
-# Keep normal Git text detection. Unlisted text files, including documentation,
-# remain text but do not have a repository-enforced checkout line ending.
-* text=auto
+# Preserve line endings unless a file type is explicitly covered below.
+* -text
 
-# C and C++ source files.
+# C and C++ source files maintained by IOsonata.
 *.c      text eol=lf
 *.cc     text eol=lf
 *.cpp    text eol=lf
@@ -48,10 +47,21 @@ CMakeLists.txt text eol=lf
 .gitattributes text eol=lf
 .gitignore     text eol=lf
 
-# Documentation remains ordinary text without a forced checkout EOL.
-*.md   text
-*.txt  text
-*.rst  text
+# Documentation keeps its existing line endings but remains text-diffable.
+*.md      -text diff
+*.txt     -text diff
+*.rst     -text diff
+README*   -text diff
+LICENSE*  -text diff
+NOTICE*   -text diff
+COPYING*  -text diff
+docs/**   -text diff
+
+# Third-party source keeps the upstream byte representation.
+external/**  -text diff
+fatfs/**     -text diff
+littlefs/**  -text diff
+micro-ecc/** -text diff
 
 # Binary files must never undergo line-ending conversion.
 *.a      binary
