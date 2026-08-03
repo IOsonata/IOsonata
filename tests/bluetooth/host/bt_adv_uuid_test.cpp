@@ -162,6 +162,30 @@ void TestUuidRoundTrip()
 	CHECK(!BtUuidTo128(&invalid, rebuilt));
 }
 
+void TestUuidNullInputs()
+{
+	uint8_t uuid[16] = BLUETOOTH_SIG_BASE_UUID;
+	uint8_t rebuilt[16] = {};
+	BtUuid_t uuidAny = {};
+	uuidAny.BaseIdx = 0;
+	uuidAny.Type = BT_UUID_TYPE_16;
+	uuidAny.Uuid16 = 0x180FU;
+	BtUuid16_t uuid16 = { 0, BT_UUID_TYPE_16, 0x180FU };
+	BtUuid32_t uuid32 = { 0, BT_UUID_TYPE_32, 0x11223344U };
+
+	CHECK(BtUuidFindBase(nullptr) == -1);
+	CHECK(BtUuidAddBase(nullptr) == -1);
+	CHECK(!BtUuidGetBase(0, nullptr));
+	CHECK(!BtUuidTo128(nullptr, rebuilt));
+	CHECK(!BtUuidTo128(&uuidAny, nullptr));
+	CHECK(!BtUuid16To128(nullptr, rebuilt));
+	CHECK(!BtUuid16To128(&uuid16, nullptr));
+	CHECK(!BtUuid32To128(nullptr, rebuilt));
+	CHECK(!BtUuid32To128(&uuid32, nullptr));
+	CHECK(BtUuid128To16(nullptr, uuid) == -1);
+	CHECK(BtUuid128To16(&uuid16, nullptr) == -1);
+}
+
 void TestUuidAdvertising()
 {
 	alignas(BtUuidArr_t) uint8_t uuidMem[sizeof(BtUuidArr_t) + sizeof(uint16_t)] = {};
@@ -169,12 +193,6 @@ void TestUuidAdvertising()
 	pUuid->BaseIdx = 0;
 	pUuid->Type = BT_UUID_TYPE_16;
 	pUuid->Count = 2;
-	// Uuid16 is a variable-length trailing array declared [1] inside a
-	// pack(1) struct, so it sits at an odd offset. The member expression is
-	// packed-aware but trips older clang's -Warray-bounds on the constant
-	// index past [0]; a decayed uint16_t pointer avoids that warning but
-	// makes the store a misaligned access (UBSan). memcpy at the computed
-	// offsets is correct for both.
 	const uint16_t uuids[2] = { BT_UUID_GATT_SERVICE_DEVICE_INFORMATION,
 								BT_UUID_GATT_SERVICE_BATTERY };
 	std::memcpy(uuidMem + offsetof(BtUuidArr_t, Uuid16), uuids, sizeof(uuids));
@@ -291,6 +309,7 @@ int main()
 	TestNameEncoding();
 	TestMalformedRecords();
 	TestUuidRoundTrip();
+	TestUuidNullInputs();
 	TestUuidAdvertising();
 	TestLegacyEncode();
 	TestScanResponseEncode();
