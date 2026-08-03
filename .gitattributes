@@ -1,5 +1,6 @@
-# Preserve existing line endings for unspecified files, including documentation.
-* -text
+# Keep normal Git text detection. Unlisted text files, including documentation,
+# remain text but do not have a repository-enforced checkout line ending.
+* text=auto
 
 # C and C++ source files.
 *.c      text eol=lf
@@ -46,6 +47,11 @@ CMakeLists.txt text eol=lf
 # Repository control files.
 .gitattributes text eol=lf
 .gitignore     text eol=lf
+
+# Documentation remains ordinary text without a forced checkout EOL.
+*.md   text
+*.txt  text
+*.rst  text
 
 # Binary files must never undergo line-ending conversion.
 *.a      binary
