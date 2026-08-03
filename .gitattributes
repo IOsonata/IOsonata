@@ -1,5 +1,51 @@
-# Normalize repository text to LF on every platform.
-* text=auto eol=lf
+# Preserve existing line endings for unspecified files, including documentation.
+* -text
+
+# C and C++ source files.
+*.c      text eol=lf
+*.cc     text eol=lf
+*.cpp    text eol=lf
+*.cxx    text eol=lf
+*.h      text eol=lf
+*.hh     text eol=lf
+*.hpp    text eol=lf
+*.hxx    text eol=lf
+*.inc    text eol=lf
+*.inl    text eol=lf
+
+# Assembly and linker source files.
+*.s      text eol=lf
+*.S      text eol=lf
+*.asm    text eol=lf
+*.ld     text eol=lf
+*.lds    text eol=lf
+
+# Build files and code-generation scripts.
+Makefile       text eol=lf
+makefile       text eol=lf
+CMakeLists.txt text eol=lf
+*.mk           text eol=lf
+*.cmake        text eol=lf
+*.py           text eol=lf
+*.sh           text eol=lf
+*.bash         text eol=lf
+*.zsh          text eol=lf
+*.ps1          text eol=lf
+
+# Eclipse and development project metadata used to build the code.
+.project           text eol=lf
+.cproject          text eol=lf
+.settings/*.prefs  text eol=lf
+*.launch           text eol=lf
+.vscode/*.json     text eol=lf
+.github/*.yml      text eol=lf
+.github/*.yaml     text eol=lf
+.github/**/*.yml   text eol=lf
+.github/**/*.yaml  text eol=lf
+
+# Repository control files.
+.gitattributes text eol=lf
+.gitignore     text eol=lf
 
 # Binary files must never undergo line-ending conversion.
 *.a      binary
@@ -21,16 +67,16 @@
 *.woff2  binary
 *.zip    binary
 
-# IOsonata uses .h for its C++ classes and implementation interfaces
+# IOsonata uses .h for its C++ classes and implementation interfaces.
 *.h linguist-language=C++
 
-# Explicit C sources remain C
+# Explicit C sources remain C.
 *.c linguist-language=C
 
-# Add actual C-only header directories here
+# Add actual C-only header directories here.
 # src/c_component/** linguist-language=C
 
-# Third-party code does not represent the IOsonata implementation
+# Third-party code does not represent the IOsonata implementation.
 external/**  linguist-vendored
 fatfs/**     linguist-vendored
 littlefs/**  linguist-vendored
