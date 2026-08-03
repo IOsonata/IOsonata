@@ -46,9 +46,7 @@ SOFTWARE.
 #include <string.h>
 #include <atomic>
 
-#if defined(__arm__)
-#include "iatomic.h"
-#endif
+#include "coredev/interrupt.h"
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_dev.h"
@@ -115,7 +113,7 @@ static std::atomic_flag s_BtSmpBondTableLock = ATOMIC_FLAG_INIT;
 static uint32_t BtSmpBondTableEnter(void)
 {
 #if defined(__arm__)
-	return EnterCriticalSection();
+	return DisableInterrupt();
 #else
 	while (s_BtSmpBondTableLock.test_and_set(std::memory_order_acquire))
 	{
@@ -127,7 +125,7 @@ static uint32_t BtSmpBondTableEnter(void)
 static void BtSmpBondTableExit(uint32_t State)
 {
 #if defined(__arm__)
-	ExitCriticalSection(State);
+	EnableInterrupt(State);
 #else
 	(void)State;
 	s_BtSmpBondTableLock.clear(std::memory_order_release);
