@@ -57,6 +57,51 @@ SOFTWARE.
 #define BT_ATT_TRANSACTION_TIMEOUT_MS		30000U
 #endif
 
+static void BtAttTransactionTimeout(BtDevice_t *pPeer, uint32_t Now)
+{
+	if (pPeer == nullptr || !pPeer->bAttReqPending || pPeer->bAttTimedOut ||
+		(uint32_t)(Now - pPeer->AttReqTime) < BT_ATT_TRANSACTION_TIMEOUT_MS)
+	{
+		return;
+	}
+
+	pPeer->bAttReqPending = false;
+	pPeer->bAttTimedOut = true;
+	pPeer->AttReqOpcode = 0;
+	pPeer->AttRspOpcode = 0;
+	pPeer->AttReqTime = 0;
+
+	if (pPeer->pHciDev != nullptr && pPeer->pHciDev->Command != nullptr)
+	{
+		uint8_t param[3];
+		param[0] = (uint8_t)(pPeer->Conn.Hdl & 0xFF);
+		param[1] = (uint8_t)((pPeer->Conn.Hdl >> 8) & 0xFF);
+		param[2] = 0x13;
+		pPeer->pHciDev->Command(pPeer->pHciDev,
+				BT_HCI_CMD_LINKCTRL_DISCONNECT, param, sizeof(param),
+				nullptr, 0);
+	}
+}
+
+void BtAttTransactionTimeoutCheck(void)
+{
+	uint32_t now = BtGattMsTick();
+	if (now == 0)
+	{
+		return;
+	}
+
+	for (uint16_t i = 0; i < BtPeerCount(); i++)
+	{
+		BtDevice_t *pPeer = BtPeerSlot(i);
+		if (pPeer == nullptr || pPeer->Conn.Hdl == BT_CONN_HDL_INVALID)
+		{
+			continue;
+		}
+		BtAttTransactionTimeout(pPeer, now);
+	}
+}
+
 static uint16_t BtAttRequestMtu(uint16_t ConnHdl)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
@@ -104,10 +149,6 @@ static uint8_t BtAttExpectedResponse(uint8_t OpCode)
 	}
 }
 
-// Every ATT request is ACL traffic and must occupy its actual position in the
-// per-link completion queue. A request that expects a response also owns the
-// one ATT transaction slot on that bearer until the matching response or Error
-// Response arrives. Commands do not consume the transaction slot.
 static bool BtAttSendRequest(BtHciDevice_t *pDev, BtHciACLDataPacket_t *pAcl)
 {
 	if (pDev == nullptr || pAcl == nullptr || pDev->SendData == nullptr)
@@ -132,11 +173,9 @@ static bool BtAttSendRequest(BtHciDevice_t *pDev, BtHciACLDataPacket_t *pAcl)
 		if (pPeer->bAttReqPending)
 		{
 			uint32_t now = BtGattMsTick();
-			if (now != 0 &&
-				(uint32_t)(now - pPeer->AttReqTime) >= BT_ATT_TRANSACTION_TIMEOUT_MS)
+			if (now != 0)
 			{
-				pPeer->bAttReqPending = false;
-				pPeer->bAttTimedOut = true;
+				BtAttTransactionTimeout(pPeer, now);
 			}
 			return false;
 		}
