@@ -20,6 +20,8 @@
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_uuid.h"
 
+void BtAttTransactionTimeoutCheck(void);
+
 namespace {
 
 constexpr uint16_t kConnHdl = 0x0042;
@@ -31,6 +33,7 @@ uint32_t s_Now;
 int s_SendCount;
 int s_ReserveCount;
 int s_ReleaseCount;
+int s_DisconnectCount;
 bool s_ReserveOk;
 bool s_SendOk;
 int s_Checks;
@@ -49,6 +52,22 @@ uint32_t DummySend(void *, uint32_t Len)
 	return Len;
 }
 
+uint8_t DummyCommand(BtHciDevice_t * const, uint16_t OpCode,
+		const void *pParam, uint8_t ParamLen, void *, uint8_t)
+{
+	if (OpCode == BT_HCI_CMD_LINKCTRL_DISCONNECT &&
+		pParam != nullptr && ParamLen == 3)
+	{
+		const uint8_t *p = static_cast<const uint8_t *>(pParam);
+		uint16_t hdl = (uint16_t)p[0] | ((uint16_t)p[1] << 8);
+		if (hdl == kConnHdl && p[2] == BT_HCI_ERR_CONN_TERMINATED_USER)
+		{
+			s_DisconnectCount++;
+		}
+	}
+	return BT_HCI_SUCCESS;
+}
+
 void Setup()
 {
 	std::memset(&s_Peer, 0, sizeof(s_Peer));
@@ -59,12 +78,14 @@ void Setup()
 	s_Peer.Conn.MaxMtu = 247;
 	s_Peer.pHciDev = &s_Hci;
 	s_Hci.SendData = DummySend;
+	s_Hci.Command = DummyCommand;
 	s_Hci.AclMaxLen = 251;
 
 	s_Now = 100;
 	s_SendCount = 0;
 	s_ReserveCount = 0;
 	s_ReleaseCount = 0;
+	s_DisconnectCount = 0;
 	s_ReserveOk = true;
 	s_SendOk = true;
 }
@@ -85,7 +106,6 @@ void TestMatchingResponseOwnsBearer()
 	CHECK(s_Peer.AttRspOpcode == BT_ATT_OPCODE_ATT_WRITE_RSP);
 	CHECK(s_SendCount == 1);
 
-	// A second request cannot pass the first one.
 	CHECK(BtAttReadRequest(&s_Hci, kConnHdl, 0x0021) == false);
 	CHECK(s_SendCount == 1);
 
@@ -94,7 +114,6 @@ void TestMatchingResponseOwnsBearer()
 	BtAttProcessRsp(kConnHdl, &rsp, 1);
 	CHECK(s_Peer.bAttReqPending);
 
-	// An Error Response for a different request also does not release it.
 	std::memset(&rsp, 0, sizeof(rsp));
 	rsp.OpCode = BT_ATT_OPCODE_ATT_ERROR_RSP;
 	rsp.ErrorRsp.ReqOpCode = BT_ATT_OPCODE_ATT_READ_REQ;
@@ -102,8 +121,6 @@ void TestMatchingResponseOwnsBearer()
 	BtAttProcessRsp(kConnHdl, &rsp, 5);
 	CHECK(s_Peer.bAttReqPending);
 
-	// The matching response releases the bearer before dispatch, allowing the
-	// next request immediately.
 	std::memset(&rsp, 0, sizeof(rsp));
 	rsp.OpCode = BT_ATT_OPCODE_ATT_WRITE_RSP;
 	BtAttProcessRsp(kConnHdl, &rsp, 1);
@@ -138,15 +155,10 @@ void TestMalformedMatchedResponseKeepsBearer()
 
 	BtAttReqRsp_t rsp = {};
 	rsp.OpCode = BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP;
-
-	// Matching opcode but no MTU field: do not release the transaction and do
-	// not read outside the declared PDU.
 	BtAttProcessRsp(kConnHdl, &rsp, 1);
 	CHECK(s_Peer.bAttReqPending);
 	CHECK(s_Peer.Conn.MaxMtu == 247);
 
-	// The structure is present but the peer's Rx MTU is below the mandatory
-	// ATT minimum. It is still not a completed transaction.
 	rsp.ExchgMtuReqRsp.RxMtu = BT_ATT_MTU_MIN - 1;
 	BtAttProcessRsp(kConnHdl, &rsp, 3);
 	CHECK(s_Peer.bAttReqPending);
@@ -160,9 +172,6 @@ void TestMalformedMatchedResponseKeepsBearer()
 	Setup();
 	uint8_t value = 0x31;
 	CHECK(BtAttWriteRequest(&s_Hci, kConnHdl, 0x0020, &value, 1));
-
-	// A one-byte Error Response exposes only the opcode. Reading ReqOpCode
-	// would be outside the PDU, and it cannot complete the outstanding write.
 	std::memset(&rsp, 0, sizeof(rsp));
 	rsp.OpCode = BT_ATT_OPCODE_ATT_ERROR_RSP;
 	BtAttProcessRsp(kConnHdl, &rsp, 1);
@@ -180,11 +189,9 @@ void TestMalformedMatchedResponseKeepsBearer()
 	charDecl.Type = BT_UUID_TYPE_16;
 	charDecl.Uuid16 = BT_UUID_DECLARATIONS_CHARACTERISTIC;
 	s_Peer.Discovery.UuidType = charDecl;
-	CHECK(BtAttReadByTypeRequest(&s_Hci, kConnHdl, 1, 0xFFFF, &charDecl));
+	CHECK(BtAttReadByTypeRequest(&s_Hci, kConnHdl, 1, 0xFFFF,
+		&charDecl));
 
-	// Characteristic declarations are exactly seven or twenty-one bytes per
-	// tuple. An eight-byte tuple previously entered the 128-bit path and read
-	// beyond the element.
 	std::memset(&rsp, 0, sizeof(rsp));
 	rsp.OpCode = BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP;
 	rsp.ReadByTypeRsp.Len = 8;
@@ -192,7 +199,6 @@ void TestMalformedMatchedResponseKeepsBearer()
 	CHECK(s_Peer.bAttReqPending);
 	CHECK(s_Peer.NbSrvc == 0);
 
-	// A full matching Error Response can terminate this request.
 	std::memset(&rsp, 0, sizeof(rsp));
 	rsp.OpCode = BT_ATT_OPCODE_ATT_ERROR_RSP;
 	rsp.ErrorRsp.ReqOpCode = BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ;
@@ -208,10 +214,19 @@ void TestTransactionTimeoutLocksBearer()
 	uint8_t value = 0x11;
 	CHECK(BtAttWriteRequest(&s_Hci, kConnHdl, 0x0020, &value, 1));
 
-	s_Now += 30000;
-	CHECK(BtAttReadRequest(&s_Hci, kConnHdl, 0x0021) == false);
+	s_Now += 29999;
+	BtAttTransactionTimeoutCheck();
+	CHECK(s_Peer.bAttReqPending);
+	CHECK(s_DisconnectCount == 0);
+
+	s_Now += 1;
+	BtAttTransactionTimeoutCheck();
 	CHECK(s_Peer.bAttReqPending == false);
 	CHECK(s_Peer.bAttTimedOut);
+	CHECK(s_DisconnectCount == 1);
+
+	BtAttTransactionTimeoutCheck();
+	CHECK(s_DisconnectCount == 1);
 	CHECK(BtAttReadRequest(&s_Hci, kConnHdl, 0x0021) == false);
 	CHECK(s_SendCount == 1);
 }
@@ -247,8 +262,9 @@ void CheckUuid32Pdu(bool Group)
 
 	BtL2CapPdu_t *pdu = LastPdu();
 	CHECK(pdu->Hdr.Len == 21);
-	CHECK(pdu->Att.OpCode == (Group ? BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ :
-		BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ));
+	CHECK(pdu->Att.OpCode ==
+		(Group ? BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ :
+		 BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ));
 
 	uint8_t expected[16];
 	CHECK(BtUuidTo128(&uuid, expected));
@@ -271,6 +287,16 @@ extern "C" {
 BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 {
 	return Hdl == kConnHdl ? &s_Peer : nullptr;
+}
+
+uint16_t BtPeerCount(void)
+{
+	return 1;
+}
+
+BtDevice_t *BtPeerSlot(uint16_t Idx)
+{
+	return Idx == 0 ? &s_Peer : nullptr;
 }
 
 bool BtGattTxPendReserve(uint16_t, BtGattChar_t *, uint16_t)
