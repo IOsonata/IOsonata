@@ -1,5 +1,25 @@
-# Normalize text files
-* text=auto
+# Normalize repository text to LF on every platform.
+* text=auto eol=lf
+
+# Binary files must never undergo line-ending conversion.
+*.a      binary
+*.bin    binary
+*.bmp    binary
+*.dll    binary
+*.dylib  binary
+*.elf    binary
+*.gif    binary
+*.ico    binary
+*.jpeg   binary
+*.jpg    binary
+*.lib    binary
+*.o      binary
+*.pdf    binary
+*.png    binary
+*.so     binary
+*.woff   binary
+*.woff2  binary
+*.zip    binary
 
 # IOsonata uses .h for its C++ classes and implementation interfaces
 *.h linguist-language=C++
