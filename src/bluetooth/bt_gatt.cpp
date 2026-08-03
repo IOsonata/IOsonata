@@ -18,8 +18,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is furnished
-to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -632,14 +632,14 @@ void BtGattTxPendRelease(uint16_t ConnHdl)
 
 // Compatibility helper for callers that own no completion callback. It still
 // occupies its real position in the ordered ring.
-bool BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
+void BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
 {
-	return BtGattTxPendReserve(ConnHdl, nullptr, NbPkt);
+	(void)BtGattTxPendReserve(ConnHdl, nullptr, NbPkt);
 }
 
-bool BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar)
+void BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar)
 {
-	return BtGattTxPendReserve(ConnHdl, pChar, 1);
+	BtGattTxPendReserve(ConnHdl, pChar, 1);
 }
 
 static uint16_t BtGattTxPktCount(BtDevice_t *pConn, uint16_t AclLen)
@@ -692,40 +692,13 @@ __attribute__((weak)) bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pC
 	return true;
 }
 
-static void BtGattTxCompleteChar(BtGattChar_t *pChar)
-{
-	if (pChar == nullptr || pChar->TxCompleteCB == nullptr)
-	{
-		return;
-	}
-
-	int idx = 0;
-	if (pChar->pSrvc != nullptr)
-	{
-		for (int k = 0; k < pChar->pSrvc->NbChar; k++)
-		{
-			if (&pChar->pSrvc->pCharArray[k] == pChar)
-			{
-				idx = k;
-				break;
-			}
-		}
-	}
-	pChar->TxCompleteCB(pChar, idx);
-}
-
 void BtGattHandleValueConfirm(uint16_t ConnHdl)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
-	if (pConn == nullptr)
+	if (pConn != nullptr)
 	{
-		return;
+		pConn->Conn.bIndCfmPending = false;
 	}
-
-	pConn->Conn.bIndCfmPending = false;
-	BtGattChar_t *pChar = (BtGattChar_t*)pConn->pIndChar;
-	pConn->pIndChar = nullptr;
-	BtGattTxCompleteChar(pChar);
 }
 
 __attribute__((weak)) void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl,
@@ -762,7 +735,6 @@ __attribute__((weak)) void BtGattIndicationTimeout(uint16_t ConnHdl)
 	}
 
 	pConn->Conn.bIndCfmPending = false;
-	pConn->pIndChar = nullptr;
 
 	if (pConn->pHciDev != nullptr && pConn->pHciDev->Command != nullptr)
 	{
@@ -1028,7 +1000,25 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 		pConn->TxPendHead = (uint8_t)((pConn->TxPendHead + 1) % BT_DEV_TXPEND_MAX);
 		pConn->TxPendCount--;
 
-		BtGattTxCompleteChar(c);
+		if (c == nullptr || c->TxCompleteCB == nullptr)
+		{
+			continue;
+		}
+
+		int idx = 0;
+		if (c->pSrvc != nullptr)
+		{
+			for (int k = 0; k < c->pSrvc->NbChar; k++)
+			{
+				if (&c->pSrvc->pCharArray[k] == c)
+				{
+					idx = k;
+					break;
+				}
+			}
+		}
+		c->TxCompleteCB(c, idx);
 	}
 }
+
 
