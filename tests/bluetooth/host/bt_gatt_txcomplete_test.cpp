@@ -2,9 +2,9 @@
 //
 // The controller reports completed HCI ACL packets, not GATT operations. The
 // per-link ring holds every transmitted packet group in controller acceptance
-// order. A null owner represents ATT, SMP, or L2CAP traffic with no GATT
-// callback; notification owners fire only after their entire packet group has
-// completed.
+// order. A null owner represents ATT, SMP, L2CAP, or indication traffic with no
+// ACL-completion callback. Notification owners fire only after their entire
+// packet group has completed; indications fire only after ATT confirmation.
 
 #include <cstddef>
 #include <cstdint>
@@ -81,7 +81,8 @@ void Setup(uint16_t AclMaxLen)
 
 	for (int i = 0; i < 2; i++)
 	{
-		s_Char[i].Property = BT_GATT_CHAR_PROP_NOTIFY;
+		s_Char[i].Property = BT_GATT_CHAR_PROP_NOTIFY |
+			BT_GATT_CHAR_PROP_INDICATE;
 		s_Char[i].ValHdl = (uint16_t)(0x0010 + i);
 		s_Char[i].CccdHdl = (uint16_t)(0x0011 + i);
 		s_Char[i].MaxDataLen = sizeof(s_Value);
@@ -184,6 +185,44 @@ void TestFragmentsReportedTogether()
 	BtGattSendCompleted(kConnHdl, 4);
 	CHECK(s_TxCompleteCount == 1);
 	CHECK(Peer()->TxPendCount == 0);
+}
+
+// ---- an indication completes only after ATT confirmation -------------------
+
+void TestIndicationWaitsForConfirmation()
+{
+	Setup(64);
+
+	CHECK(BtGattCccdSet(kConnHdl, s_Char[0].CccdHdl,
+		BT_DESC_CLIENT_CHAR_CONFIG_INDICATION));
+	CHECK(BtGattCharIndicate(kConnHdl, &s_Char[0], s_Value, 8));
+	CHECK(Peer()->Conn.bIndCfmPending);
+	CHECK(Peer()->pIndChar == &s_Char[0]);
+	CHECK(Peer()->TxPendCount == 1);
+	CHECK(Peer()->TxPend[Peer()->TxPendHead].pChar == nullptr);
+	CHECK(s_HciPacketCount == 1);
+
+	// Only one indication may be outstanding on the ATT bearer.
+	CHECK(BtGattCharIndicate(kConnHdl, &s_Char[1], s_Value, 8) == false);
+	CHECK(Peer()->TxPendCount == 1);
+	CHECK(s_HciPacketCount == 1);
+
+	// Controller completion only releases the ACL credit. It must not report
+	// the indication complete to the application.
+	BtGattSendCompleted(kConnHdl, 1);
+	CHECK(s_TxCompleteCount == 0);
+	CHECK(Peer()->TxPendCount == 0);
+	CHECK(Peer()->Conn.bIndCfmPending);
+	CHECK(Peer()->pIndChar == &s_Char[0]);
+
+	BtGattHandleValueConfirm(kConnHdl);
+	CHECK(Peer()->Conn.bIndCfmPending == false);
+	CHECK(Peer()->pIndChar == nullptr);
+	CHECK(s_TxCompleteCount == 1);
+
+	// A duplicate confirmation has no owner and does not fire twice.
+	BtGattHandleValueConfirm(kConnHdl);
+	CHECK(s_TxCompleteCount == 1);
 }
 
 // ---- the ring is reserved before the packet goes out -----------------------
@@ -299,6 +338,7 @@ int main()
 	TestUntrackedGroupsRemainOrdered();
 	TestFragmentedNotifyFiresOnce();
 	TestFragmentsReportedTogether();
+	TestIndicationWaitsForConfirmation();
 	TestReservationRefusesWhenFull();
 	TestFailedSendReleasesReservation();
 	TestNoCallbackCharStillTracked();

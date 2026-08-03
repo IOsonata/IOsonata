@@ -721,12 +721,13 @@ __attribute__((weak)) bool BtGattCharIndicate(uint16_t ConnHdl,
 	if (pConn == nullptr || pConn->Conn.bIndCfmPending ||
 		BtGattSendHandleValue(ConnHdl,
 			BT_ATT_OPCODE_ATT_HANDLE_VALUE_IND, pChar->ValHdl,
-			pVal, Len, pChar) < 0)
+			pVal, Len, nullptr) < 0)
 	{
 		return false;
 	}
 	pConn->Conn.bIndCfmPending = true;
 	pConn->Conn.IndCfmTime = BtGattMsTick();
+	pConn->pIndChar = pChar;
 	return true;
 }
 
