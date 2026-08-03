@@ -10,9 +10,13 @@
 #include <cstring>
 
 #include "bt_test_harness.h"
+#include "bluetooth/bt_att.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_smp.h"
+
+extern "C" void BtSmpBondPersistComplete(int Slot, const void *pBond,
+											 size_t Len, bool Success);
 
 namespace {
 
@@ -239,9 +243,6 @@ void TestVersionOneRetiresUncertainCsrk()
 } // namespace
 
 extern "C" {
-
-void BtSmpBondPersistComplete(int Slot, const void *pBond,
-									 size_t Len, bool Success);
 
 BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 {
