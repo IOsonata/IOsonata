@@ -80,7 +80,9 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
-	if (pChar == nullptr || (Len > 0 && pVal == nullptr) || Len > 64)
+	// Model strict vendor APIs: the buffer itself must be valid even when the
+	// semantic value length is zero.
+	if (pChar == nullptr || pVal == nullptr || Len > 64)
 	{
 		return false;
 	}
@@ -145,13 +147,20 @@ int main()
 			BT_UUID_CHARACTERISTIC_MANUFACTURER_NAME_STRING);
 		BtGattChar_t *pModel = FindChar(pDis,
 			BT_UUID_CHARACTERISTIC_MODEL_NUMBER_STRING);
+		BtGattChar_t *pSw = FindChar(pDis,
+			BT_UUID_CHARACTERISTIC_SOFTWARE_REVISION_STRING);
 		BtGattChar_t *pPnp = FindChar(pDis,
 			BT_UUID_CHARACTERISTIC_PNP_ID);
 		BT_CHECK(ctx, pManuf != nullptr);
 		BT_CHECK(ctx, pModel != nullptr);
+		BT_CHECK(ctx, pSw != nullptr);
 		BT_CHECK(ctx, pPnp != nullptr);
 		BT_CHECK(ctx, ValueEquals(pManuf, "I-SYST", 6));
 		BT_CHECK(ctx, ValueEquals(pModel, "Model-54", 8));
+
+		ValueCapture *pSwCap = CaptureFor(pSw);
+		BT_CHECK(ctx, pSwCap != nullptr && pSwCap->Len == 0);
+		BT_CHECK(ctx, pSw != nullptr && pSw->pValue != nullptr);
 
 		BtDisPnpId_t pnp = {};
 		ValueCapture *pCap = CaptureFor(pPnp);
