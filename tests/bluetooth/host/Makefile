@@ -3,6 +3,7 @@ BUILD_DIR := build
 
 CC ?= gcc
 CXX ?= g++
+PYTHON ?= python3
 OPT ?= -O1
 
 CPPFLAGS += -I$(ROOT)/include -I.
@@ -53,6 +54,7 @@ TEST_NAMES := \
 	bt_gatt_cccd_test \
 	bt_gatt_srvc_test \
 	bt_app_multilink_test \
+	bt_app_init_bm_test \
 	syslog_tx_test \
 	bt_gatt_txcomplete_test \
 	bt_att_adversarial_test \
@@ -65,6 +67,8 @@ TEST_NAMES := \
 
 TARGETS := $(addprefix $(BUILD_DIR)/,$(TEST_NAMES))
 CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
+BT_APP_BM_SOURCE := $(ROOT)/ARM/Nordic/nRF54/src/bt_app_bm.cpp
+BT_APP_BM_INIT_INC := generated/bt_app_bm_init.inc
 
 bt_adv_uuid_test_SOURCES := \
 	bt_adv_uuid_test.cpp \
@@ -133,6 +137,11 @@ bt_app_multilink_test_SOURCES := \
 	bt_app_multilink_test.cpp \
 	$(ROOT)/src/bluetooth/bt_app.cpp
 
+bt_app_init_bm_test_SOURCES := \
+	bt_app_init_bm_test.cpp \
+	$(ROOT)/src/bluetooth/services/bt_dis.cpp
+bt_app_init_bm_test_DEPS := $(BT_APP_BM_INIT_INC)
+
 syslog_tx_test_SOURCES := \
 	syslog_tx_test.cpp \
 	$(ROOT)/src/syslog.cpp \
@@ -192,12 +201,15 @@ test-clang:
 
 test-matrix: test-gcc test-clang
 
+$(BT_APP_BM_INIT_INC): extract_bt_app_init.py $(BT_APP_BM_SOURCE)
+	$(PYTHON) extract_bt_app_init.py $(BT_APP_BM_SOURCE) $@
+
 $(CFIFO_OBJ): $(ROOT)/src/cfifo.c $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SANITIZERS) -c $< -o $@
 
 define BUILD_TEST
-$(BUILD_DIR)/$(1): $$($(1)_SOURCES) $$($(1)_EXTRA) $(HEADERS)
+$(BUILD_DIR)/$(1): $$($(1)_SOURCES) $$($(1)_EXTRA) $$($(1)_DEPS) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$$($(1)_SOURCES) $$($(1)_EXTRA) -o $$@ \
@@ -207,4 +219,4 @@ endef
 $(foreach test,$(TEST_NAMES),$(eval $(call BUILD_TEST,$(test))))
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR) generated
