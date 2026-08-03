@@ -31,6 +31,7 @@ Copyright (c) 2026, I-SYST inc. All rights reserved.
 #endif
 
 static BtDisPnpId_t s_BtDisPnpId = {};
+static uint8_t s_BtDisEmptyValue;
 
 enum {
 	BT_DIS_CHAR_IDX_MANUF_NAME = 0,
@@ -70,7 +71,10 @@ static bool SetStrCharValue(BtGattChar_t *pChar, const char *pStr)
 {
 	if (pStr == NULL || pStr[0] == 0)
 	{
-		return BtGattCharSetValue(pChar, NULL, 0);
+		// Some vendor GATT APIs require a valid value pointer even when the
+		// requested length is zero. Keep the semantic value empty without
+		// passing a null pointer across the port boundary.
+		return BtGattCharSetValue(pChar, &s_BtDisEmptyValue, 0);
 	}
 
 	size_t l = strlen(pStr);
