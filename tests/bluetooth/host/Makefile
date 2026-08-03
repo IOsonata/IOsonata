@@ -55,6 +55,7 @@ TEST_NAMES := \
 	bt_gatt_srvc_test \
 	bt_app_multilink_test \
 	bt_app_init_bm_test \
+	bt_lesc_sd_test \
 	syslog_tx_test \
 	bt_gatt_txcomplete_test \
 	bt_att_adversarial_test \
@@ -142,6 +143,16 @@ bt_app_init_bm_test_SOURCES := \
 	$(ROOT)/src/bluetooth/services/bt_dis.cpp
 bt_app_init_bm_test_DEPS := $(BT_APP_BM_INIT_INC)
 
+bt_lesc_sd_test_CPPFLAGS := -Inordic_stub -I$(ROOT)/ARM/Nordic/include
+bt_lesc_sd_test_SOURCES := \
+	bt_lesc_sd_test.cpp \
+	$(ROOT)/ARM/Nordic/src/bt_lesc_sd.cpp \
+	$(ROOT)/src/device.cpp \
+	$(ROOT)/src/device_intrf.cpp
+bt_lesc_sd_test_DEPS := \
+	$(wildcard nordic_stub/*.h) \
+	$(ROOT)/ARM/Nordic/include/bt_lesc.h
+
 syslog_tx_test_SOURCES := \
 	syslog_tx_test.cpp \
 	$(ROOT)/src/syslog.cpp \
@@ -211,7 +222,7 @@ $(CFIFO_OBJ): $(ROOT)/src/cfifo.c $(HEADERS)
 define BUILD_TEST
 $(BUILD_DIR)/$(1): $$($(1)_SOURCES) $$($(1)_EXTRA) $$($(1)_DEPS) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
+	$(CXX) $(CPPFLAGS) $$($(1)_CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$$($(1)_SOURCES) $$($(1)_EXTRA) -o $$@ \
 		$(LDFLAGS) $(SANITIZERS)
 endef
