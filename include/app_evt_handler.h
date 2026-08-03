@@ -135,4 +135,14 @@ void AppEvtHandlerExec();
 }
 #endif
 
+// The WBA application includes this header after the ST BLE middleware
+// headers. In that one translation unit, install the SVCCTL validation wrapper
+// before BtAppStackInit registers its static event handler. Other targets see
+// no code or macros from the hook.
+#if defined(__cplusplus) && defined(STM32WBAxx_H) && \
+	defined(HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE) && \
+	defined(ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE)
+#include "bluetooth/bt_wba_event_hook.h"
+#endif
+
 #endif // __APP_EVT_HANDLER_H__
