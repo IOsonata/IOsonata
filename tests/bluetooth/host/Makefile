@@ -53,6 +53,7 @@ TEST_NAMES := \
 	bt_adv_hci_test \
 	bt_gatt_cccd_test \
 	bt_gatt_srvc_test \
+	bt_gatt_hci_security_test \
 	bt_app_multilink_test \
 	bt_app_init_bm_test \
 	bt_lesc_sd_test \
@@ -133,6 +134,10 @@ bt_gatt_srvc_test_SOURCES := \
 	$(ROOT)/src/bluetooth/bt_gatt.cpp \
 	$(ROOT)/src/bluetooth/bt_att.cpp \
 	$(ROOT)/src/bluetooth/bt_uuid.cpp
+
+bt_gatt_hci_security_test_SOURCES := \
+	bt_gatt_hci_security_test.cpp \
+	$(ROOT)/src/bluetooth/bt_gatt_hci.cpp
 
 bt_app_multilink_test_SOURCES := \
 	bt_app_multilink_test.cpp \
