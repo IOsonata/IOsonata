@@ -43,6 +43,7 @@ HEADERS := $(wildcard $(ROOT)/include/bluetooth/*.h) \
 
 TEST_NAMES := \
 	app_evt_handler_retry_test \
+	cfifo_boundary_test \
 	bt_adv_uuid_test \
 	bt_intrf_test \
 	bt_hci_flow_test \
@@ -79,6 +80,9 @@ app_evt_handler_retry_test_SOURCES := \
 	app_evt_handler_retry_test.cpp \
 	$(ROOT)/src/app_evt_handler.cpp
 app_evt_handler_retry_test_EXTRA := $(CFIFO_OBJ)
+
+cfifo_boundary_test_SOURCES := cfifo_boundary_test.cpp
+cfifo_boundary_test_EXTRA := $(CFIFO_OBJ)
 
 bt_adv_uuid_test_SOURCES := \
 	bt_adv_uuid_test.cpp \
