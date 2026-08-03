@@ -192,9 +192,6 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar,
 		return false;
 	}
 
-	// Reserve before the vendor stack accepts the notification. A failed
-	// reservation must not transmit an operation that later consumes an older
-	// completion entry.
 	if (!BtGattTxPendingAdd(ConnHdl, pChar))
 	{
 		return false;
@@ -250,17 +247,12 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar,
 		return false;
 	}
 
-	// Indication completion belongs exclusively to the peer confirmation.
-	// Do not place it in the notification/controller completion ring.
 	pConn->Conn.bIndCfmPending = true;
 	pConn->Conn.IndCfmTime = BtGattMsTick();
 	pConn->pIndChar = pChar;
 	return true;
 }
 
-// The WBA event supplies the connection and attribute handles for one accepted
-// notification. Drain only when they match the current ring head; a stale or
-// out-of-order event must not complete an unrelated characteristic.
 void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t ValHdl)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
@@ -269,7 +261,7 @@ void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t ValHdl)
 		return;
 	}
 
-	BtGattTxPend_t *pPend = &pConn->TxPend[pConn->TxPendHead];
+	auto *pPend = &pConn->TxPend[pConn->TxPendHead];
 	BtGattChar_t *pChar = (BtGattChar_t *)pPend->pChar;
 	if (pChar == nullptr || pPend->Remain != 1 || pChar->ValHdl != ValHdl)
 	{
