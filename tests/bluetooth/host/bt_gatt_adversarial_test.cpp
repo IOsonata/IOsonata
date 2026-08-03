@@ -63,6 +63,7 @@ void ResetPeer()
 	std::memset(&s_Peer, 0, sizeof(s_Peer));
 	std::memset(&s_Hci, 0, sizeof(s_Hci));
 	s_Peer.Conn.Hdl = kConnHdl;
+	s_Peer.Conn.MaxMtu = BT_ATT_MTU_MIN;
 	s_Peer.pHciDev = &s_Hci;
 	s_Hci.SendData = DummySendData;
 	s_HciPacketCount = 0;
@@ -95,7 +96,7 @@ void BuildSubscriptionService()
 	std::memset(&s_SubService, 0, sizeof(s_SubService));
 
 	s_SubChar.Uuid = 0xFFF2;
-	s_SubChar.MaxDataLen = 8;
+	s_SubChar.MaxDataLen = 32;
 	s_SubChar.Property =
 			BT_GATT_CHAR_PROP_READ |
 			BT_GATT_CHAR_PROP_NOTIFY |
@@ -119,6 +120,21 @@ void TestInitialValueIsCopied()
 	BT_CHECK(s_Test,
 			std::memcmp(s_InitialChar.pValue,
 						s_InitialData, sizeof(s_InitialData)) == 0);
+}
+
+void TestOversizedValueIsRejectedWithoutMutation()
+{
+	uint8_t before[sizeof(s_InitialData)];
+	std::memcpy(before, s_InitialChar.pValue, sizeof(before));
+	uint16_t beforeLen = s_InitialChar.ValueLen;
+	uint8_t oversized[sizeof(s_InitialData) + 1] = { 1, 2, 3, 4, 5 };
+
+	BT_CHECK(s_Test,
+			!BtGattCharSetValue(&s_InitialChar, oversized,
+								 sizeof(oversized)));
+	BT_CHECK(s_Test, s_InitialChar.ValueLen == beforeLen);
+	BT_CHECK(s_Test,
+			std::memcmp(s_InitialChar.pValue, before, sizeof(before)) == 0);
 }
 
 void TestDisconnectReportsSubscriptionDisable()
@@ -147,15 +163,34 @@ void TestDisconnectReportsSubscriptionDisable()
 	BT_CHECK(s_Test, !s_LastIndicateState);
 }
 
+void TestOversizedHandleValueIsRejected()
+{
+	BT_CHECK(s_Test, BtGattCccdSet(kConnHdl, s_SubChar.CccdHdl,
+			BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION |
+			BT_DESC_CLIENT_CHAR_CONFIG_INDICATION));
+
+	uint8_t payload[BT_ATT_MTU_MIN - 2] = {};
+	s_HciPacketCount = 0;
+	s_Peer.TxPendHead = 0;
+	s_Peer.TxPendCount = 0;
+
+	BT_CHECK(s_Test,
+			!BtGattCharNotify(kConnHdl, &s_SubChar,
+							 payload, sizeof(payload)));
+	BT_CHECK(s_Test,
+			!BtGattCharIndicate(kConnHdl, &s_SubChar,
+							   payload, sizeof(payload)));
+	BT_CHECK(s_Test, s_HciPacketCount == 0);
+	BT_CHECK(s_Test, s_Peer.TxPendCount == 0);
+	BT_CHECK(s_Test, !s_Peer.Conn.bIndCfmPending);
+}
+
 void TestMixedPacketCompletionOrdering()
 {
 	s_Peer.TxPendHead = 0;
 	s_Peer.TxPendCount = 0;
 	s_TxCompleteCount = 0;
 
-	// An ATT response goes out on this link. It owns no GATT completion, so
-	// the layer that sent it reports the packet; bt_hci_host.cpp does this
-	// for real, and the stub below only counts.
 	BtHciACLDataPacket_t untracked = {};
 	BT_CHECK(s_Test, BtHciSendAcl(&s_Hci, &untracked) != 0);
 	BtGattTxPendUntracked(kConnHdl, 1);
@@ -178,9 +213,6 @@ void TestFragmentCompletionWaitsForFinalPacket()
 	s_Peer.TxPendCount = 0;
 	s_TxCompleteCount = 0;
 
-	// One notification that the transport split into three ACL packets. The
-	// send path derives the count from the PDU size and the controller's ACL
-	// length; here it is stated directly.
 	BT_CHECK(s_Test, BtGattTxPendReserve(kConnHdl, &s_SubChar, 3));
 	BT_CHECK(s_Test, s_Peer.TxPendCount == 1);
 
@@ -283,8 +315,12 @@ int main()
 	BtAttDBInit(4096);
 
 	s_Test.Run("initial value copy", TestInitialValueIsCopied);
+	s_Test.Run("oversized value rejected",
+			   TestOversizedValueIsRejectedWithoutMutation);
 	s_Test.Run("subscription teardown callbacks",
 			   TestDisconnectReportsSubscriptionDisable);
+	s_Test.Run("oversized handle value rejected",
+			   TestOversizedHandleValueIsRejected);
 	s_Test.Run("mixed packet completion ordering",
 			   TestMixedPacketCompletionOrdering);
 	s_Test.Run("fragment completion ordering",
