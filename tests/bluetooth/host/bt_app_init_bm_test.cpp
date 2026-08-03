@@ -12,9 +12,6 @@
 #define BLE_GAP_TX_POWER_ROLE_ADV		1U
 #define BLE_GAP_TX_POWER_ROLE_SCAN_INIT	2U
 #define GATT_MTU_SIZE_DEFAULT			23U
-#define IOPINDIR_OUTPUT				1
-#define IOPINRES_NONE				0
-#define IOPINTYPE_NORMAL			0
 #define DEBUG_PRINTF(...)
 
 struct ble_conn_params_evt {};
@@ -151,7 +148,7 @@ void BtPeerLongWrInit(uint8_t *, size_t)
 }
 
 void BtAppConnLedOff(void) {}
-void IOPinConfig(int, int, int, int, int, int) {}
+void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
 
 bool BtAppStackInit(const BtAppCfg_t *)
 {
@@ -239,6 +236,11 @@ uint32_t sd_ble_gap_tx_power_set(uint8_t, uint8_t, int8_t)
 	return NRF_SUCCESS;
 }
 
+int8_t GetValidTxPower(int Value)
+{
+	return (int8_t)Value;
+}
+
 } // extern "C"
 
 static void on_conn_params_evt(const struct ble_conn_params_evt *) {}
@@ -247,11 +249,6 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE, uint8_t, bool)
 {
 	Record(CALL_SECURITY);
 	return s_FailPoint == FAIL_SECURITY ? NRF_ERROR_INTERNAL : NRF_SUCCESS;
-}
-
-static int8_t GetValidTxPower(int Value)
-{
-	return (int8_t)Value;
 }
 
 #include "generated/bt_app_bm_init.inc"
