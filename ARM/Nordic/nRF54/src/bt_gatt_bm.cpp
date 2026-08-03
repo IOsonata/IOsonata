@@ -45,6 +45,7 @@ SOFTWARE.
 #include <ble_gatts.h>
 
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
 
@@ -84,6 +85,22 @@ typedef struct {
 
 alignas(4) static uint8_t s_LongWrScratch[BT_GATT_LONG_WRITE_SCRATCH_MAX];
 static uint8_t s_EmptyValue;
+
+class BtGattInitGuard {
+public:
+	~BtGattInitGuard()
+	{
+		if (!vSuccess)
+		{
+			BtGattInitStatusFail(BT_GATT_INIT_ERROR_SERVICE_ADD);
+		}
+	}
+
+	void Success() { vSuccess = true; }
+
+private:
+	bool vSuccess = false;
+};
 
 static bool BtGattBmValueLenValid(const BtDevice_t *pConn, size_t Len)
 {
@@ -491,6 +508,7 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
 
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
+	BtGattInitGuard initGuard;
 	DEBUG_PRINTF("BtGattSrvcAdd[bm]: enter pSrvc=%p\r\n", (void *)pSrvc);
 	if (pSrvc == nullptr || pSrvc->pCharArray == nullptr || pSrvc->NbChar <= 0)
 	{
@@ -501,6 +519,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	{
 		if (p == pSrvc)
 		{
+			initGuard.Success();
 			return true;
 		}
 	}
@@ -508,6 +527,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	if (pSrvc->UuidSrvc == BT_UUID_GATT_SERVICE_GENERIC_ACCESS ||
 		pSrvc->UuidSrvc == BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE)
 	{
+		initGuard.Success();
 		return true;
 	}
 
@@ -579,5 +599,6 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	BtGattInsertSrvcList(pSrvc);
 	DEBUG_PRINTF("BtGattSrvcAdd[bm]: OK Hdl=%d NbChar=%d\r\n",
 		pSrvc->Hdl, pSrvc->NbChar);
+	initGuard.Success();
 	return true;
 }
