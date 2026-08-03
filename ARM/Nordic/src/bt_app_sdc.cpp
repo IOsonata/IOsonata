@@ -68,6 +68,7 @@ SOFTWARE.
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/services/bt_dis.h"
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_hci_ctlr.h"
@@ -495,6 +496,11 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
  */
 bool BtAppInit(const BtAppCfg_t *pCfg)
 {
+	if (pCfg == nullptr)
+	{
+		return false;
+	}
+
 	int32_t res = 0;
 
 	// Initialize the peer/connection table (and its long-write pool) before
@@ -819,7 +825,12 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		// SDK peer_manager and fstorage. Printed so a persistence problem is
 		// not chased in the wrong layer.
 		STORE_PRINTF("STORE: bt_pds -> Nvm (SDC, no fstorage)\r\n");
-		BtSmpBondNvmInit();
+		int storeRes = BtSmpBondNvmInit();
+		if (storeRes < 0)
+		{
+			STORE_PRINTF("STORE: bt_pds init failed: %d\r\n", storeRes);
+			return false;
+		}
 	}
 	else
 	{
@@ -832,9 +843,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 		// Register Device Information Service when the app supplies device
 		// info. Generic bt_dis adds it to the same ATT DB as user services.
-		if (pCfg->pDevInfo != NULL)
+		if (pCfg->pDevInfo != NULL && !BtDisInit(pCfg))
 		{
-			BtDisInit(pCfg);
+			return false;
 		}
 
 		BtGapSetAppearance(pCfg->Appearance);
@@ -854,6 +865,12 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 			return false;
 		}
     }
+	else if (!BtGattInitStatusComplete())
+	{
+		DEBUG_PRINTF("BtAppInit refused: GATT init error %u\r\n",
+			(unsigned)BtGattInitStatusErrorGet());
+		return false;
+	}
 /*
     BtGapInit(pCfg->Role);
 
