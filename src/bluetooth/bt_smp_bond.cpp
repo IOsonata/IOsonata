@@ -46,7 +46,9 @@ SOFTWARE.
 #include <string.h>
 #include <atomic>
 
+#if defined(__arm__)
 #include "iatomic.h"
+#endif
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_dev.h"
@@ -195,9 +197,6 @@ static uint32_t BtSmpSignNextHigh(uint32_t High)
 	return High + BT_SMP_SIGN_COUNTER_WINDOW;
 }
 
-// Weak persistence hooks. The default is RAM only. A RAM-only bond cannot make
-// a signed-write counter survive reset, so it never calls
-// BtSmpBondPersistComplete and signed commands remain fail-closed.
 __attribute__((weak)) void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 {
 	(void)Slot;
@@ -303,11 +302,6 @@ static bool BtSmpSignCounterPrepare(int Slot)
 	return true;
 }
 
-// Called by a persistence backend after its synchronous medium write returns.
-// pBond is the exact serialized blob that was written. Passing the blob closes
-// a race where another reservation could be requested after serialization but
-// before completion: only the high-water value actually carried by this write
-// is made usable.
 extern "C" void BtSmpBondPersistComplete(int Slot, const void *pBond,
 											 size_t Len, bool Success)
 {
