@@ -17,8 +17,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -48,8 +48,7 @@ SOFTWARE.
 
 
 /** @addtogroup Bluetooth
-  * @{
-  */
+  * @{ */
 #ifndef BTAPP_NAME_MAXLEN
 #define BTAPP_NAME_MAXLEN				20
 #endif
@@ -184,6 +183,7 @@ typedef struct __Bt_App_Data {
 	uint8_t         ConnLedActLevel;//!< Connection LED active level
 	int             PeriphDevCnt;   //!< Peripheral connection count when in central role
 	BTAPP_COEXMODE  CoexMode;       //!< CoEx mode in effect
+	BTGAP_SECTYPE   SecType;        //!< Configured application security mode
 	bool            bExtAdv;        //!< Extended advertising enabled
 	bool            bScan;          //!< Scan currently enabled
 	bool            bInitialized;   //!< BtAppInit completed
@@ -423,4 +423,3 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev);//uint16_t ConnHdl);
 /** @} end group Bluetooth */
 
 #endif // __BT_APP_H__
-
