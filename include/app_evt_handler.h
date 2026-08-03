@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	app_evt_handler.h
 
-@brief	Event handler queuing 
+@brief	Event handler queuing
 
 This is an implementation of event handler queuing to schedule event handler
 in firmware application main loop.
@@ -22,8 +22,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -55,9 +55,14 @@ SOFTWARE.
 #define APPEVT_HANDLER_EXEC_MAX_COUNT	30	//!< Max events per AppEvtHandlerExec call
 #endif
 
+#ifndef APPEVT_HANDLER_IDLE_MAX_COUNT
+#define APPEVT_HANDLER_IDLE_MAX_COUNT	4	//!< Max registered retry/idle pumps
+#endif
+
 #define APPEVT_HANDLER_QUE_MEMSIZE(Count)		CFIFO_TOTAL_MEMSIZE(Count, sizeof(AppEvtHandlerQue_t))
 
 typedef void (*AppEvtHandler_t)(uint32_t Evt, void *pCtx);
+typedef void (*AppEvtHandlerIdle_t)(void);
 
 #pragma pack(push,4)
 
@@ -69,76 +74,30 @@ typedef struct __App_Event_Handler_Que {
 
 #pragma pack(pop)
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/**
- * @brief	Initialize event handler que
- *
- * Initialize fifo to be used to queue the event handlers. Pass NULL in pFifoMem
- * parameter to use library default APP_EVT_HANDLER_QUE_DEFAULT_SIZE.
- *
- * Use the macro APPEVT_HANDLER_QUE_MEMSIZE(Count) to calculate require memory size
- * for user queue size. Usage example for custom queue size of 10 :
- *
- * #define APPEVT_HANDLER_TOTAL_MEM_SIZE	APPEVT_HANDLER_QUE_MEMSIZE(10)
- *
- * static uint8_t s_Fifomem[APPEVT_HANDLER_TOTAL_MEM_SIZE];
- *
- * ...
- * if (AppEvtHandlerInit(s_Fifomem, APPEVT_HANDLER_TOTAL_MEM_SIZE) == false)
- * {
- *     printf("Failed\n");
- * }
- * ...
- *
- * @param	pFifoMem: Pointer to Fifo memory block.
- * 						NULL - use library default
- * @param	Size	: Total memory size in bytes
- *
- * @return	true - success
- */
 bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size);
-
-/**
- * @brief	Add new event to que for execution
- *
- * @param	EvtId	: Event Id number
- * @param	pCtx	: Context data to pass to handler
- * @param 	Handler	: Event handler function to call
- *
- * @return	true - success. false - que full
- */
 bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler);
+void AppEvtHandlerDispatch(void);
+void AppEvtHandlerExec(void);
 
 /**
- * @brief	Execute next event
+ * @brief Register a main-loop retry/idle pump.
  *
- * @param	None
+ * The pump runs once after each AppEvtHandlerExec call, after queued handlers
+ * have released their FIFO entries. Registering the same function twice is a
+ * successful no-op. Registration is intended for initialization context.
  *
- * @return	None
+ * @return true when registered or already present; false on null or no slot.
  */
-void AppEvtHandlerDispatch();
-
-/**
- * @brief	Execute all event
- *
- * @param	None
- *
- * @return	None
- */
-void AppEvtHandlerExec();
+bool AppEvtHandlerIdleRegister(AppEvtHandlerIdle_t Handler);
 
 #ifdef __cplusplus
 }
 #endif
 
-// The WBA application includes this header after the ST BLE middleware
-// headers. In that one translation unit, install the SVCCTL validation wrapper
-// before BtAppStackInit registers its static event handler. Other targets see
-// no code or macros from the hook.
 #if defined(__cplusplus) && defined(STM32WBAxx_H) && \
 	defined(HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE) && \
 	defined(ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE)
