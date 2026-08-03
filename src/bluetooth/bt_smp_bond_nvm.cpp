@@ -135,10 +135,14 @@ static int PdsEnsureReady(void)
 }
 
 #define BT_SMP_BOND_PEND_MAX		32
+#ifndef BT_SMP_BOND_RETRY_IDLE_CYCLES
+#define BT_SMP_BOND_RETRY_IDLE_CYCLES	32
+#endif
 
 static std::atomic<uint32_t> s_PendMask;
 static std::atomic<bool> s_LocalIdPend;
 static std::atomic<bool> s_SaveHandlerQueued;
+static std::atomic<uint8_t> s_RetryIdleCycles;
 static uint32_t s_PendDropCnt;
 static uint32_t s_PendFailCnt;
 
@@ -148,6 +152,12 @@ static bool BondSavePending(void)
 {
 	return s_PendMask.load(std::memory_order_acquire) != 0 ||
 		s_LocalIdPend.load(std::memory_order_acquire);
+}
+
+static void BondSaveDeferRetry(void)
+{
+	s_RetryIdleCycles.store(BT_SMP_BOND_RETRY_IDLE_CYCLES,
+			std::memory_order_release);
 }
 
 static void BondSaveSchedule(void)
@@ -172,9 +182,17 @@ static void BondSaveSchedule(void)
 
 static void BondSavePump(void)
 {
+	uint8_t delay = s_RetryIdleCycles.load(std::memory_order_acquire);
+	if (delay != 0)
+	{
+		s_RetryIdleCycles.store((uint8_t)(delay - 1),
+				std::memory_order_release);
+		return;
+	}
+
 	// AppEvtHandlerExec calls this after queued callbacks have released their
-	// FIFO slots. A previous full-queue failure is therefore retried without
-	// doing NVM work inside Bluetooth event dispatch.
+	// FIFO slots. Queue-full scheduling failures retry on the next idle pass;
+	// actual storage failures set a bounded delay above.
 	BondSaveSchedule();
 }
 
@@ -194,10 +212,12 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 			BOND_PRINTF("PDS: save mask %08lX held, store not ready %d\r\n",
 						(unsigned long)left, r);
 		}
+		BondSaveDeferRetry();
 		return;
 	}
 
 	uint8_t rec[BT_PDS_RECORD_DATA_MAX];
+	bool failed = false;
 
 	if (s_LocalIdPend.exchange(false, std::memory_order_acq_rel))
 	{
@@ -208,52 +228,66 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 			if (w != (ssize_t)len)
 			{
 				s_LocalIdPend.store(true, std::memory_order_release);
+				failed = true;
 				BOND_PRINTF("PDS: local id save len %u failed %d, still marked\r\n",
 							(unsigned)len, (int)w);
 			}
 		}
 	}
 
-	for (int slot = 0; slot < BT_SMP_BOND_PEND_MAX; slot++)
+	if (!failed)
 	{
-		if (s_PendMask.load(std::memory_order_acquire) == 0)
+		for (int slot = 0; slot < BT_SMP_BOND_PEND_MAX; slot++)
 		{
-			break;
-		}
+			if (s_PendMask.load(std::memory_order_acquire) == 0)
+			{
+				break;
+			}
 
-		uint32_t bit = 1UL << slot;
-		if ((s_PendMask.fetch_and(~bit, std::memory_order_acq_rel) & bit) == 0)
-		{
-			continue;
-		}
+			uint32_t bit = 1UL << slot;
+			if ((s_PendMask.fetch_and(~bit, std::memory_order_acq_rel) & bit) == 0)
+			{
+				continue;
+			}
 
-		size_t len = BtSmpBondSerialize(slot, rec, sizeof(rec));
-		if (len == 0)
-		{
-			BOND_PRINTF("PDS: save slot %d refused by the bond table\r\n", slot);
-			continue;
-		}
+			size_t len = BtSmpBondSerialize(slot, rec, sizeof(rec));
+			if (len == 0)
+			{
+				BOND_PRINTF("PDS: save slot %d refused by the bond table\r\n", slot);
+				continue;
+			}
 
-		ssize_t w = BtPdsWrite(BT_SMP_BOND_KEY_BASE + (uint32_t)slot,
+			ssize_t w = BtPdsWrite(BT_SMP_BOND_KEY_BASE + (uint32_t)slot,
 							 rec, len);
-		bool committed = w == (ssize_t)len;
-		BtSmpBondPersistComplete(slot, rec, len, committed);
+			bool committed = w == (ssize_t)len;
+			BtSmpBondPersistComplete(slot, rec, len, committed);
 
-		if (!committed)
-		{
-			s_PendMask.fetch_or(bit, std::memory_order_release);
-			s_PendFailCnt++;
-			BOND_PRINTF("PDS: save slot %d len %u failed %d, still marked, "
+			if (!committed)
+			{
+				s_PendMask.fetch_or(bit, std::memory_order_release);
+				s_PendFailCnt++;
+				failed = true;
+				BOND_PRINTF("PDS: save slot %d len %u failed %d, still marked, "
 						"%lu so far\r\n", slot, (unsigned)len, (int)w,
 						(unsigned long)s_PendFailCnt);
-			break;
-		}
+				break;
+			}
 
-		BOND_PRINTF("PDS: save slot %d len %u -> %d\r\n", slot,
+			BOND_PRINTF("PDS: save slot %d len %u -> %d\r\n", slot,
 					(unsigned)len, (int)w);
+		}
 	}
 
 	CryptoSecureWipe(rec, sizeof(rec));
+
+	if (failed)
+	{
+		BondSaveDeferRetry();
+	}
+	else
+	{
+		s_RetryIdleCycles.store(0, std::memory_order_release);
+	}
 }
 
 void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
@@ -271,12 +305,16 @@ void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 	}
 
 	s_PendMask.fetch_or(1UL << Slot, std::memory_order_release);
+	// A new mutation is useful progress and deserves an immediate attempt even
+	// when an older storage failure was backing off.
+	s_RetryIdleCycles.store(0, std::memory_order_release);
 	BondSaveSchedule();
 }
 
 void BtSmpLocalIdSave(void)
 {
 	s_LocalIdPend.store(true, std::memory_order_release);
+	s_RetryIdleCycles.store(0, std::memory_order_release);
 	BondSaveSchedule();
 }
 
