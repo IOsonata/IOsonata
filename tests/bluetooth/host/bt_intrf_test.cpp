@@ -44,6 +44,13 @@ struct Fixture {
 		std::memset(&Service, 0, sizeof(Service));
 		Service.pCharArray = Char;
 		Service.NbChar = 2;
+
+		// BtGattSrvcAdd establishes this back-pointer during normal service
+		// registration. This isolated test does not call a platform GATT port,
+		// so mirror the registered-service state explicitly before invoking
+		// characteristic callbacks.
+		Char[0].pSrvc = &Service;
+		Char[1].pSrvc = &Service;
 		Char[0].Property = BT_GATT_CHAR_PROP_WRITE;
 		Char[0].MaxDataLen = 64;
 		Char[1].Property = BT_GATT_CHAR_PROP_NOTIFY;
