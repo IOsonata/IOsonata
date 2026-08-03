@@ -24,8 +24,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -57,57 +57,18 @@ typedef struct __Bt_Base_Uuid_Tbl_Entry {
 // The remaining table entries are value-initialized (all zero, bValid false).
 alignas(4) static BtBaseUuidTblEntry_t s_BtBaseUuidTbl[BT_BASE_UUID_ENTRY_MAX_COUNT] = {{BLUETOOTH_SIG_BASE_UUID, true},};
 
-/**
- * @brief	Find index of stored base UUID 128 bits
- *
- * This function lookup the internal table for a 128 bits UUID.
- *
- * @param 	Uuid : The 128 bits UUID to find
- *
- * @return	The index in the internal UUID table
- * 			-1 : Not found
- */
 int BtUuidFindBase(uint8_t const Uuid[16])
 {
+	if (Uuid == nullptr)
+	{
+		return -1;
+	}
+
 	for (int i = 0; i < BT_BASE_UUID_ENTRY_MAX_COUNT; i++)
 	{
-		if (s_BtBaseUuidTbl[i].bValid == true)
+		if (s_BtBaseUuidTbl[i].bValid &&
+			memcmp(s_BtBaseUuidTbl[i].Uuid, Uuid, 16) == 0)
 		{
-			if (memcmp(s_BtBaseUuidTbl[i].Uuid, Uuid, 16) == 0)
-			{
-				return i;
-			}
-		}
-	}
-
-	return -1;
-}
-
-/**
- * @brief	Add new 128 bit base UUID into the internal table
- *
- * If UUID already exits, returns its index. Otherwise add to available slot.
- *
- * @param	Uuid :	128 bits UUID to add
- *
- * @return	The index in the internal UUID table
- * 			-1 : Table full, cannot add
- */
-int BtUuidAddBase(uint8_t const Uuid[16])
-{
-	int idx = BtUuidFindBase(Uuid);
-
-	if (idx >= 0)
-	{
-		return idx;
-	}
-
-	for (int i = 1; i < BT_BASE_UUID_ENTRY_MAX_COUNT; i++)
-	{
-		if (s_BtBaseUuidTbl[i].bValid == false)
-		{
-			s_BtBaseUuidTbl[i].bValid = true;
-			memcpy(s_BtBaseUuidTbl[i].Uuid, Uuid, 16);
 			return i;
 		}
 	}
@@ -115,182 +76,145 @@ int BtUuidAddBase(uint8_t const Uuid[16])
 	return -1;
 }
 
-/**
- * @brief	Get the base 128 bits UUID
- *
- * Find and return to base 128 UUID located at index location in the internal table
- *
- * @param	Idx		: Index into the base UUID table.
- * @param 	Uuid 	: Buffer to store the UUID found
- *
- * @return	true - UUID found
- * 			false - UUID not found
- */
+int BtUuidAddBase(uint8_t const Uuid[16])
+{
+	if (Uuid == nullptr)
+	{
+		return -1;
+	}
+
+	int idx = BtUuidFindBase(Uuid);
+	if (idx >= 0)
+	{
+		return idx;
+	}
+
+	for (int i = 1; i < BT_BASE_UUID_ENTRY_MAX_COUNT; i++)
+	{
+		if (!s_BtBaseUuidTbl[i].bValid)
+		{
+			memcpy(s_BtBaseUuidTbl[i].Uuid, Uuid, 16);
+			s_BtBaseUuidTbl[i].bValid = true;
+			return i;
+		}
+	}
+
+	return -1;
+}
+
 bool BtUuidGetBase(int Idx, uint8_t Uuid[16])
 {
-	if (Idx < 0 || Idx >= BT_BASE_UUID_ENTRY_MAX_COUNT)
+	if (Uuid == nullptr || Idx < 0 || Idx >= BT_BASE_UUID_ENTRY_MAX_COUNT ||
+		!s_BtBaseUuidTbl[Idx].bValid)
 	{
 		return false;
 	}
 
-	if (s_BtBaseUuidTbl[Idx].bValid)
-	{
-		memcpy(Uuid, s_BtBaseUuidTbl[Idx].Uuid, 16);
-
-		return true;
-	}
-
-	return false;
+	memcpy(Uuid, s_BtBaseUuidTbl[Idx].Uuid, 16);
+	return true;
 }
 
-/**
- * @brief	Convert the BtUuid_t type to 128 bits UUID
- *
- * @param 	pUuid	: Reference to the BtUuid_t to convert
- * @param 	Uuid128	: Buffer to store the 128 bits UUID result
- *
- * @return	true - success
- */
 bool BtUuidTo128(BtUuid_t * const pUuid, uint8_t Uuid128[16])
 {
-	// BaseIdx is a 6-bit field (0-63) but the table holds only
-	// BT_BASE_UUID_ENTRY_MAX_COUNT entries. Reject an out-of-range index
-	// (e.g. an unresolved/stale UUID) before indexing to avoid an OOB read.
-	if (pUuid->BaseIdx >= BT_BASE_UUID_ENTRY_MAX_COUNT)
+	if (pUuid == nullptr || Uuid128 == nullptr ||
+		pUuid->BaseIdx >= BT_BASE_UUID_ENTRY_MAX_COUNT)
 	{
 		return false;
 	}
 
 	BtBaseUuidTblEntry_t *p = &s_BtBaseUuidTbl[pUuid->BaseIdx];
-
-	if (p->bValid == true)
+	if (!p->bValid)
 	{
-		memcpy(Uuid128, p->Uuid, 16);
-		Uuid128[12] = pUuid->Uuid16 & 0xFF;
-		Uuid128[13] = (pUuid->Uuid16 >> 8) & 0xFF;
-
-		if (pUuid->Type == BT_UUID_TYPE_32)
-		{
-			Uuid128[14] = (pUuid->Uuid32 >> 16) & 0xFF;
-			Uuid128[15] = (pUuid->Uuid32 >> 24) & 0xFF;
-		}
+		return false;
 	}
 
-	return p->bValid;
+	memcpy(Uuid128, p->Uuid, 16);
+	Uuid128[12] = pUuid->Uuid16 & 0xFF;
+	Uuid128[13] = (pUuid->Uuid16 >> 8) & 0xFF;
+
+	if (pUuid->Type == BT_UUID_TYPE_32)
+	{
+		Uuid128[14] = (pUuid->Uuid32 >> 16) & 0xFF;
+		Uuid128[15] = (pUuid->Uuid32 >> 24) & 0xFF;
+	}
+
+	return true;
 }
 
-/**
- * @brief	Convert the BtUuid16_t 16 bits type to 128 bits UUID
- *
- * @param 	pUuid	: Reference to the BtUuid16_t to convert
- * @param 	Uuid128	: Buffer to store the 128 bits UUID result
- *
- * @return	true - success
- */
 bool BtUuid16To128(BtUuid16_t * const pUuid, uint8_t Uuid128[16])
 {
-	if (pUuid->BaseIdx >= BT_BASE_UUID_ENTRY_MAX_COUNT)
+	if (pUuid == nullptr || Uuid128 == nullptr ||
+		pUuid->BaseIdx >= BT_BASE_UUID_ENTRY_MAX_COUNT)
 	{
 		return false;
 	}
 
 	BtBaseUuidTblEntry_t *p = &s_BtBaseUuidTbl[pUuid->BaseIdx];
-
-	if (p->bValid == true)
+	if (!p->bValid)
 	{
-		memcpy(Uuid128, p->Uuid, 16);
-		Uuid128[12] = pUuid->Uuid & 0xFF;
-		Uuid128[13] = pUuid->Uuid >> 8;
+		return false;
 	}
 
-	return p->bValid;
+	memcpy(Uuid128, p->Uuid, 16);
+	Uuid128[12] = pUuid->Uuid & 0xFF;
+	Uuid128[13] = pUuid->Uuid >> 8;
+	return true;
 }
 
-/**
- * @brief	Convert the BtUuid32_t 32 bits type to 128 bits UUID
- *
- * @param 	pUuid	: Reference to the BtUuid32_t to convert
- * @param 	Uuid128	: Buffer to store the 128 bits UUID result
- *
- * @return	true - success
- */
 bool BtUuid32To128(BtUuid32_t * const pUuid, uint8_t Uuid128[16])
 {
-	if (pUuid->BaseIdx >= BT_BASE_UUID_ENTRY_MAX_COUNT)
+	if (pUuid == nullptr || Uuid128 == nullptr ||
+		pUuid->BaseIdx >= BT_BASE_UUID_ENTRY_MAX_COUNT)
 	{
 		return false;
 	}
 
 	BtBaseUuidTblEntry_t *p = &s_BtBaseUuidTbl[pUuid->BaseIdx];
-
-	if (p->bValid == true)
+	if (!p->bValid)
 	{
-		memcpy(Uuid128, p->Uuid, 16);
-		Uuid128[12] = pUuid->Uuid & 0xFF;
-		Uuid128[13] = pUuid->Uuid >> 8;
-
-		if (pUuid->Type == BT_UUID_TYPE_32)
-		{
-			Uuid128[14] = (pUuid->Uuid >> 16) & 0xFF;
-			Uuid128[15] = (pUuid->Uuid >> 24) & 0xFF;
-		}
+		return false;
 	}
 
-	return p->bValid;
+	memcpy(Uuid128, p->Uuid, 16);
+	Uuid128[12] = pUuid->Uuid & 0xFF;
+	Uuid128[13] = pUuid->Uuid >> 8;
+
+	if (pUuid->Type == BT_UUID_TYPE_32)
+	{
+		Uuid128[14] = (pUuid->Uuid >> 16) & 0xFF;
+		Uuid128[15] = (pUuid->Uuid >> 24) & 0xFF;
+	}
+
+	return true;
 }
 
-/**
- * 	Extract the 16-bit short identifier (bytes 12-13) from a 128-bit UUID and
- * 	find the base 128-bit UUID in the internal table. If the base is not yet
- * 	present, add it.
- *
- * 	The input Uuid128 is not modified.
- *
- * @param pUuid16		: Pointer to the BtUuid16_t to populate
- * @param Uuid128		: The input 128-bit UUID
- *
- * @return	The index of the base UUID128 in the internal UUID table,
- * 			or -1 if the table is full and the base could not be added.
- */
 int BtUuid128To16(BtUuid16_t *pUuid16, uint8_t Uuid128[16])
 {
-	// Work on a local copy so the caller's buffer is left intact.
+	if (pUuid16 == nullptr || Uuid128 == nullptr)
+	{
+		return -1;
+	}
+
 	uint8_t base[16];
 	memcpy(base, Uuid128, 16);
 
-	// The short identifier lives in bytes 12-13 of the 128-bit UUID
-	// (little-endian on the wire). Pull it out then zero those bytes so
-	// the remainder of base matches a base UUID in the table.
 	uint16_t shortUuid = (uint16_t)base[12] | ((uint16_t)base[13] << 8);
 	base[12] = 0;
 	base[13] = 0;
 
-	int idx = -1;
-	for (int i = 0; i < BT_BASE_UUID_ENTRY_MAX_COUNT; i++)
-	{
-		if (s_BtBaseUuidTbl[i].bValid == true)
-		{
-			if (memcmp(s_BtBaseUuidTbl[i].Uuid, base, 16) == 0)
-			{
-				idx = i;
-				break;
-			}
-		}
-	}
-
-	if (idx == -1)
+	int idx = BtUuidFindBase(base);
+	if (idx < 0)
 	{
 		idx = BtUuidAddBase(base);
 	}
 
-	pUuid16->Type    = BT_UUID_TYPE_16;
-	// On table-full (idx < 0) the custom base could not be registered. Do NOT
-	// fall back to BaseIdx 0 (the Bluetooth SIG base): that would alias an
-	// unknown vendor UUID onto a standard one and address the wrong
-	// characteristic. Store an out-of-range index so BtUuidGetBase /
-	// BtUuid*To128 reject it cleanly instead of mis-resolving to the SIG base.
-	pUuid16->BaseIdx = (idx >= 0) ? (uint8_t)idx : (uint8_t)BT_BASE_UUID_ENTRY_MAX_COUNT;
-	pUuid16->Uuid    = shortUuid;
+	pUuid16->Type = BT_UUID_TYPE_16;
+	// Do not alias a vendor UUID onto the Bluetooth SIG base when the custom
+	// table is full. The out-of-range index makes all conversion helpers reject
+	// it until the application provides more table capacity.
+	pUuid16->BaseIdx = (idx >= 0) ? (uint8_t)idx :
+		(uint8_t)BT_BASE_UUID_ENTRY_MAX_COUNT;
+	pUuid16->Uuid = shortUuid;
 
 	return idx;
 }
