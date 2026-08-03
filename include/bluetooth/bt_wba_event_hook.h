@@ -6,8 +6,8 @@
 Included only after the STM32WBA BLE middleware headers are visible. It wraps
 SVCCTL_RegisterHandler so malformed variable-length discovery events are
 dropped before the port parser reads them, notification completion is matched
-by connection/value handle, and indication confirmation is kept separate from
-the notification completion ring.
+by connection/attribute handle, and indication confirmation is kept separate
+from the notification completion ring.
 ----------------------------------------------------------------------------*/
 #ifndef __BT_WBA_EVENT_HOOK_H__
 #define __BT_WBA_EVENT_HOOK_H__
@@ -21,7 +21,7 @@ the notification completion ring.
 
 #include "bluetooth/bt_gatt.h"
 
-void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t ValHdl);
+void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t AttrHdl);
 
 static inline uint16_t BtWbaEvtLe16(const uint8_t *p)
 {
@@ -228,9 +228,13 @@ struct BtWbaEventHook
 	}
 };
 
-// The STM32WBA application source calls this after all vendor declarations and
-// after defining its static handler. Capture that handler and register the
-// validating wrapper instead.
+// Preserve the vendor registration call inside Register above, then replace
+// subsequent source-level registrations with the validating wrapper. Some
+// CubeWBA releases expose SVCCTL_RegisterHandler as a macro rather than a plain
+// function declaration, so remove that spelling before installing ours.
+#ifdef SVCCTL_RegisterHandler
+#undef SVCCTL_RegisterHandler
+#endif
 #define SVCCTL_RegisterHandler(handler) \
 	BtWbaEventHook<decltype(&(handler))>::Register(&(handler))
 
