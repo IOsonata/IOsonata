@@ -162,7 +162,7 @@ uint8_t BtAttAccessSecurityError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 
 	if (sec.KeySize != 0 && sec.KeySize < 7)
 	{
-		return BT_ATT_ERROR_INSUF_ENCRYPT_KEY_SIZE;
+		return BT_ATT_ERROR_ENCRYPT_KEY_TOO_SHORT;
 	}
 
 	if (sec.Level < minLevel ||
