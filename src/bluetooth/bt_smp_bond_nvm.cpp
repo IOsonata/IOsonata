@@ -3,33 +3,13 @@
 
 @brief	Persistent bond storage glue over an Nvm.
 
-		The generic SMP bond table (src/bluetooth/bt_smp_bond.cpp) keeps bonds
-		in RAM and calls the weak hooks BtSmpBondSave / BtSmpBondLoad /
-		BtSmpBondErase when a slot changes, at init, and on clear. This file
-		provides strong overrides that persist the bond records through the
-		generic bt_pds key value store, so bonds survive a reset.
+		The generic SMP bond table keeps bonds in RAM and calls the weak
+		BtSmpBondSave / BtSmpBondLoad / BtSmpBondErase hooks. This file
+		provides strong overrides backed by the generic transactional PDS.
 
-		Layering:
-		    bt_smp_bond.cpp (RAM table, weak hooks)
-		      -> these strong hooks (slot <-> bt_pds key)
-		        -> bt_pds.cpp (log structured KV over a region)
-		          -> Nvm (the part's driver: NVMC on nRF52, RRAMC on nRF54L,
-		             and the radio arbitration that goes with either)
-
-		This file names no vendor and includes no vendor header. It reaches
-		the memory through NvmIntrf and the linker regions, so which driver
-		answers is settled at link time. It lived under ARM/Nordic/src as
-		bt_smp_bond_sdc.cpp until the store itself became generic, and the
-		name outlasted the reason for it.
-
-		The memory is brought up here because this is where the store is
-		mounted. Nothing target specific is left to do beyond saying where the
-		region is: the page size, the write unit and the sector size all come
-		off the memory.
-
-		Each bond slot maps to a fixed bt_pds key (BOND_KEY_BASE + Slot). The
-		record is an opaque blob of BtSmpBondRecordSize() bytes; this file does
-		not need the BtSmpBond_t layout.
+		Each bond slot maps to BOND_KEY_BASE + Slot. The record is opaque here;
+		BtSmpBondSerialize builds the exact blob when the application-context
+		save handler is ready to write it.
 
 @author	Hoang Nguyen Hoan
 @date	Jun 09, 2026
@@ -50,9 +30,12 @@
 #include "storage/nvm_region.h"
 #include "app_evt_handler.h"
 
-// Comment out to silence. Deliberately not guarded on NDEBUG: the release
-// build is where the store has to be watched, and a silent mount failure is
-// indistinguishable from a bond that was saved and not found again.
+// The generic bond layer only makes a signed-write counter range usable after
+// the persistence backend confirms that the exact serialized record reached
+// the medium. This is internal to the bond-store implementation.
+extern "C" void BtSmpBondPersistComplete(int Slot, const void *pBond,
+											 size_t Len, bool Success);
+
 #define BT_SMP_BOND_TRACE
 
 #ifdef BT_SMP_BOND_TRACE
@@ -62,28 +45,12 @@
 #define BOND_PRINTF(...)
 #endif
 
-// bt_pds key for bond slot N. Kept in a dedicated range so other persisted
-// items (if added later) do not collide with bond slots.
 #define BT_SMP_BOND_KEY_BASE	0x42440000u		// 'B''D' 00 00
-
-// bt_pds key for the device's own identity record (the stable local IRK).
-// Outside the bond slot range (base + 0..31), same 'BD' family. BtPdsClear
-// wipes this key along with the bonds, so a full bond clear also retires the
-// identity and a fresh IRK is generated on the next pairing, which is the
-// intended meaning of a factory clear.
 #define BT_SMP_LOCALID_KEY		(BT_SMP_BOND_KEY_BASE + 0x100u)
 
 static bool s_PdsReady;
-
-// Set by BtSmpBondNvmInit, which the application layer calls only when the
-// device is secure. Linking this file overrides the weak RAM-only bond hooks
-// for every build, so without this arming a broadcaster or an unsecured
-// application would still mount the store, and format a blank region, the
-// first time BtSmpInit loads bonds.
 static bool s_PdsArmed;
 
-// Which linker declared region the bonds live in. A project that wants them
-// somewhere else moves the region in its linker script, not here.
 #ifndef BT_SMP_BOND_REGION_NO
 #define BT_SMP_BOND_REGION_NO		0
 #endif
@@ -91,7 +58,6 @@ static bool s_PdsArmed;
 static NvmIntrf s_BondIntrf;
 static Nvm s_BondMem;
 
-// Bring up the memory and mount the store on it once. Returns 0 on success.
 static int PdsEnsureReady(void)
 {
 	if (s_PdsArmed == false)
@@ -105,18 +71,12 @@ static int PdsEnsureReady(void)
 
 	BOND_PRINTF("PDS: mount, store on Nvm (not fstorage/fds)\r\n");
 
-	// Nothing is set up here beyond the memory itself. Who may touch it and
-	// when is registered with the interface by whoever owns the radio, and how
-	// long a program takes is the memory's own timing.
 	if (s_BondIntrf.Init() == false)
 	{
 		BOND_PRINTF("PDS: memory interface init failed\r\n");
 		return -EIO;
 	}
 
-	// The region the linker set aside is the device: base and size come from
-	// it, and the geometry from the part. Nothing here states an address, so
-	// there is nothing to keep in sync with the linker script.
 	uintptr_t base = NvmRegionAddr(BT_SMP_BOND_REGION_NO);
 	size_t size = NvmRegionSize(BT_SMP_BOND_REGION_NO);
 
@@ -134,7 +94,6 @@ static int PdsEnsureReady(void)
 	NvmCfg_t cfg;
 	memset(&cfg, 0, sizeof(cfg));
 	NvmMcuCfg(cfg);
-
 	cfg.BaseAddr = base;
 	cfg.TotalSize = size;
 
@@ -142,11 +101,7 @@ static int PdsEnsureReady(void)
 				(unsigned long)cfg.TotalSize, (unsigned long)cfg.EraseSize,
 				(unsigned long)cfg.SectorSize, (unsigned long)cfg.PageSize,
 				(unsigned long)cfg.WriteGran, (unsigned long)cfg.AddrSize);
-	BOND_PRINTF("PDS: region NVM%d at %08lX size %08lX\r\n",
-				BT_SMP_BOND_REGION_NO, (unsigned long)base,
-				(unsigned long)size);
 
-	// The region is the whole of this device, so no window inside it.
 	if (s_BondMem.Init(cfg, &s_BondIntrf, 0, 0) == false)
 	{
 		BOND_PRINTF("PDS: Nvm init failed\r\n");
@@ -158,11 +113,10 @@ static int PdsEnsureReady(void)
 				(unsigned long)s_BondMem.LogicalSectorSize(),
 				(unsigned long)s_BondMem.WriteGran());
 
-	// What the region holds before the store touches it. All ones is a blank
-	// region; anything else should be a sector header the scan recognises.
 	uint32_t first = 0;
 	int rd = s_BondMem.Read(0, &first, sizeof(first));
-	BOND_PRINTF("PDS: raw [0] = %08lX (read %d)\r\n", (unsigned long)first, rd);
+	BOND_PRINTF("PDS: raw [0] = %08lX (read %d)\r\n",
+				(unsigned long)first, rd);
 
 	int r = BtPdsInit(&s_BondMem);
 	if (r != 0)
@@ -171,8 +125,6 @@ static int PdsEnsureReady(void)
 		return r;
 	}
 
-	// A bond bigger than the store's record cap is rejected on every save,
-	// which otherwise shows up only as an errno per pairing.
 	size_t rsz = BtSmpBondRecordSize();
 	if (rsz > BT_PDS_RECORD_DATA_MAX)
 	{
@@ -186,39 +138,17 @@ static int PdsEnsureReady(void)
 				(unsigned)rsz, (unsigned)BT_PDS_RECORD_DATA_MAX);
 
 	s_PdsReady = true;
-
 	return 0;
 }
 
-// Persist one bond slot. The generic layer calls this whenever slot Slot
-// changes.
-//
-// A save arrives from inside the stack event dispatch, at the priority the
-// SMP state machine runs at. The memory is arbitrated with an MPSL timeslot,
-// and BtPdsMpslRun waits for a callback that cannot preempt that context, so
-// writing there ends the slot abnormally. The write runs from the application
-// event handler instead, which is what nvm_demo does with its own writes for
-// the same reason.
-//
-// What is deferred is the slot number, not the record. The bond table owns
-// the record and BtSmpBondSerialize builds it on demand, so the write path
-// reads the slot back when it is ready to write it. A save landing while the
-// handler runs updates the table and marks the slot again; there is no copy
-// of the record here for it to land in the middle of.
-//
-// One bit per slot, so a save for a second slot no longer displaces the
-// first. A uint32_t bounds this at 32 slots; BT_SMP_BOND_MAX is private to
-// bt_smp_bond.cpp, so the bound is checked at init against
-// BtSmpBondSlotCount() rather than restated as a constant here.
+// A save can originate inside Bluetooth event dispatch. NVM access is deferred
+// to the application handler because Nordic radio arbitration cannot complete
+// while the higher-priority stack callback is still running.
 #define BT_SMP_BOND_PEND_MAX		32
 
 static std::atomic<uint32_t> s_PendMask;
 static uint32_t s_PendDropCnt;
 static uint32_t s_PendFailCnt;
-
-// The local identity follows the same deferral as the slots: what is marked
-// is the fact that it changed, and the record is serialized on demand when
-// the handler is ready to write it.
 static std::atomic<bool> s_LocalIdPend;
 
 static void BondSaveHandler(uint32_t Evt, void *pCtx)
@@ -229,8 +159,6 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 	int r = PdsEnsureReady();
 	if (r != 0)
 	{
-		// The marks stay. A store that is not ready yet is a reason to write
-		// later, not a reason to forget which slots changed.
 		uint32_t left = s_PendMask.load();
 		if (left != 0)
 		{
@@ -250,11 +178,9 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 			ssize_t w = BtPdsWrite(BT_SMP_LOCALID_KEY, rec, len);
 			if (w != (ssize_t)len)
 			{
-				// Marked before the write and the write did not happen, so
-				// mark it again, as the slot path does.
 				s_LocalIdPend.store(true);
-				BOND_PRINTF("PDS: local id save len %u failed %d, still "
-							"marked\r\n", (unsigned)len, (int)w);
+				BOND_PRINTF("PDS: local id save len %u failed %d, still marked\r\n",
+							(unsigned)len, (int)w);
 			}
 		}
 	}
@@ -268,9 +194,8 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 
 		uint32_t bit = 1UL << slot;
 
-		// Clear the mark before reading the slot, not after. A save arriving
-		// past this point marks it again and the record is written twice;
-		// clearing after would let that save be forgotten.
+		// Clear before serialization. A change arriving afterward marks the slot
+		// again, so it is written a second time instead of being lost.
 		if ((s_PendMask.fetch_and(~bit) & bit) == 0)
 		{
 			continue;
@@ -283,21 +208,22 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 			continue;
 		}
 
-		ssize_t w = BtPdsWrite(BT_SMP_BOND_KEY_BASE + (uint32_t)slot, rec, len);
+		ssize_t w = BtPdsWrite(BT_SMP_BOND_KEY_BASE + (uint32_t)slot,
+							 rec, len);
+		bool committed = w == (ssize_t)len;
 
-		if (w != (ssize_t)len)
+		// A signed-write counter window is unusable until this acknowledgment.
+		// Pass the exact record written so a later reservation cannot be
+		// mistaken for the one that just reached the medium.
+		BtSmpBondPersistComplete(slot, rec, len, committed);
+
+		if (!committed)
 		{
-			// The slot was marked before the write and the write did not
-			// happen, so mark it again. Leaving it clear threw the update
-			// away on a full or failing store.
 			s_PendMask.fetch_or(bit);
 			s_PendFailCnt++;
 			BOND_PRINTF("PDS: save slot %d len %u failed %d, still marked, "
 						"%lu so far\r\n", slot, (unsigned)len, (int)w,
 						(unsigned long)s_PendFailCnt);
-
-			// Another slot may still be writable, but a store that just
-			// refused is unlikely to take the next one either.
 			break;
 		}
 
@@ -310,9 +236,6 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 
 void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 {
-	// The blob is not taken here. The bond table owns it and the handler
-	// reads it back through BtSmpBondSerialize, so only the fact that this
-	// slot changed is recorded.
 	(void)pBond;
 	(void)Len;
 
@@ -329,32 +252,21 @@ void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 
 	if (AppEvtHandlerQue(0, NULL, BondSaveHandler) == false)
 	{
-		// The slot stays marked. Any later save queues the handler again and
-		// the handler takes every marked slot, so a queue that is full for a
-		// moment does not lose the bond.
 		BOND_PRINTF("PDS: save slot %d not queued yet, event queue full\r\n",
 					Slot);
 	}
 }
 
-// The local identity changed. A save arrives from the same stack dispatch
-// context as a bond save, so the write is deferred the same way: mark and
-// drain from the application event handler, serializing on demand.
 void BtSmpLocalIdSave(void)
 {
 	s_LocalIdPend.store(true);
 
 	if (AppEvtHandlerQue(0, NULL, BondSaveHandler) == false)
 	{
-		// The mark stays. Any later save or bond save queues the handler
-		// again and the handler drains it.
-		BOND_PRINTF("PDS: local id save not queued yet, event queue "
-					"full\r\n");
+		BOND_PRINTF("PDS: local id save not queued yet, event queue full\r\n");
 	}
 }
 
-// Load all persisted bonds into the RAM table at init. Reads each slot key and
-// hands the blob to BtSmpBondRestore. Missing slots are skipped.
 void BtSmpBondLoad(void)
 {
 	int r = PdsEnsureReady();
@@ -389,8 +301,6 @@ void BtSmpBondLoad(void)
 		}
 	}
 
-	// The device's own identity, stored under its own key. A missing record
-	// is a first boot; the IRK is generated on the first pairing instead.
 	size_t isz = BtSmpLocalIdRecordSize();
 	ssize_t n = BtPdsRead(BT_SMP_LOCALID_KEY, blob, isz);
 	if (n == (ssize_t)isz)
@@ -406,15 +316,13 @@ void BtSmpBondLoad(void)
 	}
 	else if (n != -ENOENT)
 	{
-		BOND_PRINTF("PDS: local identity load -> %d (want %u)\r\n", (int)n,
-					(unsigned)isz);
+		BOND_PRINTF("PDS: local identity load -> %d (want %u)\r\n",
+					(int)n, (unsigned)isz);
 	}
 
 	BOND_PRINTF("PDS: load done, %d of %d slots restored\r\n", found, slots);
 }
 
-// Wipe all persisted bonds. Called from BtSmpBondClearAll so stale records do
-// not reappear on the next BtSmpBondLoad.
 void BtSmpBondErase(void)
 {
 	if (PdsEnsureReady() != 0)
@@ -422,45 +330,22 @@ void BtSmpBondErase(void)
 		return;
 	}
 
-	// The hook returns nothing, so a failure here cannot reach the caller and
-	// the RAM table is already empty. Say so, because the old bonds are still
-	// in the memory and come back at the next mount.
 	int r = BtPdsClear();
-
 	if (r != 0)
 	{
-		// Whether the stored bonds are gone depends on where this failed.
-		// BtPdsClear commits when the new epoch header lands and only then
-		// erases, so a failure can mean either nothing was cleared or the
-		// clear took and the old sectors were left behind. The result does
-		// not say which, and neither does this.
 		BOND_PRINTF("PDS: clear failed %d, the stored bonds may or may not "
 					"be gone\r\n", r);
 	}
 }
 
-// Explicit init entry. The application MUST call this once during setup (after
-// BtSmpInit). Its purpose is twofold:
-//   1. Force the linker to pull this object from the static library. The bond
-//      hooks above are strong overrides of the weak BtSmpBondSave/Load/Erase in
-//      bt_smp_bond.cpp; in an archive, the linker only extracts this object if
-//      something references a symbol it defines. Without this referenced entry,
-//      the already-linked weak no-ops win and bonds are never persisted.
-//   2. Bring up the NVM implementation and load any stored bonds into the RAM table
-//      now, so a reconnect right after boot finds its LTK.
-// Returns 0 on success, negative errno on implementation init failure.
 int BtSmpBondNvmInit(void)
 {
 	BOND_PRINTF("PDS: BtSmpBondNvmInit, arming the store\r\n");
 
 	if (BtSmpBondSlotCount() > BT_SMP_BOND_PEND_MAX)
 	{
-		// Returning success here would mean bonds past slot 31 are quietly
-		// never written. Raise BT_SMP_BOND_PEND_MAX and widen s_PendMask to
-		// match if a build really needs more.
 		BOND_PRINTF("PDS: %d bond slots, only %d can be marked, refusing\r\n",
 					BtSmpBondSlotCount(), BT_SMP_BOND_PEND_MAX);
-
 		return -ENOTSUP;
 	}
 
@@ -474,6 +359,12 @@ int BtSmpBondNvmInit(void)
 	}
 
 	BtSmpBondLoad();
+
+	// Restore reserves a fresh counter window above every persisted high-water
+	// mark. Initialization already runs in application context, so commit those
+	// reservations now and return only after they are durable. A queued copy of
+	// the same handler is harmless: the pending mask is empty afterward.
+	BondSaveHandler(0, nullptr);
 
 	return 0;
 }
