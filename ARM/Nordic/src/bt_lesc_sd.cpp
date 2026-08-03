@@ -233,7 +233,26 @@ bool BtLescInit(void)
 		LESC_TRACE("LESC crypto engine missing or unsupported\r\n");
 		return false;
 	}
-	return BtLescKeyPairGenStatus() == CRYPTO_STATUS_OK;
+
+	CRYPTO_STATUS status = BtLescKeyPairGenStatus();
+	if (status == CRYPTO_STATUS_OK)
+	{
+		return true;
+	}
+	if (status == CRYPTO_STATUS_UNSUPPORTED)
+	{
+		return false;
+	}
+
+	// The SoftDevice may not have application RNG bytes ready immediately
+	// after enable. That is a transient startup condition, not a Peer Manager
+	// initialization failure. The existing main-loop handler retries before
+	// servicing any pending DHKey work. Until generation succeeds the public
+	// key accessor returns null, so pairing fails closed rather than using an
+	// uninitialized key.
+	s_bRegenPending = true;
+	LESC_TRACE("LESC initial keypair deferred st=%d\r\n", (int)status);
+	return true;
 }
 
 ble_gap_lesc_p256_pk_t *BtLescPubKeyGet(void)
@@ -347,6 +366,25 @@ static CRYPTO_STATUS ComputeAndReply(BtLescPeerKey_t *pPeer)
 bool BtLescRequestHandler(void)
 {
 	bool result = true;
+
+	// Startup and post-pairing regeneration are attempted before DHKey work.
+	// On the first BtAppRun iteration this gives the SoftDevice RNG another
+	// chance after its initial pool has been seeded, before a connection can
+	// request the local public key.
+	if (s_bRegenPending && !KeyInUse())
+	{
+		CRYPTO_STATUS status = BtLescKeyPairGenStatus();
+		if (status == CRYPTO_STATUS_OK)
+		{
+			s_bRegenPending = false;
+		}
+		else if (status != CRYPTO_STATUS_BUSY)
+		{
+			LESC_TRACE("LESC keypair regenerate failed st=%d\r\n", (int)status);
+			result = false;
+		}
+	}
+
 	for (int i = 0; i < LinkCount(); i++)
 	{
 		if (!s_PeerKeys[i].bRequested)
@@ -370,19 +408,6 @@ bool BtLescRequestHandler(void)
 		}
 	}
 
-	if (s_bRegenPending && !KeyInUse())
-	{
-		CRYPTO_STATUS status = BtLescKeyPairGenStatus();
-		if (status == CRYPTO_STATUS_OK)
-		{
-			s_bRegenPending = false;
-		}
-		else if (status != CRYPTO_STATUS_BUSY)
-		{
-			LESC_TRACE("LESC keypair regenerate failed st=%d\r\n", (int)status);
-			result = false;
-		}
-	}
 	return result;
 }
 
