@@ -76,6 +76,7 @@ CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
 BT_APP_BM_SOURCE := $(ROOT)/ARM/Nordic/nRF54/src/bt_app_bm.cpp
 BT_APP_BM_INIT_INC := generated/bt_app_bm_init.inc
 GATT_INIT_TEST_SUPPORT := bt_gatt_init_test_support.cpp
+HCI_GATT_TEST_STUB := ../bt_hci_gatt_test_stubs.cpp
 
 app_evt_handler_retry_test_SOURCES := \
 	app_evt_handler_retry_test.cpp \
@@ -98,6 +99,7 @@ bt_intrf_test_EXTRA := $(CFIFO_OBJ)
 
 bt_hci_flow_test_SOURCES := \
 	bt_hci_flow_test.cpp \
+	$(HCI_GATT_TEST_STUB) \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
@@ -197,6 +199,7 @@ bt_gatt_adversarial_test_SOURCES := \
 
 bt_hci_adversarial_test_SOURCES := \
 	bt_hci_adversarial_test.cpp \
+	$(HCI_GATT_TEST_STUB) \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 

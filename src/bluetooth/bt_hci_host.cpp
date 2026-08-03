@@ -1056,26 +1056,6 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 }
 
 
-// Packets this link sent that carry no GATT completion. The GATT layer keeps
-// the per-link ring that attributes controller completions to notifications,
-// and an ATT response or L2CAP signaling packet consumes a completion without
-// owning a callback. Telling it here keeps the two in step; without this an
-// ATT response completing would fire the next notification's callback early.
-//
-// Weak defaults for builds that do not link bt_gatt.cpp, which the host test
-// harnesses do. bt_gatt.cpp defines the real functions and overrides these.
-__attribute__((weak)) bool BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
-{
-	(void)ConnHdl;
-	(void)NbPkt;
-	return true;
-}
-
-__attribute__((weak)) void BtGattTxPendRelease(uint16_t ConnHdl)
-{
-	(void)ConnHdl;
-}
-
 // HCI ACL packets a PDU of AclLen octets goes out as.
 static uint16_t BtHciAclPktCount(BtHciDevice_t * const pDev, uint16_t AclLen)
 {

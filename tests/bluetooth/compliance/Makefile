@@ -41,6 +41,7 @@ TEST_ENV := ASAN_OPTIONS=$(ASAN_RUNTIME_OPTIONS) \
 
 HCI_SOURCES := \
 	hci/bt_hci_compliance_test.cpp \
+	../bt_hci_gatt_test_stubs.cpp \
 	framework/bt_compliance.cpp \
 	framework/bt_virtual_clock.cpp \
 	controller/bt_virtual_controller.cpp \
