@@ -506,9 +506,20 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		return;
 	}
 
-	bool matched = pRspAtt->OpCode == BT_ATT_OPCODE_ATT_ERROR_RSP ?
-			pRspAtt->ErrorRsp.ReqOpCode == pPeer->AttReqOpcode :
-			pRspAtt->OpCode == pPeer->AttRspOpcode;
+	bool matched = false;
+	if (pRspAtt->OpCode == BT_ATT_OPCODE_ATT_ERROR_RSP)
+	{
+		if (RspLen < 2)
+		{
+			return;
+		}
+		matched = pRspAtt->ErrorRsp.ReqOpCode == pPeer->AttReqOpcode;
+	}
+	else
+	{
+		matched = pRspAtt->OpCode == pPeer->AttRspOpcode;
+	}
+
 	if (!matched || !BtAttRspValid(pPeer, pRspAtt, RspLen))
 	{
 		return;
