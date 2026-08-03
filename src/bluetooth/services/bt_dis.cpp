@@ -24,6 +24,7 @@ Copyright (c) 2026, I-SYST inc. All rights reserved.
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/services/bt_dis.h"
 
 #ifndef BT_DIS_STR_MAX_LEN
@@ -100,11 +101,13 @@ __attribute__((weak)) bool BtDisInit(const struct __Bt_App_Cfg *pCfgIn)
 
 	if (pCfg == NULL)
 	{
+		BtGattInitStatusFail(BT_GATT_INIT_ERROR_INVALID_CFG);
 		return false;
 	}
 
 	if (BtGattSrvcAdd(&s_BtDisSrvc) == false)
 	{
+		BtGattInitStatusFail(BT_GATT_INIT_ERROR_SERVICE_ADD);
 		return false;
 	}
 
@@ -135,5 +138,9 @@ __attribute__((weak)) bool BtDisInit(const struct __Bt_App_Cfg *pCfgIn)
 	ok = BtGattCharSetValue(&s_BtDisChar[BT_DIS_CHAR_IDX_PNP_ID],
 	                   &s_BtDisPnpId, sizeof(s_BtDisPnpId)) && ok;
 
+	if (!ok)
+	{
+		BtGattInitStatusFail(BT_GATT_INIT_ERROR_VALUE_SET);
+	}
 	return ok;
 }
