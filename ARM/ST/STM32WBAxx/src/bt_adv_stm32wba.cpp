@@ -38,6 +38,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/bt_appearance.h"
 
 /******** For DEBUG ************/
@@ -296,8 +297,10 @@ static bool PushAdvDataToStack(const BtAppCfg_t *pCfg,
 
 __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 {
-	if (pCfg == NULL)
+	if (pCfg == NULL || !BtGattInitStatusComplete())
 	{
+		DEBUG_PRINTF("BtAppAdvInit refused: GATT init error %u\r\n",
+			(unsigned)BtGattInitStatusErrorGet());
 		return false;
 	}
 
