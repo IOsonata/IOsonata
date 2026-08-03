@@ -46,6 +46,7 @@ SOFTWARE.
 #include <string.h>
 #include <atomic>
 
+#include "iatomic.h"
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_dev.h"
@@ -104,6 +105,32 @@ typedef struct __Bt_Smp_Sign_State {
 
 static BtSmpBond_t s_BtSmpBondTable[BT_SMP_BOND_MAX];
 static BtSmpSignState_t s_BtSmpSignState[BT_SMP_BOND_MAX];
+
+#if !defined(__arm__)
+static std::atomic_flag s_BtSmpBondTableLock = ATOMIC_FLAG_INIT;
+#endif
+
+static uint32_t BtSmpBondTableEnter(void)
+{
+#if defined(__arm__)
+	return EnterCriticalSection();
+#else
+	while (s_BtSmpBondTableLock.test_and_set(std::memory_order_acquire))
+	{
+	}
+	return 0;
+#endif
+}
+
+static void BtSmpBondTableExit(uint32_t State)
+{
+#if defined(__arm__)
+	ExitCriticalSection(State);
+#else
+	(void)State;
+	s_BtSmpBondTableLock.clear(std::memory_order_release);
+#endif
+}
 
 static bool BtSmpBondEqualCT(const uint8_t *a, const uint8_t *b, size_t len)
 {
@@ -196,9 +223,10 @@ size_t BtSmpBondRecordSize(void)
 	return sizeof(BtSmpBondRecord_t);
 }
 
-// Build the blob for one slot into a caller buffer. pBuff may be any
-// alignment, so the record is assembled in a local and copied out, the way
-// BtSmpBondRestore copies in before validating.
+// Build one coherent slot image. The deferred persistence path can run from a
+// different context than the Bluetooth event that changes the slot. On Arm,
+// the short copy window masks interrupts; host tests use an atomic flag. CRC
+// calculation and NVM work remain outside the protected window.
 size_t BtSmpBondSerialize(int Slot, void *pBuff, size_t BuffLen)
 {
 	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX || pBuff == nullptr ||
@@ -213,42 +241,12 @@ size_t BtSmpBondSerialize(int Slot, void *pBuff, size_t BuffLen)
 	record.Version = BT_SMP_BOND_RECORD_VERSION;
 	record.Length = (uint16_t)sizeof(record);
 
-	// A platform that defers its write calls this from a different context to
-	// the one that changed the slot, so a save can land part way through the
-	// copy and leave it holding part of each version, over which the CRC
-	// below would then be computed as if it were a record anyone ever held.
-	// Copy twice and compare: equal copies mean nothing changed from the
-	// start of the first to the end of the second, which is a snapshot.
-	BtSmpBond_t check;
-	bool stable = false;
-
-	for (int i = 0; i < 4; i++)
-	{
-		memcpy(&record.Bond, &s_BtSmpBondTable[Slot], sizeof(record.Bond));
-		memcpy(&check, &s_BtSmpBondTable[Slot], sizeof(check));
-
-		if (memcmp(&record.Bond, &check, sizeof(check)) == 0)
-		{
-			stable = true;
-			break;
-		}
-	}
-
-	CryptoSecureWipe(&check, sizeof(check));
-
-	if (!stable)
-	{
-		CryptoSecureWipe(&record, sizeof(record));
-		return 0;
-	}
-
-	// PendingHigh is not usable yet, but it is the value this record asks the
-	// platform to commit. The platform reports successful completion with the
-	// exact blob through BtSmpBondPersistComplete; only then does it become the
-	// live DurableHigh value.
+	uint32_t state = BtSmpBondTableEnter();
+	memcpy(&record.Bond, &s_BtSmpBondTable[Slot], sizeof(record.Bond));
 	uint32_t durable = s_BtSmpSignState[Slot].DurableHigh.load();
 	uint32_t pending = s_BtSmpSignState[Slot].PendingHigh.load();
 	record.Bond.SignCounter = pending > durable ? pending : durable;
+	BtSmpBondTableExit(state);
 
 	record.Crc = 0U;
 	record.Crc = BtSmpBondCrc32(&record, sizeof(record));
@@ -329,6 +327,7 @@ extern "C" void BtSmpBondPersistComplete(int Slot, const void *pBond,
 		record.Length == sizeof(record) &&
 		savedCrc == BtSmpBondCrc32(&record, sizeof(record));
 
+	uint32_t state = BtSmpBondTableEnter();
 	BtSmpBond_t *pLive = &s_BtSmpBondTable[Slot];
 	if (valid)
 	{
@@ -340,26 +339,27 @@ extern "C" void BtSmpBondPersistComplete(int Slot, const void *pBond,
 
 	if (valid)
 	{
-		BtSmpSignState_t &state = s_BtSmpSignState[Slot];
+		BtSmpSignState_t &signState = s_BtSmpSignState[Slot];
 		uint32_t committed = record.Bond.SignCounter;
-		uint32_t durable = state.DurableHigh.load();
+		uint32_t durable = signState.DurableHigh.load();
 
 		if (committed > durable)
 		{
-			state.DurableHigh.store(committed);
+			signState.DurableHigh.store(committed);
 			pLive->SignCounter = committed;
 			durable = committed;
 		}
 
-		uint32_t pending = state.PendingHigh.load();
+		uint32_t pending = signState.PendingHigh.load();
 		if (pending != 0U && pending <= durable)
 		{
-			state.PendingHigh.store(0U);
+			signState.PendingHigh.store(0U);
 		}
 
-		state.Ready.store(BtSmpBondHasCsrk(pLive) &&
-							 state.Next.load() < durable);
+		signState.Ready.store(BtSmpBondHasCsrk(pLive) &&
+							 signState.Next.load() < durable);
 	}
+	BtSmpBondTableExit(state);
 
 	CryptoSecureWipe(&record, sizeof(record));
 }
@@ -392,7 +392,9 @@ void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
 		savedCrc == BtSmpBondCrc32(&record, sizeof(record)) &&
 		BtSmpBondFieldsValid(&record.Bond);
 	bool migrate = valid && record.Version == BT_SMP_BOND_RECORD_VERSION_OLD;
+	bool persist = false;
 
+	uint32_t state = BtSmpBondTableEnter();
 	memset(&s_BtSmpBondTable[Slot], 0, sizeof(s_BtSmpBondTable[Slot]));
 	BtSmpSignStateReset(Slot, 0U, 0U);
 
@@ -402,33 +404,22 @@ void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
 
 		if (migrate)
 		{
-			// Version 1 advanced the counter in RAM and deferred the save. Its
-			// persisted value may therefore be older than a command already
-			// applied before power loss. Preserve LTK/IRK/CCCD, but retire that
-			// CSRK so the old uncertainty cannot be used for a replay. A new
-			// pairing supplies a fresh CSRK and starts the version-2 scheme.
 			CryptoSecureWipe(s_BtSmpBondTable[Slot].Keys.Csrk, 16);
 			s_BtSmpBondTable[Slot].SignCounter = 0U;
+			persist = true;
 		}
 		else
 		{
 			uint32_t high = s_BtSmpBondTable[Slot].SignCounter;
 			BtSmpSignStateReset(Slot, high, high);
+			persist = BtSmpSignCounterPrepare(Slot);
 		}
 	}
+	BtSmpBondTableExit(state);
 
 	CryptoSecureWipe(&record, sizeof(record));
 
-	if (!valid)
-	{
-		return;
-	}
-
-	if (!migrate && BtSmpSignCounterPrepare(Slot))
-	{
-		BtSmpBondPersist(Slot);
-	}
-	else if (migrate)
+	if (persist)
 	{
 		BtSmpBondPersist(Slot);
 	}
@@ -500,8 +491,6 @@ static int BtSmpBondAllocSlot(void)
 			return i;
 		}
 	}
-	// Table full. Refuse rather than silently evicting a stored bond; the
-	// application clears bonds when it wants space back.
 	return -1;
 }
 
@@ -533,6 +522,7 @@ void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 		}
 	}
 
+	uint32_t state = BtSmpBondTableEnter();
 	bool sameCsrk = !freshSlot && s_BtSmpBondTable[slot].bValid &&
 		memcmp(s_BtSmpBondTable[slot].Keys.Csrk, pKeys->Csrk, 16) == 0;
 
@@ -575,6 +565,7 @@ void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 	s_BtSmpBondTable[slot].NbCccd = nc;
 
 	(void)BtSmpSignCounterPrepare(slot);
+	BtSmpBondTableExit(state);
 	BtSmpBondPersist(slot);
 }
 
@@ -586,12 +577,15 @@ void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 		return;
 	}
 
-	int slot = BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType, pPeer->Conn.PeerAddr);
+	int slot = BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType,
+		pPeer->Conn.PeerAddr);
 	if (slot < 0)
 	{
 		return;
 	}
 
+	bool changed = false;
+	uint32_t state = BtSmpBondTableEnter();
 	BtSmpBond_t *p = &s_BtSmpBondTable[slot];
 	int idx = -1;
 	for (uint8_t i = 0; i < p->NbCccd; i++)
@@ -605,36 +599,38 @@ void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 
 	if (Value == 0U)
 	{
-		if (idx < 0)
+		if (idx >= 0)
 		{
-			return;
+			p->Cccd[idx] = p->Cccd[p->NbCccd - 1U];
+			p->NbCccd--;
+			changed = true;
 		}
-		p->Cccd[idx] = p->Cccd[p->NbCccd - 1U];
-		p->NbCccd--;
 	}
 	else if (idx >= 0)
 	{
-		if (p->Cccd[idx].Value == Value)
+		if (p->Cccd[idx].Value != Value)
 		{
-			return;
+			p->Cccd[idx].Value = Value;
+			changed = true;
 		}
-		p->Cccd[idx].Value = Value;
 	}
-	else
+	else if (p->NbCccd < BT_GATT_CCCD_STATE_MAX)
 	{
-		if (p->NbCccd >= BT_GATT_CCCD_STATE_MAX)
-		{
-			return;
-		}
 		idx = p->NbCccd++;
 		p->Cccd[idx].Hdl = CccdHdl;
 		p->Cccd[idx].Value = Value;
+		changed = true;
 	}
-	BtSmpBondPersist(slot);
+	BtSmpBondTableExit(state);
+
+	if (changed)
+	{
+		BtSmpBondPersist(slot);
+	}
 }
 
-uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl, uint16_t *pValue,
-							 uint8_t Max)
+uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl,
+		uint16_t *pValue, uint8_t Max)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr || pHdl == nullptr || pValue == nullptr)
@@ -642,7 +638,8 @@ uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl, uint16_t *pValue,
 		return 0;
 	}
 
-	int slot = BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType, pPeer->Conn.PeerAddr);
+	int slot = BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType,
+		pPeer->Conn.PeerAddr);
 	if (slot < 0)
 	{
 		return 0;
@@ -719,7 +716,8 @@ bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
 		return false;
 	}
 
-	int slot = BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType, pPeer->Conn.PeerAddr);
+	int slot = BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType,
+		pPeer->Conn.PeerAddr);
 	if (slot < 0)
 	{
 		return false;
@@ -769,10 +767,12 @@ bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
 
 void BtSmpBondClearAll(void)
 {
+	uint32_t state = BtSmpBondTableEnter();
 	CryptoSecureWipe(s_BtSmpBondTable, sizeof(s_BtSmpBondTable));
 	for (int i = 0; i < BT_SMP_BOND_MAX; i++)
 	{
 		BtSmpSignStateReset(i, 0U, 0U);
 	}
+	BtSmpBondTableExit(state);
 	BtSmpBondErase();
 }
