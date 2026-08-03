@@ -41,6 +41,7 @@ HEADERS := $(wildcard $(ROOT)/include/bluetooth/*.h) \
 	bt_test_harness.h
 
 TEST_NAMES := \
+	app_evt_handler_retry_test \
 	bt_adv_uuid_test \
 	bt_hci_flow_test \
 	bt_hci_ctlr_init_test \
@@ -71,6 +72,11 @@ TARGETS := $(addprefix $(BUILD_DIR)/,$(TEST_NAMES))
 CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
 BT_APP_BM_SOURCE := $(ROOT)/ARM/Nordic/nRF54/src/bt_app_bm.cpp
 BT_APP_BM_INIT_INC := generated/bt_app_bm_init.inc
+
+app_evt_handler_retry_test_SOURCES := \
+	app_evt_handler_retry_test.cpp \
+	$(ROOT)/src/app_evt_handler.cpp
+app_evt_handler_retry_test_EXTRA := $(CFIFO_OBJ)
 
 bt_adv_uuid_test_SOURCES := \
 	bt_adv_uuid_test.cpp \
