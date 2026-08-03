@@ -212,6 +212,11 @@ void BtGapInit(const BtGapCfg_t *pCfg)
 	{
 		BtGapParamInit(pCfg);
 	}
+
+	if ((pCfg->Role & BT_GAP_ROLE_PERIPHERAL) == 0)
+	{
+		(void)BtGattInitStatusComplete();
+	}
 }
 
 __attribute__((weak)) bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)

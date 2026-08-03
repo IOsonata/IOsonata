@@ -105,6 +105,11 @@ __attribute__((weak)) bool BtDisInit(const struct __Bt_App_Cfg *pCfgIn)
 		return false;
 	}
 
+	if ((pCfg->Role & BTAPP_ROLE_PERIPHERAL) == 0)
+	{
+		return true;
+	}
+
 	if (BtGattSrvcAdd(&s_BtDisSrvc) == false)
 	{
 		BtGattInitStatusFail(BT_GATT_INIT_ERROR_SERVICE_ADD);
