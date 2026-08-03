@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	bt_gatt.cpp
 
-@brief	Bluetooth GATT  
+@brief	Bluetooth GATT
 
 Generic implementation & definitions of Bluetooth Generic Attribute Profile
 
@@ -107,7 +107,6 @@ bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar)
 	// notification. New code should use BtGattCharNotifyEnabled(ConnHdl,...).
 	return pChar->bNotify;
 }
-
 
 static BtGattCccdState_t *BtGattCccdFind(BtDevice_t *pConn, uint16_t CccdHdl, bool bAlloc)
 {
@@ -251,24 +250,151 @@ uint8_t BtGattCccdWriteError(uint16_t CccdHdl, uint16_t Value)
 	return BtGattCccdValueError(BtGattFindCharByCccd(CccdHdl), Value);
 }
 
-// Whether BtGattCccdSet would be able to store this value, asked before the
-// write is acknowledged. Clearing a subscription always fits, and so does
-// changing one that already has a slot on this link; only a new non-zero
-// subscription can run the per-link table out of room. Answering a Write
-// Response for a subscription that was then dropped leaves the client believing
-// it is subscribed, so the ATT layer asks first and answers Insufficient
-// Resources instead.
-bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
+static int BtGattCccdProjectedFind(BtGattCccdState_t *pState, uint8_t Count,
+								  uint16_t CccdHdl)
 {
-	if (Value == 0)
+	for (uint8_t i = 0; i < Count; i++)
 	{
-		return true;
+		if (pState[i].Hdl == CccdHdl)
+		{
+			return i;
+		}
 	}
 
+	return -1;
+}
+
+// When Execute Write validates a queue, every CCCD record has to be checked
+// against the table produced by all earlier queued records, not against the
+// unchanged live table. Otherwise two new subscriptions can both pass with one
+// slot free and the second store fails after the first has already committed.
+//
+// Return true when a valid projection was made. pTargetFound says whether the
+// current CanStore query belongs to that queue; pTargetFits is false only for
+// the first queued CCCD record that exceeds the projected table capacity.
+static bool BtGattCccdQueueProjection(BtDevice_t *pConn,
+									 uint16_t TargetHdl, uint16_t TargetValue,
+									 bool *pTargetFound, bool *pTargetFits)
+{
+	*pTargetFound = false;
+	*pTargetFits = true;
+
+	if (pConn == nullptr || pConn->Conn.pLongWrBuff == nullptr ||
+		pConn->Conn.LongWrLen == 0)
+	{
+		return false;
+	}
+
+	BtGattCccdState_t projected[BT_GATT_CCCD_STATE_MAX];
+	uint8_t projectedCount = pConn->Conn.NbCccd;
+	memcpy(projected, pConn->Conn.Cccd, sizeof(projected));
+
+	uint8_t *pBuf = pConn->Conn.pLongWrBuff;
+	uint16_t total = pConn->Conn.LongWrLen;
+	uint16_t pos = 0;
+	uint16_t overflowHdl = BT_ATT_HANDLE_INVALID;
+	uint16_t overflowValue = 0;
+
+	while (pos < total)
+	{
+		if ((uint32_t)pos + 6U > total)
+		{
+			return false;
+		}
+
+		uint16_t hdl;
+		uint16_t offset;
+		uint16_t len;
+		memcpy(&hdl, pBuf + pos, 2);
+		memcpy(&offset, pBuf + pos + 2, 2);
+		memcpy(&len, pBuf + pos + 4, 2);
+
+		if ((uint32_t)pos + 6U + len > total)
+		{
+			return false;
+		}
+
+		BtGattChar_t *pChar = BtGattFindCharByCccd(hdl);
+		if (pChar != nullptr)
+		{
+			// A malformed CCCD record is rejected by the ATT validation pass.
+			// Do not use an incomplete projection to answer an unrelated write.
+			if (offset != 0 || len != 2)
+			{
+				return false;
+			}
+
+			uint16_t value = (uint16_t)(pBuf[pos + 6] |
+									 ((uint16_t)pBuf[pos + 7] << 8));
+			if (BtGattCccdValueError(pChar, value) != 0)
+			{
+				return false;
+			}
+
+			if (hdl == TargetHdl && value == TargetValue)
+			{
+				*pTargetFound = true;
+			}
+
+			int idx = BtGattCccdProjectedFind(projected, projectedCount, hdl);
+			if (value == 0)
+			{
+				if (idx >= 0)
+				{
+					projected[idx] = projected[projectedCount - 1];
+					projectedCount--;
+				}
+			}
+			else if (idx >= 0)
+			{
+				projected[idx].Value = value;
+			}
+			else if (projectedCount < BT_GATT_CCCD_STATE_MAX)
+			{
+				projected[projectedCount].Hdl = hdl;
+				projected[projectedCount].Value = value;
+				projectedCount++;
+			}
+			else
+			{
+				overflowHdl = hdl;
+				overflowValue = value;
+				break;
+			}
+		}
+
+		pos = (uint16_t)(pos + 6U + len);
+	}
+
+	if (*pTargetFound && TargetHdl == overflowHdl && TargetValue == overflowValue)
+	{
+		*pTargetFits = false;
+	}
+
+	return true;
+}
+
+// Whether BtGattCccdSet would be able to store this value, asked before the
+// write is acknowledged. During Execute Write, capacity is evaluated against
+// the projected queue state so validation remains atomic.
+bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
+{
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 	if (pConn == nullptr)
 	{
 		return false;
+	}
+
+	bool queued = false;
+	bool fits = true;
+	if (BtGattCccdQueueProjection(pConn, CccdHdl, Value, &queued, &fits) && queued)
+	{
+		return fits;
+	}
+
+	if (Value == 0)
+	{
+		return true;
 	}
 
 	if (BtGattCccdFind(pConn, CccdHdl, false) != nullptr)
@@ -1031,4 +1157,3 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 		BtGattTxCompleteChar(c);
 	}
 }
-
