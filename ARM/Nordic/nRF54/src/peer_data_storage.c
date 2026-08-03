@@ -47,6 +47,7 @@ struct pds_pending {
 
 static struct pds_pending pds_que[PDS_QUE_DEPTH];
 static bool del_peer_running;
+static bool del_peer_queue_retry;
 
 LOG_MODULE_DECLARE(peer_manager, CONFIG_PEER_MANAGER_LOG_LEVEL);
 
@@ -195,8 +196,8 @@ static void peer_ids_load(void)
 
 	unsigned n = 0;
 
-	while (pds_peer_data_iterate(PM_PEER_DATA_ID_BONDING, &peer_id, &peer_data,
-		&peer_id_iter)) {
+	while (pds_peer_data_iterate(PM_PEER_DATA_ID_BONDING, &peer_id,
+		&peer_data, &peer_id_iter)) {
 		if (peer_id_allocate(peer_id) == peer_id) {
 			PDS_LOAD_PRINTF("PDS: peer %u restored\r\n", (unsigned)peer_id);
 			n++;
@@ -258,6 +259,11 @@ static void peer_delete_kick(void);
 
 static void pds_idle_pump(void)
 {
+	if (!del_peer_queue_retry) {
+		return;
+	}
+
+	del_peer_queue_retry = false;
 	peer_delete_kick();
 }
 
@@ -373,9 +379,11 @@ static void peer_delete_kick(void)
 	if (!AppEvtHandlerQue(0, p, pds_work_handler)) {
 		p->del_peer = false;
 		p->busy = false;
+		del_peer_queue_retry = true;
 		return;
 	}
 
+	del_peer_queue_retry = false;
 	del_peer_running = true;
 }
 
@@ -390,15 +398,13 @@ static void pds_work_handler(uint32_t evt, void *ctx)
 	}
 
 	if (p->del_peer) {
-		if (peer_delete_step(p) &&
-			AppEvtHandlerQue(0, p, pds_work_handler)) {
-			return;
+		if (peer_delete_step(p)) {
+			if (AppEvtHandlerQue(0, p, pds_work_handler)) {
+				return;
+			}
+			del_peer_queue_retry = true;
 		}
 
-		/* The peer remains marked when the queue cannot take the next step.
-		 * AppEvtHandlerExec invokes pds_idle_pump after releasing queue slots,
-		 * which starts a new walk without waiting for unrelated storage work.
-		 */
 		del_peer_running = false;
 		p->busy = false;
 		return;
