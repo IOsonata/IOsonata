@@ -162,6 +162,13 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		return false;
 	}
 
+	if (AdvLen < 0 || SrLen < 0 ||
+		(AdvLen > 0 && pAdvData == nullptr) ||
+		(SrLen > 0 && pSrData == nullptr))
+	{
+		return false;
+	}
+
 	BtHciDevice_t *pDev = BtAdvHciDev();
 	if (pDev == nullptr)
 	{
