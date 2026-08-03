@@ -77,21 +77,17 @@ __attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar, void * const 
 		return false;
 	}
 
-	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID || pChar->pValue == nullptr)
+	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID || pChar->pValue == nullptr ||
+		Len > pChar->MaxDataLen || Len > UINT16_MAX)
 	{
 		return false;
 	}
 
-	// Clamp on size_t before narrowing. Casting Len to uint16_t first would
-	// wrap a >= 64 KiB length down to a small value and silently truncate the
-	// stored value while still reporting success.
-	size_t l = min(Len, (size_t)pChar->MaxDataLen);
-
-	if (l > 0)
+	if (Len > 0)
 	{
-		memcpy(pChar->pValue, pVal, l);
+		memcpy(pChar->pValue, pVal, Len);
 	}
-	pChar->ValueLen = (uint16_t)l;
+	pChar->ValueLen = (uint16_t)Len;
 
 	return true;
 }
@@ -211,13 +207,6 @@ uint16_t BtGattCccdGet(uint16_t ConnHdl, uint16_t CccdHdl)
 	return pState != nullptr ? pState->Value : 0;
 }
 
-// A CCCD holds two defined bits and 14 reserved ones, and each defined bit is
-// only meaningful when the characteristic declares the matching property
-// (Vol 3 Part G 3.3.3.3). Anything else is a value the server cannot honour,
-// answered with Client Characteristic Configuration Descriptor Improperly
-// Configured (Core Specification Supplement Part B 1.2). Enabling notification
-// on a characteristic without the Notify property is the case that matters in
-// practice: accepting it leaves the client waiting for packets that never come.
 uint8_t BtGattCccdValueError(BtGattChar_t *pChar, uint16_t Value)
 {
 	if (pChar == nullptr)
@@ -264,14 +253,6 @@ static int BtGattCccdProjectedFind(BtGattCccdState_t *pState, uint8_t Count,
 	return -1;
 }
 
-// When Execute Write validates a queue, every CCCD record has to be checked
-// against the table produced by all earlier queued records, not against the
-// unchanged live table. Otherwise two new subscriptions can both pass with one
-// slot free and the second store fails after the first has already committed.
-//
-// Return true when a valid projection was made. pTargetFound says whether the
-// current CanStore query belongs to that queue; pTargetFits is false only for
-// the first queued CCCD record that exceeds the projected table capacity.
 static bool BtGattCccdQueueProjection(BtDevice_t *pConn,
 									 uint16_t TargetHdl, uint16_t TargetValue,
 									 bool *pTargetFound, bool *pTargetFits)
@@ -317,8 +298,6 @@ static bool BtGattCccdQueueProjection(BtDevice_t *pConn,
 		BtGattChar_t *pChar = BtGattFindCharByCccd(hdl);
 		if (pChar != nullptr)
 		{
-			// A malformed CCCD record is rejected by the ATT validation pass.
-			// Do not use an incomplete projection to answer an unrelated write.
 			if (offset != 0 || len != 2)
 			{
 				return false;
@@ -374,9 +353,6 @@ static bool BtGattCccdQueueProjection(BtDevice_t *pConn,
 	return true;
 }
 
-// Whether BtGattCccdSet would be able to store this value, asked before the
-// write is acknowledged. During Execute Write, capacity is evaluated against
-// the projected queue state so validation remains atomic.
 bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
@@ -547,8 +523,6 @@ void BtGattCccdClear(uint16_t ConnHdl)
 	}
 }
 
-// Restore persisted CCCD subscriptions atomically. Validate the whole restored
-// set, including projected table occupancy, before changing the live link.
 void BtGattCccdRestoreBonded(uint16_t ConnHdl)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
@@ -684,7 +658,7 @@ static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValH
 	}
 	if (Len > maxData)
 	{
-		Len = maxData;
+		return -1;
 	}
 
 	uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
@@ -756,8 +730,6 @@ void BtGattTxPendRelease(uint16_t ConnHdl)
 	pConn->TxPendCount--;
 }
 
-// Compatibility helper for callers that own no completion callback. It still
-// occupies its real position in the ordered ring.
 bool BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
 {
 	return BtGattTxPendReserve(ConnHdl, nullptr, NbPkt);
