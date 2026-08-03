@@ -19,8 +19,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -102,6 +102,12 @@ typedef struct __Bt_Device {
 	int				NbSrvc;						//!< Number of services in the Services array
 	BtGattDBSrvc_t	Services[BT_DEV_SERVICE_MAXCNT];	//!< Services: exposed if local, discovered if remote
 	BtDevDiscState_t Discovery;					//!< Per-peer discovery cursor (remote role only)
+	void			*pIndChar;					//!< Vendor-host indication owner completed by HVC, null on raw HCI
+	bool			bAttReqPending;				//!< One ATT client request may be outstanding per bearer
+	bool			bAttTimedOut;				//!< ATT bearer timed out and may not start another request
+	uint8_t			AttReqOpcode;				//!< Outstanding ATT request opcode
+	uint8_t			AttRspOpcode;				//!< Expected ATT response opcode
+	uint32_t		AttReqTime;				//!< Request start tick for the 30 second ATT timeout
 	//!< Ring of HCI ACL packet groups in flight on this link, in send order.
 	//!< One entry per operation, not per packet: pChar names the characteristic
 	//!< whose TxCompleteCB is due when the group finishes, or is null for
