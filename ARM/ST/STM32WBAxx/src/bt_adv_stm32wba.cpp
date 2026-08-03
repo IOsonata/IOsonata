@@ -301,23 +301,34 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
-	BtAdvPacket_t *advpkt = g_BtAppData.bExtAdv
-		? &s_BtAppExtAdvPkt : &s_BtAppAdvPkt;
-	BtAdvPacket_t *srpkt  = g_BtAppData.bExtAdv
-		? &s_BtAppExtSrPkt  : &s_BtAppSrPkt;
+	// Give the encoder the full packet capacities. It performs its own legacy
+	// attempt with 31-octet limits and reports the selected PDU mode.
+	BtAdvPacket_t *advpkt = &s_BtAppExtAdvPkt;
+	BtAdvPacket_t *srpkt = &s_BtAppExtSrPkt;
+	bool bScannable = false;
 
-	// Reset previously-encoded content so re-init works.
 	advpkt->Len = 0;
-	srpkt->Len  = 0;
+	srpkt->Len = 0;
 
-	// Generic AD payload encode.
-	if (BtAdvEncode(pCfg, advpkt, srpkt) == false)
+	if (BtAdvEncode(pCfg, advpkt, srpkt, &g_BtAppData.bExtAdv,
+					&bScannable) == false)
 	{
 		DEBUG_PRINTF("BtAdvEncode failed\r\n");
 		return false;
 	}
 
-	// Push to the ST stack.
+	// Legacy and extended packet views share storage. Preserve the encoded
+	// lengths in the legacy views so later manufacturer-data updates select
+	// the same packet state.
+	if (g_BtAppData.bExtAdv == false)
+	{
+		s_BtAppAdvPkt.Len = advpkt->Len;
+		s_BtAppSrPkt.Len = srpkt->Len;
+		advpkt = &s_BtAppAdvPkt;
+		srpkt = &s_BtAppSrPkt;
+	}
+
+	(void)bScannable;
 	return PushAdvDataToStack(pCfg, advpkt, srpkt);
 }
 
