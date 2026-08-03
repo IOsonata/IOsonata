@@ -43,6 +43,7 @@ SOFTWARE.
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_smp.h"
 
 static BtGattChar_t *BtGattHciEntryChar(BtAttDBEntry_t *pEntry)
 {
@@ -77,14 +78,21 @@ static BtGattChar_t *BtGattHciEntryChar(BtAttDBEntry_t *pEntry)
 	}
 }
 
+static bool BtGattHciSignedMitm(uint16_t ConnHdl)
+{
+	BtSmpKeys_t keys;
+	bool ok = BtSmpBondKeysLookup(ConnHdl, 0U, 0U, &keys) &&
+			  keys.bAuthenticated;
+	memset(&keys, 0, sizeof(keys));
+	return ok;
+}
+
 // Native HCI security enforcement. The generic ATT server calls this strong
 // override after property/permission checks. A characteristic SecType overrides
 // its service SecType; NONE inherits the service setting.
 uint8_t BtAttAccessSecurityError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 													  bool bRead)
 {
-	(void)bRead;
-
 	BtGattChar_t *pChar = BtGattHciEntryChar(pEntry);
 	if (pChar == nullptr)
 	{
@@ -98,6 +106,26 @@ uint8_t BtAttAccessSecurityError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 	}
 	if (secType == BT_GAP_SECTYPE_NONE)
 	{
+		return 0;
+	}
+
+	// A signed security mode is meaningful only for a signed-only writable
+	// characteristic. BtAttCommandWrite reaches this hook after the CSRK MAC and
+	// counter have been verified, while an ordinary Write Request/Command cannot
+	// pass the property check because WRITE and WRITE_WORESP are absent. Reads
+	// have no signed ATT form and therefore remain protected by link security.
+	if (!bRead &&
+		(secType == BT_GAP_SECTYPE_SIGNED_NO_MITM ||
+		 secType == BT_GAP_SECTYPE_SIGNED_MITM) &&
+		(pChar->Property & BT_GATT_CHAR_PROP_AUTH_SIGNED) != 0 &&
+		(pChar->Property & (BT_GATT_CHAR_PROP_WRITE |
+							BT_GATT_CHAR_PROP_WRITE_WORESP)) == 0)
+	{
+		if (secType == BT_GAP_SECTYPE_SIGNED_MITM &&
+			!BtGattHciSignedMitm(ConnHdl))
+		{
+			return BT_ATT_ERROR_INSUF_AUTHEN;
+		}
 		return 0;
 	}
 
