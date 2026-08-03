@@ -68,22 +68,46 @@ int s_Checks = 0;
 	} \
 } while (0)
 
-constexpr uint16_t kConnHdl   = 0x0040;
+constexpr uint16_t kConnHdl    = 0x0040;
 constexpr uint16_t kNotifyCccd = 0x0010;
 constexpr uint16_t kIndicCccd  = 0x0020;
 constexpr uint16_t kBothCccd   = 0x0030;
 constexpr uint16_t kPlainCccd  = 0x0040;
+constexpr size_t kCharCount = BT_GATT_CCCD_STATE_MAX + 2;
+constexpr size_t kQueueRecordSize = 8;
 
-BtGattChar_t s_Chars[4];
+BtGattChar_t s_Chars[kCharCount];
 BtGattSrvc_t s_Srvc;
+uint8_t s_PrepareQueue[kQueueRecordSize * 3];
 
-// One service with four characteristics: notify only, indicate only, both, and
-// one with neither. Each has a CCCD handle so the lookup by handle resolves.
+static void PutLe16(uint8_t *p, uint16_t Value)
+{
+	p[0] = (uint8_t)(Value & 0xFF);
+	p[1] = (uint8_t)(Value >> 8);
+}
+
+static uint16_t CccdHandle(size_t Idx)
+{
+	return (uint16_t)((Idx + 1) * 0x10);
+}
+
+static void QueueCccd(size_t Record, uint16_t Hdl, uint16_t Value)
+{
+	uint8_t *p = &s_PrepareQueue[Record * kQueueRecordSize];
+	PutLe16(&p[0], Hdl);
+	PutLe16(&p[2], 0);
+	PutLe16(&p[4], 2);
+	PutLe16(&p[6], Value);
+}
+
+// One service with notify-only, indicate-only, both, plain, and enough extra
+// notify characteristics to fill and overflow the per-link CCCD table.
 void Setup()
 {
 	std::memset(s_Chars, 0, sizeof(s_Chars));
 	std::memset(&s_Srvc, 0, sizeof(s_Srvc));
 	std::memset(&s_StubPeer, 0, sizeof(s_StubPeer));
+	std::memset(s_PrepareQueue, 0, sizeof(s_PrepareQueue));
 
 	s_Chars[0].Property = BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY;
 	s_Chars[0].CccdHdl  = kNotifyCccd;
@@ -95,7 +119,13 @@ void Setup()
 	s_Chars[3].Property = BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_WRITE;
 	s_Chars[3].CccdHdl  = kPlainCccd;
 
-	s_Srvc.NbChar     = 4;
+	for (size_t i = 4; i < kCharCount; i++)
+	{
+		s_Chars[i].Property = BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY;
+		s_Chars[i].CccdHdl = CccdHandle(i);
+	}
+
+	s_Srvc.NbChar = (int)kCharCount;
 	s_Srvc.pCharArray = s_Chars;
 	BtGattInsertSrvcList(&s_Srvc);
 
@@ -160,6 +190,7 @@ void TestValueErrorReservedBits()
 void TestSetRejectsUnsupportedValue()
 {
 	s_StubPeer.Conn.NbCccd = 0;
+	s_StubPeer.Conn.LongWrLen = 0;
 
 	// A supported value is stored and readable.
 	CHECK(BtGattCccdSet(kConnHdl, kNotifyCccd,
@@ -197,6 +228,49 @@ void TestSetRejectsUnsupportedValue()
 						BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) == false);
 }
 
+void TestExecuteWriteProjectedCapacity()
+{
+	constexpr uint16_t kEnabled = BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION;
+	const uint16_t firstNew = CccdHandle(BT_GATT_CCCD_STATE_MAX - 1);
+	const uint16_t secondNew = CccdHandle(BT_GATT_CCCD_STATE_MAX);
+
+	std::memset(s_StubPeer.Conn.Cccd, 0, sizeof(s_StubPeer.Conn.Cccd));
+	s_StubPeer.Conn.NbCccd = BT_GATT_CCCD_STATE_MAX - 1;
+	for (uint8_t i = 0; i < s_StubPeer.Conn.NbCccd; i++)
+	{
+		s_StubPeer.Conn.Cccd[i].Hdl = CccdHandle(i);
+		s_StubPeer.Conn.Cccd[i].Value = kEnabled;
+	}
+
+	QueueCccd(0, firstNew, kEnabled);
+	QueueCccd(1, secondNew, kEnabled);
+	s_StubPeer.Conn.pLongWrBuff = s_PrepareQueue;
+	s_StubPeer.Conn.LongWrBuffSize = sizeof(s_PrepareQueue);
+	s_StubPeer.Conn.LongWrLen = kQueueRecordSize * 2;
+
+	// One slot remains. Validation must succeed for the first queued record and
+	// fail at the second, before either value is stored.
+	CHECK(BtGattCccdCanStore(kConnHdl, firstNew, kEnabled));
+	CHECK(BtGattCccdCanStore(kConnHdl, secondNew, kEnabled) == false);
+	CHECK(s_StubPeer.Conn.NbCccd == BT_GATT_CCCD_STATE_MAX - 1);
+	CHECK(BtGattCccdGet(kConnHdl, firstNew) == 0);
+	CHECK(BtGattCccdGet(kConnHdl, secondNew) == 0);
+
+	// A queued clear before the two additions creates the second required slot;
+	// both new records must then validate against the projected table.
+	QueueCccd(0, CccdHandle(0), 0);
+	QueueCccd(1, firstNew, kEnabled);
+	QueueCccd(2, secondNew, kEnabled);
+	s_StubPeer.Conn.LongWrLen = kQueueRecordSize * 3;
+
+	CHECK(BtGattCccdCanStore(kConnHdl, firstNew, kEnabled));
+	CHECK(BtGattCccdCanStore(kConnHdl, secondNew, kEnabled));
+	CHECK(s_StubPeer.Conn.NbCccd == BT_GATT_CCCD_STATE_MAX - 1);
+
+	s_StubPeer.Conn.LongWrLen = 0;
+	s_StubPeer.Conn.pLongWrBuff = nullptr;
+}
+
 } // namespace
 
 int main()
@@ -206,6 +280,7 @@ int main()
 	TestValueErrorByProperty();
 	TestValueErrorReservedBits();
 	TestSetRejectsUnsupportedValue();
+	TestExecuteWriteProjectedCapacity();
 
 	if (s_Failures != 0)
 	{
