@@ -75,6 +75,7 @@ TARGETS := $(addprefix $(BUILD_DIR)/,$(TEST_NAMES))
 CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
 BT_APP_BM_SOURCE := $(ROOT)/ARM/Nordic/nRF54/src/bt_app_bm.cpp
 BT_APP_BM_INIT_INC := generated/bt_app_bm_init.inc
+GATT_INIT_TEST_SUPPORT := bt_gatt_init_test_support.cpp
 
 app_evt_handler_retry_test_SOURCES := \
 	app_evt_handler_retry_test.cpp \
@@ -134,6 +135,7 @@ bt_gap_hci_test_SOURCES := \
 
 bt_adv_hci_test_SOURCES := \
 	bt_adv_hci_test.cpp \
+	$(GATT_INIT_TEST_SUPPORT) \
 	$(ROOT)/src/bluetooth/bt_adv_hci.cpp \
 	$(ROOT)/src/bluetooth/bt_adv.cpp \
 	$(ROOT)/src/bluetooth/bt_uuid.cpp
@@ -163,6 +165,7 @@ bt_app_multilink_test_SOURCES := \
 
 bt_app_init_bm_test_SOURCES := \
 	bt_app_init_bm_test.cpp \
+	$(GATT_INIT_TEST_SUPPORT) \
 	$(ROOT)/src/bluetooth/services/bt_dis.cpp
 bt_app_init_bm_test_DEPS := $(BT_APP_BM_INIT_INC)
 
@@ -207,6 +210,7 @@ bt_app_adversarial_test_SOURCES := \
 
 bt_std_services_test_SOURCES := \
 	bt_std_services_test.cpp \
+	$(GATT_INIT_TEST_SUPPORT) \
 	$(ROOT)/src/bluetooth/services/bt_dis.cpp \
 	$(ROOT)/src/bluetooth/services/bt_bas.cpp
 
