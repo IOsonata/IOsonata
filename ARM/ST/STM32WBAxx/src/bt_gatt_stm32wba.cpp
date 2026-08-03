@@ -67,6 +67,38 @@ static uint32_t WbaCharSecType(const BtGattSrvc_t *pSrvc,
 	return g_BtAppData.SecType;
 }
 
+// ACI attribute permissions can require encryption or authentication, but the
+// pairing method itself is configured stack-wide. Refuse a declaration whose
+// explicit mode cannot be produced by that configuration. Registering it with
+// a weaker global mode would make the data model claim protection the WBA stack
+// cannot enforce.
+static bool WbaSecTypeSupported(uint32_t SecType)
+{
+	uint32_t app = g_BtAppData.SecType;
+
+	switch (SecType)
+	{
+		case BTGAP_SECTYPE_NONE:
+			return true;
+
+		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
+		case BTGAP_SECTYPE_SIGNED_NO_MITM:
+			return app != BTGAP_SECTYPE_NONE;
+
+		case BTGAP_SECTYPE_STATICKEY_MITM:
+		case BTGAP_SECTYPE_SIGNED_MITM:
+			return app == BTGAP_SECTYPE_STATICKEY_MITM ||
+				   app == BTGAP_SECTYPE_SIGNED_MITM ||
+				   app == BTGAP_SECTYPE_LESC_MITM;
+
+		case BTGAP_SECTYPE_LESC_MITM:
+			return app == BTGAP_SECTYPE_LESC_MITM;
+
+		default:
+			return false;
+	}
+}
+
 static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc,
 							  BtGattChar_t * const pChar)
 {
@@ -86,6 +118,12 @@ static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc,
 		uuid.Char_UUID_16 = pChar->Uuid;
 	}
 
+	uint32_t secType = WbaCharSecType(pSrvc, pChar);
+	if (!WbaSecTypeSupported(secType))
+	{
+		return false;
+	}
+
 	uint16_t charHdl = BT_ATT_HANDLE_INVALID;
 	uint8_t eventMask = GATT_NOTIFY_ATTRIBUTE_WRITE;
 	if (pChar->Property & BT_GATT_CHAR_PROP_NOTIFY)
@@ -95,8 +133,8 @@ static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc,
 
 	tBleStatus st = aci_gatt_add_char(pSrvc->Hdl, uuidType, &uuid,
 									  pChar->MaxDataLen, (uint8_t)pChar->Property,
-									  WbaSecPerm(WbaCharSecType(pSrvc, pChar)),
-									  eventMask, MIN_ENCRY_KEY_SIZE,
+									  WbaSecPerm(secType), eventMask,
+									  MIN_ENCRY_KEY_SIZE,
 									  CHAR_VALUE_LEN_VARIABLE, &charHdl);
 	if (st != BLE_STATUS_SUCCESS)
 	{
