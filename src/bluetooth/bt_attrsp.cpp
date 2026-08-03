@@ -284,7 +284,7 @@ uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt,
 				return 0;
 			}
 
-			if ((uint16_t)pPeer->Discovery.SrvIdx + 1U < pPeer->NbSrvc)
+			if (pPeer->Discovery.SrvIdx + 1 < pPeer->NbSrvc)
 			{
 				pPeer->Discovery.SrvIdx++;
 				pPeer->Discovery.CharIdx = 0;
@@ -417,7 +417,7 @@ static void BtAttProcessReadByTypeRsp(BtDevice_t *pPeer,
 		return;
 	}
 
-	if ((uint16_t)pPeer->Discovery.SrvIdx + 1U < pPeer->NbSrvc)
+	if (pPeer->Discovery.SrvIdx + 1 < pPeer->NbSrvc)
 	{
 		pPeer->Discovery.SrvIdx++;
 		pPeer->Discovery.CharIdx = 0;
@@ -466,7 +466,9 @@ static void BtAttProcessReadByGroupRsp(BtDevice_t *pPeer,
 		}
 		else
 		{
-			(void)BtUuid128To16(&pSrvc->srv_uuid, d + 4);
+			uint8_t uuid128[16];
+			memcpy(uuid128, d + 4, sizeof(uuid128));
+			(void)BtUuid128To16(&pSrvc->srv_uuid, uuid128);
 		}
 
 		pPeer->NbSrvc++;
@@ -559,7 +561,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 				pPeer->Discovery.Hdl++;
 				if (pPeer->Discovery.Hdl > pSrvc->handle_range.EndHdl)
 				{
-					if ((uint16_t)pPeer->Discovery.SrvIdx + 1U < pPeer->NbSrvc)
+					if (pPeer->Discovery.SrvIdx + 1 < pPeer->NbSrvc)
 					{
 						pPeer->Discovery.SrvIdx++;
 						pSrvc = &pPeer->Services[pPeer->Discovery.SrvIdx];
