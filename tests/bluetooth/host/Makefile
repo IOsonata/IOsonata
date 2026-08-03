@@ -37,12 +37,14 @@ HEADERS := $(wildcard $(ROOT)/include/bluetooth/*.h) \
 	$(ROOT)/include/istddef.h \
 	$(ROOT)/include/device_intrf.h \
 	$(ROOT)/include/cfifo.h \
+	$(ROOT)/include/coredev/interrupt.h \
 	$(ROOT)/include/syslog.h \
 	bt_test_harness.h
 
 TEST_NAMES := \
 	app_evt_handler_retry_test \
 	bt_adv_uuid_test \
+	bt_intrf_test \
 	bt_hci_flow_test \
 	bt_hci_ctlr_init_test \
 	bt_l2cap_signal_test \
@@ -82,6 +84,12 @@ bt_adv_uuid_test_SOURCES := \
 	bt_adv_uuid_test.cpp \
 	$(ROOT)/src/bluetooth/bt_adv.cpp \
 	$(ROOT)/src/bluetooth/bt_uuid.cpp
+
+bt_intrf_test_SOURCES := \
+	bt_intrf_test.cpp \
+	$(ROOT)/src/bluetooth/bt_intrf.cpp \
+	$(ROOT)/src/device_intrf.cpp
+bt_intrf_test_EXTRA := $(CFIFO_OBJ)
 
 bt_hci_flow_test_SOURCES := \
 	bt_hci_flow_test.cpp \
