@@ -63,21 +63,11 @@ void BtGattInsertSrvcList(BtGattSrvc_t * const pSrvc)
 	s_pBtGattSrvcList = pSrvc;
 }
 
-//size_t BtGattGetValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff)
-
-__attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
+__attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar,
+		void * const pVal, size_t Len)
 {
-	if (pChar == nullptr)
-	{
-		return false;
-	}
-
-	if (Len > 0 && pVal == nullptr)
-	{
-		return false;
-	}
-
-	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID || pChar->pValue == nullptr ||
+	if (pChar == nullptr || (Len > 0 && pVal == nullptr) ||
+		pChar->ValHdl == BT_ATT_HANDLE_INVALID || pChar->pValue == nullptr ||
 		Len > pChar->MaxDataLen || Len > UINT16_MAX)
 	{
 		return false;
@@ -88,7 +78,6 @@ __attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar, void * const 
 		memcpy(pChar->pValue, pVal, Len);
 	}
 	pChar->ValueLen = (uint16_t)Len;
-
 	return true;
 }
 
@@ -98,13 +87,11 @@ bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar)
 	{
 		return false;
 	}
-
-	// Legacy aggregate view: true when at least one connected peer enabled
-	// notification. New code should use BtGattCharNotifyEnabled(ConnHdl,...).
 	return pChar->bNotify;
 }
 
-static BtGattCccdState_t *BtGattCccdFind(BtDevice_t *pConn, uint16_t CccdHdl, bool bAlloc)
+static BtGattCccdState_t *BtGattCccdFind(BtDevice_t *pConn,
+		uint16_t CccdHdl, bool bAlloc)
 {
 	if (pConn == nullptr || CccdHdl == BT_ATT_HANDLE_INVALID)
 	{
@@ -119,7 +106,7 @@ static BtGattCccdState_t *BtGattCccdFind(BtDevice_t *pConn, uint16_t CccdHdl, bo
 		}
 	}
 
-	if (bAlloc == false || pConn->Conn.NbCccd >= BT_GATT_CCCD_STATE_MAX)
+	if (!bAlloc || pConn->Conn.NbCccd >= BT_GATT_CCCD_STATE_MAX)
 	{
 		return nullptr;
 	}
@@ -127,7 +114,6 @@ static BtGattCccdState_t *BtGattCccdFind(BtDevice_t *pConn, uint16_t CccdHdl, bo
 	BtGattCccdState_t *pState = &pConn->Conn.Cccd[pConn->Conn.NbCccd++];
 	pState->Hdl = CccdHdl;
 	pState->Value = 0;
-
 	return pState;
 }
 
@@ -138,7 +124,8 @@ static BtGattChar_t *BtGattFindCharByCccd(uint16_t CccdHdl)
 		return nullptr;
 	}
 
-	for (BtGattSrvc_t *pSrvc = BtGattGetSrvcList(); pSrvc != nullptr; pSrvc = pSrvc->pNext)
+	for (BtGattSrvc_t *pSrvc = BtGattGetSrvcList(); pSrvc != nullptr;
+		pSrvc = pSrvc->pNext)
 	{
 		for (int i = 0; i < pSrvc->NbChar; i++)
 		{
@@ -149,7 +136,6 @@ static BtGattChar_t *BtGattFindCharByCccd(uint16_t CccdHdl)
 			}
 		}
 	}
-
 	return nullptr;
 }
 
@@ -175,25 +161,25 @@ static void BtGattCccdUpdateMirror(BtGattChar_t *pChar)
 		{
 			if (pPeer->Conn.Cccd[j].Hdl == pChar->CccdHdl)
 			{
-				uint16_t v = pPeer->Conn.Cccd[j].Value;
-				bNotify = bNotify || ((v & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0);
-				bIndic = bIndic || ((v & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0);
+				uint16_t value = pPeer->Conn.Cccd[j].Value;
+				bNotify = bNotify ||
+					((value & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0);
+				bIndic = bIndic ||
+					((value & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0);
 			}
 		}
 	}
 
 	pChar->bNotify = bNotify;
 	pChar->bIndic = bIndic;
-
-	uint16_t cccval = (bNotify ? BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION : 0) |
-					  (bIndic ? BT_DESC_CLIENT_CHAR_CONFIG_INDICATION : 0);
-	BtGattCccdDbSync(pChar->CccdHdl, cccval);
+	uint16_t cccd =
+		(bNotify ? BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION : 0) |
+		(bIndic ? BT_DESC_CLIENT_CHAR_CONFIG_INDICATION : 0);
+	BtGattCccdDbSync(pChar->CccdHdl, cccd);
 }
 
-// Weak no-op default. On a SoftDevice/ST port there is no native ATT DB, so the
-// aggregate does not need to be mirrored into a descriptor entry. The native
-// host (bt_att.cpp) overrides this with the strong version that writes CccVal.
-__attribute__((weak)) void BtGattCccdDbSync(uint16_t CccdHdl, uint16_t CccVal)
+__attribute__((weak)) void BtGattCccdDbSync(uint16_t CccdHdl,
+		uint16_t CccVal)
 {
 	(void)CccdHdl;
 	(void)CccVal;
@@ -203,7 +189,6 @@ uint16_t BtGattCccdGet(uint16_t ConnHdl, uint16_t CccdHdl)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 	BtGattCccdState_t *pState = BtGattCccdFind(pConn, CccdHdl, false);
-
 	return pState != nullptr ? pState->Value : 0;
 }
 
@@ -214,23 +199,14 @@ uint8_t BtGattCccdValueError(BtGattChar_t *pChar, uint16_t Value)
 		return BT_ATT_ERROR_INVALID_HANDLE;
 	}
 
-	if ((Value & (uint16_t)~BT_DESC_CLIENT_CHAR_CONFIG_MASK) != 0)
+	if ((Value & (uint16_t)~BT_DESC_CLIENT_CHAR_CONFIG_MASK) != 0 ||
+		((Value & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0 &&
+		 (pChar->Property & BT_GATT_CHAR_PROP_NOTIFY) == 0) ||
+		((Value & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0 &&
+		 (pChar->Property & BT_GATT_CHAR_PROP_INDICATE) == 0))
 	{
 		return BT_ATT_ERROR_CCCD_IMPROPER_CFG;
 	}
-
-	if ((Value & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0 &&
-		(pChar->Property & BT_GATT_CHAR_PROP_NOTIFY) == 0)
-	{
-		return BT_ATT_ERROR_CCCD_IMPROPER_CFG;
-	}
-
-	if ((Value & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0 &&
-		(pChar->Property & BT_GATT_CHAR_PROP_INDICATE) == 0)
-	{
-		return BT_ATT_ERROR_CCCD_IMPROPER_CFG;
-	}
-
 	return 0;
 }
 
@@ -239,8 +215,8 @@ uint8_t BtGattCccdWriteError(uint16_t CccdHdl, uint16_t Value)
 	return BtGattCccdValueError(BtGattFindCharByCccd(CccdHdl), Value);
 }
 
-static int BtGattCccdProjectedFind(BtGattCccdState_t *pState, uint8_t Count,
-								  uint16_t CccdHdl)
+static int BtGattCccdProjectedFind(BtGattCccdState_t *pState,
+		uint8_t Count, uint16_t CccdHdl)
 {
 	for (uint8_t i = 0; i < Count; i++)
 	{
@@ -249,13 +225,12 @@ static int BtGattCccdProjectedFind(BtGattCccdState_t *pState, uint8_t Count,
 			return i;
 		}
 	}
-
 	return -1;
 }
 
 static bool BtGattCccdQueueProjection(BtDevice_t *pConn,
-									 uint16_t TargetHdl, uint16_t TargetValue,
-									 bool *pTargetFound, bool *pTargetFits)
+		uint16_t TargetHdl, uint16_t TargetValue,
+		bool *pTargetFound, bool *pTargetFits)
 {
 	*pTargetFound = false;
 	*pTargetFits = true;
@@ -289,7 +264,6 @@ static bool BtGattCccdQueueProjection(BtDevice_t *pConn,
 		memcpy(&hdl, pBuf + pos, 2);
 		memcpy(&offset, pBuf + pos + 2, 2);
 		memcpy(&len, pBuf + pos + 4, 2);
-
 		if ((uint32_t)pos + 6U + len > total)
 		{
 			return false;
@@ -304,7 +278,7 @@ static bool BtGattCccdQueueProjection(BtDevice_t *pConn,
 			}
 
 			uint16_t value = (uint16_t)(pBuf[pos + 6] |
-									 ((uint16_t)pBuf[pos + 7] << 8));
+				((uint16_t)pBuf[pos + 7] << 8));
 			if (BtGattCccdValueError(pChar, value) != 0)
 			{
 				return false;
@@ -315,7 +289,8 @@ static bool BtGattCccdQueueProjection(BtDevice_t *pConn,
 				*pTargetFound = true;
 			}
 
-			int idx = BtGattCccdProjectedFind(projected, projectedCount, hdl);
+			int idx = BtGattCccdProjectedFind(projected,
+				projectedCount, hdl);
 			if (value == 0)
 			{
 				if (idx >= 0)
@@ -345,15 +320,16 @@ static bool BtGattCccdQueueProjection(BtDevice_t *pConn,
 		pos = (uint16_t)(pos + 6U + len);
 	}
 
-	if (*pTargetFound && TargetHdl == overflowHdl && TargetValue == overflowValue)
+	if (*pTargetFound && TargetHdl == overflowHdl &&
+		TargetValue == overflowValue)
 	{
 		*pTargetFits = false;
 	}
-
 	return true;
 }
 
-bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
+bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl,
+		uint16_t Value)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 	if (pConn == nullptr)
@@ -363,26 +339,21 @@ bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 
 	bool queued = false;
 	bool fits = true;
-	if (BtGattCccdQueueProjection(pConn, CccdHdl, Value, &queued, &fits) && queued)
+	if (BtGattCccdQueueProjection(pConn, CccdHdl, Value,
+		&queued, &fits) && queued)
 	{
 		return fits;
 	}
 
-	if (Value == 0)
+	if (Value == 0 || BtGattCccdFind(pConn, CccdHdl, false) != nullptr)
 	{
 		return true;
 	}
-
-	if (BtGattCccdFind(pConn, CccdHdl, false) != nullptr)
-	{
-		return true;
-	}
-
 	return pConn->Conn.NbCccd < BT_GATT_CCCD_STATE_MAX;
 }
 
 static void BtGattCccdReportChange(uint16_t ConnHdl, uint16_t CccdHdl,
-									 uint16_t OldValue, uint16_t Value)
+		uint16_t OldValue, uint16_t Value)
 {
 	BtGattChar_t *pChar = BtGattFindCharByCccd(CccdHdl);
 	if (pChar == nullptr)
@@ -392,46 +363,45 @@ static void BtGattCccdReportChange(uint16_t ConnHdl, uint16_t CccdHdl,
 
 	BtSmpBondCccdSave(ConnHdl, CccdHdl, Value);
 
-	bool oldNotify = (OldValue & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
-	bool newNotify = (Value & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
+	bool oldNotify =
+		(OldValue & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
+	bool newNotify =
+		(Value & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
 	if (oldNotify != newNotify && pChar->SetNotifCB != nullptr)
 	{
 		pChar->SetNotifCB(pChar, newNotify, ConnHdl);
 	}
 
-	bool oldIndic = (OldValue & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
-	bool newIndic = (Value & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
+	bool oldIndic =
+		(OldValue & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
+	bool newIndic =
+		(Value & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
 	if (oldIndic != newIndic && pChar->SetIndCB != nullptr)
 	{
 		pChar->SetIndCB(pChar, newIndic, ConnHdl);
 	}
 }
 
-static bool BtGattCccdApply(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value,
-								 bool bReport, uint16_t *pOldValue)
+static bool BtGattCccdApply(uint16_t ConnHdl, uint16_t CccdHdl,
+		uint16_t Value, bool bReport, uint16_t *pOldValue)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 	BtGattChar_t *pChar = BtGattFindCharByCccd(CccdHdl);
-
-	if (pConn == nullptr || pChar == nullptr)
-	{
-		return false;
-	}
-
-	if (BtGattCccdValueError(pChar, Value) != 0)
+	if (pConn == nullptr || pChar == nullptr ||
+		BtGattCccdValueError(pChar, Value) != 0)
 	{
 		return false;
 	}
 
 	uint16_t oldValue = BtGattCccdGet(ConnHdl, CccdHdl);
-
 	if (Value == 0)
 	{
 		for (uint8_t i = 0; i < pConn->Conn.NbCccd; i++)
 		{
 			if (pConn->Conn.Cccd[i].Hdl == CccdHdl)
 			{
-				pConn->Conn.Cccd[i] = pConn->Conn.Cccd[pConn->Conn.NbCccd - 1];
+				pConn->Conn.Cccd[i] =
+					pConn->Conn.Cccd[pConn->Conn.NbCccd - 1];
 				pConn->Conn.NbCccd--;
 				break;
 			}
@@ -439,7 +409,8 @@ static bool BtGattCccdApply(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value,
 	}
 	else
 	{
-		BtGattCccdState_t *pState = BtGattCccdFind(pConn, CccdHdl, true);
+		BtGattCccdState_t *pState =
+			BtGattCccdFind(pConn, CccdHdl, true);
 		if (pState == nullptr)
 		{
 			return false;
@@ -448,7 +419,6 @@ static bool BtGattCccdApply(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value,
 	}
 
 	BtGattCccdUpdateMirror(pChar);
-
 	if (pOldValue != nullptr)
 	{
 		*pOldValue = oldValue;
@@ -457,7 +427,6 @@ static bool BtGattCccdApply(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value,
 	{
 		BtGattCccdReportChange(ConnHdl, CccdHdl, oldValue, Value);
 	}
-
 	return true;
 }
 
@@ -467,13 +436,13 @@ bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 }
 
 bool BtGattCccdSetDeferred(uint16_t ConnHdl, uint16_t CccdHdl,
-								 uint16_t Value, uint16_t *pOldValue)
+		uint16_t Value, uint16_t *pOldValue)
 {
 	return BtGattCccdApply(ConnHdl, CccdHdl, Value, false, pOldValue);
 }
 
 void BtGattCccdCommitDeferred(uint16_t ConnHdl, uint16_t CccdHdl,
-									uint16_t OldValue, uint16_t Value)
+		uint16_t OldValue, uint16_t Value)
 {
 	BtGattCccdReportChange(ConnHdl, CccdHdl, OldValue, Value);
 }
@@ -489,32 +458,26 @@ void BtGattCccdClear(uint16_t ConnHdl)
 	uint8_t n = pConn->Conn.NbCccd;
 	uint16_t hdl[BT_GATT_CCCD_STATE_MAX];
 	uint16_t val[BT_GATT_CCCD_STATE_MAX];
-
 	for (uint8_t i = 0; i < n; i++)
 	{
 		hdl[i] = pConn->Conn.Cccd[i].Hdl;
 		val[i] = pConn->Conn.Cccd[i].Value;
 	}
-
 	pConn->Conn.NbCccd = 0;
 
 	for (uint8_t i = 0; i < n; i++)
 	{
 		BtGattChar_t *pChar = BtGattFindCharByCccd(hdl[i]);
-
 		BtGattCccdUpdateMirror(pChar);
-
 		if (pChar == nullptr)
 		{
 			continue;
 		}
-
 		if ((val[i] & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0 &&
 			pChar->SetNotifCB != nullptr)
 		{
 			pChar->SetNotifCB(pChar, false, ConnHdl);
 		}
-
 		if ((val[i] & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0 &&
 			pChar->SetIndCB != nullptr)
 		{
@@ -537,7 +500,8 @@ void BtGattCccdRestoreBonded(uint16_t ConnHdl)
 	BtGattCccdState_t snapshot[BT_GATT_CCCD_STATE_MAX];
 	BtGattCccdState_t projected[BT_GATT_CCCD_STATE_MAX];
 
-	uint8_t n = BtSmpBondCccdGet(ConnHdl, hdl, val, BT_GATT_CCCD_STATE_MAX);
+	uint8_t n = BtSmpBondCccdGet(ConnHdl, hdl, val,
+		BT_GATT_CCCD_STATE_MAX);
 	uint8_t originalCount = pConn->Conn.NbCccd;
 	uint8_t projectedCount = originalCount;
 	memcpy(snapshot, pConn->Conn.Cccd, sizeof(snapshot));
@@ -593,7 +557,7 @@ void BtGattCccdRestoreBonded(uint16_t ConnHdl)
 
 	for (uint8_t i = 0; i < n; i++)
 	{
-		if (BtGattCccdSetDeferred(ConnHdl, hdl[i], val[i], &old[i]) == false)
+		if (!BtGattCccdSetDeferred(ConnHdl, hdl[i], val[i], &old[i]))
 		{
 			memcpy(pConn->Conn.Cccd, snapshot, sizeof(snapshot));
 			pConn->Conn.NbCccd = originalCount;
@@ -613,45 +577,37 @@ void BtGattCccdRestoreBonded(uint16_t ConnHdl)
 
 bool BtGattCharNotifyEnabled(uint16_t ConnHdl, BtGattChar_t *pChar)
 {
-	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID)
-	{
-		return false;
-	}
-
-	return (BtGattCccdGet(ConnHdl, pChar->CccdHdl) &
-			BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
+	return pChar != nullptr && pChar->CccdHdl != BT_ATT_HANDLE_INVALID &&
+		(BtGattCccdGet(ConnHdl, pChar->CccdHdl) &
+		 BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
 }
 
 bool BtGattCharIndicateEnabled(uint16_t ConnHdl, BtGattChar_t *pChar)
 {
-	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID)
-	{
-		return false;
-	}
-
-	return (BtGattCccdGet(ConnHdl, pChar->CccdHdl) &
-			BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
+	return pChar != nullptr && pChar->CccdHdl != BT_ATT_HANDLE_INVALID &&
+		(BtGattCccdGet(ConnHdl, pChar->CccdHdl) &
+		 BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
 }
 
 static uint16_t BtGattTxPktCount(BtDevice_t *pConn, uint16_t AclLen);
 
-static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValHdl,
-								 const void *pVal, size_t Len, BtGattChar_t *pOwner)
+static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode,
+		uint16_t ValHdl, const void *pVal, size_t Len,
+		BtGattChar_t *pOwner)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
-	if (pConn == nullptr || pConn->pHciDev == nullptr || pConn->pHciDev->SendData == nullptr)
+	if (pConn == nullptr || pConn->pHciDev == nullptr ||
+		pConn->pHciDev->SendData == nullptr ||
+		(Len > 0 && pVal == nullptr))
 	{
 		return -1;
 	}
 
-	if (Len > 0 && pVal == nullptr)
-	{
-		return -1;
-	}
-
-	uint16_t mtu = pConn->Conn.MaxMtu >= BT_ATT_MTU_MIN ? pConn->Conn.MaxMtu : BT_ATT_MTU_MIN;
+	uint16_t mtu = pConn->Conn.MaxMtu >= BT_ATT_MTU_MIN ?
+		pConn->Conn.MaxMtu : BT_ATT_MTU_MIN;
 	size_t maxData = (size_t)mtu - 3;
-	size_t bufMax = BT_HCI_BUFFER_MAX_SIZE - sizeof(BtHciACLDataPacketHdr_t) - sizeof(BtL2CapHdr_t) - 3;
+	size_t bufMax = BT_HCI_BUFFER_MAX_SIZE -
+		sizeof(BtHciACLDataPacketHdr_t) - sizeof(BtL2CapHdr_t) - 3;
 	if (maxData > bufMax)
 	{
 		maxData = bufMax;
@@ -664,11 +620,9 @@ static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValH
 	uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
 	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
-
 	acl->Hdr.ConnHdl = ConnHdl;
 	acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 	acl->Hdr.BCFlag = 0;
-
 	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
 	l2pdu->Att.OpCode = OpCode;
 	l2pdu->Att.HandleValueNtf.ValHdl = ValHdl;
@@ -676,58 +630,48 @@ static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValH
 	{
 		memcpy(l2pdu->Att.HandleValueNtf.Data, pVal, Len);
 	}
-	l2pdu->Hdr.Len = 1 + 2 + Len;
+	l2pdu->Hdr.Len = (uint16_t)(3U + Len);
 	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
 	uint16_t nbpkt = BtGattTxPktCount(pConn, acl->Hdr.Len);
-
-	if (BtGattTxPendReserve(ConnHdl, pOwner, nbpkt) == false)
+	if (!BtGattTxPendReserve(ConnHdl, pOwner, nbpkt))
 	{
 		return -1;
 	}
 
-	uint32_t sent = BtHciSendAcl(pConn->pHciDev, acl);
-	if (sent == 0)
+	if (BtHciSendAcl(pConn->pHciDev, acl) == 0)
 	{
 		BtGattTxPendRelease(ConnHdl);
 		return -1;
 	}
-
 	return (int)Len;
 }
 
-bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar, uint16_t NbPkt)
+bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar,
+		uint16_t NbPkt)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
-
-	if (pConn == nullptr || NbPkt == 0)
+	if (pConn == nullptr || NbPkt == 0 ||
+		pConn->TxPendCount >= BT_DEV_TXPEND_MAX)
 	{
 		return false;
 	}
 
-	if (pConn->TxPendCount >= BT_DEV_TXPEND_MAX)
-	{
-		return false;
-	}
-
-	uint8_t idx = (uint8_t)((pConn->TxPendHead + pConn->TxPendCount) % BT_DEV_TXPEND_MAX);
+	uint8_t idx = (uint8_t)((pConn->TxPendHead + pConn->TxPendCount) %
+		BT_DEV_TXPEND_MAX);
 	pConn->TxPend[idx].pChar = pChar;
 	pConn->TxPend[idx].Remain = NbPkt;
 	pConn->TxPendCount++;
-
 	return true;
 }
 
 void BtGattTxPendRelease(uint16_t ConnHdl)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
-
-	if (pConn == nullptr || pConn->TxPendCount == 0)
+	if (pConn != nullptr && pConn->TxPendCount > 0)
 	{
-		return;
+		pConn->TxPendCount--;
 	}
-
-	pConn->TxPendCount--;
 }
 
 bool BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
@@ -747,44 +691,40 @@ static uint16_t BtGattTxPktCount(BtDevice_t *pConn, uint16_t AclLen)
 	{
 		return 1;
 	}
-
 	uint16_t max = pConn->pHciDev->AclMaxLen;
-
 	return (uint16_t)((AclLen + max - 1) / max);
 }
 
-__attribute__((weak)) bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
+__attribute__((weak)) bool BtGattCharNotify(uint16_t ConnHdl,
+		BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID ||
-		BtGattCharNotifyEnabled(ConnHdl, pChar) == false)
+		!BtGattCharNotifyEnabled(ConnHdl, pChar))
 	{
 		return false;
 	}
-
-	return BtGattSendHandleValue(ConnHdl, BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF,
-								 pChar->ValHdl, pVal, Len, pChar) >= 0;
+	return BtGattSendHandleValue(ConnHdl,
+		BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF, pChar->ValHdl,
+		pVal, Len, pChar) >= 0;
 }
 
-__attribute__((weak)) bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
+__attribute__((weak)) bool BtGattCharIndicate(uint16_t ConnHdl,
+		BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID ||
-		BtGattCharIndicateEnabled(ConnHdl, pChar) == false)
+		!BtGattCharIndicateEnabled(ConnHdl, pChar))
 	{
 		return false;
 	}
 
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
-	if (pConn == nullptr || pConn->Conn.bIndCfmPending)
+	if (pConn == nullptr || pConn->Conn.bIndCfmPending ||
+		BtGattSendHandleValue(ConnHdl,
+			BT_ATT_OPCODE_ATT_HANDLE_VALUE_IND, pChar->ValHdl,
+			pVal, Len, pChar) < 0)
 	{
 		return false;
 	}
-
-	if (BtGattSendHandleValue(ConnHdl, BT_ATT_OPCODE_ATT_HANDLE_VALUE_IND,
-							  pChar->ValHdl, pVal, Len, pChar) < 0)
-	{
-		return false;
-	}
-
 	pConn->Conn.bIndCfmPending = true;
 	pConn->Conn.IndCfmTime = BtGattMsTick();
 	return true;
@@ -819,15 +759,14 @@ void BtGattHandleValueConfirm(uint16_t ConnHdl)
 	{
 		return;
 	}
-
 	pConn->Conn.bIndCfmPending = false;
 	BtGattChar_t *pChar = (BtGattChar_t*)pConn->pIndChar;
 	pConn->pIndChar = nullptr;
 	BtGattTxCompleteChar(pChar);
 }
 
-__attribute__((weak)) void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl,
-												uint8_t *pData, uint16_t Len)
+__attribute__((weak)) void BtGattClientNotified(uint16_t ConnHdl,
+		uint16_t ValHdl, uint8_t *pData, uint16_t Len)
 {
 	(void)ConnHdl;
 	(void)ValHdl;
@@ -840,15 +779,15 @@ __attribute__((weak)) uint32_t BtGattMsTick(void)
 	return 0;
 }
 
+__attribute__((weak)) void BtAttTransactionTimeoutCheck(void)
+{
+}
+
 bool BtGattIndicationTimedOut(uint16_t ConnHdl, uint32_t TimeoutMs)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
-	if (pConn == nullptr || pConn->Conn.bIndCfmPending == false)
-	{
-		return false;
-	}
-
-	return (uint32_t)(BtGattMsTick() - pConn->Conn.IndCfmTime) >= TimeoutMs;
+	return pConn != nullptr && pConn->Conn.bIndCfmPending &&
+		(uint32_t)(BtGattMsTick() - pConn->Conn.IndCfmTime) >= TimeoutMs;
 }
 
 __attribute__((weak)) void BtGattIndicationTimeout(uint16_t ConnHdl)
@@ -861,7 +800,6 @@ __attribute__((weak)) void BtGattIndicationTimeout(uint16_t ConnHdl)
 
 	pConn->Conn.bIndCfmPending = false;
 	pConn->pIndChar = nullptr;
-
 	if (pConn->pHciDev != nullptr && pConn->pHciDev->Command != nullptr)
 	{
 		uint8_t param[3];
@@ -869,8 +807,8 @@ __attribute__((weak)) void BtGattIndicationTimeout(uint16_t ConnHdl)
 		param[1] = (uint8_t)((ConnHdl >> 8) & 0xFF);
 		param[2] = 0x13;
 		pConn->pHciDev->Command(pConn->pHciDev,
-								BT_HCI_CMD_LINKCTRL_DISCONNECT,
-								param, sizeof(param), nullptr, 0);
+			BT_HCI_CMD_LINKCTRL_DISCONNECT, param, sizeof(param),
+			nullptr, 0);
 	}
 }
 
@@ -878,51 +816,50 @@ void BtGattIndicationTimeoutCheck(void)
 {
 	uint16_t hdl[BT_GATT_TIMEOUT_CHECK_MAX];
 	size_t n = BtPeerGetConnectedHandles(hdl, BT_GATT_TIMEOUT_CHECK_MAX);
-
 	for (size_t i = 0; i < n; i++)
 	{
-		if (BtGattIndicationTimedOut(hdl[i], BT_GATT_INDICATION_TIMEOUT_MS))
+		if (BtGattIndicationTimedOut(hdl[i],
+			BT_GATT_INDICATION_TIMEOUT_MS))
 		{
 			BtGattIndicationTimeout(hdl[i]);
 		}
 	}
+	BtAttTransactionTimeoutCheck();
 }
 
-static bool BtGattSrvcAddFailed(BtGattSrvc_t *pSrvc, const BtAttDBMark_t *pMark)
+static bool BtGattSrvcAddFailed(BtGattSrvc_t *pSrvc,
+		const BtAttDBMark_t *pMark)
 {
 	BtAttDBUnwind(pMark);
-
 	pSrvc->Hdl = BT_ATT_HANDLE_INVALID;
-
 	for (int i = 0; i < pSrvc->NbChar; i++)
 	{
 		BtGattChar_t *c = &pSrvc->pCharArray[i];
-
-		c->Hdl     = BT_ATT_HANDLE_INVALID;
-		c->ValHdl  = BT_ATT_HANDLE_INVALID;
+		c->Hdl = BT_ATT_HANDLE_INVALID;
+		c->ValHdl = BT_ATT_HANDLE_INVALID;
 		c->DescHdl = BT_ATT_HANDLE_INVALID;
 		c->CccdHdl = BT_ATT_HANDLE_INVALID;
 		c->SccdHdl = BT_ATT_HANDLE_INVALID;
-		c->pValue  = nullptr;
+		c->pValue = nullptr;
 		c->ValueLen = 0;
 		c->bNotify = false;
-		c->bIndic  = false;
-		c->pSrvc   = nullptr;
+		c->bIndic = false;
+		c->pSrvc = nullptr;
 	}
-
 	return false;
 }
 
 __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
 	uint8_t baseidx = 0;
-
-	if (pSrvc == nullptr || pSrvc->pCharArray == nullptr || pSrvc->NbChar <= 0)
+	if (pSrvc == nullptr || pSrvc->pCharArray == nullptr ||
+		pSrvc->NbChar <= 0)
 	{
 		return false;
 	}
 
-	for (BtGattSrvc_t *p = BtGattGetSrvcList(); p != nullptr; p = p->pNext)
+	for (BtGattSrvc_t *p = BtGattGetSrvcList(); p != nullptr;
+		p = p->pNext)
 	{
 		if (p == pSrvc)
 		{
@@ -932,131 +869,122 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 
 	if (pSrvc->bCustom)
 	{
-		baseidx = BtUuidAddBase(pSrvc->UuidBase);
+		int idx = BtUuidAddBase(pSrvc->UuidBase);
+		if (idx < 0)
+		{
+			return false;
+		}
+		baseidx = (uint8_t)idx;
 	}
 
-	pSrvc->Uuid = { baseidx, BT_UUID_TYPE_16, { pSrvc->UuidSrvc } };
-	pSrvc->Hdl  = BT_ATT_HANDLE_INVALID;
-
-	BtUuid16_t typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_PRIMARY_SERVICE };
-
-	int l = sizeof(BtAttSrvcDeclar_t);
-
+	pSrvc->Uuid = { baseidx, BT_UUID_TYPE_16,
+		{ pSrvc->UuidSrvc } };
+	pSrvc->Hdl = BT_ATT_HANDLE_INVALID;
+	BtUuid16_t typeuuid = {0, BT_UUID_TYPE_16,
+		BT_UUID_DECLARATIONS_PRIMARY_SERVICE};
 	BtAttDBMark_t mark;
 	BtAttDBMark(&mark);
 
-	BtAttDBEntry_t *srvcentry = BtAttDBAddEntry(&typeuuid, l);
-
+	BtAttDBEntry_t *srvcentry =
+		BtAttDBAddEntry(&typeuuid, sizeof(BtAttSrvcDeclar_t));
 	if (srvcentry == nullptr)
 	{
 		return BtGattSrvcAddFailed(pSrvc, &mark);
 	}
 
-	BtAttSrvcDeclar_t *srvcdec = (BtAttSrvcDeclar_t*) srvcentry->Data;
-
+	BtAttSrvcDeclar_t *srvcdec = (BtAttSrvcDeclar_t*)srvcentry->Data;
 	srvcdec->Uuid = pSrvc->Uuid;
 	srvcdec->pSrvc = pSrvc;
-
 	pSrvc->Hdl = srvcentry->Hdl;
 
 	BtGattChar_t *c = pSrvc->pCharArray;
-
-	BtAttDBEntry_t *entry = nullptr;
-
 	for (int i = 0; i < pSrvc->NbChar; i++, c++)
 	{
-		typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_CHARACTERISTIC };
-		l = sizeof(BtAttCharDeclar_t);
-
-		entry = BtAttDBAddEntry(&typeuuid, l);
+		typeuuid = {0, BT_UUID_TYPE_16,
+			BT_UUID_DECLARATIONS_CHARACTERISTIC};
+		BtAttDBEntry_t *entry = BtAttDBAddEntry(&typeuuid,
+			sizeof(BtAttCharDeclar_t));
 		if (entry == nullptr)
 		{
 			return BtGattSrvcAddFailed(pSrvc, &mark);
 		}
 
 		BtAttCharDeclar_t *chardec = (BtAttCharDeclar_t*)entry->Data;
-
-		chardec->Uuid  = { baseidx, BT_UUID_TYPE_16, { c->Uuid } };
+		chardec->Uuid = {baseidx, BT_UUID_TYPE_16, {c->Uuid}};
 		chardec->pChar = c;
-
-		c->ValHdl      = BT_ATT_HANDLE_INVALID;
-		c->DescHdl     = BT_ATT_HANDLE_INVALID;
-		c->CccdHdl     = BT_ATT_HANDLE_INVALID;
-		c->SccdHdl     = BT_ATT_HANDLE_INVALID;
-		c->pSrvc       = pSrvc;
+		c->ValHdl = BT_ATT_HANDLE_INVALID;
+		c->DescHdl = BT_ATT_HANDLE_INVALID;
+		c->CccdHdl = BT_ATT_HANDLE_INVALID;
+		c->SccdHdl = BT_ATT_HANDLE_INVALID;
+		c->pSrvc = pSrvc;
 		c->BaseUuidIdx = pSrvc->Uuid.BaseIdx;
 
-		typeuuid = {baseidx, BT_UUID_TYPE_16, c->Uuid };
-		entry = BtAttDBAddEntry(&typeuuid, c->MaxDataLen + sizeof(BtAttCharValue_t));
+		typeuuid = {baseidx, BT_UUID_TYPE_16, c->Uuid};
+		entry = BtAttDBAddEntry(&typeuuid,
+			c->MaxDataLen + sizeof(BtAttCharValue_t));
 		if (entry == nullptr)
 		{
 			return BtGattSrvcAddFailed(pSrvc, &mark);
 		}
-		BtAttCharValue_t *charval = (BtAttCharValue_t*)entry->Data;
 
+		BtAttCharValue_t *charval = (BtAttCharValue_t*)entry->Data;
 		charval->pChar = c;
 		c->ValHdl = entry->Hdl;
-
-		void     *pInitVal = c->pValue;
-		uint16_t  initLen  = c->ValueLen;
-
+		void *pInitVal = c->pValue;
+		uint16_t initLen = c->ValueLen;
 		c->pValue = charval->Data;
 
-		if (initLen > c->MaxDataLen)
+		if (initLen > c->MaxDataLen ||
+			(initLen > 0 && pInitVal == nullptr))
 		{
 			return BtGattSrvcAddFailed(pSrvc, &mark);
 		}
 
 		memset(c->pValue, 0, c->MaxDataLen);
-
-		if (initLen > 0 && pInitVal != nullptr)
+		if (initLen > 0)
 		{
 			memcpy(c->pValue, pInitVal, initLen);
-			c->ValueLen = initLen;
 		}
-		else
-		{
-			c->ValueLen = c->MaxDataLen;
-		}
-
+		c->ValueLen = initLen;
 		c->bNotify = false;
-		c->bIndic  = false;
-		if (c->Property & (BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_INDICATE))
+		c->bIndic = false;
+
+		if ((c->Property &
+			(BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_INDICATE)) != 0)
 		{
-			typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION };
-			l = sizeof(BtDescClientCharConfig_t);
-			entry = BtAttDBAddEntry(&typeuuid, l);
+			typeuuid = {0, BT_UUID_TYPE_16,
+				BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION};
+			entry = BtAttDBAddEntry(&typeuuid,
+				sizeof(BtDescClientCharConfig_t));
 			if (entry == nullptr)
 			{
 				return BtGattSrvcAddFailed(pSrvc, &mark);
 			}
-
-			BtDescClientCharConfig_t *ccc = (BtDescClientCharConfig_t*)entry->Data;
-
-			ccc->pChar  = c;
+			BtDescClientCharConfig_t *ccc =
+				(BtDescClientCharConfig_t*)entry->Data;
+			ccc->pChar = c;
 			ccc->CccVal = 0;
 			c->CccdHdl = entry->Hdl;
 		}
 
-		if (c->pDesc)
+		if (c->pDesc != nullptr)
 		{
-			typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION };
-			size_t dl = sizeof(BtDescCharUserDesc_t);
-			entry = BtAttDBAddEntry(&typeuuid, dl);
+			typeuuid = {0, BT_UUID_TYPE_16,
+				BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION};
+			entry = BtAttDBAddEntry(&typeuuid,
+				sizeof(BtDescCharUserDesc_t));
 			if (entry == nullptr)
 			{
 				return BtGattSrvcAddFailed(pSrvc, &mark);
 			}
-
-			BtDescCharUserDesc_t *dcud = (BtDescCharUserDesc_t*)entry->Data;
-
-			dcud->pChar = c;
+			BtDescCharUserDesc_t *desc =
+				(BtDescCharUserDesc_t*)entry->Data;
+			desc->pChar = c;
 			c->DescHdl = entry->Hdl;
 		}
 	}
 
 	BtGattInsertSrvcList(pSrvc);
-
 	return true;
 }
 
@@ -1067,30 +995,26 @@ __attribute__((weak)) void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)
 		if (pSrvc->pCharArray[i].CccdHdl != BT_ATT_HANDLE_INVALID)
 		{
 			pSrvc->pCharArray[i].bNotify = false;
-			pSrvc->pCharArray[i].bIndic  = false;
-
-			BtAttDBEntry_t *entry = BtAttDBFindHandle(pSrvc->pCharArray[i].CccdHdl);
-			if (entry)
+			pSrvc->pCharArray[i].bIndic = false;
+			BtAttDBEntry_t *entry =
+				BtAttDBFindHandle(pSrvc->pCharArray[i].CccdHdl);
+			if (entry != nullptr)
 			{
-				BtDescClientCharConfig_t *p = (BtDescClientCharConfig_t*)entry->Data;
+				BtDescClientCharConfig_t *p =
+					(BtDescClientCharConfig_t*)entry->Data;
 				p->CccVal = 0;
 			}
 		}
 	}
 }
 
-__attribute__((weak)) void BtGattEvtHandler(uint32_t Evt, void * const pCtx)
+__attribute__((weak)) void BtGattEvtHandler(uint32_t Evt,
+		void * const pCtx)
 {
-	if (s_pBtGattSrvcList)
+	for (BtGattSrvc_t *p = s_pBtGattSrvcList; p != nullptr;
+		p = p->pNext)
 	{
-		BtGattSrvc_t *p = s_pBtGattSrvcList;
-
-		while (p)
-		{
-			BtGattSrvcEvtHandler(p, Evt, pCtx);
-
-			p = p->pNext;
-		}
+		BtGattSrvcEvtHandler(p, Evt, pCtx);
 	}
 }
 
@@ -1108,24 +1032,23 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 	}
 
 	uint16_t n = NbPktSent;
-
 	while (n > 0 && pConn->TxPendCount > 0)
 	{
-		uint16_t take = min(n, pConn->TxPend[pConn->TxPendHead].Remain);
-
+		uint16_t take = min(n,
+			pConn->TxPend[pConn->TxPendHead].Remain);
 		pConn->TxPend[pConn->TxPendHead].Remain =
-				(uint16_t)(pConn->TxPend[pConn->TxPendHead].Remain - take);
+			(uint16_t)(pConn->TxPend[pConn->TxPendHead].Remain - take);
 		n = (uint16_t)(n - take);
-
 		if (pConn->TxPend[pConn->TxPendHead].Remain > 0)
 		{
 			break;
 		}
 
-		BtGattChar_t *c = (BtGattChar_t*)pConn->TxPend[pConn->TxPendHead].pChar;
-		pConn->TxPendHead = (uint8_t)((pConn->TxPendHead + 1) % BT_DEV_TXPEND_MAX);
+		BtGattChar_t *c =
+			(BtGattChar_t*)pConn->TxPend[pConn->TxPendHead].pChar;
+		pConn->TxPendHead = (uint8_t)((pConn->TxPendHead + 1) %
+			BT_DEV_TXPEND_MAX);
 		pConn->TxPendCount--;
-
 		BtGattTxCompleteChar(c);
 	}
 }
