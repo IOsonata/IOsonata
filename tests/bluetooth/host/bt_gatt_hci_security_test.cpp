@@ -22,6 +22,7 @@ BtConnSec_t s_Sec;
 BtGattSrvc_t s_Service;
 BtGattChar_t s_Char;
 uint8_t s_Value[32];
+alignas(BtAttDBEntry_t)
 uint8_t s_EntryStorage[sizeof(BtAttDBEntry_t) + sizeof(BtAttCharValue_t)] = {};
 BtAttDBEntry_t *s_Entry = reinterpret_cast<BtAttDBEntry_t *>(s_EntryStorage);
 bool s_NotifyEnabled = true;
