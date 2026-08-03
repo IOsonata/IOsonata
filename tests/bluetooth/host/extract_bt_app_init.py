@@ -72,6 +72,15 @@ def extract_function(source: str, signature: str) -> str:
 	raise ValueError("function closing brace not found")
 
 
+def host_compat(function: str) -> str:
+	"""Apply only strict-host compile fixes without changing control flow."""
+	old = "\t\t.Role = pCfg->Role,"
+	new = "\t\t.Role = static_cast<uint8_t>(pCfg->Role),"
+	if old not in function:
+		raise ValueError("BtGapCfg_t Role initializer not found")
+	return function.replace(old, new, 1)
+
+
 def main() -> int:
 	parser = argparse.ArgumentParser()
 	parser.add_argument("source", type=pathlib.Path)
@@ -84,6 +93,7 @@ def main() -> int:
 			source,
 			r"^bool\s+BtAppInit\s*\(const\s+BtAppCfg_t\s*\*\s*pCfg\s*\)",
 		)
+		function = host_compat(function)
 	except (OSError, ValueError) as exc:
 		print(f"extract_bt_app_init.py: {exc}", file=sys.stderr)
 		return 1
