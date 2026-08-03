@@ -4,7 +4,6 @@
 @brief	Implementation allow the creation of generic serial interface of
 a custom Bluetooth service with multiple user defined characteristics.
 
-
 @author	Hoang Nguyen Hoan
 @date	Feb. 6, 2017
 
@@ -33,6 +32,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <stdint.h>
 #include <string.h>
 
 #include "istddef.h"
@@ -43,374 +43,399 @@ SOFTWARE.
 #include "bluetooth/bt_peer.h"
 #include "coredev/interrupt.h"
 
-#define BTINTRF_PACKET_SIZE		(20)// + sizeof(BLEINTRF_PKT) - 1)
+#define BTINTRF_PACKET_SIZE		20
 #define BTINTRF_CFIFO_SIZE		BTINTRF_CFIFO_TOTAL_MEMSIZE(2, BTINTRF_PACKET_SIZE)
 
-alignas(4) static uint8_t s_BtDevIntrfRxFifoMem[BTINTRF_CFIFO_SIZE];
-alignas(4) static uint8_t s_BtDevIntrfTxFifoMem[BTINTRF_CFIFO_SIZE];
+alignas(CFifo_t) static uint8_t s_BtDevIntrfRxFifoMem[BTINTRF_CFIFO_SIZE];
+alignas(CFifo_t) static uint8_t s_BtDevIntrfTxFifoMem[BTINTRF_CFIFO_SIZE];
+static BtDevIntrf_t *s_pDefaultRxOwner;
+static BtDevIntrf_t *s_pDefaultTxOwner;
 
-/**
- * @brief - Disable
- * 		Turn off the interface.  If this is a physical interface, provide a
- * way to turn off for energy saving. Make sure the turn off procedure can
- * be turned back on without going through the full init sequence
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- *
- * @return None
- */
-void BtIntrfDisable(DevIntrf_t *pDevIntrf)
+static bool BtIntrfFifoMemValid(const uint8_t *pMem, int MemSize,
+		uint32_t BlockSize)
 {
-	// TODO:
-}
-
-/**
- * @brief - Enable
- * 		Turn on the interface.
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- *
- * @return None
- */
-void BtIntrfEnable(DevIntrf_t *pDevIntrf)
-{
-	// TODO:
-}
-
-/**
- * @brief - GetRate
- * 		Get data rate of the interface in Hertz.  This is not a clock frequency
- * but rather the transfer frequency (number of transfers per second). It has meaning base on the
- * implementation as bits/sec or bytes/sec or whatever the case
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- *
- * @return Transfer rate per second
- */
-uint32_t BtIntrfGetRate(DevIntrf_t *pDevIntrf)
-{
-	return 0;	// BLE has no rate
-}
-
-/**
- * @brief - SetRate
- * 		Set data rate of the interface in Hertz.  This is not a clock frequency
- * but rather the transfer frequency (number of transfers per second). It has meaning base on the
- * implementation as bits/sec or bytes/sec or whatever the case
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- * 		Rate 	  : Data rate to be set in Hertz (transfer per second)
- *
- * @return 	Actual transfer rate per second set. It is the closest achievable
- * 			rate to the requested rate.
- */
-uint32_t BtIntrfSetRate(DevIntrf_t *pDevIntrf, uint32_t Rate)
-{
-	return 0; // BLE has no rate
-}
-
-/**
- * @brief - StartRx
- * 		Prepare start condition to receive data with subsequence RxData.
- * This can be in case such as start condition for I2C or Chip Select for
- * SPI or precondition for DMA transfer or whatever requires it or not
- * This function must check & set the busy state for re-entrancy
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- * 		DevAddr   : The device selection id scheme
- *
- * @return 	true - Success
- * 			false - failed.
- */
-bool BtIntrfStartRx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
-{
-	return true;
-}
-
-/**
- * @brief - RxData : retrieve 1 packet of received data
- * 		Receive data into pBuff passed in parameter.  Assuming StartRx was
- * called prior calling this function to get the actual data. BufferLen
- * to receive data must be at least 1 packet in size.  Otherwise remaining
- * bytes are dropped.
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- * 		pBuff 	  : Pointer to memory area to receive data.
- * 		BuffLen   : Length of buffer memory in bytes. Must be at least 1 packet
- * 		            in size.  Otherwise remaining bytes are dropped.
- *
- * @return	Number of bytes read
- */
-int BtIntrfRxData(DevIntrf_t *pDevIntrf, uint8_t *pBuff, int BuffLen)
-{
-	BtDevIntrf_t *intrf = (BtDevIntrf_t*)pDevIntrf->pDevData;
-	BtIntrfPkt_t *pkt;
-	int cnt = 0;
-
-	// Guard the FIFO index update against the producer (BtIntrfRxWrCB), which
-	// runs from BLE stack/callback context. Matches the TX path's guarding.
-	uint32_t state = DisableInterrupt();
-	pkt = (BtIntrfPkt_t *)CFifoGet(intrf->hRxFifo);
-	EnableInterrupt(state);
-	if (pkt != NULL)
+	if (pMem == nullptr || MemSize <= 0 ||
+		((uintptr_t)pMem % alignof(CFifo_t)) != 0)
 	{
-	    cnt = min(BuffLen, pkt->Len);
-		memcpy(pBuff, pkt->Data, cnt);
+		return false;
 	}
 
-	return cnt;
+	return (uint32_t)MemSize >= sizeof(CFifo_t) + BlockSize;
 }
 
-/**
- * @brief - StopRx
- * 		Completion of read data phase. Do require post processing
- * after data has been received via RxData
- * This function must clear the busy state for re-entrancy
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- *
- * @return	None
- */
-void BtIntrfStopRx(DevIntrf_t *pSerDev)
+static uint16_t BtIntrfNotifyHandle(BtGattChar_t *pChar)
 {
-	// TODO:
+	if (pChar == nullptr)
+	{
+		return BT_CONN_HDL_INVALID;
+	}
+
+	for (uint16_t i = 0; i < BtPeerCount(); i++)
+	{
+		BtDevice_t *pPeer = BtPeerSlot(i);
+		if (pPeer != nullptr && pPeer->Conn.Hdl != BT_CONN_HDL_INVALID &&
+			BtGattCharNotifyEnabled(pPeer->Conn.Hdl, pChar))
+		{
+			return pPeer->Conn.Hdl;
+		}
+	}
+
+	return BT_CONN_HDL_INVALID;
 }
 
-/**
- * @brief - StartTx
- * 		Prepare start condition to transfer data with subsequence TxData.
- * This can be in case such as start condition for I2C or Chip Select for
- * SPI or precondition for DMA transfer or whatever requires it or not
- * This function must check & set the busy state for re-entrancy
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- * 		DevAddr   : The device selection id scheme
- *
- * @return 	true - Success
- * 			false - failed
- */
+void BtIntrfDisable(DevIntrf_t *pDevIntrf)
+{
+	(void)pDevIntrf;
+}
+
+void BtIntrfEnable(DevIntrf_t *pDevIntrf)
+{
+	(void)pDevIntrf;
+}
+
+uint32_t BtIntrfGetRate(DevIntrf_t *pDevIntrf)
+{
+	(void)pDevIntrf;
+	return 0;
+}
+
+uint32_t BtIntrfSetRate(DevIntrf_t *pDevIntrf, uint32_t Rate)
+{
+	(void)pDevIntrf;
+	(void)Rate;
+	return 0;
+}
+
+bool BtIntrfStartRx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
+{
+	(void)DevAddr;
+	return pDevIntrf != nullptr && pDevIntrf->pDevData != nullptr;
+}
+
+int BtIntrfRxData(DevIntrf_t *pDevIntrf, uint8_t *pBuff, int BuffLen)
+{
+	if (pDevIntrf == nullptr || pDevIntrf->pDevData == nullptr ||
+		pBuff == nullptr || BuffLen <= 0)
+	{
+		return 0;
+	}
+
+	BtDevIntrf_t *pIntrf = (BtDevIntrf_t *)pDevIntrf->pDevData;
+	if (pIntrf->hRxFifo == nullptr)
+	{
+		return 0;
+	}
+
+	int count = 0;
+	uint32_t state = DisableInterrupt();
+	BtIntrfPkt_t *pPkt = (BtIntrfPkt_t *)CFifoGet(pIntrf->hRxFifo);
+	if (pPkt != nullptr)
+	{
+		int payloadMax = pIntrf->PacketSize - (int)BTINTRF_PKHDR_LEN;
+		if (pPkt->Len <= payloadMax)
+		{
+			count = min(BuffLen, (int)pPkt->Len);
+			memcpy(pBuff, pPkt->Data, (size_t)count);
+		}
+		else
+		{
+			pIntrf->RxDropCnt++;
+		}
+	}
+	EnableInterrupt(state);
+
+	return count;
+}
+
+void BtIntrfStopRx(DevIntrf_t *pDevIntrf)
+{
+	(void)pDevIntrf;
+}
+
 bool BtIntrfStartTx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
 {
-	return true;
+	(void)DevAddr;
+	return pDevIntrf != nullptr && pDevIntrf->pDevData != nullptr;
 }
 
 bool BtIntrfNotify(BtDevIntrf_t *pIntrf)
 {
-	BtIntrfPkt_t *pkt = NULL;
-    bool res = true;
-    uint16_t connhdl = BtPeerActiveHdl();
-
-    if (pIntrf->TxCharIdx < 0)
-    {
-    	return false;
-    }
-
-    if (pIntrf->TransBuffLen > 0)
-    {
-    	res = BtGattCharNotify(connhdl, &pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx], pIntrf->TransBuff, pIntrf->TransBuffLen);
-        //res = BtDevNotify(&pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx], pIntrf->TransBuff, pIntrf->TransBuffLen);
-    }
-
-    while (res == true)
+	if (pIntrf == nullptr || pIntrf->pSrvc == nullptr ||
+		pIntrf->pSrvc->pCharArray == nullptr ||
+		pIntrf->TxCharIdx < 0 || pIntrf->TxCharIdx >= pIntrf->pSrvc->NbChar ||
+		pIntrf->hTxFifo == nullptr)
 	{
-		pIntrf->TransBuffLen = 0;
-		uint32_t state = DisableInterrupt();
-		pkt = (BtIntrfPkt_t *)CFifoGet(pIntrf->hTxFifo);
-		EnableInterrupt(state);
-		if (pkt == NULL)
+		return false;
+	}
+
+	BtGattChar_t *pChar = &pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx];
+	uint16_t connHdl = BtIntrfNotifyHandle(pChar);
+	if (connHdl == BT_CONN_HDL_INVALID)
+	{
+		return false;
+	}
+
+	if (pIntrf->TransBuffLen > 0)
+	{
+		if (!BtGattCharNotify(connHdl, pChar, pIntrf->TransBuff,
+				(size_t)pIntrf->TransBuffLen))
 		{
+			return false;
+		}
+		pIntrf->TransBuffLen = 0;
+	}
+
+	for (;;)
+	{
+		uint32_t state = DisableInterrupt();
+		BtIntrfPkt_t *pPkt = (BtIntrfPkt_t *)CFifoGet(pIntrf->hTxFifo);
+		if (pPkt == nullptr)
+		{
+			EnableInterrupt(state);
 			return true;
 		}
-		res = BtGattCharNotify(connhdl, &pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx], pkt->Data, pkt->Len);
-	}
 
-	if (pkt != NULL)
-	{
-		memcpy(pIntrf->TransBuff, pkt->Data, pkt->Len);
-		pIntrf->TransBuffLen = pkt->Len;
-	}
+		int payloadMax = pIntrf->PacketSize - (int)BTINTRF_PKHDR_LEN;
+		if (pPkt->Len > payloadMax || pPkt->Len > sizeof(pIntrf->TransBuff))
+		{
+			pIntrf->TxDropCnt++;
+			EnableInterrupt(state);
+			continue;
+		}
 
-	return false;
+		memcpy(pIntrf->TransBuff, pPkt->Data, pPkt->Len);
+		pIntrf->TransBuffLen = pPkt->Len;
+		EnableInterrupt(state);
+
+		if (!BtGattCharNotify(connHdl, pChar, pIntrf->TransBuff,
+				(size_t)pIntrf->TransBuffLen))
+		{
+			return false;
+		}
+		pIntrf->TransBuffLen = 0;
+	}
 }
 
-/**
- * @brief - TxData
- * 		Transfer data from pData passed in parameter.  Assuming StartTx was
- * called prior calling this function to send the actual data
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- * 		pData 	: Pointer to memory area of data to send.
- * 		DataLen : Length of data memory in bytes
- *
- * @return	Number of bytes sent
- */
 int BtIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int DataLen)
 {
-	BtDevIntrf_t *intrf = (BtDevIntrf_t*)pDevIntrf->pDevData;
-	BtIntrfPkt_t *pkt;
-    int maxlen = intrf->PacketSize - BTINTRF_PKHDR_LEN;
-	int cnt = 0;
-
-	while (DataLen > 0)
+	if (pDevIntrf == nullptr || pDevIntrf->pDevData == nullptr ||
+		pData == nullptr || DataLen <= 0)
 	{
-	    uint32_t state = DisableInterrupt();
-		pkt = (BtIntrfPkt_t *)CFifoPut(intrf->hTxFifo);
-		EnableInterrupt(state);
-		if (pkt == NULL)
-		{
-			intrf->TxDropCnt++;
-			break;
-		}
-		int l = min(DataLen, maxlen);
-		memcpy(pkt->Data, pData, l);
-		pkt->Len = l;
-		DataLen -= l;
-		pData += l;
-		cnt += l;
+		return 0;
 	}
 
-    BtIntrfNotify(intrf);
+	BtDevIntrf_t *pIntrf = (BtDevIntrf_t *)pDevIntrf->pDevData;
+	if (pIntrf->hTxFifo == nullptr)
+	{
+		return 0;
+	}
 
-	return cnt;
+	int payloadMax = pIntrf->PacketSize - (int)BTINTRF_PKHDR_LEN;
+	if (payloadMax <= 0)
+	{
+		return 0;
+	}
+
+	int count = 0;
+	while (DataLen > 0)
+	{
+		int len = min(DataLen, payloadMax);
+		uint32_t state = DisableInterrupt();
+		BtIntrfPkt_t *pPkt = (BtIntrfPkt_t *)CFifoPut(pIntrf->hTxFifo);
+		if (pPkt != nullptr)
+		{
+			memcpy(pPkt->Data, pData, (size_t)len);
+			pPkt->Len = (uint16_t)len;
+		}
+		EnableInterrupt(state);
+
+		if (pPkt == nullptr)
+		{
+			pIntrf->TxDropCnt++;
+			break;
+		}
+
+		DataLen -= len;
+		pData += len;
+		count += len;
+	}
+
+	BtIntrfNotify(pIntrf);
+	return count;
 }
 
-/**
- * @brief - StopTx
- * 		Completion of sending data via TxData.  Do require post processing
- * after all data was transmitted via TxData.
- * This function must clear the busy state for re-entrancy
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- *
- * @return	None
- */
 void BtIntrfStopTx(DevIntrf_t *pDevIntrf)
 {
-
+	(void)pDevIntrf;
 }
 
-/**
- * @brief - Reset
- *      This function perform a reset of interface.  Must provide empty
- * function of not used.
- *
- * @param
- *      pDevIntrf : Pointer to an instance of the Device Interface
- *
- * @return  None
- */
 void BtIntrfReset(DevIntrf_t *pDevIntrf)
 {
+	if (pDevIntrf == nullptr || pDevIntrf->pDevData == nullptr)
+	{
+		return;
+	}
 
+	BtDevIntrf_t *pIntrf = (BtDevIntrf_t *)pDevIntrf->pDevData;
+	uint32_t state = DisableInterrupt();
+	CFifoFlush(pIntrf->hRxFifo);
+	CFifoFlush(pIntrf->hTxFifo);
+	pIntrf->TransBuffLen = 0;
+	EnableInterrupt(state);
 }
 
-/**
- *
- *
- */
+void *BtIntrfGetHandle(DevIntrf_t *pDevIntrf)
+{
+	return pDevIntrf != nullptr ? pDevIntrf->pDevData : nullptr;
+}
+
 void BtIntrfTxComplete(BtGattChar_t *pChar, int CharIdx)
 {
-    BtIntrfNotify((BtDevIntrf_t*)pChar->pSrvc->pContext);
+	(void)CharIdx;
+	if (pChar != nullptr && pChar->pSrvc != nullptr)
+	{
+		BtIntrfNotify((BtDevIntrf_t *)pChar->pSrvc->pContext);
+	}
 }
 
 void BtIntrfRxWrCB(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
 {
-	BtDevIntrf_t *intrf = (BtDevIntrf_t*)pChar->pSrvc->pContext;
-	BtIntrfPkt_t *pkt;
-    //int maxlen = intrf->hTxFifo->BlkSize - sizeof(pkt->Len);
-
-	while (Len > 0) {
-		// Guard the FIFO index update against the consumer (BtIntrfRxData).
-		uint32_t state = DisableInterrupt();
-		pkt = (BtIntrfPkt_t *)CFifoPut(intrf->hRxFifo);
-		EnableInterrupt(state);
-		if (pkt == NULL)
-		{
-			intrf->RxDropCnt++;
-			break;
-		}
-		int l = min(intrf->PacketSize - (int)BTINTRF_PKHDR_LEN, Len);
-		memcpy(pkt->Data, pData, l);
-		pkt->Len = l;
-		Len -= l;
-		pData += l;
+	(void)Offset;
+	if (pChar == nullptr || pChar->pSrvc == nullptr ||
+		pChar->pSrvc->pContext == nullptr || pData == nullptr || Len <= 0)
+	{
+		return;
 	}
 
-	if (CFifoUsed(intrf->hRxFifo) > 0 && intrf->DevIntrf.EvtCB != NULL)
+	BtDevIntrf_t *pIntrf = (BtDevIntrf_t *)pChar->pSrvc->pContext;
+	if (pIntrf->hRxFifo == nullptr)
 	{
-		intrf->DevIntrf.EvtCB(&intrf->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, 0);
+		return;
+	}
+
+	int payloadMax = pIntrf->PacketSize - (int)BTINTRF_PKHDR_LEN;
+	while (Len > 0)
+	{
+		int len = min(payloadMax, Len);
+		uint32_t state = DisableInterrupt();
+		BtIntrfPkt_t *pPkt = (BtIntrfPkt_t *)CFifoPut(pIntrf->hRxFifo);
+		if (pPkt != nullptr)
+		{
+			memcpy(pPkt->Data, pData, (size_t)len);
+			pPkt->Len = (uint16_t)len;
+		}
+		EnableInterrupt(state);
+
+		if (pPkt == nullptr)
+		{
+			pIntrf->RxDropCnt++;
+			break;
+		}
+
+		Len -= len;
+		pData += len;
+	}
+
+	if (CFifoUsed(pIntrf->hRxFifo) > 0 && pIntrf->DevIntrf.EvtCB != nullptr)
+	{
+		pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
+			DEVINTRF_EVT_RX_DATA, nullptr, 0);
 	}
 }
 
 bool BtIntrfInit(BtDevIntrf_t *pIntrf, const BtIntrfCfg_t *pCfg)
 {
-	if (pIntrf == NULL || pCfg == NULL)
+	if (pIntrf == nullptr || pCfg == nullptr || pCfg->pSrvc == nullptr ||
+		pCfg->pSrvc->pCharArray == nullptr || pCfg->pSrvc->NbChar <= 0 ||
+		pCfg->RxCharIdx < -1 || pCfg->RxCharIdx >= pCfg->pSrvc->NbChar ||
+		pCfg->TxCharIdx < -1 || pCfg->TxCharIdx >= pCfg->pSrvc->NbChar)
+	{
 		return false;
-
-	if (pCfg->PacketSize <= 0)
-	{
-		pIntrf->PacketSize = BTINTRF_PACKET_SIZE + BTINTRF_PKHDR_LEN;
-	}
-	else
-	{
-		pIntrf->PacketSize = pCfg->PacketSize + BTINTRF_PKHDR_LEN;
 	}
 
-	if (pCfg->pRxFifoMem == nullptr)
+	int payloadSize = pCfg->PacketSize > 0 ? pCfg->PacketSize :
+		BTINTRF_PACKET_SIZE;
+	if (payloadSize <= 0 || payloadSize > BTINTRF_TRANSBUFF_MAXLEN)
 	{
-		pIntrf->hRxFifo = CFifoInit(s_BtDevIntrfRxFifoMem, BTINTRF_CFIFO_SIZE, pIntrf->PacketSize, pCfg->bBlocking);
+		return false;
 	}
-	else
+	if (pCfg->TxCharIdx >= 0 &&
+		payloadSize > pCfg->pSrvc->pCharArray[pCfg->TxCharIdx].MaxDataLen)
 	{
-		pIntrf->hRxFifo = CFifoInit(pCfg->pRxFifoMem, pCfg->RxFifoMemSize, pIntrf->PacketSize, pCfg->bBlocking);
-	}
-
-	if (pCfg->pTxFifoMem == nullptr)
-	{
-		pIntrf->hTxFifo = CFifoInit(s_BtDevIntrfTxFifoMem, BTINTRF_CFIFO_SIZE, pIntrf->PacketSize, pCfg->bBlocking);
-	}
-	else
-	{
-		pIntrf->hTxFifo = CFifoInit(pCfg->pTxFifoMem, pCfg->TxFifoMemSize, pIntrf->PacketSize, pCfg->bBlocking);
+		return false;
 	}
 
-	pIntrf->DevIntrf.pDevData = (void*)pIntrf;
+	uint32_t blockSize = (uint32_t)payloadSize + BTINTRF_PKHDR_LEN;
+	uint8_t *pRxMem = pCfg->pRxFifoMem;
+	int rxMemSize = pCfg->RxFifoMemSize;
+	uint8_t *pTxMem = pCfg->pTxFifoMem;
+	int txMemSize = pCfg->TxFifoMemSize;
+	bool useDefaultRx = pRxMem == nullptr;
+	bool useDefaultTx = pTxMem == nullptr;
+
+	if (useDefaultRx)
+	{
+		if ((s_pDefaultRxOwner != nullptr && s_pDefaultRxOwner != pIntrf) ||
+			blockSize > BTINTRF_PACKET_SIZE + BTINTRF_PKHDR_LEN)
+		{
+			return false;
+		}
+		pRxMem = s_BtDevIntrfRxFifoMem;
+		rxMemSize = sizeof(s_BtDevIntrfRxFifoMem);
+	}
+	if (useDefaultTx)
+	{
+		if ((s_pDefaultTxOwner != nullptr && s_pDefaultTxOwner != pIntrf) ||
+			blockSize > BTINTRF_PACKET_SIZE + BTINTRF_PKHDR_LEN)
+		{
+			return false;
+		}
+		pTxMem = s_BtDevIntrfTxFifoMem;
+		txMemSize = sizeof(s_BtDevIntrfTxFifoMem);
+	}
+
+	if (!BtIntrfFifoMemValid(pRxMem, rxMemSize, blockSize) ||
+		!BtIntrfFifoMemValid(pTxMem, txMemSize, blockSize))
+	{
+		return false;
+	}
+
+	hCFifo_t rxFifo = CFifoInit(pRxMem, (uint32_t)rxMemSize,
+		blockSize, pCfg->bBlocking);
+	hCFifo_t txFifo = CFifoInit(pTxMem, (uint32_t)txMemSize,
+		blockSize, pCfg->bBlocking);
+	if (rxFifo == nullptr || txFifo == nullptr)
+	{
+		return false;
+	}
+
+	if (useDefaultRx)
+	{
+		s_pDefaultRxOwner = pIntrf;
+	}
+	if (useDefaultTx)
+	{
+		s_pDefaultTxOwner = pIntrf;
+	}
+
+	pIntrf->DevIntrf.pDevData = pIntrf;
 	pIntrf->pSrvc = pCfg->pSrvc;
 	pIntrf->pSrvc->pContext = pIntrf;
-	pIntrf->RxCharIdx = -1;
-	pIntrf->TxCharIdx = -1;
+	pIntrf->RxCharIdx = pCfg->RxCharIdx;
+	pIntrf->TxCharIdx = pCfg->TxCharIdx;
+	pIntrf->PacketSize = (int)blockSize;
+	pIntrf->hRxFifo = rxFifo;
+	pIntrf->hTxFifo = txFifo;
 
-	if (pCfg->RxCharIdx < pCfg->pSrvc->NbChar)
-	{
-		pIntrf->RxCharIdx = pCfg->RxCharIdx;
-	}
-
-	if (pCfg->TxCharIdx < pCfg->pSrvc->NbChar)
-	{
-		pIntrf->TxCharIdx = pCfg->TxCharIdx;
-	}
-
-	if (pIntrf->RxCharIdx >= 0 &&  pIntrf->RxCharIdx < pCfg->pSrvc->NbChar)
+	if (pIntrf->RxCharIdx >= 0)
 	{
 		pIntrf->pSrvc->pCharArray[pIntrf->RxCharIdx].WrCB = BtIntrfRxWrCB;
 	}
-
-	if (pIntrf->TxCharIdx >= 0 &&  pIntrf->TxCharIdx < pCfg->pSrvc->NbChar)
+	if (pIntrf->TxCharIdx >= 0)
 	{
-		pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx].TxCompleteCB = BtIntrfTxComplete;
+		pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx].TxCompleteCB =
+			BtIntrfTxComplete;
 	}
-	//pIntrf->pSrvc->pCharArray[pIntrf->RxCharIdx].pSrvc = pIntrf->pSrvc;
-	//pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx].pSrvc = pIntrf->pSrvc;
 
 	pIntrf->DevIntrf.Type = DEVINTRF_TYPE_BT;
 	pIntrf->DevIntrf.Enable = BtIntrfEnable;
@@ -422,19 +447,24 @@ bool BtIntrfInit(BtDevIntrf_t *pIntrf, const BtIntrfCfg_t *pCfg)
 	pIntrf->DevIntrf.StopRx = BtIntrfStopRx;
 	pIntrf->DevIntrf.StartTx = BtIntrfStartTx;
 	pIntrf->DevIntrf.TxData = BtIntrfTxData;
+	pIntrf->DevIntrf.TxSrData = BtIntrfTxData;
 	pIntrf->DevIntrf.StopTx = BtIntrfStopTx;
+	pIntrf->DevIntrf.Reset = BtIntrfReset;
+	pIntrf->DevIntrf.PowerOff = BtIntrfDisable;
+	pIntrf->DevIntrf.GetHandle = BtIntrfGetHandle;
 	pIntrf->DevIntrf.MaxRetry = 0;
 	pIntrf->DevIntrf.EvtCB = pCfg->EvtCB;
+	pIntrf->DevIntrf.bDma = false;
+	pIntrf->DevIntrf.bIntEn = true;
 	pIntrf->TransBuffLen = 0;
 	pIntrf->RxDropCnt = 0;
 	pIntrf->TxDropCnt = 0;
 	atomic_flag_clear(&pIntrf->DevIntrf.bBusy);
+	atomic_store(&pIntrf->DevIntrf.EnCnt, 0);
+	atomic_store(&pIntrf->DevIntrf.bTxReady, true);
+	atomic_store(&pIntrf->DevIntrf.bNoStop, false);
 
 	DeviceIntrfEnable(&pIntrf->DevIntrf);
-
-//	BtGattUpdate(pIntrf->pSrvc->pCharArray[pIntrf->RxCharIdx].ValHdl,
-//				&pIntrf->pSrvc->pCharArray[pIntrf->RxCharIdx], sizeof(BtGattChar_t));
-
 	return true;
 }
 
@@ -445,26 +475,17 @@ bool BtIntrf::Init(const BtIntrfCfg_t &Cfg)
 
 bool BtIntrf::RequestToSend(int NbBytes)
 {
-	bool retval = false;
+	if (NbBytes < 0 || vBtDevIntrf.hTxFifo == nullptr)
+	{
+		return false;
+	}
+	if (NbBytes == 0)
+	{
+		return true;
+	}
 
-	// ****
-	// Some threaded application firmware may stop sending when queue full
-	// causing lockup
-	// Try to send to free up the queue before validating.
-	//
 	BtIntrfNotify(&vBtDevIntrf);
-
-	if (vBtDevIntrf.hTxFifo)
-	{
-		int avail = CFifoAvail(vBtDevIntrf.hTxFifo);
-		if ((avail * (vBtDevIntrf.PacketSize - BTINTRF_PKHDR_LEN)) > NbBytes)
-			retval = true;
-	}
-	else
-	{
-		retval = true;
-	}
-
-	return retval;
+	int avail = CFifoAvail(vBtDevIntrf.hTxFifo);
+	int payloadSize = vBtDevIntrf.PacketSize - (int)BTINTRF_PKHDR_LEN;
+	return (int64_t)avail * payloadSize >= NbBytes;
 }
-
