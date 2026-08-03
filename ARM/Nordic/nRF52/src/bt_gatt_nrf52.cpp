@@ -21,8 +21,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -70,6 +70,10 @@ typedef struct {
 } GETTLWRMEM;
 
 #pragma pack(pop)
+
+#ifndef BT_GATT_LONG_WRITE_RECORD_MAX
+#define BT_GATT_LONG_WRITE_RECORD_MAX	32
+#endif
 
 static uint16_t s_ConnHandle = BLE_CONN_HANDLE_INVALID;
 static BtGattSrvc_t *s_pBtGattSrvcHead = nullptr;
@@ -124,23 +128,29 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
     uint16_t l = (uint16_t)Len;
     params.p_len = &l;
 
+    // Reserve the completion entry before the SoftDevice accepts the packet.
+    // Otherwise a full ring sends an untracked notification and shifts every
+    // later TxCompleteCB by one controller completion.
+    if (BtGattTxPendingAdd(hdl, pChar) == false)
+    {
+        return false;
+    }
+
     uint32_t err_code = sd_ble_gatts_hvx(hdl, &params);
 
     if (err_code == NRF_SUCCESS)
     {
-        BtGattTxPendingAdd(ConnHdl, pChar);
         return true;
     }
 
+    BtGattTxPendRelease(hdl);
     return false;
 }
 
 // Native indication path. The SoftDevice enforces the single-outstanding-
 // indication rule (sd_ble_gatts_hvx returns NRF_ERROR_BUSY while one is pending).
-// A successful send is recorded on the TX-pending ring and starts the per-link
-// indication transaction timeout. The client confirmation is delivered to the
-// app event handler as the SoftDevice BLE_GATTS_EVT_HVC event, which routes it
-// to BtGattHandleValueConfirm.
+// A successful send starts the per-link indication transaction timeout. Its
+// TxCompleteCB belongs to BLE_GATTS_EVT_HVC, not BLE_GATTS_EVT_HVN_TX_COMPLETE.
 bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (pChar == nullptr)
@@ -170,10 +180,15 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal
 		return false;
 	}
 
+	BtDevice_t *pConn = BtPeerFindByHdl(hdl);
+	if (pConn == nullptr || pConn->Conn.bIndCfmPending)
+	{
+		return false;
+	}
+
 	// No local CCCD gate. sd_ble_gatts_hvx with BLE_GATT_HVX_INDICATION returns
 	// an error when this connection has not enabled indication, so the
-	// SoftDevice is the authority. The local bIndic flag was never set here, so
-	// gating on it blocked every indication.
+	// SoftDevice is the authority.
 
     ble_gatts_hvx_params_t params;
 
@@ -188,13 +203,9 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal
 
     if (err_code == NRF_SUCCESS)
     {
-        BtDevice_t *pConn = BtPeerFindByHdl(hdl);
-        if (pConn != nullptr)
-        {
-            pConn->Conn.bIndCfmPending = true;
-            pConn->Conn.IndCfmTime = BtGattMsTick();
-        }
-        BtGattTxPendingAdd(hdl, pChar);
+        pConn->Conn.bIndCfmPending = true;
+        pConn->Conn.IndCfmTime = BtGattMsTick();
+        pConn->pIndChar = pChar;
         return true;
     }
 
@@ -243,16 +254,98 @@ void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)
 
 }
 
-void GatherLongWrBuff(GATLWRHDR *pHdr)
+// Validate the complete SoftDevice user-memory queue before reading or moving
+// any payload. The fixed record table bounds stack use and rejects a queue with
+// more fragments than this port supports instead of recursing without a limit.
+static bool GatherLongWrBuff(uint8_t *pBuff, uint16_t BuffSize, uint16_t Handle,
+							 uint16_t *pOffset, uint16_t *pLen)
 {
-	uint8_t *p = (uint8_t*)pHdr + pHdr->Len + sizeof(GATLWRHDR);
-	GATLWRHDR *hdr = (GATLWRHDR*)p;
-	if (hdr->Handle == pHdr->Handle)
+	if (pBuff == nullptr || pOffset == nullptr || pLen == nullptr ||
+		BuffSize < sizeof(GATLWRHDR))
 	{
-		GatherLongWrBuff(hdr);
-		pHdr->Len += hdr->Len;
-		memcpy(p, p + sizeof(GATLWRHDR), hdr->Len);
+		return false;
 	}
+
+	uint16_t pos[BT_GATT_LONG_WRITE_RECORD_MAX];
+	GATLWRHDR rec[BT_GATT_LONG_WRITE_RECORD_MAX];
+	uint16_t count = 0;
+	uint16_t cur = 0;
+
+	while ((uint32_t)cur + sizeof(GATLWRHDR) <= BuffSize)
+	{
+		GATLWRHDR hdr;
+		memcpy(&hdr, pBuff + cur, sizeof(hdr));
+
+		// The unused tail of the user-memory block is zero-filled.
+		if (hdr.Handle == 0 && hdr.Offset == 0 && hdr.Len == 0)
+		{
+			break;
+		}
+
+		if (count >= BT_GATT_LONG_WRITE_RECORD_MAX ||
+			(uint32_t)hdr.Len > (uint32_t)BuffSize - cur - sizeof(GATLWRHDR))
+		{
+			return false;
+		}
+
+		pos[count] = cur;
+		rec[count] = hdr;
+		count++;
+		cur = (uint16_t)(cur + sizeof(GATLWRHDR) + hdr.Len);
+	}
+
+	bool found = false;
+	uint16_t offset = 0;
+	uint16_t total = 0;
+	uint16_t match[BT_GATT_LONG_WRITE_RECORD_MAX];
+	uint16_t matchCount = 0;
+
+	for (uint16_t i = 0; i < count; i++)
+	{
+		if (rec[i].Handle != Handle)
+		{
+			continue;
+		}
+
+		if (found == false)
+		{
+			found = true;
+			offset = rec[i].Offset;
+		}
+		else if (rec[i].Offset != (uint16_t)(offset + total))
+		{
+			return false;
+		}
+
+		if ((uint32_t)total + rec[i].Len >
+			(uint32_t)BuffSize - sizeof(GATLWRHDR))
+		{
+			return false;
+		}
+
+		match[matchCount++] = i;
+		total = (uint16_t)(total + rec[i].Len);
+	}
+
+	if (found == false)
+	{
+		return false;
+	}
+
+	// Move from the last fragment backwards. Destinations are before their
+	// sources; reverse order keeps every source intact until it has been read.
+	uint16_t end = total;
+	for (uint16_t n = matchCount; n > 0; n--)
+	{
+		uint16_t i = match[n - 1];
+		end = (uint16_t)(end - rec[i].Len);
+		memmove(pBuff + sizeof(GATLWRHDR) + end,
+				pBuff + pos[i] + sizeof(GATLWRHDR), rec[i].Len);
+	}
+
+	*pOffset = offset;
+	*pLen = total;
+	return true;
 }
 
 void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const pCtx)
@@ -282,6 +375,7 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 				// (the memory handed to the SoftDevice at USER_MEM_REQUEST).
 				BtDevice_t *pLwConn = BtPeerFindByHdl(pBleEvt->evt.gatts_evt.conn_handle);
 				uint8_t *pLongWr = (pLwConn != nullptr) ? pLwConn->Conn.pLongWrBuff : nullptr;
+				uint16_t longWrSize = (pLwConn != nullptr) ? pLwConn->Conn.LongWrBuffSize : 0;
 
 				//g_Uart.printf("BLE_GATTS_EVT_WRITE: %d\r\n", pSrvc->NbChar);
 
@@ -291,16 +385,18 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 					//if (p_evt_write->handle == 0)
 					{
 						//g_Uart.printf("Long Write\r\n");
-						if (pLongWr == nullptr)
+						if (pLongWr == nullptr || pSrvc->pCharArray[i].WrCB == nullptr)
 						{
 							continue;
 						}
-						GATLWRHDR *hdr = (GATLWRHDR *)pLongWr;
-					    uint8_t *p = (uint8_t*)pLongWr + sizeof(GATLWRHDR);
-						if (hdr->Handle == pSrvc->pCharArray[i].ValHdl)//.value_handle)
+
+						uint16_t offset = 0;
+						uint16_t len = 0;
+						if (GatherLongWrBuff(pLongWr, longWrSize,
+								pSrvc->pCharArray[i].ValHdl, &offset, &len))
 					    {
-							GatherLongWrBuff(hdr);
-							pSrvc->pCharArray[i].WrCB(&pSrvc->pCharArray[i], p, hdr->Offset, hdr->Len);
+							pSrvc->pCharArray[i].WrCB(&pSrvc->pCharArray[i],
+								pLongWr + sizeof(GATLWRHDR), offset, len);
 					    }
 					}
 					else
@@ -308,19 +404,23 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 						if ((p_evt_write->handle == pSrvc->pCharArray[i].CccdHdl) && //cccd_handle) &&
 							(p_evt_write->len == 2))
 						{
-							//g_Uart.printf("CCCD\r\n");
-							if (ble_srv_is_notification_enabled(p_evt_write->data))
-							{
-								pSrvc->pCharArray[i].bNotify = true;
-							}
-							else
-							{
-								pSrvc->pCharArray[i].bNotify = false;
-							}
-							// Set notify callback
+							uint16_t cccd = (uint16_t)(p_evt_write->data[0] |
+													(p_evt_write->data[1] << 8));
+							bool notify = (cccd & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
+							bool indicate = (cccd & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
+
+							pSrvc->pCharArray[i].bNotify = notify;
+							pSrvc->pCharArray[i].bIndic = indicate;
+
 							if (pSrvc->pCharArray[i].SetNotifCB)
 							{
-								pSrvc->pCharArray[i].SetNotifCB(&pSrvc->pCharArray[i], pSrvc->pCharArray[i].bNotify, pBleEvt->evt.gatts_evt.conn_handle);
+								pSrvc->pCharArray[i].SetNotifCB(&pSrvc->pCharArray[i],
+										notify, pBleEvt->evt.gatts_evt.conn_handle);
+							}
+							if (pSrvc->pCharArray[i].SetIndCB)
+							{
+								pSrvc->pCharArray[i].SetIndCB(&pSrvc->pCharArray[i],
+										indicate, pBleEvt->evt.gatts_evt.conn_handle);
 							}
 						}
 						else if ((p_evt_write->handle == pSrvc->pCharArray[i].ValHdl) &&//.value_handle) &&
@@ -437,13 +537,20 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
     char_md.p_cccd_md = NULL;
     char_md.p_sccd_md = NULL;
 
-    if (pChar->Property & BT_GATT_CHAR_PROP_NOTIFY)
+    if (pChar->Property & (BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_INDICATE))
     {
-    	char_md.char_props.notify = 1;
+    	if (pChar->Property & BT_GATT_CHAR_PROP_NOTIFY)
+    	{
+    		char_md.char_props.notify = 1;
+    	}
+    	if (pChar->Property & BT_GATT_CHAR_PROP_INDICATE)
+    	{
+    		char_md.char_props.indicate = 1;
+    	}
     	BLE_GAP_CONN_SEC_MODE_SET_OPEN(&cccd_md.read_perm);
     	BtSrvcEncSec(&cccd_md.write_perm, SecType);
     	BtSrvcEncSec(&attr_md.read_perm, SecType);
-        char_md.p_cccd_md         = &cccd_md;
+        char_md.p_cccd_md = &cccd_md;
     }
 
     if (pChar->Property & BT_GATT_CHAR_PROP_BROADCAST)
@@ -602,5 +709,3 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 */
     return true;
 }
-
-
