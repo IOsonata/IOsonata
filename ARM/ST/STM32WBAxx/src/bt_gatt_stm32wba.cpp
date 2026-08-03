@@ -253,7 +253,7 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar,
 	return true;
 }
 
-void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t ValHdl)
+void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t AttrHdl)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 	if (pConn == nullptr || pConn->TxPendCount == 0)
@@ -263,7 +263,8 @@ void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t ValHdl)
 
 	auto *pPend = &pConn->TxPend[pConn->TxPendHead];
 	BtGattChar_t *pChar = (BtGattChar_t *)pPend->pChar;
-	if (pChar == nullptr || pPend->Remain != 1 || pChar->ValHdl != ValHdl)
+	if (pChar == nullptr || pPend->Remain != 1 ||
+		(AttrHdl != pChar->Hdl && AttrHdl != pChar->ValHdl))
 	{
 		return;
 	}
