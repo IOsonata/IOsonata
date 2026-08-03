@@ -7,10 +7,6 @@
 		BtSmpBondSave / BtSmpBondLoad / BtSmpBondErase hooks. This file
 		provides strong overrides backed by the generic transactional PDS.
 
-		Each bond slot maps to BOND_KEY_BASE + Slot. The record is opaque here;
-		BtSmpBondSerialize builds the exact blob when the application-context
-		save handler is ready to write it.
-
 @author	Hoang Nguyen Hoan
 @date	Jun 09, 2026
 
@@ -30,9 +26,6 @@
 #include "storage/nvm_region.h"
 #include "app_evt_handler.h"
 
-// The generic bond layer only makes a signed-write counter range usable after
-// the persistence backend confirms that the exact serialized record reached
-// the medium. This is internal to the bond-store implementation.
 extern "C" void BtSmpBondPersistComplete(int Slot, const void *pBond,
 											 size_t Len, bool Success);
 
@@ -45,7 +38,7 @@ extern "C" void BtSmpBondPersistComplete(int Slot, const void *pBond,
 #define BOND_PRINTF(...)
 #endif
 
-#define BT_SMP_BOND_KEY_BASE	0x42440000u		// 'B''D' 00 00
+#define BT_SMP_BOND_KEY_BASE	0x42440000u
 #define BT_SMP_LOCALID_KEY		(BT_SMP_BOND_KEY_BASE + 0x100u)
 
 static bool s_PdsReady;
@@ -141,25 +134,61 @@ static int PdsEnsureReady(void)
 	return 0;
 }
 
-// A save can originate inside Bluetooth event dispatch. NVM access is deferred
-// to the application handler because Nordic radio arbitration cannot complete
-// while the higher-priority stack callback is still running.
 #define BT_SMP_BOND_PEND_MAX		32
 
 static std::atomic<uint32_t> s_PendMask;
+static std::atomic<bool> s_LocalIdPend;
+static std::atomic<bool> s_SaveHandlerQueued;
 static uint32_t s_PendDropCnt;
 static uint32_t s_PendFailCnt;
-static std::atomic<bool> s_LocalIdPend;
+
+static void BondSaveHandler(uint32_t Evt, void *pCtx);
+
+static bool BondSavePending(void)
+{
+	return s_PendMask.load(std::memory_order_acquire) != 0 ||
+		s_LocalIdPend.load(std::memory_order_acquire);
+}
+
+static void BondSaveSchedule(void)
+{
+	if (!BondSavePending())
+	{
+		return;
+	}
+
+	bool expected = false;
+	if (!s_SaveHandlerQueued.compare_exchange_strong(expected, true,
+			std::memory_order_acq_rel, std::memory_order_acquire))
+	{
+		return;
+	}
+
+	if (!AppEvtHandlerQue(0, nullptr, BondSaveHandler))
+	{
+		s_SaveHandlerQueued.store(false, std::memory_order_release);
+	}
+}
+
+static void BondSavePump(void)
+{
+	// AppEvtHandlerExec calls this after queued callbacks have released their
+	// FIFO slots. A previous full-queue failure is therefore retried without
+	// doing NVM work inside Bluetooth event dispatch.
+	BondSaveSchedule();
+}
 
 static void BondSaveHandler(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
 	(void)pCtx;
 
+	s_SaveHandlerQueued.store(false, std::memory_order_release);
+
 	int r = PdsEnsureReady();
 	if (r != 0)
 	{
-		uint32_t left = s_PendMask.load();
+		uint32_t left = s_PendMask.load(std::memory_order_acquire);
 		if (left != 0)
 		{
 			BOND_PRINTF("PDS: save mask %08lX held, store not ready %d\r\n",
@@ -170,7 +199,7 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 
 	uint8_t rec[BT_PDS_RECORD_DATA_MAX];
 
-	if (s_LocalIdPend.exchange(false))
+	if (s_LocalIdPend.exchange(false, std::memory_order_acq_rel))
 	{
 		size_t len = BtSmpLocalIdSerialize(rec, sizeof(rec));
 		if (len != 0)
@@ -178,7 +207,7 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 			ssize_t w = BtPdsWrite(BT_SMP_LOCALID_KEY, rec, len);
 			if (w != (ssize_t)len)
 			{
-				s_LocalIdPend.store(true);
+				s_LocalIdPend.store(true, std::memory_order_release);
 				BOND_PRINTF("PDS: local id save len %u failed %d, still marked\r\n",
 							(unsigned)len, (int)w);
 			}
@@ -187,16 +216,13 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 
 	for (int slot = 0; slot < BT_SMP_BOND_PEND_MAX; slot++)
 	{
-		if (s_PendMask.load() == 0)
+		if (s_PendMask.load(std::memory_order_acquire) == 0)
 		{
 			break;
 		}
 
 		uint32_t bit = 1UL << slot;
-
-		// Clear before serialization. A change arriving afterward marks the slot
-		// again, so it is written a second time instead of being lost.
-		if ((s_PendMask.fetch_and(~bit) & bit) == 0)
+		if ((s_PendMask.fetch_and(~bit, std::memory_order_acq_rel) & bit) == 0)
 		{
 			continue;
 		}
@@ -211,15 +237,11 @@ static void BondSaveHandler(uint32_t Evt, void *pCtx)
 		ssize_t w = BtPdsWrite(BT_SMP_BOND_KEY_BASE + (uint32_t)slot,
 							 rec, len);
 		bool committed = w == (ssize_t)len;
-
-		// A signed-write counter window is unusable until this acknowledgment.
-		// Pass the exact record written so a later reservation cannot be
-		// mistaken for the one that just reached the medium.
 		BtSmpBondPersistComplete(slot, rec, len, committed);
 
 		if (!committed)
 		{
-			s_PendMask.fetch_or(bit);
+			s_PendMask.fetch_or(bit, std::memory_order_release);
 			s_PendFailCnt++;
 			BOND_PRINTF("PDS: save slot %d len %u failed %d, still marked, "
 						"%lu so far\r\n", slot, (unsigned)len, (int)w,
@@ -248,23 +270,14 @@ void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 		return;
 	}
 
-	s_PendMask.fetch_or(1UL << Slot);
-
-	if (AppEvtHandlerQue(0, NULL, BondSaveHandler) == false)
-	{
-		BOND_PRINTF("PDS: save slot %d not queued yet, event queue full\r\n",
-					Slot);
-	}
+	s_PendMask.fetch_or(1UL << Slot, std::memory_order_release);
+	BondSaveSchedule();
 }
 
 void BtSmpLocalIdSave(void)
 {
-	s_LocalIdPend.store(true);
-
-	if (AppEvtHandlerQue(0, NULL, BondSaveHandler) == false)
-	{
-		BOND_PRINTF("PDS: local id save not queued yet, event queue full\r\n");
-	}
+	s_LocalIdPend.store(true, std::memory_order_release);
+	BondSaveSchedule();
 }
 
 void BtSmpBondLoad(void)
@@ -349,6 +362,12 @@ int BtSmpBondNvmInit(void)
 		return -ENOTSUP;
 	}
 
+	if (!AppEvtHandlerIdleRegister(BondSavePump))
+	{
+		BOND_PRINTF("PDS: no application idle-pump slot\r\n");
+		return -ENOMEM;
+	}
+
 	s_PdsArmed = true;
 
 	int r = PdsEnsureReady();
@@ -359,11 +378,6 @@ int BtSmpBondNvmInit(void)
 	}
 
 	BtSmpBondLoad();
-
-	// Restore reserves a fresh counter window above every persisted high-water
-	// mark. Initialization already runs in application context, so commit those
-	// reservations now and return only after they are durable. A queued copy of
-	// the same handler is harmless: the pending mask is empty afterward.
 	BondSaveHandler(0, nullptr);
 
 	return 0;
