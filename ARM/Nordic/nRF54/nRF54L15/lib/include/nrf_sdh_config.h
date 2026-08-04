@@ -80,12 +80,11 @@
 /*
  * Host-side connection-table capacity.
  * IOsonata configures the actual SoftDevice connection and role counts from
- * BtAppCfg_t at runtime. The precompiled nRF54L15 S145 library therefore keeps
- * its SDK, identity, security, and deferred-work tables sized for S145's
- * maximum of five concurrent links.
+ * BtAppCfg_t at runtime. Keep this value identical to bm_config_defaults.h so
+ * the SDK, identity, security, and deferred-work tables have the same layout.
  */
 #ifndef CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT
-#define CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT  5
+#define CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT  2
 #endif
 
 /* GAP event length in 1.25 ms units. Must be >= 6 for coded PHY. */
