@@ -135,6 +135,48 @@ static void BtAdvStateUpdate()
 	}
 }
 
+static bool BtAdvDataCanAllocate(const BtAdvPacket_t *pPacket, uint8_t Type,
+								 int DataLen)
+{
+	if (pPacket == nullptr || pPacket->pData == nullptr || DataLen < 0 ||
+		DataLen > pPacket->MaxLen || DataLen > 254 ||
+		pPacket->Len < 0 || pPacket->Len > pPacket->MaxLen)
+	{
+		return false;
+	}
+
+	int used = pPacket->Len;
+	int idx = 0;
+	int remaining = pPacket->Len;
+
+	while (remaining > 0)
+	{
+		if (remaining < (int)sizeof(BtAdvDataHdr_t))
+		{
+			return false;
+		}
+
+		const BtAdvDataHdr_t *pHdr =
+			(const BtAdvDataHdr_t *)&pPacket->pData[idx];
+		int recordLen = pHdr->Len + 1;
+		if (pHdr->Len == 0 || recordLen > remaining)
+		{
+			return false;
+		}
+
+		if (pHdr->Type == Type)
+		{
+			used -= recordLen;
+			break;
+		}
+
+		idx += recordLen;
+		remaining -= recordLen;
+	}
+
+	return DataLen + 2 <= pPacket->MaxLen - used;
+}
+
 // A connectable advertising set stops when it creates a peripheral link. S145
 // does not report that as BLE_GAP_EVT_ADV_SET_TERMINATED, so the connection
 // observer calls this before deciding whether capacity remains for another link.
@@ -287,14 +329,44 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 
 	BtAdvPacket_t *advpkt = &s_BtAppAdvPkt;
 	BtAdvPacket_t *srpkt  = &s_BtAppSrPkt;
+	int advDataLen = AdvLen + 2;
+	int srDataLen = SrLen + 2;
+
+	// Validate both replacements without touching the buffers. SoftDevice owns
+	// the configured buffers while advertising is active.
+	if ((pAdvData != nullptr && !BtAdvDataCanAllocate(advpkt,
+			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, advDataLen)) ||
+		(pSrData != nullptr && !BtAdvDataCanAllocate(srpkt,
+			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, srDataLen)))
+	{
+		return false;
+	}
+
+	bool wasAdvertising = s_bAdvertising;
+	if (wasAdvertising)
+	{
+		uint32_t err_code = sd_ble_gap_adv_stop(g_BtAppData.AdvHdl);
+		if (err_code != NRF_SUCCESS && err_code != NRF_ERROR_INVALID_STATE)
+		{
+			DEBUG_PRINTF("BtAppAdvManDataSet stop failed: 0x%x\r\n", err_code);
+			return false;
+		}
+		s_bAdvertising = false;
+		BtAdvStateUpdate();
+	}
 
 	if (pAdvData != nullptr)
 	{
 		BtAdvData_t *p = BtAdvDataAllocate(advpkt,
-			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, AdvLen + 2);
+			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, advDataLen);
 
 		if (p == NULL)
 		{
+			DEBUG_PRINTF("BtAppAdvManDataSet adv allocation invariant failed\r\n");
+			if (wasAdvertising)
+			{
+				BtAdvStart();
+			}
 			return false;
 		}
 		uint16_t vendorId = g_BtAppData.AppDevice.VendorId;
@@ -310,10 +382,11 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 	if (pSrData != nullptr)
 	{
 		BtAdvData_t *p = BtAdvDataAllocate(srpkt,
-			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, SrLen + 2);
+			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, srDataLen);
 
 		if (p == NULL)
 		{
+			DEBUG_PRINTF("BtAppAdvManDataSet scan allocation invariant failed\r\n");
 			return false;
 		}
 		uint16_t vendorId = g_BtAppData.AppDevice.VendorId;
@@ -327,30 +400,13 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		s_BtAppAdvData.scan_rsp_data.len = srpkt->Len;
 	}
 
-	// The SoftDevice does not allow a data update while the set is running:
-	// stop, reconfigure, then restore the previous running state.
-	bool wasAdvertising = s_bAdvertising;
-	if (wasAdvertising)
-	{
-		uint32_t err_code = sd_ble_gap_adv_stop(g_BtAppData.AdvHdl);
-		if (err_code != NRF_SUCCESS && err_code != NRF_ERROR_INVALID_STATE)
-		{
-			DEBUG_PRINTF("BtAppAdvManDataSet stop failed: 0x%x\r\n", err_code);
-			return false;
-		}
-		s_bAdvertising = false;
-		BtAdvStateUpdate();
-	}
-
 	uint32_t err_code = sd_ble_gap_adv_set_configure(
 		&g_BtAppData.AdvHdl, &s_BtAppAdvData, NULL);
 	if (err_code != NRF_SUCCESS)
 	{
 		DEBUG_PRINTF("BtAppAdvManDataSet configure failed: 0x%x\r\n", err_code);
-		if (wasAdvertising)
-		{
-			BtAdvStart();
-		}
+		// The live buffers now contain the requested data. Do not restart an
+		// advertising set whose reconfiguration was rejected.
 		return false;
 	}
 
