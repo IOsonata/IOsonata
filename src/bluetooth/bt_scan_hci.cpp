@@ -13,7 +13,7 @@
 
 MIT License
 
-Copyright (c) 2022, I-SYST inc., all rights reserved
+Copyright (c) 2022, I-SYST inc., all rights reserved.
 
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
@@ -43,5 +43,21 @@ void BtAppScanStop()
 
 bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 {
+	if (pCfg == nullptr)
+	{
+		return false;
+	}
+
+	// Existing application configurations predate the Phy field and leave it
+	// zero through aggregate initialization. Preserve that source-compatible
+	// default as 1M at the application boundary, while BtGapScanInit remains
+	// strict for callers constructing HCI command parameters directly.
+	if (pCfg->Param.Phy == 0)
+	{
+		BtGapScanCfg_t cfg = *pCfg;
+		cfg.Param.Phy = BT_GAP_PHY_1MBITS;
+		return BtGapScanInit(&cfg);
+	}
+
 	return BtGapScanInit(pCfg);
 }
