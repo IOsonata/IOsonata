@@ -17,6 +17,13 @@ All other Peer Manager failure handling remains unchanged.
 #include "bt_app_bm_impl.inc"
 #undef pm_handler_disconnect_on_sec_failure
 
+#if !defined(NDEBUG)
+#include "syslog.h"
+#define PM_DEBUG_PRINTF(...)	SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define PM_DEBUG_PRINTF(...)
+#endif
+
 static void BtPmStaleBondRepair(uint32_t Evt, void *pCtx)
 {
 	(void)pCtx;
@@ -28,7 +35,7 @@ static void BtPmStaleBondRepair(uint32_t Evt, void *pCtx)
 	}
 
 	uint32_t err = pm_conn_secure(connHdl, true);
-	DEBUG_PRINTF("BM SEC: stale bond repair hdl=%u status=0x%08lx\r\n",
+	PM_DEBUG_PRINTF("BM SEC: stale bond repair hdl=%u status=0x%08lx\r\n",
 			(unsigned)connHdl, (unsigned long)err);
 
 	if (err != NRF_SUCCESS && err != NRF_ERROR_BUSY &&
@@ -56,7 +63,7 @@ extern "C" void BtPmDisconnectOnSecFailure(const struct pm_evt *pEvt)
 		if (AppEvtHandlerQue((uint32_t)pEvt->conn_handle, nullptr,
 							  BtPmStaleBondRepair))
 		{
-			DEBUG_PRINTF("BM SEC: stale bond repair queued hdl=%u\r\n",
+			PM_DEBUG_PRINTF("BM SEC: stale bond repair queued hdl=%u\r\n",
 					(unsigned)pEvt->conn_handle);
 			return;
 		}
@@ -68,7 +75,7 @@ extern "C" void BtPmDisconnectOnSecFailure(const struct pm_evt *pEvt)
 		pEvt->conn_handle, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
 	if (err != NRF_SUCCESS && err != NRF_ERROR_INVALID_STATE)
 	{
-		DEBUG_PRINTF("BM SEC: failure disconnect hdl=%u status=0x%08lx\r\n",
+		PM_DEBUG_PRINTF("BM SEC: failure disconnect hdl=%u status=0x%08lx\r\n",
 				(unsigned)pEvt->conn_handle, (unsigned long)err);
 	}
 }
