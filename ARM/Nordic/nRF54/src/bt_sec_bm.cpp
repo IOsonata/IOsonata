@@ -119,8 +119,19 @@ SOFTWARE.
 #endif
 
 #include "bt_lesc.h"
+#include "syslog.h"
 
 LOG_MODULE_DECLARE(peer_manager, CONFIG_PEER_MANAGER_LOG_LEVEL);
+
+#ifndef BT_SEC_BM_RECONNECT_TRACE
+#define BT_SEC_BM_RECONNECT_TRACE	1
+#endif
+
+#if BT_SEC_BM_RECONNECT_TRACE
+#define RECONNECT_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define RECONNECT_PRINTF(...)
+#endif
 
 // Event sink in peer_manager.c; the same extern hookup the stock sm uses.
 extern "C" void pm_sm_evt_handler(struct pm_evt *sm_evt);
@@ -504,6 +515,120 @@ static void ParamsRequestProcess(uint16_t ConnHdl, const ble_gap_sec_params_t *p
 // ---- link secure (pm_conn_secure and Security Request) ----------------------
 
 #if defined(CONFIG_SOFTDEVICE_CENTRAL)
+static bool ReconnectIrkPresent(const ble_gap_irk_t *pIrk)
+{
+	if (pIrk == nullptr)
+	{
+		return false;
+	}
+
+	uint8_t present = 0;
+	for (uint32_t i = 0; i < BLE_GAP_SEC_KEY_LEN; i++)
+	{
+		present |= pIrk->irk[i];
+	}
+	return present != 0;
+}
+
+static void ReconnectPeerTrace(uint16_t ConnHdl, uint16_t PeerId)
+{
+#if BT_SEC_BM_RECONNECT_TRACE
+	ble_gap_addr_t connAddr;
+	memset(&connAddr, 0, sizeof(connAddr));
+	uint32_t addrStatus = im_ble_addr_get(ConnHdl, &connAddr);
+
+	if (addrStatus == NRF_SUCCESS)
+	{
+		RECONNECT_PRINTF(
+				"BM ID: hdl=%u peer=%u type=%u addr=%02x:%02x:%02x:%02x:%02x:%02x\r\n",
+				(unsigned)ConnHdl, (unsigned)PeerId,
+				(unsigned)connAddr.addr_type,
+				connAddr.addr[5], connAddr.addr[4], connAddr.addr[3],
+				connAddr.addr[2], connAddr.addr[1], connAddr.addr[0]);
+	}
+	else
+	{
+		RECONNECT_PRINTF(
+				"BM ID: hdl=%u peer=%u address read failed 0x%08lx\r\n",
+				(unsigned)ConnHdl, (unsigned)PeerId,
+				(unsigned long)addrStatus);
+	}
+
+	if (PeerId != PM_PEER_ID_INVALID)
+	{
+		return;
+	}
+
+	uint16_t candidateId;
+	uint16_t iter;
+	struct pm_peer_data_const peerData;
+	uint8_t buffer[PM_PEER_DATA_MAX_SIZE];
+
+	memset(&peerData, 0, sizeof(peerData));
+	memset(buffer, 0, sizeof(buffer));
+	peerData.all_data = buffer;
+	pds_peer_data_iterate_prepare(&iter);
+
+	while (pds_peer_data_iterate(PM_PEER_DATA_ID_BONDING, &candidateId,
+								 &peerData, &iter))
+	{
+		const ble_gap_id_key_t *pId = &peerData.bonding_data->peer_ble_id;
+		bool direct = addrStatus == NRF_SUCCESS &&
+			connAddr.addr_type == pId->id_addr_info.addr_type &&
+			memcmp(connAddr.addr, pId->id_addr_info.addr,
+					BLE_GAP_ADDR_LEN) == 0;
+		bool rpa = addrStatus == NRF_SUCCESS &&
+			connAddr.addr_type == BLE_GAP_ADDR_TYPE_RANDOM_PRIVATE_RESOLVABLE &&
+			ReconnectIrkPresent(&pId->id_info) &&
+			im_address_resolve(&connAddr, &pId->id_info);
+
+		RECONNECT_PRINTF(
+				"BM ID: candidate=%u type=%u addr=%02x:%02x:%02x:%02x:%02x:%02x "
+				"irk=%u direct=%u rpa=%u\r\n",
+				(unsigned)candidateId, (unsigned)pId->id_addr_info.addr_type,
+				pId->id_addr_info.addr[5], pId->id_addr_info.addr[4],
+				pId->id_addr_info.addr[3], pId->id_addr_info.addr[2],
+				pId->id_addr_info.addr[1], pId->id_addr_info.addr[0],
+				ReconnectIrkPresent(&pId->id_info) ? 1U : 0U,
+				direct ? 1U : 0U, rpa ? 1U : 0U);
+	}
+#else
+	(void)ConnHdl;
+	(void)PeerId;
+#endif
+}
+
+static void ReconnectBondTrace(uint16_t PeerId, uint32_t Status,
+							   const struct pm_peer_data_bonding *pBond)
+{
+#if BT_SEC_BM_RECONNECT_TRACE
+	if (Status != NRF_SUCCESS || pBond == nullptr)
+	{
+		RECONNECT_PRINTF("BM SEC: bond read peer=%u status=0x%08lx\r\n",
+				(unsigned)PeerId, (unsigned long)Status);
+		return;
+	}
+
+	const ble_gap_addr_t *pAddr = &pBond->peer_ble_id.id_addr_info;
+	RECONNECT_PRINTF(
+			"BM SEC: bond peer=%u own(sc=%u len=%u) peer(sc=%u len=%u) "
+			"idtype=%u id=%02x:%02x:%02x:%02x:%02x:%02x irk=%u\r\n",
+			(unsigned)PeerId,
+			(unsigned)pBond->own_ltk.enc_info.lesc,
+			(unsigned)pBond->own_ltk.enc_info.ltk_len,
+			(unsigned)pBond->peer_ltk.enc_info.lesc,
+			(unsigned)pBond->peer_ltk.enc_info.ltk_len,
+			(unsigned)pAddr->addr_type,
+			pAddr->addr[5], pAddr->addr[4], pAddr->addr[3],
+			pAddr->addr[2], pAddr->addr[1], pAddr->addr[0],
+			ReconnectIrkPresent(&pBond->peer_ble_id.id_info) ? 1U : 0U);
+#else
+	(void)PeerId;
+	(void)Status;
+	(void)pBond;
+#endif
+}
+
 static uint32_t LinkSecureCentralEncrypt(uint16_t ConnHdl, uint16_t PeerId)
 {
 	struct pm_peer_data_bonding bondData;
@@ -516,6 +641,7 @@ static uint32_t LinkSecureCentralEncrypt(uint16_t ConnHdl, uint16_t PeerId)
 
 	uint32_t r = pds_peer_data_read(PeerId, PM_PEER_DATA_ID_BONDING,
 									&peerData, &bufSize);
+	ReconnectBondTrace(PeerId, r, r == NRF_SUCCESS ? &bondData : nullptr);
 	if (r == NRF_SUCCESS)
 	{
 		// Peer distributed its LTK as peripheral; for LESC both sides hold
@@ -541,10 +667,17 @@ static uint32_t LinkSecureCentralEncrypt(uint16_t ConnHdl, uint16_t PeerId)
 
 	if (pKey == NULL || !pKey->enc_info.ltk_len)
 	{
+		RECONNECT_PRINTF("BM SEC: peer=%u has no usable LTK, pair instead\r\n",
+				(unsigned)PeerId);
 		return NRF_ERROR_NOT_FOUND;		// no usable key; caller falls back to pairing
 	}
 
 	r = sd_ble_gap_encrypt(ConnHdl, &pKey->master_id, &pKey->enc_info);
+	RECONNECT_PRINTF(
+			"BM SEC: encrypt hdl=%u peer=%u sc=%u len=%u ediv=0x%04x status=0x%08lx\r\n",
+			(unsigned)ConnHdl, (unsigned)PeerId,
+			(unsigned)pKey->enc_info.lesc, (unsigned)pKey->enc_info.ltk_len,
+			(unsigned)pKey->master_id.ediv, (unsigned long)r);
 	if (r == NRF_SUCCESS)
 	{
 		SecProcStart(ConnHdl, true, PM_CONN_SEC_PROCEDURE_ENCRYPTION);
@@ -597,6 +730,7 @@ static uint32_t LinkSecure(uint16_t ConnHdl, bool bNullParams, bool bForceRepair
 		if (!bForceRepairing)
 		{
 			uint16_t peerId = im_peer_id_get_by_conn_handle(ConnHdl);
+			ReconnectPeerTrace(ConnHdl, peerId);
 
 			if (peerId != PM_PEER_ID_INVALID)
 			{
@@ -1080,7 +1214,6 @@ static void PendingPumpsRun(void)
 #define BT_SEC_BM_PDS_TRACE
 
 #ifdef BT_SEC_BM_PDS_TRACE
-#include "syslog.h"
 #define PDS_PRINTF(...)			SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define PDS_PRINTF(...)
@@ -1461,4 +1594,3 @@ uint32_t sm_link_secure(uint16_t conn_handle, bool force_repairing)
 	}
 	return LinkSecure(conn_handle, s_pSecParams == NULL, force_repairing, false);
 }
-
