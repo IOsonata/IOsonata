@@ -918,9 +918,14 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 {
-	// Standard peer_manager housekeeping: applies the event to internal state,
-	// disconnects on security failure, and cleans flash on data update.
-	pm_handler_on_pm_evt(p_evt);
+	// IOsonata starts security once from BtAppRun for both new and restored
+	// peers. The Nordic helper also starts it immediately for a restored peer,
+	// before the remaining CONNECTED observers run, so skip that one helper
+	// action while preserving its handling for all other Peer Manager events.
+	if (p_evt->evt_id != PM_EVT_BONDED_PEER_CONNECTED)
+	{
+		pm_handler_on_pm_evt(p_evt);
+	}
 	pm_handler_disconnect_on_sec_failure(p_evt);
 	pm_handler_flash_clean(p_evt);
 
