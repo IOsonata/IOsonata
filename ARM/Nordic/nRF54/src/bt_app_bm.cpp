@@ -49,7 +49,7 @@ static void BtPmStaleBondRepair(uint32_t Evt, void *pCtx)
 
 	EnableInterrupt(intState);
 
-	if (!found || !pm_conn_state_valid(connHdl))
+	if (!found || !ble_conn_state_valid(connHdl))
 	{
 		return;
 	}
