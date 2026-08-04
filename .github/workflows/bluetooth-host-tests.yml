@@ -5,20 +5,37 @@ on:
     branches:
       - bt_update
       - bt_conformance
+      - bt_conformance_merge
     paths:
       - "include/bluetooth/**"
       - "src/bluetooth/**"
       - "tests/bluetooth/**"
-      - "ARM/Nordic/nRF52/src/bt_gatt_nrf52.cpp"
-      - "ARM/Nordic/nRF54/src/bt_gatt_bm.cpp"
+      - "include/app_evt_handler.h"
+      - "src/app_evt_handler.cpp"
+      - "include/cfifo.h"
+      - "src/cfifo.c"
+      - "ARM/Nordic/nRF52/src/bt_*"
+      - "ARM/Nordic/nRF54/src/bt_*"
+      - "ARM/Nordic/nRF54/src/peer_data_storage.c"
+      - "ARM/Nordic/src/bt_*"
+      - "ARM/ST/STM32WBAxx/src/bt_*"
+      - "exemples/bluetooth/**"
       - ".github/workflows/bluetooth-host-tests.yml"
   pull_request:
     paths:
       - "include/bluetooth/**"
       - "src/bluetooth/**"
       - "tests/bluetooth/**"
-      - "ARM/Nordic/nRF52/src/bt_gatt_nrf52.cpp"
-      - "ARM/Nordic/nRF54/src/bt_gatt_bm.cpp"
+      - "include/app_evt_handler.h"
+      - "src/app_evt_handler.cpp"
+      - "include/cfifo.h"
+      - "src/cfifo.c"
+      - "ARM/Nordic/nRF52/src/bt_*"
+      - "ARM/Nordic/nRF54/src/bt_*"
+      - "ARM/Nordic/nRF54/src/peer_data_storage.c"
+      - "ARM/Nordic/src/bt_*"
+      - "ARM/ST/STM32WBAxx/src/bt_*"
+      - "exemples/bluetooth/**"
       - ".github/workflows/bluetooth-host-tests.yml"
   workflow_dispatch:
 
