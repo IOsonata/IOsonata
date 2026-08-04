@@ -192,6 +192,16 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 		return false;
 	}
 
+	// This command layout contains one Scan_Type/Interval/Window block. HCI
+	// requires one such block for every selected scanning PHY. Support either
+	// 1M or Coded here, and reject zero, 2M (not a scanning PHY), or a combined
+	// mask instead of sending a short parameter list for the advertised mask.
+	if (pCfg->Param.Phy != BT_GAP_PHY_1MBITS &&
+		pCfg->Param.Phy != BT_GAP_PHY_CODED)
+	{
+		return false;
+	}
+
 	BtHciDevice_t *pDev = BtGapHciDev();
 	if (pDev == nullptr)
 	{
