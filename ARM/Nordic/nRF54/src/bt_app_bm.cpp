@@ -4,9 +4,9 @@
 @brief	nRF54 bare-metal Bluetooth application wrapper.
 
 The implementation body remains in bt_app_bm_impl.inc.  This wrapper replaces
-one sdk-nrf-bm Peer Manager convenience handler: a locally missing LTK is a
-recoverable stale-bond condition, not a reason to disconnect immediately.
-All other Peer Manager failure handling remains unchanged.
+one sdk-nrf-bm Peer Manager convenience handler: a missing LTK is a recoverable
+stale-bond condition, not a reason to disconnect immediately.  All other Peer
+Manager failure handling remains unchanged.
 
 ----------------------------------------------------------------------------*/
 
@@ -24,12 +24,32 @@ All other Peer Manager failure handling remains unchanged.
 #define PM_DEBUG_PRINTF(...)
 #endif
 
+static bool s_StaleBondRepairPending[CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT];
+static uint16_t s_StaleBondRepairHdl[CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT];
+
+static bool BtPmStaleBondRepairQueue(uint16_t ConnHdl);
+
 static void BtPmStaleBondRepair(uint32_t Evt, void *pCtx)
 {
 	(void)pCtx;
 	uint16_t connHdl = (uint16_t)Evt;
+	bool found = false;
+	uint32_t intState = DisableInterrupt();
 
-	if (!pm_conn_state_valid(connHdl))
+	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
+	{
+		if (s_StaleBondRepairPending[i] &&
+			s_StaleBondRepairHdl[i] == connHdl)
+		{
+			s_StaleBondRepairPending[i] = false;
+			found = true;
+			break;
+		}
+	}
+
+	EnableInterrupt(intState);
+
+	if (!found || !pm_conn_state_valid(connHdl))
 	{
 		return;
 	}
@@ -46,6 +66,56 @@ static void BtPmStaleBondRepair(uint32_t Evt, void *pCtx)
 	}
 }
 
+static bool BtPmStaleBondRepairQueue(uint16_t ConnHdl)
+{
+	int freeIdx = -1;
+	uint32_t intState = DisableInterrupt();
+
+	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
+	{
+		if (s_StaleBondRepairPending[i])
+		{
+			if (s_StaleBondRepairHdl[i] == ConnHdl)
+			{
+				EnableInterrupt(intState);
+				return true;	// local and remote missing-key reports may both arrive
+			}
+		}
+		else if (freeIdx < 0)
+		{
+			freeIdx = i;
+		}
+	}
+
+	if (freeIdx >= 0)
+	{
+		s_StaleBondRepairHdl[freeIdx] = ConnHdl;
+		s_StaleBondRepairPending[freeIdx] = true;
+	}
+
+	EnableInterrupt(intState);
+
+	if (freeIdx < 0)
+	{
+		return false;
+	}
+
+	if (AppEvtHandlerQue((uint32_t)ConnHdl, nullptr, BtPmStaleBondRepair))
+	{
+		return true;
+	}
+
+	intState = DisableInterrupt();
+	if (s_StaleBondRepairPending[freeIdx] &&
+		s_StaleBondRepairHdl[freeIdx] == ConnHdl)
+	{
+		s_StaleBondRepairPending[freeIdx] = false;
+	}
+	EnableInterrupt(intState);
+
+	return false;
+}
+
 extern "C" void BtPmDisconnectOnSecFailure(const struct pm_evt *pEvt)
 {
 	if (pEvt == nullptr || pEvt->evt_id != PM_EVT_CONN_SEC_FAILED)
@@ -54,17 +124,17 @@ extern "C" void BtPmDisconnectOnSecFailure(const struct pm_evt *pEvt)
 	}
 
 	if (pEvt->conn_sec_failed.procedure == PM_CONN_SEC_PROCEDURE_ENCRYPTION &&
-		pEvt->conn_sec_failed.error == PM_CONN_SEC_ERROR_PIN_OR_KEY_MISSING &&
-		pEvt->conn_sec_failed.error_src == BLE_GAP_SEC_STATUS_SOURCE_LOCAL)
+		pEvt->conn_sec_failed.error == PM_CONN_SEC_ERROR_PIN_OR_KEY_MISSING)
 	{
-		// The peer attempted to use a bond that is absent locally.  Let the
-		// failed encryption event unwind, then request fresh pairing from the
-		// application context.  Do not disconnect the still-valid link.
-		if (AppEvtHandlerQue((uint32_t)pEvt->conn_handle, nullptr,
-							  BtPmStaleBondRepair))
+		// Either side can discover the stale bond first.  Let the failed
+		// encryption event unwind, then request fresh pairing from application
+		// context.  Duplicate local/remote failure reports share one request.
+		if (BtPmStaleBondRepairQueue(pEvt->conn_handle))
 		{
-			PM_DEBUG_PRINTF("BM SEC: stale bond repair queued hdl=%u\r\n",
-					(unsigned)pEvt->conn_handle);
+			PM_DEBUG_PRINTF(
+				"BM SEC: stale bond repair queued hdl=%u src=%u\r\n",
+				(unsigned)pEvt->conn_handle,
+				(unsigned)pEvt->conn_sec_failed.error_src);
 			return;
 		}
 	}
