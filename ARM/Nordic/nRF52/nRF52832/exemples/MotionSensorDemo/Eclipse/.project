@@ -70,5 +70,10 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/ag_icm456x.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/sensors/agm_icm20948_old.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/agm_icm20948_old.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

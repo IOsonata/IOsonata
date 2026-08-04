@@ -168,7 +168,7 @@ class MockIntrf : public DeviceIntrf {
 public:
 	MockIntrf() { MockIntrfInit(&vIntrf); }
 
-	operator DevIntrf_t * () { return &vIntrf; }
+	operator DevIntrf_t * const () { return &vIntrf; }
 	uint32_t Rate(uint32_t DataRate) { (void)DataRate; return 0; }
 	uint32_t Rate(void) { return 0; }
 	bool StartRx(uint32_t DevAddr) { return MockStartRx(&vIntrf, DevAddr); }

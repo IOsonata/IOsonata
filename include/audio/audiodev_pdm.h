@@ -125,9 +125,9 @@ static inline void PdmDisable(PdmDev_t *const pDev) { DeviceIntrfDisable(&pDev->
 class Pdm : public DeviceIntrf {
 public:
 	bool Init(const PdmCfg_t &Cfg) { return PdmInit(&vDevData, &Cfg); }
-	operator DEVINTRF * () { return &vDevData.DevIntrf; }
+	operator DEVINTRF * const () { return &vDevData.DevIntrf; }
 	operator PdmDev_t& () { return vDevData; }
-	operator PdmDev_t* () { return &vDevData; }
+	operator PdmDev_t* const () { return &vDevData; }
 	uint32_t Rate(uint32_t RateHz) { return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz); }
 	uint32_t Rate(void) { return vDevData.DevIntrf.GetRate(&vDevData.DevIntrf); }	// Get rate in Hz
 	void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }

@@ -145,9 +145,9 @@ static inline void I2SDisable(I2SDev_t *const pDev) { DeviceIntrfDisable(&pDev->
 class I2S : public DeviceIntrf {
 public:
 	bool Init(const I2SCfg_t &Cfg) { return I2SInit(&vDevData, &Cfg); }
-	operator DevIntrf_t * () { return &vDevData.DevIntrf; }
+	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
 	operator I2SDev_t& () { return vDevData; }
-	operator I2SDev_t* () { return &vDevData; }
+	operator I2SDev_t* const () { return &vDevData; }
 	uint32_t Rate(uint32_t RateHz) { return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz); }
 	uint32_t Rate(void) { return vDevData.DevIntrf.GetRate(&vDevData.DevIntrf); }	// Get rate in Hz
 	void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }

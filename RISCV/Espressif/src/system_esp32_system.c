@@ -362,7 +362,7 @@ void SystemOscInit(void)
 {
 }
 
-void *SystemRamStart(void)
+void * const SystemRamStart(void)
 {
 	extern unsigned long __data_start__;
 	return (void *)&__data_start__;

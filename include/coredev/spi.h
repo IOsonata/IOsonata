@@ -325,9 +325,9 @@ public:
 
 	bool Init(const SPICfg_t &CfgData) { return SPIInit(&vDevData, &CfgData); }
 
-	operator DevIntrf_t * () { return &vDevData.DevIntrf; }
+	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
 	operator SPIDev_t& () { return vDevData; };			// Get config data
-	operator SPIDev_t * () { return &vDevData; };	// Get pointer to device data
+	operator SPIDev_t * const () { return &vDevData; };	// Get pointer to device data
 	uint32_t Rate(uint32_t RateHz) { return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz); }
 	uint32_t Rate(void) { return vDevData.DevIntrf.GetRate(&vDevData.DevIntrf); }	// Get rate in Hz
 	void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }

@@ -198,7 +198,7 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt);
 // anything has to look up or remember.
 static NvmDevIntrf_t s_NvmDev;
 
-DevIntrf_t *NvmMcuDevIntrf(void)
+DevIntrf_t * const NvmMcuDevIntrf(void)
 {
 	return &s_NvmDev.DevIntrf;
 }

@@ -198,7 +198,7 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 			break;
 	}
 
-	return I2C_BUFF_SIZE;
+	return 0;
 }
 
 void HardwareInit()

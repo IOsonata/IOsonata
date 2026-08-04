@@ -1262,11 +1262,11 @@ public:
 
 	AuxIntrfIcm456x(AuxIntrfIcm456x&);	// Copy ctor not allowed
 
-	operator AgIcm456x * () { return (AgIcm456x *)vIntrfData.pDevData; }
-	virtual operator DevIntrf_t * () { return &vIntrfData; }
+	operator AgIcm456x * const () { return (AgIcm456x * const)vIntrfData.pDevData; }
+	virtual operator DevIntrf_t * const () { return &vIntrfData; }
 
 	bool Init(AgIcm456x * const pIcm);
-	//operator DevIntrf_t * () { return &vDevData; }
+	//operator DevIntrf_t * const () { return &vDevData; }
 	uint32_t Rate(uint32_t RateHz) { return 100000; }
 	uint32_t Rate(void) { return 100000; };	// Get rate in Hz
 	void Enable(void);
@@ -1415,7 +1415,7 @@ public:
 
 	AgIcm456x();
 
-	operator AuxIntrfIcm456x * () { return &vAuxIntrf; }
+	operator AuxIntrfIcm456x * const () { return &vAuxIntrf; }
 
 	/**
 	 * @brief	Initialize accelerometer sensor.

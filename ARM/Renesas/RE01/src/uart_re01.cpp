@@ -104,7 +104,7 @@ static Re01UartDev_t s_Re01UartDev[] = {
 
 static const int s_NbRe01UartDev = sizeof(s_Re01UartDev) / sizeof(Re01UartDev_t);
 
-UARTDEV const *UARTGetInstance(int DevNo)
+UARTDEV const * const UARTGetInstance(int DevNo)
 {
 	if (DevNo < 0 || DevNo >= s_NbRe01UartDev)
 	{

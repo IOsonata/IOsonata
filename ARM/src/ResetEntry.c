@@ -83,7 +83,7 @@ uint32_t SystemMicroSecLoopCnt = 1;
  *
  * @return	Pointer to start of RAM
  */
-void *SystemRamStart(void)
+void * const SystemRamStart(void)
 {
 	return &__data_start__;
 }

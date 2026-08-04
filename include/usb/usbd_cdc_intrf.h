@@ -73,7 +73,7 @@ class UsbdCdcIntrf : public DeviceIntrf {
 public:
 	bool Init(const UsbdCdcIntrfCfg_t &Cfg);
 
-	operator DevIntrf_t * () { return &vUsbDevIntrf.DevIntrf; }	// Get device interface data
+	operator DevIntrf_t * const () { return &vUsbDevIntrf.DevIntrf; }	// Get device interface data
 
 	// Set data rate in bits/sec (Hz)
 	virtual uint32_t Rate(uint32_t DataRate) { return DeviceIntrfSetRate(&vUsbDevIntrf.DevIntrf, DataRate); }

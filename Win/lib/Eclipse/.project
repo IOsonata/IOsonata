@@ -86,19 +86,24 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/device.h</locationURI>
 		</link>
 		<link>
+			<name>include/device_intrf copy.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/device_intrf%20copy.h</locationURI>
+		</link>
+		<link>
 			<name>include/device_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/device_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>include/storage/diskio.h</name>
+			<name>include/diskio.h</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/storage/diskio.h</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/include/diskio.h</locationURI>
 		</link>
 		<link>
-			<name>include/storage/diskio_flash.h</name>
+			<name>include/diskio_flash.h</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/storage/diskio_flash.h</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/include/diskio_flash.h</locationURI>
 		</link>
 		<link>
 			<name>include/display</name>
@@ -111,9 +116,9 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/excelitas_serlink.h</locationURI>
 		</link>
 		<link>
-			<name>include/storage/fatfs.h</name>
+			<name>include/fatfs.h</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/storage/fatfs.h</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/include/fatfs.h</locationURI>
 		</link>
 		<link>
 			<name>include/iatomic.h</name>
@@ -166,9 +171,9 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/pulse_train.h</locationURI>
 		</link>
 		<link>
-			<name>include/coredev/pwm.h</name>
+			<name>include/pwm.h</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/coredev/pwm.h</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/include/pwm.h</locationURI>
 		</link>
 		<link>
 			<name>include/pwrmgnt</name>
@@ -176,14 +181,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>include/storage/sdcard.h</name>
+			<name>include/sdcard.h</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/storage/sdcard.h</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/include/sdcard.h</locationURI>
 		</link>
 		<link>
-			<name>include/storage/seep.h</name>
+			<name>include/seep.h</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/storage/seep.h</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/include/seep.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors</name>
@@ -276,14 +281,14 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/device_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/storage/diskio_flash.cpp</name>
+			<name>src/diskio_flash.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/storage/diskio_flash.cpp</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/diskio_flash.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/storage/diskio_impl.cpp</name>
+			<name>src/diskio_impl.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/storage/diskio_impl.cpp</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/diskio_impl.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display</name>
@@ -296,14 +301,14 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/excelitas_serlink.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/storage/fatfs.cpp</name>
+			<name>src/fatfs.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/storage/fatfs.cpp</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/fatfs.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/storage/fatfs_vdisk.cpp</name>
+			<name>src/fatfs_vdisk.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/storage/fatfs_vdisk.cpp</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/fatfs_vdisk.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/motion</name>
@@ -366,14 +371,14 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/sbuffer.c</locationURI>
 		</link>
 		<link>
-			<name>src/storage/sdcard_impl.cpp</name>
+			<name>src/sdcard_impl.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/storage/sdcard_impl.cpp</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/sdcard_impl.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/storage/seep_impl.cpp</name>
+			<name>src/seep_impl.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/storage/seep_impl.cpp</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/seep_impl.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors</name>
@@ -424,6 +429,11 @@
 			<name>src/utf8cvt.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/utf8cvt.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bleadv_mandata.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/bluetooth/bleadv_mandata.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/blueio_blesrvc.h</name>

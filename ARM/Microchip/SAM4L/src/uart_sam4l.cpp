@@ -113,7 +113,7 @@ static SAM4L_UARTDEV s_Sam4lUartDev[] = {
 
 static const int s_NbSam4lUartDev = sizeof(s_Sam4lUartDev) / sizeof(SAM4L_UARTDEV);
 
-UARTDev_t const *UARTGetInstance(int DevNo)
+UARTDev_t const * const UARTGetInstance(int DevNo)
 {
 	if (DevNo < 0 || DevNo >= s_NbSam4lUartDev)
 	{

@@ -206,7 +206,7 @@ extern "C" {
 // Require implementations
 bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfgData);
 void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState);
-UARTDev_t const *UARTGetInstance(int DevNo);
+UARTDev_t const * const UARTGetInstance(int DevNo);
 
 static inline int UARTGetRate(UARTDev_t * const pDev) { return DeviceIntrfGetRate(&pDev->DevIntrf); }
 static inline int UARTSetRate(UARTDev_t * const pDev, int Rate) { return DeviceIntrfSetRate(&pDev->DevIntrf, Rate); }
@@ -245,8 +245,8 @@ public:
 		return UARTInit(&vDevData, &CfgData);
 	}
 
-	operator DevIntrf_t * () { return &vDevData.DevIntrf; }
-	operator UARTDev_t * () { return &vDevData; }
+	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
+	operator UARTDev_t *  const () { return &vDevData; }
 
 	// Set data baudrate
 	virtual uint32_t Rate(uint32_t DataRate) { return UARTSetRate(&vDevData, DataRate); }

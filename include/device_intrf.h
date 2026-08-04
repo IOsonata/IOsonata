@@ -626,7 +626,7 @@ public:
 	 *
 	 * @return	Pointer to internal DEVINTRF to be used with C interface functions
 	 */
-	virtual operator DevIntrf_t * () = 0;	// Get device interface data (handle)
+	virtual operator DevIntrf_t * const () = 0;	// Get device interface data (handle)
 
 	/**
 	 * @brief   Get interface type

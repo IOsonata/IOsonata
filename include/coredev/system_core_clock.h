@@ -244,7 +244,7 @@ void SystemOscInit(void);
  *
  * @return	Pointer to start of RAM
  */
-void *SystemRamStart(void);
+void * const SystemRamStart(void);
 
 #ifdef __cplusplus
 }
