@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract one C/C++ function from a source file without copying its body."""
+"""Extract the production nRF54 BtAppInit function for its host test."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ def extract_function(source: str, signature: str) -> str:
 
 
 def host_compat(function: str) -> str:
-	"""Apply only strict-host compile fixes without changing control flow."""
+	"""Apply strict-host adaptations without changing production control flow."""
 	old = "\t\t.Role = pCfg->Role,"
 	new = "\t\t.Role = static_cast<uint8_t>(pCfg->Role),"
 	if old not in function:
@@ -98,12 +98,18 @@ def main() -> int:
 		print(f"extract_bt_app_init.py: {exc}", file=sys.stderr)
 		return 1
 
-	args.output.parent.mkdir(parents=True, exist_ok=True)
-	args.output.write_text(
-		"// Generated from the production nRF54 BM port. Do not edit.\n" +
-		function + "\n",
-		encoding="utf-8",
+	# BtAppInit resets two nRF54 translation-unit-local state machines before
+	# doing any externally visible initialization. Their behavior is tested in
+	# the production port; the isolated host test only needs no-op definitions
+	# so it can execute the complete production BtAppInit control flow.
+	preamble = (
+		"// Generated from the production nRF54 BM port. Do not edit.\n"
+		"static void SecurePendingReset() {}\n"
+		"static void BtSmpOobDataClearInternal() {}\n\n"
 	)
+
+	args.output.parent.mkdir(parents=True, exist_ok=True)
+	args.output.write_text(preamble + function + "\n", encoding="utf-8")
 	return 0
 
 
