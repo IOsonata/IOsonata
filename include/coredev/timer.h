@@ -418,7 +418,7 @@ public:
 	Timer() { vTimer.pObj = this; }
 	virtual ~Timer() {}
 
-	virtual operator TimerDev_t * const () { return &vTimer; }
+	virtual operator TimerDev_t * () { return &vTimer; }
 
     /**
      * @brief   Timer initialization.

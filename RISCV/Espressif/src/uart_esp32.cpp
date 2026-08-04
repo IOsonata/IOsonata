@@ -169,7 +169,7 @@ void Esp32UartDebugSnapshot(void)
 }
 }
 
-UARTDev_t const * const UARTGetInstance(int DevNo)
+UARTDev_t const *UARTGetInstance(int DevNo)
 {
     if (DevNo < 0 || DevNo >= s_NbUartDev) return nullptr;
     return s_Esp32UartDev[DevNo].pUartDev;

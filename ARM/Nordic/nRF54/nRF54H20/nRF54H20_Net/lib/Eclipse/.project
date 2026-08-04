@@ -81,11 +81,6 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/vector_nrf52h20_net.c</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/ble_conn.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/ble_conn.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_adv.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
@@ -121,11 +116,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_ctlr.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_ctlr_att.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_ctlr_att.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_dev.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_dev.cpp</locationURI>
@@ -159,11 +149,6 @@
 			<name>src/bluetooth/bt_hci_host.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_hci_host.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_hcix.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_hcix.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_host.cpp</name>

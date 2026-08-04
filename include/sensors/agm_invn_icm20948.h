@@ -80,7 +80,7 @@ public:
 private:
 
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
-	virtual operator inv_icm20948_t * const () = 0;	// Get device interface data (handle)
+	virtual operator inv_icm20948_t * () = 0;	// Get device interface data (handle)
 };
 
 class GyroInvnIcm20948 : public GyroSensor {
@@ -103,7 +103,7 @@ public:
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
-	virtual operator inv_icm20948_t * const () = 0;	// Get device interface data (handle)
+	virtual operator inv_icm20948_t * () = 0;	// Get device interface data (handle)
 };
 
 class MagInvnIcm20948 : public MagAk09916 {
@@ -138,7 +138,7 @@ private:
 	//virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) = 0;
 
 	uint32_t vDevAddr;
-	virtual operator inv_icm20948_t * const () = 0;	// Get device interface data (handle)
+	virtual operator inv_icm20948_t * () = 0;	// Get device interface data (handle)
 };
 
 class AgmInvnIcm20948 : public AccelInvnIcm20948, public GyroInvnIcm20948, public MagInvnIcm20948 {
@@ -223,7 +223,7 @@ public:
 	void UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg);
 	void UpdateData(SENSOR_TYPE Type, uint64_t Timestamp, uint8_t * const pData);
 
-	operator inv_icm20948_t * const () { return &vIcmDevice; }
+	operator inv_icm20948_t * () { return &vIcmDevice; }
 
 	static int InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen);
 	static int InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen);

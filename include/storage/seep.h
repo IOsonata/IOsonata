@@ -339,7 +339,7 @@ public:
      *
      * @return	Pointer to internal SEEPDEV data.
      */
-    operator SeepDev_t*  const () { return &vDevData; }
+    operator SeepDev_t* () { return &vDevData; }
 
 protected:
 

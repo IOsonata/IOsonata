@@ -233,7 +233,7 @@ static NvmIntrfStat_t s_Stat;
 
 static NvmDevIntrf_t s_NvmDev;
 
-DevIntrf_t * const NvmMcuDevIntrf(void)
+DevIntrf_t *NvmMcuDevIntrf(void)
 {
 	return &s_NvmDev.DevIntrf;
 }

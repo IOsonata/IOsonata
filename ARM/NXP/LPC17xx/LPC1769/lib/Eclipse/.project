@@ -91,14 +91,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/device_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>include/diskio.h</name>
+			<name>include/storage/diskio.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/diskio.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio.h</locationURI>
 		</link>
 		<link>
-			<name>include/diskio_flash.h</name>
+			<name>include/storage/diskio_flash.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/diskio_flash.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_flash.h</locationURI>
 		</link>
 		<link>
 			<name>include/display</name>
@@ -106,9 +106,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>include/fatfs.h</name>
+			<name>include/storage/fatfs.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/fatfs.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
 		</link>
 		<link>
 			<name>include/ibb_mbedpresso.h</name>
@@ -161,9 +161,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
 		</link>
 		<link>
-			<name>include/pwm.h</name>
+			<name>include/coredev/pwm.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/pwm.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
 		</link>
 		<link>
 			<name>include/pwrmgnt</name>
@@ -171,14 +171,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>include/sdcard.h</name>
+			<name>include/storage/sdcard.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sdcard.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/sdcard.h</locationURI>
 		</link>
 		<link>
-			<name>include/seep.h</name>
+			<name>include/storage/seep.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/seep.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/seep.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors</name>
