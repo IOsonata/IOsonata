@@ -19,6 +19,7 @@ Copyright (c) 2026, I-SYST inc. All rights reserved.
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -71,6 +72,8 @@ typedef struct __Bt_App_Bm_Data {
 #pragma pack(pop)
 
 static BtAppBmData_t s_BmData = { {0} };
+static bool s_bAdvertising;
+static uint8_t s_PeripheralLinkCount;
 
 alignas(4) static uint8_t s_BtAppAdvBuff[256];
 alignas(4) static BtAdvPacket_t s_BtAppAdvPkt = { 255, 0, s_BtAppAdvBuff };
@@ -83,10 +86,74 @@ static ble_gap_adv_data_t s_BtAppAdvData = {
 	.scan_rsp_data = { s_BtAppSrBuff, 0 }
 };
 
+static uint16_t BtAdvPeripheralConnCount()
+{
+	uint16_t count = 0;
+	uint16_t peerCount = BtPeerCount();
+
+	for (uint16_t i = 0; i < peerCount; i++)
+	{
+		BtDevice_t *pPeer = BtPeerSlot(i);
+		if (pPeer != nullptr && pPeer->Conn.Hdl != BT_CONN_HDL_INVALID &&
+			pPeer->Conn.Role == BT_CONN_ROLE_PERIPHERAL)
+		{
+			count++;
+		}
+	}
+
+	return count;
+}
+
+static bool BtAdvCanStart()
+{
+	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
+
+	if ((role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)) == 0)
+	{
+		return false;
+	}
+
+	if (role & BTAPP_ROLE_PERIPHERAL)
+	{
+		return s_PeripheralLinkCount != 0 &&
+			BtAdvPeripheralConnCount() < s_PeripheralLinkCount;
+	}
+
+	return true;
+}
+
+static void BtAdvStateUpdate()
+{
+	if (BtPeerIsConnected())
+	{
+		g_BtAppData.State = BTAPP_STATE_CONNECTED;
+	}
+	else
+	{
+		g_BtAppData.State = s_bAdvertising ?
+			BTAPP_STATE_ADVERTISING : BTAPP_STATE_IDLE;
+	}
+}
+
+// A connectable advertising set stops when it creates a peripheral link. S145
+// does not report that as BLE_GAP_EVT_ADV_SET_TERMINATED, so the connection
+// observer calls this before deciding whether capacity remains for another link.
+void BtAdvBmConnected()
+{
+	s_bAdvertising = false;
+	BtAdvStateUpdate();
+}
+
+// Timeout and event-limit termination are reported explicitly by S145.
+void BtAdvBmTerminated()
+{
+	s_bAdvertising = false;
+	BtAdvStateUpdate();
+}
+
 void BtAdvStart()
 {
-	// The question here is whether any link is up, not which one.
-	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING || BtPeerIsConnected())
+	if (s_bAdvertising || !BtAdvCanStart())
 	{
 		return;
 	}
@@ -94,7 +161,8 @@ void BtAdvStart()
 	uint32_t err_code = sd_ble_gap_adv_start(g_BtAppData.AdvHdl, BTAPP_CONN_CFG_TAG);
 	if (err_code == NRF_SUCCESS)
 	{
-		g_BtAppData.State = BTAPP_STATE_ADVERTISING;
+		s_bAdvertising = true;
+		BtAdvStateUpdate();
 	}
 	else
 	{
@@ -104,8 +172,20 @@ void BtAdvStart()
 
 void BtAdvStop()
 {
-	sd_ble_gap_adv_stop(g_BtAppData.AdvHdl);
-	g_BtAppData.State = BTAPP_STATE_IDLE;
+	if (!s_bAdvertising)
+	{
+		return;
+	}
+
+	uint32_t err_code = sd_ble_gap_adv_stop(g_BtAppData.AdvHdl);
+	if (err_code != NRF_SUCCESS && err_code != NRF_ERROR_INVALID_STATE)
+	{
+		DEBUG_PRINTF("BtAdvStop failed: 0x%x\r\n", err_code);
+		return;
+	}
+
+	s_bAdvertising = false;
+	BtAdvStateUpdate();
 }
 
 __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
@@ -120,6 +200,8 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	BtAdvPacket_t *advpkt = &s_BtAppAdvPkt;
 	BtAdvPacket_t *srpkt  = &s_BtAppSrPkt;
 
+	s_bAdvertising = false;
+	s_PeripheralLinkCount = pCfg->PeriLinkCount;
 	memset(&s_BmData.AdvParam, 0, sizeof(ble_gap_adv_params_t));
 
 	// Encode the AD payload. BtAdvEncode decides legacy vs extended from how the
@@ -195,8 +277,10 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
 {
-	if (g_BtAppData.State != BTAPP_STATE_ADVERTISING &&
-		g_BtAppData.State != BTAPP_STATE_IDLE)
+	if (AdvLen < 0 || SrLen < 0 || AdvLen > INT_MAX - 2 || SrLen > INT_MAX - 2 ||
+		(AdvLen != 0 && pAdvData == nullptr) ||
+		(SrLen != 0 && pSrData == nullptr) ||
+		g_BtAppData.AdvHdl == BLE_GAP_ADV_SET_HANDLE_NOT_SET)
 	{
 		return false;
 	}
@@ -204,52 +288,77 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 	BtAdvPacket_t *advpkt = &s_BtAppAdvPkt;
 	BtAdvPacket_t *srpkt  = &s_BtAppSrPkt;
 
-	if (pAdvData)
+	if (pAdvData != nullptr)
 	{
-		int l = AdvLen + 2;
 		BtAdvData_t *p = BtAdvDataAllocate(advpkt,
-			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, AdvLen + 2);
 
 		if (p == NULL)
 		{
 			return false;
 		}
-		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
-		memcpy(&p->Data[2], pAdvData, AdvLen);
+		uint16_t vendorId = g_BtAppData.AppDevice.VendorId;
+		memcpy(p->Data, &vendorId, sizeof(vendorId));
+		if (AdvLen != 0)
+		{
+			memcpy(&p->Data[2], pAdvData, AdvLen);
+		}
 
 		s_BtAppAdvData.adv_data.len = advpkt->Len;
 	}
 
-	if (pSrData)
+	if (pSrData != nullptr)
 	{
-		int l = SrLen + 2;
 		BtAdvData_t *p = BtAdvDataAllocate(srpkt,
-			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, SrLen + 2);
 
 		if (p == NULL)
 		{
 			return false;
 		}
-		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
-		memcpy(&p->Data[2], pSrData, SrLen);
+		uint16_t vendorId = g_BtAppData.AppDevice.VendorId;
+		memcpy(p->Data, &vendorId, sizeof(vendorId));
+		if (SrLen != 0)
+		{
+			memcpy(&p->Data[2], pSrData, SrLen);
+		}
 
+		s_BtAppAdvData.scan_rsp_data.p_data = s_BtAppSrBuff;
 		s_BtAppAdvData.scan_rsp_data.len = srpkt->Len;
 	}
 
 	// The SoftDevice does not allow a data update while the set is running:
-	// stop, reconfigure, restart. Mirrors the SDC disable/enable on update.
-	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)
+	// stop, reconfigure, then restore the previous running state.
+	bool wasAdvertising = s_bAdvertising;
+	if (wasAdvertising)
 	{
-		sd_ble_gap_adv_stop(g_BtAppData.AdvHdl);
+		uint32_t err_code = sd_ble_gap_adv_stop(g_BtAppData.AdvHdl);
+		if (err_code != NRF_SUCCESS && err_code != NRF_ERROR_INVALID_STATE)
+		{
+			DEBUG_PRINTF("BtAppAdvManDataSet stop failed: 0x%x\r\n", err_code);
+			return false;
+		}
+		s_bAdvertising = false;
+		BtAdvStateUpdate();
 	}
 
-	sd_ble_gap_adv_set_configure(&g_BtAppData.AdvHdl, &s_BtAppAdvData, NULL);
-
-	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)
+	uint32_t err_code = sd_ble_gap_adv_set_configure(
+		&g_BtAppData.AdvHdl, &s_BtAppAdvData, NULL);
+	if (err_code != NRF_SUCCESS)
 	{
-		g_BtAppData.State = BTAPP_STATE_IDLE;
+		DEBUG_PRINTF("BtAppAdvManDataSet configure failed: 0x%x\r\n", err_code);
+		if (wasAdvertising)
+		{
+			BtAdvStart();
+		}
+		return false;
+	}
+
+	if (wasAdvertising)
+	{
 		BtAdvStart();
+		return s_bAdvertising;
 	}
 
-	return g_BtAppData.State == BTAPP_STATE_ADVERTISING;
+	return true;
 }
