@@ -24,26 +24,27 @@ Manager failure handling remains unchanged.
 #define PM_DEBUG_PRINTF(...)
 #endif
 
-enum BtPmStaleBondRepairState_t : uint8_t
-{
-	BT_PM_STALE_REPAIR_NONE = 0,
-	BT_PM_STALE_REPAIR_WAIT_RESULT,
-	BT_PM_STALE_REPAIR_QUEUED,
-	BT_PM_STALE_REPAIR_RETRY,
-};
+#define BT_PM_STALE_REPAIR_DELAY_MS		20U
+#define BT_PM_STALE_REPAIR_TIMEOUT_MS	2000U
 
-static uint8_t s_StaleBondRepairState[CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT];
+static bool s_StaleBondRepairActive[CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT];
 static uint16_t s_StaleBondRepairHdl[CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT];
+static uint32_t s_StaleBondRepairNextMs[CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT];
+static uint32_t s_StaleBondRepairDeadlineMs[CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT];
 static bool s_bStaleBondRepairPumpRegistered;
 
-static void BtPmStaleBondRepair(uint32_t Evt, void *pCtx);
 static void BtPmStaleBondRepairPump();
+
+static bool BtPmTimeReached(uint32_t Now, uint32_t Target)
+{
+	return (int32_t)(Now - Target) >= 0;
+}
 
 static int BtPmStaleBondRepairFind(uint16_t ConnHdl)
 {
 	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
 	{
-		if (s_StaleBondRepairState[i] != BT_PM_STALE_REPAIR_NONE &&
+		if (s_StaleBondRepairActive[i] &&
 			s_StaleBondRepairHdl[i] == ConnHdl)
 		{
 			return i;
@@ -63,7 +64,7 @@ static int BtPmStaleBondRepairAllocate(uint16_t ConnHdl)
 
 	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
 	{
-		if (s_StaleBondRepairState[i] == BT_PM_STALE_REPAIR_NONE)
+		if (!s_StaleBondRepairActive[i])
 		{
 			s_StaleBondRepairHdl[i] = ConnHdl;
 			return i;
@@ -79,8 +80,10 @@ static void BtPmStaleBondRepairClear(uint16_t ConnHdl)
 	int idx = BtPmStaleBondRepairFind(ConnHdl);
 	if (idx >= 0)
 	{
-		s_StaleBondRepairState[idx] = BT_PM_STALE_REPAIR_NONE;
+		s_StaleBondRepairActive[idx] = false;
 		s_StaleBondRepairHdl[idx] = BLE_CONN_HANDLE_INVALID;
+		s_StaleBondRepairNextMs[idx] = 0;
+		s_StaleBondRepairDeadlineMs[idx] = 0;
 	}
 	EnableInterrupt(intState);
 }
@@ -96,84 +99,81 @@ static bool BtPmStaleBondRepairPumpEnsure()
 	return s_bStaleBondRepairPumpRegistered;
 }
 
-static bool BtPmStaleBondRepairWait(uint16_t ConnHdl)
+static bool BtPmStaleBondRepairSchedule(uint16_t ConnHdl)
 {
 	if (!BtPmStaleBondRepairPumpEnsure())
 	{
 		return false;
 	}
 
+	uint32_t now = s_BtAppSdGrtc3.mSecond();
 	uint32_t intState = DisableInterrupt();
 	int idx = BtPmStaleBondRepairAllocate(ConnHdl);
-	if (idx >= 0 && s_StaleBondRepairState[idx] == BT_PM_STALE_REPAIR_NONE)
-	{
-		s_StaleBondRepairState[idx] = BT_PM_STALE_REPAIR_WAIT_RESULT;
-	}
-	EnableInterrupt(intState);
 
+	if (idx >= 0)
+	{
+		if (!s_StaleBondRepairActive[idx])
+		{
+			s_StaleBondRepairDeadlineMs[idx] =
+				now + BT_PM_STALE_REPAIR_TIMEOUT_MS;
+		}
+
+		s_StaleBondRepairHdl[idx] = ConnHdl;
+		s_StaleBondRepairNextMs[idx] = now + BT_PM_STALE_REPAIR_DELAY_MS;
+		s_StaleBondRepairActive[idx] = true;
+	}
+
+	EnableInterrupt(intState);
 	return idx >= 0;
 }
 
-static bool BtPmStaleBondRepairQueue(uint16_t ConnHdl)
+static void BtPmStaleBondRepairPump()
 {
-	if (!BtPmStaleBondRepairPumpEnsure())
-	{
-		return false;
-	}
-
+	uint32_t now = s_BtAppSdGrtc3.mSecond();
+	uint16_t connHdl = BLE_CONN_HANDLE_INVALID;
+	bool expired = false;
 	uint32_t intState = DisableInterrupt();
-	int idx = BtPmStaleBondRepairAllocate(ConnHdl);
-	if (idx < 0)
+
+	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
 	{
-		EnableInterrupt(intState);
-		return false;
+		if (!s_StaleBondRepairActive[i])
+		{
+			continue;
+		}
+
+		if (BtPmTimeReached(now, s_StaleBondRepairDeadlineMs[i]))
+		{
+			connHdl = s_StaleBondRepairHdl[i];
+			s_StaleBondRepairActive[i] = false;
+			s_StaleBondRepairHdl[i] = BLE_CONN_HANDLE_INVALID;
+			expired = true;
+			break;
+		}
+
+		if (BtPmTimeReached(now, s_StaleBondRepairNextMs[i]))
+		{
+			connHdl = s_StaleBondRepairHdl[i];
+			s_StaleBondRepairNextMs[i] =
+				now + BT_PM_STALE_REPAIR_DELAY_MS;
+			break;
+		}
 	}
 
-	if (s_StaleBondRepairState[idx] == BT_PM_STALE_REPAIR_QUEUED ||
-		s_StaleBondRepairState[idx] == BT_PM_STALE_REPAIR_RETRY)
-	{
-		EnableInterrupt(intState);
-		return true;
-	}
-
-	s_StaleBondRepairState[idx] = BT_PM_STALE_REPAIR_QUEUED;
 	EnableInterrupt(intState);
 
-	if (AppEvtHandlerQue((uint32_t)ConnHdl, nullptr, BtPmStaleBondRepair))
+	if (connHdl == BLE_CONN_HANDLE_INVALID)
 	{
-		return true;
-	}
-
-	// The application queue is temporarily full.  The idle pump runs after
-	// queued handlers release their slots and will submit this repair again.
-	intState = DisableInterrupt();
-	if (s_StaleBondRepairState[idx] == BT_PM_STALE_REPAIR_QUEUED &&
-		s_StaleBondRepairHdl[idx] == ConnHdl)
-	{
-		s_StaleBondRepairState[idx] = BT_PM_STALE_REPAIR_RETRY;
-	}
-	EnableInterrupt(intState);
-
-	return true;
-}
-
-static void BtPmStaleBondRepair(uint32_t Evt, void *pCtx)
-{
-	(void)pCtx;
-	uint16_t connHdl = (uint16_t)Evt;
-	uint32_t intState = DisableInterrupt();
-	int idx = BtPmStaleBondRepairFind(connHdl);
-
-	if (idx < 0 || s_StaleBondRepairState[idx] != BT_PM_STALE_REPAIR_QUEUED)
-	{
-		EnableInterrupt(intState);
 		return;
 	}
 
-	// RETRY also marks the slot as in progress, preventing a duplicate local
-	// or remote failure report from enqueuing another callback concurrently.
-	s_StaleBondRepairState[idx] = BT_PM_STALE_REPAIR_RETRY;
-	EnableInterrupt(intState);
+	if (expired)
+	{
+		PM_DEBUG_PRINTF("BM SEC: stale bond repair timeout hdl=%u\r\n",
+				(unsigned)connHdl);
+		(void)sd_ble_gap_disconnect(connHdl,
+								BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+		return;
+	}
 
 	if (BtPeerFindByHdl(connHdl) == nullptr)
 	{
@@ -193,47 +193,12 @@ static void BtPmStaleBondRepair(uint32_t Evt, void *pCtx)
 
 	if (err == NRF_ERROR_BUSY || err == NRF_ERROR_INVALID_STATE)
 	{
-		return;	// idle pump retries once on the next main-loop pass
+		return;	// retry after BT_PM_STALE_REPAIR_DELAY_MS
 	}
 
 	BtPmStaleBondRepairClear(connHdl);
 	(void)sd_ble_gap_disconnect(connHdl,
 								BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
-}
-
-static void BtPmStaleBondRepairPump()
-{
-	uint16_t connHdl = BLE_CONN_HANDLE_INVALID;
-	int idx = -1;
-	uint32_t intState = DisableInterrupt();
-
-	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
-	{
-		if (s_StaleBondRepairState[i] == BT_PM_STALE_REPAIR_RETRY)
-		{
-			idx = i;
-			connHdl = s_StaleBondRepairHdl[i];
-			s_StaleBondRepairState[i] = BT_PM_STALE_REPAIR_QUEUED;
-			break;
-		}
-	}
-	EnableInterrupt(intState);
-
-	if (idx < 0)
-	{
-		return;
-	}
-
-	if (!AppEvtHandlerQue((uint32_t)connHdl, nullptr, BtPmStaleBondRepair))
-	{
-		intState = DisableInterrupt();
-		if (s_StaleBondRepairState[idx] == BT_PM_STALE_REPAIR_QUEUED &&
-			s_StaleBondRepairHdl[idx] == connHdl)
-		{
-			s_StaleBondRepairState[idx] = BT_PM_STALE_REPAIR_RETRY;
-		}
-		EnableInterrupt(intState);
-	}
 }
 
 extern "C" void BtPmDisconnectOnSecFailure(const struct pm_evt *pEvt)
@@ -257,20 +222,12 @@ extern "C" void BtPmDisconnectOnSecFailure(const struct pm_evt *pEvt)
 	if (pEvt->conn_sec_failed.procedure == PM_CONN_SEC_PROCEDURE_ENCRYPTION &&
 		pEvt->conn_sec_failed.error == PM_CONN_SEC_ERROR_PIN_OR_KEY_MISSING)
 	{
-		if (pEvt->conn_sec_failed.error_src == BLE_GAP_SEC_STATUS_SOURCE_LOCAL)
+		// S145 does not reliably emit a terminal CONN_SEC_UPDATE after replying
+		// without an LTK. Retry forced pairing from application context after
+		// the failed encryption request has had time to unwind.
+		if (BtPmStaleBondRepairSchedule(pEvt->conn_handle))
 		{
-			// SEC_INFO_REQUEST is not the end of the failed encryption procedure.
-			// Record it and wait for S145's unencrypted CONN_SEC_UPDATE.
-			if (BtPmStaleBondRepairWait(pEvt->conn_handle))
-			{
-				PM_DEBUG_PRINTF("BM SEC: stale bond wait hdl=%u\r\n",
-						(unsigned)pEvt->conn_handle);
-				return;
-			}
-		}
-		else if (BtPmStaleBondRepairQueue(pEvt->conn_handle))
-		{
-			PM_DEBUG_PRINTF("BM SEC: stale bond repair queued hdl=%u src=%u\r\n",
+			PM_DEBUG_PRINTF("BM SEC: stale bond repair scheduled hdl=%u src=%u\r\n",
 					(unsigned)pEvt->conn_handle,
 					(unsigned)pEvt->conn_sec_failed.error_src);
 			return;
