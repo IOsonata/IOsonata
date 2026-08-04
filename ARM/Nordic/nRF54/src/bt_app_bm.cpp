@@ -88,6 +88,10 @@ SOFTWARE.
 
 extern "C" bool sdh_state_evt_observer_notify(enum nrf_sdh_state_evt state);
 
+// Target-local advertising state hooks implemented in bt_adv_bm.cpp.
+void BtAdvBmConnected();
+void BtAdvBmTerminated();
+
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
 // SysLog transport the app configured (UART, USB, RTT, BLE, or any other
@@ -159,7 +163,71 @@ const static TimerCfg_t s_BtAppSdTimerCfg = {
 };
 
 static Timer s_BtAppSdGrtc3;
-static volatile uint16_t s_SecurePendingHdl = BLE_CONN_HANDLE_INVALID;
+static volatile uint16_t s_SecurePendingHdl[CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT];
+
+static void SecurePendingReset()
+{
+	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
+	{
+		s_SecurePendingHdl[i] = BLE_CONN_HANDLE_INVALID;
+	}
+}
+
+static bool SecurePendingAdd(uint16_t ConnHdl)
+{
+	int freeIdx = -1;
+
+	if (ConnHdl == BLE_CONN_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
+	{
+		if (s_SecurePendingHdl[i] == ConnHdl)
+		{
+			return true;
+		}
+		if (freeIdx < 0 && s_SecurePendingHdl[i] == BLE_CONN_HANDLE_INVALID)
+		{
+			freeIdx = i;
+		}
+	}
+
+	if (freeIdx < 0)
+	{
+		return false;
+	}
+
+	s_SecurePendingHdl[freeIdx] = ConnHdl;
+	return true;
+}
+
+static void SecurePendingRemove(uint16_t ConnHdl)
+{
+	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
+	{
+		if (s_SecurePendingHdl[i] == ConnHdl)
+		{
+			s_SecurePendingHdl[i] = BLE_CONN_HANDLE_INVALID;
+		}
+	}
+}
+
+static uint16_t SecurePendingTake()
+{
+	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
+	{
+		uint16_t connHdl = s_SecurePendingHdl[i];
+		if (connHdl != BLE_CONN_HANDLE_INVALID)
+		{
+			s_SecurePendingHdl[i] = BLE_CONN_HANDLE_INVALID;
+			return connHdl;
+		}
+	}
+
+	return BLE_CONN_HANDLE_INVALID;
+}
 
 // --- Helper functions ---
 
@@ -255,11 +323,12 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 }
 
 // LE Secure Connections OOB data (strong overrides of the generic weak API).
-// The IOsonata BtLesc module owns the SC key pair, so the local OOB set comes
-// from it and the peer set is staged here; the peer data handler hands it to
-// the pairing with the link peer address filled in.
+// The public staging API has no connection handle, so one staged peer set is
+// bound to the first link that consumes it. A second concurrent OOB procedure
+// is rejected rather than overwriting data already owned by another link.
 static ble_gap_lesc_oob_data_t s_BtAppPeerOob;
 static bool s_BtAppPeerOobValid = false;
+static uint16_t s_BtAppPeerOobHdl = BLE_CONN_HANDLE_INVALID;
 
 typedef struct __Bt_Smp_Bm_Auth_Cfg {
 	uint8_t IoCaps;
@@ -280,6 +349,21 @@ void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 	s_BtSmpAuthCfg.bSet = true;
 }
 
+static void BtSmpOobDataClearInternal()
+{
+	s_BtAppPeerOobValid = false;
+	s_BtAppPeerOobHdl = BLE_CONN_HANDLE_INVALID;
+	CryptoSecureWipe(&s_BtAppPeerOob, sizeof(s_BtAppPeerOob));
+}
+
+static void BtSmpOobDataClearConn(uint16_t ConnHdl)
+{
+	if (s_BtAppPeerOobValid && s_BtAppPeerOobHdl == ConnHdl)
+	{
+		BtSmpOobDataClearInternal();
+	}
+}
+
 static ble_gap_lesc_oob_data_t *BtAppOobPeerDataHandler(uint16_t ConnHdl)
 {
 	if (!s_BtAppPeerOobValid)
@@ -288,12 +372,24 @@ static ble_gap_lesc_oob_data_t *BtAppOobPeerDataHandler(uint16_t ConnHdl)
 		return NULL;
 	}
 
-	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
-	if (pPeer != nullptr)
+	if (s_BtAppPeerOobHdl != BLE_CONN_HANDLE_INVALID &&
+		s_BtAppPeerOobHdl != ConnHdl)
 	{
-		s_BtAppPeerOob.addr.addr_type = pPeer->Conn.PeerAddrType;
-		memcpy(s_BtAppPeerOob.addr.addr, pPeer->Conn.PeerAddr, 6);
+		DEBUG_PRINTF("SEC: OOB data busy on hdl=%u, reject hdl=%u\r\n",
+			s_BtAppPeerOobHdl, ConnHdl);
+		return NULL;
 	}
+
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr)
+	{
+		DEBUG_PRINTF("SEC: no peer record for OOB hdl=%u\r\n", ConnHdl);
+		return NULL;
+	}
+
+	s_BtAppPeerOobHdl = ConnHdl;
+	s_BtAppPeerOob.addr.addr_type = pPeer->Conn.PeerAddrType;
+	memcpy(s_BtAppPeerOob.addr.addr, pPeer->Conn.PeerAddr, 6);
 
 	return &s_BtAppPeerOob;
 }
@@ -329,7 +425,16 @@ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pCon
 	{
 		return;
 	}
-	CryptoSecureWipe(&s_BtAppPeerOob, sizeof(s_BtAppPeerOob));
+
+	if (s_BtAppPeerOobValid && s_BtAppPeerOobHdl != BLE_CONN_HANDLE_INVALID &&
+		BtPeerFindByHdl(s_BtAppPeerOobHdl) != nullptr)
+	{
+		DEBUG_PRINTF("SEC: OOB data already owned by hdl=%u\r\n",
+			s_BtAppPeerOobHdl);
+		return;
+	}
+
+	BtSmpOobDataClearInternal();
 	memcpy(s_BtAppPeerOob.r, pRand, 16);
 	memcpy(s_BtAppPeerOob.c, pConf, 16);
 	s_BtAppPeerOobValid = true;
@@ -337,8 +442,7 @@ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pCon
 
 void BtSmpOobDataClear(void)
 {
-	s_BtAppPeerOobValid = false;
-	CryptoSecureWipe(&s_BtAppPeerOob, sizeof(s_BtAppPeerOob));
+	BtSmpOobDataClearInternal();
 }
 
 // Weak defaults. With no application override the only safe action is to reject,
@@ -372,6 +476,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 	switch (p_ble_evt->header.evt_id)
 	{
 		case BLE_GAP_EVT_CONNECTED:
+		{
 			BtAppConnLedOn();
 			// Own address not stamped: SMP runs in the S145 host, not the
 			// IOsonata toolbox, so the record is left for the
@@ -381,23 +486,42 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			// record stores it in the HCI encoding (BT_CONN_ROLE_*); the
 			// config bitmask previously stored here is not a link role at
 			// all and made the record unusable on a mixed-role device.
+			uint8_t role = p_gap_evt->params.connected.role;
 			BtPeerConnected(p_gap_evt->conn_handle,
-							   p_gap_evt->params.connected.role == BLE_GAP_ROLE_CENTRAL ?
+							   role == BLE_GAP_ROLE_CENTRAL ?
 							   BT_CONN_ROLE_CENTRAL :
-							   p_gap_evt->params.connected.role == BLE_GAP_ROLE_PERIPH ?
+							   role == BLE_GAP_ROLE_PERIPH ?
 							   BT_CONN_ROLE_PERIPHERAL : BT_CONN_ROLE_UNKNOWN,
 							   p_gap_evt->params.connected.peer_addr.addr_type,
 							   (uint8_t *)p_gap_evt->params.connected.peer_addr.addr,
 							   0, NULL);
+
+			// A peripheral-role connection consumes the running connectable
+			// advertising set. Mark it stopped before checking remaining capacity.
+			if (role == BLE_GAP_ROLE_PERIPH)
+			{
+				BtAdvBmConnected();
+			}
+
 			g_BtAppData.State = BTAPP_STATE_CONNECTED;
 			BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 
 			// Start security from the main loop. Peer Manager and LESC work
 			// must not run in the SoftDevice event interrupt.
-			if (g_BtAppData.AppDevice.bSecure)
+			if (g_BtAppData.AppDevice.bSecure &&
+				!SecurePendingAdd(p_gap_evt->conn_handle))
 			{
-				s_SecurePendingHdl = p_gap_evt->conn_handle;
+				DEBUG_PRINTF("SEC: pending queue full hdl=%u\r\n",
+					p_gap_evt->conn_handle);
 			}
+
+			// Continue connectable advertising while peripheral-link capacity
+			// remains. BtAdvStart counts only peripheral-role links.
+			if (role == BLE_GAP_ROLE_PERIPH)
+			{
+				BtAdvStart();
+			}
+		}
 			break;
 
 		case BLE_GAP_EVT_DISCONNECTED:
@@ -405,17 +529,18 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			uint16_t connHdl = p_ble_evt->evt.gap_evt.conn_handle;
 			BtDevice_t *pPeer = BtPeerFindByHdl(connHdl);
 
-			if (s_SecurePendingHdl == connHdl)
-			{
-				s_SecurePendingHdl = BLE_CONN_HANDLE_INVALID;
-			}
-			BtSmpOobDataClear();
-			BtAppConnLedOff();
+			SecurePendingRemove(connHdl);
+			BtSmpOobDataClearConn(connHdl);
 			BtPeerFree(pPeer);
 
-			if (BtPeerIsConnected() == false)
+			if (BtPeerIsConnected())
+			{
+				g_BtAppData.State = BTAPP_STATE_CONNECTED;
+			}
+			else
 			{
 				g_BtAppData.State = BTAPP_STATE_IDLE;
+				BtAppConnLedOff();
 			}
 
 			BtAppEvtDisconnected(connHdl);
@@ -471,6 +596,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			break;
 
 		case BLE_GAP_EVT_ADV_SET_TERMINATED:
+			BtAdvBmTerminated();
 			BtAppAdvTimeoutHandler();
 			break;
 
@@ -932,7 +1058,7 @@ static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 	switch (p_evt->evt_id)
 	{
 		case PM_EVT_CONN_SEC_SUCCEEDED:
-			BtSmpOobDataClear();
+			BtSmpOobDataClearConn(p_evt->conn_handle);
 			// Link is encrypted. peer_manager holds the bond. Notify the app so
 			// it can run work that needs an encrypted link (e.g. a central
 			// reading protected characteristics). (nRF52 optionally enforces
@@ -941,7 +1067,7 @@ static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 			break;
 
 		case PM_EVT_CONN_SEC_FAILED:
-			BtSmpOobDataClear();
+			BtSmpOobDataClearConn(p_evt->conn_handle);
 			// Security setup failed. pm_handler_disconnect_on_sec_failure above
 			// already tears the link down when required.
 			break;
@@ -1146,6 +1272,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
+	SecurePendingReset();
+	BtSmpOobDataClearInternal();
+
 	// Populate internal app data from config
 	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
 	g_BtAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
@@ -1331,19 +1460,26 @@ void BtAppRun()
 
 	while (1)
 	{
-		uint16_t connHdl = BLE_CONN_HANDLE_INVALID;
-		uint32_t intState = DisableInterrupt();
-
-		if (s_SecurePendingHdl != BLE_CONN_HANDLE_INVALID)
+		// Drain every connection queued by one SoftDevice dispatch. A fixed
+		// array is used because the maximum is already the configured link count.
+		while (true)
 		{
-			connHdl = s_SecurePendingHdl;
-			s_SecurePendingHdl = BLE_CONN_HANDLE_INVALID;
-		}
+			uint32_t intState = DisableInterrupt();
+			uint16_t connHdl = SecurePendingTake();
+			EnableInterrupt(intState);
 
-		EnableInterrupt(intState);
+			if (connHdl == BLE_CONN_HANDLE_INVALID)
+			{
+				break;
+			}
 
-		if (connHdl != BLE_CONN_HANDLE_INVALID)
-		{
+			// A disconnect may have raced the deferred work. Never secure a stale
+			// handle that has already been returned to the SoftDevice.
+			if (BtPeerFindByHdl(connHdl) == nullptr)
+			{
+				continue;
+			}
+
 			uint32_t err = pm_conn_secure(connHdl, false);
 			DEBUG_PRINTF("pm_conn_secure hdl=%u returned 0x%08" PRIx32 "\r\n",
 				connHdl, err);
