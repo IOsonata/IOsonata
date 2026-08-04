@@ -387,8 +387,25 @@ bool MpslInit(void)
 	NRF_GRTC->TASKS_START = 1;
 
 
+	// Check mpsl_init before the latency call, which used to overwrite res and
+	// leave the check below testing the wrong result: a failed mpsl_init went
+	// through as success on this part.
 	res = mpsl_init(&lfclk, SWI00_IRQn, MpslAssert);
-	res = mpsl_clock_hfclk_latency_set(MPSL_CLOCK_HF_LATENCY_TYPICAL);
+	if (res < 0)
+	{
+		DEBUG_PRINTF("mpsl_init failed %d\r\n", (int)res);
+
+		return false;
+	}
+
+	// Latency is a tuning hint. A refusal leaves the default in place, so
+	// report it rather than fail the whole bring-up. This one reports its
+	// error as 1, not as a negative errno, so test against zero.
+	int32_t lat = mpsl_clock_hfclk_latency_set(MPSL_CLOCK_HF_LATENCY_TYPICAL);
+	if (lat != 0)
+	{
+		DEBUG_PRINTF("mpsl_clock_hfclk_latency_set failed %d\r\n", (int)lat);
+	}
 //	mpsl_pan_rfu();
 #else
 	// The low priority line must be a real NVIC interrupt: MPSL pends it

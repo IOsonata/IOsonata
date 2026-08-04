@@ -190,6 +190,59 @@ void TestReinitialization()
 	}
 }
 
+// Every lookup must be safe on an empty database. The tail sentinel is the
+// only node then, and its pNext is null, so a walk that only tests the
+// sentinel dereferences null on its second pass. Handle 0 is reserved and
+// must not match the zero initialised sentinel either.
+void TestEmptyDatabaseLookups()
+{
+	BtAttDBInit(256);
+
+	BtUuid16_t uuid = { 0, BT_UUID_TYPE_16, 0x2803 };
+
+	CHECK(BtAttDBFindUuidRange(&uuid, 1, 0xFFFF) == nullptr);
+	CHECK(BtAttDBFindUuid(nullptr, &uuid) == nullptr);
+	CHECK(BtAttDBFindHandle(0) == nullptr);
+	CHECK(BtAttDBFindHandle(1) == nullptr);
+	CHECK(BtAttDBFindHandle(0xFFFF) == nullptr);
+
+	uint16_t start = 1;
+	uint16_t end = 0xFFFF;
+	CHECK(BtAttDBFindHdlRange(&uuid, &start, &end) == nullptr);
+
+	// Handle 0 stays rejected once the database has entries.
+	BtAttDBEntry_t *entry = BtAttDBAddEntry(&uuid, 8);
+	CHECK(entry != nullptr);
+	CHECK(BtAttDBFindHandle(0) == nullptr);
+	CHECK(BtAttDBFindHandle(1) == entry);
+}
+
+// BtAttDBInit takes the caller's word for how much pool to use. A value larger
+// than the compiled-in array would memset past its end, and a value too small
+// for one entry would leave the tail sentinel written outside the usable
+// region. Both are clamped.
+void TestInitMemSizeClamped()
+{
+	// Absurdly large: must clamp, not overrun. ASan would catch an overrun.
+	BtAttDBInit(1024U * 1024U);
+
+	BtUuid16_t uuid = { 0, BT_UUID_TYPE_16, 0xFFF7 };
+	BtAttDBEntry_t *entry = BtAttDBAddEntry(&uuid, 8);
+	CHECK(entry != nullptr);
+	CHECK(BtAttDBFindHandle(1) == entry);
+
+	// Smaller than one entry: still leaves a usable, empty database.
+	BtAttDBInit(1);
+	CHECK(BtAttDBFindHandle(1) == nullptr);
+
+	// And an entry that cannot fit is refused rather than written out of bounds.
+	CHECK(BtAttDBAddEntry(&uuid, 4096) == nullptr);
+
+	// Zero behaves the same way.
+	BtAttDBInit(0);
+	CHECK(BtAttDBFindHandle(1) == nullptr);
+}
+
 } // namespace
 
 int main()
@@ -198,6 +251,8 @@ int main()
 	TestNativePointerLinks();
 	TestExhaustionDoesNotCorruptTail();
 	TestReinitialization();
+	TestEmptyDatabaseLookups();
+	TestInitMemSizeClamped();
 
 	if (s_Failures != 0)
 	{

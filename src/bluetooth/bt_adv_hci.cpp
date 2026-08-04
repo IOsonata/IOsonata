@@ -31,8 +31,23 @@ Copyright (c) 2022, I-SYST inc., all rights reserved
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_appearance.h"
+
+/******** For DEBUG Trace ************/
+// Define DEBUG_ENABLE to trace advertising state changes for this file. Output
+// goes to the SysLog transport the app configured. A release build defines
+// NDEBUG, which strips the trace regardless.
+//#define DEBUG_ENABLE
+
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define DEBUG_PRINTF(...)
+#endif
+/*******************************/
 
 // --- Packed standard HCI command parameter layouts (Core Vol 4 Part E) ---
 
@@ -85,11 +100,13 @@ typedef struct {
 // --- Adv packet buffers (data region overlaid by BtAdvPacket_t) ---
 
 alignas(4) static uint8_t s_BtDevAdvBuff[sizeof(BtHciLeExtAdvData_t)];
-alignas(4) static BtHciLeExtAdvData_t &s_BtDevExtAdvData = *(BtHciLeExtAdvData_t*)s_BtDevAdvBuff;
+// The alignment lives on the backing buffer above; a reference has no storage
+// of its own to align (clang rejects alignas on a reference, g++ ignores it).
+static BtHciLeExtAdvData_t &s_BtDevExtAdvData = *(BtHciLeExtAdvData_t*)s_BtDevAdvBuff;
 alignas(4) static BtAdvPacket_t s_BtDevExtAdvPkt = { 251, 0, s_BtDevExtAdvData.Data };
 
 alignas(4) static uint8_t s_BtDevSrBuff[sizeof(BtHciLeExtAdvData_t)];
-alignas(4) static BtHciLeExtAdvData_t &s_BtDevExtSrData = *(BtHciLeExtAdvData_t*)s_BtDevSrBuff;
+static BtHciLeExtAdvData_t &s_BtDevExtSrData = *(BtHciLeExtAdvData_t*)s_BtDevSrBuff;
 alignas(4) static BtAdvPacket_t s_BtDevExtSrPkt = { 251, 0, s_BtDevExtSrData.Data };
 
 // Advertising duration in 10 ms units, cached at init for the enable command.
@@ -146,6 +163,13 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		return false;
 	}
 
+	if (AdvLen < 0 || SrLen < 0 ||
+		(AdvLen > 0 && pAdvData == nullptr) ||
+		(SrLen > 0 && pSrData == nullptr))
+	{
+		return false;
+	}
+
 	BtHciDevice_t *pDev = BtAdvHciDev();
 	if (pDev == nullptr)
 	{
@@ -164,7 +188,11 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		{
 			return false;
 		}
-		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
+		// Company identifier is little-endian on air. Write the two octets
+		// directly rather than through a uint16_t cast, which assumes host byte
+		// order and an aligned destination (Core Spec Supplement Part A 1.4).
+		p->Data[0] = (uint8_t)(g_BtAppData.AppDevice.VendorId & 0xFF);
+		p->Data[1] = (uint8_t)(g_BtAppData.AppDevice.VendorId >> 8);
 		memcpy(&p->Data[2], pAdvData, AdvLen);
 
 		s_BtDevExtAdvData.AdvHandle = 0;
@@ -187,7 +215,9 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		{
 			return false;
 		}
-		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
+		// Company identifier is little-endian on air; see the note above.
+		p->Data[0] = (uint8_t)(g_BtAppData.AppDevice.VendorId & 0xFF);
+		p->Data[1] = (uint8_t)(g_BtAppData.AppDevice.VendorId >> 8);
 		memcpy(&p->Data[2], pSrData, SrLen);
 
 		s_BtDevExtSrData.AdvHandle = 0;
@@ -206,8 +236,18 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 	// considered enabled. Mirrors the nRF52 stop-then-start on data update.
 	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)
 	{
+		// The disable result is not decisive: the set may already have been
+		// stopped by the controller, for example on a duration expiry not yet
+		// processed. The enable result is. If it fails the device is off air
+		// with the new data loaded, so report the failure and record IDLE
+		// rather than leave the state claiming the device is advertising.
 		BtAppAdvDisable();
-		BtAppAdvEnable();
+
+		if (BtAppAdvEnable() != 0)
+		{
+			g_BtAppData.State = BTAPP_STATE_IDLE;
+			return false;
+		}
 	}
 
 	return true;
@@ -259,21 +299,45 @@ void BtAppAdvStart()
 	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)
 		return;
 
-	if (BtAppAdvEnable() == 0)
+	int res = BtAppAdvEnable();
+	if (res == 0)
 	{
 		g_BtAppData.State = BTAPP_STATE_ADVERTISING;
+
+		return;
 	}
+
+	// A refused enable used to leave the device silent with nothing said. The
+	// case that matters is the restart after a disconnect: the application has
+	// no other signal that it stopped being discoverable, and from the outside
+	// it looks like the board died.
+	DEBUG_PRINTF("ADV enable failed, status=0x%02x, not advertising\r\n",
+				 (unsigned)res);
 }
 
 void BtAppAdvStop()
 {
-	BtAppAdvDisable();
+	// Only report idle once the controller has accepted the disable. If the
+	// command failed the set is still on air, and moving to IDLE would make a
+	// later BtAppAdvStart look like a no-op while the device keeps
+	// advertising with whatever data it had.
+	if (BtAppAdvDisable() != 0)
+	{
+		return;
+	}
 
 	g_BtAppData.State = BTAPP_STATE_IDLE;
 }
 
 bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 {
+	if (pCfg == nullptr || !BtGattInitStatusComplete())
+	{
+		DEBUG_PRINTF("BtAppAdvInit refused: GATT init error %u\r\n",
+			(unsigned)BtGattInitStatusErrorGet());
+		return false;
+	}
+
 	BtHciDevice_t *pDev = BtAdvHciDev();
 	if (pDev == nullptr)
 	{
@@ -353,7 +417,16 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 	BtAdvWr24(p.PrimIntervalMin, primMin);
 	BtAdvWr24(p.PrimIntervalMax, primMax);
 	p.PrimChanMap  = 7;
-	p.OwnAddrType  = BTADDR_TYPE_RAND;
+	// Own address type follows the configured local identity instead of being
+	// forced to Random. A public identity advertises as public and needs no
+	// random address; a random identity advertises as random with a validated
+	// static random address loaded per set.
+	uint8_t  localType = 0;
+	uint8_t  localAddr[6];
+	BtSmpLocalAddrGet(&localType, localAddr);
+	bool useRandom = (localType == BTADDR_TYPE_RAND ||
+					  localType == BTADDR_TYPE_RANDOM_STATIC);
+	p.OwnAddrType  = useRandom ? BTADDR_TYPE_RAND : BTADDR_TYPE_PUBLIC;
 	p.PeerAddrType = 0;
 	p.FilterPolicy = 0;
 	p.TxPower      = 0;
@@ -370,24 +443,36 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 
 	// Extended advertising with a random own-address type requires the random
 	// address to be set per advertising set; the legacy LE Set Random Address
-	// command does not configure it. Use the device's configured random address.
-	// This write is the single point where the on-air own address is chosen;
-	// a privacy layer that rotates resolvable private addresses replaces the
-	// address here, and the recorded copy below is what a new connection is
-	// stamped with.
+	// command does not configure it. This is the single point where the on-air
+	// own address is chosen; a privacy layer that rotates resolvable private
+	// addresses replaces the address here, and the recorded copy is what a new
+	// connection is stamped with.
+	if (useRandom)
 	{
-		uint8_t atype = 0;
+		// Reject an address that is not a valid static random address (for
+		// example the all-zero default) rather than have the controller fail
+		// the command. See BtAddrIsStaticRandom, Vol 6 Part B 1.3.2.1.
+		if (BtAddrIsStaticRandom(localAddr) == false)
+		{
+			return false;
+		}
+
 		BtHciLeAdvSetRandAddr_t ra;
 		ra.AdvHandle = 0;
-		BtSmpLocalAddrGet(&atype, ra.RandAddr);
+		memcpy(ra.RandAddr, localAddr, 6);
 
 		if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_ADV_SET_RAND_ADDR, &ra, sizeof(ra), NULL, 0) != 0)
 		{
 			return false;
 		}
 
-		s_BtAdvOwnAddrType = atype;
-		memcpy(s_BtAdvOwnAddr, ra.RandAddr, 6);
+		s_BtAdvOwnAddrType = BTADDR_TYPE_RAND;
+		memcpy(s_BtAdvOwnAddr, localAddr, 6);
+	}
+	else
+	{
+		s_BtAdvOwnAddrType = BTADDR_TYPE_PUBLIC;
+		memcpy(s_BtAdvOwnAddr, localAddr, 6);
 	}
 
 	s_BtDevExtAdvData.AdvHandle = 0;

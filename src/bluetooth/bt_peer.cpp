@@ -199,6 +199,14 @@ BtDevice_t * BtPeerAlloc(uint16_t ConnHdl)
 			memset(p, 0, sizeof(*p));
 			p->Conn.Hdl = ConnHdl;
 			p->bIsLocal = false;
+			// BT_CONN_ROLE_CENTRAL is 0, so a zeroed record reads as a central
+			// link rather than as an unset one, and BtPeerRole cannot tell the
+			// two apart. That matters because the SMP and L2CAP role gates
+			// refuse a PDU when the role says central: a record allocated but
+			// not yet filled in by BtPeerConnected would make a peripheral
+			// reject a Pairing Request. Start from UNKNOWN, which both gates
+			// treat as "do not gate".
+			p->Conn.Role = BT_CONN_ROLE_UNKNOWN;
 			// Re-attach this slot's long-write slice (the memset above
 			// cleared it). Slot i always maps to the same slice.
 			if (s_pLongWrPool != nullptr && s_LongWrSlotSize > 0)
@@ -353,4 +361,21 @@ uint16_t BtPeerActiveHdl(void)
 {
 	BtDevice_t *p = BtPeerGetActive();
 	return p != nullptr ? p->Conn.Hdl : BT_CONN_HDL_INVALID;
+}
+
+uint8_t BtPeerRole(uint16_t ConnHdl)
+{
+	BtDevice_t *p = BtPeerFindByHdl(ConnHdl);
+	if (p == nullptr)
+	{
+		return BT_CONN_ROLE_UNKNOWN;
+	}
+	// Only the two HCI values are meaningful; anything else in the field
+	// (an unconverted vendor encoding or an unset record) reports UNKNOWN
+	// rather than being misread as a role.
+	if (p->Conn.Role == BT_CONN_ROLE_CENTRAL || p->Conn.Role == BT_CONN_ROLE_PERIPHERAL)
+	{
+		return p->Conn.Role;
+	}
+	return BT_CONN_ROLE_UNKNOWN;
 }

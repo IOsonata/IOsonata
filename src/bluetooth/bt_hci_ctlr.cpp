@@ -75,13 +75,13 @@ static size_t BtHciCtlrReceive(BtHciCtlrDev_t * const pDev, uint16_t Hdl, void *
 // DevIntrf ops. The HCI controller is not a byte bus: it exchanges formed
 // packets through Send / SendCommand and the RX fifo, so the rate and rx/tx
 // stream ops are no-ops.
-static void BtHciCtlrIntrfDisable(DevIntrf_t * const pDev) {}
-static void BtHciCtlrIntrfEnable(DevIntrf_t * const pDev) {}
-static uint32_t BtHciCtlrIntrfGetRate(DevIntrf_t * const pDev) { return 0; }
-static uint32_t BtHciCtlrIntrfSetRate(DevIntrf_t * const pDev, uint32_t Rate) { return 0; }
-static bool BtHciCtlrIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr) { return true; }
-static int BtHciCtlrIntrfRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen) { return 0; }
-static void BtHciCtlrIntrfStopRx(DevIntrf_t * const pDev) {}
+static void BtHciCtlrIntrfDisable(DevIntrf_t * const) {}
+static void BtHciCtlrIntrfEnable(DevIntrf_t * const) {}
+static uint32_t BtHciCtlrIntrfGetRate(DevIntrf_t * const) { return 0; }
+static uint32_t BtHciCtlrIntrfSetRate(DevIntrf_t * const, uint32_t) { return 0; }
+static bool BtHciCtlrIntrfStartRx(DevIntrf_t * const, uint32_t) { return true; }
+static int BtHciCtlrIntrfRxData(DevIntrf_t * const, uint8_t *, int) { return 0; }
+static void BtHciCtlrIntrfStopRx(DevIntrf_t * const) {}
 
 static bool BtHciCtlrIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
@@ -102,8 +102,8 @@ static int BtHciCtlrIntrfTxData(DevIntrf_t * const pDev, const uint8_t *pData, i
 	return (p->Send != nullptr) ? (int)p->Send(p, (void*)pData, DataLen) : 0;
 }
 
-static void BtHciCtlrIntrfStopTx(DevIntrf_t * const pDev) {}
-static void BtHciCtlrIntrfPowerOff(DevIntrf_t * const pDev) {}
+static void BtHciCtlrIntrfStopTx(DevIntrf_t * const) {}
+static void BtHciCtlrIntrfPowerOff(DevIntrf_t * const) {}
 
 bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 {
@@ -212,4 +212,38 @@ size_t BtHciCtlrSendCommand(BtHciCtlrDev_t * const pDev, uint16_t OpCode, const 
 	}
 
 	return pDev->SendCommand(pDev, buf, BTHCICTLR_CMD_HDR_LEN + ParamLen);
+}
+
+// Target controller bring-up. The weak default succeeds, which is right for a
+// port whose controller needs nothing beyond the generic wiring: a plain HCI
+// transport over UART or USB has no vendor stack to start.
+__attribute__((weak)) bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev,
+										  const BtHciCtlrCfg_t *pCfg)
+{
+	(void)pDev;
+	(void)pCfg;
+
+	return true;
+}
+
+// One bring-up sequence for every port. The ordering is the point: generic
+// init assigns RxHandler, Receive and the interface table, and returns early
+// without them on a bad packet size, a misaligned or undersized RX FIFO
+// buffer, or a CFifoInit failure. Starting the controller anyway leaves an
+// enabled controller with no receive path, delivering nothing and saying
+// nothing. This used to be each port's own function, and the SDC one
+// discarded the init result.
+bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
+{
+	if (pDev == nullptr || pCfg == nullptr)
+	{
+		return false;
+	}
+
+	if (BtHciCtlrInit(pDev, pCfg) == false)
+	{
+		return false;
+	}
+
+	return BtHciCtlrStart(pDev, pCfg);
 }

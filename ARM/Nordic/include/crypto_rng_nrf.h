@@ -59,7 +59,7 @@ class RngPeriphIntrf : public DeviceIntrf {
 public:
 	bool Init(void);
 
-	operator DevIntrf_t * const () override { return &vDevIntrf; }
+	operator DevIntrf_t * () override { return &vDevIntrf; }
 	uint32_t Rate(uint32_t DataRate) override { (void)DataRate; return 0; }
 	uint32_t Rate(void) override { return 0; }
 	bool StartRx(uint32_t DevAddr) override {

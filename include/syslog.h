@@ -155,7 +155,7 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args);
  *
  * @return	Handle to the global logger.
  */
-SysLog_t * const SysLogGet(void);
+SysLog_t *SysLogGet(void);
 
 //
 // Status stack. IOsonata default storage for status provenance. A fixed
@@ -244,7 +244,7 @@ int SysStatusStackCount(SysStatusStack_t * const pStack);
  *
  * @return	Handle to the global stack.
  */
-SysStatusStack_t * const SysStatusStackGet(void);
+SysStatusStack_t *SysStatusStackGet(void);
 
 /**
  * Push a status onto the global stack.
@@ -283,7 +283,7 @@ public:
 	void Init(DeviceIntrf &Sink, uint32_t SinkAddr = 0,
 			  Timer *pTimer = (Timer *)0, uint32_t MinType = 0) {
 		SysLogInit(&vLog, Sink, SinkAddr,
-				   pTimer ? (TimerDev_t * const)*pTimer : (TimerDev_t *)0,
+				   pTimer ? (TimerDev_t *)*pTimer : (TimerDev_t *)0,
 				   MinType);
 	}
 
@@ -298,7 +298,7 @@ public:
 		;
 
 	// Return the underlying C handle for use with the C API.
-	operator SysLog_t * const () { return &vLog; }
+	operator SysLog_t * () { return &vLog; }
 
 	// Non copyable. A logger references a single output interface.
 	SysLog(const SysLog &) = delete;
@@ -314,7 +314,7 @@ private:
  *
  * @return	Const pointer to the global SysLog instance.
  */
-SysLog * const SysLogGetInstance(void);
+SysLog *SysLogGetInstance(void);
 
 #endif // __cplusplus
 

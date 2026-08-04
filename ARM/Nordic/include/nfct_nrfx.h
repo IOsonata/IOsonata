@@ -143,11 +143,11 @@ public:
 		return NfctIntrfInit(&vDevData, &Cfg);
 	}
 
-	operator DevIntrf_t * const () {
+	operator DevIntrf_t * () {
 		return &vDevData.DevIntrf;
 	}
 
-	operator NfctIntrfDev_t * const () {
+	operator NfctIntrfDev_t * () {
 		return &vDevData;
 	}
 

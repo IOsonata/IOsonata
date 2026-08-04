@@ -66,6 +66,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/cfifo.h</locationURI>
 		</link>
 		<link>
+			<name>include/cli</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/converters</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -119,11 +124,6 @@
 			<name>include/iatomic.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
-		</link>
-		<link>
-			<name>include/icli.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/icli.h</locationURI>
 		</link>
 		<link>
 			<name>include/intelhex.h</name>
@@ -204,11 +204,6 @@
 			<name>include/pulse_train.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
-		</link>
-		<link>
-			<name>include/pwm.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/pwm.h</locationURI>
 		</link>
 		<link>
 			<name>include/pwrmgnt</name>
@@ -526,16 +521,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev_pdm.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/ble_conn.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_conn.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bleadv_mandata.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bleadv_mandata.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/blueio_blesrvc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
@@ -641,16 +626,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_pds.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_pds_nvm_mpsl.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/bt_pds_nvm_mpsl.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_pds_sdc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/bt_pds_sdc.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/bt_peer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_peer.h</locationURI>
@@ -674,6 +649,11 @@
 			<name>include/bluetooth/services</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/cli/icli.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/cli/icli.h</locationURI>
 		</link>
 		<link>
 			<name>include/converters/adc_device.h</name>
@@ -724,6 +704,11 @@
 			<name>include/coredev/pdm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/pwm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/shared_intrf.h</name>
@@ -801,11 +786,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/icrypto.h</locationURI>
 		</link>
 		<link>
-			<name>include/display/display copy.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/display/display%20copy.h</locationURI>
-		</link>
-		<link>
 			<name>include/display/display.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/display.h</locationURI>
@@ -859,11 +839,6 @@
 			<name>include/display/eink_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/display/eink_intrf.h.new</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h.new</locationURI>
 		</link>
 		<link>
 			<name>include/display/eink_vb3300.h</name>
@@ -1416,16 +1391,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_pds.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_pds_bm.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/bt_pds_bm.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_pds_nvm_rramc_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_pds_nvm_rramc_sdc.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_peer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_peer.cpp</locationURI>
@@ -1466,9 +1431,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_smp_bond_sdc.cpp</name>
+			<name>src/bluetooth/bt_smp_bond_nvm.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_smp_bond_sdc.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond_nvm.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_uuid.cpp</name>
@@ -2041,11 +2006,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/services/bt_dis.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/display/fonts/.DS_Store</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/.DS_Store</locationURI>
-		</link>
-		<link>
 			<name>src/display/fonts/CREDITS</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/CREDITS</locationURI>
@@ -2319,11 +2279,6 @@
 			<name>src/display/fonts/FreeSans/FreeSansIta8pt.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSans/FreeSansIta8pt.c</locationURI>
-		</link>
-		<link>
-			<name>src/display/fonts/FreeSerif/.DS_Store</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/.DS_Store</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts/FreeSerif/FreeSerif10pt.c</name>
@@ -2771,16 +2726,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/peer_manager.c</locationURI>
 		</link>
 		<link>
-			<name>src/sdk-nrf-bm/subsys/bluetooth/services/ble_bas</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/subsys/bluetooth/services/ble_dis</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/sdk-nrf-bm/include/bm/bluetooth/peer_manager/nrf_ble_lesc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/peer_manager/nrf_ble_lesc.h</locationURI>
@@ -2801,11 +2746,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/peer_manager/peer_manager_types.h</locationURI>
 		</link>
 		<link>
-			<name>src/sdk-nrf-bm/include/bm/bluetooth/services/ble_bas.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/services/ble_bas.h</locationURI>
-		</link>
-		<link>
 			<name>src/sdk-nrf-bm/include/bm/bluetooth/services/ble_bms.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/services/ble_bms.h</locationURI>
@@ -2819,11 +2759,6 @@
 			<name>src/sdk-nrf-bm/include/bm/bluetooth/services/ble_date_time.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/services/ble_date_time.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/include/bm/bluetooth/services/ble_dis.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/services/ble_dis.h</locationURI>
 		</link>
 		<link>
 			<name>src/sdk-nrf-bm/include/bm/bluetooth/services/ble_hids.h</name>
@@ -2974,16 +2909,6 @@
 			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/pm_buffer.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/pm_buffer.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/subsys/bluetooth/services/ble_bas/bas.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/subsys/bluetooth/services/ble_bas/bas.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/subsys/bluetooth/services/ble_dis/dis.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/subsys/bluetooth/services/ble_dis/dis.c</locationURI>
 		</link>
 		<link>
 			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/auth_status_tracker.h</name>

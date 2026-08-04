@@ -354,7 +354,7 @@ public:
 		atomic_flag_clear(&vDev.bBusy);
 	}
 
-	operator DevIntrf_t * const () override { return &vDev; }
+	operator DevIntrf_t * () override { return &vDev; }
 	uint32_t Rate(uint32_t r) override { return r; }
 	uint32_t Rate(void) override { return 1000000; }
 };

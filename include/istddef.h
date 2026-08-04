@@ -161,6 +161,15 @@ static inline uint32_t min(uint32_t x, uint32_t y) { return  y ^ ((x ^ y) & -(x 
 #endif
 static inline int64_t min(int64_t x, int64_t y) { return  y ^ ((x ^ y) & -(x < y)); } // { return x > y ? y : x; }
 static inline uint64_t min(uint64_t x, uint64_t y) { return  y ^ ((x ^ y) & -(x < y)); } // { return x > y ? y : x; }
+#if defined(__APPLE__)
+// On Darwin size_t/ptrdiff_t are (unsigned) long, a type distinct from both
+// (unsigned) int and the (unsigned) long long that (u)int64_t map to. A size_t
+// argument therefore matches none of the overloads above exactly and the call
+// is ambiguous. Add exact matches for (unsigned) long. These are omitted where
+// long already aliases int64_t (LP64 Linux/BSD) to avoid redefinition.
+static inline long min(long x, long y) { return  y ^ ((x ^ y) & -(x < y)); }
+static inline unsigned long min(unsigned long x, unsigned long y) { return  y ^ ((x ^ y) & -(x < y)); }
+#endif
 #endif
 
 #ifndef max
@@ -171,6 +180,12 @@ static inline uint32_t max(uint32_t x, uint32_t y) { return x ^ ((x ^ y) & -(x <
 #endif
 static inline int64_t max(int64_t x, int64_t y) { return x ^ ((x ^ y) & -(x < y)); } // { return x > y ? x : y; }
 static inline uint64_t max(uint64_t x, uint64_t y) { return x ^ ((x ^ y) & -(x < y)); } // { return x > y ? x : y; }
+#if defined(__APPLE__)
+// See the note on the (unsigned) long min overloads above: size_t on Darwin is
+// unsigned long, which matches none of the above exactly.
+static inline long max(long x, long y) { return x ^ ((x ^ y) & -(x < y)); }
+static inline unsigned long max(unsigned long x, unsigned long y) { return x ^ ((x ^ y) & -(x < y)); }
+#endif
 #endif
 
 #endif

@@ -26,6 +26,7 @@ Copyright (c) 2024 I-SYST inc. All rights reserved.
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_smp.h"
 
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
@@ -92,6 +93,68 @@ static inline BtHciDevice_t *BtGapHciDev(void)
 	return g_BtAppData.AppDevice.pHciDev;
 }
 
+// Clamp the HCI-encoded LE scan interval and window to the valid range
+// 0x0004..0x4000 (Core Vol 4 Part E 7.8.64 scan, 7.8.66 create connection) and
+// keep the window no larger than the interval. A small or misconfigured value
+// would otherwise reach the controller as Invalid HCI Command Parameters.
+static inline void BtGapClampScanParams(uint16_t *pInterval, uint16_t *pWindow)
+{
+	if (*pInterval < 0x0004)
+	{
+		*pInterval = 0x0004;
+	}
+	else if (*pInterval > 0x4000)
+	{
+		*pInterval = 0x4000;
+	}
+
+	if (*pWindow < 0x0004)
+	{
+		*pWindow = 0x0004;
+	}
+	else if (*pWindow > 0x4000)
+	{
+		*pWindow = 0x4000;
+	}
+
+	if (*pWindow > *pInterval)
+	{
+		*pWindow = *pInterval;
+	}
+}
+
+// Resolve the Own_Address_Type for scanning or initiating from the configured
+// local identity. A public identity uses Public and needs no controller random
+// address. A random identity uses Random and requires the global controller
+// random address to be programmed first (LE Set Random Address, Core Vol 4
+// Part E 7.8.4); scanning or initiating as Random with an unset (all-zero)
+// controller random address yields an undefined on-air address or Command
+// Disallowed. Returns the HCI Own_Address_Type, or 0xFF if the configured
+// random address is not a valid static random address (Vol 6 Part B 1.3.2.1).
+static uint8_t BtGapResolveOwnAddr(BtHciDevice_t *pDev)
+{
+	uint8_t localType = 0;
+	uint8_t localAddr[6];
+	BtSmpLocalAddrGet(&localType, localAddr);
+
+	if (localType != BTADDR_TYPE_RAND && localType != BTADDR_TYPE_RANDOM_STATIC)
+	{
+		return BTADDR_TYPE_PUBLIC;
+	}
+
+	if (BtAddrIsStaticRandom(localAddr) == false)
+	{
+		return 0xFF;
+	}
+
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_RANDOM_ADDR, localAddr, 6, NULL, 0) != 0)
+	{
+		return 0xFF;
+	}
+
+	return BTADDR_TYPE_RAND;
+}
+
 // Validate the HCI-encoded connection parameters before LE Create Connection
 // (Core Vol 4 Part E 7.8.12, Vol 6 Part B 4.5.2). Arguments are in HCI units:
 // interval in 1.25 ms steps, timeout in 10 ms steps, latency a raw count.
@@ -133,7 +196,12 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 	memcpy(&s_ScanParams, &pCfg->Param, sizeof(BtGapScanParam_t));
 
 	BtHciLeExtScanParams1_t p;
-	p.OwnAddrType  = 1;
+	uint8_t ownAddrType = BtGapResolveOwnAddr(pDev);
+	if (ownAddrType == 0xFF)
+	{
+		return false;
+	}
+	p.OwnAddrType  = ownAddrType;
 	p.FilterPolicy = 0;
 	p.ScanPhys     = pCfg->Param.Phy;
 	// Map the API scan type to the HCI Scan_Type field (Core Vol 4 Part E
@@ -142,8 +210,11 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 	// directly would send ACTIVE (2) as an invalid value and PASSIVE_EXT (1) as
 	// active.
 	p.ScanType     = (pCfg->Type == BTSCAN_TYPE_ACTIVE) ? 1 : 0;
-	BtGapWr16(p.ScanInterval, mSecTo0_625(pCfg->Param.Interval));
-	BtGapWr16(p.ScanWindow, mSecTo0_625(pCfg->Param.Duration));
+	uint16_t scanInterval = mSecTo0_625(pCfg->Param.Interval);
+	uint16_t scanWindow   = mSecTo0_625(pCfg->Param.Duration);
+	BtGapClampScanParams(&scanInterval, &scanWindow);
+	BtGapWr16(p.ScanInterval, scanInterval);
+	BtGapWr16(p.ScanWindow, scanWindow);
 
 	uint8_t res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM, &p, sizeof(p), NULL, 0);
 	DEBUG_PRINTF("SET_EXT_SCAN_PARAM: res=%d\r\n", res);
@@ -153,6 +224,9 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 
 bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 {
+	(void)pBuff;
+	(void)Len;
+
 	BtHciDevice_t *pDev = BtGapHciDev();
 	if (pDev == nullptr)
 	{
@@ -187,6 +261,9 @@ void BtGapScanStop()
 
 bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
 {
+	(void)pBuff;
+	(void)Len;
+
 	return true;
 }
 
@@ -209,12 +286,20 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 	}
 
 	BtHciLeCreateConn_t p;
-	BtGapWr16(p.ScanInterval, mSecTo0_625(s_ScanParams.Interval));
-	BtGapWr16(p.ScanWindow, mSecTo0_625(s_ScanParams.Duration));
+	uint16_t scanInterval = mSecTo0_625(s_ScanParams.Interval);
+	uint16_t scanWindow   = mSecTo0_625(s_ScanParams.Duration);
+	BtGapClampScanParams(&scanInterval, &scanWindow);
+	BtGapWr16(p.ScanInterval, scanInterval);
+	BtGapWr16(p.ScanWindow, scanWindow);
 	p.FilterPolicy  = 0;
 	p.PeerAddrType  = pPeerAddr->Type;
 	memcpy(p.PeerAddr, pPeerAddr->Addr, 6);
-	p.OwnAddrType   = s_ScanParams.OwnAddrType;
+	uint8_t ownAddrType = BtGapResolveOwnAddr(pDev);
+	if (ownAddrType == 0xFF)
+	{
+		return false;
+	}
+	p.OwnAddrType   = ownAddrType;
 	BtGapWr16(p.ConnIntervalMin, connIntervalMin);
 	BtGapWr16(p.ConnIntervalMax, connIntervalMax);
 	BtGapWr16(p.MaxLatency, pConnParam->Latency);

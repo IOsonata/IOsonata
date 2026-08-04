@@ -49,9 +49,6 @@ SOFTWARE.
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_gatt.h"
-// SMP uses the OO crypto engine facets (KeyAgreeEngine, CipherEngine,
-// RngEngine) and the shared CRYPTO_STATUS, all from icrypto.h via bt_smp.h.
-// The legacy crypto.h is intentionally not included here.
 
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on the SMP handshake trace for this file: every
@@ -60,15 +57,6 @@ SOFTWARE.
 // does not assume a transport. A release build defines NDEBUG, which strips all
 // trace regardless of DEBUG_ENABLE.
 //#define DEBUG_ENABLE
-
-// DHKey byte-order interop fallback. When enabled, a failed Ea verification
-// retries f5 with the raw DHKey order before failing, to tolerate a crypto
-// provider that returns the shared secret in the opposite byte order. Leave
-// off for release: it can mask a provider byte-order bug. Enable only for
-// provider bring-up or interop debugging.
-#ifndef BT_SMP_DHKEY_ORDER_FALLBACK
-#define BT_SMP_DHKEY_ORDER_FALLBACK 0
-#endif
 
 #if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 #include "syslog.h"
@@ -83,6 +71,20 @@ static const char *SmpCodeName(uint8_t c);
 #define SMP_TRACE_PDU(dir, code, state)
 #endif
 /*******************************/
+
+// SMP uses the OO crypto engine facets (KeyAgreeEngine, CipherEngine,
+// RngEngine) and the shared CRYPTO_STATUS, all from icrypto.h via bt_smp.h.
+// The legacy crypto.h is intentionally not included here.
+
+// DHKey byte-order interop fallback. When enabled, a failed Ea verification
+// retries f5 with the raw DHKey order before failing, to tolerate a crypto
+// provider that returns the shared secret in the opposite byte order. Leave
+// off for release: it can mask a provider byte-order bug. Enable only for
+// provider bring-up or interop debugging.
+#ifndef BT_SMP_DHKEY_ORDER_FALLBACK
+#define BT_SMP_DHKEY_ORDER_FALLBACK 0
+#endif
+
 
 #ifndef BT_SMP_MAX_LINK
 #define BT_SMP_MAX_LINK		4
@@ -946,6 +948,8 @@ static bool SmpF6(const uint8_t w[16], const uint8_t n1[16], const uint8_t n2[16
 // Pairing feature negotiation
 //-----------------------------------------------------------------------------
 
+static void SmpSendLocalPubKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink, uint16_t ConnHdl);
+
 // Select the association model for this pairing. OOB takes precedence when
 // present. Without a MITM requirement from either side the result is Just
 // Works. Otherwise the IO capability table decides; a capability value outside
@@ -971,6 +975,14 @@ static uint8_t SmpSelectModel(uint8_t InitIo, uint8_t RespIo, bool Mitm, bool Oo
 // Copy the pending OOB material into the link context of an OOB pairing.
 static bool SmpOobCtxLoad(BtSmpLink_t *pLink)
 {
+	// LE Secure Connections supports OOB in either or both directions. The
+	// local set commits our public key; the peer set authenticates the peer.
+	// At least one must exist for this device to select the OOB model, but a
+	// one-direction exchange is valid and uses zero for the absent peer r.
+	if (!s_SmpOob.bLocalValid && !s_SmpOob.bPeerValid)
+	{
+		return false;
+	}
 	if (SmpOobReserve(pLink) == false)
 	{
 		return false;
@@ -1196,6 +1208,8 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	if (pReq->IOCaps > BT_SMP_IOCAPS_KEYBOARD_DISPLAY ||
 		pReq->OOBFlag > BT_SMP_OOB_AUTH_PRESENT)
 	{
+		DEBUG_PRINTF("SMP reject PairingReq, reserved field iocaps=%d oob=%d\r\n",
+				  pReq->IOCaps, pReq->OOBFlag);
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
 		SmpAbortPairing(pLink);
 		return;
@@ -1208,6 +1222,9 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	if (pReq->MaxKeySize < BT_SMP_CFG_MIN_ENC_KEY_SIZE ||
 		pReq->MaxKeySize > BT_SMP_MAX_ENC_KEY_SIZE)
 	{
+		DEBUG_PRINTF("SMP reject PairingReq, key size %d outside %d..%d\r\n",
+				  pReq->MaxKeySize, BT_SMP_CFG_MIN_ENC_KEY_SIZE,
+				  BT_SMP_MAX_ENC_KEY_SIZE);
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_ENC_KEY_SIZE);
 		SmpAbortPairing(pLink);
 		return;
@@ -1252,6 +1269,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	if (pLink->Ctx.bSc && pReq->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT &&
 		!SmpOobLocalReady(pLink))
 	{
+		DEBUG_PRINTF("SMP reject PairingReq, peer claims OOB but no local set\r\n");
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
 		SmpAbortPairing(pLink);
 		return;
@@ -1259,6 +1277,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	pLink->Ctx.Model = SmpSelectModel(pReq->IOCaps, s_SmpIoCaps, mitm, oob);
 	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB && SmpOobCtxLoad(pLink) == false)
 	{
+		DEBUG_PRINTF("SMP reject PairingReq, OOB model but context load failed\r\n");
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
 		SmpAbortPairing(pLink);
 		return;
@@ -1288,7 +1307,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		DEBUG_PRINTF("SMP P256KeyGen rc=%d\r\n", rc);
 		if (rc == BT_SMP_CRYPTO_FAIL)
 		{
-			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
 			SmpAbortPairing(pLink);
 		}
 	}
@@ -1318,8 +1337,11 @@ static bool SmpStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 	// mandatory to reject since Core 5.1 (CVE-2020-26558). Both keys are always
 	// present at this chokepoint (the initiator has sent its key and the
 	// responder only reaches here once both are in). On-curve validation of the
-	// peer key is done by the key-agreement engine. A false return makes the
-	// caller send Pairing Failed and abort.
+	// peer key is done by the key-agreement engine, which the KeyAgreeEngine
+	// interface requires of every implementation; SMP has no field arithmetic
+	// to repeat it with. An all-zero key never reaches here either, since
+	// SmpTryStartDhKey only calls in once both keys are present. A false return
+	// makes the caller send Pairing Failed and abort.
 	if (memcmp(pLink->Ctx.PeerPubKey, pLink->Ctx.LocalPubKey,
 			   sizeof(pLink->Ctx.PeerPubKey)) == 0)
 	{
@@ -1443,6 +1465,7 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	pLink->Ctx.Model = SmpSelectModel(s_SmpIoCaps, pRsp->IOCaps, mitm, oob);
 	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB && SmpOobCtxLoad(pLink) == false)
 	{
+		DEBUG_PRINTF("SMP reject PairingReq, OOB model but context load failed\r\n");
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
 		SmpAbortPairing(pLink);
 		return;
@@ -1459,6 +1482,20 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
 		SmpAbortPairing(pLink);
 		return;
+	}
+
+	// The initiator defers key generation when OOB data is pending because the
+	// Pairing Response is what selects the association model. Reuse the key
+	// pair committed by BtSmpOobLocalDataGen now that OOB is selected.
+	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB &&
+		!SmpKeyPresent(pLink->Ctx.LocalPubKey, sizeof(pLink->Ctx.LocalPubKey)))
+	{
+		if (SmpLocalKeyGen(pDev, pLink) != BT_SMP_CRYPTO_OK)
+		{
+			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
+			SmpAbortPairing(pLink);
+			return;
+		}
 	}
 
 	// The initiator sends its public key after the Pairing Response. If the
@@ -2431,6 +2468,8 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 		if (Len < minLen)
 		{
+			DEBUG_PRINTF("SMP reject short PDU code=0x%02x len=%u need=%u\r\n",
+					  pSmp->Code, (unsigned)Len, (unsigned)minLen);
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
 			return;
 		}
@@ -2475,11 +2514,24 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	switch (pSmp->Code)
 	{
 		case BT_SMP_CODE_PAIRING_REQ:
+			// A Pairing Request travels central to peripheral only (Vol 3
+			// Part H 3.5.1). A central receiving one answers Pairing Failed
+			// with Command Not Supported. Gated only when the link role is
+			// known; a port that does not populate the peer pool keeps the
+			// old behavior.
+			if (BtPeerRole(ConnHdl) == BT_CONN_ROLE_CENTRAL)
+			{
+				DEBUG_PRINTF("SMP reject PairingReq, link role is central\r\n");
+				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CMD_NOT_SUPPORTED);
+				return;
+			}
 			// Responder side, and only when no pairing runs on the link. A
 			// request that arrives mid-pairing or after completion is rejected
 			// (the handler also refuses a re-pair on an encrypted link).
 			if (pLink->Ctx.State != BT_SMP_STATE_IDLE)
 			{
+				DEBUG_PRINTF("SMP reject PairingReq, pairing already at state=%d\r\n",
+						  (int)pLink->Ctx.State);
 				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
 				return;
 			}
@@ -2617,6 +2669,15 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		}
 
 		case BT_SMP_CODE_PAIRING_SECURITY_REQ:
+			// A Security Request travels peripheral to central only (Vol 3
+			// Part H 3.6.7 / 2.4.6). A peripheral receiving one answers
+			// Pairing Failed with Command Not Supported (S1). Gated only when
+			// the link role is known.
+			if (BtPeerRole(ConnHdl) == BT_CONN_ROLE_PERIPHERAL)
+			{
+				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CMD_NOT_SUPPORTED);
+				break;
+			}
 			// A peripheral is asking us (the central) to secure the link. Start
 			// pairing or re-encrypt from a bond. Idempotent if already running.
 			BtSmpStartPairing(ConnHdl);
@@ -3205,8 +3266,10 @@ static int SmpCryptoEcdh(BtSmpLink_t *pLink,
 	{
 		return BT_SMP_CRYPTO_FAIL;
 	}
+	uint8_t *pKeyCtx = (SmpOobReservedFor(pLink) && s_SmpOob.bLocalValid) ?
+						 s_SmpOob.EcdhKeyCtx : pLink->Ctx.EcdhKeyCtx;
 	return CryptoStatusToSmp(s_pCryptoEcdh->Agree(CRYPTO_CURVE_P256,
-												  pLink->Ctx.EcdhKeyCtx,
+												  pKeyCtx,
 												  pPeerPubKey, pDhKey));
 }
 
@@ -3855,6 +3918,15 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 	SmpSend(pDev, ConnHdl, &req, sizeof(req));
 
 	pLink->Ctx.State = BT_SMP_STATE_PUBKEY_LOCAL_WAIT;
+	// A generated OOB data set owns a distinct P-256 private-key context. The
+	// response determines whether OOB is actually selected, so do not start a
+	// second per-link key generation before that decision. The response handler
+	// reserves and copies the OOB key when both sides advertise usable data.
+	if (s_SmpOob.bLocalValid)
+	{
+		return;
+	}
+
 	int rc = SmpLocalKeyGen(pDev, pLink);
 	if (rc == BT_SMP_CRYPTO_FAIL)
 	{

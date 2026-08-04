@@ -38,6 +38,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/bt_appearance.h"
 
 /******** For DEBUG ************/
@@ -89,10 +90,8 @@ extern UART g_Uart;
 // All three channels (37, 38, 39).
 #define BT_WBA_ADV_CHAN_MAP_ALL			0x07
 
-// PHY constants for extended adv.
-#define BT_WBA_PHY_1M					0x01
+// Secondary PHY for extended advertising.
 #define BT_WBA_PHY_2M					0x02
-#define BT_WBA_PHY_CODED				0x03
 
 // --- Adv packet buffers ---
 //
@@ -248,7 +247,7 @@ static bool PushAdvDataToStack(const BtAppCfg_t *pCfg,
 		uint16_t evtProp = MapExtAdvEvtProps(pCfg->Role);
 
 		ret = aci_gap_adv_set_configuration(
-			0x7F,						// TX power = host-pref (no preference)
+			0,							// public address, 1M primary PHY
 			BT_WBA_ADV_HANDLE,
 			evtProp,
 			intervalUnits,				// primary interval min
@@ -257,32 +256,34 @@ static bool PushAdvDataToStack(const BtAppCfg_t *pCfg,
 			0,							// own address type = public
 			0, zeros,					// peer
 			0,							// filter policy = any
-			BT_WBA_PHY_1M,				// primary phy
+			0x7F,						// TX power = host preference
 			0,							// secondary max skip
-			BT_WBA_PHY_2M,				// secondary phy
-			0,							// sid
-			0);							// scan req notif disabled
+			BT_WBA_PHY_2M,				// secondary PHY
+			0,							// SID
+			0);							// scan request notification disabled
 		if (ret != BLE_STATUS_SUCCESS)
 		{
 			DEBUG_PRINTF("aci_gap_adv_set_configuration: 0x%02x\r\n", ret);
 			return false;
 		}
 
-		ret = aci_gap_adv_set_data(BT_WBA_ADV_HANDLE,
-		                           BT_WBA_ADV_DATA_OP_COMPLETE,
-		                           (uint8_t)pAdv->Len, pAdv->pData);
+		ret = aci_gap_adv_set_adv_data(BT_WBA_ADV_HANDLE,
+									BT_WBA_ADV_DATA_OP_COMPLETE,
+									BT_WBA_ADV_DATA_FRAG_PREF_NONE,
+									(uint8_t)pAdv->Len, pAdv->pData);
 		if (ret != BLE_STATUS_SUCCESS)
 		{
-			DEBUG_PRINTF("aci_gap_adv_set_data: 0x%02x\r\n", ret);
+			DEBUG_PRINTF("aci_gap_adv_set_adv_data: 0x%02x\r\n", ret);
 			return false;
 		}
 
 		if (pSr->Len > 0)
 		{
 			ret = aci_gap_adv_set_scan_resp_data(BT_WBA_ADV_HANDLE,
-			                                     BT_WBA_ADV_DATA_OP_COMPLETE,
-			                                     (uint8_t)pSr->Len,
-			                                     pSr->pData);
+										  BT_WBA_ADV_DATA_OP_COMPLETE,
+										  BT_WBA_ADV_DATA_FRAG_PREF_NONE,
+										  (uint8_t)pSr->Len,
+										  pSr->pData);
 			if (ret != BLE_STATUS_SUCCESS)
 			{
 				DEBUG_PRINTF("aci_gap_adv_set_scan_resp_data: 0x%02x\r\n", ret);
@@ -296,28 +297,41 @@ static bool PushAdvDataToStack(const BtAppCfg_t *pCfg,
 
 __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 {
-	if (pCfg == NULL)
+	if (pCfg == NULL || !BtGattInitStatusComplete())
 	{
+		DEBUG_PRINTF("BtAppAdvInit refused: GATT init error %u\r\n",
+			(unsigned)BtGattInitStatusErrorGet());
 		return false;
 	}
 
-	BtAdvPacket_t *advpkt = g_BtAppData.bExtAdv
-		? &s_BtAppExtAdvPkt : &s_BtAppAdvPkt;
-	BtAdvPacket_t *srpkt  = g_BtAppData.bExtAdv
-		? &s_BtAppExtSrPkt  : &s_BtAppSrPkt;
+	// Give the encoder the full packet capacities. It performs its own legacy
+	// attempt with 31-octet limits and reports the selected PDU mode.
+	BtAdvPacket_t *advpkt = &s_BtAppExtAdvPkt;
+	BtAdvPacket_t *srpkt = &s_BtAppExtSrPkt;
+	bool bScannable = false;
 
-	// Reset previously-encoded content so re-init works.
 	advpkt->Len = 0;
-	srpkt->Len  = 0;
+	srpkt->Len = 0;
 
-	// Generic AD payload encode.
-	if (BtAdvEncode(pCfg, advpkt, srpkt) == false)
+	if (BtAdvEncode(pCfg, advpkt, srpkt, &g_BtAppData.bExtAdv,
+					&bScannable) == false)
 	{
 		DEBUG_PRINTF("BtAdvEncode failed\r\n");
 		return false;
 	}
 
-	// Push to the ST stack.
+	// Legacy and extended packet views share storage. Preserve the encoded
+	// lengths in the legacy views so later manufacturer-data updates select
+	// the same packet state.
+	if (g_BtAppData.bExtAdv == false)
+	{
+		s_BtAppAdvPkt.Len = advpkt->Len;
+		s_BtAppSrPkt.Len = srpkt->Len;
+		advpkt = &s_BtAppAdvPkt;
+		srpkt = &s_BtAppSrPkt;
+	}
+
+	(void)bScannable;
 	return PushAdvDataToStack(pCfg, advpkt, srpkt);
 }
 
@@ -381,9 +395,10 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen,
 	}
 	else
 	{
-		ret = aci_gap_adv_set_data(BT_WBA_ADV_HANDLE,
-		                           BT_WBA_ADV_DATA_OP_COMPLETE,
-		                           (uint8_t)advpkt->Len, advpkt->pData);
+		ret = aci_gap_adv_set_adv_data(BT_WBA_ADV_HANDLE,
+									BT_WBA_ADV_DATA_OP_COMPLETE,
+									BT_WBA_ADV_DATA_FRAG_PREF_NONE,
+									(uint8_t)advpkt->Len, advpkt->pData);
 		if (ret != BLE_STATUS_SUCCESS)
 		{
 			return false;
@@ -392,9 +407,10 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen,
 		if (srpkt->Len > 0)
 		{
 			ret = aci_gap_adv_set_scan_resp_data(BT_WBA_ADV_HANDLE,
-			                                     BT_WBA_ADV_DATA_OP_COMPLETE,
-			                                     (uint8_t)srpkt->Len,
-			                                     srpkt->pData);
+										  BT_WBA_ADV_DATA_OP_COMPLETE,
+										  BT_WBA_ADV_DATA_FRAG_PREF_NONE,
+										  (uint8_t)srpkt->Len,
+										  srpkt->pData);
 			if (ret != BLE_STATUS_SUCCESS)
 			{
 				return false;

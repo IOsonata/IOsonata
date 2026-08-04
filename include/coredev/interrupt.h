@@ -36,8 +36,18 @@ SOFTWARE.
 
 #include <stdint.h>
 
-#ifdef __unix__
-// UNIX
+#if defined(__unix__) || defined(__APPLE__) || defined(_WIN32)
+// Host builds have no MCU interrupt state. These no-op definitions let generic
+// drivers keep the same short critical-section structure under host tests.
+static inline uint32_t DisableInterrupt(void)
+{
+	return 0;
+}
+
+static inline void EnableInterrupt(uint32_t State)
+{
+	(void)State;
+}
 
 #elif defined(__arm__) || defined(__ICCARM__)
 // ARM
@@ -50,13 +60,15 @@ SOFTWARE.
 
 #include "cmsis_compiler.h"
 
-static inline uint32_t DisableInterrupt() {
+static inline uint32_t DisableInterrupt()
+{
 	uint32_t __primmask = __get_PRIMASK();
 	__disable_irq();
 	return __primmask;
 }
 
-static inline void EnableInterrupt(uint32_t __primmask) {
+static inline void EnableInterrupt(uint32_t __primmask)
+{
 	__set_PRIMASK(__primmask);
 }
 
@@ -149,10 +161,8 @@ static inline void EnableInterrupt(uint32_t __primmask) {
 #define IRQ_PRIO_CRITICAL   7
 #endif
 
+#else
+#error "Interrupt control is not implemented for this target"
 #endif
 
 #endif // __INTERRUPT_H__
-
-
-
-

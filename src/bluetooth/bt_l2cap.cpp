@@ -17,8 +17,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -37,6 +37,7 @@ SOFTWARE.
 
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_l2cap.h"
+#include "bluetooth/bt_peer.h"
 #include "syslog.h"
 
 #ifndef BT_L2CAP_LE_SIG_RSP_MAX
@@ -93,6 +94,28 @@ static bool BtL2CapAppendCmdReject(uint8_t *pOut, uint16_t *pOutLen, uint16_t Ou
 	return BtL2CapAppendFrame(pOut, pOutLen, OutMax,
 							  BT_L2CAP_CODE_COMMAND_REJECT_RSP,
 							  Id, payload, (uint16_t)(sizeof(uint16_t) + DataLen));
+}
+
+// An identified response is not answered with a Command Reject (Vol 3 Part A
+// 4.1). A packet whose first command is one of these is discarded when it
+// cannot be processed, otherwise two implementations that both reject on sight
+// can answer each other's rejects.
+static bool BtL2CapCodeIsResponse(uint8_t Code)
+{
+	switch (Code)
+	{
+		case BT_L2CAP_CODE_COMMAND_REJECT_RSP:
+		case BT_L2CAP_CODE_CONNECTION_PARAMETER_UPDATE_RSP:
+		case BT_L2CAP_CODE_LE_CREDIT_BASED_CONNECTION_RSP:
+		case BT_L2CAP_CODE_DISCONNECTION_RSP:
+		case BT_L2CAP_CODE_CREDIT_BASED_CONNECTION_RSP:
+		case BT_L2CAP_CODE_CREDIT_BASED_RECONFIGURE_RSP:
+			return true;
+		default:
+			break;
+	}
+
+	return false;
 }
 
 static bool BtL2CapConnParamValid(const BtL2CapConnParamUpdateReq_t *pReq)
@@ -244,6 +267,41 @@ uint32_t BtL2CapProcessSignal(BtHciDevice_t * const pDev,
 
 	pRspPdu->Hdr.Cid = BT_L2CAP_CID_SIGNAL;
 
+	// Vol 3 Part A 4.1: a signaling packet longer than the signaling MTU of the
+	// channel it arrived on is answered with Command Reject reason 0x0001,
+	// carrying the MTU this side does support so the peer can resize. ReqLen is
+	// the L2CAP payload length on CID 0x0005, which is what the MTU bounds. The
+	// command header is present, checked above, so the Identifier to echo can be
+	// read from it. Nothing in the packet is parsed past that point: the length
+	// is already known to be wrong.
+	if (ReqLen > BT_L2CAP_LE_SIG_MTU)
+	{
+		uint8_t code = ((BtL2CapCFrame_t const *)p)->Code;
+		uint8_t id = ((BtL2CapCFrame_t const *)p)->Id;
+
+		// Identifier 0 is reserved and never valid on a signaling command
+		// (Vol 3 Part A 4). Nothing can be echoed back, so discard.
+		if (BtL2CapCodeIsResponse(code) || id == 0)
+		{
+			pRspPdu->Hdr.Len = 0;
+
+			return 0;
+		}
+
+		uint16_t sigMtu = BT_L2CAP_LE_SIG_MTU;
+
+		BtL2CapAppendCmdReject(pOut, &outLen, outMax, id,
+								BT_L2CAP_CMD_REJECT_REASON_MTU_EXCEEDED,
+								&sigMtu, sizeof(sigMtu));
+		pRspPdu->Hdr.Len = outLen;
+
+		return outLen;
+	}
+
+	// Vol 3 Part A 4: multiple commands per C-frame are permitted only on the
+	// BR/EDR signaling channel. The LE-U fixed signaling channel (CID 0x0005)
+	// allows exactly one command per C-frame, so the loop below processes the
+	// first command and then stops, ignoring any trailing bytes.
 	while (remain >= (sizeof(BtL2CapCFrame_t) - 1))
 	{
 		BtL2CapCFrame_t const *pCmd = (BtL2CapCFrame_t const *)p;
@@ -252,9 +310,12 @@ uint32_t BtL2CapProcessSignal(BtHciDevice_t * const pDev,
 
 		if (cmdLen > (remain - cmdHdrLen))
 		{
-			BtL2CapAppendCmdReject(pOut, &outLen, outMax, pCmd->Id,
-									BT_L2CAP_CMD_REJECT_REASON_NOT_UNDERSTOOD,
-									nullptr, 0);
+			if (!BtL2CapCodeIsResponse(pCmd->Code) && pCmd->Id != 0)
+			{
+				BtL2CapAppendCmdReject(pOut, &outLen, outMax, pCmd->Id,
+										BT_L2CAP_CMD_REJECT_REASON_NOT_UNDERSTOOD,
+										nullptr, 0);
+			}
 			break;
 		}
 
@@ -267,6 +328,20 @@ uint32_t BtL2CapProcessSignal(BtHciDevice_t * const pDev,
 
 			case BT_L2CAP_CODE_CONNECTION_PARAMETER_UPDATE_REQ:
 			{
+				// The Connection Parameter Update Request travels peripheral
+				// to central only (Vol 3 Part A 4.20). A peripheral receiving
+				// one sends a Command Reject rather than answering with an
+				// Update Response. Gated only when the link role is known
+				// (BtPeerRole returns UNKNOWN on ports that do not populate
+				// the peer pool, keeping their existing behavior).
+				if (BtPeerRole(ConnHdl) == BT_CONN_ROLE_PERIPHERAL)
+				{
+					BtL2CapAppendCmdReject(pOut, &outLen, outMax, pCmd->Id,
+											BT_L2CAP_CMD_REJECT_REASON_NOT_UNDERSTOOD,
+											nullptr, 0);
+					break;
+				}
+
 				BtL2CapConnParamUpdateRsp_t rsp;
 				rsp.Result = BT_L2CAP_CONN_PARAM_REJECTED;
 
@@ -429,8 +504,8 @@ uint32_t BtL2CapProcessSignal(BtHciDevice_t * const pDev,
 				break;
 		}
 
-		p += cmdHdrLen + cmdLen;
-		remain -= cmdHdrLen + cmdLen;
+		// LE signaling channel: stop after the first command in the C-frame.
+		break;
 	}
 
 	pRspPdu->Hdr.Len = outLen;

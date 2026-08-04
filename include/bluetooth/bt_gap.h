@@ -115,6 +115,15 @@ SOFTWARE.
 #define	BT_GAP_ROLE_PERIPHERAL							(1<<2)	//!< Optimized for device that supports a single connection
 #define	BT_GAP_ROLE_CENTRAL								(1<<3)	//!< The initiator for all connection with devices. Support multiple connections.
 
+/// Per-link LL role, HCI encoding (Core Vol 4 Part E 7.7.65.10). This is the
+/// LOCAL device's role on one connection, stored in the peer record's
+/// Conn.Role. Not the same thing as the BT_GAP_ROLE_* configuration bitmask
+/// above, which describes what the application is set up to do overall and is
+/// stored only in the local device record.
+#define BT_CONN_ROLE_CENTRAL							0		//!< This device is the central on the link
+#define BT_CONN_ROLE_PERIPHERAL							1		//!< This device is the peripheral on the link
+#define BT_CONN_ROLE_UNKNOWN							0xFF	//!< No peer record / role not recorded
+
 #define BT_GAP_IO_CAPABILITY_DISPLAY_ONLY				0
 #define BT_GAP_IO_CAPABILITY_DISPLAY_YES_NO				1
 #define BT_GAP_IO_CAPABILITY_KEYBOARD_ONLY				2
@@ -205,7 +214,10 @@ typedef struct __Bt_Conn_Sec {
 
 typedef struct __Bt_Gap_Connection {
 	uint16_t Hdl;				//!< Connection handle (BT_ATT_HANDLE_INVALID when slot is free)
-	uint8_t Role;				//!< LL role on this link
+	uint8_t Role;				//!< On a peer record: this device's LL role on the
+								//!< link, BT_CONN_ROLE_* (HCI encoding). On the
+								//!< local device record: the BT_GAP_ROLE_* config
+								//!< bitmask (a different meaning, see bt_dev.h).
 	uint8_t PeerAddrType;		//!< Peer address type
 	uint8_t PeerAddr[6];		//!< Peer BD_ADDR
 	uint8_t OwnAddrType;		//!< Own address type in use on this link
