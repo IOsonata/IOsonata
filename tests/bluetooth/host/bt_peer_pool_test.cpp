@@ -13,6 +13,10 @@ int s_Checks = 0;
 int s_CccdClearCount = 0;
 uint16_t s_LastClearedHdl = BT_CONN_HDL_INVALID;
 int s_ServiceDisconnectCount = 0;
+int s_StateChangeCount = 0;
+bool s_LastConnectedState = false;
+int s_RejectedCount = 0;
+uint16_t s_LastRejectedHdl = BT_CONN_HDL_INVALID;
 
 #define CHECK(expr) do { \
 	++s_Checks; \
@@ -38,6 +42,18 @@ void BtGattCccdClear(uint16_t ConnHdl)
 void BtGattSrvcDisconnected(BtGattSrvc_t *)
 {
 	++s_ServiceDisconnectCount;
+}
+
+void BtPeerConnectionStateChanged(bool Connected)
+{
+	++s_StateChangeCount;
+	s_LastConnectedState = Connected;
+}
+
+void BtPeerConnectionRejected(uint16_t ConnHdl)
+{
+	++s_RejectedCount;
+	s_LastRejectedHdl = ConnHdl;
 }
 
 namespace {
@@ -170,6 +186,35 @@ void TestTruncatedHandleScanRotates()
 	}
 }
 
+void TestConnectionLifecycleHooks()
+{
+	alignas(BtDevice_t) uint8_t pool[BT_PEER_POOL_MEMSIZE(1)] = {};
+	CHECK(BtPeerInit(pool, sizeof(pool)));
+
+	s_StateChangeCount = 0;
+	s_LastConnectedState = false;
+	s_RejectedCount = 0;
+	s_LastRejectedHdl = BT_CONN_HDL_INVALID;
+
+	const uint8_t addr[6] = { 1, 2, 3, 4, 5, 6 };
+	BtDevice_t *peer = BtPeerConnected(0x41, BT_CONN_ROLE_PERIPHERAL,
+		0, addr, 0, nullptr);
+	CHECK(peer != nullptr);
+	CHECK(s_StateChangeCount == 1);
+	CHECK(s_LastConnectedState);
+	CHECK(s_RejectedCount == 0);
+
+	CHECK(BtPeerConnected(0x42, BT_CONN_ROLE_PERIPHERAL,
+		0, addr, 0, nullptr) == nullptr);
+	CHECK(s_RejectedCount == 1);
+	CHECK(s_LastRejectedHdl == 0x42);
+	CHECK(s_StateChangeCount == 1);
+
+	BtPeerFree(peer);
+	CHECK(s_StateChangeCount == 2);
+	CHECK(!s_LastConnectedState);
+}
+
 void TestConnectedFieldsAndDefaultPool()
 {
 	CHECK(BtPeerInit(nullptr, 0));
@@ -248,6 +293,7 @@ int main()
 	TestMisalignedCallerPool();
 	TestAllocationAndLongWriteSlices();
 	TestTruncatedHandleScanRotates();
+	TestConnectionLifecycleHooks();
 	TestConnectedFieldsAndDefaultPool();
 	TestPeerRole();
 	TestInvalidPool();

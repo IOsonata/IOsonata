@@ -60,6 +60,19 @@ static BtPeerPoolHdr_t *s_pPeerPool = nullptr;
 static BtDevice_t *s_pPeerSlots = nullptr;
 static uint16_t s_HandleScanCursor = 0;
 
+// The generic application layer overrides these hooks. Weak defaults keep the
+// peer manager independently testable and usable by ports that do not link the
+// generic application helper.
+__attribute__((weak)) void BtPeerConnectionStateChanged(bool Connected)
+{
+	(void)Connected;
+}
+
+__attribute__((weak)) void BtPeerConnectionRejected(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+}
+
 // Long-write reassembly pool. Split evenly across the peer slots by
 // BtPeerLongWrInit; each slot's slice is re-assigned in BtPeerAlloc because
 // the slot is memset on every connect. NULL/0 means long-write is disabled.
@@ -242,6 +255,7 @@ BtDevice_t * BtPeerFindByHdl(uint16_t ConnHdl)
 
 void BtPeerFree(BtDevice_t *pPeer)
 {
+	bool bFreed = pPeer != nullptr;
 	if (pPeer != nullptr)
 	{
 		// Drop this link's CCCD subscriptions and recompute the aggregate
@@ -264,12 +278,18 @@ void BtPeerFree(BtDevice_t *pPeer)
 		pPeer->Conn.Hdl = BT_CONN_HDL_INVALID;
 	}
 
+	bool bConnected = BtPeerIsConnected();
+	if (bFreed)
+	{
+		BtPeerConnectionStateChanged(bConnected);
+	}
+
 	// Last link out: clear per-connection GATT state (CCCD notify/indicate
 	// flags) on every registered service. This used to live in
 	// BtGapDeleteConnection and only covered the two internal GAP services;
 	// owning the pool here lets it cover the whole service list. bt_peer is
 	// above bt_gatt, so calling down is within the layering.
-	if (BtPeerIsConnected() == false)
+	if (bConnected == false)
 	{
 		for (BtGattSrvc_t *p = BtGattGetSrvcList(); p != nullptr; p = p->pNext)
 		{
@@ -386,20 +406,24 @@ BtDevice_t * BtPeerConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, c
 							 uint8_t OwnAddrType, const uint8_t *pOwnAddr)
 {
 	BtDevice_t *p = BtPeerAlloc(ConnHdl);
-	if (p != nullptr)
+	if (p == nullptr)
 	{
-		p->Conn.Role = Role;
-		p->Conn.PeerAddrType = AddrType;
-		if (pAddr != nullptr)
-		{
-			memcpy(p->Conn.PeerAddr, pAddr, sizeof(p->Conn.PeerAddr));
-		}
-		p->Conn.OwnAddrType = OwnAddrType;
-		if (pOwnAddr != nullptr)
-		{
-			memcpy(p->Conn.OwnAddr, pOwnAddr, sizeof(p->Conn.OwnAddr));
-		}
+		BtPeerConnectionRejected(ConnHdl);
+		return nullptr;
 	}
+
+	p->Conn.Role = Role;
+	p->Conn.PeerAddrType = AddrType;
+	if (pAddr != nullptr)
+	{
+		memcpy(p->Conn.PeerAddr, pAddr, sizeof(p->Conn.PeerAddr));
+	}
+	p->Conn.OwnAddrType = OwnAddrType;
+	if (pOwnAddr != nullptr)
+	{
+		memcpy(p->Conn.OwnAddr, pOwnAddr, sizeof(p->Conn.OwnAddr));
+	}
+	BtPeerConnectionStateChanged(true);
 	return p;
 }
 
