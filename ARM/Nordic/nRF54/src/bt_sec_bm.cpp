@@ -92,8 +92,6 @@ SOFTWARE.
 #include <ble_err.h>
 #include <ble_hci.h>
 
-#include <zephyr/logging/log.h>
-
 #include "storage/nvm.h"
 #include "storage/nvm_intrf.h"
 #include "storage/nvm_region.h"
@@ -119,19 +117,17 @@ SOFTWARE.
 #endif
 
 #include "bt_lesc.h"
+
+/******** For DEBUG Trace ************/
+#define DEBUG_ENABLE
+
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 #include "syslog.h"
-
-LOG_MODULE_DECLARE(peer_manager, CONFIG_PEER_MANAGER_LOG_LEVEL);
-
-#ifndef BT_SEC_BM_RECONNECT_TRACE
-#define BT_SEC_BM_RECONNECT_TRACE	1
-#endif
-
-#if BT_SEC_BM_RECONNECT_TRACE
-#define RECONNECT_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
-#define RECONNECT_PRINTF(...)
+#define DEBUG_PRINTF(...)
 #endif
+/*******************************/
 
 // Event sink in peer_manager.c; the same extern hookup the stock sm uses.
 extern "C" void pm_sm_evt_handler(struct pm_evt *sm_evt);
@@ -515,6 +511,7 @@ static void ParamsRequestProcess(uint16_t ConnHdl, const ble_gap_sec_params_t *p
 // ---- link secure (pm_conn_secure and Security Request) ----------------------
 
 #if defined(CONFIG_SOFTDEVICE_CENTRAL)
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 static bool ReconnectIrkPresent(const ble_gap_irk_t *pIrk)
 {
 	if (pIrk == nullptr)
@@ -532,14 +529,13 @@ static bool ReconnectIrkPresent(const ble_gap_irk_t *pIrk)
 
 static void ReconnectPeerTrace(uint16_t ConnHdl, uint16_t PeerId)
 {
-#if BT_SEC_BM_RECONNECT_TRACE
 	ble_gap_addr_t connAddr;
 	memset(&connAddr, 0, sizeof(connAddr));
 	uint32_t addrStatus = im_ble_addr_get(ConnHdl, &connAddr);
 
 	if (addrStatus == NRF_SUCCESS)
 	{
-		RECONNECT_PRINTF(
+		DEBUG_PRINTF(
 				"BM ID: hdl=%u peer=%u type=%u addr=%02x:%02x:%02x:%02x:%02x:%02x\r\n",
 				(unsigned)ConnHdl, (unsigned)PeerId,
 				(unsigned)connAddr.addr_type,
@@ -548,7 +544,7 @@ static void ReconnectPeerTrace(uint16_t ConnHdl, uint16_t PeerId)
 	}
 	else
 	{
-		RECONNECT_PRINTF(
+		DEBUG_PRINTF(
 				"BM ID: hdl=%u peer=%u address read failed 0x%08lx\r\n",
 				(unsigned)ConnHdl, (unsigned)PeerId,
 				(unsigned long)addrStatus);
@@ -582,7 +578,7 @@ static void ReconnectPeerTrace(uint16_t ConnHdl, uint16_t PeerId)
 			ReconnectIrkPresent(&pId->id_info) &&
 			im_address_resolve(&connAddr, &pId->id_info);
 
-		RECONNECT_PRINTF(
+		DEBUG_PRINTF(
 				"BM ID: candidate=%u type=%u addr=%02x:%02x:%02x:%02x:%02x:%02x "
 				"irk=%u direct=%u rpa=%u\r\n",
 				(unsigned)candidateId, (unsigned)pId->id_addr_info.addr_type,
@@ -592,25 +588,20 @@ static void ReconnectPeerTrace(uint16_t ConnHdl, uint16_t PeerId)
 				ReconnectIrkPresent(&pId->id_info) ? 1U : 0U,
 				direct ? 1U : 0U, rpa ? 1U : 0U);
 	}
-#else
-	(void)ConnHdl;
-	(void)PeerId;
-#endif
 }
 
 static void ReconnectBondTrace(uint16_t PeerId, uint32_t Status,
 							   const struct pm_peer_data_bonding *pBond)
 {
-#if BT_SEC_BM_RECONNECT_TRACE
 	if (Status != NRF_SUCCESS || pBond == nullptr)
 	{
-		RECONNECT_PRINTF("BM SEC: bond read peer=%u status=0x%08lx\r\n",
+		DEBUG_PRINTF("BM SEC: bond read peer=%u status=0x%08lx\r\n",
 				(unsigned)PeerId, (unsigned long)Status);
 		return;
 	}
 
 	const ble_gap_addr_t *pAddr = &pBond->peer_ble_id.id_addr_info;
-	RECONNECT_PRINTF(
+	DEBUG_PRINTF(
 			"BM SEC: bond peer=%u own(sc=%u len=%u) peer(sc=%u len=%u) "
 			"idtype=%u id=%02x:%02x:%02x:%02x:%02x:%02x irk=%u\r\n",
 			(unsigned)PeerId,
@@ -622,12 +613,22 @@ static void ReconnectBondTrace(uint16_t PeerId, uint32_t Status,
 			pAddr->addr[5], pAddr->addr[4], pAddr->addr[3],
 			pAddr->addr[2], pAddr->addr[1], pAddr->addr[0],
 			ReconnectIrkPresent(&pBond->peer_ble_id.id_info) ? 1U : 0U);
+}
 #else
+static inline void ReconnectPeerTrace(uint16_t ConnHdl, uint16_t PeerId)
+{
+	(void)ConnHdl;
+	(void)PeerId;
+}
+
+static inline void ReconnectBondTrace(uint16_t PeerId, uint32_t Status,
+								  const struct pm_peer_data_bonding *pBond)
+{
 	(void)PeerId;
 	(void)Status;
 	(void)pBond;
-#endif
 }
+#endif
 
 static uint32_t LinkSecureCentralEncrypt(uint16_t ConnHdl, uint16_t PeerId)
 {
@@ -667,13 +668,13 @@ static uint32_t LinkSecureCentralEncrypt(uint16_t ConnHdl, uint16_t PeerId)
 
 	if (pKey == NULL || !pKey->enc_info.ltk_len)
 	{
-		RECONNECT_PRINTF("BM SEC: peer=%u has no usable LTK, pair instead\r\n",
+		DEBUG_PRINTF("BM SEC: peer=%u has no usable LTK, pair instead\r\n",
 				(unsigned)PeerId);
 		return NRF_ERROR_NOT_FOUND;		// no usable key; caller falls back to pairing
 	}
 
 	r = sd_ble_gap_encrypt(ConnHdl, &pKey->master_id, &pKey->enc_info);
-	RECONNECT_PRINTF(
+	DEBUG_PRINTF(
 			"BM SEC: encrypt hdl=%u peer=%u sc=%u len=%u ediv=0x%04x status=0x%08lx\r\n",
 			(unsigned)ConnHdl, (unsigned)PeerId,
 			(unsigned)pKey->enc_info.lesc, (unsigned)pKey->enc_info.ltk_len,
@@ -1208,17 +1209,6 @@ static void PendingPumpsRun(void)
 #define BT_SEC_BM_REGION_NO			0
 #endif
 
-// Store trace. Independent of NDEBUG: a release build is where peer data has
-// to survive a reset, and a mount that silently did not happen looks exactly
-// like data that was written and not found again.
-#define BT_SEC_BM_PDS_TRACE
-
-#ifdef BT_SEC_BM_PDS_TRACE
-#define PDS_PRINTF(...)			SysLogPrintf(SysLogGet(), __VA_ARGS__)
-#else
-#define PDS_PRINTF(...)
-#endif
-
 static NvmIntrf s_PdsIntrf;
 static Nvm s_PdsMem;
 static bool s_bPdsMounted = false;
@@ -1246,13 +1236,13 @@ extern "C" int BtPdsBmInit(void)
 	uintptr_t base = NvmRegionAddr(BT_SEC_BM_REGION_NO);
 	size_t size = NvmRegionSize(BT_SEC_BM_REGION_NO);
 
-	PDS_PRINTF("PDS: linker NVM%d at %08lX size %08lX\r\n",
+	DEBUG_PRINTF("PDS: linker NVM%d at %08lX size %08lX\r\n",
 			   BT_SEC_BM_REGION_NO, (unsigned long)base,
 			   (unsigned long)size);
 
 	if (base == 0 || size == 0)
 	{
-		PDS_PRINTF("PDS: no NVM%d region in the linker script, "
+		DEBUG_PRINTF("PDS: no NVM%d region in the linker script, "
 				   "peer data will not persist\r\n", BT_SEC_BM_REGION_NO);
 
 		return -ENODEV;
@@ -1263,7 +1253,7 @@ extern "C" int BtPdsBmInit(void)
 	// how long a program takes is the memory's own timing.
 	if (s_PdsIntrf.Init() == false)
 	{
-		PDS_PRINTF("PDS: memory interface init failed\r\n");
+		DEBUG_PRINTF("PDS: memory interface init failed\r\n");
 
 		return -EIO;
 	}
@@ -1278,12 +1268,12 @@ extern "C" int BtPdsBmInit(void)
 	// The region is the whole of this device, so no window inside it.
 	if (s_PdsMem.Init(cfg, &s_PdsIntrf, 0, 0) == false)
 	{
-		PDS_PRINTF("PDS: Nvm init failed\r\n");
+		DEBUG_PRINTF("PDS: Nvm init failed\r\n");
 
 		return -EIO;
 	}
 
-	PDS_PRINTF("PDS: Nvm ok, size %lu, sector %lu, wr %lu\r\n",
+	DEBUG_PRINTF("PDS: Nvm ok, size %lu, sector %lu, wr %lu\r\n",
 			   (unsigned long)s_PdsMem.Size(),
 			   (unsigned long)s_PdsMem.LogicalSectorSize(),
 			   (unsigned long)s_PdsMem.WriteGran());
@@ -1291,12 +1281,12 @@ extern "C" int BtPdsBmInit(void)
 	int r = BtPdsInit(&s_PdsMem);
 	if (r != 0)
 	{
-		PDS_PRINTF("PDS: store mount failed %d\r\n", r);
+		DEBUG_PRINTF("PDS: store mount failed %d\r\n", r);
 
 		return r;
 	}
 
-	PDS_PRINTF("PDS: store mounted\r\n");
+	DEBUG_PRINTF("PDS: store mounted\r\n");
 
 	s_bPdsMounted = true;
 
@@ -1316,7 +1306,7 @@ void BtSmpBondErase(void)
 {
 	uint32_t err = pm_peers_delete();
 
-	PDS_PRINTF("PDS: clear all peers, pm_peers_delete returned 0x%lX\r\n",
+	DEBUG_PRINTF("PDS: clear all peers, pm_peers_delete returned 0x%lX\r\n",
 			   (unsigned long)err);
 }
 
@@ -1351,8 +1341,8 @@ uint32_t sm_init(void)
 
 	if (s_FlagReplyPendBusy == PM_CONN_STATE_USER_FLAG_INVALID)
 	{
-		LOG_ERR("Could not acquire conn_state user flags. Increase "
-				"PM_CONN_STATE_USER_FLAG_COUNT in the pm_conn_state module.");
+		DEBUG_PRINTF("SEC: could not acquire conn_state user flags; increase "
+				"PM_CONN_STATE_USER_FLAG_COUNT\r\n");
 		return NRF_ERROR_INTERNAL;
 	}
 
