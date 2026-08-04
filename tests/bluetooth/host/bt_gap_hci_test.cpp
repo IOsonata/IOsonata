@@ -97,11 +97,36 @@ BtGapScanCfg_t MakeScanCfg(uint32_t Interval, uint32_t Duration)
 	return cfg;
 }
 
+BtGapConnParams_t MakeConnParams()
+{
+	BtGapConnParams_t params = {};
+	params.IntervalMin = 30.0f;
+	params.IntervalMax = 50.0f;
+	params.Latency = 0;
+	params.Timeout = 4000;
+	return params;
+}
+
 // Offsets into the SET_EXT_SCAN_PARAM parameter block (single PHY):
 // OwnAddrType(1) FilterPolicy(1) ScanPhys(1) ScanType(1) Interval(2) Window(2).
 constexpr size_t kScanOwnAddr = 0;
 constexpr size_t kScanInterval = 4;
 constexpr size_t kScanWindow = 6;
+
+void TestInvalidArguments()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+
+	CHECK(BtGapScanInit(nullptr) == false);
+	CHECK(s_CmdCount == 0);
+
+	BtGapPeerAddr_t peer = {};
+	BtGapConnParams_t params = MakeConnParams();
+	CHECK(BtGapConnect(nullptr, &params) == false);
+	CHECK(BtGapConnect(&peer, nullptr) == false);
+	CHECK(s_CmdCount == 0);
+}
 
 // ---- G1: own-address resolution ------------------------------------------
 
@@ -266,6 +291,7 @@ void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 
 int main()
 {
+	TestInvalidArguments();
 	TestScanPublicIdentity();
 	TestScanRandomIdentity();
 	TestScanInvalidRandomIdentity();

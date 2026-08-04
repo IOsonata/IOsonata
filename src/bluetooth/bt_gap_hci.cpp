@@ -187,6 +187,11 @@ static bool BtGapCreateConnParamValid(uint16_t IntervalMin, uint16_t IntervalMax
 
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 {
+	if (pCfg == nullptr)
+	{
+		return false;
+	}
+
 	BtHciDevice_t *pDev = BtGapHciDev();
 	if (pDev == nullptr)
 	{
@@ -269,6 +274,11 @@ bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
 
 bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam)
 {
+	if (pPeerAddr == nullptr || pConnParam == nullptr)
+	{
+		return false;
+	}
+
 	BtHciDevice_t *pDev = BtGapHciDev();
 	if (pDev == nullptr)
 	{
