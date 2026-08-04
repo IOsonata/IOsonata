@@ -127,6 +127,49 @@ void TestAllocationAndLongWriteSlices()
 	CHECK(!BtPeerIsConnected());
 }
 
+void TestTruncatedHandleScanRotates()
+{
+	constexpr uint16_t kPeerCount = 10;
+	alignas(BtDevice_t)
+	std::array<uint8_t, BT_PEER_POOL_MEMSIZE(kPeerCount)> pool = {};
+	CHECK(BtPeerInit(pool.data(), pool.size()));
+
+	for (uint16_t i = 0; i < kPeerCount; i++)
+	{
+		CHECK(BtPeerAlloc((uint16_t)(0x100U + i)) != nullptr);
+	}
+
+	uint16_t first[8] = {};
+	uint16_t second[8] = {};
+	CHECK(BtPeerGetConnectedHandles(first, 8) == 8);
+	CHECK(BtPeerGetConnectedHandles(second, 8) == 8);
+
+	bool seen[kPeerCount] = {};
+	for (uint16_t hdl : first)
+	{
+		CHECK(hdl >= 0x100U && hdl < 0x100U + kPeerCount);
+		seen[hdl - 0x100U] = true;
+	}
+	for (uint16_t hdl : second)
+	{
+		CHECK(hdl >= 0x100U && hdl < 0x100U + kPeerCount);
+		seen[hdl - 0x100U] = true;
+	}
+	for (bool value : seen)
+	{
+		CHECK(value);
+	}
+
+	// A complete snapshot remains deterministic and resets the bounded-scan
+	// cursor for callers that can hold every active link.
+	uint16_t all[kPeerCount] = {};
+	CHECK(BtPeerGetConnectedHandles(all, kPeerCount) == kPeerCount);
+	for (uint16_t i = 0; i < kPeerCount; i++)
+	{
+		CHECK(all[i] == (uint16_t)(0x100U + i));
+	}
+}
+
 void TestConnectedFieldsAndDefaultPool()
 {
 	CHECK(BtPeerInit(nullptr, 0));
@@ -204,6 +247,7 @@ int main()
 {
 	TestMisalignedCallerPool();
 	TestAllocationAndLongWriteSlices();
+	TestTruncatedHandleScanRotates();
 	TestConnectedFieldsAndDefaultPool();
 	TestPeerRole();
 	TestInvalidPool();

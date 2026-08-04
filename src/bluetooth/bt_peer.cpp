@@ -25,8 +25,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -58,6 +58,7 @@ SOFTWARE.
 alignas(BtDevice_t) static uint8_t s_DefaultPeerPoolMem[BT_PEER_POOL_MEMSIZE(BT_PEER_POOL_DEFAULT_COUNT)];
 static BtPeerPoolHdr_t *s_pPeerPool = nullptr;
 static BtDevice_t *s_pPeerSlots = nullptr;
+static uint16_t s_HandleScanCursor = 0;
 
 // Long-write reassembly pool. Split evenly across the peer slots by
 // BtPeerLongWrInit; each slot's slice is re-assigned in BtPeerAlloc because
@@ -130,6 +131,7 @@ bool BtPeerInit(uint8_t *pMem, size_t MemSize)
 
 	s_pPeerPool = hdr;
 	s_pPeerSlots = slots;
+	s_HandleScanCursor = 0;
 	return true;
 }
 
@@ -319,15 +321,59 @@ size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 		return 0;
 	}
 
-	size_t n = 0;
 	BtDevice_t *slots = PeerSlots();
-	for (uint16_t i = 0; i < s_pPeerPool->Count && n < MaxCount; i++)
+	uint16_t slotCount = s_pPeerPool->Count;
+	size_t active = 0;
+	for (uint16_t i = 0; i < slotCount; i++)
 	{
 		if (slots[i].Conn.Hdl != BT_CONN_HDL_INVALID)
 		{
-			pHdl[n++] = slots[i].Conn.Hdl;
+			active++;
 		}
 	}
+
+	if (active == 0)
+	{
+		s_HandleScanCursor = 0;
+		return 0;
+	}
+
+	// When the caller can hold the complete set, retain deterministic pool
+	// order. Single-link helpers and snapshots should not depend on prior
+	// bounded scans.
+	if (active <= MaxCount)
+	{
+		size_t n = 0;
+		for (uint16_t i = 0; i < slotCount; i++)
+		{
+			if (slots[i].Conn.Hdl != BT_CONN_HDL_INVALID)
+			{
+				pHdl[n++] = slots[i].Conn.Hdl;
+			}
+		}
+		s_HandleScanCursor = 0;
+		return n;
+	}
+
+	// A bounded periodic scan must not return the same first slots forever.
+	// Continue after the last slot inspected by the previous truncated call.
+	uint16_t idx = s_HandleScanCursor < slotCount ? s_HandleScanCursor : 0;
+	size_t n = 0;
+	uint16_t inspected = 0;
+	while (inspected < slotCount && n < MaxCount)
+	{
+		if (slots[idx].Conn.Hdl != BT_CONN_HDL_INVALID)
+		{
+			pHdl[n++] = slots[idx].Conn.Hdl;
+		}
+		idx++;
+		if (idx >= slotCount)
+		{
+			idx = 0;
+		}
+		inspected++;
+	}
+	s_HandleScanCursor = idx;
 	return n;
 }
 
