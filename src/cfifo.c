@@ -49,6 +49,16 @@ SOFTWARE.
 
 #include "cfifo.h"
 
+#define CFIFO_ATOMIC_STORE(p, v, order) \
+	__atomic_store_n((p), (v), (order))
+#define CFIFO_ATOMIC_LOAD(p, order) \
+	__atomic_load_n((p), (order))
+#define CFIFO_ATOMIC_CAS_WEAK(p, expected, desired, success, failure) \
+	__atomic_compare_exchange_n((p), (expected), (desired), true, \
+		(success), (failure))
+#define CFIFO_ATOMIC_FETCH_ADD(p, v, order) \
+	__atomic_fetch_add((p), (v), (order))
+
 static inline uint32_t cfifo_slot(const CFifo_t *pFifo, uint32_t Idx)
 {
 	return pFifo->Mask ? (Idx & pFifo->Mask) :
@@ -76,13 +86,13 @@ hCFifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize,
 	}
 
 	CFifo_t *pFifo = (CFifo_t *)pMemBlk;
-	atomic_store_explicit(&pFifo->PutIdx, 0U, __ATOMIC_RELAXED);
-	atomic_store_explicit(&pFifo->GetIdx, 0U, __ATOMIC_RELAXED);
+	CFIFO_ATOMIC_STORE(&pFifo->PutIdx, 0U, __ATOMIC_RELAXED);
+	CFIFO_ATOMIC_STORE(&pFifo->GetIdx, 0U, __ATOMIC_RELAXED);
 	pFifo->BlkSize = BlkSize;
 	pFifo->pMemStart = pMemBlk + sizeof(CFifo_t);
 	pFifo->MaxIdxCnt = (int32_t)count;
 	pFifo->bBlocking = bBlocking;
-	atomic_store_explicit(&pFifo->DropCnt, 0U, __ATOMIC_RELAXED);
+	CFIFO_ATOMIC_STORE(&pFifo->DropCnt, 0U, __ATOMIC_RELAXED);
 	pFifo->Mask = (count & (count - 1U)) == 0U ? count - 1U : 0U;
 
 	return pFifo;
@@ -95,8 +105,8 @@ uint8_t *CFifoPeek(hCFifo_t const pFifo)
 		return NULL;
 	}
 
-	uint32_t getIdx = atomic_load_explicit(&pFifo->GetIdx, __ATOMIC_RELAXED);
-	uint32_t putIdx = atomic_load_explicit(&pFifo->PutIdx, __ATOMIC_ACQUIRE);
+	uint32_t getIdx = CFIFO_ATOMIC_LOAD(&pFifo->GetIdx, __ATOMIC_RELAXED);
+	uint32_t putIdx = CFIFO_ATOMIC_LOAD(&pFifo->PutIdx, __ATOMIC_ACQUIRE);
 	if (getIdx == putIdx)
 	{
 		return NULL;
@@ -115,13 +125,13 @@ uint8_t *CFifoGet(hCFifo_t const pFifo)
 	uint32_t getIdx;
 	uint32_t putIdx;
 	do {
-		getIdx = atomic_load_explicit(&pFifo->GetIdx, __ATOMIC_RELAXED);
-		putIdx = atomic_load_explicit(&pFifo->PutIdx, __ATOMIC_ACQUIRE);
+		getIdx = CFIFO_ATOMIC_LOAD(&pFifo->GetIdx, __ATOMIC_RELAXED);
+		putIdx = CFIFO_ATOMIC_LOAD(&pFifo->PutIdx, __ATOMIC_ACQUIRE);
 		if (getIdx == putIdx)
 		{
 			return NULL;
 		}
-	} while (!atomic_compare_exchange_weak_explicit(&pFifo->GetIdx,
+	} while (!CFIFO_ATOMIC_CAS_WEAK(&pFifo->GetIdx,
 		&getIdx, getIdx + 1U, __ATOMIC_RELEASE, __ATOMIC_RELAXED));
 
 	return cfifo_addr(pFifo, cfifo_slot(pFifo, getIdx));
@@ -146,8 +156,8 @@ uint8_t *CFifoGetMultiple(hCFifo_t const pFifo, int *pCnt)
 	uint32_t count;
 
 	do {
-		getIdx = atomic_load_explicit(&pFifo->GetIdx, __ATOMIC_RELAXED);
-		putIdx = atomic_load_explicit(&pFifo->PutIdx, __ATOMIC_ACQUIRE);
+		getIdx = CFIFO_ATOMIC_LOAD(&pFifo->GetIdx, __ATOMIC_RELAXED);
+		putIdx = CFIFO_ATOMIC_LOAD(&pFifo->PutIdx, __ATOMIC_ACQUIRE);
 		used = putIdx - getIdx;
 		if (used == 0U)
 		{
@@ -167,7 +177,7 @@ uint8_t *CFifoGetMultiple(hCFifo_t const pFifo, int *pCnt)
 		{
 			count = contiguous;
 		}
-	} while (!atomic_compare_exchange_weak_explicit(&pFifo->GetIdx,
+	} while (!CFIFO_ATOMIC_CAS_WEAK(&pFifo->GetIdx,
 		&getIdx, getIdx + count, __ATOMIC_RELEASE, __ATOMIC_RELAXED));
 
 	*pCnt = (int)count;
@@ -182,8 +192,8 @@ uint8_t *CFifoPut(hCFifo_t const pFifo)
 	}
 
 	uint32_t max = (uint32_t)pFifo->MaxIdxCnt;
-	uint32_t putIdx = atomic_load_explicit(&pFifo->PutIdx, __ATOMIC_RELAXED);
-	uint32_t getIdx = atomic_load_explicit(&pFifo->GetIdx, __ATOMIC_ACQUIRE);
+	uint32_t putIdx = CFIFO_ATOMIC_LOAD(&pFifo->PutIdx, __ATOMIC_RELAXED);
+	uint32_t getIdx = CFIFO_ATOMIC_LOAD(&pFifo->GetIdx, __ATOMIC_ACQUIRE);
 	uint32_t used = putIdx - getIdx;
 
 	if (used >= max)
@@ -194,15 +204,15 @@ uint8_t *CFifoPut(hCFifo_t const pFifo)
 		}
 
 		uint32_t oldGet = getIdx;
-		while (!atomic_compare_exchange_weak_explicit(&pFifo->GetIdx,
+		while (!CFIFO_ATOMIC_CAS_WEAK(&pFifo->GetIdx,
 			&oldGet, oldGet + 1U, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
 		{
 		}
-		atomic_fetch_add_explicit(&pFifo->DropCnt, 1U, __ATOMIC_RELAXED);
+		CFIFO_ATOMIC_FETCH_ADD(&pFifo->DropCnt, 1U, __ATOMIC_RELAXED);
 	}
 
 	uint32_t slot = cfifo_slot(pFifo, putIdx);
-	atomic_store_explicit(&pFifo->PutIdx, putIdx + 1U, __ATOMIC_RELEASE);
+	CFIFO_ATOMIC_STORE(&pFifo->PutIdx, putIdx + 1U, __ATOMIC_RELEASE);
 	return cfifo_addr(pFifo, slot);
 }
 
@@ -219,8 +229,8 @@ uint8_t *CFifoPutMultiple(hCFifo_t const pFifo, int *pCnt)
 	}
 
 	uint32_t max = (uint32_t)pFifo->MaxIdxCnt;
-	uint32_t putIdx = atomic_load_explicit(&pFifo->PutIdx, __ATOMIC_RELAXED);
-	uint32_t getIdx = atomic_load_explicit(&pFifo->GetIdx, __ATOMIC_ACQUIRE);
+	uint32_t putIdx = CFIFO_ATOMIC_LOAD(&pFifo->PutIdx, __ATOMIC_RELAXED);
+	uint32_t getIdx = CFIFO_ATOMIC_LOAD(&pFifo->GetIdx, __ATOMIC_ACQUIRE);
 	uint32_t used = putIdx - getIdx;
 	uint32_t avail = used < max ? max - used : 0U;
 
@@ -238,9 +248,9 @@ uint8_t *CFifoPutMultiple(hCFifo_t const pFifo, int *pCnt)
 			drop = (int)max;
 		}
 		CFifoGetMultiple(pFifo, &drop);
-		atomic_fetch_add_explicit(&pFifo->DropCnt,
+		CFIFO_ATOMIC_FETCH_ADD(&pFifo->DropCnt,
 			(uint32_t)drop, __ATOMIC_RELAXED);
-		getIdx = atomic_load_explicit(&pFifo->GetIdx, __ATOMIC_ACQUIRE);
+		getIdx = CFIFO_ATOMIC_LOAD(&pFifo->GetIdx, __ATOMIC_ACQUIRE);
 		used = putIdx - getIdx;
 		avail = used < max ? max - used : 0U;
 	}
@@ -263,7 +273,7 @@ uint8_t *CFifoPutMultiple(hCFifo_t const pFifo, int *pCnt)
 		return NULL;
 	}
 
-	atomic_store_explicit(&pFifo->PutIdx, putIdx + count, __ATOMIC_RELEASE);
+	CFIFO_ATOMIC_STORE(&pFifo->PutIdx, putIdx + count, __ATOMIC_RELEASE);
 	*pCnt = (int)count;
 	return cfifo_addr(pFifo, slot);
 }
@@ -275,8 +285,8 @@ void CFifoFlush(hCFifo_t const pFifo)
 		return;
 	}
 
-	uint32_t putIdx = atomic_load_explicit(&pFifo->PutIdx, __ATOMIC_RELAXED);
-	atomic_store_explicit(&pFifo->GetIdx, putIdx, __ATOMIC_RELEASE);
+	uint32_t putIdx = CFIFO_ATOMIC_LOAD(&pFifo->PutIdx, __ATOMIC_RELAXED);
+	CFIFO_ATOMIC_STORE(&pFifo->GetIdx, putIdx, __ATOMIC_RELEASE);
 }
 
 int CFifoAvail(hCFifo_t const pFifo)
@@ -286,8 +296,8 @@ int CFifoAvail(hCFifo_t const pFifo)
 		return 0;
 	}
 
-	uint32_t putIdx = atomic_load_explicit(&pFifo->PutIdx, __ATOMIC_RELAXED);
-	uint32_t getIdx = atomic_load_explicit(&pFifo->GetIdx, __ATOMIC_RELAXED);
+	uint32_t putIdx = CFIFO_ATOMIC_LOAD(&pFifo->PutIdx, __ATOMIC_RELAXED);
+	uint32_t getIdx = CFIFO_ATOMIC_LOAD(&pFifo->GetIdx, __ATOMIC_RELAXED);
 	uint32_t used = putIdx - getIdx;
 	uint32_t max = (uint32_t)pFifo->MaxIdxCnt;
 	return used < max ? (int)(max - used) : 0;
@@ -300,8 +310,8 @@ int CFifoUsed(hCFifo_t const pFifo)
 		return 0;
 	}
 
-	uint32_t putIdx = atomic_load_explicit(&pFifo->PutIdx, __ATOMIC_RELAXED);
-	uint32_t getIdx = atomic_load_explicit(&pFifo->GetIdx, __ATOMIC_RELAXED);
+	uint32_t putIdx = CFIFO_ATOMIC_LOAD(&pFifo->PutIdx, __ATOMIC_RELAXED);
+	uint32_t getIdx = CFIFO_ATOMIC_LOAD(&pFifo->GetIdx, __ATOMIC_RELAXED);
 	uint32_t used = putIdx - getIdx;
 	uint32_t max = (uint32_t)pFifo->MaxIdxCnt;
 	return (int)(used < max ? used : max);

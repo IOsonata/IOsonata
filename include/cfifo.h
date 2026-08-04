@@ -42,10 +42,7 @@ SOFTWARE.
 #include <stdbool.h>
 
 #ifdef __cplusplus
-#include <atomic>
-using std::atomic_uint;
-#else
-#include <stdatomic.h>
+extern "C" {
 #endif
 
 /** @addtogroup FIFO
@@ -56,14 +53,14 @@ using std::atomic_uint;
 
 /// Header defining a circular fifo memory block.
 typedef struct __CFIFO_Header {
-	atomic_uint PutIdx;			//!< Index to start of empty data block
-	atomic_uint GetIdx;			//!< Index to start of used data block
+	uint32_t PutIdx;			//!< Index to start of empty data block
+	uint32_t GetIdx;			//!< Index to start of used data block
 	uint32_t BlkSize;			//!< Block size in bytes. Note: This must be adjacent to pMemStart for compiler optimization
 	uint8_t *pMemStart;			//!< Start of FIFO data memory
 	int32_t MaxIdxCnt;			//!< Max block count
 	uint32_t Mask;				//!< NbBlk-1 (pow2) or 0 (non-pow2)
 	bool bBlocking;          	//!< False to push out when FIFO is full (drop)
-	atomic_uint DropCnt;           //!< Count dropped block
+	uint32_t DropCnt;           //!< Count dropped block
 } CFifo_t;
 
 #pragma pack(pop)
@@ -82,10 +79,6 @@ typedef CFifo_t* hCFifo_t;
 
 /// This macro calculates total memory require in bytes including header for block based FIFO.
 #define CFIFO_TOTAL_MEMSIZE(NbBlk, BlkSize)		((NbBlk) * (BlkSize) + sizeof(CFifo_t))
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * @brief	Initialize FIFO.
