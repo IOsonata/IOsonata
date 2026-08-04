@@ -691,6 +691,9 @@ static uint32_t LinkSecureAuthenticate(uint16_t ConnHdl, ble_gap_sec_params_t *p
 {
 	uint32_t r = sd_ble_gap_authenticate(ConnHdl, pSecParams);
 
+	DEBUG_PRINTF("BM SEC: authenticate hdl=%u status=0x%08lx\r\n",
+			(unsigned)ConnHdl, (unsigned long)r);
+
 	if (r == NRF_SUCCESS)
 	{
 #if defined(CONFIG_SOFTDEVICE_CENTRAL)
@@ -716,6 +719,10 @@ static uint32_t LinkSecure(uint16_t ConnHdl, bool bNullParams, bool bForceRepair
 	uint32_t              r;
 	ble_gap_sec_params_t *pParams = bNullParams ? NULL : s_pSecParams;
 	uint8_t               role = pm_conn_state_role(ConnHdl);
+
+	DEBUG_PRINTF("BM SEC: secure hdl=%u role=%u force=%u null=%u\r\n",
+			(unsigned)ConnHdl, (unsigned)role,
+			bForceRepairing ? 1U : 0U, bNullParams ? 1U : 0U);
 
 	if (role == BLE_GAP_ROLE_INVALID)
 	{
@@ -836,6 +843,11 @@ static void SecInfoRequestProcess(const ble_gap_evt_t *pGapEvt)
 		im_new_peer_id(pGapEvt->conn_handle, peerId);
 	}
 
+	DEBUG_PRINTF("BM SEC: sec-info request hdl=%u peer=%u enc=%u ediv=0x%04x\r\n",
+			(unsigned)pGapEvt->conn_handle, (unsigned)peerId,
+			(unsigned)pGapEvt->params.sec_info_request.enc_info,
+			(unsigned)pGapEvt->params.sec_info_request.master_id.ediv);
+
 	SecProcStart(pGapEvt->conn_handle, true, PM_CONN_SEC_PROCEDURE_ENCRYPTION);
 
 	if (peerId != PM_PEER_ID_INVALID)
@@ -845,6 +857,10 @@ static void SecInfoRequestProcess(const ble_gap_evt_t *pGapEvt)
 
 		uint32_t r = pds_peer_data_read(peerId, PM_PEER_DATA_ID_BONDING,
 										&peerData, &bufSize);
+		DEBUG_PRINTF("BM SEC: sec-info bond peer=%u status=0x%08lx sc=%u len=%u\r\n",
+				(unsigned)peerId, (unsigned long)r,
+				r == NRF_SUCCESS ? (unsigned)bondData.own_ltk.enc_info.lesc : 0U,
+				r == NRF_SUCCESS ? (unsigned)bondData.own_ltk.enc_info.ltk_len : 0U);
 		if (r == NRF_SUCCESS)
 		{
 			// Reply with own LTK when it is the one the request names. A LESC
@@ -869,6 +885,9 @@ static void SecInfoRequestProcess(const ble_gap_evt_t *pGapEvt)
 
 	// S145 copies the enc info during the call; the stack buffer is fine.
 	uint32_t r = sd_ble_gap_sec_info_reply(pGapEvt->conn_handle, pEncInfo);
+	DEBUG_PRINTF("BM SEC: sec-info reply hdl=%u peer=%u key=%u status=0x%08lx\r\n",
+			(unsigned)pGapEvt->conn_handle, (unsigned)peerId,
+			pEncInfo != NULL ? 1U : 0U, (unsigned long)r);
 	if (r == NRF_ERROR_INVALID_STATE)
 	{
 		// Another module already replied, or the link is going down; the
@@ -892,6 +911,12 @@ static void SecRequestProcess(const ble_gap_evt_t *pGapEvt)
 {
 	bool bForceRepairing = false;
 	bool bNullParams = (s_pSecParams == NULL);
+
+	DEBUG_PRINTF("BM SEC: security request hdl=%u bond=%u mitm=%u lesc=%u\r\n",
+			(unsigned)pGapEvt->conn_handle,
+			(unsigned)pGapEvt->params.sec_request.bond,
+			(unsigned)pGapEvt->params.sec_request.mitm,
+			(unsigned)pGapEvt->params.sec_request.lesc);
 
 	if (!bNullParams && pm_conn_state_encrypted(pGapEvt->conn_handle))
 	{
@@ -1105,6 +1130,14 @@ static void ConnSecUpdateProcess(const ble_gap_evt_t *pGapEvt)
 	{
 		pLink->EncrKeySize = keySize;
 	}
+
+	DEBUG_PRINTF("BM SEC: update hdl=%u role=%u enc=%u mitm=%u lesc=%u key=%u\r\n",
+			(unsigned)pGapEvt->conn_handle,
+			(unsigned)pm_conn_state_role(pGapEvt->conn_handle),
+			pm_conn_state_encrypted(pGapEvt->conn_handle) ? 1U : 0U,
+			pm_conn_state_mitm_protected(pGapEvt->conn_handle) ? 1U : 0U,
+			pm_conn_state_lesc(pGapEvt->conn_handle) ? 1U : 0U,
+			(unsigned)keySize);
 
 	if (pm_conn_state_encrypted(pGapEvt->conn_handle) && keySize < s_MinKeySize)
 	{
@@ -1355,6 +1388,7 @@ uint32_t sm_init(void)
 #endif
 
 	s_bInit = true;
+	DEBUG_PRINTF("BM SEC: init complete\r\n");
 	return NRF_SUCCESS;
 }
 
@@ -1376,6 +1410,9 @@ void sm_ble_evt_handler(const ble_evt_t *ble_evt)
 		{
 			memset(pLink, 0, sizeof(*pLink));
 		}
+		DEBUG_PRINTF("BM SEC: connected hdl=%u role=%u\r\n",
+				(unsigned)pGapEvt->conn_handle,
+				(unsigned)pm_conn_state_role(pGapEvt->conn_handle));
 		break;
 	}
 
