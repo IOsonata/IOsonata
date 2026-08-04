@@ -59,7 +59,7 @@ SOFTWARE.
 #include "bm/bluetooth/ble_conn_params.h"
 #include "bm/bluetooth/peer_manager/peer_manager.h"
 #include "bm/bluetooth/peer_manager/peer_manager_handler.h"
-#include "bm/bluetooth/services/ble_dis.h"
+#include "bluetooth/services/bt_dis.h"
 
 #include "cracen_intrf.h"
 #include "crypto/ba414ep.h"
@@ -87,6 +87,10 @@ SOFTWARE.
 #include "app_evt_handler.h"
 
 extern "C" bool sdh_state_evt_observer_notify(enum nrf_sdh_state_evt state);
+
+// Target-local advertising state hooks implemented in bt_adv_bm.cpp.
+void BtAdvBmConnected();
+void BtAdvBmTerminated();
 
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
@@ -139,7 +143,7 @@ static const int8_t s_TxPowerdBm[] = {
 static const int s_NbTxPowerdBm = sizeof(s_TxPowerdBm) / sizeof(int8_t);
 
 // g_BtAppData definition and helpers (isConnected, BtConnected, BtInitialized,
-// BtAppGetConnHandle, BtAppConnLedOff/On) moved to src/bluetooth/bt_app.cpp.
+// BtAppNotify/BtAppIndicate, BtAppConnLedOff/On) moved to src/bluetooth/bt_app.cpp.
 
 // --- Advertisement packet buffers ---
 
@@ -159,7 +163,71 @@ const static TimerCfg_t s_BtAppSdTimerCfg = {
 };
 
 static Timer s_BtAppSdGrtc3;
-static volatile uint16_t s_SecurePendingHdl = BLE_CONN_HANDLE_INVALID;
+static volatile uint16_t s_SecurePendingHdl[CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT];
+
+static void SecurePendingReset()
+{
+	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
+	{
+		s_SecurePendingHdl[i] = BLE_CONN_HANDLE_INVALID;
+	}
+}
+
+static bool SecurePendingAdd(uint16_t ConnHdl)
+{
+	int freeIdx = -1;
+
+	if (ConnHdl == BLE_CONN_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
+	{
+		if (s_SecurePendingHdl[i] == ConnHdl)
+		{
+			return true;
+		}
+		if (freeIdx < 0 && s_SecurePendingHdl[i] == BLE_CONN_HANDLE_INVALID)
+		{
+			freeIdx = i;
+		}
+	}
+
+	if (freeIdx < 0)
+	{
+		return false;
+	}
+
+	s_SecurePendingHdl[freeIdx] = ConnHdl;
+	return true;
+}
+
+static void SecurePendingRemove(uint16_t ConnHdl)
+{
+	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
+	{
+		if (s_SecurePendingHdl[i] == ConnHdl)
+		{
+			s_SecurePendingHdl[i] = BLE_CONN_HANDLE_INVALID;
+		}
+	}
+}
+
+static uint16_t SecurePendingTake()
+{
+	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
+	{
+		uint16_t connHdl = s_SecurePendingHdl[i];
+		if (connHdl != BLE_CONN_HANDLE_INVALID)
+		{
+			s_SecurePendingHdl[i] = BLE_CONN_HANDLE_INVALID;
+			return connHdl;
+		}
+	}
+
+	return BLE_CONN_HANDLE_INVALID;
+}
 
 // --- Helper functions ---
 
@@ -183,7 +251,9 @@ static void on_conn_params_evt(const struct ble_conn_params_evt *p_evt)
 {
 	if (p_evt->evt_type == BLE_CONN_PARAMS_EVT_ERROR)
 	{
-		sd_ble_gap_disconnect(BtAppGetConnHandle(),
+		// The event names the link whose negotiation failed. Reading the active
+		// handle instead dropped whichever link happened to be current.
+		sd_ble_gap_disconnect(p_evt->conn_handle,
 							  BLE_HCI_CONN_INTERVAL_UNACCEPTABLE);
 	}
 }
@@ -253,11 +323,12 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 }
 
 // LE Secure Connections OOB data (strong overrides of the generic weak API).
-// The IOsonata BtLesc module owns the SC key pair, so the local OOB set comes
-// from it and the peer set is staged here; the peer data handler hands it to
-// the pairing with the link peer address filled in.
+// The public staging API has no connection handle, so one staged peer set is
+// bound to the first link that consumes it. A second concurrent OOB procedure
+// is rejected rather than overwriting data already owned by another link.
 static ble_gap_lesc_oob_data_t s_BtAppPeerOob;
 static bool s_BtAppPeerOobValid = false;
+static uint16_t s_BtAppPeerOobHdl = BLE_CONN_HANDLE_INVALID;
 
 typedef struct __Bt_Smp_Bm_Auth_Cfg {
 	uint8_t IoCaps;
@@ -278,6 +349,21 @@ void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 	s_BtSmpAuthCfg.bSet = true;
 }
 
+static void BtSmpOobDataClearInternal()
+{
+	s_BtAppPeerOobValid = false;
+	s_BtAppPeerOobHdl = BLE_CONN_HANDLE_INVALID;
+	CryptoSecureWipe(&s_BtAppPeerOob, sizeof(s_BtAppPeerOob));
+}
+
+static void BtSmpOobDataClearConn(uint16_t ConnHdl)
+{
+	if (s_BtAppPeerOobValid && s_BtAppPeerOobHdl == ConnHdl)
+	{
+		BtSmpOobDataClearInternal();
+	}
+}
+
 static ble_gap_lesc_oob_data_t *BtAppOobPeerDataHandler(uint16_t ConnHdl)
 {
 	if (!s_BtAppPeerOobValid)
@@ -286,12 +372,24 @@ static ble_gap_lesc_oob_data_t *BtAppOobPeerDataHandler(uint16_t ConnHdl)
 		return NULL;
 	}
 
-	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
-	if (pPeer != nullptr)
+	if (s_BtAppPeerOobHdl != BLE_CONN_HANDLE_INVALID &&
+		s_BtAppPeerOobHdl != ConnHdl)
 	{
-		s_BtAppPeerOob.addr.addr_type = pPeer->Conn.PeerAddrType;
-		memcpy(s_BtAppPeerOob.addr.addr, pPeer->Conn.PeerAddr, 6);
+		DEBUG_PRINTF("SEC: OOB data busy on hdl=%u, reject hdl=%u\r\n",
+			s_BtAppPeerOobHdl, ConnHdl);
+		return NULL;
 	}
+
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr)
+	{
+		DEBUG_PRINTF("SEC: no peer record for OOB hdl=%u\r\n", ConnHdl);
+		return NULL;
+	}
+
+	s_BtAppPeerOobHdl = ConnHdl;
+	s_BtAppPeerOob.addr.addr_type = pPeer->Conn.PeerAddrType;
+	memcpy(s_BtAppPeerOob.addr.addr, pPeer->Conn.PeerAddr, 6);
 
 	return &s_BtAppPeerOob;
 }
@@ -327,7 +425,16 @@ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pCon
 	{
 		return;
 	}
-	CryptoSecureWipe(&s_BtAppPeerOob, sizeof(s_BtAppPeerOob));
+
+	if (s_BtAppPeerOobValid && s_BtAppPeerOobHdl != BLE_CONN_HANDLE_INVALID &&
+		BtPeerFindByHdl(s_BtAppPeerOobHdl) != nullptr)
+	{
+		DEBUG_PRINTF("SEC: OOB data already owned by hdl=%u\r\n",
+			s_BtAppPeerOobHdl);
+		return;
+	}
+
+	BtSmpOobDataClearInternal();
 	memcpy(s_BtAppPeerOob.r, pRand, 16);
 	memcpy(s_BtAppPeerOob.c, pConf, 16);
 	s_BtAppPeerOobValid = true;
@@ -335,8 +442,7 @@ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pCon
 
 void BtSmpOobDataClear(void)
 {
-	s_BtAppPeerOobValid = false;
-	CryptoSecureWipe(&s_BtAppPeerOob, sizeof(s_BtAppPeerOob));
+	BtSmpOobDataClearInternal();
 }
 
 // Weak defaults. With no application override the only safe action is to reject,
@@ -365,30 +471,57 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 {
 	uint32_t err_code;
 	const ble_gap_evt_t *p_gap_evt = &p_ble_evt->evt.gap_evt;
-	//uint8_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
-	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
 
 	DEBUG_PRINTF("evt: 0x%x\r\n", p_ble_evt->header.evt_id);
 	switch (p_ble_evt->header.evt_id)
 	{
 		case BLE_GAP_EVT_CONNECTED:
+		{
 			BtAppConnLedOn();
 			// Own address not stamped: SMP runs in the S145 host, not the
 			// IOsonata toolbox, so the record is left for the
 			// BtSmpLocalAddrGet fallback.
-			BtPeerConnected(p_gap_evt->conn_handle, role,
+			// The connected event reports this device's role on the new link
+			// (BLE_GAP_ROLE_PERIPH 1, BLE_GAP_ROLE_CENTRAL 2). The peer
+			// record stores it in the HCI encoding (BT_CONN_ROLE_*); the
+			// config bitmask previously stored here is not a link role at
+			// all and made the record unusable on a mixed-role device.
+			uint8_t role = p_gap_evt->params.connected.role;
+			BtPeerConnected(p_gap_evt->conn_handle,
+							   role == BLE_GAP_ROLE_CENTRAL ?
+							   BT_CONN_ROLE_CENTRAL :
+							   role == BLE_GAP_ROLE_PERIPH ?
+							   BT_CONN_ROLE_PERIPHERAL : BT_CONN_ROLE_UNKNOWN,
 							   p_gap_evt->params.connected.peer_addr.addr_type,
 							   (uint8_t *)p_gap_evt->params.connected.peer_addr.addr,
 							   0, NULL);
+
+			// A peripheral-role connection consumes the running connectable
+			// advertising set. Mark it stopped before checking remaining capacity.
+			if (role == BLE_GAP_ROLE_PERIPH)
+			{
+				BtAdvBmConnected();
+			}
+
 			g_BtAppData.State = BTAPP_STATE_CONNECTED;
 			BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 
 			// Start security from the main loop. Peer Manager and LESC work
 			// must not run in the SoftDevice event interrupt.
-			if (g_BtAppData.AppDevice.bSecure)
+			if (g_BtAppData.AppDevice.bSecure &&
+				!SecurePendingAdd(p_gap_evt->conn_handle))
 			{
-				s_SecurePendingHdl = p_gap_evt->conn_handle;
+				DEBUG_PRINTF("SEC: pending queue full hdl=%u\r\n",
+					p_gap_evt->conn_handle);
 			}
+
+			// Continue connectable advertising while peripheral-link capacity
+			// remains. BtAdvStart counts only peripheral-role links.
+			if (role == BLE_GAP_ROLE_PERIPH)
+			{
+				BtAdvStart();
+			}
+		}
 			break;
 
 		case BLE_GAP_EVT_DISCONNECTED:
@@ -396,17 +529,18 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			uint16_t connHdl = p_ble_evt->evt.gap_evt.conn_handle;
 			BtDevice_t *pPeer = BtPeerFindByHdl(connHdl);
 
-			if (s_SecurePendingHdl == connHdl)
-			{
-				s_SecurePendingHdl = BLE_CONN_HANDLE_INVALID;
-			}
-			BtSmpOobDataClear();
-			BtAppConnLedOff();
+			SecurePendingRemove(connHdl);
+			BtSmpOobDataClearConn(connHdl);
 			BtPeerFree(pPeer);
 
-			if (BtPeerIsConnected() == false)
+			if (BtPeerIsConnected())
+			{
+				g_BtAppData.State = BTAPP_STATE_CONNECTED;
+			}
+			else
 			{
 				g_BtAppData.State = BTAPP_STATE_IDLE;
+				BtAppConnLedOff();
 			}
 
 			BtAppEvtDisconnected(connHdl);
@@ -462,6 +596,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			break;
 
 		case BLE_GAP_EVT_ADV_SET_TERMINATED:
+			BtAdvBmTerminated();
 			BtAppAdvTimeoutHandler();
 			break;
 
@@ -487,8 +622,9 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 		break;
 
 		case BLE_GATTS_EVT_SYS_ATTR_MISSING:
+			// The event names the link that is missing them.
 			err_code = sd_ble_gatts_sys_attr_set(
-				BtAppGetConnHandle(), NULL, 0, 0);
+				p_ble_evt->evt.gatts_evt.conn_handle, NULL, 0, 0);
 			(void)err_code;
 			break;
 
@@ -534,9 +670,18 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			break;
 	}
 
-	// Forward to central/observer handlers
-	if ((role == BLE_GAP_ROLE_CENTRAL) ||
-		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER)))
+	// Forward to central/observer handlers. This asks what the device is
+	// configured to do, not what its role is on one link: the scan report and
+	// the scan timeout below carry no connection handle at all, and the
+	// controller only delivers GATTC events on links where this side is the
+	// client. The local record holds the BTAPP_ROLE_* capability bitmask.
+	//
+	// There used to be a "role == BLE_GAP_ROLE_CENTRAL" term in front of this.
+	// role was a local copy of that same capability bitmask, so comparing it to
+	// a per-link BLE_GAP_ROLE_* value asked nothing meaningful; c47258c5 removed
+	// the local when it gave the connected event its real role and left this
+	// use behind.
+	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
 	{
 		switch (p_ble_evt->header.evt_id)
 		{
@@ -638,58 +783,19 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 
 // --- Notify ---
 
-bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
-{
-	if (pChar == nullptr)
-	{
-		return false;
-	}
-
-	if (DataLen > 0 && pData == nullptr)
-	{
-		return false;
-	}
-
-	if (DataLen > 0 && BtGattCharSetValue(pChar, pData, DataLen) == false)
-	{
-		return false;
-	}
-
-	// Delegate the send to BtGattCharNotify so the notification is tracked in
-	// the TX-pending ring and TxCompleteCB fires on completion.
-	return BtGattCharNotify(BtAppGetConnHandle(), pChar, pData, DataLen);
-}
-
-bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
-{
-	if (pChar == nullptr)
-	{
-		return false;
-	}
-
-	if (DataLen > 0 && pData == nullptr)
-	{
-		return false;
-	}
-
-	if (DataLen > 0 && BtGattCharSetValue(pChar, pData, DataLen) == false)
-	{
-		return false;
-	}
-
-	// Delegate to BtGattCharIndicate so the indication is tracked: pending flag,
-	// transaction timeout, and TX-pending ring.
-	return BtGattCharIndicate(BtAppGetConnHandle(), pChar, pData, DataLen);
-}
+// BtAppNotify/BtAppIndicate, their Conn and All forms are the shared weak
+// implementations in src/bluetooth/bt_app.cpp. This port used to carry a copy
+// that read the active connection handle. What stays here is the disconnect
+// command, which is the one part only this port can issue.
 
 // --- Disconnect ---
 
-void BtAppDisconnect()
+void BtAppDisconnectConn(uint16_t ConnHdl)
 {
-	if (BtAppGetConnHandle() != BLE_CONN_HANDLE_INVALID)
+	if (ConnHdl != BLE_CONN_HANDLE_INVALID)
 	{
 		uint32_t err_code = sd_ble_gap_disconnect(
-			BtAppGetConnHandle(),
+			ConnHdl,
 			BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
 		if (err_code != NRF_SUCCESS && err_code != NRF_ERROR_INVALID_STATE)
 		{
@@ -707,35 +813,6 @@ void BtAppEnterDfu()
 {
 	// Not supported on nRF54L15 S145 yet
 	NVIC_SystemReset();
-}
-
-// --- DIS initialization ---
-
-static void BtDisInit(const BtAppCfg_t *pCfg)
-{
-	// sdk-nrf-bm DIS uses Kconfig values for device info strings.
-	// Call ble_dis_init() with security settings based on SecType.
-	// Note: BLE_DIS_CONFIG_SEC_MODE_DEFAULT uses C nested designated
-	// initializers (.device_info_char.read = ...) which are not valid
-	// in C++. Initialize manually.
-	struct ble_dis_config dis_cfg = {};
-	dis_cfg.sec_mode.device_info_char.read.sm = 1;
-	dis_cfg.sec_mode.device_info_char.read.lv = 1;
-
-	switch (pCfg->SecType)
-	{
-		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
-		case BTGAP_SECTYPE_LESC_MITM:
-		case BTGAP_SECTYPE_SIGNED_NO_MITM:
-			// Just works / signed
-			break;
-		case BTGAP_SECTYPE_NONE:
-		default:
-			// Open access
-			break;
-	}
-
-	ble_dis_init(&dis_cfg);
 }
 
 // --- Stack Init ---
@@ -967,16 +1044,21 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 {
-	// Standard peer_manager housekeeping: applies the event to internal state,
-	// disconnects on security failure, and cleans flash on data update.
-	pm_handler_on_pm_evt(p_evt);
+	// IOsonata starts security once from BtAppRun for both new and restored
+	// peers. The Nordic helper also starts it immediately for a restored peer,
+	// before the remaining CONNECTED observers run, so skip that one helper
+	// action while preserving its handling for all other Peer Manager events.
+	if (p_evt->evt_id != PM_EVT_BONDED_PEER_CONNECTED)
+	{
+		pm_handler_on_pm_evt(p_evt);
+	}
 	pm_handler_disconnect_on_sec_failure(p_evt);
 	pm_handler_flash_clean(p_evt);
 
 	switch (p_evt->evt_id)
 	{
 		case PM_EVT_CONN_SEC_SUCCEEDED:
-			BtSmpOobDataClear();
+			BtSmpOobDataClearConn(p_evt->conn_handle);
 			// Link is encrypted. peer_manager holds the bond. Notify the app so
 			// it can run work that needs an encrypted link (e.g. a central
 			// reading protected characteristics). (nRF52 optionally enforces
@@ -985,7 +1067,7 @@ static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 			break;
 
 		case PM_EVT_CONN_SEC_FAILED:
-			BtSmpOobDataClear();
+			BtSmpOobDataClearConn(p_evt->conn_handle);
 			// Security setup failed. pm_handler_disconnect_on_sec_failure above
 			// already tears the link down when required.
 			break;
@@ -1190,6 +1272,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
+	SecurePendingReset();
+	BtSmpOobDataClearInternal();
+
 	// Populate internal app data from config
 	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
 	g_BtAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
@@ -1271,10 +1356,11 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		BtAppInitUserServices();
 	}
 
-	// Initialize Device Information Service
-	if (pCfg->pDevInfo != NULL)
+	// Register the IOsonata Device Information Service through the
+	// target BtGattSrvcAdd/BtGattCharSetValue implementation.
+	if (pCfg->pDevInfo != NULL && BtDisInit(pCfg) == false)
 	{
-		BtDisInit(pCfg);
+		return false;
 	}
 
 	// Initialize user data
@@ -1374,19 +1460,26 @@ void BtAppRun()
 
 	while (1)
 	{
-		uint16_t connHdl = BLE_CONN_HANDLE_INVALID;
-		uint32_t intState = DisableInterrupt();
-
-		if (s_SecurePendingHdl != BLE_CONN_HANDLE_INVALID)
+		// Drain every connection queued by one SoftDevice dispatch. A fixed
+		// array is used because the maximum is already the configured link count.
+		while (true)
 		{
-			connHdl = s_SecurePendingHdl;
-			s_SecurePendingHdl = BLE_CONN_HANDLE_INVALID;
-		}
+			uint32_t intState = DisableInterrupt();
+			uint16_t connHdl = SecurePendingTake();
+			EnableInterrupt(intState);
 
-		EnableInterrupt(intState);
+			if (connHdl == BLE_CONN_HANDLE_INVALID)
+			{
+				break;
+			}
 
-		if (connHdl != BLE_CONN_HANDLE_INVALID)
-		{
+			// A disconnect may have raced the deferred work. Never secure a stale
+			// handle that has already been returned to the SoftDevice.
+			if (BtPeerFindByHdl(connHdl) == nullptr)
+			{
+				continue;
+			}
+
 			uint32_t err = pm_conn_secure(connHdl, false);
 			DEBUG_PRINTF("pm_conn_secure hdl=%u returned 0x%08" PRIx32 "\r\n",
 				connHdl, err);
@@ -1510,14 +1603,12 @@ bool BtAppConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 // BtDeviceDiscovered(pDev) is called (weak default in bt_app.cpp, overridden
 // by the app).
 //
-// Single active discovery at a time. The cursor lives in file-scope statics,
-// not per peer, so concurrent central links are not supported yet. Per-link
-// discovery would move this cursor into pDev->Discovery.
+// The cursor lives in the peer record (pDev->Discovery), one per link. It used
+// to be three file-scope statics, so starting discovery on a second connection
+// overwrote the first procedure's position and both walked the survivor's
+// table. Each response resolves its peer from the event's connection handle,
+// which is the only thing that says which procedure the response belongs to.
 // =====================================================================
-
-static BtDevice_t *s_pDiscDev    = NULL;    // peer under discovery
-static uint8_t     s_DiscSrvIdx  = 0;       // service cursor (char and desc phases)
-static uint8_t     s_DiscCharIdx = 0;       // characteristic cursor (desc phase)
 
 static void BtAppDiscStartChar(BtDevice_t *pDev);
 static void BtAppDiscStartDesc(BtDevice_t *pDev);
@@ -1529,9 +1620,8 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 		return false;
 	}
 
-	s_pDiscDev    = pDev;
-	s_DiscSrvIdx  = 0;
-	s_DiscCharIdx = 0;
+	pDev->Discovery.SrvIdx  = 0;
+	pDev->Discovery.CharIdx = 0;
 
 	pDev->NbSrvc = 0;
 	memset(pDev->Services, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
@@ -1542,9 +1632,9 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 
 static void BtAppDiscStartChar(BtDevice_t *pDev)
 {
-	while (s_DiscSrvIdx < pDev->NbSrvc)
+	while (pDev->Discovery.SrvIdx < pDev->NbSrvc)
 	{
-		BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
+		BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
 		ble_gattc_handle_range_t range;
 
 		range.start_handle = pSrvc->handle_range.StartHdl + 1;  // skip service declaration
@@ -1555,31 +1645,31 @@ static void BtAppDiscStartChar(BtDevice_t *pDev)
 		{
 			return;     // wait for BLE_GATTC_EVT_CHAR_DISC_RSP
 		}
-		s_DiscSrvIdx++; // empty service or request rejected; advance
+		pDev->Discovery.SrvIdx++; // empty service or request rejected; advance
 	}
 
 	// All services covered for characteristics. Resolve descriptors (CCCD).
-	s_DiscSrvIdx  = 0;
-	s_DiscCharIdx = 0;
+	pDev->Discovery.SrvIdx  = 0;
+	pDev->Discovery.CharIdx = 0;
 	BtAppDiscStartDesc(pDev);
 }
 
 static void BtAppDiscStartDesc(BtDevice_t *pDev)
 {
-	while (s_DiscSrvIdx < pDev->NbSrvc)
+	while (pDev->Discovery.SrvIdx < pDev->NbSrvc)
 	{
-		BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
+		BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
 
-		while (s_DiscCharIdx < pSrvc->char_count)
+		while (pDev->Discovery.CharIdx < pSrvc->char_count)
 		{
-			BtGattDBChar_t *pCh    = &pSrvc->characteristics[s_DiscCharIdx];
+			BtGattDBChar_t *pCh    = &pSrvc->characteristics[pDev->Discovery.CharIdx];
 			uint16_t        valHdl = pCh->characteristic.handle_value;
 			uint16_t        start  = valHdl + 1;
 			uint16_t        end;
 
-			if ((s_DiscCharIdx + 1) < pSrvc->char_count)
+			if ((pDev->Discovery.CharIdx + 1) < pSrvc->char_count)
 			{
-				end = pSrvc->characteristics[s_DiscCharIdx + 1].characteristic.handle_decl - 1;
+				end = pSrvc->characteristics[pDev->Discovery.CharIdx + 1].characteristic.handle_decl - 1;
 			}
 			else
 			{
@@ -1596,10 +1686,10 @@ static void BtAppDiscStartDesc(BtDevice_t *pDev)
 					return; // wait for BLE_GATTC_EVT_DESC_DISC_RSP
 				}
 			}
-			s_DiscCharIdx++; // no descriptor range or request rejected
+			pDev->Discovery.CharIdx++; // no descriptor range or request rejected
 		}
-		s_DiscSrvIdx++;
-		s_DiscCharIdx = 0;
+		pDev->Discovery.SrvIdx++;
+		pDev->Discovery.CharIdx = 0;
 	}
 
 	// Every service and characteristic processed. Discovery complete.
@@ -1608,7 +1698,7 @@ static void BtAppDiscStartDesc(BtDevice_t *pDev)
 
 static void BtAppDiscPrimSrvcRsp(const ble_gattc_evt_t *pEvt)
 {
-	BtDevice_t *pDev = s_pDiscDev;
+	BtDevice_t *pDev = BtPeerFindByHdl(pEvt->conn_handle);
 	if (pDev == NULL)
 	{
 		return;
@@ -1646,19 +1736,19 @@ static void BtAppDiscPrimSrvcRsp(const ble_gattc_evt_t *pEvt)
 	}
 
 	// ATTRIBUTE_NOT_FOUND, DB end, or table full: service phase done.
-	s_DiscSrvIdx = 0;
+	pDev->Discovery.SrvIdx = 0;
 	BtAppDiscStartChar(pDev);
 }
 
 static void BtAppDiscCharRsp(const ble_gattc_evt_t *pEvt)
 {
-	BtDevice_t *pDev = s_pDiscDev;
-	if (pDev == NULL)
+	BtDevice_t *pDev = BtPeerFindByHdl(pEvt->conn_handle);
+	if (pDev == NULL || pDev->Discovery.SrvIdx >= pDev->NbSrvc)
 	{
 		return;
 	}
 
-	BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
+	BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
 
 	if (pEvt->gatt_status == BLE_GATT_STATUS_SUCCESS)
 	{
@@ -1715,23 +1805,24 @@ static void BtAppDiscCharRsp(const ble_gattc_evt_t *pEvt)
 	}
 
 	// Service complete (ATTRIBUTE_NOT_FOUND, table full, or error). Advance.
-	s_DiscSrvIdx++;
+	pDev->Discovery.SrvIdx++;
 	BtAppDiscStartChar(pDev);
 }
 
 static void BtAppDiscDescRsp(const ble_gattc_evt_t *pEvt)
 {
-	BtDevice_t *pDev = s_pDiscDev;
-	if (pDev == NULL)
+	BtDevice_t *pDev = BtPeerFindByHdl(pEvt->conn_handle);
+	if (pDev == NULL || pDev->Discovery.SrvIdx >= pDev->NbSrvc)
 	{
 		return;
 	}
 
-	if (pEvt->gatt_status == BLE_GATT_STATUS_SUCCESS)
+	if (pEvt->gatt_status == BLE_GATT_STATUS_SUCCESS &&
+		pDev->Discovery.CharIdx < pDev->Services[pDev->Discovery.SrvIdx].char_count)
 	{
 		const ble_gattc_evt_desc_disc_rsp_t *p = &pEvt->params.desc_disc_rsp;
-		BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
-		BtGattDBChar_t *pCh   = &pSrvc->characteristics[s_DiscCharIdx];
+		BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
+		BtGattDBChar_t *pCh   = &pSrvc->characteristics[pDev->Discovery.CharIdx];
 
 		for (uint16_t i = 0; i < p->count; i++)
 		{
@@ -1756,7 +1847,7 @@ static void BtAppDiscDescRsp(const ble_gattc_evt_t *pEvt)
 	}
 
 	// Advance to the next characteristic regardless of result.
-	s_DiscCharIdx++;
+	pDev->Discovery.CharIdx++;
 	BtAppDiscStartDesc(pDev);
 }
 

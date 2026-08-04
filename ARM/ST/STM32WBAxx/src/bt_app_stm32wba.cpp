@@ -202,24 +202,27 @@ static void BleHostTask(void)
 // (characteristics) and ACI_ATT_FIND_INFO_RESP (descriptors) events before it.
 // The cursor walks services, then characteristics per service, then descriptors
 // per characteristic (to locate the CCCD), then calls BtDeviceDiscovered.
-typedef enum {
+// Values for BtDevDiscState_t::Phase on this port. Idle is 0, which is what a
+// freshly cleared peer record holds.
+enum {
 	DISC_IDLE = 0,
 	DISC_SERVICES,
 	DISC_CHARS,
 	DISC_DESCS
-} WbaDiscPhase_t;
+};
 
-static BtDevice_t   *s_pDiscDev   = nullptr;
-static WbaDiscPhase_t s_DiscPhase = DISC_IDLE;
-static uint8_t       s_DiscSrvIdx = 0;
-static uint8_t       s_DiscCharIdx = 0;
+// Discovery progress lives in the peer record, one cursor per link
+// (pDev->Discovery). It used to be four file scope variables, so a second
+// central link discovering at the same time overwrote the first one's position.
+// The ACI response events all name their link in Connection_Handle, so each
+// callback resolves its own peer.
 
 static void BtAppDiscStartChar(BtDevice_t *pDev);
 static void BtAppDiscStartDesc(BtDevice_t *pDev);
 static void WbaDiscSrvc(const aci_att_read_by_group_type_resp_event_rp0 *p);
 static void WbaDiscChar(const aci_att_read_by_type_resp_event_rp0 *p);
 static void WbaDiscDesc(const aci_att_find_info_resp_event_rp0 *p);
-static void WbaDiscProcComplete(void);
+static void WbaDiscProcComplete(const aci_gatt_proc_complete_event_rp0 *p);
 
 // Server side write from a connected client. ST reports CCCD writes and
 // characteristic value writes through ACI_GATT_ATTRIBUTE_MODIFIED. Route a CCCD
@@ -618,7 +621,7 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 					break;
 
 				case ACI_GATT_PROC_COMPLETE_VSEVT_CODE:
-					WbaDiscProcComplete();
+					WbaDiscProcComplete((aci_gatt_proc_complete_event_rp0 *)pAci->data);
 					break;
 
 				case ACI_GATT_NOTIFICATION_VSEVT_CODE:
@@ -1160,46 +1163,16 @@ __attribute__((weak)) void BtAppEvtWait(void)
 	__WFE();
 }
 
-bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
+// BtAppNotify/BtAppIndicate, their Conn and All forms are the shared weak
+// implementations in src/bluetooth/bt_app.cpp. This port used to carry a copy
+// that sent to the active connection. What stays here is the disconnect
+// command, which is the one part only this port can issue.
+
+void BtAppDisconnectConn(uint16_t ConnHdl)
 {
-	if (pChar == NULL || pData == NULL || DataLen == 0)
+	if (ConnHdl != BT_CONN_HDL_INVALID)
 	{
-		return false;
-	}
-
-	if (BtPeerIsConnected() == false)
-	{
-		return false;
-	}
-
-	// Notify the active connection. BtGattCharNotify targets that connection and
-	// the ST stack gates on its CCCD, so this matches the active-peer semantics
-	// of the other ports.
-	return BtGattCharNotify(BtPeerActiveHdl(), pChar, pData, DataLen);
-}
-
-bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
-{
-	if (pChar == NULL || pData == NULL || DataLen == 0)
-	{
-		return false;
-	}
-
-	if (BtPeerIsConnected() == false)
-	{
-		return false;
-	}
-
-	// Indicate the active connection; the ST stack gates on its CCCD and tracks
-	// the outstanding confirmation internally.
-	return BtGattCharIndicate(BtPeerActiveHdl(), pChar, pData, DataLen);
-}
-
-void BtAppDisconnect(void)
-{
-	if (BtPeerIsConnected())
-	{
-		aci_gap_terminate(BtPeerActiveHdl(), 0x13);	// remote user term
+		aci_gap_terminate(ConnHdl, 0x13);	// remote user term
 	}
 }
 
@@ -1244,7 +1217,7 @@ static uint16_t WbaUuid16(const uint8_t *pUuid, uint8_t Len)
 // (6 for 16-bit, 20 for 128-bit).
 static void WbaDiscSrvc(const aci_att_read_by_group_type_resp_event_rp0 *p)
 {
-	BtDevice_t *pDev = s_pDiscDev;
+	BtDevice_t *pDev = BtPeerFindByHdl(p->Connection_Handle);
 	if (pDev == nullptr)
 	{
 		return;
@@ -1281,12 +1254,12 @@ static void WbaDiscSrvc(const aci_att_read_by_group_type_resp_event_rp0 *p)
 // Handle_Value_Pair_Length (7 for 16-bit, 21 for 128-bit).
 static void WbaDiscChar(const aci_att_read_by_type_resp_event_rp0 *p)
 {
-	BtDevice_t *pDev = s_pDiscDev;
-	if (pDev == nullptr || s_DiscSrvIdx >= pDev->NbSrvc)
+	BtDevice_t *pDev = BtPeerFindByHdl(p->Connection_Handle);
+	if (pDev == nullptr || pDev->Discovery.SrvIdx >= pDev->NbSrvc)
 	{
 		return;
 	}
-	BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
+	BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
 
 	uint8_t entryLen = p->Handle_Value_Pair_Length;
 	uint8_t total    = p->Data_Length;
@@ -1337,17 +1310,17 @@ static void WbaDiscChar(const aci_att_read_by_type_resp_event_rp0 *p)
 // characteristic.
 static void WbaDiscDesc(const aci_att_find_info_resp_event_rp0 *p)
 {
-	BtDevice_t *pDev = s_pDiscDev;
-	if (pDev == nullptr || s_DiscSrvIdx >= pDev->NbSrvc)
+	BtDevice_t *pDev = BtPeerFindByHdl(p->Connection_Handle);
+	if (pDev == nullptr || pDev->Discovery.SrvIdx >= pDev->NbSrvc)
 	{
 		return;
 	}
-	BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
-	if (s_DiscCharIdx >= pSrvc->char_count)
+	BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
+	if (pDev->Discovery.CharIdx >= pSrvc->char_count)
 	{
 		return;
 	}
-	BtGattDBChar_t *pCh = &pSrvc->characteristics[s_DiscCharIdx];
+	BtGattDBChar_t *pCh = &pSrvc->characteristics[pDev->Discovery.CharIdx];
 
 	uint8_t pairLen = (p->Format == 0x02) ? 18 : 4;
 	uint8_t total   = p->Event_Data_Length;
@@ -1382,26 +1355,26 @@ static void WbaDiscDesc(const aci_att_find_info_resp_event_rp0 *p)
 // services. When every service has been covered, move on to descriptors.
 static void BtAppDiscStartChar(BtDevice_t *pDev)
 {
-	while (s_DiscSrvIdx < pDev->NbSrvc)
+	while (pDev->Discovery.SrvIdx < pDev->NbSrvc)
 	{
-		BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
+		BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
 		uint16_t start = (uint16_t)(pSrvc->handle_range.StartHdl + 1); // skip decl
 		uint16_t end   = pSrvc->handle_range.EndHdl;
 
 		if (start <= end)
 		{
-			s_DiscPhase = DISC_CHARS;
+			pDev->Discovery.Phase = DISC_CHARS;
 			if (aci_gatt_disc_all_char_of_service(pDev->Conn.Hdl, start, end) ==
 				BLE_STATUS_SUCCESS)
 			{
 				return;
 			}
 		}
-		s_DiscSrvIdx++;
+		pDev->Discovery.SrvIdx++;
 	}
 
-	s_DiscSrvIdx  = 0;
-	s_DiscCharIdx = 0;
+	pDev->Discovery.SrvIdx  = 0;
+	pDev->Discovery.CharIdx = 0;
 	BtAppDiscStartDesc(pDev);
 }
 
@@ -1410,20 +1383,20 @@ static void BtAppDiscStartChar(BtDevice_t *pDev)
 // complete.
 static void BtAppDiscStartDesc(BtDevice_t *pDev)
 {
-	while (s_DiscSrvIdx < pDev->NbSrvc)
+	while (pDev->Discovery.SrvIdx < pDev->NbSrvc)
 	{
-		BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
+		BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
 
-		while (s_DiscCharIdx < pSrvc->char_count)
+		while (pDev->Discovery.CharIdx < pSrvc->char_count)
 		{
-			BtGattDBChar_t *pCh    = &pSrvc->characteristics[s_DiscCharIdx];
+			BtGattDBChar_t *pCh    = &pSrvc->characteristics[pDev->Discovery.CharIdx];
 			uint16_t        valHdl = pCh->characteristic.handle_value;
 			uint16_t        start  = (uint16_t)(valHdl + 1);
 			uint16_t        end;
 
-			if ((uint8_t)(s_DiscCharIdx + 1) < pSrvc->char_count)
+			if ((uint8_t)(pDev->Discovery.CharIdx + 1) < pSrvc->char_count)
 			{
-				end = (uint16_t)(pSrvc->characteristics[s_DiscCharIdx + 1]
+				end = (uint16_t)(pSrvc->characteristics[pDev->Discovery.CharIdx + 1]
 									 .characteristic.handle_decl - 1);
 			}
 			else
@@ -1433,7 +1406,7 @@ static void BtAppDiscStartDesc(BtDevice_t *pDev)
 
 			if (valHdl != BT_ATT_HANDLE_INVALID && start <= end)
 			{
-				s_DiscPhase = DISC_DESCS;
+				pDev->Discovery.Phase = DISC_DESCS;
 				// ST takes the characteristic value handle and walks the Find
 				// Information range internally up to End_Handle.
 				if (aci_gatt_disc_all_char_desc(pDev->Conn.Hdl, valHdl, end) ==
@@ -1442,40 +1415,40 @@ static void BtAppDiscStartDesc(BtDevice_t *pDev)
 					return;
 				}
 			}
-			s_DiscCharIdx++;
+			pDev->Discovery.CharIdx++;
 		}
-		s_DiscSrvIdx++;
-		s_DiscCharIdx = 0;
+		pDev->Discovery.SrvIdx++;
+		pDev->Discovery.CharIdx = 0;
 	}
 
-	s_DiscPhase = DISC_IDLE;
+	pDev->Discovery.Phase = DISC_IDLE;
 	BtDeviceDiscovered(pDev);
 }
 
 // ACI_GATT_PROC_COMPLETE advances the discovery state machine to the next phase
 // or the next entry in the current phase.
-static void WbaDiscProcComplete(void)
+static void WbaDiscProcComplete(const aci_gatt_proc_complete_event_rp0 *p)
 {
-	BtDevice_t *pDev = s_pDiscDev;
+	BtDevice_t *pDev = BtPeerFindByHdl(p->Connection_Handle);
 	if (pDev == nullptr)
 	{
 		return;
 	}
 
-	switch (s_DiscPhase)
+	switch (pDev->Discovery.Phase)
 	{
 		case DISC_SERVICES:
-			s_DiscSrvIdx = 0;
+			pDev->Discovery.SrvIdx = 0;
 			BtAppDiscStartChar(pDev);
 			break;
 
 		case DISC_CHARS:
-			s_DiscSrvIdx++;
+			pDev->Discovery.SrvIdx++;
 			BtAppDiscStartChar(pDev);
 			break;
 
 		case DISC_DESCS:
-			s_DiscCharIdx++;
+			pDev->Discovery.CharIdx++;
 			BtAppDiscStartDesc(pDev);
 			break;
 
@@ -1491,10 +1464,9 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 		return false;
 	}
 
-	s_pDiscDev    = pDev;
-	s_DiscSrvIdx  = 0;
-	s_DiscCharIdx = 0;
-	s_DiscPhase   = DISC_SERVICES;
+	pDev->Discovery.SrvIdx  = 0;
+	pDev->Discovery.CharIdx = 0;
+	pDev->Discovery.Phase   = DISC_SERVICES;
 
 	pDev->NbSrvc = 0;
 	memset(pDev->Services, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);

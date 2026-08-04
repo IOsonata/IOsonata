@@ -56,14 +56,26 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "crypto_rng_nrf.h"
 
-#if 0
-/******** For DEBUG ************/
+/******** For DEBUG Trace ************/
+// Define DEBUG_ENABLE to turn on the SMP handshake trace for this file: every
+// SMP PDU in/out and the link state. Output goes to the SysLog transport the
+// app configured (UART, USB, RTT, BLE, or any other DeviceIntrf); the trace
+// does not assume a transport. A release build defines NDEBUG, which strips all
+// trace regardless of DEBUG_ENABLE.
+//#define DEBUG_ENABLE
+
+// Which persistence the build uses. Deliberately independent of DEBUG_ENABLE
+// and of NDEBUG: the release build is where a bond has to survive a reset, and
+// this one line says whether the store is even in the picture.
+#define STORE_TRACE
+
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 #include "syslog.h"
 #define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
-/*******************************/
 #else
 #define DEBUG_PRINTF(...)
 #endif
+/*******************************/
 
 // PCD-side controller device pointer, set by BtHciCtlrSdcInit.
 static BtHciCtlrDev_t *s_pBtHciCtlrSdc = nullptr;
@@ -79,13 +91,26 @@ void BtHciCtlrProcess(BtHciCtlrDev_t * const pDev)
 		return;
 	}
 
+	// HCI_MSG_BUFFER_MAX_SIZE is what sdc_hci_get documents as the minimum
+	// buffer. It does not cover isochronous channels: enabling ISO requires
+	// HCI_MSG_BUFFER_ISO_MAX_SIZE (or the configured rx_sdu_buffer_size)
+	// here, so revisit this buffer if ISO support is ever turned on.
 	uint8_t buf[HCI_MSG_BUFFER_MAX_SIZE];
-	sdc_hci_msg_type_t mtype;
+
+	// sdc_hci_get takes uint8_t *p_msg_type_out and writes exactly one byte.
+	// Passing a sdc_hci_msg_type_t through a uint8_t cast only works while the
+	// enum happens to be one byte wide, which is the arm-none-eabi default
+	// (-fshort-enums, AAPCS) but not guaranteed and not set by any project
+	// file here. With a four byte enum the call fills the low byte and leaves
+	// the other three indeterminate, so the comparison below can fail for a
+	// real event and route every event into the ACL data path. Use the type
+	// the API asks for.
+	uint8_t mtype = SDC_HCI_MSG_TYPE_NONE;
 
 	// Drain every queued message. The controller can queue several at once,
 	// for example a command completion followed by an Encryption Change event
 	// during pairing; stopping after one strands the later packets.
-	while (sdc_hci_get(buf, (uint8_t*)&mtype) == 0)
+	while (sdc_hci_get(buf, &mtype) == 0)
 	{
 		pDev->RxHandler(pDev, mtype == SDC_HCI_MSG_TYPE_EVT, buf);
 	}
@@ -274,18 +299,41 @@ static void BtStackSdcCB()
 	BtHciCtlrProcess(s_pBtHciCtlrSdc);
 }
 
-bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
+// SDC bring-up, reached from the generic BtHciCtlrEnable once BtHciCtlrInit
+// has succeeded. The argument checks and the init gate live there now, so this
+// starts from a device that is already wired.
+bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 {
 	if (pDev == nullptr || pCfg == nullptr)
 	{
 		return false;
 	}
 
-	BtHciCtlrInit(pDev, pCfg);
 	pDev->Send = BtHciCtlrSendData;		// SDC ACL transmit, forwarded by BtHciCtlrSdcSend
 	s_pBtHciCtlrSdc = pDev;
 
+	// MPSL first. sdc_init answers -NRF_EPERM when MPSL is not up, and it used
+	// to run 188 lines ahead of MpslInit, so it had been returning that error
+	// on every boot. The result was assigned and never read, which is why
+	// nothing showed until the result was checked.
+	if (MpslInit() == false)
+	{
+		DEBUG_PRINTF("MpslInit failed\r\n");
+
+		return false;
+	}
+
+	// sdc_init returns -NRF_EINVAL or -NRF_EPERM (MPSL not up, or the low
+	// frequency clock accuracy is not good enough). Everything below operates
+	// on a controller that was never initialised, so stop here rather than
+	// carry on and fail somewhere less obvious.
 	int32_t res = sdc_init(BtStackSdcAssert);
+	if (res != 0)
+	{
+		DEBUG_PRINTF("sdc_init failed %d\r\n", (int)res);
+
+		return false;
+	}
 
 	//sdc_hci_cmd_cb_reset();
 
@@ -295,8 +343,21 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		.rand_poll = BtStackRandPrioLowGetBlocking
 	};
 
+	// Without an entropy source the controller cannot produce the random
+	// numbers pairing and private addresses need. sdc_enable does refuse to
+	// start in that case, but failing here names the cause.
 	res = sdc_rand_source_register(&rand_functions);
+	if (res != 0)
+	{
+		DEBUG_PRINTF("sdc_rand_source_register failed %d\r\n", (int)res);
 
+		return false;
+	}
+
+	// The sdc_support_* calls below are not checked. What they document is a
+	// call order error, returned when they run after sdc_cfg_set or
+	// sdc_enable, and the order here is fixed. Their return type also differs
+	// between nrfxlib versions, so nothing should depend on the value.
 	sdc_support_le_2m_phy();
 	sdc_support_le_coded_phy();
 	//sdc_support_le_power_control();
@@ -343,14 +404,24 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 						  &cfg);
 	if (ram < 0)
 	{
+		DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_BUFFER_CFG failed %d\r\n", (int)ram);
+
 		return false;
 	}
 
 
+	// Vendor specific command, answered with an HCI status. A refusal leaves
+	// the controller default event length in place, which costs throughput but
+	// still gives a working link, so report it and carry on.
 	sdc_hci_cmd_vs_event_length_set_t evlen = {
 		.event_length_us = 7500,
 	};
-	sdc_hci_cmd_vs_event_length_set(&evlen);
+
+	uint8_t hcistat = sdc_hci_cmd_vs_event_length_set(&evlen);
+	if (hcistat != 0)
+	{
+		DEBUG_PRINTF("sdc_hci_cmd_vs_event_length_set status 0x%02x\r\n", hcistat);
+	}
 
 	/*
 	cfg.event_length.event_length_us = 7500;
@@ -359,6 +430,8 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 						  &cfg);
 	if (ram < 0)
 	{
+		DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_EVENT_LENGTH failed %d\r\n", (int)ram);
+
 		return false;
 	}
 */
@@ -372,6 +445,8 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 		if (ram < 0)
 		{
+			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIPHERAL_COUNT failed %d\r\n", (int)ram);
+
 			return false;
 		}
 
@@ -382,6 +457,8 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 		if (ram < 0)
 		{
+			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_ADV_COUNT failed %d\r\n", (int)ram);
+
 			return false;
 		}
 
@@ -392,6 +469,8 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 		if (ram < 0)
 		{
+			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_ADV_BUFFER_CFG failed %d\r\n", (int)ram);
+
 			return false;
 		}
 	}
@@ -405,6 +484,8 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 		if (ram < 0)
 		{
+			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_CENTRAL_COUNT failed %d\r\n", (int)ram);
+
 			return false;
 		}
 
@@ -416,17 +497,21 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 						  &cfg);
 		if (ram < 0)
 		{
+			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_SCAN_BUFFER_CFG failed %d\r\n", (int)ram);
+
 			return false;
 		}
 	}
 
-	if (sizeof(s_BtStackSdcMemPool) < ram)
+	// ram is the pool size the configuration above needs, reported by the last
+	// sdc_cfg_set. It is non-negative here because every call was checked, but
+	// compare as a signed value so a negative one cannot convert to a huge
+	// unsigned and pass.
+	if ((int32_t)sizeof(s_BtStackSdcMemPool) < ram)
 	{
-		return false;
-	}
+		DEBUG_PRINTF("sdc mem pool too small: have %d need %d\r\n",
+					 (int)sizeof(s_BtStackSdcMemPool), (int)ram);
 
-	if (MpslInit() == false)
-	{
 		return false;
 	}
 
@@ -448,6 +533,13 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	res = sdc_enable(BtStackSdcCB, s_BtStackSdcMemPool);
 	if (res != 0)
 	{
+		DEBUG_PRINTF("sdc_enable failed %d\r\n", (int)res);
+
+		// The radio never started, so the timeslot session opened above has
+		// nothing to arbitrate against. Close it, or the memory controller
+		// keeps going through a session that will never see a radio event.
+		MpslNvmArbiterStop();
+
 		return false;
 	}
 

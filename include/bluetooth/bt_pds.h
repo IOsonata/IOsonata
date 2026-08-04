@@ -114,6 +114,24 @@ int BtPdsDelete(uint32_t Id);
  */
 int BtPdsClear(void);
 
+/**
+ * @brief Persist SMP bonds through this store.
+ *
+ * Mounts the store on the Nvm covering linker region
+ * BT_SMP_BOND_REGION_NO, loads any stored bonds into the RAM bond table so a
+ * reconnect right after boot finds its LTK, and arms the strong
+ * BtSmpBondSave / BtSmpBondLoad / BtSmpBondErase overrides in
+ * bt_smp_bond_nvm.cpp. Called by the port app init when a secure SecType is
+ * configured, not by the application.
+ *
+ * Linking bt_smp_bond_nvm.cpp replaces the weak RAM-only bond hooks for the
+ * whole build, so a build that does not want bonds on the memory should not
+ * link it rather than not call this.
+ *
+ * @return 0 on success, negative errno on failure.
+ */
+int BtSmpBondNvmInit(void);
+
 #ifdef __cplusplus
 }
 #endif

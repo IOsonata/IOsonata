@@ -161,9 +161,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
 		</link>
 		<link>
-			<name>include/pwm.h</name>
+			<name>include/coredev/pwm.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/pwm.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
 		</link>
 		<link>
 			<name>include/pwrmgnt</name>
@@ -404,16 +404,6 @@
 			<name>include/audio/audiodev_pdm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev_pdm.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/ble_conn.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_conn.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bleadv_mandata.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bleadv_mandata.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/blueio_blesrvc.h</name>

@@ -146,7 +146,10 @@ size_t       BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount);
 void         BtPeerFreeByHdl(uint16_t Hdl);
 
 // Allocate (or reuse) a record for a new link and fill its base connection
-// fields (replaces the old BtGapAddConnection). OwnAddrType/pOwnAddr are the
+// fields (replaces the old BtGapAddConnection). Role is the LOCAL device's LL
+// role on this link in HCI encoding (BT_CONN_ROLE_CENTRAL 0 or
+// BT_CONN_ROLE_PERIPHERAL 1); a port whose stack reports the role in another
+// encoding must convert before calling. OwnAddrType/pOwnAddr are the
 // device's own address as the peer saw it when the link was created; a link
 // made over a resolvable private address must record that address here so
 // the SMP toolbox computes f5/f6/c1 with it. pOwnAddr NULL leaves the field
@@ -154,6 +157,12 @@ void         BtPeerFreeByHdl(uint16_t Hdl);
 // or NULL when the pool is full.
 BtDevice_t * BtPeerConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, const uint8_t *pAddr,
 							 uint8_t OwnAddrType, const uint8_t *pOwnAddr);
+
+// This device's LL role on the link (BT_CONN_ROLE_CENTRAL or
+// BT_CONN_ROLE_PERIPHERAL), or BT_CONN_ROLE_UNKNOWN when no peer record
+// exists for the handle. Role gates treat UNKNOWN as "do not gate" so ports
+// that never populate the peer pool keep their existing behavior.
+uint8_t      BtPeerRole(uint16_t ConnHdl);
 
 // Handle of the first live link, or BT_CONN_HDL_INVALID. Convenience for
 // single-link senders (replaces the old BtGapGetConnection).

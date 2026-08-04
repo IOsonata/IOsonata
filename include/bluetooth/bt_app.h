@@ -17,8 +17,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -48,8 +48,7 @@ SOFTWARE.
 
 
 /** @addtogroup Bluetooth
-  * @{
-  */
+  * @{ */
 #ifndef BTAPP_NAME_MAXLEN
 #define BTAPP_NAME_MAXLEN				20
 #endif
@@ -172,7 +171,7 @@ extern "C" {
 // BtAppData_t and g_BtAppData are for cross-arch sharing between Voci's own
 // source files (the generic bt_app.cpp and the per-port bt_app_<port>.cpp).
 // Apps must not bind to fields here; use accessor functions (isConnected,
-// BtAppGetConnHandle, BtInitialized, ...) declared further below.
+// BtPeerGetConnectedHandles, BtInitialized, ...) declared further below.
 
 #pragma pack(push, 4)
 
@@ -184,6 +183,7 @@ typedef struct __Bt_App_Data {
 	uint8_t         ConnLedActLevel;//!< Connection LED active level
 	int             PeriphDevCnt;   //!< Peripheral connection count when in central role
 	BTAPP_COEXMODE  CoexMode;       //!< CoEx mode in effect
+	BTGAP_SECTYPE   SecType;        //!< Configured application security mode
 	bool            bExtAdv;        //!< Extended advertising enabled
 	bool            bScan;          //!< Scan currently enabled
 	bool            bInitialized;   //!< BtAppInit completed
@@ -253,22 +253,81 @@ void BtAppEvtDispatch();
 bool BtAppInit(const BtAppCfg_t * const pCfg);
 void BtAppEnterDfu(void);
 void BtAppRun(void);
-uint16_t BtAppGetConnHandle(void);
-uint16_t BleAppGetConnHandle(void);
 void BtAppGapDeviceNameSet(const char* ppDeviceName);
 
 void BtAppSetDevName(const char *pName);
-char * const BtAppGetDevName(void);
+char *BtAppGetDevName(void);
+
+/**
+ * @brief	Send a Handle Value Notification for pChar on the one connected link.
+ *
+ *			Defined only while exactly one link is up. With none, and with more
+ *			than one, there is no single link this can mean and the call returns
+ *			false without sending. It does not pick one.
+ *
+ *			There used to be an active connection handle the send read in that
+ *			situation, which quietly chose a link. Code written for one link keeps
+ *			working; code that has to handle several names its link with
+ *			BtAppNotifyConn or reaches every subscriber with BtAppNotifyAll.
+ *
+ *			No-op (returns false) unless the client subscribed for notifications
+ *			via the CCCD.
+ *
+ * @param	pChar		Characteristic to notify
+ * @param	pData		Value bytes, may be null when DataLen is 0
+ * @param	DataLen		Value length in octets
+ *
+ * @return	true if the packet was accepted
+ */
 bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
 
 /**
- * @brief	Send a Handle Value Indication for pChar on the active link.
+ * @brief	Send a Handle Value Notification for pChar on the named link.
+ *
+ * @param	ConnHdl		Connection handle to send on
+ *
+ * @return	true if the packet was accepted for that link
+ */
+bool BtAppNotifyConn(uint16_t ConnHdl, BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
+
+/**
+ * @brief	Notify pChar on every connected link whose client subscribed.
+ *
+ *			The value is stored once and then sent per link, so a client that
+ *			did not subscribe is skipped rather than counted.
+ *
+ * @return	Number of links the notification was accepted for, 0 if none
+ */
+int BtAppNotifyAll(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
+
+/**
+ * @brief	Send a Handle Value Indication for pChar on the one connected link.
+ *
  *			Indication is the confirmed counterpart of BtAppNotify: only one may
  *			be outstanding per link until the client returns its confirmation.
- *			No-op (returns false) unless the client subscribed for indications
- *			via the CCCD.
+ *			Same single-link rule as BtAppNotify: false when none or several are
+ *			up. No-op unless the client subscribed for indications via the CCCD.
+ *
+ * @return	true if the packet was accepted
  */
 bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
+
+/**
+ * @brief	Send a Handle Value Indication for pChar on the named link.
+ *
+ * @return	true if the packet was accepted for that link
+ */
+bool BtAppIndicateConn(uint16_t ConnHdl, BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
+
+/**
+ * @brief	Indicate pChar on every connected link whose client subscribed.
+ *
+ *			A link with an indication already outstanding is skipped, so the
+ *			count can be lower than the number of subscribed links.
+ *
+ * @return	Number of links the indication was accepted for, 0 if none
+ */
+int BtAppIndicateAll(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
 
 /**
  *
@@ -317,7 +376,28 @@ bool BtAppAdvInit(const BtAppCfg_t *pCfg);
  */
 bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt,
 		bool *pExtAdv, bool *pScannable);
+/**
+ * @brief	Disconnect the one connected link.
+ *
+ *			Same single-link rule as BtAppNotify: does nothing when no link is
+ *			up or when several are, rather than dropping one of them.
+ */
 void BtAppDisconnect(void);
+
+/**
+ * @brief	Disconnect the named link. This is the form each port implements;
+ *			the two above are built on it in src/bluetooth/bt_app.cpp.
+ *
+ * @param	ConnHdl		Connection handle to drop
+ */
+void BtAppDisconnectConn(uint16_t ConnHdl);
+
+/**
+ * @brief	Disconnect every connected link.
+ *
+ * @return	Number of links the disconnect was issued for
+ */
+int BtAppDisconnectAll(void);
 
 bool BtAppScanInit(BtGapScanCfg_t *pCfg);
 void BtAppScan(void);
@@ -343,4 +423,3 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev);//uint16_t ConnHdl);
 /** @} end group Bluetooth */
 
 #endif // __BT_APP_H__
-

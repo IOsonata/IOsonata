@@ -68,10 +68,11 @@ SOFTWARE.
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/services/bt_dis.h"
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_hci_ctlr.h"
-#include "bt_pds_sdc.h"				// BtSmpBondSdcInit (flash-backed bond persistence)
+#include "bluetooth/bt_pds.h"		// BtSmpBondNvmInit (bond persistence on an Nvm)
 #include "nrf_mpsl.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
@@ -259,7 +260,7 @@ void BtAppSetDevName(const char *pName)
 	BtGapSetDevName(pName);
 }
 /*
-char * const BleAppGetDevName()
+char *BleAppGetDevName()
 {
 	//return s_BtGapCharDevName;
 }
@@ -274,13 +275,13 @@ void BtAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt)
 void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_t PeerAddr[6])
 {
 	// The own address the peer saw when it made this link. Peripheral role
-	// (HCI role 1) means the peer connected to our advertising, so the
-	// address is whatever the advertising set was programmed with; as the
-	// central (role 0) the initiator address is the device's configured one.
-	// The SMP toolbox computes f5/f6/c1 with the stamped value.
+	// means the peer connected to our advertising, so the address is whatever
+	// the advertising set was programmed with; as the central the initiator
+	// address is the device's configured one. The SMP toolbox computes
+	// f5/f6/c1 with the stamped value.
 	uint8_t ownType = 0;
 	uint8_t ownAddr[6];
-	if (Role != 0)
+	if (Role == BT_CONN_ROLE_PERIPHERAL)
 	{
 		BtAdvOwnAddrGet(&ownType, ownAddr);
 	}
@@ -303,8 +304,9 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 	// Defer MTU exchange until after encryption/service discovery.
 	// BtAttExchangeMtuRequest(&s_BtHciDev, ConnHdl, BtAttGetMtu());
 
-	//DEBUG_PRINTF("This device's Role = %d\r\n", g_BtAppData.AppDevice.Conn.Role);
-	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
+	// Discovery is a per-link decision, so it is gated on this link's role
+	// rather than on the device's configured role bitmask.
+	if (Role == BT_CONN_ROLE_CENTRAL)
 	{
 		// TODO: obtain the connected peripheral device's name and store to pPeer->Name;
 		//BtAppDiscoverDevice(&s_BtHciDev, ConnHdl);
@@ -314,15 +316,27 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 	// initiate pairing (or re-encrypt from a bond); as the peripheral we send a
 	// Security Request. Host-driven SMP, internal so the application stays
 	// SDK-neutral - it does not call any stack-specific function.
+	// Which procedure to run is decided by this link's role, not by the
+	// device's configured role bitmask: a device built for both roles has
+	// both bits set, so the bitmask cannot say what this connection is. The
+	// central starts pairing; the peripheral asks the central to secure the
+	// link with a Security Request (Vol 3 Part H 2.4.6, 3.5.1).
 	if (g_BtAppData.AppDevice.bSecure)
 	{
-		if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
+		switch (Role)
 		{
-			BtSmpStartPairing(ConnHdl);
-		}
-		else
-		{
-			BtSmpRequestSecurity(ConnHdl);
+			case BT_CONN_ROLE_CENTRAL:
+				BtSmpStartPairing(ConnHdl);
+				break;
+
+			case BT_CONN_ROLE_PERIPHERAL:
+				BtSmpRequestSecurity(ConnHdl);
+				break;
+
+			default:
+				// Role not reported: starting the wrong procedure would be
+				// rejected by the peer, so start neither.
+				break;
 		}
 	}
 
@@ -387,25 +401,23 @@ void BtAppEnterDfu()
 	/* TODO: implement */
 }
 
-void BtAppDisconnect()
+void BtAppDisconnectConn(uint16_t ConnHdl)
 {
-	uint16_t connHdl = BtPeerActiveHdl();
-
-	if (connHdl == BT_CONN_HDL_INVALID)
+	if (ConnHdl == BT_CONN_HDL_INVALID)
 	{
-		DEBUG_PRINTF("BtAppDisconnect: no active connection\r\n");
+		DEBUG_PRINTF("BtAppDisconnect: invalid handle\r\n");
 		return;
 	}
 
 	// HCI Disconnect, Link Control OGF=0x01/OCF=0x0006.
 	// Reason 0x13 = Remote User Terminated Connection.
 	uint8_t param[3];
-	param[0] = (uint8_t)(connHdl & 0xFF);
-	param[1] = (uint8_t)(connHdl >> 8);
+	param[0] = (uint8_t)(ConnHdl & 0xFF);
+	param[1] = (uint8_t)(ConnHdl >> 8);
 	param[2] = 0x13;
 
 	uint8_t rc = BtHciCommand(&s_BtHciDev, BT_HCI_CMD_LINKCTRL_DISCONNECT, param, sizeof(param), NULL, 0);
-	DEBUG_PRINTF("BtAppDisconnect: hdl=%u rc=%u\r\n", connHdl, rc);
+	DEBUG_PRINTF("BtAppDisconnect: hdl=%u rc=%u\r\n", ConnHdl, rc);
 }
 /*
 void BleAppGapDeviceNameSet(const char* pDeviceName)
@@ -441,10 +453,7 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
 
 
 
-uint16_t BleAppGetConnHandle()
-{
-	return BtAppGetConnHandle();
-}
+
 
 
 
@@ -487,6 +496,11 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
  */
 bool BtAppInit(const BtAppCfg_t *pCfg)
 {
+	if (pCfg == nullptr)
+	{
+		return false;
+	}
+
 	int32_t res = 0;
 
 	// Initialize the peer/connection table (and its long-write pool) before
@@ -811,7 +825,12 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		// SDK peer_manager and fstorage. Printed so a persistence problem is
 		// not chased in the wrong layer.
 		STORE_PRINTF("STORE: bt_pds -> Nvm (SDC, no fstorage)\r\n");
-		BtSmpBondSdcInit();
+		int storeRes = BtSmpBondNvmInit();
+		if (storeRes < 0)
+		{
+			STORE_PRINTF("STORE: bt_pds init failed: %d\r\n", storeRes);
+			return false;
+		}
 	}
 	else
 	{
@@ -824,9 +843,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 		// Register Device Information Service when the app supplies device
 		// info. Generic bt_dis adds it to the same ATT DB as user services.
-		if (pCfg->pDevInfo != NULL)
+		if (pCfg->pDevInfo != NULL && !BtDisInit(pCfg))
 		{
-			BtDisInit(pCfg);
+			return false;
 		}
 
 		BtGapSetAppearance(pCfg->Appearance);
@@ -846,6 +865,12 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 			return false;
 		}
     }
+	else if (!BtGattInitStatusComplete())
+	{
+		DEBUG_PRINTF("BtAppInit refused: GATT init error %u\r\n",
+			(unsigned)BtGattInitStatusErrorGet());
+		return false;
+	}
 /*
     BtGapInit(pCfg->Role);
 
@@ -1002,30 +1027,10 @@ bool BtAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16
 	return BtAttWriteCommand(pPeer->pHciDev, ConnHandle, CharHandle, pData, DataLen);
 }
 
-bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
-{
-	return BtGattCharNotify(BtPeerActiveHdl(), pChar, pData, DataLen);
-	/*
-	if (BtGattCharSetValue(pChar, pData, DataLen) == false)
-	{
-		return false;
-	}
-
-	if (isBtGattCharNotifyEnabled(pChar) == false)
-	{
-		return false;
-	}
-
-	BtHciMotify(&s_HciDevice, g_BleAppData.ConnHdl, pChar->ValHdl, pData, DataLen);
-//	BtHciMotify(g_BleAppData.ConnHdl, pChar->ValHdl, pData, DataLen);
-
-	return true;*/
-}
-
-bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
-{
-	return BtGattCharIndicate(BtPeerActiveHdl(), pChar, pData, DataLen);
-}
+// BtAppNotify/BtAppIndicate, their Conn and All forms are the shared weak
+// implementations in src/bluetooth/bt_app.cpp. This port used to carry a copy
+// that read the active connection handle. What stays here is the disconnect
+// command, which is the one part only this port can issue.
 
 bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DataLen)
 {

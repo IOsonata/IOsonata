@@ -67,22 +67,24 @@
 #define CONFIG_NRF_SDH_BLE_CONN_TAG  99
 #endif
 
-/* Maximum number of peripheral links (0 if central-only) */
+/* Maximum number of peripheral links used by the SDK fallback configuration. */
 #ifndef CONFIG_NRF_SDH_BLE_PERIPHERAL_LINK_COUNT
 #define CONFIG_NRF_SDH_BLE_PERIPHERAL_LINK_COUNT  1
 #endif
 
-/* Maximum number of central links (0 if peripheral-only) */
+/* Maximum number of central links used by the SDK fallback configuration. */
 #ifndef CONFIG_NRF_SDH_BLE_CENTRAL_LINK_COUNT
 #define CONFIG_NRF_SDH_BLE_CENTRAL_LINK_COUNT  0
 #endif
 
 /*
- * Maximum total concurrent connections.
- * S115: max 2, S145: max 5
+ * Host-side connection-table capacity.
+ * IOsonata configures the actual SoftDevice connection and role counts from
+ * BtAppCfg_t at runtime. Keep this value identical to bm_config_defaults.h so
+ * the SDK, identity, security, and deferred-work tables have the same layout.
  */
 #ifndef CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT
-#define CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT  1
+#define CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT  2
 #endif
 
 /* GAP event length in 1.25 ms units. Must be >= 6 for coded PHY. */

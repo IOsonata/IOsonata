@@ -83,7 +83,7 @@ class CracenIntrf : public DeviceIntrf {
 public:
 	bool Init(void);
 
-	operator DevIntrf_t * const () override { return &vDevIntrf; }
+	operator DevIntrf_t * () override { return &vDevIntrf; }
 
 	uint32_t Rate(uint32_t RateHz) override { (void)RateHz; return 0; }
 	uint32_t Rate(void) override { return 0; }

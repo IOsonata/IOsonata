@@ -44,14 +44,23 @@ SOFTWARE.
 
 #include "crypto/icrypto.h"
 #include "bt_lesc.h"
-#include "syslog.h"
 
-#define BT_LESC_TRACE_ENABLE
-#if defined(BT_LESC_TRACE_ENABLE)
-#define LESC_TRACE(...)	SysLogPrintf(SysLogGet(), __VA_ARGS__)
+/******** For DEBUG Trace ************/
+// Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
+// SysLog transport the app configured (UART, USB, RTT, BLE, or any other
+// DeviceIntrf); the trace does not assume a transport. A release build
+// defines NDEBUG, which strips all trace regardless of DEBUG_ENABLE.
+//#define DEBUG_ENABLE
+
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
-#define LESC_TRACE(...)
+#define DEBUG_PRINTF(...)
 #endif
+
+/*******************************/
+
 
 #define LESC_COORD_SIZE		(BLE_GAP_LESC_P256_PK_LEN / 2)
 #define LESC_MAX_LINK		8
@@ -184,7 +193,7 @@ CRYPTO_STATUS BtLescKeyPairGenStatus(void)
 	}
 	if (s_pLescCrypto == nullptr)
 	{
-		LESC_TRACE("LESC keygen: no synchronous crypto engine bound\r\n");
+		DEBUG_PRINTF("LESC keygen: no synchronous crypto engine bound\r\n");
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 	if (s_pLescCrypto->KeyCtxSize() == 0U ||
@@ -212,7 +221,7 @@ CRYPTO_STATUS BtLescKeyPairGenStatus(void)
 	{
 		s_pLescCrypto->KeyReset(s_LescEcdhKeyCtx);
 		CryptoSecureWipe(&s_LescPubKey, sizeof(s_LescPubKey));
-		LESC_TRACE("LESC keypair generate failed st=%d\r\n", (int)status);
+		DEBUG_PRINTF("LESC keypair generate failed st=%d\r\n", (int)status);
 	}
 	CryptoSecureWipe(pubBe, sizeof(pubBe));
 	return status;
@@ -230,17 +239,36 @@ bool BtLescInit(void)
 	s_bRegenPending = false;
 	if (s_pLescCrypto == nullptr)
 	{
-		LESC_TRACE("LESC crypto engine missing or unsupported\r\n");
+		DEBUG_PRINTF("LESC crypto engine missing or unsupported\r\n");
 		return false;
 	}
-	return BtLescKeyPairGenStatus() == CRYPTO_STATUS_OK;
+
+	CRYPTO_STATUS status = BtLescKeyPairGenStatus();
+	if (status == CRYPTO_STATUS_OK)
+	{
+		return true;
+	}
+	if (status == CRYPTO_STATUS_UNSUPPORTED)
+	{
+		return false;
+	}
+
+	// The SoftDevice may not have application RNG bytes ready immediately
+	// after enable. That is a transient startup condition, not a Peer Manager
+	// initialization failure. The existing main-loop handler retries before
+	// servicing any pending DHKey work. Until generation succeeds the public
+	// key accessor returns null, so pairing fails closed rather than using an
+	// uninitialized key.
+	s_bRegenPending = true;
+	DEBUG_PRINTF("LESC initial keypair deferred st=%d\r\n", (int)status);
+	return true;
 }
 
 ble_gap_lesc_p256_pk_t *BtLescPubKeyGet(void)
 {
 	if (!s_bKeyPairGen)
 	{
-		LESC_TRACE("LESC public key accessed before generation\r\n");
+		DEBUG_PRINTF("LESC public key accessed before generation\r\n");
 		return NULL;
 	}
 	return &s_LescPubKey;
@@ -273,7 +301,7 @@ ble_gap_lesc_oob_data_t *BtLescOobLocalGet(void)
 {
 	if (!s_bOobLocalGen)
 	{
-		LESC_TRACE("LESC OOB data accessed before generation\r\n");
+		DEBUG_PRINTF("LESC OOB data accessed before generation\r\n");
 		return NULL;
 	}
 	return &s_OobLocal;
@@ -308,7 +336,7 @@ static CRYPTO_STATUS ComputeAndReply(BtLescPeerKey_t *pPeer)
 	if (memcmp(s_LescPubKey.pk, pPeer->Value,
 		BLE_GAP_LESC_P256_PK_LEN) == 0)
 	{
-		LESC_TRACE("LESC peer used identical public key\r\n");
+		DEBUG_PRINTF("LESC peer used identical public key\r\n");
 		return ReplyStatus(pPeer->ConnHdl, BLE_GAP_SEC_STATUS_DHKEY_FAILURE, NULL);
 	}
 
@@ -333,7 +361,7 @@ static CRYPTO_STATUS ComputeAndReply(BtLescPeerKey_t *pPeer)
 	}
 	else if (status != CRYPTO_STATUS_BUSY)
 	{
-		LESC_TRACE("LESC ECDH failed st=%d\r\n", (int)status);
+		DEBUG_PRINTF("LESC ECDH failed st=%d\r\n", (int)status);
 		status = ReplyStatus(pPeer->ConnHdl,
 			BLE_GAP_SEC_STATUS_DHKEY_FAILURE, NULL);
 	}
@@ -347,6 +375,25 @@ static CRYPTO_STATUS ComputeAndReply(BtLescPeerKey_t *pPeer)
 bool BtLescRequestHandler(void)
 {
 	bool result = true;
+
+	// Startup and post-pairing regeneration are attempted before DHKey work.
+	// On the first BtAppRun iteration this gives the SoftDevice RNG another
+	// chance after its initial pool has been seeded, before a connection can
+	// request the local public key.
+	if (s_bRegenPending && !KeyInUse())
+	{
+		CRYPTO_STATUS status = BtLescKeyPairGenStatus();
+		if (status == CRYPTO_STATUS_OK)
+		{
+			s_bRegenPending = false;
+		}
+		else if (status != CRYPTO_STATUS_BUSY)
+		{
+			DEBUG_PRINTF("LESC keypair regenerate failed st=%d\r\n", (int)status);
+			result = false;
+		}
+	}
+
 	for (int i = 0; i < LinkCount(); i++)
 	{
 		if (!s_PeerKeys[i].bRequested)
@@ -370,19 +417,6 @@ bool BtLescRequestHandler(void)
 		}
 	}
 
-	if (s_bRegenPending && !KeyInUse())
-	{
-		CRYPTO_STATUS status = BtLescKeyPairGenStatus();
-		if (status == CRYPTO_STATUS_OK)
-		{
-			s_bRegenPending = false;
-		}
-		else if (status != CRYPTO_STATUS_BUSY)
-		{
-			LESC_TRACE("LESC keypair regenerate failed st=%d\r\n", (int)status);
-			result = false;
-		}
-	}
 	return result;
 }
 
@@ -447,7 +481,7 @@ void BtLescOnBleEvt(const ble_evt_t *pEvt)
 			if (pEvt->evt.gap_evt.params.lesc_dhkey_request.oobd_req &&
 				OobDataSet(connHdl) != NRF_SUCCESS)
 			{
-				LESC_TRACE("LESC oob_data_set failed\r\n");
+				DEBUG_PRINTF("LESC oob_data_set failed\r\n");
 				forceFail = true;
 			}
 			OnDhKeyRequest(connHdl,

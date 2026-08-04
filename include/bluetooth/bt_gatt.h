@@ -18,8 +18,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -119,7 +119,7 @@ typedef struct
   uint8_t read            :1; /**< Reading the value permitted. */
   uint8_t write_wo_resp   :1; /**< Writing the value with Write Command permitted. */
   uint8_t write           :1; /**< Writing the value with Write Request permitted. */
-  uint8_t notify          :1; /**< Notification of the value permitted. */
+  uint8_t notify          :1; /**< Notifications of the value permitted. */
   uint8_t indicate        :1; /**< Indications of the value permitted. */
   uint8_t auth_signed_wr  :1; /**< Writing the value with Signed Write Command permitted. */
 } BtGattCharProps_t;//ble_gatt_char_props_t;
@@ -178,20 +178,53 @@ typedef struct
 extern "C" {
 #endif
 
-BtGattSrvc_t * const BtGattGetSrvcList(void);
+BtGattSrvc_t *BtGattGetSrvcList(void);
 void BtGattInsertSrvcList(BtGattSrvc_t * const pSrvc);
 bool BtGattUpdate(uint16_t Hdl, void * const pAttVal, size_t Len);
 bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar);
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
-// Record a notify/indicate packet accepted by the transport so
-// BtGattSendCompleted() can fire TxCompleteCB in send order.
-void BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar);
+// Reserve a packet group before sending it so completions are consumed in the
+// exact order accepted by the controller. pChar is null for ATT/SMP/L2CAP
+// traffic that owns no GATT callback.
+bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar, uint16_t NbPkt);
+void BtGattTxPendRelease(uint16_t ConnHdl);
+bool BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt);
+bool BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar);
 void BtGattHandleValueConfirm(uint16_t ConnHdl);
 
 uint16_t BtGattCccdGet(uint16_t ConnHdl, uint16_t CccdHdl);
+// Check a client supplied CCCD value against the characteristic it belongs to.
+// Returns 0 when the value can be applied, otherwise the ATT error code the
+// server has to answer a Write Request with. The pChar form is for callers that
+// already resolved the owner characteristic, such as the ATT server walking its
+// own database.
+uint8_t BtGattCccdValueError(BtGattChar_t *pChar, uint16_t Value);
+uint8_t BtGattCccdWriteError(uint16_t CccdHdl, uint16_t Value);
+
+/**
+ * @brief	Whether a CCCD write could be stored on this link.
+ *
+ * Asked during validation, before the write is acknowledged. A per-link CCCD
+ * table that is full cannot take a new subscription, and a Write Response for
+ * a subscription that was dropped would leave the client believing it is
+ * subscribed.
+ *
+ * @param	ConnHdl : Connection handle
+ * @param	CccdHdl : Handle of the CCCD being written
+ * @param	Value	: Value the client is writing
+ *
+ * @return	true if the value can be stored, false if the table is full
+ */
+bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value);
 bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value);
+// Apply a CCCD value without persistence or callbacks. Execute Write uses this
+// to make the entire transaction visible before application code is called.
+bool BtGattCccdSetDeferred(uint16_t ConnHdl, uint16_t CccdHdl,
+								 uint16_t Value, uint16_t *pOldValue);
+void BtGattCccdCommitDeferred(uint16_t ConnHdl, uint16_t CccdHdl,
+									uint16_t OldValue, uint16_t Value);
 void BtGattCccdClear(uint16_t ConnHdl);
 void BtGattCccdRestoreBonded(uint16_t ConnHdl);
 // Mirror the aggregate CCCD value into the native ATT DB descriptor so a local
@@ -317,4 +350,3 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent);
 	  .pCharArray = (chars_array), __VA_ARGS__ }
 
 #endif // __BT_GATT_H__
-

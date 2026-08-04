@@ -113,7 +113,7 @@ static STM32L4X_UARTDEV s_Stm32l4xUartDev[] = {
 
 static const int s_NbUartDev = sizeof(s_Stm32l4xUartDev) / sizeof(STM32L4X_UARTDEV);
 
-UARTDev_t const * const UARTGetInstance(int DevNo)
+UARTDev_t const *UARTGetInstance(int DevNo)
 {
 	return s_Stm32l4xUartDev[DevNo].pUartDev;
 }

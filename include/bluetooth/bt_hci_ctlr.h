@@ -128,12 +128,18 @@ size_t BtHciCtlrSdcSend(void *pData, size_t Len);
 uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen);
 
 /**
- * @brief	Bring up the controller: initialize the underlying stack, apply
- *			role and resource configuration, and enable it.
+ * @brief	Bring up the controller.
  *
- * For the SDC controller this runs sdc_init, the role-gated sdc_support_*
- * calls, sdc_cfg_set resource sizing, MpslInit, and sdc_enable, then wires
- * the device through BtHciCtlrInit. Call once at startup before the pump.
+ * Generic, one implementation for every port. Validates the arguments, runs
+ * BtHciCtlrInit and stops if it fails, then hands over to BtHciCtlrStart for
+ * whatever the target's controller needs.
+ *
+ * The order matters and is why this is not left to each port. BtHciCtlrInit
+ * assigns RxHandler, Receive and the interface table, and returns early
+ * without them on a bad packet size, a misaligned or undersized RX FIFO
+ * buffer, or a CFifoInit failure. A port that starts its controller anyway
+ * reports an enabled controller with no receive path, and no HCI packet is
+ * ever delivered.
  *
  * @param	pDev	Controller device.
  * @param	pCfg	Controller configuration.
@@ -141,6 +147,25 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
  * @return	true on success.
  */
 bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
+
+/**
+ * @brief	Target controller bring-up, called by BtHciCtlrEnable.
+ *
+ * Everything vendor specific belongs here: for the SDC port that is sdc_init,
+ * the role-gated sdc_support_* calls, sdc_cfg_set resource sizing, MpslInit
+ * and sdc_enable. A port that needs nothing beyond the generic wiring, such
+ * as a plain HCI transport over UART or USB, can leave the weak default,
+ * which succeeds.
+ *
+ * Called only after BtHciCtlrInit has succeeded, so the device is wired
+ * before any controller traffic can arrive.
+ *
+ * @param	pDev	Controller device, already initialized.
+ * @param	pCfg	Controller configuration.
+ *
+ * @return	true on success.
+ */
+bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
 
 /**
  * @brief	Drain all HCI packets currently queued by the controller.
@@ -174,8 +199,8 @@ size_t BtHciCtlrSendCommand(BtHciCtlrDev_t * const pDev, uint16_t OpCode, const 
 
 class BtHciCtlr : public DeviceIntrf {
 public:
-	operator BtHciCtlrDev_t *  const () { return &vDevData; }
-	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
+	operator BtHciCtlrDev_t * () { return &vDevData; }
+	operator DevIntrf_t * () { return &vDevData.DevIntrf; }
 
 	virtual bool Init(const BtHciCtlrCfg_t &Cfg) { return BtHciCtlrInit(&vDevData, &Cfg); }
 	// Set data baudrate
@@ -184,6 +209,10 @@ public:
 	virtual uint32_t Rate(void) { return vDevData.Rate; }
     void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }
     void Disable(void) { DeviceIntrfDisable(&vDevData.DevIntrf); }
+	// Keep the base class 3 argument Rx/Tx visible alongside the 2 argument
+	// convenience forms below, so neither set hides the other.
+	using DeviceIntrf::Rx;
+	using DeviceIntrf::Tx;
 	virtual int Rx(uint8_t *pBuff, int Len) { return DeviceIntrfRx(&vDevData.DevIntrf, 0, pBuff, Len); }
 	// Initiate receive
 	virtual int Tx(uint8_t *pData, uint32_t Len) { return DeviceIntrfTx(&vDevData.DevIntrf, 0, pData, Len); }

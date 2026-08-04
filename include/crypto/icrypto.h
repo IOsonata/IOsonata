@@ -314,6 +314,17 @@ public:
 		(void)Curve; (void)pKeyCtx; (void)pPubKey;
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
+	// Agree validates pPeerPubKey before it is used as a point. An
+	// implementation shall reject a peer key whose coordinates are not both
+	// less than the field prime or that does not satisfy the curve equation,
+	// and shall return a failure status without producing a shared secret.
+	// This is required of the engine, not of the caller: SMP has no field
+	// arithmetic of its own and cannot repeat the check at its layer, so an
+	// engine that skips it would let LE Secure Connections pairing proceed on
+	// an invalid-curve point. The three in-tree engines all validate:
+	// CryptoUecc through uECC_valid_public_key, Ba414ep through the
+	// BA414EP_CMD_P256_PTONCURVE pass before the multiply, and CryptoCc3xx
+	// through PointValidate inside P256Multiply.
 	virtual CRYPTO_STATUS Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 								const uint8_t *pPeerPubKey,
 								uint8_t *pSharedX,

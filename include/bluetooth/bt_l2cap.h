@@ -101,6 +101,11 @@ typedef enum __Ble_L2CAP_Mode {
 #define BT_L2CAP_CMD_REJECT_REASON_MTU_EXCEEDED			0x0001
 #define BT_L2CAP_CMD_REJECT_REASON_INVALID_CID			0x0002
 
+//!< Signaling MTU of the LE-U fixed signaling channel, CID 0x0005
+//!< (Vol 3 Part A 4). A larger signaling packet is answered with a Command
+//!< Reject carrying reason 0x0001 and this value.
+#define BT_L2CAP_LE_SIG_MTU								23
+
 #define BT_L2CAP_CONN_PARAM_ACCEPTED					0x0000
 #define BT_L2CAP_CONN_PARAM_REJECTED					0x0001
 

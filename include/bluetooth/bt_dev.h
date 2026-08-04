@@ -3,7 +3,7 @@
 
 @brief	Bluetooth device representation. Same struct for local stack
 		identity and for tracked remote peers. Operations differ by who
-		drives them, factored into separate function namespaces
+	drives them, factored into separate function namespaces
 		(BtApp*() for app driven, BtDevice*() for shared queries).
 
 @author	Hoang Nguyen Hoan
@@ -19,8 +19,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -57,7 +57,7 @@ SOFTWARE.
 
 #define BT_DEV_NAME_MAXLEN			30
 #define BT_DEV_SERVICE_MAXCNT		10
-#define BT_DEV_TXPEND_MAX			8		//!< Depth of the per-link notify/indicate TX-complete ring
+#define BT_DEV_TXPEND_MAX			16		//!< Depth of the per-link ordered ACL TX-complete ring
 
 /// Per-peer discovery state. Used by the central while walking the peer's
 /// GATT table. Previously held as file-scope globals (g_CurIdx, g_UuidType)
@@ -70,6 +70,7 @@ SOFTWARE.
 typedef struct __Bt_Dev_Disc_State {
 	uint8_t			SrvIdx;			//!< Index into Services[] currently being parsed
 	uint8_t			CharIdx;		//!< Index into the current service's char array
+	uint8_t			Phase;			//!< Port-defined discovery phase, 0 = idle
 	uint16_t		Hdl;			//!< Current ATT handle being read/queried
 	BtUuid_t		UuidType;		//!< UUID type the state machine is scanning for
 } BtDevDiscState_t;
@@ -84,7 +85,8 @@ typedef struct __Bt_Dev_Disc_State {
 ///            bitmask of GAP roles this stack takes, Services = exposed GATT
 ///            DB, Conn.Hdl = unused, pHciDev = the controller in use.
 ///   remote : Name = peer's reported name, Conn.PeerAddr = peer's BD_ADDR,
-///            Conn.Role = LL role peer plays on the active link,
+///            Conn.Role = LOCAL device's LL role on the active link
+///            (BT_CONN_ROLE_* HCI encoding: 0 central, 1 peripheral),
 ///            Services = discovered GATT DB, Conn.Hdl = active link handle,
 ///            pHciDev = the local controller managing this link.
 typedef struct __Bt_Device {
@@ -100,9 +102,25 @@ typedef struct __Bt_Device {
 	int				NbSrvc;						//!< Number of services in the Services array
 	BtGattDBSrvc_t	Services[BT_DEV_SERVICE_MAXCNT];	//!< Services: exposed if local, discovered if remote
 	BtDevDiscState_t Discovery;					//!< Per-peer discovery cursor (remote role only)
-	void			*TxPendCh[BT_DEV_TXPEND_MAX];//!< Ring of chars with a notification/indication in flight (native-host TX-complete attribution)
+	void			*pIndChar;					//!< Vendor-host indication owner completed by HVC, null on raw HCI
+	bool			bAttReqPending;				//!< One ATT client request may be outstanding per bearer
+	bool			bAttTimedOut;				//!< ATT bearer timed out and may not start another request
+	uint8_t			AttReqOpcode;				//!< Outstanding ATT request opcode
+	uint8_t			AttRspOpcode;				//!< Expected ATT response opcode
+	uint32_t		AttReqTime;				//!< Request start tick for the 30 second ATT timeout
+	//!< Ring of HCI ACL packet groups in flight on this link, in send order.
+	//!< One entry per operation, not per packet: pChar names the characteristic
+	//!< whose TxCompleteCB is due when the group finishes, or is null for
+	//!< packets another layer sent (ATT responses, SMP, L2CAP signaling) which
+	//!< own no callback but do consume controller completions. Remain counts
+	//!< the HCI packets of that group still outstanding, so a fragmented
+	//!< notification fires once, on its last fragment.
+	struct {
+		void		*pChar;						//!< Owning characteristic, null when untracked
+		uint16_t	Remain;						//!< HCI packets of this group not yet completed
+	} TxPend[BT_DEV_TXPEND_MAX];
 	uint8_t			TxPendHead;					//!< Ring read index
-	uint8_t			TxPendCount;				//!< Ring occupancy
+	uint8_t			TxPendCount;				//!< Ring occupancy in entries
 } BtDevice_t;
 
 #ifdef __cplusplus

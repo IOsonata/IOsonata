@@ -86,9 +86,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/device_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>include/fatfs.h</name>
+			<name>include/storage/fatfs.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/fatfs.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
 		</link>
 		<link>
 			<name>include/intelhex.h</name>
@@ -121,14 +121,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/prbs.h</locationURI>
 		</link>
 		<link>
-			<name>include/pwm.h</name>
+			<name>include/coredev/pwm.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/pwm.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
 		</link>
 		<link>
-			<name>include/seep.h</name>
+			<name>include/storage/seep.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/seep.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/seep.h</locationURI>
 		</link>
 		<link>
 			<name>include/slip_intrf.h</name>
@@ -261,19 +261,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/utf8cvt.cpp</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bleadv_mandata.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bleadv_mandata.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/blueio_blesrvc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_dis.h</name>
+			<name>include/bluetooth/services/bt_dis.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dis.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/services/bt_dis.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bt_peer.h</name>
@@ -366,9 +361,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attrsp.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_dis.cpp</name>
+			<name>src/bluetooth/services/bt_dis.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dis.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/services/bt_dis.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_gap.cpp</name>

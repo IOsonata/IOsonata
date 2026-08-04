@@ -243,6 +243,47 @@ static inline bool BtAdvUseExtended(size_t AdvLen, size_t SrLen)
 	return AdvLen > BT_ADV_LEGACY_DATA_MAX || SrLen > BT_ADV_LEGACY_DATA_MAX;
 }
 
+/**
+ * @brief	Check a static random device address.
+ *
+ * Vol 6 Part B 1.3.2.1 puts two requirements on a static random address: the
+ * two most significant bits of the most significant octet are both 1, and the
+ * remaining 46 bits hold at least one bit equal to 0 and at least one bit
+ * equal to 1. The second requirement is what rules out the all-zero address
+ * left by an uninitialised identity and the all-ones address; the bit pattern
+ * check alone accepts both, and a controller then rejects the command or the
+ * device advertises an address no peer can bond to.
+ *
+ * @param	pAddr	Six octet address, least significant octet first.
+ *
+ * @return	true if the address is a valid static random address.
+ */
+static inline bool BtAddrIsStaticRandom(const uint8_t *pAddr)
+{
+	if (pAddr == NULL)
+	{
+		return false;
+	}
+
+	if ((pAddr[5] & 0xC0) != 0xC0)
+	{
+		return false;
+	}
+
+	// Accumulate the random part twice: once as it is and once inverted. A
+	// zero accumulator means that bit value never appeared in the 46 bits.
+	uint8_t ones = pAddr[5] & 0x3F;
+	uint8_t zeros = (uint8_t)(~pAddr[5]) & 0x3F;
+
+	for (int i = 0; i < 5; i++)
+	{
+		ones |= pAddr[i];
+		zeros |= (uint8_t)~pAddr[i];
+	}
+
+	return ones != 0 && zeros != 0;
+}
+
 #ifdef __cplusplus
 }
 #endif

@@ -266,7 +266,7 @@ int NvmMcuErase(uintptr_t Addr);
  *
  * @return	The controller's interface.
  */
-DevIntrf_t * const NvmMcuDevIntrf(void);
+DevIntrf_t *NvmMcuDevIntrf(void);
 
 /// @brief	The MCU memory controller as a device interface.
 class NvmIntrf : public DeviceIntrf {
@@ -289,7 +289,7 @@ public:
 	 */
 	bool Init(DevIntrfEvtHandler_t EvtCB = nullptr, bool bIntEn = false);
 
-	operator DevIntrf_t * const () override { return NvmMcuDevIntrf(); }
+	operator DevIntrf_t * () override { return NvmMcuDevIntrf(); }
 
 	uint32_t Rate(uint32_t RateHz) override { (void)RateHz; return 0; }
 	uint32_t Rate(void) override { return 0; }

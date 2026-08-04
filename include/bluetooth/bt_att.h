@@ -96,8 +96,18 @@ SOFTWARE.
 #define BT_ATT_ERROR_INSUF_ENCRYPT						15		//!< Require encryption
 #define BT_ATT_ERROR_UNSUPP_GROUP_TYPE					16		//!< Unsupported group type
 #define BT_ATT_ERROR_INSUF_RESOURCE						17		//!< Insufficient resources
-#define BT_ATT_ERROR_DB_OUT_SYNC						19		//!< Database out of sync
-#define BT_ATT_ERROR_VALUE_NOT_ALLOWED					20		//!< Value not allowed
+// 0x12 and 0x13 per Vol 3 Part F Table 3.4. They were 19 and 20 decimal here,
+// one above the codes on the wire, so a peer decoded them as the next code.
+#define BT_ATT_ERROR_DB_OUT_SYNC						0x12	//!< Database out of sync
+#define BT_ATT_ERROR_VALUE_NOT_ALLOWED					0x13	//!< Value not allowed
+
+// Common profile and service error codes, Core Specification Supplement Part B
+// section 1.2. They share the ATT error code space and travel in an ATT Error
+// Response like any code above.
+#define BT_ATT_ERROR_WRITE_REQ_REJECTED					0xFC	//!< Write request rejected
+#define BT_ATT_ERROR_CCCD_IMPROPER_CFG					0xFD	//!< Client char config descriptor improperly configured
+#define BT_ATT_ERROR_PROC_ALREADY_IN_PROGRESS			0xFE	//!< Procedure already in progress
+#define BT_ATT_ERROR_OUT_OF_RANGE						0xFF	//!< Out of range
 
 // Attribute permission/security policy bits stored in BtAttDBEntry_t::Permission.
 #define BT_ATT_PERMISSION_READ					(1UL << 0)
@@ -490,6 +500,10 @@ typedef struct __Bt_Att_Char_Value {
 
 #define BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION		(1<<0)
 #define BT_DESC_CLIENT_CHAR_CONFIG_INDICATION		(1<<1)
+//!< Bits 2..15 are reserved for future use (Vol 3 Part G 3.3.3.3). A client
+//!< that sets one of them has written a value this version cannot honour.
+#define BT_DESC_CLIENT_CHAR_CONFIG_MASK				(BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION | \
+													 BT_DESC_CLIENT_CHAR_CONFIG_INDICATION)
 
 typedef struct __Bt_Desc_Client_Char_Config {
 	BtGattChar_t *pChar;				//!< Owner characteristic
@@ -505,6 +519,15 @@ typedef struct __Bt_Desc_Char_User_Desc {
 #pragma pack(pop)
 
 #pragma pack(push,4)
+
+// Position of the attribute database allocator, taken before a group of
+// related entries is added so the group can be removed as a unit if one of
+// them fails. The database is a bump allocator with a rising handle counter,
+// so a position is those two numbers.
+typedef struct __Bt_Att_DB_Mark {
+	size_t MemUsed;						//!< Bytes of the pool in use
+	uint16_t LastHdl;					//!< Highest handle assigned
+} BtAttDBMark_t;
 
 struct __Bt_Att_DB_Entry {
 	uint16_t Hdl;						//!< Attribute handle
@@ -580,11 +603,19 @@ extern "C" {
 #endif
 
 void BtAttDBInit(size_t MemSize);
-BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen);//, void *pData, int DataLen);
-BtAttDBEntry_t * const BtAttDBFindHandle(uint16_t Hdl);
-BtAttDBEntry_t * const BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid);
-BtAttDBEntry_t * const BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart, uint16_t HdlEnd);
-BtAttDBEntry_t * const BtAttDBFindHdlRange(BtUuid16_t *pUuid, uint16_t *pHdlStart, uint16_t *pHdlEnd);
+BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen);//, void *pData, int DataLen);
+// Record the allocator position, and return to a recorded one. Adding a
+// service means adding several entries, and a failure part way through would
+// otherwise leave the earlier ones in the database with no owner. Unwinding to
+// a mark taken before the first entry drops the whole group and hands the
+// handles back. Only the newest entries can be dropped: a mark older than an
+// entry another service still points at must not be used.
+void BtAttDBMark(BtAttDBMark_t *pMark);
+void BtAttDBUnwind(const BtAttDBMark_t *pMark);
+BtAttDBEntry_t *BtAttDBFindHandle(uint16_t Hdl);
+BtAttDBEntry_t *BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid);
+BtAttDBEntry_t *BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart, uint16_t HdlEnd);
+BtAttDBEntry_t *BtAttDBFindHdlRange(BtUuid16_t *pUuid, uint16_t *pHdlStart, uint16_t *pHdlEnd);
 
 void BtAttDBEntrySetPermission(BtAttDBEntry_t *pEntry, uint32_t Permission);
 uint32_t BtAttDBEntryGetPermission(BtAttDBEntry_t *pEntry);
@@ -618,6 +649,11 @@ bool BtAttReadMultipleRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint
 bool BtAttReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t StartHdl, uint16_t EndHdl, BtUuid_t *pUuid);
 bool BtAttStartReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t StartHdl, uint16_t EndHdl, BtUuid_t *pUuid);
 bool BtAttWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl, uint8_t *pData, size_t DataLen);
+bool BtAttPrepareWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+								 uint16_t Hdl, uint16_t Offset,
+								 const uint8_t *pData, size_t DataLen);
+bool BtAttExecuteWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+								 bool Execute);
 bool BtAttWriteCommand(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl, uint8_t *pData, size_t DataLen);
 uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen);
 

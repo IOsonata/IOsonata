@@ -236,11 +236,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/cfifo.c</locationURI>
 		</link>
 		<link>
-			<name>src/cfifo_new.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/cfifo_new.c</locationURI>
-		</link>
-		<link>
 			<name>src/converters</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -264,16 +259,6 @@
 			<name>src/device_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/device_intrf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/diskio_flash copy 2.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/diskio_flash%20copy%202.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/diskio_flash copy.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/diskio_flash%20copy.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display</name>
@@ -811,11 +796,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_ak09916.h</locationURI>
 		</link>
 		<link>
-			<name>include/sensors/mag_ak09940 copy.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_ak09940%20copy.h</locationURI>
-		</link>
-		<link>
 			<name>include/sensors/mag_ak09940.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_ak09940.h</locationURI>
@@ -1006,11 +986,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/display/eink_intrf.cpp.new</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp.new</locationURI>
-		</link>
-		<link>
 			<name>src/display/eink_vb3300.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_vb3300.cpp</locationURI>
@@ -1146,11 +1121,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/accel_lisxdh.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/sensors/accel_lisxdh_bad.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/accel_lisxdh_bad.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/sensors/accel_sensor.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/accel_sensor.cpp</locationURI>
@@ -1171,11 +1141,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ag_bmi323.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/sensors/ag_icm456x copy.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ag_icm456x%20copy.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/sensors/ag_icm456x.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ag_icm456x.cpp</locationURI>
@@ -1189,26 +1154,6 @@
 			<name>src/sensors/agm_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/agm_icm20948_have_data.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm20948_have_data.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/agm_icm20948_int_ok.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm20948_int_ok.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/agm_icm20948_no_DMP.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm20948_no_DMP.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/agm_icm20948_old_works.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm20948_old_works.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/agm_invn_icm20948.cpp</name>
@@ -1346,11 +1291,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/display/fonts/.DS_Store</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/.DS_Store</locationURI>
-		</link>
-		<link>
 			<name>src/display/fonts/CREDITS</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/CREDITS</locationURI>
@@ -1389,11 +1329,6 @@
 			<name>src/display/fonts/syst5x7.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/syst5x7.c</locationURI>
-		</link>
-		<link>
-			<name>src/display/fonts/FreeMono/.DS_Store</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeMono/.DS_Store</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts/FreeMono/FreeMono10pt.c</name>
@@ -1594,11 +1529,6 @@
 			<name>src/display/fonts/FreeSans/FreeSansIta8pt.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSans/FreeSansIta8pt.c</locationURI>
-		</link>
-		<link>
-			<name>src/display/fonts/FreeSerif/.DS_Store</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/.DS_Store</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts/FreeSerif/FreeSerif10pt.c</name>

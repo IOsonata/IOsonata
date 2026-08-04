@@ -123,6 +123,27 @@ void BtAttSetHandler(AttReadValFct_t ReadFct, AttWriteValFct_t WriteFct)
 */
 void BtAttDBInit(size_t MemSize)
 {
+	// The database lives in s_BtAttDBMem, a weak array of BT_ATT_DB_MEMSIZE
+	// bytes. MemSize is the caller's claim about how much of it to use, and
+	// this file cannot prove a claim larger than the array it was compiled
+	// against, so clamp to that: a larger value would run the memset below
+	// off the end of the pool. A bigger database comes from raising
+	// BT_ATT_DB_MEMSIZE for the whole build, which resizes the array and this
+	// sizeof together, not from defining a different sized array elsewhere,
+	// which the sizeof here would not see.
+	if (MemSize > sizeof(s_BtAttDBMem))
+	{
+		MemSize = sizeof(s_BtAttDBMem);
+	}
+
+	// The tail sentinel is written immediately below, so the pool has to hold
+	// at least one entry. The clamp above already bounded MemSize by the
+	// array, which is far larger than one entry.
+	if (MemSize < sizeof(BtAttDBEntry_t))
+	{
+		MemSize = sizeof(BtAttDBEntry_t);
+	}
+
 	s_BtAttDBMemSize = MemSize;
 	s_BtAttDBMemUsed = 0;
 	memset(s_BtAttDBMem, 0, s_BtAttDBMemSize);
@@ -133,7 +154,7 @@ void BtAttDBInit(size_t MemSize)
 	s_pBtAttDbEntryEnd->pPrev = nullptr;
 }
 
-BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pData, int DataLen)
+BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pData, int DataLen)
 {
 	if (pUuid == nullptr || MaxDataLen < 0 || MaxDataLen > 0xFFFF)
 	{
@@ -179,23 +200,62 @@ BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, voi
 	return entry;
 }
 
-BtAttDBEntry_t * const BtAttDBFindHandle(uint16_t Hdl)
+void BtAttDBMark(BtAttDBMark_t *pMark)
 {
-	if (Hdl > s_LastHdl)
+	if (pMark == nullptr)
+	{
+		return;
+	}
+
+	pMark->MemUsed = s_BtAttDBMemUsed;
+	pMark->LastHdl = s_LastHdl;
+}
+
+void BtAttDBUnwind(const BtAttDBMark_t *pMark)
+{
+	// Only a rewind is allowed. A mark from a database that has since been
+	// reinitialised, or one recorded after the current position, would move
+	// the allocator forward over memory no entry owns.
+	if (pMark == nullptr || pMark->MemUsed > s_BtAttDBMemUsed ||
+		pMark->LastHdl > s_LastHdl)
+	{
+		return;
+	}
+
+	s_BtAttDBMemUsed = pMark->MemUsed;
+	s_LastHdl = pMark->LastHdl;
+
+	// The slot at the mark becomes the tail sentinel again. Its pPrev still
+	// points at the entry before it: BtAttDBAddEntry writes pPrev only when a
+	// slot is seeded as the sentinel, never when it is turned into an entry,
+	// so the link back is the one this position had before the dropped
+	// entries were added.
+	s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)(s_BtAttDBMem + s_BtAttDBMemUsed);
+	s_pBtAttDbEntryEnd->pNext = nullptr;
+}
+
+BtAttDBEntry_t *BtAttDBFindHandle(uint16_t Hdl)
+{
+	// Handle 0x0000 is reserved and never assigned to an attribute (Vol 3
+	// Part F 3.2.2). Rejecting it here matters because the tail sentinel is
+	// zero initialised, so a search for 0 would otherwise match it and hand
+	// back the sentinel as if it were an attribute.
+	if (Hdl == 0 || Hdl > s_LastHdl)
 	{
 		return nullptr;
 	}
 
-	BtAttDBEntry_t *p = (BtAttDBEntry_t *)s_pBtAttDbEntryFirst;
-
-	do {
+	// Walk to the tail sentinel, guarding against null: on an empty database
+	// the first entry is the sentinel and its pNext is null, so a do/while
+	// that only tests the sentinel dereferences null on the second pass.
+	for (BtAttDBEntry_t *p = (BtAttDBEntry_t *)s_pBtAttDbEntryFirst;
+		 p != nullptr && p != s_pBtAttDbEntryEnd; p = p->pNext)
+	{
 		if (p->Hdl == Hdl)
 		{
 			return p;
 		}
-
-		p = p->pNext;
-	} while (p != s_pBtAttDbEntryEnd);
+	}
 
 	return nullptr;
 }
@@ -226,7 +286,7 @@ void BtGattCccdDbSync(uint16_t CccdHdl, uint16_t CccVal)
 	}
 }
 
-BtAttDBEntry_t * const BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid)
+BtAttDBEntry_t *BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid)
 {
 	BtAttDBEntry_t *p = pStart;
 	if (p == nullptr)
@@ -250,11 +310,14 @@ BtAttDBEntry_t * const BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid
 	return nullptr;
 }
 
-BtAttDBEntry_t * const BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart, uint16_t HdlEnd)
+BtAttDBEntry_t *BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart, uint16_t HdlEnd)
 {
-	BtAttDBEntry_t *p = s_pBtAttDbEntryFirst;
-
-	do {
+	// Same guard as BtAttDBFindUuid: stop at the tail sentinel and at null.
+	// On an empty database the first entry is the sentinel and its pNext is
+	// null, so a do/while that only tests the sentinel walks off the end.
+	for (BtAttDBEntry_t *p = s_pBtAttDbEntryFirst;
+		 p != nullptr && p != s_pBtAttDbEntryEnd; p = p->pNext)
+	{
 		if (memcmp(&p->TypeUuid, pUuid, sizeof(BtUuid16_t)) == 0)
 		{
 			if (p->Hdl >= HdlStart && p->Hdl <= HdlEnd)
@@ -262,14 +325,12 @@ BtAttDBEntry_t * const BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart
 				return p;
 			}
 		}
-
-		p = p->pNext;
-	} while (p != s_pBtAttDbEntryEnd);
+	}
 
 	return nullptr;
 }
 
-BtAttDBEntry_t * const BtAttDBFindHdlRange(BtUuid16_t *pUuid, uint16_t *pHdlStart, uint16_t *pHdlEnd)
+BtAttDBEntry_t *BtAttDBFindHdlRange(BtUuid16_t *pUuid, uint16_t *pHdlStart, uint16_t *pHdlEnd)
 {
 	BtAttDBEntry_t *first = BtAttDBFindUuidRange(pUuid, *pHdlStart, *pHdlEnd);
 
@@ -290,11 +351,58 @@ BtAttDBEntry_t * const BtAttDBFindHdlRange(BtUuid16_t *pUuid, uint16_t *pHdlStar
 	return first;
 }
 
+// The fixed-format declaration values, which are built from their entry rather
+// than copied from a stored buffer. The longest is a 128-bit characteristic
+// declaration at 19 octets.
+static bool BtAttEntryIsFixedDeclar(const BtAttDBEntry_t *pEntry)
+{
+	if (pEntry == nullptr || pEntry->TypeUuid.BaseIdx != 0)
+	{
+		return false;
+	}
+
+	switch (pEntry->TypeUuid.Uuid)
+	{
+		case BT_UUID_DECLARATIONS_PRIMARY_SERVICE:
+		case BT_UUID_DECLARATIONS_SECONDARY_SERVICE:
+		case BT_UUID_DECLARATIONS_INCLUDE:
+		case BT_UUID_DECLARATIONS_CHARACTERISTIC:
+			return true;
+		default:
+			break;
+	}
+
+	return false;
+}
+
+#define BT_ATT_DECLAR_VALUE_MAX		19
+
 size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, uint16_t Len)
 {
 	if (pBuff == nullptr)
 	{
 		return 0;
+	}
+
+	// A declaration is serialised from byte zero by the cases below, so a Read
+	// Blob at a non-zero offset would repeat the whole value instead of
+	// continuing it. Build the value once into a local buffer and slice it, the
+	// same way a stored value is sliced (Vol 3 Part F 3.4.4.5). An offset past
+	// the end returns nothing, which the caller reports as Invalid Offset.
+	if (Offset != 0 && BtAttEntryIsFixedDeclar(pEntry))
+	{
+		uint8_t tmp[BT_ATT_DECLAR_VALUE_MAX];
+		size_t full = BtAttReadValue(pEntry, 0, tmp, (uint16_t)sizeof(tmp));
+
+		if (Offset >= full)
+		{
+			return 0;
+		}
+
+		size_t l = min((uint16_t)(full - Offset), Len);
+		memcpy(pBuff, tmp + Offset, l);
+
+		return l;
 	}
 
 	uint16_t len = 0;
@@ -544,6 +652,12 @@ static bool BtAttEntryIsCharValue(BtAttDBEntry_t *pEntry)
 	}
 }
 
+static bool BtAttEntryIsCccd(BtAttDBEntry_t *pEntry)
+{
+	return pEntry != nullptr && pEntry->TypeUuid.BaseIdx == 0 &&
+		   pEntry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION;
+}
+
 static BtGattChar_t *BtAttEntryChar(BtAttDBEntry_t *pEntry)
 {
 	if (pEntry == nullptr)
@@ -760,8 +874,7 @@ static uint8_t BtAttWritePermError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 		return BtAttAccessSecurityError(ConnHdl, pEntry, false);
 	}
 
-	if (pEntry->TypeUuid.BaseIdx == 0 &&
-		pEntry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION)
+	if (BtAttEntryIsCccd(pEntry))
 	{
 		BtGattChar_t *pChar = BtAttEntryChar(pEntry);
 		if (pChar == nullptr)
@@ -770,21 +883,16 @@ static uint8_t BtAttWritePermError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 		}
 		if (Len >= 2 && pData != nullptr)
 		{
-			uint16_t cccd = (uint16_t)(pData[0] | (pData[1] << 8));
-			if ((cccd & ~(BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION |
-						  BT_DESC_CLIENT_CHAR_CONFIG_INDICATION)) != 0)
+			// One value check for the whole stack, in bt_gatt.cpp, so the ATT
+			// server and direct GATT callers agree on what a characteristic
+			// accepts. A rejected value is Client Characteristic Configuration
+			// Descriptor Improperly Configured, the code GATT clients expect
+			// here (Core Specification Supplement Part B 1.2).
+			uint8_t cerr = BtGattCccdValueError(pChar,
+									(uint16_t)(pData[0] | (pData[1] << 8)));
+			if (cerr != 0)
 			{
-				return BT_ATT_ERROR_VALUE_NOT_ALLOWED;
-			}
-			if ((cccd & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) &&
-				(pChar->Property & BT_GATT_CHAR_PROP_NOTIFY) == 0)
-			{
-				return BT_ATT_ERROR_VALUE_NOT_ALLOWED;
-			}
-			if ((cccd & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) &&
-				(pChar->Property & BT_GATT_CHAR_PROP_INDICATE) == 0)
-			{
-				return BT_ATT_ERROR_VALUE_NOT_ALLOWED;
+				return cerr;
 			}
 		}
 		uint8_t err = BtAttAccessPolicyError(ConnHdl, pEntry, false);
@@ -934,8 +1042,7 @@ static size_t BtAttWriteValueForConn(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 		return 0;
 	}
 
-	if (pEntry->TypeUuid.BaseIdx == 0 &&
-		pEntry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION)
+	if (BtAttEntryIsCccd(pEntry))
 	{
 		if (Offset != 0 || Len != 2 || pData == nullptr)
 		{
@@ -968,6 +1075,8 @@ uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode,
 // Current value length of an attribute, for offset/length validation. Char
 // values report their live ValueLen; the CCCD is 2 bytes. Other attribute types
 // are not offset-validated here (returns 0xFFFF so the caller skips the check).
+static uint16_t BtAttFullValueLen(BtAttDBEntry_t *pEntry);
+
 static uint16_t BtAttCurValueLen(BtAttDBEntry_t *pEntry)
 {
 	if (pEntry == nullptr)
@@ -983,6 +1092,13 @@ static uint16_t BtAttCurValueLen(BtAttDBEntry_t *pEntry)
 		pEntry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION)
 	{
 		return 2;
+	}
+	// A fixed declaration has a known length, so a Read Blob past its end can
+	// be answered Invalid Offset. Returning 0xFFFF here made that guard
+	// unreachable for every declaration in the database.
+	if (BtAttEntryIsFixedDeclar(pEntry))
+	{
+		return BtAttFullValueLen(pEntry);
 	}
 	return 0xFFFF;
 }
@@ -1076,9 +1192,109 @@ static bool BtAttValueEquals(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 	return true;
 }
 
+// Measure one run of prepared-write chunks starting at Pos: the first chunk
+// plus every following chunk for the same handle whose offset continues it
+// exactly. Fills the run description and returns an ATT error code, 0 on
+// success. bCompact moves the following chunks' data up against the first
+// chunk so the run forms one contiguous value; pass false to measure the run
+// without touching the buffer.
+static uint8_t BtAttLongWrRun(uint8_t *pBuf, uint16_t Total, uint16_t Pos, bool bCompact,
+							  uint16_t *pHdl, uint16_t *pOff, uint16_t *pLen, uint16_t *pNext)
+{
+	uint16_t hdl, off, len;
+	memcpy(&hdl, pBuf + Pos, 2);
+	memcpy(&off, pBuf + Pos + 2, 2);
+	memcpy(&len, pBuf + Pos + 4, 2);
+
+	uint8_t  *dst    = pBuf + Pos + 6 + len;
+	uint16_t  totLen = len;
+	uint16_t  next   = Pos + 6 + len;
+	uint8_t   err    = 0;
+
+	while (next + 6 <= Total)
+	{
+		uint16_t nhdl, noff, nlen;
+		memcpy(&nhdl, pBuf + next, 2);
+		memcpy(&noff, pBuf + next + 2, 2);
+		memcpy(&nlen, pBuf + next + 4, 2);
+
+		if (nhdl != hdl)
+		{
+			break;
+		}
+
+		// A gap or overlap ends the current contiguous run; it is not an
+		// error. Queued prepared writes are applied in order and need not
+		// be contiguous (Vol 3 Part F 3.4.6), so a Reliable Write may patch
+		// disjoint regions of one attribute. The discontiguous chunk starts
+		// its own run.
+		if (noff != (uint16_t)(off + totLen))
+		{
+			break;
+		}
+
+		if ((uint32_t)next + 6UL + nlen > Total)
+		{
+			err = BT_ATT_ERROR_INVALID_PDU;
+			break;
+		}
+
+		if (bCompact)
+		{
+			memmove(dst, pBuf + next + 6, nlen);
+		}
+		dst    += nlen;
+		totLen += nlen;
+		next   += 6 + nlen;
+	}
+
+	*pHdl  = hdl;
+	*pOff  = off;
+	*pLen  = totLen;
+	*pNext = next;
+
+	return err;
+}
+
+// Value length the attribute will have by the time the run at StopPos is
+// applied: its live length extended by every earlier run for the same handle.
+// A write only ever extends a value, so validating an offset against this
+// projection accepts a queue that extends an attribute and then patches inside
+// the extended region, which applying the queue in order does produce.
+static uint16_t BtAttLongWrProjLen(uint8_t *pBuf, uint16_t Total, uint16_t StopPos,
+								   uint16_t Hdl, uint16_t CurLen)
+{
+	uint16_t projected = CurLen;
+	uint16_t pos = 0;
+
+	while (pos + 6 <= Total && pos < StopPos)
+	{
+		uint16_t hdl, off, len, next;
+
+		// Measure only; the commit pass does the compaction.
+		if (BtAttLongWrRun(pBuf, Total, pos, false, &hdl, &off, &len, &next) != 0)
+		{
+			break;
+		}
+
+		if (hdl == Hdl && (uint32_t)off + len > projected)
+		{
+			projected = (uint16_t)(off + len);
+		}
+
+		pos = next;
+	}
+
+	return projected;
+}
+
 // Apply the queued prepared writes. Returns 0 on success, or an ATT error code
 // with *pFailHdl set to the offending handle (Vol 3 Part F 3.4.6.3). The queue
 // is consumed either way.
+//
+// Two passes, because Execute Write is atomic (Vol 3 Part F 3.4.6): the whole
+// queue is validated before any attribute is touched, so a bad record late in
+// the queue cannot leave earlier records already applied.
 static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 {
 	if (pConn == nullptr || pConn->Conn.pLongWrBuff == nullptr)
@@ -1091,53 +1307,16 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 	uint16_t  pos   = 0;
 	uint8_t   err   = 0;
 
+	// Pass 1: validate every queued write. Nothing is modified here, not the
+	// buffer and not any attribute.
 	while (pos + 6 <= total)
 	{
-		uint16_t hdl, off, len;
-		memcpy(&hdl, buf + pos, 2);
-		memcpy(&off, buf + pos + 2, 2);
-		memcpy(&len, buf + pos + 4, 2);
+		uint16_t hdl, off, totLen, next;
 
-		// Pull any following same-handle chunks up against this chunk's data,
-		// dropping their 6-byte record headers, to form one contiguous value.
-		uint8_t  *dst    = buf + pos + 6 + len;
-		uint16_t  totLen = len;
-		uint16_t  next   = pos + 6 + len;
-
-		while (next + 6 <= total)
-		{
-			uint16_t nhdl, noff, nlen;
-			memcpy(&nhdl, buf + next, 2);
-			memcpy(&noff, buf + next + 2, 2);
-			memcpy(&nlen, buf + next + 4, 2);
-
-			if (nhdl != hdl)
-			{
-				break;
-			}
-
-			if (noff != (uint16_t)(off + totLen))
-			{
-				*pFailHdl = hdl;
-				err = BT_ATT_ERROR_INVALID_OFFSET;
-				break;
-			}
-
-			if ((uint32_t)next + 6UL + nlen > total)
-			{
-				*pFailHdl = hdl;
-				err = BT_ATT_ERROR_INVALID_PDU;
-				break;
-			}
-
-			memmove(dst, buf + next + 6, nlen);
-			dst    += nlen;
-			totLen += nlen;
-			next   += 6 + nlen;
-		}
-
+		err = BtAttLongWrRun(buf, total, pos, false, &hdl, &off, &totLen, &next);
 		if (err != 0)
 		{
+			*pFailHdl = hdl;
 			break;
 		}
 
@@ -1149,16 +1328,21 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 			break;
 		}
 
-		// Offset past the current value is INVALID_OFFSET; a reassembled value
-		// beyond the characteristic maximum is INVALID_ATTRIBUTE_VALUE_LENGTH.
-		if (off > BtAttCurValueLen(entry))
+		// Offset past the value this write will land on is INVALID_OFFSET; a
+		// reassembled value beyond the characteristic maximum is
+		// INVALID_ATTRIBUTE_VALUE_LENGTH.
+		if (off > BtAttLongWrProjLen(buf, total, pos, hdl, BtAttCurValueLen(entry)))
 		{
 			*pFailHdl = hdl;
 			err = BT_ATT_ERROR_INVALID_OFFSET;
 			break;
 		}
 
-		BtGattChar_t *pChar = BtAttEntryChar(entry);
+		// MaxDataLen bounds the characteristic value only. BtAttEntryChar also
+		// resolves the owner of a CCCD or user description entry, so ask it for
+		// a value attribute; otherwise a descriptor write would be measured
+		// against the value maximum of the characteristic it describes.
+		BtGattChar_t *pChar = BtAttEntryIsCharValue(entry) ? BtAttEntryChar(entry) : nullptr;
 		if (pChar != nullptr && (uint32_t)off + totLen > pChar->MaxDataLen)
 		{
 			*pFailHdl = hdl;
@@ -1166,13 +1350,232 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 			break;
 		}
 
-		BtAttWriteValueForConn(pConn->Conn.Hdl, entry, off, buf + pos + 6, totLen);
+		// A CCCD reassembled from prepared writes has to satisfy the same rules
+		// as a direct Write Request: exactly two octets at offset 0, holding a
+		// value the characteristic supports. The run is measured here, not
+		// compacted, so the two octets are only laid out contiguously when the
+		// run is a single queued record; a CCCD split across records is
+		// rejected rather than reassembled for this check.
+		if (BtAttEntryIsCccd(entry))
+		{
+			uint16_t reclen;
+			memcpy(&reclen, buf + pos + 4, 2);
+
+			if (off != 0 || totLen != 2 || reclen != 2 ||
+				(uint32_t)pos + 8UL > total)
+			{
+				*pFailHdl = hdl;
+				err = BT_ATT_ERROR_INVALID_ATT_VALUE;
+				break;
+			}
+
+			const uint8_t *val = buf + pos + 6;
+			uint16_t cccd = (uint16_t)(val[0] | (val[1] << 8));
+			uint8_t cerr = BtGattCccdValueError(BtAttEntryChar(entry), cccd);
+
+			if (cerr != 0)
+			{
+				*pFailHdl = hdl;
+				err = cerr;
+				break;
+			}
+
+			// Capacity is part of validation. Pass 2 cannot fail, so a write it
+			// could not store would still be answered Execute Write Response.
+			if (BtGattCccdCanStore(pConn->Conn.Hdl, hdl, cccd) == false)
+			{
+				*pFailHdl = hdl;
+				err = BT_ATT_ERROR_INSUF_RESOURCE;
+				break;
+			}
+		}
+
+		pos = next;
+	}
+
+	if (err != 0)
+	{
+		pConn->Conn.LongWrLen = 0;
+		return err;
+	}
+
+	// Pass 2: commit. Every record validated above, so no attribute write in
+	// this loop can fail on a check that pass 1 already made.
+	pos = 0;
+	while (pos + 6 <= total)
+	{
+		uint16_t hdl, off, totLen, next;
+
+		BtAttLongWrRun(buf, total, pos, true, &hdl, &off, &totLen, &next);
+
+		BtAttDBEntry_t *entry = BtAttDBFindHandle(hdl);
+		if (entry != nullptr)
+		{
+			size_t wr = BtAttWriteValueForConn(pConn->Conn.Hdl, entry, off,
+											   buf + pos + 6, totLen);
+
+			// A CCCD store can refuse for a reason pass 1 could not ask about,
+			// on a build whose GATT layer answers the capacity question only at
+			// commit time. Report it rather than acknowledging a subscription
+			// that was dropped. Records already committed stay applied: once the
+			// store has been told, there is nothing to take back.
+			if (wr == 0 && BtAttEntryIsCccd(entry))
+			{
+				*pFailHdl = hdl;
+				pConn->Conn.LongWrLen = 0;
+				return BT_ATT_ERROR_INSUF_RESOURCE;
+			}
+		}
 
 		pos = next;
 	}
 
 	pConn->Conn.LongWrLen = 0;
-	return err;
+	return 0;
+}
+
+// Resolve the attribute type of a Read By Type / Read By Group Type request
+// into the packed DB UUID form. The type is 2 or 16 octets and both are
+// mandatory (Vol 3 Part F 3.4.4.1): TypeLen 2 gives a 16-bit type; TypeLen 16
+// gives a 128-bit type resolved to a registered base (bytes 12-13 are the
+// short id, the rest must match a known base). Returns:
+//   1  = resolved into *pOut
+//   0  = a valid 128-bit type whose base is not registered - nothing can match
+//  -1  = malformed type length
+static int BtAttResolveReqType(const BtUuidVal_t *pReqUuid, int TypeLen,
+							   BtUuid16_t *pOut)
+{
+	if (TypeLen == 2)
+	{
+		pOut->BaseIdx = 0;
+		pOut->Type = BT_UUID_TYPE_16;
+		pOut->Uuid = pReqUuid->Uuid16;
+		return 1;
+	}
+
+	if (TypeLen == 16)
+	{
+		uint8_t base[16];
+		memcpy(base, pReqUuid->Uuid128, 16);
+		uint16_t shortUuid = (uint16_t)base[12] | ((uint16_t)base[13] << 8);
+		base[12] = 0;
+		base[13] = 0;
+
+		int idx = BtUuidFindBase(base);
+		if (idx < 0)
+		{
+			return 0;		// unknown vendor base: no attribute can match
+		}
+
+		pOut->BaseIdx = (uint8_t)idx;
+		pOut->Type = BT_UUID_TYPE_16;
+		pOut->Uuid = shortUuid;
+		return 1;
+	}
+
+	return -1;
+}
+
+// Default answer for builds that do not link bt_gatt.cpp. bt_att.cpp is built
+// on its own by the host test harnesses, and this is the one GATT function it
+// calls that has a safe default: permit, and let the store report its own
+// refusal, which the Write Request path turns into an error rather than a
+// Write Response. bt_gatt.cpp defines the real one and overrides this.
+__attribute__((weak)) bool BtGattCccdCanStore(uint16_t ConnHdl, uint16_t CccdHdl,
+											  uint16_t Value)
+{
+	(void)ConnHdl;
+	(void)CccdHdl;
+	(void)Value;
+
+	return true;
+}
+
+// The value-replacement rules a command write follows, shared by Write Command
+// and Signed Write Command. The two differ only in that the signed form
+// verifies a signature first (Vol 3 Part F 3.4.5.3, 3.4.5.4); once that is
+// done the write itself is the same operation, so it is done in one place.
+//
+// A command has no error response, so a write that cannot be applied is ignored
+// whole: the stored value and its length are left untouched rather than
+// partially written. A write that is applied replaces the value, so the current
+// length becomes exactly the written length. BtAttWriteValue only ever extends
+// the length, since prepared writes depend on that, which is why the
+// replacement length is set here.
+static void BtAttCommandWrite(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
+							  uint8_t OpCode, uint8_t *pData, uint16_t DataLen)
+{
+	if (pEntry == nullptr)
+	{
+		return;
+	}
+
+	if (BtAttWritePermError(ConnHdl, pEntry, OpCode, pData, DataLen) != 0)
+	{
+		return;
+	}
+
+	BtGattChar_t *pChar = BtAttEntryIsCharValue(pEntry) ? BtAttEntryChar(pEntry) : nullptr;
+
+	if (pChar != nullptr)
+	{
+		if (DataLen > pChar->MaxDataLen)
+		{
+			return;
+		}
+	}
+	else if (BtAttEntryIsCccd(pEntry))
+	{
+		// The value bits were checked by BtAttWritePermError; the fixed
+		// two-octet length and the table capacity are left to enforce here.
+		// A CCCD the link cannot store is ignored, since a command carries no
+		// way to say so.
+		if (DataLen != 2)
+		{
+			return;
+		}
+
+		if (BtGattCccdCanStore(ConnHdl, pEntry->Hdl,
+							   (uint16_t)(pData[0] | (pData[1] << 8))) == false)
+		{
+			return;
+		}
+	}
+
+	BtAttWriteValueForConn(ConnHdl, pEntry, 0, pData, DataLen);
+
+	if (pChar != nullptr)
+	{
+		pChar->ValueLen = DataLen;
+	}
+}
+
+// An Error Response answers a Request and nothing else (Vol 3 Part F 3.4.1.1).
+// Commands carry the command flag in bit 6. Notifications, indications,
+// confirmations and responses are not requests either. Anything left is treated
+// as a request, so an unknown opcode still gets Request Not Supported rather
+// than silence, which would leave the client waiting for its transaction to
+// time out.
+static bool BtAttPduExpectsErrorRsp(uint8_t OpCode)
+{
+	if ((OpCode & 0x40) != 0)			// Write Command, Signed Write Command
+	{
+		return false;
+	}
+
+	switch (OpCode)
+	{
+		case BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF:
+		case BT_ATT_OPCODE_ATT_HANDLE_VALUE_IND:
+		case BT_ATT_OPCODE_ATT_HANDLE_VALUE_CFM:
+		case BT_ATT_OPCODE_ATT_MULTIPLE_HANDLE_VALUE_NTF:
+		case BT_ATT_OPCODE_ATT_ERROR_RSP:
+			return false;
+		default:
+			break;
+	}
+
+	return (OpCode & 0x01) == 0;		// odd opcodes are responses
 }
 
 uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int ReqLen, BtAttReqRsp_t * const pRspAtt)
@@ -1186,36 +1589,64 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 	DEBUG_PRINTF("ATT OpCode %x, L2Cap len %d\n", pReqAtt->OpCode, ReqLen);
 
-	// Reject truncated request PDUs before any field is parsed. ReqLen counts
-	// the opcode byte plus all parameters; a PDU shorter than the fixed size
-	// required by its opcode would read handles/lengths past the end of the
-	// received L2CAP buffer. PDUs arrive over the air from an untrusted peer.
+	// Reject malformed PDUs before any field is parsed. ReqLen counts the opcode
+	// byte plus all parameters; a PDU shorter than the size its opcode requires
+	// would read handles/lengths past the end of the received L2CAP buffer, and
+	// a fixed-format PDU carrying trailing bytes is not the PDU it claims to be.
+	// PDUs arrive over the air from an untrusted peer.
+	//
+	// exactLen is the total size of a PDU whose format is fixed; 0 marks the
+	// ones with a variable tail (a value, a UUID that may be 2 or 16 bytes, or a
+	// handle list), which are bounded by minLen and by their own handlers.
 	{
 		int minLen = 1;
+		int exactLen = 0;
+
 		switch (pReqAtt->OpCode)
 		{
-			case BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ:		minLen = 3; break;	// op + RxMtu(2)
-			case BT_ATT_OPCODE_ATT_FIND_INFORMATION_REQ:	minLen = 5; break;	// op + start(2) + end(2)
-			case BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ:	minLen = 7; break;	// op + start(2) + end(2) + type(2)
-			case BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ:		minLen = 7; break;	// op + start(2) + end(2) + uuid16(2)
-			case BT_ATT_OPCODE_ATT_READ_REQ:				minLen = 3; break;	// op + hdl(2)
-			case BT_ATT_OPCODE_ATT_READ_BLOB_REQ:			minLen = 5; break;	// op + hdl(2) + offset(2)
+			case BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ:		minLen = 3; exactLen = 3; break;	// op + RxMtu(2)
+			case BT_ATT_OPCODE_ATT_FIND_INFORMATION_REQ:	minLen = 5; exactLen = 5; break;	// op + start(2) + end(2)
+			case BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ:	minLen = 7; break;	// op + start(2) + end(2) + type(2) + value
+			case BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ:		minLen = 7; break;	// op + start(2) + end(2) + uuid(2 or 16)
+			case BT_ATT_OPCODE_ATT_READ_REQ:				minLen = 3; exactLen = 3; break;	// op + hdl(2)
+			case BT_ATT_OPCODE_ATT_READ_BLOB_REQ:			minLen = 5; exactLen = 5; break;	// op + hdl(2) + offset(2)
 			case BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ:		minLen = 5; break;	// op + at least 2 handles
-			case BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ: minLen = 3; break;	// op + at least 1 handle
-			case BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ:	minLen = 7; break;	// op + start(2) + end(2) + uuid16(2)
+			case BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ: minLen = 5; break;	// op + at least 2 handles
+			case BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ:	minLen = 7; break;	// op + start(2) + end(2) + uuid(2 or 16)
 			case BT_ATT_OPCODE_ATT_WRITE_REQ:				minLen = 3; break;	// op + hdl(2) + value(>=0)
 			case BT_ATT_OPCODE_ATT_CMD:						minLen = 3; break;	// op + hdl(2) + value(>=0)
-			case BT_ATT_OPCODE_ATT_SIGNED_WRITE_CMD:			minLen = 15; break;	// op + hdl(2) + signature(12)
-			case BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ:		minLen = 5; break;	// op + hdl(2) + offset(2)
-			case BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ:		minLen = 2; break;	// op + flags(1)
+			case BT_ATT_OPCODE_ATT_SIGNED_WRITE_CMD:			minLen = 15; break;	// op + hdl(2) + value(>=0) + signature(12)
+			case BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ:		minLen = 5; break;	// op + hdl(2) + offset(2) + value(>=0)
+			case BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ:		minLen = 2; exactLen = 2; break;	// op + flags(1)
 			case BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF:		minLen = 3; break;	// op + hdl(2) + value(>=0)
 			case BT_ATT_OPCODE_ATT_HANDLE_VALUE_IND:		minLen = 3; break;	// op + hdl(2) + value(>=0)
-			case BT_ATT_OPCODE_ATT_HANDLE_VALUE_CFM:		minLen = 1; break;	// op only
+			case BT_ATT_OPCODE_ATT_HANDLE_VALUE_CFM:		minLen = 1; exactLen = 1; break;	// op only
 			default:										minLen = 1; break;
 		}
 
-		if (ReqLen < minLen)
+		bool bad = ReqLen < minLen || (exactLen != 0 && ReqLen != exactLen);
+
+		// Both Read Multiple forms carry a list of whole 16-bit handles, so a
+		// trailing odd byte is malformed however long the list is.
+		if (bad == false &&
+			(pReqAtt->OpCode == BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ ||
+			 pReqAtt->OpCode == BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ))
 		{
+			bad = ((ReqLen - 1) & 1) != 0;
+		}
+
+		if (bad)
+		{
+			// A malformed request is answered Invalid PDU. A malformed command,
+			// notification, indication or confirmation is discarded in silence:
+			// those PDUs have no response, and answering one with an Error
+			// Response puts a PDU on air that the peer is not expecting
+			// (Vol 3 Part F 3.4.1.1).
+			if (BtAttPduExpectsErrorRsp(pReqAtt->OpCode) == false)
+			{
+				return 0;
+			}
+
 			return BtAttError(pRspAtt, 0, pReqAtt->OpCode, BT_ATT_ERROR_INVALID_PDU);
 		}
 	}
@@ -1442,14 +1873,26 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					break;
 				}
 
+				// The attribute type is 2 or 16 octets (op + start(2) + end(2) +
+				// type). A 128-bit type is resolved to its registered base so
+				// that "Discover Characteristics by UUID" / "Read using
+				// Characteristic UUID" with a vendor 128-bit UUID works.
+				BtUuid16_t uid16;
+				int typeRes = BtAttResolveReqType(&req->Uuid, ReqLen - 5, &uid16);
+				if (typeRes < 0)
+				{
+					retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ, BT_ATT_ERROR_INVALID_PDU);
+					break;
+				}
+
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP;
 
 				uint8_t *p = (uint8_t*)pRspAtt->ReadByTypeRsp.Data;
 
-				//DEBUG_PRINTF("sHdl: %x, eHdl: %x, Type: %x\r\n", req->StartHdl, req->EndHdl, req->Uuid.Uuid16);
-				BtUuid16_t uid16 = { 0, BT_UUID_TYPE_16, req->Uuid.Uuid16};
-
-				BtAttDBEntry_t *entry = BtAttDBFindUuidRange(&uid16, req->StartHdl, req->EndHdl);
+				// A well-formed 128-bit type with no registered base matches no
+				// attribute: return Attribute Not Found rather than searching.
+				BtAttDBEntry_t *entry = typeRes == 1 ?
+					BtAttDBFindUuidRange(&uid16, req->StartHdl, req->EndHdl) : nullptr;
 				if (entry)
 				{
 					DEBUG_PRINTF("Entry found\r\n");
@@ -1525,12 +1968,15 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						pRspAtt->ReadByTypeRsp.Len = (uint8_t)(2 + pairValLen);
 					}
 
-					// entry is the last DB node; no next handle to continue the scan
-					if (entry->pNext == nullptr)
+					// Advance strictly past the handle just emitted. Continuing
+					// from entry->pNext->Hdl is wrong when pNext is the list-end
+					// sentinel (handle 0): the search would restart at handle 0
+					// and re-match this same entry until the response fills.
+					if (entry->Hdl >= req->EndHdl || entry->Hdl == 0xFFFF)
 					{
 						break;
 					}
-					req->StartHdl = entry->pNext->Hdl;
+					req->StartHdl = entry->Hdl + 1;
 					entry = BtAttDBFindUuidRange(&uid16, req->StartHdl, req->EndHdl);
 				}
 
@@ -1625,9 +2071,15 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				DEBUG_PRINTF("BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ (0x0E)\r\n");
 				int nhdl = (ReqLen - 1) >> 1;
+				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_MULTIPLE_RSP;
 				uint8_t *p = pRspAtt->ReadMultipleRsp.Data;
 				retval = 1;
-				for (int i = 0; i < nhdl && (rspMtu - retval) >= BT_ATT_MTU_MIN; i++)
+				// Concatenate values until the response reaches ATT_MTU or the
+				// handles run out (Vol 3 Part F 3.4.4.7). Each read is capped at
+				// the space remaining (rspMtu - retval), so the last value is
+				// truncated to fit; the previous guard demanded a whole ATT_MTU
+				// of free space and so returned an empty response at MTU 23.
+				for (int i = 0; i < nhdl && retval < rspMtu; i++)
 				{
 					BtAttDBEntry_t *entry = BtAttDBFindHandle(pReqAtt->ReadMultipleReq.Hdl[i]);
 					if (entry == nullptr)
@@ -1674,12 +2126,20 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				// Read By Group Type is defined only for the Primary Service
 				// (0x2800) and Secondary Service (0x2801) group types (Core Vol 3
-				// Part F 3.4.4.9). Any other group type - including a 128-bit type
-				// (ReqLen 21, not 7) - must return Unsupported Group Type rather
-				// than being grouped by the generic handle-range heuristic.
-				if (ReqLen != 7 ||
-					(req->Uuid.Uuid16 != BT_UUID_DECLARATIONS_PRIMARY_SERVICE &&
-					 req->Uuid.Uuid16 != BT_UUID_DECLARATIONS_SECONDARY_SERVICE))
+				// Part F 3.4.4.9). Accept either the 16-bit form or its 128-bit
+				// expansion; a malformed type length is Invalid PDU, and any
+				// other type (including an unknown 128-bit base) is Unsupported
+				// Group Type.
+				BtUuid16_t uid16;
+				int gTypeRes = BtAttResolveReqType(&req->Uuid, ReqLen - 5, &uid16);
+				if (gTypeRes < 0)
+				{
+					retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ, BT_ATT_ERROR_INVALID_PDU);
+					break;
+				}
+				if (gTypeRes != 1 || uid16.BaseIdx != 0 ||
+					(uid16.Uuid != BT_UUID_DECLARATIONS_PRIMARY_SERVICE &&
+					 uid16.Uuid != BT_UUID_DECLARATIONS_SECONDARY_SERVICE))
 				{
 					retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ, BT_ATT_ERROR_UNSUPP_GROUP_TYPE);
 					break;
@@ -1688,7 +2148,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_RSP;
 
 				uint8_t *p = (uint8_t*)pRspAtt->ReadByGroupTypeRsp.Data;
-				BtUuid16_t uid16 = { 0, BT_UUID_TYPE_16, req->Uuid.Uuid16};
 				BtAttHdlRange_t *hu = (BtAttHdlRange_t*)p;
 				int l = 0;
 
@@ -1707,12 +2166,11 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				}
 
 				pRspAtt->ReadByGroupTypeRsp.Len = 0;
-				int temp_cnt = 0;
 
 				while (entry && (rspMtu - l) >= BT_ATT_MTU_MIN)
 				{
-					DEBUG_PRINTF("#%d BaseIdx = %d, entry->Hdl = %d, entry->pNext->Hdl = %d, UuidType = %d, uuid16 = 0x%x\r\n",
-							temp_cnt, entry->TypeUuid.BaseIdx, entry->Hdl, (entry->pNext ? entry->pNext->Hdl : 0), entry->TypeUuid.Type, entry->TypeUuid.Uuid);
+					DEBUG_PRINTF("BaseIdx = %d, entry->Hdl = %d, entry->pNext->Hdl = %d, UuidType = %d, uuid16 = 0x%x\r\n",
+							entry->TypeUuid.BaseIdx, entry->Hdl, (entry->pNext ? entry->pNext->Hdl : 0), entry->TypeUuid.Type, entry->TypeUuid.Uuid);
 
 					if (entry->Hdl >= req->StartHdl && entry->Hdl <= req->EndHdl && baseidx == entry->TypeUuid.BaseIdx)
 					{
@@ -1745,7 +2203,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					DEBUG_PRINTF("Next Find Range StartHdl = %d, EndHdl = %d, Uuid16Type = 0x%X\r\n",
 							hu->StartHdl, hu->EndHdl, uid16.Uuid);
 					entry = BtAttDBFindHdlRange(&uid16, &hu->StartHdl, &hu->EndHdl);
-					temp_cnt++;
 				}
 
 				if (l > 0)
@@ -1792,11 +2249,24 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					// 2-octet field. A write of any other length is rejected with
 					// Invalid Attribute Value Length (Core spec Vol 3 Part G,
 					// 3.3.3.3), not silently truncated or accepted.
-					if (entry->TypeUuid.BaseIdx == 0 &&
-						entry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION &&
-						dlen != 2)
+					bool bCccd = BtAttEntryIsCccd(entry);
+
+					if (bCccd && dlen != 2)
 					{
 						retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_INVALID_ATT_VALUE);
+						break;
+					}
+
+					// The per-link CCCD table has a fixed size. A new
+					// subscription it cannot hold is refused here, before the
+					// Write Response is built: acknowledging a write that was
+					// then dropped leaves the client believing it is subscribed
+					// and waiting for notifications that never arrive.
+					if (bCccd &&
+						BtGattCccdCanStore(ConnHdl, req->Hdl,
+										   (uint16_t)(req->Data[0] | (req->Data[1] << 8))) == false)
+					{
+						retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_INSUF_RESOURCE);
 						break;
 					}
 
@@ -1827,7 +2297,17 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						}
 					}
 
-					BtAttWriteValueForConn(ConnHdl, entry, 0, req->Data, (uint16_t)dlen);
+					size_t wr = BtAttWriteValueForConn(ConnHdl, entry, 0, req->Data, (uint16_t)dlen);
+
+					// A CCCD write reports whether the GATT layer stored it. The
+					// capacity question was asked above, but the store can still
+					// refuse for a reason only it knows, and a Write Response for
+					// a value that was not stored is worse than an error.
+					if (bCccd && wr == 0)
+					{
+						retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_INSUF_RESOURCE);
+						break;
+					}
 
 					// A Write Request replaces the whole attribute value, so the
 					// current length becomes exactly the written length: a
@@ -1873,46 +2353,8 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					{
 						dlen = 0;
 					}
-					if (BtAttWritePermError(ConnHdl, entry, BT_ATT_OPCODE_ATT_CMD,
-											pReqAtt->WriteCmd.Data, (uint16_t)dlen) == 0)
-					{
-						// Write Command has no error response, so an invalid
-						// length cannot be reported: the whole command is ignored
-						// (do not touch the stored value or its length) per Vol 3
-						// Part F 3.4.5.3. Validate the length in the handler, as
-						// the Write Request path does, rather than relying on the
-						// write helper to reject it: a characteristic value must
-						// fit the attribute maximum, and a CCCD must be exactly
-						// two octets. A valid write replaces the value, so the
-						// current length becomes exactly dlen.
-						BtGattChar_t *pCmdChar =
-							BtAttEntryIsCharValue(entry) ? BtAttEntryChar(entry) : nullptr;
-
-						bool valid;
-						if (pCmdChar != nullptr)
-						{
-							valid = (uint16_t)dlen <= pCmdChar->MaxDataLen;
-						}
-						else if (entry->TypeUuid.BaseIdx == 0 &&
-								 entry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION)
-						{
-							valid = (dlen == 2);
-						}
-						else
-						{
-							valid = true;
-						}
-
-						if (valid)
-						{
-							BtAttWriteValueForConn(ConnHdl, entry, 0,
-											pReqAtt->WriteCmd.Data, (uint16_t)dlen);
-							if (pCmdChar != nullptr)
-							{
-								pCmdChar->ValueLen = (uint16_t)dlen;
-							}
-						}
-					}
+					BtAttCommandWrite(ConnHdl, entry, BT_ATT_OPCODE_ATT_CMD,
+									  pReqAtt->WriteCmd.Data, (uint16_t)dlen);
 
 					retval = 0;
 				}
@@ -1935,20 +2377,18 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				BtAttDBEntry_t *entry = BtAttDBFindHandle(pReqAtt->SignedWriteCmd.Hdl);
 				const uint8_t *sig = &pReqAtt->SignedWriteCmd.Data[dlen];
 
+				// Signature first, then the same write a Write Command performs.
+				// Sharing the write is what keeps the two forms from drifting:
+				// before, the signed path skipped the length checks and left the
+				// replacement length unset, so an oversize signed value was
+				// partially committed and a shorter one left a stale tail.
 				if (entry != nullptr &&
 					BtAttSignedWriteVerify(ConnHdl, &pReqAtt->SignedWriteCmd,
 										   (uint16_t)dlen, sig))
 				{
-					uint8_t err = BtAttWritePermError(ConnHdl, entry,
-													  BT_ATT_OPCODE_ATT_SIGNED_WRITE_CMD,
-													  pReqAtt->SignedWriteCmd.Data,
-													  (uint16_t)dlen);
-					if (err == 0)
-					{
-						BtAttWriteValueForConn(ConnHdl, entry, 0,
-											   pReqAtt->SignedWriteCmd.Data,
-											   (uint16_t)dlen);
-					}
+					BtAttCommandWrite(ConnHdl, entry,
+									  BT_ATT_OPCODE_ATT_SIGNED_WRITE_CMD,
+									  pReqAtt->SignedWriteCmd.Data, (uint16_t)dlen);
 				}
 
 				retval = 0;
@@ -2052,12 +2492,22 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 		case BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ:
 			{
 				DEBUG_PRINTF("BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ (0x20) \r\n");
-				uint16_t *hdl = pReqAtt->ReadMultipleVarReq.Hdl;
+				// The handle list sits one octet into the PDU (after the
+				// opcode), so it is 2-byte misaligned. Walk it with a byte
+				// pointer and assemble each handle little-endian rather than
+				// dereferencing a uint16_t*, which is undefined and faults on
+				// targets without unaligned access (for example Cortex-M0).
+				uint8_t *hdlp = (uint8_t*)pReqAtt->ReadMultipleVarReq.Hdl;
 				uint8_t *p = pRspAtt->ReadMultipleVarRsp.Data;
 				int l = 0;
 				int hdlBytes = ReqLen - 1;	// exclude opcode
 
-				if (hdlBytes < 2 || (hdlBytes & 1))
+				// The Set Of Handles carries two or more attribute handles
+				// (Vol 3 Part F 3.4.4.11), so fewer than four octets is
+				// malformed, as is a partial handle. The generic length check
+				// ahead of this switch enforces the same minimum; both are kept
+				// so the handler stays correct if it is ever called directly.
+				if (hdlBytes < 4 || (hdlBytes & 1))
 				{
 					retval = BtAttError(pRspAtt, 0,
 										BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ,
@@ -2067,11 +2517,12 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				while (hdlBytes > 0 && l + 3 <= rspMtu)
 				{
-					BtAttDBEntry_t *entry = BtAttDBFindHandle(*hdl);
+					uint16_t curHdl = (uint16_t)(hdlp[0] | (hdlp[1] << 8));
+					BtAttDBEntry_t *entry = BtAttDBFindHandle(curHdl);
 
 					if (entry == nullptr)
 					{
-						retval = BtAttError(pRspAtt, *hdl,
+						retval = BtAttError(pRspAtt, curHdl,
 											BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ,
 											BT_ATT_ERROR_INVALID_HANDLE);
 						break;
@@ -2079,20 +2530,33 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					uint8_t err = BtAttReadPermError(ConnHdl, entry);
 					if (err != 0)
 					{
-						retval = BtAttError(pRspAtt, *hdl,
+						retval = BtAttError(pRspAtt, curHdl,
 											BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ, err);
 						break;
 					}
 
 					pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_RSP;
 					uint16_t space = (uint16_t)(rspMtu - 1 - l - 2);	// MTU - opcode - existing payload - length field
+					// The Length field holds the complete attribute value
+					// length, even when the value is truncated to fit (Vol 3
+					// Part F 3.4.4.13), so the client can detect that the last
+					// value was cut and re-read it. Only value bytes that fit
+					// are emitted.
+					uint16_t full = BtAttFullValueLen(entry);
 					uint16_t n = BtAttReadValueForConn(ConnHdl, entry, 0, p + 2, space);
-					p[0] = n & 0xFF;
-					p[1] = n >> 8;
+					p[0] = full & 0xFF;
+					p[1] = full >> 8;
 					p += n + 2;
 					l += n + 2;
-					hdl++;
+					hdlp += 2;
 					hdlBytes -= 2;
+
+					// Only the last tuple may be truncated: once a value did
+					// not fit, stop rather than emitting more tuples.
+					if (n < full)
+					{
+						break;
+					}
 				}
 
 				if (retval != 0 && pRspAtt->OpCode == BT_ATT_OPCODE_ATT_ERROR_RSP)
@@ -2163,21 +2627,10 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 			// responses do not get a reply. A request is anything else with an
 			// even-ish method that expects a response; treat unknown opcodes
 			// that are not command/notify/confirm/response as requests.
+			if (BtAttPduExpectsErrorRsp(pReqAtt->OpCode))
 			{
-				uint8_t op = pReqAtt->OpCode;
-				bool isCommand = (op & 0x40) != 0;	// Write Command, Signed Write
-				bool noRsp = isCommand ||
-							 op == BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF ||
-							 op == BT_ATT_OPCODE_ATT_HANDLE_VALUE_IND ||
-							 op == BT_ATT_OPCODE_ATT_HANDLE_VALUE_CFM ||
-							 op == BT_ATT_OPCODE_ATT_MULTIPLE_HANDLE_VALUE_NTF ||
-							 op == BT_ATT_OPCODE_ATT_ERROR_RSP ||
-							 (op & 0x01);	// odd opcodes in 1..0x1B are responses
-				if (!noRsp)
-				{
-					retval = BtAttError(pRspAtt, 0x0000, op,
-										 BT_ATT_ERROR_REQUEST_NOT_SUPP);
-				}
+				retval = BtAttError(pRspAtt, 0x0000, pReqAtt->OpCode,
+									 BT_ATT_ERROR_REQUEST_NOT_SUPP);
 			}
 			break;
 	}
