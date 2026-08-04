@@ -38,6 +38,7 @@ SOFTWARE.
 #ifndef __CFIFO_H__
 #define __CFIFO_H__
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -92,7 +93,7 @@ typedef CFifo_t* hCFifo_t;
  * @param	BlkSize 		: Block size in bytes
  * @param   bBlocking  		: Behavior when FIFO is full.\n
  *                    			false - Old data will be pushed out to make place
- *                            			for new data. Put always succeed\n
+ *                            		for new data. Put always succeed\n
  *                    			true  - New data will not be pushed in. Put will
  *                    					return fail.
  *
@@ -112,7 +113,25 @@ hCFifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkS
  *
  * @return	Pointer to the next FIFO block, or NULL when empty.
  */
-uint8_t *CFifoPeek(hCFifo_t const hFifo);
+static inline uint8_t *CFifoPeek(hCFifo_t const pFifo)
+{
+	if (pFifo == NULL)
+	{
+		return NULL;
+	}
+
+	uint32_t getIdx = __atomic_load_n(&pFifo->GetIdx, __ATOMIC_RELAXED);
+	uint32_t putIdx = __atomic_load_n(&pFifo->PutIdx, __ATOMIC_ACQUIRE);
+	if (getIdx == putIdx)
+	{
+		return NULL;
+	}
+
+	uint32_t slot = pFifo->Mask ? (getIdx & pFifo->Mask) :
+		(uint32_t)(getIdx % (uint32_t)pFifo->MaxIdxCnt);
+
+	return pFifo->pMemStart + slot * pFifo->BlkSize;
+}
 
 /**
  * @brief	Retrieve FIFO data by returning pointer to FIFO memory block for reading.
