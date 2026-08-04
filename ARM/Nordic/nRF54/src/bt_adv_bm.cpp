@@ -195,7 +195,16 @@ void BtAdvBmTerminated()
 
 void BtAdvStart()
 {
-	if (s_bAdvertising || !BtAdvCanStart())
+	if (s_bAdvertising)
+	{
+		// A mixed-role device can remain advertising while its last central
+		// link disconnects. Resynchronize the shared state even though there is
+		// no SoftDevice operation to start.
+		BtAdvStateUpdate();
+		return;
+	}
+
+	if (!BtAdvCanStart())
 	{
 		return;
 	}
