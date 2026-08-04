@@ -172,15 +172,26 @@ void TestRxPacketOwnership()
 	}
 	f.Char[0].WrCB(&f.Char[0], incoming, 0, sizeof(incoming));
 	BT_CHECK(s_Test, s_RxEventCount == 1);
+	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 2);
+
+	// A packet is not a stream fragment. A destination that cannot hold the
+	// complete next packet must leave it queued so the caller can retry.
+	uint8_t shortOut[3] = {};
+	BT_CHECK(s_Test,
+		f.Intrf.DevIntrf.RxData(&f.Intrf.DevIntrf, shortOut,
+			sizeof(shortOut)) == 0);
+	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 2);
 
 	uint8_t out[8] = {};
 	BT_CHECK(s_Test,
 		f.Intrf.DevIntrf.RxData(&f.Intrf.DevIntrf, out, sizeof(out)) == 8);
 	BT_CHECK(s_Test, std::memcmp(out, incoming, 8) == 0);
+	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 1);
 	std::memset(out, 0, sizeof(out));
 	BT_CHECK(s_Test,
 		f.Intrf.DevIntrf.RxData(&f.Intrf.DevIntrf, out, sizeof(out)) == 4);
 	BT_CHECK(s_Test, std::memcmp(out, incoming + 8, 4) == 0);
+	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 0);
 }
 
 void TestTxRetryAndReset()

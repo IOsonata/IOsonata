@@ -108,6 +108,20 @@ extern "C" {
 hCFifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking);
 
 /**
+ * @brief	Inspect the next FIFO block without consuming it.
+ *
+ * The returned pointer remains owned by the FIFO. A later non-blocking put may
+ * overwrite it when the FIFO is full, so callers must not retain the pointer.
+ * This is intended for checking a block header before deciding whether to
+ * consume the block with CFifoGet().
+ *
+ * @param	hFifo : CFIFO handle
+ *
+ * @return	Pointer to the next FIFO block, or NULL when empty.
+ */
+uint8_t *CFifoPeek(hCFifo_t const hFifo);
+
+/**
  * @brief	Retrieve FIFO data by returning pointer to FIFO memory block for reading.
  *
  * This function returns a direct pointer to FIFO memory to quickly retrieve data.

@@ -88,6 +88,23 @@ hCFifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize,
 	return pFifo;
 }
 
+uint8_t *CFifoPeek(hCFifo_t const pFifo)
+{
+	if (pFifo == NULL)
+	{
+		return NULL;
+	}
+
+	uint32_t getIdx = atomic_load_explicit(&pFifo->GetIdx, __ATOMIC_RELAXED);
+	uint32_t putIdx = atomic_load_explicit(&pFifo->PutIdx, __ATOMIC_ACQUIRE);
+	if (getIdx == putIdx)
+	{
+		return NULL;
+	}
+
+	return cfifo_addr(pFifo, cfifo_slot(pFifo, getIdx));
+}
+
 uint8_t *CFifoGet(hCFifo_t const pFifo)
 {
 	if (pFifo == NULL)
