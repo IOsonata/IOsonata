@@ -287,9 +287,7 @@ static SVCCTL_UserEvtFlowStatus_t BtWbaEventHookDispatch(void *pPayload)
 			case ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE:
 				if (available >= 2)
 				{
-					uint16_t connHdl = BtWbaEvtLe16(pAci->data);
-					BtGattHandleValueConfirm(connHdl);
-					BtGattSendCompleted(connHdl, 1);
+					BtGattHandleValueConfirm(BtWbaEvtLe16(pAci->data));
 				}
 				return SVCCTL_UserEvtFlowEnable;
 
