@@ -35,8 +35,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -130,6 +130,11 @@ extern UART g_Uart;
 #define SEC_PARAM_MIN_KEY_SIZE			7
 #define SEC_PARAM_MAX_KEY_SIZE			16
 
+// HCI error used when the application cannot complete an authenticated user
+// interaction. aci_gap_pass_key_resp has no reject form; submitting zero would
+// accept the valid passkey 000000 rather than cancel pairing.
+#define BT_APP_HCI_AUTH_FAILURE			0x05
+
 // Mapping from BtGap SecType to ST's IO-capability + auth-requirement
 // values is done at init time. Default to NoInputNoOutput / no MITM.
 #ifndef BT_APP_DEFAULT_IO_CAPABILITY
@@ -151,6 +156,7 @@ __attribute__((weak)) void BtAppInitUserData(void) {}
 // allocation internally - we don't track a separate AdvHdl on this port.
 typedef struct __Bt_App_WbaData {
 	uint16_t	GattSrvcStartHdl;	//!< First handle of the user GATT service
+	uint16_t	PasskeyRejectedHdl;	//!< Synchronous passkey UI rejection marker
 	uint8_t		IoCapability;		//!< SMP IO cap - mapped from SecType at init
 	uint8_t		AuthRequirement;	//!< SMP auth requirement bits
 	bool		bOobEnabled;		//!< LESC OOB explicitly enabled by app config
@@ -160,6 +166,7 @@ typedef struct __Bt_App_WbaData {
 
 static BtAppWbaData_t s_WbaData = {
 	.GattSrvcStartHdl = 0,
+	.PasskeyRejectedHdl = BT_CONN_HDL_INVALID,
 	.IoCapability     = BT_APP_DEFAULT_IO_CAPABILITY,
 	.AuthRequirement  = 0,
 	.bOobEnabled      = false,
@@ -339,6 +346,12 @@ static bool WbaPasskeyLocalDisplays(uint8_t LocalIo, uint8_t PeerIo)
 	return (PeerIo == IO_CAP_KEYBOARD_ONLY);
 }
 
+static void WbaPasskeyReject(uint16_t ConnHdl)
+{
+	s_WbaData.PasskeyRejectedHdl = ConnHdl;
+	(void)aci_gap_terminate(ConnHdl, BT_APP_HCI_AUTH_FAILURE);
+}
+
 // Resume Numeric Comparison. Confirm true reports a match, false rejects and
 // aborts pairing.
 void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
@@ -347,16 +360,18 @@ void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 }
 
 // Resume Passkey Entry on the input side. A value in 0..999999 is handed to the
-// stack. A value above that range cancels: ST has no explicit passkey reject,
-// so a zero value is sent and pairing fails at the Confirm stage on the
-// resulting mismatch.
+// stack. A value above that range cancels by terminating the pending link with
+// Authentication Failure. Sending zero is not a cancellation because 000000 is
+// a valid passkey.
 void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 {
 	if (Passkey > 999999u)
 	{
-		(void)aci_gap_pass_key_resp(ConnHdl, 0);
+		WbaPasskeyReject(ConnHdl);
 		return;
 	}
+
+	s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
 	(void)aci_gap_pass_key_resp(ConnHdl, Passkey);
 }
 
@@ -548,8 +563,8 @@ __attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Val
 
 __attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
 {
-	(void)ConnHdl;
 	(void)Passkey;
+	WbaPasskeyReject(ConnHdl);
 }
 
 __attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
@@ -573,6 +588,10 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 				(hci_disconnection_complete_event_rp0 *)pEvtPkt->data;
 			if (p->Status == BLE_STATUS_SUCCESS)
 			{
+				if (s_WbaData.PasskeyRejectedHdl == p->Connection_Handle)
+				{
+					s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
+				}
 				BtSmpOobDataClearConn(p->Connection_Handle);
 				BtDevice_t *pPeer = BtPeerFindByHdl(p->Connection_Handle);
 				if (pPeer != nullptr)
@@ -773,6 +792,10 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 				{
 					aci_gap_pairing_complete_event_rp0 *pPc =
 						(aci_gap_pairing_complete_event_rp0 *)pAci->data;
+					if (s_WbaData.PasskeyRejectedHdl == pPc->Connection_Handle)
+					{
+						s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
+					}
 					BtSmpOobDataClearConn(pPc->Connection_Handle);
 					if (pPc->Status == 0)
 					{
@@ -796,18 +819,23 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 					aci_gap_pass_key_req_event_rp0 *pPk =
 						(aci_gap_pass_key_req_event_rp0 *)pAci->data;
 					uint16_t connHdl = pPk->Connection_Handle;
+					s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
 					// The event reports the peer IO capability; the local one is
 					// the configured value.
 					if (WbaPasskeyLocalDisplays(s_WbaData.IoCapability, pPk->IO_Capability))
 					{
 						// Display side: generate a six digit passkey, show it,
-						// and hand the same value to the stack.
+						// and hand the same value to the stack unless the callback
+						// rejected synchronously.
 						uint8_t rnd[8] = {0};
 						(void)hci_le_rand(rnd);
 						uint32_t val = ((uint32_t)rnd[0] | ((uint32_t)rnd[1] << 8) |
 										((uint32_t)rnd[2] << 16) | ((uint32_t)rnd[3] << 24)) % 1000000u;
 						BtSmpPasskeyDisplay(connHdl, val);
-						(void)aci_gap_pass_key_resp(connHdl, val);
+						if (s_WbaData.PasskeyRejectedHdl != connHdl)
+						{
+							(void)aci_gap_pass_key_resp(connHdl, val);
+						}
 					}
 					else
 					{
@@ -993,6 +1021,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 
 	BtSmpOobDataClearInternal();
+	s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
 	s_WbaData.bOobEnabled =
 		pCfg->SecType == BTGAP_SECTYPE_LESC_MITM &&
 		(pCfg->SecExchg & BTAPP_SECEXCHG_OOB) != 0;
