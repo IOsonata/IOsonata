@@ -153,6 +153,7 @@ typedef struct __Bt_App_WbaData {
 	uint16_t	GattSrvcStartHdl;	//!< First handle of the user GATT service
 	uint8_t		IoCapability;		//!< SMP IO cap - mapped from SecType at init
 	uint8_t		AuthRequirement;	//!< SMP auth requirement bits
+	bool		bOobEnabled;		//!< LESC OOB explicitly enabled by app config
 	bool		bStackInited;		//!< true after BleStack_Init succeeded
 	uint16_t	NvmCacheWords;		//!< 64 bit words preloaded into the cache
 } BtAppWbaData_t;
@@ -161,6 +162,7 @@ static BtAppWbaData_t s_WbaData = {
 	.GattSrvcStartHdl = 0,
 	.IoCapability     = BT_APP_DEFAULT_IO_CAPABILITY,
 	.AuthRequirement  = 0,
+	.bOobEnabled      = false,
 	.bStackInited     = false,
 };
 
@@ -362,8 +364,8 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 // the same entry point the SDC and BM ports expose. Maps the generic
 // BT_SMP_IOCAPS_* / BT_SMP_AUTHREQ_* values to ST's IO_CAP_* and the split
 // arguments of aci_gap_set_authentication_requirement, then applies them so a
-// call after BtAppInit reconfigures the next pairing. This port pairs with LE
-// Secure Connections only, so the SC bit stays set regardless of AuthReq.
+// call after BtAppInit reconfigures the next pairing. An AuthReq with the SC
+// bit set is configured as SC-only; legacy fallback is not permitted.
 void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 {
 	uint8_t io;
@@ -389,10 +391,11 @@ void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 	s_WbaData.IoCapability    = io;
 	s_WbaData.AuthRequirement = AuthReq;
 
-	uint8_t bonding = (AuthReq & BT_SMP_AUTHREQ_BONDING_FLAG_MASK) != 0 ? 1 : 0;
-	uint8_t mitm    = (AuthReq & BT_SMP_AUTHREQ_MITM) != 0 ? 1 : 0;
+	uint8_t bonding   = (AuthReq & BT_SMP_AUTHREQ_BONDING_FLAG_MASK) != 0 ? 1 : 0;
+	uint8_t mitm      = (AuthReq & BT_SMP_AUTHREQ_MITM) != 0 ? 1 : 0;
+	uint8_t scSupport = (AuthReq & BT_SMP_AUTHREQ_SC) != 0 ? 2 : 0;
 	aci_gap_set_authentication_requirement(bonding, mitm,
-	                                       1,	// LE Secure Connections
+	                                       scSupport,
 	                                       0,	// keypress not supported
 	                                       SEC_PARAM_MIN_KEY_SIZE,
 	                                       SEC_PARAM_MAX_KEY_SIZE,
@@ -435,7 +438,7 @@ int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint
 {
 	(void)pDev;
 
-	if (pRand == NULL || pConf == NULL ||
+	if (!s_WbaData.bOobEnabled || pRand == NULL || pConf == NULL ||
 		s_BtAppPeerOobHdl != BT_CONN_HDL_INVALID)
 	{
 		return -1;
@@ -470,7 +473,7 @@ int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint
 
 void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pConf)
 {
-	if (pRand == NULL || pConf == NULL)
+	if (!s_WbaData.bOobEnabled || pRand == NULL || pConf == NULL)
 	{
 		return;
 	}
@@ -509,7 +512,8 @@ void BtSmpOobDataClear(void)
 static void BtAppOobPeerDataPush(uint16_t ConnHdl, uint8_t AddrType,
 								 const uint8_t *pAddr)
 {
-	if (!s_BtAppPeerOobValid || pAddr == NULL)
+	if (!s_WbaData.bOobEnabled || !g_BtAppData.AppDevice.bSecure ||
+		!s_BtAppPeerOobValid || pAddr == NULL)
 	{
 		return;
 	}
@@ -653,18 +657,21 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 						BtAppConnLedOn();
 						BtAppEvtConnected(p->Connection_Handle);
 
-						// Staged LESC OOB peer data must be in the stack before
-						// pairing starts on this link.
-						BtAppOobPeerDataPush(p->Connection_Handle,
-						                     p->Peer_Address_Type,
-						                     p->Peer_Address);
-
 						// Secure link setup. ST owns the SMP exchange and emits
 						// ACI_GAP_PAIRING_COMPLETE, which surfaces below as
 						// BtAppEvtSecured. A central starts pairing directly; a
 						// peripheral asks the central with a Security Request.
 						if (g_BtAppData.AppDevice.bSecure)
 						{
+							// Only a LESC link configured for OOB may claim the
+							// single staged peer OOB set.
+							if (s_WbaData.bOobEnabled)
+							{
+								BtAppOobPeerDataPush(p->Connection_Handle,
+								                     p->Peer_Address_Type,
+								                     p->Peer_Address);
+							}
+
 							switch (p->Role)
 							{
 								case BT_CONN_ROLE_CENTRAL:
@@ -986,6 +993,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 
 	BtSmpOobDataClearInternal();
+	s_WbaData.bOobEnabled =
+		pCfg->SecType == BTGAP_SECTYPE_LESC_MITM &&
+		(pCfg->SecExchg & BTAPP_SECEXCHG_OOB) != 0;
 
 	// Initialize application event handler queue.
 	if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem,
@@ -1093,7 +1103,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 			break;
 		case BTGAP_SECTYPE_LESC_MITM:
 			authReq   = 0x05;
-			scSupport = 1;
+			scSupport = 2;	// SC-only, no legacy fallback
 			break;
 		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
 		case BTGAP_SECTYPE_SIGNED_NO_MITM:
