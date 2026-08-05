@@ -131,112 +131,105 @@ static bool BtWbaDiscInfoEventValid(
 		   (p->Event_Data_Length % elemLen) == 0;
 }
 
-template <typename Handler>
-struct BtWbaEventHook
+typedef SVCCTL_UserEvtFlowStatus_t (*BtWbaUserEvtHandler_t)(void *pPayload);
+
+static BtWbaUserEvtHandler_t s_BtWbaOriginalHandler;
+
+static SVCCTL_UserEvtFlowStatus_t BtWbaEventHookDispatch(void *pPayload)
 {
-	static Handler &Original(void)
+	if (pPayload == nullptr)
 	{
-		static Handler handler = nullptr;
-		return handler;
+		return SVCCTL_UserEvtFlowEnable;
 	}
 
-	static SVCCTL_UserEvtFlowStatus_t Dispatch(void *pPayload)
+	hci_event_pckt *pEvt =
+		(hci_event_pckt *)((hci_uart_pckt *)pPayload)->data;
+	if (pEvt->evt == HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE)
 	{
-		if (pPayload == nullptr)
+		if (pEvt->plen < offsetof(evt_blecore_aci, data))
 		{
 			return SVCCTL_UserEvtFlowEnable;
 		}
 
-		hci_event_pckt *pEvt =
-			(hci_event_pckt *)((hci_uart_pckt *)pPayload)->data;
-		if (pEvt->evt == HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE)
+		evt_blecore_aci *pAci = (evt_blecore_aci *)pEvt->data;
+		size_t available =
+			(size_t)pEvt->plen - offsetof(evt_blecore_aci, data);
+
+		switch (pAci->ecode)
 		{
-			if (pEvt->plen < offsetof(evt_blecore_aci, data))
-			{
-				return SVCCTL_UserEvtFlowEnable;
-			}
-
-			evt_blecore_aci *pAci = (evt_blecore_aci *)pEvt->data;
-			size_t available =
-				(size_t)pEvt->plen - offsetof(evt_blecore_aci, data);
-
-			switch (pAci->ecode)
-			{
-				case ACI_ATT_READ_BY_GROUP_TYPE_RESP_VSEVT_CODE:
-					if (!BtWbaDiscServiceEventValid(
-							(aci_att_read_by_group_type_resp_event_rp0 *)pAci->data,
-							available))
-					{
-						return SVCCTL_UserEvtFlowEnable;
-					}
-					break;
-
-				case ACI_ATT_READ_BY_TYPE_RESP_VSEVT_CODE:
-					if (!BtWbaDiscCharEventValid(
-							(aci_att_read_by_type_resp_event_rp0 *)pAci->data,
-							available))
-					{
-						return SVCCTL_UserEvtFlowEnable;
-					}
-					break;
-
-				case ACI_ATT_FIND_INFO_RESP_VSEVT_CODE:
-					if (!BtWbaDiscInfoEventValid(
-							(aci_att_find_info_resp_event_rp0 *)pAci->data,
-							available))
-					{
-						return SVCCTL_UserEvtFlowEnable;
-					}
-					break;
-
-#ifdef ACI_GATT_NOTIFICATION_COMPLETE_VSEVT_CODE
-				case ACI_GATT_NOTIFICATION_COMPLETE_VSEVT_CODE:
+			case ACI_ATT_READ_BY_GROUP_TYPE_RESP_VSEVT_CODE:
+				if (!BtWbaDiscServiceEventValid(
+						(aci_att_read_by_group_type_resp_event_rp0 *)pAci->data,
+						available))
 				{
-					if (available >= sizeof(
-							aci_gatt_notification_complete_event_rp0))
-					{
-						auto *p =
-							(aci_gatt_notification_complete_event_rp0 *)pAci->data;
-						BtGattWbaNotificationComplete(
-							p->Connection_Handle, p->Attribute_Handle);
-					}
 					return SVCCTL_UserEvtFlowEnable;
 				}
+				break;
+
+			case ACI_ATT_READ_BY_TYPE_RESP_VSEVT_CODE:
+				if (!BtWbaDiscCharEventValid(
+						(aci_att_read_by_type_resp_event_rp0 *)pAci->data,
+						available))
+				{
+					return SVCCTL_UserEvtFlowEnable;
+				}
+				break;
+
+			case ACI_ATT_FIND_INFO_RESP_VSEVT_CODE:
+				if (!BtWbaDiscInfoEventValid(
+						(aci_att_find_info_resp_event_rp0 *)pAci->data,
+						available))
+				{
+					return SVCCTL_UserEvtFlowEnable;
+				}
+				break;
+
+#ifdef ACI_GATT_NOTIFICATION_COMPLETE_VSEVT_CODE
+			case ACI_GATT_NOTIFICATION_COMPLETE_VSEVT_CODE:
+			{
+				if (available >= sizeof(
+						aci_gatt_notification_complete_event_rp0))
+				{
+					auto *p =
+						(aci_gatt_notification_complete_event_rp0 *)pAci->data;
+					BtGattWbaNotificationComplete(
+						p->Connection_Handle, p->Attribute_Handle);
+				}
+				return SVCCTL_UserEvtFlowEnable;
+			}
 #endif
 
-				case ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE:
-					if (available >= 2)
-					{
-						BtGattHandleValueConfirm(BtWbaEvtLe16(pAci->data));
-					}
-					return SVCCTL_UserEvtFlowEnable;
+			case ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE:
+				if (available >= 2)
+				{
+					BtGattHandleValueConfirm(BtWbaEvtLe16(pAci->data));
+				}
+				return SVCCTL_UserEvtFlowEnable;
 
-				default:
-					break;
-			}
+			default:
+				break;
 		}
-
-		Handler handler = Original();
-		return handler != nullptr ? handler(pPayload) :
-				SVCCTL_UserEvtFlowEnable;
 	}
 
-	static void Register(Handler handler)
-	{
-		Original() = handler;
-		SVCCTL_RegisterHandler(Dispatch);
-	}
-};
+	return s_BtWbaOriginalHandler != nullptr ?
+		s_BtWbaOriginalHandler(pPayload) : SVCCTL_UserEvtFlowEnable;
+}
 
-// Preserve the vendor registration call inside Register above, then replace
-// subsequent source-level registrations with the validating wrapper. Some
-// CubeWBA releases expose SVCCTL_RegisterHandler as a macro rather than a plain
-// function declaration, so remove that spelling before installing ours.
+static inline void BtWbaEventHookRegister(BtWbaUserEvtHandler_t Handler)
+{
+	s_BtWbaOriginalHandler = Handler;
+	SVCCTL_RegisterHandler(BtWbaEventHookDispatch);
+}
+
+// Preserve the vendor registration call inside BtWbaEventHookRegister above,
+// then replace subsequent source-level registrations with the validating
+// wrapper. Some CubeWBA releases expose SVCCTL_RegisterHandler as a macro
+// rather than a plain function declaration, so remove that spelling before
+// installing ours.
 #ifdef SVCCTL_RegisterHandler
 #undef SVCCTL_RegisterHandler
 #endif
-#define SVCCTL_RegisterHandler(handler) \
-	BtWbaEventHook<decltype(&(handler))>::Register(&(handler))
+#define SVCCTL_RegisterHandler(handler) BtWbaEventHookRegister(handler)
 
 #endif // STM32WBA BLE headers visible
 
