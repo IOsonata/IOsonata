@@ -135,7 +135,7 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 #endif
 
 //#define SLAVE_LATENCY                   0                                           /**< Slave latency. */
-//#define CONN_SUP_TIMEOUT                MSEC_TO_UNITS(4000, UNIT_10_MS)             /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
+//#define CONN_SUP_TIMEOUT                MSEC_TO_UNITS(4000, UNIT_10_MS)             /**< Connection supervisory timeout (4 seconds). */
 
 #define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(5000)  /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (5 seconds). */
 #define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000) /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
@@ -847,8 +847,8 @@ __attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Val
 
 __attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
 {
-	(void)ConnHdl;
 	(void)Passkey;
+	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
 }
 
 __attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
@@ -1041,7 +1041,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
         {
         	ble_gap_data_length_params_t dl_params;
 
-//           printf("BLE_GAP_EVT_DATA_LENGTH_UPDATE_REQUEST\r\n");
+//           printf("PHY update request.\r\n");
 
 			// Clearing the struct will effectivly set members to @ref BLE_GAP_DATA_LENGTH_AUTO
 			memset(&dl_params, 0, sizeof(ble_gap_data_length_params_t));
