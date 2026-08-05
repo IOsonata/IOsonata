@@ -845,8 +845,6 @@ __attribute__((weak)) void SoftdeviceFaultHandler(uint32_t id, uint32_t pc, uint
 void SDBleRandSeed(uint32_t evt, void *ctx)
 {
 	uint32_t nrf_err;
-	uint32_t evt_id;
-	(void)evt_id;
 	uint8_t seed[SD_RAND_SEED_SIZE];
 
 	(void)ctx;
