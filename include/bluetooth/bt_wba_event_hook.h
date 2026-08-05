@@ -26,7 +26,8 @@ void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t AttrHdl);
 void BtGapWbaConnParamsConnected(uint16_t ConnHdl, uint8_t Role,
 		uint16_t Interval, uint16_t Latency, uint16_t Timeout);
 void BtGapWbaConnParamsDisconnected(uint16_t ConnHdl);
-void BtGapWbaConnParamsUpdateComplete(uint16_t ConnHdl, uint8_t Status);
+void BtGapWbaConnParamsUpdateComplete(uint16_t ConnHdl, uint8_t Status,
+		uint16_t Interval, uint16_t Latency, uint16_t Timeout);
 void BtGapWbaConnParamsL2capResponse(uint16_t ConnHdl, uint16_t Result);
 
 static inline uint16_t BtWbaEvtLe16(const uint8_t *p)
@@ -191,7 +192,8 @@ static SVCCTL_UserEvtFlowStatus_t BtWbaEventHookDispatch(void *pPayload)
 						auto *p =
 							(hci_le_connection_update_complete_event_rp0 *)pMeta->data;
 						BtGapWbaConnParamsUpdateComplete(
-							p->Connection_Handle, p->Status);
+							p->Connection_Handle, p->Status, p->Conn_Interval,
+							p->Conn_Latency, p->Supervision_Timeout);
 					}
 					break;
 
