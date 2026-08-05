@@ -30,6 +30,7 @@ BtGattSrvcAdd in bt_gatt.cpp is weak; this strong override replaces it on WBA.
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_app.h"
+#include "bluetooth/bt_uuid.h"
 
 #define WBA_CHAR_VALUE_OFFSET		1
 #define WBA_CHAR_CCCD_OFFSET		2
@@ -164,6 +165,16 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	if (pSrvc == nullptr || pSrvc->pCharArray == nullptr || pSrvc->NbChar <= 0)
 	{
 		return false;
+	}
+
+	if (!pSrvc->bCustom &&
+		(pSrvc->UuidSrvc == BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE ||
+		 pSrvc->UuidSrvc == BT_UUID_GATT_SERVICE_GENERIC_ACCESS))
+	{
+		// aci_gatt_init and aci_gap_init create the native 0x1801 and 0x1800
+		// services. Treat the generic declarations as already registered rather
+		// than attempting duplicate standard services in the ST database.
+		return true;
 	}
 
 	Service_UUID_t uuid;
