@@ -685,12 +685,9 @@ bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
 			break;
 	}
 
-	if (level >= 0x02)
-	{
-		// aci_gap_get_security_level does not report the per-link key size. SC
-		// and WBA pairing use a 16-octet key, so report 16 on an encrypted link.
-		pSec->KeySize = 16;
-	}
+	// The ST host API reports the security mode and level but not the
+	// negotiated encryption-key size. Leave KeySize at zero, which the common
+	// ATT security gate defines as "not reported", rather than asserting 16.
 
 	// The ST host owns the bond table as an opaque blob and a reliable per-link
 	// bonded query is not available here (resolvable peer address plus opaque
