@@ -4,9 +4,11 @@
 @brief	STM32WBAxx BLE port - Generic Access Profile (GAP) procedures.
 
         Overrides the weak generic implementations of BtGapParamInit,
-        BtGapSetDevName, BtGapConnect, BtGapScanInit/Start/Stop/Next.
-        The application port owns the one-time ST GAP initialization and its
-        native service handles; this file owns scan, connection and per-link
+        BtGapSetDevName, BtGapSetAppearance, BtGapSetPreferedConnParam,
+        BtGapConnect and BtGapScanInit/Start/Stop/Next. The application port
+        owns the one permitted aci_gap_init call; the WBA source hook captures
+        its exact native service and characteristic handles here. This file
+        owns native GAP value updates, scan, connection and per-link
         connection-parameter procedures.
 
         Core Bluetooth Vol.1, Part A, 6.2
@@ -24,8 +26,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -100,13 +102,18 @@ typedef struct __Bt_Gap_WbaState {
 	uint16_t	ScanWindow;			//!< Scan window in 0.625ms units
 	uint8_t		ScanType;			//!< HCI scan type (active/passive)
 	uint8_t		ScanFilterDup;		//!< Filter duplicate adv reports
-	bool		bSettingDevName;	//!< Break BtGap/BtApp name-set forwarding recursion
 	bool		bConnParamsValid;	//!< Preferred parameters passed spec-range checks
 	bool		bConnParamPumpRegistered;
 	uint16_t	ConnIntervalMin;	//!< Preferred minimum, 1.25ms units
 	uint16_t	ConnIntervalMax;	//!< Preferred maximum, 1.25ms units
 	uint16_t	ConnLatency;		//!< Preferred peripheral latency
 	uint16_t	ConnSupTimeout;	//!< Preferred supervision timeout, 10ms units
+	uint16_t	GapSrvcHdl;		//!< Native GAP service handle returned by aci_gap_init
+	uint16_t	DevNameCharHdl;	//!< Native device-name characteristic handle
+	uint16_t	AppearanceCharHdl;	//!< Native appearance characteristic handle
+	uint16_t	PpcpCharHdl;		//!< Native peripheral preferred connection params handle
+	uint8_t		DevNameMaxLen;		//!< Native device-name characteristic capacity
+	bool		bLegacyNameUpdatePending;	//!< Old app helper already performed native update
 } BtGapWbaState_t;
 
 static BtGapWbaState_t s_GapWba = {
@@ -114,12 +121,83 @@ static BtGapWbaState_t s_GapWba = {
 	.ScanWindow    = (uint16_t)BT_GAP_MSEC_TO_0_625(BT_GAP_SCAN_WINDOW),
 	.ScanType      = BT_GAP_HCI_SCAN_ACTIVE,
 	.ScanFilterDup = 1,
-	.bSettingDevName = false,
 	.bConnParamsValid = false,
 	.bConnParamPumpRegistered = false,
+	.GapSrvcHdl = BT_ATT_HANDLE_INVALID,
+	.DevNameCharHdl = BT_ATT_HANDLE_INVALID,
+	.AppearanceCharHdl = BT_ATT_HANDLE_INVALID,
+	.PpcpCharHdl = BT_ATT_HANDLE_INVALID,
+	.DevNameMaxLen = 0,
+	.bLegacyNameUpdatePending = false,
 };
 
 static BtGapWbaConnParamLink_t s_ConnParamLink[CFG_BLE_NUM_LINK];
+
+// aci_gap_init returns the service, Device Name characteristic and Appearance
+// characteristic handles. ST creates Peripheral Preferred Connection Parameters
+// immediately after Appearance when the peripheral role is enabled, so its
+// characteristic handle is Appearance + 2 (declaration/value pair spacing).
+void BtGapWbaNativeHandlesSet(uint8_t Role, uint8_t DeviceNameMaxLen,
+		uint16_t GapSrvcHdl, uint16_t DevNameCharHdl,
+		uint16_t AppearanceCharHdl)
+{
+	s_GapWba.GapSrvcHdl = GapSrvcHdl;
+	s_GapWba.DevNameCharHdl = DevNameCharHdl;
+	s_GapWba.AppearanceCharHdl = AppearanceCharHdl;
+	s_GapWba.DevNameMaxLen = DeviceNameMaxLen;
+	s_GapWba.bLegacyNameUpdatePending = false;
+	s_GapWba.PpcpCharHdl = BT_ATT_HANDLE_INVALID;
+
+	if ((Role & GAP_PERIPHERAL_ROLE) != 0 &&
+		AppearanceCharHdl != BT_ATT_HANDLE_INVALID &&
+		AppearanceCharHdl <= (uint16_t)(UINT16_MAX - 2U))
+	{
+		s_GapWba.PpcpCharHdl = (uint16_t)(AppearanceCharHdl + 2U);
+	}
+}
+
+// BtAppGapDeviceNameSet historically used GapService + 2, which is the value
+// handle in the native service layout. aci_gatt_update_char_value expects the
+// characteristic handle returned by aci_gap_init. Correct only that exact GAP
+// path; all user-service updates pass through unchanged.
+uint16_t BtGapWbaNativeCharHandleResolve(uint16_t SrvcHdl, uint16_t CharHdl)
+{
+	if (SrvcHdl == s_GapWba.GapSrvcHdl &&
+		CharHdl == (uint16_t)(s_GapWba.GapSrvcHdl + 2U) &&
+		s_GapWba.DevNameCharHdl != BT_ATT_HANDLE_INVALID)
+	{
+		return s_GapWba.DevNameCharHdl;
+	}
+	return CharHdl;
+}
+
+void BtGapWbaNativeCharUpdateComplete(uint16_t SrvcHdl,
+		uint16_t RequestedCharHdl, uint16_t ActualCharHdl, uint8_t Status)
+{
+	if (Status == BLE_STATUS_SUCCESS &&
+		SrvcHdl == s_GapWba.GapSrvcHdl &&
+		RequestedCharHdl != ActualCharHdl &&
+		ActualCharHdl == s_GapWba.DevNameCharHdl)
+	{
+		// BtAppGapDeviceNameSet calls BtGapSetDevName immediately after this
+		// native update. Consume that forwarding call so the database is not
+		// written twice.
+		s_GapWba.bLegacyNameUpdatePending = true;
+	}
+}
+
+static bool BtGapWbaNativeCharUpdate(uint16_t CharHdl,
+		const uint8_t *pData, uint8_t Len)
+{
+	if (s_GapWba.GapSrvcHdl == BT_ATT_HANDLE_INVALID ||
+		CharHdl == BT_ATT_HANDLE_INVALID || (Len > 0 && pData == nullptr))
+	{
+		return false;
+	}
+
+	return aci_gatt_update_char_value(s_GapWba.GapSrvcHdl, CharHdl,
+		0, Len, (uint8_t *)pData) == BLE_STATUS_SUCCESS;
+}
 
 static uint16_t BtGapWbaMsecTo1_25(float Ms)
 {
@@ -400,33 +478,93 @@ void BtGapParamInit(const BtGapCfg_t *pCfg)
 	s_GapWba.ConnLatency = pCfg->SlaveLatency;
 	s_GapWba.ConnSupTimeout = (uint16_t)BT_GAP_MSEC_TO_10MS(pCfg->SupTimeout);
 
+	bool paramsValid = BtGapWbaConnParamsValid(
+		s_GapWba.ConnIntervalMin, s_GapWba.ConnIntervalMax,
+		s_GapWba.ConnLatency, s_GapWba.ConnSupTimeout);
+
 	if (!s_GapWba.bConnParamPumpRegistered)
 	{
 		s_GapWba.bConnParamPumpRegistered =
 			AppEvtHandlerIdleRegister(BtGapWbaConnParamProcess);
 	}
 
-	s_GapWba.bConnParamsValid = s_GapWba.bConnParamPumpRegistered &&
-		(pCfg->Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_CENTRAL)) != 0 &&
-		BtGapWbaConnParamsValid(
-			s_GapWba.ConnIntervalMin, s_GapWba.ConnIntervalMax,
-			s_GapWba.ConnLatency, s_GapWba.ConnSupTimeout);
+	s_GapWba.bConnParamsValid = paramsValid &&
+		s_GapWba.bConnParamPumpRegistered &&
+		(pCfg->Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_CENTRAL)) != 0;
+
+	if (paramsValid && (pCfg->Role & BT_GAP_ROLE_PERIPHERAL) != 0)
+	{
+		BtGattPreferedConnParams_t ppcp = {
+			.IntervalMin = s_GapWba.ConnIntervalMin,
+			.IntervalMax = s_GapWba.ConnIntervalMax,
+			.Latency = s_GapWba.ConnLatency,
+			.Timeout = s_GapWba.ConnSupTimeout,
+		};
+		BtGapSetPreferedConnParam(&ppcp);
+	}
 }
 
 void BtGapSetDevName(const char *pName)
 {
-	if (pName == NULL || s_GapWba.bSettingDevName)
+	if (pName == nullptr)
 	{
 		return;
 	}
 
-	// BtAppGapDeviceNameSet owns the native service handles returned by the
-	// single aci_gap_init call. It calls BtGapSetDevName after updating the ST
-	// database, so guard the nested call rather than maintaining a second handle
-	// copy in this translation unit.
-	s_GapWba.bSettingDevName = true;
-	BtAppGapDeviceNameSet(pName);
-	s_GapWba.bSettingDevName = false;
+	// The old BtAppGapDeviceNameSet path already performed the corrected native
+	// write before forwarding here. Consume only that one forwarding call.
+	if (s_GapWba.bLegacyNameUpdatePending)
+	{
+		s_GapWba.bLegacyNameUpdatePending = false;
+		return;
+	}
+
+	size_t len = strlen(pName);
+	if (len > s_GapWba.DevNameMaxLen)
+	{
+		len = s_GapWba.DevNameMaxLen;
+	}
+	if (len > UINT8_MAX)
+	{
+		len = UINT8_MAX;
+	}
+
+	(void)BtGapWbaNativeCharUpdate(
+		s_GapWba.DevNameCharHdl, (const uint8_t *)pName, (uint8_t)len);
+}
+
+void BtGapSetAppearance(uint16_t Val)
+{
+	uint8_t value[2] = {
+		(uint8_t)(Val & 0xFFU),
+		(uint8_t)(Val >> 8),
+	};
+	if (BtGapWbaNativeCharUpdate(s_GapWba.AppearanceCharHdl,
+			value, sizeof(value)))
+	{
+		g_BtAppData.AppDevice.Appearance = Val;
+	}
+}
+
+void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t *pVal)
+{
+	if (pVal == nullptr)
+	{
+		return;
+	}
+
+	uint8_t value[8] = {
+		(uint8_t)(pVal->IntervalMin & 0xFFU),
+		(uint8_t)(pVal->IntervalMin >> 8),
+		(uint8_t)(pVal->IntervalMax & 0xFFU),
+		(uint8_t)(pVal->IntervalMax >> 8),
+		(uint8_t)(pVal->Latency & 0xFFU),
+		(uint8_t)(pVal->Latency >> 8),
+		(uint8_t)(pVal->Timeout & 0xFFU),
+		(uint8_t)(pVal->Timeout >> 8),
+	};
+	(void)BtGapWbaNativeCharUpdate(
+		s_GapWba.PpcpCharHdl, value, sizeof(value));
 }
 
 bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr,
