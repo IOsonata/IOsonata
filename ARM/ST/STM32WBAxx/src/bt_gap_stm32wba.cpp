@@ -24,8 +24,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is furnished
-to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -55,7 +55,8 @@ SOFTWARE.
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_peer.h"
-#include "app_evt_handler.h"
+
+extern "C" bool AppEvtHandlerIdleRegister(void (*Handler)(void));
 
 #ifndef BLE_STATUS_SUCCESS
 #define BLE_STATUS_SUCCESS				0x00
@@ -313,6 +314,10 @@ static void BtGapWbaConnParamProcess(void)
 void BtGapWbaConnParamsConnected(uint16_t ConnHdl, uint8_t Role,
 		uint16_t Interval, uint16_t Latency, uint16_t Timeout)
 {
+	// A controller handle may be reused after a lost disconnect event. Remove
+	// any stale state before deciding whether this new link needs an update.
+	BtGapWbaConnParamClear(BtGapWbaConnParamFind(ConnHdl));
+
 	if (!s_GapWba.bConnParamsValid ||
 		(Role != BT_CONN_ROLE_PERIPHERAL && Role != BT_CONN_ROLE_CENTRAL) ||
 		BtGapWbaConnParamsMatch(Interval, Latency, Timeout))
@@ -337,7 +342,8 @@ void BtGapWbaConnParamsDisconnected(uint16_t ConnHdl)
 	BtGapWbaConnParamClear(BtGapWbaConnParamFind(ConnHdl));
 }
 
-void BtGapWbaConnParamsUpdateComplete(uint16_t ConnHdl, uint8_t Status)
+void BtGapWbaConnParamsUpdateComplete(uint16_t ConnHdl, uint8_t Status,
+		uint16_t Interval, uint16_t Latency, uint16_t Timeout)
 {
 	BtGapWbaConnParamLink_t *pLink = BtGapWbaConnParamFind(ConnHdl);
 	if (pLink == nullptr)
@@ -347,9 +353,16 @@ void BtGapWbaConnParamsUpdateComplete(uint16_t ConnHdl, uint8_t Status)
 
 	if (Status == BLE_STATUS_SUCCESS)
 	{
-		BtGapWbaConnParamClear(pLink);
+		if (BtGapWbaConnParamsMatch(Interval, Latency, Timeout))
+		{
+			BtGapWbaConnParamClear(pLink);
+		}
+		else if (pLink->bAwaitingComplete)
+		{
+			BtGapWbaConnParamRetry(pLink);
+		}
 	}
-	else
+	else if (pLink->bAwaitingComplete)
 	{
 		BtGapWbaConnParamRetry(pLink);
 	}
@@ -358,7 +371,8 @@ void BtGapWbaConnParamsUpdateComplete(uint16_t ConnHdl, uint8_t Status)
 void BtGapWbaConnParamsL2capResponse(uint16_t ConnHdl, uint16_t Result)
 {
 	BtGapWbaConnParamLink_t *pLink = BtGapWbaConnParamFind(ConnHdl);
-	if (pLink == nullptr || pLink->Role != BT_CONN_ROLE_PERIPHERAL)
+	if (pLink == nullptr || pLink->Role != BT_CONN_ROLE_PERIPHERAL ||
+		!pLink->bAwaitingComplete)
 	{
 		return;
 	}
