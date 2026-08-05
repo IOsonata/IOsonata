@@ -511,15 +511,33 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 		{
 			hci_disconnection_complete_event_rp0 *p =
 				(hci_disconnection_complete_event_rp0 *)pEvtPkt->data;
-			if (BtPeerFindByHdl(p->Connection_Handle) != nullptr)
+			if (p->Status == BLE_STATUS_SUCCESS)
 			{
-				g_BtAppData.State = BTAPP_DISCONNECTED;
-				BtAppConnLedOff();
-				BtPeerFreeByHdl(p->Connection_Handle);
-				// Re-arm advertising for peripheral/broadcaster apps.
-				if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+				BtDevice_t *pPeer = BtPeerFindByHdl(p->Connection_Handle);
+				if (pPeer != nullptr)
 				{
-					BtAdvStart();
+					BtPeerFree(pPeer);
+					bool connected = BtPeerIsConnected();
+
+					if (connected)
+					{
+						g_BtAppData.State = BTAPP_STATE_CONNECTED;
+						BtAppConnLedOn();
+					}
+					else
+					{
+						g_BtAppData.State = BTAPP_STATE_IDLE;
+						BtAppConnLedOff();
+					}
+
+					BtAppEvtDisconnected(p->Connection_Handle);
+
+					if (!connected &&
+						(g_BtAppData.AppDevice.Conn.Role &
+						 (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
+					{
+						BtAdvStart();
+					}
 				}
 			}
 			break;
@@ -552,16 +570,25 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 						(hci_le_connection_complete_event_rp0 *)pMeta->data;
 					if (p->Status == BLE_STATUS_SUCCESS)
 					{
-						g_BtAppData.State = BTAPP_CONNECTED;
-						BtAppConnLedOn();
 						// Own address not stamped: SMP runs in the ST host, not
 						// the IOsonata toolbox, so the record is left for the
 						// BtSmpLocalAddrGet fallback.
-						BtPeerConnected(p->Connection_Handle,
+						BtDevice_t *pPeer = BtPeerConnected(p->Connection_Handle,
 						                   p->Role,
 						                   p->Peer_Address_Type,
 						                   p->Peer_Address,
 						                   0, NULL);
+						if (pPeer == nullptr)
+						{
+							// The controller accepted a link that cannot be represented
+							// in the IOsonata connection table. Close it before any
+							// application callback or security procedure is started.
+							aci_gap_terminate(p->Connection_Handle, 0x13);
+							break;
+						}
+
+						g_BtAppData.State = BTAPP_STATE_CONNECTED;
+						BtAppConnLedOn();
 						BtAppEvtConnected(p->Connection_Handle);
 
 						// Staged LESC OOB peer data must be in the stack before
@@ -573,17 +600,21 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 						// ACI_GAP_PAIRING_COMPLETE, which surfaces below as
 						// BtAppEvtSecured. A central starts pairing directly; a
 						// peripheral asks the central with a Security Request.
-						if (g_BtAppData.AppDevice.bSecure &&
-						    (g_BtAppData.AppDevice.Conn.Role &
-						     (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER)))
+						if (g_BtAppData.AppDevice.bSecure)
 						{
-							aci_gap_send_pairing_req(p->Connection_Handle, 0);
-						}
-						else if (g_BtAppData.AppDevice.bSecure &&
-						    (g_BtAppData.AppDevice.Conn.Role &
-						     (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
-						{
-							aci_gap_slave_security_req(p->Connection_Handle);
+							switch (p->Role)
+							{
+								case BT_CONN_ROLE_CENTRAL:
+									aci_gap_send_pairing_req(p->Connection_Handle, 0);
+									break;
+
+								case BT_CONN_ROLE_PERIPHERAL:
+									aci_gap_slave_security_req(p->Connection_Handle);
+									break;
+
+								default:
+									break;
+							}
 						}
 					}
 					break;
