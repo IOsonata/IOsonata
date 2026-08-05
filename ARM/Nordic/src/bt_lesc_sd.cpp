@@ -44,6 +44,7 @@ SOFTWARE.
 
 #include "crypto/icrypto.h"
 #include "bt_lesc.h"
+#include "bluetooth/bt_smp.h"
 
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
@@ -81,6 +82,7 @@ static bool s_bRegenPending;
 static BtLescPeerKey_t s_PeerKeys[LESC_MAX_LINK];
 static bool s_bOobLocalGen;
 static ble_gap_lesc_oob_data_t s_OobLocal;
+static uint16_t s_OobConnHdl = BLE_CONN_HANDLE_INVALID;
 static BtLescOobPeerHandler_t s_OobPeerHandler;
 static KeyAgreeEngine *s_pLescCrypto;
 alignas(CRYPTO_KEYCTX_ALIGN_MAX) static uint8_t s_LescEcdhKeyCtx[LESC_KEYCTX_SIZE];
@@ -156,6 +158,19 @@ static void SlotRelease(int Index)
 	s_bRegenPending = true;
 }
 
+static void OobRelease(uint16_t ConnHdl)
+{
+	if (s_OobConnHdl != ConnHdl)
+	{
+		return;
+	}
+
+	s_OobConnHdl = BLE_CONN_HANDLE_INVALID;
+	s_bOobLocalGen = false;
+	CryptoSecureWipe(&s_OobLocal, sizeof(s_OobLocal));
+	BtSmpOobDataClear();
+}
+
 static void LocalKeyReset(void)
 {
 	if (s_pLescCrypto != nullptr)
@@ -168,6 +183,7 @@ static void LocalKeyReset(void)
 	}
 	s_bKeyPairGen = false;
 	s_bOobLocalGen = false;
+	s_OobConnHdl = BLE_CONN_HANDLE_INVALID;
 	CryptoSecureWipe(&s_LescPubKey, sizeof(s_LescPubKey));
 	CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
 	CryptoSecureWipe(&s_OobLocal, sizeof(s_OobLocal));
@@ -281,6 +297,11 @@ static void LinkRelease(uint16_t ConnHdl)
 
 bool BtLescOobLocalGen(void)
 {
+	if (s_OobConnHdl != BLE_CONN_HANDLE_INVALID)
+	{
+		return false;
+	}
+
 	s_bOobLocalGen = false;
 	CryptoSecureWipe(&s_OobLocal, sizeof(s_OobLocal));
 	if (!s_bKeyPairGen)
@@ -445,10 +466,21 @@ static void OnDhKeyRequest(uint16_t ConnHdl,
 
 static uint32_t OobDataSet(uint16_t ConnHdl)
 {
+	if (s_OobConnHdl != BLE_CONN_HANDLE_INVALID &&
+		s_OobConnHdl != ConnHdl)
+	{
+		return NRF_ERROR_BUSY;
+	}
+
 	ble_gap_lesc_oob_data_t *pOwn = s_bOobLocalGen ? &s_OobLocal : NULL;
 	ble_gap_lesc_oob_data_t *pPeer = s_OobPeerHandler != nullptr ?
 		s_OobPeerHandler(ConnHdl) : NULL;
-	return sd_ble_gap_lesc_oob_data_set(ConnHdl, pOwn, pPeer);
+	uint32_t result = sd_ble_gap_lesc_oob_data_set(ConnHdl, pOwn, pPeer);
+	if (result == NRF_SUCCESS)
+	{
+		s_OobConnHdl = ConnHdl;
+	}
+	return result;
 }
 
 void BtLescOnBleEvt(const ble_evt_t *pEvt)
@@ -471,6 +503,7 @@ void BtLescOnBleEvt(const ble_evt_t *pEvt)
 		break;
 
 	case BLE_GAP_EVT_DISCONNECTED:
+		OobRelease(connHdl);
 		LinkRelease(connHdl);
 		CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
 		break;
@@ -490,6 +523,7 @@ void BtLescOnBleEvt(const ble_evt_t *pEvt)
 		break;
 
 	case BLE_GAP_EVT_AUTH_STATUS:
+		OobRelease(connHdl);
 		LinkRelease(connHdl);
 		break;
 
