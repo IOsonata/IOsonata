@@ -185,6 +185,15 @@ static bool BtGapCreateConnParamValid(uint16_t IntervalMin, uint16_t IntervalMax
 	return true;
 }
 
+// The generic SMP host provides a weak display hook. A build that advertises
+// display capability but does not implement a UI must reject the pending
+// passkey procedure instead of continuing with a value the user never saw.
+void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
+{
+	(void)Passkey;
+	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
+}
+
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 {
 	if (pCfg == nullptr)
