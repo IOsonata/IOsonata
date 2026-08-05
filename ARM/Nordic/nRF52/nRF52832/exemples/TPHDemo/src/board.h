@@ -37,55 +37,31 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-#include "blueio_board.h"
+// LED Pin
+#define LED_PIN                 31
+#define LED_PORT                0
 
-// I-SYST BlueIO boards
+// Button Pin
+#define BUTTON_PIN              3
+#define BUTTON_PORT             0
 
-#define UART_RX_PORT					BLUEIO_UART_RX_PORT
-#define UART_RX_PIN						BLUEIO_UART_RX_PIN
-#define UART_RX_PINOP					BLUEIO_UART_RX_PINOP
-#define UART_TX_PORT					BLUEIO_UART_TX_PORT
-#define UART_TX_PIN						BLUEIO_UART_TX_PIN
-#define UART_TX_PINOP					BLUEIO_UART_TX_PINOP
-#define UART_CTS_PORT					BLUEIO_UART_CTS_PORT
-#define UART_CTS_PIN					BLUEIO_UART_CTS_PIN
-#define UART_CTS_PINOP					BLUEIO_UART_CTS_PINOP
-#define UART_RTS_PORT					BLUEIO_UART_RTS_PORT
-#define UART_RTS_PIN					BLUEIO_UART_RTS_PIN
-#define UART_RTS_PINOP					BLUEIO_UART_RTS_PINOP
+// I2C Pins for BME680
+#define I2C_SDA_PORT            0
+#define I2C_SDA_PIN             23
 
-//#define BLUEIO_TAG_BME680_PROTO
-#ifdef BLUEIO_TAG_BME680_PROTO
-#define I2C0_SDA_PORT					BLUEIO_TAG_BME280_I2C_SDA_PORT
-#define I2C0_SDA_PIN					BLUEIO_TAG_BME280_I2C_SDA_PIN
-#define I2C0_SDA_PINOP					BLUEIO_TAG_BME280_I2C_SDA_PINOP
-#define I2C0_SCL_PORT					BLUEIO_TAG_BME280_I2C_SCL_PORT
-#define I2C0_SCL_PIN					BLUEIO_TAG_BME280_I2C_SCL_PIN
-#define I2C0_SCL_PINOP					BLUEIO_TAG_BME280_I2C_SCL_PINOP
-#else
-#define I2C0_SDA_PORT					BLUEIO_TAG_BME680_I2C_SDA_PORT
-#define I2C0_SDA_PIN					BLUEIO_TAG_BME680_I2C_SDA_PIN
-#define I2C0_SDA_PINOP					BLUEIO_TAG_BME680_I2C_SDA_PINOP
-#define I2C0_SCL_PORT					BLUEIO_TAG_BME680_I2C_SCL_PORT
-#define I2C0_SCL_PIN					BLUEIO_TAG_BME680_I2C_SCL_PIN
-#define I2C0_SCL_PINOP					BLUEIO_TAG_BME680_I2C_SCL_PINOP
-#endif
+#define I2C_SCL_PORT            0
+#define I2C_SCL_PIN             24
 
-#define SPI_DEVNO      					2
-#define SPI_MISO_PORT       			0
-#define SPI_MISO_PIN        			17//13
-#define SPI_MISO_PINOP      			1
-#define SPI_MOSI_PORT       			0
-#define SPI_MOSI_PIN        			16//12
-#define SPI_MOSI_PINOP      			1
-#define SPI_SCK_PORT        			0
-#define SPI_SCK_PIN         			15//11
-#define SPI_SCK_PINOP       			1
+// BME680 Interrupt Pin (optional)
+#define BME680_INT_PORT         0
+#define BME680_INT_PIN          25
 
-#define BMEx80_CS_IDX          			0
-#define BMEx80_CS_PORT         			0
-#define BMEx80_CS_PIN          			18//26
-#define BMEx80_CS_PINOP        			1
+// UART Pins for Debug Output
+#define UART_RX_PORT            0
+#define UART_RX_PIN             8
+
+#define UART_TX_PORT            0
+#define UART_TX_PIN             6
 
 #endif // __BOARD_H__
 

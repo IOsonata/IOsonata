@@ -36,6 +36,16 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
+			<name>src/nvm_demo.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/storage/nvm_demo.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/pds_test.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/bluetooth/pds_test.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/uart_ble.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/bluetooth/uart_ble.cpp</locationURI>
