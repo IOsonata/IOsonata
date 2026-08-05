@@ -661,10 +661,7 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
             break;
 
         case PM_EVT_PEERS_DELETE_SUCCEEDED:
-
-            //ble_advertising_start(&g_AdvInstance, BLE_ADV_MODE_FAST);
-            err_code = sd_ble_gap_adv_start(g_BtAppData.AdvHdl, BTAPP_CONN_CFG_TAG);
-
+            BtAdvStart();
             break;
 
         case PM_EVT_LOCAL_DB_CACHE_APPLY_FAILED:
