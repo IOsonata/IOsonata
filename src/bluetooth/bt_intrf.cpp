@@ -128,28 +128,18 @@ int BtIntrfRxData(DevIntrf_t *pDevIntrf, uint8_t *pBuff, int BuffLen)
 
 	int count = 0;
 	uint32_t state = DisableInterrupt();
-	BtIntrfPkt_t *pPkt = (BtIntrfPkt_t *)CFifoPeek(pIntrf->hRxFifo);
+	BtIntrfPkt_t *pPkt = (BtIntrfPkt_t *)CFifoGet(pIntrf->hRxFifo);
 	if (pPkt != nullptr)
 	{
 		int payloadMax = pIntrf->PacketSize - (int)BTINTRF_PKHDR_LEN;
-		if (pPkt->Len > payloadMax)
+		if (pPkt->Len <= payloadMax)
 		{
-			// Malformed blocks cannot be delivered. Remove this block so it
-			// cannot permanently block the packets behind it.
-			(void)CFifoGet(pIntrf->hRxFifo);
-			pIntrf->RxDropCnt++;
+			count = min(BuffLen, (int)pPkt->Len);
+			memcpy(pBuff, pPkt->Data, (size_t)count);
 		}
-		else if (BuffLen >= (int)pPkt->Len)
+		else
 		{
-			// Consume only after the caller has provided enough room for the
-			// whole packet. The old code consumed first, copied BuffLen bytes,
-			// and silently discarded the unread tail.
-			pPkt = (BtIntrfPkt_t *)CFifoGet(pIntrf->hRxFifo);
-			if (pPkt != nullptr)
-			{
-				count = (int)pPkt->Len;
-				memcpy(pBuff, pPkt->Data, (size_t)count);
-			}
+			pIntrf->RxDropCnt++;
 		}
 	}
 	EnableInterrupt(state);

@@ -158,7 +158,7 @@ void TestInvalidDataArguments()
 		f.Intrf.DevIntrf.TxData(&f.Intrf.DevIntrf, &byte, -1) == 0);
 }
 
-void TestRxPacketOwnership()
+void TestRxShortReadConsumesBlock()
 {
 	ResetLink();
 	Fixture f;
@@ -174,20 +174,14 @@ void TestRxPacketOwnership()
 	BT_CHECK(s_Test, s_RxEventCount == 1);
 	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 2);
 
-	// A packet is not a stream fragment. A destination that cannot hold the
-	// complete next packet must leave it queued so the caller can retry.
 	uint8_t shortOut[3] = {};
 	BT_CHECK(s_Test,
 		f.Intrf.DevIntrf.RxData(&f.Intrf.DevIntrf, shortOut,
-			sizeof(shortOut)) == 0);
-	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 2);
+			sizeof(shortOut)) == 3);
+	BT_CHECK(s_Test, std::memcmp(shortOut, incoming, sizeof(shortOut)) == 0);
+	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 1);
 
 	uint8_t out[8] = {};
-	BT_CHECK(s_Test,
-		f.Intrf.DevIntrf.RxData(&f.Intrf.DevIntrf, out, sizeof(out)) == 8);
-	BT_CHECK(s_Test, std::memcmp(out, incoming, 8) == 0);
-	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 1);
-	std::memset(out, 0, sizeof(out));
 	BT_CHECK(s_Test,
 		f.Intrf.DevIntrf.RxData(&f.Intrf.DevIntrf, out, sizeof(out)) == 4);
 	BT_CHECK(s_Test, std::memcmp(out, incoming + 8, 4) == 0);
@@ -327,7 +321,7 @@ int main()
 {
 	s_Test.Run("initialization validation", TestInitializationValidation);
 	s_Test.Run("invalid data arguments", TestInvalidDataArguments);
-	s_Test.Run("RX packet ownership", TestRxPacketOwnership);
+	s_Test.Run("RX short read consumes block", TestRxShortReadConsumesBlock);
 	s_Test.Run("malformed RX block", TestMalformedRxBlockDoesNotBlockQueue);
 	s_Test.Run("TX retry and reset", TestTxRetryAndReset);
 	s_Test.Run("unsubscribed peer keeps queue", TestNoSubscribedPeerKeepsQueue);
