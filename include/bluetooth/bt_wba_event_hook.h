@@ -328,8 +328,14 @@ static inline tBleStatus BtWbaGattUpdateCharValue(uint16_t SrvcHdl,
 	uint16_t actualHdl = BtGapWbaNativeCharHandleResolve(SrvcHdl, CharHdl);
 	tBleStatus status = aci_gatt_update_char_value(
 		SrvcHdl, actualHdl, Offset, Len, pValue);
+
+	// Every successful source-level Device Name write is followed by the
+	// generic BtGapSetDevName forwarding call. When no handle correction was
+	// needed, use INVALID as the source marker so the GAP port still suppresses
+	// that duplicate native write. The actual handle remains unchanged.
+	uint16_t sourceHdl = CharHdl == actualHdl ? BT_ATT_HANDLE_INVALID : CharHdl;
 	BtGapWbaNativeCharUpdateComplete(
-		SrvcHdl, CharHdl, actualHdl, (uint8_t)status);
+		SrvcHdl, sourceHdl, actualHdl, (uint8_t)status);
 	return status;
 }
 
