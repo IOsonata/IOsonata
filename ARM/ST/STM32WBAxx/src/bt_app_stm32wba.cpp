@@ -408,15 +408,35 @@ void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 // extracts them. The peer set is staged here and pushed to the stack at
 // connection time, when the peer address is known; without privacy the
 // connection address is the identity address the command expects.
+// The public staging API has no connection handle, so the staged set is bound
+// to the first link that consumes it and cannot be reused by another pairing.
 static uint8_t s_BtAppPeerOobRand[16];
 static uint8_t s_BtAppPeerOobConf[16];
 static bool s_BtAppPeerOobValid = false;
+static uint16_t s_BtAppPeerOobHdl = BT_CONN_HDL_INVALID;
+
+static void BtSmpOobDataClearInternal(void)
+{
+	s_BtAppPeerOobValid = false;
+	s_BtAppPeerOobHdl = BT_CONN_HDL_INVALID;
+	memset(s_BtAppPeerOobRand, 0, sizeof(s_BtAppPeerOobRand));
+	memset(s_BtAppPeerOobConf, 0, sizeof(s_BtAppPeerOobConf));
+}
+
+static void BtSmpOobDataClearConn(uint16_t ConnHdl)
+{
+	if (s_BtAppPeerOobValid && s_BtAppPeerOobHdl == ConnHdl)
+	{
+		BtSmpOobDataClearInternal();
+	}
+}
 
 int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint8_t * const pConf)
 {
 	(void)pDev;
 
-	if (pRand == NULL || pConf == NULL)
+	if (pRand == NULL || pConf == NULL ||
+		s_BtAppPeerOobHdl != BT_CONN_HDL_INVALID)
 	{
 		return -1;
 	}
@@ -454,28 +474,63 @@ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pCon
 	{
 		return;
 	}
-	memcpy(s_BtAppPeerOobRand, pRand, 16);
-	memcpy(s_BtAppPeerOobConf, pConf, 16);
+
+	if (s_BtAppPeerOobValid && s_BtAppPeerOobHdl != BT_CONN_HDL_INVALID &&
+		BtPeerFindByHdl(s_BtAppPeerOobHdl) != nullptr)
+	{
+		DEBUG_PRINTF("SEC: OOB data already owned by hdl=%u\r\n",
+					 s_BtAppPeerOobHdl);
+		return;
+	}
+
+	BtSmpOobDataClearInternal();
+	memcpy(s_BtAppPeerOobRand, pRand, sizeof(s_BtAppPeerOobRand));
+	memcpy(s_BtAppPeerOobConf, pConf, sizeof(s_BtAppPeerOobConf));
 	s_BtAppPeerOobValid = true;
 }
 
 void BtSmpOobDataClear(void)
 {
-	s_BtAppPeerOobValid = false;
-	memset(s_BtAppPeerOobRand, 0, 16);
-	memset(s_BtAppPeerOobConf, 0, 16);
+	if (s_BtAppPeerOobValid && s_BtAppPeerOobHdl != BT_CONN_HDL_INVALID &&
+		BtPeerFindByHdl(s_BtAppPeerOobHdl) != nullptr)
+	{
+		DEBUG_PRINTF("SEC: OOB data busy on hdl=%u\r\n",
+					 s_BtAppPeerOobHdl);
+		return;
+	}
+
+	BtSmpOobDataClearInternal();
 }
 
 // Push the staged peer OOB data into the stack for this link. Called from the
-// connection complete event, before any pairing initiation.
-static void BtAppOobPeerDataPush(uint8_t AddrType, const uint8_t *pAddr)
+// connection complete event, before any pairing initiation. Reserve the data
+// before issuing either ACI command so a partial command failure cannot make
+// the same peer values available to another link.
+static void BtAppOobPeerDataPush(uint16_t ConnHdl, uint8_t AddrType,
+								 const uint8_t *pAddr)
 {
-	if (!s_BtAppPeerOobValid)
+	if (!s_BtAppPeerOobValid || pAddr == NULL)
 	{
 		return;
 	}
-	aci_gap_set_oob_data(1, AddrType, pAddr, 1, 16, s_BtAppPeerOobRand);
-	aci_gap_set_oob_data(1, AddrType, pAddr, 2, 16, s_BtAppPeerOobConf);
+	if (s_BtAppPeerOobHdl != BT_CONN_HDL_INVALID &&
+		s_BtAppPeerOobHdl != ConnHdl)
+	{
+		DEBUG_PRINTF("SEC: OOB data busy on hdl=%u, reject hdl=%u\r\n",
+					 s_BtAppPeerOobHdl, ConnHdl);
+		return;
+	}
+
+	s_BtAppPeerOobHdl = ConnHdl;
+	tBleStatus randStatus = aci_gap_set_oob_data(1, AddrType, pAddr, 1, 16,
+											  s_BtAppPeerOobRand);
+	tBleStatus confStatus = aci_gap_set_oob_data(1, AddrType, pAddr, 2, 16,
+											  s_BtAppPeerOobConf);
+	if (randStatus != BLE_STATUS_SUCCESS || confStatus != BLE_STATUS_SUCCESS)
+	{
+		DEBUG_PRINTF("SEC: set OOB data failed hdl=%u rand=0x%02X conf=0x%02X\r\n",
+					 ConnHdl, randStatus, confStatus);
+	}
 }
 
 // Weak defaults. With no application override the only safe action is to reject,
@@ -514,6 +569,7 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 				(hci_disconnection_complete_event_rp0 *)pEvtPkt->data;
 			if (p->Status == BLE_STATUS_SUCCESS)
 			{
+				BtSmpOobDataClearConn(p->Connection_Handle);
 				BtDevice_t *pPeer = BtPeerFindByHdl(p->Connection_Handle);
 				if (pPeer != nullptr)
 				{
@@ -599,7 +655,8 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 
 						// Staged LESC OOB peer data must be in the stack before
 						// pairing starts on this link.
-						BtAppOobPeerDataPush(p->Peer_Address_Type,
+						BtAppOobPeerDataPush(p->Connection_Handle,
+						                     p->Peer_Address_Type,
 						                     p->Peer_Address);
 
 						// Secure link setup. ST owns the SMP exchange and emits
@@ -709,6 +766,7 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 				{
 					aci_gap_pairing_complete_event_rp0 *pPc =
 						(aci_gap_pairing_complete_event_rp0 *)pAci->data;
+					BtSmpOobDataClearConn(pPc->Connection_Handle);
 					if (pPc->Status == 0)
 					{
 						BtAppEvtSecured(pPc->Connection_Handle);
@@ -926,6 +984,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	{
 		return false;
 	}
+
+	BtSmpOobDataClearInternal();
 
 	// Initialize application event handler queue.
 	if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem,
