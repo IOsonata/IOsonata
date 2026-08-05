@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	bt_wba_event_hook.h
 
-@brief	STM32WBA BLE event validation and GATT completion routing.
+@brief	STM32WBA BLE event validation and native GAP/GATT routing.
 
 Included only after the STM32WBA BLE middleware headers are visible. It wraps
 SVCCTL_RegisterHandler so malformed variable-length discovery events are
@@ -9,6 +9,11 @@ dropped before the port parser reads them, notification completion is matched
 by connection/attribute handle, indication confirmation is kept separate from
 the notification completion ring, and connection-parameter events are routed
 to the per-link GAP state machine.
+
+The same source-level hook captures the one aci_gap_init result and retains the
+native GAP handles. It also corrects the old BtAppGapDeviceNameSet path, which
+used the GAP value-handle offset instead of the characteristic handle returned
+by aci_gap_init.
 ----------------------------------------------------------------------------*/
 #ifndef __BT_WBA_EVENT_HOOK_H__
 #define __BT_WBA_EVENT_HOOK_H__
@@ -29,6 +34,14 @@ void BtGapWbaConnParamsDisconnected(uint16_t ConnHdl);
 void BtGapWbaConnParamsUpdateComplete(uint16_t ConnHdl, uint8_t Status,
 		uint16_t Interval, uint16_t Latency, uint16_t Timeout);
 void BtGapWbaConnParamsL2capResponse(uint16_t ConnHdl, uint16_t Result);
+
+void BtGapWbaNativeHandlesSet(uint8_t Role, uint8_t DeviceNameMaxLen,
+		uint16_t GapSrvcHdl, uint16_t DevNameCharHdl,
+		uint16_t AppearanceCharHdl);
+uint16_t BtGapWbaNativeCharHandleResolve(uint16_t SrvcHdl,
+		uint16_t CharHdl);
+void BtGapWbaNativeCharUpdateComplete(uint16_t SrvcHdl,
+		uint16_t RequestedCharHdl, uint16_t ActualCharHdl, uint8_t Status);
 
 static inline uint16_t BtWbaEvtLe16(const uint8_t *p)
 {
@@ -293,15 +306,50 @@ static inline void BtWbaEventHookRegister(BtWbaUserEvtHandler_t Handler)
 	SVCCTL_RegisterHandler(BtWbaEventHookDispatch);
 }
 
-// Preserve the vendor registration call inside BtWbaEventHookRegister above,
-// then replace subsequent source-level registrations with the validating
-// wrapper. Some CubeWBA releases expose SVCCTL_RegisterHandler as a macro
-// rather than a plain function declaration, so remove that spelling before
-// installing ours.
+static inline tBleStatus BtWbaGapInitCapture(uint8_t Role,
+		uint8_t PrivacyType, uint8_t DeviceNameCharLen,
+		uint16_t *pGapSrvcHdl, uint16_t *pDevNameCharHdl,
+		uint16_t *pAppearanceCharHdl)
+{
+	tBleStatus status = aci_gap_init(Role, PrivacyType, DeviceNameCharLen,
+		pGapSrvcHdl, pDevNameCharHdl, pAppearanceCharHdl);
+	if (status == BLE_STATUS_SUCCESS && pGapSrvcHdl != nullptr &&
+		pDevNameCharHdl != nullptr && pAppearanceCharHdl != nullptr)
+	{
+		BtGapWbaNativeHandlesSet(Role, DeviceNameCharLen,
+			*pGapSrvcHdl, *pDevNameCharHdl, *pAppearanceCharHdl);
+	}
+	return status;
+}
+
+static inline tBleStatus BtWbaGattUpdateCharValue(uint16_t SrvcHdl,
+		uint16_t CharHdl, uint8_t Offset, uint8_t Len, uint8_t *pValue)
+{
+	uint16_t actualHdl = BtGapWbaNativeCharHandleResolve(SrvcHdl, CharHdl);
+	tBleStatus status = aci_gatt_update_char_value(
+		SrvcHdl, actualHdl, Offset, Len, pValue);
+	BtGapWbaNativeCharUpdateComplete(
+		SrvcHdl, CharHdl, actualHdl, (uint8_t)status);
+	return status;
+}
+
+// Preserve the vendor calls inside the wrappers above, then replace subsequent
+// source-level calls in bt_app_stm32wba.cpp. Some CubeWBA releases expose these
+// spellings as macros rather than plain function declarations.
 #ifdef SVCCTL_RegisterHandler
 #undef SVCCTL_RegisterHandler
 #endif
 #define SVCCTL_RegisterHandler(handler) BtWbaEventHookRegister(handler)
+
+#ifdef aci_gap_init
+#undef aci_gap_init
+#endif
+#define aci_gap_init(...) BtWbaGapInitCapture(__VA_ARGS__)
+
+#ifdef aci_gatt_update_char_value
+#undef aci_gatt_update_char_value
+#endif
+#define aci_gatt_update_char_value(...) BtWbaGattUpdateCharValue(__VA_ARGS__)
 
 #endif // STM32WBA BLE headers visible
 
