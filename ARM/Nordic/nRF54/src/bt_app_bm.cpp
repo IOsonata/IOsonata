@@ -456,8 +456,8 @@ __attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Val
 
 __attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
 {
-	(void)ConnHdl;
 	(void)Passkey;
+	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
 }
 
 __attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
@@ -845,6 +845,8 @@ __attribute__((weak)) void SoftdeviceFaultHandler(uint32_t id, uint32_t pc, uint
 void SDBleRandSeed(uint32_t evt, void *ctx)
 {
 	uint32_t nrf_err;
+	uint32_t evt_id;
+	(void)evt_id;
 	uint8_t seed[SD_RAND_SEED_SIZE];
 
 	(void)ctx;
