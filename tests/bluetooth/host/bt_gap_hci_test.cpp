@@ -13,7 +13,6 @@
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_app.h"
-#include "bluetooth/bt_smp.h"
 
 namespace {
 
@@ -40,11 +39,6 @@ int s_CmdCount = 0;
 // Controlled local identity returned by the BtSmpLocalAddrGet override below.
 uint8_t s_LocalType = 0;
 uint8_t s_LocalAddr[6] = {};
-
-// Capture the generic fail-closed display default without linking the full SMP
-// engine into this command-level GAP test.
-uint16_t s_PasskeyReplyHdl = BT_CONN_HDL_INVALID;
-uint32_t s_PasskeyReplyValue = 0;
 
 uint8_t CaptureCommand(BtHciDevice_t * const, uint16_t OpCode, const void *pParam,
 					   uint8_t ParamLen, void *, uint8_t)
@@ -73,8 +67,6 @@ void Setup(uint8_t LocalType, const uint8_t LocalAddr[6])
 	g_BtAppData.AppDevice.pHciDev = &s_Dev;
 	s_LocalType = LocalType;
 	std::memcpy(s_LocalAddr, LocalAddr, 6);
-	s_PasskeyReplyHdl = BT_CONN_HDL_INVALID;
-	s_PasskeyReplyValue = 0;
 }
 
 const CapturedCmd *FindCmd(uint16_t OpCode)
@@ -135,16 +127,6 @@ void TestInvalidArguments()
 	CHECK(BtGapConnect(nullptr, &params) == false);
 	CHECK(BtGapConnect(&peer, nullptr) == false);
 	CHECK(s_CmdCount == 0);
-}
-
-void TestPasskeyDisplayDefaultRejects()
-{
-	uint8_t addr[6] = {};
-	Setup(BTADDR_TYPE_PUBLIC, addr);
-
-	BtSmpPasskeyDisplay(0x0042, 123456);
-	CHECK(s_PasskeyReplyHdl == 0x0042);
-	CHECK(s_PasskeyReplyValue == BT_SMP_PASSKEY_INVALID);
 }
 
 void TestScanPhyValidation()
@@ -321,12 +303,6 @@ void TestScanClampWindowLeInterval()
 
 } // namespace
 
-void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
-{
-	s_PasskeyReplyHdl = ConnHdl;
-	s_PasskeyReplyValue = Passkey;
-}
-
 extern "C" {
 
 BtAppData_t g_BtAppData;
@@ -342,7 +318,6 @@ void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 int main()
 {
 	TestInvalidArguments();
-	TestPasskeyDisplayDefaultRejects();
 	TestScanPhyValidation();
 	TestScanPublicIdentity();
 	TestScanRandomIdentity();

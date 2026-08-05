@@ -57,7 +57,6 @@
 
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_peer.h"
-#include "bluetooth/bt_smp.h"
 
 #define BT_GAP_CONN_CFG_TAG            1     /**< A tag identifying the SoftDevice BLE configuration. */
 
@@ -142,15 +141,6 @@ void BtGapSetDevName(const char* pDeviceName)
 	                                      (const uint8_t *)pDeviceName,
 	                                      strlen(pDeviceName));
 	APP_ERROR_CHECK(err_code);
-}
-
-// bt_app_nrf52.cpp provides a weak UI hook. A build that declares display
-// capability but does not supply a UI must reject the pending passkey procedure
-// instead of silently accepting a value that was never shown to the user.
-void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
-{
-	(void)Passkey;
-	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
 }
 
 bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam)
