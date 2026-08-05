@@ -214,9 +214,16 @@ void BtAdvStart()
 {
 	if (s_bAdvertising)
 	{
-		// A mixed-role device can remain advertising while its last central
-		// link disconnects. Resynchronize the shared state even though there is
-		// no SoftDevice operation to start.
+		// A central-role connection can consume the last peer slot while the
+		// connectable advertising set remains active. Stop the set as soon as
+		// the common capacity check says another peripheral link cannot be
+		// represented.
+		if (!BtAdvCanStart())
+		{
+			BtAdvStop();
+			return;
+		}
+
 		BtAdvStateUpdate();
 		return;
 	}
