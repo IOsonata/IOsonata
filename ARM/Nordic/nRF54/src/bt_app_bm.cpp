@@ -507,7 +507,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 
 			if (pPeer == nullptr)
 			{
-				break;
+				return;
 			}
 
 			g_BtAppData.State = BTAPP_STATE_CONNECTED;
@@ -522,9 +522,11 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 					p_gap_evt->conn_handle);
 			}
 
-			// Continue connectable advertising while peripheral-link capacity
-			// remains. BtAdvStart counts only peripheral-role links.
-			if (role == BLE_GAP_ROLE_PERIPH)
+			// Re-evaluate connectable advertising after every accepted link.
+			// A central-role link can consume the final peer slot even though
+			// it does not consume a peripheral-role link count.
+			if (g_BtAppData.AppDevice.Conn.Role &
+				(BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 			{
 				BtAdvStart();
 			}
