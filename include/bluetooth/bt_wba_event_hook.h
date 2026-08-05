@@ -6,8 +6,9 @@
 Included only after the STM32WBA BLE middleware headers are visible. It wraps
 SVCCTL_RegisterHandler so malformed variable-length discovery events are
 dropped before the port parser reads them, notification completion is matched
-by connection/attribute handle, and indication confirmation is kept separate
-from the notification completion ring.
+by connection/attribute handle, indication confirmation is kept separate from
+the notification completion ring, and connection-parameter events are routed
+to the per-link GAP state machine.
 ----------------------------------------------------------------------------*/
 #ifndef __BT_WBA_EVENT_HOOK_H__
 #define __BT_WBA_EVENT_HOOK_H__
@@ -22,6 +23,11 @@ from the notification completion ring.
 #include "bluetooth/bt_gatt.h"
 
 void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t AttrHdl);
+void BtGapWbaConnParamsConnected(uint16_t ConnHdl, uint8_t Role,
+		uint16_t Interval, uint16_t Latency, uint16_t Timeout);
+void BtGapWbaConnParamsDisconnected(uint16_t ConnHdl);
+void BtGapWbaConnParamsUpdateComplete(uint16_t ConnHdl, uint8_t Status);
+void BtGapWbaConnParamsL2capResponse(uint16_t ConnHdl, uint16_t Result);
 
 static inline uint16_t BtWbaEvtLe16(const uint8_t *p)
 {
@@ -144,6 +150,57 @@ static SVCCTL_UserEvtFlowStatus_t BtWbaEventHookDispatch(void *pPayload)
 
 	hci_event_pckt *pEvt =
 		(hci_event_pckt *)((hci_uart_pckt *)pPayload)->data;
+
+	if (pEvt->evt == HCI_DISCONNECTION_COMPLETE_EVT_CODE &&
+		pEvt->plen >= sizeof(hci_disconnection_complete_event_rp0))
+	{
+		auto *p = (hci_disconnection_complete_event_rp0 *)pEvt->data;
+		if (p->Status == 0)
+		{
+			BtGapWbaConnParamsDisconnected(p->Connection_Handle);
+		}
+	}
+	else if (pEvt->evt == HCI_LE_META_EVT_CODE)
+	{
+		const size_t fixed = offsetof(evt_le_meta_event, data);
+		if (pEvt->plen >= fixed)
+		{
+			evt_le_meta_event *pMeta = (evt_le_meta_event *)pEvt->data;
+			size_t available = (size_t)pEvt->plen - fixed;
+
+			switch (pMeta->subevent)
+			{
+				case HCI_LE_CONNECTION_COMPLETE_SUBEVT_CODE:
+					if (available >= sizeof(
+							hci_le_connection_complete_event_rp0))
+					{
+						auto *p = (hci_le_connection_complete_event_rp0 *)pMeta->data;
+						if (p->Status == 0)
+						{
+							BtGapWbaConnParamsConnected(
+								p->Connection_Handle, p->Role, p->Conn_Interval,
+								p->Conn_Latency, p->Supervision_Timeout);
+						}
+					}
+					break;
+
+				case HCI_LE_CONNECTION_UPDATE_COMPLETE_SUBEVT_CODE:
+					if (available >= sizeof(
+							hci_le_connection_update_complete_event_rp0))
+					{
+						auto *p =
+							(hci_le_connection_update_complete_event_rp0 *)pMeta->data;
+						BtGapWbaConnParamsUpdateComplete(
+							p->Connection_Handle, p->Status);
+					}
+					break;
+
+				default:
+					break;
+			}
+		}
+	}
+
 	if (pEvt->evt == HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE)
 	{
 		if (pEvt->plen < offsetof(evt_blecore_aci, data))
@@ -183,6 +240,19 @@ static SVCCTL_UserEvtFlowStatus_t BtWbaEventHookDispatch(void *pPayload)
 					return SVCCTL_UserEvtFlowEnable;
 				}
 				break;
+
+#ifdef ACI_L2CAP_CONNECTION_UPDATE_RESP_VSEVT_CODE
+			case ACI_L2CAP_CONNECTION_UPDATE_RESP_VSEVT_CODE:
+				if (available >= sizeof(
+						aci_l2cap_connection_update_resp_event_rp0))
+				{
+					auto *p =
+						(aci_l2cap_connection_update_resp_event_rp0 *)pAci->data;
+					BtGapWbaConnParamsL2capResponse(
+						p->Connection_Handle, p->Result);
+				}
+				break;
+#endif
 
 #ifdef ACI_GATT_NOTIFICATION_COMPLETE_VSEVT_CODE
 			case ACI_GATT_NOTIFICATION_COMPLETE_VSEVT_CODE:
