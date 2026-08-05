@@ -27,6 +27,15 @@ by aci_gap_init.
 
 #include "bluetooth/bt_gatt.h"
 
+#ifndef BT_GAP_WBA_DEVICE_NAME_MAX_LEN
+#define BT_GAP_WBA_DEVICE_NAME_MAX_LEN	64U
+#endif
+
+#if BT_GAP_WBA_DEVICE_NAME_MAX_LEN == 0 || \
+	BT_GAP_WBA_DEVICE_NAME_MAX_LEN > UINT8_MAX
+#error "BT_GAP_WBA_DEVICE_NAME_MAX_LEN must be in 1..255"
+#endif
+
 void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t AttrHdl);
 void BtGapWbaConnParamsConnected(uint16_t ConnHdl, uint8_t Role,
 		uint16_t Interval, uint16_t Latency, uint16_t Timeout);
@@ -154,6 +163,8 @@ static bool BtWbaDiscInfoEventValid(
 typedef SVCCTL_UserEvtFlowStatus_t (*BtWbaUserEvtHandler_t)(void *pPayload);
 
 static BtWbaUserEvtHandler_t s_BtWbaOriginalHandler;
+static uint16_t s_BtWbaGapSrvcHdl = BT_ATT_HANDLE_INVALID;
+static uint16_t s_BtWbaDevNameCharHdl = BT_ATT_HANDLE_INVALID;
 
 static SVCCTL_UserEvtFlowStatus_t BtWbaEventHookDispatch(void *pPayload)
 {
@@ -311,12 +322,16 @@ static inline tBleStatus BtWbaGapInitCapture(uint8_t Role,
 		uint16_t *pGapSrvcHdl, uint16_t *pDevNameCharHdl,
 		uint16_t *pAppearanceCharHdl)
 {
-	tBleStatus status = aci_gap_init(Role, PrivacyType, DeviceNameCharLen,
+	(void)DeviceNameCharLen;
+	const uint8_t nameCapacity = (uint8_t)BT_GAP_WBA_DEVICE_NAME_MAX_LEN;
+	tBleStatus status = aci_gap_init(Role, PrivacyType, nameCapacity,
 		pGapSrvcHdl, pDevNameCharHdl, pAppearanceCharHdl);
 	if (status == BLE_STATUS_SUCCESS && pGapSrvcHdl != nullptr &&
 		pDevNameCharHdl != nullptr && pAppearanceCharHdl != nullptr)
 	{
-		BtGapWbaNativeHandlesSet(Role, DeviceNameCharLen,
+		s_BtWbaGapSrvcHdl = *pGapSrvcHdl;
+		s_BtWbaDevNameCharHdl = *pDevNameCharHdl;
+		BtGapWbaNativeHandlesSet(Role, nameCapacity,
 			*pGapSrvcHdl, *pDevNameCharHdl, *pAppearanceCharHdl);
 	}
 	return status;
@@ -326,6 +341,13 @@ static inline tBleStatus BtWbaGattUpdateCharValue(uint16_t SrvcHdl,
 		uint16_t CharHdl, uint8_t Offset, uint8_t Len, uint8_t *pValue)
 {
 	uint16_t actualHdl = BtGapWbaNativeCharHandleResolve(SrvcHdl, CharHdl);
+	if (SrvcHdl == s_BtWbaGapSrvcHdl &&
+		actualHdl == s_BtWbaDevNameCharHdl &&
+		Len > BT_GAP_WBA_DEVICE_NAME_MAX_LEN)
+	{
+		Len = (uint8_t)BT_GAP_WBA_DEVICE_NAME_MAX_LEN;
+	}
+
 	tBleStatus status = aci_gatt_update_char_value(
 		SrvcHdl, actualHdl, Offset, Len, pValue);
 
