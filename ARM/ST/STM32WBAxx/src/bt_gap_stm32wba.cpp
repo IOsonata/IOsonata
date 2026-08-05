@@ -411,19 +411,6 @@ void BtGapParamInit(const BtGapCfg_t *pCfg)
 		BtGapWbaConnParamsValid(
 			s_GapWba.ConnIntervalMin, s_GapWba.ConnIntervalMax,
 			s_GapWba.ConnLatency, s_GapWba.ConnSupTimeout);
-
-	if (s_GapWba.bConnParamsValid && (pCfg->Role & BT_GAP_ROLE_PERIPHERAL))
-	{
-		// Keep the generic GAP mirror coherent. The native ST PPCP handle is
-		// owned by the one aci_gap_init call in bt_app_stm32wba.cpp.
-		BtGattPreferedConnParams_t ppcp = {
-			.IntervalMin = s_GapWba.ConnIntervalMin,
-			.IntervalMax = s_GapWba.ConnIntervalMax,
-			.Latency = s_GapWba.ConnLatency,
-			.Timeout = s_GapWba.ConnSupTimeout,
-		};
-		BtGapSetPreferedConnParam(&ppcp);
-	}
 }
 
 void BtGapSetDevName(const char *pName)
