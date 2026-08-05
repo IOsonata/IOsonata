@@ -98,6 +98,9 @@ extern UART g_Uart;
 // Each pair (legacy + extended) shares the same underlying byte buffer;
 // the BtAdvPacket_t.MaxLen field caps each into the right window. This
 // mirrors bt_adv_bm.cpp - lets app code reuse the buffer between modes.
+static bool s_bAdvertising;
+static uint16_t s_PeripheralLinkCount;
+
 alignas(4) static uint8_t s_BtAppAdvBuff[BT_WBA_ADV_EXTENDED_MAX + 5];
 alignas(4) static BtAdvPacket_t s_BtAppAdvPkt = {
 	BT_WBA_ADV_LEGACY_MAX, 0, s_BtAppAdvBuff
@@ -141,11 +144,91 @@ static uint16_t MapExtAdvEvtProps(uint8_t Role)
 	return prop;
 }
 
+static uint16_t BtAdvPeripheralConnCount(void)
+{
+	uint16_t count = 0;
+	uint16_t peerCount = BtPeerCount();
+
+	for (uint16_t i = 0; i < peerCount; i++)
+	{
+		BtDevice_t *pPeer = BtPeerSlot(i);
+		if (pPeer != nullptr && pPeer->Conn.Hdl != BT_CONN_HDL_INVALID &&
+			pPeer->Conn.Role == BT_CONN_ROLE_PERIPHERAL)
+		{
+			count++;
+		}
+	}
+
+	return count;
+}
+
+static bool BtAdvPeerSlotAvailable(void)
+{
+	uint16_t peerCount = BtPeerCount();
+
+	for (uint16_t i = 0; i < peerCount; i++)
+	{
+		BtDevice_t *pPeer = BtPeerSlot(i);
+		if (pPeer != nullptr && pPeer->Conn.Hdl == BT_CONN_HDL_INVALID)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool BtAdvCanStart(void)
+{
+	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
+
+	if ((role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)) == 0)
+	{
+		return false;
+	}
+
+	if (role & BTAPP_ROLE_PERIPHERAL)
+	{
+		return s_PeripheralLinkCount != 0 &&
+			BtAdvPeerSlotAvailable() &&
+			BtAdvPeripheralConnCount() < s_PeripheralLinkCount;
+	}
+
+	return true;
+}
+
+static void BtAdvStateUpdate(void)
+{
+	if (BtPeerIsConnected())
+	{
+		g_BtAppData.State = BTAPP_STATE_CONNECTED;
+	}
+	else
+	{
+		g_BtAppData.State = s_bAdvertising ?
+			BTAPP_STATE_ADVERTISING : BTAPP_STATE_IDLE;
+	}
+}
+
+// A connectable advertising set stops when it creates a peripheral link.
+// Record that controller-side transition without sending a redundant disable.
+void BtAdvWbaConnected(void)
+{
+	s_bAdvertising = false;
+	BtAdvStateUpdate();
+}
+
 void BtAdvStart(void)
 {
-	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING ||
-	    BtPeerIsConnected())
+	if (s_bAdvertising)
 	{
+		BtAdvStateUpdate();
+		return;
+	}
+
+	if (!BtAdvCanStart())
+	{
+		BtAdvStateUpdate();
 		return;
 	}
 
@@ -168,7 +251,8 @@ void BtAdvStart(void)
 
 	if (ret == BLE_STATUS_SUCCESS)
 	{
-		g_BtAppData.State = BTAPP_STATE_ADVERTISING;
+		s_bAdvertising = true;
+		BtAdvStateUpdate();
 	}
 	else
 	{
@@ -178,9 +262,16 @@ void BtAdvStart(void)
 
 void BtAdvStop(void)
 {
+	if (!s_bAdvertising)
+	{
+		BtAdvStateUpdate();
+		return;
+	}
+
+	uint8_t ret;
 	if (g_BtAppData.bExtAdv == false)
 	{
-		hci_le_set_advertising_enable(0);
+		ret = hci_le_set_advertising_enable(0);
 	}
 	else
 	{
@@ -189,10 +280,17 @@ void BtAdvStop(void)
 			.Duration                        = 0,
 			.Max_Extended_Advertising_Events = 0,
 		};
-		aci_gap_adv_set_enable(0, 1, &advSet);
+		ret = aci_gap_adv_set_enable(0, 1, &advSet);
 	}
 
-	g_BtAppData.State = BTAPP_STATE_IDLE;
+	if (ret != BLE_STATUS_SUCCESS)
+	{
+		DEBUG_PRINTF("BtAdvStop failed: 0x%02x\r\n", ret);
+		return;
+	}
+
+	s_bAdvertising = false;
+	BtAdvStateUpdate();
 }
 
 // Push the encoded packet pair to the ST stack. Splits between legacy
@@ -310,6 +408,9 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	BtAdvPacket_t *srpkt = &s_BtAppExtSrPkt;
 	bool bScannable = false;
 
+	s_bAdvertising = false;
+	s_PeripheralLinkCount = pCfg->PeriLinkCount > 0 ?
+		(uint16_t)pCfg->PeriLinkCount : 0;
 	advpkt->Len = 0;
 	srpkt->Len = 0;
 

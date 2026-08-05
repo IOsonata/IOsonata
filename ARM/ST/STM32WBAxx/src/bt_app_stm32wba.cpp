@@ -139,6 +139,7 @@ extern UART g_Uart;
 // Forward decls from peer port files (defined in 9b..9e).
 extern "C" bool BtAppAdvInit(const BtAppCfg_t *pCfg);
 extern "C" bool BtDisInit(const struct __Bt_App_Cfg *pCfg);
+void BtAdvWbaConnected(void);
 
 // User hooks - weak symbols overridden by the app.
 __attribute__((weak)) void BtAppInitUserServices(void) {}
@@ -531,14 +532,12 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 					}
 
 					BtAppEvtDisconnected(p->Connection_Handle);
-
-					if (!connected &&
-						(g_BtAppData.AppDevice.Conn.Role &
-						 (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
-					{
-						BtAdvStart();
-					}
 				}
+
+				// A disconnect can free either peripheral capacity or the last
+				// peer-table slot. BtAdvStart performs both checks and is a no-op
+				// when the advertising set is already active.
+				BtAdvStart();
 			}
 			break;
 		}
@@ -578,12 +577,19 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 						                   p->Peer_Address_Type,
 						                   p->Peer_Address,
 						                   0, NULL);
+
+						if (p->Role == BT_CONN_ROLE_PERIPHERAL)
+						{
+							// A connectable advertising set stops after creating this
+							// link. Update the local set state before deciding whether
+							// another peripheral link may be accepted.
+							BtAdvWbaConnected();
+						}
+
 						if (pPeer == nullptr)
 						{
-							// The controller accepted a link that cannot be represented
-							// in the IOsonata connection table. Close it before any
-							// application callback or security procedure is started.
-							aci_gap_terminate(p->Connection_Handle, 0x13);
+							// BtPeerConnected already routes rejection through
+							// BtPeerConnectionRejected, which terminates the link.
 							break;
 						}
 
@@ -615,6 +621,11 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 								default:
 									break;
 							}
+						}
+
+						if (p->Role == BT_CONN_ROLE_PERIPHERAL)
+						{
+							BtAdvStart();
 						}
 					}
 					break;
