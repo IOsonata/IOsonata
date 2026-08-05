@@ -104,6 +104,22 @@ static uint16_t BtAdvPeripheralConnCount()
 	return count;
 }
 
+static bool BtAdvPeerSlotAvailable()
+{
+	uint16_t peerCount = BtPeerCount();
+
+	for (uint16_t i = 0; i < peerCount; i++)
+	{
+		BtDevice_t *pPeer = BtPeerSlot(i);
+		if (pPeer != nullptr && pPeer->Conn.Hdl == BT_CONN_HDL_INVALID)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static bool BtAdvCanStart()
 {
 	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
@@ -116,6 +132,7 @@ static bool BtAdvCanStart()
 	if (role & BTAPP_ROLE_PERIPHERAL)
 	{
 		return s_PeripheralLinkCount != 0 &&
+			BtAdvPeerSlotAvailable() &&
 			BtAdvPeripheralConnCount() < s_PeripheralLinkCount;
 	}
 
