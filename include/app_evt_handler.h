@@ -22,8 +22,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is furnished
-to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -102,6 +102,12 @@ bool AppEvtHandlerIdleRegister(AppEvtHandlerIdle_t Handler);
 	defined(HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE) && \
 	defined(ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE)
 #include "bluetooth/bt_wba_event_hook.h"
+#endif
+
+#if defined(__cplusplus) && defined(CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT) && \
+	(defined(NRF54L15_XXAA) || defined(NRF54L15_XXAB) || \
+	 defined(NRF54L10_XXAA) || defined(NRF54L05_XXAA))
+#include "bluetooth/bt_bm_event_hook.h"
 #endif
 
 #endif // __APP_EVT_HANDLER_H__
