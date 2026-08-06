@@ -26,6 +26,7 @@ by aci_gap_init.
 #include <stdint.h>
 
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_smp.h"
 
 #ifndef BT_GAP_WBA_DEVICE_NAME_MAX_LEN
 #define BT_GAP_WBA_DEVICE_NAME_MAX_LEN	64U
@@ -165,6 +166,7 @@ typedef SVCCTL_UserEvtFlowStatus_t (*BtWbaUserEvtHandler_t)(void *pPayload);
 static BtWbaUserEvtHandler_t s_BtWbaOriginalHandler;
 static uint16_t s_BtWbaGapSrvcHdl = BT_ATT_HANDLE_INVALID;
 static uint16_t s_BtWbaDevNameCharHdl = BT_ATT_HANDLE_INVALID;
+static bool s_BtWbaPasskeyRandValid = true;
 
 static SVCCTL_UserEvtFlowStatus_t BtWbaEventHookDispatch(void *pPayload)
 {
@@ -361,6 +363,25 @@ static inline tBleStatus BtWbaGattUpdateCharValue(uint16_t SrvcHdl,
 	return status;
 }
 
+static inline tBleStatus BtWbaLeRand(uint8_t *pRand)
+{
+	tBleStatus status = hci_le_rand(pRand);
+	s_BtWbaPasskeyRandValid = status == BLE_STATUS_SUCCESS;
+	return status;
+}
+
+static inline void BtWbaPasskeyRequest(uint16_t ConnHdl)
+{
+	bool valid = s_BtWbaPasskeyRandValid;
+	s_BtWbaPasskeyRandValid = true;
+	if (!valid)
+	{
+		BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
+		return;
+	}
+	BtSmpPasskeyRequest(ConnHdl);
+}
+
 // Preserve the vendor calls inside the wrappers above, then replace subsequent
 // source-level calls in bt_app_stm32wba.cpp. Some CubeWBA releases expose these
 // spellings as macros rather than plain function declarations.
@@ -378,6 +399,16 @@ static inline tBleStatus BtWbaGattUpdateCharValue(uint16_t SrvcHdl,
 #undef aci_gatt_update_char_value
 #endif
 #define aci_gatt_update_char_value(...) BtWbaGattUpdateCharValue(__VA_ARGS__)
+
+#ifdef hci_le_rand
+#undef hci_le_rand
+#endif
+#define hci_le_rand(...) BtWbaLeRand(__VA_ARGS__)
+
+#ifdef BtSmpPasskeyRequest
+#undef BtSmpPasskeyRequest
+#endif
+#define BtSmpPasskeyRequest(...) BtWbaPasskeyRequest(__VA_ARGS__)
 
 #endif // STM32WBA BLE headers visible
 
