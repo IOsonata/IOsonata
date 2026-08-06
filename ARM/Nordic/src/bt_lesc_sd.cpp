@@ -82,6 +82,7 @@ static bool s_bRegenPending;
 static BtLescPeerKey_t s_PeerKeys[LESC_MAX_LINK];
 static bool s_bOobLocalGen;
 static ble_gap_lesc_oob_data_t s_OobLocal;
+static ble_gap_lesc_oob_data_t s_OobPeer;
 static uint16_t s_OobConnHdl = BLE_CONN_HANDLE_INVALID;
 static BtLescOobPeerHandler_t s_OobPeerHandler;
 static KeyAgreeEngine *s_pLescCrypto;
@@ -181,7 +182,7 @@ static void OobRelease(uint16_t ConnHdl)
 	s_OobConnHdl = BLE_CONN_HANDLE_INVALID;
 	s_bOobLocalGen = false;
 	CryptoSecureWipe(&s_OobLocal, sizeof(s_OobLocal));
-	BtSmpOobDataClear();
+	CryptoSecureWipe(&s_OobPeer, sizeof(s_OobPeer));
 }
 
 static void LocalKeyReset(void)
@@ -200,6 +201,7 @@ static void LocalKeyReset(void)
 	CryptoSecureWipe(&s_LescPubKey, sizeof(s_LescPubKey));
 	CryptoSecureWipe(&s_LescDhKey, sizeof(s_LescDhKey));
 	CryptoSecureWipe(&s_OobLocal, sizeof(s_OobLocal));
+	CryptoSecureWipe(&s_OobPeer, sizeof(s_OobPeer));
 }
 
 void BtLescSetCryptoEngine(KeyAgreeEngine *pEcdh)
@@ -492,12 +494,30 @@ static uint32_t OobDataSet(uint16_t ConnHdl)
 	}
 
 	ble_gap_lesc_oob_data_t *pOwn = s_bOobLocalGen ? &s_OobLocal : NULL;
-	ble_gap_lesc_oob_data_t *pPeer = s_OobPeerHandler != nullptr ?
+	ble_gap_lesc_oob_data_t *pStagedPeer = s_OobPeerHandler != nullptr ?
 		s_OobPeerHandler(ConnHdl) : NULL;
+	ble_gap_lesc_oob_data_t *pPeer = NULL;
+
+	// Consume the application staging record at the connection boundary. The
+	// module-owned copy remains bound to ConnHdl until authentication completes
+	// or the link disconnects, so another application update cannot alter the
+	// active procedure and a later procedure cannot reuse the same record.
+	CryptoSecureWipe(&s_OobPeer, sizeof(s_OobPeer));
+	if (pStagedPeer != NULL)
+	{
+		memcpy(&s_OobPeer, pStagedPeer, sizeof(s_OobPeer));
+		BtSmpOobDataClear();
+		pPeer = &s_OobPeer;
+	}
+
 	uint32_t result = sd_ble_gap_lesc_oob_data_set(ConnHdl, pOwn, pPeer);
 	if (result == NRF_SUCCESS)
 	{
 		s_OobConnHdl = ConnHdl;
+	}
+	else
+	{
+		CryptoSecureWipe(&s_OobPeer, sizeof(s_OobPeer));
 	}
 	return result;
 }
