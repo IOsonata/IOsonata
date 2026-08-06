@@ -20,7 +20,7 @@
 
 MIT License
 
-Copyright (c) 2026, I-SYST inc., all rights reserved
+Copyright (c) 2026, I-SYST inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -86,6 +86,8 @@ extern "C" bool AppEvtHandlerIdleRegister(void (*Handler)(void));
 // HCI scan-type values.
 #define BT_GAP_HCI_SCAN_PASSIVE			0x00
 #define BT_GAP_HCI_SCAN_ACTIVE			0x01
+#define BT_GAP_HCI_SCAN_INTERVAL_MIN	0x0004U
+#define BT_GAP_HCI_SCAN_INTERVAL_MAX	0x4000U
 
 // --- Port-private GAP state ---
 
@@ -180,8 +182,7 @@ void BtGapWbaNativeCharUpdateComplete(uint16_t SrvcHdl,
 		ActualCharHdl == s_GapWba.DevNameCharHdl)
 	{
 		// BtAppGapDeviceNameSet calls BtGapSetDevName immediately after this
-		// native update. Consume that forwarding call so the database is not
-		// written twice.
+		// native update. Consume only that one forwarding call.
 		s_GapWba.bLegacyNameUpdatePending = true;
 	}
 }
@@ -230,6 +231,30 @@ static bool BtGapWbaConnParamsValid(uint16_t IntervalMin,
 	// floating point: timeout(10ms) * 4 > interval(1.25ms) * (latency + 1).
 	return (uint32_t)Timeout * 4U >
 		(uint32_t)IntervalMax * ((uint32_t)Latency + 1U);
+}
+
+static bool BtGapWbaScanParamsConvert(uint32_t IntervalMs,
+		uint32_t WindowMs, uint16_t *pInterval, uint16_t *pWindow)
+{
+	if (pInterval == nullptr || pWindow == nullptr)
+	{
+		return false;
+	}
+
+	uint64_t interval = ((uint64_t)IntervalMs * 1600U) / 1000U;
+	uint64_t window = ((uint64_t)WindowMs * 1600U) / 1000U;
+	if (interval < BT_GAP_HCI_SCAN_INTERVAL_MIN ||
+		interval > BT_GAP_HCI_SCAN_INTERVAL_MAX ||
+		window < BT_GAP_HCI_SCAN_INTERVAL_MIN ||
+		window > BT_GAP_HCI_SCAN_INTERVAL_MAX ||
+		window > interval)
+	{
+		return false;
+	}
+
+	*pInterval = (uint16_t)interval;
+	*pWindow = (uint16_t)window;
+	return true;
 }
 
 static void BtGapWbaConnParamClear(BtGapWbaConnParamLink_t *pLink)
@@ -607,10 +632,18 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 		return false;
 	}
 
-	s_GapWba.ScanType      = (pCfg->Type == BTSCAN_TYPE_ACTIVE)
-	                         ? BT_GAP_HCI_SCAN_ACTIVE : BT_GAP_HCI_SCAN_PASSIVE;
-	s_GapWba.ScanInterval  = (uint16_t)BT_GAP_MSEC_TO_0_625(pCfg->Param.Interval);
-	s_GapWba.ScanWindow    = (uint16_t)BT_GAP_MSEC_TO_0_625(pCfg->Param.Duration);
+	uint16_t interval;
+	uint16_t window;
+	if (!BtGapWbaScanParamsConvert(
+			pCfg->Param.Interval, pCfg->Param.Duration, &interval, &window))
+	{
+		return false;
+	}
+
+	s_GapWba.ScanType = (pCfg->Type == BTSCAN_TYPE_ACTIVE) ?
+		BT_GAP_HCI_SCAN_ACTIVE : BT_GAP_HCI_SCAN_PASSIVE;
+	s_GapWba.ScanInterval = interval;
+	s_GapWba.ScanWindow = window;
 	s_GapWba.ScanFilterDup = 1;
 
 	return true;
