@@ -52,7 +52,7 @@ HCI_SOURCES := \
 
 CAP_SOURCES := \
 	hci/bt_hci_capability_test.cpp \
-	$(ROOT)/src/bluetooth/bt_hci_cap.cpp
+	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
 ATT_SOURCES := \
 	att/bt_att_dual_host_test.cpp \
@@ -120,10 +120,10 @@ $(HCI_TARGET): $(HCI_SOURCES) $(HEADERS) $(CFIFO_OBJ)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$(HCI_SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
 
-$(CAP_TARGET): $(CAP_SOURCES) $(HEADERS)
+$(CAP_TARGET): $(CAP_SOURCES) $(HEADERS) $(CFIFO_OBJ)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
-		$(CAP_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+		$(CAP_SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(ATT_TARGET): $(ATT_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)

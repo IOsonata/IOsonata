@@ -78,8 +78,34 @@ SOFTWARE.
 #endif
 /*******************************/
 
-// PCD-side controller device pointer, set by BtHciCtlrSdcInit.
+// PCD-side controller device pointer, set by BtHciCtlrStart.
 static BtHciCtlrDev_t *s_pBtHciCtlrSdc = nullptr;
+
+static void BtHciCtlrSdcApplyCapabilities(BtHciDevice_t * const pDev)
+{
+	if (pDev == nullptr || s_pBtHciCtlrSdc == nullptr ||
+		s_pBtHciCtlrSdc->CapabilitiesApplied)
+	{
+		return;
+	}
+
+	const BtHciCapabilities_t *pCapabilities =
+		&s_pBtHciCtlrSdc->Capabilities;
+	if ((pCapabilities->Valid & BT_HCI_CAP_VALID_BUFFER_SIZE) == 0 ||
+		pCapabilities->LeAclDataLen == 0 ||
+		pCapabilities->LeAclPacketCount == 0)
+	{
+		return;
+	}
+
+	// LE Read Buffer Size reports the controller buffers available for
+	// host-to-controller ACL data. Replace the configured startup assumption
+	// once, before the first real host command can lead to ACL traffic.
+	BtHciSetLeAclBuffer(pDev, pCapabilities->LeAclDataLen,
+		pCapabilities->LeAclPacketCount);
+	s_pBtHciCtlrSdc->pHciDev = pDev;
+	s_pBtHciCtlrSdc->CapabilitiesApplied = true;
+}
 
 static inline size_t BtHciCtlrSendData(BtHciCtlrDev_t * const pDev, void *pData, size_t Len) {
 	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
@@ -127,18 +153,14 @@ size_t BtHciCtlrSdcSend(void *pData, size_t Len)
 	return s_pBtHciCtlrSdc->Send(s_pBtHciCtlrSdc, pData, Len);
 }
 
-// SDC command executor. Sends the command, then pumps the controller until the
-// matching Command Complete or Command Status sets CmdDone, and returns the HCI
-// status. Command credit and opcode match are the generic fields filled by
-// BtHciProcessEvent. This is the SDC response model: a busy wait on sdc_hci_get
-// through BtHciCtlrProcess. A target with an event driven SDK would bind its own.
 // SDC command executor. The SDC HCI command interface is typed, not raw: each
-// opcode maps to a sdc_hci_cmd_le_* wrapper. The generic parameters are the
+// opcode maps to a sdc_hci_cmd_* wrapper. The generic parameters are the
 // standard HCI wire layout, which matches the SDC command struct, so they cast
-// directly. The wrappers are synchronous, so this returns the status inline; the
-// generic command credit and match path is used only by a raw HCI controller.
+// directly. The wrappers are synchronous and return the HCI status inline.
 uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen)
 {
+	BtHciCtlrSdcApplyCapabilities(pDev);
+
 	uint8_t res;
 
 	switch (OpCode)
@@ -502,7 +524,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		sdc_support_le_conn_cte_rsp_central();
 	}
 
-    int32_t ram = 0;
+	int32_t ram = 0;
 	sdc_cfg_t cfg;
 
 	// Reserve max always. It seems sdc lib is not capable of changing it in runtime
@@ -514,7 +536,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	DEBUG_PRINTF("sdc_cfg_set\r\n");
 
 	ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-				       	  SDC_CFG_TYPE_BUFFER_CFG,
+						  SDC_CFG_TYPE_BUFFER_CFG,
 						  &cfg);
 	if (ram < 0)
 	{
@@ -522,7 +544,6 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 
 		return false;
 	}
-
 
 	// Vendor specific command, answered with an HCI status. A refusal leaves
 	// the controller default event length in place, which costs throughput but
@@ -540,7 +561,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	/*
 	cfg.event_length.event_length_us = 7500;
 	ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-				       	  SDC_CFG_TYPE_EVENT_LENGTH,
+						  SDC_CFG_TYPE_EVENT_LENGTH,
 						  &cfg);
 	if (ram < 0)
 	{
@@ -555,7 +576,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		cfg.peripheral_count.count = pCfg->PeriLinkCount;
 
 		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-					       	  SDC_CFG_TYPE_PERIPHERAL_COUNT,
+							  SDC_CFG_TYPE_PERIPHERAL_COUNT,
 							  &cfg);
 		if (ram < 0)
 		{
@@ -594,7 +615,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		// Config for central role
 		cfg.central_count.count = pCfg->CentLinkCount;
 		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-					       	  SDC_CFG_TYPE_CENTRAL_COUNT,
+							  SDC_CFG_TYPE_CENTRAL_COUNT,
 							  &cfg);
 		if (ram < 0)
 		{
@@ -602,7 +623,6 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 
 			return false;
 		}
-
 
 		cfg.scan_buffer_cfg.count = 10;
 
@@ -641,7 +661,6 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	}
 
 	// Enable BLE stack.
-
 	DEBUG_PRINTF("sdc_enable\r\n");
 
 	res = sdc_enable(BtStackSdcCB, s_BtStackSdcMemPool);
@@ -655,6 +674,22 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		MpslNvmArbiterStop();
 
 		return false;
+	}
+
+	// Capability queries are valid only after the controller is enabled. Use a
+	// temporary host device bound to the same typed command executor; the
+	// controller owns the result and the real host receives the ACL limits on
+	// its first command. A failed discovery leaves Valid at zero, so the
+	// application's configured ACL fallback remains active.
+	memset(&pDev->Capabilities, 0, sizeof(pDev->Capabilities));
+	pDev->pHciDev = nullptr;
+	pDev->CapabilitiesApplied = false;
+
+	BtHciDevice_t hciDev = {};
+	hciDev.Command = BtHciCmdSdc;
+	if (BtHciCapabilitiesRead(&hciDev, &pDev->Capabilities) == false)
+	{
+		DEBUG_PRINTF("SDC capability discovery failed\r\n");
 	}
 
 	return true;

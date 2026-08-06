@@ -38,6 +38,7 @@ SOFTWARE.
 #include "device_intrf.h"
 #include "cfifo.h"
 #include "bluetooth/bt_hcievt.h"
+#include "bluetooth/bt_hci_cap.h"
 
 /** @addtogroup Bluetooth
   * @{
@@ -87,6 +88,9 @@ struct __Bt_Hci_Ctlr_Dev {
 	uint16_t ConnHdl;				//<! Connection handle
 	uint16_t ValHdl;				//<! Characteristic value handle
 	hCFifo_t hRxFifo;
+	BtHciCapabilities_t Capabilities;	//!< Controller capabilities discovered after target start
+	BtHciDevice_t *pHciDev;			//!< Host device the discovered ACL limits were applied to
+	bool CapabilitiesApplied;		//!< true after reported ACL limits were applied to pHciDev
 	BtHciCtlrRxHandler_t RxHandler;	//!< HCI receive handler set from config
 	void (*OnWake)(void);			//!< Host waiter wake, set from config
 	size_t (*Send)(BtHciCtlrDev_t * const pDev, void * const pData, size_t Len);
@@ -126,6 +130,18 @@ extern "C" {
 bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
 size_t BtHciCtlrSdcSend(void *pData, size_t Len);
 uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen);
+
+/**
+ * @brief	Return the controller-owned capability record.
+ *
+ * The record is zero until the target controller completes discovery. Valid
+ * identifies which fields contain controller-reported values.
+ *
+ * @param	pDev	Controller device.
+ *
+ * @return	Capability record, or NULL for a null device.
+ */
+const BtHciCapabilities_t *BtHciCtlrCapabilitiesGet(const BtHciCtlrDev_t *pDev);
 
 /**
  * @brief	Bring up the controller.

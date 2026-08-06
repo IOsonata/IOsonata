@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "bluetooth/bt_hci_cap.h"
+#include "bluetooth/bt_hci_ctlr.h"
 
 namespace {
 
@@ -213,6 +214,23 @@ void TestArguments()
 	CHECK(BtHciCapabilitiesRead(&dev, nullptr) == false);
 }
 
+void TestControllerCapabilityStorage()
+{
+	alignas(4) uint8_t fifo[1024] = {};
+	BtHciCtlrDev_t ctlr = {};
+	BtHciCtlrCfg_t cfg = {};
+	cfg.PacketSize = 64;
+	cfg.pRxFifoMem = fifo;
+	cfg.RxFifoMemSize = sizeof(fifo);
+
+	CHECK(BtHciCtlrInit(&ctlr, &cfg));
+	CHECK(ctlr.Capabilities.Valid == 0);
+	CHECK(ctlr.pHciDev == nullptr);
+	CHECK(ctlr.CapabilitiesApplied == false);
+	CHECK(BtHciCtlrCapabilitiesGet(&ctlr) == &ctlr.Capabilities);
+	CHECK(BtHciCtlrCapabilitiesGet(nullptr) == nullptr);
+}
+
 } // namespace
 
 int main()
@@ -221,6 +239,7 @@ int main()
 	TestOptionalFallback();
 	TestMandatoryFailure();
 	TestArguments();
+	TestControllerCapabilityStorage();
 
 	if (s_Failures == 0)
 	{
