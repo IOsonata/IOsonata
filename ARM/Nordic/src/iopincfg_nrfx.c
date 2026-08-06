@@ -443,7 +443,15 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 #endif
 
 	uint32_t cfg = 0;
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+	// Two GPIOTE instances of 4 channels each, the second one starts over at 0
 	int idx = IntNo > 3 ? IntNo - 4 : IntNo;
+#else
+	// One instance, so the channel is the interrupt number. Folding 4 to 7 back
+	// onto 0 to 3 here made those four allocations program the config of a
+	// channel they did not own while enabling the interrupt of one they did.
+	int idx = IntNo;
+#endif
 
 	if (IntNo < 0)
 	{
