@@ -46,6 +46,7 @@ SOFTWARE.
 
 #include "sdc_hci.h"
 #include "sdc_hci_cmd_le.h"
+#include "sdc_hci_cmd_info_params.h"
 #include "sdc_hci_cmd_controller_baseband.h"
 #include "sdc_hci_cmd_link_control.h"
 
@@ -138,10 +139,121 @@ size_t BtHciCtlrSdcSend(void *pData, size_t Len)
 // generic command credit and match path is used only by a raw HCI controller.
 uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen)
 {
-	int32_t res;
+	uint8_t res;
 
 	switch (OpCode)
 	{
+		case BT_HCI_CMD_INFO_READ_LOCAL_VERS_INFO:
+			{
+				sdc_hci_cmd_ip_read_local_version_information_return_t r = {};
+				res = sdc_hci_cmd_ip_read_local_version_information(&r);
+				if (res == 0 && pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_INFO_READ_LOCAL_SUPPORTED_COMMANDS:
+			{
+				sdc_hci_cmd_ip_read_local_supported_commands_return_t r = {};
+				res = sdc_hci_cmd_ip_read_local_supported_commands(&r);
+				if (res == 0 && pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, r.raw, RetLen < sizeof(r.raw) ? RetLen : sizeof(r.raw));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_READ_LOCAL_SUPP_FEATURES:
+			{
+				sdc_hci_cmd_le_read_local_supported_features_return_t r = {};
+				res = sdc_hci_cmd_le_read_local_supported_features(&r);
+				if (res == 0 && pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, r.raw, RetLen < sizeof(r.raw) ? RetLen : sizeof(r.raw));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_READ_SUPPORTED_STATES:
+			{
+				sdc_hci_cmd_le_read_supported_states_return_t r = {};
+				res = sdc_hci_cmd_le_read_supported_states(&r);
+				if (res == 0 && pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, r.le_states,
+						RetLen < sizeof(r.le_states) ? RetLen : sizeof(r.le_states));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_READ_BUFF_SIZE_EXT:
+			{
+				sdc_hci_cmd_le_read_buffer_size_v2_return_t r = {};
+				res = sdc_hci_cmd_le_read_buffer_size_v2(&r);
+				if (res == 0 && pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_READ_BUFF_SIZE:
+			{
+				sdc_hci_cmd_le_read_buffer_size_return_t r = {};
+				res = sdc_hci_cmd_le_read_buffer_size(&r);
+				if (res == 0 && pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_RESOLVING_LIST_READ_SIZE:
+			{
+				sdc_hci_cmd_le_read_resolving_list_size_return_t r = {};
+				res = sdc_hci_cmd_le_read_resolving_list_size(&r);
+				if (res == 0 && pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_READ_MAX_ADV_DATA_LEN:
+			{
+				sdc_hci_cmd_le_read_max_adv_data_length_return_t r = {};
+				res = sdc_hci_cmd_le_read_max_adv_data_length(&r);
+				if (res == 0 && pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_READ_NB_SUPPORTED_ADV_SETS:
+			{
+				sdc_hci_cmd_le_read_number_of_supported_adv_sets_return_t r = {};
+				res = sdc_hci_cmd_le_read_number_of_supported_adv_sets(&r);
+				if (res == 0 && pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_LIST_READ_SIZE:
+			{
+				sdc_hci_cmd_le_read_periodic_adv_list_size_return_t r = {};
+				res = sdc_hci_cmd_le_read_periodic_adv_list_size(&r);
+				if (res == 0 && pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
 		case BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM:
 			{
 				sdc_hci_cmd_le_set_ext_adv_params_return_t r;
@@ -249,7 +361,9 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 			return 0xFF;
 	}
 
-	return res == 0 ? 0 : 0xFF;
+	// SDC typed command functions already return the standard HCI status.
+	// Keep 0xFF for an opcode that has no SDC implementation above.
+	return res;
 }
 
 alignas(8) static uint8_t s_BtStackSdcMemPool[10000];
