@@ -38,7 +38,11 @@ jobs:
           PY
 
       - name: Check patch formatting
-        run: git diff --check
+        shell: bash
+        run: |
+          set -o pipefail
+          git diff --check 2>&1 | tee diff-check.log
+          test ! -s diff-check.log
 
       - name: Run GCC host test matrix
         shell: bash
@@ -54,13 +58,14 @@ jobs:
         with:
           name: smp-tx-validation-logs
           path: |
+            diff-check.log
             gcc-host.log
             clang-host.log
           if-no-files-found: ignore
 
       - name: Commit validated result
         run: |
-          rm -f gcc-host.log clang-host.log
+          rm -f diff-check.log gcc-host.log clang-host.log
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
