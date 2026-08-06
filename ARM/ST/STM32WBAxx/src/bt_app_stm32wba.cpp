@@ -35,8 +35,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -130,6 +130,11 @@ extern UART g_Uart;
 #define SEC_PARAM_MIN_KEY_SIZE			7
 #define SEC_PARAM_MAX_KEY_SIZE			16
 
+// HCI error used when the application cannot complete an authenticated user
+// interaction. aci_gap_pass_key_resp has no reject form; submitting zero would
+// accept the valid passkey 000000 rather than cancel pairing.
+#define BT_APP_HCI_AUTH_FAILURE			0x05
+
 // Mapping from BtGap SecType to ST's IO-capability + auth-requirement
 // values is done at init time. Default to NoInputNoOutput / no MITM.
 #ifndef BT_APP_DEFAULT_IO_CAPABILITY
@@ -139,6 +144,7 @@ extern UART g_Uart;
 // Forward decls from peer port files (defined in 9b..9e).
 extern "C" bool BtAppAdvInit(const BtAppCfg_t *pCfg);
 extern "C" bool BtDisInit(const struct __Bt_App_Cfg *pCfg);
+void BtAdvWbaConnected(void);
 
 // User hooks - weak symbols overridden by the app.
 __attribute__((weak)) void BtAppInitUserServices(void) {}
@@ -150,16 +156,20 @@ __attribute__((weak)) void BtAppInitUserData(void) {}
 // allocation internally - we don't track a separate AdvHdl on this port.
 typedef struct __Bt_App_WbaData {
 	uint16_t	GattSrvcStartHdl;	//!< First handle of the user GATT service
+	uint16_t	PasskeyRejectedHdl;	//!< Synchronous passkey UI rejection marker
 	uint8_t		IoCapability;		//!< SMP IO cap - mapped from SecType at init
 	uint8_t		AuthRequirement;	//!< SMP auth requirement bits
+	bool		bOobEnabled;		//!< LESC OOB explicitly enabled by app config
 	bool		bStackInited;		//!< true after BleStack_Init succeeded
 	uint16_t	NvmCacheWords;		//!< 64 bit words preloaded into the cache
 } BtAppWbaData_t;
 
 static BtAppWbaData_t s_WbaData = {
 	.GattSrvcStartHdl = 0,
+	.PasskeyRejectedHdl = BT_CONN_HDL_INVALID,
 	.IoCapability     = BT_APP_DEFAULT_IO_CAPABILITY,
 	.AuthRequirement  = 0,
+	.bOobEnabled      = false,
 	.bStackInited     = false,
 };
 
@@ -336,6 +346,12 @@ static bool WbaPasskeyLocalDisplays(uint8_t LocalIo, uint8_t PeerIo)
 	return (PeerIo == IO_CAP_KEYBOARD_ONLY);
 }
 
+static void WbaPasskeyReject(uint16_t ConnHdl)
+{
+	s_WbaData.PasskeyRejectedHdl = ConnHdl;
+	(void)aci_gap_terminate(ConnHdl, BT_APP_HCI_AUTH_FAILURE);
+}
+
 // Resume Numeric Comparison. Confirm true reports a match, false rejects and
 // aborts pairing.
 void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
@@ -344,16 +360,18 @@ void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 }
 
 // Resume Passkey Entry on the input side. A value in 0..999999 is handed to the
-// stack. A value above that range cancels: ST has no explicit passkey reject,
-// so a zero value is sent and pairing fails at the Confirm stage on the
-// resulting mismatch.
+// stack. A value above that range cancels by terminating the pending link with
+// Authentication Failure. Sending zero is not a cancellation because 000000 is
+// a valid passkey.
 void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 {
 	if (Passkey > 999999u)
 	{
-		(void)aci_gap_pass_key_resp(ConnHdl, 0);
+		WbaPasskeyReject(ConnHdl);
 		return;
 	}
+
+	s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
 	(void)aci_gap_pass_key_resp(ConnHdl, Passkey);
 }
 
@@ -361,8 +379,8 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 // the same entry point the SDC and BM ports expose. Maps the generic
 // BT_SMP_IOCAPS_* / BT_SMP_AUTHREQ_* values to ST's IO_CAP_* and the split
 // arguments of aci_gap_set_authentication_requirement, then applies them so a
-// call after BtAppInit reconfigures the next pairing. This port pairs with LE
-// Secure Connections only, so the SC bit stays set regardless of AuthReq.
+// call after BtAppInit reconfigures the next pairing. An AuthReq with the SC
+// bit set is configured as SC-only; legacy fallback is not permitted.
 void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 {
 	uint8_t io;
@@ -388,10 +406,11 @@ void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 	s_WbaData.IoCapability    = io;
 	s_WbaData.AuthRequirement = AuthReq;
 
-	uint8_t bonding = (AuthReq & BT_SMP_AUTHREQ_BONDING_FLAG_MASK) != 0 ? 1 : 0;
-	uint8_t mitm    = (AuthReq & BT_SMP_AUTHREQ_MITM) != 0 ? 1 : 0;
+	uint8_t bonding   = (AuthReq & BT_SMP_AUTHREQ_BONDING_FLAG_MASK) != 0 ? 1 : 0;
+	uint8_t mitm      = (AuthReq & BT_SMP_AUTHREQ_MITM) != 0 ? 1 : 0;
+	uint8_t scSupport = (AuthReq & BT_SMP_AUTHREQ_SC) != 0 ? 2 : 0;
 	aci_gap_set_authentication_requirement(bonding, mitm,
-	                                       1,	// LE Secure Connections
+	                                       scSupport,
 	                                       0,	// keypress not supported
 	                                       SEC_PARAM_MIN_KEY_SIZE,
 	                                       SEC_PARAM_MAX_KEY_SIZE,
@@ -407,15 +426,35 @@ void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 // extracts them. The peer set is staged here and pushed to the stack at
 // connection time, when the peer address is known; without privacy the
 // connection address is the identity address the command expects.
+// The public staging API has no connection handle, so the staged set is bound
+// to the first link that consumes it and cannot be reused by another pairing.
 static uint8_t s_BtAppPeerOobRand[16];
 static uint8_t s_BtAppPeerOobConf[16];
 static bool s_BtAppPeerOobValid = false;
+static uint16_t s_BtAppPeerOobHdl = BT_CONN_HDL_INVALID;
+
+static void BtSmpOobDataClearInternal(void)
+{
+	s_BtAppPeerOobValid = false;
+	s_BtAppPeerOobHdl = BT_CONN_HDL_INVALID;
+	memset(s_BtAppPeerOobRand, 0, sizeof(s_BtAppPeerOobRand));
+	memset(s_BtAppPeerOobConf, 0, sizeof(s_BtAppPeerOobConf));
+}
+
+static void BtSmpOobDataClearConn(uint16_t ConnHdl)
+{
+	if (s_BtAppPeerOobValid && s_BtAppPeerOobHdl == ConnHdl)
+	{
+		BtSmpOobDataClearInternal();
+	}
+}
 
 int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint8_t * const pConf)
 {
 	(void)pDev;
 
-	if (pRand == NULL || pConf == NULL)
+	if (!s_WbaData.bOobEnabled || pRand == NULL || pConf == NULL ||
+		s_BtAppPeerOobHdl != BT_CONN_HDL_INVALID)
 	{
 		return -1;
 	}
@@ -449,32 +488,68 @@ int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint
 
 void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pConf)
 {
-	if (pRand == NULL || pConf == NULL)
+	if (!s_WbaData.bOobEnabled || pRand == NULL || pConf == NULL)
 	{
 		return;
 	}
-	memcpy(s_BtAppPeerOobRand, pRand, 16);
-	memcpy(s_BtAppPeerOobConf, pConf, 16);
+
+	if (s_BtAppPeerOobValid && s_BtAppPeerOobHdl != BT_CONN_HDL_INVALID &&
+		BtPeerFindByHdl(s_BtAppPeerOobHdl) != nullptr)
+	{
+		DEBUG_PRINTF("SEC: OOB data already owned by hdl=%u\r\n",
+					 s_BtAppPeerOobHdl);
+		return;
+	}
+
+	BtSmpOobDataClearInternal();
+	memcpy(s_BtAppPeerOobRand, pRand, sizeof(s_BtAppPeerOobRand));
+	memcpy(s_BtAppPeerOobConf, pConf, sizeof(s_BtAppPeerOobConf));
 	s_BtAppPeerOobValid = true;
 }
 
 void BtSmpOobDataClear(void)
 {
-	s_BtAppPeerOobValid = false;
-	memset(s_BtAppPeerOobRand, 0, 16);
-	memset(s_BtAppPeerOobConf, 0, 16);
+	if (s_BtAppPeerOobValid && s_BtAppPeerOobHdl != BT_CONN_HDL_INVALID &&
+		BtPeerFindByHdl(s_BtAppPeerOobHdl) != nullptr)
+	{
+		DEBUG_PRINTF("SEC: OOB data busy on hdl=%u\r\n",
+					 s_BtAppPeerOobHdl);
+		return;
+	}
+
+	BtSmpOobDataClearInternal();
 }
 
 // Push the staged peer OOB data into the stack for this link. Called from the
-// connection complete event, before any pairing initiation.
-static void BtAppOobPeerDataPush(uint8_t AddrType, const uint8_t *pAddr)
+// connection complete event, before any pairing initiation. Reserve the data
+// before issuing either ACI command so a partial command failure cannot make
+// the same peer values available to another link.
+static void BtAppOobPeerDataPush(uint16_t ConnHdl, uint8_t AddrType,
+								 const uint8_t *pAddr)
 {
-	if (!s_BtAppPeerOobValid)
+	if (!s_WbaData.bOobEnabled || !g_BtAppData.AppDevice.bSecure ||
+		!s_BtAppPeerOobValid || pAddr == NULL)
 	{
 		return;
 	}
-	aci_gap_set_oob_data(1, AddrType, pAddr, 1, 16, s_BtAppPeerOobRand);
-	aci_gap_set_oob_data(1, AddrType, pAddr, 2, 16, s_BtAppPeerOobConf);
+	if (s_BtAppPeerOobHdl != BT_CONN_HDL_INVALID &&
+		s_BtAppPeerOobHdl != ConnHdl)
+	{
+		DEBUG_PRINTF("SEC: OOB data busy on hdl=%u, reject hdl=%u\r\n",
+					 s_BtAppPeerOobHdl, ConnHdl);
+		return;
+	}
+
+	s_BtAppPeerOobHdl = ConnHdl;
+	tBleStatus randStatus = aci_gap_set_oob_data(1, AddrType, pAddr, 1, 16,
+											  s_BtAppPeerOobRand);
+	tBleStatus confStatus = aci_gap_set_oob_data(1, AddrType, pAddr, 2, 16,
+											  s_BtAppPeerOobConf);
+	if (randStatus != BLE_STATUS_SUCCESS || confStatus != BLE_STATUS_SUCCESS)
+	{
+		DEBUG_PRINTF("SEC: set OOB data failed hdl=%u rand=0x%02X conf=0x%02X\r\n",
+					 ConnHdl, randStatus, confStatus);
+	}
 }
 
 // Weak defaults. With no application override the only safe action is to reject,
@@ -488,8 +563,8 @@ __attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Val
 
 __attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
 {
-	(void)ConnHdl;
 	(void)Passkey;
+	WbaPasskeyReject(ConnHdl);
 }
 
 __attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
@@ -511,16 +586,37 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 		{
 			hci_disconnection_complete_event_rp0 *p =
 				(hci_disconnection_complete_event_rp0 *)pEvtPkt->data;
-			if (BtPeerFindByHdl(p->Connection_Handle) != nullptr)
+			if (p->Status == BLE_STATUS_SUCCESS)
 			{
-				g_BtAppData.State = BTAPP_DISCONNECTED;
-				BtAppConnLedOff();
-				BtPeerFreeByHdl(p->Connection_Handle);
-				// Re-arm advertising for peripheral/broadcaster apps.
-				if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+				if (s_WbaData.PasskeyRejectedHdl == p->Connection_Handle)
 				{
-					BtAdvStart();
+					s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
 				}
+				BtSmpOobDataClearConn(p->Connection_Handle);
+				BtDevice_t *pPeer = BtPeerFindByHdl(p->Connection_Handle);
+				if (pPeer != nullptr)
+				{
+					BtPeerFree(pPeer);
+					bool connected = BtPeerIsConnected();
+
+					if (connected)
+					{
+						g_BtAppData.State = BTAPP_STATE_CONNECTED;
+						BtAppConnLedOn();
+					}
+					else
+					{
+						g_BtAppData.State = BTAPP_STATE_IDLE;
+						BtAppConnLedOff();
+					}
+
+					BtAppEvtDisconnected(p->Connection_Handle);
+				}
+
+				// A disconnect can free either peripheral capacity or the last
+				// peer-table slot. BtAdvStart performs both checks and is a no-op
+				// when the advertising set is already active.
+				BtAdvStart();
 			}
 			break;
 		}
@@ -552,38 +648,67 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 						(hci_le_connection_complete_event_rp0 *)pMeta->data;
 					if (p->Status == BLE_STATUS_SUCCESS)
 					{
-						g_BtAppData.State = BTAPP_CONNECTED;
-						BtAppConnLedOn();
 						// Own address not stamped: SMP runs in the ST host, not
 						// the IOsonata toolbox, so the record is left for the
 						// BtSmpLocalAddrGet fallback.
-						BtPeerConnected(p->Connection_Handle,
+						BtDevice_t *pPeer = BtPeerConnected(p->Connection_Handle,
 						                   p->Role,
 						                   p->Peer_Address_Type,
 						                   p->Peer_Address,
 						                   0, NULL);
-						BtAppEvtConnected(p->Connection_Handle);
 
-						// Staged LESC OOB peer data must be in the stack before
-						// pairing starts on this link.
-						BtAppOobPeerDataPush(p->Peer_Address_Type,
-						                     p->Peer_Address);
+						if (p->Role == BT_CONN_ROLE_PERIPHERAL)
+						{
+							// A connectable advertising set stops after creating this
+							// link. Update the local set state before deciding whether
+							// another peripheral link may be accepted.
+							BtAdvWbaConnected();
+						}
+
+						if (pPeer == nullptr)
+						{
+							// BtPeerConnected already routes rejection through
+							// BtPeerConnectionRejected, which terminates the link.
+							break;
+						}
+
+						g_BtAppData.State = BTAPP_STATE_CONNECTED;
+						BtAppConnLedOn();
+						BtAppEvtConnected(p->Connection_Handle);
 
 						// Secure link setup. ST owns the SMP exchange and emits
 						// ACI_GAP_PAIRING_COMPLETE, which surfaces below as
 						// BtAppEvtSecured. A central starts pairing directly; a
 						// peripheral asks the central with a Security Request.
-						if (g_BtAppData.AppDevice.bSecure &&
-						    (g_BtAppData.AppDevice.Conn.Role &
-						     (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER)))
+						if (g_BtAppData.AppDevice.bSecure)
 						{
-							aci_gap_send_pairing_req(p->Connection_Handle, 0);
+							// Only a LESC link configured for OOB may claim the
+							// single staged peer OOB set.
+							if (s_WbaData.bOobEnabled)
+							{
+								BtAppOobPeerDataPush(p->Connection_Handle,
+								                     p->Peer_Address_Type,
+								                     p->Peer_Address);
+							}
+
+							switch (p->Role)
+							{
+								case BT_CONN_ROLE_CENTRAL:
+									aci_gap_send_pairing_req(p->Connection_Handle, 0);
+									break;
+
+								case BT_CONN_ROLE_PERIPHERAL:
+									aci_gap_slave_security_req(p->Connection_Handle);
+									break;
+
+								default:
+									break;
+							}
 						}
-						else if (g_BtAppData.AppDevice.bSecure &&
-						    (g_BtAppData.AppDevice.Conn.Role &
-						     (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
+
+						if (p->Role == BT_CONN_ROLE_PERIPHERAL)
 						{
-							aci_gap_slave_security_req(p->Connection_Handle);
+							BtAdvStart();
 						}
 					}
 					break;
@@ -667,6 +792,11 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 				{
 					aci_gap_pairing_complete_event_rp0 *pPc =
 						(aci_gap_pairing_complete_event_rp0 *)pAci->data;
+					if (s_WbaData.PasskeyRejectedHdl == pPc->Connection_Handle)
+					{
+						s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
+					}
+					BtSmpOobDataClearConn(pPc->Connection_Handle);
 					if (pPc->Status == 0)
 					{
 						BtAppEvtSecured(pPc->Connection_Handle);
@@ -689,18 +819,23 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 					aci_gap_pass_key_req_event_rp0 *pPk =
 						(aci_gap_pass_key_req_event_rp0 *)pAci->data;
 					uint16_t connHdl = pPk->Connection_Handle;
+					s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
 					// The event reports the peer IO capability; the local one is
 					// the configured value.
 					if (WbaPasskeyLocalDisplays(s_WbaData.IoCapability, pPk->IO_Capability))
 					{
 						// Display side: generate a six digit passkey, show it,
-						// and hand the same value to the stack.
+						// and hand the same value to the stack unless the callback
+						// rejected synchronously.
 						uint8_t rnd[8] = {0};
 						(void)hci_le_rand(rnd);
 						uint32_t val = ((uint32_t)rnd[0] | ((uint32_t)rnd[1] << 8) |
 										((uint32_t)rnd[2] << 16) | ((uint32_t)rnd[3] << 24)) % 1000000u;
 						BtSmpPasskeyDisplay(connHdl, val);
-						(void)aci_gap_pass_key_resp(connHdl, val);
+						if (s_WbaData.PasskeyRejectedHdl != connHdl)
+						{
+							(void)aci_gap_pass_key_resp(connHdl, val);
+						}
 					}
 					else
 					{
@@ -885,6 +1020,12 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
+	BtSmpOobDataClearInternal();
+	s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
+	s_WbaData.bOobEnabled =
+		pCfg->SecType == BTGAP_SECTYPE_LESC_MITM &&
+		(pCfg->SecExchg & BTAPP_SECEXCHG_OOB) != 0;
+
 	// Initialize application event handler queue.
 	if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem,
 	                      pCfg->EvtHandlerQueMemSize) == false)
@@ -991,7 +1132,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 			break;
 		case BTGAP_SECTYPE_LESC_MITM:
 			authReq   = 0x05;
-			scSupport = 1;
+			scSupport = 2;	// SC-only, no legacy fallback
 			break;
 		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
 		case BTGAP_SECTYPE_SIGNED_NO_MITM:

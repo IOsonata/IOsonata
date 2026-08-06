@@ -104,6 +104,22 @@ static uint16_t BtAdvPeripheralConnCount()
 	return count;
 }
 
+static bool BtAdvPeerSlotAvailable()
+{
+	uint16_t peerCount = BtPeerCount();
+
+	for (uint16_t i = 0; i < peerCount; i++)
+	{
+		BtDevice_t *pPeer = BtPeerSlot(i);
+		if (pPeer != nullptr && pPeer->Conn.Hdl == BT_CONN_HDL_INVALID)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static bool BtAdvCanStart()
 {
 	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
@@ -116,6 +132,7 @@ static bool BtAdvCanStart()
 	if (role & BTAPP_ROLE_PERIPHERAL)
 	{
 		return s_PeripheralLinkCount != 0 &&
+			BtAdvPeerSlotAvailable() &&
 			BtAdvPeripheralConnCount() < s_PeripheralLinkCount;
 	}
 
@@ -197,9 +214,16 @@ void BtAdvStart()
 {
 	if (s_bAdvertising)
 	{
-		// A mixed-role device can remain advertising while its last central
-		// link disconnects. Resynchronize the shared state even though there is
-		// no SoftDevice operation to start.
+		// A central-role connection can consume the last peer slot while the
+		// connectable advertising set remains active. Stop the set as soon as
+		// the common capacity check says another peripheral link cannot be
+		// represented.
+		if (!BtAdvCanStart())
+		{
+			BtAdvStop();
+			return;
+		}
+
 		BtAdvStateUpdate();
 		return;
 	}

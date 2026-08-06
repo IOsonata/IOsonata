@@ -25,8 +25,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -58,6 +58,20 @@ SOFTWARE.
 alignas(BtDevice_t) static uint8_t s_DefaultPeerPoolMem[BT_PEER_POOL_MEMSIZE(BT_PEER_POOL_DEFAULT_COUNT)];
 static BtPeerPoolHdr_t *s_pPeerPool = nullptr;
 static BtDevice_t *s_pPeerSlots = nullptr;
+static uint16_t s_HandleScanCursor = 0;
+
+// The generic application layer overrides these hooks. Weak defaults keep the
+// peer manager independently testable and usable by ports that do not link the
+// generic application helper.
+__attribute__((weak)) void BtPeerConnectionStateChanged(bool Connected)
+{
+	(void)Connected;
+}
+
+__attribute__((weak)) void BtPeerConnectionRejected(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+}
 
 // Long-write reassembly pool. Split evenly across the peer slots by
 // BtPeerLongWrInit; each slot's slice is re-assigned in BtPeerAlloc because
@@ -130,6 +144,7 @@ bool BtPeerInit(uint8_t *pMem, size_t MemSize)
 
 	s_pPeerPool = hdr;
 	s_pPeerSlots = slots;
+	s_HandleScanCursor = 0;
 	return true;
 }
 
@@ -240,6 +255,7 @@ BtDevice_t * BtPeerFindByHdl(uint16_t ConnHdl)
 
 void BtPeerFree(BtDevice_t *pPeer)
 {
+	bool bFreed = pPeer != nullptr;
 	if (pPeer != nullptr)
 	{
 		// Drop this link's CCCD subscriptions and recompute the aggregate
@@ -262,12 +278,18 @@ void BtPeerFree(BtDevice_t *pPeer)
 		pPeer->Conn.Hdl = BT_CONN_HDL_INVALID;
 	}
 
+	bool bConnected = BtPeerIsConnected();
+	if (bFreed)
+	{
+		BtPeerConnectionStateChanged(bConnected);
+	}
+
 	// Last link out: clear per-connection GATT state (CCCD notify/indicate
 	// flags) on every registered service. This used to live in
 	// BtGapDeleteConnection and only covered the two internal GAP services;
 	// owning the pool here lets it cover the whole service list. bt_peer is
 	// above bt_gatt, so calling down is within the layering.
-	if (BtPeerIsConnected() == false)
+	if (bConnected == false)
 	{
 		for (BtGattSrvc_t *p = BtGattGetSrvcList(); p != nullptr; p = p->pNext)
 		{
@@ -319,15 +341,59 @@ size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 		return 0;
 	}
 
-	size_t n = 0;
 	BtDevice_t *slots = PeerSlots();
-	for (uint16_t i = 0; i < s_pPeerPool->Count && n < MaxCount; i++)
+	uint16_t slotCount = s_pPeerPool->Count;
+	size_t active = 0;
+	for (uint16_t i = 0; i < slotCount; i++)
 	{
 		if (slots[i].Conn.Hdl != BT_CONN_HDL_INVALID)
 		{
-			pHdl[n++] = slots[i].Conn.Hdl;
+			active++;
 		}
 	}
+
+	if (active == 0)
+	{
+		s_HandleScanCursor = 0;
+		return 0;
+	}
+
+	// When the caller can hold the complete set, retain deterministic pool
+	// order. Single-link helpers and snapshots should not depend on prior
+	// bounded scans.
+	if (active <= MaxCount)
+	{
+		size_t n = 0;
+		for (uint16_t i = 0; i < slotCount; i++)
+		{
+			if (slots[i].Conn.Hdl != BT_CONN_HDL_INVALID)
+			{
+				pHdl[n++] = slots[i].Conn.Hdl;
+			}
+		}
+		s_HandleScanCursor = 0;
+		return n;
+	}
+
+	// A bounded periodic scan must not return the same first slots forever.
+	// Continue after the last slot inspected by the previous truncated call.
+	uint16_t idx = s_HandleScanCursor < slotCount ? s_HandleScanCursor : 0;
+	size_t n = 0;
+	uint16_t inspected = 0;
+	while (inspected < slotCount && n < MaxCount)
+	{
+		if (slots[idx].Conn.Hdl != BT_CONN_HDL_INVALID)
+		{
+			pHdl[n++] = slots[idx].Conn.Hdl;
+		}
+		idx++;
+		if (idx >= slotCount)
+		{
+			idx = 0;
+		}
+		inspected++;
+	}
+	s_HandleScanCursor = idx;
 	return n;
 }
 
@@ -340,20 +406,24 @@ BtDevice_t * BtPeerConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, c
 							 uint8_t OwnAddrType, const uint8_t *pOwnAddr)
 {
 	BtDevice_t *p = BtPeerAlloc(ConnHdl);
-	if (p != nullptr)
+	if (p == nullptr)
 	{
-		p->Conn.Role = Role;
-		p->Conn.PeerAddrType = AddrType;
-		if (pAddr != nullptr)
-		{
-			memcpy(p->Conn.PeerAddr, pAddr, sizeof(p->Conn.PeerAddr));
-		}
-		p->Conn.OwnAddrType = OwnAddrType;
-		if (pOwnAddr != nullptr)
-		{
-			memcpy(p->Conn.OwnAddr, pOwnAddr, sizeof(p->Conn.OwnAddr));
-		}
+		BtPeerConnectionRejected(ConnHdl);
+		return nullptr;
 	}
+
+	p->Conn.Role = Role;
+	p->Conn.PeerAddrType = AddrType;
+	if (pAddr != nullptr)
+	{
+		memcpy(p->Conn.PeerAddr, pAddr, sizeof(p->Conn.PeerAddr));
+	}
+	p->Conn.OwnAddrType = OwnAddrType;
+	if (pOwnAddr != nullptr)
+	{
+		memcpy(p->Conn.OwnAddr, pOwnAddr, sizeof(p->Conn.OwnAddr));
+	}
+	BtPeerConnectionStateChanged(true);
 	return p;
 }
 

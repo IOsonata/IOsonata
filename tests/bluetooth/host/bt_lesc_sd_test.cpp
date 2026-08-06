@@ -112,6 +112,15 @@ public:
 static uint32_t s_DhReplyCount;
 static uint8_t s_LastDhStatus;
 static bool s_LastDhHadKey;
+static uint32_t s_OobSetCount;
+static uint16_t s_LastOobConnHdl;
+static bool s_LastOobHadOwn;
+static bool s_LastOobHadPeer;
+static uint32_t s_OobClearCount;
+static uint32_t s_OobSetResult;
+static ble_gap_lesc_oob_data_t s_PeerOob;
+static ble_gap_lesc_oob_data_t s_ExpectedPeerOob;
+static const ble_gap_lesc_oob_data_t *s_LastOobPeerPtr;
 
 static void ResetReplies()
 {
@@ -120,14 +129,50 @@ static void ResetReplies()
 	s_LastDhHadKey = false;
 }
 
+static void ResetOob()
+{
+	s_OobSetCount = 0;
+	s_LastOobConnHdl = BLE_CONN_HANDLE_INVALID;
+	s_LastOobHadOwn = false;
+	s_LastOobHadPeer = false;
+	s_OobClearCount = 0;
+	s_OobSetResult = NRF_SUCCESS;
+	s_LastOobPeerPtr = nullptr;
+	std::memset(&s_PeerOob, 0xA6, sizeof(s_PeerOob));
+	std::memcpy(&s_ExpectedPeerOob, &s_PeerOob, sizeof(s_ExpectedPeerOob));
+}
+
+static ble_gap_lesc_oob_data_t *PeerOobHandler(uint16_t)
+{
+	return &s_PeerOob;
+}
+
 static ble_evt_t MakeDhRequest(uint16_t ConnHdl,
-							 ble_gap_lesc_p256_pk_t *pPeer)
+							 ble_gap_lesc_p256_pk_t *pPeer,
+							 bool Oob = false)
 {
 	ble_evt_t evt = {};
 	evt.header.evt_id = BLE_GAP_EVT_LESC_DHKEY_REQUEST;
 	evt.evt.gap_evt.conn_handle = ConnHdl;
 	evt.evt.gap_evt.params.lesc_dhkey_request.p_pk_peer = pPeer;
+	evt.evt.gap_evt.params.lesc_dhkey_request.oobd_req = Oob ? 1 : 0;
 	return evt;
+}
+
+static ble_evt_t MakeGapEvent(uint16_t EvtId, uint16_t ConnHdl)
+{
+	ble_evt_t evt = {};
+	evt.header.evt_id = EvtId;
+	evt.evt.gap_evt.conn_handle = ConnHdl;
+	return evt;
+}
+
+static void FillPeerKey(ble_gap_lesc_p256_pk_t *pPeer, uint8_t Base)
+{
+	for (size_t i = 0; i < sizeof(pPeer->pk); i++)
+	{
+		pPeer->pk[i] = (uint8_t)(Base + i);
+	}
 }
 
 } // namespace
@@ -143,6 +188,12 @@ void CryptoSecureWipe(void *pData, size_t Len)
 	}
 }
 
+void BtSmpOobDataClear(void)
+{
+	s_OobClearCount++;
+	std::memset(&s_PeerOob, 0, sizeof(s_PeerOob));
+}
+
 uint32_t sd_ble_gap_lesc_oob_data_get(uint16_t,
 								 ble_gap_lesc_p256_pk_t *,
 								 ble_gap_lesc_oob_data_t *pData)
@@ -155,11 +206,16 @@ uint32_t sd_ble_gap_lesc_oob_data_get(uint16_t,
 	return NRF_SUCCESS;
 }
 
-uint32_t sd_ble_gap_lesc_oob_data_set(uint16_t,
-								 ble_gap_lesc_oob_data_t *,
-								 ble_gap_lesc_oob_data_t *)
+uint32_t sd_ble_gap_lesc_oob_data_set(uint16_t ConnHdl,
+								 ble_gap_lesc_oob_data_t *pOwn,
+								 ble_gap_lesc_oob_data_t *pPeer)
 {
-	return NRF_SUCCESS;
+	s_OobSetCount++;
+	s_LastOobConnHdl = ConnHdl;
+	s_LastOobHadOwn = pOwn != nullptr;
+	s_LastOobHadPeer = pPeer != nullptr;
+	s_LastOobPeerPtr = pPeer;
+	return s_OobSetResult;
 }
 
 uint32_t BtLescDhKeyReply(uint16_t, uint8_t SecStatus,
@@ -225,10 +281,7 @@ int main()
 		ResetReplies();
 
 		ble_gap_lesc_p256_pk_t peer = {};
-		for (size_t i = 0; i < sizeof(peer.pk); i++)
-		{
-			peer.pk[i] = (uint8_t)(0x80U + i);
-		}
+		FillPeerKey(&peer, 0x80U);
 		ble_evt_t evt = MakeDhRequest(1, &peer);
 		BtLescOnBleEvt(&evt);
 		BT_CHECK(ctx, s_DhReplyCount == 0);
@@ -237,6 +290,102 @@ int main()
 		BT_CHECK(ctx, s_LastDhStatus == BLE_GAP_SEC_STATUS_SUCCESS);
 		BT_CHECK(ctx, s_LastDhHadKey);
 		BT_CHECK(ctx, engine.AgreeCalls() == 1);
+	});
+
+	ctx.Run("OOB data is reserved by the first connection", [&]() {
+		engine.Script(CRYPTO_STATUS_OK, CRYPTO_STATUS_OK);
+		BtLescSetCryptoEngine(&engine);
+		BT_CHECK(ctx, BtLescInit());
+		BtLescOobPeerHandlerSet(PeerOobHandler);
+		ResetReplies();
+		ResetOob();
+		BT_CHECK(ctx, BtLescOobLocalGen());
+
+		ble_gap_lesc_p256_pk_t peer1 = {};
+		ble_gap_lesc_p256_pk_t peer2 = {};
+		FillPeerKey(&peer1, 0x40U);
+		FillPeerKey(&peer2, 0x90U);
+
+		ble_evt_t req1 = MakeDhRequest(1, &peer1, true);
+		BtLescOnBleEvt(&req1);
+		BT_CHECK(ctx, s_OobSetCount == 1);
+		BT_CHECK(ctx, s_LastOobConnHdl == 1);
+		BT_CHECK(ctx, s_LastOobHadOwn);
+		BT_CHECK(ctx, s_LastOobHadPeer);
+		BT_CHECK(ctx, s_OobClearCount == 1);
+		BT_CHECK(ctx, s_LastOobPeerPtr != nullptr);
+		BT_CHECK(ctx, s_LastOobPeerPtr != &s_PeerOob);
+		BT_CHECK(ctx, std::memcmp(s_LastOobPeerPtr, &s_ExpectedPeerOob,
+			sizeof(s_ExpectedPeerOob)) == 0);
+		BT_CHECK(ctx, std::memcmp(&s_PeerOob, &s_ExpectedPeerOob,
+			sizeof(s_PeerOob)) != 0);
+		BT_CHECK(ctx, !BtLescOobLocalGen());
+
+		ble_evt_t req2 = MakeDhRequest(2, &peer2, true);
+		BtLescOnBleEvt(&req2);
+		BT_CHECK(ctx, s_OobSetCount == 1);
+		BT_CHECK(ctx, s_OobClearCount == 1);
+		BT_CHECK(ctx, std::memcmp(s_LastOobPeerPtr, &s_ExpectedPeerOob,
+			sizeof(s_ExpectedPeerOob)) == 0);
+		BT_CHECK(ctx, s_DhReplyCount == 1);
+		BT_CHECK(ctx, s_LastDhStatus == BLE_GAP_SEC_STATUS_DHKEY_FAILURE);
+		BT_CHECK(ctx, !s_LastDhHadKey);
+		BT_CHECK(ctx, BtLescRequestHandler());
+		BT_CHECK(ctx, s_DhReplyCount == 2);
+		BT_CHECK(ctx, s_LastDhStatus == BLE_GAP_SEC_STATUS_SUCCESS);
+		BT_CHECK(ctx, s_LastDhHadKey);
+
+		ble_evt_t auth2 = MakeGapEvent(BLE_GAP_EVT_AUTH_STATUS, 2);
+		BtLescOnBleEvt(&auth2);
+		BT_CHECK(ctx, s_OobClearCount == 1);
+		BT_CHECK(ctx, std::memcmp(s_LastOobPeerPtr, &s_ExpectedPeerOob,
+			sizeof(s_ExpectedPeerOob)) == 0);
+		BT_CHECK(ctx, !BtLescOobLocalGen());
+
+		ble_evt_t auth1 = MakeGapEvent(BLE_GAP_EVT_AUTH_STATUS, 1);
+		BtLescOnBleEvt(&auth1);
+		ble_gap_lesc_oob_data_t zeroOob = {};
+		BT_CHECK(ctx, s_OobClearCount == 1);
+		BT_CHECK(ctx, std::memcmp(s_LastOobPeerPtr, &zeroOob,
+			sizeof(zeroOob)) == 0);
+		BT_CHECK(ctx, BtLescRequestHandler());
+		BT_CHECK(ctx, BtLescOobLocalGen());
+
+		std::memset(&s_PeerOob, 0xB7, sizeof(s_PeerOob));
+		std::memcpy(&s_ExpectedPeerOob, &s_PeerOob, sizeof(s_ExpectedPeerOob));
+		BtLescOnBleEvt(&req2);
+		BT_CHECK(ctx, s_OobSetCount == 2);
+		BT_CHECK(ctx, s_LastOobConnHdl == 2);
+		BT_CHECK(ctx, s_OobClearCount == 2);
+		BT_CHECK(ctx, std::memcmp(s_LastOobPeerPtr, &s_ExpectedPeerOob,
+			sizeof(s_ExpectedPeerOob)) == 0);
+	});
+
+	ctx.Run("disconnect releases OOB ownership", [&]() {
+		engine.Script(CRYPTO_STATUS_OK, CRYPTO_STATUS_OK);
+		BtLescSetCryptoEngine(&engine);
+		BT_CHECK(ctx, BtLescInit());
+		BtLescOobPeerHandlerSet(PeerOobHandler);
+		ResetOob();
+		BT_CHECK(ctx, BtLescOobLocalGen());
+
+		ble_gap_lesc_p256_pk_t peer = {};
+		FillPeerKey(&peer, 0x60U);
+		ble_evt_t req = MakeDhRequest(1, &peer, true);
+		BtLescOnBleEvt(&req);
+		BT_CHECK(ctx, s_OobSetCount == 1);
+		BT_CHECK(ctx, s_OobClearCount == 1);
+		BT_CHECK(ctx, std::memcmp(s_LastOobPeerPtr, &s_ExpectedPeerOob,
+			sizeof(s_ExpectedPeerOob)) == 0);
+
+		ble_evt_t disconnected = MakeGapEvent(BLE_GAP_EVT_DISCONNECTED, 1);
+		BtLescOnBleEvt(&disconnected);
+		ble_gap_lesc_oob_data_t zeroOob = {};
+		BT_CHECK(ctx, s_OobClearCount == 1);
+		BT_CHECK(ctx, std::memcmp(s_LastOobPeerPtr, &zeroOob,
+			sizeof(zeroOob)) == 0);
+		BT_CHECK(ctx, BtLescRequestHandler());
+		BT_CHECK(ctx, BtLescOobLocalGen());
 	});
 
 	return ctx.Finish();

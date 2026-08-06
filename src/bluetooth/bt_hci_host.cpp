@@ -657,24 +657,53 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 	}
 
 	uint16_t l2Len = (uint16_t)pAcl->Hdr.Len;	// L2CAP PDU bytes (header + payload)
+	const BtL2CapHdr_t *pL2Hdr = l2Len >= sizeof(BtL2CapHdr_t) ?
+			(const BtL2CapHdr_t*)pAcl->Data : nullptr;
+	bool bSmp = pL2Hdr != nullptr &&
+			pL2Hdr->Cid == BT_L2CAP_CID_SEC_MNGR &&
+			(uint32_t)pL2Hdr->Len + sizeof(BtL2CapHdr_t) == l2Len;
+	uint16_t nFrag = (pDev->AclMaxLen == 0 || l2Len <= pDev->AclMaxLen) ? 1 :
+			(uint16_t)((l2Len + pDev->AclMaxLen - 1) / pDev->AclMaxLen);
+
+	// Every controller packet must occupy the same per-connection completion
+	// order used by GATT. SMP previously bypassed this queue, so its completion
+	// could consume a later notification entry and fire that callback early.
+	// Reserve the whole PDU before any fragment can enter the controller.
+	if (pDev->AclCreditMax > 0 && pDev->AclCredit < (int16_t)nFrag)
+	{
+		if (bSmp)
+		{
+			// SMP callers advance their state immediately after this void-style
+			// send path. With no packet sent, terminate the link instead of
+			// letting the pairing state describe a PDU the peer never received.
+			BtHciDropLink(pDev, pAcl->Hdr.ConnHdl);
+		}
+		return 0;
+	}
+	if (bSmp && BtGattTxPendUntracked(pAcl->Hdr.ConnHdl, nFrag) == false)
+	{
+		// The completion ring is part of ACL ordering. Sending without a slot
+		// would corrupt callback attribution, so fail the security procedure
+		// closed before handing any bytes to the controller.
+		BtHciDropLink(pDev, pAcl->Hdr.ConnHdl);
+		return 0;
+	}
 
 	// Single-packet path: used when fragmentation is not configured or the PDU
-	// already fits one ACL data packet. Byte-for-byte the prior behaviour, plus
-	// a credit gate when flow control is configured.
-	if (pDev->AclMaxLen == 0 || l2Len <= pDev->AclMaxLen)
+	// already fits one ACL data packet.
+	if (nFrag == 1)
 	{
-		if (pDev->AclCreditMax > 0)
-		{
-			if (pDev->AclCredit <= 0)
-			{
-				return 0;					// no controller buffer available
-			}
-		}
-
 		uint32_t txLen = (uint32_t)l2Len + sizeof(pAcl->Hdr);
 		uint32_t sent = pDev->SendData((uint8_t*)pAcl, txLen);
 		if (sent != txLen)
 		{
+			if (bSmp)
+			{
+				// No controller packet was accepted, so remove the reservation
+				// and terminate the pairing link before its caller advances.
+				BtGattTxPendRelease(pAcl->Hdr.ConnHdl);
+				BtHciDropLink(pDev, pAcl->Hdr.ConnHdl);
+			}
 			return 0;
 		}
 		if (pDev->AclCreditMax > 0)
@@ -684,23 +713,11 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 		return sent;
 	}
 
-	// Fragmentation path: split the L2CAP PDU across ACL packets of at most
-	// AclMaxLen payload bytes. The first holds a START boundary flag, the rest
-	// CONTINUING.
-	uint16_t nFrag = (uint16_t)((l2Len + pDev->AclMaxLen - 1) / pDev->AclMaxLen);
-
-	// Take the credits for the whole PDU before the first fragment goes out.
-	// The earlier code only compared the count and then decremented one
-	// fragment at a time, so anything else sending on this device between
-	// fragments could spend the credits this PDU still needed and leave the
-	// controller holding a START with no way to finish it.
+	// Fragmentation path: take the credits for the whole PDU before the first
+	// fragment goes out. This prevents another sender from spending credits
+	// needed to finish a PDU whose START is already in the controller.
 	if (pDev->AclCreditMax > 0)
 	{
-		if (pDev->AclCredit < (int16_t)nFrag)
-		{
-			return 0;
-		}
-
 		pDev->AclCredit = (int16_t)(pDev->AclCredit - (int16_t)nFrag);
 	}
 
@@ -729,25 +746,26 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 		uint32_t sent = pDev->SendData((uint8_t*)frag, txLen);
 		if (sent != txLen)
 		{
-			// Hand back the credits for the fragments that never went out. The
-			// ones already accepted stay spent; the controller holds those
-			// buffers until it reports them completed.
+			// Hand back credits for fragments that never went out. Fragments
+			// already accepted stay spent until the controller completes them.
 			if (pDev->AclCreditMax > 0)
 			{
-				pDev->AclCredit = (int16_t)(pDev->AclCredit + (int16_t)(nFrag - nSent));
+				pDev->AclCredit = (int16_t)(pDev->AclCredit +
+						(int16_t)(nFrag - nSent));
 			}
 
-			if (nSent > 0)
+			if (bSmp && nSent == 0)
 			{
-				// A START fragment is already in the controller and the rest of
-				// this PDU cannot follow it. Nothing completes that PDU, and the
-				// caller cannot resend the whole thing without putting a second
-				// START on a link that is still waiting for the first one to
-				// finish, so drop the link instead (Vol 4 Part E 5.4.2 has no
-				// way to withdraw a fragment already given to the controller).
+				// No fragment can complete this reservation.
+				BtGattTxPendRelease(pAcl->Hdr.ConnHdl);
+			}
+			if (nSent > 0 || bSmp)
+			{
+				// A partial L2CAP PDU cannot be withdrawn, while an unsent SMP
+				// PDU would leave the pairing state ahead of the wire. Both
+				// cases require terminating the link.
 				BtHciDropLink(pDev, pAcl->Hdr.ConnHdl);
 			}
-
 			return 0;
 		}
 

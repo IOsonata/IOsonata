@@ -3730,15 +3730,13 @@ void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 	}
 }
 
-// Weak default for the Passkey Entry display. The displaying device shows the
-// generated 6 digit passkey so the user can enter it on the peer. With no
-// application display there is nothing to show; pairing then fails at the per
-// round Confirm check because the input side cannot match an unshown value. An
-// application advertising a display overrides this with a strong definition.
+// Weak default for the Passkey Entry display. Without an application display
+// the generated passkey cannot be conveyed to the user, so reject immediately.
+// An application advertising a display overrides this with a strong definition.
 __attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
 {
-	(void)ConnHdl;
 	(void)Passkey;
+	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
 }
 
 // Weak default for the Passkey Entry request. The inputting device must obtain

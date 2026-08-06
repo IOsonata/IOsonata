@@ -78,7 +78,17 @@ def host_compat(function: str) -> str:
 	new = "\t\t.Role = static_cast<uint8_t>(pCfg->Role),"
 	if old not in function:
 		raise ValueError("BtGapCfg_t Role initializer not found")
-	return function.replace(old, new, 1)
+
+	# BtAppInit resets file-local pending-security and OOB state before it
+	# starts initialization. The extraction test has no corresponding state;
+	# provide test-local no-op definitions so the production function can be
+	# compiled without copying unrelated nRF54 BM implementation details.
+	helpers = (
+		"static void SecurePendingReset() {}\n"
+		"static void BtSmpOobDataClearInternal() {}\n\n"
+	)
+
+	return helpers + function.replace(old, new, 1)
 
 
 def main() -> int:

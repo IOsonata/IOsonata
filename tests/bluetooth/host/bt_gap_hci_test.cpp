@@ -91,17 +91,68 @@ BtGapScanCfg_t MakeScanCfg(uint32_t Interval, uint32_t Duration)
 	BtGapScanCfg_t cfg;
 	std::memset(&cfg, 0, sizeof(cfg));
 	cfg.Type          = BTSCAN_TYPE_PASSIVE;
-	cfg.Param.Phy     = 1;
+	cfg.Param.Phy     = BT_GAP_PHY_1MBITS;
 	cfg.Param.Interval = Interval;
 	cfg.Param.Duration = Duration;
 	return cfg;
 }
 
+BtGapConnParams_t MakeConnParams()
+{
+	BtGapConnParams_t params = {};
+	params.IntervalMin = 30.0f;
+	params.IntervalMax = 50.0f;
+	params.Latency = 0;
+	params.Timeout = 4000;
+	return params;
+}
+
 // Offsets into the SET_EXT_SCAN_PARAM parameter block (single PHY):
 // OwnAddrType(1) FilterPolicy(1) ScanPhys(1) ScanType(1) Interval(2) Window(2).
 constexpr size_t kScanOwnAddr = 0;
+constexpr size_t kScanPhys = 2;
 constexpr size_t kScanInterval = 4;
 constexpr size_t kScanWindow = 6;
+
+void TestInvalidArguments()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+
+	CHECK(BtGapScanInit(nullptr) == false);
+	CHECK(s_CmdCount == 0);
+
+	BtGapPeerAddr_t peer = {};
+	BtGapConnParams_t params = MakeConnParams();
+	CHECK(BtGapConnect(nullptr, &params) == false);
+	CHECK(BtGapConnect(&peer, nullptr) == false);
+	CHECK(s_CmdCount == 0);
+}
+
+void TestScanPhyValidation()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
+	cfg.Param.Phy = 0;
+	CHECK(BtGapScanInit(&cfg) == false);
+	cfg.Param.Phy = BT_GAP_PHY_2MBITS;
+	CHECK(BtGapScanInit(&cfg) == false);
+	cfg.Param.Phy = BT_GAP_PHY_1MBITS | BT_GAP_PHY_CODED;
+	CHECK(BtGapScanInit(&cfg) == false);
+	CHECK(s_CmdCount == 0);
+
+	cfg.Param.Phy = BT_GAP_PHY_CODED;
+	CHECK(BtGapScanInit(&cfg) == true);
+	const CapturedCmd *sp = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM);
+	CHECK(sp != nullptr);
+	if (sp != nullptr)
+	{
+		CHECK(sp->ParamLen == 8);
+		CHECK(sp->Param[kScanPhys] == BT_GAP_PHY_CODED);
+	}
+}
 
 // ---- G1: own-address resolution ------------------------------------------
 
@@ -266,6 +317,8 @@ void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 
 int main()
 {
+	TestInvalidArguments();
+	TestScanPhyValidation();
 	TestScanPublicIdentity();
 	TestScanRandomIdentity();
 	TestScanInvalidRandomIdentity();

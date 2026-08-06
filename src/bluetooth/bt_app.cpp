@@ -113,6 +113,35 @@ bool isConnected(void)
 	return BtPeerGetActive() != NULL;
 }
 
+// bt_peer.cpp owns the connection table and calls these hooks whenever its
+// live-link state changes. Keeping the state and connection LED derived from
+// that table prevents one disconnect event from declaring a multi-link device
+// idle while other links remain.
+void BtPeerConnectionStateChanged(bool Connected)
+{
+	g_BtAppData.State = Connected ? BTAPP_STATE_CONNECTED : BTAPP_STATE_IDLE;
+	if (Connected)
+	{
+		BtAppConnLedOn();
+	}
+	else
+	{
+		BtAppConnLedOff();
+	}
+}
+
+// A controller connection that cannot be represented in the peer table cannot
+// safely enter ATT, GATT, SMP, or application callbacks. Tear it down rather
+// than leaving an accepted but untracked link alive.
+void BtPeerConnectionRejected(uint16_t ConnHdl)
+{
+	BtPeerConnectionStateChanged(BtPeerIsConnected());
+	if (ConnHdl != BT_CONN_HDL_INVALID)
+	{
+		BtAppDisconnectConn(ConnHdl);
+	}
+}
+
 // Largest number of links one broadcast walks in a single call. The peer pool
 // is smaller than this on every port today, so the bound never truncates; it
 // exists so the handle array stays a fixed local.

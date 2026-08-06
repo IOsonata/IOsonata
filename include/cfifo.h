@@ -38,14 +38,12 @@ SOFTWARE.
 #ifndef __CFIFO_H__
 #define __CFIFO_H__
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 
 #ifdef __cplusplus
-#include <atomic>
-using std::atomic_uint;
-#else
-#include <stdatomic.h>
+extern "C" {
 #endif
 
 /** @addtogroup FIFO
@@ -56,14 +54,14 @@ using std::atomic_uint;
 
 /// Header defining a circular fifo memory block.
 typedef struct __CFIFO_Header {
-	atomic_uint PutIdx;			//!< Index to start of empty data block
-	atomic_uint GetIdx;			//!< Index to start of used data block
+	uint32_t PutIdx;			//!< Index to start of empty data block
+	uint32_t GetIdx;			//!< Index to start of used data block
 	uint32_t BlkSize;			//!< Block size in bytes. Note: This must be adjacent to pMemStart for compiler optimization
 	uint8_t *pMemStart;			//!< Start of FIFO data memory
 	int32_t MaxIdxCnt;			//!< Max block count
 	uint32_t Mask;				//!< NbBlk-1 (pow2) or 0 (non-pow2)
 	bool bBlocking;          	//!< False to push out when FIFO is full (drop)
-	atomic_uint DropCnt;           //!< Count dropped block
+	uint32_t DropCnt;           //!< Count dropped block
 } CFifo_t;
 
 #pragma pack(pop)
@@ -83,10 +81,6 @@ typedef CFifo_t* hCFifo_t;
 /// This macro calculates total memory require in bytes including header for block based FIFO.
 #define CFIFO_TOTAL_MEMSIZE(NbBlk, BlkSize)		((NbBlk) * (BlkSize) + sizeof(CFifo_t))
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * @brief	Initialize FIFO.
  *
@@ -99,13 +93,45 @@ extern "C" {
  * @param	BlkSize 		: Block size in bytes
  * @param   bBlocking  		: Behavior when FIFO is full.\n
  *                    			false - Old data will be pushed out to make place
- *                            			for new data. Put always succeed\n
+ *                            		for new data. Put always succeed\n
  *                    			true  - New data will not be pushed in. Put will
  *                    					return fail.
  *
  * 	@return CFifo Handle
  */
 hCFifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking);
+
+/**
+ * @brief	Inspect the next FIFO block without consuming it.
+ *
+ * The returned pointer remains owned by the FIFO. A later non-blocking put may
+ * overwrite it when the FIFO is full, so callers must not retain the pointer.
+ * This is intended for checking a block header before deciding whether to
+ * consume the block with CFifoGet().
+ *
+ * @param	hFifo : CFIFO handle
+ *
+ * @return	Pointer to the next FIFO block, or NULL when empty.
+ */
+static inline uint8_t *CFifoPeek(hCFifo_t const pFifo)
+{
+	if (pFifo == NULL)
+	{
+		return NULL;
+	}
+
+	uint32_t getIdx = __atomic_load_n(&pFifo->GetIdx, __ATOMIC_RELAXED);
+	uint32_t putIdx = __atomic_load_n(&pFifo->PutIdx, __ATOMIC_ACQUIRE);
+	if (getIdx == putIdx)
+	{
+		return NULL;
+	}
+
+	uint32_t slot = pFifo->Mask ? (getIdx & pFifo->Mask) :
+		(uint32_t)(getIdx % (uint32_t)pFifo->MaxIdxCnt);
+
+	return pFifo->pMemStart + slot * pFifo->BlkSize;
+}
 
 /**
  * @brief	Retrieve FIFO data by returning pointer to FIFO memory block for reading.

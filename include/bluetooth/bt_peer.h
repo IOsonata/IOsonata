@@ -139,7 +139,10 @@ BtDevice_t * BtPeerSlot(uint16_t Idx);
 // connection pool is gone); GAP/GATT receive a borrowed &pPeer->Conn rather
 // than querying a pool of their own.
 //   BtPeerIsConnected       - true if any slot holds a live link
-//   BtPeerGetConnectedHandles - copy up to MaxCount live handles, return count
+//   BtPeerGetConnectedHandles - copy up to MaxCount live handles, return count.
+//       When the active set is larger than MaxCount, successive calls rotate
+//       through the pool so a bounded periodic scan eventually visits every
+//       link instead of always returning the first slots.
 //   BtPeerFreeByHdl         - free the slot matching Hdl (disconnect convenience)
 bool         BtPeerIsConnected(void);
 size_t       BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount);

@@ -158,7 +158,7 @@ void TestInvalidDataArguments()
 		f.Intrf.DevIntrf.TxData(&f.Intrf.DevIntrf, &byte, -1) == 0);
 }
 
-void TestRxPacketOwnership()
+void TestRxShortReadConsumesBlock()
 {
 	ResetLink();
 	Fixture f;
@@ -172,15 +172,53 @@ void TestRxPacketOwnership()
 	}
 	f.Char[0].WrCB(&f.Char[0], incoming, 0, sizeof(incoming));
 	BT_CHECK(s_Test, s_RxEventCount == 1);
+	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 2);
+
+	uint8_t shortOut[3] = {};
+	BT_CHECK(s_Test,
+		f.Intrf.DevIntrf.RxData(&f.Intrf.DevIntrf, shortOut,
+			sizeof(shortOut)) == 3);
+	BT_CHECK(s_Test, std::memcmp(shortOut, incoming, sizeof(shortOut)) == 0);
+	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 1);
 
 	uint8_t out[8] = {};
 	BT_CHECK(s_Test,
-		f.Intrf.DevIntrf.RxData(&f.Intrf.DevIntrf, out, sizeof(out)) == 8);
-	BT_CHECK(s_Test, std::memcmp(out, incoming, 8) == 0);
-	std::memset(out, 0, sizeof(out));
-	BT_CHECK(s_Test,
 		f.Intrf.DevIntrf.RxData(&f.Intrf.DevIntrf, out, sizeof(out)) == 4);
 	BT_CHECK(s_Test, std::memcmp(out, incoming + 8, 4) == 0);
+	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 0);
+}
+
+void TestMalformedRxBlockDoesNotBlockQueue()
+{
+	ResetLink();
+	Fixture f;
+	BtIntrfCfg_t cfg = f.Config();
+	BT_CHECK(s_Test, BtIntrfInit(&f.Intrf, &cfg));
+
+	BtIntrfPkt_t *pMalformed =
+		(BtIntrfPkt_t *)CFifoPut(f.Intrf.hRxFifo);
+	BT_CHECK(s_Test, pMalformed != nullptr);
+	if (pMalformed != nullptr)
+	{
+		pMalformed->Len = 9;
+		std::memset(pMalformed->Data, 0xA5, 8);
+	}
+
+	uint8_t incoming[4] = { 1, 2, 3, 4 };
+	f.Char[0].WrCB(&f.Char[0], incoming, 0, sizeof(incoming));
+	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 2);
+
+	uint32_t drops = f.Intrf.RxDropCnt;
+	uint8_t out[8] = {};
+	BT_CHECK(s_Test,
+		f.Intrf.DevIntrf.RxData(&f.Intrf.DevIntrf, out, sizeof(out)) == 0);
+	BT_CHECK(s_Test, f.Intrf.RxDropCnt == drops + 1U);
+	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 1);
+
+	BT_CHECK(s_Test,
+		f.Intrf.DevIntrf.RxData(&f.Intrf.DevIntrf, out, sizeof(out)) == 4);
+	BT_CHECK(s_Test, std::memcmp(out, incoming, sizeof(incoming)) == 0);
+	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 0);
 }
 
 void TestTxRetryAndReset()
@@ -283,7 +321,8 @@ int main()
 {
 	s_Test.Run("initialization validation", TestInitializationValidation);
 	s_Test.Run("invalid data arguments", TestInvalidDataArguments);
-	s_Test.Run("RX packet ownership", TestRxPacketOwnership);
+	s_Test.Run("RX short read consumes block", TestRxShortReadConsumesBlock);
+	s_Test.Run("malformed RX block", TestMalformedRxBlockDoesNotBlockQueue);
 	s_Test.Run("TX retry and reset", TestTxRetryAndReset);
 	s_Test.Run("unsubscribed peer keeps queue", TestNoSubscribedPeerKeepsQueue);
 	return s_Test.Finish();

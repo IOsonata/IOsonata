@@ -456,8 +456,8 @@ __attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Val
 
 __attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
 {
-	(void)ConnHdl;
 	(void)Passkey;
+	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
 }
 
 __attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
@@ -487,7 +487,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			// config bitmask previously stored here is not a link role at
 			// all and made the record unusable on a mixed-role device.
 			uint8_t role = p_gap_evt->params.connected.role;
-			BtPeerConnected(p_gap_evt->conn_handle,
+			BtDevice_t *pPeer = BtPeerConnected(p_gap_evt->conn_handle,
 							   role == BLE_GAP_ROLE_CENTRAL ?
 							   BT_CONN_ROLE_CENTRAL :
 							   role == BLE_GAP_ROLE_PERIPH ?
@@ -497,10 +497,17 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 							   0, NULL);
 
 			// A peripheral-role connection consumes the running connectable
-			// advertising set. Mark it stopped before checking remaining capacity.
+			// advertising set even if the peer table is full and the link is
+			// rejected below. Update the set state before deciding whether any
+			// application-visible connection work may continue.
 			if (role == BLE_GAP_ROLE_PERIPH)
 			{
 				BtAdvBmConnected();
+			}
+
+			if (pPeer == nullptr)
+			{
+				return;
 			}
 
 			g_BtAppData.State = BTAPP_STATE_CONNECTED;
@@ -515,9 +522,11 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 					p_gap_evt->conn_handle);
 			}
 
-			// Continue connectable advertising while peripheral-link capacity
-			// remains. BtAdvStart counts only peripheral-role links.
-			if (role == BLE_GAP_ROLE_PERIPH)
+			// Re-evaluate connectable advertising after every accepted link.
+			// A central-role link can consume the final peer slot even though
+			// it does not consume a peripheral-role link count.
+			if (g_BtAppData.AppDevice.Conn.Role &
+				(BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 			{
 				BtAdvStart();
 			}
@@ -952,12 +961,10 @@ static uint32_t SDBleDefaultCfgSet(const BtAppCfg_t *pCfg, uint32_t ConnCfgTag, 
 }
 
 /**
- * @brief Initialize the SoftDevice BLE stack.
+ * @brief Initialize the Bluetooth application.
  *
- * In the bm framework, nrf_sdh.c handles the clock configuration
- * automatically from g_McuOsc, and nrf_sdh_ble.c handles the BLE
- * configuration from CONFIG_ defaults.  This function just
- * requests SD enable and then enables the BLE stack.
+ * This function initializes the SoftDevice, BLE stack, GAP parameters,
+ * GATT services, advertising, and security.
  */
 bool BtAppStackInit(const BtAppCfg_t *pCfg)
 {

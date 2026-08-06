@@ -1,13 +1,19 @@
 /**-------------------------------------------------------------------------
 @file	bt_wba_event_hook.h
 
-@brief	STM32WBA BLE event validation and GATT completion routing.
+@brief	STM32WBA BLE event validation and native GAP/GATT routing.
 
 Included only after the STM32WBA BLE middleware headers are visible. It wraps
 SVCCTL_RegisterHandler so malformed variable-length discovery events are
 dropped before the port parser reads them, notification completion is matched
-by connection/attribute handle, and indication confirmation is kept separate
-from the notification completion ring.
+by connection/attribute handle, indication confirmation is kept separate from
+the notification completion ring, and connection-parameter events are routed
+to the per-link GAP state machine.
+
+The same source-level hook captures the one aci_gap_init result and retains the
+native GAP handles. It also corrects the old BtAppGapDeviceNameSet path, which
+used the GAP value-handle offset instead of the characteristic handle returned
+by aci_gap_init.
 ----------------------------------------------------------------------------*/
 #ifndef __BT_WBA_EVENT_HOOK_H__
 #define __BT_WBA_EVENT_HOOK_H__
@@ -20,8 +26,32 @@ from the notification completion ring.
 #include <stdint.h>
 
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_smp.h"
+
+#ifndef BT_GAP_WBA_DEVICE_NAME_MAX_LEN
+#define BT_GAP_WBA_DEVICE_NAME_MAX_LEN	64U
+#endif
+
+#if BT_GAP_WBA_DEVICE_NAME_MAX_LEN == 0 || \
+	BT_GAP_WBA_DEVICE_NAME_MAX_LEN > UINT8_MAX
+#error "BT_GAP_WBA_DEVICE_NAME_MAX_LEN must be in 1..255"
+#endif
 
 void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t AttrHdl);
+void BtGapWbaConnParamsConnected(uint16_t ConnHdl, uint8_t Role,
+		uint16_t Interval, uint16_t Latency, uint16_t Timeout);
+void BtGapWbaConnParamsDisconnected(uint16_t ConnHdl);
+void BtGapWbaConnParamsUpdateComplete(uint16_t ConnHdl, uint8_t Status,
+		uint16_t Interval, uint16_t Latency, uint16_t Timeout);
+void BtGapWbaConnParamsL2capResponse(uint16_t ConnHdl, uint16_t Result);
+
+void BtGapWbaNativeHandlesSet(uint8_t Role, uint8_t DeviceNameMaxLen,
+		uint16_t GapSrvcHdl, uint16_t DevNameCharHdl,
+		uint16_t AppearanceCharHdl);
+uint16_t BtGapWbaNativeCharHandleResolve(uint16_t SrvcHdl,
+		uint16_t CharHdl);
+void BtGapWbaNativeCharUpdateComplete(uint16_t SrvcHdl,
+		uint16_t RequestedCharHdl, uint16_t ActualCharHdl, uint8_t Status);
 
 static inline uint16_t BtWbaEvtLe16(const uint8_t *p)
 {
@@ -131,112 +161,254 @@ static bool BtWbaDiscInfoEventValid(
 		   (p->Event_Data_Length % elemLen) == 0;
 }
 
-template <typename Handler>
-struct BtWbaEventHook
+typedef SVCCTL_UserEvtFlowStatus_t (*BtWbaUserEvtHandler_t)(void *pPayload);
+
+static BtWbaUserEvtHandler_t s_BtWbaOriginalHandler;
+static uint16_t s_BtWbaGapSrvcHdl = BT_ATT_HANDLE_INVALID;
+static uint16_t s_BtWbaDevNameCharHdl = BT_ATT_HANDLE_INVALID;
+static bool s_BtWbaPasskeyRandValid = true;
+
+static SVCCTL_UserEvtFlowStatus_t BtWbaEventHookDispatch(void *pPayload)
 {
-	static Handler &Original(void)
+	if (pPayload == nullptr)
 	{
-		static Handler handler = nullptr;
-		return handler;
+		return SVCCTL_UserEvtFlowEnable;
 	}
 
-	static SVCCTL_UserEvtFlowStatus_t Dispatch(void *pPayload)
+	hci_event_pckt *pEvt =
+		(hci_event_pckt *)((hci_uart_pckt *)pPayload)->data;
+
+	if (pEvt->evt == HCI_DISCONNECTION_COMPLETE_EVT_CODE &&
+		pEvt->plen >= sizeof(hci_disconnection_complete_event_rp0))
 	{
-		if (pPayload == nullptr)
+		auto *p = (hci_disconnection_complete_event_rp0 *)pEvt->data;
+		if (p->Status == 0)
 		{
-			return SVCCTL_UserEvtFlowEnable;
+			BtGapWbaConnParamsDisconnected(p->Connection_Handle);
 		}
-
-		hci_event_pckt *pEvt =
-			(hci_event_pckt *)((hci_uart_pckt *)pPayload)->data;
-		if (pEvt->evt == HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE)
+	}
+	else if (pEvt->evt == HCI_LE_META_EVT_CODE)
+	{
+		const size_t fixed = offsetof(evt_le_meta_event, data);
+		if (pEvt->plen >= fixed)
 		{
-			if (pEvt->plen < offsetof(evt_blecore_aci, data))
+			evt_le_meta_event *pMeta = (evt_le_meta_event *)pEvt->data;
+			size_t available = (size_t)pEvt->plen - fixed;
+
+			switch (pMeta->subevent)
 			{
-				return SVCCTL_UserEvtFlowEnable;
-			}
-
-			evt_blecore_aci *pAci = (evt_blecore_aci *)pEvt->data;
-			size_t available =
-				(size_t)pEvt->plen - offsetof(evt_blecore_aci, data);
-
-			switch (pAci->ecode)
-			{
-				case ACI_ATT_READ_BY_GROUP_TYPE_RESP_VSEVT_CODE:
-					if (!BtWbaDiscServiceEventValid(
-							(aci_att_read_by_group_type_resp_event_rp0 *)pAci->data,
-							available))
-					{
-						return SVCCTL_UserEvtFlowEnable;
-					}
-					break;
-
-				case ACI_ATT_READ_BY_TYPE_RESP_VSEVT_CODE:
-					if (!BtWbaDiscCharEventValid(
-							(aci_att_read_by_type_resp_event_rp0 *)pAci->data,
-							available))
-					{
-						return SVCCTL_UserEvtFlowEnable;
-					}
-					break;
-
-				case ACI_ATT_FIND_INFO_RESP_VSEVT_CODE:
-					if (!BtWbaDiscInfoEventValid(
-							(aci_att_find_info_resp_event_rp0 *)pAci->data,
-							available))
-					{
-						return SVCCTL_UserEvtFlowEnable;
-					}
-					break;
-
-#ifdef ACI_GATT_NOTIFICATION_COMPLETE_VSEVT_CODE
-				case ACI_GATT_NOTIFICATION_COMPLETE_VSEVT_CODE:
-				{
+				case HCI_LE_CONNECTION_COMPLETE_SUBEVT_CODE:
 					if (available >= sizeof(
-							aci_gatt_notification_complete_event_rp0))
+							hci_le_connection_complete_event_rp0))
+					{
+						auto *p = (hci_le_connection_complete_event_rp0 *)pMeta->data;
+						if (p->Status == 0)
+						{
+							BtGapWbaConnParamsConnected(
+								p->Connection_Handle, p->Role, p->Conn_Interval,
+								p->Conn_Latency, p->Supervision_Timeout);
+						}
+					}
+					break;
+
+				case HCI_LE_CONNECTION_UPDATE_COMPLETE_SUBEVT_CODE:
+					if (available >= sizeof(
+							hci_le_connection_update_complete_event_rp0))
 					{
 						auto *p =
-							(aci_gatt_notification_complete_event_rp0 *)pAci->data;
-						BtGattWbaNotificationComplete(
-							p->Connection_Handle, p->Attribute_Handle);
+							(hci_le_connection_update_complete_event_rp0 *)pMeta->data;
+						BtGapWbaConnParamsUpdateComplete(
+							p->Connection_Handle, p->Status, p->Conn_Interval,
+							p->Conn_Latency, p->Supervision_Timeout);
 					}
-					return SVCCTL_UserEvtFlowEnable;
-				}
-#endif
-
-				case ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE:
-					if (available >= 2)
-					{
-						BtGattHandleValueConfirm(BtWbaEvtLe16(pAci->data));
-					}
-					return SVCCTL_UserEvtFlowEnable;
+					break;
 
 				default:
 					break;
 			}
 		}
-
-		Handler handler = Original();
-		return handler != nullptr ? handler(pPayload) :
-				SVCCTL_UserEvtFlowEnable;
 	}
 
-	static void Register(Handler handler)
+	if (pEvt->evt == HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE)
 	{
-		Original() = handler;
-		SVCCTL_RegisterHandler(Dispatch);
-	}
-};
+		if (pEvt->plen < offsetof(evt_blecore_aci, data))
+		{
+			return SVCCTL_UserEvtFlowEnable;
+		}
 
-// Preserve the vendor registration call inside Register above, then replace
-// subsequent source-level registrations with the validating wrapper. Some
-// CubeWBA releases expose SVCCTL_RegisterHandler as a macro rather than a plain
-// function declaration, so remove that spelling before installing ours.
+		evt_blecore_aci *pAci = (evt_blecore_aci *)pEvt->data;
+		size_t available =
+			(size_t)pEvt->plen - offsetof(evt_blecore_aci, data);
+
+		switch (pAci->ecode)
+		{
+			case ACI_ATT_READ_BY_GROUP_TYPE_RESP_VSEVT_CODE:
+				if (!BtWbaDiscServiceEventValid(
+						(aci_att_read_by_group_type_resp_event_rp0 *)pAci->data,
+						available))
+				{
+					return SVCCTL_UserEvtFlowEnable;
+				}
+				break;
+
+			case ACI_ATT_READ_BY_TYPE_RESP_VSEVT_CODE:
+				if (!BtWbaDiscCharEventValid(
+						(aci_att_read_by_type_resp_event_rp0 *)pAci->data,
+						available))
+				{
+					return SVCCTL_UserEvtFlowEnable;
+				}
+				break;
+
+			case ACI_ATT_FIND_INFO_RESP_VSEVT_CODE:
+				if (!BtWbaDiscInfoEventValid(
+						(aci_att_find_info_resp_event_rp0 *)pAci->data,
+						available))
+				{
+					return SVCCTL_UserEvtFlowEnable;
+				}
+				break;
+
+#ifdef ACI_L2CAP_CONNECTION_UPDATE_RESP_VSEVT_CODE
+			case ACI_L2CAP_CONNECTION_UPDATE_RESP_VSEVT_CODE:
+				if (available >= sizeof(
+						aci_l2cap_connection_update_resp_event_rp0))
+				{
+					auto *p =
+						(aci_l2cap_connection_update_resp_event_rp0 *)pAci->data;
+					BtGapWbaConnParamsL2capResponse(
+						p->Connection_Handle, p->Result);
+				}
+				break;
+#endif
+
+#ifdef ACI_GATT_NOTIFICATION_COMPLETE_VSEVT_CODE
+			case ACI_GATT_NOTIFICATION_COMPLETE_VSEVT_CODE:
+			{
+				if (available >= sizeof(
+						aci_gatt_notification_complete_event_rp0))
+				{
+					auto *p =
+						(aci_gatt_notification_complete_event_rp0 *)pAci->data;
+					BtGattWbaNotificationComplete(
+						p->Connection_Handle, p->Attribute_Handle);
+				}
+				return SVCCTL_UserEvtFlowEnable;
+			}
+#endif
+
+			case ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE:
+				if (available >= 2)
+				{
+					BtGattHandleValueConfirm(BtWbaEvtLe16(pAci->data));
+				}
+				return SVCCTL_UserEvtFlowEnable;
+
+			default:
+				break;
+		}
+	}
+
+	return s_BtWbaOriginalHandler != nullptr ?
+		s_BtWbaOriginalHandler(pPayload) : SVCCTL_UserEvtFlowEnable;
+}
+
+static inline void BtWbaEventHookRegister(BtWbaUserEvtHandler_t Handler)
+{
+	s_BtWbaOriginalHandler = Handler;
+	SVCCTL_RegisterHandler(BtWbaEventHookDispatch);
+}
+
+static inline tBleStatus BtWbaGapInitCapture(uint8_t Role,
+		uint8_t PrivacyType, uint8_t DeviceNameCharLen,
+		uint16_t *pGapSrvcHdl, uint16_t *pDevNameCharHdl,
+		uint16_t *pAppearanceCharHdl)
+{
+	(void)DeviceNameCharLen;
+	const uint8_t nameCapacity = (uint8_t)BT_GAP_WBA_DEVICE_NAME_MAX_LEN;
+	tBleStatus status = aci_gap_init(Role, PrivacyType, nameCapacity,
+		pGapSrvcHdl, pDevNameCharHdl, pAppearanceCharHdl);
+	if (status == BLE_STATUS_SUCCESS && pGapSrvcHdl != nullptr &&
+		pDevNameCharHdl != nullptr && pAppearanceCharHdl != nullptr)
+	{
+		s_BtWbaGapSrvcHdl = *pGapSrvcHdl;
+		s_BtWbaDevNameCharHdl = *pDevNameCharHdl;
+		BtGapWbaNativeHandlesSet(Role, nameCapacity,
+			*pGapSrvcHdl, *pDevNameCharHdl, *pAppearanceCharHdl);
+	}
+	return status;
+}
+
+static inline tBleStatus BtWbaGattUpdateCharValue(uint16_t SrvcHdl,
+		uint16_t CharHdl, uint8_t Offset, uint8_t Len, uint8_t *pValue)
+{
+	uint16_t actualHdl = BtGapWbaNativeCharHandleResolve(SrvcHdl, CharHdl);
+	if (SrvcHdl == s_BtWbaGapSrvcHdl &&
+		actualHdl == s_BtWbaDevNameCharHdl &&
+		Len > BT_GAP_WBA_DEVICE_NAME_MAX_LEN)
+	{
+		Len = (uint8_t)BT_GAP_WBA_DEVICE_NAME_MAX_LEN;
+	}
+
+	tBleStatus status = aci_gatt_update_char_value(
+		SrvcHdl, actualHdl, Offset, Len, pValue);
+
+	// Every successful source-level Device Name write is followed by the
+	// generic BtGapSetDevName forwarding call. When no handle correction was
+	// needed, use INVALID as the source marker so the GAP port still suppresses
+	// that duplicate native write. The actual handle remains unchanged.
+	uint16_t sourceHdl = CharHdl == actualHdl ? BT_ATT_HANDLE_INVALID : CharHdl;
+	BtGapWbaNativeCharUpdateComplete(
+		SrvcHdl, sourceHdl, actualHdl, (uint8_t)status);
+	return status;
+}
+
+static inline tBleStatus BtWbaLeRand(uint8_t *pRand)
+{
+	tBleStatus status = hci_le_rand(pRand);
+	s_BtWbaPasskeyRandValid = status == BLE_STATUS_SUCCESS;
+	return status;
+}
+
+static inline void BtWbaPasskeyRequest(uint16_t ConnHdl)
+{
+	bool valid = s_BtWbaPasskeyRandValid;
+	s_BtWbaPasskeyRandValid = true;
+	if (!valid)
+	{
+		BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
+		return;
+	}
+	BtSmpPasskeyRequest(ConnHdl);
+}
+
+// Preserve the vendor calls inside the wrappers above, then replace subsequent
+// source-level calls in bt_app_stm32wba.cpp. Some CubeWBA releases expose these
+// spellings as macros rather than plain function declarations.
 #ifdef SVCCTL_RegisterHandler
 #undef SVCCTL_RegisterHandler
 #endif
-#define SVCCTL_RegisterHandler(handler) \
-	BtWbaEventHook<decltype(&(handler))>::Register(&(handler))
+#define SVCCTL_RegisterHandler(handler) BtWbaEventHookRegister(handler)
+
+#ifdef aci_gap_init
+#undef aci_gap_init
+#endif
+#define aci_gap_init(...) BtWbaGapInitCapture(__VA_ARGS__)
+
+#ifdef aci_gatt_update_char_value
+#undef aci_gatt_update_char_value
+#endif
+#define aci_gatt_update_char_value(...) BtWbaGattUpdateCharValue(__VA_ARGS__)
+
+#ifdef hci_le_rand
+#undef hci_le_rand
+#endif
+#define hci_le_rand(...) BtWbaLeRand(__VA_ARGS__)
+
+#ifdef BtSmpPasskeyRequest
+#undef BtSmpPasskeyRequest
+#endif
+#define BtSmpPasskeyRequest(...) BtWbaPasskeyRequest(__VA_ARGS__)
 
 #endif // STM32WBA BLE headers visible
 

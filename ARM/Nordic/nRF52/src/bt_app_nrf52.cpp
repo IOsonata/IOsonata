@@ -661,10 +661,7 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
             break;
 
         case PM_EVT_PEERS_DELETE_SUCCEEDED:
-
-            //ble_advertising_start(&g_AdvInstance, BLE_ADV_MODE_FAST);
-            err_code = sd_ble_gap_adv_start(g_BtAppData.AdvHdl, BTAPP_CONN_CFG_TAG);
-
+            BtAdvStart();
             break;
 
         case PM_EVT_LOCAL_DB_CACHE_APPLY_FAILED:
@@ -850,8 +847,8 @@ __attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Val
 
 __attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
 {
-	(void)ConnHdl;
 	(void)Passkey;
+	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
 }
 
 __attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
@@ -946,20 +943,29 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
     switch (p_ble_evt->header.evt_id)
     {
         case BLE_GAP_EVT_CONNECTED:
-        	BtAppConnLedOn();
+		{
+			uint8_t connRole = p_gap_evt->params.connected.role;
+			uint8_t peerRole = connRole == BLE_GAP_ROLE_CENTRAL ? BT_CONN_ROLE_CENTRAL
+							 : connRole == BLE_GAP_ROLE_PERIPH ? BT_CONN_ROLE_PERIPHERAL
+							 : BT_CONN_ROLE_UNKNOWN;
+
         	// Own address not stamped: SMP runs in the SoftDevice, not the
         	// IOsonata toolbox, so the record is left for the
         	// BtSmpLocalAddrGet fallback.
-        	// The peer record stores the link role in the HCI encoding
-        	// (BT_CONN_ROLE_*), not the SoftDevice one (BLE_GAP_ROLE_PERIPH 1,
-        	// BLE_GAP_ROLE_CENTRAL 2); convert at this boundary.
-        	BtPeerConnected(p_gap_evt->conn_handle,
-        					   role == BLE_GAP_ROLE_CENTRAL ? BT_CONN_ROLE_CENTRAL
-        					   : role == BLE_GAP_ROLE_PERIPH ? BT_CONN_ROLE_PERIPHERAL
-        					   : BT_CONN_ROLE_UNKNOWN,
-        					   p_gap_evt->params.connected.peer_addr.addr_type,
-        					   (uint8_t*)p_gap_evt->params.connected.peer_addr.addr,
-        					   0, NULL);
+			BtDevice_t *pPeer = BtPeerConnected(p_gap_evt->conn_handle,
+										 peerRole,
+        								 p_gap_evt->params.connected.peer_addr.addr_type,
+        								 (uint8_t*)p_gap_evt->params.connected.peer_addr.addr,
+        								 0, NULL);
+			if (pPeer == nullptr)
+			{
+				// BtPeerConnected already routes rejection through
+				// BtPeerConnectionRejected. Do not expose the untracked link to
+				// security, GATT, or application callbacks.
+				return;
+			}
+
+        	BtAppConnLedOn();
         	g_BtAppData.State = BTAPP_STATE_CONNECTED;
 
         	// If a secure SecType was configured, the SoftDevice implementation requests
@@ -983,27 +989,38 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
         	}
 
         	BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
-
+		}
         	break;
         case BLE_GAP_EVT_DISCONNECTED:
 			{
 				uint16_t connHdl = p_ble_evt->evt.gap_evt.conn_handle;
 				BtDevice_t *pPeer = BtPeerFindByHdl(connHdl);
 
-				BtAppConnLedOff();
-				BtPeerFree(pPeer);
+				if (pPeer != nullptr)
+				{
+					BtPeerFree(pPeer);
+				}
 
-				if (BtPeerIsConnected() == false)
+				bool connected = BtPeerIsConnected();
+				if (connected)
+				{
+					g_BtAppData.State = BTAPP_STATE_CONNECTED;
+					BtAppConnLedOn();
+				}
+				else
 				{
 					g_BtAppData.State = BTAPP_STATE_IDLE;
+					BtAppConnLedOff();
 				}
 
-				BtAppEvtDisconnected(connHdl);
-
-				if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+				if (pPeer != nullptr)
 				{
-					BtAdvStart();
+					BtAppEvtDisconnected(connHdl);
 				}
+
+				// A disconnect can free peripheral capacity or the last peer slot.
+				// BtAdvStart performs both checks and is a no-op for central-only apps.
+				BtAdvStart();
 			}
         	break;
         case BLE_GAP_EVT_ADV_SET_TERMINATED:
