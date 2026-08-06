@@ -47,6 +47,7 @@ TEST_NAMES := \
 	bt_adv_uuid_test \
 	bt_intrf_test \
 	bt_hci_flow_test \
+	bt_hci_smp_tx_test \
 	bt_hci_ctlr_init_test \
 	bt_l2cap_signal_test \
 	bt_att_db_test \
@@ -102,6 +103,10 @@ bt_hci_flow_test_SOURCES := \
 	$(HCI_GATT_TEST_STUB) \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
+
+bt_hci_smp_tx_test_SOURCES := \
+	bt_hci_smp_tx_test.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_host.cpp
 
 bt_hci_ctlr_init_test_SOURCES := \
 	bt_hci_ctlr_init_test.cpp \
