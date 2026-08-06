@@ -192,6 +192,66 @@ void TestCommandBoundaryAndTiming(Context &ctx)
 	ctx.End();
 }
 
+void TestRemoteConnectionParameterRequest(Context &ctx)
+{
+	static const Requirement req = {
+		"HCI-LE-CONNPARAM-BI-01", "Core Vol 4 Part E", "7.7.65.6, 7.8.31, 7.8.32",
+		"the host accepts valid connection parameters, rejects invalid values, and ignores a short event"
+	};
+	ctx.Begin(req);
+
+	VirtualClock clock;
+	BtHciDevice_t host = {};
+	VirtualController controller(clock);
+	BT_CHECK(ctx, controller.Attach(&host));
+
+	BtHciLeEvtRemoteConnParamReq_t valid = {};
+	valid.ConnHdl = 0x0123;
+	valid.IntervalMin = 0x0018;
+	valid.IntervalMax = 0x0028;
+	valid.Latency = 4;
+	valid.Timeout = 0x0200;
+	BT_CHECK(ctx, controller.InjectLeEvent(BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST,
+		&valid, sizeof(valid)));
+	BT_CHECK(ctx, controller.CommandCount() == 1);
+	const VirtualController::CommandRecord *pCommand = controller.CommandAt(0);
+	BT_CHECK(ctx, pCommand != nullptr);
+	if (pCommand != nullptr)
+	{
+		const uint8_t expected[14] = {
+			0x23, 0x01, 0x18, 0x00, 0x28, 0x00, 0x04,
+			0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00
+		};
+		BT_CHECK(ctx, pCommand->Opcode == BT_HCI_CMD_CTLR_REMOTE_CONN_PARAM_REQUEST_REPLY);
+		BT_CHECK(ctx, pCommand->ParamLen == sizeof(expected));
+		BT_CHECK(ctx, std::memcmp(pCommand->Param, expected, sizeof(expected)) == 0);
+	}
+
+	controller.Reset();
+	BtHciLeEvtRemoteConnParamReq_t invalid = valid;
+	invalid.IntervalMin = 0x0030;
+	invalid.IntervalMax = 0x0020;
+	BT_CHECK(ctx, controller.InjectLeEvent(BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST,
+		&invalid, sizeof(invalid)));
+	BT_CHECK(ctx, controller.CommandCount() == 1);
+	pCommand = controller.CommandAt(0);
+	BT_CHECK(ctx, pCommand != nullptr);
+	if (pCommand != nullptr)
+	{
+		const uint8_t expected[3] = { 0x23, 0x01, 0x3B };
+		BT_CHECK(ctx, pCommand->Opcode == BT_HCI_CMD_CTLR_REMOTE_CONN_PARAM_RQST_NEG_REPLY);
+		BT_CHECK(ctx, pCommand->ParamLen == sizeof(expected));
+		BT_CHECK(ctx, std::memcmp(pCommand->Param, expected, sizeof(expected)) == 0);
+	}
+
+	controller.Reset();
+	BT_CHECK(ctx, controller.InjectLeEvent(BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST,
+		&valid, static_cast<uint8_t>(sizeof(valid) - 1)));
+	BT_CHECK(ctx, controller.CommandCount() == 0);
+	controller.Detach();
+	ctx.End();
+}
+
 void TestAclFragmentationAndCredits(Context &ctx)
 {
 	static const Requirement req = {
@@ -644,6 +704,7 @@ int main()
 	Context ctx("Bluetooth HCI compliance foundation");
 	TestVirtualTime(ctx);
 	TestCommandBoundaryAndTiming(ctx);
+	TestRemoteConnectionParameterRequest(ctx);
 	TestAclFragmentationAndCredits(ctx);
 	TestAclTransportFailure(ctx);
 	TestCompletedPacketBoundaries(ctx);

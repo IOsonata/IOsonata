@@ -201,6 +201,22 @@ static BtExtAdvReasm_t *BtExtAdvReasmAlloc(uint8_t AddrType, const uint8_t Addr[
 	return nullptr;
 }
 
+static void BtHciPutLe16(uint8_t *pData, uint16_t Value)
+{
+	pData[0] = (uint8_t)(Value & 0xFF);
+	pData[1] = (uint8_t)(Value >> 8);
+}
+
+static bool BtHciRemoteConnParamValid(const BtHciLeEvtRemoteConnParamReq_t *pParam)
+{
+	return pParam->IntervalMin >= 0x0006 && pParam->IntervalMin <= 0x0C80 &&
+		pParam->IntervalMax >= 0x0006 && pParam->IntervalMax <= 0x0C80 &&
+		pParam->IntervalMin <= pParam->IntervalMax &&
+		pParam->Latency <= 0x01F3 &&
+		pParam->Timeout >= 0x000A && pParam->Timeout <= 0x0C80 &&
+		4UL * pParam->Timeout > (uint32_t)(pParam->Latency + 1UL) * pParam->IntervalMax;
+}
+
 void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt, int EvtLen)
 {
 	// End of the received event payload; report parsers must not read past it.
@@ -302,8 +318,33 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST:
 			{
-//				BtHciLeEvtRemoteConnParamReq_t *p = (BtHciLeEvtRemoteConnParamReq_t*)pLeEvtPkt->Data;
-				DEBUG_PRINTF("BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST\r\n");
+				if ((const uint8_t*)pLeEvtPkt->Data + sizeof(BtHciLeEvtRemoteConnParamReq_t) > evtEnd)
+				{
+					break;
+				}
+
+				BtHciLeEvtRemoteConnParamReq_t *p =
+					(BtHciLeEvtRemoteConnParamReq_t*)pLeEvtPkt->Data;
+
+				if (BtHciRemoteConnParamValid(p))
+				{
+					uint8_t reply[14] = {};
+					BtHciPutLe16(&reply[0], p->ConnHdl);
+					BtHciPutLe16(&reply[2], p->IntervalMin);
+					BtHciPutLe16(&reply[4], p->IntervalMax);
+					BtHciPutLe16(&reply[6], p->Latency);
+					BtHciPutLe16(&reply[8], p->Timeout);
+					BtHciCommand(pDev, BT_HCI_CMD_CTLR_REMOTE_CONN_PARAM_REQUEST_REPLY,
+						reply, sizeof(reply), nullptr, 0);
+				}
+				else
+				{
+					uint8_t reply[3];
+					BtHciPutLe16(&reply[0], p->ConnHdl);
+					reply[2] = 0x3B;
+					BtHciCommand(pDev, BT_HCI_CMD_CTLR_REMOTE_CONN_PARAM_RQST_NEG_REPLY,
+						reply, sizeof(reply), nullptr, 0);
+				}
 			}
 			break;
 		case BT_HCI_EVT_LE_DATA_LEN_CHANGE:
