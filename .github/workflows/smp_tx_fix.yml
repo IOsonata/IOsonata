@@ -1,0 +1,38 @@
+name: Temporary SMP TX validation
+
+on:
+  push:
+    branches:
+      - bt_sig_compliance_smp_tx_fix
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out candidate branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply exact source patch
+        run: python3 .tmp_smp_tx_patch.py
+
+      - name: Check patch formatting
+        run: git diff --check
+
+      - name: Run GCC host test matrix
+        run: make -C tests/bluetooth/host test-gcc
+
+      - name: Run Clang host test matrix
+        run: make -C tests/bluetooth/host test-clang
+
+      - name: Commit validated result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Account native SMP packets in ACL completion order"
+          git push origin HEAD:bt_sig_compliance_smp_tx_fix
