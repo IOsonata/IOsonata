@@ -145,7 +145,9 @@ bt_adv_hci_test_SOURCES := \
 	$(GATT_INIT_TEST_SUPPORT) \
 	$(ROOT)/src/bluetooth/bt_adv_hci.cpp \
 	$(ROOT)/src/bluetooth/bt_adv.cpp \
-	$(ROOT)/src/bluetooth/bt_uuid.cpp
+	$(ROOT)/src/bluetooth/bt_uuid.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
+bt_adv_hci_test_EXTRA := $(CFIFO_OBJ)
 
 bt_gatt_cccd_test_SOURCES := \
 	bt_gatt_cccd_test.cpp \

@@ -28,6 +28,7 @@ Copyright (c) 2022, I-SYST inc., all rights reserved
 #include "convutil.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_hci.h"
+#include "bluetooth/bt_hci_cap.h"
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_gatt.h"
@@ -92,10 +93,28 @@ typedef struct {
 	uint8_t  RandAddr[6];
 } BtHciLeAdvSetRandAddr_t;
 
+typedef struct {
+	uint8_t  IntervalMin[2];
+	uint8_t  IntervalMax[2];
+	uint8_t  AdvType;
+	uint8_t  OwnAddrType;
+	uint8_t  PeerAddrType;
+	uint8_t  PeerAddr[6];
+	uint8_t  ChanMap;
+	uint8_t  FilterPolicy;
+} BtHciLeAdvParams_t;				//!< 15 octets
+
+typedef struct {
+	uint8_t  DataLen;
+	uint8_t  Data[BT_ADV_LEGACY_DATA_MAX];
+} BtHciLeAdvData_t;				//!< 32 octets
+
 #pragma pack(pop)
 
-// Header length (bytes before the variable data) of the ext adv/scan data cmd.
 #define BTADV_HCI_DATA_HDR_LEN		(sizeof(BtHciLeExtAdvData_t) - 251)
+#define BTADV_LEGACY_ADV_IND		0x00
+#define BTADV_LEGACY_ADV_SCAN_IND	0x02
+#define BTADV_LEGACY_ADV_NONCONN_IND	0x03
 
 // --- Adv packet buffers (data region overlaid by BtAdvPacket_t) ---
 
@@ -109,9 +128,13 @@ alignas(4) static uint8_t s_BtDevSrBuff[sizeof(BtHciLeExtAdvData_t)];
 static BtHciLeExtAdvData_t &s_BtDevExtSrData = *(BtHciLeExtAdvData_t*)s_BtDevSrBuff;
 alignas(4) static BtAdvPacket_t s_BtDevExtSrPkt = { 251, 0, s_BtDevExtSrData.Data };
 
-// Advertising duration in 10 ms units, cached at init for the enable command.
-// 0 means no timeout.
+// Advertising duration in 10 ms units, cached at init for the extended enable
+// command. 0 means no timeout.
 static uint16_t s_BtDevAdvDuration = 0;
+static bool s_BtDevUseExtAdvCmd = true;
+static bool s_BtDevAdvScannable = false;
+static BtHciCapabilities_t s_BtAdvReadCapabilities;
+static const BtHciCapabilities_t *s_pBtAdvCapabilities = nullptr;
 
 // The own address the advertising set was last programmed with. What a new
 // peripheral-role connection is stamped with, so the SMP toolbox computes
@@ -156,6 +179,123 @@ static inline BtHciDevice_t *BtAdvHciDev(void)
 	return g_BtAppData.AppDevice.pHciDev;
 }
 
+static bool BtAdvExtLimitsValid(uint16_t AdvLen, uint16_t ScanResponseLen)
+{
+	if (s_pBtAdvCapabilities == nullptr)
+	{
+		return false;
+	}
+
+	if ((s_pBtAdvCapabilities->Valid & BT_HCI_CAP_VALID_ADV_SET_COUNT) != 0 &&
+		s_pBtAdvCapabilities->AdvSetCount == 0)
+	{
+		return false;
+	}
+
+	if ((s_pBtAdvCapabilities->Valid & BT_HCI_CAP_VALID_MAX_ADV_DATA_LEN) != 0 &&
+		(AdvLen > s_pBtAdvCapabilities->MaxAdvDataLen ||
+		 ScanResponseLen > s_pBtAdvCapabilities->MaxAdvDataLen))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+static bool BtAdvCommandSetSelect(bool ExtPayload, bool UseRandomAddress,
+	bool UseScanResponse, uint16_t AdvLen, uint16_t ScanResponseLen,
+	bool *pUseExtCommands)
+{
+	if (pUseExtCommands == nullptr || s_pBtAdvCapabilities == nullptr)
+	{
+		return false;
+	}
+
+	if (BtHciCapabilitiesExtendedAdvertisingSupported(s_pBtAdvCapabilities,
+		UseRandomAddress, UseScanResponse) &&
+		BtAdvExtLimitsValid(AdvLen, ScanResponseLen))
+	{
+		*pUseExtCommands = true;
+		return true;
+	}
+
+	if (ExtPayload || AdvLen > BT_ADV_LEGACY_DATA_MAX ||
+		ScanResponseLen > BT_ADV_LEGACY_DATA_MAX)
+	{
+		return false;
+	}
+
+	if (BtHciCapabilitiesLegacyAdvertisingSupported(s_pBtAdvCapabilities,
+		UseRandomAddress, UseScanResponse) == false)
+	{
+		return false;
+	}
+
+	*pUseExtCommands = false;
+	return true;
+}
+
+static int BtAdvDataWrite(BtHciDevice_t *pDev, BtAdvPacket_t *pPacket,
+	bool ScanResponse)
+{
+	if (pDev == nullptr || pPacket == nullptr || s_pBtAdvCapabilities == nullptr ||
+		pPacket->Len < 0 || pPacket->Len > pPacket->MaxLen ||
+		(ScanResponse && s_BtDevAdvScannable == false))
+	{
+		return -1;
+	}
+
+	if (s_BtDevUseExtAdvCmd)
+	{
+		uint16_t commandBit = ScanResponse ?
+			BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_RESPONSE_DATA :
+			BT_HCI_CAP_CMD_LE_SET_EXT_ADV_DATA;
+		if (BtHciCapabilitiesCommandSupported(s_pBtAdvCapabilities,
+			commandBit) == false ||
+			BtAdvExtLimitsValid(ScanResponse ? 0 : (uint16_t)pPacket->Len,
+				ScanResponse ? (uint16_t)pPacket->Len : 0) == false)
+		{
+			return -1;
+		}
+
+		BtHciLeExtAdvData_t *pData = ScanResponse ?
+			&s_BtDevExtSrData : &s_BtDevExtAdvData;
+		pData->AdvHandle = 0;
+		pData->Operation = 3;
+		pData->FragPref = 1;
+		pData->DataLen = (uint8_t)pPacket->Len;
+
+		uint16_t opcode = ScanResponse ?
+			BT_HCI_CMD_CTLR_SET_EXT_SCAN_RESP_DATA :
+			BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA;
+		return BtHciCommand(pDev, opcode, pData,
+			(uint8_t)(BTADV_HCI_DATA_HDR_LEN + pPacket->Len), NULL, 0);
+	}
+
+	if (pPacket->Len > BT_ADV_LEGACY_DATA_MAX)
+	{
+		return -1;
+	}
+
+	uint16_t commandBit = ScanResponse ?
+		BT_HCI_CAP_CMD_LE_SET_SCAN_RESPONSE_DATA :
+		BT_HCI_CAP_CMD_LE_SET_ADV_DATA;
+	if (BtHciCapabilitiesCommandSupported(s_pBtAdvCapabilities,
+		commandBit) == false)
+	{
+		return -1;
+	}
+
+	BtHciLeAdvData_t data = {};
+	data.DataLen = (uint8_t)pPacket->Len;
+	memcpy(data.Data, pPacket->pData, (size_t)pPacket->Len);
+
+	uint16_t opcode = ScanResponse ?
+		BT_HCI_CMD_CTLR_SET_SCAN_RESP_DATA :
+		BT_HCI_CMD_CTLR_SET_ADV_DATA;
+	return BtHciCommand(pDev, opcode, &data, sizeof(data), NULL, 0);
+}
+
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
 {
 	if (g_BtAppData.State != BTAPP_STATE_ADVERTISING && g_BtAppData.State != BTAPP_STATE_IDLE)
@@ -165,7 +305,10 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 
 	if (AdvLen < 0 || SrLen < 0 ||
 		(AdvLen > 0 && pAdvData == nullptr) ||
-		(SrLen > 0 && pSrData == nullptr))
+		(SrLen > 0 && pSrData == nullptr) ||
+		AdvLen > s_BtDevExtAdvPkt.MaxLen - 2 ||
+		SrLen > s_BtDevExtSrPkt.MaxLen - 2 ||
+		(pSrData != nullptr && s_BtDevAdvScannable == false))
 	{
 		return false;
 	}
@@ -176,86 +319,79 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		return false;
 	}
 
+	bool restart = g_BtAppData.State == BTAPP_STATE_ADVERTISING;
+	if (restart)
+	{
+		if (BtAppAdvDisable() != 0)
+		{
+			return false;
+		}
+		g_BtAppData.State = BTAPP_STATE_IDLE;
+	}
+
 	BtAdvPacket_t *advpkt = &s_BtDevExtAdvPkt;
 	BtAdvPacket_t *srpkt  = &s_BtDevExtSrPkt;
 
 	if (pAdvData)
 	{
-		int l = AdvLen + 2;
-		BtAdvData_t *p = BtAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		uint8_t oldData[251];
+		int oldLen = advpkt->Len;
+		memcpy(oldData, advpkt->pData, (size_t)oldLen);
 
+		BtAdvData_t *p = BtAdvDataAllocate(advpkt,
+			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, AdvLen + 2);
 		if (p == NULL)
 		{
 			return false;
 		}
-		// Company identifier is little-endian on air. Write the two octets
-		// directly rather than through a uint16_t cast, which assumes host byte
-		// order and an aligned destination (Core Spec Supplement Part A 1.4).
 		p->Data[0] = (uint8_t)(g_BtAppData.AppDevice.VendorId & 0xFF);
 		p->Data[1] = (uint8_t)(g_BtAppData.AppDevice.VendorId >> 8);
-		memcpy(&p->Data[2], pAdvData, AdvLen);
+		memcpy(&p->Data[2], pAdvData, (size_t)AdvLen);
 
-		s_BtDevExtAdvData.AdvHandle = 0;
-		s_BtDevExtAdvData.Operation = 3;
-		s_BtDevExtAdvData.FragPref  = 1;
-		s_BtDevExtAdvData.DataLen   = advpkt->Len;
-
-		if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA, &s_BtDevExtAdvData, BTADV_HCI_DATA_HDR_LEN + advpkt->Len, NULL, 0) != 0)
+		if (BtAdvDataWrite(pDev, advpkt, false) != 0)
 		{
+			memcpy(advpkt->pData, oldData, (size_t)oldLen);
+			advpkt->Len = oldLen;
 			return false;
 		}
 	}
 
 	if (pSrData)
 	{
-		int l = SrLen + 2;
-		BtAdvData_t *p = BtAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		uint8_t oldData[251];
+		int oldLen = srpkt->Len;
+		memcpy(oldData, srpkt->pData, (size_t)oldLen);
 
+		BtAdvData_t *p = BtAdvDataAllocate(srpkt,
+			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, SrLen + 2);
 		if (p == NULL)
 		{
 			return false;
 		}
-		// Company identifier is little-endian on air; see the note above.
 		p->Data[0] = (uint8_t)(g_BtAppData.AppDevice.VendorId & 0xFF);
 		p->Data[1] = (uint8_t)(g_BtAppData.AppDevice.VendorId >> 8);
-		memcpy(&p->Data[2], pSrData, SrLen);
+		memcpy(&p->Data[2], pSrData, (size_t)SrLen);
 
-		s_BtDevExtSrData.AdvHandle = 0;
-		s_BtDevExtSrData.Operation = 3;
-		s_BtDevExtSrData.FragPref  = 1;
-		s_BtDevExtSrData.DataLen   = srpkt->Len;
-
-		if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_SCAN_RESP_DATA, &s_BtDevExtSrData, BTADV_HCI_DATA_HDR_LEN + srpkt->Len, NULL, 0) != 0)
+		if (BtAdvDataWrite(pDev, srpkt, true) != 0)
 		{
+			memcpy(srpkt->pData, oldData, (size_t)oldLen);
+			srpkt->Len = oldLen;
 			return false;
 		}
 	}
 
-	// Re-enable advertising with the updated data. Disable first so the enable
-	// is not rejected with Command Disallowed (0x0C) when the set is still
-	// considered enabled. Mirrors the nRF52 stop-then-start on data update.
-	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)
+	if (restart)
 	{
-		// The disable result is not decisive: the set may already have been
-		// stopped by the controller, for example on a duration expiry not yet
-		// processed. The enable result is. If it fails the device is off air
-		// with the new data loaded, so report the failure and record IDLE
-		// rather than leave the state claiming the device is advertising.
-		BtAppAdvDisable();
-
 		if (BtAppAdvEnable() != 0)
 		{
-			g_BtAppData.State = BTAPP_STATE_IDLE;
 			return false;
 		}
+		g_BtAppData.State = BTAPP_STATE_ADVERTISING;
 	}
 
 	return true;
 }
 
-// Issue the extended advertising enable command for adv set 0 with the cached
-// duration. Safe to call whether the set is currently enabled (the controller
-// resets the duration timer) or stopped (it restarts). Returns 0 on success.
 static int BtAppAdvEnable(void)
 {
 	BtHciDevice_t *pDev = BtAdvHciDev();
@@ -264,18 +400,24 @@ static int BtAppAdvEnable(void)
 		return -1;
 	}
 
-	BtHciLeExtAdvEnable_t x;
-	x.Enable = 1;
-	x.NumSets = 1;
-	x.AdvHandle = 0;
-	BtAdvWr16(x.Duration, s_BtDevAdvDuration);
-	x.MaxExtAdvEvts = 0;
+	if (s_BtDevUseExtAdvCmd)
+	{
+		BtHciLeExtAdvEnable_t x;
+		x.Enable = 1;
+		x.NumSets = 1;
+		x.AdvHandle = 0;
+		BtAdvWr16(x.Duration, s_BtDevAdvDuration);
+		x.MaxExtAdvEvts = 0;
 
-	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE, &x, sizeof(x), NULL, 0);
+		return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE,
+			&x, sizeof(x), NULL, 0);
+	}
+
+	uint8_t enable = 1;
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_ADV_ENABLE,
+		&enable, sizeof(enable), NULL, 0);
 }
 
-// Disable advertising for adv set 0 (controller command only, does not change
-// app State). Disabling an already-disabled set has no effect.
 static int BtAppAdvDisable(void)
 {
 	BtHciDevice_t *pDev = BtAdvHciDev();
@@ -284,14 +426,22 @@ static int BtAppAdvDisable(void)
 		return -1;
 	}
 
-	BtHciLeExtAdvEnable_t x;
-	x.Enable = 0;
-	x.NumSets = 1;
-	x.AdvHandle = 0;
-	BtAdvWr16(x.Duration, 0);
-	x.MaxExtAdvEvts = 0;
+	if (s_BtDevUseExtAdvCmd)
+	{
+		BtHciLeExtAdvEnable_t x;
+		x.Enable = 0;
+		x.NumSets = 1;
+		x.AdvHandle = 0;
+		BtAdvWr16(x.Duration, 0);
+		x.MaxExtAdvEvts = 0;
 
-	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE, &x, sizeof(x), NULL, 0);
+		return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE,
+			&x, sizeof(x), NULL, 0);
+	}
+
+	uint8_t enable = 0;
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_ADV_ENABLE,
+		&enable, sizeof(enable), NULL, 0);
 }
 
 void BtAppAdvStart()
@@ -307,20 +457,12 @@ void BtAppAdvStart()
 		return;
 	}
 
-	// A refused enable used to leave the device silent with nothing said. The
-	// case that matters is the restart after a disconnect: the application has
-	// no other signal that it stopped being discoverable, and from the outside
-	// it looks like the board died.
 	DEBUG_PRINTF("ADV enable failed, status=0x%02x, not advertising\r\n",
 				 (unsigned)res);
 }
 
 void BtAppAdvStop()
 {
-	// Only report idle once the controller has accepted the disable. If the
-	// command failed the set is still on air, and moving to IDLE would make a
-	// later BtAppAdvStart look like a no-op while the device keeps
-	// advertising with whatever data it had.
 	if (BtAppAdvDisable() != 0)
 	{
 		return;
@@ -344,66 +486,74 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 		return false;
 	}
 
+	s_pBtAdvCapabilities = BtHciCapabilitiesForDeviceGet(pDev);
+	if (s_pBtAdvCapabilities == nullptr || s_pBtAdvCapabilities->Valid == 0)
+	{
+		if (BtHciCapabilitiesRead(pDev, &s_BtAdvReadCapabilities) == false)
+		{
+			return false;
+		}
+		s_pBtAdvCapabilities = &s_BtAdvReadCapabilities;
+	}
+
 	BtAdvPacket_t *advpkt = &s_BtDevExtAdvPkt;
 	BtAdvPacket_t *srpkt  = &s_BtDevExtSrPkt;
-
-	// Encode the AD payload. BtAdvEncode decides legacy vs extended from how the
-	// records pack, and reports it via bExtAdv/scannable.
 	bool scannable = false;
 
 	if (BtAdvEncode(pCfg, advpkt, srpkt, &g_BtAppData.bExtAdv, &scannable) == false)
 	{
 		return false;
 	}
+	if (advpkt->Len < 0 || srpkt->Len < 0 ||
+		advpkt->Len > advpkt->MaxLen || srpkt->Len > srpkt->MaxLen)
+	{
+		return false;
+	}
 
-	// Both legacy and extended advertising are reached through the extended HCI
-	// commands. Legacy advertising PDUs (so older centrals can see the set) are
-	// selected with the legacy event-property bit; this also makes the
-	// advertising duration / timeout available, which the old legacy enable
-	// command does not provide.
 	uint16_t extprop = 0;
-
 	if (g_BtAppData.bExtAdv == false)
 	{
 		extprop |= BTADV_EXTADV_EVT_PROP_LEGACY;
 	}
-
-	// Role dictates connectable / scannable per the validated mapping:
-	//   peripheral legacy   -> connectable + scannable (ADV_IND)
-	//   peripheral extended -> connectable only (extended cannot be scannable)
-	//   broadcaster         -> neither (non-connectable non-scannable)
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
 		extprop |= BTADV_EXTADV_EVT_PROP_CONNECTABLE;
 	}
-
-	// A legacy connectable set is ADV_IND, which is always scannable. Core Vol 4
-	// Part E 7.8.53 defines only a fixed set of legacy event-property values;
-	// LEGACY|CONNECTABLE on its own (0x11) is not one of them and the controller
-	// rejects it with Invalid HCI Command Parameters. Force the scannable
-	// property (an empty scan response is valid) so a name-only peripheral, the
-	// most common configuration, is accepted and advertises.
 	if (g_BtAppData.bExtAdv == false && (pCfg->Role & BTAPP_ROLE_PERIPHERAL))
 	{
 		scannable = true;
 	}
-
 	if (scannable)
 	{
 		extprop |= BTADV_EXTADV_EVT_PROP_SCANNABLE;
 	}
 
-	// Build the LE Set Extended Advertising Parameters command directly in the
-	// packed HCI layout. Casting BtExtAdvParam_t onto it does not work: its
-	// bitfield layout differs from the wire format.
-	BtHciLeExtAdvParams_t p;
-	memset(&p, 0, sizeof(p));
-	p.AdvHandle = 0;
-	BtAdvWr16(p.EvtProp, extprop);
-	// Primary_Advertising_Interval_Min has a floor of 0x000020 (20 ms) in the
-	// LE Set Extended Advertising Parameters command; a smaller configured
-	// interval is otherwise rejected by the controller with Invalid HCI Command
-	// Parameters. Clamp up to the floor and keep max >= min.
+	uint8_t localType = 0;
+	uint8_t localAddr[6];
+	BtSmpLocalAddrGet(&localType, localAddr);
+	bool useRandom = (localType == BTADDR_TYPE_RAND ||
+		localType == BTADDR_TYPE_RANDOM_STATIC);
+	if (useRandom && BtAddrIsStaticRandom(localAddr) == false)
+	{
+		return false;
+	}
+
+	bool useScanResponse = scannable && srpkt->Len > 0;
+	bool useExtCommands;
+	if (BtAdvCommandSetSelect(g_BtAppData.bExtAdv, useRandom,
+		useScanResponse, (uint16_t)advpkt->Len,
+		useScanResponse ? (uint16_t)srpkt->Len : 0, &useExtCommands) == false)
+	{
+		return false;
+	}
+
+	// LE Set Advertising Enable has no duration parameter. Reject a nonzero
+	// timeout when the legacy command set is selected.
+	if (useExtCommands == false && pCfg->AdvTimeout != 0)
+	{
+		return false;
+	}
+
 	uint32_t primMin = mSecTo0_625(pCfg->AdvInterval);
 	uint32_t primMax = mSecTo0_625(pCfg->AdvInterval + 50);
 	if (primMin < 0x20)
@@ -414,93 +564,93 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 	{
 		primMax = primMin;
 	}
-	BtAdvWr24(p.PrimIntervalMin, primMin);
-	BtAdvWr24(p.PrimIntervalMax, primMax);
-	p.PrimChanMap  = 7;
-	// Own address type follows the configured local identity instead of being
-	// forced to Random. A public identity advertises as public and needs no
-	// random address; a random identity advertises as random with a validated
-	// static random address loaded per set.
-	uint8_t  localType = 0;
-	uint8_t  localAddr[6];
-	BtSmpLocalAddrGet(&localType, localAddr);
-	bool useRandom = (localType == BTADDR_TYPE_RAND ||
-					  localType == BTADDR_TYPE_RANDOM_STATIC);
-	p.OwnAddrType  = useRandom ? BTADDR_TYPE_RAND : BTADDR_TYPE_PUBLIC;
-	p.PeerAddrType = 0;
-	p.FilterPolicy = 0;
-	p.TxPower      = 0;
-	p.PrimPhy      = BTADV_EXTADV_PHY_1M;
-	p.SecMaxSkip   = 0;
-	p.SecPhy       = BTADV_EXTADV_PHY_2M;
-	p.Sid          = 0;
-	p.ScanReqNotif = 0;
-
-	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM, &p, sizeof(p), NULL, 0) != 0)
+	if ((useExtCommands && primMax > 0xFFFFFF) ||
+		(useExtCommands == false && primMax > 0x4000))
 	{
 		return false;
 	}
 
-	// Extended advertising with a random own-address type requires the random
-	// address to be set per advertising set; the legacy LE Set Random Address
-	// command does not configure it. This is the single point where the on-air
-	// own address is chosen; a privacy layer that rotates resolvable private
-	// addresses replaces the address here, and the recorded copy is what a new
-	// connection is stamped with.
-	if (useRandom)
+	s_BtDevUseExtAdvCmd = useExtCommands;
+	s_BtDevAdvScannable = scannable;
+
+	if (useExtCommands)
 	{
-		// Reject an address that is not a valid static random address (for
-		// example the all-zero default) rather than have the controller fail
-		// the command. See BtAddrIsStaticRandom, Vol 6 Part B 1.3.2.1.
-		if (BtAddrIsStaticRandom(localAddr) == false)
+		BtHciLeExtAdvParams_t p;
+		memset(&p, 0, sizeof(p));
+		p.AdvHandle = 0;
+		BtAdvWr16(p.EvtProp, extprop);
+		BtAdvWr24(p.PrimIntervalMin, primMin);
+		BtAdvWr24(p.PrimIntervalMax, primMax);
+		p.PrimChanMap = 7;
+		p.OwnAddrType = useRandom ? BTADDR_TYPE_RAND : BTADDR_TYPE_PUBLIC;
+		p.PeerAddrType = 0;
+		p.FilterPolicy = 0;
+		p.TxPower = 0;
+		p.PrimPhy = BTADV_EXTADV_PHY_1M;
+		p.SecMaxSkip = 0;
+		p.SecPhy = BtHciCapabilitiesLeFeatureSupported(s_pBtAdvCapabilities,
+			BT_HCI_CAP_LE_FEATURE_PHY_2M) ?
+			BTADV_EXTADV_PHY_2M : BTADV_EXTADV_PHY_1M;
+		p.Sid = 0;
+		p.ScanReqNotif = 0;
+
+		if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM,
+			&p, sizeof(p), NULL, 0) != 0)
 		{
 			return false;
 		}
 
-		BtHciLeAdvSetRandAddr_t ra;
-		ra.AdvHandle = 0;
-		memcpy(ra.RandAddr, localAddr, 6);
-
-		if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_ADV_SET_RAND_ADDR, &ra, sizeof(ra), NULL, 0) != 0)
+		if (useRandom)
 		{
-			return false;
-		}
+			BtHciLeAdvSetRandAddr_t ra;
+			ra.AdvHandle = 0;
+			memcpy(ra.RandAddr, localAddr, 6);
 
-		s_BtAdvOwnAddrType = BTADDR_TYPE_RAND;
-		memcpy(s_BtAdvOwnAddr, localAddr, 6);
+			if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_ADV_SET_RAND_ADDR,
+				&ra, sizeof(ra), NULL, 0) != 0)
+			{
+				return false;
+			}
+		}
 	}
 	else
 	{
-		s_BtAdvOwnAddrType = BTADDR_TYPE_PUBLIC;
-		memcpy(s_BtAdvOwnAddr, localAddr, 6);
-	}
+		BtHciLeAdvParams_t p = {};
+		BtAdvWr16(p.IntervalMin, (uint16_t)primMin);
+		BtAdvWr16(p.IntervalMax, (uint16_t)primMax);
+		p.AdvType = (pCfg->Role & BTAPP_ROLE_PERIPHERAL) ?
+			BTADV_LEGACY_ADV_IND :
+			(scannable ? BTADV_LEGACY_ADV_SCAN_IND :
+			 BTADV_LEGACY_ADV_NONCONN_IND);
+		p.OwnAddrType = useRandom ? BTADDR_TYPE_RAND : BTADDR_TYPE_PUBLIC;
+		p.PeerAddrType = 0;
+		p.ChanMap = 7;
+		p.FilterPolicy = 0;
 
-	s_BtDevExtAdvData.AdvHandle = 0;
-	s_BtDevExtAdvData.Operation = 3;
-	s_BtDevExtAdvData.FragPref  = 1;
-	s_BtDevExtAdvData.DataLen   = advpkt->Len;
+		if (useRandom && BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_RANDOM_ADDR,
+			localAddr, sizeof(localAddr), NULL, 0) != 0)
+		{
+			return false;
+		}
 
-	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA, &s_BtDevExtAdvData, BTADV_HCI_DATA_HDR_LEN + advpkt->Len, NULL, 0) != 0)
-	{
-		return false;
-	}
-
-	// Scan response data only exists for a scannable set; setting it on a
-	// non-scannable set is rejected by the controller.
-	if (scannable && srpkt->Len > 0)
-	{
-		s_BtDevExtSrData.AdvHandle = 0;
-		s_BtDevExtSrData.Operation = 3;
-		s_BtDevExtSrData.FragPref  = 1;
-		s_BtDevExtSrData.DataLen   = srpkt->Len;
-
-		if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_SCAN_RESP_DATA, &s_BtDevExtSrData, BTADV_HCI_DATA_HDR_LEN + srpkt->Len, NULL, 0) != 0)
+		if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_ADV_PARAM,
+			&p, sizeof(p), NULL, 0) != 0)
 		{
 			return false;
 		}
 	}
 
-	// Cache the advertising duration (10 ms units) for the enable command.
+	if (BtAdvDataWrite(pDev, advpkt, false) != 0)
+	{
+		return false;
+	}
+	if (useScanResponse && BtAdvDataWrite(pDev, srpkt, true) != 0)
+	{
+		return false;
+	}
+
+	s_BtAdvOwnAddrType = useRandom ? BTADDR_TYPE_RAND : BTADDR_TYPE_PUBLIC;
+	memcpy(s_BtAdvOwnAddr, localAddr, 6);
 	s_BtDevAdvDuration = mSecTo10Ms(pCfg->AdvTimeout);
 
 	return true;

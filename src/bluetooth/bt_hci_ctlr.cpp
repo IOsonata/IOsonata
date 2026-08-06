@@ -49,6 +49,11 @@ SOFTWARE.
 #define BTHCICTLR_FIFO_MEM_SIZE			BTHCICTLR_PKT_CFIFO_TOTAL_MEMSIZE(4, BT_HCI_CTLR_MTU_MAX)
 alignas(4) static uint8_t s_BtHciCtlrRxFifoMem[BTHCICTLR_FIFO_MEM_SIZE];
 
+// The current controller instance. Existing ports expose one controller per
+// firmware image; this association lets generic HCI operations obtain the
+// controller-owned capability record after the target identifies its host.
+static BtHciCtlrDev_t *s_pBtHciCtlrActive = nullptr;
+
 static uint16_t BtHciCapLoadLe16(const uint8_t *pData)
 {
 	return (uint16_t)(pData[0] | ((uint16_t)pData[1] << 8));
@@ -169,6 +174,18 @@ bool BtHciCapabilitiesRead(BtHciDevice_t * const pDev,
 const BtHciCapabilities_t *BtHciCtlrCapabilitiesGet(const BtHciCtlrDev_t *pDev)
 {
 	return pDev != nullptr ? &pDev->Capabilities : nullptr;
+}
+
+const BtHciCapabilities_t *BtHciCapabilitiesForDeviceGet(
+	const BtHciDevice_t *pDev)
+{
+	if (pDev == nullptr || s_pBtHciCtlrActive == nullptr ||
+		s_pBtHciCtlrActive->pHciDev != pDev)
+	{
+		return nullptr;
+	}
+
+	return &s_pBtHciCtlrActive->Capabilities;
 }
 
 // Queue one controller->host packet. Hdl identifies the value, data copied up
@@ -365,10 +382,12 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		return false;
 	}
 
-	if (BtHciCtlrInit(pDev, pCfg) == false)
+	if (BtHciCtlrInit(pDev, pCfg) == false ||
+		BtHciCtlrStart(pDev, pCfg) == false)
 	{
 		return false;
 	}
 
-	return BtHciCtlrStart(pDev, pCfg);
+	s_pBtHciCtlrActive = pDev;
+	return true;
 }

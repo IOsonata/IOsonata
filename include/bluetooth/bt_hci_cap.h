@@ -32,6 +32,11 @@
 // The number is octet * 8 + bit, using the octet and bit numbering from
 // Core Vol 4 Part E, Section 6.27.
 enum {
+	BT_HCI_CAP_CMD_LE_SET_RANDOM_ADDRESS = 25U * 8U + 4U,
+	BT_HCI_CAP_CMD_LE_SET_ADV_PARAMETERS = 25U * 8U + 5U,
+	BT_HCI_CAP_CMD_LE_SET_ADV_DATA = 25U * 8U + 7U,
+	BT_HCI_CAP_CMD_LE_SET_SCAN_RESPONSE_DATA = 26U * 8U,
+	BT_HCI_CAP_CMD_LE_SET_ADV_ENABLE = 26U * 8U + 1U,
 	BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS = 35U * 8U + 6U,
 	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS = 35U * 8U + 7U,
 	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_DATA = 36U * 8U,
@@ -43,6 +48,7 @@ enum {
 
 // Bit numbers in the LE Read Local Supported Features return value.
 enum {
+	BT_HCI_CAP_LE_FEATURE_PHY_2M = 8U,
 	BT_HCI_CAP_LE_FEATURE_EXT_ADV = 12U,
 };
 
@@ -110,12 +116,86 @@ static inline bool BtHciCapabilitiesLeFeatureSupported(
 		(1U << (FeatureBit & 7U))) != 0;
 }
 
+static inline bool BtHciCapabilitiesLegacyAdvertisingSupported(
+	const BtHciCapabilities_t *pCapabilities, bool UseRandomAddress,
+	bool UseScanResponse)
+{
+	if (BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_ADV_PARAMETERS) == false ||
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_ADV_DATA) == false ||
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_ADV_ENABLE) == false)
+	{
+		return false;
+	}
+
+	if (UseRandomAddress &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_RANDOM_ADDRESS) == false)
+	{
+		return false;
+	}
+
+	if (UseScanResponse &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_SCAN_RESPONSE_DATA) == false)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+static inline bool BtHciCapabilitiesExtendedAdvertisingSupported(
+	const BtHciCapabilities_t *pCapabilities, bool UseRandomAddress,
+	bool UseScanResponse)
+{
+	if (BtHciCapabilitiesLeFeatureSupported(pCapabilities,
+		BT_HCI_CAP_LE_FEATURE_EXT_ADV) == false ||
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS) == false ||
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_DATA) == false ||
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_ENABLE) == false)
+	{
+		return false;
+	}
+
+	if (UseRandomAddress &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS) == false)
+	{
+		return false;
+	}
+
+	if (UseScanResponse &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_RESPONSE_DATA) == false)
+	{
+		return false;
+	}
+
+	return true;
+}
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 bool BtHciCapabilitiesRead(BtHciDevice_t * const pDev,
 	BtHciCapabilities_t * const pCapabilities);
+
+/**
+ * Return the capability record for an HCI device associated with the active
+ * controller instance.
+ *
+ * @return Controller-owned capability record, or NULL when the device has not
+ *         been associated with the controller.
+ */
+const BtHciCapabilities_t *BtHciCapabilitiesForDeviceGet(
+	const BtHciDevice_t *pDev);
 
 #ifdef __cplusplus
 }
