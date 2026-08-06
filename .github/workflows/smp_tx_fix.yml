@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - bt_sig_compliance_smp_tx_fix
+  pull_request:
+    branches:
+      - bt_sig_compliance
 
 permissions:
   contents: write
@@ -16,6 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: bt_sig_compliance_smp_tx_fix
 
       - name: Apply exact source patch
         run: python3 .tmp_smp_tx_patch.py
