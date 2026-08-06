@@ -1,0 +1,234 @@
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+
+#include "bluetooth/bt_hci_cap.h"
+
+namespace {
+
+int s_Checks;
+int s_Failures;
+int s_Mode;
+uint16_t s_Opcode[16];
+size_t s_OpcodeCount;
+
+#define CHECK(expr) do { \
+	s_Checks++; \
+	if (!(expr)) { \
+		std::printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #expr); \
+		s_Failures++; \
+	} \
+} while (0)
+
+void CopyReturn(void *pRet, uint8_t RetLen, const uint8_t *pData, size_t DataLen)
+{
+	if (pRet != nullptr && RetLen != 0)
+	{
+		size_t len = RetLen < DataLen ? RetLen : DataLen;
+		std::memcpy(pRet, pData, len);
+	}
+}
+
+uint8_t CapabilityCommand(BtHciDevice_t * const, uint16_t OpCode,
+	const void *, uint8_t, void *pRet, uint8_t RetLen)
+{
+	if (s_OpcodeCount < sizeof(s_Opcode) / sizeof(s_Opcode[0]))
+	{
+		s_Opcode[s_OpcodeCount++] = OpCode;
+	}
+
+	if (s_Mode == 2 && OpCode == BT_HCI_CMD_INFO_READ_LOCAL_SUPPORTED_COMMANDS)
+	{
+		return 1;
+	}
+
+	if (s_Mode == 1)
+	{
+		if (OpCode == BT_HCI_CMD_CTLR_READ_BUFF_SIZE_EXT)
+		{
+			return 1;
+		}
+		if (OpCode != BT_HCI_CMD_INFO_READ_LOCAL_VERS_INFO &&
+			OpCode != BT_HCI_CMD_INFO_READ_LOCAL_SUPPORTED_COMMANDS &&
+			OpCode != BT_HCI_CMD_CTLR_READ_LOCAL_SUPP_FEATURES &&
+			OpCode != BT_HCI_CMD_CTLR_READ_SUPPORTED_STATES &&
+			OpCode != BT_HCI_CMD_CTLR_READ_BUFF_SIZE)
+		{
+			return 1;
+		}
+	}
+
+	uint8_t data[64] = {};
+	switch (OpCode)
+	{
+		case BT_HCI_CMD_INFO_READ_LOCAL_VERS_INFO:
+		{
+			const uint8_t value[8] = { 0x0D, 0x34, 0x12, 0x0D, 0x59, 0x00, 0x78, 0x56 };
+			CopyReturn(pRet, RetLen, value, sizeof(value));
+			break;
+		}
+		case BT_HCI_CMD_INFO_READ_LOCAL_SUPPORTED_COMMANDS:
+			for (size_t i = 0; i < sizeof(data); i++)
+			{
+				data[i] = static_cast<uint8_t>(i);
+			}
+			CopyReturn(pRet, RetLen, data, sizeof(data));
+			break;
+		case BT_HCI_CMD_CTLR_READ_LOCAL_SUPP_FEATURES:
+			std::memset(data, 0xA5, 8);
+			CopyReturn(pRet, RetLen, data, 8);
+			break;
+		case BT_HCI_CMD_CTLR_READ_SUPPORTED_STATES:
+			std::memset(data, 0x5A, 8);
+			CopyReturn(pRet, RetLen, data, 8);
+			break;
+		case BT_HCI_CMD_CTLR_READ_BUFF_SIZE_EXT:
+		{
+			const uint8_t value[6] = { 0xFB, 0x00, 7, 0x78, 0x00, 2 };
+			CopyReturn(pRet, RetLen, value, sizeof(value));
+			break;
+		}
+		case BT_HCI_CMD_CTLR_READ_BUFF_SIZE:
+		{
+			const uint8_t value[3] = { 0x1B, 0x00, 4 };
+			CopyReturn(pRet, RetLen, value, sizeof(value));
+			break;
+		}
+		case BT_HCI_CMD_CTLR_READ_MAX_DATA_LEN:
+		{
+			const uint8_t value[8] = { 0xFB, 0x00, 0x48, 0x08, 0xFB, 0x00, 0x48, 0x08 };
+			CopyReturn(pRet, RetLen, value, sizeof(value));
+			break;
+		}
+		case BT_HCI_CMD_CTLR_RESOLVING_LIST_READ_SIZE:
+			data[0] = 8;
+			CopyReturn(pRet, RetLen, data, 1);
+			break;
+		case BT_HCI_CMD_CTLR_READ_MAX_ADV_DATA_LEN:
+			data[0] = 0x72;
+			data[1] = 0x06;
+			CopyReturn(pRet, RetLen, data, 2);
+			break;
+		case BT_HCI_CMD_CTLR_READ_NB_SUPPORTED_ADV_SETS:
+			data[0] = 4;
+			CopyReturn(pRet, RetLen, data, 1);
+			break;
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_LIST_READ_SIZE:
+			data[0] = 3;
+			CopyReturn(pRet, RetLen, data, 1);
+			break;
+		default:
+			return 1;
+	}
+	return 0;
+}
+
+void Reset(int Mode)
+{
+	s_Mode = Mode;
+	s_OpcodeCount = 0;
+	std::memset(s_Opcode, 0, sizeof(s_Opcode));
+}
+
+void TestFullDiscovery()
+{
+	Reset(0);
+	BtHciDevice_t dev = {};
+	dev.Command = CapabilityCommand;
+	BtHciCapabilities_t caps = {};
+
+	CHECK(BtHciCapabilitiesRead(&dev, &caps));
+	CHECK(caps.Valid == ((1UL << 10) - 1));
+	CHECK(caps.HciVersion == 0x0D);
+	CHECK(caps.HciRevision == 0x1234);
+	CHECK(caps.LmpVersion == 0x0D);
+	CHECK(caps.Manufacturer == 0x0059);
+	CHECK(caps.LmpSubversion == 0x5678);
+	CHECK(caps.SupportedCommands[0] == 0);
+	CHECK(caps.SupportedCommands[63] == 63);
+	CHECK(caps.LeFeatures[0] == 0xA5);
+	CHECK(caps.LeStates[7] == 0x5A);
+	CHECK(caps.LeAclDataLen == 251);
+	CHECK(caps.LeAclPacketCount == 7);
+	CHECK(caps.IsoDataLen == 120);
+	CHECK(caps.IsoPacketCount == 2);
+	CHECK(caps.MaxTxOctets == 251);
+	CHECK(caps.MaxTxTime == 2120);
+	CHECK(caps.MaxRxOctets == 251);
+	CHECK(caps.MaxRxTime == 2120);
+	CHECK(caps.ResolvingListSize == 8);
+	CHECK(caps.MaxAdvDataLen == 1650);
+	CHECK(caps.AdvSetCount == 4);
+	CHECK(caps.PeriodicAdvListSize == 3);
+	CHECK(s_OpcodeCount == 10);
+}
+
+void TestOptionalFallback()
+{
+	Reset(1);
+	BtHciDevice_t dev = {};
+	dev.Command = CapabilityCommand;
+	BtHciCapabilities_t caps = {};
+
+	CHECK(BtHciCapabilitiesRead(&dev, &caps));
+	CHECK(caps.Valid == (BT_HCI_CAP_VALID_VERSION |
+		BT_HCI_CAP_VALID_COMMANDS |
+		BT_HCI_CAP_VALID_LE_FEATURES |
+		BT_HCI_CAP_VALID_LE_STATES |
+		BT_HCI_CAP_VALID_BUFFER_SIZE));
+	CHECK(caps.LeAclDataLen == 27);
+	CHECK(caps.LeAclPacketCount == 4);
+	CHECK(caps.IsoDataLen == 0);
+	CHECK(caps.IsoPacketCount == 0);
+	CHECK(s_Opcode[4] == BT_HCI_CMD_CTLR_READ_BUFF_SIZE_EXT);
+	CHECK(s_Opcode[5] == BT_HCI_CMD_CTLR_READ_BUFF_SIZE);
+}
+
+void TestMandatoryFailure()
+{
+	Reset(2);
+	BtHciDevice_t dev = {};
+	dev.Command = CapabilityCommand;
+	BtHciCapabilities_t caps;
+	std::memset(&caps, 0xA5, sizeof(caps));
+
+	CHECK(BtHciCapabilitiesRead(&dev, &caps) == false);
+	CHECK(caps.Valid == 0);
+	CHECK(caps.HciVersion == 0);
+	CHECK(s_OpcodeCount == 2);
+}
+
+void TestArguments()
+{
+	BtHciDevice_t dev = {};
+	BtHciCapabilities_t caps;
+	std::memset(&caps, 0xA5, sizeof(caps));
+	CHECK(BtHciCapabilitiesRead(nullptr, &caps) == false);
+	CHECK(caps.Valid == 0);
+	std::memset(&caps, 0xA5, sizeof(caps));
+	CHECK(BtHciCapabilitiesRead(&dev, &caps) == false);
+	CHECK(caps.Valid == 0);
+	dev.Command = CapabilityCommand;
+	CHECK(BtHciCapabilitiesRead(&dev, nullptr) == false);
+}
+
+} // namespace
+
+int main()
+{
+	TestFullDiscovery();
+	TestOptionalFallback();
+	TestMandatoryFailure();
+	TestArguments();
+
+	if (s_Failures == 0)
+	{
+		std::printf("Bluetooth HCI capability tests: PASS (%d checks)\n", s_Checks);
+		return 0;
+	}
+
+	std::printf("Bluetooth HCI capability tests: FAIL (%d failures, %d checks)\n",
+		s_Failures, s_Checks);
+	return 1;
+}

@@ -1,9 +1,10 @@
 ROOT := ../../..
 BUILD_DIR := build
 HCI_TARGET := $(BUILD_DIR)/bt_hci_compliance_test
+CAP_TARGET := $(BUILD_DIR)/bt_hci_capability_test
 SMP_TARGET := $(BUILD_DIR)/bt_smp_dual_host_test
 ATT_TARGET := $(BUILD_DIR)/bt_att_dual_host_test
-TARGETS := $(HCI_TARGET) $(SMP_TARGET) $(ATT_TARGET)
+TARGETS := $(HCI_TARGET) $(CAP_TARGET) $(SMP_TARGET) $(ATT_TARGET)
 
 CC ?= gcc
 CXX ?= g++
@@ -48,6 +49,10 @@ HCI_SOURCES := \
 	peer/bt_virtual_peer.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
+
+CAP_SOURCES := \
+	hci/bt_hci_capability_test.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_cap.cpp
 
 ATT_SOURCES := \
 	att/bt_att_dual_host_test.cpp \
@@ -95,6 +100,7 @@ test: $(TARGETS)
 
 strict: $(TARGETS)
 	BT_COMPLIANCE_STRICT=1 $(TEST_ENV) ./$(HCI_TARGET)
+	$(TEST_ENV) ./$(CAP_TARGET)
 	$(TEST_ENV) ./$(SMP_TARGET)
 	$(TEST_ENV) ./$(ATT_TARGET)
 
@@ -113,6 +119,11 @@ $(HCI_TARGET): $(HCI_SOURCES) $(HEADERS) $(CFIFO_OBJ)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$(HCI_SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(CAP_TARGET): $(CAP_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
+		$(CAP_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(ATT_TARGET): $(ATT_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
