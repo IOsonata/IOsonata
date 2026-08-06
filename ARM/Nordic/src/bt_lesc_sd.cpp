@@ -5,9 +5,9 @@
 
 		The SoftDevice owns the SMP state machine and delegates P-256 work to this
 		module. Peer requests are deferred from the stack callback to the main loop.
-		One local key pair may serve several simultaneous peers. Each connection
-		that receives the public key is tracked until authentication completes or
-		the link is released, so the shared private key cannot be replaced early.
+		A local key pair is assigned to at most one pairing procedure. Concurrent
+		pairing attempts fail closed instead of sharing private-key material, and a
+		fresh key pair is generated after every completed or aborted procedure.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -123,6 +123,19 @@ static int SlotAlloc(uint16_t ConnHdl)
 	{
 		return index;
 	}
+
+	// One P-256 private key belongs to one pairing procedure. The SoftDevice
+	// API obtains the local public key before this event hook can bind the
+	// connection handle, so a second active slot would mean that two procedures
+	// were given the same private key. Reject instead of sharing it.
+	for (int i = 0; i < LinkCount(); i++)
+	{
+		if (s_PeerKeys[i].bAssigned)
+		{
+			return -1;
+		}
+	}
+
 	for (int i = 0; i < LinkCount(); i++)
 	{
 		if (!s_PeerKeys[i].bAssigned)
@@ -282,9 +295,12 @@ bool BtLescInit(void)
 
 ble_gap_lesc_p256_pk_t *BtLescPubKeyGet(void)
 {
-	if (!s_bKeyPairGen)
+	// Do not hand the same public/private key pair to another link. After a
+	// pairing releases its slot, regeneration is deferred to the main loop;
+	// until that completes the old public key must remain unavailable.
+	if (!s_bKeyPairGen || KeyInUse() || s_bRegenPending)
 	{
-		DEBUG_PRINTF("LESC public key accessed before generation\r\n");
+		DEBUG_PRINTF("LESC public key unavailable\r\n");
 		return NULL;
 	}
 	return &s_LescPubKey;
@@ -297,7 +313,8 @@ static void LinkRelease(uint16_t ConnHdl)
 
 bool BtLescOobLocalGen(void)
 {
-	if (s_OobConnHdl != BLE_CONN_HANDLE_INVALID)
+	if (s_OobConnHdl != BLE_CONN_HANDLE_INVALID || KeyInUse() ||
+		s_bRegenPending)
 	{
 		return false;
 	}
@@ -354,10 +371,12 @@ static CRYPTO_STATUS ComputeAndReply(BtLescPeerKey_t *pPeer)
 	{
 		return ReplyStatus(pPeer->ConnHdl, BLE_GAP_SEC_STATUS_DHKEY_FAILURE, NULL);
 	}
-	if (memcmp(s_LescPubKey.pk, pPeer->Value,
-		BLE_GAP_LESC_P256_PK_LEN) == 0)
+
+	// Core 5.1+ reflection/debug-key mitigation compares the X coordinates.
+	// The opposite valid Y coordinate for the same X must be rejected too.
+	if (memcmp(s_LescPubKey.pk, pPeer->Value, LESC_COORD_SIZE) == 0)
 	{
-		DEBUG_PRINTF("LESC peer used identical public key\r\n");
+		DEBUG_PRINTF("LESC peer used local public-key X coordinate\r\n");
 		return ReplyStatus(pPeer->ConnHdl, BLE_GAP_SEC_STATUS_DHKEY_FAILURE, NULL);
 	}
 
@@ -496,7 +515,7 @@ void BtLescOnBleEvt(const ble_evt_t *pEvt)
 		// The security manager has just placed s_LescPubKey in this link's
 		// keyset. Register the user before any other BLE event can complete a
 		// different pairing and request key regeneration.
-		if (s_bKeyPairGen)
+		if (s_bKeyPairGen && !s_bRegenPending)
 		{
 			(void)SlotAlloc(connHdl);
 		}
