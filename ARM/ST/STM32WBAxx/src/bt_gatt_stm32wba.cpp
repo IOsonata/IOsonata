@@ -230,7 +230,9 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar,
 {
 	if (ConnHdl == BT_CONN_HDL_INVALID || pChar == nullptr ||
 		pChar->pSrvc == nullptr || pChar->Hdl == BT_ATT_HANDLE_INVALID ||
-		pChar->ValHdl == BT_ATT_HANDLE_INVALID)
+		pChar->ValHdl == BT_ATT_HANDLE_INVALID ||
+		pChar->CccdHdl == BT_ATT_HANDLE_INVALID ||
+		!BtGattCharNotifyEnabled(ConnHdl, pChar))
 	{
 		return false;
 	}
@@ -267,7 +269,9 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar,
 {
 	if (ConnHdl == BT_CONN_HDL_INVALID || pChar == nullptr ||
 		pChar->pSrvc == nullptr || pChar->Hdl == BT_ATT_HANDLE_INVALID ||
-		pChar->ValHdl == BT_ATT_HANDLE_INVALID)
+		pChar->ValHdl == BT_ATT_HANDLE_INVALID ||
+		pChar->CccdHdl == BT_ATT_HANDLE_INVALID ||
+		!BtGattCharIndicateEnabled(ConnHdl, pChar))
 	{
 		return false;
 	}
