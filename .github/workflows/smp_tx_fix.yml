@@ -41,7 +41,11 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          git diff --check 2>&1 | tee diff-check.log
+          git diff --check 1ba4a99dc3acfebeb7498c4bd6b4c2bd673bbc7d -- \
+            src/bluetooth/bt_hci_host.cpp \
+            tests/bluetooth/host/Makefile \
+            tests/bluetooth/host/bt_hci_smp_tx_test.cpp \
+            2>&1 | tee diff-check.log
           test ! -s diff-check.log
 
       - name: Run GCC host test matrix
