@@ -74,10 +74,13 @@ uint8_t CapabilityCommand(BtHciDevice_t * const, uint16_t OpCode,
 			{
 				data[i] = static_cast<uint8_t>(i);
 			}
+			data[35] |= 0xC0;
+			data[36] |= 0x1F;
 			CopyReturn(pRet, RetLen, data, sizeof(data));
 			break;
 		case BT_HCI_CMD_CTLR_READ_LOCAL_SUPP_FEATURES:
 			std::memset(data, 0xA5, 8);
+			data[1] |= 0x10;
 			CopyReturn(pRet, RetLen, data, 8);
 			break;
 		case BT_HCI_CMD_CTLR_READ_SUPPORTED_STATES:
@@ -163,6 +166,19 @@ void TestFullDiscovery()
 	CHECK(caps.AdvSetCount == 4);
 	CHECK(caps.PeriodicAdvListSize == 3);
 	CHECK(s_OpcodeCount == 10);
+	CHECK(BtHciCapabilitiesCommandsKnown(&caps));
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS));
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS));
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_DATA));
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_RESPONSE_DATA));
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_ENABLE));
+	CHECK(BtHciCapabilitiesLeFeatureSupported(&caps,
+		BT_HCI_CAP_LE_FEATURE_EXT_ADV));
 }
 
 void TestOptionalFallback()
@@ -231,6 +247,33 @@ void TestControllerCapabilityStorage()
 	CHECK(BtHciCtlrCapabilitiesGet(nullptr) == nullptr);
 }
 
+void TestCapabilityPredicates()
+{
+	BtHciCapabilities_t caps = {};
+
+	CHECK(BtHciCapabilitiesCommandsKnown(nullptr) == false);
+	CHECK(BtHciCapabilitiesCommandsKnown(&caps) == false);
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS) == false);
+
+	caps.Valid = BT_HCI_CAP_VALID_COMMANDS;
+	caps.SupportedCommands[35] = 0x80;
+	CHECK(BtHciCapabilitiesCommandsKnown(&caps));
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS));
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS) == false);
+	CHECK(BtHciCapabilitiesCommandSupported(&caps, 512) == false);
+
+	CHECK(BtHciCapabilitiesLeFeaturesKnown(&caps) == false);
+	caps.Valid |= BT_HCI_CAP_VALID_LE_FEATURES;
+	caps.LeFeatures[1] = 0x10;
+	CHECK(BtHciCapabilitiesLeFeaturesKnown(&caps));
+	CHECK(BtHciCapabilitiesLeFeatureSupported(&caps,
+		BT_HCI_CAP_LE_FEATURE_EXT_ADV));
+	CHECK(BtHciCapabilitiesLeFeatureSupported(&caps, 64) == false);
+}
+
 } // namespace
 
 int main()
@@ -240,6 +283,7 @@ int main()
 	TestMandatoryFailure();
 	TestArguments();
 	TestControllerCapabilityStorage();
+	TestCapabilityPredicates();
 
 	if (s_Failures == 0)
 	{

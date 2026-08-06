@@ -28,6 +28,24 @@
 #define BT_HCI_CAP_VALID_ADV_SET_COUNT			(1UL << 8)
 #define BT_HCI_CAP_VALID_PERIODIC_LIST_SIZE		(1UL << 9)
 
+// Bit numbers in the 64-octet Read Local Supported Commands return value.
+// The number is octet * 8 + bit, using the octet and bit numbering from
+// Core Vol 4 Part E, Section 6.27.
+enum {
+	BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS = 35U * 8U + 6U,
+	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS = 35U * 8U + 7U,
+	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_DATA = 36U * 8U,
+	BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_RESPONSE_DATA = 36U * 8U + 1U,
+	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_ENABLE = 36U * 8U + 2U,
+	BT_HCI_CAP_CMD_LE_READ_MAX_ADV_DATA_LENGTH = 36U * 8U + 3U,
+	BT_HCI_CAP_CMD_LE_READ_SUPPORTED_ADV_SETS = 36U * 8U + 4U,
+};
+
+// Bit numbers in the LE Read Local Supported Features return value.
+enum {
+	BT_HCI_CAP_LE_FEATURE_EXT_ADV = 12U,
+};
+
 typedef struct __Bt_Hci_Capabilities {
 	uint32_t Valid;
 	uint8_t HciVersion;
@@ -51,6 +69,46 @@ typedef struct __Bt_Hci_Capabilities {
 	uint8_t AdvSetCount;
 	uint8_t PeriodicAdvListSize;
 } BtHciCapabilities_t;
+
+static inline bool BtHciCapabilitiesCommandsKnown(
+	const BtHciCapabilities_t *pCapabilities)
+{
+	return pCapabilities != NULL &&
+		(pCapabilities->Valid & BT_HCI_CAP_VALID_COMMANDS) != 0;
+}
+
+static inline bool BtHciCapabilitiesCommandSupported(
+	const BtHciCapabilities_t *pCapabilities, uint16_t CommandBit)
+{
+	if (BtHciCapabilitiesCommandsKnown(pCapabilities) == false ||
+		CommandBit >= sizeof(pCapabilities->SupportedCommands) * 8U)
+	{
+		return false;
+	}
+
+	return (pCapabilities->SupportedCommands[CommandBit >> 3] &
+		(1U << (CommandBit & 7U))) != 0;
+}
+
+static inline bool BtHciCapabilitiesLeFeaturesKnown(
+	const BtHciCapabilities_t *pCapabilities)
+{
+	return pCapabilities != NULL &&
+		(pCapabilities->Valid & BT_HCI_CAP_VALID_LE_FEATURES) != 0;
+}
+
+static inline bool BtHciCapabilitiesLeFeatureSupported(
+	const BtHciCapabilities_t *pCapabilities, uint8_t FeatureBit)
+{
+	if (BtHciCapabilitiesLeFeaturesKnown(pCapabilities) == false ||
+		FeatureBit >= sizeof(pCapabilities->LeFeatures) * 8U)
+	{
+		return false;
+	}
+
+	return (pCapabilities->LeFeatures[FeatureBit >> 3] &
+		(1U << (FeatureBit & 7U))) != 0;
+}
 
 #ifdef __cplusplus
 extern "C" {
