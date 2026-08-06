@@ -31,19 +31,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/UART_EBUSY_FIX_NOTES.md</name>
-			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/exemples/UART_EBUSY_FIX_NOTES.md</location>
-		</link>
-		<link>
 			<name>src/UartPrbsTxSdk5.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-5-PROJECT_LOC%7D/exemples/UartPrbsTxSdk5.c</locationURI>
-		</link>
-		<link>
-			<name>src/UartPrbsTxSdk5_new.c</name>
-			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/exemples/UartPrbsTxSdk5_new.c</location>
 		</link>
 		<link>
 			<name>src/board.h</name>
@@ -64,11 +54,6 @@
 			<name>src/sdk_config.h</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/sdk_config.h</locationURI>
-		</link>
-		<link>
-			<name>src/uart_prs_recover.c</name>
-			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/exemples/uart_prs_recover.c</location>
 		</link>
 		<link>
 			<name>src/nrfx/drivers</name>
