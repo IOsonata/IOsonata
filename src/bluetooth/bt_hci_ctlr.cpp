@@ -59,6 +59,12 @@ static uint16_t BtHciCapLoadLe16(const uint8_t *pData)
 	return (uint16_t)(pData[0] | ((uint16_t)pData[1] << 8));
 }
 
+static void BtHciCapStoreLe16(uint8_t *pData, uint16_t Value)
+{
+	pData[0] = (uint8_t)(Value & 0xFFU);
+	pData[1] = (uint8_t)(Value >> 8);
+}
+
 static bool BtHciCapRead(BtHciDevice_t * const pDev, uint16_t OpCode,
 	uint8_t *pData, uint8_t DataLen)
 {
@@ -186,6 +192,172 @@ const BtHciCapabilities_t *BtHciCapabilitiesForDeviceGet(
 	}
 
 	return &s_pBtHciCtlrActive->Capabilities;
+}
+
+static const BtHciCapabilities_t *BtHciPhyCapabilitiesGet(
+	BtHciDevice_t *pDev, BtHciCapabilities_t *pLocal)
+{
+	if (pDev == nullptr || pDev->Command == nullptr || pLocal == nullptr)
+	{
+		return nullptr;
+	}
+
+	const BtHciCapabilities_t *pCapabilities =
+		BtHciCapabilitiesForDeviceGet(pDev);
+	const uint32_t required = BT_HCI_CAP_VALID_COMMANDS |
+		BT_HCI_CAP_VALID_LE_FEATURES;
+	if (pCapabilities != nullptr &&
+		(pCapabilities->Valid & required) == required)
+	{
+		return pCapabilities;
+	}
+
+	if (BtHciCapabilitiesRead(pDev, pLocal) == false)
+	{
+		return nullptr;
+	}
+
+	return pLocal;
+}
+
+static bool BtHciPhyMaskSupported(
+	const BtHciCapabilities_t *pCapabilities, uint8_t Phys)
+{
+	if ((Phys & (uint8_t)~BT_HCI_PHY_ALL) != 0)
+	{
+		return false;
+	}
+
+	if ((Phys & BT_HCI_PHY_2M) != 0 &&
+		BtHciCapabilitiesLeFeatureSupported(pCapabilities,
+			BT_HCI_CAP_LE_FEATURE_PHY_2M) == false)
+	{
+		return false;
+	}
+
+	if ((Phys & BT_HCI_PHY_CODED) != 0 &&
+		BtHciCapabilitiesLeFeatureSupported(pCapabilities,
+			BT_HCI_CAP_LE_FEATURE_CODED_PHY) == false)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+static uint8_t BtHciPhyValueToMask(uint8_t Phy)
+{
+	switch (Phy)
+	{
+		case 0x01:
+			return BT_HCI_PHY_1M;
+		case 0x02:
+			return BT_HCI_PHY_2M;
+		case 0x03:
+			return BT_HCI_PHY_CODED;
+		default:
+			return 0;
+	}
+}
+
+bool BtHciReadPhy(BtHciDevice_t *pDev, uint16_t ConnHdl,
+	uint8_t *pTxPhy, uint8_t *pRxPhy)
+{
+	if (pTxPhy == nullptr || pRxPhy == nullptr ||
+		ConnHdl > BT_HCI_LE_CONN_HANDLE_MAX)
+	{
+		return false;
+	}
+
+	BtHciCapabilities_t localCapabilities;
+	const BtHciCapabilities_t *pCapabilities =
+		BtHciPhyCapabilitiesGet(pDev, &localCapabilities);
+	if (pCapabilities == nullptr ||
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+			BT_HCI_CAP_CMD_LE_READ_PHY) == false)
+	{
+		return false;
+	}
+
+	uint8_t param[2];
+	BtHciCapStoreLe16(param, ConnHdl);
+	uint8_t result[4] = {};
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_READ_PHY,
+		param, sizeof(param), result, sizeof(result)) != 0)
+	{
+		return false;
+	}
+
+	uint16_t resultHdl = BtHciCapLoadLe16(result);
+	uint8_t txPhy = BtHciPhyValueToMask(result[2]);
+	uint8_t rxPhy = BtHciPhyValueToMask(result[3]);
+	if (resultHdl != ConnHdl || txPhy == 0 || rxPhy == 0 ||
+		BtHciPhyMaskSupported(pCapabilities, txPhy) == false ||
+		BtHciPhyMaskSupported(pCapabilities, rxPhy) == false)
+	{
+		return false;
+	}
+
+	*pTxPhy = txPhy;
+	*pRxPhy = rxPhy;
+	return true;
+}
+
+bool BtHciSetDefaultPhy(BtHciDevice_t *pDev, uint8_t TxPhys, uint8_t RxPhys)
+{
+	BtHciCapabilities_t localCapabilities;
+	const BtHciCapabilities_t *pCapabilities =
+		BtHciPhyCapabilitiesGet(pDev, &localCapabilities);
+	if (pCapabilities == nullptr ||
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+			BT_HCI_CAP_CMD_LE_SET_DEFAULT_PHY) == false ||
+		BtHciPhyMaskSupported(pCapabilities, TxPhys) == false ||
+		BtHciPhyMaskSupported(pCapabilities, RxPhys) == false)
+	{
+		return false;
+	}
+
+	uint8_t param[3];
+	param[0] = (TxPhys == 0 ? 0x01U : 0U) |
+		(RxPhys == 0 ? 0x02U : 0U);
+	param[1] = TxPhys;
+	param[2] = RxPhys;
+
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_DEFAULT_PHY,
+		param, sizeof(param), nullptr, 0) == 0;
+}
+
+bool BtHciSetPhy(BtHciDevice_t *pDev, uint16_t ConnHdl,
+	uint8_t TxPhys, uint8_t RxPhys, uint16_t PhyOptions)
+{
+	if (ConnHdl > BT_HCI_LE_CONN_HANDLE_MAX ||
+		PhyOptions > BT_HCI_PHY_CODED_S8)
+	{
+		return false;
+	}
+
+	BtHciCapabilities_t localCapabilities;
+	const BtHciCapabilities_t *pCapabilities =
+		BtHciPhyCapabilitiesGet(pDev, &localCapabilities);
+	if (pCapabilities == nullptr ||
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+			BT_HCI_CAP_CMD_LE_SET_PHY) == false ||
+		BtHciPhyMaskSupported(pCapabilities, TxPhys) == false ||
+		BtHciPhyMaskSupported(pCapabilities, RxPhys) == false)
+	{
+		return false;
+	}
+
+	uint8_t param[7];
+	BtHciCapStoreLe16(&param[0], ConnHdl);
+	param[2] = (TxPhys == 0 ? 0x01U : 0U) |
+		(RxPhys == 0 ? 0x02U : 0U);
+	param[3] = TxPhys;
+	param[4] = RxPhys;
+	BtHciCapStoreLe16(&param[5], PhyOptions);
+
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PHY,
+		param, sizeof(param), nullptr, 0) == 0;
 }
 
 // Queue one controller->host packet. Hdl identifies the value, data copied up

@@ -360,6 +360,28 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 			}
 			break;
 
+		case BT_HCI_CMD_CTLR_READ_PHY:
+			{
+				sdc_hci_cmd_le_read_phy_return_t r = {};
+				res = sdc_hci_cmd_le_read_phy(
+					(const sdc_hci_cmd_le_read_phy_t*)pParam, &r);
+				if (res == 0 && pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_DEFAULT_PHY:
+			res = sdc_hci_cmd_le_set_default_phy(
+				(const sdc_hci_cmd_le_set_default_phy_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PHY:
+			res = sdc_hci_cmd_le_set_phy(
+				(const sdc_hci_cmd_le_set_phy_t*)pParam);
+			break;
+
 		case BT_HCI_CMD_CTLR_WRITE_SUGG_DEFAULT_DATA_LEN:
 			res = sdc_hci_cmd_le_write_suggested_default_data_length((const sdc_hci_cmd_le_write_suggested_default_data_length_t*)pParam);
 			break;

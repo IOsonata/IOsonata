@@ -40,6 +40,9 @@ enum {
 	BT_HCI_CAP_CMD_LE_SET_SCAN_PARAMETERS = 26U * 8U + 2U,
 	BT_HCI_CAP_CMD_LE_SET_SCAN_ENABLE = 26U * 8U + 3U,
 	BT_HCI_CAP_CMD_LE_CREATE_CONNECTION = 26U * 8U + 4U,
+	BT_HCI_CAP_CMD_LE_READ_PHY = 35U * 8U + 1U,
+	BT_HCI_CAP_CMD_LE_SET_DEFAULT_PHY = 35U * 8U + 2U,
+	BT_HCI_CAP_CMD_LE_SET_PHY = 35U * 8U + 3U,
 	BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS = 35U * 8U + 6U,
 	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS = 35U * 8U + 7U,
 	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_DATA = 36U * 8U,
@@ -58,6 +61,19 @@ enum {
 	BT_HCI_CAP_LE_FEATURE_CODED_PHY = 11U,
 	BT_HCI_CAP_LE_FEATURE_EXT_ADV = 12U,
 };
+
+// HCI TX_PHYs/RX_PHYs bit values used by LE Set Default PHY and LE Set PHY.
+#define BT_HCI_PHY_1M					(1U << 0)
+#define BT_HCI_PHY_2M					(1U << 1)
+#define BT_HCI_PHY_CODED				(1U << 2)
+#define BT_HCI_PHY_ALL					(BT_HCI_PHY_1M | BT_HCI_PHY_2M | BT_HCI_PHY_CODED)
+
+// LE Set PHY PHY_Options values for LE Coded PHY.
+#define BT_HCI_PHY_CODED_ANY			0U
+#define BT_HCI_PHY_CODED_S2			1U
+#define BT_HCI_PHY_CODED_S8			2U
+
+#define BT_HCI_LE_CONN_HANDLE_MAX		0x0EFFU
 
 typedef struct __Bt_Hci_Capabilities {
 	uint32_t Valid;
@@ -235,6 +251,19 @@ bool BtHciCapabilitiesRead(BtHciDevice_t * const pDev,
  */
 const BtHciCapabilities_t *BtHciCapabilitiesForDeviceGet(
 	const BtHciDevice_t *pDev);
+
+// Read the current PHY for ConnHdl. Outputs use BT_HCI_PHY_* bit values.
+bool BtHciReadPhy(BtHciDevice_t *pDev, uint16_t ConnHdl,
+	uint8_t *pTxPhy, uint8_t *pRxPhy);
+
+// Set preferred PHYs for subsequent LE connections. Zero means no preference
+// for that direction.
+bool BtHciSetDefaultPhy(BtHciDevice_t *pDev, uint8_t TxPhys, uint8_t RxPhys);
+
+// Set PHY preferences for one LE connection. Zero TxPhys or RxPhys means no
+// preference for that direction. PhyOptions is BT_HCI_PHY_CODED_*.
+bool BtHciSetPhy(BtHciDevice_t *pDev, uint16_t ConnHdl,
+	uint8_t TxPhys, uint8_t RxPhys, uint16_t PhyOptions);
 
 #ifdef __cplusplus
 }

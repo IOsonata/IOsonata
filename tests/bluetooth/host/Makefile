@@ -49,6 +49,7 @@ TEST_NAMES := \
 	bt_hci_flow_test \
 	bt_hci_smp_tx_test \
 	bt_hci_ctlr_init_test \
+	bt_hci_phy_test \
 	bt_l2cap_signal_test \
 	bt_att_db_test \
 	bt_att_req_test \
@@ -112,6 +113,11 @@ bt_hci_ctlr_init_test_SOURCES := \
 	bt_hci_ctlr_init_test.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 bt_hci_ctlr_init_test_EXTRA := $(CFIFO_OBJ)
+
+bt_hci_phy_test_SOURCES := \
+	bt_hci_phy_test.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
+bt_hci_phy_test_EXTRA := $(CFIFO_OBJ)
 
 bt_l2cap_signal_test_SOURCES := \
 	bt_l2cap_signal_test.cpp \
