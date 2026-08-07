@@ -360,6 +360,18 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 			}
 			break;
 
+		case BT_HCI_CMD_CTLR_SET_DATA_LEN:
+			{
+				sdc_hci_cmd_le_set_data_length_return_t r = {};
+				res = sdc_hci_cmd_le_set_data_length(
+					(const sdc_hci_cmd_le_set_data_length_t*)pParam, &r);
+				if (res == 0 && pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
 		case BT_HCI_CMD_CTLR_READ_PHY:
 			{
 				sdc_hci_cmd_le_read_phy_return_t r = {};

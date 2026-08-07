@@ -194,6 +194,64 @@ const BtHciCapabilities_t *BtHciCapabilitiesForDeviceGet(
 	return &s_pBtHciCtlrActive->Capabilities;
 }
 
+bool BtHciSetDataLength(BtHciDevice_t *pDev, uint16_t ConnHdl,
+	uint16_t TxOctets, uint16_t TxTime)
+{
+	// Core Vol 4 Part E 7.8.33. Tx_Octets is the requested maximum LL Data
+	// PDU payload and Tx_Time is its requested transmission time in usec.
+	if (pDev == nullptr || pDev->Command == nullptr ||
+		ConnHdl > BT_HCI_LE_CONN_HANDLE_MAX ||
+		TxOctets < 0x001BU || TxOctets > 0x00FBU ||
+		TxTime < 0x0148U || TxTime > 0x4290U)
+	{
+		return false;
+	}
+
+	BtHciCapabilities_t localCapabilities;
+	const BtHciCapabilities_t *pCapabilities =
+		BtHciCapabilitiesForDeviceGet(pDev);
+	const uint32_t required = BT_HCI_CAP_VALID_COMMANDS |
+		BT_HCI_CAP_VALID_LE_FEATURES;
+	if (pCapabilities == nullptr ||
+		(pCapabilities->Valid & required) != required)
+	{
+		if (BtHciCapabilitiesRead(pDev, &localCapabilities) == false)
+		{
+			return false;
+		}
+		pCapabilities = &localCapabilities;
+	}
+
+	if (BtHciCapabilitiesCommandSupported(pCapabilities,
+			BT_HCI_CAP_CMD_LE_SET_DATA_LENGTH) == false ||
+		BtHciCapabilitiesLeFeatureSupported(pCapabilities,
+			BT_HCI_CAP_LE_FEATURE_DATA_LENGTH_EXT) == false)
+	{
+		return false;
+	}
+
+	if ((pCapabilities->Valid & BT_HCI_CAP_VALID_MAX_DATA_LEN) != 0 &&
+		(TxOctets > pCapabilities->MaxTxOctets ||
+		 TxTime > pCapabilities->MaxTxTime))
+	{
+		return false;
+	}
+
+	uint8_t param[6];
+	BtHciCapStoreLe16(&param[0], ConnHdl);
+	BtHciCapStoreLe16(&param[2], TxOctets);
+	BtHciCapStoreLe16(&param[4], TxTime);
+	uint8_t result[2] = {};
+
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_DATA_LEN,
+		param, sizeof(param), result, sizeof(result)) != 0)
+	{
+		return false;
+	}
+
+	return BtHciCapLoadLe16(result) == ConnHdl;
+}
+
 static const BtHciCapabilities_t *BtHciPhyCapabilitiesGet(
 	BtHciDevice_t *pDev, BtHciCapabilities_t *pLocal)
 {

@@ -40,6 +40,7 @@ enum {
 	BT_HCI_CAP_CMD_LE_SET_SCAN_PARAMETERS = 26U * 8U + 2U,
 	BT_HCI_CAP_CMD_LE_SET_SCAN_ENABLE = 26U * 8U + 3U,
 	BT_HCI_CAP_CMD_LE_CREATE_CONNECTION = 26U * 8U + 4U,
+	BT_HCI_CAP_CMD_LE_SET_DATA_LENGTH = 33U * 8U + 6U,
 	BT_HCI_CAP_CMD_LE_READ_PHY = 35U * 8U + 1U,
 	BT_HCI_CAP_CMD_LE_SET_DEFAULT_PHY = 35U * 8U + 2U,
 	BT_HCI_CAP_CMD_LE_SET_PHY = 35U * 8U + 3U,
@@ -57,6 +58,7 @@ enum {
 
 // Bit numbers in the LE Read Local Supported Features return value.
 enum {
+	BT_HCI_CAP_LE_FEATURE_DATA_LENGTH_EXT = 5U,
 	BT_HCI_CAP_LE_FEATURE_PHY_2M = 8U,
 	BT_HCI_CAP_LE_FEATURE_CODED_PHY = 11U,
 	BT_HCI_CAP_LE_FEATURE_EXT_ADV = 12U,
@@ -251,6 +253,10 @@ bool BtHciCapabilitiesRead(BtHciDevice_t * const pDev,
  */
 const BtHciCapabilities_t *BtHciCapabilitiesForDeviceGet(
 	const BtHciDevice_t *pDev);
+
+// Request the transmit Link Layer data length for one LE connection.
+bool BtHciSetDataLength(BtHciDevice_t *pDev, uint16_t ConnHdl,
+	uint16_t TxOctets, uint16_t TxTime);
 
 // Read the current PHY for ConnHdl. Outputs use BT_HCI_PHY_* bit values.
 bool BtHciReadPhy(BtHciDevice_t *pDev, uint16_t ConnHdl,

@@ -6,6 +6,8 @@
 #include "bluetooth/bt_hci_cap.h"
 #include "bluetooth/bt_hci_ctlr.h"
 
+static_assert(BT_HCI_CAP_CMD_LE_SET_DATA_LENGTH == 270U);
+
 namespace {
 
 int s_Checks;
@@ -13,6 +15,16 @@ int s_Failures;
 int s_Mode;
 uint16_t s_Opcode[16];
 size_t s_OpcodeCount;
+uint8_t s_DataLengthStatus;
+uint8_t s_DataLengthParam[6];
+uint8_t s_DataLengthParamLen;
+int s_DataLengthCount;
+uint16_t s_DataLengthReturnHdl;
+bool s_DleCommandSupported;
+bool s_DleFeatureSupported;
+bool s_MaxDataLengthSupported;
+uint16_t s_MaxTxOctets;
+uint16_t s_MaxTxTime;
 
 #define CHECK(expr) do { \
 	s_Checks++; \
@@ -38,7 +50,7 @@ void SetCommand(BtHciCapabilities_t *pCapabilities, uint16_t CommandBit)
 }
 
 uint8_t CapabilityCommand(BtHciDevice_t * const, uint16_t OpCode,
-	const void *, uint8_t, void *pRet, uint8_t RetLen)
+	const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen)
 {
 	if (s_OpcodeCount < sizeof(s_Opcode) / sizeof(s_Opcode[0]))
 	{
@@ -82,6 +94,14 @@ uint8_t CapabilityCommand(BtHciDevice_t * const, uint16_t OpCode,
 			}
 			data[25] |= 0xB0;
 			data[26] |= 0x1F;
+			if (s_DleCommandSupported)
+			{
+				data[33] |= 0x40;
+			}
+			else
+			{
+				data[33] &= static_cast<uint8_t>(~0x40U);
+			}
 			data[35] |= 0xC0;
 			data[36] |= 0x1F;
 			data[37] |= 0x1C;
@@ -89,6 +109,14 @@ uint8_t CapabilityCommand(BtHciDevice_t * const, uint16_t OpCode,
 			break;
 		case BT_HCI_CMD_CTLR_READ_LOCAL_SUPP_FEATURES:
 			std::memset(data, 0xA5, 8);
+			if (s_DleFeatureSupported)
+			{
+				data[0] |= 0x20;
+			}
+			else
+			{
+				data[0] &= static_cast<uint8_t>(~0x20U);
+			}
 			data[1] |= 0x18;
 			CopyReturn(pRet, RetLen, data, 8);
 			break;
@@ -110,7 +138,17 @@ uint8_t CapabilityCommand(BtHciDevice_t * const, uint16_t OpCode,
 		}
 		case BT_HCI_CMD_CTLR_READ_MAX_DATA_LEN:
 		{
-			const uint8_t value[8] = { 0xFB, 0x00, 0x48, 0x08, 0xFB, 0x00, 0x48, 0x08 };
+			if (!s_MaxDataLengthSupported)
+			{
+				return 1;
+			}
+			const uint8_t value[8] = {
+				static_cast<uint8_t>(s_MaxTxOctets),
+				static_cast<uint8_t>(s_MaxTxOctets >> 8),
+				static_cast<uint8_t>(s_MaxTxTime),
+				static_cast<uint8_t>(s_MaxTxTime >> 8),
+				0xFB, 0x00, 0x48, 0x08
+			};
 			CopyReturn(pRet, RetLen, value, sizeof(value));
 			break;
 		}
@@ -131,6 +169,21 @@ uint8_t CapabilityCommand(BtHciDevice_t * const, uint16_t OpCode,
 			data[0] = 3;
 			CopyReturn(pRet, RetLen, data, 1);
 			break;
+		case BT_HCI_CMD_CTLR_SET_DATA_LEN:
+			s_DataLengthCount++;
+			s_DataLengthParamLen = ParamLen;
+			std::memset(s_DataLengthParam, 0, sizeof(s_DataLengthParam));
+			if (pParam != nullptr && ParamLen <= sizeof(s_DataLengthParam))
+			{
+				std::memcpy(s_DataLengthParam, pParam, ParamLen);
+			}
+			if (s_DataLengthStatus == 0)
+			{
+				data[0] = static_cast<uint8_t>(s_DataLengthReturnHdl);
+				data[1] = static_cast<uint8_t>(s_DataLengthReturnHdl >> 8);
+				CopyReturn(pRet, RetLen, data, 2);
+			}
+			return s_DataLengthStatus;
 		default:
 			return 1;
 	}
@@ -142,6 +195,16 @@ void Reset(int Mode)
 	s_Mode = Mode;
 	s_OpcodeCount = 0;
 	std::memset(s_Opcode, 0, sizeof(s_Opcode));
+	s_DataLengthStatus = 0;
+	std::memset(s_DataLengthParam, 0, sizeof(s_DataLengthParam));
+	s_DataLengthParamLen = 0;
+	s_DataLengthCount = 0;
+	s_DataLengthReturnHdl = 0x0042;
+	s_DleCommandSupported = true;
+	s_DleFeatureSupported = true;
+	s_MaxDataLengthSupported = true;
+	s_MaxTxOctets = 251;
+	s_MaxTxTime = 2120;
 }
 
 void TestFullDiscovery()
@@ -183,6 +246,8 @@ void TestFullDiscovery()
 	CHECK(BtHciCapabilitiesCommandSupported(&caps,
 		BT_HCI_CAP_CMD_LE_CREATE_CONNECTION));
 	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_SET_DATA_LENGTH));
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
 		BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS));
 	CHECK(BtHciCapabilitiesCommandSupported(&caps,
 		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS));
@@ -198,6 +263,8 @@ void TestFullDiscovery()
 		BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE));
 	CHECK(BtHciCapabilitiesCommandSupported(&caps,
 		BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION));
+	CHECK(BtHciCapabilitiesLeFeatureSupported(&caps,
+		BT_HCI_CAP_LE_FEATURE_DATA_LENGTH_EXT));
 	CHECK(BtHciCapabilitiesLeFeatureSupported(&caps,
 		BT_HCI_CAP_LE_FEATURE_EXT_ADV));
 	CHECK(BtHciCapabilitiesLeFeatureSupported(&caps,
@@ -383,6 +450,82 @@ void TestGapCommandChecks()
 	CHECK(BtHciCapabilitiesExtendedInitiatingSupported(&caps));
 }
 
+void TestDataLengthControl()
+{
+	BtHciDevice_t dev = {};
+	dev.Command = CapabilityCommand;
+
+	Reset(0);
+	CHECK(BtHciSetDataLength(&dev, 0x0042, 251, 2120));
+	CHECK(s_DataLengthCount == 1);
+	CHECK(s_DataLengthParamLen == 6);
+	CHECK(s_DataLengthParam[0] == 0x42);
+	CHECK(s_DataLengthParam[1] == 0x00);
+	CHECK(s_DataLengthParam[2] == 0xFB);
+	CHECK(s_DataLengthParam[3] == 0x00);
+	CHECK(s_DataLengthParam[4] == 0x48);
+	CHECK(s_DataLengthParam[5] == 0x08);
+
+	Reset(0);
+	s_DataLengthReturnHdl = 1;
+	CHECK(BtHciSetDataLength(&dev, 1, 27, 328));
+	CHECK(s_DataLengthCount == 1);
+	CHECK(s_DataLengthParam[2] == 0x1B);
+	CHECK(s_DataLengthParam[3] == 0x00);
+	CHECK(s_DataLengthParam[4] == 0x48);
+	CHECK(s_DataLengthParam[5] == 0x01);
+
+	Reset(0);
+	CHECK(BtHciSetDataLength(nullptr, 1, 27, 328) == false);
+	CHECK(BtHciSetDataLength(&dev, BT_HCI_LE_CONN_HANDLE_MAX + 1U,
+		27, 328) == false);
+	CHECK(BtHciSetDataLength(&dev, 1, 26, 328) == false);
+	CHECK(BtHciSetDataLength(&dev, 1, 252, 328) == false);
+	CHECK(BtHciSetDataLength(&dev, 1, 27, 327) == false);
+	CHECK(BtHciSetDataLength(&dev, 1, 27, 17041) == false);
+	CHECK(s_OpcodeCount == 0);
+	CHECK(s_DataLengthCount == 0);
+
+	Reset(0);
+	s_DleCommandSupported = false;
+	CHECK(BtHciSetDataLength(&dev, 0x0042, 251, 2120) == false);
+	CHECK(s_DataLengthCount == 0);
+
+	Reset(0);
+	s_DleFeatureSupported = false;
+	CHECK(BtHciSetDataLength(&dev, 0x0042, 251, 2120) == false);
+	CHECK(s_DataLengthCount == 0);
+
+	Reset(0);
+	s_MaxTxOctets = 100;
+	CHECK(BtHciSetDataLength(&dev, 0x0042, 101, 1000) == false);
+	CHECK(s_DataLengthCount == 0);
+
+	Reset(0);
+	s_MaxTxTime = 1000;
+	CHECK(BtHciSetDataLength(&dev, 0x0042, 100, 1001) == false);
+	CHECK(s_DataLengthCount == 0);
+
+	Reset(0);
+	s_MaxDataLengthSupported = false;
+	CHECK(BtHciSetDataLength(&dev, 0x0042, 251, 2120));
+	CHECK(s_DataLengthCount == 1);
+
+	Reset(0);
+	s_DataLengthStatus = 0x0C;
+	CHECK(BtHciSetDataLength(&dev, 0x0042, 251, 2120) == false);
+	CHECK(s_DataLengthCount == 1);
+
+	Reset(0);
+	s_DataLengthReturnHdl = 0x0043;
+	CHECK(BtHciSetDataLength(&dev, 0x0042, 251, 2120) == false);
+	CHECK(s_DataLengthCount == 1);
+
+	Reset(2);
+	CHECK(BtHciSetDataLength(&dev, 0x0042, 251, 2120) == false);
+	CHECK(s_DataLengthCount == 0);
+}
+
 } // namespace
 
 int main()
@@ -395,6 +538,7 @@ int main()
 	TestCapabilityPredicates();
 	TestAdvertisingCommandChecks();
 	TestGapCommandChecks();
+	TestDataLengthControl();
 
 	if (s_Failures == 0)
 	{
