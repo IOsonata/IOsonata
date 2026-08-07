@@ -3,9 +3,10 @@ BUILD_DIR := build
 HCI_TARGET := $(BUILD_DIR)/bt_hci_compliance_test
 CAP_TARGET := $(BUILD_DIR)/bt_hci_capability_test
 ADV_TARGET := $(BUILD_DIR)/bt_adv_hci_test
+GAP_TARGET := $(BUILD_DIR)/bt_gap_hci_test
 SMP_TARGET := $(BUILD_DIR)/bt_smp_dual_host_test
 ATT_TARGET := $(BUILD_DIR)/bt_att_dual_host_test
-TARGETS := $(HCI_TARGET) $(CAP_TARGET) $(ADV_TARGET) $(SMP_TARGET) $(ATT_TARGET)
+TARGETS := $(HCI_TARGET) $(CAP_TARGET) $(ADV_TARGET) $(GAP_TARGET) $(SMP_TARGET) $(ATT_TARGET)
 
 CC ?= gcc
 CXX ?= g++
@@ -63,6 +64,10 @@ ADV_SOURCES := \
 	$(ROOT)/src/bluetooth/bt_uuid.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
+GAP_SOURCES := \
+	../host/bt_gap_hci_test.cpp \
+	$(ROOT)/src/bluetooth/bt_gap_hci.cpp
+
 ATT_SOURCES := \
 	att/bt_att_dual_host_test.cpp \
 	att/bt_att_client_test_stubs.cpp \
@@ -111,6 +116,7 @@ strict: $(TARGETS)
 	BT_COMPLIANCE_STRICT=1 $(TEST_ENV) ./$(HCI_TARGET)
 	$(TEST_ENV) ./$(CAP_TARGET)
 	$(TEST_ENV) ./$(ADV_TARGET)
+	$(TEST_ENV) ./$(GAP_TARGET)
 	$(TEST_ENV) ./$(SMP_TARGET)
 	$(TEST_ENV) ./$(ATT_TARGET)
 
@@ -139,6 +145,11 @@ $(ADV_TARGET): $(ADV_SOURCES) $(HEADERS) $(CFIFO_OBJ)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$(ADV_SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(GAP_TARGET): $(GAP_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
+		$(GAP_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(ATT_TARGET): $(ATT_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)

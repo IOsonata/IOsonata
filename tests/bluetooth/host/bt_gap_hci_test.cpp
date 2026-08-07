@@ -1,9 +1,6 @@
-// Command-level coverage for the GAP HCI scan/initiate path: the own-address
-// resolution (G1), the static random address validity check, and the scan
-// interval/window clamping (G4). BtHciCommand dispatches through the device's
-// Command function pointer, so a capture device records the opcode and the
-// packed parameter bytes each call emits. No controller is involved; the tests
-// assert on what would be sent on air.
+// Command-level coverage for the GAP HCI scan/initiate path. The capture
+// device records the exact standard HCI commands and parameter bytes selected
+// from a reported controller capability set.
 
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +8,7 @@
 #include <cstring>
 
 #include "bluetooth/bt_hci.h"
+#include "bluetooth/bt_hci_cap.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_app.h"
 
@@ -33,12 +31,49 @@ struct CapturedCmd {
 	uint8_t  ParamLen;
 };
 
-CapturedCmd s_Cmds[8];
+CapturedCmd s_Cmds[16];
 int s_CmdCount = 0;
+uint8_t s_SupportedCommands[64];
+uint8_t s_LeFeatures[8];
 
 // Controlled local identity returned by the BtSmpLocalAddrGet override below.
 uint8_t s_LocalType = 0;
 uint8_t s_LocalAddr[6] = {};
+
+void SetCommand(uint16_t CommandBit)
+{
+	s_SupportedCommands[CommandBit >> 3] |=
+		static_cast<uint8_t>(1U << (CommandBit & 7U));
+}
+
+void ClearCommand(uint16_t CommandBit)
+{
+	s_SupportedCommands[CommandBit >> 3] &=
+		static_cast<uint8_t>(~(1U << (CommandBit & 7U)));
+}
+
+void SetDefaultCapabilities()
+{
+	std::memset(s_SupportedCommands, 0, sizeof(s_SupportedCommands));
+	std::memset(s_LeFeatures, 0, sizeof(s_LeFeatures));
+
+	SetCommand(BT_HCI_CAP_CMD_LE_SET_RANDOM_ADDRESS);
+	SetCommand(BT_HCI_CAP_CMD_LE_SET_SCAN_PARAMETERS);
+	SetCommand(BT_HCI_CAP_CMD_LE_SET_SCAN_ENABLE);
+	SetCommand(BT_HCI_CAP_CMD_LE_CREATE_CONNECTION);
+	SetCommand(BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_PARAMETERS);
+	SetCommand(BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE);
+	SetCommand(BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION);
+
+	s_LeFeatures[BT_HCI_CAP_LE_FEATURE_CODED_PHY >> 3] |=
+		static_cast<uint8_t>(1U << (BT_HCI_CAP_LE_FEATURE_CODED_PHY & 7U));
+}
+
+void ClearCaptured()
+{
+	s_CmdCount = 0;
+	std::memset(s_Cmds, 0, sizeof(s_Cmds));
+}
 
 uint8_t CaptureCommand(BtHciDevice_t * const, uint16_t OpCode, const void *pParam,
 					   uint8_t ParamLen, void *, uint8_t)
@@ -60,8 +95,8 @@ BtHciDevice_t s_Dev;
 
 void Setup(uint8_t LocalType, const uint8_t LocalAddr[6])
 {
-	s_CmdCount = 0;
-	std::memset(s_Cmds, 0, sizeof(s_Cmds));
+	ClearCaptured();
+	SetDefaultCapabilities();
 	std::memset(&s_Dev, 0, sizeof(s_Dev));
 	s_Dev.Command = CaptureCommand;
 	g_BtAppData.AppDevice.pHciDev = &s_Dev;
@@ -90,8 +125,8 @@ BtGapScanCfg_t MakeScanCfg(uint32_t Interval, uint32_t Duration)
 {
 	BtGapScanCfg_t cfg;
 	std::memset(&cfg, 0, sizeof(cfg));
-	cfg.Type          = BTSCAN_TYPE_PASSIVE;
-	cfg.Param.Phy     = BT_GAP_PHY_1MBITS;
+	cfg.Type           = BTSCAN_TYPE_PASSIVE;
+	cfg.Param.Phy      = BT_GAP_PHY_1MBITS;
 	cfg.Param.Interval = Interval;
 	cfg.Param.Duration = Duration;
 	return cfg;
@@ -107,12 +142,28 @@ BtGapConnParams_t MakeConnParams()
 	return params;
 }
 
-// Offsets into the SET_EXT_SCAN_PARAM parameter block (single PHY):
-// OwnAddrType(1) FilterPolicy(1) ScanPhys(1) ScanType(1) Interval(2) Window(2).
-constexpr size_t kScanOwnAddr = 0;
-constexpr size_t kScanPhys = 2;
-constexpr size_t kScanInterval = 4;
-constexpr size_t kScanWindow = 6;
+BtGapPeerAddr_t MakePeer()
+{
+	BtGapPeerAddr_t peer = {};
+	peer.Type = BTADDR_TYPE_PUBLIC;
+	uint8_t addr[6] = { 1, 2, 3, 4, 5, 6 };
+	std::memcpy(peer.Addr, addr, sizeof(addr));
+	return peer;
+}
+
+// Offsets into SET_EXT_SCAN_PARAM (single PHY): OwnAddrType(1),
+// FilterPolicy(1), ScanPhys(1), ScanType(1), Interval(2), Window(2).
+constexpr size_t kExtScanOwnAddr = 0;
+constexpr size_t kExtScanPhys = 2;
+constexpr size_t kExtScanInterval = 4;
+constexpr size_t kExtScanWindow = 6;
+
+// Offsets into SET_SCAN_PARAM: ScanType(1), Interval(2), Window(2),
+// OwnAddrType(1), FilterPolicy(1).
+constexpr size_t kLegacyScanType = 0;
+constexpr size_t kLegacyScanInterval = 1;
+constexpr size_t kLegacyScanWindow = 3;
+constexpr size_t kLegacyScanOwnAddr = 5;
 
 void TestInvalidArguments()
 {
@@ -150,11 +201,9 @@ void TestScanPhyValidation()
 	if (sp != nullptr)
 	{
 		CHECK(sp->ParamLen == 8);
-		CHECK(sp->Param[kScanPhys] == BT_GAP_PHY_CODED);
+		CHECK(sp->Param[kExtScanPhys] == BT_GAP_PHY_CODED);
 	}
 }
-
-// ---- G1: own-address resolution ------------------------------------------
 
 void TestScanPublicIdentity()
 {
@@ -168,22 +217,19 @@ void TestScanPublicIdentity()
 	CHECK(sp != nullptr);
 	if (sp != nullptr)
 	{
-		CHECK(sp->Param[kScanOwnAddr] == BTADDR_TYPE_PUBLIC);
+		CHECK(sp->Param[kExtScanOwnAddr] == BTADDR_TYPE_PUBLIC);
 	}
-	// A public identity needs no controller random address.
 	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_RANDOM_ADDR) == nullptr);
 }
 
 void TestScanRandomIdentity()
 {
-	// Static random address: two most significant bits of the MSB are 1.
 	uint8_t addr[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0xC6 };
 	Setup(BTADDR_TYPE_RANDOM_STATIC, addr);
 
 	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
 	CHECK(BtGapScanInit(&cfg) == true);
 
-	// The controller random address is programmed before scanning.
 	const CapturedCmd *ra = FindCmd(BT_HCI_CMD_CTLR_SET_RANDOM_ADDR);
 	CHECK(ra != nullptr);
 	if (ra != nullptr)
@@ -195,26 +241,21 @@ void TestScanRandomIdentity()
 	CHECK(sp != nullptr);
 	if (sp != nullptr)
 	{
-		CHECK(sp->Param[kScanOwnAddr] == BTADDR_TYPE_RAND);
+		CHECK(sp->Param[kExtScanOwnAddr] == BTADDR_TYPE_RAND);
 	}
 }
 
 void TestScanInvalidRandomIdentity()
 {
-	// MSB 0x06: top two bits are not 0b11, so not a valid static random address.
 	uint8_t addr[6] = { 1, 2, 3, 4, 5, 6 };
 	Setup(BTADDR_TYPE_RANDOM_STATIC, addr);
 
 	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
-	// Scan init fails rather than scanning as Random with a bad address.
 	CHECK(BtGapScanInit(&cfg) == false);
 	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM) == nullptr);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_SCAN_PARAM) == nullptr);
 }
 
-// The two type bits are not the whole rule: the 46 bit random part must hold
-// at least one 0 and at least one 1 (Vol 6 Part B 1.3.2.1). An identity left at
-// the all-zero default with only the type bits forced on, or one left all ones,
-// passes the bit pattern check but is not a usable address.
 void TestScanDegenerateRandomIdentity()
 {
 	uint8_t allZero[6] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0 };
@@ -229,7 +270,6 @@ void TestScanDegenerateRandomIdentity()
 	CHECK(BtGapScanInit(&cfg) == false);
 	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM) == nullptr);
 
-	// One bit away from each degenerate case is valid again.
 	uint8_t oneBitSet[6] = { 0x01, 0x00, 0x00, 0x00, 0x00, 0xC0 };
 	Setup(BTADDR_TYPE_RANDOM_STATIC, oneBitSet);
 	cfg = MakeScanCfg(100, 100);
@@ -241,14 +281,11 @@ void TestScanDegenerateRandomIdentity()
 	CHECK(BtGapScanInit(&cfg) == true);
 }
 
-// ---- G4: interval/window clamping ----------------------------------------
-
 void TestScanClampLower()
 {
 	uint8_t addr[6] = {};
 	Setup(BTADDR_TYPE_PUBLIC, addr);
 
-	// 1 ms encodes to ~1 (0.625 ms units), below the 0x0004 minimum.
 	BtGapScanCfg_t cfg = MakeScanCfg(1, 1);
 	CHECK(BtGapScanInit(&cfg) == true);
 
@@ -256,8 +293,8 @@ void TestScanClampLower()
 	CHECK(sp != nullptr);
 	if (sp != nullptr)
 	{
-		CHECK(GetLe16(sp->Param + kScanInterval) == 0x0004);
-		CHECK(GetLe16(sp->Param + kScanWindow) == 0x0004);
+		CHECK(GetLe16(sp->Param + kExtScanInterval) == 0x0004);
+		CHECK(GetLe16(sp->Param + kExtScanWindow) == 0x0004);
 	}
 }
 
@@ -266,7 +303,6 @@ void TestScanClampUpper()
 	uint8_t addr[6] = {};
 	Setup(BTADDR_TYPE_PUBLIC, addr);
 
-	// 12000 ms encodes to 19200 (0x4B00), above the 0x4000 maximum.
 	BtGapScanCfg_t cfg = MakeScanCfg(12000, 12000);
 	CHECK(BtGapScanInit(&cfg) == true);
 
@@ -274,8 +310,8 @@ void TestScanClampUpper()
 	CHECK(sp != nullptr);
 	if (sp != nullptr)
 	{
-		CHECK(GetLe16(sp->Param + kScanInterval) == 0x4000);
-		CHECK(GetLe16(sp->Param + kScanWindow) == 0x4000);
+		CHECK(GetLe16(sp->Param + kExtScanInterval) == 0x4000);
+		CHECK(GetLe16(sp->Param + kExtScanWindow) == 0x4000);
 	}
 }
 
@@ -284,8 +320,6 @@ void TestScanClampWindowLeInterval()
 	uint8_t addr[6] = {};
 	Setup(BTADDR_TYPE_PUBLIC, addr);
 
-	// Interval 100 ms -> 160, window 200 ms -> 320: window is clamped down to
-	// the interval.
 	BtGapScanCfg_t cfg = MakeScanCfg(100, 200);
 	CHECK(BtGapScanInit(&cfg) == true);
 
@@ -293,12 +327,242 @@ void TestScanClampWindowLeInterval()
 	CHECK(sp != nullptr);
 	if (sp != nullptr)
 	{
-		uint16_t interval = GetLe16(sp->Param + kScanInterval);
-		uint16_t window   = GetLe16(sp->Param + kScanWindow);
+		uint16_t interval = GetLe16(sp->Param + kExtScanInterval);
+		uint16_t window   = GetLe16(sp->Param + kExtScanWindow);
 		CHECK(interval == 160);
 		CHECK(window == 160);
 		CHECK(window <= interval);
 	}
+}
+
+void TestLegacyScanFallback()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	ClearCommand(BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_PARAMETERS);
+	ClearCommand(BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE);
+
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 50);
+	cfg.Type = BTSCAN_TYPE_ACTIVE;
+	CHECK(BtGapScanInit(&cfg));
+	const CapturedCmd *sp = FindCmd(BT_HCI_CMD_CTLR_SET_SCAN_PARAM);
+	CHECK(sp != nullptr);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM) == nullptr);
+	if (sp != nullptr)
+	{
+		CHECK(sp->ParamLen == 7);
+		CHECK(sp->Param[kLegacyScanType] == 1);
+		CHECK(GetLe16(sp->Param + kLegacyScanInterval) == 160);
+		CHECK(GetLe16(sp->Param + kLegacyScanWindow) == 80);
+		CHECK(sp->Param[kLegacyScanOwnAddr] == BTADDR_TYPE_PUBLIC);
+	}
+
+	ClearCaptured();
+	CHECK(BtGapScanStart(nullptr, 0));
+	const CapturedCmd *se = FindCmd(BT_HCI_CMD_CTLR_SET_SCAN_ENABLE);
+	CHECK(se != nullptr);
+	if (se != nullptr)
+	{
+		CHECK(se->ParamLen == 2);
+		CHECK(se->Param[0] == 1);
+		CHECK(se->Param[1] == 1);
+	}
+
+	ClearCaptured();
+	BtGapScanStop();
+	se = FindCmd(BT_HCI_CMD_CTLR_SET_SCAN_ENABLE);
+	CHECK(se != nullptr);
+	if (se != nullptr)
+	{
+		CHECK(se->Param[0] == 0);
+		CHECK(se->Param[1] == 0);
+	}
+}
+
+void TestScanCommandRefusal()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	ClearCommand(BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_PARAMETERS);
+	ClearCommand(BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE);
+	ClearCommand(BT_HCI_CAP_CMD_LE_SET_SCAN_ENABLE);
+
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
+	CHECK(BtGapScanInit(&cfg) == false);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_SCAN_PARAM) == nullptr);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM) == nullptr);
+}
+
+void TestCodedScanChecks()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
+	cfg.Param.Phy = BT_GAP_PHY_CODED;
+
+	s_LeFeatures[BT_HCI_CAP_LE_FEATURE_CODED_PHY >> 3] &=
+		static_cast<uint8_t>(~(1U << (BT_HCI_CAP_LE_FEATURE_CODED_PHY & 7U)));
+	CHECK(BtGapScanInit(&cfg) == false);
+	CHECK(s_CmdCount == 0);
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	ClearCommand(BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE);
+	CHECK(BtGapScanInit(&cfg) == false);
+	CHECK(s_CmdCount == 0);
+}
+
+void TestExtendedScanEnable()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
+	CHECK(BtGapScanInit(&cfg));
+
+	ClearCaptured();
+	CHECK(BtGapScanStart(nullptr, 0));
+	const CapturedCmd *se = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_SCAN_ENABLE);
+	CHECK(se != nullptr);
+	if (se != nullptr)
+	{
+		CHECK(se->ParamLen == 6);
+		CHECK(se->Param[0] == 1);
+		CHECK(se->Param[1] == 1);
+	}
+
+	ClearCaptured();
+	BtGapScanStop();
+	se = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_SCAN_ENABLE);
+	CHECK(se != nullptr);
+	if (se != nullptr)
+	{
+		CHECK(se->Param[0] == 0);
+	}
+}
+
+void TestExtendedCreateConnection1M()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 50);
+	CHECK(BtGapScanInit(&cfg));
+	ClearCaptured();
+
+	BtGapPeerAddr_t peer = MakePeer();
+	BtGapConnParams_t params = MakeConnParams();
+	CHECK(BtGapConnect(&peer, &params));
+
+	const CapturedCmd *cc = FindCmd(BT_HCI_CMD_CTLR_EXT_CREATE_CONN);
+	CHECK(cc != nullptr);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_CREATE_CONN) == nullptr);
+	if (cc != nullptr)
+	{
+		CHECK(cc->ParamLen == 26);
+		CHECK(cc->Param[0] == 0);
+		CHECK(cc->Param[1] == BTADDR_TYPE_PUBLIC);
+		CHECK(cc->Param[2] == peer.Type);
+		CHECK(std::memcmp(cc->Param + 3, peer.Addr, 6) == 0);
+		CHECK(cc->Param[9] == BT_GAP_PHY_1MBITS);
+		CHECK(GetLe16(cc->Param + 10) == 160);
+		CHECK(GetLe16(cc->Param + 12) == 80);
+		CHECK(GetLe16(cc->Param + 14) == 24);
+		CHECK(GetLe16(cc->Param + 16) == 40);
+		CHECK(GetLe16(cc->Param + 18) == 0);
+		CHECK(GetLe16(cc->Param + 20) == 400);
+	}
+}
+
+void TestLegacyCreateConnectionFallback()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	ClearCommand(BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION);
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 50);
+	CHECK(BtGapScanInit(&cfg));
+	ClearCaptured();
+
+	BtGapPeerAddr_t peer = MakePeer();
+	BtGapConnParams_t params = MakeConnParams();
+	CHECK(BtGapConnect(&peer, &params));
+	const CapturedCmd *cc = FindCmd(BT_HCI_CMD_CTLR_CREATE_CONN);
+	CHECK(cc != nullptr);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_EXT_CREATE_CONN) == nullptr);
+	if (cc != nullptr)
+	{
+		CHECK(cc->ParamLen == 25);
+		CHECK(GetLe16(cc->Param) == 160);
+		CHECK(GetLe16(cc->Param + 2) == 80);
+	}
+}
+
+void TestCodedCreateConnection()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
+	cfg.Param.Phy = BT_GAP_PHY_CODED;
+	CHECK(BtGapScanInit(&cfg));
+	ClearCaptured();
+
+	BtGapPeerAddr_t peer = MakePeer();
+	BtGapConnParams_t params = MakeConnParams();
+	CHECK(BtGapConnect(&peer, &params));
+	const CapturedCmd *cc = FindCmd(BT_HCI_CMD_CTLR_EXT_CREATE_CONN);
+	CHECK(cc != nullptr);
+	if (cc != nullptr)
+	{
+		CHECK(cc->ParamLen == 26);
+		CHECK(cc->Param[9] == BT_GAP_PHY_CODED);
+	}
+}
+
+void TestCodedCreateConnectionRefusalBeforeRandomAddress()
+{
+	uint8_t addr[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0xC6 };
+	Setup(BTADDR_TYPE_RANDOM_STATIC, addr);
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
+	cfg.Param.Phy = BT_GAP_PHY_CODED;
+	CHECK(BtGapScanInit(&cfg));
+	ClearCaptured();
+	ClearCommand(BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION);
+
+	BtGapPeerAddr_t peer = MakePeer();
+	BtGapConnParams_t params = MakeConnParams();
+	CHECK(BtGapConnect(&peer, &params) == false);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_RANDOM_ADDR) == nullptr);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_CREATE_CONN) == nullptr);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_EXT_CREATE_CONN) == nullptr);
+}
+
+void TestCreateConnectionCommandRefusal()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
+	CHECK(BtGapScanInit(&cfg));
+	ClearCaptured();
+	ClearCommand(BT_HCI_CAP_CMD_LE_CREATE_CONNECTION);
+	ClearCommand(BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION);
+
+	BtGapPeerAddr_t peer = MakePeer();
+	BtGapConnParams_t params = MakeConnParams();
+	CHECK(BtGapConnect(&peer, &params) == false);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_CREATE_CONN) == nullptr);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_EXT_CREATE_CONN) == nullptr);
+}
+
+void TestInvalidConnectionParametersBeforeCommands()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
+	CHECK(BtGapScanInit(&cfg));
+	ClearCaptured();
+
+	BtGapPeerAddr_t peer = MakePeer();
+	BtGapConnParams_t params = MakeConnParams();
+	params.Timeout = 10;
+	CHECK(BtGapConnect(&peer, &params) == false);
+	CHECK(s_CmdCount == 0);
 }
 
 } // namespace
@@ -311,6 +575,30 @@ void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 {
 	*pType = s_LocalType;
 	std::memcpy(pAddr, s_LocalAddr, 6);
+}
+
+bool BtHciCapabilitiesRead(BtHciDevice_t * const pDev,
+	BtHciCapabilities_t * const pCapabilities)
+{
+	if (pDev == nullptr || pDev->Command == nullptr || pCapabilities == nullptr)
+	{
+		return false;
+	}
+
+	std::memset(pCapabilities, 0, sizeof(*pCapabilities));
+	pCapabilities->Valid = BT_HCI_CAP_VALID_COMMANDS |
+		BT_HCI_CAP_VALID_LE_FEATURES;
+	std::memcpy(pCapabilities->SupportedCommands, s_SupportedCommands,
+		sizeof(s_SupportedCommands));
+	std::memcpy(pCapabilities->LeFeatures, s_LeFeatures,
+		sizeof(s_LeFeatures));
+	return true;
+}
+
+const BtHciCapabilities_t *BtHciCapabilitiesForDeviceGet(
+	const BtHciDevice_t *)
+{
+	return nullptr;
 }
 
 } // extern "C"
@@ -326,6 +614,16 @@ int main()
 	TestScanClampLower();
 	TestScanClampUpper();
 	TestScanClampWindowLeInterval();
+	TestLegacyScanFallback();
+	TestScanCommandRefusal();
+	TestCodedScanChecks();
+	TestExtendedScanEnable();
+	TestExtendedCreateConnection1M();
+	TestLegacyCreateConnectionFallback();
+	TestCodedCreateConnection();
+	TestCodedCreateConnectionRefusalBeforeRandomAddress();
+	TestCreateConnectionCommandRefusal();
+	TestInvalidConnectionParametersBeforeCommands();
 
 	if (s_Failures != 0)
 	{

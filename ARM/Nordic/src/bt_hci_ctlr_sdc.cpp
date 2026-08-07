@@ -303,6 +303,14 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 			res = sdc_hci_cmd_le_set_adv_set_random_address((const sdc_hci_cmd_le_set_adv_set_random_address_t*)pParam);
 			break;
 
+		case BT_HCI_CMD_CTLR_SET_SCAN_PARAM:
+			res = sdc_hci_cmd_le_set_scan_params((const sdc_hci_cmd_le_set_scan_params_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_SCAN_ENABLE:
+			res = sdc_hci_cmd_le_set_scan_enable((const sdc_hci_cmd_le_set_scan_enable_t*)pParam);
+			break;
+
 		case BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM:
 			res = sdc_hci_cmd_le_set_ext_scan_params((const sdc_hci_cmd_le_set_ext_scan_params_t*)pParam);
 			break;
@@ -313,6 +321,10 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 
 		case BT_HCI_CMD_CTLR_CREATE_CONN:
 			res = sdc_hci_cmd_le_create_conn((const sdc_hci_cmd_le_create_conn_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_EXT_CREATE_CONN:
+			res = sdc_hci_cmd_le_ext_create_conn((const sdc_hci_cmd_le_ext_create_conn_t*)pParam);
 			break;
 
 		case BT_HCI_CMD_CTLR_ENABLE_ENCRYPTION:
@@ -436,8 +448,8 @@ static void BtStackSdcCB()
 }
 
 // SDC bring-up, reached from the generic BtHciCtlrEnable once BtHciCtlrInit
-// has succeeded. The argument checks and the init gate live there now, so this
-// starts from a device that is already wired.
+// has succeeded. The argument checks and the initialization check live there,
+// so this starts from a device that is already wired.
 bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 {
 	if (pDev == nullptr || pCfg == nullptr)

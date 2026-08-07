@@ -25,6 +25,7 @@ Copyright (c) 2024 I-SYST inc. All rights reserved.
 #include "convutil.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_hci.h"
+#include "bluetooth/bt_hci_cap.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_smp.h"
 
@@ -48,6 +49,14 @@ Copyright (c) 2024 I-SYST inc. All rights reserved.
 #pragma pack(push, 1)
 
 typedef struct {
+	uint8_t  ScanType;
+	uint8_t  ScanInterval[2];
+	uint8_t  ScanWindow[2];
+	uint8_t  OwnAddrType;
+	uint8_t  FilterPolicy;
+} BtHciLeScanParams_t;			//!< 7 octets
+
+typedef struct {
 	uint8_t  OwnAddrType;
 	uint8_t  FilterPolicy;
 	uint8_t  ScanPhys;			//!< Scanning_PHYs bitmask, one PHY here
@@ -55,6 +64,11 @@ typedef struct {
 	uint8_t  ScanInterval[2];
 	uint8_t  ScanWindow[2];
 } BtHciLeExtScanParams1_t;		//!< 8 octets, single PHY
+
+typedef struct {
+	uint8_t  Enable;
+	uint8_t  FilterDup;
+} BtHciLeScanEnable_t;			//!< 2 octets
 
 typedef struct {
 	uint8_t  Enable;
@@ -78,9 +92,29 @@ typedef struct {
 	uint8_t  MaxCeLength[2];
 } BtHciLeCreateConn_t;			//!< 25 octets
 
+typedef struct {
+	uint8_t  FilterPolicy;
+	uint8_t  OwnAddrType;
+	uint8_t  PeerAddrType;
+	uint8_t  PeerAddr[6];
+	uint8_t  InitiatingPhys;		//!< Initiating_PHYs bitmask, one PHY here
+	uint8_t  ScanInterval[2];
+	uint8_t  ScanWindow[2];
+	uint8_t  ConnIntervalMin[2];
+	uint8_t  ConnIntervalMax[2];
+	uint8_t  MaxLatency[2];
+	uint8_t  SupervisionTimeout[2];
+	uint8_t  MinCeLength[2];
+	uint8_t  MaxCeLength[2];
+} BtHciLeExtCreateConn1_t;		//!< 26 octets, single PHY
+
 #pragma pack(pop)
 
 BtGapScanParam_t s_ScanParams;
+
+static bool s_BtGapUseExtScanCmd = true;
+static uint8_t s_BtGapScanPhy = BT_GAP_PHY_1MBITS;
+static BtHciCapabilities_t s_BtGapReadCapabilities;
 
 static inline void BtGapWr16(uint8_t *p, uint16_t v)
 {
@@ -91,6 +125,23 @@ static inline void BtGapWr16(uint8_t *p, uint16_t v)
 static inline BtHciDevice_t *BtGapHciDev(void)
 {
 	return g_BtAppData.AppDevice.pHciDev;
+}
+
+static const BtHciCapabilities_t *BtGapCapabilitiesGet(BtHciDevice_t *pDev)
+{
+	const BtHciCapabilities_t *pCapabilities =
+		BtHciCapabilitiesForDeviceGet(pDev);
+	if (pCapabilities != nullptr && pCapabilities->Valid != 0)
+	{
+		return pCapabilities;
+	}
+
+	if (BtHciCapabilitiesRead(pDev, &s_BtGapReadCapabilities) == false)
+	{
+		return nullptr;
+	}
+
+	return &s_BtGapReadCapabilities;
 }
 
 // Clamp the HCI-encoded LE scan interval and window to the valid range
@@ -127,11 +178,10 @@ static inline void BtGapClampScanParams(uint16_t *pInterval, uint16_t *pWindow)
 // local identity. A public identity uses Public and needs no controller random
 // address. A random identity uses Random and requires the global controller
 // random address to be programmed first (LE Set Random Address, Core Vol 4
-// Part E 7.8.4); scanning or initiating as Random with an unset (all-zero)
-// controller random address yields an undefined on-air address or Command
-// Disallowed. Returns the HCI Own_Address_Type, or 0xFF if the configured
-// random address is not a valid static random address (Vol 6 Part B 1.3.2.1).
-static uint8_t BtGapResolveOwnAddr(BtHciDevice_t *pDev)
+// Part E 7.8.4). Returns 0xFF when the configured random address is invalid or
+// the controller cannot execute LE Set Random Address.
+static uint8_t BtGapResolveOwnAddr(BtHciDevice_t *pDev,
+	const BtHciCapabilities_t *pCapabilities)
 {
 	uint8_t localType = 0;
 	uint8_t localAddr[6];
@@ -142,12 +192,15 @@ static uint8_t BtGapResolveOwnAddr(BtHciDevice_t *pDev)
 		return BTADDR_TYPE_PUBLIC;
 	}
 
-	if (BtAddrIsStaticRandom(localAddr) == false)
+	if (BtAddrIsStaticRandom(localAddr) == false ||
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+			BT_HCI_CAP_CMD_LE_SET_RANDOM_ADDRESS) == false)
 	{
 		return 0xFF;
 	}
 
-	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_RANDOM_ADDR, localAddr, 6, NULL, 0) != 0)
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_RANDOM_ADDR,
+		localAddr, sizeof(localAddr), NULL, 0) != 0)
 	{
 		return 0xFF;
 	}
@@ -159,7 +212,7 @@ static uint8_t BtGapResolveOwnAddr(BtHciDevice_t *pDev)
 // (Core Vol 4 Part E 7.8.12, Vol 6 Part B 4.5.2). Arguments are in HCI units:
 // interval in 1.25 ms steps, timeout in 10 ms steps, latency a raw count.
 // Rejecting out-of-range or self-inconsistent values here avoids a controller
-// error and, worse, a link that supervision-times-out immediately.
+// error and a link that supervision-times-out immediately.
 static bool BtGapCreateConnParamValid(uint16_t IntervalMin, uint16_t IntervalMax,
 									  uint16_t Latency, uint16_t Timeout)
 {
@@ -192,10 +245,9 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 		return false;
 	}
 
-	// This command layout contains one Scan_Type/Interval/Window block. HCI
-	// requires one such block for every selected scanning PHY. Support either
-	// 1M or Coded here, and reject zero, 2M (not a scanning PHY), or a combined
-	// mask instead of sending a short parameter list for the advertised mask.
+	// This implementation carries one Scan_Type/Interval/Window block. HCI
+	// requires one block for every selected scanning PHY, so support one primary
+	// advertising PHY at a time and reject 2M, zero, and combined masks.
 	if (pCfg->Param.Phy != BT_GAP_PHY_1MBITS &&
 		pCfg->Param.Phy != BT_GAP_PHY_CODED)
 	{
@@ -208,33 +260,86 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 		return false;
 	}
 
-	memcpy(&s_ScanParams, &pCfg->Param, sizeof(BtGapScanParam_t));
+	const BtHciCapabilities_t *pCapabilities = BtGapCapabilitiesGet(pDev);
+	if (pCapabilities == nullptr)
+	{
+		return false;
+	}
 
-	BtHciLeExtScanParams1_t p;
-	uint8_t ownAddrType = BtGapResolveOwnAddr(pDev);
+	bool useExtScan;
+	if (pCfg->Param.Phy == BT_GAP_PHY_CODED)
+	{
+		if (BtHciCapabilitiesLeFeatureSupported(pCapabilities,
+			BT_HCI_CAP_LE_FEATURE_CODED_PHY) == false ||
+			BtHciCapabilitiesExtendedScanningSupported(pCapabilities) == false)
+		{
+			return false;
+		}
+		useExtScan = true;
+	}
+	else if (BtHciCapabilitiesExtendedScanningSupported(pCapabilities))
+	{
+		useExtScan = true;
+	}
+	else if (BtHciCapabilitiesLegacyScanningSupported(pCapabilities))
+	{
+		useExtScan = false;
+	}
+	else
+	{
+		return false;
+	}
+
+	uint8_t ownAddrType = BtGapResolveOwnAddr(pDev, pCapabilities);
 	if (ownAddrType == 0xFF)
 	{
 		return false;
 	}
-	p.OwnAddrType  = ownAddrType;
-	p.FilterPolicy = 0;
-	p.ScanPhys     = pCfg->Param.Phy;
-	// Map the API scan type to the HCI Scan_Type field (Core Vol 4 Part E
-	// 7.8.64): 0x00 = passive, 0x01 = active. Only BTSCAN_TYPE_ACTIVE requests
-	// active scanning; the passive variants map to passive. Assigning the enum
-	// directly would send ACTIVE (2) as an invalid value and PASSIVE_EXT (1) as
-	// active.
-	p.ScanType     = (pCfg->Type == BTSCAN_TYPE_ACTIVE) ? 1 : 0;
+
 	uint16_t scanInterval = mSecTo0_625(pCfg->Param.Interval);
 	uint16_t scanWindow   = mSecTo0_625(pCfg->Param.Duration);
 	BtGapClampScanParams(&scanInterval, &scanWindow);
-	BtGapWr16(p.ScanInterval, scanInterval);
-	BtGapWr16(p.ScanWindow, scanWindow);
+	uint8_t scanType = (pCfg->Type == BTSCAN_TYPE_ACTIVE) ? 1 : 0;
+	uint8_t res;
 
-	uint8_t res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM, &p, sizeof(p), NULL, 0);
-	DEBUG_PRINTF("SET_EXT_SCAN_PARAM: res=%d\r\n", res);
+	if (useExtScan)
+	{
+		BtHciLeExtScanParams1_t p;
+		p.OwnAddrType  = ownAddrType;
+		p.FilterPolicy = 0;
+		p.ScanPhys     = pCfg->Param.Phy;
+		p.ScanType     = scanType;
+		BtGapWr16(p.ScanInterval, scanInterval);
+		BtGapWr16(p.ScanWindow, scanWindow);
 
-	return res == 0;
+		res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM,
+			&p, sizeof(p), NULL, 0);
+		DEBUG_PRINTF("SET_EXT_SCAN_PARAM: res=%d\r\n", res);
+	}
+	else
+	{
+		BtHciLeScanParams_t p;
+		p.ScanType = scanType;
+		BtGapWr16(p.ScanInterval, scanInterval);
+		BtGapWr16(p.ScanWindow, scanWindow);
+		p.OwnAddrType = ownAddrType;
+		p.FilterPolicy = 0;
+
+		res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_SCAN_PARAM,
+			&p, sizeof(p), NULL, 0);
+		DEBUG_PRINTF("SET_SCAN_PARAM: res=%d\r\n", res);
+	}
+
+	if (res != 0)
+	{
+		return false;
+	}
+
+	memcpy(&s_ScanParams, &pCfg->Param, sizeof(BtGapScanParam_t));
+	s_BtGapUseExtScanCmd = useExtScan;
+	s_BtGapScanPhy = pCfg->Param.Phy;
+
+	return true;
 }
 
 bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
@@ -248,14 +353,26 @@ bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 		return false;
 	}
 
-	BtHciLeExtScanEnable_t e;
-	e.Enable = 1;
-	e.FilterDup = 1;
-	BtGapWr16(e.Duration, 0);
-	BtGapWr16(e.Period, 0);
+	uint8_t res;
+	if (s_BtGapUseExtScanCmd)
+	{
+		BtHciLeExtScanEnable_t e;
+		e.Enable = 1;
+		e.FilterDup = 1;
+		BtGapWr16(e.Duration, 0);
+		BtGapWr16(e.Period, 0);
 
-	uint8_t res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_SCAN_ENABLE, &e, sizeof(e), NULL, 0);
-	DEBUG_PRINTF("SET_EXT_SCAN_ENABLE: res=%d\r\n", res);
+		res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_SCAN_ENABLE,
+			&e, sizeof(e), NULL, 0);
+		DEBUG_PRINTF("SET_EXT_SCAN_ENABLE: res=%d\r\n", res);
+	}
+	else
+	{
+		BtHciLeScanEnable_t e = { 1, 1 };
+		res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_SCAN_ENABLE,
+			&e, sizeof(e), NULL, 0);
+		DEBUG_PRINTF("SET_SCAN_ENABLE: res=%d\r\n", res);
+	}
 
 	return res == 0;
 }
@@ -268,10 +385,18 @@ void BtGapScanStop()
 		return;
 	}
 
-	BtHciLeExtScanEnable_t e;
-	memset(&e, 0, sizeof(e));
-
-	BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_SCAN_ENABLE, &e, sizeof(e), NULL, 0);
+	if (s_BtGapUseExtScanCmd)
+	{
+		BtHciLeExtScanEnable_t e = {};
+		BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_SCAN_ENABLE,
+			&e, sizeof(e), NULL, 0);
+	}
+	else
+	{
+		BtHciLeScanEnable_t e = {};
+		BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_SCAN_ENABLE,
+			&e, sizeof(e), NULL, 0);
+	}
 }
 
 bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
@@ -305,20 +430,81 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 		return false;
 	}
 
-	BtHciLeCreateConn_t p;
+	const BtHciCapabilities_t *pCapabilities = BtGapCapabilitiesGet(pDev);
+	if (pCapabilities == nullptr)
+	{
+		return false;
+	}
+
+	uint8_t initiatingPhy = s_BtGapScanPhy;
+	bool useExtCreate;
+	if (initiatingPhy == BT_GAP_PHY_CODED)
+	{
+		if (BtHciCapabilitiesLeFeatureSupported(pCapabilities,
+			BT_HCI_CAP_LE_FEATURE_CODED_PHY) == false ||
+			BtHciCapabilitiesExtendedInitiatingSupported(pCapabilities) == false)
+		{
+			return false;
+		}
+		useExtCreate = true;
+	}
+	else if (initiatingPhy == BT_GAP_PHY_1MBITS)
+	{
+		if (BtHciCapabilitiesExtendedInitiatingSupported(pCapabilities))
+		{
+			useExtCreate = true;
+		}
+		else if (BtHciCapabilitiesLegacyInitiatingSupported(pCapabilities))
+		{
+			useExtCreate = false;
+		}
+		else
+		{
+			return false;
+		}
+	}
+	else
+	{
+		return false;
+	}
+
 	uint16_t scanInterval = mSecTo0_625(s_ScanParams.Interval);
 	uint16_t scanWindow   = mSecTo0_625(s_ScanParams.Duration);
 	BtGapClampScanParams(&scanInterval, &scanWindow);
+
+	uint8_t ownAddrType = BtGapResolveOwnAddr(pDev, pCapabilities);
+	if (ownAddrType == 0xFF)
+	{
+		return false;
+	}
+
+	if (useExtCreate)
+	{
+		BtHciLeExtCreateConn1_t p = {};
+		p.FilterPolicy = 0;
+		p.OwnAddrType = ownAddrType;
+		p.PeerAddrType = pPeerAddr->Type;
+		memcpy(p.PeerAddr, pPeerAddr->Addr, 6);
+		p.InitiatingPhys = initiatingPhy;
+		BtGapWr16(p.ScanInterval, scanInterval);
+		BtGapWr16(p.ScanWindow, scanWindow);
+		BtGapWr16(p.ConnIntervalMin, connIntervalMin);
+		BtGapWr16(p.ConnIntervalMax, connIntervalMax);
+		BtGapWr16(p.MaxLatency, pConnParam->Latency);
+		BtGapWr16(p.SupervisionTimeout, supTimeout);
+		BtGapWr16(p.MinCeLength, 0);
+		BtGapWr16(p.MaxCeLength, 0);
+
+		return BtHciCommand(pDev, BT_HCI_CMD_CTLR_EXT_CREATE_CONN,
+			&p, sizeof(p), NULL, 0) == 0;
+	}
+
+	BtHciLeCreateConn_t p = {};
 	BtGapWr16(p.ScanInterval, scanInterval);
 	BtGapWr16(p.ScanWindow, scanWindow);
 	p.FilterPolicy  = 0;
 	p.PeerAddrType  = pPeerAddr->Type;
 	memcpy(p.PeerAddr, pPeerAddr->Addr, 6);
-	uint8_t ownAddrType = BtGapResolveOwnAddr(pDev);
-	if (ownAddrType == 0xFF)
-	{
-		return false;
-	}
 	p.OwnAddrType   = ownAddrType;
 	BtGapWr16(p.ConnIntervalMin, connIntervalMin);
 	BtGapWr16(p.ConnIntervalMax, connIntervalMax);
@@ -327,7 +513,6 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 	BtGapWr16(p.MinCeLength, 0);
 	BtGapWr16(p.MaxCeLength, 0);
 
-	uint8_t res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_CREATE_CONN, &p, sizeof(p), NULL, 0);
-
-	return res == 0;
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_CREATE_CONN,
+		&p, sizeof(p), NULL, 0) == 0;
 }

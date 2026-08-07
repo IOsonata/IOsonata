@@ -81,14 +81,15 @@ uint8_t CapabilityCommand(BtHciDevice_t * const, uint16_t OpCode,
 				data[i] = static_cast<uint8_t>(i);
 			}
 			data[25] |= 0xB0;
-			data[26] |= 0x03;
+			data[26] |= 0x1F;
 			data[35] |= 0xC0;
 			data[36] |= 0x1F;
+			data[37] |= 0x1C;
 			CopyReturn(pRet, RetLen, data, sizeof(data));
 			break;
 		case BT_HCI_CMD_CTLR_READ_LOCAL_SUPP_FEATURES:
 			std::memset(data, 0xA5, 8);
-			data[1] |= 0x10;
+			data[1] |= 0x18;
 			CopyReturn(pRet, RetLen, data, 8);
 			break;
 		case BT_HCI_CMD_CTLR_READ_SUPPORTED_STATES:
@@ -176,6 +177,12 @@ void TestFullDiscovery()
 	CHECK(s_OpcodeCount == 10);
 	CHECK(BtHciCapabilitiesCommandsKnown(&caps));
 	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_SET_SCAN_PARAMETERS));
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_SET_SCAN_ENABLE));
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_CREATE_CONNECTION));
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
 		BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS));
 	CHECK(BtHciCapabilitiesCommandSupported(&caps,
 		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS));
@@ -185,12 +192,24 @@ void TestFullDiscovery()
 		BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_RESPONSE_DATA));
 	CHECK(BtHciCapabilitiesCommandSupported(&caps,
 		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_ENABLE));
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_PARAMETERS));
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE));
+	CHECK(BtHciCapabilitiesCommandSupported(&caps,
+		BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION));
 	CHECK(BtHciCapabilitiesLeFeatureSupported(&caps,
 		BT_HCI_CAP_LE_FEATURE_EXT_ADV));
 	CHECK(BtHciCapabilitiesLeFeatureSupported(&caps,
 		BT_HCI_CAP_LE_FEATURE_PHY_2M));
+	CHECK(BtHciCapabilitiesLeFeatureSupported(&caps,
+		BT_HCI_CAP_LE_FEATURE_CODED_PHY));
 	CHECK(BtHciCapabilitiesLegacyAdvertisingSupported(&caps, true, true));
 	CHECK(BtHciCapabilitiesExtendedAdvertisingSupported(&caps, true, true));
+	CHECK(BtHciCapabilitiesLegacyScanningSupported(&caps));
+	CHECK(BtHciCapabilitiesExtendedScanningSupported(&caps));
+	CHECK(BtHciCapabilitiesLegacyInitiatingSupported(&caps));
+	CHECK(BtHciCapabilitiesExtendedInitiatingSupported(&caps));
 }
 
 void TestOptionalFallback()
@@ -284,10 +303,12 @@ void TestCapabilityPredicates()
 
 	CHECK(BtHciCapabilitiesLeFeaturesKnown(&caps) == false);
 	caps.Valid |= BT_HCI_CAP_VALID_LE_FEATURES;
-	caps.LeFeatures[1] = 0x10;
+	caps.LeFeatures[1] = 0x18;
 	CHECK(BtHciCapabilitiesLeFeaturesKnown(&caps));
 	CHECK(BtHciCapabilitiesLeFeatureSupported(&caps,
 		BT_HCI_CAP_LE_FEATURE_EXT_ADV));
+	CHECK(BtHciCapabilitiesLeFeatureSupported(&caps,
+		BT_HCI_CAP_LE_FEATURE_CODED_PHY));
 	CHECK(BtHciCapabilitiesLeFeatureSupported(&caps, 64) == false);
 }
 
@@ -337,6 +358,31 @@ void TestAdvertisingCommandChecks()
 	CHECK(BtHciCapabilitiesExtendedAdvertisingSupported(&caps, false, false) == false);
 }
 
+void TestGapCommandChecks()
+{
+	BtHciCapabilities_t caps = {};
+	caps.Valid = BT_HCI_CAP_VALID_COMMANDS;
+
+	CHECK(BtHciCapabilitiesLegacyScanningSupported(&caps) == false);
+	SetCommand(&caps, BT_HCI_CAP_CMD_LE_SET_SCAN_PARAMETERS);
+	CHECK(BtHciCapabilitiesLegacyScanningSupported(&caps) == false);
+	SetCommand(&caps, BT_HCI_CAP_CMD_LE_SET_SCAN_ENABLE);
+	CHECK(BtHciCapabilitiesLegacyScanningSupported(&caps));
+
+	CHECK(BtHciCapabilitiesExtendedScanningSupported(&caps) == false);
+	SetCommand(&caps, BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_PARAMETERS);
+	CHECK(BtHciCapabilitiesExtendedScanningSupported(&caps) == false);
+	SetCommand(&caps, BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE);
+	CHECK(BtHciCapabilitiesExtendedScanningSupported(&caps));
+
+	CHECK(BtHciCapabilitiesLegacyInitiatingSupported(&caps) == false);
+	SetCommand(&caps, BT_HCI_CAP_CMD_LE_CREATE_CONNECTION);
+	CHECK(BtHciCapabilitiesLegacyInitiatingSupported(&caps));
+	CHECK(BtHciCapabilitiesExtendedInitiatingSupported(&caps) == false);
+	SetCommand(&caps, BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION);
+	CHECK(BtHciCapabilitiesExtendedInitiatingSupported(&caps));
+}
+
 } // namespace
 
 int main()
@@ -348,6 +394,7 @@ int main()
 	TestControllerCapabilityStorage();
 	TestCapabilityPredicates();
 	TestAdvertisingCommandChecks();
+	TestGapCommandChecks();
 
 	if (s_Failures == 0)
 	{

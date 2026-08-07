@@ -37,6 +37,9 @@ enum {
 	BT_HCI_CAP_CMD_LE_SET_ADV_DATA = 25U * 8U + 7U,
 	BT_HCI_CAP_CMD_LE_SET_SCAN_RESPONSE_DATA = 26U * 8U,
 	BT_HCI_CAP_CMD_LE_SET_ADV_ENABLE = 26U * 8U + 1U,
+	BT_HCI_CAP_CMD_LE_SET_SCAN_PARAMETERS = 26U * 8U + 2U,
+	BT_HCI_CAP_CMD_LE_SET_SCAN_ENABLE = 26U * 8U + 3U,
+	BT_HCI_CAP_CMD_LE_CREATE_CONNECTION = 26U * 8U + 4U,
 	BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS = 35U * 8U + 6U,
 	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS = 35U * 8U + 7U,
 	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_DATA = 36U * 8U,
@@ -44,11 +47,15 @@ enum {
 	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_ENABLE = 36U * 8U + 2U,
 	BT_HCI_CAP_CMD_LE_READ_MAX_ADV_DATA_LENGTH = 36U * 8U + 3U,
 	BT_HCI_CAP_CMD_LE_READ_SUPPORTED_ADV_SETS = 36U * 8U + 4U,
+	BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_PARAMETERS = 37U * 8U + 2U,
+	BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE = 37U * 8U + 3U,
+	BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION = 37U * 8U + 4U,
 };
 
 // Bit numbers in the LE Read Local Supported Features return value.
 enum {
 	BT_HCI_CAP_LE_FEATURE_PHY_2M = 8U,
+	BT_HCI_CAP_LE_FEATURE_CODED_PHY = 11U,
 	BT_HCI_CAP_LE_FEATURE_EXT_ADV = 12U,
 };
 
@@ -178,6 +185,38 @@ static inline bool BtHciCapabilitiesExtendedAdvertisingSupported(
 	}
 
 	return true;
+}
+
+static inline bool BtHciCapabilitiesLegacyScanningSupported(
+	const BtHciCapabilities_t *pCapabilities)
+{
+	return BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_SCAN_PARAMETERS) &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_SCAN_ENABLE);
+}
+
+static inline bool BtHciCapabilitiesExtendedScanningSupported(
+	const BtHciCapabilities_t *pCapabilities)
+{
+	return BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_PARAMETERS) &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE);
+}
+
+static inline bool BtHciCapabilitiesLegacyInitiatingSupported(
+	const BtHciCapabilities_t *pCapabilities)
+{
+	return BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_CREATE_CONNECTION);
+}
+
+static inline bool BtHciCapabilitiesExtendedInitiatingSupported(
+	const BtHciCapabilities_t *pCapabilities)
+{
+	return BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION);
 }
 
 #ifdef __cplusplus
