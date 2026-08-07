@@ -22,6 +22,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "nrf_error.h"
 #include "ble.h"
 #include "ble_gap.h"
+#include "bm/softdevice_handler/nrf_sdh_ble.h"
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
@@ -31,6 +32,22 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 // S145 on nRF54L15 caps extended-adv data at BLE_GAP_SCAN_BUFFER_EXTENDED_MAX_SUPPORTED (255).
 // Same buffer covers legacy 31-byte scans too.
 alignas(4) static uint8_t s_BleScanBuff[BLE_GAP_SCAN_BUFFER_EXTENDED_MAX_SUPPORTED];
+
+// Scan timeout is a GAP event from the SoftDevice. Keep the scan state and
+// application callback with the scan module rather than making the application
+// dispatcher own scan-specific state.
+static void BtScanBmEvtHandler(const ble_evt_t *pEvt, void *pCtx)
+{
+	(void)pCtx;
+	if (pEvt->header.evt_id == BLE_GAP_EVT_TIMEOUT &&
+		pEvt->evt.gap_evt.params.timeout.src == BLE_GAP_TIMEOUT_SRC_SCAN)
+	{
+		g_BtAppData.bScan = false;
+		BtAppScanTimeoutHandler();
+	}
+}
+
+NRF_SDH_BLE_OBSERVER(s_BtScanBmObserver, BtScanBmEvtHandler, NULL, USER);
 
 bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 {

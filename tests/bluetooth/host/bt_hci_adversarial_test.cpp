@@ -24,6 +24,7 @@ bttest::Context s_Test("HCI adversarial host tests");
 
 int s_CompletedCount = 0;
 int s_ScanCount = 0;
+int s_ScanTimeoutCount = 0;
 size_t s_LastScanLen = 0;
 uint8_t s_LastScanData[64] = {};
 
@@ -102,6 +103,26 @@ void TestExtendedAdvEventNeedsCountByte()
 	BT_CHECK(s_Test, s_ScanCount == 0);
 }
 
+void TestScanTimeoutEventDispatch()
+{
+	BtHciDevice_t dev = {};
+	s_ScanTimeoutCount = 0;
+
+	alignas(4) std::array<uint8_t, sizeof(BtHciEvtPacket_t)> raw = {};
+	BtHciEvtPacket_t *pEvt = (BtHciEvtPacket_t *)raw.data();
+	pEvt->Hdr.Evt = BT_HCI_EVT_LE;
+	pEvt->Hdr.Len = 1;
+	pEvt->Data[0] = BT_HCI_EVT_LE_SCAN_TIMEOUT;
+
+	BtHciProcessEvent(&dev, pEvt);
+	BT_CHECK(s_Test, s_ScanTimeoutCount == 1);
+
+	// A zero-length LE Meta event has no subevent byte and must not dispatch.
+	pEvt->Hdr.Len = 0;
+	BtHciProcessEvent(&dev, pEvt);
+	BT_CHECK(s_Test, s_ScanTimeoutCount == 1);
+}
+
 void FeedExtAdv(BtHciDevice_t *pDev, const uint8_t Addr[6],
 				uint8_t Sid, uint8_t DataStatus,
 				const uint8_t *pData, uint8_t DataLen)
@@ -155,6 +176,12 @@ void TestDroppedReassemblyCannotBecomeComplete()
 }
 
 } // namespace
+
+// Strong override of the weak HCI host timeout hook.
+void BtHciScanTimeout(BtHciDevice_t * const)
+{
+	s_ScanTimeoutCount++;
+}
 
 extern "C" {
 
@@ -222,6 +249,8 @@ int main()
 			   TestLegacyAdvEventNeedsCountByte);
 	s_Test.Run("extended advertising count boundary",
 			   TestExtendedAdvEventNeedsCountByte);
+	s_Test.Run("scan timeout event dispatch",
+			   TestScanTimeoutEventDispatch);
 	s_Test.Run("dropped extended advertising reassembly",
 			   TestDroppedReassemblyCannotBecomeComplete);
 	return s_Test.Finish();

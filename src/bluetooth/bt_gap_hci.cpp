@@ -245,6 +245,14 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 		return false;
 	}
 
+	// LE Set Extended Scan Enable encodes Duration as uint16_t in 10 ms
+	// units. BtGapScanParam_t.Timeout is seconds, so 655 s is the largest
+	// value that can be represented without changing the requested timeout.
+	if (pCfg->Param.Timeout > 655U)
+	{
+		return false;
+	}
+
 	// This implementation carries one Scan_Type/Interval/Window block. HCI
 	// requires one block for every selected scanning PHY, so support one primary
 	// advertising PHY at a time and reject 2M, zero, and combined masks.
@@ -272,6 +280,16 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 		if (BtHciCapabilitiesLeFeatureSupported(pCapabilities,
 			BT_HCI_CAP_LE_FEATURE_CODED_PHY) == false ||
 			BtHciCapabilitiesExtendedScanningSupported(pCapabilities) == false)
+		{
+			return false;
+		}
+		useExtScan = true;
+	}
+	else if (pCfg->Param.Timeout != 0)
+	{
+		// Legacy LE Set Scan Enable has no duration field. A finite timeout
+		// therefore requires the extended scan command family.
+		if (BtHciCapabilitiesExtendedScanningSupported(pCapabilities) == false)
 		{
 			return false;
 		}
@@ -359,7 +377,7 @@ bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 		BtHciLeExtScanEnable_t e;
 		e.Enable = 1;
 		e.FilterDup = 1;
-		BtGapWr16(e.Duration, 0);
+		BtGapWr16(e.Duration, (uint16_t)(s_ScanParams.Timeout * 100U));
 		BtGapWr16(e.Period, 0);
 
 		res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_SCAN_ENABLE,

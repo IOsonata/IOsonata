@@ -427,6 +427,8 @@ void TestExtendedScanEnable()
 		CHECK(se->ParamLen == 6);
 		CHECK(se->Param[0] == 1);
 		CHECK(se->Param[1] == 1);
+		CHECK(GetLe16(se->Param + 2) == 0);
+		CHECK(GetLe16(se->Param + 4) == 0);
 	}
 
 	ClearCaptured();
@@ -437,6 +439,62 @@ void TestExtendedScanEnable()
 	{
 		CHECK(se->Param[0] == 0);
 	}
+}
+
+void TestExtendedScanTimeoutEncoding()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
+	cfg.Param.Timeout = 120;
+	CHECK(BtGapScanInit(&cfg));
+
+	ClearCaptured();
+	CHECK(BtGapScanStart(nullptr, 0));
+	const CapturedCmd *se = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_SCAN_ENABLE);
+	CHECK(se != nullptr);
+	if (se != nullptr)
+	{
+		CHECK(se->ParamLen == 6);
+		CHECK(GetLe16(se->Param + 2) == 12000);
+		CHECK(GetLe16(se->Param + 4) == 0);
+	}
+}
+
+void TestScanTimeoutRequiresExtended()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	ClearCommand(BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_PARAMETERS);
+	ClearCommand(BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE);
+
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
+	cfg.Param.Timeout = 10;
+	CHECK(BtGapScanInit(&cfg) == false);
+	CHECK(s_CmdCount == 0);
+}
+
+void TestScanTimeoutRange()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
+	cfg.Param.Timeout = 655;
+	CHECK(BtGapScanInit(&cfg));
+	ClearCaptured();
+	CHECK(BtGapScanStart(nullptr, 0));
+	const CapturedCmd *se = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_SCAN_ENABLE);
+	CHECK(se != nullptr);
+	if (se != nullptr)
+	{
+		CHECK(GetLe16(se->Param + 2) == 65500);
+	}
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	cfg = MakeScanCfg(100, 100);
+	cfg.Param.Timeout = 656;
+	CHECK(BtGapScanInit(&cfg) == false);
+	CHECK(s_CmdCount == 0);
 }
 
 void TestExtendedCreateConnection1M()
@@ -618,6 +676,9 @@ int main()
 	TestScanCommandRefusal();
 	TestCodedScanChecks();
 	TestExtendedScanEnable();
+	TestExtendedScanTimeoutEncoding();
+	TestScanTimeoutRequiresExtended();
+	TestScanTimeoutRange();
 	TestExtendedCreateConnection1M();
 	TestLegacyCreateConnectionFallback();
 	TestCodedCreateConnection();

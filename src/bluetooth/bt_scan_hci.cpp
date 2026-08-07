@@ -24,6 +24,15 @@ Copyright (c) 2022, I-SYST inc., all rights reserved.
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
 
+// Strong application-layer handler for the weak HCI host timeout hook.
+// The controller has already stopped scanning when LE Scan Timeout arrives.
+void BtHciScanTimeout(BtHciDevice_t * const pDev)
+{
+	(void)pDev;
+	g_BtAppData.bScan = false;
+	BtAppScanTimeoutHandler();
+}
+
 void BtAppScan()
 {
 	if (BtGapScanStart(NULL, 0))

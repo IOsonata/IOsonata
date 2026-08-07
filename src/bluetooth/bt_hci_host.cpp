@@ -47,6 +47,13 @@ SOFTWARE.
 
 void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
 
+// Application scanning supplies a strong implementation. Keeping the default
+// here lets the HCI host remain independently linkable in controller tests.
+__attribute__((weak)) void BtHciScanTimeout(BtHciDevice_t * const pDev)
+{
+	(void)pDev;
+}
+
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
 // SysLog transport the app configured (UART, USB, RTT, BLE, or any other
@@ -556,6 +563,7 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_LOST:
 			break;
 		case BT_HCI_EVT_LE_SCAN_TIMEOUT:
+			BtHciScanTimeout(pDev);
 			break;
 		case BT_HCI_EVT_LE_ADV_SET_TERMINATED:
 			if (pDev->AdvTimeout)

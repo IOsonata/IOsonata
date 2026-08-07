@@ -169,10 +169,18 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 		return false;
 	}
 
+	// S145 encodes scan timeout as uint16_t in 10 ms units while the
+	// IOsonata scan API uses seconds. Reject values that cannot be represented
+	// exactly instead of truncating the requested timeout.
+	if (pCfg->Param.Timeout > 655U)
+	{
+		return false;
+	}
+
 	s_ScanParams.active = (pCfg->Type == BTSCAN_TYPE_ACTIVE) ? 1 : 0;
 	s_ScanParams.interval = mSecTo0_625((float)pCfg->Param.Interval);
 	s_ScanParams.window = mSecTo0_625((float)pCfg->Param.Duration);
-	s_ScanParams.timeout = (uint16_t)pCfg->Param.Timeout;
+	s_ScanParams.timeout = (uint16_t)(pCfg->Param.Timeout * 100U);
 	s_ScanParams.filter_policy = BLE_GAP_SCAN_FP_ACCEPT_ALL;
 	s_ScanParams.scan_phys = BLE_GAP_PHY_1MBPS;
 
@@ -278,7 +286,7 @@ bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
 		}
 
 		// Real negotiated size. 0 here only if the update event has not run,
-		// which keeps the key-size gate on the safe (reject) side.
+		// which keeps the key-size check on the safe (reject) side.
 		pSec->KeySize = p->Conn.Sec.KeySize;
 	}
 
