@@ -181,7 +181,7 @@ void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 
 // Surface a secured link (fresh pairing or bonded reconnect) to the application.
 // The generic SMP engine calls this on every successful encryption; translate it
-// to the port-neutral BtAppEvtSecured hook the example gates discovery on.
+// to the port-neutral BtAppEvtSecured hook the example checks before discovery.
 // Declared in bt_smp.h, so no linkage specifier is needed here.
 void BtSmpPairingComplete(uint16_t ConnHdl, bool Success,
 						  const BtSmpKeys_t *pKeys)
@@ -304,8 +304,8 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 	// Defer MTU exchange until after encryption/service discovery.
 	// BtAttExchangeMtuRequest(&s_BtHciDev, ConnHdl, BtAttGetMtu());
 
-	// Discovery is a per-link decision, so it is gated on this link's role
-	// rather than on the device's configured role bitmask.
+	// Discovery is a per-link decision, so use this link's role rather than
+	// the device's configured role bitmask.
 	if (Role == BT_CONN_ROLE_CENTRAL)
 	{
 		// TODO: obtain the connected peripheral device's name and store to pPeer->Name;
@@ -477,7 +477,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	}
 
 	// The controller was configured with these ACL buffer parameters above.
-	// Use the generic HCI host credit gate instead of the old SDC-local
+	// Use the generic HCI host credit handling instead of the old SDC-local
 	// s_SdcAclTxPktAvail counter.
 	BtHciSetLeAclBuffer(&s_BtHciDev, ctlrcfg.MaxDataLen, ctlrcfg.TxPktCount);
 
@@ -639,20 +639,23 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	DEBUG_PRINTF("local addr %02x:%02x:%02x:%02x:%02x:%02x type=1\r\n",
 				 ranaddr[5], ranaddr[4], ranaddr[3], ranaddr[2], ranaddr[1], ranaddr[0]);
 
-	// LE Read Maximum Data Length return: supported max TX octets, TX time, RX
-	// octets, RX time, each 2 bytes little endian.
-	uint8_t maxlen[8] = {0};
-	BtHciCommand(&s_BtHciDev, BT_HCI_CMD_CTLR_READ_MAX_DATA_LEN, NULL, 0, maxlen, sizeof(maxlen));
-	uint16_t maxTxOctets = (uint16_t)(maxlen[0] | (maxlen[1] << 8));
-	uint16_t maxTxTime   = (uint16_t)(maxlen[2] | (maxlen[3] << 8));
-
-	uint16_t txOctets = (uint16_t)min(maxTxOctets, pCfg->MaxMtu);
-	uint8_t datalen[4];
-	datalen[0] = (uint8_t)(txOctets & 0xff);
-	datalen[1] = (uint8_t)(txOctets >> 8);
-	datalen[2] = (uint8_t)(maxTxTime & 0xff);
-	datalen[3] = (uint8_t)(maxTxTime >> 8);
-	BtHciCommand(&s_BtHciDev, BT_HCI_CMD_CTLR_WRITE_SUGG_DEFAULT_DATA_LEN, datalen, sizeof(datalen), NULL, 0);
+	const BtHciCapabilities_t *pCapabilities =
+		BtHciCtlrCapabilitiesGet(&s_BtHciCtlr);
+	if (pCapabilities != nullptr &&
+		(pCapabilities->Valid & BT_HCI_CAP_VALID_MAX_DATA_LEN) != 0 &&
+		pCapabilities->MaxTxOctets != 0 && pCapabilities->MaxTxTime != 0)
+	{
+		// LE Write Suggested Default Data Length configures Link Layer payload
+		// limits. It is independent of the ATT MTU, so use the maximum values
+		// already reported by LE Read Maximum Data Length during controller start.
+		uint8_t datalen[4];
+		datalen[0] = (uint8_t)(pCapabilities->MaxTxOctets & 0xff);
+		datalen[1] = (uint8_t)(pCapabilities->MaxTxOctets >> 8);
+		datalen[2] = (uint8_t)(pCapabilities->MaxTxTime & 0xff);
+		datalen[3] = (uint8_t)(pCapabilities->MaxTxTime >> 8);
+		BtHciCommand(&s_BtHciDev, BT_HCI_CMD_CTLR_WRITE_SUGG_DEFAULT_DATA_LEN,
+			datalen, sizeof(datalen), NULL, 0);
+	}
 
 	sdc_default_tx_power_set(pCfg->TxPower);
 
