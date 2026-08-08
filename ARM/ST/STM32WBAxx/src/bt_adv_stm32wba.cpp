@@ -35,6 +35,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "ble_hci_le.h"
 
 #include "istddef.h"
+#include "app_evt_handler.h"
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
@@ -71,8 +72,6 @@ extern UART g_Uart;
 // 1ms -> 0.625ms unit conversion (rounded down). HCI adv interval is in
 // 0.625 ms units across both legacy and extended adv params.
 #define BT_WBA_MSEC_TO_0_625(ms)		(((uint32_t)(ms) * 1600U) / 1000U)
-// 10ms unit for adv duration / timeout.
-#define BT_WBA_MSEC_TO_10MS(ms)			(((uint32_t)(ms) + 9U) / 10U)
 
 // Extended adv event_properties bitfield (HCI v5.0+).
 #define BT_WBA_EVT_PROP_CONNECTABLE		0x0001
@@ -100,6 +99,9 @@ extern UART g_Uart;
 // mirrors bt_adv_bm.cpp - lets app code reuse the buffer between modes.
 static bool s_bAdvertising;
 static uint16_t s_PeripheralLinkCount;
+static uint32_t s_AdvTimeoutMs;
+static uint32_t s_AdvStartTime;
+static bool s_bAdvTimeoutPumpRegistered;
 
 alignas(4) static uint8_t s_BtAppAdvBuff[BT_WBA_ADV_EXTENDED_MAX + 5];
 alignas(4) static BtAdvPacket_t s_BtAppAdvPkt = {
@@ -239,8 +241,8 @@ void BtAdvStart(void)
 	}
 	else
 	{
-		// aci_gap_adv_set_enable takes an Adv_Set_t array. Single set
-		// here; duration 0 = until explicitly disabled.
+		// The common timeout pump owns duration for both legacy and extended
+		// advertising, so keep the controller duration disabled here.
 		Adv_Set_t advSet = {
 			.Advertising_Handle              = BT_WBA_ADV_HANDLE,
 			.Duration                        = 0,
@@ -252,6 +254,7 @@ void BtAdvStart(void)
 	if (ret == BLE_STATUS_SUCCESS)
 	{
 		s_bAdvertising = true;
+		s_AdvStartTime = HAL_GetTick();
 		BtAdvStateUpdate();
 	}
 	else
@@ -291,6 +294,21 @@ void BtAdvStop(void)
 
 	s_bAdvertising = false;
 	BtAdvStateUpdate();
+}
+
+static void BtAdvWbaTimeoutProcess(void)
+{
+	if (!s_bAdvertising || s_AdvTimeoutMs == 0 ||
+		(uint32_t)(HAL_GetTick() - s_AdvStartTime) < s_AdvTimeoutMs)
+	{
+		return;
+	}
+
+	BtAdvStop();
+	if (!s_bAdvertising)
+	{
+		BtAppAdvTimeoutHandler();
+	}
 }
 
 // Push the encoded packet pair to the ST stack. Splits between legacy
@@ -411,8 +429,19 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	s_bAdvertising = false;
 	s_PeripheralLinkCount = pCfg->PeriLinkCount > 0 ?
 		(uint16_t)pCfg->PeriLinkCount : 0;
+	s_AdvTimeoutMs = pCfg->AdvTimeout;
 	advpkt->Len = 0;
 	srpkt->Len = 0;
+
+	if (s_AdvTimeoutMs != 0 && !s_bAdvTimeoutPumpRegistered)
+	{
+		s_bAdvTimeoutPumpRegistered =
+			AppEvtHandlerIdleRegister(BtAdvWbaTimeoutProcess);
+		if (!s_bAdvTimeoutPumpRegistered)
+		{
+			return false;
+		}
+	}
 
 	if (BtAdvEncode(pCfg, advpkt, srpkt, &g_BtAppData.bExtAdv,
 					&bScannable) == false)
