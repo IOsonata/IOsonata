@@ -14,6 +14,7 @@
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_smp.h"
+#include "bluetooth/bt_smp_bond.h"
 
 extern "C" void BtSmpBondPersistComplete(int Slot, const void *pBond,
 											 size_t Len, bool Success);
@@ -266,6 +267,20 @@ void TestResolvedIdentityLookup()
 	s_AutoComplete = true;
 	s_SaveCount = 0;
 	BtSmpBondRestore(0, persisted, persistedLen);
+
+	uint8_t identityType = 0xFF;
+	uint8_t storedIdentity[6] = {};
+	uint8_t storedIrk[16] = {};
+	BT_CHECK(s_Test, BtSmpBondIdentityGet(0, &identityType,
+		storedIdentity, storedIrk));
+	BT_CHECK(s_Test, identityType == BTADDR_TYPE_RAND);
+	BT_CHECK(s_Test, std::memcmp(storedIdentity, identity, sizeof(identity)) == 0);
+	BT_CHECK(s_Test, std::memcmp(storedIrk, s_Keys.Irk, sizeof(storedIrk)) == 0);
+	BT_CHECK(s_Test, !BtSmpBondIdentityGet(BT_SMP_BOND_MAX, &identityType,
+		storedIdentity, storedIrk));
+	BT_CHECK(s_Test, identityType == 0);
+	BT_CHECK(s_Test, AllZero(storedIdentity, sizeof(storedIdentity)));
+	BT_CHECK(s_Test, AllZero(storedIrk, sizeof(storedIrk)));
 
 	s_Peer.Conn.PeerAddrType = BTADDR_TYPE_RANDOM_STATIC;
 	std::memcpy(s_Peer.Conn.PeerAddr, identity, sizeof(identity));

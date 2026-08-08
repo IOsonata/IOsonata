@@ -48,6 +48,7 @@ SOFTWARE.
 
 #include "coredev/interrupt.h"
 #include "bluetooth/bt_smp.h"
+#include "bluetooth/bt_smp_bond.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_dev.h"
 
@@ -228,6 +229,39 @@ __attribute__((weak)) void BtSmpBondErase(void)
 int BtSmpBondSlotCount(void)
 {
 	return BT_SMP_BOND_MAX;
+}
+
+bool BtSmpBondIdentityGet(int Slot, uint8_t *pAddrType,
+	uint8_t Addr[6], uint8_t Irk[16])
+{
+	if (pAddrType == nullptr || Addr == nullptr || Irk == nullptr)
+	{
+		return false;
+	}
+
+	*pAddrType = 0;
+	memset(Addr, 0, 6);
+	memset(Irk, 0, 16);
+	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX)
+	{
+		return false;
+	}
+
+	uint32_t state = BtSmpBondTableEnter();
+	const BtSmpBond_t *pBond = &s_BtSmpBondTable[Slot];
+	bool valid = pBond->bValid && pBond->Keys.bValid &&
+		BtSmpBondHasIrk(pBond) &&
+		(pBond->Keys.IdAddrType == BTADDR_TYPE_PUBLIC ||
+		 pBond->Keys.IdAddrType == BTADDR_TYPE_RAND);
+
+	if (valid)
+	{
+		*pAddrType = pBond->Keys.IdAddrType;
+		memcpy(Addr, pBond->Keys.IdAddr, 6);
+		memcpy(Irk, pBond->Keys.Irk, 16);
+	}
+	BtSmpBondTableExit(state);
+	return valid;
 }
 
 size_t BtSmpBondRecordSize(void)
