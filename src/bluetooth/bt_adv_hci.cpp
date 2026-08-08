@@ -258,8 +258,11 @@ static int BtAdvDataWrite(BtHciDevice_t *pDev, BtAdvPacket_t *pPacket,
 			return -1;
 		}
 
-		BtHciLeExtAdvData_t *pData = ScanResponse ?
-			&s_BtDevExtSrData : &s_BtDevExtAdvData;
+		// Extended advertising packets used here reserve the four HCI command
+		// parameter bytes immediately before pData. This is true for the static
+		// advertising buffers and for the temporary update packet below.
+		BtHciLeExtAdvData_t *pData = (BtHciLeExtAdvData_t *)
+			(pPacket->pData - BTADV_HCI_DATA_HDR_LEN);
 		pData->AdvHandle = 0;
 		pData->Operation = 3;
 		pData->FragPref = 1;
@@ -296,6 +299,31 @@ static int BtAdvDataWrite(BtHciDevice_t *pDev, BtAdvPacket_t *pPacket,
 	return BtHciCommand(pDev, opcode, &data, sizeof(data), NULL, 0);
 }
 
+static bool BtAdvManDataSetPacket(BtAdvPacket_t *pPacket,
+	const uint8_t *pData, int Len)
+{
+	BtAdvData_t *p = BtAdvDataAllocate(pPacket,
+		BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, Len + 2);
+	if (p == nullptr)
+	{
+		return false;
+	}
+
+	p->Data[0] = (uint8_t)(g_BtAppData.AppDevice.VendorId & 0xFF);
+	p->Data[1] = (uint8_t)(g_BtAppData.AppDevice.VendorId >> 8);
+	if (Len > 0)
+	{
+		memcpy(&p->Data[2], pData, (size_t)Len);
+	}
+	return true;
+}
+
+static void BtAdvPacketCopy(BtAdvPacket_t *pDst, const BtAdvPacket_t *pSrc)
+{
+	memcpy(pDst->pData, pSrc->pData, (size_t)pSrc->Len);
+	pDst->Len = pSrc->Len;
+}
+
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
 {
 	if (g_BtAppData.State != BTAPP_STATE_ADVERTISING && g_BtAppData.State != BTAPP_STATE_IDLE)
@@ -319,6 +347,35 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		return false;
 	}
 
+	BtAdvPacket_t *advpkt = &s_BtDevExtAdvPkt;
+	BtAdvPacket_t *srpkt  = &s_BtDevExtSrPkt;
+	bool changeAdv = pAdvData != nullptr;
+	bool changeSr = pSrData != nullptr;
+
+	// One temporary HCI-sized packet is enough for both updates. Validate both
+	// replacements before stopping advertising so an allocation failure cannot
+	// interrupt an otherwise working advertiser.
+	alignas(4) uint8_t scratchMem[sizeof(BtHciLeExtAdvData_t)];
+	BtHciLeExtAdvData_t *scratchData = (BtHciLeExtAdvData_t *)scratchMem;
+	BtAdvPacket_t scratch = { 251, 0, scratchData->Data };
+
+	if (changeAdv)
+	{
+		BtAdvPacketCopy(&scratch, advpkt);
+		if (BtAdvManDataSetPacket(&scratch, pAdvData, AdvLen) == false)
+		{
+			return false;
+		}
+	}
+	if (changeSr)
+	{
+		BtAdvPacketCopy(&scratch, srpkt);
+		if (BtAdvManDataSetPacket(&scratch, pSrData, SrLen) == false)
+		{
+			return false;
+		}
+	}
+
 	bool restart = g_BtAppData.State == BTAPP_STATE_ADVERTISING;
 	if (restart)
 	{
@@ -329,55 +386,42 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		g_BtAppData.State = BTAPP_STATE_IDLE;
 	}
 
-	BtAdvPacket_t *advpkt = &s_BtDevExtAdvPkt;
-	BtAdvPacket_t *srpkt  = &s_BtDevExtSrPkt;
-
-	if (pAdvData)
+	bool advWritten = false;
+	if (changeAdv)
 	{
-		uint8_t oldData[251];
-		int oldLen = advpkt->Len;
-		memcpy(oldData, advpkt->pData, (size_t)oldLen);
-
-		BtAdvData_t *p = BtAdvDataAllocate(advpkt,
-			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, AdvLen + 2);
-		if (p == NULL)
+		BtAdvPacketCopy(&scratch, advpkt);
+		(void)BtAdvManDataSetPacket(&scratch, pAdvData, AdvLen);
+		if (BtAdvDataWrite(pDev, &scratch, false) != 0)
 		{
-			return false;
+			goto rollback;
 		}
-		p->Data[0] = (uint8_t)(g_BtAppData.AppDevice.VendorId & 0xFF);
-		p->Data[1] = (uint8_t)(g_BtAppData.AppDevice.VendorId >> 8);
-		memcpy(&p->Data[2], pAdvData, (size_t)AdvLen);
+		advWritten = true;
+	}
 
-		if (BtAdvDataWrite(pDev, advpkt, false) != 0)
+	if (changeSr)
+	{
+		BtAdvPacketCopy(&scratch, srpkt);
+		(void)BtAdvManDataSetPacket(&scratch, pSrData, SrLen);
+		if (BtAdvDataWrite(pDev, &scratch, true) != 0)
 		{
-			memcpy(advpkt->pData, oldData, (size_t)oldLen);
-			advpkt->Len = oldLen;
-			return false;
+			goto rollback;
 		}
 	}
 
-	if (pSrData)
+	// Controller accepted all requested writes. Apply the same validated edits
+	// to the retained packets only now, so they remain the rollback copy until
+	// the controller state is complete.
+	if (changeAdv)
 	{
-		uint8_t oldData[251];
-		int oldLen = srpkt->Len;
-		memcpy(oldData, srpkt->pData, (size_t)oldLen);
-
-		BtAdvData_t *p = BtAdvDataAllocate(srpkt,
-			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, SrLen + 2);
-		if (p == NULL)
-		{
-			return false;
-		}
-		p->Data[0] = (uint8_t)(g_BtAppData.AppDevice.VendorId & 0xFF);
-		p->Data[1] = (uint8_t)(g_BtAppData.AppDevice.VendorId >> 8);
-		memcpy(&p->Data[2], pSrData, (size_t)SrLen);
-
-		if (BtAdvDataWrite(pDev, srpkt, true) != 0)
-		{
-			memcpy(srpkt->pData, oldData, (size_t)oldLen);
-			srpkt->Len = oldLen;
-			return false;
-		}
+		BtAdvPacketCopy(&scratch, advpkt);
+		(void)BtAdvManDataSetPacket(&scratch, pAdvData, AdvLen);
+		BtAdvPacketCopy(advpkt, &scratch);
+	}
+	if (changeSr)
+	{
+		BtAdvPacketCopy(&scratch, srpkt);
+		(void)BtAdvManDataSetPacket(&scratch, pSrData, SrLen);
+		BtAdvPacketCopy(srpkt, &scratch);
 	}
 
 	if (restart)
@@ -390,6 +434,23 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 	}
 
 	return true;
+
+rollback:
+	// The retained packets still contain the old data. If the advertising data
+	// command succeeded before a later failure, restore it in the controller.
+	// A rollback failure leaves advertising stopped rather than transmitting a
+	// data set whose two packets may no longer match.
+	if (advWritten && BtAdvDataWrite(pDev, advpkt, false) != 0)
+	{
+		return false;
+	}
+
+	if (restart && BtAppAdvEnable() == 0)
+	{
+		g_BtAppData.State = BTAPP_STATE_ADVERTISING;
+	}
+
+	return false;
 }
 
 static int BtAppAdvEnable(void)

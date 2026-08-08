@@ -250,6 +250,18 @@ const CapturedCmd *FindCmd(uint16_t OpCode)
 	return nullptr;
 }
 
+const CapturedCmd *FindLastCmd(uint16_t OpCode)
+{
+	for (int i = s_CmdCount - 1; i >= 0; i--)
+	{
+		if (s_Cmds[i].OpCode == OpCode)
+		{
+			return &s_Cmds[i];
+		}
+	}
+	return nullptr;
+}
+
 int FindCmdIndex(uint16_t OpCode, uint8_t FirstParam = 0xFF)
 {
 	for (int i = 0; i < s_CmdCount; i++)
@@ -524,6 +536,76 @@ void TestAdvManDataSetReportsRestartFailure()
 	CHECK(g_BtAppData.State == BTAPP_STATE_IDLE);
 }
 
+void TestAdvManDataSetRestartsAfterWriteFailure()
+{
+	uint8_t addr[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0xC6 };
+	Setup(BTADDR_TYPE_RANDOM_STATIC, addr);
+
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	CHECK(BtAppAdvInit(&cfg) == true);
+	BtAppAdvStart();
+	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+	ClearCommands();
+
+	s_FailOpCode = BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA;
+	uint8_t data[2] = { 0xA1, 0xB2 };
+	CHECK(BtAppAdvManDataSet(data, sizeof(data), nullptr, 0) == false);
+	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+
+	int disable = FindCmdIndex(BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE, 0);
+	int failedWrite = FindCmdIndex(BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA);
+	int enable = FindCmdIndex(BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE, 1);
+	CHECK(disable >= 0);
+	CHECK(failedWrite > disable);
+	CHECK(enable > failedWrite);
+}
+
+void TestAdvManDataSetRollsBackAfterScanResponseFailure()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr, CAP_LEGACY);
+
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	CHECK(BtAppAdvInit(&cfg) == true);
+	const CapturedCmd *initial = FindCmd(BT_HCI_CMD_CTLR_SET_ADV_DATA);
+	CHECK(initial != nullptr);
+	CapturedCmd oldAdv = {};
+	if (initial != nullptr)
+	{
+		oldAdv = *initial;
+	}
+
+	BtAppAdvStart();
+	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+	ClearCommands();
+
+	s_FailOpCode = BT_HCI_CMD_CTLR_SET_SCAN_RESP_DATA;
+	uint8_t advData[2] = { 0x11, 0x22 };
+	uint8_t srData[2] = { 0x33, 0x44 };
+	CHECK(BtAppAdvManDataSet(advData, sizeof(advData),
+		srData, sizeof(srData)) == false);
+	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+
+	int advWriteCount = 0;
+	for (int i = 0; i < s_CmdCount; i++)
+	{
+		if (s_Cmds[i].OpCode == BT_HCI_CMD_CTLR_SET_ADV_DATA)
+		{
+			advWriteCount++;
+		}
+	}
+	CHECK(advWriteCount == 2);
+
+	const CapturedCmd *rollback = FindLastCmd(BT_HCI_CMD_CTLR_SET_ADV_DATA);
+	CHECK(rollback != nullptr);
+	if (rollback != nullptr && initial != nullptr)
+	{
+		CHECK(rollback->ParamLen == oldAdv.ParamLen);
+		CHECK(std::memcmp(rollback->Param, oldAdv.Param,
+			oldAdv.ParamLen) == 0);
+	}
+}
+
 void TestLegacyDataUpdateOrder()
 {
 	uint8_t addr[6] = {};
@@ -604,6 +686,8 @@ int main()
 	TestExtendedSecondaryPhySelection();
 	TestAdvStopKeepsStateOnFailure();
 	TestAdvManDataSetReportsRestartFailure();
+	TestAdvManDataSetRestartsAfterWriteFailure();
+	TestAdvManDataSetRollsBackAfterScanResponseFailure();
 	TestLegacyDataUpdateOrder();
 
 	if (s_Failures != 0)
