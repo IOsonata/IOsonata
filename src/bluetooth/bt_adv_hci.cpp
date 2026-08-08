@@ -602,6 +602,19 @@ void BtAppAdvStop()
 	g_BtAppData.State = BTAPP_STATE_IDLE;
 }
 
+// Portable advertising control. Target ports such as nRF54 BM provide strong
+// BtAdvStart/BtAdvStop definitions; the HCI implementation is the generic
+// fallback used by SDC and other standard-HCI controllers.
+__attribute__((weak)) void BtAdvStart()
+{
+	BtAppAdvStart();
+}
+
+__attribute__((weak)) void BtAdvStop()
+{
+	BtAppAdvStop();
+}
+
 bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 {
 	if (pCfg == nullptr || !BtGattInitStatusComplete())

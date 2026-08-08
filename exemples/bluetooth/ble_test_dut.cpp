@@ -213,14 +213,14 @@ static void HandleCommand(const char *pLine)
 
 	if (strcmp(pLine, "adv start") == 0)
 	{
-		BtAppAdvStart();
+		BtAdvStart();
 		g_Uart.printf("DUT ADV_START requested\r\n");
 		return;
 	}
 
 	if (strcmp(pLine, "adv stop") == 0)
 	{
-		BtAppAdvStop();
+		BtAdvStop();
 		g_Uart.printf("DUT ADV_STOP requested\r\n");
 		return;
 	}
