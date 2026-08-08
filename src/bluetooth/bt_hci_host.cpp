@@ -409,7 +409,13 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				{
 					DEBUG_PRINTF("BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE_V1/V2\r\n");
 					DEBUG_PRINTF("Target device Role = %d\r\n", p->Role);
-					if (pDev->Connected)
+					if (pDev->EnhancedConnected)
+					{
+						pDev->EnhancedConnected(p->ConnHdl, p->Role,
+							p->PeerAddrType, p->PeerAddr,
+							p->LocalResolPriAddr, p->PeerResolPriAddr);
+					}
+					else if (pDev->Connected)
 					{
 						pDev->Connected(p->ConnHdl, p->Role, p->PeerAddrType, p->PeerAddr);
 					}

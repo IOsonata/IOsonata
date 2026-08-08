@@ -719,6 +719,9 @@ struct __Bt_Hci_Device {
 	uint8_t (*Command)(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen);	//!< Target command executor: sends and returns the HCI status. The target picks the response model its SDK offers.
 	void (*EvtHandler)(BtHciDevice_t * const pDev, uint32_t Evt);
 	void (*Connected)(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
+	void (*EnhancedConnected)(uint16_t ConnHdl, uint8_t Role,
+		uint8_t PeerIdentityAddrType, const uint8_t PeerIdentityAddr[6],
+		const uint8_t LocalRpa[6], const uint8_t PeerRpa[6]);
 	void (*Disconnected)(uint16_t ConnHdl, uint8_t Reason);
 	void (*SendCompleted)(uint16_t ConnHdl, uint16_t NbPktSent);
 	bool (*ScanReport)(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *AdvData);
