@@ -90,7 +90,7 @@ alignas(CRYPTO_KEYCTX_ALIGN_MAX) static uint8_t s_LescEcdhKeyCtx[LESC_KEYCTX_SIZ
 
 static void ByteOrderInvert(const uint8_t *pIn, uint8_t *pOut)
 {
-	for (int i = 0; i < LESC_COORD_SIZE; i++)
+	for (size_t i = 0; i < LESC_COORD_SIZE; i++)
 	{
 		pOut[i] = pIn[LESC_COORD_SIZE - 1 - i];
 		pOut[LESC_COORD_SIZE + i] = pIn[2 * LESC_COORD_SIZE - 1 - i];
@@ -389,7 +389,7 @@ static CRYPTO_STATUS ComputeAndReply(BtLescPeerKey_t *pPeer)
 		s_LescEcdhKeyCtx, peerBe, dhBe, true);
 	if (status == CRYPTO_STATUS_OK)
 	{
-		for (int i = 0; i < BLE_GAP_LESC_DHKEY_LEN; i++)
+		for (size_t i = 0; i < BLE_GAP_LESC_DHKEY_LEN; i++)
 		{
 			s_LescDhKey.key[i] = dhBe[BLE_GAP_LESC_DHKEY_LEN - 1 - i];
 		}
