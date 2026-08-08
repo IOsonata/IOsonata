@@ -111,22 +111,35 @@ typedef struct {
 
 #pragma pack(pop)
 
-#define BTADV_HCI_DATA_HDR_LEN		(sizeof(BtHciLeExtAdvData_t) - 251)
+#define BTADV_HCI_DATA_FRAGMENT_MAX	251
+#define BTADV_HCI_DATA_HDR_LEN		(sizeof(BtHciLeExtAdvData_t) - BTADV_HCI_DATA_FRAGMENT_MAX)
+#define BTADV_EXTADV_DATA_MAX		1650
+#define BTADV_EXTADV_OP_INTERMEDIATE	0x00
+#define BTADV_EXTADV_OP_FIRST		0x01
+#define BTADV_EXTADV_OP_LAST		0x02
+#define BTADV_EXTADV_OP_COMPLETE	0x03
 #define BTADV_LEGACY_ADV_IND		0x00
 #define BTADV_LEGACY_ADV_SCAN_IND	0x02
 #define BTADV_LEGACY_ADV_NONCONN_IND	0x03
 
-// --- Adv packet buffers (data region overlaid by BtAdvPacket_t) ---
+// --- Adv packet buffers ---
+// Extended advertising Host data can be up to 1650 octets. HCI transports it
+// in commands carrying at most 251 data octets each, so the retained packet
+// storage is independent of the command fragment buffer.
+alignas(4) static uint8_t s_BtDevAdvBuff[BTADV_EXTADV_DATA_MAX];
+alignas(4) static BtAdvPacket_t s_BtDevExtAdvPkt = {
+	BTADV_EXTADV_DATA_MAX, 0, s_BtDevAdvBuff
+};
 
-alignas(4) static uint8_t s_BtDevAdvBuff[sizeof(BtHciLeExtAdvData_t)];
-// The alignment lives on the backing buffer above; a reference has no storage
-// of its own to align (clang rejects alignas on a reference, g++ ignores it).
-static BtHciLeExtAdvData_t &s_BtDevExtAdvData = *(BtHciLeExtAdvData_t*)s_BtDevAdvBuff;
-alignas(4) static BtAdvPacket_t s_BtDevExtAdvPkt = { 251, 0, s_BtDevExtAdvData.Data };
+alignas(4) static uint8_t s_BtDevSrBuff[BTADV_EXTADV_DATA_MAX];
+alignas(4) static BtAdvPacket_t s_BtDevExtSrPkt = {
+	BTADV_EXTADV_DATA_MAX, 0, s_BtDevSrBuff
+};
 
-alignas(4) static uint8_t s_BtDevSrBuff[sizeof(BtHciLeExtAdvData_t)];
-static BtHciLeExtAdvData_t &s_BtDevExtSrData = *(BtHciLeExtAdvData_t*)s_BtDevSrBuff;
-alignas(4) static BtAdvPacket_t s_BtDevExtSrPkt = { 251, 0, s_BtDevExtSrData.Data };
+// One reusable full-size scratch packet keeps live manufacturer-data updates
+// off the task stack. Advertising state is global and the update path is
+// serialized with the rest of BtApp advertising control.
+alignas(4) static uint8_t s_BtDevScratchBuff[BTADV_EXTADV_DATA_MAX];
 
 // Advertising duration in 10 ms units, cached at init for the extended enable
 // command. 0 means no timeout.
@@ -236,8 +249,13 @@ static bool BtAdvCommandSetSelect(bool ExtPayload, bool UseRandomAddress,
 }
 
 static int BtAdvDataWrite(BtHciDevice_t *pDev, BtAdvPacket_t *pPacket,
-	bool ScanResponse)
+	bool ScanResponse, bool *pPartialWrite = nullptr)
 {
+	if (pPartialWrite != nullptr)
+	{
+		*pPartialWrite = false;
+	}
+
 	if (pDev == nullptr || pPacket == nullptr || s_pBtAdvCapabilities == nullptr ||
 		pPacket->Len < 0 || pPacket->Len > pPacket->MaxLen ||
 		(ScanResponse && s_BtDevAdvScannable == false))
@@ -258,21 +276,67 @@ static int BtAdvDataWrite(BtHciDevice_t *pDev, BtAdvPacket_t *pPacket,
 			return -1;
 		}
 
-		// Extended advertising packets used here reserve the four HCI command
-		// parameter bytes immediately before pData. This is true for the static
-		// advertising buffers and for the temporary update packet below.
-		BtHciLeExtAdvData_t *pData = (BtHciLeExtAdvData_t *)
-			(pPacket->pData - BTADV_HCI_DATA_HDR_LEN);
-		pData->AdvHandle = 0;
-		pData->Operation = 3;
-		pData->FragPref = 1;
-		pData->DataLen = (uint8_t)pPacket->Len;
-
 		uint16_t opcode = ScanResponse ?
 			BT_HCI_CMD_CTLR_SET_EXT_SCAN_RESP_DATA :
 			BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA;
-		return BtHciCommand(pDev, opcode, pData,
-			(uint8_t)(BTADV_HCI_DATA_HDR_LEN + pPacket->Len), NULL, 0);
+		BtHciLeExtAdvData_t data = {};
+		data.AdvHandle = 0;
+		data.FragPref = 1;
+
+		if (pPacket->Len <= BTADV_HCI_DATA_FRAGMENT_MAX)
+		{
+			data.Operation = BTADV_EXTADV_OP_COMPLETE;
+			data.DataLen = (uint8_t)pPacket->Len;
+			if (pPacket->Len > 0)
+			{
+				memcpy(data.Data, pPacket->pData, (size_t)pPacket->Len);
+			}
+			return BtHciCommand(pDev, opcode, &data,
+				(uint8_t)(BTADV_HCI_DATA_HDR_LEN + pPacket->Len), NULL, 0);
+		}
+
+		int offset = 0;
+		int remaining = pPacket->Len;
+		bool wroteFragment = false;
+
+		while (remaining > 0)
+		{
+			int fragmentLen = remaining > BTADV_HCI_DATA_FRAGMENT_MAX ?
+				BTADV_HCI_DATA_FRAGMENT_MAX : remaining;
+
+			if (offset == 0)
+			{
+				data.Operation = BTADV_EXTADV_OP_FIRST;
+			}
+			else if (remaining > BTADV_HCI_DATA_FRAGMENT_MAX)
+			{
+				data.Operation = BTADV_EXTADV_OP_INTERMEDIATE;
+			}
+			else
+			{
+				data.Operation = BTADV_EXTADV_OP_LAST;
+			}
+
+			data.DataLen = (uint8_t)fragmentLen;
+			memcpy(data.Data, pPacket->pData + offset, (size_t)fragmentLen);
+
+			int res = BtHciCommand(pDev, opcode, &data,
+				(uint8_t)(BTADV_HCI_DATA_HDR_LEN + fragmentLen), NULL, 0);
+			if (res != 0)
+			{
+				if (pPartialWrite != nullptr)
+				{
+					*pPartialWrite = wroteFragment;
+				}
+				return res;
+			}
+
+			wroteFragment = true;
+			offset += fragmentLen;
+			remaining -= fragmentLen;
+		}
+
+		return 0;
 	}
 
 	if (pPacket->Len > BT_ADV_LEGACY_DATA_MAX)
@@ -352,12 +416,12 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 	bool changeAdv = pAdvData != nullptr;
 	bool changeSr = pSrData != nullptr;
 
-	// One temporary HCI-sized packet is enough for both updates. Validate both
+	// One full-size reusable packet is enough for both updates. Validate both
 	// replacements before stopping advertising so an allocation failure cannot
 	// interrupt an otherwise working advertiser.
-	alignas(4) uint8_t scratchMem[sizeof(BtHciLeExtAdvData_t)];
-	BtHciLeExtAdvData_t *scratchData = (BtHciLeExtAdvData_t *)scratchMem;
-	BtAdvPacket_t scratch = { 251, 0, scratchData->Data };
+	BtAdvPacket_t scratch = {
+		BTADV_EXTADV_DATA_MAX, 0, s_BtDevScratchBuff
+	};
 
 	if (changeAdv)
 	{
@@ -387,11 +451,13 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 	}
 
 	bool advWritten = false;
+	bool advPartial = false;
+	bool srPartial = false;
 	if (changeAdv)
 	{
 		BtAdvPacketCopy(&scratch, advpkt);
 		(void)BtAdvManDataSetPacket(&scratch, pAdvData, AdvLen);
-		if (BtAdvDataWrite(pDev, &scratch, false) != 0)
+		if (BtAdvDataWrite(pDev, &scratch, false, &advPartial) != 0)
 		{
 			goto rollback;
 		}
@@ -402,7 +468,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 	{
 		BtAdvPacketCopy(&scratch, srpkt);
 		(void)BtAdvManDataSetPacket(&scratch, pSrData, SrLen);
-		if (BtAdvDataWrite(pDev, &scratch, true) != 0)
+		if (BtAdvDataWrite(pDev, &scratch, true, &srPartial) != 0)
 		{
 			goto rollback;
 		}
@@ -436,11 +502,15 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 	return true;
 
 rollback:
-	// The retained packets still contain the old data. If the advertising data
-	// command succeeded before a later failure, restore it in the controller.
-	// A rollback failure leaves advertising stopped rather than transmitting a
-	// data set whose two packets may no longer match.
-	if (advWritten && BtAdvDataWrite(pDev, advpkt, false) != 0)
+	// A failed fragmented write may have left a partial Host data sequence in
+	// the controller. Restore the retained packet before advertising is allowed
+	// to resume. A single complete command that fails has not replaced the old
+	// data and does not need this extra write.
+	if (srPartial && BtAdvDataWrite(pDev, srpkt, true) != 0)
+	{
+		return false;
+	}
+	if ((advWritten || advPartial) && BtAdvDataWrite(pDev, advpkt, false) != 0)
 	{
 		return false;
 	}

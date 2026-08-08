@@ -1,8 +1,8 @@
 // Command-level coverage for the advertising HCI path: capability-based
-// command selection, own-address validation, advertising state, and
-// manufacturer company identifier byte order. BtHciCommand dispatches through
-// the device Command pointer, so a capture device records every opcode and
-// packed parameter block. No controller is involved.
+// command selection, own-address validation, advertising state, extended-data
+// fragmentation, and manufacturer company identifier byte order. BtHciCommand
+// dispatches through the device Command pointer, so a capture device records
+// every opcode and packed parameter block. No controller is involved.
 
 #include <cstddef>
 #include <cstdint>
@@ -158,7 +158,17 @@ bool CapabilityCommand(uint16_t OpCode, void *pRet, uint8_t RetLen,
 				*pStatus = BT_HCI_ERR_UNKNOWN_COMMAND;
 				return true;
 			}
-			data[0] = s_CapabilityMode == CAP_EXT_LIMIT_SMALL ? 8 : 251;
+			if (s_CapabilityMode == CAP_EXT_LIMIT_SMALL)
+			{
+				data[0] = 8;
+				data[1] = 0;
+			}
+			else
+			{
+				// Core maximum Host Advertising Data length: 1650 = 0x0672.
+				data[0] = 0x72;
+				data[1] = 0x06;
+			}
 			CopyReturn(pRet, RetLen, data, 2);
 			return true;
 
@@ -494,6 +504,57 @@ void TestExtendedSecondaryPhySelection()
 	}
 }
 
+void TestExtendedAdvertisingDataFragmentation()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+
+	char name[251];
+	std::memset(name, 'N', sizeof(name) - 1);
+	name[sizeof(name) - 1] = '\0';
+
+	uint8_t manData[250];
+	for (size_t i = 0; i < sizeof(manData); i++)
+	{
+		manData[i] = static_cast<uint8_t>(i);
+	}
+
+	BtAppCfg_t cfg = MakePeripheralCfg(name);
+	cfg.pAdvManData = manData;
+	cfg.AdvManDataLen = sizeof(manData);
+	CHECK(BtAppAdvInit(&cfg) == true);
+
+	const CapturedCmd *fragment[3] = {};
+	int fragmentCount = 0;
+	for (int i = 0; i < s_CmdCount; i++)
+	{
+		if (s_Cmds[i].OpCode == BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA &&
+			fragmentCount < 3)
+		{
+			fragment[fragmentCount++] = &s_Cmds[i];
+		}
+	}
+
+	CHECK(fragmentCount == 3);
+	if (fragmentCount == 3)
+	{
+		CHECK(fragment[0]->Param[1] == 0x01); // First
+		CHECK(fragment[1]->Param[1] == 0x00); // Intermediate
+		CHECK(fragment[2]->Param[1] == 0x02); // Last
+		CHECK(fragment[0]->Param[2] == 0x01);
+		CHECK(fragment[1]->Param[2] == 0x01);
+		CHECK(fragment[2]->Param[2] == 0x01);
+		CHECK(fragment[0]->Param[3] == 251);
+		CHECK(fragment[1]->Param[3] == 251);
+		CHECK(fragment[2]->Param[3] == 7);
+		CHECK(fragment[0]->ParamLen == 255);
+		CHECK(fragment[1]->ParamLen == 255);
+		CHECK(fragment[2]->ParamLen == 11);
+		CHECK((int)fragment[0]->Param[3] + fragment[1]->Param[3] +
+			fragment[2]->Param[3] == 509);
+	}
+}
+
 void TestAdvStopKeepsStateOnFailure()
 {
 	uint8_t addr[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0xC6 };
@@ -684,6 +745,7 @@ int main()
 	TestExtendedLimitRejectsExtendedPayload();
 	TestZeroAdvertisingSetsFallsBackToLegacy();
 	TestExtendedSecondaryPhySelection();
+	TestExtendedAdvertisingDataFragmentation();
 	TestAdvStopKeepsStateOnFailure();
 	TestAdvManDataSetReportsRestartFailure();
 	TestAdvManDataSetRestartsAfterWriteFailure();
