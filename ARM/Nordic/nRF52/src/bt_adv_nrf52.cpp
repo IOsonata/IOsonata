@@ -230,6 +230,12 @@ void BtAdvStop()
 	BtAdvStateUpdate();
 }
 
+static void BtAdvNrf52VendorIdWrite(uint8_t *pData)
+{
+	pData[0] = (uint8_t)(g_BtAppData.AppDevice.VendorId & 0xFFU);
+	pData[1] = (uint8_t)(g_BtAppData.AppDevice.VendorId >> 8);
+}
+
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData,
 		int SrLen)
 {
@@ -247,6 +253,24 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData,
 
 	BtAdvPacket_t *advpkt = &s_BleAppAdvPkt;
 	BtAdvPacket_t *srpkt  = &s_BleAppSrPkt;
+	uint8_t oldAdvData[255];
+	uint8_t oldSrData[BT_ADV_LEGACY_DATA_MAX];
+	int oldAdvLen = advpkt->Len;
+	int oldSrLen = srpkt->Len;
+	memcpy(oldAdvData, advpkt->pData, (size_t)oldAdvLen);
+	memcpy(oldSrData, srpkt->pData, (size_t)oldSrLen);
+
+	bool restart = s_bAdvertising;
+	if (restart)
+	{
+		uint32_t stopErr = sd_ble_gap_adv_stop(g_BtAppData.AdvHdl);
+		if (stopErr != NRF_SUCCESS && stopErr != NRF_ERROR_INVALID_STATE)
+		{
+			return false;
+		}
+		s_bAdvertising = false;
+		BtAdvStateUpdate();
+	}
 
 	if (g_BtAppData.bExtAdv == false)
 	{
@@ -258,9 +282,9 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData,
 
 			if (p == NULL)
 			{
-				return false;
+				goto rollback;
 			}
-			*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
+			BtAdvNrf52VendorIdWrite(p->Data);
 			memcpy(&p->Data[2], pAdvData, (size_t)AdvLen);
 
 			s_BtAppAdvData.adv_data.len = advpkt->Len;
@@ -274,9 +298,9 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData,
 
 			if (p == NULL)
 			{
-				return false;
+				goto rollback;
 			}
-			*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
+			BtAdvNrf52VendorIdWrite(p->Data);
 			memcpy(&p->Data[2], pSrData, (size_t)SrLen);
 
 			s_BtAppAdvData.scan_rsp_data.len = srpkt->Len;
@@ -292,9 +316,9 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData,
 
 			if (p == NULL)
 			{
-				return false;
+				goto rollback;
 			}
-			*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
+			BtAdvNrf52VendorIdWrite(p->Data);
 			if (AdvLen > 0)
 			{
 				memcpy(&p->Data[2], pAdvData, (size_t)AdvLen);
@@ -307,23 +331,10 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData,
 		}
 	}
 
-	bool restart = s_bAdvertising;
-	if (restart)
+	if (sd_ble_gap_adv_set_configure(&g_BtAppData.AdvHdl,
+		&s_BtAppAdvData, NULL) != NRF_SUCCESS)
 	{
-		uint32_t stopErr = sd_ble_gap_adv_stop(g_BtAppData.AdvHdl);
-		if (stopErr != NRF_SUCCESS && stopErr != NRF_ERROR_INVALID_STATE)
-		{
-			return false;
-		}
-		s_bAdvertising = false;
-		BtAdvStateUpdate();
-	}
-
-	uint32_t err = sd_ble_gap_adv_set_configure(&g_BtAppData.AdvHdl,
-		&s_BtAppAdvData, NULL);
-	if (err != NRF_SUCCESS)
-	{
-		return false;
+		goto rollback;
 	}
 
 	if (restart)
@@ -333,6 +344,20 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData,
 	}
 
 	return true;
+
+rollback:
+	memcpy(advpkt->pData, oldAdvData, (size_t)oldAdvLen);
+	advpkt->Len = oldAdvLen;
+	memcpy(srpkt->pData, oldSrData, (size_t)oldSrLen);
+	srpkt->Len = oldSrLen;
+	s_BtAppAdvData.adv_data.len = oldAdvLen;
+	s_BtAppAdvData.scan_rsp_data.len = oldSrLen;
+
+	if (restart)
+	{
+		BtAdvStart();
+	}
+	return false;
 }
 
 /**@brief Overloadable function for initializing the Advertising functionality.
