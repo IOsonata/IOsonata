@@ -39,6 +39,14 @@ SOFTWARE.
 #include <stdint.h>
 #include "bluetooth/bt_hci.h"
 
+// Maximum Host Advertising Data that can be assembled from LE Extended
+// Advertising Report fragments. The Core limit is 1650 octets. Applications
+// that intentionally support a smaller controller/data model can override this
+// at compile time to reduce static RAM use.
+#ifndef BT_EXT_ADV_REASSEMBLY_MAX
+#define BT_EXT_ADV_REASSEMBLY_MAX		1650
+#endif
+
 #pragma pack(push, 1)
 
 /// HCI Event packet header
