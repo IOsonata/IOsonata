@@ -7,6 +7,19 @@
 #include "bluetooth/bt_hci_ctlr.h"
 
 static_assert(BT_HCI_CAP_CMD_LE_SET_DATA_LENGTH == 270U);
+static_assert(BT_HCI_CAP_CMD_LE_READ_PHY == 284U);
+static_assert(BT_HCI_CAP_CMD_LE_SET_DEFAULT_PHY == 285U);
+static_assert(BT_HCI_CAP_CMD_LE_SET_PHY == 286U);
+static_assert(BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS == 289U);
+static_assert(BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS == 290U);
+static_assert(BT_HCI_CAP_CMD_LE_SET_EXT_ADV_DATA == 291U);
+static_assert(BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_RESPONSE_DATA == 292U);
+static_assert(BT_HCI_CAP_CMD_LE_SET_EXT_ADV_ENABLE == 293U);
+static_assert(BT_HCI_CAP_CMD_LE_READ_MAX_ADV_DATA_LENGTH == 294U);
+static_assert(BT_HCI_CAP_CMD_LE_READ_SUPPORTED_ADV_SETS == 295U);
+static_assert(BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_PARAMETERS == 301U);
+static_assert(BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE == 302U);
+static_assert(BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION == 303U);
 
 namespace {
 
@@ -102,9 +115,11 @@ uint8_t CapabilityCommand(BtHciDevice_t * const, uint16_t OpCode,
 			{
 				data[33] &= static_cast<uint8_t>(~0x40U);
 			}
-			data[35] |= 0xC0;
-			data[36] |= 0x1F;
-			data[37] |= 0x1C;
+			// Literal Core Supported Commands bitmap positions. Keep these
+			// independent of the IOsonata enum so a shifted enum fails this test.
+			data[35] = 0x70;
+			data[36] = 0xFE;
+			data[37] = 0xE0;
 			CopyReturn(pRet, RetLen, data, sizeof(data));
 			break;
 		case BT_HCI_CMD_CTLR_READ_LOCAL_SUPP_FEATURES:
@@ -360,7 +375,7 @@ void TestCapabilityPredicates()
 		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS) == false);
 
 	caps.Valid = BT_HCI_CAP_VALID_COMMANDS;
-	caps.SupportedCommands[35] = 0x80;
+	caps.SupportedCommands[36] = 0x04;
 	CHECK(BtHciCapabilitiesCommandsKnown(&caps));
 	CHECK(BtHciCapabilitiesCommandSupported(&caps,
 		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS));
@@ -435,6 +450,13 @@ void TestGapCommandChecks()
 	CHECK(BtHciCapabilitiesLegacyScanningSupported(&caps) == false);
 	SetCommand(&caps, BT_HCI_CAP_CMD_LE_SET_SCAN_ENABLE);
 	CHECK(BtHciCapabilitiesLegacyScanningSupported(&caps));
+
+	// Periodic Advertising occupies byte 37 bits 2..4. Those bits must not
+	// be mistaken for the Extended Scan/Create Connection commands at 5..7.
+	caps.SupportedCommands[37] = 0x1C;
+	CHECK(BtHciCapabilitiesExtendedScanningSupported(&caps) == false);
+	CHECK(BtHciCapabilitiesExtendedInitiatingSupported(&caps) == false);
+	caps.SupportedCommands[37] = 0;
 
 	CHECK(BtHciCapabilitiesExtendedScanningSupported(&caps) == false);
 	SetCommand(&caps, BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_PARAMETERS);

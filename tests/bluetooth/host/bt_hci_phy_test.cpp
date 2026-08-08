@@ -7,9 +7,9 @@
 
 #include "bluetooth/bt_hci_cap.h"
 
-static_assert(BT_HCI_CAP_CMD_LE_READ_PHY == 281U);
-static_assert(BT_HCI_CAP_CMD_LE_SET_DEFAULT_PHY == 282U);
-static_assert(BT_HCI_CAP_CMD_LE_SET_PHY == 283U);
+static_assert(BT_HCI_CAP_CMD_LE_READ_PHY == 284U);
+static_assert(BT_HCI_CAP_CMD_LE_SET_DEFAULT_PHY == 285U);
+static_assert(BT_HCI_CAP_CMD_LE_SET_PHY == 286U);
 
 namespace {
 
