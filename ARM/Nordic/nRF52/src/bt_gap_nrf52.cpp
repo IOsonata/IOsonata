@@ -160,23 +160,67 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 	return err_code == NRF_SUCCESS;
 }
 
-bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
+static bool BtGapNrf52ScanParamsConvert(uint32_t IntervalMs,
+	uint32_t WindowMs, uint16_t *pInterval, uint16_t *pWindow)
 {
-	if (pCfg == NULL)
+	uint64_t interval = ((uint64_t)IntervalMs * 1600U) / 1000U;
+	uint64_t window = ((uint64_t)WindowMs * 1600U) / 1000U;
+	if (pInterval == nullptr || pWindow == nullptr || interval < 0x0004U ||
+		interval > 0x4000U || window < 0x0004U || window > 0x4000U ||
+		window > interval)
 	{
 		return false;
 	}
 
-	// Convert from the documented API units to SoftDevice units:
-	// Interval/Duration are msec -> 0.625 ms units; Timeout is sec -> 10 ms
-	// units. These were previously assigned raw, which made the scan run
-	// 100x too short (e.g. a 120 s timeout became 1.2 s).
-	s_ScanParams.timeout  = MSEC_TO_UNITS(pCfg->Param.Timeout * 1000, UNIT_10_MS);
-	s_ScanParams.window   = MSEC_TO_UNITS(pCfg->Param.Duration, UNIT_0_625_MS);
-	s_ScanParams.interval = MSEC_TO_UNITS(pCfg->Param.Interval, UNIT_0_625_MS);
+	*pInterval = (uint16_t)interval;
+	*pWindow = (uint16_t)window;
+	return true;
+}
+
+bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
+{
+	if (pCfg == NULL ||
+		(pCfg->Param.Phy != BT_GAP_PHY_1MBITS &&
+		 pCfg->Param.Phy != BT_GAP_PHY_CODED) ||
+		pCfg->Param.Timeout > 655U)
+	{
+		return false;
+	}
+
+	uint16_t interval;
+	uint16_t window;
+	if (!BtGapNrf52ScanParamsConvert(pCfg->Param.Interval,
+		pCfg->Param.Duration, &interval, &window))
+	{
+		return false;
+	}
+
+	s_ScanParams.active = (pCfg->Type == BTSCAN_TYPE_ACTIVE) ? 1 : 0;
+	s_ScanParams.timeout = (uint16_t)(pCfg->Param.Timeout * 100U);
+	s_ScanParams.window = window;
+	s_ScanParams.interval = interval;
+
+#if (NRF_SD_BLE_API_VERSION >= 6)
+	if (pCfg->Param.Phy == BT_GAP_PHY_CODED)
+	{
+#ifdef BLE_GAP_PHY_CODED
+		s_ScanParams.scan_phys = BLE_GAP_PHY_CODED;
+#else
+		return false;
+#endif
+	}
+	else
+	{
+		s_ScanParams.scan_phys = BLE_GAP_PHY_1MBPS;
+	}
+#else
+	if (pCfg->Param.Phy != BT_GAP_PHY_1MBITS)
+	{
+		return false;
+	}
+#endif
 
 	uint8_t uidtype = BLE_UUID_TYPE_VENDOR_BEGIN;
-
 	ble_uuid128_t uid;
 	memcpy(uid.uuid128, pCfg->BaseUid, 16);
 

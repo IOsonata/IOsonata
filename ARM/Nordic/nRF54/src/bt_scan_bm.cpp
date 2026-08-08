@@ -56,7 +56,13 @@ bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 		return false;
 	}
 
-	if (BtGapScanInit(pCfg) == false)
+	BtGapScanCfg_t cfg = *pCfg;
+	if (cfg.Param.Phy == 0)
+	{
+		cfg.Param.Phy = BT_GAP_PHY_1MBITS;
+	}
+
+	if (BtGapScanInit(&cfg) == false)
 	{
 		return false;
 	}

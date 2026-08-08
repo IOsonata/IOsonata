@@ -36,15 +36,20 @@ bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 		return false;
 	}
 
-	if (BtGapScanInit(pCfg) == false)
+	BtGapScanCfg_t cfg = *pCfg;
+	if (cfg.Param.Phy == 0)
+	{
+		cfg.Param.Phy = BT_GAP_PHY_1MBITS;
+	}
+
+	if (BtGapScanInit(&cfg) == false)
 	{
 		return false;
 	}
 
 	g_BtAppData.bScan = false;
-	// ST's aci_gap_start_observation_procedure does not take a buffer -
-	// adv reports come back as HCI events. The args here are kept for
-	// API parity with the SoftDevice ports.
+	// ST's GAP procedure reports advertising results as HCI events. The args
+	// here stay for API parity with the SoftDevice ports.
 	if (BtGapScanStart(NULL, 0) == false)
 	{
 		return false;

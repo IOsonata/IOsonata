@@ -162,9 +162,28 @@ static bool IsAllZero(const uint8_t *pData, size_t Len)
 	return true;
 }
 
+static bool BtGapScanParamsConvert(uint32_t IntervalMs, uint32_t WindowMs,
+	uint16_t *pInterval, uint16_t *pWindow)
+{
+	uint64_t interval = ((uint64_t)IntervalMs * 1600U) / 1000U;
+	uint64_t window = ((uint64_t)WindowMs * 1600U) / 1000U;
+	if (pInterval == nullptr || pWindow == nullptr || interval < 0x0004U ||
+		interval > 0x4000U || window < 0x0004U || window > 0x4000U ||
+		window > interval)
+	{
+		return false;
+	}
+
+	*pInterval = (uint16_t)interval;
+	*pWindow = (uint16_t)window;
+	return true;
+}
+
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 {
-	if (pCfg == nullptr)
+	if (pCfg == nullptr ||
+		(pCfg->Param.Phy != BT_GAP_PHY_1MBITS &&
+		 pCfg->Param.Phy != BT_GAP_PHY_CODED))
 	{
 		return false;
 	}
@@ -177,26 +196,31 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 		return false;
 	}
 
+	uint16_t interval;
+	uint16_t window;
+	if (!BtGapScanParamsConvert(pCfg->Param.Interval, pCfg->Param.Duration,
+		&interval, &window))
+	{
+		return false;
+	}
+
 	s_ScanParams.active = (pCfg->Type == BTSCAN_TYPE_ACTIVE) ? 1 : 0;
-	s_ScanParams.interval = mSecTo0_625((float)pCfg->Param.Interval);
-	s_ScanParams.window = mSecTo0_625((float)pCfg->Param.Duration);
+	s_ScanParams.interval = interval;
+	s_ScanParams.window = window;
 	s_ScanParams.timeout = (uint16_t)(pCfg->Param.Timeout * 100U);
 	s_ScanParams.filter_policy = BLE_GAP_SCAN_FP_ACCEPT_ALL;
-	s_ScanParams.scan_phys = BLE_GAP_PHY_1MBPS;
 
-	if (pCfg->Param.Phy & BT_GAP_PHY_CODED)
+	if (pCfg->Param.Phy == BT_GAP_PHY_CODED)
 	{
 #ifdef BLE_GAP_PHY_CODED
 		s_ScanParams.scan_phys = BLE_GAP_PHY_CODED;
+#else
+		return false;
 #endif
 	}
-	else if (pCfg->Param.Phy & BT_GAP_PHY_2MBITS)
+	else
 	{
-#ifdef BLE_GAP_PHY_2MBPS
-		s_ScanParams.scan_phys = BLE_GAP_PHY_2MBPS;
-#else
 		s_ScanParams.scan_phys = BLE_GAP_PHY_1MBPS;
-#endif
 	}
 
 	if (!IsAllZero(pCfg->BaseUid, sizeof(pCfg->BaseUid)))

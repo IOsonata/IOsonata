@@ -83,11 +83,13 @@ extern "C" bool AppEvtHandlerIdleRegister(void (*Handler)(void));
 #define BT_GAP_MSEC_TO_0_625(ms)		(((uint32_t)(ms) * 1600U) / 1000U)
 #define BT_GAP_MSEC_TO_10MS(ms)			(((uint32_t)(ms) + 9U) / 10U)
 
-// HCI scan-type values.
+// HCI scan-type values and ST scan PHY flags.
 #define BT_GAP_HCI_SCAN_PASSIVE			0x00
 #define BT_GAP_HCI_SCAN_ACTIVE			0x01
 #define BT_GAP_HCI_SCAN_INTERVAL_MIN	0x0004U
 #define BT_GAP_HCI_SCAN_INTERVAL_MAX	0x4000U
+#define BT_GAP_WBA_SCAN_PHY_1M			0x01U
+#define BT_GAP_WBA_SCAN_PHY_CODED		0x04U
 
 // --- Port-private GAP state ---
 
@@ -104,6 +106,7 @@ typedef struct __Bt_Gap_WbaState {
 	uint16_t	ScanWindow;			//!< Scan window in 0.625ms units
 	uint8_t		ScanType;			//!< HCI scan type (active/passive)
 	uint8_t		ScanFilterDup;		//!< Filter duplicate adv reports
+	uint8_t		ScanPhy;			//!< ST LE_1M_PHY_BIT or LE_CODED_PHY_BIT
 	bool		bConnParamsValid;	//!< Preferred parameters passed spec-range checks
 	bool		bConnParamPumpRegistered;
 	uint16_t	ConnIntervalMin;	//!< Preferred minimum, 1.25ms units
@@ -123,6 +126,7 @@ static BtGapWbaState_t s_GapWba = {
 	.ScanWindow    = (uint16_t)BT_GAP_MSEC_TO_0_625(BT_GAP_SCAN_WINDOW),
 	.ScanType      = BT_GAP_HCI_SCAN_ACTIVE,
 	.ScanFilterDup = 1,
+	.ScanPhy       = BT_GAP_WBA_SCAN_PHY_1M,
 	.bConnParamsValid = false,
 	.bConnParamPumpRegistered = false,
 	.GapSrvcHdl = BT_ATT_HANDLE_INVALID,
@@ -627,7 +631,9 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr,
 
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 {
-	if (pCfg == NULL)
+	if (pCfg == NULL ||
+		(pCfg->Param.Phy != BT_GAP_PHY_1MBITS &&
+		 pCfg->Param.Phy != BT_GAP_PHY_CODED))
 	{
 		return false;
 	}
@@ -645,8 +651,16 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 	s_GapWba.ScanInterval = interval;
 	s_GapWba.ScanWindow = window;
 	s_GapWba.ScanFilterDup = 1;
+	s_GapWba.ScanPhy = pCfg->Param.Phy == BT_GAP_PHY_CODED ?
+		BT_GAP_WBA_SCAN_PHY_CODED : BT_GAP_WBA_SCAN_PHY_1M;
 
-	return true;
+	return aci_gap_set_scan_configuration(
+		s_GapWba.ScanFilterDup,
+		0,							// scanning filter policy = accept all
+		s_GapWba.ScanPhy,
+		s_GapWba.ScanType,
+		s_GapWba.ScanInterval,
+		s_GapWba.ScanWindow) == BLE_STATUS_SUCCESS;
 }
 
 bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
@@ -654,15 +668,11 @@ bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 	(void)pBuff;	// ST stack reports results via HCI events, not a buffer
 	(void)Len;
 
-	uint8_t ret = aci_gap_start_observation_procedure(
-		s_GapWba.ScanInterval,
-		s_GapWba.ScanWindow,
-		s_GapWba.ScanType,
-		0,							// own address type = public
-		s_GapWba.ScanFilterDup,
-		0);							// scanning filter policy = accept all
-
-	return ret == BLE_STATUS_SUCCESS;
+	return aci_gap_start_procedure(
+		GAP_OBSERVATION_PROC,
+		s_GapWba.ScanPhy,
+		0,
+		0) == BLE_STATUS_SUCCESS;
 }
 
 bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
