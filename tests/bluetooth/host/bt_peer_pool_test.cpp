@@ -238,6 +238,37 @@ void TestConnectedFieldsAndDefaultPool()
 	BtPeerFree(peer);
 }
 
+void TestPreStampedOwnAddress()
+{
+	alignas(BtDevice_t) uint8_t pool[BT_PEER_POOL_MEMSIZE(1)] = {};
+	CHECK(BtPeerInit(pool, sizeof(pool)));
+
+	const uint8_t localRpa[6] = { 0x10, 0x20, 0x30, 0x40, 0x50, 0x46 };
+	const uint8_t staticAddr[6] = { 6, 5, 4, 3, 2, 0xC1 };
+	const uint8_t peerRpa[6] = { 0x11, 0x21, 0x31, 0x41, 0x51, 0x47 };
+
+	BtDevice_t *peer = BtPeerAlloc(0x56);
+	CHECK(peer != nullptr);
+	if (peer != nullptr)
+	{
+		peer->Conn.OwnAddrType = BTADDR_TYPE_RAND;
+		std::memcpy(peer->Conn.OwnAddr, localRpa, sizeof(localRpa));
+	}
+
+	peer = BtPeerConnected(0x56, BT_CONN_ROLE_PERIPHERAL,
+		BTADDR_TYPE_RAND, peerRpa, BTADDR_TYPE_RAND, staticAddr);
+	CHECK(peer != nullptr);
+	if (peer != nullptr)
+	{
+		CHECK(peer->Conn.OwnAddrType == BTADDR_TYPE_RAND);
+		CHECK(std::memcmp(peer->Conn.OwnAddr, localRpa, sizeof(localRpa)) == 0);
+		CHECK(peer->Conn.PeerAddrType == BTADDR_TYPE_RAND);
+		CHECK(std::memcmp(peer->Conn.PeerAddr, peerRpa, sizeof(peerRpa)) == 0);
+	}
+
+	BtPeerFree(peer);
+}
+
 // BtPeerRole reports this device's LL role on a link in the HCI encoding, and
 // UNKNOWN for a missing record or an unconverted value (for example a config
 // bitmask stored by a port that has not been fixed), so role gates never
@@ -295,6 +326,7 @@ int main()
 	TestTruncatedHandleScanRotates();
 	TestConnectionLifecycleHooks();
 	TestConnectedFieldsAndDefaultPool();
+	TestPreStampedOwnAddress();
 	TestPeerRole();
 	TestInvalidPool();
 

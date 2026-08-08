@@ -412,16 +412,25 @@ BtDevice_t * BtPeerConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, c
 		return nullptr;
 	}
 
+	bool ownAddrStamped = false;
+	for (size_t i = 0; i < sizeof(p->Conn.OwnAddr); i++)
+	{
+		ownAddrStamped = ownAddrStamped || p->Conn.OwnAddr[i] != 0;
+	}
+
 	p->Conn.Role = Role;
 	p->Conn.PeerAddrType = AddrType;
 	if (pAddr != nullptr)
 	{
 		memcpy(p->Conn.PeerAddr, pAddr, sizeof(p->Conn.PeerAddr));
 	}
-	p->Conn.OwnAddrType = OwnAddrType;
-	if (pOwnAddr != nullptr)
+	if (!ownAddrStamped)
 	{
-		memcpy(p->Conn.OwnAddr, pOwnAddr, sizeof(p->Conn.OwnAddr));
+		p->Conn.OwnAddrType = OwnAddrType;
+		if (pOwnAddr != nullptr)
+		{
+			memcpy(p->Conn.OwnAddr, pOwnAddr, sizeof(p->Conn.OwnAddr));
+		}
 	}
 	BtPeerConnectionStateChanged(true);
 	return p;

@@ -23,6 +23,53 @@ into its AES slot uniformly alongside real crypto engines.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hci_cap.h"
 #include "bluetooth/bt_app.h"
+#include "bluetooth/bt_adv.h"
+#include "bluetooth/bt_peer.h"
+
+void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType,
+	uint8_t PeerAddr[6]);
+
+static bool AddressIsSet(const uint8_t Addr[6])
+{
+	for (size_t i = 0; i < 6; i++)
+	{
+		if (Addr[i] != 0)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+static void SdcEnhancedConnected(uint16_t ConnHdl, uint8_t Role,
+	uint8_t PeerIdentityAddrType, const uint8_t PeerIdentityAddr[6],
+	const uint8_t LocalRpa[6], const uint8_t PeerRpa[6])
+{
+	uint8_t peerAddrType = (uint8_t)(PeerIdentityAddrType & 1U);
+	uint8_t peerAddr[6];
+	memcpy(peerAddr, PeerIdentityAddr, sizeof(peerAddr));
+
+	if (AddressIsSet(PeerRpa))
+	{
+		peerAddrType = BTADDR_TYPE_RAND;
+		memcpy(peerAddr, PeerRpa, sizeof(peerAddr));
+	}
+
+	// BtAppConnected starts SMP before it returns. Pre-stamp the local RPA in
+	// the peer slot so BtPeerConnected preserves the actual on-air address
+	// instead of replacing it with the static identity address.
+	if (AddressIsSet(LocalRpa))
+	{
+		BtDevice_t *pPeer = BtPeerAlloc(ConnHdl);
+		if (pPeer != nullptr)
+		{
+			pPeer->Conn.OwnAddrType = BTADDR_TYPE_RAND;
+			memcpy(pPeer->Conn.OwnAddr, LocalRpa, sizeof(pPeer->Conn.OwnAddr));
+		}
+	}
+
+	BtAppConnected(ConnHdl, Role, peerAddrType, peerAddr);
+}
 
 static void ReverseCopy(uint8_t *pDst, const uint8_t *pSrc, size_t Len)
 {
@@ -166,6 +213,12 @@ bool BtSmpBondLoadComplete(void)
 
 CipherEngine *BtCryptoCtlrSdcInit(void)
 {
+	BtHciDevice_t *pHci = g_BtAppData.AppDevice.pHciDev;
+	if (pHci != nullptr)
+	{
+		pHci->EnhancedConnected = SdcEnhancedConnected;
+	}
+
 	static CryptoCtlrSdc s_Instance;
 	return &s_Instance;
 }
