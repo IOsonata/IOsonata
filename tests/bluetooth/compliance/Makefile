@@ -3,12 +3,13 @@ BUILD_DIR := build
 HCI_TARGET := $(BUILD_DIR)/bt_hci_compliance_test
 EXTADV_RX_TARGET := $(BUILD_DIR)/bt_hci_ext_adv_reassembly_test
 CAP_TARGET := $(BUILD_DIR)/bt_hci_capability_test
+PRIVACY_TARGET := $(BUILD_DIR)/bt_hci_privacy_test
 ADV_TARGET := $(BUILD_DIR)/bt_adv_hci_test
 GAP_TARGET := $(BUILD_DIR)/bt_gap_hci_test
 PHY_TARGET := $(BUILD_DIR)/bt_hci_phy_test
 SMP_TARGET := $(BUILD_DIR)/bt_smp_dual_host_test
 ATT_TARGET := $(BUILD_DIR)/bt_att_dual_host_test
-TARGETS := $(HCI_TARGET) $(EXTADV_RX_TARGET) $(CAP_TARGET) $(ADV_TARGET) $(GAP_TARGET) $(PHY_TARGET) $(SMP_TARGET) $(ATT_TARGET)
+TARGETS := $(HCI_TARGET) $(EXTADV_RX_TARGET) $(CAP_TARGET) $(PRIVACY_TARGET) $(ADV_TARGET) $(GAP_TARGET) $(PHY_TARGET) $(SMP_TARGET) $(ATT_TARGET)
 
 CC ?= gcc
 CXX ?= g++
@@ -65,6 +66,10 @@ EXTADV_RX_SOURCES := \
 
 CAP_SOURCES := \
 	hci/bt_hci_capability_test.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
+
+PRIVACY_SOURCES := \
+	hci/bt_hci_privacy_test.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
 ADV_SOURCES := \
@@ -131,6 +136,7 @@ strict: $(TARGETS)
 	BT_COMPLIANCE_STRICT=1 $(TEST_ENV) ./$(HCI_TARGET)
 	$(TEST_ENV) ./$(EXTADV_RX_TARGET)
 	$(TEST_ENV) ./$(CAP_TARGET)
+	$(TEST_ENV) ./$(PRIVACY_TARGET)
 	$(TEST_ENV) ./$(ADV_TARGET)
 	$(TEST_ENV) ./$(GAP_TARGET)
 	$(TEST_ENV) ./$(PHY_TARGET)
@@ -162,6 +168,11 @@ $(CAP_TARGET): $(CAP_SOURCES) $(HEADERS) $(CFIFO_OBJ)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$(CAP_SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(PRIVACY_TARGET): $(PRIVACY_SOURCES) $(HEADERS) $(CFIFO_OBJ)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
+		$(PRIVACY_SOURCES) $(CFIFO_OBJ) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(ADV_TARGET): $(ADV_SOURCES) $(HEADERS) $(CFIFO_OBJ)
 	@mkdir -p $(BUILD_DIR)

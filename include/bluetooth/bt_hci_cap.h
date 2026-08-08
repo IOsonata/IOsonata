@@ -42,6 +42,14 @@ enum {
 	BT_HCI_CAP_CMD_LE_SET_SCAN_ENABLE = 26U * 8U + 3U,
 	BT_HCI_CAP_CMD_LE_CREATE_CONNECTION = 26U * 8U + 4U,
 	BT_HCI_CAP_CMD_LE_SET_DATA_LENGTH = 33U * 8U + 6U,
+	BT_HCI_CAP_CMD_LE_ADD_DEVICE_TO_RESOLVING_LIST = 34U * 8U + 3U,
+	BT_HCI_CAP_CMD_LE_REMOVE_DEVICE_FROM_RESOLVING_LIST = 34U * 8U + 4U,
+	BT_HCI_CAP_CMD_LE_CLEAR_RESOLVING_LIST = 34U * 8U + 5U,
+	BT_HCI_CAP_CMD_LE_READ_RESOLVING_LIST_SIZE = 34U * 8U + 6U,
+	BT_HCI_CAP_CMD_LE_READ_PEER_RESOLVABLE_ADDRESS = 34U * 8U + 7U,
+	BT_HCI_CAP_CMD_LE_READ_LOCAL_RESOLVABLE_ADDRESS = 35U * 8U,
+	BT_HCI_CAP_CMD_LE_SET_ADDRESS_RESOLUTION_ENABLE = 35U * 8U + 1U,
+	BT_HCI_CAP_CMD_LE_SET_RESOLVABLE_PRIVATE_ADDRESS_TIMEOUT = 35U * 8U + 2U,
 	BT_HCI_CAP_CMD_LE_READ_PHY = 35U * 8U + 4U,
 	BT_HCI_CAP_CMD_LE_SET_DEFAULT_PHY = 35U * 8U + 5U,
 	BT_HCI_CAP_CMD_LE_SET_PHY = 35U * 8U + 6U,
@@ -55,11 +63,13 @@ enum {
 	BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_PARAMETERS = 37U * 8U + 5U,
 	BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE = 37U * 8U + 6U,
 	BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION = 37U * 8U + 7U,
+	BT_HCI_CAP_CMD_LE_SET_PRIVACY_MODE = 39U * 8U + 2U,
 };
 
 // Bit numbers in the LE Read Local Supported Features return value.
 enum {
 	BT_HCI_CAP_LE_FEATURE_DATA_LENGTH_EXT = 5U,
+	BT_HCI_CAP_LE_FEATURE_LL_PRIVACY = 6U,
 	BT_HCI_CAP_LE_FEATURE_PHY_2M = 8U,
 	BT_HCI_CAP_LE_FEATURE_CODED_PHY = 11U,
 	BT_HCI_CAP_LE_FEATURE_EXT_ADV = 12U,
@@ -77,6 +87,21 @@ enum {
 #define BT_HCI_PHY_CODED_S8			2U
 
 #define BT_HCI_LE_CONN_HANDLE_MAX		0x0EFFU
+
+// LE privacy controller configuration. Identity address types are the HCI
+// values used by the resolving-list commands: 0 = public, 1 = random static.
+#define BT_HCI_PRIVACY_ID_ADDR_PUBLIC		0U
+#define BT_HCI_PRIVACY_ID_ADDR_RANDOM		1U
+#define BT_HCI_PRIVACY_MODE_NETWORK			0U
+#define BT_HCI_PRIVACY_MODE_DEVICE			1U
+#define BT_HCI_PRIVACY_RPA_TIMEOUT_DEFAULT	0x0384U	//!< 900 seconds
+#define BT_HCI_PRIVACY_RPA_TIMEOUT_MAX		0xA1B8U
+
+typedef struct __Bt_Hci_Privacy_Entry {
+	uint8_t PeerIdentityAddrType;
+	uint8_t PeerIdentityAddr[6];
+	uint8_t PeerIrk[16];
+} BtHciPrivacyEntry_t;
 
 typedef struct __Bt_Hci_Capabilities {
 	uint32_t Valid;
@@ -254,6 +279,22 @@ bool BtHciCapabilitiesRead(BtHciDevice_t * const pDev,
  */
 const BtHciCapabilities_t *BtHciCapabilitiesForDeviceGet(
 	const BtHciDevice_t *pDev);
+
+/**
+ * Program the controller resolving list from the supplied identity/IRK set.
+ *
+ * The caller owns bond storage and supplies only the identity data needed by
+ * HCI. The controller must be quiescent while this runs: advertising, scanning
+ * and initiating must be stopped when required by the controller. EntryCount
+ * zero disables address resolution and clears the resolving list.
+ *
+ * @return true when the requested controller state was applied. A failed
+ *         partial update leaves address resolution disabled and best-effort
+ *         clears the list.
+ */
+bool BtHciPrivacyConfigure(BtHciDevice_t *pDev,
+	const BtHciPrivacyEntry_t *pEntries, uint8_t EntryCount,
+	const uint8_t LocalIrk[16], uint16_t RpaTimeoutSec, uint8_t PrivacyMode);
 
 // Request the transmit Link Layer data length for one LE connection.
 bool BtHciSetDataLength(BtHciDevice_t *pDev, uint16_t ConnHdl,

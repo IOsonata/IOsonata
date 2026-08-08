@@ -194,6 +194,166 @@ const BtHciCapabilities_t *BtHciCapabilitiesForDeviceGet(
 	return &s_pBtHciCtlrActive->Capabilities;
 }
 
+static bool BtHciPrivacyIrkValid(const uint8_t Irk[16])
+{
+	if (Irk == nullptr)
+	{
+		return false;
+	}
+
+	uint8_t nz = 0;
+	for (int i = 0; i < 16; i++)
+	{
+		nz |= Irk[i];
+	}
+	return nz != 0;
+}
+
+static bool BtHciPrivacyEntryValid(const BtHciPrivacyEntry_t *pEntry)
+{
+	return pEntry != nullptr &&
+		(pEntry->PeerIdentityAddrType == BT_HCI_PRIVACY_ID_ADDR_PUBLIC ||
+		 pEntry->PeerIdentityAddrType == BT_HCI_PRIVACY_ID_ADDR_RANDOM) &&
+		BtHciPrivacyIrkValid(pEntry->PeerIrk);
+}
+
+static void BtHciPrivacyAbort(BtHciDevice_t *pDev)
+{
+	uint8_t disable = 0;
+	(void)BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_ADDR_RESOLUTION_ENABLE,
+		&disable, sizeof(disable), nullptr, 0);
+	(void)BtHciCommand(pDev, BT_HCI_CMD_CTLR_RESOLVING_LIST_CLEAR,
+		nullptr, 0, nullptr, 0);
+}
+
+bool BtHciPrivacyConfigure(BtHciDevice_t *pDev,
+	const BtHciPrivacyEntry_t *pEntries, uint8_t EntryCount,
+	const uint8_t LocalIrk[16], uint16_t RpaTimeoutSec, uint8_t PrivacyMode)
+{
+	if (pDev == nullptr || pDev->Command == nullptr ||
+		PrivacyMode > BT_HCI_PRIVACY_MODE_DEVICE ||
+		RpaTimeoutSec == 0 || RpaTimeoutSec > BT_HCI_PRIVACY_RPA_TIMEOUT_MAX ||
+		(EntryCount != 0 && (pEntries == nullptr ||
+		 BtHciPrivacyIrkValid(LocalIrk) == false)))
+	{
+		return false;
+	}
+
+	for (uint8_t i = 0; i < EntryCount; i++)
+	{
+		if (BtHciPrivacyEntryValid(&pEntries[i]) == false)
+		{
+			return false;
+		}
+	}
+
+	BtHciCapabilities_t localCapabilities;
+	const BtHciCapabilities_t *pCapabilities =
+		BtHciCapabilitiesForDeviceGet(pDev);
+	const uint32_t required = BT_HCI_CAP_VALID_COMMANDS |
+		BT_HCI_CAP_VALID_LE_FEATURES |
+		BT_HCI_CAP_VALID_RESOLVING_LIST_SIZE;
+	if (pCapabilities == nullptr ||
+		(pCapabilities->Valid & required) != required)
+	{
+		if (BtHciCapabilitiesRead(pDev, &localCapabilities) == false)
+		{
+			return false;
+		}
+		pCapabilities = &localCapabilities;
+	}
+
+	if (BtHciCapabilitiesLeFeatureSupported(pCapabilities,
+			BT_HCI_CAP_LE_FEATURE_LL_PRIVACY) == false ||
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+			BT_HCI_CAP_CMD_LE_CLEAR_RESOLVING_LIST) == false ||
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+			BT_HCI_CAP_CMD_LE_READ_RESOLVING_LIST_SIZE) == false ||
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+			BT_HCI_CAP_CMD_LE_SET_ADDRESS_RESOLUTION_ENABLE) == false ||
+		(EntryCount != 0 &&
+		 BtHciCapabilitiesCommandSupported(pCapabilities,
+			BT_HCI_CAP_CMD_LE_ADD_DEVICE_TO_RESOLVING_LIST) == false) ||
+		(EntryCount != 0 &&
+		 BtHciCapabilitiesCommandSupported(pCapabilities,
+			BT_HCI_CAP_CMD_LE_SET_RESOLVABLE_PRIVATE_ADDRESS_TIMEOUT) == false) ||
+		(PrivacyMode == BT_HCI_PRIVACY_MODE_DEVICE && EntryCount != 0 &&
+		 BtHciCapabilitiesCommandSupported(pCapabilities,
+			BT_HCI_CAP_CMD_LE_SET_PRIVACY_MODE) == false) ||
+		EntryCount > pCapabilities->ResolvingListSize)
+	{
+		return false;
+	}
+
+	uint8_t enable = 0;
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_ADDR_RESOLUTION_ENABLE,
+		&enable, sizeof(enable), nullptr, 0) != 0)
+	{
+		return false;
+	}
+
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_RESOLVING_LIST_CLEAR,
+		nullptr, 0, nullptr, 0) != 0)
+	{
+		return false;
+	}
+
+	if (EntryCount == 0)
+	{
+		return true;
+	}
+
+	uint8_t timeout[2];
+	BtHciCapStoreLe16(timeout, RpaTimeoutSec);
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_RESOLVABLE_PRIVATE_ADDR_TIMEOUT,
+		timeout, sizeof(timeout), nullptr, 0) != 0)
+	{
+		BtHciPrivacyAbort(pDev);
+		return false;
+	}
+
+	for (uint8_t i = 0; i < EntryCount; i++)
+	{
+		uint8_t add[39];
+		add[0] = pEntries[i].PeerIdentityAddrType;
+		memcpy(&add[1], pEntries[i].PeerIdentityAddr, 6);
+		memcpy(&add[7], pEntries[i].PeerIrk, 16);
+		memcpy(&add[23], LocalIrk, 16);
+
+		if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_RESOLVING_LIST_ADD_DEV,
+			add, sizeof(add), nullptr, 0) != 0)
+		{
+			BtHciPrivacyAbort(pDev);
+			return false;
+		}
+
+		if (PrivacyMode == BT_HCI_PRIVACY_MODE_DEVICE)
+		{
+			uint8_t mode[8];
+			mode[0] = pEntries[i].PeerIdentityAddrType;
+			memcpy(&mode[1], pEntries[i].PeerIdentityAddr, 6);
+			mode[7] = PrivacyMode;
+
+			if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PRIVACY_MODE,
+				mode, sizeof(mode), nullptr, 0) != 0)
+			{
+				BtHciPrivacyAbort(pDev);
+				return false;
+			}
+		}
+	}
+
+	enable = 1;
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_ADDR_RESOLUTION_ENABLE,
+		&enable, sizeof(enable), nullptr, 0) != 0)
+	{
+		BtHciPrivacyAbort(pDev);
+		return false;
+	}
+
+	return true;
+}
+
 bool BtHciSetDataLength(BtHciDevice_t *pDev, uint16_t ConnHdl,
 	uint16_t TxOctets, uint16_t TxTime)
 {
