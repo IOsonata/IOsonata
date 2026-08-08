@@ -41,6 +41,17 @@ extern "C" {
 bool BtSmpBondIdentityGet(int Slot, uint8_t *pAddrType,
 	uint8_t Addr[6], uint8_t Irk[16]);
 
+/**
+ * @brief	Notification after persistent bonds and local identity are loaded.
+ *
+ * The generic weak implementation returns true. A Bluetooth port can override
+ * this to synchronize controller state that depends on the restored identities,
+ * such as an HCI resolving list. It runs before BtSmpBondNvmInit returns.
+ *
+ * @return	true when dependent controller state is ready.
+ */
+bool BtSmpBondLoadComplete(void);
+
 #ifdef __cplusplus
 }
 #endif

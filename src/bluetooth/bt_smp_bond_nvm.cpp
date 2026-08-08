@@ -19,6 +19,7 @@
 #include <atomic>
 
 #include "bluetooth/bt_smp.h"
+#include "bluetooth/bt_smp_bond.h"
 #include "bluetooth/bt_pds.h"
 #include "crypto/icrypto.h"
 #include "storage/nvm.h"
@@ -28,6 +29,11 @@
 
 extern "C" void BtSmpBondPersistComplete(int Slot, const void *pBond,
 											 size_t Len, bool Success);
+
+__attribute__((weak)) bool BtSmpBondLoadComplete(void)
+{
+	return true;
+}
 
 #define BT_SMP_BOND_TRACE
 
@@ -416,6 +422,11 @@ int BtSmpBondNvmInit(void)
 	}
 
 	BtSmpBondLoad();
+	if (BtSmpBondLoadComplete() == false)
+	{
+		BOND_PRINTF("PDS: bond-dependent controller state failed\r\n");
+		return -EIO;
+	}
 	BondSaveHandler(0, nullptr);
 
 	return 0;
