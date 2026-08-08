@@ -116,22 +116,6 @@ static bool ReceiveWire(int Fd, WireMessage *pMessage)
 	return pMessage != nullptr && ReadAll(Fd, pMessage, sizeof(*pMessage));
 }
 
-static uint32_t LoadLe32(const uint8_t *p)
-{
-	return static_cast<uint32_t>(p[0]) |
-		(static_cast<uint32_t>(p[1]) << 8) |
-		(static_cast<uint32_t>(p[2]) << 16) |
-		(static_cast<uint32_t>(p[3]) << 24);
-}
-
-static void StoreLe32(uint8_t *p, uint32_t Value)
-{
-	p[0] = static_cast<uint8_t>(Value);
-	p[1] = static_cast<uint8_t>(Value >> 8);
-	p[2] = static_cast<uint8_t>(Value >> 16);
-	p[3] = static_cast<uint8_t>(Value >> 24);
-}
-
 static uint64_t LoadLe64(const uint8_t *p)
 {
 	uint64_t value = 0;
