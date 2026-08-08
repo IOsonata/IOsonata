@@ -436,87 +436,138 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	return PushAdvDataToStack(pCfg, advpkt, srpkt);
 }
 
-bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen,
-                        uint8_t *pSrData, int SrLen)
+static void BtAdvWbaPacketCopy(BtAdvPacket_t *pDst,
+	const BtAdvPacket_t *pSrc)
 {
-	BtAdvPacket_t *advpkt = g_BtAppData.bExtAdv
-		? &s_BtAppExtAdvPkt : &s_BtAppAdvPkt;
-	BtAdvPacket_t *srpkt  = g_BtAppData.bExtAdv
-		? &s_BtAppExtSrPkt  : &s_BtAppSrPkt;
+	pDst->MaxLen = pSrc->MaxLen;
+	pDst->Len = pSrc->Len;
+	memcpy(pDst->pData, pSrc->pData, (size_t)pSrc->Len);
+}
 
-	// Update the manuf-specific data record on the adv packet.
-	if (pAdvData != NULL && AdvLen > 0)
+static bool BtAdvWbaManDataSet(BtAdvPacket_t *pPacket,
+	const uint8_t *pData, int Len)
+{
+	BtAdvData_t *p = BtAdvDataAllocate(pPacket,
+		BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, Len + 2);
+	if (p == nullptr)
 	{
-		BtAdvDataRemove(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA);
-		int l = AdvLen + 2;
-		BtAdvData_t *p = BtAdvDataAllocate(advpkt,
-			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
-		if (p == NULL)
-		{
-			return false;
-		}
-		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
-		memcpy(&p->Data[2], pAdvData, AdvLen);
+		return false;
 	}
 
-	// Update the manuf-specific data record on the scan response.
-	if (pSrData != NULL && SrLen > 0)
-	{
-		BtAdvDataRemove(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA);
-		int l = SrLen + 2;
-		BtAdvData_t *p = BtAdvDataAllocate(srpkt,
-			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
-		if (p == NULL)
-		{
-			return false;
-		}
-		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
-		memcpy(&p->Data[2], pSrData, SrLen);
-	}
+	p->Data[0] = (uint8_t)(g_BtAppData.AppDevice.VendorId & 0xFFU);
+	p->Data[1] = (uint8_t)(g_BtAppData.AppDevice.VendorId >> 8);
+	memcpy(&p->Data[2], pData, (size_t)Len);
+	return true;
+}
 
-	// Re-push only the data buffers (params unchanged).
+static bool BtAdvWbaDataWrite(BtAdvPacket_t *pPacket, bool ScanResponse)
+{
 	uint8_t ret;
 	if (g_BtAppData.bExtAdv == false)
 	{
-		ret = hci_le_set_advertising_data((uint8_t)advpkt->Len, advpkt->pData);
-		if (ret != BLE_STATUS_SUCCESS)
-		{
-			return false;
-		}
-
-		if (srpkt->Len > 0)
-		{
-			ret = hci_le_set_scan_response_data((uint8_t)srpkt->Len,
-			                                    srpkt->pData);
-			if (ret != BLE_STATUS_SUCCESS)
-			{
-				return false;
-			}
-		}
+		ret = ScanResponse ?
+			hci_le_set_scan_response_data((uint8_t)pPacket->Len, pPacket->pData) :
+			hci_le_set_advertising_data((uint8_t)pPacket->Len, pPacket->pData);
+	}
+	else if (ScanResponse)
+	{
+		ret = aci_gap_adv_set_scan_resp_data(BT_WBA_ADV_HANDLE,
+			BT_WBA_ADV_DATA_OP_COMPLETE, BT_WBA_ADV_DATA_FRAG_PREF_NONE,
+			(uint8_t)pPacket->Len, pPacket->pData);
 	}
 	else
 	{
 		ret = aci_gap_adv_set_adv_data(BT_WBA_ADV_HANDLE,
-									BT_WBA_ADV_DATA_OP_COMPLETE,
-									BT_WBA_ADV_DATA_FRAG_PREF_NONE,
-									(uint8_t)advpkt->Len, advpkt->pData);
-		if (ret != BLE_STATUS_SUCCESS)
+			BT_WBA_ADV_DATA_OP_COMPLETE, BT_WBA_ADV_DATA_FRAG_PREF_NONE,
+			(uint8_t)pPacket->Len, pPacket->pData);
+	}
+
+	return ret == BLE_STATUS_SUCCESS;
+}
+
+bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen,
+                        uint8_t *pSrData, int SrLen)
+{
+	if (AdvLen < 0 || SrLen < 0 ||
+		(AdvLen > 0 && pAdvData == nullptr) ||
+		(SrLen > 0 && pSrData == nullptr))
+	{
+		return false;
+	}
+
+	BtAdvPacket_t *advpkt = g_BtAppData.bExtAdv
+		? &s_BtAppExtAdvPkt : &s_BtAppAdvPkt;
+	BtAdvPacket_t *srpkt  = g_BtAppData.bExtAdv
+		? &s_BtAppExtSrPkt  : &s_BtAppSrPkt;
+	bool changeAdv = pAdvData != nullptr && AdvLen > 0;
+	bool changeSr = pSrData != nullptr && SrLen > 0;
+
+	alignas(4) uint8_t scratchData[BT_WBA_ADV_EXTENDED_MAX];
+	BtAdvPacket_t scratch = {
+		BT_WBA_ADV_EXTENDED_MAX, 0, scratchData
+	};
+
+	// Validate both replacements before changing the controller. The common
+	// allocator preserves an existing record when the replacement does not fit.
+	if (changeAdv)
+	{
+		BtAdvWbaPacketCopy(&scratch, advpkt);
+		if (BtAdvWbaManDataSet(&scratch, pAdvData, AdvLen) == false)
 		{
 			return false;
 		}
-
-		if (srpkt->Len > 0)
+	}
+	if (changeSr)
+	{
+		BtAdvWbaPacketCopy(&scratch, srpkt);
+		if (BtAdvWbaManDataSet(&scratch, pSrData, SrLen) == false)
 		{
-			ret = aci_gap_adv_set_scan_resp_data(BT_WBA_ADV_HANDLE,
-										  BT_WBA_ADV_DATA_OP_COMPLETE,
-										  BT_WBA_ADV_DATA_FRAG_PREF_NONE,
-										  (uint8_t)srpkt->Len,
-										  srpkt->pData);
-			if (ret != BLE_STATUS_SUCCESS)
-			{
-				return false;
-			}
+			return false;
 		}
+	}
+
+	bool advWritten = false;
+	if (changeAdv)
+	{
+		BtAdvWbaPacketCopy(&scratch, advpkt);
+		(void)BtAdvWbaManDataSet(&scratch, pAdvData, AdvLen);
+		if (BtAdvWbaDataWrite(&scratch, false) == false)
+		{
+			return false;
+		}
+		advWritten = true;
+	}
+
+	if (changeSr)
+	{
+		BtAdvWbaPacketCopy(&scratch, srpkt);
+		(void)BtAdvWbaManDataSet(&scratch, pSrData, SrLen);
+		if (BtAdvWbaDataWrite(&scratch, true) == false)
+		{
+			// Advertising data may already have changed. Restore the retained
+			// packet before returning so the two controller buffers still match.
+			if (advWritten && BtAdvWbaDataWrite(advpkt, false) == false &&
+				s_bAdvertising)
+			{
+				BtAdvStop();
+			}
+			return false;
+		}
+	}
+
+	// Controller accepted all requested writes. Commit the same validated
+	// packet edits to the retained buffers.
+	if (changeAdv)
+	{
+		BtAdvWbaPacketCopy(&scratch, advpkt);
+		(void)BtAdvWbaManDataSet(&scratch, pAdvData, AdvLen);
+		BtAdvWbaPacketCopy(advpkt, &scratch);
+	}
+	if (changeSr)
+	{
+		BtAdvWbaPacketCopy(&scratch, srpkt);
+		(void)BtAdvWbaManDataSet(&scratch, pSrData, SrLen);
+		BtAdvWbaPacketCopy(srpkt, &scratch);
 	}
 
 	return true;
