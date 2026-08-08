@@ -232,6 +232,20 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 			}
 			break;
 
+		case BT_HCI_CMD_CTLR_RESOLVING_LIST_ADD_DEV:
+			res = sdc_hci_cmd_le_add_device_to_resolving_list(
+				(const sdc_hci_cmd_le_add_device_to_resolving_list_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_RESOLVING_LIST_REMOVE_DEV:
+			res = sdc_hci_cmd_le_remove_device_from_resolving_list(
+				(const sdc_hci_cmd_le_remove_device_from_resolving_list_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_RESOLVING_LIST_CLEAR:
+			res = sdc_hci_cmd_le_clear_resolving_list();
+			break;
+
 		case BT_HCI_CMD_CTLR_RESOLVING_LIST_READ_SIZE:
 			{
 				sdc_hci_cmd_le_read_resolving_list_size_return_t r = {};
@@ -241,6 +255,21 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
 				}
 			}
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_ADDR_RESOLUTION_ENABLE:
+			res = sdc_hci_cmd_le_set_address_resolution_enable(
+				(const sdc_hci_cmd_le_set_address_resolution_enable_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_RESOLVABLE_PRIVATE_ADDR_TIMEOUT:
+			res = sdc_hci_cmd_le_set_resolvable_private_address_timeout(
+				(const sdc_hci_cmd_le_set_resolvable_private_address_timeout_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PRIVACY_MODE:
+			res = sdc_hci_cmd_le_set_privacy_mode(
+				(const sdc_hci_cmd_le_set_privacy_mode_t*)pParam);
 			break;
 
 		case BT_HCI_CMD_CTLR_READ_MAX_ADV_DATA_LEN:
