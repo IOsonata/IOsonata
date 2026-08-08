@@ -61,8 +61,14 @@ bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 		return false;
 	}
 
+	g_BtAppData.bScan = false;
+	if (BtGapScanStart(s_BleScanBuff, sizeof(s_BleScanBuff)) == false)
+	{
+		return false;
+	}
+
 	g_BtAppData.bScan = true;
-	return BtGapScanStart(s_BleScanBuff, sizeof(s_BleScanBuff));
+	return true;
 }
 
 void BtAppScan(void)
@@ -71,12 +77,17 @@ void BtAppScan(void)
 	{
 		// Re-arm the scan with the same parameters (SD requirement after
 		// every adv report when reporting is one-shot).
-		BtGapScanNext(s_BleScanBuff, sizeof(s_BleScanBuff));
+		if (BtGapScanNext(s_BleScanBuff, sizeof(s_BleScanBuff)) == false)
+		{
+			g_BtAppData.bScan = false;
+		}
 	}
 	else
 	{
-		g_BtAppData.bScan = true;
-		BtGapScanStart(s_BleScanBuff, sizeof(s_BleScanBuff));
+		if (BtGapScanStart(s_BleScanBuff, sizeof(s_BleScanBuff)))
+		{
+			g_BtAppData.bScan = true;
+		}
 	}
 }
 

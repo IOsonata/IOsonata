@@ -41,11 +41,17 @@ bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 		return false;
 	}
 
-	g_BtAppData.bScan = true;
+	g_BtAppData.bScan = false;
 	// ST's aci_gap_start_observation_procedure does not take a buffer -
 	// adv reports come back as HCI events. The args here are kept for
 	// API parity with the SoftDevice ports.
-	return BtGapScanStart(NULL, 0);
+	if (BtGapScanStart(NULL, 0) == false)
+	{
+		return false;
+	}
+
+	g_BtAppData.bScan = true;
+	return true;
 }
 
 void BtAppScan(void)
@@ -53,12 +59,14 @@ void BtAppScan(void)
 	if (g_BtAppData.bScan)
 	{
 		// ST stack keeps scanning until terminated. Just confirm.
-		BtGapScanNext(NULL, 0);
+		if (BtGapScanNext(NULL, 0) == false)
+		{
+			g_BtAppData.bScan = false;
+		}
 	}
-	else
+	else if (BtGapScanStart(NULL, 0))
 	{
 		g_BtAppData.bScan = true;
-		BtGapScanStart(NULL, 0);
 	}
 }
 

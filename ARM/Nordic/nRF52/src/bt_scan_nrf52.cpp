@@ -51,14 +51,20 @@ void BtAppScan(void)
 	if (g_BtAppData.bScan == true)
 	{
 		//err_code = sd_ble_gap_scan_start(NULL, &g_BleScanReportData);
-		BtGapScanNext(g_BleScanReportData.p_data, g_BleScanReportData.len);
+		if (BtGapScanNext(g_BleScanReportData.p_data,
+			g_BleScanReportData.len) == false)
+		{
+			g_BtAppData.bScan = false;
+		}
 	}
 	else
 	{
-		g_BtAppData.bScan = true;
-
 //		err_code = sd_ble_gap_scan_start(&s_BleScanParams, &g_BleScanReportData);
-		BtGapScanStart(g_BleScanReportData.p_data, g_BleScanReportData.len);
+		if (BtGapScanStart(g_BleScanReportData.p_data,
+			g_BleScanReportData.len))
+		{
+			g_BtAppData.bScan = true;
+		}
 	}
 }
 
@@ -89,11 +95,18 @@ bool BtAppScanInit(BtGapScanCfg_t *pCfg)
     ret_code_t err_code = sd_ble_uuid_vs_add(&uid, &uidtype);
     APP_ERROR_CHECK(err_code);
 */
-    g_BtAppData.bScan = true;
+	g_BtAppData.bScan = false;
 
 //	err_code = sd_ble_gap_scan_start(&s_BleScanParams, &g_BleScanReportData);
 //	APP_ERROR_CHECK(err_code);
 
 //	return err_code == NRF_SUCCESS;
-    return BtGapScanStart(g_BleScanReportData.p_data, g_BleScanReportData.len);
+	if (BtGapScanStart(g_BleScanReportData.p_data,
+		g_BleScanReportData.len) == false)
+	{
+		return false;
+	}
+
+	g_BtAppData.bScan = true;
+	return true;
 }
