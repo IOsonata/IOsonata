@@ -130,7 +130,6 @@ static const BtAppCfg_t s_BleAppCfg = {
 	.ProductVer = 1,
 	.Appearance = BT_APPEAR_UNKNOWN_GENERIC,
 	.pDevInfo = &s_DevInfo,
-	.bExtAdv = false,
 	.pAdvManData = s_AdvMarker,
 	.AdvManDataLen = sizeof(s_AdvMarker),
 	.pSrManData = nullptr,
