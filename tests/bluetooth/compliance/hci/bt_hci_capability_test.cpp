@@ -6,6 +6,8 @@
 #include "bluetooth/bt_hci_cap.h"
 #include "bluetooth/bt_hci_ctlr.h"
 
+static_assert(BT_HCI_CAP_CMD_LE_REMOTE_CONN_PARAM_REQUEST_REPLY == 268U);
+static_assert(BT_HCI_CAP_CMD_LE_REMOTE_CONN_PARAM_REQUEST_NEG_REPLY == 269U);
 static_assert(BT_HCI_CAP_CMD_LE_SET_DATA_LENGTH == 270U);
 static_assert(BT_HCI_CAP_CMD_LE_READ_PHY == 284U);
 static_assert(BT_HCI_CAP_CMD_LE_SET_DEFAULT_PHY == 285U);
@@ -394,6 +396,82 @@ void TestCapabilityPredicates()
 	CHECK(BtHciCapabilitiesLeFeatureSupported(&caps, 64) == false);
 }
 
+// Every LE meta event except the one under test must stay enabled, whatever
+// the controller reports. A mask builder that cleared more than it was asked
+// to would silence connection completes and advertising reports as well.
+bool LeEventMaskOnlyClears(const uint8_t Mask[8], int ClearedBit)
+{
+	for (int i = 0; i < 64; i++)
+	{
+		bool set = (Mask[i >> 3] & (1U << (i & 7U))) != 0;
+
+		if (set != (i != ClearedBit))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void TestRemoteConnParamEventMask()
+{
+	// LE Remote Connection Parameter Request is subevent 6, so LE Event Mask
+	// octet 0 bit 5.
+	const int connParamBit = BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST - 1;
+	BtHciCapabilities_t caps = {};
+	uint8_t mask[8];
+
+	CHECK(BtHciCapabilitiesRemoteConnParamRequestSupported(nullptr) == false);
+	CHECK(BtHciCapabilitiesRemoteConnParamRequestSupported(&caps) == false);
+
+	// An unread controller masks the event off. This is the case a port hits
+	// when capability discovery failed outright.
+	std::memset(mask, 0, sizeof(mask));
+	BtHciLeEventMaskBuild(nullptr, mask);
+	CHECK(LeEventMaskOnlyClears(mask, connParamBit));
+
+	// Commands known, neither reply present: the SoftDevice Controller case.
+	caps.Valid = BT_HCI_CAP_VALID_COMMANDS;
+	std::memset(mask, 0, sizeof(mask));
+	BtHciLeEventMaskBuild(&caps, mask);
+	CHECK(BtHciCapabilitiesRemoteConnParamRequestSupported(&caps) == false);
+	CHECK(LeEventMaskOnlyClears(mask, connParamBit));
+
+	// One reply without the other cannot answer every request, so it does not
+	// unmask the event.
+	SetCommand(&caps, BT_HCI_CAP_CMD_LE_REMOTE_CONN_PARAM_REQUEST_REPLY);
+	std::memset(mask, 0, sizeof(mask));
+	BtHciLeEventMaskBuild(&caps, mask);
+	CHECK(BtHciCapabilitiesRemoteConnParamRequestSupported(&caps) == false);
+	CHECK(LeEventMaskOnlyClears(mask, connParamBit));
+
+	caps.SupportedCommands[33] = 0;
+	SetCommand(&caps, BT_HCI_CAP_CMD_LE_REMOTE_CONN_PARAM_REQUEST_NEG_REPLY);
+	std::memset(mask, 0, sizeof(mask));
+	BtHciLeEventMaskBuild(&caps, mask);
+	CHECK(BtHciCapabilitiesRemoteConnParamRequestSupported(&caps) == false);
+	CHECK(LeEventMaskOnlyClears(mask, connParamBit));
+
+	// Both replies present: the event is enabled with everything else.
+	SetCommand(&caps, BT_HCI_CAP_CMD_LE_REMOTE_CONN_PARAM_REQUEST_REPLY);
+	std::memset(mask, 0, sizeof(mask));
+	BtHciLeEventMaskBuild(&caps, mask);
+	CHECK(BtHciCapabilitiesRemoteConnParamRequestSupported(&caps));
+	CHECK(LeEventMaskOnlyClears(mask, -1));
+
+	// A capability record whose command octets were never read must not be
+	// trusted just because the octets happen to hold the right bits.
+	caps.Valid = 0;
+	std::memset(mask, 0, sizeof(mask));
+	BtHciLeEventMaskBuild(&caps, mask);
+	CHECK(BtHciCapabilitiesRemoteConnParamRequestSupported(&caps) == false);
+	CHECK(LeEventMaskOnlyClears(mask, connParamBit));
+
+	// A null destination is refused rather than written through.
+	BtHciLeEventMaskBuild(&caps, nullptr);
+}
+
 void TestAdvertisingCommandChecks()
 {
 	BtHciCapabilities_t caps = {};
@@ -558,6 +636,7 @@ int main()
 	TestArguments();
 	TestControllerCapabilityStorage();
 	TestCapabilityPredicates();
+	TestRemoteConnParamEventMask();
 	TestAdvertisingCommandChecks();
 	TestGapCommandChecks();
 	TestDataLengthControl();

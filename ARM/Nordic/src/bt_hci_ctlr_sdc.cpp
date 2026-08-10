@@ -89,6 +89,14 @@ static void BtHciCtlrSdcApplyCapabilities(BtHciDevice_t * const pDev)
 		return;
 	}
 
+	// Record the association before looking at the buffer report.
+	// BtHciCapabilitiesForDeviceGet matches on this pointer to hand out the
+	// discovered record, and every other field of that record is already
+	// filled. Leaving the pointer unset because one optional read failed sends
+	// BtHciPrivacyConfigure, BtHciSetDataLength, BtHciReadPhy, BtAppAdvInit and
+	// BtGapScanInit through a full inline re-discovery on each call.
+	s_pBtHciCtlrSdc->pHciDev = pDev;
+
 	const BtHciCapabilities_t *pCapabilities =
 		&s_pBtHciCtlrSdc->Capabilities;
 	if ((pCapabilities->Valid & BT_HCI_CAP_VALID_BUFFER_SIZE) == 0 ||
@@ -103,7 +111,6 @@ static void BtHciCtlrSdcApplyCapabilities(BtHciDevice_t * const pDev)
 	// once, before the first real host command can lead to ACL traffic.
 	BtHciSetLeAclBuffer(pDev, pCapabilities->LeAclDataLen,
 		pCapabilities->LeAclPacketCount);
-	s_pBtHciCtlrSdc->pHciDev = pDev;
 	s_pBtHciCtlrSdc->CapabilitiesApplied = true;
 }
 
@@ -164,6 +171,11 @@ size_t BtHciCtlrSdcSend(void *pData, size_t Len)
 // address read commands are absent from the switch, so their bits stay clear.
 // LE Read Supported States has no consumer in the capability layer and is left
 // to the default case.
+//
+// The two LE Remote Connection Parameter Request Reply commands are absent for
+// a different reason: the SDC raises the request event but declares no reply
+// wrapper at all, so the host cannot answer it. Their bits staying clear is
+// what keeps BtHciLeEventMaskBuild from unmasking that event on this port.
 static const uint16_t s_BtHciCmdSdcSupported[] = {
 	BT_HCI_CAP_CMD_LE_SET_RANDOM_ADDRESS,
 	BT_HCI_CAP_CMD_LE_SET_SCAN_PARAMETERS,

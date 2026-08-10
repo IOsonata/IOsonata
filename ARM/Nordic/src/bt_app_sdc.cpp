@@ -659,15 +659,17 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	sdc_default_tx_power_set(pCfg->TxPower);
 
-	// Enable all LE meta events EXCEPT the LE Remote Connection Parameter Request
-	// event (LE event mask octet 0, bit 5). When that event is unmasked the
-	// controller defers every peer connection-parameter-update to the host and
-	// waits for an explicit reply. The app layer does not issue that reply, so
-	// leaving it enabled stalls the link-layer parameter update a central runs
-	// right after connecting or pairing, and the link drops on supervision timeout.
+	// Enable the LE meta events this host can service on the controller that
+	// was just discovered. BtHciLeEventMaskBuild holds the rule; on the
+	// SoftDevice Controller the outcome is that the LE Remote Connection
+	// Parameter Request event stays masked, because the library raises that
+	// event and supplies no reply command for it. Deriving the mask from the
+	// reported command set rather than clearing a fixed bit here keeps the
+	// decision with the capability record: a controller that does implement
+	// the reply commands gets the event, and the handler in bt_hci_host answers
+	// it.
 	uint8_t evmask[8];
-	memset(evmask, 0xff, sizeof(evmask));
-	evmask[0] &= ~(1 << 5);		// LE Remote Connection Parameter Request event
+	BtHciLeEventMaskBuild(pCapabilities, evmask);
 	if (BtHciCommand(&s_BtHciDev, BT_HCI_CMD_CTLR_SET_EVENT_MASK, evmask, sizeof(evmask), NULL, 0))
 	{
 		return false;

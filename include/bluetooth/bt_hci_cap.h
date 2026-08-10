@@ -41,6 +41,8 @@ enum {
 	BT_HCI_CAP_CMD_LE_SET_SCAN_PARAMETERS = 26U * 8U + 2U,
 	BT_HCI_CAP_CMD_LE_SET_SCAN_ENABLE = 26U * 8U + 3U,
 	BT_HCI_CAP_CMD_LE_CREATE_CONNECTION = 26U * 8U + 4U,
+	BT_HCI_CAP_CMD_LE_REMOTE_CONN_PARAM_REQUEST_REPLY = 33U * 8U + 4U,
+	BT_HCI_CAP_CMD_LE_REMOTE_CONN_PARAM_REQUEST_NEG_REPLY = 33U * 8U + 5U,
 	BT_HCI_CAP_CMD_LE_SET_DATA_LENGTH = 33U * 8U + 6U,
 	BT_HCI_CAP_CMD_LE_ADD_DEVICE_TO_RESOLVING_LIST = 34U * 8U + 3U,
 	BT_HCI_CAP_CMD_LE_REMOVE_DEVICE_FROM_RESOLVING_LIST = 34U * 8U + 4U,
@@ -167,6 +169,26 @@ static inline bool BtHciCapabilitiesLeFeatureSupported(
 		(1U << (FeatureBit & 7U))) != 0;
 }
 
+/**
+ * Can the host answer an LE Remote Connection Parameter Request event on this
+ * controller?
+ *
+ * The event obliges the host to reply with either LE Remote Connection
+ * Parameter Request Reply or its negative form. A controller that raises the
+ * event but implements neither reply leaves the peer's Link Layer parameter
+ * update unanswered until the connection drops on supervision timeout, so the
+ * event must stay masked off on such a controller and the request handled by
+ * the controller itself.
+ */
+static inline bool BtHciCapabilitiesRemoteConnParamRequestSupported(
+	const BtHciCapabilities_t *pCapabilities)
+{
+	return BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_REMOTE_CONN_PARAM_REQUEST_REPLY) &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_REMOTE_CONN_PARAM_REQUEST_NEG_REPLY);
+}
+
 static inline bool BtHciCapabilitiesLegacyAdvertisingSupported(
 	const BtHciCapabilities_t *pCapabilities, bool UseRandomAddress,
 	bool UseScanResponse)
@@ -269,6 +291,23 @@ extern "C" {
 
 bool BtHciCapabilitiesRead(BtHciDevice_t * const pDev,
 	BtHciCapabilities_t * const pCapabilities);
+
+/**
+ * Build the LE Event Mask parameter for a controller.
+ *
+ * Every LE meta event is enabled except the ones this host cannot service on
+ * the given controller. An event the host leaves unanswered is worse than an
+ * event it never receives, because the controller waits for a reply that never
+ * arrives instead of running the procedure on its own.
+ *
+ * A NULL or incomplete capability record masks off every event whose handling
+ * depends on a command, which is the safe reading of an unknown controller.
+ *
+ * @param   pCapabilities   Capability record for the controller, or NULL.
+ * @param   Mask            Receives the 8 octet LE Event Mask, octet 0 first.
+ */
+void BtHciLeEventMaskBuild(const BtHciCapabilities_t *pCapabilities,
+	uint8_t Mask[8]);
 
 /**
  * Return the capability record for an HCI device associated with the active

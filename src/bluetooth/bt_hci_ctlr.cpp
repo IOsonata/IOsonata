@@ -185,6 +185,32 @@ const BtHciCapabilities_t *BtHciCtlrCapabilitiesGet(const BtHciCtlrDev_t *pDev)
 	return pDev != nullptr ? &pDev->Capabilities : nullptr;
 }
 
+void BtHciLeEventMaskBuild(const BtHciCapabilities_t *pCapabilities,
+	uint8_t Mask[8])
+{
+	if (Mask == nullptr)
+	{
+		return;
+	}
+
+	memset(Mask, 0xFF, 8);
+
+	// LE Event Mask bit numbering is the subevent code less one, so the LE
+	// Remote Connection Parameter Request event (subevent 6) is octet 0 bit 5.
+	// BtHciProcessLeEvent answers that event with LE Remote Connection
+	// Parameter Request Reply or its negative form. A controller without those
+	// two commands cannot be answered, and an unanswered request stalls the
+	// peer's Link Layer parameter update until the link drops on supervision
+	// timeout, so leave the event masked and let the controller run the
+	// procedure itself. The Nordic SoftDevice Controller is such a controller:
+	// it raises the event and supplies no reply command.
+	if (BtHciCapabilitiesRemoteConnParamRequestSupported(pCapabilities) == false)
+	{
+		Mask[(BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST - 1) >> 3] &=
+			(uint8_t)~(1U << ((BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST - 1) & 7U));
+	}
+}
+
 const BtHciCapabilities_t *BtHciCapabilitiesForDeviceGet(
 	const BtHciDevice_t *pDev)
 {
