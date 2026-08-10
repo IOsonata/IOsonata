@@ -153,6 +153,63 @@ size_t BtHciCtlrSdcSend(void *pData, size_t Len)
 	return s_pBtHciCtlrSdc->Send(s_pBtHciCtlrSdc, pData, Len);
 }
 
+// The SDC declares sdc_hci_cmd_ip_read_local_supported_commands() and
+// sdc_hci_cmd_le_read_supported_states() in its headers but implements neither
+// in any released library, and it offers no raw command entry point, so neither
+// HCI command can be forwarded to the controller. Read Local Supported Commands
+// is answered here instead: from the host side this executor is the controller,
+// so the supported set is the set of opcodes the switch in BtHciCmdSdc
+// dispatches. Bit numbers are octet * 8 + bit per Core Vol 4 Part E Section
+// 6.27, named in bt_hci_cap.h. Legacy advertising data and the resolvable
+// address read commands are absent from the switch, so their bits stay clear.
+// LE Read Supported States has no consumer in the capability layer and is left
+// to the default case.
+static const uint16_t s_BtHciCmdSdcSupported[] = {
+	BT_HCI_CAP_CMD_LE_SET_RANDOM_ADDRESS,
+	BT_HCI_CAP_CMD_LE_SET_SCAN_PARAMETERS,
+	BT_HCI_CAP_CMD_LE_SET_SCAN_ENABLE,
+	BT_HCI_CAP_CMD_LE_CREATE_CONNECTION,
+	BT_HCI_CAP_CMD_LE_SET_DATA_LENGTH,
+	BT_HCI_CAP_CMD_LE_ADD_DEVICE_TO_RESOLVING_LIST,
+	BT_HCI_CAP_CMD_LE_REMOVE_DEVICE_FROM_RESOLVING_LIST,
+	BT_HCI_CAP_CMD_LE_CLEAR_RESOLVING_LIST,
+	BT_HCI_CAP_CMD_LE_READ_RESOLVING_LIST_SIZE,
+	BT_HCI_CAP_CMD_LE_SET_ADDRESS_RESOLUTION_ENABLE,
+	BT_HCI_CAP_CMD_LE_SET_RESOLVABLE_PRIVATE_ADDRESS_TIMEOUT,
+	BT_HCI_CAP_CMD_LE_READ_PHY,
+	BT_HCI_CAP_CMD_LE_SET_DEFAULT_PHY,
+	BT_HCI_CAP_CMD_LE_SET_PHY,
+	BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS,
+	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS,
+	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_DATA,
+	BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_RESPONSE_DATA,
+	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_ENABLE,
+	BT_HCI_CAP_CMD_LE_READ_MAX_ADV_DATA_LENGTH,
+	BT_HCI_CAP_CMD_LE_READ_SUPPORTED_ADV_SETS,
+	BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_PARAMETERS,
+	BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE,
+	BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION,
+	BT_HCI_CAP_CMD_LE_SET_PRIVACY_MODE,
+};
+
+static void BtHciCmdSdcSupportedCommandsGet(uint8_t *pMap, size_t Len)
+{
+	memset(pMap, 0, Len);
+
+	for (size_t i = 0;
+		i < sizeof(s_BtHciCmdSdcSupported) / sizeof(s_BtHciCmdSdcSupported[0]);
+		i++)
+	{
+		uint16_t bit = s_BtHciCmdSdcSupported[i];
+		size_t octet = (size_t)(bit >> 3);
+
+		if (octet < Len)
+		{
+			pMap[octet] |= (uint8_t)(1U << (bit & 7U));
+		}
+	}
+}
+
 // SDC command executor. The SDC HCI command interface is typed, not raw: each
 // opcode maps to a sdc_hci_cmd_* wrapper. The generic parameters are the
 // standard HCI wire layout, which matches the SDC command struct, so they cast
@@ -178,12 +235,13 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 
 		case BT_HCI_CMD_INFO_READ_LOCAL_SUPPORTED_COMMANDS:
 			{
-				sdc_hci_cmd_ip_read_local_supported_commands_return_t r = {};
-				res = sdc_hci_cmd_ip_read_local_supported_commands(&r);
-				if (res == 0 && pRet != nullptr && RetLen > 0)
+				uint8_t map[64];
+				BtHciCmdSdcSupportedCommandsGet(map, sizeof(map));
+				if (pRet != nullptr && RetLen > 0)
 				{
-					memcpy(pRet, r.raw, RetLen < sizeof(r.raw) ? RetLen : sizeof(r.raw));
+					memcpy(pRet, map, RetLen < sizeof(map) ? RetLen : sizeof(map));
 				}
+				res = 0;
 			}
 			break;
 
@@ -194,18 +252,6 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 				if (res == 0 && pRet != nullptr && RetLen > 0)
 				{
 					memcpy(pRet, r.raw, RetLen < sizeof(r.raw) ? RetLen : sizeof(r.raw));
-				}
-			}
-			break;
-
-		case BT_HCI_CMD_CTLR_READ_SUPPORTED_STATES:
-			{
-				sdc_hci_cmd_le_read_supported_states_return_t r = {};
-				res = sdc_hci_cmd_le_read_supported_states(&r);
-				if (res == 0 && pRet != nullptr && RetLen > 0)
-				{
-					memcpy(pRet, r.le_states,
-						RetLen < sizeof(r.le_states) ? RetLen : sizeof(r.le_states));
 				}
 			}
 			break;

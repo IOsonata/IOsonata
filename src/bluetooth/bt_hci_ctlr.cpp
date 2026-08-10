@@ -117,13 +117,16 @@ bool BtHciCapabilitiesRead(BtHciDevice_t * const pDev,
 	memcpy(capabilities.LeFeatures, data, sizeof(capabilities.LeFeatures));
 	capabilities.Valid |= BT_HCI_CAP_VALID_LE_FEATURES;
 
+	// LE Read Supported States is optional here. Some controllers, the Nordic
+	// SoftDevice Controller among them, expose no way to issue it, and no
+	// caller requires BT_HCI_CAP_VALID_LE_STATES. Leave the bit clear when the
+	// read fails rather than discarding the whole capability set.
 	if (BtHciCapRead(pDev, BT_HCI_CMD_CTLR_READ_SUPPORTED_STATES,
-		data, sizeof(capabilities.LeStates)) == false)
+		data, sizeof(capabilities.LeStates)))
 	{
-		return false;
+		memcpy(capabilities.LeStates, data, sizeof(capabilities.LeStates));
+		capabilities.Valid |= BT_HCI_CAP_VALID_LE_STATES;
 	}
-	memcpy(capabilities.LeStates, data, sizeof(capabilities.LeStates));
-	capabilities.Valid |= BT_HCI_CAP_VALID_LE_STATES;
 
 	if (BtHciCapRead(pDev, BT_HCI_CMD_CTLR_READ_BUFF_SIZE_EXT, data, 6))
 	{
