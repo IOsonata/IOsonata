@@ -685,7 +685,6 @@ void BtAdvPawrResponseReportEvt(uint8_t AdvHandle, uint8_t Subevent,
 // subevent a reply quotes belong to the first part.
 static uint16_t s_BtAdvPawrRxEvent;
 static uint8_t s_BtAdvPawrRxSubevent;
-static uint16_t s_BtAdvPawrRxLen;
 static bool s_BtAdvPawrRxDrop;
 
 bool BtAdvPawrSyncSubeventSet(BtHciDevice_t * const pDev, uint16_t SyncHdl,
