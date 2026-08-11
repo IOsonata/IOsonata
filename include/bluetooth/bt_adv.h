@@ -430,6 +430,92 @@ void BtAdvPeriodicReportFragment(uint16_t SyncHdl, int8_t TxPower, int8_t Rssi,
 	uint8_t DataStatus, size_t Len, const uint8_t *pData);
 void BtAdvPeriodicSyncLostEvt(uint16_t SyncHdl);
 
+// --- Periodic Advertising with Responses, Core 5.4 ---
+
+//!< Subevents a PAwR train may have, Core Vol 4 Part E 7.8.61.
+#define BT_ADV_PAWR_SUBEVENT_MAX			0x80
+
+//!< Subevent interval, 1.25 ms units, 7.5 ms to 318.75 ms.
+#define BT_ADV_PAWR_SUBEVENT_INTERVAL_MIN	0x06
+
+//!< Response slot delay, 1.25 ms units. Zero means no response slots.
+#define BT_ADV_PAWR_RSP_SLOT_DELAY_MAX		0xFE
+
+//!< Response slot spacing, 0.125 ms units. Zero means no response slots.
+#define BT_ADV_PAWR_RSP_SLOT_SPACING_MIN	0x02
+
+//!< Data octets one subevent can hold.
+#define BT_ADV_PAWR_SUBEVENT_DATA_MAX		251
+
+typedef struct __Bt_Adv_Pawr_Cfg {
+	uint16_t IntervalMin;			//!< Periodic advertising interval min, 1.25 ms units
+	uint16_t IntervalMax;			//!< Periodic advertising interval max, 1.25 ms units
+	uint8_t  OwnAddrType;			//!< BTADDR_TYPE_PUBLIC or BTADDR_TYPE_RAND
+	uint8_t  Sid;					//!< Advertising set id, 0 to 15
+	bool     IncludeTxPower;		//!< Include TxPower in the periodic advertising PDU
+	uint8_t  NumSubevents;			//!< Subevents per event, 1 to 0x80
+	uint8_t  SubeventInterval;		//!< Time between subevents, 0x06 to 0xFF
+	uint8_t  ResponseSlotDelay;		//!< 0 for no response slots, else 0x01 to 0xFE
+	uint8_t  ResponseSlotSpacing;	//!< 0 for no response slots, else 0x02 to 0xFF
+	uint8_t  NumResponseSlots;		//!< 0 for no response slots, else 0x01 to 0xFF
+} BtAdvPawrCfg_t;
+
+/**
+ * @brief	Create the advertising set and configure a PAwR train.
+ *
+ * Periodic Advertising with Responses is a periodic advertising train divided
+ * into subevents, each of which may open response slots the scanners answer
+ * in. It uses the v2 form of the parameters, which is the only one with the
+ * subevent fields, and the same advertising set the plain train uses.
+ *
+ * The four response slot parameters are all or nothing: either every one is
+ * zero, meaning a train nobody answers, or all of them are in range.
+ *
+ * @return	true when the set and the train parameters were accepted.
+ */
+bool BtAdvPawrInit(BtHciDevice_t * const pDev, const BtAdvPawrCfg_t *pCfg);
+
+/**
+ * @brief	Fill one subevent with the data it will advertise.
+ *
+ * Answers a subevent data request. The response slot window named here is the
+ * part of the subevent's slots this data invites answers in.
+ *
+ * @param	Subevent		Subevent to fill, below the configured count.
+ * @param	RspSlotStart	First response slot the data invites answers in.
+ * @param	RspSlotCount	Response slots the data invites answers in.
+ * @param	pData			Subevent data, at most BT_ADV_PAWR_SUBEVENT_DATA_MAX.
+ * @param	Len				Data length, may be zero.
+ */
+bool BtAdvPawrSubeventDataSet(uint8_t Subevent, uint8_t RspSlotStart,
+	uint8_t RspSlotCount, const uint8_t *pData, size_t Len);
+
+/**
+ * @brief	The controller wants data for subevents it is about to advertise.
+ *
+ * Weak, override to be told. The handler is expected to call
+ * BtAdvPawrSubeventDataSet for each subevent in the range, from
+ * SubeventStart, wrapping at the configured subevent count.
+ */
+void BtAdvPawrSubeventDataRequest(uint8_t AdvHandle, uint8_t SubeventStart,
+	uint8_t SubeventDataCount);
+
+/**
+ * @brief	A scanner answered in a response slot.
+ *
+ * Weak, override to be told. Called once per response in a report. A response
+ * the controller marked incomplete is not delivered.
+ */
+void BtAdvPawrResponse(uint8_t AdvHandle, uint8_t Subevent,
+	uint8_t ResponseSlot, int8_t Rssi, size_t Len, const uint8_t *pData);
+
+// Event seams, weak and empty in bt_hci_host, overridden by the module.
+void BtAdvPawrSubeventDataRequestEvt(uint8_t AdvHandle, uint8_t SubeventStart,
+	uint8_t SubeventDataCount);
+void BtAdvPawrResponseReportEvt(uint8_t AdvHandle, uint8_t Subevent,
+	uint8_t TxStatus, uint8_t NumResponses, const uint8_t *pResponses,
+	size_t ResponsesLen);
+
 /**
  * @brief	Decide whether extended advertising PDUs are required.
  *

@@ -74,6 +74,10 @@ enum {
 	BT_HCI_CAP_CMD_LE_SET_PRIVACY_MODE = 39U * 8U + 2U,
 	BT_HCI_CAP_CMD_LE_SET_HOST_FEATURE = 44U * 8U + 1U,
 	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS_V2 = 46U * 8U + 2U,
+	BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_SUBEVENT_DATA = 46U * 8U + 5U,
+	BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_RESPONSE_DATA = 46U * 8U + 6U,
+	BT_HCI_CAP_CMD_LE_SET_PERIODIC_SYNC_SUBEVENT = 46U * 8U + 7U,
+	BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_PARAMETERS_V2 = 47U * 8U + 1U,
 };
 
 // Bit numbers in the LE Read Local Supported Features return value.
@@ -86,6 +90,8 @@ enum {
 	BT_HCI_CAP_LE_FEATURE_PERIODIC_ADV = 13U,
 	BT_HCI_CAP_LE_FEATURE_ADV_CODING_SELECTION = 40U,
 	BT_HCI_CAP_LE_FEATURE_ADV_CODING_SELECTION_HOST = 41U,
+	BT_HCI_CAP_LE_FEATURE_PAWR_ADVERTISER = 43U,
+	BT_HCI_CAP_LE_FEATURE_PAWR_SCANNER = 44U,
 };
 
 // HCI TX_PHYs/RX_PHYs bit values used by LE Set Default PHY and LE Set PHY.
@@ -335,6 +341,26 @@ static inline bool BtHciCapabilitiesPeriodicSyncSupported(
 		BT_HCI_CAP_CMD_LE_PERIODIC_ADV_CREATE_SYNC_CANCEL) &&
 		BtHciCapabilitiesCommandSupported(pCapabilities,
 		BT_HCI_CAP_CMD_LE_PERIODIC_ADV_TERMINATE_SYNC);
+}
+
+/**
+ * Can this controller run Periodic Advertising with Responses as advertiser?
+ *
+ * Needs the PAwR advertiser LE feature, the v2 form of the periodic
+ * advertising parameters which is the only one with the subevent fields, and
+ * the command that fills a subevent. Ordinary periodic advertising is a
+ * further requirement handled by the caller, since PAwR is a train with
+ * subevents rather than a separate thing.
+ */
+static inline bool BtHciCapabilitiesPawrAdvertiserSupported(
+	const BtHciCapabilities_t *pCapabilities)
+{
+	return BtHciCapabilitiesLeFeatureSupported(pCapabilities,
+		BT_HCI_CAP_LE_FEATURE_PAWR_ADVERTISER) &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_PARAMETERS_V2) &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_SUBEVENT_DATA);
 }
 
 static inline bool BtHciCapabilitiesLegacyScanningSupported(

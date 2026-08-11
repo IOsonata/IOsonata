@@ -126,6 +126,9 @@ void ResetCaps(uint8_t AdvSetCount = 4)
 	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_PERIODIC_ADV_CREATE_SYNC);
 	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_PERIODIC_ADV_CREATE_SYNC_CANCEL);
 	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_PERIODIC_ADV_TERMINATE_SYNC);
+	SetFeatureBit(s_Caps.LeFeatures, BT_HCI_CAP_LE_FEATURE_PAWR_ADVERTISER);
+	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_PARAMETERS_V2);
+	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_SUBEVENT_DATA);
 	s_CapsValid = true;
 }
 
@@ -681,7 +684,261 @@ void TestTerminateDropsReassembly()
 	CHECK(s_ReportCount == 0);
 }
 
+// --- PAwR advertiser ---
+
+int s_ReqCount, s_RspCount;
+uint8_t s_ReqStart, s_ReqCount2, s_RspSubevent, s_RspSlot;
+size_t s_RspLen;
+uint8_t s_RspData[BT_ADV_PAWR_SUBEVENT_DATA_MAX];
+
+void ResetPawrCallbacks()
+{
+	s_ReqCount = s_RspCount = 0;
+	s_ReqStart = s_ReqCount2 = s_RspSubevent = s_RspSlot = 0xFF;
+	s_RspLen = 0;
+}
+
+BtAdvPawrCfg_t MakePawrCfg()
+{
+	BtAdvPawrCfg_t cfg = {};
+	cfg.IntervalMin = 0x0060;
+	cfg.IntervalMax = 0x0080;
+	cfg.OwnAddrType = BTADDR_TYPE_RAND;
+	cfg.Sid = 1;
+	cfg.NumSubevents = 4;
+	cfg.SubeventInterval = 0x10;
+	cfg.ResponseSlotDelay = 0x04;
+	cfg.ResponseSlotSpacing = 0x04;
+	cfg.NumResponseSlots = 8;
+	return cfg;
+}
+
+// A PAwR train uses the v2 parameters, the only form with the subevent fields.
+void TestPawrParametersV2()
+{
+	Reset();
+	BtAdvPawrCfg_t cfg = MakePawrCfg();
+	CHECK(BtAdvPawrInit(&s_Dev, &cfg));
+
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM) == nullptr);
+	const CapturedCmd *p = FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM_V2);
+	CHECK(p != nullptr);
+	if (p != nullptr)
+	{
+		CHECK(p->ParamLen == 12);
+		CHECK(p->Param[0] == BT_ADV_PERIODIC_ADV_HANDLE);
+		CHECK(p->Param[7] == 4);		// num subevents
+		CHECK(p->Param[8] == 0x10);		// subevent interval
+		CHECK(p->Param[9] == 0x04);		// response slot delay
+		CHECK(p->Param[10] == 0x04);	// response slot spacing
+		CHECK(p->Param[11] == 8);		// num response slots
+	}
+
+	// The set it rides on is created the same way as for a plain train.
+	const CapturedCmd *e = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
+	CHECK(e != nullptr);
+	if (e != nullptr)
+	{
+		CHECK(e->Param[0] == BT_ADV_PERIODIC_ADV_HANDLE);
+		CHECK(e->Param[1] == 0 && e->Param[2] == 0);
+	}
+}
+
+void TestPawrValidation()
+{
+	Reset();
+	BtAdvPawrCfg_t cfg = MakePawrCfg();
+
+	// Zero subevents is a plain train, not a PAwR one.
+	cfg.NumSubevents = 0;
+	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	cfg = MakePawrCfg();
+	cfg.NumSubevents = BT_ADV_PAWR_SUBEVENT_MAX + 1;
+	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	cfg = MakePawrCfg();
+	cfg.SubeventInterval = BT_ADV_PAWR_SUBEVENT_INTERVAL_MIN - 1;
+	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	CHECK(s_CmdCount == 0);
+
+	// Response slots are all or nothing.
+	cfg = MakePawrCfg();
+	cfg.ResponseSlotDelay = 0;
+	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	cfg = MakePawrCfg();
+	cfg.ResponseSlotSpacing = BT_ADV_PAWR_RSP_SLOT_SPACING_MIN - 1;
+	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	cfg = MakePawrCfg();
+	cfg.NumResponseSlots = 0;
+	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	CHECK(s_CmdCount == 0);
+
+	// A train nobody answers is legitimate: every slot parameter zero.
+	Reset();
+	cfg = MakePawrCfg();
+	cfg.ResponseSlotDelay = 0;
+	cfg.ResponseSlotSpacing = 0;
+	cfg.NumResponseSlots = 0;
+	CHECK(BtAdvPawrInit(&s_Dev, &cfg));
+
+	CHECK(BtAdvPawrInit(nullptr, &cfg) == false);
+	CHECK(BtAdvPawrInit(&s_Dev, nullptr) == false);
+}
+
+void TestPawrCapabilityGating()
+{
+	Reset();
+	s_Caps.LeFeatures[BT_HCI_CAP_LE_FEATURE_PAWR_ADVERTISER >> 3] &=
+		static_cast<uint8_t>(~(1U <<
+		(BT_HCI_CAP_LE_FEATURE_PAWR_ADVERTISER & 7U)));
+	BtAdvPawrCfg_t cfg = MakePawrCfg();
+	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	CHECK(s_CmdCount == 0);
+
+	Reset();
+	s_Caps.SupportedCommands[BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_PARAMETERS_V2 >> 3] &=
+		static_cast<uint8_t>(~(1U <<
+		(BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_PARAMETERS_V2 & 7U)));
+	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	CHECK(s_CmdCount == 0);
+}
+
+void TestSubeventData()
+{
+	Reset();
+	BtAdvPawrCfg_t cfg = MakePawrCfg();
+	CHECK(BtAdvPawrInit(&s_Dev, &cfg));
+	s_CmdCount = 0;
+
+	const uint8_t data[5] = { 1, 2, 3, 4, 5 };
+	CHECK(BtAdvPawrSubeventDataSet(2, 0, 8, data, sizeof(data)));
+	const CapturedCmd *c =
+		FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_SUBEVENT_DATA);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->ParamLen == 6 + 5);
+		CHECK(c->Param[0] == BT_ADV_PERIODIC_ADV_HANDLE);
+		CHECK(c->Param[1] == 1);		// one subevent per command
+		CHECK(c->Param[2] == 2);		// subevent
+		CHECK(c->Param[3] == 0);		// response slot start
+		CHECK(c->Param[4] == 8);		// response slot count
+		CHECK(c->Param[5] == 5);		// data length
+		CHECK(c->Param[6] == 1 && c->Param[10] == 5);
+	}
+
+	// A subevent at or past the configured count is refused.
+	s_CmdCount = 0;
+	CHECK(BtAdvPawrSubeventDataSet(4, 0, 8, data, sizeof(data)) == false);
+	CHECK(BtAdvPawrSubeventDataSet(0, 0, 8, data,
+		BT_ADV_PAWR_SUBEVENT_DATA_MAX + 1) == false);
+	CHECK(BtAdvPawrSubeventDataSet(0, 0, 8, nullptr, 4) == false);
+	CHECK(s_CmdCount == 0);
+
+	// Zero length is legitimate, a subevent that only opens response slots.
+	CHECK(BtAdvPawrSubeventDataSet(1, 2, 3, nullptr, 0));
+	c = FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_SUBEVENT_DATA);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->ParamLen == 6);
+		CHECK(c->Param[5] == 0);
+	}
+
+	// Subevent data on a plain train has no subevent to go in.
+	Reset();
+	BtAdvPeriodicCfg_t plain = MakeCfg();
+	CHECK(BtAdvPeriodicInit(&s_Dev, &plain));
+	CHECK(BtAdvPawrSubeventDataSet(0, 0, 8, data, sizeof(data)) == false);
+}
+
+void TestSubeventDataRequestEvent()
+{
+	Reset();
+	ResetPawrCallbacks();
+	BtAdvPawrSubeventDataRequestEvt(BT_ADV_PERIODIC_ADV_HANDLE, 3, 2);
+	CHECK(s_ReqCount == 1);
+	CHECK(s_ReqStart == 3);
+	CHECK(s_ReqCount2 == 2);
+
+	// A request for another advertising set is not this module's.
+	BtAdvPawrSubeventDataRequestEvt(0, 1, 1);
+	CHECK(s_ReqCount == 1);
+}
+
+void TestResponseReport()
+{
+	Reset();
+	ResetPawrCallbacks();
+
+	// Two responses. Each is TxPower, RSSI, CTE type, slot, data status,
+	// length, then data.
+	const uint8_t responses[] = {
+		0x00, 0xD6, 0x00, 0x02, 0x00, 0x03, 0xAA, 0xBB, 0xCC,
+		0x00, 0xE0, 0x00, 0x05, 0x00, 0x01, 0x11,
+	};
+	BtAdvPawrResponseReportEvt(BT_ADV_PERIODIC_ADV_HANDLE, 1, 0, 2,
+		responses, sizeof(responses));
+	CHECK(s_RspCount == 2);
+	CHECK(s_RspSubevent == 1);
+	CHECK(s_RspSlot == 5);
+	CHECK(s_RspLen == 1);
+	CHECK(s_RspData[0] == 0x11);
+
+	// An incomplete response is a piece of an answer with no second report to
+	// finish it, so it is not handed up.
+	ResetPawrCallbacks();
+	const uint8_t partial[] = {
+		0x00, 0xD6, 0x00, 0x02, 0x01, 0x02, 0xAA, 0xBB,
+	};
+	BtAdvPawrResponseReportEvt(BT_ADV_PERIODIC_ADV_HANDLE, 1, 0, 1,
+		partial, sizeof(partial));
+	CHECK(s_RspCount == 0);
+
+	// A count larger than the event delivered stops at the end rather than
+	// reading past it.
+	ResetPawrCallbacks();
+	BtAdvPawrResponseReportEvt(BT_ADV_PERIODIC_ADV_HANDLE, 1, 0, 8,
+		responses, sizeof(responses));
+	CHECK(s_RspCount == 2);
+
+	// A length that runs past the event is refused rather than copied.
+	ResetPawrCallbacks();
+	const uint8_t overrun[] = { 0x00, 0xD6, 0x00, 0x02, 0x00, 0x40, 0xAA };
+	BtAdvPawrResponseReportEvt(BT_ADV_PERIODIC_ADV_HANDLE, 1, 0, 1,
+		overrun, sizeof(overrun));
+	CHECK(s_RspCount == 0);
+
+	// Another advertising set is not this module's.
+	ResetPawrCallbacks();
+	BtAdvPawrResponseReportEvt(0, 1, 0, 2, responses, sizeof(responses));
+	CHECK(s_RspCount == 0);
+	BtAdvPawrResponseReportEvt(BT_ADV_PERIODIC_ADV_HANDLE, 1, 0, 2,
+		nullptr, 0);
+	CHECK(s_RspCount == 0);
+}
+
 } // namespace
+
+void BtAdvPawrSubeventDataRequest(uint8_t, uint8_t SubeventStart,
+	uint8_t SubeventDataCount)
+{
+	s_ReqCount++;
+	s_ReqStart = SubeventStart;
+	s_ReqCount2 = SubeventDataCount;
+}
+
+void BtAdvPawrResponse(uint8_t, uint8_t Subevent, uint8_t ResponseSlot,
+	int8_t, size_t Len, const uint8_t *pData)
+{
+	s_RspCount++;
+	s_RspSubevent = Subevent;
+	s_RspSlot = ResponseSlot;
+	s_RspLen = Len;
+	if (Len > 0 && pData != nullptr && Len <= sizeof(s_RspData))
+	{
+		std::memcpy(s_RspData, pData, Len);
+	}
+}
 
 // Strong overrides of the application facing callbacks.
 void BtAdvPeriodicSyncEstablished(uint8_t Status, uint16_t SyncHdl,
@@ -742,6 +999,12 @@ int main()
 	TestReportOverflowDropped();
 	TestSyncLostAndFailedEstablish();
 	TestTerminateDropsReassembly();
+	TestPawrParametersV2();
+	TestPawrValidation();
+	TestPawrCapabilityGating();
+	TestSubeventData();
+	TestSubeventDataRequestEvent();
+	TestResponseReport();
 
 	if (s_Failures == 0)
 	{

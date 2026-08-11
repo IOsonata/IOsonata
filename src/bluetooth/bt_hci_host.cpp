@@ -73,6 +73,20 @@ __attribute__((weak)) void BtAdvPeriodicSyncLostEvt(uint16_t SyncHdl)
 	(void)SyncHdl;
 }
 
+__attribute__((weak)) void BtAdvPawrSubeventDataRequestEvt(uint8_t AdvHandle,
+	uint8_t SubeventStart, uint8_t SubeventDataCount)
+{
+	(void)AdvHandle; (void)SubeventStart; (void)SubeventDataCount;
+}
+
+__attribute__((weak)) void BtAdvPawrResponseReportEvt(uint8_t AdvHandle,
+	uint8_t Subevent, uint8_t TxStatus, uint8_t NumResponses,
+	const uint8_t *pResponses, size_t ResponsesLen)
+{
+	(void)AdvHandle; (void)Subevent; (void)TxStatus; (void)NumResponses;
+	(void)pResponses; (void)ResponsesLen;
+}
+
 __attribute__((weak)) void BtHciScanTimeout(BtHciDevice_t * const pDev)
 {
 	(void)pDev;
@@ -680,6 +694,30 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		case BT_HCI_EVT_LE_TRANSMIT_PWR_REPORTING:
 			break;
 		case BT_HCI_EVT_LE_BIGINFO_ADV_REPORT:
+			break;
+		case BT_HCI_EVT_LE_PERIODIC_ADV_DATA_REQ:
+			{
+				// Advertising handle, subevent start, subevent data count.
+				if ((const uint8_t*)pLeEvtPkt->Data + 3 > evtEnd)
+				{
+					break;
+				}
+				const uint8_t *p = (const uint8_t*)pLeEvtPkt->Data;
+				BtAdvPawrSubeventDataRequestEvt(p[0], p[1], p[2]);
+			}
+			break;
+		case BT_HCI_EVT_LE_PERIODIC_ADV_RESP_REPORT:
+			{
+				// Advertising handle, subevent, TX status, response count,
+				// then the variable response array.
+				const uint8_t *p = (const uint8_t*)pLeEvtPkt->Data;
+				if (p + 4 > evtEnd)
+				{
+					break;
+				}
+				BtAdvPawrResponseReportEvt(p[0], p[1], p[2], p[3], &p[4],
+					(size_t)(evtEnd - (p + 4)));
+			}
 			break;
 		case BT_HCI_EVT_LE_SUBRATE_CHANGE:
 			break;

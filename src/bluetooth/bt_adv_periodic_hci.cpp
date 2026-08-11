@@ -103,6 +103,28 @@ typedef struct {
 	uint8_t  SyncHdl[2];
 } BtAdvPeriodicTerminateSync_t;
 
+typedef struct {
+	uint8_t  AdvHandle;
+	uint8_t  IntervalMin[2];		//!< 1.25 ms units
+	uint8_t  IntervalMax[2];		//!< 1.25 ms units
+	uint8_t  Properties[2];
+	uint8_t  NumSubevents;
+	uint8_t  SubeventInterval;
+	uint8_t  ResponseSlotDelay;
+	uint8_t  ResponseSlotSpacing;
+	uint8_t  NumResponseSlots;
+} BtAdvPeriodicParamsV2_t;
+
+typedef struct {
+	uint8_t  AdvHandle;
+	uint8_t  NumSubeventsWithData;
+	uint8_t  Subevent;
+	uint8_t  ResponseSlotStart;
+	uint8_t  ResponseSlotCount;
+	uint8_t  SubeventDataLen;
+	uint8_t  SubeventData[BT_ADV_PAWR_SUBEVENT_DATA_MAX];
+} BtAdvPeriodicSubeventData_t;
+
 #pragma pack(pop)
 
 static_assert(sizeof(BtAdvPeriodicExtParams_t) == 25, "extended advertising parameters must be 25 octets");
@@ -111,6 +133,7 @@ static_assert(sizeof(BtAdvPeriodicEnable_t) == 2, "periodic advertising enable m
 static_assert(sizeof(BtAdvPeriodicExtEnable_t) == 6, "extended advertising enable must be 6 octets");
 static_assert(sizeof(BtAdvPeriodicCreateSync_t) == 14, "create sync must be 14 octets");
 static_assert(sizeof(BtAdvPeriodicTerminateSync_t) == 2, "terminate sync must be 2 octets");
+static_assert(sizeof(BtAdvPeriodicParamsV2_t) == 12, "periodic advertising parameters v2 must be 12 octets");
 
 // Data operation values, Core Vol 4 Part E 7.8.62. The same encoding the
 // extended advertising data command uses.
@@ -130,6 +153,12 @@ static uint16_t s_BtAdvPeriodicDataLen = 0;
 static bool s_BtAdvPeriodicReady = false;
 static bool s_BtAdvPeriodicRunning = false;
 
+// Subevents the train was configured for. Zero when the train is not PAwR,
+// which is what makes a subevent data command refusable before it is sent.
+// Cleared by both init functions, so a plain train after a PAwR one does not
+// inherit a count that no longer describes what is on air.
+static uint8_t s_BtAdvPawrSubevents = 0;
+
 static void BtAdvPeriodicWr16(uint8_t *pDest, uint16_t Value)
 {
 	pDest[0] = (uint8_t)(Value & 0xFF);
@@ -143,31 +172,52 @@ static void BtAdvPeriodicWr24(uint8_t *pDest, uint32_t Value)
 	pDest[2] = (uint8_t)((Value >> 16) & 0xFF);
 }
 
-bool BtAdvPeriodicInit(BtHciDevice_t * const pDev, const BtAdvPeriodicCfg_t *pCfg)
+// Create the extended advertising set a train rides on. Non connectable and
+// non scannable is forced by 7.8.61; the primary interval only paces the
+// extended advertising events that point at the train, so it follows the
+// periodic interval rather than being configured separately. Shared by the
+// plain train and the PAwR one, which differ only in the parameters command
+// that follows.
+static bool BtAdvPeriodicExtSetCreate(BtHciDevice_t * const pDev,
+	const BtHciCapabilities_t *pCap, uint16_t IntervalMin,
+	uint16_t IntervalMax, uint8_t OwnAddrType, uint8_t Sid)
 {
-	s_pBtAdvPeriodicDev = nullptr;
-	s_BtAdvPeriodicReady = false;
-	s_BtAdvPeriodicRunning = false;
-	s_BtAdvPeriodicDataLen = 0;
+	BtAdvPeriodicExtParams_t ext;
+	memset(&ext, 0, sizeof(ext));
+	ext.AdvHandle = BT_ADV_PERIODIC_ADV_HANDLE;
+	BtAdvPeriodicWr16(ext.EvtProp, BT_ADV_PERIODIC_EXT_EVT_PROP);
+	BtAdvPeriodicWr24(ext.PrimIntervalMin, IntervalMin);
+	BtAdvPeriodicWr24(ext.PrimIntervalMax, IntervalMax);
+	ext.PrimChanMap = 7;
+	ext.OwnAddrType = OwnAddrType;
+	ext.FilterPolicy = 0;
+	ext.TxPower = 0;
+	ext.PrimPhy = BTADV_EXTADV_PHY_1M;
+	ext.SecMaxSkip = 0;
+	ext.SecPhy = BtHciCapabilitiesLeFeatureSupported(pCap,
+		BT_HCI_CAP_LE_FEATURE_PHY_2M) ?
+		BTADV_EXTADV_PHY_2M : BTADV_EXTADV_PHY_1M;
+	ext.Sid = Sid;
+	ext.ScanReqNotif = 0;
 
-	if (pDev == nullptr || pCfg == nullptr)
-	{
-		return false;
-	}
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM,
+		&ext, sizeof(ext), nullptr, 0) == 0;
+}
 
-	// 7.8.61 puts both interval parameters in 1.25 ms units with a range of
-	// 0x0006 to 0xFFFF, and requires min to be no greater than max.
-	if (pCfg->IntervalMin < BT_ADV_PERIODIC_INTERVAL_MIN ||
-		pCfg->IntervalMax < BT_ADV_PERIODIC_INTERVAL_MIN ||
-		pCfg->IntervalMin > pCfg->IntervalMax)
+// Shared preflight: interval range and the capabilities every train needs.
+static bool BtAdvPeriodicCommonValid(BtHciDevice_t * const pDev,
+	uint16_t IntervalMin, uint16_t IntervalMax,
+	const BtHciCapabilities_t **ppCap)
+{
+	if (IntervalMin < BT_ADV_PERIODIC_INTERVAL_MIN ||
+		IntervalMax < BT_ADV_PERIODIC_INTERVAL_MIN ||
+		IntervalMin > IntervalMax)
 	{
 		return false;
 	}
 
 	const BtHciCapabilities_t *pCap = BtHciCapabilitiesForDeviceGet(pDev);
 
-	// The train needs its own extended advertising set, so a controller that
-	// reports only one cannot run this alongside connectable advertising.
 	if (BtHciCapabilitiesPeriodicAdvertisingSupported(pCap) == false ||
 		BtHciCapabilitiesLeFeatureSupported(pCap,
 			BT_HCI_CAP_LE_FEATURE_EXT_ADV) == false ||
@@ -179,42 +229,47 @@ bool BtAdvPeriodicInit(BtHciDevice_t * const pDev, const BtAdvPeriodicCfg_t *pCf
 		return false;
 	}
 
+	// The train needs its own extended advertising set, so a controller that
+	// reports only one cannot run this alongside connectable advertising.
 	if ((pCap->Valid & BT_HCI_CAP_VALID_ADV_SET_COUNT) != 0 &&
 		pCap->AdvSetCount <= BT_ADV_PERIODIC_ADV_HANDLE)
 	{
 		return false;
 	}
 
-	// Create the set the train rides on. Non connectable and non scannable is
-	// forced by 7.8.61; the primary interval only paces the extended
-	// advertising events that point at the train, so it follows the periodic
-	// interval rather than being configured separately.
-	BtAdvPeriodicExtParams_t ext;
-	memset(&ext, 0, sizeof(ext));
-	ext.AdvHandle = BT_ADV_PERIODIC_ADV_HANDLE;
-	BtAdvPeriodicWr16(ext.EvtProp, BT_ADV_PERIODIC_EXT_EVT_PROP);
-	BtAdvPeriodicWr24(ext.PrimIntervalMin, pCfg->IntervalMin);
-	BtAdvPeriodicWr24(ext.PrimIntervalMax, pCfg->IntervalMax);
-	ext.PrimChanMap = 7;
-	ext.OwnAddrType = pCfg->OwnAddrType;
-	ext.FilterPolicy = 0;
-	ext.TxPower = 0;
-	ext.PrimPhy = BTADV_EXTADV_PHY_1M;
-	ext.SecMaxSkip = 0;
-	ext.SecPhy = BtHciCapabilitiesLeFeatureSupported(pCap,
-		BT_HCI_CAP_LE_FEATURE_PHY_2M) ?
-		BTADV_EXTADV_PHY_2M : BTADV_EXTADV_PHY_1M;
-	ext.Sid = pCfg->Sid;
-	ext.ScanReqNotif = 0;
+	*ppCap = pCap;
+	return true;
+}
 
-	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM,
-		&ext, sizeof(ext), nullptr, 0) != 0)
+bool BtAdvPeriodicInit(BtHciDevice_t * const pDev, const BtAdvPeriodicCfg_t *pCfg)
+{
+	s_pBtAdvPeriodicDev = nullptr;
+	s_BtAdvPeriodicReady = false;
+	s_BtAdvPeriodicRunning = false;
+	s_BtAdvPeriodicDataLen = 0;
+	s_BtAdvPawrSubevents = 0;
+
+	if (pDev == nullptr || pCfg == nullptr)
 	{
 		return false;
 	}
 
-	BtAdvPeriodicParams_t p;
-	memset(&p, 0, sizeof(p));
+	// 7.8.61 puts both interval parameters in 1.25 ms units with a range of
+	// 0x0006 to 0xFFFF, and requires min to be no greater than max.
+	const BtHciCapabilities_t *pCap = nullptr;
+	if (BtAdvPeriodicCommonValid(pDev, pCfg->IntervalMin, pCfg->IntervalMax,
+		&pCap) == false)
+	{
+		return false;
+	}
+
+	if (BtAdvPeriodicExtSetCreate(pDev, pCap, pCfg->IntervalMin,
+		pCfg->IntervalMax, pCfg->OwnAddrType, pCfg->Sid) == false)
+	{
+		return false;
+	}
+
+	BtAdvPeriodicParams_t p;	memset(&p, 0, sizeof(p));
 	p.AdvHandle = BT_ADV_PERIODIC_ADV_HANDLE;
 	BtAdvPeriodicWr16(p.IntervalMin, pCfg->IntervalMin);
 	BtAdvPeriodicWr16(p.IntervalMax, pCfg->IntervalMax);
@@ -403,6 +458,196 @@ bool BtAdvPeriodicStop(void)
 bool BtAdvPeriodicIsRunning(void)
 {
 	return s_BtAdvPeriodicRunning;
+}
+
+// --- Periodic Advertising with Responses, advertiser ---
+
+bool BtAdvPawrInit(BtHciDevice_t * const pDev, const BtAdvPawrCfg_t *pCfg)
+{
+	s_pBtAdvPeriodicDev = nullptr;
+	s_BtAdvPeriodicReady = false;
+	s_BtAdvPeriodicRunning = false;
+	s_BtAdvPeriodicDataLen = 0;
+	s_BtAdvPawrSubevents = 0;
+
+	if (pDev == nullptr || pCfg == nullptr)
+	{
+		return false;
+	}
+
+	// A PAwR train has at least one subevent; zero would be the plain train,
+	// which BtAdvPeriodicInit already covers.
+	if (pCfg->NumSubevents == 0 ||
+		pCfg->NumSubevents > BT_ADV_PAWR_SUBEVENT_MAX ||
+		pCfg->SubeventInterval < BT_ADV_PAWR_SUBEVENT_INTERVAL_MIN)
+	{
+		return false;
+	}
+
+	// The response slot parameters are all or nothing. 7.8.61 gives each of
+	// them zero as the no response slots value, and a train with slots but no
+	// spacing, or spacing but no slots, is not a shape the controller accepts.
+	bool slots = pCfg->NumResponseSlots != 0;
+	if (slots)
+	{
+		if (pCfg->ResponseSlotDelay == 0 ||
+			pCfg->ResponseSlotDelay > BT_ADV_PAWR_RSP_SLOT_DELAY_MAX ||
+			pCfg->ResponseSlotSpacing < BT_ADV_PAWR_RSP_SLOT_SPACING_MIN)
+		{
+			return false;
+		}
+	}
+	else if (pCfg->ResponseSlotDelay != 0 || pCfg->ResponseSlotSpacing != 0)
+	{
+		return false;
+	}
+
+	const BtHciCapabilities_t *pCap = nullptr;
+	if (BtAdvPeriodicCommonValid(pDev, pCfg->IntervalMin, pCfg->IntervalMax,
+		&pCap) == false)
+	{
+		return false;
+	}
+
+	if (BtHciCapabilitiesPawrAdvertiserSupported(pCap) == false)
+	{
+		return false;
+	}
+
+	if (BtAdvPeriodicExtSetCreate(pDev, pCap, pCfg->IntervalMin,
+		pCfg->IntervalMax, pCfg->OwnAddrType, pCfg->Sid) == false)
+	{
+		return false;
+	}
+
+	BtAdvPeriodicParamsV2_t p;
+	memset(&p, 0, sizeof(p));
+	p.AdvHandle = BT_ADV_PERIODIC_ADV_HANDLE;
+	BtAdvPeriodicWr16(p.IntervalMin, pCfg->IntervalMin);
+	BtAdvPeriodicWr16(p.IntervalMax, pCfg->IntervalMax);
+	BtAdvPeriodicWr16(p.Properties, pCfg->IncludeTxPower ?
+		BT_ADV_PERIODIC_PROP_INCLUDE_TXPOWER : 0);
+	p.NumSubevents = pCfg->NumSubevents;
+	p.SubeventInterval = pCfg->SubeventInterval;
+	p.ResponseSlotDelay = pCfg->ResponseSlotDelay;
+	p.ResponseSlotSpacing = pCfg->ResponseSlotSpacing;
+	p.NumResponseSlots = pCfg->NumResponseSlots;
+
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM_V2,
+		&p, sizeof(p), nullptr, 0) != 0)
+	{
+		return false;
+	}
+
+	s_pBtAdvPeriodicDev = pDev;
+	s_BtAdvPeriodicReady = true;
+	s_BtAdvPawrSubevents = pCfg->NumSubevents;
+
+	return true;
+}
+
+bool BtAdvPawrSubeventDataSet(uint8_t Subevent, uint8_t RspSlotStart,
+	uint8_t RspSlotCount, const uint8_t *pData, size_t Len)
+{
+	if (s_BtAdvPeriodicReady == false || s_pBtAdvPeriodicDev == nullptr ||
+		s_BtAdvPawrSubevents == 0 || Subevent >= s_BtAdvPawrSubevents ||
+		Len > BT_ADV_PAWR_SUBEVENT_DATA_MAX || (Len > 0 && pData == nullptr))
+	{
+		return false;
+	}
+
+	// One subevent per command. The command can hold several, but the request
+	// event names a range the caller walks one at a time, and a single
+	// subevent per command keeps a refusal attributable to one subevent.
+	BtAdvPeriodicSubeventData_t s;
+	memset(&s, 0, sizeof(s));
+	s.AdvHandle = BT_ADV_PERIODIC_ADV_HANDLE;
+	s.NumSubeventsWithData = 1;
+	s.Subevent = Subevent;
+	s.ResponseSlotStart = RspSlotStart;
+	s.ResponseSlotCount = RspSlotCount;
+	s.SubeventDataLen = (uint8_t)Len;
+	if (Len > 0)
+	{
+		memcpy(s.SubeventData, pData, Len);
+	}
+
+	// Only the octets in use are sent: handle, count, then the one subevent
+	// block of four header octets and its data.
+	return BtHciCommand(s_pBtAdvPeriodicDev,
+		BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_SUBEVENT_DATA,
+		&s, (uint8_t)(6 + Len), nullptr, 0) == 0;
+}
+
+__attribute__((weak)) void BtAdvPawrSubeventDataRequest(uint8_t AdvHandle,
+	uint8_t SubeventStart, uint8_t SubeventDataCount)
+{
+	(void)AdvHandle; (void)SubeventStart; (void)SubeventDataCount;
+}
+
+__attribute__((weak)) void BtAdvPawrResponse(uint8_t AdvHandle,
+	uint8_t Subevent, uint8_t ResponseSlot, int8_t Rssi, size_t Len,
+	const uint8_t *pData)
+{
+	(void)AdvHandle; (void)Subevent; (void)ResponseSlot; (void)Rssi;
+	(void)Len; (void)pData;
+}
+
+void BtAdvPawrSubeventDataRequestEvt(uint8_t AdvHandle, uint8_t SubeventStart,
+	uint8_t SubeventDataCount)
+{
+	if (AdvHandle != BT_ADV_PERIODIC_ADV_HANDLE)
+	{
+		return;
+	}
+
+	BtAdvPawrSubeventDataRequest(AdvHandle, SubeventStart, SubeventDataCount);
+}
+
+void BtAdvPawrResponseReportEvt(uint8_t AdvHandle, uint8_t Subevent,
+	uint8_t TxStatus, uint8_t NumResponses, const uint8_t *pResponses,
+	size_t ResponsesLen)
+{
+	(void)TxStatus;
+
+	if (AdvHandle != BT_ADV_PERIODIC_ADV_HANDLE || pResponses == nullptr)
+	{
+		return;
+	}
+
+	// Each response is a 6 octet header, TxPower, RSSI, CTE type, response
+	// slot, data status and length, then its data. Walk by stride and bound
+	// every step against what the event delivered, because NumResponses and
+	// each length come off the wire.
+	const uint8_t *cur = pResponses;
+	const uint8_t *end = pResponses + ResponsesLen;
+
+	for (uint8_t i = 0; i < NumResponses; i++)
+	{
+		if (cur + 6 > end)
+		{
+			break;
+		}
+
+		int8_t rssi = (int8_t)cur[1];
+		uint8_t slot = cur[3];
+		uint8_t dataStatus = cur[4];
+		uint8_t len = cur[5];
+
+		if (cur + 6 + len > end)
+		{
+			break;
+		}
+
+		// Only a complete response is handed up. An incomplete one is a piece
+		// of an answer, and there is no second report to finish it with.
+		if (dataStatus == BT_ADV_PERIODIC_DATA_COMPLETE)
+		{
+			BtAdvPawrResponse(AdvHandle, Subevent, slot, rssi, len, &cur[6]);
+		}
+
+		cur += 6 + len;
+	}
 }
 
 // --- Synchronising to someone else's train ---
