@@ -74,6 +74,38 @@ typedef struct {
 
 typedef struct {
 	uint8_t  AdvHandle;
+	uint8_t  EvtProp[2];			//!< Advertising_Event_Properties
+	uint8_t  PrimIntervalMin[3];	//!< Primary_Advertising_Interval_Min, 0.625 ms units
+	uint8_t  PrimIntervalMax[3];	//!< Primary_Advertising_Interval_Max, 0.625 ms units
+	uint8_t  PrimChanMap;
+	uint8_t  OwnAddrType;
+	uint8_t  PeerAddrType;
+	uint8_t  PeerAddr[6];
+	uint8_t  FilterPolicy;
+	int8_t   TxPower;
+	uint8_t  PrimPhy;
+	uint8_t  SecMaxSkip;
+	uint8_t  SecPhy;
+	uint8_t  Sid;
+	uint8_t  ScanReqNotif;
+	uint8_t  PrimPhyOptions;		//!< Primary_Advertising_PHY_Options
+	uint8_t  SecPhyOptions;			//!< Secondary_Advertising_PHY_Options
+} BtHciLeExtAdvParamsV2_t;			//!< 27 octets, the v1 layout plus the two coding fields
+
+// The v1 command is sent from a v2 object by shortening the length, which only
+// holds while v1 is byte for byte the leading part of v2. Check the join and
+// both sizes rather than trusting the field lists to stay in step.
+static_assert(sizeof(BtHciLeExtAdvParams_t) == 25, "v1 extended advertising parameters must be 25 octets");
+static_assert(sizeof(BtHciLeExtAdvParamsV2_t) == 27, "v2 extended advertising parameters must be 27 octets");
+static_assert(offsetof(BtHciLeExtAdvParamsV2_t, ScanReqNotif) ==
+	offsetof(BtHciLeExtAdvParams_t, ScanReqNotif),
+	"v2 must extend v1, not reorder it");
+static_assert(offsetof(BtHciLeExtAdvParamsV2_t, PrimPhyOptions) ==
+	sizeof(BtHciLeExtAdvParams_t),
+	"the v2 coding fields must follow the whole v1 layout");
+
+typedef struct {
+	uint8_t  AdvHandle;
 	uint8_t  Operation;
 	uint8_t  FragPref;
 	uint8_t  DataLen;
@@ -148,6 +180,41 @@ static bool s_BtDevUseExtAdvCmd = true;
 static bool s_BtDevAdvScannable = false;
 static BtHciCapabilities_t s_BtAdvReadCapabilities;
 static const BtHciCapabilities_t *s_pBtAdvCapabilities = nullptr;
+
+// Requested LE Coded PHY coding for the advertising set, Core Vol 4 Part E
+// 7.8.53. Zero on both means no coding was asked for, which is the state every
+// build starts in and the only value a controller without Advertising Coding
+// Selection accepts. A non zero value also selects the LE Coded PHY for that
+// advertising physical channel, because the options field is ignored on any
+// other PHY and asking for a coding without the PHY would do nothing.
+static uint8_t s_BtAdvPrimPhyOptions = BT_HCI_ADV_PHY_OPT_NONE;
+static uint8_t s_BtAdvSecPhyOptions = BT_HCI_ADV_PHY_OPT_NONE;
+
+bool BtAdvCodingSelectionSet(uint8_t PrimOption, uint8_t SecOption)
+{
+	if (PrimOption > BT_HCI_ADV_PHY_OPT_MAX ||
+		SecOption > BT_HCI_ADV_PHY_OPT_MAX)
+	{
+		return false;
+	}
+
+	s_BtAdvPrimPhyOptions = PrimOption;
+	s_BtAdvSecPhyOptions = SecOption;
+
+	return true;
+}
+
+void BtAdvCodingSelectionGet(uint8_t *pPrimOption, uint8_t *pSecOption)
+{
+	if (pPrimOption != nullptr)
+	{
+		*pPrimOption = s_BtAdvPrimPhyOptions;
+	}
+	if (pSecOption != nullptr)
+	{
+		*pSecOption = s_BtAdvSecPhyOptions;
+	}
+}
 
 // The own address the advertising set was last programmed with. What a new
 // peripheral-role connection is stamped with, so the SMP toolbox computes
@@ -719,7 +786,19 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 
 	if (useExtCommands)
 	{
-		BtHciLeExtAdvParams_t p;
+		// A coding was asked for, the controller has Advertising Coding
+		// Selection and it has the v2 command that holds the fields. The
+		// coded PHY itself is a separate feature: without it there is no
+		// channel the options could apply to, so the request is dropped
+		// rather than sent to be refused.
+		bool coding = (s_BtAdvPrimPhyOptions != BT_HCI_ADV_PHY_OPT_NONE ||
+			s_BtAdvSecPhyOptions != BT_HCI_ADV_PHY_OPT_NONE) &&
+			BtHciCapabilitiesLeFeatureSupported(s_pBtAdvCapabilities,
+				BT_HCI_CAP_LE_FEATURE_CODED_PHY) &&
+			BtHciCapabilitiesAdvertisingCodingSelectionSupported(
+				s_pBtAdvCapabilities);
+
+		BtHciLeExtAdvParamsV2_t p;
 		memset(&p, 0, sizeof(p));
 		p.AdvHandle = 0;
 		BtAdvWr16(p.EvtProp, extprop);
@@ -738,9 +817,32 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 		p.Sid = 0;
 		p.ScanReqNotif = 0;
 
-		if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM,
-			&p, sizeof(p), NULL, 0) != 0)
+		if (coding)
 		{
+			// The options field is ignored unless the matching PHY is the LE
+			// Coded PHY, so select it on the channel the caller named.
+			if (s_BtAdvPrimPhyOptions != BT_HCI_ADV_PHY_OPT_NONE)
+			{
+				p.PrimPhy = BTADV_EXTADV_PHY_CODED;
+				p.PrimPhyOptions = s_BtAdvPrimPhyOptions;
+			}
+			if (s_BtAdvSecPhyOptions != BT_HCI_ADV_PHY_OPT_NONE)
+			{
+				p.SecPhy = BTADV_EXTADV_PHY_CODED;
+				p.SecPhyOptions = s_BtAdvSecPhyOptions;
+			}
+
+			if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2,
+				&p, sizeof(p), NULL, 0) != 0)
+			{
+				return false;
+			}
+		}
+		else if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM,
+			&p, sizeof(BtHciLeExtAdvParams_t), NULL, 0) != 0)
+		{
+			// The v1 layout is the leading 25 octets of the v2 one, and both
+			// trailing option fields are zero on this path.
 			return false;
 		}
 

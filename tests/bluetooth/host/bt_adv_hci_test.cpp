@@ -51,6 +51,8 @@ enum CapabilityMode {
 	CAP_LEGACY_MISSING_DATA,
 	CAP_EXT_LIMIT_SMALL,
 	CAP_EXT_ZERO_SETS,
+	CAP_EXT_CODING,
+	CAP_EXT_CODING_NO_FEATURE,
 };
 
 CapabilityMode s_CapabilityMode = CAP_EXTENDED;
@@ -106,6 +108,13 @@ bool CapabilityCommand(uint16_t OpCode, void *pRet, uint8_t RetLen,
 				SetCommandBit(data, BT_HCI_CAP_CMD_LE_READ_SUPPORTED_ADV_SETS);
 			}
 
+			if (s_CapabilityMode == CAP_EXT_CODING ||
+				s_CapabilityMode == CAP_EXT_CODING_NO_FEATURE)
+			{
+				SetCommandBit(data,
+					BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS_V2);
+			}
+
 			CopyReturn(pRet, RetLen, data, sizeof(data));
 			return true;
 
@@ -124,6 +133,21 @@ bool CapabilityCommand(uint16_t OpCode, void *pRet, uint8_t RetLen,
 				data[BT_HCI_CAP_LE_FEATURE_PHY_2M >> 3] |=
 					static_cast<uint8_t>(1U <<
 					(BT_HCI_CAP_LE_FEATURE_PHY_2M & 7U));
+			}
+			if (s_CapabilityMode == CAP_EXT_CODING ||
+				s_CapabilityMode == CAP_EXT_CODING_NO_FEATURE)
+			{
+				data[BT_HCI_CAP_LE_FEATURE_CODED_PHY >> 3] |=
+					static_cast<uint8_t>(1U <<
+					(BT_HCI_CAP_LE_FEATURE_CODED_PHY & 7U));
+			}
+			// CAP_EXT_CODING_NO_FEATURE has the v2 command and the coded PHY
+			// but not the Advertising Coding Selection feature itself.
+			if (s_CapabilityMode == CAP_EXT_CODING)
+			{
+				data[BT_HCI_CAP_LE_FEATURE_ADV_CODING_SELECTION >> 3] |=
+					static_cast<uint8_t>(1U <<
+					(BT_HCI_CAP_LE_FEATURE_ADV_CODING_SELECTION & 7U));
 			}
 			CopyReturn(pRet, RetLen, data, 8);
 			return true;
@@ -345,7 +369,10 @@ BtAppCfg_t MakePeripheralCfg(const char *pName = "Test")
 }
 
 constexpr size_t kExtAdvOwnAddr = 10;
+constexpr size_t kExtAdvPrimPhy = 20;
 constexpr size_t kExtAdvSecPhy = 22;
+constexpr size_t kExtAdvPrimPhyOptions = 25;
+constexpr size_t kExtAdvSecPhyOptions = 26;
 constexpr size_t kLegacyAdvOwnAddr = 5;
 
 void TestAdvPublicIdentity()
@@ -502,6 +529,116 @@ void TestExtendedSecondaryPhySelection()
 	{
 		CHECK(ap->Param[kExtAdvSecPhy] == BTADV_EXTADV_PHY_1M);
 	}
+}
+
+void TestAdvertisingCodingSelectionArguments()
+{
+	uint8_t prim = 0xFF;
+	uint8_t sec = 0xFF;
+
+	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_REQUIRE_S8,
+		BT_HCI_ADV_PHY_OPT_PREFER_S2));
+	BtAdvCodingSelectionGet(&prim, &sec);
+	CHECK(prim == BT_HCI_ADV_PHY_OPT_REQUIRE_S8);
+	CHECK(sec == BT_HCI_ADV_PHY_OPT_PREFER_S2);
+
+	// Out of range on either argument changes nothing.
+	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_MAX + 1,
+		BT_HCI_ADV_PHY_OPT_NONE) == false);
+	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_NONE,
+		BT_HCI_ADV_PHY_OPT_MAX + 1) == false);
+	BtAdvCodingSelectionGet(&prim, &sec);
+	CHECK(prim == BT_HCI_ADV_PHY_OPT_REQUIRE_S8);
+	CHECK(sec == BT_HCI_ADV_PHY_OPT_PREFER_S2);
+
+	// A NULL output is skipped, not written through.
+	BtAdvCodingSelectionGet(nullptr, nullptr);
+
+	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_NONE,
+		BT_HCI_ADV_PHY_OPT_NONE));
+}
+
+void TestAdvertisingCodingSelectionApplied()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr, CAP_EXT_CODING);
+	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_REQUIRE_S8,
+		BT_HCI_ADV_PHY_OPT_PREFER_S2));
+
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	CHECK(BtAppAdvInit(&cfg) == true);
+
+	// The v2 command is the only one with the coding fields, so the
+	// v1 form must not be the one that went out.
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM) == nullptr);
+	const CapturedCmd *ap = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2);
+	CHECK(ap != nullptr);
+	if (ap != nullptr)
+	{
+		CHECK(ap->ParamLen == 27);
+		CHECK(ap->Param[kExtAdvPrimPhyOptions] ==
+			BT_HCI_ADV_PHY_OPT_REQUIRE_S8);
+		CHECK(ap->Param[kExtAdvSecPhyOptions] ==
+			BT_HCI_ADV_PHY_OPT_PREFER_S2);
+		// A coding is meaningless unless the channel is on the coded PHY.
+		CHECK(ap->Param[kExtAdvPrimPhy] == BTADV_EXTADV_PHY_CODED);
+		CHECK(ap->Param[kExtAdvSecPhy] == BTADV_EXTADV_PHY_CODED);
+	}
+
+	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_NONE,
+		BT_HCI_ADV_PHY_OPT_NONE));
+}
+
+void TestAdvertisingCodingSelectionSecondaryOnly()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr, CAP_EXT_CODING);
+	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_NONE,
+		BT_HCI_ADV_PHY_OPT_REQUIRE_S2));
+
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	CHECK(BtAppAdvInit(&cfg) == true);
+
+	const CapturedCmd *ap = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2);
+	CHECK(ap != nullptr);
+	if (ap != nullptr)
+	{
+		// Only the channel that was asked for moves to the coded PHY.
+		CHECK(ap->Param[kExtAdvPrimPhy] == BTADV_EXTADV_PHY_1M);
+		CHECK(ap->Param[kExtAdvPrimPhyOptions] == BT_HCI_ADV_PHY_OPT_NONE);
+		CHECK(ap->Param[kExtAdvSecPhy] == BTADV_EXTADV_PHY_CODED);
+		CHECK(ap->Param[kExtAdvSecPhyOptions] ==
+			BT_HCI_ADV_PHY_OPT_REQUIRE_S2);
+	}
+
+	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_NONE,
+		BT_HCI_ADV_PHY_OPT_NONE));
+}
+
+void TestAdvertisingCodingSelectionWithoutFeature()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr, CAP_EXT_CODING_NO_FEATURE);
+	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_REQUIRE_S8,
+		BT_HCI_ADV_PHY_OPT_REQUIRE_S8));
+
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	CHECK(BtAppAdvInit(&cfg) == true);
+
+	// A controller without the feature answers any non zero option with
+	// Unsupported Feature or Parameter Value, so the request is dropped and
+	// the v1 command goes out unchanged.
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2) == nullptr);
+	const CapturedCmd *ap = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
+	CHECK(ap != nullptr);
+	if (ap != nullptr)
+	{
+		CHECK(ap->ParamLen == 25);
+		CHECK(ap->Param[kExtAdvPrimPhy] == BTADV_EXTADV_PHY_1M);
+	}
+
+	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_NONE,
+		BT_HCI_ADV_PHY_OPT_NONE));
 }
 
 void TestExtendedAdvertisingDataFragmentation()
@@ -745,6 +882,10 @@ int main()
 	TestExtendedLimitRejectsExtendedPayload();
 	TestZeroAdvertisingSetsFallsBackToLegacy();
 	TestExtendedSecondaryPhySelection();
+	TestAdvertisingCodingSelectionArguments();
+	TestAdvertisingCodingSelectionApplied();
+	TestAdvertisingCodingSelectionSecondaryOnly();
+	TestAdvertisingCodingSelectionWithoutFeature();
 	TestExtendedAdvertisingDataFragmentation();
 	TestAdvStopKeepsStateOnFailure();
 	TestAdvManDataSetReportsRestartFailure();

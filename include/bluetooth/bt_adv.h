@@ -227,6 +227,35 @@ void BtAdvStart(void);
 void BtAdvStop(void);
 
 /**
+ * @brief	Request an LE Coded PHY coding for the advertising set.
+ *
+ * Advertising Coding Selection, Core 5.4. Values are BT_HCI_ADV_PHY_OPT_*: no
+ * preference, prefer S=2 or S=8, or require S=2 or S=8. A non zero option also
+ * selects the LE Coded PHY for that advertising physical channel, because the
+ * coding field has no meaning on any other PHY.
+ *
+ * Takes effect at the next advertising init. Silently ignored at that point if
+ * the controller lacks either the LE Coded PHY or Advertising Coding
+ * Selection, since a controller without the feature refuses any non zero
+ * option outright.
+ *
+ * @param	PrimOption	Coding for the primary advertising physical channel.
+ * @param	SecOption	Coding for the secondary advertising physical channel.
+ *
+ * @return	true when both values are in range, false otherwise, in which case
+ * 			nothing is changed.
+ */
+bool BtAdvCodingSelectionSet(uint8_t PrimOption, uint8_t SecOption);
+
+/**
+ * @brief	Read back the requested advertising coding selection.
+ *
+ * Reports what was asked for, not what the controller granted. Either pointer
+ * may be NULL.
+ */
+void BtAdvCodingSelectionGet(uint8_t *pPrimOption, uint8_t *pSecOption);
+
+/**
  * @brief	Decide whether extended advertising PDUs are required.
  *
  * Legacy advertising PDUs cap both the advertising data and the scan response

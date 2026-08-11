@@ -66,6 +66,8 @@ enum {
 	BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE = 37U * 8U + 6U,
 	BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION = 37U * 8U + 7U,
 	BT_HCI_CAP_CMD_LE_SET_PRIVACY_MODE = 39U * 8U + 2U,
+	BT_HCI_CAP_CMD_LE_SET_HOST_FEATURE = 44U * 8U + 1U,
+	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS_V2 = 46U * 8U + 2U,
 };
 
 // Bit numbers in the LE Read Local Supported Features return value.
@@ -75,6 +77,9 @@ enum {
 	BT_HCI_CAP_LE_FEATURE_PHY_2M = 8U,
 	BT_HCI_CAP_LE_FEATURE_CODED_PHY = 11U,
 	BT_HCI_CAP_LE_FEATURE_EXT_ADV = 12U,
+	BT_HCI_CAP_LE_FEATURE_PERIODIC_ADV = 13U,
+	BT_HCI_CAP_LE_FEATURE_ADV_CODING_SELECTION = 40U,
+	BT_HCI_CAP_LE_FEATURE_ADV_CODING_SELECTION_HOST = 41U,
 };
 
 // HCI TX_PHYs/RX_PHYs bit values used by LE Set Default PHY and LE Set PHY.
@@ -87,6 +92,21 @@ enum {
 #define BT_HCI_PHY_CODED_ANY			0U
 #define BT_HCI_PHY_CODED_S2			1U
 #define BT_HCI_PHY_CODED_S8			2U
+
+// Primary and Secondary Advertising PHY Options for LE Set Extended
+// Advertising Parameters v2, Core Vol 4 Part E 7.8.53. The first three values
+// match the LE Set PHY options above; 3 and 4 are the Advertising Coding
+// Selection additions and turn a preference into a requirement. A controller
+// without that feature refuses any non zero value with Unsupported Feature or
+// Parameter Value, and a controller with it refuses a requirement it cannot
+// meet with Command Disallowed. The field is ignored unless the matching PHY
+// is the LE Coded PHY.
+#define BT_HCI_ADV_PHY_OPT_NONE			0U
+#define BT_HCI_ADV_PHY_OPT_PREFER_S2	1U
+#define BT_HCI_ADV_PHY_OPT_PREFER_S8	2U
+#define BT_HCI_ADV_PHY_OPT_REQUIRE_S2	3U
+#define BT_HCI_ADV_PHY_OPT_REQUIRE_S8	4U
+#define BT_HCI_ADV_PHY_OPT_MAX			BT_HCI_ADV_PHY_OPT_REQUIRE_S8
 
 #define BT_HCI_LE_CONN_HANDLE_MAX		0x0EFFU
 
@@ -187,6 +207,23 @@ static inline bool BtHciCapabilitiesRemoteConnParamRequestSupported(
 		BT_HCI_CAP_CMD_LE_REMOTE_CONN_PARAM_REQUEST_REPLY) &&
 		BtHciCapabilitiesCommandSupported(pCapabilities,
 		BT_HCI_CAP_CMD_LE_REMOTE_CONN_PARAM_REQUEST_NEG_REPLY);
+}
+
+/**
+ * Can this controller be given an advertising coding selection?
+ *
+ * Needs the Advertising Coding Selection LE feature and the v2 form of LE Set
+ * Extended Advertising Parameters, the only command with the PHY options
+ * fields. The host support feature bit is a separate step: the controller
+ * reports it only once the host has claimed it through LE Set Host Feature.
+ */
+static inline bool BtHciCapabilitiesAdvertisingCodingSelectionSupported(
+	const BtHciCapabilities_t *pCapabilities)
+{
+	return BtHciCapabilitiesLeFeatureSupported(pCapabilities,
+		BT_HCI_CAP_LE_FEATURE_ADV_CODING_SELECTION) &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS_V2);
 }
 
 static inline bool BtHciCapabilitiesLegacyAdvertisingSupported(

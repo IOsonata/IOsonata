@@ -385,6 +385,7 @@ SOFTWARE.
 #define BT_HCI_CMD_CTLR_SET_DATA_RELATED_ADDR_CHANGE			((8<<10) | 0x7C)	//!< LE Set Data Related Address Changes command
 #define BT_HCI_CMD_CTLR_SET_DEFAULT_SUBRATE						((8<<10) | 0x7D)	//!< LE Set Default Subrate command
 #define BT_HCI_CMD_CTLR_SUBRATE_RQST							((8<<10) | 0x7E)	//!< LE Subrate Request command
+#define BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2					((8<<10) | 0x7F)	//!< LE Set Extended Advertising Parameters [v2] command
 
 
 
