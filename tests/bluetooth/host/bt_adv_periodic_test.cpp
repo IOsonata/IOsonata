@@ -20,6 +20,14 @@ go out until that set is advertising.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hci_cap.h"
 #include "bluetooth/bt_adv.h"
+#include "bluetooth/bt_app.h"
+
+// The record bt_adv_hci reads the local HCI device out of, the same
+// way bt_adv_hci and bt_gap_hci do. Defined out here rather than in the
+// anonymous namespace below, which would give it internal linkage and leave
+// the module under test with an undefined reference. Only pHciDev is used, so
+// the rest stays zeroed.
+BtAppData_t g_BtAppData;
 
 namespace {
 
@@ -137,11 +145,17 @@ void ResetCaps(uint8_t AdvSetCount = 4)
 
 BtHciDevice_t s_Dev;
 
+// bt_adv_hci reads the local HCI device out of the shared app record,
+// the same way bt_adv_hci and bt_gap_hci do. Supplying the record here keeps
+// the test linking two files. A port with no HCI device leaves the field NULL,
+// which is what the null device cases below model.
+
 void Reset(uint8_t AdvSetCount = 4)
 {
 	s_CmdCount = 0;
 	s_FailOpCode = 0;
 	s_FailAfter = 0;
+	g_BtAppData.AppDevice.pHciDev = &s_Dev;
 	std::memset(&s_Dev, 0, sizeof(s_Dev));
 	s_Dev.Command = TestCommand;
 	ResetCaps(AdvSetCount);
@@ -164,7 +178,7 @@ void TestExtendedSetProperties()
 {
 	Reset();
 	BtAdvPeriodicCfg_t cfg = MakeCfg();
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg));
+	CHECK(BtAdvPeriodicInit(&cfg));
 
 	const CapturedCmd *e = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
 	CHECK(e != nullptr);
@@ -197,7 +211,7 @@ void TestTxPowerProperty()
 	Reset();
 	BtAdvPeriodicCfg_t cfg = MakeCfg();
 	cfg.IncludeTxPower = true;
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg));
+	CHECK(BtAdvPeriodicInit(&cfg));
 
 	const CapturedCmd *p = FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM);
 	CHECK(p != nullptr);
@@ -214,19 +228,21 @@ void TestIntervalValidation()
 	BtAdvPeriodicCfg_t cfg = MakeCfg();
 
 	cfg.IntervalMin = BT_ADV_PERIODIC_INTERVAL_MIN - 1;
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPeriodicInit(&cfg) == false);
 	CHECK(s_CmdCount == 0);
 
 	Reset();
 	cfg = MakeCfg();
 	cfg.IntervalMin = 0x0100;
 	cfg.IntervalMax = 0x00FF;
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPeriodicInit(&cfg) == false);
 	CHECK(s_CmdCount == 0);
 
 	Reset();
-	CHECK(BtAdvPeriodicInit(nullptr, &cfg) == false);
-	CHECK(BtAdvPeriodicInit(&s_Dev, nullptr) == false);
+	g_BtAppData.AppDevice.pHciDev = nullptr;
+	CHECK(BtAdvPeriodicInit(&cfg) == false);
+	g_BtAppData.AppDevice.pHciDev = &s_Dev;
+	CHECK(BtAdvPeriodicInit(nullptr) == false);
 }
 
 // A controller with one advertising set has none to spare for the train.
@@ -234,11 +250,11 @@ void TestSecondAdvertisingSetRequired()
 {
 	Reset(1);
 	BtAdvPeriodicCfg_t cfg = MakeCfg();
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPeriodicInit(&cfg) == false);
 	CHECK(s_CmdCount == 0);
 
 	Reset(2);
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg));
+	CHECK(BtAdvPeriodicInit(&cfg));
 }
 
 void TestCapabilityGating()
@@ -248,7 +264,7 @@ void TestCapabilityGating()
 	s_Caps.LeFeatures[BT_HCI_CAP_LE_FEATURE_PERIODIC_ADV >> 3] &=
 		static_cast<uint8_t>(~(1U << (BT_HCI_CAP_LE_FEATURE_PERIODIC_ADV & 7U)));
 	BtAdvPeriodicCfg_t cfg = MakeCfg();
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPeriodicInit(&cfg) == false);
 	CHECK(s_CmdCount == 0);
 
 	// Feature present but the enable command missing.
@@ -256,20 +272,20 @@ void TestCapabilityGating()
 	s_Caps.SupportedCommands[BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_ENABLE >> 3] &=
 		static_cast<uint8_t>(~(1U <<
 		(BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_ENABLE & 7U)));
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPeriodicInit(&cfg) == false);
 	CHECK(s_CmdCount == 0);
 
 	// No capability record at all.
 	Reset();
 	s_CapsValid = false;
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPeriodicInit(&cfg) == false);
 }
 
 void TestDataFragmentation()
 {
 	Reset();
 	BtAdvPeriodicCfg_t cfg = MakeCfg();
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg));
+	CHECK(BtAdvPeriodicInit(&cfg));
 	s_CmdCount = 0;
 
 	// Two full fragments and a remainder.
@@ -294,7 +310,7 @@ void TestDataFragmentation()
 
 	// A payload that fits in one command is sent Complete, not First and Last.
 	Reset();
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg));
+	CHECK(BtAdvPeriodicInit(&cfg));
 	s_CmdCount = 0;
 	CHECK(BtAdvPeriodicDataSet(data, 20));
 	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_DATA) == 1);
@@ -308,7 +324,7 @@ void TestPartialDataRunClearsLength()
 {
 	Reset();
 	BtAdvPeriodicCfg_t cfg = MakeCfg();
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg));
+	CHECK(BtAdvPeriodicInit(&cfg));
 
 	uint8_t data[64];
 	std::memset(data, 0x5A, sizeof(data));
@@ -329,7 +345,7 @@ void TestDataArguments()
 {
 	Reset();
 	BtAdvPeriodicCfg_t cfg = MakeCfg();
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg));
+	CHECK(BtAdvPeriodicInit(&cfg));
 
 	uint8_t data[4] = {};
 	CHECK(BtAdvPeriodicDataSet(nullptr, 4) == false);
@@ -343,7 +359,7 @@ void TestStartEnablesBoth()
 {
 	Reset();
 	BtAdvPeriodicCfg_t cfg = MakeCfg();
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg));
+	CHECK(BtAdvPeriodicInit(&cfg));
 	s_CmdCount = 0;
 
 	CHECK(BtAdvPeriodicStart());
@@ -364,7 +380,7 @@ void TestStartRollsBackOnSetFailure()
 {
 	Reset();
 	BtAdvPeriodicCfg_t cfg = MakeCfg();
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg));
+	CHECK(BtAdvPeriodicInit(&cfg));
 	s_CmdCount = 0;
 	s_FailOpCode = BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE;
 
@@ -383,7 +399,7 @@ void TestStopDisablesBoth()
 {
 	Reset();
 	BtAdvPeriodicCfg_t cfg = MakeCfg();
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg));
+	CHECK(BtAdvPeriodicInit(&cfg));
 	CHECK(BtAdvPeriodicStart());
 	s_CmdCount = 0;
 
@@ -396,7 +412,7 @@ void TestStopDisablesBoth()
 	CHECK(BtAdvPeriodicIsRunning() == false);
 
 	Reset();
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg));
+	CHECK(BtAdvPeriodicInit(&cfg));
 	CHECK(BtAdvPeriodicStart());
 	s_CmdCount = 0;
 	s_FailOpCode = BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_ENABLE;
@@ -413,7 +429,7 @@ void TestOperationsBeforeInit()
 	BtAdvPeriodicCfg_t cfg = MakeCfg();
 
 	Reset(1);
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPeriodicInit(&cfg) == false);
 	CHECK(BtAdvPeriodicDataSet(data, sizeof(data)) == false);
 	CHECK(BtAdvPeriodicStart() == false);
 	CHECK(BtAdvPeriodicIsRunning() == false);
@@ -421,7 +437,7 @@ void TestOperationsBeforeInit()
 	// The periodic parameters failing leaves init refused as a whole.
 	Reset();
 	s_FailOpCode = BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM;
-	CHECK(BtAdvPeriodicInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPeriodicInit(&cfg) == false);
 	CHECK(BtAdvPeriodicStart() == false);
 }
 
@@ -463,7 +479,7 @@ void TestSyncCreateParameters()
 	Reset();
 	ResetSyncCallbacks();
 	BtAdvPeriodicSyncCfg_t cfg = MakeSyncCfg();
-	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg));
+	CHECK(BtAdvPeriodicSyncCreate(&cfg));
 
 	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC);
 	CHECK(c != nullptr);
@@ -481,7 +497,7 @@ void TestSyncCreateParameters()
 
 	Reset();
 	cfg.DisableReporting = true;
-	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg));
+	CHECK(BtAdvPeriodicSyncCreate(&cfg));
 	c = FindCmd(BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC);
 	CHECK(c != nullptr);
 	if (c != nullptr)
@@ -496,21 +512,23 @@ void TestSyncCreateValidation()
 	BtAdvPeriodicSyncCfg_t cfg = MakeSyncCfg();
 
 	cfg.AdvSid = BT_ADV_PERIODIC_SID_MAX + 1;
-	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPeriodicSyncCreate(&cfg) == false);
 	cfg = MakeSyncCfg();
 	cfg.AdvAddrType = 2;
-	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPeriodicSyncCreate(&cfg) == false);
 	cfg = MakeSyncCfg();
 	cfg.Skip = BT_ADV_PERIODIC_SKIP_MAX + 1;
-	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPeriodicSyncCreate(&cfg) == false);
 	cfg = MakeSyncCfg();
 	cfg.SyncTimeout = BT_ADV_PERIODIC_SYNC_TIMEOUT_MIN - 1;
-	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPeriodicSyncCreate(&cfg) == false);
 	cfg = MakeSyncCfg();
 	cfg.SyncTimeout = BT_ADV_PERIODIC_SYNC_TIMEOUT_MAX + 1;
-	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg) == false);
-	CHECK(BtAdvPeriodicSyncCreate(nullptr, &cfg) == false);
-	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, nullptr) == false);
+	CHECK(BtAdvPeriodicSyncCreate(&cfg) == false);
+	g_BtAppData.AppDevice.pHciDev = nullptr;
+	CHECK(BtAdvPeriodicSyncCreate(&cfg) == false);
+	g_BtAppData.AppDevice.pHciDev = &s_Dev;
+	CHECK(BtAdvPeriodicSyncCreate(nullptr) == false);
 	CHECK(s_CmdCount == 0);
 
 	// Synchronising is gated on the three sync commands, not the three the
@@ -520,14 +538,14 @@ void TestSyncCreateValidation()
 		static_cast<uint8_t>(~(1U <<
 		(BT_HCI_CAP_CMD_LE_PERIODIC_ADV_TERMINATE_SYNC & 7U)));
 	cfg = MakeSyncCfg();
-	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPeriodicSyncCreate(&cfg) == false);
 	CHECK(s_CmdCount == 0);
 }
 
 void TestSyncCancelAndTerminate()
 {
 	Reset();
-	CHECK(BtAdvPeriodicSyncCancel(&s_Dev));
+	CHECK(BtAdvPeriodicSyncCancel());
 	const CapturedCmd *c =
 		FindCmd(BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC_CANCEL);
 	CHECK(c != nullptr);
@@ -535,10 +553,12 @@ void TestSyncCancelAndTerminate()
 	{
 		CHECK(c->ParamLen == 0);
 	}
-	CHECK(BtAdvPeriodicSyncCancel(nullptr) == false);
+	g_BtAppData.AppDevice.pHciDev = nullptr;
+	CHECK(BtAdvPeriodicSyncCancel() == false);
+	g_BtAppData.AppDevice.pHciDev = &s_Dev;
 
 	Reset();
-	CHECK(BtAdvPeriodicSyncTerminate(&s_Dev, 0x0123));
+	CHECK(BtAdvPeriodicSyncTerminate(0x0123));
 	c = FindCmd(BT_HCI_CMD_CTLR_PERIODIC_ADV_TERMINATE_SYNC);
 	CHECK(c != nullptr);
 	if (c != nullptr)
@@ -549,7 +569,7 @@ void TestSyncCancelAndTerminate()
 
 	Reset();
 	s_FailOpCode = BT_HCI_CMD_CTLR_PERIODIC_ADV_TERMINATE_SYNC;
-	CHECK(BtAdvPeriodicSyncTerminate(&s_Dev, 0x0123) == false);
+	CHECK(BtAdvPeriodicSyncTerminate(0x0123) == false);
 }
 
 void TestReportReassembly()
@@ -679,7 +699,7 @@ void TestTerminateDropsReassembly()
 	ResetSyncCallbacks();
 	uint8_t addr[6] = {};
 	BtAdvPeriodicSyncEstablishedEvt(0, 0x0007, 3, 1, addr, 1, 0x0080);
-	CHECK(BtAdvPeriodicSyncTerminate(&s_Dev, 0x0007));
+	CHECK(BtAdvPeriodicSyncTerminate(0x0007));
 
 	const uint8_t a[2] = { 1, 2 };
 	BtAdvPeriodicReportFragment(0x0007, 0, 0,
@@ -721,7 +741,7 @@ void TestPawrParametersV2()
 {
 	Reset();
 	BtAdvPawrCfg_t cfg = MakePawrCfg();
-	CHECK(BtAdvPawrInit(&s_Dev, &cfg));
+	CHECK(BtAdvPawrInit(&cfg));
 
 	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM) == nullptr);
 	const CapturedCmd *p = FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM_V2);
@@ -754,25 +774,25 @@ void TestPawrValidation()
 
 	// Zero subevents is a plain train, not a PAwR one.
 	cfg.NumSubevents = 0;
-	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPawrInit(&cfg) == false);
 	cfg = MakePawrCfg();
 	cfg.NumSubevents = BT_ADV_PAWR_SUBEVENT_MAX + 1;
-	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPawrInit(&cfg) == false);
 	cfg = MakePawrCfg();
 	cfg.SubeventInterval = BT_ADV_PAWR_SUBEVENT_INTERVAL_MIN - 1;
-	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPawrInit(&cfg) == false);
 	CHECK(s_CmdCount == 0);
 
 	// Response slots are all or nothing.
 	cfg = MakePawrCfg();
 	cfg.ResponseSlotDelay = 0;
-	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPawrInit(&cfg) == false);
 	cfg = MakePawrCfg();
 	cfg.ResponseSlotSpacing = BT_ADV_PAWR_RSP_SLOT_SPACING_MIN - 1;
-	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPawrInit(&cfg) == false);
 	cfg = MakePawrCfg();
 	cfg.NumResponseSlots = 0;
-	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPawrInit(&cfg) == false);
 	CHECK(s_CmdCount == 0);
 
 	// A train nobody answers is legitimate: every slot parameter zero.
@@ -781,10 +801,12 @@ void TestPawrValidation()
 	cfg.ResponseSlotDelay = 0;
 	cfg.ResponseSlotSpacing = 0;
 	cfg.NumResponseSlots = 0;
-	CHECK(BtAdvPawrInit(&s_Dev, &cfg));
+	CHECK(BtAdvPawrInit(&cfg));
 
-	CHECK(BtAdvPawrInit(nullptr, &cfg) == false);
-	CHECK(BtAdvPawrInit(&s_Dev, nullptr) == false);
+	g_BtAppData.AppDevice.pHciDev = nullptr;
+	CHECK(BtAdvPawrInit(&cfg) == false);
+	g_BtAppData.AppDevice.pHciDev = &s_Dev;
+	CHECK(BtAdvPawrInit(nullptr) == false);
 }
 
 void TestPawrCapabilityGating()
@@ -794,14 +816,14 @@ void TestPawrCapabilityGating()
 		static_cast<uint8_t>(~(1U <<
 		(BT_HCI_CAP_LE_FEATURE_PAWR_ADVERTISER & 7U)));
 	BtAdvPawrCfg_t cfg = MakePawrCfg();
-	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPawrInit(&cfg) == false);
 	CHECK(s_CmdCount == 0);
 
 	Reset();
 	s_Caps.SupportedCommands[BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_PARAMETERS_V2 >> 3] &=
 		static_cast<uint8_t>(~(1U <<
 		(BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_PARAMETERS_V2 & 7U)));
-	CHECK(BtAdvPawrInit(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPawrInit(&cfg) == false);
 	CHECK(s_CmdCount == 0);
 }
 
@@ -809,7 +831,7 @@ void TestSubeventData()
 {
 	Reset();
 	BtAdvPawrCfg_t cfg = MakePawrCfg();
-	CHECK(BtAdvPawrInit(&s_Dev, &cfg));
+	CHECK(BtAdvPawrInit(&cfg));
 	s_CmdCount = 0;
 
 	const uint8_t data[5] = { 1, 2, 3, 4, 5 };
@@ -850,7 +872,7 @@ void TestSubeventData()
 	// Subevent data on a plain train has no subevent to go in.
 	Reset();
 	BtAdvPeriodicCfg_t plain = MakeCfg();
-	CHECK(BtAdvPeriodicInit(&s_Dev, &plain));
+	CHECK(BtAdvPeriodicInit(&plain));
 	CHECK(BtAdvPawrSubeventDataSet(0, 0, 8, data, sizeof(data)) == false);
 }
 
@@ -940,7 +962,7 @@ void TestSyncSubeventSet()
 {
 	Reset();
 	const uint8_t subevents[3] = { 0, 2, 5 };
-	CHECK(BtAdvPawrSyncSubeventSet(&s_Dev, 0x0007, subevents,
+	CHECK(BtAdvPawrSyncSubeventSet(0x0007, subevents,
 		sizeof(subevents)));
 
 	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_SYNC_SUBEVENT);
@@ -956,11 +978,13 @@ void TestSyncSubeventSet()
 
 	// Validation.
 	Reset();
-	CHECK(BtAdvPawrSyncSubeventSet(nullptr, 0x0007, subevents, 3) == false);
-	CHECK(BtAdvPawrSyncSubeventSet(&s_Dev, 0x0007, nullptr, 3) == false);
-	CHECK(BtAdvPawrSyncSubeventSet(&s_Dev, 0x0007, subevents, 0) == false);
+	g_BtAppData.AppDevice.pHciDev = nullptr;
+	CHECK(BtAdvPawrSyncSubeventSet(0x0007, subevents, 3) == false);
+	g_BtAppData.AppDevice.pHciDev = &s_Dev;
+	CHECK(BtAdvPawrSyncSubeventSet(0x0007, nullptr, 3) == false);
+	CHECK(BtAdvPawrSyncSubeventSet(0x0007, subevents, 0) == false);
 	const uint8_t bad[2] = { 0, BT_ADV_PAWR_SUBEVENT_NUM_MAX + 1 };
-	CHECK(BtAdvPawrSyncSubeventSet(&s_Dev, 0x0007, bad, 2) == false);
+	CHECK(BtAdvPawrSyncSubeventSet(0x0007, bad, 2) == false);
 	CHECK(s_CmdCount == 0);
 
 	// Gated on its own command.
@@ -968,7 +992,7 @@ void TestSyncSubeventSet()
 	s_Caps.SupportedCommands[BT_HCI_CAP_CMD_LE_SET_PERIODIC_SYNC_SUBEVENT >> 3] &=
 		static_cast<uint8_t>(~(1U <<
 		(BT_HCI_CAP_CMD_LE_SET_PERIODIC_SYNC_SUBEVENT & 7U)));
-	CHECK(BtAdvPawrSyncSubeventSet(&s_Dev, 0x0007, subevents, 3) == false);
+	CHECK(BtAdvPawrSyncSubeventSet(0x0007, subevents, 3) == false);
 	CHECK(s_CmdCount == 0);
 }
 
@@ -976,7 +1000,7 @@ void TestResponseDataSet()
 {
 	Reset();
 	const uint8_t data[3] = { 0xDE, 0xAD, 0xBE };
-	CHECK(BtAdvPawrResponseDataSet(&s_Dev, 0x0007, 0x1234, 2, 3, 4,
+	CHECK(BtAdvPawrResponseDataSet(0x0007, 0x1234, 2, 3, 4,
 		data, sizeof(data)));
 
 	const CapturedCmd *c =
@@ -995,16 +1019,18 @@ void TestResponseDataSet()
 	}
 
 	Reset();
-	CHECK(BtAdvPawrResponseDataSet(nullptr, 0x0007, 0, 0, 0, 0, data, 3) == false);
-	CHECK(BtAdvPawrResponseDataSet(&s_Dev, 0x0007, 0, 0, 0, 0, nullptr, 3) == false);
-	CHECK(BtAdvPawrResponseDataSet(&s_Dev, 0x0007, 0, 0, 0, 0, data,
+	g_BtAppData.AppDevice.pHciDev = nullptr;
+	CHECK(BtAdvPawrResponseDataSet(0x0007, 0, 0, 0, 0, data, 3) == false);
+	g_BtAppData.AppDevice.pHciDev = &s_Dev;
+	CHECK(BtAdvPawrResponseDataSet(0x0007, 0, 0, 0, 0, nullptr, 3) == false);
+	CHECK(BtAdvPawrResponseDataSet(0x0007, 0, 0, 0, 0, data,
 		BT_ADV_PAWR_RESPONSE_DATA_MAX + 1) == false);
-	CHECK(BtAdvPawrResponseDataSet(&s_Dev, 0x0007, 0,
+	CHECK(BtAdvPawrResponseDataSet(0x0007, 0,
 		BT_ADV_PAWR_SUBEVENT_NUM_MAX + 1, 0, 0, data, 3) == false);
 	CHECK(s_CmdCount == 0);
 
 	// Zero length is an empty answer, still an answer.
-	CHECK(BtAdvPawrResponseDataSet(&s_Dev, 0x0007, 1, 0, 0, 0, nullptr, 0));
+	CHECK(BtAdvPawrResponseDataSet(0x0007, 1, 0, 0, 0, nullptr, 0));
 }
 
 // The v2 report is not the v1 layout with a tail: the event counter and

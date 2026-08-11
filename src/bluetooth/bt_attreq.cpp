@@ -36,6 +36,11 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <memory.h>
 
+// This file builds ACL packets and sends them, so it uses the HCI vocabulary
+// directly and says so. It used to reach it through bt_att.h, which no longer
+// provides it: bt_gatt.h includes bt_att.h and bt_app.h includes that, so
+// anything bt_att.h pulls in lands in front of every application.
+#include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_dev.h"

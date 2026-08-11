@@ -40,14 +40,6 @@ SOFTWARE.
 
 #include "bluetooth/bt_uuid.h"
 
-// Periodic advertising takes the HCI device the commands go to. Forward
-// declare it with the same guard bt_hci.h uses, so including that header is
-// not forced on every user of this one.
-#ifndef BT_HCI_DEVICE_T_DEFINED
-#define BT_HCI_DEVICE_T_DEFINED
-typedef struct __Bt_Hci_Device		BtHciDevice_t;
-#endif
-
 /// Maximum advertising or scan-response data payload (in octets) that fits in
 /// legacy advertising PDUs. Above this, extended advertising PDUs are required.
 #define BT_ADV_LEGACY_DATA_MAX		31
@@ -300,7 +292,7 @@ typedef struct __Bt_Adv_Periodic_Cfg {
  *
  * @return	true when the set and the train parameters were accepted.
  */
-bool BtAdvPeriodicInit(BtHciDevice_t * const pDev, const BtAdvPeriodicCfg_t *pCfg);
+bool BtAdvPeriodicInit(const BtAdvPeriodicCfg_t *pCfg);
 
 /**
  * @brief	Replace the periodic advertising data.
@@ -378,15 +370,14 @@ typedef struct __Bt_Adv_Periodic_Sync_Cfg {
  *
  * @return	true when the controller accepted the request.
  */
-bool BtAdvPeriodicSyncCreate(BtHciDevice_t * const pDev,
-	const BtAdvPeriodicSyncCfg_t *pCfg);
+bool BtAdvPeriodicSyncCreate(const BtAdvPeriodicSyncCfg_t *pCfg);
 
 /**
  * @brief	Cancel a synchronisation request that has not completed.
  *
  * Refused by the controller when no request is outstanding.
  */
-bool BtAdvPeriodicSyncCancel(BtHciDevice_t * const pDev);
+bool BtAdvPeriodicSyncCancel(void);
 
 /**
  * @brief	Drop an established synchronisation.
@@ -394,7 +385,7 @@ bool BtAdvPeriodicSyncCancel(BtHciDevice_t * const pDev);
  * No Sync Lost event follows a terminate, so the caller owns the handle's fate
  * from here.
  */
-bool BtAdvPeriodicSyncTerminate(BtHciDevice_t * const pDev, uint16_t SyncHdl);
+bool BtAdvPeriodicSyncTerminate(uint16_t SyncHdl);
 
 /**
  * @brief	Synchronisation attempt finished.
@@ -420,9 +411,9 @@ void BtAdvPeriodicSyncReport(uint16_t SyncHdl, int8_t TxPower, int8_t Rssi,
 void BtAdvPeriodicSyncLost(uint16_t SyncHdl);
 
 // Seams the HCI event path calls. bt_hci_host declares each weak and empty so
-// a build without the periodic advertising module links; bt_adv_periodic_hci
-// overrides them, tracks the sync handle and reassembly, then hands the result
-// to the three callbacks above.
+// a build without the HCI advertising port links; bt_adv_hci overrides them,
+// tracks the sync handle and reassembly, then hands the result to the three
+// callbacks above.
 void BtAdvPeriodicSyncEstablishedEvt(uint8_t Status, uint16_t SyncHdl,
 	uint8_t AdvSid, uint8_t AdvAddrType, const uint8_t AdvAddr[6],
 	uint8_t AdvPhy, uint16_t Interval);
@@ -473,7 +464,7 @@ typedef struct __Bt_Adv_Pawr_Cfg {
  *
  * @return	true when the set and the train parameters were accepted.
  */
-bool BtAdvPawrInit(BtHciDevice_t * const pDev, const BtAdvPawrCfg_t *pCfg);
+bool BtAdvPawrInit(const BtAdvPawrCfg_t *pCfg);
 
 /**
  * @brief	Fill one subevent with the data it will advertise.
@@ -537,7 +528,7 @@ void BtAdvPawrResponseReportEvt(uint8_t AdvHandle, uint8_t Subevent,
  * @param	pSubevents	Subevent numbers, each 0 to 0x7F.
  * @param	Count		How many, 1 to 0x80.
  */
-bool BtAdvPawrSyncSubeventSet(BtHciDevice_t * const pDev, uint16_t SyncHdl,
+bool BtAdvPawrSyncSubeventSet(uint16_t SyncHdl,
 	const uint8_t *pSubevents, uint8_t Count);
 
 /**
@@ -555,7 +546,7 @@ bool BtAdvPawrSyncSubeventSet(BtHciDevice_t * const pDev, uint16_t SyncHdl,
  * @param	pData				Response data, may be NULL when Len is zero.
  * @param	Len					At most BT_ADV_PAWR_RESPONSE_DATA_MAX.
  */
-bool BtAdvPawrResponseDataSet(BtHciDevice_t * const pDev, uint16_t SyncHdl,
+bool BtAdvPawrResponseDataSet(uint16_t SyncHdl,
 	uint16_t RequestEvent, uint8_t RequestSubevent, uint8_t ResponseSubevent,
 	uint8_t ResponseSlot, const uint8_t *pData, size_t Len);
 

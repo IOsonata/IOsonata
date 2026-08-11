@@ -41,7 +41,15 @@ SOFTWARE.
 #include <stddef.h>
 
 #include "bluetooth/bt_uuid.h"
-#include "bluetooth/bt_hci.h"
+// Same reason as bt_dev.h: the ATT client entry points take the HCI device the
+// request goes out on, but nothing here reads through it, so the name is all
+// this header needs. bt_gatt.h includes this one and bt_app.h includes that, so
+// pulling bt_hci.h here would put the whole HCI vocabulary in front of every
+// application.
+#ifndef BT_HCI_DEVICE_T_DEFINED
+#define BT_HCI_DEVICE_T_DEFINED
+typedef struct __Bt_Hci_Device		BtHciDevice_t;
+#endif
 
 #define BT_ATT_OPCODE_FLAG_COMMAND						(1<<6)
 #define BT_ATT_OPCODE_FLAG_AUTH_SIGNATURE				(1<<7)

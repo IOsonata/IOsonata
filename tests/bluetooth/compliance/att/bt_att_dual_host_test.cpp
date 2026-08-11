@@ -16,6 +16,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_gatt.h"

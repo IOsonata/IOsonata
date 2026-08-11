@@ -50,8 +50,8 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 
 // Application scanning supplies a strong implementation. Keeping the default
 // here lets the HCI host remain independently linkable in controller tests.
-// Periodic advertising seams. Weak and empty so a build without
-// bt_adv_periodic_hci links; that module overrides all three.
+// Periodic advertising seams. Weak and empty so a build without the HCI
+// advertising port links; bt_adv_hci overrides them.
 __attribute__((weak)) void BtAdvPeriodicSyncEstablishedEvt(uint8_t Status,
 	uint16_t SyncHdl, uint8_t AdvSid, uint8_t AdvAddrType,
 	const uint8_t AdvAddr[6], uint8_t AdvPhy, uint16_t Interval)

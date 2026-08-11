@@ -174,7 +174,11 @@ bt_gatt_srvc_test_SOURCES := \
 
 bt_adv_periodic_test_SOURCES := \
 	bt_adv_periodic_test.cpp \
-	$(ROOT)/src/bluetooth/bt_adv_periodic_hci.cpp
+	$(GATT_INIT_TEST_SUPPORT) \
+	$(ROOT)/src/bluetooth/bt_adv_hci.cpp \
+	$(ROOT)/src/bluetooth/bt_adv.cpp \
+	$(ROOT)/src/bluetooth/bt_uuid.cpp
+bt_adv_periodic_test_EXTRA := $(CFIFO_OBJ)
 
 bt_gap_sec_levels_test_SOURCES := \
 	bt_gap_sec_levels_test.cpp \

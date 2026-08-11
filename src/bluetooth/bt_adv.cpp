@@ -743,3 +743,149 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 	*pScannable = false;
 	return true;
 }
+
+// --- Periodic advertising and PAwR, port neutral half ---
+
+// bt_adv.h declares the periodic advertising and PAwR surface for every port,
+// but only the HCI port implements it: the SoftDevice, BM and STM32WBA hosts
+// expose no equivalent operation. These weak defaults refuse the call, so an
+// application written against the header links on every port and finds out at
+// run time that the feature is not there. bt_adv_hci overrides each one.
+
+__attribute__((weak))
+bool BtAdvPeriodicInit(const BtAdvPeriodicCfg_t *pCfg)
+{
+	(void)pCfg;
+	return false;
+}
+
+__attribute__((weak))
+bool BtAdvPeriodicDataSet(const uint8_t *pData, size_t Len)
+{
+	(void)pData; (void)Len;
+	return false;
+}
+
+__attribute__((weak))
+size_t BtAdvPeriodicDataGet(uint8_t *pBuff, size_t BuffLen)
+{
+	(void)pBuff; (void)BuffLen;
+	return 0;
+}
+
+__attribute__((weak))
+bool BtAdvPeriodicStart(void)
+{
+	return false;
+}
+
+__attribute__((weak))
+bool BtAdvPeriodicStop(void)
+{
+	return false;
+}
+
+__attribute__((weak))
+bool BtAdvPeriodicIsRunning(void)
+{
+	return false;
+}
+
+__attribute__((weak))
+bool BtAdvPeriodicSyncCreate(const BtAdvPeriodicSyncCfg_t *pCfg)
+{
+	(void)pCfg;
+	return false;
+}
+
+__attribute__((weak))
+bool BtAdvPeriodicSyncCancel(void)
+{
+	return false;
+}
+
+__attribute__((weak))
+bool BtAdvPeriodicSyncTerminate(uint16_t SyncHdl)
+{
+	(void)SyncHdl;
+	return false;
+}
+
+__attribute__((weak))
+bool BtAdvPawrInit(const BtAdvPawrCfg_t *pCfg)
+{
+	(void)pCfg;
+	return false;
+}
+
+__attribute__((weak))
+bool BtAdvPawrSubeventDataSet(uint8_t Subevent, uint8_t RspSlotStart,
+	uint8_t RspSlotCount, const uint8_t *pData, size_t Len)
+{
+	(void)Subevent; (void)RspSlotStart; (void)RspSlotCount;
+	(void)pData; (void)Len;
+	return false;
+}
+
+__attribute__((weak))
+bool BtAdvPawrSyncSubeventSet(uint16_t SyncHdl, const uint8_t *pSubevents,
+	uint8_t Count)
+{
+	(void)SyncHdl; (void)pSubevents; (void)Count;
+	return false;
+}
+
+__attribute__((weak))
+bool BtAdvPawrResponseDataSet(uint16_t SyncHdl, uint16_t RequestEvent,
+	uint8_t RequestSubevent, uint8_t ResponseSubevent, uint8_t ResponseSlot,
+	const uint8_t *pData, size_t Len)
+{
+	(void)SyncHdl; (void)RequestEvent; (void)RequestSubevent;
+	(void)ResponseSubevent; (void)ResponseSlot; (void)pData; (void)Len;
+	return false;
+}
+
+// Application seams. Weak and empty here rather than beside the HCI
+// implementation, because an application overrides them the same way on every
+// port and the override must not depend on which port supplies the train.
+
+__attribute__((weak)) void BtAdvPeriodicSyncEstablished(uint8_t Status,
+	uint16_t SyncHdl, uint8_t AdvSid, uint8_t AdvAddrType,
+	const uint8_t AdvAddr[6], uint8_t AdvPhy, uint16_t Interval)
+{
+	(void)Status; (void)SyncHdl; (void)AdvSid; (void)AdvAddrType;
+	(void)AdvAddr; (void)AdvPhy; (void)Interval;
+}
+
+__attribute__((weak)) void BtAdvPeriodicSyncReport(uint16_t SyncHdl,
+	int8_t TxPower, int8_t Rssi, size_t Len, const uint8_t *pData)
+{
+	(void)SyncHdl; (void)TxPower; (void)Rssi; (void)Len; (void)pData;
+}
+
+__attribute__((weak)) void BtAdvPeriodicSyncLost(uint16_t SyncHdl)
+{
+	(void)SyncHdl;
+}
+
+__attribute__((weak)) void BtAdvPawrSubeventDataRequest(uint8_t AdvHandle,
+	uint8_t SubeventStart, uint8_t SubeventDataCount)
+{
+	(void)AdvHandle; (void)SubeventStart; (void)SubeventDataCount;
+}
+
+__attribute__((weak)) void BtAdvPawrResponse(uint8_t AdvHandle,
+	uint8_t Subevent, uint8_t ResponseSlot, int8_t Rssi, size_t Len,
+	const uint8_t *pData)
+{
+	(void)AdvHandle; (void)Subevent; (void)ResponseSlot; (void)Rssi;
+	(void)Len; (void)pData;
+}
+
+__attribute__((weak)) void BtAdvPawrSubeventReport(uint16_t SyncHdl,
+	uint16_t EventCounter, uint8_t Subevent, int8_t Rssi, size_t Len,
+	const uint8_t *pData)
+{
+	(void)SyncHdl; (void)EventCounter; (void)Subevent; (void)Rssi;
+	(void)Len; (void)pData;
+}

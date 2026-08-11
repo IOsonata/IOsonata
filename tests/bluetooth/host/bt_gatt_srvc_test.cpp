@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"

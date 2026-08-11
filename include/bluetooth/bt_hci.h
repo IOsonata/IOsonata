@@ -37,6 +37,7 @@ SOFTWARE.
 #define __BT_HCI_H__
 
 #include <stdint.h>
+#include <stddef.h>		// size_t
 
 /** @addtogroup Bluetooth
  * @{ */

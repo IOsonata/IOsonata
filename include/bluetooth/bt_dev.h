@@ -49,7 +49,15 @@ SOFTWARE.
 
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
-#include "bluetooth/bt_hci.h"
+
+// The HCI device is how the stack reaches its controller. A device record
+// holds one but nothing here reads through it, so the name is all this header
+// needs. Including bt_hci.h for it would put the whole HCI vocabulary in front
+// of every application, since bt_app.h reaches this header.
+#ifndef BT_HCI_DEVICE_T_DEFINED
+#define BT_HCI_DEVICE_T_DEFINED
+typedef struct __Bt_Hci_Device		BtHciDevice_t;
+#endif
 
 /** @addtogroup Bluetooth
   * @{

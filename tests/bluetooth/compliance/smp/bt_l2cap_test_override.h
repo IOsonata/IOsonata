@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 
+#include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_att.h"
 
 #define BT_L2CAP_CID_ATT       4
