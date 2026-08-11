@@ -104,6 +104,23 @@ typedef struct {
 } BtAdvPeriodicTerminateSync_t;
 
 typedef struct {
+	uint8_t  SyncHdl[2];
+	uint8_t  Properties[2];
+	uint8_t  NumSubevents;
+	uint8_t  Subevents[BT_ADV_PAWR_SYNC_SUBEVENT_MAX];
+} BtAdvPawrSyncSubevent_t;
+
+typedef struct {
+	uint8_t  SyncHdl[2];
+	uint8_t  RequestEvent[2];
+	uint8_t  RequestSubevent;
+	uint8_t  ResponseSubevent;
+	uint8_t  ResponseSlot;
+	uint8_t  ResponseDataLen;
+	uint8_t  ResponseData[BT_ADV_PAWR_RESPONSE_DATA_MAX];
+} BtAdvPawrResponseData_t;
+
+typedef struct {
 	uint8_t  AdvHandle;
 	uint8_t  IntervalMin[2];		//!< 1.25 ms units
 	uint8_t  IntervalMax[2];		//!< 1.25 ms units
@@ -158,6 +175,17 @@ static bool s_BtAdvPeriodicRunning = false;
 // Cleared by both init functions, so a plain train after a PAwR one does not
 // inherit a count that no longer describes what is on air.
 static uint8_t s_BtAdvPawrSubevents = 0;
+
+// One synchronised train at a time. A second would need a handle table and a
+// way for the application to say which train a report belongs to; the
+// reassembly is written against a single handle and refuses anything else.
+// Shared by the plain periodic reports and the PAwR subevent ones, since a
+// device is synchronised to one train either way.
+static uint16_t s_BtAdvPeriodicSyncHdl;
+static bool s_BtAdvPeriodicSyncActive;
+static uint8_t s_BtAdvPeriodicRxData[BT_ADV_PERIODIC_DATA_MAX];
+static uint16_t s_BtAdvPeriodicRxLen;
+static bool s_BtAdvPeriodicRxDrop;
 
 static void BtAdvPeriodicWr16(uint8_t *pDest, uint16_t Value)
 {
@@ -650,21 +678,156 @@ void BtAdvPawrResponseReportEvt(uint8_t AdvHandle, uint8_t Subevent,
 	}
 }
 
+// --- PAwR scanner ---
+
+// Reassembly for a synchronised PAwR train. A subevent report can arrive in
+// several parts the same way a plain periodic report can, and the event and
+// subevent a reply quotes belong to the first part.
+static uint16_t s_BtAdvPawrRxEvent;
+static uint8_t s_BtAdvPawrRxSubevent;
+static uint16_t s_BtAdvPawrRxLen;
+static bool s_BtAdvPawrRxDrop;
+
+bool BtAdvPawrSyncSubeventSet(BtHciDevice_t * const pDev, uint16_t SyncHdl,
+	const uint8_t *pSubevents, uint8_t Count)
+{
+	if (pDev == nullptr || pSubevents == nullptr || Count == 0 ||
+		Count > BT_ADV_PAWR_SYNC_SUBEVENT_MAX)
+	{
+		return false;
+	}
+
+	for (uint8_t i = 0; i < Count; i++)
+	{
+		if (pSubevents[i] > BT_ADV_PAWR_SUBEVENT_NUM_MAX)
+		{
+			return false;
+		}
+	}
+
+	if (BtHciCapabilitiesCommandSupported(BtHciCapabilitiesForDeviceGet(pDev),
+		BT_HCI_CAP_CMD_LE_SET_PERIODIC_SYNC_SUBEVENT) == false)
+	{
+		return false;
+	}
+
+	BtAdvPawrSyncSubevent_t s;
+	memset(&s, 0, sizeof(s));
+	BtAdvPeriodicWr16(s.SyncHdl, SyncHdl);
+	BtAdvPeriodicWr16(s.Properties, 0);
+	s.NumSubevents = Count;
+	memcpy(s.Subevents, pSubevents, Count);
+
+	// Only the subevents named are sent, not the whole array.
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_SYNC_SUBEVENT,
+		&s, (uint8_t)(5 + Count), nullptr, 0) == 0;
+}
+
+bool BtAdvPawrResponseDataSet(BtHciDevice_t * const pDev, uint16_t SyncHdl,
+	uint16_t RequestEvent, uint8_t RequestSubevent, uint8_t ResponseSubevent,
+	uint8_t ResponseSlot, const uint8_t *pData, size_t Len)
+{
+	if (pDev == nullptr || Len > BT_ADV_PAWR_RESPONSE_DATA_MAX ||
+		(Len > 0 && pData == nullptr) ||
+		RequestSubevent > BT_ADV_PAWR_SUBEVENT_NUM_MAX ||
+		ResponseSubevent > BT_ADV_PAWR_SUBEVENT_NUM_MAX)
+	{
+		return false;
+	}
+
+	if (BtHciCapabilitiesCommandSupported(BtHciCapabilitiesForDeviceGet(pDev),
+		BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_RESPONSE_DATA) == false)
+	{
+		return false;
+	}
+
+	BtAdvPawrResponseData_t r;
+	memset(&r, 0, sizeof(r));
+	BtAdvPeriodicWr16(r.SyncHdl, SyncHdl);
+	BtAdvPeriodicWr16(r.RequestEvent, RequestEvent);
+	r.RequestSubevent = RequestSubevent;
+	r.ResponseSubevent = ResponseSubevent;
+	r.ResponseSlot = ResponseSlot;
+	r.ResponseDataLen = (uint8_t)Len;
+	if (Len > 0)
+	{
+		memcpy(r.ResponseData, pData, Len);
+	}
+
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_RESPONSE_DATA,
+		&r, (uint8_t)(8 + Len), nullptr, 0) == 0;
+}
+
+__attribute__((weak)) void BtAdvPawrSubeventReport(uint16_t SyncHdl,
+	uint16_t EventCounter, uint8_t Subevent, int8_t Rssi, size_t Len,
+	const uint8_t *pData)
+{
+	(void)SyncHdl; (void)EventCounter; (void)Subevent; (void)Rssi;
+	(void)Len; (void)pData;
+}
+
+void BtAdvPawrSubeventReportEvt(uint16_t SyncHdl, uint16_t EventCounter,
+	uint8_t Subevent, int8_t TxPower, int8_t Rssi, uint8_t DataStatus,
+	size_t Len, const uint8_t *pData)
+{
+	(void)TxPower;
+
+	if (s_BtAdvPeriodicSyncActive == false || SyncHdl != s_BtAdvPeriodicSyncHdl)
+	{
+		return;
+	}
+
+	if (DataStatus == BT_ADV_PERIODIC_DATA_RX_FAILED)
+	{
+		s_BtAdvPeriodicRxLen = 0;
+		s_BtAdvPawrRxDrop = false;
+		return;
+	}
+
+	// The event and subevent a reply quotes belong to the packet the payload
+	// started in, so they are taken from the first part and kept.
+	if (s_BtAdvPeriodicRxLen == 0)
+	{
+		s_BtAdvPawrRxEvent = EventCounter;
+		s_BtAdvPawrRxSubevent = Subevent;
+	}
+
+	if (Len > 0 && pData != nullptr)
+	{
+		if (s_BtAdvPeriodicRxLen + Len > BT_ADV_PERIODIC_DATA_MAX)
+		{
+			s_BtAdvPawrRxDrop = true;
+		}
+		else
+		{
+			memcpy(&s_BtAdvPeriodicRxData[s_BtAdvPeriodicRxLen], pData, Len);
+			s_BtAdvPeriodicRxLen = (uint16_t)(s_BtAdvPeriodicRxLen + Len);
+		}
+	}
+
+	if (DataStatus == BT_ADV_PERIODIC_DATA_MORE)
+	{
+		return;
+	}
+
+	if (DataStatus == BT_ADV_PERIODIC_DATA_COMPLETE &&
+		s_BtAdvPawrRxDrop == false)
+	{
+		BtAdvPawrSubeventReport(SyncHdl, s_BtAdvPawrRxEvent,
+			s_BtAdvPawrRxSubevent, Rssi, s_BtAdvPeriodicRxLen,
+			s_BtAdvPeriodicRxData);
+	}
+
+	s_BtAdvPeriodicRxLen = 0;
+	s_BtAdvPawrRxDrop = false;
+}
+
 // --- Synchronising to someone else's train ---
 
 // Create Sync Options bit 0 selects the periodic advertiser list instead of
 // the address and set id in the command. Nothing populates that list yet, so
 // the option is always clear and the train is always named explicitly.
 #define BT_ADV_PERIODIC_SYNC_OPT_DISABLE_REPORTING	(1U << 1)
-
-// One train at a time. A second sync would need a handle table and a way for
-// the application to say which train a report belongs to; the reassembly
-// below is written against a single handle and refuses anything else.
-static uint16_t s_BtAdvPeriodicSyncHdl;
-static bool s_BtAdvPeriodicSyncActive;
-static uint8_t s_BtAdvPeriodicRxData[BT_ADV_PERIODIC_DATA_MAX];
-static uint16_t s_BtAdvPeriodicRxLen;
-static bool s_BtAdvPeriodicRxDrop;
 
 bool BtAdvPeriodicSyncCreate(BtHciDevice_t * const pDev,
 	const BtAdvPeriodicSyncCfg_t *pCfg)

@@ -73,6 +73,14 @@ __attribute__((weak)) void BtAdvPeriodicSyncLostEvt(uint16_t SyncHdl)
 	(void)SyncHdl;
 }
 
+__attribute__((weak)) void BtAdvPawrSubeventReportEvt(uint16_t SyncHdl,
+	uint16_t EventCounter, uint8_t Subevent, int8_t TxPower, int8_t Rssi,
+	uint8_t DataStatus, size_t Len, const uint8_t *pData)
+{
+	(void)SyncHdl; (void)EventCounter; (void)Subevent; (void)TxPower;
+	(void)Rssi; (void)DataStatus; (void)Len; (void)pData;
+}
+
 __attribute__((weak)) void BtAdvPawrSubeventDataRequestEvt(uint8_t AdvHandle,
 	uint8_t SubeventStart, uint8_t SubeventDataCount)
 {
@@ -616,7 +624,6 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			}
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V1:
-		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V2:
 			{
 				// The fixed part is 7 octets up to and including DataLen. Prove
 				// it is present before reading DataLen, then prove the payload
@@ -634,6 +641,30 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				}
 				BtAdvPeriodicReportFragment(p->SyncHdl, p->TxPower, p->Rssi,
 					p->DataStatus, p->DataLen, p->Data);
+			}
+			break;
+		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V2:
+			{
+				// v2 is not v1 with a tail: it inserts the event counter and
+				// subevent between CteType and DataStatus, so the fixed part is
+				// 10 octets and the two cannot share a layout. Parsing a v2
+				// report as a v1 one reads DataStatus out of the event counter.
+				const uint8_t *pFixed = (const uint8_t*)pLeEvtPkt->Data;
+				if (pFixed + 10 > evtEnd)
+				{
+					break;
+				}
+				BtHciLeEvtPeriodicAdvReportV2_t *p =
+					(BtHciLeEvtPeriodicAdvReportV2_t*)pLeEvtPkt->Data;
+				if (pFixed + 10 + p->DataLen > evtEnd)
+				{
+					break;
+				}
+				// A PAwR train names the event and subevent a response has to
+				// quote, so the scanner side needs both alongside the payload.
+				BtAdvPawrSubeventReportEvt(p->SyncHdl, p->PeriodicEventCounter,
+					p->Subevent, p->TxPower, p->Rssi, p->DataStatus,
+					p->DataLen, p->Data);
 			}
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_LOST:

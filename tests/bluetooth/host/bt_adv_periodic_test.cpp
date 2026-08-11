@@ -129,6 +129,9 @@ void ResetCaps(uint8_t AdvSetCount = 4)
 	SetFeatureBit(s_Caps.LeFeatures, BT_HCI_CAP_LE_FEATURE_PAWR_ADVERTISER);
 	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_PARAMETERS_V2);
 	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_SUBEVENT_DATA);
+	SetFeatureBit(s_Caps.LeFeatures, BT_HCI_CAP_LE_FEATURE_PAWR_SCANNER);
+	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_SET_PERIODIC_SYNC_SUBEVENT);
+	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_RESPONSE_DATA);
 	s_CapsValid = true;
 }
 
@@ -917,6 +920,138 @@ void TestResponseReport()
 	CHECK(s_RspCount == 0);
 }
 
+// --- PAwR scanner ---
+
+int s_SubRptCount;
+uint16_t s_SubRptEvent;
+uint8_t s_SubRptSubevent;
+size_t s_SubRptLen;
+uint8_t s_SubRptData[BT_ADV_PERIODIC_DATA_MAX];
+
+void ResetScannerCallbacks()
+{
+	s_SubRptCount = 0;
+	s_SubRptEvent = 0xFFFF;
+	s_SubRptSubevent = 0xFF;
+	s_SubRptLen = 0;
+}
+
+void TestSyncSubeventSet()
+{
+	Reset();
+	const uint8_t subevents[3] = { 0, 2, 5 };
+	CHECK(BtAdvPawrSyncSubeventSet(&s_Dev, 0x0007, subevents,
+		sizeof(subevents)));
+
+	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_SYNC_SUBEVENT);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->ParamLen == 5 + 3);
+		CHECK(c->Param[0] == 0x07 && c->Param[1] == 0x00);
+		CHECK(c->Param[2] == 0 && c->Param[3] == 0);	// properties
+		CHECK(c->Param[4] == 3);
+		CHECK(c->Param[5] == 0 && c->Param[6] == 2 && c->Param[7] == 5);
+	}
+
+	// Validation.
+	Reset();
+	CHECK(BtAdvPawrSyncSubeventSet(nullptr, 0x0007, subevents, 3) == false);
+	CHECK(BtAdvPawrSyncSubeventSet(&s_Dev, 0x0007, nullptr, 3) == false);
+	CHECK(BtAdvPawrSyncSubeventSet(&s_Dev, 0x0007, subevents, 0) == false);
+	const uint8_t bad[2] = { 0, BT_ADV_PAWR_SUBEVENT_NUM_MAX + 1 };
+	CHECK(BtAdvPawrSyncSubeventSet(&s_Dev, 0x0007, bad, 2) == false);
+	CHECK(s_CmdCount == 0);
+
+	// Gated on its own command.
+	Reset();
+	s_Caps.SupportedCommands[BT_HCI_CAP_CMD_LE_SET_PERIODIC_SYNC_SUBEVENT >> 3] &=
+		static_cast<uint8_t>(~(1U <<
+		(BT_HCI_CAP_CMD_LE_SET_PERIODIC_SYNC_SUBEVENT & 7U)));
+	CHECK(BtAdvPawrSyncSubeventSet(&s_Dev, 0x0007, subevents, 3) == false);
+	CHECK(s_CmdCount == 0);
+}
+
+void TestResponseDataSet()
+{
+	Reset();
+	const uint8_t data[3] = { 0xDE, 0xAD, 0xBE };
+	CHECK(BtAdvPawrResponseDataSet(&s_Dev, 0x0007, 0x1234, 2, 3, 4,
+		data, sizeof(data)));
+
+	const CapturedCmd *c =
+		FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_RESPONSE_DATA);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->ParamLen == 8 + 3);
+		CHECK(c->Param[0] == 0x07 && c->Param[1] == 0x00);
+		CHECK(c->Param[2] == 0x34 && c->Param[3] == 0x12);	// request event
+		CHECK(c->Param[4] == 2);		// request subevent
+		CHECK(c->Param[5] == 3);		// response subevent
+		CHECK(c->Param[6] == 4);		// response slot
+		CHECK(c->Param[7] == 3);		// length
+		CHECK(c->Param[8] == 0xDE && c->Param[10] == 0xBE);
+	}
+
+	Reset();
+	CHECK(BtAdvPawrResponseDataSet(nullptr, 0x0007, 0, 0, 0, 0, data, 3) == false);
+	CHECK(BtAdvPawrResponseDataSet(&s_Dev, 0x0007, 0, 0, 0, 0, nullptr, 3) == false);
+	CHECK(BtAdvPawrResponseDataSet(&s_Dev, 0x0007, 0, 0, 0, 0, data,
+		BT_ADV_PAWR_RESPONSE_DATA_MAX + 1) == false);
+	CHECK(BtAdvPawrResponseDataSet(&s_Dev, 0x0007, 0,
+		BT_ADV_PAWR_SUBEVENT_NUM_MAX + 1, 0, 0, data, 3) == false);
+	CHECK(s_CmdCount == 0);
+
+	// Zero length is an empty answer, still an answer.
+	CHECK(BtAdvPawrResponseDataSet(&s_Dev, 0x0007, 1, 0, 0, 0, nullptr, 0));
+}
+
+// The v2 report is not the v1 layout with a tail: the event counter and
+// subevent sit in the middle, and both have to reach the application because
+// a reply quotes them back.
+void TestSubeventReportReassembly()
+{
+	Reset();
+	ResetSyncCallbacks();
+	ResetScannerCallbacks();
+	uint8_t addr[6] = {};
+	BtAdvPeriodicSyncEstablishedEvt(0, 0x0007, 3, 1, addr, 1, 0x0080);
+
+	const uint8_t a[3] = { 1, 2, 3 };
+	const uint8_t b[2] = { 4, 5 };
+	BtAdvPawrSubeventReportEvt(0x0007, 0x00AB, 2, 0, -50,
+		BT_ADV_PERIODIC_DATA_MORE, sizeof(a), a);
+	CHECK(s_SubRptCount == 0);
+	// A later part reporting a different event does not move the answer target.
+	BtAdvPawrSubeventReportEvt(0x0007, 0x00AC, 3, 0, -51,
+		BT_ADV_PERIODIC_DATA_COMPLETE, sizeof(b), b);
+	CHECK(s_SubRptCount == 1);
+	CHECK(s_SubRptEvent == 0x00AB);
+	CHECK(s_SubRptSubevent == 2);
+	CHECK(s_SubRptLen == 5);
+	CHECK(s_SubRptData[0] == 1 && s_SubRptData[4] == 5);
+
+	// Truncated is dropped, like the plain report path.
+	ResetScannerCallbacks();
+	BtAdvPawrSubeventReportEvt(0x0007, 0x00B0, 1, 0, 0,
+		BT_ADV_PERIODIC_DATA_TRUNCATED, sizeof(a), a);
+	CHECK(s_SubRptCount == 0);
+
+	// A report for a train this module is not synced to is ignored.
+	BtAdvPawrSubeventReportEvt(0x0009, 0x00B1, 1, 0, 0,
+		BT_ADV_PERIODIC_DATA_COMPLETE, sizeof(a), a);
+	CHECK(s_SubRptCount == 0);
+
+	// And the next payload starts clean.
+	BtAdvPawrSubeventReportEvt(0x0007, 0x00B2, 6, 0, 0,
+		BT_ADV_PERIODIC_DATA_COMPLETE, sizeof(a), a);
+	CHECK(s_SubRptCount == 1);
+	CHECK(s_SubRptEvent == 0x00B2);
+	CHECK(s_SubRptSubevent == 6);
+	CHECK(s_SubRptLen == 3);
+}
+
 } // namespace
 
 void BtAdvPawrSubeventDataRequest(uint8_t, uint8_t SubeventStart,
@@ -925,6 +1060,19 @@ void BtAdvPawrSubeventDataRequest(uint8_t, uint8_t SubeventStart,
 	s_ReqCount++;
 	s_ReqStart = SubeventStart;
 	s_ReqCount2 = SubeventDataCount;
+}
+
+void BtAdvPawrSubeventReport(uint16_t, uint16_t EventCounter,
+	uint8_t Subevent, int8_t, size_t Len, const uint8_t *pData)
+{
+	s_SubRptCount++;
+	s_SubRptEvent = EventCounter;
+	s_SubRptSubevent = Subevent;
+	s_SubRptLen = Len;
+	if (Len > 0 && pData != nullptr && Len <= sizeof(s_SubRptData))
+	{
+		std::memcpy(s_SubRptData, pData, Len);
+	}
 }
 
 void BtAdvPawrResponse(uint8_t, uint8_t Subevent, uint8_t ResponseSlot,
@@ -1005,6 +1153,9 @@ int main()
 	TestSubeventData();
 	TestSubeventDataRequestEvent();
 	TestResponseReport();
+	TestSyncSubeventSet();
+	TestResponseDataSet();
+	TestSubeventReportReassembly();
 
 	if (s_Failures == 0)
 	{

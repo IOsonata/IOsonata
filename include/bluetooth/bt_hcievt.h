@@ -269,6 +269,21 @@ typedef struct __attribute__((packed)) {
 	uint8_t		Data[1];		//!< Variable, DataLen octets
 } BtHciLeEvtPeriodicAdvReport_t;
 
+/// LE Periodic Advertising Report v2, Core Vol 4 Part E 7.7.65.15. Not the v1
+/// layout with a tail: the event counter and subevent sit between CteType and
+/// DataStatus, which is what a PAwR response has to quote back.
+typedef struct __attribute__((packed)) {
+	uint16_t	SyncHdl;
+	int8_t		TxPower;
+	int8_t		Rssi;
+	uint8_t		CteType;
+	uint16_t	PeriodicEventCounter;
+	uint8_t		Subevent;
+	uint8_t		DataStatus;
+	uint8_t		DataLen;
+	uint8_t		Data[1];		//!< Variable, DataLen octets
+} BtHciLeEvtPeriodicAdvReportV2_t;
+
 /// LE Periodic Advertising Sync Lost, Core Vol 4 Part E 7.7.65.16.
 typedef struct __attribute__((packed)) {
 	uint16_t	SyncHdl;

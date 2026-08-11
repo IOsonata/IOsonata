@@ -516,6 +516,64 @@ void BtAdvPawrResponseReportEvt(uint8_t AdvHandle, uint8_t Subevent,
 	uint8_t TxStatus, uint8_t NumResponses, const uint8_t *pResponses,
 	size_t ResponsesLen);
 
+// --- PAwR scanner ---
+
+//!< Subevents one Set Periodic Sync Subevent command may name.
+#define BT_ADV_PAWR_SYNC_SUBEVENT_MAX		0x80
+
+//!< Largest subevent number a scanner may synchronise with.
+#define BT_ADV_PAWR_SUBEVENT_NUM_MAX		0x7F
+
+//!< Data octets one response slot can hold.
+#define BT_ADV_PAWR_RESPONSE_DATA_MAX		251
+
+/**
+ * @brief	Choose which subevents of a PAwR train to listen to.
+ *
+ * Core Vol 4 Part E 7.8.87. The controller stops listening to any subevent not
+ * named here, so this is the whole subset each time rather than an addition.
+ *
+ * @param	SyncHdl		Train from BtAdvPeriodicSyncEstablished.
+ * @param	pSubevents	Subevent numbers, each 0 to 0x7F.
+ * @param	Count		How many, 1 to 0x80.
+ */
+bool BtAdvPawrSyncSubeventSet(BtHciDevice_t * const pDev, uint16_t SyncHdl,
+	const uint8_t *pSubevents, uint8_t Count);
+
+/**
+ * @brief	Answer a PAwR advertiser in one response slot.
+ *
+ * Core Vol 4 Part E 7.8.88. The request event and subevent identify the packet
+ * being answered and come from the report that delivered it. Data for a slot
+ * is transmitted once.
+ *
+ * @param	SyncHdl				Train the answer belongs to.
+ * @param	RequestEvent		Event counter the report carried.
+ * @param	RequestSubevent		Subevent the report arrived in.
+ * @param	ResponseSubevent	Subevent to answer in.
+ * @param	ResponseSlot		Response slot to answer in.
+ * @param	pData				Response data, may be NULL when Len is zero.
+ * @param	Len					At most BT_ADV_PAWR_RESPONSE_DATA_MAX.
+ */
+bool BtAdvPawrResponseDataSet(BtHciDevice_t * const pDev, uint16_t SyncHdl,
+	uint16_t RequestEvent, uint8_t RequestSubevent, uint8_t ResponseSubevent,
+	uint8_t ResponseSlot, const uint8_t *pData, size_t Len);
+
+/**
+ * @brief	A subevent of a synchronised PAwR train delivered data.
+ *
+ * Weak, override to be told. EventCounter and Subevent are what a reply has to
+ * quote back through BtAdvPawrResponseDataSet. Reassembled across reports; an
+ * incomplete or truncated payload is not delivered.
+ */
+void BtAdvPawrSubeventReport(uint16_t SyncHdl, uint16_t EventCounter,
+	uint8_t Subevent, int8_t Rssi, size_t Len, const uint8_t *pData);
+
+// Event seam, weak and empty in bt_hci_host, overridden by the module.
+void BtAdvPawrSubeventReportEvt(uint16_t SyncHdl, uint16_t EventCounter,
+	uint8_t Subevent, int8_t TxPower, int8_t Rssi, uint8_t DataStatus,
+	size_t Len, const uint8_t *pData);
+
 /**
  * @brief	Decide whether extended advertising PDUs are required.
  *
