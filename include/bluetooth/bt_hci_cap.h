@@ -62,6 +62,9 @@ enum {
 	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_ENABLE = 36U * 8U + 5U,
 	BT_HCI_CAP_CMD_LE_READ_MAX_ADV_DATA_LENGTH = 36U * 8U + 6U,
 	BT_HCI_CAP_CMD_LE_READ_SUPPORTED_ADV_SETS = 36U * 8U + 7U,
+	BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_PARAMETERS = 37U * 8U + 2U,
+	BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_DATA = 37U * 8U + 3U,
+	BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_ENABLE = 37U * 8U + 4U,
 	BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_PARAMETERS = 37U * 8U + 5U,
 	BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE = 37U * 8U + 6U,
 	BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION = 37U * 8U + 7U,
@@ -288,6 +291,27 @@ static inline bool BtHciCapabilitiesExtendedAdvertisingSupported(
 	}
 
 	return true;
+}
+
+/**
+ * Can this controller run a periodic advertising train?
+ *
+ * Needs the LE Periodic Advertising feature and the three commands that
+ * configure, fill and start the train. Extended advertising is a further
+ * requirement handled by the caller, because the train rides on an extended
+ * advertising set that the caller also has to be able to create.
+ */
+static inline bool BtHciCapabilitiesPeriodicAdvertisingSupported(
+	const BtHciCapabilities_t *pCapabilities)
+{
+	return BtHciCapabilitiesLeFeatureSupported(pCapabilities,
+		BT_HCI_CAP_LE_FEATURE_PERIODIC_ADV) &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_PARAMETERS) &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_DATA) &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_ENABLE);
 }
 
 static inline bool BtHciCapabilitiesLegacyScanningSupported(

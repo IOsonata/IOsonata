@@ -40,6 +40,14 @@ SOFTWARE.
 
 #include "bluetooth/bt_uuid.h"
 
+// Periodic advertising takes the HCI device the commands go to. Forward
+// declare it with the same guard bt_hci.h uses, so including that header is
+// not forced on every user of this one.
+#ifndef BT_HCI_DEVICE_T_DEFINED
+#define BT_HCI_DEVICE_T_DEFINED
+typedef struct __Bt_Hci_Device		BtHciDevice_t;
+#endif
+
 /// Maximum advertising or scan-response data payload (in octets) that fits in
 /// legacy advertising PDUs. Above this, extended advertising PDUs are required.
 #define BT_ADV_LEGACY_DATA_MAX		31
@@ -254,6 +262,83 @@ bool BtAdvCodingSelectionSet(uint8_t PrimOption, uint8_t SecOption);
  * may be NULL.
  */
 void BtAdvCodingSelectionGet(uint8_t *pPrimOption, uint8_t *pSecOption);
+
+// --- Periodic advertising, Core Vol 4 Part E 7.8.61 to 7.8.63 ---
+
+//!< Advertising set the periodic advertising train rides on. Section 7.8.61
+//!< refuses a train on a set that is scannable, connectable, legacy or
+//!< anonymous, so it cannot be the set bt_adv_hci uses for a connectable
+//!< peripheral. A controller reporting fewer sets than this cannot run one.
+#define BT_ADV_PERIODIC_ADV_HANDLE			1
+
+//!< Smallest periodic advertising interval, 1.25 ms units, 7.5 ms.
+#define BT_ADV_PERIODIC_INTERVAL_MIN		0x0006
+
+//!< Periodic_Advertising_Properties bit 6, include TxPower in the PDU.
+#define BT_ADV_PERIODIC_PROP_INCLUDE_TXPOWER	(1U << 6)
+
+//!< Data octets one LE Set Periodic Advertising Data command can hold.
+#define BT_ADV_PERIODIC_FRAGMENT_MAX		252
+
+//!< Periodic advertising data a train can hold, reassembled from fragments.
+#define BT_ADV_PERIODIC_DATA_MAX			1650
+
+typedef struct __Bt_Adv_Periodic_Cfg {
+	uint16_t IntervalMin;		//!< Periodic advertising interval min, 1.25 ms units
+	uint16_t IntervalMax;		//!< Periodic advertising interval max, 1.25 ms units
+	uint8_t  OwnAddrType;		//!< BTADDR_TYPE_PUBLIC or BTADDR_TYPE_RAND
+	uint8_t  Sid;				//!< Advertising set id, 0 to 15
+	bool     IncludeTxPower;	//!< Include TxPower in the periodic advertising PDU
+} BtAdvPeriodicCfg_t;
+
+/**
+ * @brief	Create the advertising set and configure a periodic advertising train.
+ *
+ * Refuses when the controller lacks LE Periodic Advertising, extended
+ * advertising, any of the three periodic commands, or reports too few
+ * advertising sets to hold a second one.
+ *
+ * @return	true when the set and the train parameters were accepted.
+ */
+bool BtAdvPeriodicInit(BtHciDevice_t * const pDev, const BtAdvPeriodicCfg_t *pCfg);
+
+/**
+ * @brief	Replace the periodic advertising data.
+ *
+ * Fragments to what one command can hold. A run that fails part way leaves the
+ * train holding partial data, which the controller refuses to advertise, so
+ * the retained length is cleared until a whole set of fragments lands.
+ *
+ * @return	true when every fragment was accepted.
+ */
+bool BtAdvPeriodicDataSet(const uint8_t *pData, size_t Len);
+
+/**
+ * @brief	Read back the periodic advertising data last accepted.
+ *
+ * @return	Octets held. Nothing is copied when pBuff is NULL or too small.
+ */
+size_t BtAdvPeriodicDataGet(uint8_t *pBuff, size_t BuffLen);
+
+/**
+ * @brief	Start the periodic advertising train and the set that points at it.
+ *
+ * A train does not go out until its advertising set is enabled, so both are
+ * turned on. If the set refuses, the train is turned back off rather than left
+ * running with nothing advertising it.
+ */
+bool BtAdvPeriodicStart(void);
+
+/**
+ * @brief	Stop the periodic advertising train and its advertising set.
+ *
+ * Disabling the set alone does not stop a train that is already running, so
+ * both are turned off. The set is stopped even when the train refuses.
+ */
+bool BtAdvPeriodicStop(void);
+
+//!< Is a periodic advertising train running?
+bool BtAdvPeriodicIsRunning(void);
 
 /**
  * @brief	Decide whether extended advertising PDUs are required.

@@ -204,6 +204,9 @@ static const uint16_t s_BtHciCmdSdcSupported[] = {
 	BT_HCI_CAP_CMD_LE_SET_PRIVACY_MODE,
 	BT_HCI_CAP_CMD_LE_SET_HOST_FEATURE,
 	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS_V2,
+	BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_PARAMETERS,
+	BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_DATA,
+	BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_ENABLE,
 };
 
 static void BtHciCmdSdcSupportedCommandsGet(uint8_t *pMap, size_t Len)
@@ -391,6 +394,21 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 		case BT_HCI_CMD_CTLR_SET_HOST_FEATURE:
 			res = sdc_hci_cmd_le_set_host_feature(
 				(const sdc_hci_cmd_le_set_host_feature_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM:
+			res = sdc_hci_cmd_le_set_periodic_adv_params(
+				(const sdc_hci_cmd_le_set_periodic_adv_params_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_DATA:
+			res = sdc_hci_cmd_le_set_periodic_adv_data(
+				(const sdc_hci_cmd_le_set_periodic_adv_data_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_ENABLE:
+			res = sdc_hci_cmd_le_set_periodic_adv_enable(
+				(const sdc_hci_cmd_le_set_periodic_adv_enable_t*)pParam);
 			break;
 
 		case BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA:

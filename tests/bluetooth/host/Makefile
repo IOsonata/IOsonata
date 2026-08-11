@@ -60,6 +60,7 @@ TEST_NAMES := \
 	bt_gatt_cccd_test \
 	bt_gatt_srvc_test \
 	bt_gap_sec_levels_test \
+	bt_adv_periodic_test \
 	bt_gatt_hci_security_test \
 	bt_app_multilink_test \
 	bt_app_init_bm_test \
@@ -170,6 +171,10 @@ bt_gatt_srvc_test_SOURCES := \
 	$(ROOT)/src/bluetooth/bt_gatt.cpp \
 	$(ROOT)/src/bluetooth/bt_att.cpp \
 	$(ROOT)/src/bluetooth/bt_uuid.cpp
+
+bt_adv_periodic_test_SOURCES := \
+	bt_adv_periodic_test.cpp \
+	$(ROOT)/src/bluetooth/bt_adv_periodic_hci.cpp
 
 bt_gap_sec_levels_test_SOURCES := \
 	bt_gap_sec_levels_test.cpp \
