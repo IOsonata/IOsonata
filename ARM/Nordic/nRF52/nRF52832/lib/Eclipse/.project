@@ -296,11 +296,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
 		</link>
 		<link>
-			<name>include/coredev/pwm.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
-		</link>
-		<link>
 			<name>include/pwrmgnt</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -691,11 +686,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_gatt.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_pds.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_pds.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/bt_hci.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci.h</locationURI>
@@ -724,6 +714,11 @@
 			<name>include/bluetooth/bt_oob_rftag.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_oob_rftag.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_pds.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_pds.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bt_peer.h</name>
@@ -854,6 +849,11 @@
 			<name>include/coredev/pdm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/pwm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/shared_intrf.h</name>
@@ -1509,6 +1509,11 @@
 			<name>src/bluetooth/bt_adv_nrf52.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/bt_adv_nrf52.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_adv_periodic_hci.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv_periodic_hci.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_app.cpp</name>
