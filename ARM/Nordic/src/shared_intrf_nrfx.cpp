@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	shared_intrf_nrfx.cpp
 
-@brief	Shared serial interface dispatch for nRF5x, nRF54L and nRF91 series
+@brief	Shared serial interface dispatch for the nRF families
 
 UARTE / SPIM / SPIS / TWIM / TWIS on these parts share a single peripheral
 instance and a single interrupt line. This file routes each shared line to the
@@ -42,14 +42,30 @@ SOFTWARE.
 #include "device_intrf.h"
 #include "coredev/shared_intrf.h"
 
+// One slot per shared instance. The index a device registers with is its
+// DevNo, so the slot count follows the largest DevNo any driver can hand over.
 #ifdef NRF52840_XXAA
 #define MAX_NB_DEV		4
-#elif defined(NRF54L15_XXAA)
+#elif defined(NRF54H_SERIES)
+#define MAX_NB_DEV		9
+#elif defined(NRF54L_SERIES)
+#ifdef NRF_UARTE23
+#define MAX_NB_DEV		7
+#else
 #define MAX_NB_DEV		5
+#endif
 #elif defined(NRF91_SERIES)
 #define MAX_NB_DEV		4
 #else
 #define MAX_NB_DEV		3
+#endif
+
+// UARTE00 on nRF54L is listed after the general purpose instances in
+// uart_nrfx.cpp, so its slot moves with the instance count of the part.
+#ifdef NRF_UARTE23
+#define SHARED_IDX_UARTE00	6
+#else
+#define SHARED_IDX_UARTE00	4
 #endif
 
 const int g_SharedIntrfMaxCnt = MAX_NB_DEV;
@@ -63,8 +79,12 @@ extern "C" {
 void TWIM0_TWIS0_TWI0_IRQHandler()
 #elif defined(NRF52_SERIES)
 void SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQHandler(void)
-#elif defined(NRF54L15_XXAA)
+#elif defined(NRF54H_SERIES)
+void SERIAL0_IRQHandler(void)
+#elif defined(NRF54L_SERIES)
 void SERIAL30_IRQHandler(void)
+#elif defined(NRF53_SERIES)
+void SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler(void)
 #elif defined(NRF91_SERIES)
 void UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQHandler(void)
 #else
@@ -79,8 +99,12 @@ void SPI0_TWI0_IRQHandler(void)
 	NVIC_ClearPendingIRQ(TWIM0_TWIS0_TWI0_IRQn);
 #elif defined(NRF52_SERIES)
 	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
-#elif defined(NRF54L15_XXAA)
+#elif defined(NRF54H_SERIES)
+	NVIC_ClearPendingIRQ(SERIAL0_IRQn);
+#elif defined(NRF54L_SERIES)
 	NVIC_ClearPendingIRQ(SERIAL30_IRQn);
+#elif defined(NRF53_SERIES)
+	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
 #elif defined(NRF91_SERIES)
 	NVIC_ClearPendingIRQ(UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQn);
 #else
@@ -88,11 +112,15 @@ void SPI0_TWI0_IRQHandler(void)
 #endif
 }
 
-#if !defined(NRF52805_XXAA) && ! defined(NRF52810_XXAA)
+#if !defined(NRF52805_XXAA) && !defined(NRF52810_XXAA) && !defined(NRF5340_XXAA_NETWORK)
 #ifdef NRF52_SERIES
 void SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQHandler(void)
-#elif defined(NRF54L15_XXAA)
+#elif defined(NRF54H_SERIES)
+void SERIAL1_IRQHandler(void)
+#elif defined(NRF54L_SERIES)
 void SERIAL20_IRQHandler(void)
+#elif defined(NRF53_SERIES)
+void SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQHandler(void)
 #elif defined(NRF91_SERIES)
 void UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQHandler(void)
 #else
@@ -105,8 +133,12 @@ void SPI1_TWI1_IRQHandler(void)
 	}
 #ifdef NRF52_SERIES
 	NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
-#elif defined(NRF54L15_XXAA)
+#elif defined(NRF54H_SERIES)
+	NVIC_ClearPendingIRQ(SERIAL1_IRQn);
+#elif defined(NRF54L_SERIES)
 	NVIC_ClearPendingIRQ(SERIAL20_IRQn);
+#elif defined(NRF53_SERIES)
+	NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn);
 #elif defined(NRF91_SERIES)
 	NVIC_ClearPendingIRQ(UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQn);
 #else
@@ -115,7 +147,7 @@ void SPI1_TWI1_IRQHandler(void)
 }
 #endif
 
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L_SERIES)
 void SERIAL21_IRQHandler(void)
 {
 	if (g_SharedIntrf[2].pIntrf != NULL)
@@ -134,13 +166,122 @@ void SERIAL22_IRQHandler(void)
 	NVIC_ClearPendingIRQ(SERIAL22_IRQn);
 }
 
-void SERIAL00_IRQHandler(void)
+#ifdef NRF_UARTE23
+// nRF54LM20A and up
+void SERIAL23_IRQHandler(void)
 {
 	if (g_SharedIntrf[4].pIntrf != NULL)
 	{
 		g_SharedIntrf[4].Handler(4, g_SharedIntrf[4].pIntrf);
 	}
+	NVIC_ClearPendingIRQ(SERIAL23_IRQn);
+}
+
+void SERIAL24_IRQHandler(void)
+{
+	if (g_SharedIntrf[5].pIntrf != NULL)
+	{
+		g_SharedIntrf[5].Handler(5, g_SharedIntrf[5].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SERIAL24_IRQn);
+}
+#endif
+
+void SERIAL00_IRQHandler(void)
+{
+	if (g_SharedIntrf[SHARED_IDX_UARTE00].pIntrf != NULL)
+	{
+		g_SharedIntrf[SHARED_IDX_UARTE00].Handler(SHARED_IDX_UARTE00,
+							  g_SharedIntrf[SHARED_IDX_UARTE00].pIntrf);
+	}
 	NVIC_ClearPendingIRQ(SERIAL00_IRQn);
+}
+#endif
+
+#if defined(NRF54H_SERIES)
+// SERIAL0 and SERIAL1 are handled above. UARTE120 sits on the fast domain and
+// does not have a SERIALn vector of its own.
+void SERIAL2_IRQHandler(void)
+{
+	if (g_SharedIntrf[2].pIntrf != NULL)
+	{
+		g_SharedIntrf[2].Handler(2, g_SharedIntrf[2].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SERIAL2_IRQn);
+}
+
+void SERIAL3_IRQHandler(void)
+{
+	if (g_SharedIntrf[3].pIntrf != NULL)
+	{
+		g_SharedIntrf[3].Handler(3, g_SharedIntrf[3].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SERIAL3_IRQn);
+}
+
+void SERIAL4_IRQHandler(void)
+{
+	if (g_SharedIntrf[4].pIntrf != NULL)
+	{
+		g_SharedIntrf[4].Handler(4, g_SharedIntrf[4].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SERIAL4_IRQn);
+}
+
+void SERIAL5_IRQHandler(void)
+{
+	if (g_SharedIntrf[5].pIntrf != NULL)
+	{
+		g_SharedIntrf[5].Handler(5, g_SharedIntrf[5].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SERIAL5_IRQn);
+}
+
+void SERIAL6_IRQHandler(void)
+{
+	if (g_SharedIntrf[6].pIntrf != NULL)
+	{
+		g_SharedIntrf[6].Handler(6, g_SharedIntrf[6].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SERIAL6_IRQn);
+}
+
+void SERIAL7_IRQHandler(void)
+{
+	if (g_SharedIntrf[7].pIntrf != NULL)
+	{
+		g_SharedIntrf[7].Handler(7, g_SharedIntrf[7].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SERIAL7_IRQn);
+}
+
+void SPIM120_UARTE120_IRQHandler(void)
+{
+	if (g_SharedIntrf[8].pIntrf != NULL)
+	{
+		g_SharedIntrf[8].Handler(8, g_SharedIntrf[8].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SPIM120_UARTE120_IRQn);
+}
+#endif
+
+#if defined(NRF5340_XXAA_APPLICATION)
+void SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQHandler(void)
+{
+	if (g_SharedIntrf[2].pIntrf != NULL)
+	{
+		g_SharedIntrf[2].Handler(2, g_SharedIntrf[2].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn);
+}
+
+void SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQHandler(void)
+{
+	if (g_SharedIntrf[3].pIntrf != NULL)
+	{
+		g_SharedIntrf[3].Handler(3, g_SharedIntrf[3].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn);
 }
 #endif
 
