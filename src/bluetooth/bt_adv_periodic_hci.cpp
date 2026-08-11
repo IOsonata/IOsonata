@@ -89,12 +89,28 @@ typedef struct {
 	uint8_t  MaxExtAdvEvts;
 } BtAdvPeriodicExtEnable_t;
 
+typedef struct {
+	uint8_t  Options;
+	uint8_t  AdvSid;
+	uint8_t  AdvAddrType;
+	uint8_t  AdvAddr[6];
+	uint8_t  Skip[2];
+	uint8_t  SyncTimeout[2];		//!< 10 ms units
+	uint8_t  SyncCteType;
+} BtAdvPeriodicCreateSync_t;
+
+typedef struct {
+	uint8_t  SyncHdl[2];
+} BtAdvPeriodicTerminateSync_t;
+
 #pragma pack(pop)
 
 static_assert(sizeof(BtAdvPeriodicExtParams_t) == 25, "extended advertising parameters must be 25 octets");
 static_assert(sizeof(BtAdvPeriodicParams_t) == 7, "periodic advertising parameters must be 7 octets");
 static_assert(sizeof(BtAdvPeriodicEnable_t) == 2, "periodic advertising enable must be 2 octets");
 static_assert(sizeof(BtAdvPeriodicExtEnable_t) == 6, "extended advertising enable must be 6 octets");
+static_assert(sizeof(BtAdvPeriodicCreateSync_t) == 14, "create sync must be 14 octets");
+static_assert(sizeof(BtAdvPeriodicTerminateSync_t) == 2, "terminate sync must be 2 octets");
 
 // Data operation values, Core Vol 4 Part E 7.8.62. The same encoding the
 // extended advertising data command uses.
@@ -387,4 +403,198 @@ bool BtAdvPeriodicStop(void)
 bool BtAdvPeriodicIsRunning(void)
 {
 	return s_BtAdvPeriodicRunning;
+}
+
+// --- Synchronising to someone else's train ---
+
+// Create Sync Options bit 0 selects the periodic advertiser list instead of
+// the address and set id in the command. Nothing populates that list yet, so
+// the option is always clear and the train is always named explicitly.
+#define BT_ADV_PERIODIC_SYNC_OPT_DISABLE_REPORTING	(1U << 1)
+
+// One train at a time. A second sync would need a handle table and a way for
+// the application to say which train a report belongs to; the reassembly
+// below is written against a single handle and refuses anything else.
+static uint16_t s_BtAdvPeriodicSyncHdl;
+static bool s_BtAdvPeriodicSyncActive;
+static uint8_t s_BtAdvPeriodicRxData[BT_ADV_PERIODIC_DATA_MAX];
+static uint16_t s_BtAdvPeriodicRxLen;
+static bool s_BtAdvPeriodicRxDrop;
+
+bool BtAdvPeriodicSyncCreate(BtHciDevice_t * const pDev,
+	const BtAdvPeriodicSyncCfg_t *pCfg)
+{
+	if (pDev == nullptr || pCfg == nullptr ||
+		pCfg->AdvSid > BT_ADV_PERIODIC_SID_MAX ||
+		pCfg->AdvAddrType > 1 ||
+		pCfg->Skip > BT_ADV_PERIODIC_SKIP_MAX ||
+		pCfg->SyncTimeout < BT_ADV_PERIODIC_SYNC_TIMEOUT_MIN ||
+		pCfg->SyncTimeout > BT_ADV_PERIODIC_SYNC_TIMEOUT_MAX)
+	{
+		return false;
+	}
+
+	if (BtHciCapabilitiesPeriodicSyncSupported(
+		BtHciCapabilitiesForDeviceGet(pDev)) == false)
+	{
+		return false;
+	}
+
+	BtAdvPeriodicCreateSync_t c;
+	memset(&c, 0, sizeof(c));
+	c.Options = pCfg->DisableReporting ?
+		BT_ADV_PERIODIC_SYNC_OPT_DISABLE_REPORTING : 0;
+	c.AdvSid = pCfg->AdvSid;
+	c.AdvAddrType = pCfg->AdvAddrType;
+	memcpy(c.AdvAddr, pCfg->AdvAddr, sizeof(c.AdvAddr));
+	BtAdvPeriodicWr16(c.Skip, pCfg->Skip);
+	BtAdvPeriodicWr16(c.SyncTimeout, pCfg->SyncTimeout);
+	c.SyncCteType = 0;
+
+	// Start reassembly clean: a request that succeeds must not deliver the
+	// tail of whatever the previous train was sending.
+	s_BtAdvPeriodicRxLen = 0;
+	s_BtAdvPeriodicRxDrop = false;
+
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC,
+		&c, sizeof(c), nullptr, 0) == 0;
+}
+
+bool BtAdvPeriodicSyncCancel(BtHciDevice_t * const pDev)
+{
+	if (pDev == nullptr)
+	{
+		return false;
+	}
+
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC_CANCEL,
+		nullptr, 0, nullptr, 0) == 0;
+}
+
+bool BtAdvPeriodicSyncTerminate(BtHciDevice_t * const pDev, uint16_t SyncHdl)
+{
+	if (pDev == nullptr)
+	{
+		return false;
+	}
+
+	BtAdvPeriodicTerminateSync_t t;
+	BtAdvPeriodicWr16(t.SyncHdl, SyncHdl);
+
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_PERIODIC_ADV_TERMINATE_SYNC,
+		&t, sizeof(t), nullptr, 0) != 0)
+	{
+		return false;
+	}
+
+	// No Sync Lost event follows a terminate, so the state is dropped here.
+	if (s_BtAdvPeriodicSyncActive && s_BtAdvPeriodicSyncHdl == SyncHdl)
+	{
+		s_BtAdvPeriodicSyncActive = false;
+		s_BtAdvPeriodicRxLen = 0;
+		s_BtAdvPeriodicRxDrop = false;
+	}
+
+	return true;
+}
+
+__attribute__((weak)) void BtAdvPeriodicSyncEstablished(uint8_t Status,
+	uint16_t SyncHdl, uint8_t AdvSid, uint8_t AdvAddrType,
+	const uint8_t AdvAddr[6], uint8_t AdvPhy, uint16_t Interval)
+{
+	(void)Status; (void)SyncHdl; (void)AdvSid; (void)AdvAddrType;
+	(void)AdvAddr; (void)AdvPhy; (void)Interval;
+}
+
+__attribute__((weak)) void BtAdvPeriodicSyncReport(uint16_t SyncHdl,
+	int8_t TxPower, int8_t Rssi, size_t Len, const uint8_t *pData)
+{
+	(void)SyncHdl; (void)TxPower; (void)Rssi; (void)Len; (void)pData;
+}
+
+__attribute__((weak)) void BtAdvPeriodicSyncLost(uint16_t SyncHdl)
+{
+	(void)SyncHdl;
+}
+
+// Strong overrides of the seams bt_hci_host declares weak. Track the handle
+// first, then hand the event to the application, so a callback that turns
+// straight round and terminates the sync sees consistent state.
+void BtAdvPeriodicSyncEstablishedEvt(uint8_t Status, uint16_t SyncHdl,
+	uint8_t AdvSid, uint8_t AdvAddrType, const uint8_t AdvAddr[6],
+	uint8_t AdvPhy, uint16_t Interval)
+{
+	if (Status == 0)
+	{
+		s_BtAdvPeriodicSyncHdl = SyncHdl;
+		s_BtAdvPeriodicSyncActive = true;
+	}
+	s_BtAdvPeriodicRxLen = 0;
+	s_BtAdvPeriodicRxDrop = false;
+
+	BtAdvPeriodicSyncEstablished(Status, SyncHdl, AdvSid, AdvAddrType,
+		AdvAddr, AdvPhy, Interval);
+}
+
+void BtAdvPeriodicSyncLostEvt(uint16_t SyncHdl)
+{
+	if (s_BtAdvPeriodicSyncActive && s_BtAdvPeriodicSyncHdl == SyncHdl)
+	{
+		s_BtAdvPeriodicSyncActive = false;
+	}
+	s_BtAdvPeriodicRxLen = 0;
+	s_BtAdvPeriodicRxDrop = false;
+
+	BtAdvPeriodicSyncLost(SyncHdl);
+}
+
+void BtAdvPeriodicReportFragment(uint16_t SyncHdl, int8_t TxPower, int8_t Rssi,
+	uint8_t DataStatus, size_t Len, const uint8_t *pData)
+{
+	if (s_BtAdvPeriodicSyncActive == false || SyncHdl != s_BtAdvPeriodicSyncHdl)
+	{
+		return;
+	}
+
+	// 0xFF says the controller failed to receive a subevent PDU. There is no
+	// payload and whatever was accumulating cannot be completed.
+	if (DataStatus == BT_ADV_PERIODIC_DATA_RX_FAILED)
+	{
+		s_BtAdvPeriodicRxLen = 0;
+		s_BtAdvPeriodicRxDrop = false;
+		return;
+	}
+
+	if (Len > 0 && pData != nullptr)
+	{
+		if (s_BtAdvPeriodicRxLen + Len > sizeof(s_BtAdvPeriodicRxData))
+		{
+			// More than a whole payload can hold. Drop the rest of this one
+			// rather than deliver a prefix that looks complete.
+			s_BtAdvPeriodicRxDrop = true;
+		}
+		else
+		{
+			memcpy(&s_BtAdvPeriodicRxData[s_BtAdvPeriodicRxLen], pData, Len);
+			s_BtAdvPeriodicRxLen = (uint16_t)(s_BtAdvPeriodicRxLen + Len);
+		}
+	}
+
+	if (DataStatus == BT_ADV_PERIODIC_DATA_MORE)
+	{
+		return;
+	}
+
+	// Truncated means the rest is never coming, so what is held is a fragment
+	// of a payload the sender meant to be longer. Reporting it would look like
+	// a whole one.
+	if (DataStatus == BT_ADV_PERIODIC_DATA_COMPLETE &&
+		s_BtAdvPeriodicRxDrop == false)
+	{
+		BtAdvPeriodicSyncReport(SyncHdl, TxPower, Rssi,
+			s_BtAdvPeriodicRxLen, s_BtAdvPeriodicRxData);
+	}
+
+	s_BtAdvPeriodicRxLen = 0;
+	s_BtAdvPeriodicRxDrop = false;
 }

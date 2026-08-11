@@ -243,6 +243,37 @@ typedef struct __Bt_HciLe_Evt_Remote_Conn_Param_Request {
 	uint16_t Timeout;			//!< Supervision timeout
 } BtHciLeEvtRemoteConnParamReq_t;
 
+/// LE Periodic Advertising Sync Established, Core Vol 4 Part E 7.7.65.14.
+/// The v2 form appends Num_Subevents, Subevent_Interval, Response_Slot_Delay
+/// and Response_Slot_Spacing; the leading fields are identical, so both are
+/// parsed through this and the PAwR tail is read separately when it is used.
+typedef struct __attribute__((packed)) {
+	uint8_t		Status;
+	uint16_t	SyncHdl;
+	uint8_t		AdvSid;
+	uint8_t		AdvAddrType;
+	uint8_t		AdvAddr[6];
+	uint8_t		AdvPhy;
+	uint16_t	PeriodicAdvInterval;
+	uint8_t		AdvClockAccuracy;
+} BtHciLeEvtPeriodicAdvSyncEstablished_t;
+
+/// LE Periodic Advertising Report, Core Vol 4 Part E 7.7.65.15.
+typedef struct __attribute__((packed)) {
+	uint16_t	SyncHdl;
+	int8_t		TxPower;
+	int8_t		Rssi;
+	uint8_t		CteType;
+	uint8_t		DataStatus;
+	uint8_t		DataLen;
+	uint8_t		Data[1];		//!< Variable, DataLen octets
+} BtHciLeEvtPeriodicAdvReport_t;
+
+/// LE Periodic Advertising Sync Lost, Core Vol 4 Part E 7.7.65.16.
+typedef struct __attribute__((packed)) {
+	uint16_t	SyncHdl;
+} BtHciLeEvtPeriodicAdvSyncLost_t;
+
 typedef struct __Bt_HciLe_Evt_Data_Len_Change {
 	uint16_t ConnHdl;			//!< Connection handle
 	uint16_t MaxTxLen;			//!< Max number length of transmit payload in bytes

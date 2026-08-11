@@ -340,6 +340,96 @@ bool BtAdvPeriodicStop(void);
 //!< Is a periodic advertising train running?
 bool BtAdvPeriodicIsRunning(void);
 
+// --- Synchronising to someone else's train, Core Vol 4 Part E 7.8.67 to 7.8.69 ---
+
+//!< Skip range, periodic advertising events that may be missed after a receive.
+#define BT_ADV_PERIODIC_SKIP_MAX			0x01F3
+
+//!< Sync timeout range, 10 ms units, 100 ms to 163.84 s.
+#define BT_ADV_PERIODIC_SYNC_TIMEOUT_MIN	0x000A
+#define BT_ADV_PERIODIC_SYNC_TIMEOUT_MAX	0x4000
+
+//!< Largest advertising set id a train can use.
+#define BT_ADV_PERIODIC_SID_MAX				0x0F
+
+//!< Data_Status in a periodic advertising report, 7.7.65.15.
+#define BT_ADV_PERIODIC_DATA_COMPLETE		0x00
+#define BT_ADV_PERIODIC_DATA_MORE			0x01
+#define BT_ADV_PERIODIC_DATA_TRUNCATED		0x02
+#define BT_ADV_PERIODIC_DATA_RX_FAILED		0xFF
+
+typedef struct __Bt_Adv_Periodic_Sync_Cfg {
+	uint8_t  AdvSid;			//!< Advertising set id of the train, 0 to 15
+	uint8_t  AdvAddrType;		//!< 0 public, 1 random
+	uint8_t  AdvAddr[6];		//!< Advertiser address
+	uint16_t Skip;				//!< Events that may be skipped, 0 to 0x01F3
+	uint16_t SyncTimeout;		//!< 10 ms units, 0x000A to 0x4000
+	bool     DisableReporting;	//!< Synchronise without receiving reports
+} BtAdvPeriodicSyncCfg_t;
+
+/**
+ * @brief	Ask the controller to synchronise to a periodic advertising train.
+ *
+ * The train is named by advertiser address and set id. Completion arrives as
+ * BtAdvPeriodicSyncEstablished, which may report a failure status, so a true
+ * return means the request was accepted rather than that a sync exists.
+ *
+ * Scanning has to be running for the controller to find the train.
+ *
+ * @return	true when the controller accepted the request.
+ */
+bool BtAdvPeriodicSyncCreate(BtHciDevice_t * const pDev,
+	const BtAdvPeriodicSyncCfg_t *pCfg);
+
+/**
+ * @brief	Cancel a synchronisation request that has not completed.
+ *
+ * Refused by the controller when no request is outstanding.
+ */
+bool BtAdvPeriodicSyncCancel(BtHciDevice_t * const pDev);
+
+/**
+ * @brief	Drop an established synchronisation.
+ *
+ * No Sync Lost event follows a terminate, so the caller owns the handle's fate
+ * from here.
+ */
+bool BtAdvPeriodicSyncTerminate(BtHciDevice_t * const pDev, uint16_t SyncHdl);
+
+/**
+ * @brief	Synchronisation attempt finished.
+ *
+ * Weak, override to be told. Status is zero on success; every other value
+ * means no train was joined and SyncHdl is meaningless.
+ */
+void BtAdvPeriodicSyncEstablished(uint8_t Status, uint16_t SyncHdl,
+	uint8_t AdvSid, uint8_t AdvAddrType, const uint8_t AdvAddr[6],
+	uint8_t AdvPhy, uint16_t Interval);
+
+/**
+ * @brief	A whole periodic advertising payload arrived.
+ *
+ * Weak, override to be told. Reassembled across however many reports the
+ * controller needed. A payload the controller marked truncated is dropped
+ * rather than reported short.
+ */
+void BtAdvPeriodicSyncReport(uint16_t SyncHdl, int8_t TxPower, int8_t Rssi,
+	size_t Len, const uint8_t *pData);
+
+//!< A synchronisation was lost. Weak, override to be told. The handle is dead.
+void BtAdvPeriodicSyncLost(uint16_t SyncHdl);
+
+// Seams the HCI event path calls. bt_hci_host declares each weak and empty so
+// a build without the periodic advertising module links; bt_adv_periodic_hci
+// overrides them, tracks the sync handle and reassembly, then hands the result
+// to the three callbacks above.
+void BtAdvPeriodicSyncEstablishedEvt(uint8_t Status, uint16_t SyncHdl,
+	uint8_t AdvSid, uint8_t AdvAddrType, const uint8_t AdvAddr[6],
+	uint8_t AdvPhy, uint16_t Interval);
+void BtAdvPeriodicReportFragment(uint16_t SyncHdl, int8_t TxPower, int8_t Rssi,
+	uint8_t DataStatus, size_t Len, const uint8_t *pData);
+void BtAdvPeriodicSyncLostEvt(uint16_t SyncHdl);
+
 /**
  * @brief	Decide whether extended advertising PDUs are required.
  *

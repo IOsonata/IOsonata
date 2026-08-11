@@ -37,6 +37,7 @@ SOFTWARE.
 
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_hcievt.h"
+#include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
@@ -49,6 +50,29 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 
 // Application scanning supplies a strong implementation. Keeping the default
 // here lets the HCI host remain independently linkable in controller tests.
+// Periodic advertising seams. Weak and empty so a build without
+// bt_adv_periodic_hci links; that module overrides all three.
+__attribute__((weak)) void BtAdvPeriodicSyncEstablishedEvt(uint8_t Status,
+	uint16_t SyncHdl, uint8_t AdvSid, uint8_t AdvAddrType,
+	const uint8_t AdvAddr[6], uint8_t AdvPhy, uint16_t Interval)
+{
+	(void)Status; (void)SyncHdl; (void)AdvSid; (void)AdvAddrType;
+	(void)AdvAddr; (void)AdvPhy; (void)Interval;
+}
+
+__attribute__((weak)) void BtAdvPeriodicReportFragment(uint16_t SyncHdl,
+	int8_t TxPower, int8_t Rssi, uint8_t DataStatus, size_t Len,
+	const uint8_t *pData)
+{
+	(void)SyncHdl; (void)TxPower; (void)Rssi; (void)DataStatus;
+	(void)Len; (void)pData;
+}
+
+__attribute__((weak)) void BtAdvPeriodicSyncLostEvt(uint16_t SyncHdl)
+{
+	(void)SyncHdl;
+}
+
 __attribute__((weak)) void BtHciScanTimeout(BtHciDevice_t * const pDev)
 {
 	(void)pDev;
@@ -562,11 +586,53 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V1:
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V2:
+			{
+				// The v2 form appends the PAwR fields; everything read here is
+				// in the part the two share, so one bound covers both.
+				if ((const uint8_t*)pLeEvtPkt->Data +
+					sizeof(BtHciLeEvtPeriodicAdvSyncEstablished_t) > evtEnd)
+				{
+					break;
+				}
+				BtHciLeEvtPeriodicAdvSyncEstablished_t *p =
+					(BtHciLeEvtPeriodicAdvSyncEstablished_t*)pLeEvtPkt->Data;
+				BtAdvPeriodicSyncEstablishedEvt(p->Status, p->SyncHdl,
+					p->AdvSid, p->AdvAddrType, p->AdvAddr, p->AdvPhy,
+					p->PeriodicAdvInterval);
+			}
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V1:
 		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V2:
+			{
+				// The fixed part is 7 octets up to and including DataLen. Prove
+				// it is present before reading DataLen, then prove the payload
+				// it announces is inside the event.
+				const uint8_t *pFixed = (const uint8_t*)pLeEvtPkt->Data;
+				if (pFixed + 7 > evtEnd)
+				{
+					break;
+				}
+				BtHciLeEvtPeriodicAdvReport_t *p =
+					(BtHciLeEvtPeriodicAdvReport_t*)pLeEvtPkt->Data;
+				if (pFixed + 7 + p->DataLen > evtEnd)
+				{
+					break;
+				}
+				BtAdvPeriodicReportFragment(p->SyncHdl, p->TxPower, p->Rssi,
+					p->DataStatus, p->DataLen, p->Data);
+			}
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_LOST:
+			{
+				if ((const uint8_t*)pLeEvtPkt->Data +
+					sizeof(BtHciLeEvtPeriodicAdvSyncLost_t) > evtEnd)
+				{
+					break;
+				}
+				BtHciLeEvtPeriodicAdvSyncLost_t *p =
+					(BtHciLeEvtPeriodicAdvSyncLost_t*)pLeEvtPkt->Data;
+				BtAdvPeriodicSyncLostEvt(p->SyncHdl);
+			}
 			break;
 		case BT_HCI_EVT_LE_SCAN_TIMEOUT:
 			BtHciScanTimeout(pDev);

@@ -68,6 +68,9 @@ enum {
 	BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_PARAMETERS = 37U * 8U + 5U,
 	BT_HCI_CAP_CMD_LE_SET_EXT_SCAN_ENABLE = 37U * 8U + 6U,
 	BT_HCI_CAP_CMD_LE_EXT_CREATE_CONNECTION = 37U * 8U + 7U,
+	BT_HCI_CAP_CMD_LE_PERIODIC_ADV_CREATE_SYNC = 38U * 8U + 0U,
+	BT_HCI_CAP_CMD_LE_PERIODIC_ADV_CREATE_SYNC_CANCEL = 38U * 8U + 1U,
+	BT_HCI_CAP_CMD_LE_PERIODIC_ADV_TERMINATE_SYNC = 38U * 8U + 2U,
 	BT_HCI_CAP_CMD_LE_SET_PRIVACY_MODE = 39U * 8U + 2U,
 	BT_HCI_CAP_CMD_LE_SET_HOST_FEATURE = 44U * 8U + 1U,
 	BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS_V2 = 46U * 8U + 2U,
@@ -312,6 +315,26 @@ static inline bool BtHciCapabilitiesPeriodicAdvertisingSupported(
 		BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_DATA) &&
 		BtHciCapabilitiesCommandSupported(pCapabilities,
 		BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_ENABLE);
+}
+
+/**
+ * Can this controller synchronise to someone else's periodic advertising train?
+ *
+ * A separate question from running one: an advertiser needs LE Periodic
+ * Advertising, a scanner needs the three sync commands and extended scanning,
+ * which is how a train is found in the first place.
+ */
+static inline bool BtHciCapabilitiesPeriodicSyncSupported(
+	const BtHciCapabilities_t *pCapabilities)
+{
+	return BtHciCapabilitiesLeFeatureSupported(pCapabilities,
+		BT_HCI_CAP_LE_FEATURE_PERIODIC_ADV) &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_PERIODIC_ADV_CREATE_SYNC) &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_PERIODIC_ADV_CREATE_SYNC_CANCEL) &&
+		BtHciCapabilitiesCommandSupported(pCapabilities,
+		BT_HCI_CAP_CMD_LE_PERIODIC_ADV_TERMINATE_SYNC);
 }
 
 static inline bool BtHciCapabilitiesLegacyScanningSupported(

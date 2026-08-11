@@ -207,6 +207,9 @@ static const uint16_t s_BtHciCmdSdcSupported[] = {
 	BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_PARAMETERS,
 	BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_DATA,
 	BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_ENABLE,
+	BT_HCI_CAP_CMD_LE_PERIODIC_ADV_CREATE_SYNC,
+	BT_HCI_CAP_CMD_LE_PERIODIC_ADV_CREATE_SYNC_CANCEL,
+	BT_HCI_CAP_CMD_LE_PERIODIC_ADV_TERMINATE_SYNC,
 };
 
 static void BtHciCmdSdcSupportedCommandsGet(uint8_t *pMap, size_t Len)
@@ -394,6 +397,20 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 		case BT_HCI_CMD_CTLR_SET_HOST_FEATURE:
 			res = sdc_hci_cmd_le_set_host_feature(
 				(const sdc_hci_cmd_le_set_host_feature_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC:
+			res = sdc_hci_cmd_le_periodic_adv_create_sync(
+				(const sdc_hci_cmd_le_periodic_adv_create_sync_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC_CANCEL:
+			res = sdc_hci_cmd_le_periodic_adv_create_sync_cancel();
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_TERMINATE_SYNC:
+			res = sdc_hci_cmd_le_periodic_adv_terminate_sync(
+				(const sdc_hci_cmd_le_periodic_adv_terminate_sync_t*)pParam);
 			break;
 
 		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM:

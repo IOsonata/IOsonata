@@ -123,6 +123,9 @@ void ResetCaps(uint8_t AdvSetCount = 4)
 	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_PARAMETERS);
 	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_DATA);
 	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_ENABLE);
+	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_PERIODIC_ADV_CREATE_SYNC);
+	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_PERIODIC_ADV_CREATE_SYNC_CANCEL);
+	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_PERIODIC_ADV_TERMINATE_SYNC);
 	s_CapsValid = true;
 }
 
@@ -416,7 +419,297 @@ void TestOperationsBeforeInit()
 	CHECK(BtAdvPeriodicStart() == false);
 }
 
+// --- Sync side ---
+
+int s_EstCount, s_LostCount, s_ReportCount;
+uint8_t s_EstStatus;
+uint16_t s_EstHdl, s_LostHdl, s_ReportHdl;
+size_t s_ReportLen;
+uint8_t s_ReportData[BT_ADV_PERIODIC_DATA_MAX];
+int8_t s_ReportRssi;
+
+void ResetSyncCallbacks()
+{
+	s_EstCount = s_LostCount = s_ReportCount = 0;
+	s_EstStatus = 0xFF;
+	s_EstHdl = s_LostHdl = s_ReportHdl = 0xFFFF;
+	s_ReportLen = 0;
+	s_ReportRssi = 0;
+}
+
+BtAdvPeriodicSyncCfg_t MakeSyncCfg()
+{
+	BtAdvPeriodicSyncCfg_t cfg = {};
+	cfg.AdvSid = 3;
+	cfg.AdvAddrType = 1;
+	for (int i = 0; i < 6; i++)
+	{
+		cfg.AdvAddr[i] = static_cast<uint8_t>(0xA0 + i);
+	}
+	cfg.Skip = 4;
+	cfg.SyncTimeout = 0x0100;
+	cfg.DisableReporting = false;
+	return cfg;
+}
+
+void TestSyncCreateParameters()
+{
+	Reset();
+	ResetSyncCallbacks();
+	BtAdvPeriodicSyncCfg_t cfg = MakeSyncCfg();
+	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg));
+
+	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->ParamLen == 14);
+		CHECK(c->Param[0] == 0);
+		CHECK(c->Param[1] == 3);
+		CHECK(c->Param[2] == 1);
+		CHECK(c->Param[3] == 0xA0 && c->Param[8] == 0xA5);
+		CHECK(c->Param[9] == 4 && c->Param[10] == 0);
+		CHECK(c->Param[11] == 0x00 && c->Param[12] == 0x01);
+		CHECK(c->Param[13] == 0);
+	}
+
+	Reset();
+	cfg.DisableReporting = true;
+	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg));
+	c = FindCmd(BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->Param[0] == 0x02);
+	}
+}
+
+void TestSyncCreateValidation()
+{
+	Reset();
+	BtAdvPeriodicSyncCfg_t cfg = MakeSyncCfg();
+
+	cfg.AdvSid = BT_ADV_PERIODIC_SID_MAX + 1;
+	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg) == false);
+	cfg = MakeSyncCfg();
+	cfg.AdvAddrType = 2;
+	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg) == false);
+	cfg = MakeSyncCfg();
+	cfg.Skip = BT_ADV_PERIODIC_SKIP_MAX + 1;
+	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg) == false);
+	cfg = MakeSyncCfg();
+	cfg.SyncTimeout = BT_ADV_PERIODIC_SYNC_TIMEOUT_MIN - 1;
+	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg) == false);
+	cfg = MakeSyncCfg();
+	cfg.SyncTimeout = BT_ADV_PERIODIC_SYNC_TIMEOUT_MAX + 1;
+	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg) == false);
+	CHECK(BtAdvPeriodicSyncCreate(nullptr, &cfg) == false);
+	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, nullptr) == false);
+	CHECK(s_CmdCount == 0);
+
+	// Synchronising is gated on the three sync commands, not the three the
+	// advertiser side needs.
+	Reset();
+	s_Caps.SupportedCommands[BT_HCI_CAP_CMD_LE_PERIODIC_ADV_TERMINATE_SYNC >> 3] &=
+		static_cast<uint8_t>(~(1U <<
+		(BT_HCI_CAP_CMD_LE_PERIODIC_ADV_TERMINATE_SYNC & 7U)));
+	cfg = MakeSyncCfg();
+	CHECK(BtAdvPeriodicSyncCreate(&s_Dev, &cfg) == false);
+	CHECK(s_CmdCount == 0);
+}
+
+void TestSyncCancelAndTerminate()
+{
+	Reset();
+	CHECK(BtAdvPeriodicSyncCancel(&s_Dev));
+	const CapturedCmd *c =
+		FindCmd(BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC_CANCEL);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->ParamLen == 0);
+	}
+	CHECK(BtAdvPeriodicSyncCancel(nullptr) == false);
+
+	Reset();
+	CHECK(BtAdvPeriodicSyncTerminate(&s_Dev, 0x0123));
+	c = FindCmd(BT_HCI_CMD_CTLR_PERIODIC_ADV_TERMINATE_SYNC);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->ParamLen == 2);
+		CHECK(c->Param[0] == 0x23 && c->Param[1] == 0x01);
+	}
+
+	Reset();
+	s_FailOpCode = BT_HCI_CMD_CTLR_PERIODIC_ADV_TERMINATE_SYNC;
+	CHECK(BtAdvPeriodicSyncTerminate(&s_Dev, 0x0123) == false);
+}
+
+void TestReportReassembly()
+{
+	Reset();
+	ResetSyncCallbacks();
+	uint8_t addr[6] = { 1, 2, 3, 4, 5, 6 };
+	BtAdvPeriodicSyncEstablishedEvt(0, 0x0007, 3, 1, addr, 1, 0x0080);
+	CHECK(s_EstCount == 1);
+	CHECK(s_EstStatus == 0);
+	CHECK(s_EstHdl == 0x0007);
+
+	const uint8_t a[4] = { 0x11, 0x22, 0x33, 0x44 };
+	const uint8_t b[3] = { 0x55, 0x66, 0x77 };
+	BtAdvPeriodicReportFragment(0x0007, -10, -40,
+		BT_ADV_PERIODIC_DATA_MORE, sizeof(a), a);
+	CHECK(s_ReportCount == 0);
+	BtAdvPeriodicReportFragment(0x0007, -10, -42,
+		BT_ADV_PERIODIC_DATA_COMPLETE, sizeof(b), b);
+	CHECK(s_ReportCount == 1);
+	CHECK(s_ReportLen == 7);
+	CHECK(s_ReportData[0] == 0x11 && s_ReportData[6] == 0x77);
+	CHECK(s_ReportRssi == -42);
+
+	// A report for a handle this module is not synced to is ignored.
+	BtAdvPeriodicReportFragment(0x0009, 0, 0,
+		BT_ADV_PERIODIC_DATA_COMPLETE, sizeof(a), a);
+	CHECK(s_ReportCount == 1);
+}
+
+// Truncated means the rest is never coming, so what is held is a piece of a
+// longer payload and must not be delivered as a whole one.
+void TestTruncatedAndFailedReports()
+{
+	Reset();
+	ResetSyncCallbacks();
+	uint8_t addr[6] = {};
+	BtAdvPeriodicSyncEstablishedEvt(0, 0x0007, 3, 1, addr, 1, 0x0080);
+
+	const uint8_t a[4] = { 1, 2, 3, 4 };
+	BtAdvPeriodicReportFragment(0x0007, 0, 0,
+		BT_ADV_PERIODIC_DATA_MORE, sizeof(a), a);
+	BtAdvPeriodicReportFragment(0x0007, 0, 0,
+		BT_ADV_PERIODIC_DATA_TRUNCATED, sizeof(a), a);
+	CHECK(s_ReportCount == 0);
+
+	// The next payload starts clean rather than continuing the abandoned one.
+	BtAdvPeriodicReportFragment(0x0007, 0, 0,
+		BT_ADV_PERIODIC_DATA_COMPLETE, sizeof(a), a);
+	CHECK(s_ReportCount == 1);
+	CHECK(s_ReportLen == 4);
+
+	// A failed receive has no payload and abandons what was accumulating.
+	ResetSyncCallbacks();
+	BtAdvPeriodicReportFragment(0x0007, 0, 0,
+		BT_ADV_PERIODIC_DATA_MORE, sizeof(a), a);
+	BtAdvPeriodicReportFragment(0x0007, 0, 0,
+		BT_ADV_PERIODIC_DATA_RX_FAILED, 0, nullptr);
+	CHECK(s_ReportCount == 0);
+	BtAdvPeriodicReportFragment(0x0007, 0, 0,
+		BT_ADV_PERIODIC_DATA_COMPLETE, sizeof(a), a);
+	CHECK(s_ReportCount == 1);
+	CHECK(s_ReportLen == 4);
+}
+
+// More than a whole payload can hold is dropped, not delivered as a prefix.
+void TestReportOverflowDropped()
+{
+	Reset();
+	ResetSyncCallbacks();
+	uint8_t addr[6] = {};
+	BtAdvPeriodicSyncEstablishedEvt(0, 0x0007, 3, 1, addr, 1, 0x0080);
+
+	uint8_t chunk[248];
+	std::memset(chunk, 0x5A, sizeof(chunk));
+	size_t sent = 0;
+	while (sent + sizeof(chunk) <= BT_ADV_PERIODIC_DATA_MAX)
+	{
+		BtAdvPeriodicReportFragment(0x0007, 0, 0,
+			BT_ADV_PERIODIC_DATA_MORE, sizeof(chunk), chunk);
+		sent += sizeof(chunk);
+	}
+	BtAdvPeriodicReportFragment(0x0007, 0, 0,
+		BT_ADV_PERIODIC_DATA_MORE, sizeof(chunk), chunk);
+	BtAdvPeriodicReportFragment(0x0007, 0, 0,
+		BT_ADV_PERIODIC_DATA_COMPLETE, 0, nullptr);
+	CHECK(s_ReportCount == 0);
+
+	// And the next payload is unaffected.
+	const uint8_t a[2] = { 9, 9 };
+	BtAdvPeriodicReportFragment(0x0007, 0, 0,
+		BT_ADV_PERIODIC_DATA_COMPLETE, sizeof(a), a);
+	CHECK(s_ReportCount == 1);
+	CHECK(s_ReportLen == 2);
+}
+
+void TestSyncLostAndFailedEstablish()
+{
+	Reset();
+	ResetSyncCallbacks();
+	uint8_t addr[6] = {};
+	BtAdvPeriodicSyncEstablishedEvt(0, 0x0007, 3, 1, addr, 1, 0x0080);
+	BtAdvPeriodicSyncLostEvt(0x0007);
+	CHECK(s_LostCount == 1);
+	CHECK(s_LostHdl == 0x0007);
+
+	// After the loss nothing is reassembled for that handle any more.
+	const uint8_t a[2] = { 1, 2 };
+	BtAdvPeriodicReportFragment(0x0007, 0, 0,
+		BT_ADV_PERIODIC_DATA_COMPLETE, sizeof(a), a);
+	CHECK(s_ReportCount == 0);
+
+	// A failed establish reports the status and joins no train.
+	ResetSyncCallbacks();
+	BtAdvPeriodicSyncEstablishedEvt(0x3E, 0x0000, 3, 1, addr, 1, 0);
+	CHECK(s_EstCount == 1);
+	CHECK(s_EstStatus == 0x3E);
+	BtAdvPeriodicReportFragment(0x0000, 0, 0,
+		BT_ADV_PERIODIC_DATA_COMPLETE, sizeof(a), a);
+	CHECK(s_ReportCount == 0);
+}
+
+// A terminate drops the state without waiting for a Sync Lost that never comes.
+void TestTerminateDropsReassembly()
+{
+	Reset();
+	ResetSyncCallbacks();
+	uint8_t addr[6] = {};
+	BtAdvPeriodicSyncEstablishedEvt(0, 0x0007, 3, 1, addr, 1, 0x0080);
+	CHECK(BtAdvPeriodicSyncTerminate(&s_Dev, 0x0007));
+
+	const uint8_t a[2] = { 1, 2 };
+	BtAdvPeriodicReportFragment(0x0007, 0, 0,
+		BT_ADV_PERIODIC_DATA_COMPLETE, sizeof(a), a);
+	CHECK(s_ReportCount == 0);
+}
+
 } // namespace
+
+// Strong overrides of the application facing callbacks.
+void BtAdvPeriodicSyncEstablished(uint8_t Status, uint16_t SyncHdl,
+	uint8_t, uint8_t, const uint8_t[6], uint8_t, uint16_t)
+{
+	s_EstCount++;
+	s_EstStatus = Status;
+	s_EstHdl = SyncHdl;
+}
+
+void BtAdvPeriodicSyncReport(uint16_t SyncHdl, int8_t, int8_t Rssi,
+	size_t Len, const uint8_t *pData)
+{
+	s_ReportCount++;
+	s_ReportHdl = SyncHdl;
+	s_ReportRssi = Rssi;
+	s_ReportLen = Len;
+	if (Len > 0 && pData != nullptr && Len <= sizeof(s_ReportData))
+	{
+		std::memcpy(s_ReportData, pData, Len);
+	}
+}
+
+void BtAdvPeriodicSyncLost(uint16_t SyncHdl)
+{
+	s_LostCount++;
+	s_LostHdl = SyncHdl;
+}
 
 // The module reads capabilities through this. The real one matches the device
 // against the active controller; here the test owns the record.
@@ -441,6 +734,14 @@ int main()
 	TestStartRollsBackOnSetFailure();
 	TestStopDisablesBoth();
 	TestOperationsBeforeInit();
+	TestSyncCreateParameters();
+	TestSyncCreateValidation();
+	TestSyncCancelAndTerminate();
+	TestReportReassembly();
+	TestTruncatedAndFailedReports();
+	TestReportOverflowDropped();
+	TestSyncLostAndFailedEstablish();
+	TestTerminateDropsReassembly();
 
 	if (s_Failures == 0)
 	{
