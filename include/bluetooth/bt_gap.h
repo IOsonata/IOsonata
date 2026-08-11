@@ -137,6 +137,24 @@ SOFTWARE.
 #define	BT_GAP_SECTYPE_SIGNED_NO_MITM					4	//!< AES signed encryption without MITM
 #define	BT_GAP_SECTYPE_SIGNED_MITM						5	//!< AES signed encryption with MITM
 
+// LE security modes and levels, Core Vol 3 Part C, Section 10.2. Mode 1 is
+// encryption, mode 2 is connection based data signing. These are the numbers
+// the LE GATT Security Levels characteristic reports, which Section 12.7
+// requires be the same numbers used in the mode and level definitions.
+#define	BT_GAP_SEC_MODE_1								1	//!< Encryption
+#define	BT_GAP_SEC_MODE_2								2	//!< Data signing
+#define	BT_GAP_SEC_MODE1_LEVEL_NONE						1	//!< No authentication and no encryption
+#define	BT_GAP_SEC_MODE1_LEVEL_ENC_NO_AUTH				2	//!< Unauthenticated pairing with encryption
+#define	BT_GAP_SEC_MODE1_LEVEL_ENC_AUTH					3	//!< Authenticated pairing with encryption
+#define	BT_GAP_SEC_MODE1_LEVEL_LESC						4	//!< Authenticated LE Secure Connections pairing with encryption
+#define	BT_GAP_SEC_MODE2_LEVEL_SIGN_NO_AUTH				1	//!< Unauthenticated pairing with data signing
+#define	BT_GAP_SEC_MODE2_LEVEL_SIGN_AUTH				2	//!< Authenticated pairing with data signing
+
+//!< Security Level Requirements the LE GATT Security Levels characteristic can
+//!< hold. Each is a mode octet followed by a level octet.
+#define	BT_GAP_SEC_LEVEL_REQ_MAX						4
+#define	BT_GAP_SEC_LEVEL_VALUE_MAX						(BT_GAP_SEC_LEVEL_REQ_MAX * 2)
+
 #define BT_GAP_PHY_1MBITS								(1<<0)
 #define BT_GAP_PHY_2MBITS								(1<<1)
 #define BT_GAP_PHY_CODED								(1<<2)
@@ -292,6 +310,44 @@ void BtGapServiceInit(void);//BtGattSrvc_t * const pSrvc);
 void BtGapSetDevName(const char *pName);
 void BtGapSetAppearance(uint16_t Val);
 void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t *pVal);
+
+/**
+ * @brief	Set the LE GATT Security Levels characteristic value.
+ *
+ * Core 5.4, Vol 3 Part C, Section 12.7. Reports the highest security
+ * requirements of the GATT server, as one or more Security Level Requirements.
+ * Each requirement is a BT_GAP_SEC_MODE_* octet followed by a level octet for
+ * that mode. Meeting any one of them is enough for the client to use every
+ * GATT procedure the characteristic properties allow.
+ *
+ * BtGapInit derives a value from the configured security type, so this is only
+ * needed when the server's real requirement differs from that, for instance a
+ * server that accepts either mode.
+ *
+ * The value is required to be static for the length of a connection, so call
+ * this before advertising starts.
+ *
+ * @param	pRequirements	Mode and level octet pairs.
+ * @param	Count			Number of requirements, 1 to BT_GAP_SEC_LEVEL_REQ_MAX.
+ *
+ * @return	true when the value was set. false when Count is out of range, a
+ * 			mode or level is not one this specification defines, or the
+ * 			characteristic value could not be written, in which case the
+ * 			previous value is kept.
+ */
+bool BtGapSetSecurityLevels(const uint8_t *pRequirements, size_t Count);
+
+/**
+ * @brief	Read back the LE GATT Security Levels characteristic value.
+ *
+ * @param	pBuff	Destination for the mode and level octet pairs, or NULL to
+ * 					query the length alone.
+ * @param	BuffLen	Size of pBuff in octets.
+ *
+ * @return	Octets the characteristic holds, which is twice the number of
+ * 			requirements. Nothing is copied when pBuff is NULL or too small.
+ */
+size_t BtGapGetSecurityLevels(uint8_t *pBuff, size_t BuffLen);
 bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam);//, BtGapScanParam_t * const pScanParam);
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg);
 bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len);

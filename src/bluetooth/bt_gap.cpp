@@ -118,7 +118,18 @@ static BtGattChar_t s_BtGapChar[] = {
 	        sizeof(BtGattPreferedConnParams_t),
 	        BT_GATT_CHAR_PROP_READ,
 	        NULL),
+	// Core Vol 3 Part C 12.7 gives this one Read Only, no encryption, no
+	// authentication and no authorization, so a client can learn what the
+	// server wants before it has met any of it.
+	BT_CHAR(BT_UUID_CHARACTERISTIC_LE_GATT_SECURITY_LEVELS,
+	        BT_GAP_SEC_LEVEL_VALUE_MAX,
+	        BT_GATT_CHAR_PROP_READ,
+	        NULL),
 };
+
+// Index of the LE GATT Security Levels characteristic above. The setters
+// address the array by position, so keep this in step with the order.
+#define BT_GAP_CHAR_IDX_SEC_LEVELS		3
 
 static BtGattSrvc_t s_BtGapSrvc = BT_SRVC_STD(BT_UUID_GATT_SERVICE_GENERIC_ACCESS, s_BtGapChar);
 
@@ -172,6 +183,99 @@ __attribute__((weak)) void BtGapSetAppearance(uint16_t Val)
 	}
 }
 
+static bool BtGapSecurityLevelValid(uint8_t Mode, uint8_t Level)
+{
+	// Core Vol 3 Part C 10.2. Mode 1 has four levels, mode 2 has two. Mode 3
+	// is BR/EDR only and has no place in this characteristic, which reports
+	// the requirements of a GATT server on an LE connection.
+	if (Mode == BT_GAP_SEC_MODE_1)
+	{
+		return Level >= BT_GAP_SEC_MODE1_LEVEL_NONE &&
+			Level <= BT_GAP_SEC_MODE1_LEVEL_LESC;
+	}
+
+	if (Mode == BT_GAP_SEC_MODE_2)
+	{
+		return Level >= BT_GAP_SEC_MODE2_LEVEL_SIGN_NO_AUTH &&
+			Level <= BT_GAP_SEC_MODE2_LEVEL_SIGN_AUTH;
+	}
+
+	return false;
+}
+
+bool BtGapSetSecurityLevels(const uint8_t *pRequirements, size_t Count)
+{
+	if (pRequirements == nullptr || Count == 0 ||
+		Count > BT_GAP_SEC_LEVEL_REQ_MAX)
+	{
+		return false;
+	}
+
+	// Validate the whole set before writing any of it, so a bad entry late in
+	// the list cannot leave the characteristic holding half an update.
+	for (size_t i = 0; i < Count; i++)
+	{
+		if (BtGapSecurityLevelValid(pRequirements[i * 2],
+			pRequirements[i * 2 + 1]) == false)
+		{
+			return false;
+		}
+	}
+
+	return BtGattCharSetValue(&s_BtGapChar[BT_GAP_CHAR_IDX_SEC_LEVELS],
+		(void*)pRequirements, Count * 2);
+}
+
+size_t BtGapGetSecurityLevels(uint8_t *pBuff, size_t BuffLen)
+{
+	const BtGattChar_t *p = &s_BtGapChar[BT_GAP_CHAR_IDX_SEC_LEVELS];
+	size_t len = p->ValueLen;
+
+	if (pBuff != nullptr && p->pValue != nullptr && BuffLen >= len)
+	{
+		memcpy(pBuff, p->pValue, len);
+	}
+
+	return len;
+}
+
+// The security type the application asked for, expressed as the single
+// Security Level Requirement it amounts to. Core Vol 3 Part C 10.2.1 and
+// 10.2.2 name the levels; the mapping is one to one because each security type
+// names an authentication strength and whether the link is encrypted or
+// signed.
+static void BtGapSecurityLevelsFromSecType(uint8_t SecType, uint8_t Req[2])
+{
+	switch (SecType)
+	{
+		case BT_GAP_SECTYPE_STATICKEY_NO_MITM:
+			Req[0] = BT_GAP_SEC_MODE_1;
+			Req[1] = BT_GAP_SEC_MODE1_LEVEL_ENC_NO_AUTH;
+			break;
+		case BT_GAP_SECTYPE_STATICKEY_MITM:
+			Req[0] = BT_GAP_SEC_MODE_1;
+			Req[1] = BT_GAP_SEC_MODE1_LEVEL_ENC_AUTH;
+			break;
+		case BT_GAP_SECTYPE_LESC_MITM:
+			Req[0] = BT_GAP_SEC_MODE_1;
+			Req[1] = BT_GAP_SEC_MODE1_LEVEL_LESC;
+			break;
+		case BT_GAP_SECTYPE_SIGNED_NO_MITM:
+			Req[0] = BT_GAP_SEC_MODE_2;
+			Req[1] = BT_GAP_SEC_MODE2_LEVEL_SIGN_NO_AUTH;
+			break;
+		case BT_GAP_SECTYPE_SIGNED_MITM:
+			Req[0] = BT_GAP_SEC_MODE_2;
+			Req[1] = BT_GAP_SEC_MODE2_LEVEL_SIGN_AUTH;
+			break;
+		case BT_GAP_SECTYPE_NONE:
+		default:
+			Req[0] = BT_GAP_SEC_MODE_1;
+			Req[1] = BT_GAP_SEC_MODE1_LEVEL_NONE;
+			break;
+	}
+}
+
 __attribute__((weak)) void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t *pVal)
 {
 	if (pVal == nullptr)
@@ -205,6 +309,20 @@ void BtGapInit(const BtGapCfg_t *pCfg)
 			!BtGattSrvcAdd(&s_BtGapSrvc))
 		{
 			BtGattInitStatusFail(BT_GATT_INIT_ERROR_SERVICE_ADD);
+		}
+	}
+
+	if (pCfg->Role & BT_GAP_ROLE_PERIPHERAL)
+	{
+		// The value is required to be static during a connection, so it is set
+		// once here rather than tracked as security is negotiated. An
+		// application whose real requirement is not the configured one calls
+		// BtGapSetSecurityLevels afterwards.
+		uint8_t req[2];
+		BtGapSecurityLevelsFromSecType(pCfg->SecType, req);
+		if (BtGapSetSecurityLevels(req, 1) == false)
+		{
+			BtGattInitStatusFail(BT_GATT_INIT_ERROR_VALUE_SET);
 		}
 	}
 
