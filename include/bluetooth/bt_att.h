@@ -134,6 +134,20 @@ typedef struct __Bt_Hci_Device		BtHciDevice_t;
 
 #define BT_ATT_HANDLE_INVALID		0xFFFFU
 
+// Security types. On BtAppCfg_t and BtGapCfg_t these name the security the
+// application wants for the device, and NONE means no security. On a service
+// or a characteristic they name what reading or writing it requires, and there
+// NONE means unspecified: the value is taken from the service, then from the
+// application. A service or characteristic that must stay reachable without
+// security says OPEN, which stops that walk. Resolve with BtGattSecTypeGet.
+#define	BT_GAP_SECTYPE_NONE								0	//!< No security on the app, unspecified on a service or characteristic
+#define	BT_GAP_SECTYPE_STATICKEY_NO_MITM				1	//!< Bonding static pass key without Man In The Middle
+#define	BT_GAP_SECTYPE_STATICKEY_MITM					2	//!< Bonding static pass key with MITM
+#define	BT_GAP_SECTYPE_LESC_MITM						3	//!< LE secure encryption
+#define	BT_GAP_SECTYPE_SIGNED_NO_MITM					4	//!< AES signed encryption without MITM
+#define	BT_GAP_SECTYPE_SIGNED_MITM						5	//!< AES signed encryption with MITM
+#define	BT_GAP_SECTYPE_OPEN								6	//!< Reachable without security, do not inherit
+
 typedef struct __Bt_Characteristic		BtGattChar_t;
 typedef struct __Bt_Service				BtGattSrvc_t;
 typedef struct __Bt_Characteristic		BtChar_t;

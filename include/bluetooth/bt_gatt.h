@@ -335,6 +335,38 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent);
 //   //                                  BT_GATT_CHAR_PROP_READ, "FW Version",
 //   //                                  .WrCB = MyWriteCb);
 
+// Resolve what security a characteristic requires. A characteristic that names
+// one wins; otherwise the service's; otherwise the application's. OPEN stops
+// the walk wherever it appears, so a characteristic that has to be reachable
+// before the peer has met anything stays reachable. Both OPEN and a walk that
+// ends at NONE mean no security is required, the difference being that OPEN
+// says so deliberately.
+//
+// Every port resolves through this, so a service declaration means the same
+// thing over standard HCI, the SoftDevice, the nRF54 BM stack and the
+// STM32WBA. AppSecType is passed in rather than read from g_BtAppData, to keep
+// this header free of the application module.
+static inline uint8_t BtGattSecTypeGet(const BtGattSrvc_t *pSrvc,
+									   const BtGattChar_t *pChar,
+									   uint8_t AppSecType)
+{
+	if (pChar != NULL && pChar->SecType != BT_GAP_SECTYPE_NONE)
+	{
+		return pChar->SecType;
+	}
+	if (pSrvc != NULL && pSrvc->SecType != BT_GAP_SECTYPE_NONE)
+	{
+		return pSrvc->SecType;
+	}
+	return AppSecType;
+}
+
+//!< True when the resolved security type requires nothing of the peer.
+static inline bool BtGattSecTypeIsOpen(uint8_t SecType)
+{
+	return SecType == BT_GAP_SECTYPE_NONE || SecType == BT_GAP_SECTYPE_OPEN;
+}
+
 #define BT_CHAR(uuid, maxlen, props, desc, ...) \
 	{ .Uuid = (uuid), .MaxDataLen = (maxlen), .Property = (props), \
 	  .pDesc = (desc), __VA_ARGS__ }

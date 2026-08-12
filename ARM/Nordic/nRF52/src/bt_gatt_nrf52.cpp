@@ -43,6 +43,7 @@ SOFTWARE.
 #include "app_error.h"
 #include "ble_srv_common.h"
 
+#include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/bt_dev.h"
@@ -56,6 +57,7 @@ typedef enum {
 	BTSRVC_SECTYPE_LESC_MITM,
 	BTSRVC_SECTYPE_SIGNED_NO_MITM,
 	BTSRVC_SECTYPE_SIGNED_MITM,
+	BTSRVC_SECTYPE_OPEN,		//!< Matches BT_GAP_SECTYPE_OPEN
 } BTSRVC_SECTYPE;
 
 typedef struct {
@@ -405,6 +407,7 @@ static void BtSrvcEncSec(ble_gap_conn_sec_mode_t *pSecMode,
 			BLE_GAP_CONN_SEC_MODE_SET_SIGNED_WITH_MITM(pSecMode);
 			break;
 		case BTSRVC_SECTYPE_NONE:
+		case BTSRVC_SECTYPE_OPEN:
 		default:
 			BLE_GAP_CONN_SEC_MODE_SET_OPEN(pSecMode);
 			break;
@@ -524,6 +527,18 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		}
 	}
 
+	// The SoftDevice creates the 0x1800 and 0x1801 services itself and
+	// reserves both UUIDs, so sd_ble_gatts_service_add refuses them. Treat the
+	// generic declarations BtGapInit passes down as already registered. The BM
+	// and STM32WBA ports do the same for their own native services.
+	if (!pSrvc->bCustom &&
+		(pSrvc->UuidSrvc == BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE ||
+		 pSrvc->UuidSrvc == BT_UUID_GATT_SERVICE_GENERIC_ACCESS))
+	{
+		initGuard.Success();
+		return true;
+	}
+
 	for (int i = 0; i < pSrvc->NbChar; i++)
 	{
 		BtGattChar_t *pChar = &pSrvc->pCharArray[i];
@@ -572,9 +587,8 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	for (int i = 0; i < pSrvc->NbChar; i++)
 	{
 		BtGattChar_t *pChar = &pSrvc->pCharArray[i];
-		BTSRVC_SECTYPE sec = (BTSRVC_SECTYPE)(
-			pChar->SecType != BT_GAP_SECTYPE_NONE ?
-			pChar->SecType : pSrvc->SecType);
+		BTSRVC_SECTYPE sec = (BTSRVC_SECTYPE)BtGattSecTypeGet(pSrvc, pChar,
+			g_BtAppData.SecType);
 		if (BtGattCharAdd(pSrvc, pChar, sec,
 			softDeviceUuidType) != NRF_SUCCESS)
 		{

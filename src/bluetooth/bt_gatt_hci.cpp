@@ -39,6 +39,7 @@ SOFTWARE.
 #include "crypto/icrypto.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_att.h"
+#include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_dev.h"
@@ -97,12 +98,9 @@ uint8_t BtAttAccessSecurityError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 		return 0;
 	}
 
-	uint8_t secType = pChar->SecType;
-	if (secType == BT_GAP_SECTYPE_NONE && pChar->pSrvc != nullptr)
-	{
-		secType = pChar->pSrvc->SecType;
-	}
-	if (secType == BT_GAP_SECTYPE_NONE)
+	uint8_t secType = BtGattSecTypeGet(pChar->pSrvc, pChar,
+		g_BtAppData.SecType);
+	if (BtGattSecTypeIsOpen(secType))
 	{
 		return 0;
 	}

@@ -56,21 +56,36 @@ enum {
 	BT_DIS_CHAR_COUNT,
 };
 
+// Device information is what a peer reads to find out what it is talking to,
+// so these are OPEN rather than inheriting the application security. Zephyr
+// declares every DIS characteristic with plain BT_GATT_PERM_READ and the
+// Nordic SDK service offers no way to secure them either.
+//
+// The serial number is the exception. It identifies one unit rather than a
+// product, so it inherits: a device configured with security does not hand it
+// to anyone who connects.
 static BtGattChar_t s_BtDisChar[] = {
 	BT_CHAR(BT_UUID_CHARACTERISTIC_MANUFACTURER_NAME_STRING,
-	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
+	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL,
+	        .SecType = BT_GAP_SECTYPE_OPEN),
 	BT_CHAR(BT_UUID_CHARACTERISTIC_MODEL_NUMBER_STRING,
-	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
+	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL,
+	        .SecType = BT_GAP_SECTYPE_OPEN),
 	BT_CHAR(BT_UUID_CHARACTERISTIC_SERIAL_NUMBER_STRING,
-	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
+	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL,
+	        .SecType = BT_GAP_SECTYPE_NONE),
 	BT_CHAR(BT_UUID_CHARACTERISTIC_FIRMWARE_REVISION_STRING,
-	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
+	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL,
+	        .SecType = BT_GAP_SECTYPE_OPEN),
 	BT_CHAR(BT_UUID_CHARACTERISTIC_HARDWARE_REVISION_STRING,
-	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
+	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL,
+	        .SecType = BT_GAP_SECTYPE_OPEN),
 	BT_CHAR(BT_UUID_CHARACTERISTIC_PNP_ID,
-	        sizeof(BtDisPnpId_t), BT_GATT_CHAR_PROP_READ, NULL),
+	        sizeof(BtDisPnpId_t), BT_GATT_CHAR_PROP_READ, NULL,
+	        .SecType = BT_GAP_SECTYPE_OPEN),
 	BT_CHAR(BT_UUID_CHARACTERISTIC_SOFTWARE_REVISION_STRING,
-	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
+	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL,
+	        .SecType = BT_GAP_SECTYPE_OPEN),
 };
 
 static BtGattSrvc_t s_BtDisSrvc = BT_SRVC_STD(BT_UUID_GATT_SERVICE_DEVICE_INFORMATION,

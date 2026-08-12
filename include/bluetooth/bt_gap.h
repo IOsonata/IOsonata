@@ -130,12 +130,8 @@ SOFTWARE.
 #define BT_GAP_IO_CAPABILITY_NONE						3
 #define BT_GAP_IO_CAPABILITY_KEYBOARD_DISPLAY			4
 
-#define	BT_GAP_SECTYPE_NONE								0	//!< open, no security
-#define	BT_GAP_SECTYPE_STATICKEY_NO_MITM				1	//!< Bonding static pass key without Man In The Middle
-#define	BT_GAP_SECTYPE_STATICKEY_MITM					2	//!< Bonding static pass key with MITM
-#define	BT_GAP_SECTYPE_LESC_MITM						3	//!< LE secure encryption
-#define	BT_GAP_SECTYPE_SIGNED_NO_MITM					4	//!< AES signed encryption without MITM
-#define	BT_GAP_SECTYPE_SIGNED_MITM						5	//!< AES signed encryption with MITM
+// BT_GAP_SECTYPE_* live in bt_att.h, beside the SecType fields they describe.
+// They reach here through bt_gatt.h.
 
 // LE security modes and levels, Core Vol 3 Part C, Section 10.2. Mode 1 is
 // encryption, mode 2 is connection based data signing. These are the numbers
@@ -189,7 +185,8 @@ typedef enum __Bt_Gap_SecType {
 	BTGAP_SECTYPE_STATICKEY_MITM = BT_GAP_SECTYPE_STATICKEY_MITM,
 	BTGAP_SECTYPE_LESC_MITM = BT_GAP_SECTYPE_LESC_MITM,
 	BTGAP_SECTYPE_SIGNED_NO_MITM = BT_GAP_SECTYPE_SIGNED_NO_MITM,
-	BTGAP_SECTYPE_SIGNED_MITM = BT_GAP_SECTYPE_SIGNED_MITM
+	BTGAP_SECTYPE_SIGNED_MITM = BT_GAP_SECTYPE_SIGNED_MITM,
+	BTGAP_SECTYPE_OPEN = BT_GAP_SECTYPE_OPEN
 } BTGAP_SECTYPE;
 
 #pragma pack(push, 4)

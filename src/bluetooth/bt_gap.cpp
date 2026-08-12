@@ -105,26 +105,33 @@ BtGattInitError_t BtGattInitStatusErrorGet(void)
 			std::memory_order_acquire);
 }
 
+// Every one of these is read without security, so they name OPEN rather than
+// inheriting the application's. That is what the two stacks that own this
+// service natively do: Zephyr declares Device Name, Appearance, Central
+// Address Resolution and PPCP with plain BT_GATT_PERM_READ, and the Nordic
+// SoftDevice takes only a write permission in sd_ble_gap_device_name_set, so
+// its read cannot be secured at all.
+//
+// The security levels characteristic has a second reason: a client reads it to
+// learn what the server will require, which has to work before the client has
+// met any of it.
 static BtGattChar_t s_BtGapChar[] = {
 	BT_CHAR(BT_UUID_CHARACTERISTIC_DEVICE_NAME,
 	        BT_GAP_DEVNAME_MAX_LEN,
 	        BT_GATT_CHAR_PROP_READ,
-	        NULL),
+	        NULL, .SecType = BT_GAP_SECTYPE_OPEN),
 	BT_CHAR(BT_UUID_CHARACTERISTIC_APPEARANCE,
 	        2,
 	        BT_GATT_CHAR_PROP_READ,
-	        NULL),
+	        NULL, .SecType = BT_GAP_SECTYPE_OPEN),
 	BT_CHAR(BT_UUID_CHARACTERISTIC_PERIPH_PREFERRED_CONN_PARAM,
 	        sizeof(BtGattPreferedConnParams_t),
 	        BT_GATT_CHAR_PROP_READ,
-	        NULL),
-	// Core Vol 3 Part C 12.7 gives this one Read Only, no encryption, no
-	// authentication and no authorization, so a client can learn what the
-	// server wants before it has met any of it.
+	        NULL, .SecType = BT_GAP_SECTYPE_OPEN),
 	BT_CHAR(BT_UUID_CHARACTERISTIC_LE_GATT_SECURITY_LEVELS,
 	        BT_GAP_SEC_LEVEL_VALUE_MAX,
 	        BT_GATT_CHAR_PROP_READ,
-	        NULL),
+	        NULL, .SecType = BT_GAP_SECTYPE_OPEN),
 };
 
 // Index of the LE GATT Security Levels characteristic above. The setters
@@ -274,6 +281,57 @@ static void BtGapSecurityLevelsFromSecType(uint8_t SecType, uint8_t Req[2])
 			Req[1] = BT_GAP_SEC_MODE1_LEVEL_NONE;
 			break;
 	}
+}
+
+// --- Link procedures on an established connection ---
+//
+// Weak and refusing, so every port answers these whether or not it implements
+// them, and a port that does overrides. bt_gap_hci runs them over standard
+// HCI. The vendor host ports answer a PHY update the peer starts, in their
+// BLE_GAP_EVT_PHY_UPDATE_REQUEST handler, but none of them can start one, so
+// on those ports these refuse until a port implementation is written against
+// the vendor call, sd_ble_gap_phy_update on the Nordic ports.
+//
+// Refusing is what an application can act on. The alternative is a link that
+// silently stays on the PHY it had while the caller believes it asked.
+
+__attribute__((weak)) bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys,
+	uint8_t RxPhys, uint16_t PhyOptions)
+{
+	(void)ConnHdl;
+	(void)TxPhys;
+	(void)RxPhys;
+	(void)PhyOptions;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy,
+	uint8_t *pRxPhy)
+{
+	(void)ConnHdl;
+	(void)pTxPhy;
+	(void)pRxPhy;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtGapSetDefaultPhy(uint8_t TxPhys, uint8_t RxPhys)
+{
+	(void)TxPhys;
+	(void)RxPhys;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtGapSetDataLength(uint16_t ConnHdl,
+	uint16_t TxOctets, uint16_t TxTime)
+{
+	(void)ConnHdl;
+	(void)TxOctets;
+	(void)TxTime;
+
+	return false;
 }
 
 __attribute__((weak)) void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t *pVal)

@@ -4,6 +4,7 @@
 
 #include "bt_test_harness.h"
 #include "crypto/icrypto.h"
+#include "bluetooth/bt_app.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_gatt.h"
@@ -245,6 +246,42 @@ uint32_t BtGattMsTick(void)
 
 } // extern "C"
 
+// The module under test reads the application security type when neither the
+// characteristic nor the service names one.
+BtAppData_t g_BtAppData;
+
+static void TestSecurityInheritance()
+{
+	// Reset leaves the link unsecured and the service asking for encryption,
+	// so both are cleared here to start from nothing named anywhere.
+	Reset();
+	g_BtAppData.SecType = BTGAP_SECTYPE_NONE;
+	s_Service.SecType = BT_GAP_SECTYPE_NONE;
+	s_Char.SecType = BT_GAP_SECTYPE_NONE;
+	BT_CHECK(s_Test, BtAttAccessSecurityError(kConnHdl, s_Entry, true) == 0);
+
+	// The application asks for encryption and the characteristic says nothing,
+	// so the characteristic inherits it and an unencrypted link is refused.
+	g_BtAppData.SecType = BTGAP_SECTYPE_STATICKEY_NO_MITM;
+	BT_CHECK(s_Test, BtAttAccessSecurityError(kConnHdl, s_Entry, true) ==
+		BT_ATT_ERROR_INSUF_ENCRYPT);
+
+	// OPEN stops the walk, so the same link is accepted.
+	s_Char.SecType = BT_GAP_SECTYPE_OPEN;
+	BT_CHECK(s_Test, BtAttAccessSecurityError(kConnHdl, s_Entry, true) == 0);
+
+	// A service level OPEN does the same for a characteristic that named
+	// nothing itself.
+	s_Char.SecType = BT_GAP_SECTYPE_NONE;
+	s_Service.SecType = BT_GAP_SECTYPE_OPEN;
+	BT_CHECK(s_Test, BtAttAccessSecurityError(kConnHdl, s_Entry, true) == 0);
+
+	// A characteristic naming its own requirement still wins over both.
+	s_Char.SecType = BT_GAP_SECTYPE_STATICKEY_MITM;
+	BT_CHECK(s_Test, BtAttAccessSecurityError(kConnHdl, s_Entry, true) ==
+		BT_ATT_ERROR_INSUF_ENCRYPT);
+}
+
 int main()
 {
 	s_Test.Run("security error mapping", TestSecurityErrors);
@@ -252,5 +289,6 @@ int main()
 	s_Test.Run("transport failure preserves value",
 			   TestTransportFailureDoesNotMutateValue);
 	s_Test.Run("successful send updates value", TestSuccessfulSendUpdatesValue);
+	s_Test.Run("security inherits from the app config", TestSecurityInheritance);
 	return s_Test.Finish();
 }
