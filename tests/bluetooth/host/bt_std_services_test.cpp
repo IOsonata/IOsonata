@@ -3,6 +3,7 @@
 
 #include "bluetooth/bt_app.h"
 #include "bluetooth/services/bt_bas.h"
+#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/services/bt_dis.h"
 #include "bt_test_harness.h"
 
@@ -16,6 +17,7 @@ struct ValueCapture {
 
 static BtGattSrvc_t *s_Services[4];
 static int s_ServiceCount;
+static bool s_RefuseServiceAdd;
 static ValueCapture s_Values[16];
 static int s_ValueCount;
 static uint16_t s_NotifyConn;
@@ -70,7 +72,7 @@ extern "C" {
 
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
-	if (pSrvc == nullptr)
+	if (pSrvc == nullptr || s_RefuseServiceAdd)
 	{
 		return false;
 	}
@@ -202,6 +204,24 @@ int main()
 		BT_CHECK(ctx, pnp.VendorId == cfg.VendorId);
 		BT_CHECK(ctx, pnp.ProductId == cfg.ProductId);
 		BT_CHECK(ctx, pnp.ProductVer == cfg.ProductVer);
+	});
+
+	ctx.Run("BAS registration failure reaches init status", [&]() {
+		// An application adds BAS from BtAppInitUserServices, inside the window
+		// BtGapInit opens and BtAppAdvInit closes. A refused registration has to
+		// land in the init status, or the device advertises a service it does
+		// not have. Runs before the successful case below, because BAS registers
+		// once and a later call short circuits without reaching BtGattSrvcAdd.
+		BtGattInitStatusReset();
+		BT_CHECK(ctx, BtGattInitStatusOk());
+
+		s_RefuseServiceAdd = true;
+		BT_CHECK(ctx, BtBasInit(50) == false);
+		s_RefuseServiceAdd = false;
+
+		BT_CHECK(ctx, BtGattInitStatusErrorGet() ==
+			BT_GATT_INIT_ERROR_SERVICE_ADD);
+		BT_CHECK(ctx, !BtGattInitStatusComplete());
 	});
 
 	ctx.Run("generic BAS", [&]() {

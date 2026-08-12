@@ -22,6 +22,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "istddef.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/services/bt_bas.h"
 
 static uint8_t s_BtBasLevel = 100;
@@ -55,13 +56,24 @@ bool BtBasInit(uint8_t Level)
 	{
 		if (BtGattSrvcAdd(&s_BtBasSrvc) == false)
 		{
+			// An application registers this from BtAppInitUserServices, which
+			// runs inside the window BtGapInit opened and BtAppAdvInit closes.
+			// Reporting the failure there is what stops a device advertising a
+			// service it does not have, the same way bt_dis does.
+			BtGattInitStatusFail(BT_GATT_INIT_ERROR_SERVICE_ADD);
 			return false;
 		}
 		s_BtBasRegistered = true;
 	}
 
-	return BtGattCharSetValue(&s_BtBasChar[BT_BAS_CHAR_IDX_BATTERY_LEVEL],
-							  &s_BtBasLevel, sizeof(s_BtBasLevel));
+	if (BtGattCharSetValue(&s_BtBasChar[BT_BAS_CHAR_IDX_BATTERY_LEVEL],
+						   &s_BtBasLevel, sizeof(s_BtBasLevel)) == false)
+	{
+		BtGattInitStatusFail(BT_GATT_INIT_ERROR_VALUE_SET);
+		return false;
+	}
+
+	return true;
 }
 
 bool BtBasSetLevel(uint16_t ConnHdl, uint8_t Level, bool bNotify)
