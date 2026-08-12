@@ -159,6 +159,12 @@ SOFTWARE.
 #define BT_GAP_PHY_2MBITS								(1<<1)
 #define BT_GAP_PHY_CODED								(1<<2)
 
+// PHY_Options for BtGapSetPhy, Core Vol 4 Part E 7.8.49. Only meaningful when
+// the LE Coded PHY is among the ones asked for; ignored otherwise.
+#define BT_GAP_PHY_CODED_ANY							0
+#define BT_GAP_PHY_CODED_S2								1
+#define BT_GAP_PHY_CODED_S8								2
+
 #define BT_GAP_CONN_SLAVE_LATENCY						0 		//!< Slave latency.
 #define BT_GAP_CONN_SUP_TIMEOUT							4000	//!< Connection supervisory timeout (4 seconds), in msec.
 
@@ -281,8 +287,8 @@ typedef struct __Bt_Gap_Config {
 	uint32_t AdvTimeout;		//!< Advertisement timeout in msec
 	float ConnIntervalMin;		//!< Min connection interval in msec
 	float ConnIntervalMax;		//!< Max connection interval in msec
-	uint16_t SlaveLatency;		//!< Slave latency
-	uint16_t SupTimeout;		//!< Connection supervisory timeout
+	uint16_t SlaveLatency;		//!< Slave latency, in connection events
+	uint16_t SupTimeout;		//!< Connection supervisory timeout in msec
 } BtGapCfg_t;
 
 #pragma pack(pop)
@@ -348,6 +354,65 @@ bool BtGapSetSecurityLevels(const uint8_t *pRequirements, size_t Count);
  * 			requirements. Nothing is copied when pBuff is NULL or too small.
  */
 size_t BtGapGetSecurityLevels(uint8_t *pBuff, size_t BuffLen);
+
+// --- Link procedures on an established connection ---
+//
+// These run the same controller commands bt_hci_ctlr exposes, and exist so an
+// application does not have to hold an HCI device to ask for them. The rule
+// they follow is the one BtGapConnect and BtAdvStart already follow: the
+// controller layer takes the device it operates on, the layer above resolves
+// it and takes only what the caller can be expected to know.
+//
+// Implemented on the ports that run the IOsonata host over standard HCI. A
+// port whose vendor SDK owns the host answers a PHY update the peer starts,
+// but has no way to start one, so these refuse there rather than failing to
+// link. Check the return value: false means the procedure did not go out.
+
+/**
+ * @brief	Request a PHY change on one connection.
+ *
+ * TxPhys and RxPhys are BT_GAP_PHY_* bit masks. Zero for either direction
+ * means no preference for it. PhyOptions selects an LE Coded PHY coding and
+ * is ignored on any other PHY.
+ *
+ * The change is negotiated with the peer, so a true return means the request
+ * went out, not that the PHY moved. The result arrives as an LE PHY Update
+ * Complete event and can be read back with BtGapReadPhy.
+ *
+ * @return	true when the controller accepted the request.
+ */
+bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys, uint8_t RxPhys,
+	uint16_t PhyOptions);
+
+/**
+ * @brief	Read the PHY one connection is using now.
+ *
+ * Outputs are BT_GAP_PHY_* bit masks, one bit set in each.
+ *
+ * @return	true when both directions were read.
+ */
+bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy, uint8_t *pRxPhy);
+
+/**
+ * @brief	Set the PHY preference applied to connections made from now on.
+ *
+ * Zero for either direction means no preference for it. Does not disturb a
+ * connection that already exists.
+ */
+bool BtGapSetDefaultPhy(uint8_t TxPhys, uint8_t RxPhys);
+
+/**
+ * @brief	Request the transmit Link Layer data length for one connection.
+ *
+ * TxOctets is the requested maximum LL Data PDU payload and TxTime its
+ * transmission time in microseconds. Like a PHY change this is negotiated,
+ * so the outcome arrives as an LE Data Length Change event. A controller
+ * already at the requested length is allowed to send no event at all.
+ *
+ * @return	true when the controller accepted the request.
+ */
+bool BtGapSetDataLength(uint16_t ConnHdl, uint16_t TxOctets, uint16_t TxTime);
+
 bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam);//, BtGapScanParam_t * const pScanParam);
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg);
 bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len);

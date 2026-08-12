@@ -696,8 +696,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		.AdvTimeout = pCfg->AdvTimeout,
 		.ConnIntervalMin = pCfg->ConnIntervalMin,
 		.ConnIntervalMax = pCfg->ConnIntervalMax,
-		.SlaveLatency = 0,
-		.SupTimeout = 400
+		.SlaveLatency = BT_GAP_CONN_SLAVE_LATENCY,
+		.SupTimeout = BT_GAP_CONN_SUP_TIMEOUT
 	};
 
 	DEBUG_PRINTF("BtGapInit\r\n");

@@ -31,6 +31,11 @@ Copyright (c) 2026, I-SYST inc. All rights reserved.
 #define BT_DIS_STR_MAX_LEN		22
 #endif
 
+// The PnP ID characteristic value is seven octets: one for the vendor id
+// source, then three 16 bit fields little endian. The struct is written
+// straight to the characteristic, so its packed size is the wire length.
+static_assert(sizeof(BtDisPnpId_t) == 7, "PnP ID must be 7 octets");
+
 static BtDisPnpId_t s_BtDisPnpId = {};
 static uint8_t s_BtDisEmptyValue;
 static bool s_BtDisRegistered = false;

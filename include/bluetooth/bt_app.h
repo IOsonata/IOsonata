@@ -142,7 +142,7 @@ typedef struct __Bt_App_Cfg {
 	bool bCompleteUuidList;			//!< true - Follow is a complete uuid list. false - incomplete list (more uuid than listed here)
 	const BtUuidArr_t *pAdvUuid;
 	uint32_t AdvInterval;			//!< In msec
-	uint32_t AdvTimeout;			//!< In sec
+	uint32_t AdvTimeout;			//!< In msec, 0 for no timeout
 	uint32_t AdvSlowInterval;		//!< Slow advertising interval, if > 0, fallback to
 									//!< slow interval on adv timeout and advertise until connected
 	float ConnIntervalMin;   		//!< Min. connection interval in msec
