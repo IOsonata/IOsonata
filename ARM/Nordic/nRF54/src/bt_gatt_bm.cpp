@@ -525,6 +525,18 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		return true;
 	}
 
+	// This port cannot sign, so an application asking for signed security is
+	// asking for something no service here can provide. Report that once, as a
+	// configuration error, rather than refusing every service in turn and
+	// leaving the reason to be guessed from a failed advertising start.
+	if (g_BtAppData.SecType == BT_GAP_SECTYPE_SIGNED_NO_MITM ||
+		g_BtAppData.SecType == BT_GAP_SECTYPE_SIGNED_MITM)
+	{
+		DEBUG_PRINTF("BtGattSrvcAdd[bm]: signed security is not supported\r\n");
+		BtGattInitStatusFail(BT_GATT_INIT_ERROR_INVALID_CFG);
+		return false;
+	}
+
 	for (int i = 0; i < pSrvc->NbChar; i++)
 	{
 		BtGattChar_t *pChar = &pSrvc->pCharArray[i];
