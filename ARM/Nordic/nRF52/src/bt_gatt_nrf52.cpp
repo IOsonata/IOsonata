@@ -50,16 +50,6 @@ SOFTWARE.
 #include "bluetooth/bt_peer.h"
 
 #pragma pack(push, 1)
-typedef enum {
-	BTSRVC_SECTYPE_NONE,
-	BTSRVC_SECTYPE_STATICKEY_NO_MITM,
-	BTSRVC_SECTYPE_STATICKEY_MITM,
-	BTSRVC_SECTYPE_LESC_MITM,
-	BTSRVC_SECTYPE_SIGNED_NO_MITM,
-	BTSRVC_SECTYPE_SIGNED_MITM,
-	BTSRVC_SECTYPE_OPEN,		//!< Matches BT_GAP_SECTYPE_OPEN
-} BTSRVC_SECTYPE;
-
 typedef struct {
 	uint16_t Handle;
 	uint16_t Offset;
@@ -387,27 +377,27 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt,
 }
 
 static void BtSrvcEncSec(ble_gap_conn_sec_mode_t *pSecMode,
-						 BTSRVC_SECTYPE SecType)
+						 uint8_t SecType)
 {
 	switch (SecType)
 	{
-		case BTSRVC_SECTYPE_STATICKEY_NO_MITM:
+		case BT_GAP_SECTYPE_STATICKEY_NO_MITM:
 			BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(pSecMode);
 			break;
-		case BTSRVC_SECTYPE_STATICKEY_MITM:
+		case BT_GAP_SECTYPE_STATICKEY_MITM:
 			BLE_GAP_CONN_SEC_MODE_SET_ENC_WITH_MITM(pSecMode);
 			break;
-		case BTSRVC_SECTYPE_LESC_MITM:
+		case BT_GAP_SECTYPE_LESC_MITM:
 			BLE_GAP_CONN_SEC_MODE_SET_LESC_ENC_WITH_MITM(pSecMode);
 			break;
-		case BTSRVC_SECTYPE_SIGNED_NO_MITM:
+		case BT_GAP_SECTYPE_SIGNED_NO_MITM:
 			BLE_GAP_CONN_SEC_MODE_SET_SIGNED_NO_MITM(pSecMode);
 			break;
-		case BTSRVC_SECTYPE_SIGNED_MITM:
+		case BT_GAP_SECTYPE_SIGNED_MITM:
 			BLE_GAP_CONN_SEC_MODE_SET_SIGNED_WITH_MITM(pSecMode);
 			break;
-		case BTSRVC_SECTYPE_NONE:
-		case BTSRVC_SECTYPE_OPEN:
+		case BT_GAP_SECTYPE_NONE:
+		case BT_GAP_SECTYPE_OPEN:
 		default:
 			BLE_GAP_CONN_SEC_MODE_SET_OPEN(pSecMode);
 			break;
@@ -415,7 +405,7 @@ static void BtSrvcEncSec(ble_gap_conn_sec_mode_t *pSecMode,
 }
 
 static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
-									 BTSRVC_SECTYPE SecType,
+									 uint8_t SecType,
 									 uint8_t SoftDeviceUuidType)
 {
 	ble_gatts_char_md_t charMd;
@@ -587,7 +577,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	for (int i = 0; i < pSrvc->NbChar; i++)
 	{
 		BtGattChar_t *pChar = &pSrvc->pCharArray[i];
-		BTSRVC_SECTYPE sec = (BTSRVC_SECTYPE)BtGattSecTypeGet(pSrvc, pChar,
+		uint8_t sec = BtGattSecTypeGet(pSrvc, pChar,
 			g_BtAppData.SecType);
 		if (BtGattCharAdd(pSrvc, pChar, sec,
 			softDeviceUuidType) != NRF_SUCCESS)
