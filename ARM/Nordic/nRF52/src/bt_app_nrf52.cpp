@@ -1434,11 +1434,17 @@ void BtDisInit(const BtAppCfg_t *pCfg)
 			ble_srv_ascii_to_utf8(&dis_init.fw_rev_str, (char*)pCfg->pDevInfo->pFwVerStr);
 		if (pCfg->pDevInfo->pHwVerStr)
 			ble_srv_ascii_to_utf8(&dis_init.hw_rev_str, (char*)pCfg->pDevInfo->pHwVerStr);
+		if (pCfg->pDevInfo->pSwVerStr)
+			ble_srv_ascii_to_utf8(&dis_init.sw_rev_str, (char*)pCfg->pDevInfo->pSwVerStr);
 	}
 
+	// Zeroed first: product_version was never assigned, so the PnP ID
+	// characteristic published whatever the stack frame held there.
+	memset(&pnp_id, 0, sizeof(pnp_id));
     pnp_id.vendor_id_source = BLE_DIS_VENDOR_ID_SRC_BLUETOOTH_SIG;
     pnp_id.vendor_id  = pCfg->VendorId;
     pnp_id.product_id = pCfg->ProductId;
+    pnp_id.product_version = pCfg->ProductVer;
     dis_init.p_pnp_id = &pnp_id;
 
     //BLE_GAP_CONN_SEC_MODE_SET_OPEN(&dis_init.dis_attr_md.read_perm);

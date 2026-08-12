@@ -156,6 +156,7 @@ const BtAppDevInfo_t s_BlePdmDevDesc = {
 	"123",					// Serial number string
 	"0.0",					// Firmware version string
 	"0.0",					// Hardware version string
+	nullptr,				// Software version string, loadable software only
 };
 
 const BtAppCfg_t s_BleAppCfg = {

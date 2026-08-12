@@ -62,7 +62,6 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_smp.h"
-#include "bluetooth/bt_hci_cap.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "bluetooth/bt_appearance.h"
 
@@ -175,6 +174,7 @@ static const BtAppDevInfo_t s_DevInfo = {
 	"001",
 	"0.1",
 	"0.1",
+	nullptr,
 };
 
 // Stable marker used by the HciController Python test to identify the DUT by
@@ -373,23 +373,8 @@ static bool DutParseHex(const char *pArg, uint8_t *pBuff, size_t BuffLen,
 // Stack access
 //
 
-// Several of the stack APIs used below take the local HCI device, which is how
-// the IOsonata host reaches its controller. That is plumbing inside the stack,
-// not something this application interprets: it fetches the pointer, prints
-// the refusal when the port has none, and leaves the caller with nothing to
-// check beyond a null return.
-static BtHciDevice_t *DutHciDev(const char *pWhat)
-{
-	BtHciDevice_t *pDev = BtAppHciDevGet();
-
-	if (pDev == nullptr)
-	{
-		g_Uart.printf("DUT ERROR %s no_hci_device\r\n", pWhat);
-	}
-
-	return pDev;
-}
-
+// The link the commands below act on. This peripheral holds one at a time, so
+// there is nothing to choose between.
 static uint16_t DutActiveConnHdl(void)
 {
 	BtDevice_t *pPeer = BtPeerGetActive();
@@ -567,16 +552,10 @@ static void DutPhyRead(void)
 		return;
 	}
 
-	BtHciDevice_t *pDev = DutHciDev("phy");
-	if (pDev == nullptr)
-	{
-		return;
-	}
-
 	uint8_t tx = 0;
 	uint8_t rx = 0;
 
-	if (BtHciReadPhy(pDev, hdl, &tx, &rx) == false)
+	if (BtGapReadPhy(hdl, &tx, &rx) == false)
 	{
 		g_Uart.printf("DUT ERROR phy read_failed hdl=%u\r\n", (unsigned)hdl);
 		return;
@@ -598,14 +577,7 @@ static void DutPhySet(uint32_t Tx, uint32_t Rx, uint32_t Opt)
 		return;
 	}
 
-	BtHciDevice_t *pDev = DutHciDev("phy");
-	if (pDev == nullptr)
-	{
-		return;
-	}
-
-	if (BtHciSetPhy(pDev, hdl, (uint8_t)Tx, (uint8_t)Rx,
-		(uint16_t)Opt) == false)
+	if (BtGapSetPhy(hdl, (uint8_t)Tx, (uint8_t)Rx, (uint16_t)Opt) == false)
 	{
 		g_Uart.printf("DUT ERROR phy set_failed tx=%lu rx=%lu opt=%lu\r\n",
 			(unsigned long)Tx, (unsigned long)Rx, (unsigned long)Opt);
@@ -626,14 +598,7 @@ static void DutDataLen(uint32_t Octets, uint32_t Time)
 		return;
 	}
 
-	BtHciDevice_t *pDev = DutHciDev("datalen");
-	if (pDev == nullptr)
-	{
-		return;
-	}
-
-	if (BtHciSetDataLength(pDev, hdl, (uint16_t)Octets,
-		(uint16_t)Time) == false)
+	if (BtGapSetDataLength(hdl, (uint16_t)Octets, (uint16_t)Time) == false)
 	{
 		g_Uart.printf("DUT ERROR datalen set_failed octets=%lu time=%lu\r\n",
 			(unsigned long)Octets, (unsigned long)Time);
@@ -678,12 +643,6 @@ static void DutNotify(const char *pArg)
 
 static void DutPeriodicInit(void)
 {
-	BtHciDevice_t *pDev = DutHciDev("padv");
-	if (pDev == nullptr)
-	{
-		return;
-	}
-
 	BtAdvPeriodicCfg_t cfg = {};
 	cfg.IntervalMin = DUT_PERIODIC_INTERVAL_MIN;
 	cfg.IntervalMax = DUT_PERIODIC_INTERVAL_MAX;
@@ -691,7 +650,7 @@ static void DutPeriodicInit(void)
 	cfg.Sid = 0;
 	cfg.IncludeTxPower = true;
 
-	if (BtAdvPeriodicInit(pDev, &cfg) == false)
+	if (BtAdvPeriodicInit(&cfg) == false)
 	{
 		g_Uart.printf("DUT ERROR padv init_failed\r\n");
 		s_PeriodicReady = false;
@@ -775,12 +734,6 @@ static void DutPeriodicStop(void)
 
 static void DutPawrInit(void)
 {
-	BtHciDevice_t *pDev = DutHciDev("pawr");
-	if (pDev == nullptr)
-	{
-		return;
-	}
-
 	BtAdvPawrCfg_t cfg = {};
 	cfg.IntervalMin = DUT_PAWR_INTERVAL_MIN;
 	cfg.IntervalMax = DUT_PAWR_INTERVAL_MAX;
@@ -793,7 +746,7 @@ static void DutPawrInit(void)
 	cfg.ResponseSlotSpacing = DUT_PAWR_RSP_SLOT_SPACING;
 	cfg.NumResponseSlots = DUT_PAWR_RSP_SLOT_CNT;
 
-	if (BtAdvPawrInit(pDev, &cfg) == false)
+	if (BtAdvPawrInit(&cfg) == false)
 	{
 		g_Uart.printf("DUT ERROR pawr init_failed\r\n");
 		s_PawrReady = false;
@@ -986,7 +939,7 @@ static void HandleCommand(const char *pLine)
 		}
 		if (DutParseUint(&arg, &c) == false)
 		{
-			c = BT_HCI_PHY_CODED_ANY;
+			c = BT_GAP_PHY_CODED_ANY;
 		}
 		DutPhySet(a, b, c);
 		return;

@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_l2cap.h"
 
 namespace btcompliance {

@@ -116,6 +116,11 @@ typedef struct __Bt_App_Dev_Info {
 	const char *pSerialNoStr;	//!< Serial number string
 	const char *pFwVerStr;		//!< Firmware version string
 	const char *pHwVerStr;		//!< Hardware version string
+	//!< Software version string, for a device that loads software at run
+	//!< time on top of its firmware. Null on a device that flashes one
+	//!< image and boots into it: there the firmware version is the only
+	//!< version, and DIS leaves out the Software Revision characteristic.
+	const char *pSwVerStr;
 } BtAppDevInfo_t;
 
 typedef struct __Bt_App_Cfg {

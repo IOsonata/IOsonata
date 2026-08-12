@@ -33,15 +33,21 @@ Copyright (c) 2026, I-SYST inc. All rights reserved.
 
 static BtDisPnpId_t s_BtDisPnpId = {};
 static uint8_t s_BtDisEmptyValue;
+static bool s_BtDisRegistered = false;
 
+// Software Revision sits last so the characteristic count can drop it without
+// disturbing the others. A device that flashes one image and boots into it has
+// no software revision distinct from its firmware revision, and an empty
+// characteristic on air is worse than an absent optional one.
 enum {
 	BT_DIS_CHAR_IDX_MANUF_NAME = 0,
 	BT_DIS_CHAR_IDX_MODEL_NUM,
 	BT_DIS_CHAR_IDX_SERIAL_NUM,
 	BT_DIS_CHAR_IDX_FW_REV,
 	BT_DIS_CHAR_IDX_HW_REV,
-	BT_DIS_CHAR_IDX_SW_REV,
 	BT_DIS_CHAR_IDX_PNP_ID,
+	BT_DIS_CHAR_COUNT_NO_SW,
+	BT_DIS_CHAR_IDX_SW_REV = BT_DIS_CHAR_COUNT_NO_SW,
 	BT_DIS_CHAR_COUNT,
 };
 
@@ -56,10 +62,10 @@ static BtGattChar_t s_BtDisChar[] = {
 	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
 	BT_CHAR(BT_UUID_CHARACTERISTIC_HARDWARE_REVISION_STRING,
 	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
-	BT_CHAR(BT_UUID_CHARACTERISTIC_SOFTWARE_REVISION_STRING,
-	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
 	BT_CHAR(BT_UUID_CHARACTERISTIC_PNP_ID,
 	        sizeof(BtDisPnpId_t), BT_GATT_CHAR_PROP_READ, NULL),
+	BT_CHAR(BT_UUID_CHARACTERISTIC_SOFTWARE_REVISION_STRING,
+	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
 };
 
 static BtGattSrvc_t s_BtDisSrvc = BT_SRVC_STD(BT_UUID_GATT_SERVICE_DEVICE_INFORMATION,
@@ -110,13 +116,27 @@ __attribute__((weak)) bool BtDisInit(const struct __Bt_App_Cfg *pCfgIn)
 		return true;
 	}
 
+	const BtAppDevInfo_t *pInfo = pCfg->pDevInfo;
+	const char *pSwVer = pInfo != NULL ? pInfo->pSwVerStr : NULL;
+	bool hasSw = pSwVer != NULL && pSwVer[0] != 0;
+
+	// The characteristic count is decided once, before the service reaches a
+	// port, because every port keeps the pointer and builds its database from
+	// it. A later init cannot grow or shrink what is already on air, so it
+	// only refreshes values.
+	if (s_BtDisRegistered == false)
+	{
+		s_BtDisSrvc.NbChar = hasSw ?
+			BT_DIS_CHAR_COUNT : BT_DIS_CHAR_COUNT_NO_SW;
+	}
+
 	if (BtGattSrvcAdd(&s_BtDisSrvc) == false)
 	{
 		BtGattInitStatusFail(BT_GATT_INIT_ERROR_SERVICE_ADD);
 		return false;
 	}
+	s_BtDisRegistered = true;
 
-	const BtAppDevInfo_t *pInfo = pCfg->pDevInfo;
 	bool ok = true;
 	ok = SetStrCharValue(&s_BtDisChar[BT_DIS_CHAR_IDX_MANUF_NAME],
 		pInfo != NULL ? pInfo->ManufName : NULL) && ok;
@@ -128,7 +148,14 @@ __attribute__((weak)) bool BtDisInit(const struct __Bt_App_Cfg *pCfgIn)
 		pInfo != NULL ? pInfo->pFwVerStr : NULL) && ok;
 	ok = SetStrCharValue(&s_BtDisChar[BT_DIS_CHAR_IDX_HW_REV],
 		pInfo != NULL ? pInfo->pHwVerStr : NULL) && ok;
-	ok = SetStrCharValue(&s_BtDisChar[BT_DIS_CHAR_IDX_SW_REV], NULL) && ok;
+	// Only when the characteristic is part of the registered service. It is
+	// cleared rather than skipped when a later init drops the software
+	// revision, so the previous value does not stay readable.
+	if (s_BtDisSrvc.NbChar > BT_DIS_CHAR_COUNT_NO_SW)
+	{
+		ok = SetStrCharValue(&s_BtDisChar[BT_DIS_CHAR_IDX_SW_REV],
+			hasSw ? pSwVer : NULL) && ok;
+	}
 
 	uint8_t source = BtDisVendorIdSource(pCfgIn);
 	if (source != BT_DIS_PNP_VENDOR_ID_SRC_BT_SIG &&

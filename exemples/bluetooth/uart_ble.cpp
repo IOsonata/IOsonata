@@ -202,6 +202,7 @@ const BtAppDevInfo_t s_UartBleDevDesc = {
 	"123",					// Serial number string
 	"0.0",					// Firmware version string
 	"0.0",					// Hardware version string
+	nullptr,				// Software version string, loadable software only
 };
 
 uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+\0";

@@ -153,6 +153,7 @@ static const BtAppDevInfo_t s_SmpDevInfo = {
 	"001",		// serial
 	"0.0",		// fw
 	"0.0",		// hw
+	nullptr,	// sw, loadable software only
 };
 uint8_t g_ManData[4] = { 0 };
 static BtSmpKeys_t s_SmpBondKeys;

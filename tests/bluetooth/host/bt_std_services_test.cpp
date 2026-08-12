@@ -70,7 +70,22 @@ extern "C" {
 
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
-	if (pSrvc == nullptr || s_ServiceCount >= 4)
+	if (pSrvc == nullptr)
+	{
+		return false;
+	}
+
+	// Every port accepts a service it already holds and adds nothing, so
+	// reinitialization refreshes values without a second registration.
+	for (int i = 0; i < s_ServiceCount; i++)
+	{
+		if (s_Services[i] == pSrvc)
+		{
+			return true;
+		}
+	}
+
+	if (s_ServiceCount >= 4)
 	{
 		return false;
 	}
@@ -129,7 +144,7 @@ int main()
 		BT_CHECK(ctx, BtDisInit(nullptr) == false);
 
 		BtAppDevInfo_t info = {
-			"Model-54", "I-SYST", "SN-42", "1.2.3", "A1"
+			"Model-54", "I-SYST", "SN-42", "1.2.3", "A1", "9.8.7"
 		};
 		BtAppCfg_t cfg = {};
 		cfg.pDevInfo = &info;
@@ -146,6 +161,8 @@ int main()
 		BT_CHECK(ctx, s_ServiceCount == 1);
 		BtGattSrvc_t *pDis = s_Services[0];
 		BT_CHECK(ctx, pDis->UuidSrvc == BT_UUID_GATT_SERVICE_DEVICE_INFORMATION);
+		// Seven because this config carries a software revision; a build
+		// without one registers six and no Software Revision characteristic.
 		BT_CHECK(ctx, pDis->NbChar == 7);
 
 		BtGattChar_t *pManuf = FindChar(pDis,
@@ -163,6 +180,12 @@ int main()
 		BT_CHECK(ctx, ValueEquals(pManuf, "I-SYST", 6));
 		BT_CHECK(ctx, ValueEquals(pModel, "Model-54", 8));
 
+		BT_CHECK(ctx, ValueEquals(pSw, "9.8.7", 5));
+
+		// An absent software revision leaves the characteristic registered
+		// with an empty value rather than keeping the previous one.
+		info.pSwVerStr = nullptr;
+		BT_CHECK(ctx, BtDisInit(&cfg));
 		ValueCapture *pSwCap = CaptureFor(pSw);
 		BT_CHECK(ctx, pSwCap != nullptr && pSwCap->Len == 0);
 		BT_CHECK(ctx, pSw != nullptr && pSw->pValue != nullptr);

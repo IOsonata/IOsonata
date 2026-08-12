@@ -83,7 +83,11 @@ static void ResetHarness()
 static BtAppCfg_t MakeCfg(bool Secure = true, bool DeviceInfo = true)
 {
 	static const BtAppDevInfo_t devInfo = {
-		"Model-54", "I-SYST", "SN-54", "1.0.0", "A1"
+		// No software version: this is a single image build, so DIS leaves
+		// out the Software Revision characteristic entirely. The serial
+		// number is absent instead, which is what the zero-length checks
+		// below cover, a missing string still being set with a valid pointer.
+		"Model-54", "I-SYST", nullptr, "1.0.0", "A1", nullptr
 	};
 	static uint8_t evtMem[64];
 	static uint8_t peerMem[256];
@@ -274,7 +278,9 @@ int main()
 		BT_CHECK(ctx, BtAppInit(&cfg));
 		BT_CHECK(ctx, g_BtAppData.State == BTAPP_STATE_INITIALIZED);
 		BT_CHECK(ctx, CallSeen(CALL_DIS_SERVICE));
-		BT_CHECK(ctx, s_DisValueCount == 7);
+		// Six, not seven: no software revision configured, so that
+		// characteristic is not part of the service.
+		BT_CHECK(ctx, s_DisValueCount == 6);
 		BT_CHECK(ctx, s_ZeroLenCount == 1);
 		BT_CHECK(ctx, s_ZeroLenPointerValid);
 		BT_CHECK(ctx, CallSeen(CALL_SECURITY));
@@ -336,7 +342,10 @@ int main()
 	});
 
 	ctx.Run("every DIS value failure reaches AppInit", [&]() {
-		for (int i = 0; i < 7; i++)
+		// Six values for this config: five strings and the PnP ID. The
+		// Software Revision characteristic is absent, so there is no
+		// seventh value to fail.
+		for (int i = 0; i < 6; i++)
 		{
 			ResetHarness();
 			s_FailPoint = FAIL_DIS_VALUE;
