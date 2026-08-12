@@ -424,14 +424,17 @@ static ret_code_t LinkSecureCentralEncrypt(uint16_t ConnHdl, pm_peer_id_t PeerId
 {
 	pm_peer_data_flash_t peerData;
 	const ble_gap_enc_key_t *pKey = NULL;
+	bool lesc = false;
 
 	ret_code_t r = pdb_peer_data_ptr_get(PeerId, PM_PEER_DATA_ID_BONDING, &peerData);
 	if (r == NRF_SUCCESS)
 	{
 		// Peer distributed its LTK as peripheral; for LESC both sides hold
-		// the same LTK under own_ltk.
+		// the same LTK under own_ltk. Which one was used is a property of the
+		// bond, so it is read from own_ltk before either key is chosen.
 		pKey = &peerData.p_bonding_data->peer_ltk;
-		if (peerData.p_bonding_data->own_ltk.enc_info.lesc)
+		lesc = peerData.p_bonding_data->own_ltk.enc_info.lesc;
+		if (lesc)
 		{
 			pKey = &peerData.p_bonding_data->own_ltk;
 		}
@@ -441,7 +444,15 @@ static ret_code_t LinkSecureCentralEncrypt(uint16_t ConnHdl, pm_peer_id_t PeerId
 		return (r == NRF_ERROR_BUSY) ? NRF_ERROR_BUSY : NRF_ERROR_INTERNAL;
 	}
 
-	if (pKey == NULL || !pKey->enc_info.ltk_len)
+	// A legacy bond is re-encrypted by quoting the EDIV and Rand the peripheral
+	// issued, so a record without them is unusable however long its key is:
+	// sd_ble_gap_encrypt would go out with an all zero master id and the
+	// peripheral would answer Pin or Key Missing. A LESC LTK has an all zero
+	// master id by design, so that test is skipped there. Core Vol 3 Part H
+	// 2.4.4, and the same rule the SDK peer manager applies in
+	// link_secure_central_encryption.
+	if (pKey == NULL || !pKey->enc_info.ltk_len ||
+		(!lesc && !im_master_id_is_valid(&pKey->master_id)))
 	{
 		return NRF_ERROR_NOT_FOUND;		// no usable key; caller falls back to pairing
 	}
