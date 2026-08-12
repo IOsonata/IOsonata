@@ -4,9 +4,9 @@
 @brief	Bluetooth Device Information Service (DIS) - service UUID 0x180A.
 
         Generic spec-standard implementation. Builds the standard GATT service
-        via BtGattSrvcAdd, so works on any port that uses the generic GATT layer
-        (SDC, and any future host-side port). Ports that rely on vendor
-        middleware currently use their own BtDisInit and bypass this module.
+        via BtGattSrvcAdd, so it works on every port: raw HCI, the SoftDevice,
+        the nRF54 BM stack and the STM32WBA all reach it through the same
+        call. Declared weak, so a port that needs its own can still override.
 
 @author	Hoang Nguyen Hoan
 @date	May 25, 2026

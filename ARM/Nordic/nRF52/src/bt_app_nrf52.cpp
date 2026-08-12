@@ -47,7 +47,6 @@ SOFTWARE.
 #include "ble_advertising.h"
 #include "ble_conn_params.h"
 #include "ble_conn_state.h"
-#include "ble_dis.h"
 #include "nrf_ble_gatt.h"
 #include "peer_manager.h"
 #include "app_timer.h"
@@ -78,6 +77,7 @@ SOFTWARE.
 #endif
 #include "bt_lesc.h"
 #include "bluetooth/bt_app.h"
+#include "bluetooth/services/bt_dis.h"
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
@@ -1416,68 +1416,6 @@ static void fds_evt_handler(fds_evt_t const * const p_fds_evt)
 }
 
 
-void BtDisInit(const BtAppCfg_t *pCfg)
-{
-    ble_dis_init_t   dis_init;
-    ble_dis_pnp_id_t pnp_id;
-
-    // Initialize Device Information Service.
-    memset(&dis_init, 0, sizeof(dis_init));
-
-	if (pCfg->pDevInfo)
-	{
-		ble_srv_ascii_to_utf8(&dis_init.manufact_name_str, (char*)pCfg->pDevInfo->ManufName);
-		ble_srv_ascii_to_utf8(&dis_init.model_num_str, (char*)pCfg->pDevInfo->ModelName);
-		if (pCfg->pDevInfo->pSerialNoStr)
-			ble_srv_ascii_to_utf8(&dis_init.serial_num_str, (char*)pCfg->pDevInfo->pSerialNoStr);
-		if (pCfg->pDevInfo->pFwVerStr)
-			ble_srv_ascii_to_utf8(&dis_init.fw_rev_str, (char*)pCfg->pDevInfo->pFwVerStr);
-		if (pCfg->pDevInfo->pHwVerStr)
-			ble_srv_ascii_to_utf8(&dis_init.hw_rev_str, (char*)pCfg->pDevInfo->pHwVerStr);
-		if (pCfg->pDevInfo->pSwVerStr)
-			ble_srv_ascii_to_utf8(&dis_init.sw_rev_str, (char*)pCfg->pDevInfo->pSwVerStr);
-	}
-
-	// Zeroed first: product_version was never assigned, so the PnP ID
-	// characteristic published whatever the stack frame held there.
-	memset(&pnp_id, 0, sizeof(pnp_id));
-    pnp_id.vendor_id_source = BLE_DIS_VENDOR_ID_SRC_BLUETOOTH_SIG;
-    pnp_id.vendor_id  = pCfg->VendorId;
-    pnp_id.product_id = pCfg->ProductId;
-    pnp_id.product_version = pCfg->ProductVer;
-    dis_init.p_pnp_id = &pnp_id;
-
-    //BLE_GAP_CONN_SEC_MODE_SET_OPEN(&dis_init.dis_attr_md.read_perm);
-    //BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&dis_init.dis_attr_md.write_perm);
-
-    switch (pCfg->SecType)
-    {
-    	case BTGAP_SECTYPE_STATICKEY_NO_MITM:
-    	    dis_init.dis_char_rd_sec = SEC_JUST_WORKS;
-    		break;
-    	case BTGAP_SECTYPE_STATICKEY_MITM:
-    	    dis_init.dis_char_rd_sec = SEC_MITM;
-    		break;
-    	case BTGAP_SECTYPE_LESC_MITM:
-    	    dis_init.dis_char_rd_sec = SEC_JUST_WORKS;
-    		break;
-    	case BTGAP_SECTYPE_SIGNED_NO_MITM:
-    	    dis_init.dis_char_rd_sec = SEC_SIGNED;
-    		break;
-    	case BTGAP_SECTYPE_SIGNED_MITM:
-    	    dis_init.dis_char_rd_sec = SEC_SIGNED_MITM;
-    		break;
-    	case BTGAP_SECTYPE_NONE:
-    	default:
-    	    dis_init.dis_char_rd_sec = SEC_OPEN;
-    	    break;
-    }
-
-    uint32_t err_code = ble_dis_init(&dis_init);
-    APP_ERROR_CHECK(err_code);
-
-}
-
 /**@brief Function for Initializing the Nordic SoftDevice firmware stack
  *
  * @param[in] CentLinkCount
@@ -1831,9 +1769,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 		BtAppInitUserServices();
 	}
 
-	if (pCfg->pDevInfo != NULL)
+	if (pCfg->pDevInfo != NULL && BtDisInit(pCfg) == false)
 	{
-		BtDisInit(pCfg);
+		return false;
 	}
 
     BtGattInit();
