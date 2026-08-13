@@ -36,6 +36,10 @@ constexpr uint16_t kConnHdl = 0x0044;
 BtHciDevice_t s_Dev = {};
 BtDevice_t s_Peer = {};
 
+// The bond this device already holds for the peer, as BtSmpBondKeysLookup
+// would return it. bValid false means no stored bond.
+BtSmpKeys_t s_StoredBond = {};
+
 void ResetLink(uint8_t LocalIoCaps, uint8_t LocalAuthReq)
 {
 	std::memset(s_SmpLink, 0, sizeof(s_SmpLink));
@@ -50,24 +54,42 @@ void ResetLink(uint8_t LocalIoCaps, uint8_t LocalAuthReq)
 	s_Peer.Conn.Hdl = kConnHdl;
 	s_Peer.bSecure = false;
 
+	std::memset(&s_StoredBond, 0, sizeof(s_StoredBond));
+
 	BtSmpAuthConfig(LocalIoCaps, LocalAuthReq);
 	SmpTxReset();
 }
 
+// Record a stored bond at the strength the cases below compare against.
+void StoreBond(uint8_t EncKeySize, bool bSc, bool bAuthenticated)
+{
+	std::memset(&s_StoredBond, 0, sizeof(s_StoredBond));
+	s_StoredBond.EncKeySize = EncKeySize;
+	s_StoredBond.bSc = bSc;
+	s_StoredBond.bAuthenticated = bAuthenticated;
+	s_StoredBond.bValid = true;
+}
+
 // A Pairing Request as a central would send it: Secure Connections, full key
 // size, no OOB, distributing the identity key.
-void FeedPairingReq(uint8_t PeerIoCaps, uint8_t PeerAuthReq)
+void FeedPairingReqKeySize(uint8_t PeerIoCaps, uint8_t PeerAuthReq,
+						   uint8_t MaxKeySize)
 {
 	BtSmpPairingReq_t req = {};
 	req.Code = BT_SMP_CODE_PAIRING_REQ;
 	req.IOCaps = PeerIoCaps;
 	req.OOBFlag = BT_SMP_OOB_AUTH_NOT_PRESENT;
 	req.AuthReq = (uint8_t)(PeerAuthReq | BT_SMP_AUTHREQ_SC);
-	req.MaxKeySize = BT_SMP_MAX_ENC_KEY_SIZE;
+	req.MaxKeySize = MaxKeySize;
 	req.InitiatorKeyDist = BT_SMP_KEYDIST_IDKEY;
 	req.ResponderKeyDist = BT_SMP_KEYDIST_IDKEY;
 
 	BtProcessSmpData(&s_Dev, kConnHdl, (BtL2CapSmp_t*)&req, sizeof(req));
+}
+
+void FeedPairingReq(uint8_t PeerIoCaps, uint8_t PeerAuthReq)
+{
+	FeedPairingReqKeySize(PeerIoCaps, PeerAuthReq, BT_SMP_MAX_ENC_KEY_SIZE);
 }
 
 bool FirstIsPairingFailed(uint8_t Reason)
@@ -175,6 +197,135 @@ void TestPeerMitmAloneDoesNotRefuse()
 	CHECK(FirstIsPairingRsp());
 }
 
+
+//-----------------------------------------------------------------------------
+// Bond strength. A stored bond must not be replaced by a pairing that would
+// end at a lower security level. Three properties decide it: the encryption
+// key length, whether Secure Connections produced the key, and whether the
+// association model authenticated the peer. Equal strength passes so a
+// legitimate re-pair still works, and raising any property is an upgrade.
+//
+// The re-pair guard in SmpHandlePairingReq only fires once the link is already
+// encrypted, so on a fresh connection nothing else consults the stored record
+// before BtSmpBondAdd overwrites it.
+//-----------------------------------------------------------------------------
+
+// The attack: a Numeric Comparison bond holding a 16 octet Secure Connections
+// key, replaced by Just Works from anyone who can present the address.
+void TestBondDowngradeRefusesUnauthenticatedModel()
+{
+	ResetLink(BT_SMP_IOCAPS_DISPLAY_YESNO, 0);
+	StoreBond(16, true, true);
+	FeedPairingReq(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, 0);
+
+	CHECK(FirstIsPairingFailed(BT_SMP_ERR_AUTHEN_REQUIREMENTS));
+	CHECK(FirstIsPairingRsp() == false);
+	CHECK(s_SmpLink[0].Ctx.State == BT_SMP_STATE_IDLE);
+}
+
+// The same bond, kept authenticated but shrunk to the spec floor.
+void TestBondDowngradeRefusesShorterKey()
+{
+	ResetLink(BT_SMP_IOCAPS_DISPLAY_YESNO, 0);
+	StoreBond(16, true, true);
+	FeedPairingReqKeySize(BT_SMP_IOCAPS_DISPLAY_YESNO, BT_SMP_AUTHREQ_MITM,
+						  BT_SMP_MIN_ENC_KEY_SIZE);
+
+	CHECK(FirstIsPairingFailed(BT_SMP_ERR_AUTHEN_REQUIREMENTS));
+	CHECK(FirstIsPairingRsp() == false);
+}
+
+// Key size is compared, not assumed: one octet down is still down.
+void TestBondDowngradeRefusesOneOctetShorter()
+{
+	ResetLink(BT_SMP_IOCAPS_DISPLAY_YESNO, 0);
+	StoreBond(16, true, true);
+	FeedPairingReqKeySize(BT_SMP_IOCAPS_DISPLAY_YESNO, BT_SMP_AUTHREQ_MITM, 15);
+
+	CHECK(FirstIsPairingFailed(BT_SMP_ERR_AUTHEN_REQUIREMENTS));
+}
+
+// Re-pairing at the strength already held has to keep working. This is the
+// case that makes the rule a downgrade check rather than an overwrite ban.
+void TestBondEqualStrengthIsAccepted()
+{
+	ResetLink(BT_SMP_IOCAPS_DISPLAY_YESNO, 0);
+	StoreBond(16, true, true);
+	FeedPairingReq(BT_SMP_IOCAPS_DISPLAY_YESNO, BT_SMP_AUTHREQ_MITM);
+
+	CHECK(FirstIsPairingRsp());
+}
+
+// Raising the model from Just Works to Numeric Comparison is an upgrade.
+void TestBondUpgradeToAuthenticatedIsAccepted()
+{
+	ResetLink(BT_SMP_IOCAPS_DISPLAY_YESNO, 0);
+	StoreBond(16, true, false);
+	FeedPairingReq(BT_SMP_IOCAPS_DISPLAY_YESNO, BT_SMP_AUTHREQ_MITM);
+
+	CHECK(FirstIsPairingRsp());
+}
+
+// Raising the key length is an upgrade, and an unauthenticated stored bond
+// does not require the new pairing to be authenticated.
+void TestBondUpgradeKeySizeIsAccepted()
+{
+	ResetLink(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, 0);
+	StoreBond(7, true, false);
+	FeedPairingReq(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, 0);
+
+	CHECK(FirstIsPairingRsp());
+}
+
+// A legacy stored bond replaced by a Secure Connections one is an upgrade. The
+// harness always negotiates SC, so this pins the direction of the bSc test:
+// reading it backwards would refuse the pairing that should be encouraged.
+void TestBondLegacyReplacedByScIsAccepted()
+{
+	ResetLink(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, 0);
+	StoreBond(16, false, false);
+	FeedPairingReq(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, 0);
+
+	CHECK(FirstIsPairingRsp());
+}
+
+// First pairing with this peer. Nothing stored, nothing to weaken.
+void TestNoStoredBondPairsFreely()
+{
+	ResetLink(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, 0);
+	FeedPairingReqKeySize(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, 0,
+						  BT_SMP_MIN_ENC_KEY_SIZE);
+
+	CHECK(FirstIsPairingRsp());
+}
+
+// A slot that was found but never populated must not be read as a strong bond
+// and lock the peer out.
+void TestInvalidStoredBondPairsFreely()
+{
+	ResetLink(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, 0);
+	StoreBond(16, true, true);
+	s_StoredBond.bValid = false;
+	FeedPairingReqKeySize(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, 0,
+						  BT_SMP_MIN_ENC_KEY_SIZE);
+
+	CHECK(FirstIsPairingRsp());
+}
+
+// The rule judges the model, not Ctx.bAuthenticated, which is still false
+// while the negotiation runs and only becomes true once the model's own check
+// has passed. Reading the flag instead would refuse every re-pair of an
+// authenticated bond.
+void TestRuleJudgesModelNotAuthenticatedFlag()
+{
+	ResetLink(BT_SMP_IOCAPS_DISPLAY_YESNO, 0);
+	StoreBond(16, true, true);
+	FeedPairingReq(BT_SMP_IOCAPS_DISPLAY_YESNO, BT_SMP_AUTHREQ_MITM);
+
+	CHECK(FirstIsPairingRsp());
+	CHECK(s_SmpLink[0].Ctx.bAuthenticated == false);
+}
+
 } // namespace
 
 //-----------------------------------------------------------------------------
@@ -201,9 +352,14 @@ void BtGattCccdRestoreBonded(uint16_t)
 {
 }
 
-bool BtSmpBondKeysLookup(uint16_t, uint64_t, uint16_t, BtSmpKeys_t *)
+bool BtSmpBondKeysLookup(uint16_t, uint64_t, uint16_t, BtSmpKeys_t *pKeys)
 {
-	return false;
+	if (pKeys == nullptr || !s_StoredBond.bValid)
+	{
+		return false;
+	}
+	std::memcpy(pKeys, &s_StoredBond, sizeof(*pKeys));
+	return true;
 }
 
 void BtSmpBondLoad(void)
@@ -231,6 +387,16 @@ int main()
 	TestMitmRequiredAcceptsPasskeyEntry();
 	TestNoMitmStillPairsJustWorks();
 	TestPeerMitmAloneDoesNotRefuse();
+	TestBondDowngradeRefusesUnauthenticatedModel();
+	TestBondDowngradeRefusesShorterKey();
+	TestBondDowngradeRefusesOneOctetShorter();
+	TestBondEqualStrengthIsAccepted();
+	TestBondUpgradeToAuthenticatedIsAccepted();
+	TestBondUpgradeKeySizeIsAccepted();
+	TestBondLegacyReplacedByScIsAccepted();
+	TestNoStoredBondPairsFreely();
+	TestInvalidStoredBondPairsFreely();
+	TestRuleJudgesModelNotAuthenticatedFlag();
 
 	if (s_Failures != 0)
 	{

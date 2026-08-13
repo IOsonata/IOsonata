@@ -949,14 +949,25 @@ static uint8_t SmpSelectModel(uint8_t InitIo, uint8_t RespIo, bool Mitm, bool Oo
 	return s_SmpModelMap[InitIo][RespIo];
 }
 
+// Will the key this model produces carry the Authenticated security property
+// (Vol 3 Part H 2.3.1)? Of the models this stack selects only Just Works fails
+// to: Numeric Comparison and Passkey Entry are authenticated under Secure
+// Connections, and OOB is treated as authenticated where the out of band
+// channel is trusted.
+//
+// This answers from the model rather than from Ctx.bAuthenticated, which is
+// set later, once the model's own check has passed, and is still false while
+// feature negotiation runs.
+static bool SmpModelIsAuthenticated(uint8_t Model)
+{
+	return Model != BT_SMP_MODEL_JUST_WORKS;
+}
+
 // Does the selected model produce a key with the security property this device
 // asked for? The MITM flag requests an Authenticated security property for the
-// LTK (Vol 3 Part H 3.5.1), and of the models this stack selects only Just
-// Works fails to provide it: Numeric Comparison and Passkey Entry are
-// authenticated under Secure Connections, and OOB is treated as authenticated
-// where the out of band channel is trusted (Vol 3 Part H 2.3.1). Vol 3 Part H
-// 2.3.5.1 requires Pairing Failed with Authentication Requirements when the
-// key generation method does not reach the properties the device needs.
+// LTK (Vol 3 Part H 3.5.1). Vol 3 Part H 2.3.5.1 requires Pairing Failed with
+// Authentication Requirements when the key generation method does not reach the
+// properties the device needs.
 //
 // Only the local requirement is enforced. A peer that sets MITM enforces it on
 // its own side; refusing on its behalf would break a pairing this device is
@@ -967,7 +978,55 @@ static bool SmpModelMeetsLocalAuth(uint8_t Model)
 	{
 		return true;
 	}
-	return Model != BT_SMP_MODEL_JUST_WORKS;
+	return SmpModelIsAuthenticated(Model);
+}
+
+// Would completing this pairing replace a stored bond with a weaker one?
+//
+// The re-pair guard in SmpHandlePairingReq refuses only once the link is
+// already encrypted. On a fresh connection nothing else consults the stored
+// record, and BtSmpBondAdd finds the slot by peer address and overwrites it
+// wholesale, so a bond made with Numeric Comparison and a 16 octet Secure
+// Connections key can be replaced by Just Works with MaxKeySize 7 by anyone
+// who can present the address. The ATT permission checks then read the weaker
+// level from the record and trust it.
+//
+// Three properties decide it, the three the stored record carries and the ones
+// SmpConnSecFromKeys turns into a security level: the encryption key length,
+// whether Secure Connections produced the key, and whether the model
+// authenticated the peer. Equal strength passes, so a legitimate re-pair still
+// works; raising any of the three is an upgrade and passes too.
+//
+// The lookup is BtSmpBondKeysLookup with Rand and EDIV zero, which resolves
+// through BtSmpBondFindByAddr - the same function and the same address that
+// BtSmpBondAdd uses to pick the slot it would overwrite. So this inspects
+// exactly the record at risk. A peer whose address does not resolve to a
+// stored record is not matched, which is a limit of address resolution rather
+// than of this rule.
+//
+// Not adopted: Zephyr also refuses Just Works over an existing unauthenticated
+// bond (update_keys_check, behind CONFIG_BT_SMP_ALLOW_UNAUTH_OVERWRITE). That
+// is overwrite protection at equal strength rather than downgrade protection,
+// and is a separate policy decision.
+static bool SmpPairingWeakensBond(uint16_t ConnHdl, const BtSmpLink_t *pLink)
+{
+	BtSmpKeys_t stored;
+
+	if (BtSmpBondKeysLookup(ConnHdl, 0U, 0U, &stored) == false)
+	{
+		// No bond for this peer. Nothing to weaken.
+		return false;
+	}
+
+	bool weaker = pLink->Ctx.EncKeySize < stored.EncKeySize ||
+				  (stored.bSc && !pLink->Ctx.bSc) ||
+				  (stored.bAuthenticated &&
+				   !SmpModelIsAuthenticated(pLink->Ctx.Model));
+
+	// The copy carries the LTK, IRK and CSRK.
+	CryptoSecureWipe(&stored, sizeof(stored));
+
+	return weaker;
 }
 
 // Copy the pending OOB material into the link context of an OOB pairing.
@@ -1306,6 +1365,20 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		return;
 	}
 
+	if (SmpPairingWeakensBond(ConnHdl, pLink))
+	{
+		// A stored bond for this peer is stronger than what this pairing would
+		// end at. Completing would overwrite it and the link would then report
+		// the weaker level as if it had always been so. Authentication
+		// Requirements names the reason: the security level the pairing would
+		// reach, not a malformed field. The key size case is not Encryption Key
+		// Size, which the existing range gate owns.
+		DEBUG_PRINTF("SMP reject, pairing would weaken the stored bond\r\n");
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
+		SmpAbortPairing(pLink);
+		return;
+	}
+
 	BtSmpPairingRsp_t rsp;
 	SmpBuildPairingRsp(pLink, &rsp);
 	SmpSend(pDev, ConnHdl, &rsp, sizeof(rsp));
@@ -1509,6 +1582,20 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		// mark of the shortfall is bAuthenticated in the completion record.
 		DEBUG_PRINTF("SMP reject, MITM required but model=%d is Just Works\r\n",
 				  pLink->Ctx.Model);
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
+		SmpAbortPairing(pLink);
+		return;
+	}
+
+	if (SmpPairingWeakensBond(ConnHdl, pLink))
+	{
+		// A stored bond for this peer is stronger than what this pairing would
+		// end at. Completing would overwrite it and the link would then report
+		// the weaker level as if it had always been so. Authentication
+		// Requirements names the reason: the security level the pairing would
+		// reach, not a malformed field. The key size case is not Encryption Key
+		// Size, which the existing range gate owns.
+		DEBUG_PRINTF("SMP reject, pairing would weaken the stored bond\r\n");
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
 		SmpAbortPairing(pLink);
 		return;
