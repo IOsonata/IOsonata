@@ -7,6 +7,7 @@
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_l2cap.h"
+#include "syslog.h"
 
 namespace {
 
@@ -275,6 +276,24 @@ void BtGattTxPendRelease(uint16_t ConnHdl)
 	s_ReleaseCount++;
 	s_ReleaseConnHdl = ConnHdl;
 }
+
+// bt_hci_host.cpp logs on paths this test does not exercise. Section garbage
+// collection used to drop those references; a new one anywhere in the file
+// would break the link instead of the test.
+extern "C" {
+
+SysLog_t *SysLogGet(void)
+{
+	static SysLog_t log = {};
+	return &log;
+}
+
+int SysLogPrintf(SysLog_t * const, const char *, ...)
+{
+	return 0;
+}
+
+} // extern "C"
 
 int main()
 {

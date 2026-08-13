@@ -797,6 +797,122 @@ static void BtHciReasmReset(uint16_t ConnHdl)
 	}
 }
 
+// --- Per-link ACL TX accounting ----------------------------------------------
+// AclCredit counts the controller's free ACL data buffers for the whole device,
+// and Number Of Completed Packets is the only thing that gives credits back.
+// Vol 4 Part E 4.3: on Disconnection Complete the host shall assume every
+// unacknowledged packet sent for that handle has been flushed and its buffer
+// freed, and the controller does not have to report those packets first. So the
+// credits they hold are returned by nobody unless the host returns them itself,
+// and the pool shrinks on every disconnect that had traffic in flight.
+//
+// Doing that needs a per-link count of packets handed to the controller and not
+// yet completed. bt_gatt's TxPend ring holds the same number, but it lives in
+// the peer slot, which the application's Disconnected callback frees before
+// this file sees the rest of the event, so the count is gone by the time it is
+// needed. This table is owned here, next to AclCredit, and outlives the peer
+// record.
+//
+// BT_HCI_ACL_TX_LINK_COUNT matches BT_PEER_POOL_DEFAULT_COUNT; raise both
+// together for a build with more concurrent links. A link that finds no free
+// slot is simply not tracked, which is the behaviour this table replaces.
+#ifndef BT_HCI_ACL_TX_LINK_COUNT
+#define BT_HCI_ACL_TX_LINK_COUNT		4
+#endif
+
+typedef struct __Bt_Hci_Acl_Tx_Link {
+	bool     Active;						//!< Slot tracks a link
+	uint16_t ConnHdl;						//!< Owning connection handle
+	uint16_t InFlight;						//!< Packets sent and not yet completed
+} BtHciAclTxLink_t;
+
+static BtHciAclTxLink_t s_BtHciAclTx[BT_HCI_ACL_TX_LINK_COUNT];
+
+static BtHciAclTxLink_t *BtHciAclTxFind(uint16_t ConnHdl)
+{
+	for (int i = 0; i < BT_HCI_ACL_TX_LINK_COUNT; i++)
+	{
+		if (s_BtHciAclTx[i].Active && s_BtHciAclTx[i].ConnHdl == ConnHdl)
+		{
+			return &s_BtHciAclTx[i];
+		}
+	}
+
+	return nullptr;
+}
+
+// Record NbPkt packets accepted by the controller on this link.
+static void BtHciAclTxSent(uint16_t ConnHdl, uint16_t NbPkt)
+{
+	BtHciAclTxLink_t *p = BtHciAclTxFind(ConnHdl);
+
+	if (p == nullptr)
+	{
+		for (int i = 0; i < BT_HCI_ACL_TX_LINK_COUNT; i++)
+		{
+			if (s_BtHciAclTx[i].Active == false)
+			{
+				p = &s_BtHciAclTx[i];
+				p->Active = true;
+				p->ConnHdl = ConnHdl;
+				p->InFlight = 0;
+				break;
+			}
+		}
+	}
+
+	if (p == nullptr)
+	{
+		SysLogPrintf(SysLogGet(),
+			"ACL TX untracked link hdl=%u, credits will not be returned on disconnect\r\n",
+			ConnHdl);
+		return;
+	}
+
+	p->InFlight = (uint16_t)(p->InFlight + NbPkt);
+}
+
+// Number Of Completed Packets reported NbPkt for this link.
+static void BtHciAclTxCompleted(uint16_t ConnHdl, uint16_t NbPkt)
+{
+	BtHciAclTxLink_t *p = BtHciAclTxFind(ConnHdl);
+
+	if (p == nullptr)
+	{
+		return;
+	}
+
+	// A controller reporting more than was sent is out of range; take the
+	// count to zero rather than wrapping the counter.
+	p->InFlight = NbPkt >= p->InFlight ? 0 : (uint16_t)(p->InFlight - NbPkt);
+
+	// A link with nothing outstanding holds no information. Releasing the slot
+	// here keeps the table from filling with idle links, so a link that ends
+	// without a Disconnection Complete reaching this handler cannot starve a
+	// later one of tracking.
+	if (p->InFlight == 0)
+	{
+		p->Active = false;
+	}
+}
+
+// Release the link and answer how many of its packets the controller still
+// held, which is what the disconnection flushed.
+static uint16_t BtHciAclTxRelease(uint16_t ConnHdl)
+{
+	BtHciAclTxLink_t *p = BtHciAclTxFind(ConnHdl);
+
+	if (p == nullptr)
+	{
+		return 0;
+	}
+
+	uint16_t n = p->InFlight;
+	p->Active = false;
+	p->InFlight = 0;
+	return n;
+}
+
 // Configure the controller's LE ACL buffer parameters. Clamps the packet
 // length to what a single host buffer can hold.
 void BtHciSetLeAclBuffer(BtHciDevice_t * const pDev, uint16_t MaxLen, uint8_t PktCount)
@@ -815,6 +931,10 @@ void BtHciSetLeAclBuffer(BtHciDevice_t * const pDev, uint16_t MaxLen, uint8_t Pk
 	pDev->AclMaxLen = MaxLen;
 	pDev->AclCreditMax = PktCount;
 	pDev->AclCredit = (int16_t)PktCount;
+
+	// The credit pool is being declared empty, so nothing can still be in
+	// flight. Any stale per-link count would return credits twice.
+	memset(s_BtHciAclTx, 0, sizeof(s_BtHciAclTx));
 
 	// Command flow control starts with one credit per spec: the host may send a
 	// single command before the first Command Complete or Command Status.
@@ -899,6 +1019,7 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 		if (pDev->AclCreditMax > 0)
 		{
 			pDev->AclCredit--;
+			BtHciAclTxSent(pAcl->Hdr.ConnHdl, 1);
 		}
 		return sent;
 	}
@@ -960,6 +1081,12 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 		}
 
 		nSent++;
+		if (pDev->AclCreditMax > 0)
+		{
+			// Count each fragment as the controller accepts it, so a transport
+			// that stops part way leaves the link holding only what went out.
+			BtHciAclTxSent(pAcl->Hdr.ConnHdl, 1);
+		}
 		off = (uint16_t)(off + chunk);
 	}
 
@@ -1000,6 +1127,23 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 							 p->ConnHdl, p->Reason);
 				DEBUG_PRINTF("BtHciProcessEvent: Disconnected, Status = %d (0x%x) \r\n",
 						p->Status, p->Status);
+
+				// Return the credits held by packets the disconnection
+				// flushed. Vol 4 Part E 4.3 says the controller does not have
+				// to complete them, so nothing else ever gives them back and
+				// the pool shrinks by that many for the rest of the session.
+				// Done before the application callback because that callback
+				// frees the peer slot on the raw HCI port, and a port is free
+				// to do anything else in it.
+				uint16_t inflight = BtHciAclTxRelease(p->ConnHdl);
+				if (pDev->AclCreditMax > 0 && inflight > 0)
+				{
+					pDev->AclCredit = (int16_t)(pDev->AclCredit + (int16_t)inflight);
+					if (pDev->AclCredit > pDev->AclCreditMax)
+					{
+						pDev->AclCredit = pDev->AclCreditMax;
+					}
+				}
 
 				if (pDev->Disconnected)
 				{
@@ -1149,6 +1293,8 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 						{
 							pDev->AclCredit = pDev->AclCreditMax;
 						}
+						BtHciAclTxCompleted(p->Completed[i].Hdl,
+											p->Completed[i].NbPkt);
 					}
 
 					if (pDev->SendCompleted)

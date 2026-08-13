@@ -351,6 +351,144 @@ void TestAclFragmentSendFailure()
 	CHECK(s_AclCreditAtSend[2] == 0);
 }
 
+// Send one single-fragment ACL PDU on a link, carrying an ATT CID so the SMP
+// branch of BtHciSendAcl is not involved.
+uint32_t SendOneAcl(BtHciDevice_t *pDev, uint16_t ConnHdl)
+{
+	alignas(4) std::array<uint8_t, 32> raw = {};
+	BtHciACLDataPacket_t *pAcl = reinterpret_cast<BtHciACLDataPacket_t *>(raw.data());
+
+	pAcl->Hdr.ConnHdl = ConnHdl;
+	pAcl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	pAcl->Hdr.BCFlag = BT_HCI_BCFLAG_POINT_TO_POINT;
+	pAcl->Hdr.Len = 8;
+	pAcl->Data[0] = 4;					// L2CAP length
+	pAcl->Data[1] = 0;
+	pAcl->Data[2] = BT_L2CAP_CID_ATT & 0xFF;
+	pAcl->Data[3] = BT_L2CAP_CID_ATT >> 8;
+
+	return BtHciSendAcl(pDev, pAcl);
+}
+
+void FeedCompleted(BtHciDevice_t *pDev, uint16_t ConnHdl, uint16_t NbPkt)
+{
+	alignas(4) uint8_t raw[sizeof(BtHciEvtPacketHdr_t) + 5] = {};
+	BtHciEvtPacket_t *pEvt = reinterpret_cast<BtHciEvtPacket_t *>(raw);
+	pEvt->Hdr.Evt = BT_HCI_EVT_NB_COMPLETED_PACKET;
+	pEvt->Hdr.Len = 5;
+	BtHciEvtNbCompletedPkt_t *p =
+		reinterpret_cast<BtHciEvtNbCompletedPkt_t *>(pEvt->Data);
+	p->NbHdl = 1;
+	p->Completed[0].Hdl = ConnHdl;
+	p->Completed[0].NbPkt = NbPkt;
+
+	BtHciProcessEvent(pDev, pEvt);
+}
+
+void FeedDisconnect(BtHciDevice_t *pDev, uint16_t ConnHdl)
+{
+	alignas(4) uint8_t raw[sizeof(BtHciEvtPacketHdr_t) +
+						  sizeof(BtHciEvtDisconComplete_t)] = {};
+	BtHciEvtPacket_t *pEvt = reinterpret_cast<BtHciEvtPacket_t *>(raw);
+	pEvt->Hdr.Evt = BT_HCI_EVT_DISCONN_COMPLETE;
+	pEvt->Hdr.Len = sizeof(BtHciEvtDisconComplete_t);
+	BtHciEvtDisconComplete_t *p =
+		reinterpret_cast<BtHciEvtDisconComplete_t *>(pEvt->Data);
+	p->Status = 0;
+	p->ConnHdl = ConnHdl;
+	p->Reason = 0x13;
+
+	BtHciProcessEvent(pDev, pEvt);
+}
+
+// Vol 4 Part E 4.3: on Disconnection Complete the host shall assume every
+// unacknowledged packet sent for that handle has been flushed and its buffer
+// freed, and the controller does not have to report those packets in a Number
+// Of Completed Packets event first. Credits held by packets in flight at
+// teardown are therefore returned by nobody unless the host returns them, and
+// the pool shrinks on every disconnect until sending stops working.
+void TestAclCreditsReturnedOnDisconnect()
+{
+	BtHciDevice_t dev = {};
+	dev.SendData = CaptureAcl;
+	dev.Command = CaptureDevCommand;
+	ResetAclCapture();
+
+	const uint16_t hdlA = 0x0011;
+	const uint16_t hdlB = 0x0022;
+
+	BtHciSetLeAclBuffer(&dev, 27, 4);
+	CHECK(dev.AclCredit == 4);
+
+	// Two packets outstanding on A, one on B.
+	CHECK(SendOneAcl(&dev, hdlA) != 0);
+	CHECK(SendOneAcl(&dev, hdlA) != 0);
+	CHECK(SendOneAcl(&dev, hdlB) != 0);
+	CHECK(dev.AclCredit == 1);
+
+	// A goes down: its two credits come back, B keeps holding its one.
+	FeedDisconnect(&dev, hdlA);
+	CHECK(dev.AclCredit == 3);
+
+	FeedDisconnect(&dev, hdlB);
+	CHECK(dev.AclCredit == 4);
+
+	// Packets already reported complete must not be returned a second time.
+	// The credit count is kept below the maximum by B's outstanding packet so
+	// a double return would show rather than being hidden by the clamp.
+	ResetAclCapture();
+	BtHciSetLeAclBuffer(&dev, 27, 4);
+	CHECK(SendOneAcl(&dev, hdlA) != 0);
+	CHECK(SendOneAcl(&dev, hdlA) != 0);
+	FeedCompleted(&dev, hdlA, 2);
+	CHECK(dev.AclCredit == 4);
+	CHECK(SendOneAcl(&dev, hdlB) != 0);
+	CHECK(dev.AclCredit == 3);
+	FeedDisconnect(&dev, hdlA);
+	CHECK(dev.AclCredit == 3);
+	FeedDisconnect(&dev, hdlB);
+	CHECK(dev.AclCredit == 4);
+
+	// The reported failure: repeated connect, send, disconnect cycles with
+	// traffic outstanding used to drive the pool to zero and leave every
+	// further send refused.
+	ResetAclCapture();
+	BtHciSetLeAclBuffer(&dev, 27, 4);
+	for (int i = 0; i < 20; ++i)
+	{
+		ResetAclCapture();
+		uint16_t hdl = static_cast<uint16_t>(0x0100 + i);
+		CHECK(SendOneAcl(&dev, hdl) != 0);
+		CHECK(SendOneAcl(&dev, hdl) != 0);
+		FeedDisconnect(&dev, hdl);
+	}
+	CHECK(dev.AclCredit == 4);
+	CHECK(SendOneAcl(&dev, hdlA) != 0);
+
+	// A transport that stops part way through a fragmented PDU leaves only the
+	// fragments it accepted in the controller, so only those are returned.
+	ResetAclCapture();
+	BtHciSetLeAclBuffer(&dev, 10, 8);
+
+	alignas(4) std::array<uint8_t, 64> raw = {};
+	BtHciACLDataPacket_t *pAcl = reinterpret_cast<BtHciACLDataPacket_t *>(raw.data());
+	pAcl->Hdr.ConnHdl = hdlA;
+	pAcl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	pAcl->Hdr.BCFlag = BT_HCI_BCFLAG_POINT_TO_POINT;
+	pAcl->Hdr.Len = 25;
+	pAcl->Data[0] = 21;
+	pAcl->Data[1] = 0;
+	pAcl->Data[2] = BT_L2CAP_CID_ATT & 0xFF;
+	pAcl->Data[3] = BT_L2CAP_CID_ATT >> 8;
+
+	s_AclFailOnPacket = 2;
+	CHECK(BtHciSendAcl(&dev, pAcl) == 0);
+	CHECK(s_AclPacketCount == 1);
+	CHECK(dev.AclCredit == 7);
+	FeedDisconnect(&dev, hdlA);
+	CHECK(dev.AclCredit == 8);
+}
+
 void TestAclCompletionCredits()
 {
 	BtHciDevice_t dev = {};
@@ -818,6 +956,7 @@ int main()
 	TestCommandFraming();
 	TestAclFragmentationAndCredits();
 	TestAclFragmentSendFailure();
+	TestAclCreditsReturnedOnDisconnect();
 	TestAclCompletionCredits();
 	TestCompletedPacketsBounded();
 	TestCommandCreditsAndCompletion();
