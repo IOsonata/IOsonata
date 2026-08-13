@@ -122,6 +122,7 @@ typedef struct {
 	bool                   bReplyReject;	// the pending reply is a rejection
 	bool                   bStorePending;	// bond store deferred on busy
 	bool                   bStoreNewPeer;	// the pending store allocated the peer id
+	bool                   bDisconnPending;	// disconnect deferred on busy
 	pm_peer_id_t           StorePeerId;		// peer id of the pending store
 	uint8_t                EncrKeySize;		// negotiated key size, from CONN_SEC_UPDATE
 } BtSecSdLink_t;
@@ -188,6 +189,57 @@ static void StorageFullSend(uint16_t ConnHdl)
 	pm_evt_t evt = NewEvt(PM_EVT_STORAGE_FULL, ConnHdl);
 
 	EvtSend(&evt);
+}
+
+// Drop a link whose security this device has refused.
+//
+// sd_ble_gap_disconnect accepts two HCI reasons, documented on the call in
+// ble_gap.h: BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION and
+// BLE_HCI_CONN_INTERVAL_UNACCEPTABLE. Anything else, Authentication Failure
+// included, is answered with NRF_ERROR_INVALID_PARAM and the link stays up.
+// Core Vol 4 Part E 7.1.6 lists Remote User Terminated Connection among the
+// reasons a Host may give in HCI_Disconnect, so the accepted value is a valid
+// one to put on air as well.
+//
+// NRF_ERROR_BUSY means another procedure holds the link for the moment, not
+// that the link may stay; the request is kept and repeated by the pumps. A
+// link that is already gone, or already dropping, needs nothing further.
+static void SecDisconnect(uint16_t ConnHdl)
+{
+	ret_code_t r = sd_ble_gap_disconnect(ConnHdl,
+										 BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+	BtSecSdLink_t *pLink = LinkGet(ConnHdl);
+
+	if (pLink != nullptr)
+	{
+		pLink->bDisconnPending = (r == NRF_ERROR_BUSY);
+	}
+
+	if (r == NRF_SUCCESS || r == NRF_ERROR_BUSY || r == NRF_ERROR_INVALID_STATE ||
+		r == BLE_ERROR_INVALID_CONN_HANDLE)
+	{
+		return;
+	}
+	UnexpectedErrorSend(ConnHdl, r);
+}
+
+// Ask the application whether a peer that already holds a bond record may pair
+// again and replace it.
+//
+// Default deny. The flag is cleared at the start of every security procedure,
+// so an application that does not answer refuses, and one that answered
+// earlier in the same procedure is not asked twice.
+static bool RepairingAllowed(uint16_t ConnHdl)
+{
+	if (ble_conn_state_user_flag_get(ConnHdl, s_FlagAllowRepairing))
+	{
+		return true;
+	}
+
+	pm_evt_t evt = NewEvt(PM_EVT_CONN_SEC_CONFIG_REQ, ConnHdl);
+	EvtSend(&evt);
+
+	return ble_conn_state_user_flag_get(ConnHdl, s_FlagAllowRepairing);
 }
 
 // ---- Procedure bookkeeping --------------------------------------------------
@@ -572,6 +624,26 @@ static void SecParamsRequestProcess(const ble_gap_evt_t *pGapEvt)
 		SecProcStart(pGapEvt->conn_handle, true,
 					 pGapEvt->params.sec_params_request.peer_params.bond ?
 					 PM_CONN_SEC_PROCEDURE_BONDING : PM_CONN_SEC_PROCEDURE_PAIRING);
+
+		// The peer already has a bond record and the application will not have
+		// it replaced. Core Vol 3 Part H 2.3: "If the responding device does
+		// not support pairing or pairing cannot be performed then the
+		// responding device shall respond using the Pairing Failed message
+		// with the error code Pairing Not Supported", which is what a NULL
+		// parameters reply produces. Answering here, at the Pairing Request,
+		// is the point of it: the keys are never exchanged and the old bond is
+		// never at risk. A peer whose identity only becomes known during key
+		// distribution is caught again at AUTH_STATUS.
+		if (im_peer_id_get_by_conn_handle(pGapEvt->conn_handle) != PM_PEER_ID_INVALID &&
+			!RepairingAllowed(pGapEvt->conn_handle))
+		{
+			ret_code_t r = ReplyAttempt(pGapEvt->conn_handle, NULL);
+			if (r != NRF_SUCCESS && r != NRF_ERROR_BUSY)
+			{
+				UnexpectedErrorSend(pGapEvt->conn_handle, r);
+			}
+			return;
+		}
 	}
 	ParamsRequestProcess(pGapEvt->conn_handle,
 						 &pGapEvt->params.sec_params_request.peer_params);
@@ -769,36 +841,31 @@ static void AuthStatusSuccessProcess(const ble_gap_evt_t *pGapEvt)
 		peerId = im_find_duplicate_bonding_data(peerData.p_bonding_data, PM_PEER_ID_INVALID);
 		if (peerId != PM_PEER_ID_INVALID)
 		{
-			// Known identity re-pairing. Map the connection to the existing
-			// peer first (the SDK does), so peer lookups work even when the
-			// application denies. Then ask unless a decision was already made
-			// for this procedure; default deny. On deny the old bond record is
-			// kept, and the live link stays encrypted with the newly
-			// negotiated key until the application disconnects: the SMP
-			// exchange completed inside the SoftDevice before the peer
-			// identity could be known, so denial after the fact is the only
-			// option this stack offers, matching the SDK.
+			// Known identity re-pairing, discovered only now. A peer that was
+			// already identified at the Pairing Request was answered there,
+			// before any key was exchanged; this is the remainder, a peer that
+			// connected under an address this device could not resolve and
+			// turned out to hold a bond once it distributed its identity.
+			//
+			// Map the connection to the existing peer first (the SDK does), so
+			// peer lookups work even when the application denies. Then ask,
+			// unless the answer was already given for this procedure. On deny
+			// the old record is kept and the link is dropped: the SMP exchange
+			// completed inside the SoftDevice before the identity could be
+			// known, so there is nothing left to refuse on air.
 			im_new_peer_id(connHdl, peerId);
 
-			if (!ble_conn_state_user_flag_get(connHdl, s_FlagAllowRepairing))
+			if (!RepairingAllowed(connHdl))
 			{
-				pm_evt_t evt = NewEvt(PM_EVT_CONN_SEC_CONFIG_REQ, connHdl);
-				evt.peer_id = peerId;
-				EvtSend(&evt);
-
-				if (!ble_conn_state_user_flag_get(connHdl, s_FlagAllowRepairing))
-				{
-					// Denied: drop the new bond data, keep the old record, and
-					// disconnect. The link is encrypted with a key the
-					// application refused, so leaving it up and reporting
-					// success (the SDK behavior) is wrong. The procedure flag
-					// stays set; the disconnect path reports CONN_SEC_FAILED.
-					(void)pdb_write_buf_release(PDB_TEMP_PEER_ID(connHdl),
-												PM_PEER_DATA_ID_BONDING);
-					(void)sd_ble_gap_disconnect(connHdl,
-												BLE_HCI_AUTHENTICATION_FAILURE);
-					return;
-				}
+				// Denied: drop the new bond data, keep the old record, and
+				// disconnect. The link is encrypted with a key the application
+				// refused, so leaving it up and reporting success (the SDK
+				// behavior) is wrong. The procedure flag stays set; the
+				// disconnect path reports CONN_SEC_FAILED.
+				(void)pdb_write_buf_release(PDB_TEMP_PEER_ID(connHdl),
+											PM_PEER_DATA_ID_BONDING);
+				SecDisconnect(connHdl);
+				return;
 			}
 		}
 	}
@@ -858,8 +925,7 @@ static void ConnSecUpdateProcess(const ble_gap_evt_t *pGapEvt)
 		// whether this is a fresh pairing or a reconnect.
 		SecFailureSend(pGapEvt->conn_handle, BLE_GAP_SEC_STATUS_ENC_KEY_SIZE,
 					   BLE_GAP_SEC_STATUS_SOURCE_LOCAL);
-		(void)sd_ble_gap_disconnect(pGapEvt->conn_handle,
-									BLE_HCI_AUTHENTICATION_FAILURE);
+		SecDisconnect(pGapEvt->conn_handle);
 		return;
 	}
 
@@ -943,6 +1009,13 @@ static void PendingPumpsRun(void)
 		{
 			s_Links[h].bStorePending = false;
 			BondStoreAttempt(h, s_Links[h].StorePeerId, s_Links[h].bStoreNewPeer);
+		}
+
+		if (s_Links[h].bDisconnPending && ble_conn_state_valid(h))
+		{
+			// SecDisconnect sets the flag again if the link is still held.
+			s_Links[h].bDisconnPending = false;
+			SecDisconnect(h);
 		}
 	}
 }

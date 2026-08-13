@@ -76,7 +76,8 @@ TEST_NAMES := \
 	bt_smp_sign_counter_test \
 	bt_smp_keydist_test \
 	bt_smp_pairing_policy_test \
-	bt_smp_pubkey_test
+	bt_smp_pubkey_test \
+	bt_sec_sd_test
 
 TARGETS := $(addprefix $(BUILD_DIR)/,$(TEST_NAMES))
 CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
@@ -205,6 +206,16 @@ bt_app_init_bm_test_SOURCES := \
 	$(GATT_INIT_TEST_SUPPORT) \
 	$(ROOT)/src/bluetooth/services/bt_dis.cpp
 bt_app_init_bm_test_DEPS := $(BT_APP_BM_INIT_INC)
+
+bt_sec_sd_test_CPPFLAGS := -Inordic_stub -I$(ROOT)/ARM/Nordic/include
+bt_sec_sd_test_SOURCES := \
+	bt_sec_sd_test.cpp \
+	bt_sec_sd_test_stubs.cpp \
+	$(ROOT)/ARM/Nordic/nRF52/src/bt_sec_sd.cpp
+bt_sec_sd_test_DEPS := \
+	$(wildcard nordic_stub/*.h) \
+	bt_sec_sd_test_stubs.h \
+	$(ROOT)/ARM/Nordic/include/bt_lesc.h
 
 bt_lesc_sd_test_CPPFLAGS := -Inordic_stub -I$(ROOT)/ARM/Nordic/include
 bt_lesc_sd_test_SOURCES := \

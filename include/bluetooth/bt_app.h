@@ -229,6 +229,16 @@ void BtAppEvtDisconnected(uint16_t ConnHdl);
 // is empty. Apps that gate work on encryption (e.g. a central reading
 // protected characteristics) override this.
 void BtAppEvtSecured(uint16_t ConnHdl);
+// Called when a peer that already holds a bond record asks to pair again,
+// which would replace that record. Return true to permit it, false to refuse.
+// The weak default refuses, so a device that is not told otherwise keeps the
+// bond it has. Applications that support re-pairing, for instance after the
+// peer was factory reset, override this and decide from their own state, the
+// connection handle naming the link.
+//
+// Refusing ends the pairing with Pairing Failed, reason Pairing Not Supported,
+// per Core Vol 3 Part H 2.3. Implemented on the nRF52 SoftDevice port.
+bool BtAppSecRepairingAllowed(uint16_t ConnHdl);
 void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx);
 void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx);
 

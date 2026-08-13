@@ -643,9 +643,14 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
 
         case PM_EVT_CONN_SEC_CONFIG_REQ:
 			{
-				DEBUG_PRINTF("SEC: CONN_SEC_CONFIG_REQ hdl=%d (allow repairing)\r\n", p_evt->conn_handle);
-				// Accept pairing request from an already bonded peer.
-				pm_conn_sec_config_t conn_sec_config = {.allow_repairing = true};
+				// An already bonded peer asks to pair again, which replaces the
+				// stored record. The application decides through the weak hook;
+				// the default refuses.
+				bool allow = BtAppSecRepairingAllowed(p_evt->conn_handle);
+
+				DEBUG_PRINTF("SEC: CONN_SEC_CONFIG_REQ hdl=%d allow=%d\r\n",
+							 p_evt->conn_handle, allow);
+				pm_conn_sec_config_t conn_sec_config = {.allow_repairing = allow};
 				pm_conn_sec_config_reply(p_evt->conn_handle, &conn_sec_config);
 			}
 			break;
@@ -854,6 +859,15 @@ __attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passke
 __attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
 {
 	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
+}
+
+// Same reasoning for re-pairing: an application that has not said it supports
+// replacing a bond keeps the bond it has, so a peer that reaches the device
+// cannot silently overwrite the record of the peer that owns it.
+__attribute__((weak)) bool BtAppSecRepairingAllowed(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+	return false;
 }
 
 /**@brief Function for dispatching a SoftDevice event to all modules with a SoftDevice
