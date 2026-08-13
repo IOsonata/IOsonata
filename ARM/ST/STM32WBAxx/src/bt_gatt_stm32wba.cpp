@@ -49,6 +49,7 @@ static uint8_t WbaSecPerm(uint32_t SecType)
 			return ATTR_PERMISSION_ENCRY_READ | ATTR_PERMISSION_ENCRY_WRITE;
 
 		case BTGAP_SECTYPE_NONE:
+		case BTGAP_SECTYPE_OPEN:
 		default:
 			return ATTR_PERMISSION_NONE;
 	}
@@ -57,15 +58,7 @@ static uint8_t WbaSecPerm(uint32_t SecType)
 static uint32_t WbaCharSecType(const BtGattSrvc_t *pSrvc,
 								 const BtGattChar_t *pChar)
 {
-	if (pChar->SecType != BTGAP_SECTYPE_NONE)
-	{
-		return pChar->SecType;
-	}
-	if (pSrvc->SecType != BTGAP_SECTYPE_NONE)
-	{
-		return pSrvc->SecType;
-	}
-	return g_BtAppData.SecType;
+	return BtGattSecTypeGet(pSrvc, pChar, g_BtAppData.SecType);
 }
 
 // ACI attribute permissions can require encryption or authentication, but the
