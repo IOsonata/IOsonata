@@ -80,11 +80,12 @@ const BtAppCfg_t s_BtAppCfg = {
 	.VendorId = ISYST_BLUETOOTH_ID,			// PnP Bluetooth/USB vendor id
 	.Appearance = BT_APPEAR_COMPUTER_WEARABLE,
 #ifdef EXTADV
-	.bExtAdv = true,						// Enable extended advertising
+	// Too long for a legacy PDU, so BtAdvEncode selects extended advertising
+	// on its own and records that in g_BtAppData.bExtAdv.
 	.pAdvManData  = (uint8_t*)&g_AdvLong,   // Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_AdvLong),     // Length of manufacture specific data
 #else
-	.bExtAdv = false,						// Legacy advertising
+	// Fits a legacy PDU, so legacy advertising is what gets used.
 	.pAdvManData  = (uint8_t*)&g_AdvCnt,   	// Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_AdvCnt),      // Length of manufacture specific data
 #endif

@@ -168,7 +168,6 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ProductVer = 0,
 	.Appearance = BT_APPEAR_UNKNOWN_GENERIC,
 	.pDevInfo = &s_SmpDevInfo,
-	.bExtAdv = false,
 	.pAdvManData = g_ManData,
 	.AdvManDataLen = sizeof(g_ManData),
 	.pSrManData = NULL,
