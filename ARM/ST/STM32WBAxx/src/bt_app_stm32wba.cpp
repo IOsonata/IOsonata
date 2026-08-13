@@ -1044,7 +1044,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Populate generic app data from cfg.
 	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
 	g_BtAppData.AdvHdl          = 0;	// WBA stack manages adv internally
-	g_BtAppData.bExtAdv         = pCfg->bExtAdv;
+	// bExtAdv is not configured. BtAdvEncode decides extended or legacy from
+	// whether the encoded payload fits a legacy PDU and writes the answer to
+	// g_BtAppData.bExtAdv, which the advertising path here then reads.
 	g_BtAppData.ConnLedPort     = pCfg->ConnLedPort;
 	g_BtAppData.ConnLedPin      = pCfg->ConnLedPin;
 	g_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
