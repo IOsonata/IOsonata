@@ -40,6 +40,21 @@ BtDevice_t s_Peer = {};
 // would return it. bValid false means no stored bond.
 BtSmpKeys_t s_StoredBond = {};
 
+uint8_t s_Role = BT_CONN_ROLE_PERIPHERAL;
+
+// HCI commands SMP issued. BtHciCommand dispatches through pDev->Command, so
+// capturing it needs no extra link dependency.
+uint16_t s_HciOpCode = 0;
+int s_HciCount = 0;
+
+uint8_t TestHciCommand(BtHciDevice_t * const, uint16_t OpCode, const void *,
+					   uint8_t, void *, uint8_t)
+{
+	s_HciOpCode = OpCode;
+	s_HciCount++;
+	return 0;
+}
+
 void ResetLink(uint8_t LocalIoCaps, uint8_t LocalAuthReq)
 {
 	std::memset(s_SmpLink, 0, sizeof(s_SmpLink));
@@ -55,6 +70,14 @@ void ResetLink(uint8_t LocalIoCaps, uint8_t LocalAuthReq)
 	s_Peer.bSecure = false;
 
 	std::memset(&s_StoredBond, 0, sizeof(s_StoredBond));
+	std::memset(&s_Dev, 0, sizeof(s_Dev));
+	s_Dev.Command = TestHciCommand;
+	s_Peer.pHciDev = &s_Dev;
+	s_HciOpCode = 0;
+	s_HciCount = 0;
+	// The responder cases are this device as peripheral. The Security Request
+	// cases set the central role themselves.
+	s_Role = BT_CONN_ROLE_PERIPHERAL;
 
 	BtSmpAuthConfig(LocalIoCaps, LocalAuthReq);
 	SmpTxReset();
@@ -326,6 +349,168 @@ void TestRuleJudgesModelNotAuthenticatedFlag()
 	CHECK(s_SmpLink[0].Ctx.bAuthenticated == false);
 }
 
+
+//-----------------------------------------------------------------------------
+// Security Request. Vol 3 Part H 2.4.6: "After receiving a Security Request,
+// the Central shall first check whether it has the required security
+// information to enable encryption... If this information is missing or does
+// not meet the security properties requested by the Peripheral, then the
+// Central shall initiate the pairing procedure." Figure 2.7 draws the same
+// decision: no LTK, or an LTK below the requested level, goes to pair.
+//
+// The requested level comes from the AuthReq octet. Vol 3 Part H 2.3.1 names
+// the Security Properties as LE Secure Connections pairing and Authenticated
+// MITM protection, and Vol 3 Part C 10.2.1 defines LE security mode 1 level 4
+// as authenticated LE Secure Connections pairing with encryption using a
+// 128-bit strength encryption key, so asking for both properties also asks for
+// that key length.
+//-----------------------------------------------------------------------------
+
+void FeedSecurityReq(uint8_t PeerAuthReq)
+{
+	BtSmpSecurityReq_t req = {};
+	req.Code = BT_SMP_CODE_PAIRING_SECURITY_REQ;
+	req.AuthReq = PeerAuthReq;
+
+	BtProcessSmpData(&s_Dev, kConnHdl, (BtL2CapSmp_t*)&req, sizeof(req));
+}
+
+bool SentEnableEncryption(void)
+{
+	return s_HciCount > 0 && s_HciOpCode == BT_HCI_CMD_CTLR_ENABLE_ENCRYPTION;
+}
+
+bool SentPairingReq(void)
+{
+	return g_SmpTx.Count >= 1 &&
+		   g_SmpTx.Pdu[0].Data[0] == BT_SMP_CODE_PAIRING_REQ;
+}
+
+void ResetCentralLink(uint8_t LocalIoCaps, uint8_t LocalAuthReq)
+{
+	ResetLink(LocalIoCaps, LocalAuthReq);
+	s_Role = BT_CONN_ROLE_CENTRAL;
+}
+
+// The stored key meets everything asked for, so encryption setup stands. This
+// is the case that must not regress into pairing on every reconnect.
+void TestSecurityReqMetByBond()
+{
+	ResetCentralLink(BT_SMP_IOCAPS_DISPLAY_YESNO, BT_SMP_AUTHREQ_SC);
+	StoreBond(BT_SMP_MAX_ENC_KEY_SIZE, true, true);
+	FeedSecurityReq(BT_SMP_AUTHREQ_MITM | BT_SMP_AUTHREQ_SC);
+
+	CHECK(SentEnableEncryption());
+	CHECK(SentPairingReq() == false);
+}
+
+// Authenticated MITM protection asked for over a bond that does not have it.
+void TestSecurityReqMitmOverUnauthenticatedBondPairs()
+{
+	ResetCentralLink(BT_SMP_IOCAPS_DISPLAY_YESNO, BT_SMP_AUTHREQ_SC);
+	StoreBond(BT_SMP_MAX_ENC_KEY_SIZE, true, false);
+	FeedSecurityReq(BT_SMP_AUTHREQ_MITM | BT_SMP_AUTHREQ_SC);
+
+	CHECK(SentPairingReq());
+	CHECK(SentEnableEncryption() == false);
+}
+
+// LE Secure Connections pairing asked for over a legacy bond.
+void TestSecurityReqScOverLegacyBondPairs()
+{
+	ResetCentralLink(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, BT_SMP_AUTHREQ_SC);
+	StoreBond(BT_SMP_MAX_ENC_KEY_SIZE, false, false);
+	FeedSecurityReq(BT_SMP_AUTHREQ_SC);
+
+	CHECK(SentPairingReq());
+	CHECK(SentEnableEncryption() == false);
+}
+
+// Both properties asked for is LE security mode 1 level 4, which Vol 3 Part C
+// 10.2.1 defines with a 128-bit strength encryption key. A bond that is
+// authenticated and from Secure Connections but holds a shorter key does not
+// reach that level.
+void TestSecurityReqLevel4OverShortKeyPairs()
+{
+	ResetCentralLink(BT_SMP_IOCAPS_DISPLAY_YESNO, BT_SMP_AUTHREQ_SC);
+	StoreBond(BT_SMP_MIN_ENC_KEY_SIZE, true, true);
+	FeedSecurityReq(BT_SMP_AUTHREQ_MITM | BT_SMP_AUTHREQ_SC);
+
+	CHECK(SentPairingReq());
+	CHECK(SentEnableEncryption() == false);
+}
+
+// One octet short of 128-bit is still short of it, so the check is a
+// comparison and not a test for the floor value.
+void TestSecurityReqLevel4OverFifteenOctetKeyPairs()
+{
+	ResetCentralLink(BT_SMP_IOCAPS_DISPLAY_YESNO, BT_SMP_AUTHREQ_SC);
+	StoreBond(BT_SMP_MAX_ENC_KEY_SIZE - 1, true, true);
+	FeedSecurityReq(BT_SMP_AUTHREQ_MITM | BT_SMP_AUTHREQ_SC);
+
+	CHECK(SentPairingReq());
+	CHECK(SentEnableEncryption() == false);
+}
+
+// The key length belongs to level 4, so it is not applied when only one of the
+// two properties is asked for. MITM alone is level 3, which 10.2.1 states
+// without a key length.
+void TestSecurityReqMitmOnlyIgnoresKeySize()
+{
+	ResetCentralLink(BT_SMP_IOCAPS_DISPLAY_YESNO, BT_SMP_AUTHREQ_SC);
+	StoreBond(BT_SMP_MIN_ENC_KEY_SIZE, true, true);
+	FeedSecurityReq(BT_SMP_AUTHREQ_MITM);
+
+	CHECK(SentEnableEncryption());
+	CHECK(SentPairingReq() == false);
+}
+
+// Nothing asked for beyond what the bond holds. An unauthenticated bond and a
+// request with no MITM bit must not pair, or every reconnect would.
+void TestSecurityReqNoExtraRequirementEncrypts()
+{
+	ResetCentralLink(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, BT_SMP_AUTHREQ_SC);
+	StoreBond(BT_SMP_MAX_ENC_KEY_SIZE, true, false);
+	FeedSecurityReq(BT_SMP_AUTHREQ_SC);
+
+	CHECK(SentEnableEncryption());
+	CHECK(SentPairingReq() == false);
+}
+
+// A bare Security Request names no property, so whatever is stored meets it.
+void TestSecurityReqBareEncrypts()
+{
+	ResetCentralLink(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, BT_SMP_AUTHREQ_SC);
+	StoreBond(BT_SMP_MIN_ENC_KEY_SIZE, false, false);
+	FeedSecurityReq(0);
+
+	CHECK(SentEnableEncryption());
+	CHECK(SentPairingReq() == false);
+}
+
+// "If this information is missing... the Central shall initiate the pairing
+// procedure."
+void TestSecurityReqNoBondPairs()
+{
+	ResetCentralLink(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, BT_SMP_AUTHREQ_SC);
+	FeedSecurityReq(BT_SMP_AUTHREQ_MITM | BT_SMP_AUTHREQ_SC);
+
+	CHECK(SentPairingReq());
+	CHECK(SentEnableEncryption() == false);
+}
+
+// A Security Request travels peripheral to central only, Vol 3 Part H 3.6.7.
+// Reading AuthReq must not have moved that gate.
+void TestSecurityReqRefusedOnPeripheral()
+{
+	ResetLink(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, BT_SMP_AUTHREQ_SC);
+	StoreBond(BT_SMP_MAX_ENC_KEY_SIZE, true, true);
+	FeedSecurityReq(BT_SMP_AUTHREQ_MITM);
+
+	CHECK(FirstIsPairingFailed(BT_SMP_ERR_CMD_NOT_SUPPORTED));
+	CHECK(SentEnableEncryption() == false);
+}
+
 } // namespace
 
 //-----------------------------------------------------------------------------
@@ -341,7 +526,7 @@ BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 
 uint8_t BtPeerRole(uint16_t)
 {
-	return BT_CONN_ROLE_PERIPHERAL;
+	return s_Role;
 }
 
 void BtGapConnSecSet(uint16_t, const BtConnSec_t *)
@@ -397,6 +582,16 @@ int main()
 	TestNoStoredBondPairsFreely();
 	TestInvalidStoredBondPairsFreely();
 	TestRuleJudgesModelNotAuthenticatedFlag();
+	TestSecurityReqMetByBond();
+	TestSecurityReqMitmOverUnauthenticatedBondPairs();
+	TestSecurityReqScOverLegacyBondPairs();
+	TestSecurityReqLevel4OverShortKeyPairs();
+	TestSecurityReqLevel4OverFifteenOctetKeyPairs();
+	TestSecurityReqMitmOnlyIgnoresKeySize();
+	TestSecurityReqNoExtraRequirementEncrypts();
+	TestSecurityReqBareEncrypts();
+	TestSecurityReqNoBondPairs();
+	TestSecurityReqRefusedOnPeripheral();
 
 	if (s_Failures != 0)
 	{

@@ -106,16 +106,30 @@ BtGattInitError_t BtGattInitStatusErrorGet(void)
 			std::memory_order_acquire);
 }
 
-// Every one of these is read without security, so they name OPEN rather than
-// inheriting the application's. That is what the two stacks that own this
-// service natively do: Zephyr declares Device Name, Appearance, Central
-// Address Resolution and PPCP with plain BT_GATT_PERM_READ, and the Nordic
-// SoftDevice takes only a write permission in sd_ble_gap_device_name_set, so
-// its read cannot be secured at all.
+// These name OPEN rather than inheriting the application's security type
+// because the spec fixes their permissions, per characteristic:
 //
-// The security levels characteristic has a second reason: a client reads it to
-// learn what the server will require, which has to work before the client has
-// met any of it.
+//   Device Name  Vol 3 Part C 12.1, Table 12.3. "When the device is
+//                discoverable, the Device Name characteristic value shall be
+//                readable without authentication or authorization." Not
+//                readable that way once undiscoverable, which this
+//                declaration does not yet distinguish.
+//   Appearance   Vol 3 Part C 12.2, Table 12.4. "The Appearance
+//                characteristic value shall be readable without
+//                authentication or authorization."
+//   PPCP         Vol 3 Part C 12.3, Table 12.5. "shall be readable.
+//                Authentication and authorization may be defined by a higher
+//                layer specification or be implementation specific." So OPEN
+//                is a choice here, not a requirement, and it is the one that
+//                lets a peer read the preferred parameters before pairing.
+//   Sec Levels   Vol 3 Part C 12.7, Table 12.11. "Read Only, No Encryption
+//                required, No Authentication, No Authorization." A client
+//                reads this to learn what the server will require, so it has
+//                to work before the client has met any of it.
+//
+// A platform constraint points the same way on one port: the Nordic
+// SoftDevice takes only a write permission in sd_ble_gap_device_name_set, so
+// the read cannot be secured there at all.
 static BtGattChar_t s_BtGapChar[] = {
 	BT_CHAR(BT_UUID_CHARACTERISTIC_DEVICE_NAME,
 	        BT_GAP_DEVNAME_MAX_LEN,
@@ -141,13 +155,14 @@ static BtGattChar_t s_BtGapChar[] = {
 
 static BtGattSrvc_t s_BtGapSrvc = BT_SRVC_STD(BT_UUID_GATT_SERVICE_GENERIC_ACCESS, s_BtGapChar);
 
-// Service Changed names OPEN for the same reason the GAP characteristics
-// above do: a client subscribes to it to be told the database moved, which it
-// has to be able to do before it has met any requirement. Zephyr declares the
-// characteristic BT_GATT_PERM_NONE and its CCCD plain read/write with no
-// security attached (gatt.c, BT_GATT_SERVICE_DEFINE _1_gatt_svc). Naming OPEN
-// rather than leaving NONE also keeps it out of the application inheritance
-// that BtGapInit publishes below.
+// Service Changed names OPEN because the spec fixes its permissions too:
+// Vol 3 Part G 7.1, Table 7.2 gives the declaration "No Authentication, No
+// Authorization", and Table 7.3 gives the value "No Authentication, No
+// Authorization, Not Readable, Not Writable". Indication is the only
+// permitted operation, which is what the property below says.
+//
+// Naming OPEN rather than leaving NONE also keeps it out of the application
+// inheritance that BtGapInit publishes below.
 static BtGattChar_t s_BtGattChar[] = {
 	BT_CHAR(BT_UUID_CHARACTERISTIC_SERVICE_CHANGED,
 	        sizeof(BtGattCharSrvcChanged_t),

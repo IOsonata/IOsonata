@@ -57,9 +57,14 @@ enum {
 };
 
 // Device information is what a peer reads to find out what it is talking to,
-// so these are OPEN rather than inheriting the application security. Zephyr
-// declares every DIS characteristic with plain BT_GATT_PERM_READ and the
-// Nordic SDK service offers no way to secure them either.
+// so these are OPEN rather than inheriting the application security.
+//
+// The authority for these permissions is the Device Information Service
+// specification, which is published separately from the Core specification and
+// has not been checked against this declaration. Treat the choice as this
+// implementation's, not as a quoted requirement, until it has been. One
+// platform constraint does point the same way: the Nordic SDK service offers
+// no way to secure them.
 //
 // The serial number is the exception. It identifies one unit rather than a
 // product, so it inherits: a device configured with security does not hand it

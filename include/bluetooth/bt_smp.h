@@ -136,6 +136,11 @@ SOFTWARE.
 /// compares this length and not the whole key.
 #define BT_SMP_PUBKEY_COORD_LEN						32
 
+/// Encryption key size LE security mode 1 level 4 requires, in octets. Vol 3
+/// Part C 10.2.1 defines level 4 as "Authenticated LE Secure Connections
+/// pairing with encryption using a 128-bit strength encryption key".
+#define BT_SMP_SEC_LEVEL4_KEY_SIZE					16
+
 /// Locally-enforced minimum encryption key size. Defaults to the spec floor (7)
 /// for interoperability; a security-sensitive build raises it (16 for full LE
 /// Secure Connections entropy) to refuse a KNOB-style key-size downgrade, where

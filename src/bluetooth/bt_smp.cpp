@@ -307,6 +307,10 @@ static void SmpOobRelease(BtSmpLink_t *pLink)
 static void SmpCryptoPump(void);
 static int SmpCryptoStart(BtSmpLink_t *pLink);
 
+// Forward for the PDU dispatcher, which starts pairing on a Security Request
+// and has to carry down the security properties that request named.
+static void SmpStartPairing(uint16_t ConnHdl, uint8_t PeerAuthReq);
+
 // Drop this link's crypto request. If it owned the engine, free the engine so
 // a waiting link can start.
 static void SmpCryptoLinkClear(BtSmpLink_t *pLink)
@@ -805,10 +809,14 @@ static void SmpReverse6(const uint8_t in[6], uint8_t out[6])
 
 // f4(U, V, X, Z) -> confirm
 //
-// U/V/X are passed in SMP byte order. The CMAC core works on the big-endian
-// form used by the Bluetooth crypto definition, then the 128-bit result is
-// converted back to SMP PDU order. This matches the byte-order handling used
-// by Zephyr's bt_crypto_f4().
+// Vol 3 Part H 2.2.6. U and V are the 256-bit public key X coordinates, X is
+// the 128-bit nonce and Z the 8-bit round input; "U, V and Z are concatenated
+// and used as input m to the function AES-CMAC and X is used as the key k".
+//
+// U/V/X are passed here in SMP PDU byte order. The CMAC core works on the
+// big-endian form the crypto definitions in 2.2 are written in, so they are
+// reversed on the way in and the 128-bit result is reversed back on the way
+// out.
 static bool SmpF4(const uint8_t u[32], const uint8_t v[32],
 				  const uint8_t x[16], uint8_t z, uint8_t out[16])
 {
@@ -981,6 +989,49 @@ static bool SmpModelMeetsLocalAuth(uint8_t Model)
 	return SmpModelIsAuthenticated(Model);
 }
 
+// Does the stored bond meet the security properties a Security Request named?
+//
+// Vol 3 Part H 2.4.6: "After receiving a Security Request, the Central shall
+// first check whether it has the required security information to enable
+// encryption; see Section 2.4.4.2. If this information is missing or does not
+// meet the security properties requested by the Peripheral, then the Central
+// shall initiate the pairing procedure." Figure 2.7 draws the same decision,
+// with "LTK >= Requested Security Level" choosing between encrypting and
+// pairing. Both are shall.
+//
+// The requested properties are the AuthReq bits. Vol 3 Part H 2.3.1 lists the
+// Security Properties as LE Secure Connections pairing and Authenticated MITM
+// protection, which are the SC and MITM bits of Figure 3.3. Asking for both is
+// LE security mode 1 level 4, and Vol 3 Part C 10.2.1 defines that level as
+// "Authenticated LE Secure Connections pairing with encryption using a 128-bit
+// strength encryption key" - so the key length is part of the level, but only
+// when both properties are asked for. Level 3, MITM without SC, is stated
+// without a key length.
+//
+// Reading the SC bit as a requirement rather than as the "device supports LE
+// Secure Connections pairing" of 3.5.1 follows 2.4.6, which says the Security
+// Request "includes the required security properties". A legacy LTK does not
+// provide the LE Secure Connections property whichever way the bit is read.
+static bool SmpBondMeetsRequest(const BtSmpKeys_t *pKeys, uint8_t PeerAuthReq)
+{
+	bool reqMitm = (PeerAuthReq & BT_SMP_AUTHREQ_MITM) != 0;
+	bool reqSc = (PeerAuthReq & BT_SMP_AUTHREQ_SC) != 0;
+
+	if (reqMitm && !pKeys->bAuthenticated)
+	{
+		return false;
+	}
+	if (reqSc && !pKeys->bSc)
+	{
+		return false;
+	}
+	if (reqMitm && reqSc && pKeys->EncKeySize < BT_SMP_SEC_LEVEL4_KEY_SIZE)
+	{
+		return false;
+	}
+	return true;
+}
+
 // Would completing this pairing replace a stored bond with a weaker one?
 //
 // The re-pair guard in SmpHandlePairingReq refuses only once the link is
@@ -991,11 +1042,16 @@ static bool SmpModelMeetsLocalAuth(uint8_t Model)
 // who can present the address. The ATT permission checks then read the weaker
 // level from the record and trust it.
 //
-// Three properties decide it, the three the stored record carries and the ones
-// SmpConnSecFromKeys turns into a security level: the encryption key length,
-// whether Secure Connections produced the key, and whether the model
-// authenticated the peer. Equal strength passes, so a legitimate re-pair still
-// works; raising any of the three is an upgrade and passes too.
+// Vol 3 Part H 2.3.1 names the Security Properties a pairing produces: LE
+// Secure Connections pairing, and Authenticated MITM protection. Vol 3 Part C
+// 10.2.1 adds the third dimension by defining LE security mode 1 level 4 as
+// "Authenticated LE Secure Connections pairing with encryption using a
+// 128-bit strength encryption key", so the key length is part of the level a
+// bond reaches. Those three are what the stored record holds and what
+// SmpConnSecFromKeys turns into a security level.
+//
+// Equal strength passes, so a legitimate re-pair still works; raising any of
+// the three is an upgrade and passes too.
 //
 // The lookup is BtSmpBondKeysLookup with Rand and EDIV zero, which resolves
 // through BtSmpBondFindByAddr - the same function and the same address that
@@ -1004,10 +1060,11 @@ static bool SmpModelMeetsLocalAuth(uint8_t Model)
 // stored record is not matched, which is a limit of address resolution rather
 // than of this rule.
 //
-// Not adopted: Zephyr also refuses Just Works over an existing unauthenticated
-// bond (update_keys_check, behind CONFIG_BT_SMP_ALLOW_UNAUTH_OVERWRITE). That
-// is overwrite protection at equal strength rather than downgrade protection,
-// and is a separate policy decision.
+// Scope. This refuses a pairing that would lower the level, not one that would
+// merely replace a bond at the same level. Refusing an equal-strength
+// overwrite as well - for instance Just Works over an existing unauthenticated
+// bond - is a separate policy decision with its own interoperability cost, and
+// is not made here.
 static bool SmpPairingWeakensBond(uint16_t ConnHdl, const BtSmpLink_t *pLink)
 {
 	BtSmpKeys_t stored;
@@ -1023,7 +1080,7 @@ static bool SmpPairingWeakensBond(uint16_t ConnHdl, const BtSmpLink_t *pLink)
 				  (stored.bAuthenticated &&
 				   !SmpModelIsAuthenticated(pLink->Ctx.Model));
 
-	// The copy carries the LTK, IRK and CSRK.
+	// The copy holds the LTK, IRK and CSRK.
 	CryptoSecureWipe(&stored, sizeof(stored));
 
 	return weaker;
@@ -1415,24 +1472,31 @@ static bool SmpKeyPresent(const uint8_t *pKey, size_t Len)
 
 static bool SmpStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 {
-	// Reject a peer public key that reuses our own X coordinate before starting
-	// ECDH. This is the reflection attack against LE Secure Connections,
-	// mandatory to reject since Core 5.1 (CVE-2020-26558). Both keys are always
-	// present at this chokepoint (the initiator has sent its key and the
-	// responder only reaches here once both are in). On-curve validation of the
-	// peer key is done by the key-agreement engine, which the KeyAgreeEngine
-	// interface requires of every implementation; SMP has no field arithmetic
-	// to repeat it with. An all-zero key never reaches here either, since
-	// SmpTryStartDhKey only calls in once both keys are present. A false return
-	// makes the caller send Pairing Failed and abort.
+	// Vol 3 Part H 2.3.5.6.1: "If the two public keys have the same X
+	// coordinate and neither is the debug key, each device should fail the
+	// pairing process." So the test is on the X coordinate, not on the whole
+	// 64 octet key, and the reason is in 2.2.6: f4 takes the two X coordinates
+	// and nothing else ("PKax denotes the x-coordinate of the public key PKa
+	// of A"). A peer that sends (X, p - Y) presents a different 64 octet key
+	// with our X, which is the negation of our point and therefore on the
+	// curve, so it passes the engine's validation - and then every confirm
+	// value is computable by that peer from public material. X(d * -P) equals
+	// X(d * P), so the shared secret is the reflected one as well.
 	//
-	// X alone, not the whole key. f4 (Vol 3 Part H 2.2.6) takes the two X
-	// coordinates and nothing else, so a peer that sends (X, p - Y) can compute
-	// every confirm value from public material even though the 64 octet key
-	// differs from ours. That point is the negation of ours: it is on the
-	// curve, so the engine accepts it, and X(d * -P) equals X(d * P), so the
-	// shared secret is the reflected one too. Zephyr compares the same
-	// BT_PUB_KEY_COORD_LEN prefix for this reason.
+	// Stricter than the clause in two ways, both deliberate. It is a "should",
+	// and this refuses rather than continuing. And the debug key carve-out is
+	// not made, because this stack has no debug key detection yet; adding it
+	// means letting a matching X through when both keys are the published
+	// debug key of 2.3.5.6.1.
+	//
+	// Both keys are always present at this chokepoint: the initiator has sent
+	// its key and the responder only reaches here once both are in, so an
+	// all-zero key cannot reach it either. On-curve validation - "A device
+	// shall validate that any public key received from any BD_ADDR is on the
+	// correct curve (P-256)", same section - is done by the key-agreement
+	// engine, which the KeyAgreeEngine interface requires of every
+	// implementation; SMP has no field arithmetic to repeat it with. A false
+	// return makes the caller send Pairing Failed and abort.
 	if (memcmp(pLink->Ctx.PeerPubKey, pLink->Ctx.LocalPubKey,
 			   BT_SMP_PUBKEY_COORD_LEN) == 0)
 	{
@@ -2830,9 +2894,14 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CMD_NOT_SUPPORTED);
 				break;
 			}
-			// A peripheral is asking us (the central) to secure the link. Start
-			// pairing or re-encrypt from a bond. Idempotent if already running.
-			BtSmpStartPairing(ConnHdl);
+			// A peripheral is asking us (the central) to secure the link.
+			// Vol 3 Part H 2.4.6: the Security Request "includes the required
+			// security properties", and the central shall pair when the stored
+			// security information does not meet them. Pass the AuthReq octet
+			// down so that decision can be made; the length gate above proved
+			// the octet present. Idempotent if already running.
+			SmpStartPairing(ConnHdl,
+					((const BtSmpSecurityReq_t*)pSmp)->AuthReq);
 			break;
 
 		default:
@@ -3990,7 +4059,10 @@ void BtSmpRequestSecurity(uint16_t ConnHdl)
 	SmpSend(pDev, ConnHdl, &req, sizeof(req));
 }
 
-void BtSmpStartPairing(uint16_t ConnHdl)
+// PeerAuthReq is what a Security Request named, or 0 when the local device is
+// starting on its own account. It only decides between encrypting from a
+// stored bond and pairing again; it does not change what is negotiated.
+static void SmpStartPairing(uint16_t ConnHdl, uint8_t PeerAuthReq)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr || pPeer->pHciDev == nullptr)
@@ -4034,12 +4106,24 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 	// completes it.
 	if (BtSmpBondKeysLookup(ConnHdl, 0U, 0U, &pLink->Keys))
 	{
-		pLink->Ctx.bInitiator = true;
-		pLink->Ctx.State = BT_SMP_STATE_DONE;
-		DEBUG_PRINTF("SMP central reconnect, encrypt from bond\r\n");
-		BtSmpHciEnableEncryption(pDev, ConnHdl, pLink->Keys.Rand,
-								 pLink->Keys.Ediv, pLink->Keys.Ltk);
-		return;
+		if (SmpBondMeetsRequest(&pLink->Keys, PeerAuthReq))
+		{
+			pLink->Ctx.bInitiator = true;
+			pLink->Ctx.State = BT_SMP_STATE_DONE;
+			DEBUG_PRINTF("SMP central reconnect, encrypt from bond\r\n");
+			BtSmpHciEnableEncryption(pDev, ConnHdl, pLink->Keys.Rand,
+									 pLink->Keys.Ediv, pLink->Keys.Ltk);
+			return;
+		}
+
+		// Below the requested level, so 2.4.6 requires pairing. The record
+		// just restored into the link is the old one; drop it rather than
+		// carry it into a pairing that will build its own.
+		// SmpPairingWeakensBond still bounds what that pairing may end at, so
+		// an upgrade cannot complete as a downgrade.
+		DEBUG_PRINTF("SMP security request auth=0x%02x above bond, pair\r\n",
+				  PeerAuthReq);
+		CryptoSecureWipe(&pLink->Keys, sizeof(pLink->Keys));
 	}
 
 	// Fresh pairing as initiator (central). Send Pairing Request and request the
@@ -4083,6 +4167,14 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
 		SmpAbortPairing(pLink);
 	}
+}
+
+// Start pairing on the local device's own account. A Security Request goes
+// through the internal entry so the properties it named are honoured; this one
+// names none, so a stored bond is used as it stands.
+void BtSmpStartPairing(uint16_t ConnHdl)
+{
+	SmpStartPairing(ConnHdl, 0U);
 }
 
 __attribute__((weak))
