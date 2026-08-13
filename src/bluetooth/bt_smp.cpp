@@ -1506,6 +1506,31 @@ static bool SmpKeyPresent(const uint8_t *pKey, size_t Len)
 	return false;
 }
 
+// The LE Secure Connections debug public key, Vol 3 Part H 2.3.5.6.1, X then Y
+// as Ctx.PeerPubKey holds them. The specification publishes the matching
+// private key in the same paragraph, so an LTK derived from this key is
+// computable by anyone listening.
+//
+// This stack has no debug mode: it never generates this pair and has no way to
+// be told to accept it. That makes it permanently "in a mode in which it
+// cannot accept the debug key", which is the condition the same section
+// attaches to answering Pairing Failed with Invalid Parameters.
+static const uint8_t kSmpDebugPubKey[64] = {
+	0x20, 0xb0, 0x03, 0xd2, 0xf2, 0x97, 0xbe, 0x2c,
+	0x5e, 0x2c, 0x83, 0xa7, 0xe9, 0xf9, 0xa5, 0xb9,
+	0xef, 0xf4, 0x91, 0x11, 0xac, 0xf4, 0xfd, 0xdb,
+	0xcc, 0x03, 0x01, 0x48, 0x0e, 0x35, 0x9d, 0xe6,
+	0xdc, 0x80, 0x9c, 0x49, 0x65, 0x2a, 0xeb, 0x6d,
+	0x63, 0x32, 0x9a, 0xbf, 0x5a, 0x52, 0x15, 0x5c,
+	0x76, 0x63, 0x45, 0xc2, 0x8f, 0xed, 0x30, 0x24,
+	0x74, 0x1c, 0x8e, 0xd0, 0x15, 0x89, 0xd2, 0x8b,
+};
+
+static bool SmpIsDebugPubKey(const uint8_t PubKey[64])
+{
+	return memcmp(PubKey, kSmpDebugPubKey, sizeof(kSmpDebugPubKey)) == 0;
+}
+
 static bool SmpStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 {
 	// Vol 3 Part H 2.3.5.6.1: "If the two public keys have the same X
@@ -1519,11 +1544,12 @@ static bool SmpStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 	// value is computable by that peer from public material. X(d * -P) equals
 	// X(d * P), so the shared secret is the reflected one as well.
 	//
-	// Stricter than the clause in two ways, both deliberate. It is a "should",
-	// and this refuses rather than continuing. And the debug key carve-out is
-	// not made, because this stack has no debug key detection yet; adding it
-	// means letting a matching X through when both keys are the published
-	// debug key of 2.3.5.6.1.
+	// The clause excepts the case where either key is the debug key, and that
+	// exception is satisfied by construction here: a peer debug key is refused
+	// in SmpHandlePublicKey before this runs, and this device never generates
+	// the debug pair, so neither key can be it by the time the comparison
+	// happens. One deliberate departure remains, that the clause is a "should"
+	// and this refuses rather than continuing.
 	//
 	// Both keys are always present at this chokepoint: the initiator has sent
 	// its key and the responder only reaches here once both are in, so an
@@ -1734,6 +1760,21 @@ static void SmpHandlePublicKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	{
 		pLink->Ctx.PeerPubKey[i]      = pPk->KeyX[31 - i];
 		pLink->Ctx.PeerPubKey[32 + i] = pPk->KeyY[31 - i];
+	}
+
+	if (SmpIsDebugPubKey(pLink->Ctx.PeerPubKey))
+	{
+		// The peer is pairing with the published debug pair. The LTK that
+		// follows would be derivable by any passive listener, and the link
+		// would still be committed as Secure Connections and, under Numeric
+		// Comparison or Passkey Entry, as authenticated. Refuse before the
+		// ECDH. One check here covers both roles, since the peer key lands
+		// here whichever side this device is.
+		DEBUG_PRINTF("SMP peer sent the debug public key\r\n");
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
+		SmpAbortPairing(pLink);
+		BtSmpPairingComplete(ConnHdl, false, nullptr);
+		return;
 	}
 
 	if (pLink->Ctx.bInitiator)

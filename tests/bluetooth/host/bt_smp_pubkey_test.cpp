@@ -338,6 +338,87 @@ void TestNegatedYReflectionIsRefusedAsInitiator()
 	CHECK(SentPairingFailed(BT_SMP_ERR_DHKEY_CHECK_FAILED));
 }
 
+
+// The debug key. Vol 3 Part H 2.3.5.6.1 publishes the whole pair, so its
+// private half is public knowledge and any LTK derived from it is computable by
+// a passive listener. This stack has no debug mode, so it is always "in a mode
+// in which it cannot accept the debug key", and the clause allows Pairing
+// Failed with Invalid Parameters for exactly that.
+const uint8_t kDebugPubX[32] = {
+	0x20, 0xb0, 0x03, 0xd2, 0xf2, 0x97, 0xbe, 0x2c,
+	0x5e, 0x2c, 0x83, 0xa7, 0xe9, 0xf9, 0xa5, 0xb9,
+	0xef, 0xf4, 0x91, 0x11, 0xac, 0xf4, 0xfd, 0xdb,
+	0xcc, 0x03, 0x01, 0x48, 0x0e, 0x35, 0x9d, 0xe6,
+};
+const uint8_t kDebugPubY[32] = {
+	0xdc, 0x80, 0x9c, 0x49, 0x65, 0x2a, 0xeb, 0x6d,
+	0x63, 0x32, 0x9a, 0xbf, 0x5a, 0x52, 0x15, 0x5c,
+	0x76, 0x63, 0x45, 0xc2, 0x8f, 0xed, 0x30, 0x24,
+	0x74, 0x1c, 0x8e, 0xd0, 0x15, 0x89, 0xd2, 0x8b,
+};
+
+void TestDebugKeyRefused()
+{
+	ResetLink();
+	FeedPairingReq();
+
+	BtSmpLink_t *pLink = ActiveLink();
+	CHECK(pLink != nullptr);
+	if (pLink == nullptr)
+	{
+		return;
+	}
+
+	// The debug key is a real curve point, so nothing downstream would have
+	// stopped it. Proven with the engine rather than asserted, which also
+	// checks the constants above were transcribed correctly.
+	uint8_t debugPub[64];
+	std::memcpy(debugPub, kDebugPubX, 32);
+	std::memcpy(debugPub + 32, kDebugPubY, 32);
+	alignas(8) uint8_t probeCtx[CRYPTO_KEYCTX_MAX] = {};
+	uint8_t probePub[64] = {};
+	uint8_t shared[32] = {};
+	CHECK(s_pEcdh->KeyGen(CRYPTO_CURVE_P256, probeCtx, probePub) ==
+		CRYPTO_STATUS_OK);
+	CHECK(s_pEcdh->Agree(CRYPTO_CURVE_P256, probeCtx, debugPub, shared,
+		false) == CRYPTO_STATUS_OK);
+
+	// And it is not our own key, so the reflection check is not what fires.
+	CHECK(std::memcmp(kDebugPubX, pLink->Ctx.LocalPubKey, 32) != 0);
+
+	SmpTxReset();
+	FeedPublicKey(kDebugPubX, kDebugPubY);
+
+	CHECK(SentPairingFailed(BT_SMP_ERR_INVALID_PARAMS));
+	CHECK(SmpKeyPresent(pLink->Ctx.DhKey, sizeof(pLink->Ctx.DhKey)) == false);
+}
+
+// Same key with one octet of X changed is an ordinary peer key again, so the
+// detection is a comparison of the published value and not a broader rule.
+void TestNearDebugKeyAccepted()
+{
+	ResetLink();
+	FeedPairingReq();
+
+	BtSmpLink_t *pLink = ActiveLink();
+	CHECK(pLink != nullptr);
+	if (pLink == nullptr)
+	{
+		return;
+	}
+
+	alignas(8) uint8_t peerCtx[CRYPTO_KEYCTX_MAX] = {};
+	uint8_t peerPub[64] = {};
+	CHECK(s_pEcdh->KeyGen(CRYPTO_CURVE_P256, peerCtx, peerPub) ==
+		CRYPTO_STATUS_OK);
+	CHECK(std::memcmp(peerPub, kDebugPubX, 32) != 0);
+
+	SmpTxReset();
+	FeedPublicKey(peerPub, peerPub + 32);
+
+	CHECK(SentPairingFailed(BT_SMP_ERR_INVALID_PARAMS) == false);
+}
+
 } // namespace
 
 extern "C" {
@@ -389,6 +470,8 @@ int main()
 	TestReflectedKeyIsRefused();
 	TestNegatedYReflectionIsRefused();
 	TestNegatedYReflectionIsRefusedAsInitiator();
+	TestDebugKeyRefused();
+	TestNearDebugKeyAccepted();
 
 	if (s_Failures != 0)
 	{
