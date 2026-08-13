@@ -13,6 +13,8 @@
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_hci.h"
+#include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_peer.h"
 
 namespace {
@@ -385,6 +387,91 @@ void TestSignedWriteReplacementRules()
 	s_SignatureValid = false;
 }
 
+// A request longer than the link ATT_MTU must be refused before any of its
+// parameters reach the response. Core Vol 3 Part F section 3.2.8 makes ATT_MTU
+// the maximum size of any packet sent between a client and a server, and
+// section 3.3 requires an invalid request - the example given is a PDU of the
+// wrong length - to be answered with Invalid PDU (0x04) and Attribute Handle
+// In Error 0x0000.
+//
+// Prepare Write is the request that makes an unchecked length reachable: it
+// echoes the whole value back. The buffers here have the same geometry as
+// BtHciProcessData, where the response is built in a BT_HCI_BUFFER_MAX_SIZE
+// stack buffer behind an ACL header and an L2CAP header. Without the gate the
+// echo runs off the end of that buffer and the sanitizer build reports a stack
+// buffer overflow.
+void TestOversizeRequestRejected()
+{
+	constexpr size_t kAttOffset =
+			sizeof(BtHciACLDataPacketHdr_t) + sizeof(BtL2CapHdr_t);
+	// Largest ATT PDU the reassembly path in BtHciProcessData will deliver.
+	constexpr int kMaxReasmAtt =
+			BT_HCI_BUFFER_MAX_SIZE - (int)sizeof(BtL2CapHdr_t);
+
+	BtAttDBInit(2048);
+	BtAttSetMtu(BT_ATT_MTU_MIN);
+
+	BtGattChar_t chr;
+	uint8_t value[8] = {};
+	BtAttDBEntry_t *pEntry = AddChar(&chr, value, 0, sizeof(value),
+			BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_WRITE);
+	BT_CHECK(s_Test, pEntry != nullptr);
+	if (pEntry == nullptr)
+	{
+		return;
+	}
+
+	// The shipped peripheral examples give one link a 512 byte long write
+	// pool, so the queue has room for the oversize value and the request is
+	// not turned away as Prepare Queue Full before the echo.
+	uint8_t longWrite[512];
+	ResetPeer();
+	s_Peer.Conn.pLongWrBuff = longWrite;
+	s_Peer.Conn.LongWrBuffSize = sizeof(longWrite);
+
+	uint8_t reqBuf[BT_HCI_BUFFER_MAX_SIZE] = {};
+	uint8_t rspBuf[BT_HCI_BUFFER_MAX_SIZE] = {};
+	uint8_t *pReq = reqBuf + sizeof(BtL2CapHdr_t);
+	BtAttReqRsp_t *pRsp = (BtAttReqRsp_t *)(rspBuf + kAttOffset);
+	const uint8_t *pRspBytes = (const uint8_t *)pRsp;
+
+	pReq[0] = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
+	PutLe16(pReq + 1, pEntry->Hdl);
+	PutLe16(pReq + 3, 0);
+	std::memset(pReq + 5, 0xA5, (size_t)kMaxReasmAtt - 5);
+
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)pReq,
+			kMaxReasmAtt, pRsp);
+	CheckInvalidPdu(pRspBytes, n, BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ);
+	BT_CHECK(s_Test, s_Peer.Conn.LongWrLen == 0);
+
+	// One octet over the MTU is refused.
+	std::memset(rspBuf, 0, sizeof(rspBuf));
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)pReq,
+			BT_ATT_MTU_MIN + 1, pRsp);
+	CheckInvalidPdu(pRspBytes, n, BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ);
+	BT_CHECK(s_Test, s_Peer.Conn.LongWrLen == 0);
+
+	// Exactly at the MTU is still accepted, so the gate does not cost the
+	// peer the largest legal request.
+	std::memset(rspBuf, 0, sizeof(rspBuf));
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)pReq,
+			BT_ATT_MTU_MIN, pRsp);
+	BT_CHECK(s_Test, n == (uint32_t)BT_ATT_MTU_MIN);
+	BT_CHECK(s_Test, pRspBytes[0] == BT_ATT_OPCODE_ATT_PREPARE_WRITE_RSP);
+	BT_CHECK(s_Test, s_Peer.Conn.LongWrLen == 6 + BT_ATT_MTU_MIN - 5);
+
+	// A command carries no response, so an oversize one is dropped in silence
+	// rather than answered.
+	std::memset(rspBuf, 0xC3, sizeof(rspBuf));
+	pReq[0] = BT_ATT_OPCODE_ATT_CMD;
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)pReq, kMaxReasmAtt, pRsp);
+	BT_CHECK(s_Test, n == 0);
+	BT_CHECK(s_Test, pRspBytes[0] == 0xC3);
+
+	s_PeerEnabled = false;
+}
+
 } // namespace
 
 extern "C" {
@@ -445,5 +532,6 @@ int main()
 			   TestReadMultipleVariableNeedsTwoHandles);
 	s_Test.Run("Signed Write replacement rules",
 			   TestSignedWriteReplacementRules);
+	s_Test.Run("oversize request rejected", TestOversizeRequestRejected);
 	return s_Test.Finish();
 }
