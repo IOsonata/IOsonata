@@ -78,7 +78,8 @@ TEST_NAMES := \
 	bt_smp_pairing_policy_test \
 	bt_smp_pubkey_test \
 	bt_sec_sd_test \
-	bt_gatt_permission_test
+	bt_gatt_permission_test \
+	bt_gap_init_port_test
 
 TARGETS := $(addprefix $(BUILD_DIR)/,$(TEST_NAMES))
 CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
@@ -172,6 +173,13 @@ bt_gatt_txcomplete_test_SOURCES := \
 	bt_gatt_txcomplete_test.cpp \
 	$(ROOT)/src/bluetooth/bt_gatt.cpp \
 	$(ROOT)/src/bluetooth/bt_peer.cpp
+
+bt_gap_init_port_test_SOURCES := \
+	bt_gap_init_port_test.cpp \
+	$(ROOT)/src/bluetooth/bt_gap.cpp \
+	$(ROOT)/src/bluetooth/bt_gatt.cpp \
+	$(ROOT)/src/bluetooth/bt_att.cpp \
+	$(ROOT)/src/bluetooth/bt_uuid.cpp
 
 bt_gatt_permission_test_SOURCES := \
 	bt_gatt_permission_test.cpp \

@@ -233,10 +233,32 @@ static bool BtGapSecurityLevelValid(uint8_t Mode, uint8_t Level)
 	return false;
 }
 
+// True when a port actually registered this characteristic, so it has a handle
+// and somewhere to hold a value.
+//
+// BT_CHAR names neither field, so a static declaration starts with ValHdl 0
+// and pValue null, and BtGattSrvcAdd fills them in. A port whose stack owns
+// the GAP service declines to register it and leaves both as they were. Note
+// the handle is 0 there and not BT_ATT_HANDLE_INVALID, which is 0xFFFF: a
+// check for the invalid handle alone does not catch this.
+static bool BtGapCharRegistered(const BtGattChar_t *pChar)
+{
+	return pChar != nullptr && pChar->pValue != nullptr &&
+		   pChar->ValHdl != 0 && pChar->ValHdl != BT_ATT_HANDLE_INVALID;
+}
+
 bool BtGapSetSecurityLevels(const uint8_t *pRequirements, size_t Count)
 {
 	if (pRequirements == nullptr || Count == 0 ||
 		Count > BT_GAP_SEC_LEVEL_REQ_MAX)
+	{
+		return false;
+	}
+
+	// Nothing to write to. Answering here keeps a value set off a
+	// characteristic with no handle, which on the SoftDevice ports means
+	// sd_ble_gatts_value_set on handle 0.
+	if (!BtGapCharRegistered(&s_BtGapChar[BT_GAP_CHAR_IDX_SEC_LEVELS]))
 	{
 		return false;
 	}
@@ -414,11 +436,23 @@ void BtGapInit(const BtGapCfg_t *pCfg)
 		// once here rather than tracked as security is negotiated. An
 		// application whose real requirement is not the configured one calls
 		// BtGapSetSecurityLevels afterwards.
-		uint8_t req[2];
-		BtGapSecurityLevelsFromSecType(pCfg->SecType, req);
-		if (BtGapSetSecurityLevels(req, 1) == false)
+		//
+		// Only a port that registered the characteristic can be held to
+		// writing it. Core Vol 3 Part C Table 12.2 lists LE GATT Security
+		// Levels as Optional for both the LE Peripheral and the LE Central
+		// role, so a stack that owns the GAP service and offers no 0x2BF5
+		// leaves a device that conforms without it. The SoftDevice, sdk-nrf-bm
+		// and CubeWBA are all in that position: they create 0x1800 themselves
+		// and expose no way to add a characteristic to it. Treating that as a
+		// failed value set stopped BtAppInit on all three.
+		if (BtGapCharRegistered(&s_BtGapChar[BT_GAP_CHAR_IDX_SEC_LEVELS]))
 		{
-			BtGattInitStatusFail(BT_GATT_INIT_ERROR_VALUE_SET);
+			uint8_t req[2];
+			BtGapSecurityLevelsFromSecType(pCfg->SecType, req);
+			if (BtGapSetSecurityLevels(req, 1) == false)
+			{
+				BtGattInitStatusFail(BT_GATT_INIT_ERROR_VALUE_SET);
+			}
 		}
 	}
 
