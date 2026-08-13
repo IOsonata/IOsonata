@@ -949,6 +949,27 @@ static uint8_t SmpSelectModel(uint8_t InitIo, uint8_t RespIo, bool Mitm, bool Oo
 	return s_SmpModelMap[InitIo][RespIo];
 }
 
+// Does the selected model produce a key with the security property this device
+// asked for? The MITM flag requests an Authenticated security property for the
+// LTK (Vol 3 Part H 3.5.1), and of the models this stack selects only Just
+// Works fails to provide it: Numeric Comparison and Passkey Entry are
+// authenticated under Secure Connections, and OOB is treated as authenticated
+// where the out of band channel is trusted (Vol 3 Part H 2.3.1). Vol 3 Part H
+// 2.3.5.1 requires Pairing Failed with Authentication Requirements when the
+// key generation method does not reach the properties the device needs.
+//
+// Only the local requirement is enforced. A peer that sets MITM enforces it on
+// its own side; refusing on its behalf would break a pairing this device is
+// content with, and the peer's flag still feeds model selection.
+static bool SmpModelMeetsLocalAuth(uint8_t Model)
+{
+	if ((s_SmpAuthReq & BT_SMP_AUTHREQ_MITM) == 0)
+	{
+		return true;
+	}
+	return Model != BT_SMP_MODEL_JUST_WORKS;
+}
+
 // Copy the pending OOB material into the link context of an OOB pairing.
 static bool SmpOobCtxLoad(BtSmpLink_t *pLink)
 {
@@ -1273,6 +1294,18 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		return;
 	}
 
+	if (SmpModelMeetsLocalAuth(pLink->Ctx.Model) == false)
+	{
+		// MITM was required locally and the IO capabilities available on this
+		// pairing cannot deliver it. Completing would store a bond whose only
+		// mark of the shortfall is bAuthenticated in the completion record.
+		DEBUG_PRINTF("SMP reject, MITM required but model=%d is Just Works\r\n",
+				  pLink->Ctx.Model);
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
+		SmpAbortPairing(pLink);
+		return;
+	}
+
 	BtSmpPairingRsp_t rsp;
 	SmpBuildPairingRsp(pLink, &rsp);
 	SmpSend(pDev, ConnHdl, &rsp, sizeof(rsp));
@@ -1456,6 +1489,18 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	{
 		// Unknown model; fail closed rather than continuing to a link
 		// the peer would treat as authenticated.
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
+		SmpAbortPairing(pLink);
+		return;
+	}
+
+	if (SmpModelMeetsLocalAuth(pLink->Ctx.Model) == false)
+	{
+		// MITM was required locally and the IO capabilities available on this
+		// pairing cannot deliver it. Completing would store a bond whose only
+		// mark of the shortfall is bAuthenticated in the completion record.
+		DEBUG_PRINTF("SMP reject, MITM required but model=%d is Just Works\r\n",
+				  pLink->Ctx.Model);
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
 		SmpAbortPairing(pLink);
 		return;

@@ -74,7 +74,8 @@ TEST_NAMES := \
 	bt_app_adversarial_test \
 	bt_std_services_test \
 	bt_smp_sign_counter_test \
-	bt_smp_keydist_test
+	bt_smp_keydist_test \
+	bt_smp_pairing_policy_test
 
 TARGETS := $(addprefix $(BUILD_DIR)/,$(TEST_NAMES))
 CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
@@ -255,6 +256,15 @@ bt_smp_keydist_test_SOURCES := \
 	$(ROOT)/src/device.cpp
 bt_smp_keydist_test_EXTRA := $(CRC_OBJ)
 bt_smp_keydist_test_DEPS := \
+	bt_smp_link_test_stubs.h \
+	$(ROOT)/src/bluetooth/bt_smp.cpp
+
+bt_smp_pairing_policy_test_SOURCES := \
+	bt_smp_pairing_policy_test.cpp \
+	bt_smp_link_test_stubs.cpp \
+	$(ROOT)/src/device.cpp
+bt_smp_pairing_policy_test_EXTRA := $(CRC_OBJ)
+bt_smp_pairing_policy_test_DEPS := \
 	bt_smp_link_test_stubs.h \
 	$(ROOT)/src/bluetooth/bt_smp.cpp
 
