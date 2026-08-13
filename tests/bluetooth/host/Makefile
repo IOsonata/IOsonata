@@ -73,10 +73,12 @@ TEST_NAMES := \
 	bt_l2cap_adversarial_test \
 	bt_app_adversarial_test \
 	bt_std_services_test \
-	bt_smp_sign_counter_test
+	bt_smp_sign_counter_test \
+	bt_smp_keydist_test
 
 TARGETS := $(addprefix $(BUILD_DIR)/,$(TEST_NAMES))
 CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
+CRC_OBJ := $(BUILD_DIR)/crc.o
 BT_APP_BM_SOURCE := $(ROOT)/ARM/Nordic/nRF54/src/bt_app_bm.cpp
 BT_APP_BM_INIT_INC := generated/bt_app_bm_init.inc
 GATT_INIT_TEST_SUPPORT := bt_gatt_init_test_support.cpp
@@ -247,6 +249,15 @@ bt_std_services_test_SOURCES := \
 	$(ROOT)/src/bluetooth/services/bt_dis.cpp \
 	$(ROOT)/src/bluetooth/services/bt_bas.cpp
 
+bt_smp_keydist_test_SOURCES := \
+	bt_smp_keydist_test.cpp \
+	bt_smp_link_test_stubs.cpp \
+	$(ROOT)/src/device.cpp
+bt_smp_keydist_test_EXTRA := $(CRC_OBJ)
+bt_smp_keydist_test_DEPS := \
+	bt_smp_link_test_stubs.h \
+	$(ROOT)/src/bluetooth/bt_smp.cpp
+
 bt_smp_sign_counter_test_SOURCES := \
 	bt_smp_sign_counter_test.cpp \
 	$(ROOT)/src/bluetooth/bt_smp_bond.cpp
@@ -276,6 +287,10 @@ $(BT_APP_BM_INIT_INC): extract_bt_app_init.py $(BT_APP_BM_SOURCE)
 	$(PYTHON) extract_bt_app_init.py $(BT_APP_BM_SOURCE) $@
 
 $(CFIFO_OBJ): $(ROOT)/src/cfifo.c $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(CRC_OBJ): $(ROOT)/src/crc.c $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SANITIZERS) -c $< -o $@
 

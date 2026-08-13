@@ -2475,6 +2475,41 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
 				return;
 			}
+
+			// The PDU must also belong to the key set the pairing negotiated.
+			// Vol 3 Part H 3.6.1: the keys distributed in this phase are the
+			// ones named in the Key Distribution fields of the Pairing Request
+			// and Pairing Response, and on the LE transport under Secure
+			// Connections the EncKey field shall be ignored with EDIV and Rand
+			// neither set nor distributed. Ctx.KeyDistExp holds the negotiated
+			// set with the keys already received cleared, so it answers both
+			// "was this key agreed" and "has it already arrived". Without this
+			// an encrypted peer can send Encryption Information at any point in
+			// the phase and replace the LTK that phase 2 derived, which the
+			// next Identity Address Information then persists to the bond.
+			uint8_t kdBit = 0;
+			switch (pSmp->Code)
+			{
+				case BT_SMP_CODE_PAIRING_ENCRYP_INFO:
+				case BT_SMP_CODE_PAIRING_CENTRAL_ID:
+					kdBit = BT_SMP_KEYDIST_ENCKEY;
+					break;
+				case BT_SMP_CODE_PAIRING_ID_INFO:
+				case BT_SMP_CODE_PAIRING_ID_ADDR_INFO:
+					kdBit = BT_SMP_KEYDIST_IDKEY;
+					break;
+				default:
+					kdBit = BT_SMP_KEYDIST_SIGNKEY;
+					break;
+			}
+
+			if ((pLink->Ctx.KeyDistExp & kdBit) == 0)
+			{
+				DEBUG_PRINTF("SMP drop key-dist code 0x%02x, not negotiated (exp=0x%02x)\r\n",
+						  pSmp->Code, pLink->Ctx.KeyDistExp);
+				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+				return;
+			}
 			break;
 		}
 		default:
