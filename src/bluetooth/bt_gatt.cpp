@@ -43,6 +43,7 @@ SOFTWARE.
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_smp.h"
+#include "bluetooth/bt_app.h"		// g_BtAppData.SecType, the device wide default
 
 static BtGattSrvc_t *s_pBtGattSrvcList = nullptr;
 
@@ -850,6 +851,51 @@ static bool BtGattSrvcAddFailed(BtGattSrvc_t *pSrvc,
 	return false;
 }
 
+// Security half of an Attribute Permission, one mask for reading and one for
+// writing. Core Vol 3 Part F 3.2.5: "Attribute permissions are a combination of
+// access permissions, encryption permissions, authentication permissions and
+// authorization permissions", and the axes are independent per direction. A
+// security type names one requirement for the whole characteristic, so both
+// directions come out the same here; a service that needs them to differ says
+// so per attribute.
+//
+// The signed types add nothing. A signed write proves itself with its
+// signature, verified on the write path, and does not require the link to be
+// encrypted first.
+static void BtGattSecTypePermission(uint8_t SecType, uint32_t *pRead,
+									uint32_t *pWrite)
+{
+	*pRead = 0;
+	*pWrite = 0;
+
+	switch (SecType)
+	{
+		case BT_GAP_SECTYPE_STATICKEY_NO_MITM:
+			*pRead  = BT_ATT_PERMISSION_READ_ENCRYPT;
+			*pWrite = BT_ATT_PERMISSION_WRITE_ENCRYPT;
+			break;
+
+		case BT_GAP_SECTYPE_STATICKEY_MITM:
+			*pRead  = BT_ATT_PERMISSION_READ_AUTHEN;
+			*pWrite = BT_ATT_PERMISSION_WRITE_AUTHEN;
+			break;
+
+		case BT_GAP_SECTYPE_LESC_MITM:
+			// Vol 3 Part C 10.2.1 defines security mode 1 level 4 as
+			// "Authenticated LE Secure Connections pairing with encryption
+			// using a 128-bit strength encryption key", so the key length is
+			// part of the requirement, not a separate one.
+			*pRead  = BT_ATT_PERMISSION_READ_AUTHEN |
+					  BT_ATT_PERMISSION_READ_KEY_SIZE;
+			*pWrite = BT_ATT_PERMISSION_WRITE_AUTHEN |
+					  BT_ATT_PERMISSION_WRITE_KEY_SIZE;
+			break;
+
+		default:
+			break;		// OPEN, NONE and the signed types require nothing here
+	}
+}
+
 __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
 	uint8_t baseidx = 0;
@@ -898,6 +944,12 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	srvcdec->pSrvc = pSrvc;
 	pSrvc->Hdl = srvcentry->Hdl;
 
+	// Vol 3 Part G 3.1, the service declaration: "The Attribute Permissions
+	// shall be read-only and shall not require authentication or
+	// authorization." A service whose own security is set does not change
+	// this: discovery has to work before the peer has met anything.
+	BtAttDBEntrySetPermission(srvcentry, BT_ATT_PERMISSION_READ);
+
 	BtGattChar_t *c = pSrvc->pCharArray;
 	for (int i = 0; i < pSrvc->NbChar; i++, c++)
 	{
@@ -920,6 +972,24 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		c->pSrvc = pSrvc;
 		c->BaseUuidIdx = pSrvc->Uuid.BaseIdx;
 
+		// Vol 3 Part G 3.3.1, the characteristic declaration: "The Attribute
+		// Permissions shall be readable and not require authentication or
+		// authorization." It names the value handle and the UUID, which a
+		// client needs before it can ask for anything protected.
+		BtAttDBEntrySetPermission(entry, BT_ATT_PERMISSION_READ);
+
+		// Everything below is the value and its descriptors, where Vol 3
+		// Part G 3.3.2 says the permissions "are specified by the service".
+		uint32_t readSec = 0;
+		uint32_t writeSec = 0;
+		BtGattSecTypePermission(BtGattSecTypeGet(pSrvc, c, g_BtAppData.SecType),
+								&readSec, &writeSec);
+
+		bool bReadable = (c->Property & BT_GATT_CHAR_PROP_READ) != 0;
+		bool bWritable = (c->Property & (BT_GATT_CHAR_PROP_WRITE |
+										 BT_GATT_CHAR_PROP_WRITE_WORESP |
+										 BT_GATT_CHAR_PROP_AUTH_SIGNED)) != 0;
+
 		typeuuid = {baseidx, BT_UUID_TYPE_16, c->Uuid};
 		entry = BtAttDBAddEntry(&typeuuid,
 			c->MaxDataLen + sizeof(BtAttCharValue_t));
@@ -931,6 +1001,13 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		BtAttCharValue_t *charval = (BtAttCharValue_t*)entry->Data;
 		charval->pChar = c;
 		c->ValHdl = entry->Hdl;
+
+		// Access from the Characteristic Properties, security from the
+		// resolved type, and a direction the characteristic does not offer
+		// gets no requirement because it is refused outright.
+		BtAttDBEntrySetPermission(entry,
+			(bReadable ? (BT_ATT_PERMISSION_READ | readSec) : 0U) |
+			(bWritable ? (BT_ATT_PERMISSION_WRITE | writeSec) : 0U));
 		void *pInitVal = c->pValue;
 		uint16_t initLen = c->ValueLen;
 		c->pValue = charval->Data;
@@ -966,6 +1043,17 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 			ccc->pChar = c;
 			ccc->CccVal = 0;
 			c->CccdHdl = entry->Hdl;
+
+			// Vol 3 Part G 3.3.3.3 leaves the CCCD permissions to the profile.
+			// Read open so a client can see its own subscription state, write
+			// at the characteristic's security so a peer cannot subscribe to
+			// protected data without meeting the requirement. The write side
+			// takes the security type directly rather than the value's write
+			// permission, because a read-only characteristic that notifies
+			// still has a writable CCCD. This is what the SoftDevice and the
+			// STM32WBA ports already register.
+			BtAttDBEntrySetPermission(entry,
+				BT_ATT_PERMISSION_READ | BT_ATT_PERMISSION_WRITE | writeSec);
 		}
 
 		if (c->pDesc != nullptr)
@@ -982,6 +1070,12 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 				(BtDescCharUserDesc_t*)entry->Data;
 			desc->pChar = c;
 			c->DescHdl = entry->Hdl;
+
+			// Vol 3 Part G 3.3.3.2 leaves the User Description permissions to
+			// the profile as well. It is a fixed label, not data, and this
+			// stack offers no way to write it, so read open. The SoftDevice
+			// port registers it the same way, with no descriptor metadata.
+			BtAttDBEntrySetPermission(entry, BT_ATT_PERMISSION_READ);
 		}
 	}
 

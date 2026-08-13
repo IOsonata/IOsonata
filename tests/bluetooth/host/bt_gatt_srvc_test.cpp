@@ -16,6 +16,12 @@
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_peer.h"
+#include "bluetooth/bt_app.h"
+
+// BtGattSrvcAdd resolves the device wide default security type from here
+// when a service and its characteristics name none. The real definition
+// lives in bt_app.cpp, which this test does not link.
+BtAppData_t g_BtAppData;
 
 // bt_gatt.cpp and bt_att.cpp are both linked in, so only the layers outside
 // them need stubbing.

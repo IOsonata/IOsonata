@@ -194,6 +194,13 @@ BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pDat
 	entry->Hdl = ++s_LastHdl;
 	entry->DataLen = (uint16_t)MaxDataLen;
 
+	// Start with no permissions, so an entry only ever holds what a caller
+	// set on it. BtAttDBInit zeroes the pool, but BtAttDBUnwind rewinds the
+	// allocator without clearing, so a slot freed by a failed service
+	// registration would otherwise hand the next service the permissions of
+	// the one that did not make it.
+	entry->Permission = 0;
+
 	s_BtAttDBMemUsed += entrySize;
 
 	s_pBtAttDbEntryEnd =
