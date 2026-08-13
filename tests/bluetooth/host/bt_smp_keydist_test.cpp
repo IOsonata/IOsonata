@@ -194,6 +194,136 @@ void TestRepeatedKeyRejected()
 	CHECK(pLink->Keys.Irk[0] == 0xC1);
 }
 
+
+//-----------------------------------------------------------------------------
+// Identity key distribution. Vol 3 Part H 3.6.1, the IdKey flag: the device
+// "shall distribute IRK using the Identity Information command followed by its
+// public device or static random address using Identity Address Information".
+// Two requirements in one sentence, the order and what the address may be.
+//
+// 3.6.5 states the address again, per field: "If BD_ADDR is a public device
+// address, then AddrType shall be set to 0x00. If BD_ADDR is a static random
+// device address then AddrType shall be set to 0x01", and the value "is set to
+// the distributing device's public device address or static random address".
+// A resolvable or non-resolvable private address is neither.
+//-----------------------------------------------------------------------------
+
+bool SentPairingFailedReason(uint8_t Reason)
+{
+	return g_SmpTx.Count == 1 &&
+		   g_SmpTx.Pdu[0].Len >= sizeof(BtSmpPairingFailed_t) &&
+		   g_SmpTx.Pdu[0].Data[0] == BT_SMP_CODE_PAIRING_FAILED &&
+		   g_SmpTx.Pdu[0].Data[1] == Reason;
+}
+
+void FeedIdInfo(uint8_t Fill)
+{
+	BtSmpIdInfo_t ii = {};
+	ii.Code = BT_SMP_CODE_PAIRING_ID_INFO;
+	std::memset(ii.Irk, Fill, sizeof(ii.Irk));
+	Feed(&ii, sizeof(ii));
+}
+
+// Addr[5] is the most significant octet, so the address type bits live there.
+// Static random is 0b11, resolvable private 0b01, non-resolvable private 0b00.
+void FeedIdAddrInfo(uint8_t AddrType, uint8_t TopBits)
+{
+	BtSmpIdAddrInfo_t ai = {};
+	ai.Code = BT_SMP_CODE_PAIRING_ID_ADDR_INFO;
+	ai.AddrType = AddrType;
+	std::memset(ai.Addr, 0x22, sizeof(ai.Addr));
+	ai.Addr[5] = (uint8_t)((ai.Addr[5] & 0x3F) | TopBits);
+	Feed(&ai, sizeof(ai));
+}
+
+// Control. IRK then a public address is the ordinary case and must complete
+// the IDKEY set.
+void TestIdKeyPublicAddressAccepted()
+{
+	BtSmpLink_t *pLink = ArmKeyDist(BT_SMP_KEYDIST_IDKEY);
+
+	FeedIdInfo(0x33);
+	FeedIdAddrInfo(BTADDR_TYPE_PUBLIC, 0x00);
+
+	CHECK(g_SmpTx.Count == 0);
+	CHECK(pLink->Ctx.KeyDistExp == 0);
+	CHECK(pLink->Keys.Irk[0] == 0x33);
+	CHECK(pLink->Keys.IdAddrType == BTADDR_TYPE_PUBLIC);
+	CHECK(pLink->Keys.IdAddr[0] == 0x22);
+}
+
+// The other address the clause allows.
+void TestIdKeyStaticRandomAddressAccepted()
+{
+	BtSmpLink_t *pLink = ArmKeyDist(BT_SMP_KEYDIST_IDKEY);
+
+	FeedIdInfo(0x44);
+	FeedIdAddrInfo(BTADDR_TYPE_RAND, 0xC0);
+
+	CHECK(g_SmpTx.Count == 0);
+	CHECK(pLink->Ctx.KeyDistExp == 0);
+	CHECK(pLink->Keys.IdAddrType == BTADDR_TYPE_RAND);
+}
+
+// Order. The address arriving first leaves the IRK all zero, and the set would
+// complete without one, so the bond could never resolve that peer again.
+void TestIdAddrBeforeIdInfoRefused()
+{
+	BtSmpLink_t *pLink = ArmKeyDist(BT_SMP_KEYDIST_IDKEY);
+
+	FeedIdAddrInfo(BTADDR_TYPE_PUBLIC, 0x00);
+
+	CHECK(SentPairingFailed());
+	// Pairing Failed terminates the procedure (3.5.5), so the context is torn
+	// down rather than left owing the key. What matters is that neither half of
+	// the identity key was taken.
+	CHECK(pLink->Ctx.State == BT_SMP_STATE_IDLE);
+	CHECK(pLink->Keys.IdAddr[0] == 0x00);
+	for (size_t i = 0; i < sizeof(pLink->Keys.Irk); i++)
+	{
+		CHECK(pLink->Keys.Irk[i] == 0x00);
+	}
+}
+
+// A resolvable private address is not an identity address. Accepting one puts
+// an address into the bond that stops resolving as soon as the peer rotates it.
+void TestIdAddrResolvablePrivateRefused()
+{
+	BtSmpLink_t *pLink = ArmKeyDist(BT_SMP_KEYDIST_IDKEY);
+
+	FeedIdInfo(0x55);
+	SmpTxReset();
+	FeedIdAddrInfo(BTADDR_TYPE_RAND, 0x40);
+
+	CHECK(SentPairingFailedReason(BT_SMP_ERR_INVALID_PARAMS));
+	CHECK(pLink->Keys.IdAddr[0] == 0x00);
+}
+
+void TestIdAddrNonResolvablePrivateRefused()
+{
+	BtSmpLink_t *pLink = ArmKeyDist(BT_SMP_KEYDIST_IDKEY);
+
+	FeedIdInfo(0x66);
+	SmpTxReset();
+	FeedIdAddrInfo(BTADDR_TYPE_RAND, 0x00);
+
+	CHECK(SentPairingFailedReason(BT_SMP_ERR_INVALID_PARAMS));
+	CHECK(pLink->Keys.IdAddr[0] == 0x00);
+}
+
+// 3.6.5 defines 0x00 and 0x01 only.
+void TestIdAddrReservedTypeRefused()
+{
+	BtSmpLink_t *pLink = ArmKeyDist(BT_SMP_KEYDIST_IDKEY);
+
+	FeedIdInfo(0x77);
+	SmpTxReset();
+	FeedIdAddrInfo(0x02, 0xC0);
+
+	CHECK(SentPairingFailedReason(BT_SMP_ERR_INVALID_PARAMS));
+	CHECK(pLink->Keys.IdAddr[0] == 0x00);
+}
+
 } // namespace
 
 //-----------------------------------------------------------------------------
@@ -248,6 +378,12 @@ int main()
 	TestSigningInfoRejectedWhenNotNegotiated();
 	TestNegotiatedKeysAccepted();
 	TestRepeatedKeyRejected();
+	TestIdKeyPublicAddressAccepted();
+	TestIdKeyStaticRandomAddressAccepted();
+	TestIdAddrBeforeIdInfoRefused();
+	TestIdAddrResolvablePrivateRefused();
+	TestIdAddrNonResolvablePrivateRefused();
+	TestIdAddrReservedTypeRefused();
 
 	if (s_Failures != 0)
 	{

@@ -2559,13 +2559,64 @@ static void SmpHandleCentralId(BtSmpLink_t *pLink, const BtSmpCentralId_t *pId)
 	pLink->Keys.Rand = pId->Rand;
 }
 
+// Is this a valid identity address to receive in Identity Address Information?
+//
+// Vol 3 Part H 3.6.5 defines the two fields together: "If BD_ADDR is a public
+// device address, then AddrType shall be set to 0x00. If BD_ADDR is a static
+// random device address then AddrType shall be set to 0x01", and BD_ADDR "is
+// set to the distributing device's public device address or static random
+// address". So only those two forms exist here, and a random one has to carry
+// the static random pattern, the two most significant bits of the address set.
+//
+// Narrower than the identity test the bond store uses for lookups, which also
+// accepts the resolved and static-typed forms a controller reports. Those
+// describe an address this device already resolved; this is a value arriving
+// from the peer, and it gets the literal field definition.
+static bool SmpIsIdentityAddr(uint8_t AddrType, const uint8_t Addr[6])
+{
+	if (AddrType == BTADDR_TYPE_PUBLIC)
+	{
+		return true;
+	}
+	if (AddrType == BTADDR_TYPE_RAND)
+	{
+		return (Addr[5] & 0xC0) == 0xC0;
+	}
+	return false;
+}
+
 static void SmpHandleIdInfo(BtSmpLink_t *pLink, const BtSmpIdInfo_t *pInfo)
 {
 	memcpy(pLink->Keys.Irk, pInfo->Irk, 16);
+	// 3.6.1: the IRK is distributed "followed by" the address, so the address
+	// PDU is only in order once this has arrived.
+	pLink->Ctx.bPeerIrkIn = true;
 }
 
-static void SmpHandleIdAddrInfo(BtSmpLink_t *pLink, const BtSmpIdAddrInfo_t *pInfo)
+// False refuses the PDU. Two reasons, both from the IdKey sentence in 3.6.1
+// and the field definitions in 3.6.5.
+static bool SmpHandleIdAddrInfo(BtSmpLink_t *pLink, const BtSmpIdAddrInfo_t *pInfo)
 {
+	if (pLink->Ctx.bPeerIrkIn == false)
+	{
+		// Address before the IRK. Taking it would complete the IDKEY set with
+		// Keys.Irk still all zero, and a bond holding an identity address and
+		// no IRK can never resolve that peer's private addresses again.
+		DEBUG_PRINTF("SMP IdAddrInfo before IdInfo\r\n");
+		return false;
+	}
+
+	if (SmpIsIdentityAddr(pInfo->AddrType, pInfo->Addr) == false)
+	{
+		// A private address, resolvable or not, or a reserved type. Storing one
+		// as the peer identity poisons the bond: the lookup matches on it until
+		// the peer rotates the address, and the port programs it into the
+		// controller resolving list as an identity.
+		DEBUG_PRINTF("SMP IdAddrInfo type=%d not an identity address\r\n",
+				  pInfo->AddrType);
+		return false;
+	}
+
 	pLink->Keys.IdAddrType = pInfo->AddrType;
 	memcpy(pLink->Keys.IdAddr, pInfo->Addr, 6);
 	// Peer identity now known. Refresh the stored bond so it holds the peer
@@ -2576,6 +2627,8 @@ static void SmpHandleIdAddrInfo(BtSmpLink_t *pLink, const BtSmpIdAddrInfo_t *pIn
 	{
 		BtSmpBondAdd(pLink->ConnHdl, &pLink->Keys);
 	}
+
+	return true;
 }
 
 static void SmpHandleSigningInfo(BtSmpLink_t *pLink, const BtSmpSigningInfo_t *pInfo)
@@ -2887,7 +2940,18 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			break;
 
 		case BT_SMP_CODE_PAIRING_ID_ADDR_INFO:
-			SmpHandleIdAddrInfo(pLink, (const BtSmpIdAddrInfo_t*)pSmp);
+			if (SmpHandleIdAddrInfo(pLink, (const BtSmpIdAddrInfo_t*)pSmp) == false)
+			{
+				// Out of order, or not an identity address. Invalid Parameters
+				// is what 3.5.5 names for "a parameter is outside of the
+				// specified range"; the ordering case takes the same code
+				// because the offending parameter is the address either way.
+				// The IDKEY bit stays set, so the set is still owed.
+				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
+				SmpAbortPairing(pLink);
+				BtSmpPairingComplete(ConnHdl, false, nullptr);
+				return;
+			}
 			// Identity Address is the last PDU of the IDKEY set (IRK + address).
 			SmpKeyDistReceived(pLink, BT_SMP_KEYDIST_IDKEY);
 			break;

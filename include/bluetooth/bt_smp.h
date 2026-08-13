@@ -240,6 +240,7 @@ typedef struct __Bt_Smp_Ctx {
 	uint8_t  OobLocalRand[16];		//!< OOB: local random distributed out of band (SMP order)
 	uint8_t  OobPeerRand[16];		//!< OOB: peer random received out of band (SMP order)
 	uint8_t  OobPeerConfirm[16];	//!< OOB: peer confirm received out of band (SMP order)
+	bool     bPeerIrkIn;			//!< Phase-3: peer Identity Information arrived, so its address may follow
 	uint8_t  KeyDistExp;			//!< Phase-3 peer key-distribution bits still expected (BT_SMP_KEYDIST_*)
 	uint32_t TmrStart;				//!< BtSmpMsTick() when the current pairing started (SMP timeout anchor)
 	uint8_t  FailCount;				//!< Failed pairing attempts on this link (repeated-attempts guard)
