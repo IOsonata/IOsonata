@@ -131,6 +131,11 @@ SOFTWARE.
 #define BT_SMP_MAX_ENC_KEY_SIZE						16
 #define BT_SMP_MIN_ENC_KEY_SIZE						7	//!< Spec absolute floor (Core Vol 3 Part H 2.3.4)
 
+/// Octets in one P-256 public key coordinate. A Secure Connections public key
+/// is two of these, X then Y. f4 consumes only X, so the reflection check
+/// compares this length and not the whole key.
+#define BT_SMP_PUBKEY_COORD_LEN						32
+
 /// Locally-enforced minimum encryption key size. Defaults to the spec floor (7)
 /// for interoperability; a security-sensitive build raises it (16 for full LE
 /// Secure Connections entropy) to refuse a KNOB-style key-size downgrade, where

@@ -75,11 +75,13 @@ TEST_NAMES := \
 	bt_std_services_test \
 	bt_smp_sign_counter_test \
 	bt_smp_keydist_test \
-	bt_smp_pairing_policy_test
+	bt_smp_pairing_policy_test \
+	bt_smp_pubkey_test
 
 TARGETS := $(addprefix $(BUILD_DIR)/,$(TEST_NAMES))
 CFIFO_OBJ := $(BUILD_DIR)/cfifo.o
 CRC_OBJ := $(BUILD_DIR)/crc.o
+UECC_OBJ := $(BUILD_DIR)/uECC.o
 BT_APP_BM_SOURCE := $(ROOT)/ARM/Nordic/nRF54/src/bt_app_bm.cpp
 BT_APP_BM_INIT_INC := generated/bt_app_bm_init.inc
 GATT_INIT_TEST_SUPPORT := bt_gatt_init_test_support.cpp
@@ -268,6 +270,20 @@ bt_smp_pairing_policy_test_DEPS := \
 	bt_smp_link_test_stubs.h \
 	$(ROOT)/src/bluetooth/bt_smp.cpp
 
+bt_smp_pubkey_test_SOURCES := \
+	bt_smp_pubkey_test.cpp \
+	bt_smp_link_test_stubs.cpp \
+	$(ROOT)/src/device.cpp \
+	$(ROOT)/src/crypto/crypto_uecc.cpp \
+	$(ROOT)/src/crypto/crypto_softaes.cpp \
+	$(ROOT)/src/crypto/crypto_softrng.cpp \
+	$(ROOT)/src/crypto/crypto_p256.cpp
+bt_smp_pubkey_test_EXTRA := $(CRC_OBJ) $(UECC_OBJ)
+bt_smp_pubkey_test_CPPFLAGS := -I$(ROOT)/micro-ecc
+bt_smp_pubkey_test_DEPS := \
+	bt_smp_link_test_stubs.h \
+	$(ROOT)/src/bluetooth/bt_smp.cpp
+
 bt_smp_sign_counter_test_SOURCES := \
 	bt_smp_sign_counter_test.cpp \
 	$(ROOT)/src/bluetooth/bt_smp_bond.cpp
@@ -303,6 +319,14 @@ $(CFIFO_OBJ): $(ROOT)/src/cfifo.c $(HEADERS)
 $(CRC_OBJ): $(ROOT)/src/crc.c $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SANITIZERS) -c $< -o $@
+
+# micro-ecc is vendored third party C. Its own rule so it is compiled as C
+# rather than through a _SOURCES list, and without the project warning set it
+# was not written against.
+$(UECC_OBJ): $(ROOT)/micro-ecc/uECC.c
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -I$(ROOT)/micro-ecc $(OPT) -g -std=gnu11 -fno-omit-frame-pointer \
+		$(SANITIZERS) -c $< -o $@
 
 define BUILD_TEST
 $(BUILD_DIR)/$(1): $$($(1)_SOURCES) $$($(1)_EXTRA) $$($(1)_DEPS) $(HEADERS)

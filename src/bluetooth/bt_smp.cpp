@@ -1342,8 +1342,8 @@ static bool SmpKeyPresent(const uint8_t *pKey, size_t Len)
 
 static bool SmpStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 {
-	// Reject a peer public key identical to our own before starting ECDH. This
-	// is the reflection / debug-key attack against LE Secure Connections,
+	// Reject a peer public key that reuses our own X coordinate before starting
+	// ECDH. This is the reflection attack against LE Secure Connections,
 	// mandatory to reject since Core 5.1 (CVE-2020-26558). Both keys are always
 	// present at this chokepoint (the initiator has sent its key and the
 	// responder only reaches here once both are in). On-curve validation of the
@@ -1352,8 +1352,16 @@ static bool SmpStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
 	// to repeat it with. An all-zero key never reaches here either, since
 	// SmpTryStartDhKey only calls in once both keys are present. A false return
 	// makes the caller send Pairing Failed and abort.
+	//
+	// X alone, not the whole key. f4 (Vol 3 Part H 2.2.6) takes the two X
+	// coordinates and nothing else, so a peer that sends (X, p - Y) can compute
+	// every confirm value from public material even though the 64 octet key
+	// differs from ours. That point is the negation of ours: it is on the
+	// curve, so the engine accepts it, and X(d * -P) equals X(d * P), so the
+	// shared secret is the reflected one too. Zephyr compares the same
+	// BT_PUB_KEY_COORD_LEN prefix for this reason.
 	if (memcmp(pLink->Ctx.PeerPubKey, pLink->Ctx.LocalPubKey,
-			   sizeof(pLink->Ctx.PeerPubKey)) == 0)
+			   BT_SMP_PUBKEY_COORD_LEN) == 0)
 	{
 		return false;
 	}
