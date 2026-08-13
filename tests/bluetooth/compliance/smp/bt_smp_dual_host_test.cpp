@@ -969,7 +969,7 @@ static void TestAssociationMatrix(Context &ctx)
 {
 	static const Requirement req = {
 		"SMP-SC-ASSOC-BV-01", "Core Vol 3 Part H", "2.3.5.1 and 2.3.5.6",
-		"all IO-capability pairs complete through the selected SC association model, including OOB"
+		"every IO-capability pair reaches the outcome 2.3.5.1 requires of it, completing through the selected SC association model or refusing when the model cannot meet the requested Security Properties"
 	};
 	ctx.Begin(req);
 
@@ -988,6 +988,23 @@ static void TestAssociationMatrix(Context &ctx)
 				cfg.PeripheralReceives = OobFault::None;
 				PairingRunResult result = RunPairing(cfg);
 				uint8_t model = ExpectedModel(centralIo, peripheralIo, cfg.Mitm, cfg.Oob);
+
+				if (cfg.Mitm && model == BT_SMP_MODEL_JUST_WORKS)
+				{
+					// MITM was asked for and these IO capabilities can only
+					// produce Just Works, which yields an Unauthenticated key
+					// (Table 2.8). 2.3.5.1 immediately after that table: "If
+					// the key generation method does not result in a key that
+					// provides sufficient Security Properties (see Section
+					// 2.3.1) then the device shall send the Pairing Failed
+					// command with the error code Authentication
+					// Requirements." Refusing is the conforming outcome here,
+					// so a completed pairing would be the defect.
+					BT_CHECK(ctx, !result.Success);
+					BT_CHECK(ctx, result.FailureReason ==
+						BT_SMP_ERR_AUTHEN_REQUIREMENTS);
+					continue;
+				}
 
 				BT_CHECK(ctx, result.TransportOk);
 				BT_CHECK(ctx, result.Complete);
