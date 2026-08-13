@@ -3,7 +3,8 @@
 // bt_smp.cpp carries a weak BtHciSendAcl of its own, so a test that includes
 // that source cannot define a strong one in the same translation unit. This
 // file supplies it from outside, where the strong symbol wins, and records
-// what SMP put on the link.
+// what SMP put on the link. BtSmpBondAdd is weak in the same source for the
+// same reason and is counted here too.
 
 #include <cstddef>
 #include <cstdint>
@@ -11,9 +12,24 @@
 
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_l2cap.h"
+#include "bluetooth/bt_smp.h"
 #include "bt_smp_link_test_stubs.h"
 
 SmpTxCapture g_SmpTx = {};
+
+int g_SmpBondAddCount = 0;
+
+void SmpBondAddReset(void)
+{
+	g_SmpBondAddCount = 0;
+}
+
+extern "C" void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
+{
+	(void)ConnHdl;
+	(void)pKeys;
+	g_SmpBondAddCount++;
+}
 
 void SmpTxReset(void)
 {

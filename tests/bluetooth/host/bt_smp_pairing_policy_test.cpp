@@ -511,6 +511,174 @@ void TestSecurityReqRefusedOnPeripheral()
 	CHECK(SentEnableEncryption() == false);
 }
 
+
+//-----------------------------------------------------------------------------
+// Bonding flags. Vol 3 Part C 9.4.4.2, the bonding procedure: the central
+// pairs "with the Bonding_Flags set to Bonding as defined in [Vol 3] Part H,
+// Section 3.5.1. If the peer device is in the bondable mode, the devices shall
+// exchange and store the bonding information in the security database." So it
+// takes both sides. 9.4.2.2 states the other half for a device in non-bondable
+// mode: it "shall set the Bonding_Flags to 'No Bonding' ... and bonding
+// information shall not be exchanged or stored."
+//
+// Two consequences, tested separately: the transport keys are not distributed,
+// and no record is written to the security database.
+//-----------------------------------------------------------------------------
+
+// Key distribution fields of the Pairing Response, which is the first PDU out.
+// Byte 5 is InitiatorKeyDist and byte 6 is ResponderKeyDist (Figure 3.4).
+bool RspKeyDist(uint8_t *pInit, uint8_t *pResp)
+{
+	if (!FirstIsPairingRsp() || g_SmpTx.Pdu[0].Len < 7)
+	{
+		return false;
+	}
+	*pInit = g_SmpTx.Pdu[0].Data[5];
+	*pResp = g_SmpTx.Pdu[0].Data[6];
+	return true;
+}
+
+// Control. Both sides bondable, so the keys the initiator offered come back in
+// the response and phase 3 will run.
+void TestBondingBothSidesDistributesKeys()
+{
+	// Bonding_Flags is the low two bits of AuthReq, so a local configuration
+	// that names only SC is No Bonding and would clear the set on its own.
+	ResetLink(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+			  BT_SMP_AUTHREQ_SC | BT_SMP_AUTHREQ_BONDING_FLAG_BONDING);
+	FeedPairingReq(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+				   BT_SMP_AUTHREQ_BONDING_FLAG_BONDING);
+
+	uint8_t ik = 0, rk = 0;
+	CHECK(RspKeyDist(&ik, &rk));
+	CHECK((ik & BT_SMP_KEYDIST_IDKEY) != 0);
+	CHECK((rk & BT_SMP_KEYDIST_IDKEY) != 0);
+}
+
+// The peer is non-bondable. Nothing may be exchanged, so the negotiated set
+// comes back with the transported keys cleared.
+void TestPeerNoBondingClearsKeyDistribution()
+{
+	ResetLink(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, BT_SMP_AUTHREQ_SC);
+	FeedPairingReq(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+				   BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING);
+
+	uint8_t ik = 0, rk = 0;
+	CHECK(RspKeyDist(&ik, &rk));
+	CHECK((ik & (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY)) == 0);
+	CHECK((rk & (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY)) == 0);
+
+	// Still a Pairing Response, not a refusal. Non-bondable is a legitimate
+	// pairing, it just produces no bond.
+	CHECK(FirstIsPairingRsp());
+}
+
+// This device is non-bondable and the peer is not. Same outcome: it takes both.
+void TestLocalNoBondingClearsKeyDistribution()
+{
+	ResetLink(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+			  BT_SMP_AUTHREQ_SC | BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING);
+	FeedPairingReq(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+				   BT_SMP_AUTHREQ_BONDING_FLAG_BONDING);
+
+	uint8_t ik = 0, rk = 0;
+	CHECK(RspKeyDist(&ik, &rk));
+	CHECK((ik & (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY)) == 0);
+	CHECK((rk & (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY)) == 0);
+}
+
+void TestNeitherSideBondingClearsKeyDistribution()
+{
+	ResetLink(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+			  BT_SMP_AUTHREQ_SC | BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING);
+	FeedPairingReq(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+				   BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING);
+
+	uint8_t ik = 0, rk = 0;
+	CHECK(RspKeyDist(&ik, &rk));
+	CHECK((ik & (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY)) == 0);
+	CHECK((rk & (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY)) == 0);
+}
+
+// The second half of the clause, "or stored". Drive the link to the point
+// where encryption has just come up on a fresh pairing, which is where the
+// record is written, and count the writes. The harness has no crypto engine so
+// the pairing cannot be run end to end; the state the encryption event acts on
+// is set directly instead.
+void DriveEncryptionChanged(uint8_t LocalAuthReq, uint8_t PeerAuthReq)
+{
+	ResetLink(BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT, LocalAuthReq);
+	SmpBondAddReset();
+
+	// The identity IRK is drawn from the secure RBG on first use, and this
+	// harness binds no crypto engines. Seed it so BtSmpLocalIrkGet succeeds and
+	// the distribution path runs, which is what a device has after first boot.
+	// Without this the IRK fetch fails, the pairing is aborted before the
+	// record is written, and the no-bonding cases below would pass for the
+	// wrong reason.
+	std::memset(s_SmpLocalId.Irk, 0x5A, sizeof(s_SmpLocalId.Irk));
+	s_SmpLocalId.bValid = true;
+
+	BtSmpLink_t *pLink = SmpLinkAlloc(kConnHdl);
+	if (pLink == nullptr)
+	{
+		return;
+	}
+	pLink->Ctx.State = BT_SMP_STATE_LTK_WAIT;
+	pLink->Ctx.bInitiator = false;
+	pLink->Ctx.bSc = true;
+	pLink->Ctx.PeerAuthReq = PeerAuthReq;
+	// Negotiated key distribution as SmpBuildPairingRsp would have left it for
+	// a bondable pairing: byte 5 initiator, byte 6 responder.
+	pLink->Ctx.PRsp[5] = BT_SMP_KEYDIST_IDKEY;
+	pLink->Ctx.PRsp[6] = BT_SMP_KEYDIST_IDKEY;
+	pLink->Keys.bValid = true;
+	pLink->Keys.EncKeySize = BT_SMP_MAX_ENC_KEY_SIZE;
+	pLink->Keys.bSc = true;
+
+	BtSmpEncryptionChanged(&s_Dev, kConnHdl, 0, 1);
+}
+
+void TestBondingStoresTheRecord()
+{
+	DriveEncryptionChanged(BT_SMP_AUTHREQ_SC | BT_SMP_AUTHREQ_BONDING_FLAG_BONDING,
+						   BT_SMP_AUTHREQ_BONDING_FLAG_BONDING);
+
+	CHECK(g_SmpBondAddCount == 1);
+}
+
+void TestPeerNoBondingStoresNothing()
+{
+	DriveEncryptionChanged(BT_SMP_AUTHREQ_SC | BT_SMP_AUTHREQ_BONDING_FLAG_BONDING,
+						   BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING);
+
+	CHECK(g_SmpBondAddCount == 0);
+}
+
+void TestLocalNoBondingStoresNothing()
+{
+	DriveEncryptionChanged(BT_SMP_AUTHREQ_SC | BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING,
+						   BT_SMP_AUTHREQ_BONDING_FLAG_BONDING);
+
+	CHECK(g_SmpBondAddCount == 0);
+}
+
+// A non-bondable pairing distributes nothing, so the identity IRK and the CSRK
+// do not leave this device either.
+void TestNoBondingSendsNoKeyPdus()
+{
+	DriveEncryptionChanged(BT_SMP_AUTHREQ_SC | BT_SMP_AUTHREQ_BONDING_FLAG_BONDING,
+						   BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING);
+
+	for (size_t i = 0; i < g_SmpTx.Count && i < SMP_TX_CAPTURE_MAX; i++)
+	{
+		uint8_t code = g_SmpTx.Pdu[i].Data[0];
+		CHECK(code != BT_SMP_CODE_PAIRING_ID_INFO);
+		CHECK(code != BT_SMP_CODE_PAIRING_ID_ADDR_INFO);
+		CHECK(code != BT_SMP_CODE_PAIRING_SIGNING_INFO);
+	}
+}
+
 } // namespace
 
 //-----------------------------------------------------------------------------
@@ -592,6 +760,14 @@ int main()
 	TestSecurityReqBareEncrypts();
 	TestSecurityReqNoBondPairs();
 	TestSecurityReqRefusedOnPeripheral();
+	TestBondingBothSidesDistributesKeys();
+	TestPeerNoBondingClearsKeyDistribution();
+	TestLocalNoBondingClearsKeyDistribution();
+	TestNeitherSideBondingClearsKeyDistribution();
+	TestBondingStoresTheRecord();
+	TestPeerNoBondingStoresNothing();
+	TestLocalNoBondingStoresNothing();
+	TestNoBondingSendsNoKeyPdus();
 
 	if (s_Failures != 0)
 	{

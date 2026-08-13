@@ -24,4 +24,11 @@ extern SmpTxCapture g_SmpTx;
 
 void SmpTxReset(void);
 
+// BtSmpBondAdd is weak in bt_smp.cpp, and the SMP tests include that source, so
+// a strong definition has to live in this separate translation unit. Counting
+// only; behaviourally the same as the weak no-op it replaces.
+extern int g_SmpBondAddCount;
+
+void SmpBondAddReset(void);
+
 #endif // BT_SMP_LINK_TEST_STUBS_H

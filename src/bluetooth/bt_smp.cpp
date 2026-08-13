@@ -989,6 +989,32 @@ static bool SmpModelMeetsLocalAuth(uint8_t Model)
 	return SmpModelIsAuthenticated(Model);
 }
 
+// Was bonding agreed by both sides?
+//
+// Vol 3 Part C 9.4.4.2, the bonding procedure: the central pairs "with the
+// Bonding_Flags set to Bonding as defined in [Vol 3] Part H, Section 3.5.1. If
+// the peer device is in the bondable mode, the devices shall exchange and
+// store the bonding information in the security database." The condition is on
+// the peer as well, so one side asking is not enough.
+//
+// 9.4.2.2 gives the other half for a device in non-bondable mode: it "shall set
+// the Bonding_Flags to 'No Bonding' ... and bonding information shall not be
+// exchanged or stored". Two duties, and this stack performed neither: the flag
+// was written into the local default and never read again, so a peer pairing
+// without bonding was handed the local identity IRK and a CSRK, consumed a
+// bond slot, and had an LTK persisted for a session it meant to be transient.
+//
+// The peer field is Ctx.PeerAuthReq, recorded from the Pairing Request on the
+// responder and from the Pairing Response on the initiator, so this answers
+// the same way in both roles.
+static bool SmpPairingIsBonding(const BtSmpLink_t *pLink)
+{
+	return (s_SmpAuthReq & BT_SMP_AUTHREQ_BONDING_FLAG_MASK) ==
+			   BT_SMP_AUTHREQ_BONDING_FLAG_BONDING &&
+		   (pLink->Ctx.PeerAuthReq & BT_SMP_AUTHREQ_BONDING_FLAG_MASK) ==
+			   BT_SMP_AUTHREQ_BONDING_FLAG_BONDING;
+}
+
 // Does the stored bond meet the security properties a Security Request named?
 //
 // Vol 3 Part H 2.4.6: "After receiving a Security Request, the Central shall
@@ -1223,6 +1249,16 @@ static void SmpBuildPairingRsp(BtSmpLink_t *pLink, BtSmpPairingRsp_t *pRsp)
 	// BtSmpEncryptionChanged); the advertised bit is what closes the central.
 	uint8_t supported = BT_SMP_KEYDIST_ENCKEY | BT_SMP_KEYDIST_IDKEY |
 						BT_SMP_KEYDIST_SIGNKEY;
+
+	if (SmpPairingIsBonding(pLink) == false)
+	{
+		// Non-bondable on one side or both, so nothing is exchanged. Only the
+		// transported keys are cleared; the EncKey bit is left as the mirror
+		// above set it because it is never transmitted under Secure
+		// Connections and the interop workaround described there depends on
+		// it staying visible.
+		supported &= (uint8_t)~(BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY);
+	}
 
 	pRsp->InitiatorKeyDist = reqInitKeyDist & supported;
 	pRsp->ResponderKeyDist = reqRespKeyDist & supported;
@@ -3247,9 +3283,19 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		// ResponderKeyDist (PRsp[6]) when we are the peripheral. For SC the LTK
 		// is derived (EncKey is never distributed); we send IRK + identity
 		// address (IDKEY) and/or CSRK (SIGNKEY) only if negotiated.
+		// Nothing is exchanged or stored on a non-bondable pairing, whichever
+		// side declined. Masked here as well as in the negotiated fields so
+		// the rule holds on both roles and does not rest on what the peer put
+		// in its response.
+		bool bonding = SmpPairingIsBonding(pLink);
+
 		uint8_t localKeyDist = (pLink->Ctx.bInitiator ?
 									pLink->Ctx.PReq[5] : pLink->Ctx.PRsp[6]) &
 							   (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY);
+		if (!bonding)
+		{
+			localKeyDist = 0;
+		}
 		DEBUG_PRINTF("SMP encrypted, distribute lk=%02x init=%d\r\n",
 				  localKeyDist, pLink->Ctx.bInitiator ? 1 : 0);
 
@@ -3313,6 +3359,10 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		uint8_t peerKeyDist = (pLink->Ctx.bInitiator ?
 									pLink->Ctx.PRsp[6] : pLink->Ctx.PRsp[5]) &
 							   (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY);
+		if (!bonding)
+		{
+			peerKeyDist = 0;
+		}
 		pLink->Ctx.KeyDistExp = peerKeyDist;
 
 		// Store the bond now so the controller LTK request on an immediate
@@ -3322,7 +3372,10 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		// is incomplete; reporting it now would let an application persist a
 		// bond missing those keys. The completion is raised from
 		// SmpKeyDistReceived once every negotiated peer key has arrived.
-		BtSmpBondAdd(ConnHdl, &pLink->Keys);
+		if (bonding)
+		{
+			BtSmpBondAdd(ConnHdl, &pLink->Keys);
+		}
 
 		// OOB material is single use and is wiped after the link is secured.
 		if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
@@ -4141,8 +4194,13 @@ static void SmpStartPairing(uint16_t ConnHdl, uint8_t PeerAuthReq)
 				  BT_SMP_OOB_AUTH_PRESENT : BT_SMP_OOB_AUTH_NOT_PRESENT;
 	req.AuthReq = (uint8_t)(s_SmpAuthReq & ~BT_SMP_AUTHREQ_KEYPRESS);
 	req.MaxKeySize = BT_SMP_MAX_ENC_KEY_SIZE;
-	req.InitiatorKeyDist = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
-	req.ResponderKeyDist = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+	// A non-bondable device exchanges nothing, so it offers nothing.
+	uint8_t offerKeyDist = (s_SmpAuthReq & BT_SMP_AUTHREQ_BONDING_FLAG_MASK) ==
+								   BT_SMP_AUTHREQ_BONDING_FLAG_BONDING ?
+						   (uint8_t)(BT_SMP_KEYDIST_IDKEY |
+									 BT_SMP_KEYDIST_SIGNKEY) : 0U;
+	req.InitiatorKeyDist = offerKeyDist;
+	req.ResponderKeyDist = offerKeyDist;
 
 	memcpy(pLink->Ctx.PReq, &req, 7);
 	pLink->Ctx.IoCaps = req.IOCaps;
