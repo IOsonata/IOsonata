@@ -1117,9 +1117,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	aci_gatt_update_char_value(gapSrvcHdl, appearanceHdl,
 	                           0, sizeof(appearance), (uint8_t *)&appearance);
 
-	// Store the app security type so the GATT layer can gate characteristic
-	// permissions before user services are registered.
-	g_BtAppData.SecType = pCfg->SecType;
+	// The app security type is published by BtGapInit below, which every port
+	// calls before it registers user services. Setting it here as well would
+	// give the field two writers.
 
 	// SMP / pairing config. Map BtGap SecType to ST auth requirement.
 	uint8_t authReq      = 0;	// bonding NO, MITM NO by default

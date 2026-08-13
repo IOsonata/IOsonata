@@ -18,9 +18,15 @@ four levels for mode 1 and two for mode 2.
 #include <cstdio>
 #include <cstring>
 
+#include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_uuid.h"
+
+// BtGapInit publishes the configured security type here for the GATT layer to
+// resolve against. The real definition lives in bt_app.cpp, which this test
+// does not link.
+BtAppData_t g_BtAppData;
 
 namespace {
 
@@ -176,6 +182,99 @@ void TestGetArguments()
 	CHECK(small[0] == 0xA5);
 }
 
+// BtGapInit is the one path every port takes, so it is where the configured
+// security type is published for the GATT layer. Without this the field keeps
+// its zero initialiser, BT_GAP_SECTYPE_NONE, on every port that does not set
+// it itself.
+void TestApplicationSecurityTypePublished()
+{
+	const uint8_t types[] = {
+		BT_GAP_SECTYPE_STATICKEY_NO_MITM,
+		BT_GAP_SECTYPE_STATICKEY_MITM,
+		BT_GAP_SECTYPE_LESC_MITM,
+		BT_GAP_SECTYPE_SIGNED_NO_MITM,
+		BT_GAP_SECTYPE_SIGNED_MITM,
+		BT_GAP_SECTYPE_NONE,
+	};
+
+	for (size_t i = 0; i < sizeof(types) / sizeof(types[0]); i++)
+	{
+		g_BtAppData.SecType = BTGAP_SECTYPE_OPEN;
+		BtGapCfg_t cfg = MakeCfg(types[i]);
+		BtGapInit(&cfg);
+		CHECK(g_BtAppData.SecType == types[i]);
+	}
+
+	// A role with no peripheral bit still configures the application, because
+	// a central enforces the same requirement on the server it talks to.
+	g_BtAppData.SecType = BTGAP_SECTYPE_OPEN;
+	BtGapCfg_t central = MakeCfg(BT_GAP_SECTYPE_LESC_MITM);
+	central.Role = BT_GAP_ROLE_CENTRAL;
+	BtGapInit(&central);
+	CHECK(g_BtAppData.SecType == BT_GAP_SECTYPE_LESC_MITM);
+
+	// A rejected configuration must not leave a stale requirement behind for
+	// the services that follow. BTGAP_SECTYPE_OPEN is the sentinel here
+	// because it is a valid enumerator that none of the cases configures.
+	g_BtAppData.SecType = BTGAP_SECTYPE_OPEN;
+	BtGapInit(nullptr);
+	CHECK(g_BtAppData.SecType == BT_GAP_SECTYPE_NONE);
+}
+
+// The resolution rule every port shares: characteristic, then service, then
+// application. A service written to inherit the application policy names
+// nothing itself, so the walk has to reach a real value.
+void TestInheritedSecurityResolvesToApplication()
+{
+	BtGapCfg_t cfg = MakeCfg(BT_GAP_SECTYPE_LESC_MITM);
+	BtGapInit(&cfg);
+
+	BtGattChar_t chr = {};
+	BtGattSrvc_t srvc = {};
+	chr.Uuid = 0xFFF1;
+	chr.SecType = BT_GAP_SECTYPE_NONE;
+	srvc.SecType = BT_GAP_SECTYPE_NONE;
+
+	uint8_t sec = BtGattSecTypeGet(&srvc, &chr, g_BtAppData.SecType);
+	CHECK(sec == BT_GAP_SECTYPE_LESC_MITM);
+	CHECK(BtGattSecTypeIsOpen(sec) == false);
+
+	// The service still overrides the application, and the characteristic
+	// still overrides the service.
+	srvc.SecType = BT_GAP_SECTYPE_STATICKEY_NO_MITM;
+	CHECK(BtGattSecTypeGet(&srvc, &chr, g_BtAppData.SecType) ==
+		BT_GAP_SECTYPE_STATICKEY_NO_MITM);
+
+	chr.SecType = BT_GAP_SECTYPE_OPEN;
+	CHECK(BtGattSecTypeGet(&srvc, &chr, g_BtAppData.SecType) ==
+		BT_GAP_SECTYPE_OPEN);
+	CHECK(BtGattSecTypeIsOpen(
+		BtGattSecTypeGet(&srvc, &chr, g_BtAppData.SecType)) == true);
+}
+
+// The GAP and GATT service characteristics are read before a client has met
+// any requirement, so they name OPEN rather than inheriting. Publishing the
+// application type must not change that.
+void TestStandardServicesStayOpen()
+{
+	BtGapCfg_t cfg = MakeCfg(BT_GAP_SECTYPE_LESC_MITM);
+	BtGapInit(&cfg);
+
+	for (BtGattSrvc_t *p = BtGattGetSrvcList(); p != nullptr; p = p->pNext)
+	{
+		if (p->UuidSrvc != BT_UUID_GATT_SERVICE_GENERIC_ACCESS &&
+			p->UuidSrvc != BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE)
+		{
+			continue;
+		}
+		for (int i = 0; i < p->NbChar; i++)
+		{
+			CHECK(BtGattSecTypeIsOpen(BtGattSecTypeGet(p,
+				&p->pCharArray[i], g_BtAppData.SecType)) == true);
+		}
+	}
+}
+
 } // namespace
 
 int main()
@@ -185,6 +284,9 @@ int main()
 	TestArgumentValidation();
 	TestPartialUpdateRefused();
 	TestGetArguments();
+	TestApplicationSecurityTypePublished();
+	TestInheritedSecurityResolvesToApplication();
+	TestStandardServicesStayOpen();
 
 	if (s_Failures == 0)
 	{

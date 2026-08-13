@@ -47,6 +47,7 @@ SOFTWARE.
 #include <atomic>
 #include <memory.h>
 
+#include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/bt_gap.h"
@@ -140,11 +141,18 @@ static BtGattChar_t s_BtGapChar[] = {
 
 static BtGattSrvc_t s_BtGapSrvc = BT_SRVC_STD(BT_UUID_GATT_SERVICE_GENERIC_ACCESS, s_BtGapChar);
 
+// Service Changed names OPEN for the same reason the GAP characteristics
+// above do: a client subscribes to it to be told the database moved, which it
+// has to be able to do before it has met any requirement. Zephyr declares the
+// characteristic BT_GATT_PERM_NONE and its CCCD plain read/write with no
+// security attached (gatt.c, BT_GATT_SERVICE_DEFINE _1_gatt_svc). Naming OPEN
+// rather than leaving NONE also keeps it out of the application inheritance
+// that BtGapInit publishes below.
 static BtGattChar_t s_BtGattChar[] = {
 	BT_CHAR(BT_UUID_CHARACTERISTIC_SERVICE_CHANGED,
 	        sizeof(BtGattCharSrvcChanged_t),
 	        BT_GATT_CHAR_PROP_INDICATE,
-	        NULL),
+	        NULL, .SecType = BT_GAP_SECTYPE_OPEN),
 };
 
 static BtGattSrvc_t s_BtGattSrvc = BT_SRVC_STD(BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE, s_BtGattChar);
@@ -355,11 +363,26 @@ __attribute__((weak)) void BtGapParamInit(const BtGapCfg_t *pCfg)
 void BtGapInit(const BtGapCfg_t *pCfg)
 {
 	BtGattInitStatusReset();
+
+	// Clear before validating so a refused configuration cannot leave the
+	// requirement from an earlier one in force.
+	g_BtAppData.SecType = BTGAP_SECTYPE_NONE;
+
 	if (pCfg == nullptr)
 	{
 		BtGattInitStatusFail(BT_GATT_INIT_ERROR_INVALID_CFG);
 		return;
 	}
+
+	// Publish the configured security type for BtGattSecTypeGet to resolve
+	// against. It is the last step of the characteristic to service to
+	// application walk, so a service written to inherit the application policy
+	// reads it and nothing else. This belongs here rather than in each port's
+	// BtAppInit: every port routes its BtAppCfg_t::SecType through this one
+	// call, and every port registers its services after it, so one assignment
+	// covers all four. It is set for every role, not only peripheral, because
+	// a central applies the same requirement to the server it talks to.
+	g_BtAppData.SecType = (BTGAP_SECTYPE)pCfg->SecType;
 
 	if (pCfg->Role & BT_GAP_ROLE_PERIPHERAL)
 	{
