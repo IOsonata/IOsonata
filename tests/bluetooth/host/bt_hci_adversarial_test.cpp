@@ -435,10 +435,19 @@ void FeedExtAdv(BtHciDevice_t *pDev, const uint8_t Addr[6],
 	BtHciProcessEvent(pDev, pEvt);
 }
 
+// The terminating fragment of a chain the host gave up on looks exactly like a
+// standalone complete report, and delivering it hands the application a
+// truncated suffix as whole advertising data.
+//
+// This used to force the drop by starving the table: two advertisers holding
+// both slots meant a third could not reassemble at all. That is the defect the
+// slot reclaim removed, so the drop is now forced the way it can still happen,
+// by the stalled chain losing its slot to newer ones.
 void TestDroppedReassemblyCannotBecomeComplete()
 {
 	BtHciDevice_t dev = {};
 	dev.ScanReport = ScanReport;
+	BtHciExtAdvReasmReset();
 	s_ScanCount = 0;
 	s_LastScanLen = 0;
 
@@ -449,12 +458,25 @@ void TestDroppedReassemblyCannotBecomeComplete()
 	const uint8_t last = 0xC2;
 
 	FeedExtAdv(&dev, addrA, 1, 1, &first, 1);
+
+	// Two newer chains, so A is the oldest and loses its slot.
 	FeedExtAdv(&dev, addrB, 2, 1, &first, 1);
+	FeedExtAdv(&dev, addrC, 3, 1, &first, 1);
 	BT_CHECK(s_Test, s_ScanCount == 0);
 
-	FeedExtAdv(&dev, addrC, 3, 1, &first, 1);
-	FeedExtAdv(&dev, addrC, 3, 0, &last, 1);
+	// A's tail must not be delivered as a whole report.
+	FeedExtAdv(&dev, addrA, 1, 0, &last, 1);
 	BT_CHECK(s_Test, s_ScanCount == 0);
+
+	// B and C were never dropped and still complete.
+	FeedExtAdv(&dev, addrB, 2, 0, &last, 1);
+	BT_CHECK(s_Test, s_ScanCount == 1);
+	BT_CHECK(s_Test, s_LastScanLen == 2);
+	FeedExtAdv(&dev, addrC, 3, 0, &last, 1);
+	BT_CHECK(s_Test, s_ScanCount == 2);
+	BT_CHECK(s_Test, s_LastScanLen == 2);
+
+	BtHciExtAdvReasmReset();
 }
 
 } // namespace

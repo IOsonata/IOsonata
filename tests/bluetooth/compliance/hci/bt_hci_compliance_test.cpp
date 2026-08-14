@@ -469,11 +469,12 @@ void TestDroppedExtendedAdvertisingReassembly(Context &ctx)
 {
 	static const Requirement req = {
 		"HCI-EXTADV-REASM-BI-01", "Core Vol 4 Part E", "7.7.65.13",
-		"a final fragment is discarded when the earlier fragment could not obtain reassembly storage"
+		"a final fragment is discarded when the host gave up the reassembly its earlier fragments were going into"
 	};
 	ctx.Begin(req);
 
 	ResetCaptures();
+	BtHciExtAdvReasmReset();
 	VirtualClock clock;
 	BtHciDevice_t host = {};
 	host.ScanReport = CaptureScanReport;
@@ -483,16 +484,27 @@ void TestDroppedExtendedAdvertisingReassembly(Context &ctx)
 	const uint8_t addrB[6] = { 2, 0, 0, 0, 0, 0 };
 	const uint8_t addrC[6] = { 3, 0, 0, 0, 0, 0 };
 
+	// A stops after one fragment. Two newer chains then need the slots, so A
+	// is the oldest and loses its. This used to be driven the other way, with
+	// A and B holding both slots and C refused one, but a chain that stopped
+	// no longer keeps a slot from a chain that has not.
 	FeedExtAdv(controller, addrA, 1, 1, 0xA1);
 	FeedExtAdv(controller, addrB, 2, 1, 0xB1);
 	FeedExtAdv(controller, addrC, 3, 1, 0xC1);
-	FeedExtAdv(controller, addrC, 3, 0, 0xC2);
+
+	// A's terminating fragment is a suffix of a report the host no longer
+	// holds the front of, and looks identical to a standalone complete one.
+	FeedExtAdv(controller, addrA, 1, 0, 0xA2);
 	BT_CHECK(ctx, s_ScanReports == 0);
 
-	// Release the two occupied contexts so this requirement leaves no static
-	// reassembly state for later tests.
-	FeedExtAdv(controller, addrA, 1, 2, 0);
-	FeedExtAdv(controller, addrB, 2, 2, 0);
+	// The two chains that kept going are unaffected.
+	FeedExtAdv(controller, addrB, 2, 0, 0xB2);
+	BT_CHECK(ctx, s_ScanReports == 1);
+	FeedExtAdv(controller, addrC, 3, 0, 0xC2);
+	BT_CHECK(ctx, s_ScanReports == 2);
+
+	// Leave no static reassembly state for later requirements.
+	BtHciExtAdvReasmReset();
 	controller.Detach();
 	ctx.End();
 }

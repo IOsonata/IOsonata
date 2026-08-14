@@ -791,6 +791,19 @@ static inline uint8_t BtHciCommand(BtHciDevice_t * const pDev, uint16_t OpCode, 
 }
 //void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len);
 
+/**
+ * @brief	Discard every partial extended advertising report.
+ *
+ * A chain of LE Extended Advertising Report fragments holds a reassembly slot
+ * from its first fragment until its last, and an advertiser that starts one and
+ * goes away never sends that last one. Scanning is the only thing that produces
+ * fragments, so starting or stopping it is where a chain that will never finish
+ * stops being worth a slot. Also clears the record of the advertisers whose
+ * reassembly was abandoned, which otherwise swallows one later standalone
+ * report from each of them.
+ */
+void BtHciExtAdvReasmReset(void);
+
 
 #ifdef __cplusplus
 }

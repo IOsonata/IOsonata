@@ -379,6 +379,11 @@ bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 		return false;
 	}
 
+	// Nothing from the previous scan can be finished now. A partial extended
+	// advertising report holds a reassembly slot until its chain ends, and a
+	// chain interrupted by the scan stopping never ends.
+	BtHciExtAdvReasmReset();
+
 	uint8_t res;
 	if (s_BtGapUseExtScanCmd)
 	{
@@ -423,6 +428,10 @@ void BtGapScanStop()
 		BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_SCAN_ENABLE,
 			&e, sizeof(e), NULL, 0);
 	}
+
+	// No further fragment can arrive for any chain in progress, so holding
+	// their slots across the gap only starves the next scan.
+	BtHciExtAdvReasmReset();
 }
 
 bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)

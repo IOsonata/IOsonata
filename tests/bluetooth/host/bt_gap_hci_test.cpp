@@ -14,6 +14,10 @@
 
 namespace {
 
+// Counts the reassembly discards BtGapScanStart and BtGapScanStop ask for.
+// Defined with the stub at the bottom of the file.
+extern int g_ExtAdvReasmResets;
+
 int s_Failures = 0;
 int s_Checks = 0;
 
@@ -418,8 +422,13 @@ void TestExtendedScanEnable()
 	BtGapScanCfg_t cfg = MakeScanCfg(100, 100);
 	CHECK(BtGapScanInit(&cfg));
 
+	// A partial extended advertising report holds a reassembly slot until its
+	// chain ends, and a chain cannot end across a gap in scanning. Both edges
+	// discard them, so a stopped chain cannot starve the next scan.
 	ClearCaptured();
+	g_ExtAdvReasmResets = 0;
 	CHECK(BtGapScanStart(nullptr, 0));
+	CHECK(g_ExtAdvReasmResets == 1);
 	const CapturedCmd *se = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_SCAN_ENABLE);
 	CHECK(se != nullptr);
 	if (se != nullptr)
@@ -433,6 +442,7 @@ void TestExtendedScanEnable()
 
 	ClearCaptured();
 	BtGapScanStop();
+	CHECK(g_ExtAdvReasmResets == 2);
 	se = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_SCAN_ENABLE);
 	CHECK(se != nullptr);
 	if (se != nullptr)
@@ -625,6 +635,8 @@ void TestInvalidConnectionParametersBeforeCommands()
 
 } // namespace
 
+namespace { int g_ExtAdvReasmResets = 0; }
+
 extern "C" {
 
 BtAppData_t g_BtAppData;
@@ -633,6 +645,11 @@ void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 {
 	*pType = s_LocalType;
 	std::memcpy(pAddr, s_LocalAddr, 6);
+}
+
+void BtHciExtAdvReasmReset(void)
+{
+	g_ExtAdvReasmResets++;
 }
 
 bool BtHciCapabilitiesRead(BtHciDevice_t * const pDev,

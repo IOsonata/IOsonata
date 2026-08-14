@@ -168,11 +168,19 @@ typedef struct __Bt_ExtAdv_Reassembly {
 	uint8_t  AddrType;						//!< Advertiser address type
 	uint8_t  Addr[6];						//!< Advertiser address
 	uint8_t  Sid;							//!< Advertising SID
+	uint32_t Seq;							//!< Sequence at the last fragment
 	uint16_t Len;							//!< Bytes accumulated so far
 	uint8_t  Buf[BT_EXT_ADV_REASSEMBLY_MAX];//!< Accumulated AD
 } BtExtAdvReasm_t;
 
 static BtExtAdvReasm_t s_BtExtAdvReasm[BT_EXT_ADV_REASSEMBLY_COUNT];
+
+// Counts fragments, so a slot can be ranked by how long ago it last received
+// one. Nothing else in this file has a clock: BtSmpMsTick is weak and returns
+// zero on any port that has not overridden it, so a chain cannot be timed out
+// the way Zephyr times one out. Ranking by arrival needs no clock and answers
+// the same question.
+static uint32_t s_BtExtAdvReasmSeq = 0;
 
 // Advertisers whose reassembly was abandoned, because no context was free or
 // because the accumulated data overflowed. Their remaining fragments must not
@@ -242,22 +250,71 @@ static BtExtAdvReasm_t *BtExtAdvReasmFind(uint8_t AddrType, const uint8_t Addr[6
 	return nullptr;
 }
 
+// A free slot if there is one, otherwise the slot whose last fragment is
+// oldest. Never returns null.
+//
+// Failing instead was the whole defect: a slot is released only by the
+// terminating or truncated fragment of the chain that claimed it, and an
+// advertiser that starts a chain and then goes out of range or stops sends
+// neither. Two such advertisers pinned both slots for the rest of the session,
+// after which every fragmented report from every advertiser was abandoned and,
+// through the dropped table, one standalone report from each of them was
+// swallowed as well. Short reports kept arriving, so scanning looked healthy.
+//
+// The advertiser losing its slot goes into the dropped table, because the tail
+// of its chain is indistinguishable from a standalone complete report and
+// delivering it would hand the application a truncated suffix as whole data.
+// A chain still receiving fragments is never the oldest, so what this reclaims
+// is a chain that stopped.
 static BtExtAdvReasm_t *BtExtAdvReasmAlloc(uint8_t AddrType, const uint8_t Addr[6], uint8_t Sid)
+{
+	BtExtAdvReasm_t *c = nullptr;
+
+	for (int i = 0; i < BT_EXT_ADV_REASSEMBLY_COUNT; i++)
+	{
+		BtExtAdvReasm_t *s = &s_BtExtAdvReasm[i];
+		if (s->Active == false)
+		{
+			c = s;
+			break;
+		}
+
+		// Unsigned subtraction, so the ranking survives the sequence wrapping.
+		if (c == nullptr ||
+			(uint32_t)(s_BtExtAdvReasmSeq - s->Seq) >
+			(uint32_t)(s_BtExtAdvReasmSeq - c->Seq))
+		{
+			c = s;
+		}
+	}
+
+	if (c->Active)
+	{
+		BtExtAdvDroppedMark(c->AddrType, c->Addr, c->Sid);
+	}
+
+	c->Active   = true;
+	c->AddrType = AddrType;
+	c->Sid      = Sid;
+	memcpy(c->Addr, Addr, 6);
+	c->Len      = 0;
+	c->Seq      = s_BtExtAdvReasmSeq;
+	return c;
+}
+
+void BtHciExtAdvReasmReset(void)
 {
 	for (int i = 0; i < BT_EXT_ADV_REASSEMBLY_COUNT; i++)
 	{
-		BtExtAdvReasm_t *c = &s_BtExtAdvReasm[i];
-		if (c->Active == false)
-		{
-			c->Active   = true;
-			c->AddrType = AddrType;
-			c->Sid      = Sid;
-			memcpy(c->Addr, Addr, 6);
-			c->Len      = 0;
-			return c;
-		}
+		s_BtExtAdvReasm[i].Active = false;
+		s_BtExtAdvReasm[i].Len = 0;
 	}
-	return nullptr;
+
+	for (int i = 0; i < BT_EXT_ADV_DROPPED_COUNT; i++)
+	{
+		s_BtExtAdvDropped[i].Active = false;
+	}
+	s_BtExtAdvDroppedNext = 0;
 }
 
 static void BtHciPutLe16(uint8_t *pData, uint16_t Value)
@@ -529,6 +586,11 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 					BtExtAdvReasm_t *ctx =
 						BtExtAdvReasmFind(r->AddrType, r->Addr, r->AdvSid);
 
+					// Ranks the slots for reclaim. Every fragment counts,
+					// including the ones that reach no slot, so a chain that
+					// stopped ages against the traffic that followed it.
+					s_BtExtAdvReasmSeq++;
+
 					if (dataStatus == 1)
 					{
 						// More data to come: buffer this fragment.
@@ -543,6 +605,7 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 							{
 								memcpy(ctx->Buf + ctx->Len, r->Data, r->DataLen);
 								ctx->Len = (uint16_t)(ctx->Len + r->DataLen);
+								ctx->Seq = s_BtExtAdvReasmSeq;
 							}
 							else
 							{
@@ -554,9 +617,13 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 						}
 						else
 						{
-							// No context free, or this advertiser is already
-							// abandoned. Either way the report cannot be
-							// reassembled and its tail must not be delivered.
+							// This advertiser is already abandoned, which is
+							// now the only way to get here: a chain whose head
+							// was discarded cannot be reassembled from the rest
+							// of it, so it stays abandoned until it ends. The
+							// mark is already in place and this refreshes
+							// nothing, it only keeps the branch honest if the
+							// allocation rule changes again.
 							BtExtAdvDroppedMark(r->AddrType, r->Addr, r->AdvSid);
 						}
 					}
