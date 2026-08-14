@@ -810,7 +810,18 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 		// coded PHY itself is a separate feature: without it there is no
 		// channel the options could apply to, so the request is dropped
 		// rather than sent to be refused.
-		bool coding = (s_BtAdvPrimPhyOptions != BT_HCI_ADV_PHY_OPT_NONE ||
+		//
+		// A set using legacy PDUs is the same case. 7.8.53: "If legacy
+		// advertising PDUs are being used, the Primary_Advertising_PHY shall
+		// indicate the LE 1M PHY", and legacy PDUs never reach the secondary
+		// channel at all, so neither option has anywhere to apply. Sending
+		// the coded PHY anyway is what the controller refuses, and since the
+		// payload decides legacy against extended, a small payload turned an
+		// accepted coding request into a device that did not advertise.
+		bool legacy = (extprop & BTADV_EXTADV_EVT_PROP_LEGACY) != 0;
+
+		bool coding = legacy == false &&
+			(s_BtAdvPrimPhyOptions != BT_HCI_ADV_PHY_OPT_NONE ||
 			s_BtAdvSecPhyOptions != BT_HCI_ADV_PHY_OPT_NONE) &&
 			BtHciCapabilitiesLeFeatureSupported(s_pBtAdvCapabilities,
 				BT_HCI_CAP_LE_FEATURE_CODED_PHY) &&

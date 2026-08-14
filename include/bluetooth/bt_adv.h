@@ -239,6 +239,13 @@ void BtAdvStop(void);
  * Selection, since a controller without the feature refuses any non zero
  * option outright.
  *
+ * Ignored the same way when the advertising set ends up using legacy PDUs,
+ * which happens whenever the encoded payload fits one. Core Vol 4 Part E
+ * 7.8.53 requires the primary PHY of such a set to be LE 1M, and legacy PDUs
+ * never use the secondary channel, so there is no channel either option could
+ * name. An application that needs a coding has to give the set enough data to
+ * make it extended.
+ *
  * @param	PrimOption	Coding for the primary advertising physical channel.
  * @param	SecOption	Coding for the secondary advertising physical channel.
  *

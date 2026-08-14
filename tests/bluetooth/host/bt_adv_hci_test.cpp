@@ -651,6 +651,43 @@ void TestAdvertisingCodingSelectionArguments()
 		BT_HCI_ADV_PHY_OPT_NONE));
 }
 
+// A coding request against a payload that fits legacy PDUs. Core Vol 4 Part E
+// 7.8.53 requires the primary PHY of a legacy set to be LE 1M, so the request
+// is dropped and the set is programmed exactly as if none had been made. The
+// controller refused the coded PHY before, and the device did not advertise
+// at all.
+void TestAdvertisingCodingSelectionIgnoredOnLegacySet()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr, CAP_EXT_CODING);
+	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_REQUIRE_S8,
+		BT_HCI_ADV_PHY_OPT_REQUIRE_S2));
+
+	BtAppCfg_t cfg = MakePeripheralCfg();		// short name, legacy PDUs
+	CHECK(BtAppAdvInit(&cfg) == true);
+
+	// No coding to carry, so the v1 command is the one that goes out.
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2) == nullptr);
+	const CapturedCmd *ap = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
+	CHECK(ap != nullptr);
+	if (ap != nullptr)
+	{
+		CHECK((ap->Param[1] & BTADV_EXTADV_EVT_PROP_LEGACY) != 0);
+		CHECK(ap->Param[kExtAdvPrimPhy] == BTADV_EXTADV_PHY_1M);
+	}
+
+	// The request is remembered, since the getter reports what was asked for
+	// rather than what the set was able to use.
+	uint8_t prim = 0;
+	uint8_t sec = 0;
+	BtAdvCodingSelectionGet(&prim, &sec);
+	CHECK(prim == BT_HCI_ADV_PHY_OPT_REQUIRE_S8);
+	CHECK(sec == BT_HCI_ADV_PHY_OPT_REQUIRE_S2);
+
+	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_NONE,
+		BT_HCI_ADV_PHY_OPT_NONE));
+}
+
 void TestAdvertisingCodingSelectionApplied()
 {
 	uint8_t addr[6] = {};
@@ -658,7 +695,11 @@ void TestAdvertisingCodingSelectionApplied()
 	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_REQUIRE_S8,
 		BT_HCI_ADV_PHY_OPT_PREFER_S2));
 
-	BtAppCfg_t cfg = MakePeripheralCfg();
+	// The payload has to force extended PDUs. A coding cannot apply to a set
+	// using legacy ones, so driving this from the short default name tested
+	// nothing the specification allows.
+	BtAppCfg_t cfg = MakePeripheralCfg(
+		"This name is long enough to require extended advertising data");
 	CHECK(BtAppAdvInit(&cfg) == true);
 
 	// The v2 command is the only one with the coding fields, so the
@@ -689,7 +730,8 @@ void TestAdvertisingCodingSelectionSecondaryOnly()
 	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_NONE,
 		BT_HCI_ADV_PHY_OPT_REQUIRE_S2));
 
-	BtAppCfg_t cfg = MakePeripheralCfg();
+	BtAppCfg_t cfg = MakePeripheralCfg(
+		"This name is long enough to require extended advertising data");
 	CHECK(BtAppAdvInit(&cfg) == true);
 
 	const CapturedCmd *ap = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2);
@@ -980,6 +1022,7 @@ int main()
 	TestZeroAdvertisingSetsFallsBackToLegacy();
 	TestExtendedSecondaryPhySelection();
 	TestAdvertisingCodingSelectionArguments();
+	TestAdvertisingCodingSelectionIgnoredOnLegacySet();
 	TestAdvertisingCodingSelectionApplied();
 	TestAdvertisingCodingSelectionSecondaryOnly();
 	TestAdvertisingCodingSelectionWithoutFeature();
