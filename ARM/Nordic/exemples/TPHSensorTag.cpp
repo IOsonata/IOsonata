@@ -70,7 +70,7 @@ SOFTWARE.
 #include "sensors/tph_ms8607.h"
 #include "sensors/tphg_bme680.h"
 #include "bluetooth/bt_hci.h"
-#include "timer_nrfx.h"
+#include "coredev/timer.h"
 #ifdef NRF51
 //#include "timer_nrf_app_timer.h"
 #else
@@ -106,7 +106,7 @@ SOFTWARE.
 #define APP_ADV_TIMEOUT_MSEC      	120000 //MSEC_TO_UNITS(120000, UNIT_10_MS)           /**< The advertising timeout (in units of seconds). */
 #endif
 
-void TimerHandler(TIMER * const pTimer, uint32_t Evt);
+void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
 uint8_t g_AdvDataBuff[10] = {
 	BT_ADV_MANDATA_TYPE_TPH,
@@ -119,7 +119,7 @@ BtAdvManData_TphSensor_t &g_TPHData = *(BtAdvManData_TphSensor_t *)g_AdvData.Dat
 BtAdvManData_AqSensor_t &g_GasData = *(BtAdvManData_AqSensor_t *)g_AdvData.Data;
 BLUEIO_DATA_BAT &g_AdvBat = *(BLUEIO_DATA_BAT *)g_AdvData.Data;
 
-const static TIMER_CFG s_TimerCfg = {
+const static TimerCfg_t s_TimerCfg = {
     .DevNo = 2,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default highest frequency
@@ -130,38 +130,38 @@ const static TIMER_CFG s_TimerCfg = {
 Timer g_Timer;
 
 const BtAppCfg_t s_BtDevCfg = {
-	BTAPP_ROLE_BROADCASTER,
-	0, 						// Number of central link
-	1, 						// Number of peripheral link
-	DEVICE_NAME,                 // Device name
-	ISYST_BLUETOOTH_ID,     // PnP Bluetooth/USB vendor id
-	1,                      // PnP Product ID
-	0,						// Pnp prod version
-	0,						// Appearance
-	NULL,					// Enable device information service (DIS)
-	(uint8_t*)&g_AdvDataBuff,   // Manufacture specific data to advertise
-	sizeof(g_AdvDataBuff),      // Length of manufacture specific data
-	NULL,
-	0,
-	BTGAP_SECTYPE_NONE,    // Secure connection type
-	BTAPP_SECEXCHG_NONE,   // Security key exchange
-	NULL,      				// Service uuids to advertise
-	0, 						// Total number of uuids
-	APP_ADV_INTERVAL_MSEC,       // Advertising interval in msec
-	APP_ADV_TIMEOUT_MSEC,	// Advertising timeout in sec
-	0,//MSEC_TO_UNITS(1000, UNIT_0_625_MS) ,   // Slow advertising interval, if > 0, fallback to
-								// slow interval on adv timeout and advertise until connected
-	0,
-	0,
-	BLUEIO_LED1_PORT,		// Led port nuber
-	BLUEIO_LED1_PIN,     // Led pin number
-	0,
-	0, 		// Tx power
+	.Role = BTAPP_ROLE_BROADCASTER,
+	.CentLinkCount = 0, 				// Number of central link
+	.PeriLinkCount = 1, 				// Number of peripheral link
+	.pDevName = DEVICE_NAME,			// Device name
+	.VendorId = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
+	.ProductId = 1,						// PnP Product ID
+	.ProductVer = 0,					// Pnp prod version
+	.Appearance = 0,					// Appearance
+	.pDevInfo = NULL,					// Device information service (DIS)
+	.pAdvManData = g_AdvDataBuff,		// Manufacture specific data to advertise
+	.AdvManDataLen = sizeof(g_AdvDataBuff),	// Length of manufacture specific data
+	.pSrManData = NULL,
+	.SrManDataLen = 0,
+	.SecType = BTGAP_SECTYPE_NONE,		// Secure connection type
+	.SecExchg = BTAPP_SECEXCHG_NONE,	// Security key exchange
+	.bCompleteUuidList = false,
+	.pAdvUuid = NULL,      				// Service uuids to advertise
+	.AdvInterval = APP_ADV_INTERVAL_MSEC,	// Advertising interval in msec
+	.AdvTimeout = APP_ADV_TIMEOUT_MSEC,	// Advertising timeout in msec
+	.AdvSlowInterval = 0,				// Slow advertising interval, if > 0, fallback to
+										// slow interval on adv timeout and advertise until connected
+	.ConnIntervalMin = 0,
+	.ConnIntervalMax = 0,
+	.ConnLedPort = BLUEIO_LED1_PORT,	// Led port nuber
+	.ConnLedPin = BLUEIO_LED1_PIN,		// Led pin number
+	.ConnLedActLevel = 0,
+	.TxPower = 0, 						// Tx power
 };
 
 // Motsai Neblina V2 module uses SPI interface
 #ifdef NEBLINA_MODULE
-static const IOPINCFG gsSpiBoschPin[] = {
+static const IOPinCfg_t gsSpiBoschPin[] = {
     {SPI_SCK_PORT, SPI_SCK_PIN, SPI_SCK_PINOP,
      IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
     {SPI_MISO_PORT, SPI_MISO_PIN, SPI_MISO_PINOP,
@@ -172,20 +172,23 @@ static const IOPINCFG gsSpiBoschPin[] = {
      IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 };
 
-static const SPICFG s_SpiCfg = {
-    SPI_DEVNO,
-    SPIMODE_MASTER,
-    gsSpiBoschPin,
-    sizeof( gsSpiBoschPin ) / sizeof( IOPINCFG ),
-    8000000,   // Speed in Hz
-    8,      // Data Size
-    5,      // Max retries
-    SPIDATABIT_MSB,
-    SPIDATAPHASE_SECOND_CLK, // Data phase
-    SPICLKPOL_LOW,         // clock polarity
-    SPICSEL_AUTO,
-    6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
-    nullptr
+static const SPICfg_t s_SpiCfg = {
+	.DevNo = SPI_DEVNO,
+	.Phy = SPIPHY_NORMAL,
+	.Mode = SPIMODE_MASTER,
+	.pIOPinMap = gsSpiBoschPin,
+	.NbIOPins = sizeof(gsSpiBoschPin) / sizeof(IOPinCfg_t),
+	.Rate = 8000000,			// Speed in Hz
+	.DataSize = 8,				// Data Size
+	.MaxRetry = 5,				// Max retries
+	.BitOrder = SPIDATABIT_MSB,
+	.DataPhase = SPIDATAPHASE_SECOND_CLK,	// Data phase
+	.ClkPol = SPICLKPOL_LOW,	// Clock polarity
+	.ChipSel = SPICSEL_AUTO,
+	.bDmaEn = true,
+	.bIntEn = false,
+	.IntPrio = 6,				// Interrupt priority
+	.EvtCB = nullptr
 };
 
 SPI g_Spi;
@@ -271,7 +274,7 @@ static const GasSensorCfg_t s_GasSensorCfg = {
 	BME680_I2C_DEV_ADDR0,	// Device address
 	SENSOR_OPMODE_SINGLE,	// Operating mode
 	10,
-	sizeof(s_HeaterProfile) / sizeof(GasSensorCfg_t),
+	sizeof(s_HeaterProfile) / sizeof(GasSensorHeater_t),
 	s_HeaterProfile
 };
 
@@ -442,7 +445,7 @@ void ReadPTHData()
 	gascnt++;
 }
 
-void TimerHandler(TIMER * const pTimer, uint32_t Evt)
+void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt)
 {
     if (Evt & TIMER_EVT_TRIGGER(0))
     {
@@ -454,7 +457,7 @@ void TimerHandler(TIMER * const pTimer, uint32_t Evt)
     }
 }
 
-void AppTimerHandler(Timer *pTimer, int TrigNo, void *pContext)
+void AppTimerHandler(TimerDev_t * const pTimer, int TrigNo, void * const pContext)
 {
 	if (TrigNo == 0)
 	{
