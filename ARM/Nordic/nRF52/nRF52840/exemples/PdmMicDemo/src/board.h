@@ -63,6 +63,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_RTS_PINOP		BLUEIO_UART_RTS_PINOP
 #endif
 
+// PDM microphone
+#define PDM_CLK_PORT		0
+#define PDM_CLK_PIN			24
+#define PDM_CLK_PINOP		1
+
+#define PDM_DIN_PORT		0
+#define PDM_DIN_PIN			25
+#define PDM_DIN_PINOP		1
 
 #endif // __BOARD_H__
 
