@@ -31,9 +31,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/BlePdmDemo.cpp</name>
+			<name>src/pdm_ble.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/exemples/BlePdmDemo.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/bluetooth/pdm_ble.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/board.h</name>
