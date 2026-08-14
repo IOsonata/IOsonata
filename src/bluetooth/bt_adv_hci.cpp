@@ -682,6 +682,53 @@ __attribute__((weak)) void BtAdvStop()
 	BtAppAdvStop();
 }
 
+// Strong override of the weak seam in bt_hci_host, the advertising twin of
+// BtHciScanTimeout. Core Vol 4 Part E 7.7.65.18 fires this event for two
+// unrelated reasons and the host has to tell them apart.
+//
+// Status 0 means a connection was created. That is not a timeout, and the
+// shipped handlers restart advertising or rewrite the advertising data, so
+// every successful connection re-armed the set. The connection path owns the
+// state from there: BtAppDisconnected restarts advertising when the last link
+// goes. The event can arrive either side of LE Connection Complete, so nothing
+// is written to the state here either.
+//
+// Any other status ends advertising in the controller while the host still
+// believes the set is enabled. The event defines two: Advertising Timeout
+// (0x3C) when the duration elapsed, Limit Reached (0x43) when the extended
+// advertising event count did. The state has to leave ADVERTISING or
+// BtAppAdvStart returns early at its first line and the device never
+// advertises again, which is what a handler like TPHSensorTag's, calling
+// BtAdvStart and nothing else, ran into.
+//
+// The handle names the set that ended, and only set 0 is the application's.
+// The periodic train rides BT_ADV_PERIODIC_ADV_HANDLE, and while
+// 7.8.61 forces that set non connectable and non scannable and it is enabled
+// with neither a duration nor an event limit, so it has no way to reach here
+// today, the filter is what keeps that true if it gains one.
+void BtAdvSetTerminatedEvt(uint8_t Status, uint8_t AdvHdl, uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+
+	if (AdvHdl != 0 || Status == BT_HCI_SUCCESS)
+	{
+		return;
+	}
+
+	// Only clear the advertising state. A device with another link up is
+	// CONNECTED here, and that is the peer table's to report.
+	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)
+	{
+		g_BtAppData.State = BTAPP_STATE_IDLE;
+	}
+
+	BtHciDevice_t *pDev = BtAdvHciDev();
+	if (pDev != nullptr && pDev->AdvTimeout)
+	{
+		pDev->AdvTimeout();
+	}
+}
+
 bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 {
 	if (pCfg == nullptr || !BtGattInitStatusComplete())

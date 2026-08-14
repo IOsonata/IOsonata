@@ -135,6 +135,10 @@ uint8_t s_DataReqStart = 0xFF;
 int s_RspRptCount = 0;
 uint8_t s_RspRptNum = 0xFF;
 size_t s_RspRptLen = 0;
+int s_AdvTermCount = 0;
+uint8_t s_AdvTermStatus = 0xFF;
+uint8_t s_AdvTermHdl = 0xFF;
+uint16_t s_AdvTermConnHdl = 0xFFFF;
 
 void ResetPeriodic()
 {
@@ -156,6 +160,10 @@ void ResetPeriodic()
 	s_RspRptCount = 0;
 	s_RspRptNum = 0xFF;
 	s_RspRptLen = 0;
+	s_AdvTermCount = 0;
+	s_AdvTermStatus = 0xFF;
+	s_AdvTermHdl = 0xFF;
+	s_AdvTermConnHdl = 0xFFFF;
 }
 
 // Build an LE meta event from a subevent code and its parameter octets.
@@ -330,6 +338,53 @@ void TestPawrEvents()
 	BT_CHECK(s_Test, s_RspRptLen == 8);
 }
 
+// Core Vol 4 Part E 7.7.65.18. The event has five octets and the host
+// used to read none of them, so the parse is what has to be pinned here: the
+// policy that acts on Status and the handle lives in bt_adv_hci and is
+// covered by bt_adv_hci_test.
+void TestAdvSetTerminatedLayout()
+{
+	BtHciDevice_t dev = {};
+	ResetPeriodic();
+
+	// Advertising Timeout on set 0, connection handle unused, no completed
+	// extended advertising events.
+	const uint8_t timeout[] = { 0x3C, 0x00, 0x00, 0x00, 0x00 };
+	alignas(4) uint8_t raw[sizeof(BtHciEvtPacket_t) + sizeof(timeout)] = {};
+	BtHciEvtPacket_t *pEvt = MakeLeEvent(raw, sizeof(raw),
+		BT_HCI_EVT_LE_ADV_SET_TERMINATED, timeout, sizeof(timeout));
+	BtHciProcessEvent(&dev, pEvt);
+	BT_CHECK(s_Test, s_AdvTermCount == 1);
+	BT_CHECK(s_Test, s_AdvTermStatus == 0x3C);
+	BT_CHECK(s_Test, s_AdvTermHdl == 0);
+	BT_CHECK(s_Test, s_AdvTermConnHdl == 0);
+
+	// A connection ended it: status 0, set 3, connection handle 0x0042.
+	ResetPeriodic();
+	const uint8_t conn[] = { 0x00, 0x03, 0x42, 0x00, 0x07 };
+	pEvt = MakeLeEvent(raw, sizeof(raw),
+		BT_HCI_EVT_LE_ADV_SET_TERMINATED, conn, sizeof(conn));
+	BtHciProcessEvent(&dev, pEvt);
+	BT_CHECK(s_Test, s_AdvTermCount == 1);
+	BT_CHECK(s_Test, s_AdvTermStatus == 0x00);
+	BT_CHECK(s_Test, s_AdvTermHdl == 3);
+	BT_CHECK(s_Test, s_AdvTermConnHdl == 0x0042);
+
+	// Four octets is not enough for the five the event has.
+	ResetPeriodic();
+	pEvt = MakeLeEvent(raw, sizeof(raw),
+		BT_HCI_EVT_LE_ADV_SET_TERMINATED, timeout, 4);
+	BtHciProcessEvent(&dev, pEvt);
+	BT_CHECK(s_Test, s_AdvTermCount == 0);
+
+	// And no parameters at all is not either.
+	ResetPeriodic();
+	pEvt = MakeLeEvent(raw, sizeof(raw),
+		BT_HCI_EVT_LE_ADV_SET_TERMINATED, nullptr, 0);
+	BtHciProcessEvent(&dev, pEvt);
+	BT_CHECK(s_Test, s_AdvTermCount == 0);
+}
+
 void TestScanTimeoutEventDispatch()
 {
 	BtHciDevice_t dev = {};
@@ -446,6 +501,14 @@ void BtAdvPeriodicSyncLostEvt(uint16_t)
 	s_LostCount++;
 }
 
+void BtAdvSetTerminatedEvt(uint8_t Status, uint8_t AdvHdl, uint16_t ConnHdl)
+{
+	s_AdvTermCount++;
+	s_AdvTermStatus = Status;
+	s_AdvTermHdl = AdvHdl;
+	s_AdvTermConnHdl = ConnHdl;
+}
+
 void BtAdvPawrSubeventDataRequestEvt(uint8_t, uint8_t SubeventStart, uint8_t)
 {
 	s_DataReqCount++;
@@ -532,6 +595,8 @@ int main()
 			   TestLegacyAdvEventNeedsCountByte);
 	s_Test.Run("extended advertising count boundary",
 			   TestExtendedAdvEventNeedsCountByte);
+	s_Test.Run("advertising set terminated layout",
+			   TestAdvSetTerminatedLayout);
 	s_Test.Run("scan timeout event dispatch",
 			   TestScanTimeoutEventDispatch);
 	s_Test.Run("dropped extended advertising reassembly",

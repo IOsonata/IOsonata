@@ -73,6 +73,12 @@ __attribute__((weak)) void BtAdvPeriodicSyncLostEvt(uint16_t SyncHdl)
 	(void)SyncHdl;
 }
 
+__attribute__((weak)) void BtAdvSetTerminatedEvt(uint8_t Status, uint8_t AdvHdl,
+	uint16_t ConnHdl)
+{
+	(void)Status; (void)AdvHdl; (void)ConnHdl;
+}
+
 __attribute__((weak)) void BtAdvPawrSubeventReportEvt(uint16_t SyncHdl,
 	uint16_t EventCounter, uint8_t Subevent, int8_t TxPower, int8_t Rssi,
 	uint8_t DataStatus, size_t Len, const uint8_t *pData)
@@ -683,9 +689,19 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			BtHciScanTimeout(pDev);
 			break;
 		case BT_HCI_EVT_LE_ADV_SET_TERMINATED:
-			if (pDev->AdvTimeout)
 			{
-				pDev->AdvTimeout();
+				// Status(1) + AdvHdl(1) + ConnHdl(2) + NbCompletedEvt(1). The
+				// old code called the application handler without reading any
+				// of it, so a connection and a timeout were indistinguishable.
+				if ((const uint8_t*)pLeEvtPkt->Data +
+					sizeof(BtHciLeEvtAdvSetTerminated_t) > evtEnd)
+				{
+					break;
+				}
+				BtHciLeEvtAdvSetTerminated_t *p =
+					(BtHciLeEvtAdvSetTerminated_t*)pLeEvtPkt->Data;
+
+				BtAdvSetTerminatedEvt(p->Status, p->AdvHdl, p->ConnHdl);
 			}
 			break;
 		case BT_HCI_EVT_LE_SCAN_RQST_RECEIVED:

@@ -428,6 +428,12 @@ void BtAdvPeriodicReportFragment(uint16_t SyncHdl, int8_t TxPower, int8_t Rssi,
 	uint8_t DataStatus, size_t Len, const uint8_t *pData);
 void BtAdvPeriodicSyncLostEvt(uint16_t SyncHdl);
 
+//!< An advertising set stopped, Core Vol 4 Part E 7.7.65.18. Status is 0 when
+//!< a connection ended it and an error code otherwise, of which the event
+//!< names Advertising Timeout and Limit Reached. ConnHdl means nothing unless
+//!< Status is 0. Same seam arrangement as above.
+void BtAdvSetTerminatedEvt(uint8_t Status, uint8_t AdvHdl, uint16_t ConnHdl);
+
 // --- Periodic Advertising with Responses, Core 5.4 ---
 
 //!< Subevents a PAwR train may have, Core Vol 4 Part E 7.8.61.

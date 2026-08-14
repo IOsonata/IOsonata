@@ -553,6 +553,97 @@ void TestAdvDegenerateRandomIdentity()
 	CHECK(BtAppAdvInit(&cfg) == true);
 }
 
+int s_AdvTimeoutCount = 0;
+
+void CountAdvTimeout()
+{
+	s_AdvTimeoutCount++;
+}
+
+// Bring the set up and leave it advertising, with the timeout hook counted.
+void SetupAdvertising(CapabilityMode Mode = CAP_EXTENDED)
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr, Mode);
+	s_Dev.AdvTimeout = CountAdvTimeout;
+	s_AdvTimeoutCount = 0;
+
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	CHECK(BtAppAdvInit(&cfg) == true);
+	BtAppAdvStart();
+	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+	ClearCommands();
+}
+
+// Core Vol 4 Part E 7.7.65.18, Status 0x3C, the duration elapsed. Advertising
+// has stopped in the controller, so the state has to follow or BtAppAdvStart
+// returns at its first line for the rest of the session.
+void TestAdvSetTerminatedTimeoutReleasesTheState()
+{
+	SetupAdvertising();
+
+	BtAdvSetTerminatedEvt(0x3C, 0, 0);
+	CHECK(s_AdvTimeoutCount == 1);
+	CHECK(g_BtAppData.State == BTAPP_STATE_IDLE);
+
+	// Which is what a handler calling BtAdvStart and nothing else needs.
+	BtAppAdvStart();
+	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE) != nullptr);
+}
+
+// Status 0x43, Limit Reached, is the other end the event defines and reaches
+// the application the same way.
+void TestAdvSetTerminatedLimitReachedIsATimeout()
+{
+	SetupAdvertising();
+
+	BtAdvSetTerminatedEvt(0x43, 0, 0);
+	CHECK(s_AdvTimeoutCount == 1);
+	CHECK(g_BtAppData.State == BTAPP_STATE_IDLE);
+}
+
+// Status 0x00 means a connection was created. The shipped handlers restart
+// advertising, so calling one here re-armed the set on every connection.
+void TestAdvSetTerminatedConnectionIsNotATimeout()
+{
+	SetupAdvertising();
+
+	BtAdvSetTerminatedEvt(0x00, 0, 0x0042);
+	CHECK(s_AdvTimeoutCount == 0);
+
+	// The connection path owns the state, and this event can arrive on either
+	// side of LE Connection Complete, so nothing is written to it here.
+	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+	CHECK(HasAdvertisingCommand() == false);
+}
+
+// Only set 0 is the application's advertising set.
+void TestAdvSetTerminatedIgnoresOtherSets()
+{
+	SetupAdvertising();
+
+	BtAdvSetTerminatedEvt(0x3C, BT_ADV_PERIODIC_ADV_HANDLE, 0);
+	CHECK(s_AdvTimeoutCount == 0);
+	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+
+	BtAdvSetTerminatedEvt(0x3C, 0xEF, 0);
+	CHECK(s_AdvTimeoutCount == 0);
+	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+}
+
+// A device advertising alongside a live link is CONNECTED here, and that is
+// the peer table's state to report, not this event's to overwrite.
+void TestAdvSetTerminatedLeavesConnectedAlone()
+{
+	SetupAdvertising();
+	g_BtAppData.State = BTAPP_STATE_CONNECTED;
+
+	BtAdvSetTerminatedEvt(0x3C, 0, 0);
+	CHECK(s_AdvTimeoutCount == 1);
+	CHECK(g_BtAppData.State == BTAPP_STATE_CONNECTED);
+}
+
 void TestLegacyCommandSelection()
 {
 	uint8_t addr[6] = {};
@@ -1077,6 +1168,11 @@ int main()
 	TestAdvRandomIdentity();
 	TestAdvInvalidRandomIdentity();
 	TestAdvDegenerateRandomIdentity();
+	TestAdvSetTerminatedTimeoutReleasesTheState();
+	TestAdvSetTerminatedLimitReachedIsATimeout();
+	TestAdvSetTerminatedConnectionIsNotATimeout();
+	TestAdvSetTerminatedIgnoresOtherSets();
+	TestAdvSetTerminatedLeavesConnectedAlone();
 	TestLegacyCommandSelection();
 	TestLegacyMissingCommandRefused();
 	TestExtendedPayloadNeedsExtendedCommands();
