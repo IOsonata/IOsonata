@@ -3021,13 +3021,29 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	if (pLink->Ctx.State == BT_SMP_STATE_LTK_WAIT)
 	{
 		// Encrypted via fresh pairing. Run the key distribution phase that was
-		// negotiated. The local device distributes the keys it offered:
-		// InitiatorKeyDist (PReq[6 of req = byte 5]) when we are the central,
-		// ResponderKeyDist (PRsp[6]) when we are the peripheral. For SC the LTK
-		// is derived (EncKey is never distributed); we send IRK + identity
-		// address (IDKEY) and/or CSRK (SIGNKEY) only if negotiated.
+		// negotiated.
+		//
+		// Both key distribution fields are negotiated across the two PDUs: the
+		// initiator names a set in the Pairing Request (byte 5 Initiator, byte
+		// 6 Responder) and the responder answers in the Pairing Response with
+		// the subset it accepts. The set actually agreed for a field is
+		// therefore the two octets intersected, which holds whatever a peer
+		// puts in either PDU. This device distributes the Initiator field when
+		// it initiated and the Responder field when it did not.
+		//
+		// Taking the local set from the Pairing Request alone made the
+		// responder's answer advisory: a responder that cleared SignKey from
+		// the offer was still sent Signing Information, and one that cleared
+		// IdKey was still sent the local IRK and identity address. Phones do
+		// clear these.
+		//
+		// For SC the LTK is derived (EncKey is never distributed); we send IRK
+		// + identity address (IDKEY) and/or CSRK (SIGNKEY) only if negotiated.
+		uint8_t initKeyDist = pLink->Ctx.PReq[5] & pLink->Ctx.PRsp[5];
+		uint8_t respKeyDist = pLink->Ctx.PReq[6] & pLink->Ctx.PRsp[6];
+
 		uint8_t localKeyDist = (pLink->Ctx.bInitiator ?
-									pLink->Ctx.PReq[5] : pLink->Ctx.PRsp[6]) &
+									initKeyDist : respKeyDist) &
 							   (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY);
 		DEBUG_PRINTF("SMP encrypted, distribute lk=%02x init=%d\r\n",
 				  localKeyDist, pLink->Ctx.bInitiator ? 1 : 0);
@@ -3082,15 +3098,14 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			CryptoSecureWipe(csrk, sizeof(csrk));
 		}
 
-		// Compute which keys the peer will distribute in return. The negotiated
-		// key-distribution fields live in the Pairing Response (byte 5 =
-		// InitiatorKeyDist, byte 6 = ResponderKeyDist): the peer sends the field
-		// for its own role. While those are still outstanding the link sits in
+		// Compute which keys the peer will distribute in return: the other
+		// field of the same negotiated pair, the peer sending the one for its
+		// own role. While those are still outstanding the link sits in
 		// KEYDIST, the only state in which the H4 gate accepts inbound
 		// key-distribution PDUs; once all have arrived SmpKeyDistReceived moves it
 		// to DONE. If the peer distributes nothing, go straight to DONE.
 		uint8_t peerKeyDist = (pLink->Ctx.bInitiator ?
-									pLink->Ctx.PRsp[6] : pLink->Ctx.PRsp[5]) &
+									respKeyDist : initKeyDist) &
 							   (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY);
 		pLink->Ctx.KeyDistExp = peerKeyDist;
 

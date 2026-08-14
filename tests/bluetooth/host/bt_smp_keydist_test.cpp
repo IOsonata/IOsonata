@@ -1,0 +1,276 @@
+/**-------------------------------------------------------------------------
+@file	bt_smp_keydist_test.cpp
+
+@brief	Phase 3 key distribution follows the negotiated set, host tests
+
+The key distribution fields are negotiated across two PDUs: the initiator
+names a set in the Pairing Request and the responder answers in the Pairing
+Response with the subset it accepts. What each side then distributes is the
+two octets of its field intersected. Reading the local set from the Pairing
+Request alone made the responder's answer advisory.
+
+bt_smp.cpp is included rather than linked so a case can put a link straight
+into the state that follows a completed pairing. Its transport and platform
+hooks are weak definitions, replaced from bt_smp_link_test_stubs.cpp, which is
+a separate object for that reason.
+
+@author	Hoang Nguyen Hoan
+@date	Aug. 14, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------------------------------------------*/
+#include <cstring>
+
+#include "crypto/crypto_softrng.h"
+
+#include "bt_test_harness.h"
+#include "bt_smp_link_test_stubs.h"
+
+#include "../../../src/bluetooth/bt_smp.cpp"
+
+namespace {
+
+// The CSRK is drawn through BtSmpCryptoRand, which refuses an engine that
+// reports IsSecure() false so a deterministic stream can never reach a key.
+// These cases are about which PDUs go out, not about the values in them, so
+// the software PRNG is presented as secure to let the distribution path run.
+// Nothing outside this test does that.
+class TestRng : public CryptoSoftRng {
+public:
+	bool IsSecure() const override { return true; }
+};
+
+TestRng s_Rng;
+
+const uint16_t kConnHdl = 0x0040;
+
+// Pairing Request and Pairing Response are the same seven octet layout:
+// Code, IO Capability, OOB flag, AuthReq, Max Encryption Key Size, Initiator
+// Key Distribution, Responder Key Distribution.
+const int kInitKeyDist = 5;
+const int kRespKeyDist = 6;
+
+BtHciDevice_t s_HciDev;
+
+// Put a link into the state BtSmpEncryptionChanged sees after a Secure
+// Connections pairing has produced an LTK and the controller has reported the
+// link encrypted, with the two pairing PDUs the exchange left behind.
+void ArmLink(bool bInitiator, uint8_t ReqInit, uint8_t ReqResp,
+			 uint8_t RspInit, uint8_t RspResp)
+{
+	BtSmpTestCaptureReset();
+
+	// A zeroed slot reads as connection handle 0, which SmpLinkFind would match.
+	// Only slot 0 belongs to this case; the rest are marked free the way
+	// SmpLinkFree leaves them, so a later case that looks up another handle does
+	// not find a slot this one left behind.
+	memset(s_SmpLink, 0, sizeof(s_SmpLink));
+	for (int i = 1; i < BT_SMP_MAX_LINK; i++)
+	{
+		s_SmpLink[i].ConnHdl = BT_CONN_HDL_INVALID;
+	}
+
+	BtSmpLink_t *pLink = &s_SmpLink[0];
+
+	pLink->ConnHdl = kConnHdl;
+	pLink->Ctx.State = BT_SMP_STATE_LTK_WAIT;
+	pLink->Ctx.bInitiator = bInitiator;
+	pLink->Ctx.bSc = true;
+	pLink->Ctx.EncKeySize = BT_SMP_MAX_ENC_KEY_SIZE;
+	pLink->Ctx.Model = BT_SMP_MODEL_JUST_WORKS;
+
+	pLink->Ctx.PReq[0] = BT_SMP_CODE_PAIRING_REQ;
+	pLink->Ctx.PReq[1] = BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT;
+	pLink->Ctx.PReq[2] = BT_SMP_OOB_AUTH_NOT_PRESENT;
+	pLink->Ctx.PReq[3] = BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_SC;
+	pLink->Ctx.PReq[4] = BT_SMP_MAX_ENC_KEY_SIZE;
+	pLink->Ctx.PReq[kInitKeyDist] = ReqInit;
+	pLink->Ctx.PReq[kRespKeyDist] = ReqResp;
+
+	memcpy(pLink->Ctx.PRsp, pLink->Ctx.PReq, sizeof(pLink->Ctx.PRsp));
+	pLink->Ctx.PRsp[0] = BT_SMP_CODE_PAIRING_RSP;
+	pLink->Ctx.PRsp[kInitKeyDist] = RspInit;
+	pLink->Ctx.PRsp[kRespKeyDist] = RspResp;
+
+	// The identity IRK is drawn from the secure RBG on first use and this test
+	// binds no crypto engines. Seeding it is what a device has after first
+	// boot, and without it the distribution path fails the pairing before it
+	// sends anything.
+	s_SmpLocalId.bValid = true;
+	memset(s_SmpLocalId.Irk, 0x5A, sizeof(s_SmpLocalId.Irk));
+
+	s_Rng.Enable();
+	s_pCryptoRng = &s_Rng;
+	s_pSmpActiveDev = &s_HciDev;
+}
+
+int IdInfoCount(void)
+{
+	return BtSmpTestCaptureCount(BT_SMP_CODE_PAIRING_ID_INFO);
+}
+
+int IdAddrCount(void)
+{
+	return BtSmpTestCaptureCount(BT_SMP_CODE_PAIRING_ID_ADDR_INFO);
+}
+
+int SigningCount(void)
+{
+	return BtSmpTestCaptureCount(BT_SMP_CODE_PAIRING_SIGNING_INFO);
+}
+
+// Control. Both sides asked for both keys and neither trimmed, so the
+// initiator distributes both and expects both back.
+void TestInitiatorSendsTheWholeNegotiatedSet(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(true, both, both, both, both);
+	BtSmpEncryptionChanged(&s_HciDev, kConnHdl, 0, 1);
+
+	BT_CHECK(ctx, IdInfoCount() == 1);
+	BT_CHECK(ctx, IdAddrCount() == 1);
+	BT_CHECK(ctx, SigningCount() == 1);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.KeyDistExp == both);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.State == BT_SMP_STATE_KEYDIST);
+	// The LTK bond is stored once, before the peer keys arrive, so a controller
+	// LTK request on an immediate reconnect is answered.
+	BT_CHECK(ctx, BtSmpTestBondAddCount() == 1);
+}
+
+// A responder that clears SignKey from the Initiator Key Distribution field of
+// its Pairing Response has refused the CSRK. Taking the local set from the
+// request alone sent Signing Information anyway. Phones do clear it.
+void TestInitiatorHonoursATrimmedSignKey(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(true, both, both, BT_SMP_KEYDIST_IDKEY, both);
+	BtSmpEncryptionChanged(&s_HciDev, kConnHdl, 0, 1);
+
+	BT_CHECK(ctx, IdInfoCount() == 1);
+	BT_CHECK(ctx, IdAddrCount() == 1);
+	BT_CHECK(ctx, SigningCount() == 0);
+	// The Responder field is untouched, so what the peer owes is unchanged.
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.KeyDistExp == both);
+}
+
+// The same with IdKey cleared: no IRK and no identity address go out.
+void TestInitiatorHonoursATrimmedIdKey(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(true, both, both, BT_SMP_KEYDIST_SIGNKEY, both);
+	BtSmpEncryptionChanged(&s_HciDev, kConnHdl, 0, 1);
+
+	BT_CHECK(ctx, IdInfoCount() == 0);
+	BT_CHECK(ctx, IdAddrCount() == 0);
+	BT_CHECK(ctx, SigningCount() == 1);
+}
+
+// A responder cleared both, so the initiator distributes nothing. It still
+// expects the Responder field back, so the link waits in KEYDIST.
+void TestInitiatorDistributesNothingWhenBothCleared(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(true, both, both, 0, both);
+	BtSmpEncryptionChanged(&s_HciDev, kConnHdl, 0, 1);
+
+	BT_CHECK(ctx, IdInfoCount() == 0);
+	BT_CHECK(ctx, IdAddrCount() == 0);
+	BT_CHECK(ctx, SigningCount() == 0);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.KeyDistExp == both);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.State == BT_SMP_STATE_KEYDIST);
+}
+
+// Nothing owed either way ends the pairing without entering KEYDIST.
+void TestNoKeysAtAllCompletesImmediately(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(true, both, both, 0, 0);
+	BtSmpEncryptionChanged(&s_HciDev, kConnHdl, 0, 1);
+
+	BT_CHECK(ctx, g_BtSmpTestCapture.Count == 0);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.KeyDistExp == 0);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.State == BT_SMP_STATE_DONE);
+}
+
+// The responder distributes the Responder field and expects the Initiator
+// field. It builds its own response, so this side already agreed with itself;
+// the case pins that the shared expression did not disturb it.
+void TestResponderUsesTheResponderField(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(false, both, both, BT_SMP_KEYDIST_IDKEY, BT_SMP_KEYDIST_SIGNKEY);
+	BtSmpEncryptionChanged(&s_HciDev, kConnHdl, 0, 1);
+
+	BT_CHECK(ctx, IdInfoCount() == 0);
+	BT_CHECK(ctx, IdAddrCount() == 0);
+	BT_CHECK(ctx, SigningCount() == 1);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.KeyDistExp == BT_SMP_KEYDIST_IDKEY);
+}
+
+// A peer answering with a bit the request never offered has not negotiated it.
+// Intersecting the two octets keeps that bit out whichever field it lands in.
+void TestAResponseCannotAddAKeyTheRequestDidNotOffer(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(true, BT_SMP_KEYDIST_IDKEY, BT_SMP_KEYDIST_IDKEY, both, both);
+	BtSmpEncryptionChanged(&s_HciDev, kConnHdl, 0, 1);
+
+	BT_CHECK(ctx, IdInfoCount() == 1);
+	BT_CHECK(ctx, IdAddrCount() == 1);
+	BT_CHECK(ctx, SigningCount() == 0);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.KeyDistExp == BT_SMP_KEYDIST_IDKEY);
+}
+
+} // namespace
+
+int main()
+{
+	bttest::Context ctx("SMP key distribution tests");
+
+	ctx.Run("initiator sends the whole negotiated set",
+			[&] { TestInitiatorSendsTheWholeNegotiatedSet(ctx); });
+	ctx.Run("initiator honours a trimmed SignKey",
+			[&] { TestInitiatorHonoursATrimmedSignKey(ctx); });
+	ctx.Run("initiator honours a trimmed IdKey",
+			[&] { TestInitiatorHonoursATrimmedIdKey(ctx); });
+	ctx.Run("initiator distributes nothing when both cleared",
+			[&] { TestInitiatorDistributesNothingWhenBothCleared(ctx); });
+	ctx.Run("no keys at all completes immediately",
+			[&] { TestNoKeysAtAllCompletesImmediately(ctx); });
+	ctx.Run("responder uses the responder field",
+			[&] { TestResponderUsesTheResponderField(ctx); });
+	ctx.Run("a response cannot add a key the request did not offer",
+			[&] { TestAResponseCannotAddAKeyTheRequestDidNotOffer(ctx); });
+
+	return ctx.Finish();
+}
