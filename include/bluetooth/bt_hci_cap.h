@@ -226,17 +226,52 @@ static inline bool BtHciCapabilitiesRemoteConnParamRequestSupported(
  *
  * Needs the Advertising Coding Selection LE feature and the v2 form of LE Set
  * Extended Advertising Parameters, the only command with the PHY options
- * fields. The host support feature bit is a separate step: the controller
- * reports it only once the host has claimed it through LE Set Host Feature.
+ * fields, and the host support bit, which the controller reports only once
+ * BtHciHostFeaturesClaim has claimed it through LE Set Host Feature. Vol 6
+ * Part B Table 4.7 makes bit 41 host controlled, and until it is set the
+ * controller puts no coding on air whatever the parameters say.
  */
 static inline bool BtHciCapabilitiesAdvertisingCodingSelectionSupported(
 	const BtHciCapabilities_t *pCapabilities)
 {
 	return BtHciCapabilitiesLeFeatureSupported(pCapabilities,
 		BT_HCI_CAP_LE_FEATURE_ADV_CODING_SELECTION) &&
+		BtHciCapabilitiesLeFeatureSupported(pCapabilities,
+		BT_HCI_CAP_LE_FEATURE_ADV_CODING_SELECTION_HOST) &&
 		BtHciCapabilitiesCommandSupported(pCapabilities,
 		BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS_V2);
 }
+
+/**
+ * Record a host controlled FeatureSet bit as set.
+ *
+ * Called after LE Set Host Feature succeeds, so the discovered record agrees
+ * with the FeatureSet the controller now holds. Vol 6 Part B Table 4.7 marks
+ * which bits the Host controls; the rest are the controller's to report.
+ */
+static inline void BtHciCapabilitiesLeFeatureMark(
+	BtHciCapabilities_t *pCapabilities, uint8_t FeatureBit)
+{
+	if (pCapabilities == nullptr ||
+		FeatureBit >= sizeof(pCapabilities->LeFeatures) * 8U)
+	{
+		return;
+	}
+
+	pCapabilities->LeFeatures[FeatureBit >> 3] |=
+		(uint8_t)(1U << (FeatureBit & 7U));
+}
+
+/**
+ * Claim the host controlled FeatureSet bits for the features this host
+ * implements, and record them in pCapabilities.
+ *
+ * Core Vol 4 Part E 7.8.115 refuses the command with Command Disallowed once
+ * the controller has a connection, so this belongs in controller start before
+ * anything can connect. Returns true when a bit was claimed.
+ */
+bool BtHciHostFeaturesClaim(BtHciDevice_t * const pDev,
+	BtHciCapabilities_t * const pCapabilities);
 
 static inline bool BtHciCapabilitiesLegacyAdvertisingSupported(
 	const BtHciCapabilities_t *pCapabilities, bool UseRandomAddress,

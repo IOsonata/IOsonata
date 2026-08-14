@@ -211,6 +211,49 @@ void BtHciLeEventMaskBuild(const BtHciCapabilities_t *pCapabilities,
 	}
 }
 
+// Core Vol 4 Part E 7.8.115. A host controlled FeatureSet bit stays clear
+// until the Host claims it, and Vol 6 Part B Table 4.7 marks bit 41,
+// Advertising Coding Selection (Host Support), as one of the three the Host
+// controls. Until it is set the controller puts no coding on air, so
+// BtAdvCodingSelectionSet had nothing behind it.
+//
+// Only bit 41 is claimed. The other two host controlled bits, 32 for
+// Connected Isochronous Stream and 38 for Connection Subrating, name features
+// this host does not implement, and 7.8.115 answers a claim whose controller
+// side is missing with Unsupported Feature or Parameter Value anyway.
+bool BtHciHostFeaturesClaim(BtHciDevice_t * const pDev,
+	BtHciCapabilities_t * const pCapabilities)
+{
+	if (pDev == nullptr || pDev->Command == nullptr || pCapabilities == nullptr)
+	{
+		return false;
+	}
+
+	if (BtHciCapabilitiesCommandSupported(pCapabilities,
+			BT_HCI_CAP_CMD_LE_SET_HOST_FEATURE) == false ||
+		BtHciCapabilitiesLeFeatureSupported(pCapabilities,
+			BT_HCI_CAP_LE_FEATURE_ADV_CODING_SELECTION) == false)
+	{
+		return false;
+	}
+
+	uint8_t param[2];
+	param[0] = BT_HCI_CAP_LE_FEATURE_ADV_CODING_SELECTION_HOST;
+	param[1] = 1;
+
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_HOST_FEATURE,
+		param, sizeof(param), nullptr, 0) != 0)
+	{
+		return false;
+	}
+
+	// The controller's FeatureSet now has the bit, so the discovered record
+	// has to agree: every coding decision is taken against this copy.
+	BtHciCapabilitiesLeFeatureMark(pCapabilities,
+		BT_HCI_CAP_LE_FEATURE_ADV_CODING_SELECTION_HOST);
+	return true;
+}
+
 const BtHciCapabilities_t *BtHciCapabilitiesForDeviceGet(
 	const BtHciDevice_t *pDev)
 {

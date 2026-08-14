@@ -905,5 +905,11 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		DEBUG_PRINTF("SDC capability discovery failed\r\n");
 	}
 
+	// Claim the host controlled FeatureSet bits here, while the controller is
+	// enabled and nothing has connected yet: Core Vol 4 Part E 7.8.115 refuses
+	// the command with Command Disallowed once a connection exists. A refusal
+	// is not fatal, it only means the coding stays off air.
+	(void)BtHciHostFeaturesClaim(&hciDev, &pDev->Capabilities);
+
 	return true;
 }

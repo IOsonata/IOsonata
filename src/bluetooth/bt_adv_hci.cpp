@@ -704,6 +704,13 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 		{
 			return false;
 		}
+
+		// Nothing claimed the host controlled FeatureSet bits on this path:
+		// the controller layer that normally does it at start is not the one
+		// holding this device. Advertising init runs before anything can
+		// connect, which is what Core Vol 4 Part E 7.8.115 requires.
+		(void)BtHciHostFeaturesClaim(pDev, &s_BtAdvReadCapabilities);
+
 		s_pBtAdvCapabilities = &s_BtAdvReadCapabilities;
 	}
 

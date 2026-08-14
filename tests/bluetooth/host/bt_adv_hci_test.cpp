@@ -52,7 +52,8 @@ enum CapabilityMode {
 	CAP_LEGACY_MISSING_DATA,
 	CAP_EXT_LIMIT_SMALL,
 	CAP_EXT_ZERO_SETS,
-	CAP_EXT_CODING,
+	CAP_EXT_CODING_REFUSED,		// bit 40, and the claim of bit 41 is refused
+	CAP_EXT_CODING_HOST,		// bit 40, and the claim of bit 41 succeeds
 	CAP_EXT_CODING_NO_FEATURE,
 };
 
@@ -109,11 +110,13 @@ bool CapabilityCommand(uint16_t OpCode, void *pRet, uint8_t RetLen,
 				SetCommandBit(data, BT_HCI_CAP_CMD_LE_READ_SUPPORTED_ADV_SETS);
 			}
 
-			if (s_CapabilityMode == CAP_EXT_CODING ||
+			if (s_CapabilityMode == CAP_EXT_CODING_REFUSED ||
+				s_CapabilityMode == CAP_EXT_CODING_HOST ||
 				s_CapabilityMode == CAP_EXT_CODING_NO_FEATURE)
 			{
 				SetCommandBit(data,
 					BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS_V2);
+				SetCommandBit(data, BT_HCI_CAP_CMD_LE_SET_HOST_FEATURE);
 			}
 
 			CopyReturn(pRet, RetLen, data, sizeof(data));
@@ -135,7 +138,8 @@ bool CapabilityCommand(uint16_t OpCode, void *pRet, uint8_t RetLen,
 					static_cast<uint8_t>(1U <<
 					(BT_HCI_CAP_LE_FEATURE_PHY_2M & 7U));
 			}
-			if (s_CapabilityMode == CAP_EXT_CODING ||
+			if (s_CapabilityMode == CAP_EXT_CODING_REFUSED ||
+				s_CapabilityMode == CAP_EXT_CODING_HOST ||
 				s_CapabilityMode == CAP_EXT_CODING_NO_FEATURE)
 			{
 				data[BT_HCI_CAP_LE_FEATURE_CODED_PHY >> 3] |=
@@ -144,13 +148,28 @@ bool CapabilityCommand(uint16_t OpCode, void *pRet, uint8_t RetLen,
 			}
 			// CAP_EXT_CODING_NO_FEATURE has the v2 command and the coded PHY
 			// but not the Advertising Coding Selection feature itself.
-			if (s_CapabilityMode == CAP_EXT_CODING)
+			if (s_CapabilityMode == CAP_EXT_CODING_REFUSED ||
+				s_CapabilityMode == CAP_EXT_CODING_HOST)
 			{
 				data[BT_HCI_CAP_LE_FEATURE_ADV_CODING_SELECTION >> 3] |=
 					static_cast<uint8_t>(1U <<
 					(BT_HCI_CAP_LE_FEATURE_ADV_CODING_SELECTION & 7U));
 			}
+			// Bit 41 is never reported here. Vol 6 Part B Table 4.7 makes it
+			// host controlled, so it reads as clear until LE Set Host Feature
+			// sets it, and the read that fills this record runs before the
+			// claim does.
 			CopyReturn(pRet, RetLen, data, 8);
+			return true;
+
+		// Core Vol 4 Part E 7.8.115. CAP_EXT_CODING_REFUSED is the controller
+		// that reports the feature and refuses the claim, which is what a
+		// controller with a connection already up answers.
+		case BT_HCI_CMD_CTLR_SET_HOST_FEATURE:
+			if (s_CapabilityMode == CAP_EXT_CODING_REFUSED)
+			{
+				*pStatus = BT_HCI_ERR_COMMAND_DISALLOWED;
+			}
 			return true;
 
 		case BT_HCI_CMD_CTLR_READ_SUPPORTED_STATES:
@@ -651,15 +670,45 @@ void TestAdvertisingCodingSelectionArguments()
 		BT_HCI_ADV_PHY_OPT_NONE));
 }
 
-// A coding request against a payload that fits legacy PDUs. Core Vol 4 Part E
-// 7.8.53 requires the primary PHY of a legacy set to be LE 1M, so the request
-// is dropped and the set is programmed exactly as if none had been made. The
-// controller refused the coded PHY before, and the device did not advertise
-// at all.
+// The controller has Advertising Coding Selection and the v2 command, but it
+// refuses the host support bit. Vol 6 Part B Table 4.7 makes bit 41 host
+// controlled and Vol 4 Part E 7.8.115 is the only way to set it, so with the
+// claim refused the controller puts no coding on air whatever the parameters
+// say. Sending it anyway is the state this branch shipped in.
+void TestAdvertisingCodingSelectionNeedsTheHostBit()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr, CAP_EXT_CODING_REFUSED);
+	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_REQUIRE_S8,
+		BT_HCI_ADV_PHY_OPT_PREFER_S2));
+
+	BtAppCfg_t cfg = MakePeripheralCfg(
+		"This name is long enough to require extended advertising data");
+	CHECK(BtAppAdvInit(&cfg) == true);
+
+	// The claim was attempted and answered Command Disallowed.
+	const CapturedCmd *hf = FindCmd(BT_HCI_CMD_CTLR_SET_HOST_FEATURE);
+	CHECK(hf != nullptr);
+
+	// No coding to carry, so the v1 command goes out and both PHYs stay off
+	// the coded one.
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2) == nullptr);
+	const CapturedCmd *ap = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
+	CHECK(ap != nullptr);
+	if (ap != nullptr)
+	{
+		CHECK(ap->Param[kExtAdvPrimPhy] != BTADV_EXTADV_PHY_CODED);
+		CHECK(ap->Param[kExtAdvSecPhy] != BTADV_EXTADV_PHY_CODED);
+	}
+
+	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_NONE,
+		BT_HCI_ADV_PHY_OPT_NONE));
+}
+
 void TestAdvertisingCodingSelectionIgnoredOnLegacySet()
 {
 	uint8_t addr[6] = {};
-	Setup(BTADDR_TYPE_PUBLIC, addr, CAP_EXT_CODING);
+	Setup(BTADDR_TYPE_PUBLIC, addr, CAP_EXT_CODING_HOST);
 	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_REQUIRE_S8,
 		BT_HCI_ADV_PHY_OPT_REQUIRE_S2));
 
@@ -691,7 +740,7 @@ void TestAdvertisingCodingSelectionIgnoredOnLegacySet()
 void TestAdvertisingCodingSelectionApplied()
 {
 	uint8_t addr[6] = {};
-	Setup(BTADDR_TYPE_PUBLIC, addr, CAP_EXT_CODING);
+	Setup(BTADDR_TYPE_PUBLIC, addr, CAP_EXT_CODING_HOST);
 	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_REQUIRE_S8,
 		BT_HCI_ADV_PHY_OPT_PREFER_S2));
 
@@ -701,6 +750,18 @@ void TestAdvertisingCodingSelectionApplied()
 	BtAppCfg_t cfg = MakePeripheralCfg(
 		"This name is long enough to require extended advertising data");
 	CHECK(BtAppAdvInit(&cfg) == true);
+
+	// Bit 41 is not reported by the controller read, so the coding below only
+	// reaches the air because the claim ran and succeeded first. Core Vol 4
+	// Part E 7.8.115 fixes the two parameters.
+	const CapturedCmd *hf = FindCmd(BT_HCI_CMD_CTLR_SET_HOST_FEATURE);
+	CHECK(hf != nullptr);
+	if (hf != nullptr)
+	{
+		CHECK(hf->ParamLen == 2);
+		CHECK(hf->Param[0] == 41);
+		CHECK(hf->Param[1] == 1);
+	}
 
 	// The v2 command is the only one with the coding fields, so the
 	// v1 form must not be the one that went out.
@@ -726,7 +787,7 @@ void TestAdvertisingCodingSelectionApplied()
 void TestAdvertisingCodingSelectionSecondaryOnly()
 {
 	uint8_t addr[6] = {};
-	Setup(BTADDR_TYPE_PUBLIC, addr, CAP_EXT_CODING);
+	Setup(BTADDR_TYPE_PUBLIC, addr, CAP_EXT_CODING_HOST);
 	CHECK(BtAdvCodingSelectionSet(BT_HCI_ADV_PHY_OPT_NONE,
 		BT_HCI_ADV_PHY_OPT_REQUIRE_S2));
 
@@ -762,7 +823,9 @@ void TestAdvertisingCodingSelectionWithoutFeature()
 
 	// A controller without the feature answers any non zero option with
 	// Unsupported Feature or Parameter Value, so the request is dropped and
-	// the v1 command goes out unchanged.
+	// the v1 command goes out unchanged. 7.8.115 answers a claim whose
+	// controller side is missing the same way, so it is not asked either.
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_HOST_FEATURE) == nullptr);
 	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2) == nullptr);
 	const CapturedCmd *ap = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
 	CHECK(ap != nullptr);
@@ -1022,6 +1085,7 @@ int main()
 	TestZeroAdvertisingSetsFallsBackToLegacy();
 	TestExtendedSecondaryPhySelection();
 	TestAdvertisingCodingSelectionArguments();
+	TestAdvertisingCodingSelectionNeedsTheHostBit();
 	TestAdvertisingCodingSelectionIgnoredOnLegacySet();
 	TestAdvertisingCodingSelectionApplied();
 	TestAdvertisingCodingSelectionSecondaryOnly();
