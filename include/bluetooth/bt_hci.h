@@ -295,7 +295,7 @@ SOFTWARE.
 #define BT_HCI_CMD_CTLR_TRANSMITTER_TEST_V1						((8<<10) | 0x1E)	//!< LE Transmitter Test command V1
 #define BT_HCI_CMD_CTLR_TRANSMITTER_TEST_V2						((8<<10) | 0x34)	//!< LE Transmitter Test command V2
 #define BT_HCI_CMD_CTLR_TRANSMITTER_TEST_V3						((8<<10) | 0x50)	//!< LE Transmitter Test command V3
-#define BT_HCI_CMD_CTLR_TRANSMITTER_TEST_V4						((8<<10) | 0x17B)	//!< LE Transmitter Test command V4
+#define BT_HCI_CMD_CTLR_TRANSMITTER_TEST_V4						((8<<10) | 0x7B)	//!< LE Transmitter Test command V4
 #define BT_HCI_CMD_CTLR_TEST_END								((8<<10) | 0x1F)	//!< LE Test End command
 #define BT_HCI_CMD_CTLR_REMOTE_CONN_PARAM_REQUEST_REPLY			((8<<10) | 0x20)	//!< LE Remote Connection Parameter Request Reply command
 #define BT_HCI_CMD_CTLR_REMOTE_CONN_PARAM_RQST_NEG_REPLY		((8<<10) | 0x21)	//!< LE Remote Connection Parameter Request Negative Reply command

@@ -172,6 +172,27 @@ static BtGattChar_t s_BtGattChar[] = {
 
 static BtGattSrvc_t s_BtGattSrvc = BT_SRVC_STD(BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE, s_BtGattChar);
 
+// True when a port actually registered this characteristic, so it has a handle
+// and somewhere to hold a value.
+//
+// BT_CHAR names neither field, so a static declaration starts with ValHdl 0
+// and pValue null, and BtGattSrvcAdd fills them in. A port whose stack owns
+// the GAP service declines to register it and leaves both as they were. Note
+// the handle is 0 there and not BT_ATT_HANDLE_INVALID, which is 0xFFFF: a
+// check for the invalid handle alone does not catch this.
+static bool BtGapCharRegistered(const BtGattChar_t *pChar)
+{
+	return pChar != nullptr && pChar->pValue != nullptr &&
+		   pChar->ValHdl != 0 && pChar->ValHdl != BT_ATT_HANDLE_INVALID;
+}
+
+// A port whose stack owns the GAP service registers none of these
+// characteristics here and drives the same values through its own API
+// instead: the Nordic ports call sd_ble_gap_device_name_set,
+// sd_ble_gap_appearance_set and sd_ble_gap_ppcp_set directly. Writing a value
+// into an attribute that was never registered is not a failure to report, it
+// is a write with nowhere to go, so each setter below checks first and the
+// initialisation status is left alone.
 __attribute__((weak)) void BtGapSetDevName(const char *pName)
 {
 	if (pName == nullptr)
@@ -180,6 +201,11 @@ __attribute__((weak)) void BtGapSetDevName(const char *pName)
 	}
 
 	BtGattChar_t *p = &s_BtGapChar[0];
+	if (!BtGapCharRegistered(p))
+	{
+		return;
+	}
+
 	size_t l = strlen(pName);
 	if (p->MaxDataLen > 0 && l > (size_t)(p->MaxDataLen - 1))
 	{
@@ -204,6 +230,11 @@ __attribute__((weak)) const char *BtGapGetDevName()
 
 __attribute__((weak)) void BtGapSetAppearance(uint16_t Val)
 {
+	if (!BtGapCharRegistered(&s_BtGapChar[1]))
+	{
+		return;
+	}
+
 	uint8_t buf[2];
 	buf[0] = (uint8_t)(Val & 0xFF);
 	buf[1] = (uint8_t)(Val >> 8);
@@ -231,20 +262,6 @@ static bool BtGapSecurityLevelValid(uint8_t Mode, uint8_t Level)
 	}
 
 	return false;
-}
-
-// True when a port actually registered this characteristic, so it has a handle
-// and somewhere to hold a value.
-//
-// BT_CHAR names neither field, so a static declaration starts with ValHdl 0
-// and pValue null, and BtGattSrvcAdd fills them in. A port whose stack owns
-// the GAP service declines to register it and leaves both as they were. Note
-// the handle is 0 there and not BT_ATT_HANDLE_INVALID, which is 0xFFFF: a
-// check for the invalid handle alone does not catch this.
-static bool BtGapCharRegistered(const BtGattChar_t *pChar)
-{
-	return pChar != nullptr && pChar->pValue != nullptr &&
-		   pChar->ValHdl != 0 && pChar->ValHdl != BT_ATT_HANDLE_INVALID;
 }
 
 bool BtGapSetSecurityLevels(const uint8_t *pRequirements, size_t Count)
@@ -381,7 +398,7 @@ __attribute__((weak)) bool BtGapSetDataLength(uint16_t ConnHdl,
 
 __attribute__((weak)) void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t *pVal)
 {
-	if (pVal == nullptr)
+	if (pVal == nullptr || !BtGapCharRegistered(&s_BtGapChar[2]))
 	{
 		return;
 	}

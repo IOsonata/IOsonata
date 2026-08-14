@@ -58,6 +58,10 @@ SOFTWARE.
 // lives in bt_app.cpp, which this test does not link.
 BtAppData_t g_BtAppData;
 
+// Exported by bt_gap.cpp but declared in no header, so it is named here with
+// the linkage the definition has.
+const char *BtGapGetDevName();
+
 namespace {
 
 bttest::Context g_Ctx("bt_gap_init_port_test");
@@ -194,6 +198,70 @@ void TestRegisteredCharacteristicIsWritten()
 	CHECK(BtGattInitStatusErrorGet() == BT_GATT_INIT_ERROR_NONE);
 }
 
+
+//-----------------------------------------------------------------------------
+// The other three GAP characteristics, same shape as the security levels one.
+//
+// A port whose stack owns the GAP service drives Device Name, Appearance and
+// the Preferred Connection Parameters through its own API instead: both Nordic
+// ports call sd_ble_gap_device_name_set, sd_ble_gap_appearance_set and
+// sd_ble_gap_ppcp_set from their own code. The generic setters here are still
+// public, so an application can reach them on those ports, and a write to an
+// attribute that was never registered must not be reported as a failed
+// initialisation.
+//-----------------------------------------------------------------------------
+
+void TestGapSettersDoNotFailInitOnADecliningPort()
+{
+	Reset();
+	BtGapCfg_t cfg = MakeCfg(BT_GAP_ROLE_PERIPHERAL, BT_GAP_SECTYPE_NONE);
+	BtGapInit(&cfg);
+	CHECK(BtGattInitStatusErrorGet() == BT_GATT_INIT_ERROR_NONE);
+
+	// s_BtGapChar lives in bt_gap.cpp and keeps whatever a registering port
+	// wrote into it for the rest of the process, so this case is only
+	// meaningful while nothing has registered the service yet. Assert that
+	// rather than depend on the order the cases run in.
+	CHECK(BtGapGetDevName() == nullptr);
+
+	// BtGapInit closed the window for a peripheral only at BtAppAdvInit, so
+	// the status is still live here and a failure would be recorded.
+	CHECK(BtGattInitStatusActive());
+
+	BtGapSetDevName("probe");
+	CHECK(BtGattInitStatusErrorGet() == BT_GATT_INIT_ERROR_NONE);
+
+	BtGapSetAppearance(0x0341);
+	CHECK(BtGattInitStatusErrorGet() == BT_GATT_INIT_ERROR_NONE);
+
+	BtGattPreferedConnParams_t ppcp = {};
+	ppcp.IntervalMin = 8;
+	ppcp.IntervalMax = 40;
+	ppcp.Latency = 0;
+	ppcp.Timeout = 400;
+	BtGapSetPreferedConnParam(&ppcp);
+	CHECK(BtGattInitStatusErrorGet() == BT_GATT_INIT_ERROR_NONE);
+
+	CHECK(BtGattInitStatusComplete());
+}
+
+// Control. On a port that does register the service the same three calls
+// write their values, so the guard has not turned them into no-ops.
+void TestGapSettersStillWriteOnARegisteringPort()
+{
+	Reset();
+	g_bDeclineNativeServices = false;
+
+	BtGapCfg_t cfg = MakeCfg(BT_GAP_ROLE_PERIPHERAL, BT_GAP_SECTYPE_NONE);
+	BtGapInit(&cfg);
+
+	BtGapSetDevName("probe");
+	const char *pName = BtGapGetDevName();
+	CHECK(pName != nullptr);
+	CHECK(pName != nullptr && std::strcmp(pName, "probe") == 0);
+	CHECK(BtGattInitStatusErrorGet() == BT_GATT_INIT_ERROR_NONE);
+}
+
 } // namespace
 
 // Stand-in port. Declines 0x1800 and 0x1801 exactly as the three vendor ports
@@ -262,6 +330,10 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 
 int main(void)
 {
+	// The declining-port cases run first: once a registering case has filled
+	// in the handles of the static GAP characteristics they stay filled.
+	g_Ctx.Run("GAP setters do not fail init on a declining port",
+			  TestGapSettersDoNotFailInitOnADecliningPort);
 	g_Ctx.Run("peripheral init completes without the characteristic",
 			  TestPeripheralInitCompletesWithoutTheCharacteristic);
 	g_Ctx.Run("central init completes without the characteristic",
@@ -274,6 +346,8 @@ int main(void)
 			  TestRegisteredCharacteristicValueSetFailureStillFails);
 	g_Ctx.Run("registered characteristic is written",
 			  TestRegisteredCharacteristicIsWritten);
+	g_Ctx.Run("GAP setters still write on a registering port",
+			  TestGapSettersStillWriteOnARegisteringPort);
 
 	return g_Ctx.Finish();
 }
