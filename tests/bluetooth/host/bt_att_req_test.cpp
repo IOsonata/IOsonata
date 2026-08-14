@@ -831,6 +831,141 @@ void TestReadMultiple()
 	CHECK(std::memcmp(rspbuf + 1 + 8, val[2], 4) == 0);
 }
 
+// Core Vol 3 Part F 3.4.4.7 and 3.4.4.11: an Error Response is due if any of
+// the handles are invalid, and again if any of the values cannot be read due
+// to permissions. Both handlers used to check a handle only as they emitted
+// its value and stop once the response was full, so a client could name one
+// readable attribute large enough to fill the MTU and follow it with anything
+// at all and get a success.
+void TestReadMultipleValidatesEveryHandle()
+{
+	BtAttDBInit(2048);
+	BtAttSetMtu(BT_ATT_MTU_MIN);		// 23
+
+	// One 20-octet value fills the response on its own.
+	BtChar_t big;
+	uint8_t bigVal[20];
+	for (int i = 0; i < 20; ++i) bigVal[i] = (uint8_t)(0xB0 + i);
+	BtAttDBEntry_t *eBig =
+		AddCharValue(&big, bigVal, 20, 20, BT_GATT_CHAR_PROP_READ);
+	CHECK(eBig != nullptr);
+
+	// A second attribute the client may not read.
+	BtChar_t closed;
+	uint8_t closedVal[4] = { 9, 9, 9, 9 };
+	BtAttDBEntry_t *eClosed =
+		AddCharValue(&closed, closedVal, 4, 4, BT_GATT_CHAR_PROP_WRITE);
+	CHECK(eClosed != nullptr);
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+
+	// A handle past the end of the database, behind a value that fills the
+	// response.
+	reqbuf[0] = BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ;
+	PutLe16(reqbuf + 1, eBig->Hdl);
+	PutLe16(reqbuf + 3, 0x7FFF);
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+								 (BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 5);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrReqOp] == BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_INVALID_HANDLE);
+	// The Attribute Handle In Error names the first attribute causing it.
+	CHECK(GetLe16(rspbuf + 2) == 0x7FFF);
+
+	// An unreadable handle in the same position.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	PutLe16(reqbuf + 3, eClosed->Hdl);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 5);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_READ_NOT_PERMITTED);
+	CHECK(GetLe16(rspbuf + 2) == eClosed->Hdl);
+
+	// The same set with a readable second handle still answers a response,
+	// truncated at the MTU, so the check did not cost the emission.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	BtChar_t ok;
+	uint8_t okVal[4] = { 7, 7, 7, 7 };
+	BtAttDBEntry_t *eOk = AddCharValue(&ok, okVal, 4, 4, BT_GATT_CHAR_PROP_READ);
+	CHECK(eOk != nullptr);
+	PutLe16(reqbuf + 3, eOk->Hdl);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_READ_MULTIPLE_RSP);
+	CHECK(n == 23);
+	CHECK(std::memcmp(rspbuf + 1, bigVal, 20) == 0);
+
+	// The first bad handle wins, whichever kind it is and wherever it sits.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	reqbuf[0] = BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ;
+	PutLe16(reqbuf + 1, eClosed->Hdl);
+	PutLe16(reqbuf + 3, 0x7FFF);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_READ_NOT_PERMITTED);
+	CHECK(GetLe16(rspbuf + 2) == eClosed->Hdl);
+}
+
+// The variable length form has the same rule, 3.4.4.11, and the same defect.
+void TestReadMultipleVariableValidatesEveryHandle()
+{
+	BtAttDBInit(2048);
+	BtAttSetMtu(BT_ATT_MTU_MIN);		// 23
+
+	BtChar_t big;
+	uint8_t bigVal[20];
+	for (int i = 0; i < 20; ++i) bigVal[i] = (uint8_t)(0xC0 + i);
+	BtAttDBEntry_t *eBig =
+		AddCharValue(&big, bigVal, 20, 20, BT_GATT_CHAR_PROP_READ);
+	CHECK(eBig != nullptr);
+
+	BtChar_t closed;
+	uint8_t closedVal[4] = { 5, 5, 5, 5 };
+	BtAttDBEntry_t *eClosed =
+		AddCharValue(&closed, closedVal, 4, 4, BT_GATT_CHAR_PROP_WRITE);
+	CHECK(eClosed != nullptr);
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+
+	reqbuf[0] = BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ;
+	PutLe16(reqbuf + 1, eBig->Hdl);
+	PutLe16(reqbuf + 3, 0x7FFF);
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+								 (BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 5);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrReqOp] == BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_INVALID_HANDLE);
+	CHECK(GetLe16(rspbuf + 2) == 0x7FFF);
+
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	PutLe16(reqbuf + 3, eClosed->Hdl);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 5);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_READ_NOT_PERMITTED);
+	CHECK(GetLe16(rspbuf + 2) == eClosed->Hdl);
+
+	// A handle beyond what the response can hold is still checked even when
+	// every handle before it is fine, so a set that truncates still answers.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	BtChar_t ok;
+	uint8_t okVal[4] = { 3, 3, 3, 3 };
+	BtAttDBEntry_t *eOk = AddCharValue(&ok, okVal, 4, 4, BT_GATT_CHAR_PROP_READ);
+	CHECK(eOk != nullptr);
+	PutLe16(reqbuf + 3, eOk->Hdl);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_RSP);
+	CHECK(GetLe16(rspbuf + 1) == 20);
+	CHECK(n == 23);
+}
+
 // ---- Read By Group Type rejects starting handle 0x0000 --------------------
 
 void TestReadByGroupTypeInvalidStartHandle()
@@ -1035,6 +1170,8 @@ int main()
 	TestFindByTypeValueOracleAndEndHandle();
 	TestFindByTypeValueChunkedCompare();
 	TestReadMultiple();
+	TestReadMultipleValidatesEveryHandle();
+	TestReadMultipleVariableValidatesEveryHandle();
 	TestReadByGroupTypeInvalidStartHandle();
 	TestExecuteWriteNonContiguous();
 	TestExecuteWriteAtomicFailure();
