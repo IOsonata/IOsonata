@@ -31,9 +31,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/AnalogCompDemo.cpp</name>
+			<name>src/analog_comp_demo.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/exemples/AnalogCompDemo.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/converters/analog_comp_demo.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/board.h</name>

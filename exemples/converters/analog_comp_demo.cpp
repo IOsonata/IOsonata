@@ -1,7 +1,10 @@
 /**-------------------------------------------------------------------------
-@example	AnalogCompDemo.cpp
+@example	analog_comp_demo.cpp
 
-@brief	Analog comparator example for nRF52
+@brief	Analog comparator demo.
+
+Configures the comparator for single ended mode against an internal reference
+and toggles two output pins from the comparator event handler.
 
 
 @author	Hoang Nguyen Hoan
@@ -32,7 +35,6 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
-#include "nrf.h"
 #include "converters/analog_comp.h"
 #include "coredev/uart.h"
 #include "stddev.h"
