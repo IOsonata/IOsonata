@@ -9,7 +9,7 @@ SEARCH_DIR("../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/ARM/ldscript")
 
-GROUP(-lgcc -lc)
+GROUP(-lgcc -lc -lnosys)
 
 MEMORY
 {
@@ -87,6 +87,5 @@ SECTIONS
   } > FLASH
 
 } INSERT AFTER .text
-
 
 INCLUDE "gcc_arm_flash.ld"
