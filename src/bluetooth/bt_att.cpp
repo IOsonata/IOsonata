@@ -1699,7 +1699,8 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				// setting and one peer's value must not leak into other links.
 				uint16_t serverRxMtu = BT_ATT_MTU_MAX;
 				uint16_t peerRxMtu   = pReqAtt->ExchgMtuReqRsp.RxMtu;
-				uint16_t linkMtu     = peerRxMtu < serverRxMtu ? peerRxMtu : serverRxMtu;
+				uint16_t linkMtu     = BtAttMtuNegotiated(peerRxMtu,
+											serverRxMtu);
 
 				pRspAtt->ExchgMtuReqRsp.RxMtu = serverRxMtu;
 

@@ -158,6 +158,71 @@ int BuildWrite(uint8_t *pReq, uint16_t Hdl, const uint8_t *pVal, int Len)
 	return 3 + Len;
 }
 
+// ---- ATT_MTU negotiation --------------------------------------------------
+
+// Core Vol 3 Part F 3.4.2.2: ATT_MTU is the minimum of the Client Rx MTU and
+// the Server Rx MTU, and each of those has to be at least the default. Every
+// port needs the same answer, and both Nordic ports read it out of the peer
+// slot before sizing a notification, so the rule lives in one place.
+void TestMtuNegotiationRule()
+{
+	CHECK(BtAttMtuNegotiated(100, BT_ATT_MTU_MAX) == 100);
+	CHECK(BtAttMtuNegotiated(BT_ATT_MTU_MAX, 100) == 100);
+	CHECK(BtAttMtuNegotiated(BT_ATT_MTU_MAX, BT_ATT_MTU_MAX) ==
+		BT_ATT_MTU_MAX);
+	CHECK(BtAttMtuNegotiated(BT_ATT_MTU_MIN, BT_ATT_MTU_MAX) ==
+		BT_ATT_MTU_MIN);
+
+	// A peer below the floor broke the same section. Its offer must not
+	// shrink the link under what every ATT PDU may assume.
+	CHECK(BtAttMtuNegotiated(BT_ATT_MTU_MIN - 1, BT_ATT_MTU_MAX) ==
+		BT_ATT_MTU_MIN);
+	CHECK(BtAttMtuNegotiated(0, BT_ATT_MTU_MAX) == BT_ATT_MTU_MIN);
+	CHECK(BtAttMtuNegotiated(1, 1) == BT_ATT_MTU_MIN);
+}
+
+// The server side of the same exchange: the response names what this server
+// can receive, and the link keeps the minimum.
+void TestExchangeMtuRequestRecordsTheLink()
+{
+	BtAttDBInit(1024);
+	BtAttSetMtu(BT_ATT_MTU_MAX);
+	g_PeerEnabled = true;
+	s_StubPeer.Conn.MaxMtu = 0;
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+	BtAttReqRsp_t *req = (BtAttReqRsp_t *)reqbuf;
+	BtAttReqRsp_t *rsp = (BtAttReqRsp_t *)rspbuf;
+
+	req->OpCode = BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ;
+	req->ExchgMtuReqRsp.RxMtu = 100;
+	uint32_t n = BtAttProcessReq(kConnHdl, req, 3, rsp);
+	CHECK(n == 3);
+	CHECK(rsp->OpCode == BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP);
+	CHECK(rsp->ExchgMtuReqRsp.RxMtu == BT_ATT_MTU_MAX);
+	CHECK(s_StubPeer.Conn.MaxMtu == 100);
+
+	// An offer above what this server can receive is capped by it.
+	s_StubPeer.Conn.MaxMtu = 0;
+	req->ExchgMtuReqRsp.RxMtu = 512;
+	CHECK(BtAttProcessReq(kConnHdl, req, 3, rsp) == 3);
+	CHECK(s_StubPeer.Conn.MaxMtu == BT_ATT_MTU_MAX);
+
+	// An offer below the default breaks 3.4.2.2 and this server answers it
+	// with an error rather than negotiating, so the link keeps whatever it
+	// had. The floor in the rule above is for the ports whose stack hands
+	// over the peer's value unchecked.
+	s_StubPeer.Conn.MaxMtu = 100;
+	req->ExchgMtuReqRsp.RxMtu = 10;
+	CHECK(BtAttProcessReq(kConnHdl, req, 3, rsp) == 5);
+	CHECK(rsp->OpCode == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(s_StubPeer.Conn.MaxMtu == 100);
+
+	s_StubPeer.Conn.MaxMtu = 0;
+	g_PeerEnabled = false;
+}
+
 // ---- invalid handles ------------------------------------------------------
 
 void TestInvalidStartHandleAndWriteHandle()
@@ -1023,6 +1088,8 @@ void TestExecuteWriteAtomicFailure()
 
 int main()
 {
+	TestMtuNegotiationRule();
+	TestExchangeMtuRequestRecordsTheLink();
 	TestInvalidStartHandleAndWriteHandle();
 	TestReadByTypePacksMultiplePairs();
 	TestReadByTypeRejectsTruncatedPair();

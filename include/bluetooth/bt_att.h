@@ -657,6 +657,32 @@ uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode,
  */
 uint16_t BtAttSetMtu(uint16_t MaxMtu);
 uint16_t BtAttGetMtu(void);
+
+/**
+ * @brief	ATT_MTU for a link, from the two Rx MTUs the exchange named.
+ *
+ * Core Vol 3 Part F 3.4.2.2: both sides set ATT_MTU to the minimum of the
+ * Client Rx MTU and the Server Rx MTU. The same section requires each of those
+ * to be at least the default ATT_MTU, so a smaller one is a peer that broke
+ * the rule and the floor here is what keeps it from shrinking the link below
+ * what every ATT PDU is allowed to assume.
+ *
+ * Every port negotiates the same way and each was doing its own arithmetic, or
+ * none at all. Both Nordic ports read the result out of the peer slot before
+ * sizing a notification, so a slot left at zero capped them at 20 octets.
+ *
+ * @param	PeerRxMtu	Rx MTU the peer named.
+ * @param	LocalRxMtu	Rx MTU this device named.
+ *
+ * @return	ATT_MTU for the link.
+ */
+static inline uint16_t BtAttMtuNegotiated(uint16_t PeerRxMtu,
+	uint16_t LocalRxMtu)
+{
+	uint16_t mtu = PeerRxMtu < LocalRxMtu ? PeerRxMtu : LocalRxMtu;
+
+	return mtu < BT_ATT_MTU_MIN ? BT_ATT_MTU_MIN : mtu;
+}
 uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pInAtt, int ReqLen, BtAttReqRsp_t * const pOutAtt);
 void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen);
 
