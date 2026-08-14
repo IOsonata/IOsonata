@@ -16,7 +16,7 @@ MEMORY
 
 	/* App flash stops short of the store below, so an image that grows
 	   into it fails to link rather than overlapping it. */
-	FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 0xFD000
+	FLASH (rx) : ORIGIN = 0x1000, LENGTH = 0xFC000
 	EXTFLASH (rx) : ORIGIN = 0x12000000, LENGTH = 0x8000000
 	/* The bond store. Declared here so the linker owns the layout: FLASH
 	   above stops short of it, so an image that grows into the store fails
