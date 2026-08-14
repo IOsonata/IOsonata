@@ -31,7 +31,7 @@
 //#define IMU_FUSION_VQF
 #define IMU_FUSION_EQF
 
-// Fusion backend test selector. Define one of:
+// Fusion algorithm test selector. Define one of:
 //   IMU_FUSION_VQF - software VQF fusion (AttVqf)
 //   IMU_FUSION_EQF - software EqF fusion (AttEqf), 6-axis, FPU targets only
 // to run software fusion instead of the ICM20948 on-chip DMP. Both read raw

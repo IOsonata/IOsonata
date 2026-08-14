@@ -19,7 +19,7 @@
 #include "sensors/agm_mpu9250.h"
 #include "motion/mot_mpu9250.h"
 
-// Fusion backend test selector. Define one of:
+// Fusion algorithm test selector. Define one of:
 //   IMU_FUSION_VQF - software VQF fusion (AttVqf)
 //   IMU_FUSION_EQF - software EqF fusion (AttEqf), 6-axis, FPU targets only
 // to run software fusion instead of the MPU9250 on-chip DMP. Both read raw
