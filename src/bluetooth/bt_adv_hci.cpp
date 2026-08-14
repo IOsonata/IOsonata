@@ -1108,22 +1108,75 @@ static uint8_t s_BtAdvPeriodicRxData[BT_ADV_PERIODIC_DATA_MAX];
 static uint16_t s_BtAdvPeriodicRxLen;
 static bool s_BtAdvPeriodicRxDrop;
 
+// Periodic advertising interval, in the 1.25 ms units of 7.8.61, to the
+// primary advertising interval of 7.8.53, which is in 0.625 ms units. The two
+// commands express the same quantity in different units and the value used to
+// be passed across unchanged, so the primary train ran at twice the density
+// asked for, and the legal minimum periodic interval of 0x0006 landed at 6
+// where 7.8.53 requires 0x20, which the controller refuses. Every periodic
+// interval under 20 ms failed to start for that reason.
+//
+// Clamping up rather than refusing is what the 7.8.53 floor means here: the
+// primary train only advertises where the periodic one is, so pacing it slower
+// than the periodic interval costs nothing but the time to find the train.
+static uint32_t BtAdvPeriodicPrimInterval(uint16_t Periodic1_25Ms)
+{
+	uint32_t units = (uint32_t)Periodic1_25Ms * 2U;
+
+	if (units < 0x20)
+	{
+		units = 0x20;
+	}
+
+	// 0xFFFF in 1.25 ms units doubles to 0x1FFFE, well inside the 0xFFFFFF
+	// the field holds, so only the floor can bind.
+	return units;
+}
+
+// Own_Address_Type for the train's set, or false when the request has no
+// meaning here. 7.8.53 gives 0x02 and 0x03 to a controller generated
+// resolvable private address taken from the resolving list, which is not what
+// a caller naming an address type is asking for, and nothing in this stack
+// programs a local IRK. The value used to be passed through unchecked, so a
+// caller asking for the identity address got an RPA request on the wire.
+//
+// BTADDR_TYPE_RANDOM_STATIC resolves to the random device address, the same
+// way BtAppAdvInit resolves the type it gets from BtSmpLocalAddrGet.
+static bool BtAdvPeriodicOwnAddrType(uint8_t Requested, uint8_t *pOwnAddrType)
+{
+	switch (Requested)
+	{
+		case BTADDR_TYPE_PUBLIC:
+			*pOwnAddrType = BTADDR_TYPE_PUBLIC;
+			return true;
+		case BTADDR_TYPE_RAND:
+		case BTADDR_TYPE_RANDOM_STATIC:
+			*pOwnAddrType = BTADDR_TYPE_RAND;
+			return true;
+		default:
+			return false;
+	}
+}
+
 // Create the extended advertising set a train rides on. Non connectable and
-// non scannable is forced by 7.8.61; the primary interval only paces the
-// extended advertising events that point at the train, so it follows the
-// periodic interval rather than being configured separately. Shared by the
-// plain train and the PAwR one, which differ only in the parameters command
-// that follows.
+// non scannable is forced by 7.8.61. Shared by the plain train and the PAwR
+// one, which differ only in the parameters command that follows.
 static bool BtAdvPeriodicExtSetCreate(BtHciDevice_t * const pDev,
 	const BtHciCapabilities_t *pCap, uint16_t IntervalMin,
-	uint16_t IntervalMax, uint8_t OwnAddrType, uint8_t Sid)
+	uint16_t IntervalMax, uint8_t RequestedAddrType, uint8_t Sid)
 {
+	uint8_t OwnAddrType = BTADDR_TYPE_PUBLIC;
+	if (BtAdvPeriodicOwnAddrType(RequestedAddrType, &OwnAddrType) == false)
+	{
+		return false;
+	}
+
 	BtHciLeExtAdvParams_t ext;
 	memset(&ext, 0, sizeof(ext));
 	ext.AdvHandle = BT_ADV_PERIODIC_ADV_HANDLE;
 	BtAdvWr16(ext.EvtProp, BT_ADV_PERIODIC_EXT_EVT_PROP);
-	BtAdvWr24(ext.PrimIntervalMin, IntervalMin);
-	BtAdvWr24(ext.PrimIntervalMax, IntervalMax);
+	BtAdvWr24(ext.PrimIntervalMin, BtAdvPeriodicPrimInterval(IntervalMin));
+	BtAdvWr24(ext.PrimIntervalMax, BtAdvPeriodicPrimInterval(IntervalMax));
 	ext.PrimChanMap = 7;
 	ext.OwnAddrType = OwnAddrType;
 	ext.FilterPolicy = 0;
@@ -1136,8 +1189,42 @@ static bool BtAdvPeriodicExtSetCreate(BtHciDevice_t * const pDev,
 	ext.Sid = Sid;
 	ext.ScanReqNotif = 0;
 
-	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM,
-		&ext, sizeof(ext), nullptr, 0) == 0;
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM,
+		&ext, sizeof(ext), nullptr, 0) != 0)
+	{
+		return false;
+	}
+
+	if (OwnAddrType != BTADDR_TYPE_RAND)
+	{
+		return true;
+	}
+
+	if (BtHciCapabilitiesCommandSupported(pCap,
+		BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS) == false)
+	{
+		return false;
+	}
+
+	// A set advertising from a random address needs one, and it is per set:
+	// 7.8.52 takes an Advertising_Handle, and the only other caller in this
+	// file names set 0, the connectable one. So the train's set had none and
+	// the enable was refused. The set has to exist first, which is why this
+	// follows the parameters rather than preceding them.
+	uint8_t localType = 0;
+	uint8_t localAddr[6];
+	BtSmpLocalAddrGet(&localType, localAddr);
+	if (BtAddrIsStaticRandom(localAddr) == false)
+	{
+		return false;
+	}
+
+	BtHciLeAdvSetRandAddr_t ra;
+	ra.AdvHandle = BT_ADV_PERIODIC_ADV_HANDLE;
+	memcpy(ra.RandAddr, localAddr, 6);
+
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_ADV_SET_RAND_ADDR,
+		&ra, sizeof(ra), nullptr, 0) == 0;
 }
 
 // Shared preflight: interval range and the capabilities every train needs.

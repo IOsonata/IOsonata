@@ -107,9 +107,26 @@ int CountCmd(uint16_t OpCode)
 	return n;
 }
 
+// A set advertising from a random address needs one programmed for that set,
+// and the address has to be a static random one. The two high bits set is what
+// makes it static.
+uint8_t g_LocalAddrType = BTADDR_TYPE_RAND;
+uint8_t g_LocalAddr[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0xC6 };
+
+extern "C" void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
+{
+	*pType = g_LocalAddrType;
+	std::memcpy(pAddr, g_LocalAddr, 6);
+}
+
 void SetCommandBit(uint8_t commands[64], uint16_t bit)
 {
 	commands[bit >> 3] |= static_cast<uint8_t>(1U << (bit & 7U));
+}
+
+void ClearCommandBit(uint8_t commands[64], uint16_t bit)
+{
+	commands[bit >> 3] &= static_cast<uint8_t>(~(1U << (bit & 7U)));
 }
 
 void SetFeatureBit(uint8_t features[8], uint8_t bit)
@@ -127,6 +144,8 @@ void ResetCaps(uint8_t AdvSetCount = 4)
 	SetFeatureBit(s_Caps.LeFeatures, BT_HCI_CAP_LE_FEATURE_PERIODIC_ADV);
 	SetFeatureBit(s_Caps.LeFeatures, BT_HCI_CAP_LE_FEATURE_PHY_2M);
 	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_SET_EXT_ADV_PARAMETERS);
+	SetCommandBit(s_Caps.SupportedCommands,
+		BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS);
 	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_SET_EXT_ADV_ENABLE);
 	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_PARAMETERS);
 	SetCommandBit(s_Caps.SupportedCommands, BT_HCI_CAP_CMD_LE_SET_PERIODIC_ADV_DATA);
@@ -189,9 +208,30 @@ void TestExtendedSetProperties()
 		// Event properties, octets 1 and 2, every bit clear.
 		CHECK(e->Param[1] == 0);
 		CHECK(e->Param[2] == 0);
+		// Primary interval, octets 3 to 5 and 6 to 8, 0.625 ms units per
+		// 7.8.53 against the 1.25 ms units 7.8.61 gives the periodic one,
+		// so twice the configured number. These used to be passed across
+		// unchanged, which paced the primary train at twice the density.
+		CHECK(e->Param[3] == 0xC0 && e->Param[4] == 0x00 &&
+			e->Param[5] == 0x00);				// 0x0060 * 2
+		CHECK(e->Param[6] == 0x00 && e->Param[7] == 0x01 &&
+			e->Param[8] == 0x00);				// 0x0080 * 2
+		CHECK(e->Param[10] == BTADDR_TYPE_RAND);
 		CHECK(e->Param[20] == BTADV_EXTADV_PHY_1M);
 		CHECK(e->Param[22] == BTADV_EXTADV_PHY_2M);
 		CHECK(e->Param[23] == 2);
+	}
+
+	// 7.8.52 takes an advertising handle, so the train's set needs its own
+	// random address. Nothing programmed one, and the enable was refused.
+	const CapturedCmd *ra = FindCmd(BT_HCI_CMD_CTLR_SET_ADV_SET_RAND_ADDR);
+	CHECK(ra != nullptr);
+	if (ra != nullptr)
+	{
+		CHECK(ra->ParamLen == 7);
+		CHECK(ra->Param[0] == BT_ADV_PERIODIC_ADV_HANDLE);
+		CHECK(ra->Param[1] == 0x11);
+		CHECK(ra->Param[6] == 0xC6);
 	}
 
 	const CapturedCmd *p = FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM);
@@ -220,6 +260,124 @@ void TestTxPowerProperty()
 		CHECK(p->Param[5] == (BT_ADV_PERIODIC_PROP_INCLUDE_TXPOWER & 0xFF));
 		CHECK(p->Param[6] == 0);
 	}
+}
+
+// The smallest legal periodic interval is 7.5 ms, which doubles to 12 units of
+// 0.625 ms and is below the 0x20 that 7.8.53 requires of the primary one.
+// Passing it through unchanged put 6 in the field, which the controller
+// refuses, so no periodic interval under 20 ms could start at all.
+void TestPrimaryIntervalFloor()
+{
+	Reset();
+	BtAdvPeriodicCfg_t cfg = MakeCfg();
+	cfg.IntervalMin = BT_ADV_PERIODIC_INTERVAL_MIN;		// 0x0006, 7.5 ms
+	cfg.IntervalMax = BT_ADV_PERIODIC_INTERVAL_MIN;
+	CHECK(BtAdvPeriodicInit(&cfg));
+
+	const CapturedCmd *e = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
+	CHECK(e != nullptr);
+	if (e != nullptr)
+	{
+		CHECK(e->Param[3] == 0x20 && e->Param[4] == 0 && e->Param[5] == 0);
+		CHECK(e->Param[6] == 0x20 && e->Param[7] == 0 && e->Param[8] == 0);
+	}
+
+	// The periodic parameters keep what was asked for: only the primary
+	// interval has the floor.
+	const CapturedCmd *p = FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM);
+	CHECK(p != nullptr);
+	if (p != nullptr)
+	{
+		CHECK(p->Param[1] == 0x06 && p->Param[2] == 0x00);
+		CHECK(p->Param[3] == 0x06 && p->Param[4] == 0x00);
+	}
+
+	// The largest periodic interval doubles to 0x01FFFE, inside the three
+	// octet field, so nothing is lost at the top either.
+	Reset();
+	cfg = MakeCfg();
+	cfg.IntervalMin = 0xFFFF;
+	cfg.IntervalMax = 0xFFFF;
+	CHECK(BtAdvPeriodicInit(&cfg));
+	e = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
+	CHECK(e != nullptr);
+	if (e != nullptr)
+	{
+		CHECK(e->Param[3] == 0xFE && e->Param[4] == 0xFF &&
+			e->Param[5] == 0x01);
+	}
+}
+
+// 7.8.53 gives Own_Address_Type 0x02 and 0x03 to a controller generated
+// resolvable private address from the resolving list, which is not what a
+// caller naming an address type is asking for and which this stack never
+// programs an IRK for. The field used to be passed through unchecked.
+void TestOwnAddressTypeValidation()
+{
+	Reset();
+	BtAdvPeriodicCfg_t cfg = MakeCfg();
+	cfg.OwnAddrType = BTADDR_TYPE_RESOLV;
+	CHECK(BtAdvPeriodicInit(&cfg) == false);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM) == nullptr);
+
+	Reset();
+	cfg = MakeCfg();
+	cfg.OwnAddrType = 4;
+	CHECK(BtAdvPeriodicInit(&cfg) == false);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM) == nullptr);
+
+	// The identity address type resolves to the random device address, the
+	// same way BtAppAdvInit resolves it, and still programs the set address.
+	Reset();
+	cfg = MakeCfg();
+	cfg.OwnAddrType = BTADDR_TYPE_RANDOM_STATIC;
+	CHECK(BtAdvPeriodicInit(&cfg));
+	const CapturedCmd *e = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
+	CHECK(e != nullptr);
+	if (e != nullptr)
+	{
+		CHECK(e->Param[10] == BTADDR_TYPE_RAND);
+	}
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_ADV_SET_RAND_ADDR) != nullptr);
+
+	// A public set needs no address of its own.
+	Reset();
+	cfg = MakeCfg();
+	cfg.OwnAddrType = BTADDR_TYPE_PUBLIC;
+	CHECK(BtAdvPeriodicInit(&cfg));
+	e = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
+	CHECK(e != nullptr);
+	if (e != nullptr)
+	{
+		CHECK(e->Param[10] == BTADDR_TYPE_PUBLIC);
+	}
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_ADV_SET_RAND_ADDR) == nullptr);
+}
+
+// A random set address the controller cannot be given, and a controller that
+// cannot be given one at all.
+void TestSetRandomAddressRequirements()
+{
+	Reset();
+	g_LocalAddr[5] = 0x06;			// not a static random address
+	BtAdvPeriodicCfg_t cfg = MakeCfg();
+	CHECK(BtAdvPeriodicInit(&cfg) == false);
+	g_LocalAddr[5] = 0xC6;
+
+	Reset();
+	ClearCommandBit(s_Caps.SupportedCommands,
+		BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS);
+	cfg = MakeCfg();
+	CHECK(BtAdvPeriodicInit(&cfg) == false);
+	CHECK(FindCmd(BT_HCI_CMD_CTLR_SET_ADV_SET_RAND_ADDR) == nullptr);
+
+	// The same controller can still run a train from the public address.
+	Reset();
+	ClearCommandBit(s_Caps.SupportedCommands,
+		BT_HCI_CAP_CMD_LE_SET_ADV_SET_RANDOM_ADDRESS);
+	cfg = MakeCfg();
+	cfg.OwnAddrType = BTADDR_TYPE_PUBLIC;
+	CHECK(BtAdvPeriodicInit(&cfg));
 }
 
 void TestIntervalValidation()
@@ -1155,6 +1313,9 @@ int main()
 {
 	TestExtendedSetProperties();
 	TestTxPowerProperty();
+	TestPrimaryIntervalFloor();
+	TestOwnAddressTypeValidation();
+	TestSetRandomAddressRequirements();
 	TestIntervalValidation();
 	TestSecondAdvertisingSetRequired();
 	TestCapabilityGating();
