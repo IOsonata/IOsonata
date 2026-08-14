@@ -541,8 +541,9 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 			break;
 
 		case BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP:
-			pPeer->Conn.MaxMtu = min(BtAttGetMtu(),
-									 pRspAtt->ExchgMtuReqRsp.RxMtu);
+			pPeer->Conn.MaxMtu = BtAttMtuNegotiated(
+									pRspAtt->ExchgMtuReqRsp.RxMtu,
+									BtAttGetMtu());
 			break;
 
 		case BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP:

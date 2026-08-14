@@ -669,9 +669,25 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 		case BLE_GATTS_EVT_EXCHANGE_MTU_REQUEST:
 		{
 			uint16_t mtu = g_BtAppData.AppDevice.Conn.MaxMtu;
-			err_code = sd_ble_gatts_exchange_mtu_reply(
-				p_ble_evt->evt.gatts_evt.conn_handle, mtu);
-			(void)err_code;
+			uint16_t connHdl = p_ble_evt->evt.gatts_evt.conn_handle;
+			err_code = sd_ble_gatts_exchange_mtu_reply(connHdl, mtu);
+
+			// Record the negotiated ATT_MTU on the peer slot. Nothing wrote
+			// it, so BtGattBmValueLenValid read zero, fell back to the
+			// default and refused every notification and indication over 20
+			// octets for the life of a link that had negotiated more. Core
+			// Vol 3 Part F 3.4.2.2 puts the value at the minimum of the two
+			// Rx MTUs, applied once the response is sent, which is why this
+			// waits for the reply to be accepted.
+			BtDevice_t *pConn = err_code == NRF_SUCCESS ?
+				BtPeerFindByHdl(connHdl) : nullptr;
+			if (pConn != nullptr)
+			{
+				pConn->Conn.MaxMtu = BtAttMtuNegotiated(
+					p_ble_evt->evt.gatts_evt.params.
+						exchange_mtu_request.client_rx_mtu,
+					mtu);
+			}
 		}
 		break;
 
