@@ -79,8 +79,38 @@ static inline uint16_t uSecTo625(uint32_t Val) {
 	return (uint16_t)((Val + 500UL) / 625UL);
 };
 
-static inline uint16_t mSecTo0_625(float Val) {
-	return (uint16_t)(Val / 0.625F);
+// Milliseconds to 0.625 ms units, the unit every LE advertising and scan
+// interval is expressed in.
+//
+// Integer arithmetic in 64 bits, and a 32 bit result. The previous form took a
+// float and cast the quotient to uint16_t, so any interval from 40960 ms up
+// produced a value the destination type cannot hold, which is undefined: the
+// same input gave 65535 folded at compile time and 0 at run time. 40960 ms is
+// well inside the extended advertising range of 0x000020 to 0xFFFFFF that
+// Core Vol 4 Part E 7.8.53 defines, so this was reachable with a legal
+// request. Callers apply the range their command allows.
+static inline uint32_t mSecTo0_625(float Val) {
+	// Single precision throughout. 0.625 is exact in binary and the largest
+	// value any of these fields holds is 0xFFFFFF units, just under 2 to the
+	// 24, so every interval in range converts exactly: 7.5 ms gives 12. On a
+	// Cortex-M4F this is one VDIV.F32 and one VCVT, both hardware. Double
+	// would force calls into the soft-float library on a part that has no
+	// double unit.
+	float units = Val / 0.625F;
+
+	// Only the destination width is guarded, which the two compares above the
+	// convert do in hardware as well. The old form cast to uint16_t, and a
+	// float to integer conversion that does not fit is undefined: 40960 ms
+	// gave 65535 folded at compile time and 0 at run time.
+	if (units <= 0.0F)
+	{
+		return 0;
+	}
+	if (units >= 4294967296.0F)
+	{
+		return 0xFFFFFFFFU;
+	}
+	return (uint32_t)units;
 };
 
 /**
@@ -88,8 +118,14 @@ static inline uint16_t mSecTo0_625(float Val) {
  */
 #define MSEC_TO_10MS(Val)	((uint16_t)(((Val) + 5UL) / 10UL))
 
-static inline uint16_t mSecTo10Ms(uint32_t Val) {
-	return (uint16_t)((Val + 5UL) / 10UL);
+// Milliseconds to 10 ms units, the unit of an advertising or scan duration.
+// A 32 bit result for the same reason as above: truncating to uint16_t turned
+// 660000 ms into 464 units, 4.64 s instead of 11 minutes. Callers apply the
+// range their command allows, and note that a duration of zero means "until
+// the Host disables it" in Core Vol 4 Part E 7.8.56, so a caller with a
+// nonzero request must not let this round down to zero.
+static inline uint32_t mSecTo10Ms(uint32_t Val) {
+	return (uint32_t)(((uint64_t)Val + 5ULL) / 10ULL);
 };
 
 /**

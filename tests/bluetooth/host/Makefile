@@ -35,6 +35,7 @@ TEST_ENV := ASAN_OPTIONS=$(ASAN_RUNTIME_OPTIONS) \
 HEADERS := $(wildcard $(ROOT)/include/bluetooth/*.h) \
 	$(wildcard $(ROOT)/include/bluetooth/services/*.h) \
 	$(ROOT)/include/istddef.h \
+	$(ROOT)/include/convutil.h \
 	$(ROOT)/include/device_intrf.h \
 	$(ROOT)/include/cfifo.h \
 	$(ROOT)/include/coredev/interrupt.h \

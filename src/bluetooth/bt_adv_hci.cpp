@@ -765,8 +765,13 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 		return false;
 	}
 
+	// Core Vol 4 Part E 7.8.5 allows 0x0020 to 0x4000 for a legacy set, and
+	// 7.8.53 allows 0x000020 to 0xFFFFFF for an extended one. Both bounds are
+	// applied against a value converted in 32 bits, so the upper test can
+	// actually fire; while the conversion truncated to 16 bits it never could,
+	// and the whole extended range above 10.24 s was unreachable.
 	uint32_t primMin = mSecTo0_625(pCfg->AdvInterval);
-	uint32_t primMax = mSecTo0_625(pCfg->AdvInterval + 50);
+	uint32_t primMax = mSecTo0_625((uint32_t)(pCfg->AdvInterval + 50));
 	if (primMin < 0x20)
 	{
 		primMin = 0x20;
@@ -779,6 +784,20 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 		(useExtCommands == false && primMax > 0x4000))
 	{
 		return false;
+	}
+
+	// 7.8.56: a Duration of 0x0000 means advertise until the Host disables the
+	// set. So a request that is nonzero but rounds to zero has to become the
+	// smallest duration the command can express rather than an endless one,
+	// and a request past the field is refused rather than wrapped.
+	uint32_t advDuration = mSecTo10Ms(pCfg->AdvTimeout);
+	if (advDuration > 0xFFFF)
+	{
+		return false;
+	}
+	if (advDuration == 0 && pCfg->AdvTimeout != 0)
+	{
+		advDuration = 1;
 	}
 
 	s_BtDevUseExtAdvCmd = useExtCommands;
@@ -897,7 +916,7 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 
 	s_BtAdvOwnAddrType = useRandom ? BTADDR_TYPE_RAND : BTADDR_TYPE_PUBLIC;
 	memcpy(s_BtAdvOwnAddr, localAddr, 6);
-	s_BtDevAdvDuration = mSecTo10Ms(pCfg->AdvTimeout);
+	s_BtDevAdvDuration = (uint16_t)advDuration;
 
 	return true;
 }

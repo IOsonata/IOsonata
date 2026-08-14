@@ -13,6 +13,7 @@
 #include "bluetooth/bt_hci_cap.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_adv.h"
+#include "convutil.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_appearance.h"
 
@@ -374,6 +375,98 @@ constexpr size_t kExtAdvSecPhy = 22;
 constexpr size_t kExtAdvPrimPhyOptions = 25;
 constexpr size_t kExtAdvSecPhyOptions = 26;
 constexpr size_t kLegacyAdvOwnAddr = 5;
+
+// LE Set Extended Advertising Parameters, Core Vol 4 Part E 7.8.53: handle,
+// then the 2-octet event properties, then the two 3-octet primary intervals.
+constexpr size_t kExtAdvPrimIntervalMin = 3;
+constexpr size_t kExtAdvPrimIntervalMax = 6;
+
+uint32_t Rd24(const uint8_t *p)
+{
+	return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
+}
+
+// An interval past what 16 bits of 0.625 ms units can hold. 41000 ms is
+// 65600 units, inside the 0x000020 to 0xFFFFFF that 7.8.53 allows for an
+// extended set. Converting through a float and casting to uint16_t made this
+// undefined: it produced 64 units, a 40 ms interval, and reported success.
+// A fractional millisecond that is a whole number of 0.625 ms units has to
+// survive the conversion. 7.5 ms is 12 units exactly, and is the value the
+// specification uses for the shortest connection interval, so it is the one
+// most likely to be written into a configuration by hand.
+void TestAdvIntervalFractionalMilliseconds()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	cfg.AdvInterval = 152;				// the field is whole milliseconds
+	CHECK(BtAppAdvInit(&cfg) == true);
+
+	const CapturedCmd *ap = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
+	CHECK(ap != nullptr);
+	if (ap != nullptr)
+	{
+		// 152 ms is 243.2 units, and the controller takes whole units.
+		CHECK(Rd24(&ap->Param[kExtAdvPrimIntervalMin]) == 243U);
+	}
+
+	// The conversion itself keeps a value that lands on a unit boundary,
+	// which the millisecond field above cannot express but callers passing a
+	// float can. 7.5 ms is 12 units, not 11.
+	CHECK(mSecTo0_625(7.5F) == 12U);
+	CHECK(mSecTo0_625(11.25F) == 18U);
+	CHECK(mSecTo0_625(152.5F) == 244U);
+}
+
+void TestAdvIntervalBeyond16Bits()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	cfg.AdvInterval = 41000;
+	CHECK(BtAppAdvInit(&cfg) == true);
+
+	const CapturedCmd *ap = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
+	CHECK(ap != nullptr);
+	if (ap != nullptr)
+	{
+		CHECK(Rd24(&ap->Param[kExtAdvPrimIntervalMin]) == 65600U);
+		CHECK(Rd24(&ap->Param[kExtAdvPrimIntervalMax]) == 65680U);
+	}
+}
+
+// Well up the extended range, which 16 bits could not reach at all.
+void TestAdvIntervalNearExtendedMaximum()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	cfg.AdvInterval = 10000000;			// 16,000,000 units
+	CHECK(BtAppAdvInit(&cfg) == true);
+
+	const CapturedCmd *ap = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
+	CHECK(ap != nullptr);
+	if (ap != nullptr)
+	{
+		CHECK(Rd24(&ap->Param[kExtAdvPrimIntervalMin]) == 16000000U);
+	}
+}
+
+// Past 0xFFFFFF the command cannot express it, so the request is refused
+// rather than wrapped. This check could never fail while the conversion
+// truncated to 16 bits, because the value could not reach the bound.
+void TestAdvIntervalPastExtendedMaximumRefused()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	cfg.AdvInterval = 11000000;			// 17,600,000 units, over 0xFFFFFF
+	CHECK(BtAppAdvInit(&cfg) == false);
+}
 
 void TestAdvPublicIdentity()
 {
@@ -871,6 +964,10 @@ void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 int main()
 {
 	TestManDataCompanyIdLittleEndian();
+	TestAdvIntervalFractionalMilliseconds();
+	TestAdvIntervalBeyond16Bits();
+	TestAdvIntervalNearExtendedMaximum();
+	TestAdvIntervalPastExtendedMaximumRefused();
 	TestAdvPublicIdentity();
 	TestAdvRandomIdentity();
 	TestAdvInvalidRandomIdentity();

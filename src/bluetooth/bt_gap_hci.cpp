@@ -148,7 +148,15 @@ static const BtHciCapabilities_t *BtGapCapabilitiesGet(BtHciDevice_t *pDev)
 // 0x0004..0x4000 (Core Vol 4 Part E 7.8.64 scan, 7.8.66 create connection) and
 // keep the window no larger than the interval. A small or misconfigured value
 // would otherwise reach the controller as Invalid HCI Command Parameters.
-static inline void BtGapClampScanParams(uint16_t *pInterval, uint16_t *pWindow)
+// Core Vol 4 Part E 7.8.10 allows 0x0004 to 0x4000 for both the scan interval
+// and the scan window, 2.5 ms to 10.24 s, and requires the window to be no
+// larger than the interval.
+//
+// Takes the converted values in 32 bits so an over-range request clamps down
+// to 0x4000. While the conversion truncated first, 40960 ms wrapped to 0 and
+// then clamped up to 0x0004, so a request for a 41 second duty cycle became
+// continuous scanning at full power, the opposite of what was asked.
+static inline void BtGapClampScanParams(uint32_t *pInterval, uint32_t *pWindow)
 {
 	if (*pInterval < 0x0004)
 	{
@@ -314,8 +322,8 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 		return false;
 	}
 
-	uint16_t scanInterval = mSecTo0_625(pCfg->Param.Interval);
-	uint16_t scanWindow   = mSecTo0_625(pCfg->Param.Duration);
+	uint32_t scanInterval = mSecTo0_625(pCfg->Param.Interval);
+	uint32_t scanWindow   = mSecTo0_625(pCfg->Param.Duration);
 	BtGapClampScanParams(&scanInterval, &scanWindow);
 	uint8_t scanType = (pCfg->Type == BTSCAN_TYPE_ACTIVE) ? 1 : 0;
 	uint8_t res;
@@ -486,8 +494,8 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 		return false;
 	}
 
-	uint16_t scanInterval = mSecTo0_625(s_ScanParams.Interval);
-	uint16_t scanWindow   = mSecTo0_625(s_ScanParams.Duration);
+	uint32_t scanInterval = mSecTo0_625(s_ScanParams.Interval);
+	uint32_t scanWindow   = mSecTo0_625(s_ScanParams.Duration);
 	BtGapClampScanParams(&scanInterval, &scanWindow);
 
 	uint8_t ownAddrType = BtGapResolveOwnAddr(pDev, pCapabilities);
