@@ -33,6 +33,8 @@ uint16_t s_ReserveConnHdl;
 uint16_t s_ReserveNbPkt;
 int s_ReleaseCount;
 uint16_t s_ReleaseConnHdl;
+int s_ResetCount;
+uint16_t s_ResetConnHdl;
 
 int s_CommandCount;
 uint16_t s_CommandOpCode;
@@ -48,6 +50,8 @@ void Reset()
 	s_ReserveNbPkt = 0;
 	s_ReleaseCount = 0;
 	s_ReleaseConnHdl = 0;
+	s_ResetCount = 0;
+	s_ResetConnHdl = 0;
 	s_CommandCount = 0;
 	s_CommandOpCode = 0;
 	std::memset(s_CommandParam, 0, sizeof(s_CommandParam));
@@ -239,6 +243,14 @@ void TestPartialSendFailureKeepsReservationAndDropsSmp()
 	CHECK(s_PacketCount == 1);
 	CHECK(dev.AclCredit == 4);
 	CheckDisconnect(0x0678);
+
+	// One fragment is in the controller and the rest of the PDU never will
+	// be, so this group can never reach the count it reserved. Its
+	// completion would otherwise retire the oldest entry in the ring, which
+	// belongs to something else. The send order cannot be reconstructed and
+	// the link is going, so the ring goes with it.
+	CHECK(s_ResetCount == 1);
+	CHECK(s_ResetConnHdl == 0x0678);
 }
 
 void TestNonSmpFailureBehaviorUnchanged()
@@ -259,6 +271,34 @@ void TestNonSmpFailureBehaviorUnchanged()
 	CHECK(s_PacketCount == 0);
 	CHECK(dev.AclCredit == 3);
 	CHECK(s_CommandCount == 0);
+
+	// Nothing was accepted, so the caller's own release is the right answer
+	// and the ring is left alone.
+	CHECK(s_ResetCount == 0);
+}
+
+// The same partial send on a link that is not carrying SMP. The PDU has no
+// reservation of its own here, its caller made one, and the ring still has to
+// go because the fragments already accepted have no group left to complete.
+void TestPartialSendResetsRingWithoutSmp()
+{
+	Reset();
+	s_FailPacket = 2;
+	BtHciDevice_t dev = {};
+	dev.SendData = CaptureAcl;
+	dev.Command = CaptureCommand;
+	BtHciSetLeAclBuffer(&dev, 8, 5);
+	alignas(4) RawPacket raw = {};
+	BtHciACLDataPacket_t *pAcl =
+		BuildPdu(raw, 0x0234, BT_L2CAP_CID_ATT, 17);
+
+	CHECK(BtHciSendAcl(&dev, pAcl) == 0);
+	CHECK(s_ReserveCount == 0);
+	CHECK(s_ReleaseCount == 0);
+	CHECK(s_PacketCount == 1);
+	CHECK(s_ResetCount == 1);
+	CHECK(s_ResetConnHdl == 0x0234);
+	CheckDisconnect(0x0234);
 }
 
 } // namespace
@@ -275,6 +315,12 @@ void BtGattTxPendRelease(uint16_t ConnHdl)
 {
 	s_ReleaseCount++;
 	s_ReleaseConnHdl = ConnHdl;
+}
+
+void BtGattTxPendReset(uint16_t ConnHdl)
+{
+	s_ResetCount++;
+	s_ResetConnHdl = ConnHdl;
 }
 
 // bt_hci_host.cpp logs on paths this test does not exercise. Section garbage
@@ -304,6 +350,7 @@ int main()
 	TestFirstSendFailureReleasesAndDropsSmp();
 	TestPartialSendFailureKeepsReservationAndDropsSmp();
 	TestNonSmpFailureBehaviorUnchanged();
+	TestPartialSendResetsRingWithoutSmp();
 
 	if (s_Failures != 0)
 	{

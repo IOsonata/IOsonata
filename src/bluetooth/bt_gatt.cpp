@@ -680,6 +680,18 @@ bool BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
 	return BtGattTxPendReserve(ConnHdl, nullptr, NbPkt);
 }
 
+void BtGattTxPendReset(uint16_t ConnHdl)
+{
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+	if (pConn != nullptr)
+	{
+		// Only the occupancy. The head is where the next reservation lands as
+		// well as where the next completion retires from, so an empty ring is
+		// coherent wherever it points and moving it would say nothing.
+		pConn->TxPendCount = 0;
+	}
+}
+
 bool BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar)
 {
 	return BtGattTxPendReserve(ConnHdl, pChar, 1);

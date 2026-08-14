@@ -27,3 +27,8 @@ bool BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
 	(void)ConnHdl;
 	return NbPkt > 0;
 }
+
+void BtGattTxPendReset(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+}

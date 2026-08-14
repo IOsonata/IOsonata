@@ -518,6 +518,45 @@ void TestAclCompletionCredits()
 	CHECK(dev.AclCredit == 3);
 }
 
+// AclCredit is signed 16 bit and the reported count is unsigned 16 bit. Adding
+// 0x8000 straight to the field landed on a negative number, which the upper
+// clamp does not catch, and BtHciSendAcl then refused every transmit at its
+// credit gate until later completions climbed back over zero. The same value
+// reached the completion callback, which retires the whole per-link ring.
+void TestCompletionCountBounded()
+{
+	BtHciDevice_t dev = {};
+	dev.SendData = CaptureAcl;
+	dev.Command = CaptureDevCommand;
+	dev.SendCompleted = CaptureCompleted;
+	ResetAclCapture();
+	s_CompletedCallbacks = 0;
+	BtHciSetLeAclBuffer(&dev, 0, 8);
+
+	// Two packets on this link, so two is all the controller can complete.
+	const uint16_t hdl = 0x0345;
+	CHECK(SendOneAcl(&dev, hdl) != 0);
+	CHECK(SendOneAcl(&dev, hdl) != 0);
+	CHECK(dev.AclCredit == 6);
+
+	FeedCompleted(&dev, hdl, 0x8000);
+	CHECK(dev.AclCredit > 0);
+	CHECK(dev.AclCredit == 8);
+	CHECK(s_CompletedCallbacks == 1);
+	CHECK(s_CompletedCount == 2);
+
+	// Credits still work afterwards, which is what the negative value took
+	// away: the gate compares against the number of packets to send.
+	ResetAclCapture();
+	CHECK(SendOneAcl(&dev, hdl) != 0);
+	CHECK(s_AclPacketCount == 1);
+
+	// An untracked link has no in-flight count to bound against, so the
+	// arithmetic itself has to hold. The pool is capped, not wrapped.
+	FeedCompleted(&dev, 0x0999, 0x8000);
+	CHECK(dev.AclCredit == 8);
+}
+
 // A Number Of Completed Packets event whose NbHdl count exceeds what the event
 // length can hold must be bounded to the payload; the buffer is sized to exactly
 // one entry so an unbounded walk would run off the end (caught by ASan).
@@ -958,6 +997,7 @@ int main()
 	TestAclFragmentSendFailure();
 	TestAclCreditsReturnedOnDisconnect();
 	TestAclCompletionCredits();
+	TestCompletionCountBounded();
 	TestCompletedPacketsBounded();
 	TestCommandCreditsAndCompletion();
 	TestCommandCompleteBounds();

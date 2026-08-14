@@ -191,6 +191,18 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal
 bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar, uint16_t NbPkt);
 void BtGattTxPendRelease(uint16_t ConnHdl);
 bool BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt);
+
+/**
+ * @brief	Empty the completion ring of a link.
+ *
+ * For a link whose send order can no longer be reconstructed. A transport that
+ * stops part way through a fragmented PDU leaves packets in the controller
+ * with no way to say which group they belong to, and the completions for them
+ * would otherwise retire whatever is at the head of the ring and fire an
+ * earlier characteristic's callback while its own data is still in flight.
+ * Such a link is being dropped, so the callbacks it still owes are moot.
+ */
+void BtGattTxPendReset(uint16_t ConnHdl);
 bool BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar);
 void BtGattHandleValueConfirm(uint16_t ConnHdl);
 

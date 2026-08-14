@@ -979,6 +979,22 @@ static void BtHciAclTxCompleted(uint16_t ConnHdl, uint16_t NbPkt)
 	}
 }
 
+// How many packets this link has in the controller, when the link is tracked
+// at all. A link is untracked when flow control is off, when the table was
+// full at the time it first sent, or when it has nothing outstanding.
+static bool BtHciAclTxInFlightGet(uint16_t ConnHdl, uint16_t *pInFlight)
+{
+	const BtHciAclTxLink_t *p = BtHciAclTxFind(ConnHdl);
+
+	if (p == nullptr)
+	{
+		return false;
+	}
+
+	*pInFlight = p->InFlight;
+	return true;
+}
+
 // Release the link and answer how many of its packets the controller still
 // held, which is what the disconnection flushed.
 static uint16_t BtHciAclTxRelease(uint16_t ConnHdl)
@@ -1153,6 +1169,21 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 				// No fragment can complete this reservation.
 				BtGattTxPendRelease(pAcl->Hdr.ConnHdl);
 			}
+
+			if (nSent > 0)
+			{
+				// Fragments are in the controller and the rest of the PDU
+				// never will be, so this group can never reach the count it
+				// reserved. Its caller releases the reservation on a zero
+				// return, which drops the newest entry while the completions
+				// for those fragments retire from the oldest, firing an
+				// earlier characteristic's callback with its data still in
+				// flight. The send order of this link cannot be reconstructed
+				// from here, and the link is being dropped on the next line,
+				// so the whole ring goes rather than part of it.
+				BtGattTxPendReset(pAcl->Hdr.ConnHdl);
+			}
+
 			if (nSent > 0 || bSmp)
 			{
 				// A partial L2CAP PDU cannot be withdrawn, while an unsent SMP
@@ -1366,23 +1397,45 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 				}
 				for (int i = 0; i < nbHdl; i++)
 				{
+					// The controller cannot complete more packets than the
+					// host gave it, so the count is taken down to what this
+					// link actually holds. Both the credit pool and the
+					// completion ring are sized by that number, and letting a
+					// larger one through retires ring entries whose packets
+					// are still in flight.
+					uint16_t nbPkt = p->Completed[i].NbPkt;
+					uint16_t inflight = 0;
+					if (BtHciAclTxInFlightGet(p->Completed[i].Hdl, &inflight) &&
+						nbPkt > inflight)
+					{
+						nbPkt = inflight;
+					}
+
 					// Replenish ACL TX credits for completed packets when flow
 					// control is configured. Independent of SendCompleted so
 					// credits recover even with no completion callback wired.
 					if (pDev->AclCreditMax > 0)
 					{
-						pDev->AclCredit += p->Completed[i].NbPkt;
-						if (pDev->AclCredit > pDev->AclCreditMax)
+						// Widened, because AclCredit is signed 16 bit and the
+						// reported count is unsigned 16 bit: 0x8000 added
+						// straight to the field landed on a negative number,
+						// which the clamp below does not catch and which then
+						// blocked every ACL transmit at the credit gate until
+						// later completions climbed back over zero.
+						int32_t credit = (int32_t)pDev->AclCredit +
+							(int32_t)nbPkt;
+						if (credit > (int32_t)pDev->AclCreditMax)
 						{
-							pDev->AclCredit = pDev->AclCreditMax;
+							credit = (int32_t)pDev->AclCreditMax;
 						}
-						BtHciAclTxCompleted(p->Completed[i].Hdl,
-											p->Completed[i].NbPkt);
+						pDev->AclCredit = (int16_t)credit;
+
+						BtHciAclTxCompleted(p->Completed[i].Hdl, nbPkt);
 					}
 
 					if (pDev->SendCompleted)
 					{
-						pDev->SendCompleted(p->Completed[i].Hdl, p->Completed[i].NbPkt);
+						pDev->SendCompleted(p->Completed[i].Hdl, nbPkt);
 					}
 				}
 

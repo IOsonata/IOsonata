@@ -158,6 +158,46 @@ void TestUntrackedGroupsRemainOrdered()
 	CHECK(Peer()->TxPendCount == 1);
 }
 
+// A transport that stops part way through a fragmented PDU leaves packets in
+// the controller belonging to a group that can never finish. Releasing that
+// group drops the newest entry while the completions retire from the oldest,
+// so an earlier characteristic's callback fires with its own data still in
+// flight. The link is dropped in that case, so the whole ring goes.
+void TestResetDiscardsTheWholeRing()
+{
+	Setup(64);
+
+	CHECK(BtGattCharNotify(kConnHdl, &s_Char[0], s_Value, 8));
+	CHECK(BtGattTxPendUntracked(kConnHdl, 2));
+	CHECK(BtGattCharNotify(kConnHdl, &s_Char[1], s_Value, 8));
+	CHECK(Peer()->TxPendCount == 3);
+
+	// Retire the first, so the reset happens with the ring part way round and
+	// its head away from the start.
+	BtGattSendCompleted(kConnHdl, 1);
+	CHECK(s_TxCompleteCount == 1);
+	CHECK(Peer()->TxPendCount == 2);
+	CHECK(Peer()->TxPendHead != 0);
+
+	BtGattTxPendReset(kConnHdl);
+	CHECK(Peer()->TxPendCount == 0);
+
+	// Completions arriving after it retire nothing and fire nothing.
+	BtGattSendCompleted(kConnHdl, 4);
+	CHECK(s_TxCompleteCount == 1);
+	CHECK(Peer()->TxPendCount == 0);
+
+	// And the ring still works from wherever it now points.
+	CHECK(BtGattCharNotify(kConnHdl, &s_Char[0], s_Value, 8));
+	CHECK(Peer()->TxPendCount == 1);
+	BtGattSendCompleted(kConnHdl, 1);
+	CHECK(s_TxCompleteCount == 2);
+	CHECK(Peer()->TxPendCount == 0);
+
+	// An unknown link is left alone rather than reaching through a null peer.
+	BtGattTxPendReset(kConnHdl + 1);
+}
+
 // ---- a fragmented notification fires once, at the end ----------------------
 
 void TestFragmentedNotifyFiresOnce()
@@ -342,6 +382,7 @@ int main()
 {
 	TestUntrackedPacketDoesNotFire();
 	TestUntrackedGroupsRemainOrdered();
+	TestResetDiscardsTheWholeRing();
 	TestFragmentedNotifyFiresOnce();
 	TestFragmentsReportedTogether();
 	TestIndicationWaitsForConfirmation();
