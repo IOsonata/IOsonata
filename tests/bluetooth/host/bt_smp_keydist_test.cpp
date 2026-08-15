@@ -457,6 +457,63 @@ void TestKeypressNotificationIsAcceptedAndResetsTheTimer(bttest::Context &ctx)
 	BT_CHECK(ctx, s_SmpLink[0].Ctx.TmrStart == 0);
 }
 
+// An encrypted link whose key properties the host cannot recover reports the
+// floor. Vol 3 Part F 3.2.5 lets an attribute demand an encryption key of a
+// given size, and bt_att refuses one below sixteen octets. Naming the maximum
+// for a link with no key record and no matching bond served those attributes
+// over a key that may be seven octets long. A legacy bond whose LTK the
+// controller matched by EDIV and Rand, from a peer whose address does not
+// resolve to that bond, reaches this branch on every reconnect.
+void TestUnknownKeySizeIsNotReportedAsTheMaximum(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(true, both, both, both, both);
+
+	// No key record on the link and no bond behind the stub lookup, which is
+	// what leaves the properties unknown.
+	s_SmpLink[0].Ctx.State = BT_SMP_STATE_DONE;
+	s_SmpLink[0].Keys.bValid = false;
+	BtSmpTestPeerSet(true, kConnHdl, false);
+
+	BtSmpEncryptionChanged(&s_HciDev, kConnHdl, 0, 1);
+
+	BtConnSec_t sec;
+	BtSmpTestConnSecGet(&sec);
+
+	BT_CHECK(ctx, BtSmpTestConnSecCount() == 1);
+	BT_CHECK(ctx, sec.Level == BT_GAP_SEC_LEVEL_ENC_UNAUTH);
+	BT_CHECK(ctx, sec.KeySize == 0);
+	// Zero is below the sixteen bt_att demands, so a key size permission on an
+	// attribute refuses the link rather than passing it.
+	BT_CHECK(ctx, sec.KeySize < BT_SMP_MAX_ENC_KEY_SIZE);
+}
+
+// The control: a link that does hold a key record reports that record, so the
+// floor above is the unknown case and not a blanket zero.
+void TestAKnownKeyRecordStillReportsItsSize(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(true, both, both, both, both);
+
+	s_SmpLink[0].Ctx.State = BT_SMP_STATE_DONE;
+	s_SmpLink[0].Keys.bValid = true;
+	s_SmpLink[0].Keys.bSc = true;
+	s_SmpLink[0].Keys.bAuthenticated = false;
+	s_SmpLink[0].Keys.EncKeySize = BT_SMP_MAX_ENC_KEY_SIZE;
+	BtSmpTestPeerSet(true, kConnHdl, false);
+
+	BtSmpEncryptionChanged(&s_HciDev, kConnHdl, 0, 1);
+
+	BtConnSec_t sec;
+	BtSmpTestConnSecGet(&sec);
+
+	BT_CHECK(ctx, BtSmpTestConnSecCount() == 1);
+	BT_CHECK(ctx, sec.KeySize == BT_SMP_MAX_ENC_KEY_SIZE);
+	BT_CHECK(ctx, (sec.Flags & BT_GAP_SEC_FLAG_SC) != 0);
+}
+
 } // namespace
 
 int main()
@@ -493,6 +550,10 @@ int main()
 			[&] { TestReservedCodeIsIgnored(ctx); });
 	ctx.Run("keypress notification is accepted and resets the timer",
 			[&] { TestKeypressNotificationIsAcceptedAndResetsTheTimer(ctx); });
+	ctx.Run("unknown key size is not reported as the maximum",
+			[&] { TestUnknownKeySizeIsNotReportedAsTheMaximum(ctx); });
+	ctx.Run("a known key record still reports its size",
+			[&] { TestAKnownKeyRecordStillReportsItsSize(ctx); });
 
 	return ctx.Finish();
 }

@@ -53,6 +53,10 @@ BtSmpTestCapture_t g_BtSmpTestCapture;
 static int s_BondAddCount;
 static bool s_BondAddResult = true;
 static int s_BondStoreFailedCount;
+static BtDevice_t s_Peer;
+static bool s_PeerPresent;
+static BtConnSec_t s_ConnSec;
+static int s_ConnSecCount;
 
 void BtSmpTestCaptureReset(void)
 {
@@ -60,6 +64,31 @@ void BtSmpTestCaptureReset(void)
 	s_BondAddCount = 0;
 	s_BondStoreFailedCount = 0;
 	s_BondAddResult = true;
+	memset(&s_Peer, 0, sizeof(s_Peer));
+	s_PeerPresent = false;
+	memset(&s_ConnSec, 0, sizeof(s_ConnSec));
+	s_ConnSecCount = 0;
+}
+
+void BtSmpTestPeerSet(bool Present, uint16_t ConnHdl, bool Secure)
+{
+	memset(&s_Peer, 0, sizeof(s_Peer));
+	s_Peer.Conn.Hdl = ConnHdl;
+	s_Peer.bSecure = Secure;
+	s_PeerPresent = Present;
+}
+
+void BtSmpTestConnSecGet(BtConnSec_t *pSec)
+{
+	if (pSec != nullptr)
+	{
+		*pSec = s_ConnSec;
+	}
+}
+
+int BtSmpTestConnSecCount(void)
+{
+	return s_ConnSecCount;
 }
 
 int BtSmpTestCaptureCount(uint8_t Code)
@@ -175,7 +204,12 @@ void BtSmpBondLoad(void)
 void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *pSec)
 {
 	(void)ConnHdl;
-	(void)pSec;
+
+	if (pSec != nullptr)
+	{
+		s_ConnSec = *pSec;
+	}
+	s_ConnSecCount++;
 }
 
 void BtGattCccdRestoreBonded(uint16_t ConnHdl)
@@ -184,11 +218,15 @@ void BtGattCccdRestoreBonded(uint16_t ConnHdl)
 }
 
 // No peer pool in this test. A null peer skips the security-state reporting
-// block, which is not what these cases are about, and leaves the key
-// distribution phase to run on the link record alone.
+// block, which is not what most of these cases are about, and leaves the key
+// distribution phase to run on the link record alone. A case about what the
+// link reports calls BtSmpTestPeerSet to present one.
 BtDevice_t *BtPeerFindByHdl(uint16_t ConnHdl)
 {
-	(void)ConnHdl;
+	if (s_PeerPresent && s_Peer.Conn.Hdl == ConnHdl)
+	{
+		return &s_Peer;
+	}
 
 	return nullptr;
 }

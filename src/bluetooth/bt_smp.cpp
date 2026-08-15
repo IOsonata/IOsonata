@@ -3071,9 +3071,18 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 				else
 				{
 					// Encrypted with no key record and no stored bond. The
-					// key properties are unknown; report the floor.
+					// key properties are unknown; report the floor. The
+					// authentication level floors at ENC_UNAUTH, and the key
+					// size floors at zero, which is what bt_att uses for a
+					// link with no security state at all and what bt_gatt_hci
+					// reads as "size not reported". Naming the maximum here
+					// instead let an attribute permitted only on a 16 octet
+					// key be served over a link whose key size is unknown and
+					// may be as short as seven octets; a legacy bond matched
+					// by EDIV and Rand while its peer address does not resolve
+					// reaches exactly this branch.
 					sec.Level = BT_GAP_SEC_LEVEL_ENC_UNAUTH;
-					sec.KeySize = BT_SMP_MAX_ENC_KEY_SIZE;
+					sec.KeySize = 0;
 				}
 				CryptoSecureWipe(&keys, sizeof(keys));
 			}

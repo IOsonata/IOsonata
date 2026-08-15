@@ -41,6 +41,8 @@ SOFTWARE.
 #include <stddef.h>
 #include <stdint.h>
 
+#include "bluetooth/bt_gap.h"
+
 #define BT_SMP_TEST_MAX_PDU			16
 #define BT_SMP_TEST_MAX_PDU_LEN		96
 
@@ -69,5 +71,16 @@ void BtSmpTestBondAddResultSet(bool Result);
 
 /// Times BtSmpBondStoreFailed was reached since the last reset.
 int BtSmpTestBondStoreFailedCount(void);
+
+/// Present a peer record to BtPeerFindByHdl for this handle, or withdraw it.
+/// Off by default and after a reset: most cases want the null peer, which
+/// skips the security state reporting and leaves key distribution to run on
+/// the link record alone. A case about what the link reports turns it on.
+void BtSmpTestPeerSet(bool Present, uint16_t ConnHdl, bool Secure);
+
+/// The last BtConnSec_t handed to BtGapConnSecSet, and how many times it was
+/// called since the last reset.
+void BtSmpTestConnSecGet(BtConnSec_t *pSec);
+int BtSmpTestConnSecCount(void);
 
 #endif // __BT_SMP_LINK_TEST_STUBS_H__
