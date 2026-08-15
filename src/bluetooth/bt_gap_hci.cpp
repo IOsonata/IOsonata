@@ -78,7 +78,37 @@ typedef struct {
 	uint8_t  MaxCeLength[2];
 } BtHciLeCreateConn_t;			//!< 25 octets
 
+typedef struct {
+	uint8_t  ConnHdl[2];
+} BtHciLeReadPhy_t;				//!< 2 octets, 7.8.47
+
+typedef struct {
+	uint8_t  ConnHdl[2];
+	uint8_t  TxPhy;
+	uint8_t  RxPhy;
+} BtHciLeReadPhyRet_t;			//!< 4 octets of return parameters, 7.8.47
+
+typedef struct {
+	uint8_t  ConnHdl[2];
+	uint8_t  AllPhys;
+	uint8_t  TxPhys;
+	uint8_t  RxPhys;
+	uint8_t  PhyOptions[2];
+} BtHciLeSetPhy_t;				//!< 7 octets, 7.8.49
+
+typedef struct {
+	uint8_t  ConnHdl[2];
+	uint8_t  TxOctets[2];
+	uint8_t  TxTime[2];
+} BtHciLeSetDataLen_t;			//!< 6 octets, 7.8.33
+
 #pragma pack(pop)
+
+// ALL_PHYS of LE Set PHY, Core Vol 4 Part E 7.8.49. A set bit says the host
+// has no preference in that direction, and the matching PHY mask is then
+// ignored.
+#define BT_GAP_ALL_PHYS_TX_ANY		(1<<0)
+#define BT_GAP_ALL_PHYS_RX_ANY		(1<<1)
 
 BtGapScanParam_t s_ScanParams;
 
@@ -328,6 +358,117 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 	BtGapWr16(p.MaxCeLength, 0);
 
 	uint8_t res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_CREATE_CONN, &p, sizeof(p), NULL, 0);
+
+	return res == 0;
+}
+
+// --- Link procedures on an established connection ---
+
+bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy, uint8_t *pRxPhy)
+{
+	if (pTxPhy == nullptr || pRxPhy == nullptr)
+	{
+		return false;
+	}
+
+	BtHciDevice_t *pDev = BtGapHciDev();
+	if (pDev == nullptr)
+	{
+		return false;
+	}
+
+	BtHciLeReadPhy_t p;
+	BtGapWr16(p.ConnHdl, ConnHdl);
+
+	BtHciLeReadPhyRet_t r;
+	memset(&r, 0, sizeof(r));
+
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_READ_PHY, &p, sizeof(p),
+					 &r, sizeof(r)) != 0)
+	{
+		return false;
+	}
+
+	// TX_PHY and RX_PHY are enumerated 1, 2, 3 for 1M, 2M and coded (7.8.47),
+	// where the API uses the bit mask LE Set PHY takes. Converting here keeps
+	// one PHY encoding in the API rather than one per command.
+	if (r.TxPhy < 1 || r.TxPhy > 3 || r.RxPhy < 1 || r.RxPhy > 3)
+	{
+		return false;
+	}
+
+	*pTxPhy = (uint8_t)(1 << (r.TxPhy - 1));
+	*pRxPhy = (uint8_t)(1 << (r.RxPhy - 1));
+
+	return true;
+}
+
+bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys, uint8_t RxPhys,
+				 uint16_t PhyOptions)
+{
+	if ((TxPhys & ~BT_GAP_PHY_ALL) != 0 || (RxPhys & ~BT_GAP_PHY_ALL) != 0 ||
+		PhyOptions > BT_GAP_PHY_OPT_MAX)
+	{
+		return false;
+	}
+
+	BtHciDevice_t *pDev = BtGapHciDev();
+	if (pDev == nullptr)
+	{
+		return false;
+	}
+
+	BtHciLeSetPhy_t p;
+	BtGapWr16(p.ConnHdl, ConnHdl);
+
+	// An empty mask is no preference, which 7.8.49 spells in ALL_PHYS. Sending
+	// it in the mask instead would be a request for no PHY at all, which the
+	// controller answers with Invalid HCI Command Parameters.
+	p.AllPhys = 0;
+	if (TxPhys == 0)
+	{
+		p.AllPhys |= BT_GAP_ALL_PHYS_TX_ANY;
+	}
+	if (RxPhys == 0)
+	{
+		p.AllPhys |= BT_GAP_ALL_PHYS_RX_ANY;
+	}
+
+	p.TxPhys = TxPhys;
+	p.RxPhys = RxPhys;
+	BtGapWr16(p.PhyOptions, PhyOptions);
+
+	uint8_t res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PHY, &p, sizeof(p),
+							   NULL, 0);
+	DEBUG_PRINTF("SET_PHY: res=%d\r\n", res);
+
+	return res == 0;
+}
+
+bool BtGapSetDataLength(uint16_t ConnHdl, uint16_t TxOctets, uint16_t TxTime)
+{
+	if (TxOctets < BT_GAP_DATA_LEN_OCTETS_MIN ||
+		TxOctets > BT_GAP_DATA_LEN_OCTETS_MAX ||
+		TxTime < BT_GAP_DATA_LEN_TIME_MIN ||
+		TxTime > BT_GAP_DATA_LEN_TIME_MAX)
+	{
+		return false;
+	}
+
+	BtHciDevice_t *pDev = BtGapHciDev();
+	if (pDev == nullptr)
+	{
+		return false;
+	}
+
+	BtHciLeSetDataLen_t p;
+	BtGapWr16(p.ConnHdl, ConnHdl);
+	BtGapWr16(p.TxOctets, TxOctets);
+	BtGapWr16(p.TxTime, TxTime);
+
+	uint8_t res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_DATA_LEN, &p,
+							   sizeof(p), NULL, 0);
+	DEBUG_PRINTF("SET_DATA_LEN: res=%d\r\n", res);
 
 	return res == 0;
 }

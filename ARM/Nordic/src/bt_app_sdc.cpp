@@ -54,6 +54,7 @@ SOFTWARE.
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_smp.h"		// BtSmpLocalAddrGet override
 #include "bluetooth/bt_adv.h"		// BtAdvOwnAddrGet for the connection stamp
+#include "bluetooth/bt_ead.h"		// Encrypted Advertising Data engines
 
 #include "crypto/crypto_uecc.h"
 #include "crypto_rng_nrf.h"
@@ -767,6 +768,17 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	{
 		DEBUG_PRINTF("BtAppInit: SMP crypto self-test FAILED\r\n");
 		return false;
+	}
+
+	// Encrypted Advertising Data draws on the same AES engine and the same
+	// hardware RNG. Binding them here rather than leaving it to the
+	// application means an application that installs key material with
+	// BtAdvEadKeySet advertises encrypted, instead of having every packet
+	// refused for a missing engine at the point it is about to go on air.
+	// Nothing is encrypted until key material is installed.
+	if (BtEadInit(pAes, CryptoRngNrfInstance()) == false)
+	{
+		DEBUG_PRINTF("BtAppInit: EAD engines unavailable\r\n");
 	}
 
 	// Translate the application security configuration into the SMP IO
