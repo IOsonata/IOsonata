@@ -365,10 +365,15 @@ void TestAnswerablePduKeepsOobMaterial(bttest::Context &ctx)
 	s_SmpLink[0].Ctx.Model = BT_SMP_MODEL_OOB;
 	ArmOobReservation();
 
-	// An unrecognised code. Answered, and the pairing is left running.
-	BtL2CapSmp_t smp = {};
-	smp.Code = 0xFF;
-	BtProcessSmpData(&s_HciDev, kConnHdl, &smp, sizeof(smp));
+	// A Pairing Request arriving mid-pairing. The phase gate answers it and
+	// deliberately leaves the running attempt alone, which is what makes it the
+	// right shape for this case. A reserved code would no longer do: those are
+	// ignored outright now, so nothing is sent and nothing is released.
+	uint8_t pdu[7] = { BT_SMP_CODE_PAIRING_REQ, BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+					   BT_SMP_OOB_AUTH_NOT_PRESENT,
+					   BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_SC,
+					   BT_SMP_MAX_ENC_KEY_SIZE, both, both };
+	BtProcessSmpData(&s_HciDev, kConnHdl, (BtL2CapSmp_t *)pdu, sizeof(pdu));
 
 	BT_CHECK(ctx, BtSmpTestCaptureCount(BT_SMP_CODE_PAIRING_FAILED) == 1);
 	BT_CHECK(ctx, s_SmpLink[0].Ctx.State == BT_SMP_STATE_RANDOM_WAIT);
@@ -400,6 +405,56 @@ void TestEndingTheAttemptStillReleasesOob(bttest::Context &ctx)
 	BT_CHECK(ctx, s_SmpOob.bLocalValid == false);
 	BT_CHECK(ctx, SmpIsAllZero(s_SmpOob.PeerConfirm,
 							   sizeof(s_SmpOob.PeerConfirm)));
+}
+
+// Vol 3 Part H 3.3: "If a packet is received with a Code that is reserved for
+// future use it shall be ignored." Table 3.3 defines 0x01 to 0x0E and reserves
+// the rest. Answering Command Not Supported put a PDU on air the spec forbids.
+void TestReservedCodeIsIgnored(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+	static const uint8_t reserved[] = { 0x00, 0x0F, 0x10, 0x7F, 0xFF };
+
+	for (size_t i = 0; i < sizeof(reserved) / sizeof(reserved[0]); i++)
+	{
+		ArmLink(false, both, both, both, both);
+		s_SmpLink[0].Ctx.State = BT_SMP_STATE_RANDOM_WAIT;
+
+		BtL2CapSmp_t smp = {};
+		smp.Code = reserved[i];
+		BtProcessSmpData(&s_HciDev, kConnHdl, &smp, sizeof(smp));
+
+		// Nothing on air at all, and the pairing is left where it was.
+		BT_CHECK(ctx, g_BtSmpTestCapture.Count == 0);
+		BT_CHECK(ctx, s_SmpLink[0].Ctx.State == BT_SMP_STATE_RANDOM_WAIT);
+	}
+}
+
+// Vol 3 Part H 3.5.8 defines Keypress Notification and 3.3 requires every
+// command to be supported once pairing is. It used to reach the default and be
+// answered with Pairing Failed, ending a Passkey Entry pairing with a peer
+// doing nothing wrong. 3.4 asks for the Security Manager Timer to be reset on
+// reception, because the PDU draws no reply.
+void TestKeypressNotificationIsAcceptedAndResetsTheTimer(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(false, both, both, both, both);
+	s_SmpLink[0].Ctx.State = BT_SMP_STATE_CONFIRM_WAIT;
+	s_SmpLink[0].Ctx.Model = BT_SMP_MODEL_PASSKEY_ENTRY;
+	// BtSmpMsTick is the weak default and answers zero, so a start stamp is
+	// only recent if the unsigned difference from zero is small. 0x1234 would
+	// wrap to about four billion and read as an expired pairing, which is the
+	// same trap the timeout itself has on a port with no clock.
+	s_SmpLink[0].Ctx.TmrStart = 0xFFFFFFF0;
+
+	uint8_t pdu[2] = { BT_SMP_CODE_PAIRING_KEYPRESS_NOTIF, 1 };
+	BtProcessSmpData(&s_HciDev, kConnHdl, (BtL2CapSmp_t *)pdu, sizeof(pdu));
+
+	BT_CHECK(ctx, g_BtSmpTestCapture.Count == 0);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.State == BT_SMP_STATE_CONFIRM_WAIT);
+	// The reset is visible as the seeded stamp being replaced by the tick.
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.TmrStart == 0);
 }
 
 } // namespace
@@ -434,6 +489,10 @@ int main()
 			[&] { TestAnswerablePduKeepsOobMaterial(ctx); });
 	ctx.Run("ending the attempt still releases oob",
 			[&] { TestEndingTheAttemptStillReleasesOob(ctx); });
+	ctx.Run("a reserved code is ignored",
+			[&] { TestReservedCodeIsIgnored(ctx); });
+	ctx.Run("keypress notification is accepted and resets the timer",
+			[&] { TestKeypressNotificationIsAcceptedAndResetsTheTimer(ctx); });
 
 	return ctx.Finish();
 }

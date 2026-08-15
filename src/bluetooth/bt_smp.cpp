@@ -2736,8 +2736,42 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			BtSmpStartPairing(ConnHdl);
 			break;
 
+		case BT_SMP_CODE_PAIRING_KEYPRESS_NOTIF:
+			// Vol 3 Part H 3.5.8: sent during Passkey Entry by a device with
+			// KeyboardOnly IO capabilities to say a key was entered or erased.
+			// It holds no state this side acts on and draws no reply.
+			//
+			// 3.4 asks for the Security Manager Timer to be reset on reception,
+			// and says why: a Keypress Notification has no response, so without
+			// the reset this side can time the pairing out before the peer's
+			// Security Manager does. A user typing a passkey is exactly the
+			// case where the 30 seconds runs out.
+			//
+			// It had no case, so it reached the default and was answered
+			// Pairing Failed with Command Not Supported, which ends a Passkey
+			// Entry pairing with a peer doing nothing wrong. 3.3 leaves no room
+			// for that: "If pairing is supported then all commands shall be
+			// supported."
+			//
+			// The length is not checked. The Notification Type octet is never
+			// read, and refusing a short one would put back the failure this
+			// removes.
+			DEBUG_PRINTF("SMP RX Keypress\r\n");
+			pLink->Ctx.TmrStart = BtSmpMsTick();
+			break;
+
 		default:
-			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CMD_NOT_SUPPORTED);
+			// Vol 3 Part H 3.3: "If a packet is received with a Code that is
+			// reserved for future use it shall be ignored." Table 3.3 defines
+			// 0x01 to 0x0E and reserves every other value, and each defined
+			// code now has a case above, so everything arriving here is
+			// reserved.
+			//
+			// This used to answer Pairing Failed with Command Not Supported,
+			// which is a PDU the spec says must not be sent, and which took
+			// the link's OOB material with it through SmpSendFailed. One byte
+			// from a peer was enough.
+			DEBUG_PRINTF("SMP ignore reserved code 0x%02x\r\n", pSmp->Code);
 			break;
 	}
 }
