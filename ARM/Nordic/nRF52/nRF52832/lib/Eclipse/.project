@@ -661,6 +661,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_adv.h</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/bt_ead.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_ead.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/bt_padv.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_padv.h</locationURI>
@@ -1509,6 +1514,11 @@
 			<name>src/bluetooth/bt_adv.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_ead.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_ead.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_adv_hci.cpp</name>

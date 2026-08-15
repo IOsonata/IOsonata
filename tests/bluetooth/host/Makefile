@@ -56,6 +56,7 @@ TEST_NAMES := \
 	bt_peer_pool_test \
 	bt_gap_hci_test \
 	bt_gap_srvc_test \
+	bt_ead_test \
 	bt_adv_hci_test \
 	bt_padv_hci_test \
 	bt_psync_test \
@@ -157,6 +158,14 @@ bt_adv_hci_test_SOURCES := \
 bt_padv_hci_test_SOURCES := \
 	bt_padv_hci_test.cpp \
 	$(ROOT)/src/bluetooth/bt_padv_hci.cpp
+
+bt_ead_test_SOURCES := \
+	bt_ead_test.cpp \
+	$(ROOT)/src/bluetooth/bt_ead.cpp \
+	$(ROOT)/src/crypto/crypto_softaes.cpp \
+	$(ROOT)/src/crypto/crypto_p256.cpp \
+	$(ROOT)/src/device.cpp \
+	$(ROOT)/src/device_intrf.cpp
 
 bt_gap_srvc_test_SOURCES := \
 	bt_gap_srvc_test.cpp \
