@@ -42,6 +42,7 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_scan.h"
+#include "bluetooth/bt_psync.h"
 #include "istddef.h"
 #include "syslog.h"
 
@@ -506,13 +507,27 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				}
 			}
 			break;
+		// Periodic advertising sync. The parsing, the report reassembly and
+		// the application hooks are in bt_psync.cpp, which needs no HCI
+		// device, so what happens here is bounding the payload and saying
+		// which version of the event arrived. The V2 forms carry extra fields
+		// and, for the report, carry them in the middle rather than at the
+		// end, so the version cannot be inferred from the length.
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V1:
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V2:
+			BtPsyncEvtEstablished(pLeEvtPkt->Data,
+				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data),
+				pLeEvtPkt->Evt == BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V2);
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V1:
 		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V2:
+			BtPsyncEvtReport(pLeEvtPkt->Data,
+				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data),
+				pLeEvtPkt->Evt == BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V2);
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_LOST:
+			BtPsyncEvtLost(pLeEvtPkt->Data,
+				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data));
 			break;
 		case BT_HCI_EVT_LE_SCAN_TIMEOUT:
 			break;

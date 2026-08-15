@@ -187,6 +187,48 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 			res = sdc_hci_cmd_le_set_periodic_adv_enable((const sdc_hci_cmd_le_set_periodic_adv_enable_t*)pParam);
 			break;
 
+		// Periodic advertising, receiving side. Create Sync is answered with
+		// Command Status rather than Command Complete, which changes nothing
+		// here: the SDC entry point returns the status either way.
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC:
+			res = sdc_hci_cmd_le_periodic_adv_create_sync((const sdc_hci_cmd_le_periodic_adv_create_sync_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC_CANCEL:
+			res = sdc_hci_cmd_le_periodic_adv_create_sync_cancel();
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_TERMINATE_SYNC:
+			res = sdc_hci_cmd_le_periodic_adv_terminate_sync((const sdc_hci_cmd_le_periodic_adv_terminate_sync_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_LIST_ADD_DEV:
+			res = sdc_hci_cmd_le_add_device_to_periodic_adv_list((const sdc_hci_cmd_le_add_device_to_periodic_adv_list_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_LIST_REMOVE_DEV:
+			res = sdc_hci_cmd_le_remove_device_from_periodic_adv_list((const sdc_hci_cmd_le_remove_device_from_periodic_adv_list_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_LIST_CLEAR:
+			res = sdc_hci_cmd_le_clear_periodic_adv_list();
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_LIST_READ_SIZE:
+			{
+				sdc_hci_cmd_le_read_periodic_adv_list_size_return_t r;
+				res = sdc_hci_cmd_le_read_periodic_adv_list_size(&r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_RECEIVE_ENABLE:
+			res = sdc_hci_cmd_le_set_periodic_adv_receive_enable((const sdc_hci_cmd_le_set_periodic_adv_receive_enable_t*)pParam);
+			break;
+
 		case BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM:
 			res = sdc_hci_cmd_le_set_ext_scan_params((const sdc_hci_cmd_le_set_ext_scan_params_t*)pParam);
 			break;

@@ -57,6 +57,7 @@ TEST_NAMES := \
 	bt_gap_hci_test \
 	bt_adv_hci_test \
 	bt_padv_hci_test \
+	bt_psync_test \
 	bt_gatt_cccd_test \
 	bt_gatt_srvc_test \
 	bt_gatt_hci_security_test \
@@ -105,11 +106,13 @@ bt_hci_flow_test_SOURCES := \
 	bt_hci_flow_test.cpp \
 	$(HCI_GATT_TEST_STUB) \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
+	$(ROOT)/src/bluetooth/bt_psync.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
 bt_hci_smp_tx_test_SOURCES := \
 	bt_hci_smp_tx_test.cpp \
-	$(ROOT)/src/bluetooth/bt_hci_host.cpp
+	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
+	$(ROOT)/src/bluetooth/bt_psync.cpp
 
 bt_hci_ctlr_init_test_SOURCES := \
 	bt_hci_ctlr_init_test.cpp \
@@ -153,6 +156,11 @@ bt_adv_hci_test_SOURCES := \
 bt_padv_hci_test_SOURCES := \
 	bt_padv_hci_test.cpp \
 	$(ROOT)/src/bluetooth/bt_padv_hci.cpp
+
+bt_psync_test_SOURCES := \
+	bt_psync_test.cpp \
+	$(ROOT)/src/bluetooth/bt_psync.cpp \
+	$(ROOT)/src/bluetooth/bt_psync_hci.cpp
 
 bt_gatt_cccd_test_SOURCES := \
 	bt_gatt_cccd_test.cpp \
@@ -213,6 +221,7 @@ bt_hci_adversarial_test_SOURCES := \
 	bt_hci_adversarial_test.cpp \
 	$(HCI_GATT_TEST_STUB) \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
+	$(ROOT)/src/bluetooth/bt_psync.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
 bt_l2cap_adversarial_test_SOURCES := \
