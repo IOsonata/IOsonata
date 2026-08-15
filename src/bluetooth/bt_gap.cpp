@@ -118,7 +118,18 @@ static BtGattChar_t s_BtGapChar[] = {
 	        sizeof(BtGattPreferedConnParams_t),
 	        BT_GATT_CHAR_PROP_READ,
 	        NULL),
+	// LE GATT Security Levels, Core 5.4 Vol 3 Part C 12.7. Read only with no
+	// encryption, no authentication and no authorization, because a client
+	// reads it to find out what security to establish and cannot have
+	// established it yet.
+	BT_CHAR(BT_UUID_CHARACTERISTIC_LE_GATT_SECURITY_LEVELS,
+	        BT_GAP_SEC_LEVELS_MAX_LEN,
+	        BT_GATT_CHAR_PROP_READ,
+	        NULL),
 };
+
+// Index of the security levels characteristic in the array above.
+#define BT_GAP_SEC_LEVELS_CHAR_IDX		3
 
 static BtGattSrvc_t s_BtGapSrvc = BT_SRVC_STD(BT_UUID_GATT_SERVICE_GENERIC_ACCESS, s_BtGapChar);
 
@@ -190,6 +201,71 @@ __attribute__((weak)) void BtGapParamInit(const BtGapCfg_t *pCfg)
 	(void)pCfg;
 }
 
+// The LE GATT Security Levels value, Core 5.4 Vol 3 Part C 12.7: a sequence of
+// Security Level Requirements, each a Security Mode octet followed by a
+// Security Level octet, both written as the number used in their definitions.
+//
+// The spec makes meeting any one of the requirements listed for a mode
+// sufficient, so a longer sequence is a weaker statement, not a stronger one.
+// One requirement is what a server with a single policy has to say.
+bool BtGapSecLevelsSet(const uint8_t *pReq, size_t Len)
+{
+	if (pReq == nullptr || Len < 2 || (Len & 1) != 0 ||
+		Len > BT_GAP_SEC_LEVELS_MAX_LEN)
+	{
+		return false;
+	}
+
+	if (!BtGattCharSetValue(&s_BtGapChar[BT_GAP_SEC_LEVELS_CHAR_IDX],
+							(void*)pReq, Len))
+	{
+		BtGattInitStatusFail(BT_GATT_INIT_ERROR_VALUE_SET);
+		return false;
+	}
+
+	return true;
+}
+
+// Default value from the configured security type. This says what the
+// configuration names and nothing more.
+//
+// A build that refuses legacy pairing requires mode 1 level 4 wherever this
+// would answer level 3, because level 3 tells a client that authenticated
+// legacy pairing is enough when it is not. The generic bt_smp.cpp path is one
+// such build: BtSmpAuthConfig forces the Secure Connections bit. On the nRF54
+// port it depends on BtSecBmScOnlySet, which is a runtime choice. Neither is
+// visible from here, so an application whose stack refuses legacy calls
+// BtGapSecLevelsSet with mode 1 level 4 instead.
+static void BtGapSecLevelsDefault(uint32_t SecType)
+{
+	uint8_t req[2];
+
+	switch (SecType)
+	{
+		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
+			req[0] = 1; req[1] = 2;		// encrypted, unauthenticated
+			break;
+		case BTGAP_SECTYPE_STATICKEY_MITM:
+			req[0] = 1; req[1] = 3;		// encrypted, authenticated
+			break;
+		case BTGAP_SECTYPE_LESC_MITM:
+			req[0] = 1; req[1] = 4;		// authenticated Secure Connections
+			break;
+		case BTGAP_SECTYPE_SIGNED_NO_MITM:
+			req[0] = 2; req[1] = 1;		// data signing, unauthenticated
+			break;
+		case BTGAP_SECTYPE_SIGNED_MITM:
+			req[0] = 2; req[1] = 2;		// data signing, authenticated
+			break;
+		case BTGAP_SECTYPE_NONE:
+		default:
+			req[0] = 1; req[1] = 1;		// no security
+			break;
+	}
+
+	(void)BtGapSecLevelsSet(req, sizeof(req));
+}
+
 void BtGapInit(const BtGapCfg_t *pCfg)
 {
 	BtGattInitStatusReset();
@@ -201,6 +277,12 @@ void BtGapInit(const BtGapCfg_t *pCfg)
 
 	if (pCfg->Role & BT_GAP_ROLE_PERIPHERAL)
 	{
+		// The value has to be in place before the service is registered: a
+		// port that copies the characteristic into a vendor database at
+		// registration would otherwise take an empty one, and 12.7 requires
+		// the value to be static during a connection.
+		BtGapSecLevelsDefault(pCfg->SecType);
+
 		if (!BtGattSrvcAdd(&s_BtGattSrvc) ||
 			!BtGattSrvcAdd(&s_BtGapSrvc))
 		{

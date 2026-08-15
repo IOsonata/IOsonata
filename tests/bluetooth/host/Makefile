@@ -55,6 +55,7 @@ TEST_NAMES := \
 	bt_att_client_transaction_test \
 	bt_peer_pool_test \
 	bt_gap_hci_test \
+	bt_gap_srvc_test \
 	bt_adv_hci_test \
 	bt_padv_hci_test \
 	bt_psync_test \
@@ -156,6 +157,10 @@ bt_adv_hci_test_SOURCES := \
 bt_padv_hci_test_SOURCES := \
 	bt_padv_hci_test.cpp \
 	$(ROOT)/src/bluetooth/bt_padv_hci.cpp
+
+bt_gap_srvc_test_SOURCES := \
+	bt_gap_srvc_test.cpp \
+	$(ROOT)/src/bluetooth/bt_gap.cpp
 
 bt_psync_test_SOURCES := \
 	bt_psync_test.cpp \

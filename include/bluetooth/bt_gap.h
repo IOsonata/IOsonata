@@ -159,6 +159,12 @@ typedef struct __Bt_Gatt_Cccd_State {
 	uint16_t Value;				//!< Per-peer CCCD value for Hdl
 } BtGattCccdState_t;
 
+/// Largest LE GATT Security Levels value this stack stores, Core 5.4 Vol 3
+/// Part C 12.7. The value is a sequence of two octet Security Level
+/// Requirements; four of them covers both security modes with room to spare,
+/// and the spec allows at most one instance of the characteristic.
+#define BT_GAP_SEC_LEVELS_MAX_LEN			8
+
 typedef enum __Bt_Gap_SecType {
 	BTGAP_SECTYPE_NONE = BT_GAP_SECTYPE_NONE,
 	BTGAP_SECTYPE_STATICKEY_NO_MITM = BT_GAP_SECTYPE_STATICKEY_NO_MITM,
@@ -278,6 +284,32 @@ extern "C" {
 // store; an arch port overrides it only when the vendor stack owns the security
 // database (it then maps the vendor state into BtConnSec_t).
 bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec);
+
+/**
+ * @brief	Set the LE GATT Security Levels characteristic value
+ *
+ * Core 5.4 Vol 3 Part C 12.7. pReq is a sequence of Security Level
+ * Requirements, each a Security Mode octet followed by a Security Level
+ * octet, written as the numbers used in their definitions: mode 1 level 4 is
+ * 0x01 0x04.
+ *
+ * Meeting any one of the requirements listed for a mode is sufficient, so
+ * listing several is a weaker statement than listing one, not a stronger one.
+ *
+ * BtGapInit fills this from the configured security type. Override it when
+ * the stack refuses legacy pairing, since the default answers mode 1 level 3
+ * for an authenticated configuration and level 3 tells a client that
+ * authenticated legacy pairing is enough.
+ *
+ * The value has to be static during a connection, so this belongs before the
+ * first connection rather than in response to one.
+ *
+ * @param	pReq	: Security Level Requirements, two octets each
+ * @param	Len		: Length in octets, even, 2 to BT_GAP_SEC_LEVELS_MAX_LEN
+ *
+ * @return	true on success
+ */
+bool BtGapSecLevelsSet(const uint8_t *pReq, size_t Len);
 
 // Record the security state of ConnHdl. Called by the security layer when
 // pairing or encryption completes or is lost.
