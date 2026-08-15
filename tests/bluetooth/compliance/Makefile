@@ -47,6 +47,7 @@ HCI_SOURCES := \
 	controller/bt_virtual_controller.cpp \
 	peer/bt_virtual_peer.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
+	$(ROOT)/src/bluetooth/bt_psync.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp
 
 ATT_SOURCES := \
