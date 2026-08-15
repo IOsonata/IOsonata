@@ -102,6 +102,70 @@ void TestExtendedAdvEventNeedsCountByte()
 	BT_CHECK(s_Test, s_ScanCount == 0);
 }
 
+int s_AdvTimeoutCount = 0;
+
+void AdvTimeout(void)
+{
+	s_AdvTimeoutCount++;
+}
+
+void FeedAdvSetTerminated(BtHciDevice_t *pDev, uint8_t Status, uint8_t Len)
+{
+	alignas(4) std::array<uint8_t,
+			sizeof(BtHciEvtPacket_t) + 1 +
+			sizeof(BtHciLeEvtAdvSetTerminated_t)> raw = {};
+	BtHciEvtPacket_t *pEvt = (BtHciEvtPacket_t *)raw.data();
+	pEvt->Hdr.Evt = BT_HCI_EVT_LE;
+	pEvt->Hdr.Len = (uint8_t)(1 + Len);
+
+	BtHciLeEvtPacket_t *pLe = (BtHciLeEvtPacket_t *)pEvt->Data;
+	pLe->Evt = BT_HCI_EVT_LE_ADV_SET_TERMINATED;
+
+	BtHciLeEvtAdvSetTerminated_t *pTerm =
+		(BtHciLeEvtAdvSetTerminated_t *)pLe->Data;
+	pTerm->Status = Status;
+	pTerm->AdvHdl = 0;
+	pTerm->ConnHdl = 0x0040;
+	pTerm->NbCompletedEvt = 0;
+
+	BtHciProcessEvent(pDev, pEvt);
+}
+
+// Vol 4 Part E 7.7.65.18: an Advertising Set Terminated with Status success
+// means a connection was created, not that the set timed out. The handler used
+// to run whatever the Status was, so an application that restarts advertising
+// from it fought every connection it made.
+void TestAdvSetTerminatedReadsStatus()
+{
+	BtHciDevice_t dev = {};
+	dev.AdvTimeout = AdvTimeout;
+	s_AdvTimeoutCount = 0;
+
+	// A connection was created. Not a timeout.
+	FeedAdvSetTerminated(&dev, BT_HCI_SUCCESS,
+						 sizeof(BtHciLeEvtAdvSetTerminated_t));
+	BT_CHECK(s_Test, s_AdvTimeoutCount == 0);
+
+	// The duration elapsed, and the advertising event count was met. Both are
+	// what the handler exists for.
+	FeedAdvSetTerminated(&dev, BT_HCI_ERR_ADV_TIMEOUT,
+						 sizeof(BtHciLeEvtAdvSetTerminated_t));
+	BT_CHECK(s_Test, s_AdvTimeoutCount == 1);
+
+	FeedAdvSetTerminated(&dev, BT_HCI_ERR_LIMIT_REACHED,
+						 sizeof(BtHciLeEvtAdvSetTerminated_t));
+	BT_CHECK(s_Test, s_AdvTimeoutCount == 2);
+
+	// Status is the first octet of the event body, so a truncated event has
+	// to be dropped rather than read.
+	FeedAdvSetTerminated(&dev, BT_HCI_ERR_ADV_TIMEOUT, 0);
+	BT_CHECK(s_Test, s_AdvTimeoutCount == 2);
+
+	FeedAdvSetTerminated(&dev, BT_HCI_ERR_ADV_TIMEOUT,
+						 sizeof(BtHciLeEvtAdvSetTerminated_t) - 1);
+	BT_CHECK(s_Test, s_AdvTimeoutCount == 2);
+}
+
 void FeedExtAdv(BtHciDevice_t *pDev, const uint8_t Addr[6],
 				uint8_t Sid, uint8_t DataStatus,
 				const uint8_t *pData, uint8_t DataLen)
@@ -224,5 +288,7 @@ int main()
 			   TestExtendedAdvEventNeedsCountByte);
 	s_Test.Run("dropped extended advertising reassembly",
 			   TestDroppedReassemblyCannotBecomeComplete);
+	s_Test.Run("advertising set terminated reads status",
+			   TestAdvSetTerminatedReadsStatus);
 	return s_Test.Finish();
 }

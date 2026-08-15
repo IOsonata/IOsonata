@@ -517,9 +517,32 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		case BT_HCI_EVT_LE_SCAN_TIMEOUT:
 			break;
 		case BT_HCI_EVT_LE_ADV_SET_TERMINATED:
-			if (pDev->AdvTimeout)
 			{
-				pDev->AdvTimeout();
+				// Vol 4 Part E 7.7.65.18: Status says why the set stopped.
+				// Success means a connection was created, which is not a
+				// timeout; Advertising Timeout (0x3C) is the duration
+				// elapsing and Limit Reached (0x43) is the advertising event
+				// count being met. Dispatching whatever the Status was ran the
+				// application's advertising timeout handler on every
+				// successful connection, so an application that restarts
+				// advertising from it fought the connection it had just made.
+				//
+				// Any other status also means advertising stopped without a
+				// connection, which is the case the handler exists for, so the
+				// gate is on success rather than on the two named codes.
+				if ((const uint8_t*)pLeEvtPkt->Data +
+					sizeof(BtHciLeEvtAdvSetTerminated_t) > evtEnd)
+				{
+					break;
+				}
+
+				BtHciLeEvtAdvSetTerminated_t *p =
+					(BtHciLeEvtAdvSetTerminated_t*)pLeEvtPkt->Data;
+
+				if (p->Status != BT_HCI_SUCCESS && pDev->AdvTimeout)
+				{
+					pDev->AdvTimeout();
+				}
 			}
 			break;
 		case BT_HCI_EVT_LE_SCAN_RQST_RECEIVED:
