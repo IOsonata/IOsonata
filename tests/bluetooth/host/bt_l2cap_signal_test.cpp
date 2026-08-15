@@ -169,6 +169,45 @@ void TestNullAndShortInput()
 	CHECK(BtL2CapProcessSignal(nullptr, 1, x.Req, kFrameHeaderLen - 1, x.Rsp) == 0);
 }
 
+// Vol 3 Part A 4.1: "L2CAP_COMMAND_REJECT_RSP packets should not be sent in
+// response to an identified Response packet." Table 4.2 allows none of these
+// four on CID 0x0005, and Section 4 has a code disallowed on the channel it
+// arrives on answered with a Command Reject, but the rule about identified
+// Responses is the specific one and it is what stops a reject loop. Every
+// other Response the table lists is handled by its own case, so these four are
+// the only ones that reach the default.
+void TestIdentifiedResponsesAreNotRejected()
+{
+	static const uint8_t responses[] = {
+		BT_L2CAP_CODE_CONNECTION_RSP,
+		BT_L2CAP_CODE_CONFIGURATION_RSP,
+		BT_L2CAP_CODE_ECHO_RSP,
+		BT_L2CAP_CODE_INFORMATION_RSP,
+	};
+
+	for (size_t i = 0; i < sizeof(responses) / sizeof(responses[0]); i++)
+	{
+		SignalExchange rsp;
+		rsp.Append(responses[i], (uint8_t)(0x21 + i));
+		CHECK(rsp.Run() == 0);
+	}
+
+	// The previously used block is not a Response and is disallowed on every
+	// channel, so it is still rejected.
+	SignalExchange previouslyUsed;
+	previouslyUsed.Append(0x0C, 0x26);
+	CHECK(previouslyUsed.Run() == kFrameHeaderLen + sizeof(uint16_t));
+	CheckReject(previouslyUsed.Frame(), 0x26,
+				BT_L2CAP_CMD_REJECT_REASON_NOT_UNDERSTOOD);
+
+	// A Request this channel does not allow is still rejected.
+	SignalExchange echoReq;
+	echoReq.Append(BT_L2CAP_CODE_ECHO_REQ, 0x27);
+	CHECK(echoReq.Run() == kFrameHeaderLen + sizeof(uint16_t));
+	CheckReject(echoReq.Frame(), 0x27,
+				BT_L2CAP_CMD_REJECT_REASON_NOT_UNDERSTOOD);
+}
+
 void TestUnknownAndTruncatedCommand()
 {
 	SignalExchange unknown;
@@ -646,6 +685,7 @@ int main()
 {
 	TestNullAndShortInput();
 	TestUnknownAndTruncatedCommand();
+	TestIdentifiedResponsesAreNotRejected();
 	TestSignalingMtuExceeded();
 	TestConnectionParameterRequest();
 	TestConnParamRoleGate();

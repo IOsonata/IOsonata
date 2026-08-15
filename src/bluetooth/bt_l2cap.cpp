@@ -96,18 +96,38 @@ static bool BtL2CapAppendCmdReject(uint8_t *pOut, uint16_t *pOutLen, uint16_t Ou
 							  Id, payload, (uint16_t)(sizeof(uint16_t) + DataLen));
 }
 
-// An identified response is not answered with a Command Reject (Vol 3 Part A
-// 4.1). A packet whose first command is one of these is discarded when it
-// cannot be processed, otherwise two implementations that both reject on sight
-// can answer each other's rejects.
+// An identified Response is not answered with a Command Reject. Vol 3 Part A
+// 4.1: "L2CAP_COMMAND_REJECT_RSP packets should not be sent in response to an
+// identified Response packet", and for a packet over the signaling MTU, "If
+// only Responses are recognized, the packet shall be silently discarded".
+// Otherwise two implementations that both reject on sight answer each other's
+// rejects.
+//
+// Every Response in Table 4.2 is listed, not only the ones this channel
+// allows. The four that LE-U does not allow, Connection Response,
+// Configuration Response, Echo Response and Information Response, are the only
+// ones that can reach the default case of the command switch, because every
+// code LE-U does allow is handled explicitly. They are identified Responses
+// wherever they arrive, so 4.1 covers them even though Section 4 also says a
+// code disallowed on the channel it arrives on is rejected. The rule about
+// identified Responses is the specific one, and it is the one that stops the
+// reject loop.
+//
+// Codes that are unknown, and the previously used block 0x0C to 0x11, are not
+// Responses and are still rejected, which is what Section 4 requires of an
+// unidentified signaling packet.
 static bool BtL2CapCodeIsResponse(uint8_t Code)
 {
 	switch (Code)
 	{
 		case BT_L2CAP_CODE_COMMAND_REJECT_RSP:
+		case BT_L2CAP_CODE_CONNECTION_RSP:
+		case BT_L2CAP_CODE_CONFIGURATION_RSP:
+		case BT_L2CAP_CODE_DISCONNECTION_RSP:
+		case BT_L2CAP_CODE_ECHO_RSP:
+		case BT_L2CAP_CODE_INFORMATION_RSP:
 		case BT_L2CAP_CODE_CONNECTION_PARAMETER_UPDATE_RSP:
 		case BT_L2CAP_CODE_LE_CREDIT_BASED_CONNECTION_RSP:
-		case BT_L2CAP_CODE_DISCONNECTION_RSP:
 		case BT_L2CAP_CODE_CREDIT_BASED_CONNECTION_RSP:
 		case BT_L2CAP_CODE_CREDIT_BASED_RECONFIGURE_RSP:
 			return true;
@@ -498,9 +518,19 @@ uint32_t BtL2CapProcessSignal(BtHciDevice_t * const pDev,
 				break;
 
 			default:
-				BtL2CapAppendCmdReject(pOut, &outLen, outMax, pCmd->Id,
-										BT_L2CAP_CMD_REJECT_REASON_NOT_UNDERSTOOD,
-										nullptr, 0);
+				// Everything the LE-U signaling channel allows is handled
+				// above, so what arrives here is a code that channel does not
+				// allow or does not define. An unidentified one is rejected,
+				// which Vol 3 Part A 4.1 requires. An identified Response is
+				// not, which the same section asks for; without this the four
+				// BR/EDR Responses were answered with a Command Reject that a
+				// peer following the same rule would then have to drop.
+				if (BtL2CapCodeIsResponse(pCmd->Code) == false)
+				{
+					BtL2CapAppendCmdReject(pOut, &outLen, outMax, pCmd->Id,
+											BT_L2CAP_CMD_REJECT_REASON_NOT_UNDERSTOOD,
+											nullptr, 0);
+				}
 				break;
 		}
 
