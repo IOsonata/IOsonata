@@ -278,6 +278,119 @@ void TestManDataCompanyIdLittleEndian()
 	}
 }
 
+
+
+// --- Advertising Coding Selection ----------------------------------------
+
+int CountCmd(uint16_t OpCode)
+{
+	int n = 0;
+
+	for (int i = 0; i < s_CmdCount; i++)
+	{
+		if (s_Cmds[i].OpCode == OpCode)
+		{
+			n++;
+		}
+	}
+
+	return n;
+}
+
+// 7.8.53 [v2] is a separate opcode from [v1] and appends
+// Primary_Advertising_PHY_Options and Secondary_Advertising_PHY_Options. A
+// set asking for neither keeps [v1], which a controller predating Core 5.4
+// accepts.
+void TestCodingSelectionUsesTheV2Opcode()
+{
+	uint8_t addr[6] = {};
+	BtAppCfg_t cfg = MakePeripheralCfg();
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtAdvCodingSet(BTADV_PHY_OPT_NONE, BTADV_PHY_OPT_NONE));
+	CHECK(BtAppAdvInit(&cfg) == true);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM) == 1);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2) == 0);
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtAdvCodingSet(BTADV_PHY_OPT_REQUIRE_S8, BTADV_PHY_OPT_PREFER_S2));
+	CHECK(BtAppAdvInit(&cfg) == true);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM) == 0);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2) == 1);
+
+	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		// The 25 octets of [v1] then the two options.
+		CHECK(c->ParamLen == 27);
+		CHECK(c->Param[25] == BTADV_PHY_OPT_REQUIRE_S8);
+		CHECK(c->Param[26] == BTADV_PHY_OPT_PREFER_S2);
+		// What comes before them is the [v1] layout untouched, so the own
+		// address type is still where the other cases look for it.
+		CHECK(c->Param[0] == 0);
+		CHECK(c->Param[kAdvOwnAddr] == BTADDR_TYPE_PUBLIC);
+	}
+
+	// Back to none restores [v1].
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtAdvCodingSet(BTADV_PHY_OPT_NONE, BTADV_PHY_OPT_NONE));
+	CHECK(BtAppAdvInit(&cfg) == true);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM) == 1);
+}
+
+// Only 0x00 to 0x04 are defined. A reserved value is refused here rather than
+// sent for the controller to answer with one status byte.
+void TestCodingOptionRangeIsChecked()
+{
+	uint8_t addr[6] = {};
+	BtAppCfg_t cfg = MakePeripheralCfg();
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtAdvCodingSet(BTADV_PHY_OPT_MAX + 1, BTADV_PHY_OPT_NONE) == false);
+	CHECK(BtAdvCodingSet(BTADV_PHY_OPT_NONE, BTADV_PHY_OPT_MAX + 1) == false);
+	CHECK(s_CmdCount == 0);
+
+	// A refused call leaves the previous choice alone, so this still sends
+	// [v1] rather than a command built from a rejected value.
+	CHECK(BtAppAdvInit(&cfg) == true);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM) == 1);
+}
+
+// The host support bit goes through LE Set Host Feature. Without it a PHY of
+// 0x03 means LE Coded with the controller choosing the coding, so the options
+// above have no effect on air.
+void TestCodingSelectionHostFeatureBit()
+{
+	uint8_t addr[6] = {};
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtAdvCodingSelectionEnable(true));
+
+	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_SET_HOST_FEATURE);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		// 7.8.115: Bit_Number(1) Bit_Value(1). Bit 41 is Advertising Coding
+		// Selection (Host Support) in the Vol 6 Part B 4.6 FeatureSet.
+		CHECK(c->ParamLen == 2);
+		CHECK(c->Param[0] == 41);
+		CHECK(c->Param[0] == BTADV_FEATURE_BIT_CODING_SELECTION);
+		CHECK(c->Param[1] == 1);
+	}
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtAdvCodingSelectionEnable(false));
+	c = FindCmd(BT_HCI_CMD_CTLR_SET_HOST_FEATURE);
+	CHECK(c != nullptr && c->Param[1] == 0);
+
+	// A controller without the feature answers Unsupported Feature or
+	// Parameter Value, which is passed up rather than assumed away.
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	s_FailOpCode = BT_HCI_CMD_CTLR_SET_HOST_FEATURE;
+	CHECK(BtAdvCodingSelectionEnable(true) == false);
+}
+
 } // namespace
 
 extern "C" {
@@ -301,6 +414,9 @@ int main()
 	TestAdvDegenerateRandomIdentity();
 	TestAdvStopKeepsStateOnFailure();
 	TestAdvManDataSetReportsRestartFailure();
+	TestCodingSelectionUsesTheV2Opcode();
+	TestCodingOptionRangeIsChecked();
+	TestCodingSelectionHostFeatureBit();
 
 	if (s_Failures != 0)
 	{

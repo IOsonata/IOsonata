@@ -392,6 +392,9 @@ SOFTWARE.
 #define BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_RESPONSE_DATA			((8<<10) | 0x83)	//!< LE Set Periodic Advertising Response Data command
 #define BT_HCI_CMD_CTLR_SET_PERIODIC_SYNC_SUBEVENT				((8<<10) | 0x84)	//!< LE Set Periodic Sync Subevent command
 #define BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM_V2				((8<<10) | 0x86)	//!< LE Set Periodic Advertising Parameters [v2] command
+// Advertising Coding Selection. As with the periodic parameters command, [v2]
+// is its own OCF rather than a version parameter, so 0x36 above stays [v1].
+#define BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2					((8<<10) | 0x7F)	//!< LE Set Extended Advertising Parameters [v2] command
 
 
 

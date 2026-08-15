@@ -153,6 +153,23 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 			}
 			break;
 
+		// Advertising Coding Selection. [v2] is a separate entry point, and
+		// like [v1] it returns the selected transmit power.
+		case BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2:
+			{
+				sdc_hci_cmd_le_set_ext_adv_params_v2_return_t r;
+				res = sdc_hci_cmd_le_set_ext_adv_params_v2((const sdc_hci_cmd_le_set_ext_adv_params_v2_t*)pParam, &r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_HOST_FEATURE:
+			res = sdc_hci_cmd_le_set_host_feature((const sdc_hci_cmd_le_set_host_feature_t*)pParam);
+			break;
+
 		case BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA:
 			res = sdc_hci_cmd_le_set_ext_adv_data((const sdc_hci_cmd_le_set_ext_adv_data_t*)pParam);
 			break;

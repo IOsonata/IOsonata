@@ -69,7 +69,35 @@ typedef struct {
 	uint8_t  SecPhy;
 	uint8_t  Sid;
 	uint8_t  ScanReqNotif;
-} BtHciLeExtAdvParams_t;			//!< 25 octets
+} BtHciLeExtAdvParams_t;			//!< 25 octets, 7.8.53 [v1]
+
+// 7.8.53 [v2] is a separate opcode, not a version parameter. It appends the
+// two PHY options that Advertising Coding Selection adds.
+typedef struct {
+	uint8_t  AdvHandle;
+	uint8_t  EvtProp[2];
+	uint8_t  PrimIntervalMin[3];
+	uint8_t  PrimIntervalMax[3];
+	uint8_t  PrimChanMap;
+	uint8_t  OwnAddrType;
+	uint8_t  PeerAddrType;
+	uint8_t  PeerAddr[6];
+	uint8_t  FilterPolicy;
+	int8_t   TxPower;
+	uint8_t  PrimPhy;
+	uint8_t  SecMaxSkip;
+	uint8_t  SecPhy;
+	uint8_t  Sid;
+	uint8_t  ScanReqNotif;
+	uint8_t  PrimPhyOpt;
+	uint8_t  SecPhyOpt;
+} BtHciLeExtAdvParamsV2_t;			//!< 27 octets, 7.8.53 [v2]
+
+// 7.8.115 LE Set Host Feature.
+typedef struct {
+	uint8_t  BitNumber;
+	uint8_t  BitValue;
+} BtHciLeSetHostFeature_t;			//!< 2 octets
 
 typedef struct {
 	uint8_t  AdvHandle;
@@ -154,6 +182,43 @@ static inline void BtAdvWr24(uint8_t *p, uint32_t v)
 static inline BtHciDevice_t *BtAdvHciDev(void)
 {
 	return g_BtAppData.AppDevice.pHciDev;
+}
+
+// LE Coded PHY coding the next advertising set asks for. Both none is the
+// ordinary case and keeps the [v1] parameters command, which is what a
+// controller predating Core 5.4 accepts.
+static uint8_t s_BtAdvPrimPhyOpt = BTADV_PHY_OPT_NONE;
+static uint8_t s_BtAdvSecPhyOpt = BTADV_PHY_OPT_NONE;
+
+bool BtAdvCodingSet(uint8_t PrimOpt, uint8_t SecOpt)
+{
+	if (PrimOpt > BTADV_PHY_OPT_MAX || SecOpt > BTADV_PHY_OPT_MAX)
+	{
+		return false;
+	}
+
+	s_BtAdvPrimPhyOpt = PrimOpt;
+	s_BtAdvSecPhyOpt = SecOpt;
+
+	return true;
+}
+
+bool BtAdvCodingSelectionEnable(bool bEnable)
+{
+	BtHciDevice_t *pDev = BtAdvHciDev();
+
+	if (pDev == nullptr)
+	{
+		return false;
+	}
+
+	BtHciLeSetHostFeature_t p;
+
+	p.BitNumber = BTADV_FEATURE_BIT_CODING_SELECTION;
+	p.BitValue = bEnable ? 1 : 0;
+
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_HOST_FEATURE, &p,
+						sizeof(p), NULL, 0) == 0;
 }
 
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
@@ -436,7 +501,25 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 	p.Sid          = 0;
 	p.ScanReqNotif = 0;
 
-	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM, &p, sizeof(p), NULL, 0) != 0)
+	// Advertising Coding Selection. The two PHY options only exist on the
+	// [v2] command, so a set that asks for a coding goes out that way and one
+	// that does not keeps [v1], which every controller accepts.
+	if (s_BtAdvPrimPhyOpt != BTADV_PHY_OPT_NONE ||
+		s_BtAdvSecPhyOpt != BTADV_PHY_OPT_NONE)
+	{
+		BtHciLeExtAdvParamsV2_t v2;
+
+		memcpy(&v2, &p, sizeof(p));
+		v2.PrimPhyOpt = s_BtAdvPrimPhyOpt;
+		v2.SecPhyOpt = s_BtAdvSecPhyOpt;
+
+		if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2, &v2,
+						 sizeof(v2), NULL, 0) != 0)
+		{
+			return false;
+		}
+	}
+	else if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM, &p, sizeof(p), NULL, 0) != 0)
 	{
 		return false;
 	}

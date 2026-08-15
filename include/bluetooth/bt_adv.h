@@ -95,6 +95,26 @@ typedef struct __Bt_Adv_Param {
 #define BTADV_EXTADV_EVT_PROP_HIGH_DUTY					(1<<3)	//!< High duty cycle direct connectable <= 3.75ms interval
 #define BTADV_EXTADV_EVT_PROP_LEGACY					(1<<4)	//!< Legacy advertising using PDU
 #define BTADV_EXTADV_EVT_PROP_OMIT_ADDR					(1<<5)	//!< Omit advertise's address from all PDU (anonymous)
+// Advertising Coding Selection, Core 5.4. The coding used on the LE Coded PHY
+// is chosen by the Host through the [v2] parameters command rather than left
+// to the Controller, which is what the feature adds.
+//
+// Primary_Advertising_PHY_Options and Secondary_Advertising_PHY_Options,
+// Vol 4 Part E 7.8.53. A preference lets the Controller fall back, a
+// requirement does not.
+#define BTADV_PHY_OPT_NONE								0x00	//!< No preferred or required coding
+#define BTADV_PHY_OPT_PREFER_S2							0x01	//!< Prefers S=2
+#define BTADV_PHY_OPT_PREFER_S8							0x02	//!< Prefers S=8
+#define BTADV_PHY_OPT_REQUIRE_S2						0x03	//!< Requires S=2
+#define BTADV_PHY_OPT_REQUIRE_S8						0x04	//!< Requires S=8
+#define BTADV_PHY_OPT_MAX								0x04
+
+/// FeatureSet bit the Host sets to say it supports Advertising Coding
+/// Selection, Vol 6 Part B 4.6.33.3. With it clear a Primary or Secondary PHY
+/// of 0x03 means LE Coded with the Controller choosing; with it set 0x03 is
+/// S=8 and 0x04 is S=2.
+#define BTADV_FEATURE_BIT_CODING_SELECTION				41
+
 #define BTADV_EXTADV_EVT_PROP_TXPWR						(1<<6)	//!< Include Tx power in the extended header
 
 #define BTADV_EXTADV_PHY_1M								1
@@ -176,6 +196,43 @@ BtAdvData_t *BtAdvDataAllocate(BtAdvPacket_t * const pAdvPkt, uint8_t Type, int 
 // connection is stamped with this so the SMP toolbox computes f5/f6/c1 with
 // the address the peer actually saw.
 void BtAdvOwnAddrGet(uint8_t *pType, uint8_t pAddr[6]);
+
+/**
+ * @brief	Tell the controller this host supports Advertising Coding Selection
+ *
+ * Issues LE Set Host Feature for FeatureSet bit 41 (Vol 4 Part E 7.8.115).
+ * Until this succeeds a Primary or Secondary PHY of 0x03 means LE Coded with
+ * the controller choosing the coding, and the PHY options of the [v2]
+ * parameters command have no effect.
+ *
+ * Vol 4 Part E 7.8.115 has the controller answer Command Disallowed while it
+ * holds any connection, so this belongs in initialization rather than in
+ * response to anything. A controller without the feature answers Unsupported
+ * Feature or Parameter Value.
+ *
+ * @param	bEnable	: true to set the bit, false to clear it
+ *
+ * @return	true when the controller accepted it
+ */
+bool BtAdvCodingSelectionEnable(bool bEnable);
+
+/**
+ * @brief	Choose the LE Coded PHY coding the next advertising set uses
+ *
+ * The values take effect at the next BtAppAdvInit, which sends the [v2]
+ * parameters command instead of [v1] when either option is not
+ * BTADV_PHY_OPT_NONE. Both BTADV_PHY_OPT_NONE restores [v1], which is what a
+ * controller predating Core 5.4 accepts.
+ *
+ * The options only mean anything on the LE Coded PHY. On 1M or 2M the
+ * controller ignores them.
+ *
+ * @param	PrimOpt	: BTADV_PHY_OPT_* for the primary advertising PHY
+ * @param	SecOpt	: BTADV_PHY_OPT_* for the secondary advertising PHY
+ *
+ * @return	true when both values are in range
+ */
+bool BtAdvCodingSet(uint8_t PrimOpt, uint8_t SecOpt);
 
 /**
  * @brief	Add advertisement data into the adv packet
