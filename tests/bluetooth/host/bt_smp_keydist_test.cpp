@@ -161,6 +161,41 @@ void TestInitiatorSendsTheWholeNegotiatedSet(bttest::Context &ctx)
 	BT_CHECK(ctx, BtSmpTestBondAddCount() == 1);
 }
 
+// A bond store that refuses, the table being full being the ordinary reason,
+// used to be swallowed: the call returned nothing and the pairing completed as
+// if the record were kept. The peer then holds a bond this device does not.
+// The link is encrypted and usable, so pairing still completes; what changes
+// is that the application is told.
+void TestBondStoreRefusalIsReported(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(true, both, both, both, both);
+	BtSmpTestBondAddResultSet(false);
+	BtSmpEncryptionChanged(&s_HciDev, kConnHdl, 0, 1);
+
+	BT_CHECK(ctx, BtSmpTestBondAddCount() == 1);
+	BT_CHECK(ctx, BtSmpTestBondStoreFailedCount() == 1);
+
+	// The key distribution still runs and the link still reaches the phase it
+	// should. Losing the bond does not lose the session.
+	BT_CHECK(ctx, IdInfoCount() == 1);
+	BT_CHECK(ctx, SigningCount() == 1);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.State == BT_SMP_STATE_KEYDIST);
+}
+
+// The control: a store that accepts reports nothing.
+void TestBondStoreSuccessIsSilent(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(true, both, both, both, both);
+	BtSmpEncryptionChanged(&s_HciDev, kConnHdl, 0, 1);
+
+	BT_CHECK(ctx, BtSmpTestBondAddCount() == 1);
+	BT_CHECK(ctx, BtSmpTestBondStoreFailedCount() == 0);
+}
+
 // A responder that clears SignKey from the Initiator Key Distribution field of
 // its Pairing Response has refused the CSRK. Taking the local set from the
 // request alone sent Signing Information anyway. Phones do clear it.
@@ -271,6 +306,10 @@ int main()
 			[&] { TestResponderUsesTheResponderField(ctx); });
 	ctx.Run("a response cannot add a key the request did not offer",
 			[&] { TestAResponseCannotAddAKeyTheRequestDidNotOffer(ctx); });
+	ctx.Run("bond store refusal is reported",
+			[&] { TestBondStoreRefusalIsReported(ctx); });
+	ctx.Run("bond store success is silent",
+			[&] { TestBondStoreSuccessIsSilent(ctx); });
 
 	return ctx.Finish();
 }

@@ -64,4 +64,10 @@ int BtSmpTestCaptureCount(uint8_t Code);
 /// Times BtSmpBondAdd was reached since the last reset.
 int BtSmpTestBondAddCount(void);
 
+/// What the next BtSmpBondAdd calls answer. Reset restores true.
+void BtSmpTestBondAddResultSet(bool Result);
+
+/// Times BtSmpBondStoreFailed was reached since the last reset.
+int BtSmpTestBondStoreFailedCount(void);
+
 #endif // __BT_SMP_LINK_TEST_STUBS_H__

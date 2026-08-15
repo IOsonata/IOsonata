@@ -2355,6 +2355,11 @@ static void SmpHandleIdAddrInfo(BtSmpLink_t *pLink, const BtSmpIdAddrInfo_t *pIn
 	// IRK. BtSmpBondAdd keys the slot by the connection address (not this
 	// identity address), so the refresh updates the same slot the lookup will
 	// match on reconnect.
+	// The result is not reported here. This refreshes a record whose creation
+	// was already attempted at encryption change: if that succeeded this finds
+	// the same slot by address and succeeds too, and if it refused the
+	// application has already been told once. Reporting again per key would
+	// say nothing new.
 	if (pLink->Keys.bValid)
 	{
 		BtSmpBondAdd(pLink->ConnHdl, &pLink->Keys);
@@ -2364,6 +2369,7 @@ static void SmpHandleIdAddrInfo(BtSmpLink_t *pLink, const BtSmpIdAddrInfo_t *pIn
 static void SmpHandleSigningInfo(BtSmpLink_t *pLink, const BtSmpSigningInfo_t *pInfo)
 {
 	memcpy(pLink->Keys.Csrk, pInfo->Csrk, 16);
+	// Same refresh, same reason for not reporting it again.
 	if (pLink->Keys.bValid)
 	{
 		BtSmpBondAdd(pLink->ConnHdl, &pLink->Keys);
@@ -3116,7 +3122,20 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		// is incomplete; reporting it now would let an application persist a
 		// bond missing those keys. The completion is raised from
 		// SmpKeyDistReceived once every negotiated peer key has arrived.
-		BtSmpBondAdd(ConnHdl, &pLink->Keys);
+		//
+		// A store that refuses, the table being full being the ordinary
+		// reason, used to be swallowed: the call returned nothing and the
+		// pairing was reported complete anyway. The peer then holds a bond
+		// this device does not, offers its LTK on the next connection, and is
+		// answered with a negative reply. The link here is genuinely encrypted
+		// and usable, so the pairing still completes; what the application is
+		// told is that the bond was not kept, which is the only thing it can
+		// act on.
+		if (BtSmpBondAdd(ConnHdl, &pLink->Keys) == false)
+		{
+			DEBUG_PRINTF("SMP bond store refused for hdl %d\r\n", ConnHdl);
+			BtSmpBondStoreFailed(ConnHdl);
+		}
 
 		// OOB material is single use and is wiped after the link is secured.
 		if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
@@ -3177,10 +3196,23 @@ bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, uint8_t 
 }
 
 __attribute__((weak))
-void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
+bool BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 {
 	(void)ConnHdl;
 	(void)pKeys;
+
+	// No store linked. Nothing was kept, and saying so is what lets the core
+	// report it rather than treat a build with no bond table as a bond.
+	return false;
+}
+
+// Weak: a build with no bond store, or one whose table filled, has nothing to
+// do here by default. An application overrides it to make room or to tell the
+// user.
+__attribute__((weak))
+void BtSmpBondStoreFailed(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
 }
 
 __attribute__((weak))

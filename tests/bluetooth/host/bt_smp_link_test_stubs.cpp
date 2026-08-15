@@ -51,11 +51,15 @@ SOFTWARE.
 BtSmpTestCapture_t g_BtSmpTestCapture;
 
 static int s_BondAddCount;
+static bool s_BondAddResult = true;
+static int s_BondStoreFailedCount;
 
 void BtSmpTestCaptureReset(void)
 {
 	memset(&g_BtSmpTestCapture, 0, sizeof(g_BtSmpTestCapture));
 	s_BondAddCount = 0;
+	s_BondStoreFailedCount = 0;
+	s_BondAddResult = true;
 }
 
 int BtSmpTestCaptureCount(uint8_t Code)
@@ -108,12 +112,31 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 	return (uint32_t)(pAcl->Hdr.Len + sizeof(BtHciACLDataPacketHdr_t));
 }
 
-void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
+void BtSmpTestBondAddResultSet(bool Result)
+{
+	s_BondAddResult = Result;
+}
+
+int BtSmpTestBondStoreFailedCount(void)
+{
+	return s_BondStoreFailedCount;
+}
+
+bool BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 {
 	(void)ConnHdl;
 	(void)pKeys;
 
 	s_BondAddCount++;
+
+	return s_BondAddResult;
+}
+
+void BtSmpBondStoreFailed(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+
+	s_BondStoreFailedCount++;
 }
 
 bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv,
