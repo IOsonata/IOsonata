@@ -73,12 +73,34 @@ SOFTWARE.
 #define BTEAD_BLOCK_LEN				16
 
 static CipherEngine *s_pEadAes = nullptr;
+static RngEngine *s_pEadRng = nullptr;
 
-bool BtEadInit(CipherEngine *pAes)
+bool BtEadInit(CipherEngine *pAes, RngEngine *pRng)
 {
 	s_pEadAes = pAes;
+	s_pEadRng = pRng;
 
 	return pAes != nullptr;
+}
+
+bool BtEadRandGen(uint8_t Rand[BTEAD_RANDOMIZER_LEN])
+{
+	if (Rand == nullptr)
+	{
+		return false;
+	}
+
+	// A randomizer that is not unpredictable gives back exactly the tracking
+	// the feature exists to prevent, so a deterministic engine is refused
+	// rather than used (CSS Part A 1.23.4, Vol 2 Part H 2).
+	if (s_pEadRng == nullptr || !s_pEadRng->IsSecure() ||
+		s_pEadRng->Random(Rand, BTEAD_RANDOMIZER_LEN) != CRYPTO_STATUS_OK)
+	{
+		CryptoSecureWipe(Rand, BTEAD_RANDOMIZER_LEN);
+		return false;
+	}
+
+	return true;
 }
 
 // One AES-128 ECB block. Returns false on any engine failure, and the callers

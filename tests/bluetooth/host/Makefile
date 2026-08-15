@@ -96,6 +96,12 @@ cfifo_boundary_test_EXTRA := $(CFIFO_OBJ)
 bt_adv_uuid_test_SOURCES := \
 	bt_adv_uuid_test.cpp \
 	$(ROOT)/src/bluetooth/bt_adv.cpp \
+	$(ROOT)/src/bluetooth/bt_ead.cpp \
+	$(ROOT)/src/crypto/crypto_softaes.cpp \
+	$(ROOT)/src/crypto/crypto_softrng.cpp \
+	$(ROOT)/src/crypto/crypto_p256.cpp \
+	$(ROOT)/src/device.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/bluetooth/bt_uuid.cpp
 
 bt_intrf_test_SOURCES := \
@@ -153,6 +159,10 @@ bt_adv_hci_test_SOURCES := \
 	$(GATT_INIT_TEST_SUPPORT) \
 	$(ROOT)/src/bluetooth/bt_adv_hci.cpp \
 	$(ROOT)/src/bluetooth/bt_adv.cpp \
+	$(ROOT)/src/bluetooth/bt_ead.cpp \
+	$(ROOT)/src/crypto/crypto_p256.cpp \
+	$(ROOT)/src/device.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/bluetooth/bt_uuid.cpp
 
 bt_padv_hci_test_SOURCES := \
@@ -163,6 +173,7 @@ bt_ead_test_SOURCES := \
 	bt_ead_test.cpp \
 	$(ROOT)/src/bluetooth/bt_ead.cpp \
 	$(ROOT)/src/crypto/crypto_softaes.cpp \
+	$(ROOT)/src/crypto/crypto_softrng.cpp \
 	$(ROOT)/src/crypto/crypto_p256.cpp \
 	$(ROOT)/src/device.cpp \
 	$(ROOT)/src/device_intrf.cpp

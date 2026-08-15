@@ -13,6 +13,7 @@
 #include <cstring>
 
 #include "crypto/crypto_softaes.h"
+#include "crypto/crypto_softrng.h"
 
 #include "bluetooth/bt_ead.h"
 
@@ -30,6 +31,16 @@ int s_Checks = 0;
 } while (0)
 
 CryptoSoftAes s_Aes;
+
+// BtEadRandGen refuses an engine reporting IsSecure() false, which the
+// software generator does, so these cases present one that claims otherwise.
+// Nothing outside a test does that.
+class TestRng : public CryptoSoftRng {
+public:
+	bool IsSecure() const override { return true; }
+};
+
+TestRng s_Rng;
 
 // CSS Part A 2.3.1 and 2.3.2. Both sets encrypt the same payload, a Complete
 // Local Name and an Appearance, under the same key and IV with different
@@ -234,7 +245,7 @@ void TestNoEngineFailsClosed(void)
 {
 	uint8_t out[sizeof(kAd1)];
 
-	CHECK(BtEadInit(nullptr) == false);
+	CHECK(BtEadInit(nullptr, &s_Rng) == false);
 	CHECK(BtEadEncrypt(&kKey, kRand1, kPlain, sizeof(kPlain), out,
 					   sizeof(out)) == 0);
 
@@ -247,7 +258,42 @@ void TestNoEngineFailsClosed(void)
 	}
 	CHECK(nz == 0);
 
-	CHECK(BtEadInit(&s_Aes));
+	CHECK(BtEadInit(&s_Aes, &s_Rng));
+}
+
+
+// CSS Part A 1.23.4 requires the randomizer to meet the random number
+// requirements of Vol 2 Part H 2. A deterministic engine is refused rather
+// than used, because a predictable randomizer hands back the tracking the
+// feature exists to prevent.
+void TestTheRandomizerNeedsASecureEngine(void)
+{
+	uint8_t r[BTEAD_RANDOMIZER_LEN];
+
+	CHECK(BtEadRandGen(r));
+
+	// Two draws in a row differing is not proof of anything, but a generator
+	// returning a constant would be visible here.
+	uint8_t r2[BTEAD_RANDOMIZER_LEN];
+
+	CHECK(BtEadRandGen(r2));
+	CHECK(std::memcmp(r, r2, sizeof(r)) != 0);
+
+	// No engine at all, and the buffer is left empty rather than stale.
+	CHECK(BtEadInit(&s_Aes, nullptr));
+	std::memset(r, 0xAA, sizeof(r));
+	CHECK(BtEadRandGen(r) == false);
+
+	uint8_t nz = 0;
+
+	for (size_t i = 0; i < sizeof(r); i++)
+	{
+		nz |= r[i];
+	}
+	CHECK(nz == 0);
+
+	CHECK(BtEadRandGen(nullptr) == false);
+	CHECK(BtEadInit(&s_Aes, &s_Rng));
 }
 
 } // namespace
@@ -255,8 +301,9 @@ void TestNoEngineFailsClosed(void)
 int main()
 {
 	s_Aes.Enable();
+	s_Rng.Enable();
 
-	if (!BtEadInit(&s_Aes))
+	if (!BtEadInit(&s_Aes, &s_Rng))
 	{
 		std::printf("EAD host tests: engine bind failed\n");
 		return 1;
@@ -270,6 +317,7 @@ int main()
 	TestAnEmptyPayloadRoundTrips();
 	TestLongerPayloadsRoundTrip();
 	TestNoEngineFailsClosed();
+	TestTheRandomizerNeedsASecureEngine();
 
 	if (s_Failures == 0)
 	{

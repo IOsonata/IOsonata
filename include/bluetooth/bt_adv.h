@@ -38,6 +38,7 @@ SOFTWARE.
 #include <stddef.h>
 #include <stdint.h>
 
+#include "bluetooth/bt_ead.h"
 #include "bluetooth/bt_uuid.h"
 
 /// Maximum advertising or scan-response data payload (in octets) that fits in
@@ -215,6 +216,58 @@ void BtAdvOwnAddrGet(uint8_t *pType, uint8_t pAddr[6]);
  * @return	true when the controller accepted it
  */
 bool BtAdvCodingSelectionEnable(bool bEnable);
+
+/**
+ * @brief	Arm or disarm Encrypted Advertising Data
+ *
+ * With key material installed, BtAdvEncode wraps the advertising data and the
+ * scan response data it builds in Encrypted Data AD structures (Core 5.4
+ * Vol 3 Part C 10.10, CSS Part A 1.23). With none installed it does nothing
+ * at all, so a build that never calls this is unchanged.
+ *
+ * This is the only place the feature is switched on. Every port reaches the
+ * advertising data through the same BtAdvEncode, so arming it here arms it
+ * everywhere rather than per port.
+ *
+ * The key material is copied. Pass null to disarm and wipe the copy.
+ *
+ * The AES and random engines must already be bound through BtEadInit; the
+ * randomizer has to be unpredictable or the feature gives back the tracking
+ * it exists to prevent.
+ *
+ * @param	pKey	: Session key and IV, or null to disarm
+ *
+ * @return	true on success
+ */
+bool BtAdvEadKeySet(const BtEadKey_t * const pKey);
+
+/**
+ * @brief	Whether Encrypted Advertising Data is armed
+ *
+ * @return	true when key material is installed
+ */
+bool BtAdvEadIsArmed(void);
+
+/**
+ * @brief	Wrap one advertising packet in an Encrypted Data AD structure
+ *
+ * Rewrites pPkt in place as a single AD structure holding a fresh randomizer,
+ * the encrypted former contents and the MIC. BtAdvEncode calls this for both
+ * packets when armed, so a port has nothing to do; it is public because a
+ * port that builds advertising data some other way still needs it.
+ *
+ * A fresh randomizer is drawn for each call, which is what CSS Part A 1.23.4
+ * requires whenever the payload changes.
+ *
+ * Nothing is written unless the whole structure fits, so a failure leaves the
+ * plaintext packet as it was rather than half encrypted.
+ *
+ * @param	pPkt	: Packet to wrap in place
+ *
+ * @return	true on success, false when not armed, out of room, or the crypto
+ *			failed
+ */
+bool BtAdvEncrypt(BtAdvPacket_t *pPkt);
 
 /**
  * @brief	Choose the LE Coded PHY coding the next advertising set uses

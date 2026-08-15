@@ -99,17 +99,36 @@ extern "C" {
 #endif
 
 /**
- * @brief	Bind the AES engine this module encrypts with
+ * @brief	Bind the engines this module needs
  *
- * The same engine the rest of the stack uses. Nothing here works before this
+ * The same engines the rest of the stack uses. Nothing here works before this
  * is called, which is deliberate: a build with no AES provider fails at init
  * rather than silently advertising in the clear.
  *
- * @param	pAes	: AES-128 capable cipher engine
+ * The RNG is what BtEadRandGen draws the randomizer from. CSS Part A 1.23.4
+ * requires it to meet the random number requirements of Vol 2 Part H 2,
+ * because a predictable randomizer hands back the tracking the whole feature
+ * exists to prevent. It may be null when the caller supplies its own
+ * randomizers and never calls BtEadRandGen.
  *
- * @return	true when the engine was accepted
+ * @param	pAes	: AES-128 capable cipher engine
+ * @param	pRng	: Secure random source, or null
+ *
+ * @return	true when the AES engine was accepted
  */
-bool BtEadInit(CipherEngine *pAes);
+bool BtEadInit(CipherEngine *pAes, RngEngine *pRng);
+
+/**
+ * @brief	Draw a randomizer
+ *
+ * Refuses an engine reporting IsSecure() false rather than producing a
+ * predictable randomizer, and wipes the buffer when it refuses.
+ *
+ * @param	Rand	: Receives BTEAD_RANDOMIZER_LEN octets in air order
+ *
+ * @return	true on success
+ */
+bool BtEadRandGen(uint8_t Rand[BTEAD_RANDOMIZER_LEN]);
 
 /**
  * @brief	Wrap advertising data in an Encrypted Data AD structure
