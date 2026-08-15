@@ -559,6 +559,36 @@ static void SmpAbortOffPhase(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	BtSmpPairingComplete(ConnHdl, false, nullptr);
 }
 
+// Send Pairing Failed for a reason of the caller's choosing and drop the local
+// half of the attempt with it.
+//
+// A Pairing Failed ends the pairing for the peer, so keeping this side's
+// context alive afterwards leaves the attempt half dead: the DHKey, the MacKey
+// and the derived LTK sit in the link context with no exchange left to use
+// them. Nothing reclaims that except the pairing timeout, and BtSmpMsTick is
+// weak and answers zero by default, so on a port that does not override it
+// SmpPairingTimedOut can never fire and the material is held until the link
+// drops.
+//
+// Only an attempt in progress is dropped. An idle link has nothing to drop,
+// and a link in DONE holds the record of a pairing that already completed,
+// which a reconnect answers its LTK request from; wiping that would turn a
+// stray PDU into a lost bond.
+static void SmpFailAndDropAttempt(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+								  BtSmpLink_t *pLink, uint8_t Reason)
+{
+	SmpSendFailed(pDev, ConnHdl, Reason);
+
+	if (pLink == nullptr || pLink->Ctx.State == BT_SMP_STATE_IDLE ||
+		pLink->Ctx.State == BT_SMP_STATE_DONE)
+	{
+		return;
+	}
+
+	SmpAbortPairing(pLink);
+	BtSmpPairingComplete(ConnHdl, false, nullptr);
+}
+
 //-----------------------------------------------------------------------------
 // Outbound packet helpers
 //-----------------------------------------------------------------------------
@@ -2476,7 +2506,8 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		{
 			DEBUG_PRINTF("SMP reject short PDU code=0x%02x len=%u need=%u\r\n",
 					  pSmp->Code, (unsigned)Len, (unsigned)minLen);
-			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
+			SmpFailAndDropAttempt(pDev, ConnHdl, pLink,
+								  BT_SMP_ERR_INVALID_PARAMS);
 			return;
 		}
 	}
@@ -2501,7 +2532,8 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 				DEBUG_PRINTF("SMP drop key-dist code 0x%02x (secure=%d state=%d)\r\n",
 						  pSmp->Code, (pKdPeer != nullptr) && pKdPeer->bSecure,
 						  (int)pLink->Ctx.State);
-				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+				SmpFailAndDropAttempt(pDev, ConnHdl, pLink,
+									  BT_SMP_ERR_UNSPECIFIED);
 				return;
 			}
 			break;

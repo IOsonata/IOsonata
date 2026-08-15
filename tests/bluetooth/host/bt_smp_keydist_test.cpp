@@ -286,6 +286,57 @@ void TestAResponseCannotAddAKeyTheRequestDidNotOffer(bttest::Context &ctx)
 	BT_CHECK(ctx, s_SmpLink[0].Ctx.KeyDistExp == BT_SMP_KEYDIST_IDKEY);
 }
 
+// Sending Pairing Failed ends the pairing for the peer. Keeping this side's
+// context alive left the DHKey, the MacKey and the derived LTK in the link
+// with no exchange left to use them, reclaimed only by a pairing timeout that
+// cannot fire at all on a port leaving BtSmpMsTick at its weak zero.
+void TestShortPduDropsTheAttempt(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(true, both, both, both, both);
+	s_SmpLink[0].Ctx.State = BT_SMP_STATE_DHKEY_CHECK_WAIT;
+	memset(s_SmpLink[0].Ctx.DhKey, 0xD1, sizeof(s_SmpLink[0].Ctx.DhKey));
+	memset(s_SmpLink[0].Ctx.Mackey, 0xA4, sizeof(s_SmpLink[0].Ctx.Mackey));
+	memset(s_SmpLink[0].Ctx.Ltk, 0x77, sizeof(s_SmpLink[0].Ctx.Ltk));
+
+	// One octet, which is shorter than every code's minimum.
+	BtL2CapSmp_t smp = {};
+	smp.Code = BT_SMP_CODE_PAIRING_CONFIRM;
+	BtProcessSmpData(&s_HciDev, kConnHdl, &smp, 1);
+
+	BT_CHECK(ctx, BtSmpTestCaptureCount(BT_SMP_CODE_PAIRING_FAILED) == 1);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.State == BT_SMP_STATE_IDLE);
+	BT_CHECK(ctx, SmpIsAllZero(s_SmpLink[0].Ctx.DhKey,
+							   sizeof(s_SmpLink[0].Ctx.DhKey)));
+	BT_CHECK(ctx, SmpIsAllZero(s_SmpLink[0].Ctx.Mackey,
+							   sizeof(s_SmpLink[0].Ctx.Mackey)));
+	BT_CHECK(ctx, SmpIsAllZero(s_SmpLink[0].Ctx.Ltk,
+							   sizeof(s_SmpLink[0].Ctx.Ltk)));
+}
+
+// A link that already finished pairing keeps its record. A stray short PDU
+// must not turn into a lost bond: BtSmpProcessLtkRequest answers a reconnect
+// from exactly this state.
+void TestShortPduLeavesACompletedPairingAlone(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(true, both, both, both, both);
+	s_SmpLink[0].Ctx.State = BT_SMP_STATE_DONE;
+	s_SmpLink[0].Keys.bValid = true;
+	memset(s_SmpLink[0].Keys.Ltk, 0x5C, sizeof(s_SmpLink[0].Keys.Ltk));
+
+	BtL2CapSmp_t smp = {};
+	smp.Code = BT_SMP_CODE_PAIRING_CONFIRM;
+	BtProcessSmpData(&s_HciDev, kConnHdl, &smp, 1);
+
+	BT_CHECK(ctx, BtSmpTestCaptureCount(BT_SMP_CODE_PAIRING_FAILED) == 1);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.State == BT_SMP_STATE_DONE);
+	BT_CHECK(ctx, s_SmpLink[0].Keys.bValid);
+	BT_CHECK(ctx, s_SmpLink[0].Keys.Ltk[0] == 0x5C);
+}
+
 } // namespace
 
 int main()
@@ -310,6 +361,10 @@ int main()
 			[&] { TestBondStoreRefusalIsReported(ctx); });
 	ctx.Run("bond store success is silent",
 			[&] { TestBondStoreSuccessIsSilent(ctx); });
+	ctx.Run("short pdu drops the attempt",
+			[&] { TestShortPduDropsTheAttempt(ctx); });
+	ctx.Run("short pdu leaves a completed pairing alone",
+			[&] { TestShortPduLeavesACompletedPairingAlone(ctx); });
 
 	return ctx.Finish();
 }
