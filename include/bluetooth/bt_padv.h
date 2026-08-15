@@ -68,15 +68,53 @@ SOFTWARE.
 /// Advertising_Handle range, Vol 4 Part E 7.8.61.
 #define BTPADV_ADV_HDL_MAX					0xEF
 
+// --- Periodic Advertising with Responses ---
+
+/// Num_Subevents range in the [v2] parameters command, Vol 4 Part E 7.8.61.
+/// Zero means the train has no subevents, which is plain periodic
+/// advertising, and the other four PAwR parameters are then ignored.
+#define BTPADV_SUBEVENT_COUNT_MAX			0x80
+
+/// Subevent index range, Vol 4 Part E 7.8.61 and 7.8.125.
+#define BTPADV_SUBEVENT_MAX					0x7F
+
+/// Num_Subevents range of one LE Set Periodic Advertising Subevent Data
+/// command, Vol 4 Part E 7.8.125. Narrower than the train can have, so a
+/// train with more subevents needs several commands.
+#define BTPADV_SUBEVENT_DATA_MAX			0x0F
+
+/// Subevent_Data_Length range of one subevent, Vol 4 Part E 7.8.125.
+#define BTPADV_SUBEVENT_DATA_LEN_MAX		251
+
 #pragma pack(push, 4)
 
 /// Periodic advertising train configuration.
+///
+/// NbSubevents zero configures a plain periodic advertising train through the
+/// [v1] command. Anything else configures Periodic Advertising with
+/// Responses through [v2], which is a separate opcode rather than a version
+/// parameter, and the four fields below it then apply.
 typedef struct __Bt_Padv_Cfg {
 	uint8_t AdvHdl;					//!< Advertising set the train attaches to, 0 to 0xEF
 	uint16_t IntervalMin;			//!< Periodic advertising interval min, 1.25 ms units
 	uint16_t IntervalMax;			//!< Periodic advertising interval max, 1.25 ms units
 	uint16_t Properties;			//!< BTPADV_PROP_* bits
+	uint8_t NbSubevents;			//!< PAwR subevents per periodic advertising event, 0 for none
+	uint8_t SubeventInterval;		//!< Time between subevents, 1.25 ms units
+	uint8_t RspSlotDelay;			//!< Subevent start to first response slot, 1.25 ms units
+	uint8_t RspSlotSpacing;			//!< Time between response slots, 0.125 ms units
+	uint8_t NbRspSlots;				//!< Response slots per subevent
 } BtPadvCfg_t;
+
+/// One subevent's worth of data for LE Set Periodic Advertising Subevent
+/// Data. The command takes an array of these, interleaved on the wire.
+typedef struct __Bt_Padv_Subevent_Data {
+	uint8_t Subevent;				//!< Subevent index, 0 to 0x7F
+	uint8_t RspSlotStart;			//!< First response slot used in this subevent
+	uint8_t RspSlotCount;			//!< Response slots used in this subevent
+	uint8_t DataLen;				//!< Significant octets of pData, 0 to 251
+	const uint8_t *pData;			//!< Advertising data for this subevent
+} BtPadvSubeventData_t;
 
 #pragma pack(pop)
 
@@ -173,6 +211,81 @@ bool BtPadvStop(uint8_t AdvHdl);
  * @return	true when the last accepted command on this handle was an enable
  */
 bool BtPadvIsEnabled(uint8_t AdvHdl);
+
+/**
+ * @brief	Supply the data for one or more PAwR subevents
+ *
+ * Issues LE Set Periodic Advertising Subevent Data (Vol 4 Part E 7.8.125).
+ * This answers a Subevent Data Request and has to reach the controller within
+ * the subevent interval: a subevent already gone is answered Too Late and one
+ * too far ahead Too Early, and in both cases the data is discarded.
+ *
+ * The arrayed parameters interleave on the wire, one record per subevent,
+ * which is the ordering Vol 4 Part E 5.4.1 states for arrayed parameters.
+ *
+ * The data for a subevent is transmitted once, so this is called again for
+ * every request.
+ *
+ * @param	AdvHdl		: Advertising set the train is on
+ * @param	pSubevents	: Per subevent data, NbSubevents entries
+ * @param	NbSubevents	: Number of entries, 1 to BTPADV_SUBEVENT_DATA_MAX
+ *
+ * @return	true on success
+ */
+bool BtPadvSubeventDataSet(uint8_t AdvHdl,
+						   const BtPadvSubeventData_t * const pSubevents,
+						   uint8_t NbSubevents);
+
+/**
+ * @brief	The controller is ready for the data of one or more subevents
+ *
+ * Weak, called from the LE Periodic Advertising Subevent Data Request event
+ * (Vol 4 Part E 7.7.65.36). The application answers with
+ * BtPadvSubeventDataSet for the subevents named here and no others: a
+ * subevent outside the requested range is answered Command Disallowed.
+ *
+ * The subevent numbers wrap, from one less than the number of subevents in
+ * the train back to zero, so the requested set is not simply Start to
+ * Start + Count. BtPadvSubeventOfRequest walks it correctly.
+ *
+ * The default does nothing, which leaves those subevents carrying no data.
+ *
+ * @param	AdvHdl	: Advertising set the request is for
+ * @param	Start	: First subevent data is requested for
+ * @param	Count	: Number of subevents data is requested for
+ */
+void BtPadvSubeventDataRequest(uint8_t AdvHdl, uint8_t Start, uint8_t Count);
+
+/**
+ * @brief	Subevents the train was last configured with
+ *
+ * The Subevent Data Request event names its subevents modulo this, so the
+ * wrap cannot be resolved from the event alone.
+ *
+ * @return	Num_Subevents of the last accepted configuration, 0 for a plain
+ *			periodic advertising train
+ */
+uint8_t BtPadvNbSubevents(void);
+
+/**
+ * @brief	The Nth subevent of a data request, accounting for the wrap
+ *
+ * @param	Start		: Subevent_Start from the request
+ * @param	Idx			: Which of the requested subevents, 0 to Count-1
+ * @param	NbSubevents	: Subevents the train was configured with
+ *
+ * @return	The subevent index, or 0xFF when NbSubevents is 0
+ */
+static inline uint8_t BtPadvSubeventOfRequest(uint8_t Start, uint8_t Idx,
+											  uint8_t NbSubevents)
+{
+	if (NbSubevents == 0)
+	{
+		return 0xFF;
+	}
+
+	return (uint8_t)(((uint16_t)Start + Idx) % NbSubevents);
+}
 
 #ifdef __cplusplus
 }

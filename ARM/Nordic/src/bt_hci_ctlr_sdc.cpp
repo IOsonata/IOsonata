@@ -229,6 +229,53 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 			res = sdc_hci_cmd_le_set_periodic_adv_receive_enable((const sdc_hci_cmd_le_set_periodic_adv_receive_enable_t*)pParam);
 			break;
 
+		// Periodic Advertising with Responses. All four return the handle
+		// they were given alongside the status, which the callers do not read
+		// back since it is the one they asked for.
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM_V2:
+			{
+				sdc_hci_cmd_le_set_periodic_adv_params_v2_return_t r;
+				res = sdc_hci_cmd_le_set_periodic_adv_params_v2((const sdc_hci_cmd_le_set_periodic_adv_params_v2_t*)pParam, &r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_SUBEVENT_DATA:
+			{
+				sdc_hci_cmd_le_set_periodic_adv_subevent_data_return_t r;
+				res = sdc_hci_cmd_le_set_periodic_adv_subevent_data((const sdc_hci_cmd_le_set_periodic_adv_subevent_data_t*)pParam, &r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_RESPONSE_DATA:
+			{
+				sdc_hci_cmd_le_set_periodic_adv_response_data_return_t r;
+				res = sdc_hci_cmd_le_set_periodic_adv_response_data((const sdc_hci_cmd_le_set_periodic_adv_response_data_t*)pParam, &r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_SYNC_SUBEVENT:
+			{
+				sdc_hci_cmd_le_set_periodic_sync_subevent_return_t r;
+				res = sdc_hci_cmd_le_set_periodic_sync_subevent((const sdc_hci_cmd_le_set_periodic_sync_subevent_t*)pParam, &r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
 		case BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM:
 			res = sdc_hci_cmd_le_set_ext_scan_params((const sdc_hci_cmd_le_set_ext_scan_params_t*)pParam);
 			break;

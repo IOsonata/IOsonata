@@ -301,3 +301,78 @@ bool BtPsyncReceiveEnable(uint16_t SyncHdl, bool Enable)
 	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_RECEIVE_ENABLE,
 						&p, sizeof(p), nullptr, 0) == 0;
 }
+
+bool BtPsyncSubeventSet(uint16_t SyncHdl, uint16_t Properties,
+						const uint8_t *pSubevents, uint8_t NbSubevents)
+{
+	if (SyncHdl > BTPSYNC_HDL_MAX || pSubevents == nullptr ||
+		NbSubevents == 0 || NbSubevents > BTPSYNC_SUBEVENT_COUNT_MAX)
+	{
+		return false;
+	}
+
+	for (uint8_t i = 0; i < NbSubevents; i++)
+	{
+		if (pSubevents[i] > BTPSYNC_SUBEVENT_MAX)
+		{
+			return false;
+		}
+	}
+
+	BtHciDevice_t *pDev = BtPsyncHciDev();
+	if (pDev == nullptr)
+	{
+		return false;
+	}
+
+	// Sync_Handle(2) Properties(2) Num_Subevents(1) Subevent[Num_Subevents].
+	// The Parameter_Total_Length of an HCI command packet is one octet, and
+	// the largest this can reach is 5 + 128, so it always fits.
+	uint8_t buf[5 + BTPSYNC_SUBEVENT_COUNT_MAX];
+
+	BtPsyncWr16(&buf[0], SyncHdl);
+	BtPsyncWr16(&buf[2], Properties);
+	buf[4] = NbSubevents;
+	memcpy(&buf[5], pSubevents, NbSubevents);
+
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_SYNC_SUBEVENT,
+						buf, (uint8_t)(5 + NbSubevents), nullptr, 0) == 0;
+}
+
+bool BtPsyncResponseSet(uint16_t SyncHdl, uint16_t ReqEvent,
+						uint8_t ReqSubevent, uint8_t RspSubevent,
+						uint8_t RspSlot, const uint8_t *pData, uint8_t Len)
+{
+	if (SyncHdl > BTPSYNC_HDL_MAX ||
+		ReqSubevent > BTPSYNC_SUBEVENT_MAX ||
+		RspSubevent > BTPSYNC_SUBEVENT_MAX ||
+		Len > BTPSYNC_RESPONSE_DATA_MAX ||
+		(Len > 0 && pData == nullptr))
+	{
+		return false;
+	}
+
+	BtHciDevice_t *pDev = BtPsyncHciDev();
+	if (pDev == nullptr)
+	{
+		return false;
+	}
+
+	// Sync_Handle(2) Request_Event(2) Request_Subevent(1) Response_Subevent(1)
+	// Response_Slot(1) Response_Data_Length(1) Response_Data.
+	uint8_t buf[8 + BTPSYNC_RESPONSE_DATA_MAX];
+
+	BtPsyncWr16(&buf[0], SyncHdl);
+	BtPsyncWr16(&buf[2], ReqEvent);
+	buf[4] = ReqSubevent;
+	buf[5] = RspSubevent;
+	buf[6] = RspSlot;
+	buf[7] = Len;
+	if (Len > 0)
+	{
+		memcpy(&buf[8], pData, Len);
+	}
+
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_RESPONSE_DATA,
+						buf, (uint8_t)(8 + Len), nullptr, 0) == 0;
+}

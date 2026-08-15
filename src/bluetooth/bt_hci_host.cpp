@@ -600,6 +600,17 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_SUBRATE_CHANGE:
 			break;
+		// Periodic Advertising with Responses. The data request goes to the
+		// advertiser and the response report to the device that advertised
+		// the subevent, so both belong to a train this device transmits.
+		case BT_HCI_EVT_LE_PERIODIC_ADV_DATA_REQ:
+			BtPsyncEvtDataRequest(pLeEvtPkt->Data,
+				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data));
+			break;
+		case BT_HCI_EVT_LE_PERIODIC_ADV_RESP_REPORT:
+			BtPsyncEvtResponseReport(pLeEvtPkt->Data,
+				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data));
+			break;
 	}
 }
 static BtHciReasm_t *BtHciReasmFind(uint16_t ConnHdl)

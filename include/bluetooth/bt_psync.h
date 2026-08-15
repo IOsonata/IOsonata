@@ -84,6 +84,29 @@ SOFTWARE.
 /// Largest reassembled report this layer will hold.
 #define BTPSYNC_REPORT_MAX					512
 
+
+// --- Periodic Advertising with Responses, receiving side ---
+
+/// Periodic_Advertising_Properties of LE Set Periodic Sync Subevent, Vol 4
+/// Part E 7.8.127. Bit 6 is the only one defined.
+#define BTPSYNC_PROP_TXPWR					(1<<6)
+
+/// Num_Subevents range of LE Set Periodic Sync Subevent, Vol 4 Part E 7.8.127.
+#define BTPSYNC_SUBEVENT_COUNT_MAX			0x80
+
+/// Subevent index range, Vol 4 Part E 7.8.127.
+#define BTPSYNC_SUBEVENT_MAX				0x7F
+
+/// Num_Responses range of the Response Report event, Vol 4 Part E 7.7.65.37.
+#define BTPSYNC_RESPONSE_MAX				0x19
+
+/// Tx_Status of the Response Report event, Vol 4 Part E 7.7.65.37.
+#define BTPSYNC_TX_STATUS_SENT				0x00
+#define BTPSYNC_TX_STATUS_NOT_SENT			0x01
+
+/// Response_Data_Length range, Vol 4 Part E 7.8.126.
+#define BTPSYNC_RESPONSE_DATA_MAX			251
+
 #pragma pack(push, 4)
 
 /// Create Sync parameters. AdvSid, AdvAddrType and AdvAddr are ignored by the
@@ -273,6 +296,93 @@ void BtPsyncReport(uint16_t SyncHdl, int8_t TxPwr, int8_t Rssi, uint8_t CteType,
  * @param	SyncHdl	: Train that was lost
  */
 void BtPsyncLost(uint16_t SyncHdl);
+
+/**
+ * @brief	Synchronize with a subset of the subevents of a PAwR train
+ *
+ * Issues LE Set Periodic Sync Subevent (Vol 4 Part E 7.8.127). The list
+ * replaces whatever the controller was synchronized to: any subevent not
+ * named here is dropped, so this is not an add.
+ *
+ * @param	SyncHdl		: Train to act on
+ * @param	Properties	: BTPSYNC_PROP_* bits for the response PDUs
+ * @param	pSubevents	: Subevent indices to synchronize with
+ * @param	NbSubevents	: Number of entries, 1 to BTPSYNC_SUBEVENT_COUNT_MAX
+ *
+ * @return	true on success
+ */
+bool BtPsyncSubeventSet(uint16_t SyncHdl, uint16_t Properties,
+						const uint8_t *pSubevents, uint8_t NbSubevents);
+
+/**
+ * @brief	Answer a PAwR subevent in one of its response slots
+ *
+ * Issues LE Set Periodic Advertising Response Data (Vol 4 Part E 7.8.126).
+ * The data for a response slot is transmitted once, and a slot that has
+ * already passed is answered Too Late, so this belongs in the report handler
+ * rather than deferred.
+ *
+ * @param	SyncHdl		: Train the subevent belongs to
+ * @param	ReqEvent	: paEventCounter of the packet being answered
+ * @param	ReqSubevent	: Subevent the packet was received in
+ * @param	RspSubevent	: Subevent to answer in
+ * @param	RspSlot		: Response slot to answer in
+ * @param	pData		: Response data, may be null only when Len is 0
+ * @param	Len			: Response data length, 0 to 251
+ *
+ * @return	true on success
+ */
+bool BtPsyncResponseSet(uint16_t SyncHdl, uint16_t ReqEvent,
+						uint8_t ReqSubevent, uint8_t RspSubevent,
+						uint8_t RspSlot, const uint8_t *pData, uint8_t Len);
+
+/**
+ * @brief	A device answered a PAwR subevent this device advertised
+ *
+ * Weak, called from the LE Periodic Advertising Response Report event (Vol 4
+ * Part E 7.7.65.37) once a response is whole. A response split across several
+ * reports is reassembled first, and a response whose reassembly was abandoned
+ * is not delivered at all.
+ *
+ * @param	AdvHdl		: Advertising set the train is on
+ * @param	Subevent	: Subevent the response was received in
+ * @param	RspSlot		: Response slot the response arrived in
+ * @param	TxPwr		: Transmit power, 0x7F when not available
+ * @param	Rssi		: RSSI, 0x7F when not available
+ * @param	pData		: Response data
+ * @param	Len			: Response data length
+ */
+void BtPsyncResponseReport(uint8_t AdvHdl, uint8_t Subevent, uint8_t RspSlot,
+						   int8_t TxPwr, int8_t Rssi, const uint8_t *pData,
+						   uint16_t Len);
+
+/**
+ * @brief	A PAwR subevent this device advertised was not transmitted
+ *
+ * Weak. Vol 4 Part E 7.7.65.37 lets the controller report that it failed to
+ * send the AUX_SYNC_SUBEVENT_IND that would have let responders answer, so
+ * silence in that subevent means nothing about the responders.
+ *
+ * @param	AdvHdl		: Advertising set the train is on
+ * @param	Subevent	: Subevent that was not transmitted
+ */
+void BtPsyncSubeventNotSent(uint8_t AdvHdl, uint8_t Subevent);
+
+/**
+ * @brief	Handle an LE Periodic Advertising Subevent Data Request event
+ *
+ * @param	pData	: Event payload after the subevent code
+ * @param	Len		: Payload length
+ */
+void BtPsyncEvtDataRequest(const uint8_t *pData, int Len);
+
+/**
+ * @brief	Handle an LE Periodic Advertising Response Report event
+ *
+ * @param	pData	: Event payload after the subevent code
+ * @param	Len		: Payload length
+ */
+void BtPsyncEvtResponseReport(const uint8_t *pData, int Len);
 
 #ifdef __cplusplus
 }

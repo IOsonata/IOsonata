@@ -47,6 +47,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
+#include "bluetooth/bt_padv.h"
 #include "bluetooth/bt_psync.h"
 
 // How many trains can be mid-reassembly at once, and how many abandoned ones
@@ -339,4 +340,271 @@ __attribute__((weak)) void BtPsyncReport(uint16_t SyncHdl, int8_t TxPwr,
 __attribute__((weak)) void BtPsyncLost(uint16_t SyncHdl)
 {
 	(void)SyncHdl;
+}
+
+// --- PAwR response reassembly -----------------------------------------------
+// A response splits across reports the same way a periodic advertising report
+// does, and the same trap applies: the last fragment of a reassembly that was
+// abandoned looks exactly like a whole single fragment response. The key is
+// wider here, because responses from different slots interleave inside one
+// event, so an advertising handle alone cannot tell two of them apart.
+
+#define BT_PSYNC_RSP_REASM_COUNT		2
+#define BT_PSYNC_RSP_DROPPED_COUNT		4
+
+typedef struct __Bt_Psync_Rsp_Key {
+	uint8_t  AdvHdl;
+	uint8_t  Subevent;
+	uint8_t  RspSlot;
+} BtPsyncRspKey_t;
+
+typedef struct __Bt_Psync_Rsp_Reasm {
+	bool     Active;
+	BtPsyncRspKey_t Key;
+	int8_t   TxPwr;						//!< From the first fragment
+	int8_t   Rssi;						//!< From the last fragment
+	uint16_t Len;
+	uint8_t  Buf[BTPSYNC_REPORT_MAX];
+} BtPsyncRspReasm_t;
+
+typedef struct __Bt_Psync_Rsp_Dropped {
+	bool     Active;
+	BtPsyncRspKey_t Key;
+} BtPsyncRspDropped_t;
+
+static BtPsyncRspReasm_t s_BtPsyncRspReasm[BT_PSYNC_RSP_REASM_COUNT];
+static BtPsyncRspDropped_t s_BtPsyncRspDropped[BT_PSYNC_RSP_DROPPED_COUNT];
+static uint8_t s_BtPsyncRspDroppedNext = 0;
+
+static bool BtPsyncRspKeyEq(const BtPsyncRspKey_t *a, const BtPsyncRspKey_t *b)
+{
+	return a->AdvHdl == b->AdvHdl && a->Subevent == b->Subevent &&
+		   a->RspSlot == b->RspSlot;
+}
+
+static BtPsyncRspReasm_t *BtPsyncRspReasmFind(const BtPsyncRspKey_t *pKey)
+{
+	for (int i = 0; i < BT_PSYNC_RSP_REASM_COUNT; i++)
+	{
+		if (s_BtPsyncRspReasm[i].Active &&
+			BtPsyncRspKeyEq(&s_BtPsyncRspReasm[i].Key, pKey))
+		{
+			return &s_BtPsyncRspReasm[i];
+		}
+	}
+
+	return nullptr;
+}
+
+static BtPsyncRspDropped_t *BtPsyncRspDroppedFind(const BtPsyncRspKey_t *pKey)
+{
+	for (int i = 0; i < BT_PSYNC_RSP_DROPPED_COUNT; i++)
+	{
+		if (s_BtPsyncRspDropped[i].Active &&
+			BtPsyncRspKeyEq(&s_BtPsyncRspDropped[i].Key, pKey))
+		{
+			return &s_BtPsyncRspDropped[i];
+		}
+	}
+
+	return nullptr;
+}
+
+// Oldest entry is overwritten. Losing the record of a very old abandoned
+// response risks one stale suffix; holding the table open forever is worse.
+static void BtPsyncRspDroppedMark(const BtPsyncRspKey_t *pKey)
+{
+	if (BtPsyncRspDroppedFind(pKey) != nullptr)
+	{
+		return;
+	}
+
+	BtPsyncRspDropped_t *d = &s_BtPsyncRspDropped[s_BtPsyncRspDroppedNext];
+
+	s_BtPsyncRspDroppedNext = (uint8_t)((s_BtPsyncRspDroppedNext + 1) %
+										BT_PSYNC_RSP_DROPPED_COUNT);
+	d->Active = true;
+	d->Key = *pKey;
+}
+
+// One response of a Response Report, already bounded by the caller.
+static void BtPsyncRspOne(const BtPsyncRspKey_t *pKey, int8_t TxPwr, int8_t Rssi,
+						  uint8_t DataStatus, const uint8_t *pData, uint8_t Len)
+{
+	BtPsyncRspReasm_t *ctx = BtPsyncRspReasmFind(pKey);
+
+	if (DataStatus == BTPSYNC_DATA_MORE)
+	{
+		if (ctx == nullptr && BtPsyncRspDroppedFind(pKey) == nullptr)
+		{
+			for (int i = 0; i < BT_PSYNC_RSP_REASM_COUNT; i++)
+			{
+				if (s_BtPsyncRspReasm[i].Active == false)
+				{
+					ctx = &s_BtPsyncRspReasm[i];
+					ctx->Active = true;
+					ctx->Key = *pKey;
+					ctx->TxPwr = TxPwr;
+					ctx->Rssi = Rssi;
+					ctx->Len = 0;
+					break;
+				}
+			}
+		}
+
+		if (ctx == nullptr)
+		{
+			BtPsyncRspDroppedMark(pKey);
+			return;
+		}
+
+		if ((uint32_t)ctx->Len + Len > BTPSYNC_REPORT_MAX)
+		{
+			ctx->Active = false;
+			BtPsyncRspDroppedMark(pKey);
+			return;
+		}
+
+		memcpy(ctx->Buf + ctx->Len, pData, Len);
+		ctx->Len = (uint16_t)(ctx->Len + Len);
+		ctx->Rssi = Rssi;
+		return;
+	}
+
+	if (DataStatus == BTPSYNC_DATA_COMPLETE)
+	{
+		if (ctx != nullptr)
+		{
+			if ((uint32_t)ctx->Len + Len <= BTPSYNC_REPORT_MAX)
+			{
+				memcpy(ctx->Buf + ctx->Len, pData, Len);
+				ctx->Len = (uint16_t)(ctx->Len + Len);
+				BtPsyncResponseReport(pKey->AdvHdl, pKey->Subevent,
+									  pKey->RspSlot, ctx->TxPwr, Rssi,
+									  ctx->Buf, ctx->Len);
+			}
+			ctx->Active = false;
+			return;
+		}
+
+		// No context: either a whole response in one report, or the tail of
+		// one that was abandoned, which look the same on the wire.
+		BtPsyncRspDropped_t *d = BtPsyncRspDroppedFind(pKey);
+
+		if (d != nullptr)
+		{
+			d->Active = false;
+			return;
+		}
+
+		BtPsyncResponseReport(pKey->AdvHdl, pKey->Subevent, pKey->RspSlot,
+							  TxPwr, Rssi, pData, Len);
+		return;
+	}
+
+	// Truncated or reserved: no more is coming and what arrived is partial.
+	if (ctx != nullptr)
+	{
+		ctx->Active = false;
+	}
+}
+
+// 7.7.65.36: Advertising_Handle(1) Subevent_Start(1) Subevent_Data_Count(1).
+void BtPsyncEvtDataRequest(const uint8_t *pData, int Len)
+{
+	if (pData == nullptr || Len < 3)
+	{
+		return;
+	}
+
+	BtPadvSubeventDataRequest(pData[0], pData[1], pData[2]);
+}
+
+// 7.7.65.37: Advertising_Handle(1) Subevent(1) Tx_Status(1) Num_Responses(1),
+// then one interleaved record per response of Tx_Power(1) RSSI(1) CTE_Type(1)
+// Response_Slot(1) Data_Status(1) Data_Length(1) Data.
+void BtPsyncEvtResponseReport(const uint8_t *pData, int Len)
+{
+	if (pData == nullptr || Len < 4)
+	{
+		return;
+	}
+
+	uint8_t advHdl = pData[0];
+	uint8_t subevent = pData[1];
+	uint8_t txStatus = pData[2];
+	uint8_t nbRsp = pData[3];
+
+	if (txStatus == BTPSYNC_TX_STATUS_NOT_SENT)
+	{
+		// The synchronization packet that would have let responders answer
+		// never went out, so an empty subevent says nothing about them.
+		BtPsyncSubeventNotSent(advHdl, subevent);
+	}
+
+	int off = 4;
+
+	for (uint8_t i = 0; i < nbRsp; i++)
+	{
+		// Six fixed octets then the data. Num_Responses is controller
+		// supplied, so every record is bounded against the event length
+		// before any of it is read.
+		if (off + 6 > Len)
+		{
+			return;
+		}
+
+		int8_t txPwr = (int8_t)pData[off];
+		int8_t rssi = (int8_t)pData[off + 1];
+		uint8_t dataStatus = pData[off + 4];
+		uint8_t dataLen = pData[off + 5];
+		BtPsyncRspKey_t key;
+
+		key.AdvHdl = advHdl;
+		key.Subevent = subevent;
+		key.RspSlot = pData[off + 3];
+
+		if (off + 6 + dataLen > Len)
+		{
+			return;
+		}
+
+		BtPsyncRspOne(&key, txPwr, rssi, dataStatus, &pData[off + 6], dataLen);
+
+		off += 6 + dataLen;
+	}
+}
+
+__attribute__((weak))
+void BtPsyncResponseReport(uint8_t AdvHdl, uint8_t Subevent, uint8_t RspSlot,
+						   int8_t TxPwr, int8_t Rssi, const uint8_t *pData,
+						   uint16_t Len)
+{
+	(void)AdvHdl;
+	(void)Subevent;
+	(void)RspSlot;
+	(void)TxPwr;
+	(void)Rssi;
+	(void)pData;
+	(void)Len;
+}
+
+__attribute__((weak))
+void BtPsyncSubeventNotSent(uint8_t AdvHdl, uint8_t Subevent)
+{
+	(void)AdvHdl;
+	(void)Subevent;
+}
+
+// The data request hook lives here rather than beside the command it is
+// answered with. This file is reached from the event dispatcher and holds no
+// dependency on the application state; putting the weak definition in
+// bt_padv_hci.cpp would have made every object that links the dispatcher pull
+// that state in.
+__attribute__((weak))
+void BtPadvSubeventDataRequest(uint8_t AdvHdl, uint8_t Start, uint8_t Count)
+{
+	(void)AdvHdl;
+	(void)Start;
+	(void)Count;
 }

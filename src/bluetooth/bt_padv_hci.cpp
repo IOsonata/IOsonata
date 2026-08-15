@@ -72,7 +72,21 @@ typedef struct {
 	uint8_t  IntervalMin[2];		//!< 1.25 ms units
 	uint8_t  IntervalMax[2];		//!< 1.25 ms units
 	uint8_t  Properties[2];
-} BtHciLePadvParams_t;				//!< 7 octets
+} BtHciLePadvParams_t;				//!< 7 octets, 7.8.61 [v1]
+
+// 7.8.61 [v2] is a separate opcode, not a version parameter, and it returns
+// the advertising handle alongside the status.
+typedef struct {
+	uint8_t  AdvHdl;
+	uint8_t  IntervalMin[2];		//!< 1.25 ms units
+	uint8_t  IntervalMax[2];		//!< 1.25 ms units
+	uint8_t  Properties[2];
+	uint8_t  NbSubevents;
+	uint8_t  SubeventInterval;		//!< 1.25 ms units
+	uint8_t  RspSlotDelay;			//!< 1.25 ms units
+	uint8_t  RspSlotSpacing;		//!< 0.125 ms units
+	uint8_t  NbRspSlots;
+} BtHciLePadvParamsV2_t;			//!< 12 octets, 7.8.61 [v2]
 
 typedef struct {
 	uint8_t  AdvHdl;
@@ -116,6 +130,11 @@ typedef struct {
 // changes it, and the data path needs it to know which operations are legal.
 static uint8_t s_PadvHdl;
 static bool s_PadvEnabled;
+
+// Subevents the train was last configured with. Kept because the Subevent
+// Data Request event names its subevents modulo this count, so the wrap
+// cannot be resolved from the event alone.
+static uint8_t s_PadvNbSubevents;
 
 static inline void BtPadvWr16(uint8_t *p, uint16_t v)
 {
@@ -167,23 +186,102 @@ bool BtPadvInit(const BtPadvCfg_t * const pCfg)
 		return false;
 	}
 
+	// Periodic Advertising with Responses. Vol 4 Part E 7.8.61 states the
+	// relations between the four PAwR parameters; the controller answers a
+	// violation with one status byte covering all of them, so they are
+	// checked here where each can be named. Zero subevents is a plain train
+	// and the rest are ignored, which is what the [v1] command is for.
+	if (pCfg->NbSubevents > 0)
+	{
+		if (pCfg->NbSubevents > BTPADV_SUBEVENT_COUNT_MAX)
+		{
+			DEBUG_PRINTF("PADV subevent count %u out of range\r\n",
+						 (unsigned)pCfg->NbSubevents);
+			return false;
+		}
+
+		// Subevent_Interval shall be at most Interval_Min / Num_Subevents.
+		// Both are 1.25 ms units, so the comparison needs no conversion.
+		if (pCfg->SubeventInterval == 0 ||
+			(uint32_t)pCfg->SubeventInterval * pCfg->NbSubevents >
+				(uint32_t)pCfg->IntervalMin)
+		{
+			DEBUG_PRINTF("PADV subevent interval does not fit the train\r\n");
+			return false;
+		}
+
+		// Response_Slot_Delay shall be less than Subevent_Interval. A train
+		// with no response slots ignores the delay and the spacing.
+		if (pCfg->NbRspSlots > 0 &&
+			(pCfg->RspSlotDelay == 0 ||
+			 pCfg->RspSlotDelay >= pCfg->SubeventInterval))
+		{
+			DEBUG_PRINTF("PADV response slot delay does not fit the subevent\r\n");
+			return false;
+		}
+
+		// Response_Slot_Spacing shall be at most
+		// 10 x (Subevent_Interval - Response_Slot_Delay) / Num_Response_Slots,
+		// and is ignored when there is a single slot. The 10 is the ratio of
+		// the two units: the interval and the delay are 1.25 ms, the spacing
+		// is 0.125 ms.
+		if (pCfg->NbRspSlots > 1)
+		{
+			uint32_t span = (uint32_t)(pCfg->SubeventInterval -
+									   pCfg->RspSlotDelay) * 10U;
+			if (pCfg->RspSlotSpacing == 0 ||
+				(uint32_t)pCfg->RspSlotSpacing * pCfg->NbRspSlots > span)
+			{
+				DEBUG_PRINTF("PADV response slot spacing does not fit\r\n");
+				return false;
+			}
+		}
+	}
+
 	BtHciDevice_t *pDev = BtPadvHciDev();
 	if (pDev == nullptr)
 	{
 		return false;
 	}
 
-	BtHciLePadvParams_t p;
-	p.AdvHdl = pCfg->AdvHdl;
-	BtPadvWr16(p.IntervalMin, pCfg->IntervalMin);
-	BtPadvWr16(p.IntervalMax, pCfg->IntervalMax);
-	BtPadvWr16(p.Properties, pCfg->Properties);
+	int rc;
 
-	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM, &p,
-					 sizeof(p), nullptr, 0) != 0)
+	if (pCfg->NbSubevents > 0)
+	{
+		BtHciLePadvParamsV2_t p;
+		p.AdvHdl = pCfg->AdvHdl;
+		BtPadvWr16(p.IntervalMin, pCfg->IntervalMin);
+		BtPadvWr16(p.IntervalMax, pCfg->IntervalMax);
+		BtPadvWr16(p.Properties, pCfg->Properties);
+		p.NbSubevents = pCfg->NbSubevents;
+		p.SubeventInterval = pCfg->SubeventInterval;
+		p.RspSlotDelay = pCfg->RspSlotDelay;
+		p.RspSlotSpacing = pCfg->RspSlotSpacing;
+		p.NbRspSlots = pCfg->NbRspSlots;
+
+		// The returned advertising handle is the one that was asked for, so
+		// there is nothing to read back.
+		rc = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM_V2, &p,
+						  sizeof(p), nullptr, 0);
+	}
+	else
+	{
+		BtHciLePadvParams_t p;
+		p.AdvHdl = pCfg->AdvHdl;
+		BtPadvWr16(p.IntervalMin, pCfg->IntervalMin);
+		BtPadvWr16(p.IntervalMax, pCfg->IntervalMax);
+		BtPadvWr16(p.Properties, pCfg->Properties);
+
+		rc = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM, &p,
+						  sizeof(p), nullptr, 0);
+	}
+
+	if (rc != 0)
 	{
 		return false;
 	}
+
+	s_PadvNbSubevents = pCfg->NbSubevents;
 
 	// Vol 4 Part E 7.8.61: the controller refuses this command with Command
 	// Disallowed while periodic advertising is enabled for the set. It was
@@ -343,4 +441,75 @@ bool BtPadvStop(uint8_t AdvHdl)
 bool BtPadvIsEnabled(uint8_t AdvHdl)
 {
 	return BtPadvEnabledOn(AdvHdl);
+}
+
+uint8_t BtPadvNbSubevents(void)
+{
+	return s_PadvNbSubevents;
+}
+
+bool BtPadvSubeventDataSet(uint8_t AdvHdl,
+						   const BtPadvSubeventData_t * const pSubevents,
+						   uint8_t NbSubevents)
+{
+	if (AdvHdl > BTPADV_ADV_HDL_MAX || pSubevents == nullptr ||
+		NbSubevents == 0 || NbSubevents > BTPADV_SUBEVENT_DATA_MAX)
+	{
+		return false;
+	}
+
+	// Vol 4 Part E 5.4.1: where a command has several arrayed parameters they
+	// interleave one iteration at a time, so each subevent is a record of
+	// four octets and its data rather than five parallel blocks. Build it in
+	// one pass and bound it against the command parameter length, which is a
+	// single octet on the wire.
+	// The Parameter_Total_Length of an HCI command packet is one octet, so 255
+	// is the whole of what one command can hold whatever the controller's
+	// buffers are.
+	uint8_t buf[255];
+	size_t n = 0;
+
+	buf[n++] = AdvHdl;
+	buf[n++] = NbSubevents;
+
+	for (uint8_t i = 0; i < NbSubevents; i++)
+	{
+		const BtPadvSubeventData_t *s = &pSubevents[i];
+
+		if (s->Subevent > BTPADV_SUBEVENT_MAX ||
+			s->DataLen > BTPADV_SUBEVENT_DATA_LEN_MAX ||
+			(s->DataLen > 0 && s->pData == nullptr))
+		{
+			return false;
+		}
+
+		if (n + 4 + s->DataLen > sizeof(buf))
+		{
+			// More than one command can hold. Splitting it here would send
+			// some subevents and drop others, and the controller discards the
+			// whole set of a command it refuses, so neither half would be
+			// what the caller asked for.
+			DEBUG_PRINTF("PADV subevent data too long for one command\r\n");
+			return false;
+		}
+
+		buf[n++] = s->Subevent;
+		buf[n++] = s->RspSlotStart;
+		buf[n++] = s->RspSlotCount;
+		buf[n++] = s->DataLen;
+		if (s->DataLen > 0)
+		{
+			memcpy(&buf[n], s->pData, s->DataLen);
+			n += s->DataLen;
+		}
+	}
+
+	BtHciDevice_t *pDev = BtPadvHciDev();
+	if (pDev == nullptr)
+	{
+		return false;
+	}
+
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_SUBEVENT_DATA,
+						buf, (uint8_t)n, nullptr, 0) == 0;
 }

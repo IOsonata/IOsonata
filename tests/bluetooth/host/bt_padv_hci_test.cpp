@@ -501,11 +501,259 @@ void TestNoDeviceIsRefused(void)
 	CHECK(s_CmdCount == 0);
 }
 
+
+// --- Periodic Advertising with Responses ---
+
+// 7.8.61 [v2] is a separate opcode from [v1], not a version parameter, and it
+// appends Num_Subevents(1) Subevent_Interval(1) Response_Slot_Delay(1)
+// Response_Slot_Spacing(1) Num_Response_Slots(1).
+void TestPawrUsesTheV2Opcode(void)
+{
+	Reset();
+
+	BtPadvCfg_t cfg = MakeCfg();
+	cfg.NbSubevents = 4;
+	cfg.SubeventInterval = 0x18;
+	cfg.RspSlotDelay = 0x08;
+	cfg.RspSlotSpacing = 0x10;
+	cfg.NbRspSlots = 4;
+
+	CHECK(BtPadvInit(&cfg));
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM) == 0);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM_V2) == 1);
+
+	const CapturedCmd *c = NthCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM_V2, 1);
+	CHECK(c != nullptr);
+	if (c == nullptr)
+	{
+		return;
+	}
+
+	CHECK(c->ParamLen == 12);
+	CHECK(c->Param[0] == kAdvHdl);
+	CHECK(c->Param[7] == 4);
+	CHECK(c->Param[8] == 0x18);
+	CHECK(c->Param[9] == 0x08);
+	CHECK(c->Param[10] == 0x10);
+	CHECK(c->Param[11] == 4);
+	CHECK(BtPadvNbSubevents() == 4);
+
+	// Zero subevents is a plain train and keeps the [v1] opcode.
+	Reset();
+	cfg = MakeCfg();
+	CHECK(BtPadvInit(&cfg));
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM) == 1);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM_V2) == 0);
+	CHECK(BtPadvNbSubevents() == 0);
+}
+
+// 7.8.61 states the relations between the four PAwR parameters. A controller
+// answers all of them with one status byte, so they are checked before the
+// command goes out.
+void TestPawrParameterRelationsRefusedLocally(void)
+{
+	BtPadvCfg_t cfg;
+
+	Reset();
+	// Subevent_Interval x Num_Subevents must fit Interval_Min. Interval_Min is
+	// 0x0060, so four subevents of 0x19 do not fit.
+	cfg = MakeCfg();
+	cfg.NbSubevents = 4;
+	cfg.SubeventInterval = 0x19;
+	cfg.RspSlotDelay = 0x08;
+	cfg.RspSlotSpacing = 0x10;
+	cfg.NbRspSlots = 4;
+	CHECK(BtPadvInit(&cfg) == false);
+
+	// Response_Slot_Delay must be less than Subevent_Interval.
+	cfg = MakeCfg();
+	cfg.NbSubevents = 4;
+	cfg.SubeventInterval = 0x18;
+	cfg.RspSlotDelay = 0x18;
+	cfg.RspSlotSpacing = 0x10;
+	cfg.NbRspSlots = 4;
+	CHECK(BtPadvInit(&cfg) == false);
+
+	// Response_Slot_Spacing x Num_Response_Slots must fit
+	// 10 x (Subevent_Interval - Response_Slot_Delay). That is 160 here, so
+	// four slots of 0x29 do not fit and four of 0x28 do.
+	cfg = MakeCfg();
+	cfg.NbSubevents = 4;
+	cfg.SubeventInterval = 0x18;
+	cfg.RspSlotDelay = 0x08;
+	cfg.RspSlotSpacing = 0x29;
+	cfg.NbRspSlots = 4;
+	CHECK(BtPadvInit(&cfg) == false);
+
+	cfg.NbSubevents = 0x81;
+	CHECK(BtPadvInit(&cfg) == false);
+
+	CHECK(s_CmdCount == 0);
+
+	cfg = MakeCfg();
+	cfg.NbSubevents = 4;
+	cfg.SubeventInterval = 0x18;
+	cfg.RspSlotDelay = 0x08;
+	cfg.RspSlotSpacing = 0x28;
+	cfg.NbRspSlots = 4;
+	CHECK(BtPadvInit(&cfg));
+
+	// A single response slot ignores the spacing, so a value that would not
+	// fit four slots is accepted for one.
+	cfg.NbRspSlots = 1;
+	cfg.RspSlotSpacing = 0xFF;
+	CHECK(BtPadvInit(&cfg));
+	CHECK(s_CmdCount == 2);
+}
+
+// 7.8.125, and Vol 4 Part E 5.4.1 for the ordering: the arrayed parameters
+// interleave one record per subevent. Encoding them as five parallel blocks
+// gives a buffer of the right length whose every octet after the first two is
+// in the wrong place.
+void TestSubeventDataInterleaves(void)
+{
+	Reset();
+
+	const uint8_t a[3] = { 0xA0, 0xA1, 0xA2 };
+	const uint8_t b[2] = { 0xB0, 0xB1 };
+	BtPadvSubeventData_t se[2];
+
+	se[0].Subevent = 1;
+	se[0].RspSlotStart = 0;
+	se[0].RspSlotCount = 2;
+	se[0].DataLen = sizeof(a);
+	se[0].pData = a;
+	se[1].Subevent = 2;
+	se[1].RspSlotStart = 2;
+	se[1].RspSlotCount = 3;
+	se[1].DataLen = sizeof(b);
+	se[1].pData = b;
+
+	CHECK(BtPadvSubeventDataSet(kAdvHdl, se, 2));
+
+	const CapturedCmd *c = NthCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_SUBEVENT_DATA, 1);
+	CHECK(c != nullptr);
+	if (c == nullptr)
+	{
+		return;
+	}
+
+	// AdvHdl, NbSubevents, then {1,0,2,3,A0,A1,A2}, then {2,2,3,2,B0,B1}.
+	CHECK(c->ParamLen == 2 + 4 + 3 + 4 + 2);
+	CHECK(c->Param[0] == kAdvHdl);
+	CHECK(c->Param[1] == 2);
+	CHECK(c->Param[2] == 1 && c->Param[3] == 0 && c->Param[4] == 2);
+	CHECK(c->Param[5] == 3);
+	CHECK(std::memcmp(&c->Param[6], a, sizeof(a)) == 0);
+	CHECK(c->Param[9] == 2 && c->Param[10] == 2 && c->Param[11] == 3);
+	CHECK(c->Param[12] == 2);
+	CHECK(std::memcmp(&c->Param[13], b, sizeof(b)) == 0);
+}
+
+void TestSubeventDataRangesRefusedLocally(void)
+{
+	const uint8_t a[3] = { 1, 2, 3 };
+	BtPadvSubeventData_t se[1];
+
+	Reset();
+	se[0].Subevent = 0;
+	se[0].RspSlotStart = 0;
+	se[0].RspSlotCount = 1;
+	se[0].DataLen = sizeof(a);
+	se[0].pData = a;
+
+	CHECK(BtPadvSubeventDataSet(BTPADV_ADV_HDL_MAX + 1, se, 1) == false);
+	CHECK(BtPadvSubeventDataSet(kAdvHdl, nullptr, 1) == false);
+	CHECK(BtPadvSubeventDataSet(kAdvHdl, se, 0) == false);
+	CHECK(BtPadvSubeventDataSet(kAdvHdl, se, BTPADV_SUBEVENT_DATA_MAX + 1) == false);
+
+	// Subevent index range is 0x00 to 0x7F.
+	se[0].Subevent = BTPADV_SUBEVENT_MAX + 1;
+	CHECK(BtPadvSubeventDataSet(kAdvHdl, se, 1) == false);
+
+	// Data with no buffer behind it.
+	se[0].Subevent = 0;
+	se[0].pData = nullptr;
+	CHECK(BtPadvSubeventDataSet(kAdvHdl, se, 1) == false);
+
+	CHECK(s_CmdCount == 0);
+
+	// Zero length with a null buffer is legal, it clears the subevent.
+	se[0].DataLen = 0;
+	CHECK(BtPadvSubeventDataSet(kAdvHdl, se, 1));
+	CHECK(s_CmdCount == 1);
+}
+
+// More than one HCI command packet can hold is refused whole. The controller
+// discards the entire set of a command it refuses, so sending part of it
+// would leave the train advertising some subevents and not others.
+void TestSubeventDataTooLongIsRefusedWhole(void)
+{
+	static uint8_t big[BTPADV_SUBEVENT_DATA_LEN_MAX];
+	BtPadvSubeventData_t se[2];
+
+	std::memset(big, 0x5A, sizeof(big));
+
+	Reset();
+	for (int i = 0; i < 2; i++)
+	{
+		se[i].Subevent = (uint8_t)i;
+		se[i].RspSlotStart = 0;
+		se[i].RspSlotCount = 1;
+		se[i].DataLen = sizeof(big);
+		se[i].pData = big;
+	}
+
+	// Two subevents of 251 octets is 502 plus headers, past the 255 octet
+	// Parameter_Total_Length.
+	CHECK(BtPadvSubeventDataSet(kAdvHdl, se, 2) == false);
+	CHECK(s_CmdCount == 0);
+
+	// One of them does not fit either. 7.8.125 gives Subevent_Data_Length a
+	// range up to 251, but Parameter_Total_Length is one octet and the
+	// command spends 2 on the header and 4 on the record, so the effective
+	// maximum for a single subevent is 249. Vol 4 Part E 5.4.1 names this
+	// case: the specified maximum of an arrayed parameter can exceed what the
+	// packet holds, and the effective maximum is then lower.
+	CHECK(BtPadvSubeventDataSet(kAdvHdl, se, 1) == false);
+	CHECK(s_CmdCount == 0);
+
+	se[0].DataLen = 250;
+	CHECK(BtPadvSubeventDataSet(kAdvHdl, se, 1) == false);
+
+	se[0].DataLen = 249;
+	CHECK(BtPadvSubeventDataSet(kAdvHdl, se, 1));
+	CHECK(s_CmdCount == 1);
+	CHECK(NthCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_SUBEVENT_DATA, 1)->ParamLen == 255);
+}
+
+// 7.7.65.36: the subevent numbers wrap from one less than the number of
+// subevents back to zero, so a request is not simply Start to Start + Count.
+void TestDataRequestSubeventsWrap(void)
+{
+	// Six subevents, asked for three starting at four: 4, 5, 0.
+	CHECK(BtPadvSubeventOfRequest(4, 0, 6) == 4);
+	CHECK(BtPadvSubeventOfRequest(4, 1, 6) == 5);
+	CHECK(BtPadvSubeventOfRequest(4, 2, 6) == 0);
+
+	// No wrap when it does not reach the end.
+	CHECK(BtPadvSubeventOfRequest(0, 2, 6) == 2);
+
+	// A train with no subevents has no answer to give.
+	CHECK(BtPadvSubeventOfRequest(0, 0, 0) == 0xFF);
+}
+
 } // namespace
 
 int main()
 {
 	TestOpcodeValues();
+	TestPawrUsesTheV2Opcode();
+	TestPawrParameterRelationsRefusedLocally();
+	TestSubeventDataInterleaves();
+	TestSubeventDataRangesRefusedLocally();
+	TestSubeventDataTooLongIsRefusedWhole();
+	TestDataRequestSubeventsWrap();
 	TestParametersLayout();
 	TestIntervalRangeRefusedBeforeTheCommand();
 	TestARefusedCommandIsReported();

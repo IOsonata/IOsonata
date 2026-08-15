@@ -13,6 +13,7 @@
 
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_hci.h"
+#include "bluetooth/bt_padv.h"
 #include "bluetooth/bt_psync.h"
 
 // bt_app.cpp is not linked here. It brings the whole application state machine
@@ -89,6 +90,20 @@ struct {
 	uint16_t LostHdl;
 } s_App;
 
+
+// PAwR capture.
+struct {
+	int DataReqCount;
+	uint8_t ReqAdvHdl, ReqStart, ReqCount;
+	int RspCount;
+	uint8_t RspAdvHdl, RspSubevent, RspSlot;
+	int8_t RspTxPwr, RspRssi;
+	uint16_t RspLen;
+	uint8_t RspData[BTPSYNC_REPORT_MAX];
+	int NotSentCount;
+	uint8_t NotSentSubevent;
+} s_Pawr;
+
 const uint8_t kAddr[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66 };
 
 void Reset(void)
@@ -99,6 +114,7 @@ void Reset(void)
 	std::memset(s_Cmds, 0, sizeof(s_Cmds));
 	std::memset(&s_Dev, 0, sizeof(s_Dev));
 	std::memset(&s_App, 0, sizeof(s_App));
+	std::memset(&s_Pawr, 0, sizeof(s_Pawr));
 	s_Dev.Command = CaptureCommand;
 	g_BtAppData.AppDevice.pHciDev = &s_Dev;
 	// Any train state a previous case left behind.
@@ -620,6 +636,272 @@ void TestTerminateClearsTheTrain(void)
 	CHECK(s_App.ReportLen == sizeof(frag));
 }
 
+
+// --- PAwR ---------------------------------------------------------------
+
+// 7.8.127: Sync_Handle(2) Properties(2) Num_Subevents(1) Subevent[].
+void TestSyncSubeventLayout(void)
+{
+	const uint8_t se[3] = { 0, 2, 5 };
+
+	Reset();
+	CHECK(BtPsyncSubeventSet(0x0003, BTPSYNC_PROP_TXPWR, se, sizeof(se)));
+
+	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_SYNC_SUBEVENT);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->ParamLen == 5 + sizeof(se));
+		CHECK(c->Param[0] == 0x03 && c->Param[1] == 0x00);
+		CHECK(c->Param[2] == BTPSYNC_PROP_TXPWR && c->Param[3] == 0x00);
+		CHECK(c->Param[4] == sizeof(se));
+		CHECK(std::memcmp(&c->Param[5], se, sizeof(se)) == 0);
+	}
+
+	Reset();
+	CHECK(BtPsyncSubeventSet(BTPSYNC_HDL_MAX + 1, 0, se, sizeof(se)) == false);
+	CHECK(BtPsyncSubeventSet(0, 0, nullptr, 1) == false);
+	CHECK(BtPsyncSubeventSet(0, 0, se, 0) == false);
+	CHECK(BtPsyncSubeventSet(0, 0, se, BTPSYNC_SUBEVENT_COUNT_MAX + 1) == false);
+
+	const uint8_t bad[1] = { BTPSYNC_SUBEVENT_MAX + 1 };
+	CHECK(BtPsyncSubeventSet(0, 0, bad, 1) == false);
+	CHECK(s_CmdCount == 0);
+}
+
+// 7.8.126: Sync_Handle(2) Request_Event(2) Request_Subevent(1)
+// Response_Subevent(1) Response_Slot(1) Response_Data_Length(1) Data.
+void TestResponseDataLayout(void)
+{
+	const uint8_t data[3] = { 0xD0, 0xD1, 0xD2 };
+
+	Reset();
+	CHECK(BtPsyncResponseSet(0x0005, 0x1234, 2, 3, 7, data, sizeof(data)));
+
+	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_RESPONSE_DATA);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->ParamLen == 8 + sizeof(data));
+		CHECK(c->Param[0] == 0x05 && c->Param[1] == 0x00);
+		CHECK(c->Param[2] == 0x34 && c->Param[3] == 0x12);
+		CHECK(c->Param[4] == 2);
+		CHECK(c->Param[5] == 3);
+		CHECK(c->Param[6] == 7);
+		CHECK(c->Param[7] == sizeof(data));
+		CHECK(std::memcmp(&c->Param[8], data, sizeof(data)) == 0);
+	}
+
+	Reset();
+	CHECK(BtPsyncResponseSet(BTPSYNC_HDL_MAX + 1, 0, 0, 0, 0, data, 3) == false);
+	CHECK(BtPsyncResponseSet(0, 0, BTPSYNC_SUBEVENT_MAX + 1, 0, 0, data, 3) == false);
+	CHECK(BtPsyncResponseSet(0, 0, 0, BTPSYNC_SUBEVENT_MAX + 1, 0, data, 3) == false);
+	CHECK(BtPsyncResponseSet(0, 0, 0, 0, 0, nullptr, 3) == false);
+	CHECK(s_CmdCount == 0);
+
+	// An empty response is legal.
+	CHECK(BtPsyncResponseSet(0, 0, 0, 0, 0, nullptr, 0));
+}
+
+// 7.7.65.36: Advertising_Handle(1) Subevent_Start(1) Subevent_Data_Count(1).
+void TestDataRequestEvent(void)
+{
+	uint8_t evt[3] = { 2, 4, 3 };
+
+	Reset();
+	BtPsyncEvtDataRequest(evt, sizeof(evt));
+	CHECK(s_Pawr.DataReqCount == 1);
+	CHECK(s_Pawr.ReqAdvHdl == 2);
+	CHECK(s_Pawr.ReqStart == 4);
+	CHECK(s_Pawr.ReqCount == 3);
+
+	Reset();
+	BtPsyncEvtDataRequest(evt, 2);
+	CHECK(s_Pawr.DataReqCount == 0);
+}
+
+// 7.7.65.37, and Vol 4 Part E 5.4.1 for the ordering: the per response fields
+// interleave, one record of six octets plus data each. Reading them as
+// parallel blocks would take the second response's Tx_Power for the first
+// one's RSSI.
+int BuildRspReport(uint8_t *p, uint8_t AdvHdl, uint8_t Subevent,
+				   uint8_t TxStatus, int Nb, const uint8_t *pSlots,
+				   const uint8_t *pStatus, const uint8_t *const *ppData,
+				   const uint8_t *pLens)
+{
+	int n = 0;
+
+	p[n++] = AdvHdl;
+	p[n++] = Subevent;
+	p[n++] = TxStatus;
+	p[n++] = (uint8_t)Nb;
+
+	for (int i = 0; i < Nb; i++)
+	{
+		p[n++] = (uint8_t)(-20 - i);	// Tx_Power
+		p[n++] = (uint8_t)(-50 - i);	// RSSI
+		p[n++] = 0xFF;					// CTE_Type
+		p[n++] = pSlots[i];
+		p[n++] = pStatus[i];
+		p[n++] = pLens[i];
+		if (pLens[i] > 0)
+		{
+			std::memcpy(&p[n], ppData[i], pLens[i]);
+			n += pLens[i];
+		}
+	}
+
+	return n;
+}
+
+void TestResponseReportInterleaves(void)
+{
+	uint8_t evt[128];
+	const uint8_t a[3] = { 0xA0, 0xA1, 0xA2 };
+	const uint8_t b[2] = { 0xB0, 0xB1 };
+	const uint8_t *data[2] = { a, b };
+	const uint8_t slots[2] = { 1, 4 };
+	const uint8_t status[2] = { BTPSYNC_DATA_COMPLETE, BTPSYNC_DATA_COMPLETE };
+	const uint8_t lens[2] = { sizeof(a), sizeof(b) };
+
+	Reset();
+	int len = BuildRspReport(evt, 3, 6, BTPSYNC_TX_STATUS_SENT, 2, slots,
+							 status, data, lens);
+	BtPsyncEvtResponseReport(evt, len);
+
+	// Both delivered, and the second one is the last seen.
+	CHECK(s_Pawr.RspCount == 2);
+	CHECK(s_Pawr.RspAdvHdl == 3);
+	CHECK(s_Pawr.RspSubevent == 6);
+	CHECK(s_Pawr.RspSlot == 4);
+	CHECK(s_Pawr.RspTxPwr == -21);
+	CHECK(s_Pawr.RspRssi == -51);
+	CHECK(s_Pawr.RspLen == sizeof(b));
+	CHECK(std::memcmp(s_Pawr.RspData, b, sizeof(b)) == 0);
+
+	// A Num_Responses larger than the event holds stops at what is there.
+	Reset();
+	evt[3] = 4;
+	BtPsyncEvtResponseReport(evt, len);
+	CHECK(s_Pawr.RspCount == 2);
+
+	// A Data_Length past the end of the event is not read.
+	Reset();
+	len = BuildRspReport(evt, 3, 6, BTPSYNC_TX_STATUS_SENT, 1, slots,
+						 status, data, lens);
+	BtPsyncEvtResponseReport(evt, len - 1);
+	CHECK(s_Pawr.RspCount == 0);
+
+	Reset();
+	BtPsyncEvtResponseReport(evt, 3);
+	CHECK(s_Pawr.RspCount == 0);
+}
+
+// A subevent the controller could not transmit is reported, because silence
+// from the responders in that subevent then means nothing.
+void TestSubeventNotSentIsReported(void)
+{
+	uint8_t evt[16];
+	const uint8_t *data[1] = { nullptr };
+	const uint8_t slots[1] = { 0 };
+	const uint8_t status[1] = { BTPSYNC_DATA_COMPLETE };
+	const uint8_t lens[1] = { 0 };
+
+	Reset();
+	int len = BuildRspReport(evt, 1, 5, BTPSYNC_TX_STATUS_NOT_SENT, 0, slots,
+							 status, data, lens);
+	BtPsyncEvtResponseReport(evt, len);
+	CHECK(s_Pawr.NotSentCount == 1);
+	CHECK(s_Pawr.NotSentSubevent == 5);
+	CHECK(s_Pawr.RspCount == 0);
+
+	Reset();
+	len = BuildRspReport(evt, 1, 5, BTPSYNC_TX_STATUS_SENT, 0, slots,
+						 status, data, lens);
+	BtPsyncEvtResponseReport(evt, len);
+	CHECK(s_Pawr.NotSentCount == 0);
+}
+
+// A response splits across reports the same way everything else does, and the
+// key has to include the response slot: two responders answering the same
+// subevent in different slots interleave inside one event, so a key of
+// advertising handle alone would merge them.
+void TestResponseReassemblyIsPerSlot(void)
+{
+	uint8_t evt[128];
+	const uint8_t a[4] = { 0xA0, 0xA1, 0xA2, 0xA3 };
+	const uint8_t b[4] = { 0xB0, 0xB1, 0xB2, 0xB3 };
+	const uint8_t *data[2] = { a, b };
+	const uint8_t slots[2] = { 1, 2 };
+	uint8_t status[2] = { BTPSYNC_DATA_MORE, BTPSYNC_DATA_MORE };
+	const uint8_t lens[2] = { sizeof(a), sizeof(b) };
+
+	Reset();
+	// Two slots each start a fragmented response in one event.
+	int len = BuildRspReport(evt, 1, 0, BTPSYNC_TX_STATUS_SENT, 2, slots,
+							 status, data, lens);
+	BtPsyncEvtResponseReport(evt, len);
+	CHECK(s_Pawr.RspCount == 0);
+
+	// Slot 1 completes. It must hold only its own halves.
+	status[0] = BTPSYNC_DATA_COMPLETE;
+	len = BuildRspReport(evt, 1, 0, BTPSYNC_TX_STATUS_SENT, 1, slots,
+						 status, data, lens);
+	BtPsyncEvtResponseReport(evt, len);
+	CHECK(s_Pawr.RspCount == 1);
+	CHECK(s_Pawr.RspSlot == 1);
+	CHECK(s_Pawr.RspLen == sizeof(a) * 2);
+	CHECK(std::memcmp(s_Pawr.RspData, a, sizeof(a)) == 0);
+	CHECK(std::memcmp(s_Pawr.RspData + sizeof(a), a, sizeof(a)) == 0);
+}
+
+// The same trap as every other report: the tail of an abandoned reassembly is
+// indistinguishable from a whole single fragment response.
+void TestAnAbandonedResponseDoesNotDeliverItsTail(void)
+{
+	uint8_t evt[128];
+	const uint8_t f[4] = { 1, 2, 3, 4 };
+	const uint8_t *data[1] = { f };
+	uint8_t slots[1] = { 0 };
+	uint8_t status[1] = { BTPSYNC_DATA_MORE };
+	const uint8_t lens[1] = { sizeof(f) };
+
+	Reset();
+	// Three slots start a fragmented response, only two contexts exist.
+	for (uint8_t sl = 1; sl <= 3; sl++)
+	{
+		slots[0] = sl;
+		BtPsyncEvtResponseReport(evt,
+			BuildRspReport(evt, 1, 0, BTPSYNC_TX_STATUS_SENT, 1, slots,
+						   status, data, lens));
+	}
+	CHECK(s_Pawr.RspCount == 0);
+
+	// The abandoned one finishes. Nothing may be delivered for it.
+	status[0] = BTPSYNC_DATA_COMPLETE;
+	slots[0] = 3;
+	BtPsyncEvtResponseReport(evt,
+		BuildRspReport(evt, 1, 0, BTPSYNC_TX_STATUS_SENT, 1, slots,
+					   status, data, lens));
+	CHECK(s_Pawr.RspCount == 0);
+
+	// One that kept a context still completes.
+	slots[0] = 1;
+	BtPsyncEvtResponseReport(evt,
+		BuildRspReport(evt, 1, 0, BTPSYNC_TX_STATUS_SENT, 1, slots,
+					   status, data, lens));
+	CHECK(s_Pawr.RspCount == 1);
+	CHECK(s_Pawr.RspLen == sizeof(f) * 2);
+
+	// Once forgotten, a fresh standalone response from that slot is delivered.
+	slots[0] = 3;
+	BtPsyncEvtResponseReport(evt,
+		BuildRspReport(evt, 1, 0, BTPSYNC_TX_STATUS_SENT, 1, slots,
+					   status, data, lens));
+	CHECK(s_Pawr.RspCount == 2);
+	CHECK(s_Pawr.RspLen == sizeof(f));
+}
+
 } // namespace
 
 // Strong definitions beat the weak defaults in bt_psync.cpp.
@@ -647,6 +929,38 @@ void BtPsyncReport(uint16_t SyncHdl, int8_t TxPwr, int8_t Rssi, uint8_t CteType,
 	}
 }
 
+void BtPadvSubeventDataRequest(uint8_t AdvHdl, uint8_t Start, uint8_t Count)
+{
+	s_Pawr.DataReqCount++;
+	s_Pawr.ReqAdvHdl = AdvHdl;
+	s_Pawr.ReqStart = Start;
+	s_Pawr.ReqCount = Count;
+}
+
+void BtPsyncResponseReport(uint8_t AdvHdl, uint8_t Subevent, uint8_t RspSlot,
+						   int8_t TxPwr, int8_t Rssi, const uint8_t *pData,
+						   uint16_t Len)
+{
+	s_Pawr.RspCount++;
+	s_Pawr.RspAdvHdl = AdvHdl;
+	s_Pawr.RspSubevent = Subevent;
+	s_Pawr.RspSlot = RspSlot;
+	s_Pawr.RspTxPwr = TxPwr;
+	s_Pawr.RspRssi = Rssi;
+	s_Pawr.RspLen = Len;
+	if (pData != nullptr && Len <= sizeof(s_Pawr.RspData))
+	{
+		std::memcpy(s_Pawr.RspData, pData, Len);
+	}
+}
+
+void BtPsyncSubeventNotSent(uint8_t AdvHdl, uint8_t Subevent)
+{
+	(void)AdvHdl;
+	s_Pawr.NotSentCount++;
+	s_Pawr.NotSentSubevent = Subevent;
+}
+
 void BtPsyncLost(uint16_t SyncHdl)
 {
 	s_App.LostCount++;
@@ -669,6 +983,13 @@ int main()
 	TestTruncatedAndOverlongReportsAreDropped();
 	TestSyncLostClearsTheTrain();
 	TestTerminateClearsTheTrain();
+	TestSyncSubeventLayout();
+	TestResponseDataLayout();
+	TestDataRequestEvent();
+	TestResponseReportInterleaves();
+	TestSubeventNotSentIsReported();
+	TestResponseReassemblyIsPerSlot();
+	TestAnAbandonedResponseDoesNotDeliverItsTail();
 
 	if (s_Failures == 0)
 	{
