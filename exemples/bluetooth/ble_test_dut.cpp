@@ -86,7 +86,6 @@ SOFTWARE.
 #include <string.h>
 
 #include "istddef.h"
-#include "idelay.h"
 #include "app_evt_handler.h"
 #include "coredev/uart.h"
 #include "coredev/system_core_clock.h"
@@ -111,6 +110,151 @@ SOFTWARE.
 #ifdef MCU_OSC
 McuOsc_t g_McuOsc = MCU_OSC;
 #endif
+
+// --- Port shim ---
+//
+// The DUT offers the same command set on every port it is built for, so it
+// names every call it needs whether or not the port provides one. A call the
+// port does not provide is defined here, weak and refusing, and the strong
+// definition wins wherever the library builds it. This belongs to the DUT and
+// not to the library: the library has no reason to grow a definition for the
+// benefit of a test application.
+//
+// Advertising start and stop are named twice in the library. bt_adv_hci.cpp
+// defines BtAppAdvStart and BtAppAdvStop; bt_adv_nrf52.cpp and bt_adv_bm.cpp
+// define BtAdvStart and BtAdvStop. Neither pair is defined on every port. The
+// DUT calls the BtApp pair and the weak definition below forwards to the other
+// one, which resolves on the ports that name it that way.
+//
+// A refusing call reports "not supported" to the harness. Answering success
+// would let a test record a pass for something that never reached the air.
+
+__attribute__((weak)) void BtAdvStart(void)
+{
+}
+
+__attribute__((weak)) void BtAdvStop(void)
+{
+}
+
+__attribute__((weak)) void BtAppAdvStart(void)
+{
+	BtAdvStart();
+}
+
+__attribute__((weak)) void BtAppAdvStop(void)
+{
+	BtAdvStop();
+}
+
+__attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
+{
+	(void)pCfg;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtAdvCodingSet(uint8_t PrimOpt, uint8_t SecOpt)
+{
+	(void)PrimOpt;
+	(void)SecOpt;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtAdvCodingSelectionEnable(bool bEnable)
+{
+	(void)bEnable;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys,
+									   uint8_t RxPhys, uint16_t PhyOptions)
+{
+	(void)ConnHdl;
+	(void)TxPhys;
+	(void)RxPhys;
+	(void)PhyOptions;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy,
+										uint8_t *pRxPhy)
+{
+	(void)ConnHdl;
+	(void)pTxPhy;
+	(void)pRxPhy;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtGapSetDataLength(uint16_t ConnHdl,
+											  uint16_t TxOctets,
+											  uint16_t TxTime)
+{
+	(void)ConnHdl;
+	(void)TxOctets;
+	(void)TxTime;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtSmpBonded(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtPadvInit(const BtPadvCfg_t * const pCfg)
+{
+	(void)pCfg;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtPadvDataSet(uint8_t AdvHdl, const uint8_t *pData,
+										 size_t Len)
+{
+	(void)AdvHdl;
+	(void)pData;
+	(void)Len;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtPadvStart(uint8_t AdvHdl)
+{
+	(void)AdvHdl;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtPadvStop(uint8_t AdvHdl)
+{
+	(void)AdvHdl;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtPadvIsEnabled(uint8_t AdvHdl)
+{
+	(void)AdvHdl;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtPadvSubeventDataSet(uint8_t AdvHdl,
+		const BtPadvSubeventData_t * const pSubevents, uint8_t NbSubevents)
+{
+	(void)AdvHdl;
+	(void)pSubevents;
+	(void)NbSubevents;
+
+	return false;
+}
 
 #define DUT_DEVICE_NAME			"IOsonataDUT"
 #define DUT_MANUFACTURER_NAME	"I-SYST inc."
@@ -657,14 +801,14 @@ static void PrintLink(uint16_t ConnHdl)
 // a running advertiser.
 static bool DutAdvRebuild(void)
 {
-	BtAdvStop();
+	BtAppAdvStop();
 
 	if (BtAppAdvInit(&s_BleAppCfg) == false)
 	{
 		return false;
 	}
 
-	BtAdvStart();
+	BtAppAdvStart();
 
 	return true;
 }
@@ -913,23 +1057,6 @@ static void DutEadSelfTest(void)
 
 	DutOut("DUT EAD_SELFTEST pass=1");
 	DutOutEnd();
-}
-
-// Restart the board so a run starts from a known state. A harness that has to
-// power cycle by hand between runs is not automated, and reaching the same
-// state by sending the commands that undo the previous run tests the undo path
-// rather than the run that follows it.
-//
-// The line goes out before the reset and the transmit path is given time to
-// drain, because a harness that sees nothing cannot tell a board that reset
-// from one that hung.
-static void DutReset(void)
-{
-	DutOut("DUT RESET requested");
-	DutOutEnd();
-	msDelay(50);
-
-	NVIC_SystemReset();
 }
 
 // Peripheral initiated security, Core 5.4 Vol 3 Part H 2.4.6. The peripheral
@@ -1249,7 +1376,7 @@ static void DutPawrStop(void)
 
 static void PrintHelp(void)
 {
-	DutOut("DUT COMMANDS status | link | reset | help");
+	DutOut("DUT COMMANDS status | link | help");
 	DutOutEnd();
 	DutOut("DUT COMMANDS adv start | adv stop | adv ext <len> | "
 		"adv mode <conn|scan|nonconn> | coding <prim> <sec>");
@@ -1301,15 +1428,9 @@ static void HandleCommand(const char *pLine)
 		return;
 	}
 
-	if (DutMatch(pLine, "reset", &arg) && *arg == 0)
-	{
-		DutReset();
-		return;
-	}
-
 	if (DutMatch(pLine, "adv start", &arg) && *arg == 0)
 	{
-		BtAdvStart();
+		BtAppAdvStart();
 		DutOut("DUT ADV_START requested");
 		DutOutEnd();
 		return;
@@ -1317,7 +1438,7 @@ static void HandleCommand(const char *pLine)
 
 	if (DutMatch(pLine, "adv stop", &arg) && *arg == 0)
 	{
-		BtAdvStop();
+		BtAppAdvStop();
 		DutOut("DUT ADV_STOP requested");
 		DutOutEnd();
 		return;

@@ -226,50 +226,6 @@ bool BtGapSecLevelsSet(const uint8_t *pReq, size_t Len)
 	return true;
 }
 
-// --- Link procedures on an established connection ---
-//
-// Weak and refusing, so an application can ask for them on any port and be
-// told when the port cannot run them. bt_gap_hci.cpp runs all three over
-// standard HCI and overrides these. The vendor host ports answer a PHY change
-// the peer starts, in their own event handlers, but none of them can start one
-// from here, so on those ports these refuse until a port implementation is
-// written against the vendor call.
-//
-// Refusing is what an application can act on. Answering true would leave a
-// caller believing it asked for something that never went out.
-
-__attribute__((weak)) bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys,
-									   uint8_t RxPhys, uint16_t PhyOptions)
-{
-	(void)ConnHdl;
-	(void)TxPhys;
-	(void)RxPhys;
-	(void)PhyOptions;
-
-	return false;
-}
-
-__attribute__((weak)) bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy,
-										uint8_t *pRxPhy)
-{
-	(void)ConnHdl;
-	(void)pTxPhy;
-	(void)pRxPhy;
-
-	return false;
-}
-
-__attribute__((weak)) bool BtGapSetDataLength(uint16_t ConnHdl,
-											  uint16_t TxOctets,
-											  uint16_t TxTime)
-{
-	(void)ConnHdl;
-	(void)TxOctets;
-	(void)TxTime;
-
-	return false;
-}
-
 // Default value from the configured security type. This says what the
 // configuration names and nothing more.
 //
