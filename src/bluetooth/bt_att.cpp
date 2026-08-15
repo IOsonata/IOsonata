@@ -109,7 +109,12 @@ static uint16_t BtAttGetMtuForConn(uint16_t ConnHdl)
 
 	if (pConn != nullptr && pConn->Conn.MaxMtu >= BT_ATT_MTU_MIN)
 	{
-		return pConn->Conn.MaxMtu;
+		// Clamp here rather than trusting every writer of Conn.MaxMtu. This
+		// value bounds both the size of a response written into the caller's
+		// buffer and the largest request accepted, so the bound has to hold
+		// in this file and not depend on a distant assignment.
+		return pConn->Conn.MaxMtu > BT_ATT_MTU_MAX ?
+				BT_ATT_MTU_MAX : pConn->Conn.MaxMtu;
 	}
 
 	return s_AttMtu;
@@ -1633,6 +1638,8 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 	DEBUG_PRINTF("ATT OpCode %x, L2Cap len %d\n", pReqAtt->OpCode, ReqLen);
 
+	uint16_t rspMtu = BtAttGetMtuForConn(ConnHdl);
+
 	// Reject malformed PDUs before any field is parsed. ReqLen counts the opcode
 	// byte plus all parameters; a PDU shorter than the size its opcode requires
 	// would read handles/lengths past the end of the received L2CAP buffer, and
@@ -1668,7 +1675,16 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 			default:										minLen = 1; break;
 		}
 
-		bool bad = ReqLen < minLen || (exactLen != 0 && ReqLen != exactLen);
+		// ATT_MTU is the maximum size of any packet sent between a client and
+		// a server (Vol 3 Part F 3.2.8), and the variable length parameter of
+		// each PDU in 3.4 is given as at most (ATT_MTU - X) octets. The
+		// reassembly path in BtHciProcessData hands up an L2CAP PDU as large
+		// as the HCI buffer allows, which on the minimum 23 octet link is
+		// eleven times the MTU, so the upper bound has to be checked here.
+		// Without it a Prepare Write Request echoes a value the caller's
+		// response buffer cannot hold.
+		bool bad = ReqLen < minLen || ReqLen > (int)rspMtu ||
+				   (exactLen != 0 && ReqLen != exactLen);
 
 		// Both Read Multiple forms carry a list of whole 16-bit handles, so a
 		// trailing odd byte is malformed however long the list is.
@@ -1694,8 +1710,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 			return BtAttError(pRspAtt, 0, pReqAtt->OpCode, BT_ATT_ERROR_INVALID_PDU);
 		}
 	}
-
-	uint16_t rspMtu = BtAttGetMtuForConn(ConnHdl);
 
 	switch (pReqAtt->OpCode)
 	{

@@ -1240,6 +1240,15 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 		case BT_L2CAP_CID_ATT:
 		{
 			//DEBUG_PRINTF("BT_L2CAP_CID_ATT\r\n");
+
+			// BtAttProcessReq sizes every response to the link ATT_MTU, which
+			// it clamps to BT_ATT_MTU_MAX. That bound only protects this
+			// buffer while the buffer can still hold such a response behind
+			// both headers, so tie the two together at compile time.
+			static_assert(BT_ATT_MTU_MAX + sizeof(BtHciACLDataPacketHdr_t) +
+						  sizeof(BtL2CapHdr_t) <= BT_HCI_BUFFER_MAX_SIZE,
+						  "BT_HCI_BUFFER_MAX_SIZE cannot hold a BT_ATT_MTU_MAX response");
+
 			uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
 			BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
 			BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;

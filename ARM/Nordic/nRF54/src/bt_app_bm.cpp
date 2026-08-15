@@ -445,25 +445,11 @@ void BtSmpOobDataClear(void)
 	BtSmpOobDataClearInternal();
 }
 
-// Weak defaults. With no application override the only safe action is to reject,
-// so the user interaction cannot be performed silently. An application that can
-// display or input overrides these.
-__attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
-{
-	(void)Value;
-	BtSmpNumericComparisonReply(ConnHdl, false);
-}
-
-__attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
-{
-	(void)Passkey;
-	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
-}
-
-__attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
-{
-	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
-}
+// The rejecting defaults for BtSmpNumericComparison, BtSmpPasskeyDisplay and
+// BtSmpPasskeyRequest are weak in bt_smp.cpp, which this port links. A second
+// weak definition here left the choice to link order. They reach this port
+// through the strong BtSmpNumericComparisonReply and BtSmpPasskeyReply above,
+// so the behaviour is what it was.
 
 // --- BLE event dispatch (registered as observer) ---
 

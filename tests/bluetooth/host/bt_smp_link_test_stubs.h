@@ -76,7 +76,10 @@ int BtSmpTestBondStoreFailedCount(void);
 /// Off by default and after a reset: most cases want the null peer, which
 /// skips the security state reporting and leaves key distribution to run on
 /// the link record alone. A case about what the link reports turns it on.
-void BtSmpTestPeerSet(bool Present, uint16_t ConnHdl, bool Secure);
+/// pHciDev is the device the user interaction paths read back off the peer;
+/// pass null when the case does not send anything.
+void BtSmpTestPeerSet(bool Present, uint16_t ConnHdl, bool Secure,
+					  void *pHciDev);
 
 /// The last BtConnSec_t handed to BtGapConnSecSet, and how many times it was
 /// called since the last reset.

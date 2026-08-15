@@ -474,7 +474,7 @@ void TestUnknownKeySizeIsNotReportedAsTheMaximum(bttest::Context &ctx)
 	// what leaves the properties unknown.
 	s_SmpLink[0].Ctx.State = BT_SMP_STATE_DONE;
 	s_SmpLink[0].Keys.bValid = false;
-	BtSmpTestPeerSet(true, kConnHdl, false);
+	BtSmpTestPeerSet(true, kConnHdl, false, nullptr);
 
 	BtSmpEncryptionChanged(&s_HciDev, kConnHdl, 0, 1);
 
@@ -502,7 +502,7 @@ void TestAKnownKeyRecordStillReportsItsSize(bttest::Context &ctx)
 	s_SmpLink[0].Keys.bSc = true;
 	s_SmpLink[0].Keys.bAuthenticated = false;
 	s_SmpLink[0].Keys.EncKeySize = BT_SMP_MAX_ENC_KEY_SIZE;
-	BtSmpTestPeerSet(true, kConnHdl, false);
+	BtSmpTestPeerSet(true, kConnHdl, false, nullptr);
 
 	BtSmpEncryptionChanged(&s_HciDev, kConnHdl, 0, 1);
 
@@ -512,6 +512,69 @@ void TestAKnownKeyRecordStillReportsItsSize(bttest::Context &ctx)
 	BT_CHECK(ctx, BtSmpTestConnSecCount() == 1);
 	BT_CHECK(ctx, sec.KeySize == BT_SMP_MAX_ENC_KEY_SIZE);
 	BT_CHECK(ctx, (sec.Flags & BT_GAP_SEC_FLAG_SC) != 0);
+}
+
+// Find the reason octet of the first captured Pairing Failed, or -1.
+int FailedReason(void)
+{
+	for (int i = 0; i < g_BtSmpTestCapture.Count; i++)
+	{
+		if (g_BtSmpTestCapture.Len[i] >= 2 &&
+			g_BtSmpTestCapture.Pdu[i][0] == BT_SMP_CODE_PAIRING_FAILED)
+		{
+			return g_BtSmpTestCapture.Pdu[i][1];
+		}
+	}
+
+	return -1;
+}
+
+// The rejecting defaults for the three user interaction entry points used to
+// be defined weak in bt_smp.cpp and again weak in bt_app_nrf52.cpp,
+// bt_app_bm.cpp and bt_app_stm32wba.cpp, all of which link bt_smp.cpp for
+// BtSmpTimeoutCheck. Two weak definitions of one symbol leave the choice to
+// link order. The port copies are gone and this pins what the surviving one
+// does, so a later change to it cannot pass unnoticed.
+void TestNumericComparisonDefaultRejects(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(false, both, both, both, both);
+	s_SmpLink[0].Ctx.State = BT_SMP_STATE_NUMERIC_WAIT;
+	s_SmpLink[0].Ctx.Model = BT_SMP_MODEL_NUMERIC_COMPARISON;
+	BtSmpTestPeerSet(true, kConnHdl, false, &s_HciDev);
+
+	BtSmpNumericComparison(kConnHdl, 123456);
+
+	BT_CHECK(ctx, FailedReason() == BT_SMP_ERR_NUMERIC_COMPARISON_FAILED);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.State == BT_SMP_STATE_IDLE);
+}
+
+void TestPasskeyDefaultsReject(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(false, both, both, both, both);
+	s_SmpLink[0].Ctx.State = BT_SMP_STATE_PASSKEY_WAIT;
+	s_SmpLink[0].Ctx.Model = BT_SMP_MODEL_PASSKEY_ENTRY;
+	BtSmpTestPeerSet(true, kConnHdl, false, &s_HciDev);
+
+	BtSmpPasskeyRequest(kConnHdl);
+
+	BT_CHECK(ctx, FailedReason() == BT_SMP_ERR_PASSKEY_ENTRY_FAILED);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.State == BT_SMP_STATE_IDLE);
+
+	// The display side rejects the same way, so a device with no display never
+	// leaves the peer waiting on a value it cannot show.
+	ArmLink(false, both, both, both, both);
+	s_SmpLink[0].Ctx.State = BT_SMP_STATE_PASSKEY_WAIT;
+	s_SmpLink[0].Ctx.Model = BT_SMP_MODEL_PASSKEY_ENTRY;
+	BtSmpTestPeerSet(true, kConnHdl, false, &s_HciDev);
+
+	BtSmpPasskeyDisplay(kConnHdl, 123456);
+
+	BT_CHECK(ctx, FailedReason() == BT_SMP_ERR_PASSKEY_ENTRY_FAILED);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.State == BT_SMP_STATE_IDLE);
 }
 
 } // namespace
@@ -554,6 +617,10 @@ int main()
 			[&] { TestUnknownKeySizeIsNotReportedAsTheMaximum(ctx); });
 	ctx.Run("a known key record still reports its size",
 			[&] { TestAKnownKeyRecordStillReportsItsSize(ctx); });
+	ctx.Run("numeric comparison default rejects",
+			[&] { TestNumericComparisonDefaultRejects(ctx); });
+	ctx.Run("passkey defaults reject",
+			[&] { TestPasskeyDefaultsReject(ctx); });
 
 	return ctx.Finish();
 }

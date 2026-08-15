@@ -552,25 +552,13 @@ static void BtAppOobPeerDataPush(uint16_t ConnHdl, uint8_t AddrType,
 	}
 }
 
-// Weak defaults. With no application override the only safe action is to reject,
-// so the user interaction cannot be performed silently. An application that can
-// display or input overrides these.
-__attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
-{
-	(void)Value;
-	BtSmpNumericComparisonReply(ConnHdl, false);
-}
-
-__attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
-{
-	(void)Passkey;
-	WbaPasskeyReject(ConnHdl);
-}
-
-__attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
-{
-	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
-}
+// The rejecting defaults for BtSmpNumericComparison, BtSmpPasskeyDisplay and
+// BtSmpPasskeyRequest are weak in bt_smp.cpp, which this port links for
+// BtSmpTimeoutCheck at the end of this file. A second weak definition here
+// left the choice to link order. Both reach this port through the strong
+// BtSmpNumericComparisonReply and BtSmpPasskeyReply above, and the display
+// default that called WbaPasskeyReject arrives at the same place, since
+// BtSmpPasskeyReply routes an out of range passkey there.
 
 // HCI event callback registered with the stack. ST's stack invokes this
 // for every HCI / vendor event; we route by type to the appropriate

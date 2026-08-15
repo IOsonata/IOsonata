@@ -56,6 +56,7 @@ TEST_NAMES := \
 	bt_peer_pool_test \
 	bt_gap_hci_test \
 	bt_adv_hci_test \
+	bt_padv_hci_test \
 	bt_gatt_cccd_test \
 	bt_gatt_srvc_test \
 	bt_gatt_hci_security_test \
@@ -148,6 +149,10 @@ bt_adv_hci_test_SOURCES := \
 	$(ROOT)/src/bluetooth/bt_adv_hci.cpp \
 	$(ROOT)/src/bluetooth/bt_adv.cpp \
 	$(ROOT)/src/bluetooth/bt_uuid.cpp
+
+bt_padv_hci_test_SOURCES := \
+	bt_padv_hci_test.cpp \
+	$(ROOT)/src/bluetooth/bt_padv_hci.cpp
 
 bt_gatt_cccd_test_SOURCES := \
 	bt_gatt_cccd_test.cpp \

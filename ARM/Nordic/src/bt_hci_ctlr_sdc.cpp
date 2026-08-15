@@ -169,6 +169,24 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 			res = sdc_hci_cmd_le_set_adv_set_random_address((const sdc_hci_cmd_le_set_adv_set_random_address_t*)pParam);
 			break;
 
+		// Periodic advertising, advertiser side. bt_padv_hci.cpp builds these
+		// three in the wire layout of Vol 4 Part E 7.8.61 to 7.8.63, which is
+		// what the SDC parameter types are, so the buffer casts across the
+		// same way the extended advertising commands above do. Without these
+		// cases the opcodes reach the default and the whole feature answers
+		// 0xFF on this controller.
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM:
+			res = sdc_hci_cmd_le_set_periodic_adv_params((const sdc_hci_cmd_le_set_periodic_adv_params_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_DATA:
+			res = sdc_hci_cmd_le_set_periodic_adv_data((const sdc_hci_cmd_le_set_periodic_adv_data_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_ENABLE:
+			res = sdc_hci_cmd_le_set_periodic_adv_enable((const sdc_hci_cmd_le_set_periodic_adv_enable_t*)pParam);
+			break;
+
 		case BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM:
 			res = sdc_hci_cmd_le_set_ext_scan_params((const sdc_hci_cmd_le_set_ext_scan_params_t*)pParam);
 			break;
@@ -367,8 +385,9 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		// Config for peripheral role
 		sdc_support_adv();
 		sdc_support_ext_adv();
+		// Periodic advertising in the Advertising state. sdc.h requires
+		// sdc_support_ext_adv() first, which is the line above.
 		sdc_support_le_periodic_adv();
-		sdc_support_le_periodic_sync();
 		sdc_support_peripheral();
 		sdc_support_dle_peripheral();
 		sdc_support_phy_update_peripheral();
@@ -380,6 +399,13 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		// Config for central role
 		sdc_support_scan();
 		sdc_support_ext_scan();
+		// Periodic advertising in the Synchronization state, which is the
+		// receiving side: an observer syncs to a train, an advertiser
+		// transmits one. This was in the peripheral branch above, where the
+		// prerequisite sdc.h states for it, sdc_support_ext_scan(), is never
+		// called, so an observer build did not enable it at all and Create
+		// Sync would have been refused by the controller.
+		sdc_support_le_periodic_sync();
 		sdc_support_central();
 		sdc_support_ext_central();
 		sdc_support_dle_central();

@@ -70,11 +70,13 @@ void BtSmpTestCaptureReset(void)
 	s_ConnSecCount = 0;
 }
 
-void BtSmpTestPeerSet(bool Present, uint16_t ConnHdl, bool Secure)
+void BtSmpTestPeerSet(bool Present, uint16_t ConnHdl, bool Secure,
+					  void *pHciDev)
 {
 	memset(&s_Peer, 0, sizeof(s_Peer));
 	s_Peer.Conn.Hdl = ConnHdl;
 	s_Peer.bSecure = Secure;
+	s_Peer.pHciDev = (BtHciDevice_t*)pHciDev;
 	s_PeerPresent = Present;
 }
 
