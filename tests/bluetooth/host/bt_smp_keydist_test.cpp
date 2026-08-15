@@ -337,6 +337,71 @@ void TestShortPduLeavesACompletedPairingAlone(bttest::Context &ctx)
 	BT_CHECK(ctx, s_SmpLink[0].Keys.Ltk[0] == 0x5C);
 }
 
+// Put the pending OOB set under this link's reservation, the way SmpOobCtxLoad
+// leaves it once the feature exchange has selected the OOB model.
+void ArmOobReservation(void)
+{
+	memset(&s_SmpOob, 0, sizeof(s_SmpOob));
+	s_SmpOob.bLocalValid = true;
+	s_SmpOob.bPeerValid = true;
+	s_SmpOob.bReserved = true;
+	s_SmpOob.ConnHdl = s_SmpLink[0].ConnHdl;
+	s_SmpOob.Generation = s_SmpLink[0].Generation;
+	memset(s_SmpOob.LocalRand, 0x11, sizeof(s_SmpOob.LocalRand));
+	memset(s_SmpOob.PeerRand, 0x22, sizeof(s_SmpOob.PeerRand));
+	memset(s_SmpOob.PeerConfirm, 0x33, sizeof(s_SmpOob.PeerConfirm));
+}
+
+// Sending Pairing Failed used to wipe the link's OOB material as a side
+// effect, so any PDU this stack answers without ending the pairing took the
+// randoms and confirms with it. The pairing then ran on and failed later at
+// the DHKey check. A peer could do it with one unrecognised code.
+void TestAnswerablePduKeepsOobMaterial(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(false, both, both, both, both);
+	s_SmpLink[0].Ctx.State = BT_SMP_STATE_RANDOM_WAIT;
+	s_SmpLink[0].Ctx.Model = BT_SMP_MODEL_OOB;
+	ArmOobReservation();
+
+	// An unrecognised code. Answered, and the pairing is left running.
+	BtL2CapSmp_t smp = {};
+	smp.Code = 0xFF;
+	BtProcessSmpData(&s_HciDev, kConnHdl, &smp, sizeof(smp));
+
+	BT_CHECK(ctx, BtSmpTestCaptureCount(BT_SMP_CODE_PAIRING_FAILED) == 1);
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.State == BT_SMP_STATE_RANDOM_WAIT);
+	BT_CHECK(ctx, s_SmpOob.bReserved);
+	BT_CHECK(ctx, s_SmpOob.bLocalValid);
+	BT_CHECK(ctx, s_SmpOob.bPeerValid);
+	BT_CHECK(ctx, s_SmpOob.PeerConfirm[0] == 0x33);
+}
+
+// The other half of the same rule: a path that does end the pairing still
+// releases, because releasing lives in SmpAbortPairing rather than in the
+// transmission.
+void TestEndingTheAttemptStillReleasesOob(bttest::Context &ctx)
+{
+	const uint8_t both = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	ArmLink(false, both, both, both, both);
+	s_SmpLink[0].Ctx.State = BT_SMP_STATE_RANDOM_WAIT;
+	s_SmpLink[0].Ctx.Model = BT_SMP_MODEL_OOB;
+	ArmOobReservation();
+
+	// A one octet PDU, which drops the attempt.
+	BtL2CapSmp_t smp = {};
+	smp.Code = BT_SMP_CODE_PAIRING_CONFIRM;
+	BtProcessSmpData(&s_HciDev, kConnHdl, &smp, 1);
+
+	BT_CHECK(ctx, s_SmpLink[0].Ctx.State == BT_SMP_STATE_IDLE);
+	BT_CHECK(ctx, s_SmpOob.bReserved == false);
+	BT_CHECK(ctx, s_SmpOob.bLocalValid == false);
+	BT_CHECK(ctx, SmpIsAllZero(s_SmpOob.PeerConfirm,
+							   sizeof(s_SmpOob.PeerConfirm)));
+}
+
 } // namespace
 
 int main()
@@ -365,6 +430,10 @@ int main()
 			[&] { TestShortPduDropsTheAttempt(ctx); });
 	ctx.Run("short pdu leaves a completed pairing alone",
 			[&] { TestShortPduLeavesACompletedPairingAlone(ctx); });
+	ctx.Run("an answerable pdu keeps oob material",
+			[&] { TestAnswerablePduKeepsOobMaterial(ctx); });
+	ctx.Run("ending the attempt still releases oob",
+			[&] { TestEndingTheAttemptStillReleasesOob(ctx); });
 
 	return ctx.Finish();
 }

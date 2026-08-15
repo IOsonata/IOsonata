@@ -639,9 +639,24 @@ static void SmpSend(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 				  pLink ? (int)pLink->Ctx.State : -1);
 }
 
+// Send Pairing Failed. This transmits and nothing else.
+//
+// It used to release the link's OOB reservation as well, which conflated
+// sending the PDU with ending the pairing. They are not the same: several
+// sites answer a PDU they will not act on and deliberately leave a running
+// pairing alone, and every one of them destroyed the OOB material on the way
+// past. A peer could break a legitimate OOB pairing that was about to succeed
+// by sending any unrecognised code, or a second Pairing Request, or a Security
+// Request in the wrong direction. The pairing then ran on with the randoms and
+// confirms wiped and failed later at the DHKey check, which names a cause
+// nowhere near the real one.
+//
+// Releasing belongs to the paths that end the pairing, and it is already there:
+// SmpAbortPairing releases before it wipes the context, SmpLinkFree does it on
+// disconnect, and BtSmpEncryptionChanged does it once an OOB pairing has
+// succeeded. Every site here that ends the attempt calls one of those.
 static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t Reason)
 {
-	SmpOobRelease(SmpLinkFind(ConnHdl));
 	BtSmpPairingFailed_t f;
 	f.Code = BT_SMP_CODE_PAIRING_FAILED;
 	f.Reason = Reason;
