@@ -144,6 +144,72 @@ void TestArmedWrapsThePacket()
 	CHECK(BtAdvEadKeySet(nullptr));
 }
 
+// The scanner half. A scan report handler has the whole advertising payload,
+// not the AD data of one structure, so what it needs is to be handed the
+// report and get the plaintext back. Nothing did that before: the cipher was
+// reachable and the report was not.
+void TestAReportIsDecrypted()
+{
+	uint8_t buf[64];
+	BtAdvPacket_t pkt = { static_cast<int>(sizeof(buf)), 0, buf };
+
+	int len = BuildPlain(buf, sizeof(buf), &pkt);
+	uint8_t plain[64];
+
+	std::memcpy(plain, buf, len);
+
+	CHECK(BtAdvEadKeySet(&kEadKey));
+	CHECK(BtAdvEncrypt(&pkt));
+
+	uint8_t back[64];
+	size_t n = BtAdvDecrypt(&kEadKey, buf, (size_t)pkt.Len, back, sizeof(back));
+
+	CHECK(n == (size_t)len);
+	CHECK(std::memcmp(back, plain, len) == 0);
+
+	// The structure is found wherever it sits, not only first. A report that
+	// leads with Flags is the ordinary case on air.
+	uint8_t rep[80];
+	int off = 0;
+
+	rep[off++] = 2;
+	rep[off++] = 0x01;					// Flags
+	rep[off++] = 0x06;
+	std::memcpy(&rep[off], buf, pkt.Len);
+	off += pkt.Len;
+
+	std::memset(back, 0, sizeof(back));
+	n = BtAdvDecrypt(&kEadKey, rep, (size_t)off, back, sizeof(back));
+	CHECK(n == (size_t)len);
+	CHECK(std::memcmp(back, plain, len) == 0);
+
+	// A report with no Encrypted Data structure yields nothing rather than
+	// treating some other structure as ciphertext.
+	CHECK(BtAdvDecrypt(&kEadKey, rep, 3, back, sizeof(back)) == 0);
+
+	// A structure claiming more than the report holds is malformed, and a
+	// length octet of zero ends the sequence. Neither may be read past.
+	uint8_t bad[8] = { 0x40, BTEAD_AD_TYPE, 1, 2, 3, 4, 5, 6 };
+	CHECK(BtAdvDecrypt(&kEadKey, bad, sizeof(bad), back, sizeof(back)) == 0);
+
+	uint8_t pad[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	CHECK(BtAdvDecrypt(&kEadKey, pad, sizeof(pad), back, sizeof(back)) == 0);
+
+	// A wrong key does not authenticate, so nothing comes back. This is the
+	// check that says the MIC is being verified and not merely stripped.
+	BtEadKey_t wrong = kEadKey;
+
+	wrong.SessionKey[0] ^= 0xFF;
+	CHECK(BtAdvDecrypt(&wrong, buf, (size_t)pkt.Len, back, sizeof(back)) == 0);
+
+	CHECK(BtAdvDecrypt(nullptr, buf, (size_t)pkt.Len, back, sizeof(back)) == 0);
+	CHECK(BtAdvDecrypt(&kEadKey, nullptr, 4, back, sizeof(back)) == 0);
+	CHECK(BtAdvDecrypt(&kEadKey, buf, (size_t)pkt.Len, nullptr, sizeof(back)) == 0);
+	CHECK(BtAdvDecrypt(&kEadKey, buf, (size_t)pkt.Len, back, 0) == 0);
+
+	CHECK(BtAdvEadKeySet(nullptr));
+}
+
 // A fresh randomizer per call is what CSS Part A 1.23.4 asks for whenever the
 // payload changes. Two encryptions of the same payload must not match, or a
 // scanner could follow the device across address changes by the ciphertext.
@@ -463,6 +529,7 @@ int main()
 	TestExtendedSelection();
 	TestNotArmedLeavesThePacketAlone();
 	TestArmedWrapsThePacket();
+	TestAReportIsDecrypted();
 	TestEachWrapUsesAFreshRandomizer();
 	TestNoRoomLeavesThePlaintext();
 	TestDataMutation();

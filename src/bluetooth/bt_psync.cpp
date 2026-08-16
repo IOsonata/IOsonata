@@ -69,6 +69,9 @@ typedef struct __Bt_Psync_Reasm {
 	uint16_t SyncHdl;						//!< Train the partial report belongs to
 	int8_t   TxPwr;							//!< Transmit power of the first fragment
 	uint8_t  CteType;						//!< Constant Tone Extension type of the first fragment
+	uint16_t EvtCounter;					//!< paEventCounter of the first fragment
+	uint8_t  Subevent;						//!< Subevent of the first fragment
+	bool     bSubevent;						//!< The two above were reported, so a V2 event
 	uint16_t Len;							//!< Bytes accumulated so far
 	uint8_t  Buf[BTPSYNC_REPORT_MAX];		//!< Accumulated advertising data
 } BtPsyncReasm_t;
@@ -101,7 +104,8 @@ static BtPsyncReasm_t *BtPsyncReasmFind(uint16_t SyncHdl)
 }
 
 static BtPsyncReasm_t *BtPsyncReasmAlloc(uint16_t SyncHdl, int8_t TxPwr,
-										 uint8_t CteType)
+										 uint8_t CteType, uint16_t EvtCounter,
+										 uint8_t Subevent, bool bSubevent)
 {
 	for (int i = 0; i < BT_PSYNC_REASM_COUNT; i++)
 	{
@@ -113,6 +117,9 @@ static BtPsyncReasm_t *BtPsyncReasmAlloc(uint16_t SyncHdl, int8_t TxPwr,
 			c->SyncHdl = SyncHdl;
 			c->TxPwr = TxPwr;
 			c->CteType = CteType;
+			c->EvtCounter = EvtCounter;
+			c->Subevent = Subevent;
+			c->bSubevent = bSubevent;
 			c->Len = 0;
 			return c;
 		}
@@ -216,6 +223,11 @@ void BtPsyncEvtReport(const uint8_t *pData, int Len, bool bV2)
 	int8_t rssi = (int8_t)pData[3];
 	uint8_t cteType = pData[4];
 	// V2 inserts Periodic_Event_Counter(2) and Subevent(1) before Data_Status.
+	// Both are what LE Set Periodic Advertising Response Data names as
+	// Request_Event and Request_Subevent, so a responder that never receives
+	// them cannot answer the subevent it just heard.
+	uint16_t evtCounter = bV2 ? BtPsyncRd16(&pData[5]) : 0;
+	uint8_t subevent = bV2 ? pData[7] : 0;
 	uint8_t dataStatus = pData[hdr - 2];
 	uint8_t dataLen = pData[hdr - 1];
 	const uint8_t *pAd = &pData[hdr];
@@ -233,7 +245,8 @@ void BtPsyncEvtReport(const uint8_t *pData, int Len, bool bV2)
 	{
 		if (ctx == nullptr && BtPsyncDroppedFind(syncHdl) == nullptr)
 		{
-			ctx = BtPsyncReasmAlloc(syncHdl, txPwr, cteType);
+			ctx = BtPsyncReasmAlloc(syncHdl, txPwr, cteType, evtCounter,
+									subevent, bV2);
 		}
 
 		if (ctx == nullptr)
@@ -260,6 +273,12 @@ void BtPsyncEvtReport(const uint8_t *pData, int Len, bool bV2)
 
 	if (dataStatus == BTPSYNC_DATA_COMPLETE)
 	{
+		BtPsyncReportInfo_t rep;
+
+		memset(&rep, 0, sizeof(rep));
+		rep.SyncHdl = syncHdl;
+		rep.Rssi = rssi;
+
 		if (ctx != nullptr)
 		{
 			if ((uint32_t)ctx->Len + dataLen <= BTPSYNC_REPORT_MAX)
@@ -268,9 +287,17 @@ void BtPsyncEvtReport(const uint8_t *pData, int Len, bool bV2)
 				ctx->Len = (uint16_t)(ctx->Len + dataLen);
 				// Vol 4 Part E 7.7.65.15: the transmit power belongs to the
 				// first packet of the advertisement and may read 0x7F on the
-				// later ones, while the RSSI is the last packet received.
-				BtPsyncReport(syncHdl, ctx->TxPwr, rssi, ctx->CteType,
-							  ctx->Buf, ctx->Len);
+				// later ones, while the RSSI is the last packet received. The
+				// subevent the advertisement arrived in is the first packet's
+				// as well, since a fragmented report stays inside one subevent.
+				rep.TxPwr = ctx->TxPwr;
+				rep.CteType = ctx->CteType;
+				rep.EvtCounter = ctx->EvtCounter;
+				rep.Subevent = ctx->Subevent;
+				rep.bSubevent = ctx->bSubevent;
+				rep.pData = ctx->Buf;
+				rep.Len = ctx->Len;
+				BtPsyncReport(&rep);
 			}
 
 			ctx->Active = false;
@@ -287,7 +314,14 @@ void BtPsyncEvtReport(const uint8_t *pData, int Len, bool bV2)
 			return;
 		}
 
-		BtPsyncReport(syncHdl, txPwr, rssi, cteType, pAd, dataLen);
+		rep.TxPwr = txPwr;
+		rep.CteType = cteType;
+		rep.EvtCounter = evtCounter;
+		rep.Subevent = subevent;
+		rep.bSubevent = bV2;
+		rep.pData = pAd;
+		rep.Len = dataLen;
+		BtPsyncReport(&rep);
 		return;
 	}
 
@@ -325,16 +359,9 @@ __attribute__((weak)) void BtPsyncEstablished(const BtPsyncInfo_t * const pInfo)
 	(void)pInfo;
 }
 
-__attribute__((weak)) void BtPsyncReport(uint16_t SyncHdl, int8_t TxPwr,
-										 int8_t Rssi, uint8_t CteType,
-										 const uint8_t *pData, uint16_t Len)
+__attribute__((weak)) void BtPsyncReport(const BtPsyncReportInfo_t * const pRep)
 {
-	(void)SyncHdl;
-	(void)TxPwr;
-	(void)Rssi;
-	(void)CteType;
-	(void)pData;
-	(void)Len;
+	(void)pRep;
 }
 
 __attribute__((weak)) void BtPsyncLost(uint16_t SyncHdl)

@@ -403,6 +403,23 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 	return res == 0 ? 0 : 0xFF;
 }
 
+// Buffer sizing for the periodic advertising resources above. These are counts
+// and a data length, not switches: the resources themselves are allocated only
+// when the application asks for a non zero set or sync count.
+//
+// Two response transmit buffers let one be filled while the other is on air.
+// The data size is the largest a single subevent response holds, 7.8.126.
+// The receive counts are one periodic advertising event's worth, since a report
+// is consumed before the next event.
+#define BT_SDC_PAWR_TX_BUFFER_COUNT		2
+#define BT_SDC_PAWR_TX_DATA_SIZE		251
+#define BT_SDC_PAWR_RX_BUFFER_COUNT		2
+#define BT_SDC_PSYNC_BUFFER_COUNT		2
+
+// The pool the whole controller configuration is carved out of. Periodic
+// advertising grows what sdc_cfg_set asks for, and the check below reports the
+// number it wants when this is too small, so a device that turns the feature on
+// finds out here rather than on air.
 alignas(8) static uint8_t s_BtStackSdcMemPool[10000];
 
 static void BtStackSdcAssert(const char * file, const uint32_t line)
@@ -521,6 +538,11 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		// Periodic advertising in the Advertising state. sdc.h requires
 		// sdc_support_ext_adv() first, which is the line above.
 		sdc_support_le_periodic_adv();
+		// Periodic advertising with responses, the advertiser half. Separate
+		// from the line above: enabling plain periodic advertising leaves the
+		// four PAwR commands refused, which is what made a train run while a
+		// subevent could never be configured.
+		sdc_support_le_periodic_adv_with_rsp();
 		sdc_support_peripheral();
 		sdc_support_dle_peripheral();
 		sdc_support_phy_update_peripheral();
@@ -539,6 +561,9 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		// called, so an observer build did not enable it at all and Create
 		// Sync would have been refused by the controller.
 		sdc_support_le_periodic_sync();
+		// The responder half of PAwR, which is what lets a synchronized device
+		// answer a subevent rather than only receive it.
+		sdc_support_le_periodic_sync_with_rsp();
 		sdc_support_central();
 		sdc_support_ext_central();
 		sdc_support_dle_central();
@@ -632,6 +657,56 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 
 			return false;
 		}
+
+		// Periodic advertising sets. The controller allocates none unless it is
+		// told to, so sdc_support_le_periodic_adv() alone leaves every periodic
+		// advertising command refused for want of a set to act on.
+		if (pCfg->PeriodicAdvCount > 0)
+		{
+			cfg.periodic_adv_count.count = pCfg->PeriodicAdvCount;
+
+			ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
+							  SDC_CFG_TYPE_PERIODIC_ADV_COUNT,
+							  &cfg);
+			if (ram < 0)
+			{
+				DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIODIC_ADV_COUNT failed %d\r\n", (int)ram);
+
+				return false;
+			}
+		}
+
+		// Sets carrying responses, and the buffers the responses arrive in. The
+		// count is separate from the one above because a PAwR set costs the
+		// response buffers as well.
+		if (pCfg->PawrAdvCount > 0)
+		{
+			cfg.periodic_adv_rsp_count.count = pCfg->PawrAdvCount;
+
+			ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
+							  SDC_CFG_TYPE_PERIODIC_ADV_RSP_COUNT,
+							  &cfg);
+			if (ram < 0)
+			{
+				DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIODIC_ADV_RSP_COUNT failed %d\r\n", (int)ram);
+
+				return false;
+			}
+
+			cfg.periodic_adv_rsp_buffer_cfg.tx_buffer_count = BT_SDC_PAWR_TX_BUFFER_COUNT;
+			cfg.periodic_adv_rsp_buffer_cfg.max_tx_data_size = BT_SDC_PAWR_TX_DATA_SIZE;
+			cfg.periodic_adv_rsp_buffer_cfg.rx_buffer_count = BT_SDC_PAWR_RX_BUFFER_COUNT;
+
+			ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
+							  SDC_CFG_TYPE_PERIODIC_ADV_RSP_BUFFER_CFG,
+							  &cfg);
+			if (ram < 0)
+			{
+				DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIODIC_ADV_RSP_BUFFER_CFG failed %d\r\n", (int)ram);
+
+				return false;
+			}
+		}
 	}
 
 	if (pCfg->Role & (BT_GAP_ROLE_CENTRAL | BT_GAP_ROLE_OBSERVER))
@@ -659,6 +734,53 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_SCAN_BUFFER_CFG failed %d\r\n", (int)ram);
 
 			return false;
+		}
+
+		// Trains this device can be synchronized to, and the buffers their
+		// reports arrive in. Without a count the controller has nothing to hold
+		// a train in and Create Sync is refused.
+		if (pCfg->PeriodicSyncCount > 0)
+		{
+			cfg.periodic_sync_count.count = pCfg->PeriodicSyncCount;
+
+			ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
+							  SDC_CFG_TYPE_PERIODIC_SYNC_COUNT,
+							  &cfg);
+			if (ram < 0)
+			{
+				DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIODIC_SYNC_COUNT failed %d\r\n", (int)ram);
+
+				return false;
+			}
+
+			cfg.periodic_sync_buffer_cfg.count = BT_SDC_PSYNC_BUFFER_COUNT;
+
+			ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
+							  SDC_CFG_TYPE_PERIODIC_SYNC_BUFFER_CFG,
+							  &cfg);
+			if (ram < 0)
+			{
+				DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIODIC_SYNC_BUFFER_CFG failed %d\r\n", (int)ram);
+
+				return false;
+			}
+		}
+
+		// Transmit buffers for answering a subevent. A responder that syncs to
+		// a PAwR train without these receives it and cannot reply.
+		if (pCfg->PawrSyncCount > 0)
+		{
+			cfg.periodic_sync_rsp_tx_buffer_cfg.count = pCfg->PawrSyncCount;
+
+			ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
+							  SDC_CFG_TYPE_PERIODIC_SYNC_RSP_TX_BUFFER_CFG,
+							  &cfg);
+			if (ram < 0)
+			{
+				DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIODIC_SYNC_RSP_TX_BUFFER_CFG failed %d\r\n", (int)ram);
+
+				return false;
+			}
 		}
 	}
 

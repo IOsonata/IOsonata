@@ -133,6 +133,24 @@ typedef struct __Bt_Psync_Info {
 	uint8_t ClockAccuracy;			//!< Advertiser clock accuracy
 } BtPsyncInfo_t;
 
+/// One complete periodic advertising report.
+///
+/// EvtCounter and Subevent are only present on the V2 form of the event, which
+/// a PAwR train uses, and bSubevent says whether they were reported. They are
+/// what BtPsyncResponseSet names as ReqEvent and ReqSubevent, so answering a
+/// subevent is only possible from a report that has them.
+typedef struct __Bt_Psync_Report_Info {
+	uint16_t SyncHdl;				//!< Train the report belongs to
+	int8_t TxPwr;					//!< Transmit power, 0x7F when not available
+	int8_t Rssi;					//!< Received signal strength, 0x7F when not available
+	uint8_t CteType;				//!< Constant Tone Extension type, 0xFF for none
+	bool bSubevent;					//!< EvtCounter and Subevent below are meaningful
+	uint16_t EvtCounter;			//!< paEventCounter the advertisement arrived in
+	uint8_t Subevent;				//!< Subevent the advertisement arrived in
+	const uint8_t *pData;			//!< Reassembled advertising data
+	uint16_t Len;					//!< Length of pData in bytes
+} BtPsyncReportInfo_t;
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
@@ -275,18 +293,17 @@ void BtPsyncEstablished(const BtPsyncInfo_t * const pInfo);
 /**
  * @brief	A complete periodic advertising report arrived
  *
- * pData is the reassembled data of one advertisement. A report the controller
- * could not complete is not delivered.
+ * pRep->pData is the reassembled data of one advertisement. A report the
+ * controller could not complete is not delivered.
  *
- * @param	SyncHdl	: Train the report belongs to
- * @param	TxPwr	: Transmit power, 0x7F when not available
- * @param	Rssi	: Received signal strength, 0x7F when not available
- * @param	CteType	: Constant Tone Extension type, 0xFF for none
- * @param	pData	: Reassembled advertising data
- * @param	Len		: Length of pData in bytes
+ * On a PAwR train pRep also names the subevent and the event counter the
+ * advertisement arrived in, which is what BtPsyncResponseSet needs to answer
+ * it. The response slot has to be chosen by the application, since the train
+ * decides what a slot means.
+ *
+ * @param	pRep	: What the report carried
  */
-void BtPsyncReport(uint16_t SyncHdl, int8_t TxPwr, int8_t Rssi, uint8_t CteType,
-				   const uint8_t *pData, uint16_t Len);
+void BtPsyncReport(const BtPsyncReportInfo_t * const pRep);
 
 /**
  * @brief	Synchronization with a train was lost

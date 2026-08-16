@@ -184,15 +184,55 @@ static inline BtHciDevice_t *BtAdvHciDev(void)
 	return g_BtAppData.AppDevice.pHciDev;
 }
 
+// PHY the next advertising set advertises on. 1M primary and 2M secondary is
+// what every set used before a PHY could be chosen, so it stays the default.
+static uint8_t s_BtAdvPrimPhy = BTADV_EXTADV_PHY_1M;
+static uint8_t s_BtAdvSecPhy = BTADV_EXTADV_PHY_2M;
+
 // LE Coded PHY coding the next advertising set asks for. Both none is the
 // ordinary case and keeps the [v1] parameters command, which is what a
 // controller predating Core 5.4 accepts.
 static uint8_t s_BtAdvPrimPhyOpt = BTADV_PHY_OPT_NONE;
 static uint8_t s_BtAdvSecPhyOpt = BTADV_PHY_OPT_NONE;
 
+bool BtAdvPhySet(uint8_t PrimPhy, uint8_t SecPhy)
+{
+	// 7.8.53 gives the primary PHY only 1M and Coded; 2M cannot carry an
+	// ADV_EXT_IND. The secondary takes all three.
+	if (PrimPhy != BTADV_EXTADV_PHY_1M && PrimPhy != BTADV_EXTADV_PHY_CODED)
+	{
+		return false;
+	}
+
+	if (SecPhy != BTADV_EXTADV_PHY_1M && SecPhy != BTADV_EXTADV_PHY_2M &&
+		SecPhy != BTADV_EXTADV_PHY_CODED)
+	{
+		return false;
+	}
+
+	s_BtAdvPrimPhy = PrimPhy;
+	s_BtAdvSecPhy = SecPhy;
+
+	return true;
+}
+
+// A coding is only meaningful on LE Coded. 7.8.53 has the Controller ignore
+// Primary_Advertising_PHY_Options unless Primary_Advertising_PHY is Coded, and
+// the same for the secondary pair, so a set that asks for a coding on 1M or 2M
+// is refused here rather than accepted and silently dropped on air.
 bool BtAdvCodingSet(uint8_t PrimOpt, uint8_t SecOpt)
 {
 	if (PrimOpt > BTADV_PHY_OPT_MAX || SecOpt > BTADV_PHY_OPT_MAX)
+	{
+		return false;
+	}
+
+	if (PrimOpt != BTADV_PHY_OPT_NONE && s_BtAdvPrimPhy != BTADV_EXTADV_PHY_CODED)
+	{
+		return false;
+	}
+
+	if (SecOpt != BTADV_PHY_OPT_NONE && s_BtAdvSecPhy != BTADV_EXTADV_PHY_CODED)
 	{
 		return false;
 	}
@@ -495,9 +535,9 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 	p.PeerAddrType = 0;
 	p.FilterPolicy = 0;
 	p.TxPower      = 0;
-	p.PrimPhy      = BTADV_EXTADV_PHY_1M;
+	p.PrimPhy      = s_BtAdvPrimPhy;
 	p.SecMaxSkip   = 0;
-	p.SecPhy       = BTADV_EXTADV_PHY_2M;
+	p.SecPhy       = s_BtAdvSecPhy;
 	p.Sid          = 0;
 	p.ScanReqNotif = 0;
 

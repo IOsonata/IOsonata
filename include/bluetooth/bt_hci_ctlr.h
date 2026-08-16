@@ -72,6 +72,15 @@ typedef struct __Bt_Hci_Ctlr_Config {
 	uint8_t RxPktCount;				//!< Controller RX ACL packet count
 	uint8_t TxPktCount;				//!< Controller TX ACL packet count
 	uint16_t MaxDataLen;			//!< ACL data length for buffer sizing
+	// Periodic advertising resources. The controller allocates none of these by
+	// default, so a device that leaves them zero behaves as before and every
+	// periodic advertising command is refused. Each one costs controller RAM,
+	// which is why the count is the application's to give rather than implied
+	// by the role.
+	uint8_t PeriodicAdvCount;		//!< Periodic advertising sets to transmit, advertiser role
+	uint8_t PeriodicSyncCount;		//!< Trains that can be synchronized to at once, observer role
+	uint8_t PawrAdvCount;			//!< Periodic advertising with responses sets, advertiser role
+	uint8_t PawrSyncCount;			//!< Periodic advertising with responses trains answered, responder role
 	void (*OnWake)(void);			//!< Fired from the controller receive context to wake a host waiter
 //	uint32_t (*Send)(BtHciCtlrDev_t * const pDev, void * const pData, uint32_t Len);
 //	uint32_t (*Receive)(BtHciCtlrDev_t * const pDev, void * const pData, uint32_t Len);

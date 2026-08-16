@@ -627,6 +627,56 @@ bool BtAdvEncrypt(BtAdvPacket_t *pPkt)
 	return true;
 }
 
+// The receiving half of BtAdvEncrypt. A scan report is a sequence of AD
+// structures, one of which may be Encrypted Data; the plaintext inside it is
+// itself AD structures, which is why the recovered payload is handed back
+// whole rather than parsed here.
+//
+// The key belongs to the advertiser, not to this device, so it is a parameter:
+// a scanner following several peers holds one key material per peer and has to
+// say which it is trying.
+size_t BtAdvDecrypt(const BtEadKey_t * const pKey, const uint8_t *pAdvData,
+					size_t Len, uint8_t *pOut, size_t OutLen)
+{
+	if (pKey == nullptr || pAdvData == nullptr || pOut == nullptr || OutLen == 0)
+	{
+		return 0;
+	}
+
+	size_t off = 0;
+
+	while (off < Len)
+	{
+		uint8_t adLen = pAdvData[off];
+
+		// A zero length ends the sequence: Core Vol 3 Part C 11 has the
+		// remainder of the payload as padding once one is met.
+		if (adLen == 0)
+		{
+			return 0;
+		}
+
+		// The length covers the type and the data, so a structure claiming more
+		// than the report holds is malformed and nothing after it can be read.
+		if (off + 1 + adLen > Len)
+		{
+			return 0;
+		}
+
+		if (pAdvData[off + 1] == BTEAD_AD_TYPE)
+		{
+			// BtEadDecrypt verifies the MIC before it returns anything, so a
+			// structure that does not authenticate yields nothing here.
+			return BtEadDecrypt(pKey, &pAdvData[off + 2], (size_t)(adLen - 1),
+								pOut, OutLen);
+		}
+
+		off += 1 + adLen;
+	}
+
+	return 0;
+}
+
 static bool BtAdvEncodeRaw(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt,
 		bool *pExtAdv, bool *pScannable)
 {

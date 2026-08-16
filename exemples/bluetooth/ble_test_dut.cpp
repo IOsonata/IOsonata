@@ -162,6 +162,14 @@ __attribute__((weak)) bool BtAdvCodingSet(uint8_t PrimOpt, uint8_t SecOpt)
 	return false;
 }
 
+__attribute__((weak)) bool BtAdvPhySet(uint8_t PrimPhy, uint8_t SecPhy)
+{
+	(void)PrimPhy;
+	(void)SecPhy;
+
+	return false;
+}
+
 __attribute__((weak)) bool BtAdvCodingSelectionEnable(bool bEnable)
 {
 	(void)bEnable;
@@ -940,8 +948,24 @@ static void DutCoding(uint32_t Prim, uint32_t Sec)
 	uint8_t prevPrim = s_CodingPrim;
 	uint8_t prevSec = s_CodingSec;
 
+	// A coding only reaches the air on LE Coded, so the PHY moves with it: an
+	// option asked for on 1M or 2M is refused rather than ignored by the
+	// controller. Both options none goes back to the ordinary 1M and 2M pair.
+	bool coded = (Prim != BTADV_PHY_OPT_NONE || Sec != BTADV_PHY_OPT_NONE);
+
+	if (BtAdvPhySet(coded ? BTADV_EXTADV_PHY_CODED : BTADV_EXTADV_PHY_1M,
+					coded ? BTADV_EXTADV_PHY_CODED : BTADV_EXTADV_PHY_2M) == false)
+	{
+		DutOut("DUT ERROR coding phy_refused prim=%lu sec=%lu",
+			(unsigned long)Prim, (unsigned long)Sec);
+		DutOutEnd();
+		return;
+	}
+
 	if (BtAdvCodingSet((uint8_t)Prim, (uint8_t)Sec) == false)
 	{
+		BtAdvPhySet(BTADV_EXTADV_PHY_1M, BTADV_EXTADV_PHY_2M);
+		BtAdvCodingSet(prevPrim, prevSec);
 		DutOut("DUT ERROR coding out_of_range prim=%lu sec=%lu",
 			(unsigned long)Prim, (unsigned long)Sec);
 		DutOutEnd();
@@ -957,6 +981,12 @@ static void DutCoding(uint32_t Prim, uint32_t Sec)
 	{
 		s_CodingPrim = prevPrim;
 		s_CodingSec = prevSec;
+
+		bool prevCoded = (prevPrim != BTADV_PHY_OPT_NONE ||
+						  prevSec != BTADV_PHY_OPT_NONE);
+
+		BtAdvPhySet(prevCoded ? BTADV_EXTADV_PHY_CODED : BTADV_EXTADV_PHY_1M,
+					prevCoded ? BTADV_EXTADV_PHY_CODED : BTADV_EXTADV_PHY_2M);
 		BtAdvCodingSet(prevPrim, prevSec);
 		DutAdvRebuild();
 

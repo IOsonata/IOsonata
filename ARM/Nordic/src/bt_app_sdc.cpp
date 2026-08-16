@@ -471,6 +471,13 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	ctlrcfg.RxPktCount = BT_SDC_RX_MAX_PACKET_COUNT;
 	ctlrcfg.TxPktCount = BT_SDC_TX_MAX_PACKET_COUNT;
 	ctlrcfg.MaxDataLen = BTAPP_DEFAULT_MAX_DATA_LEN;
+	// What the application asked for reaches the controller here. Without this
+	// the counts stay zero, the controller reserves nothing, and the periodic
+	// advertising commands are refused however well formed they are.
+	ctlrcfg.PeriodicAdvCount = pCfg->PeriodicAdvCount;
+	ctlrcfg.PeriodicSyncCount = pCfg->PeriodicSyncCount;
+	ctlrcfg.PawrAdvCount = pCfg->PawrAdvCount;
+	ctlrcfg.PawrSyncCount = pCfg->PawrSyncCount;
 
 	if (BtHciCtlrEnable(&s_BtHciCtlr, &ctlrcfg) == false)
 	{

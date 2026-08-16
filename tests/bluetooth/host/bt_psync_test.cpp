@@ -85,6 +85,9 @@ struct {
 	int8_t ReportRssi;
 	uint8_t ReportCteType;
 	uint16_t ReportLen;
+	bool ReportHasSubevent;
+	uint16_t ReportEvtCounter;
+	uint8_t ReportSubevent;
 	uint8_t ReportData[BTPSYNC_REPORT_MAX];
 	int LostCount;
 	uint16_t LostHdl;
@@ -420,7 +423,8 @@ void TestEstablishedIsParsed(void)
 // before Data_Status.
 int BuildReport(uint8_t *p, bool bV2, uint16_t Hdl, int8_t TxPwr, int8_t Rssi,
 				uint8_t CteType, uint8_t DataStatus, const uint8_t *pData,
-				uint8_t Len)
+				uint8_t Len, uint16_t EvtCounter = 0x1234,
+				uint8_t Subevent = 0xFF)
 {
 	int n = 0;
 
@@ -431,9 +435,9 @@ int BuildReport(uint8_t *p, bool bV2, uint16_t Hdl, int8_t TxPwr, int8_t Rssi,
 	p[n++] = CteType;
 	if (bV2)
 	{
-		p[n++] = 0x34;					// periodic event counter low
-		p[n++] = 0x12;
-		p[n++] = 0xFF;					// subevent, none
+		p[n++] = (uint8_t)(EvtCounter & 0xFF);
+		p[n++] = (uint8_t)(EvtCounter >> 8);
+		p[n++] = Subevent;
 	}
 	p[n++] = DataStatus;
 	p[n++] = Len;
@@ -472,6 +476,54 @@ void TestCompleteReportIsDelivered(void)
 	CHECK(s_App.ReportCount == 1);
 	CHECK(s_App.ReportLen == sizeof(ad));
 	CHECK(std::memcmp(s_App.ReportData, ad, sizeof(ad)) == 0);
+}
+
+// The subevent and the event counter are what LE Set Periodic Advertising
+// Response Data names Request_Subevent and Request_Event, so a responder that
+// does not receive them cannot answer the subevent it just heard. They arrive
+// only on the V2 report, and a V1 one has to say so rather than report subevent
+// zero, which is a real subevent index.
+void TestSubeventReachesTheApplication(void)
+{
+	uint8_t evt[64];
+	const uint8_t ad[3] = { 7, 8, 9 };
+
+	Reset();
+	int len = BuildReport(evt, true, 0x0002, -20, -60, 0xFF,
+						  BTPSYNC_DATA_COMPLETE, ad, sizeof(ad), 0xBEEF, 5);
+	BtPsyncEvtReport(evt, len, true);
+
+	CHECK(s_App.ReportCount == 1);
+	CHECK(s_App.ReportHasSubevent);
+	CHECK(s_App.ReportEvtCounter == 0xBEEF);
+	CHECK(s_App.ReportSubevent == 5);
+
+	// V1 has neither, and subevent 0 is a valid index, so the flag is the
+	// only thing that separates "subevent 0" from "not reported".
+	Reset();
+	len = BuildReport(evt, false, 0x0002, -20, -60, 0xFF,
+					  BTPSYNC_DATA_COMPLETE, ad, sizeof(ad));
+	BtPsyncEvtReport(evt, len, false);
+
+	CHECK(s_App.ReportCount == 1);
+	CHECK(s_App.ReportHasSubevent == false);
+
+	// A fragmented report stays inside one subevent, so the value belongs to
+	// the fragment that opened the reassembly, alongside the transmit power.
+	Reset();
+	len = BuildReport(evt, true, 0x0002, -20, -60, 0xFF,
+					  BTPSYNC_DATA_MORE, ad, sizeof(ad), 0x0111, 9);
+	BtPsyncEvtReport(evt, len, true);
+	len = BuildReport(evt, true, 0x0002, 0x7F, -55, 0xFF,
+					  BTPSYNC_DATA_COMPLETE, ad, sizeof(ad), 0x0222, 3);
+	BtPsyncEvtReport(evt, len, true);
+
+	CHECK(s_App.ReportCount == 1);
+	CHECK(s_App.ReportLen == sizeof(ad) * 2);
+	CHECK(s_App.ReportHasSubevent);
+	CHECK(s_App.ReportEvtCounter == 0x0111);
+	CHECK(s_App.ReportSubevent == 9);
+	CHECK(s_App.ReportRssi == -55);
 }
 
 void TestFragmentedReportIsReassembled(void)
@@ -914,18 +966,20 @@ void BtPsyncEstablished(const BtPsyncInfo_t * const pInfo)
 	}
 }
 
-void BtPsyncReport(uint16_t SyncHdl, int8_t TxPwr, int8_t Rssi, uint8_t CteType,
-				   const uint8_t *pData, uint16_t Len)
+void BtPsyncReport(const BtPsyncReportInfo_t * const pRep)
 {
 	s_App.ReportCount++;
-	s_App.ReportHdl = SyncHdl;
-	s_App.ReportTxPwr = TxPwr;
-	s_App.ReportRssi = Rssi;
-	s_App.ReportCteType = CteType;
-	s_App.ReportLen = Len;
-	if (pData != nullptr && Len <= sizeof(s_App.ReportData))
+	s_App.ReportHdl = pRep->SyncHdl;
+	s_App.ReportTxPwr = pRep->TxPwr;
+	s_App.ReportRssi = pRep->Rssi;
+	s_App.ReportCteType = pRep->CteType;
+	s_App.ReportLen = pRep->Len;
+	s_App.ReportHasSubevent = pRep->bSubevent;
+	s_App.ReportEvtCounter = pRep->EvtCounter;
+	s_App.ReportSubevent = pRep->Subevent;
+	if (pRep->pData != nullptr && pRep->Len <= sizeof(s_App.ReportData))
 	{
-		std::memcpy(s_App.ReportData, pData, Len);
+		std::memcpy(s_App.ReportData, pRep->pData, pRep->Len);
 	}
 }
 
@@ -978,6 +1032,7 @@ int main()
 	TestARefusedCommandIsReported();
 	TestEstablishedIsParsed();
 	TestCompleteReportIsDelivered();
+	TestSubeventReachesTheApplication();
 	TestFragmentedReportIsReassembled();
 	TestAnAbandonedReassemblyDoesNotDeliverItsTail();
 	TestTruncatedAndOverlongReportsAreDropped();

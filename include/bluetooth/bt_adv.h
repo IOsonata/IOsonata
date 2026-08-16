@@ -270,6 +270,47 @@ bool BtAdvEadIsArmed(void);
 bool BtAdvEncrypt(BtAdvPacket_t *pPkt);
 
 /**
+ * @brief	Recover the payload of an Encrypted Data AD structure in a report
+ *
+ * The receiving half of BtAdvEncrypt, for a scan report handler to call. The
+ * advertising data is walked for an Encrypted Data structure and its payload
+ * is decrypted into pOut. The recovered payload is itself a sequence of AD
+ * structures, so a caller reads it the same way it reads a plain report.
+ *
+ * The MIC is verified first, so nothing is returned for a structure that does
+ * not authenticate under pKey.
+ *
+ * @param	pKey		: Session key and IV of the advertiser being followed
+ * @param	pAdvData	: Advertising data of the report
+ * @param	Len			: Advertising data length
+ * @param	pOut		: Output buffer for the recovered payload
+ * @param	OutLen		: Output buffer size
+ *
+ * @return	Payload octets recovered. 0 when the report holds no Encrypted Data
+ *			structure, when it is malformed, or when the MIC does not verify.
+ */
+size_t BtAdvDecrypt(const BtEadKey_t * const pKey, const uint8_t *pAdvData,
+					size_t Len, uint8_t *pOut, size_t OutLen);
+
+/**
+ * @brief	Choose the PHY the next advertising set advertises on
+ *
+ * Takes effect at the next BtAppAdvInit. The default is 1M primary and 2M
+ * secondary, which is what every set used before the PHY could be chosen.
+ *
+ * A coding selected with BtAdvCodingSet only reaches the air on LE Coded, so
+ * this is the call that has to come first.
+ *
+ * @param	PrimPhy	: BTADV_EXTADV_PHY_1M or BTADV_EXTADV_PHY_CODED. 7.8.53
+ *					  gives the primary PHY no 2M, since 2M cannot carry an
+ *					  ADV_EXT_IND.
+ * @param	SecPhy	: BTADV_EXTADV_PHY_1M, _2M or _CODED
+ *
+ * @return	true when both values are legal for their position
+ */
+bool BtAdvPhySet(uint8_t PrimPhy, uint8_t SecPhy);
+
+/**
  * @brief	Choose the LE Coded PHY coding the next advertising set uses
  *
  * The values take effect at the next BtAppAdvInit, which sends the [v2]
@@ -277,13 +318,15 @@ bool BtAdvEncrypt(BtAdvPacket_t *pPkt);
  * BTADV_PHY_OPT_NONE. Both BTADV_PHY_OPT_NONE restores [v1], which is what a
  * controller predating Core 5.4 accepts.
  *
- * The options only mean anything on the LE Coded PHY. On 1M or 2M the
- * controller ignores them.
+ * A coding only means anything on LE Coded: 7.8.53 has the controller ignore
+ * the option when the PHY in that position is 1M or 2M. Asking for one there
+ * is refused rather than accepted and dropped, so call BtAdvPhySet with
+ * BTADV_EXTADV_PHY_CODED first.
  *
  * @param	PrimOpt	: BTADV_PHY_OPT_* for the primary advertising PHY
  * @param	SecOpt	: BTADV_PHY_OPT_* for the secondary advertising PHY
  *
- * @return	true when both values are in range
+ * @return	true when both values are in range and their PHY is LE Coded
  */
 bool BtAdvCodingSet(uint8_t PrimOpt, uint8_t SecOpt);
 
