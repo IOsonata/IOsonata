@@ -56,6 +56,7 @@ TEST_NAMES := \
 	bt_peer_pool_test \
 	bt_gap_hci_test \
 	bt_gap_srvc_test \
+	bt_gap_gatt_init_test \
 	bt_ead_test \
 	bt_adv_hci_test \
 	bt_padv_hci_test \
@@ -181,6 +182,16 @@ bt_ead_test_SOURCES := \
 bt_gap_srvc_test_SOURCES := \
 	bt_gap_srvc_test.cpp \
 	$(ROOT)/src/bluetooth/bt_gap.cpp
+
+# The only place bt_gap.cpp is linked against the real GATT server. Everything
+# else that touches bt_gap.cpp stubs BtGattSrvcAdd or BtGattCharSetValue, and
+# a stub that is more permissive than the real function hides an init failure.
+bt_gap_gatt_init_test_SOURCES := \
+	bt_gap_gatt_init_test.cpp \
+	$(ROOT)/src/bluetooth/bt_gap.cpp \
+	$(ROOT)/src/bluetooth/bt_gatt.cpp \
+	$(ROOT)/src/bluetooth/bt_att.cpp \
+	$(ROOT)/src/bluetooth/bt_uuid.cpp
 
 bt_psync_test_SOURCES := \
 	bt_psync_test.cpp \

@@ -105,6 +105,16 @@ BtGattInitError_t BtGattInitStatusErrorGet(void)
 			std::memory_order_acquire);
 }
 
+// Storage for the LE GATT Security Levels value. The default has to be in
+// place before the service is registered, because a port that copies the
+// characteristic into a vendor database at registration would otherwise take
+// an empty one, and 12.7 requires the value to be static during a connection.
+// BtGattCharSetValue cannot stage it: the generic one refuses a characteristic
+// whose storage registration has not yet handed out, and the SoftDevice ones
+// write through to a database that does not hold the characteristic yet. So
+// the staging writes here directly and registration copies it.
+static uint8_t s_BtGapSecLevels[BT_GAP_SEC_LEVELS_MAX_LEN];
+
 static BtGattChar_t s_BtGapChar[] = {
 	BT_CHAR(BT_UUID_CHARACTERISTIC_DEVICE_NAME,
 	        BT_GAP_DEVNAME_MAX_LEN,
@@ -125,7 +135,8 @@ static BtGattChar_t s_BtGapChar[] = {
 	BT_CHAR(BT_UUID_CHARACTERISTIC_LE_GATT_SECURITY_LEVELS,
 	        BT_GAP_SEC_LEVELS_MAX_LEN,
 	        BT_GATT_CHAR_PROP_READ,
-	        NULL),
+	        NULL,
+	        .pValue = s_BtGapSecLevels),
 };
 
 // Index of the security levels characteristic in the array above.
@@ -263,7 +274,16 @@ static void BtGapSecLevelsDefault(uint32_t SecType)
 			break;
 	}
 
-	(void)BtGapSecLevelsSet(req, sizeof(req));
+	// Written straight into the staging buffer. Registration copies it from
+	// there, so the value is on the characteristic before any port sees it.
+	//
+	// pValue is pointed back at the buffer as well. The generic server moves it
+	// to the attribute database entry when it registers, so on a second init
+	// the characteristic would otherwise be staged from a pointer into a
+	// database that has since been reset.
+	memcpy(s_BtGapSecLevels, req, sizeof(req));
+	s_BtGapChar[BT_GAP_SEC_LEVELS_CHAR_IDX].pValue = s_BtGapSecLevels;
+	s_BtGapChar[BT_GAP_SEC_LEVELS_CHAR_IDX].ValueLen = sizeof(req);
 }
 
 void BtGapInit(const BtGapCfg_t *pCfg)
@@ -277,10 +297,6 @@ void BtGapInit(const BtGapCfg_t *pCfg)
 
 	if (pCfg->Role & BT_GAP_ROLE_PERIPHERAL)
 	{
-		// The value has to be in place before the service is registered: a
-		// port that copies the characteristic into a vendor database at
-		// registration would otherwise take an empty one, and 12.7 requires
-		// the value to be static during a connection.
 		BtGapSecLevelsDefault(pCfg->SecType);
 
 		if (!BtGattSrvcAdd(&s_BtGattSrvc) ||
