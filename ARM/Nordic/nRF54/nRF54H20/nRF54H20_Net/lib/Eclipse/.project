@@ -146,6 +146,16 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_gatt.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_smp_bond.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_smp_bond.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_peer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_peer.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_gatt_sdc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/bt_gatt_sdc.cpp</locationURI>
