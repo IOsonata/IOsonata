@@ -836,11 +836,22 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 		case BT_HCI_EVT_INQUERY_RESULT:
 			break;
 		case BT_HCI_EVT_CONN_COMPLETE:
-		{
-			BtHciEvtConnCompete_t *p = (BtHciEvtConnCompete_t *) pEvtPkt->Data;
-			DEBUG_PRINTF("BtHciProcessEvent: ConnectionComplete, Status = %d (0x%x) \r\n",
-									p->Status, p->Status);
-		}
+			{
+				// Status(1) + ConnHdl(2) + Addr(6) + LinkType(1) + Encrypt(1).
+				// Only the trace reads the event today, and the disabled form
+				// of DEBUG_PRINTF never evaluates its arguments, so the read
+				// past a short packet exists only in a DEBUG_ENABLE build. The
+				// guard is here because the next reader of this event will not
+				// know that, and every neighbouring case already has one.
+				if (pEvtPkt->Hdr.Len < sizeof(BtHciEvtConnCompete_t))
+				{
+					break;
+				}
+
+				BtHciEvtConnCompete_t *p = (BtHciEvtConnCompete_t *) pEvtPkt->Data;
+				DEBUG_PRINTF("BtHciProcessEvent: ConnectionComplete, Status = %d (0x%x) \r\n",
+										p->Status, p->Status);
+			}
 			break;
 		case BT_HCI_EVT_CONN_REQUEST:
 			break;

@@ -478,29 +478,6 @@ static void SmpLinkFree(uint16_t ConnHdl)
 	}
 }
 
-// Wipe pairing/key material after a failed attempt but keep the slot bound to
-// the connection along with the repeated-attempts counter and lock flag, so
-// FailCount accumulates across attempts on the same connection (the record is
-// only fully freed by BtSmpDisconnected). Preserves the security property of
-// SmpLinkFree - no key material survives - without losing the counter.
-static void SmpLinkResetKeepCount(BtSmpLink_t *pLink)
-{
-	uint16_t hdl       = pLink->ConnHdl;
-	uint32_t generation = pLink->Generation;
-	uint8_t  fc        = pLink->Ctx.FailCount;
-	bool     locked    = pLink->Ctx.bLocked;
-
-	SmpOobRelease(pLink);
-	SmpEcdhCtxReset(pLink->Ctx.EcdhKeyCtx);
-	CryptoSecureWipe(&pLink->Ctx, sizeof(pLink->Ctx));
-
-	pLink->ConnHdl       = hdl;
-	pLink->Generation    = generation;
-	pLink->Ctx.FailCount = fc;
-	pLink->Ctx.bLocked   = locked;
-	pLink->Ctx.State     = BT_SMP_STATE_IDLE;
-}
-
 //-----------------------------------------------------------------------------
 // Pairing timeout (Core Vol 3 Part H 3.4)
 //-----------------------------------------------------------------------------
