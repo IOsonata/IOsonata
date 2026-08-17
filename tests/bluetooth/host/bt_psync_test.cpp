@@ -723,6 +723,48 @@ void TestSyncSubeventLayout(void)
 
 // 7.8.126: Sync_Handle(2) Request_Event(2) Request_Subevent(1)
 // Response_Subevent(1) Response_Slot(1) Response_Data_Length(1) Data.
+// The two halves joined. TestSubeventReachesTheApplication checks the report
+// delivers the pair, TestResponseDataLayout checks the command holds what it
+// is given, and both use literals. This is the one case where the values come
+// out of the report and go straight into the answer, which is what a responder
+// actually does and the only place a mismatch between the two would show.
+void TestAReportCanBeAnswered(void)
+{
+	uint8_t evt[64];
+	const uint8_t ad[3] = { 1, 2, 3 };
+
+	Reset();
+	int len = BuildReport(evt, true, 0x0007, -30, -55, 0xFF,
+						  BTPSYNC_DATA_COMPLETE, ad, sizeof(ad), 0x1A9A, 3);
+	BtPsyncEvtReport(evt, len, true);
+
+	CHECK(s_App.ReportCount == 1);
+	CHECK(s_App.ReportHasSubevent);
+
+	const uint8_t rsp[2] = { 0x5A, 0xA5 };
+
+	// 7.8.126 keeps Request_Subevent and Response_Subevent apart, so the answer
+	// goes in a different one here. Passing the same value for both would make
+	// the two fields indistinguishable and this case would pass whichever the
+	// encoder wrote where.
+	CHECK(BtPsyncResponseSet(s_App.ReportHdl, s_App.ReportEvtCounter,
+							 s_App.ReportSubevent, 4, 1,
+							 rsp, sizeof(rsp)));
+
+	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_RESPONSE_DATA);
+
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		// Sync_Handle, Request_Event and Request_Subevent are the report's,
+		// unchanged, and the response subevent is the one asked for.
+		CHECK(c->Param[0] == 0x07 && c->Param[1] == 0x00);
+		CHECK(c->Param[2] == 0x9A && c->Param[3] == 0x1A);
+		CHECK(c->Param[4] == 3);
+		CHECK(c->Param[5] == 4);
+	}
+}
+
 void TestResponseDataLayout(void)
 {
 	const uint8_t data[3] = { 0xD0, 0xD1, 0xD2 };
@@ -1033,6 +1075,7 @@ int main()
 	TestEstablishedIsParsed();
 	TestCompleteReportIsDelivered();
 	TestSubeventReachesTheApplication();
+	TestAReportCanBeAnswered();
 	TestFragmentedReportIsReassembled();
 	TestAnAbandonedReassemblyDoesNotDeliverItsTail();
 	TestTruncatedAndOverlongReportsAreDropped();

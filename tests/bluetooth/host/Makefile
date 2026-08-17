@@ -49,6 +49,7 @@ TEST_NAMES := \
 	bt_hci_flow_test \
 	bt_hci_smp_tx_test \
 	bt_hci_ctlr_init_test \
+	bt_hci_ctlr_sdc_test \
 	bt_l2cap_signal_test \
 	bt_att_db_test \
 	bt_att_req_test \
@@ -226,6 +227,27 @@ bt_app_init_bm_test_SOURCES := \
 	$(GATT_INIT_TEST_SUPPORT) \
 	$(ROOT)/src/bluetooth/services/bt_dis.cpp
 bt_app_init_bm_test_DEPS := $(BT_APP_BM_INIT_INC)
+
+# The SoftDevice Controller setup, against the stand-in vendor headers in
+# nordic_stub/sdc. They sit under nordic_stub beside the SoftDevice ones
+# because both stand in for a Nordic header on a host; the subdirectory keeps
+# them apart because a build links the SoftDevice or the controller library,
+# never both. Nothing else in the tree compiles that file on a host, so which
+# sdc_support_* calls it makes and which resources it reserves had no check at
+# all, which is where four rounds of review found the next defect.
+bt_hci_ctlr_sdc_test_CPPFLAGS := -Inordic_stub/sdc -I$(ROOT)/ARM/Nordic/include
+bt_hci_ctlr_sdc_test_SOURCES := \
+	bt_hci_ctlr_sdc_test.cpp \
+	nordic_stub/sdc/sdc_hci_cmd_stub.cpp \
+	$(ROOT)/ARM/Nordic/src/bt_hci_ctlr_sdc.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp \
+	$(ROOT)/src/device.cpp \
+	$(ROOT)/src/device_intrf.cpp \
+	$(BUILD_DIR)/cfifo.o
+bt_hci_ctlr_sdc_test_DEPS := \
+	$(wildcard nordic_stub/sdc/*.h) \
+	$(ROOT)/ARM/Nordic/include/nrf_mpsl.h \
+	$(ROOT)/ARM/Nordic/include/crypto_rng_nrf.h
 
 bt_lesc_sd_test_CPPFLAGS := -Inordic_stub -I$(ROOT)/ARM/Nordic/include
 bt_lesc_sd_test_SOURCES := \
