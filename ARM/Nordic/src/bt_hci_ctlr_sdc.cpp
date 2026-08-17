@@ -81,6 +81,10 @@ SOFTWARE.
 static BtHciCtlrDev_t *s_pBtHciCtlrSdc = nullptr;
 
 static inline size_t BtHciCtlrSendData(BtHciCtlrDev_t * const pDev, void *pData, size_t Len) {
+	// The signature is the generic transmit one. This transport reaches the
+	// controller through the linked library rather than through a device.
+	(void)pDev;
+
 	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
 }
 
@@ -138,6 +142,12 @@ size_t BtHciCtlrSdcSend(void *pData, size_t Len)
 // generic command credit and match path is used only by a raw HCI controller.
 uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen)
 {
+	// The wrappers below take the parameter block whole and know its length
+	// from its type, and they reach the controller through the linked library,
+	// so neither the device nor the length is read here.
+	(void)pDev;
+	(void)ParamLen;
+
 	int32_t res;
 
 	switch (OpCode)
@@ -424,30 +434,26 @@ alignas(8) static uint8_t s_BtStackSdcMemPool[10000];
 
 static void BtStackSdcAssert(const char * file, const uint32_t line)
 {
+	// Both are read by the trace, which a build without DEBUG_ENABLE compiles
+	// away. The halt below is what the fault handler is for either way.
+	(void)file;
+	(void)line;
+
 	DEBUG_PRINTF("SDC Fault: %s, %d\n", file, line);
 	while(1);
 }
 
 // Controller entropy source. The SoftDevice Controller draws its entropy pool
-// through these fixed-signature callbacks; they route to the Nordic hardware RNG
+// through this fixed-signature callback; it routes to the Nordic hardware RNG
 // (CryptoRngNrf): a CRACEN CTR-DRBG seeded from the CRACEN TRNG on nRF54L/H, the
 // NRF_RNG peripheral on nRF52/53/91. This removes the libc rand path so BLE
 // pairing, SMP, OOB and key material never draw from a software PRNG. The build
 // must link the Nordic RNG (rng_nrfx.cpp); a part without an RNG peripheral does
 // not link.
-static uint8_t BtStackRandPrioLowGet(uint8_t *pBuff, uint8_t Len)
-{
-	DEBUG_PRINTF("BtStackRandPrioLowGet\r\n");
-	// Fail closed: report 0 bytes if the hardware RNG did not deliver entropy.
-	return CryptoRngNrfInstance()->Random(pBuff, Len) == CRYPTO_STATUS_OK ?
-		   Len : 0;
-}
-
-static uint8_t BtStackRandPrioHighGet(uint8_t *pBuff, uint8_t Len)
-{
-	return BtStackRandPrioLowGet(pBuff, Len);
-}
-
+//
+// sdc_rand_source_t once had a priority pair alongside the poll callback. It
+// holds only rand_poll now, so the two getters written for it had no caller
+// left and are gone with the initializer lines that named them.
 static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 {
 	// Fail closed: the poll source must not report weak entropy. Retry until the
@@ -506,8 +512,6 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	//sdc_hci_cmd_cb_reset();
 
 	sdc_rand_source_t rand_functions = {
-		//.rand_prio_low_get = BtStackRandPrioLowGet,
-		//.rand_prio_high_get = BtStackRandPrioHighGet,
 		.rand_poll = BtStackRandPrioLowGetBlocking
 	};
 

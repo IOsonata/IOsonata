@@ -702,6 +702,11 @@ bool CryptoRngNrf::Init(DeviceIntrf * const)
 
 bool CryptoRngNrf::Enable()
 {
+	// Written because this is a member definition and can reach it.
+	// rng_nrfx.cpp is what really uses the field; without a write here it
+	// reads as a dead private field in this build alone.
+	vbIntrfEnabled = false;
+
 	return false;
 }
 
