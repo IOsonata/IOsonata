@@ -278,6 +278,13 @@ bool BtPadvInit(const BtPadvCfg_t * const pCfg)
 
 	if (rc != 0)
 	{
+		// The status separates a parameter the controller rejected from a set it
+		// has no room for. A controller given no periodic advertising resources
+		// refuses this command whatever the parameters are, and without the
+		// status that reads the same as a malformed train.
+		DEBUG_PRINTF("PADV param refused hdl=%u subevents=%u status 0x%02x\r\n",
+					 (unsigned)pCfg->AdvHdl, (unsigned)pCfg->NbSubevents,
+					 (unsigned)rc);
 		return false;
 	}
 
@@ -309,8 +316,21 @@ static bool BtPadvDataCmd(BtHciDevice_t *pDev, uint8_t AdvHdl, uint8_t Operation
 		memcpy(d.Data, pData, Len);
 	}
 
-	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_DATA, &d,
-						(uint8_t)(BTPADV_DATA_HDR_LEN + Len), nullptr, 0) == 0;
+	uint8_t rc = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_DATA, &d,
+							  (uint8_t)(BTPADV_DATA_HDR_LEN + Len), nullptr, 0);
+
+	if (rc != 0)
+	{
+		// The operation is named because a fragmented write refused partway
+		// leaves the controller holding a partial set, and which fragment it
+		// stopped on is what says whether the retry starts from the first.
+		DEBUG_PRINTF("PADV data refused hdl=%u op=%u len=%u status 0x%02x\r\n",
+					 (unsigned)AdvHdl, (unsigned)Operation, (unsigned)Len,
+					 (unsigned)rc);
+		return false;
+	}
+
+	return true;
 }
 
 bool BtPadvDataSet(uint8_t AdvHdl, const uint8_t *pData, size_t Len)
@@ -398,9 +418,13 @@ bool BtPadvStart(uint8_t AdvHdl)
 	x.Enable = BTPADV_ENABLE_ON;
 	x.AdvHdl = AdvHdl;
 
-	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_ENABLE, &x,
-					 sizeof(x), nullptr, 0) != 0)
+	uint8_t rc = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_ENABLE, &x,
+							  sizeof(x), nullptr, 0);
+
+	if (rc != 0)
 	{
+		DEBUG_PRINTF("PADV start refused hdl=%u status 0x%02x\r\n",
+					 (unsigned)AdvHdl, (unsigned)rc);
 		return false;
 	}
 
@@ -422,11 +446,15 @@ bool BtPadvStop(uint8_t AdvHdl)
 	x.Enable = 0;
 	x.AdvHdl = AdvHdl;
 
-	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_ENABLE, &x,
-					 sizeof(x), nullptr, 0) != 0)
+	uint8_t rc = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_ENABLE, &x,
+							  sizeof(x), nullptr, 0);
+
+	if (rc != 0)
 	{
 		// The train is still running. Recording it as stopped would make a
 		// later start look like a no-op while the train stays on air.
+		DEBUG_PRINTF("PADV stop refused hdl=%u status 0x%02x\r\n",
+					 (unsigned)AdvHdl, (unsigned)rc);
 		return false;
 	}
 
@@ -510,6 +538,19 @@ bool BtPadvSubeventDataSet(uint8_t AdvHdl,
 		return false;
 	}
 
-	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_SUBEVENT_DATA,
-						buf, (uint8_t)n, nullptr, 0) == 0;
+	uint8_t rc = BtHciCommand(pDev,
+							  BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_SUBEVENT_DATA,
+							  buf, (uint8_t)n, nullptr, 0);
+
+	if (rc != 0)
+	{
+		// The controller asks for subevent data every periodic advertising
+		// event, so this refusal repeats. It is traced once per call rather
+		// than suppressed, because the caller decides how often to answer.
+		DEBUG_PRINTF("PADV subevent data refused hdl=%u count=%u status 0x%02x\r\n",
+					 (unsigned)AdvHdl, (unsigned)NbSubevents, (unsigned)rc);
+		return false;
+	}
+
+	return true;
 }

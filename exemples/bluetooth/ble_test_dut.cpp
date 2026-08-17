@@ -488,6 +488,18 @@ static BtAppCfg_t s_BleAppCfg = {
 	.TxPower = 0,
 	.pLongWrPoolMem = s_LongWriteMem,
 	.LongWrPoolMemSize = sizeof(s_LongWriteMem),
+	// Periodic advertising resources. The controller reserves none by default,
+	// and this is how an application asks for them; without it every periodic
+	// advertising command is refused whatever the train looks like. One set of
+	// each is enough because the DUT runs one train at a time: "padv init" and
+	// "pawr init" each replace whatever the other configured, on the same
+	// advertising handle.
+	//
+	// Only the advertiser counts are set. The DUT does not scan, so it is never
+	// the synchronizing side of a train and reserving sync slots here would
+	// spend controller RAM on a role this application never takes.
+	.PeriodicAdvCount = 1,
+	.PawrAdvCount = 1,
 };
 
 static volatile bool s_NumCompPending = false;
