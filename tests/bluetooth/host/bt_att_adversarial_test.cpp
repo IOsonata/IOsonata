@@ -24,12 +24,17 @@ bttest::Context s_Test("ATT adversarial host tests");
 constexpr uint16_t kConnHdl = 0x0042;
 constexpr uint16_t kCharUuid = 0xFFF1;
 constexpr uint8_t kInsufficientResources = 0x11;
+constexpr uint8_t kCccdImproperCfg = 0xFD;
 
 BtDevice_t s_Peer;
 uint8_t s_LongWrite[128];
 bool s_PeerEnabled = false;
 bool s_CccdSetResult = true;
 int s_CccdSetCount = 0;
+// The real BtGattCccdValueError rejects reserved bits and a notify or indicate
+// bit the characteristic does not grant. A stub fixed at 0 would leave the
+// improper configuration error unreachable from the ATT server.
+uint8_t s_CccdValueErr = 0;
 bool s_SignatureValid = false;
 int s_ConfirmCount = 0;
 
@@ -257,6 +262,81 @@ void TestCccdFailurePropagation()
 
 	s_PeerEnabled = false;
 	s_CccdSetResult = true;
+}
+
+// A CCCD value the characteristic does not grant is answered Client
+// Characteristic Configuration Descriptor Improperly Configured, and the write
+// never reaches the store. Both the direct write and the prepared write have
+// to validate, since a prepared one is committed by an Execute Write that is
+// not allowed to fail.
+void TestCccdImproperConfigurationIsRejected()
+{
+	BtAttDBInit(2048);
+	BtAttSetMtu(BT_ATT_MTU_MIN);
+
+	BtGattChar_t chr = {};
+	chr.Uuid = 0xFFF3;
+	chr.Property = BT_GATT_CHAR_PROP_NOTIFY;
+	BtAttDBEntry_t *pCccd = AddCccd(&chr);
+	BT_CHECK(s_Test, pCccd != nullptr);
+	if (pCccd == nullptr)
+	{
+		return;
+	}
+
+	ResetPeer();
+	s_CccdValueErr = kCccdImproperCfg;
+	s_CccdSetCount = 0;
+
+	uint8_t req[32] = {};
+	uint8_t rsp[32] = {};
+	req[0] = BT_ATT_OPCODE_ATT_WRITE_REQ;
+	PutLe16(req + 1, pCccd->Hdl);
+	PutLe16(req + 3, BT_DESC_CLIENT_CHAR_CONFIG_INDICATION);
+
+	uint32_t n = BtAttProcessReq(kConnHdl,
+			(BtAttReqRsp_t *)req, 5, (BtAttReqRsp_t *)rsp);
+	BT_CHECK(s_Test, n == sizeof(BtAttErrorRsp_t) + 1);
+	BT_CHECK(s_Test, rsp[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	BT_CHECK(s_Test, rsp[1] == BT_ATT_OPCODE_ATT_WRITE_REQ);
+	BT_CHECK(s_Test, GetLe16(rsp + 2) == pCccd->Hdl);
+	BT_CHECK(s_Test, rsp[4] == kCccdImproperCfg);
+	// Rejected before the store, so nothing was written.
+	BT_CHECK(s_Test, s_CccdSetCount == 0);
+
+	// The prepared form refuses the value when it is queued, not when the queue
+	// is executed. 3.4.6.3 has Execute Write commit what was already accepted,
+	// so a value error the Prepare could see belongs to the Prepare. Capacity
+	// is the opposite case and is checked at execute time, which is what
+	// TestCccdFailurePropagation covers.
+	ResetPeer();
+	s_CccdSetCount = 0;
+	std::memset(rsp, 0, sizeof(rsp));
+	req[0] = BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ;
+	PutLe16(req + 1, pCccd->Hdl);
+	PutLe16(req + 3, 0);
+	PutLe16(req + 5, BT_DESC_CLIENT_CHAR_CONFIG_INDICATION);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)req, 7,
+			(BtAttReqRsp_t *)rsp);
+	BT_CHECK(s_Test, n == sizeof(BtAttErrorRsp_t) + 1);
+	BT_CHECK(s_Test, rsp[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	BT_CHECK(s_Test, rsp[1] == BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ);
+	BT_CHECK(s_Test, GetLe16(rsp + 2) == pCccd->Hdl);
+	BT_CHECK(s_Test, rsp[4] == kCccdImproperCfg);
+	BT_CHECK(s_Test, s_CccdSetCount == 0);
+
+	// Nothing was queued, so an Execute Write has nothing to commit and
+	// succeeds rather than reporting the rejected value a second time.
+	std::memset(rsp, 0, sizeof(rsp));
+	req[0] = BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ;
+	req[1] = 1;
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)req, 2,
+			(BtAttReqRsp_t *)rsp);
+	BT_CHECK(s_Test, rsp[0] == BT_ATT_OPCODE_ATT_EXECUTE_WRITE_RSP);
+	BT_CHECK(s_Test, s_CccdSetCount == 0);
+
+	s_PeerEnabled = false;
+	s_CccdValueErr = 0;
 }
 
 void TestReadBlobSlicesDeclaration()
@@ -497,7 +577,7 @@ uint16_t BtGattCccdGet(uint16_t, uint16_t)
 
 uint8_t BtGattCccdValueError(BtGattChar_t *, uint16_t)
 {
-	return 0;
+	return s_CccdValueErr;
 }
 
 bool BtGattCccdSet(uint16_t, uint16_t, uint16_t)
@@ -527,6 +607,8 @@ int main()
 	s_Test.Run("fixed PDU lengths", TestFixedPduLengths);
 	s_Test.Run("malformed commands are silent", TestMalformedCommandsAreSilent);
 	s_Test.Run("CCCD failure propagation", TestCccdFailurePropagation);
+	s_Test.Run("CCCD improper configuration rejected",
+			   TestCccdImproperConfigurationIsRejected);
 	s_Test.Run("Read Blob declaration slicing", TestReadBlobSlicesDeclaration);
 	s_Test.Run("Read Multiple Variable handle count",
 			   TestReadMultipleVariableNeedsTwoHandles);

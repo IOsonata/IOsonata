@@ -105,9 +105,26 @@ size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 
 BtDevice_t *BtPeerGetActive(void) { return nullptr; }
 
-bool BtGattCharSetValue(BtGattChar_t *, void * const, size_t)
+// The same refusals as the real one in bt_gatt.cpp. An always-true stub would
+// make the give-up branch in every send path here unreachable, and that branch
+// is the rule that a value the characteristic cannot store is never sent.
+bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
+	if (pChar == nullptr || (Len > 0 && pVal == nullptr) ||
+		pChar->ValHdl == BT_ATT_HANDLE_INVALID || pChar->pValue == nullptr ||
+		Len > pChar->MaxDataLen || Len > UINT16_MAX)
+	{
+		return false;
+	}
+
+	if (Len > 0)
+	{
+		std::memcpy(pChar->pValue, pVal, Len);
+	}
+	pChar->ValueLen = (uint16_t)Len;
+
 	++s_SetValueCount;
+
 	return true;
 }
 
@@ -143,6 +160,10 @@ namespace {
 
 BtGattChar_t s_Char;
 uint8_t s_Value[4] = { 1, 2, 3, 4 };
+
+// Storage the characteristic writes through, as a registered one would have.
+constexpr size_t kCharMaxLen = 8;
+uint8_t s_CharStore[kCharMaxLen] = {};
 
 // ---- one link is named, not inferred --------------------------------------
 
@@ -312,6 +333,11 @@ void TestDisconnectAllCoversEveryLink()
 int main()
 {
 	std::memset(&s_Char, 0, sizeof(s_Char));
+	// Registered: a value handle the server handed out and storage to write
+	// through, both of which the real BtGattCharSetValue requires.
+	s_Char.ValHdl = 0x0010;
+	s_Char.pValue = s_CharStore;
+	s_Char.MaxDataLen = kCharMaxLen;
 
 	TestNotifyTargetsNamedLink();
 	TestSoleLinkForms();

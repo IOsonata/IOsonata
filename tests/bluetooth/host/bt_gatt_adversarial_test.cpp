@@ -24,6 +24,7 @@ constexpr uint16_t kConnHdl = 0x0044;
 BtDevice_t s_Peer;
 BtHciDevice_t s_Hci;
 int s_HciPacketCount = 0;
+bool s_AclAccept = true;
 int s_TxCompleteCount = 0;
 int s_NotifyTransitions = 0;
 int s_IndicateTransitions = 0;
@@ -224,6 +225,44 @@ void TestFragmentCompletionWaitsForFinalPacket()
 	BT_CHECK(s_Test, s_TxCompleteCount == 1);
 }
 
+// A reservation is taken before the packet reaches the transport, so a refused
+// send has to give the slot back. Leaking one slot per refusal fills the
+// pending ring, and once it is full the link can never send again even after
+// the transport recovers.
+void TestRefusedTransportReleasesReservation()
+{
+	s_Peer.Conn.NbCccd = 1;
+	s_Peer.Conn.Cccd[0].Hdl = s_SubChar.CccdHdl;
+	s_Peer.Conn.Cccd[0].Value = BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION;
+	s_Peer.TxPendHead = 0;
+	s_Peer.TxPendCount = 0;
+	s_HciPacketCount = 0;
+	s_AclAccept = false;
+
+	uint8_t value[2] = { 0xAA, 0x55 };
+
+	// Refuse more times than the ring has slots. A leak of one slot per
+	// attempt would fill it and the count would climb.
+	for (int i = 0; i < BT_DEV_TXPEND_MAX + 2; i++)
+	{
+		BT_CHECK(s_Test,
+				BtGattCharNotify(kConnHdl, &s_SubChar, value,
+								 sizeof(value)) == false);
+		BT_CHECK(s_Test, s_Peer.TxPendCount == 0);
+	}
+
+	BT_CHECK(s_Test, s_HciPacketCount == BT_DEV_TXPEND_MAX + 2);
+
+	// The link still sends once the transport recovers, which is what the
+	// released slots were for.
+	s_AclAccept = true;
+	BT_CHECK(s_Test,
+			BtGattCharNotify(kConnHdl, &s_SubChar, value, sizeof(value)));
+	BT_CHECK(s_Test, s_Peer.TxPendCount == 1);
+
+	s_Peer.TxPendCount = 0;
+}
+
 void TestFullCompletionQueueRejectsSend()
 {
 	s_Peer.Conn.NbCccd = 1;
@@ -299,6 +338,13 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const,
 					  BtHciACLDataPacket_t * const pPacket)
 {
 	s_HciPacketCount++;
+	// The real one returns zero when the device or its send is missing and
+	// when the link has no credit left. A stub that always succeeded would
+	// leave the release of a reservation the transport refused unreachable.
+	if (s_AclAccept == false)
+	{
+		return 0;
+	}
 	return pPacket != nullptr ?
 			(uint32_t)pPacket->Hdr.Len + sizeof(pPacket->Hdr) : 1;
 }
@@ -325,6 +371,8 @@ int main()
 			   TestMixedPacketCompletionOrdering);
 	s_Test.Run("fragment completion ordering",
 			   TestFragmentCompletionWaitsForFinalPacket);
+	s_Test.Run("refused transport releases reservation",
+			   TestRefusedTransportReleasesReservation);
 	s_Test.Run("completion queue exhaustion",
 			   TestFullCompletionQueueRejectsSend);
 	return s_Test.Finish();

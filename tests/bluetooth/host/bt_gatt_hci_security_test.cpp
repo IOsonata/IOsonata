@@ -28,6 +28,10 @@ BtAttDBEntry_t *s_Entry = reinterpret_cast<BtAttDBEntry_t *>(s_EntryStorage);
 bool s_NotifyEnabled = true;
 bool s_IndicateEnabled = true;
 bool s_TransportAccept = true;
+// The real BtGattTxPendReserve fails on an unknown peer, a zero packet count
+// and a full pending ring. A stub that always succeeded would leave the branch
+// that gives up on a refused reservation unreachable.
+bool s_ReserveAccept = true;
 int s_SendCount = 0;
 int s_ReserveCount = 0;
 int s_ReleaseCount = 0;
@@ -72,6 +76,7 @@ void Reset()
 	s_NotifyEnabled = true;
 	s_IndicateEnabled = true;
 	s_TransportAccept = true;
+	s_ReserveAccept = true;
 	s_SendCount = 0;
 	s_ReserveCount = 0;
 	s_ReleaseCount = 0;
@@ -153,6 +158,38 @@ void TestTransportFailureDoesNotMutateValue()
 			std::memcmp(s_Value, before, sizeof(before)) == 0);
 }
 
+// A refused reservation means the completion ring has no slot for the packet.
+// Sending anyway would put a notification on air that TxCompleteCB can never
+// account for, so the send has to stop before the transport and leave the
+// stored value alone.
+void TestReserveFailureStopsBeforeTransport()
+{
+	Reset();
+	s_ReserveAccept = false;
+	uint8_t payload[4] = { 1, 2, 3, 4 };
+	uint8_t before[sizeof(s_Value)];
+	std::memcpy(before, s_Value, sizeof(before));
+	uint16_t beforeLen = s_Char.ValueLen;
+
+	BT_CHECK(s_Test,
+			!BtGattCharNotify(kConnHdl, &s_Char, payload, sizeof(payload)));
+	BT_CHECK(s_Test, s_ReserveCount == 1);
+	// Nothing was reserved, so nothing may be released: a release here would
+	// return a slot the ring never handed out.
+	BT_CHECK(s_Test, s_ReleaseCount == 0);
+	BT_CHECK(s_Test, s_SendCount == 0);
+	BT_CHECK(s_Test, s_Char.ValueLen == beforeLen);
+	BT_CHECK(s_Test, std::memcmp(s_Value, before, sizeof(before)) == 0);
+
+	// An indication takes the same path and has to refuse the same way.
+	Reset();
+	s_ReserveAccept = false;
+	BT_CHECK(s_Test,
+			!BtGattCharIndicate(kConnHdl, &s_Char, payload, sizeof(payload)));
+	BT_CHECK(s_Test, s_SendCount == 0);
+	BT_CHECK(s_Test, s_ReleaseCount == 0);
+}
+
 void TestSuccessfulSendUpdatesValue()
 {
 	Reset();
@@ -216,9 +253,15 @@ bool BtGattCharIndicateEnabled(uint16_t, BtGattChar_t *)
 	return s_IndicateEnabled;
 }
 
-bool BtGattTxPendReserve(uint16_t, BtGattChar_t *, uint16_t)
+bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *, uint16_t NbPkt)
 {
 	s_ReserveCount++;
+	// The refusals the real one makes, plus a switch for the ring being full,
+	// which a stub cannot reach by argument alone.
+	if (ConnHdl != kConnHdl || NbPkt == 0 || s_ReserveAccept == false)
+	{
+		return false;
+	}
 	return true;
 }
 
@@ -251,6 +294,8 @@ int main()
 	s_Test.Run("MTU bound rejects truncation", TestMtuBoundDoesNotTruncate);
 	s_Test.Run("transport failure preserves value",
 			   TestTransportFailureDoesNotMutateValue);
+	s_Test.Run("reserve failure stops before transport",
+			   TestReserveFailureStopsBeforeTransport);
 	s_Test.Run("successful send updates value", TestSuccessfulSendUpdatesValue);
 	return s_Test.Finish();
 }
