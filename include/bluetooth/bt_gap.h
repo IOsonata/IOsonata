@@ -141,6 +141,29 @@ SOFTWARE.
 #define BT_GAP_PHY_2MBITS								(1<<1)
 #define BT_GAP_PHY_CODED								(1<<2)
 
+/// PHY_Options of LE Set PHY, Core Vol 4 Part E 7.8.49. Only read when the
+/// coded PHY is among the transmit PHYs; the controller ignores it otherwise.
+/// A prefer value lets the controller answer with the other coding, a require
+/// value does not.
+#define BT_GAP_PHY_OPT_NONE								0
+#define BT_GAP_PHY_OPT_PREFER_S2						1
+#define BT_GAP_PHY_OPT_PREFER_S8						2
+#define BT_GAP_PHY_OPT_REQUIRE_S2						3
+#define BT_GAP_PHY_OPT_REQUIRE_S8						4
+#define BT_GAP_PHY_OPT_MAX								4
+
+/// Every PHY bit LE Set PHY defines. A mask with anything else set is refused
+/// before the command goes out.
+#define BT_GAP_PHY_ALL									(BT_GAP_PHY_1MBITS | \
+														 BT_GAP_PHY_2MBITS | \
+														 BT_GAP_PHY_CODED)
+
+/// Data length range of LE Set Data Length, Core Vol 4 Part E 7.8.33.
+#define BT_GAP_DATA_LEN_OCTETS_MIN						0x001B
+#define BT_GAP_DATA_LEN_OCTETS_MAX						0x00FB
+#define BT_GAP_DATA_LEN_TIME_MIN						0x0148
+#define BT_GAP_DATA_LEN_TIME_MAX						0x4290
+
 #define BT_GAP_CONN_SLAVE_LATENCY						0 		//!< Slave latency.
 #define BT_GAP_CONN_SUP_TIMEOUT							4000	//!< Connection supervisory timeout (4 seconds), in msec.
 
@@ -158,6 +181,12 @@ typedef struct __Bt_Gatt_Cccd_State {
 	uint16_t Hdl;				//!< CCCD attribute handle
 	uint16_t Value;				//!< Per-peer CCCD value for Hdl
 } BtGattCccdState_t;
+
+/// Largest LE GATT Security Levels value this stack stores, Core 5.4 Vol 3
+/// Part C 12.7. The value is a sequence of two octet Security Level
+/// Requirements; four of them covers both security modes with room to spare,
+/// and the spec allows at most one instance of the characteristic.
+#define BT_GAP_SEC_LEVELS_MAX_LEN			8
 
 typedef enum __Bt_Gap_SecType {
 	BTGAP_SECTYPE_NONE = BT_GAP_SECTYPE_NONE,
@@ -278,6 +307,88 @@ extern "C" {
 // store; an arch port overrides it only when the vendor stack owns the security
 // database (it then maps the vendor state into BtConnSec_t).
 bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec);
+
+/**
+ * @brief	Set the LE GATT Security Levels characteristic value
+ *
+ * Core 5.4 Vol 3 Part C 12.7. pReq is a sequence of Security Level
+ * Requirements, each a Security Mode octet followed by a Security Level
+ * octet, written as the numbers used in their definitions: mode 1 level 4 is
+ * 0x01 0x04.
+ *
+ * Meeting any one of the requirements listed for a mode is sufficient, so
+ * listing several is a weaker statement than listing one, not a stronger one.
+ *
+ * BtGapInit fills this from the configured security type. Override it when
+ * the stack refuses legacy pairing, since the default answers mode 1 level 3
+ * for an authenticated configuration and level 3 tells a client that
+ * authenticated legacy pairing is enough.
+ *
+ * The value has to be static during a connection, so this belongs before the
+ * first connection rather than in response to one.
+ *
+ * @param	pReq	: Security Level Requirements, two octets each
+ * @param	Len		: Length in octets, even, 2 to BT_GAP_SEC_LEVELS_MAX_LEN
+ *
+ * @return	true on success
+ */
+bool BtGapSecLevelsSet(const uint8_t *pReq, size_t Len);
+
+
+/**
+ * @brief	Ask for a PHY change on an established link
+ *
+ * Issues LE Set PHY, Core Vol 4 Part E 7.8.49. TxPhys and RxPhys are
+ * BT_GAP_PHY_* masks naming every PHY the local device will accept in that
+ * direction; zero means no preference, which the command encodes in
+ * ALL_PHYS rather than in the mask.
+ *
+ * The peer has a say, so a true return means the request went out, not that
+ * the link changed PHY. The result arrives as an LE PHY Update Complete event
+ * and can be read with BtGapReadPhy afterwards.
+ *
+ * PhyOptions is a BT_GAP_PHY_OPT_* value and only matters when the coded PHY
+ * is in TxPhys.
+ *
+ * @param	ConnHdl		: Connection handle
+ * @param	TxPhys		: Acceptable transmit PHYs, 0 for no preference
+ * @param	RxPhys		: Acceptable receive PHYs, 0 for no preference
+ * @param	PhyOptions	: BT_GAP_PHY_OPT_* coding preference
+ *
+ * @return	true when the controller accepted the request
+ */
+bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys, uint8_t RxPhys,
+				 uint16_t PhyOptions);
+
+/**
+ * @brief	Read the PHY a link is using
+ *
+ * Issues LE Read PHY, Core Vol 4 Part E 7.8.47. Each output is a BT_GAP_PHY_*
+ * mask with one bit set.
+ *
+ * @param	ConnHdl	: Connection handle
+ * @param	pTxPhy	: Receives the transmit PHY
+ * @param	pRxPhy	: Receives the receive PHY
+ *
+ * @return	true on success
+ */
+bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy, uint8_t *pRxPhy);
+
+/**
+ * @brief	Ask for the link layer data length of a link
+ *
+ * Issues LE Set Data Length, Core Vol 4 Part E 7.8.33. Both values are
+ * suggestions the controller uses in the Data Length Update procedure, so an
+ * accepted command changes what is asked for, not what the link ends up
+ * using. The peer answers with what it will take.
+ *
+ * @param	ConnHdl		: Connection handle
+ * @param	TxOctets	: Suggested payload octets, 0x1B to 0xFB
+ * @param	TxTime		: Suggested packet time in microseconds, 0x148 to 0x4290
+ *
+ * @return	true when the controller accepted the request
+ */
+bool BtGapSetDataLength(uint16_t ConnHdl, uint16_t TxOctets, uint16_t TxTime);
 
 // Record the security state of ConnHdl. Called by the security layer when
 // pairing or encryption completes or is lost.

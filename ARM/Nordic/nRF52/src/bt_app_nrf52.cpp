@@ -836,25 +836,11 @@ void BtSmpOobDataClear(void)
 	memset(&s_BtAppPeerOob, 0, sizeof(s_BtAppPeerOob));
 }
 
-// Weak defaults. With no application override the only safe action is to reject,
-// so the user interaction cannot be performed silently. An application that can
-// display or input overrides these.
-__attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
-{
-	(void)Value;
-	BtSmpNumericComparisonReply(ConnHdl, false);
-}
-
-__attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
-{
-	(void)Passkey;
-	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
-}
-
-__attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
-{
-	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
-}
+// The rejecting defaults for BtSmpNumericComparison, BtSmpPasskeyDisplay and
+// BtSmpPasskeyRequest are weak in bt_smp.cpp, which this port links for
+// BtSmpTimeoutCheck. A second weak definition here left the choice to link
+// order. They reach this port through the strong BtSmpNumericComparisonReply
+// and BtSmpPasskeyReply above, so the behaviour is what it was.
 
 /**@brief Function for dispatching a SoftDevice event to all modules with a SoftDevice
  *        event handler.
@@ -1350,9 +1336,20 @@ void BtGattEvtHandler(nrf_ble_gatt_t * p_gatt, const nrf_ble_gatt_evt_t * p_evt)
     // to compare it against.
     if (p_evt->evt_id == NRF_BLE_GATT_EVT_ATT_MTU_UPDATED)
     {
-    	//g_BleAppData.MaxMtu = p_evt->params.att_mtu_effective - 3;//OPCODE_LENGTH - HANDLE_LENGTH;
-       // m_ble_nus_max_data_len = p_evt->params.att_mtu_effective - OPCODE_LENGTH - HANDLE_LENGTH;
-        //NRF_LOG_INFO("Data len is set to 0x%X(%d)\r\n", m_ble_nus_max_data_len, m_ble_nus_max_data_len);
+    	// Record the negotiated ATT_MTU on the peer slot. The body here was
+    	// commented out and nothing else wrote the slot, so
+    	// BtGattNrf52ValueLenValid read zero, fell back to the default and
+    	// refused every notification and indication over 20 octets for the
+    	// life of a link that had negotiated 247. The GATT module has already
+    	// applied the Core Vol 3 Part F 3.4.2.2 minimum of the two Rx MTUs, so
+    	// the effective value is taken as it stands and only refused if it is
+    	// below what every ATT PDU may assume.
+    	BtDevice_t *pConn = BtPeerFindByHdl(p_evt->conn_handle);
+    	if (pConn != nullptr &&
+    		p_evt->params.att_mtu_effective >= BT_ATT_MTU_MIN)
+    	{
+    		pConn->Conn.MaxMtu = p_evt->params.att_mtu_effective;
+    	}
     }
  //   printf("ATT MTU exchange completed. central 0x%x peripheral 0x%x\r\n", p_gatt->att_mtu_desired_central, p_gatt->att_mtu_desired_periph);
 }

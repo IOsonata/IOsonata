@@ -40,8 +40,15 @@ int s_CmdCount = 0;
 uint8_t s_LocalType = 0;
 uint8_t s_LocalAddr[6] = {};
 
+// Return parameters the next captured command answers with, and the HCI
+// status it answers. A command that reads something back needs both, and a
+// caller has to be seen refusing a controller error as well as a bad value.
+uint8_t s_Ret[8] = {};
+uint8_t s_RetLen = 0;
+uint8_t s_CmdStatus = 0;
+
 uint8_t CaptureCommand(BtHciDevice_t * const, uint16_t OpCode, const void *pParam,
-					   uint8_t ParamLen, void *, uint8_t)
+					   uint8_t ParamLen, void *pRet, uint8_t RetLen)
 {
 	if (s_CmdCount < (int)(sizeof(s_Cmds) / sizeof(s_Cmds[0])))
 	{
@@ -53,7 +60,13 @@ uint8_t CaptureCommand(BtHciDevice_t * const, uint16_t OpCode, const void *pPara
 			std::memcpy(c.Param, pParam, ParamLen);
 		}
 	}
-	return 0;		// HCI success
+
+	if (pRet != nullptr && RetLen > 0 && s_RetLen > 0)
+	{
+		std::memcpy(pRet, s_Ret, RetLen < s_RetLen ? RetLen : s_RetLen);
+	}
+
+	return s_CmdStatus;
 }
 
 BtHciDevice_t s_Dev;
@@ -63,6 +76,9 @@ void Setup(uint8_t LocalType, const uint8_t LocalAddr[6])
 	s_CmdCount = 0;
 	std::memset(s_Cmds, 0, sizeof(s_Cmds));
 	std::memset(&s_Dev, 0, sizeof(s_Dev));
+	std::memset(s_Ret, 0, sizeof(s_Ret));
+	s_RetLen = 0;
+	s_CmdStatus = 0;
 	s_Dev.Command = CaptureCommand;
 	g_BtAppData.AppDevice.pHciDev = &s_Dev;
 	s_LocalType = LocalType;
@@ -301,6 +317,255 @@ void TestScanClampWindowLeInterval()
 	}
 }
 
+// --- Link procedures on an established connection ---
+//
+// LE Read PHY 7.8.47, LE Set PHY 7.8.49 and LE Set Data Length 7.8.33. The
+// same capture device records what would go on air.
+
+// Offsets into the SET_PHY parameter block:
+// ConnHdl(2) AllPhys(1) TxPhys(1) RxPhys(1) PhyOptions(2).
+constexpr size_t kPhyConnHdl = 0;
+constexpr size_t kPhyAllPhys = 2;
+constexpr size_t kPhyTxPhys = 3;
+constexpr size_t kPhyRxPhys = 4;
+constexpr size_t kPhyOptions = 5;
+
+// Offsets into the SET_DATA_LEN parameter block:
+// ConnHdl(2) TxOctets(2) TxTime(2).
+constexpr size_t kDataLenConnHdl = 0;
+constexpr size_t kDataLenOctets = 2;
+constexpr size_t kDataLenTime = 4;
+
+void SetReadPhyReturn(uint16_t ConnHdl, uint8_t TxPhy, uint8_t RxPhy)
+{
+	s_Ret[0] = (uint8_t)(ConnHdl & 0xFF);
+	s_Ret[1] = (uint8_t)(ConnHdl >> 8);
+	s_Ret[2] = TxPhy;
+	s_Ret[3] = RxPhy;
+	s_RetLen = 4;
+}
+
+// 7.8.47 enumerates the PHY 1, 2, 3 while the API uses the bit mask LE Set PHY
+// takes. A caller comparing a read against a mask it set would see every read
+// as a mismatch if the two encodings were mixed.
+void TestReadPhyEnumToMask()
+{
+	uint8_t addr[6] = {};
+	uint8_t tx = 0;
+	uint8_t rx = 0;
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	SetReadPhyReturn(0x0010, 1, 3);
+
+	CHECK(BtGapReadPhy(0x0010, &tx, &rx) == true);
+	CHECK(tx == BT_GAP_PHY_1MBITS);
+	CHECK(rx == BT_GAP_PHY_CODED);
+
+	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_READ_PHY);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->ParamLen == 2);
+		CHECK(GetLe16(c->Param) == 0x0010);
+	}
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	SetReadPhyReturn(0x0010, 2, 2);
+	CHECK(BtGapReadPhy(0x0010, &tx, &rx) == true);
+	CHECK(tx == BT_GAP_PHY_2MBITS);
+	CHECK(rx == BT_GAP_PHY_2MBITS);
+}
+
+// A value outside the enumeration would map to a mask bit that means a
+// different PHY or to none at all, so it is refused rather than converted.
+void TestReadPhyRejectsUnknownValue()
+{
+	uint8_t addr[6] = {};
+	uint8_t tx = 0xAA;
+	uint8_t rx = 0xAA;
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	SetReadPhyReturn(0x0010, 0, 1);
+	CHECK(BtGapReadPhy(0x0010, &tx, &rx) == false);
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	SetReadPhyReturn(0x0010, 1, 4);
+	CHECK(BtGapReadPhy(0x0010, &tx, &rx) == false);
+
+	// Nothing was written on either refusal.
+	CHECK(tx == 0xAA);
+	CHECK(rx == 0xAA);
+}
+
+void TestReadPhyRefusesBadArguments()
+{
+	uint8_t addr[6] = {};
+	uint8_t phy = 0;
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtGapReadPhy(0x0010, nullptr, &phy) == false);
+	CHECK(BtGapReadPhy(0x0010, &phy, nullptr) == false);
+	CHECK(s_CmdCount == 0);
+
+	// A controller error is a refusal, not a PHY of whatever the buffer held.
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	SetReadPhyReturn(0x0010, 1, 1);
+	s_CmdStatus = 0x12;
+	uint8_t tx = 0;
+	uint8_t rx = 0;
+	CHECK(BtGapReadPhy(0x0010, &tx, &rx) == false);
+}
+
+// An empty mask is no preference, which 7.8.49 spells in ALL_PHYS. Sent in the
+// mask instead it would be a request for no PHY at all.
+void TestSetPhyEmptyMaskGoesToAllPhys()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+
+	CHECK(BtGapSetPhy(0x0021, 0, 0, BT_GAP_PHY_OPT_NONE) == true);
+
+	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_SET_PHY);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->ParamLen == 7);
+		CHECK(GetLe16(c->Param + kPhyConnHdl) == 0x0021);
+		CHECK(c->Param[kPhyAllPhys] == 0x03);
+		CHECK(c->Param[kPhyTxPhys] == 0);
+		CHECK(c->Param[kPhyRxPhys] == 0);
+	}
+
+	// One direction named, the other left to the controller.
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtGapSetPhy(0x0021, BT_GAP_PHY_2MBITS, 0, BT_GAP_PHY_OPT_NONE) == true);
+	c = FindCmd(BT_HCI_CMD_CTLR_SET_PHY);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->Param[kPhyAllPhys] == 0x02);
+		CHECK(c->Param[kPhyTxPhys] == BT_GAP_PHY_2MBITS);
+	}
+}
+
+void TestSetPhyEmitsMaskAndOptions()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+
+	CHECK(BtGapSetPhy(0x0034, BT_GAP_PHY_1MBITS | BT_GAP_PHY_CODED,
+					  BT_GAP_PHY_CODED, BT_GAP_PHY_OPT_REQUIRE_S8) == true);
+
+	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_SET_PHY);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->Param[kPhyAllPhys] == 0);
+		CHECK(c->Param[kPhyTxPhys] ==
+			  (BT_GAP_PHY_1MBITS | BT_GAP_PHY_CODED));
+		CHECK(c->Param[kPhyRxPhys] == BT_GAP_PHY_CODED);
+		CHECK(GetLe16(c->Param + kPhyOptions) == BT_GAP_PHY_OPT_REQUIRE_S8);
+	}
+}
+
+void TestSetPhyRefusesOutOfRange()
+{
+	uint8_t addr[6] = {};
+
+	// A bit outside the three PHYs 7.8.49 defines.
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtGapSetPhy(0x0034, 0x08, BT_GAP_PHY_1MBITS,
+					  BT_GAP_PHY_OPT_NONE) == false);
+	CHECK(s_CmdCount == 0);
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtGapSetPhy(0x0034, BT_GAP_PHY_1MBITS, 0x80,
+					  BT_GAP_PHY_OPT_NONE) == false);
+	CHECK(s_CmdCount == 0);
+
+	// A coding option past the last one defined.
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtGapSetPhy(0x0034, BT_GAP_PHY_CODED, BT_GAP_PHY_CODED,
+					  BT_GAP_PHY_OPT_MAX + 1) == false);
+	CHECK(s_CmdCount == 0);
+
+	// A controller that refuses the request is reported as a refusal.
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	s_CmdStatus = 0x0C;
+	CHECK(BtGapSetPhy(0x0034, BT_GAP_PHY_2MBITS, BT_GAP_PHY_2MBITS,
+					  BT_GAP_PHY_OPT_NONE) == false);
+}
+
+void TestDataLenEmitsRequest()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+
+	CHECK(BtGapSetDataLength(0x0042, 251, 2120) == true);
+
+	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_SET_DATA_LEN);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->ParamLen == 6);
+		CHECK(GetLe16(c->Param + kDataLenConnHdl) == 0x0042);
+		CHECK(GetLe16(c->Param + kDataLenOctets) == 251);
+		CHECK(GetLe16(c->Param + kDataLenTime) == 2120);
+	}
+}
+
+// 7.8.33 gives both parameters a closed range. A value outside it reaches the
+// controller as Invalid HCI Command Parameters, which a caller then has to map
+// back to a parameter it already knew was wrong.
+void TestDataLenRefusesOutOfRange()
+{
+	uint8_t addr[6] = {};
+
+	const struct {
+		uint16_t Octets;
+		uint16_t Time;
+	} bad[] = {
+		{ BT_GAP_DATA_LEN_OCTETS_MIN - 1, BT_GAP_DATA_LEN_TIME_MIN },
+		{ BT_GAP_DATA_LEN_OCTETS_MAX + 1, BT_GAP_DATA_LEN_TIME_MIN },
+		{ BT_GAP_DATA_LEN_OCTETS_MIN, BT_GAP_DATA_LEN_TIME_MIN - 1 },
+		{ BT_GAP_DATA_LEN_OCTETS_MIN, BT_GAP_DATA_LEN_TIME_MAX + 1 },
+		{ 0, 0 },
+	};
+
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++)
+	{
+		Setup(BTADDR_TYPE_PUBLIC, addr);
+		CHECK(BtGapSetDataLength(0x0042, bad[i].Octets, bad[i].Time) == false);
+		CHECK(s_CmdCount == 0);
+	}
+
+	// Both ends of the range are accepted.
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtGapSetDataLength(0x0042, BT_GAP_DATA_LEN_OCTETS_MIN,
+							 BT_GAP_DATA_LEN_TIME_MIN) == true);
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtGapSetDataLength(0x0042, BT_GAP_DATA_LEN_OCTETS_MAX,
+							 BT_GAP_DATA_LEN_TIME_MAX) == true);
+}
+
+// Every one of the three refuses without an HCI device rather than following a
+// null pointer.
+void TestLinkProceduresWithoutDevice()
+{
+	uint8_t addr[6] = {};
+	uint8_t tx = 0;
+	uint8_t rx = 0;
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	g_BtAppData.AppDevice.pHciDev = nullptr;
+
+	CHECK(BtGapReadPhy(0x0010, &tx, &rx) == false);
+	CHECK(BtGapSetPhy(0x0010, BT_GAP_PHY_1MBITS, BT_GAP_PHY_1MBITS,
+					  BT_GAP_PHY_OPT_NONE) == false);
+	CHECK(BtGapSetDataLength(0x0010, 251, 2120) == false);
+	CHECK(s_CmdCount == 0);
+}
+
 } // namespace
 
 extern "C" {
@@ -326,6 +591,15 @@ int main()
 	TestScanClampLower();
 	TestScanClampUpper();
 	TestScanClampWindowLeInterval();
+	TestReadPhyEnumToMask();
+	TestReadPhyRejectsUnknownValue();
+	TestReadPhyRefusesBadArguments();
+	TestSetPhyEmptyMaskGoesToAllPhys();
+	TestSetPhyEmitsMaskAndOptions();
+	TestSetPhyRefusesOutOfRange();
+	TestDataLenEmitsRequest();
+	TestDataLenRefusesOutOfRange();
+	TestLinkProceduresWithoutDevice();
 
 	if (s_Failures != 0)
 	{

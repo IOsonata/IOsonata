@@ -38,6 +38,7 @@ SOFTWARE.
 #include <stddef.h>
 #include <stdint.h>
 
+#include "bluetooth/bt_ead.h"
 #include "bluetooth/bt_uuid.h"
 
 /// Maximum advertising or scan-response data payload (in octets) that fits in
@@ -95,6 +96,26 @@ typedef struct __Bt_Adv_Param {
 #define BTADV_EXTADV_EVT_PROP_HIGH_DUTY					(1<<3)	//!< High duty cycle direct connectable <= 3.75ms interval
 #define BTADV_EXTADV_EVT_PROP_LEGACY					(1<<4)	//!< Legacy advertising using PDU
 #define BTADV_EXTADV_EVT_PROP_OMIT_ADDR					(1<<5)	//!< Omit advertise's address from all PDU (anonymous)
+// Advertising Coding Selection, Core 5.4. The coding used on the LE Coded PHY
+// is chosen by the Host through the [v2] parameters command rather than left
+// to the Controller, which is what the feature adds.
+//
+// Primary_Advertising_PHY_Options and Secondary_Advertising_PHY_Options,
+// Vol 4 Part E 7.8.53. A preference lets the Controller fall back, a
+// requirement does not.
+#define BTADV_PHY_OPT_NONE								0x00	//!< No preferred or required coding
+#define BTADV_PHY_OPT_PREFER_S2							0x01	//!< Prefers S=2
+#define BTADV_PHY_OPT_PREFER_S8							0x02	//!< Prefers S=8
+#define BTADV_PHY_OPT_REQUIRE_S2						0x03	//!< Requires S=2
+#define BTADV_PHY_OPT_REQUIRE_S8						0x04	//!< Requires S=8
+#define BTADV_PHY_OPT_MAX								0x04
+
+/// FeatureSet bit the Host sets to say it supports Advertising Coding
+/// Selection, Vol 6 Part B 4.6.33.3. With it clear a Primary or Secondary PHY
+/// of 0x03 means LE Coded with the Controller choosing; with it set 0x03 is
+/// S=8 and 0x04 is S=2.
+#define BTADV_FEATURE_BIT_CODING_SELECTION				41
+
 #define BTADV_EXTADV_EVT_PROP_TXPWR						(1<<6)	//!< Include Tx power in the extended header
 
 #define BTADV_EXTADV_PHY_1M								1
@@ -176,6 +197,138 @@ BtAdvData_t *BtAdvDataAllocate(BtAdvPacket_t * const pAdvPkt, uint8_t Type, int 
 // connection is stamped with this so the SMP toolbox computes f5/f6/c1 with
 // the address the peer actually saw.
 void BtAdvOwnAddrGet(uint8_t *pType, uint8_t pAddr[6]);
+
+/**
+ * @brief	Tell the controller this host supports Advertising Coding Selection
+ *
+ * Issues LE Set Host Feature for FeatureSet bit 41 (Vol 4 Part E 7.8.115).
+ * Until this succeeds a Primary or Secondary PHY of 0x03 means LE Coded with
+ * the controller choosing the coding, and the PHY options of the [v2]
+ * parameters command have no effect.
+ *
+ * Vol 4 Part E 7.8.115 has the controller answer Command Disallowed while it
+ * holds any connection, so this belongs in initialization rather than in
+ * response to anything. A controller without the feature answers Unsupported
+ * Feature or Parameter Value.
+ *
+ * @param	bEnable	: true to set the bit, false to clear it
+ *
+ * @return	true when the controller accepted it
+ */
+bool BtAdvCodingSelectionEnable(bool bEnable);
+
+/**
+ * @brief	Arm or disarm Encrypted Advertising Data
+ *
+ * With key material installed, BtAdvEncode wraps the advertising data and the
+ * scan response data it builds in Encrypted Data AD structures (Core 5.4
+ * Vol 3 Part C 10.10, CSS Part A 1.23). With none installed it does nothing
+ * at all, so a build that never calls this is unchanged.
+ *
+ * This is the only place the feature is switched on. Every port reaches the
+ * advertising data through the same BtAdvEncode, so arming it here arms it
+ * everywhere rather than per port.
+ *
+ * The key material is copied. Pass null to disarm and wipe the copy.
+ *
+ * The AES and random engines must already be bound through BtEadInit; the
+ * randomizer has to be unpredictable or the feature gives back the tracking
+ * it exists to prevent.
+ *
+ * @param	pKey	: Session key and IV, or null to disarm
+ *
+ * @return	true on success
+ */
+bool BtAdvEadKeySet(const BtEadKey_t * const pKey);
+
+/**
+ * @brief	Whether Encrypted Advertising Data is armed
+ *
+ * @return	true when key material is installed
+ */
+bool BtAdvEadIsArmed(void);
+
+/**
+ * @brief	Wrap one advertising packet in an Encrypted Data AD structure
+ *
+ * Rewrites pPkt in place as a single AD structure holding a fresh randomizer,
+ * the encrypted former contents and the MIC. BtAdvEncode calls this for both
+ * packets when armed, so a port has nothing to do; it is public because a
+ * port that builds advertising data some other way still needs it.
+ *
+ * A fresh randomizer is drawn for each call, which is what CSS Part A 1.23.4
+ * requires whenever the payload changes.
+ *
+ * Nothing is written unless the whole structure fits, so a failure leaves the
+ * plaintext packet as it was rather than half encrypted.
+ *
+ * @param	pPkt	: Packet to wrap in place
+ *
+ * @return	true on success, false when not armed, out of room, or the crypto
+ *			failed
+ */
+bool BtAdvEncrypt(BtAdvPacket_t *pPkt);
+
+/**
+ * @brief	Recover the payload of an Encrypted Data AD structure in a report
+ *
+ * The receiving half of BtAdvEncrypt, for a scan report handler to call. The
+ * advertising data is walked for an Encrypted Data structure and its payload
+ * is decrypted into pOut. The recovered payload is itself a sequence of AD
+ * structures, so a caller reads it the same way it reads a plain report.
+ *
+ * The MIC is verified first, so nothing is returned for a structure that does
+ * not authenticate under pKey.
+ *
+ * @param	pKey		: Session key and IV of the advertiser being followed
+ * @param	pAdvData	: Advertising data of the report
+ * @param	Len			: Advertising data length
+ * @param	pOut		: Output buffer for the recovered payload
+ * @param	OutLen		: Output buffer size
+ *
+ * @return	Payload octets recovered. 0 when the report holds no Encrypted Data
+ *			structure, when it is malformed, or when the MIC does not verify.
+ */
+size_t BtAdvDecrypt(const BtEadKey_t * const pKey, const uint8_t *pAdvData,
+					size_t Len, uint8_t *pOut, size_t OutLen);
+
+/**
+ * @brief	Choose the PHY the next advertising set advertises on
+ *
+ * Takes effect at the next BtAppAdvInit. The default is 1M primary and 2M
+ * secondary, which is what every set used before the PHY could be chosen.
+ *
+ * A coding selected with BtAdvCodingSet only reaches the air on LE Coded, so
+ * this is the call that has to come first.
+ *
+ * @param	PrimPhy	: BTADV_EXTADV_PHY_1M or BTADV_EXTADV_PHY_CODED. 7.8.53
+ *					  gives the primary PHY no 2M, since 2M cannot carry an
+ *					  ADV_EXT_IND.
+ * @param	SecPhy	: BTADV_EXTADV_PHY_1M, _2M or _CODED
+ *
+ * @return	true when both values are legal for their position
+ */
+bool BtAdvPhySet(uint8_t PrimPhy, uint8_t SecPhy);
+
+/**
+ * @brief	Choose the LE Coded PHY coding the next advertising set uses
+ *
+ * The values take effect at the next BtAppAdvInit, which sends the [v2]
+ * parameters command instead of [v1] when either option is not
+ * BTADV_PHY_OPT_NONE. Both BTADV_PHY_OPT_NONE restores [v1], which is what a
+ * controller predating Core 5.4 accepts.
+ *
+ * A coding only means anything on LE Coded: 7.8.53 has the controller ignore
+ * the option when the PHY in that position is 1M or 2M. Asking for one there
+ * is refused rather than accepted and dropped, so call BtAdvPhySet with
+ * BTADV_EXTADV_PHY_CODED first.
+ *
+ * @param	PrimOpt	: BTADV_PHY_OPT_* for the primary advertising PHY
+ * @param	SecOpt	: BTADV_PHY_OPT_* for the secondary advertising PHY
+ *
+ * @return	true when both values are in range and their PHY is LE Coded
+ */
+bool BtAdvCodingSet(uint8_t PrimOpt, uint8_t SecOpt);
 
 /**
  * @brief	Add advertisement data into the adv packet

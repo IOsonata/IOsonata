@@ -528,7 +528,156 @@ static uint8_t BtAdvFlagsValue(const BtAppCfg_t *pCfg)
 // pExtAdv   : out, set true if extended advertising is required.
 // pScannable: out, set true if the set is scannable (legacy peripheral with a
 //             scan response). False otherwise.
-bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt,
+
+// --- Encrypted Advertising Data ---------------------------------------------
+// Core 5.4 Vol 3 Part C 10.10 and CSS Part A 1.23. This sits in the shared
+// encoder rather than in a port because every port reaches its advertising
+// data through BtAdvEncode with the same BtAdvPacket_t, so one place arms the
+// feature for all of them.
+
+// An AD structure Length field is one octet covering the type and the data,
+// so the data of a single structure tops out at 254 octets. Nothing longer
+// can be expressed whatever the advertising set allows.
+#define BT_ADV_EAD_SCRATCH_MAX		254
+
+static BtEadKey_t s_BtAdvEadKey;
+static bool s_BtAdvEadArmed = false;
+
+bool BtAdvEadKeySet(const BtEadKey_t * const pKey)
+{
+	if (pKey == nullptr)
+	{
+		CryptoSecureWipe(&s_BtAdvEadKey, sizeof(s_BtAdvEadKey));
+		s_BtAdvEadArmed = false;
+		return true;
+	}
+
+	memcpy(&s_BtAdvEadKey, pKey, sizeof(s_BtAdvEadKey));
+	s_BtAdvEadArmed = true;
+
+	return true;
+}
+
+bool BtAdvEadIsArmed(void)
+{
+	return s_BtAdvEadArmed;
+}
+
+bool BtAdvEncrypt(BtAdvPacket_t *pPkt)
+{
+	if (s_BtAdvEadArmed == false || pPkt == nullptr || pPkt->pData == nullptr)
+	{
+		return false;
+	}
+
+	// Length(1) Type(1) then the AD data the structure holds.
+	const int hdr = 2;
+	int len = pPkt->Len;
+
+	if (len < 0 || len + hdr + BTEAD_OVERHEAD > pPkt->MaxLen)
+	{
+		DEBUG_PRINTF("BtAdvEncrypt: no room, %d octets\r\n", len);
+		return false;
+	}
+
+	// An AD structure Length field is one octet, so the whole thing has to fit
+	// 255 including the type. Nothing longer can be expressed.
+	if (1 + BTEAD_OVERHEAD + len > 255)
+	{
+		return false;
+	}
+
+	uint8_t rand[BTEAD_RANDOMIZER_LEN];
+
+	if (BtEadRandGen(rand) == false)
+	{
+		// Without an unpredictable randomizer the structure would be traceable
+		// across address changes, which is what the feature exists to stop, so
+		// this fails rather than falling back to a fixed value.
+		DEBUG_PRINTF("BtAdvEncrypt: no secure randomizer\r\n");
+		return false;
+	}
+
+	// Encrypt into a scratch buffer first. Writing in place would leave a half
+	// encrypted packet behind if the crypto failed partway, and this packet is
+	// about to go on air.
+	uint8_t buf[BT_ADV_EAD_SCRATCH_MAX];
+	size_t n = 0;
+
+	if ((size_t)(len + BTEAD_OVERHEAD) <= sizeof(buf))
+	{
+		n = BtEadEncrypt(&s_BtAdvEadKey, rand, pPkt->pData, (size_t)len,
+						 buf, sizeof(buf));
+	}
+
+	CryptoSecureWipe(rand, sizeof(rand));
+
+	if (n == 0)
+	{
+		return false;
+	}
+
+	pPkt->pData[0] = (uint8_t)(1 + n);		// type plus the AD data
+	pPkt->pData[1] = BTEAD_AD_TYPE;
+	memcpy(&pPkt->pData[2], buf, n);
+	pPkt->Len = (int)(hdr + n);
+
+	CryptoSecureWipe(buf, sizeof(buf));
+
+	return true;
+}
+
+// The receiving half of BtAdvEncrypt. A scan report is a sequence of AD
+// structures, one of which may be Encrypted Data; the plaintext inside it is
+// itself AD structures, which is why the recovered payload is handed back
+// whole rather than parsed here.
+//
+// The key belongs to the advertiser, not to this device, so it is a parameter:
+// a scanner following several peers holds one key material per peer and has to
+// say which it is trying.
+size_t BtAdvDecrypt(const BtEadKey_t * const pKey, const uint8_t *pAdvData,
+					size_t Len, uint8_t *pOut, size_t OutLen)
+{
+	if (pKey == nullptr || pAdvData == nullptr || pOut == nullptr || OutLen == 0)
+	{
+		return 0;
+	}
+
+	size_t off = 0;
+
+	while (off < Len)
+	{
+		uint8_t adLen = pAdvData[off];
+
+		// A zero length ends the sequence: Core Vol 3 Part C 11 has the
+		// remainder of the payload as padding once one is met.
+		if (adLen == 0)
+		{
+			return 0;
+		}
+
+		// The length covers the type and the data, so a structure claiming more
+		// than the report holds is malformed and nothing after it can be read.
+		if (off + 1 + adLen > Len)
+		{
+			return 0;
+		}
+
+		if (pAdvData[off + 1] == BTEAD_AD_TYPE)
+		{
+			// BtEadDecrypt verifies the MIC before it returns anything, so a
+			// structure that does not authenticate yields nothing here.
+			return BtEadDecrypt(pKey, &pAdvData[off + 2], (size_t)(adLen - 1),
+								pOut, OutLen);
+		}
+
+		off += 1 + adLen;
+	}
+
+	return 0;
+}
+
+static bool BtAdvEncodeRaw(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt,
 		bool *pExtAdv, bool *pScannable)
 {
 	if (pCfg == nullptr || pAdvPkt == nullptr || pExtAdv == nullptr || pScannable == nullptr)
@@ -741,5 +890,47 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 
 	*pExtAdv = true;
 	*pScannable = false;
+	return true;
+}
+
+// The public encoder. Builds the advertising data, then wraps it when
+// Encrypted Advertising Data is armed.
+//
+// The wrapping is here rather than in each port because all four ports reach
+// this same function with the same buffers, so one place covers them all. A
+// build that never installs key material takes no new path at all.
+//
+// A failure to encrypt fails the whole encode. The alternative would be to
+// advertise the plaintext the caller asked to have encrypted, which is worse
+// than not advertising.
+bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt,
+		bool *pExtAdv, bool *pScannable)
+{
+	if (BtAdvEncodeRaw(pCfg, pAdvPkt, pSrPkt, pExtAdv, pScannable) == false)
+	{
+		return false;
+	}
+
+	if (BtAdvEadIsArmed() == false)
+	{
+		return true;
+	}
+
+	// Each packet is a payload of its own and gets its own randomizer, which
+	// is what CSS Part A 1.23.4 asks for. An empty packet is left alone: an
+	// Encrypted Data structure holding nothing tells a scanner this device
+	// uses the feature and nothing else, which is information for free.
+	if (pAdvPkt != nullptr && pAdvPkt->Len > 0 &&
+		BtAdvEncrypt(pAdvPkt) == false)
+	{
+		return false;
+	}
+
+	if (pSrPkt != nullptr && pSrPkt->Len > 0 &&
+		BtAdvEncrypt(pSrPkt) == false)
+	{
+		return false;
+	}
+
 	return true;
 }

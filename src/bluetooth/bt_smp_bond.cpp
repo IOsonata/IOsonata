@@ -564,17 +564,17 @@ static int BtSmpBondAllocSlot(void)
 	return -1;
 }
 
-void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
+bool BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 {
 	if (pKeys == nullptr || !pKeys->bValid)
 	{
-		return;
+		return false;
 	}
 
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr)
 	{
-		return;
+		return false;
 	}
 
 	uint8_t addrType = pPeer->Conn.PeerAddrType;
@@ -588,7 +588,10 @@ void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 		slot = BtSmpBondAllocSlot();
 		if (slot < 0)
 		{
-			return;
+			// Every slot holds a valid bond. Nothing is stored, and the caller
+			// has to know: the peer keeps a bond this device will not be able
+			// to answer on reconnect.
+			return false;
 		}
 	}
 
@@ -637,6 +640,8 @@ void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 	(void)BtSmpSignCounterPrepare(slot);
 	BtSmpBondTableExit(state);
 	BtSmpBondPersist(slot);
+
+	return true;
 }
 
 void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)

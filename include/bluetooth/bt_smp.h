@@ -589,7 +589,38 @@ void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmpKeys_t *pKe
  *			BtSmpBondErase and uses the access functions below to move records
  *			between its non-volatile storage and the generic RAM table.
  */
-void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys);
+/**
+ * @brief	Store the key set for the peer on ConnHdl.
+ *
+ * Answers whether the record is held. A false is a store that refused, the
+ * table being full being the ordinary reason, and it means this device has no
+ * bond for a peer that believes it has one: the peer will offer an LTK on
+ * reconnect that this side cannot answer. The SMP core reports it through
+ * BtSmpBondStoreFailed rather than swallowing it.
+ *
+ * @param	ConnHdl	Connection handle naming the peer.
+ * @param	pKeys	Key set to store.
+ *
+ * @return	true if the record is stored.
+ */
+bool BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys);
+
+/**
+ * @brief	The bond store refused to keep the record for this link.
+ *
+ * Weak, and does nothing by default. The link is encrypted and usable for this
+ * session, so pairing still completes; what is lost is the bond, and only the
+ * application can decide what to do about it, whether that is evicting a stale
+ * record with BtSmpBondErase, telling the user, or dropping the link.
+ *
+ * Vol 3 Part C 9.4.4.2 has bondable devices exchange and store the bonding
+ * information, so a store that refuses leaves this device outside that rule
+ * and the application is the only place that can put it back inside.
+ *
+ * @param	ConnHdl	Connection handle whose bond was not stored.
+ */
+void BtSmpBondStoreFailed(uint16_t ConnHdl);
+
 bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, uint8_t Ltk[16]);
 
 /**

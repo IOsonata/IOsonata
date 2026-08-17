@@ -109,7 +109,12 @@ static uint16_t BtAttGetMtuForConn(uint16_t ConnHdl)
 
 	if (pConn != nullptr && pConn->Conn.MaxMtu >= BT_ATT_MTU_MIN)
 	{
-		return pConn->Conn.MaxMtu;
+		// Clamp here rather than trusting every writer of Conn.MaxMtu. This
+		// value bounds both the size of a response written into the caller's
+		// buffer and the largest request accepted, so the bound has to hold
+		// in this file and not depend on a distant assignment.
+		return pConn->Conn.MaxMtu > BT_ATT_MTU_MAX ?
+				BT_ATT_MTU_MAX : pConn->Conn.MaxMtu;
 	}
 
 	return s_AttMtu;
@@ -831,6 +836,50 @@ static uint8_t BtAttReadPermError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry)
 	}
 
 	return BtAttAccessSecurityError(ConnHdl, pEntry, true);
+}
+
+// Validate a whole Set Of Handles before any of it is read.
+//
+// Core Vol 3 Part F 3.4.4.7 and 3.4.4.11 both say an Error Response is due if
+// any of the handles are invalid, and again if any of the attribute values
+// cannot be read due to permissions. Both handlers used to check each handle
+// as they emitted its value and stop once the response was full, so a request
+// that overflowed the MTU was answered with a response while later handles in
+// the set were never looked at. A client could name one readable attribute
+// large enough to fill the MTU followed by any number of handles it has no
+// permission for, or that do not exist, and get a success.
+//
+// The values still truncate at the MTU, which is what 3.4.4.8 and 3.4.4.12
+// require. It is the checking that has to cover the whole set.
+//
+// Answers the error code and, through pErrHdl, the handle of the first
+// attribute causing it, which is what the Attribute Handle In Error field
+// holds. Handles are read a byte at a time so the same walk serves both PDUs
+// whatever the request buffer's alignment.
+static uint8_t BtAttReadMultipleValidate(uint16_t ConnHdl,
+										 const uint8_t *pHdl, int NbHdl,
+										 uint16_t *pErrHdl)
+{
+	for (int i = 0; i < NbHdl; i++)
+	{
+		uint16_t hdl = (uint16_t)(pHdl[i * 2] | (pHdl[i * 2 + 1] << 8));
+		BtAttDBEntry_t *pEntry = BtAttDBFindHandle(hdl);
+
+		if (pEntry == nullptr)
+		{
+			*pErrHdl = hdl;
+			return BT_ATT_ERROR_INVALID_HANDLE;
+		}
+
+		uint8_t err = BtAttReadPermError(ConnHdl, pEntry);
+		if (err != 0)
+		{
+			*pErrHdl = hdl;
+			return err;
+		}
+	}
+
+	return 0;
 }
 
 static uint8_t BtAttWritePermError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
@@ -1589,6 +1638,8 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 	DEBUG_PRINTF("ATT OpCode %x, L2Cap len %d\n", pReqAtt->OpCode, ReqLen);
 
+	uint16_t rspMtu = BtAttGetMtuForConn(ConnHdl);
+
 	// Reject malformed PDUs before any field is parsed. ReqLen counts the opcode
 	// byte plus all parameters; a PDU shorter than the size its opcode requires
 	// would read handles/lengths past the end of the received L2CAP buffer, and
@@ -1624,7 +1675,16 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 			default:										minLen = 1; break;
 		}
 
-		bool bad = ReqLen < minLen || (exactLen != 0 && ReqLen != exactLen);
+		// ATT_MTU is the maximum size of any packet sent between a client and
+		// a server (Vol 3 Part F 3.2.8), and the variable length parameter of
+		// each PDU in 3.4 is given as at most (ATT_MTU - X) octets. The
+		// reassembly path in BtHciProcessData hands up an L2CAP PDU as large
+		// as the HCI buffer allows, which on the minimum 23 octet link is
+		// eleven times the MTU, so the upper bound has to be checked here.
+		// Without it a Prepare Write Request echoes a value the caller's
+		// response buffer cannot hold.
+		bool bad = ReqLen < minLen || ReqLen > (int)rspMtu ||
+				   (exactLen != 0 && ReqLen != exactLen);
 
 		// Both Read Multiple forms carry a list of whole 16-bit handles, so a
 		// trailing odd byte is malformed however long the list is.
@@ -1651,8 +1711,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 		}
 	}
 
-	uint16_t rspMtu = BtAttGetMtuForConn(ConnHdl);
-
 	switch (pReqAtt->OpCode)
 	{
 		case BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ:
@@ -1678,7 +1736,8 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				// setting and one peer's value must not leak into other links.
 				uint16_t serverRxMtu = BT_ATT_MTU_MAX;
 				uint16_t peerRxMtu   = pReqAtt->ExchgMtuReqRsp.RxMtu;
-				uint16_t linkMtu     = peerRxMtu < serverRxMtu ? peerRxMtu : serverRxMtu;
+				uint16_t linkMtu     = BtAttMtuNegotiated(peerRxMtu,
+											serverRxMtu);
 
 				pRspAtt->ExchgMtuReqRsp.RxMtu = serverRxMtu;
 
@@ -2071,6 +2130,21 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				DEBUG_PRINTF("BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ (0x0E)\r\n");
 				int nhdl = (ReqLen - 1) >> 1;
+
+				// Every handle in the set first, whatever the response has
+				// room for. Emitting and checking in one pass stopped checking
+				// where the response filled up.
+				uint16_t errHdl = 0;
+				uint8_t setErr = BtAttReadMultipleValidate(ConnHdl,
+					(const uint8_t*)pReqAtt->ReadMultipleReq.Hdl, nhdl,
+					&errHdl);
+				if (setErr != 0)
+				{
+					retval = BtAttError(pRspAtt, errHdl,
+						BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ, setErr);
+					break;
+				}
+
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_MULTIPLE_RSP;
 				uint8_t *p = pRspAtt->ReadMultipleRsp.Data;
 				retval = 1;
@@ -2082,18 +2156,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				for (int i = 0; i < nhdl && retval < rspMtu; i++)
 				{
 					BtAttDBEntry_t *entry = BtAttDBFindHandle(pReqAtt->ReadMultipleReq.Hdl[i]);
-					if (entry == nullptr)
-					{
-						retval = BtAttError(pRspAtt, pReqAtt->ReadMultipleReq.Hdl[i], BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
-						break;
-					}
-					uint8_t err = BtAttReadPermError(ConnHdl, entry);
-					if (err != 0)
-					{
-						retval = BtAttError(pRspAtt, pReqAtt->ReadMultipleReq.Hdl[i],
-											BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ, err);
-						break;
-					}
 
 					// Cap each value at the space remaining in the response
 					// buffer (MTU - bytes already written), not the full MTU,
@@ -2515,27 +2577,25 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					break;
 				}
 
+				// Every handle in the set first, whatever the response has room
+				// for, the same as the fixed length form above.
+				uint16_t errHdl = 0;
+				uint8_t setErr = BtAttReadMultipleValidate(ConnHdl, hdlp,
+					hdlBytes >> 1, &errHdl);
+				if (setErr != 0)
+				{
+					retval = BtAttError(pRspAtt, errHdl,
+						BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ, setErr);
+					break;
+				}
+
+				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_RSP;
+
 				while (hdlBytes > 0 && l + 3 <= rspMtu)
 				{
 					uint16_t curHdl = (uint16_t)(hdlp[0] | (hdlp[1] << 8));
 					BtAttDBEntry_t *entry = BtAttDBFindHandle(curHdl);
 
-					if (entry == nullptr)
-					{
-						retval = BtAttError(pRspAtt, curHdl,
-											BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ,
-											BT_ATT_ERROR_INVALID_HANDLE);
-						break;
-					}
-					uint8_t err = BtAttReadPermError(ConnHdl, entry);
-					if (err != 0)
-					{
-						retval = BtAttError(pRspAtt, curHdl,
-											BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ, err);
-						break;
-					}
-
-					pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_RSP;
 					uint16_t space = (uint16_t)(rspMtu - 1 - l - 2);	// MTU - opcode - existing payload - length field
 					// The Length field holds the complete attribute value
 					// length, even when the value is truncated to fit (Vol 3
@@ -2559,21 +2619,13 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					}
 				}
 
-				if (retval != 0 && pRspAtt->OpCode == BT_ATT_OPCODE_ATT_ERROR_RSP)
-				{
-					break;
-				}
-				else if (l > 0)
-				{
-					retval = l + 1;
-				}
-				else
-				{
-					retval = BtAttError(pRspAtt,
-										pReqAtt->ReadMultipleVarReq.Hdl[0],
-										BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ,
-										BT_ATT_ERROR_ATT_NOT_FOUND);
-				}
+				// The validation above already answered every way the set can
+				// fail, and it left at least two handles with an ATT_MTU of at
+				// least 23 to put them in, so the loop ran and l names real
+				// tuples. The error and empty branches that used to be here
+				// were the loop's way of reporting a bad handle and are gone
+				// with it.
+				retval = l + 1;			// tuples plus the opcode
 			}
 			break;
 		case BT_ATT_OPCODE_ATT_MULTIPLE_HANDLE_VALUE_NTF:

@@ -167,13 +167,16 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ProductVer = 0,
 	.Appearance = BT_APPEAR_UNKNOWN_GENERIC,
 	.pDevInfo = &s_SmpDevInfo,
-	.bExtAdv = false,
 	.pAdvManData = g_ManData,
 	.AdvManDataLen = sizeof(g_ManData),
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
 	.SecType = BTGAP_SECTYPE_STATICKEY_NO_MITM,	// Just Works pairing + bonding
-	.SecExchg = BTAPP_SECEXCHG_KEYBOARD,		// distribute keys (IRK/CSRK)
+	// SecExchg selects the IO capability, not the keys to distribute. This
+	// board has neither a keyboard nor a display, so it says so: KEYBOARD here
+	// advertises Keyboard Only, and a peer that asks for MITM would then be
+	// offered Passkey Entry and left waiting for digits nobody can type.
+	.SecExchg = BTAPP_SECEXCHG_NONE,
 	.bCompleteUuidList = true,
 	.pAdvUuid = &s_AdvUuid,
 	.AdvInterval = APP_ADV_INTERVAL,

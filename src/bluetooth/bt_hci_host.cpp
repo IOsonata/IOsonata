@@ -42,6 +42,7 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_scan.h"
+#include "bluetooth/bt_psync.h"
 #include "istddef.h"
 #include "syslog.h"
 
@@ -506,20 +507,57 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				}
 			}
 			break;
+		// Periodic advertising sync. The parsing, the report reassembly and
+		// the application hooks are in bt_psync.cpp, which needs no HCI
+		// device, so what happens here is bounding the payload and saying
+		// which version of the event arrived. The V2 forms carry extra fields
+		// and, for the report, carry them in the middle rather than at the
+		// end, so the version cannot be inferred from the length.
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V1:
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V2:
+			BtPsyncEvtEstablished(pLeEvtPkt->Data,
+				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data),
+				pLeEvtPkt->Evt == BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V2);
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V1:
 		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V2:
+			BtPsyncEvtReport(pLeEvtPkt->Data,
+				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data),
+				pLeEvtPkt->Evt == BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V2);
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_LOST:
+			BtPsyncEvtLost(pLeEvtPkt->Data,
+				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data));
 			break;
 		case BT_HCI_EVT_LE_SCAN_TIMEOUT:
 			break;
 		case BT_HCI_EVT_LE_ADV_SET_TERMINATED:
-			if (pDev->AdvTimeout)
 			{
-				pDev->AdvTimeout();
+				// Vol 4 Part E 7.7.65.18: Status says why the set stopped.
+				// Success means a connection was created, which is not a
+				// timeout; Advertising Timeout (0x3C) is the duration
+				// elapsing and Limit Reached (0x43) is the advertising event
+				// count being met. Dispatching whatever the Status was ran the
+				// application's advertising timeout handler on every
+				// successful connection, so an application that restarts
+				// advertising from it fought the connection it had just made.
+				//
+				// Any other status also means advertising stopped without a
+				// connection, which is the case the handler exists for, so the
+				// gate is on success rather than on the two named codes.
+				if ((const uint8_t*)pLeEvtPkt->Data +
+					sizeof(BtHciLeEvtAdvSetTerminated_t) > evtEnd)
+				{
+					break;
+				}
+
+				BtHciLeEvtAdvSetTerminated_t *p =
+					(BtHciLeEvtAdvSetTerminated_t*)pLeEvtPkt->Data;
+
+				if (p->Status != BT_HCI_SUCCESS && pDev->AdvTimeout)
+				{
+					pDev->AdvTimeout();
+				}
 			}
 			break;
 		case BT_HCI_EVT_LE_SCAN_RQST_RECEIVED:
@@ -561,6 +599,17 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		case BT_HCI_EVT_LE_BIGINFO_ADV_REPORT:
 			break;
 		case BT_HCI_EVT_LE_SUBRATE_CHANGE:
+			break;
+		// Periodic Advertising with Responses. The data request goes to the
+		// advertiser and the response report to the device that advertised
+		// the subevent, so both belong to a train this device transmits.
+		case BT_HCI_EVT_LE_PERIODIC_ADV_DATA_REQ:
+			BtPsyncEvtDataRequest(pLeEvtPkt->Data,
+				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data));
+			break;
+		case BT_HCI_EVT_LE_PERIODIC_ADV_RESP_REPORT:
+			BtPsyncEvtResponseReport(pLeEvtPkt->Data,
+				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data));
 			break;
 	}
 }
@@ -787,11 +836,22 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 		case BT_HCI_EVT_INQUERY_RESULT:
 			break;
 		case BT_HCI_EVT_CONN_COMPLETE:
-		{
-			BtHciEvtConnCompete_t *p = (BtHciEvtConnCompete_t *) pEvtPkt->Data;
-			DEBUG_PRINTF("BtHciProcessEvent: ConnectionComplete, Status = %d (0x%x) \r\n",
-									p->Status, p->Status);
-		}
+			{
+				// Status(1) + ConnHdl(2) + Addr(6) + LinkType(1) + Encrypt(1).
+				// Only the trace reads the event today, and the disabled form
+				// of DEBUG_PRINTF never evaluates its arguments, so the read
+				// past a short packet exists only in a DEBUG_ENABLE build. The
+				// guard is here because the next reader of this event will not
+				// know that, and every neighbouring case already has one.
+				if (pEvtPkt->Hdr.Len < sizeof(BtHciEvtConnCompete_t))
+				{
+					break;
+				}
+
+				BtHciEvtConnCompete_t *p = (BtHciEvtConnCompete_t *) pEvtPkt->Data;
+				DEBUG_PRINTF("BtHciProcessEvent: ConnectionComplete, Status = %d (0x%x) \r\n",
+										p->Status, p->Status);
+			}
 			break;
 		case BT_HCI_EVT_CONN_REQUEST:
 			break;
@@ -1217,6 +1277,15 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 		case BT_L2CAP_CID_ATT:
 		{
 			//DEBUG_PRINTF("BT_L2CAP_CID_ATT\r\n");
+
+			// BtAttProcessReq sizes every response to the link ATT_MTU, which
+			// it clamps to BT_ATT_MTU_MAX. That bound only protects this
+			// buffer while the buffer can still hold such a response behind
+			// both headers, so tie the two together at compile time.
+			static_assert(BT_ATT_MTU_MAX + sizeof(BtHciACLDataPacketHdr_t) +
+						  sizeof(BtL2CapHdr_t) <= BT_HCI_BUFFER_MAX_SIZE,
+						  "BT_HCI_BUFFER_MAX_SIZE cannot hold a BT_ATT_MTU_MAX response");
+
 			uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
 			BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
 			BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;

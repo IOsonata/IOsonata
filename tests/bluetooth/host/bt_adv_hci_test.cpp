@@ -117,8 +117,11 @@ BtAppCfg_t MakePeripheralCfg()
 }
 
 // SET_EXT_ADV_PARAM parameter layout: AdvHandle(1) EvtProp(2) PrimIntMin(3)
-// PrimIntMax(3) PrimChanMap(1) OwnAddrType(1) ...
+// PrimIntMax(3) PrimChanMap(1) OwnAddrType(1) PeerAddrType(1) PeerAddr(6)
+// FilterPolicy(1) TxPower(1) PrimPhy(1) SecMaxSkip(1) SecPhy(1) ...
 constexpr size_t kAdvOwnAddr = 10;
+constexpr size_t kAdvPrimPhy = 20;
+constexpr size_t kAdvSecPhy = 22;
 
 // ---- G2: own-address type and static random validation -------------------
 
@@ -278,6 +281,170 @@ void TestManDataCompanyIdLittleEndian()
 	}
 }
 
+
+
+// --- Advertising Coding Selection ----------------------------------------
+
+int CountCmd(uint16_t OpCode)
+{
+	int n = 0;
+
+	for (int i = 0; i < s_CmdCount; i++)
+	{
+		if (s_Cmds[i].OpCode == OpCode)
+		{
+			n++;
+		}
+	}
+
+	return n;
+}
+
+// 7.8.53 [v2] is a separate opcode from [v1] and appends
+// Primary_Advertising_PHY_Options and Secondary_Advertising_PHY_Options. A
+// set asking for neither keeps [v1], which a controller predating Core 5.4
+// accepts.
+void TestCodingSelectionUsesTheV2Opcode()
+{
+	uint8_t addr[6] = {};
+	BtAppCfg_t cfg = MakePeripheralCfg();
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtAdvCodingSet(BTADV_PHY_OPT_NONE, BTADV_PHY_OPT_NONE));
+	CHECK(BtAppAdvInit(&cfg) == true);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM) == 1);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2) == 0);
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	// The PHY has to be LE Coded first. 7.8.53 has the controller ignore the
+	// options otherwise, so a coding asked for on 1M or 2M never reaches air.
+	CHECK(BtAdvPhySet(BTADV_EXTADV_PHY_CODED, BTADV_EXTADV_PHY_CODED));
+	CHECK(BtAdvCodingSet(BTADV_PHY_OPT_REQUIRE_S8, BTADV_PHY_OPT_PREFER_S2));
+	CHECK(BtAppAdvInit(&cfg) == true);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM) == 0);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2) == 1);
+
+	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		// The 25 octets of [v1] then the two options.
+		CHECK(c->ParamLen == 27);
+		CHECK(c->Param[25] == BTADV_PHY_OPT_REQUIRE_S8);
+		CHECK(c->Param[26] == BTADV_PHY_OPT_PREFER_S2);
+		// The PHY octets carry LE Coded, which is what makes the two options
+		// above mean anything to the controller.
+		CHECK(c->Param[kAdvPrimPhy] == BTADV_EXTADV_PHY_CODED);
+		CHECK(c->Param[kAdvSecPhy] == BTADV_EXTADV_PHY_CODED);
+		// What comes before them is the [v1] layout untouched, so the own
+		// address type is still where the other cases look for it.
+		CHECK(c->Param[0] == 0);
+		CHECK(c->Param[kAdvOwnAddr] == BTADDR_TYPE_PUBLIC);
+	}
+
+	// Back to none restores [v1] and the default PHY pair.
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtAdvCodingSet(BTADV_PHY_OPT_NONE, BTADV_PHY_OPT_NONE));
+	CHECK(BtAdvPhySet(BTADV_EXTADV_PHY_1M, BTADV_EXTADV_PHY_2M));
+	CHECK(BtAppAdvInit(&cfg) == true);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM) == 1);
+
+	const CapturedCmd *v1 = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
+	CHECK(v1 != nullptr);
+	if (v1 != nullptr)
+	{
+		CHECK(v1->Param[kAdvPrimPhy] == BTADV_EXTADV_PHY_1M);
+		CHECK(v1->Param[kAdvSecPhy] == BTADV_EXTADV_PHY_2M);
+	}
+}
+
+// A coding is meaningless off LE Coded, so asking for one there is refused
+// rather than accepted and dropped by the controller without a word.
+void TestCodingNeedsTheCodedPhy()
+{
+	uint8_t addr[6] = {};
+	BtAppCfg_t cfg = MakePeripheralCfg();
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtAdvPhySet(BTADV_EXTADV_PHY_1M, BTADV_EXTADV_PHY_2M));
+	CHECK(BtAdvCodingSet(BTADV_PHY_OPT_REQUIRE_S8, BTADV_PHY_OPT_NONE) == false);
+	CHECK(BtAdvCodingSet(BTADV_PHY_OPT_NONE, BTADV_PHY_OPT_PREFER_S2) == false);
+
+	// Refused, so the set still goes out as [v1] on the PHYs asked for.
+	CHECK(BtAppAdvInit(&cfg) == true);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM) == 1);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2) == 0);
+
+	// 2M cannot carry an ADV_EXT_IND, so it is not a legal primary PHY.
+	CHECK(BtAdvPhySet(BTADV_EXTADV_PHY_2M, BTADV_EXTADV_PHY_2M) == false);
+	CHECK(BtAdvPhySet(0, BTADV_EXTADV_PHY_2M) == false);
+	CHECK(BtAdvPhySet(BTADV_EXTADV_PHY_1M, 0) == false);
+
+	// A refused PHY leaves the previous pair in place.
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtAppAdvInit(&cfg) == true);
+
+	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		CHECK(c->Param[kAdvPrimPhy] == BTADV_EXTADV_PHY_1M);
+		CHECK(c->Param[kAdvSecPhy] == BTADV_EXTADV_PHY_2M);
+	}
+}
+
+// Only 0x00 to 0x04 are defined. A reserved value is refused here rather than
+// sent for the controller to answer with one status byte.
+void TestCodingOptionRangeIsChecked()
+{
+	uint8_t addr[6] = {};
+	BtAppCfg_t cfg = MakePeripheralCfg();
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtAdvCodingSet(BTADV_PHY_OPT_MAX + 1, BTADV_PHY_OPT_NONE) == false);
+	CHECK(BtAdvCodingSet(BTADV_PHY_OPT_NONE, BTADV_PHY_OPT_MAX + 1) == false);
+	CHECK(s_CmdCount == 0);
+
+	// A refused call leaves the previous choice alone, so this still sends
+	// [v1] rather than a command built from a rejected value.
+	CHECK(BtAppAdvInit(&cfg) == true);
+	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM) == 1);
+}
+
+// The host support bit goes through LE Set Host Feature. Without it a PHY of
+// 0x03 means LE Coded with the controller choosing the coding, so the options
+// above have no effect on air.
+void TestCodingSelectionHostFeatureBit()
+{
+	uint8_t addr[6] = {};
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtAdvCodingSelectionEnable(true));
+
+	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_SET_HOST_FEATURE);
+	CHECK(c != nullptr);
+	if (c != nullptr)
+	{
+		// 7.8.115: Bit_Number(1) Bit_Value(1). Bit 41 is Advertising Coding
+		// Selection (Host Support) in the Vol 6 Part B 4.6 FeatureSet.
+		CHECK(c->ParamLen == 2);
+		CHECK(c->Param[0] == 41);
+		CHECK(c->Param[0] == BTADV_FEATURE_BIT_CODING_SELECTION);
+		CHECK(c->Param[1] == 1);
+	}
+
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	CHECK(BtAdvCodingSelectionEnable(false));
+	c = FindCmd(BT_HCI_CMD_CTLR_SET_HOST_FEATURE);
+	CHECK(c != nullptr && c->Param[1] == 0);
+
+	// A controller without the feature answers Unsupported Feature or
+	// Parameter Value, which is passed up rather than assumed away.
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	s_FailOpCode = BT_HCI_CMD_CTLR_SET_HOST_FEATURE;
+	CHECK(BtAdvCodingSelectionEnable(true) == false);
+}
+
 } // namespace
 
 extern "C" {
@@ -301,6 +468,10 @@ int main()
 	TestAdvDegenerateRandomIdentity();
 	TestAdvStopKeepsStateOnFailure();
 	TestAdvManDataSetReportsRestartFailure();
+	TestCodingSelectionUsesTheV2Opcode();
+	TestCodingNeedsTheCodedPhy();
+	TestCodingOptionRangeIsChecked();
+	TestCodingSelectionHostFeatureBit();
 
 	if (s_Failures != 0)
 	{

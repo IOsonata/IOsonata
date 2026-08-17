@@ -266,7 +266,7 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE, uint8_t, bool)
 
 int main()
 {
-	bttest::Context ctx("nRF54 BM BtAppInit contract tests");
+	bttest::Context ctx("nRF54 BM BtAppInit sequence tests");
 
 	ctx.Run("full secure initialization", [&]() {
 		ResetHarness();

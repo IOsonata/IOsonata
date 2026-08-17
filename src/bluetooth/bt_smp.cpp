@@ -478,29 +478,6 @@ static void SmpLinkFree(uint16_t ConnHdl)
 	}
 }
 
-// Wipe pairing/key material after a failed attempt but keep the slot bound to
-// the connection along with the repeated-attempts counter and lock flag, so
-// FailCount accumulates across attempts on the same connection (the record is
-// only fully freed by BtSmpDisconnected). Preserves the security property of
-// SmpLinkFree - no key material survives - without losing the counter.
-static void SmpLinkResetKeepCount(BtSmpLink_t *pLink)
-{
-	uint16_t hdl       = pLink->ConnHdl;
-	uint32_t generation = pLink->Generation;
-	uint8_t  fc        = pLink->Ctx.FailCount;
-	bool     locked    = pLink->Ctx.bLocked;
-
-	SmpOobRelease(pLink);
-	SmpEcdhCtxReset(pLink->Ctx.EcdhKeyCtx);
-	CryptoSecureWipe(&pLink->Ctx, sizeof(pLink->Ctx));
-
-	pLink->ConnHdl       = hdl;
-	pLink->Generation    = generation;
-	pLink->Ctx.FailCount = fc;
-	pLink->Ctx.bLocked   = locked;
-	pLink->Ctx.State     = BT_SMP_STATE_IDLE;
-}
-
 //-----------------------------------------------------------------------------
 // Pairing timeout (Core Vol 3 Part H 3.4)
 //-----------------------------------------------------------------------------
@@ -559,6 +536,36 @@ static void SmpAbortOffPhase(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	BtSmpPairingComplete(ConnHdl, false, nullptr);
 }
 
+// Send Pairing Failed for a reason of the caller's choosing and drop the local
+// half of the attempt with it.
+//
+// A Pairing Failed ends the pairing for the peer, so keeping this side's
+// context alive afterwards leaves the attempt half dead: the DHKey, the MacKey
+// and the derived LTK sit in the link context with no exchange left to use
+// them. Nothing reclaims that except the pairing timeout, and BtSmpMsTick is
+// weak and answers zero by default, so on a port that does not override it
+// SmpPairingTimedOut can never fire and the material is held until the link
+// drops.
+//
+// Only an attempt in progress is dropped. An idle link has nothing to drop,
+// and a link in DONE holds the record of a pairing that already completed,
+// which a reconnect answers its LTK request from; wiping that would turn a
+// stray PDU into a lost bond.
+static void SmpFailAndDropAttempt(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+								  BtSmpLink_t *pLink, uint8_t Reason)
+{
+	SmpSendFailed(pDev, ConnHdl, Reason);
+
+	if (pLink == nullptr || pLink->Ctx.State == BT_SMP_STATE_IDLE ||
+		pLink->Ctx.State == BT_SMP_STATE_DONE)
+	{
+		return;
+	}
+
+	SmpAbortPairing(pLink);
+	BtSmpPairingComplete(ConnHdl, false, nullptr);
+}
+
 //-----------------------------------------------------------------------------
 // Outbound packet helpers
 //-----------------------------------------------------------------------------
@@ -609,9 +616,24 @@ static void SmpSend(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 				  pLink ? (int)pLink->Ctx.State : -1);
 }
 
+// Send Pairing Failed. This transmits and nothing else.
+//
+// It used to release the link's OOB reservation as well, which conflated
+// sending the PDU with ending the pairing. They are not the same: several
+// sites answer a PDU they will not act on and deliberately leave a running
+// pairing alone, and every one of them destroyed the OOB material on the way
+// past. A peer could break a legitimate OOB pairing that was about to succeed
+// by sending any unrecognised code, or a second Pairing Request, or a Security
+// Request in the wrong direction. The pairing then ran on with the randoms and
+// confirms wiped and failed later at the DHKey check, which names a cause
+// nowhere near the real one.
+//
+// Releasing belongs to the paths that end the pairing, and it is already there:
+// SmpAbortPairing releases before it wipes the context, SmpLinkFree does it on
+// disconnect, and BtSmpEncryptionChanged does it once an OOB pairing has
+// succeeded. Every site here that ends the attempt calls one of those.
 static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t Reason)
 {
-	SmpOobRelease(SmpLinkFind(ConnHdl));
 	BtSmpPairingFailed_t f;
 	f.Code = BT_SMP_CODE_PAIRING_FAILED;
 	f.Reason = Reason;
@@ -2355,6 +2377,11 @@ static void SmpHandleIdAddrInfo(BtSmpLink_t *pLink, const BtSmpIdAddrInfo_t *pIn
 	// IRK. BtSmpBondAdd keys the slot by the connection address (not this
 	// identity address), so the refresh updates the same slot the lookup will
 	// match on reconnect.
+	// The result is not reported here. This refreshes a record whose creation
+	// was already attempted at encryption change: if that succeeded this finds
+	// the same slot by address and succeeds too, and if it refused the
+	// application has already been told once. Reporting again per key would
+	// say nothing new.
 	if (pLink->Keys.bValid)
 	{
 		BtSmpBondAdd(pLink->ConnHdl, &pLink->Keys);
@@ -2364,6 +2391,7 @@ static void SmpHandleIdAddrInfo(BtSmpLink_t *pLink, const BtSmpIdAddrInfo_t *pIn
 static void SmpHandleSigningInfo(BtSmpLink_t *pLink, const BtSmpSigningInfo_t *pInfo)
 {
 	memcpy(pLink->Keys.Csrk, pInfo->Csrk, 16);
+	// Same refresh, same reason for not reporting it again.
 	if (pLink->Keys.bValid)
 	{
 		BtSmpBondAdd(pLink->ConnHdl, &pLink->Keys);
@@ -2470,7 +2498,8 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		{
 			DEBUG_PRINTF("SMP reject short PDU code=0x%02x len=%u need=%u\r\n",
 					  pSmp->Code, (unsigned)Len, (unsigned)minLen);
-			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
+			SmpFailAndDropAttempt(pDev, ConnHdl, pLink,
+								  BT_SMP_ERR_INVALID_PARAMS);
 			return;
 		}
 	}
@@ -2495,7 +2524,8 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 				DEBUG_PRINTF("SMP drop key-dist code 0x%02x (secure=%d state=%d)\r\n",
 						  pSmp->Code, (pKdPeer != nullptr) && pKdPeer->bSecure,
 						  (int)pLink->Ctx.State);
-				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+				SmpFailAndDropAttempt(pDev, ConnHdl, pLink,
+									  BT_SMP_ERR_UNSPECIFIED);
 				return;
 			}
 			break;
@@ -2683,8 +2713,42 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			BtSmpStartPairing(ConnHdl);
 			break;
 
+		case BT_SMP_CODE_PAIRING_KEYPRESS_NOTIF:
+			// Vol 3 Part H 3.5.8: sent during Passkey Entry by a device with
+			// KeyboardOnly IO capabilities to say a key was entered or erased.
+			// It holds no state this side acts on and draws no reply.
+			//
+			// 3.4 asks for the Security Manager Timer to be reset on reception,
+			// and says why: a Keypress Notification has no response, so without
+			// the reset this side can time the pairing out before the peer's
+			// Security Manager does. A user typing a passkey is exactly the
+			// case where the 30 seconds runs out.
+			//
+			// It had no case, so it reached the default and was answered
+			// Pairing Failed with Command Not Supported, which ends a Passkey
+			// Entry pairing with a peer doing nothing wrong. 3.3 leaves no room
+			// for that: "If pairing is supported then all commands shall be
+			// supported."
+			//
+			// The length is not checked. The Notification Type octet is never
+			// read, and refusing a short one would put back the failure this
+			// removes.
+			DEBUG_PRINTF("SMP RX Keypress\r\n");
+			pLink->Ctx.TmrStart = BtSmpMsTick();
+			break;
+
 		default:
-			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CMD_NOT_SUPPORTED);
+			// Vol 3 Part H 3.3: "If a packet is received with a Code that is
+			// reserved for future use it shall be ignored." Table 3.3 defines
+			// 0x01 to 0x0E and reserves every other value, and each defined
+			// code now has a case above, so everything arriving here is
+			// reserved.
+			//
+			// This used to answer Pairing Failed with Command Not Supported,
+			// which is a PDU the spec says must not be sent, and which took
+			// the link's OOB material with it through SmpSendFailed. One byte
+			// from a peer was enough.
+			DEBUG_PRINTF("SMP ignore reserved code 0x%02x\r\n", pSmp->Code);
 			break;
 	}
 }
@@ -2984,9 +3048,18 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 				else
 				{
 					// Encrypted with no key record and no stored bond. The
-					// key properties are unknown; report the floor.
+					// key properties are unknown; report the floor. The
+					// authentication level floors at ENC_UNAUTH, and the key
+					// size floors at zero, which is what bt_att uses for a
+					// link with no security state at all and what bt_gatt_hci
+					// reads as "size not reported". Naming the maximum here
+					// instead let an attribute permitted only on a 16 octet
+					// key be served over a link whose key size is unknown and
+					// may be as short as seven octets; a legacy bond matched
+					// by EDIV and Rand while its peer address does not resolve
+					// reaches exactly this branch.
 					sec.Level = BT_GAP_SEC_LEVEL_ENC_UNAUTH;
-					sec.KeySize = BT_SMP_MAX_ENC_KEY_SIZE;
+					sec.KeySize = 0;
 				}
 				CryptoSecureWipe(&keys, sizeof(keys));
 			}
@@ -3021,13 +3094,29 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	if (pLink->Ctx.State == BT_SMP_STATE_LTK_WAIT)
 	{
 		// Encrypted via fresh pairing. Run the key distribution phase that was
-		// negotiated. The local device distributes the keys it offered:
-		// InitiatorKeyDist (PReq[6 of req = byte 5]) when we are the central,
-		// ResponderKeyDist (PRsp[6]) when we are the peripheral. For SC the LTK
-		// is derived (EncKey is never distributed); we send IRK + identity
-		// address (IDKEY) and/or CSRK (SIGNKEY) only if negotiated.
+		// negotiated.
+		//
+		// Both key distribution fields are negotiated across the two PDUs: the
+		// initiator names a set in the Pairing Request (byte 5 Initiator, byte
+		// 6 Responder) and the responder answers in the Pairing Response with
+		// the subset it accepts. The set actually agreed for a field is
+		// therefore the two octets intersected, which holds whatever a peer
+		// puts in either PDU. This device distributes the Initiator field when
+		// it initiated and the Responder field when it did not.
+		//
+		// Taking the local set from the Pairing Request alone made the
+		// responder's answer advisory: a responder that cleared SignKey from
+		// the offer was still sent Signing Information, and one that cleared
+		// IdKey was still sent the local IRK and identity address. Phones do
+		// clear these.
+		//
+		// For SC the LTK is derived (EncKey is never distributed); we send IRK
+		// + identity address (IDKEY) and/or CSRK (SIGNKEY) only if negotiated.
+		uint8_t initKeyDist = pLink->Ctx.PReq[5] & pLink->Ctx.PRsp[5];
+		uint8_t respKeyDist = pLink->Ctx.PReq[6] & pLink->Ctx.PRsp[6];
+
 		uint8_t localKeyDist = (pLink->Ctx.bInitiator ?
-									pLink->Ctx.PReq[5] : pLink->Ctx.PRsp[6]) &
+									initKeyDist : respKeyDist) &
 							   (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY);
 		DEBUG_PRINTF("SMP encrypted, distribute lk=%02x init=%d\r\n",
 				  localKeyDist, pLink->Ctx.bInitiator ? 1 : 0);
@@ -3082,15 +3171,14 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			CryptoSecureWipe(csrk, sizeof(csrk));
 		}
 
-		// Compute which keys the peer will distribute in return. The negotiated
-		// key-distribution fields live in the Pairing Response (byte 5 =
-		// InitiatorKeyDist, byte 6 = ResponderKeyDist): the peer sends the field
-		// for its own role. While those are still outstanding the link sits in
+		// Compute which keys the peer will distribute in return: the other
+		// field of the same negotiated pair, the peer sending the one for its
+		// own role. While those are still outstanding the link sits in
 		// KEYDIST, the only state in which the H4 gate accepts inbound
 		// key-distribution PDUs; once all have arrived SmpKeyDistReceived moves it
 		// to DONE. If the peer distributes nothing, go straight to DONE.
 		uint8_t peerKeyDist = (pLink->Ctx.bInitiator ?
-									pLink->Ctx.PRsp[6] : pLink->Ctx.PRsp[5]) &
+									respKeyDist : initKeyDist) &
 							   (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY);
 		pLink->Ctx.KeyDistExp = peerKeyDist;
 
@@ -3101,7 +3189,20 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		// is incomplete; reporting it now would let an application persist a
 		// bond missing those keys. The completion is raised from
 		// SmpKeyDistReceived once every negotiated peer key has arrived.
-		BtSmpBondAdd(ConnHdl, &pLink->Keys);
+		//
+		// A store that refuses, the table being full being the ordinary
+		// reason, used to be swallowed: the call returned nothing and the
+		// pairing was reported complete anyway. The peer then holds a bond
+		// this device does not, offers its LTK on the next connection, and is
+		// answered with a negative reply. The link here is genuinely encrypted
+		// and usable, so the pairing still completes; what the application is
+		// told is that the bond was not kept, which is the only thing it can
+		// act on.
+		if (BtSmpBondAdd(ConnHdl, &pLink->Keys) == false)
+		{
+			DEBUG_PRINTF("SMP bond store refused for hdl %d\r\n", ConnHdl);
+			BtSmpBondStoreFailed(ConnHdl);
+		}
 
 		// OOB material is single use and is wiped after the link is secured.
 		if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
@@ -3162,10 +3263,23 @@ bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, uint8_t 
 }
 
 __attribute__((weak))
-void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
+bool BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 {
 	(void)ConnHdl;
 	(void)pKeys;
+
+	// No store linked. Nothing was kept, and saying so is what lets the core
+	// report it rather than treat a build with no bond table as a bond.
+	return false;
+}
+
+// Weak: a build with no bond store, or one whose table filled, has nothing to
+// do here by default. An application overrides it to make room or to tell the
+// user.
+__attribute__((weak))
+void BtSmpBondStoreFailed(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
 }
 
 __attribute__((weak))

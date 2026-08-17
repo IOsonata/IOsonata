@@ -158,6 +158,71 @@ int BuildWrite(uint8_t *pReq, uint16_t Hdl, const uint8_t *pVal, int Len)
 	return 3 + Len;
 }
 
+// ---- ATT_MTU negotiation --------------------------------------------------
+
+// Core Vol 3 Part F 3.4.2.2: ATT_MTU is the minimum of the Client Rx MTU and
+// the Server Rx MTU, and each of those has to be at least the default. Every
+// port needs the same answer, and both Nordic ports read it out of the peer
+// slot before sizing a notification, so the rule lives in one place.
+void TestMtuNegotiationRule()
+{
+	CHECK(BtAttMtuNegotiated(100, BT_ATT_MTU_MAX) == 100);
+	CHECK(BtAttMtuNegotiated(BT_ATT_MTU_MAX, 100) == 100);
+	CHECK(BtAttMtuNegotiated(BT_ATT_MTU_MAX, BT_ATT_MTU_MAX) ==
+		BT_ATT_MTU_MAX);
+	CHECK(BtAttMtuNegotiated(BT_ATT_MTU_MIN, BT_ATT_MTU_MAX) ==
+		BT_ATT_MTU_MIN);
+
+	// A peer below the floor broke the same section. Its offer must not
+	// shrink the link under what every ATT PDU may assume.
+	CHECK(BtAttMtuNegotiated(BT_ATT_MTU_MIN - 1, BT_ATT_MTU_MAX) ==
+		BT_ATT_MTU_MIN);
+	CHECK(BtAttMtuNegotiated(0, BT_ATT_MTU_MAX) == BT_ATT_MTU_MIN);
+	CHECK(BtAttMtuNegotiated(1, 1) == BT_ATT_MTU_MIN);
+}
+
+// The server side of the same exchange: the response names what this server
+// can receive, and the link keeps the minimum.
+void TestExchangeMtuRequestRecordsTheLink()
+{
+	BtAttDBInit(1024);
+	BtAttSetMtu(BT_ATT_MTU_MAX);
+	g_PeerEnabled = true;
+	s_StubPeer.Conn.MaxMtu = 0;
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+	BtAttReqRsp_t *req = (BtAttReqRsp_t *)reqbuf;
+	BtAttReqRsp_t *rsp = (BtAttReqRsp_t *)rspbuf;
+
+	req->OpCode = BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ;
+	req->ExchgMtuReqRsp.RxMtu = 100;
+	uint32_t n = BtAttProcessReq(kConnHdl, req, 3, rsp);
+	CHECK(n == 3);
+	CHECK(rsp->OpCode == BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP);
+	CHECK(rsp->ExchgMtuReqRsp.RxMtu == BT_ATT_MTU_MAX);
+	CHECK(s_StubPeer.Conn.MaxMtu == 100);
+
+	// An offer above what this server can receive is capped by it.
+	s_StubPeer.Conn.MaxMtu = 0;
+	req->ExchgMtuReqRsp.RxMtu = 512;
+	CHECK(BtAttProcessReq(kConnHdl, req, 3, rsp) == 3);
+	CHECK(s_StubPeer.Conn.MaxMtu == BT_ATT_MTU_MAX);
+
+	// An offer below the default breaks 3.4.2.2 and this server answers it
+	// with an error rather than negotiating, so the link keeps whatever it
+	// had. The floor in the rule above is for the ports whose stack hands
+	// over the peer's value unchecked.
+	s_StubPeer.Conn.MaxMtu = 100;
+	req->ExchgMtuReqRsp.RxMtu = 10;
+	CHECK(BtAttProcessReq(kConnHdl, req, 3, rsp) == 5);
+	CHECK(rsp->OpCode == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(s_StubPeer.Conn.MaxMtu == 100);
+
+	s_StubPeer.Conn.MaxMtu = 0;
+	g_PeerEnabled = false;
+}
+
 // ---- invalid handles ------------------------------------------------------
 
 void TestInvalidStartHandleAndWriteHandle()
@@ -831,6 +896,141 @@ void TestReadMultiple()
 	CHECK(std::memcmp(rspbuf + 1 + 8, val[2], 4) == 0);
 }
 
+// Core Vol 3 Part F 3.4.4.7 and 3.4.4.11: an Error Response is due if any of
+// the handles are invalid, and again if any of the values cannot be read due
+// to permissions. Both handlers used to check a handle only as they emitted
+// its value and stop once the response was full, so a client could name one
+// readable attribute large enough to fill the MTU and follow it with anything
+// at all and get a success.
+void TestReadMultipleValidatesEveryHandle()
+{
+	BtAttDBInit(2048);
+	BtAttSetMtu(BT_ATT_MTU_MIN);		// 23
+
+	// One 20-octet value fills the response on its own.
+	BtChar_t big;
+	uint8_t bigVal[20];
+	for (int i = 0; i < 20; ++i) bigVal[i] = (uint8_t)(0xB0 + i);
+	BtAttDBEntry_t *eBig =
+		AddCharValue(&big, bigVal, 20, 20, BT_GATT_CHAR_PROP_READ);
+	CHECK(eBig != nullptr);
+
+	// A second attribute the client may not read.
+	BtChar_t closed;
+	uint8_t closedVal[4] = { 9, 9, 9, 9 };
+	BtAttDBEntry_t *eClosed =
+		AddCharValue(&closed, closedVal, 4, 4, BT_GATT_CHAR_PROP_WRITE);
+	CHECK(eClosed != nullptr);
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+
+	// A handle past the end of the database, behind a value that fills the
+	// response.
+	reqbuf[0] = BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ;
+	PutLe16(reqbuf + 1, eBig->Hdl);
+	PutLe16(reqbuf + 3, 0x7FFF);
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+								 (BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 5);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrReqOp] == BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_INVALID_HANDLE);
+	// The Attribute Handle In Error names the first attribute causing it.
+	CHECK(GetLe16(rspbuf + 2) == 0x7FFF);
+
+	// An unreadable handle in the same position.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	PutLe16(reqbuf + 3, eClosed->Hdl);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 5);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_READ_NOT_PERMITTED);
+	CHECK(GetLe16(rspbuf + 2) == eClosed->Hdl);
+
+	// The same set with a readable second handle still answers a response,
+	// truncated at the MTU, so the check did not cost the emission.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	BtChar_t ok;
+	uint8_t okVal[4] = { 7, 7, 7, 7 };
+	BtAttDBEntry_t *eOk = AddCharValue(&ok, okVal, 4, 4, BT_GATT_CHAR_PROP_READ);
+	CHECK(eOk != nullptr);
+	PutLe16(reqbuf + 3, eOk->Hdl);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_READ_MULTIPLE_RSP);
+	CHECK(n == 23);
+	CHECK(std::memcmp(rspbuf + 1, bigVal, 20) == 0);
+
+	// The first bad handle wins, whichever kind it is and wherever it sits.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	reqbuf[0] = BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ;
+	PutLe16(reqbuf + 1, eClosed->Hdl);
+	PutLe16(reqbuf + 3, 0x7FFF);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_READ_NOT_PERMITTED);
+	CHECK(GetLe16(rspbuf + 2) == eClosed->Hdl);
+}
+
+// The variable length form has the same rule, 3.4.4.11, and the same defect.
+void TestReadMultipleVariableValidatesEveryHandle()
+{
+	BtAttDBInit(2048);
+	BtAttSetMtu(BT_ATT_MTU_MIN);		// 23
+
+	BtChar_t big;
+	uint8_t bigVal[20];
+	for (int i = 0; i < 20; ++i) bigVal[i] = (uint8_t)(0xC0 + i);
+	BtAttDBEntry_t *eBig =
+		AddCharValue(&big, bigVal, 20, 20, BT_GATT_CHAR_PROP_READ);
+	CHECK(eBig != nullptr);
+
+	BtChar_t closed;
+	uint8_t closedVal[4] = { 5, 5, 5, 5 };
+	BtAttDBEntry_t *eClosed =
+		AddCharValue(&closed, closedVal, 4, 4, BT_GATT_CHAR_PROP_WRITE);
+	CHECK(eClosed != nullptr);
+
+	uint8_t reqbuf[64] = {};
+	uint8_t rspbuf[64] = {};
+
+	reqbuf[0] = BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ;
+	PutLe16(reqbuf + 1, eBig->Hdl);
+	PutLe16(reqbuf + 3, 0x7FFF);
+	uint32_t n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+								 (BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 5);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrReqOp] == BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_INVALID_HANDLE);
+	CHECK(GetLe16(rspbuf + 2) == 0x7FFF);
+
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	PutLe16(reqbuf + 3, eClosed->Hdl);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(n == 5);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rspbuf[kErrCode] == BT_ATT_ERROR_READ_NOT_PERMITTED);
+	CHECK(GetLe16(rspbuf + 2) == eClosed->Hdl);
+
+	// A handle beyond what the response can hold is still checked even when
+	// every handle before it is fine, so a set that truncates still answers.
+	std::memset(rspbuf, 0, sizeof(rspbuf));
+	BtChar_t ok;
+	uint8_t okVal[4] = { 3, 3, 3, 3 };
+	BtAttDBEntry_t *eOk = AddCharValue(&ok, okVal, 4, 4, BT_GATT_CHAR_PROP_READ);
+	CHECK(eOk != nullptr);
+	PutLe16(reqbuf + 3, eOk->Hdl);
+	n = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)reqbuf, 1 + 2 * 2,
+						(BtAttReqRsp_t *)rspbuf);
+	CHECK(rspbuf[0] == BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_RSP);
+	CHECK(GetLe16(rspbuf + 1) == 20);
+	CHECK(n == 23);
+}
+
 // ---- Read By Group Type rejects starting handle 0x0000 --------------------
 
 void TestReadByGroupTypeInvalidStartHandle()
@@ -1023,6 +1223,8 @@ void TestExecuteWriteAtomicFailure()
 
 int main()
 {
+	TestMtuNegotiationRule();
+	TestExchangeMtuRequestRecordsTheLink();
 	TestInvalidStartHandleAndWriteHandle();
 	TestReadByTypePacksMultiplePairs();
 	TestReadByTypeRejectsTruncatedPair();
@@ -1035,6 +1237,8 @@ int main()
 	TestFindByTypeValueOracleAndEndHandle();
 	TestFindByTypeValueChunkedCompare();
 	TestReadMultiple();
+	TestReadMultipleValidatesEveryHandle();
+	TestReadMultipleVariableValidatesEveryHandle();
 	TestReadByGroupTypeInvalidStartHandle();
 	TestExecuteWriteNonContiguous();
 	TestExecuteWriteAtomicFailure();

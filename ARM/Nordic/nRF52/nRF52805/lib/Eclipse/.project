@@ -1031,6 +1031,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_ead.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_ead.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_app_handler.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_handler.c</locationURI>
@@ -1061,6 +1066,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gatt.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_smp_bond.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_peer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_peer.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
@@ -1069,6 +1084,81 @@
 			<name>src/bluetooth/bt_smp.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_p256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/micro-ecc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/icrypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/icrypto.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softaes.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softrng.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softrng.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softsha256.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softsha256.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_uecc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_uecc.h</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softaes.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softaes.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softrng.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softsha256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softsha256.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_uecc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/rng_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/micro-ecc/uECC.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_uuid.cpp</name>

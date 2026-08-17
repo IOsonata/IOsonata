@@ -3,6 +3,9 @@
 #include <cstdio>
 #include <cstring>
 
+#include "crypto/crypto_softaes.h"
+#include "crypto/crypto_softrng.h"
+
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
@@ -46,6 +49,217 @@ const BtAdvData_t *FindAd(const uint8_t *pData, size_t Len, uint8_t Type)
 	}
 
 	return nullptr;
+}
+
+
+// --- Encrypted Advertising Data in the shared encoder ---------------------
+
+// The integration lives here rather than in a port because every port reaches
+// its advertising data through BtAdvEncode with the same BtAdvPacket_t. These
+// cases work on a packet directly, which is what BtAdvEncode hands over.
+
+// BtEadRandGen refuses an engine reporting IsSecure() false, so these cases
+// present one that claims otherwise. Nothing outside a test does that.
+class TestRng : public CryptoSoftRng {
+public:
+	bool IsSecure() const override { return true; }
+};
+
+CryptoSoftAes s_EadAes;
+TestRng s_EadRng;
+
+const BtEadKey_t kEadKey = {
+	{ 0x57,0xA9,0xDA,0x12,0xD1,0x2E,0x6E,0x13,
+	  0x1E,0x20,0x61,0x2A,0xD1,0x0A,0x6A,0x19 },
+	{ 0x9E,0x7A,0x00,0xEF,0xB1,0x7A,0xE7,0x46 }
+};
+
+// A packet holding a couple of ordinary AD structures.
+int BuildPlain(uint8_t *pBuf, int Max, BtAdvPacket_t *pPkt)
+{
+	const uint8_t name[6] = { 'S','e','n','s','o','r' };
+	const uint8_t flags = 0x06;
+
+	pPkt->Len = 0;
+	CHECK(BtAdvDataAdd(pPkt, BT_GAP_DATA_TYPE_FLAGS, (uint8_t*)&flags, 1));
+	CHECK(BtAdvDataAdd(pPkt, BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME,
+					   (uint8_t*)name, sizeof(name)));
+	(void)pBuf;
+	(void)Max;
+
+	return pPkt->Len;
+}
+
+// With no key installed nothing happens at all, so a build that never uses
+// the feature takes no new path.
+void TestNotArmedLeavesThePacketAlone()
+{
+	uint8_t buf[64];
+	BtAdvPacket_t pkt = { static_cast<int>(sizeof(buf)), 0, buf };
+
+	CHECK(BtAdvEadKeySet(nullptr));
+	CHECK(BtAdvEadIsArmed() == false);
+
+	int len = BuildPlain(buf, sizeof(buf), &pkt);
+	uint8_t before[64];
+
+	std::memcpy(before, buf, len);
+
+	CHECK(BtAdvEncrypt(&pkt) == false);
+	CHECK(pkt.Len == len);
+	CHECK(std::memcmp(buf, before, len) == 0);
+}
+
+// Armed, the packet becomes one Encrypted Data AD structure, and decrypting
+// its AD data gives back exactly what was there before.
+void TestArmedWrapsThePacket()
+{
+	uint8_t buf[64];
+	BtAdvPacket_t pkt = { static_cast<int>(sizeof(buf)), 0, buf };
+
+	int len = BuildPlain(buf, sizeof(buf), &pkt);
+	uint8_t plain[64];
+
+	std::memcpy(plain, buf, len);
+
+	CHECK(BtAdvEadKeySet(&kEadKey));
+	CHECK(BtAdvEadIsArmed());
+	CHECK(BtAdvEncrypt(&pkt));
+
+	// One AD structure: Length, Type, then randomizer, ciphertext and MIC.
+	CHECK(pkt.Len == len + 2 + BTEAD_OVERHEAD);
+	CHECK(buf[0] == 1 + BTEAD_OVERHEAD + len);
+	CHECK(buf[1] == BTEAD_AD_TYPE);
+
+	// The plaintext is gone from the packet.
+	CHECK(std::memcmp(&buf[2], plain, len) != 0);
+
+	uint8_t back[64];
+	size_t n = BtEadDecrypt(&kEadKey, &buf[2], (size_t)(pkt.Len - 2),
+							back, sizeof(back));
+
+	CHECK(n == (size_t)len);
+	CHECK(std::memcmp(back, plain, len) == 0);
+
+	CHECK(BtAdvEadKeySet(nullptr));
+}
+
+// The scanner half. A scan report handler has the whole advertising payload,
+// not the AD data of one structure, so what it needs is to be handed the
+// report and get the plaintext back. Nothing did that before: the cipher was
+// reachable and the report was not.
+void TestAReportIsDecrypted()
+{
+	uint8_t buf[64];
+	BtAdvPacket_t pkt = { static_cast<int>(sizeof(buf)), 0, buf };
+
+	int len = BuildPlain(buf, sizeof(buf), &pkt);
+	uint8_t plain[64];
+
+	std::memcpy(plain, buf, len);
+
+	CHECK(BtAdvEadKeySet(&kEadKey));
+	CHECK(BtAdvEncrypt(&pkt));
+
+	uint8_t back[64];
+	size_t n = BtAdvDecrypt(&kEadKey, buf, (size_t)pkt.Len, back, sizeof(back));
+
+	CHECK(n == (size_t)len);
+	CHECK(std::memcmp(back, plain, len) == 0);
+
+	// The structure is found wherever it sits, not only first. A report that
+	// leads with Flags is the ordinary case on air.
+	uint8_t rep[80];
+	int off = 0;
+
+	rep[off++] = 2;
+	rep[off++] = 0x01;					// Flags
+	rep[off++] = 0x06;
+	std::memcpy(&rep[off], buf, pkt.Len);
+	off += pkt.Len;
+
+	std::memset(back, 0, sizeof(back));
+	n = BtAdvDecrypt(&kEadKey, rep, (size_t)off, back, sizeof(back));
+	CHECK(n == (size_t)len);
+	CHECK(std::memcmp(back, plain, len) == 0);
+
+	// A report with no Encrypted Data structure yields nothing rather than
+	// treating some other structure as ciphertext.
+	CHECK(BtAdvDecrypt(&kEadKey, rep, 3, back, sizeof(back)) == 0);
+
+	// A structure claiming more than the report holds is malformed, and a
+	// length octet of zero ends the sequence. Neither may be read past.
+	uint8_t bad[8] = { 0x40, BTEAD_AD_TYPE, 1, 2, 3, 4, 5, 6 };
+	CHECK(BtAdvDecrypt(&kEadKey, bad, sizeof(bad), back, sizeof(back)) == 0);
+
+	uint8_t pad[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	CHECK(BtAdvDecrypt(&kEadKey, pad, sizeof(pad), back, sizeof(back)) == 0);
+
+	// A wrong key does not authenticate, so nothing comes back. This is the
+	// check that says the MIC is being verified and not merely stripped.
+	BtEadKey_t wrong = kEadKey;
+
+	wrong.SessionKey[0] ^= 0xFF;
+	CHECK(BtAdvDecrypt(&wrong, buf, (size_t)pkt.Len, back, sizeof(back)) == 0);
+
+	CHECK(BtAdvDecrypt(nullptr, buf, (size_t)pkt.Len, back, sizeof(back)) == 0);
+	CHECK(BtAdvDecrypt(&kEadKey, nullptr, 4, back, sizeof(back)) == 0);
+	CHECK(BtAdvDecrypt(&kEadKey, buf, (size_t)pkt.Len, nullptr, sizeof(back)) == 0);
+	CHECK(BtAdvDecrypt(&kEadKey, buf, (size_t)pkt.Len, back, 0) == 0);
+
+	CHECK(BtAdvEadKeySet(nullptr));
+}
+
+// A fresh randomizer per call is what CSS Part A 1.23.4 asks for whenever the
+// payload changes. Two encryptions of the same payload must not match, or a
+// scanner could follow the device across address changes by the ciphertext.
+void TestEachWrapUsesAFreshRandomizer()
+{
+	uint8_t a[64];
+	uint8_t b[64];
+	BtAdvPacket_t pa = { static_cast<int>(sizeof(a)), 0, a };
+	BtAdvPacket_t pb = { static_cast<int>(sizeof(b)), 0, b };
+
+	CHECK(BtAdvEadKeySet(&kEadKey));
+
+	BuildPlain(a, sizeof(a), &pa);
+	BuildPlain(b, sizeof(b), &pb);
+	CHECK(pa.Len == pb.Len);
+
+	CHECK(BtAdvEncrypt(&pa));
+	CHECK(BtAdvEncrypt(&pb));
+
+	CHECK(pa.Len == pb.Len);
+	CHECK(std::memcmp(a, b, pa.Len) != 0);
+
+	CHECK(BtAdvEadKeySet(nullptr));
+}
+
+// Nothing is written unless the whole structure fits, so a packet with no
+// room is left as the plaintext it was rather than half encrypted.
+void TestNoRoomLeavesThePlaintext()
+{
+	uint8_t buf[64];
+	BtAdvPacket_t pkt = { static_cast<int>(sizeof(buf)), 0, buf };
+
+	int len = BuildPlain(buf, sizeof(buf), &pkt);
+	uint8_t before[64];
+
+	std::memcpy(before, buf, len);
+
+	CHECK(BtAdvEadKeySet(&kEadKey));
+
+	// One octet short of the overhead the structure adds.
+	pkt.MaxLen = len + 2 + BTEAD_OVERHEAD - 1;
+	CHECK(BtAdvEncrypt(&pkt) == false);
+	CHECK(pkt.Len == len);
+	CHECK(std::memcmp(buf, before, len) == 0);
+
+	// Exactly enough is accepted.
+	pkt.MaxLen = len + 2 + BTEAD_OVERHEAD;
+	CHECK(BtAdvEncrypt(&pkt));
+
+	CHECK(BtAdvEadKeySet(nullptr));
 }
 
 void TestExtendedSelection()
@@ -302,9 +516,22 @@ void TestExtendedEncode()
 
 } // namespace
 
+void SetupEad()
+{
+	s_EadAes.Enable();
+	s_EadRng.Enable();
+	BtEadInit(&s_EadAes, &s_EadRng);
+}
+
 int main()
 {
+	SetupEad();
 	TestExtendedSelection();
+	TestNotArmedLeavesThePacketAlone();
+	TestArmedWrapsThePacket();
+	TestAReportIsDecrypted();
+	TestEachWrapUsesAFreshRandomizer();
+	TestNoRoomLeavesThePlaintext();
 	TestDataMutation();
 	TestNameEncoding();
 	TestMalformedRecords();

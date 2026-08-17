@@ -69,7 +69,35 @@ typedef struct {
 	uint8_t  SecPhy;
 	uint8_t  Sid;
 	uint8_t  ScanReqNotif;
-} BtHciLeExtAdvParams_t;			//!< 25 octets
+} BtHciLeExtAdvParams_t;			//!< 25 octets, 7.8.53 [v1]
+
+// 7.8.53 [v2] is a separate opcode, not a version parameter. It appends the
+// two PHY options that Advertising Coding Selection adds.
+typedef struct {
+	uint8_t  AdvHandle;
+	uint8_t  EvtProp[2];
+	uint8_t  PrimIntervalMin[3];
+	uint8_t  PrimIntervalMax[3];
+	uint8_t  PrimChanMap;
+	uint8_t  OwnAddrType;
+	uint8_t  PeerAddrType;
+	uint8_t  PeerAddr[6];
+	uint8_t  FilterPolicy;
+	int8_t   TxPower;
+	uint8_t  PrimPhy;
+	uint8_t  SecMaxSkip;
+	uint8_t  SecPhy;
+	uint8_t  Sid;
+	uint8_t  ScanReqNotif;
+	uint8_t  PrimPhyOpt;
+	uint8_t  SecPhyOpt;
+} BtHciLeExtAdvParamsV2_t;			//!< 27 octets, 7.8.53 [v2]
+
+// 7.8.115 LE Set Host Feature.
+typedef struct {
+	uint8_t  BitNumber;
+	uint8_t  BitValue;
+} BtHciLeSetHostFeature_t;			//!< 2 octets
 
 typedef struct {
 	uint8_t  AdvHandle;
@@ -154,6 +182,83 @@ static inline void BtAdvWr24(uint8_t *p, uint32_t v)
 static inline BtHciDevice_t *BtAdvHciDev(void)
 {
 	return g_BtAppData.AppDevice.pHciDev;
+}
+
+// PHY the next advertising set advertises on. 1M primary and 2M secondary is
+// what every set used before a PHY could be chosen, so it stays the default.
+static uint8_t s_BtAdvPrimPhy = BTADV_EXTADV_PHY_1M;
+static uint8_t s_BtAdvSecPhy = BTADV_EXTADV_PHY_2M;
+
+// LE Coded PHY coding the next advertising set asks for. Both none is the
+// ordinary case and keeps the [v1] parameters command, which is what a
+// controller predating Core 5.4 accepts.
+static uint8_t s_BtAdvPrimPhyOpt = BTADV_PHY_OPT_NONE;
+static uint8_t s_BtAdvSecPhyOpt = BTADV_PHY_OPT_NONE;
+
+bool BtAdvPhySet(uint8_t PrimPhy, uint8_t SecPhy)
+{
+	// 7.8.53 gives the primary PHY only 1M and Coded; 2M cannot carry an
+	// ADV_EXT_IND. The secondary takes all three.
+	if (PrimPhy != BTADV_EXTADV_PHY_1M && PrimPhy != BTADV_EXTADV_PHY_CODED)
+	{
+		return false;
+	}
+
+	if (SecPhy != BTADV_EXTADV_PHY_1M && SecPhy != BTADV_EXTADV_PHY_2M &&
+		SecPhy != BTADV_EXTADV_PHY_CODED)
+	{
+		return false;
+	}
+
+	s_BtAdvPrimPhy = PrimPhy;
+	s_BtAdvSecPhy = SecPhy;
+
+	return true;
+}
+
+// A coding is only meaningful on LE Coded. 7.8.53 has the Controller ignore
+// Primary_Advertising_PHY_Options unless Primary_Advertising_PHY is Coded, and
+// the same for the secondary pair, so a set that asks for a coding on 1M or 2M
+// is refused here rather than accepted and silently dropped on air.
+bool BtAdvCodingSet(uint8_t PrimOpt, uint8_t SecOpt)
+{
+	if (PrimOpt > BTADV_PHY_OPT_MAX || SecOpt > BTADV_PHY_OPT_MAX)
+	{
+		return false;
+	}
+
+	if (PrimOpt != BTADV_PHY_OPT_NONE && s_BtAdvPrimPhy != BTADV_EXTADV_PHY_CODED)
+	{
+		return false;
+	}
+
+	if (SecOpt != BTADV_PHY_OPT_NONE && s_BtAdvSecPhy != BTADV_EXTADV_PHY_CODED)
+	{
+		return false;
+	}
+
+	s_BtAdvPrimPhyOpt = PrimOpt;
+	s_BtAdvSecPhyOpt = SecOpt;
+
+	return true;
+}
+
+bool BtAdvCodingSelectionEnable(bool bEnable)
+{
+	BtHciDevice_t *pDev = BtAdvHciDev();
+
+	if (pDev == nullptr)
+	{
+		return false;
+	}
+
+	BtHciLeSetHostFeature_t p;
+
+	p.BitNumber = BTADV_FEATURE_BIT_CODING_SELECTION;
+	p.BitValue = bEnable ? 1 : 0;
+
+	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_HOST_FEATURE, &p,
+						sizeof(p), NULL, 0) == 0;
 }
 
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
@@ -430,13 +535,31 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 	p.PeerAddrType = 0;
 	p.FilterPolicy = 0;
 	p.TxPower      = 0;
-	p.PrimPhy      = BTADV_EXTADV_PHY_1M;
+	p.PrimPhy      = s_BtAdvPrimPhy;
 	p.SecMaxSkip   = 0;
-	p.SecPhy       = BTADV_EXTADV_PHY_2M;
+	p.SecPhy       = s_BtAdvSecPhy;
 	p.Sid          = 0;
 	p.ScanReqNotif = 0;
 
-	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM, &p, sizeof(p), NULL, 0) != 0)
+	// Advertising Coding Selection. The two PHY options only exist on the
+	// [v2] command, so a set that asks for a coding goes out that way and one
+	// that does not keeps [v1], which every controller accepts.
+	if (s_BtAdvPrimPhyOpt != BTADV_PHY_OPT_NONE ||
+		s_BtAdvSecPhyOpt != BTADV_PHY_OPT_NONE)
+	{
+		BtHciLeExtAdvParamsV2_t v2;
+
+		memcpy(&v2, &p, sizeof(p));
+		v2.PrimPhyOpt = s_BtAdvPrimPhyOpt;
+		v2.SecPhyOpt = s_BtAdvSecPhyOpt;
+
+		if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2, &v2,
+						 sizeof(v2), NULL, 0) != 0)
+		{
+			return false;
+		}
+	}
+	else if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM, &p, sizeof(p), NULL, 0) != 0)
 	{
 		return false;
 	}

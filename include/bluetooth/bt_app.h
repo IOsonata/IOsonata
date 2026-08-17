@@ -156,6 +156,14 @@ typedef struct __Bt_App_Cfg {
 	uint8_t *pLongWrPoolMem;		//!< Long-write reassembly pool; library splits evenly across peer slots. NULL = no long-write support.
 	size_t LongWrPoolMemSize;		//!< Total pLongWrPoolMem length in bytes
 	size_t AttDBMemSize;			//!< User overload mem size for stack usage, set to 0 if not overloading default.
+	// Periodic advertising resources the controller has to reserve. Zero, the
+	// default, leaves the controller with none and every periodic advertising
+	// command refused, which is what an application not using the feature
+	// wants: the resources cost controller RAM whether or not a train runs.
+	uint8_t PeriodicAdvCount;		//!< Periodic advertising sets to transmit
+	uint8_t PeriodicSyncCount;		//!< Trains that can be synchronized to at once
+	uint8_t PawrAdvCount;			//!< Periodic advertising with responses sets to transmit
+	uint8_t PawrSyncCount;			//!< Periodic advertising with responses trains answered
 } BtAppCfg_t;
 
 

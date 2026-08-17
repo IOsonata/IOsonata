@@ -385,6 +385,16 @@ SOFTWARE.
 #define BT_HCI_CMD_CTLR_SET_DATA_RELATED_ADDR_CHANGE			((8<<10) | 0x7C)	//!< LE Set Data Related Address Changes command
 #define BT_HCI_CMD_CTLR_SET_DEFAULT_SUBRATE						((8<<10) | 0x7D)	//!< LE Set Default Subrate command
 #define BT_HCI_CMD_CTLR_SUBRATE_RQST							((8<<10) | 0x7E)	//!< LE Subrate Request command
+// Periodic Advertising with Responses. The [v2] Set Periodic Advertising
+// Parameters is its own OCF rather than a version parameter, so 0x3E above
+// stays the [v1] form.
+#define BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_SUBEVENT_DATA			((8<<10) | 0x82)	//!< LE Set Periodic Advertising Subevent Data command
+#define BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_RESPONSE_DATA			((8<<10) | 0x83)	//!< LE Set Periodic Advertising Response Data command
+#define BT_HCI_CMD_CTLR_SET_PERIODIC_SYNC_SUBEVENT				((8<<10) | 0x84)	//!< LE Set Periodic Sync Subevent command
+#define BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM_V2				((8<<10) | 0x86)	//!< LE Set Periodic Advertising Parameters [v2] command
+// Advertising Coding Selection. As with the periodic parameters command, [v2]
+// is its own OCF rather than a version parameter, so 0x36 above stays [v1].
+#define BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2					((8<<10) | 0x7F)	//!< LE Set Extended Advertising Parameters [v2] command
 
 
 
