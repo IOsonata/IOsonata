@@ -37,7 +37,6 @@ Copyright (c) 2026, I-SYST inc. All rights reserved.
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_gap.h"
-#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_peer.h"
 
@@ -265,10 +264,8 @@ void BtAdvStop()
 
 __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 {
-	if (pCfg == nullptr || !BtGattInitStatusComplete())
+	if (pCfg == nullptr)
 	{
-		DEBUG_PRINTF("BtAppAdvInit refused: GATT init error %u\r\n",
-				(unsigned)BtGattInitStatusErrorGet());
 		return false;
 	}
 

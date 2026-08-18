@@ -1808,7 +1808,12 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 		.SupTimeout = BT_GAP_CONN_SUP_TIMEOUT
     };
 
-	BtGapInit(&gapcfg);
+	// The GAP and GATT services are the table a client reads first. Without
+	// them there is nothing to advertise, so this stops here.
+	if (BtGapInit(&gapcfg) == false)
+	{
+		return false;
+	}
 
 	if (pCfg->pDevName != NULL)
 	{

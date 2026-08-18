@@ -20,7 +20,6 @@
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_gatt.h"
-#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_smp.h"
@@ -59,18 +58,14 @@ BtGapCfg_t Cfg(uint8_t Role, uint32_t SecType)
 }
 
 // A peripheral has to come out of BtGapInit ready to advertise. This is the
-// case that was failing: BtAppAdvInit calls BtGattInitStatusComplete and
-// refuses when it reports an error.
+// case that was failing: a port refuses to bring advertising up when this
+// reports the services did not register.
 void TestPeripheralInitLeavesNoError(void)
 {
 	ResetDb();
 
 	BtGapCfg_t cfg = Cfg(BT_GAP_ROLE_PERIPHERAL, BTGAP_SECTYPE_LESC_MITM);
-	BtGapInit(&cfg);
-
-	CHECK(BtGattInitStatusErrorGet() == BT_GATT_INIT_ERROR_NONE);
-	CHECK(BtGattInitStatusOk());
-	CHECK(BtGattInitStatusComplete());
+	CHECK(BtGapInit(&cfg));
 }
 
 // Every SecType, because the default value is derived from it and a failure
@@ -91,9 +86,7 @@ void TestEverySecTypeInitialises(void)
 		ResetDb();
 
 		BtGapCfg_t cfg = Cfg(BT_GAP_ROLE_PERIPHERAL, types[i]);
-		BtGapInit(&cfg);
-
-		CHECK(BtGattInitStatusErrorGet() == BT_GATT_INIT_ERROR_NONE);
+		CHECK(BtGapInit(&cfg));
 	}
 }
 
@@ -201,9 +194,8 @@ void TestNonPeripheralRolesAreClean(void)
 		ResetDb();
 
 		BtGapCfg_t cfg = Cfg(roles[i], BTGAP_SECTYPE_NONE);
-		BtGapInit(&cfg);
 
-		CHECK(BtGattInitStatusErrorGet() == BT_GATT_INIT_ERROR_NONE);
+		CHECK(BtGapInit(&cfg));
 	}
 }
 
@@ -213,10 +205,7 @@ void TestNullConfigIsReported(void)
 {
 	ResetDb();
 
-	BtGapInit(nullptr);
-
-	CHECK(BtGattInitStatusErrorGet() == BT_GATT_INIT_ERROR_INVALID_CFG);
-	CHECK(BtGattInitStatusOk() == false);
+	CHECK(BtGapInit(nullptr) == false);
 }
 
 }	// namespace

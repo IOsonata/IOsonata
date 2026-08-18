@@ -489,6 +489,12 @@ void TestAnUndersizedPoolStopsTheBringUp(void)
 	// timeslot session open.
 	CHECK(s_ArbiterStartCalls == 0);
 
+	// The refusal names itself. A target build has no other way to learn the
+	// size to set the pool from, since the traces here are compiled out unless
+	// the build defines DEBUG_ENABLE and no project does.
+	CHECK(BtHciCtlrErrorGet() == BT_HCI_CTLR_ERROR_MEM_POOL);
+	CHECK(BtHciCtlrErrorValueGet() == 10001);
+
 	// Exactly the pool size is enough.
 	Reset();
 	s_CfgRam = 10000;

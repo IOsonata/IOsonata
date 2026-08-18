@@ -492,6 +492,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	// nothing showed until the result was checked.
 	if (MpslInit() == false)
 	{
+		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_MPSL_INIT, 0);
 		DEBUG_PRINTF("MpslInit failed\r\n");
 
 		return false;
@@ -504,6 +505,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	int32_t res = sdc_init(BtStackSdcAssert);
 	if (res != 0)
 	{
+		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CTLR_INIT, res);
 		DEBUG_PRINTF("sdc_init failed %d\r\n", (int)res);
 
 		return false;
@@ -592,6 +594,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 						  &cfg);
 	if (ram < 0)
 	{
+		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CFG_SET, (int32_t)SDC_CFG_TYPE_BUFFER_CFG);
 		DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_BUFFER_CFG failed %d\r\n", (int)ram);
 
 		return false;
@@ -618,6 +621,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 						  &cfg);
 	if (ram < 0)
 	{
+		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CFG_SET, (int32_t)SDC_CFG_TYPE_EVENT_LENGTH);
 		DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_EVENT_LENGTH failed %d\r\n", (int)ram);
 
 		return false;
@@ -633,6 +637,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 		if (ram < 0)
 		{
+			BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CFG_SET, (int32_t)SDC_CFG_TYPE_PERIPHERAL_COUNT);
 			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIPHERAL_COUNT failed %d\r\n", (int)ram);
 
 			return false;
@@ -645,6 +650,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 		if (ram < 0)
 		{
+			BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CFG_SET, (int32_t)SDC_CFG_TYPE_ADV_COUNT);
 			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_ADV_COUNT failed %d\r\n", (int)ram);
 
 			return false;
@@ -657,6 +663,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 		if (ram < 0)
 		{
+			BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CFG_SET, (int32_t)SDC_CFG_TYPE_ADV_BUFFER_CFG);
 			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_ADV_BUFFER_CFG failed %d\r\n", (int)ram);
 
 			return false;
@@ -674,6 +681,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 			if (ram < 0)
 			{
+				BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CFG_SET, (int32_t)SDC_CFG_TYPE_PERIODIC_ADV_COUNT);
 				DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIODIC_ADV_COUNT failed %d\r\n", (int)ram);
 
 				return false;
@@ -692,6 +700,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 			if (ram < 0)
 			{
+				BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CFG_SET, (int32_t)SDC_CFG_TYPE_PERIODIC_ADV_RSP_COUNT);
 				DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIODIC_ADV_RSP_COUNT failed %d\r\n", (int)ram);
 
 				return false;
@@ -706,6 +715,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 			if (ram < 0)
 			{
+				BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CFG_SET, (int32_t)SDC_CFG_TYPE_PERIODIC_ADV_RSP_BUFFER_CFG);
 				DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIODIC_ADV_RSP_BUFFER_CFG failed %d\r\n", (int)ram);
 
 				return false;
@@ -722,6 +732,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 		if (ram < 0)
 		{
+			BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CFG_SET, (int32_t)SDC_CFG_TYPE_CENTRAL_COUNT);
 			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_CENTRAL_COUNT failed %d\r\n", (int)ram);
 
 			return false;
@@ -735,6 +746,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 						  &cfg);
 		if (ram < 0)
 		{
+			BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CFG_SET, (int32_t)SDC_CFG_TYPE_SCAN_BUFFER_CFG);
 			DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_SCAN_BUFFER_CFG failed %d\r\n", (int)ram);
 
 			return false;
@@ -752,6 +764,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 			if (ram < 0)
 			{
+				BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CFG_SET, (int32_t)SDC_CFG_TYPE_PERIODIC_SYNC_COUNT);
 				DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIODIC_SYNC_COUNT failed %d\r\n", (int)ram);
 
 				return false;
@@ -764,6 +777,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 			if (ram < 0)
 			{
+				BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CFG_SET, (int32_t)SDC_CFG_TYPE_PERIODIC_SYNC_BUFFER_CFG);
 				DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIODIC_SYNC_BUFFER_CFG failed %d\r\n", (int)ram);
 
 				return false;
@@ -781,6 +795,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 							  &cfg);
 			if (ram < 0)
 			{
+				BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CFG_SET, (int32_t)SDC_CFG_TYPE_PERIODIC_SYNC_RSP_TX_BUFFER_CFG);
 				DEBUG_PRINTF("sdc_cfg_set SDC_CFG_TYPE_PERIODIC_SYNC_RSP_TX_BUFFER_CFG failed %d\r\n", (int)ram);
 
 				return false;
@@ -794,6 +809,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	// unsigned and pass.
 	if ((int32_t)sizeof(s_BtStackSdcMemPool) < ram)
 	{
+		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_MEM_POOL, ram);
 		DEBUG_PRINTF("sdc mem pool too small: have %d need %d\r\n",
 					 (int)sizeof(s_BtStackSdcMemPool), (int)ram);
 
@@ -806,6 +822,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	int arb = MpslNvmArbiterStart();
 	if (arb != 0)
 	{
+		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_ARBITER, (int32_t)arb);
 		DEBUG_PRINTF("MpslNvmArbiterStart failed %d\r\n", arb);
 
 		return false;
@@ -818,6 +835,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	res = sdc_enable(BtStackSdcCB, s_BtStackSdcMemPool);
 	if (res != 0)
 	{
+		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CTLR_ENABLE, (int32_t)res);
 		DEBUG_PRINTF("sdc_enable failed %d\r\n", (int)res);
 
 		// The radio never started, so the timeslot session opened above has

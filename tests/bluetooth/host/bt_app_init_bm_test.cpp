@@ -3,7 +3,6 @@
 #include <cstring>
 
 #include "bluetooth/bt_app.h"
-#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/services/bt_dis.h"
 #include "bt_test_harness.h"
 
@@ -24,7 +23,7 @@ enum FailPoint {
 	FAIL_EVENT_QUEUE,
 	FAIL_PEER_POOL,
 	FAIL_STACK,
-	FAIL_USER_SERVICE_LATCH,
+	FAIL_GAP_INIT,
 	FAIL_DIS_SERVICE,
 	FAIL_DIS_VALUE,
 	FAIL_SECURITY,
@@ -164,10 +163,10 @@ uint32_t sd_ble_gap_appearance_set(uint16_t)
 	return NRF_SUCCESS;
 }
 
-void BtGapInit(const BtGapCfg_t *)
+bool BtGapInit(const BtGapCfg_t *)
 {
 	Record(CALL_GAP);
-	BtGattInitStatusReset();
+	return s_FailPoint != FAIL_GAP_INIT;
 }
 
 void BtGapSetDevName(const char *)
@@ -183,10 +182,6 @@ void ble_conn_params_evt_handler_set(void (*)(const struct ble_conn_params_evt *
 void BtAppInitUserServices(void)
 {
 	Record(CALL_USER_SERVICES);
-	if (s_FailPoint == FAIL_USER_SERVICE_LATCH)
-	{
-		BtGattInitStatusFail(BT_GATT_INIT_ERROR_SERVICE_ADD);
-	}
 }
 
 void BtAppInitUserData(void)
@@ -234,10 +229,6 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 bool BtAppAdvInit(const BtAppCfg_t *)
 {
 	Record(CALL_ADVERTISING);
-	if (!BtGattInitStatusComplete())
-	{
-		return false;
-	}
 	return s_FailPoint != FAIL_ADVERTISING;
 }
 
@@ -314,16 +305,18 @@ int main()
 		BT_CHECK(ctx, !CallSeen(CALL_DIS_SERVICE));
 	});
 
-	ctx.Run("ignored user service failure reaches AppInit", [&]() {
+	// The GAP and GATT services are the table a client reads first, so a
+	// refusal there stops before any service of the application is registered
+	// and before advertising is brought up.
+	ctx.Run("GAP registration failure stops the init", [&]() {
 		ResetHarness();
-		s_FailPoint = FAIL_USER_SERVICE_LATCH;
+		s_FailPoint = FAIL_GAP_INIT;
 		BtAppCfg_t cfg = MakeCfg();
 		BT_CHECK(ctx, !BtAppInit(&cfg));
-		BT_CHECK(ctx, CallSeen(CALL_USER_SERVICES));
-		BT_CHECK(ctx, CallSeen(CALL_ADVERTISING));
+		BT_CHECK(ctx, CallSeen(CALL_GAP));
+		BT_CHECK(ctx, !CallSeen(CALL_USER_SERVICES));
+		BT_CHECK(ctx, !CallSeen(CALL_ADVERTISING));
 		BT_CHECK(ctx, !CallSeen(CALL_TX_POWER));
-		BT_CHECK(ctx,
-			BtGattInitStatusErrorGet() == BT_GATT_INIT_ERROR_SERVICE_ADD);
 	});
 
 	ctx.Run("DIS registration failure reaches AppInit", [&]() {

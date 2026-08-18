@@ -97,6 +97,7 @@ SOFTWARE.
 #include "bluetooth/bt_ead.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_hci_ctlr.h"
 #include "bluetooth/bt_intrf.h"
 #include "bluetooth/bt_padv.h"
 #include "bluetooth/bt_peer.h"
@@ -106,6 +107,14 @@ SOFTWARE.
 #include "bluetooth/bt_appearance.h"
 
 #include "board.h"
+
+// A board that does not say how many periodic advertising with responses sets
+// it can reserve gets none. Zero is what the controller reserves by default
+// and it keeps the DUT booting on a controller without the feature, which then
+// refuses the pawr commands rather than refusing to start.
+#ifndef DUT_PAWR_ADV_COUNT
+#define DUT_PAWR_ADV_COUNT		0
+#endif
 
 #ifdef MCU_OSC
 McuOsc_t g_McuOsc = MCU_OSC;
@@ -128,6 +137,15 @@ McuOsc_t g_McuOsc = MCU_OSC;
 //
 // A refusing call reports "not supported" to the harness. Answering success
 // would let a test record a pass for something that never reached the air.
+//
+// Only a call no port defines belongs here. This file is an object the linker
+// always takes, so a weak definition in it is in place before the library is
+// searched, and a port that defines the same call weak never replaces it: two
+// weak definitions resolve to the first one seen, not to the better one. Only
+// a strong port definition wins. BtAppAdvInit was defined here and is weak in
+// three of the four ports, so those three ran this refusal instead of their
+// own and the application would not start. Check how a port defines a call
+// before adding a shim for it.
 
 __attribute__((weak)) void BtAdvStart(void)
 {
@@ -145,13 +163,6 @@ __attribute__((weak)) void BtAppAdvStart(void)
 __attribute__((weak)) void BtAppAdvStop(void)
 {
 	BtAdvStop();
-}
-
-__attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
-{
-	(void)pCfg;
-
-	return false;
 }
 
 __attribute__((weak)) bool BtAdvCodingSet(uint8_t PrimOpt, uint8_t SecOpt)
@@ -262,6 +273,21 @@ __attribute__((weak)) bool BtPadvSubeventDataSet(uint8_t AdvHdl,
 	(void)NbSubevents;
 
 	return false;
+}
+
+// The controller bring-up record lives in bt_hci_ctlr.cpp, which the nRF5 SDK
+// configurations do not build: those ports bring the SoftDevice up themselves
+// and have no such step to record. Answering none rather than failing to link
+// keeps one binary for every port, and a reason of none reads as nothing was
+// recorded, which is exactly what happened.
+__attribute__((weak)) BtHciCtlrError_t BtHciCtlrErrorGet(void)
+{
+	return BT_HCI_CTLR_ERROR_NONE;
+}
+
+__attribute__((weak)) int32_t BtHciCtlrErrorValueGet(void)
+{
+	return 0;
 }
 
 #define DUT_DEVICE_NAME			"IOsonataDUT"
@@ -498,8 +524,14 @@ static BtAppCfg_t s_BleAppCfg = {
 	// Only the advertiser counts are set. The DUT does not scan, so it is never
 	// the synchronizing side of a train and reserving sync slots here would
 	// spend controller RAM on a role this application never takes.
+	//
+	// The response set count comes from the board, because periodic
+	// advertising with responses is not on every controller. A controller that
+	// does not have it refuses the reservation and stops the whole bring-up,
+	// which would leave the board answering nothing at all rather than
+	// answering the pawr commands with a refusal.
 	.PeriodicAdvCount = 1,
-	.PawrAdvCount = 1,
+	.PawrAdvCount = DUT_PAWR_ADV_COUNT,
 };
 
 static volatile bool s_NumCompPending = false;
@@ -589,7 +621,27 @@ static void DutOutEnd(void)
 	s_OutLine[s_OutLen] = '\n';
 	int len = s_OutLen + 1;
 
-	g_Uart.Tx((uint8_t*)s_OutLine, len);
+	// The transmit call answers how many octets it took and takes fewer than it
+	// was given when the transmit FIFO is full, which it is through boot while
+	// the store traces are still draining to the same port. Writing once left
+	// the tail of every report behind, so a harness matching on a tag saw a
+	// line it could not parse rather than a line it could. The write repeats
+	// until the line is gone, and gives up only when a call takes nothing at
+	// all, since repeating that one forever would stop the application instead
+	// of a report.
+	int off = 0;
+
+	while (off < len)
+	{
+		int n = g_Uart.Tx((uint8_t*)&s_OutLine[off], len - off);
+
+		if (n <= 0)
+		{
+			break;
+		}
+
+		off += n;
+	}
 
 	// BtIntrf holds the line in its own FIFO and notifies it in whatever the
 	// negotiated ATT_MTU allows, so nothing here has to know the MTU. A client
@@ -1916,7 +1968,16 @@ int main(void)
 
 	if (BtAppInit(&s_BleAppCfg) == false)
 	{
-		DutOut("DUT ERROR bt_init");
+		// Which step refused, and the number it reported. Without this the
+		// line says only that the stack did not start, and the controller has
+		// six ways to refuse that look identical from here. For a memory pool
+		// refusal the value is the size to set the pool from, which is the one
+		// number a target build cannot be told any other way.
+		// The attribute table is the other way this fails, and it now reports
+		// itself: BtGapInit answers false when the services did not register
+		// and the port stops there, so there is no separate status to read.
+		DutOut("DUT ERROR bt_init reason=%u value=%d",
+			(unsigned)BtHciCtlrErrorGet(), (int)BtHciCtlrErrorValueGet());
 		DutOutEnd();
 		while (true)
 		{

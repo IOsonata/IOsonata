@@ -69,7 +69,6 @@ SOFTWARE.
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
-#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/services/bt_dis.h"
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_hci_ctlr.h"
@@ -705,7 +704,12 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	DEBUG_PRINTF("BtGapInit\r\n");
 
-	BtGapInit(&gapcfg);
+	// The GAP and GATT services are the table a client reads first. Without
+	// them there is nothing to advertise, so this stops here.
+	if (BtGapInit(&gapcfg) == false)
+	{
+		return false;
+	}
 
 	// The SDC path owns its SMP crypto: P-256 ECDH and the BLE controller
 	// (HCI LE Encrypt) for AES. These are internal to this path - the
@@ -884,12 +888,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 			return false;
 		}
     }
-	else if (!BtGattInitStatusComplete())
-	{
-		DEBUG_PRINTF("BtAppInit refused: GATT init error %u\r\n",
-			(unsigned)BtGattInitStatusErrorGet());
-		return false;
-	}
 /*
     BtGapInit(pCfg->Role);
 

@@ -126,5 +126,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define TIMER_DEVNO		2
 
+// Periodic advertising with responses is not available on this controller.
+// Asking for a set is refused at SDC_CFG_TYPE_PERIODIC_ADV_RSP_BUFFER_CFG
+// and the whole bring-up stops, so the DUT asks for none and answers the
+// pawr commands with a refusal instead. Plain periodic advertising is
+// available and stays on.
+#define DUT_PAWR_ADV_COUNT		0
+
 #endif // __BOARD_H__
 

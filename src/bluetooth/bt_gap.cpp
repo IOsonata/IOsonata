@@ -48,7 +48,6 @@ SOFTWARE.
 #include <memory.h>
 
 #include "bluetooth/bt_gatt.h"
-#include "bluetooth/bt_gatt_init.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
@@ -57,53 +56,6 @@ SOFTWARE.
 #ifndef BT_GAP_DEVNAME_MAX_LEN
 #define BT_GAP_DEVNAME_MAX_LEN			64
 #endif
-
-static std::atomic<bool> s_BtGattInitActive;
-static std::atomic<uint8_t> s_BtGattInitError;
-
-void BtGattInitStatusReset(void)
-{
-	s_BtGattInitError.store(BT_GATT_INIT_ERROR_NONE,
-			std::memory_order_relaxed);
-	s_BtGattInitActive.store(true, std::memory_order_release);
-}
-
-void BtGattInitStatusFail(BtGattInitError_t Error)
-{
-	if (Error == BT_GATT_INIT_ERROR_NONE ||
-		!s_BtGattInitActive.load(std::memory_order_acquire))
-	{
-		return;
-	}
-
-	uint8_t expected = BT_GATT_INIT_ERROR_NONE;
-	s_BtGattInitError.compare_exchange_strong(expected, (uint8_t)Error,
-			std::memory_order_acq_rel, std::memory_order_acquire);
-}
-
-bool BtGattInitStatusActive(void)
-{
-	return s_BtGattInitActive.load(std::memory_order_acquire);
-}
-
-bool BtGattInitStatusOk(void)
-{
-	return s_BtGattInitError.load(std::memory_order_acquire) ==
-		BT_GATT_INIT_ERROR_NONE;
-}
-
-bool BtGattInitStatusComplete(void)
-{
-	bool ok = BtGattInitStatusOk();
-	s_BtGattInitActive.store(false, std::memory_order_release);
-	return ok;
-}
-
-BtGattInitError_t BtGattInitStatusErrorGet(void)
-{
-	return (BtGattInitError_t)s_BtGattInitError.load(
-			std::memory_order_acquire);
-}
 
 // Storage for the LE GATT Security Levels value. The default has to be in
 // place before the service is registered, because a port that copies the
@@ -169,7 +121,6 @@ __attribute__((weak)) void BtGapSetDevName(const char *pName)
 
 	if (!BtGattCharSetValue(p, (void*)pName, l))
 	{
-		BtGattInitStatusFail(BT_GATT_INIT_ERROR_VALUE_SET);
 		return;
 	}
 	if (p->pValue != nullptr)
@@ -188,10 +139,7 @@ __attribute__((weak)) void BtGapSetAppearance(uint16_t Val)
 	uint8_t buf[2];
 	buf[0] = (uint8_t)(Val & 0xFF);
 	buf[1] = (uint8_t)(Val >> 8);
-	if (!BtGattCharSetValue(&s_BtGapChar[1], buf, 2))
-	{
-		BtGattInitStatusFail(BT_GATT_INIT_ERROR_VALUE_SET);
-	}
+	(void)BtGattCharSetValue(&s_BtGapChar[1], buf, 2);
 }
 
 __attribute__((weak)) void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t *pVal)
@@ -200,11 +148,8 @@ __attribute__((weak)) void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t 
 	{
 		return;
 	}
-	if (!BtGattCharSetValue(&s_BtGapChar[2], pVal,
-			sizeof(BtGattPreferedConnParams_t)))
-	{
-		BtGattInitStatusFail(BT_GATT_INIT_ERROR_VALUE_SET);
-	}
+	(void)BtGattCharSetValue(&s_BtGapChar[2], pVal,
+			sizeof(BtGattPreferedConnParams_t));
 }
 
 __attribute__((weak)) void BtGapParamInit(const BtGapCfg_t *pCfg)
@@ -230,7 +175,6 @@ bool BtGapSecLevelsSet(const uint8_t *pReq, size_t Len)
 	if (!BtGattCharSetValue(&s_BtGapChar[BT_GAP_SEC_LEVELS_CHAR_IDX],
 							(void*)pReq, Len))
 	{
-		BtGattInitStatusFail(BT_GATT_INIT_ERROR_VALUE_SET);
 		return false;
 	}
 
@@ -286,23 +230,24 @@ static void BtGapSecLevelsDefault(uint32_t SecType)
 	s_BtGapChar[BT_GAP_SEC_LEVELS_CHAR_IDX].ValueLen = sizeof(req);
 }
 
-void BtGapInit(const BtGapCfg_t *pCfg)
+bool BtGapInit(const BtGapCfg_t *pCfg)
 {
-	BtGattInitStatusReset();
 	if (pCfg == nullptr)
 	{
-		BtGattInitStatusFail(BT_GATT_INIT_ERROR_INVALID_CFG);
-		return;
+		return false;
 	}
 
 	if (pCfg->Role & BT_GAP_ROLE_PERIPHERAL)
 	{
 		BtGapSecLevelsDefault(pCfg->SecType);
 
+		// A service the server would not take leaves the attribute table
+		// without the entries a client reads, so a caller that goes on to
+		// advertise would put an incomplete table on the air.
 		if (!BtGattSrvcAdd(&s_BtGattSrvc) ||
 			!BtGattSrvcAdd(&s_BtGapSrvc))
 		{
-			BtGattInitStatusFail(BT_GATT_INIT_ERROR_SERVICE_ADD);
+			return false;
 		}
 	}
 
@@ -311,10 +256,7 @@ void BtGapInit(const BtGapCfg_t *pCfg)
 		BtGapParamInit(pCfg);
 	}
 
-	if ((pCfg->Role & BT_GAP_ROLE_PERIPHERAL) == 0)
-	{
-		(void)BtGattInitStatusComplete();
-	}
+	return true;
 }
 
 __attribute__((weak)) bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)

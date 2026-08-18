@@ -127,5 +127,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},}
 
 
+// Periodic advertising with responses is not available on this controller.
+// Measured: SDC_CFG_TYPE_PERIODIC_ADV_COUNT is accepted and the response
+// buffer configuration is refused, which stops the whole bring-up. The DUT
+// asks for none and answers the pawr commands with a refusal instead.
+// Plain periodic advertising is available and stays on.
+#define DUT_PAWR_ADV_COUNT		0
+
 #endif // __BOARD_H__
 

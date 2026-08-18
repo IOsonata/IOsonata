@@ -227,6 +227,28 @@ __attribute__((weak)) bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev,
 }
 
 // One bring-up sequence for every port. The ordering is the point: generic
+// Why the last bring-up failed. Kept here rather than in a port so every port
+// records it the same way and an application reads it the same way, and so the
+// storage exists even for a port that records nothing.
+static BtHciCtlrError_t s_BtHciCtlrError = BT_HCI_CTLR_ERROR_NONE;
+static int32_t s_BtHciCtlrErrorValue = 0;
+
+void BtHciCtlrErrorSet(BtHciCtlrError_t Error, int32_t Value)
+{
+	s_BtHciCtlrError = Error;
+	s_BtHciCtlrErrorValue = Value;
+}
+
+BtHciCtlrError_t BtHciCtlrErrorGet(void)
+{
+	return s_BtHciCtlrError;
+}
+
+int32_t BtHciCtlrErrorValueGet(void)
+{
+	return s_BtHciCtlrErrorValue;
+}
+
 // init assigns RxHandler, Receive and the interface table, and returns early
 // without them on a bad packet size, a misaligned or undersized RX FIFO
 // buffer, or a CFifoInit failure. Starting the controller anyway leaves an

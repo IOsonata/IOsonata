@@ -397,7 +397,16 @@ void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *pSec);
 // Initialise the GAP layer: registers the GAP and GATT services for the
 // peripheral role and configures GAP for peripheral/central per pCfg->Role.
 // Per-link connection state is owned by bt_peer (see BtPeerInit), not here.
-void BtGapInit(const BtGapCfg_t *pCfg);
+/**
+ * @brief	Register the GAP and GATT services and apply the configuration.
+ *
+ * @param	pCfg	GAP configuration.
+ *
+ * @return	true when the services registered. False leaves the attribute
+ * 			table without the entries a client reads, so a caller must not go
+ * 			on to advertise.
+ */
+bool BtGapInit(const BtGapCfg_t *pCfg);
 void BtGapParamInit(const BtGapCfg_t *pCfg);
 void BtGapServiceInit(void);//BtGattSrvc_t * const pSrvc);
 void BtGapSetDevName(const char *pName);

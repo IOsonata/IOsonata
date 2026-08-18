@@ -121,5 +121,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define TIMER_DEVNO			2
 
+// Periodic advertising with responses, one set. This is the target the
+// feature is expected on. If the controller refuses the reservation the
+// boot line names the configuration it refused, so lower this to 0 rather
+// than guessing at the cause.
+#define DUT_PAWR_ADV_COUNT		1
+
 #endif // __BOARD_H__
 

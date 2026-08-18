@@ -157,6 +157,49 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
  */
 bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
 
+/// Why the controller refused to start. A failed bring-up returns one bool to
+/// its caller and that reaches the application as a single failure, so the
+/// reason has to be recorded to be recoverable. The port traces are compiled
+/// out unless the build defines DEBUG_ENABLE, which no project here does, so a
+/// trace is not a substitute for this.
+typedef enum __Bt_Hci_Ctlr_Error {
+	BT_HCI_CTLR_ERROR_NONE = 0,		//!< No failure recorded
+	BT_HCI_CTLR_ERROR_MPSL_INIT,	//!< Multiprotocol service layer refused, Value is its code
+	BT_HCI_CTLR_ERROR_CTLR_INIT,	//!< Target controller init refused, Value is its code
+	BT_HCI_CTLR_ERROR_CFG_SET,		//!< A resource configuration was refused, Value is the tag
+	BT_HCI_CTLR_ERROR_MEM_POOL,		//!< Pool too small, Value is the size asked for in bytes
+	BT_HCI_CTLR_ERROR_ARBITER,		//!< Memory arbiter refused, Value is its code
+	BT_HCI_CTLR_ERROR_CTLR_ENABLE,	//!< Target controller enable refused, Value is its code
+} BtHciCtlrError_t;
+
+/**
+ * @brief	Record why controller bring-up failed.
+ *
+ * Called by the port at each point it gives up. The meaning of Value depends
+ * on Error and is given with each enumerator.
+ *
+ * @param	Error	Which step refused.
+ * @param	Value	The number that step reported.
+ */
+void BtHciCtlrErrorSet(BtHciCtlrError_t Error, int32_t Value);
+
+/**
+ * @brief	The step that refused the last bring-up.
+ *
+ * @return	BT_HCI_CTLR_ERROR_NONE when no failure has been recorded.
+ */
+BtHciCtlrError_t BtHciCtlrErrorGet(void);
+
+/**
+ * @brief	The number reported by the step that refused.
+ *
+ * For BT_HCI_CTLR_ERROR_MEM_POOL this is the pool size the configuration
+ * needs, which is what the pool constant should be set from.
+ *
+ * @return	The recorded value, zero when nothing has been recorded.
+ */
+int32_t BtHciCtlrErrorValueGet(void);
+
 /**
  * @brief	Target controller bring-up, called by BtHciCtlrEnable.
  *
