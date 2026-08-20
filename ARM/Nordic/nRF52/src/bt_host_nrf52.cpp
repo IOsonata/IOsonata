@@ -1394,11 +1394,11 @@ bool BleAppConnectable(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 
 /**@brief Function for Initializing the Nordic SoftDevice firmware stack
  *
- * @param[in] CentLinkCount
- * @param[in] PeriLinkCount
+ * @param[in] PeriphDevMax
+ * @param[in] CentralDevMax
  * @param[in] bConnectable
  */
-bool BleAppStackInit(int CentLinkCount, int PeriLinkCount, bool bConnectable)
+bool BleAppStackInit(int PeriphDevMax, int CentralDevMax, bool bConnectable)
 {
     // Configure the BLE stack using the default settings.
     // Fetch the start address of the application RAM.
@@ -1413,7 +1413,7 @@ bool BleAppStackInit(int CentLinkCount, int PeriLinkCount, bool bConnectable)
 
     // Configure the number of custom UUIDS.
     memset(&ble_cfg, 0, sizeof(ble_cfg));
-    //if (CentLinkCount > 0)
+    //if (PeriphDevMax > 0)
         ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = BLESVC_UUID_BASE_MAXCNT;
     //else
     //	ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = 2;
@@ -1423,9 +1423,9 @@ bool BleAppStackInit(int CentLinkCount, int PeriLinkCount, bool bConnectable)
     // Configure the maximum number of connections.
 	memset(&ble_cfg, 0, sizeof(ble_cfg));
 	ble_cfg.conn_cfg.conn_cfg_tag                     = BLEAPP_CONN_CFG_TAG;
-	ble_cfg.gap_cfg.role_count_cfg.periph_role_count  = PeriLinkCount;
-	ble_cfg.gap_cfg.role_count_cfg.central_role_count = CentLinkCount;
-	ble_cfg.gap_cfg.role_count_cfg.central_sec_count  = CentLinkCount ? BLE_GAP_ROLE_COUNT_CENTRAL_SEC_DEFAULT: 0;
+	ble_cfg.gap_cfg.role_count_cfg.periph_role_count  = CentralDevMax;
+	ble_cfg.gap_cfg.role_count_cfg.central_role_count = PeriphDevMax;
+	ble_cfg.gap_cfg.role_count_cfg.central_sec_count  = PeriphDevMax ? BLE_GAP_ROLE_COUNT_CENTRAL_SEC_DEFAULT: 0;
 	err_code = sd_ble_cfg_set(BLE_GAP_CFG_ROLE_COUNT, &ble_cfg, ram_start);
 	APP_ERROR_CHECK(err_code);
 
@@ -1440,7 +1440,7 @@ bool BleAppStackInit(int CentLinkCount, int PeriLinkCount, bool bConnectable)
 	memset(&ble_cfg, 0x00, sizeof(ble_cfg));
 	ble_cfg.conn_cfg.conn_cfg_tag                     = BLEAPP_CONN_CFG_TAG;
 	ble_cfg.conn_cfg.params.gap_conn_cfg.event_length = 320;
-	ble_cfg.conn_cfg.params.gap_conn_cfg.conn_count   = PeriLinkCount + CentLinkCount;//BLE_GAP_CONN_COUNT_DEFAULT;
+	ble_cfg.conn_cfg.params.gap_conn_cfg.conn_count   = CentralDevMax + PeriphDevMax;//BLE_GAP_CONN_COUNT_DEFAULT;
 	err_code = sd_ble_cfg_set(BLE_CONN_CFG_GAP, &ble_cfg, ram_start);
 	APP_ERROR_CHECK(err_code);
 
@@ -1551,13 +1551,13 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
     APP_ERROR_CHECK(err_code);
 
     // Initialize SoftDevice.
-    BleAppStackInit(pBleAppCfg->CentLinkCount, pBleAppCfg->PeriLinkCount,
+    BleAppStackInit(pBleAppCfg->PeriphDevMax, pBleAppCfg->CentralDevMax,
     				pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT);
 
     //err_code = ble_lesc_init();
     //APP_ERROR_CHECK(err_code);
 
-	if (pBleAppCfg->PeriLinkCount > 0 && pBleAppCfg->AdvInterval > 0)
+	if (pBleAppCfg->CentralDevMax > 0 && pBleAppCfg->AdvInterval > 0)
 	{
 		s_BtHostData.AppRole |= BLEAPP_ROLE_PERIPHERAL;
 
@@ -1575,7 +1575,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
     	BleAppConnectable(pBleAppCfg, bEraseBond);
     }
 
-    if (pBleAppCfg->CentLinkCount > 0)
+    if (pBleAppCfg->PeriphDevMax > 0)
 	{
 		s_BtHostData.AppRole |= BLEAPP_ROLE_CENTRAL;
 //		ret_code_t err_code = ble_db_discovery_init(BleAppDBDiscoveryHandler);

@@ -213,6 +213,16 @@ static bool BtGattHciSendHandleValue(uint16_t ConnHdl, BtGattChar_t *pChar,
 		return false;
 	}
 
+	// Refresh the stored attribute value before transmitting. On the native HCI
+	// host the ATT server answers a Read from pChar->pValue, so the value must
+	// reflect the latest write regardless of whether the notification is
+	// actually sent. It must not be tied to the transport result.
+	if (Len > 0)
+	{
+		memcpy(pChar->pValue, pData, Len);
+	}
+	pChar->ValueLen = (uint16_t)Len;
+
 	uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
 	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
@@ -247,11 +257,6 @@ static bool BtGattHciSendHandleValue(uint16_t ConnHdl, BtGattChar_t *pChar,
 		return false;
 	}
 
-	if (Len > 0)
-	{
-		memcpy(pChar->pValue, pData, Len);
-	}
-	pChar->ValueLen = (uint16_t)Len;
 	return true;
 }
 

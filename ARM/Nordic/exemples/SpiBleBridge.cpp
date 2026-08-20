@@ -300,8 +300,8 @@ const BtAppDevInfo_t s_UartBleDevDesc {
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
-	.CentLinkCount = 0, 				// Number of central link
-	.PeriLinkCount = 1, 				// Number of peripheral link
+	.PeriphDevMax = 0, 				// Max peripheral devices we connect to as central
+	.CentralDevMax = 1, 				// Max central devices we serve as peripheral
 	.pDevName = DEVICE_NAME,			// Device name
 	.VendorId = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,						// PnP Product ID
@@ -566,6 +566,15 @@ bool ReadFlash(SPI_PKT *pkt)
 	p.Addr = pkt->Addr;
 	p.DataLen = pkt->DataLen;
 
+	// DataLen comes straight from the remote write and can be up to 0xFFFF.
+	// p.Data is only MAX_FLASH_DATA_LEN bytes on the stack, so clamp the
+	// requested read length before it reaches g_Flash.Read to avoid a
+	// stack buffer overflow.
+	if (p.DataLen > MAX_FLASH_DATA_LEN)
+	{
+		p.DataLen = MAX_FLASH_DATA_LEN;
+	}
+
 	DEBUG_PRINTF("ReadFlash %d bytes from addr = \r\n", p.DataLen, p.Addr);
 	l = g_Flash.Read(p.Addr, p.Data, p.DataLen);
 	p.DataLen = l;
@@ -759,6 +768,13 @@ void WritePacketToFlash(SPI_PKT *pkt)
 	uint32_t tbw = 0;
 
 	// TODO: Stop time-out timer trigger
+
+	// DataLen is remote-supplied; pkt->Data holds at most MAX_FLASH_DATA_LEN
+	// bytes, so clamp to avoid reading past the packet buffer.
+	if (pkt->DataLen > MAX_FLASH_DATA_LEN)
+	{
+		pkt->DataLen = MAX_FLASH_DATA_LEN;
+	}
 
 	uint32_t l = g_Flash.Write(pkt->Addr, pkt->Data, pkt->DataLen);
 	if (l < pkt->DataLen)

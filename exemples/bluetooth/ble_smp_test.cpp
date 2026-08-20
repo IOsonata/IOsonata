@@ -159,8 +159,8 @@ static BtSmpKeys_t s_SmpBondKeys;
 static bool s_SmpBondValid = false;
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
-	.CentLinkCount = 0,
-	.PeriLinkCount = 1,
+	.PeriphDevMax = 0,
+	.CentralDevMax = 1,
 	.pDevName = DEVICE_NAME,
 	.VendorId = ISYST_BLUETOOTH_ID,
 	.ProductId = 1,

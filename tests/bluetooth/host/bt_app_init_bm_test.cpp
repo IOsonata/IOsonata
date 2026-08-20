@@ -90,7 +90,7 @@ static BtAppCfg_t MakeCfg(bool Secure = true, bool DeviceInfo = true)
 
 	BtAppCfg_t cfg = {};
 	cfg.Role = BTAPP_ROLE_PERIPHERAL;
-	cfg.PeriLinkCount = 1;
+	cfg.CentralDevMax = 1;
 	cfg.pDevName = "BM init test";
 	cfg.VendorId = 0x1234;
 	cfg.ProductId = 0x5678;

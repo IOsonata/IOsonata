@@ -60,7 +60,7 @@ void TestAllOperationsCoverEntirePool()
 	Reset();
 
 	BT_CHECK(s_Test,
-			BtAppNotifyAll(&s_Char, s_Value, sizeof(s_Value)) ==
+			BtAppNotify(&s_Char, s_Value, sizeof(s_Value)) ==
 			(int)kLinkCount);
 	BT_CHECK(s_Test, s_NotifyCount == kLinkCount);
 	for (size_t i = 0; i < kLinkCount; i++)
@@ -70,7 +70,7 @@ void TestAllOperationsCoverEntirePool()
 
 	Reset();
 	BT_CHECK(s_Test,
-			BtAppIndicateAll(&s_Char, s_Value, sizeof(s_Value)) ==
+			BtAppIndicate(&s_Char, s_Value, sizeof(s_Value)) ==
 			(int)kLinkCount);
 	BT_CHECK(s_Test, s_IndicateCount == kLinkCount);
 	for (size_t i = 0; i < kLinkCount; i++)
@@ -125,12 +125,12 @@ void TestUnstorableValueIsNotTransmitted()
 	// has to stop every link, not just the first.
 	Reset();
 	BT_CHECK(s_Test,
-			BtAppNotifyAll(&unregistered, s_Value, sizeof(s_Value)) == 0);
+			BtAppNotify(&unregistered, s_Value, sizeof(s_Value)) == 0);
 	BT_CHECK(s_Test, s_NotifyCount == 0);
 
 	Reset();
 	BT_CHECK(s_Test,
-			BtAppIndicateAll(&unregistered, s_Value, sizeof(s_Value)) == 0);
+			BtAppIndicate(&unregistered, s_Value, sizeof(s_Value)) == 0);
 	BT_CHECK(s_Test, s_IndicateCount == 0);
 
 	// A registered characteristic still refuses more than its storage holds,
@@ -145,7 +145,7 @@ void TestUnstorableValueIsNotTransmitted()
 
 	Reset();
 	BT_CHECK(s_Test,
-			BtAppNotifyAll(&s_Char, oversize, sizeof(oversize)) == 0);
+			BtAppNotify(&s_Char, oversize, sizeof(oversize)) == 0);
 	BT_CHECK(s_Test, s_NotifyCount == 0);
 
 	// The value the characteristic already held is unchanged by a refused

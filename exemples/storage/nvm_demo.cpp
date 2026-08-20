@@ -792,8 +792,8 @@ static uint32_t s_Skips = 0;
 
 const BtAppCfg_t s_BtAppCfg = {
 	.Role = BTAPP_ROLE_BROADCASTER,
-	.CentLinkCount = 0,
-	.PeriLinkCount = 1,
+	.PeriphDevMax = 0,
+	.CentralDevMax = 1,
 	.pDevName = (char*)DEVICE_NAME,
 	.VendorId = ISYST_BLUETOOTH_ID,
 	.Appearance = BT_APPEAR_COMPUTER_WEARABLE,

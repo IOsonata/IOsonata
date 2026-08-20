@@ -406,8 +406,8 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	bool bScannable = false;
 
 	s_bAdvertising = false;
-	s_PeripheralLinkCount = pCfg->PeriLinkCount > 0 ?
-		(uint16_t)pCfg->PeriLinkCount : 0;
+	s_PeripheralLinkCount = pCfg->CentralDevMax > 0 ?
+		(uint16_t)pCfg->CentralDevMax : 0;
 	advpkt->Len = 0;
 	srpkt->Len = 0;
 

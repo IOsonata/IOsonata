@@ -630,7 +630,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	if (pCfg->Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_BROADCASTER))
 	{
 		// Config for peripheral role
-		cfg.peripheral_count.count = pCfg->PeriLinkCount;
+		cfg.peripheral_count.count = pCfg->CentralDevMax;
 
 		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
 					       	  SDC_CFG_TYPE_PERIPHERAL_COUNT,
@@ -726,7 +726,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	if (pCfg->Role & (BT_GAP_ROLE_CENTRAL | BT_GAP_ROLE_OBSERVER))
 	{
 		// Config for central role
-		cfg.central_count.count = pCfg->CentLinkCount;
+		cfg.central_count.count = pCfg->PeriphDevMax;
 		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
 					       	  SDC_CFG_TYPE_CENTRAL_COUNT,
 							  &cfg);

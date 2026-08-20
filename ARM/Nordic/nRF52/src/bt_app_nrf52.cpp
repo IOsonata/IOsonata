@@ -1471,11 +1471,11 @@ void BtDisInit(const BtAppCfg_t *pCfg)
 
 /**@brief Function for Initializing the Nordic SoftDevice firmware stack
  *
- * @param[in] CentLinkCount
- * @param[in] PeriLinkCount
+ * @param[in] PeriphDevMax
+ * @param[in] CentralDevMax
  * @param[in] bConnectable
  */
-bool BtAppStackInit(int MaxMtu, int CentLinkCount, int PeriLinkCount, bool bConnectable)
+bool BtAppStackInit(int MaxMtu, int PeriphDevMax, int CentralDevMax, bool bConnectable)
 {
     // Configure the BLE stack using the default settings.
     // Fetch the start address of the application RAM.
@@ -1490,7 +1490,7 @@ bool BtAppStackInit(int MaxMtu, int CentLinkCount, int PeriLinkCount, bool bConn
 
     // Configure the number of custom UUIDS.
     memset(&ble_cfg, 0, sizeof(ble_cfg));
-    //if (CentLinkCount > 0)
+    //if (PeriphDevMax > 0)
         ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = 4;//BLESRVC_UUID_BASE_MAXCNT;
     //else
     //	ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = 2;
@@ -1500,9 +1500,9 @@ bool BtAppStackInit(int MaxMtu, int CentLinkCount, int PeriLinkCount, bool bConn
     // Configure the maximum number of connections.
 	memset(&ble_cfg, 0, sizeof(ble_cfg));
 	ble_cfg.conn_cfg.conn_cfg_tag                     = BTAPP_CONN_CFG_TAG;
-	ble_cfg.gap_cfg.role_count_cfg.periph_role_count  = PeriLinkCount;
-	ble_cfg.gap_cfg.role_count_cfg.central_role_count = CentLinkCount;
-	ble_cfg.gap_cfg.role_count_cfg.central_sec_count  = CentLinkCount ? BLE_GAP_ROLE_COUNT_CENTRAL_SEC_DEFAULT: 0;
+	ble_cfg.gap_cfg.role_count_cfg.periph_role_count  = CentralDevMax;
+	ble_cfg.gap_cfg.role_count_cfg.central_role_count = PeriphDevMax;
+	ble_cfg.gap_cfg.role_count_cfg.central_sec_count  = PeriphDevMax ? BLE_GAP_ROLE_COUNT_CENTRAL_SEC_DEFAULT: 0;
 	err_code = sd_ble_cfg_set(BLE_GAP_CFG_ROLE_COUNT, &ble_cfg, ram_start);
 	APP_ERROR_CHECK(err_code);
 
@@ -1530,7 +1530,7 @@ bool BtAppStackInit(int MaxMtu, int CentLinkCount, int PeriLinkCount, bool bConn
 	memset(&ble_cfg, 0x00, sizeof(ble_cfg));
 	ble_cfg.conn_cfg.conn_cfg_tag                     = BTAPP_CONN_CFG_TAG;
 	ble_cfg.conn_cfg.params.gap_conn_cfg.event_length = 320;
-	ble_cfg.conn_cfg.params.gap_conn_cfg.conn_count   = PeriLinkCount + CentLinkCount;//BLE_GAP_CONN_COUNT_DEFAULT;
+	ble_cfg.conn_cfg.params.gap_conn_cfg.conn_count   = CentralDevMax + PeriphDevMax;//BLE_GAP_CONN_COUNT_DEFAULT;
 	err_code = sd_ble_cfg_set(BLE_CONN_CFG_GAP, &ble_cfg, ram_start);
 	APP_ERROR_CHECK(err_code);
 
@@ -1698,6 +1698,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 	g_BtAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
 	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
 	{
+		DEBUG_PRINTF("BtAppInit FAIL: BtPeerInit (pool mem=%p size=%d)\r\n",
+			(void*)pCfg->pPeerPoolMem, (int)pCfg->PeerPoolMemSize);
 		return false;
 	}
 
@@ -1751,6 +1753,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
     if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
     {
+    	DEBUG_PRINTF("BtAppInit FAIL: AppEvtHandlerInit (mem=%p size=%d)\r\n",
+    		(void*)pCfg->pEvtHandlerQueMem, (int)pCfg->EvtHandlerQueMemSize);
     	return false;
     }
 
@@ -1777,7 +1781,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     APP_ERROR_CHECK(err_code);
 
     // Initialize SoftDevice.
-    BtAppStackInit(g_BtAppData.AppDevice.Conn.MaxMtu, pCfg->CentLinkCount, pCfg->PeriLinkCount,
+    BtAppStackInit(g_BtAppData.AppDevice.Conn.MaxMtu, pCfg->PeriphDevMax, pCfg->CentralDevMax,
     				pCfg->Role & BTAPP_ROLE_PERIPHERAL);
     				//pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND);
 //    				pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT);
@@ -1812,6 +1816,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 	// them there is nothing to advertise, so this stops here.
 	if (BtGapInit(&gapcfg) == false)
 	{
+		DEBUG_PRINTF("BtAppInit FAIL: BtGapInit (GAP/GATT base services)\r\n");
 		return false;
 	}
 
@@ -1841,12 +1846,17 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
     g_BtAppData.AppDevice.bSecure = pCfg->SecType != BTGAP_SECTYPE_NONE;
 
+    DEBUG_PRINTF("BtAppInit: reached adv gate, role=0x%02x\r\n",
+        (unsigned)g_BtAppData.AppDevice.Conn.Role);
     if (g_BtAppData.AppDevice.Conn.Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_BROADCASTER))
     {
         if (BtAppAdvInit(pCfg) == false)
         {
+        	DEBUG_PRINTF("BtAppInit FAIL: BtAppAdvInit\r\n");
         	return false;
         }
+        DEBUG_PRINTF("BtAppInit: BtAppAdvInit ok, AdvHdl=%d\r\n",
+            (int)g_BtAppData.AdvHdl);
 
         err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_ADV, g_BtAppData.AdvHdl, GetValidTxPower(pCfg->TxPower));
         APP_ERROR_CHECK(err_code);

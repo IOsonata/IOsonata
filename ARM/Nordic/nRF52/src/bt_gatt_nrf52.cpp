@@ -505,6 +505,17 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		}
 	}
 
+	// The Generic Access (0x1800) and Generic Attribute (0x1801) services are
+	// provided by the SoftDevice itself; sd_ble_gatts_service_add rejects a
+	// second registration of them. Treat them as already present so a peripheral
+	// that registers the standard services through the generic layer still
+	// initializes. Matches the nRF54 port.
+	if (pSrvc->UuidSrvc == BT_UUID_GATT_SERVICE_GENERIC_ACCESS ||
+		pSrvc->UuidSrvc == BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE)
+	{
+		return true;
+	}
+
 	for (int i = 0; i < pSrvc->NbChar; i++)
 	{
 		BtGattChar_t *pChar = &pSrvc->pCharArray[i];

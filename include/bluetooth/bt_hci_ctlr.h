@@ -67,8 +67,8 @@ typedef struct __Bt_Hci_Ctlr_Config {
 	DevIntrfEvtHandler_t EvtHandler;
 	BtHciCtlrRxHandler_t RxHandler;	//!< HCI receive handler, host wires it to its process entry
 	uint16_t Role;					//!< BT_GAP_ROLE_* bitmask the controller must support
-	uint8_t PeriLinkCount;			//!< Peripheral link count for resource sizing
-	uint8_t CentLinkCount;			//!< Central link count for resource sizing
+	uint8_t CentralDevMax;			//!< Max central devices (peripheral-role links) for resource sizing
+	uint8_t PeriphDevMax;			//!< Max peripheral devices (central-role links) for resource sizing
 	uint8_t RxPktCount;				//!< Controller RX ACL packet count
 	uint8_t TxPktCount;				//!< Controller TX ACL packet count
 	uint16_t MaxDataLen;			//!< ACL data length for buffer sizing

@@ -465,8 +465,8 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	ctlrcfg.RxHandler = BtAppSdcCtlrRx;
 	ctlrcfg.OnWake = BtAppEvtNotify;
 	ctlrcfg.Role = pCfg->Role;
-	ctlrcfg.PeriLinkCount = pCfg->PeriLinkCount;
-	ctlrcfg.CentLinkCount = pCfg->CentLinkCount;
+	ctlrcfg.CentralDevMax = pCfg->CentralDevMax;
+	ctlrcfg.PeriphDevMax = pCfg->PeriphDevMax;
 	ctlrcfg.RxPktCount = BT_SDC_RX_MAX_PACKET_COUNT;
 	ctlrcfg.TxPktCount = BT_SDC_TX_MAX_PACKET_COUNT;
 	ctlrcfg.MaxDataLen = BTAPP_DEFAULT_MAX_DATA_LEN;

@@ -73,8 +73,8 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx);
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_CENTRAL,
-	.CentLinkCount = 1, 							// Number of central link
-	.PeriLinkCount = 0, 							// Number of peripheral link
+	.PeriphDevMax = 1, 							// Max peripheral devices we connect to as central
+	.CentralDevMax = 0, 							// Max central devices we serve as peripheral
 	.pDevName = DEVICE_NAME,                // Device name
 	.VendorId = ISYST_BLUETOOTH_ID,     	// PnP Bluetooth/USB vendor id
 	.ProductId = 1,                      	// PnP Product ID

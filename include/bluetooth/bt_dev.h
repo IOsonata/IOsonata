@@ -59,6 +59,14 @@ SOFTWARE.
 #define BT_DEV_SERVICE_MAXCNT		10
 #define BT_DEV_TXPEND_MAX			16		//!< Depth of the per-link ordered ACL TX-complete ring
 
+//!< Hard ceiling on simultaneous connections (peer pool slots). The application
+//!< chooses its own PeriphDevMax/CentralDevMax; their sum, and the peer pool,
+//!< cannot exceed this. Override at build time for a device that needs a
+//!< different maximum.
+#ifndef BT_DEV_CONN_MAX
+#define BT_DEV_CONN_MAX				18
+#endif
+
 /// Per-peer discovery state. Used by the central while walking the peer's
 /// GATT table. Previously held as file-scope globals (g_CurIdx, g_UuidType)
 /// in bt_attrsp.cpp / bt_attreq.cpp, which broke multi-link discovery: the

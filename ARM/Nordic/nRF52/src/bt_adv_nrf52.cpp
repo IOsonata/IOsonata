@@ -347,7 +347,7 @@ __WEAK bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	BtAdvPacket_t *srpkt  = &s_BleAppSrPkt;
 
 	s_bAdvertising = false;
-	s_PeripheralLinkCount = pCfg->PeriLinkCount;
+	s_PeripheralLinkCount = pCfg->CentralDevMax;
 	s_PendingPeripheralHdl = BT_CONN_HDL_INVALID;
 	memset(&s_Nrf52Data.AdvParam, 0, sizeof(ble_gap_adv_params_t));
 

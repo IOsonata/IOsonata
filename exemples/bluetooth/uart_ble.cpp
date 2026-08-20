@@ -208,8 +208,8 @@ uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+\0";
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
-	.CentLinkCount = 0, 				// Number of central link
-	.PeriLinkCount = 2, 				// Number of peripheral links; keep advertising after the first
+	.PeriphDevMax = 0, 				// Max peripheral devices we connect to as central
+	.CentralDevMax = 2, 				// Max central devices we serve as peripheral; keep advertising after the first
 	.pDevName = DEVICE_NAME,			// Device name
 	.VendorId = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,						// PnP Product ID

@@ -2,9 +2,10 @@
 //
 // Notify, indicate and disconnect used to read one active connection handle
 // when the caller did not name a link, which quietly picked a link once more
-// than one was up. The no-handle forms are now defined only while exactly one
-// link is up and refuse otherwise; the Conn forms name a link; the All forms
-// walk every connected one and report how many accepted.
+// than one was up. The no-handle notify/indicate now broadcast to every
+// subscribed link (same as the All forms, reporting only whether any accepted);
+// no-handle disconnect drops the active link; the Conn forms name a link; the
+// All forms walk every connected one and report how many accepted.
 
 #include <cstddef>
 #include <cstdint>
@@ -192,12 +193,11 @@ void TestNotifyTargetsNamedLink()
 	CHECK(s_NotifyCount == 0);
 }
 
-// ---- the no-handle forms mean the one link, and only that ------------------
+// ---- the no-handle forms broadcast to every subscribed link ----------------
 
-// Code written for a single link keeps working unchanged. With no link, and
-// with several, there is no single link to mean, so the call refuses rather
-// than picking one. That refusal is the whole point: the old behaviour was to
-// pick whichever link was current.
+// Code written for a single link keeps working unchanged. With no link nothing
+// is sent; with several the notify/indicate reach all subscribed links instead
+// of refusing. Disconnect drops the active (first) link.
 void TestSoleLinkForms()
 {
 	// Exactly one link: the send goes to it without naming it.
@@ -235,17 +235,21 @@ void TestSoleLinkForms()
 	CHECK(s_IndicateCount == 0);
 	CHECK(s_DisconnectCount == 0);
 
-	// Two links: no single link to mean, so nothing is sent and no link is
-	// picked. A caller that has to reach both uses the Conn or All form.
+	// Two links: the no-handle notify/indicate reach every subscribed link, and
+	// disconnect drops the active (first) one. A caller that must single one out
+	// uses the Conn form.
 	const uint16_t two[] = { 0x0021, 0x0022 };
 	SetLinks(two, 2);
 	Reset();
-	CHECK(BtAppNotify(&s_Char, s_Value, sizeof(s_Value)) == false);
-	CHECK(BtAppIndicate(&s_Char, s_Value, sizeof(s_Value)) == false);
+	CHECK(BtAppNotify(&s_Char, s_Value, sizeof(s_Value)));
+	CHECK(BtAppIndicate(&s_Char, s_Value, sizeof(s_Value)));
 	BtAppDisconnect();
-	CHECK(s_NotifyCount == 0);
-	CHECK(s_IndicateCount == 0);
-	CHECK(s_DisconnectCount == 0);
+	CHECK(s_NotifyCount == 2);
+	CHECK(s_NotifyHdl[0] == 0x0021);
+	CHECK(s_NotifyHdl[1] == 0x0022);
+	CHECK(s_IndicateCount == 2);
+	CHECK(s_DisconnectCount == 1);
+	CHECK(s_DisconnectHdl[0] == 0x0021);
 }
 
 void TestSendRejectsBadArguments()
@@ -265,8 +269,8 @@ void TestSendRejectsBadArguments()
 	CHECK(s_NotifyCount == 1);
 
 	Reset();
-	CHECK(BtAppNotifyAll(nullptr, s_Value, sizeof(s_Value)) == 0);
-	CHECK(BtAppIndicateAll(nullptr, s_Value, sizeof(s_Value)) == 0);
+	CHECK(BtAppNotify(nullptr, s_Value, sizeof(s_Value)) == 0);
+	CHECK(BtAppIndicate(nullptr, s_Value, sizeof(s_Value)) == 0);
 	CHECK(s_NotifyCount == 0);
 	CHECK(s_IndicateCount == 0);
 }
@@ -279,7 +283,7 @@ void TestNotifyAllWalksEveryLink()
 	SetLinks(links, 3);
 	Reset();
 
-	CHECK(BtAppNotifyAll(&s_Char, s_Value, sizeof(s_Value)) == 3);
+	CHECK(BtAppNotify(&s_Char, s_Value, sizeof(s_Value)) == 3);
 	CHECK(s_NotifyCount == 3);
 	CHECK(s_NotifyHdl[0] == 0x0010);
 	CHECK(s_NotifyHdl[1] == 0x0020);
@@ -291,13 +295,13 @@ void TestNotifyAllWalksEveryLink()
 	// A link that refuses is still visited but not counted.
 	Reset();
 	s_RefuseHdl = 0x0020;
-	CHECK(BtAppNotifyAll(&s_Char, s_Value, sizeof(s_Value)) == 2);
+	CHECK(BtAppNotify(&s_Char, s_Value, sizeof(s_Value)) == 2);
 	CHECK(s_NotifyCount == 3);
 
 	// Indicate behaves the same way.
 	Reset();
 	s_RefuseHdl = 0x0010;
-	CHECK(BtAppIndicateAll(&s_Char, s_Value, sizeof(s_Value)) == 2);
+	CHECK(BtAppIndicate(&s_Char, s_Value, sizeof(s_Value)) == 2);
 	CHECK(s_IndicateCount == 3);
 	CHECK(s_IndicateHdl[0] == 0x0010);
 	CHECK(s_SetValueCount == 1);
@@ -308,8 +312,8 @@ void TestAllFormsWithNoLinks()
 	SetLinks(nullptr, 0);
 	Reset();
 
-	CHECK(BtAppNotifyAll(&s_Char, s_Value, sizeof(s_Value)) == 0);
-	CHECK(BtAppIndicateAll(&s_Char, s_Value, sizeof(s_Value)) == 0);
+	CHECK(BtAppNotify(&s_Char, s_Value, sizeof(s_Value)) == 0);
+	CHECK(BtAppIndicate(&s_Char, s_Value, sizeof(s_Value)) == 0);
 	CHECK(BtAppDisconnectAll() == 0);
 	CHECK(s_NotifyCount == 0);
 	CHECK(s_IndicateCount == 0);

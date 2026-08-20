@@ -488,8 +488,8 @@ static uint8_t s_LongWriteMem[512];
 // value.
 static BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
-	.CentLinkCount = 0,
-	.PeriLinkCount = 1,
+	.PeriphDevMax = 0,
+	.CentralDevMax = 1,
 	.pDevName = DUT_DEVICE_NAME,
 	.VendorId = ISYST_BLUETOOTH_ID,
 	.ProductId = 1,
@@ -1866,7 +1866,14 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 
 // Numeric Comparison, Core 5.4 Vol 3 Part H 2.3.5.6.4. The value is reported
 // and the answer comes back as a command, so a harness confirms it the same
-// way a person would.
+// way a person would. A headless DUT has no operator to compare the value, so
+// by default it confirms the match automatically and pairing completes without
+// a console. A build that has an input path can set DUT_NUMCOMP_AUTO_ACCEPT 0
+// and answer with the y / n command instead.
+#ifndef DUT_NUMCOMP_AUTO_ACCEPT
+#define DUT_NUMCOMP_AUTO_ACCEPT		1
+#endif
+
 void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
 {
 	s_NumCompPending = true;
@@ -1875,6 +1882,13 @@ void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
 	DutOut("DUT NUMCOMP hdl=%u value=%06u", (unsigned)ConnHdl,
 		(unsigned)Value);
 	DutOutEnd();
+
+#if DUT_NUMCOMP_AUTO_ACCEPT
+	s_NumCompPending = false;
+	BtSmpNumericComparisonReply(ConnHdl, true);
+	DutOut("DUT NUMCOMP_REPLY hdl=%u accept=1 auto=1", (unsigned)ConnHdl);
+	DutOutEnd();
+#endif
 }
 
 // The controller asks for the subevents it is about to advertise. Answering

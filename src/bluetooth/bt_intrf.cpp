@@ -175,45 +175,42 @@ bool BtIntrfNotify(BtDevIntrf_t *pIntrf)
 		return false;
 	}
 
+	// A packet left stashed by a previous refused send goes out first.
+	bool res = true;
 	if (pIntrf->TransBuffLen > 0)
 	{
-		if (!BtGattCharNotify(connHdl, pChar, pIntrf->TransBuff,
-				(size_t)pIntrf->TransBuffLen))
-		{
-			return false;
-		}
-		pIntrf->TransBuffLen = 0;
+		res = BtGattCharNotify(connHdl, pChar, pIntrf->TransBuff,
+				(size_t)pIntrf->TransBuffLen);
 	}
 
-	for (;;)
+	// Drain the TxFifo. Each packet is sent straight from its FIFO slot, so the
+	// shared TransBuff is written only to stash a packet whose send was refused.
+	// This runs from both the Tx path and the TX-complete callback, so sending
+	// from the slot means a re-entrant call cannot resend or overwrite a buffer
+	// that is in flight. A FIFO packet never exceeds PacketSize, which
+	// BtIntrfInit bounds to TransBuff, so the stash copy cannot overflow.
+	BtIntrfPkt_t *pPkt = nullptr;
+	while (res == true)
 	{
+		pIntrf->TransBuffLen = 0;
 		uint32_t state = DisableInterrupt();
-		BtIntrfPkt_t *pPkt = (BtIntrfPkt_t *)CFifoGet(pIntrf->hTxFifo);
+		pPkt = (BtIntrfPkt_t *)CFifoGet(pIntrf->hTxFifo);
+		EnableInterrupt(state);
 		if (pPkt == nullptr)
 		{
-			EnableInterrupt(state);
 			return true;
 		}
+		res = BtGattCharNotify(connHdl, pChar, pPkt->Data, (size_t)pPkt->Len);
+	}
 
-		int payloadMax = pIntrf->PacketSize - (int)BTINTRF_PKHDR_LEN;
-		if (pPkt->Len > payloadMax || pPkt->Len > sizeof(pIntrf->TransBuff))
-		{
-			pIntrf->TxDropCnt++;
-			EnableInterrupt(state);
-			continue;
-		}
-
+	// The send was refused. Hold the popped packet for the next call.
+	if (pPkt != nullptr)
+	{
 		memcpy(pIntrf->TransBuff, pPkt->Data, pPkt->Len);
 		pIntrf->TransBuffLen = pPkt->Len;
-		EnableInterrupt(state);
-
-		if (!BtGattCharNotify(connHdl, pChar, pIntrf->TransBuff,
-				(size_t)pIntrf->TransBuffLen))
-		{
-			return false;
-		}
-		pIntrf->TransBuffLen = 0;
 	}
+
+	return false;
 }
 
 int BtIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int DataLen)

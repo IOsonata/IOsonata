@@ -149,8 +149,8 @@ const BtAppDevInfo_t s_UartBleDevDesc {
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
-	.CentLinkCount = 0, 				// Number of central link
-	.PeriLinkCount = 1, 				// Number of peripheral link
+	.PeriphDevMax = 0, 				// Max peripheral devices we connect to as central
+	.CentralDevMax = 1, 				// Max central devices we serve as peripheral
 	.pDevName = DEVICE_NAME,			// Device name
 	.VendorId = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,						// PnP Product ID
@@ -173,7 +173,9 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,// Led port nuber
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
 	.TxPower = 0,						// Tx power
-	.MaxMtu = 244,
+	.MaxMtu = 247,						// Must be >= PACKET_SIZE + 3 so a full
+										// PACKET_SIZE payload fits in one notification
+										// (a notification is capped at ATT_MTU - 3)
 	.pLongWrPoolMem = g_LWrBuffer,		// Long-write reassembly pool (split across peer slots)
 	.LongWrPoolMemSize = sizeof(g_LWrBuffer),
 };

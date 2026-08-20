@@ -142,58 +142,17 @@ void BtPeerConnectionRejected(uint16_t ConnHdl)
 	}
 }
 
-// Largest number of links one broadcast walks in a single call. The peer pool
-// is smaller than this on every port today, so the bound never truncates; it
-// exists so the handle array stays a fixed local.
-#ifndef BT_APP_LINK_MAX
-#define BT_APP_LINK_MAX				8
-#endif
-
-// Store the value once for a broadcast, then let each link send from it. Doing
-// it per link would rewrite the same bytes for every subscriber.
-static bool BtAppStoreValue(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
-{
-	if (pChar == nullptr)
-	{
-		return false;
-	}
-
-	if (DataLen > 0 && pData == nullptr)
-	{
-		return false;
-	}
-
-	// A zero-length value is a value. Skipping the store left the previous
-	// contents readable after a zero-length notification, so a Read returned
-	// something the client had just been told was gone.
-	return BtGattCharSetValue(pChar, pData, DataLen);
-}
-
-// Resolve the one connected link. Returns false when none is up and when more
-// than one is: there is no single link to mean then, and picking one is what
-// the old active connection handle did.
-static bool BtAppSoleLink(uint16_t *pHdl)
-{
-	// Ask for two. One means exactly one link; two means there is no sole one.
-	uint16_t hdl[2];
-	size_t n = BtPeerGetConnectedHandles(hdl, 2);
-
-	if (n != 1)
-	{
-		return false;
-	}
-
-	*pHdl = hdl[0];
-
-	return true;
-}
-
 // One implementation for every port. The SoftDevice and ST ports used to carry
 // a copy each, all four the same apart from which handle they read.
+//
+// The value is stored (BtGattCharSetValue) before the send so a later GATT read
+// reflects it, and so a value larger than the characteristic can hold, or a bad
+// (len>0, data==NULL) pair, is refused before anything is transmitted. A
+// zero-length value is a valid value and is stored.
 __attribute__((weak)) bool BtAppNotifyConn(uint16_t ConnHdl, BtGattChar_t *pChar,
 										   uint8_t *pData, uint16_t DataLen)
 {
-	if (BtAppStoreValue(pChar, pData, DataLen) == false)
+	if (BtGattCharSetValue(pChar, pData, DataLen) == false)
 	{
 		return false;
 	}
@@ -206,7 +165,7 @@ __attribute__((weak)) bool BtAppNotifyConn(uint16_t ConnHdl, BtGattChar_t *pChar
 __attribute__((weak)) bool BtAppIndicateConn(uint16_t ConnHdl, BtGattChar_t *pChar,
 											 uint8_t *pData, uint16_t DataLen)
 {
-	if (BtAppStoreValue(pChar, pData, DataLen) == false)
+	if (BtGattCharSetValue(pChar, pData, DataLen) == false)
 	{
 		return false;
 	}
@@ -216,54 +175,22 @@ __attribute__((weak)) bool BtAppIndicateConn(uint16_t ConnHdl, BtGattChar_t *pCh
 	return BtGattCharIndicate(ConnHdl, pChar, pData, DataLen);
 }
 
-__attribute__((weak)) bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
+__attribute__((weak)) int BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 {
-	uint16_t hdl;
-
-	if (BtAppSoleLink(&hdl) == false)
-	{
-		return false;
-	}
-
-	return BtAppNotifyConn(hdl, pChar, pData, DataLen);
-}
-
-__attribute__((weak)) bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
-{
-	uint16_t hdl;
-
-	if (BtAppSoleLink(&hdl) == false)
-	{
-		return false;
-	}
-
-	return BtAppIndicateConn(hdl, pChar, pData, DataLen);
-}
-
-__attribute__((weak)) int BtAppNotifyAll(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
-{
-	if (BtAppStoreValue(pChar, pData, DataLen) == false)
+	if (BtGattCharSetValue(pChar, pData, DataLen) == false)
 	{
 		return 0;
 	}
 
-	// Walk the peer pool itself. A fixed local array silently skipped every
-	// link past its size, and the pool is sized by the caller's memory, not by
-	// a constant here.
-	uint16_t n = BtPeerCount();
+	uint16_t hdl[BT_DEV_CONN_MAX];
+	uint16_t n = BtPeerGetConnectedHandles(hdl, BT_DEV_CONN_MAX);
 	int sent = 0;
 
 	for (uint16_t i = 0; i < n; i++)
 	{
-		BtDevice_t *pPeer = BtPeerSlot(i);
-		if (pPeer == nullptr || pPeer->Conn.Hdl == BT_CONN_HDL_INVALID)
-		{
-			continue;
-		}
-
 		// A link whose client did not subscribe is skipped by
 		// BtGattCharNotify, so it is not counted.
-		if (BtGattCharNotify(pPeer->Conn.Hdl, pChar, pData, DataLen))
+		if (BtGattCharNotify(hdl[i], pChar, pData, DataLen))
 		{
 			sent++;
 		}
@@ -272,31 +199,23 @@ __attribute__((weak)) int BtAppNotifyAll(BtGattChar_t *pChar, uint8_t *pData, ui
 	return sent;
 }
 
-__attribute__((weak)) int BtAppIndicateAll(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
+__attribute__((weak)) int BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 {
-	if (BtAppStoreValue(pChar, pData, DataLen) == false)
+	if (BtGattCharSetValue(pChar, pData, DataLen) == false)
 	{
 		return 0;
 	}
 
-	// Walk the peer pool itself. A fixed local array silently skipped every
-	// link past its size, and the pool is sized by the caller's memory, not by
-	// a constant here.
-	uint16_t n = BtPeerCount();
+	uint16_t hdl[BT_DEV_CONN_MAX];
+	uint16_t n = BtPeerGetConnectedHandles(hdl, BT_DEV_CONN_MAX);
 	int sent = 0;
 
 	for (uint16_t i = 0; i < n; i++)
 	{
-		BtDevice_t *pPeer = BtPeerSlot(i);
-		if (pPeer == nullptr || pPeer->Conn.Hdl == BT_CONN_HDL_INVALID)
-		{
-			continue;
-		}
-
 		// A link that already has an indication outstanding is refused until
 		// its confirmation arrives, so the count can be below the number of
 		// subscribed links.
-		if (BtGattCharIndicate(pPeer->Conn.Hdl, pChar, pData, DataLen))
+		if (BtGattCharIndicate(hdl[i], pChar, pData, DataLen))
 		{
 			sent++;
 		}
@@ -305,11 +224,14 @@ __attribute__((weak)) int BtAppIndicateAll(BtGattChar_t *pChar, uint8_t *pData, 
 	return sent;
 }
 
+// Disconnect the active link. With no link this is a no-op; with several it
+// drops the first live one. Use BtAppDisconnectConn to name a link or
+// BtAppDisconnectAll to drop every link.
 __attribute__((weak)) void BtAppDisconnect(void)
 {
 	uint16_t hdl;
 
-	if (BtAppSoleLink(&hdl) == false)
+	if (BtPeerGetConnectedHandles(&hdl, 1) == 0)
 	{
 		return;
 	}

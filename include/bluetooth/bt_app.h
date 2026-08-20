@@ -120,8 +120,8 @@ typedef struct __Bt_App_Dev_Info {
 
 typedef struct __Bt_App_Cfg {
 	BTAPP_ROLE	Role;				//!< Application mode peripheral/central/mix
-	int CentLinkCount;				//!< Number of central link
-	int	PeriLinkCount;				//!< Number of peripheral link
+	int PeriphDevMax;				//!< Max peripheral devices this device connects to (i.e. links where we act as central). Feeds central_role_count.
+	int	CentralDevMax;				//!< Max central devices connected to this device (i.e. links where we act as peripheral). Feeds periph_role_count. When reached, further central connections are refused.
 	const char *pDevName;			//!< Device name
 	uint16_t VendorId;				//!< PnP Bluetooth/USB vendor id. iBeacon mode, this is Major value
 	uint16_t ProductId;				//!< PnP product ID. iBeacon mode, this is Minor value
@@ -267,27 +267,25 @@ void BtAppSetDevName(const char *pName);
 char *BtAppGetDevName(void);
 
 /**
- * @brief	Send a Handle Value Notification for pChar on the one connected link.
+ * @brief	Send a Handle Value Notification for pChar to every subscribed link.
  *
- *			Defined only while exactly one link is up. With none, and with more
- *			than one, there is no single link this can mean and the call returns
- *			false without sending. It does not pick one.
+ *			Broadcasts to all connected links; a link whose client did not
+ *			subscribe via the CCCD is skipped. On a single-link device this is
+ *			just "notify the one link". To target one specific link out of
+ *			several, use BtAppNotifyConn; BtAppNotifyAll is the same broadcast
+ *			but returns the accepted count instead of a bool.
  *
- *			There used to be an active connection handle the send read in that
- *			situation, which quietly chose a link. Code written for one link keeps
- *			working; code that has to handle several names its link with
- *			BtAppNotifyConn or reaches every subscriber with BtAppNotifyAll.
- *
- *			No-op (returns false) unless the client subscribed for notifications
- *			via the CCCD.
+ *			The value is stored once (so a later GATT read reflects it) before
+ *			the broadcast, and a value the characteristic cannot hold is refused
+ *			before anything is sent.
  *
  * @param	pChar		Characteristic to notify
  * @param	pData		Value bytes, may be null when DataLen is 0
  * @param	DataLen		Value length in octets
  *
- * @return	true if the packet was accepted
+ * @return	true if at least one link was notified
  */
-bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
+int BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
 
 /**
  * @brief	Send a Handle Value Notification for pChar on the named link.
@@ -298,6 +296,7 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
  */
 bool BtAppNotifyConn(uint16_t ConnHdl, BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
 
+
 /**
  * @brief	Notify pChar on every connected link whose client subscribed.
  *
@@ -306,19 +305,20 @@ bool BtAppNotifyConn(uint16_t ConnHdl, BtGattChar_t *pChar, uint8_t *pData, uint
  *
  * @return	Number of links the notification was accepted for, 0 if none
  */
-int BtAppNotifyAll(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
+//int BtAppNotifyAll(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
 
 /**
- * @brief	Send a Handle Value Indication for pChar on the one connected link.
+ * @brief	Send a Handle Value Indication for pChar to every subscribed link.
  *
  *			Indication is the confirmed counterpart of BtAppNotify: only one may
  *			be outstanding per link until the client returns its confirmation.
- *			Same single-link rule as BtAppNotify: false when none or several are
- *			up. No-op unless the client subscribed for indications via the CCCD.
+ *			Broadcasts like BtAppNotify; a link that already has an indication
+ *			outstanding, or whose client did not subscribe, is skipped. Target a
+ *			single link with BtAppIndicateConn.
  *
- * @return	true if the packet was accepted
+ * @return	true if at least one link was indicated
  */
-bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
+int BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
 
 /**
  * @brief	Send a Handle Value Indication for pChar on the named link.
@@ -335,7 +335,7 @@ bool BtAppIndicateConn(uint16_t ConnHdl, BtGattChar_t *pChar, uint8_t *pData, ui
  *
  * @return	Number of links the indication was accepted for, 0 if none
  */
-int BtAppIndicateAll(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
+//int BtAppIndicateAll(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
 
 /**
  *
@@ -385,10 +385,11 @@ bool BtAppAdvInit(const BtAppCfg_t *pCfg);
 bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt,
 		bool *pExtAdv, bool *pScannable);
 /**
- * @brief	Disconnect the one connected link.
+ * @brief	Disconnect the active link.
  *
- *			Same single-link rule as BtAppNotify: does nothing when no link is
- *			up or when several are, rather than dropping one of them.
+ *			Drops the first connected link, or does nothing when none is up. To
+ *			name a link use BtAppDisconnectConn; to drop every link use
+ *			BtAppDisconnectAll.
  */
 void BtAppDisconnect(void);
 

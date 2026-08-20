@@ -56,7 +56,7 @@ SOFTWARE.
 // app configured (UART, USB, RTT, BLE, or any other DeviceIntrf); the trace
 // does not assume a transport. A release build defines NDEBUG, which strips all
 // trace regardless of DEBUG_ENABLE.
-//#define DEBUG_ENABLE
+#define DEBUG_ENABLE
 
 #if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 #include "syslog.h"

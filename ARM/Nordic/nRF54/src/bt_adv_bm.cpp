@@ -273,7 +273,7 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	BtAdvPacket_t *srpkt  = &s_BtAppSrPkt;
 
 	s_bAdvertising = false;
-	s_PeripheralLinkCount = pCfg->PeriLinkCount;
+	s_PeripheralLinkCount = pCfg->CentralDevMax;
 	memset(&s_BmData.AdvParam, 0, sizeof(ble_gap_adv_params_t));
 
 	// Encode the AD payload. BtAdvEncode decides legacy vs extended from how the

@@ -48,17 +48,11 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_uuid.h"
 
-// Default pool size used when the app passes {NULL, 0}. Matches the
-// previous CFG_BT_PEER_MAX = 4 baseline so apps that were sized for
-// CFG_BT_PEER_MAX continue to work without explicit cfg fields.
-#ifndef BT_PEER_POOL_DEFAULT_COUNT
-#define BT_PEER_POOL_DEFAULT_COUNT		4
-#endif
-
-alignas(BtDevice_t) static uint8_t s_DefaultPeerPoolMem[BT_PEER_POOL_MEMSIZE(BT_PEER_POOL_DEFAULT_COUNT)];
+// Default pool when the app passes {NULL, 0}: sized to the hard maximum so a
+// default build already supports up to BT_DEV_CONN_MAX simultaneous links.
+alignas(BtDevice_t) static uint8_t s_DefaultPeerPoolMem[BT_PEER_POOL_MEMSIZE(BT_DEV_CONN_MAX)];
 static BtPeerPoolHdr_t *s_pPeerPool = nullptr;
 static BtDevice_t *s_pPeerSlots = nullptr;
-static uint16_t s_HandleScanCursor = 0;
 
 // The generic application layer overrides these hooks. Weak defaults keep the
 // peer manager independently testable and usable by ports that do not link the
@@ -128,6 +122,14 @@ bool BtPeerInit(uint8_t *pMem, size_t MemSize)
 		return false;
 	}
 
+	// The supported number of simultaneous links is whatever the caller sized
+	// the pool for, but never above the hard ceiling. A larger pool is capped
+	// here so a config can request up to, but not beyond, BT_DEV_CONN_MAX.
+	if (countValue > BT_DEV_CONN_MAX)
+	{
+		countValue = BT_DEV_CONN_MAX;
+	}
+
 	BtPeerPoolHdr_t *hdr =
 		(BtPeerPoolHdr_t*)(slotAddr - sizeof(BtPeerPoolHdr_t));
 	uint16_t count = (uint16_t)countValue;
@@ -144,7 +146,6 @@ bool BtPeerInit(uint8_t *pMem, size_t MemSize)
 
 	s_pPeerPool = hdr;
 	s_pPeerSlots = slots;
-	s_HandleScanCursor = 0;
 	return true;
 }
 
@@ -186,7 +187,7 @@ BtDevice_t * BtPeerSlot(uint16_t Idx)
 	{
 		return nullptr;
 	}
-	return &PeerSlots()[Idx];
+	return &s_pPeerSlots[Idx];
 }
 
 BtDevice_t * BtPeerAlloc(uint16_t ConnHdl)
@@ -341,59 +342,16 @@ size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 		return 0;
 	}
 
+	// Fill pHdl with connected handles in pool order, up to MaxCount.
 	BtDevice_t *slots = PeerSlots();
-	uint16_t slotCount = s_pPeerPool->Count;
-	size_t active = 0;
-	for (uint16_t i = 0; i < slotCount; i++)
+	size_t n = 0;
+	for (uint16_t i = 0; i < s_pPeerPool->Count && n < MaxCount; i++)
 	{
 		if (slots[i].Conn.Hdl != BT_CONN_HDL_INVALID)
 		{
-			active++;
+			pHdl[n++] = slots[i].Conn.Hdl;
 		}
 	}
-
-	if (active == 0)
-	{
-		s_HandleScanCursor = 0;
-		return 0;
-	}
-
-	// When the caller can hold the complete set, retain deterministic pool
-	// order. Single-link helpers and snapshots should not depend on prior
-	// bounded scans.
-	if (active <= MaxCount)
-	{
-		size_t n = 0;
-		for (uint16_t i = 0; i < slotCount; i++)
-		{
-			if (slots[i].Conn.Hdl != BT_CONN_HDL_INVALID)
-			{
-				pHdl[n++] = slots[i].Conn.Hdl;
-			}
-		}
-		s_HandleScanCursor = 0;
-		return n;
-	}
-
-	// A bounded periodic scan must not return the same first slots forever.
-	// Continue after the last slot inspected by the previous truncated call.
-	uint16_t idx = s_HandleScanCursor < slotCount ? s_HandleScanCursor : 0;
-	size_t n = 0;
-	uint16_t inspected = 0;
-	while (inspected < slotCount && n < MaxCount)
-	{
-		if (slots[idx].Conn.Hdl != BT_CONN_HDL_INVALID)
-		{
-			pHdl[n++] = slots[idx].Conn.Hdl;
-		}
-		idx++;
-		if (idx >= slotCount)
-		{
-			idx = 0;
-		}
-		inspected++;
-	}
-	s_HandleScanCursor = idx;
 	return n;
 }
 

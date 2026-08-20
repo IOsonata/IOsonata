@@ -163,8 +163,8 @@ BtHciCtlrCfg_t MakeCfg(uint16_t Role)
 
 	std::memset(&cfg, 0, sizeof(cfg));
 	cfg.Role = Role;
-	cfg.PeriLinkCount = 1;
-	cfg.CentLinkCount = 1;
+	cfg.CentralDevMax = 1;
+	cfg.PeriphDevMax = 1;
 	cfg.RxPktCount = 4;
 	cfg.TxPktCount = 4;
 	cfg.MaxDataLen = 251;

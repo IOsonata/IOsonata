@@ -131,8 +131,8 @@ Timer g_Timer;
 
 const BtAppCfg_t s_BtDevCfg = {
 	.Role = BTAPP_ROLE_BROADCASTER,
-	.CentLinkCount = 0, 				// Number of central link
-	.PeriLinkCount = 1, 				// Number of peripheral link
+	.PeriphDevMax = 0, 				// Max peripheral devices we connect to as central
+	.CentralDevMax = 1, 				// Max central devices we serve as peripheral
 	.pDevName = DEVICE_NAME,			// Device name
 	.VendorId = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,						// PnP Product ID

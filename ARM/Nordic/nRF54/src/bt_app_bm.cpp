@@ -879,7 +879,7 @@ static uint32_t SDBleDefaultCfgSet(const BtAppCfg_t *pCfg, uint32_t ConnCfgTag, 
 
 	memset(&ble_cfg, 0, sizeof(ble_cfg));
 	ble_cfg.conn_cfg.conn_cfg_tag = ConnCfgTag;
-	ble_cfg.conn_cfg.params.gap_conn_cfg.conn_count = pCfg->PeriLinkCount + pCfg->CentLinkCount; //CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT;
+	ble_cfg.conn_cfg.params.gap_conn_cfg.conn_count = pCfg->CentralDevMax + pCfg->PeriphDevMax; //CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT;
 	ble_cfg.conn_cfg.params.gap_conn_cfg.event_length = CONFIG_NRF_SDH_BLE_GAP_EVENT_LENGTH;
 
 	err = sd_ble_cfg_set(BLE_CONN_CFG_GAP, &ble_cfg, RamStart);
@@ -891,14 +891,14 @@ static uint32_t SDBleDefaultCfgSet(const BtAppCfg_t *pCfg, uint32_t ConnCfgTag, 
 	}
 
 	memset(&ble_cfg, 0, sizeof(ble_cfg));
-	ble_cfg.gap_cfg.role_count_cfg.periph_role_count = pCfg->PeriLinkCount;
+	ble_cfg.gap_cfg.role_count_cfg.periph_role_count = pCfg->CentralDevMax;
 
 	// TODO: make this configurable
 	ble_cfg.gap_cfg.role_count_cfg.adv_set_count = BLE_GAP_ADV_SET_COUNT_DEFAULT;
 
-	ble_cfg.gap_cfg.role_count_cfg.central_role_count = pCfg->CentLinkCount;
+	ble_cfg.gap_cfg.role_count_cfg.central_role_count = pCfg->PeriphDevMax;
 	ble_cfg.gap_cfg.role_count_cfg.central_sec_count =
-		MIN(pCfg->CentLinkCount, BLE_GAP_ROLE_COUNT_CENTRAL_SEC_DEFAULT);
+		MIN(pCfg->PeriphDevMax, BLE_GAP_ROLE_COUNT_CENTRAL_SEC_DEFAULT);
 
 	err = sd_ble_cfg_set(BLE_GAP_CFG_ROLE_COUNT, &ble_cfg, RamStart);
 	if (err)

@@ -108,9 +108,10 @@ extern "C" {
 #endif
 
 // Subsystem init. Called by each port's BtAppInit early, with the cfg's
-// pool fields forwarded straight in. Passing {NULL, 0} selects the small
-// library default (BT_PEER_POOL_DEFAULT_COUNT slots). Returns false if
-// the buffer cannot hold at least one correctly aligned BtDevice_t slot.
+// pool fields forwarded straight in. Passing {NULL, 0} selects the library
+// default pool (BT_DEV_CONN_MAX slots). A caller-provided pool is honored up
+// to BT_DEV_CONN_MAX slots; anything beyond that ceiling is capped. Returns
+// false if the buffer cannot hold at least one correctly aligned BtDevice_t.
 bool         BtPeerInit(uint8_t *pMem, size_t MemSize);
 
 // Register the long-write reassembly pool. Splits pMem evenly across the

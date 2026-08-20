@@ -143,7 +143,7 @@ void TestAllocationAndLongWriteSlices()
 	CHECK(!BtPeerIsConnected());
 }
 
-void TestTruncatedHandleScanRotates()
+void TestTruncatedHandleScan()
 {
 	constexpr uint16_t kPeerCount = 10;
 	alignas(BtDevice_t)
@@ -155,35 +155,44 @@ void TestTruncatedHandleScanRotates()
 		CHECK(BtPeerAlloc((uint16_t)(0x100U + i)) != nullptr);
 	}
 
+	// A truncated request returns the first MaxCount handles in pool order,
+	// the same set on every call.
 	uint16_t first[8] = {};
 	uint16_t second[8] = {};
 	CHECK(BtPeerGetConnectedHandles(first, 8) == 8);
 	CHECK(BtPeerGetConnectedHandles(second, 8) == 8);
-
-	bool seen[kPeerCount] = {};
-	for (uint16_t hdl : first)
+	for (uint16_t i = 0; i < 8; i++)
 	{
-		CHECK(hdl >= 0x100U && hdl < 0x100U + kPeerCount);
-		seen[hdl - 0x100U] = true;
-	}
-	for (uint16_t hdl : second)
-	{
-		CHECK(hdl >= 0x100U && hdl < 0x100U + kPeerCount);
-		seen[hdl - 0x100U] = true;
-	}
-	for (bool value : seen)
-	{
-		CHECK(value);
+		CHECK(first[i] == (uint16_t)(0x100U + i));
+		CHECK(second[i] == first[i]);
 	}
 
-	// A complete snapshot remains deterministic and resets the bounded-scan
-	// cursor for callers that can hold every active link.
+	// A request that can hold every active link returns them all in order.
 	uint16_t all[kPeerCount] = {};
 	CHECK(BtPeerGetConnectedHandles(all, kPeerCount) == kPeerCount);
 	for (uint16_t i = 0; i < kPeerCount; i++)
 	{
 		CHECK(all[i] == (uint16_t)(0x100U + i));
 	}
+}
+
+// A pool sized above the hard ceiling is capped at BT_DEV_CONN_MAX, and no
+// more than that many links can be allocated.
+void TestConnMaxCeiling()
+{
+	constexpr uint16_t kOversize = BT_DEV_CONN_MAX + 5;
+	alignas(BtDevice_t)
+	std::array<uint8_t, BT_PEER_POOL_MEMSIZE(kOversize)> pool = {};
+	CHECK(BtPeerInit(pool.data(), pool.size()));
+
+	// Only BT_DEV_CONN_MAX slots are usable even though the buffer holds more.
+	uint16_t i = 0;
+	for (; i < BT_DEV_CONN_MAX; i++)
+	{
+		CHECK(BtPeerAlloc((uint16_t)(0x200U + i)) != nullptr);
+	}
+	// The next allocation is refused: the pool is capped at the ceiling.
+	CHECK(BtPeerAlloc((uint16_t)(0x200U + i)) == nullptr);
 }
 
 void TestConnectionLifecycleHooks()
@@ -218,7 +227,7 @@ void TestConnectionLifecycleHooks()
 void TestConnectedFieldsAndDefaultPool()
 {
 	CHECK(BtPeerInit(nullptr, 0));
-	CHECK(BtPeerCount() == 4);
+	CHECK(BtPeerCount() == BT_DEV_CONN_MAX);
 
 	const uint8_t peerAddr[6] = { 1, 2, 3, 4, 5, 6 };
 	const uint8_t ownAddr[6] = { 6, 5, 4, 3, 2, 1 };
@@ -292,7 +301,8 @@ int main()
 {
 	TestMisalignedCallerPool();
 	TestAllocationAndLongWriteSlices();
-	TestTruncatedHandleScanRotates();
+	TestTruncatedHandleScan();
+	TestConnMaxCeiling();
 	TestConnectionLifecycleHooks();
 	TestConnectedFieldsAndDefaultPool();
 	TestPeerRole();

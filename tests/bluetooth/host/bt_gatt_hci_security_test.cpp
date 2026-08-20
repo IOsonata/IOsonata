@@ -138,14 +138,14 @@ void TestMtuBoundDoesNotTruncate()
 			std::memcmp(s_Value, before, sizeof(before)) == 0);
 }
 
-void TestTransportFailureDoesNotMutateValue()
+// The stored attribute value is refreshed before the transmit, so a failed
+// transport still leaves the latest write in place for a subsequent Read. The
+// call returns false only to report that the notification did not go out.
+void TestTransportFailureStillUpdatesValue()
 {
 	Reset();
 	s_TransportAccept = false;
 	uint8_t payload[4] = { 1, 2, 3, 4 };
-	uint8_t before[sizeof(s_Value)];
-	std::memcpy(before, s_Value, sizeof(before));
-	uint16_t beforeLen = s_Char.ValueLen;
 
 	BT_CHECK(s_Test,
 			!BtGattCharNotify(kConnHdl, &s_Char,
@@ -153,23 +153,20 @@ void TestTransportFailureDoesNotMutateValue()
 	BT_CHECK(s_Test, s_SendCount == 1);
 	BT_CHECK(s_Test, s_ReserveCount == 1);
 	BT_CHECK(s_Test, s_ReleaseCount == 1);
-	BT_CHECK(s_Test, s_Char.ValueLen == beforeLen);
+	BT_CHECK(s_Test, s_Char.ValueLen == sizeof(payload));
 	BT_CHECK(s_Test,
-			std::memcmp(s_Value, before, sizeof(before)) == 0);
+			std::memcmp(s_Value, payload, sizeof(payload)) == 0);
 }
 
 // A refused reservation means the completion ring has no slot for the packet.
 // Sending anyway would put a notification on air that TxCompleteCB can never
-// account for, so the send has to stop before the transport and leave the
-// stored value alone.
+// account for, so the send has to stop before the transport. The value was
+// already refreshed before the reservation, so a later Read returns it.
 void TestReserveFailureStopsBeforeTransport()
 {
 	Reset();
 	s_ReserveAccept = false;
 	uint8_t payload[4] = { 1, 2, 3, 4 };
-	uint8_t before[sizeof(s_Value)];
-	std::memcpy(before, s_Value, sizeof(before));
-	uint16_t beforeLen = s_Char.ValueLen;
 
 	BT_CHECK(s_Test,
 			!BtGattCharNotify(kConnHdl, &s_Char, payload, sizeof(payload)));
@@ -178,8 +175,8 @@ void TestReserveFailureStopsBeforeTransport()
 	// return a slot the ring never handed out.
 	BT_CHECK(s_Test, s_ReleaseCount == 0);
 	BT_CHECK(s_Test, s_SendCount == 0);
-	BT_CHECK(s_Test, s_Char.ValueLen == beforeLen);
-	BT_CHECK(s_Test, std::memcmp(s_Value, before, sizeof(before)) == 0);
+	BT_CHECK(s_Test, s_Char.ValueLen == sizeof(payload));
+	BT_CHECK(s_Test, std::memcmp(s_Value, payload, sizeof(payload)) == 0);
 
 	// An indication takes the same path and has to refuse the same way.
 	Reset();
@@ -292,8 +289,8 @@ int main()
 {
 	s_Test.Run("security error mapping", TestSecurityErrors);
 	s_Test.Run("MTU bound rejects truncation", TestMtuBoundDoesNotTruncate);
-	s_Test.Run("transport failure preserves value",
-			   TestTransportFailureDoesNotMutateValue);
+	s_Test.Run("transport failure still updates value",
+			   TestTransportFailureStillUpdatesValue);
 	s_Test.Run("reserve failure stops before transport",
 			   TestReserveFailureStopsBeforeTransport);
 	s_Test.Run("successful send updates value", TestSuccessfulSendUpdatesValue);
