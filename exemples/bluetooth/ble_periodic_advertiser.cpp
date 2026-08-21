@@ -344,22 +344,8 @@ void BtAppTimerHandler(TimerDev_t * const pTimer, int TrigNo, void * const pCont
 #if PADV_ENABLE_PAWR == 0
 	g_PeriodicCnt++;
 	PeriodicAdBuild();
-	bool ok = BtPadvDataSet(APP_ADV_HDL, s_PeriodicAd, sizeof(s_PeriodicAd));
-#ifdef UART_PINS
-	// Diagnostic: confirm the tick fires each second and the data update is
-	// accepted. A counter that stops advancing at the receiver means either
-	// this stops printing (timer fired once) or ok goes 0 (update refused).
-	g_Uart.printf("tick cnt=%lu set=%d\r\n", (unsigned long)g_PeriodicCnt, ok ? 1 : 0);
+	BtPadvDataSet(APP_ADV_HDL, s_PeriodicAd, sizeof(s_PeriodicAd));
 #endif
-#endif
-
-	// Re-arm the tick. On nRF54L the GRTC based timer's continuous mode relies
-	// on the CCADD hardware auto-reload, which does not repeat here (the GRTC is
-	// shared with MPSL), so a continuous trigger fires once. Re-arming from the
-	// handler makes the tick repeat regardless. Harmless where continuous
-	// already works: it just re-sets the same one second period.
-	g_Timer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS,
-		BtAppTimerHandler);
 }
 
 int main()

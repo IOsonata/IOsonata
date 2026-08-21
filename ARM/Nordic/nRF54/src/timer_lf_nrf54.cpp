@@ -257,14 +257,11 @@ static uint64_t nRFxGrtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uin
 
     uint64_t period = pTimer->nsPeriod * (uint64_t)cc;
 
-    if (Type == TIMER_TRIG_TYPE_CONTINUOUS)
-    {
-    	NRF_GRTC->CC[idx].CCADD = rtc.CC[TrigNo];
-    }
-    else
-    {
-    	NRF_GRTC->CC[idx].CCADD = 0;
-    }
+    // Continuous triggers are rescheduled in GrtcIRQHandler, not by the GRTC
+    // CCADD auto-reload. CCADD does not repeat reliably when the GRTC is shared
+    // with MPSL (MPSL owns its own channel), so it is left off and the handler
+    // advances the compare by one period on each match.
+    NRF_GRTC->CC[idx].CCADD = 0;
     NRF_GRTC->TASKS_CAPTURE[idx] = 1;
 
     uint64_t v = *(uint64_t*)&NRF_GRTC->CC[idx] + cc;
@@ -490,6 +487,16 @@ static void GrtcIRQHandler(int DevNo)
         {
             evt |= TIMER_EVT_TRIGGER(i);
             NRF_GRTC->EVENTS_COMPARE[idx] = 0;
+
+            // Repeat a continuous trigger by advancing the compare one period.
+            // The GRTC clears CCEN on a match, so it is re-enabled here. Done
+            // before the handler so a slow handler does not delay the next tick.
+            if (rtc.Trigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS && rtc.CC[i] != 0)
+            {
+                uint64_t next = *(uint64_t*)&NRF_GRTC->CC[idx] + rtc.CC[i];
+                *(uint64_t*)&NRF_GRTC->CC[idx] = next;
+                NRF_GRTC->CC[idx].CCEN = 1;
+            }
 
             if (rtc.Trigger[i].Handler)
             {
