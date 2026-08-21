@@ -502,26 +502,64 @@ void TIMER0_IRQHandler(void)
 }
 
 #if defined(NRF54L_SERIES)
+// Constant latency is driven straight through the POWER HAL here rather than
+// through nrfx_power. The only reason nrfx_power was linked into this build was
+// these two register pokes, and on this nrfx it also defines its own
+// CLOCK_POWER_IRQHandler, which collides with the MPSL one above. Talking to the
+// HAL keeps the constant latency behaviour and lets nrfx_power stay out of the
+// SDC library, so MPSL owns the shared interrupt vector.
+#if NRF_POWER_HAS_CONST_LATENCY
+static volatile uint8_t s_ConstLatRefs = 0;
+
+static void ConstLatRequest(void)
+{
+	if (s_ConstLatRefs++ == 0)
+	{
+		nrf_power_task_trigger(NRF_POWER, NRF_POWER_TASK_CONSTLAT);
+	}
+}
+
+static void ConstLatFree(void)
+{
+	if (s_ConstLatRefs > 0 && --s_ConstLatRefs == 0)
+	{
+		nrf_power_task_trigger(NRF_POWER, NRF_POWER_TASK_LOWPWR);
+	}
+}
+#else
+static void ConstLatRequest(void) {}
+static void ConstLatFree(void) {}
+#endif
+
 /** @brief MPSL requesting CONSTLAT to be on.
  *
- * The application needs to implement this function.
- * MPSL will call the function when it needs CONSTLAT to be on.
- * It only calls the function on nRF54L Series devices.
+ * MPSL calls this when it needs constant latency, only on nRF54L Series.
  */
 void mpsl_constlat_request_callback(void)
 {
-	nrfx_power_constlat_mode_request();
+	ConstLatRequest();
 }
 
-/** @brief De-request CONSTLAT to be on.
- *
- * The application needs to implement this function.
- * MPSL will call the function when it no longer needs CONSTLAT to be on.
- * It only only calls the function on nRF54L Series devices.
- */
+/** @brief De-request CONSTLAT. MPSL calls this when it no longer needs it. */
 void mpsl_lowpower_request_callback(void)
 {
-	nrfx_power_constlat_mode_free();
+	ConstLatFree();
+}
+
+/** @brief MPSL requesting the low latency (constant latency) mode.
+ *
+ * Newer MPSL libraries call these two instead of the constlat / lowpower pair
+ * above. Both name pairs are provided; the linker drops whichever the library
+ * does not reference.
+ */
+void mpsl_low_latency_acquire_callback(void)
+{
+	ConstLatRequest();
+}
+
+void mpsl_low_latency_release_callback(void)
+{
+	ConstLatFree();
 }
 #endif
 

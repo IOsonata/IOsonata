@@ -410,7 +410,12 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 			return 0xFF;
 	}
 
-	return res == 0 ? 0 : 0xFF;
+	// Propagate the controller status byte. The sdc_hci_cmd_* wrappers return
+	// the HCI status, 0 on success, and a caller needs the actual code to tell
+	// a rejected parameter from a set the controller has no room for. Flatten
+	// only a value that is not a status byte, which the uint8_t return already
+	// bounds, so 0xFF here means an out of range internal result.
+	return (res >= 0 && res <= 0xFF) ? (uint8_t)res : 0xFF;
 }
 
 // Buffer sizing for the periodic advertising resources above. These are counts
