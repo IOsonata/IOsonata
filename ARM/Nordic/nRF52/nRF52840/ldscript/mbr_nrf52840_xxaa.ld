@@ -13,8 +13,24 @@ GROUP(-lgcc -lc -lnosys)
 
 MEMORY
 {
-  FLASH (rx) : ORIGIN = 0x1000, LENGTH = 0xff000
+  FLASH (rx) : ORIGIN = 0x1000, LENGTH = 0xDC000
   RAM (rwx) :  ORIGIN = 0x20000008, LENGTH = 0x3fff8
+  NVM0 (rw) : ORIGIN = 0x000DD000, LENGTH = 0x00003000
+}
+
+SECTIONS
+{
+	/* The region as a section, so the reservation shows up in the map file
+	   with its size and the bounds arrive as __start_ and __stop_ symbols,
+	   the naming the SDK uses for its own section variables. KEEP lets a
+	   variable be placed in here later if anything ever wants to. */
+	nvm0 (NOLOAD) :
+	{
+		__start_nvm0 = .;
+		KEEP(*(nvm0))
+		. = ORIGIN(NVM0) + LENGTH(NVM0);
+		__stop_nvm0 = .;
+	} > NVM0
 }
 
 SECTIONS

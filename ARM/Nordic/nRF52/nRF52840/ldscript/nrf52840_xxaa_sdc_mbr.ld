@@ -16,13 +16,13 @@ MEMORY
 
 	/* App flash stops short of the store below, so an image that grows
 	   into it fails to link rather than overlapping it. */
-	FLASH (rx) : ORIGIN = 0x1000, LENGTH = 0xFC000
+	FLASH (rx) : ORIGIN = 0x1000, LENGTH = 0xDC000
 	EXTFLASH (rx) : ORIGIN = 0x1200000, LENGTH = 0x8000000
 	/* The bond store. Declared here so the linker owns the layout: FLASH
 	   above stops short of it, so an image that grows into the store fails
 	   to link. NvmRegionAddr(0) reads the section below, so nothing
 	   states the address twice. */
-	NVM0 (rw) : ORIGIN = 0x000FD000, LENGTH = 0x00003000
+	NVM0 (rw) : ORIGIN = 0x000DD000, LENGTH = 0x00003000
 	RAM (rwx) : ORIGIN = 0x20000010, LENGTH = 0x3FFF0
 	CODE_RAM (rwx) : ORIGIN = 0x800000, LENGTH = 0x40000
 }
