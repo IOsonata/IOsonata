@@ -260,6 +260,7 @@ syslog_tx_test_SOURCES := \
 	syslog_tx_test.cpp \
 	$(ROOT)/src/syslog.cpp \
 	$(ROOT)/src/device_intrf.cpp
+syslog_tx_test_EXTRA := $(CFIFO_OBJ)
 
 bt_att_adversarial_test_SOURCES := \
 	bt_att_adversarial_test.cpp \
@@ -306,7 +307,8 @@ bt_smp_keydist_test_SOURCES := \
 	$(ROOT)/src/crypto/crypto_p256.cpp \
 	$(ROOT)/src/crypto/crypto_softrng.cpp \
 	$(ROOT)/src/device.cpp \
-	$(ROOT)/src/device_intrf.cpp
+	$(ROOT)/src/device_intrf.cpp \
+	$(ROOT)/src/syslog.cpp
 bt_smp_keydist_test_EXTRA := $(CRC_OBJ) $(CFIFO_OBJ)
 bt_smp_keydist_test_DEPS := \
 	bt_smp_link_test_stubs.h \

@@ -3,9 +3,9 @@
 
 @brief	System logger implementation.
 
- Formats a SysStatus_t record into one text line and transmits it through
- the configured DeviceIntrf output. The line is built in a stack local
- buffer, so the function is reentrant and uses no static state.
+ Formats a SysStatus_t record into one text line and either queues the complete
+ record in an optional CFifo or transmits it through the configured DeviceIntrf
+ output. The FIFO and output transport are independent.
 
 @author	Hoang Nguyen Hoan
 @date	May. 29, 2026
@@ -117,42 +117,49 @@ static void SysStatusStackUnlock(uintptr_t State)
 #endif
 }
 
-// Validate the logger, then send the whole line to the sink. One place for the
-// guard shared by the printf and status paths. DeviceIntrfTx returns the number
-// of bytes the sink accepted and only retries internally when it accepted none;
-// a partial write (the sink FIFO filled mid-line) leaves the tail unsent. Resend
-// the remainder until the line is out, the way UARTvprintf does. Without this a
-// burst of log lines loses the tail of each line once the FIFO backs up, which
-// reads as truncated or interleaved output. A bounded no-progress spin keeps a
-// stalled sink from hanging the logger.
-static int SysLogSend(SysLog_t * const pLog, const char *pLine, int Len)
+// Queue one complete formatted record when a FIFO is configured. Without a
+// FIFO, send it directly through DeviceIntrf. Transfer behavior belongs to the
+// DeviceIntrf implementation; SysLog performs one DeviceIntrfTx call.
+static int SysLogOutput(SysLog_t * const pLog, const char *pLine, int Len)
 {
-	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER || pLog->pSink == 0)
+	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER ||
+		pLine == 0 || Len <= 0)
 	{
 		return 0;
 	}
 
-	const uint8_t *p = (const uint8_t *)pLine;
-	int remain = Len;
-	int stall  = 5;
-
-	while (remain > 0 && stall > 0)
+	if (pLog->hFifo != 0)
 	{
-		int n = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr, p, remain);
-		if (n < 0)
+		uint32_t blockSize = CFifoBlockSize(pLog->hFifo);
+		if (blockSize < 2U)
 		{
-			break;
+			return 0;
 		}
-		if (n == 0)
+
+		uint8_t *pBlock = CFifoPut(pLog->hFifo);
+		if (pBlock == 0)
 		{
-			stall--;
-			continue;
+			return 0;
 		}
-		p      += n;
-		remain -= n;
+
+		int count = Len;
+		if ((uint32_t)count >= blockSize)
+		{
+			count = (int)blockSize - 1;
+		}
+
+		memcpy(pBlock, pLine, (size_t)count);
+		pBlock[count] = 0;
+		return count;
 	}
 
-	return Len - remain;
+	if (pLog->pSink == 0)
+	{
+		return 0;
+	}
+
+	return DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
+					 (const uint8_t *)pLine, Len);
 }
 
 void SysLogInit(SysLog_t * const pLog, DevIntrf_t * const pSink,
@@ -167,7 +174,73 @@ void SysLogInit(SysLog_t * const pLog, DevIntrf_t * const pSink,
 	pLog->SinkAddr = SinkAddr;
 	pLog->pTimer = pTimer;
 	pLog->MinType = MinType & SYSSTATUS_TYPE_MASK;
+	pLog->hFifo = 0;
 	pLog->Marker = SYSLOG_INIT_MARKER;
+}
+
+void SysLogSetBuffer(SysLog_t * const pLog, hCFifo_t const hFifo)
+{
+	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER)
+	{
+		return;
+	}
+
+	pLog->hFifo = hFifo;
+}
+
+void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
+				   uint32_t SinkAddr)
+{
+	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER)
+	{
+		return;
+	}
+
+	pLog->pSink = pSink;
+	pLog->SinkAddr = SinkAddr;
+}
+
+int SysLogFlush(SysLog_t * const pLog)
+{
+	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER ||
+		pLog->hFifo == 0 || pLog->pSink == 0)
+	{
+		return 0;
+	}
+
+	const uint32_t blockSize = CFifoBlockSize(pLog->hFifo);
+	if (blockSize == 0U)
+	{
+		return 0;
+	}
+
+	uint8_t *pBlock = CFifoPeek(pLog->hFifo);
+	if (pBlock == 0)
+	{
+		return 0;
+	}
+
+	uint32_t len = 0U;
+	while (len < blockSize && pBlock[len] != 0U)
+	{
+		len++;
+	}
+
+	if (len == 0U)
+	{
+		// Remove an empty record so one failed format cannot block the FIFO.
+		(void)CFifoGet(pLog->hFifo);
+		return 0;
+	}
+
+	int count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
+						   pBlock, (int)len);
+	if (count == (int)len)
+	{
+		(void)CFifoGet(pLog->hFifo);
+	}
+
+	return count;
 }
 
 int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
@@ -175,7 +248,7 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 	char line[SYSLOG_LINE_MAX];
 	int len = 0;
 
-	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER || pLog->pSink == 0)
+	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER)
 	{
 		return 0;
 	}
@@ -208,33 +281,64 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 
 	len = SysLogAppend(line, sizeof(line), len, "\r\n");
 
-	return SysLogSend(pLog, line, len);
+	return SysLogOutput(pLog, line, len);
 }
 
 int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 {
-	char line[SYSLOG_LINE_MAX];
-
-	if (pFormat == 0)
+	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER || pFormat == 0)
 	{
 		return 0;
 	}
 
-	int len = vsnprintf(line, sizeof(line), pFormat, Args);
+	if (pLog->hFifo != 0)
+	{
+		const uint32_t blockSize = CFifoBlockSize(pLog->hFifo);
+		if (blockSize < 2U)
+		{
+			return 0;
+		}
 
+		uint8_t *pBlock = CFifoPut(pLog->hFifo);
+		if (pBlock == 0)
+		{
+			return 0;
+		}
+
+		int len = vsnprintf((char *)pBlock, (size_t)blockSize, pFormat, Args);
+		if (len < 0)
+		{
+			pBlock[0] = 0U;
+			return 0;
+		}
+
+		if ((uint32_t)len >= blockSize)
+		{
+			len = (int)blockSize - 1;
+		}
+
+		return len;
+	}
+
+	if (pLog->pSink == 0)
+	{
+		return 0;
+	}
+
+	char line[SYSLOG_LINE_MAX];
+	int len = vsnprintf(line, sizeof(line), pFormat, Args);
 	if (len < 0)
 	{
 		return 0;
 	}
 
-	// vsnprintf returns the untruncated length. Transmit only stored text.
 	if (len >= (int)sizeof(line))
 	{
 		len = (int)sizeof(line) - 1;
 	}
 
-	// SysLogSend validates the logger before touching the sink.
-	return SysLogSend(pLog, line, len);
+	return DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
+					 (const uint8_t *)line, len);
 }
 
 int SysLogPrintf(SysLog_t * const pLog, const char *pFormat, ...)

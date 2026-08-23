@@ -9,6 +9,10 @@
  from the status type field (SYSSTATUS_TYPE_*); no separate level field is
  defined.
 
+ An optional CFifo stores complete formatted log records before output. The
+ FIFO and DeviceIntrf are independent: CFifo provides deferred storage while
+ DeviceIntrf remains only the output transport.
+
  The status word supplies the type, module id and code fields. The optional
  detail string supplies additional runtime values and is formatted by the
  caller.
@@ -61,6 +65,7 @@ SOFTWARE.
 
 #include "sysstatus.h"
 #include "device_intrf.h"
+#include "cfifo.h"
 #include "coredev/timer.h"
 
 // Max length of one formatted log line, including the detail string.
@@ -87,17 +92,22 @@ extern "C" {
  */
 typedef struct __Sys_Log {
 	uint32_t	Marker;		//!< SYSLOG_INIT_MARKER when initialized, else dormant
-	DevIntrf_t	*pSink;		//!< Output interface. NULL disables output.
+	DevIntrf_t	*pSink;		//!< Output interface. NULL disables direct output.
 	uint32_t	SinkAddr;	//!< Device select id passed to DeviceIntrfTx, 0 for UART
 	TimerDev_t	*pTimer;	//!< Timestamp tick source. NULL disables timestamp.
 	uint32_t	MinType;	//!< Minimum type field emitted, e.g. SYSSTATUS_TYPE_WRN. 0 emits all.
+	hCFifo_t	hFifo;		//!< Optional FIFO of complete formatted records.
 } SysLog_t;
 
 /**
  * Initialize a logger instance.
  *
+ * The logger starts without a FIFO. Call SysLogSetBuffer to queue complete
+ * records before output. pSink may be NULL when records are buffered and the
+ * output transport will be attached later.
+ *
  * @param	pLog	 : Logger instance.
- * @param	pSink	 : Output DeviceIntrf, NULL disables output.
+ * @param	pSink	 : Output DeviceIntrf, NULL disables direct output.
  * @param	SinkAddr : Device select id for the output, 0 for UART.
  * @param	pTimer	 : Timer for timestamps, NULL disables timestamp.
  * @param	MinType	 : Minimum type field emitted, SYSSTATUS_TYPE_*. 0 emits all.
@@ -107,15 +117,57 @@ void SysLogInit(SysLog_t * const pLog, DevIntrf_t * const pSink,
 				uint32_t SinkAddr, TimerDev_t * const pTimer, uint32_t MinType);
 
 /**
+ * Attach or detach a CFifo used to store complete formatted log records.
+ *
+ * Each FIFO block holds one NUL-terminated record. A block smaller than
+ * SYSLOG_LINE_MAX is allowed; records are truncated to the block size. The
+ * FIFO full policy is selected when CFifoInit is called.
+ *
+ * @param	pLog	: Logger instance.
+ * @param	hFifo	: Initialized CFifo handle, NULL for direct output.
+ */
+void SysLogSetBuffer(SysLog_t * const pLog, hCFifo_t const hFifo);
+
+/**
+ * Select the DeviceIntrf used for output.
+ *
+ * The sink may be changed independently of the FIFO. Passing NULL detaches
+ * the output while buffered records remain queued.
+ *
+ * @param	pLog	 : Logger instance.
+ * @param	pSink	 : Output DeviceIntrf, NULL to detach.
+ * @param	SinkAddr : Device select id passed to DeviceIntrfTx.
+ */
+void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
+				   uint32_t SinkAddr);
+
+/**
+ * Send one queued record through the configured DeviceIntrf.
+ *
+ * One CFifo block is one log record. SysLog peeks the next record and passes
+ * it once to DeviceIntrfTx. The record is consumed only when DeviceIntrfTx
+ * accepts the complete record. A zero, partial, or negative result leaves the
+ * record queued; SysLog does not retry the remainder. Buffered sinks should
+ * therefore accept one complete record or return zero when not ready.
+ * Transport transfer handling remains in the concrete interface implementation.
+ *
+ * @param	pLog : Logger instance.
+ *
+ * @return	Byte count returned by DeviceIntrfTx.
+ */
+int SysLogFlush(SysLog_t * const pLog);
+
+/**
  * Format and emit one status record.
  * No-op when the instance is not initialized (no SYSLOG_INIT_MARKER), when
- * pSink is NULL, or when the type field is below MinType.
+ * neither a FIFO nor an output sink is configured, or when the type field is
+ * below MinType.
  *
  * @param	pLog	: Logger instance.
  * @param	Status	: Status word to emit.
  * @param	pDetail	: Detail string, NULL for none.
  *
- * @return	Byte count written to the output. 0 when dormant, filtered, or no output.
+ * @return	Byte count queued or written. 0 when dormant, filtered, or no output.
  */
 int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail);
 
@@ -123,13 +175,14 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
  * Format and emit free form trace text. No record prefix is added, the
  * output is the formatted text as given. For developer trace that has no
  * status meaning.
- * No-op when the instance is not initialized, pSink is NULL, or pFormat is NULL.
- * Not subject to the MinType filter, which applies to status records only.
+ * No-op when the instance is not initialized, when neither a FIFO nor an
+ * output sink is configured, or when pFormat is NULL. Not subject to the
+ * MinType filter, which applies to status records only.
  *
  * @param	pLog	: Logger instance.
  * @param	pFormat	: printf style format string.
  *
- * @return	Byte count written to the output. 0 when dormant or no output.
+ * @return	Byte count queued or written. 0 when dormant or no output.
  */
 int SysLogPrintf(SysLog_t * const pLog, const char *pFormat, ...)
 #if defined(__GNUC__) || defined(__clang__)
@@ -144,7 +197,7 @@ int SysLogPrintf(SysLog_t * const pLog, const char *pFormat, ...)
  * @param	pFormat	: printf style format string.
  * @param	Args	: Variable argument list.
  *
- * @return	Byte count written to the output. 0 when dormant or no output.
+ * @return	Byte count queued or written. 0 when dormant or no output.
  */
 int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args);
 
@@ -278,13 +331,38 @@ SysStatus_t SysStatusPeek(void);
 class SysLog {
 public:
 	// Construct dormant. The instance stays inert until Init is called.
-	SysLog() { vLog.Marker = 0; vLog.pSink = (DevIntrf_t *)0; }
+	SysLog() : vLog{} {}
+
+	void Init(DeviceIntrf *pSink = (DeviceIntrf *)0, uint32_t SinkAddr = 0,
+			  Timer *pTimer = (Timer *)0, uint32_t MinType = 0) {
+		SysLogInit(&vLog,
+				   pSink ? (DevIntrf_t *)*pSink : (DevIntrf_t *)0,
+				   SinkAddr,
+				   pTimer ? (TimerDev_t *)*pTimer : (TimerDev_t *)0,
+				   MinType);
+	}
 
 	void Init(DeviceIntrf &Sink, uint32_t SinkAddr = 0,
 			  Timer *pTimer = (Timer *)0, uint32_t MinType = 0) {
-		SysLogInit(&vLog, Sink, SinkAddr,
-				   pTimer ? (TimerDev_t *)*pTimer : (TimerDev_t *)0,
-				   MinType);
+		Init(&Sink, SinkAddr, pTimer, MinType);
+	}
+
+	void SetBuffer(hCFifo_t hFifo) {
+		SysLogSetBuffer(&vLog, hFifo);
+	}
+
+	void SetSink(DeviceIntrf *pSink, uint32_t SinkAddr = 0) {
+		SysLogSetSink(&vLog,
+					  pSink ? (DevIntrf_t *)*pSink : (DevIntrf_t *)0,
+					  SinkAddr);
+	}
+
+	void SetSink(DeviceIntrf &Sink, uint32_t SinkAddr = 0) {
+		SetSink(&Sink, SinkAddr);
+	}
+
+	int Flush() {
+		return SysLogFlush(&vLog);
 	}
 
 	int Log(SysStatus_t Status, const char *pDetail = (const char *)0) {
