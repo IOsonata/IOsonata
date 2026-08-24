@@ -89,6 +89,13 @@
     #include <nrfx_config_nrf54lm20a_enga_application.h>
 #elif defined(NRF54LM20A_ENGA_XXAA) && defined(NRF_FLPR)
     #include <nrfx_config_nrf54lm20a_enga_flpr.h>
+#elif (defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)) && defined(NRF_APPLICATION)
+    // One config serves both nRF54LM20 variants (IOsonata nRF54LM20x port)
+    #include <nrfx_config_nrf54lm20x_application.h>
+#elif defined(NRF54LM20A_XXAA) && defined(NRF_FLPR)
+    #include <nrfx_config_nrf54lm20a_flpr.h>
+#elif defined(NRF54LM20B_XXAA) && defined(NRF_FLPR)
+    #include <nrfx_config_nrf54lm20b_flpr.h>
 #elif defined(NRF54LS05B_ENGA_XXAA) && defined(NRF_APPLICATION)
     #include <nrfx_config_nrf54ls05b_application.h>
 #elif defined(NRF54LV10A_ENGA_XXAA) && defined(NRF_APPLICATION)

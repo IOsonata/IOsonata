@@ -44,7 +44,9 @@ SOFTWARE.
 
 #ifdef NRF52840_XXAA
 #define MAX_NB_DEV		4
-#elif defined(NRF54L15_XXAA)
+#elif defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#define MAX_NB_DEV		7
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 #define MAX_NB_DEV		5
 #elif defined(NRF91_SERIES)
 #define MAX_NB_DEV		4
@@ -63,7 +65,7 @@ extern "C" {
 void TWIM0_TWIS0_TWI0_IRQHandler()
 #elif defined(NRF52_SERIES)
 void SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQHandler(void)
-#elif defined(NRF54L15_XXAA)
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 void SERIAL30_IRQHandler(void)
 #elif defined(NRF91_SERIES)
 void UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQHandler(void)
@@ -79,7 +81,7 @@ void SPI0_TWI0_IRQHandler(void)
 	NVIC_ClearPendingIRQ(TWIM0_TWIS0_TWI0_IRQn);
 #elif defined(NRF52_SERIES)
 	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
-#elif defined(NRF54L15_XXAA)
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	NVIC_ClearPendingIRQ(SERIAL30_IRQn);
 #elif defined(NRF91_SERIES)
 	NVIC_ClearPendingIRQ(UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQn);
@@ -91,7 +93,7 @@ void SPI0_TWI0_IRQHandler(void)
 #if !defined(NRF52805_XXAA) && ! defined(NRF52810_XXAA)
 #ifdef NRF52_SERIES
 void SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQHandler(void)
-#elif defined(NRF54L15_XXAA)
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 void SERIAL20_IRQHandler(void)
 #elif defined(NRF91_SERIES)
 void UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQHandler(void)
@@ -105,7 +107,7 @@ void SPI1_TWI1_IRQHandler(void)
 	}
 #ifdef NRF52_SERIES
 	NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
-#elif defined(NRF54L15_XXAA)
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	NVIC_ClearPendingIRQ(SERIAL20_IRQn);
 #elif defined(NRF91_SERIES)
 	NVIC_ClearPendingIRQ(UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQn);
@@ -115,7 +117,7 @@ void SPI1_TWI1_IRQHandler(void)
 }
 #endif
 
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 void SERIAL21_IRQHandler(void)
 {
 	if (g_SharedIntrf[2].pIntrf != NULL)
@@ -142,6 +144,26 @@ void SERIAL00_IRQHandler(void)
 	}
 	NVIC_ClearPendingIRQ(SERIAL00_IRQn);
 }
+
+#if defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+void SERIAL23_IRQHandler(void)
+{
+	if (g_SharedIntrf[5].pIntrf != NULL)
+	{
+		g_SharedIntrf[5].Handler(5, g_SharedIntrf[5].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SERIAL23_IRQn);
+}
+
+void SERIAL24_IRQHandler(void)
+{
+	if (g_SharedIntrf[6].pIntrf != NULL)
+	{
+		g_SharedIntrf[6].Handler(6, g_SharedIntrf[6].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SERIAL24_IRQn);
+}
+#endif
 #endif
 
 #if defined(NRF91_SERIES)

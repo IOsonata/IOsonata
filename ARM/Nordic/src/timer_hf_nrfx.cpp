@@ -51,7 +51,7 @@ SOFTWARE.
 #define NRF_TIMER1			NRF_TIMER1_NS
 #define NRF_TIMER2			NRF_TIMER2_NS
 #define NRF_CLOCK			NRF_CLOCK_NS
-#elif defined(NRF54L15_XXAA)
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 #define NRF_TIMER0			NRF_TIMER00_S
 #define NRF_TIMER1			NRF_TIMER10_S
 #define NRF_TIMER2			NRF_TIMER20_S
@@ -189,7 +189,7 @@ static void TimerIRQHandler(int DevNo)
 
 extern "C" {
 
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 __WEAK void TIMER00_IRQHandler()
 {
 	TimerIRQHandler(0);
@@ -264,7 +264,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 	// Clock source not available.  Only 64MHz XTAL
 	if (s_nRfxHFClockSem <= 0)
 	{
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 		if (!(NRF_CLOCK->PLL.STAT & CLOCK_PLL_STAT_STATE_Msk))
 		{
 			NRF_CLOCK->TASKS_PLLSTART = 1;
@@ -301,7 +301,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 	switch (devno)
 	{
 		case 0:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 			NVIC_ClearPendingIRQ(TIMER00_IRQn);
 			NVIC_EnableIRQ(TIMER00_IRQn);
 #else
@@ -310,7 +310,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 #endif
 			break;
 		case 1:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 			NVIC_ClearPendingIRQ(TIMER10_IRQn);
 			NVIC_EnableIRQ(TIMER10_IRQn);
 #else
@@ -319,7 +319,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 #endif
 			break;
 		case 2:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 			NVIC_ClearPendingIRQ(TIMER20_IRQn);
 			NVIC_EnableIRQ(TIMER20_IRQn);
 #else
@@ -329,7 +329,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 			break;
 #if TIMER_NRFX_HF_MAX > 3
 		case 3:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 			NVIC_ClearPendingIRQ(TIMER21_IRQn);
 			NVIC_EnableIRQ(TIMER21_IRQn);
 #else
@@ -338,7 +338,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 #endif
 			break;
 		case 4:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 			NVIC_ClearPendingIRQ(TIMER22_IRQn);
 			NVIC_EnableIRQ(TIMER22_IRQn);
 #else
@@ -375,7 +375,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 
 	if (s_nRfxHFClockSem <= 0)
 	{
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 		NRF_CLOCK->TASKS_XOSTOP = 1;
 #else
 		NRF_CLOCK->TASKS_HFCLKSTOP = 1;
@@ -386,7 +386,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
     switch (devno)
     {
         case 0:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
         	NVIC_ClearPendingIRQ(TIMER00_IRQn);
             NVIC_DisableIRQ(TIMER00_IRQn);
 #else
@@ -395,7 +395,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 #endif
             break;
         case 1:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
         	NVIC_ClearPendingIRQ(TIMER10_IRQn);
             NVIC_DisableIRQ(TIMER10_IRQn);
 #else
@@ -404,7 +404,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 #endif
             break;
         case 2:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
         	NVIC_ClearPendingIRQ(TIMER20_IRQn);
             NVIC_DisableIRQ(TIMER20_IRQn);
 #else
@@ -414,7 +414,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
             break;
 #if TIMER_NRFX_HF_MAX > 3
         case 3:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
         	NVIC_ClearPendingIRQ(TIMER21_IRQn);
             NVIC_DisableIRQ(TIMER21_IRQn);
 #else
@@ -423,7 +423,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 #endif
             break;
         case 4:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
         	NVIC_ClearPendingIRQ(TIMER22_IRQn);
             NVIC_DisableIRQ(TIMER22_IRQn);
 #else
@@ -656,7 +656,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	reg->BITMODE = TIMER_BITMODE_BITMODE_32Bit;
 
 	// Init clock source for TIMERs
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	if (!(NRF_CLOCK->XO.STAT & CLOCK_XO_STAT_STATE_Msk))
 	{
 		// Clock source not available.  Only 32MHz XTAL
@@ -708,7 +708,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	switch (devno)
 	{
 	case 0:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 		NVIC_ClearPendingIRQ(TIMER00_IRQn);
 		NVIC_SetPriority(TIMER00_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER00_IRQn);
@@ -719,7 +719,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 #endif
 		break;
 	case 1:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 		NVIC_ClearPendingIRQ(TIMER10_IRQn);
 		NVIC_SetPriority(TIMER10_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER10_IRQn);
@@ -730,7 +730,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 #endif
 		break;
 	case 2:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 		NVIC_ClearPendingIRQ(TIMER20_IRQn);
 		NVIC_SetPriority(TIMER20_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER20_IRQn);
@@ -742,7 +742,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 		break;
 #if TIMER_NRFX_HF_MAX > 3
 	case 3:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 		NVIC_ClearPendingIRQ(TIMER21_IRQn);
 		NVIC_SetPriority(TIMER21_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER21_IRQn);
@@ -753,7 +753,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 #endif
 		break;
 	case 4:
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 		NVIC_ClearPendingIRQ(TIMER22_IRQn);
 		NVIC_SetPriority(TIMER22_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER22_IRQn);

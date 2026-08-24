@@ -42,7 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NRF_PWM0		NRF_PWM0_S
 #define NRF_PWM1		NRF_PWM1_S
 #define NRF_PWM2		NRF_PWM2_S
-#elif defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#elif defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 #define NRF_PWM0		NRF_PWM20_S
 #define NRF_PWM1		NRF_PWM21_S
 #define NRF_PWM2		NRF_PWM22_S
@@ -127,7 +127,7 @@ bool PWMInit(PwmDev_t *pDev, const PwmCfg_t *pCfg)
 
 	dev->pReg->DECODER = PWM_DECODER_LOAD_Individual << PWM_DECODER_LOAD_Pos;
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	dev->pReg->DMA.SEQ[0].PTR = (uint32_t)dev->Seq0;
 	dev->pReg->DMA.SEQ[0].MAXCNT = PWM_NRF5_MAX_CHAN;
 #else
@@ -137,7 +137,7 @@ bool PWMInit(PwmDev_t *pDev, const PwmCfg_t *pCfg)
 	dev->pReg->SEQ[0].REFRESH = 0;
 	dev->pReg->SEQ[0].ENDDELAY = 0;
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	dev->pReg->DMA.SEQ[1].PTR = (uint32_t)dev->Seq1;
 	dev->pReg->DMA.SEQ[1].MAXCNT = PWM_NRF5_MAX_CHAN;
 #else
@@ -259,7 +259,7 @@ bool PWMSetFrequency(PwmDev_t *pDev, uint32_t Freq)
 
 	if (dev->bStarted)
 	{
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 		dev->pReg->TASKS_DMA.SEQ[0].START = 1;
 #else
 		dev->pReg->TASKS_SEQSTART[0] = 1;
@@ -351,7 +351,7 @@ bool PWMStart(PwmDev_t *pDev, uint32_t msDur)
 		dev->pReg->LOOP = 0;
 	}
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	dev->pReg->TASKS_DMA.SEQ[0].START = 1;
 #else
 	dev->pReg->TASKS_SEQSTART[0] = 1;
@@ -402,7 +402,7 @@ bool PWMSetDutyCycle(PwmDev_t *pDev, int Chan, int DutyCycle)
 
 	if (dev->bStarted)
 	{
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	dev->pReg->TASKS_DMA.SEQ[0].START = 1;
 #else
 	dev->pReg->TASKS_SEQSTART[0] = 1;
@@ -440,7 +440,7 @@ bool PWMPlay(PwmDev_t *pDev, int Chan, uint32_t Freq, uint32_t Dur)
 
 	dev->pReg->SHORTS = PWM_SHORTS_LOOPSDONE_STOP_Msk;
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	dev->pReg->TASKS_DMA.SEQ[0].START = 1;
 #else
 	dev->pReg->TASKS_SEQSTART[0] = 1;
@@ -480,7 +480,7 @@ void nRF52PWMIrqHandler(int PwmNo)
 
 extern "C" {
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 void PWM20_IRQHandler()
 #else
 void PWM0_IRQHandler()
@@ -489,7 +489,7 @@ void PWM0_IRQHandler()
 	nRF52PWMIrqHandler(0);
 }
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 void PWM21_IRQHandler()
 #else
 void PWM1_IRQHandler()
@@ -498,7 +498,7 @@ void PWM1_IRQHandler()
 	nRF52PWMIrqHandler(1);
 }
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 void PWM22_IRQHandler()
 #else
 void PWM2_IRQHandler()

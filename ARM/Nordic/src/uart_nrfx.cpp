@@ -1,7 +1,26 @@
 /**-------------------------------------------------------------------------
 @file	uart_nrfx.cpp
 
-@brief	nRF5x UART implementation
+@brief	nRF5x & nRF54x UART implementation
+
+Single implementation for all nRF series.
+
+nRF51        : UART0 only, no DMA
+nRF52        : UART0/UARTE0 (+UARTE1 on nRF52840), DMA optional
+nRF53, nRF91 : UARTE0..3, DMA only
+nRF54L       : new UARTE register block (DMA.RX/DMA.TX), DMA only,
+               hardware frame timeout
+
+nRF54L DevNo mapping
+
+DevNo		hardware		domain
+0			UARTE30			LP  (P0)
+1			UARTE20			PERI(P1)
+2			UARTE21			PERI(P1)
+3			UARTE22			PERI(P1)
+4			UARTE00			MCU (P2), runs on the fast clock
+5			UARTE23			PERI(P1), nRF54LM20x only
+6			UARTE24			PERI(P1), nRF54LM20x only
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 30, 2015
@@ -69,12 +88,49 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NRFX_UART_ERRORSRC_OVERRUN_NotPresent (0UL) /*!< Read: error not present */
 #define NRFX_UART_ERRORSRC_OVERRUN_Present (1UL) /*!< Read: error present */
 
+// The nRF54 series moved the UARTE DMA controls into the DMA.RX/DMA.TX
+// sub-blocks and renamed the task/event registers. Everything else in the
+// transfer logic is identical, so the differences are folded into the
+// accessors below and the shared code reads through them.
+#if defined(NRF54L_SERIES)
+#define NRFX_UARTE_NEW_DMA_REG		1
+
+#define NRFX_UARTE_RXD_PTR(r)		((r)->DMA.RX.PTR)
+#define NRFX_UARTE_RXD_MAXCNT(r)	((r)->DMA.RX.MAXCNT)
+#define NRFX_UARTE_RXD_AMOUNT(r)	((r)->DMA.RX.AMOUNT)
+#define NRFX_UARTE_TXD_PTR(r)		((r)->DMA.TX.PTR)
+#define NRFX_UARTE_TXD_MAXCNT(r)	((r)->DMA.TX.MAXCNT)
+#define NRFX_UARTE_EVENTS_ENDRX(r)	((r)->EVENTS_DMA.RX.END)
+#define NRFX_UARTE_EVENTS_ENDTX(r)	((r)->EVENTS_DMA.TX.END)
+#define NRFX_UARTE_TASKS_STARTRX(r)	((r)->TASKS_DMA.RX.START)
+#define NRFX_UARTE_TASKS_STOPRX(r)	((r)->TASKS_DMA.RX.STOP)
+#define NRFX_UARTE_TASKS_STARTTX(r)	((r)->TASKS_DMA.TX.START)
+#define NRFX_UARTE_TASKS_STOPTX(r)	((r)->TASKS_DMA.TX.STOP)
+
+// There is no indication in the datasheet about how many hardware fifo
+// this value seems to produce best performance
+#define NRFX_UART_HWFIFO_SIZE		8
+#elif defined(UARTE_PRESENT)
+#define NRFX_UARTE_RXD_PTR(r)		((r)->RXD.PTR)
+#define NRFX_UARTE_RXD_MAXCNT(r)	((r)->RXD.MAXCNT)
+#define NRFX_UARTE_RXD_AMOUNT(r)	((r)->RXD.AMOUNT)
+#define NRFX_UARTE_TXD_PTR(r)		((r)->TXD.PTR)
+#define NRFX_UARTE_TXD_MAXCNT(r)	((r)->TXD.MAXCNT)
+#define NRFX_UARTE_EVENTS_ENDRX(r)	((r)->EVENTS_ENDRX)
+#define NRFX_UARTE_EVENTS_ENDTX(r)	((r)->EVENTS_ENDTX)
+#define NRFX_UARTE_TASKS_STARTRX(r)	((r)->TASKS_STARTRX)
+#define NRFX_UARTE_TASKS_STOPRX(r)	((r)->TASKS_STOPRX)
+#define NRFX_UARTE_TASKS_STARTTX(r)	((r)->TASKS_STARTTX)
+#define NRFX_UARTE_TASKS_STOPTX(r)	((r)->TASKS_STOPTX)
+
 // There is no indication in the datasheet about how many hardware fifo
 // this value seems to produce best performance
 #define NRFX_UART_HWFIFO_SIZE		4
+#else
+#define NRFX_UART_HWFIFO_SIZE		4
+#endif
 
 #define NRFX_UART_MAXDEV			UARTE_COUNT
-#define NRFX_UART_DMA_MAXCNT		((1<<UARTE0_EASYDMA_MAXCNT_SIZE)-1)
 
 // Default fifo size if one is not provided in the config.
 #define NRFX_UART_RXDMA_SIZE		(NRFX_UART_HWFIFO_SIZE)
@@ -105,59 +161,76 @@ typedef struct __nRF_UART_Dev {
 	uint8_t RxDmaMem[NRFX_UART_RXDMA_SIZE];
 	uint8_t TxDmaMem[NRFX_UART_TXDMA_SIZE];
 } nRFUartDev_t;
-
-/*
-typedef struct {
-	int Baud;
-	int RegVal;
-} nRFUartBaud_t;
-*/
 #pragma pack(pop)
-/*
-alignas(4) static const nRFUartBaud_t s_nRFxBaudrate[] = {
-#ifdef UART_PRESENT
-	{1200, UART_BAUDRATE_BAUDRATE_Baud1200},
-	{2400, UART_BAUDRATE_BAUDRATE_Baud2400},
-	{4800, UART_BAUDRATE_BAUDRATE_Baud4800},
-	{9600, UART_BAUDRATE_BAUDRATE_Baud9600},
-	{14400, UART_BAUDRATE_BAUDRATE_Baud14400},
-	{19200, UART_BAUDRATE_BAUDRATE_Baud19200},
-	{28800, UART_BAUDRATE_BAUDRATE_Baud28800},
-	{31250, UART_BAUDRATE_BAUDRATE_Baud31250},
-	{38400, UART_BAUDRATE_BAUDRATE_Baud38400},
-	{56000, UART_BAUDRATE_BAUDRATE_Baud56000},
-	{57600, UART_BAUDRATE_BAUDRATE_Baud57600},
-	{76800, UART_BAUDRATE_BAUDRATE_Baud76800},
-	{115200, UART_BAUDRATE_BAUDRATE_Baud115200},
-	{230400, UART_BAUDRATE_BAUDRATE_Baud230400},
-	{250000, UART_BAUDRATE_BAUDRATE_Baud250000},
-	{460800, UART_BAUDRATE_BAUDRATE_Baud460800},
-	{921600, UART_BAUDRATE_BAUDRATE_Baud921600},
-	{1000000, UART_BAUDRATE_BAUDRATE_Baud1M}
-#else
-	{1200, UARTE_BAUDRATE_BAUDRATE_Baud1200},
-	{2400, UARTE_BAUDRATE_BAUDRATE_Baud2400},
-	{4800, UARTE_BAUDRATE_BAUDRATE_Baud4800},
-	{9600, UARTE_BAUDRATE_BAUDRATE_Baud9600},
-	{14400, UARTE_BAUDRATE_BAUDRATE_Baud14400},
-	{19200, UARTE_BAUDRATE_BAUDRATE_Baud19200},
-	{28800, UARTE_BAUDRATE_BAUDRATE_Baud28800},
-	{38400, UARTE_BAUDRATE_BAUDRATE_Baud38400},
-	{57600, UARTE_BAUDRATE_BAUDRATE_Baud57600},
-	{76800, UARTE_BAUDRATE_BAUDRATE_Baud76800},
-	{115200, UARTE_BAUDRATE_BAUDRATE_Baud115200},
-	{230400, UARTE_BAUDRATE_BAUDRATE_Baud230400},
-	{250000, UARTE_BAUDRATE_BAUDRATE_Baud250000},
-	{460800, UARTE_BAUDRATE_BAUDRATE_Baud460800},
-	{921600, UARTE_BAUDRATE_BAUDRATE_Baud921600},
-	{1000000, UARTE_BAUDRATE_BAUDRATE_Baud1M}
-#endif
-};
 
-static const int s_NbBaudrate = sizeof(s_nRFxBaudrate) / sizeof(nRFUartBaud_t);
-*/
 alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF54L_SERIES)
+	{	// On P0
+		.DevNo = 0,
+		.pDmaReg = NRF_UARTE30_S,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+	},
+	{	// On P1
+		.DevNo = 1,
+		.pDmaReg = NRF_UARTE20_S,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+	},
+	{	// On P1
+		.DevNo = 2,
+		.pDmaReg = NRF_UARTE21_S,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+	},
+	{	// On P1
+		.DevNo = 3,
+		.pDmaReg = NRF_UARTE22_S,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+	},
+	{	// On P2
+		.DevNo = 4,
+		.pDmaReg = NRF_UARTE00_S,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+	},
+#if UARTE_COUNT > 5
+	{	// On P1
+		.DevNo = 5,
+		.pDmaReg = NRF_UARTE23_S,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+	},
+	{	// On P1
+		.DevNo = 6,
+		.pDmaReg = NRF_UARTE24_S,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+	},
+#endif
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
 	{
 		.DevNo = 0,
@@ -227,28 +300,6 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 		.RtsPin = (uint32_t)-1,
 	},
 #endif
-#if NRFX_UART_MAXDEV > 2
-	{
-		.DevNo = 2,
-		.pDmaReg = NRF_UARTE2,
-		.pUartDev = NULL,
-		.RxPin = (uint32_t)-1,
-		.TxPin = (uint32_t)-1,
-		.CtsPin = (uint32_t)-1,
-		.RtsPin = (uint32_t)-1,
-	},
-#endif
-#if NRFX_UART_MAXDEV > 3
-	{
-		.DevNo = 3,
-		.pDmaReg = NRF_UARTE3,
-		.pUartDev = NULL,
-		.RxPin = (uint32_t)-1,
-		.TxPin = (uint32_t)-1,
-		.CtsPin = (uint32_t)-1,
-		.RtsPin = (uint32_t)-1,
-	},
-#endif
 #endif
 };
 
@@ -290,7 +341,6 @@ bool nRFUARTWaitForTxReady(nRFUartDev_t * const pDev, uint32_t Timeout)
 	return false;
 }
 
-//static void UartIrqHandler(nRFUartDev_t * const pDev)
 static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
@@ -301,6 +351,17 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	NRF_UART_Type *reg = dev->pReg;
 #else
 	NRF_UARTE_Type *reg = dev->pDmaReg;
+#endif
+
+#if defined(UARTE_CONFIG_FRAMETIMEOUT_Msk)
+	if (dev->pDmaReg->EVENTS_FRAMETIMEOUT)
+	{
+		// The hardware frame timeout replaces the manual DMA stop used on
+		// the older series : stopping the RX DMA forces the END event which
+		// drains the partial buffer into the fifo.
+		dev->pDmaReg->EVENTS_FRAMETIMEOUT = 0;
+		NRFX_UARTE_TASKS_STOPRX(dev->pDmaReg) = 1;
+	}
 #endif
 
 	if (reg->EVENTS_RXTO)
@@ -317,14 +378,13 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	}
 
 #ifdef UARTE_PRESENT
-	if (dev->pDmaReg->EVENTS_ENDRX)
+	if (NRFX_UARTE_EVENTS_ENDRX(dev->pDmaReg))
 	{
-		// No DMA support for RX, just clear the event
 		dev->pDmaReg->EVENTS_RXDRDY = 0;
-		dev->pDmaReg->EVENTS_ENDRX = 0;
+		NRFX_UARTE_EVENTS_ENDRX(dev->pDmaReg) = 0;
 		dev->RxDmaCnt = 0;
 
-		int l = dev->pDmaReg->RXD.AMOUNT;
+		int l = NRFX_UARTE_RXD_AMOUNT(dev->pDmaReg);
 		uint8_t *p = CFifoPutMultiple(dev->pUartDev->hRxFifo, &l);
 		if (p)
 		{
@@ -336,9 +396,7 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		}
 
 		dev->pUartDev->bRxReady = false;
-		//dev->pDmaReg->RXD.MAXCNT = NRFX_UART_BUFF_SIZE;
-		//dev->pDmaReg->RXD.PTR = (uint32_t)dev->RxDmaMem;
-		dev->pDmaReg->TASKS_STARTRX = 1;
+		NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
 	}
 	else
 #endif
@@ -414,12 +472,12 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	}
 
 #ifdef UARTE_PRESENT
-	if (dev->pDmaReg->EVENTS_ENDTX || dev->pDmaReg->EVENTS_TXSTOPPED)
+	if (NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) || dev->pDmaReg->EVENTS_TXSTOPPED)
 	{
-		dev->pDmaReg->EVENTS_ENDTX = 0;
+		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
 		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
 
-		int l = NRFX_UART_TXDMA_SIZE;//min(CFifoUsed(pDev->pUartDev->hTxFifo), NRF52_UART_DMA_MAX_LEN);
+		int l = NRFX_UART_TXDMA_SIZE;
 		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &l);
 		if (p)
 		{
@@ -430,9 +488,9 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			// if uart tx has not completed in time.
 			memcpy(dev->TxDmaMem, p, l);
 
-			dev->pDmaReg->TXD.MAXCNT = l;
-			dev->pDmaReg->TXD.PTR = (uint32_t)dev->TxDmaMem;
-			dev->pDmaReg->TASKS_STARTTX = 1;
+			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
+			NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
+			NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
 		}
 		else
 		{
@@ -440,16 +498,8 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		}
 		if (dev->pUartDev->EvtCallback)
 		{
-			//uint8_t buff[NRFUART_CFIFO_SIZE];
-
-			//len = min(NRFUART_CFIFO_SIZE, CFifoAvail(s_nRFxUARTDev.pUartDev->hTxFifo));
 			len = CFifoAvail(dev->pUartDev->hTxFifo);
 			len = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_TXREADY, NULL, len);
-			if (len > 0)
-			{
-				//s_nRFxUARTDev.bTxReady = false;
-				//nRFUARTTxData(&s_nRFxUARTDev.pUartDev->SerIntrf, buff, len);
-			}
 		}
 	}
 #endif
@@ -468,7 +518,7 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 #ifdef UARTE_PRESENT
 			if (pDev->bDma == true)
 			{
-				dev->pDmaReg->TASKS_STOPRX = 1;
+				NRFX_UARTE_TASKS_STOPRX(dev->pDmaReg) = 1;
 			}
 			else
 #endif
@@ -506,13 +556,27 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		if (err & NRFX_UART_ERRORSRC_BREAK_Msk)
 		{
 		}
-		reg->ERRORSRC = reg->ERRORSRC;
+		// Write back the captured bits (write 1 to clear). Re-reading the
+		// register here could clear error bits latched after the capture
+		// without them ever being counted.
+		reg->ERRORSRC = err;
 		len = 0;
 		if (dev->pUartDev->EvtCallback)
 		{
 			dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_LINESTATE, NULL, len);
 		}
-		reg->TASKS_STARTRX = 1;
+#ifdef UARTE_PRESENT
+		if (pDev->bDma == true)
+		{
+			NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
+		}
+		else
+#endif
+		{
+#ifdef UART_PRESENT
+			dev->pReg->TASKS_STARTRX = 1;
+#endif
+		}
 	}
 
 	if (reg->EVENTS_CTS)
@@ -525,15 +589,12 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
             len = 1;
             dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_LINESTATE, &buff, len);
         }
-		//NRF_UART0->TASKS_STARTTX = 1;
-		//s_nRFxUARTDev.bTxReady = true;
 	}
 
 	if (reg->EVENTS_NCTS)
 	{
 		reg->EVENTS_NCTS = 0;
 		dev->pUartDev->LineState |= UART_LINESTATE_CTS;
-		//NRF_UART0->TASKS_STOPTX = 1;
         if (dev->pUartDev->EvtCallback)
         {
             uint8_t buff = UART_LINESTATE_CTS;
@@ -560,30 +621,25 @@ static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	uint32_t regval = (uint32_t)(((((uint64_t)Rate << 32ULL) + 8000000ULL) / 16000000ULL) + 0x800ULL) & 0xFFFFF000;
 	rate = (uint32_t)(((uint64_t)regval * 16000000ULL) >> 32ULL);
 
-#ifdef UARTE_PRESENT
-		    dev->pDmaReg->BAUDRATE = regval;
-#else
-		    dev->pReg->BAUDRATE = regval;
-#endif
-
-	return rate;
-#if 0
-	for (int i = 0; i < s_NbBaudrate; i++)
+#if defined(NRF54L_SERIES)
+	if (dev->pDmaReg == NRF_UARTE00_S)
 	{
-		if (s_nRFxBaudrate[i].Baud >= Rate)
-		{
-#ifdef UARTE_PRESENT
-		    dev->pDmaReg->BAUDRATE = s_nRFxBaudrate[i].RegVal;
-#else
-		    dev->pReg->BAUDRATE = s_nRFxBaudrate[i].RegVal;
-#endif
-		    rate = s_nRFxBaudrate[i].Baud;
-		    break;
-		}
+		// UARTE00 sits in the MCU domain and runs on the fast clock, not
+		// the 16MHz the baud formula assumes.
+		uint32_t f = SystemCoreClock / 16000000;
+		dev->pDmaReg->BAUDRATE = regval / f;
 	}
+	else
+	{
+		dev->pDmaReg->BAUDRATE = regval;
+	}
+#elif defined(UARTE_PRESENT)
+	dev->pDmaReg->BAUDRATE = regval;
+#else
+	dev->pReg->BAUDRATE = regval;
+#endif
 
 	return rate;
-#endif
 }
 
 static bool nRFUARTStartRx(DevIntrf_t * const pSerDev, uint32_t DevAddr)
@@ -603,12 +659,15 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hRxFifo, &l);
 		if (p == NULL)
 		{
-#ifdef UARTE_PRESENT
+#if defined(UARTE_PRESENT) && !defined(UARTE_CONFIG_FRAMETIMEOUT_Msk)
+			// Force the partial DMA buffer out into the fifo. On chips with
+			// the hardware frame timeout this is done by the FRAMETIMEOUT
+			// event instead.
 			if (pDev->bDma == true && CFifoUsed(dev->pUartDev->hRxFifo) <= 0)
 			{
 				if (dev->RxDmaCnt > 0)
 				{
-					dev->pDmaReg->TASKS_STOPRX = 1;
+					NRFX_UARTE_TASKS_STOPRX(dev->pDmaReg) = 1;
 				}
 			}
 #endif
@@ -627,9 +686,9 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 		if (pDev->bDma == true)
 		{
 			dev->pUartDev->bRxReady = false;
-			dev->pDmaReg->RXD.MAXCNT = NRFX_UART_RXDMA_SIZE;
-			dev->pDmaReg->RXD.PTR = (uint32_t)dev->RxDmaMem;
-			dev->pDmaReg->TASKS_STARTRX = 1;
+			NRFX_UARTE_RXD_MAXCNT(dev->pDmaReg) = NRFX_UART_RXDMA_SIZE;
+			NRFX_UARTE_RXD_PTR(dev->pDmaReg) = (uint32_t)dev->RxDmaMem;
+			NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
 		}
 		else
 #endif
@@ -674,7 +733,6 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
             uint8_t *p = CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
             if (p == NULL)
             {
-//            	dev->pUartDev->TxDropCnt++;
             	break;
             }
             memcpy(p, pData, l);
@@ -689,7 +747,7 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
 #ifdef UARTE_PRESENT
         	if (pDev->bDma == true)
         	{
-        		int l = NRFX_UART_TXDMA_SIZE;//min(CFifoUsed(dev->pUartDev->hTxFifo), NRF52_UART_DMA_MAX_LEN);
+        		int l = NRFX_UART_TXDMA_SIZE;
         		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &l);
         		if (p)
         		{
@@ -700,14 +758,13 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
         			// if uart tx has not completed in time.
         			memcpy(dev->TxDmaMem, p, l);
 
-					dev->pDmaReg->TXD.MAXCNT = l;
-					dev->pDmaReg->TXD.PTR = (uint32_t)dev->TxDmaMem;
-					dev->pDmaReg->TASKS_STARTTX = 1;
+					NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
+					NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
+					NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
         		}
         	}
         	else
 #endif
-            //if (nRFUARTWaitForTxReady(dev, 1000))
             {
 #ifdef UART_PRESENT
                 dev->pReg->EVENTS_TXDRDY = 0;
@@ -760,8 +817,8 @@ static void nRFUARTDisable(DevIntrf_t * const pDev)
 #endif
 #else
 	NRF_UARTE_Type *reg = dev->pDmaReg;
-	reg->TASKS_STOPRX = 1;
-	reg->TASKS_STOPTX = 1;
+	NRFX_UARTE_TASKS_STOPRX(reg) = 1;
+	NRFX_UARTE_TASKS_STOPTX(reg) = 1;
 	reg->PSEL.RXD = -1;
 	reg->PSEL.TXD = -1;
 	reg->PSEL.RTS = -1;
@@ -792,10 +849,10 @@ static void nRFUARTEnable(DevIntrf_t * const pDev)
 		dev->pDmaReg->PSEL.RTS = dev->RtsPin;
 
 		dev->pDmaReg->ENABLE |= (UARTE_ENABLE_ENABLE_Enabled << UARTE_ENABLE_ENABLE_Pos);
-		dev->pDmaReg->RXD.MAXCNT = NRFX_UART_RXDMA_SIZE;
-		dev->pDmaReg->RXD.PTR = (uint32_t)dev->RxDmaMem;
-		dev->pDmaReg->EVENTS_ENDRX = 0;
-		dev->pDmaReg->TASKS_STARTRX = 1;
+		NRFX_UARTE_RXD_MAXCNT(dev->pDmaReg) = NRFX_UART_RXDMA_SIZE;
+		NRFX_UARTE_RXD_PTR(dev->pDmaReg) = (uint32_t)dev->RxDmaMem;
+		NRFX_UARTE_EVENTS_ENDRX(dev->pDmaReg) = 0;
+		NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
 	}
 	else
 #endif
@@ -830,10 +887,15 @@ void nRFUARTPowerOff(DevIntrf_t * const pDev)
 	NRF_UARTE_Type *reg = dev->pDmaReg;
 #endif
 
+#if !defined(NRF54L_SERIES)
 	// Undocumented Power down.  Nordic Bug with DMA causing high current consumption
+	// Not present on the nRF54 series.
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC) = 1;
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC) = 0;
+#else
+	(void)reg;
+#endif
 
 	if (dev->CtsPin != -1)
 	{
@@ -915,9 +977,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	NRF_UARTE_Type *reg = s_nRFxUARTDev[devno].pDmaReg;
 #endif
 
+#if !defined(NRF54L_SERIES)
 	// Force power on in case it was powered off previously
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC) = 1;
+#endif
 
 	if (pCfg->pRxMem && pCfg->RxMemSize > 0)
 	{
@@ -975,9 +1039,39 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	s_nRFxUARTDev[devno].TxPin = (pincfg[UARTPIN_TX_IDX].PinNo & 0x1f) | (pincfg[UARTPIN_TX_IDX].PortNo << 5);
 	s_nRFxUARTDev[devno].pDmaReg->PSEL.RXD = s_nRFxUARTDev[devno].RxPin;
 	s_nRFxUARTDev[devno].pDmaReg->PSEL.TXD = s_nRFxUARTDev[devno].TxPin;
-    s_nRFxUARTDev[devno].pDmaReg->CONFIG &= ~(UARTE_CONFIG_PARITY_Msk << UARTE_CONFIG_PARITY_Pos);
+#endif
 
-    if (pCfg->Parity == UART_PARITY_NONE)
+#if defined(UARTE_CONFIG_FRAMESIZE_Msk)
+	// New UARTE (nRF54 series) : full frame configuration in one register
+	// write. FRAMETIMEOUT counts idle bit periods after the last received
+	// frame before flagging the timeout event.
+	{
+		uint32_t cnf = ((uint32_t)pCfg->DataBits << UARTE_CONFIG_FRAMESIZE_Pos) & UARTE_CONFIG_FRAMESIZE_Msk;
+
+		if (pCfg->Parity != UART_PARITY_NONE)
+		{
+			cnf |= UARTE_CONFIG_PARITY_Included << UARTE_CONFIG_PARITY_Pos;
+			cnf |= pCfg->Parity == UART_PARITY_ODD ? (UARTE_CONFIG_PARITYTYPE_Odd << UARTE_CONFIG_PARITYTYPE_Pos) :
+								  (UARTE_CONFIG_PARITYTYPE_Even << UARTE_CONFIG_PARITYTYPE_Pos);
+		}
+
+		cnf |= pCfg->StopBits == 2 ? UARTE_CONFIG_STOP_Two << UARTE_CONFIG_STOP_Pos : UARTE_CONFIG_STOP_One << UARTE_CONFIG_STOP_Pos;
+
+		if (pCfg->FlowControl == UART_FLWCTRL_HW)
+		{
+			cnf |= (UARTE_CONFIG_HWFC_Enabled << UARTE_CONFIG_HWFC_Pos);
+		}
+
+		cnf |= UARTE_CONFIG_ENDIAN_LSB << UARTE_CONFIG_ENDIAN_Pos;
+		cnf |= UARTE_CONFIG_FRAMETIMEOUT_Msk;
+
+		s_nRFxUARTDev[devno].pDmaReg->CONFIG = cnf;
+		s_nRFxUARTDev[devno].pDmaReg->FRAMETIMEOUT = 8;
+	}
+#elif defined(UARTE_PRESENT)
+	s_nRFxUARTDev[devno].pDmaReg->CONFIG &= ~(UARTE_CONFIG_PARITY_Msk << UARTE_CONFIG_PARITY_Pos);
+
+	if (pCfg->Parity == UART_PARITY_NONE)
 	{
 		s_nRFxUARTDev[devno].pDmaReg->CONFIG |= UARTE_CONFIG_PARITY_Excluded << UARTE_CONFIG_PARITY_Pos;
 	}
@@ -997,18 +1091,40 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	reg->EVENTS_RXTO = 0;
 	reg->ERRORSRC = reg->ERRORSRC;
 	reg->EVENTS_CTS = 0;
+#if defined(UARTE_CONFIG_FRAMETIMEOUT_Msk)
+	reg->EVENTS_FRAMETIMEOUT = 0;
+	reg->EVENTS_TXSTOPPED = 0;
+#endif
 
-#ifdef UARTE_PRESENT
+#if defined(UARTE_PRESENT) && !defined(NRFX_UARTE_NEW_DMA_REG)
 	if (pDev->DevIntrf.bDma == true)
 	{
 		s_nRFxUARTDev[devno].pDmaReg->EVENTS_RXSTARTED = 0;
 		s_nRFxUARTDev[devno].pDmaReg->EVENTS_TXSTARTED = 0;
 		s_nRFxUARTDev[devno].pDmaReg->EVENTS_TXSTOPPED = 0;
 	}
-
 #endif
 
-#ifdef UART_PRESENT
+#if defined(UARTE_CONFIG_FRAMESIZE_Msk)
+	// Flow control pins. HWFC itself is already set in CONFIG above.
+    if (pCfg->FlowControl == UART_FLWCTRL_HW)
+	{
+    	s_nRFxUARTDev[devno].CtsPin = (pincfg[UARTPIN_CTS_IDX].PinNo & 0x1f) | (pincfg[UARTPIN_CTS_IDX].PortNo << 5);
+    	s_nRFxUARTDev[devno].RtsPin = (pincfg[UARTPIN_RTS_IDX].PinNo & 0x1f) | (pincfg[UARTPIN_RTS_IDX].PortNo << 5);
+    	s_nRFxUARTDev[devno].pDmaReg->PSEL.CTS = s_nRFxUARTDev[devno].CtsPin;
+    	s_nRFxUARTDev[devno].pDmaReg->PSEL.RTS = s_nRFxUARTDev[devno].RtsPin;
+
+    	IOPinClear(pincfg[UARTPIN_CTS_IDX].PortNo, pincfg[UARTPIN_CTS_IDX].PinNo);
+        IOPinClear(pincfg[UARTPIN_RTS_IDX].PortNo, pincfg[UARTPIN_RTS_IDX].PinNo);
+	}
+	else
+	{
+		s_nRFxUARTDev[devno].pDmaReg->PSEL.RTS = -1;
+		s_nRFxUARTDev[devno].pDmaReg->PSEL.CTS = -1;
+		s_nRFxUARTDev[devno].CtsPin = -1;
+		s_nRFxUARTDev[devno].RtsPin = -1;
+	}
+#elif defined(UART_PRESENT)
     if (pCfg->FlowControl == UART_FLWCTRL_HW)
 	{
     	s_nRFxUARTDev[devno].pReg->CONFIG |= (UART_CONFIG_HWFC_Enabled << UART_CONFIG_HWFC_Pos);
@@ -1069,7 +1185,6 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
-//	pDev->DevIntrf.bDma = pCfg->bDmaEn;
 	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_UART;
 	pDev->DataBits = pCfg->DataBits;
@@ -1104,15 +1219,13 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	{
 		s_nRFxUARTDev[devno].pDmaReg->ENABLE = (UARTE_ENABLE_ENABLE_Enabled << UARTE_ENABLE_ENABLE_Pos);
 
-//#ifndef UART_PRESENT
 		// We need to transfer only 1 byte at a time for Rx. Otherwise, it will not interrupt
 		// until buffer is filled. It will be blocked.
 		// The RX timeout logic of the nRF series is implemented wrong. We cannot use it.
-		s_nRFxUARTDev[devno].pDmaReg->RXD.MAXCNT = NRFX_UART_RXDMA_SIZE;
-		s_nRFxUARTDev[devno].pDmaReg->RXD.PTR = (uint32_t)s_nRFxUARTDev[devno].RxDmaMem;
-//#endif
-		s_nRFxUARTDev[devno].pDmaReg->EVENTS_ENDRX = 0;
-		s_nRFxUARTDev[devno].pDmaReg->TASKS_STARTRX = 1;
+		NRFX_UARTE_RXD_MAXCNT(s_nRFxUARTDev[devno].pDmaReg) = NRFX_UART_RXDMA_SIZE;
+		NRFX_UARTE_RXD_PTR(s_nRFxUARTDev[devno].pDmaReg) = (uint32_t)s_nRFxUARTDev[devno].RxDmaMem;
+		NRFX_UARTE_EVENTS_ENDRX(s_nRFxUARTDev[devno].pDmaReg) = 0;
+		NRFX_UARTE_TASKS_STARTRX(s_nRFxUARTDev[devno].pDmaReg) = 1;
 	}
 	else
 #endif
@@ -1122,22 +1235,30 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		s_nRFxUARTDev[devno].pReg->TASKS_STARTTX = 1;
 		s_nRFxUARTDev[devno].pReg->TASKS_STARTRX = 1;
 #endif
-
 	}
 
     reg->INTENCLR = 0xffffffffUL;
 
 	if (pCfg->bIntMode)
 	{
-#ifdef UARTE_PRESENT
-
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
-    	//SharedIntrfSetIrqHandler(pCfg->DevNo, &pDev->DevIntrf, SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler);
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54L_SERIES)
 		SharedIntrfSetIrqHandler(pCfg->DevNo, &pDev->DevIntrf, UartIrqHandler);
 #endif
 
+#ifdef UARTE_PRESENT
 		if (pDev->DevIntrf.bDma == true)
 		{
+#if defined(UARTE_INTENSET_DMARXEND_Msk)
+			s_nRFxUARTDev[devno].pDmaReg->INTENSET = (UARTE_INTENSET_RXDRDY_Set << UARTE_INTENSET_RXDRDY_Pos) |
+							  (UARTE_INTENSET_RXTO_Set << UARTE_INTENSET_RXTO_Pos) |
+							  (UARTE_INTENSET_TXDRDY_Set << UARTE_INTENSET_TXDRDY_Pos) |
+							  (UARTE_INTENSET_ERROR_Set << UARTE_INTENSET_ERROR_Pos) |
+							  (UARTE_INTENSET_CTS_Set << UARTE_INTENSET_CTS_Pos) |
+							  (UARTE_INTENSET_NCTS_Set << UARTE_INTENSET_NCTS_Pos) |
+							  (UARTE_INTENSET_DMARXEND_Set << UARTE_INTENSET_DMARXEND_Pos) |
+							  (UARTE_INTENSET_DMATXEND_Set << UARTE_INTENSET_DMATXEND_Pos) |
+							  (UARTE_INTEN_FRAMETIMEOUT_Enabled << UARTE_INTEN_FRAMETIMEOUT_Pos);
+#else
 			s_nRFxUARTDev[devno].pDmaReg->INTENSET = (UARTE_INTENSET_RXDRDY_Set << UARTE_INTENSET_RXDRDY_Pos) |
 							  (UARTE_INTENSET_RXTO_Set << UARTE_INTENSET_RXTO_Pos) |
 							  (UARTE_INTENSET_TXDRDY_Set << UARTE_INTENSET_TXDRDY_Pos) |
@@ -1146,6 +1267,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 							  (UARTE_INTENSET_NCTS_Set << UARTE_INTENSET_NCTS_Pos) |
 							  (UARTE_INTENSET_ENDTX_Set << UARTE_INTENSET_ENDTX_Pos) |
 							  (UARTE_INTENSET_ENDRX_Set << UARTE_INTENSET_ENDRX_Pos);
+#endif
 		}
 		else
 #endif
@@ -1162,26 +1284,64 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 		switch (devno)
 		{
-#ifdef NRF91_SERIES
+#if defined(NRF54L_SERIES)
 		case 0:
-			NVIC_ClearPendingIRQ(UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQn);
-			NVIC_SetPriority(UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQn);
+			NVIC_ClearPendingIRQ(SERIAL30_IRQn);
+			NVIC_SetPriority(SERIAL30_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(SERIAL30_IRQn);
 			break;
 		case 1:
-			NVIC_ClearPendingIRQ(UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQn);
-			NVIC_SetPriority(UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQn);
+			NVIC_ClearPendingIRQ(SERIAL20_IRQn);
+			NVIC_SetPriority(SERIAL20_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(SERIAL20_IRQn);
 			break;
 		case 2:
-			NVIC_ClearPendingIRQ(UARTE2_SPIM2_SPIS2_TWIM2_TWIS2_IRQn);
-			NVIC_SetPriority(UARTE2_SPIM2_SPIS2_TWIM2_TWIS2_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(UARTE2_SPIM2_SPIS2_TWIM2_TWIS2_IRQn);
+			NVIC_ClearPendingIRQ(SERIAL21_IRQn);
+			NVIC_SetPriority(SERIAL21_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(SERIAL21_IRQn);
 			break;
 		case 3:
-			NVIC_ClearPendingIRQ(UARTE3_SPIM3_SPIS3_TWIM3_TWIS3_IRQn);
-			NVIC_SetPriority(UARTE3_SPIM3_SPIS3_TWIM3_TWIS3_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(UARTE3_SPIM3_SPIS3_TWIM3_TWIS3_IRQn);
+			NVIC_ClearPendingIRQ(SERIAL22_IRQn);
+			NVIC_SetPriority(SERIAL22_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(SERIAL22_IRQn);
+			break;
+		case 4:
+			NVIC_ClearPendingIRQ(SERIAL00_IRQn);
+			NVIC_SetPriority(SERIAL00_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(SERIAL00_IRQn);
+			break;
+#if UARTE_COUNT > 5
+		case 5:
+			NVIC_ClearPendingIRQ(SERIAL23_IRQn);
+			NVIC_SetPriority(SERIAL23_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(SERIAL23_IRQn);
+			break;
+		case 6:
+			NVIC_ClearPendingIRQ(SERIAL24_IRQn);
+			NVIC_SetPriority(SERIAL24_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(SERIAL24_IRQn);
+			break;
+#endif
+#elif defined(NRF91_SERIES)
+		case 0:
+			NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
+			NVIC_SetPriority(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
+			break;
+		case 1:
+			NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn);
+			NVIC_SetPriority(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn);
+			break;
+		case 2:
+			NVIC_ClearPendingIRQ(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn);
+			NVIC_SetPriority(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn);
+			break;
+		case 3:
+			NVIC_ClearPendingIRQ(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn);
+			NVIC_SetPriority(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn);
 			break;
 #elif defined(NRF53_SERIES)
     		case 0:
@@ -1234,8 +1394,6 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)
 {
-//	NRFUARTDEV *dev = (NRFUARTDEV *)pDev->SerIntrf.pDevData;
-
 }
 
 UARTDev_t const *UARTGetInstance(int DevNo)
@@ -1243,28 +1401,25 @@ UARTDev_t const *UARTGetInstance(int DevNo)
 	return s_nRFxUARTDev[DevNo].pUartDev;
 }
 
-#ifdef UART_PRESENT
+// Direct vector handlers for the devices whose UART interrupt is not routed
+// through the shared interface (nRF51 & nRF52). The IOsonata nRF52 vector
+// tables name the entry UARTE0_UART0_IRQHandler; nRF51 names it
+// UART0_IRQHandler.
+#if defined(NRF51)
 extern "C" void UART0_IRQHandler()
+{
+	UartIrqHandler(0, &s_nRFxUARTDev[0].pUartDev->DevIntrf);
+}
+#elif defined(NRF52_SERIES)
+extern "C" void UARTE0_UART0_IRQHandler()
 {
 	UartIrqHandler(0, &s_nRFxUARTDev[0].pUartDev->DevIntrf);
 }
 #endif
 
-#if defined(NRF52840_XXAA) || defined(NRF5340_XXAA_App)
+#if defined(NRF52840_XXAA)
 extern "C" void UARTE1_IRQHandler()
 {
 	UartIrqHandler(1, &s_nRFxUARTDev[1].pUartDev->DevIntrf);
-}
-#endif
-
-#if defined(NRF5340_XXAA_App)
-extern "C" void UARTE2_IRQHandler()
-{
-	UartIrqHandler(2, &s_nRFxUARTDev[2].pUartDev->DevIntrf);
-}
-
-extern "C" void UARTE3_IRQHandler()
-{
-	UartIrqHandler(3, &s_nRFxUARTDev[3].pUartDev->DevIntrf);
 }
 #endif

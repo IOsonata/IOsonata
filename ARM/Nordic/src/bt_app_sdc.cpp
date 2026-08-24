@@ -925,7 +925,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	BtGapSetDevName(pCfg->pDevName);
 
     //BleAppGapDeviceNameSet(pBleAppCfg->pDevName);
-#ifndef NRF54L15_XXAA
+#if !defined(NRF54L15_XXAA) && !defined(NRF54LM20A_XXAA) && !defined(NRF54LM20B_XXAA)
 #if (__FPU_USED == 1)
     // Patch for softdevice & FreeRTOS to sleep properly when FPU is in used
     NVIC_SetPriority(FPU_IRQn, 6);

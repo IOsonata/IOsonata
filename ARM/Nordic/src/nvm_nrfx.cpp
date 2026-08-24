@@ -43,7 +43,7 @@ SOFTWARE.
 
 #if defined(NRF52_SERIES)
 #include "hal/nrf_nvmc.h"
-#elif defined(NRF54L_SERIES) || defined(NRF54L15_XXAA)
+#elif defined(NRF54L_SERIES) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 #include "hal/nrf_rramc.h"
 #else
 #error "nvm_nrfx: unsupported MCU model"
@@ -56,7 +56,7 @@ SOFTWARE.
 #if defined(SOFTDEVICE_PRESENT) || defined(S112) || defined(S113) || \
 	defined(S132) || defined(S140) || defined(S145)
 #define NVM_INTRF_SOFTDEVICE		1
-#elif defined(NRF54L_SERIES) || defined(NRF54L15_XXAA)
+#elif defined(NRF54L_SERIES) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 // The nRF54L library is built with no SoftDevice define at all, because one
 // archive serves SoftDevice, link controller and plain bare metal
 // applications alike. A compile time test can therefore never be right here:
@@ -76,7 +76,7 @@ SOFTWARE.
 // own chain; one without links nothing extra, the reference resolves null,
 // and the operation goes to the controller. The flash arbitration therefore
 // lives entirely here; who may touch the memory is registered by the stack.
-#if !defined(NRFXLIB_SDC) && (defined(NRF54L_SERIES) || defined(NRF54L15_XXAA))
+#if !defined(NRFXLIB_SDC) && (defined(NRF54L_SERIES) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA))
 #define NVM_INTRF_SLOT_RUNTIME		1
 #endif
 

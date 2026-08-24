@@ -34,7 +34,7 @@
 #endif
 /*******************************/
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 #include "cracen_intrf.h"
 
 #define RNG_USE_CRACEN	1

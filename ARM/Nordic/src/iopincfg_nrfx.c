@@ -43,7 +43,7 @@ SOFTWARE.
 NRF_GPIO_Type *nRFGpioGetReg(int PortNo);
 void __WEAK GPIOTE_IRQHandler(void);
 
-#if defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 #define IOPIN_MAX_INT			(GPIOTE20_GPIOTE_NCHANNELS_SIZE + GPIOTE30_GPIOTE_NCHANNELS_SIZE)
 #define GPIO_PIN_CNF_DRIVE_Pos (8UL)              //!< Position of DRIVE0 field.
 #define GPIO_PIN_CNF_DRIVE_Msk (0xFUL << GPIO_PIN_CNF_DRIVE0_Pos) //!< Bit mask of DRIVE0 field.
@@ -154,7 +154,7 @@ static NRF_GPIOTE_Type *nRFGpioteGetReg(int PortNo)
 {
 	NRF_GPIOTE_Type *reg = NULL;
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	if (PortNo & 0x7F)
 	{
 	    if (PortNo & 0x80)
@@ -244,7 +244,7 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 
 	if (Type == IOPINTYPE_OPENDRAIN)
 	{
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 		cnf |= (GPIO_PIN_CNF_DRIVE0_S0 << GPIO_PIN_CNF_DRIVE0_Pos) | (GPIO_PIN_CNF_DRIVE1_D1 << GPIO_PIN_CNF_DRIVE1_Pos);
 #else
 		cnf |= (GPIO_PIN_CNF_DRIVE_S0D1 << GPIO_PIN_CNF_DRIVE_Pos);
@@ -291,7 +291,7 @@ void IOPinDisableInterrupt(int IntNo)
     if (IntNo < 0)
     {
         IntNo = IOPIN_MAX_INT;
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
         if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
         {
         	if (IntNo > 4)
@@ -327,7 +327,7 @@ void IOPinDisableInterrupt(int IntNo)
     {
     	NRF_GPIO_Type *reg = nRFGpioGetReg(s_GpIOSenseEvt[IntNo].PortPinNo >> 8);
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
     	if (IntNo > 4)
     	{
     		gpiotereg->INTENCLR1 = (1 << (IntNo - 4));
@@ -355,7 +355,7 @@ void IOPinDisableInterrupt(int IntNo)
     }
 
 //#if defined(NRF91_SERIES) || defined(NRF53_SERIES) ||
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
     if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x7F00)
     {
 		if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
@@ -443,7 +443,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 #endif
 
 	uint32_t cfg = 0;
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	// Two GPIOTE instances of 4 channels each, the second one starts over at 0
 	int idx = IntNo > 3 ? IntNo - 4 : IntNo;
 #else
@@ -456,7 +456,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	if (IntNo < 0)
 	{
 		IntNo = IOPIN_MAX_INT;
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 
 		if (IntNo > 3)
 		{
@@ -555,7 +555,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 
 		gpiotereg->CONFIG[idx] = cfg;
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 		if (IntNo > 3)
 		{
 			if (PortNo & 0x80)
@@ -606,7 +606,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	    NVIC_SetPriority(GPIOTE1_IRQn, IntPrio);
 	    NVIC_EnableIRQ(GPIOTE1_IRQn);
 	}
-#elif defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#elif defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	if ((PortNo & 0x7F) == 0)
 	{
 		if (PortNo & 0x80)
@@ -830,7 +830,7 @@ void __WEAK GPIOTE1_IRQHandler(void)
 
 	NVIC_ClearPendingIRQ(GPIOTE0_IRQn);
 }
-#elif defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#elif defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 
 // Unsecure
 void __WEAK GPIOTE20_0_IRQHandler(void)
