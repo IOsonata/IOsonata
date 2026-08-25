@@ -41,8 +41,15 @@ SOFTWARE.
 
 #include "idelay.h"
 
-#if defined(NRF52_SERIES)
+// The family test below turns on NRF52_SERIES, NRF54L_SERIES and NRF91_SERIES,
+// all of which nrf.h derives from the part define. Include it first so the test
+// works off what the MDK says rather than off whatever the project happened to
+// put on the command line.
+#include "nrf.h"
+
+#if defined(NRF52_SERIES) || defined(NRF91_SERIES)
 #include "hal/nrf_nvmc.h"
+#include "hal/nrf_ficr.h"
 #elif defined(NRF54L_SERIES) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 #include "hal/nrf_rramc.h"
 #else
@@ -94,6 +101,21 @@ SOFTWARE.
 #if defined(NRFXLIB_SDC) || defined(NVM_INTRF_SLOT_RUNTIME)
 #endif
 
+// The nRF52 and the nRF91 both drive an NVMC: page erased flash, a mode
+// register, a READY flag and the geometry in FICR. The nRF54L drives an RRAMC,
+// which overwrites in place and has no erase at all. That is the split the
+// controller code below turns on, so it is named once here rather than
+// repeating the family test at every site.
+//
+// Two details differ inside the NVMC family and the HAL absorbs both. The
+// nRF91 has no ERASEPAGE register, so nrf_nvmc_page_erase_start writes the
+// erased word to the page instead. And the nRF91 keeps the geometry in
+// FICR->INFO where the nRF52 keeps it flat, which nrf_ficr_codepagesize_get
+// resolves. Neither is a second shape, so neither gets a second branch.
+#if defined(NRF52_SERIES) || defined(NRF91_SERIES)
+#define NVM_INTRF_NVMC				1
+#endif
+
 #include "storage/nvm_intrf.h"
 
 // The command set, using the opcodes a serial flash uses so a config for
@@ -111,7 +133,7 @@ SOFTWARE.
 // ---------------------------------------------------------------------------
 // What follows from the MCU model
 // ---------------------------------------------------------------------------
-#if defined(NRF52_SERIES)
+#if defined(NVM_INTRF_NVMC)
 
 // Largest bytes one transfer may take. A word write is a few hundred usec and
 // on a timeslot build the whole transfer has to fit one slot, which is the
@@ -382,7 +404,7 @@ static NvmIntrfErCtx_t *OpCtxEr(uintptr_t Addr)
 // ---------------------------------------------------------------------------
 // The controller. One of these two, chosen by the MCU model.
 // ---------------------------------------------------------------------------
-#if defined(NRF52_SERIES)
+#if defined(NVM_INTRF_NVMC)
 
 static void CtrlWriteWords(uintptr_t Addr, const uint32_t *pSrc,
 						   uint32_t WordCnt)
@@ -420,7 +442,7 @@ static void CtrlRelease(void)
 
 static uint32_t CtrlEraseSize(void)
 {
-	return NRF_FICR->CODEPAGESIZE;
+	return nrf_ficr_codepagesize_get(NRF_FICR);
 }
 
 #else	// nRF54L
@@ -465,7 +487,7 @@ static uint32_t CtrlEraseSize(void)
 
 #endif
 
-#if defined(NRF52_SERIES)
+#if defined(NVM_INTRF_NVMC)
 
 // True when the page already reads erased, so it can be left alone. Saves the
 // work and the wear that goes with it.
@@ -485,7 +507,7 @@ static bool CtrlIsErased(uintptr_t Addr, uint32_t Len)
 	return true;
 }
 
-#endif	// NRF52_SERIES
+#endif	// NVM_INTRF_NVMC
 
 // ---------------------------------------------------------------------------
 // SoftDevice path. The memory is not ours to touch while one runs, so the work
@@ -712,7 +734,7 @@ static uint32_t SlotWriteStep(void *pv)
 	return 0;					// done in one step
 }
 
-#if defined(NRF52_SERIES)
+#if defined(NVM_INTRF_NVMC)
 // A page erase is far longer than a timeslot, so it is started in one and
 // polled in later ones while the radio keeps its slots.
 static uint32_t SlotEraseStep(void *pv)
@@ -741,7 +763,7 @@ static uint32_t SlotEraseStep(void *pv)
 
 	return NVM_INTRF_ERASE_SLICE_MS * 1000UL;
 }
-#endif	// NRF52_SERIES
+#endif	// NVM_INTRF_NVMC
 
 // ---------------------------------------------------------------------------
 // The one place that knows which of the three cases we are in.
@@ -829,7 +851,7 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 	return 0;
 }
 
-#if defined(NRF52_SERIES)
+#if defined(NVM_INTRF_NVMC)
 // Erase with the memory all ours: start the page erase and wait it out. The
 // wait is handed to the application, since the erase stalls instruction fetch.
 static int NvmEraseBare(uintptr_t Addr, uint32_t page)
@@ -874,7 +896,7 @@ static int NvmEraseBare(uintptr_t Addr, uint32_t page)
 // completion is owed, or a negative errno.
 static int NvmEraseUnit(uintptr_t Addr)
 {
-#if defined(NRF52_SERIES)
+#if defined(NVM_INTRF_NVMC)
 	uint32_t page = CtrlEraseSize();
 
 	if (page == 0)
@@ -1193,7 +1215,7 @@ void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
 // The nRF54L is left on the weak true. RRAM commits inside the transfer, the
 // buffer is drained before CtrlWriteWords returns, and there is no busy period
 // afterwards for anyone to wait on.
-#if defined(NRF52_SERIES)
+#if defined(NVM_INTRF_NVMC)
 bool NvmMcuIsReady(void)
 {
 	return nrf_nvmc_ready_check(NRF_NVMC);
@@ -1209,10 +1231,11 @@ void NvmMcuCfg(NvmCfg_t &Cfg)
 	// puts its base in here and the driver adds it.
 	Cfg.BaseAddr = 0;
 
-#if defined(NRF52_SERIES)
-	// Geometry from the device itself.
-	uint32_t pagesize = NRF_FICR->CODEPAGESIZE;
-	uint32_t pagecnt = NRF_FICR->CODESIZE;
+#if defined(NVM_INTRF_NVMC)
+	// Geometry from the device itself. The getters resolve the FICR layout:
+	// flat on the nRF52, inside INFO on the nRF91.
+	uint32_t pagesize = nrf_ficr_codepagesize_get(NRF_FICR);
+	uint32_t pagecnt = nrf_ficr_codesize_get(NRF_FICR);
 
 	Cfg.TotalSize = (uint64_t)pagesize * (uint64_t)pagecnt;
 	Cfg.EraseSize = pagesize;
@@ -1245,8 +1268,9 @@ void NvmMcuCfg(NvmCfg_t &Cfg)
 // slot ends at the storage partition.
 __attribute__((weak)) uint64_t NvmMcuCeiling(void)
 {
-#if defined(NRF52_SERIES)
-	return (uint64_t)NRF_FICR->CODEPAGESIZE * (uint64_t)NRF_FICR->CODESIZE;
+#if defined(NVM_INTRF_NVMC)
+	return (uint64_t)nrf_ficr_codepagesize_get(NRF_FICR) *
+		   (uint64_t)nrf_ficr_codesize_get(NRF_FICR);
 #else
 	return NVM_INTRF_TOTAL_SIZE;
 #endif

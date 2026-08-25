@@ -41,7 +41,13 @@ SOFTWARE.
 #include "idelay.h"
 #include "coredev/i2s.h"
 
-#ifndef NRF52_SERIES
+// The MDK indexes the I2S instance on nRF53 but not on nRF91, the same split
+// the PDM has. nRF52 needs no alias, its register block is named NRF_I2S.
+#if defined(NRF53_SERIES)
+#define NRF_I2S			NRF_I2S0_S
+#define NRF_I2S_BASE	NRF_I2S0_S_BASE
+#define I2S_IRQn		I2S0_IRQn
+#elif !defined(NRF52_SERIES)
 #define NRF_I2S			NRF_I2S_S
 #define NRF_I2S_BASE	NRF_I2S_S_BASE
 #endif
@@ -67,7 +73,13 @@ static const MCLK_FREQ s_MClkFreqTable[] = {
 	{2909091, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV11},	// 2.9090909 MHz
 	{3200000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV10},	// 3.2 MHz
 	{4000000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV8},	// 4.0 MHz
-#if defined(NRF52_SERIES)
+// The high rate dividers are an nRF53 feature. This block used to be keyed on
+// NRF52_SERIES, which is exactly backwards: no nRF52 part defines 32MDIV6
+// through 32MDIV2 and the file could not compile for any of them, while the
+// nRF5340 that does have them was excluded. The nRF91 does not have them
+// either. Key it on the MDK symbol so it follows the target rather than a
+// family name.
+#if defined(I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV6)
 	{5333333, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV6},	// 5.3333333 MHz
 	{6400000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV5},	// 6.4 MHz
 	{8000000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4},	// 8.0 MHz

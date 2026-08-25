@@ -45,6 +45,15 @@
 #endif
 #endif
 
+#if defined(NRF91_SERIES)
+// The nRF91 has no RNG peripheral at all. There is no NRF_RNG_S to return and
+// no RNG_PRESENT in nrf9160_peripherals.h; entropy comes from the CryptoCell
+// TRNG (CC_RNG) instead. This file was previously reachable for NRF91_SERIES
+// through RngPeriphReg below, which named NRF_RNG_S and could not compile.
+// Say so here rather than failing on an undeclared identifier further down.
+#error "rng_nrfx: the nRF91 has no RNG peripheral, use the CryptoCell TRNG"
+#endif
+
 #ifndef RNG_NRF_POLL_LIMIT
 #define RNG_NRF_POLL_LIMIT	1000000U
 #endif
@@ -53,7 +62,7 @@
 
 static inline NRF_RNG_Type *RngPeriphReg(void)
 {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF53_SERIES)
  #ifdef NRF5340_XXAA_NETWORK
 	return NRF_RNG_NS;
  #else

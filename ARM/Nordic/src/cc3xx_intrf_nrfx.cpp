@@ -51,13 +51,25 @@ SOFTWARE.
 #error CC3xx wrapper is not defined for the selected Nordic target
 #endif
 
+// Base of the CryptoCell core register file, which sits above the wrapper.
+// This used to be the literal 0x5002B000, which is the nRF52840 address and
+// only that: the nRF9160 puts it at 0x50841000 and the nRF5340 application
+// core at 0x50845000. Take it from the MDK so it follows the target.
+#if defined(NRF_CC_HOST_RGF_BASE)
+#define CC3XX_CORE_BASE				NRF_CC_HOST_RGF_BASE
+#elif defined(NRF_CC_HOST_RGF_S_BASE)
+#define CC3XX_CORE_BASE				NRF_CC_HOST_RGF_S_BASE
+#else
+#error CC3xx core base is not defined for the selected Nordic target
+#endif
+
 #ifndef CC3XX_POWERUP_SPINS
 #define CC3XX_POWERUP_SPINS			256U
 #endif
 
 uintptr_t Cc3xxBase(void)
 {
-	return 0x5002B000UL;
+	return (uintptr_t)CC3XX_CORE_BASE;
 }
 
 bool Cc3xxEnable(void)

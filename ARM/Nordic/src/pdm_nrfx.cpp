@@ -37,9 +37,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "idelay.h"
 #include "coredev/pdm.h"
 
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+// The MDK indexes the PDM instance on nRF53 but not on nRF91, so the secure
+// alias and the interrupt number are spelled differently on the two families.
+#if defined(NRF53_SERIES)
 #define NRF_PDM			NRF_PDM0_S
 #define PDM_IRQn		PDM0_IRQn
+#elif defined(NRF91_SERIES)
+#define NRF_PDM			NRF_PDM_S
 #endif
 
 // Only one DPM device on chip

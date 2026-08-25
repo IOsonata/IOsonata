@@ -68,7 +68,7 @@ void SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQHandler(void)
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 void SERIAL30_IRQHandler(void)
 #elif defined(NRF91_SERIES)
-void UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQHandler(void)
+void SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler(void)
 #else
 void SPI0_TWI0_IRQHandler(void)
 #endif
@@ -84,7 +84,7 @@ void SPI0_TWI0_IRQHandler(void)
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	NVIC_ClearPendingIRQ(SERIAL30_IRQn);
 #elif defined(NRF91_SERIES)
-	NVIC_ClearPendingIRQ(UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQn);
+	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
 #else
 	NVIC_ClearPendingIRQ(SPI0_TWI0_IRQn);
 #endif
@@ -96,7 +96,7 @@ void SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQHandler(void)
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 void SERIAL20_IRQHandler(void)
 #elif defined(NRF91_SERIES)
-void UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQHandler(void)
+void SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQHandler(void)
 #else
 void SPI1_TWI1_IRQHandler(void)
 #endif
@@ -110,7 +110,7 @@ void SPI1_TWI1_IRQHandler(void)
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	NVIC_ClearPendingIRQ(SERIAL20_IRQn);
 #elif defined(NRF91_SERIES)
-	NVIC_ClearPendingIRQ(UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQn);
+	NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn);
 #else
 	NVIC_ClearPendingIRQ(SPI1_TWI1_IRQn);
 #endif
@@ -167,22 +167,22 @@ void SERIAL24_IRQHandler(void)
 #endif
 
 #if defined(NRF91_SERIES)
-void UARTE2_SPIM2_SPIS2_TWIM2_TWIS2_IRQHandler(void)
+void SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQHandler(void)
 {
 	if (g_SharedIntrf[2].pIntrf != NULL)
 	{
 		g_SharedIntrf[2].Handler(2, g_SharedIntrf[2].pIntrf);
 	}
-	NVIC_ClearPendingIRQ(UARTE2_SPIM2_SPIS2_TWIM2_TWIS2_IRQn);
+	NVIC_ClearPendingIRQ(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn);
 }
 
-void UARTE3_SPIM3_SPIS3_TWIM3_TWIS3_IRQHandler(void)
+void SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQHandler(void)
 {
 	if (g_SharedIntrf[3].pIntrf != NULL)
 	{
 		g_SharedIntrf[3].Handler(3, g_SharedIntrf[3].pIntrf);
 	}
-	NVIC_ClearPendingIRQ(UARTE3_SPIM3_SPIS3_TWIM3_TWIS3_IRQn);
+	NVIC_ClearPendingIRQ(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn);
 }
 #endif
 
