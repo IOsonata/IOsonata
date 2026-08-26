@@ -6,11 +6,11 @@
 				<externalSettings>
 					<externalSetting>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_nRF91"/>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_nRF9120"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_nRF91x1"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/IOsonata_nRF91/Debug"/>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/IOsonata_nRF9120/Debug"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/IOsonata_nRF91x1/Debug"/>
 						<entry flags="RESOLVED" kind="libraryFile" name="IOsonata_nRF91" srcPrefixMapping="" srcRootPath=""/>
-						<entry flags="RESOLVED" kind="libraryFile" name="IOsonata_nRF9120" srcPrefixMapping="" srcRootPath=""/>
+						<entry flags="RESOLVED" kind="libraryFile" name="IOsonata_nRF91x1" srcPrefixMapping="" srcRootPath=""/>
 					</externalSetting>
 				</externalSettings>
 				<extensions>
@@ -155,11 +155,11 @@
 				<externalSettings>
 					<externalSetting>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_nRF91"/>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_nRF9120"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_nRF91x1"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/IOsonata_nRF91/Release"/>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/IOsonata_nRF9120/Release"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/IOsonata_nRF91x1/Release"/>
 						<entry flags="RESOLVED" kind="libraryFile" name="IOsonata_nRF91" srcPrefixMapping="" srcRootPath=""/>
-						<entry flags="RESOLVED" kind="libraryFile" name="IOsonata_nRF9120" srcPrefixMapping="" srcRootPath=""/>
+						<entry flags="RESOLVED" kind="libraryFile" name="IOsonata_nRF91x1" srcPrefixMapping="" srcRootPath=""/>
 					</externalSetting>
 				</externalSettings>
 				<extensions>
