@@ -84,17 +84,6 @@ SysLogCfg_t MakeCfg(uint8_t *pMem, uint32_t MemSize, uint32_t RecordLen,
 	return cfg;
 }
 
-int FlushAll(SysLog_t *pLog)
-{
-	int total = 0;
-	int n;
-	while ((n = SysLogFlush(pLog)) > 0)
-	{
-		total += n;
-	}
-	return total;
-}
-
 // The store keeps complete records without requiring an output sink.
 void TestBufferedBeforeSink()
 {
@@ -114,8 +103,7 @@ void TestBufferedBeforeSink()
 	MakeIntrf(&intrf);
 	SysLogSetSink(&log, &intrf, 0);
 
-	CHECK(SysLogFlush(&log) == 6);
-	CHECK(SysLogFlush(&log) == 7);
+	CHECK(SysLogFlush(&log) == 13);
 	CHECK(SysLogFlush(&log) == 0);
 	CHECK(s_TxCalls == 2);
 	CHECK(s_CapturedLen == 13);
@@ -239,18 +227,20 @@ void TestBufferedFlushDropsEmptyRecord()
 	SysLogCfg_t cfg = MakeCfg(fifoMem, sizeof(fifoMem), kLineLen, false);
 	CHECK(SysLogInit(&log, &cfg, &intrf, 0, nullptr, 0));
 
-	// A format that produces no characters still occupies a block.
-	CHECK(SysLogPrintf(&log, "%s", "") == 0);
-
 	ResetCapture();
+
+	// A format that produces no characters still occupies a block, and the
+	// auto send discards it without reaching the transport.
+	CHECK(SysLogPrintf(&log, "%s", "") == 0);
+	CHECK(s_TxCalls == 0);
 	CHECK(SysLogFlush(&log) == 0);
 	CHECK(s_TxCalls == 0);
 
 	// The empty record was discarded, so the next one is delivered.
 	CHECK(SysLogPrintf(&log, "after\n") == 6);
-	CHECK(SysLogFlush(&log) == 6);
 	CHECK(s_CapturedLen == 6);
 	CHECK(std::memcmp(s_Captured, "after\n", 6) == 0);
+	CHECK(SysLogFlush(&log) == 0);
 }
 
 // The non-blocking store policy drops the oldest complete record when full.
@@ -272,7 +262,7 @@ void TestBufferedDropIsRecordBased()
 	ResetCapture();
 	SysLogSetSink(&log, &intrf, 0);
 
-	CHECK(FlushAll(&log) == 10);
+	CHECK(SysLogFlush(&log) == 10);
 	CHECK(s_TxCalls == 2);
 	CHECK(s_CapturedLen == 10);
 	CHECK(std::memcmp(s_Captured, "two\nthree\n", 10) == 0);
@@ -294,7 +284,7 @@ void TestStatusFormatting()
 	SysStatus_t st = SYSSTATUS_TYPE_ERR | (0x0ABu << 16) | 0x1234u;
 	ResetCapture();
 	SysLogStatus(&log, st, nullptr);
-	FlushAll(&log);
+	SysLogFlush(&log);
 
 	const char *want = "E:0AB:1234\r\n";
 	CHECK(s_CapturedLen == (int)std::strlen(want));
@@ -302,7 +292,7 @@ void TestStatusFormatting()
 
 	ResetCapture();
 	SysLogStatus(&log, st, "oops");
-	FlushAll(&log);
+	SysLogFlush(&log);
 	const char *want2 = "E:0AB:1234 oops\r\n";
 	CHECK(s_CapturedLen == (int)std::strlen(want2));
 	CHECK(std::memcmp(s_Captured, want2, std::strlen(want2)) == 0);
@@ -323,12 +313,12 @@ void TestStatusFilter()
 
 	ResetCapture();
 	CHECK(SysLogStatus(&log, SYSSTATUS_TYPE_WRN | 0x0001u, nullptr) == 0);
-	CHECK(FlushAll(&log) == 0);
+	CHECK(SysLogFlush(&log) == 0);
 	CHECK(s_CapturedLen == 0);
 
 	CHECK(SysLogStatus(&log, SYSSTATUS_TYPE_ERR | 0x0002u, nullptr) > 0);
-	CHECK(FlushAll(&log) > 0);
 	CHECK(s_CapturedLen > 0);
+	CHECK(SysLogFlush(&log) == 0);
 }
 
 // Memory too small for one record leaves the instance dormant, and a dormant
@@ -396,24 +386,24 @@ void TestShortRecordLen()
 	SysLogCfg_t cfg = MakeCfg(fifoMem, sizeof(fifoMem), kLen, true);
 	CHECK(SysLogInit(&log, &cfg, &intrf, 0, nullptr, 0));
 
-	// Three records fit where a 128 byte line would have given none.
+	ResetCapture();
+
+	// Three records fit where a 128 byte line would have given none, and each
+	// one goes out as it is logged.
 	CHECK(SysLogPrintf(&log, "one\n") == 4);
 	CHECK(SysLogPrintf(&log, "two\n") == 4);
 	CHECK(SysLogPrintf(&log, "three\n") == 6);
-
-	ResetCapture();
-	CHECK(FlushAll(&log) == 14);
 	CHECK(s_CapturedLen == 14);
 	CHECK(std::memcmp(s_Captured, "one\ntwo\nthree\n", 14) == 0);
+	CHECK(SysLogFlush(&log) == 0);
 
 	// Anything past the record length is cut, NUL included.
 	char text[64];
 	std::memset(text, 'x', sizeof(text) - 1U);
 	text[sizeof(text) - 1U] = '\0';
-	CHECK(SysLogPrintf(&log, "%s", text) == (int)kLen - 1);
 
 	ResetCapture();
-	CHECK(SysLogFlush(&log) == (int)kLen - 1);
+	CHECK(SysLogPrintf(&log, "%s", text) == (int)kLen - 1);
 	CHECK(s_CapturedLen == (int)kLen - 1);
 }
 
@@ -434,8 +424,8 @@ void TestShortRecordLenTruncatesStatus()
 	SysStatus_t st = SYSSTATUS_TYPE_ERR | (0x0ABu << 16) | 0x1234u;
 	ResetCapture();
 	CHECK(SysLogStatus(&log, st, "detail") == (int)kLen - 1);
-	CHECK(SysLogFlush(&log) == (int)kLen - 1);
 	CHECK(s_CapturedLen == (int)kLen - 1);
+	CHECK(SysLogFlush(&log) == 0);
 	CHECK(std::memcmp(s_Captured, "E:0AB:1", (size_t)kLen - 1U) == 0);
 }
 
@@ -457,10 +447,9 @@ void TestLongRecordLen()
 	char text[350];
 	std::memset(text, 'x', sizeof(text) - 1U);
 	text[sizeof(text) - 1U] = '\0';
-	CHECK(SysLogPrintf(&log, "%s", text) == 349);
 
 	ResetCapture();
-	CHECK(SysLogFlush(&log) == 349);
+	CHECK(SysLogPrintf(&log, "%s", text) == 349);
 	CHECK(s_CapturedLen == 349);
 
 	// A status record reaches past a 128 byte line too.
@@ -468,7 +457,6 @@ void TestLongRecordLen()
 	ResetCapture();
 	constexpr int kStatusLen = 10 + 1 + 349 + 2;
 	CHECK(SysLogStatus(&log, st, text) == kStatusLen);
-	CHECK(SysLogFlush(&log) == kStatusLen);
 	CHECK(s_CapturedLen == kStatusLen);
 	CHECK(std::memcmp(s_Captured, "E:0AB:1234 x", 12) == 0);
 }
@@ -486,6 +474,82 @@ void TestRecordLenTooShortRefused()
 
 	SysLogCfg_t zero = MakeCfg(fifoMem, sizeof(fifoMem), 0U, true);
 	CHECK(SysLogInit(&log, &zero, nullptr, 0, nullptr, 0) == false);
+}
+
+// With a sink attached a record reaches the transport on the log call, with
+// nothing else asked of the application.
+void TestAutoSendWhenSinkAttached()
+{
+	alignas(4) uint8_t fifoMem[SYSLOG_MEMSIZE(4, kLineLen)];
+
+	DevIntrf_t intrf{};
+	MakeIntrf(&intrf);
+
+	SysLog_t log;
+	std::memset(&log, 0, sizeof(log));
+	SysLogCfg_t cfg = MakeCfg(fifoMem, sizeof(fifoMem), kLineLen, false);
+	CHECK(SysLogInit(&log, &cfg, &intrf, 0, nullptr, 0));
+
+	ResetCapture();
+	CHECK(SysLogPrintf(&log, "one\n") == 4);
+	CHECK(s_CapturedLen == 4);
+	CHECK(s_TxCalls == 1);
+
+	SysStatus_t st = SYSSTATUS_TYPE_ERR | (0x0ABu << 16) | 0x1234u;
+	CHECK(SysLogStatus(&log, st, nullptr) == 12);
+	CHECK(s_CapturedLen == 16);
+	CHECK(std::memcmp(s_Captured, "one\nE:0AB:1234\r\n", 16) == 0);
+
+	// Nothing left for an explicit call to do.
+	CHECK(SysLogFlush(&log) == 0);
+}
+
+// A sink that refuses leaves the record stored, and the next log call sends
+// it along with its own.
+void TestAutoSendRetriesOnNextRecord()
+{
+	alignas(4) uint8_t fifoMem[SYSLOG_MEMSIZE(4, kLineLen)];
+
+	DevIntrf_t intrf{};
+	MakeIntrf(&intrf);
+
+	SysLog_t log;
+	std::memset(&log, 0, sizeof(log));
+	SysLogCfg_t cfg = MakeCfg(fifoMem, sizeof(fifoMem), kLineLen, false);
+	CHECK(SysLogInit(&log, &cfg, &intrf, 0, nullptr, 0));
+
+	ResetCapture(0);
+	CHECK(SysLogPrintf(&log, "one\n") == 4);
+	CHECK(s_CapturedLen == 0);
+
+	s_ChunkLimit = 512;
+	CHECK(SysLogPrintf(&log, "two\n") == 4);
+	CHECK(s_CapturedLen == 8);
+	CHECK(std::memcmp(s_Captured, "one\ntwo\n", 8) == 0);
+}
+
+// With no sink the records only accumulate, and attaching one later sends
+// everything that was stored meanwhile.
+void TestStoredRecordsGoOutOnSinkAttach()
+{
+	alignas(4) uint8_t fifoMem[SYSLOG_MEMSIZE(4, kLineLen)];
+
+	DevIntrf_t intrf{};
+	MakeIntrf(&intrf);
+
+	SysLog_t log;
+	std::memset(&log, 0, sizeof(log));
+	SysLogCfg_t cfg = MakeCfg(fifoMem, sizeof(fifoMem), kLineLen, false);
+	CHECK(SysLogInit(&log, &cfg, nullptr, 0, nullptr, 0));
+
+	ResetCapture();
+	CHECK(SysLogPrintf(&log, "one\n") == 4);
+	CHECK(SysLogPrintf(&log, "two\n") == 4);
+	CHECK(s_TxCalls == 0);
+
+	SysLogSetSink(&log, &intrf, 0);
+	CHECK(SysLogFlush(&log) == 8);
+	CHECK(std::memcmp(s_Captured, "one\ntwo\n", 8) == 0);
 }
 
 } // namespace
@@ -508,6 +572,9 @@ int main()
 	TestShortRecordLenTruncatesStatus();
 	TestLongRecordLen();
 	TestRecordLenTooShortRefused();
+	TestAutoSendWhenSinkAttached();
+	TestAutoSendRetriesOnNextRecord();
+	TestStoredRecordsGoOutOnSinkAttach();
 
 	if (s_Failures != 0)
 	{

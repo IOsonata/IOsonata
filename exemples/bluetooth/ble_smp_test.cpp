@@ -350,12 +350,25 @@ void HardwareInit()
 
 	// Route SysLog to the same UART so the library's SMP_TRACE output (and any
 	// HCI DEBUG_PRINTF) appears here. No timer -> no timestamps; emit all.
-	SysLogInit(SysLogGet(), (DevIntrf_t*)g_Uart, 0, nullptr, 0);
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0,
+			   nullptr, 0);
 
 	// SMP crypto (software uECC ECDH + BLE controller AES) is owned and brought
 	// up by the BLE app layer during BtAppInit; the application does not set it
 	// up here.
 }
+
+// SysLog store. With the UART attached at init, each record goes out as it
+// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
+// cannot keep up with drops the oldest lines rather than the newest.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem      = s_SysLogMem,
+	.MemSize   = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = false
+};
 
 int main()
 {

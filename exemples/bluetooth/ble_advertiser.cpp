@@ -175,6 +175,20 @@ void BtAppAdvTimeoutHandler()
  * 		nrfutil pkg generate --hw-version 52 --sd-req 0x0124 --application-version 0x0 --application ./BleAdvertiser.hex --key-file ../../../../../../src/iosonata_dfukey.pem BleAdvertiser_package.zip
  */
 
+#ifdef UART_PINS
+// SysLog store. With the UART attached at init, each record goes out as it
+// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
+// cannot keep up with drops the oldest lines rather than the newest.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem      = s_SysLogMem,
+	.MemSize   = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = false
+};
+#endif
+
 int main()
 {
 	// Configure Leds
@@ -188,7 +202,8 @@ int main()
 	g_Uart.printf("BleAdvertiser\n\r");
 
 	// Enable SysLog output through the UART so library DEBUG_PRINTF appears.
-	SysLogGetInstance()->Init(g_Uart);
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0,
+			   nullptr, 0);
 #endif
 
 	// Clear all leds

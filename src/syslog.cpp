@@ -45,6 +45,32 @@ SOFTWARE.
 #define SYSSTATUS_STACK_USE_IRQ_LOCK    1
 #endif
 
+//
+// Status stack. IOsonata default storage for status provenance.
+// Independent of the logger above.
+//
+
+// Weak linkage for override of the global accessors.
+#ifndef SYSSTATUS_WEAK
+#if defined(__GNUC__) || defined(__clang__)
+#define SYSSTATUS_WEAK  __attribute__((weak))
+#else
+#define SYSSTATUS_WEAK
+#endif
+#endif
+
+// IOsonata global instance. Zero initialized, so Count is 0 (empty) at
+// startup with no explicit init required.
+static SysStatusStack_t g_SysStatusStack;
+
+
+//
+// Library global logger instance. File static, one per image. Constructed
+// dormant, stays inert until configured.
+//
+static SysLog g_SysLog;
+
+
 // Return one character tag for the status type field.
 static char SysLogTypeTag(SysStatus_t Status)
 {
@@ -180,35 +206,50 @@ int SysLogFlush(SysLog_t * const pLog)
 		return 0;
 	}
 
-	uint8_t *pBlock = CFifoPeek(pLog->hFifo);
-	if (pBlock == 0)
-	{
-		return 0;
-	}
-
 	const uint32_t recordLen = CFifoBlockSize(pLog->hFifo);
+	int total = 0;
+	uint8_t *pBlock;
 
-	uint32_t len = 0U;
-	while (len < recordLen && pBlock[len] != 0U)
+	while ((pBlock = CFifoPeek(pLog->hFifo)) != 0)
 	{
-		len++;
-	}
+		uint32_t len = 0U;
+		while (len < recordLen && pBlock[len] != 0U)
+		{
+			len++;
+		}
 
-	if (len == 0U)
-	{
-		// Remove an empty record so one failed format cannot block the FIFO.
+		if (len == 0U)
+		{
+			// Remove an empty record so one failed format cannot block the
+			// store, and carry on with the next one.
+			(void)CFifoGet(pLog->hFifo);
+			continue;
+		}
+
+		int count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
+							   pBlock, (int)len);
+		if (count > 0)
+		{
+			total += count;
+		}
+
+		if (count != (int)len)
+		{
+			// The sink did not take the whole record. Leave it queued and
+			// stop; a later call offers it again. A negative result with
+			// nothing sent is reported as it came back.
+			if (count < 0 && total == 0)
+			{
+				return count;
+			}
+
+			break;
+		}
+
 		(void)CFifoGet(pLog->hFifo);
-		return 0;
 	}
 
-	int count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
-						   pBlock, (int)len);
-	if (count == (int)len)
-	{
-		(void)CFifoGet(pLog->hFifo);
-	}
-
-	return count;
+	return total;
 }
 
 int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
@@ -261,6 +302,13 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 
 	pLine[len] = 0;
 
+	// A record goes out as soon as it is stored when a transport is attached.
+	// SysLogFlush does not log, so this cannot recurse.
+	if (pLog->pSink != 0)
+	{
+		(void)SysLogFlush(pLog);
+	}
+
 	return len;
 }
 
@@ -290,6 +338,11 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 	if ((uint32_t)len >= recordLen)
 	{
 		len = (int)recordLen - 1;
+	}
+
+	if (pLog->pSink != 0)
+	{
+		(void)SysLogFlush(pLog);
 	}
 
 	return len;
@@ -329,12 +382,6 @@ int SysLog::Printf(const char *pFormat, ...)
 	return len;
 }
 
-//
-// Library global logger instance. File static, one per image. Constructed
-// dormant, stays inert until configured.
-//
-static SysLog g_SysLog;
-
 // C++ direct access to the global object.
 SysLog *SysLogGetInstance(void)
 {
@@ -346,20 +393,6 @@ extern "C" SysLog_t *SysLogGet(void)
 {
 	return (SysLog_t *)g_SysLog;
 }
-
-//
-// Status stack. IOsonata default storage for status provenance.
-// Independent of the logger above.
-//
-
-// Weak linkage for override of the global accessors.
-#ifndef SYSSTATUS_WEAK
-#if defined(__GNUC__) || defined(__clang__)
-#define SYSSTATUS_WEAK  __attribute__((weak))
-#else
-#define SYSSTATUS_WEAK
-#endif
-#endif
 
 void SysStatusStackReset(SysStatusStack_t * const pStack)
 {
@@ -468,10 +501,6 @@ int SysStatusStackCount(SysStatusStack_t * const pStack)
 
 	return retval;
 }
-
-// IOsonata global instance. Zero initialized, so Count is 0 (empty) at
-// startup with no explicit init required.
-static SysStatusStack_t g_SysStatusStack;
 
 SYSSTATUS_WEAK SysStatusStack_t *SysStatusStackGet(void)
 {

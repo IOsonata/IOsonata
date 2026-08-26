@@ -14,6 +14,11 @@
  whether or not an output transport exists, so a logger works with a transport
  that comes and goes, or with none at all.
 
+ When a transport is attached, a record is sent as soon as it is stored, so
+ nothing has to be pumped. SysLogFlush is there for the case a sink refuses a
+ record and no further record follows to send it, and for sending what
+ accumulated while no transport was attached.
+
  The status word supplies the type, module id and code fields. The optional
  detail string supplies additional runtime values and is formatted by the
  caller.
@@ -53,10 +58,10 @@
                  StatusEncode(SYSSTATUS_TYPE_ERR, SYSSTATUS_MODID_BLE, 0x21),
                  "conn fail");
 
-    // When a transport turns up, attach it and drain. One record per call.
+    // When a transport turns up, attach it and send what was stored while
+    // there was none. Later records go out as they are logged.
     SysLogSetSink(SysLogGet(), (DevIntrf_t *)g_Uart, 0);
-    while (SysLogFlush(SysLogGet()) > 0)
-        ;
+    SysLogFlush(SysLogGet());
 
     // Detach when it goes away again. Queued records stay queued.
     SysLogSetSink(SysLogGet(), NULL, 0);
@@ -71,8 +76,6 @@
     SysLogGetInstance()->Init(s_LogCfg, &g_Uart, 0, &g_Timer,
                               SYSSTATUS_TYPE_WRN);
     SysLogGetInstance()->Printf("boot %u\r\n", reason);
-    while (SysLogGetInstance()->Flush() > 0)
-        ;
 
  For per file developer trace, the convention is :
 
@@ -214,18 +217,28 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
 				   uint32_t SinkAddr);
 
 /**
- * Send one queued record through the configured DeviceIntrf.
+ * Send queued records through the configured DeviceIntrf until the store is
+ * empty or the sink stops taking them.
  *
- * One store block is one log record. SysLog peeks the next record and passes
- * it once to DeviceIntrfTx. The record is consumed only when DeviceIntrfTx
- * accepts the complete record. A zero, partial, or negative result leaves the
- * record queued; SysLog does not retry the remainder. Buffered sinks should
- * therefore accept one complete record or return zero when not ready.
- * Transport transfer handling remains in the concrete interface implementation.
+ * Not normally needed. SysLogStatus and SysLogPrintf already do this whenever
+ * a sink is attached. Call it after SysLogSetSink to send what was stored
+ * while there was no transport, or when a sink refused the last record and no
+ * further record is coming to send it.
+ *
+ * One store block is one log record. Each record is passed once to
+ * DeviceIntrfTx and consumed only when the whole record is accepted. A zero,
+ * partial, or negative result leaves that record queued and ends the call;
+ * SysLog does not retry the remainder, so a later call offers the same
+ * complete record again. Transport transfer handling remains in the concrete
+ * interface implementation.
+ *
+ * Note this is the opposite of CFifoFlush, which discards. This one sends.
  *
  * @param	pLog : Logger instance.
  *
- * @return	Byte count returned by DeviceIntrfTx.
+ * @return	Total bytes the sink accepted, 0 when there was nothing to send or
+ *          the sink took nothing. A negative DeviceIntrfTx result is returned
+ *          unchanged when no bytes went out before it.
  */
 int SysLogFlush(SysLog_t * const pLog);
 
@@ -239,7 +252,8 @@ int SysLogFlush(SysLog_t * const pLog);
  * @param	Status	: Status word to emit.
  * @param	pDetail	: Detail string, NULL for none.
  *
- * @return	Byte count stored. 0 when dormant, filtered, or the store is full.
+ * @return	Byte count stored, not the byte count sent. 0 when dormant,
+ *          filtered, or the store is full.
  */
 int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail);
 

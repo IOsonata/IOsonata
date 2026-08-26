@@ -856,7 +856,8 @@ void HardwareInit()
 	// Route SysLog to the same UART so the SMP/ATT stack traces (SMP_TRACE,
 	// DEBUG_PRINTF) appear here alongside the application output. Without this
 	// the stack pairs/runs silently and no trace is seen.
-	SysLogInit(SysLogGet(), (DevIntrf_t*)g_Uart, 0, nullptr, 0);
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0,
+			   nullptr, 0);
 
 	IOPinCfg(s_LedPins, s_NbLedPins);
 
@@ -1091,6 +1092,18 @@ int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffer
 //
 // Adjust it for other toolchains.
 //
+
+// SysLog store. With the UART attached at init, each record goes out as it
+// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
+// cannot keep up with drops the oldest lines rather than the newest.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem      = s_SysLogMem,
+	.MemSize   = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = false
+};
 
 int main()
 {

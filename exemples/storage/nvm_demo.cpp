@@ -984,6 +984,18 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 
 #endif
 
+// SysLog store. With the UART attached at init, each record goes out as it
+// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
+// cannot keep up with drops the oldest lines rather than the newest.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem      = s_SysLogMem,
+	.MemSize   = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = false
+};
+
 // Runs from the BtAppRun loop, so blocking here is safe while advertising
 // continues.
 static void NvmCycleHandler(uint32_t Evt, void *pCtx)
@@ -1125,7 +1137,8 @@ int main()
 
 	g_Uart.printf("\r\nNvm demo on the %s, with a stack up\r\n", s_MediumName);
 
-	SysLogGetInstance()->Init(g_Uart);
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0,
+			   nullptr, 0);
 
 	BtAppInit(&s_BtAppCfg);
 
