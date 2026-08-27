@@ -254,13 +254,13 @@ while IFS= read -r proj_file; do
 
   # Ignores Windows/macOS specific lib projects
   if [[ "$rel_path" =~ ^Win/lib/Eclipse$ ]] || \
-     [[ "$rel_path" =~ /Win/lib/Eclipse$ ]] || \
+     [[ "$rel_path" =~ /Win/lib/ioc$ ]] || \
      [[ "$rel_path" =~ ^Windows/lib/Eclipse$ ]] || \
-     [[ "$rel_path" =~ /Windows/lib/Eclipse$ ]] || \
+     [[ "$rel_path" =~ /Windows/lib/ioc$ ]] || \
      [[ "$rel_path" =~ ^macOS/lib/Eclipse$ ]] || \
-     [[ "$rel_path" =~ /macOS/lib/Eclipse$ ]] || \
+     [[ "$rel_path" =~ /macOS/lib/ioc$ ]] || \
      [[ "$rel_path" =~ ^OSX/lib/Eclipse$ ]] || \
-     [[ "$rel_path" =~ /OSX/lib/Eclipse$ ]]; then
+     [[ "$rel_path" =~ /OSX/lib/ioc$ ]]; then
     continue
   fi
 
@@ -268,16 +268,16 @@ while IFS= read -r proj_file; do
   mcu_families+=("$rel_path")
   mcu_paths+=("$proj_root")
 
-done < <(find "$ROOT/IOsonata" -type f -ipath "*lib/eclipse/.project" 2>/dev/null | sort)
+done < <(find "$ROOT/IOsonata" -type f -ipath "*lib/ioc/.project" 2>/dev/null | sort)
 
 # ---------------------------------------------------------
 # EMPTY RESULTS CHECK
 # ---------------------------------------------------------
 
 if [[ ${#mcu_families[@]} -eq 0 ]]; then
-  echo "⚠️  WARNING: No IOsonata Eclipse library projects found."
+  echo "⚠️  WARNING: No IOsonata ioc library projects found."
   echo ""
-  echo "Expected to find .project files at: */lib/Eclipse/.project"
+  echo "Expected to find .project files at: */lib/ioc/.project"
   echo "Searched in: $ROOT/IOsonata"
   exit 1
 fi
@@ -286,8 +286,8 @@ fi
 # TAKTOS PROJECT DISCOVERY (lib only: ARM + RISCV)
 # ---------------------------------------------------------
 # TaktOS library projects live at:
-#   <TaktOS>/ARM/<core>/Eclipse
-#   <TaktOS>/RISCV/<core>/Eclipse
+#   <TaktOS>/ARM/<core>/ioc
+#   <TaktOS>/RISCV/<core>/ioc
 # Everything under Benchmark/, KVB/ and test/ is skipped
 # because those relative paths do not match the predicate.
 
@@ -307,9 +307,9 @@ else
     proj_root=$(dirname "$proj_file")
     rel="${proj_root#$TAKTOS_DIR/}"
 
-    # Keep only top level ARM/<core>/Eclipse or RISCV/<core>/Eclipse
-    if [[ "$rel" =~ ^ARM/[^/]+/Eclipse$ ]] || \
-       [[ "$rel" =~ ^RISCV/[^/]+/Eclipse$ ]]; then
+    # Keep only top level ARM/<core>/ioc or RISCV/<core>/ioc
+    if [[ "$rel" =~ ^ARM/[^/]+/ioc$ ]] || \
+       [[ "$rel" =~ ^RISCV/[^/]+/ioc$ ]]; then
       taktos_families+=("$rel")
       taktos_paths+=("$proj_root")
     fi

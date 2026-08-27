@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "mcu": "NRF54LM20A_XXAA",
+  "cpu": "cortex-m33",
+  "fpu": true,
+  "fpu_unit": "fpv5spd16",
+  "defines": [
+	"NRF_APPLICATION"
+  ],
+  "includes": [
+    "${iosonata}/ARM/Nordic/include",
+    "${iosonata}/ARM/Nordic/nRF54/include",
+    "${iosonata}/ARM/Nordic/nRF54/nRF54LM20x/lib/include",
+    "${external}/nrfx",
+    "${external}/nrfx/drivers/include",
+    "${external}/nrfx/bsp/stable",
+    "${external}/nrfx/bsp/stable/mdk",
+    "${external}/nrfx/hal"
+  ],
+  "linker_script": "${iosonata}/ARM/Nordic/nRF54/ldscript/nrf54lm20a_xxaa_application.ld",
+  "lib_path": "${iosonata}/ARM/Nordic/nRF54/nRF54LM20x/lib/ioc/${config}",
+  "lib": "IOsonata_nRF54LM20x",
+  "features": {
+    "ble": {
+      "linker_script": "${iosonata}/ARM/Nordic/nRF54/ldscript/gcc_nrf54lm20a_xxaa_s145.ld",
+      "defines": [
+        "S145"
+      ],
+      "extra_includes": [
+        "${external}/sdk-nrf-bm/include",
+        "${external}/sdk-nrf-bm/components/softdevice/nrf54lm/s145/s145_API/include"
+      ]
+    }
+  }
+}

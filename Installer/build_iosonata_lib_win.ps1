@@ -184,10 +184,10 @@ $mcuFamilies = @()
 $mcuPaths = @()
 
 Get-ChildItem -Path "$ROOT\IOsonata" -Recurse -Filter ".project" -ErrorAction SilentlyContinue | ForEach-Object {
-    # Look for projects inside 'lib\Eclipse' folders
-    if ($_.DirectoryName -match "\\lib\\Eclipse$") {
+    # Look for projects inside 'lib\ioc' folders
+    if ($_.DirectoryName -match "\\lib\\ioc$") {
         $projRoot = $_.DirectoryName
-        # Get relative path for display (e.g., "Nordic\nRF52840\lib\Eclipse")
+        # Get relative path for display (e.g., "Nordic\nRF52840\lib\ioc")
         $relPath = $projRoot.Replace("$ROOT\IOsonata\", "")
 
         # Filter out non-Windows projects if any exist
@@ -207,8 +207,8 @@ if ($mcuFamilies.Count -eq 0) {
 
 # --- Discover TaktOS Projects (lib only: ARM + RISCV) ---
 # TaktOS library projects live at:
-#   <TaktOS>\ARM\<core>\Eclipse
-#   <TaktOS>\RISCV\<core>\Eclipse
+#   <TaktOS>\ARM\<core>\ioc
+#   <TaktOS>\RISCV\<core>\ioc
 # Everything under Benchmark\, KVB\ and test\ is skipped because
 # those relative paths do not match the predicate.
 $taktosFamilies = @()
@@ -226,8 +226,8 @@ if ($NoTaktos) {
     Get-ChildItem -Path $TaktosDir -Recurse -Filter ".project" -ErrorAction SilentlyContinue | ForEach-Object {
         $projRoot = $_.DirectoryName
         $rel = $projRoot.Replace("$TaktosDir\", "")
-        # Keep only top level ARM\<core>\Eclipse or RISCV\<core>\Eclipse
-        if ($rel -match '^(ARM|RISCV)\\[^\\]+\\Eclipse$') {
+        # Keep only top level ARM\<core>\ioc or RISCV\<core>\ioc
+        if ($rel -match '^(ARM|RISCV)\\[^\\]+\\ioc$') {
             $taktosFamilies += $rel
             $taktosPaths += $projRoot
         }

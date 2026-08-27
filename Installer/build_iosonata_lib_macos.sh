@@ -99,7 +99,7 @@ while [[ $# -gt 0 ]]; do
       echo ""
       echo "This script will:"
       echo "  1. Locate IOcomposer (preferred) or Eclipse Embedded CDT"
-      echo "  2. Discover available IOsonata Eclipse library projects"
+      echo "  2. Discover available IOsonata ioc library projects"
       echo "  3. Present an interactive menu for IOsonata"
       echo "  4. Discover TaktOS ARM + RISCV library projects (lib only)"
       echo "  5. Build Debug and Release configurations"
@@ -230,22 +230,22 @@ while IFS= read -r proj_file; do
 
   # Filter out Windows/Linux specific lib projects
   if [[ "$rel_path" =~ ^Win/lib/Eclipse$ ]] || \
-     [[ "$rel_path" =~ /Win/lib/Eclipse$ ]] || \
+     [[ "$rel_path" =~ /Win/lib/ioc$ ]] || \
      [[ "$rel_path" =~ ^Windows/lib/Eclipse$ ]] || \
-     [[ "$rel_path" =~ /Windows/lib/Eclipse$ ]] || \
+     [[ "$rel_path" =~ /Windows/lib/ioc$ ]] || \
      [[ "$rel_path" =~ ^Linux/lib/Eclipse$ ]] || \
-     [[ "$rel_path" =~ /Linux/lib/Eclipse$ ]]; then
+     [[ "$rel_path" =~ /Linux/lib/ioc$ ]]; then
     continue
   fi
 
   mcu_families+=("$rel_path")
   mcu_paths+=("$proj_root")
-done < <(find "$ROOT/IOsonata" -type f -path "*/lib/Eclipse/.project" 2>/dev/null | sort)
+done < <(find "$ROOT/IOsonata" -type f -path "*/lib/ioc/.project" 2>/dev/null | sort)
 
 if [[ ${#mcu_families[@]} -eq 0 ]]; then
-  echo "⚠️  WARNING: No IOsonata Eclipse library projects found."
+  echo "⚠️  WARNING: No IOsonata ioc library projects found."
   echo ""
-  echo "Expected to find .project files at: */lib/Eclipse/.project"
+  echo "Expected to find .project files at: */lib/ioc/.project"
   echo "Searched in: $ROOT/IOsonata"
   exit 1
 fi
@@ -254,8 +254,8 @@ fi
 # TAKTOS PROJECT DISCOVERY (lib only: ARM + RISCV)
 # ---------------------------------------------------------
 # TaktOS library projects live at:
-#   <TaktOS>/ARM/<core>/Eclipse
-#   <TaktOS>/RISCV/<core>/Eclipse
+#   <TaktOS>/ARM/<core>/ioc
+#   <TaktOS>/RISCV/<core>/ioc
 # Everything under Benchmark/, KVB/ and test/ is skipped
 # because those relative paths do not match the predicate.
 
@@ -275,9 +275,9 @@ else
     proj_root=$(dirname "$proj_file")
     rel="${proj_root#$TAKTOS_DIR/}"
 
-    # Keep only top level ARM/<core>/Eclipse or RISCV/<core>/Eclipse
-    if [[ "$rel" =~ ^ARM/[^/]+/Eclipse$ ]] || \
-       [[ "$rel" =~ ^RISCV/[^/]+/Eclipse$ ]]; then
+    # Keep only top level ARM/<core>/ioc or RISCV/<core>/ioc
+    if [[ "$rel" =~ ^ARM/[^/]+/ioc$ ]] || \
+       [[ "$rel" =~ ^RISCV/[^/]+/ioc$ ]]; then
       taktos_families+=("$rel")
       taktos_paths+=("$proj_root")
     fi
