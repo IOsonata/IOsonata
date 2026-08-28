@@ -335,7 +335,7 @@ STM32 source ports and target projects remain in the repository, but no STM32 ta
 Install IOcomposer
     → run the IOsonata library builder
     → select nRF52832
-    → open ARM/Nordic/nRF52/nRF52832/exemples/Blinky/Eclipse/
+    → open ARM/Nordic/nRF52/nRF52832/exemples/Blinky/ioc/
     → use IDK-BLYST-NANO or an nRF52832 DK
     → build, flash and debug with IDAP-Link, J-Link or another supported probe
 ```
@@ -389,7 +389,7 @@ bash ~/IOcomposer/IOsonata/Installer/build_iosonata_lib_linux.sh
 The builder:
 
 1. Locates the IOcomposer installation.
-2. Discovers the supported IOsonata MCU library projects under `*/lib/Eclipse/`.
+2. Discovers the supported IOsonata MCU library projects under `*/lib/ioc/`.
 3. Presents an interactive menu to select one MCU target or build all targets.
 4. Runs the IOcomposer managed builder headlessly.
 5. Builds both Debug and Release configurations and places the libraries in the selected project's `Debug/` and `Release/` directories.
@@ -402,7 +402,7 @@ In IOcomposer:
 
 1. Select **File → Open Projects from File System...**
 2. Open a target project, for example:
-   `ARM/Nordic/nRF52/nRF52832/exemples/Blinky/Eclipse/`
+   `ARM/Nordic/nRF52/nRF52832/exemples/Blinky/ioc/`
 3. Build, flash and debug.
 
 Generic reusable examples are under [`exemples/`](exemples/). Buildable MCU projects are under each target's `exemples/` directory.

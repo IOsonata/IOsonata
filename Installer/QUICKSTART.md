@@ -115,17 +115,17 @@ Made changes to IOsonata source?
 ### macOS
 - Eclipse: `/Applications/Eclipse.app`
 - IOsonata: `~/IOcomposer/IOsonata`
-- Libraries: `~/IOcomposer/IOsonata/ARM/.../lib/Eclipse/Debug|Release/`
+- Libraries: `~/IOcomposer/IOsonata/ARM/.../lib/ioc/Debug|Release/`
 
 ### Linux
 - Eclipse: `/opt/eclipse`
 - IOsonata: `~/IOcomposer/IOsonata`
-- Libraries: `~/IOcomposer/IOsonata/ARM/.../lib/Eclipse/Debug|Release/`
+- Libraries: `~/IOcomposer/IOsonata/ARM/.../lib/ioc/Debug|Release/`
 
 ### Windows
 - Eclipse: `C:\Program Files\Eclipse Embedded CDT`
 - IOsonata: `%USERPROFILE%\IOcomposer\IOsonata`
-- Libraries: `%USERPROFILE%\IOcomposer\IOsonata\ARM\...\lib\Eclipse\Debug|Release\`
+- Libraries: `%USERPROFILE%\IOcomposer\IOsonata\ARM\...\lib\ioc\Debug|Release\`
 
 ---
 

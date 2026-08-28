@@ -73,7 +73,7 @@ Current architecture and workflow documents take precedence when procedures, too
 - Do not create a second positioning document that repeats the root README.
 - Keep tutorials, quick-reference material and architecture rules in separate files.
 - Use real repository paths and current public APIs.
-- IOcomposer is the official IDE. An `Eclipse/` path may be shown only when it is the actual directory name of a target project.
+- IOcomposer is the official IDE. Current migrated IOsonata managed-build projects use `ioc/`; show an `Eclipse/` path only when it is still the actual repository path for an unmigrated target, an external dependency or dated historical material.
 - Update target status only with a named board and recorded hardware result.
 - Do not retain an implementation or validation matrix without clear ownership and current evidence.
 - Do not embed proposed scripts, workflows or README fragments inside user documentation.

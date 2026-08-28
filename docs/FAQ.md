@@ -89,19 +89,19 @@ bash ~/IOcomposer/IOsonata/Installer/build_iosonata_lib_linux.sh
 
 The builder discovers the supported MCU library projects and lets you select one target or build all targets. It builds both Debug and Release libraries.
 
-## Why do project paths still contain an `Eclipse/` directory?
+## What is the `ioc/` project directory?
 
-That is the existing repository directory name for the per-target managed-build project. The user-facing IDE is IOcomposer.
+Current migrated IOsonata managed-build projects use `ioc/` as the repository directory name for IOcomposer projects.
 
 For example:
 
 ```text
-ARM/Nordic/nRF52/nRF52832/exemples/Blinky/Eclipse/
+ARM/Nordic/nRF52/nRF52832/exemples/Blinky/ioc/
 ```
 
-is the IOcomposer target project used to compile the nRF52832 Blinky application.
+is the IOcomposer target project used to compile the nRF52832 Blinky application. MCU library projects use the same convention under `lib/ioc/`.
 
-The directory name identifies the project format and repository layout. It does not mean users should install or configure a separate IDE.
+The directory contains the managed-build metadata and target configuration used by IOcomposer. Older documentation may still show `Eclipse/`; for migrated targets, use the current `ioc/` path.
 
 ## What is inside a per-target application project?
 

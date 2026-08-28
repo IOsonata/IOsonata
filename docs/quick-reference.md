@@ -42,11 +42,11 @@ bash ~/IOcomposer/IOsonata/Installer/build_iosonata_lib_linux.sh
 & "$env:USERPROFILE\IOcomposer\IOsonata\Installer\build_iosonata_lib_win.ps1"
 ```
 
-Select one MCU or **Build All**. The builder produces Debug and Release libraries.
+Select one MCU or **Build All**. The builder discovers current library projects under `lib/ioc/` and produces Debug and Release libraries.
 
 ```text
-<MCU project>/Debug/libIOsonata_<MCU>.a
-<MCU project>/Release/libIOsonata_<MCU>.a
+<MCU project>/lib/ioc/Debug/libIOsonata_<MCU>.a
+<MCU project>/lib/ioc/Release/libIOsonata_<MCU>.a
 ```
 
 The selected binary is reused across boards, products, bare metal, TaktOS, FreeRTOS and ThreadX.
@@ -54,11 +54,10 @@ The selected binary is reused across boards, products, bare metal, TaktOS, FreeR
 ## Open an example
 
 1. Select **File → Open Projects from File System...**
-2. Browse to the target example folder, for example:
-   `~/IOcomposer/IOsonata/ARM/Nordic/nRF52/nRF52832/exemples/Blinky/`
-3. Enable **Search for nested projects**.
-4. Select the discovered project.
-5. Build, flash and debug.
+2. Browse directly to the target project, for example:
+   `~/IOcomposer/IOsonata/ARM/Nordic/nRF52/nRF52832/exemples/Blinky/ioc/`
+3. Select the project.
+4. Build, flash and debug.
 
 ## Create a project
 
@@ -218,7 +217,7 @@ Change `board.h`. Reuse the same IOsonata library.
 
 ### Different MCU
 
-Run the library builder and select the new MCU. Create or open the corresponding target application project.
+Run the library builder and select the new MCU. Create or open the corresponding target application project under its current `ioc/` directory.
 
 ### Different execution model
 

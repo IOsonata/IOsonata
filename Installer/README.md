@@ -374,7 +374,7 @@ Build scripts compile IOsonata libraries for specific MCU targets. These standal
 
 - **Multiple times** - Build for different MCUs without re-running installer
 - **After source changes** - Rebuild libraries when you modify IOsonata code
-- **From anywhere** - As long as Eclipse and IOsonata are installed
+- **From anywhere** - As long as IOcomposer or a compatible Eclipse Embedded CDT installation and IOsonata are installed
 
 ### Usage
 
@@ -419,35 +419,31 @@ Get-Help .\build_iosonata_lib_win.ps1
 
 ### Interactive Menu
 
-When you run a build script, it presents an interactive menu:
+The build script discovers current IOsonata library projects from `*/lib/ioc/.project`. The exact menu depends on the checkout. Representative output is:
 
 ```
 =========================================================
-  IOsonata Library Builder (macOS)
-  Version: v1.0.0
+  IOsonata + TaktOS Library Builder (macOS)
+  Version: v2.4.0
 =========================================================
 
-✓ Eclipse found at: /Applications/Eclipse.app
+✓ IOcomposer found at: /Applications/IOcomposer.app
 ✓ IOsonata SDK found at: /Users/john/IOcomposer/IOsonata
 
 Available IOsonata library projects:
 
-   1) ARM/Nordic/nRF52/nRF52832/lib/Eclipse
-   2) ARM/Nordic/nRF52/nRF52840/lib/Eclipse
-   3) ARM/Nordic/nRF53/nRF5340/lib/Eclipse
-   4) ARM/Nordic/nRF54/nRF54H20/lib/Eclipse
-   5) ARM/Nordic/nRF54/nRF54L15/lib/Eclipse
-   6) ARM/Nordic/nRF91/lib/Eclipse
-   7) ARM/NXP/LPC11xx/lib/Eclipse
-   8) ARM/NXP/LPC17xx/lib/Eclipse
-   9) ARM/ST/STM32F0xx/lib/Eclipse
-  10) ARM/ST/STM32F4xx/lib/Eclipse
-  11) ARM/ST/STM32L4xx/lib/Eclipse
-  12) ARM/ST/STM32U5xx/lib/Eclipse
-  13) RISC-V/GigaDevice/GD32VF103/lib/Eclipse
+   1) ARM/Nordic/nRF52/nRF52832/lib/ioc
+   2) ARM/Nordic/nRF52/nRF52840/lib/ioc
+   3) ARM/Nordic/nRF53/nRF5340_App/lib/ioc
+   4) ARM/Nordic/nRF53/nRF5340_Net/lib/ioc
+   5) ARM/Nordic/nRF54/nRF54L15/lib/ioc
+   6) ARM/Nordic/nRF54/nRF54LM20x/lib/ioc
+   7) ARM/Nordic/nRF91/nRF9160/lib/ioc
+   8) ARM/Nordic/nRF91/nRF91x1/lib/ioc
+   A) Build All
    0) Exit
 
-Select project to build (0-13): 
+Select IOsonata project to build (0-8 or A):
 ```
 
 ### What Gets Built
@@ -455,7 +451,7 @@ Select project to build (0-13):
 For each MCU target, the build script creates:
 
 ```
-IOsonata/ARM/Nordic/nRF52/nRF52840/lib/Eclipse/
+IOsonata/ARM/Nordic/nRF52/nRF52840/lib/ioc/
 ├── Debug/
 │   └── libIOsonata_nRF52840.a      # Debug build (with symbols)
 └── Release/
@@ -474,7 +470,7 @@ These libraries are then linked into your firmware projects.
 After successful build:
 
 ```
-✅ IOsonata library build completed for ARM/Nordic/nRF52/nRF52840/lib/Eclipse
+✅ IOsonata library build completed for ARM/Nordic/nRF52/nRF52840/lib/ioc
 
 Libraries created:
 -rw-r--r--  1 john  staff   2.1M Jan  3 10:30 Debug/libIOsonata_nRF52840.a
@@ -500,7 +496,7 @@ firmware projects.
 #    (e.g., nRF52840)
 
 # 3. Start developing!
-# Open Eclipse and import your firmware project
+# Open IOcomposer and import your firmware project
 ```
 
 ### Workflow 2: Supporting Multiple MCUs
@@ -510,15 +506,15 @@ You're developing a product that uses three different MCUs:
 ```bash
 # Build for nRF52840
 ./build_iosonata_lib_macos.sh
-# Select: 2) ARM/Nordic/nRF52/nRF52840
+# Select the nRF52840 lib/ioc project
 
 # Build for nRF52832
 ./build_iosonata_lib_macos.sh
-# Select: 1) ARM/Nordic/nRF52/nRF52832
+# Select the nRF52832 lib/ioc project
 
 # Build for STM32F4
 ./build_iosonata_lib_macos.sh
-# Select: 10) ARM/ST/STM32F4xx
+# Select the desired STM32F4 lib/ioc project when available in the current checkout
 
 # All three libraries ready!
 ```
@@ -892,9 +888,9 @@ tail -50 /tmp/build_iosonata_lib.log
 
 **A:** Yes, after pulling new IOsonata code, run the build script to recompile libraries.
 
-### Q: Can I build libraries without Eclipse?
+### Q: Can I build libraries without IOcomposer?
 
-**A:** No, the build scripts use Eclipse CDT's headless build system. Eclipse is required.
+**A:** The build scripts require IOcomposer or a compatible Eclipse Embedded CDT installation because they use the managed-build headless application. IOcomposer is the preferred environment.
 
 ### Q: What if I don't want to build libraries?
 

@@ -79,7 +79,7 @@ bash ~/IOcomposer/IOsonata/Installer/build_iosonata_lib_linux.sh
 & "$env:USERPROFILE\IOcomposer\IOsonata\Installer\build_iosonata_lib_win.ps1"
 ```
 
-The builder discovers the MCU library projects in the current checkout. Select the MCU used by the board, or select **Build All**.
+The builder discovers the MCU library projects in the current checkout under their `lib/ioc/` directories. Select the MCU used by the board, or select **Build All**.
 
 For this first run, select **nRF52832**.
 
@@ -99,9 +99,8 @@ When TaktOS is installed, the builder also builds detected TaktOS architecture l
 1. Launch IOcomposer.
 2. Select **File -> Open Projects from File System...**
 3. Browse to:
-   `~/IOcomposer/IOsonata/ARM/Nordic/nRF52/nRF52832/exemples/Blinky/`
-4. Enable **Search for nested projects**.
-5. Select the discovered target project and finish the import.
+   `~/IOcomposer/IOsonata/ARM/Nordic/nRF52/nRF52832/exemples/Blinky/ioc/`
+4. Select the target project and finish the import.
 
 Use an IDK-BLYST-NANO/BLYST Nano or Nordic nRF52 DK for the documented nRF52832 first-run path.
 
@@ -180,7 +179,7 @@ exemples/
 └── sensor/
 ```
 
-Each supported MCU normally has target projects that reference the shared source and provide target-specific build and board configuration. Source belongs inside a target project only when the example is genuinely target-specific.
+Each supported MCU normally has target projects that reference the shared source and provide target-specific build and board configuration. Current migrated projects use an `ioc/` directory below the example, such as `ARM/Nordic/nRF52/nRF52832/exemples/Blinky/ioc/`. Source belongs inside a target project only when the example is genuinely target-specific.
 
 Useful starting points include:
 
