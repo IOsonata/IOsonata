@@ -10,13 +10,13 @@ interrupt priority and the unique id used for the serial number string.
 One implementation per MCU family, selected by which port library is linked.
 Nothing above this header knows which part it is running on.
 
-The DCD owns endpoint and transfer handling. This layer owns the MCU-specific
-power and controller sequencing around it, so the same interface serves a
-full speed controller and a high speed one without either knowing about the
-other.
+The controller backend owns endpoint and transfer handling. This layer owns
+the MCU-specific power and controller sequencing around it, so the same
+interface serves a full speed controller and a high speed one without either
+knowing about the other.
 
 @author	Hoang Nguyen Hoan
-@date	Aug. 28, 2026
+@date	Aug. 29, 2026
 
 @license
 
@@ -60,6 +60,14 @@ typedef enum __Usbd_Speed {
 	USBD_SPEED_HIGH			//!< 480 Mbit/s
 } UsbdSpeed_t;
 
+/// Static capabilities of the USB device controller instance.
+typedef struct __Usbd_Capabilities {
+	UsbdSpeed_t MaxSpeed;		//!< Fastest bus speed supported
+	uint8_t EpInCnt;			//!< IN endpoint numbers including endpoint zero
+	uint8_t EpOutCnt;			//!< OUT endpoint numbers including endpoint zero
+	uint8_t Ep0Mps;			//!< Endpoint zero maximum packet size
+} UsbdCaps_t;
+
 /// Cable events. Reported from UsbdProcess, never from an interrupt.
 typedef enum __Usbd_Evt {
 	USBD_EVT_ATTACHED,		//!< Bus power appeared
@@ -84,6 +92,18 @@ typedef struct __Usbd_Config {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * @brief	Return static controller capabilities.
+ *
+ * Endpoint counts are direction-specific and include endpoint zero. The port
+ * reports the instantiated controller resources rather than an architectural
+ * maximum so common USB code can size its function topology correctly on
+ * every MCU.
+ *
+ * @return	Pointer to the immutable capability record
+ */
+const UsbdCaps_t *UsbdGetCaps(void);
 
 /**
  * @brief	Configure the USB hardware without powering it.
