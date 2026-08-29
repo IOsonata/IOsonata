@@ -254,7 +254,7 @@ static bool UsbdCdcDescBuildFunction(uint16_t *pOffset, int FunctionNo,
 	data.bInterfaceNumber = dataIntrf;
 	data.bAlternateSetting = 0U;
 	data.bNumEndpoints = 2U;
-	data.bInterfaceClass = USB_INTRFCLASS_DATA;
+	data.bInterfaceClass = USB_INTRFCLASS_CDCDATA;
 	data.bInterfaceSubClass = 0U;
 	data.bInterfaceProtocol = USB_CDCDATA_PROT_NONE;
 	data.iInterface = 0U;
