@@ -137,6 +137,14 @@ bool UsbdCtrlrStart(void);
  */
 void UsbdCtrlrStop(void);
 
+/**
+ * @brief	Return whether the active bus connection negotiated high speed.
+ *
+ * Full-speed-only controllers use the default false result. A dual-speed
+ * controller updates this after enumeration completes.
+ */
+bool UsbdCtrlrHighSpeed(void);
+
 /** @brief Enable the USB controller interrupt. */
 void UsbdCtrlrIntEnable(void);
 
