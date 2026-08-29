@@ -45,3 +45,8 @@ __attribute__((weak)) bool UsbdCtrlrStart(void)
 __attribute__((weak)) void UsbdCtrlrStop(void)
 {
 }
+
+__attribute__((weak)) bool UsbdCtrlrHighSpeed(void)
+{
+	return false;
+}

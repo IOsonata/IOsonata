@@ -75,6 +75,20 @@ static int UsbDevMaxCdcCount(const UsbdCaps_t *pCaps)
 	return maxCdc < USBD_CDC_FUNC_MAXCNT ? maxCdc : USBD_CDC_FUNC_MAXCNT;
 }
 
+static const uint8_t *UsbDevDescHandler(uint8_t DescType,
+									uint8_t DescIndex,
+									uint16_t LangId,
+									UsbdSpeed_t,
+									uint16_t *pLength,
+									void *pContext)
+{
+	const UsbdSpeed_t speed = UsbdCtrlrHighSpeed() ?
+		USBD_SPEED_HIGH : USBD_SPEED_FULL;
+
+	return UsbdCdcDescHandler(DescType, DescIndex, LangId, speed,
+							 pLength, pContext);
+}
+
 static void UsbDevEvtHandler(UsbdEvt_t Evt)
 {
 	switch (Evt)
@@ -158,7 +172,7 @@ bool UsbDevInit(const UsbDevCfg_t *pCfg)
 	}
 
 	UsbdCoreCfg_t coreCfg = {};
-	coreCfg.DescHandler = UsbdCdcDescHandler;
+	coreCfg.DescHandler = UsbDevDescHandler;
 	coreCfg.pDescContext = nullptr;
 	coreCfg.Speed = pCaps->MaxSpeed;
 	coreCfg.Ep0Mps = pCaps->Ep0Mps;
