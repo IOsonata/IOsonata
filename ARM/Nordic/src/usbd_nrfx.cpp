@@ -11,14 +11,13 @@ made on the MDK capability symbol, not on a part name :
 					POWER and four errata around the enable sequence.
 
 	USBHS_PRESENT	nRF54LM20. A DesignWare core behind a Nordic wrapper,
-					running at high speed. The device stack's own dwc2 layer
-					starts the regulator and the PHY, so the controller step
-					is not repeated here. What it does not do is ask for the
-					24 MHz clock the PHY runs from, or read the regulator's
-					VBUS state, and both are done below.
+					running at high speed. This layer powers the regulator,
+					wrapper and PHY and supplies the 24 MHz PHY clock. The
+					native UsbdCtrlr backend owns the DesignWare core,
+					endpoints and USBHS interrupt.
 
-What both have in common is a clock the PHY needs, cable detect, the
-interrupt and the unique id, and that is what this layer exists for.
+What both have in common is a clock the PHY needs, cable detect and the unique
+id, and that is what this layer exists for.
 
 The POWER or CLOCK interrupt is deliberately not taken. On this family that
 vector is claimed by MPSL whenever a radio stack is in the build, and MPSL
@@ -30,7 +29,7 @@ per pass. Attach is then noticed within one pump interval, which enumeration
 does not care about.
 
 @author	Hoang Nguyen Hoan
-@date	Aug. 28, 2026
+@date	Aug. 29, 2026
 
 @license
 
@@ -73,10 +72,6 @@ SOFTWARE.
 #include "soc/nrfx_coredep.h"
 #else
 #error "usbd_nrfx: this part has no USB device controller"
-#endif
-
-#ifdef NRFX_USBD_HAS_USBHS
-#include "device/dcd.h"
 #endif
 
 #include "usb/usbd.h"
@@ -124,11 +119,8 @@ SOFTWARE.
 
 #endif
 
-//
-// One USB controller per part, so this is file scope. Nothing here is written
-// from an interrupt : the only interrupt this file owns hands straight to the
-// device stack and touches none of it.
-//
+// One USB controller per part, so the common power/clock state is file scope.
+// Controller interrupts are owned by the corresponding UsbdCtrlr backend.
 static UsbdCfg_t s_UsbdCfg;
 static bool s_UsbdInitialized = false;
 static bool s_UsbdStarted = false;
@@ -209,12 +201,8 @@ __attribute__((weak)) bool UsbdXtalRequest(void)
 
 	return false;
 #elif NRF_CLOCK_HAS_HFCLK24M
-	//
 	// The USBHS PHY runs from the 24 MHz clock, not from the radio crystal.
-	// This is a separate domain with its own task and its own started event,
-	// and neither the device stack's dwc2 layer nor its Nordic header asks
-	// for it, so it is asked for here.
-	//
+	// This is a separate domain with its own task and its own started event.
 	if (nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_HFCLK24M, NULL))
 	{
 		return true;
@@ -248,10 +236,8 @@ __attribute__((weak)) void UsbdXtalRelease(void)
 	}
 #endif
 
-	//
 	// Left running on both parts. Other peripherals take these clocks without
 	// counting, so stopping one here would stop it under them.
-	//
 }
 
 #ifdef NRFX_USBD_HAS_USBD
@@ -302,11 +288,11 @@ static void UsbdErrataRevert(void)
 }
 
 /**
- * The part does not leave USB low power on its own. The device stack writes
- * LOWPOWER on suspend and signals resume, but no driver anywhere writes
- * ForceNormal except the remote wakeup path, which is the device asking the
- * host to wake, not the other way round. Without this the board is gone after
- * the host sleeps and needs a power cycle.
+ * The part does not leave USB low power on its own. The native controller
+ * writes LOWPOWER on suspend and signals resume, but no driver anywhere
+ * writes ForceNormal except the remote wakeup path, which is the device
+ * asking the host to wake, not the other way round. Without this the board is
+ * gone after the host sleeps and needs a power cycle.
  */
 static void UsbdLowPowerExit(void)
 {
@@ -374,10 +360,8 @@ static bool UsbdStartCtrlr(void)
 
 	UsbdErrataRevert();
 
-	//
 	// The regulator reports itself usable separately from the controller, and
 	// pulling up before it does gives the host a device that cannot answer.
-	//
 	for (i = 0; i < NRFX_USBD_READY_WAIT_LOOPS; i++)
 	{
 		if (NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_OUTPUTRDY_Msk)
@@ -392,11 +376,9 @@ static bool UsbdStartCtrlr(void)
 		return false;
 	}
 
-	//
-	// The stock Nordic power-ready path arms this interrupt before the pull-up
-	// is enabled. This port replaces that power handler, so do the same here.
-	// The DCD expands the mask after it receives the first bus reset.
-	//
+	// The stock Nordic power-ready path arms USBRESET before the pull-up is
+	// enabled. This port replaces that power handler, so do the same here. The
+	// native nRF52 controller expands the mask after the first bus reset.
 	NRF_USBD->EVENTS_USBRESET = 0;
 	NRF_USBD->INTENCLR = NRF_USBD->INTEN;
 	NRF_USBD->INTENSET = USBD_INTEN_USBRESET_Msk;
@@ -418,13 +400,11 @@ static void UsbdStopCtrlr(void)
 
 #ifdef NRFX_USBD_HAS_USBHS
 
-//
 // Undocumented VREGUSB status register. The events below report the edges and
 // are in the MDK, but the level is not, and something has to answer what the
 // state is at start up before any edge has happened. Offset and bit are as
 // used by Zephyr's regulator_nrf_vregusb driver, which says in its own source
 // that the register is not part of NRF_VREGUSB_Type.
-//
 #define NRFX_USBD_VREGUSB_STATUS_OFS		0x400UL
 #define NRFX_USBD_VREGUSB_STATUS_VBUSDET	(1UL << 2)
 
@@ -453,17 +433,12 @@ static bool UsbdVbusPoll(void)
 
 /**
  * Power the USBHS wrapper, its PHY and the core, in the order the part
- * requires. Seven steps, and the two delays between them are not optional :
- * a core register read before the PHY clock is up hangs the bus.
+ * requires. The two delays are not optional: a core register read before the
+ * PHY clock is up can hang the bus. This sequence completes before
+ * UsbdCtrlrStart() touches NRF_USBHSCORE.
  *
- * The device stack's own Nordic header has this same sequence, but the whole
- * of it sits behind NRF54LM20A_ENGA_XXAA, so on a production part it compiles
- * to an empty function and the core is never powered. Doing it here, before
- * the device stack is initialised, leaves that empty function harmless and
- * keeps us off a patch against an external tree.
- *
- * The sequence itself is not invented here. It follows Zephyr's
- * usbhs_enable_core in drivers/usb/udc/udc_dwc2_vendor_quirks.h.
+ * The sequence follows Nordic's USBHS integration requirements, matching the
+ * ordering used by Zephyr's Nordic USBHS vendor quirk implementation.
  */
 static bool UsbdStartCtrlr(void)
 {
@@ -487,15 +462,13 @@ static bool UsbdStartCtrlr(void)
 	// Settle before anything reads a core register
 	nrfx_coredep_delay_us(2);
 
-	// Drop the VBUSVALID override and keep the device role. The pull up goes
-	// on when the device stack clears SftDiscon, not here.
+	// Drop the VBUSVALID override and keep the device role. The native
+	// controller connects when it clears SftDiscon.
 	NRF_USBHS->PHY.INPUTOVERRIDE = USBHS_PHY_INPUTOVERRIDE_ID_Msk;
 
-	//
 	// The wrapper and the core are separate peripheral blocks at separate
 	// addresses. Without this the writes above can still be sitting in the
 	// write buffer when the core is first read.
-	//
 	__DSB();
 
 	return true;
@@ -508,19 +481,6 @@ static void UsbdStopCtrlr(void)
 	NRF_USBHS->ENABLE = 0;
 	__ISB();
 	__DSB();
-}
-
-//
-// The nRF52 USBD vector belongs to tu_dcd_nrfx.c, the driver that owns that
-// controller. The nRF54 has no equivalent : its dwc2 driver is vendor neutral
-// and supplies no Nordic vector, so this file provides it. Either way the
-// vector reaches dcd_int_handler directly, because nothing above the
-// controller should have to be configured first for an interrupt to be
-// serviced.
-//
-extern "C" void USBHS_IRQHandler(void)
-{
-	dcd_int_handler(0);
 }
 
 #endif	// NRFX_USBD_HAS_USBHS
@@ -553,11 +513,9 @@ size_t UsbdGetSerial(char *pBuff, size_t BuffLen)
 		return 0;
 	}
 
-	//
 	// nrf_ficr_deviceid_get and not FICR->DEVICEID, because the nRF52 keeps
-	// the id flat and the nRF54 keeps it under INFO, and the HAL already
-	// knows which.
-	//
+	// the id flat and the nRF54 keeps it under INFO, and the HAL already knows
+	// which.
 	for (int i = 0; i < 2; i++)
 	{
 		uint32_t id = nrf_ficr_deviceid_get(NRF_FICR, (uint32_t)i);
@@ -589,11 +547,9 @@ bool UsbdInit(const UsbdCfg_t *pCfg)
 	memcpy(&s_UsbdCfg, pCfg, sizeof(UsbdCfg_t));
 
 #ifdef NRFX_USBD_HAS_USBHS
-	//
-	// The regulator reports nothing until it is started, so it is started
-	// here rather than left to the device stack, which starts it much later
-	// and only on the way to enabling the core.
-	//
+	// Start the regulator here so VBUS state is available before the native
+	// controller is enabled. The wrapper/core power sequence happens later in
+	// UsbdStart(), before UsbdCtrlrStart() reads the DesignWare registers.
 	nrf_vregusb_event_clear(NRF_VREGUSB, NRF_VREGUSB_EVENT_VBUS_DETECTED);
 	nrf_vregusb_event_clear(NRF_VREGUSB, NRF_VREGUSB_EVENT_VBUS_REMOVED);
 	nrf_vregusb_task_trigger(NRF_VREGUSB, NRF_VREGUSB_TASK_START);
@@ -625,10 +581,8 @@ bool UsbdStart(void)
 
 	if (UsbdVbusDetected() == false)
 	{
-		//
-		// No cable. Not a failure : the poll in UsbdProcess reports the
-		// attach and the caller comes back.
-		//
+		// No cable. Not a failure: the poll in UsbdProcess reports the attach
+		// and the caller comes back.
 		return false;
 	}
 
@@ -665,11 +619,7 @@ void UsbdStop(void)
 		return;
 	}
 
-	//
-	// The interrupt goes first. Everything after this runs with no chance of
-	// the device stack being entered from the vector while it is being torn
-	// down.
-	//
+	// Stop the controller interrupt before powering down the wrapper.
 #ifdef NRFX_USBD_HAS_USBD
 	NVIC_DisableIRQ(USBD_IRQn);
 #else
