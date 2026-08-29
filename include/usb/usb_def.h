@@ -64,7 +64,7 @@ typedef enum __USB_Interface_Class {
 	USB_INTRFCLASS_PRT 		= 7,		//!< Printer
 	USB_INTRFCLASS_MSC 		= 8,		//!< Mass Storage
 	USB_INTRFCLASS_HUB 		= 9,		//!< Hub
-	USB_INTRFCLASS_DATA 	= 10,		//!< CDC Data interface class
+	USB_INTRFCLASS_CDCDATA 	= 10,		//!< CDC Data interface class
 	USB_INTRFCLASS_SMC 		= 11,		//!< Smart Card
 	USB_INTRFCLASS_MMC 		= 11,		//!< Legacy alias; USB class 0x0B is Smart Card
 	USB_INTRFCLASS_CSEC 	= 13,		//!< Content Security
