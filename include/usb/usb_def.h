@@ -64,13 +64,17 @@ typedef enum __USB_Interface_Class {
 	USB_INTRFCLASS_PRT 		= 7,		//!< Printer
 	USB_INTRFCLASS_MSC 		= 8,		//!< Mass Storage
 	USB_INTRFCLASS_HUB 		= 9,		//!< Hub
-	USB_INTRFCLASS_DATA 	= 10,		//!< Data interface class
+	USB_INTRFCLASS_DATA 	= 10,		//!< CDC Data interface class
 	USB_INTRFCLASS_SMC 		= 11,		//!< Smart Card
-	USB_INTRFCLASS_MMC 		= 11,		//!< Smart Card
+	USB_INTRFCLASS_MMC 		= 11,		//!< Legacy alias; USB class 0x0B is Smart Card
 	USB_INTRFCLASS_CSEC 	= 13,		//!< Content Security
 	USB_INTRFCLASS_VIDEO 	= 14,		//!< Video
 	USB_INTRFCLASS_HEALTH 	= 15,		//!< Personal Healthcare
 	USB_INTRFCLASS_AUDVID 	= 16,		//!< Audio/Video Devices
+	USB_INTRFCLASS_TYPEC_BRIDGE = 0x12,	//!< USB Type-C Bridge
+	USB_INTRFCLASS_BULK_DISPLAY = 0x13,	//!< USB Bulk Display Protocol
+	USB_INTRFCLASS_MCTP 	= 0x14,		//!< MCTP over USB Protocol Endpoint
+	USB_INTRFCLASS_I3C 		= 0x3C,		//!< I3C Device Class
 	USB_INTRFCLASS_DIAG 	= 0xDC,		//!< Diagnostic Device
 	USB_INTRFCLASS_WIRELESS = 0xE0,		//!< Wireless Controller
 	USB_INTRFCLASS_MISC 	= 0xEF,		//!< Miscellaneous
@@ -80,12 +84,12 @@ typedef enum __USB_Interface_Class {
 
 
 typedef enum __USB_Device_State {
-	USB_DEVSTATE_ATTACHED = 1,
-	USB_DEVSTATE_POWERED = 2,
-	USB_DEVSTATE_DEFAULT = 4,
-	USB_DEVSTATE_ADDRESS = 8,
-	USB_DEVSTATE_CONFIGURED = 0x10,
-	USB_DEVSTATE_SUSPENDED = 0x20
+	USB_DEVSTATE_ATTACHED 		= (1U << 0),
+	USB_DEVSTATE_POWERED 		= (1U << 1),
+	USB_DEVSTATE_DEFAULT 		= (1U << 2),
+	USB_DEVSTATE_ADDRESS 		= (1U << 3),
+	USB_DEVSTATE_CONFIGURED 	= (1U << 4),
+	USB_DEVSTATE_SUSPENDED 		= (1U << 5)
 } USB_DEVSTATE;
 
 typedef enum __USB_Standard_Request_Codes {
@@ -118,6 +122,8 @@ typedef enum __USB_Descriptor_Type {
 	USB_DESCTYPE_OTG 				= 9,
 	USB_DESCTYPE_DEBUG 				= 10,
 	USB_DESCTYPE_IA 				= 11,	//!< Interface Association
+	USB_DESCTYPE_BOS 				= 15,
+	USB_DESCTYPE_DEVICE_CAPABILITY 	= 16,
 	USB_DESCTYPE_HID				= 0x21,
 	USB_DESCTYPE_HID_REPORT			= 0x22,
 	USB_DESCTYPE_PHYSICAL			= 0x23
@@ -125,15 +131,16 @@ typedef enum __USB_Descriptor_Type {
 
 typedef enum __USB_Standard_Feature_Selectors {
 	USB_FEATSEL_ENDPOINT_HALT = 0,
-	USB_FEATSEL_DEVICE_REMOTE_WAKEUP = 1,	//
+	USB_FEATSEL_DEVICE_REMOTE_WAKEUP = 1,
 	USB_FEATSEL_TEST_MODE = 2
 } USB_FEATSEL;
 
 
 typedef enum __USB_Config_Attribute {
-	USB_CONFATT_REMOTE_WAKEUP = 0xA0,
-	USB_CONFATT_SELF_POWERED = 0xC0,
-	USB_CONFATT_BUS_POWERED = 0x80
+	USB_CONFATT_RESERVED 		= (1U << 7),	//!< D7 is reserved and must be set to one
+	USB_CONFATT_SELF_POWERED 	= (1U << 6),
+	USB_CONFATT_REMOTE_WAKEUP 	= (1U << 5),
+	USB_CONFATT_BUS_POWERED 	= USB_CONFATT_RESERVED	//!< Legacy alias: bus powered means D6 is clear
 } USB_CONFATT;
 
 #pragma pack(push, 1)
@@ -143,19 +150,29 @@ typedef enum __USB_Request_Type {
 	USB_REQTYPE_INTERFACE 	= 1,
 	USB_REQTYPE_ENDPOINT 	= 2,
 	USB_REQTYPE_OTHER 		= 3,
-	USB_REQTYPE_STANDARD	= (0 << 5),
-	USB_REQTYPE_CLASS 		= (1 << 5),
-	USB_REQTYPE_VEND		= (2 << 5),
-	USB_REQTYPE_RSVD		= (3 << 5),
-	USB_REQTYPE_DIRDEV		= (0 << 8),
-	USB_REQTYPE_DIRHOST		= (1 << 8)
+	USB_REQTYPE_STANDARD	= (0U << 5),
+	USB_REQTYPE_CLASS 		= (1U << 5),
+	USB_REQTYPE_VEND		= (2U << 5),
+	USB_REQTYPE_RSVD		= (3U << 5),
+	USB_REQTYPE_DIRDEV		= (0U << 7),	//!< Host-to-device
+	USB_REQTYPE_DIRHOST		= (1U << 7)	//!< Device-to-host
 } USB_REQTYPE;
 
 typedef enum __USB_Request_Type_Mask {
-	USB_REQTYPE_MASK_RECEIPT 	= 0x1F,
-	USB_REQTYPE_MASK_TYPE		= (3 << 5),
-	USB_REQTYPE_MASK_DIR		= 0x80
+	USB_REQTYPE_MASK_RECIPIENT 	= (0x1FU << 0),
+	USB_REQTYPE_MASK_RECEIPT 	= USB_REQTYPE_MASK_RECIPIENT,	//!< Legacy misspelled alias
+	USB_REQTYPE_MASK_TYPE		= (3U << 5),
+	USB_REQTYPE_MASK_DIR		= (1U << 7)
 } USB_REQTYPE_MASK;
+
+typedef enum __USB_Device_Status {
+	USB_DEVSTATUS_SELF_POWERED 	= (1U << 0),
+	USB_DEVSTATUS_REMOTE_WAKEUP 	= (1U << 1)
+} USB_DEVSTATUS;
+
+typedef enum __USB_Endpoint_Status {
+	USB_ENDPSTATUS_HALT 		= (1U << 0)
+} USB_ENDPSTATUS;
 
 typedef struct __USB_Setup_Data {
 	uint8_t bmRequestType;			//!< Characteristics of request:
@@ -222,11 +239,11 @@ typedef struct __USB_Config_Descriptor {
 	uint8_t		bNumInterfaces;		//!< Number of Interfaces
 	uint8_t		bConfigurationValue;//!< Value to use as an argument to select this configuration
 	uint8_t		iConfiguration;		//!< Index of String Descriptor describing this configuration
-	uint8_t		bmAttributes;		//!< - D7 Reserved, set to 1. (USB 1.0 Bus Powered)
+	uint8_t		bmAttributes;		//!< - D7 Reserved, set to 1
 									//!< - D6 Self Powered
 									//!< - D5 Remote Wakeup
-									//!< - D4..0 Reserved, set to 0.
-	uint8_t		bMaxPower;			//!< Maximum Power Consumption in 2mA units
+									//!< - D4..0 Reserved, set to 0
+	uint8_t		bMaxPower;			//!< Maximum Power Consumption in 2mA units for USB 2.0
 } UsbCfgDesc_t;
 
 typedef struct __USB_Other_Speed_Configuration_Descriptor {
@@ -252,52 +269,59 @@ typedef struct __USB_Interface_Descriptor {
 	uint8_t		iInterface;			//!< Index of String Descriptor describing this interface
 } UsbIntrfDesc_t;
 
-#define USB_ENDPADDR_DIRIN(addr)	((addr & 0xF) | 0x80)
-#define USB_ENDPADDR_DIROUT(addr)	(addr & 0xF)
+#define USB_ENDPADDR_NUM_MASK			(0xFU << 0)
+#define USB_ENDPADDR_DIR_MASK			(1U << 7)
+#define USB_ENDPADDR_DIR_OUT			(0U << 7)
+#define USB_ENDPADDR_DIR_IN			(1U << 7)
+#define USB_ENDPADDR_NUM(addr)			((uint8_t)((addr) & USB_ENDPADDR_NUM_MASK))
+#define USB_ENDPADDR_IS_IN(addr)		(((addr) & USB_ENDPADDR_DIR_MASK) != 0U)
+#define USB_ENDPADDR_DIRIN(addr)		((uint8_t)(((addr) & USB_ENDPADDR_NUM_MASK) | USB_ENDPADDR_DIR_IN))
+#define USB_ENDPADDR_DIROUT(addr)		((uint8_t)((addr) & USB_ENDPADDR_NUM_MASK))
 
 typedef enum __USB_Endpoint_Attribute {
-	USB_ENDPATT_TRANS_CONTROL	= 0,		//!< Control transfer
-	USB_ENDPATT_TRANS_ISO		= 1,		//!< Isochronous transfer
-	USB_ENDPATT_TRANS_BULK		= 2,		//!< Bulk transfer
-	USB_ENDPATT_TRANS_INT 		= 3,		//!< Interrupt transfer
-	USB_ENDPATT_ISO_NOSYNC		= 0,		//!< Iso transfer no sync
-	USB_ENDPATT_ISO_ASYNC		= 4,		//!< Iso transfer async
-	USB_ENDPATT_ISO_ADAP		= 8,		//!< Iso transfer adaptive
-	USB_ENDPATT_ISO_SYNC		= 0xC,		//!< Iso transfer sync
-	USB_ENDPATT_ISO_DATA		= 0,		//!< Iso mode data
-	USB_ENDPATT_ISO_FB			= 0x10,		//!< Iso mode feedback
-	USB_ENDPATT_ISO_EXPFB		= 0x20,		//!< Iso mode explicite feedback
+	USB_ENDPATT_TRANS_CONTROL	= (0U << 0),	//!< Control transfer
+	USB_ENDPATT_TRANS_ISO		= (1U << 0),	//!< Isochronous transfer
+	USB_ENDPATT_TRANS_BULK		= (2U << 0),	//!< Bulk transfer
+	USB_ENDPATT_TRANS_INT 		= (3U << 0),	//!< Interrupt transfer
+	USB_ENDPATT_TRANS_MASK		= (3U << 0),
+	USB_ENDPATT_ISO_NOSYNC		= (0U << 2),	//!< Iso transfer no sync
+	USB_ENDPATT_ISO_ASYNC		= (1U << 2),	//!< Iso transfer async
+	USB_ENDPATT_ISO_ADAP		= (2U << 2),	//!< Iso transfer adaptive
+	USB_ENDPATT_ISO_SYNC		= (3U << 2),	//!< Iso transfer sync
+	USB_ENDPATT_ISO_SYNC_MASK	= (3U << 2),
+	USB_ENDPATT_ISO_DATA		= (0U << 4),	//!< Iso data endpoint
+	USB_ENDPATT_ISO_FB			= (1U << 4),	//!< Iso feedback endpoint
+	USB_ENDPATT_ISO_IMPLICIT_FB	= (2U << 4),	//!< Iso implicit feedback data endpoint
+	USB_ENDPATT_ISO_EXPFB		= USB_ENDPATT_ISO_IMPLICIT_FB,	//!< Legacy alias
+	USB_ENDPATT_ISO_USAGE_MASK	= (3U << 4)
 } USB_ENDPATT;
 
 typedef struct __USB_Endpoint_Descriptor {
 	uint8_t		bLength;			//!< Size of Descriptor in Bytes (7 bytes)
 	uint8_t		bDescriptorType;	//!< Endpoint Descriptor (0x05)
 	uint8_t		bEndpointAddress;	//!< Endpoint Address
-									//!< - Bits 0..3b Endpoint Number.
-									//!< - Bits 4..6b Reserved. Set to Zero
-									//!< - Bits 7 Direction 0 = Out, 1 = In (Ignored for Control Endpoints)
-	uint8_t		bmAttributes;		//!< - Bits 0..1 Transfer Type
+									//!< - Bits 0..3 Endpoint Number
+									//!< - Bits 4..6 Reserved, set to zero
+									//!< - Bit 7 Direction: 0 = Out, 1 = In (ignored for Control Endpoints)
+	uint8_t		bmAttributes;		//!< - Bits 1..0 Transfer Type
 									//!<		- 00 = Control
 									//!<		- 01 = Isochronous
 									//!<		- 10 = Bulk
 									//!<		- 11 = Interrupt
-									//!< - Bits 2..7 are reserved.
 									//!<
-									//!< If Isochronous endpoint,
-									//!< - Bits 3..2 = Synchronisation Type (Iso Mode)
-									//!<		- 00 = No Synchonisation
+									//!< If Isochronous endpoint:
+									//!< - Bits 3..2 = Synchronisation Type
+									//!<		- 00 = No Synchronisation
 									//!<		- 01 = Asynchronous
 									//!<		- 10 = Adaptive
 									//!<		- 11 = Synchronous
-									//!< - Bits 5..4 = Usage Type (Iso Mode)
+									//!< - Bits 5..4 = Usage Type
 									//!<		- 00 = Data Endpoint
 									//!<		- 01 = Feedback Endpoint
-									//!<		- 10 = Explicit Feedback Data Endpoint
+									//!<		- 10 = Implicit Feedback Data Endpoint
 									//!<		- 11 = Reserved
-	uint16_t	wMaxPacketSize;		//!< Maximum Packet Size this endpoint is capable of sending or receiving
-	uint8_t		bInterval;			//!< Interval for polling endpoint data transfers. Value in frame counts.
-									//!< Ignored for Bulk & Control Endpoints. Isochronous must equal 1 and
-									//!< field may range from 1 to 255 for interrupt endpoints.
+	uint16_t	wMaxPacketSize;		//!< Maximum packet size; HS interrupt/iso also encode transactions in bits 12..11
+	uint8_t		bInterval;			//!< Polling/service interval; encoding depends on speed and endpoint type
 } UsbEndPointDesc_t;
 
 typedef struct __USB_Interface_Association_Descriptor {
@@ -322,6 +346,12 @@ typedef struct __USB_Interface_Association_Descriptor {
 									//!< bFunctionClass and bFunctionSubClass fields.
 	uint8_t iFunction;				//!< Index of string descriptor describing this function.
 } UsbInrtfAssDesc_t;
+
+typedef enum __USB_OTG_Attribute {
+	USB_OTGATT_SRP 			= (1U << 0),
+	USB_OTGATT_HNP 			= (1U << 1),
+	USB_OTGATT_ADP 			= (1U << 2)
+} USB_OTGATT;
 
 typedef struct __USB_OTG_Descriptor {
 	uint8_t bLength;				//!< Size of Descriptor
