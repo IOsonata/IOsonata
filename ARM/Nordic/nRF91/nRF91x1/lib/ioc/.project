@@ -76,6 +76,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crc.h</locationURI>
 		</link>
 		<link>
+			<name>include/crypto</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/device bridge.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/device%20bridge.h</locationURI>
@@ -91,24 +96,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/device_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>include/storage/diskio.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio.h</locationURI>
-		</link>
-		<link>
-			<name>include/storage/diskio_flash.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_flash.h</locationURI>
-		</link>
-		<link>
 			<name>include/display</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>include/storage/fatfs.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
 		</link>
 		<link>
 			<name>include/idelay.h</name>
@@ -171,24 +161,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
 		</link>
 		<link>
-			<name>include/coredev/pwm.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
-		</link>
-		<link>
 			<name>include/pwrmgnt</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>include/storage/sdcard.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/storage/sdcard.h</locationURI>
-		</link>
-		<link>
-			<name>include/storage/seep.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/storage/seep.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors</name>
@@ -204,6 +179,11 @@
 			<name>include/stddev.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/stddev.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/sys</name>
@@ -279,6 +259,11 @@
 			<name>src/crc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crc.c</locationURI>
+		</link>
+		<link>
+			<name>src/crypto</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/device.cpp</name>
@@ -426,6 +411,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/pwm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/shared_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/shared_intrf.h</locationURI>
@@ -449,6 +439,36 @@
 			<name>include/coredev/uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softaes.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softrng.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softrng.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softsha256.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softsha256.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_uecc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_uecc.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/cryptomaster.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/cryptomaster.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/icrypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/icrypto.h</locationURI>
 		</link>
 		<link>
 			<name>include/display/eink_intrf.h</name>
@@ -676,6 +696,61 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/tphg_bme680.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/diskio.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/diskio_flash.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_flash.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/diskio_nvm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_nvm.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/fatfs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/flash.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/flash.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/nvm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/nvm_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/nvm_region.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm_region.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/sdcard.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/sdcard.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/seep.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/seep.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/stdfs_littlefs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/stdfs_littlefs.h</locationURI>
+		</link>
+		<link>
 			<name>include/sys/dirent.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sys/dirent.h</locationURI>
@@ -764,6 +839,36 @@
 			<name>src/coredev/uart_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_p256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softaes.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softaes.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softrng.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softsha256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softsha256.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_uecc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/cryptomaster.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/cryptomaster.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/eink_intrf.cpp</name>
@@ -981,6 +1086,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_impl.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/storage/diskio_nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_nvm.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/storage/fatfs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/fatfs.cpp</locationURI>
@@ -999,6 +1109,16 @@
 			<name>src/storage/flash.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/flash.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm_region.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_region.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/storage/sdcard_impl.cpp</name>

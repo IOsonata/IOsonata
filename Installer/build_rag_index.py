@@ -359,7 +359,7 @@ def parse_eclipse_project(project_file: Path) -> List[str]:
 def find_eclipse_lib_projects(root: Path) -> List[Path]:
     projects = []
     for arch_dir in ['ARM', 'RISCV']:
-        pattern = str(root / arch_dir / '**' / 'lib' / 'Eclipse' / '.project')
+        pattern = str(root / arch_dir / '**' / 'lib' / 'ioc' / '.project')
         projects.extend(Path(p) for p in glob.glob(pattern, recursive=True))
     return sorted(projects)
 

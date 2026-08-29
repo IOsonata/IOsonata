@@ -833,7 +833,7 @@ echo
 echo
 echo "📦 Syncing IOsonata + external SDKs..."
 
-CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/clone_iosonata_sdk_linux.sh"
+CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/main/Installer/clone_iosonata_sdk_linux.sh"
 TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_linux.XXXXXX.sh)
 CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_linux.XXXXXX.log)
 

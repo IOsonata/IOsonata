@@ -229,12 +229,9 @@ while IFS= read -r proj_file; do
   rel_path="${proj_root#$ROOT/IOsonata/}"
 
   # Filter out Windows/Linux specific lib projects
-  if [[ "$rel_path" =~ ^Win/lib/Eclipse$ ]] || \
-     [[ "$rel_path" =~ /Win/lib/ioc$ ]] || \
-     [[ "$rel_path" =~ ^Windows/lib/Eclipse$ ]] || \
-     [[ "$rel_path" =~ /Windows/lib/ioc$ ]] || \
-     [[ "$rel_path" =~ ^Linux/lib/Eclipse$ ]] || \
-     [[ "$rel_path" =~ /Linux/lib/ioc$ ]]; then
+  if [[ "$rel_path" =~ ^Win/lib/ioc$ ]] || \
+     [[ "$rel_path" =~ ^Windows/lib/ioc$ ]] || \
+     [[ "$rel_path" =~ ^Linux/lib/ioc$ ]]; then
     continue
   fi
 

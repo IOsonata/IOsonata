@@ -25,7 +25,7 @@ set -euo pipefail
 SCRIPT_VERSION="v2.4.0"
 ROOT="${HOME}/IOcomposer"
 IOCOMPOSER_DIR="/opt/iocomposer"
-ECLIPSE_DIR="/opt/eclipse"
+ECLIPSE_DIR="$HOME/eclipse"
 
 # TaktOS install dir. Empty means derive from ROOT after
 # argument parsing (ROOT/TaktOS, cloned next to IOsonata).
@@ -91,7 +91,7 @@ while [[ $# -gt 0 ]]; do
       echo "Options:"
       echo "  --home <path>         Set SDK root (default: ~/IOcomposer)"
       echo "  --iocomposer <path>   Set IOcomposer install dir (default: /opt/iocomposer)"
-      echo "  --eclipse <path>      Set Eclipse install dir (fallback) (default: /opt/eclipse)"
+      echo "  --eclipse <path>      Set Eclipse install dir (fallback) (default: ~/eclipse)"
       echo "  --taktos <path>       Set TaktOS source dir (default: <home>/TaktOS)"
       echo "  --no-taktos           Do not build TaktOS, IOsonata only"
       echo "  --help, -h            Show this help"
@@ -253,14 +253,10 @@ while IFS= read -r proj_file; do
   rel_path="${proj_root#$ROOT/IOsonata}"
 
   # Ignores Windows/macOS specific lib projects
-  if [[ "$rel_path" =~ ^Win/lib/Eclipse$ ]] || \
-     [[ "$rel_path" =~ /Win/lib/ioc$ ]] || \
-     [[ "$rel_path" =~ ^Windows/lib/Eclipse$ ]] || \
-     [[ "$rel_path" =~ /Windows/lib/ioc$ ]] || \
-     [[ "$rel_path" =~ ^macOS/lib/Eclipse$ ]] || \
-     [[ "$rel_path" =~ /macOS/lib/ioc$ ]] || \
-     [[ "$rel_path" =~ ^OSX/lib/Eclipse$ ]] || \
-     [[ "$rel_path" =~ /OSX/lib/ioc$ ]]; then
+  if [[ "$rel_path" =~ ^/Win/lib/ioc$ ]] || \
+     [[ "$rel_path" =~ ^/Windows/lib/ioc$ ]] || \
+     [[ "$rel_path" =~ ^/macOS/lib/ioc$ ]] || \
+     [[ "$rel_path" =~ ^/OSX/lib/ioc$ ]]; then
     continue
   fi
 

@@ -1,11 +1,21 @@
 /**-------------------------------------------------------------------------
-@file	usbd_cdc_intrf.cpp
+@file	usbd_cdc_intrf_nrf52.cpp
 
-@brief	Generic implementation of USBD CDC device interface
+@brief	USBD CDC device interface over the nRF5 SDK app_usbd stack
 
-Moves data between a CDC function of the device stack and a pair of CFIFOs,
-and presents that as a DeviceIntrf. Generic over the controller : everything
-part specific is behind usbd.h.
+Nordic implementation of the interface declared in usb/usbd_cdc_intrf.h,
+built on app_usbd and nrfx_usbd. The generic implementation in src/usb runs
+on the device stack in external/tinyusb instead. Both answer the same header,
+so a library build takes one of them and excludes the other.
+
+nRF52 only, and only the parts that have the USBD peripheral : nRF52840,
+nRF52833 and nRF52820. app_usbd ships in the nRF5 SDK, which has no nRF54
+version, and nrfx_usbd drives the nRF52 USBD, which the nRF54LM20 does not
+have. Hence nRF52 in the name and in the directory rather than nrfx.
+
+Work in progress. The class instance is set up but no data path is finished :
+cdc_acm_user_ev_handler has an empty body, Enable, Disable and StopRx are
+unwritten, and TxData fills the FIFO and stops short of sending.
 
 
 @author	Hoang Nguyen Hoan
@@ -36,29 +46,149 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#include <string.h>
+#include <memory.h>
 
-#include "tusb.h"
+#include "nrfx_usbd.h"
+#include "app_usbd_core.h"
+#include "acm/app_usbd_cdc_acm.h"
 
 #include "istddef.h"
 #include "cfifo.h"
 #include "usb/usbd_cdc_intrf.h"
-#include "usb/usb_dev.h"
 #include "coredev/interrupt.h"
 
 #define USBD_CDC_PACKET_SIZE			(64)
 #define USBD_CDC_CFIFO_MEMSIZE			CFIFO_MEMSIZE(4 * USBD_CDC_PACKET_SIZE)
 
-alignas(4) static uint8_t s_UsbdCdcDevIntrfRxFifoMem[CFG_TUD_CDC][USBD_CDC_CFIFO_MEMSIZE];
-alignas(4) static uint8_t s_UsbdCdcDevIntrfTxFifoMem[CFG_TUD_CDC][USBD_CDC_CFIFO_MEMSIZE];
+#define CDC_ACM_COMM_INTERFACE  0
+#define CDC_ACM_COMM_EPIN       NRFX_USBD_EPIN2
 
-//
-// One instance per CDC function of the device stack. File scope because the
-// index belongs to the controller, not to any one instance, and two instances
-// claiming the same function would each move half the data and neither would
-// report an error.
-//
-static UsbdCdcDevIntrf_t *s_pUsbdCdcIntrf[CFG_TUD_CDC] = { nullptr };
+#define CDC_ACM_DATA_INTERFACE  1
+#define CDC_ACM_DATA_EPIN       NRFX_USBD_EPIN1
+#define CDC_ACM_DATA_EPOUT      NRFX_USBD_EPOUT1
+
+#define INTERFACE_CONFIGS APP_USBD_CDC_ACM_CONFIG(CDC_ACM_COMM_INTERFACE, CDC_ACM_COMM_EPIN, CDC_ACM_DATA_INTERFACE, CDC_ACM_DATA_EPIN, CDC_ACM_DATA_EPOUT)
+
+#define CLASS_CONFIG_PART (APP_USBD_CDC_ACM_INST_CONFIG(cdc_acm_user_ev_handler, \
+        					CDC_ACM_COMM_INTERFACE,                       \
+							CDC_ACM_COMM_EPIN,                            \
+							CDC_ACM_DATA_INTERFACE,                       \
+							CDC_ACM_DATA_EPIN,                            \
+							CDC_ACM_DATA_EPOUT,                           \
+							APP_USBD_CDC_COMM_PROTOCOL_AT_V250,           \
+							&m_app_cdc_acm_ep))
+
+static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
+                                    app_usbd_cdc_acm_user_event_t event);
+
+alignas(4) static uint8_t s_UsbdCdcDevIntrfRxFifoMem[USBD_CDC_CFIFO_MEMSIZE];
+alignas(4) static uint8_t s_UsbdCdcDevIntrfTxFifoMem[USBD_CDC_CFIFO_MEMSIZE];
+
+static uint8_t m_app_cdc_acm_ep = { (APP_USBD_EXTRACT_INTERVAL_FLAG(CDC_ACM_COMM_EPIN) ?
+	APP_USBD_EXTRACT_INTERVAL_VALUE(CDC_ACM_COMM_EPIN) : APP_USBD_CDC_ACM_DEFAULT_INTERVAL)};
+
+static app_usbd_cdc_acm_data_t	m_app_cdc_acm_data;
+// Define a USB instance
+static const app_usbd_cdc_acm_inst_t s_usb_inst =
+{
+	.comm_interface = CDC_ACM_COMM_INTERFACE,
+	.comm_epin = CDC_ACM_COMM_EPIN,
+	.data_interface = CDC_ACM_DATA_INTERFACE,
+	.data_epout = CDC_ACM_DATA_EPOUT,
+	.data_epin = CDC_ACM_DATA_EPIN,
+	.protocol = APP_USBD_CDC_COMM_PROTOCOL_AT_V250,
+	.user_ev_handler = cdc_acm_user_ev_handler,
+	.p_ep_interval = &m_app_cdc_acm_ep,
+};
+/*
+APP_USBD_CLASS_TYPEDEF(app_usbd_cdc_acm,            \
+            APP_USBD_CDC_ACM_CONFIG(0, 0, 0, 0, 0), \
+            APP_USBD_CDC_ACM_INSTANCE_SPECIFIC_DEC, \
+            APP_USBD_CDC_ACM_DATA_SPECIFIC_DEC      \
+);
+*/
+//#define APP_USBD_CLASS_TYPEDEF(type_name, interface_configs, class_config_dec, class_data_dec) \
+//    APP_USBD_CLASS_DATA_TYPEDEF(type_name, class_data_dec);                                    \
+//    APP_USBD_CLASS_INSTANCE_TYPEDEF(type_name, interface_configs, class_config_dec)
+
+//APP_USBD_CLASS_DATA_TYPEDEF(app_usbd_cdc_acm1, APP_USBD_CDC_ACM_DATA_SPECIFIC_DEC);
+
+/*#define APP_USBD_CLASS_DATA_TYPEDEF(type_name, class_data_dec) \
+    typedef struct                                             \
+    {                                                          \
+        app_usbd_class_data_t base;                            \
+        class_data_dec                                         \
+    }APP_USBD_CLASS_DATA_TYPE(type_name)
+*/
+
+typedef struct {
+    app_usbd_class_data_t base;
+    app_usbd_cdc_acm_ctx_t ctx;
+} app_usbd_cdc_acm1_data_t;
+
+//APP_USBD_CLASS_INSTANCE_TYPEDEF(app_usbd_cdc_acm1, APP_USBD_CDC_ACM_CONFIG(0, 0, 0, 0, 0), APP_USBD_CDC_ACM_INSTANCE_SPECIFIC_DEC);
+/*
+#define APP_USBD_CLASS_INSTANCE_TYPEDEF(type_name, interfaces_configs, class_config_dec)     \
+    typedef union CONCAT_2(type_name, _u)                                                    \
+    {                                                                                        \
+        app_usbd_class_inst_t base;                                                          \
+        struct                                                                               \
+        {                                                                                    \
+            APP_USBD_CLASS_DATA_TYPE(type_name) * p_data;                                    \
+            app_usbd_class_methods_t const * p_class_methods;                                \
+            struct                                                                           \
+            {                                                                                \
+                uint8_t cnt;                                                                 \
+                app_usbd_class_iface_conf_t                                                  \
+                                config[NUM_VA_ARGS(BRACKET_EXTRACT(interfaces_configs))];    \
+                app_usbd_class_ep_conf_t                                                     \
+                                ep[APP_USBD_CLASS_CONF_TOTAL_EP_COUNT(interfaces_configs)];  \
+            } iface;                                                                         \
+            class_config_dec                                                                 \
+        } specific;                                                                          \
+    } APP_USBD_CLASS_INSTANCE_TYPE(type_name)
+*/
+
+typedef union app_usbd_cdc_acm1_u {                                                                                        \
+    app_usbd_class_inst_t base;
+    struct
+    {
+		app_usbd_cdc_acm1_data_t * p_data;
+        app_usbd_class_methods_t const * p_class_methods;
+        struct
+        {
+            uint8_t cnt;
+            app_usbd_class_iface_conf_t config[NUM_VA_ARGS(BRACKET_EXTRACT(APP_USBD_CDC_ACM_CONFIG(0, 0, 0, 0, 0)))];
+            app_usbd_class_ep_conf_t ep[APP_USBD_CLASS_CONF_TOTAL_EP_COUNT(APP_USBD_CDC_ACM_CONFIG(0, 0, 0, 0, 0))];
+        } iface;
+        APP_USBD_CDC_ACM_INSTANCE_SPECIFIC_DEC
+    } specific;
+} app_usbd_cdc_acm1_t;
+
+
+const app_usbd_cdc_acm_t m_app_cdc_acm =
+{
+	//.base = 0,
+	.specific =
+	{
+			.p_data = &m_app_cdc_acm_data,
+			.p_class_methods = &app_usbd_cdc_acm_class_methods,
+			.iface =
+			{
+					.cnt = 2,//NUM_VA_ARGS(BRACKET_EXTRACT(INTERFACE_CONFIGS)),
+					.config = { APP_USBD_CLASS_IFACES_CONFIG_EXTRACT(INTERFACE_CONFIGS) },
+					.ep = { APP_USBD_CLASS_IFACES_EP_EXTRACT(INTERFACE_CONFIGS) },
+			},
+			.inst = s_usb_inst,//BRACKET_EXTRACT(CLASS_CONFIG_PART),
+	},
+};
+
+void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
+                             app_usbd_cdc_acm_user_event_t event)
+{
+
+}
+
 
 /**
  * @brief - Disable
@@ -73,14 +203,7 @@ static UsbdCdcDevIntrf_t *s_pUsbdCdcIntrf[CFG_TUD_CDC] = { nullptr };
  */
 void UsbdCdcIntrfDisable(DevIntrf_t *pDevIntrf)
 {
-	UsbdCdcDevIntrf_t *intrf = (UsbdCdcDevIntrf_t*)pDevIntrf->pDevData;
-
-	//
-	// Stops the data plane and leaves the FIFOs and the bus alone. The USB
-	// device itself is started and stopped by UsbDev, because it is one
-	// controller shared by every function on it.
-	//
-	intrf->bEnabled = false;
+	// TODO:
 }
 
 /**
@@ -94,9 +217,7 @@ void UsbdCdcIntrfDisable(DevIntrf_t *pDevIntrf)
  */
 void UsbdCdcIntrfEnable(DevIntrf_t *pDevIntrf)
 {
-	UsbdCdcDevIntrf_t *intrf = (UsbdCdcDevIntrf_t*)pDevIntrf->pDevData;
-
-	intrf->bEnabled = true;
+	// TODO:
 }
 
 /**
@@ -112,11 +233,7 @@ void UsbdCdcIntrfEnable(DevIntrf_t *pDevIntrf)
  */
 uint32_t UsbdCdcIntrfGetRate(DevIntrf_t *pDevIntrf)
 {
-	//
-	// A CDC function has a line coding the host sets, but nothing on this
-	// side runs at it. There is no rate to report.
-	//
-	return 0;
+	return 0;	// BLE has no rate
 }
 
 /**
@@ -134,7 +251,7 @@ uint32_t UsbdCdcIntrfGetRate(DevIntrf_t *pDevIntrf)
  */
 uint32_t UsbdCdcIntrfSetRate(DevIntrf_t *pDevIntrf, uint32_t Rate)
 {
-	return 0;
+	return 0; // BLE has no rate
 }
 
 /**
@@ -153,10 +270,6 @@ uint32_t UsbdCdcIntrfSetRate(DevIntrf_t *pDevIntrf, uint32_t Rate)
  */
 bool UsbdCdcIntrfStartRx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
 {
-	//
-	// A CDC function is a byte stream with no addressing and no transaction
-	// to begin. Receiving is whatever is already in the FIFO.
-	//
 	return true;
 }
 
@@ -178,18 +291,17 @@ bool UsbdCdcIntrfStartRx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
 int UsbdCdcIntrfRxData(DevIntrf_t *pDevIntrf, uint8_t *pBuff, int Bufflen)
 {
 	UsbdCdcDevIntrf_t *intrf = (UsbdCdcDevIntrf_t*)pDevIntrf->pDevData;
+	int cnt = 0;
+	int l = Bufflen;
 
-	if (pBuff == nullptr || Bufflen <= 0)
+	uint8_t *p = CFifoGetMultiple(intrf->hRxFifo, &l);
+	if (p != nullptr)
 	{
-		return 0;
+	    cnt = min(Bufflen, l);
+		memcpy(pBuff, p, cnt);
 	}
 
-	//
-	// CFifoRead and not CFifoGetMultiple : the second returns one contiguous
-	// run and stops at the wrap, so a caller asking for more than the tail
-	// would be told the FIFO was empty while it was not.
-	//
-	return CFifoRead(intrf->hRxFifo, pBuff, Bufflen);
+	return cnt;
 }
 
 /**
@@ -205,6 +317,7 @@ int UsbdCdcIntrfRxData(DevIntrf_t *pDevIntrf, uint8_t *pBuff, int Bufflen)
  */
 void UsbdCdcIntrfStopRx(DevIntrf_t *pSerDev)
 {
+	// TODO:
 }
 
 /**
@@ -224,233 +337,6 @@ void UsbdCdcIntrfStopRx(DevIntrf_t *pSerDev)
 bool UsbdCdcIntrfStartTx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
 {
 	return true;
-}
-
-/**
- * Move whatever the endpoint will take from the staging buffer. Returns true
- * when the buffer is empty, so the caller knows it may stage more.
- */
-static bool UsbdCdcIntrfTxPending(UsbdCdcDevIntrf_t *pIntrf)
-{
-	if (pIntrf->TxPendingOfs >= pIntrf->TxPendingLen)
-	{
-		pIntrf->TxPendingOfs = 0;
-		pIntrf->TxPendingLen = 0;
-		return true;
-	}
-
-	uint32_t avail = tud_cdc_n_write_available(pIntrf->ItfNo);
-
-	if (avail == 0)
-	{
-		pIntrf->TxBusyCnt++;
-		return false;
-	}
-
-	int len = pIntrf->TxPendingLen - pIntrf->TxPendingOfs;
-
-	if (len > (int)avail)
-	{
-		len = (int)avail;
-	}
-
-	uint32_t written = tud_cdc_n_write(pIntrf->ItfNo,
-									   &pIntrf->TransBuff[pIntrf->TxPendingOfs],
-									   (uint32_t)len);
-
-	if (written > (uint32_t)len)
-	{
-		pIntrf->TxDropCnt++;
-		return false;
-	}
-
-	pIntrf->TxPendingOfs += (int)written;
-
-	if (written != (uint32_t)len)
-	{
-		//
-		// Nothing is lost. What was not accepted stays in TransBuff and the
-		// next pass resumes at the same offset.
-		//
-		return false;
-	}
-
-	if (pIntrf->TxPendingOfs >= pIntrf->TxPendingLen)
-	{
-		pIntrf->TxPendingOfs = 0;
-		pIntrf->TxPendingLen = 0;
-	}
-
-	return true;
-}
-
-static void UsbdCdcIntrfProcessTx(UsbdCdcDevIntrf_t *pIntrf)
-{
-	while (true)
-	{
-		if (pIntrf->TxPendingLen != 0)
-		{
-			if (UsbdCdcIntrfTxPending(pIntrf) == false)
-			{
-				break;
-			}
-			continue;
-		}
-
-		int used = CFifoUsed(pIntrf->hTxFifo);
-
-		if (used <= 0)
-		{
-			break;
-		}
-
-		uint32_t avail = tud_cdc_n_write_available(pIntrf->ItfNo);
-
-		if (avail == 0)
-		{
-			pIntrf->TxBusyCnt++;
-			break;
-		}
-
-		int len = min(used, (int)sizeof(pIntrf->TransBuff));
-
-		if (len > (int)avail)
-		{
-			len = (int)avail;
-		}
-
-		int cnt = CFifoRead(pIntrf->hTxFifo, pIntrf->TransBuff, len);
-
-		if (cnt <= 0)
-		{
-			break;
-		}
-
-		pIntrf->TxPendingOfs = 0;
-		pIntrf->TxPendingLen = cnt;
-
-		if (UsbdCdcIntrfTxPending(pIntrf) == false)
-		{
-			break;
-		}
-	}
-
-	tud_cdc_n_write_flush(pIntrf->ItfNo);
-
-	if (pIntrf->TxPendingLen == 0 && CFifoUsed(pIntrf->hTxFifo) <= 0 &&
-		pIntrf->DevIntrf.EvtCB != nullptr)
-	{
-		pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf, DEVINTRF_EVT_TX_FIFO_EMPTY,
-							   nullptr, 0);
-	}
-}
-
-static void UsbdCdcIntrfProcessRx(UsbdCdcDevIntrf_t *pIntrf)
-{
-	uint8_t buff[USBD_CDC_INTRF_TRANSBUFF_MAXLEN];
-
-	while (tud_cdc_n_available(pIntrf->ItfNo) > 0)
-	{
-		int room = CFifoAvail(pIntrf->hRxFifo);
-
-		if (room <= 0)
-		{
-			//
-			// Left in the endpoint buffer rather than read and thrown away.
-			// The host stops when its buffer fills, which is flow control the
-			// application gets for free by not draining.
-			//
-			if (pIntrf->DevIntrf.EvtCB != nullptr)
-			{
-				pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-									   DEVINTRF_EVT_RX_FIFO_FULL, nullptr, 0);
-			}
-			break;
-		}
-
-		uint32_t len = tud_cdc_n_available(pIntrf->ItfNo);
-
-		if (len > sizeof(buff))
-		{
-			len = sizeof(buff);
-		}
-		if (len > (uint32_t)room)
-		{
-			len = (uint32_t)room;
-		}
-
-		uint32_t cnt = tud_cdc_n_read(pIntrf->ItfNo, buff, len);
-
-		if (cnt == 0 || cnt > len)
-		{
-			pIntrf->RxErrCnt++;
-			break;
-		}
-
-		int written = CFifoWrite(pIntrf->hRxFifo, buff, (int)cnt);
-
-		if (written != (int)cnt)
-		{
-			pIntrf->RxDropCnt += cnt - (uint32_t)(written > 0 ? written : 0);
-			break;
-		}
-
-		if (pIntrf->DevIntrf.EvtCB != nullptr)
-		{
-			pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf, DEVINTRF_EVT_RX_DATA,
-								   nullptr, CFifoUsed(pIntrf->hRxFifo));
-		}
-	}
-}
-
-bool UsbdCdcIntrfPortIsOpen(UsbdCdcDevIntrf_t * const pIntrf)
-{
-	if (pIntrf == nullptr)
-	{
-		return false;
-	}
-
-	//
-	// Computed, not remembered. A cached flag has to be cleared on unplug, on
-	// reset and on suspend, and the one path that forgets leaves the data
-	// plane writing into an endpoint nobody reads.
-	//
-	return UsbDevMounted() &&
-		   (tud_cdc_n_get_line_state(pIntrf->ItfNo) & 0x01) != 0;
-}
-
-void UsbdCdcIntrfProcess(UsbdCdcDevIntrf_t * const pIntrf)
-{
-	if (pIntrf == nullptr || pIntrf->bEnabled == false)
-	{
-		return;
-	}
-
-	bool open = UsbdCdcIntrfPortIsOpen(pIntrf);
-
-	if (open != pIntrf->bPortOpen)
-	{
-		pIntrf->bPortOpen = open;
-
-		if (pIntrf->DevIntrf.EvtCB != nullptr)
-		{
-			pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf, DEVINTRF_EVT_STATECHG,
-								   nullptr, open ? 1 : 0);
-		}
-	}
-
-	if (open == false)
-	{
-		return;
-	}
-
-	UsbdCdcIntrfProcessRx(pIntrf);
-	UsbdCdcIntrfProcessTx(pIntrf);
-}
-
-static void UsbdCdcIntrfPump(void *pCtx)
-{
-	UsbdCdcIntrfProcess((UsbdCdcDevIntrf_t*)pCtx);
 }
 
 /**
@@ -487,15 +373,7 @@ int UsbdCdcIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int Datalen)
 		cnt += l;
 	}
 
-	//
-	// Push straight away rather than waiting for the next pass. A caller that
-	// fills the FIFO and then waits for room would otherwise wait for a pump
-	// it is blocking.
-	//
-	if (intrf->bEnabled && UsbdCdcIntrfPortIsOpen(intrf))
-	{
-		UsbdCdcIntrfProcessTx(intrf);
-	}
+	// TODO : Send via USB
 
 	return cnt;
 }
@@ -513,6 +391,7 @@ int UsbdCdcIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int Datalen)
  */
 void UsbdCdcIntrfStopTx(DevIntrf_t *pDevIntrf)
 {
+
 }
 
 /**
@@ -527,11 +406,7 @@ void UsbdCdcIntrfStopTx(DevIntrf_t *pDevIntrf)
  */
 void UsbdCdcIntrfReset(DevIntrf_t *pDevIntrf)
 {
-	UsbdCdcDevIntrf_t *intrf = (UsbdCdcDevIntrf_t*)pDevIntrf->pDevData;
 
-	intrf->TxPendingOfs = 0;
-	intrf->TxPendingLen = 0;
-	intrf->TransBuffLen = 0;
 }
 
 bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t *pIntrf, const UsbdCdcIntrfCfg_t *pCfg)
@@ -539,15 +414,9 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t *pIntrf, const UsbdCdcIntrfCfg_t *pCfg)
 	if (pIntrf == NULL || pCfg == NULL)
 		return false;
 
-	if (pCfg->ItfNo < 0 || pCfg->ItfNo >= CFG_TUD_CDC ||
-		s_pUsbdCdcIntrf[pCfg->ItfNo] != nullptr)
-	{
-		return false;
-	}
-
 	if (pCfg->pRxFifoMem == nullptr)
 	{
-		pIntrf->hRxFifo = CFifoInit(s_UsbdCdcDevIntrfRxFifoMem[pCfg->ItfNo], USBD_CDC_CFIFO_MEMSIZE, 1, pCfg->bBlocking);
+		pIntrf->hRxFifo = CFifoInit(s_UsbdCdcDevIntrfRxFifoMem, USBD_CDC_CFIFO_MEMSIZE, 1, pCfg->bBlocking);
 	}
 	else
 	{
@@ -556,17 +425,17 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t *pIntrf, const UsbdCdcIntrfCfg_t *pCfg)
 
 	if (pCfg->pTxFifoMem == nullptr)
 	{
-		pIntrf->hTxFifo = CFifoInit(s_UsbdCdcDevIntrfTxFifoMem[pCfg->ItfNo], USBD_CDC_CFIFO_MEMSIZE, 1, pCfg->bBlocking);
+		pIntrf->hTxFifo = CFifoInit(s_UsbdCdcDevIntrfTxFifoMem, USBD_CDC_CFIFO_MEMSIZE, 1, pCfg->bBlocking);
 	}
 	else
 	{
 		pIntrf->hTxFifo = CFifoInit(pCfg->pTxFifoMem, pCfg->TxFifoMemSize, 1, pCfg->bBlocking);
 	}
 
-	if (pIntrf->hRxFifo == nullptr || pIntrf->hTxFifo == nullptr)
-	{
-		return false;
-	}
+	app_usbd_class_inst_t const *class_cdc_acm =
+			app_usbd_cdc_acm_class_inst_get(&m_app_cdc_acm);
+	ret_code_t ret = app_usbd_class_append(class_cdc_acm);
+
 
 	pIntrf->DevIntrf.pDevData = (void*)pIntrf;
 
@@ -581,27 +450,12 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t *pIntrf, const UsbdCdcIntrfCfg_t *pCfg)
 	pIntrf->DevIntrf.StartTx = UsbdCdcIntrfStartTx;
 	pIntrf->DevIntrf.TxData = UsbdCdcIntrfTxData;
 	pIntrf->DevIntrf.StopTx = UsbdCdcIntrfStopTx;
-	pIntrf->DevIntrf.Reset = UsbdCdcIntrfReset;
 	pIntrf->DevIntrf.MaxRetry = 0;
 	pIntrf->DevIntrf.EvtCB = pCfg->EvtCB;
 	pIntrf->TransBuffLen = 0;
 	pIntrf->RxDropCnt = 0;
 	pIntrf->TxDropCnt = 0;
-	pIntrf->RxErrCnt = 0;
-	pIntrf->TxBusyCnt = 0;
-	pIntrf->TxPendingOfs = 0;
-	pIntrf->TxPendingLen = 0;
-	pIntrf->ItfNo = pCfg->ItfNo;
-	pIntrf->bPortOpen = false;
 	atomic_flag_clear(&pIntrf->DevIntrf.bBusy);
-
-	s_pUsbdCdcIntrf[pCfg->ItfNo] = pIntrf;
-
-	if (UsbDevRegisterFunc(UsbdCdcIntrfPump, pIntrf) == false)
-	{
-		s_pUsbdCdcIntrf[pCfg->ItfNo] = nullptr;
-		return false;
-	}
 
 	DeviceIntrfEnable(&pIntrf->DevIntrf);
 
@@ -611,11 +465,6 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t *pIntrf, const UsbdCdcIntrfCfg_t *pCfg)
 bool UsbdCdcIntrf::Init(const UsbdCdcIntrfCfg_t &Cfg)
 {
 	return UsbdCdcIntrfInit(&vUsbDevIntrf, &Cfg);
-}
-
-bool UsbdCdcIntrf::IsPortOpen(void)
-{
-	return UsbdCdcIntrfPortIsOpen(&vUsbDevIntrf);
 }
 
 bool UsbdCdcIntrf::RequestToSend(int NbBytes)
@@ -629,11 +478,6 @@ bool UsbdCdcIntrf::RequestToSend(int NbBytes)
 	//
 	if (vUsbDevIntrf.hTxFifo)
 	{
-		if (CFifoAvail(vUsbDevIntrf.hTxFifo) < NbBytes)
-		{
-			UsbdCdcIntrfProcess(&vUsbDevIntrf);
-		}
-
 		if (CFifoAvail(vUsbDevIntrf.hTxFifo) > 0)
 		{
 			retval = true;

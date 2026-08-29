@@ -1296,6 +1296,11 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/app_usbd_hid.h</locationURI>
 		</link>
 		<link>
+			<name>include/usb/tusb_config.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/tusb_config.h</locationURI>
+		</link>
+		<link>
 			<name>include/usb/usb_cdcdef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_cdcdef.h</locationURI>
@@ -1304,6 +1309,11 @@
 			<name>include/usb/usb_def.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_def.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usb_dev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_dev.h</locationURI>
 		</link>
 		<link>
 			<name>include/usb/usb_hiddef.h</name>
@@ -1319,6 +1329,11 @@
 			<name>include/usb/usb_mscdef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_mscdef.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd.h</locationURI>
 		</link>
 		<link>
 			<name>include/usb/usbd_cdc_intrf.h</name>
@@ -2336,9 +2351,34 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/usb/tu_dcd_nrfx.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/tu_dcd_nrfx.c</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usb_dev.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_dev.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/usb/usbd_cdc_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_cdc_intrf_nrf52.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/usbd_cdc_intrf_nrf52.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_desc_cdc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_desc_cdc.c</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usbd_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/vqf/cpp</name>

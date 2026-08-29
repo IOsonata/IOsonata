@@ -21,7 +21,7 @@ Welcome to IOsonata! This guide explains the installation and build scripts avai
 
 IOsonata is a cross-platform C++ framework for embedded MCU development. These scripts automate the setup of your development environment including:
 
-- **Eclipse Embedded CDT IDE** - For development and debugging
+- **IOcomposer development environment** - For embedded C/C++ development and debugging
 - **ARM and RISC-V toolchains** - Cross-compilers and build tools
 - **IOsonata SDK** - The framework source code
 - **Dependencies** - External libraries (Nordic SDKs, TinyUSB, LVGL, etc.)
@@ -40,17 +40,17 @@ You can run the installation scripts directly from GitHub without cloning the re
 
 **macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/install_iocdevtools_macos.sh | bash
+curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/main/Installer/install_iocdevtools_macos.sh | bash
 ```
 
 **Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/install_iocdevtools_linux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/main/Installer/install_iocdevtools_linux.sh | bash
 ```
 
 **Windows (PowerShell as Administrator):**
 ```powershell
-iwr -useb https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/install_iocdevtools_win.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/main/Installer/install_iocdevtools_win.ps1 | iex
 ```
 
 ### Recommended: Download Then Run
@@ -60,7 +60,7 @@ For better security, download and review the script first:
 **macOS/Linux:**
 ```bash
 # Download
-curl -O https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/install_iocdevtools_macos.sh
+curl -O https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/main/Installer/install_iocdevtools_macos.sh
 
 # Review (IMPORTANT!)
 cat install_iocdevtools_macos.sh | less
@@ -72,7 +72,7 @@ chmod +x install_iocdevtools_macos.sh
 **Linux:**
 ```bash
 # Download
-curl -O https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/install_iocdevtools_linux.sh
+curl -O https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/main/Installer/install_iocdevtools_linux.sh
 
 # Review (IMPORTANT!)
 cat install_iocdevtools_linux.sh | less
@@ -85,7 +85,7 @@ chmod +x install_iocdevtools_linux.sh
 **Windows:**
 ```powershell
 # Download
-Invoke-WebRequest -Uri https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/install_iocdevtools_win.ps1 -OutFile install_iocdevtools_win.ps1
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/main/Installer/install_iocdevtools_win.ps1 -OutFile install_iocdevtools_win.ps1
 
 # Review (IMPORTANT!)
 notepad install_iocdevtools_win.ps1
@@ -148,14 +148,14 @@ Build IOsonata libraries for specific MCU targets:
 ```
 
 This will:
-1. Install Eclipse Embedded CDT IDE
+1. Install the IOcomposer development environment
 2. Install ARM and RISC-V toolchains
 3. Clone IOsonata SDK and dependencies
 4. Prompt you to build libraries for your MCU
 
-### For Existing Eclipse Users
+### For Existing IOcomposer or Compatible CDT Users
 
-If you already have Eclipse installed:
+If you already have IOcomposer or a compatible Eclipse Embedded CDT installation:
 
 **Clone repositories:**
 ```bash
@@ -175,13 +175,15 @@ If you already have Eclipse installed:
 
 Installation scripts set up a **complete development environment** from scratch:
 
-- Download and install Eclipse Embedded CDT
+- Install the IOcomposer development environment
 - Install xPack ARM GCC and RISC-V GCC toolchains
 - Install OpenOCD debugger
 - Clone IOsonata SDK
 - Clone all dependencies (Nordic SDKs, TinyUSB, FreeRTOS, etc.)
-- Configure Eclipse with proper paths
+- Configure the development environment with the required IOsonata paths
 - Optionally build IOsonata libraries
+
+The current installers use Eclipse Embedded CDT as the underlying managed-build runtime. The build scripts prefer IOcomposer and retain Eclipse Embedded CDT as a compatibility fallback.
 
 ### Usage
 
@@ -242,10 +244,10 @@ Get-Help .\install_iocdevtools_win.ps1
 
 **Default Installation Paths:**
 
-| Platform | Eclipse | Toolchains | IOsonata SDK |
-|----------|---------|------------|--------------|
+| Platform | IDE runtime | Toolchains | IOsonata SDK |
+|----------|-------------|------------|--------------|
 | macOS | `/Applications/Eclipse.app` | `/opt/xPacks` | `~/IOcomposer` |
-| Linux | `/opt/eclipse` | `/opt/xPacks` | `~/IOcomposer` |
+| Linux | `~/eclipse` | `/opt/xPacks` | `~/IOcomposer` |
 | Windows | `C:\Program Files\Eclipse Embedded CDT` | `C:\Program Files\xPacks` | `%USERPROFILE%\IOcomposer` |
 
 **Repository Structure:**
@@ -288,12 +290,12 @@ Approximate time to complete installation:
 
 ### Purpose
 
-Clone scripts are for users who **already have Eclipse** and toolchains installed. They only:
+Clone scripts are for users who **already have IOcomposer or a compatible CDT environment** and toolchains installed. They only:
 
 - Clone IOsonata SDK
 - Clone all dependencies
-- Configure Eclipse workspace (optional)
-- Optionally build libraries (if Eclipse detected)
+- Configure CDT system properties (optional)
+- Optionally build libraries when a compatible development environment is detected
 
 ### Usage
 
@@ -309,7 +311,7 @@ Clone scripts are for users who **already have Eclipse** and toolchains installe
 # Force re-clone all repositories
 ./clone_iosonata_sdk_macos.sh --mode force
 
-# Also configure Eclipse settings
+# Also configure CDT system properties
 ./clone_iosonata_sdk_macos.sh --eclipse
 
 # Show help
@@ -328,7 +330,7 @@ Clone scripts are for users who **already have Eclipse** and toolchains installe
 # Force re-clone
 ./clone_iosonata_sdk_linux.sh --mode force
 
-# Configure Eclipse
+# Configure CDT system properties
 ./clone_iosonata_sdk_linux.sh --eclipse
 ```
 
@@ -339,12 +341,12 @@ Clone scripts are for users who **already have Eclipse** and toolchains installe
 .\clone_iosonata_sdk_win.ps1
 
 # Clone to custom location
-.\clone_iosonata_sdk_win.ps1 -Home C:\Dev\IOsonata
+.\clone_iosonata_sdk_win.ps1 -SdkHome C:\Dev\IOsonata
 
 # Force re-clone
 .\clone_iosonata_sdk_win.ps1 -Mode force
 
-# Configure Eclipse
+# Configure CDT system properties
 .\clone_iosonata_sdk_win.ps1 -Eclipse
 ```
 
@@ -352,7 +354,7 @@ Clone scripts are for users who **already have Eclipse** and toolchains installe
 
 Use clone scripts when:
 
-- ✅ You already have Eclipse installed
+- ✅ You already have IOcomposer or a compatible CDT installation
 - ✅ You already have ARM/RISC-V toolchains
 - ✅ You only need the IOsonata source code
 - ✅ You're setting up a new workspace
@@ -598,11 +600,11 @@ chmod +x install_iocdevtools_macos.sh
 # Right-click PowerShell → "Run as Administrator"
 ```
 
-#### Eclipse installation fails
+#### IOcomposer/CDT runtime installation fails
 
 **macOS:**
 ```bash
-# Check if old Eclipse exists
+# Check the installed runtime
 ls -la /Applications/Eclipse.app
 
 # Remove it and try again
@@ -612,41 +614,41 @@ sudo rm -rf /Applications/Eclipse.app
 
 **Linux:**
 ```bash
-# Check permissions
-ls -la /opt/eclipse
+# Check the installed runtime
+ls -la ~/eclipse
 
 # Remove and reinstall
-sudo rm -rf /opt/eclipse
+rm -rf ~/eclipse
 ./install_iocdevtools_linux.sh --force-update
 ```
 
 #### Out of disk space
 
 Installation requires approximately:
-- **Eclipse**: 500 MB
+- **IDE runtime**: 500 MB
 - **Toolchains**: 1.5 GB
 - **Repositories**: 2 GB
 - **Total**: ~4 GB free space needed
 
 ### Build Issues
 
-#### "Eclipse not found"
+#### "IOcomposer or Eclipse not found"
 
 **macOS:**
 ```bash
-# Check if Eclipse is installed
-ls -la /Applications/Eclipse.app
+# Check preferred IOcomposer and compatibility fallback locations
+ls -ld /Applications/IOcomposer.app /Applications/Eclipse.app 2>/dev/null
 
-# If not, run installer
+# If neither is installed, run the installer
 ./install_iocdevtools_macos.sh
 ```
 
 **Linux:**
 ```bash
-# Check Eclipse
-ls -la /opt/eclipse
+# Check preferred IOcomposer and compatibility fallback locations
+ls -ld /opt/iocomposer ~/eclipse /opt/eclipse 2>/dev/null
 
-# If not installed
+# If none is installed, run the installer
 ./install_iocdevtools_linux.sh
 ```
 
@@ -662,27 +664,13 @@ ls -la ~/IOcomposer/IOsonata
 
 #### Build fails with compiler errors
 
-```bash
-# Check build log
-cat /tmp/build_iosonata_lib.log
+The build script prints the exact log path when a project fails. On macOS and Linux, build logs are created as `/tmp/build_lib_*.log`.
 
-# Common issues:
-# 1. Missing toolchain - reinstall with --force-update
-# 2. Corrupted .cproject - delete and re-clone
-# 3. Wrong Eclipse version - reinstall Eclipse
-```
+Common causes include a missing toolchain, a corrupted `.cproject`, or an incompatible IOcomposer/CDT runtime.
 
 #### Build hangs indefinitely
 
-This should not happen with the updated scripts (using `-no-indexer`), but if it does:
-
-```bash
-# Kill the build
-killall eclipse
-
-# Try again - script uses -no-indexer to prevent hangs
-./build_iosonata_lib_macos.sh
-```
+The build scripts use `-no-indexer` to avoid indexer-related headless build hangs. If a build still hangs, terminate the current IOcomposer/CDT headless process and run the build script again.
 
 ### Repository Issues
 
@@ -723,14 +711,14 @@ git --version
 - 4 GB free disk space
 
 **Default Paths:**
-- Eclipse: `/Applications/Eclipse.app`
+- IDE runtime: `/Applications/Eclipse.app`
 - Toolchains: `/opt/xPacks`
 - IOsonata: `~/IOcomposer`
 
 **Notes:**
-- Installation requires `sudo` for Eclipse and toolchains
-- First Eclipse launch may show security warning - allow in System Preferences
-- Build scripts use `eclipsec` (console launcher) to avoid GUI dialogs
+- Installation requires `sudo` for the IDE runtime and toolchains
+- First launch may show a security warning - allow it in System Preferences
+- Build scripts use the IOcomposer/CDT managed-build headless launcher
 
 ### Linux
 
@@ -740,7 +728,7 @@ git --version
 - 4 GB free disk space
 
 **Default Paths:**
-- Eclipse: `/opt/eclipse`
+- IDE runtime: `~/eclipse`
 - Toolchains: `/opt/xPacks`
 - IOsonata: `~/IOcomposer`
 
@@ -748,12 +736,12 @@ git --version
 The installer will check and prompt to install:
 - `curl`, `tar`, `wget`
 - `git`
-- Java Runtime (for Eclipse)
+- Java Runtime (for the CDT runtime)
 
 **Notes:**
-- Installation requires `sudo` for system paths
-- Build scripts use `eclipsec` (console launcher)
-- Eclipse may require GTK3 libraries on some distributions
+- Installation requires `sudo` for system paths such as the toolchain directory
+- Build scripts use the IOcomposer/CDT managed-build headless launcher
+- The CDT runtime may require GTK3 libraries on some distributions
 
 ### Windows
 
@@ -764,7 +752,7 @@ The installer will check and prompt to install:
 - 4 GB free disk space
 
 **Default Paths:**
-- Eclipse: `C:\Program Files\Eclipse Embedded CDT`
+- IDE runtime: `C:\Program Files\Eclipse Embedded CDT`
 - Toolchains: `C:\Program Files\xPacks`
 - IOsonata: `%USERPROFILE%\IOcomposer`
 
@@ -814,20 +802,19 @@ For CI/CD or automated setups:
 ./clone_iosonata_sdk_macos.sh --home /path/to/ci/workspace
 
 # Build scripts require interactive selection
-# For automation, consider calling Eclipse directly
+# For automation, call the IOcomposer/CDT managed-build headless application directly
 ```
 
-### Using Different Eclipse
+### Using a Different Development Environment
 
-If you have your own Eclipse installation:
+If you have a compatible Eclipse Embedded CDT installation, the build scripts can use it as a fallback:
 
 ```bash
 # Clone repositories only
 ./clone_iosonata_sdk_macos.sh
 
-# Point to your Eclipse when building
-# Modify BUILD_SCRIPT path in the script, or
-# Use the standalone build script manually
+# Point the build script to the compatible CDT installation
+./build_iosonata_lib_macos.sh --eclipse /path/to/Eclipse.app
 ```
 
 ---
@@ -852,15 +839,7 @@ Get-Help .\build_iosonata_lib_win.ps1
 
 ### Log Files
 
-Build scripts create detailed logs:
-
-```bash
-# Check build log
-cat /tmp/build_iosonata_lib.log
-
-# View recent errors
-tail -50 /tmp/build_iosonata_lib.log
-```
+Build scripts print the exact log path when a project fails. On macOS and Linux, logs are written under `/tmp` using the `build_lib_*.log` pattern.
 
 ### Community Support
 
@@ -876,9 +855,9 @@ tail -50 /tmp/build_iosonata_lib.log
 
 **A:** For first-time setup, use the **installation script** for your platform. It does everything.
 
-### Q: Can I use my existing Eclipse?
+### Q: Can I use an existing Eclipse Embedded CDT installation?
 
-**A:** Yes! Use the **clone script** to get the code, then use the **build script** to compile libraries.
+**A:** Yes. IOcomposer is preferred, but the build scripts retain a compatible Eclipse Embedded CDT fallback.
 
 ### Q: How do I build for multiple MCUs?
 
@@ -898,11 +877,11 @@ tail -50 /tmp/build_iosonata_lib.log
 
 ### Q: How do I uninstall?
 
-**A:** Run the installer with `--uninstall` flag. This removes tools but keeps your repositories and workspaces.
+**A:** On macOS/Linux, run the installer with `--uninstall`. On Windows, use `-Uninstall`. This removes tools but keeps your repositories and workspaces.
 
 ### Q: Can I have multiple IOsonata installations?
 
-**A:** Yes! Use the `--home` parameter to specify different directories.
+**A:** Yes. Use `--home` on macOS/Linux or `-SdkHome` on Windows to select a different SDK root.
 
 ---
 
@@ -915,9 +894,7 @@ IOsonata is released under the Apache License 2.0. See LICENSE file in the repos
 ## Version History
 
 - **v1.0.0** - Initial release with refactored standalone build scripts
-- Installer scripts: macOS v1.0.87, Linux v1.0.87, Windows v1.0.87-win
-- Clone scripts: All platforms v1.3.0
-- Build scripts: All platforms v1.0.0
+- Current script revisions are maintained in the scripts themselves; use each script's built-in help/version reporting for the installed revision.
 
 ---
 

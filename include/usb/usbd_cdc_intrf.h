@@ -11,7 +11,7 @@
 
 MIT License
 
-Copyright (c) 2024 I-SYST inc. All rights reserved.
+Copyright (c) 2024, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -35,6 +35,7 @@ SOFTWARE.
 #ifndef __USBD_CDC_INTRF_H__
 #define __USBD_CDC_INTRF_H__
 
+#include "cfifo.h"
 #include "device_intrf.h"
 
 /** @addtogroup USBD
@@ -49,6 +50,7 @@ typedef struct __UsbdCdc_Interf_Config {
 	uint8_t *pRxFifoMem;		//!< Pointer to memory to be used by CFIFO
 	int TxFifoMemSize;			//!< Total memory size for CFIFO
 	uint8_t *pTxFifoMem;		//!< Pointer to memory to be used by CFIFO
+	int ItfNo;					//!< CDC function index, 0 for the first port
 	DevIntrfEvtHandler_t EvtCB;	//!< Event callback
 } UsbdCdcIntrfCfg_t;
 
@@ -63,6 +65,19 @@ typedef struct __UsbdCdc_Dev_Interf {
     uint32_t	TxDropCnt;
     uint8_t     TransBuff[USBD_CDC_INTRF_TRANSBUFF_MAXLEN];  //
     int         TransBuffLen;	//!< Data length
+    int			ItfNo;			//!< CDC function index this instance serves
+    bool		bEnabled;		//!< false - Data plane stopped, FIFOs kept
+    volatile bool bPortOpen;	//!< Host asserted DTR on this function
+    //
+    // A FIFO read is destructive while the device stack is allowed to accept
+    // fewer octets than offered. The tail that was not accepted stays in
+    // TransBuff until it is, otherwise one short write loses octets that were
+    // already taken out of the FIFO.
+    //
+    int			TxPendingOfs;	//!< Offset of the first octet not yet accepted
+    int			TxPendingLen;	//!< Length staged in TransBuff
+    uint32_t	RxErrCnt;		//!< Reads that returned more than was asked for
+    uint32_t	TxBusyCnt;		//!< Writes refused because the endpoint was full
 } UsbdCdcDevIntrf_t;
 
 #pragma pack(pop)
@@ -93,6 +108,9 @@ public:
 
 	virtual bool RequestToSend(int NbBytes);
 
+	// true when the host has opened this port
+	bool IsPortOpen(void);
+
 private:
 
 	UsbdCdcDevIntrf_t vUsbDevIntrf;
@@ -102,6 +120,29 @@ extern "C" {
 #endif
 
 bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pUsbdDevIntrf, const UsbdCdcIntrfCfg_t *pCfg);
+
+/**
+ * @brief	Move data in both directions for this function.
+ *
+ * Called by UsbDevProcess for every registered interface. An application that
+ * pumps the device itself does not call this.
+ *
+ * @param	pUsbdDevIntrf : Interface instance
+ */
+void UsbdCdcIntrfProcess(UsbdCdcDevIntrf_t * const pUsbdDevIntrf);
+
+/**
+ * @brief	Whether the host has opened this port.
+ *
+ * The device is mounted and something on the host has asserted DTR. A write
+ * to a port nobody opened fills the endpoint buffer once and then refuses
+ * everything after it, so the data plane checks this first.
+ *
+ * @param	pUsbdDevIntrf : Interface instance
+ *
+ * @return	true - Open
+ */
+bool UsbdCdcIntrfPortIsOpen(UsbdCdcDevIntrf_t * const pUsbdDevIntrf);
 
 #ifdef __cplusplus
 }

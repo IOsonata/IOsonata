@@ -628,7 +628,7 @@ fi
 echo
 echo "📦 Syncing IOsonata + external SDKs..."
 
-CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/clone_iosonata_sdk_macos.sh"
+CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/main/Installer/clone_iosonata_sdk_macos.sh"
 TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_macos.XXXXXX.sh)
 CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_macos.XXXXXX.log)
 
@@ -910,4 +910,3 @@ echo "The variable is available in ALL workspaces."
 echo "No macOS reboot required!"
 echo "=============================================="
 echo
-

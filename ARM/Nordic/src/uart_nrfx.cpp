@@ -341,6 +341,73 @@ bool nRFUARTWaitForTxReady(nRFUartDev_t * const pDev, uint32_t Timeout)
 	return false;
 }
 
+#ifdef UARTE_PRESENT
+/**
+ * @brief	Retire a finished tx dma transfer outside of interrupt context.
+ *
+ * With bIntMode false there is no handler to clear ENDTX, so bTxReady stays
+ * false after the first block and every later transfer is refused. This does
+ * the same retirement the handler does. It tests the event and returns, it
+ * never waits, so the caller keeps its non blocking behaviour.
+ */
+static void nRFUARTPollTx(nRFUartDev_t * const dev)
+{
+	if (NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) || dev->pDmaReg->EVENTS_TXSTOPPED)
+	{
+		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
+		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
+		dev->pUartDev->bTxReady = true;
+	}
+}
+
+/**
+ * @brief	Retire a finished rx dma transfer outside of interrupt context.
+ *
+ * Same reasoning as nRFUARTPollTx. Without this the rx fifo is never filled
+ * in polling mode and every read returns nothing. Re-arm matches the handler,
+ * which relies on the dma keeping PTR and MAXCNT across a transfer.
+ */
+static void nRFUARTPollRx(nRFUartDev_t * const dev)
+{
+#if defined(UARTE_CONFIG_FRAMETIMEOUT_Msk)
+	if (dev->pDmaReg->EVENTS_FRAMETIMEOUT)
+	{
+		dev->pDmaReg->EVENTS_FRAMETIMEOUT = 0;
+		NRFX_UARTE_TASKS_STOPRX(dev->pDmaReg) = 1;
+	}
+#else
+	if (dev->pDmaReg->EVENTS_RXDRDY)
+	{
+		// Polling only needs to know that the active DMA contains data. The
+		// exact count comes from RXD.AMOUNT after STOPRX raises ENDRX.
+		dev->pDmaReg->EVENTS_RXDRDY = 0;
+		dev->RxDmaCnt = 1;
+	}
+#endif
+
+	if (NRFX_UARTE_EVENTS_ENDRX(dev->pDmaReg))
+	{
+		dev->pDmaReg->EVENTS_RXDRDY = 0;
+		NRFX_UARTE_EVENTS_ENDRX(dev->pDmaReg) = 0;
+		dev->RxDmaCnt = 0;
+
+		int l = NRFX_UARTE_RXD_AMOUNT(dev->pDmaReg);
+		uint8_t *p = CFifoPutMultiple(dev->pUartDev->hRxFifo, &l);
+		if (p)
+		{
+			memcpy(p, dev->RxDmaMem, l);
+		}
+		else
+		{
+			dev->pUartDev->RxDropCnt++;
+		}
+
+		dev->pUartDev->bRxReady = false;
+		NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
+	}
+}
+#endif
+
 static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
@@ -652,6 +719,13 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 	int cnt = 0;
 
+#ifdef UARTE_PRESENT
+	if (pDev->bIntEn == false && pDev->bDma == true)
+	{
+		nRFUARTPollRx(dev);
+	}
+#endif
+
 	uint32_t state = DisableInterrupt();
 	while (Bufflen)
 	{
@@ -741,6 +815,13 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
             cnt += l;
         }
         EnableInterrupt(state);
+
+#ifdef UARTE_PRESENT
+        if (pDev->bIntEn == false && pDev->bDma == true)
+        {
+        	nRFUARTPollTx(dev);
+        }
+#endif
 
         if (dev->pUartDev->bTxReady)
         {
