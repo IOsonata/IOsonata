@@ -5,7 +5,8 @@
 
 This is the hardware-facing boundary of the IOsonata USB device stack. The
 USB device core owns Chapter 9, descriptors and class dispatch. Controller
-implementations own endpoint registers, DMA and the USB interrupt.
+implementations own endpoint registers, DMA/FIFO handling and the USB
+interrupt.
 
 No controller-specific type is exposed here. A Nordic USBD peripheral, a DWC2
 core or another USB device controller implements the same interface.
@@ -111,9 +112,30 @@ extern "C" {
  * @brief	Initialize controller software state.
  *
  * The MCU USB power/clock wrapper is initialized separately through UsbdInit().
- * This call only initializes endpoint and interrupt-facing controller state.
+ * This call must not access controller registers because the peripheral may
+ * still be unpowered.
  */
 bool UsbdCtrlrInit(UsbdCtrlrEvtHandler_t EvtHandler, void *pContext);
+
+/**
+ * @brief	Initialize powered controller hardware before bus connection.
+ *
+ * Called after UsbdStart() has enabled the MCU USB power, clock and PHY and
+ * before controller interrupts or the device pull-up are enabled. Backends
+ * that need no second-stage register initialization may use the weak default.
+ *
+ * @return	true - Controller is ready
+ */
+bool UsbdCtrlrStart(void);
+
+/**
+ * @brief	Stop controller hardware state before MCU USB power is removed.
+ *
+ * Called after the device has disconnected and controller interrupts are
+ * disabled. Backends that need no separate stop action may use the weak
+ * default.
+ */
+void UsbdCtrlrStop(void);
 
 /** @brief Enable the USB controller interrupt. */
 void UsbdCtrlrIntEnable(void);
@@ -145,7 +167,7 @@ void UsbdCtrlrSetAddress(uint8_t Address);
  * @brief	Open one non-control endpoint.
  *
  * The endpoint descriptor supplies address, transfer type and maximum packet
- * size. Endpoint zero is prepared by UsbdCtrlrInit().
+ * size. Endpoint zero is prepared by UsbdCtrlrStart().
  */
 bool UsbdCtrlrEpOpen(const UsbEndPointDesc_t *pDesc);
 
