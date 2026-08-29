@@ -75,7 +75,9 @@ SOFTWARE.
 #error "usbd_nrfx: this part has no USB device controller"
 #endif
 
+#ifdef NRFX_USBD_HAS_USBHS
 #include "device/dcd.h"
+#endif
 
 #include "usb/usbd.h"
 
