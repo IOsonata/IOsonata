@@ -212,23 +212,72 @@ typedef enum __USB_CDC_Notification_Code {
 	USB_CDC_NOTIFY_CALL_STATE_CHANGE 		= 0x28,
 	USB_CDC_NOTIFY_LINE_STATE_CHANGE 		= 0x29,
 	USB_CDC_NOTIFY_CONNECTION_SPEED_CHANGE 	= 0x2A,
-	USB_CDC_NOTIFY_MDML_SEMANTIC			= 0x40	//!< MDML SEMANTIC-MODEL-SPECIFIC NOTIFICATION start here
+	USB_CDC_NOTIFY_MDLM_SEMANTIC			= 0x40,
+	USB_CDC_NOTIFY_MDML_SEMANTIC			= USB_CDC_NOTIFY_MDLM_SEMANTIC	//!< Legacy misspelled alias
 } USB_CDC_NOTIFY;
 
 // USB_CDC_REQ_SET_CTRL_LINE_STATE
-#define USB_CDC_CTRL_LINE_STATE_DTR		(1<<0)	//!< Data terminal ready
-#define USB_CDC_CTRL_LINE_STATE_RTS		(1<<1)	//!< Ready to send
+#define USB_CDC_CTRL_LINE_STATE_DTR		(1U << 0)	//!< Data terminal ready
+#define USB_CDC_CTRL_LINE_STATE_RTS		(1U << 1)	//!< Ready to send
 
-// USB_CDC_NOTIFY_LINE_STATE_CHANGE
-#define	USB_CDC_LINE_STATE_DCD			(1<<0) //!< Data carrier detect. This is asserted when a connection has been established with remote equipment
-#define	USB_CDC_LINE_STATE_DSR			(1<<1) //!< Data Set Ready. This is asserted to indicate an active connection. (CTS)
-#define	USB_CDC_LINE_STATE_BRK			(1<<2) //!< Break detection state
-#define	USB_CDC_LINE_STATE_RI			(1<<3) //!< Ring indicator state.
-#define	USB_CDC_LINE_STATE_FE			(1<<4) //!< Framing error detected.
-#define	USB_CDC_LINE_STATE_PE			(1<<5) //!< Parity error detected.
-#define	USB_CDC_LINE_STATE_OE			(1<<6) //!< Overrun error
+// Abstract Control Management Functional Descriptor bmCapabilities
+#define USB_CDC_ACM_CAP_COMM_FEATURE		(1U << 0)
+#define USB_CDC_ACM_CAP_LINE_CODING		(1U << 1)
+#define USB_CDC_ACM_CAP_SEND_BREAK		(1U << 2)
+#define USB_CDC_ACM_CAP_NET_CONNECTION	(1U << 3)
+
+// Call Management Functional Descriptor bmCapabilities
+#define USB_CDC_CALL_MGMT_CAP_DEVICE		(1U << 0)
+#define USB_CDC_CALL_MGMT_CAP_DATA_INTRF	(1U << 1)
+
+// USB_CDC_NOTIFY_SERIAL_STATE
+#define USB_CDC_SERIAL_STATE_RX_CARRIER	(1U << 0)
+#define USB_CDC_SERIAL_STATE_TX_CARRIER	(1U << 1)
+#define USB_CDC_SERIAL_STATE_BREAK		(1U << 2)
+#define USB_CDC_SERIAL_STATE_RING		(1U << 3)
+#define USB_CDC_SERIAL_STATE_FRAMING		(1U << 4)
+#define USB_CDC_SERIAL_STATE_PARITY		(1U << 5)
+#define USB_CDC_SERIAL_STATE_OVERRUN		(1U << 6)
+
+// Legacy modem-signal names for SerialState bits
+#define USB_CDC_LINE_STATE_DCD			USB_CDC_SERIAL_STATE_RX_CARRIER
+#define USB_CDC_LINE_STATE_DSR			USB_CDC_SERIAL_STATE_TX_CARRIER
+#define USB_CDC_LINE_STATE_BRK			USB_CDC_SERIAL_STATE_BREAK
+#define USB_CDC_LINE_STATE_RI			USB_CDC_SERIAL_STATE_RING
+#define USB_CDC_LINE_STATE_FE			USB_CDC_SERIAL_STATE_FRAMING
+#define USB_CDC_LINE_STATE_PE			USB_CDC_SERIAL_STATE_PARITY
+#define USB_CDC_LINE_STATE_OE			USB_CDC_SERIAL_STATE_OVERRUN
+
+typedef enum __USB_CDC_Line_Coding_Char_Format {
+	USB_CDC_LINE_STOP_1 		= 0,
+	USB_CDC_LINE_STOP_1_5 		= 1,
+	USB_CDC_LINE_STOP_2 		= 2
+} USB_CDC_LINE_STOP;
+
+typedef enum __USB_CDC_Line_Coding_Parity {
+	USB_CDC_LINE_PARITY_NONE 	= 0,
+	USB_CDC_LINE_PARITY_ODD 	= 1,
+	USB_CDC_LINE_PARITY_EVEN 	= 2,
+	USB_CDC_LINE_PARITY_MARK 	= 3,
+	USB_CDC_LINE_PARITY_SPACE 	= 4
+} USB_CDC_LINE_PARITY;
 
 #pragma pack(push, 1)
+
+typedef struct __USB_CDC_Line_Coding {
+	uint32_t dwDTERate;		//!< Data terminal rate in bits per second
+	uint8_t bCharFormat;		//!< USB_CDC_LINE_STOP
+	uint8_t bParityType;		//!< USB_CDC_LINE_PARITY
+	uint8_t bDataBits;		//!< Number of data bits
+} UsbCdcLineCoding_t;
+
+typedef struct __USB_CDC_Notification {
+	uint8_t bmRequestType;		//!< Device-to-host, Class, Interface for CDC notifications
+	uint8_t bNotification;		//!< USB_CDC_NOTIFY
+	uint16_t wValue;
+	uint16_t wIndex;			//!< Communication interface number
+	uint16_t wLength;			//!< Notification data length
+} UsbCdcNotification_t;
 
 typedef struct __USB_Functional_Descriptor {
 	uint8_t bFunctionLength;		//!< Size of this descriptor.
@@ -273,7 +322,7 @@ typedef struct __USB_Country_Functional_Descriptor {
 typedef struct __USB_Call_Management_Functional_Descriptor {
 	uint8_t bFunctionLength;		//!< Size of this functional descriptor, in bytes.
 	uint8_t bDescriptorType;		//!< CS_INTERFACE
-	uint8_t bDescriptorSubtype;		//!< ￼Call Management functional descriptor subtype,
+	uint8_t bDescriptorSubtype;		//!< Call Management functional descriptor subtype,
 									//!< as defined in [USBCDC1.2].
 	uint8_t bmCapabilities;			//!< The capabilities that this configuration supports:
 									//!< - D7..D2: RESERVED (Reset to zero)
