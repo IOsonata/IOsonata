@@ -64,6 +64,11 @@ static void UsbdBulkIntrfEnable(DevIntrf_t * const pDevIntrf)
 
 	pIntrf->bEnabled = true;
 
+	if (pIntrf->RxKick != nullptr)
+	{
+		pIntrf->RxKick(pIntrf, pIntrf->pContext);
+	}
+
 	if (pIntrf->TxKick != nullptr && CFifoUsed(pIntrf->hTxFifo) > 0)
 	{
 		pIntrf->TxKick(pIntrf, pIntrf->pContext);
@@ -97,7 +102,14 @@ static int UsbdBulkIntrfRxData(DevIntrf_t * const pDevIntrf,
 		return 0;
 	}
 
-	return CFifoRead(pIntrf->hRxFifo, pBuffer, BufferLen);
+	const int cnt = CFifoRead(pIntrf->hRxFifo, pBuffer, BufferLen);
+
+	if (cnt > 0 && pIntrf->bEnabled && pIntrf->RxKick != nullptr)
+	{
+		pIntrf->RxKick(pIntrf, pIntrf->pContext);
+	}
+
+	return cnt;
 }
 
 static void UsbdBulkIntrfStopRx(DevIntrf_t * const)
@@ -180,6 +192,7 @@ bool UsbdBulkIntrfInit(UsbdBulkDevIntrf_t *pIntrf,
 
 	pIntrf->hRxFifo = hRxFifo;
 	pIntrf->hTxFifo = hTxFifo;
+	pIntrf->RxKick = pCfg->RxKick;
 	pIntrf->TxKick = pCfg->TxKick;
 	pIntrf->pContext = pCfg->pContext;
 	pIntrf->bEnabled = false;

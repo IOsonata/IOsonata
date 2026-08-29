@@ -56,14 +56,14 @@ SOFTWARE.
 typedef struct __UsbdBulk_Dev_Interf UsbdBulkDevIntrf_t;
 
 /**
- * @brief	Ask the owning USB function to service queued Bulk IN data.
+ * @brief	Ask the owning USB function to service queued Bulk data.
  *
  * The callback may start a transfer immediately or only schedule service.
  * UsbdBulkIntrf never assumes an endpoint number, controller type or execution
  * context.
  */
-typedef void (*UsbdBulkTxKickHandler_t)(UsbdBulkDevIntrf_t * const pIntrf,
-										void *pContext);
+typedef void (*UsbdBulkKickHandler_t)(UsbdBulkDevIntrf_t * const pIntrf,
+									 void *pContext);
 
 typedef struct __UsbdBulk_Interf_Config {
 	bool bBlocking;					//!< CFifo full behavior
@@ -71,8 +71,9 @@ typedef struct __UsbdBulk_Interf_Config {
 	uint8_t *pRxFifoMem;			//!< Word-aligned RX FIFO memory
 	int TxFifoMemSize;				//!< TX FIFO memory size including CFifo header
 	uint8_t *pTxFifoMem;			//!< Word-aligned TX FIFO memory
-	UsbdBulkTxKickHandler_t TxKick;	//!< Optional Bulk IN service callback
-	void *pContext;					//!< Opaque context passed to TxKick
+	UsbdBulkKickHandler_t RxKick;	//!< Optional Bulk OUT service callback
+	UsbdBulkKickHandler_t TxKick;	//!< Optional Bulk IN service callback
+	void *pContext;					//!< Opaque context passed to service callbacks
 	DevIntrfEvtHandler_t EvtCB;		//!< Optional DeviceIntrf event callback
 } UsbdBulkIntrfCfg_t;
 
@@ -80,7 +81,8 @@ struct __UsbdBulk_Dev_Interf {
 	DevIntrf_t DevIntrf;			//!< Device interface, must be first
 	hCFifo_t hRxFifo;				//!< USB OUT -> application
 	hCFifo_t hTxFifo;				//!< Application -> USB IN
-	UsbdBulkTxKickHandler_t TxKick;	//!< Owning USB function service callback
+	UsbdBulkKickHandler_t RxKick;	//!< Owning USB function Bulk OUT service callback
+	UsbdBulkKickHandler_t TxKick;	//!< Owning USB function Bulk IN service callback
 	void *pContext;					//!< Opaque callback context
 	bool bEnabled;					//!< Interface data plane enabled
 };
