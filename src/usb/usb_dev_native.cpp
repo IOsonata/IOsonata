@@ -39,6 +39,7 @@ SOFTWARE.
 
 #include "usb/usb_dev.h"
 #include "usb/usbd_core.h"
+#include "usb/usbd_ctrlr.h"
 #include "usb/usbd_cdc_desc.h"
 
 #define USBDEV_FUNC_MAXCNT			USBD_CDC_FUNC_MAXCNT
@@ -202,6 +203,12 @@ bool UsbDevEnable(void)
 		return false;
 	}
 
+	if (!UsbdCtrlrStart())
+	{
+		UsbdStop();
+		return false;
+	}
+
 	UsbdCoreStart();
 	s_UsbDevStarted = true;
 	s_UsbDevAttachPending = false;
@@ -217,6 +224,7 @@ void UsbDevDisable(void)
 	}
 
 	UsbdCoreStop();
+	UsbdCtrlrStop();
 	UsbdStop();
 	s_UsbDevStarted = false;
 	s_UsbDevAttachPending = false;
