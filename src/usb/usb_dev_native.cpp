@@ -41,8 +41,7 @@ SOFTWARE.
 #include "usb/usbd_core.h"
 #include "usb/usbd_cdc_desc.h"
 
-#define USBDEV_FUNC_MAXCNT			4
-#define USBDEV_NRF52_CDC_MAXCNT		3
+#define USBDEV_FUNC_MAXCNT			USBD_CDC_FUNC_MAXCNT
 
 typedef struct __Usb_Dev_Function {
 	void (*Pump)(void *pCtx);
@@ -57,13 +56,22 @@ static bool s_UsbDevInitialized;
 static bool s_UsbDevStarted;
 static bool s_UsbDevAttachPending;
 
-static int UsbDevMaxCdcCount(void)
+static int UsbDevMaxCdcCount(const UsbdCaps_t *pCaps)
 {
-	// Current native backends are nRF52 USBD and the future nRF54 DWC2 path.
-	// nRF52 has endpoint numbers 0..7; the default CDC topology consumes two
-	// endpoint numbers per function. The high-speed controller has 0..15.
-	return UsbdMaxSpeed() == USBD_SPEED_HIGH ?
-		USBD_CDC_FUNC_MAXCNT : USBDEV_NRF52_CDC_MAXCNT;
+	if (pCaps == nullptr || pCaps->EpInCnt < 3U || pCaps->EpOutCnt < 3U)
+	{
+		return 0;
+	}
+
+	// The native CDC topology uses endpoint 1 for notification and endpoint 2
+	// for bulk on the first function, then advances both endpoint numbers by
+	// two. Endpoint counts include EP0, so the smaller direction determines
+	// how many complete CDC functions fit on this controller instance.
+	const int maxIn = ((int)pCaps->EpInCnt - 1) / 2;
+	const int maxOut = ((int)pCaps->EpOutCnt - 1) / 2;
+	const int maxCdc = maxIn < maxOut ? maxIn : maxOut;
+
+	return maxCdc < USBD_CDC_FUNC_MAXCNT ? maxCdc : USBD_CDC_FUNC_MAXCNT;
 }
 
 static void UsbDevEvtHandler(UsbdEvt_t Evt)
@@ -97,6 +105,13 @@ bool UsbDevInit(const UsbDevCfg_t *pCfg)
 		return false;
 	}
 
+	const UsbdCaps_t *pCaps = UsbdGetCaps();
+	const int maxCdc = UsbDevMaxCdcCount(pCaps);
+	if (maxCdc < 1 || pCaps->Ep0Mps == 0U)
+	{
+		return false;
+	}
+
 	s_UsbDevInitialized = false;
 	s_UsbDevStarted = false;
 	s_UsbDevAttachPending = false;
@@ -109,7 +124,6 @@ bool UsbDevInit(const UsbDevCfg_t *pCfg)
 		s_UsbDevCfg.NbCdc = 1;
 	}
 
-	const int maxCdc = UsbDevMaxCdcCount();
 	if (s_UsbDevCfg.NbCdc > maxCdc)
 	{
 		s_UsbDevCfg.NbCdc = maxCdc;
@@ -145,8 +159,8 @@ bool UsbDevInit(const UsbDevCfg_t *pCfg)
 	UsbdCoreCfg_t coreCfg = {};
 	coreCfg.DescHandler = UsbdCdcDescHandler;
 	coreCfg.pDescContext = nullptr;
-	coreCfg.Speed = UsbdMaxSpeed();
-	coreCfg.Ep0Mps = 64U;
+	coreCfg.Speed = pCaps->MaxSpeed;
+	coreCfg.Ep0Mps = pCaps->Ep0Mps;
 
 	if (!UsbdCoreInit(&coreCfg))
 	{
