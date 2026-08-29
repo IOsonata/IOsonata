@@ -75,15 +75,13 @@ static void UsbdCdcFuncDefaultLineCoding(UsbdCdcFunc_t *pFunc)
 
 static uint16_t UsbdCdcFuncMps(void)
 {
-	// The first native controller is nRF52840 and therefore full speed. The
-	// nRF54 DWC2 backend will provide negotiated-speed state before HS cutover.
-	return UsbdMaxSpeed() == USBD_SPEED_HIGH ?
+	return UsbdCtrlrHighSpeed() ?
 		USBD_CDC_BULK_HS_MPS : USBD_CDC_BULK_FS_MPS;
 }
 
 static uint8_t UsbdCdcFuncNotifInterval(void)
 {
-	return UsbdMaxSpeed() == USBD_SPEED_HIGH ? 8U : 16U;
+	return UsbdCtrlrHighSpeed() ? 8U : 16U;
 }
 
 bool UsbdCdcFuncPortIsOpen(const UsbdCdcFunc_t *pFunc)
