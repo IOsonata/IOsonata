@@ -71,7 +71,7 @@ typedef enum __USB_Communication_Class_Protocol {
 	USB_CDC_PROT_PCCA101A0 	= 3, 	//!< PCCA-101 AT Commands defined by PCCA-101 & Annex O
 	USB_CDC_PROT_GSM 		= 4,	//!< GSM 7.07 AT Commands defined by GSM 07.07
 	USB_CDC_PROT_3GPP 		= 5, 	//!< 3GPP 27.07 AT Commands defined by 3GPP 27.007
-	USB_CD_PROT_CS0017 		= 6,	//!< C-S0017-0 AT Commands defined by TIA for CDMA
+	USB_CDC_PROT_CS0017		= 6,	//!< C-S0017-0 AT Commands defined by TIA for CDMA
 	USB_CDC_PROT_EEM 		= 7,	//!< USB EEM Ethernet Emulation Model
 	USB_CDC_PROT_EXTRN 		= 0xFE,	//!< External Protocol: Commands defined by
 									//!< Command Set Functional Descriptor
