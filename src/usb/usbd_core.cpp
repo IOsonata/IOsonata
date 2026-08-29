@@ -36,20 +36,8 @@ SOFTWARE.
 #include "usb/usbd_core.h"
 
 #define USBD_CORE_EP0_MPS_DEFAULT		64U
-#define USBD_CORE_DEVICE_DESC_LEN		18U
-#define USBD_CORE_CONFIG_DESC_LEN		9U
-#define USBD_CORE_CONFIG_SELF_POWERED	0x40U
-#define USBD_CORE_CONFIG_REMOTE_WAKEUP	0x20U
-
-#define USBD_CORE_REQTYPE_TYPE_MASK		0x60U
-#define USBD_CORE_REQTYPE_STANDARD		0x00U
-#define USBD_CORE_REQTYPE_CLASS			0x20U
-#define USBD_CORE_REQTYPE_VENDOR		0x40U
-#define USBD_CORE_REQTYPE_DIR_IN		0x80U
-
-#define USBD_CORE_RECIP_DEVICE			0U
-#define USBD_CORE_RECIP_INTERFACE		1U
-#define USBD_CORE_RECIP_ENDPOINT		2U
+#define USBD_CORE_DEVICE_DESC_LEN		((uint16_t)sizeof(UsbDevDesc_t))
+#define USBD_CORE_CONFIG_DESC_LEN		((uint16_t)sizeof(UsbCfgDesc_t))
 
 typedef enum __Usbd_Core_Ctrl_State {
 	USBD_CORE_CTRL_IDLE,
@@ -86,12 +74,12 @@ static uint8_t s_CtrlReply[2];
 
 static uint8_t UsbdCoreRecipient(const UsbSetupData_t *pSetup)
 {
-	return pSetup->bmRequestType & USB_REQTYPE_MASK_RECEIPT;
+	return pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT;
 }
 
 static bool UsbdCoreDirIn(const UsbSetupData_t *pSetup)
 {
-	return (pSetup->bmRequestType & USBD_CORE_REQTYPE_DIR_IN) != 0;
+	return (pSetup->bmRequestType & USB_REQTYPE_DIRHOST) != 0;
 }
 
 static bool UsbdCoreValidEp0Mps(uint8_t Mps)
@@ -195,7 +183,7 @@ static bool UsbdCoreInterfaceExists(uint8_t InterfaceNo)
 			break;
 		}
 
-		if (type == USB_DESCTYPE_INTERFACE && dlen >= 9U &&
+		if (type == USB_DESCTYPE_INTERFACE && dlen >= sizeof(UsbIntrfDesc_t) &&
 			pDesc[ofs + 2U] == InterfaceNo)
 		{
 			return true;
@@ -209,7 +197,7 @@ static bool UsbdCoreInterfaceExists(uint8_t InterfaceNo)
 
 static bool UsbdCoreEndpointExists(uint8_t EpAddr)
 {
-	if (USBD_EP_NUM(EpAddr) == 0)
+	if (USB_ENDPADDR_NUM(EpAddr) == 0)
 	{
 		return true;
 	}
@@ -233,7 +221,7 @@ static bool UsbdCoreEndpointExists(uint8_t EpAddr)
 			break;
 		}
 
-		if (type == USB_DESCTYPE_ENDPOINT && dlen >= 7U &&
+		if (type == USB_DESCTYPE_ENDPOINT && dlen >= sizeof(UsbEndPointDesc_t) &&
 			pDesc[ofs + 2U] == EpAddr)
 		{
 			return true;
@@ -254,6 +242,30 @@ static int UsbdCoreFindFunction(uint8_t InterfaceNo)
 
 		if (count != 0 && InterfaceNo >= first &&
 			InterfaceNo < (uint8_t)(first + count))
+		{
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+static int UsbdCoreFindEndpointFunction(uint8_t EpAddr)
+{
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
+	if (epNum == 0)
+	{
+		return -1;
+	}
+
+	const uint16_t bit = (uint16_t)(1U << epNum);
+
+	for (int i = 0; i < s_CoreFuncCnt; i++)
+	{
+		const uint16_t mask = USB_ENDPADDR_IS_IN(EpAddr) ?
+			s_CoreFunc[i].EpInMask : s_CoreFunc[i].EpOutMask;
+
+		if ((mask & bit) != 0)
 		{
 			return i;
 		}
@@ -304,9 +316,9 @@ static bool UsbdCoreInvokeActive(UsbdCoreCtrlStage_t Stage,
 static bool UsbdCoreStartStatus(void)
 {
 	const uint8_t epAddr = UsbdCoreDirIn(&s_Setup) ?
-		USBD_EP_DIR_OUT : USBD_EP_DIR_IN;
+		USB_ENDPADDR_DIR_OUT : USB_ENDPADDR_DIR_IN;
 
-	s_CtrlState = USBD_EP_IS_IN(epAddr) ?
+	s_CtrlState = USB_ENDPADDR_IS_IN(epAddr) ?
 		USBD_CORE_CTRL_STATUS_IN : USBD_CORE_CTRL_STATUS_OUT;
 
 	if (!UsbdCtrlrEpXfer(epAddr, nullptr, 0))
@@ -344,7 +356,7 @@ static bool UsbdCoreStartIn(const uint8_t *pData, uint16_t Available)
 		(sendLen % s_CoreCfg.Ep0Mps) == 0;
 	s_CtrlState = USBD_CORE_CTRL_DATA_IN;
 
-	if (!UsbdCtrlrEpXfer(USBD_EP_DIR_IN, s_CtrlData, sendLen))
+	if (!UsbdCtrlrEpXfer(USB_ENDPADDR_DIR_IN, s_CtrlData, sendLen))
 	{
 		UsbdCoreResetControl();
 		return false;
@@ -373,7 +385,7 @@ static bool UsbdCoreStartOut(uint8_t *pData, uint16_t Capacity)
 	s_CtrlActual = 0;
 	s_CtrlState = USBD_CORE_CTRL_DATA_OUT;
 
-	if (!UsbdCtrlrEpXfer(USBD_EP_DIR_OUT, pData, s_Setup.wLength))
+	if (!UsbdCtrlrEpXfer(USB_ENDPADDR_DIR_OUT, pData, s_Setup.wLength))
 	{
 		UsbdCoreResetControl();
 		return false;
@@ -388,7 +400,7 @@ static bool UsbdCoreConfigRemoteWakeupCapable(void)
 	const uint8_t *pDesc = UsbdCoreActiveConfig(&len);
 
 	return pDesc != nullptr && len >= USBD_CORE_CONFIG_DESC_LEN &&
-		(pDesc[7] & USBD_CORE_CONFIG_REMOTE_WAKEUP) != 0;
+		(pDesc[7] & USB_CONFATT_REMOTE_WAKEUP) != 0;
 }
 
 static bool UsbdCoreConfigSelfPowered(void)
@@ -397,7 +409,7 @@ static bool UsbdCoreConfigSelfPowered(void)
 	const uint8_t *pDesc = UsbdCoreActiveConfig(&len);
 
 	return pDesc != nullptr && len >= USBD_CORE_CONFIG_DESC_LEN &&
-		(pDesc[7] & USBD_CORE_CONFIG_SELF_POWERED) != 0;
+		(pDesc[7] & USB_CONFATT_SELF_POWERED) != 0;
 }
 
 static void UsbdCoreClearEndpointState(void)
@@ -477,8 +489,8 @@ static bool UsbdCoreApplyConfiguration(uint8_t Configuration)
 
 static void UsbdCoreSetEndpointHalt(uint8_t EpAddr, bool Halt)
 {
-	const uint16_t bit = (uint16_t)(1U << USBD_EP_NUM(EpAddr));
-	uint16_t *pMask = USBD_EP_IS_IN(EpAddr) ? &s_HaltIn : &s_HaltOut;
+	const uint16_t bit = (uint16_t)(1U << USB_ENDPADDR_NUM(EpAddr));
+	uint16_t *pMask = USB_ENDPADDR_IS_IN(EpAddr) ? &s_HaltIn : &s_HaltOut;
 
 	if (Halt)
 	{
@@ -494,8 +506,8 @@ static void UsbdCoreSetEndpointHalt(uint8_t EpAddr, bool Halt)
 
 static bool UsbdCoreEndpointHalted(uint8_t EpAddr)
 {
-	const uint16_t bit = (uint16_t)(1U << USBD_EP_NUM(EpAddr));
-	const uint16_t mask = USBD_EP_IS_IN(EpAddr) ? s_HaltIn : s_HaltOut;
+	const uint16_t bit = (uint16_t)(1U << USB_ENDPADDR_NUM(EpAddr));
+	const uint16_t mask = USB_ENDPADDR_IS_IN(EpAddr) ? s_HaltIn : s_HaltOut;
 
 	return (mask & bit) != 0;
 }
@@ -542,22 +554,22 @@ static bool UsbdCoreHandleGetStatus(void)
 
 	switch (recipient)
 	{
-		case USBD_CORE_RECIP_DEVICE:
+		case USB_REQTYPE_DEVICE:
 			if (s_Setup.wIndex != 0)
 			{
 				return false;
 			}
 			if (UsbdCoreConfigSelfPowered())
 			{
-				status |= 0x0001U;
+				status |= USB_DEVSTATUS_SELF_POWERED;
 			}
 			if (s_RemoteWakeup)
 			{
-				status |= 0x0002U;
+				status |= USB_DEVSTATUS_REMOTE_WAKEUP;
 			}
 			break;
 
-		case USBD_CORE_RECIP_INTERFACE:
+		case USB_REQTYPE_INTERFACE:
 			if (s_Configuration == 0 || s_Setup.wIndex > 0xFFU ||
 				!UsbdCoreInterfaceExists((uint8_t)s_Setup.wIndex))
 			{
@@ -565,7 +577,7 @@ static bool UsbdCoreHandleGetStatus(void)
 			}
 			break;
 
-		case USBD_CORE_RECIP_ENDPOINT:
+		case USB_REQTYPE_ENDPOINT:
 		{
 			const uint8_t epAddr = (uint8_t)s_Setup.wIndex;
 			if ((s_Setup.wIndex & 0xFF00U) != 0 ||
@@ -575,7 +587,7 @@ static bool UsbdCoreHandleGetStatus(void)
 			}
 			if (UsbdCoreEndpointHalted(epAddr))
 			{
-				status = 1;
+				status = USB_ENDPSTATUS_HALT;
 			}
 			break;
 		}
@@ -598,7 +610,7 @@ static bool UsbdCoreHandleFeature(bool Set)
 
 	const uint8_t recipient = UsbdCoreRecipient(&s_Setup);
 
-	if (recipient == USBD_CORE_RECIP_DEVICE &&
+	if (recipient == USB_REQTYPE_DEVICE &&
 		s_Setup.wValue == USB_FEATSEL_DEVICE_REMOTE_WAKEUP &&
 		s_Setup.wIndex == 0 && s_Configuration != 0 &&
 		UsbdCoreConfigRemoteWakeupCapable())
@@ -607,13 +619,13 @@ static bool UsbdCoreHandleFeature(bool Set)
 		return UsbdCoreStartStatus();
 	}
 
-	if (recipient == USBD_CORE_RECIP_ENDPOINT &&
+	if (recipient == USB_REQTYPE_ENDPOINT &&
 		s_Setup.wValue == USB_FEATSEL_ENDPOINT_HALT &&
 		(s_Setup.wIndex & 0xFF00U) == 0)
 	{
 		const uint8_t epAddr = (uint8_t)s_Setup.wIndex;
 
-		if (USBD_EP_NUM(epAddr) == 0 || s_Configuration == 0 ||
+		if (USB_ENDPADDR_NUM(epAddr) == 0 || s_Configuration == 0 ||
 			!UsbdCoreEndpointExists(epAddr))
 		{
 			return false;
@@ -629,7 +641,7 @@ static bool UsbdCoreHandleFeature(bool Set)
 static bool UsbdCoreHandleSetConfiguration(void)
 {
 	if (UsbdCoreDirIn(&s_Setup) ||
-		UsbdCoreRecipient(&s_Setup) != USBD_CORE_RECIP_DEVICE ||
+		UsbdCoreRecipient(&s_Setup) != USB_REQTYPE_DEVICE ||
 		s_Setup.wIndex != 0 || s_Setup.wLength != 0 ||
 		s_Setup.wValue > 0xFFU || s_Address == 0)
 	{
@@ -647,7 +659,7 @@ static bool UsbdCoreHandleSetConfiguration(void)
 static bool UsbdCoreHandleGetInterface(void)
 {
 	if (!UsbdCoreDirIn(&s_Setup) ||
-		UsbdCoreRecipient(&s_Setup) != USBD_CORE_RECIP_INTERFACE ||
+		UsbdCoreRecipient(&s_Setup) != USB_REQTYPE_INTERFACE ||
 		s_Setup.wValue != 0 || s_Setup.wLength != 1 ||
 		s_Setup.wIndex > 0xFFU || s_Configuration == 0)
 	{
@@ -668,7 +680,7 @@ static bool UsbdCoreHandleGetInterface(void)
 static bool UsbdCoreHandleSetInterface(void)
 {
 	if (UsbdCoreDirIn(&s_Setup) ||
-		UsbdCoreRecipient(&s_Setup) != USBD_CORE_RECIP_INTERFACE ||
+		UsbdCoreRecipient(&s_Setup) != USB_REQTYPE_INTERFACE ||
 		s_Setup.wLength != 0 || s_Setup.wIndex > 0xFFU ||
 		s_Setup.wValue > 0xFFU || s_Configuration == 0)
 	{
@@ -717,7 +729,7 @@ static bool UsbdCoreHandleStandard(void)
 
 		case USB_REQ_SET_ADDRESS:
 			if (UsbdCoreDirIn(&s_Setup) ||
-				UsbdCoreRecipient(&s_Setup) != USBD_CORE_RECIP_DEVICE ||
+				UsbdCoreRecipient(&s_Setup) != USB_REQTYPE_DEVICE ||
 				s_Setup.wIndex != 0 || s_Setup.wLength != 0 ||
 				s_Setup.wValue > 127U || s_Configuration != 0)
 			{
@@ -732,7 +744,7 @@ static bool UsbdCoreHandleStandard(void)
 
 		case USB_REQ_GET_CONFIGURATION:
 			if (!UsbdCoreDirIn(&s_Setup) ||
-				UsbdCoreRecipient(&s_Setup) != USBD_CORE_RECIP_DEVICE ||
+				UsbdCoreRecipient(&s_Setup) != USB_REQTYPE_DEVICE ||
 				s_Setup.wValue != 0 || s_Setup.wIndex != 0 ||
 				s_Setup.wLength != 1)
 			{
@@ -794,7 +806,7 @@ static bool UsbdCoreHandleFunctionRequest(void)
 {
 	const uint8_t recipient = UsbdCoreRecipient(&s_Setup);
 
-	if (recipient == USBD_CORE_RECIP_INTERFACE && s_Setup.wIndex <= 0xFFU)
+	if (recipient == USB_REQTYPE_INTERFACE && s_Setup.wIndex <= 0xFFU)
 	{
 		const int func = UsbdCoreFindFunction((uint8_t)s_Setup.wIndex);
 		return func >= 0 && UsbdCoreCallFunctionSetup(func);
@@ -821,15 +833,14 @@ static void UsbdCoreHandleSetup(const UsbSetupData_t *pSetup)
 	UsbdCoreResetControl();
 	memcpy(&s_Setup, pSetup, sizeof(s_Setup));
 
-	const uint8_t type = s_Setup.bmRequestType & USBD_CORE_REQTYPE_TYPE_MASK;
+	const uint8_t type = s_Setup.bmRequestType & USB_REQTYPE_MASK_TYPE;
 	bool handled = false;
 
-	if (type == USBD_CORE_REQTYPE_STANDARD)
+	if (type == USB_REQTYPE_STANDARD)
 	{
 		handled = UsbdCoreHandleStandard();
 	}
-	else if (type == USBD_CORE_REQTYPE_CLASS ||
-			 type == USBD_CORE_REQTYPE_VENDOR)
+	else if (type == USB_REQTYPE_CLASS || type == USB_REQTYPE_VEND)
 	{
 		handled = UsbdCoreHandleFunctionRequest();
 	}
@@ -862,7 +873,7 @@ static void UsbdCoreHandleCtrlXfer(const UsbdCtrlrXferEvt_t *pXfer)
 			{
 				s_CtrlNeedZlp = false;
 				s_CtrlState = USBD_CORE_CTRL_DATA_IN_ZLP;
-				if (!UsbdCtrlrEpXfer(USBD_EP_DIR_IN, nullptr, 0))
+				if (!UsbdCtrlrEpXfer(USB_ENDPADDR_DIR_IN, nullptr, 0))
 				{
 					UsbdCoreStallControl();
 				}
@@ -945,9 +956,20 @@ static void UsbdCoreCtrlrEvent(const UsbdCtrlrEvt_t *pEvt, void *)
 			break;
 
 		case USBD_CTRLR_EVT_XFER_CMPL:
-			if (USBD_EP_NUM(pEvt->Xfer.EpAddr) == 0)
+			if (USB_ENDPADDR_NUM(pEvt->Xfer.EpAddr) == 0)
 			{
 				UsbdCoreHandleCtrlXfer(&pEvt->Xfer);
+			}
+			else
+			{
+				const int func = UsbdCoreFindEndpointFunction(pEvt->Xfer.EpAddr);
+				if (func >= 0 && s_CoreFunc[func].XferHandler != nullptr)
+				{
+					s_CoreFunc[func].XferHandler(pEvt->Xfer.EpAddr,
+										 pEvt->Xfer.Length,
+										 pEvt->Xfer.Result,
+										 s_CoreFunc[func].pContext);
+				}
 			}
 			break;
 
@@ -1009,6 +1031,12 @@ bool UsbdCoreRegisterFunction(const UsbdCoreFuncCfg_t *pCfg)
 		return false;
 	}
 
+	if (((pCfg->EpInMask | pCfg->EpOutMask) & 1U) != 0 ||
+		((pCfg->EpInMask | pCfg->EpOutMask) != 0 && pCfg->XferHandler == nullptr))
+	{
+		return false;
+	}
+
 	if (pCfg->InterfaceCount != 0)
 	{
 		const uint16_t last = (uint16_t)pCfg->FirstInterface +
@@ -1030,6 +1058,15 @@ bool UsbdCoreRegisterFunction(const UsbdCoreFuncCfg_t *pCfg)
 			{
 				return false;
 			}
+		}
+	}
+
+	for (int i = 0; i < s_CoreFuncCnt; i++)
+	{
+		if ((pCfg->EpInMask & s_CoreFunc[i].EpInMask) != 0 ||
+			(pCfg->EpOutMask & s_CoreFunc[i].EpOutMask) != 0)
+		{
+			return false;
 		}
 	}
 
