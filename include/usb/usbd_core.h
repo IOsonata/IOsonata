@@ -121,6 +121,16 @@ typedef bool (*UsbdCoreSetInterfaceHandler_t)(uint8_t InterfaceNo,
 											 uint8_t Alternate,
 											 void *pContext);
 
+/**
+ * @brief Non-control endpoint transfer completion callback.
+ *
+ * Called from the USB interrupt for an endpoint owned by the function.
+ */
+typedef void (*UsbdCoreXferHandler_t)(uint8_t EpAddr,
+									 uint16_t Length,
+									 UsbdCtrlrXferResult_t Result,
+									 void *pContext);
+
 /** @brief Bus-reset callback for one USB function. */
 typedef void (*UsbdCoreResetHandler_t)(void *pContext);
 
@@ -136,9 +146,12 @@ typedef struct __Usbd_Core_Config {
 typedef struct __Usbd_Core_Function_Config {
 	uint8_t FirstInterface;					//!< First interface owned by function
 	uint8_t InterfaceCount;					//!< Number of interfaces, zero for none
+	uint16_t EpInMask;						//!< IN endpoint ownership, bit n = endpoint n
+	uint16_t EpOutMask;						//!< OUT endpoint ownership, bit n = endpoint n
 	UsbdCoreRequestHandler_t RequestHandler;
 	UsbdCoreConfigHandler_t ConfigHandler;
 	UsbdCoreSetInterfaceHandler_t SetInterfaceHandler;
+	UsbdCoreXferHandler_t XferHandler;
 	UsbdCoreResetHandler_t ResetHandler;
 	void *pContext;
 } UsbdCoreFuncCfg_t;
@@ -158,7 +171,9 @@ bool UsbdCoreInit(const UsbdCoreCfg_t *pCfg);
  * @brief Register one USB function with the device core.
  *
  * Registration is static and intended to be complete before the device is
- * connected to the bus.
+ * connected to the bus. Endpoint zero is owned by the core and bit zero must
+ * be clear in both endpoint masks. Endpoint masks may not overlap between
+ * functions.
  */
 bool UsbdCoreRegisterFunction(const UsbdCoreFuncCfg_t *pCfg);
 
