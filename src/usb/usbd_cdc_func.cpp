@@ -4,7 +4,7 @@
 @brief	Native USB CDC ACM function implementation.
 
 @author	Hoang Nguyen Hoan
-@date	Aug. 29, 2026
+@date	Aug. 30, 2026
 
 @license
 
@@ -38,9 +38,15 @@ SOFTWARE.
 static_assert(sizeof(UsbCdcLineCoding_t) == 7U, "CDC line coding size");
 static_assert(sizeof(UsbCdcNotification_t) == 8U, "CDC notification header size");
 
-static uint8_t *UsbdCdcFuncRxBuffer(UsbdCdcFunc_t *pFunc)
+static UsbdCdcRxStage_t *UsbdCdcFuncRxStage(UsbdCdcFunc_t *pFunc,
+										 uint32_t Index)
 {
-	return reinterpret_cast<uint8_t *>(pFunc->RxTransfer);
+	return &pFunc->RxStage[Index % USBD_CDC_RX_STAGE_COUNT];
+}
+
+static uint8_t *UsbdCdcFuncRxBuffer(UsbdCdcRxStage_t *pStage)
+{
+	return reinterpret_cast<uint8_t *>(pStage->Data);
 }
 
 static uint8_t *UsbdCdcFuncTxBuffer(UsbdCdcFunc_t *pFunc)
@@ -51,6 +57,21 @@ static uint8_t *UsbdCdcFuncTxBuffer(UsbdCdcFunc_t *pFunc)
 static uint8_t *UsbdCdcFuncNotifBuffer(UsbdCdcFunc_t *pFunc)
 {
 	return reinterpret_cast<uint8_t *>(pFunc->NotifTransfer);
+}
+
+static uint32_t UsbdCdcFuncRxPut(const UsbdCdcFunc_t *pFunc)
+{
+	return __atomic_load_n(&pFunc->RxPut, __ATOMIC_ACQUIRE);
+}
+
+static uint32_t UsbdCdcFuncRxGet(const UsbdCdcFunc_t *pFunc)
+{
+	return __atomic_load_n(&pFunc->RxGet, __ATOMIC_ACQUIRE);
+}
+
+static bool UsbdCdcFuncTxCompletionPending(const UsbdCdcFunc_t *pFunc)
+{
+	return __atomic_load_n(&pFunc->TxCompletePending, __ATOMIC_ACQUIRE);
 }
 
 static uint16_t UsbdCdcFuncSerialStateMask(void)
@@ -112,16 +133,19 @@ static void UsbdCdcFuncRxKick(UsbdBulkDevIntrf_t * const pBulk,
 		return;
 	}
 
-	if (pBulk->hRxFifo->bBlocking &&
-		CFifoAvail(pBulk->hRxFifo) < pFunc->BulkMps)
+	const uint32_t put = UsbdCdcFuncRxPut(pFunc);
+	const uint32_t get = UsbdCdcFuncRxGet(pFunc);
+	if ((put - get) >= USBD_CDC_RX_STAGE_COUNT)
 	{
 		return;
 	}
 
-	if (UsbdCtrlrEpXfer(USBD_CDC_DATA_OUT_EP(pFunc->FunctionNo),
-						UsbdCdcFuncRxBuffer(pFunc), pFunc->BulkMps))
+	UsbdCdcRxStage_t *pStage = UsbdCdcFuncRxStage(pFunc, put);
+	pFunc->RxActive = true;
+	if (!UsbdCtrlrEpXfer(USBD_CDC_DATA_OUT_EP(pFunc->FunctionNo),
+						 UsbdCdcFuncRxBuffer(pStage), pFunc->BulkMps))
 	{
-		pFunc->RxActive = true;
+		pFunc->RxActive = false;
 	}
 }
 
@@ -132,7 +156,8 @@ static void UsbdCdcFuncTxKick(UsbdBulkDevIntrf_t * const pBulk,
 
 	if (pFunc == nullptr || pFunc->pBulk != pBulk ||
 		!pBulk->bEnabled || !UsbdCdcFuncPortIsOpen(pFunc) ||
-		pFunc->TxActive || pFunc->TxZlpActive)
+		pFunc->TxActive || pFunc->TxZlpActive || pFunc->TxZlpRequired ||
+		UsbdCdcFuncTxCompletionPending(pFunc))
 	{
 		return;
 	}
@@ -149,10 +174,11 @@ static void UsbdCdcFuncTxKick(UsbdBulkDevIntrf_t * const pBulk,
 		pFunc->TxLength = (uint16_t)length;
 	}
 
-	if (UsbdCtrlrEpXfer(USBD_CDC_DATA_IN_EP(pFunc->FunctionNo),
-						UsbdCdcFuncTxBuffer(pFunc), pFunc->TxLength))
+	pFunc->TxActive = true;
+	if (!UsbdCtrlrEpXfer(USBD_CDC_DATA_IN_EP(pFunc->FunctionNo),
+						 UsbdCdcFuncTxBuffer(pFunc), pFunc->TxLength))
 	{
-		pFunc->TxActive = true;
+		pFunc->TxActive = false;
 	}
 }
 
@@ -178,13 +204,11 @@ static void UsbdCdcFuncNotifKick(UsbdCdcFunc_t *pFunc)
 	pData[sizeof(notification) + 1U] = (uint8_t)(pFunc->SerialState >> 8);
 
 	pFunc->SerialStatePending = false;
-	if (UsbdCtrlrEpXfer(USBD_CDC_NOTIF_EP(pFunc->FunctionNo),
-						pData, USBD_CDC_NOTIFY_LEN))
+	pFunc->NotifActive = true;
+	if (!UsbdCtrlrEpXfer(USBD_CDC_NOTIF_EP(pFunc->FunctionNo),
+						 pData, USBD_CDC_NOTIFY_LEN))
 	{
-		pFunc->NotifActive = true;
-	}
-	else
-	{
+		pFunc->NotifActive = false;
 		pFunc->SerialStatePending = true;
 	}
 }
@@ -209,6 +233,17 @@ static void UsbdCdcFuncCloseEndpoints(UsbdCdcFunc_t *pFunc)
 	UsbdCtrlrEpClose(USBD_CDC_DATA_IN_EP(pFunc->FunctionNo));
 }
 
+static void UsbdCdcFuncCancelBusState(UsbdCdcFunc_t *pFunc)
+{
+	pFunc->RxActive = false;
+	pFunc->TxActive = false;
+	pFunc->TxZlpActive = false;
+	pFunc->TxZlpRequired = false;
+	pFunc->NotifActive = false;
+	pFunc->SerialStatePending = false;
+	__atomic_store_n(&pFunc->TxCompletePending, false, __ATOMIC_RELEASE);
+}
+
 static bool UsbdCdcFuncConfig(uint8_t Configuration, void *pContext)
 {
 	UsbdCdcFunc_t *pFunc = static_cast<UsbdCdcFunc_t *>(pContext);
@@ -217,21 +252,10 @@ static bool UsbdCdcFuncConfig(uint8_t Configuration, void *pContext)
 		return false;
 	}
 
-	const bool wasOpen = UsbdCdcFuncPortIsOpen(pFunc);
-
 	pFunc->Configured = false;
-	pFunc->RxActive = false;
-	pFunc->TxActive = false;
-	pFunc->TxZlpActive = false;
-	pFunc->NotifActive = false;
 	pFunc->ControlLineState = 0U;
 	pFunc->PendingControlLineState = 0U;
-	pFunc->SerialStatePending = false;
-
-	if (wasOpen)
-	{
-		UsbdCdcFuncNotifyPortState(pFunc, false);
-	}
+	UsbdCdcFuncCancelBusState(pFunc);
 
 	if (Configuration == 0U)
 	{
@@ -266,20 +290,7 @@ static bool UsbdCdcFuncConfig(uint8_t Configuration, void *pContext)
 
 static void UsbdCdcFuncApplyControlLineState(UsbdCdcFunc_t *pFunc)
 {
-	const bool wasOpen = UsbdCdcFuncPortIsOpen(pFunc);
 	pFunc->ControlLineState = pFunc->PendingControlLineState;
-	const bool isOpen = UsbdCdcFuncPortIsOpen(pFunc);
-
-	if (wasOpen != isOpen)
-	{
-		UsbdCdcFuncNotifyPortState(pFunc, isOpen);
-	}
-
-	if (isOpen && pFunc->pBulk->bEnabled)
-	{
-		UsbdCdcFuncRxKick(pFunc->pBulk, pFunc);
-		UsbdCdcFuncTxKick(pFunc->pBulk, pFunc);
-	}
 }
 
 static bool UsbdCdcFuncRequest(const UsbSetupData_t *pSetup,
@@ -390,47 +401,41 @@ static void UsbdCdcFuncXfer(uint8_t EpAddr, uint16_t Length,
 	if (EpAddr == USBD_CDC_DATA_OUT_EP(pFunc->FunctionNo))
 	{
 		pFunc->RxActive = false;
-		if (Result == USBD_CTRLR_XFER_SUCCESS && Length <= pFunc->BulkMps)
+
+		if (Result == USBD_CTRLR_XFER_SUCCESS && Length > 0U &&
+			Length <= pFunc->BulkMps)
 		{
-			(void)UsbdBulkIntrfPutRxData(pFunc->pBulk,
-				UsbdCdcFuncRxBuffer(pFunc), Length);
-			UsbdCdcFuncRxKick(pFunc->pBulk, pFunc);
+			const uint32_t put = UsbdCdcFuncRxPut(pFunc);
+			const uint32_t get = UsbdCdcFuncRxGet(pFunc);
+			if ((put - get) < USBD_CDC_RX_STAGE_COUNT)
+			{
+				UsbdCdcRxStage_t *pStage = UsbdCdcFuncRxStage(pFunc, put);
+				pStage->Length = Length;
+				__atomic_store_n(&pFunc->RxPut, put + 1U, __ATOMIC_RELEASE);
+			}
 		}
+
+		// A failed or zero-length OUT consumes no application FIFO space. Rearm
+		// immediately when another private staging slot is available.
+		UsbdCdcFuncRxKick(pFunc->pBulk, pFunc);
 		return;
 	}
 
 	if (EpAddr == USBD_CDC_DATA_IN_EP(pFunc->FunctionNo))
 	{
-		if (pFunc->TxZlpActive)
+		pFunc->TxCompleteLength = Length;
+		pFunc->TxCompleteExpected = pFunc->TxZlpActive ? 0U : pFunc->TxLength;
+		pFunc->TxCompleteResult = Result;
+
+		// A successful payload is already owned by the host. Clear its staged
+		// length before publishing completion so a simultaneous USB reset cannot
+		// cause the same payload to be retransmitted after re-enumeration.
+		if (!pFunc->TxZlpActive && Result == USBD_CTRLR_XFER_SUCCESS)
 		{
-			pFunc->TxZlpActive = false;
-			if (Result == USBD_CTRLR_XFER_SUCCESS)
-			{
-				UsbdBulkIntrfTxComplete(pFunc->pBulk);
-			}
-			return;
+			pFunc->TxLength = 0U;
 		}
 
-		pFunc->TxActive = false;
-		if (Result != USBD_CTRLR_XFER_SUCCESS)
-		{
-			return;
-		}
-
-		pFunc->TxLength = 0U;
-
-		if (Length != 0U && (Length % pFunc->BulkMps) == 0U &&
-			UsbdBulkIntrfTxUsed(pFunc->pBulk) == 0)
-		{
-			if (UsbdCtrlrEpXfer(USBD_CDC_DATA_IN_EP(pFunc->FunctionNo),
-							nullptr, 0U))
-			{
-				pFunc->TxZlpActive = true;
-				return;
-			}
-		}
-
-		UsbdBulkIntrfTxComplete(pFunc->pBulk);
+		__atomic_store_n(&pFunc->TxCompletePending, true, __ATOMIC_RELEASE);
 		return;
 	}
 
@@ -452,23 +457,152 @@ static void UsbdCdcFuncReset(void *pContext)
 		return;
 	}
 
-	const bool wasOpen = UsbdCdcFuncPortIsOpen(pFunc);
-
 	pFunc->Configured = false;
-	pFunc->RxActive = false;
-	pFunc->TxActive = false;
-	pFunc->TxZlpActive = false;
-	pFunc->NotifActive = false;
-	pFunc->SerialStatePending = false;
 	pFunc->ControlLineState = 0U;
 	pFunc->PendingControlLineState = 0U;
 	pFunc->SerialState = 0U;
+	UsbdCdcFuncCancelBusState(pFunc);
 	UsbdCdcFuncDefaultLineCoding(pFunc);
+}
 
-	if (wasOpen)
+static void UsbdCdcFuncProcessRx(UsbdCdcFunc_t *pFunc)
+{
+	if (!pFunc->pBulk->bEnabled)
 	{
-		UsbdCdcFuncNotifyPortState(pFunc, false);
+		return;
 	}
+
+	for (;;)
+	{
+		const uint32_t get = UsbdCdcFuncRxGet(pFunc);
+		const uint32_t put = UsbdCdcFuncRxPut(pFunc);
+		if (get == put)
+		{
+			break;
+		}
+
+		UsbdCdcRxStage_t *pStage = UsbdCdcFuncRxStage(pFunc, get);
+		const uint16_t length = pStage->Length;
+
+		if (pFunc->pBulk->hRxFifo->bBlocking &&
+			CFifoAvail(pFunc->pBulk->hRxFifo) < length)
+		{
+			break;
+		}
+
+		if (length > 0U)
+		{
+			const int accepted = UsbdBulkIntrfPutRxData(
+				pFunc->pBulk, UsbdCdcFuncRxBuffer(pStage), length);
+			if (accepted != length)
+			{
+				// Blocking FIFOs are checked above; a short write can only mean
+				// the application violated CFifo's single-context requirement.
+				break;
+			}
+		}
+
+		pStage->Length = 0U;
+		__atomic_store_n(&pFunc->RxGet, get + 1U, __ATOMIC_RELEASE);
+	}
+}
+
+static void UsbdCdcFuncReportTxFailure(UsbdCdcFunc_t *pFunc, uint16_t Length)
+{
+	if (pFunc->pBulk->DevIntrf.EvtCB != nullptr)
+	{
+		pFunc->pBulk->DevIntrf.EvtCB(&pFunc->pBulk->DevIntrf,
+									  DEVINTRF_EVT_TX_TIMEOUT,
+									  nullptr, Length);
+	}
+}
+
+static void UsbdCdcFuncTryZlp(UsbdCdcFunc_t *pFunc)
+{
+	if (!pFunc->TxZlpRequired || pFunc->TxZlpActive ||
+		!pFunc->pBulk->bEnabled || !UsbdCdcFuncPortIsOpen(pFunc))
+	{
+		return;
+	}
+
+	// If more data arrived before the terminating ZLP was started, it is a
+	// continuation of the same byte stream. Suppress the ZLP and send it.
+	if (UsbdBulkIntrfTxUsed(pFunc->pBulk) > 0)
+	{
+		pFunc->TxZlpRequired = false;
+		UsbdBulkIntrfTxComplete(pFunc->pBulk);
+		return;
+	}
+
+	// nRF EasyDMA still captures EPIN.PTR for MAXCNT=0. Keep the pointer in
+	// aligned RAM instead of passing nullptr.
+	pFunc->TxZlpRequired = false;
+	pFunc->TxZlpActive = true;
+	if (!UsbdCtrlrEpXfer(USBD_CDC_DATA_IN_EP(pFunc->FunctionNo),
+						 UsbdCdcFuncTxBuffer(pFunc), 0U))
+	{
+		pFunc->TxZlpActive = false;
+		pFunc->TxZlpRequired = true;
+	}
+}
+
+static void UsbdCdcFuncProcessTx(UsbdCdcFunc_t *pFunc)
+{
+	if (__atomic_exchange_n(&pFunc->TxCompletePending, false,
+							__ATOMIC_ACQ_REL))
+	{
+		const UsbdCtrlrXferResult_t result = pFunc->TxCompleteResult;
+		const uint16_t length = pFunc->TxCompleteLength;
+		const uint16_t expected = pFunc->TxCompleteExpected;
+
+		if (pFunc->TxZlpActive)
+		{
+			pFunc->TxZlpActive = false;
+			if (result == USBD_CTRLR_XFER_SUCCESS && length == 0U)
+			{
+				UsbdBulkIntrfTxComplete(pFunc->pBulk);
+			}
+			else
+			{
+				// Retrying a ZLP cannot duplicate payload bytes.
+				pFunc->TxZlpRequired = true;
+			}
+		}
+		else if (pFunc->TxActive)
+		{
+			pFunc->TxActive = false;
+
+			if (result == USBD_CTRLR_XFER_SUCCESS && length == expected)
+			{
+				pFunc->TxLength = 0U;
+				if (length != 0U && (length % pFunc->BulkMps) == 0U &&
+					UsbdBulkIntrfTxUsed(pFunc->pBulk) == 0)
+				{
+					pFunc->TxZlpRequired = true;
+				}
+				else
+				{
+					UsbdBulkIntrfTxComplete(pFunc->pBulk);
+				}
+			}
+			else if (length == 0U)
+			{
+				// No payload byte reached the host, so retrying the staged
+				// request is safe. TxLength intentionally remains unchanged.
+				UsbdCdcFuncTxKick(pFunc->pBulk, pFunc);
+			}
+			else
+			{
+				// Some bytes may already have reached the host. Never resend the
+				// whole staged packet after a short or failed completion.
+				pFunc->TxLength = 0U;
+				UsbdCdcFuncReportTxFailure(pFunc, length);
+				UsbdBulkIntrfTxComplete(pFunc->pBulk);
+			}
+		}
+	}
+
+	UsbdCdcFuncTryZlp(pFunc);
 }
 
 bool UsbdCdcFuncInit(UsbdCdcFunc_t *pFunc, int FunctionNo,
@@ -486,6 +620,9 @@ bool UsbdCdcFuncInit(UsbdCdcFunc_t *pFunc, int FunctionNo,
 	pFunc->FunctionNo = FunctionNo;
 	pFunc->BulkMps = UsbdCdcFuncMps();
 	UsbdCdcFuncDefaultLineCoding(pFunc);
+	__atomic_store_n(&pFunc->RxPut, 0U, __ATOMIC_RELEASE);
+	__atomic_store_n(&pFunc->RxGet, 0U, __ATOMIC_RELEASE);
+	__atomic_store_n(&pFunc->TxCompletePending, false, __ATOMIC_RELEASE);
 
 	UsbdCoreFuncCfg_t cfg = {};
 	cfg.FirstInterface = USBD_CDC_CTRL_INTRF(FunctionNo);
@@ -513,6 +650,31 @@ bool UsbdCdcFuncInit(UsbdCdcFunc_t *pFunc, int FunctionNo,
 	pBulk->pContext = pFunc;
 
 	return true;
+}
+
+void UsbdCdcFuncProcess(UsbdCdcFunc_t *pFunc)
+{
+	if (pFunc == nullptr || pFunc->pBulk == nullptr)
+	{
+		return;
+	}
+
+	const bool open = UsbdCdcFuncPortIsOpen(pFunc);
+	if (open != pFunc->ReportedOpen)
+	{
+		pFunc->ReportedOpen = open;
+		UsbdCdcFuncNotifyPortState(pFunc, open);
+	}
+
+	UsbdCdcFuncProcessRx(pFunc);
+	UsbdCdcFuncProcessTx(pFunc);
+	UsbdCdcFuncNotifKick(pFunc);
+
+	if (pFunc->pBulk->bEnabled && open)
+	{
+		UsbdCdcFuncRxKick(pFunc->pBulk, pFunc);
+		UsbdCdcFuncTxKick(pFunc->pBulk, pFunc);
+	}
 }
 
 const UsbCdcLineCoding_t *UsbdCdcFuncLineCoding(const UsbdCdcFunc_t *pFunc)

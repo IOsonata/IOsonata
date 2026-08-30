@@ -8,7 +8,7 @@ UsbdBulkIntrf and the CDC ACM protocol through UsbdCdcFunc. This source is the
 replacement for usbd_cdc_intrf.cpp when the native USB stack is linked.
 
 @author	Hoang Nguyen Hoan
-@date	Aug. 29, 2026
+@date	Aug. 30, 2026
 
 @license
 
@@ -112,6 +112,20 @@ static int UsbdCdcNativeEvent(DevIntrf_t * const pDevIntrf,
 
 	return pState->AppEvt != nullptr ?
 		pState->AppEvt(&pState->pPublic->DevIntrf, EvtId, pBuffer, Len) : 0;
+}
+
+static void UsbdCdcNativePump(void *pContext)
+{
+	UsbdCdcNativeState_t *pState =
+		static_cast<UsbdCdcNativeState_t *>(pContext);
+	if (pState == nullptr || pState->pPublic == nullptr)
+	{
+		return;
+	}
+
+	UsbdCdcFuncProcess(&pState->Func);
+	pState->pPublic->RxDropCnt = pState->Bulk.hRxFifo->DropCnt;
+	pState->pPublic->TxDropCnt = pState->Bulk.hTxFifo->DropCnt;
 }
 
 static void UsbdCdcNativeDisable(DevIntrf_t * const pDevIntrf)
@@ -293,7 +307,8 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 	bulkCfg.EvtCB = UsbdCdcNativeEvent;
 
 	if (!UsbdBulkIntrfInit(&pState->Bulk, &bulkCfg) ||
-		!UsbdCdcFuncInit(&pState->Func, pCfg->ItfNo, &pState->Bulk))
+		!UsbdCdcFuncInit(&pState->Func, pCfg->ItfNo, &pState->Bulk) ||
+		!UsbDevRegisterFunc(UsbdCdcNativePump, pState))
 	{
 		pState->pPublic = nullptr;
 		pState->AppEvt = nullptr;
@@ -346,9 +361,11 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 
 void UsbdCdcIntrfProcess(UsbdCdcDevIntrf_t * const pIntrf)
 {
-	// Native endpoint data movement is interrupt driven. This entry point is
-	// retained for source compatibility and for future deferred class work.
-	(void)pIntrf;
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromPublic(pIntrf);
+	if (pState != nullptr)
+	{
+		UsbdCdcNativePump(pState);
+	}
 }
 
 bool UsbdCdcIntrfPortIsOpen(UsbdCdcDevIntrf_t * const pIntrf)
