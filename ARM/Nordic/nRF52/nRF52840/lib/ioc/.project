@@ -1281,26 +1281,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sys/dirent.h</locationURI>
 		</link>
 		<link>
-			<name>include/usb/app_usbd_cdc_acm.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/app_usbd_cdc_acm.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/app_usbd_cdc_acm_internal.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/app_usbd_cdc_acm_internal.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/app_usbd_hid.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/app_usbd_hid.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/tusb_config.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/tusb_config.h</locationURI>
-		</link>
-		<link>
 			<name>include/usb/usb_cdcdef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_cdcdef.h</locationURI>
@@ -1336,9 +1316,34 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd.h</locationURI>
 		</link>
 		<link>
+			<name>include/usb/usbd_bulk_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_bulk_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_cdc_desc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc_desc.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_cdc_func.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc_func.h</locationURI>
+		</link>
+		<link>
 			<name>include/usb/usbd_cdc_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_core.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_core.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_ctrlr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_ctrlr.h</locationURI>
 		</link>
 		<link>
 			<name>src/Fusion/Fusion.h</name>
@@ -2351,14 +2356,29 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/usb/tu_dcd_nrfx.c</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/tu_dcd_nrfx.c</locationURI>
-		</link>
-		<link>
 			<name>src/usb/usb_dev.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_dev.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_bulk_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_bulk_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_caps_nrfx.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usbd_caps_nrfx.c</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_cdc_desc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_desc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_cdc_func.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_func.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usbd_cdc_intrf.cpp</name>
@@ -2366,9 +2386,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/usb/usbd_desc_cdc.c</name>
+			<name>src/usb/usbd_core.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_desc_cdc.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_core.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_ctrlr_default.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_ctrlr_default.c</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_ctrlr_nrf52.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/usbd_ctrlr_nrf52.c</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usbd_nrfx.cpp</name>
@@ -3222,11 +3252,6 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/cli/ble_uart</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/cli/cdc_acm</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -4879,11 +4904,6 @@
 			<name>src/nRF5_SDK/libraries/cli/ble_uart/nrf_cli_ble_uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/ble_uart/nrf_cli_ble_uart.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/cli/uart/nrf_cli_uart.c</name>
