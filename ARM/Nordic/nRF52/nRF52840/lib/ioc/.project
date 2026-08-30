@@ -4706,11 +4706,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_rng.c</locationURI>
 		</link>
 		<link>
-			<name>src/nrfx/drivers/src/nrfx_usbd.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_usbd.c</locationURI>
-		</link>
-		<link>
 			<name>src/Invn/Devices/Drivers/Ak0991x/Ak0991x.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Ak0991x/Ak0991x.c</locationURI>
