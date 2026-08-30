@@ -2381,11 +2381,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_ctrlr.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/usb/usbd_desc_cdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_desc_cdc.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/usb/usbd_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/usbd_nrfx.cpp</locationURI>
