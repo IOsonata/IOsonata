@@ -1,11 +1,10 @@
 /**-------------------------------------------------------------------------
-@file	usbd_cdc_intrf_native.cpp
+@file	usbd_cdc_intrf.cpp
 
-@brief	Native IOsonata USB CDC DeviceIntrf adapter.
+@brief	IOsonata USB CDC DeviceIntrf adapter.
 
-Preserves the public UsbdCdcIntrf API while routing the data plane through
-UsbdBulkIntrf and the CDC ACM protocol through UsbdCdcFunc. This source is the
-replacement for usbd_cdc_intrf.cpp when the native USB stack is linked.
+Routes the data plane through UsbdBulkIntrf and the CDC ACM protocol through
+UsbdCdcFunc.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 30, 2026
@@ -42,44 +41,44 @@ SOFTWARE.
 #include "usb/usbd_bulk_intrf.h"
 #include "usbd_cdc_priv.h"
 
-#define USBD_CDC_NATIVE_FUNC_MAXCNT		3
-#define USBD_CDC_NATIVE_DEFAULT_FIFO_MEMSIZE \
+#define USBD_CDC_INTRF_MAXCNT		3
+#define USBD_CDC_DEFAULT_FIFO_MEMSIZE \
 	CFIFO_MEMSIZE(4U * USBD_CDC_BULK_FS_MPS)
 
-typedef struct __Usbd_Cdc_Native_State {
+typedef struct __Usbd_Cdc_State {
 	UsbdBulkDevIntrf_t Bulk;
 	UsbdCdcFunc_t Func;
 	UsbdCdcDevIntrf_t *pPublic;
 	DevIntrfEvtHandler_t AppEvt;
-} UsbdCdcNativeState_t;
+} UsbdCdcState_t;
 
-alignas(4) static uint8_t s_RxFifoMem[USBD_CDC_NATIVE_FUNC_MAXCNT]
-	[USBD_CDC_NATIVE_DEFAULT_FIFO_MEMSIZE];
-alignas(4) static uint8_t s_TxFifoMem[USBD_CDC_NATIVE_FUNC_MAXCNT]
-	[USBD_CDC_NATIVE_DEFAULT_FIFO_MEMSIZE];
-static UsbdCdcNativeState_t s_State[USBD_CDC_NATIVE_FUNC_MAXCNT];
+alignas(4) static uint8_t s_RxFifoMem[USBD_CDC_INTRF_MAXCNT]
+	[USBD_CDC_DEFAULT_FIFO_MEMSIZE];
+alignas(4) static uint8_t s_TxFifoMem[USBD_CDC_INTRF_MAXCNT]
+	[USBD_CDC_DEFAULT_FIFO_MEMSIZE];
+static UsbdCdcState_t s_State[USBD_CDC_INTRF_MAXCNT];
 
-static UsbdCdcNativeState_t *UsbdCdcNativeFromPublic(UsbdCdcDevIntrf_t *pIntrf)
+static UsbdCdcState_t *UsbdCdcFromPublic(UsbdCdcDevIntrf_t *pIntrf)
 {
 	if (pIntrf == nullptr || pIntrf->ItfNo < 0 ||
-		pIntrf->ItfNo >= USBD_CDC_NATIVE_FUNC_MAXCNT)
+		pIntrf->ItfNo >= USBD_CDC_INTRF_MAXCNT)
 	{
 		return nullptr;
 	}
 
-	UsbdCdcNativeState_t *pState = &s_State[pIntrf->ItfNo];
+	UsbdCdcState_t *pState = &s_State[pIntrf->ItfNo];
 	return pState->pPublic == pIntrf ? pState : nullptr;
 }
 
-static UsbdCdcNativeState_t *UsbdCdcNativeFromDev(DevIntrf_t *pDevIntrf)
+static UsbdCdcState_t *UsbdCdcFromDev(DevIntrf_t *pDevIntrf)
 {
 	return pDevIntrf != nullptr ?
-		static_cast<UsbdCdcNativeState_t *>(pDevIntrf->pDevData) : nullptr;
+		static_cast<UsbdCdcState_t *>(pDevIntrf->pDevData) : nullptr;
 }
 
-static UsbdCdcNativeState_t *UsbdCdcNativeFromBulk(DevIntrf_t *pDevIntrf)
+static UsbdCdcState_t *UsbdCdcFromBulk(DevIntrf_t *pDevIntrf)
 {
-	for (int i = 0; i < USBD_CDC_NATIVE_FUNC_MAXCNT; i++)
+	for (int i = 0; i < USBD_CDC_INTRF_MAXCNT; i++)
 	{
 		if (&s_State[i].Bulk.DevIntrf == pDevIntrf &&
 			s_State[i].pPublic != nullptr)
@@ -91,11 +90,11 @@ static UsbdCdcNativeState_t *UsbdCdcNativeFromBulk(DevIntrf_t *pDevIntrf)
 	return nullptr;
 }
 
-static int UsbdCdcNativeEvent(DevIntrf_t * const pDevIntrf,
-							  DEVINTRF_EVT EvtId,
-							  uint8_t *pBuffer, int Len)
+static int UsbdCdcEvent(DevIntrf_t * const pDevIntrf,
+						 DEVINTRF_EVT EvtId,
+						 uint8_t *pBuffer, int Len)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromBulk(pDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromBulk(pDevIntrf);
 	if (pState == nullptr || pState->pPublic == nullptr)
 	{
 		return 0;
@@ -114,10 +113,9 @@ static int UsbdCdcNativeEvent(DevIntrf_t * const pDevIntrf,
 		pState->AppEvt(&pState->pPublic->DevIntrf, EvtId, pBuffer, Len) : 0;
 }
 
-static void UsbdCdcNativePump(void *pContext)
+static void UsbdCdcPump(void *pContext)
 {
-	UsbdCdcNativeState_t *pState =
-		static_cast<UsbdCdcNativeState_t *>(pContext);
+	UsbdCdcState_t *pState = static_cast<UsbdCdcState_t *>(pContext);
 	if (pState == nullptr || pState->pPublic == nullptr)
 	{
 		return;
@@ -128,9 +126,9 @@ static void UsbdCdcNativePump(void *pContext)
 	pState->pPublic->TxDropCnt = pState->Bulk.hTxFifo->DropCnt;
 }
 
-static void UsbdCdcNativeDisable(DevIntrf_t * const pDevIntrf)
+static void UsbdCdcDisable(DevIntrf_t * const pDevIntrf)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromDev(pDevIntrf);
 	if (pState != nullptr)
 	{
 		DeviceIntrfDisable(&pState->Bulk.DevIntrf);
@@ -138,9 +136,9 @@ static void UsbdCdcNativeDisable(DevIntrf_t * const pDevIntrf)
 	}
 }
 
-static void UsbdCdcNativeEnable(DevIntrf_t * const pDevIntrf)
+static void UsbdCdcEnable(DevIntrf_t * const pDevIntrf)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromDev(pDevIntrf);
 	if (pState != nullptr)
 	{
 		DeviceIntrfEnable(&pState->Bulk.DevIntrf);
@@ -148,56 +146,55 @@ static void UsbdCdcNativeEnable(DevIntrf_t * const pDevIntrf)
 	}
 }
 
-static uint32_t UsbdCdcNativeGetRate(DevIntrf_t * const pDevIntrf)
+static uint32_t UsbdCdcGetRate(DevIntrf_t * const pDevIntrf)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromDev(pDevIntrf);
 	return pState != nullptr ? DeviceIntrfGetRate(&pState->Bulk.DevIntrf) : 0;
 }
 
-static uint32_t UsbdCdcNativeSetRate(DevIntrf_t * const pDevIntrf,
-									uint32_t Rate)
+static uint32_t UsbdCdcSetRate(DevIntrf_t * const pDevIntrf, uint32_t Rate)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromDev(pDevIntrf);
 	return pState != nullptr ?
 		DeviceIntrfSetRate(&pState->Bulk.DevIntrf, Rate) : 0;
 }
 
-static bool UsbdCdcNativeStartRx(DevIntrf_t * const pDevIntrf, uint32_t DevAddr)
+static bool UsbdCdcStartRx(DevIntrf_t * const pDevIntrf, uint32_t DevAddr)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromDev(pDevIntrf);
 	return pState != nullptr &&
 		pState->Bulk.DevIntrf.StartRx(&pState->Bulk.DevIntrf, DevAddr);
 }
 
-static int UsbdCdcNativeRxData(DevIntrf_t * const pDevIntrf,
-							   uint8_t *pBuffer, int BufferLen)
+static int UsbdCdcRxData(DevIntrf_t * const pDevIntrf,
+						 uint8_t *pBuffer, int BufferLen)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromDev(pDevIntrf);
 	return pState != nullptr ?
 		pState->Bulk.DevIntrf.RxData(&pState->Bulk.DevIntrf,
 								 pBuffer, BufferLen) : 0;
 }
 
-static void UsbdCdcNativeStopRx(DevIntrf_t * const pDevIntrf)
+static void UsbdCdcStopRx(DevIntrf_t * const pDevIntrf)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromDev(pDevIntrf);
 	if (pState != nullptr)
 	{
 		pState->Bulk.DevIntrf.StopRx(&pState->Bulk.DevIntrf);
 	}
 }
 
-static bool UsbdCdcNativeStartTx(DevIntrf_t * const pDevIntrf, uint32_t DevAddr)
+static bool UsbdCdcStartTx(DevIntrf_t * const pDevIntrf, uint32_t DevAddr)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromDev(pDevIntrf);
 	return pState != nullptr &&
 		pState->Bulk.DevIntrf.StartTx(&pState->Bulk.DevIntrf, DevAddr);
 }
 
-static int UsbdCdcNativeTxData(DevIntrf_t * const pDevIntrf,
-							   const uint8_t *pData, int DataLen)
+static int UsbdCdcTxData(DevIntrf_t * const pDevIntrf,
+						 const uint8_t *pData, int DataLen)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromDev(pDevIntrf);
 	if (pState == nullptr)
 	{
 		return 0;
@@ -209,10 +206,10 @@ static int UsbdCdcNativeTxData(DevIntrf_t * const pDevIntrf,
 	return count;
 }
 
-static int UsbdCdcNativeTxSrData(DevIntrf_t * const pDevIntrf,
-								 const uint8_t *pData, int DataLen)
+static int UsbdCdcTxSrData(DevIntrf_t * const pDevIntrf,
+						   const uint8_t *pData, int DataLen)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromDev(pDevIntrf);
 	if (pState == nullptr)
 	{
 		return 0;
@@ -224,32 +221,32 @@ static int UsbdCdcNativeTxSrData(DevIntrf_t * const pDevIntrf,
 	return count;
 }
 
-static void UsbdCdcNativeStopTx(DevIntrf_t * const pDevIntrf)
+static void UsbdCdcStopTx(DevIntrf_t * const pDevIntrf)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromDev(pDevIntrf);
 	if (pState != nullptr)
 	{
 		pState->Bulk.DevIntrf.StopTx(&pState->Bulk.DevIntrf);
 	}
 }
 
-static void UsbdCdcNativeReset(DevIntrf_t * const pDevIntrf)
+static void UsbdCdcReset(DevIntrf_t * const pDevIntrf)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromDev(pDevIntrf);
 	if (pState != nullptr)
 	{
 		pState->Bulk.DevIntrf.Reset(&pState->Bulk.DevIntrf);
 	}
 }
 
-static void UsbdCdcNativePowerOff(DevIntrf_t * const pDevIntrf)
+static void UsbdCdcPowerOff(DevIntrf_t * const pDevIntrf)
 {
-	UsbdCdcNativeDisable(pDevIntrf);
+	UsbdCdcDisable(pDevIntrf);
 }
 
-static void *UsbdCdcNativeGetHandle(DevIntrf_t * const pDevIntrf)
+static void *UsbdCdcGetHandle(DevIntrf_t * const pDevIntrf)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromDev(pDevIntrf);
 	return pState != nullptr ? pState->pPublic : nullptr;
 }
 
@@ -257,15 +254,14 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 					  const UsbdCdcIntrfCfg_t *pCfg)
 {
 	if (pIntrf == nullptr || pCfg == nullptr ||
-		pCfg->ItfNo < 0 || pCfg->ItfNo >= USBD_CDC_NATIVE_FUNC_MAXCNT)
+		pCfg->ItfNo < 0 || pCfg->ItfNo >= USBD_CDC_INTRF_MAXCNT)
 	{
 		return false;
 	}
 
-	// The first native adapter targets nRF52 USBD. Keeping only three states
-	// avoids reserving four unused high-speed transfer contexts on nRF52840.
-	// The nRF54 DWC2 backend will lift this limit together with negotiated
-	// high-speed endpoint sizing.
+	// The current interface keeps three statically allocated CDC instances.
+	// High-speed operation is not enabled here because the default FIFO sizing
+	// is based on the full-speed CDC packet size.
 	if (UsbdMaxSpeed() != USBD_SPEED_FULL)
 	{
 		return false;
@@ -294,7 +290,7 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 		txMemSize = sizeof(s_TxFifoMem[pCfg->ItfNo]);
 	}
 
-	UsbdCdcNativeState_t *pState = &s_State[pCfg->ItfNo];
+	UsbdCdcState_t *pState = &s_State[pCfg->ItfNo];
 	pState->pPublic = pIntrf;
 	pState->AppEvt = pCfg->EvtCB;
 
@@ -304,11 +300,11 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 	bulkCfg.pRxFifoMem = pRxMem;
 	bulkCfg.TxFifoMemSize = txMemSize;
 	bulkCfg.pTxFifoMem = pTxMem;
-	bulkCfg.EvtCB = UsbdCdcNativeEvent;
+	bulkCfg.EvtCB = UsbdCdcEvent;
 
 	if (!UsbdBulkIntrfInit(&pState->Bulk, &bulkCfg) ||
 		!UsbdCdcFuncInit(&pState->Func, pCfg->ItfNo, &pState->Bulk) ||
-		!UsbDevRegisterFunc(UsbdCdcNativePump, pState))
+		!UsbDevRegisterFunc(UsbdCdcPump, pState))
 	{
 		pState->pPublic = nullptr;
 		pState->AppEvt = nullptr;
@@ -322,20 +318,20 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 	pIntrf->DevIntrf.Type = DEVINTRF_TYPE_USB;
 	pIntrf->DevIntrf.bDma = false;
 	pIntrf->DevIntrf.bIntEn = true;
-	pIntrf->DevIntrf.Disable = UsbdCdcNativeDisable;
-	pIntrf->DevIntrf.Enable = UsbdCdcNativeEnable;
-	pIntrf->DevIntrf.GetRate = UsbdCdcNativeGetRate;
-	pIntrf->DevIntrf.SetRate = UsbdCdcNativeSetRate;
-	pIntrf->DevIntrf.StartRx = UsbdCdcNativeStartRx;
-	pIntrf->DevIntrf.RxData = UsbdCdcNativeRxData;
-	pIntrf->DevIntrf.StopRx = UsbdCdcNativeStopRx;
-	pIntrf->DevIntrf.StartTx = UsbdCdcNativeStartTx;
-	pIntrf->DevIntrf.TxData = UsbdCdcNativeTxData;
-	pIntrf->DevIntrf.TxSrData = UsbdCdcNativeTxSrData;
-	pIntrf->DevIntrf.StopTx = UsbdCdcNativeStopTx;
-	pIntrf->DevIntrf.Reset = UsbdCdcNativeReset;
-	pIntrf->DevIntrf.PowerOff = UsbdCdcNativePowerOff;
-	pIntrf->DevIntrf.GetHandle = UsbdCdcNativeGetHandle;
+	pIntrf->DevIntrf.Disable = UsbdCdcDisable;
+	pIntrf->DevIntrf.Enable = UsbdCdcEnable;
+	pIntrf->DevIntrf.GetRate = UsbdCdcGetRate;
+	pIntrf->DevIntrf.SetRate = UsbdCdcSetRate;
+	pIntrf->DevIntrf.StartRx = UsbdCdcStartRx;
+	pIntrf->DevIntrf.RxData = UsbdCdcRxData;
+	pIntrf->DevIntrf.StopRx = UsbdCdcStopRx;
+	pIntrf->DevIntrf.StartTx = UsbdCdcStartTx;
+	pIntrf->DevIntrf.TxData = UsbdCdcTxData;
+	pIntrf->DevIntrf.TxSrData = UsbdCdcTxSrData;
+	pIntrf->DevIntrf.StopTx = UsbdCdcStopTx;
+	pIntrf->DevIntrf.Reset = UsbdCdcReset;
+	pIntrf->DevIntrf.PowerOff = UsbdCdcPowerOff;
+	pIntrf->DevIntrf.GetHandle = UsbdCdcGetHandle;
 
 	pIntrf->RxDropCnt = 0;
 	pIntrf->TxDropCnt = 0;
@@ -361,16 +357,16 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 
 void UsbdCdcIntrfProcess(UsbdCdcDevIntrf_t * const pIntrf)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromPublic(pIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromPublic(pIntrf);
 	if (pState != nullptr)
 	{
-		UsbdCdcNativePump(pState);
+		UsbdCdcPump(pState);
 	}
 }
 
 bool UsbdCdcIntrfPortIsOpen(UsbdCdcDevIntrf_t * const pIntrf)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromPublic(pIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromPublic(pIntrf);
 	return pState != nullptr && UsbdCdcFuncPortIsOpen(&pState->Func);
 }
 
@@ -386,7 +382,7 @@ bool UsbdCdcIntrf::IsPortOpen(void)
 
 bool UsbdCdcIntrf::RequestToSend(int NbBytes)
 {
-	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromPublic(&vUsbDevIntrf);
+	UsbdCdcState_t *pState = UsbdCdcFromPublic(&vUsbDevIntrf);
 	return pState != nullptr &&
 		UsbdBulkIntrfRequestToSend(&pState->Bulk, NbBytes);
 }

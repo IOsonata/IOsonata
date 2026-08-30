@@ -1,11 +1,10 @@
 /**-------------------------------------------------------------------------
-@file	usb_dev_native.cpp
+@file	usb_dev.cpp
 
-@brief	Native IOsonata USB device runtime.
+@brief	IOsonata USB device runtime.
 
-Owns USB device identity, hardware start/stop sequencing and the native
-UsbdCore lifecycle. This file is the replacement for usb_dev.cpp when the
-native device stack is linked.
+Owns USB device identity, hardware start/stop sequencing and the UsbdCore
+lifecycle.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 29, 2026
@@ -64,7 +63,7 @@ static int UsbDevMaxCdcCount(const UsbdCaps_t *pCaps)
 		return 0;
 	}
 
-	// The native CDC topology uses endpoint 1 for notification and endpoint 2
+	// The CDC topology uses endpoint 1 for notification and endpoint 2
 	// for bulk on the first function, then advances both endpoint numbers by
 	// two. Endpoint counts include EP0, so the smaller direction determines
 	// how many complete CDC functions fit on this controller instance.
