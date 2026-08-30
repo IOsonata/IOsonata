@@ -134,9 +134,31 @@ static bool s_UsbdVbusLevel = false;
 #endif
 
 #ifdef NRFX_USBD_SOFTDEVICE
+/**
+ * Whether a SoftDevice is programmed at all.
+ *
+ * sd_softdevice_is_enabled is an SVC. On a part with no SoftDevice in flash
+ * nothing implements that vector, so the call lands in the default handler
+ * and stops there. The image has to be found before it may be asked
+ * anything. Same test as SdPresent in nvm_nrfx.cpp.
+ */
+static bool UsbdSdPresent(void)
+{
+#if defined(SD_MAGIC_NUMBER) && defined(MBR_SIZE)
+	return SD_MAGIC_NUMBER_GET(MBR_SIZE) == SD_MAGIC_NUMBER;
+#else
+	return false;
+#endif
+}
+
 static bool UsbdSdRunning(void)
 {
 	uint8_t en = 0;
+
+	if (UsbdSdPresent() == false)
+	{
+		return false;
+	}
 
 	if (sd_softdevice_is_enabled(&en) != NRF_SUCCESS)
 	{
