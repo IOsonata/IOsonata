@@ -41,6 +41,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "blueio_board.h"
 
+// Board selection: nRF54LM20 DK. Comment out for a custom board (else branch).
+#define NORDIC_DK
+
 // IBK-NRF5x
 #ifdef NORDIC_DK
 
