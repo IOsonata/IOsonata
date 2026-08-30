@@ -1321,19 +1321,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_bulk_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>include/usb/usbd_cdc_desc.h</name>
+			<name>include/usb/usbd_cdc.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc_desc.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd_cdc_func.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc_func.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd_cdc_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc_intrf.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc.h</locationURI>
 		</link>
 		<link>
 			<name>include/usb/usbd_core.h</name>
@@ -2376,11 +2366,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_desc.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/usb/usbd_cdc_func.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_func.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/usb/usbd_cdc_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_intrf.cpp</locationURI>
@@ -2391,14 +2376,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_core.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/usb/usbd_ctrlr_default.c</name>
+			<name>src/usb/usbd_ctrlr.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_ctrlr_default.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_ctrlr.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/usb/usbd_ctrlr_nrf52.c</name>
+			<name>src/usb/usbd_desc_cdc.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/usbd_ctrlr_nrf52.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_desc_cdc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usbd_nrfx.cpp</name>
