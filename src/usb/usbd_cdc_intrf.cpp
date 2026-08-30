@@ -1,21 +1,20 @@
 /**-------------------------------------------------------------------------
-@file	usbd_cdc_intrf.cpp
+@file	usbd_cdc_intrf_native.cpp
 
-@brief	Generic implementation of USBD CDC device interface
+@brief	Native IOsonata USB CDC DeviceIntrf adapter.
 
-Moves data between a CDC function of the device stack and a pair of CFIFOs,
-and presents that as a DeviceIntrf. Generic over the controller : everything
-part specific is behind usbd.h.
-
+Preserves the public UsbdCdcIntrf API while routing the data plane through
+UsbdBulkIntrf and the CDC ACM protocol through UsbdCdcFunc. This source is the
+replacement for usbd_cdc_intrf.cpp when the native USB stack is linked.
 
 @author	Hoang Nguyen Hoan
-@date	May 2, 2024
+@date	Aug. 30, 2026
 
 @license
 
 MIT License
 
-Copyright (c) 2024, I-SYST inc., all rights reserved
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -38,574 +37,341 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "tusb.h"
-
-#include "istddef.h"
-#include "cfifo.h"
-#include "usb/usbd_cdc_intrf.h"
 #include "usb/usb_dev.h"
-#include "coredev/interrupt.h"
+#include "usb/usbd_cdc_intrf.h"
+#include "usb/usbd_bulk_intrf.h"
+#include "usb/usbd_cdc_func.h"
 
-#define USBD_CDC_PACKET_SIZE			(64)
-#define USBD_CDC_CFIFO_MEMSIZE			CFIFO_MEMSIZE(4 * USBD_CDC_PACKET_SIZE)
+#define USBD_CDC_NATIVE_FUNC_MAXCNT		3
+#define USBD_CDC_NATIVE_DEFAULT_FIFO_MEMSIZE \
+	CFIFO_MEMSIZE(4U * USBD_CDC_BULK_FS_MPS)
 
-alignas(4) static uint8_t s_UsbdCdcDevIntrfRxFifoMem[CFG_TUD_CDC][USBD_CDC_CFIFO_MEMSIZE];
-alignas(4) static uint8_t s_UsbdCdcDevIntrfTxFifoMem[CFG_TUD_CDC][USBD_CDC_CFIFO_MEMSIZE];
+typedef struct __Usbd_Cdc_Native_State {
+	UsbdBulkDevIntrf_t Bulk;
+	UsbdCdcFunc_t Func;
+	UsbdCdcDevIntrf_t *pPublic;
+	DevIntrfEvtHandler_t AppEvt;
+} UsbdCdcNativeState_t;
 
-//
-// One instance per CDC function of the device stack. File scope because the
-// index belongs to the controller, not to any one instance, and two instances
-// claiming the same function would each move half the data and neither would
-// report an error.
-//
-static UsbdCdcDevIntrf_t *s_pUsbdCdcIntrf[CFG_TUD_CDC] = { nullptr };
+alignas(4) static uint8_t s_RxFifoMem[USBD_CDC_NATIVE_FUNC_MAXCNT]
+	[USBD_CDC_NATIVE_DEFAULT_FIFO_MEMSIZE];
+alignas(4) static uint8_t s_TxFifoMem[USBD_CDC_NATIVE_FUNC_MAXCNT]
+	[USBD_CDC_NATIVE_DEFAULT_FIFO_MEMSIZE];
+static UsbdCdcNativeState_t s_State[USBD_CDC_NATIVE_FUNC_MAXCNT];
 
-/**
- * @brief - Disable
- * 		Turn off the interface.  If this is a physical interface, provide a
- * way to turn off for energy saving. Make sure the turn off procedure can
- * be turned back on without going through the full init sequence
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- *
- * @return None
- */
-void UsbdCdcIntrfDisable(DevIntrf_t *pDevIntrf)
+static UsbdCdcNativeState_t *UsbdCdcNativeFromPublic(UsbdCdcDevIntrf_t *pIntrf)
 {
-	UsbdCdcDevIntrf_t *intrf = (UsbdCdcDevIntrf_t*)pDevIntrf->pDevData;
+	if (pIntrf == nullptr || pIntrf->ItfNo < 0 ||
+		pIntrf->ItfNo >= USBD_CDC_NATIVE_FUNC_MAXCNT)
+	{
+		return nullptr;
+	}
 
-	//
-	// Stops the data plane and leaves the FIFOs and the bus alone. The USB
-	// device itself is started and stopped by UsbDev, because it is one
-	// controller shared by every function on it.
-	//
-	intrf->bEnabled = false;
+	UsbdCdcNativeState_t *pState = &s_State[pIntrf->ItfNo];
+	return pState->pPublic == pIntrf ? pState : nullptr;
 }
 
-/**
- * @brief - Enable
- * 		Turn on the interface.
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- *
- * @return None
- */
-void UsbdCdcIntrfEnable(DevIntrf_t *pDevIntrf)
+static UsbdCdcNativeState_t *UsbdCdcNativeFromDev(DevIntrf_t *pDevIntrf)
 {
-	UsbdCdcDevIntrf_t *intrf = (UsbdCdcDevIntrf_t*)pDevIntrf->pDevData;
-
-	intrf->bEnabled = true;
+	return pDevIntrf != nullptr ?
+		static_cast<UsbdCdcNativeState_t *>(pDevIntrf->pDevData) : nullptr;
 }
 
-/**
- * @brief - GetRate
- * 		Get data rate of the interface in Hertz.  This is not a clock frequency
- * but rather the transfer frequency (number of transfers per second). It has meaning base on the
- * implementation as bits/sec or bytes/sec or whatever the case
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- *
- * @return Transfer rate per second
- */
-uint32_t UsbdCdcIntrfGetRate(DevIntrf_t *pDevIntrf)
+static UsbdCdcNativeState_t *UsbdCdcNativeFromBulk(DevIntrf_t *pDevIntrf)
 {
-	//
-	// A CDC function has a line coding the host sets, but nothing on this
-	// side runs at it. There is no rate to report.
-	//
-	return 0;
+	for (int i = 0; i < USBD_CDC_NATIVE_FUNC_MAXCNT; i++)
+	{
+		if (&s_State[i].Bulk.DevIntrf == pDevIntrf &&
+			s_State[i].pPublic != nullptr)
+		{
+			return &s_State[i];
+		}
+	}
+
+	return nullptr;
 }
 
-/**
- * @brief - SetRate
- * 		Set data rate of the interface in Hertz.  This is not a clock frequency
- * but rather the transfer frequency (number of transfers per second). It has meaning base on the
- * implementation as bits/sec or bytes/sec or whatever the case
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- * 		Rate 	  : Data rate to be set in Hertz (transfer per second)
- *
- * @return 	Actual transfer rate per second set.  It is the real capable rate
- * 			closes to rate being requested.
- */
-uint32_t UsbdCdcIntrfSetRate(DevIntrf_t *pDevIntrf, uint32_t Rate)
+static int UsbdCdcNativeEvent(DevIntrf_t * const pDevIntrf,
+							  DEVINTRF_EVT EvtId,
+							  uint8_t *pBuffer, int Len)
 {
-	return 0;
-}
-
-/**
- * @brief - StartRx
- * 		Prepare start condition to receive data with subsequence RxData.
- * This can be in case such as start condition for I2C or Chip Select for
- * SPI or precondition for DMA transfer or whatever requires it or not
- * This function must check & set the busy state for re-entrancy
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- * 		DevAddr   : The device selection id scheme
- *
- * @return 	true - Success
- * 			false - failed.
- */
-bool UsbdCdcIntrfStartRx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
-{
-	//
-	// A CDC function is a byte stream with no addressing and no transaction
-	// to begin. Receiving is whatever is already in the FIFO.
-	//
-	return true;
-}
-
-/**
- * @brief - RxData : retrieve 1 packet of received data
- * 		Receive data into pBuff passed in parameter.  Assuming StartRx was
- * called prior calling this function to get the actual data. BufferLen
- * to receive data must be at least 1 packet in size.  Otherwise remaining
- * bytes are dropped.
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- * 		pBuff 	  : Pointer to memory area to receive data.
- * 		BuffLen   : Length of buffer memory in bytes. Must be at least 1 packet
- * 		            in size.  Otherwise remaining bytes are dropped.
- *
- * @return	Number of bytes read
- */
-int UsbdCdcIntrfRxData(DevIntrf_t *pDevIntrf, uint8_t *pBuff, int Bufflen)
-{
-	UsbdCdcDevIntrf_t *intrf = (UsbdCdcDevIntrf_t*)pDevIntrf->pDevData;
-
-	if (pBuff == nullptr || Bufflen <= 0)
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromBulk(pDevIntrf);
+	if (pState == nullptr || pState->pPublic == nullptr)
 	{
 		return 0;
 	}
 
-	//
-	// CFifoRead and not CFifoGetMultiple : the second returns one contiguous
-	// run and stops at the wrap, so a caller asking for more than the tail
-	// would be told the FIFO was empty while it was not.
-	//
-	return CFifoRead(intrf->hRxFifo, pBuff, Bufflen);
+	if (EvtId == DEVINTRF_EVT_STATECHG)
+	{
+		pState->pPublic->bPortOpen = Len != 0;
+	}
+	else if (EvtId == DEVINTRF_EVT_RX_FIFO_FULL)
+	{
+		pState->pPublic->RxDropCnt = pState->Bulk.hRxFifo->DropCnt;
+	}
+
+	return pState->AppEvt != nullptr ?
+		pState->AppEvt(&pState->pPublic->DevIntrf, EvtId, pBuffer, Len) : 0;
 }
 
-/**
- * @brief - StopRx
- * 		Completion of read data phase. Do require post processing
- * after data has been received via RxData
- * This function must clear the busy state for re-entrancy
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- *
- * @return	None
- */
-void UsbdCdcIntrfStopRx(DevIntrf_t *pSerDev)
+static void UsbdCdcNativePump(void *pContext)
 {
+	UsbdCdcNativeState_t *pState =
+		static_cast<UsbdCdcNativeState_t *>(pContext);
+	if (pState == nullptr || pState->pPublic == nullptr)
+	{
+		return;
+	}
+
+	UsbdCdcFuncProcess(&pState->Func);
+	pState->pPublic->RxDropCnt = pState->Bulk.hRxFifo->DropCnt;
+	pState->pPublic->TxDropCnt = pState->Bulk.hTxFifo->DropCnt;
 }
 
-/**
- * @brief - StartTx
- * 		Prepare start condition to transfer data with subsequence TxData.
- * This can be in case such as start condition for I2C or Chip Select for
- * SPI or precondition for DMA transfer or whatever requires it or not
- * This function must check & set the busy state for re-entrancy
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- * 		DevAddr   : The device selection id scheme
- *
- * @return 	true - Success
- * 			false - failed
- */
-bool UsbdCdcIntrfStartTx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
+static void UsbdCdcNativeDisable(DevIntrf_t * const pDevIntrf)
 {
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	if (pState != nullptr)
+	{
+		DeviceIntrfDisable(&pState->Bulk.DevIntrf);
+		pState->pPublic->bEnabled = false;
+	}
+}
+
+static void UsbdCdcNativeEnable(DevIntrf_t * const pDevIntrf)
+{
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	if (pState != nullptr)
+	{
+		DeviceIntrfEnable(&pState->Bulk.DevIntrf);
+		pState->pPublic->bEnabled = true;
+	}
+}
+
+static uint32_t UsbdCdcNativeGetRate(DevIntrf_t * const pDevIntrf)
+{
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	return pState != nullptr ? DeviceIntrfGetRate(&pState->Bulk.DevIntrf) : 0;
+}
+
+static uint32_t UsbdCdcNativeSetRate(DevIntrf_t * const pDevIntrf,
+									uint32_t Rate)
+{
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	return pState != nullptr ?
+		DeviceIntrfSetRate(&pState->Bulk.DevIntrf, Rate) : 0;
+}
+
+static bool UsbdCdcNativeStartRx(DevIntrf_t * const pDevIntrf, uint32_t DevAddr)
+{
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	return pState != nullptr &&
+		pState->Bulk.DevIntrf.StartRx(&pState->Bulk.DevIntrf, DevAddr);
+}
+
+static int UsbdCdcNativeRxData(DevIntrf_t * const pDevIntrf,
+							   uint8_t *pBuffer, int BufferLen)
+{
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	return pState != nullptr ?
+		pState->Bulk.DevIntrf.RxData(&pState->Bulk.DevIntrf,
+								 pBuffer, BufferLen) : 0;
+}
+
+static void UsbdCdcNativeStopRx(DevIntrf_t * const pDevIntrf)
+{
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	if (pState != nullptr)
+	{
+		pState->Bulk.DevIntrf.StopRx(&pState->Bulk.DevIntrf);
+	}
+}
+
+static bool UsbdCdcNativeStartTx(DevIntrf_t * const pDevIntrf, uint32_t DevAddr)
+{
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	return pState != nullptr &&
+		pState->Bulk.DevIntrf.StartTx(&pState->Bulk.DevIntrf, DevAddr);
+}
+
+static int UsbdCdcNativeTxData(DevIntrf_t * const pDevIntrf,
+							   const uint8_t *pData, int DataLen)
+{
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	if (pState == nullptr)
+	{
+		return 0;
+	}
+
+	const int count = pState->Bulk.DevIntrf.TxData(&pState->Bulk.DevIntrf,
+											 pData, DataLen);
+	pState->pPublic->TxDropCnt = pState->Bulk.hTxFifo->DropCnt;
+	return count;
+}
+
+static int UsbdCdcNativeTxSrData(DevIntrf_t * const pDevIntrf,
+								 const uint8_t *pData, int DataLen)
+{
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	if (pState == nullptr)
+	{
+		return 0;
+	}
+
+	const int count = pState->Bulk.DevIntrf.TxSrData(&pState->Bulk.DevIntrf,
+											   pData, DataLen);
+	pState->pPublic->TxDropCnt = pState->Bulk.hTxFifo->DropCnt;
+	return count;
+}
+
+static void UsbdCdcNativeStopTx(DevIntrf_t * const pDevIntrf)
+{
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	if (pState != nullptr)
+	{
+		pState->Bulk.DevIntrf.StopTx(&pState->Bulk.DevIntrf);
+	}
+}
+
+static void UsbdCdcNativeReset(DevIntrf_t * const pDevIntrf)
+{
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	if (pState != nullptr)
+	{
+		pState->Bulk.DevIntrf.Reset(&pState->Bulk.DevIntrf);
+	}
+}
+
+static void UsbdCdcNativePowerOff(DevIntrf_t * const pDevIntrf)
+{
+	UsbdCdcNativeDisable(pDevIntrf);
+}
+
+static void *UsbdCdcNativeGetHandle(DevIntrf_t * const pDevIntrf)
+{
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromDev(pDevIntrf);
+	return pState != nullptr ? pState->pPublic : nullptr;
+}
+
+bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
+					  const UsbdCdcIntrfCfg_t *pCfg)
+{
+	if (pIntrf == nullptr || pCfg == nullptr ||
+		pCfg->ItfNo < 0 || pCfg->ItfNo >= USBD_CDC_NATIVE_FUNC_MAXCNT)
+	{
+		return false;
+	}
+
+	// The first native adapter targets nRF52 USBD. Keeping only three states
+	// avoids reserving four unused high-speed transfer contexts on nRF52840.
+	// The nRF54 DWC2 backend will lift this limit together with negotiated
+	// high-speed endpoint sizing.
+	if (UsbdMaxSpeed() != USBD_SPEED_FULL)
+	{
+		return false;
+	}
+
+	const UsbDevCfg_t *pDevCfg = UsbDevGetCfg();
+	if (pDevCfg == nullptr || pCfg->ItfNo >= pDevCfg->NbCdc ||
+		s_State[pCfg->ItfNo].pPublic != nullptr)
+	{
+		return false;
+	}
+
+	uint8_t *pRxMem = pCfg->pRxFifoMem;
+	int rxMemSize = pCfg->RxFifoMemSize;
+	uint8_t *pTxMem = pCfg->pTxFifoMem;
+	int txMemSize = pCfg->TxFifoMemSize;
+
+	if (pRxMem == nullptr)
+	{
+		pRxMem = s_RxFifoMem[pCfg->ItfNo];
+		rxMemSize = sizeof(s_RxFifoMem[pCfg->ItfNo]);
+	}
+	if (pTxMem == nullptr)
+	{
+		pTxMem = s_TxFifoMem[pCfg->ItfNo];
+		txMemSize = sizeof(s_TxFifoMem[pCfg->ItfNo]);
+	}
+
+	UsbdCdcNativeState_t *pState = &s_State[pCfg->ItfNo];
+	pState->pPublic = pIntrf;
+	pState->AppEvt = pCfg->EvtCB;
+
+	UsbdBulkIntrfCfg_t bulkCfg = {};
+	bulkCfg.bBlocking = pCfg->bBlocking;
+	bulkCfg.RxFifoMemSize = rxMemSize;
+	bulkCfg.pRxFifoMem = pRxMem;
+	bulkCfg.TxFifoMemSize = txMemSize;
+	bulkCfg.pTxFifoMem = pTxMem;
+	bulkCfg.EvtCB = UsbdCdcNativeEvent;
+
+	if (!UsbdBulkIntrfInit(&pState->Bulk, &bulkCfg) ||
+		!UsbdCdcFuncInit(&pState->Func, pCfg->ItfNo, &pState->Bulk) ||
+		!UsbDevRegisterFunc(UsbdCdcNativePump, pState))
+	{
+		pState->pPublic = nullptr;
+		pState->AppEvt = nullptr;
+		return false;
+	}
+
+	pIntrf->DevIntrf.pDevData = pState;
+	pIntrf->DevIntrf.IntPrio = 0;
+	pIntrf->DevIntrf.EvtCB = pCfg->EvtCB;
+	pIntrf->DevIntrf.MaxRetry = 0;
+	pIntrf->DevIntrf.Type = DEVINTRF_TYPE_USB;
+	pIntrf->DevIntrf.bDma = false;
+	pIntrf->DevIntrf.bIntEn = true;
+	pIntrf->DevIntrf.Disable = UsbdCdcNativeDisable;
+	pIntrf->DevIntrf.Enable = UsbdCdcNativeEnable;
+	pIntrf->DevIntrf.GetRate = UsbdCdcNativeGetRate;
+	pIntrf->DevIntrf.SetRate = UsbdCdcNativeSetRate;
+	pIntrf->DevIntrf.StartRx = UsbdCdcNativeStartRx;
+	pIntrf->DevIntrf.RxData = UsbdCdcNativeRxData;
+	pIntrf->DevIntrf.StopRx = UsbdCdcNativeStopRx;
+	pIntrf->DevIntrf.StartTx = UsbdCdcNativeStartTx;
+	pIntrf->DevIntrf.TxData = UsbdCdcNativeTxData;
+	pIntrf->DevIntrf.TxSrData = UsbdCdcNativeTxSrData;
+	pIntrf->DevIntrf.StopTx = UsbdCdcNativeStopTx;
+	pIntrf->DevIntrf.Reset = UsbdCdcNativeReset;
+	pIntrf->DevIntrf.PowerOff = UsbdCdcNativePowerOff;
+	pIntrf->DevIntrf.GetHandle = UsbdCdcNativeGetHandle;
+
+	pIntrf->RxDropCnt = 0;
+	pIntrf->TxDropCnt = 0;
+	memset(pIntrf->TransBuff, 0, sizeof(pIntrf->TransBuff));
+	pIntrf->TransBuffLen = 0;
+	pIntrf->TxPendingOfs = 0;
+	pIntrf->TxPendingLen = 0;
+	pIntrf->RxErrCnt = 0;
+	pIntrf->TxBusyCnt = 0;
+	pIntrf->hRxFifo = pState->Bulk.hRxFifo;
+	pIntrf->hTxFifo = pState->Bulk.hTxFifo;
+	pIntrf->ItfNo = pCfg->ItfNo;
+	pIntrf->bEnabled = true;
+	pIntrf->bPortOpen = false;
+
+	atomic_flag_clear(&pIntrf->DevIntrf.bBusy);
+	atomic_store(&pIntrf->DevIntrf.EnCnt, 1);
+	atomic_store(&pIntrf->DevIntrf.bTxReady, true);
+	atomic_store(&pIntrf->DevIntrf.bNoStop, false);
+
 	return true;
 }
 
-/**
- * Move whatever the endpoint will take from the staging buffer. Returns true
- * when the buffer is empty, so the caller knows it may stage more.
- */
-static bool UsbdCdcIntrfTxPending(UsbdCdcDevIntrf_t *pIntrf)
+void UsbdCdcIntrfProcess(UsbdCdcDevIntrf_t * const pIntrf)
 {
-	if (pIntrf->TxPendingOfs >= pIntrf->TxPendingLen)
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromPublic(pIntrf);
+	if (pState != nullptr)
 	{
-		pIntrf->TxPendingOfs = 0;
-		pIntrf->TxPendingLen = 0;
-		return true;
-	}
-
-	uint32_t avail = tud_cdc_n_write_available(pIntrf->ItfNo);
-
-	if (avail == 0)
-	{
-		pIntrf->TxBusyCnt++;
-		return false;
-	}
-
-	int len = pIntrf->TxPendingLen - pIntrf->TxPendingOfs;
-
-	if (len > (int)avail)
-	{
-		len = (int)avail;
-	}
-
-	uint32_t written = tud_cdc_n_write(pIntrf->ItfNo,
-									   &pIntrf->TransBuff[pIntrf->TxPendingOfs],
-									   (uint32_t)len);
-
-	if (written > (uint32_t)len)
-	{
-		pIntrf->TxDropCnt++;
-		return false;
-	}
-
-	pIntrf->TxPendingOfs += (int)written;
-
-	if (written != (uint32_t)len)
-	{
-		//
-		// Nothing is lost. What was not accepted stays in TransBuff and the
-		// next pass resumes at the same offset.
-		//
-		return false;
-	}
-
-	if (pIntrf->TxPendingOfs >= pIntrf->TxPendingLen)
-	{
-		pIntrf->TxPendingOfs = 0;
-		pIntrf->TxPendingLen = 0;
-	}
-
-	return true;
-}
-
-static void UsbdCdcIntrfProcessTx(UsbdCdcDevIntrf_t *pIntrf)
-{
-	while (true)
-	{
-		if (pIntrf->TxPendingLen != 0)
-		{
-			if (UsbdCdcIntrfTxPending(pIntrf) == false)
-			{
-				break;
-			}
-			continue;
-		}
-
-		int used = CFifoUsed(pIntrf->hTxFifo);
-
-		if (used <= 0)
-		{
-			break;
-		}
-
-		uint32_t avail = tud_cdc_n_write_available(pIntrf->ItfNo);
-
-		if (avail == 0)
-		{
-			pIntrf->TxBusyCnt++;
-			break;
-		}
-
-		int len = min(used, (int)sizeof(pIntrf->TransBuff));
-
-		if (len > (int)avail)
-		{
-			len = (int)avail;
-		}
-
-		int cnt = CFifoRead(pIntrf->hTxFifo, pIntrf->TransBuff, len);
-
-		if (cnt <= 0)
-		{
-			break;
-		}
-
-		pIntrf->TxPendingOfs = 0;
-		pIntrf->TxPendingLen = cnt;
-
-		if (UsbdCdcIntrfTxPending(pIntrf) == false)
-		{
-			break;
-		}
-	}
-
-	tud_cdc_n_write_flush(pIntrf->ItfNo);
-
-	if (pIntrf->TxPendingLen == 0 && CFifoUsed(pIntrf->hTxFifo) <= 0 &&
-		pIntrf->DevIntrf.EvtCB != nullptr)
-	{
-		pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf, DEVINTRF_EVT_TX_FIFO_EMPTY,
-							   nullptr, 0);
-	}
-}
-
-static void UsbdCdcIntrfProcessRx(UsbdCdcDevIntrf_t *pIntrf)
-{
-	uint8_t buff[USBD_CDC_INTRF_TRANSBUFF_MAXLEN];
-
-	while (tud_cdc_n_available(pIntrf->ItfNo) > 0)
-	{
-		int room = CFifoAvail(pIntrf->hRxFifo);
-
-		if (room <= 0)
-		{
-			//
-			// Left in the endpoint buffer rather than read and thrown away.
-			// The host stops when its buffer fills, which is flow control the
-			// application gets for free by not draining.
-			//
-			if (pIntrf->DevIntrf.EvtCB != nullptr)
-			{
-				pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-									   DEVINTRF_EVT_RX_FIFO_FULL, nullptr, 0);
-			}
-			break;
-		}
-
-		uint32_t len = tud_cdc_n_available(pIntrf->ItfNo);
-
-		if (len > sizeof(buff))
-		{
-			len = sizeof(buff);
-		}
-		if (len > (uint32_t)room)
-		{
-			len = (uint32_t)room;
-		}
-
-		uint32_t cnt = tud_cdc_n_read(pIntrf->ItfNo, buff, len);
-
-		if (cnt == 0 || cnt > len)
-		{
-			pIntrf->RxErrCnt++;
-			break;
-		}
-
-		int written = CFifoWrite(pIntrf->hRxFifo, buff, (int)cnt);
-
-		if (written != (int)cnt)
-		{
-			pIntrf->RxDropCnt += cnt - (uint32_t)(written > 0 ? written : 0);
-			break;
-		}
-
-		if (pIntrf->DevIntrf.EvtCB != nullptr)
-		{
-			pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf, DEVINTRF_EVT_RX_DATA,
-								   nullptr, CFifoUsed(pIntrf->hRxFifo));
-		}
+		UsbdCdcNativePump(pState);
 	}
 }
 
 bool UsbdCdcIntrfPortIsOpen(UsbdCdcDevIntrf_t * const pIntrf)
 {
-	if (pIntrf == nullptr)
-	{
-		return false;
-	}
-
-	//
-	// Computed, not remembered. A cached flag has to be cleared on unplug, on
-	// reset and on suspend, and the one path that forgets leaves the data
-	// plane writing into an endpoint nobody reads.
-	//
-	return UsbDevMounted() &&
-		   (tud_cdc_n_get_line_state(pIntrf->ItfNo) & 0x01) != 0;
-}
-
-void UsbdCdcIntrfProcess(UsbdCdcDevIntrf_t * const pIntrf)
-{
-	if (pIntrf == nullptr || pIntrf->bEnabled == false)
-	{
-		return;
-	}
-
-	bool open = UsbdCdcIntrfPortIsOpen(pIntrf);
-
-	if (open != pIntrf->bPortOpen)
-	{
-		pIntrf->bPortOpen = open;
-
-		if (pIntrf->DevIntrf.EvtCB != nullptr)
-		{
-			pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf, DEVINTRF_EVT_STATECHG,
-								   nullptr, open ? 1 : 0);
-		}
-	}
-
-	if (open == false)
-	{
-		return;
-	}
-
-	UsbdCdcIntrfProcessRx(pIntrf);
-	UsbdCdcIntrfProcessTx(pIntrf);
-}
-
-static void UsbdCdcIntrfPump(void *pCtx)
-{
-	UsbdCdcIntrfProcess((UsbdCdcDevIntrf_t*)pCtx);
-}
-
-/**
- * @brief - TxData
- * 		Transfer data from pData passed in parameter.  Assuming StartTx was
- * called prior calling this function to send the actual data
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- * 		pData 	: Pointer to memory area of data to send.
- * 		DataLen : Length of data memory in bytes
- *
- * @return	Number of bytes sent
- */
-int UsbdCdcIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int Datalen)
-{
-	UsbdCdcDevIntrf_t *intrf = (UsbdCdcDevIntrf_t*)pDevIntrf->pDevData;
-	int cnt = 0;
-
-	while (Datalen > 0)
-	{
-	    uint32_t state = DisableInterrupt();
-	    int l = Datalen;
-		uint8_t *p = CFifoPutMultiple(intrf->hTxFifo, &l);
-		EnableInterrupt(state);
-		if (p == nullptr)
-		{
-			intrf->TxDropCnt++;
-			break;
-		}
-		memcpy(p, pData, l);
-		Datalen -= l;
-		pData += l;
-		cnt += l;
-	}
-
-	//
-	// Push straight away rather than waiting for the next pass. A caller that
-	// fills the FIFO and then waits for room would otherwise wait for a pump
-	// it is blocking.
-	//
-	if (intrf->bEnabled && UsbdCdcIntrfPortIsOpen(intrf))
-	{
-		UsbdCdcIntrfProcessTx(intrf);
-	}
-
-	return cnt;
-}
-
-/**
- * @brief - StopTx
- * 		Completion of sending data via TxData.  Do require post processing
- * after all data was transmitted via TxData.
- * This function must clear the busy state for re-entrancy
- *
- * @param
- * 		pDevIntrf : Pointer to an instance of the Device Interface
- *
- * @return	None
- */
-void UsbdCdcIntrfStopTx(DevIntrf_t *pDevIntrf)
-{
-}
-
-/**
- * @brief - Reset
- *      This function perform a reset of interface.  Must provide empty
- * function of not used.
- *
- * @param
- *      pDevIntrf : Pointer to an instance of the Device Interface
- *
- * @return  None
- */
-void UsbdCdcIntrfReset(DevIntrf_t *pDevIntrf)
-{
-	UsbdCdcDevIntrf_t *intrf = (UsbdCdcDevIntrf_t*)pDevIntrf->pDevData;
-
-	intrf->TxPendingOfs = 0;
-	intrf->TxPendingLen = 0;
-	intrf->TransBuffLen = 0;
-}
-
-bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t *pIntrf, const UsbdCdcIntrfCfg_t *pCfg)
-{
-	if (pIntrf == NULL || pCfg == NULL)
-		return false;
-
-	if (pCfg->ItfNo < 0 || pCfg->ItfNo >= CFG_TUD_CDC ||
-		s_pUsbdCdcIntrf[pCfg->ItfNo] != nullptr)
-	{
-		return false;
-	}
-
-	if (pCfg->pRxFifoMem == nullptr)
-	{
-		pIntrf->hRxFifo = CFifoInit(s_UsbdCdcDevIntrfRxFifoMem[pCfg->ItfNo], USBD_CDC_CFIFO_MEMSIZE, 1, pCfg->bBlocking);
-	}
-	else
-	{
-		pIntrf->hRxFifo = CFifoInit(pCfg->pRxFifoMem, pCfg->RxFifoMemSize, 1, pCfg->bBlocking);
-	}
-
-	if (pCfg->pTxFifoMem == nullptr)
-	{
-		pIntrf->hTxFifo = CFifoInit(s_UsbdCdcDevIntrfTxFifoMem[pCfg->ItfNo], USBD_CDC_CFIFO_MEMSIZE, 1, pCfg->bBlocking);
-	}
-	else
-	{
-		pIntrf->hTxFifo = CFifoInit(pCfg->pTxFifoMem, pCfg->TxFifoMemSize, 1, pCfg->bBlocking);
-	}
-
-	if (pIntrf->hRxFifo == nullptr || pIntrf->hTxFifo == nullptr)
-	{
-		return false;
-	}
-
-	pIntrf->DevIntrf.pDevData = (void*)pIntrf;
-
-	pIntrf->DevIntrf.Type = DEVINTRF_TYPE_USB;
-	pIntrf->DevIntrf.Enable = UsbdCdcIntrfEnable;
-	pIntrf->DevIntrf.Disable = UsbdCdcIntrfDisable;
-	pIntrf->DevIntrf.GetRate = UsbdCdcIntrfGetRate;
-	pIntrf->DevIntrf.SetRate = UsbdCdcIntrfSetRate;
-	pIntrf->DevIntrf.StartRx = UsbdCdcIntrfStartRx;
-	pIntrf->DevIntrf.RxData = UsbdCdcIntrfRxData;
-	pIntrf->DevIntrf.StopRx = UsbdCdcIntrfStopRx;
-	pIntrf->DevIntrf.StartTx = UsbdCdcIntrfStartTx;
-	pIntrf->DevIntrf.TxData = UsbdCdcIntrfTxData;
-	pIntrf->DevIntrf.StopTx = UsbdCdcIntrfStopTx;
-	pIntrf->DevIntrf.Reset = UsbdCdcIntrfReset;
-	pIntrf->DevIntrf.MaxRetry = 0;
-	pIntrf->DevIntrf.EvtCB = pCfg->EvtCB;
-	pIntrf->TransBuffLen = 0;
-	pIntrf->RxDropCnt = 0;
-	pIntrf->TxDropCnt = 0;
-	pIntrf->RxErrCnt = 0;
-	pIntrf->TxBusyCnt = 0;
-	pIntrf->TxPendingOfs = 0;
-	pIntrf->TxPendingLen = 0;
-	pIntrf->ItfNo = pCfg->ItfNo;
-	pIntrf->bPortOpen = false;
-	atomic_flag_clear(&pIntrf->DevIntrf.bBusy);
-
-	s_pUsbdCdcIntrf[pCfg->ItfNo] = pIntrf;
-
-	if (UsbDevRegisterFunc(UsbdCdcIntrfPump, pIntrf) == false)
-	{
-		s_pUsbdCdcIntrf[pCfg->ItfNo] = nullptr;
-		return false;
-	}
-
-	DeviceIntrfEnable(&pIntrf->DevIntrf);
-
-	return true;
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromPublic(pIntrf);
+	return pState != nullptr && UsbdCdcFuncPortIsOpen(&pState->Func);
 }
 
 bool UsbdCdcIntrf::Init(const UsbdCdcIntrfCfg_t &Cfg)
@@ -620,29 +386,7 @@ bool UsbdCdcIntrf::IsPortOpen(void)
 
 bool UsbdCdcIntrf::RequestToSend(int NbBytes)
 {
-	bool retval = false;
-
-	// ****
-	// Some threaded application firmware may stop sending when queue full
-	// causing lockup
-	// Try to send to free up the queue before validating.
-	//
-	if (vUsbDevIntrf.hTxFifo)
-	{
-		if (CFifoAvail(vUsbDevIntrf.hTxFifo) < NbBytes)
-		{
-			UsbdCdcIntrfProcess(&vUsbDevIntrf);
-		}
-
-		if (CFifoAvail(vUsbDevIntrf.hTxFifo) > 0)
-		{
-			retval = true;
-		}
-	}
-	else
-	{
-		retval = true;
-	}
-
-	return retval;
+	UsbdCdcNativeState_t *pState = UsbdCdcNativeFromPublic(&vUsbDevIntrf);
+	return pState != nullptr &&
+		UsbdBulkIntrfRequestToSend(&pState->Bulk, NbBytes);
 }
