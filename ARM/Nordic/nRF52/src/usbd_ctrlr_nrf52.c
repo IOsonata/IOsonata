@@ -1,14 +1,14 @@
 /**-------------------------------------------------------------------------
 @file	usbd_ctrlr_nrf52.c
 
-@brief	Native IOsonata USB device controller for Nordic nRF52 USBD.
+@brief	IOsonata USB device controller for Nordic nRF52 USBD.
 
 Implements usbd_ctrlr.h directly on the nRF52840 USBD peripheral. It owns
 endpoint state, EasyDMA arbitration and USBD_IRQHandler. USB power, VBUS and
 clock sequencing remain in usbd_nrfx.cpp.
 
 Only control, bulk and interrupt endpoints are implemented here. Isochronous
-support is intentionally left out of the first native USB milestone.
+support is intentionally left out of the first USB milestone.
 
 The nRF52840 has one USBD EasyDMA engine shared by all endpoints. Pending DMA
 work is kept as endpoint bit masks. Control tasks are serviced first, then OUT
@@ -61,6 +61,7 @@ enum
 {
 	NRFX_USBD_EP_COUNT = 8,
 	NRFX_USBD_MAX_PACKET_SIZE = 64,
+	NRFX_USBD_DMA_EP_NONE = 0xFFU,
 };
 
 #define NRFX_USBD_EDPT_END_ALL_MASK \
@@ -93,6 +94,7 @@ typedef struct __nRF_Usbd_Ctrlr
 
 static nRFUsbdCtrlr_t s_Ctrlr;
 static atomic_flag s_DmaRunning = ATOMIC_FLAG_INIT;
+static atomic_uint_fast8_t s_DmaEpAddr;
 static atomic_uint_fast16_t s_PendingOut;
 static atomic_uint_fast16_t s_PendingIn;
 static atomic_bool s_PendingEp0Status;
@@ -119,6 +121,24 @@ static uint8_t nRFUsbdFirstPending(uint16_t Mask)
 	}
 
 	return NRFX_USBD_EP_COUNT;
+}
+
+static uint32_t nRFUsbdDmaEndMask(uint8_t EpAddr)
+{
+	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+
+	return USBD_EP_IS_IN(EpAddr) ?
+		(1UL << (USBD_INTEN_ENDEPIN0_Pos + epNum)) :
+		(1UL << (USBD_INTEN_ENDEPOUT0_Pos + epNum));
+}
+
+static volatile uint32_t *nRFUsbdDmaEndEvent(uint8_t EpAddr)
+{
+	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+
+	return USBD_EP_IS_IN(EpAddr) ?
+		&NRF_USBD->EVENTS_ENDEPIN[epNum] :
+		&NRF_USBD->EVENTS_ENDEPOUT[epNum];
 }
 
 static void nRFUsbdEmit(const UsbdCtrlrEvt_t *pEvt)
@@ -156,19 +176,44 @@ static void nRFUsbdDmaRelease(void)
 		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
 	}
 
+	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
 	atomic_flag_clear(&s_DmaRunning);
 }
 
-static void nRFUsbdDmaStart(volatile uint32_t *pTask)
+static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 {
 	if (nrf52_errata_199())
 	{
 		NRFX_USBD_ERRATA_199_REG = 0x00000082UL;
 	}
 
+	atomic_store(&s_DmaEpAddr, EpAddr);
 	*pTask = 1;
 	__ISB();
 	__DSB();
+}
+
+static void nRFUsbdDmaWait(void)
+{
+	for (;;)
+	{
+		const uint8_t epAddr = (uint8_t)atomic_load(&s_DmaEpAddr);
+		if (epAddr == NRFX_USBD_DMA_EP_NONE)
+		{
+			return;
+		}
+
+		volatile uint32_t *pEvent = nRFUsbdDmaEndEvent(epAddr);
+		if (*pEvent == 0U)
+		{
+			continue;
+		}
+
+		*pEvent = 0;
+		__ISB();
+		__DSB();
+		nRFUsbdDmaRelease();
+	}
 }
 
 static void nRFUsbdNoDmaTask(volatile uint32_t *pTask)
@@ -198,7 +243,7 @@ static bool nRFUsbdStartOutDmaNow(uint8_t EpNum)
 	NRF_USBD->EPOUT[EpNum].PTR =
 		(uint32_t)(uintptr_t)pXfer->pBuffer;
 	NRF_USBD->EPOUT[EpNum].MAXCNT = TransferLen;
-	nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPOUT[EpNum]);
+	nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPOUT[EpNum], EpNum);
 
 	return true;
 }
@@ -220,7 +265,8 @@ static bool nRFUsbdStartInDmaNow(uint8_t EpNum)
 	NRF_USBD->EPIN[EpNum].PTR =
 		(uint32_t)(uintptr_t)pXfer->pBuffer;
 	NRF_USBD->EPIN[EpNum].MAXCNT = TransferLen;
-	nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPIN[EpNum]);
+	nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPIN[EpNum],
+					 (uint8_t)(EpNum | USBD_EP_DIR_IN));
 
 	return true;
 }
@@ -317,12 +363,45 @@ static void nRFUsbdResetState(void)
 	atomic_store(&s_PendingIn, 0);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
+	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
 	atomic_flag_clear(&s_DmaRunning);
 
 	if (nrf52_errata_199())
 	{
 		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
 	}
+}
+
+static void nRFUsbdAbortEp0(void)
+{
+	const uint8_t dmaEpAddr = (uint8_t)atomic_load(&s_DmaEpAddr);
+	if (dmaEpAddr != NRFX_USBD_DMA_EP_NONE &&
+		USBD_EP_NUM(dmaEpAddr) == 0U)
+	{
+		nRFUsbdDmaWait();
+	}
+
+	atomic_fetch_and(&s_PendingOut, (uint_fast16_t)~1U);
+	atomic_fetch_and(&s_PendingIn, (uint_fast16_t)~1U);
+	atomic_store(&s_PendingEp0Status, false);
+	atomic_store(&s_PendingEp0RcvOut, false);
+
+	for (uint8_t dir = 0; dir < 2U; dir++)
+	{
+		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[0][dir];
+		pXfer->pBuffer = NULL;
+		pXfer->TotalLen = 0;
+		pXfer->ActualLen = 0;
+		pXfer->Mps = NRFX_USBD_MAX_PACKET_SIZE;
+		pXfer->DataReceived = false;
+		pXfer->Started = false;
+	}
+
+	NRF_USBD->EVENTS_ENDEPIN[0] = 0;
+	NRF_USBD->EVENTS_ENDEPOUT[0] = 0;
+	NRF_USBD->EPDATASTATUS = (1UL << 0) | (1UL << 16);
+	__ISB();
+	__DSB();
 }
 
 bool UsbdCtrlrInit(UsbdCtrlrEvtHandler_t EvtHandler, void *pContext)
@@ -332,6 +411,12 @@ bool UsbdCtrlrInit(UsbdCtrlrEvtHandler_t EvtHandler, void *pContext)
 	nRFUsbdResetState();
 
 	return true;
+}
+
+void UsbdCtrlrStop(void)
+{
+	nRFUsbdDmaWait();
+	nRFUsbdResetState();
 }
 
 void UsbdCtrlrIntEnable(void)
@@ -440,6 +525,11 @@ void UsbdCtrlrEpClose(uint8_t EpAddr)
 		return;
 	}
 
+	if ((uint8_t)atomic_load(&s_DmaEpAddr) == EpAddr)
+	{
+		nRFUsbdDmaWait();
+	}
+
 	const uint_fast16_t bit = (uint_fast16_t)(1U << epNum);
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
 
@@ -476,6 +566,11 @@ void UsbdCtrlrEpClose(uint8_t EpAddr)
 
 void UsbdCtrlrEpCloseAll(void)
 {
+	// Endpoint state may be reused immediately by SET_CONFIGURATION. The
+	// shared EasyDMA owner must therefore be complete before any endpoint is
+	// cleared or reopened.
+	nRFUsbdDmaWait();
+
 	for (uint8_t epNum = 1; epNum < NRFX_USBD_EP_COUNT; epNum++)
 	{
 		UsbdCtrlrEpClose(epNum);
@@ -620,6 +715,11 @@ static uint32_t nRFUsbdCollectEvents(void)
 
 static void nRFUsbdBusReset(void)
 {
+	// USB reset invalidates every transfer. Finish the local EasyDMA copy
+	// before clearing software state so a reset can never free the shared DMA
+	// engine while it is still touching the previous transfer buffer.
+	nRFUsbdDmaWait();
+
 	NRF_USBD->EPOUTEN = 1UL;
 	NRF_USBD->EPINEN = 1UL;
 
@@ -682,6 +782,83 @@ static void nRFUsbdSetupEvent(void)
 	nRFUsbdEmit(&evt);
 }
 
+static void nRFUsbdHandleOutEnd(uint8_t EpNum)
+{
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
+	if (!pXfer->Started)
+	{
+		return;
+	}
+
+	const uint16_t transferLen =
+		(uint16_t)NRF_USBD->EPOUT[EpNum].AMOUNT;
+
+	if (pXfer->pBuffer != NULL)
+	{
+		pXfer->pBuffer += transferLen;
+	}
+	pXfer->ActualLen += transferLen;
+
+	if (transferLen == pXfer->Mps &&
+		pXfer->ActualLen < pXfer->TotalLen)
+	{
+		if (EpNum == 0)
+		{
+			nRFUsbdQueueEp0RcvOut();
+		}
+	}
+	else
+	{
+		pXfer->Started = false;
+		nRFUsbdEmitXfer(EpNum, pXfer->ActualLen,
+						 USBD_CTRLR_XFER_SUCCESS);
+	}
+}
+
+static void nRFUsbdHandleOutData(uint8_t EpNum)
+{
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
+	if (pXfer->Started &&
+		(pXfer->ActualLen < pXfer->TotalLen || pXfer->TotalLen == 0))
+	{
+		pXfer->DataReceived = false;
+		nRFUsbdQueueOut(EpNum);
+	}
+	else
+	{
+		pXfer->DataReceived = true;
+	}
+}
+
+static void nRFUsbdHandleInData(uint8_t EpNum)
+{
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
+	if (!pXfer->Started)
+	{
+		return;
+	}
+
+	const uint16_t transferLen =
+		(uint16_t)NRF_USBD->EPIN[EpNum].AMOUNT;
+
+	if (pXfer->pBuffer != NULL)
+	{
+		pXfer->pBuffer += transferLen;
+	}
+	pXfer->ActualLen += transferLen;
+
+	if (pXfer->ActualLen < pXfer->TotalLen)
+	{
+		nRFUsbdQueueIn(EpNum);
+	}
+	else
+	{
+		pXfer->Started = false;
+		nRFUsbdEmitXfer((uint8_t)(EpNum | USBD_EP_DIR_IN),
+						 pXfer->ActualLen, USBD_CTRLR_XFER_SUCCESS);
+	}
+}
+
 static void nRFUsbdIrqHandler(void)
 {
 	const uint32_t intStatus = nRFUsbdCollectEvents();
@@ -699,10 +876,20 @@ static void nRFUsbdIrqHandler(void)
 		__DSB();
 	}
 
+	// ENDEP is the ownership boundary of the shared EasyDMA engine. Release
+	// only when the completion belongs to the endpoint that started it.
+	const uint8_t dmaEpAddr = (uint8_t)atomic_load(&s_DmaEpAddr);
+	if (dmaEpAddr != NRFX_USBD_DMA_EP_NONE &&
+		(intStatus & nRFUsbdDmaEndMask(dmaEpAddr)) != 0U)
+	{
+		nRFUsbdDmaRelease();
+	}
+
 	if ((intStatus & USBD_INTEN_USBRESET_Msk) != 0)
 	{
 		nRFUsbdBusReset();
 		nRFUsbdEmitSimple(USBD_CTRLR_EVT_RESET);
+		return;
 	}
 
 	if ((intStatus & USBD_INTEN_USBEVENT_Msk) != 0)
@@ -730,127 +917,69 @@ static void nRFUsbdIrqHandler(void)
 		}
 	}
 
-	if ((intStatus & USBD_INTEN_EP0SETUP_Msk) != 0)
-	{
-		nRFUsbdSetupEvent();
-	}
-
-	if ((intStatus & NRFX_USBD_EDPT_END_ALL_MASK) != 0)
-	{
-		nRFUsbdDmaRelease();
-	}
-
-	for (uint8_t epNum = 0; epNum < NRFX_USBD_EP_COUNT; epNum++)
+	// Complete non-control endpoint events before dispatching a new EP0 SETUP.
+	// SET_CONFIGURATION may close and immediately reopen those endpoints.
+	for (uint8_t epNum = 1; epNum < NRFX_USBD_EP_COUNT; epNum++)
 	{
 		if ((intStatus &
-			 (1UL << (USBD_INTEN_ENDEPOUT0_Pos + epNum))) == 0)
+			 (1UL << (USBD_INTEN_ENDEPOUT0_Pos + epNum))) != 0)
 		{
-			continue;
-		}
-
-		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][0];
-		if (!pXfer->Started)
-		{
-			continue;
-		}
-
-		const uint16_t transferLen =
-			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT;
-
-		if (pXfer->pBuffer != NULL)
-		{
-			pXfer->pBuffer += transferLen;
-		}
-		pXfer->ActualLen += transferLen;
-
-		if (transferLen == pXfer->Mps &&
-			pXfer->ActualLen < pXfer->TotalLen)
-		{
-			if (epNum == 0)
-			{
-				nRFUsbdQueueEp0RcvOut();
-			}
-		}
-		else
-		{
-			pXfer->Started = false;
-			nRFUsbdEmitXfer(epNum, pXfer->ActualLen,
-							 USBD_CTRLR_XFER_SUCCESS);
+			nRFUsbdHandleOutEnd(epNum);
 		}
 	}
 
+	uint32_t dataStatus = 0;
 	if ((intStatus &
 		 (USBD_INTEN_EPDATA_Msk | USBD_INTEN_EP0DATADONE_Msk)) != 0)
 	{
-		const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
+		dataStatus = NRF_USBD->EPDATASTATUS;
 		NRF_USBD->EPDATASTATUS = dataStatus;
 		__ISB();
 		__DSB();
 
-		const bool controlIn =
-			(intStatus & USBD_INTEN_EP0DATADONE_Msk) != 0 &&
-			s_Ctrlr.SetupDirIn;
-		const bool controlOut =
-			(intStatus & USBD_INTEN_EP0DATADONE_Msk) != 0 &&
-			!s_Ctrlr.SetupDirIn;
-
-		// OUT first so host-to-device traffic is rearmed promptly.
-		for (uint8_t epNum = 0; epNum < NRFX_USBD_EP_COUNT; epNum++)
+		for (uint8_t epNum = 1; epNum < NRFX_USBD_EP_COUNT; epNum++)
 		{
-			if ((dataStatus & (1UL << (16U + epNum))) == 0 &&
-				!(epNum == 0 && controlOut))
+			if ((dataStatus & (1UL << (16U + epNum))) != 0)
 			{
-				continue;
-			}
-
-			nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][0];
-			if (pXfer->Started &&
-				(pXfer->ActualLen < pXfer->TotalLen ||
-				 pXfer->TotalLen == 0))
-			{
-				pXfer->DataReceived = false;
-				nRFUsbdQueueOut(epNum);
-			}
-			else
-			{
-				pXfer->DataReceived = true;
+				nRFUsbdHandleOutData(epNum);
 			}
 		}
 
-		for (uint8_t epNum = 0; epNum < NRFX_USBD_EP_COUNT; epNum++)
+		for (uint8_t epNum = 1; epNum < NRFX_USBD_EP_COUNT; epNum++)
 		{
-			if ((dataStatus & (1UL << epNum)) == 0 &&
-				!(epNum == 0 && controlIn))
+			if ((dataStatus & (1UL << epNum)) != 0)
 			{
-				continue;
+				nRFUsbdHandleInData(epNum);
 			}
+		}
+	}
 
-			nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][1];
-			if (!pXfer->Started)
+	const bool setupPending =
+		(intStatus & USBD_INTEN_EP0SETUP_Msk) != 0;
+	if (setupPending)
+	{
+		// A SETUP token aborts any previous control transfer. If its local
+		// EasyDMA copy is still active, wait only for EP0; unrelated data
+		// endpoint DMA remains owned and queued control work waits behind it.
+		nRFUsbdAbortEp0();
+		nRFUsbdSetupEvent();
+	}
+	else
+	{
+		if ((intStatus & USBD_INTEN_ENDEPOUT0_Msk) != 0)
+		{
+			nRFUsbdHandleOutEnd(0);
+		}
+
+		if ((intStatus & USBD_INTEN_EP0DATADONE_Msk) != 0)
+		{
+			if (s_Ctrlr.SetupDirIn)
 			{
-				continue;
-			}
-
-			const uint16_t transferLen =
-				(uint16_t)NRF_USBD->EPIN[epNum].AMOUNT;
-
-			if (pXfer->pBuffer != NULL)
-			{
-				pXfer->pBuffer += transferLen;
-			}
-			pXfer->ActualLen += transferLen;
-
-			if (pXfer->ActualLen < pXfer->TotalLen)
-			{
-				nRFUsbdQueueIn(epNum);
+				nRFUsbdHandleInData(0);
 			}
 			else
 			{
-				pXfer->Started = false;
-				nRFUsbdEmitXfer(
-					(uint8_t)(epNum | USBD_EP_DIR_IN),
-					pXfer->ActualLen,
-					USBD_CTRLR_XFER_SUCCESS);
+				nRFUsbdHandleOutData(0);
 			}
 		}
 	}
