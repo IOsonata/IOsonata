@@ -1,8 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	usbd_cdc_intrf.h
+@file	usbd_cdc.h
 
-@brief	Generic implementation of USBD CDC device interface
-
+@brief	USB CDC device interface
 
 @author	Hoang Nguyen Hoan
 @date	May 2, 2024
@@ -32,8 +31,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __USBD_CDC_INTRF_H__
-#define __USBD_CDC_INTRF_H__
+#ifndef __USBD_CDC_H__
+#define __USBD_CDC_H__
 
 #include "cfifo.h"
 #include "device_intrf.h"
@@ -63,7 +62,7 @@ typedef struct __UsbdCdc_Dev_Interf {
     hCFifo_t	hTxFifo;
     uint32_t	RxDropCnt;
     uint32_t	TxDropCnt;
-    uint8_t     TransBuff[USBD_CDC_INTRF_TRANSBUFF_MAXLEN];  //
+    uint8_t     TransBuff[USBD_CDC_INTRF_TRANSBUFF_MAXLEN];
     int         TransBuffLen;	//!< Data length
     int			ItfNo;			//!< CDC function index this instance serves
     bool		bEnabled;		//!< false - Data plane stopped, FIFOs kept
@@ -150,4 +149,4 @@ bool UsbdCdcIntrfPortIsOpen(UsbdCdcDevIntrf_t * const pUsbdDevIntrf);
 
 /** @} End of group USBD */
 
-#endif	// __USBD_CDC_INTRF_H__
+#endif	// __USBD_CDC_H__

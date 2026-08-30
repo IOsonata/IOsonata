@@ -38,9 +38,9 @@ SOFTWARE.
 #include <string.h>
 
 #include "usb/usb_dev.h"
-#include "usb/usbd_cdc_intrf.h"
+#include "usb/usbd_cdc.h"
 #include "usb/usbd_bulk_intrf.h"
-#include "usb/usbd_cdc_func.h"
+#include "usbd_cdc_priv.h"
 
 #define USBD_CDC_NATIVE_FUNC_MAXCNT		3
 #define USBD_CDC_NATIVE_DEFAULT_FIFO_MEMSIZE \

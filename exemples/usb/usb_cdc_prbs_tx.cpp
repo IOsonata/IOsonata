@@ -52,7 +52,7 @@ SOFTWARE.
 #include "cfifo.h"
 #include "prbs.h"
 #include "usb/usb_dev.h"
-#include "usb/usbd_cdc_intrf.h"
+#include "usb/usbd_cdc.h"
 
 #define BYTE_MODE
 
