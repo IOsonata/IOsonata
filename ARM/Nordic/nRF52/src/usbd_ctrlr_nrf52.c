@@ -103,12 +103,12 @@ static atomic_bool s_MacAwake;
 
 static inline uint8_t nRFUsbdDir(uint8_t EpAddr)
 {
-	return USBD_EP_IS_IN(EpAddr) ? 1U : 0U;
+	return USB_ENDPADDR_IS_IN(EpAddr) ? 1U : 0U;
 }
 
 static inline nRFUsbdXfer_t *nRFUsbdGetXfer(uint8_t EpAddr)
 {
-	return &s_Ctrlr.Xfer[USBD_EP_NUM(EpAddr)][nRFUsbdDir(EpAddr)];
+	return &s_Ctrlr.Xfer[USB_ENDPADDR_NUM(EpAddr)][nRFUsbdDir(EpAddr)];
 }
 
 static uint8_t nRFUsbdFirstPending(uint16_t Mask)
@@ -126,18 +126,18 @@ static uint8_t nRFUsbdFirstPending(uint16_t Mask)
 
 static uint32_t nRFUsbdDmaEndMask(uint8_t EpAddr)
 {
-	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 
-	return USBD_EP_IS_IN(EpAddr) ?
+	return USB_ENDPADDR_IS_IN(EpAddr) ?
 		(1UL << (USBD_INTEN_ENDEPIN0_Pos + epNum)) :
 		(1UL << (USBD_INTEN_ENDEPOUT0_Pos + epNum));
 }
 
 static volatile uint32_t *nRFUsbdDmaEndEvent(uint8_t EpAddr)
 {
-	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 
-	return USBD_EP_IS_IN(EpAddr) ?
+	return USB_ENDPADDR_IS_IN(EpAddr) ?
 		&NRF_USBD->EVENTS_ENDEPIN[epNum] :
 		&NRF_USBD->EVENTS_ENDEPOUT[epNum];
 }
@@ -238,7 +238,7 @@ static void nRFUsbdNoDmaTask(volatile uint32_t *pTask)
 static void nRFUsbdEp0StatusNow(void)
 {
 	const uint8_t epAddr = s_Ctrlr.SetupDirIn ?
-		USBD_EP_DIR_OUT : USBD_EP_DIR_IN;
+		USB_ENDPADDR_DIR_OUT : USB_ENDPADDR_DIR_IN;
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(epAddr);
 
 	// EP0STATUS permits the hardware status stage. nRF52 has no separate
@@ -301,7 +301,7 @@ static bool nRFUsbdStartInDmaNow(uint8_t EpNum)
 		(uint32_t)(uintptr_t)pXfer->pBuffer;
 	NRF_USBD->EPIN[EpNum].MAXCNT = TransferLen;
 	nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPIN[EpNum],
-					 (uint8_t)(EpNum | USBD_EP_DIR_IN));
+					 (uint8_t)(EpNum | USB_ENDPADDR_DIR_IN));
 
 	return true;
 }
@@ -425,7 +425,7 @@ static void nRFUsbdAbortEp0(void)
 {
 	const uint8_t dmaEpAddr = (uint8_t)atomic_load(&s_DmaEpAddr);
 	if (dmaEpAddr != NRFX_USBD_DMA_EP_NONE &&
-		USBD_EP_NUM(dmaEpAddr) == 0U)
+		USB_ENDPADDR_NUM(dmaEpAddr) == 0U)
 	{
 		nRFUsbdDmaWait();
 	}
@@ -733,7 +733,7 @@ bool UsbdCtrlrEpOpen(const UsbEndPointDesc_t *pDesc)
 	}
 
 	const uint8_t epAddr = pDesc->bEndpointAddress;
-	const uint8_t epNum = USBD_EP_NUM(epAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
 	const uint8_t type = pDesc->bmAttributes & 0x03U;
 
 	if (epNum == 0 || epNum >= NRFX_USBD_EP_COUNT ||
@@ -750,7 +750,7 @@ bool UsbdCtrlrEpOpen(const UsbEndPointDesc_t *pDesc)
 	pXfer->Started = false;
 	pXfer->DataReceived = false;
 
-	if (USBD_EP_IS_IN(epAddr))
+	if (USB_ENDPADDR_IS_IN(epAddr))
 	{
 		NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
 		NRF_USBD->INTENSET =
@@ -778,7 +778,7 @@ bool UsbdCtrlrEpOpen(const UsbEndPointDesc_t *pDesc)
 
 void UsbdCtrlrEpClose(uint8_t EpAddr)
 {
-	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 
 	if (epNum == 0 || epNum >= NRFX_USBD_EP_COUNT)
 	{
@@ -793,7 +793,7 @@ void UsbdCtrlrEpClose(uint8_t EpAddr)
 	const uint_fast16_t bit = (uint_fast16_t)(1U << epNum);
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
 
-	if (USBD_EP_IS_IN(EpAddr))
+	if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
 		atomic_fetch_and(&s_PendingIn, ~bit);
 		NRF_USBD->INTENCLR =
@@ -834,7 +834,7 @@ void UsbdCtrlrEpCloseAll(void)
 	for (uint8_t epNum = 1; epNum < NRFX_USBD_EP_COUNT; epNum++)
 	{
 		UsbdCtrlrEpClose(epNum);
-		UsbdCtrlrEpClose((uint8_t)(epNum | USBD_EP_DIR_IN));
+		UsbdCtrlrEpClose((uint8_t)(epNum | USB_ENDPADDR_DIR_IN));
 	}
 
 	NRF_USBD->EPOUTEN = 1UL;
@@ -843,7 +843,7 @@ void UsbdCtrlrEpCloseAll(void)
 
 bool UsbdCtrlrEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes)
 {
-	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 
 	if (epNum >= NRFX_USBD_EP_COUNT ||
 		(TotalBytes > 0 && pBuffer == NULL) ||
@@ -858,7 +858,7 @@ bool UsbdCtrlrEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes)
 		return false;
 	}
 
-	if (USBD_EP_IS_IN(EpAddr) && epNum > 0 &&
+	if (USB_ENDPADDR_IS_IN(EpAddr) && epNum > 0 &&
 		(NRF_USBD->EPDATASTATUS & (1UL << epNum)) != 0)
 	{
 		NRF_USBD->EPDATASTATUS = (1UL << epNum);
@@ -873,13 +873,13 @@ bool UsbdCtrlrEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes)
 
 	const bool controlStatus =
 		epNum == 0 && TotalBytes == 0 &&
-		USBD_EP_IS_IN(EpAddr) != s_Ctrlr.SetupDirIn;
+		USB_ENDPADDR_IS_IN(EpAddr) != s_Ctrlr.SetupDirIn;
 
 	if (controlStatus)
 	{
 		nRFUsbdQueueEp0Status();
 	}
-	else if (USBD_EP_IS_IN(EpAddr))
+	else if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
 		nRFUsbdQueueIn(epNum);
 	}
@@ -898,13 +898,13 @@ bool UsbdCtrlrEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes)
 
 bool UsbdCtrlrEpBusy(uint8_t EpAddr)
 {
-	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	return epNum < NRFX_USBD_EP_COUNT && nRFUsbdGetXfer(EpAddr)->Started;
 }
 
 void UsbdCtrlrEpStall(uint8_t EpAddr)
 {
-	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 
 	if (epNum >= NRFX_USBD_EP_COUNT)
 	{
@@ -927,7 +927,7 @@ void UsbdCtrlrEpStall(uint8_t EpAddr)
 
 void UsbdCtrlrEpClearStall(uint8_t EpAddr)
 {
-	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 
 	if (epNum == 0 || epNum >= NRFX_USBD_EP_COUNT)
 	{
@@ -940,7 +940,7 @@ void UsbdCtrlrEpClearStall(uint8_t EpAddr)
 	NRF_USBD->EPSTALL =
 		(USBD_EPSTALL_STALL_UnStall << USBD_EPSTALL_STALL_Pos) | EpAddr;
 
-	if (!USBD_EP_IS_IN(EpAddr))
+	if (!USB_ENDPADDR_IS_IN(EpAddr))
 	{
 		NRF_USBD->SIZE.EPOUT[epNum] = 0;
 	}
@@ -1116,7 +1116,7 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 	else
 	{
 		pXfer->Started = false;
-		nRFUsbdEmitXfer((uint8_t)(EpNum | USBD_EP_DIR_IN),
+		nRFUsbdEmitXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN),
 						 pXfer->ActualLen, USBD_CTRLR_XFER_SUCCESS);
 	}
 }

@@ -218,12 +218,12 @@ static uint32_t s_Ep0Bounce[NRF54_USBD_EP0_MPS / sizeof(uint32_t)]
 
 static inline uint8_t nRF54UsbdDir(uint8_t EpAddr)
 {
-	return USBD_EP_IS_IN(EpAddr) ? 1U : 0U;
+	return USB_ENDPADDR_IS_IN(EpAddr) ? 1U : 0U;
 }
 
 static inline nRF54UsbdXfer_t *nRF54UsbdGetXfer(uint8_t EpAddr)
 {
-	return &s_Ctrlr.Xfer[USBD_EP_NUM(EpAddr)][nRF54UsbdDir(EpAddr)];
+	return &s_Ctrlr.Xfer[USB_ENDPADDR_NUM(EpAddr)][nRF54UsbdDir(EpAddr)];
 }
 
 static bool nRF54UsbdWaitSet(volatile uint32_t *pReg, uint32_t Mask)
@@ -459,7 +459,7 @@ static uint32_t nRF54UsbdEpType(uint8_t Type)
 
 static bool nRF54UsbdDisableEndpoint(uint8_t EpAddr, bool Stall)
 {
-	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	if (epNum >= NRF54_USBD_EP_COUNT)
 	{
 		return false;
@@ -467,7 +467,7 @@ static bool nRF54UsbdDisableEndpoint(uint8_t EpAddr, bool Stall)
 
 	const uint32_t stall = Stall ? NRF54_USBD_DEPCTL_STALL : 0U;
 
-	if (USBD_EP_IS_IN(EpAddr))
+	if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
 		uint32_t ctl = NRF54_USBD_DIEPCTL(epNum);
 
@@ -566,7 +566,7 @@ static bool nRF54UsbdStartEp0Chunk(uint8_t EpAddr)
 
 	pXfer->ChunkLen = chunk;
 
-	if (USBD_EP_IS_IN(EpAddr))
+	if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
 		if (chunk > 0U)
 		{
@@ -601,7 +601,7 @@ static void nRF54UsbdCompleteEp0(uint8_t EpAddr)
 
 	const uint16_t chunk = pXfer->ChunkLen;
 
-	if (!USBD_EP_IS_IN(EpAddr) && chunk > 0U)
+	if (!USB_ENDPADDR_IS_IN(EpAddr) && chunk > 0U)
 	{
 		const uint16_t left =
 			(uint16_t)(NRF54_USBD_DOEPTSIZ(0) &
@@ -639,7 +639,7 @@ static void nRF54UsbdCompleteEp0(uint8_t EpAddr)
 	const bool zeroLength = pXfer->TotalLen == 0U;
 	pXfer->Started = false;
 
-	if (USBD_EP_IS_IN(EpAddr) && zeroLength && s_Ctrlr.AddressPending)
+	if (USB_ENDPADDR_IS_IN(EpAddr) && zeroLength && s_Ctrlr.AddressPending)
 	{
 		uint32_t dcfg = NRF54_USBD_DCFG;
 		dcfg &= ~NRF54_USBD_DCFG_DEVADDR_Msk;
@@ -660,7 +660,7 @@ static void nRF54UsbdCompleteEp0(uint8_t EpAddr)
 static void nRF54UsbdCompleteData(uint8_t EpAddr)
 {
 	nRF54UsbdXfer_t *pXfer = nRF54UsbdGetXfer(EpAddr);
-	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 
 	if (!pXfer->Started)
 	{
@@ -668,7 +668,7 @@ static void nRF54UsbdCompleteData(uint8_t EpAddr)
 	}
 
 	uint16_t remaining;
-	if (USBD_EP_IS_IN(EpAddr))
+	if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
 		remaining = (uint16_t)(NRF54_USBD_DIEPTSIZ(epNum) &
 							  NRF54_USBD_DEPTSIZ_XFERSIZE_Msk);
@@ -766,11 +766,11 @@ static void nRF54UsbdInInterrupt(void)
 		{
 			if (epNum == 0U)
 			{
-				nRF54UsbdCompleteEp0(USBD_EP_DIR_IN);
+				nRF54UsbdCompleteEp0(USB_ENDPADDR_DIR_IN);
 			}
 			else
 			{
-				nRF54UsbdCompleteData((uint8_t)(epNum | USBD_EP_DIR_IN));
+				nRF54UsbdCompleteData((uint8_t)(epNum | USB_ENDPADDR_DIR_IN));
 			}
 		}
 	}
@@ -804,7 +804,7 @@ static void nRF54UsbdOutInterrupt(void)
 			{
 				if (s_Ctrlr.Xfer[0][0].Started)
 				{
-					nRF54UsbdCompleteEp0(USBD_EP_DIR_OUT);
+					nRF54UsbdCompleteEp0(USB_ENDPADDR_DIR_OUT);
 				}
 			}
 			else
@@ -997,7 +997,7 @@ bool UsbdCtrlrEpOpen(const UsbEndPointDesc_t *pDesc)
 	}
 
 	const uint8_t epAddr = pDesc->bEndpointAddress;
-	const uint8_t epNum = USBD_EP_NUM(epAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
 	const uint8_t type = pDesc->bmAttributes & 0x03U;
 	const uint16_t mps = pDesc->wMaxPacketSize;
 
@@ -1025,7 +1025,7 @@ bool UsbdCtrlrEpOpen(const UsbEndPointDesc_t *pDesc)
 	const uint32_t epType =
 		nRF54UsbdEpType(type) << NRF54_USBD_DEPCTL_EPTYPE_Pos;
 
-	if (USBD_EP_IS_IN(epAddr))
+	if (USB_ENDPADDR_IS_IN(epAddr))
 	{
 		if (!nRF54UsbdAllocateTxFifo(epNum, mps))
 		{
@@ -1069,7 +1069,7 @@ bool UsbdCtrlrEpOpen(const UsbEndPointDesc_t *pDesc)
 
 void UsbdCtrlrEpClose(uint8_t EpAddr)
 {
-	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	if (epNum == 0U || epNum >= NRF54_USBD_EP_COUNT)
 	{
 		return;
@@ -1084,7 +1084,7 @@ void UsbdCtrlrEpClose(uint8_t EpAddr)
 	pXfer->ChunkLen = 0U;
 	pXfer->pBuffer = NULL;
 
-	if (USBD_EP_IS_IN(EpAddr))
+	if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
 		NRF54_USBD_DAINTMSK &= ~NRF54_USBD_DAINT_IN(epNum);
 	}
@@ -1099,7 +1099,7 @@ void UsbdCtrlrEpCloseAll(void)
 	for (uint8_t epNum = 1U; epNum < NRF54_USBD_EP_COUNT; epNum++)
 	{
 		UsbdCtrlrEpClose(epNum);
-		UsbdCtrlrEpClose((uint8_t)(epNum | USBD_EP_DIR_IN));
+		UsbdCtrlrEpClose((uint8_t)(epNum | USB_ENDPADDR_DIR_IN));
 	}
 
 	(void)nRF54UsbdFlushRx();
@@ -1107,7 +1107,7 @@ void UsbdCtrlrEpCloseAll(void)
 
 bool UsbdCtrlrEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes)
 {
-	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	if (!s_Ctrlr.Started || epNum >= NRF54_USBD_EP_COUNT ||
 		(TotalBytes > 0U && pBuffer == NULL))
 	{
@@ -1152,7 +1152,7 @@ bool UsbdCtrlrEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes)
 		((uint32_t)TotalBytes & NRF54_USBD_DEPTSIZ_XFERSIZE_Msk) |
 		(packetCnt << NRF54_USBD_DEPTSIZ_PKTCNT_Pos);
 
-	if (USBD_EP_IS_IN(EpAddr))
+	if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
 		NRF54_USBD_DIEPDMA(epNum) = (uint32_t)(uintptr_t)pBuffer;
 		NRF54_USBD_DIEPTSIZ(epNum) = size;
@@ -1172,14 +1172,14 @@ bool UsbdCtrlrEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes)
 
 bool UsbdCtrlrEpBusy(uint8_t EpAddr)
 {
-	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	return epNum < NRF54_USBD_EP_COUNT &&
 		   nRF54UsbdGetXfer(EpAddr)->Started;
 }
 
 void UsbdCtrlrEpStall(uint8_t EpAddr)
 {
-	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	if (epNum >= NRF54_USBD_EP_COUNT)
 	{
 		return;
@@ -1189,7 +1189,7 @@ void UsbdCtrlrEpStall(uint8_t EpAddr)
 
 	// EP0 OUT remains active for SETUP reception. If the setup queue was
 	// exhausted by the failed request, re-arm it without clearing STALL.
-	if (epNum == 0U && !USBD_EP_IS_IN(EpAddr))
+	if (epNum == 0U && !USB_ENDPADDR_IS_IN(EpAddr))
 	{
 		nRF54UsbdPrimeSetup();
 	}
@@ -1197,13 +1197,13 @@ void UsbdCtrlrEpStall(uint8_t EpAddr)
 
 void UsbdCtrlrEpClearStall(uint8_t EpAddr)
 {
-	const uint8_t epNum = USBD_EP_NUM(EpAddr);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	if (epNum >= NRF54_USBD_EP_COUNT)
 	{
 		return;
 	}
 
-	if (USBD_EP_IS_IN(EpAddr))
+	if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
 		uint32_t ctl = NRF54_USBD_DIEPCTL(epNum);
 		ctl &= ~NRF54_USBD_DEPCTL_STALL;
