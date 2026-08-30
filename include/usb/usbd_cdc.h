@@ -53,8 +53,6 @@ typedef struct __UsbdCdc_Interf_Config {
 	DevIntrfEvtHandler_t EvtCB;	//!< Event callback
 } UsbdCdcIntrfCfg_t;
 
-#define USBD_CDC_INTRF_TRANSBUFF_MAXLEN			64
-
 // USBD CDC interf instance data
 typedef struct __UsbdCdc_Dev_Interf {
 	DevIntrf_t	DevIntrf;		//!< Base Device Interface
@@ -62,21 +60,9 @@ typedef struct __UsbdCdc_Dev_Interf {
     hCFifo_t	hTxFifo;
     uint32_t	RxDropCnt;
     uint32_t	TxDropCnt;
-    uint8_t     TransBuff[USBD_CDC_INTRF_TRANSBUFF_MAXLEN];
-    int         TransBuffLen;	//!< Data length
     int			ItfNo;			//!< CDC function index this instance serves
     bool		bEnabled;		//!< false - Data plane stopped, FIFOs kept
     volatile bool bPortOpen;	//!< Host asserted DTR on this function
-    //
-    // A FIFO read is destructive while the device stack is allowed to accept
-    // fewer octets than offered. The tail that was not accepted stays in
-    // TransBuff until it is, otherwise one short write loses octets that were
-    // already taken out of the FIFO.
-    //
-    int			TxPendingOfs;	//!< Offset of the first octet not yet accepted
-    int			TxPendingLen;	//!< Length staged in TransBuff
-    uint32_t	RxErrCnt;		//!< Reads that returned more than was asked for
-    uint32_t	TxBusyCnt;		//!< Writes refused because the endpoint was full
 } UsbdCdcDevIntrf_t;
 
 #pragma pack(pop)
