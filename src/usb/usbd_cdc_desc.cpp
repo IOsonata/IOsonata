@@ -35,7 +35,7 @@ SOFTWARE.
 
 #include "usb/usb_cdcdef.h"
 #include "usb/usb_dev.h"
-#include "usbd_cdc_priv.h"
+#include "usb/usbd_cdc.h"
 
 #define USBD_CDC_STR_MANUFACTURER		1U
 #define USBD_CDC_STR_PRODUCT			2U
@@ -44,7 +44,6 @@ SOFTWARE.
 #define USBD_CDC_STR_MAXINDEX			4U
 #define USBD_CDC_STR_MAXLEN				32U
 
-#define USBD_CDC_CONFIG_VALUE			1U
 #define USBD_CDC_NOTIF_INTERVAL_FS		16U
 #define USBD_CDC_NOTIF_INTERVAL_HS		8U
 

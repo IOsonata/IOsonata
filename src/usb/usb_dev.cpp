@@ -39,7 +39,7 @@ SOFTWARE.
 #include "usb/usb_dev.h"
 #include "usb/usbd_core.h"
 #include "usb/usbd_ctrlr.h"
-#include "usbd_cdc_priv.h"
+#include "usb/usbd_cdc.h"
 
 #define USBDEV_FUNC_MAXCNT			USBD_CDC_FUNC_MAXCNT
 
