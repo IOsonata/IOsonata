@@ -110,6 +110,8 @@ SOFTWARE.
 // the errata sheet. nrf52_errata_nnn() decides whether the part in hand needs
 // each one, so the values below are only ever written where they apply.
 //
+#define NRFX_USBD_ERRATA_UNLOCK_REG		0x4006EC00UL
+#define NRFX_USBD_ERRATA_UNLOCK_KEY		0x00009375UL
 #define NRFX_USBD_ERRATA_171_REG			0x4006EC14UL
 #define NRFX_USBD_ERRATA_187_REG			0x4006ED14UL
 #define NRFX_USBD_ERRATA_166_REG_A			(NRF_USBD_BASE + 0x800UL)
@@ -264,9 +266,31 @@ __attribute__((weak)) void UsbdXtalRelease(void)
 
 #ifdef NRFX_USBD_HAS_USBD
 
+/**
+ * Write one errata register.
+ *
+ * The registers these workarounds use sit behind an unlock word. When that
+ * word reads zero the block is locked and a write to the errata register is
+ * discarded, so the key has to be presented around it. Errata 187 is titled
+ * "USBD cannot be enabled", and losing its write is not visible until ENABLE
+ * is set and EVENTCAUSE never reports READY.
+ *
+ * Same sequence as Nordic's own driver.
+ */
 static void UsbdErrataWrite(uint32_t Reg, uint32_t Value)
 {
-	NRFX_USBD_REG32(Reg) = Value;
+	if (NRFX_USBD_REG32(NRFX_USBD_ERRATA_UNLOCK_REG) == 0)
+	{
+		NRFX_USBD_REG32(NRFX_USBD_ERRATA_UNLOCK_REG) =
+			NRFX_USBD_ERRATA_UNLOCK_KEY;
+		NRFX_USBD_REG32(Reg) = Value;
+		NRFX_USBD_REG32(NRFX_USBD_ERRATA_UNLOCK_REG) =
+			NRFX_USBD_ERRATA_UNLOCK_KEY;
+	}
+	else
+	{
+		NRFX_USBD_REG32(Reg) = Value;
+	}
 }
 
 /**

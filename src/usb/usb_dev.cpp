@@ -254,12 +254,24 @@ void UsbDevProcess(void)
 
 	if (!s_UsbDevStarted)
 	{
-		if (s_UsbDevAttachPending)
+		//
+		// Retry on the level, not only on the attach edge. A board already on
+		// a cable at reset never produces an edge, so an Enable that failed
+		// during start up would be the only attempt ever made and the port
+		// would stay down with nothing to show for it. Enable is cheap while
+		// there is no bus power, because UsbdStart answers false immediately.
+		//
+		s_UsbDevAttachPending = false;
+
+		if (UsbdVbusDetected())
 		{
-			s_UsbDevAttachPending = false;
 			(void)UsbDevEnable();
 		}
-		return;
+
+		if (!s_UsbDevStarted)
+		{
+			return;
+		}
 	}
 
 	for (int i = 0; i < s_UsbDevFuncCnt; i++)

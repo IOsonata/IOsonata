@@ -170,8 +170,16 @@ static void UsbdCdcTxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
 
 	if (pIntrf->TxLength == 0U)
 	{
+		//
+		// Stage as much as the transfer buffer holds, not one packet.
+		// UsbdCtrlrEpXfer takes a logical length and the controller splits it,
+		// so one submission moves several back to back packets. Staging
+		// one packet at a time left the endpoint idle for a whole completion
+		// round trip between packets and put the ceiling at one packet per
+		// pump pass.
+		//
 		const int length = UsbdBulkIntrfGetTxData(pBulk,
-			UsbdCdcTxBuffer(pIntrf), pIntrf->BulkMps);
+			UsbdCdcTxBuffer(pIntrf), (int)sizeof(pIntrf->TxTransfer));
 		if (length <= 0)
 		{
 			return;
