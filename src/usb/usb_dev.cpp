@@ -1,15 +1,14 @@
 /**-------------------------------------------------------------------------
-@file	usb_dev.cpp
+@file	usb_dev_native.cpp
 
-@brief	Generic USB device.
+@brief	Native IOsonata USB device runtime.
 
-Sits between the application and the device stack. Owns the identity, the
-start and stop order, and the pump. Knows nothing about which controller is
-underneath : that is the port layer in usbd.h, and one file per MCU
-family answers it.
+Owns USB device identity, hardware start/stop sequencing and the native
+UsbdCore lifecycle. This file is the replacement for usb_dev.cpp when the
+native device stack is linked.
 
 @author	Hoang Nguyen Hoan
-@date	Aug. 28, 2026
+@date	Aug. 29, 2026
 
 @license
 
@@ -38,59 +37,64 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "tusb.h"
-#include "device/dcd.h"
-
 #include "usb/usb_dev.h"
-#include "usb/usbd.h"
+#include "usb/usbd_core.h"
+#include "usb/usbd_ctrlr.h"
+#include "usb/usbd_cdc_desc.h"
 
-//
-// The root hub port. Neither the nRF52 USBD nor the nRF54 USBHS has more than
-// one, and no part in the tree does.
-//
-#define USBDEV_RHPORT				0
+#define USBDEV_FUNC_MAXCNT			USBD_CDC_FUNC_MAXCNT
 
-//
-// How many function interfaces may register. Two CDC functions is the common
-// case and this leaves room for a third without being generous with BSS.
-//
-#define USBDEV_FUNC_MAXCNT			4
-
-typedef struct {
+typedef struct __Usb_Dev_Function {
 	void (*Pump)(void *pCtx);
 	void *pCtx;
 } UsbDevFunc_t;
 
-//
-// One USB device controller per MCU, so this state is file scope rather than
-// behind a handle. Nothing here is reachable from an interrupt : the cable
-// event handler below is called from UsbdProcess, which runs in the same
-// context as the pump.
-//
 static UsbDevCfg_t s_UsbDevCfg;
 static char s_UsbDevSerial[USBDEV_SERIAL_MAXLEN];
 static UsbDevFunc_t s_UsbDevFunc[USBDEV_FUNC_MAXCNT];
-static int s_UsbDevFuncCnt = 0;
-static bool s_UsbDevInitialized = false;
-static bool s_UsbDevStarted = false;
-static bool s_UsbDevAttachPending = false;
+static int s_UsbDevFuncCnt;
+static bool s_UsbDevInitialized;
+static bool s_UsbDevStarted;
+static bool s_UsbDevAttachPending;
 
-/**
- * Cable events arrive here from UsbdProcess, already out of interrupt
- * context. Attaching is deferred to the next pump rather than done here so
- * that the start sequence, which waits on the part, never runs from inside
- * the port layer's own housekeeping.
- */
+static int UsbDevMaxCdcCount(const UsbdCaps_t *pCaps)
+{
+	if (pCaps == nullptr || pCaps->EpInCnt < 3U || pCaps->EpOutCnt < 3U)
+	{
+		return 0;
+	}
+
+	// The native CDC topology uses endpoint 1 for notification and endpoint 2
+	// for bulk on the first function, then advances both endpoint numbers by
+	// two. Endpoint counts include EP0, so the smaller direction determines
+	// how many complete CDC functions fit on this controller instance.
+	const int maxIn = ((int)pCaps->EpInCnt - 1) / 2;
+	const int maxOut = ((int)pCaps->EpOutCnt - 1) / 2;
+	const int maxCdc = maxIn < maxOut ? maxIn : maxOut;
+
+	return maxCdc < USBD_CDC_FUNC_MAXCNT ? maxCdc : USBD_CDC_FUNC_MAXCNT;
+}
+
+static const uint8_t *UsbDevDescHandler(uint8_t DescType,
+									uint8_t DescIndex,
+									uint16_t LangId,
+									UsbdSpeed_t,
+									uint16_t *pLength,
+									void *pContext)
+{
+	const UsbdSpeed_t speed = UsbdCtrlrHighSpeed() ?
+		USBD_SPEED_HIGH : USBD_SPEED_FULL;
+
+	return UsbdCdcDescHandler(DescType, DescIndex, LangId, speed,
+							 pLength, pContext);
+}
+
 static void UsbDevEvtHandler(UsbdEvt_t Evt)
 {
 	switch (Evt)
 	{
 		case USBD_EVT_ATTACHED:
-			if (s_UsbDevStarted)
-			{
-				dcd_connect(USBDEV_RHPORT);
-			}
-			else
+			if (!s_UsbDevStarted)
 			{
 				s_UsbDevAttachPending = true;
 			}
@@ -116,30 +120,40 @@ bool UsbDevInit(const UsbDevCfg_t *pCfg)
 		return false;
 	}
 
-	memcpy(&s_UsbDevCfg, pCfg, sizeof(UsbDevCfg_t));
+	const UsbdCaps_t *pCaps = UsbdGetCaps();
+	const int maxCdc = UsbDevMaxCdcCount(pCaps);
+	if (maxCdc < 1 || pCaps->Ep0Mps == 0U)
+	{
+		return false;
+	}
+
+	s_UsbDevInitialized = false;
+	s_UsbDevStarted = false;
+	s_UsbDevAttachPending = false;
+	s_UsbDevFuncCnt = 0;
+	memset(s_UsbDevFunc, 0, sizeof(s_UsbDevFunc));
+	memcpy(&s_UsbDevCfg, pCfg, sizeof(s_UsbDevCfg));
 
 	if (s_UsbDevCfg.NbCdc < 1)
 	{
 		s_UsbDevCfg.NbCdc = 1;
 	}
-	if (s_UsbDevCfg.NbCdc > CFG_TUD_CDC)
+
+	if (s_UsbDevCfg.NbCdc > maxCdc)
 	{
-		s_UsbDevCfg.NbCdc = CFG_TUD_CDC;
+		s_UsbDevCfg.NbCdc = maxCdc;
 	}
+
 	if (s_UsbDevCfg.MaxPower == 0)
 	{
 		s_UsbDevCfg.MaxPower = 100;
 	}
 
-	//
-	// The serial string is resolved once, here, so the descriptor callback
-	// stays a lookup. It runs in whatever context the host asks from and has
-	// no business reading device registers.
-	//
 	if (s_UsbDevCfg.pSerial != nullptr)
 	{
-		strncpy(s_UsbDevSerial, s_UsbDevCfg.pSerial, sizeof(s_UsbDevSerial) - 1);
-		s_UsbDevSerial[sizeof(s_UsbDevSerial) - 1] = '\0';
+		strncpy(s_UsbDevSerial, s_UsbDevCfg.pSerial,
+				sizeof(s_UsbDevSerial) - 1U);
+		s_UsbDevSerial[sizeof(s_UsbDevSerial) - 1U] = '\0';
 	}
 	else
 	{
@@ -147,19 +161,28 @@ bool UsbDevInit(const UsbDevCfg_t *pCfg)
 	}
 	s_UsbDevCfg.pSerial = s_UsbDevSerial;
 
-	UsbdCfg_t hwcfg;
+	UsbdCfg_t hwCfg = {};
+	hwCfg.IntPrio = s_UsbDevCfg.IntPrio;
+	hwCfg.bLowPowerSuspend = s_UsbDevCfg.bLowPowerSuspend;
+	hwCfg.EvtHandler = UsbDevEvtHandler;
 
-	hwcfg.IntPrio = s_UsbDevCfg.IntPrio;
-	hwcfg.bLowPowerSuspend = s_UsbDevCfg.bLowPowerSuspend;
-	hwcfg.EvtHandler = UsbDevEvtHandler;
+	if (!UsbdInit(&hwCfg))
+	{
+		return false;
+	}
 
-	if (UsbdInit(&hwcfg) == false)
+	UsbdCoreCfg_t coreCfg = {};
+	coreCfg.DescHandler = UsbDevDescHandler;
+	coreCfg.pDescContext = nullptr;
+	coreCfg.Speed = pCaps->MaxSpeed;
+	coreCfg.Ep0Mps = pCaps->Ep0Mps;
+
+	if (!UsbdCoreInit(&coreCfg))
 	{
 		return false;
 	}
 
 	s_UsbDevInitialized = true;
-
 	return true;
 }
 
@@ -179,7 +202,7 @@ bool UsbDevRegisterFunc(void (*Pump)(void *pCtx), void *pCtx)
 
 bool UsbDevEnable(void)
 {
-	if (s_UsbDevInitialized == false)
+	if (!s_UsbDevInitialized)
 	{
 		return false;
 	}
@@ -189,97 +212,56 @@ bool UsbDevEnable(void)
 		return true;
 	}
 
-	//
-	// No bus power is the ordinary state of a board on a battery, not a
-	// failure. The attach event sets the pending flag and the next pass
-	// tries again.
-	//
-	if (UsbdStart() == false)
+	if (!UsbdStart())
 	{
 		return false;
 	}
 
-	tusb_rhport_init_t rhinit;
-
-	memset(&rhinit, 0, sizeof(rhinit));
-	rhinit.role = TUSB_ROLE_DEVICE;
-	rhinit.speed = UsbdMaxSpeed() == USBD_SPEED_HIGH ?
-					TUSB_SPEED_HIGH : TUSB_SPEED_FULL;
-
-	//
-	// tusb_rhport_init and not tud_init. tud_init reaches the device layer
-	// without going through tusb.c, so the root hub port role stays invalid
-	// and the shared interrupt handler dispatches to nothing.
-	//
-	if (tusb_rhport_init(USBDEV_RHPORT, &rhinit) == false)
+	if (!UsbdCtrlrStart())
 	{
 		UsbdStop();
 		return false;
 	}
 
-	//
-	// tud_rhport_init is a no-op when the stack is already initialised. That
-	// is the normal reattach path, and UsbdStop disabled the controller IRQ,
-	// so explicitly enable it again before reconnecting.
-	//
-	dcd_int_enable(USBDEV_RHPORT);
-
+	UsbdCoreStart();
 	s_UsbDevStarted = true;
 	s_UsbDevAttachPending = false;
-
-	//
-	// The controller start sequence deliberately leaves the pull-up off until
-	// the device stack is ready to answer the first bus reset.
-	//
-	dcd_connect(USBDEV_RHPORT);
 
 	return true;
 }
 
 void UsbDevDisable(void)
 {
-	if (s_UsbDevStarted == false)
+	if (!s_UsbDevStarted)
 	{
 		return;
 	}
 
-	//
-	// Keep the TinyUSB software stack initialised. A reconnect begins with a
-	// host bus reset, which resets its device/class state. Power down only the
-	// controller and its clock here; this also avoids depending on a DCD
-	// deinit hook that the nRF5x driver does not provide.
-	//
-	dcd_disconnect(USBDEV_RHPORT);
+	UsbdCoreStop();
+	UsbdCtrlrStop();
 	UsbdStop();
-
 	s_UsbDevStarted = false;
 	s_UsbDevAttachPending = false;
 }
 
 void UsbDevProcess(void)
 {
-	if (s_UsbDevInitialized == false)
+	if (!s_UsbDevInitialized)
 	{
 		return;
 	}
 
 	UsbdProcess();
 
-	if (s_UsbDevStarted == false)
+	if (!s_UsbDevStarted)
 	{
 		if (s_UsbDevAttachPending)
 		{
 			s_UsbDevAttachPending = false;
-			UsbDevEnable();
+			(void)UsbDevEnable();
 		}
 		return;
 	}
-
-	//
-	// Zero timeout. The pump does not block, whether it is called from a main
-	// loop or from a thread that has other work.
-	//
-	tud_task_ext(0, false);
 
 	for (int i = 0; i < s_UsbDevFuncCnt; i++)
 	{
@@ -289,12 +271,12 @@ void UsbDevProcess(void)
 
 bool UsbDevMounted(void)
 {
-	return s_UsbDevStarted && tud_mounted();
+	return s_UsbDevStarted && UsbdCoreConfigured();
 }
 
 bool UsbDevSuspended(void)
 {
-	return s_UsbDevStarted && tud_suspended();
+	return s_UsbDevStarted && UsbdCoreSuspended();
 }
 
 const UsbDevCfg_t *UsbDevGetCfg(void)
