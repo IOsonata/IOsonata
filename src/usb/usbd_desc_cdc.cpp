@@ -41,8 +41,6 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "tusb.h"
-
 #include "usb/usb_dev.h"
 
 //
