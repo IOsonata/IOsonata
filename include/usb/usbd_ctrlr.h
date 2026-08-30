@@ -51,14 +51,6 @@ SOFTWARE.
   * @{
   */
 
-// Compatibility aliases for the initial native device-controller code.
-// Endpoint address encoding is defined once in usb_def.h and is common to
-// both USB host and device implementations.
-#define USBD_EP_NUM(addr)		USB_ENDPADDR_NUM(addr)
-#define USBD_EP_IS_IN(addr)		USB_ENDPADDR_IS_IN(addr)
-#define USBD_EP_DIR_OUT			USB_ENDPADDR_DIR_OUT
-#define USBD_EP_DIR_IN			USB_ENDPADDR_DIR_IN
-
 typedef enum __Usbd_Ctrlr_Xfer_Result {
 	USBD_CTRLR_XFER_SUCCESS,
 	USBD_CTRLR_XFER_FAILED,
