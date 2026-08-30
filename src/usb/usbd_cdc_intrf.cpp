@@ -34,8 +34,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#include <string.h>
-
 #include "usb/usb_dev.h"
 #include "usb/usbd_cdc.h"
 #include "usb/usbd_bulk_intrf.h"
@@ -328,12 +326,6 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 
 	pIntrf->RxDropCnt = 0;
 	pIntrf->TxDropCnt = 0;
-	memset(pIntrf->TransBuff, 0, sizeof(pIntrf->TransBuff));
-	pIntrf->TransBuffLen = 0;
-	pIntrf->TxPendingOfs = 0;
-	pIntrf->TxPendingLen = 0;
-	pIntrf->RxErrCnt = 0;
-	pIntrf->TxBusyCnt = 0;
 	pIntrf->hRxFifo = pState->Bulk.hRxFifo;
 	pIntrf->hTxFifo = pState->Bulk.hTxFifo;
 	pIntrf->ItfNo = pCfg->ItfNo;

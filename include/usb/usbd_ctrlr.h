@@ -180,9 +180,12 @@ void UsbdCtrlrEpCloseAll(void);
 /**
  * @brief	Start one endpoint transfer.
  *
- * The transfer buffer must remain valid until USBD_CTRLR_EVT_XFER_CMPL. A
- * zero length transfer is valid. Only one transfer may be outstanding on an
- * endpoint direction at a time.
+ * TotalBytes is the logical transfer length, not a controller DMA or FIFO
+ * transaction limit. A backend must split the request into hardware-sized
+ * operations as required by the endpoint and controller. The transfer buffer
+ * must remain valid until USBD_CTRLR_EVT_XFER_CMPL. A zero length transfer is
+ * valid. Only one transfer may be outstanding on an endpoint direction at a
+ * time.
  */
 bool UsbdCtrlrEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes);
 
