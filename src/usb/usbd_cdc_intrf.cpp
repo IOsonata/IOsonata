@@ -41,9 +41,10 @@ SOFTWARE.
 #include "usb/usbd_bulk_intrf.h"
 #include "usbd_cdc_priv.h"
 
-#define USBD_CDC_INTRF_MAXCNT		3
+// The built-in FIFO holds one maximum-size bulk packet. Applications that
+// need deeper buffering supply their own FIFO memory through UsbdCdcIntrfCfg_t.
 #define USBD_CDC_DEFAULT_FIFO_MEMSIZE \
-	CFIFO_MEMSIZE(4U * USBD_CDC_BULK_FS_MPS)
+	CFIFO_MEMSIZE(USBD_CDC_BULK_HS_MPS)
 
 typedef struct __Usbd_Cdc_State {
 	UsbdBulkDevIntrf_t Bulk;
@@ -52,16 +53,16 @@ typedef struct __Usbd_Cdc_State {
 	DevIntrfEvtHandler_t AppEvt;
 } UsbdCdcState_t;
 
-alignas(4) static uint8_t s_RxFifoMem[USBD_CDC_INTRF_MAXCNT]
+alignas(4) static uint8_t s_RxFifoMem[USBD_CDC_FUNC_MAXCNT]
 	[USBD_CDC_DEFAULT_FIFO_MEMSIZE];
-alignas(4) static uint8_t s_TxFifoMem[USBD_CDC_INTRF_MAXCNT]
+alignas(4) static uint8_t s_TxFifoMem[USBD_CDC_FUNC_MAXCNT]
 	[USBD_CDC_DEFAULT_FIFO_MEMSIZE];
-static UsbdCdcState_t s_State[USBD_CDC_INTRF_MAXCNT];
+static UsbdCdcState_t s_State[USBD_CDC_FUNC_MAXCNT];
 
 static UsbdCdcState_t *UsbdCdcFromPublic(UsbdCdcDevIntrf_t *pIntrf)
 {
 	if (pIntrf == nullptr || pIntrf->ItfNo < 0 ||
-		pIntrf->ItfNo >= USBD_CDC_INTRF_MAXCNT)
+		pIntrf->ItfNo >= USBD_CDC_FUNC_MAXCNT)
 	{
 		return nullptr;
 	}
@@ -78,7 +79,7 @@ static UsbdCdcState_t *UsbdCdcFromDev(DevIntrf_t *pDevIntrf)
 
 static UsbdCdcState_t *UsbdCdcFromBulk(DevIntrf_t *pDevIntrf)
 {
-	for (int i = 0; i < USBD_CDC_INTRF_MAXCNT; i++)
+	for (int i = 0; i < USBD_CDC_FUNC_MAXCNT; i++)
 	{
 		if (&s_State[i].Bulk.DevIntrf == pDevIntrf &&
 			s_State[i].pPublic != nullptr)
@@ -254,15 +255,7 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 					  const UsbdCdcIntrfCfg_t *pCfg)
 {
 	if (pIntrf == nullptr || pCfg == nullptr ||
-		pCfg->ItfNo < 0 || pCfg->ItfNo >= USBD_CDC_INTRF_MAXCNT)
-	{
-		return false;
-	}
-
-	// The current interface keeps three statically allocated CDC instances.
-	// High-speed operation is not enabled here because the default FIFO sizing
-	// is based on the full-speed CDC packet size.
-	if (UsbdMaxSpeed() != USBD_SPEED_FULL)
+		pCfg->ItfNo < 0 || pCfg->ItfNo >= USBD_CDC_FUNC_MAXCNT)
 	{
 		return false;
 	}
