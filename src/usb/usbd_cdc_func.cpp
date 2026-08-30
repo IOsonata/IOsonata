@@ -33,7 +33,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "usb/usbd_cdc_func.h"
+#include "usbd_cdc_priv.h"
 
 static_assert(sizeof(UsbCdcLineCoding_t) == 7U, "CDC line coding size");
 static_assert(sizeof(UsbCdcNotification_t) == 8U, "CDC notification header size");

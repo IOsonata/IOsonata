@@ -35,7 +35,7 @@ SOFTWARE.
 
 #include "usb/usb_cdcdef.h"
 #include "usb/usb_dev.h"
-#include "usb/usbd_cdc_desc.h"
+#include "usbd_cdc_priv.h"
 
 #define USBD_CDC_STR_MANUFACTURER		1U
 #define USBD_CDC_STR_PRODUCT			2U
