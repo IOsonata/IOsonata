@@ -64,10 +64,6 @@ enum
 	NRFX_USBD_DMA_EP_NONE = 0xFFU,
 };
 
-#define NRFX_USBD_EDPT_END_ALL_MASK \
-	((0xFFUL << USBD_INTEN_ENDEPIN0_Pos) | \
-	 (0xFFUL << USBD_INTEN_ENDEPOUT0_Pos))
-
 #define NRFX_USBD_IRQ_EVENT_COUNT	(USBD_INTEN_EPDATA_Pos + 1)
 
 #define NRFX_USBD_ERRATA_199_REG \
@@ -99,6 +95,11 @@ static atomic_uint_fast16_t s_PendingOut;
 static atomic_uint_fast16_t s_PendingIn;
 static atomic_bool s_PendingEp0Status;
 static atomic_bool s_PendingEp0RcvOut;
+static atomic_bool s_BusSuspended;
+static atomic_bool s_SuspendPending;
+static atomic_bool s_RemoteWakePending;
+static atomic_bool s_HostResumePending;
+static atomic_bool s_MacAwake;
 
 static inline uint8_t nRFUsbdDir(uint8_t EpAddr)
 {
@@ -203,6 +204,15 @@ static void nRFUsbdDmaWait(void)
 			return;
 		}
 
+		// A USB reset cancels endpoint activity in hardware. Leave the reset
+		// event for the IRQ handler, but do not wait forever for an ENDEP event
+		// that the reset may have suppressed.
+		if (NRF_USBD->EVENTS_USBRESET != 0U)
+		{
+			nRFUsbdDmaRelease();
+			return;
+		}
+
 		volatile uint32_t *pEvent = nRFUsbdDmaEndEvent(epAddr);
 		if (*pEvent == 0U)
 		{
@@ -221,6 +231,31 @@ static void nRFUsbdNoDmaTask(volatile uint32_t *pTask)
 	*pTask = 1;
 	__ISB();
 	__DSB();
+
+	atomic_flag_clear(&s_DmaRunning);
+}
+
+static void nRFUsbdEp0StatusNow(void)
+{
+	const uint8_t epAddr = s_Ctrlr.SetupDirIn ?
+		USBD_EP_DIR_OUT : USBD_EP_DIR_IN;
+	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(epAddr);
+
+	// EP0STATUS permits the hardware status stage. nRF52 has no separate
+	// status-complete event, so publish the synthetic completion only when the
+	// task is actually issued, never while it is still queued behind EasyDMA.
+	NRF_USBD->TASKS_EP0STATUS = 1;
+	__ISB();
+	__DSB();
+
+	// Keep s_DmaRunning held across the callback. A completion callback may
+	// queue more endpoint work; the outer service loop will pick it up after
+	// this status operation has been fully published.
+	if (pXfer->Started && pXfer->TotalLen == 0U)
+	{
+		pXfer->Started = false;
+		nRFUsbdEmitXfer(epAddr, 0, USBD_CTRLR_XFER_SUCCESS);
+	}
 
 	atomic_flag_clear(&s_DmaRunning);
 }
@@ -273,6 +308,15 @@ static bool nRFUsbdStartInDmaNow(uint8_t EpNum)
 
 static void nRFUsbdServicePending(void)
 {
+	// Existing work may drain after SUSPEND, but once the controller has
+	// entered low power no endpoint task may start until the bus is awake.
+	if (atomic_load(&s_HostResumePending) ||
+		(atomic_load(&s_BusSuspended) &&
+		 !atomic_load(&s_SuspendPending)))
+	{
+		return;
+	}
+
 	for (;;)
 	{
 		if (atomic_flag_test_and_set(&s_DmaRunning))
@@ -282,7 +326,7 @@ static void nRFUsbdServicePending(void)
 
 		if (atomic_exchange(&s_PendingEp0Status, false))
 		{
-			nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0STATUS);
+			nRFUsbdEp0StatusNow();
 			continue;
 		}
 
@@ -363,6 +407,11 @@ static void nRFUsbdResetState(void)
 	atomic_store(&s_PendingIn, 0);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
+	atomic_store(&s_BusSuspended, false);
+	atomic_store(&s_SuspendPending, false);
+	atomic_store(&s_RemoteWakePending, false);
+	atomic_store(&s_HostResumePending, false);
+	atomic_store(&s_MacAwake, true);
 	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
 	atomic_flag_clear(&s_DmaRunning);
 
@@ -404,6 +453,195 @@ static void nRFUsbdAbortEp0(void)
 	__DSB();
 }
 
+static void nRFUsbdHostResumeDetected(void);
+
+static void nRFUsbdTryEnterLowPower(void)
+{
+	if (!atomic_load(&s_BusSuspended) ||
+		!atomic_load(&s_SuspendPending) ||
+		atomic_load(&s_RemoteWakePending) ||
+		atomic_load(&s_HostResumePending) ||
+		(uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE ||
+		atomic_load(&s_PendingOut) != 0U ||
+		atomic_load(&s_PendingIn) != 0U ||
+		atomic_load(&s_PendingEp0Status) ||
+		atomic_load(&s_PendingEp0RcvOut))
+	{
+		return;
+	}
+
+	// Do not enter low power if the host resumed after this IRQ snapshot was
+	// collected. SOF covers hosts affected by nRF52 anomaly 211.
+	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
+		NRF_USBD->EVENTS_SOF != 0U)
+	{
+		nRFUsbdHostResumeDetected();
+		return;
+	}
+
+	// Serialize the LOWPOWER transition with EasyDMA scheduling and remote
+	// wake. A request arriving while this lock is held is rechecked below.
+	if (atomic_flag_test_and_set(&s_DmaRunning))
+	{
+		return;
+	}
+
+	if (!atomic_load(&s_BusSuspended) ||
+		!atomic_load(&s_SuspendPending) ||
+		atomic_load(&s_RemoteWakePending) ||
+		atomic_load(&s_HostResumePending) ||
+		(uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE ||
+		atomic_load(&s_PendingOut) != 0U ||
+		atomic_load(&s_PendingIn) != 0U ||
+		atomic_load(&s_PendingEp0Status) ||
+		atomic_load(&s_PendingEp0RcvOut))
+	{
+		atomic_flag_clear(&s_DmaRunning);
+		return;
+	}
+
+	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
+		NRF_USBD->EVENTS_SOF != 0U)
+	{
+		atomic_flag_clear(&s_DmaRunning);
+		nRFUsbdHostResumeDetected();
+		return;
+	}
+
+	atomic_store(&s_MacAwake, false);
+	NRF_USBD->LOWPOWER =
+		USBD_LOWPOWER_LOWPOWER_LowPower << USBD_LOWPOWER_LOWPOWER_Pos;
+	(void)NRF_USBD->LOWPOWER;
+	__ISB();
+	__DSB();
+
+	// The resume condition can race the LOWPOWER write itself. If it did,
+	// immediately restore ForceNormal and finish resume through USBWUALLOWED.
+	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
+		NRF_USBD->EVENTS_SOF != 0U)
+	{
+		atomic_flag_clear(&s_DmaRunning);
+		nRFUsbdHostResumeDetected();
+		return;
+	}
+
+	// A remote-wake request may have arrived after the pre-write check while
+	// this lock prevented DPDMDRIVE. Restore the MAC and let USBWUALLOWED
+	// complete that request.
+	if (atomic_load(&s_RemoteWakePending) ||
+		!atomic_load(&s_SuspendPending))
+	{
+		atomic_store(&s_SuspendPending, false);
+		NRF_USBD->LOWPOWER =
+			USBD_LOWPOWER_LOWPOWER_ForceNormal <<
+			USBD_LOWPOWER_LOWPOWER_Pos;
+		__ISB();
+		__DSB();
+		atomic_flag_clear(&s_DmaRunning);
+		return;
+	}
+
+	atomic_store(&s_SuspendPending, false);
+	atomic_flag_clear(&s_DmaRunning);
+}
+
+static void nRFUsbdTryRemoteWake(void)
+{
+	if (!atomic_load(&s_RemoteWakePending) ||
+		!atomic_load(&s_BusSuspended) ||
+		atomic_load(&s_HostResumePending) ||
+		!atomic_load(&s_MacAwake) ||
+		NRF_USBD->LOWPOWER !=
+			(USBD_LOWPOWER_LOWPOWER_ForceNormal <<
+			 USBD_LOWPOWER_LOWPOWER_Pos))
+	{
+		return;
+	}
+
+	// Serialize DPDMDRIVE with the same lock that owns EasyDMA scheduling.
+	// This closes the small race where application context requests wake while
+	// the IRQ has selected a pending DMA but has not written STARTEP yet.
+	if (atomic_flag_test_and_set(&s_DmaRunning))
+	{
+		return;
+	}
+
+	if (!atomic_load(&s_RemoteWakePending) ||
+		!atomic_load(&s_BusSuspended) ||
+		atomic_load(&s_HostResumePending) ||
+		!atomic_load(&s_MacAwake) ||
+		(uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE)
+	{
+		atomic_flag_clear(&s_DmaRunning);
+		return;
+	}
+
+	atomic_store(&s_RemoteWakePending, false);
+	NRF_USBD->DPDMVALUE = USBD_DPDMVALUE_STATE_Resume;
+	NRF_USBD->TASKS_DPDMDRIVE = 1;
+	__ISB();
+	__DSB();
+	atomic_flag_clear(&s_DmaRunning);
+
+	// SOF is also the recovery path for hosts that resume by simply restarting
+	// frames instead of generating the RESUME event (nRF52 anomaly 211).
+	if ((NRF_USBD->INTEN & USBD_INTEN_SOF_Msk) == 0U)
+	{
+		NRF_USBD->EVENTS_SOF = 0;
+	}
+	NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
+}
+
+static void nRFUsbdHostResumeDetected(void)
+{
+	if (!atomic_load(&s_BusSuspended))
+	{
+		return;
+	}
+
+	// Host activity wins over a pending device-initiated remote wake.
+	atomic_store(&s_BusSuspended, false);
+	atomic_store(&s_SuspendPending, false);
+	atomic_store(&s_RemoteWakePending, false);
+
+	if (!atomic_load(&s_MacAwake) ||
+		NRF_USBD->LOWPOWER !=
+			(USBD_LOWPOWER_LOWPOWER_ForceNormal <<
+			 USBD_LOWPOWER_LOWPOWER_Pos))
+	{
+		atomic_store(&s_HostResumePending, true);
+		if (NRF_USBD->LOWPOWER !=
+			(USBD_LOWPOWER_LOWPOWER_ForceNormal <<
+			 USBD_LOWPOWER_LOWPOWER_Pos))
+		{
+			NRF_USBD->LOWPOWER =
+				USBD_LOWPOWER_LOWPOWER_ForceNormal <<
+				USBD_LOWPOWER_LOWPOWER_Pos;
+			__ISB();
+			__DSB();
+		}
+		return;
+	}
+
+	atomic_store(&s_HostResumePending, false);
+	nRFUsbdEmitSimple(USBD_CTRLR_EVT_RESUME);
+}
+
+static void nRFUsbdWakeAllowed(void)
+{
+	atomic_store(&s_MacAwake, true);
+
+	if (atomic_exchange(&s_HostResumePending, false))
+	{
+		nRFUsbdEmitSimple(USBD_CTRLR_EVT_RESUME);
+		return;
+	}
+
+	// USBWUALLOWED is generated for every ForceNormal transition. Only a
+	// remote-wake request is allowed to drive K-state on the bus.
+	nRFUsbdTryRemoteWake();
+}
+
 bool UsbdCtrlrInit(UsbdCtrlrEvtHandler_t EvtHandler, void *pContext)
 {
 	s_Ctrlr.EvtHandler = EvtHandler;
@@ -441,7 +679,29 @@ void UsbdCtrlrDisconnect(void)
 
 void UsbdCtrlrRemoteWakeup(void)
 {
-	NRF_USBD->LOWPOWER = 0;
+	if (!atomic_load(&s_BusSuspended) ||
+		atomic_load(&s_HostResumePending))
+	{
+		return;
+	}
+
+	// Stop draining queued endpoint work. Remote wake takes priority as soon
+	// as any EasyDMA operation already in progress has completed.
+	atomic_store(&s_SuspendPending, false);
+	atomic_store(&s_RemoteWakePending, true);
+
+	if (NRF_USBD->LOWPOWER !=
+		(USBD_LOWPOWER_LOWPOWER_ForceNormal <<
+		 USBD_LOWPOWER_LOWPOWER_Pos))
+	{
+		NRF_USBD->LOWPOWER =
+			USBD_LOWPOWER_LOWPOWER_ForceNormal <<
+			USBD_LOWPOWER_LOWPOWER_Pos;
+		__ISB();
+		__DSB();
+	}
+
+	nRFUsbdTryRemoteWake();
 }
 
 void UsbdCtrlrSofEnable(bool Enable)
@@ -586,7 +846,8 @@ bool UsbdCtrlrEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes)
 	const uint8_t epNum = USBD_EP_NUM(EpAddr);
 
 	if (epNum >= NRFX_USBD_EP_COUNT ||
-		(TotalBytes > 0 && pBuffer == NULL))
+		(TotalBytes > 0 && pBuffer == NULL) ||
+		atomic_load(&s_BusSuspended))
 	{
 		return false;
 	}
@@ -616,8 +877,6 @@ bool UsbdCtrlrEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes)
 
 	if (controlStatus)
 	{
-		pXfer->Started = false;
-		nRFUsbdEmitXfer(EpAddr, 0, USBD_CTRLR_XFER_SUCCESS);
 		nRFUsbdQueueEp0Status();
 	}
 	else if (USBD_EP_IS_IN(EpAddr))
@@ -715,10 +974,13 @@ static uint32_t nRFUsbdCollectEvents(void)
 
 static void nRFUsbdBusReset(void)
 {
-	// USB reset invalidates every transfer. Finish the local EasyDMA copy
-	// before clearing software state so a reset can never free the shared DMA
-	// engine while it is still touching the previous transfer buffer.
-	nRFUsbdDmaWait();
+	// USBRESET cancels endpoint activity in hardware. It is a hard transfer
+	// boundary: release any software EasyDMA ownership instead of waiting for
+	// an ENDEP event that reset is allowed to suppress.
+	if ((uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE)
+	{
+		nRFUsbdDmaRelease();
+	}
 
 	NRF_USBD->EPOUTEN = 1UL;
 	NRF_USBD->EPINEN = 1UL;
@@ -894,26 +1156,35 @@ static void nRFUsbdIrqHandler(void)
 
 	if ((intStatus & USBD_INTEN_USBEVENT_Msk) != 0)
 	{
-		if ((eventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0)
+		if ((eventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0 &&
+			!atomic_exchange(&s_BusSuspended, true))
 		{
-			NRF_USBD->LOWPOWER = 1;
-			nRFUsbdEmitSimple(USBD_CTRLR_EVT_SUSPEND);
-		}
+			// Let any local EasyDMA copy already in progress finish before
+			// entering USBD low power. New transfers are rejected meanwhile.
+			atomic_store(&s_SuspendPending, true);
+			atomic_store(&s_RemoteWakePending, false);
+			atomic_store(&s_HostResumePending, false);
 
-		if ((eventCause & USBD_EVENTCAUSE_USBWUALLOWED_Msk) != 0)
-		{
-			NRF_USBD->DPDMVALUE = USBD_DPDMVALUE_STATE_Resume;
-			NRF_USBD->TASKS_DPDMDRIVE = 1;
-			if ((NRF_USBD->INTEN & USBD_INTEN_SOF_Msk) == 0)
+			// Some hosts resume by restarting SOF without a RESUME condition.
+			if ((NRF_USBD->INTEN & USBD_INTEN_SOF_Msk) == 0U)
 			{
 				NRF_USBD->EVENTS_SOF = 0;
 			}
 			NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
+			nRFUsbdEmitSimple(USBD_CTRLR_EVT_SUSPEND);
 		}
 
+		// Host activity takes precedence if RESUME and USBWUALLOWED arrive
+		// together. Wake the MAC first; only a requested remote wake may drive
+		// resume signalling onto D+/D-.
 		if ((eventCause & USBD_EVENTCAUSE_RESUME_Msk) != 0)
 		{
-			nRFUsbdEmitSimple(USBD_CTRLR_EVT_RESUME);
+			nRFUsbdHostResumeDetected();
+		}
+
+		if ((eventCause & USBD_EVENTCAUSE_USBWUALLOWED_Msk) != 0)
+		{
+			nRFUsbdWakeAllowed();
 		}
 	}
 
@@ -958,6 +1229,10 @@ static void nRFUsbdIrqHandler(void)
 		(intStatus & USBD_INTEN_EP0SETUP_Msk) != 0;
 	if (setupPending)
 	{
+		// Any SETUP token is host bus activity and therefore also a resume
+		// indication if the host did not provide a separate RESUME event.
+		nRFUsbdHostResumeDetected();
+
 		// A SETUP token aborts any previous control transfer. If its local
 		// EasyDMA copy is still active, wait only for EP0; unrelated data
 		// endpoint DMA remains owned and queued control work waits behind it.
@@ -986,6 +1261,9 @@ static void nRFUsbdIrqHandler(void)
 
 	if ((intStatus & USBD_INTEN_SOF_Msk) != 0)
 	{
+		// SOF can be the first observable host activity after suspend.
+		nRFUsbdHostResumeDetected();
+
 		UsbdCtrlrEvt_t evt = {
 			.Type = USBD_CTRLR_EVT_SOF,
 			.FrameNo = (uint16_t)NRF_USBD->FRAMECNTR,
@@ -998,7 +1276,12 @@ static void nRFUsbdIrqHandler(void)
 		}
 	}
 
+	// A pending remote-wake request makes the service gate stop queued work.
+	// Running the wake check after service also catches a request that raced
+	// the scheduler lock while this IRQ was completing.
 	nRFUsbdServicePending();
+	nRFUsbdTryRemoteWake();
+	nRFUsbdTryEnterLowPower();
 }
 
 void USBD_IRQHandler(void)
