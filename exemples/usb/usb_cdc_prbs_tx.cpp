@@ -14,11 +14,9 @@ its cable detect are behind UsbdInit and friends, and one port file answers
 them per MCU family, so the same source builds for every target that has a
 USB device controller.
 
-CDC Tx drains its FIFO from the endpoint-completion interrupt, like UART Tx
-drains its FIFO from ENDTX. UsbDevProcess handles cable state and deferred USB
-work; it is not part of the steady-state payload path. This test therefore
-runs the byte-at-a-time Tx loop until it back-pressures, then gives the USB
-runtime a service pass.
+Unlike the UART version of this test, the loop that fills the FIFO has to run
+UsbDevProcess as it goes. Nothing leaves the FIFO without it, so a fill loop
+that spins waiting for room would wait on a pump it is itself blocking.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 28, 2026
@@ -71,9 +69,8 @@ alignas(4) static uint8_t s_CdcTxFifoMem[CDC_TXFIFO_MEMSIZE];
 
 // USB CDC interface configuration.
 //
-// The FIFO must not block. A full Tx FIFO is the point where this test gives
-// UsbDevProcess a service pass and then resumes feeding the interrupt-driven
-// endpoint path.
+// The FIFO must not block. A blocking FIFO waits for room that only the pump
+// can make, and the pump does not run while the caller is waiting in Tx.
 static const UsbdCdcIntrfCfg_t s_CdcCfg = {
 	.bBlocking = false,
 	.RxFifoMemSize = CDC_RXFIFO_MEMSIZE,
@@ -129,26 +126,23 @@ int main()
 
 	while (1)
 	{
+		UsbDevProcess();
+
 		// Sending before the host has opened the port fills the FIFO with
 		// octets the receiver will never see, and the sequence it does see
-		// then starts in the middle. While closed, service cable/control state.
+		// then starts in the middle.
 		if (g_Cdc.IsPortOpen() == false)
 		{
-			UsbDevProcess();
 			continue;
 		}
 
 #ifdef BYTE_MODE
-		// Demo transfer byte by byte, like UartPrbsTx BYTE_MODE. Endpoint
-		// completion interrupts drain/refill the FIFO; only back-pressure needs
-		// a USB runtime service pass here.
+		// Demo transfer byte by byte. The value advances only when the octet
+		// was taken, otherwise the stream would skip a step that the receiver
+		// counts as a drop.
 		if (g_Cdc.Tx(0, &d, 1) > 0)
 		{
 			d = Prbs8(d);
-		}
-		else
-		{
-			UsbDevProcess();
 		}
 #else
 		// Demo transfer buffer
@@ -165,20 +159,19 @@ int main()
 		{
 			int l = g_Cdc.Tx(0, p, len);
 
-			if (l > 0)
-			{
-				len -= l;
-				p += l;
-				continue;
-			}
+			len -= l;
+			p += l;
 
-			// The FIFO is full. Service cable/deferred USB state and stop if
-			// the cable went away while this buffer was half sent.
-			UsbDevProcess();
-
-			if (g_Cdc.IsPortOpen() == false)
+			if (len > 0)
 			{
-				break;
+				// The FIFO is full. Turn the pump over to drain it, and stop
+				// if the cable went away while this buffer was half sent.
+				UsbDevProcess();
+
+				if (g_Cdc.IsPortOpen() == false)
+				{
+					break;
+				}
 			}
 		}
 #endif
