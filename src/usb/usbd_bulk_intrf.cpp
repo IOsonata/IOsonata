@@ -31,6 +31,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include "coredev/interrupt.h"
 #include "usb/usbd_bulk_intrf.h"
 
 static UsbdBulkDevIntrf_t *UsbdBulkIntrfData(DevIntrf_t * const pDevIntrf)
@@ -131,8 +132,14 @@ static int UsbdBulkIntrfTxData(DevIntrf_t * const pDevIntrf,
 		return 0;
 	}
 
+	// The USB completion interrupt is the Tx FIFO consumer. CFifo publishes
+	// PutIdx before copying the bytes into the reserved slots, so keep the
+	// producer critical section identical to UART: the ISR must not consume a
+	// slot until its payload copy has completed.
+	uint32_t state = DisableInterrupt();
 	int cnt = CFifoWrite(pIntrf->hTxFifo,
 						 const_cast<uint8_t *>(pData), DataLen);
+	EnableInterrupt(state);
 
 	if (cnt > 0 && pIntrf->bEnabled && pIntrf->TxKick != nullptr)
 	{
