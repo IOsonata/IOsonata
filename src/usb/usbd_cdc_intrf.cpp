@@ -77,11 +77,6 @@ static uint32_t UsbdCdcRxGet(const UsbdCdcDevIntrf_t *pIntrf)
 	return __atomic_load_n(&pIntrf->RxGet, __ATOMIC_ACQUIRE);
 }
 
-static bool UsbdCdcTxCompletionPending(const UsbdCdcDevIntrf_t *pIntrf)
-{
-	return __atomic_load_n(&pIntrf->TxCompletePending, __ATOMIC_ACQUIRE);
-}
-
 static uint16_t UsbdCdcSerialStateMask(void)
 {
 	return USB_CDC_SERIAL_STATE_RX_CARRIER |
@@ -162,22 +157,29 @@ static void UsbdCdcTxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
 
 	if (pIntrf == nullptr || &pIntrf->Bulk != pBulk ||
 		!pBulk->bEnabled || !UsbdCdcIntrfPortIsOpen(pIntrf) ||
-		pIntrf->TxActive || pIntrf->TxZlpActive || pIntrf->TxZlpRequired ||
-		UsbdCdcTxCompletionPending(pIntrf))
+		pIntrf->TxActive || pIntrf->TxZlpActive)
 	{
 		return;
 	}
 
+	// An exact-MPS transfer schedules a terminating ZLP only while the stream
+	// remains empty. New bytes make it a continuation, so cancel the deferred
+	// ZLP here and let the normal Tx path start them immediately.
+	if (pIntrf->TxZlpRequired)
+	{
+		if (UsbdBulkIntrfTxUsed(pBulk) <= 0)
+		{
+			return;
+		}
+		pIntrf->TxZlpRequired = false;
+	}
+
 	if (pIntrf->TxLength == 0U)
 	{
-		//
-		// Stage as much as the transfer buffer holds, not one packet.
-		// UsbdCtrlrEpXfer takes a logical length and the controller splits it,
-		// so one submission moves several back to back packets. Staging
-		// one packet at a time left the endpoint idle for a whole completion
-		// round trip between packets and put the ceiling at one packet per
-		// pump pass.
-		//
+		// Same model as UART: the FIFO is the application queue and this private
+		// buffer is the DMA/endpoint staging area. Pull as much queued data as
+		// fits so the controller can split one logical request into back-to-back
+		// USB packets.
 		const int length = UsbdBulkIntrfGetTxData(pBulk,
 			UsbdCdcTxBuffer(pIntrf), (int)sizeof(pIntrf->TxTransfer));
 		if (length <= 0)
@@ -398,6 +400,16 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 	}
 }
 
+static void UsbdCdcReportTxFailure(UsbdCdcDevIntrf_t *pIntrf, uint16_t Length)
+{
+	if (pIntrf->Bulk.DevIntrf.EvtCB != nullptr)
+	{
+		pIntrf->Bulk.DevIntrf.EvtCB(&pIntrf->Bulk.DevIntrf,
+									DEVINTRF_EVT_TX_TIMEOUT,
+									nullptr, Length);
+	}
+}
+
 static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 						UsbdCtrlrXferResult_t Result, void *pContext)
 {
@@ -432,19 +444,64 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 
 	if (EpAddr == USBD_CDC_DATA_IN_EP(pIntrf->ItfNo))
 	{
-		pIntrf->TxCompleteLength = Length;
-		pIntrf->TxCompleteExpected = pIntrf->TxZlpActive ? 0U : pIntrf->TxLength;
-		pIntrf->TxCompleteResult = Result;
-
-		// A successful payload is already owned by the host. Clear its staged
-		// length before publishing completion so a simultaneous USB reset cannot
-		// cause the same payload to be retransmitted after re-enumeration.
-		if (!pIntrf->TxZlpActive && Result == USBD_CTRLR_XFER_SUCCESS)
+		// Match the UART ENDTX path: retire the completed transfer and refill
+		// the endpoint from the Tx FIFO in interrupt context. Continuous CDC Tx
+		// no longer waits for UsbDevProcess between logical transfers.
+		if (pIntrf->TxZlpActive)
 		{
-			pIntrf->TxLength = 0U;
+			pIntrf->TxZlpActive = false;
+			if (Result == USBD_CTRLR_XFER_SUCCESS && Length == 0U)
+			{
+				UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
+			}
+			else
+			{
+				pIntrf->TxZlpRequired = true;
+			}
+			return;
 		}
 
-		__atomic_store_n(&pIntrf->TxCompletePending, true, __ATOMIC_RELEASE);
+		if (!pIntrf->TxActive)
+		{
+			return;
+		}
+
+		const uint16_t expected = pIntrf->TxLength;
+		pIntrf->TxActive = false;
+
+		if (Result == USBD_CTRLR_XFER_SUCCESS && Length == expected)
+		{
+			pIntrf->TxLength = 0U;
+
+			if (UsbdBulkIntrfTxUsed(&pIntrf->Bulk) > 0)
+			{
+				UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
+			}
+			else if (Length != 0U && (Length % pIntrf->BulkMps) == 0U)
+			{
+				// Do not burn a bus slot on a ZLP immediately. Leave it pending so
+				// data arriving before the pump runs can continue the byte stream.
+				pIntrf->TxZlpRequired = true;
+			}
+			else
+			{
+				UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
+			}
+		}
+		else if (Length == 0U)
+		{
+			// No payload reached the host. The staged buffer is still intact, so
+			// retry it directly without involving the pump.
+			UsbdCdcTxKick(&pIntrf->Bulk, pIntrf);
+		}
+		else
+		{
+			// Some bytes may have reached the host. Never replay the whole staged
+			// buffer after a short or failed completion.
+			pIntrf->TxLength = 0U;
+			UsbdCdcReportTxFailure(pIntrf, Length);
+			UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
+		}
 		return;
 	}
 
@@ -516,16 +573,6 @@ static void UsbdCdcProcessRx(UsbdCdcDevIntrf_t *pIntrf)
 	}
 }
 
-static void UsbdCdcReportTxFailure(UsbdCdcDevIntrf_t *pIntrf, uint16_t Length)
-{
-	if (pIntrf->Bulk.DevIntrf.EvtCB != nullptr)
-	{
-		pIntrf->Bulk.DevIntrf.EvtCB(&pIntrf->Bulk.DevIntrf,
-									DEVINTRF_EVT_TX_TIMEOUT,
-									nullptr, Length);
-	}
-}
-
 static void UsbdCdcTryZlp(UsbdCdcDevIntrf_t *pIntrf)
 {
 	if (!pIntrf->TxZlpRequired || pIntrf->TxZlpActive ||
@@ -539,7 +586,7 @@ static void UsbdCdcTryZlp(UsbdCdcDevIntrf_t *pIntrf)
 	if (UsbdBulkIntrfTxUsed(&pIntrf->Bulk) > 0)
 	{
 		pIntrf->TxZlpRequired = false;
-		UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
+		UsbdCdcTxKick(&pIntrf->Bulk, pIntrf);
 		return;
 	}
 
@@ -557,60 +604,8 @@ static void UsbdCdcTryZlp(UsbdCdcDevIntrf_t *pIntrf)
 
 static void UsbdCdcProcessTx(UsbdCdcDevIntrf_t *pIntrf)
 {
-	if (__atomic_exchange_n(&pIntrf->TxCompletePending, false,
-							__ATOMIC_ACQ_REL))
-	{
-		const UsbdCtrlrXferResult_t result = pIntrf->TxCompleteResult;
-		const uint16_t length = pIntrf->TxCompleteLength;
-		const uint16_t expected = pIntrf->TxCompleteExpected;
-
-		if (pIntrf->TxZlpActive)
-		{
-			pIntrf->TxZlpActive = false;
-			if (result == USBD_CTRLR_XFER_SUCCESS && length == 0U)
-			{
-				UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
-			}
-			else
-			{
-				// Retrying a ZLP cannot duplicate payload bytes.
-				pIntrf->TxZlpRequired = true;
-			}
-		}
-		else if (pIntrf->TxActive)
-		{
-			pIntrf->TxActive = false;
-
-			if (result == USBD_CTRLR_XFER_SUCCESS && length == expected)
-			{
-				pIntrf->TxLength = 0U;
-				if (length != 0U && (length % pIntrf->BulkMps) == 0U &&
-					UsbdBulkIntrfTxUsed(&pIntrf->Bulk) == 0)
-				{
-					pIntrf->TxZlpRequired = true;
-				}
-				else
-				{
-					UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
-				}
-			}
-			else if (length == 0U)
-			{
-				// No payload byte reached the host, so retrying the staged
-				// request is safe. TxLength intentionally remains unchanged.
-				UsbdCdcTxKick(&pIntrf->Bulk, pIntrf);
-			}
-			else
-			{
-				// Some bytes may already have reached the host. Never resend the
-				// whole staged packet after a short or failed completion.
-				pIntrf->TxLength = 0U;
-				UsbdCdcReportTxFailure(pIntrf, length);
-				UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
-			}
-		}
-	}
-
+	// Payload completion/refill is interrupt driven, like UART ENDTX. The pump
+	// is only needed for the deliberately deferred exact-MPS terminating ZLP.
 	UsbdCdcTryZlp(pIntrf);
 }
 
