@@ -100,12 +100,31 @@ static int UsbdBulkIntrfRxData(DevIntrf_t * const pDevIntrf,
 {
 	UsbdBulkDevIntrf_t *pIntrf = UsbdBulkIntrfData(pDevIntrf);
 
-	if (pIntrf == nullptr)
+	if (pIntrf == nullptr || pIntrf->hRxFifo == nullptr ||
+		pBuffer == nullptr || BufferLen <= 0)
 	{
 		return 0;
 	}
 
-	const int cnt = CFifoRead(pIntrf->hRxFifo, pBuffer, BufferLen);
+	uint32_t state = DisableInterrupt();
+	int cnt = 0;
+
+	while (BufferLen > 0)
+	{
+		int length = BufferLen;
+		uint8_t *p = CFifoGetMultiple(pIntrf->hRxFifo, &length);
+		if (p == nullptr || length <= 0)
+		{
+			break;
+		}
+
+		memcpy(pBuffer, p, (size_t)length);
+		pBuffer += length;
+		BufferLen -= length;
+		cnt += length;
+	}
+
+	EnableInterrupt(state);
 
 	if (cnt > 0 && pIntrf->bEnabled && pIntrf->RxKick != nullptr)
 	{
@@ -267,11 +286,29 @@ int UsbdBulkIntrfPutRxData(UsbdBulkDevIntrf_t *pIntrf,
 		return 0;
 	}
 
+	const int requested = DataLen;
 	uint32_t dropCnt = pIntrf->hRxFifo->DropCnt;
-	int cnt = CFifoWrite(pIntrf->hRxFifo,
-						 const_cast<uint8_t *>(pData), DataLen);
+	uint32_t state = DisableInterrupt();
+	int cnt = 0;
 
-	if ((cnt < DataLen || pIntrf->hRxFifo->DropCnt != dropCnt) &&
+	while (DataLen > 0)
+	{
+		int length = DataLen;
+		uint8_t *p = CFifoPutMultiple(pIntrf->hRxFifo, &length);
+		if (p == nullptr || length <= 0)
+		{
+			break;
+		}
+
+		memcpy(p, pData, (size_t)length);
+		pData += length;
+		DataLen -= length;
+		cnt += length;
+	}
+
+	EnableInterrupt(state);
+
+	if ((cnt < requested || pIntrf->hRxFifo->DropCnt != dropCnt) &&
 		pIntrf->DevIntrf.EvtCB != nullptr)
 	{
 		pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
