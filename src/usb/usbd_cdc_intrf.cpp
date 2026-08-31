@@ -432,11 +432,34 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 		return;
 	}
 
-	// Data IN is the throughput-critical completion path. Handle it first and
-	// refill the private endpoint buffer directly instead of bouncing through
-	// Bulk TxComplete -> TxKick -> CDC again.
+	if (EpAddr == USBD_CDC_DATA_OUT_EP(pIntrf->ItfNo))
+	{
+		pIntrf->RxActive = false;
+
+		if (Result == USBD_CTRLR_XFER_SUCCESS && Length > 0U &&
+			Length <= pIntrf->BulkMps)
+		{
+			const uint32_t put = UsbdCdcRxPut(pIntrf);
+			const uint32_t get = UsbdCdcRxGet(pIntrf);
+			if ((put - get) < USBD_CDC_RX_STAGE_COUNT)
+			{
+				UsbdCdcRxStage_t *pStage = UsbdCdcRxStage(pIntrf, put);
+				pStage->Length = Length;
+				__atomic_store_n(&pIntrf->RxPut, put + 1U, __ATOMIC_RELEASE);
+			}
+		}
+
+		// A failed or zero-length OUT consumes no application FIFO space. Rearm
+		// immediately when another private staging slot is available.
+		UsbdCdcRxKick(&pIntrf->Bulk, pIntrf);
+		return;
+	}
+
 	if (EpAddr == USBD_CDC_DATA_IN_EP(pIntrf->ItfNo))
 	{
+		// Match the UART ENDTX path: retire the completed transfer and refill
+		// the endpoint from the Tx FIFO in interrupt context. Continuous CDC Tx
+		// no longer waits for UsbDevProcess between logical transfers.
 		if (pIntrf->TxZlpActive)
 		{
 			pIntrf->TxZlpActive = false;
@@ -457,82 +480,44 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 			return;
 		}
 
+		const uint16_t expected = pIntrf->TxLength;
 		pIntrf->TxActive = false;
 
-		if (Result == USBD_CTRLR_XFER_SUCCESS && Length == pIntrf->TxLength)
+		if (Result == USBD_CTRLR_XFER_SUCCESS && Length == expected)
 		{
 			pIntrf->TxLength = 0U;
 
-			// Same as the UART ENDTX refill: consume the next available FIFO
-			// block immediately and submit it without callback/state recursion.
-			const int next = UsbdBulkIntrfGetTxData(&pIntrf->Bulk,
-				UsbdCdcTxBuffer(pIntrf), (int)sizeof(pIntrf->TxTransfer));
-			if (next > 0)
+			if (UsbdBulkIntrfTxUsed(&pIntrf->Bulk) > 0)
 			{
-				pIntrf->TxLength = (uint16_t)next;
-				pIntrf->TxActive = true;
-				if (!UsbdCtrlrEpXfer(USBD_CDC_DATA_IN_EP(pIntrf->ItfNo),
-								 UsbdCdcTxBuffer(pIntrf), pIntrf->TxLength))
-				{
-					pIntrf->TxActive = false;
-					atomic_store(&pIntrf->Bulk.DevIntrf.bTxReady, true);
-				}
-				return;
+				UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
 			}
-
-			if (Length != 0U && (Length % pIntrf->BulkMps) == 0U)
+			else if (Length != 0U && (Length % pIntrf->BulkMps) == 0U)
 			{
+				// Keep the stream idle while the terminating ZLP is deferred. A
+				// later application write can claim Tx immediately, cancel the ZLP
+				// in UsbdCdcTxKick and continue without waiting for the pump.
 				pIntrf->TxZlpRequired = true;
 				atomic_store(&pIntrf->Bulk.DevIntrf.bTxReady, true);
-				return;
 			}
-
-			// Only the true idle edge needs Bulk's race-safe ready publication
-			// and TX_FIFO_EMPTY event handling.
+			else
+			{
+				UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
+			}
+		}
+		else if (Length == 0U)
+		{
+			// No payload reached the host. The staged buffer is still intact, so
+			// retry it directly without involving the pump.
+			UsbdCdcTxKick(&pIntrf->Bulk, pIntrf);
+		}
+		else
+		{
+			// Some bytes may have reached the host. Never replay the whole staged
+			// buffer after a short or failed completion.
+			pIntrf->TxLength = 0U;
+			UsbdCdcReportTxFailure(pIntrf, Length);
 			UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
-			return;
 		}
-
-		if (Length == 0U)
-		{
-			// No payload reached the host. Retry the already staged buffer
-			// directly; there is nothing to rediscover through TxKick.
-			pIntrf->TxActive = true;
-			if (!UsbdCtrlrEpXfer(USBD_CDC_DATA_IN_EP(pIntrf->ItfNo),
-							 UsbdCdcTxBuffer(pIntrf), pIntrf->TxLength))
-			{
-				pIntrf->TxActive = false;
-				atomic_store(&pIntrf->Bulk.DevIntrf.bTxReady, true);
-			}
-			return;
-		}
-
-		// Some bytes may have reached the host. Never replay the whole staged
-		// buffer after a short or failed completion.
-		pIntrf->TxLength = 0U;
-		UsbdCdcReportTxFailure(pIntrf, Length);
-		UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
-		return;
-	}
-
-	if (EpAddr == USBD_CDC_DATA_OUT_EP(pIntrf->ItfNo))
-	{
-		pIntrf->RxActive = false;
-
-		if (Result == USBD_CTRLR_XFER_SUCCESS && Length > 0U &&
-			Length <= pIntrf->BulkMps)
-		{
-			const uint32_t put = UsbdCdcRxPut(pIntrf);
-			const uint32_t get = UsbdCdcRxGet(pIntrf);
-			if ((put - get) < USBD_CDC_RX_STAGE_COUNT)
-			{
-				UsbdCdcRxStage_t *pStage = UsbdCdcRxStage(pIntrf, put);
-				pStage->Length = Length;
-				__atomic_store_n(&pIntrf->RxPut, put + 1U, __ATOMIC_RELEASE);
-			}
-		}
-
-		UsbdCdcRxKick(&pIntrf->Bulk, pIntrf);
 		return;
 	}
 
