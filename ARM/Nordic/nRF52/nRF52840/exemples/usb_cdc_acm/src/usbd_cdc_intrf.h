@@ -1,11 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	usbd_cdc_intrf.h
 
-@brief	Nordic SDK CDC ACM DeviceIntrf adapter for the USB CDC benchmark
-
-This adapter is local to the usb_cdc_acm example. It is used to compare the
-IOsonata DeviceIntrf + CFifo data path against Nordic SDK 17.1.0 CDC ACM
-without involving the native IOsonata USB stack.
+@brief	Generic implementation of USBD CDC device interface
 
 @author	Hoang Nguyen Hoan
 @date	May 2, 2024
@@ -41,19 +37,15 @@ SOFTWARE.
 #include "device_intrf.h"
 #include "cfifo.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #pragma pack(push, 4)
 
 typedef struct __UsbdCdc_Interf_Config {
-	bool bBlocking;				//!< true - Reject writes when FIFO is full
-	int RxFifoMemSize;			//!< Total RX CFifo memory size in bytes
-	uint8_t *pRxFifoMem;		//!< RX CFifo memory, NULL selects local default
-	int TxFifoMemSize;			//!< Total TX CFifo memory size in bytes
-	uint8_t *pTxFifoMem;		//!< TX CFifo memory, NULL selects local default
-	DevIntrfEvtHandler_t EvtCB;	//!< Interface event callback
+	bool bBlocking;
+	int RxFifoMemSize;
+	uint8_t *pRxFifoMem;
+	int TxFifoMemSize;
+	uint8_t *pTxFifoMem;
+	DevIntrfEvtHandler_t EvtCB;
 } UsbdCdcIntrfCfg_t;
 
 #define USBD_CDC_INTRF_TRANSBUFF_MAXLEN	64
@@ -64,19 +56,18 @@ typedef struct __UsbdCdc_Dev_Interf {
 	hCFifo_t hTxFifo;
 	uint32_t RxDropCnt;
 	uint32_t TxDropCnt;
-	uint8_t RxTransBuff[USBD_CDC_INTRF_TRANSBUFF_MAXLEN];
-	uint8_t TxTransBuff[USBD_CDC_INTRF_TRANSBUFF_MAXLEN];
-	int TxTransBuffLen;
-	atomic_bool bPortOpen;
-	atomic_bool bEnabled;
-	atomic_bool bRxPending;
+	uint8_t TransBuff[USBD_CDC_INTRF_TRANSBUFF_MAXLEN];
+	int TransBuffLen;
 } UsbdCdcDevIntrf_t;
 
 #pragma pack(pop)
 
-bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t *pIntrf,
 					  const UsbdCdcIntrfCfg_t *pCfg);
-bool UsbdCdcIntrfIsPortOpen(const UsbdCdcDevIntrf_t *pIntrf);
 
 #ifdef __cplusplus
 }
