@@ -179,7 +179,9 @@ int UsbdCdcIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int Datalen)
 		cnt += l;
 	}
 
-	if (atomic_load(&pDevIntrf->bTxReady))
+	if (atomic_load(&pDevIntrf->bTxReady) &&
+		(intrf->TransBuffLen > 0 ||
+		 CFifoUsed(intrf->hTxFifo) >= (int)sizeof(intrf->TransBuff)))
 	{
 		if (intrf->TransBuffLen == 0)
 		{
