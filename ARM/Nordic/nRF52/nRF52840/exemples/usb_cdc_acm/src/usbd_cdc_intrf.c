@@ -67,6 +67,35 @@ static uint8_t s_UsbdCdcDevIntrfRxFifoMem[USBD_CDC_CFIFO_MEMSIZE];
 static uint8_t s_UsbdCdcDevIntrfTxFifoMem[USBD_CDC_CFIFO_MEMSIZE];
 static UsbdCdcDevIntrf_t *s_pIntrf;
 
+static void UsbdCdcIntrfSend(UsbdCdcDevIntrf_t *pIntrf)
+{
+	if (pIntrf->TransBuffLen == 0)
+	{
+		int l = sizeof(pIntrf->TransBuff);
+		uint32_t state = DisableInterrupt();
+		uint8_t *p = CFifoGetMultiple(pIntrf->hTxFifo, &l);
+
+		if (p != NULL && l > 0)
+		{
+			memcpy(pIntrf->TransBuff, p, l);
+			pIntrf->TransBuffLen = l;
+		}
+		EnableInterrupt(state);
+	}
+
+	if (pIntrf->TransBuffLen == 0)
+	{
+		atomic_store(&pIntrf->DevIntrf.bTxReady, true);
+		return;
+	}
+
+	if (app_usbd_cdc_acm_write(&m_app_cdc_acm,
+			pIntrf->TransBuff, pIntrf->TransBuffLen) != NRF_SUCCESS)
+	{
+		atomic_store(&pIntrf->DevIntrf.bTxReady, true);
+	}
+}
+
 static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const *pInst,
 									app_usbd_cdc_acm_user_event_t Event)
 {
@@ -89,7 +118,7 @@ static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const *pInst,
 
 		case APP_USBD_CDC_ACM_USER_EVT_TX_DONE:
 			s_pIntrf->TransBuffLen = 0;
-			atomic_store(&s_pIntrf->DevIntrf.bTxReady, true);
+			UsbdCdcIntrfSend(s_pIntrf);
 			break;
 
 		default:
@@ -165,6 +194,11 @@ int UsbdCdcIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int Datalen)
 		uint32_t state = DisableInterrupt();
 		int l = Datalen;
 		uint8_t *p = CFifoPutMultiple(intrf->hTxFifo, &l);
+
+		if (p != NULL)
+		{
+			memcpy(p, pData, l);
+		}
 		EnableInterrupt(state);
 
 		if (p == NULL)
@@ -173,39 +207,14 @@ int UsbdCdcIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int Datalen)
 			break;
 		}
 
-		memcpy(p, pData, l);
 		Datalen -= l;
 		pData += l;
 		cnt += l;
 	}
 
-	if (atomic_load(&pDevIntrf->bTxReady) &&
-		(intrf->TransBuffLen > 0 ||
-		 CFifoUsed(intrf->hTxFifo) >= (int)sizeof(intrf->TransBuff)))
+	if (atomic_exchange(&pDevIntrf->bTxReady, false))
 	{
-		if (intrf->TransBuffLen == 0)
-		{
-			int l = sizeof(intrf->TransBuff);
-			uint32_t state = DisableInterrupt();
-			uint8_t *p = CFifoGetMultiple(intrf->hTxFifo, &l);
-			EnableInterrupt(state);
-
-			if (p != NULL && l > 0)
-			{
-				memcpy(intrf->TransBuff, p, l);
-				intrf->TransBuffLen = l;
-			}
-		}
-
-		if (intrf->TransBuffLen > 0)
-		{
-			atomic_store(&pDevIntrf->bTxReady, false);
-			if (app_usbd_cdc_acm_write(&m_app_cdc_acm,
-					intrf->TransBuff, intrf->TransBuffLen) != NRF_SUCCESS)
-			{
-				atomic_store(&pDevIntrf->bTxReady, true);
-			}
-		}
+		UsbdCdcIntrfSend(intrf);
 	}
 
 	return cnt;
