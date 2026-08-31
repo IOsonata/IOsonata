@@ -1048,6 +1048,44 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 
 	if (pXfer->ActualLen < pXfer->TotalLen)
 	{
+		if (EpNum > 0U)
+		{
+			const uint8_t epAddr =
+				(uint8_t)(EpNum | USB_ENDPADDR_DIR_IN);
+
+			// ENDEPIN can assert after the IRQ event snapshot. If EPDATA says
+			// the host already consumed this packet, retire a late DMA end now
+			// so the next packet does not wait for another interrupt.
+			if ((uint8_t)atomic_load(&s_DmaEpAddr) == epAddr &&
+				NRF_USBD->EVENTS_ENDEPIN[EpNum] != 0U)
+			{
+				NRF_USBD->EVENTS_ENDEPIN[EpNum] = 0U;
+				__ISB();
+				__DSB();
+				nRFUsbdDmaRelease();
+			}
+
+			// Continue the common Bulk IN stream immediately when EasyDMA is
+			// free and no higher-priority or competing endpoint work is queued.
+			// Otherwise leave arbitration to the generic scheduler.
+			if (!atomic_flag_test_and_set(&s_DmaRunning))
+			{
+				if (!atomic_load(&s_HostResumePending) &&
+					!(atomic_load(&s_BusSuspended) &&
+					  !atomic_load(&s_SuspendPending)) &&
+					!atomic_load(&s_PendingEp0Status) &&
+					!atomic_load(&s_PendingEp0RcvOut) &&
+					atomic_load(&s_PendingOut) == 0U &&
+					atomic_load(&s_PendingIn) == 0U &&
+					nRFUsbdStartInDmaNow(EpNum))
+				{
+					return;
+				}
+
+				atomic_flag_clear(&s_DmaRunning);
+			}
+		}
+
 		nRFUsbdQueueIn(EpNum);
 	}
 	else
