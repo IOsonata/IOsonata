@@ -155,9 +155,18 @@ static void UsbdCdcTxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
 {
 	UsbdCdcDevIntrf_t *pIntrf = static_cast<UsbdCdcDevIntrf_t *>(pContext);
 
-	if (pIntrf == nullptr || &pIntrf->Bulk != pBulk ||
-		!pBulk->bEnabled || !UsbdCdcIntrfPortIsOpen(pIntrf) ||
-		pIntrf->TxActive || pIntrf->TxZlpActive)
+	if (pIntrf == nullptr || &pIntrf->Bulk != pBulk)
+	{
+		return;
+	}
+
+	if (!pBulk->bEnabled || !UsbdCdcIntrfPortIsOpen(pIntrf))
+	{
+		atomic_store(&pBulk->DevIntrf.bTxReady, true);
+		return;
+	}
+
+	if (pIntrf->TxActive || pIntrf->TxZlpActive)
 	{
 		return;
 	}
@@ -169,6 +178,7 @@ static void UsbdCdcTxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
 	{
 		if (UsbdBulkIntrfTxUsed(pBulk) <= 0)
 		{
+			atomic_store(&pBulk->DevIntrf.bTxReady, true);
 			return;
 		}
 		pIntrf->TxZlpRequired = false;
@@ -184,6 +194,7 @@ static void UsbdCdcTxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
 			UsbdCdcTxBuffer(pIntrf), (int)sizeof(pIntrf->TxTransfer));
 		if (length <= 0)
 		{
+			atomic_store(&pBulk->DevIntrf.bTxReady, true);
 			return;
 		}
 
@@ -195,6 +206,7 @@ static void UsbdCdcTxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
 						 UsbdCdcTxBuffer(pIntrf), pIntrf->TxLength))
 	{
 		pIntrf->TxActive = false;
+		atomic_store(&pBulk->DevIntrf.bTxReady, true);
 	}
 }
 
@@ -257,6 +269,7 @@ static void UsbdCdcCancelBusState(UsbdCdcDevIntrf_t *pIntrf)
 	pIntrf->TxZlpRequired = false;
 	pIntrf->NotifActive = false;
 	pIntrf->SerialStatePending = false;
+	atomic_store(&pIntrf->Bulk.DevIntrf.bTxReady, true);
 	__atomic_store_n(&pIntrf->TxCompletePending, false, __ATOMIC_RELEASE);
 }
 
@@ -457,6 +470,7 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 			else
 			{
 				pIntrf->TxZlpRequired = true;
+				atomic_store(&pIntrf->Bulk.DevIntrf.bTxReady, true);
 			}
 			return;
 		}
@@ -479,9 +493,11 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 			}
 			else if (Length != 0U && (Length % pIntrf->BulkMps) == 0U)
 			{
-				// Do not burn a bus slot on a ZLP immediately. Leave it pending so
-				// data arriving before the pump runs can continue the byte stream.
+				// Keep the stream idle while the terminating ZLP is deferred. A
+				// later application write can claim Tx immediately, cancel the ZLP
+				// in UsbdCdcTxKick and continue without waiting for the pump.
 				pIntrf->TxZlpRequired = true;
+				atomic_store(&pIntrf->Bulk.DevIntrf.bTxReady, true);
 			}
 			else
 			{
@@ -594,11 +610,13 @@ static void UsbdCdcTryZlp(UsbdCdcDevIntrf_t *pIntrf)
 	// aligned RAM instead of passing nullptr.
 	pIntrf->TxZlpRequired = false;
 	pIntrf->TxZlpActive = true;
+	atomic_store(&pIntrf->Bulk.DevIntrf.bTxReady, false);
 	if (!UsbdCtrlrEpXfer(USBD_CDC_DATA_IN_EP(pIntrf->ItfNo),
 						 UsbdCdcTxBuffer(pIntrf), 0U))
 	{
 		pIntrf->TxZlpActive = false;
 		pIntrf->TxZlpRequired = true;
+		atomic_store(&pIntrf->Bulk.DevIntrf.bTxReady, true);
 	}
 }
 

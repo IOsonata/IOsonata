@@ -141,7 +141,13 @@ static int UsbdBulkIntrfTxData(DevIntrf_t * const pDevIntrf,
 						 const_cast<uint8_t *>(pData), DataLen);
 	EnableInterrupt(state);
 
-	if (cnt > 0 && pIntrf->bEnabled && pIntrf->TxKick != nullptr)
+	// Same Tx ownership model as UART. The application only fills the FIFO.
+	// The first writer that observes an idle transmitter claims it and kicks
+	// the endpoint with whatever is currently queued. While a transfer is in
+	// progress, subsequent writes return immediately after filling the FIFO;
+	// completion interrupts keep draining it.
+	if (cnt > 0 && pIntrf->bEnabled && pIntrf->TxKick != nullptr &&
+		atomic_exchange(&pIntrf->DevIntrf.bTxReady, false))
 	{
 		pIntrf->TxKick(pIntrf, pIntrf->pContext);
 	}
@@ -289,6 +295,21 @@ void UsbdBulkIntrfTxComplete(UsbdBulkDevIntrf_t *pIntrf)
 	if (CFifoUsed(pIntrf->hTxFifo) > 0)
 	{
 		if (pIntrf->bEnabled && pIntrf->TxKick != nullptr)
+		{
+			pIntrf->TxKick(pIntrf, pIntrf->pContext);
+		}
+		return;
+	}
+
+	// The endpoint has caught the producer. Publish idle only after confirming
+	// the FIFO is empty. Recheck after the store so a writer racing this edge
+	// cannot leave queued data with no transfer active.
+	atomic_store(&pIntrf->DevIntrf.bTxReady, true);
+
+	if (CFifoUsed(pIntrf->hTxFifo) > 0)
+	{
+		if (pIntrf->bEnabled && pIntrf->TxKick != nullptr &&
+			atomic_exchange(&pIntrf->DevIntrf.bTxReady, false))
 		{
 			pIntrf->TxKick(pIntrf, pIntrf->pContext);
 		}
