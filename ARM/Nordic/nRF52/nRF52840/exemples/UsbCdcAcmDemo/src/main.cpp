@@ -62,6 +62,7 @@
 #include "board.h"
 #include "blueio_board.h"
 //#include "blueio_types.h"
+#include "usbd_cdc_intrf.h"
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
 #include "iopinctrl.h"
@@ -120,6 +121,13 @@ NRF_CLI_DEFCPP(m_cli_cdc_acm,
             '\r',
             CLI_EXAMPLE_LOG_QUEUE_SIZE);
 #endif
+
+UsbdCdcIntrfCfg_t s_IntrfCfg = {
+	.bBlocking = true,
+
+};
+
+UsbdCdcIntrf g_UsbIntrf;
 
 /**@file
  * @defgroup usbd_cdc_acm_example main.c
@@ -631,6 +639,9 @@ int main(void)
 	HardwareInit();
 
     UsbInit();
+
+    g_UsbIntrf.Init(s_IntrfCfg);
+
 
     while (1)
     {
