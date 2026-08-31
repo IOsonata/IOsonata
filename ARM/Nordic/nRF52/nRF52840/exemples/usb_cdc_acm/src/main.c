@@ -60,17 +60,6 @@
 #include "prbs.h"
 #include "usbd_cdc_intrf.h"
 
-/**@file
- * @defgroup usbd_cdc_acm_example main.c
- * @{
- * @ingroup usbd_cdc_acm_example
- * @brief Nordic CDC ACM through the IOsonata DeviceIntrf byte-stream path
- *
- * This benchmark keeps Nordic SDK 17.1.0 as the USB stack and replaces the
- * direct 64-byte producer with the old IOsonata DeviceIntrf + CFifo interface.
- * The application still transmits one PRBS byte per DeviceIntrfTx call.
- */
-
 #define LED_USB_RESUME			(BSP_BOARD_LED_0)
 
 #ifndef USBD_POWER_DETECTION
@@ -96,9 +85,9 @@ static const UsbdCdcIntrfCfg_t s_CdcCfg = {
 uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
 uint8_t g_extern_usbd_product_string[12 + 1] = { "Test" };
 
-static void UsbdUserEvtHandler(app_usbd_event_type_t Event)
+static void usbd_user_ev_handler(app_usbd_event_type_t event)
 {
-	switch (Event)
+	switch (event)
 	{
 		case APP_USBD_EVT_DRV_SUSPEND:
 			bsp_board_led_off(LED_USB_RESUME);
@@ -108,16 +97,12 @@ static void UsbdUserEvtHandler(app_usbd_event_type_t Event)
 			bsp_board_led_on(LED_USB_RESUME);
 			break;
 
-		case APP_USBD_EVT_STARTED:
-			break;
-
 		case APP_USBD_EVT_STOPPED:
 			app_usbd_disable();
 			bsp_board_leds_off();
 			break;
 
 		case APP_USBD_EVT_POWER_DETECTED:
-			NRF_LOG_INFO("USB power detected");
 			if (!nrf_drv_usbd_is_enabled())
 			{
 				app_usbd_enable();
@@ -125,12 +110,10 @@ static void UsbdUserEvtHandler(app_usbd_event_type_t Event)
 			break;
 
 		case APP_USBD_EVT_POWER_REMOVED:
-			NRF_LOG_INFO("USB power removed");
 			app_usbd_stop();
 			break;
 
 		case APP_USBD_EVT_POWER_READY:
-			NRF_LOG_INFO("USB ready");
 			app_usbd_start();
 			break;
 
@@ -143,10 +126,8 @@ int main(void)
 {
 	ret_code_t ret;
 	uint8_t data = 0xff;
-	bool wasOpen = false;
-
 	static const app_usbd_config_t usbd_config = {
-		.ev_state_proc = UsbdUserEvtHandler
+		.ev_state_proc = usbd_user_ev_handler
 	};
 
 	ret = NRF_LOG_INIT(NULL);
@@ -158,7 +139,6 @@ int main(void)
 	nrf_drv_clock_lfclk_request(NULL);
 	while (!nrf_drv_clock_lfclk_is_running())
 	{
-		/* Just waiting */
 	}
 
 	ret = app_timer_init();
@@ -174,8 +154,6 @@ int main(void)
 	{
 		return -1;
 	}
-
-	NRF_LOG_INFO("Nordic CDC through IOsonata DeviceIntrf started.");
 
 	if (USBD_POWER_DETECTION)
 	{
@@ -193,33 +171,12 @@ int main(void)
 #if APP_USBD_CONFIG_EVENT_QUEUE_ENABLE
 		while (app_usbd_event_queue_process())
 		{
-			/* Drain queued USB events when configured. */
 		}
 #endif
 
-		if (!UsbdCdcIntrfIsPortOpen(&s_CdcIntrf))
-		{
-			wasOpen = false;
-			UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
-			__WFE();
-			continue;
-		}
-
-		if (!wasOpen)
-		{
-			data = 0xff;
-			wasOpen = true;
-		}
-
-		/*
-		 * Match the native IOsonata benchmark: one byte per call. Advance the
-		 * PRBS only after the blocking FIFO accepts that byte.
-		 */
 		if (DeviceIntrfTx(&s_CdcIntrf.DevIntrf, 0, &data, 1) == 1)
 		{
 			data = Prbs8(data);
 		}
 	}
 }
-
-/** @} */
