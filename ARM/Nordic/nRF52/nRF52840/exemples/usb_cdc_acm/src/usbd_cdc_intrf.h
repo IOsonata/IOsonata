@@ -1,8 +1,11 @@
 /**-------------------------------------------------------------------------
 @file	usbd_cdc_intrf.h
 
-@brief	Generic implementation of USBD CDC device interface
+@brief	Nordic SDK CDC ACM DeviceIntrf adapter for the USB CDC benchmark
 
+This adapter is local to the usb_cdc_acm example. It is used to compare the
+IOsonata DeviceIntrf + CFifo data path against Nordic SDK 17.1.0 CDC ACM
+without involving the native IOsonata USB stack.
 
 @author	Hoang Nguyen Hoan
 @date	May 2, 2024
@@ -38,76 +41,45 @@ SOFTWARE.
 #include "device_intrf.h"
 #include "cfifo.h"
 
-/** @addtogroup USBD
-  * @{
-  */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #pragma pack(push, 4)
 
 typedef struct __UsbdCdc_Interf_Config {
-    bool bBlocking;				//!< true - Blocking Fifo, false - Non blocking
-	int RxFifoMemSize;			//!< Total memory size for CFIFO
-	uint8_t *pRxFifoMem;		//!< Pointer to memory to be used by CFIFO
-	int TxFifoMemSize;			//!< Total memory size for CFIFO
-	uint8_t *pTxFifoMem;		//!< Pointer to memory to be used by CFIFO
-	DevIntrfEvtHandler_t EvtCB;	//!< Event callback
+	bool bBlocking;				//!< true - Reject writes when FIFO is full
+	int RxFifoMemSize;			//!< Total RX CFifo memory size in bytes
+	uint8_t *pRxFifoMem;		//!< RX CFifo memory, NULL selects local default
+	int TxFifoMemSize;			//!< Total TX CFifo memory size in bytes
+	uint8_t *pTxFifoMem;		//!< TX CFifo memory, NULL selects local default
+	DevIntrfEvtHandler_t EvtCB;	//!< Interface event callback
 } UsbdCdcIntrfCfg_t;
 
-#define USBD_CDC_INTRF_TRANSBUFF_MAXLEN			64
+#define USBD_CDC_INTRF_TRANSBUFF_MAXLEN	64
 
-// USBD CDC interf instance data
 typedef struct __UsbdCdc_Dev_Interf {
-	DevIntrf_t	DevIntrf;		//!< Base Device Interface
-    hCFifo_t	hRxFifo;
-    hCFifo_t	hTxFifo;
-    uint32_t	RxDropCnt;
-    uint32_t	TxDropCnt;
-    uint8_t     TransBuff[USBD_CDC_INTRF_TRANSBUFF_MAXLEN];  //
-    int         TransBuffLen;	//!< Data length
+	DevIntrf_t DevIntrf;
+	hCFifo_t hRxFifo;
+	hCFifo_t hTxFifo;
+	uint32_t RxDropCnt;
+	uint32_t TxDropCnt;
+	uint8_t RxTransBuff[USBD_CDC_INTRF_TRANSBUFF_MAXLEN];
+	uint8_t TxTransBuff[USBD_CDC_INTRF_TRANSBUFF_MAXLEN];
+	int TxTransBuffLen;
+	atomic_bool bPortOpen;
+	atomic_bool bEnabled;
+	atomic_bool bRxPending;
 } UsbdCdcDevIntrf_t;
 
 #pragma pack(pop)
 
-#ifdef __cplusplus
-
-class UsbdCdcIntrf : public DeviceIntrf {
-public:
-	bool Init(const UsbdCdcIntrfCfg_t &Cfg);
-
-	operator DevIntrf_t * () { return &vUsbDevIntrf.DevIntrf; }	// Get device interface data
-
-	// Set data rate in bits/sec (Hz)
-	virtual uint32_t Rate(uint32_t DataRate) { return DeviceIntrfSetRate(&vUsbDevIntrf.DevIntrf, DataRate); }
-	// Get current data rate in bits/sec (Hz)
-	virtual uint32_t Rate(void) { return DeviceIntrfGetRate(&vUsbDevIntrf.DevIntrf); }
-	// Disable device for power reduction, re-enable with Enable() without
-	// full init
-	virtual void Disable(void) { DeviceIntrfDisable(&vUsbDevIntrf.DevIntrf); }
-	// Enable device
-	virtual void Enable(void) { DeviceIntrfEnable(&vUsbDevIntrf.DevIntrf); }
-
-	// Initiate receive
-	// Stop receive
-	// BEWARE !!!!!
-	// Stop transmit
-	// BEWARE !!!!!
-
-	virtual bool RequestToSend(int NbBytes);
-
-private:
-
-	UsbdCdcDevIntrf_t vUsbDevIntrf;
-};
-
-extern "C" {
-#endif
-
-bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pUsbdDevIntrf, const UsbdCdcIntrfCfg_t *pCfg);
+bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
+					  const UsbdCdcIntrfCfg_t *pCfg);
+bool UsbdCdcIntrfIsPortOpen(const UsbdCdcDevIntrf_t *pIntrf);
 
 #ifdef __cplusplus
 }
 #endif
-
-/** @} End of group USBD */
 
 #endif	// __USBD_CDC_INTRF_H__
