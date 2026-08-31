@@ -61,6 +61,9 @@
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
 
+#include "usbd_cdc_intrf.h"
+
+
 /**@file
  * @defgroup usbd_cdc_acm_example main.c
  * @{
@@ -113,6 +116,14 @@ static uint8_t m_prbs = 0xff;
 
 uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
 uint8_t g_extern_usbd_product_string[12 + 1] = { "Test" };
+
+
+UsbdCdcIntrfCfg_t s_IntrfCfg = {
+	.bBlocking = true,
+
+};
+
+//UsbdCdcDevIntrf_t g_UsbIntrf;
 
 /**
  * @brief Generate the next value of the same 8-bit PRBS used by IOsonata tests.
