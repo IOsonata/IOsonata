@@ -60,13 +60,6 @@
 #include "prbs.h"
 #include "usbd_cdc_intrf.h"
 
-/*
- * This SDK example links external sources individually through its Eclipse
- * project. Keep the evaluation adapter local without changing project metadata
- * by compiling its implementation in this translation unit.
- */
-#include "usbd_cdc_intrf.c"
-
 /**@file
  * @defgroup usbd_cdc_acm_example main.c
  * @{
