@@ -298,7 +298,24 @@ int UsbdBulkIntrfGetTxData(UsbdBulkDevIntrf_t *pIntrf,
 		return 0;
 	}
 
-	return CFifoRead(pIntrf->hTxFifo, pBuffer, BufferLen);
+	int cnt = 0;
+
+	while (BufferLen > 0)
+	{
+		int length = BufferLen;
+		uint8_t *p = CFifoGetMultiple(pIntrf->hTxFifo, &length);
+		if (p == nullptr || length <= 0)
+		{
+			break;
+		}
+
+		memcpy(pBuffer, p, (size_t)length);
+		pBuffer += length;
+		BufferLen -= length;
+		cnt += length;
+	}
+
+	return cnt;
 }
 
 void UsbdBulkIntrfTxComplete(UsbdBulkDevIntrf_t *pIntrf)
