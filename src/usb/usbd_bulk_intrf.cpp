@@ -176,14 +176,14 @@ static int UsbdBulkIntrfTxData(DevIntrf_t * const pDevIntrf,
 
 	EnableInterrupt(state);
 
-	// Same Tx ownership model as UART. The application only fills the FIFO.
-	// The first writer that observes an idle transmitter claims it and kicks
-	// the endpoint with whatever is currently queued. While a transfer is in
-	// progress, subsequent writes return immediately after filling the FIFO;
-	// completion interrupts keep draining it.
+	// Same Tx ownership model as UART. Do not perform an atomic read-modify-
+	// write for every byte while the endpoint is already active. The producer
+	// only tests the ready flag and clears it on the idle-to-active transition.
 	if (cnt > 0 && pIntrf->bEnabled && pIntrf->TxKick != nullptr &&
-		atomic_exchange(&pIntrf->DevIntrf.bTxReady, false))
+		atomic_load_explicit(&pIntrf->DevIntrf.bTxReady, memory_order_relaxed))
 	{
+		atomic_store_explicit(&pIntrf->DevIntrf.bTxReady, false,
+						  memory_order_relaxed);
 		pIntrf->TxKick(pIntrf, pIntrf->pContext);
 	}
 
