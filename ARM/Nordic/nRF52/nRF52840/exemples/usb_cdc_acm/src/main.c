@@ -265,6 +265,13 @@ int main(void)
 
     while (true)
     {
+#if APP_USBD_CONFIG_EVENT_QUEUE_ENABLE
+        while (app_usbd_event_queue_process())
+        {
+            /* Drain all queued USB power, state and endpoint events. */
+        }
+#endif
+
         if (m_port_open && m_tx_ready)
         {
             uint8_t next = m_prbs;
