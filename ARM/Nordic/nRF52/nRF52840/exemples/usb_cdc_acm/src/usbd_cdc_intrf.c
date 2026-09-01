@@ -252,8 +252,6 @@ int UsbdCdcIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int Datalen)
 		cnt += l;
 	}
 
-	UsbdCdcIntrfSend(intrf, false);
-
 	return cnt;
 }
 
