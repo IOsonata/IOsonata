@@ -89,21 +89,28 @@ static ret_code_t UsbdCdcIntrfWrite(UsbdCdcDevIntrf_t *pIntrf)
 	return ret;
 }
 
+static void UsbdCdcIntrfStage(UsbdCdcDevIntrf_t *pIntrf)
+{
+	if (pIntrf->TransBuffLen >= sizeof(pIntrf->TransBuff))
+	{
+		return;
+	}
+
+	int l = sizeof(pIntrf->TransBuff) - pIntrf->TransBuffLen;
+	uint32_t state = DisableInterrupt();
+	uint8_t *p = CFifoGetMultiple(pIntrf->hTxFifo, &l);
+
+	if (p != NULL && l > 0)
+	{
+		memcpy(&pIntrf->TransBuff[pIntrf->TransBuffLen], p, l);
+		pIntrf->TransBuffLen += l;
+	}
+	EnableInterrupt(state);
+}
+
 static void UsbdCdcIntrfSend(UsbdCdcDevIntrf_t *pIntrf)
 {
-	if (pIntrf->TransBuffLen == 0)
-	{
-		int l = sizeof(pIntrf->TransBuff);
-		uint32_t state = DisableInterrupt();
-		uint8_t *p = CFifoGetMultiple(pIntrf->hTxFifo, &l);
-
-		if (p != NULL && l > 0)
-		{
-			memcpy(pIntrf->TransBuff, p, l);
-			pIntrf->TransBuffLen = l;
-		}
-		EnableInterrupt(state);
-	}
+	UsbdCdcIntrfStage(pIntrf);
 
 	if (pIntrf->TransBuffLen == 0)
 	{
@@ -152,7 +159,18 @@ static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const *pInst,
 
 		case APP_USBD_CDC_ACM_USER_EVT_TX_DONE:
 			s_pIntrf->TransBuffLen = 0;
-			UsbdCdcIntrfSend(s_pIntrf);
+			UsbdCdcIntrfStage(s_pIntrf);
+			if (s_pIntrf->TransBuffLen == sizeof(s_pIntrf->TransBuff))
+			{
+				if (UsbdCdcIntrfWrite(s_pIntrf) != NRF_SUCCESS)
+				{
+					atomic_store(&s_pIntrf->DevIntrf.bTxReady, true);
+				}
+			}
+			else
+			{
+				atomic_store(&s_pIntrf->DevIntrf.bTxReady, true);
+			}
 			break;
 
 		default:
