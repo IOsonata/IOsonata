@@ -204,7 +204,36 @@ int UsbdCdcIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int Datalen)
 
 	while (Datalen > 0)
 	{
+		bool send = false;
 		uint32_t state = DisableInterrupt();
+
+		if (atomic_load(&pDevIntrf->bTxReady) &&
+			intrf->TransBuffLen < sizeof(intrf->TransBuff))
+		{
+			int l = min(Datalen,
+				(int)sizeof(intrf->TransBuff) - intrf->TransBuffLen);
+
+			memcpy(&intrf->TransBuff[intrf->TransBuffLen], pData, l);
+			intrf->TransBuffLen += l;
+			Datalen -= l;
+			pData += l;
+			cnt += l;
+
+			if (intrf->TransBuffLen == sizeof(intrf->TransBuff))
+			{
+				atomic_store(&pDevIntrf->bTxReady, false);
+				send = true;
+			}
+			EnableInterrupt(state);
+
+			if (send && app_usbd_cdc_acm_write(&m_app_cdc_acm,
+					intrf->TransBuff, intrf->TransBuffLen) != NRF_SUCCESS)
+			{
+				atomic_store(&pDevIntrf->bTxReady, true);
+			}
+			continue;
+		}
+
 		int l = Datalen;
 		uint8_t *p = CFifoPutMultiple(intrf->hTxFifo, &l);
 
