@@ -179,7 +179,7 @@ int main(void)
 		}
 #endif
 
-		if (DeviceIntrfTx(&s_CdcIntrf.DevIntrf, 0, &data, 1) == 1)
+		if (s_CdcIntrf.DevIntrf.TxData(&s_CdcIntrf.DevIntrf, &data, 1) == 1)
 		{
 			data = Prbs8(data);
 		}
