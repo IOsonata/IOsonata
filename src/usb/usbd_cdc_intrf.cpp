@@ -573,8 +573,8 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 	coreCfg.ConfigHandler = UsbdCdcConfig;
 	coreCfg.SetInterfaceHandler = nullptr;
 	coreCfg.XferHandler = UsbdCdcXfer;
-	coreCfg.SofHandler = UsbdCdcSof;
 	coreCfg.ResetHandler = UsbdCdcReset;
+	coreCfg.SofHandler = UsbdCdcSof;
 	coreCfg.pContext = pIntrf;
 
 	if (!UsbdCoreRegisterFunction(&coreCfg))

@@ -6,6 +6,16 @@
 Provides the reusable DeviceIntrf, CFifo data plane and Bulk IN transfer
 engine for USB device functions.
 
+TX policy: the application only fills the TX CFifo. A write that finds the
+endpoint idle and the FIFO empty is the start of a transaction and is sent
+at once, whatever its size. While earlier data is queued, writes aggregate
+into full packets: a full packet starts a transfer and the completion
+interrupt chains the next full packet, so a producer that outruns the bus
+never emits short packets. A partial tail left behind is sent by the SOF
+handler after it has stayed partial and idle for one full frame, without
+any application-level polling. A terminating ZLP is sent the same way when
+the stream stopped on an exact packet boundary and no data followed.
+
 @author	Hoang Nguyen Hoan
 @date	Aug. 29, 2026
 
@@ -77,13 +87,12 @@ struct __UsbdBulk_Dev_Interf {
 	UsbdBulkKickHandler_t RxKick;
 	UsbdBulkTxReadyHandler_t TxReady;
 	void *pContext;
-	uint8_t TxEpAddr;
-	uint8_t *pTxBuffer;
-	uint16_t TxMps;
-	uint16_t TxLength;
+	uint8_t TxEpAddr;			//!< Bulk IN endpoint, 0 until configured
+	uint8_t *pTxBuffer;			//!< One packet staging buffer, TxMps bytes
+	uint16_t TxMps;				//!< Bulk IN max packet size
 	bool bEnabled;
-	bool TxZlpRequired;
-	volatile bool TxActivity;
+	bool TxZlpRequired;			//!< Last packet was full and nothing followed
+	bool TxTailArmed;			//!< Partial tail seen idle at previous SOF
 };
 
 #pragma pack(pop)
@@ -95,25 +104,42 @@ extern "C" {
 bool UsbdBulkIntrfInit(UsbdBulkDevIntrf_t *pIntrf,
 					   const UsbdBulkIntrfCfg_t *pCfg);
 
+/**
+ * @brief Queue received endpoint data into the RX CFifo.
+ */
 int UsbdBulkIntrfPutRxData(UsbdBulkDevIntrf_t *pIntrf,
 						   const uint8_t *pData, int DataLen);
 
-int UsbdBulkIntrfGetTxData(UsbdBulkDevIntrf_t *pIntrf,
-						   uint8_t *pBuffer, int BufferLen);
-
+/**
+ * @brief Bind the Bulk IN endpoint after SET_CONFIGURATION.
+ *
+ * pBuffer must hold Mps bytes and stay valid while configured.
+ */
 void UsbdBulkIntrfConfigTx(UsbdBulkDevIntrf_t *pIntrf,
 						   uint8_t EpAddr, uint16_t Mps,
 						   uint8_t *pBuffer);
 
+/**
+ * @brief Drop endpoint transfer state on bus reset or unconfigure.
+ *
+ * Queued FIFO data is kept.
+ */
 void UsbdBulkIntrfResetTx(UsbdBulkDevIntrf_t *pIntrf);
 
-void UsbdBulkIntrfFlushTx(UsbdBulkDevIntrf_t *pIntrf);
-
-void UsbdBulkIntrfSof(UsbdBulkDevIntrf_t *pIntrf);
-
+/**
+ * @brief Bulk IN transfer completion, called from the USB interrupt.
+ */
 void UsbdBulkIntrfTxXferComplete(UsbdBulkDevIntrf_t *pIntrf,
 								 uint16_t Length,
 								 UsbdCtrlrXferResult_t Result);
+
+/**
+ * @brief Start of frame, called from the USB interrupt.
+ *
+ * Sends a partial tail or terminating ZLP once it has stayed idle for one
+ * full frame. Full packets are never split by this call.
+ */
+void UsbdBulkIntrfSof(UsbdBulkDevIntrf_t *pIntrf);
 
 bool UsbdBulkIntrfRequestToSend(UsbdBulkDevIntrf_t *pIntrf, int NbBytes);
 

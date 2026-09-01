@@ -131,11 +131,17 @@ typedef void (*UsbdCoreXferHandler_t)(uint8_t EpAddr,
 									 UsbdCtrlrXferResult_t Result,
 									 void *pContext);
 
-/** @brief Start-of-frame callback for one USB function. */
-typedef void (*UsbdCoreSofHandler_t)(uint16_t FrameNo, void *pContext);
-
 /** @brief Bus-reset callback for one USB function. */
 typedef void (*UsbdCoreResetHandler_t)(void *pContext);
+
+/**
+ * @brief Start-of-frame callback for one USB function.
+ *
+ * Called from the USB interrupt on every frame while the device is
+ * configured. The core enables controller SOF events only when at least one
+ * registered function provides this callback. Work must remain bounded.
+ */
+typedef void (*UsbdCoreSofHandler_t)(uint16_t FrameNo, void *pContext);
 
 #pragma pack(push, 4)
 
@@ -155,8 +161,8 @@ typedef struct __Usbd_Core_Function_Config {
 	UsbdCoreConfigHandler_t ConfigHandler;
 	UsbdCoreSetInterfaceHandler_t SetInterfaceHandler;
 	UsbdCoreXferHandler_t XferHandler;
-	UsbdCoreSofHandler_t SofHandler;
 	UsbdCoreResetHandler_t ResetHandler;
+	UsbdCoreSofHandler_t SofHandler;		//!< Optional, NULL when not needed
 	void *pContext;
 } UsbdCoreFuncCfg_t;
 

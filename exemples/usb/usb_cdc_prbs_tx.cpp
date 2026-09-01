@@ -16,9 +16,10 @@ USB device controller.
 
 Tx follows the same model as UART: the application only fills the Tx CFifo.
 The first write that finds Tx idle starts the endpoint with whatever data is
-available, and completion interrupts keep draining the FIFO. UsbDevProcess is
-needed while waiting for USB attach and port open, not between transmitted
-bytes.
+available, completion interrupts keep draining the FIFO one full packet at a
+time, and a partial tail left behind goes out on its own after one idle USB
+frame. UsbDevProcess is needed while waiting for USB attach and port open,
+not between transmitted bytes.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 28, 2026

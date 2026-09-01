@@ -420,12 +420,27 @@ static void UsbdCoreClearEndpointState(void)
 	memset(s_Alternate, 0, sizeof(s_Alternate));
 }
 
+static bool UsbdCoreWantSof(void)
+{
+	for (int i = 0; i < s_CoreFuncCnt; i++)
+	{
+		if (s_CoreFunc[i].SofHandler != nullptr)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static void UsbdCoreUnconfigureFunctions(void)
 {
 	if (s_Configuration == 0)
 	{
 		return;
 	}
+
+	UsbdCtrlrSofEnable(false);
 
 	for (int i = 0; i < s_CoreFuncCnt; i++)
 	{
@@ -483,6 +498,12 @@ static bool UsbdCoreApplyConfiguration(uint8_t Configuration)
 
 	s_Configuration = Configuration;
 	s_NumInterfaces = pConfigDesc[4];
+
+	// Controllers drop SOF on bus reset, so enable it per configuration
+	if (UsbdCoreWantSof())
+	{
+		UsbdCtrlrSofEnable(true);
+	}
 
 	return true;
 }
@@ -986,12 +1007,15 @@ static void UsbdCoreCtrlrEvent(const UsbdCtrlrEvt_t *pEvt, void *)
 			break;
 
 		case USBD_CTRLR_EVT_SOF:
-			for (int i = 0; i < s_CoreFuncCnt; i++)
+			if (s_Configuration != 0)
 			{
-				if (s_CoreFunc[i].SofHandler != nullptr)
+				for (int i = 0; i < s_CoreFuncCnt; i++)
 				{
-					s_CoreFunc[i].SofHandler(pEvt->FrameNo,
-									 s_CoreFunc[i].pContext);
+					if (s_CoreFunc[i].SofHandler != nullptr)
+					{
+						s_CoreFunc[i].SofHandler(pEvt->FrameNo,
+												 s_CoreFunc[i].pContext);
+					}
 				}
 			}
 			break;
@@ -1092,17 +1116,6 @@ void UsbdCoreStart(void)
 		return;
 	}
 
-	bool sofEnabled = false;
-	for (int i = 0; i < s_CoreFuncCnt; i++)
-	{
-		if (s_CoreFunc[i].SofHandler != nullptr)
-		{
-			sofEnabled = true;
-			break;
-		}
-	}
-
-	UsbdCtrlrSofEnable(sofEnabled);
 	UsbdCtrlrIntEnable();
 	UsbdCtrlrConnect();
 	s_CoreStarted = true;
@@ -1115,7 +1128,6 @@ void UsbdCoreStop(void)
 		return;
 	}
 
-	UsbdCtrlrSofEnable(false);
 	UsbdCtrlrDisconnect();
 	UsbdCtrlrIntDisable();
 	UsbdCtrlrEpCloseAll();

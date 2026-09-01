@@ -49,8 +49,7 @@ static UsbdBulkDevIntrf_t *UsbdBulkIntrfData(DevIntrf_t * const pDevIntrf)
 static bool UsbdBulkIntrfCanTx(UsbdBulkDevIntrf_t *pIntrf)
 {
 	return pIntrf != nullptr && pIntrf->bEnabled &&
-		   pIntrf->TxEpAddr != 0U && pIntrf->TxMps > 0U &&
-		   pIntrf->pTxBuffer != nullptr &&
+		   pIntrf->TxEpAddr != 0U && pIntrf->pTxBuffer != nullptr &&
 		   (pIntrf->TxReady == nullptr ||
 		    pIntrf->TxReady(pIntrf, pIntrf->pContext));
 }
@@ -67,16 +66,10 @@ static bool UsbdBulkIntrfTakeTx(UsbdBulkDevIntrf_t *pIntrf)
 									memory_order_acquire);
 }
 
-static void UsbdBulkIntrfTxEmpty(UsbdBulkDevIntrf_t *pIntrf)
+static bool UsbdBulkIntrfTxIdle(UsbdBulkDevIntrf_t *pIntrf)
 {
-	UsbdBulkIntrfSetTxIdle(pIntrf);
-
-	if (pIntrf->DevIntrf.EvtCB != nullptr)
-	{
-		pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-							   DEVINTRF_EVT_TX_FIFO_EMPTY,
-							   nullptr, 0);
-	}
+	return atomic_load_explicit(&pIntrf->DevIntrf.bTxReady,
+								memory_order_acquire);
 }
 
 static void UsbdBulkIntrfTxFailure(UsbdBulkDevIntrf_t *pIntrf,
@@ -90,65 +83,85 @@ static void UsbdBulkIntrfTxFailure(UsbdBulkDevIntrf_t *pIntrf,
 	}
 }
 
-static bool UsbdBulkIntrfStartTxTransfer(UsbdBulkDevIntrf_t *pIntrf,
-										bool Flush)
+// Pull up to one packet out of the TX FIFO into the staging buffer.
+static int UsbdBulkIntrfFillPacket(UsbdBulkDevIntrf_t *pIntrf)
 {
-	if (!UsbdBulkIntrfCanTx(pIntrf) || !UsbdBulkIntrfTakeTx(pIntrf))
+	uint8_t *pBuffer = pIntrf->pTxBuffer;
+	int remain = (int)pIntrf->TxMps;
+	int cnt = 0;
+
+	while (remain > 0)
 	{
+		int length = remain;
+		uint8_t *p = CFifoGetMultiple(pIntrf->hTxFifo, &length);
+		if (p == nullptr || length <= 0)
+		{
+			break;
+		}
+
+		memcpy(pBuffer + cnt, p, (size_t)length);
+		cnt += length;
+		remain -= length;
+	}
+
+	return cnt;
+}
+
+/**
+ * Submit one Bulk IN transfer. The caller owns the endpoint, on failure the
+ * endpoint is returned to idle.
+ *
+ * Tail false sends only a full packet, so a continuous producer never emits
+ * short packets. Tail true also sends a partial packet or a required ZLP.
+ */
+static bool UsbdBulkIntrfSubmit(UsbdBulkDevIntrf_t *pIntrf, bool Tail)
+{
+	const int used = CFifoUsed(pIntrf->hTxFifo);
+	int length = 0;
+
+	if (used >= (int)pIntrf->TxMps || (Tail && used > 0))
+	{
+		length = UsbdBulkIntrfFillPacket(pIntrf);
+	}
+
+	if (length == 0 && !(Tail && pIntrf->TxZlpRequired))
+	{
+		UsbdBulkIntrfSetTxIdle(pIntrf);
 		return false;
 	}
 
-	const int used = CFifoUsed(pIntrf->hTxFifo);
+	// Data or a ZLP leaves now, either one ends the pending tail
+	pIntrf->TxZlpRequired = false;
+	pIntrf->TxTailArmed = false;
 
-	if (pIntrf->TxZlpRequired && used > 0)
-	{
-		pIntrf->TxZlpRequired = false;
-	}
-
-	if (pIntrf->TxLength == 0U)
-	{
-		if (used <= 0)
-		{
-			if (Flush && pIntrf->TxZlpRequired)
-			{
-				pIntrf->TxZlpRequired = false;
-				if (UsbdCtrlrEpXfer(pIntrf->TxEpAddr,
-									pIntrf->pTxBuffer, 0U))
-				{
-					return true;
-				}
-				pIntrf->TxZlpRequired = true;
-			}
-
-			UsbdBulkIntrfSetTxIdle(pIntrf);
-			return false;
-		}
-
-		if (!Flush && used < (int)pIntrf->TxMps)
-		{
-			UsbdBulkIntrfSetTxIdle(pIntrf);
-			return false;
-		}
-
-		const int length = UsbdBulkIntrfGetTxData(
-			pIntrf, pIntrf->pTxBuffer, (int)pIntrf->TxMps);
-		if (length <= 0)
-		{
-			UsbdBulkIntrfSetTxIdle(pIntrf);
-			return false;
-		}
-
-		pIntrf->TxLength = (uint16_t)length;
-	}
-
-	if (UsbdCtrlrEpXfer(pIntrf->TxEpAddr,
-						pIntrf->pTxBuffer, pIntrf->TxLength))
+	if (UsbdCtrlrEpXfer(pIntrf->TxEpAddr, pIntrf->pTxBuffer,
+						(uint16_t)length))
 	{
 		return true;
 	}
 
+	// The endpoint refused the transfer, the staged bytes are lost
 	UsbdBulkIntrfSetTxIdle(pIntrf);
+	if (length > 0)
+	{
+		UsbdBulkIntrfTxFailure(pIntrf, (uint16_t)length);
+	}
+
 	return false;
+}
+
+// Take the idle endpoint and submit, see UsbdBulkIntrfSubmit().
+static bool UsbdBulkIntrfStartXfer(UsbdBulkDevIntrf_t *pIntrf, bool Tail)
+{
+	// Cheap exit first, a streaming producer lands here on every write
+	// while the previous packet is still in flight
+	if (!UsbdBulkIntrfTxIdle(pIntrf) || !UsbdBulkIntrfCanTx(pIntrf) ||
+		!UsbdBulkIntrfTakeTx(pIntrf))
+	{
+		return false;
+	}
+
+	return UsbdBulkIntrfSubmit(pIntrf, Tail);
 }
 
 static void UsbdBulkIntrfDisable(DevIntrf_t * const pDevIntrf)
@@ -177,11 +190,7 @@ static void UsbdBulkIntrfEnable(DevIntrf_t * const pDevIntrf)
 		pIntrf->RxKick(pIntrf, pIntrf->pContext);
 	}
 
-	if (pIntrf->TxMps > 0U &&
-		CFifoUsed(pIntrf->hTxFifo) >= (int)pIntrf->TxMps)
-	{
-		(void)UsbdBulkIntrfStartTxTransfer(pIntrf, false);
-	}
+	(void)UsbdBulkIntrfStartXfer(pIntrf, false);
 }
 
 static uint32_t UsbdBulkIntrfGetRate(DevIntrf_t * const)
@@ -275,17 +284,21 @@ static int UsbdBulkIntrfTxData(DevIntrf_t * const pDevIntrf,
 		cnt += length;
 	}
 
-	if (cnt > 0)
-	{
-		pIntrf->TxActivity = true;
-	}
-
 	EnableInterrupt(state);
 
-	if (cnt > 0 && pIntrf->TxMps > 0U &&
-		CFifoUsed(pIntrf->hTxFifo) >= (int)pIntrf->TxMps)
+	if (cnt > 0 && pIntrf->TxMps > 0U)
 	{
-		(void)UsbdBulkIntrfStartTxTransfer(pIntrf, false);
+		const int used = CFifoUsed(pIntrf->hTxFifo);
+
+		// A write into an empty FIFO starts a transaction and leaves at
+		// once when the endpoint is idle, like a UART. While earlier data
+		// is still queued the write aggregates into full packets and the
+		// SOF handler sends the tail, so a fast producer that outruns the
+		// bus keeps the FIFO non empty and never emits short packets.
+		if (used >= (int)pIntrf->TxMps || used == cnt)
+		{
+			(void)UsbdBulkIntrfStartXfer(pIntrf, used == cnt);
+		}
 	}
 
 	return cnt;
@@ -347,9 +360,8 @@ bool UsbdBulkIntrfInit(UsbdBulkDevIntrf_t *pIntrf,
 	pIntrf->TxEpAddr = 0U;
 	pIntrf->pTxBuffer = nullptr;
 	pIntrf->TxMps = 0U;
-	pIntrf->TxLength = 0U;
 	pIntrf->TxZlpRequired = false;
-	pIntrf->TxActivity = false;
+	pIntrf->TxTailArmed = false;
 	pIntrf->bEnabled = false;
 
 	pIntrf->DevIntrf.pDevData = pIntrf;
@@ -433,35 +445,6 @@ int UsbdBulkIntrfPutRxData(UsbdBulkDevIntrf_t *pIntrf,
 	return cnt;
 }
 
-int UsbdBulkIntrfGetTxData(UsbdBulkDevIntrf_t *pIntrf,
-						   uint8_t *pBuffer, int BufferLen)
-{
-	if (pIntrf == nullptr || pIntrf->hTxFifo == nullptr ||
-		pBuffer == nullptr || BufferLen <= 0)
-	{
-		return 0;
-	}
-
-	int cnt = 0;
-
-	while (BufferLen > 0)
-	{
-		int length = BufferLen;
-		uint8_t *p = CFifoGetMultiple(pIntrf->hTxFifo, &length);
-		if (p == nullptr || length <= 0)
-		{
-			break;
-		}
-
-		memcpy(pBuffer, p, (size_t)length);
-		pBuffer += length;
-		BufferLen -= length;
-		cnt += length;
-	}
-
-	return cnt;
-}
-
 void UsbdBulkIntrfConfigTx(UsbdBulkDevIntrf_t *pIntrf,
 						   uint8_t EpAddr, uint16_t Mps,
 						   uint8_t *pBuffer)
@@ -484,39 +467,9 @@ void UsbdBulkIntrfResetTx(UsbdBulkDevIntrf_t *pIntrf)
 		return;
 	}
 
-	pIntrf->TxLength = 0U;
 	pIntrf->TxZlpRequired = false;
-	pIntrf->TxActivity = false;
+	pIntrf->TxTailArmed = false;
 	UsbdBulkIntrfSetTxIdle(pIntrf);
-}
-
-void UsbdBulkIntrfFlushTx(UsbdBulkDevIntrf_t *pIntrf)
-{
-	if (pIntrf != nullptr)
-	{
-		(void)UsbdBulkIntrfStartTxTransfer(pIntrf, true);
-	}
-}
-
-void UsbdBulkIntrfSof(UsbdBulkDevIntrf_t *pIntrf)
-{
-	if (!UsbdBulkIntrfCanTx(pIntrf))
-	{
-		return;
-	}
-
-	if (pIntrf->TxActivity)
-	{
-		pIntrf->TxActivity = false;
-		return;
-	}
-
-	const int used = CFifoUsed(pIntrf->hTxFifo);
-	if ((used > 0 && used < (int)pIntrf->TxMps) ||
-		(used == 0 && pIntrf->TxZlpRequired))
-	{
-		UsbdBulkIntrfFlushTx(pIntrf);
-	}
 }
 
 void UsbdBulkIntrfTxXferComplete(UsbdBulkDevIntrf_t *pIntrf,
@@ -528,64 +481,73 @@ void UsbdBulkIntrfTxXferComplete(UsbdBulkDevIntrf_t *pIntrf,
 		return;
 	}
 
-	const uint16_t expected = pIntrf->TxLength;
-
-	if (expected == 0U)
+	if (Result != USBD_CTRLR_XFER_SUCCESS)
 	{
-		if (Result == USBD_CTRLR_XFER_SUCCESS && Length == 0U)
+		// Whatever is still queued goes out on the next write or SOF
+		if (Result == USBD_CTRLR_XFER_FAILED)
 		{
-			pIntrf->TxZlpRequired = false;
-			UsbdBulkIntrfTxEmpty(pIntrf);
+			UsbdBulkIntrfTxFailure(pIntrf, Length);
 		}
-		else
-		{
-			pIntrf->TxZlpRequired = true;
-			UsbdBulkIntrfSetTxIdle(pIntrf);
-		}
+		UsbdBulkIntrfSetTxIdle(pIntrf);
 		return;
 	}
 
-	if (Result == USBD_CTRLR_XFER_SUCCESS && Length == expected)
+	// Chain the next full packet right away, still owning the endpoint
+	if (UsbdBulkIntrfCanTx(pIntrf) && UsbdBulkIntrfSubmit(pIntrf, false))
 	{
-		pIntrf->TxLength = 0U;
-
-		const int used = CFifoUsed(pIntrf->hTxFifo);
-		if (used >= (int)pIntrf->TxMps)
-		{
-			UsbdBulkIntrfSetTxIdle(pIntrf);
-			(void)UsbdBulkIntrfStartTxTransfer(pIntrf, false);
-		}
-		else if (used > 0)
-		{
-			UsbdBulkIntrfSetTxIdle(pIntrf);
-		}
-		else if ((Length % pIntrf->TxMps) == 0U)
-		{
-			pIntrf->TxZlpRequired = true;
-			UsbdBulkIntrfSetTxIdle(pIntrf);
-		}
-		else
-		{
-			UsbdBulkIntrfTxEmpty(pIntrf);
-		}
 		return;
 	}
 
-	if (Length == 0U)
+	// Submit failure already returned the endpoint to idle
+	if (!UsbdBulkIntrfTxIdle(pIntrf))
 	{
 		UsbdBulkIntrfSetTxIdle(pIntrf);
-		(void)UsbdBulkIntrfStartTxTransfer(pIntrf, false);
+	}
+
+	// Less than one packet left, SOF sends that tail
+	if (CFifoUsed(pIntrf->hTxFifo) > 0)
+	{
 		return;
 	}
 
-	pIntrf->TxLength = 0U;
-	UsbdBulkIntrfTxFailure(pIntrf, Length);
-	UsbdBulkIntrfSetTxIdle(pIntrf);
-
-	if (CFifoUsed(pIntrf->hTxFifo) >= (int)pIntrf->TxMps)
+	// The stream stopped on a full packet, the host is still waiting for a
+	// short packet to end its transfer. Only send it if nothing follows.
+	if (Length == pIntrf->TxMps)
 	{
-		(void)UsbdBulkIntrfStartTxTransfer(pIntrf, false);
+		pIntrf->TxZlpRequired = true;
+		return;
 	}
+
+	if (pIntrf->DevIntrf.EvtCB != nullptr)
+	{
+		pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
+							   DEVINTRF_EVT_TX_FIFO_EMPTY,
+							   nullptr, 0);
+	}
+}
+
+void UsbdBulkIntrfSof(UsbdBulkDevIntrf_t *pIntrf)
+{
+	if (pIntrf == nullptr || pIntrf->hTxFifo == nullptr ||
+		!UsbdBulkIntrfTxIdle(pIntrf))
+	{
+		return;
+	}
+
+	if (CFifoUsed(pIntrf->hTxFifo) == 0 && !pIntrf->TxZlpRequired)
+	{
+		pIntrf->TxTailArmed = false;
+		return;
+	}
+
+	// Give the producer one full frame to complete the packet
+	if (!pIntrf->TxTailArmed)
+	{
+		pIntrf->TxTailArmed = true;
+		return;
+	}
+
+	(void)UsbdBulkIntrfStartXfer(pIntrf, true);
 }
 
 bool UsbdBulkIntrfRequestToSend(UsbdBulkDevIntrf_t *pIntrf, int NbBytes)
@@ -602,7 +564,7 @@ bool UsbdBulkIntrfRequestToSend(UsbdBulkDevIntrf_t *pIntrf, int NbBytes)
 
 	if (CFifoAvail(pIntrf->hTxFifo) < NbBytes)
 	{
-		(void)UsbdBulkIntrfStartTxTransfer(pIntrf, false);
+		(void)UsbdBulkIntrfStartXfer(pIntrf, false);
 	}
 
 	return CFifoAvail(pIntrf->hTxFifo) >= NbBytes;
