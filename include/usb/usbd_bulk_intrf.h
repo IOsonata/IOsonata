@@ -3,12 +3,8 @@
 
 @brief	Generic USB device bulk data interface.
 
-Provides the reusable DeviceIntrf and CFifo data plane for a USB device
-function that carries data over one Bulk OUT and one Bulk IN endpoint.
-
-Endpoint allocation, descriptors, USB class requests and controller access are
-owned by the USB function and device stack. This interface only queues bytes
-between the application and that function.
+Provides the reusable DeviceIntrf, CFifo data plane and Bulk IN transfer
+engine for USB device functions.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 29, 2026
@@ -46,6 +42,7 @@ SOFTWARE.
 
 #include "cfifo.h"
 #include "device_intrf.h"
+#include "usb/usbd_ctrlr.h"
 
 /** @addtogroup USBD
   * @{
@@ -55,36 +52,37 @@ SOFTWARE.
 
 typedef struct __UsbdBulk_Dev_Interf UsbdBulkDevIntrf_t;
 
-/**
- * @brief	Ask the owning USB function to service queued Bulk data.
- *
- * The callback may start a transfer immediately or only schedule service.
- * UsbdBulkIntrf never assumes an endpoint number, controller type or execution
- * context.
- */
 typedef void (*UsbdBulkKickHandler_t)(UsbdBulkDevIntrf_t * const pIntrf,
 									 void *pContext);
 
+typedef bool (*UsbdBulkTxReadyHandler_t)(UsbdBulkDevIntrf_t * const pIntrf,
+										void *pContext);
+
 typedef struct __UsbdBulk_Interf_Config {
-	bool bBlocking;					//!< CFifo full behavior
-	int RxFifoMemSize;				//!< RX FIFO memory size including CFifo header
-	uint8_t *pRxFifoMem;			//!< Word-aligned RX FIFO memory
-	int TxFifoMemSize;				//!< TX FIFO memory size including CFifo header
-	uint8_t *pTxFifoMem;			//!< Word-aligned TX FIFO memory
-	UsbdBulkKickHandler_t RxKick;	//!< Optional Bulk OUT service callback
-	UsbdBulkKickHandler_t TxKick;	//!< Optional Bulk IN service callback
-	void *pContext;					//!< Opaque context passed to service callbacks
-	DevIntrfEvtHandler_t EvtCB;		//!< Optional DeviceIntrf event callback
+	bool bBlocking;
+	int RxFifoMemSize;
+	uint8_t *pRxFifoMem;
+	int TxFifoMemSize;
+	uint8_t *pTxFifoMem;
+	UsbdBulkKickHandler_t RxKick;
+	UsbdBulkTxReadyHandler_t TxReady;
+	void *pContext;
+	DevIntrfEvtHandler_t EvtCB;
 } UsbdBulkIntrfCfg_t;
 
 struct __UsbdBulk_Dev_Interf {
-	DevIntrf_t DevIntrf;			//!< Device interface, must be first
-	hCFifo_t hRxFifo;				//!< USB OUT -> application
-	hCFifo_t hTxFifo;				//!< Application -> USB IN
-	UsbdBulkKickHandler_t RxKick;	//!< Owning USB function Bulk OUT service callback
-	UsbdBulkKickHandler_t TxKick;	//!< Owning USB function Bulk IN service callback
-	void *pContext;					//!< Opaque callback context
-	bool bEnabled;					//!< Interface data plane enabled
+	DevIntrf_t DevIntrf;
+	hCFifo_t hRxFifo;
+	hCFifo_t hTxFifo;
+	UsbdBulkKickHandler_t RxKick;
+	UsbdBulkTxReadyHandler_t TxReady;
+	void *pContext;
+	uint8_t TxEpAddr;
+	uint8_t *pTxBuffer;
+	uint16_t TxMps;
+	uint16_t TxLength;
+	bool bEnabled;
+	bool TxZlpRequired;
 };
 
 #pragma pack(pop)
@@ -93,80 +91,31 @@ struct __UsbdBulk_Dev_Interf {
 extern "C" {
 #endif
 
-/**
- * @brief	Initialize a generic USB device Bulk interface.
- *
- * FIFO storage belongs to the caller and must remain valid for the life of the
- * interface. No memory is allocated internally.
- *
- * @param	pIntrf	: Interface instance
- * @param	pCfg	: Configuration
- *
- * @return	true on success
- */
 bool UsbdBulkIntrfInit(UsbdBulkDevIntrf_t *pIntrf,
 					   const UsbdBulkIntrfCfg_t *pCfg);
 
-/**
- * @brief	Push bytes received by a Bulk OUT transfer to the RX FIFO.
- *
- * In non-blocking mode CFifo keeps its normal drop-oldest behavior. In
- * blocking mode only bytes for which FIFO space exists are accepted.
- *
- * @param	pIntrf	: Interface instance
- * @param	pData	: Received USB data
- * @param	DataLen	: Number of bytes received
- *
- * @return	Number of bytes accepted
- */
 int UsbdBulkIntrfPutRxData(UsbdBulkDevIntrf_t *pIntrf,
 						   const uint8_t *pData, int DataLen);
 
-/**
- * @brief	Copy queued TX bytes into a buffer owned by the USB function.
- *
- * The owning function must keep the returned bytes in its transfer buffer until
- * the Bulk IN request completes. Only one logical Bulk IN request should be
- * outstanding for one UsbdBulkIntrf instance.
- *
- * @param	pIntrf		: Interface instance
- * @param	pBuffer		: USB transfer buffer
- * @param	BufferLen	: Maximum bytes to copy
- *
- * @return	Number of bytes copied
- */
 int UsbdBulkIntrfGetTxData(UsbdBulkDevIntrf_t *pIntrf,
 						   uint8_t *pBuffer, int BufferLen);
 
-/**
- * @brief	Report completion of the current Bulk IN request.
- *
- * If more application data is queued, TxKick is called again. Otherwise
- * DEVINTRF_EVT_TX_FIFO_EMPTY is reported.
- *
- * @param	pIntrf	: Interface instance
- */
-void UsbdBulkIntrfTxComplete(UsbdBulkDevIntrf_t *pIntrf);
+void UsbdBulkIntrfConfigTx(UsbdBulkDevIntrf_t *pIntrf,
+						   uint8_t EpAddr, uint16_t Mps,
+						   uint8_t *pBuffer);
 
-/**
- * @brief	Check whether the application may queue a TX request.
- *
- * For a non-blocking FIFO this is always true for a positive request because
- * CFifo intentionally drops the oldest bytes when full. For a blocking FIFO,
- * TxKick is first given a chance to move queued bytes to the USB transfer
- * buffer, then the available space is checked.
- *
- * @param	pIntrf	: Interface instance
- * @param	NbBytes	: Number of bytes the caller wants to queue
- *
- * @return	true when the request can be queued according to CFifo policy
- */
+void UsbdBulkIntrfResetTx(UsbdBulkDevIntrf_t *pIntrf);
+
+void UsbdBulkIntrfFlushTx(UsbdBulkDevIntrf_t *pIntrf);
+
+void UsbdBulkIntrfTxXferComplete(UsbdBulkDevIntrf_t *pIntrf,
+								 uint16_t Length,
+								 UsbdCtrlrXferResult_t Result);
+
 bool UsbdBulkIntrfRequestToSend(UsbdBulkDevIntrf_t *pIntrf, int NbBytes);
 
-/** @brief Return bytes currently queued for the application. */
 int UsbdBulkIntrfRxUsed(UsbdBulkDevIntrf_t *pIntrf);
 
-/** @brief Return bytes currently queued for Bulk IN. */
 int UsbdBulkIntrfTxUsed(UsbdBulkDevIntrf_t *pIntrf);
 
 #ifdef __cplusplus
@@ -175,12 +124,6 @@ int UsbdBulkIntrfTxUsed(UsbdBulkDevIntrf_t *pIntrf);
 
 #ifdef __cplusplus
 
-/**
- * @brief	C++ wrapper for the generic USB device Bulk DeviceIntrf.
- *
- * USB classes such as CDC ACM may derive from this class and add their control
- * interface and descriptors while reusing this data plane.
- */
 class UsbdBulkIntrf : public DeviceIntrf {
 public:
 	bool Init(const UsbdBulkIntrfCfg_t &Cfg) {

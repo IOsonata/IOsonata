@@ -3,13 +3,8 @@
 
 @brief	USB CDC ACM device interface
 
-One CDC ACM port : the ACM control protocol, the endpoint staging and the
-DeviceIntrf the application talks to, in one instance owned by the caller.
-
-The Bulk interface is the first member of the instance, so the CDC interface
-is that DeviceIntrf rather than a second one forwarding to it. RxKick and
-TxKick carry the instance itself as their context, and so does the device core
-function registration, so nothing here looks a port number up in a table.
+CDC owns ACM control, notification and Bulk OUT staging. The generic Bulk
+interface owns the application FIFOs and Bulk IN transfer engine.
 
 @author	Hoang Nguyen Hoan
 @date	May 2, 2024
@@ -80,12 +75,12 @@ static uint32_t UsbdCdcRxGet(const UsbdCdcDevIntrf_t *pIntrf)
 static uint16_t UsbdCdcSerialStateMask(void)
 {
 	return USB_CDC_SERIAL_STATE_RX_CARRIER |
-		USB_CDC_SERIAL_STATE_TX_CARRIER |
-		USB_CDC_SERIAL_STATE_BREAK |
-		USB_CDC_SERIAL_STATE_RING |
-		USB_CDC_SERIAL_STATE_FRAMING |
-		USB_CDC_SERIAL_STATE_PARITY |
-		USB_CDC_SERIAL_STATE_OVERRUN;
+		   USB_CDC_SERIAL_STATE_TX_CARRIER |
+		   USB_CDC_SERIAL_STATE_BREAK |
+		   USB_CDC_SERIAL_STATE_RING |
+		   USB_CDC_SERIAL_STATE_FRAMING |
+		   USB_CDC_SERIAL_STATE_PARITY |
+		   USB_CDC_SERIAL_STATE_OVERRUN;
 }
 
 static void UsbdCdcDefaultLineCoding(UsbdCdcDevIntrf_t *pIntrf)
@@ -100,7 +95,7 @@ static void UsbdCdcDefaultLineCoding(UsbdCdcDevIntrf_t *pIntrf)
 static uint16_t UsbdCdcMps(void)
 {
 	return UsbdCtrlrHighSpeed() ?
-		USBD_CDC_BULK_HS_MPS : USBD_CDC_BULK_FS_MPS;
+		   USBD_CDC_BULK_HS_MPS : USBD_CDC_BULK_FS_MPS;
 }
 
 static uint8_t UsbdCdcNotifInterval(void)
@@ -111,7 +106,16 @@ static uint8_t UsbdCdcNotifInterval(void)
 bool UsbdCdcIntrfPortIsOpen(const UsbdCdcDevIntrf_t * const pIntrf)
 {
 	return pIntrf != nullptr && pIntrf->Configured &&
-		(pIntrf->ControlLineState & USB_CDC_CTRL_LINE_STATE_DTR) != 0U;
+		   (pIntrf->ControlLineState & USB_CDC_CTRL_LINE_STATE_DTR) != 0U;
+}
+
+static bool UsbdCdcTxReady(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
+{
+	UsbdCdcDevIntrf_t *pIntrf =
+		static_cast<UsbdCdcDevIntrf_t *>(pContext);
+
+	return pIntrf != nullptr && &pIntrf->Bulk == pBulk &&
+		   UsbdCdcIntrfPortIsOpen(pIntrf);
 }
 
 static void UsbdCdcNotifyPortState(UsbdCdcDevIntrf_t *pIntrf, bool Open)
@@ -126,7 +130,8 @@ static void UsbdCdcNotifyPortState(UsbdCdcDevIntrf_t *pIntrf, bool Open)
 
 static void UsbdCdcRxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
 {
-	UsbdCdcDevIntrf_t *pIntrf = static_cast<UsbdCdcDevIntrf_t *>(pContext);
+	UsbdCdcDevIntrf_t *pIntrf =
+		static_cast<UsbdCdcDevIntrf_t *>(pContext);
 
 	if (pIntrf == nullptr || &pIntrf->Bulk != pBulk ||
 		!pBulk->bEnabled || !UsbdCdcIntrfPortIsOpen(pIntrf) ||
@@ -144,87 +149,12 @@ static void UsbdCdcRxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
 
 	UsbdCdcRxStage_t *pStage = UsbdCdcRxStage(pIntrf, put);
 	pIntrf->RxActive = true;
+
 	if (!UsbdCtrlrEpXfer(USBD_CDC_DATA_OUT_EP(pIntrf->ItfNo),
 						 UsbdCdcRxBuffer(pStage), pIntrf->BulkMps))
 	{
 		pIntrf->RxActive = false;
 	}
-}
-
-static void UsbdCdcTxSend(UsbdBulkDevIntrf_t * const pBulk,
-						   void *pContext, bool Flush)
-{
-	UsbdCdcDevIntrf_t *pIntrf = static_cast<UsbdCdcDevIntrf_t *>(pContext);
-
-	if (pIntrf == nullptr || &pIntrf->Bulk != pBulk)
-	{
-		return;
-	}
-
-	if (!pBulk->bEnabled || !UsbdCdcIntrfPortIsOpen(pIntrf))
-	{
-		atomic_store(&pBulk->DevIntrf.bTxReady, true);
-		return;
-	}
-
-	if (pIntrf->TxActive)
-	{
-		return;
-	}
-
-	// A deferred ZLP is only needed when the stream remains empty. New data is
-	// a continuation, so cancel the ZLP before considering the next packet.
-	if (pIntrf->TxZlpRequired)
-	{
-		if (UsbdBulkIntrfTxUsed(pBulk) <= 0)
-		{
-			atomic_store(&pBulk->DevIntrf.bTxReady, true);
-			return;
-		}
-		pIntrf->TxZlpRequired = false;
-	}
-
-	if (pIntrf->TxLength == 0U)
-	{
-		const int used = UsbdBulkIntrfTxUsed(pBulk);
-		if (used <= 0)
-		{
-			atomic_store(&pBulk->DevIntrf.bTxReady, true);
-			return;
-		}
-
-		// A short Bulk IN packet terminates the host's current transfer. Keep
-		// continuous traffic in full endpoint packets; the pump flushes a final
-		// partial packet when no full packet is ready.
-		if (!Flush && used < (int)pIntrf->BulkMps)
-		{
-			atomic_store(&pBulk->DevIntrf.bTxReady, true);
-			return;
-		}
-
-		const int length = UsbdBulkIntrfGetTxData(pBulk,
-			UsbdCdcTxBuffer(pIntrf), (int)pIntrf->BulkMps);
-		if (length <= 0)
-		{
-			atomic_store(&pBulk->DevIntrf.bTxReady, true);
-			return;
-		}
-
-		pIntrf->TxLength = (uint16_t)length;
-	}
-
-	pIntrf->TxActive = true;
-	if (!UsbdCtrlrEpXfer(USBD_CDC_DATA_IN_EP(pIntrf->ItfNo),
-						 UsbdCdcTxBuffer(pIntrf), pIntrf->TxLength))
-	{
-		pIntrf->TxActive = false;
-		atomic_store(&pBulk->DevIntrf.bTxReady, true);
-	}
-}
-
-static void UsbdCdcTxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
-{
-	UsbdCdcTxSend(pBulk, pContext, false);
 }
 
 static void UsbdCdcNotifKick(UsbdCdcDevIntrf_t *pIntrf)
@@ -246,10 +176,12 @@ static void UsbdCdcNotifKick(UsbdCdcDevIntrf_t *pIntrf)
 	uint8_t *pData = UsbdCdcNotifBuffer(pIntrf);
 	memcpy(pData, &notification, sizeof(notification));
 	pData[sizeof(notification)] = (uint8_t)pIntrf->SerialState;
-	pData[sizeof(notification) + 1U] = (uint8_t)(pIntrf->SerialState >> 8);
+	pData[sizeof(notification) + 1U] =
+		(uint8_t)(pIntrf->SerialState >> 8);
 
 	pIntrf->SerialStatePending = false;
 	pIntrf->NotifActive = true;
+
 	if (!UsbdCtrlrEpXfer(USBD_CDC_NOTIF_EP(pIntrf->ItfNo),
 						 pData, USBD_CDC_NOTIFY_LEN))
 	{
@@ -268,6 +200,7 @@ static bool UsbdCdcOpenEndpoint(uint8_t EpAddr, uint8_t Type,
 	desc.bmAttributes = Type;
 	desc.wMaxPacketSize = Mps;
 	desc.bInterval = Interval;
+
 	return UsbdCtrlrEpOpen(&desc);
 }
 
@@ -281,16 +214,16 @@ static void UsbdCdcCloseEndpoints(UsbdCdcDevIntrf_t *pIntrf)
 static void UsbdCdcCancelBusState(UsbdCdcDevIntrf_t *pIntrf)
 {
 	pIntrf->RxActive = false;
-	pIntrf->TxActive = false;
-	pIntrf->TxZlpRequired = false;
 	pIntrf->NotifActive = false;
 	pIntrf->SerialStatePending = false;
-	atomic_store(&pIntrf->Bulk.DevIntrf.bTxReady, true);
+	UsbdBulkIntrfResetTx(&pIntrf->Bulk);
 }
 
 static bool UsbdCdcConfig(uint8_t Configuration, void *pContext)
 {
-	UsbdCdcDevIntrf_t *pIntrf = static_cast<UsbdCdcDevIntrf_t *>(pContext);
+	UsbdCdcDevIntrf_t *pIntrf =
+		static_cast<UsbdCdcDevIntrf_t *>(pContext);
+
 	if (pIntrf == nullptr)
 	{
 		return false;
@@ -314,16 +247,24 @@ static bool UsbdCdcConfig(uint8_t Configuration, void *pContext)
 	pIntrf->BulkMps = UsbdCdcMps();
 
 	if (!UsbdCdcOpenEndpoint(USBD_CDC_NOTIF_EP(pIntrf->ItfNo),
-			USB_ENDPATT_TRANS_INT, USBD_CDC_NOTIF_MPS,
-			UsbdCdcNotifInterval()) ||
+							 USB_ENDPATT_TRANS_INT,
+							 USBD_CDC_NOTIF_MPS,
+							 UsbdCdcNotifInterval()) ||
 		!UsbdCdcOpenEndpoint(USBD_CDC_DATA_OUT_EP(pIntrf->ItfNo),
-			USB_ENDPATT_TRANS_BULK, pIntrf->BulkMps, 0U) ||
+							 USB_ENDPATT_TRANS_BULK,
+							 pIntrf->BulkMps, 0U) ||
 		!UsbdCdcOpenEndpoint(USBD_CDC_DATA_IN_EP(pIntrf->ItfNo),
-			USB_ENDPATT_TRANS_BULK, pIntrf->BulkMps, 0U))
+							 USB_ENDPATT_TRANS_BULK,
+							 pIntrf->BulkMps, 0U))
 	{
 		UsbdCdcCloseEndpoints(pIntrf);
 		return false;
 	}
+
+	UsbdBulkIntrfConfigTx(&pIntrf->Bulk,
+						  USBD_CDC_DATA_IN_EP(pIntrf->ItfNo),
+						  pIntrf->BulkMps,
+						  UsbdCdcTxBuffer(pIntrf));
 
 	pIntrf->Configured = true;
 	pIntrf->SerialStatePending = true;
@@ -338,12 +279,14 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 						   uint16_t *pLength,
 						   void *pContext)
 {
-	UsbdCdcDevIntrf_t *pIntrf = static_cast<UsbdCdcDevIntrf_t *>(pContext);
+	UsbdCdcDevIntrf_t *pIntrf =
+		static_cast<UsbdCdcDevIntrf_t *>(pContext);
 
 	if (pSetup == nullptr || pIntrf == nullptr || pLength == nullptr ||
 		!pIntrf->Configured ||
 		(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) != USB_REQTYPE_CLASS ||
-		(pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT) != USB_REQTYPE_INTERFACE ||
+		(pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT) !=
+			USB_REQTYPE_INTERFACE ||
 		(pSetup->wIndex & 0xFF00U) != 0U ||
 		(uint8_t)pSetup->wIndex != USBD_CDC_CTRL_INTRF(pIntrf->ItfNo))
 	{
@@ -353,8 +296,10 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 	switch (pSetup->bRequest)
 	{
 		case USB_CDC_REQ_SET_LINE_CODING:
-			if ((pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) != USB_REQTYPE_DIRDEV ||
-				pSetup->wValue != 0U || pSetup->wLength != sizeof(UsbCdcLineCoding_t))
+			if ((pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) !=
+					USB_REQTYPE_DIRDEV ||
+				pSetup->wValue != 0U ||
+				pSetup->wLength != sizeof(UsbCdcLineCoding_t))
 			{
 				return false;
 			}
@@ -365,7 +310,8 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 				{
 					return false;
 				}
-				*ppData = reinterpret_cast<uint8_t *>(&pIntrf->PendingLineCoding);
+				*ppData =
+					reinterpret_cast<uint8_t *>(&pIntrf->PendingLineCoding);
 				*pLength = sizeof(pIntrf->PendingLineCoding);
 				return true;
 			}
@@ -383,8 +329,10 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 			return false;
 
 		case USB_CDC_REQ_GET_LINE_CODING:
-			if ((pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) != USB_REQTYPE_DIRHOST ||
-				pSetup->wValue != 0U || pSetup->wLength != sizeof(UsbCdcLineCoding_t))
+			if ((pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) !=
+					USB_REQTYPE_DIRHOST ||
+				pSetup->wValue != 0U ||
+				pSetup->wLength != sizeof(UsbCdcLineCoding_t))
 			{
 				return false;
 			}
@@ -401,10 +349,12 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 			return true;
 
 		case USB_CDC_REQ_SET_CTRL_LINE_STATE:
-			if ((pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) != USB_REQTYPE_DIRDEV ||
+			if ((pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) !=
+					USB_REQTYPE_DIRDEV ||
 				pSetup->wLength != 0U ||
 				(pSetup->wValue &
-				 ~(USB_CDC_CTRL_LINE_STATE_DTR | USB_CDC_CTRL_LINE_STATE_RTS)) != 0U)
+				 ~(USB_CDC_CTRL_LINE_STATE_DTR |
+				   USB_CDC_CTRL_LINE_STATE_RTS)) != 0U)
 			{
 				return false;
 			}
@@ -418,7 +368,8 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 
 			if (Stage == USBD_CORE_CTRL_COMPLETE)
 			{
-				pIntrf->ControlLineState = pIntrf->PendingControlLineState;
+				pIntrf->ControlLineState =
+					pIntrf->PendingControlLineState;
 				return true;
 			}
 			return Stage == USBD_CORE_CTRL_DATA;
@@ -428,20 +379,12 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 	}
 }
 
-static void UsbdCdcReportTxFailure(UsbdCdcDevIntrf_t *pIntrf, uint16_t Length)
-{
-	if (pIntrf->Bulk.DevIntrf.EvtCB != nullptr)
-	{
-		pIntrf->Bulk.DevIntrf.EvtCB(&pIntrf->Bulk.DevIntrf,
-									DEVINTRF_EVT_TX_TIMEOUT,
-									nullptr, Length);
-	}
-}
-
 static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 						UsbdCtrlrXferResult_t Result, void *pContext)
 {
-	UsbdCdcDevIntrf_t *pIntrf = static_cast<UsbdCdcDevIntrf_t *>(pContext);
+	UsbdCdcDevIntrf_t *pIntrf =
+		static_cast<UsbdCdcDevIntrf_t *>(pContext);
+
 	if (pIntrf == nullptr)
 	{
 		return;
@@ -456,11 +399,13 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 		{
 			const uint32_t put = UsbdCdcRxPut(pIntrf);
 			const uint32_t get = UsbdCdcRxGet(pIntrf);
+
 			if ((put - get) < USBD_CDC_RX_STAGE_COUNT)
 			{
 				UsbdCdcRxStage_t *pStage = UsbdCdcRxStage(pIntrf, put);
 				pStage->Length = Length;
-				__atomic_store_n(&pIntrf->RxPut, put + 1U, __ATOMIC_RELEASE);
+				__atomic_store_n(&pIntrf->RxPut, put + 1U,
+								 __ATOMIC_RELEASE);
 			}
 		}
 
@@ -470,61 +415,7 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 
 	if (EpAddr == USBD_CDC_DATA_IN_EP(pIntrf->ItfNo))
 	{
-		if (!pIntrf->TxActive)
-		{
-			return;
-		}
-
-		const uint16_t expected = pIntrf->TxLength;
-		pIntrf->TxActive = false;
-
-		// A zero-length active transfer is the deferred terminating ZLP.
-		if (expected == 0U)
-		{
-			if (Result == USBD_CTRLR_XFER_SUCCESS && Length == 0U)
-			{
-				UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
-			}
-			else
-			{
-				pIntrf->TxZlpRequired = true;
-				atomic_store(&pIntrf->Bulk.DevIntrf.bTxReady, true);
-			}
-			return;
-		}
-
-		if (Result == USBD_CTRLR_XFER_SUCCESS && Length == expected)
-		{
-			pIntrf->TxLength = 0U;
-
-			if (UsbdBulkIntrfTxUsed(&pIntrf->Bulk) > 0)
-			{
-				UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
-			}
-			else if ((Length % pIntrf->BulkMps) == 0U)
-			{
-				pIntrf->TxZlpRequired = true;
-				atomic_store(&pIntrf->Bulk.DevIntrf.bTxReady, true);
-			}
-			else
-			{
-				UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
-			}
-		}
-		else if (Length == 0U)
-		{
-			// No payload reached the host. TxLength still describes the staged
-			// packet, so retry it without touching the FIFO.
-			UsbdCdcTxKick(&pIntrf->Bulk, pIntrf);
-		}
-		else
-		{
-			// A partial completion may already be visible to the host. Do not
-			// replay the complete staged packet.
-			pIntrf->TxLength = 0U;
-			UsbdCdcReportTxFailure(pIntrf, Length);
-			UsbdBulkIntrfTxComplete(&pIntrf->Bulk);
-		}
+		UsbdBulkIntrfTxXferComplete(&pIntrf->Bulk, Length, Result);
 		return;
 	}
 
@@ -540,7 +431,9 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 
 static void UsbdCdcReset(void *pContext)
 {
-	UsbdCdcDevIntrf_t *pIntrf = static_cast<UsbdCdcDevIntrf_t *>(pContext);
+	UsbdCdcDevIntrf_t *pIntrf =
+		static_cast<UsbdCdcDevIntrf_t *>(pContext);
+
 	if (pIntrf == nullptr)
 	{
 		return;
@@ -565,6 +458,7 @@ static void UsbdCdcProcessRx(UsbdCdcDevIntrf_t *pIntrf)
 	{
 		const uint32_t get = UsbdCdcRxGet(pIntrf);
 		const uint32_t put = UsbdCdcRxPut(pIntrf);
+
 		if (get == put)
 		{
 			break;
@@ -583,10 +477,9 @@ static void UsbdCdcProcessRx(UsbdCdcDevIntrf_t *pIntrf)
 		{
 			const int accepted = UsbdBulkIntrfPutRxData(
 				&pIntrf->Bulk, UsbdCdcRxBuffer(pStage), length);
+
 			if (accepted != length)
 			{
-				// Blocking FIFOs are checked above; a short write can only mean
-				// the application violated CFifo's single-context requirement.
 				break;
 			}
 		}
@@ -596,50 +489,10 @@ static void UsbdCdcProcessRx(UsbdCdcDevIntrf_t *pIntrf)
 	}
 }
 
-static void UsbdCdcTryZlp(UsbdCdcDevIntrf_t *pIntrf)
-{
-	if (!pIntrf->TxZlpRequired || pIntrf->TxActive ||
-		!pIntrf->Bulk.bEnabled || !UsbdCdcIntrfPortIsOpen(pIntrf))
-	{
-		return;
-	}
-
-	if (UsbdBulkIntrfTxUsed(&pIntrf->Bulk) > 0)
-	{
-		pIntrf->TxZlpRequired = false;
-		UsbdCdcTxKick(&pIntrf->Bulk, pIntrf);
-		return;
-	}
-
-	// TxActive plus TxLength == 0 represents a ZLP transfer. nRF EasyDMA still
-	// captures EPIN.PTR for MAXCNT=0, so keep the pointer in aligned RAM.
-	pIntrf->TxZlpRequired = false;
-	pIntrf->TxLength = 0U;
-	pIntrf->TxActive = true;
-	atomic_store(&pIntrf->Bulk.DevIntrf.bTxReady, false);
-	if (!UsbdCtrlrEpXfer(USBD_CDC_DATA_IN_EP(pIntrf->ItfNo),
-						 UsbdCdcTxBuffer(pIntrf), 0U))
-	{
-		pIntrf->TxActive = false;
-		pIntrf->TxZlpRequired = true;
-		atomic_store(&pIntrf->Bulk.DevIntrf.bTxReady, true);
-	}
-}
-
-static void UsbdCdcProcessTx(UsbdCdcDevIntrf_t *pIntrf)
-{
-	UsbdCdcTryZlp(pIntrf);
-
-	if (!pIntrf->TxActive && !pIntrf->TxZlpRequired &&
-		UsbdBulkIntrfTxUsed(&pIntrf->Bulk) > 0)
-	{
-		UsbdCdcTxSend(&pIntrf->Bulk, pIntrf, true);
-	}
-}
-
 static void UsbdCdcPump(void *pContext)
 {
-	UsbdCdcIntrfProcess(static_cast<UsbdCdcDevIntrf_t *>(pContext));
+	UsbdCdcIntrfProcess(
+		static_cast<UsbdCdcDevIntrf_t *>(pContext));
 }
 
 bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
@@ -665,7 +518,7 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 	bulkCfg.TxFifoMemSize = pCfg->TxFifoMemSize;
 	bulkCfg.pTxFifoMem = pCfg->pTxFifoMem;
 	bulkCfg.RxKick = UsbdCdcRxKick;
-	bulkCfg.TxKick = UsbdCdcTxKick;
+	bulkCfg.TxReady = UsbdCdcTxReady;
 	bulkCfg.pContext = pIntrf;
 	bulkCfg.EvtCB = pCfg->EvtCB;
 
@@ -674,20 +527,13 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 		return false;
 	}
 
-	//
-	// The CDC half of the instance is cleared field by field rather than with
-	// one memset. The Bulk member holds the DeviceIntrf atomics, which
-	// UsbdBulkIntrfInit has just set up, and clearing an object that holds
-	// them by writing raw zeroes over it is not defined.
-	//
 	pIntrf->ItfNo = pCfg->ItfNo;
 	pIntrf->BulkMps = UsbdCdcMps();
 	pIntrf->ControlLineState = 0U;
 	pIntrf->PendingControlLineState = 0U;
 	pIntrf->SerialState = 0U;
-	pIntrf->TxLength = 0U;
-	pIntrf->RxDropCnt = 0;
-	pIntrf->TxDropCnt = 0;
+	pIntrf->RxDropCnt = 0U;
+	pIntrf->TxDropCnt = 0U;
 	pIntrf->Configured = false;
 	pIntrf->ReportedOpen = false;
 	UsbdCdcCancelBusState(pIntrf);
@@ -705,10 +551,13 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 	coreCfg.FirstInterface = USBD_CDC_CTRL_INTRF(pCfg->ItfNo);
 	coreCfg.InterfaceCount = 2U;
 	coreCfg.EpInMask =
-		(uint16_t)((1U << USB_ENDPADDR_NUM(USBD_CDC_NOTIF_EP(pCfg->ItfNo))) |
-				   (1U << USB_ENDPADDR_NUM(USBD_CDC_DATA_IN_EP(pCfg->ItfNo))));
+		(uint16_t)((1U << USB_ENDPADDR_NUM(
+			USBD_CDC_NOTIF_EP(pCfg->ItfNo))) |
+				   (1U << USB_ENDPADDR_NUM(
+			USBD_CDC_DATA_IN_EP(pCfg->ItfNo))));
 	coreCfg.EpOutMask =
-		(uint16_t)(1U << USB_ENDPADDR_NUM(USBD_CDC_DATA_OUT_EP(pCfg->ItfNo)));
+		(uint16_t)(1U << USB_ENDPADDR_NUM(
+			USBD_CDC_DATA_OUT_EP(pCfg->ItfNo)));
 	coreCfg.RequestHandler = UsbdCdcRequest;
 	coreCfg.ConfigHandler = UsbdCdcConfig;
 	coreCfg.SetInterfaceHandler = nullptr;
@@ -737,6 +586,7 @@ void UsbdCdcIntrfProcess(UsbdCdcDevIntrf_t * const pIntrf)
 	}
 
 	const bool open = UsbdCdcIntrfPortIsOpen(pIntrf);
+
 	if (open != pIntrf->ReportedOpen)
 	{
 		pIntrf->ReportedOpen = open;
@@ -744,13 +594,12 @@ void UsbdCdcIntrfProcess(UsbdCdcDevIntrf_t * const pIntrf)
 	}
 
 	UsbdCdcProcessRx(pIntrf);
-	UsbdCdcProcessTx(pIntrf);
 	UsbdCdcNotifKick(pIntrf);
 
 	if (pIntrf->Bulk.bEnabled && open)
 	{
 		UsbdCdcRxKick(&pIntrf->Bulk, pIntrf);
-		UsbdCdcTxKick(&pIntrf->Bulk, pIntrf);
+		UsbdBulkIntrfFlushTx(&pIntrf->Bulk);
 	}
 
 	pIntrf->RxDropCnt = pIntrf->Bulk.hRxFifo->DropCnt;
@@ -763,7 +612,8 @@ const UsbCdcLineCoding_t *UsbdCdcIntrfLineCoding(
 	return pIntrf != nullptr ? &pIntrf->LineCoding : nullptr;
 }
 
-uint16_t UsbdCdcIntrfControlLineState(const UsbdCdcDevIntrf_t * const pIntrf)
+uint16_t UsbdCdcIntrfControlLineState(
+									const UsbdCdcDevIntrf_t * const pIntrf)
 {
 	return pIntrf != nullptr ? pIntrf->ControlLineState : 0U;
 }

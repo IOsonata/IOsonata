@@ -46,6 +46,111 @@ static UsbdBulkDevIntrf_t *UsbdBulkIntrfData(DevIntrf_t * const pDevIntrf)
 	return static_cast<UsbdBulkDevIntrf_t *>(pDevIntrf->pDevData);
 }
 
+static bool UsbdBulkIntrfCanTx(UsbdBulkDevIntrf_t *pIntrf)
+{
+	return pIntrf != nullptr && pIntrf->bEnabled &&
+		   pIntrf->TxEpAddr != 0U && pIntrf->TxMps > 0U &&
+		   pIntrf->pTxBuffer != nullptr &&
+		   (pIntrf->TxReady == nullptr ||
+		    pIntrf->TxReady(pIntrf, pIntrf->pContext));
+}
+
+static void UsbdBulkIntrfSetTxIdle(UsbdBulkDevIntrf_t *pIntrf)
+{
+	atomic_store_explicit(&pIntrf->DevIntrf.bTxReady, true,
+						  memory_order_release);
+}
+
+static bool UsbdBulkIntrfTakeTx(UsbdBulkDevIntrf_t *pIntrf)
+{
+	return atomic_exchange_explicit(&pIntrf->DevIntrf.bTxReady, false,
+									memory_order_acquire);
+}
+
+static void UsbdBulkIntrfTxEmpty(UsbdBulkDevIntrf_t *pIntrf)
+{
+	UsbdBulkIntrfSetTxIdle(pIntrf);
+
+	if (pIntrf->DevIntrf.EvtCB != nullptr)
+	{
+		pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
+							   DEVINTRF_EVT_TX_FIFO_EMPTY,
+							   nullptr, 0);
+	}
+}
+
+static void UsbdBulkIntrfTxFailure(UsbdBulkDevIntrf_t *pIntrf,
+								   uint16_t Length)
+{
+	if (pIntrf->DevIntrf.EvtCB != nullptr)
+	{
+		pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
+							   DEVINTRF_EVT_TX_TIMEOUT,
+							   nullptr, Length);
+	}
+}
+
+static bool UsbdBulkIntrfStartTxTransfer(UsbdBulkDevIntrf_t *pIntrf,
+										bool Flush)
+{
+	if (!UsbdBulkIntrfCanTx(pIntrf) || !UsbdBulkIntrfTakeTx(pIntrf))
+	{
+		return false;
+	}
+
+	const int used = CFifoUsed(pIntrf->hTxFifo);
+
+	if (pIntrf->TxZlpRequired && used > 0)
+	{
+		pIntrf->TxZlpRequired = false;
+	}
+
+	if (pIntrf->TxLength == 0U)
+	{
+		if (used <= 0)
+		{
+			if (Flush && pIntrf->TxZlpRequired)
+			{
+				pIntrf->TxZlpRequired = false;
+				if (UsbdCtrlrEpXfer(pIntrf->TxEpAddr,
+									pIntrf->pTxBuffer, 0U))
+				{
+					return true;
+				}
+				pIntrf->TxZlpRequired = true;
+			}
+
+			UsbdBulkIntrfSetTxIdle(pIntrf);
+			return false;
+		}
+
+		if (!Flush && used < (int)pIntrf->TxMps)
+		{
+			UsbdBulkIntrfSetTxIdle(pIntrf);
+			return false;
+		}
+
+		const int length = UsbdBulkIntrfGetTxData(
+			pIntrf, pIntrf->pTxBuffer, (int)pIntrf->TxMps);
+		if (length <= 0)
+		{
+			UsbdBulkIntrfSetTxIdle(pIntrf);
+			return false;
+		}
+
+		pIntrf->TxLength = (uint16_t)length;
+	}
+
+	if (UsbdCtrlrEpXfer(pIntrf->TxEpAddr,
+						pIntrf->pTxBuffer, pIntrf->TxLength))
+	{
+		return true;
+	}
+
+	UsbdBulkIntrfSetTxIdle(pIntrf);
+	return false;
+}
+
 static void UsbdBulkIntrfDisable(DevIntrf_t * const pDevIntrf)
 {
 	UsbdBulkDevIntrf_t *pIntrf = UsbdBulkIntrfData(pDevIntrf);
@@ -72,21 +177,20 @@ static void UsbdBulkIntrfEnable(DevIntrf_t * const pDevIntrf)
 		pIntrf->RxKick(pIntrf, pIntrf->pContext);
 	}
 
-	if (pIntrf->TxKick != nullptr && CFifoUsed(pIntrf->hTxFifo) > 0)
+	if (pIntrf->TxMps > 0U &&
+		CFifoUsed(pIntrf->hTxFifo) >= (int)pIntrf->TxMps)
 	{
-		pIntrf->TxKick(pIntrf, pIntrf->pContext);
+		(void)UsbdBulkIntrfStartTxTransfer(pIntrf, false);
 	}
 }
 
 static uint32_t UsbdBulkIntrfGetRate(DevIntrf_t * const)
 {
-	// USB Bulk has no application-settable transfer rate.
 	return 0;
 }
 
 static uint32_t UsbdBulkIntrfSetRate(DevIntrf_t * const, uint32_t)
 {
-	// USB Bulk has no application-settable transfer rate.
 	return 0;
 }
 
@@ -153,9 +257,6 @@ static int UsbdBulkIntrfTxData(DevIntrf_t * const pDevIntrf,
 		return 0;
 	}
 
-	// The USB completion interrupt is the Tx FIFO consumer. CFifoPutMultiple
-	// publishes PutIdx before the payload copy, so keep the producer critical
-	// section identical to UART and copy directly into the reserved FIFO slots.
 	uint32_t state = DisableInterrupt();
 	int cnt = 0;
 
@@ -176,15 +277,10 @@ static int UsbdBulkIntrfTxData(DevIntrf_t * const pDevIntrf,
 
 	EnableInterrupt(state);
 
-	// Same Tx ownership model as UART. Do not perform an atomic read-modify-
-	// write for every byte while the endpoint is already active. The producer
-	// only tests the ready flag and clears it on the idle-to-active transition.
-	if (cnt > 0 && pIntrf->bEnabled && pIntrf->TxKick != nullptr &&
-		atomic_load_explicit(&pIntrf->DevIntrf.bTxReady, memory_order_relaxed))
+	if (cnt > 0 && pIntrf->TxMps > 0U &&
+		CFifoUsed(pIntrf->hTxFifo) >= (int)pIntrf->TxMps)
 	{
-		atomic_store_explicit(&pIntrf->DevIntrf.bTxReady, false,
-						  memory_order_relaxed);
-		pIntrf->TxKick(pIntrf, pIntrf->pContext);
+		(void)UsbdBulkIntrfStartTxTransfer(pIntrf, false);
 	}
 
 	return cnt;
@@ -200,10 +296,10 @@ static void UsbdBulkIntrfStopTx(DevIntrf_t * const)
 {
 }
 
-static void UsbdBulkIntrfReset(DevIntrf_t * const)
+static void UsbdBulkIntrfReset(DevIntrf_t * const pDevIntrf)
 {
-	// Bus reset does not discard application queues. The owning USB function
-	// decides what to do with any transfer buffer that was active on the bus.
+	UsbdBulkDevIntrf_t *pIntrf = UsbdBulkIntrfData(pDevIntrf);
+	UsbdBulkIntrfResetTx(pIntrf);
 }
 
 static void UsbdBulkIntrfPowerOff(DevIntrf_t * const pDevIntrf)
@@ -241,8 +337,13 @@ bool UsbdBulkIntrfInit(UsbdBulkDevIntrf_t *pIntrf,
 	pIntrf->hRxFifo = hRxFifo;
 	pIntrf->hTxFifo = hTxFifo;
 	pIntrf->RxKick = pCfg->RxKick;
-	pIntrf->TxKick = pCfg->TxKick;
+	pIntrf->TxReady = pCfg->TxReady;
 	pIntrf->pContext = pCfg->pContext;
+	pIntrf->TxEpAddr = 0U;
+	pIntrf->pTxBuffer = nullptr;
+	pIntrf->TxMps = 0U;
+	pIntrf->TxLength = 0U;
+	pIntrf->TxZlpRequired = false;
 	pIntrf->bEnabled = false;
 
 	pIntrf->DevIntrf.pDevData = pIntrf;
@@ -355,42 +456,107 @@ int UsbdBulkIntrfGetTxData(UsbdBulkDevIntrf_t *pIntrf,
 	return cnt;
 }
 
-void UsbdBulkIntrfTxComplete(UsbdBulkDevIntrf_t *pIntrf)
+void UsbdBulkIntrfConfigTx(UsbdBulkDevIntrf_t *pIntrf,
+						   uint8_t EpAddr, uint16_t Mps,
+						   uint8_t *pBuffer)
+{
+	if (pIntrf == nullptr)
+	{
+		return;
+	}
+
+	pIntrf->TxEpAddr = EpAddr;
+	pIntrf->TxMps = Mps;
+	pIntrf->pTxBuffer = pBuffer;
+	UsbdBulkIntrfResetTx(pIntrf);
+}
+
+void UsbdBulkIntrfResetTx(UsbdBulkDevIntrf_t *pIntrf)
+{
+	if (pIntrf == nullptr)
+	{
+		return;
+	}
+
+	pIntrf->TxLength = 0U;
+	pIntrf->TxZlpRequired = false;
+	UsbdBulkIntrfSetTxIdle(pIntrf);
+}
+
+void UsbdBulkIntrfFlushTx(UsbdBulkDevIntrf_t *pIntrf)
+{
+	if (pIntrf != nullptr)
+	{
+		(void)UsbdBulkIntrfStartTxTransfer(pIntrf, true);
+	}
+}
+
+void UsbdBulkIntrfTxXferComplete(UsbdBulkDevIntrf_t *pIntrf,
+								 uint16_t Length,
+								 UsbdCtrlrXferResult_t Result)
 {
 	if (pIntrf == nullptr || pIntrf->hTxFifo == nullptr)
 	{
 		return;
 	}
 
-	if (CFifoUsed(pIntrf->hTxFifo) > 0)
+	const uint16_t expected = pIntrf->TxLength;
+
+	if (expected == 0U)
 	{
-		if (pIntrf->bEnabled && pIntrf->TxKick != nullptr)
+		if (Result == USBD_CTRLR_XFER_SUCCESS && Length == 0U)
 		{
-			pIntrf->TxKick(pIntrf, pIntrf->pContext);
+			pIntrf->TxZlpRequired = false;
+			UsbdBulkIntrfTxEmpty(pIntrf);
+		}
+		else
+		{
+			pIntrf->TxZlpRequired = true;
+			UsbdBulkIntrfSetTxIdle(pIntrf);
 		}
 		return;
 	}
 
-	// The endpoint has caught the producer. Publish idle only after confirming
-	// the FIFO is empty. Recheck after the store so a writer racing this edge
-	// cannot leave queued data with no transfer active.
-	atomic_store(&pIntrf->DevIntrf.bTxReady, true);
-
-	if (CFifoUsed(pIntrf->hTxFifo) > 0)
+	if (Result == USBD_CTRLR_XFER_SUCCESS && Length == expected)
 	{
-		if (pIntrf->bEnabled && pIntrf->TxKick != nullptr &&
-			atomic_exchange(&pIntrf->DevIntrf.bTxReady, false))
+		pIntrf->TxLength = 0U;
+
+		const int used = CFifoUsed(pIntrf->hTxFifo);
+		if (used >= (int)pIntrf->TxMps)
 		{
-			pIntrf->TxKick(pIntrf, pIntrf->pContext);
+			UsbdBulkIntrfSetTxIdle(pIntrf);
+			(void)UsbdBulkIntrfStartTxTransfer(pIntrf, false);
+		}
+		else if (used > 0)
+		{
+			UsbdBulkIntrfSetTxIdle(pIntrf);
+		}
+		else if ((Length % pIntrf->TxMps) == 0U)
+		{
+			pIntrf->TxZlpRequired = true;
+			UsbdBulkIntrfSetTxIdle(pIntrf);
+		}
+		else
+		{
+			UsbdBulkIntrfTxEmpty(pIntrf);
 		}
 		return;
 	}
 
-	if (pIntrf->DevIntrf.EvtCB != nullptr)
+	if (Length == 0U)
 	{
-		pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-							   DEVINTRF_EVT_TX_FIFO_EMPTY,
-							   nullptr, 0);
+		UsbdBulkIntrfSetTxIdle(pIntrf);
+		(void)UsbdBulkIntrfStartTxTransfer(pIntrf, false);
+		return;
+	}
+
+	pIntrf->TxLength = 0U;
+	UsbdBulkIntrfTxFailure(pIntrf, Length);
+	UsbdBulkIntrfSetTxIdle(pIntrf);
+
+	if (CFifoUsed(pIntrf->hTxFifo) >= (int)pIntrf->TxMps)
+	{
+		(void)UsbdBulkIntrfStartTxTransfer(pIntrf, false);
 	}
 }
 
@@ -406,10 +572,9 @@ bool UsbdBulkIntrfRequestToSend(UsbdBulkDevIntrf_t *pIntrf, int NbBytes)
 		return true;
 	}
 
-	if (CFifoAvail(pIntrf->hTxFifo) < NbBytes &&
-		pIntrf->bEnabled && pIntrf->TxKick != nullptr)
+	if (CFifoAvail(pIntrf->hTxFifo) < NbBytes)
 	{
-		pIntrf->TxKick(pIntrf, pIntrf->pContext);
+		(void)UsbdBulkIntrfStartTxTransfer(pIntrf, false);
 	}
 
 	return CFifoAvail(pIntrf->hTxFifo) >= NbBytes;

@@ -3,13 +3,8 @@
 
 @brief	USB CDC device interface
 
-One CDC ACM port. The instance holds everything the port needs : the Bulk
-data plane it is built on, the ACM protocol state, the staging the endpoints
-transfer out of, and the endpoint bookkeeping.
-
-UsbdBulkDevIntrf_t is the first member, so a UsbdCdcDevIntrf_t is a Bulk
-interface and a DevIntrf_t at the same address. There is no second interface
-to forward through and no table mapping a port number back to its state.
+One CDC ACM port. The instance owns the generic Bulk data plane, ACM protocol
+state and endpoint staging. Bulk IN transfer state is owned by UsbdBulkIntrf.
 
 @author	Hoang Nguyen Hoan
 @date	May 2, 2024
@@ -56,12 +51,6 @@ SOFTWARE.
   * @{
   */
 
-//
-// CDC topology. One port owns two consecutive interfaces, one interrupt IN
-// endpoint number and one bidirectional Bulk endpoint number. Endpoint 15 is
-// the last USB endpoint number, so this numbering fits seven ports on a
-// controller with enough endpoints.
-//
 #define USBD_CDC_FUNC_MAXCNT			7
 #define USBD_CDC_CTRL_INTRF(n)			((uint8_t)((n) * 2U))
 #define USBD_CDC_DATA_INTRF(n)			((uint8_t)(USBD_CDC_CTRL_INTRF(n) + 1U))
@@ -80,11 +69,6 @@ SOFTWARE.
 #define USBD_CDC_NOTIFY_WORDS \
 	((USBD_CDC_NOTIFY_LEN + sizeof(uint32_t) - 1U) / sizeof(uint32_t))
 
-//
-// Two receive staging slots. The interrupt fills one while the pump drains
-// the other, which is what lets the Bulk OUT endpoint stay armed while the
-// application is behind.
-//
 #define USBD_CDC_RX_STAGE_COUNT			2U
 
 #pragma pack(push, 4)
@@ -96,37 +80,33 @@ typedef struct __Usbd_Cdc_Rx_Stage {
 } UsbdCdcRxStage_t;
 
 typedef struct __UsbdCdc_Interf_Config {
-	bool bBlocking;				//!< true - Blocking Fifo, false - Non blocking
-	int RxFifoMemSize;			//!< Total memory size for CFIFO
-	uint8_t *pRxFifoMem;		//!< Pointer to memory to be used by CFIFO
-	int TxFifoMemSize;			//!< Total memory size for CFIFO
-	uint8_t *pTxFifoMem;		//!< Pointer to memory to be used by CFIFO
-	int ItfNo;					//!< CDC port index, 0 for the first port
-	DevIntrfEvtHandler_t EvtCB;	//!< Event callback
+	bool bBlocking;
+	int RxFifoMemSize;
+	uint8_t *pRxFifoMem;
+	int TxFifoMemSize;
+	uint8_t *pTxFifoMem;
+	int ItfNo;
+	DevIntrfEvtHandler_t EvtCB;
 } UsbdCdcIntrfCfg_t;
 
-// USBD CDC interface instance data
 typedef struct __UsbdCdc_Dev_Interf {
-	UsbdBulkDevIntrf_t Bulk;		//!< Bulk data plane, must be first
-	UsbCdcLineCoding_t LineCoding;	//!< Current ACM line coding
+	UsbdBulkDevIntrf_t Bulk;
+	UsbCdcLineCoding_t LineCoding;
 	UsbCdcLineCoding_t PendingLineCoding;
-	uint16_t ControlLineState;		//!< Host DTR/RTS state
+	uint16_t ControlLineState;
 	uint16_t PendingControlLineState;
-	uint16_t SerialState;			//!< Device SerialState notification bits
-	uint16_t BulkMps;				//!< Current data endpoint packet size
-	uint16_t TxLength;				//!< Active/staged IN transfer length; zero for ZLP
-	uint32_t RxPut;					//!< Published RX staging producer index
-	uint32_t RxGet;					//!< Released RX staging consumer index
+	uint16_t SerialState;
+	uint16_t BulkMps;
+	uint32_t RxPut;
+	uint32_t RxGet;
 	uint32_t RxDropCnt;
 	uint32_t TxDropCnt;
-	int ItfNo;						//!< CDC port index this instance serves
+	int ItfNo;
 	bool Configured;
 	bool RxActive;
-	bool TxActive;
-	bool TxZlpRequired;
 	bool NotifActive;
 	bool SerialStatePending;
-	bool ReportedOpen;				//!< Last port state reported to DeviceIntrf
+	bool ReportedOpen;
 	UsbdCdcRxStage_t RxStage[USBD_CDC_RX_STAGE_COUNT];
 	uint32_t TxTransfer[USBD_CDC_TRANS_WORDS];
 	uint32_t NotifTransfer[USBD_CDC_NOTIFY_WORDS];
@@ -142,32 +122,19 @@ public:
 
 	operator DevIntrf_t * () { return &vUsbDevIntrf.Bulk.DevIntrf; }
 
-	// Set data rate in bits/sec (Hz)
 	virtual uint32_t Rate(uint32_t DataRate) { return DeviceIntrfSetRate(&vUsbDevIntrf.Bulk.DevIntrf, DataRate); }
-	// Get current data rate in bits/sec (Hz)
 	virtual uint32_t Rate(void) { return DeviceIntrfGetRate(&vUsbDevIntrf.Bulk.DevIntrf); }
-	// Disable device for power reduction, re-enable with Enable() without
-	// full init
 	virtual void Disable(void) { DeviceIntrfDisable(&vUsbDevIntrf.Bulk.DevIntrf); }
-	// Enable device
 	virtual void Enable(void) { DeviceIntrfEnable(&vUsbDevIntrf.Bulk.DevIntrf); }
 
 	virtual bool RequestToSend(int NbBytes);
 
-	// true when the host has opened this port
 	bool IsPortOpen(void);
-
-	// Line coding the host last set
 	const UsbCdcLineCoding_t *LineCoding(void);
-
-	// DTR and RTS as the host last set them
 	uint16_t ControlLineState(void);
-
-	// Report modem and error state to the host over the notification endpoint
 	void SetSerialState(uint16_t SerialState);
 
 private:
-
 	UsbdCdcDevIntrf_t vUsbDevIntrf;
 };
 
@@ -177,64 +144,18 @@ extern "C" {
 bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 					  const UsbdCdcIntrfCfg_t *pCfg);
 
-/**
- * @brief	Move data in both directions for this port.
- *
- * Called by UsbDevProcess for every registered interface. An application that
- * pumps the device itself does not call this.
- *
- * @param	pIntrf : Interface instance
- */
 void UsbdCdcIntrfProcess(UsbdCdcDevIntrf_t * const pIntrf);
 
-/**
- * @brief	Whether the host has opened this port.
- *
- * The device is configured and something on the host has asserted DTR.
- *
- * @param	pIntrf : Interface instance
- *
- * @return	true - Open
- */
 bool UsbdCdcIntrfPortIsOpen(const UsbdCdcDevIntrf_t * const pIntrf);
 
-/**
- * @brief	Line coding the host last set on this port.
- *
- * @param	pIntrf : Interface instance
- *
- * @return	Pointer to the line coding, NULL for a bad instance
- */
 const UsbCdcLineCoding_t *UsbdCdcIntrfLineCoding(
 									const UsbdCdcDevIntrf_t * const pIntrf);
 
-/**
- * @brief	DTR and RTS as the host last set them.
- *
- * @param	pIntrf : Interface instance
- *
- * @return	Control line state bits
- */
 uint16_t UsbdCdcIntrfControlLineState(const UsbdCdcDevIntrf_t * const pIntrf);
 
-/**
- * @brief	Report modem and error state to the host.
- *
- * Sent on the notification endpoint. Bits outside the CDC SerialState set are
- * discarded.
- *
- * @param	pIntrf : Interface instance
- * @param	SerialState : CDC SerialState bits
- */
 void UsbdCdcIntrfSetSerialState(UsbdCdcDevIntrf_t * const pIntrf,
 								uint16_t SerialState);
 
-/**
- * @brief	Descriptor provider for the CDC ACM device.
- *
- * Builds device, configuration, string and qualifier descriptors from
- * UsbDevCfg_t. Passed to UsbdCoreInit by the device layer.
- */
 const uint8_t *UsbdCdcDescHandler(uint8_t DescType,
 								  uint8_t DescIndex,
 								  uint16_t LangId,
