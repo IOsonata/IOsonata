@@ -114,10 +114,7 @@ typedef struct __UsbdCdc_Dev_Interf {
 	uint16_t PendingControlLineState;
 	uint16_t SerialState;			//!< Device SerialState notification bits
 	uint16_t BulkMps;				//!< Current data endpoint packet size
-	uint16_t TxLength;				//!< Bytes staged in TxTransfer
-	uint16_t TxCompleteLength;		//!< Last completed IN byte count
-	uint16_t TxCompleteExpected;	//!< Expected bytes for completed IN request
-	UsbdCtrlrXferResult_t TxCompleteResult;
+	uint16_t TxLength;				//!< Active/staged IN transfer length; zero for ZLP
 	uint32_t RxPut;					//!< Published RX staging producer index
 	uint32_t RxGet;					//!< Released RX staging consumer index
 	uint32_t RxDropCnt;
@@ -126,9 +123,7 @@ typedef struct __UsbdCdc_Dev_Interf {
 	bool Configured;
 	bool RxActive;
 	bool TxActive;
-	bool TxZlpActive;
 	bool TxZlpRequired;
-	bool TxCompletePending;
 	bool NotifActive;
 	bool SerialStatePending;
 	bool ReportedOpen;				//!< Last port state reported to DeviceIntrf
