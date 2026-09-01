@@ -186,12 +186,12 @@ static void UsbdCdcTxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
 
 	if (pIntrf->TxLength == 0U)
 	{
-		// Same model as UART: the FIFO is the application queue and this private
-		// buffer is the DMA/endpoint staging area. Pull as much queued data as
-		// fits so the controller can split one logical request into back-to-back
-		// USB packets.
+		// The FIFO is the application queue and this private buffer is one USB
+		// packet of endpoint staging. Completion refills the next packet from
+		// the FIFO, matching the UART DMA model and avoiding a multi-packet
+		// logical transfer in the controller layer.
 		const int length = UsbdBulkIntrfGetTxData(pBulk,
-			UsbdCdcTxBuffer(pIntrf), (int)sizeof(pIntrf->TxTransfer));
+			UsbdCdcTxBuffer(pIntrf), (int)pIntrf->BulkMps);
 		if (length <= 0)
 		{
 			atomic_store(&pBulk->DevIntrf.bTxReady, true);
