@@ -11,17 +11,52 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
+
     steps:
       - name: Checkout IOsonata
         uses: actions/checkout@v4
-        
+        with:
+          fetch-depth: 0
+
+      - name: Check for source changes
+        id: source
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch: forcing RAG rebuild"
+            exit 0
+          fi
+
+          SOURCE_SHA="$(git log -1 --format=%H --invert-grep --grep='^Update RAG index\.db \[skip ci\]$')"
+          INDEXED_SHA=""
+
+          if [ -f .iosonata/index.db ]; then
+            INDEXED_SHA="$(sqlite3 .iosonata/index.db "SELECT CAST(v AS TEXT) FROM meta WHERE k='commit' LIMIT 1;" 2>/dev/null || true)"
+          fi
+
+          echo "Latest source commit: ${SOURCE_SHA:-none}"
+          echo "Indexed source commit: ${INDEXED_SHA:-none}"
+
+          if [ -z "$SOURCE_SHA" ] || [ "$SOURCE_SHA" != "$INDEXED_SHA" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Source changed: rebuilding RAG index"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No source commit change: skipping RAG rebuild"
+          fi
+
+      - name: No source changes
+        if: steps.source.outputs.changed != 'true'
+        run: echo "RAG index is already current"
+
       - name: Set up Python
+        if: steps.source.outputs.changed == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          
+
       - name: Debug - Show directory structure
+        if: steps.source.outputs.changed == 'true'
         run: |
           echo "=== Current directory ==="
           pwd
@@ -32,8 +67,9 @@ jobs:
           ls include/iopinctrl.h 2>/dev/null || echo "No iopinctrl.h"
           echo "=== Check Installer ==="
           ls -la Installer/ 2>/dev/null || echo "No Installer/ directory"
-          
+
       - name: Run build_rag_index.py
+        if: steps.source.outputs.changed == 'true'
         run: |
           # Use Installer version if exists, otherwise error
           if [ -f Installer/build_rag_index.py ]; then
@@ -44,12 +80,13 @@ jobs:
             echo "Please add build_rag_index.py to the Installer/ directory"
             exit 1
           fi
-          
+
       - name: Show Index Stats
+        if: steps.source.outputs.changed == 'true'
         run: |
           echo "=== Output directory ==="
           ls -la .iosonata/ 2>/dev/null || echo "No .iosonata directory created!"
-          
+
           if [ -f .iosonata/index.db ]; then
             echo "=== Database Stats ==="
             sqlite3 .iosonata/index.db "SELECT 'Chunks:', COUNT(*) FROM chunks"
@@ -60,17 +97,18 @@ jobs:
             echo "ERROR: index.db was not created!"
             exit 1
           fi
-          
+
       - name: Upload Index Artifact
+        if: steps.source.outputs.changed == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: iosonata-rag-index
           path: .iosonata/index.db
           retention-days: 90
           if-no-files-found: error
-          
+
       - name: Commit index.db to repo
-        if: github.event_name != 'pull_request'
+        if: steps.source.outputs.changed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
