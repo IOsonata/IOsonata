@@ -151,7 +151,8 @@ static void UsbdCdcRxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
 	}
 }
 
-static void UsbdCdcTxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
+static void UsbdCdcTxSend(UsbdBulkDevIntrf_t * const pBulk,
+						   void *pContext, bool Flush)
 {
 	UsbdCdcDevIntrf_t *pIntrf = static_cast<UsbdCdcDevIntrf_t *>(pContext);
 
@@ -186,10 +187,23 @@ static void UsbdCdcTxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
 
 	if (pIntrf->TxLength == 0U)
 	{
-		// The FIFO is the application queue and this private buffer is one USB
-		// packet of endpoint staging. Completion refills the next packet from
-		// the FIFO, matching the UART DMA model and avoiding a multi-packet
-		// logical transfer in the controller layer.
+		const int used = UsbdBulkIntrfTxUsed(pBulk);
+		if (used <= 0)
+		{
+			atomic_store(&pBulk->DevIntrf.bTxReady, true);
+			return;
+		}
+
+		// A short Bulk IN packet terminates the host's current transfer. While
+		// a stream is active, keep partial data in the FIFO until a complete
+		// endpoint packet is available. The device pump uses Flush=true to send
+		// the final short packet when the stream goes idle.
+		if (!Flush && used < (int)pIntrf->BulkMps)
+		{
+			atomic_store(&pBulk->DevIntrf.bTxReady, true);
+			return;
+		}
+
 		const int length = UsbdBulkIntrfGetTxData(pBulk,
 			UsbdCdcTxBuffer(pIntrf), (int)pIntrf->BulkMps);
 		if (length <= 0)
@@ -208,6 +222,11 @@ static void UsbdCdcTxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
 		pIntrf->TxActive = false;
 		atomic_store(&pBulk->DevIntrf.bTxReady, true);
 	}
+}
+
+static void UsbdCdcTxKick(UsbdBulkDevIntrf_t * const pBulk, void *pContext)
+{
+	UsbdCdcTxSend(pBulk, pContext, false);
 }
 
 static void UsbdCdcNotifKick(UsbdCdcDevIntrf_t *pIntrf)
@@ -457,9 +476,10 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 
 	if (EpAddr == USBD_CDC_DATA_IN_EP(pIntrf->ItfNo))
 	{
-		// Match the UART ENDTX path: retire the completed transfer and refill
-		// the endpoint from the Tx FIFO in interrupt context. Continuous CDC Tx
-		// no longer waits for UsbDevProcess between logical transfers.
+		// Retire the completed packet and chain another one in interrupt
+		// context only when a complete endpoint packet is queued. A short
+		// packet ends the host's current Bulk transfer, so partial data is left
+		// for the explicit pump/flush path.
 		if (pIntrf->TxZlpActive)
 		{
 			pIntrf->TxZlpActive = false;
@@ -495,7 +515,7 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 			{
 				// Keep the stream idle while the terminating ZLP is deferred. A
 				// later application write can claim Tx immediately, cancel the ZLP
-				// in UsbdCdcTxKick and continue without waiting for the pump.
+				// in UsbdCdcTxSend and continue without waiting for the pump.
 				pIntrf->TxZlpRequired = true;
 				atomic_store(&pIntrf->Bulk.DevIntrf.bTxReady, true);
 			}
@@ -622,9 +642,16 @@ static void UsbdCdcTryZlp(UsbdCdcDevIntrf_t *pIntrf)
 
 static void UsbdCdcProcessTx(UsbdCdcDevIntrf_t *pIntrf)
 {
-	// Payload completion/refill is interrupt driven, like UART ENDTX. The pump
-	// is only needed for the deliberately deferred exact-MPS terminating ZLP.
+	// Normal producer/completion kicks preserve full Bulk packets. The pump is
+	// the flush point for a final partial packet and for a deferred exact-MPS
+	// terminating ZLP.
 	UsbdCdcTryZlp(pIntrf);
+
+	if (!pIntrf->TxActive && !pIntrf->TxZlpActive &&
+		!pIntrf->TxZlpRequired && UsbdBulkIntrfTxUsed(&pIntrf->Bulk) > 0)
+	{
+		UsbdCdcTxSend(&pIntrf->Bulk, pIntrf, true);
+	}
 }
 
 static void UsbdCdcPump(void *pContext)
