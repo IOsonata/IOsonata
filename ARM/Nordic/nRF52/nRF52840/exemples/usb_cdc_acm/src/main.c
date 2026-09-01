@@ -89,6 +89,10 @@ static void usbd_user_ev_handler(app_usbd_event_type_t event)
 {
 	switch (event)
 	{
+		case APP_USBD_EVT_DRV_SOF:
+			UsbdCdcIntrfTxKick(&s_CdcIntrf);
+			break;
+
 		case APP_USBD_EVT_DRV_SUSPEND:
 			bsp_board_led_off(LED_USB_RESUME);
 			break;
@@ -127,7 +131,8 @@ int main(void)
 	ret_code_t ret;
 	uint8_t data = 0xff;
 	static const app_usbd_config_t usbd_config = {
-		.ev_state_proc = usbd_user_ev_handler
+		.ev_state_proc = usbd_user_ev_handler,
+		.enable_sof = true,
 	};
 
 	ret = NRF_LOG_INIT(NULL);

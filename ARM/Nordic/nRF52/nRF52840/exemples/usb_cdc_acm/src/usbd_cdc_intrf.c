@@ -96,6 +96,19 @@ static void UsbdCdcIntrfSend(UsbdCdcDevIntrf_t *pIntrf)
 	}
 }
 
+void UsbdCdcIntrfTxKick(UsbdCdcDevIntrf_t *pIntrf)
+{
+	if (pIntrf == NULL)
+	{
+		return;
+	}
+
+	if (atomic_exchange(&pIntrf->DevIntrf.bTxReady, false))
+	{
+		UsbdCdcIntrfSend(pIntrf);
+	}
+}
+
 static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const *pInst,
 									app_usbd_cdc_acm_user_event_t Event)
 {
@@ -210,11 +223,6 @@ int UsbdCdcIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int Datalen)
 		Datalen -= l;
 		pData += l;
 		cnt += l;
-	}
-
-	if (atomic_exchange(&pDevIntrf->bTxReady, false))
-	{
-		UsbdCdcIntrfSend(intrf);
 	}
 
 	return cnt;

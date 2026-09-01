@@ -68,6 +68,7 @@ extern "C" {
 
 bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t *pIntrf,
 					  const UsbdCdcIntrfCfg_t *pCfg);
+void UsbdCdcIntrfTxKick(UsbdCdcDevIntrf_t *pIntrf);
 
 #ifdef __cplusplus
 }
