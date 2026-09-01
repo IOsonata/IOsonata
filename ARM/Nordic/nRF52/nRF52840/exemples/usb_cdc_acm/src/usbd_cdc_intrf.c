@@ -67,6 +67,28 @@ static uint8_t s_UsbdCdcDevIntrfRxFifoMem[USBD_CDC_CFIFO_MEMSIZE];
 static uint8_t s_UsbdCdcDevIntrfTxFifoMem[USBD_CDC_CFIFO_MEMSIZE];
 static UsbdCdcDevIntrf_t *s_pIntrf;
 
+volatile uint32_t g_UsbdCdcTxUsbCnt;
+volatile uint32_t g_UsbdCdcTxUsbBytes;
+volatile uint32_t g_UsbdCdcTxUsbFullCnt;
+
+static ret_code_t UsbdCdcIntrfWrite(UsbdCdcDevIntrf_t *pIntrf)
+{
+	ret_code_t ret = app_usbd_cdc_acm_write(&m_app_cdc_acm,
+		pIntrf->TransBuff, pIntrf->TransBuffLen);
+
+	if (ret == NRF_SUCCESS)
+	{
+		g_UsbdCdcTxUsbCnt++;
+		g_UsbdCdcTxUsbBytes += pIntrf->TransBuffLen;
+		if (pIntrf->TransBuffLen == sizeof(pIntrf->TransBuff))
+		{
+			g_UsbdCdcTxUsbFullCnt++;
+		}
+	}
+
+	return ret;
+}
+
 static void UsbdCdcIntrfSend(UsbdCdcDevIntrf_t *pIntrf)
 {
 	if (pIntrf->TransBuffLen == 0)
@@ -89,8 +111,7 @@ static void UsbdCdcIntrfSend(UsbdCdcDevIntrf_t *pIntrf)
 		return;
 	}
 
-	if (app_usbd_cdc_acm_write(&m_app_cdc_acm,
-			pIntrf->TransBuff, pIntrf->TransBuffLen) != NRF_SUCCESS)
+	if (UsbdCdcIntrfWrite(pIntrf) != NRF_SUCCESS)
 	{
 		atomic_store(&pIntrf->DevIntrf.bTxReady, true);
 	}
@@ -226,8 +247,7 @@ int UsbdCdcIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int Datalen)
 			}
 			EnableInterrupt(state);
 
-			if (send && app_usbd_cdc_acm_write(&m_app_cdc_acm,
-					intrf->TransBuff, intrf->TransBuffLen) != NRF_SUCCESS)
+			if (send && UsbdCdcIntrfWrite(intrf) != NRF_SUCCESS)
 			{
 				atomic_store(&pDevIntrf->bTxReady, true);
 			}
@@ -343,6 +363,9 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t *pIntrf, const UsbdCdcIntrfCfg_t *pCfg)
 	pIntrf->TransBuffLen = 0;
 	pIntrf->RxDropCnt = 0;
 	pIntrf->TxDropCnt = 0;
+	g_UsbdCdcTxUsbCnt = 0;
+	g_UsbdCdcTxUsbBytes = 0;
+	g_UsbdCdcTxUsbFullCnt = 0;
 	atomic_flag_clear(&pIntrf->DevIntrf.bBusy);
 	atomic_store(&pIntrf->DevIntrf.EnCnt, 0);
 	atomic_store(&pIntrf->DevIntrf.bTxReady, false);
