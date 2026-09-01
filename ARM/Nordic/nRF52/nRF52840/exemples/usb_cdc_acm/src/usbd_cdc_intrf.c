@@ -89,36 +89,35 @@ static ret_code_t UsbdCdcIntrfWrite(UsbdCdcDevIntrf_t *pIntrf)
 	return ret;
 }
 
-static void UsbdCdcIntrfStage(UsbdCdcDevIntrf_t *pIntrf)
+static void UsbdCdcIntrfSend(UsbdCdcDevIntrf_t *pIntrf, bool Flush)
 {
-	if (pIntrf->TransBuffLen >= sizeof(pIntrf->TransBuff))
-	{
-		return;
-	}
-
-	int l = sizeof(pIntrf->TransBuff) - pIntrf->TransBuffLen;
+	bool send = false;
 	uint32_t state = DisableInterrupt();
-	uint8_t *p = CFifoGetMultiple(pIntrf->hTxFifo, &l);
 
-	if (p != NULL && l > 0)
+	if (atomic_load(&pIntrf->DevIntrf.bTxReady))
 	{
-		memcpy(&pIntrf->TransBuff[pIntrf->TransBuffLen], p, l);
-		pIntrf->TransBuffLen += l;
+		if (pIntrf->TransBuffLen < sizeof(pIntrf->TransBuff))
+		{
+			int l = sizeof(pIntrf->TransBuff) - pIntrf->TransBuffLen;
+			uint8_t *p = CFifoGetMultiple(pIntrf->hTxFifo, &l);
+
+			if (p != NULL && l > 0)
+			{
+				memcpy(&pIntrf->TransBuff[pIntrf->TransBuffLen], p, l);
+				pIntrf->TransBuffLen += l;
+			}
+		}
+
+		if (pIntrf->TransBuffLen == sizeof(pIntrf->TransBuff) ||
+			(Flush && pIntrf->TransBuffLen > 0))
+		{
+			atomic_store(&pIntrf->DevIntrf.bTxReady, false);
+			send = true;
+		}
 	}
 	EnableInterrupt(state);
-}
 
-static void UsbdCdcIntrfSend(UsbdCdcDevIntrf_t *pIntrf)
-{
-	UsbdCdcIntrfStage(pIntrf);
-
-	if (pIntrf->TransBuffLen == 0)
-	{
-		atomic_store(&pIntrf->DevIntrf.bTxReady, true);
-		return;
-	}
-
-	if (UsbdCdcIntrfWrite(pIntrf) != NRF_SUCCESS)
+	if (send && UsbdCdcIntrfWrite(pIntrf) != NRF_SUCCESS)
 	{
 		atomic_store(&pIntrf->DevIntrf.bTxReady, true);
 	}
@@ -126,14 +125,9 @@ static void UsbdCdcIntrfSend(UsbdCdcDevIntrf_t *pIntrf)
 
 void UsbdCdcIntrfTxKick(UsbdCdcDevIntrf_t *pIntrf)
 {
-	if (pIntrf == NULL)
+	if (pIntrf != NULL)
 	{
-		return;
-	}
-
-	if (atomic_exchange(&pIntrf->DevIntrf.bTxReady, false))
-	{
-		UsbdCdcIntrfSend(pIntrf);
+		UsbdCdcIntrfSend(pIntrf, true);
 	}
 }
 
@@ -158,20 +152,14 @@ static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const *pInst,
 			break;
 
 		case APP_USBD_CDC_ACM_USER_EVT_TX_DONE:
+		{
+			uint32_t state = DisableInterrupt();
 			s_pIntrf->TransBuffLen = 0;
-			UsbdCdcIntrfStage(s_pIntrf);
-			if (s_pIntrf->TransBuffLen == sizeof(s_pIntrf->TransBuff))
-			{
-				if (UsbdCdcIntrfWrite(s_pIntrf) != NRF_SUCCESS)
-				{
-					atomic_store(&s_pIntrf->DevIntrf.bTxReady, true);
-				}
-			}
-			else
-			{
-				atomic_store(&s_pIntrf->DevIntrf.bTxReady, true);
-			}
+			atomic_store(&s_pIntrf->DevIntrf.bTxReady, true);
+			EnableInterrupt(state);
+			UsbdCdcIntrfSend(s_pIntrf, false);
 			break;
+		}
 
 		default:
 			break;
@@ -243,35 +231,7 @@ int UsbdCdcIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int Datalen)
 
 	while (Datalen > 0)
 	{
-		bool send = false;
 		uint32_t state = DisableInterrupt();
-
-		if (atomic_load(&pDevIntrf->bTxReady) &&
-			intrf->TransBuffLen < sizeof(intrf->TransBuff))
-		{
-			int l = min(Datalen,
-				(int)sizeof(intrf->TransBuff) - intrf->TransBuffLen);
-
-			memcpy(&intrf->TransBuff[intrf->TransBuffLen], pData, l);
-			intrf->TransBuffLen += l;
-			Datalen -= l;
-			pData += l;
-			cnt += l;
-
-			if (intrf->TransBuffLen == sizeof(intrf->TransBuff))
-			{
-				atomic_store(&pDevIntrf->bTxReady, false);
-				send = true;
-			}
-			EnableInterrupt(state);
-
-			if (send && UsbdCdcIntrfWrite(intrf) != NRF_SUCCESS)
-			{
-				atomic_store(&pDevIntrf->bTxReady, true);
-			}
-			continue;
-		}
-
 		int l = Datalen;
 		uint8_t *p = CFifoPutMultiple(intrf->hTxFifo, &l);
 
@@ -291,6 +251,8 @@ int UsbdCdcIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int Datalen)
 		pData += l;
 		cnt += l;
 	}
+
+	UsbdCdcIntrfSend(intrf, false);
 
 	return cnt;
 }
