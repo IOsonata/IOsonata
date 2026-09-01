@@ -131,6 +131,9 @@ typedef void (*UsbdCoreXferHandler_t)(uint8_t EpAddr,
 									 UsbdCtrlrXferResult_t Result,
 									 void *pContext);
 
+/** @brief Start-of-frame callback for one USB function. */
+typedef void (*UsbdCoreSofHandler_t)(uint16_t FrameNo, void *pContext);
+
 /** @brief Bus-reset callback for one USB function. */
 typedef void (*UsbdCoreResetHandler_t)(void *pContext);
 
@@ -152,6 +155,7 @@ typedef struct __Usbd_Core_Function_Config {
 	UsbdCoreConfigHandler_t ConfigHandler;
 	UsbdCoreSetInterfaceHandler_t SetInterfaceHandler;
 	UsbdCoreXferHandler_t XferHandler;
+	UsbdCoreSofHandler_t SofHandler;
 	UsbdCoreResetHandler_t ResetHandler;
 	void *pContext;
 } UsbdCoreFuncCfg_t;

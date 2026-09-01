@@ -275,6 +275,11 @@ static int UsbdBulkIntrfTxData(DevIntrf_t * const pDevIntrf,
 		cnt += length;
 	}
 
+	if (cnt > 0)
+	{
+		pIntrf->TxActivity = true;
+	}
+
 	EnableInterrupt(state);
 
 	if (cnt > 0 && pIntrf->TxMps > 0U &&
@@ -344,6 +349,7 @@ bool UsbdBulkIntrfInit(UsbdBulkDevIntrf_t *pIntrf,
 	pIntrf->TxMps = 0U;
 	pIntrf->TxLength = 0U;
 	pIntrf->TxZlpRequired = false;
+	pIntrf->TxActivity = false;
 	pIntrf->bEnabled = false;
 
 	pIntrf->DevIntrf.pDevData = pIntrf;
@@ -480,6 +486,7 @@ void UsbdBulkIntrfResetTx(UsbdBulkDevIntrf_t *pIntrf)
 
 	pIntrf->TxLength = 0U;
 	pIntrf->TxZlpRequired = false;
+	pIntrf->TxActivity = false;
 	UsbdBulkIntrfSetTxIdle(pIntrf);
 }
 
@@ -488,6 +495,27 @@ void UsbdBulkIntrfFlushTx(UsbdBulkDevIntrf_t *pIntrf)
 	if (pIntrf != nullptr)
 	{
 		(void)UsbdBulkIntrfStartTxTransfer(pIntrf, true);
+	}
+}
+
+void UsbdBulkIntrfSof(UsbdBulkDevIntrf_t *pIntrf)
+{
+	if (!UsbdBulkIntrfCanTx(pIntrf))
+	{
+		return;
+	}
+
+	if (pIntrf->TxActivity)
+	{
+		pIntrf->TxActivity = false;
+		return;
+	}
+
+	const int used = CFifoUsed(pIntrf->hTxFifo);
+	if ((used > 0 && used < (int)pIntrf->TxMps) ||
+		(used == 0 && pIntrf->TxZlpRequired))
+	{
+		UsbdBulkIntrfFlushTx(pIntrf);
 	}
 }
 

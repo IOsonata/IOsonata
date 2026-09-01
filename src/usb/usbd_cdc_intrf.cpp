@@ -429,6 +429,17 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 	}
 }
 
+static void UsbdCdcSof(uint16_t, void *pContext)
+{
+	UsbdCdcDevIntrf_t *pIntrf =
+		static_cast<UsbdCdcDevIntrf_t *>(pContext);
+
+	if (pIntrf != nullptr)
+	{
+		UsbdBulkIntrfSof(&pIntrf->Bulk);
+	}
+}
+
 static void UsbdCdcReset(void *pContext)
 {
 	UsbdCdcDevIntrf_t *pIntrf =
@@ -562,6 +573,7 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
 	coreCfg.ConfigHandler = UsbdCdcConfig;
 	coreCfg.SetInterfaceHandler = nullptr;
 	coreCfg.XferHandler = UsbdCdcXfer;
+	coreCfg.SofHandler = UsbdCdcSof;
 	coreCfg.ResetHandler = UsbdCdcReset;
 	coreCfg.pContext = pIntrf;
 
@@ -599,7 +611,6 @@ void UsbdCdcIntrfProcess(UsbdCdcDevIntrf_t * const pIntrf)
 	if (pIntrf->Bulk.bEnabled && open)
 	{
 		UsbdCdcRxKick(&pIntrf->Bulk, pIntrf);
-		UsbdBulkIntrfFlushTx(&pIntrf->Bulk);
 	}
 
 	pIntrf->RxDropCnt = pIntrf->Bulk.hRxFifo->DropCnt;

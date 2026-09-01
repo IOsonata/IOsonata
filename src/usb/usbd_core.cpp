@@ -986,6 +986,16 @@ static void UsbdCoreCtrlrEvent(const UsbdCtrlrEvt_t *pEvt, void *)
 			break;
 
 		case USBD_CTRLR_EVT_SOF:
+			for (int i = 0; i < s_CoreFuncCnt; i++)
+			{
+				if (s_CoreFunc[i].SofHandler != nullptr)
+				{
+					s_CoreFunc[i].SofHandler(pEvt->FrameNo,
+									 s_CoreFunc[i].pContext);
+				}
+			}
+			break;
+
 		default:
 			break;
 	}
@@ -1082,6 +1092,17 @@ void UsbdCoreStart(void)
 		return;
 	}
 
+	bool sofEnabled = false;
+	for (int i = 0; i < s_CoreFuncCnt; i++)
+	{
+		if (s_CoreFunc[i].SofHandler != nullptr)
+		{
+			sofEnabled = true;
+			break;
+		}
+	}
+
+	UsbdCtrlrSofEnable(sofEnabled);
 	UsbdCtrlrIntEnable();
 	UsbdCtrlrConnect();
 	s_CoreStarted = true;
@@ -1094,6 +1115,7 @@ void UsbdCoreStop(void)
 		return;
 	}
 
+	UsbdCtrlrSofEnable(false);
 	UsbdCtrlrDisconnect();
 	UsbdCtrlrIntDisable();
 	UsbdCtrlrEpCloseAll();

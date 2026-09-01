@@ -83,6 +83,7 @@ struct __UsbdBulk_Dev_Interf {
 	uint16_t TxLength;
 	bool bEnabled;
 	bool TxZlpRequired;
+	volatile bool TxActivity;
 };
 
 #pragma pack(pop)
@@ -107,6 +108,8 @@ void UsbdBulkIntrfConfigTx(UsbdBulkDevIntrf_t *pIntrf,
 void UsbdBulkIntrfResetTx(UsbdBulkDevIntrf_t *pIntrf);
 
 void UsbdBulkIntrfFlushTx(UsbdBulkDevIntrf_t *pIntrf);
+
+void UsbdBulkIntrfSof(UsbdBulkDevIntrf_t *pIntrf);
 
 void UsbdBulkIntrfTxXferComplete(UsbdBulkDevIntrf_t *pIntrf,
 								 uint16_t Length,
