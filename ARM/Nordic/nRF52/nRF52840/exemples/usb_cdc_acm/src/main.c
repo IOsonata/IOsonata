@@ -106,6 +106,19 @@
 #define USB_CDC_TEST_DIRECT_IRQ_GUARD 0
 #endif
 
+/*
+ * Direct-mode CFifo granularity diagnostic.
+ *
+ * 1: reserve TX CFifo space one byte at a time.
+ * 0: reserve the complete 64-byte USB packet in one CFifo operation.
+ *
+ * Use with USB_CDC_TEST_DIRECT_IRQ_GUARD=1 to compare directly with the
+ * previous guarded reference while leaving the USB dequeue/write path unchanged.
+ */
+#ifndef USB_CDC_TEST_DIRECT_BYTE_FIFO
+#define USB_CDC_TEST_DIRECT_BYTE_FIFO 0
+#endif
+
 uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
 uint8_t g_extern_usbd_product_string[12 + 1] = { "Test" };
 
@@ -363,6 +376,56 @@ int main(void)
 #if USB_CDC_TEST_DIRECT
         if (m_port_open && m_tx_ready)
         {
+#if USB_CDC_TEST_DIRECT_BYTE_FIFO
+            uint8_t next = m_prbs;
+            bool queued = true;
+
+            for (int i = 0; i < NRF_DRV_USBD_EPSIZE; ++i)
+            {
+                int one = 1;
+                uint8_t * p_put = CFifoPutMultiple(m_tx_fifo, &one);
+
+                if (p_put == NULL || one != 1)
+                {
+                    queued = false;
+                    break;
+                }
+
+#if USB_CDC_TEST_DIRECT_IRQ_GUARD
+                uint32_t state = DisableInterrupt();
+#endif
+                p_put[0] = next;
+                next = prbs8(next);
+#if USB_CDC_TEST_DIRECT_IRQ_GUARD
+                EnableInterrupt(state);
+#endif
+            }
+
+            if (queued)
+            {
+                int count = NRF_DRV_USBD_EPSIZE;
+                uint8_t * p_tx = CFifoGetMultiple(m_tx_fifo, &count);
+
+                if (p_tx != NULL && count == NRF_DRV_USBD_EPSIZE)
+                {
+                    m_tx_ready = false;
+                    ret = app_usbd_cdc_acm_write(&m_test_cdc_acm, p_tx, count);
+
+                    if (ret == NRF_SUCCESS)
+                    {
+                        m_prbs = next;
+                    }
+                    else
+                    {
+                        m_tx_ready = true;
+                    }
+                }
+            }
+            else
+            {
+                CFifoFlush(m_tx_fifo);
+            }
+#else
             int count = NRF_DRV_USBD_EPSIZE;
             uint8_t * p_put = CFifoPutMultiple(m_tx_fifo, &count);
 
@@ -400,6 +463,7 @@ int main(void)
                     }
                 }
             }
+#endif
         }
 
         UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
