@@ -70,12 +70,12 @@ SOFTWARE.
 alignas(4) static uint8_t s_CdcRxFifoMem[CDC_RXFIFO_MEMSIZE];
 alignas(4) static uint8_t s_CdcTxFifoMem[CDC_TXFIFO_MEMSIZE];
 
-// USB CDC interface configuration.
+// USB CDC configuration.
 //
 // Match the UART PRBS test: when the FIFO is full, reject new data so the
 // caller retries the same byte. This CFifo policy does not wait for hardware;
 // Tx still returns immediately while the completion interrupt drains the FIFO.
-static const UsbdCdcIntrfCfg_t s_CdcCfg = {
+static const UsbdCdcCfg_t s_CdcCfg = {
 	.bBlocking = true,
 	.RxFifoMemSize = CDC_RXFIFO_MEMSIZE,
 	.pRxFifoMem = s_CdcRxFifoMem,
@@ -104,8 +104,8 @@ static const UsbDevCfg_t s_UsbDevCfg = {
 	.MaxPower = 100,
 };
 
-// USB CDC object instance
-UsbdCdcIntrf g_Cdc;
+// CDC class/control object. Application data uses g_Cdc.Data().
+UsbdCdc g_Cdc;
 
 int main()
 {
@@ -123,6 +123,8 @@ int main()
 	{
 		return -1;
 	}
+
+	DevIntrf_t *pData = g_Cdc.Data();
 
 	// A board on a battery starts with no cable in it, so this failing is
 	// not an error. UsbDevProcess notices the attach and comes back to it.
@@ -142,7 +144,7 @@ int main()
 		// Demo transfer byte by byte. The value advances only when the octet
 		// was accepted into the FIFO. If the FIFO is full, retry this same byte
 		// while the USB completion interrupt makes room.
-		if (g_Cdc.Tx(0, &d, 1) > 0)
+		if (DeviceIntrfTx(pData, 0, &d, 1) > 0)
 		{
 			d = Prbs8(d);
 		}
@@ -159,7 +161,7 @@ int main()
 
 		while (len > 0)
 		{
-			int l = g_Cdc.Tx(0, p, len);
+			int l = DeviceIntrfTx(pData, 0, p, len);
 
 			len -= l;
 			p += l;

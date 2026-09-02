@@ -13,8 +13,9 @@ its cable detect are behind UsbdInit and friends, and one port file answers
 them per MCU family, so the same source builds for every target that has a
 USB device controller.
 
-UsbDevProcess is what moves data. Call it from the main loop or from a thread,
-never from an interrupt, and nothing moves in either direction without it.
+USB RX/TX packet progress is interrupt driven. UsbDevProcess handles device
+attach/detach and class housekeeping and should still be called regularly from
+the main loop or a thread.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 28, 2026
@@ -54,9 +55,9 @@ SOFTWARE.
 
 #define BUFFER_SIZE				64
 
-// FIFO memory belongs to the application, the same as it does for the UART.
-// One packet is enough to echo with, but a log or a printf burst wants room
-// to run ahead of the host, so give the Tx side more than the Rx side.
+// RX memory is used directly as USB packet-ring storage. TX keeps a CFifo so
+// application writes can run ahead of USB IN completion. The existing CFifo
+// size macro leaves enough room for four 64-byte full-speed RX packet slots.
 #define CDC_RXFIFO_MEMSIZE		CFIFO_MEMSIZE(256)
 #define CDC_TXFIFO_MEMSIZE		CFIFO_MEMSIZE(1024)
 
@@ -66,9 +67,9 @@ alignas(4) static uint8_t s_CdcTxFifoMem[CDC_TXFIFO_MEMSIZE];
 static int CdcEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 						 uint8_t *pBuffer, int Len);
 
-// USB CDC interface configuration
-static const UsbdCdcIntrfCfg_t s_CdcCfg = {
-	.bBlocking = false,
+// USB CDC configuration
+static const UsbdCdcCfg_t s_CdcCfg = {
+	.bBlocking = true,
 	.RxFifoMemSize = CDC_RXFIFO_MEMSIZE,
 	.pRxFifoMem = s_CdcRxFifoMem,
 	.TxFifoMemSize = CDC_TXFIFO_MEMSIZE,
@@ -98,8 +99,8 @@ static const UsbDevCfg_t s_UsbDevCfg = {
 	.MaxPower = 100,
 };
 
-// USB CDC object instance
-UsbdCdcIntrf g_Cdc;
+// CDC class/control object. Application data uses g_Cdc.Data().
+UsbdCdc g_Cdc;
 
 static int CdcEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 						 uint8_t *pBuffer, int Len)
@@ -114,13 +115,14 @@ static int CdcEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 			{
 				const char *msg = "\r\nIOsonata USB CDC Loopback\r\n";
 
-				g_Cdc.Tx(0, (uint8_t*)msg, strlen(msg));
+				DeviceIntrfTx(g_Cdc.Data(), 0,
+							(const uint8_t *)msg, strlen(msg));
 			}
 			break;
 
 		case DEVINTRF_EVT_RX_DATA:
-			// Data is in the Rx FIFO. Read it from the main loop rather than
-			// here, so that the work does not run inside the pump.
+			// RX completion runs in the USB interrupt. Keep this callback short;
+			// the main loop consumes the committed packet-ring data below.
 			break;
 
 		default:
@@ -144,20 +146,39 @@ int main()
 		return -1;
 	}
 
+	DevIntrf_t *pData = g_Cdc.Data();
+
 	// A board on a battery starts with no cable in it, so this failing is
 	// not an error. UsbDevProcess notices the attach and comes back to it.
 	UsbDevEnable();
 
+	int pending = 0;
+	int offset = 0;
+
 	while (1)
 	{
-		UsbDevProcess();
+	    UsbDevProcess();
 
-		int l = g_Cdc.Rx(0, buff, BUFFER_SIZE);
+	    if (pending > 0)
+	    {
+	        int n = DeviceIntrfTx(pData, 0, &buff[offset], pending);
 
-		if (l > 0)
-		{
-			g_Cdc.Tx(0, buff, l);
-		}
+	        if (n > 0)
+	        {
+	            offset += n;
+	            pending -= n;
+	        }
+
+	        continue;
+	    }
+
+	    int l = DeviceIntrfRx(pData, 0, buff, sizeof(buff));
+
+	    if (l > 0)
+	    {
+	        pending = l;
+	        offset = 0;
+	    }
 	}
 
 	return 0;

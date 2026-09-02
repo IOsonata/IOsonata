@@ -1,10 +1,11 @@
 /**-------------------------------------------------------------------------
 @file	usbd_cdc.h
 
-@brief	USB CDC device interface
+@brief	USB CDC ACM class adapter.
 
-One CDC ACM port. The instance owns the generic Bulk data plane, ACM protocol
-state and endpoint staging. Bulk IN transfer state is owned by UsbdBulkIntrf.
+CDC owns ACM control requests, line/control state and notifications.
+Application data moves through the embedded generic UsbdIntrf data interface;
+CDC itself is not a DeviceIntrf and does not own a separate RX data path.
 
 @author	Hoang Nguyen Hoan
 @date	May 2, 2024
@@ -44,7 +45,7 @@ SOFTWARE.
 #include "device_intrf.h"
 #include "usb/usb_cdcdef.h"
 #include "usb/usbd.h"
-#include "usb/usbd_bulk_intrf.h"
+#include "usb/usbd_intrf.h"
 #include "usb/usbd_ctrlr.h"
 
 /** @addtogroup USBD
@@ -69,17 +70,9 @@ SOFTWARE.
 #define USBD_CDC_NOTIFY_WORDS \
 	((USBD_CDC_NOTIFY_LEN + sizeof(uint32_t) - 1U) / sizeof(uint32_t))
 
-#define USBD_CDC_RX_STAGE_COUNT			2U
-
 #pragma pack(push, 4)
 
-typedef struct __Usbd_Cdc_Rx_Stage {
-	uint16_t Length;
-	uint16_t Reserved;
-	uint32_t Data[USBD_CDC_TRANS_WORDS];
-} UsbdCdcRxStage_t;
-
-typedef struct __UsbdCdc_Interf_Config {
+typedef struct __Usbd_Cdc_Config {
 	bool bBlocking;
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;
@@ -87,47 +80,36 @@ typedef struct __UsbdCdc_Interf_Config {
 	uint8_t *pTxFifoMem;
 	int ItfNo;
 	DevIntrfEvtHandler_t EvtCB;
-} UsbdCdcIntrfCfg_t;
+} UsbdCdcCfg_t;
 
-typedef struct __UsbdCdc_Dev_Interf {
-	UsbdBulkDevIntrf_t Bulk;
+typedef struct __Usbd_Cdc_Dev {
+	UsbdDevIntrf_t Data;
 	UsbCdcLineCoding_t LineCoding;
 	UsbCdcLineCoding_t PendingLineCoding;
 	uint16_t ControlLineState;
 	uint16_t PendingControlLineState;
 	uint16_t SerialState;
-	uint16_t BulkMps;
-	uint32_t RxPut;
-	uint32_t RxGet;
+	uint16_t DataMps;
 	uint32_t RxDropCnt;
 	uint32_t TxDropCnt;
 	int ItfNo;
 	bool Configured;
-	bool RxActive;
 	bool NotifActive;
 	bool SerialStatePending;
 	bool ReportedOpen;
-	UsbdCdcRxStage_t RxStage[USBD_CDC_RX_STAGE_COUNT];
 	uint32_t TxTransfer[USBD_CDC_TRANS_WORDS];
 	uint32_t NotifTransfer[USBD_CDC_NOTIFY_WORDS];
-} UsbdCdcDevIntrf_t;
+} UsbdCdcDev_t;
 
 #pragma pack(pop)
 
 #ifdef __cplusplus
 
-class UsbdCdcIntrf : public DeviceIntrf {
+class UsbdCdc {
 public:
-	bool Init(const UsbdCdcIntrfCfg_t &Cfg);
+	bool Init(const UsbdCdcCfg_t &Cfg);
 
-	operator DevIntrf_t * () { return &vUsbDevIntrf.Bulk.DevIntrf; }
-
-	virtual uint32_t Rate(uint32_t DataRate) { return DeviceIntrfSetRate(&vUsbDevIntrf.Bulk.DevIntrf, DataRate); }
-	virtual uint32_t Rate(void) { return DeviceIntrfGetRate(&vUsbDevIntrf.Bulk.DevIntrf); }
-	virtual void Disable(void) { DeviceIntrfDisable(&vUsbDevIntrf.Bulk.DevIntrf); }
-	virtual void Enable(void) { DeviceIntrfEnable(&vUsbDevIntrf.Bulk.DevIntrf); }
-
-	virtual bool RequestToSend(int NbBytes);
+	DevIntrf_t *Data(void) { return &vUsbdCdc.Data.DevIntrf; }
 
 	bool IsPortOpen(void);
 	const UsbCdcLineCoding_t *LineCoding(void);
@@ -135,26 +117,23 @@ public:
 	void SetSerialState(uint16_t SerialState);
 
 private:
-	UsbdCdcDevIntrf_t vUsbDevIntrf;
+	UsbdCdcDev_t vUsbdCdc = {};
 };
 
 extern "C" {
 #endif
 
-bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pIntrf,
-					  const UsbdCdcIntrfCfg_t *pCfg);
+bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg);
 
-void UsbdCdcIntrfProcess(UsbdCdcDevIntrf_t * const pIntrf);
+void UsbdCdcProcess(UsbdCdcDev_t * const pCdc);
 
-bool UsbdCdcIntrfPortIsOpen(const UsbdCdcDevIntrf_t * const pIntrf);
+bool UsbdCdcPortIsOpen(const UsbdCdcDev_t * const pCdc);
 
-const UsbCdcLineCoding_t *UsbdCdcIntrfLineCoding(
-									const UsbdCdcDevIntrf_t * const pIntrf);
+const UsbCdcLineCoding_t *UsbdCdcLineCoding(const UsbdCdcDev_t * const pCdc);
 
-uint16_t UsbdCdcIntrfControlLineState(const UsbdCdcDevIntrf_t * const pIntrf);
+uint16_t UsbdCdcControlLineState(const UsbdCdcDev_t * const pCdc);
 
-void UsbdCdcIntrfSetSerialState(UsbdCdcDevIntrf_t * const pIntrf,
-								uint16_t SerialState);
+void UsbdCdcSetSerialState(UsbdCdcDev_t * const pCdc, uint16_t SerialState);
 
 const uint8_t *UsbdCdcDescHandler(uint8_t DescType,
 								  uint8_t DescIndex,
