@@ -1,12 +1,18 @@
 /**-------------------------------------------------------------------------
 @file	usbd_ctrlr.h
 
-@brief	USB device controller interface.
+@brief	USB device controller hardware backend.
 
-This is the hardware-facing boundary of the IOsonata USB device stack. The
-USB device core owns Chapter 9, descriptors and class dispatch. Controller
-implementations own endpoint registers, DMA/FIFO handling and the USB
-interrupt.
+This is the internal hardware-facing boundary below UsbdIntrf and UsbdCore. It
+is not the application data abstraction. DeviceIntrf remains the IOsonata
+transport interface seen by devices and applications; UsbdIntrf adapts a USB
+data endpoint to that model. Controller implementations own endpoint
+registers, DMA/FIFO handling and the USB interrupt.
+
+Buffers passed through this interface are controller-facing transfer storage
+chosen by the upper USB layer, such as a UsbdIntrf temporary DMA packet buffer
+or endpoint-zero control storage. Their DMA ownership must not be confused
+with DeviceIntrf application-buffer or CFifo semantics.
 
 No controller-specific type is exposed here. A Nordic USBD peripheral, a DWC2
 core or another USB device controller implements the same interface.
@@ -182,8 +188,11 @@ void UsbdCtrlrEpCloseAll(void);
  *
  * TotalBytes is the logical transfer length, not a controller DMA or FIFO
  * transaction limit. A backend must split the request into hardware-sized
- * operations as required by the endpoint and controller. The transfer buffer
- * must remain valid until USBD_CTRLR_EVT_XFER_CMPL. A zero length transfer is
+ * operations as required by the endpoint and controller. pBuffer is
+ * controller-facing transfer storage supplied by the upper USB layer. On the
+ * normal path it must remain valid until USBD_CTRLR_EVT_XFER_CMPL. This is an
+ * internal USB backend contract and must not be interpreted as the lifetime
+ * of a DeviceIntrf caller buffer or CFifo data. A zero length transfer is
  * valid. Only one transfer may be outstanding on an endpoint direction at a
  * time.
  */

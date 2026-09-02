@@ -1,13 +1,19 @@
 /**-------------------------------------------------------------------------
 @file	usbd_core.h
 
-@brief	Native IOsonata USB device protocol core.
+@brief	Native IOsonata USB device protocol/control core.
 
-Implements the USB device state machine above usbd_ctrlr.h. The core owns
-endpoint zero, Chapter 9 standard requests, configuration state, alternate
-settings and class/vendor request dispatch. USB functions register their
-interface range and callbacks; controller-specific details remain below this
-layer.
+DeviceIntrf remains the center of the IOsonata data architecture. The USB core
+is the USB protocol/control plane, not a parallel application data interface.
+Non-control USB data endpoints are represented above the controller by
+UsbdIntrf/DeviceIntrf instances, analogous to UART, I2C or SPI interface
+instances. USB functions and classes compose and configure those endpoint
+interfaces rather than replacing DeviceIntrf as the transport abstraction.
+
+The core owns endpoint zero, Chapter 9 standard requests, descriptors,
+configuration state, alternate settings and class/vendor request dispatch.
+Controller-specific endpoint registers, DMA and interrupt handling remain
+below this layer in usbd_ctrlr.h.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 29, 2026
