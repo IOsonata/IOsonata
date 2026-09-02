@@ -247,13 +247,9 @@ static bool UsbdCoreInterfaceExists(uint8_t InterfaceNo)
 	return false;
 }
 
-static bool UsbdCoreEndpointExists(uint8_t EpAddr)
+static bool UsbdCoreInterfaceAlternateExists(uint8_t InterfaceNo,
+												 uint8_t Alternate)
 {
-	if (USB_ENDPADDR_NUM(EpAddr) == 0)
-	{
-		return true;
-	}
-
 	uint16_t len;
 	const uint8_t *pDesc = UsbdCoreActiveConfig(&len);
 
@@ -273,8 +269,64 @@ static bool UsbdCoreEndpointExists(uint8_t EpAddr)
 			break;
 		}
 
-		if (type == USB_DESCTYPE_ENDPOINT && dlen >= sizeof(UsbEndPointDesc_t) &&
-			pDesc[ofs + 2U] == EpAddr)
+		if (type == USB_DESCTYPE_INTERFACE && dlen >= sizeof(UsbIntrfDesc_t) &&
+			pDesc[ofs + 2U] == InterfaceNo &&
+			pDesc[ofs + 3U] == Alternate)
+		{
+			return true;
+		}
+
+		ofs = (uint16_t)(ofs + dlen);
+	}
+
+	return false;
+}
+
+static bool UsbdCoreEndpointExists(uint8_t EpAddr)
+{
+	if (USB_ENDPADDR_NUM(EpAddr) == 0)
+	{
+		return true;
+	}
+
+	uint16_t len;
+	const uint8_t *pDesc = UsbdCoreActiveConfig(&len);
+
+	if (pDesc == nullptr)
+	{
+		return false;
+	}
+
+	bool activeInterface = false;
+	uint16_t ofs = 0;
+	while ((uint16_t)(ofs + 2U) <= len)
+	{
+		const uint8_t dlen = pDesc[ofs];
+		const uint8_t type = pDesc[ofs + 1U];
+
+		if (dlen < 2U || (uint16_t)(ofs + dlen) > len)
+		{
+			break;
+		}
+
+		if (type == USB_DESCTYPE_INTERFACE)
+		{
+			if (dlen >= sizeof(UsbIntrfDesc_t))
+			{
+				const uint8_t interfaceNo = pDesc[ofs + 2U];
+				const uint8_t alternate = pDesc[ofs + 3U];
+				activeInterface =
+					interfaceNo < USBD_CORE_INTRF_MAXCNT &&
+					s_Alternate[interfaceNo] == alternate;
+			}
+			else
+			{
+				activeInterface = false;
+			}
+		}
+		else if (activeInterface && type == USB_DESCTYPE_ENDPOINT &&
+				 dlen >= sizeof(UsbEndPointDesc_t) &&
+				 pDesc[ofs + 2U] == EpAddr)
 		{
 			return true;
 		}
@@ -792,7 +844,7 @@ static bool UsbdCoreHandleSetInterface(void)
 	const uint8_t alternate = (uint8_t)s_Setup.wValue;
 
 	if (interfaceNo >= USBD_CORE_INTRF_MAXCNT ||
-		!UsbdCoreInterfaceExists(interfaceNo))
+		!UsbdCoreInterfaceAlternateExists(interfaceNo, alternate))
 	{
 		return false;
 	}
