@@ -6,6 +6,8 @@
 
 #define CHECK(v) do { if (!(v)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #v); return false; } } while (0)
 
+static_assert(sizeof(UsbPktHdr_t) == 4, "USB packet payload must remain word aligned");
+
 typedef struct {
 	uint8_t EpAddr;
 	uint8_t *pBuffer;
@@ -71,6 +73,44 @@ static bool TestRx(void)
 	return true;
 }
 
+static bool TestRxBackpressureAndReset(void)
+{
+	constexpr uint16_t mps = 8;
+	constexpr uint16_t blockSize = sizeof(UsbPktHdr_t) + mps;
+	alignas(4) uint8_t rxMem[CFIFO_TOTAL_MEMSIZE(2, blockSize)];
+	alignas(4) uint8_t txMem[CFIFO_MEMSIZE(32)];
+	alignas(4) uint8_t rxDma[mps] = {};
+	UsbDevIntrf_t intrf = {};
+	s_XferCnt = 0;
+	CHECK(Init(&intrf, rxMem, sizeof(rxMem), txMem, sizeof(txMem), 1));
+	CHECK(UsbIntrfConfigRx(&intrf, 1, mps, rxDma));
+	UsbIntrfRxEnable(&intrf, true);
+
+	memcpy(rxDma, "12345678", mps);
+	UsbIntrfRxXferComplete(&intrf, mps, USBD_CTRLR_XFER_SUCCESS);
+	memcpy(rxDma, "abcd", 4);
+	UsbIntrfRxXferComplete(&intrf, 4, USBD_CTRLR_XFER_SUCCESS);
+	CHECK(CFifoUsed(intrf.hRxFifo) == 2);
+	CHECK(s_XferCnt == 2 && !intrf.RxActive);
+
+	uint8_t out[mps] = {};
+	CHECK(DeviceIntrfRxData(&intrf.DevIntrf, out, sizeof(out)) == mps);
+	CHECK(memcmp(out, "12345678", mps) == 0);
+	CHECK(CFifoUsed(intrf.hRxFifo) == 1);
+	CHECK(s_XferCnt == 3 && intrf.RxActive);
+
+	uint8_t partial[2] = {};
+	CHECK(DeviceIntrfRxData(&intrf.DevIntrf, partial, sizeof(partial)) == 2);
+	CHECK(intrf.RxOffset == 2);
+	UsbIntrfResetRx(&intrf);
+	CHECK(intrf.hRxFifo == nullptr && intrf.RxOffset == 0);
+	CHECK(UsbIntrfRxUsed(&intrf) == 0);
+	CHECK(UsbIntrfConfigRx(&intrf, 1, mps, rxDma));
+	UsbIntrfRxEnable(&intrf, true);
+	CHECK(intrf.hRxFifo != nullptr && intrf.RxActive);
+	return true;
+}
+
 static bool TestByteTx(void)
 {
 	alignas(4) uint8_t rxMem[CFIFO_TOTAL_MEMSIZE(2, sizeof(UsbPktHdr_t) + 8)];
@@ -80,10 +120,44 @@ static bool TestByteTx(void)
 	s_XferCnt = 0;
 	CHECK(Init(&intrf, rxMem, sizeof(rxMem), txMem, sizeof(txMem), 1));
 	UsbIntrfConfigTx(&intrf, USB_ENDPADDR_DIRIN(1), sizeof(txDma), txDma);
-	const uint8_t data[] = { 9, 8, 7 };
-	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, data, sizeof(data)) == 3);
-	CHECK(s_XferCnt == 1 && s_Xfer[0].Length == 3);
-	CHECK(memcmp(txDma, data, sizeof(data)) == 0);
+	const uint8_t one = 9;
+	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, &one, 1) == 1);
+	CHECK(s_XferCnt == 1 && s_Xfer[0].Length == 1 && txDma[0] == one);
+	UsbIntrfTxXferComplete(&intrf, 1, USBD_CTRLR_XFER_SUCCESS);
+
+	const uint8_t shortPacket[] = { 8, 7, 6 };
+	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, shortPacket,
+							 sizeof(shortPacket)) == (int)sizeof(shortPacket));
+	CHECK(s_XferCnt == 2 && s_Xfer[1].Length == sizeof(shortPacket));
+	CHECK(memcmp(txDma, shortPacket, sizeof(shortPacket)) == 0);
+	return true;
+}
+
+static bool TestByteTxFullPackets(void)
+{
+	constexpr uint16_t mps = 8;
+	alignas(4) uint8_t rxMem[CFIFO_TOTAL_MEMSIZE(2, sizeof(UsbPktHdr_t) + mps)];
+	alignas(4) uint8_t txMem[CFIFO_MEMSIZE(32)];
+	alignas(4) uint8_t txDma[mps] = {};
+	UsbDevIntrf_t intrf = {};
+	s_XferCnt = 0;
+	CHECK(Init(&intrf, rxMem, sizeof(rxMem), txMem, sizeof(txMem), 1));
+	UsbIntrfConfigTx(&intrf, USB_ENDPADDR_DIRIN(1), mps, txDma);
+	const uint8_t data[] = "12345678ABCDEFGH";
+	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, data, sizeof(data) - 1) == 16);
+	CHECK(s_XferCnt == 1 && s_Xfer[0].Length == mps);
+	CHECK(memcmp(txDma, data, mps) == 0);
+
+	UsbIntrfTxXferComplete(&intrf, mps, USBD_CTRLR_XFER_SUCCESS);
+	CHECK(s_XferCnt == 2 && s_Xfer[1].Length == mps);
+	CHECK(memcmp(txDma, data + mps, mps) == 0);
+	UsbIntrfTxXferComplete(&intrf, mps, USBD_CTRLR_XFER_SUCCESS);
+	CHECK(intrf.TxZlpRequired);
+	UsbIntrfSof(&intrf);
+	UsbIntrfSof(&intrf);
+	CHECK(s_XferCnt == 3 && s_Xfer[2].Length == 0);
+	UsbIntrfTxXferComplete(&intrf, 0, USBD_CTRLR_XFER_SUCCESS);
+	CHECK(CFifoUsed(intrf.hTxFifo) == 0);
 	return true;
 }
 
@@ -118,14 +192,32 @@ static bool TestPacketTx(void)
 	UsbIntrfTxXferComplete(&intrf, 0, USBD_CTRLR_XFER_SUCCESS);
 	CHECK(s_XferCnt == 3 && s_Xfer[2].Length == mps);
 	CHECK(memcmp(txDma, "12345678", mps) == 0);
+	UsbIntrfTxXferComplete(&intrf, mps, USBD_CTRLR_XFER_SUCCESS);
+
+	alignas(4) uint8_t invalid[blockSize] = {};
+	reinterpret_cast<UsbPktHdr_t *>(invalid)->Length = mps + 1;
+	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, invalid, sizeof(invalid)) == 0);
+	CHECK(s_XferCnt == 3 && CFifoUsed(intrf.hTxFifo) == 0);
+
+	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, packets, blockSize * 2) ==
+		(int)(blockSize * 2));
+	CHECK(s_XferCnt == 4 && CFifoUsed(intrf.hTxFifo) == 1);
+	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, packets, sizeof(packets)) ==
+		(int)sizeof(packets));
+	CHECK(CFifoUsed(intrf.hTxFifo) == 4);
+	CHECK(!UsbIntrfRequestToSend(&intrf, blockSize));
+	UsbIntrfResetTx(&intrf);
+	CHECK(CFifoUsed(intrf.hTxFifo) == 0);
 	return true;
 }
 
 int main(void)
 {
 	CHECK(TestRx());
+	CHECK(TestRxBackpressureAndReset());
 	CHECK(TestByteTx());
+	CHECK(TestByteTxFullPackets());
 	CHECK(TestPacketTx());
-	printf("Result: PASS (3/3)\n");
+	printf("Result: PASS (5/5)\n");
 	return 0;
 }

@@ -55,10 +55,11 @@ SOFTWARE.
 
 #define BUFFER_SIZE				64
 
-// RX memory is used directly as USB packet-ring storage. TX keeps a CFifo so
-// application writes can run ahead of USB IN completion. The existing CFifo
-// size macro leaves enough room for four 64-byte full-speed RX packet slots.
-#define CDC_RXFIFO_MEMSIZE		CFIFO_MEMSIZE(256)
+// RX memory holds four completed full-speed packet blocks. Each block includes
+// the generic USB packet header as well as the 64-byte payload capacity. TX
+// keeps a byte CFifo so application writes can run ahead of USB IN completion.
+#define CDC_RXFIFO_MEMSIZE \
+	CFIFO_TOTAL_MEMSIZE(4, sizeof(UsbPktHdr_t) + USBD_CDC_BULK_FS_MPS)
 #define CDC_TXFIFO_MEMSIZE		CFIFO_MEMSIZE(1024)
 
 alignas(4) static uint8_t s_CdcRxFifoMem[CDC_RXFIFO_MEMSIZE];

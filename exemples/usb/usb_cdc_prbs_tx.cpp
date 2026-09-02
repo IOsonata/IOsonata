@@ -61,10 +61,12 @@ SOFTWARE.
 
 #define TEST_BUFSIZE			16
 
-// FIFO memory belongs to the application. This test writes as fast as the
+// FIFO memory belongs to the application. RX uses completed packet blocks,
+// including the generic USB packet header. This test writes as fast as the
 // host will take it, so the Tx side is sized to hold several packets and let
 // the fill loop run ahead of the bus.
-#define CDC_RXFIFO_MEMSIZE		CFIFO_MEMSIZE(256)
+#define CDC_RXFIFO_MEMSIZE \
+	CFIFO_TOTAL_MEMSIZE(4, sizeof(UsbPktHdr_t) + USBD_CDC_BULK_FS_MPS)
 #define CDC_TXFIFO_MEMSIZE		CFIFO_MEMSIZE(2048)
 
 alignas(4) static uint8_t s_CdcRxFifoMem[CDC_RXFIFO_MEMSIZE];

@@ -13,6 +13,7 @@ host-side deadlock when either USB direction applies backpressure.
         --duration   Test duration in seconds (default 30)
         --block      Host write block size in bytes (default 4096)
         --read-size  Host read block size in bytes (default 4096)
+        --write-timeout Host write timeout in seconds (default 1)
 
 @author Hoang Nguyen Hoan
 @date   Sep. 1, 2026
@@ -116,6 +117,9 @@ def parse_args():
         "--read-size", type=int, default=4096,
         help="read block size in bytes (default: 4096)")
     parser.add_argument(
+        "--write-timeout", type=float, default=1.0,
+        help="host write timeout in seconds (default: 1)")
+    parser.add_argument(
         "--report", type=float, default=1.0,
         help="throughput report interval in seconds (default: 1)")
     parser.add_argument(
@@ -209,9 +213,10 @@ def print_report(stats, now, previous_time, previous_tx, previous_rx):
 def main():
     args = parse_args()
 
-    if args.duration <= 0 or args.block <= 0 or args.read_size <= 0:
-        print("ERROR: duration, block and read-size must be greater than zero",
-              file=sys.stderr)
+    if (args.duration <= 0 or args.block <= 0 or args.read_size <= 0 or
+            args.write_timeout <= 0 or args.drain_timeout <= 0):
+        print("ERROR: duration, block, read-size, write-timeout and "
+              "drain-timeout must be greater than zero", file=sys.stderr)
         return 2
 
     try:
@@ -219,7 +224,7 @@ def main():
             port=args.port,
             baudrate=args.baud,
             timeout=0.1,
-            write_timeout=1.0,
+            write_timeout=args.write_timeout,
             rtscts=False,
             dsrdtr=False)
     except (OSError, serial.SerialException) as error:
@@ -277,18 +282,23 @@ def main():
 
         # The writer has stopped. Drain every byte that was accepted by the
         # host serial driver so the final result also verifies byte counts.
+        # A timed-out POSIX write may have transferred a prefix before raising
+        # without returning that count. In that case TX is only a lower bound,
+        # so wait for a full quiet interval instead of stopping at RX >= TX.
         drain_deadline = time.monotonic() + args.drain_timeout
 
         while time.monotonic() < drain_deadline:
-            tx_bytes, rx_bytes, _, _ = stats.snapshot()
+            tx_bytes, rx_bytes, _, drain_write_error = stats.snapshot()
 
-            if rx_bytes >= tx_bytes:
+            if drain_write_error is None and rx_bytes >= tx_bytes:
                 break
 
             data = comm.read(args.read_size)
             if data:
                 expected, errors = check_data(data, expected)
                 stats.add_rx(len(data), errors)
+                if drain_write_error is not None:
+                    drain_deadline = time.monotonic() + args.drain_timeout
 
         tx_bytes, rx_bytes, errors, write_error = stats.snapshot()
         elapsed = active_end - start_time
@@ -306,6 +316,9 @@ def main():
 
         if write_error is not None:
             print("Write error    : %s" % write_error)
+            if pending < 0:
+                print("Uncounted RX   : %d (timed-out write prefix)" %
+                      -pending)
 
         if write_error is None and errors == 0 and pending == 0:
             print("Result         : PASS")
