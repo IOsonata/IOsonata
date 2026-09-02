@@ -57,6 +57,8 @@ static bool s_CoreStarted;
 static bool s_CoreSuspended;
 static bool s_RemoteWakeup;
 static uint8_t s_Address;
+static uint8_t s_PendingAddress;
+static bool s_AddressPending;
 static uint8_t s_Configuration;
 static uint8_t s_NumInterfaces;
 static uint8_t s_Alternate[USBD_CORE_INTRF_MAXCNT];
@@ -282,6 +284,8 @@ static void UsbdCoreResetControl(void)
 	s_CtrlDataLen = 0;
 	s_CtrlActual = 0;
 	s_CtrlNeedZlp = false;
+	s_PendingAddress = 0;
+	s_AddressPending = false;
 }
 
 static void UsbdCoreAbortControl(void);
@@ -775,8 +779,9 @@ static bool UsbdCoreHandleStandard(void)
 			{
 				return false;
 			}
-			UsbdCtrlrSetAddress((uint8_t)s_Setup.wValue);
-			s_Address = (uint8_t)s_Setup.wValue;
+			s_PendingAddress = (uint8_t)s_Setup.wValue;
+			s_AddressPending = true;
+			UsbdCtrlrSetAddress(s_PendingAddress);
 			return UsbdCoreStartStatus();
 
 		case USB_REQ_GET_DESCRIPTOR:
@@ -939,6 +944,10 @@ static void UsbdCoreHandleCtrlXfer(const UsbdCtrlrXferEvt_t *pXfer)
 
 		case USBD_CORE_CTRL_STATUS_IN:
 		case USBD_CORE_CTRL_STATUS_OUT:
+			if (s_AddressPending)
+			{
+				s_Address = s_PendingAddress;
+			}
 			(void)UsbdCoreInvokeActive(USBD_CORE_CTRL_COMPLETE,
 									   s_CtrlActual);
 			UsbdCoreResetControl();
