@@ -6,7 +6,7 @@
 DeviceIntrf remains the center of the IOsonata data architecture. The USB core
 is the USB protocol/control plane, not a parallel application data interface.
 Non-control USB data endpoints are represented above the controller by
-UsbdIntrf/DeviceIntrf instances, analogous to UART, I2C or SPI interface
+UsbIntrf/DeviceIntrf instances, analogous to UART, I2C or SPI interface
 instances. USB functions and classes compose and configure those endpoint
 interfaces rather than replacing DeviceIntrf as the transport abstraction.
 

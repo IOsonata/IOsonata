@@ -1,6 +1,7 @@
 ROOT := ../..
 BUILD_DIR := build
 TARGET := $(BUILD_DIR)/usbd_core_test
+INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
 
 CXX ?= g++
 OPT ?= -O1
@@ -28,6 +29,12 @@ SOURCES := \
 	usbd_core_test.cpp \
 	$(ROOT)/src/usb/usbd_core.cpp
 
+INTRF_SOURCES := \
+	usb_intrf_test.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/device_intrf.cpp \
+	$(ROOT)/src/cfifo.c
+
 HEADERS := \
 	$(ROOT)/include/usb/usbd.h \
 	$(ROOT)/include/usb/usb_def.h \
@@ -38,8 +45,9 @@ HEADERS := \
 
 all: test
 
-test: $(TARGET)
+test: $(TARGET) $(INTRF_TARGET)
 	$(TEST_ENV) ./$(TARGET)
+	$(TEST_ENV) ./$(INTRF_TARGET)
 
 test-gcc:
 	$(MAKE) clean
@@ -55,6 +63,11 @@ $(TARGET): $(SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$(SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(INTRF_TARGET): $(INTRF_SOURCES) $(ROOT)/include/usb/usb_intrf.h
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
+		$(INTRF_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 clean:
 	rm -rf $(BUILD_DIR)

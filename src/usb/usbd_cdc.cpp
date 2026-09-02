@@ -3,7 +3,7 @@
 
 @brief	USB CDC ACM class adapter.
 
-CDC owns ACM control requests and notifications. Generic UsbdIntrf owns both
+CDC owns ACM control requests and notifications. Generic UsbIntrf owns both
 application FIFOs and the non-control RX/TX data path.
 
 @author	Hoang Nguyen Hoan
@@ -44,6 +44,11 @@ SOFTWARE.
 static uint8_t *UsbdCdcTxBuffer(UsbdCdcDev_t *pCdc)
 {
 	return reinterpret_cast<uint8_t *>(pCdc->TxTransfer);
+}
+
+static uint8_t *UsbdCdcRxBuffer(UsbdCdcDev_t *pCdc)
+{
+	return reinterpret_cast<uint8_t *>(pCdc->RxTransfer);
 }
 
 static uint8_t *UsbdCdcNotifBuffer(UsbdCdcDev_t *pCdc)
@@ -156,9 +161,9 @@ static void UsbdCdcCancelBusState(UsbdCdcDev_t *pCdc)
 {
 	pCdc->NotifActive = false;
 	pCdc->SerialStatePending = false;
-	UsbdIntrfRxEnable(&pCdc->Data, false);
-	UsbdIntrfResetRx(&pCdc->Data);
-	UsbdIntrfResetTx(&pCdc->Data);
+	UsbIntrfRxEnable(&pCdc->Data, false);
+	UsbIntrfResetRx(&pCdc->Data);
+	UsbIntrfResetTx(&pCdc->Data);
 }
 
 static bool UsbdCdcConfig(uint8_t Configuration, void *pContext)
@@ -202,14 +207,15 @@ static bool UsbdCdcConfig(uint8_t Configuration, void *pContext)
 		return false;
 	}
 
-	if (!UsbdIntrfConfigRx(&pCdc->Data,
-						USBD_CDC_DATA_OUT_EP(pCdc->ItfNo), pCdc->DataMps))
+	if (!UsbIntrfConfigRx(&pCdc->Data,
+						USBD_CDC_DATA_OUT_EP(pCdc->ItfNo), pCdc->DataMps,
+						UsbdCdcRxBuffer(pCdc)))
 	{
 		UsbdCdcCloseEndpoints(pCdc);
 		return false;
 	}
 
-	UsbdIntrfConfigTx(&pCdc->Data,
+	UsbIntrfConfigTx(&pCdc->Data,
 					   USBD_CDC_DATA_IN_EP(pCdc->ItfNo),
 					   pCdc->DataMps, UsbdCdcTxBuffer(pCdc));
 
@@ -315,7 +321,7 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 			if (Stage == USBD_CORE_CTRL_COMPLETE)
 			{
 				pCdc->ControlLineState = pCdc->PendingControlLineState;
-				UsbdIntrfRxEnable(&pCdc->Data, UsbdCdcPortIsOpen(pCdc));
+				UsbIntrfRxEnable(&pCdc->Data, UsbdCdcPortIsOpen(pCdc));
 				return true;
 			}
 			return Stage == USBD_CORE_CTRL_DATA;
@@ -337,13 +343,13 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 
 	if (EpAddr == pCdc->Data.RxEpAddr)
 	{
-		UsbdIntrfRxXferComplete(&pCdc->Data, Length, Result);
+		UsbIntrfRxXferComplete(&pCdc->Data, Length, Result);
 		return;
 	}
 
 	if (EpAddr == pCdc->Data.TxEpAddr)
 	{
-		UsbdIntrfTxXferComplete(&pCdc->Data, Length, Result);
+		UsbIntrfTxXferComplete(&pCdc->Data, Length, Result);
 		return;
 	}
 
@@ -363,7 +369,7 @@ static void UsbdCdcSof(uint16_t, void *pContext)
 
 	if (pCdc != nullptr)
 	{
-		UsbdIntrfSof(&pCdc->Data);
+		UsbIntrfSof(&pCdc->Data);
 	}
 }
 
@@ -404,15 +410,16 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 		return false;
 	}
 
-	UsbdIntrfCfg_t dataCfg = {};
+	UsbIntrfCfg_t dataCfg = {};
 	dataCfg.bBlocking = pCfg->bBlocking;
 	dataCfg.RxFifoMemSize = pCfg->RxFifoMemSize;
 	dataCfg.pRxFifoMem = pCfg->pRxFifoMem;
 	dataCfg.TxFifoMemSize = pCfg->TxFifoMemSize;
 	dataCfg.pTxFifoMem = pCfg->pTxFifoMem;
+	dataCfg.TxFifoBlkSize = 1U;
 	dataCfg.EvtCB = pCfg->EvtCB;
 
-	if (!UsbdIntrfInit(&pCdc->Data, &dataCfg))
+	if (!UsbIntrfInit(&pCdc->Data, &dataCfg))
 	{
 		return false;
 	}
@@ -473,7 +480,7 @@ void UsbdCdcProcess(UsbdCdcDev_t * const pCdc)
 	if (open != pCdc->ReportedOpen)
 	{
 		pCdc->ReportedOpen = open;
-		UsbdIntrfRxEnable(&pCdc->Data, open);
+		UsbIntrfRxEnable(&pCdc->Data, open);
 		UsbdCdcNotifyPortState(pCdc, open);
 	}
 

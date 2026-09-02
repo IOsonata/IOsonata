@@ -3,14 +3,14 @@
 
 @brief	USB device controller hardware backend.
 
-This is the internal hardware-facing boundary below UsbdIntrf and UsbdCore. It
+This is the internal hardware-facing boundary below UsbIntrf and UsbdCore. It
 is not the application data interface. DeviceIntrf is the IOsonata data
-interface used by devices and applications; UsbdIntrf applies it to a USB data
+interface used by devices and applications; UsbIntrf applies it to a USB data
 endpoint. Controller implementations handle endpoint registers, DMA/FIFO
 access and the USB interrupt.
 
 Buffers passed through this interface are controller transfer storage supplied
-by the upper USB layer, such as a UsbdIntrf temporary DMA packet buffer or
+by the upper USB layer, such as a UsbIntrf temporary DMA packet buffer or
 endpoint-zero control storage. DMA storage, DeviceIntrf caller buffers and
 CFifo storage are separate.
 

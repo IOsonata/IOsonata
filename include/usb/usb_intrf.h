@@ -1,10 +1,10 @@
 /**-------------------------------------------------------------------------
-@file	usbd_intrf.h
+@file	usb_intrf.h
 
-@brief	Generic USB endpoint implementation of DeviceIntrf.
+@brief	Generic USB data-interface implementation of DeviceIntrf.
 
 DeviceIntrf is the IOsonata data interface used by devices and applications.
-UsbdIntrf applies DeviceIntrf to a configured USB data endpoint. Endpoint
+UsbIntrf applies DeviceIntrf to a configured USB data endpoint. Endpoint
 address/direction, transfer type and maximum packet size (MPS) are instance
 state. DeviceIntrf DevAddr is not used to select an endpoint on each transfer.
 
@@ -20,28 +20,28 @@ is the actual received data length and may be from zero to MPS. DeviceIntrfRx()
 may consume across packet blocks and present a byte stream.
 
 TX CFifo mode is selected by block size. BlkSize 1 provides byte-stream
-accumulation and UsbdIntrf packetizes queued bytes up to the endpoint MPS. In
+accumulation and UsbIntrf packetizes queued bytes up to the endpoint MPS. In
 packet mode, each CFifo block contains UsbPktHdr_t followed by storage for one
 endpoint packet. The caller splits its data into USB packets and pushes one
 CFifo block per packet. UsbPktHdr_t.Length is the actual packet data length and
-may be from zero to MPS. UsbdIntrf sends the stored packet length without
+may be from zero to MPS. UsbIntrf sends the stored packet length without
 combining packet blocks. USB transfer type and CFifo block size are separate
 settings.
 
-CFifo memory is supplied by UsbdIntrfCfg_t. Endpoint MPS determines the RX
+CFifo memory is supplied by UsbIntrfCfg_t. Endpoint MPS determines the RX
 packet block size and the TX packet-mode block size. Port maximum packet-size
 definitions may be used by static allocation macros so the configuration
 reserves sufficient memory.
 
-Controller DMA storage and CFifo storage are separate. TX may require a
-temporary packet-sized DMA buffer while an IN transfer is active. RX may DMA
-directly into packet storage when the controller permits it.
+Controller DMA storage and CFifo storage are separate. TX uses a temporary
+packet-sized DMA buffer while an IN transfer is active. RX completes into a
+USB-owned staging buffer before the packet is copied into the RX CFifo.
 
 Generic code must not assume a 64-byte packet, a specific USB speed, or a
 specific controller.
 
 There is no DTR style gating in this generic interface. A class adapter may
-enable or disable RX acceptance with UsbdIntrfRxEnable(). USB OUT flow control
+enable or disable RX acceptance with UsbIntrfRxEnable(). USB OUT flow control
 is lossless: when receive storage is full the endpoint is left unarmed so the
 host is backpressured by USB.
 
@@ -73,8 +73,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __USBD_INTRF_H__
-#define __USBD_INTRF_H__
+#ifndef __USB_INTRF_H__
+#define __USB_INTRF_H__
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -89,27 +89,32 @@ SOFTWARE.
 
 #pragma pack(push, 4)
 
-typedef struct __Usbd_Interf_Config {
+typedef struct __Usb_Packet_Header {
+	uint16_t Length;				//!< Actual packet length, from zero through MPS
+	uint16_t Reserved;			//!< Keeps the packet payload word aligned
+} UsbPktHdr_t;
+
+typedef struct __Usb_Interf_Config {
 	bool bBlocking;
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;
 	int TxFifoMemSize;
 	uint8_t *pTxFifoMem;
+	uint16_t TxFifoBlkSize;		//!< 1 for byte mode, header plus MPS for packet mode
 	DevIntrfEvtHandler_t EvtCB;
-} UsbdIntrfCfg_t;
+} UsbIntrfCfg_t;
 
-typedef struct __Usbd_Dev_Interf {
+typedef struct __Usb_Dev_Interf {
 	DevIntrf_t DevIntrf;
+	hCFifo_t hRxFifo;
 	hCFifo_t hTxFifo;
-	uint8_t *pRxMem;				//!< RX packet-ring memory supplied by application
-	uint32_t RxMemSize;			//!< RX packet-ring memory size in bytes
-	uint32_t RxPut;				//!< Number of completed RX packets published
-	uint32_t RxGet;				//!< Number of RX packets fully consumed
+	uint8_t *pRxFifoMem;			//!< RX CFifo memory supplied by application
+	uint32_t RxFifoMemSize;		//!< RX CFifo memory size in bytes
+	uint8_t *pRxBuffer;			//!< One packet RX DMA staging buffer
 	uint32_t RxUsed;				//!< Published RX payload bytes not yet consumed
 	uint32_t RxDropCnt;			//!< Controller/error drops; ring-full uses backpressure
+	uint16_t RxOffset;			//!< Byte-stream cursor in the current RX packet
 	uint16_t RxMps;				//!< OUT endpoint maximum packet size
-	uint16_t RxSlotSize;			//!< Bytes occupied by one packet slot
-	uint16_t RxSlotCnt;			//!< Number of packet slots in pRxMem
 	uint8_t RxEpAddr;			//!< OUT endpoint owned by this instance
 	uint8_t TxEpAddr;			//!< IN endpoint owned by this instance
 	uint8_t *pTxBuffer;			//!< One packet staging buffer, TxMps bytes
@@ -119,7 +124,7 @@ typedef struct __Usbd_Dev_Interf {
 	bool RxAccepting;			//!< Class/application currently accepts OUT traffic
 	bool TxZlpRequired;			//!< Last packet was full and nothing followed
 	bool TxTailArmed;			//!< Partial tail seen idle at previous SOF
-} UsbdDevIntrf_t;
+} UsbDevIntrf_t;
 
 #pragma pack(pop)
 
@@ -127,45 +132,45 @@ typedef struct __Usbd_Dev_Interf {
 extern "C" {
 #endif
 
-bool UsbdIntrfInit(UsbdDevIntrf_t *pIntrf, const UsbdIntrfCfg_t *pCfg);
+bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg);
 
 /**
  * Bind an OUT endpoint and build the RX packet ring for its maximum packet
  * size. Returns false when the supplied RX memory cannot hold one packet slot.
  */
-bool UsbdIntrfConfigRx(UsbdDevIntrf_t *pIntrf, uint8_t EpAddr,
-					   uint16_t Mps);
+bool UsbIntrfConfigRx(UsbDevIntrf_t *pIntrf, uint8_t EpAddr,
+					  uint16_t Mps, uint8_t *pBuffer);
 
 /** Drop RX endpoint/ring state on bus reset or unconfigure. */
-void UsbdIntrfResetRx(UsbdDevIntrf_t *pIntrf);
+void UsbIntrfResetRx(UsbDevIntrf_t *pIntrf);
 
 /** Enable or disable acceptance of OUT data without changing endpoint config. */
-void UsbdIntrfRxEnable(UsbdDevIntrf_t *pIntrf, bool Enable);
+void UsbIntrfRxEnable(UsbDevIntrf_t *pIntrf, bool Enable);
 
 /** OUT endpoint transfer completion, called from the USB interrupt. */
-void UsbdIntrfRxXferComplete(UsbdDevIntrf_t *pIntrf,
+void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf,
 						 uint16_t Length, UsbdCtrlrXferResult_t Result);
 
 /**
  * Bind an IN endpoint to this instance after SET_CONFIGURATION.
  * pBuffer must hold Mps bytes and remain valid while configured.
  */
-void UsbdIntrfConfigTx(UsbdDevIntrf_t *pIntrf, uint8_t EpAddr,
+void UsbIntrfConfigTx(UsbDevIntrf_t *pIntrf, uint8_t EpAddr,
 					   uint16_t Mps, uint8_t *pBuffer);
 
-/** Drop endpoint transfer state on bus reset or unconfigure. FIFO data stays. */
-void UsbdIntrfResetTx(UsbdDevIntrf_t *pIntrf);
+/** Drop endpoint transfer state and queued data on bus reset or unconfigure. */
+void UsbIntrfResetTx(UsbDevIntrf_t *pIntrf);
 
 /** IN endpoint transfer completion, called from the USB interrupt. */
-void UsbdIntrfTxXferComplete(UsbdDevIntrf_t *pIntrf,
+void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 						 uint16_t Length, UsbdCtrlrXferResult_t Result);
 
 /** Start-of-frame callback used to flush an idle partial TX tail. */
-void UsbdIntrfSof(UsbdDevIntrf_t *pIntrf);
+void UsbIntrfSof(UsbDevIntrf_t *pIntrf);
 
-bool UsbdIntrfRequestToSend(UsbdDevIntrf_t *pIntrf, int NbBytes);
-int UsbdIntrfRxUsed(UsbdDevIntrf_t *pIntrf);
-int UsbdIntrfTxUsed(UsbdDevIntrf_t *pIntrf);
+bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);
+int UsbIntrfRxUsed(UsbDevIntrf_t *pIntrf);
+int UsbIntrfTxUsed(UsbDevIntrf_t *pIntrf);
 
 #ifdef __cplusplus
 }
@@ -173,10 +178,10 @@ int UsbdIntrfTxUsed(UsbdDevIntrf_t *pIntrf);
 
 #ifdef __cplusplus
 
-class UsbdIntrf : public DeviceIntrf {
+class UsbIntrf : public DeviceIntrf {
 public:
-	bool Init(const UsbdIntrfCfg_t &Cfg) {
-		return UsbdIntrfInit(&vUsbDevIntrf, &Cfg);
+	bool Init(const UsbIntrfCfg_t &Cfg) {
+		return UsbIntrfInit(&vUsbDevIntrf, &Cfg);
 	}
 
 	operator DevIntrf_t * () override {
@@ -192,15 +197,15 @@ public:
 	}
 
 	bool RequestToSend(int NbBytes) {
-		return UsbdIntrfRequestToSend(&vUsbDevIntrf, NbBytes);
+		return UsbIntrfRequestToSend(&vUsbDevIntrf, NbBytes);
 	}
 
 protected:
-	UsbdDevIntrf_t vUsbDevIntrf = {};
+	UsbDevIntrf_t vUsbDevIntrf = {};
 };
 
 #endif
 
 /** @} End of group USBD */
 
-#endif	// __USBD_INTRF_H__
+#endif	// __USB_INTRF_H__

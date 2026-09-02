@@ -4,7 +4,7 @@
 @brief	USB CDC ACM class adapter.
 
 CDC owns ACM control requests, line/control state and notifications.
-Application data moves through the embedded generic UsbdIntrf data interface;
+Application data moves through the embedded generic UsbIntrf data interface;
 CDC itself is not a DeviceIntrf and does not own a separate RX data path.
 
 @author	Hoang Nguyen Hoan
@@ -83,7 +83,7 @@ typedef struct __Usbd_Cdc_Config {
 } UsbdCdcCfg_t;
 
 typedef struct __Usbd_Cdc_Dev {
-	UsbdDevIntrf_t Data;
+	UsbDevIntrf_t Data;
 	UsbCdcLineCoding_t LineCoding;
 	UsbCdcLineCoding_t PendingLineCoding;
 	uint16_t ControlLineState;
@@ -97,6 +97,7 @@ typedef struct __Usbd_Cdc_Dev {
 	bool NotifActive;
 	bool SerialStatePending;
 	bool ReportedOpen;
+	uint32_t RxTransfer[USBD_CDC_TRANS_WORDS];
 	uint32_t TxTransfer[USBD_CDC_TRANS_WORDS];
 	uint32_t NotifTransfer[USBD_CDC_NOTIFY_WORDS];
 } UsbdCdcDev_t;
