@@ -34,7 +34,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "coredev/interrupt.h"
-#include "usb/usbd_intrf.h"
+#include "usb/usb_intrf.h"
 
 typedef struct __Usbd_Intrf_Rx_Slot {
 	uint16_t Length;

@@ -1306,6 +1306,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_hidhost.h</locationURI>
 		</link>
 		<link>
+			<name>include/usb/usb_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_intrf.h</locationURI>
+		</link>
+		<link>
 			<name>include/usb/usb_mscdef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_mscdef.h</locationURI>
@@ -1329,11 +1334,6 @@
 			<name>include/usb/usbd_ctrlr.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_ctrlr.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_intrf.h</locationURI>
 		</link>
 		<link>
 			<name>src/Fusion/Fusion.h</name>
@@ -2351,6 +2351,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_dev.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/usb/usb_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_intrf.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/usb/usbd_caps_nrfx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/usbd_caps_nrfx.c</locationURI>
@@ -2379,11 +2384,6 @@
 			<name>src/usb/usbd_ctrlr_nrf52.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/usbd_ctrlr_nrf52.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb/usbd_intrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usbd_nrfx.cpp</name>

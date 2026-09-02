@@ -45,7 +45,7 @@ SOFTWARE.
 #include "device_intrf.h"
 #include "usb/usb_cdcdef.h"
 #include "usb/usbd.h"
-#include "usb/usbd_intrf.h"
+#include "usb/usb_intrf.h"
 #include "usb/usbd_ctrlr.h"
 
 /** @addtogroup USBD
