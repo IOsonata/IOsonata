@@ -269,7 +269,7 @@ static void FunctionSof(uint16_t FrameNo, void *)
 	s_Func.LastFrame = FrameNo;
 }
 
-static bool Fixture(void)
+static bool Fixture(bool WithSetInterface = true)
 {
 	memset(&s_Ctrlr, 0, sizeof(s_Ctrlr));
 	memset(&s_Func, 0, sizeof(s_Func));
@@ -295,7 +295,7 @@ static bool Fixture(void)
 	func.EpOutMask = (1U << 1);
 	func.RequestHandler = Request;
 	func.ConfigHandler = Configure;
-	func.SetInterfaceHandler = SetInterface;
+	func.SetInterfaceHandler = WithSetInterface ? SetInterface : nullptr;
 	func.XferHandler = FunctionXfer;
 	func.ResetHandler = FunctionReset;
 	func.SofHandler = FunctionSof;
@@ -465,6 +465,15 @@ static bool TestInterfaceAndHalt(void)
 	Setup(STD_EP_IN, USB_REQ_GET_STATUS, 0, EP2_IN, 2);
 	CHECK(s_Ctrlr.StallCnt == stalls + 1);
 
+	Setup(STD_EP_OUT, USB_REQ_SET_FEATURE,
+		  USB_FEATSEL_ENDPOINT_HALT, EP1_IN, 0);
+	CHECK(s_Ctrlr.LastStallEp == EP1_IN);
+	Complete(EP0_IN, 0);
+	Setup(STD_EP_IN, USB_REQ_GET_STATUS, 0, EP1_IN, 2);
+	CHECK((LastXfer()->Data[0] & USB_ENDPSTATUS_HALT) != 0);
+	Complete(EP0_IN, 2);
+	Complete(EP0_OUT, 0);
+
 	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 1, 0, 0);
 	CHECK(s_Func.SetIfCnt == 1 && s_Func.LastAlt == 1);
 	CHECK(UsbdCoreAlternate(0) == 1);
@@ -479,18 +488,41 @@ static bool TestInterfaceAndHalt(void)
 	Setup(STD_EP_IN, USB_REQ_GET_STATUS, 0, EP1_IN, 2);
 	CHECK(s_Ctrlr.StallCnt == stalls + 1);
 
-	Setup(STD_EP_OUT, USB_REQ_SET_FEATURE,
-		  USB_FEATSEL_ENDPOINT_HALT, EP2_IN, 0);
-	CHECK(s_Ctrlr.LastStallEp == EP2_IN);
+	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 0, 0, 0);
+	CHECK(s_Func.SetIfCnt == 2 && s_Func.LastAlt == 0);
+	CHECK(UsbdCoreAlternate(0) == 0);
 	Complete(EP0_IN, 0);
-	Setup(STD_EP_IN, USB_REQ_GET_STATUS, 0, EP2_IN, 2);
-	CHECK((LastXfer()->Data[0] & USB_ENDPSTATUS_HALT) != 0);
+
+	Setup(STD_EP_IN, USB_REQ_GET_STATUS, 0, EP1_IN, 2);
+	CHECK(LastXfer()->Length == 2 && LastXfer()->Data[0] == 0);
 	Complete(EP0_IN, 2);
 	Complete(EP0_OUT, 0);
-	Setup(STD_EP_OUT, USB_REQ_CLEAR_FEATURE,
-		  USB_FEATSEL_ENDPOINT_HALT, EP2_IN, 0);
-	CHECK(s_Ctrlr.LastClearStallEp == EP2_IN);
+
+	Setup(STD_EP_OUT, USB_REQ_SET_FEATURE,
+		  USB_FEATSEL_ENDPOINT_HALT, EP1_IN, 0);
+	CHECK(s_Ctrlr.LastStallEp == EP1_IN);
 	Complete(EP0_IN, 0);
+	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 0, 0, 0);
+	CHECK(s_Func.SetIfCnt == 3 && UsbdCoreAlternate(0) == 0);
+	Complete(EP0_IN, 0);
+
+	Setup(STD_EP_IN, USB_REQ_GET_STATUS, 0, EP1_IN, 2);
+	CHECK(LastXfer()->Length == 2 && LastXfer()->Data[0] == 0);
+	Complete(EP0_IN, 2);
+	Complete(EP0_OUT, 0);
+	return true;
+}
+
+static bool TestInterfaceRequiresHandler(void)
+{
+	CHECK(Fixture(false));
+	ClearCtrlrLog();
+	CHECK(SetAddress(6) && SetConfig(1));
+
+	const int stalls = s_Ctrlr.StallCnt;
+	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 0, 0, 0);
+	CHECK(s_Ctrlr.StallCnt == stalls + 1);
+	CHECK(s_Func.SetIfCnt == 0 && UsbdCoreAlternate(0) == 0);
 	return true;
 }
 
@@ -637,6 +669,7 @@ int main(void)
 		{ "SET_ADDRESS", TestAddress },
 		{ "configuration", TestConfiguration },
 		{ "alternate interface and halt", TestInterfaceAndHalt },
+		{ "SET_INTERFACE requires handler", TestInterfaceRequiresHandler },
 		{ "function control lifecycle", TestFunctionControl },
 		{ "reset suspend and dispatch", TestResetSuspendAndDispatch },
 	};

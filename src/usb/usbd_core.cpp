@@ -282,6 +282,92 @@ static bool UsbdCoreInterfaceAlternateExists(uint8_t InterfaceNo,
 	return false;
 }
 
+static bool UsbdCoreInterfaceEndpointMasks(uint8_t InterfaceNo,
+										   uint8_t Alternate,
+										   uint16_t *pInMask,
+										   uint16_t *pOutMask)
+{
+	if (pInMask == nullptr || pOutMask == nullptr)
+	{
+		return false;
+	}
+
+	*pInMask = 0;
+	*pOutMask = 0;
+
+	uint16_t len;
+	const uint8_t *pDesc = UsbdCoreActiveConfig(&len);
+	if (pDesc == nullptr)
+	{
+		return false;
+	}
+
+	bool targetInterface = false;
+	bool found = false;
+	uint16_t ofs = 0;
+
+	while ((uint16_t)(ofs + 2U) <= len)
+	{
+		const uint8_t dlen = pDesc[ofs];
+		const uint8_t type = pDesc[ofs + 1U];
+
+		if (dlen < 2U || (uint16_t)(ofs + dlen) > len)
+		{
+			break;
+		}
+
+		if (type == USB_DESCTYPE_INTERFACE)
+		{
+			if (dlen >= sizeof(UsbIntrfDesc_t))
+			{
+				targetInterface =
+					pDesc[ofs + 2U] == InterfaceNo &&
+					pDesc[ofs + 3U] == Alternate;
+				found = found || targetInterface;
+			}
+			else
+			{
+				targetInterface = false;
+			}
+		}
+		else if (targetInterface && type == USB_DESCTYPE_ENDPOINT &&
+				 dlen >= sizeof(UsbEndPointDesc_t))
+		{
+			const uint8_t epAddr = pDesc[ofs + 2U];
+			const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
+
+			if (epNum != 0U && (epAddr & 0x70U) == 0U)
+			{
+				uint16_t *pMask = USB_ENDPADDR_IS_IN(epAddr) ?
+					pInMask : pOutMask;
+				*pMask |= (uint16_t)(1U << epNum);
+			}
+		}
+
+		ofs = (uint16_t)(ofs + dlen);
+	}
+
+	return found;
+}
+
+static void UsbdCoreClearInterfaceHalt(uint8_t InterfaceNo,
+									  uint8_t OldAlternate,
+									  uint8_t NewAlternate)
+{
+	uint16_t oldIn = 0;
+	uint16_t oldOut = 0;
+	uint16_t newIn = 0;
+	uint16_t newOut = 0;
+
+	(void)UsbdCoreInterfaceEndpointMasks(InterfaceNo, OldAlternate,
+										&oldIn, &oldOut);
+	(void)UsbdCoreInterfaceEndpointMasks(InterfaceNo, NewAlternate,
+										&newIn, &newOut);
+
+	s_HaltIn &= (uint16_t)~(oldIn | newIn);
+	s_HaltOut &= (uint16_t)~(oldOut | newOut);
+}
+
 static bool UsbdCoreEndpointExists(uint8_t EpAddr)
 {
 	if (USB_ENDPADDR_NUM(EpAddr) == 0)
@@ -850,19 +936,19 @@ static bool UsbdCoreHandleSetInterface(void)
 	}
 
 	const int func = UsbdCoreFindFunction(interfaceNo);
-	if (func >= 0 && s_CoreFunc[func].SetInterfaceHandler != nullptr)
-	{
-		if (!s_CoreFunc[func].SetInterfaceHandler(interfaceNo, alternate,
-											 s_CoreFunc[func].pContext))
-		{
-			return false;
-		}
-	}
-	else if (alternate != 0)
+	if (func < 0 || s_CoreFunc[func].SetInterfaceHandler == nullptr)
 	{
 		return false;
 	}
 
+	const uint8_t oldAlternate = s_Alternate[interfaceNo];
+	if (!s_CoreFunc[func].SetInterfaceHandler(interfaceNo, alternate,
+											 s_CoreFunc[func].pContext))
+	{
+		return false;
+	}
+
+	UsbdCoreClearInterfaceHalt(interfaceNo, oldAlternate, alternate);
 	s_Alternate[interfaceNo] = alternate;
 	return UsbdCoreStartStatus();
 }

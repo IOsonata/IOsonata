@@ -120,8 +120,15 @@ typedef bool (*UsbdCoreConfigHandler_t)(uint8_t Configuration,
 /**
  * @brief Alternate-setting callback.
  *
- * The core tracks the selected alternate setting. The function validates and
- * applies a requested setting before the core acknowledges SET_INTERFACE.
+ * The function must discard outstanding transfers for InterfaceNo and
+ * reconfigure that interface's endpoints for Alternate before returning true.
+ * Reopened or reset endpoints must be left in their USB default state,
+ * including halt clear and DATA0 where a data toggle applies. The core updates
+ * its selected alternate and clears matching software halt state after the
+ * callback succeeds, then acknowledges SET_INTERFACE.
+ *
+ * A function that does not provide this callback does not accept
+ * SET_INTERFACE.
  */
 typedef bool (*UsbdCoreSetInterfaceHandler_t)(uint8_t InterfaceNo,
 											 uint8_t Alternate,
