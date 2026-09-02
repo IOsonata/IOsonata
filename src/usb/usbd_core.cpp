@@ -102,20 +102,70 @@ static const uint8_t *UsbdCoreGetDescriptor(uint8_t Type, uint8_t Index,
 								 pLength, s_CoreCfg.pDescContext);
 }
 
-static const uint8_t *UsbdCoreGetConfigByIndex(uint8_t Index,
-										uint16_t *pLength)
+static bool UsbdCoreValidateConfigDescriptor(const uint8_t *pDesc,
+											 uint16_t ProviderLength,
+											 uint8_t DescType,
+											 uint16_t *pLength)
 {
-	const uint8_t *pDesc = UsbdCoreGetDescriptor(USB_DESCTYPE_CONFIGURATION,
-												Index, 0, pLength);
+	if (pDesc == nullptr || pLength == nullptr ||
+		ProviderLength < USBD_CORE_CONFIG_DESC_LEN ||
+		pDesc[0] != USBD_CORE_CONFIG_DESC_LEN ||
+		pDesc[1] != DescType)
+	{
+		return false;
+	}
 
-	if (pDesc == nullptr || *pLength < USBD_CORE_CONFIG_DESC_LEN ||
-		pDesc[0] < USBD_CORE_CONFIG_DESC_LEN ||
-		pDesc[1] != USB_DESCTYPE_CONFIGURATION)
+	const uint16_t totalLength = (uint16_t)pDesc[2] |
+		((uint16_t)pDesc[3] << 8);
+	if (totalLength < USBD_CORE_CONFIG_DESC_LEN ||
+		totalLength > ProviderLength)
+	{
+		return false;
+	}
+
+	uint16_t ofs = 0;
+	while (ofs < totalLength)
+	{
+		if ((uint16_t)(ofs + 2U) > totalLength)
+		{
+			return false;
+		}
+
+		const uint8_t dlen = pDesc[ofs];
+		if (dlen < 2U || (uint16_t)(ofs + dlen) > totalLength)
+		{
+			return false;
+		}
+
+		ofs = (uint16_t)(ofs + dlen);
+	}
+
+	*pLength = totalLength;
+	return true;
+}
+
+static const uint8_t *UsbdCoreGetConfigDescriptor(uint8_t Type, uint8_t Index,
+												uint16_t *pLength)
+{
+	if (pLength == nullptr ||
+		(Type != USB_DESCTYPE_CONFIGURATION && Type != USB_DESCTYPE_OSC))
 	{
 		return nullptr;
 	}
 
-	return pDesc;
+	uint16_t providerLength;
+	const uint8_t *pDesc = UsbdCoreGetDescriptor(Type, Index, 0,
+												&providerLength);
+
+	return UsbdCoreValidateConfigDescriptor(pDesc, providerLength, Type,
+													 pLength) ? pDesc : nullptr;
+}
+
+static const uint8_t *UsbdCoreGetConfigByIndex(uint8_t Index,
+										uint16_t *pLength)
+{
+	return UsbdCoreGetConfigDescriptor(USB_DESCTYPE_CONFIGURATION, Index,
+												   pLength);
 }
 
 static uint8_t UsbdCoreConfigurationCount(void)
@@ -564,8 +614,15 @@ static bool UsbdCoreHandleGetDescriptor(void)
 	}
 
 	uint16_t len;
-	const uint8_t *pDesc = UsbdCoreGetDescriptor(type, index,
-											   s_Setup.wIndex, &len);
+	const uint8_t *pDesc;
+	if (type == USB_DESCTYPE_CONFIGURATION || type == USB_DESCTYPE_OSC)
+	{
+		pDesc = UsbdCoreGetConfigDescriptor(type, index, &len);
+	}
+	else
+	{
+		pDesc = UsbdCoreGetDescriptor(type, index, s_Setup.wIndex, &len);
+	}
 
 	if (pDesc == nullptr)
 	{
