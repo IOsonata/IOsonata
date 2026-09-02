@@ -284,9 +284,11 @@ static void UsbdCoreResetControl(void)
 	s_CtrlNeedZlp = false;
 }
 
+static void UsbdCoreAbortControl(void);
+
 static void UsbdCoreStallControl(void)
 {
-	UsbdCoreResetControl();
+	UsbdCoreAbortControl();
 	UsbdCtrlrEpStall(0);
 }
 
@@ -311,6 +313,16 @@ static bool UsbdCoreInvokeActive(UsbdCoreCtrlStage_t Stage,
 
 	return handler(&s_Setup, Stage, &pData, &len,
 				   s_CoreFunc[s_ActiveFunc].pContext);
+}
+
+static void UsbdCoreAbortControl(void)
+{
+	if (s_ActiveFunc >= 0 && s_ActiveFunc < s_CoreFuncCnt)
+	{
+		(void)UsbdCoreInvokeActive(USBD_CORE_CTRL_ABORT, s_CtrlActual);
+	}
+
+	UsbdCoreResetControl();
 }
 
 static bool UsbdCoreStartStatus(void)
@@ -358,7 +370,6 @@ static bool UsbdCoreStartIn(const uint8_t *pData, uint16_t Available)
 
 	if (!UsbdCtrlrEpXfer(USB_ENDPADDR_DIR_IN, s_CtrlData, sendLen))
 	{
-		UsbdCoreResetControl();
 		return false;
 	}
 
@@ -387,7 +398,6 @@ static bool UsbdCoreStartOut(uint8_t *pData, uint16_t Capacity)
 
 	if (!UsbdCtrlrEpXfer(USB_ENDPADDR_DIR_OUT, pData, s_Setup.wLength))
 	{
-		UsbdCoreResetControl();
 		return false;
 	}
 
@@ -860,7 +870,7 @@ static void UsbdCoreHandleSetup(const UsbSetupData_t *pSetup)
 		return;
 	}
 
-	UsbdCoreResetControl();
+	UsbdCoreAbortControl();
 	memcpy(&s_Setup, pSetup, sizeof(s_Setup));
 
 	const uint8_t type = s_Setup.bmRequestType & USB_REQTYPE_MASK_TYPE;
@@ -955,6 +965,8 @@ static void UsbdCoreNotifyReset(void)
 
 static void UsbdCoreResetDeviceState(bool NotifyFunctions)
 {
+	UsbdCoreAbortControl();
+
 	if (NotifyFunctions)
 	{
 		UsbdCoreNotifyReset();
@@ -965,7 +977,6 @@ static void UsbdCoreResetDeviceState(bool NotifyFunctions)
 	s_NumInterfaces = 0;
 	s_CoreSuspended = false;
 	UsbdCoreClearEndpointState();
-	UsbdCoreResetControl();
 }
 
 static void UsbdCoreCtrlrEvent(const UsbdCtrlrEvt_t *pEvt, void *)

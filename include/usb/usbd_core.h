@@ -59,12 +59,15 @@ SOFTWARE.
  *
  * SETUP asks a USB function to accept the request and provide its data buffer.
  * DATA is called after the data stage completes. COMPLETE is called when the
- * status stage has been accepted by the controller.
+ * status stage has been accepted by the controller. ABORT is called when an
+ * accepted request is terminated before COMPLETE by a new SETUP, reset, stop
+ * or control-transfer failure.
  */
 typedef enum __Usbd_Core_Ctrl_Stage {
 	USBD_CORE_CTRL_SETUP,
 	USBD_CORE_CTRL_DATA,
 	USBD_CORE_CTRL_COMPLETE,
+	USBD_CORE_CTRL_ABORT,
 } UsbdCoreCtrlStage_t;
 
 /**
@@ -91,7 +94,10 @@ typedef const uint8_t *(*UsbdCoreDescHandler_t)(uint8_t DescType,
  * - No-data request: ppData may be NULL and pLength zero.
  *
  * On USBD_CORE_CTRL_DATA, pLength is the number of bytes transferred. On
- * USBD_CORE_CTRL_COMPLETE it is the final data-stage length.
+ * USBD_CORE_CTRL_COMPLETE it is the final data-stage length. On
+ * USBD_CORE_CTRL_ABORT, pLength is the data-stage length completed before the
+ * abort when one was already reported; the callback should discard any staged
+ * request state. The ABORT return value is ignored.
  *
  * Callbacks execute from the USB interrupt and must remain bounded.
  */
