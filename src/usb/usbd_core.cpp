@@ -535,13 +535,20 @@ static bool UsbdCoreEndpointHalted(uint8_t EpAddr)
 
 static bool UsbdCoreHandleGetDescriptor(void)
 {
-	if (!UsbdCoreDirIn(&s_Setup))
+	if (!UsbdCoreDirIn(&s_Setup) ||
+		UsbdCoreRecipient(&s_Setup) != USB_REQTYPE_DEVICE)
 	{
 		return false;
 	}
 
 	const uint8_t type = (uint8_t)(s_Setup.wValue >> 8);
 	const uint8_t index = (uint8_t)s_Setup.wValue;
+
+	if (type != USB_DESCTYPE_STRING && s_Setup.wIndex != 0U)
+	{
+		return false;
+	}
+
 	uint16_t len;
 	const uint8_t *pDesc = UsbdCoreGetDescriptor(type, index,
 											   s_Setup.wIndex, &len);
@@ -602,6 +609,8 @@ static bool UsbdCoreHandleGetStatus(void)
 		{
 			const uint8_t epAddr = (uint8_t)s_Setup.wIndex;
 			if ((s_Setup.wIndex & 0xFF00U) != 0 ||
+				(epAddr & 0x70U) != 0U ||
+				(USB_ENDPADDR_NUM(epAddr) != 0U && s_Configuration == 0U) ||
 				!UsbdCoreEndpointExists(epAddr))
 			{
 				return false;
@@ -646,8 +655,8 @@ static bool UsbdCoreHandleFeature(bool Set)
 	{
 		const uint8_t epAddr = (uint8_t)s_Setup.wIndex;
 
-		if (USB_ENDPADDR_NUM(epAddr) == 0 || s_Configuration == 0 ||
-			!UsbdCoreEndpointExists(epAddr))
+		if ((epAddr & 0x70U) != 0U || USB_ENDPADDR_NUM(epAddr) == 0 ||
+			s_Configuration == 0 || !UsbdCoreEndpointExists(epAddr))
 		{
 			return false;
 		}
