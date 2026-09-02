@@ -530,7 +530,14 @@ static bool TestFunctionControl(void)
 {
 	CHECK(Fixture());
 	ClearCtrlrLog();
-	CHECK(SetAddress(2) && SetConfig(1));
+	CHECK(SetAddress(2));
+
+	s_Func.StageCnt = 0;
+	int stalls = s_Ctrlr.StallCnt;
+	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
+	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Func.StageCnt == 0);
+
+	CHECK(SetConfig(1));
 	s_Func.StageCnt = 0;
 
 	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
@@ -538,6 +545,17 @@ static bool TestFunctionControl(void)
 	Complete(EP0_IN, 0);
 	CHECK(s_Func.StageCnt == 2 &&
 		s_Func.Stage[1] == USBD_CORE_CTRL_COMPLETE);
+
+	// Keep the function registered for interface 0, but remove interface 0
+	// from the active descriptor. Dispatch must follow the descriptor.
+	s_Desc.Config[11] = 1;
+	s_Desc.Config[34] = 1;
+	s_Func.StageCnt = 0;
+	stalls = s_Ctrlr.StallCnt;
+	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
+	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Func.StageCnt == 0);
+	s_Desc.Config[11] = 0;
+	s_Desc.Config[34] = 0;
 
 	s_Func.StageCnt = 0;
 	Setup(CLASS_IF_OUT, CLASS_OUT_DATA, 0, 0, 4);

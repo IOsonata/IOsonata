@@ -1046,9 +1046,21 @@ static bool UsbdCoreHandleFunctionRequest(void)
 {
 	const uint8_t recipient = UsbdCoreRecipient(&s_Setup);
 
-	if (recipient == USB_REQTYPE_INTERFACE && s_Setup.wIndex <= 0xFFU)
+	if (recipient == USB_REQTYPE_INTERFACE)
 	{
-		const int func = UsbdCoreFindFunction((uint8_t)s_Setup.wIndex);
+		if (s_Configuration == 0 || s_Setup.wIndex > 0xFFU)
+		{
+			return false;
+		}
+
+		const uint8_t interfaceNo = (uint8_t)s_Setup.wIndex;
+		if (interfaceNo >= USBD_CORE_INTRF_MAXCNT ||
+			!UsbdCoreInterfaceExists(interfaceNo))
+		{
+			return false;
+		}
+
+		const int func = UsbdCoreFindFunction(interfaceNo);
 		return func >= 0 && UsbdCoreCallFunctionSetup(func);
 	}
 
