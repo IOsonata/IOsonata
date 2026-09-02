@@ -3,37 +3,42 @@
 
 @brief	Generic USB endpoint implementation of DeviceIntrf.
 
-IOsonata USB follows the same object-oriented architecture as UART, I2C, SPI,
-BLE and the other transports: DeviceIntrf is the central data-transfer
-abstraction. A UsbdIntrf instance represents one configured USB data endpoint
-interface. Endpoint address/direction, transfer type and maximum packet size
-are object state, just as a UART, I2C or SPI instance owns its hardware
-identity. DeviceIntrf DevAddr is not used to select a USB endpoint on each
-transfer.
+DeviceIntrf is the IOsonata data interface used by devices and applications.
+UsbdIntrf applies DeviceIntrf to a configured USB data endpoint. Endpoint
+address/direction, transfer type and maximum packet size (MPS) are instance
+state. DeviceIntrf DevAddr is not used to select an endpoint on each transfer.
 
-UsbdCore is the USB protocol/control plane: endpoint zero, Chapter 9 requests,
-descriptors, configuration and class/vendor dispatch. UsbdCtrlr is the
-hardware-facing controller backend. Neither replaces DeviceIntrf as the data
-interface used by devices and applications.
+UsbdCore handles endpoint zero, Chapter 9 requests, descriptors,
+configuration and class/vendor dispatch. UsbdCtrlr handles endpoint registers,
+DMA/FIFO access and controller interrupts.
 
-Do not infer the IOsonata data model from controller DMA details. Endpoint
-FIFO/storage state and temporary DMA transfer storage are different concepts.
-TX may copy queued bytes into a packet-sized temporary DMA buffer because an
-IN transfer remains asynchronous. RX may use controller-specific zero-copy
-into endpoint-owned writable receive storage when safe because an OUT packet
-has already arrived before software drains it. The exact RX storage/DMA
-strategy, including the current packet-slot implementation, is an
-implementation detail rather than the architecture contract.
+RX handling is packet based. USB hardware reports one received packet at a
+time and the complete packet is retrieved in one operation. RX storage uses
+one packet block per received USB packet. Packet block capacity is based on
+the endpoint MPS; the stored packet length is the actual received data length.
+DeviceIntrfRx() may consume across packet blocks and present a byte stream.
 
-USB is packet-oriented below UsbdIntrf while DeviceIntrf may expose stream
-semantics above it. Packet size is the endpoint's configured maximum packet
-size (MPS); generic code must not assume 64 bytes, a particular USB speed, or
-a particular controller.
+TX buffering is selected by CFifo block size. BlkSize 1 provides byte-stream
+accumulation before packetization up to the endpoint MPS. Packet-oriented
+interfaces may use packet-sized blocks. USB transfer type and CFifo block size
+are separate settings; the USB function/class configuration selects the TX
+buffering required by the data interface.
+
+CFifo memory is supplied by UsbdIntrfCfg_t. Endpoint MPS determines the RX
+packet block size. Port maximum packet-size definitions may be used by static
+allocation macros so the configuration reserves sufficient memory.
+
+Controller DMA storage and CFifo storage are separate. TX may require a
+temporary packet-sized DMA buffer while an IN transfer is active. RX may DMA
+directly into packet storage when the controller permits it.
+
+Generic code must not assume a 64-byte packet, a specific USB speed, or a
+specific controller.
 
 There is no DTR style gating in this generic interface. A class adapter may
 enable or disable RX acceptance with UsbdIntrfRxEnable(). USB OUT flow control
-is lossless: when receive storage is full the endpoint is simply left unarmed
-so the host is backpressured by USB.
+is lossless: when receive storage is full the endpoint is left unarmed so the
+host is backpressured by USB.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 1, 2026

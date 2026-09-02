@@ -4,15 +4,15 @@
 @brief	USB device controller hardware backend.
 
 This is the internal hardware-facing boundary below UsbdIntrf and UsbdCore. It
-is not the application data abstraction. DeviceIntrf remains the IOsonata
-transport interface seen by devices and applications; UsbdIntrf adapts a USB
-data endpoint to that model. Controller implementations own endpoint
-registers, DMA/FIFO handling and the USB interrupt.
+is not the application data interface. DeviceIntrf is the IOsonata data
+interface used by devices and applications; UsbdIntrf applies it to a USB data
+endpoint. Controller implementations handle endpoint registers, DMA/FIFO
+access and the USB interrupt.
 
-Buffers passed through this interface are controller-facing transfer storage
-chosen by the upper USB layer, such as a UsbdIntrf temporary DMA packet buffer
-or endpoint-zero control storage. Their DMA ownership must not be confused
-with DeviceIntrf application-buffer or CFifo semantics.
+Buffers passed through this interface are controller transfer storage supplied
+by the upper USB layer, such as a UsbdIntrf temporary DMA packet buffer or
+endpoint-zero control storage. DMA storage, DeviceIntrf caller buffers and
+CFifo storage are separate.
 
 No controller-specific type is exposed here. A Nordic USBD peripheral, a DWC2
 core or another USB device controller implements the same interface.
@@ -189,12 +189,11 @@ void UsbdCtrlrEpCloseAll(void);
  * TotalBytes is the logical transfer length, not a controller DMA or FIFO
  * transaction limit. A backend must split the request into hardware-sized
  * operations as required by the endpoint and controller. pBuffer is
- * controller-facing transfer storage supplied by the upper USB layer. On the
- * normal path it must remain valid until USBD_CTRLR_EVT_XFER_CMPL. This is an
- * internal USB backend contract and must not be interpreted as the lifetime
- * of a DeviceIntrf caller buffer or CFifo data. A zero length transfer is
- * valid. Only one transfer may be outstanding on an endpoint direction at a
- * time.
+ * controller transfer storage supplied by the upper USB layer. On the normal
+ * path it must remain valid until USBD_CTRLR_EVT_XFER_CMPL. This lifetime
+ * applies to the controller transfer storage, not a DeviceIntrf caller buffer
+ * or CFifo data. A zero length transfer is valid. Only one transfer may be
+ * outstanding on an endpoint direction at a time.
  */
 bool UsbdCtrlrEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes);
 
