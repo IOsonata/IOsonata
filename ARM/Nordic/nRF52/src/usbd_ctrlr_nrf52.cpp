@@ -11,8 +11,9 @@ Only control, bulk and interrupt endpoints are implemented here. Isochronous
 support is intentionally left out of the first USB milestone.
 
 The nRF52840 has one USBD EasyDMA engine shared by all endpoints. Pending DMA
-work is kept as endpoint bit masks. Control tasks are serviced first, then OUT
-endpoints, then IN endpoints so a ready OUT endpoint is rearmed promptly.
+work is kept as endpoint bit masks and started only from USBD_IRQHandler.
+Control tasks are serviced first, then OUT endpoints, then IN endpoints so a
+ready OUT endpoint is rearmed promptly.
 
 Errata 199 is applied around every EasyDMA task.
 
@@ -198,6 +199,8 @@ static void nRFUsbdDmaRelease(void)
 
 static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 {
+	volatile uint32_t *pEndEvent = nRFUsbdDmaEndEvent(EpAddr);
+
 	if (nrf52_errata_199())
 	{
 		NRFX_USBD_ERRATA_199_REG = 0x00000082UL;
@@ -207,6 +210,14 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 	*pTask = 1;
 	__ISB();
 	__DSB();
+
+	// Keep unrelated USBD register traffic from overlapping shared EasyDMA.
+	// The transfer stays inside the USBD interrupt and waits only on its ENDEP
+	// event. The following IRQ pass clears the event and releases the scheduler
+	// so endpoint completion keeps its normal ordering.
+	while (*pEndEvent == 0U)
+	{
+	}
 }
 
 static void nRFUsbdDmaWait(void)
@@ -368,25 +379,25 @@ static void nRFUsbdServicePending(void)
 static void nRFUsbdQueueOut(uint8_t EpNum)
 {
 	atomic_fetch_or(&s_PendingOut, (uint_fast16_t)(1U << EpNum));
-	nRFUsbdServicePending();
+	NVIC_SetPendingIRQ(USBD_IRQn);
 }
 
 static void nRFUsbdQueueIn(uint8_t EpNum)
 {
 	atomic_fetch_or(&s_PendingIn, (uint_fast16_t)(1U << EpNum));
-	nRFUsbdServicePending();
+	NVIC_SetPendingIRQ(USBD_IRQn);
 }
 
 static void nRFUsbdQueueEp0Status(void)
 {
 	atomic_store(&s_PendingEp0Status, true);
-	nRFUsbdServicePending();
+	NVIC_SetPendingIRQ(USBD_IRQn);
 }
 
 static void nRFUsbdQueueEp0RcvOut(void)
 {
 	atomic_store(&s_PendingEp0RcvOut, true);
-	nRFUsbdServicePending();
+	NVIC_SetPendingIRQ(USBD_IRQn);
 }
 
 static void nRFUsbdResetState(void)
@@ -1048,44 +1059,6 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 
 	if (pXfer->ActualLen < pXfer->TotalLen)
 	{
-		if (EpNum > 0U)
-		{
-			const uint8_t epAddr =
-				(uint8_t)(EpNum | USB_ENDPADDR_DIR_IN);
-
-			// ENDEPIN can assert after the IRQ event snapshot. If EPDATA says
-			// the host already consumed this packet, retire a late DMA end now
-			// so the next packet does not wait for another interrupt.
-			if ((uint8_t)atomic_load(&s_DmaEpAddr) == epAddr &&
-				NRF_USBD->EVENTS_ENDEPIN[EpNum] != 0U)
-			{
-				NRF_USBD->EVENTS_ENDEPIN[EpNum] = 0U;
-				__ISB();
-				__DSB();
-				nRFUsbdDmaRelease();
-			}
-
-			// Continue the common Bulk IN stream immediately when EasyDMA is
-			// free and no higher-priority or competing endpoint work is queued.
-			// Otherwise leave arbitration to the generic scheduler.
-			if (!atomic_flag_test_and_set(&s_DmaRunning))
-			{
-				if (!atomic_load(&s_HostResumePending) &&
-					!(atomic_load(&s_BusSuspended) &&
-					  !atomic_load(&s_SuspendPending)) &&
-					!atomic_load(&s_PendingEp0Status) &&
-					!atomic_load(&s_PendingEp0RcvOut) &&
-					atomic_load(&s_PendingOut) == 0U &&
-					atomic_load(&s_PendingIn) == 0U &&
-					nRFUsbdStartInDmaNow(EpNum))
-				{
-					return;
-				}
-
-				atomic_flag_clear(&s_DmaRunning);
-			}
-		}
-
 		nRFUsbdQueueIn(EpNum);
 	}
 	else
@@ -1101,6 +1074,9 @@ static void nRFUsbdIrqHandler(void)
 	const uint32_t intStatus = nRFUsbdCollectEvents();
 	if (intStatus == 0)
 	{
+		// Queueing from application context raises a software USBD interrupt.
+		// It has no peripheral event but must still start the pending DMA.
+		nRFUsbdServicePending();
 		return;
 	}
 

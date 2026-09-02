@@ -2,6 +2,7 @@ ROOT := ../..
 BUILD_DIR := build
 TARGET := $(BUILD_DIR)/usbd_core_test
 INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
+NRF52_TARGET := $(BUILD_DIR)/usbd_ctrlr_nrf52_test
 
 CXX ?= g++
 OPT ?= -O1
@@ -35,6 +36,10 @@ INTRF_SOURCES := \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
+NRF52_SOURCES := \
+	usbd_ctrlr_nrf52_test.cpp \
+	$(ROOT)/ARM/Nordic/nRF52/src/usbd_ctrlr_nrf52.cpp
+
 HEADERS := \
 	$(ROOT)/include/usb/usbd.h \
 	$(ROOT)/include/usb/usb_def.h \
@@ -45,9 +50,10 @@ HEADERS := \
 
 all: test
 
-test: $(TARGET) $(INTRF_TARGET)
+test: $(TARGET) $(INTRF_TARGET) $(NRF52_TARGET)
 	$(TEST_ENV) ./$(TARGET)
 	$(TEST_ENV) ./$(INTRF_TARGET)
+	$(TEST_ENV) ./$(NRF52_TARGET)
 
 test-gcc:
 	$(MAKE) clean
@@ -68,6 +74,11 @@ $(INTRF_TARGET): $(INTRF_SOURCES) $(ROOT)/include/usb/usb_intrf.h
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$(INTRF_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(NRF52_TARGET): $(NRF52_SOURCES) $(ROOT)/include/usb/usbd_ctrlr.h
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) -Inrf52_stub $(CXXFLAGS) $(SANITIZERS) \
+		$(NRF52_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS) -pthread
 
 clean:
 	rm -rf $(BUILD_DIR)
