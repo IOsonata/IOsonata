@@ -5,8 +5,8 @@
 
 The target must run exemples/usb/usb_cdc_loopback.cpp. The test continuously
 writes a PRBS byte stream while reading the echoed stream on a second thread
-of execution. Concurrent traffic keeps both CDC OUT and IN active and allows
-USB backpressure to propagate naturally without losing host-side accounting.
+of execution. Concurrent traffic keeps both CDC OUT and IN active and avoids
+host-side deadlock when either USB direction applies backpressure.
 
 @param  --port       CDC serial port
         --baud       CDC line coding value (default 1000000)
@@ -120,7 +120,7 @@ def parse_args():
         help="throughput report interval in seconds (default: 1)")
     parser.add_argument(
         "--drain-timeout", type=float, default=3.0,
-        help="time to drain the final echo in seconds (default: 3)")
+        help="time to wait for the final echo in seconds (default: 3)")
     return parser.parse_args()
 
 
@@ -162,25 +162,21 @@ def writer(comm, stop_event, stats, block_size):
     state = 0xff
     pending = b""
 
-    try:
-        while not stop_event.is_set():
-            if not pending:
-                pending, state = make_prbs_block(state, block_size)
+    while not stop_event.is_set():
+        if not pending:
+            pending, state = make_prbs_block(state, block_size)
 
-            # write_timeout=0 makes this a non-blocking host write. pySerial
-            # returns the exact number of bytes accepted by the OS, including
-            # a short write or zero when USB OUT is backpressured.
+        try:
             count = comm.write(pending)
+        except (OSError, serial.SerialException,
+                serial.SerialTimeoutException) as error:
+            stats.set_write_error(str(error))
+            stop_event.set()
+            return
 
-            if count > 0:
-                stats.add_tx(count)
-                pending = pending[count:]
-            else:
-                # Avoid spinning at 100% CPU while the device is applying
-                # legitimate USB OUT backpressure.
-                time.sleep(0)
-    except (OSError, serial.SerialException) as error:
-        stats.set_write_error(str(error))
+        if count > 0:
+            stats.add_tx(count)
+            pending = pending[count:]
 
 
 def check_data(data, expected):
@@ -197,35 +193,25 @@ def check_data(data, expected):
     return expected, errors
 
 
-def read_and_check(comm, stats, expected, read_size):
-    data = comm.read(read_size)
-
-    if data:
-        expected, errors = check_data(data, expected)
-        stats.add_rx(len(data), errors)
-
-    return expected
-
-
-def print_report(stats, now, previous_time, previous_rx):
+def print_report(stats, now, previous_time, previous_tx, previous_rx):
     tx_bytes, rx_bytes, errors, _ = stats.snapshot()
     elapsed = now - previous_time
-    rate = (rx_bytes - previous_rx) / elapsed if elapsed > 0 else 0.0
+    tx_rate = (tx_bytes - previous_tx) / elapsed if elapsed > 0 else 0.0
+    rx_rate = (rx_bytes - previous_rx) / elapsed if elapsed > 0 else 0.0
     pending = tx_bytes - rx_bytes
 
-    print("Bytes/sec : %.2f, errors %d, pending %d" %
-          (rate, errors, pending))
+    print("Tx B/s : %.2f, Rx B/s : %.2f, errors %d, pending %d" %
+          (tx_rate, rx_rate, errors, pending))
 
-    return now, rx_bytes
+    return now, tx_bytes, rx_bytes
 
 
 def main():
     args = parse_args()
 
-    if (args.duration <= 0 or args.block <= 0 or args.read_size <= 0 or
-            args.report <= 0 or args.drain_timeout <= 0):
-        print("ERROR: duration, block, read-size, report and drain-timeout "
-              "must be greater than zero", file=sys.stderr)
+    if args.duration <= 0 or args.block <= 0 or args.read_size <= 0:
+        print("ERROR: duration, block and read-size must be greater than zero",
+              file=sys.stderr)
         return 2
 
     try:
@@ -233,11 +219,7 @@ def main():
             port=args.port,
             baudrate=args.baud,
             timeout=0.1,
-            # Non-blocking writes are required here. They let the writer
-            # observe short/zero writes under USB backpressure and keep exact
-            # byte accounting without the partial-write ambiguity of
-            # SerialTimeoutException.
-            write_timeout=0,
+            write_timeout=1.0,
             rtscts=False,
             dsrdtr=False)
     except (OSError, serial.SerialException) as error:
@@ -264,34 +246,37 @@ def main():
         start_time = time.monotonic()
         end_time = start_time + args.duration
         report_time = start_time
+        report_tx = 0
         report_rx = 0
 
         tx_thread.start()
 
         try:
-            while time.monotonic() < end_time:
-                expected = read_and_check(
-                    comm, stats, expected, args.read_size)
+            while time.monotonic() < end_time and not stop_event.is_set():
+                data = comm.read(args.read_size)
+
+                if data:
+                    expected, errors = check_data(data, expected)
+                    stats.add_rx(len(data), errors)
 
                 now = time.monotonic()
                 if now - report_time >= args.report:
-                    report_time, report_rx = print_report(
-                        stats, now, report_time, report_rx)
+                    report_time, report_tx, report_rx = print_report(
+                        stats, now, report_time, report_tx, report_rx)
         except KeyboardInterrupt:
             print("KeyboardInterrupt. Stopping test.")
 
-        # Non-blocking writes let the writer stop immediately without
-        # cancelling an in-progress OS write.
         stop_event.set()
-        active_end = time.monotonic()
-        _, active_rx, _, _ = stats.snapshot()
-        tx_thread.join(timeout=1.0)
+        tx_thread.join(timeout=1.5)
 
         if tx_thread.is_alive():
             stats.set_write_error("writer did not stop")
 
-        # tx_bytes is now final. Drain every byte accepted by the host serial
-        # driver and verify the exact byte count.
+        active_end = time.monotonic()
+        active_tx, active_rx, _, _ = stats.snapshot()
+
+        # The writer has stopped. Drain every byte that was accepted by the
+        # host serial driver so the final result also verifies byte counts.
         drain_deadline = time.monotonic() + args.drain_timeout
 
         while time.monotonic() < drain_deadline:
@@ -300,18 +285,22 @@ def main():
             if rx_bytes >= tx_bytes:
                 break
 
-            expected = read_and_check(
-                comm, stats, expected, args.read_size)
+            data = comm.read(args.read_size)
+            if data:
+                expected, errors = check_data(data, expected)
+                stats.add_rx(len(data), errors)
 
         tx_bytes, rx_bytes, errors, write_error = stats.snapshot()
         elapsed = active_end - start_time
-        rate = active_rx / elapsed if elapsed > 0 else 0.0
+        tx_rate = active_tx / elapsed if elapsed > 0 else 0.0
+        rx_rate = active_rx / elapsed if elapsed > 0 else 0.0
         pending = tx_bytes - rx_bytes
 
         print()
         print("TX bytes       : %d" % tx_bytes)
         print("RX bytes       : %d" % rx_bytes)
-        print("Loopback B/sec : %.2f" % rate)
+        print("TX B/sec       : %.2f" % tx_rate)
+        print("RX B/sec       : %.2f" % rx_rate)
         print("Errors         : %d" % errors)
         print("Pending        : %d" % pending)
 
