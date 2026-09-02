@@ -12,21 +12,26 @@ UsbdCore handles endpoint zero, Chapter 9 requests, descriptors,
 configuration and class/vendor dispatch. UsbdCtrlr handles endpoint registers,
 DMA/FIFO access and controller interrupts.
 
-RX handling is packet based. USB hardware reports one received packet at a
-time and the complete packet is retrieved in one operation. RX storage uses
-one packet block per received USB packet. Packet block capacity is based on
-the endpoint MPS; the stored packet length is the actual received data length.
-DeviceIntrfRx() may consume across packet blocks and present a byte stream.
+RX uses packet-mode CFifo storage. USB hardware reports one received packet at
+a time and the complete packet is retrieved in one operation. Each RX CFifo
+block contains UsbPktHdr_t followed by storage for one endpoint packet. Block
+size is based on sizeof(UsbPktHdr_t) plus the endpoint MPS. UsbPktHdr_t.Length
+is the actual received data length and may be from zero to MPS. DeviceIntrfRx()
+may consume across packet blocks and present a byte stream.
 
-TX buffering is selected by CFifo block size. BlkSize 1 provides byte-stream
-accumulation before packetization up to the endpoint MPS. Packet-oriented
-interfaces may use packet-sized blocks. USB transfer type and CFifo block size
-are separate settings; the USB function/class configuration selects the TX
-buffering required by the data interface.
+TX CFifo mode is selected by block size. BlkSize 1 provides byte-stream
+accumulation and UsbdIntrf packetizes queued bytes up to the endpoint MPS. In
+packet mode, each CFifo block contains UsbPktHdr_t followed by storage for one
+endpoint packet. The caller splits its data into USB packets and pushes one
+CFifo block per packet. UsbPktHdr_t.Length is the actual packet data length and
+may be from zero to MPS. UsbdIntrf sends the stored packet length without
+combining packet blocks. USB transfer type and CFifo block size are separate
+settings.
 
 CFifo memory is supplied by UsbdIntrfCfg_t. Endpoint MPS determines the RX
-packet block size. Port maximum packet-size definitions may be used by static
-allocation macros so the configuration reserves sufficient memory.
+packet block size and the TX packet-mode block size. Port maximum packet-size
+definitions may be used by static allocation macros so the configuration
+reserves sufficient memory.
 
 Controller DMA storage and CFifo storage are separate. TX may require a
 temporary packet-sized DMA buffer while an IN transfer is active. RX may DMA
