@@ -1064,6 +1064,24 @@ static bool UsbdCoreHandleFunctionRequest(void)
 		return func >= 0 && UsbdCoreCallFunctionSetup(func);
 	}
 
+	if (recipient == USB_REQTYPE_ENDPOINT)
+	{
+		if (s_Configuration == 0 || (s_Setup.wIndex & 0xFF00U) != 0)
+		{
+			return false;
+		}
+
+		const uint8_t epAddr = (uint8_t)s_Setup.wIndex;
+		if ((epAddr & 0x70U) != 0U || USB_ENDPADDR_NUM(epAddr) == 0U ||
+			!UsbdCoreEndpointExists(epAddr))
+		{
+			return false;
+		}
+
+		const int func = UsbdCoreFindEndpointFunction(epAddr);
+		return func >= 0 && UsbdCoreCallFunctionSetup(func);
+	}
+
 	for (int i = 0; i < s_CoreFuncCnt; i++)
 	{
 		if (UsbdCoreCallFunctionSetup(i))

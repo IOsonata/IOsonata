@@ -52,6 +52,7 @@ SOFTWARE.
 #define STD_IF_IN		0x81U
 #define STD_EP_IN		0x82U
 #define CLASS_IF_OUT	0x21U
+#define CLASS_EP_OUT	0x22U
 
 #define CLASS_NO_DATA	0x40U
 #define CLASS_OUT_DATA	0x41U
@@ -537,6 +538,10 @@ static bool TestFunctionControl(void)
 	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
 	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Func.StageCnt == 0);
 
+	stalls = s_Ctrlr.StallCnt;
+	Setup(CLASS_EP_OUT, CLASS_NO_DATA, 0, EP1_OUT, 0);
+	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Func.StageCnt == 0);
+
 	CHECK(SetConfig(1));
 	s_Func.StageCnt = 0;
 
@@ -545,6 +550,18 @@ static bool TestFunctionControl(void)
 	Complete(EP0_IN, 0);
 	CHECK(s_Func.StageCnt == 2 &&
 		s_Func.Stage[1] == USBD_CORE_CTRL_COMPLETE);
+
+	s_Func.StageCnt = 0;
+	Setup(CLASS_EP_OUT, CLASS_NO_DATA, 0, EP1_OUT, 0);
+	CHECK(s_Func.StageCnt == 1 && s_Func.Stage[0] == USBD_CORE_CTRL_SETUP);
+	Complete(EP0_IN, 0);
+	CHECK(s_Func.StageCnt == 2 &&
+		s_Func.Stage[1] == USBD_CORE_CTRL_COMPLETE);
+
+	s_Func.StageCnt = 0;
+	stalls = s_Ctrlr.StallCnt;
+	Setup(CLASS_EP_OUT, CLASS_NO_DATA, 0, EP2_IN, 0);
+	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Func.StageCnt == 0);
 
 	// Keep the function registered for interface 0, but remove interface 0
 	// from the active descriptor. Dispatch must follow the descriptor.
