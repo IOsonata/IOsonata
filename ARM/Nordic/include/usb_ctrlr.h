@@ -17,8 +17,9 @@ statically, before any endpoint is configured and without calling into the
 stack.
 
 Controller numbering starts at zero and matches the CtrlrNo argument of the
-USB API. Because the accessor macros paste their arguments, CtrlrNo and
-TransType must be literal tokens, not variables.
+USB API. The accessor macros expand named constants before pasting their
+arguments. The expanded CtrlrNo and TransType still have to be compile-time
+tokens, not variables or expressions.
 
 Packet lengths are allocation bounds: the largest packet the controller can
 move on that transfer type at the fastest speed it supports. The value an
@@ -70,19 +71,24 @@ SOFTWARE.
   */
 
 /// Maximum packet length in bytes for one controller and transfer type.
-#define USB_PKT_MAXLEN(CtrlrNo, TransType)	USB_PKT_MAXLEN_##CtrlrNo##_##TransType
+#define USB_PKT_MAXLEN_(CtrlrNo, TransType)	USB_PKT_MAXLEN_##CtrlrNo##_##TransType
+#define USB_PKT_MAXLEN(CtrlrNo, TransType)	USB_PKT_MAXLEN_(CtrlrNo, TransType)
 
 /// IN endpoint numbers, including endpoint zero.
-#define USB_EPIN_CNT(CtrlrNo)				USB_EPIN_CNT_##CtrlrNo
+#define USB_EPIN_CNT_(CtrlrNo)				USB_EPIN_CNT_##CtrlrNo
+#define USB_EPIN_CNT(CtrlrNo)				USB_EPIN_CNT_(CtrlrNo)
 
 /// OUT endpoint numbers, including endpoint zero.
-#define USB_EPOUT_CNT(CtrlrNo)				USB_EPOUT_CNT_##CtrlrNo
+#define USB_EPOUT_CNT_(CtrlrNo)				USB_EPOUT_CNT_##CtrlrNo
+#define USB_EPOUT_CNT(CtrlrNo)				USB_EPOUT_CNT_(CtrlrNo)
 
 /// Nonzero when the controller can enumerate at high speed.
-#define USB_HIGHSPEED_CAPABLE(CtrlrNo)		USB_HIGHSPEED_CAPABLE_##CtrlrNo
+#define USB_HIGHSPEED_CAPABLE_(CtrlrNo)		USB_HIGHSPEED_CAPABLE_##CtrlrNo
+#define USB_HIGHSPEED_CAPABLE(CtrlrNo)		USB_HIGHSPEED_CAPABLE_(CtrlrNo)
 
 /// Nonzero when this port drives the controller's isochronous endpoints.
-#define USB_ISO_SUPPORTED(CtrlrNo)			USB_ISO_SUPPORTED_##CtrlrNo
+#define USB_ISO_SUPPORTED_(CtrlrNo)			USB_ISO_SUPPORTED_##CtrlrNo
+#define USB_ISO_SUPPORTED(CtrlrNo)			USB_ISO_SUPPORTED_(CtrlrNo)
 
 #if defined(USBD_PRESENT)
 
