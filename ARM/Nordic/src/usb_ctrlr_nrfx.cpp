@@ -63,8 +63,6 @@ SOFTWARE.
 
 #include "usb/usb.h"
 
-#include "usb_ctrlr.h"			// Port supplied, describes this target
-
 #if !defined(USBD_PRESENT) && !defined(USBHS_PRESENT)
 #error "usb_ctrlr_nrfx: this part has no USB controller"
 #endif
@@ -3307,6 +3305,44 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 void UsbCtrlrEpCloseAll(int DevNo)
 {
 	if (nRFUsbValidDevNo(DevNo)) { nRFUsbRegEpCloseAll(); }
+}
+
+void UsbCtrlrGetDebug(int DevNo, UsbCtrlrDebug_t *pDebug)
+{
+	if (pDebug == NULL)
+	{
+		return;
+	}
+
+	memset(pDebug, 0, sizeof(*pDebug));
+
+	if (!nRFUsbValidDevNo(DevNo))
+	{
+		return;
+	}
+
+	// s_DmaRunning is an atomic_flag, which has no load. Testing it would set
+	// it, so the claimed endpoint stands in: it is NRFX_USBD_DMA_EP_NONE
+	// exactly while no transfer holds the engine.
+	const uint8_t dmaEp = (uint8_t)atomic_load(&s_DmaEpAddr);
+
+	pDebug->DmaEpAddr = dmaEp;
+	pDebug->DmaBusy = dmaEp != NRFX_USBD_DMA_EP_NONE ? 1U : 0U;
+	pDebug->PendingIn = (uint32_t)atomic_load(&s_PendingIn);
+	pDebug->PendingOut = (uint32_t)atomic_load(&s_PendingOut);
+	pDebug->EpDataStatus = NRF_USBD->EPDATASTATUS;
+
+	for (uint8_t i = 0; i < NRFX_USBD_EP_COUNT; i++)
+	{
+		if (s_Ctrlr.Xfer[i][0].Started)
+		{
+			pDebug->XferStarted |= 1UL << i;
+		}
+		if (s_Ctrlr.Xfer[i][1].Started)
+		{
+			pDebug->XferStarted |= 1UL << (i + 16);
+		}
+	}
 }
 
 bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,

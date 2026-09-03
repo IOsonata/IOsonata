@@ -150,7 +150,7 @@ static void UsbIntrfTxFailure(UsbDevIntrf_t *pIntrf, uint16_t Length)
 
 static int UsbIntrfFillPacket(UsbDevIntrf_t *pIntrf)
 {
-	if (CFifoBlockSize(pIntrf->hTxFifo) != 1U)
+	if (pIntrf->TxBlkSize != 1U)
 	{
 		UsbPktHdr_t *pPacket = reinterpret_cast<UsbPktHdr_t *>(
 			CFifoPeek(pIntrf->hTxFifo));
@@ -197,7 +197,7 @@ static bool UsbIntrfSubmit(UsbDevIntrf_t *pIntrf, bool Tail)
 {
 	const int used = CFifoUsed(pIntrf->hTxFifo);
 	int length = 0;
-	const bool packetMode = CFifoBlockSize(pIntrf->hTxFifo) != 1U;
+	const bool packetMode = pIntrf->TxBlkSize != 1U;
 
 	if ((packetMode && used > 0) ||
 		(!packetMode && (used >= (int)pIntrf->TxMps || (Tail && used > 0))))
@@ -369,47 +369,38 @@ static bool UsbIntrfStartTx(DevIntrf_t * const, uint32_t)
 	return true;
 }
 
-static int UsbIntrfTxData(DevIntrf_t * const pDevIntrf,
-						   const uint8_t *pData, int DataLen)
+/**
+ * Packet mode write. Each CFifo block is one USB packet, so the caller passes
+ * whole blocks and every stored length is checked before anything is queued.
+ * Kept out of UsbIntrfTxData so byte mode does not pay for any of it.
+ */
+static int UsbIntrfTxPackets(UsbDevIntrf_t *pIntrf,
+							 const uint8_t *pData, int DataLen)
 {
-	UsbDevIntrf_t *pIntrf = UsbIntrfData(pDevIntrf);
+	const uint32_t blockSize = pIntrf->TxBlkSize;
 
-	if (pIntrf == nullptr || pData == nullptr || DataLen <= 0)
+	if (blockSize != sizeof(UsbPktHdr_t) + pIntrf->TxMps ||
+		(DataLen % (int)blockSize) != 0)
 	{
 		return 0;
 	}
 
-	// CFifoPutMultiple publishes its producer index before memcpy fills the
-	// returned area. Keep the USB completion consumer out until publication is
-	// complete.
-	uint32_t state = DisableInterrupt();
-	int cnt = 0;
-
-	const uint32_t blockSize = CFifoBlockSize(pIntrf->hTxFifo);
-	if (blockSize != 1U &&
-		(blockSize != sizeof(UsbPktHdr_t) + pIntrf->TxMps ||
-		 (DataLen % (int)blockSize) != 0))
+	for (int offset = 0; offset < DataLen; offset += (int)blockSize)
 	{
-		EnableInterrupt(state);
-		return 0;
-	}
-	if (blockSize != 1U)
-	{
-		for (int offset = 0; offset < DataLen; offset += (int)blockSize)
+		const UsbPktHdr_t *pPacket =
+			reinterpret_cast<const UsbPktHdr_t *>(pData + offset);
+		if (pPacket->Length > pIntrf->TxMps)
 		{
-			const UsbPktHdr_t *pPacket =
-				reinterpret_cast<const UsbPktHdr_t *>(pData + offset);
-			if (pPacket->Length > pIntrf->TxMps)
-			{
-				EnableInterrupt(state);
-				return 0;
-			}
+			return 0;
 		}
 	}
 
+	uint32_t state = DisableInterrupt();
+	int cnt = 0;
+
 	while (DataLen > 0)
 	{
-		int blocks = blockSize == 1U ? DataLen : DataLen / (int)blockSize;
+		int blocks = DataLen / (int)blockSize;
 		uint8_t *p = CFifoPutMultiple(pIntrf->hTxFifo, &blocks);
 		if (p == nullptr || blocks <= 0)
 		{
@@ -427,11 +418,61 @@ static int UsbIntrfTxData(DevIntrf_t * const pDevIntrf,
 
 	if (cnt > 0 && pIntrf->TxMps > 0U)
 	{
+		(void)UsbIntrfStartXfer(pIntrf, CFifoUsed(pIntrf->hTxFifo) == cnt);
+	}
+
+	return cnt;
+}
+
+static int UsbIntrfTxData(DevIntrf_t * const pDevIntrf,
+						   const uint8_t *pData, int DataLen)
+{
+	UsbDevIntrf_t *pIntrf = UsbIntrfData(pDevIntrf);
+
+	if (pIntrf == nullptr || pData == nullptr || DataLen <= 0)
+	{
+		return 0;
+	}
+
+	// CFifoPutMultiple publishes its producer index before memcpy fills the
+	// returned area. Keep the USB completion consumer out until publication is
+	// complete.
+	const uint32_t blockSize = pIntrf->TxBlkSize;
+
+	// Byte mode is the CDC path and runs once per DeviceIntrfTx call, so a
+	// one byte write walks it. Packet mode validation stays out of it.
+	if (blockSize != 1U)
+	{
+		return UsbIntrfTxPackets(pIntrf, pData, DataLen);
+	}
+
+	uint32_t state = DisableInterrupt();
+	int cnt = 0;
+
+	while (DataLen > 0)
+	{
+		int length = DataLen;
+		uint8_t *p = CFifoPutMultiple(pIntrf->hTxFifo, &length);
+		if (p == nullptr || length <= 0)
+		{
+			break;
+		}
+
+		memcpy(p, pData, (size_t)length);
+		pData += length;
+		DataLen -= length;
+		cnt += length;
+	}
+
+	EnableInterrupt(state);
+
+	if (cnt > 0 && pIntrf->TxMps > 0U)
+	{
 		const int used = CFifoUsed(pIntrf->hTxFifo);
 
 		// An empty FIFO starts immediately. While an earlier USB transaction is
 		// active, the producer only queues; completion drains full packets.
-		if (blockSize != 1U || used >= (int)pIntrf->TxMps || used == cnt)
+		if (used >= (int)pIntrf->TxMps || used == cnt)
 		{
 			(void)UsbIntrfStartXfer(pIntrf, used == cnt);
 		}
@@ -492,6 +533,9 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 
 	pIntrf->DevNo = pCfg->DevNo;
 	pIntrf->hTxFifo = hTxFifo;
+	// Fixed for the life of the FIFO, so it is read once here instead of on
+	// every transmit call. Byte mode runs once per byte on the CDC path.
+	pIntrf->TxBlkSize = (uint16_t)CFifoBlockSize(hTxFifo);
 	pIntrf->pRxMem = pCfg->pRxFifoMem;
 	pIntrf->RxMemSize = (uint32_t)pCfg->RxFifoMemSize;
 	pIntrf->RxPut = 0U;
@@ -508,6 +552,22 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	pIntrf->RxActive = false;
 	pIntrf->RxAccepting = false;
 	pIntrf->RxDropCnt = 0U;
+	pIntrf->TxStallCnt = 0U;
+	pIntrf->TxHeldFrames = 0U;
+	pIntrf->TxHeldMax = 0U;
+	pIntrf->RxHeldFrames = 0U;
+	pIntrf->RxHeldMax = 0U;
+	pIntrf->RxFullFrames = 0U;
+	pIntrf->RxFullMax = 0U;
+	pIntrf->TxStallCnt100 = 0U;
+	pIntrf->RxStallCnt100 = 0U;
+	pIntrf->StallValid = false;
+	pIntrf->StallTxHeld = 0U;
+	pIntrf->StallRxHeld = 0U;
+	pIntrf->StallRxDepth = 0U;
+	pIntrf->StallTxUsed = 0U;
+	pIntrf->StallRxActive = false;
+	pIntrf->StallTxReady = false;
 	pIntrf->TxZlpRequired = false;
 	pIntrf->TxTailArmed = false;
 	__atomic_store_n(&pIntrf->RxUsed, 0U, __ATOMIC_RELEASE);
@@ -683,8 +743,8 @@ void UsbIntrfConfigTx(UsbDevIntrf_t *pIntrf, uint8_t EpAddr,
 
 	if (EpAddr == 0U || !USB_ENDPADDR_IS_IN(EpAddr) || Mps == 0U ||
 		pBuffer == nullptr ||
-		(CFifoBlockSize(pIntrf->hTxFifo) != 1U &&
-		 CFifoBlockSize(pIntrf->hTxFifo) != sizeof(UsbPktHdr_t) + Mps))
+		(pIntrf->TxBlkSize != 1U &&
+		 pIntrf->TxBlkSize != sizeof(UsbPktHdr_t) + Mps))
 	{
 		pIntrf->TxEpAddr = 0U;
 		pIntrf->TxMps = 0U;
@@ -746,7 +806,7 @@ void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 		return;
 	}
 
-	if (CFifoBlockSize(pIntrf->hTxFifo) == 1U && Length == pIntrf->TxMps)
+	if (pIntrf->TxBlkSize == 1U && Length == pIntrf->TxMps)
 	{
 		pIntrf->TxZlpRequired = true;
 		return;
@@ -760,13 +820,124 @@ void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 	}
 }
 
-void UsbIntrfSof(UsbDevIntrf_t *pIntrf)
+/// Frames of slack before a held IN token is counted as stuck.
+#define USB_INTRF_TX_HELD_LIMIT		4U
+
+/// Frames before a hold is long enough that no host scheduling explains it.
+#define USB_INTRF_STALL_FRAMES		100U
+
+/// Freeze the state at the first stall. Later ones do not overwrite it.
+static void UsbIntrfLatchStall(UsbDevIntrf_t *pIntrf)
 {
-	if (pIntrf == nullptr || pIntrf->hTxFifo == nullptr ||
-		!UsbIntrfTxIdle(pIntrf))
+	if (pIntrf->StallValid)
 	{
 		return;
 	}
+
+	pIntrf->StallTxHeld = pIntrf->TxHeldFrames;
+	pIntrf->StallRxHeld = pIntrf->RxHeldFrames;
+	pIntrf->StallRxDepth = (uint16_t)(UsbIntrfRxPut(pIntrf) -
+									  UsbIntrfRxGet(pIntrf));
+	pIntrf->StallTxUsed = (uint16_t)CFifoUsed(pIntrf->hTxFifo);
+	pIntrf->StallRxActive = __atomic_load_n(&pIntrf->RxActive,
+											__ATOMIC_ACQUIRE);
+	pIntrf->StallTxReady = UsbIntrfTxIdle(pIntrf);
+	pIntrf->StallValid = true;
+}
+
+void UsbIntrfSof(UsbDevIntrf_t *pIntrf)
+{
+	if (pIntrf == nullptr || pIntrf->hTxFifo == nullptr)
+	{
+		return;
+	}
+
+	// Only while the class accepts OUT data. A closed port leaves a transfer
+	// armed with no host traffic, and counting that as a stalled endpoint is
+	// what made the first readout unreadable.
+	if (!UsbIntrfRxEnabled(pIntrf))
+	{
+		pIntrf->RxHeldFrames = 0U;
+		pIntrf->RxFullFrames = 0U;
+		pIntrf->TxHeldFrames = 0U;
+		return;
+	}
+
+	// The OUT side first, since a host write timeout points at this direction.
+	// RxActive stays set from arming until the completion, so a completion the
+	// controller never delivers leaves it set and UsbIntrfRxKick then refuses
+	// to rearm for good.
+	if (__atomic_load_n(&pIntrf->RxActive, __ATOMIC_ACQUIRE))
+	{
+		if (pIntrf->RxHeldFrames < UINT16_MAX)
+		{
+			pIntrf->RxHeldFrames++;
+		}
+		if (pIntrf->RxHeldFrames > pIntrf->RxHeldMax)
+		{
+			pIntrf->RxHeldMax = pIntrf->RxHeldFrames;
+		}
+		if (pIntrf->RxHeldFrames == USB_INTRF_STALL_FRAMES)
+		{
+			pIntrf->RxStallCnt100++;
+			UsbIntrfLatchStall(pIntrf);
+		}
+		pIntrf->RxFullFrames = 0U;
+	}
+	else
+	{
+		pIntrf->RxHeldFrames = 0U;
+
+		// Unarmed with a full ring is backpressure working as intended. It
+		// only matters if it never ends, which means nothing is draining.
+		if (pIntrf->RxSlotCnt > 0U &&
+			(UsbIntrfRxPut(pIntrf) - UsbIntrfRxGet(pIntrf)) >=
+				pIntrf->RxSlotCnt)
+		{
+			if (pIntrf->RxFullFrames < UINT16_MAX)
+			{
+				pIntrf->RxFullFrames++;
+			}
+			if (pIntrf->RxFullFrames > pIntrf->RxFullMax)
+			{
+				pIntrf->RxFullMax = pIntrf->RxFullFrames;
+			}
+		}
+		else
+		{
+			pIntrf->RxFullFrames = 0U;
+		}
+	}
+
+	// The token is taken by UsbIntrfStartXfer and given back only by a submit
+	// failure or a completion. Counting how long it stays taken is what tells
+	// a busy endpoint apart from a transfer that will never complete.
+	if (!UsbIntrfTxIdle(pIntrf))
+	{
+		if (pIntrf->TxHeldFrames < UINT16_MAX)
+		{
+			pIntrf->TxHeldFrames++;
+		}
+
+		if (pIntrf->TxHeldFrames > pIntrf->TxHeldMax)
+		{
+			pIntrf->TxHeldMax = pIntrf->TxHeldFrames;
+		}
+
+		if (pIntrf->TxHeldFrames == USB_INTRF_TX_HELD_LIMIT)
+		{
+			pIntrf->TxStallCnt++;
+		}
+
+		if (pIntrf->TxHeldFrames == USB_INTRF_STALL_FRAMES)
+		{
+			pIntrf->TxStallCnt100++;
+			UsbIntrfLatchStall(pIntrf);
+		}
+
+		return;
+	}
+
 
 	if (CFifoUsed(pIntrf->hTxFifo) == 0 && !pIntrf->TxZlpRequired)
 	{
@@ -794,7 +965,7 @@ bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes)
 	{
 		return true;
 	}
-	const uint32_t blockSize = CFifoBlockSize(pIntrf->hTxFifo);
+	const uint32_t blockSize = pIntrf->TxBlkSize;
 	int blocks = NbBytes;
 	if (blockSize != 1U)
 	{
@@ -811,6 +982,26 @@ bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes)
 	}
 
 	return CFifoAvail(pIntrf->hTxFifo) >= blocks;
+}
+
+uint32_t UsbIntrfTxStallCnt(const UsbDevIntrf_t *pIntrf)
+{
+	return pIntrf != nullptr ? pIntrf->TxStallCnt : 0U;
+}
+
+uint16_t UsbIntrfTxHeldMax(const UsbDevIntrf_t *pIntrf)
+{
+	return pIntrf != nullptr ? pIntrf->TxHeldMax : 0U;
+}
+
+uint16_t UsbIntrfRxHeldMax(const UsbDevIntrf_t *pIntrf)
+{
+	return pIntrf != nullptr ? pIntrf->RxHeldMax : 0U;
+}
+
+uint16_t UsbIntrfRxFullMax(const UsbDevIntrf_t *pIntrf)
+{
+	return pIntrf != nullptr ? pIntrf->RxFullMax : 0U;
 }
 
 int UsbIntrfRxUsed(UsbDevIntrf_t *pIntrf)

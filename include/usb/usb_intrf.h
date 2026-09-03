@@ -125,6 +125,24 @@ typedef struct __Usb_Dev_Interf {
 	uint32_t RxGet;				//!< RX packets fully consumed
 	uint32_t RxUsed;				//!< Published RX payload bytes not yet consumed
 	uint32_t RxDropCnt;			//!< Controller/error drops, ring full uses backpressure
+	uint32_t TxStallCnt;		//!< IN token holds past 4 frames
+	uint32_t TxStallCnt100;		//!< IN token holds past 100 frames
+	uint32_t RxStallCnt100;		//!< OUT transfer holds past 100 frames
+	uint16_t TxHeldFrames;		//!< Frames the current IN token has been held
+	uint16_t TxHeldMax;			//!< Longest IN token hold seen, in frames
+	uint16_t RxHeldFrames;		//!< Frames the OUT transfer has been outstanding
+	uint16_t RxHeldMax;			//!< Longest OUT transfer seen, in frames
+	uint16_t RxFullFrames;		//!< Frames the ring has been full with OUT unarmed
+	uint16_t RxFullMax;			//!< Longest full and unarmed stretch, in frames
+	// State latched the first time either side passes 100 frames, so it is
+	// the first real stall rather than whatever the endpoint settled into.
+	uint16_t StallTxHeld;
+	uint16_t StallRxHeld;
+	uint16_t StallRxDepth;		//!< RxPut - RxGet at the latch
+	uint16_t StallTxUsed;		//!< TX CFifo bytes queued at the latch
+	bool StallValid;
+	bool StallRxActive;
+	bool StallTxReady;
 	uint16_t RxOffset;			//!< Byte-stream cursor in the head RX packet
 	uint16_t RxSlotSize;		//!< Bytes one packet slot occupies
 	uint16_t RxSlotCnt;			//!< Packet slots in pRxMem
@@ -133,6 +151,7 @@ typedef struct __Usb_Dev_Interf {
 	uint8_t TxEpAddr;			//!< IN endpoint owned by this instance
 	uint8_t *pTxBuffer;			//!< One packet staging buffer, TxMps bytes
 	uint16_t TxMps;				//!< IN endpoint maximum packet size
+	uint16_t TxBlkSize;			//!< TX CFifo block size, 1 selects byte mode
 	bool bEnabled;
 	bool RxActive;				//!< OUT transfer currently registered with controller
 	bool RxAccepting;			//!< Class/application currently accepts OUT traffic
@@ -184,6 +203,31 @@ void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 
 /** Start-of-frame callback used to flush an idle partial TX tail. */
 void UsbIntrfSof(UsbDevIntrf_t *pIntrf);
+
+/**
+ * Frames the IN token has been held without a completion, and how many times
+ * it went past one frame of slack. A transmit the controller accepts and never
+ * completes holds the token for good, and nothing returns it, so these are the
+ * numbers that say whether that is happening.
+ */
+uint32_t UsbIntrfTxStallCnt(const UsbDevIntrf_t *pIntrf);
+uint16_t UsbIntrfTxHeldMax(const UsbDevIntrf_t *pIntrf);
+
+/**
+ * The same for the OUT side, which is the direction a host write timeout
+ * points at. RxHeldMax counts frames with a transfer outstanding, so it is
+ * only meaningful while the host is actually sending. RxFullMax counts frames
+ * with the ring full and the endpoint deliberately unarmed, which is the
+ * application failing to drain rather than the controller losing a transfer.
+ */
+uint16_t UsbIntrfRxHeldMax(const UsbDevIntrf_t *pIntrf);
+uint16_t UsbIntrfRxFullMax(const UsbDevIntrf_t *pIntrf);
+
+/**
+ * Counting only runs while the class accepts OUT data, so a closed port does
+ * not look like a stalled endpoint. An armed endpoint with no host traffic is
+ * not a fault and must not be counted as one.
+ */
 
 bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);
 int UsbIntrfRxUsed(UsbDevIntrf_t *pIntrf);

@@ -352,6 +352,26 @@ void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr);
  */
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);
 
+/**
+ * @brief	Snapshot of the port's transfer scheduling state, for diagnosis.
+ *
+ * A port that arbitrates one DMA engine between endpoints can wedge in a way
+ * the generic layer cannot see: it has an armed transfer and no completion,
+ * and cannot tell a busy engine from a lost one. Fields a port has no
+ * equivalent for read back zero. Ports that do not implement this leave the
+ * weak definition, which reports nothing.
+ */
+typedef struct __Usb_Ctrlr_Debug {
+	uint32_t DmaBusy;			//!< Non-zero while the port holds its DMA claim
+	uint32_t DmaEpAddr;			//!< Endpoint the claim is held for
+	uint32_t PendingIn;			//!< IN endpoints waiting for the engine, bitmask
+	uint32_t PendingOut;		//!< OUT endpoints waiting for the engine, bitmask
+	uint32_t EpDataStatus;		//!< Controller's own per endpoint data status
+	uint32_t XferStarted;		//!< Endpoints with a transfer registered, bitmask
+} UsbCtrlrDebug_t;
+
+void UsbCtrlrGetDebug(int DevNo, UsbCtrlrDebug_t *pDebug);
+
 #ifdef __cplusplus
 }
 #endif

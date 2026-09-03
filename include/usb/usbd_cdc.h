@@ -112,6 +112,9 @@ public:
 
 	DevIntrf_t *Data(void) { return &vUsbdCdc.Data.DevIntrf; }
 
+	/// The USB interface behind Data(), for the endpoint hold counters.
+	UsbDevIntrf_t *DataIntrf(void) { return &vUsbdCdc.Data; }
+
 	bool IsPortOpen(void);
 	const UsbCdcLineCoding_t *LineCoding(void);
 	uint16_t ControlLineState(void);
