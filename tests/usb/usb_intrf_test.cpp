@@ -290,9 +290,21 @@ static void TestTxChaining(void)
 	CHECK(!s_InBusy);
 	CHECK(s_InSubmitCnt == 2);
 
+	// A new full packet before the delayed ZLP continues the stream directly.
 	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, full, sizeof(full)) == MPS);
 	CompleteIn(MPS);
-	CHECK(s_InBusy && s_InLen == 0U);
+	CHECK(!s_InBusy);
+	CHECK(s_Intrf.TxZlpDelay == 2U);
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, full, sizeof(full)) == MPS);
+	CHECK(s_InBusy && s_InLen == MPS && s_Intrf.TxZlpDelay == 0U);
+	CompleteIn(MPS);
+	CHECK(!s_InBusy && s_Intrf.TxZlpDelay == 2U);
+
+	// An actually idle full packet gets its terminating ZLP after two SOFs.
+	UsbIntrfSof(&s_Intrf);
+	CHECK(!s_InBusy && s_Intrf.TxZlpDelay == 1U);
+	UsbIntrfSof(&s_Intrf);
+	CHECK(s_InBusy && s_InLen == 0U && s_Intrf.TxZlpDelay == 0U);
 	CompleteIn(0U);
 	CHECK(!s_InBusy);
 }

@@ -166,9 +166,13 @@ TX CFifo mode is selected only by block size:
 
 An idle producer starts transmission immediately. While IN is busy, producers
 only append to the FIFO. Completion copies and submits the next queued data
-while it still owns the inherited `DeviceIntrf.bTxReady` token. A byte-mode
-packet ending exactly on an MPS boundary is followed immediately by a ZLP; no
-separate pending-ZLP or SOF-tail flag is stored.
+while it still owns the inherited `DeviceIntrf.bTxReady` token.
+
+A byte-mode burst ending exactly on an MPS boundary needs a ZLP so the host can
+deliver the final bytes without waiting for more data. The ZLP must not be sent
+after every full packet: that halves continuous-stream transaction capacity.
+One `TxZlpDelay` counter waits two SOFs. New queued data clears it and continues
+the burst; only a genuinely idle stream sends the terminating ZLP.
 
 ## Minimal state and lifecycle
 
@@ -183,7 +187,9 @@ separate pending-ZLP or SOF-tail flag is stored.
 | Is TX software-owned? | inherited `bTxReady` token |
 
 There is no `bEnabled`, `RxActive`, `RxAccepting`, separate RX/TX endpoint
-address, release flag, pending-ZLP flag or TX-tail flag.
+address, release flag or general TX-tail state. `TxZlpDelay` is retained because
+it distinguishes a continuing full-packet stream from an idle burst that needs
+termination.
 
 The lifecycle is:
 

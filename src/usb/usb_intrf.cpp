@@ -188,6 +188,10 @@ static bool UsbIntrfSubmit(UsbDevIntrf_t *pIntrf, bool Tail)
 		return false;
 	}
 
+	// New byte-stream data continues the current burst. Do not put a ZLP
+	// between full packets that the producer kept queued.
+	pIntrf->TxZlpDelay = 0U;
+
 	if (UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfTxAddr(pIntrf), pIntrf->pTxBuffer,
 						(uint16_t)length))
 	{
@@ -485,6 +489,7 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	pIntrf->Mps = 0U;
 	pIntrf->TxBlkSize = pCfg->TxFifoBlkSize;
 	pIntrf->RxDropCnt = 0U;
+	pIntrf->TxZlpDelay = 0U;
 
 	pIntrf->DevIntrf.pDevData = pIntrf;
 	pIntrf->DevIntrf.IntPrio = 0;
@@ -529,6 +534,7 @@ bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps)
 	}
 
 	pIntrf->Mps = Mps;
+	pIntrf->TxZlpDelay = 0U;
 	CFifoFlush(pIntrf->hRxFifo);
 	CFifoFlush(pIntrf->hTxFifo);
 	UsbIntrfSetTxIdle(pIntrf);
@@ -548,6 +554,7 @@ void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf)
 	// Clear MPS first so a completion caused by closing the endpoint cannot
 	// submit another transfer.
 	pIntrf->Mps = 0U;
+	pIntrf->TxZlpDelay = 0U;
 
 	if (pIntrf->hRxFifo != nullptr)
 	{
@@ -634,19 +641,18 @@ static void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 		return;
 	}
 
-	// Terminate a byte-mode transfer ending on an MPS boundary without keeping
-	// another software state bit. Completion of this ZLP has Length zero.
-	if (UsbIntrfCanTx(pIntrf) && pIntrf->TxBlkSize == 1U &&
-		Length == pIntrf->Mps &&
-		UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfTxAddr(pIntrf),
-						pIntrf->pTxBuffer, 0U))
-	{
-		return;
-	}
-
 	if (!UsbIntrfTxIdle(pIntrf))
 	{
 		UsbIntrfSetTxIdle(pIntrf);
+	}
+
+	if (UsbIntrfCanTx(pIntrf) && pIntrf->TxBlkSize == 1U &&
+		Length == pIntrf->Mps)
+	{
+		// A ZLP is needed only if the byte stream really ends here. Waiting two
+		// SOFs lets continuous producers queue the next packet and cancel it.
+		pIntrf->TxZlpDelay = 2U;
+		return;
 	}
 
 	if (pIntrf->DevIntrf.EvtCB != nullptr)
@@ -672,6 +678,34 @@ void UsbIntrfXferComplete(UsbDevIntrf_t *pIntrf, uint8_t EpAddr,
 	else
 	{
 		UsbIntrfRxXferComplete(pIntrf, Length, Result);
+	}
+}
+
+void UsbIntrfSof(UsbDevIntrf_t *pIntrf)
+{
+	if (!UsbIntrfCanTx(pIntrf) || pIntrf->TxZlpDelay == 0U ||
+		!UsbIntrfTxIdle(pIntrf))
+	{
+		return;
+	}
+
+	if (CFifoUsed(pIntrf->hTxFifo) > 0)
+	{
+		pIntrf->TxZlpDelay = 0U;
+		return;
+	}
+
+	pIntrf->TxZlpDelay--;
+	if (pIntrf->TxZlpDelay > 0U || !UsbIntrfTakeTx(pIntrf))
+	{
+		return;
+	}
+
+	if (!UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfTxAddr(pIntrf),
+						 pIntrf->pTxBuffer, 0U))
+	{
+		pIntrf->TxZlpDelay = 1U;
+		UsbIntrfSetTxIdle(pIntrf);
 	}
 }
 
