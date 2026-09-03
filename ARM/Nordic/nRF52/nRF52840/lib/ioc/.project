@@ -1301,11 +1301,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_def.h</locationURI>
 		</link>
 		<link>
-			<name>include/usb/usb_dev.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_dev.h</locationURI>
-		</link>
-		<link>
 			<name>include/usb/usb_hiddef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_hiddef.h</locationURI>

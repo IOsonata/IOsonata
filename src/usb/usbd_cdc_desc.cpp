@@ -34,7 +34,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "usb/usb_cdcdef.h"
-#include "usb/usb_dev.h"
+#include "usb/usb.h"
 #include "usb/usbd_cdc.h"
 
 #define USBD_CDC_STR_MANUFACTURER		1U
@@ -87,7 +87,7 @@ static bool UsbdCdcDescAppend(uint16_t *pOffset,
 	return true;
 }
 
-static int UsbdCdcDescFunctionCount(const UsbDevCfg_t *pCfg)
+static int UsbdCdcDescFunctionCount(const UsbCfg_t *pCfg)
 {
 	if (pCfg == nullptr)
 	{
@@ -103,7 +103,7 @@ static int UsbdCdcDescFunctionCount(const UsbDevCfg_t *pCfg)
 	return count <= USBD_CDC_FUNC_MAXCNT ? count : 0;
 }
 
-static uint8_t UsbdCdcDescMaxPower(const UsbDevCfg_t *pCfg)
+static uint8_t UsbdCdcDescMaxPower(const UsbCfg_t *pCfg)
 {
 	if (pCfg == nullptr || pCfg->bSelfPowered)
 	{
@@ -114,23 +114,23 @@ static uint8_t UsbdCdcDescMaxPower(const UsbDevCfg_t *pCfg)
 	return units > 255U ? 255U : (uint8_t)units;
 }
 
-static uint16_t UsbdCdcDescBulkMps(UsbdSpeed_t Speed)
+static uint16_t UsbdCdcDescBulkMps(UsbSpeed_t Speed)
 {
-	return Speed == USBD_SPEED_HIGH ?
+	return Speed == USB_SPEED_HIGH ?
 		USBD_CDC_BULK_HS_MPS : USBD_CDC_BULK_FS_MPS;
 }
 
-static uint8_t UsbdCdcDescNotifInterval(UsbdSpeed_t Speed)
+static uint8_t UsbdCdcDescNotifInterval(UsbSpeed_t Speed)
 {
 	// FS is expressed in frames. HS uses 2^(bInterval-1) microframes;
 	// value 8 is 16 ms, matching the default full-speed interval.
-	return Speed == USBD_SPEED_HIGH ?
+	return Speed == USB_SPEED_HIGH ?
 		USBD_CDC_NOTIF_INTERVAL_HS : USBD_CDC_NOTIF_INTERVAL_FS;
 }
 
 static const uint8_t *UsbdCdcDescDevice(uint16_t *pLength)
 {
-	const UsbDevCfg_t *pCfg = UsbDevGetCfg();
+	const UsbCfg_t *pCfg = UsbGetCfg(0);
 	if (pCfg == nullptr || pLength == nullptr ||
 		UsbdCdcDescFunctionCount(pCfg) == 0)
 	{
@@ -164,7 +164,7 @@ static const uint8_t *UsbdCdcDescDevice(uint16_t *pLength)
 
 static const uint8_t *UsbdCdcDescQualifier(uint16_t *pLength)
 {
-	if (pLength == nullptr || UsbdMaxSpeed() != USBD_SPEED_HIGH)
+	if (pLength == nullptr || UsbGetSpeed(0) != USB_SPEED_HIGH)
 	{
 		return nullptr;
 	}
@@ -185,7 +185,7 @@ static const uint8_t *UsbdCdcDescQualifier(uint16_t *pLength)
 }
 
 static bool UsbdCdcDescBuildFunction(uint16_t *pOffset, int FunctionNo,
-									 UsbdSpeed_t Speed,
+									 UsbSpeed_t Speed,
 									 bool HasFunctionString)
 {
 	const uint8_t ctrlIntrf = USBD_CDC_CTRL_INTRF(FunctionNo);
@@ -281,11 +281,11 @@ static bool UsbdCdcDescBuildFunction(uint16_t *pOffset, int FunctionNo,
 		UsbdCdcDescAppend(pOffset, &in, sizeof(in));
 }
 
-static const uint8_t *UsbdCdcDescConfiguration(UsbdSpeed_t Speed,
+static const uint8_t *UsbdCdcDescConfiguration(UsbSpeed_t Speed,
 										   bool OtherSpeed,
 										   uint16_t *pLength)
 {
-	const UsbDevCfg_t *pCfg = UsbDevGetCfg();
+	const UsbCfg_t *pCfg = UsbGetCfg(0);
 	const int functionCount = UsbdCdcDescFunctionCount(pCfg);
 
 	if (pCfg == nullptr || pLength == nullptr || functionCount == 0)
@@ -366,7 +366,7 @@ static const uint8_t *UsbdCdcDescString(uint8_t Index, uint16_t LangId,
 		return nullptr;
 	}
 
-	const UsbDevCfg_t *pCfg = UsbDevGetCfg();
+	const UsbCfg_t *pCfg = UsbGetCfg(0);
 	if (pCfg == nullptr)
 	{
 		return nullptr;
@@ -384,7 +384,7 @@ static const uint8_t *UsbdCdcDescString(uint8_t Index, uint16_t LangId,
 			break;
 
 		case USBD_CDC_STR_SERIAL:
-			pStr = UsbDevGetSerial();
+			pStr = UsbGetSerial(0);
 			break;
 
 		case USBD_CDC_STR_FUNCTION:
@@ -422,7 +422,7 @@ static const uint8_t *UsbdCdcDescString(uint8_t Index, uint16_t LangId,
 const uint8_t *UsbdCdcDescHandler(uint8_t DescType,
 								  uint8_t DescIndex,
 								  uint16_t LangId,
-								  UsbdSpeed_t Speed,
+								  UsbSpeed_t Speed,
 								  uint16_t *pLength,
 								  void *pContext)
 {
@@ -450,12 +450,12 @@ const uint8_t *UsbdCdcDescHandler(uint8_t DescType,
 			return DescIndex == 0U ? UsbdCdcDescQualifier(pLength) : nullptr;
 
 		case USB_DESCTYPE_OSC:
-			if (DescIndex != 0U || UsbdMaxSpeed() != USBD_SPEED_HIGH)
+			if (DescIndex != 0U || UsbGetSpeed(0) != USB_SPEED_HIGH)
 			{
 				return nullptr;
 			}
 			return UsbdCdcDescConfiguration(
-				Speed == USBD_SPEED_HIGH ? USBD_SPEED_FULL : USBD_SPEED_HIGH,
+				Speed == USB_SPEED_HIGH ? USB_SPEED_FULL : USB_SPEED_HIGH,
 				true, pLength);
 
 		default:
