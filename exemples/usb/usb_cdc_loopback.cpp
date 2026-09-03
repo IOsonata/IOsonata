@@ -52,7 +52,6 @@ SOFTWARE.
 #include "cfifo.h"
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
-#include "usb_ctrlr.h"
 
 #define USB_DEVNO				0
 

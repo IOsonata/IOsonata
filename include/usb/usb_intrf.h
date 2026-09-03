@@ -12,14 +12,19 @@ The generic layer in usb.cpp handles endpoint zero, Chapter 9 requests,
 descriptors, configuration and class/vendor dispatch. The port handles endpoint
 registers, DMA/FIFO access and controller interrupts.
 
-RX storage is a ring of fixed packet slots supplied by the application, not a
-CFifo. Each slot contains UsbPktHdr_t followed by storage for one endpoint
-packet, word aligned, sized with USB_INTRF_RXMEM_SIZE. The controller is armed
-directly on the slot the ring will publish next and writes into it, so nothing
-is copied on the receive path. The slot becomes visible to the reader only
-after the transfer completes. UsbPktHdr_t.Length is the actual received data
-length and may be from zero to MPS. DeviceIntrfRx() may consume across packet
-slots and present a byte stream.
+RX storage is hRxFifo, one endpoint packet per block: UsbPktHdr_t followed by
+MPS bytes, word aligned, sized with USB_INTRF_RXMEM_SIZE.
+
+Nothing is copied on the receive path. CFifoPut advances the producer index
+before the caller fills the block, so its return value cannot be handed to a
+DMA engine that outlives the call. The block it will hand out next is still
+well defined and USB is the only producer, so the controller is armed on that
+block and CFifoPut is called from the completion, once the data is already
+there. A reader therefore only ever sees a block that is complete.
+
+UsbPktHdr_t.Length is the actual received data length and may be from zero to
+MPS. DeviceIntrfRx() may consume across packet blocks and present a byte
+stream.
 
 TX CFifo mode is selected by block size. BlkSize 1 provides byte-stream
 accumulation and UsbIntrf packetizes queued bytes up to the endpoint MPS. In
@@ -30,8 +35,8 @@ may be from zero to MPS. UsbIntrf sends the stored packet length without
 combining packet blocks. USB transfer type and CFifo block size are separate
 settings.
 
-RX ring memory and TX CFifo memory are both supplied by UsbIntrfCfg_t. Endpoint
-MPS determines the RX slot size and the TX packet-mode block size. Port maximum
+RX and TX CFifo memory are both supplied by UsbIntrfCfg_t. Endpoint MPS
+determines the RX block size and the TX packet-mode block size. Port maximum
 packet-size definitions may be used by static allocation macros so the
 configuration reserves sufficient memory.
 
@@ -93,16 +98,23 @@ SOFTWARE.
 #define USB_INTRF_PKT_BLKSIZE(Mps) \
 	((uint32_t)((sizeof(UsbPktHdr_t) + (uint32_t)(Mps) + 3U) & ~3U))
 
-/// RX memory holding NbPkt packet slots for an Mps byte endpoint.
+/// RX memory holding NbPkt packet slots for an Mps byte endpoint, including
+/// the CFifo header that CFifoInit carves out of the same buffer.
 #define USB_INTRF_RXMEM_SIZE(NbPkt, Mps) \
-	((uint32_t)(NbPkt) * USB_INTRF_PKT_BLKSIZE(Mps))
+	CFIFO_TOTAL_MEMSIZE(NbPkt, USB_INTRF_PKT_BLKSIZE(Mps))
 
 #pragma pack(push, 4)
 
 typedef struct __Usb_Packet_Header {
-	uint16_t Length;				//!< Actual packet length, from zero through MPS
+	uint16_t Length;			//!< Actual packet length, from zero through MPS
 	uint16_t Reserved;			//!< Keeps the packet payload word aligned
 } UsbPktHdr_t;
+
+// This structure must be cast to memory block, no allocate
+typedef struct __Usb_Packet {
+	UsbPktHdr_t Hdr;
+	uint8_t Data[1];			//!< Variable length
+} UsbPkt_t;
 
 typedef struct __Usb_Interf_Config {
 	int DevNo;					//!< USB controller number
@@ -112,6 +124,7 @@ typedef struct __Usb_Interf_Config {
 	int TxFifoMemSize;
 	uint8_t *pTxFifoMem;
 	uint16_t TxFifoBlkSize;		//!< 1 for byte mode, header plus MPS for packet mode
+	uint16_t Mps;
 	DevIntrfEvtHandler_t EvtCB;
 } UsbIntrfCfg_t;
 
@@ -119,33 +132,8 @@ typedef struct __Usb_Dev_Interf {
 	DevIntrf_t DevIntrf;
 	hCFifo_t hTxFifo;
 	int DevNo;					//!< USB controller number
-	uint8_t *pRxMem;			//!< RX packet ring memory supplied by application
-	uint32_t RxMemSize;			//!< RX packet ring memory size in bytes
-	uint32_t RxPut;				//!< Completed RX packets published
-	uint32_t RxGet;				//!< RX packets fully consumed
-	uint32_t RxUsed;				//!< Published RX payload bytes not yet consumed
-	uint32_t RxDropCnt;			//!< Controller/error drops, ring full uses backpressure
-	uint32_t TxStallCnt;		//!< IN token holds past 4 frames
-	uint32_t TxStallCnt100;		//!< IN token holds past 100 frames
-	uint32_t RxStallCnt100;		//!< OUT transfer holds past 100 frames
-	uint16_t TxHeldFrames;		//!< Frames the current IN token has been held
-	uint16_t TxHeldMax;			//!< Longest IN token hold seen, in frames
-	uint16_t RxHeldFrames;		//!< Frames the OUT transfer has been outstanding
-	uint16_t RxHeldMax;			//!< Longest OUT transfer seen, in frames
-	uint16_t RxFullFrames;		//!< Frames the ring has been full with OUT unarmed
-	uint16_t RxFullMax;			//!< Longest full and unarmed stretch, in frames
-	// State latched the first time either side passes 100 frames, so it is
-	// the first real stall rather than whatever the endpoint settled into.
-	uint16_t StallTxHeld;
-	uint16_t StallRxHeld;
-	uint16_t StallRxDepth;		//!< RxPut - RxGet at the latch
-	uint16_t StallTxUsed;		//!< TX CFifo bytes queued at the latch
-	bool StallValid;
-	bool StallRxActive;
-	bool StallTxReady;
-	uint16_t RxOffset;			//!< Byte-stream cursor in the head RX packet
-	uint16_t RxSlotSize;		//!< Bytes one packet slot occupies
-	uint16_t RxSlotCnt;			//!< Packet slots in pRxMem
+	hCFifo_t hRxFifo;			//!< Packet storage, one endpoint packet per block
+	uint32_t RxDropCnt;			//!< Controller/error drops, FIFO full uses backpressure
 	uint16_t RxMps;				//!< OUT endpoint maximum packet size
 	uint8_t RxEpAddr;			//!< OUT endpoint owned by this instance
 	uint8_t TxEpAddr;			//!< IN endpoint owned by this instance
@@ -168,16 +156,17 @@ extern "C" {
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg);
 
 /**
- * Bind an OUT endpoint and build the RX packet ring for its maximum packet
- * size. Returns false when the supplied RX memory cannot hold one packet slot.
+ * Bind an OUT endpoint and build hRxFifo for its maximum packet size. Returns
+ * false when the supplied RX memory cannot hold the CFifo header plus one
+ * packet block.
  *
- * There is no RX staging buffer. The controller writes straight into the slot
- * the ring is about to publish, and the slot becomes visible to the reader
+ * There is no RX staging buffer. The controller writes straight into the block
+ * CFifoPut is about to hand out, and the block becomes visible to a reader
  * only after the transfer completes.
  */
-bool UsbIntrfConfigRx(UsbDevIntrf_t *pIntrf, uint8_t EpAddr, uint16_t Mps);
+//bool UsbIntrfConfigRx(UsbDevIntrf_t *pIntrf, uint8_t EpAddr, uint16_t Mps);
 
-/** Drop RX endpoint/ring state on bus reset or unconfigure. */
+/** Drop RX endpoint and FIFO state on bus reset or unconfigure. */
 void UsbIntrfResetRx(UsbDevIntrf_t *pIntrf);
 
 /** Enable or disable acceptance of OUT data without changing endpoint config. */
@@ -204,33 +193,8 @@ void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 /** Start-of-frame callback used to flush an idle partial TX tail. */
 void UsbIntrfSof(UsbDevIntrf_t *pIntrf);
 
-/**
- * Frames the IN token has been held without a completion, and how many times
- * it went past one frame of slack. A transmit the controller accepts and never
- * completes holds the token for good, and nothing returns it, so these are the
- * numbers that say whether that is happening.
- */
-uint32_t UsbIntrfTxStallCnt(const UsbDevIntrf_t *pIntrf);
-uint16_t UsbIntrfTxHeldMax(const UsbDevIntrf_t *pIntrf);
-
-/**
- * The same for the OUT side, which is the direction a host write timeout
- * points at. RxHeldMax counts frames with a transfer outstanding, so it is
- * only meaningful while the host is actually sending. RxFullMax counts frames
- * with the ring full and the endpoint deliberately unarmed, which is the
- * application failing to drain rather than the controller losing a transfer.
- */
-uint16_t UsbIntrfRxHeldMax(const UsbDevIntrf_t *pIntrf);
-uint16_t UsbIntrfRxFullMax(const UsbDevIntrf_t *pIntrf);
-
-/**
- * Counting only runs while the class accepts OUT data, so a closed port does
- * not look like a stalled endpoint. An armed endpoint with no host traffic is
- * not a fault and must not be counted as one.
- */
-
 bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);
-int UsbIntrfRxUsed(UsbDevIntrf_t *pIntrf);
+//int UsbIntrfRxUsed(UsbDevIntrf_t *pIntrf);
 int UsbIntrfTxUsed(UsbDevIntrf_t *pIntrf);
 
 #ifdef __cplusplus

@@ -1497,16 +1497,6 @@ static const uint8_t *UsbDevDescHandler(uint8_t DescType,
 }
 
 
-// A port that does not report its scheduling state keeps this. Reporting
-// nothing is correct for a port with no engine to arbitrate.
-__attribute__((weak)) void UsbCtrlrGetDebug(int, UsbCtrlrDebug_t *pDebug)
-{
-	if (pDebug != nullptr)
-	{
-		memset(pDebug, 0, sizeof(*pDebug));
-	}
-}
-
 static bool UsbDevInit(const UsbCfg_t *pCfg)
 {
 	if (pCfg == nullptr || pCfg->Vid == 0 || pCfg->Pid == 0)

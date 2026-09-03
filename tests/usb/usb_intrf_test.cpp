@@ -123,8 +123,8 @@ static bool Setup(void)
 static void TestGeometry(void)
 {
 	CHECK(Setup());
-	CHECK(s_Intrf.RxSlotCnt == SLOTS);
-	CHECK(s_Intrf.RxSlotSize == sizeof(UsbPktHdr_t) + MPS);
+	CHECK(CFifoAvail(s_Intrf.hRxFifo) == (int)SLOTS);
+	CHECK(CFifoBlockSize(s_Intrf.hRxFifo) == sizeof(UsbPktHdr_t) + MPS);
 	CHECK(s_XferCnt == 1);			// armed on enable
 	CHECK(s_XferLen == MPS);
 }
@@ -133,13 +133,13 @@ static void TestGeometry(void)
 static void TestZeroCopyTarget(void)
 {
 	CHECK(Setup());
-	uint8_t *pSlot0 = s_RxMem + sizeof(UsbPktHdr_t);
+	uint8_t *pSlot0 = s_RxMem + sizeof(CFifo_t) + sizeof(UsbPktHdr_t);
 	CHECK(s_XferBuf == pSlot0);
 
 	const uint8_t a[3] = { 1, 2, 3 };
 	Deliver(a, 3);
 	// Next arm points at the second slot, the ring advanced.
-	CHECK(s_XferBuf == s_RxMem + s_Intrf.RxSlotSize + sizeof(UsbPktHdr_t));
+	CHECK(s_XferBuf == s_RxMem + sizeof(CFifo_t) + CFifoBlockSize(s_Intrf.hRxFifo) + sizeof(UsbPktHdr_t));
 	// The delivered bytes are still where the controller put them.
 	CHECK(memcmp(pSlot0, a, 3) == 0);
 }
@@ -175,9 +175,9 @@ static void TestStreamAcrossPackets(void)
 static void TestZlp(void)
 {
 	CHECK(Setup());
-	const uint32_t put0 = s_Intrf.RxPut;
+	const int used0 = CFifoUsed(s_Intrf.hRxFifo);
 	Deliver(nullptr, 0);
-	CHECK(s_Intrf.RxPut == put0 + 1U);
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == used0 + 1);
 	CHECK(UsbIntrfRxUsed(&s_Intrf) == 0);
 
 	uint8_t p[2] = { 'x', 'y' };
@@ -187,7 +187,7 @@ static void TestZlp(void)
 	int n = DeviceIntrfRxData(&s_Intrf.DevIntrf, out, 4);
 	CHECK(n == 2);
 	CHECK(out[0] == 'x' && out[1] == 'y');
-	CHECK(s_Intrf.RxGet == put0 + 2U);		// both slots released
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == used0);		// both slots released
 }
 
 // A full ring must leave the endpoint unarmed, not drop a packet. Reading
@@ -201,7 +201,7 @@ static void TestBackpressure(void)
 		p[0] = (uint8_t)i;
 		Deliver(p, 8);
 	}
-	CHECK(s_Intrf.RxPut - s_Intrf.RxGet == SLOTS);
+	CHECK(CFifoAvail(s_Intrf.hRxFifo) == 0);
 	CHECK(s_XferBuf == nullptr);				// unarmed, host backpressured
 	CHECK(s_Intrf.RxActive == false);
 	CHECK(s_Intrf.RxDropCnt == 0U);
@@ -245,10 +245,10 @@ static void TestWrap(void)
 static void TestXferFailed(void)
 {
 	CHECK(Setup());
-	const uint32_t put0 = s_Intrf.RxPut;
+	const int used0 = CFifoUsed(s_Intrf.hRxFifo);
 	s_XferBuf = nullptr;
 	UsbIntrfRxXferComplete(&s_Intrf, 0, USB_CTRLR_XFER_FAILED);
-	CHECK(s_Intrf.RxPut == put0);
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == used0);
 	CHECK(s_Intrf.RxDropCnt == 1U);
 	CHECK(s_XferBuf != nullptr);				// rearmed
 }
@@ -260,7 +260,7 @@ static void TestReset(void)
 	uint8_t p[4] = { 1, 2, 3, 4 };
 	Deliver(p, 4);
 	UsbIntrfResetRx(&s_Intrf);
-	CHECK(s_Intrf.RxSlotCnt == 0U);
+	CHECK(s_Intrf.hRxFifo == nullptr);
 	CHECK(s_Intrf.RxEpAddr == 0U);
 	CHECK(UsbIntrfRxUsed(&s_Intrf) == 0);
 

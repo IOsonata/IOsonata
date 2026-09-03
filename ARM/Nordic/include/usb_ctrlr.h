@@ -17,9 +17,8 @@ statically, before any endpoint is configured and without calling into the
 stack.
 
 Controller numbering starts at zero and matches the CtrlrNo argument of the
-USB API. The accessor macros expand named constants before pasting their
-arguments. The expanded CtrlrNo and TransType still have to be compile-time
-tokens, not variables or expressions.
+USB API. Because the accessor macros paste their arguments, CtrlrNo and
+TransType must be literal tokens, not variables.
 
 Packet lengths are allocation bounds: the largest packet the controller can
 move on that transfer type at the fastest speed it supports. The value an
@@ -70,25 +69,30 @@ SOFTWARE.
   * @{
   */
 
+// Each accessor pastes through a second macro so a named constant expands
+// before it is pasted. Without that, USB_PKT_MAXLEN(USB_DEVNO, BULK) would
+// build the token USB_PKT_MAXLEN_USB_DEVNO_BULK and fail to resolve.
+#define USB_PASTE3_(a, b, c)				a##b##c
+#define USB_PASTE3(a, b, c)					USB_PASTE3_(a, b, c)
+#define USB_PASTE2_(a, b)					a##b
+#define USB_PASTE2(a, b)					USB_PASTE2_(a, b)
+
 /// Maximum packet length in bytes for one controller and transfer type.
-#define USB_PKT_MAXLEN_(CtrlrNo, TransType)	USB_PKT_MAXLEN_##CtrlrNo##_##TransType
-#define USB_PKT_MAXLEN(CtrlrNo, TransType)	USB_PKT_MAXLEN_(CtrlrNo, TransType)
+#define USB_PKT_MAXLEN(CtrlrNo, TransType) \
+	USB_PASTE3(USB_PKT_MAXLEN_, CtrlrNo, USB_PASTE2(_, TransType))
 
 /// IN endpoint numbers, including endpoint zero.
-#define USB_EPIN_CNT_(CtrlrNo)				USB_EPIN_CNT_##CtrlrNo
-#define USB_EPIN_CNT(CtrlrNo)				USB_EPIN_CNT_(CtrlrNo)
+#define USB_EPIN_CNT(CtrlrNo)				USB_PASTE2(USB_EPIN_CNT_, CtrlrNo)
 
 /// OUT endpoint numbers, including endpoint zero.
-#define USB_EPOUT_CNT_(CtrlrNo)				USB_EPOUT_CNT_##CtrlrNo
-#define USB_EPOUT_CNT(CtrlrNo)				USB_EPOUT_CNT_(CtrlrNo)
+#define USB_EPOUT_CNT(CtrlrNo)				USB_PASTE2(USB_EPOUT_CNT_, CtrlrNo)
 
 /// Nonzero when the controller can enumerate at high speed.
-#define USB_HIGHSPEED_CAPABLE_(CtrlrNo)		USB_HIGHSPEED_CAPABLE_##CtrlrNo
-#define USB_HIGHSPEED_CAPABLE(CtrlrNo)		USB_HIGHSPEED_CAPABLE_(CtrlrNo)
+#define USB_HIGHSPEED_CAPABLE(CtrlrNo) \
+	USB_PASTE2(USB_HIGHSPEED_CAPABLE_, CtrlrNo)
 
 /// Nonzero when this port drives the controller's isochronous endpoints.
-#define USB_ISO_SUPPORTED_(CtrlrNo)			USB_ISO_SUPPORTED_##CtrlrNo
-#define USB_ISO_SUPPORTED(CtrlrNo)			USB_ISO_SUPPORTED_(CtrlrNo)
+#define USB_ISO_SUPPORTED(CtrlrNo)			USB_PASTE2(USB_ISO_SUPPORTED_, CtrlrNo)
 
 #if defined(USBD_PRESENT)
 

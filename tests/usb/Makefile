@@ -35,6 +35,15 @@ CORE_SOURCES := \
 	$(ROOT)/src/usb/usb.cpp \
 	$(ROOT)/src/usb/usbd_cdc_desc.cpp
 
+LINK_TARGET := $(BUILD_DIR)/usb_stack_link_test
+LINK_SOURCES := \
+	usb_stack_link_test.cpp \
+	$(ROOT)/src/usb/usb.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/usb/usbd_cdc.cpp \
+	$(ROOT)/src/usb/usbd_cdc_desc.cpp \
+	$(ROOT)/src/cfifo.c
+
 INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
 INTRF_SOURCES := \
 	usb_intrf_test.cpp \
@@ -47,7 +56,7 @@ HEADERS := \
 	$(ROOT)/include/usb/usb_def.h \
 	$(ROOT)/include/usb/usb_intrf.h
 
-TARGETS := $(CORE_TARGET) $(INTRF_TARGET)
+TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(LINK_TARGET)
 
 .PHONY: all test test-gcc test-clang test-matrix clean
 
@@ -56,6 +65,7 @@ all: test
 test: $(TARGETS)
 	$(TEST_ENV) ./$(CORE_TARGET)
 	$(TEST_ENV) ./$(INTRF_TARGET)
+	$(TEST_ENV) ./$(LINK_TARGET)
 
 test-gcc:
 	$(MAKE) clean
@@ -76,6 +86,11 @@ $(INTRF_TARGET): $(INTRF_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
 		$(INTRF_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(LINK_TARGET): $(LINK_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(LINK_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 clean:
 	rm -rf $(BUILD_DIR)

@@ -200,12 +200,14 @@ static bool UsbdCdcConfig(uint8_t Configuration, void *pContext)
 		return false;
 	}
 
+#if 0
 	if (!UsbIntrfConfigRx(&pCdc->Data,
 						USBD_CDC_DATA_OUT_EP(pCdc->ItfNo), pCdc->DataMps))
 	{
 		UsbdCdcCloseEndpoints(pCdc);
 		return false;
 	}
+#endif
 
 	UsbIntrfConfigTx(&pCdc->Data,
 					   USBD_CDC_DATA_IN_EP(pCdc->ItfNo),
@@ -417,7 +419,7 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 	dataCfg.TxFifoBlkSize = 1U;
 	dataCfg.DevNo = pCfg->DevNo;
 	dataCfg.EvtCB = pCfg->EvtCB;
-
+	dataCfg.Mps = UsbdCdcMps(pCdc);
 	if (!UsbIntrfInit(&pCdc->Data, &dataCfg))
 	{
 		return false;
