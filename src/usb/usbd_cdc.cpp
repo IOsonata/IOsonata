@@ -39,11 +39,6 @@ SOFTWARE.
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
 
-static uint8_t *UsbdCdcRxBuffer(UsbdCdcDev_t *pCdc)
-{
-	return reinterpret_cast<uint8_t *>(pCdc->RxTransfer);
-}
-
 static uint8_t *UsbdCdcTxBuffer(UsbdCdcDev_t *pCdc)
 {
 	return reinterpret_cast<uint8_t *>(pCdc->TxTransfer);
@@ -206,8 +201,7 @@ static bool UsbdCdcConfig(uint8_t Configuration, void *pContext)
 	}
 
 	if (!UsbIntrfConfigRx(&pCdc->Data,
-						USBD_CDC_DATA_OUT_EP(pCdc->ItfNo), pCdc->DataMps,
-						UsbdCdcRxBuffer(pCdc)))
+						USBD_CDC_DATA_OUT_EP(pCdc->ItfNo), pCdc->DataMps))
 	{
 		UsbdCdcCloseEndpoints(pCdc);
 		return false;
@@ -402,11 +396,14 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 		return false;
 	}
 
-	const UsbCfg_t *pDevCfg = UsbGetCfg(pCdc->DevNo);
+	// pCdc->DevNo is not set yet, so the controller comes from the config.
+	const UsbCfg_t *pDevCfg = UsbGetCfg(pCfg->DevNo);
 	if (pDevCfg == nullptr || pCfg->ItfNo >= pDevCfg->NbCdc)
 	{
 		return false;
 	}
+
+	pCdc->DevNo = pCfg->DevNo;
 
 	UsbIntrfCfg_t dataCfg = {};
 	dataCfg.bBlocking = pCfg->bBlocking;
@@ -414,9 +411,12 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 	dataCfg.pRxFifoMem = pCfg->pRxFifoMem;
 	dataCfg.TxFifoMemSize = pCfg->TxFifoMemSize;
 	dataCfg.pTxFifoMem = pCfg->pTxFifoMem;
+	// CDC is a byte stream. Block size one lets UsbIntrf packetize whatever
+	// is queued, so a single character goes out as a one byte packet instead
+	// of waiting for a full one.
+	dataCfg.TxFifoBlkSize = 1U;
 	dataCfg.DevNo = pCfg->DevNo;
 	dataCfg.EvtCB = pCfg->EvtCB;
-	pCdc->DevNo = pCfg->DevNo;
 
 	if (!UsbIntrfInit(&pCdc->Data, &dataCfg))
 	{

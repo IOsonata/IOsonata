@@ -1553,9 +1553,20 @@ static bool UsbDevInit(const UsbCfg_t *pCfg)
 		return false;
 	}
 
+	// A supplied handler replaces the built in builder. That is how a device
+	// that is not CDC, or one with a composite descriptor set of its own,
+	// gets its descriptors out.
 	UsbCoreCfg_t coreCfg = {};
-	coreCfg.DescHandler = UsbDevDescHandler;
-	coreCfg.pDescContext = nullptr;
+	if (s_UsbDevCfg.DescHandler != nullptr)
+	{
+		coreCfg.DescHandler = s_UsbDevCfg.DescHandler;
+		coreCfg.pDescContext = s_UsbDevCfg.pDescContext;
+	}
+	else
+	{
+		coreCfg.DescHandler = UsbDevDescHandler;
+		coreCfg.pDescContext = nullptr;
+	}
 	// Speed and endpoint zero packet size come from usb_ctrlr.h now. The
 	// capability record that used to carry them is gone.
 	coreCfg.Speed = USB_HIGHSPEED_CAPABLE(0) ? USB_SPEED_HIGH : USB_SPEED_FULL;

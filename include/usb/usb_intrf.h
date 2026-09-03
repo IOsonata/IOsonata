@@ -8,16 +8,18 @@ UsbIntrf applies DeviceIntrf to a configured USB data endpoint. Endpoint
 address/direction, transfer type and maximum packet size (MPS) are instance
 state. DeviceIntrf DevAddr is not used to select an endpoint on each transfer.
 
-UsbdCore handles endpoint zero, Chapter 9 requests, descriptors,
-configuration and class/vendor dispatch. UsbdCtrlr handles endpoint registers,
-DMA/FIFO access and controller interrupts.
+The generic layer in usb.cpp handles endpoint zero, Chapter 9 requests,
+descriptors, configuration and class/vendor dispatch. The port handles endpoint
+registers, DMA/FIFO access and controller interrupts.
 
-RX uses packet-mode CFifo storage. USB hardware reports one received packet at
-a time and the complete packet is retrieved in one operation. Each RX CFifo
-block contains UsbPktHdr_t followed by storage for one endpoint packet. Block
-size is based on sizeof(UsbPktHdr_t) plus the endpoint MPS. UsbPktHdr_t.Length
-is the actual received data length and may be from zero to MPS. DeviceIntrfRx()
-may consume across packet blocks and present a byte stream.
+RX storage is a ring of fixed packet slots supplied by the application, not a
+CFifo. Each slot contains UsbPktHdr_t followed by storage for one endpoint
+packet, word aligned, sized with USB_INTRF_RXMEM_SIZE. The controller is armed
+directly on the slot the ring will publish next and writes into it, so nothing
+is copied on the receive path. The slot becomes visible to the reader only
+after the transfer completes. UsbPktHdr_t.Length is the actual received data
+length and may be from zero to MPS. DeviceIntrfRx() may consume across packet
+slots and present a byte stream.
 
 TX CFifo mode is selected by block size. BlkSize 1 provides byte-stream
 accumulation and UsbIntrf packetizes queued bytes up to the endpoint MPS. In
@@ -28,14 +30,14 @@ may be from zero to MPS. UsbIntrf sends the stored packet length without
 combining packet blocks. USB transfer type and CFifo block size are separate
 settings.
 
-CFifo memory is supplied by UsbIntrfCfg_t. Endpoint MPS determines the RX
-packet block size and the TX packet-mode block size. Port maximum packet-size
-definitions may be used by static allocation macros so the configuration
-reserves sufficient memory.
+RX ring memory and TX CFifo memory are both supplied by UsbIntrfCfg_t. Endpoint
+MPS determines the RX slot size and the TX packet-mode block size. Port maximum
+packet-size definitions may be used by static allocation macros so the
+configuration reserves sufficient memory.
 
-Controller DMA storage and CFifo storage are separate. TX uses a temporary
-packet-sized DMA buffer while an IN transfer is active. RX completes into a
-USB-owned staging buffer before the packet is copied into the RX CFifo.
+TX still uses a temporary packet-sized buffer, because CFifoGet releases a
+block before the controller is done with it and byte mode has to gather across
+the ring wrap.
 
 Generic code must not assume a 64-byte packet, a specific USB speed, or a
 specific controller.
@@ -87,6 +89,14 @@ SOFTWARE.
   * @{
   */
 
+/// Bytes one stored packet occupies, header plus payload, word aligned.
+#define USB_INTRF_PKT_BLKSIZE(Mps) \
+	((uint32_t)((sizeof(UsbPktHdr_t) + (uint32_t)(Mps) + 3U) & ~3U))
+
+/// RX memory holding NbPkt packet slots for an Mps byte endpoint.
+#define USB_INTRF_RXMEM_SIZE(NbPkt, Mps) \
+	((uint32_t)(NbPkt) * USB_INTRF_PKT_BLKSIZE(Mps))
+
 #pragma pack(push, 4)
 
 typedef struct __Usb_Packet_Header {
@@ -107,15 +117,17 @@ typedef struct __Usb_Interf_Config {
 
 typedef struct __Usb_Dev_Interf {
 	DevIntrf_t DevIntrf;
-	hCFifo_t hRxFifo;
 	hCFifo_t hTxFifo;
-	uint8_t *pRxFifoMem;		//!< RX CFifo memory, kept until the MPS is known
-	uint32_t RxFifoMemSize;		//!< RX CFifo memory size in bytes
 	int DevNo;					//!< USB controller number
-	uint8_t *pRxBuffer;			//!< One packet RX DMA staging buffer
+	uint8_t *pRxMem;			//!< RX packet ring memory supplied by application
+	uint32_t RxMemSize;			//!< RX packet ring memory size in bytes
+	uint32_t RxPut;				//!< Completed RX packets published
+	uint32_t RxGet;				//!< RX packets fully consumed
 	uint32_t RxUsed;				//!< Published RX payload bytes not yet consumed
-	uint32_t RxDropCnt;			//!< Controller/error drops; ring-full uses backpressure
-	uint16_t RxOffset;			//!< Byte-stream cursor in the current RX packet
+	uint32_t RxDropCnt;			//!< Controller/error drops, ring full uses backpressure
+	uint16_t RxOffset;			//!< Byte-stream cursor in the head RX packet
+	uint16_t RxSlotSize;		//!< Bytes one packet slot occupies
+	uint16_t RxSlotCnt;			//!< Packet slots in pRxMem
 	uint16_t RxMps;				//!< OUT endpoint maximum packet size
 	uint8_t RxEpAddr;			//!< OUT endpoint owned by this instance
 	uint8_t TxEpAddr;			//!< IN endpoint owned by this instance
@@ -139,9 +151,12 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg);
 /**
  * Bind an OUT endpoint and build the RX packet ring for its maximum packet
  * size. Returns false when the supplied RX memory cannot hold one packet slot.
+ *
+ * There is no RX staging buffer. The controller writes straight into the slot
+ * the ring is about to publish, and the slot becomes visible to the reader
+ * only after the transfer completes.
  */
-bool UsbIntrfConfigRx(UsbDevIntrf_t *pIntrf, uint8_t EpAddr,
-					  uint16_t Mps, uint8_t *pBuffer);
+bool UsbIntrfConfigRx(UsbDevIntrf_t *pIntrf, uint8_t EpAddr, uint16_t Mps);
 
 /** Drop RX endpoint/ring state on bus reset or unconfigure. */
 void UsbIntrfResetRx(UsbDevIntrf_t *pIntrf);

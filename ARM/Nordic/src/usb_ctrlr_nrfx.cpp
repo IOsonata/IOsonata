@@ -59,8 +59,11 @@ SOFTWARE.
 #include "nrf.h"
 #include "nrf_peripherals.h"
 #include "nrf_erratas.h"
+#include "hal/nrf_ficr.h"
 
 #include "usb/usb.h"
+
+#include "usb_ctrlr.h"			// Port supplied, describes this target
 
 #if !defined(USBD_PRESENT) && !defined(USBHS_PRESENT)
 #error "usb_ctrlr_nrfx: this part has no USB controller"
@@ -81,8 +84,12 @@ static inline bool nRFUsbValidDevNo(int DevNo)
 #define NRFX_USBD_HAS_USBD					1
 #elif defined(USBHS_PRESENT)
 #define NRFX_USBD_HAS_USBHS				1
+// The USBHS clock and VBUS regulator are separate peripherals on this part.
+#include "hal/nrf_clock.h"
+#include "hal/nrf_vregusb.h"
+#include "soc/nrfx_coredep.h"
 #else
-#error "usbd_nrfx: this part has no USB device controller"
+#error "usb_ctrlr_nrfx: this part has no USB device controller"
 #endif
 
 
@@ -99,6 +106,9 @@ static inline bool nRFUsbValidDevNo(int DevNo)
 #endif
 
 #ifdef NRFX_USBD_SOFTDEVICE
+#include "nrf_soc.h"
+#include "nrf_sdm.h"
+#include "nrf_error.h"
 #endif
 
 #ifndef NRFX_USBD_XTAL_WAIT_LOOPS

@@ -1,15 +1,20 @@
 ROOT := ../..
 BUILD_DIR := build
-TARGET := $(BUILD_DIR)/usbd_core_test
 
 CXX ?= g++
+CC ?= gcc
 OPT ?= -O1
 
-CPPFLAGS += -I$(ROOT)/include
+# hostport supplies usb_ctrlr.h, the header every real port provides.
+CPPFLAGS += -I$(ROOT)/include -Ihostport
+
 CXXFLAGS ?= $(OPT) -g
 CXXFLAGS += -std=gnu++17 -Wall -Wextra -fno-omit-frame-pointer \
 	-ffunction-sections -fdata-sections -fstack-protector-strong \
 	-D_GLIBCXX_ASSERTIONS
+CFLAGS ?= $(OPT) -g
+CFLAGS += -std=gnu11 -Wall -Wextra -fno-omit-frame-pointer \
+	-ffunction-sections -fdata-sections -fstack-protector-strong
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
@@ -24,37 +29,53 @@ SANITIZERS ?= -fsanitize=address,undefined -fno-sanitize-recover=all
 TEST_ENV := ASAN_OPTIONS=$(ASAN_RUNTIME_OPTIONS) \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
 
-SOURCES := \
-	usbd_core_test.cpp \
-	$(ROOT)/src/usb/usbd_core.cpp
+CORE_TARGET := $(BUILD_DIR)/usb_core_test
+CORE_SOURCES := \
+	usb_core_test.cpp \
+	$(ROOT)/src/usb/usb.cpp \
+	$(ROOT)/src/usb/usbd_cdc_desc.cpp
+
+INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
+INTRF_SOURCES := \
+	usb_intrf_test.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/cfifo.c
 
 HEADERS := \
-	$(ROOT)/include/usb/usbd.h \
+	hostport/usb_ctrlr.h \
+	$(ROOT)/include/usb/usb.h \
 	$(ROOT)/include/usb/usb_def.h \
-	$(ROOT)/include/usb/usbd_ctrlr.h \
-	$(ROOT)/include/usb/usbd_core.h
+	$(ROOT)/include/usb/usb_intrf.h
+
+TARGETS := $(CORE_TARGET) $(INTRF_TARGET)
 
 .PHONY: all test test-gcc test-clang test-matrix clean
 
 all: test
 
-test: $(TARGET)
-	$(TEST_ENV) ./$(TARGET)
+test: $(TARGETS)
+	$(TEST_ENV) ./$(CORE_TARGET)
+	$(TEST_ENV) ./$(INTRF_TARGET)
 
 test-gcc:
 	$(MAKE) clean
-	$(MAKE) test CXX=g++
+	$(MAKE) test CXX=g++ CC=gcc
 
 test-clang:
 	$(MAKE) clean
-	$(MAKE) test CXX=clang++
+	$(MAKE) test CXX=clang++ CC=clang
 
 test-matrix: test-gcc test-clang
 
-$(TARGET): $(SOURCES) $(HEADERS)
+$(CORE_TARGET): $(CORE_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
-		$(SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+		$(CORE_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(INTRF_TARGET): $(INTRF_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(INTRF_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 clean:
 	rm -rf $(BUILD_DIR)

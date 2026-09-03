@@ -13,7 +13,7 @@ its cable detect are behind UsbdInit and friends, and one port file answers
 them per MCU family, so the same source builds for every target that has a
 USB device controller.
 
-USB RX/TX packet progress is interrupt driven. UsbDevProcess handles device
+USB RX/TX packet progress is interrupt driven. UsbProcess handles device
 attach/detach and class housekeeping and should still be called regularly from
 the main loop or a thread.
 
@@ -50,15 +50,20 @@ SOFTWARE.
 #include <string.h>
 
 #include "cfifo.h"
-#include "usb/usb_dev.h"
+#include "usb/usb.h"
 #include "usb/usbd_cdc.h"
+#include "usb_ctrlr.h"
+
+#define USB_DEVNO				0
 
 #define BUFFER_SIZE				64
 
-// RX memory is used directly as USB packet-ring storage. TX keeps a CFifo so
-// application writes can run ahead of USB IN completion. The existing CFifo
-// size macro leaves enough room for four 64-byte full-speed RX packet slots.
-#define CDC_RXFIFO_MEMSIZE		CFIFO_MEMSIZE(256)
+// RX memory is the USB packet ring itself. The controller writes each OUT
+// packet straight into a slot, so there is no staging buffer and no copy. TX
+// keeps a CFifo so application writes can run ahead of USB IN completion.
+#define CDC_RXFIFO_PKTCNT		4
+#define CDC_RXFIFO_MEMSIZE \
+	USB_INTRF_RXMEM_SIZE(CDC_RXFIFO_PKTCNT, USB_PKT_MAXLEN(USB_DEVNO, BULK))
 #define CDC_TXFIFO_MEMSIZE		CFIFO_MEMSIZE(1024)
 
 alignas(4) static uint8_t s_CdcRxFifoMem[CDC_RXFIFO_MEMSIZE];
@@ -75,6 +80,7 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 	.TxFifoMemSize = CDC_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_CdcTxFifoMem,
 	.ItfNo = 0,
+	.DevNo = USB_DEVNO,
 	.EvtCB = CdcEvtHandler,
 };
 
@@ -84,7 +90,8 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 // what the other USB demo in this tree uses. Put your own vendor and product
 // id here before shipping anything : a duplicate pair makes the host reuse a
 // driver and a saved COM port from somebody else's board.
-static const UsbDevCfg_t s_UsbDevCfg = {
+static const UsbCfg_t s_UsbCfg = {
+	.DevNo = USB_DEVNO,
 	.Vid = 0x1209,
 	.Pid = 0x0001,
 	.DevVer = 0x0100,
@@ -136,7 +143,7 @@ int main()
 {
 	uint8_t buff[BUFFER_SIZE];
 
-	if (UsbDevInit(&s_UsbDevCfg) == false)
+	if (UsbInit(&s_UsbCfg) == false)
 	{
 		return -1;
 	}
@@ -149,15 +156,15 @@ int main()
 	DevIntrf_t *pData = g_Cdc.Data();
 
 	// A board on a battery starts with no cable in it, so this failing is
-	// not an error. UsbDevProcess notices the attach and comes back to it.
-	UsbDevEnable();
+	// not an error. UsbProcess notices the attach and comes back to it.
+	UsbEnable(USB_DEVNO);
 
 	int pending = 0;
 	int offset = 0;
 
 	while (1)
 	{
-	    UsbDevProcess();
+	    UsbProcess(USB_DEVNO);
 
 	    if (pending > 0)
 	    {

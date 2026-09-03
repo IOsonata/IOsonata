@@ -18,7 +18,7 @@ Tx follows the same model as UART: the application only fills the Tx CFifo.
 The first write that finds Tx idle starts the endpoint with whatever data is
 available, completion interrupts keep draining the FIFO one full packet at a
 time, and a partial tail left behind goes out on its own after one idle USB
-frame. UsbDevProcess is needed while waiting for USB attach and port open,
+frame. UsbProcess is needed while waiting for USB attach and port open,
 not between transmitted bytes.
 
 @author	Hoang Nguyen Hoan
@@ -54,17 +54,22 @@ SOFTWARE.
 
 #include "cfifo.h"
 #include "prbs.h"
-#include "usb/usb_dev.h"
+#include "usb/usb.h"
 #include "usb/usbd_cdc.h"
 
 #define BYTE_MODE
+
+#define USB_DEVNO				0
 
 #define TEST_BUFSIZE			16
 
 // FIFO memory belongs to the application. This test writes as fast as the
 // host will take it, so the Tx side is sized to hold several packets and let
 // the fill loop run ahead of the bus.
-#define CDC_RXFIFO_MEMSIZE		CFIFO_MEMSIZE(256)
+// Rx memory is the USB packet ring itself, one slot per endpoint packet.
+#define CDC_RXFIFO_PKTCNT		4
+#define CDC_RXFIFO_MEMSIZE \
+	USB_INTRF_RXMEM_SIZE(CDC_RXFIFO_PKTCNT, USB_PKT_MAXLEN(USB_DEVNO, BULK))
 #define CDC_TXFIFO_MEMSIZE		CFIFO_MEMSIZE(2048)
 
 alignas(4) static uint8_t s_CdcRxFifoMem[CDC_RXFIFO_MEMSIZE];
@@ -82,6 +87,7 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 	.TxFifoMemSize = CDC_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_CdcTxFifoMem,
 	.ItfNo = 0,
+	.DevNo = USB_DEVNO,
 	.EvtCB = nullptr,
 };
 
@@ -89,7 +95,8 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 //
 // 0x1209 is the pid.codes vendor id, which exists for open hardware. Put your
 // own vendor and product id here before shipping anything.
-static const UsbDevCfg_t s_UsbDevCfg = {
+static const UsbCfg_t s_UsbCfg = {
+	.DevNo = USB_DEVNO,
 	.Vid = 0x1209,
 	.Pid = 0x0002,
 	.DevVer = 0x0100,
@@ -114,7 +121,7 @@ int main()
 	uint8_t buff[TEST_BUFSIZE];
 #endif
 
-	if (UsbDevInit(&s_UsbDevCfg) == false)
+	if (UsbInit(&s_UsbCfg) == false)
 	{
 		return -1;
 	}
@@ -127,8 +134,8 @@ int main()
 	DevIntrf_t *pData = g_Cdc.Data();
 
 	// A board on a battery starts with no cable in it, so this failing is
-	// not an error. UsbDevProcess notices the attach and comes back to it.
-	UsbDevEnable();
+	// not an error. UsbProcess notices the attach and comes back to it.
+	UsbEnable(USB_DEVNO);
 
 	while (1)
 	{
@@ -136,7 +143,7 @@ int main()
 		// is open, Bulk IN progress is entirely completion-interrupt driven.
 		if (g_Cdc.IsPortOpen() == false)
 		{
-			UsbDevProcess();
+			UsbProcess(USB_DEVNO);
 			continue;
 		}
 
