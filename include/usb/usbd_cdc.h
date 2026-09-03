@@ -83,7 +83,7 @@ typedef struct __Usbd_Cdc_Config {
 } UsbdCdcCfg_t;
 
 typedef struct __Usbd_Cdc_Dev {
-	UsbdDevIntrf_t Data;
+	UsbDevIntrf_t Data;
 	UsbCdcLineCoding_t LineCoding;
 	UsbCdcLineCoding_t PendingLineCoding;
 	uint16_t ControlLineState;

@@ -173,6 +173,16 @@ typedef struct __Usb_Func_Config {
 	void *pContext;
 } UsbFuncCfg_t;
 
+/// What the generic layer hands the port at UsbCtrlrInit. Interrupt priority
+/// and suspend behaviour reach the hardware only through here, so the port
+/// needs them alongside the event callback.
+typedef struct __Usb_Ctrlr_Config {
+	int IntPrio;					//!< Interrupt priority of the USB peripheral
+	bool bLowPowerSuspend;			//!< true - Sit in USB low power while suspended
+	UsbCtrlrEvtHandler_t EvtHandler;
+	void *pContext;
+} UsbCtrlrCfg_t;
+
 /// Everything UsbInit needs. Endpoint zero packet size and maximum speed are
 /// not here, they come from usb_ctrlr.h for this DevNo.
 typedef struct __Usb_Config {
@@ -254,7 +264,7 @@ bool UsbRemoteWakeup(int DevNo);
  *
  * Must not touch controller registers, the peripheral may still be unpowered.
  */
-bool UsbCtrlrInit(int DevNo, UsbCtrlrEvtHandler_t EvtHandler, void *pContext);
+bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg);
 
 /**
  * @brief	Power, clock and PHY up, then prepare endpoint zero.
