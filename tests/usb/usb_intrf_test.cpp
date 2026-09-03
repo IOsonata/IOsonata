@@ -266,6 +266,33 @@ static void TestUnconfigure(void)
 	CHECK(s_OutBusy);
 }
 
+// EnCnt gates every arm, and UsbIntrfDisable does nothing on its own, so
+// DeviceIntrfEnable is the only thing that restarts receive after a disable.
+// A packet completing while disabled is discarded rather than stored.
+static void TestDisableEnable(void)
+{
+	CHECK(Setup());
+	const uint8_t in[4] = { 1, 2, 3, 4 };
+
+	DeviceIntrfDisable(&s_Intrf.DevIntrf);
+	Deliver(in, sizeof(in));
+	CHECK(!s_OutBusy);
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
+
+	const int submitted = s_OutSubmitCnt;
+	DeviceIntrfEnable(&s_Intrf.DevIntrf);
+	CHECK(s_OutBusy);
+	CHECK(s_OutSubmitCnt == submitted + 1);
+	CHECK(s_OutBuf == s_RxTransfer);
+	CHECK(s_OutLen == MPS);
+
+	const uint8_t after[2] = { 'p', 'q' };
+	Deliver(after, sizeof(after));
+	uint8_t out[8] = {};
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 2);
+	CHECK(memcmp(out, after, sizeof(after)) == 0);
+}
+
 static void CompleteIn(uint16_t Len)
 {
 	CHECK(s_InBusy);
@@ -281,32 +308,73 @@ static void TestTxChaining(void)
 	memset(full, 0x5A, sizeof(full));
 	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, full, sizeof(full)) == MPS);
 	CHECK(s_InBusy && s_InBuf == s_TxTransfer && s_InLen == MPS);
+	// A tail shorter than MPS is not sent on completion. Doing that turns a
+	// producer slower than the bus into one short packet per completion, which
+	// is what costs throughput. It waits for an idle frame instead.
 	const uint8_t tail[3] = { 1, 2, 3 };
 	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, tail, sizeof(tail)) == 3);
 	CompleteIn(MPS);
+	CHECK(!s_InBusy);
+	CHECK(CFifoUsed(s_Intrf.hTxFifo) == sizeof(tail));
+
+	// One frame of grace, then it goes out.
+	UsbIntrfSof(&s_Intrf);
+	CHECK(!s_InBusy);
+	UsbIntrfSof(&s_Intrf);
 	CHECK(s_InBusy && s_InLen == sizeof(tail));
 	CHECK(memcmp(s_InBuf, tail, sizeof(tail)) == 0);
 	CompleteIn(sizeof(tail));
 	CHECK(!s_InBusy);
 	CHECK(s_InSubmitCnt == 2);
 
-	// A new full packet before the delayed ZLP continues the stream directly.
+	// Back to back full packets are never broken up by the frame clock.
 	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, full, sizeof(full)) == MPS);
-	CompleteIn(MPS);
-	CHECK(!s_InBusy);
-	CHECK(s_Intrf.TxZlpDelay == 2U);
 	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, full, sizeof(full)) == MPS);
-	CHECK(s_InBusy && s_InLen == MPS && s_Intrf.TxZlpDelay == 0U);
+	UsbIntrfSof(&s_Intrf);
 	CompleteIn(MPS);
-	CHECK(!s_InBusy && s_Intrf.TxZlpDelay == 2U);
-
-	// An actually idle full packet gets its terminating ZLP after two SOFs.
-	UsbIntrfSof(&s_Intrf);
-	CHECK(!s_InBusy && s_Intrf.TxZlpDelay == 1U);
-	UsbIntrfSof(&s_Intrf);
-	CHECK(s_InBusy && s_InLen == 0U && s_Intrf.TxZlpDelay == 0U);
+	CHECK(s_InBusy && s_InLen == MPS);
+	CompleteIn(MPS);
+	CHECK(s_InBusy && s_InLen == 0U);
 	CompleteIn(0U);
 	CHECK(!s_InBusy);
+
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, full, sizeof(full)) == MPS);
+	CompleteIn(MPS);
+	CHECK(s_InBusy && s_InLen == 0U);
+	CompleteIn(0U);
+	CHECK(!s_InBusy);
+}
+
+// A producer that goes quiet is waiting on its own data, so its tail must not
+// wait for the frame clock. The loopback example is this shape: echo a burst,
+// then block on the next read. One frame per exchange would halve its rate.
+static void TestIdleProducerTail(void)
+{
+	CHECK(Setup());
+	uint8_t burst[MPS + 20U];
+	memset(burst, 0x27, sizeof(burst));
+
+	// One write, then nothing. The first MPS bytes go out immediately.
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, burst, sizeof(burst)) ==
+		  (int)sizeof(burst));
+	CHECK(s_InBusy && s_InLen == MPS);
+
+	// Nothing was queued while that packet was on the bus, so the tail
+	// follows it without waiting for a SOF.
+	CompleteIn(MPS);
+	CHECK(s_InBusy && s_InLen == 20U);
+	CompleteIn(20U);
+	CHECK(!s_InBusy);
+	CHECK(s_InSubmitCnt == 2);
+
+	// A producer that keeps running is not interrupted for a short packet.
+	CHECK(Setup());
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, burst, MPS) == (int)MPS);
+	CHECK(s_InBusy && s_InLen == MPS);
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, burst, 20) == 20);
+	CompleteIn(MPS);
+	CHECK(!s_InBusy);
+	CHECK(CFifoUsed(s_Intrf.hTxFifo) == 20);
 }
 
 static void TestTooSmall(void)
@@ -339,7 +407,9 @@ int main(void)
 		{ "ring wrap", TestWrap },
 		{ "failed and wrong ep", TestFailedAndWrongEndpoint },
 		{ "unconfigure", TestUnconfigure },
+		{ "disable then enable", TestDisableEnable },
 		{ "tx chaining", TestTxChaining },
+		{ "idle producer tail", TestIdleProducerTail },
 		{ "memory too small", TestTooSmall },
 	};
 

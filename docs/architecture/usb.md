@@ -168,11 +168,36 @@ An idle producer starts transmission immediately. While IN is busy, producers
 only append to the FIFO. Completion copies and submits the next queued data
 while it still owns the inherited `DeviceIntrf.bTxReady` token.
 
-A byte-mode burst ending exactly on an MPS boundary needs a ZLP so the host can
-deliver the final bytes without waiting for more data. The ZLP must not be sent
-after every full packet: that halves continuous-stream transaction capacity.
-One `TxZlpDelay` counter waits two SOFs. New queued data clears it and continues
-the burst; only a genuinely idle stream sends the terminating ZLP.
+Completion sends a tail shorter than MPS only when the producer added nothing
+while the previous packet was on the bus. That one test separates the two
+workloads that pull in opposite directions:
+
+- A producer that keeps running is slower served by short packets, because a
+  short packet costs the same bus slot as a full one. Measured on a
+  one-byte-per-call producer against a bus that completes faster than the fill
+  loop, sending every tail drops the stream to two bytes per packet, thirty-two
+  times the transactions for the same data.
+- A producer that stopped is waiting on that data. Holding its tail back costs
+  a frame per exchange, which halves a request and response workload such as
+  the loopback example.
+
+`TxUsedMark` records what was still queued when the packet was filled, and the
+comparison at completion answers which case this is. `UsbIntrfSof()` remains
+the backstop for a tail that arrived just after a completion: it goes out once
+it has been seen idle across one whole frame, bounding the wait at two frames
+without ever splitting up back-to-back full packets. `TxTailArmed` is the one
+bit that grace period needs.
+
+Byte mode and packet mode are separate `DevIntrf.TxData` handlers, chosen once
+in `UsbIntrfInit()` from the CFifo block size. Byte mode is the CDC hot path and
+runs once per `DeviceIntrfTx()` call, so a one byte write walks all of it; a
+mode test at the top would be paid on every byte. Split this way the byte path
+compiles to the same instruction sequence it had before packet mode existed.
+
+A byte-mode packet ending exactly on an MPS boundary is followed by a ZLP when
+the FIFO is empty, so the host sees the stream end rather than a stalled read.
+With data still queued the next packet terminates the transfer on its own and
+no ZLP is sent, which is why no pending-ZLP flag is stored.
 
 ## Minimal state and lifecycle
 
@@ -187,9 +212,10 @@ the burst; only a genuinely idle stream sends the terminating ZLP.
 | Is TX software-owned? | inherited `bTxReady` token |
 
 There is no `bEnabled`, `RxActive`, `RxAccepting`, separate RX/TX endpoint
-address, release flag or general TX-tail state. `TxZlpDelay` is retained because
-it distinguishes a continuing full-packet stream from an idle burst that needs
-termination.
+address or pending-ZLP flag. `TxUsedMark` and `TxTailArmed` are the exceptions,
+and each holds a fact nothing else does: what was queued when the current
+packet was filled, and whether a partial tail was already idle at the previous
+frame.
 
 The lifecycle is:
 
