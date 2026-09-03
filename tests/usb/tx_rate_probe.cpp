@@ -7,6 +7,7 @@
 //
 // Not a regression test. Built and run by hand against two revisions.
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "usb/usb_intrf.h"
@@ -137,8 +138,9 @@ static void Run(int BusTicks, long Iterations)
 		   s_Packets ? (double)s_Bytes / (double)s_Packets : 0.0, s_Zlp);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+	(void)argc; (void)argv;
 	const int ticks[] = { 1, 4, 16, 64, 256 };
 
 	for (unsigned i = 0; i < sizeof(ticks) / sizeof(ticks[0]); i++)

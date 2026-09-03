@@ -51,6 +51,18 @@ INTRF_SOURCES := \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
+# Throughput measurement, not a regression test. Built and run on demand.
+# Sanitizers are left off so the numbers are not distorted.
+PROBE_TARGET := $(BUILD_DIR)/tx_rate_probe
+PROBE_SOURCES := \
+	tx_rate_probe.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/cfifo.c
+
+# Frame clock period in producer iterations. Zero disables the tail flush,
+# which shows what a byte mode tail costs when nothing sends it.
+SOF_TICKS ?= 500
+
 HEADERS := \
 	hostport/usb_ctrlr.h \
 	$(ROOT)/include/usb/usb.h \
@@ -60,7 +72,7 @@ HEADERS := \
 
 TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(LINK_TARGET)
 
-.PHONY: all test test-gcc test-clang test-matrix clean
+.PHONY: all test test-gcc test-clang test-matrix probe clean
 
 all: test
 
@@ -68,6 +80,9 @@ test: $(TARGETS)
 	$(TEST_ENV) ./$(CORE_TARGET)
 	$(TEST_ENV) ./$(INTRF_TARGET)
 	$(TEST_ENV) ./$(LINK_TARGET)
+
+probe: $(PROBE_TARGET)
+	./$(PROBE_TARGET) $(SOF_TICKS)
 
 test-gcc:
 	$(MAKE) clean
@@ -93,6 +108,11 @@ $(LINK_TARGET): $(LINK_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
 		$(LINK_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(PROBE_TARGET): $(PROBE_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++ \
+		$(PROBE_SOURCES) -o $@ $(LDFLAGS)
 
 clean:
 	rm -rf $(BUILD_DIR)
