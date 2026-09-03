@@ -333,16 +333,36 @@ static void TestTxChaining(void)
 	UsbIntrfSof(&s_Intrf);
 	CompleteIn(MPS);
 	CHECK(s_InBusy && s_InLen == MPS);
-	CompleteIn(MPS);
-	CHECK(s_InBusy && s_InLen == 0U);
-	CompleteIn(0U);
-	CHECK(!s_InBusy);
 
-	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, full, sizeof(full)) == MPS);
+	// A packet ending on an MPS boundary owes a ZLP, but the endpoint goes
+	// idle instead of spending a transaction and a completion interrupt on it
+	// straight away. That cost lands on every packet of a stream whose
+	// producer is slower than the bus.
 	CompleteIn(MPS);
+	CHECK(!s_InBusy);
+	CHECK(s_Intrf.TxZlpRequired);
+
+	// The frame clock sends it, and only once the stream has actually paused.
+	UsbIntrfSof(&s_Intrf);
+	CHECK(!s_InBusy);
+	UsbIntrfSof(&s_Intrf);
 	CHECK(s_InBusy && s_InLen == 0U);
 	CompleteIn(0U);
 	CHECK(!s_InBusy);
+	CHECK(!s_Intrf.TxZlpRequired);
+
+	// A producer that keeps feeding never reaches the second SOF, so a
+	// continuous stream never pays for a ZLP at all.
+	CHECK(Setup());
+	int submitted = 0;
+	for (int i = 0; i < 8; i++)
+	{
+		CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, full, sizeof(full)) == MPS);
+		UsbIntrfSof(&s_Intrf);
+		CompleteIn(MPS);
+		submitted++;
+	}
+	CHECK(s_InSubmitCnt == submitted);		// no ZLP among them
 }
 
 // A producer that goes quiet is waiting on its own data, so its tail must not

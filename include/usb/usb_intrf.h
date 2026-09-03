@@ -135,6 +135,7 @@ typedef struct __Usb_Dev_Interf {
 	uint16_t TxBlkSize;			//!< TX CFifo block size, 1 selects byte mode
 	uint8_t EpNo;				//!< Bidirectional endpoint number
 	int TxUsedMark;				//!< TX bytes queued when the current packet was filled
+	bool TxZlpRequired;			//!< Byte mode packet ended on an MPS boundary
 	bool TxTailArmed;			//!< Byte mode tail seen idle at the previous SOF
 } UsbDevIntrf_t;
 

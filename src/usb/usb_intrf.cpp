@@ -182,12 +182,14 @@ static bool UsbIntrfSubmit(UsbDevIntrf_t *pIntrf, bool Tail)
 		return false;
 	}
 
-	if (length == 0 && !(packetMode && used > 0))
+	if (length == 0 && !(packetMode && used > 0) &&
+		!(Tail && pIntrf->TxZlpRequired))
 	{
 		UsbIntrfSetTxIdle(pIntrf);
 		return false;
 	}
 
+	pIntrf->TxZlpRequired = false;
 	pIntrf->TxTailArmed = false;
 
 	// What the producer had queued when this packet was filled. Comparing it
@@ -671,19 +673,23 @@ static void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 		return;
 	}
 
-	// Terminate a byte-mode transfer ending on an MPS boundary without keeping
-	// another software state bit. Completion of this ZLP has Length zero.
-	if (UsbIntrfCanTx(pIntrf) && pIntrf->TxBlkSize == 1U &&
-		Length == pIntrf->Mps && CFifoUsed(pIntrf->hTxFifo) == 0 &&
-		UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfTxAddr(pIntrf),
-						pIntrf->pTxBuffer, 0U))
-	{
-		return;
-	}
-
 	if (!UsbIntrfTxIdle(pIntrf))
 	{
 		UsbIntrfSetTxIdle(pIntrf);
+	}
+
+	// A byte mode packet ending exactly on an MPS boundary owes the host a
+	// ZLP, but sending it from here spends a transaction and a completion
+	// interrupt after every full packet. A producer slower than the bus
+	// empties the FIFO at nearly every completion, so that is nearly every
+	// packet, and the interrupts come out of the same CPU the producer runs
+	// on. Record it and let the frame clock send it, which a stream that
+	// keeps producing never reaches.
+	if (pIntrf->TxBlkSize == 1U && Length == pIntrf->Mps &&
+		CFifoUsed(pIntrf->hTxFifo) == 0)
+	{
+		pIntrf->TxZlpRequired = true;
+		return;
 	}
 
 	if (pIntrf->DevIntrf.EvtCB != nullptr)
@@ -722,7 +728,7 @@ void UsbIntrfSof(UsbDevIntrf_t *pIntrf)
 {
 	if (pIntrf == nullptr || pIntrf->TxBlkSize != 1U ||
 		!UsbIntrfCanTx(pIntrf) || !UsbIntrfTxIdle(pIntrf) ||
-		CFifoUsed(pIntrf->hTxFifo) <= 0)
+		(CFifoUsed(pIntrf->hTxFifo) <= 0 && !pIntrf->TxZlpRequired))
 	{
 		if (pIntrf != nullptr) { pIntrf->TxTailArmed = false; }
 		return;
