@@ -137,6 +137,7 @@ typedef enum __Usb_Ctrl_Stage {
 	USB_CTRL_SETUP,
 	USB_CTRL_DATA,
 	USB_CTRL_COMPLETE,
+	USB_CTRL_ABORT,				//!< Transfer abandoned, drop anything staged
 } UsbCtrlStage_t;
 
 typedef const uint8_t *(*UsbDescHandler_t)(uint8_t DescType, uint8_t DescIndex,
@@ -155,6 +156,10 @@ typedef void (*UsbXferHandler_t)(uint8_t EpAddr, uint16_t Length,
 typedef void (*UsbResetHandler_t)(void *pContext);
 typedef void (*UsbSofHandler_t)(uint16_t FrameNo, void *pContext);
 
+/// Polled from UsbProcess in application context. Work a function cannot do
+/// inside the USB interrupt goes here.
+typedef void (*UsbProcessHandler_t)(void *pContext);
+
 #pragma pack(push, 4)
 
 /// One USB function. Endpoint zero belongs to the generic layer, so bit zero
@@ -170,6 +175,7 @@ typedef struct __Usb_Func_Config {
 	UsbXferHandler_t XferHandler;
 	UsbResetHandler_t ResetHandler;
 	UsbSofHandler_t SofHandler;		//!< Optional, NULL when not needed
+	UsbProcessHandler_t ProcessHandler;	//!< Optional, polled from UsbProcess
 	void *pContext;
 } UsbFuncCfg_t;
 
@@ -194,6 +200,7 @@ typedef struct __Usb_Config {
 	const char *pProduct;			//!< Product string, NULL for none
 	const char *pSerial;			//!< Serial string, NULL to take the MCU unique id
 	const char *pFuncName;			//!< Function name string, NULL for none
+	int NbCdc;						//!< Number of CDC ACM functions, 0 uses 1
 	int IntPrio;					//!< Interrupt priority of the USB peripheral
 	bool bSelfPowered;				//!< true - Device does not draw from the bus
 	bool bLowPowerSuspend;			//!< true - Sit in USB low power while the host
@@ -252,6 +259,12 @@ uint8_t UsbGetConfiguration(int DevNo);
 uint8_t UsbGetAlternate(int DevNo, uint8_t InterfaceNo);
 bool UsbRemoteWakeupEnabled(int DevNo);
 bool UsbRemoteWakeup(int DevNo);
+
+/** @brief Configuration this controller was initialized with, NULL before init. */
+const UsbCfg_t *UsbGetCfg(int DevNo);
+
+/** @brief Serial string in use, either the configured one or the MCU unique id. */
+const char *UsbGetSerial(int DevNo);
 
 //
 // Port contract. Implemented per target, for example in

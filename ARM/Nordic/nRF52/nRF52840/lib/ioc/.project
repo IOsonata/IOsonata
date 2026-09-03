@@ -2341,14 +2341,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/usb/usb.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/usb/usb_ctrlr_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/usb_ctrlr_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb/usb_dev.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_dev.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usb_intrf.cpp</name>
@@ -2364,16 +2364,6 @@
 			<name>src/usb/usbd_cdc_desc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_desc.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb/usbd_core.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_core.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb/usbd_ctrlr.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_ctrlr.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/vqf/cpp</name>
