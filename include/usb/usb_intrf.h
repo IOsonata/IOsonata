@@ -118,6 +118,7 @@ typedef struct __Usb_Packet {
 
 typedef struct __Usb_Interf_Config {
 	int DevNo;					//!< USB controller number
+	uint8_t EpAddr;
 	bool bBlocking;
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;

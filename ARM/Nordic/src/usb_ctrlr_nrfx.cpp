@@ -1775,7 +1775,7 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 	}
 }
 
-static void nRFUsbdIrqHandler(void)
+extern "C" void USBD_IRQHandler(void)
 {
 	const uint32_t intStatus = nRFUsbdCollectEvents();
 	if (intStatus == 0)
@@ -1913,10 +1913,6 @@ static void nRFUsbdIrqHandler(void)
 	nRFUsbdTryEnterLowPower();
 }
 
-extern "C" void USBD_IRQHandler(void)
-{
-	nRFUsbdIrqHandler();
-}
 /**
  * USBD has no second register stage. The power stage leaves the peripheral
  * enabled and endpoint zero is prepared when the bus reset arrives, so there

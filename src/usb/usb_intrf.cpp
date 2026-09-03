@@ -83,9 +83,7 @@ static bool UsbIntrfRxEnabled(const UsbDevIntrf_t *pIntrf)
  */
 static void UsbIntrfRxKick(UsbDevIntrf_t *pIntrf)
 {
-	if (pIntrf == nullptr || !pIntrf->bEnabled || pIntrf->hRxFifo == nullptr ||
-		!UsbIntrfRxEnabled(pIntrf) || pIntrf->RxEpAddr == 0U ||
-		pIntrf->RxMps == 0U)
+	if (!pIntrf->bEnabled || !UsbIntrfRxEnabled(pIntrf) || pIntrf->RxEpAddr == 0U)
 	{
 		return;
 	}
@@ -510,7 +508,7 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	// every transmit call. Byte mode runs once per byte on the CDC path.
 	pIntrf->TxBlkSize = pCfg->TxFifoBlkSize;
 	pIntrf->RxMps = pCfg->Mps;
-	pIntrf->RxEpAddr = 0U;
+	pIntrf->RxEpAddr = pCfg->EpAddr;
 	pIntrf->TxEpAddr = 0U;
 	pIntrf->pTxBuffer = nullptr;
 	pIntrf->TxMps = 0U;

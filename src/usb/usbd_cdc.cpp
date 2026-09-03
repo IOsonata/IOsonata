@@ -420,6 +420,8 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 	dataCfg.DevNo = pCfg->DevNo;
 	dataCfg.EvtCB = pCfg->EvtCB;
 	dataCfg.Mps = UsbdCdcMps(pCdc);
+	dataCfg.EpAddr = USBD_CDC_DATA_OUT_EP(pCfg->ItfNo);
+
 	if (!UsbIntrfInit(&pCdc->Data, &dataCfg))
 	{
 		return false;
