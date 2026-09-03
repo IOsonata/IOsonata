@@ -267,7 +267,7 @@ const UsbCfg_t *UsbGetCfg(int DevNo);
 const char *UsbGetSerial(int DevNo);
 
 //
-// Port contract. Implemented per target, for example in
+// Implemented per target, for example in
 // ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp. These do not change across
 // targets, which is why they are declared here and not in usb_ctrlr.h.
 //
