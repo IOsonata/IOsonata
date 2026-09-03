@@ -234,6 +234,13 @@ USB_ISO_SUPPORTED(DevNo)
 The port owns registers, DMA/FIFO access, endpoint busy state and controller
 interrupts. The generic layer owns no MCU-specific facts.
 
+The nRF52 USBD peripheral has one EasyDMA engine shared by every endpoint.
+Endpoint work is therefore recorded in pending masks and started only from
+`USBD_IRQHandler()`. The handler waits for the corresponding ENDEP event before
+another endpoint may program EasyDMA. Starting pending DMA directly from an
+application call or from a nested transfer-completion callback breaks this
+single-owner rule and can leave an IN or OUT request with no completion event.
+
 ## Function registration
 
 Each class or vendor function registers one `UsbFuncCfg_t` containing its
