@@ -55,11 +55,10 @@ SOFTWARE.
 
 #define USB_DEVNO				0
 
-#define BUFFER_SIZE				64
+#define BUFFER_SIZE				USB_PKT_MAXLEN(USB_DEVNO, BULK)
 
-// RX memory is the USB packet ring itself. The controller writes each OUT
-// packet straight into a slot, so there is no staging buffer and no copy. TX
-// keeps a CFifo so application writes can run ahead of USB IN completion.
+// The application owns queued RX/TX memory. UsbdCdc owns the controller
+// transfer buffers and copies completed OUT packets into this RX packet FIFO.
 #define CDC_RXFIFO_PKTCNT		4
 #define CDC_RXFIFO_MEMSIZE \
 	USB_INTRF_RXMEM_SIZE(CDC_RXFIFO_PKTCNT, USB_PKT_MAXLEN(USB_DEVNO, BULK))
@@ -103,6 +102,9 @@ static const UsbCfg_t s_UsbCfg = {
 	.bSelfPowered = false,
 	.bLowPowerSuspend = false,
 	.MaxPower = 100,
+	.EvtHandler = nullptr,
+	.DescHandler = nullptr,
+	.pDescContext = nullptr,
 };
 
 // CDC class/control object. Application data uses g_Cdc.Data().
@@ -111,6 +113,9 @@ UsbdCdc g_Cdc;
 static int CdcEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 						 uint8_t *pBuffer, int Len)
 {
+	(void)pDev;
+	(void)pBuffer;
+
 	switch (EvtId)
 	{
 		case DEVINTRF_EVT_STATECHG:

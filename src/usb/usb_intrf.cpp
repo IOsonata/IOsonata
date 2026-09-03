@@ -51,71 +51,44 @@ static uint8_t *UsbIntrfPktData(UsbPktHdr_t *pPacket)
 	return reinterpret_cast<uint8_t *>(pPacket + 1);
 }
 
-/**
- * Address CFifoPut will return next, without publishing it.
- *
- * CFifoPut advances PutIdx before the caller fills the block, so its return
- * value cannot be handed to a DMA engine that outlives the call. The block it
- * will hand out next is still well defined, and this is the only producer, so
- * the controller is armed on that address and CFifoPut is called afterwards,
- * once the data is already there. The index arithmetic matches cfifo.c.
- */
-static UsbPktHdr_t *UsbIntrfRxNextPut(UsbDevIntrf_t *pIntrf)
+static bool UsbIntrfEnabled(const UsbDevIntrf_t *pIntrf)
 {
-	const CFifo_t *pFifo = pIntrf->hRxFifo;
-	const uint32_t putIdx = __atomic_load_n(&pFifo->PutIdx, __ATOMIC_RELAXED);
-	const uint32_t slot = pFifo->Mask ? (putIdx & pFifo->Mask) :
-		(putIdx % (uint32_t)pFifo->MaxIdxCnt);
-
-	return reinterpret_cast<UsbPktHdr_t *>(
-		pFifo->pMemStart + slot * pFifo->BlkSize);
+	return pIntrf != nullptr &&
+		atomic_load_explicit(&pIntrf->DevIntrf.EnCnt,
+							 memory_order_relaxed) > 0;
 }
 
-static bool UsbIntrfRxEnabled(const UsbDevIntrf_t *pIntrf)
+static uint8_t UsbIntrfRxAddr(const UsbDevIntrf_t *pIntrf)
 {
-	return __atomic_load_n(&pIntrf->RxAccepting, __ATOMIC_ACQUIRE);
+	return USB_ENDPADDR_DIROUT(pIntrf->EpNo);
 }
 
-/**
- * Arm the OUT endpoint on the slot the ring will publish next. The controller
- * writes straight into it. The slot is not visible to the reader until the
- * transfer completes, so nothing is copied and there is no critical section.
- */
-static void UsbIntrfRxKick(UsbDevIntrf_t *pIntrf)
+static uint8_t UsbIntrfTxAddr(const UsbDevIntrf_t *pIntrf)
 {
-	if (!pIntrf->bEnabled || !UsbIntrfRxEnabled(pIntrf) || pIntrf->RxEpAddr == 0U)
+	return USB_ENDPADDR_DIRIN(pIntrf->EpNo);
+}
+
+static void UsbIntrfRxArm(UsbDevIntrf_t *pIntrf)
+{
+	if (!UsbIntrfEnabled(pIntrf) || pIntrf->Mps == 0U ||
+		pIntrf->hRxFifo == nullptr || pIntrf->pRxBuffer == nullptr ||
+		CFifoAvail(pIntrf->hRxFifo) <= 0)
 	{
 		return;
 	}
 
-	if (__atomic_exchange_n(&pIntrf->RxActive, true, __ATOMIC_ACQ_REL))
+	const uint8_t epAddr = UsbIntrfRxAddr(pIntrf);
+	if (!UsbCtrlrEpBusy(pIntrf->DevNo, epAddr))
 	{
-		return;
-	}
-
-	// Full FIFO leaves the endpoint unarmed. The host is backpressured by USB
-	// rather than a packet being dropped.
-	if (CFifoAvail(pIntrf->hRxFifo) <= 0)
-	{
-		__atomic_store_n(&pIntrf->RxActive, false, __ATOMIC_RELEASE);
-		return;
-	}
-
-	UsbPktHdr_t *pSlot = UsbIntrfRxNextPut(pIntrf);
-	pSlot->Length = 0U;
-	pSlot->Reserved = 0U;
-
-	if (!UsbCtrlrEpXfer(pIntrf->DevNo, pIntrf->RxEpAddr,
-						UsbIntrfPktData(pSlot), pIntrf->RxMps))
-	{
-		__atomic_store_n(&pIntrf->RxActive, false, __ATOMIC_RELEASE);
+		(void)UsbCtrlrEpXfer(pIntrf->DevNo, epAddr,
+							 pIntrf->pRxBuffer, pIntrf->Mps);
 	}
 }
 
 static bool UsbIntrfCanTx(UsbDevIntrf_t *pIntrf)
 {
-	return pIntrf != nullptr && pIntrf->bEnabled &&
-		   pIntrf->TxEpAddr != 0U && pIntrf->pTxBuffer != nullptr;
+	return UsbIntrfEnabled(pIntrf) && pIntrf->Mps > 0U &&
+		   pIntrf->pTxBuffer != nullptr;
 }
 
 static void UsbIntrfSetTxIdle(UsbDevIntrf_t *pIntrf)
@@ -152,7 +125,7 @@ static int UsbIntrfFillPacket(UsbDevIntrf_t *pIntrf)
 	{
 		UsbPktHdr_t *pPacket = reinterpret_cast<UsbPktHdr_t *>(
 			CFifoPeek(pIntrf->hTxFifo));
-		if (pPacket == nullptr || pPacket->Length > pIntrf->TxMps)
+		if (pPacket == nullptr || pPacket->Length > pIntrf->Mps)
 		{
 			if (pPacket != nullptr)
 			{
@@ -171,7 +144,7 @@ static int UsbIntrfFillPacket(UsbDevIntrf_t *pIntrf)
 	}
 
 	uint8_t *pBuffer = pIntrf->pTxBuffer;
-	int remain = (int)pIntrf->TxMps;
+	int remain = (int)pIntrf->Mps;
 	int cnt = 0;
 
 	while (remain > 0)
@@ -198,7 +171,7 @@ static bool UsbIntrfSubmit(UsbDevIntrf_t *pIntrf, bool Tail)
 	const bool packetMode = pIntrf->TxBlkSize != 1U;
 
 	if ((packetMode && used > 0) ||
-		(!packetMode && (used >= (int)pIntrf->TxMps || (Tail && used > 0))))
+		(!packetMode && (used >= (int)pIntrf->Mps || (Tail && used > 0))))
 	{
 		length = UsbIntrfFillPacket(pIntrf);
 	}
@@ -209,17 +182,13 @@ static bool UsbIntrfSubmit(UsbDevIntrf_t *pIntrf, bool Tail)
 		return false;
 	}
 
-	if (length == 0 && !(packetMode && used > 0) &&
-		!(Tail && pIntrf->TxZlpRequired))
+	if (length == 0 && !(packetMode && used > 0))
 	{
 		UsbIntrfSetTxIdle(pIntrf);
 		return false;
 	}
 
-	pIntrf->TxZlpRequired = false;
-	pIntrf->TxTailArmed = false;
-
-	if (UsbCtrlrEpXfer(pIntrf->DevNo, pIntrf->TxEpAddr, pIntrf->pTxBuffer,
+	if (UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfTxAddr(pIntrf), pIntrf->pTxBuffer,
 						(uint16_t)length))
 	{
 		return true;
@@ -249,12 +218,7 @@ static bool UsbIntrfStartXfer(UsbDevIntrf_t *pIntrf, bool Tail)
 
 static void UsbIntrfDisable(DevIntrf_t * const pDevIntrf)
 {
-	UsbDevIntrf_t *pIntrf = UsbIntrfData(pDevIntrf);
-
-	if (pIntrf != nullptr)
-	{
-		pIntrf->bEnabled = false;
-	}
+	(void)pDevIntrf;
 }
 
 static void UsbIntrfEnable(DevIntrf_t * const pDevIntrf)
@@ -266,8 +230,7 @@ static void UsbIntrfEnable(DevIntrf_t * const pDevIntrf)
 		return;
 	}
 
-	pIntrf->bEnabled = true;
-	UsbIntrfRxKick(pIntrf);
+	UsbIntrfRxArm(pIntrf);
 	(void)UsbIntrfStartXfer(pIntrf, false);
 }
 
@@ -286,19 +249,17 @@ static bool UsbIntrfStartRx(DevIntrf_t * const, uint32_t)
 	return true;
 }
 
-/**
- * Byte stream view of the stored packets. Packet boundaries stay in the ring.
- * The read position within the head packet is RxOffset on this object, so the
- * stored packet header carries packet information only.
- */
+/** Consume only complete stored packets, combining packets when they fit. */
 static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer, int BufferLen)
 {
-	if (pDevIntrf == nullptr || pBuffer == nullptr || BufferLen <= 0)
+	UsbDevIntrf_t *pIntrf = UsbIntrfData(pDevIntrf);
+
+	if (pIntrf == nullptr || pIntrf->hRxFifo == nullptr ||
+		pBuffer == nullptr || BufferLen <= 0)
 	{
 		return 0;
 	}
 
-	UsbDevIntrf_t *pIntrf = (UsbDevIntrf_t*)pDevIntrf->pDevData;
 	int cnt = 0;
 
 	while (BufferLen > 0)
@@ -312,14 +273,22 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer, int Bu
 
 		const uint16_t len = pkt->Hdr.Length;
 
-		if (len > 0 && BufferLen > len)
+		if (len > pIntrf->Mps)
 		{
-			return cnt == 0? -1 : cnt;
+			(void)CFifoGet(pIntrf->hRxFifo);
+			pIntrf->RxDropCnt++;
+			continue;
 		}
 
+		if (BufferLen < (int)len)
+		{
+			break;
+		}
 
-
-		memcpy(pBuffer, pkt->Data, len);
+		if (len > 0U)
+		{
+			memcpy(pBuffer, pkt->Data, len);
+		}
 
 		(void)CFifoGet(pIntrf->hRxFifo);
 
@@ -328,7 +297,7 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer, int Bu
 		cnt += len;
 	}
 
-	UsbIntrfRxKick(pIntrf);
+	UsbIntrfRxArm(pIntrf);
 
 	return cnt;
 }
@@ -352,7 +321,7 @@ static int UsbIntrfTxPackets(UsbDevIntrf_t *pIntrf,
 {
 	const uint32_t blockSize = pIntrf->TxBlkSize;
 
-	if (blockSize != sizeof(UsbPktHdr_t) + pIntrf->TxMps ||
+	if (blockSize != sizeof(UsbPktHdr_t) + pIntrf->Mps ||
 		(DataLen % (int)blockSize) != 0)
 	{
 		return 0;
@@ -362,7 +331,7 @@ static int UsbIntrfTxPackets(UsbDevIntrf_t *pIntrf,
 	{
 		const UsbPktHdr_t *pPacket =
 			reinterpret_cast<const UsbPktHdr_t *>(pData + offset);
-		if (pPacket->Length > pIntrf->TxMps)
+		if (pPacket->Length > pIntrf->Mps)
 		{
 			return 0;
 		}
@@ -389,7 +358,7 @@ static int UsbIntrfTxPackets(UsbDevIntrf_t *pIntrf,
 
 	EnableInterrupt(state);
 
-	if (cnt > 0 && pIntrf->TxMps > 0U)
+	if (cnt > 0 && pIntrf->Mps > 0U)
 	{
 		(void)UsbIntrfStartXfer(pIntrf, CFifoUsed(pIntrf->hTxFifo) == cnt);
 	}
@@ -439,13 +408,13 @@ static int UsbIntrfTxData(DevIntrf_t * const pDevIntrf,
 
 	EnableInterrupt(state);
 
-	if (cnt > 0 && pIntrf->TxMps > 0U)
+	if (cnt > 0 && pIntrf->Mps > 0U)
 	{
 		const int used = CFifoUsed(pIntrf->hTxFifo);
 
 		// An empty FIFO starts immediately. While an earlier USB transaction is
 		// active, the producer only queues; completion drains full packets.
-		if (used >= (int)pIntrf->TxMps || used == cnt)
+		if (used >= (int)pIntrf->Mps || used == cnt)
 		{
 			(void)UsbIntrfStartXfer(pIntrf, used == cnt);
 		}
@@ -468,9 +437,7 @@ static void UsbIntrfStopTx(DevIntrf_t * const)
 
 static void UsbIntrfReset(DevIntrf_t * const pDevIntrf)
 {
-	UsbDevIntrf_t *pIntrf = UsbIntrfData(pDevIntrf);
-	UsbIntrfResetRx(pIntrf);
-	UsbIntrfResetTx(pIntrf);
+	UsbIntrfUnconfigure(UsbIntrfData(pDevIntrf));
 }
 
 static void UsbIntrfPowerOff(DevIntrf_t * const pDevIntrf)
@@ -486,11 +453,15 @@ static void *UsbIntrfGetHandle(DevIntrf_t * const pDevIntrf)
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 {
 	if (pIntrf == nullptr || pCfg == nullptr ||
+		pCfg->EpNo == 0U || pCfg->EpNo > USB_ENDPADDR_NUM_MASK ||
 		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
 		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
-		pCfg->TxFifoBlkSize == 0U ||
+		pCfg->pRxBuffer == nullptr || pCfg->pTxBuffer == nullptr ||
+		pCfg->BufferSize == 0U || pCfg->TxFifoBlkSize == 0U ||
 		(((uintptr_t)pCfg->pRxFifoMem & 3U) != 0U) ||
-		(((uintptr_t)pCfg->pTxFifoMem & 3U) != 0U))
+		(((uintptr_t)pCfg->pTxFifoMem & 3U) != 0U) ||
+		(((uintptr_t)pCfg->pRxBuffer & 3U) != 0U) ||
+		(((uintptr_t)pCfg->pTxBuffer & 3U) != 0U))
 	{
 		return false;
 	}
@@ -498,26 +469,22 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	pIntrf->hTxFifo = CFifoInit(pCfg->pTxFifoMem,
 								 (uint32_t)pCfg->TxFifoMemSize,
 								 pCfg->TxFifoBlkSize, pCfg->bBlocking);
-
 	pIntrf->hRxFifo = CFifoInit(pCfg->pRxFifoMem,
 								 (uint32_t)pCfg->RxFifoMemSize,
-								 USB_INTRF_PKT_BLKSIZE(pCfg->Mps), true);
+								 USB_INTRF_PKT_BLKSIZE(pCfg->BufferSize), true);
+	if (pIntrf->hTxFifo == nullptr || pIntrf->hRxFifo == nullptr)
+	{
+		return false;
+	}
 
 	pIntrf->DevNo = pCfg->DevNo;
-	// Fixed for the life of the FIFO, so it is read once here instead of on
-	// every transmit call. Byte mode runs once per byte on the CDC path.
+	pIntrf->EpNo = pCfg->EpNo;
+	pIntrf->pRxBuffer = pCfg->pRxBuffer;
+	pIntrf->pTxBuffer = pCfg->pTxBuffer;
+	pIntrf->BufferSize = pCfg->BufferSize;
+	pIntrf->Mps = 0U;
 	pIntrf->TxBlkSize = pCfg->TxFifoBlkSize;
-	pIntrf->RxMps = pCfg->Mps;
-	pIntrf->RxEpAddr = pCfg->EpAddr;
-	pIntrf->TxEpAddr = 0U;
-	pIntrf->pTxBuffer = nullptr;
-	pIntrf->TxMps = 0U;
-	pIntrf->bEnabled = false;
-	pIntrf->RxActive = false;
-	pIntrf->RxAccepting = false;
 	pIntrf->RxDropCnt = 0U;
-	pIntrf->TxZlpRequired = false;
-	pIntrf->TxTailArmed = false;
 
 	pIntrf->DevIntrf.pDevData = pIntrf;
 	pIntrf->DevIntrf.IntPrio = 0;
@@ -551,95 +518,61 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	return true;
 }
 
-#if 0
-bool UsbIntrfConfigRx(UsbDevIntrf_t *pIntrf, uint8_t EpAddr, uint16_t Mps)
+bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps)
 {
-	if (pIntrf == nullptr || pIntrf->pRxFifoMem == nullptr ||
-		EpAddr == 0U || USB_ENDPADDR_IS_IN(EpAddr) || Mps == 0U)
+	if (pIntrf == nullptr || Mps == 0U || Mps > pIntrf->BufferSize ||
+		pIntrf->hRxFifo == nullptr ||
+		(pIntrf->TxBlkSize != 1U &&
+		 pIntrf->TxBlkSize != sizeof(UsbPktHdr_t) + Mps))
 	{
 		return false;
 	}
 
-	// Blocking, so a full FIFO refuses rather than dropping the oldest packet.
-	// Receive backpressure is USB leaving the endpoint unarmed, never a drop.
-	hCFifo_t hRxFifo = CFifoInit(pIntrf->pRxFifoMem, pIntrf->RxFifoMemSize,
-								 USB_INTRF_PKT_BLKSIZE(Mps), true);
-
-	if (hRxFifo == nullptr)
-	{
-		return false;
-	}
-
-	__atomic_store_n(&pIntrf->RxActive, false, __ATOMIC_RELEASE);
-	__atomic_store_n(&pIntrf->RxAccepting, false, __ATOMIC_RELEASE);
-	pIntrf->hRxFifo = hRxFifo;
-	pIntrf->RxEpAddr = EpAddr;
-	pIntrf->RxMps = Mps;
+	pIntrf->Mps = Mps;
+	CFifoFlush(pIntrf->hRxFifo);
+	CFifoFlush(pIntrf->hTxFifo);
+	UsbIntrfSetTxIdle(pIntrf);
+	UsbIntrfRxArm(pIntrf);
+	(void)UsbIntrfStartXfer(pIntrf, false);
 
 	return true;
 }
-#endif
 
-void UsbIntrfResetRx(UsbDevIntrf_t *pIntrf)
+void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf)
 {
 	if (pIntrf == nullptr)
 	{
 		return;
 	}
 
-	__atomic_store_n(&pIntrf->RxAccepting, false, __ATOMIC_RELEASE);
-	__atomic_store_n(&pIntrf->RxActive, false, __ATOMIC_RELEASE);
+	// Clear MPS first so a completion caused by closing the endpoint cannot
+	// submit another transfer.
+	pIntrf->Mps = 0U;
 
 	if (pIntrf->hRxFifo != nullptr)
 	{
 		CFifoFlush(pIntrf->hRxFifo);
 	}
-
-	pIntrf->hRxFifo = nullptr;
-	pIntrf->RxEpAddr = 0U;
-	pIntrf->RxMps = 0U;
+	CFifoFlush(pIntrf->hTxFifo);
+	UsbIntrfSetTxIdle(pIntrf);
 }
 
-void UsbIntrfRxEnable(UsbDevIntrf_t *pIntrf, bool Enable)
+static void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf, uint16_t Length,
+								UsbCtrlrXferResult_t Result)
 {
-	if (pIntrf == nullptr)
+	if (Result == USB_CTRLR_XFER_SUCCESS && Length <= pIntrf->Mps &&
+		UsbIntrfEnabled(pIntrf) && pIntrf->hRxFifo != nullptr)
 	{
-		return;
-	}
-
-	__atomic_store_n(&pIntrf->RxAccepting, Enable, __ATOMIC_RELEASE);
-
-	if (Enable)
-	{
-		UsbIntrfRxKick(pIntrf);
-	}
-}
-
-void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf, uint16_t Length,
-							UsbCtrlrXferResult_t Result)
-{
-	if (pIntrf == nullptr)
-	{
-		return;
-	}
-
-	__atomic_store_n(&pIntrf->RxActive, false, __ATOMIC_RELEASE);
-
-	// Length zero is a zero length packet, which is a packet. Publishing it
-	// keeps the boundary the host sent.
-	if (Result == USB_CTRLR_XFER_SUCCESS && Length <= pIntrf->RxMps &&
-		pIntrf->bEnabled && UsbIntrfRxEnabled(pIntrf) &&
-		pIntrf->hRxFifo != nullptr)
-	{
-		// The controller has finished writing the block CFifoPut is about to
-		// hand out. Storing the length first and publishing after means the
-		// block a reader sees is already complete, which is what CFifoPut on
-		// its own cannot give, since it publishes before the fill.
-		UsbPktHdr_t *pSlot = UsbIntrfRxNextPut(pIntrf);
-		pSlot->Length = Length;
-
-		if (CFifoPut(pIntrf->hRxFifo) != nullptr)
+		UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(
+			CFifoPut(pIntrf->hRxFifo));
+		if (pPacket != nullptr)
 		{
+			pPacket->Hdr.Length = Length;
+			pPacket->Hdr.Reserved = 0U;
+			if (Length > 0U)
+			{
+				memcpy(pPacket->Data, pIntrf->pRxBuffer, Length);
+			}
 
 			if (CFifoAvail(pIntrf->hRxFifo) <= 0 &&
 				pIntrf->DevIntrf.EvtCB != nullptr)
@@ -658,9 +591,6 @@ void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf, uint16_t Length,
 		}
 		else
 		{
-			// The endpoint is armed only when a block is free, so a blocking
-			// CFifoPut refusing means the FIFO moved underneath the transfer.
-			// The packet is gone.
 			pIntrf->RxDropCnt++;
 		}
 	}
@@ -675,50 +605,11 @@ void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf, uint16_t Length,
 		}
 	}
 
-	UsbIntrfRxKick(pIntrf);
+	UsbIntrfRxArm(pIntrf);
 }
 
-void UsbIntrfConfigTx(UsbDevIntrf_t *pIntrf, uint8_t EpAddr,
-					   uint16_t Mps, uint8_t *pBuffer)
-{
-	if (pIntrf == nullptr)
-	{
-		return;
-	}
-
-	if (EpAddr == 0U || !USB_ENDPADDR_IS_IN(EpAddr) || Mps == 0U ||
-		pBuffer == nullptr ||
-		(pIntrf->TxBlkSize != 1U &&
-		 pIntrf->TxBlkSize != sizeof(UsbPktHdr_t) + Mps))
-	{
-		pIntrf->TxEpAddr = 0U;
-		pIntrf->TxMps = 0U;
-		pIntrf->pTxBuffer = nullptr;
-		UsbIntrfResetTx(pIntrf);
-		return;
-	}
-
-	pIntrf->TxEpAddr = EpAddr;
-	pIntrf->TxMps = Mps;
-	pIntrf->pTxBuffer = pBuffer;
-	UsbIntrfResetTx(pIntrf);
-}
-
-void UsbIntrfResetTx(UsbDevIntrf_t *pIntrf)
-{
-	if (pIntrf == nullptr)
-	{
-		return;
-	}
-
-	pIntrf->TxZlpRequired = false;
-	pIntrf->TxTailArmed = false;
-	CFifoFlush(pIntrf->hTxFifo);
-	UsbIntrfSetTxIdle(pIntrf);
-}
-
-void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
-						 uint16_t Length, UsbCtrlrXferResult_t Result)
+static void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
+								uint16_t Length, UsbCtrlrXferResult_t Result)
 {
 	if (pIntrf == nullptr || pIntrf->hTxFifo == nullptr)
 	{
@@ -735,8 +626,20 @@ void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 		return;
 	}
 
-	// Chain the next full packet while this consumer still owns the endpoint.
-	if (UsbIntrfCanTx(pIntrf) && UsbIntrfSubmit(pIntrf, false))
+	// Chain everything already queued while this consumer owns the endpoint.
+	// A producer that runs later observes the idle token and starts itself.
+	if (UsbIntrfCanTx(pIntrf) && CFifoUsed(pIntrf->hTxFifo) > 0 &&
+		UsbIntrfSubmit(pIntrf, true))
+	{
+		return;
+	}
+
+	// Terminate a byte-mode transfer ending on an MPS boundary without keeping
+	// another software state bit. Completion of this ZLP has Length zero.
+	if (UsbIntrfCanTx(pIntrf) && pIntrf->TxBlkSize == 1U &&
+		Length == pIntrf->Mps &&
+		UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfTxAddr(pIntrf),
+						pIntrf->pTxBuffer, 0U))
 	{
 		return;
 	}
@@ -744,17 +647,6 @@ void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 	if (!UsbIntrfTxIdle(pIntrf))
 	{
 		UsbIntrfSetTxIdle(pIntrf);
-	}
-
-	if (CFifoUsed(pIntrf->hTxFifo) > 0)
-	{
-		return;
-	}
-
-	if (pIntrf->TxBlkSize == 1U && Length == pIntrf->TxMps)
-	{
-		pIntrf->TxZlpRequired = true;
-		return;
 	}
 
 	if (pIntrf->DevIntrf.EvtCB != nullptr)
@@ -765,27 +657,22 @@ void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 	}
 }
 
-void UsbIntrfSof(UsbDevIntrf_t *pIntrf)
+void UsbIntrfXferComplete(UsbDevIntrf_t *pIntrf, uint8_t EpAddr,
+						  uint16_t Length, UsbCtrlrXferResult_t Result)
 {
-	if (pIntrf == nullptr || pIntrf->hTxFifo == nullptr ||
-		!UsbIntrfTxIdle(pIntrf))
+	if (pIntrf == nullptr || USB_ENDPADDR_NUM(EpAddr) != pIntrf->EpNo)
 	{
 		return;
 	}
 
-	if (CFifoUsed(pIntrf->hTxFifo) == 0 && !pIntrf->TxZlpRequired)
+	if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
-		pIntrf->TxTailArmed = false;
-		return;
+		UsbIntrfTxXferComplete(pIntrf, Length, Result);
 	}
-
-	if (!pIntrf->TxTailArmed)
+	else
 	{
-		pIntrf->TxTailArmed = true;
-		return;
+		UsbIntrfRxXferComplete(pIntrf, Length, Result);
 	}
-
-	(void)UsbIntrfStartXfer(pIntrf, true);
 }
 
 bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes)
@@ -817,14 +704,6 @@ bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes)
 
 	return CFifoAvail(pIntrf->hTxFifo) >= blocks;
 }
-
-#if 0
-int UsbIntrfRxUsed(UsbDevIntrf_t *pIntrf)
-{
-	return pIntrf != nullptr ?
-		   (int)__atomic_load_n(&pIntrf->RxUsed, __ATOMIC_ACQUIRE) : 0;
-}
-#endif
 
 int UsbIntrfTxUsed(UsbDevIntrf_t *pIntrf)
 {

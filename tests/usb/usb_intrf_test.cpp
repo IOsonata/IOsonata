@@ -1,12 +1,12 @@
 /**-------------------------------------------------------------------------
 @file	usb_intrf_test.cpp
 
-@brief	Host regression tests for the UsbIntrf receive packet ring.
+@brief	Host regression tests for the UsbIntrf endpoint-pair data path.
 
-Links the production usb_intrf.cpp against a fake controller. The fake records
-the buffer it was armed with, so the tests can check that the controller is
-given the ring slot itself and that a slot is published only once its transfer
-has completed.
+The fake controller records the fixed staging buffers submitted by UsbIntrf.
+Tests verify that OUT completion copies whole packets into the application
+CFifo, reuses the same transfer buffer and applies USB backpressure when the
+FIFO is full.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 3, 2026
@@ -38,16 +38,22 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
 #include <string.h>
-#include <vector>
 
 #include "usb/usb_intrf.h"
 
 #define MPS			64U
+#define BUFFER_SIZE	128U
 #define SLOTS		4U
+#define EP_NO		1U
 
-static uint8_t *s_XferBuf;
-static uint16_t s_XferLen;
-static int s_XferCnt;
+static uint8_t *s_OutBuf;
+static uint8_t *s_InBuf;
+static uint16_t s_OutLen;
+static uint16_t s_InLen;
+static bool s_OutBusy;
+static bool s_InBusy;
+static int s_OutSubmitCnt;
+static int s_InSubmitCnt;
 static bool s_XferOk = true;
 
 extern "C" {
@@ -67,17 +73,31 @@ void UsbCtrlrSetAddress(int, uint8_t) {}
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
 void UsbCtrlrEpClose(int, uint8_t) {}
 void UsbCtrlrEpCloseAll(int) {}
-bool UsbCtrlrEpBusy(int, uint8_t) { return false; }
+bool UsbCtrlrEpBusy(int, uint8_t EpAddr)
+{
+	return USB_ENDPADDR_IS_IN(EpAddr) ? s_InBusy : s_OutBusy;
+}
 void UsbCtrlrEpStall(int, uint8_t) {}
 void UsbCtrlrEpClearStall(int, uint8_t) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-bool UsbCtrlrEpXfer(int, uint8_t, uint8_t *pBuf, uint16_t Len)
+bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint8_t *pBuf, uint16_t Len)
 {
 	if (!s_XferOk) { return false; }
-	s_XferBuf = pBuf;
-	s_XferLen = Len;
-	s_XferCnt++;
+	if (USB_ENDPADDR_IS_IN(EpAddr))
+	{
+		s_InBuf = pBuf;
+		s_InLen = Len;
+		s_InBusy = true;
+		s_InSubmitCnt++;
+	}
+	else
+	{
+		s_OutBuf = pBuf;
+		s_OutLen = Len;
+		s_OutBusy = true;
+		s_OutSubmitCnt++;
+	}
 	return true;
 }
 }
@@ -86,144 +106,123 @@ static int s_Fail;
 #define CHECK(c) do { if (!(c)) { \
 	printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; } } while (0)
 
-alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(SLOTS, MPS)];
+alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(SLOTS, BUFFER_SIZE)];
 alignas(4) static uint8_t s_TxMem[CFIFO_MEMSIZE(256)];
+alignas(4) static uint8_t s_RxTransfer[BUFFER_SIZE];
+alignas(4) static uint8_t s_TxTransfer[BUFFER_SIZE];
 static UsbDevIntrf_t s_Intrf;
 
-// Simulate the controller writing one OUT packet and completing it.
 static void Deliver(const uint8_t *pData, uint16_t Len)
 {
-	CHECK(s_XferBuf != nullptr);
-	if (s_XferBuf == nullptr) { return; }
-	if (Len > 0U) { memcpy(s_XferBuf, pData, Len); }
-	s_XferBuf = nullptr;
-	UsbIntrfRxXferComplete(&s_Intrf, Len, USB_CTRLR_XFER_SUCCESS);
+	CHECK(s_OutBusy);
+	CHECK(s_OutBuf == s_RxTransfer);
+	CHECK(Len <= s_OutLen);
+	if (!s_OutBusy || s_OutBuf == nullptr) { return; }
+	if (Len > 0U) { memcpy(s_OutBuf, pData, Len); }
+	s_OutBusy = false;
+	s_OutBuf = nullptr;
+	UsbIntrfXferComplete(&s_Intrf, USB_ENDPADDR_DIROUT(EP_NO), Len,
+						 USB_CTRLR_XFER_SUCCESS);
 }
 
 static bool Setup(void)
 {
 	UsbIntrfCfg_t cfg = {};
 	cfg.DevNo = 0;
+	cfg.EpNo = EP_NO;
 	cfg.pRxFifoMem = s_RxMem;
 	cfg.RxFifoMemSize = (int)sizeof(s_RxMem);
 	cfg.pTxFifoMem = s_TxMem;
 	cfg.TxFifoMemSize = (int)sizeof(s_TxMem);
 	cfg.TxFifoBlkSize = 1U;
-	memset(&s_Intrf, 0, sizeof(s_Intrf));
-	s_XferBuf = nullptr;
-	s_XferCnt = 0;
+	cfg.BufferSize = BUFFER_SIZE;
+	cfg.pRxBuffer = s_RxTransfer;
+	cfg.pTxBuffer = s_TxTransfer;
+	memset(static_cast<void *>(&s_Intrf), 0, sizeof(s_Intrf));
+	s_OutBuf = nullptr;
+	s_InBuf = nullptr;
+	s_OutBusy = false;
+	s_InBusy = false;
+	s_OutSubmitCnt = 0;
+	s_InSubmitCnt = 0;
 	s_XferOk = true;
-	if (!UsbIntrfInit(&s_Intrf, &cfg)) { return false; }
-	if (!UsbIntrfConfigRx(&s_Intrf, 0x01U, MPS)) { return false; }
-	UsbIntrfRxEnable(&s_Intrf, true);
-	return true;
+	return UsbIntrfInit(&s_Intrf, &cfg) && UsbIntrfConfigure(&s_Intrf, MPS);
 }
 
-// The ring must carve exactly SLOTS slots out of the supplied memory.
 static void TestGeometry(void)
 {
 	CHECK(Setup());
+	CHECK(s_Intrf.EpNo == EP_NO);
 	CHECK(CFifoAvail(s_Intrf.hRxFifo) == (int)SLOTS);
-	CHECK(CFifoBlockSize(s_Intrf.hRxFifo) == sizeof(UsbPktHdr_t) + MPS);
-	CHECK(s_XferCnt == 1);			// armed on enable
-	CHECK(s_XferLen == MPS);
+	CHECK(CFifoBlockSize(s_Intrf.hRxFifo) ==
+		  USB_INTRF_PKT_BLKSIZE(BUFFER_SIZE));
+	CHECK(s_OutSubmitCnt == 1);
+	CHECK(s_OutLen == MPS);
 }
 
-// The controller must be handed the slot itself, never a staging buffer.
-static void TestZeroCopyTarget(void)
+static void TestStagingBuffer(void)
 {
 	CHECK(Setup());
-	uint8_t *pSlot0 = s_RxMem + sizeof(CFifo_t) + sizeof(UsbPktHdr_t);
-	CHECK(s_XferBuf == pSlot0);
-
-	const uint8_t a[3] = { 1, 2, 3 };
-	Deliver(a, 3);
-	// Next arm points at the second slot, the ring advanced.
-	CHECK(s_XferBuf == s_RxMem + sizeof(CFifo_t) + CFifoBlockSize(s_Intrf.hRxFifo) + sizeof(UsbPktHdr_t));
-	// The delivered bytes are still where the controller put them.
-	CHECK(memcmp(pSlot0, a, 3) == 0);
+	CHECK(s_OutBuf == s_RxTransfer);
+	const uint8_t in[3] = { 1, 2, 3 };
+	Deliver(in, sizeof(in));
+	CHECK(s_OutBuf == s_RxTransfer);
+	CHECK(s_OutSubmitCnt == 2);
+	UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(CFifoPeek(s_Intrf.hRxFifo));
+	CHECK(pPacket != nullptr);
+	CHECK(pPacket != reinterpret_cast<UsbPkt_t *>(s_RxTransfer));
+	CHECK(pPacket != nullptr && pPacket->Hdr.Length == sizeof(in));
+	CHECK(pPacket != nullptr && memcmp(pPacket->Data, in, sizeof(in)) == 0);
 }
 
-// A byte-stream read spanning several packets, plus a partial read.
-static void TestStreamAcrossPackets(void)
+static void TestWholePackets(void)
 {
 	CHECK(Setup());
-	uint8_t p1[4] = { 'a', 'b', 'c', 'd' };
-	uint8_t p2[3] = { 'e', 'f', 'g' };
-	Deliver(p1, 4);
-	Deliver(p2, 3);
-	CHECK(UsbIntrfRxUsed(&s_Intrf) == 7);
+	const uint8_t p1[4] = { 'a', 'b', 'c', 'd' };
+	const uint8_t p2[3] = { 'e', 'f', 'g' };
+	Deliver(p1, sizeof(p1));
+	Deliver(p2, sizeof(p2));
 
 	uint8_t out[8] = {};
-	int n = DeviceIntrfRxData(&s_Intrf.DevIntrf, out, 2);
-	CHECK(n == 2);
-	CHECK(out[0] == 'a' && out[1] == 'b');
-	CHECK(UsbIntrfRxUsed(&s_Intrf) == 5);
-
-	memset(out, 0, sizeof(out));
-	n = DeviceIntrfRxData(&s_Intrf.DevIntrf, out, 8);
-	CHECK(n == 5);
-	CHECK(memcmp(out, "cdefg", 5) == 0);
-	CHECK(UsbIntrfRxUsed(&s_Intrf) == 0);
-
-	n = DeviceIntrfRxData(&s_Intrf.DevIntrf, out, 8);
-	CHECK(n == 0);
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, 2) == 0);
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == 2);
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 7);
+	CHECK(memcmp(out, "abcdefg", 7) == 0);
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
 }
 
-// A zero length packet is a packet. It occupies a slot and is released
-// without consuming any of the reader's buffer.
 static void TestZlp(void)
 {
 	CHECK(Setup());
-	const int used0 = CFifoUsed(s_Intrf.hRxFifo);
 	Deliver(nullptr, 0);
-	CHECK(CFifoUsed(s_Intrf.hRxFifo) == used0 + 1);
-	CHECK(UsbIntrfRxUsed(&s_Intrf) == 0);
-
-	uint8_t p[2] = { 'x', 'y' };
-	Deliver(p, 2);
-
+	const uint8_t in[2] = { 'x', 'y' };
+	Deliver(in, sizeof(in));
 	uint8_t out[4] = {};
-	int n = DeviceIntrfRxData(&s_Intrf.DevIntrf, out, 4);
-	CHECK(n == 2);
-	CHECK(out[0] == 'x' && out[1] == 'y');
-	CHECK(CFifoUsed(s_Intrf.hRxFifo) == used0);		// both slots released
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 2);
+	CHECK(memcmp(out, in, sizeof(in)) == 0);
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
 }
 
-// A full ring must leave the endpoint unarmed, not drop a packet. Reading
-// one packet must rearm it.
 static void TestBackpressure(void)
 {
 	CHECK(Setup());
-	uint8_t p[8] = { 0 };
+	uint8_t in[8] = {};
 	for (uint32_t i = 0; i < SLOTS; i++)
 	{
-		p[0] = (uint8_t)i;
-		Deliver(p, 8);
+		in[0] = (uint8_t)i;
+		Deliver(in, sizeof(in));
 	}
 	CHECK(CFifoAvail(s_Intrf.hRxFifo) == 0);
-	CHECK(s_XferBuf == nullptr);				// unarmed, host backpressured
-	CHECK(s_Intrf.RxActive == false);
+	CHECK(!s_OutBusy);
 	CHECK(s_Intrf.RxDropCnt == 0U);
 
 	uint8_t out[8] = {};
-	int n = DeviceIntrfRxData(&s_Intrf.DevIntrf, out, 8);
-	CHECK(n == 8);
-	CHECK(out[0] == 0);
-	CHECK(s_XferBuf != nullptr);				// rearmed after release
-	CHECK(s_XferLen == MPS);
-
-	// Remaining packets keep their order.
-	for (uint32_t i = 1; i < SLOTS; i++)
-	{
-		memset(out, 0xFF, sizeof(out));
-		n = DeviceIntrfRxData(&s_Intrf.DevIntrf, out, 8);
-		CHECK(n == 8);
-		CHECK(out[0] == (uint8_t)i);
-	}
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
+	CHECK(out[0] == 0U);
+	CHECK(s_OutBusy);
+	CHECK(s_OutBuf == s_RxTransfer);
 }
 
-// The ring index is monotonic, so it must survive wrapping many times.
 static void TestWrap(void)
 {
 	CHECK(Setup());
@@ -232,55 +231,87 @@ static void TestWrap(void)
 	for (int i = 0; i < 1000; i++)
 	{
 		memset(in, (uint8_t)i, sizeof(in));
-		Deliver(in, 16);
-		memset(out, 0, sizeof(out));
-		int n = DeviceIntrfRxData(&s_Intrf.DevIntrf, out, 16);
-		CHECK(n == 16);
-		if (memcmp(out, in, 16) != 0) { CHECK(false); break; }
+		Deliver(in, sizeof(in));
+		CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 16);
+		if (memcmp(out, in, sizeof(in)) != 0) { CHECK(false); break; }
 	}
-	CHECK(UsbIntrfRxUsed(&s_Intrf) == 0);
 }
 
-// A failed transfer counts a drop and does not publish a slot.
-static void TestXferFailed(void)
+static void TestFailedAndWrongEndpoint(void)
 {
 	CHECK(Setup());
-	const int used0 = CFifoUsed(s_Intrf.hRxFifo);
-	s_XferBuf = nullptr;
-	UsbIntrfRxXferComplete(&s_Intrf, 0, USB_CTRLR_XFER_FAILED);
-	CHECK(CFifoUsed(s_Intrf.hRxFifo) == used0);
+	const int used = CFifoUsed(s_Intrf.hRxFifo);
+	UsbIntrfXferComplete(&s_Intrf, USB_ENDPADDR_DIROUT(2U), 0,
+						 USB_CTRLR_XFER_FAILED);
+	CHECK(s_Intrf.RxDropCnt == 0U);
+	s_OutBusy = false;
+	s_OutBuf = nullptr;
+	UsbIntrfXferComplete(&s_Intrf, USB_ENDPADDR_DIROUT(EP_NO), 0,
+						 USB_CTRLR_XFER_FAILED);
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == used);
 	CHECK(s_Intrf.RxDropCnt == 1U);
-	CHECK(s_XferBuf != nullptr);				// rearmed
+	CHECK(s_OutBusy);
 }
 
-// Reset must drop endpoint and ring state.
-static void TestReset(void)
+static void TestUnconfigure(void)
 {
 	CHECK(Setup());
-	uint8_t p[4] = { 1, 2, 3, 4 };
-	Deliver(p, 4);
-	UsbIntrfResetRx(&s_Intrf);
-	CHECK(s_Intrf.hRxFifo == nullptr);
-	CHECK(s_Intrf.RxEpAddr == 0U);
-	CHECK(UsbIntrfRxUsed(&s_Intrf) == 0);
-
-	uint8_t out[4];
-	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, 4) == 0);
+	UsbIntrfUnconfigure(&s_Intrf);
+	CHECK(s_Intrf.Mps == 0U);
+	CHECK(s_Intrf.hRxFifo != nullptr);
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
+	CHECK(s_Intrf.EpNo == EP_NO);
+	s_OutBusy = false;
+	CHECK(UsbIntrfConfigure(&s_Intrf, MPS));
+	CHECK(s_OutBusy);
 }
 
-// RX memory too small for one slot must be refused.
+static void CompleteIn(uint16_t Len)
+{
+	CHECK(s_InBusy);
+	s_InBusy = false;
+	UsbIntrfXferComplete(&s_Intrf, USB_ENDPADDR_DIRIN(EP_NO), Len,
+						 USB_CTRLR_XFER_SUCCESS);
+}
+
+static void TestTxChaining(void)
+{
+	CHECK(Setup());
+	uint8_t full[MPS];
+	memset(full, 0x5A, sizeof(full));
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, full, sizeof(full)) == MPS);
+	CHECK(s_InBusy && s_InBuf == s_TxTransfer && s_InLen == MPS);
+	const uint8_t tail[3] = { 1, 2, 3 };
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, tail, sizeof(tail)) == 3);
+	CompleteIn(MPS);
+	CHECK(s_InBusy && s_InLen == sizeof(tail));
+	CHECK(memcmp(s_InBuf, tail, sizeof(tail)) == 0);
+	CompleteIn(sizeof(tail));
+	CHECK(!s_InBusy);
+	CHECK(s_InSubmitCnt == 2);
+
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, full, sizeof(full)) == MPS);
+	CompleteIn(MPS);
+	CHECK(s_InBusy && s_InLen == 0U);
+	CompleteIn(0U);
+	CHECK(!s_InBusy);
+}
+
 static void TestTooSmall(void)
 {
 	UsbIntrfCfg_t cfg = {};
 	cfg.DevNo = 0;
+	cfg.EpNo = EP_NO;
 	cfg.pRxFifoMem = s_RxMem;
 	cfg.RxFifoMemSize = 8;
 	cfg.pTxFifoMem = s_TxMem;
 	cfg.TxFifoMemSize = (int)sizeof(s_TxMem);
 	cfg.TxFifoBlkSize = 1U;
-	memset(&s_Intrf, 0, sizeof(s_Intrf));
-	CHECK(UsbIntrfInit(&s_Intrf, &cfg));
-	CHECK(UsbIntrfConfigRx(&s_Intrf, 0x01U, MPS) == false);
+	cfg.BufferSize = BUFFER_SIZE;
+	cfg.pRxBuffer = s_RxTransfer;
+	cfg.pTxBuffer = s_TxTransfer;
+	memset(static_cast<void *>(&s_Intrf), 0, sizeof(s_Intrf));
+	CHECK(!UsbIntrfInit(&s_Intrf, &cfg));
 }
 
 struct Case { const char *Name; void (*Fn)(void); };
@@ -289,13 +320,14 @@ int main(void)
 {
 	static const Case cases[] = {
 		{ "geometry", TestGeometry },
-		{ "zero copy target", TestZeroCopyTarget },
-		{ "stream across packets", TestStreamAcrossPackets },
+		{ "staging buffer", TestStagingBuffer },
+		{ "whole packets", TestWholePackets },
 		{ "zero length packet", TestZlp },
 		{ "backpressure", TestBackpressure },
 		{ "ring wrap", TestWrap },
-		{ "transfer failed", TestXferFailed },
-		{ "reset", TestReset },
+		{ "failed and wrong ep", TestFailedAndWrongEndpoint },
+		{ "unconfigure", TestUnconfigure },
+		{ "tx chaining", TestTxChaining },
 		{ "memory too small", TestTooSmall },
 	};
 
@@ -308,6 +340,5 @@ int main(void)
 	}
 
 	printf("%s\n", s_Fail == 0 ? "all pass" : "FAILURES");
-
 	return s_Fail == 0 ? 0 : 1;
 }

@@ -1,26 +1,22 @@
 /**-------------------------------------------------------------------------
 @file	usb_intrf.h
 
-@brief	Generic USB data-interface implementation of DeviceIntrf.
+@brief	Internal USB endpoint-pair implementation of DeviceIntrf.
 
-DeviceIntrf is the IOsonata data interface used by devices and applications.
-UsbIntrf applies DeviceIntrf to a configured USB data endpoint. Endpoint
-address/direction, transfer type and maximum packet size (MPS) are instance
-state. DeviceIntrf DevAddr is not used to select an endpoint on each transfer.
+UsbIntrf is the reusable data path inherited by public USB classes such as
+UsbdCdc. One instance is one bidirectional endpoint number: OUT is receive and
+IN is transmit. Applications use the derived USB class, not UsbIntrf directly.
+DeviceIntrf DevAddr is not used to select an endpoint on each transfer.
 
 The generic layer in usb.cpp handles endpoint zero, Chapter 9 requests,
 descriptors, configuration and class/vendor dispatch. The port handles endpoint
 registers, DMA/FIFO access and controller interrupts.
 
-RX storage is hRxFifo, one endpoint packet per block: UsbPktHdr_t followed by
-MPS bytes, word aligned, sized with USB_INTRF_RXMEM_SIZE.
-
-Nothing is copied on the receive path. CFifoPut advances the producer index
-before the caller fills the block, so its return value cannot be handed to a
-DMA engine that outlives the call. The block it will hand out next is still
-well defined and USB is the only producer, so the controller is armed on that
-block and CFifoPut is called from the completion, once the data is already
-there. A reader therefore only ever sees a block that is complete.
+The derived class supplies one RX and one TX controller buffer sized for its
+transfer type. On OUT completion UsbIntrf copies the RX buffer into hRxFifo and
+reuses the same controller buffer. On IN it copies queued TX data into the TX
+buffer before submitting it. Controller buffers therefore never alias CFifo
+storage that can be released while a transfer is active.
 
 UsbPktHdr_t.Length is the actual received data length and may be from zero to
 MPS. DeviceIntrfRx() may consume across packet blocks and present a byte
@@ -35,22 +31,17 @@ may be from zero to MPS. UsbIntrf sends the stored packet length without
 combining packet blocks. USB transfer type and CFifo block size are separate
 settings.
 
-RX and TX CFifo memory are both supplied by UsbIntrfCfg_t. Endpoint MPS
-determines the RX block size and the TX packet-mode block size. Port maximum
-packet-size definitions may be used by static allocation macros so the
-configuration reserves sufficient memory.
-
-TX still uses a temporary packet-sized buffer, because CFifoGet releases a
-block before the controller is done with it and byte mode has to gather across
-the ring wrap.
+The application supplies RX and TX CFifo memory through the public USB class.
+The class supplies its controller buffers and endpoint number to UsbIntrf.
+The actual MPS is applied after the bus speed is known and the class opens both
+directions of the endpoint.
 
 Generic code must not assume a 64-byte packet, a specific USB speed, or a
 specific controller.
 
-There is no DTR style gating in this generic interface. A class adapter may
-enable or disable RX acceptance with UsbIntrfRxEnable(). USB OUT flow control
-is lossless: when receive storage is full the endpoint is left unarmed so the
-host is backpressured by USB.
+There is no DTR style gating in this layer. USB OUT flow control is lossless:
+when receive storage is full the endpoint is left unarmed so the host is
+backpressured by USB.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 1, 2026
@@ -118,14 +109,16 @@ typedef struct __Usb_Packet {
 
 typedef struct __Usb_Interf_Config {
 	int DevNo;					//!< USB controller number
-	uint8_t EpAddr;
+	uint8_t EpNo;				//!< Bidirectional endpoint number, never an address
 	bool bBlocking;
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;
 	int TxFifoMemSize;
 	uint8_t *pTxFifoMem;
 	uint16_t TxFifoBlkSize;		//!< 1 for byte mode, header plus MPS for packet mode
-	uint16_t Mps;
+	uint16_t BufferSize;		//!< Capacity of each controller transfer buffer
+	uint8_t *pRxBuffer;			//!< OUT transfer buffer supplied by derived class
+	uint8_t *pTxBuffer;			//!< IN transfer buffer supplied by derived class
 	DevIntrfEvtHandler_t EvtCB;
 } UsbIntrfCfg_t;
 
@@ -135,17 +128,12 @@ typedef struct __Usb_Dev_Interf {
 	int DevNo;					//!< USB controller number
 	hCFifo_t hRxFifo;			//!< Packet storage, one endpoint packet per block
 	uint32_t RxDropCnt;			//!< Controller/error drops, FIFO full uses backpressure
-	uint16_t RxMps;				//!< OUT endpoint maximum packet size
-	uint8_t RxEpAddr;			//!< OUT endpoint owned by this instance
-	uint8_t TxEpAddr;			//!< IN endpoint owned by this instance
-	uint8_t *pTxBuffer;			//!< One packet staging buffer, TxMps bytes
-	uint16_t TxMps;				//!< IN endpoint maximum packet size
+	uint8_t *pRxBuffer;			//!< One OUT packet controller buffer
+	uint8_t *pTxBuffer;			//!< One IN packet controller buffer
+	uint16_t BufferSize;		//!< Capacity of pRxBuffer and pTxBuffer
+	uint16_t Mps;				//!< Active packet size, zero while unconfigured
 	uint16_t TxBlkSize;			//!< TX CFifo block size, 1 selects byte mode
-	bool bEnabled;
-	bool RxActive;				//!< OUT transfer currently registered with controller
-	bool RxAccepting;			//!< Class/application currently accepts OUT traffic
-	bool TxZlpRequired;			//!< Last packet was full and nothing followed
-	bool TxTailArmed;			//!< Partial tail seen idle at previous SOF
+	uint8_t EpNo;				//!< Bidirectional endpoint number
 } UsbDevIntrf_t;
 
 #pragma pack(pop)
@@ -156,46 +144,17 @@ extern "C" {
 
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg);
 
-/**
- * Bind an OUT endpoint and build hRxFifo for its maximum packet size. Returns
- * false when the supplied RX memory cannot hold the CFifo header plus one
- * packet block.
- *
- * There is no RX staging buffer. The controller writes straight into the block
- * CFifoPut is about to hand out, and the block becomes visible to a reader
- * only after the transfer completes.
- */
-//bool UsbIntrfConfigRx(UsbDevIntrf_t *pIntrf, uint8_t EpAddr, uint16_t Mps);
+/** Apply the negotiated MPS after both endpoint directions are open. */
+bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps);
 
-/** Drop RX endpoint and FIFO state on bus reset or unconfigure. */
-void UsbIntrfResetRx(UsbDevIntrf_t *pIntrf);
+/** Stop both directions and flush data on bus reset or unconfigure. */
+void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf);
 
-/** Enable or disable acceptance of OUT data without changing endpoint config. */
-void UsbIntrfRxEnable(UsbDevIntrf_t *pIntrf, bool Enable);
-
-/** OUT endpoint transfer completion, called from the USB interrupt. */
-void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf,
-						 uint16_t Length, UsbCtrlrXferResult_t Result);
-
-/**
- * Bind an IN endpoint to this instance after SET_CONFIGURATION.
- * pBuffer must hold Mps bytes and remain valid while configured.
- */
-void UsbIntrfConfigTx(UsbDevIntrf_t *pIntrf, uint8_t EpAddr,
-					   uint16_t Mps, uint8_t *pBuffer);
-
-/** Drop endpoint transfer state and queued data on bus reset or unconfigure. */
-void UsbIntrfResetTx(UsbDevIntrf_t *pIntrf);
-
-/** IN endpoint transfer completion, called from the USB interrupt. */
-void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
-						 uint16_t Length, UsbCtrlrXferResult_t Result);
-
-/** Start-of-frame callback used to flush an idle partial TX tail. */
-void UsbIntrfSof(UsbDevIntrf_t *pIntrf);
+/** Completion for either direction of EpNo, called from the USB interrupt. */
+void UsbIntrfXferComplete(UsbDevIntrf_t *pIntrf, uint8_t EpAddr,
+						  uint16_t Length, UsbCtrlrXferResult_t Result);
 
 bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);
-//int UsbIntrfRxUsed(UsbDevIntrf_t *pIntrf);
 int UsbIntrfTxUsed(UsbDevIntrf_t *pIntrf);
 
 #ifdef __cplusplus
@@ -206,28 +165,35 @@ int UsbIntrfTxUsed(UsbDevIntrf_t *pIntrf);
 
 class UsbIntrf : public DeviceIntrf {
 public:
-	bool Init(const UsbIntrfCfg_t &Cfg) {
-		return UsbIntrfInit(&vUsbDevIntrf, &Cfg);
-	}
-
 	operator DevIntrf_t * () override {
-		return &vUsbDevIntrf.DevIntrf;
+		return vpUsbDevIntrf != nullptr ? &vpUsbDevIntrf->DevIntrf : nullptr;
 	}
 
 	uint32_t Rate(uint32_t DataRate) override {
-		return DeviceIntrfSetRate(&vUsbDevIntrf.DevIntrf, DataRate);
+		return vpUsbDevIntrf != nullptr ?
+			DeviceIntrfSetRate(&vpUsbDevIntrf->DevIntrf, DataRate) : 0U;
 	}
 
 	uint32_t Rate(void) override {
-		return DeviceIntrfGetRate(&vUsbDevIntrf.DevIntrf);
+		return vpUsbDevIntrf != nullptr ?
+			DeviceIntrfGetRate(&vpUsbDevIntrf->DevIntrf) : 0U;
 	}
 
-	bool RequestToSend(int NbBytes) {
-		return UsbIntrfRequestToSend(&vUsbDevIntrf, NbBytes);
+	bool RequestToSend(int NbBytes) override {
+		return vpUsbDevIntrf != nullptr &&
+			UsbIntrfRequestToSend(vpUsbDevIntrf, NbBytes);
 	}
 
 protected:
-	UsbDevIntrf_t vUsbDevIntrf = {};
+	UsbIntrf() = default;
+	UsbIntrf(const UsbIntrf &) = delete;
+	UsbIntrf &operator = (const UsbIntrf &) = delete;
+
+	void Bind(UsbDevIntrf_t *pIntrf) {
+		vpUsbDevIntrf = pIntrf;
+	}
+
+	UsbDevIntrf_t *vpUsbDevIntrf = nullptr;
 };
 
 #endif

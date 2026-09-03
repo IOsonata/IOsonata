@@ -65,7 +65,7 @@ void UsbCtrlrEpClearStall(int, uint8_t) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(4, USB_PKT_MAXLEN(0, BULK))];
 alignas(4) static uint8_t s_TxMem[CFIFO_MEMSIZE(1024)];
-static UsbdCdcDev_t s_Cdc;
+static UsbdCdc s_Cdc;
 
 int main(void)
 {
@@ -83,7 +83,8 @@ int main(void)
 	cdc.pTxFifoMem = s_TxMem;
 	cdc.ItfNo = 0;
 	cdc.DevNo = 0;
-	if (!UsbdCdcInit(&s_Cdc, &cdc)) { printf("UsbdCdcInit failed\n"); return 2; }
+	if (!s_Cdc.Init(cdc)) { printf("UsbdCdc::Init failed\n"); return 2; }
+	if (s_Cdc.Data() == nullptr) { printf("UsbdCdc data binding failed\n"); return 5; }
 
 	if (!UsbEnable(0)) { printf("UsbEnable failed\n"); return 3; }
 	UsbProcess(0);

@@ -1,210 +1,240 @@
 # USB Architecture
 
-The USB stack is three layers with one boundary between each pair. Everything
-that does not change from one MCU to the next is compiled once; everything that
-does is supplied by the MCU port.
+The USB device stack separates portable USB behavior from controller hardware
+and exposes class data through the same `DeviceIntrf` API used by the rest of
+IOsonata.
 
-```text
-        Application
-             |  UsbInit / UsbEnable / UsbProcess
-             v
-     Class or function  (UsbdCdc, ...)
-             |  UsbFuncCfg_t registration + UsbIntrf data path
-             v
-     Generic layer      usb.h / usb.cpp / usb_intrf.cpp
-             |  UsbCtrlr entry points
-             v
-     MCU port           usb_ctrlr.h + usb_ctrlr_<family>.cpp
-             |
-           silicon
+```mermaid
+flowchart TD
+    App[Application] --> Class[Public USB class<br/>UsbdCdc, UsbdHid, ...]
+    Class --> Intrf[Internal UsbIntrf<br/>endpoint-pair data path]
+    Class --> Core[USB core<br/>Chapter 9 and dispatch]
+    Intrf --> Port[UsbCtrlr port]
+    Core --> Port
+    Port --> Hw[Controller hardware]
 ```
 
-## Files
+## Files and responsibilities
 
-| File | Scope |
+| File | Responsibility |
 | --- | --- |
-| `include/usb/usb_def.h` | USB specification definitions, descriptors, requests |
-| `include/usb/usb.h` | The generic layer and the port entry points |
-| `include/usb/usb_intrf.h` | `DeviceIntrf` over a USB endpoint pair |
-| `src/usb/usb.cpp` | Identity, Chapter 9, function dispatch, lifecycle |
-| `src/usb/usb_intrf.cpp` | Endpoint data path and FIFO handling |
-| `<port>/include/usb_ctrlr.h` | What the target's controller can do |
-| `<port>/src/usb_ctrlr_<family>.cpp` | Registers, DMA, interrupt |
+| `include/usb/usb_def.h` | USB specification definitions, descriptors and requests |
+| `include/usb/usb.h` | Portable USB core and the controller-port contract |
+| `src/usb/usb.cpp` | Endpoint zero, Chapter 9, lifecycle and function dispatch |
+| `include/usb/usb_intrf.h` | Internal `DeviceIntrf` endpoint-pair data path |
+| `src/usb/usb_intrf.cpp` | RX/TX FIFO and controller transfer handling |
+| `include/usb/usbd_cdc.h` | Public CDC ACM class and application configuration |
+| `src/usb/usbd_cdc.cpp` | CDC requests, notifications and data-endpoint ownership |
+| `<port>/include/usb_ctrlr.h` | Target controller capabilities |
+| `<port>/src/usb_ctrlr_<family>.cpp` | Registers, DMA and interrupts |
 
-The class layer sits alongside: `usbd_cdc.h`, `usbd_cdc.cpp` and
-`usbd_cdc_desc.cpp` for CDC ACM.
+The `usbd_` prefix identifies device classes. The `usb_` prefix is role
+neutral. `UsbCtrlr` is also role neutral because the port boundary describes
+controller operations rather than class policy.
 
-A `usbd_` prefix means device specific. A `usb_` prefix is role neutral and
-serves device and host alike. `UsbCtrlr` is role neutral because a host
-controller would implement the same shape.
+## Class model
 
-## The port boundary
+`UsbIntrf` is not a public application object. It is the reusable endpoint data
+path inherited by each public USB class.
 
-`usb.h` declares the `UsbCtrlr` entry points once. They do not change across
-targets, so they are not repeated per port, the same way `iopincfg.h` declares
-the pin API once while each port supplies `iopinctrl.h`.
+```mermaid
+classDiagram
+    DeviceIntrf <|-- UsbIntrf
+    UsbIntrf <|-- UsbdCdc
+    UsbIntrf <|-- OtherUsbClass
+    class UsbIntrf {
+        #Bind(UsbDevIntrf_t*)
+        -endpoint pair transfer
+    }
+    class UsbdCdc {
+        +Init(UsbdCdcCfg_t)
+        +IsPortOpen()
+        -RX transfer buffer
+        -TX transfer buffer
+    }
+```
 
-What does change per target is `usb_ctrlr.h`, which every port with a USB
-controller provides on its include path under that exact name. Generic code
-includes it by plain name and never switches on a vendor macro.
+The C representation follows the same IOsonata pattern: the base
+`UsbDevIntrf_t` is the first member of the class-specific device structure.
+The C++ public class binds its inherited `UsbIntrf` wrapper to that base.
 
-The include path runs most specific first, from the part directory out to the
-repository root, so a part that differs from its family can shadow the family
-file by providing its own.
+## Endpoint model
 
-## Capabilities are compile time
+An endpoint address is a direction bit plus an endpoint number. IN endpoint 1
+and OUT endpoint 1 are distinct USB endpoints and can transfer concurrently.
+They may legally share the number even though each individual endpoint is
+unidirectional.
 
-`usb_ctrlr.h` answers packet sizes, endpoint counts, speed class and
-isochronous support as macros:
+One `UsbIntrf` instance therefore stores one endpoint number, `EpNo`, and
+represents the class data pair:
+
+| Operation | Derived address |
+| --- | --- |
+| Receive | `USB_ENDPADDR_DIROUT(EpNo)` |
+| Transmit | `USB_ENDPADDR_DIRIN(EpNo)` |
+
+It never stores duplicate RX and TX endpoint addresses. The class owns any
+additional one-way endpoint itself; for example CDC owns its interrupt IN
+notification endpoint separately from its bulk data pair.
+
+`DeviceIntrf.DevAddr` is not used for endpoint selection. `DevNo` selects the
+USB controller, never the device address assigned by `SET_ADDRESS`.
+
+## Storage ownership
+
+There is no heap allocation in the data path.
+
+| Storage | Supplied by | Lifetime and use |
+| --- | --- | --- |
+| RX CFifo memory | Application in public class config | Queued packets awaiting the application |
+| TX CFifo memory | Application in public class config | Bytes or packets awaiting transmission |
+| RX controller buffer | Derived USB class | One active OUT transfer, reused after every completion |
+| TX controller buffer | Derived USB class | One active IN transfer, reused after every completion |
+
+The derived class sizes controller buffers for its transfer type. CDC bulk
+uses `USB_PKT_MAXLEN(0, BULK)`; a HID class can use its interrupt packet size
+instead. The RX CFifo is built once at that same static maximum. The negotiated
+MPS is applied only after the device speed is known and the class opens both
+endpoint directions.
+
+Applications size RX packet storage statically using the controller's compile
+time maximum:
+
+```c
+#define CDC_RXFIFO_MEMSIZE \
+    USB_INTRF_RXMEM_SIZE(4, USB_PKT_MAXLEN(0, BULK))
+```
+
+Each RX CFifo block is a word-aligned `UsbPktHdr_t` followed by space for one
+packet. `UsbPktHdr_t.Length` preserves short, full and zero-length packets.
+
+## Receive path
+
+RX uses one stable controller buffer and one copy on completion:
+
+```mermaid
+sequenceDiagram
+    participant U as UsbIntrf
+    participant C as UsbCtrlr
+    participant F as RX CFifo
+    participant A as Application
+    U->>C: Submit RX buffer
+    C-->>U: OUT complete(length)
+    U->>F: Store header and copy packet
+    U->>C: Reuse RX buffer
+    A->>F: Consume whole packet(s)
+```
+
+Initialization creates the packet CFifo using the class buffer capacity.
+`UsbIntrfConfigure()` records the negotiated MPS, flushes the queues and
+submits the class-owned RX buffer. Every successful OUT completion:
+
+1. reserves one CFifo block;
+2. stores the received length and copies the controller buffer into it;
+3. notifies the application after the copy is complete;
+4. resubmits the same controller buffer when another block is available.
+
+There is no RX lock and no RX active flag. The USB interrupt is the sole RX
+producer and foreground code is the sole consumer on the supported single-core
+targets. The interrupt finishes the copy before foreground execution resumes.
+The controller already owns the hardware busy state, so duplicating it in
+`UsbIntrf` would only create another state to synchronize.
+
+`DeviceIntrfRxData()` consumes only complete packet blocks. It may combine
+several complete packets in the caller's buffer, but it never splits the head
+packet. If the head packet does not fit, it returns zero and leaves that packet
+queued. A zero-length packet is released without consuming caller space.
+
+When the RX CFifo is full, OUT is left unarmed. USB then backpressures the host
+instead of dropping a packet. Consuming a block immediately attempts to submit
+the reusable RX buffer again.
+
+CDC DTR is class state only. It drives `IsPortOpen()` and the state-change
+notification; it does not enable or disable the generic receive path.
+
+## Transmit path
+
+TX always copies queued data into the class-owned TX controller buffer before
+submission, because the controller retains that buffer until completion.
+
+TX CFifo mode is selected only by block size:
+
+- Block size 1 is byte-stream mode. `UsbIntrf` packetizes queued bytes up to
+  MPS. CDC uses this mode.
+- Block size `sizeof(UsbPktHdr_t) + MPS` is packet mode. Each block describes
+  exactly one packet and packet blocks are never combined.
+
+An idle producer starts transmission immediately. While IN is busy, producers
+only append to the FIFO. Completion copies and submits the next queued data
+while it still owns the inherited `DeviceIntrf.bTxReady` token. A byte-mode
+packet ending exactly on an MPS boundary is followed immediately by a ZLP; no
+separate pending-ZLP or SOF-tail flag is stored.
+
+## Minimal state and lifecycle
+
+`UsbIntrf` deliberately does not mirror state already owned elsewhere:
+
+| Question | Single source of truth |
+| --- | --- |
+| Is the `DeviceIntrf` enabled? | inherited atomic `EnCnt` |
+| Is an endpoint transfer active? | `UsbCtrlrEpBusy()` / controller |
+| Which endpoint directions belong to this data path? | one `EpNo` |
+| Is the pair configured? | `Mps != 0` |
+| Is TX software-owned? | inherited `bTxReady` token |
+
+There is no `bEnabled`, `RxActive`, `RxAccepting`, separate RX/TX endpoint
+address, release flag, pending-ZLP flag or TX-tail flag.
+
+The lifecycle is:
+
+1. `UsbInit()` initializes portable core and controller software state.
+2. A public class such as `UsbdCdcInit()` registers its USB function and calls
+   `UsbIntrfInit()` with application FIFOs, endpoint number and class buffers.
+3. `UsbEnable()` powers the controller, endpoint zero and bus pull-up.
+4. Configuration opens the class endpoints and calls
+   `UsbIntrfConfigure(Mps)`, which starts RX.
+5. Reset or unconfiguration closes endpoints and calls
+   `UsbIntrfUnconfigure()`, which clears MPS and flushes both FIFOs.
+
+`Enable()` also attempts RX/TX submission. This makes the inherited
+`DeviceIntrf` enable transition sufficient; it does not introduce a separate
+`RxKick` state machine.
+
+## Port boundary and capabilities
+
+`usb.h` declares the portable `UsbCtrlr` entry points. Each target supplies a
+plain `usb_ctrlr.h` on its include path plus the implementation for its MCU.
+Generic code never switches on a vendor macro.
+
+The target header publishes compile-time capabilities used for static memory
+sizing:
 
 ```c
 USB_CTRLR_CNT
-USB_PKT_MAXLEN(DevNo, TransType)    // CONTROL, ISO, BULK, INT
+USB_PKT_MAXLEN(DevNo, TransType)
 USB_EPIN_CNT(DevNo)
 USB_EPOUT_CNT(DevNo)
 USB_HIGHSPEED_CAPABLE(DevNo)
 USB_ISO_SUPPORTED(DevNo)
 ```
 
-They are macros rather than a runtime record because an application has to size
-its packet ring and CFifo memory statically, before any endpoint exists:
-
-```c
-#define CDC_RXFIFO_MEMSIZE \
-    USB_INTRF_RXMEM_SIZE(4, USB_PKT_MAXLEN(0, BULK))
-```
-
-Packet lengths are allocation bounds: the largest packet the controller can
-move at the fastest speed it supports. A slower enumeration negotiates less and
-the buffer still fits.
-
-The accessors paste through a second macro, so a named constant expands before
-it is pasted and `USB_PKT_MAXLEN(USB_DEVNO, BULK)` works.
-
-## Lifecycle
-
-```text
-UsbInit(&cfg)          identity, controller software state, Chapter 9
-UsbdCdcInit(...)       one call per function, registers UsbFuncCfg_t
-UsbEnable(DevNo)       power, clock, PHY, endpoint zero, bus pull-up
-UsbProcess(DevNo)      polled from the application loop
-```
-
-Init and enable are separate because functions register between them. That is
-the same shape as `BtAppInit` followed by service registration.
-
-`UsbCtrlrStart` brings up power, clock, PHY and endpoint zero in one call. An
-earlier split between a power header and a register header forced callers to
-make two calls and stated the same facts twice.
-
-Bus power is not reported through a port callback. The port exposes
-`UsbCtrlrVbusDetected` and `UsbProcess` polls the level, deriving
-`USB_EVT_ATTACHED` and `USB_EVT_DETACHED` itself. The level matters rather than
-the edge: a board already on a cable at reset never produces an edge.
+`UsbCtrlrEpXfer()` retains the submitted buffer until it reports completion.
+The port owns registers, DMA/FIFO access, endpoint busy state and controller
+interrupts. The generic layer owns no MCU-specific facts.
 
 ## Function registration
 
-One registration per class or vendor function. `UsbFuncCfg_t` carries the
-interface and endpoint ownership plus every callback, including
-`ProcessHandler`, which `UsbProcess` polls in application context for work a
-function cannot do inside the interrupt.
-
-Endpoint zero belongs to the generic layer. Bit zero must be clear in both
-endpoint masks and masks may not overlap between functions.
-
-## Data path
-
-`UsbIntrf` applies `DeviceIntrf` to a configured endpoint pair, so a USB
-endpoint reads and writes like a UART, SPI or I2C interface. Endpoint address,
-transfer type and packet size are instance state; `DeviceIntrf` `DevAddr` is
-not used to select an endpoint.
-
-### Storage ownership
-
-`UsbCtrlrEpXfer` keeps the buffer it is given until it reports completion. Any
-storage that can be handed back to the other side sooner is therefore not the
-same memory. The two directions answer that differently.
-
-```text
-controller  ->  RX ring slot  ->  application            (no copy)
-application ->  byte or packet CFifo  ->  copy  ->  TX staging  ->  controller
-```
-
-`CFifoPut` advances the producer index before the caller fills the block, so a
-block is visible while still empty. A block published that way cannot be handed
-to the controller, because controller DMA outlives the call that started it.
-RX therefore does not use `CFifo` at all, and TX, which does, copies out of the
-block before submitting.
-
-### Receive
-
-RX memory is a ring of fixed packet slots, sized by the application:
-
-```c
-#define CDC_RXFIFO_MEMSIZE \
-    USB_INTRF_RXMEM_SIZE(4, USB_PKT_MAXLEN(0, BULK))
-```
-
-Each slot is `UsbPktHdr_t` followed by one endpoint packet, word aligned.
-`UsbIntrfRxKick` arms the OUT endpoint on the slot the ring will publish next,
-so the controller writes straight into it. The slot becomes visible to the
-reader only after `UsbIntrfRxXferComplete` stores the length and advances
-`RxPut`, in that order. A reader never sees a partial packet, nothing is
-copied, and there is no critical section in the interrupt.
-
-`RxPut` and `RxGet` are monotonic counters, taken modulo the slot count when a
-slot address is needed, so a full ring and an empty ring are distinguishable
-without a spare slot.
-
-Packet boundaries survive: a short packet stays one packet, a full packet stays
-one packet, and a zero length packet is one slot with `Length` zero.
-
-`DeviceIntrfRx()` presents a byte stream on top, consuming across slots and
-keeping its read position in `RxOffset` on the interface object rather than in
-the stored packet. A partially read slot stays in the ring until its last byte
-is taken. A zero length slot is released without consuming any of the caller's
-buffer.
-
-Flow control is lossless. When the ring is full the endpoint is left unarmed
-and the host is backpressured by USB rather than a packet being dropped.
-Releasing a slot rearms the endpoint.
-
-### Transmit
-
-TX mode comes from the CFifo block size alone and has nothing to do with the
-endpoint's USB transfer type. Bulk does not imply byte mode.
-
-- Block size 1 is byte mode. Application writes accumulate as bytes and the
-  interface packetizes what is queued, up to the packet size, without waiting
-  for a full packet. One queued byte becomes a one byte USB packet.
-- Block size `sizeof(UsbPktHdr_t) + MPS` is packet mode. The caller splits its
-  data into packets and pushes one block each. Exactly `Length` bytes are sent
-  per block, blocks are never combined, and `Length` zero sends a zero length
-  packet.
-
-CDC is byte mode, which is what keeps a single character interactive.
-
-## More than one controller
-
-`DevNo` selects the controller, matching the `DevNo` convention of `UARTCfg_t`,
-`SPICfg_t` and `I2CCfg_t`. It is the controller index, never the USB device
-address assigned by SET_ADDRESS.
-
-Every entry point takes it and every configuration struct carries it. Parts
-exist with two USB controllers, STM32F427 and some LPC546xx among them.
-
-The current implementations hold file scope state, so one controller is
-initialized at a time. That matches every part supported so far, where
-`USB_CTRLR_CNT` is 1. Arraying the state is work for the first part that needs
-two, and the signatures already allow it.
+Each class or vendor function registers one `UsbFuncCfg_t` containing its
+interface range, endpoint masks and callbacks. Endpoint zero belongs to the
+generic core; bit zero must be clear in function endpoint masks, and masks may
+not overlap between functions.
 
 ## Known gaps
 
-- A lost IN completion leaves the transmit token held with nothing to return
-  it, because `UsbIntrfSof` declines to act while the token is taken. There is
-  no recovery path.
-- After a bus suspend `UsbCtrlrEpXfer` refuses, `RxActive` is cleared, and
-  nothing rearms on resume while the FIFO is empty.
-- Isochronous endpoints are not driven by any port. `USB_ISO_SUPPORTED` reports
-  this separately from the packet length the hardware allows.
-- There is no host controller layer. The role neutral naming anticipates one.
+- Isochronous endpoints are not yet driven by a port.
+  `USB_ISO_SUPPORTED` reports this independently of hardware packet capacity.
+- There is no host-controller layer yet. Role-neutral naming preserves that
+  extension point.
+- Current ports hold one file-scope controller state because all supported
+  parts report `USB_CTRLR_CNT == 1`; the public signatures already carry
+  `DevNo` for a future multi-controller port.

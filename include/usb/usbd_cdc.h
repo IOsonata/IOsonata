@@ -3,9 +3,9 @@
 
 @brief	USB CDC ACM class adapter.
 
-CDC owns ACM control requests, line/control state and notifications.
-Application data moves through the embedded generic UsbdIntrf data interface;
-CDC itself is not a DeviceIntrf and does not own a separate RX data path.
+CDC owns ACM control requests, line/control state, notifications and the
+controller transfer buffers required by its bulk endpoints. UsbdCdc derives
+from the internal UsbIntrf data path and presents the DeviceIntrf API.
 
 @author	Hoang Nguyen Hoan
 @date	May 2, 2024
@@ -55,8 +55,9 @@ SOFTWARE.
 #define USBD_CDC_CTRL_INTRF(n)			((uint8_t)((n) * 2U))
 #define USBD_CDC_DATA_INTRF(n)			((uint8_t)(USBD_CDC_CTRL_INTRF(n) + 1U))
 #define USBD_CDC_NOTIF_EP(n)			USB_ENDPADDR_DIRIN(1U + ((n) * 2U))
-#define USBD_CDC_DATA_OUT_EP(n)			USB_ENDPADDR_DIROUT(2U + ((n) * 2U))
-#define USBD_CDC_DATA_IN_EP(n)			USB_ENDPADDR_DIRIN(2U + ((n) * 2U))
+#define USBD_CDC_DATA_EP_NO(n)			((uint8_t)(2U + ((n) * 2U)))
+#define USBD_CDC_DATA_OUT_EP(n)			USB_ENDPADDR_DIROUT(USBD_CDC_DATA_EP_NO(n))
+#define USBD_CDC_DATA_IN_EP(n)			USB_ENDPADDR_DIRIN(USBD_CDC_DATA_EP_NO(n))
 
 #define USBD_CDC_CONFIG_VALUE			1U
 
@@ -65,7 +66,8 @@ SOFTWARE.
 #define USBD_CDC_BULK_HS_MPS			512U
 
 #define USBD_CDC_NOTIFY_LEN				(sizeof(UsbCdcNotification_t) + 2U)
-#define USBD_CDC_TRANS_WORDS			(USBD_CDC_BULK_HS_MPS / sizeof(uint32_t))
+#define USBD_CDC_TRANS_WORDS \
+	((USB_PKT_MAXLEN(0, BULK) + sizeof(uint32_t) - 1U) / sizeof(uint32_t))
 #define USBD_CDC_NOTIFY_WORDS \
 	((USBD_CDC_NOTIFY_LEN + sizeof(uint32_t) - 1U) / sizeof(uint32_t))
 
@@ -89,15 +91,10 @@ typedef struct __Usbd_Cdc_Dev {
 	uint16_t ControlLineState;
 	uint16_t PendingControlLineState;
 	uint16_t SerialState;
-	uint16_t DataMps;
-	uint32_t RxDropCnt;
-	uint32_t TxDropCnt;
 	int ItfNo;
 	int DevNo;
-	bool Configured;
-	bool NotifActive;
 	bool SerialStatePending;
-	bool ReportedOpen;
+	uint32_t RxTransfer[USBD_CDC_TRANS_WORDS];
 	uint32_t TxTransfer[USBD_CDC_TRANS_WORDS];
 	uint32_t NotifTransfer[USBD_CDC_NOTIFY_WORDS];
 } UsbdCdcDev_t;
@@ -106,11 +103,13 @@ typedef struct __Usbd_Cdc_Dev {
 
 #ifdef __cplusplus
 
-class UsbdCdc {
+class UsbdCdc : public UsbIntrf {
 public:
+	UsbdCdc() { Bind(&vUsbdCdc.Data); }
+
 	bool Init(const UsbdCdcCfg_t &Cfg);
 
-	DevIntrf_t *Data(void) { return &vUsbdCdc.Data.DevIntrf; }
+	DevIntrf_t *Data(void) { return static_cast<DevIntrf_t *>(*this); }
 
 	bool IsPortOpen(void);
 	const UsbCdcLineCoding_t *LineCoding(void);

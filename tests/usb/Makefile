@@ -42,6 +42,7 @@ LINK_SOURCES := \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/usb/usbd_cdc.cpp \
 	$(ROOT)/src/usb/usbd_cdc_desc.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
 INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
@@ -54,7 +55,8 @@ HEADERS := \
 	hostport/usb_ctrlr.h \
 	$(ROOT)/include/usb/usb.h \
 	$(ROOT)/include/usb/usb_def.h \
-	$(ROOT)/include/usb/usb_intrf.h
+	$(ROOT)/include/usb/usb_intrf.h \
+	$(ROOT)/include/usb/usbd_cdc.h
 
 TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(LINK_TARGET)
 
