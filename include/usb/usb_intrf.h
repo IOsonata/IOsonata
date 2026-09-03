@@ -132,11 +132,7 @@ typedef struct __Usb_Dev_Interf {
 	uint8_t *pTxBuffer;			//!< One IN packet controller buffer
 	uint16_t BufferSize;		//!< Capacity of pRxBuffer and pTxBuffer
 	uint16_t Mps;				//!< Active packet size, zero while unconfigured
-	uint16_t TxBlkSize;			//!< TX CFifo block size, 1 selects byte mode
 	uint8_t EpNo;				//!< Bidirectional endpoint number
-	int TxUsedMark;				//!< TX bytes queued when the current packet was filled
-	bool TxZlpRequired;			//!< Byte mode packet ended on an MPS boundary
-	bool TxTailArmed;			//!< Byte mode tail seen idle at the previous SOF
 } UsbDevIntrf_t;
 
 #pragma pack(pop)
@@ -156,9 +152,6 @@ void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf);
 /** Completion for either direction of EpNo, called from the USB interrupt. */
 void UsbIntrfXferComplete(UsbDevIntrf_t *pIntrf, uint8_t EpAddr,
 						  uint16_t Length, UsbCtrlrXferResult_t Result);
-
-/** Start of frame hook, flushes a byte mode tail that stayed idle. */
-void UsbIntrfSof(UsbDevIntrf_t *pIntrf);
 
 bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);
 int UsbIntrfTxUsed(UsbDevIntrf_t *pIntrf);

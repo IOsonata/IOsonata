@@ -146,8 +146,9 @@ packet. If the head packet does not fit, it returns zero and leaves that packet
 queued. A zero-length packet is released without consuming caller space.
 
 When the RX CFifo is full, OUT is left unarmed. USB then backpressures the host
-instead of dropping a packet. Consuming a block immediately attempts to submit
-the reusable RX buffer again.
+instead of dropping a packet. Completion reuses the RX buffer immediately,
+before application event callbacks. A read attempts to re-arm OUT only when it
+releases a previously full FIFO.
 
 CDC DTR is class state only. It drives `IsPortOpen()` and the state-change
 notification; it does not enable or disable the generic receive path.
@@ -168,36 +169,17 @@ An idle producer starts transmission immediately. While IN is busy, producers
 only append to the FIFO. Completion copies and submits the next queued data
 while it still owns the inherited `DeviceIntrf.bTxReady` token.
 
-Completion sends a tail shorter than MPS only when the producer added nothing
-while the previous packet was on the bus. That one test separates the two
-workloads that pull in opposite directions:
-
-- A producer that keeps running is slower served by short packets, because a
-  short packet costs the same bus slot as a full one. Measured on a
-  one-byte-per-call producer against a bus that completes faster than the fill
-  loop, sending every tail drops the stream to two bytes per packet, thirty-two
-  times the transactions for the same data.
-- A producer that stopped is waiting on that data. Holding its tail back costs
-  a frame per exchange, which halves a request and response workload such as
-  the loopback example.
-
-`TxUsedMark` records what was still queued when the packet was filled, and the
-comparison at completion answers which case this is. `UsbIntrfSof()` remains
-the backstop for a tail that arrived just after a completion: it goes out once
-it has been seen idle across one whole frame, bounding the wait at two frames
-without ever splitting up back-to-back full packets. `TxTailArmed` is the one
-bit that grace period needs.
+In byte-stream mode each submission calls `CFifoGetMultiple()` once with MPS as
+the requested count. The returned contiguous byte count is copied to the TX
+controller buffer and submitted immediately. Completion repeats the same
+operation. A partial packet is not delayed, and there is no SOF tail scheduler
+or separate ZLP state.
 
 Byte mode and packet mode are separate `DevIntrf.TxData` handlers, chosen once
 in `UsbIntrfInit()` from the CFifo block size. Byte mode is the CDC hot path and
 runs once per `DeviceIntrfTx()` call, so a one byte write walks all of it; a
 mode test at the top would be paid on every byte. Split this way the byte path
 compiles to the same instruction sequence it had before packet mode existed.
-
-A byte-mode packet ending exactly on an MPS boundary is followed by a ZLP when
-the FIFO is empty, so the host sees the stream end rather than a stalled read.
-With data still queued the next packet terminates the transfer on its own and
-no ZLP is sent, which is why no pending-ZLP flag is stored.
 
 ## Minimal state and lifecycle
 
@@ -210,12 +192,10 @@ no ZLP is sent, which is why no pending-ZLP flag is stored.
 | Which endpoint directions belong to this data path? | one `EpNo` |
 | Is the pair configured? | `Mps != 0` |
 | Is TX software-owned? | inherited `bTxReady` token |
+| Is TX byte or packet mode? | `hTxFifo->BlkSize` |
 
 There is no `bEnabled`, `RxActive`, `RxAccepting`, separate RX/TX endpoint
-address or pending-ZLP flag. `TxUsedMark` and `TxTailArmed` are the exceptions,
-and each holds a fact nothing else does: what was queued when the current
-packet was filled, and whether a partial tail was already idle at the previous
-frame.
+address, release flag, TX queue watermark, tail flag or ZLP flag.
 
 The lifecycle is:
 

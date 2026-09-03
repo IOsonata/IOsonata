@@ -7,7 +7,6 @@
 //
 // Not a regression test. Built and run by hand against two revisions.
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "usb/usb_intrf.h"
@@ -101,8 +100,7 @@ static bool Setup(void)
 // BusTicks is how many producer iterations pass before an in flight packet
 // completes. Small means the bus is fast relative to the application, which is
 // the PRBS case: a tight one byte fill loop against full speed bulk.
-// SofTicks models the 1 kHz frame clock in producer iterations.
-static void Run(int BusTicks, long Iterations, int SofTicks)
+static void Run(int BusTicks, long Iterations)
 {
 	if (!Setup()) { printf("setup failed\n"); return; }
 
@@ -132,11 +130,6 @@ static void Run(int BusTicks, long Iterations, int SofTicks)
 			due--;
 		}
 
-		if (SofTicks > 0 && (i % SofTicks) == 0)
-		{
-			UsbIntrfSof(&s_Intrf);
-			if (s_InBusy && due < 0) { due = BusTicks; }
-		}
 	}
 
 	printf("bus ticks %4d   packets %8ld   bytes %9ld   avg pkt %6.1f   zlp %ld\n",
@@ -144,16 +137,13 @@ static void Run(int BusTicks, long Iterations, int SofTicks)
 		   s_Packets ? (double)s_Bytes / (double)s_Packets : 0.0, s_Zlp);
 }
 
-static int s_SofTicks;
-
-int main(int argc, char **argv)
+int main(void)
 {
-	s_SofTicks = argc > 1 ? atoi(argv[1]) : 0;
 	const int ticks[] = { 1, 4, 16, 64, 256 };
 
 	for (unsigned i = 0; i < sizeof(ticks) / sizeof(ticks[0]); i++)
 	{
-		Run(ticks[i], 200000, s_SofTicks);
+		Run(ticks[i], 200000);
 	}
 
 	return 0;

@@ -356,16 +356,6 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 	}
 }
 
-static void UsbdCdcSof(uint16_t, void *pContext)
-{
-	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);
-
-	if (pCdc != nullptr)
-	{
-		UsbIntrfSof(&pCdc->Data);
-	}
-}
-
 static void UsbdCdcReset(void *pContext)
 {
 	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);
@@ -455,7 +445,7 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 	coreCfg.SetInterfaceHandler = nullptr;
 	coreCfg.XferHandler = UsbdCdcXfer;
 	coreCfg.ResetHandler = UsbdCdcReset;
-	coreCfg.SofHandler = UsbdCdcSof;
+	coreCfg.SofHandler = nullptr;
 	coreCfg.ProcessHandler = UsbdCdcPump;
 	coreCfg.pContext = pCdc;
 

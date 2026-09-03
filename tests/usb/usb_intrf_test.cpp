@@ -173,6 +173,10 @@ static void TestStagingBuffer(void)
 	CHECK(pPacket != reinterpret_cast<UsbPkt_t *>(s_RxTransfer));
 	CHECK(pPacket != nullptr && pPacket->Hdr.Length == sizeof(in));
 	CHECK(pPacket != nullptr && memcmp(pPacket->Data, in, sizeof(in)) == 0);
+	uint8_t out[sizeof(in)] = {};
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) ==
+		  (int)sizeof(out));
+	CHECK(s_OutSubmitCnt == 2);
 }
 
 static void TestWholePackets(void)
@@ -304,97 +308,82 @@ static void CompleteIn(uint16_t Len)
 static void TestTxChaining(void)
 {
 	CHECK(Setup());
-	uint8_t full[MPS];
-	memset(full, 0x5A, sizeof(full));
-	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, full, sizeof(full)) == MPS);
+	uint8_t data[MPS * 2U + 3U];
+	for (uint32_t i = 0; i < sizeof(data); i++)
+	{
+		data[i] = (uint8_t)i;
+	}
+
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, data, sizeof(data)) ==
+		  (int)sizeof(data));
 	CHECK(s_InBusy && s_InBuf == s_TxTransfer && s_InLen == MPS);
-	// A tail shorter than MPS is not sent on completion. Doing that turns a
-	// producer slower than the bus into one short packet per completion, which
-	// is what costs throughput. It waits for an idle frame instead.
-	const uint8_t tail[3] = { 1, 2, 3 };
-	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, tail, sizeof(tail)) == 3);
-	CompleteIn(MPS);
-	CHECK(!s_InBusy);
-	CHECK(CFifoUsed(s_Intrf.hTxFifo) == sizeof(tail));
-
-	// One frame of grace, then it goes out.
-	UsbIntrfSof(&s_Intrf);
-	CHECK(!s_InBusy);
-	UsbIntrfSof(&s_Intrf);
-	CHECK(s_InBusy && s_InLen == sizeof(tail));
-	CHECK(memcmp(s_InBuf, tail, sizeof(tail)) == 0);
-	CompleteIn(sizeof(tail));
-	CHECK(!s_InBusy);
-	CHECK(s_InSubmitCnt == 2);
-
-	// Back to back full packets are never broken up by the frame clock.
-	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, full, sizeof(full)) == MPS);
-	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, full, sizeof(full)) == MPS);
-	UsbIntrfSof(&s_Intrf);
+	CHECK(memcmp(s_InBuf, data, MPS) == 0);
 	CompleteIn(MPS);
 	CHECK(s_InBusy && s_InLen == MPS);
-
-	// A packet ending on an MPS boundary owes a ZLP, but the endpoint goes
-	// idle instead of spending a transaction and a completion interrupt on it
-	// straight away. That cost lands on every packet of a stream whose
-	// producer is slower than the bus.
+	CHECK(memcmp(s_InBuf, data + MPS, MPS) == 0);
 	CompleteIn(MPS);
+	CHECK(s_InBusy && s_InLen == 3U);
+	CHECK(memcmp(s_InBuf, data + MPS * 2U, 3U) == 0);
+	CompleteIn(3U);
 	CHECK(!s_InBusy);
-	CHECK(s_Intrf.TxZlpRequired);
+	CHECK(s_InSubmitCnt == 3);
 
-	// The frame clock sends it, and only once the stream has actually paused.
-	UsbIntrfSof(&s_Intrf);
+	const uint8_t tail[3] = { 1, 2, 3 };
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, tail, sizeof(tail)) == 3);
+	CHECK(s_InBusy && s_InLen == sizeof(tail));
+	CompleteIn(sizeof(tail));
 	CHECK(!s_InBusy);
-	UsbIntrfSof(&s_Intrf);
+}
+
+static void TestTxPacketMode(void)
+{
+	constexpr uint32_t blockSize = sizeof(UsbPktHdr_t) + MPS;
+	UsbIntrfCfg_t cfg = {};
+	cfg.DevNo = 0;
+	cfg.EpNo = EP_NO;
+	cfg.pRxFifoMem = s_RxMem;
+	cfg.RxFifoMemSize = (int)sizeof(s_RxMem);
+	cfg.pTxFifoMem = s_TxMem;
+	cfg.TxFifoMemSize = (int)sizeof(s_TxMem);
+	cfg.TxFifoBlkSize = blockSize;
+	cfg.BufferSize = BUFFER_SIZE;
+	cfg.pRxBuffer = s_RxTransfer;
+	cfg.pTxBuffer = s_TxTransfer;
+	memset(static_cast<void *>(&s_Intrf), 0, sizeof(s_Intrf));
+	s_OutBusy = false;
+	s_InBusy = false;
+	s_InSubmitCnt = 0;
+	s_XferOk = true;
+	CHECK(UsbIntrfInit(&s_Intrf, &cfg));
+	CHECK(UsbIntrfConfigure(&s_Intrf, MPS));
+
+	alignas(4) uint8_t packets[blockSize * 2U] = {};
+	UsbPkt_t *p1 = reinterpret_cast<UsbPkt_t *>(packets);
+	UsbPkt_t *p2 = reinterpret_cast<UsbPkt_t *>(packets + blockSize);
+	p1->Hdr.Length = MPS;
+	p2->Hdr.Length = 3U;
+	memset(p1->Data, 0x5A, MPS);
+	p2->Data[0] = 1U;
+	p2->Data[1] = 2U;
+	p2->Data[2] = 3U;
+
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, packets, sizeof(packets)) ==
+		  (int)sizeof(packets));
+	CHECK(s_InBusy && s_InLen == MPS);
+	CHECK(memcmp(s_InBuf, p1->Data, MPS) == 0);
+	CompleteIn(MPS);
+	CHECK(s_InBusy && s_InLen == 3U);
+	CHECK(memcmp(s_InBuf, p2->Data, 3U) == 0);
+	CompleteIn(3U);
+	CHECK(!s_InBusy);
+
+	memset(packets, 0, blockSize);
+	p1->Hdr.Length = 0U;
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, packets, blockSize) ==
+		  (int)blockSize);
 	CHECK(s_InBusy && s_InLen == 0U);
 	CompleteIn(0U);
 	CHECK(!s_InBusy);
-	CHECK(!s_Intrf.TxZlpRequired);
-
-	// A producer that keeps feeding never reaches the second SOF, so a
-	// continuous stream never pays for a ZLP at all.
-	CHECK(Setup());
-	int submitted = 0;
-	for (int i = 0; i < 8; i++)
-	{
-		CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, full, sizeof(full)) == MPS);
-		UsbIntrfSof(&s_Intrf);
-		CompleteIn(MPS);
-		submitted++;
-	}
-	CHECK(s_InSubmitCnt == submitted);		// no ZLP among them
-}
-
-// A producer that goes quiet is waiting on its own data, so its tail must not
-// wait for the frame clock. The loopback example is this shape: echo a burst,
-// then block on the next read. One frame per exchange would halve its rate.
-static void TestIdleProducerTail(void)
-{
-	CHECK(Setup());
-	uint8_t burst[MPS + 20U];
-	memset(burst, 0x27, sizeof(burst));
-
-	// One write, then nothing. The first MPS bytes go out immediately.
-	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, burst, sizeof(burst)) ==
-		  (int)sizeof(burst));
-	CHECK(s_InBusy && s_InLen == MPS);
-
-	// Nothing was queued while that packet was on the bus, so the tail
-	// follows it without waiting for a SOF.
-	CompleteIn(MPS);
-	CHECK(s_InBusy && s_InLen == 20U);
-	CompleteIn(20U);
-	CHECK(!s_InBusy);
-	CHECK(s_InSubmitCnt == 2);
-
-	// A producer that keeps running is not interrupted for a short packet.
-	CHECK(Setup());
-	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, burst, MPS) == (int)MPS);
-	CHECK(s_InBusy && s_InLen == MPS);
-	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, burst, 20) == 20);
-	CompleteIn(MPS);
-	CHECK(!s_InBusy);
-	CHECK(CFifoUsed(s_Intrf.hTxFifo) == 20);
 }
 
 static void TestTooSmall(void)
@@ -429,7 +418,7 @@ int main(void)
 		{ "unconfigure", TestUnconfigure },
 		{ "disable then enable", TestDisableEnable },
 		{ "tx chaining", TestTxChaining },
-		{ "idle producer tail", TestIdleProducerTail },
+		{ "tx packet mode", TestTxPacketMode },
 		{ "memory too small", TestTooSmall },
 	};
 
