@@ -1022,6 +1022,15 @@ static void nRFUsbdServicePending(void)
 			{
 				return;
 			}
+
+			// The request is consumed before the attempt, so a refusal here
+			// would discard it. The endpoint still holds the packet and its
+			// EPDATASTATUS was acknowledged when it arrived, so nothing else
+			// would ever fetch it. Hand it back to the arrival flag that
+			// nRFUsbdEpXfer checks, which is how an unarmed endpoint already
+			// carries a waiting packet to the next submit.
+			s_Ctrlr.Xfer[epNum][0].DataReceived = true;
+
 			atomic_flag_clear(&s_DmaRunning);
 			continue;
 		}
@@ -1035,6 +1044,25 @@ static void nRFUsbdServicePending(void)
 			{
 				return;
 			}
+
+			// Same shape as the OUT branch above: the request is consumed
+			// before the attempt. A refusal while the transfer is still
+			// started leaves it with no DMA and no completion, so the sender
+			// waits on a packet that will never finish. Retire it instead, so
+			// the layer above gets its endpoint back.
+			{
+				nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][1];
+				if (pXfer->Started)
+				{
+					pXfer->Started = false;
+					atomic_flag_clear(&s_DmaRunning);
+					nRFUsbdEmitXfer((uint8_t)(epNum | USB_ENDPADDR_DIR_IN),
+									 pXfer->ActualLen,
+									 USB_CTRLR_XFER_FAILED);
+					continue;
+				}
+			}
+
 			atomic_flag_clear(&s_DmaRunning);
 			continue;
 		}
