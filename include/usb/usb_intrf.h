@@ -81,7 +81,7 @@ SOFTWARE.
 
 #include "cfifo.h"
 #include "device_intrf.h"
-#include "usb/usbd_ctrlr.h"
+#include "usb/usb.h"
 
 /** @addtogroup USBD
   * @{
@@ -95,6 +95,7 @@ typedef struct __Usb_Packet_Header {
 } UsbPktHdr_t;
 
 typedef struct __Usb_Interf_Config {
+	int DevNo;					//!< USB controller number
 	bool bBlocking;
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;
@@ -108,6 +109,9 @@ typedef struct __Usb_Dev_Interf {
 	DevIntrf_t DevIntrf;
 	hCFifo_t hRxFifo;
 	hCFifo_t hTxFifo;
+	uint8_t *pRxFifoMem;		//!< RX CFifo memory, kept until the MPS is known
+	uint32_t RxFifoMemSize;		//!< RX CFifo memory size in bytes
+	int DevNo;					//!< USB controller number
 	uint8_t *pRxBuffer;			//!< One packet RX DMA staging buffer
 	uint32_t RxUsed;				//!< Published RX payload bytes not yet consumed
 	uint32_t RxDropCnt;			//!< Controller/error drops; ring-full uses backpressure
@@ -147,7 +151,7 @@ void UsbIntrfRxEnable(UsbDevIntrf_t *pIntrf, bool Enable);
 
 /** OUT endpoint transfer completion, called from the USB interrupt. */
 void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf,
-						 uint16_t Length, UsbdCtrlrXferResult_t Result);
+						 uint16_t Length, UsbCtrlrXferResult_t Result);
 
 /**
  * Bind an IN endpoint to this instance after SET_CONFIGURATION.
@@ -161,7 +165,7 @@ void UsbIntrfResetTx(UsbDevIntrf_t *pIntrf);
 
 /** IN endpoint transfer completion, called from the USB interrupt. */
 void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
-						 uint16_t Length, UsbdCtrlrXferResult_t Result);
+						 uint16_t Length, UsbCtrlrXferResult_t Result);
 
 /** Start-of-frame callback used to flush an idle partial TX tail. */
 void UsbIntrfSof(UsbDevIntrf_t *pIntrf);

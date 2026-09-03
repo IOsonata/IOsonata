@@ -44,9 +44,8 @@ SOFTWARE.
 #include "cfifo.h"
 #include "device_intrf.h"
 #include "usb/usb_cdcdef.h"
-#include "usb/usbd.h"
+#include "usb/usb.h"
 #include "usb/usb_intrf.h"
-#include "usb/usbd_ctrlr.h"
 
 /** @addtogroup USBD
   * @{
@@ -79,6 +78,7 @@ typedef struct __Usbd_Cdc_Config {
 	int TxFifoMemSize;
 	uint8_t *pTxFifoMem;
 	int ItfNo;
+	int DevNo;						//!< USB controller number
 	DevIntrfEvtHandler_t EvtCB;
 } UsbdCdcCfg_t;
 
@@ -93,10 +93,12 @@ typedef struct __Usbd_Cdc_Dev {
 	uint32_t RxDropCnt;
 	uint32_t TxDropCnt;
 	int ItfNo;
+	int DevNo;
 	bool Configured;
 	bool NotifActive;
 	bool SerialStatePending;
 	bool ReportedOpen;
+	uint32_t RxTransfer[USBD_CDC_TRANS_WORDS];
 	uint32_t TxTransfer[USBD_CDC_TRANS_WORDS];
 	uint32_t NotifTransfer[USBD_CDC_NOTIFY_WORDS];
 } UsbdCdcDev_t;
@@ -138,7 +140,7 @@ void UsbdCdcSetSerialState(UsbdCdcDev_t * const pCdc, uint16_t SerialState);
 const uint8_t *UsbdCdcDescHandler(uint8_t DescType,
 								  uint8_t DescIndex,
 								  uint16_t LangId,
-								  UsbdSpeed_t Speed,
+								  UsbSpeed_t Speed,
 								  uint16_t *pLength,
 								  void *pContext);
 

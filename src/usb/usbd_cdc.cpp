@@ -36,10 +36,13 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "usb/usb_dev.h"
+#include "usb/usb.h"
 #include "usb/usbd_cdc.h"
-#include "usb/usbd_core.h"
-#include "usb/usbd_ctrlr.h"
+
+static uint8_t *UsbdCdcRxBuffer(UsbdCdcDev_t *pCdc)
+{
+	return reinterpret_cast<uint8_t *>(pCdc->RxTransfer);
+}
 
 static uint8_t *UsbdCdcTxBuffer(UsbdCdcDev_t *pCdc)
 {
@@ -71,15 +74,15 @@ static void UsbdCdcDefaultLineCoding(UsbdCdcDev_t *pCdc)
 	pCdc->PendingLineCoding = pCdc->LineCoding;
 }
 
-static uint16_t UsbdCdcMps(void)
+static uint16_t UsbdCdcMps(UsbdCdcDev_t *pCdc)
 {
-	return UsbdCtrlrHighSpeed() ?
+	return UsbCtrlrHighSpeed(pCdc->DevNo) ?
 		   USBD_CDC_BULK_HS_MPS : USBD_CDC_BULK_FS_MPS;
 }
 
-static uint8_t UsbdCdcNotifInterval(void)
+static uint8_t UsbdCdcNotifInterval(UsbdCdcDev_t *pCdc)
 {
-	return UsbdCtrlrHighSpeed() ? 8U : 16U;
+	return UsbCtrlrHighSpeed(pCdc->DevNo) ? 8U : 16U;
 }
 
 bool UsbdCdcPortIsOpen(const UsbdCdcDev_t * const pCdc)
@@ -123,7 +126,7 @@ static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 	pCdc->SerialStatePending = false;
 	pCdc->NotifActive = true;
 
-	if (!UsbdCtrlrEpXfer(USBD_CDC_NOTIF_EP(pCdc->ItfNo),
+	if (!UsbCtrlrEpXfer(pCdc->DevNo, USBD_CDC_NOTIF_EP(pCdc->ItfNo),
 						 pData, USBD_CDC_NOTIFY_LEN))
 	{
 		pCdc->NotifActive = false;
@@ -131,7 +134,7 @@ static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 	}
 }
 
-static bool UsbdCdcOpenEndpoint(uint8_t EpAddr, uint8_t Type,
+static bool UsbdCdcOpenEndpoint(UsbdCdcDev_t *pCdc, uint8_t EpAddr, uint8_t Type,
 								uint16_t Mps, uint8_t Interval)
 {
 	UsbEndPointDesc_t desc = {};
@@ -142,14 +145,14 @@ static bool UsbdCdcOpenEndpoint(uint8_t EpAddr, uint8_t Type,
 	desc.wMaxPacketSize = Mps;
 	desc.bInterval = Interval;
 
-	return UsbdCtrlrEpOpen(&desc);
+	return UsbCtrlrEpOpen(pCdc->DevNo, &desc);
 }
 
 static void UsbdCdcCloseEndpoints(UsbdCdcDev_t *pCdc)
 {
-	UsbdCtrlrEpClose(USBD_CDC_NOTIF_EP(pCdc->ItfNo));
-	UsbdCtrlrEpClose(USBD_CDC_DATA_OUT_EP(pCdc->ItfNo));
-	UsbdCtrlrEpClose(USBD_CDC_DATA_IN_EP(pCdc->ItfNo));
+	UsbCtrlrEpClose(pCdc->DevNo, USBD_CDC_NOTIF_EP(pCdc->ItfNo));
+	UsbCtrlrEpClose(pCdc->DevNo, USBD_CDC_DATA_OUT_EP(pCdc->ItfNo));
+	UsbCtrlrEpClose(pCdc->DevNo, USBD_CDC_DATA_IN_EP(pCdc->ItfNo));
 }
 
 static void UsbdCdcCancelBusState(UsbdCdcDev_t *pCdc)
@@ -185,16 +188,16 @@ static bool UsbdCdcConfig(uint8_t Configuration, void *pContext)
 		return false;
 	}
 
-	pCdc->DataMps = UsbdCdcMps();
+	pCdc->DataMps = UsbdCdcMps(pCdc);
 
-	if (!UsbdCdcOpenEndpoint(USBD_CDC_NOTIF_EP(pCdc->ItfNo),
+	if (!UsbdCdcOpenEndpoint(pCdc, USBD_CDC_NOTIF_EP(pCdc->ItfNo),
 							 USB_ENDPATT_TRANS_INT,
 							 USBD_CDC_NOTIF_MPS,
-							 UsbdCdcNotifInterval()) ||
-		!UsbdCdcOpenEndpoint(USBD_CDC_DATA_OUT_EP(pCdc->ItfNo),
+							 UsbdCdcNotifInterval(pCdc)) ||
+		!UsbdCdcOpenEndpoint(pCdc, USBD_CDC_DATA_OUT_EP(pCdc->ItfNo),
 							 USB_ENDPATT_TRANS_BULK,
 							 pCdc->DataMps, 0U) ||
-		!UsbdCdcOpenEndpoint(USBD_CDC_DATA_IN_EP(pCdc->ItfNo),
+		!UsbdCdcOpenEndpoint(pCdc, USBD_CDC_DATA_IN_EP(pCdc->ItfNo),
 							 USB_ENDPATT_TRANS_BULK,
 							 pCdc->DataMps, 0U))
 	{
@@ -222,7 +225,7 @@ static bool UsbdCdcConfig(uint8_t Configuration, void *pContext)
 }
 
 static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
-						   UsbdCoreCtrlStage_t Stage,
+						   UsbCtrlStage_t Stage,
 						   uint8_t **ppData,
 						   uint16_t *pLength,
 						   void *pContext)
@@ -251,7 +254,7 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 				return false;
 			}
 
-			if (Stage == USBD_CORE_CTRL_SETUP)
+			if (Stage == USB_CTRL_SETUP)
 			{
 				if (ppData == nullptr)
 				{
@@ -263,12 +266,12 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 				return true;
 			}
 
-			if (Stage == USBD_CORE_CTRL_DATA)
+			if (Stage == USB_CTRL_DATA)
 			{
 				return *pLength == sizeof(UsbCdcLineCoding_t);
 			}
 
-			if (Stage == USBD_CORE_CTRL_COMPLETE)
+			if (Stage == USB_CTRL_COMPLETE)
 			{
 				pCdc->LineCoding = pCdc->PendingLineCoding;
 				return true;
@@ -284,7 +287,7 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 				return false;
 			}
 
-			if (Stage == USBD_CORE_CTRL_SETUP)
+			if (Stage == USB_CTRL_SETUP)
 			{
 				if (ppData == nullptr)
 				{
@@ -306,20 +309,20 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 				return false;
 			}
 
-			if (Stage == USBD_CORE_CTRL_SETUP)
+			if (Stage == USB_CTRL_SETUP)
 			{
 				pCdc->PendingControlLineState = pSetup->wValue;
 				*pLength = 0U;
 				return true;
 			}
 
-			if (Stage == USBD_CORE_CTRL_COMPLETE)
+			if (Stage == USB_CTRL_COMPLETE)
 			{
 				pCdc->ControlLineState = pCdc->PendingControlLineState;
 				UsbIntrfRxEnable(&pCdc->Data, UsbdCdcPortIsOpen(pCdc));
 				return true;
 			}
-			return Stage == USBD_CORE_CTRL_DATA;
+			return Stage == USB_CTRL_DATA;
 
 		default:
 			return false;
@@ -327,7 +330,7 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 }
 
 static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
-						UsbdCtrlrXferResult_t Result, void *pContext)
+						UsbCtrlrXferResult_t Result, void *pContext)
 {
 	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);
 
@@ -351,7 +354,7 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 	if (EpAddr == USBD_CDC_NOTIF_EP(pCdc->ItfNo))
 	{
 		pCdc->NotifActive = false;
-		if (Result == USBD_CTRLR_XFER_SUCCESS)
+		if (Result == USB_CTRLR_XFER_SUCCESS)
 		{
 			UsbdCdcNotifKick(pCdc);
 		}
@@ -399,7 +402,7 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 		return false;
 	}
 
-	const UsbDevCfg_t *pDevCfg = UsbDevGetCfg();
+	const UsbCfg_t *pDevCfg = UsbGetCfg(pCdc->DevNo);
 	if (pDevCfg == nullptr || pCfg->ItfNo >= pDevCfg->NbCdc)
 	{
 		return false;
@@ -411,7 +414,9 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 	dataCfg.pRxFifoMem = pCfg->pRxFifoMem;
 	dataCfg.TxFifoMemSize = pCfg->TxFifoMemSize;
 	dataCfg.pTxFifoMem = pCfg->pTxFifoMem;
+	dataCfg.DevNo = pCfg->DevNo;
 	dataCfg.EvtCB = pCfg->EvtCB;
+	pCdc->DevNo = pCfg->DevNo;
 
 	if (!UsbIntrfInit(&pCdc->Data, &dataCfg))
 	{
@@ -419,7 +424,7 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 	}
 
 	pCdc->ItfNo = pCfg->ItfNo;
-	pCdc->DataMps = UsbdCdcMps();
+	pCdc->DataMps = UsbdCdcMps(pCdc);
 	pCdc->ControlLineState = 0U;
 	pCdc->PendingControlLineState = 0U;
 	pCdc->SerialState = 0U;
@@ -430,7 +435,7 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 	UsbdCdcCancelBusState(pCdc);
 	UsbdCdcDefaultLineCoding(pCdc);
 
-	UsbdCoreFuncCfg_t coreCfg = {};
+	UsbFuncCfg_t coreCfg = {};
 	coreCfg.FirstInterface = USBD_CDC_CTRL_INTRF(pCfg->ItfNo);
 	coreCfg.InterfaceCount = 2U;
 	coreCfg.EpInMask =
@@ -447,17 +452,14 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 	coreCfg.XferHandler = UsbdCdcXfer;
 	coreCfg.ResetHandler = UsbdCdcReset;
 	coreCfg.SofHandler = UsbdCdcSof;
+	coreCfg.ProcessHandler = UsbdCdcPump;
 	coreCfg.pContext = pCdc;
 
-	if (!UsbdCoreRegisterFunction(&coreCfg))
+	if (!UsbRegisterFunc(pCdc->DevNo, &coreCfg))
 	{
 		return false;
 	}
 
-	if (!UsbDevRegisterFunc(UsbdCdcPump, pCdc))
-	{
-		return false;
-	}
 
 	return true;
 }

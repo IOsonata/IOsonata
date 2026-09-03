@@ -77,7 +77,7 @@ static void UsbIntrfRxKick(UsbDevIntrf_t *pIntrf)
 		return;
 	}
 
-	if (!UsbdCtrlrEpXfer(pIntrf->RxEpAddr,
+	if (!UsbCtrlrEpXfer(pIntrf->DevNo, pIntrf->RxEpAddr,
 						 pIntrf->pRxBuffer, pIntrf->RxMps))
 	{
 		__atomic_store_n(&pIntrf->RxActive, false, __ATOMIC_RELEASE);
@@ -191,7 +191,7 @@ static bool UsbIntrfSubmit(UsbDevIntrf_t *pIntrf, bool Tail)
 	pIntrf->TxZlpRequired = false;
 	pIntrf->TxTailArmed = false;
 
-	if (UsbdCtrlrEpXfer(pIntrf->TxEpAddr, pIntrf->pTxBuffer,
+	if (UsbCtrlrEpXfer(pIntrf->DevNo, pIntrf->TxEpAddr, pIntrf->pTxBuffer,
 						(uint16_t)length))
 	{
 		return true;
@@ -454,7 +454,9 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 		return false;
 	}
 
+	pIntrf->DevNo = pCfg->DevNo;
 	pIntrf->hTxFifo = hTxFifo;
+	pIntrf->DevNo = pCfg->DevNo;
 	pIntrf->hRxFifo = nullptr;
 	pIntrf->pRxFifoMem = pCfg->pRxFifoMem;
 	pIntrf->RxFifoMemSize = (uint32_t)pCfg->RxFifoMemSize;
@@ -549,6 +551,7 @@ void UsbIntrfResetRx(UsbDevIntrf_t *pIntrf)
 	{
 		CFifoFlush(pIntrf->hRxFifo);
 	}
+
 	pIntrf->hRxFifo = nullptr;
 	pIntrf->pRxBuffer = nullptr;
 	pIntrf->RxOffset = 0U;
@@ -572,7 +575,7 @@ void UsbIntrfRxEnable(UsbDevIntrf_t *pIntrf, bool Enable)
 }
 
 void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf,
-						 uint16_t Length, UsbdCtrlrXferResult_t Result)
+						 uint16_t Length, UsbCtrlrXferResult_t Result)
 {
 	if (pIntrf == nullptr)
 	{
@@ -581,7 +584,7 @@ void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf,
 
 	__atomic_store_n(&pIntrf->RxActive, false, __ATOMIC_RELEASE);
 
-	if (Result == USBD_CTRLR_XFER_SUCCESS &&
+	if (Result == USB_CTRLR_XFER_SUCCESS &&
 		Length <= pIntrf->RxMps && pIntrf->bEnabled &&
 		UsbIntrfRxEnabled(pIntrf) && pIntrf->hRxFifo != nullptr)
 	{
@@ -624,7 +627,7 @@ void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf,
 			pIntrf->RxDropCnt++;
 		}
 	}
-	else if (Result == USBD_CTRLR_XFER_FAILED)
+	else if (Result == USB_CTRLR_XFER_FAILED)
 	{
 		pIntrf->RxDropCnt++;
 		if (pIntrf->DevIntrf.EvtCB != nullptr)
@@ -678,16 +681,16 @@ void UsbIntrfResetTx(UsbDevIntrf_t *pIntrf)
 }
 
 void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
-						 uint16_t Length, UsbdCtrlrXferResult_t Result)
+						 uint16_t Length, UsbCtrlrXferResult_t Result)
 {
 	if (pIntrf == nullptr || pIntrf->hTxFifo == nullptr)
 	{
 		return;
 	}
 
-	if (Result != USBD_CTRLR_XFER_SUCCESS)
+	if (Result != USB_CTRLR_XFER_SUCCESS)
 	{
-		if (Result == USBD_CTRLR_XFER_FAILED)
+		if (Result == USB_CTRLR_XFER_FAILED)
 		{
 			UsbIntrfTxFailure(pIntrf, Length);
 		}
