@@ -1251,30 +1251,11 @@ static void nRFUsbdServicePending(void)
 			continue;
 		}
 
-		uint16_t pending = (uint16_t)atomic_load(&s_PendingOut);
+		// IN first. It is only ready again after the host consumes its previous
+		// packet, so it cannot monopolize EasyDMA, while OUT-first can fill the
+		// loopback TX FIFO and stop foreground RX consumption.
+		uint16_t pending = (uint16_t)atomic_load(&s_PendingIn);
 		uint8_t epNum = nRFUsbdFirstPending(pending);
-		if (epNum < NRFX_USBD_EP_COUNT)
-		{
-			atomic_fetch_and(&s_PendingOut, (uint_fast16_t)~(1U << epNum));
-			if (nRFUsbdStartOutDmaNow(epNum))
-			{
-				return;
-			}
-
-			// The request is consumed before the attempt, so a refusal here
-			// would discard it. The endpoint still holds the packet and its
-			// EPDATASTATUS was acknowledged when it arrived, so nothing else
-			// would ever fetch it. Hand it back to the arrival flag that
-			// nRFUsbdEpXfer checks, which is how an unarmed endpoint already
-			// carries a waiting packet to the next submit.
-			s_Ctrlr.Xfer[epNum][0].DataReceived = true;
-
-			atomic_flag_clear(&s_DmaRunning);
-			continue;
-		}
-
-		pending = (uint16_t)atomic_load(&s_PendingIn);
-		epNum = nRFUsbdFirstPending(pending);
 		if (epNum < NRFX_USBD_EP_COUNT)
 		{
 			atomic_fetch_and(&s_PendingIn, (uint_fast16_t)~(1U << epNum));
@@ -1283,11 +1264,9 @@ static void nRFUsbdServicePending(void)
 				return;
 			}
 
-			// Same shape as the OUT branch above: the request is consumed
-			// before the attempt. A refusal while the transfer is still
-			// started leaves it with no DMA and no completion, so the sender
-			// waits on a packet that will never finish. Retire it instead, so
-			// the layer above gets its endpoint back.
+			// The request is consumed before the attempt. If the transfer is
+			// still marked started, report the controller failure instead of
+			// leaving the endpoint permanently busy.
 			{
 				nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][1];
 				if (pXfer->Started)
@@ -1295,11 +1274,29 @@ static void nRFUsbdServicePending(void)
 					pXfer->Started = false;
 					atomic_flag_clear(&s_DmaRunning);
 					nRFUsbdEmitXfer((uint8_t)(epNum | USB_ENDPADDR_DIR_IN),
-									 pXfer->ActualLen,
-									 USB_CTRLR_XFER_FAILED);
+								 pXfer->ActualLen,
+								 USB_CTRLR_XFER_FAILED);
 					continue;
 				}
 			}
+
+			atomic_flag_clear(&s_DmaRunning);
+			continue;
+		}
+
+		pending = (uint16_t)atomic_load(&s_PendingOut);
+		epNum = nRFUsbdFirstPending(pending);
+		if (epNum < NRFX_USBD_EP_COUNT)
+		{
+			atomic_fetch_and(&s_PendingOut, (uint_fast16_t)~(1U << epNum));
+			if (nRFUsbdStartOutDmaNow(epNum))
+			{
+				return;
+			}
+
+			// The endpoint still holds the packet after a refused OUT start.
+			// Preserve that fact so the next receive submission can fetch it.
+			s_Ctrlr.Xfer[epNum][0].DataReceived = true;
 
 			atomic_flag_clear(&s_DmaRunning);
 			continue;
