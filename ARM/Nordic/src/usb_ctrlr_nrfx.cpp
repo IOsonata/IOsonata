@@ -1027,6 +1027,17 @@ static void nRFUsbdDmaReclaim(void)
 		return;
 	}
 
+	// Only a non zero IN endpoint runs without an ENDEPIN interrupt, so only
+	// that one has an end event nothing else will retire. OUT and endpoint
+	// zero still have their ENDEP interrupt enabled and their handlers need
+	// the event: clearing it here would drop the completion and leave the
+	// transfer started forever.
+	if (!USB_ENDPADDR_IS_IN((uint8_t)epAddr) ||
+		USB_ENDPADDR_NUM((uint8_t)epAddr) == 0U)
+	{
+		return;
+	}
+
 	volatile uint32_t *pEvent = nRFUsbdDmaEndEvent((uint8_t)epAddr);
 	if (*pEvent == 0U)
 	{

@@ -84,6 +84,12 @@ typedef enum __Usbd_Core_Ctrl_State {
 static UsbCoreCfg_t s_CoreCfg;
 static UsbFuncCfg_t s_CoreFunc[USB_CORE_FUNC_MAXCNT];
 static int s_CoreFuncCnt;
+// Endpoint to function index, [0] OUT and [1] IN. Ownership masks are fixed
+// once a function registers and may not overlap, so this answer never changes
+// after registration. Every transfer completion needs it, and a completion
+// runs in the USB interrupt, which is time the application is not filling the
+// Tx CFifo. Minus one means no function owns that endpoint.
+static int8_t s_CoreEpFunc[2][16];
 
 static bool s_CoreInitialized;
 static bool s_CoreStarted;
@@ -481,20 +487,12 @@ static int UsbCoreFindEndpointFunction(uint8_t EpAddr)
 		return -1;
 	}
 
-	const uint16_t bit = (uint16_t)(1U << epNum);
-
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	if (epNum >= 16)
 	{
-		const uint16_t mask = USB_ENDPADDR_IS_IN(EpAddr) ?
-			s_CoreFunc[i].EpInMask : s_CoreFunc[i].EpOutMask;
-
-		if ((mask & bit) != 0)
-		{
-			return i;
-		}
+		return -1;
 	}
 
-	return -1;
+	return s_CoreEpFunc[USB_ENDPADDR_IS_IN(EpAddr) ? 1 : 0][epNum];
 }
 
 static void UsbCoreResetControl(void)
@@ -1330,6 +1328,9 @@ static bool UsbCoreInit(const UsbCoreCfg_t *pCfg)
 	}
 
 	memset(s_CoreFunc, 0, sizeof(s_CoreFunc));
+	// Minus one is no owner. Zero would claim function zero owns every
+	// endpoint, so this cannot be left to static initialization.
+	memset(s_CoreEpFunc, -1, sizeof(s_CoreEpFunc));
 	s_CoreFuncCnt = 0;
 	s_CoreInitialized = false;
 	s_CoreStarted = false;
@@ -1387,6 +1388,21 @@ static bool UsbCoreRegisterFunction(const UsbFuncCfg_t *pCfg)
 	}
 
 	memcpy(&s_CoreFunc[s_CoreFuncCnt], pCfg, sizeof(*pCfg));
+
+	for (int ep = 1; ep < 16; ep++)
+	{
+		const uint16_t bit = (uint16_t)(1U << ep);
+
+		if ((pCfg->EpInMask & bit) != 0)
+		{
+			s_CoreEpFunc[1][ep] = (int8_t)s_CoreFuncCnt;
+		}
+		if ((pCfg->EpOutMask & bit) != 0)
+		{
+			s_CoreEpFunc[0][ep] = (int8_t)s_CoreFuncCnt;
+		}
+	}
+
 	s_CoreFuncCnt++;
 	return true;
 }

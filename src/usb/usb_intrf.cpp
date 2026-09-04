@@ -215,27 +215,21 @@ bool UsbIntrfTakeTx(UsbDevIntrf_t *pIntrf)
 									memory_order_acquire);
 }
 
-// Reading the token must not cost a call. In C++ the atomic_exchange_explicit
-// and atomic_load_explicit templates are out of line at -O0, so reaching the
-// builtin takes three nested calls to touch one byte. cfifo.c already uses the
-// builtins directly for its indices; do the same here for the read.
-static_assert(sizeof(atomic_bool) == sizeof(bool),
-			  "atomic_bool must be bool sized to read it in place");
-static_assert(ATOMIC_BOOL_LOCK_FREE == 2,
-			  "atomic_bool must be always lock free to read it in place");
-
 /**
  * True while a transfer owns the token. The producer runs this per queued
- * byte, so it is a plain relaxed read: the byte is already in the FIFO and the
+ * byte, so it is a relaxed load: the byte is already in the FIFO and the
  * completion drains whatever is there, so a stale false only costs one
  * rejected claim and a stale true costs nothing.
+ *
+ * An earlier version read the flag through a bool pointer to skip the out of
+ * line template at -O0. Equal size and lock free do not make that alias legal,
+ * so it is a normal atomic load.
  */
 static inline __attribute__((always_inline))
 bool UsbIntrfTxHeld(const UsbDevIntrf_t *pIntrf)
 {
-	return !__atomic_load_n(
-		reinterpret_cast<const volatile bool *>(&pIntrf->DevIntrf.bTxReady),
-		__ATOMIC_RELAXED);
+	return !atomic_load_explicit(&pIntrf->DevIntrf.bTxReady,
+								 memory_order_relaxed);
 }
 
 static void UsbIntrfTxFailure(UsbDevIntrf_t *pIntrf, uint16_t Length)
@@ -491,7 +485,13 @@ static bool UsbIntrfStartTx(DevIntrf_t * const, uint32_t)
 static inline __attribute__((always_inline))
 void UsbIntrfTxQueued(UsbDevIntrf_t *pIntrf, int Cnt)
 {
-	if (Cnt <= 0 || pIntrf->Mps == 0U)
+	// Cnt zero means the put was refused, which only happens when the FIFO is
+	// full. That is exactly the moment a transmit left idle by a failed
+	// completion has to be restarted, so it cannot be a reason to return: the
+	// FIFO would stay full and every later write would queue nothing too.
+	(void)Cnt;
+
+	if (pIntrf->Mps == 0U)
 	{
 		return;
 	}

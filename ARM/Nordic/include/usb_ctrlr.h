@@ -8,8 +8,8 @@ Every target that has a USB controller provides a usb_ctrlr.h of its own on its
 include path, the same way it provides iopinctrl.h. Generic USB code includes
 it by plain name and never switches on a vendor macro.
 
-The UsbCtrlr entry points do not change across targets, so they are declared
-once in usb.h rather than repeated here. This file is the part that differs.
+This file also declares the UsbCtrlr entry points usb_ctrlr_<target>.cpp
+implements, so the port describes both what it is and what it provides.
 
 The values here describe the silicon, not a class or a configuration. They are
 constants so an application can size CFifo memory and DMA staging buffers
