@@ -854,100 +854,6 @@ static atomic_bool s_RemoteWakePending;
 static atomic_bool s_HostResumePending;
 static atomic_bool s_MacAwake;
 
-#ifdef USB_CTRLR_TX_TIMING
-// Controller timing. Off by default; define USB_CTRLR_TX_TIMING to build it
-// in. Needs the DWT cycle counter already running. Read with a debugger; at
-// 64 MHz one cycle is 15.6 ns.
-//
-// DmaStart  the errata 199 register write, the task write and the barriers
-// Svc       nRFUsbdServicePending, the arbitration around it
-// Isr       USBD_IRQHandler, since an interrupt landing inside a producer
-//           call is charged to that call
-uint32_t g_DmaStartMin = 0xFFFFFFFFU;
-uint32_t g_DmaStartMax;
-uint32_t g_DmaStartSum;
-uint32_t g_DmaStartCnt;
-uint32_t g_SvcMin = 0xFFFFFFFFU;
-uint32_t g_SvcMax;
-uint32_t g_SvcSum;
-uint32_t g_SvcCnt;
-uint32_t g_IsrMin = 0xFFFFFFFFU;
-uint32_t g_IsrMax;
-uint32_t g_IsrSum;
-uint32_t g_IsrCnt;
-// Collect   the entry prologue: reading and clearing event registers, with a
-//           barrier pair per event cleared.
-// Refill    nRFUsbdEmitXfer and everything it reaches, which is the whole
-//           completion chain out to UsbIntrfSubmit and back into the port.
-// Isr minus these two is the remainder: sweeps, EPDATASTATUS, DMA start.
-uint32_t g_CollectMin = 0xFFFFFFFFU;
-uint32_t g_CollectMax;
-uint32_t g_CollectSum;
-uint32_t g_CollectCnt;
-uint32_t g_RefillMin = 0xFFFFFFFFU;
-uint32_t g_RefillMax;
-uint32_t g_RefillSum;
-uint32_t g_RefillCnt;
-
-// Records elapsed cycles into one of the sets above when it leaves scope, so
-// a function with several exits needs no bookkeeping at each one.
-struct nRFUsbdCycleSpan {
-	uint32_t At;
-	uint32_t *pMin;
-	uint32_t *pMax;
-	uint32_t *pSum;
-	uint32_t *pCnt;
-
-	~nRFUsbdCycleSpan()
-	{
-		const uint32_t d = DWT->CYCCNT - At;
-		if (d < *pMin) { *pMin = d; }
-		if (d > *pMax) { *pMax = d; }
-		*pSum += d;
-		(*pCnt)++;
-	}
-};
-
-#define NRFUSBD_CYCLE_SPAN(name) \
-	nRFUsbdCycleSpan span = { DWT->CYCCNT, &g_##name##Min, &g_##name##Max, \
-							  &g_##name##Sum, &g_##name##Cnt }; \
-	(void)span
-
-// Counting starts at reset, so the maxima include enumeration: SETUP handling,
-// descriptor transfers and bus reset are long and happen once. Reset when a
-// data endpoint opens, which is when the class configures, so the values
-// describe the steady state only. Local to this file: the example must not
-// have to link a symbol that exists only under this guard.
-static void nRFUsbdTimingReset(void)
-{
-	// The cycle counter has to be running for any of this to mean anything.
-	// Enabling it here keeps this guard self sufficient, so the library does
-	// not depend on the application having started DWT. Idempotent.
-	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-
-	g_DmaStartMin = 0xFFFFFFFFU;
-	g_DmaStartMax = 0;
-	g_DmaStartSum = 0;
-	g_DmaStartCnt = 0;
-	g_SvcMin = 0xFFFFFFFFU;
-	g_SvcMax = 0;
-	g_SvcSum = 0;
-	g_SvcCnt = 0;
-	g_IsrMin = 0xFFFFFFFFU;
-	g_IsrMax = 0;
-	g_IsrSum = 0;
-	g_IsrCnt = 0;
-	g_CollectMin = 0xFFFFFFFFU;
-	g_CollectMax = 0;
-	g_CollectSum = 0;
-	g_CollectCnt = 0;
-	g_RefillMin = 0xFFFFFFFFU;
-	g_RefillMax = 0;
-	g_RefillSum = 0;
-	g_RefillCnt = 0;
-}
-#endif
 
 static inline __attribute__((always_inline))
 uint8_t nRFUsbdDir(uint8_t EpAddr)
@@ -1091,10 +997,6 @@ static void nRFUsbdDmaRelease(void)
 
 static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 {
-#ifdef USB_CTRLR_TX_TIMING
-	NRFUSBD_CYCLE_SPAN(DmaStart);
-#endif
-
 	if (nrf52_errata_199())
 	{
 		NRFX_USBD_ERRATA_199_REG = 0x00000082UL;
@@ -1205,13 +1107,8 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 }
 
 
-
 static void nRFUsbdServicePending(void)
 {
-#ifdef USB_CTRLR_TX_TIMING
-	NRFUSBD_CYCLE_SPAN(Svc);
-#endif
-
 	if (atomic_load(&s_HostResumePending) ||
 		(atomic_load(&s_BusSuspended) && !atomic_load(&s_SuspendPending)))
 	{
@@ -1724,12 +1621,6 @@ static bool nRFUsbRegEpOpen(const UsbEndPointDesc_t *pDesc)
 	pXfer->Started = false;
 	pXfer->DataReceived = false;
 
-#ifdef USB_CTRLR_TX_TIMING
-	if (epNum > 0U)
-	{
-		nRFUsbdTimingReset();
-	}
-#endif
 
 	if (USB_ENDPADDR_IS_IN(epAddr))
 	{
@@ -1917,10 +1808,6 @@ static void nRFUsbRegEpClearStall(uint8_t EpAddr)
 
 static uint32_t nRFUsbdCollectEvents(void)
 {
-#ifdef USB_CTRLR_TX_TIMING
-	NRFUSBD_CYCLE_SPAN(Collect);
-#endif
-
 	// One IRQ line and no aggregate pending register, so the enabled events
 	// have to be read to find which fired. Only the bits set in INTEN can be
 	// pending, so walk those; the rest are provably zero and testing them
@@ -2096,9 +1983,6 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 		}
 
 		{
-#ifdef USB_CTRLR_TX_TIMING
-			NRFUSBD_CYCLE_SPAN(Refill);
-#endif
 			nRFUsbdEmitXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN),
 							 pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
 		}
@@ -2107,10 +1991,6 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 
 extern "C" void USBD_IRQHandler(void)
 {
-#ifdef USB_CTRLR_TX_TIMING
-	NRFUSBD_CYCLE_SPAN(Isr);
-#endif
-
 	const uint32_t intStatus = nRFUsbdCollectEvents();
 	if (intStatus == 0)
 	{

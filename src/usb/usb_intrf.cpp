@@ -36,101 +36,6 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "usb/usb_intrf.h"
 
-#ifdef USB_INTRF_TX_TIMING
-// Endpoint timing. Off by default; define USB_INTRF_TX_TIMING to build it in.
-// Needs the DWT cycle counter already running, which the PRBS example does in
-// TimingProbeInit. Read the values with a debugger; at 64 MHz one cycle is
-// 15.6 ns.
-//
-// Xfer   submit to completion. How long the packet takes on the bus, which
-//        includes waiting for the host to issue an IN token.
-// Turn   completion to the next submit. How long the device takes to have the
-//        next packet ready, which is all software.
-uint32_t g_TxXferMin = 0xFFFFFFFFU;
-uint32_t g_TxXferMax;
-uint32_t g_TxXferSum;
-uint32_t g_TxXferCnt;
-uint32_t g_TxTurnMin = 0xFFFFFFFFU;
-uint32_t g_TxTurnMax;
-uint32_t g_TxTurnSum;
-uint32_t g_TxTurnCnt;
-// EpXfer   time inside UsbCtrlrEpXfer, so everything the port does to hand
-//          the packet to the controller.
-uint32_t g_TxEpXferMin = 0xFFFFFFFFU;
-uint32_t g_TxEpXferMax;
-uint32_t g_TxEpXferSum;
-uint32_t g_TxEpXferCnt;
-// Cpl   time inside UsbIntrfTxXferComplete, the completion chain that runs
-//       from the interrupt.
-uint32_t g_TxCplMin = 0xFFFFFFFFU;
-uint32_t g_TxCplMax;
-uint32_t g_TxCplSum;
-uint32_t g_TxCplCnt;
-// Payload accounting. Bulk is charged per transaction, so throughput is the
-// transaction rate times the average packet. g_TxBytes over g_TxEpXferCnt is
-// that average, and g_TxFullPkt says how many carried a whole MPS.
-uint32_t g_TxBytes;
-uint32_t g_TxFullPkt;
-static uint32_t s_TxSubmitAt;
-static uint32_t s_TxCompleteAt;
-
-// Records elapsed cycles into one of the sets above when it leaves scope.
-struct UsbIntrfCycleSpan {
-	uint32_t At;
-	uint32_t *pMin;
-	uint32_t *pMax;
-	uint32_t *pSum;
-	uint32_t *pCnt;
-
-	~UsbIntrfCycleSpan()
-	{
-		const uint32_t d = DWT->CYCCNT - At;
-		if (d < *pMin) { *pMin = d; }
-		if (d > *pMax) { *pMax = d; }
-		*pSum += d;
-		(*pCnt)++;
-	}
-};
-
-#define USBINTRF_CYCLE_SPAN(name) \
-	UsbIntrfCycleSpan span = { DWT->CYCCNT, &g_##name##Min, &g_##name##Max, \
-							   &g_##name##Sum, &g_##name##Cnt }; \
-	(void)span
-
-// Counting starts at reset, so the maxima include enumeration. Reset at
-// configure, which is the moment the class opens its endpoints, so the values
-// describe the steady state only. Local to this file: the example must not
-// have to link a symbol that exists only under this guard.
-static void UsbIntrfTimingReset(void)
-{
-	// The cycle counter has to be running for any of this to mean anything.
-	// Enabling it here keeps this guard self sufficient, so the library does
-	// not depend on the application having started DWT. Idempotent.
-	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-
-	g_TxXferMin = 0xFFFFFFFFU;
-	g_TxXferMax = 0;
-	g_TxXferSum = 0;
-	g_TxXferCnt = 0;
-	g_TxTurnMin = 0xFFFFFFFFU;
-	g_TxTurnMax = 0;
-	g_TxTurnSum = 0;
-	g_TxTurnCnt = 0;
-	g_TxEpXferMin = 0xFFFFFFFFU;
-	g_TxEpXferMax = 0;
-	g_TxEpXferSum = 0;
-	g_TxEpXferCnt = 0;
-	g_TxCplMin = 0xFFFFFFFFU;
-	g_TxCplMax = 0;
-	g_TxCplSum = 0;
-	g_TxCplCnt = 0;
-	g_TxBytes = 0;
-	g_TxFullPkt = 0;
-	s_TxSubmitAt = 0;
-	s_TxCompleteAt = 0;
-}
-#endif
 
 static UsbDevIntrf_t *UsbIntrfData(DevIntrf_t * const pDevIntrf)
 {
@@ -306,41 +211,12 @@ static bool UsbIntrfSubmit(UsbDevIntrf_t *pIntrf)
 		return false;
 	}
 
-#ifdef USB_INTRF_TX_TIMING
-	s_TxSubmitAt = DWT->CYCCNT;
-	if (s_TxCompleteAt != 0U)
-	{
-		const uint32_t turn = s_TxSubmitAt - s_TxCompleteAt;
-		if (turn < g_TxTurnMin) { g_TxTurnMin = turn; }
-		if (turn > g_TxTurnMax) { g_TxTurnMax = turn; }
-		g_TxTurnSum += turn;
-		g_TxTurnCnt++;
-	}
-#endif
 
-#ifdef USB_INTRF_TX_TIMING
-	const bool started = UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfTxAddr(pIntrf),
-										pIntrf->pTxBuffer, (uint16_t)length);
-	{
-		const uint32_t ep = DWT->CYCCNT - s_TxSubmitAt;
-		if (ep < g_TxEpXferMin) { g_TxEpXferMin = ep; }
-		if (ep > g_TxEpXferMax) { g_TxEpXferMax = ep; }
-		g_TxEpXferSum += ep;
-		g_TxEpXferCnt++;
-		g_TxBytes += (uint32_t)length;
-		if ((uint32_t)length == (uint32_t)pIntrf->Mps) { g_TxFullPkt++; }
-	}
-	if (started)
-	{
-		return true;
-	}
-#else
 	if (UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfTxAddr(pIntrf), pIntrf->pTxBuffer,
 						(uint16_t)length))
 	{
 		return true;
 	}
-#endif
 
 	// A refusal by the controller is a fault, not an idle transmit. The packet
 	// is still staged in the buffer, so releasing the token here would let the
@@ -719,9 +595,6 @@ bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps)
 		return false;
 	}
 
-#ifdef USB_INTRF_TX_TIMING
-	UsbIntrfTimingReset();
-#endif
 
 	pIntrf->Mps = Mps;
 	CFifoFlush(pIntrf->hRxFifo);
@@ -818,19 +691,6 @@ static void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 		return;
 	}
 
-#ifdef USB_INTRF_TX_TIMING
-	USBINTRF_CYCLE_SPAN(TxCpl);
-
-	s_TxCompleteAt = DWT->CYCCNT;
-	if (s_TxSubmitAt != 0U)
-	{
-		const uint32_t xfer = s_TxCompleteAt - s_TxSubmitAt;
-		if (xfer < g_TxXferMin) { g_TxXferMin = xfer; }
-		if (xfer > g_TxXferMax) { g_TxXferMax = xfer; }
-		g_TxXferSum += xfer;
-		g_TxXferCnt++;
-	}
-#endif
 
 	if (Result != USB_CTRLR_XFER_SUCCESS)
 	{
