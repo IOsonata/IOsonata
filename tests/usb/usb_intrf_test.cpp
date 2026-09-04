@@ -55,6 +55,7 @@ static bool s_InBusy;
 static int s_OutSubmitCnt;
 static int s_InSubmitCnt;
 static bool s_XferOk = true;
+static bool s_HighSpeed;
 
 extern "C" {
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
@@ -62,7 +63,7 @@ bool UsbCtrlrStart(int) { return true; }
 void UsbCtrlrStop(int) {}
 void UsbCtrlrProcess(int) {}
 bool UsbCtrlrVbusDetected(int) { return true; }
-bool UsbCtrlrHighSpeed(int) { return false; }
+bool UsbCtrlrHighSpeed(int) { return s_HighSpeed; }
 void UsbCtrlrIntEnable(int) {}
 void UsbCtrlrIntDisable(int) {}
 void UsbCtrlrConnect(int) {}
@@ -146,6 +147,7 @@ static bool Setup(void)
 	s_OutSubmitCnt = 0;
 	s_InSubmitCnt = 0;
 	s_XferOk = true;
+	s_HighSpeed = false;
 	return UsbIntrfInit(&s_Intrf, &cfg) && UsbIntrfConfigure(&s_Intrf, MPS);
 }
 
@@ -255,6 +257,28 @@ static void TestFailedAndWrongEndpoint(void)
 	CHECK(CFifoUsed(s_Intrf.hRxFifo) == used);
 	CHECK(s_Intrf.RxDropCnt == 1U);
 	CHECK(s_OutBusy);
+}
+
+// Rate reports the negotiated link rate and refuses to be set. An
+// unconfigured endpoint has no link, so it reports zero.
+static void TestRate(void)
+{
+	CHECK(Setup());
+	CHECK(DeviceIntrfGetRate(&s_Intrf.DevIntrf) == USB_LINK_RATE_FULL);
+
+	// Any request comes back as the rate already running, the same answer
+	// the getter gives.
+	CHECK(DeviceIntrfSetRate(&s_Intrf.DevIntrf, 5000000000U) ==
+		  USB_LINK_RATE_FULL);
+	CHECK(DeviceIntrfSetRate(&s_Intrf.DevIntrf, 1U) == USB_LINK_RATE_FULL);
+
+	s_HighSpeed = true;
+	CHECK(DeviceIntrfGetRate(&s_Intrf.DevIntrf) == USB_LINK_RATE_HIGH);
+	CHECK(DeviceIntrfSetRate(&s_Intrf.DevIntrf, 0U) == USB_LINK_RATE_HIGH);
+
+	UsbIntrfUnconfigure(&s_Intrf);
+	CHECK(DeviceIntrfGetRate(&s_Intrf.DevIntrf) == 0U);
+	CHECK(DeviceIntrfSetRate(&s_Intrf.DevIntrf, USB_LINK_RATE_HIGH) == 0U);
 }
 
 static void TestUnconfigure(void)
@@ -444,6 +468,7 @@ int main(void)
 		{ "backpressure", TestBackpressure },
 		{ "ring wrap", TestWrap },
 		{ "failed and wrong ep", TestFailedAndWrongEndpoint },
+		{ "rate", TestRate },
 		{ "unconfigure", TestUnconfigure },
 		{ "disable then enable", TestDisableEnable },
 		{ "tx chaining", TestTxChaining },

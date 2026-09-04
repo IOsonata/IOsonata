@@ -261,14 +261,31 @@ static void UsbIntrfEnable(DevIntrf_t * const pDevIntrf)
 	(void)UsbIntrfStartXfer(pIntrf);
 }
 
-static uint32_t UsbIntrfGetRate(DevIntrf_t * const)
+/**
+ * Link rate in bits per second, zero while the endpoint is not configured.
+ * The host owns the bus, so this reports what enumeration settled on rather
+ * than anything the device picked.
+ */
+static uint32_t UsbIntrfGetRate(DevIntrf_t * const pDevIntrf)
 {
-	return 0;
+	UsbDevIntrf_t *pIntrf = UsbIntrfData(pDevIntrf);
+
+	if (pIntrf == nullptr || pIntrf->Mps == 0U)
+	{
+		return 0;
+	}
+
+	return UsbCtrlrHighSpeed(pIntrf->DevNo) ?
+		   USB_LINK_RATE_HIGH : USB_LINK_RATE_FULL;
 }
 
-static uint32_t UsbIntrfSetRate(DevIntrf_t * const, uint32_t)
+/**
+ * The rate cannot be set. Speed is fixed by the reset handshake, so the
+ * closest match to any request is the rate already running.
+ */
+static uint32_t UsbIntrfSetRate(DevIntrf_t * const pDevIntrf, uint32_t)
 {
-	return 0;
+	return UsbIntrfGetRate(pDevIntrf);
 }
 
 static bool UsbIntrfStartRx(DevIntrf_t * const, uint32_t)

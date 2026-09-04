@@ -65,6 +65,12 @@ SOFTWARE.
   * @{
   */
 
+/// Bus signaling rate in bits per second, what DeviceIntrf Rate reports. This
+/// is the line rate, not a payload figure. Bulk moves less because the host
+/// schedules the bus and every transaction pays token and handshake overhead.
+#define USB_LINK_RATE_FULL			12000000U
+#define USB_LINK_RATE_HIGH			480000000U
+
 /// Bus speed. What the controller can do is USB_HIGHSPEED_CAPABLE() at compile
 /// time. This is what enumeration actually negotiated.
 typedef enum __Usb_Speed {
