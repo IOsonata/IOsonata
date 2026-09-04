@@ -342,7 +342,10 @@ static bool UsbIntrfSubmit(UsbDevIntrf_t *pIntrf)
 	}
 #endif
 
-	UsbIntrfSetTxIdle(pIntrf);
+	// A refusal by the controller is a fault, not an idle transmit. The packet
+	// is still staged in the buffer, so releasing the token here would let the
+	// next submission overwrite it. Report and hold until configure or
+	// unconfigure puts the endpoint back to a known state.
 	if (length > 0)
 	{
 		UsbIntrfTxFailure(pIntrf, (uint16_t)length);
@@ -485,13 +488,10 @@ static bool UsbIntrfStartTx(DevIntrf_t * const, uint32_t)
 static inline __attribute__((always_inline))
 void UsbIntrfTxQueued(UsbDevIntrf_t *pIntrf, int Cnt)
 {
-	// Cnt zero means the put was refused, which only happens when the FIFO is
-	// full. That is exactly the moment a transmit left idle by a failed
-	// completion has to be restarted, so it cannot be a reason to return: the
-	// FIFO would stay full and every later write would queue nothing too.
-	(void)Cnt;
-
-	if (pIntrf->Mps == 0U)
+	// Cnt zero means the FIFO is full, which can only happen while a transfer
+	// is running, so there is nothing to start. A failed transfer does not
+	// release the token, so an idle transmit never has a full FIFO.
+	if (Cnt <= 0 || pIntrf->Mps == 0U)
 	{
 		return;
 	}
@@ -836,11 +836,12 @@ static void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 
 	if (Result != USB_CTRLR_XFER_SUCCESS)
 	{
+		// Same as a refused submission: a fault holds the token. Configure and
+		// unconfigure are what release it again.
 		if (Result == USB_CTRLR_XFER_FAILED)
 		{
 			UsbIntrfTxFailure(pIntrf, Length);
 		}
-		UsbIntrfSetTxIdle(pIntrf);
 		return;
 	}
 
