@@ -61,7 +61,6 @@ SOFTWARE.
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
 
-#define TX_TIMING_PROBE
 
 #ifdef TX_TIMING_PROBE
 // Read these in the debugger. Cycles, so divide by the core clock. At 64 MHz
@@ -76,12 +75,13 @@ SOFTWARE.
 // Building usb_intrf.cpp with USB_INTRF_TX_TIMING adds the endpoint side:
 // g_TxXfer* is submit to completion, g_TxTurn* is completion to the next
 // submit. Those need the cycle counter this file starts, so enable both.
-static bool s_TimingArmed = false;
-
-// Supplied by the port and by usb_intrf when they are built with their own
-// timing guards. Both clear what enumeration recorded.
-extern "C" void UsbCtrlrTimingReset(void);
-extern "C" void UsbIntrfTimingReset(void);
+uint32_t g_LoopMin = 0xFFFFFFFFU;
+uint32_t g_LoopMax;
+uint32_t g_CallMin = 0xFFFFFFFFU;
+uint32_t g_CallMax;
+uint32_t g_LoopCnt;
+uint32_t g_LoopSum;
+uint32_t g_Rejects;
 
 static void TimingProbeInit(void)
 {
@@ -150,14 +150,6 @@ UsbdCdc g_Cdc;
 
 int main()
 {
-	uint32_t g_LoopMin = 0xFFFFFFFFU;
-	uint32_t g_LoopMax;
-	uint32_t g_CallMin = 0xFFFFFFFFU;
-	uint32_t g_CallMax;
-	uint32_t g_LoopCnt;
-	uint32_t g_LoopSum;
-	uint32_t g_Rejects;
-
 	uint8_t d = 0xff;
 #ifndef BYTE_MODE
 	uint8_t buff[TEST_BUFSIZE];
@@ -192,17 +184,6 @@ int main()
 			UsbProcess(USB_DEVNO);
 			continue;
 		}
-
-#ifdef TX_TIMING_PROBE
-		// Enumeration is long and happens once. Drop what it recorded so the
-		// maxima describe the steady state.
-		if (!s_TimingArmed)
-		{
-			s_TimingArmed = true;
-			UsbCtrlrTimingReset();
-			UsbIntrfTimingReset();
-		}
-#endif
 
 #ifdef BYTE_MODE
 		// Demo transfer byte by byte. The value advances only when the octet

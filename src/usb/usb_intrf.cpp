@@ -36,8 +36,6 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "usb/usb_intrf.h"
 
-#define USB_INTRF_TX_TIMING
-
 #ifdef USB_INTRF_TX_TIMING
 // Endpoint timing. Off by default; define USB_INTRF_TX_TIMING to build it in.
 // Needs the DWT cycle counter already running, which the PRBS example does in
@@ -99,10 +97,18 @@ struct UsbIntrfCycleSpan {
 							   &g_##name##Sum, &g_##name##Cnt }; \
 	(void)span
 
-// Counting starts at reset, so the maxima include enumeration. Call this after
-// the port is open to measure the steady state only.
-extern "C" void UsbIntrfTimingReset(void)
+// Counting starts at reset, so the maxima include enumeration. Reset at
+// configure, which is the moment the class opens its endpoints, so the values
+// describe the steady state only. Local to this file: the example must not
+// have to link a symbol that exists only under this guard.
+static void UsbIntrfTimingReset(void)
 {
+	// The cycle counter has to be running for any of this to mean anything.
+	// Enabling it here keeps this guard self sufficient, so the library does
+	// not depend on the application having started DWT. Idempotent.
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
 	g_TxXferMin = 0xFFFFFFFFU;
 	g_TxXferMax = 0;
 	g_TxXferSum = 0;
@@ -714,6 +720,10 @@ bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps)
 	{
 		return false;
 	}
+
+#ifdef USB_INTRF_TX_TIMING
+	UsbIntrfTimingReset();
+#endif
 
 	pIntrf->Mps = Mps;
 	CFifoFlush(pIntrf->hRxFifo);
