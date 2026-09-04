@@ -854,6 +854,19 @@ uint32_t g_IsrMin = 0xFFFFFFFFU;
 uint32_t g_IsrMax;
 uint32_t g_IsrSum;
 uint32_t g_IsrCnt;
+// Collect   the entry prologue: reading and clearing event registers, with a
+//           barrier pair per event cleared.
+// Refill    nRFUsbdEmitXfer and everything it reaches, which is the whole
+//           completion chain out to UsbIntrfSubmit and back into the port.
+// Isr minus these two is the remainder: sweeps, EPDATASTATUS, DMA start.
+uint32_t g_CollectMin = 0xFFFFFFFFU;
+uint32_t g_CollectMax;
+uint32_t g_CollectSum;
+uint32_t g_CollectCnt;
+uint32_t g_RefillMin = 0xFFFFFFFFU;
+uint32_t g_RefillMax;
+uint32_t g_RefillSum;
+uint32_t g_RefillCnt;
 
 // Records elapsed cycles into one of the sets above when it leaves scope, so
 // a function with several exits needs no bookkeeping at each one.
@@ -904,6 +917,14 @@ static void nRFUsbdTimingReset(void)
 	g_IsrMax = 0;
 	g_IsrSum = 0;
 	g_IsrCnt = 0;
+	g_CollectMin = 0xFFFFFFFFU;
+	g_CollectMax = 0;
+	g_CollectSum = 0;
+	g_CollectCnt = 0;
+	g_RefillMin = 0xFFFFFFFFU;
+	g_RefillMax = 0;
+	g_RefillSum = 0;
+	g_RefillCnt = 0;
 }
 #endif
 
@@ -1809,6 +1830,10 @@ static void nRFUsbRegEpClearStall(uint8_t EpAddr)
 
 static uint32_t nRFUsbdCollectEvents(void)
 {
+#ifdef USB_CTRLR_TX_TIMING
+	NRFUSBD_CYCLE_SPAN(Collect);
+#endif
+
 	// One IRQ line and no aggregate pending register, so the enabled events
 	// have to be read to find which fired. Only the bits set in INTEN can be
 	// pending, so walk those; the rest are provably zero and testing them
@@ -2010,8 +2035,13 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 			nRFUsbdDmaReclaim();
 		}
 
-		nRFUsbdEmitXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN),
-						 pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
+		{
+#ifdef USB_CTRLR_TX_TIMING
+			NRFUSBD_CYCLE_SPAN(Refill);
+#endif
+			nRFUsbdEmitXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN),
+							 pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
+		}
 	}
 }
 
