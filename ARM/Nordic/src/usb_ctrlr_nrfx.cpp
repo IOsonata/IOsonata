@@ -781,9 +781,6 @@ typedef uint_fast16_t atomic_uint_fast16_t;
 #define atomic_load(p) __atomic_load_n((p), __ATOMIC_SEQ_CST)
 #define atomic_store(p, v) __atomic_store_n((p), (v), __ATOMIC_SEQ_CST)
 #define atomic_exchange(p, v) __atomic_exchange_n((p), (v), __ATOMIC_SEQ_CST)
-#define atomic_compare_exchange_strong(p, expected, desired) \
-	__atomic_compare_exchange_n((p), (expected), (desired), false, \
-		__ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
 #define atomic_fetch_or(p, v) __atomic_fetch_or((p), (v), __ATOMIC_SEQ_CST)
 #define atomic_fetch_and(p, v) __atomic_fetch_and((p), (v), __ATOMIC_SEQ_CST)
 #define atomic_flag_test_and_set(p) __atomic_exchange_n((p), true, __ATOMIC_SEQ_CST)
@@ -823,6 +820,8 @@ typedef struct __nRF_Usbd_Ctrlr
 static nRFUsbdCtrlr_t s_Ctrlr;
 static atomic_flag s_DmaRunning = ATOMIC_FLAG_INIT;
 static atomic_uint_fast8_t s_DmaEpAddr;
+// Bit N identifies the deferred endpoint. Direction is kept by the separate
+// masks and the complete request is in Xfer[N][direction].
 static atomic_uint_fast16_t s_PendingOut;
 static atomic_uint_fast16_t s_PendingIn;
 static atomic_bool s_PendingEp0Status;
@@ -1008,60 +1007,6 @@ static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 	nRFUsbdEmit(&evt);
 }
 
-/**
- * Retire a DMA whose end event has fired but whose interrupt is not enabled.
- * Bulk IN data endpoints run this way: EPDATA already proves EasyDMA finished,
- * so ENDEPIN costs an interrupt that says nothing new.
- *
- * The engine is shared by every endpoint, so it cannot be left held until the
- * host happens to collect the packet. Any context that wants the engine calls
- * this first. The exchange on s_DmaEpAddr picks one caller to do the release,
- * so a foreground caller and the interrupt cannot both clear s_DmaRunning.
- */
-static void nRFUsbdDmaReclaim(void)
-{
-	uint_fast8_t epAddr = atomic_load(&s_DmaEpAddr);
-
-	if ((uint8_t)epAddr == NRFX_USBD_DMA_EP_NONE)
-	{
-		return;
-	}
-
-	// Only a non zero IN endpoint runs without an ENDEPIN interrupt, so only
-	// that one has an end event nothing else will retire. OUT and endpoint
-	// zero still have their ENDEP interrupt enabled and their handlers need
-	// the event: clearing it here would drop the completion and leave the
-	// transfer started forever.
-	if (!USB_ENDPADDR_IS_IN((uint8_t)epAddr) ||
-		USB_ENDPADDR_NUM((uint8_t)epAddr) == 0U)
-	{
-		return;
-	}
-
-	volatile uint32_t *pEvent = nRFUsbdDmaEndEvent((uint8_t)epAddr);
-	if (*pEvent == 0U)
-	{
-		return;
-	}
-
-	if (!atomic_compare_exchange_strong(&s_DmaEpAddr, &epAddr,
-		(uint_fast8_t)NRFX_USBD_DMA_EP_NONE))
-	{
-		return;
-	}
-
-	*pEvent = 0;
-	__ISB();
-	__DSB();
-
-	if (nrf52_errata_199())
-	{
-		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
-	}
-
-	atomic_flag_clear(&s_DmaRunning);
-}
-
 static void nRFUsbdDmaRelease(void)
 {
 	if (nrf52_errata_199())
@@ -1085,10 +1030,8 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 		NRFX_USBD_ERRATA_199_REG = 0x00000082UL;
 	}
 
-	// Start from a clear end event. Endpoints whose ENDEP interrupt is enabled
-	// have it cleared by nRFUsbdCollectEvents, but a data IN endpoint is
-	// retired by reading the event, and one missed retire would otherwise let
-	// the next reclaim free the engine while this transfer is still running.
+	// Start from a clear end event so the completion interrupt belongs to this
+	// transfer.
 	*nRFUsbdDmaEndEvent(EpAddr) = 0;
 	__ISB();
 	__DSB();
@@ -1213,16 +1156,9 @@ static void nRFUsbdServicePending(void)
 	{
 		if (atomic_flag_test_and_set(&s_DmaRunning))
 		{
-			// The engine may be held by an IN transfer whose ENDEPIN fired
-			// with no interrupt enabled. Retire it and retry once, so an OUT
-			// or control transfer never waits for the host to collect a
-			// packet that EasyDMA already finished with.
-			nRFUsbdDmaReclaim();
-
-			if (atomic_flag_test_and_set(&s_DmaRunning))
-			{
-				return;
-			}
+			// The request bit remains set. The active transfer's ENDEP
+			// interrupt releases EasyDMA and services it.
+			return;
 		}
 
 		if (atomic_exchange(&s_PendingEp0Status, false))
@@ -1653,11 +1589,9 @@ static bool nRFUsbRegEpOpen(const UsbEndPointDesc_t *pDesc)
 	if (USB_ENDPADDR_IS_IN(epAddr))
 	{
 		NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
-		// No ENDEPIN interrupt for a data IN endpoint. EPDATA says the host
-		// took the packet, which cannot happen before EasyDMA filled it, so
-		// ENDEPIN would be a second interrupt per packet carrying nothing new.
-		// nRFUsbdDmaReclaim retires it from the event instead. Endpoint zero
-		// keeps its interrupt: control transfers have no EPDATA of their own.
+		// IN and OUT endpoints share one EasyDMA engine. ENDEPIN releases it
+		// and services a transfer request that arrived while it was busy.
+		NRF_USBD->INTENSET = (1UL << (USBD_INTEN_ENDEPIN0_Pos + epNum));
 		NRF_USBD->EPINEN |= (1UL << epNum);
 	}
 	else
@@ -2005,11 +1939,6 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 	{
 		if (EpNum > 0U)
 		{
-			// Same retire as the completion branch below. EPDATA says the
-			// host consumed this packet, so EasyDMA is done with it whether
-			// or not an ENDEPIN interrupt was ever enabled.
-			nRFUsbdDmaReclaim();
-
 			// Continue the common Bulk IN stream immediately when EasyDMA is
 			// free and no higher-priority or competing endpoint work is queued.
 			// Otherwise leave arbitration to the generic scheduler.
@@ -2036,15 +1965,6 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 	else
 	{
 		pXfer->Started = false;
-
-		// EPDATA proves EasyDMA finished, and with no ENDEPIN interrupt on
-		// this endpoint nothing else retires it. The completion callback
-		// refills and submits the next packet, so the engine has to be free
-		// before it runs.
-		if (EpNum > 0U)
-		{
-			nRFUsbdDmaReclaim();
-		}
 
 		{
 #ifdef USB_CTRLR_TX_TIMING
