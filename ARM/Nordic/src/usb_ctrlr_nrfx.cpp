@@ -61,6 +61,8 @@ SOFTWARE.
 #include "nrf_erratas.h"
 #include "hal/nrf_ficr.h"
 
+#include "cfifo.h"
+#include "coredev/interrupt.h"
 #include "usb/usb.h"
 
 #if !defined(USBD_PRESENT) && !defined(USBHS_PRESENT)
@@ -825,8 +827,25 @@ static atomic_flag s_DmaRunning = ATOMIC_FLAG_INIT;
 static atomic_uint_fast8_t s_DmaEpAddr;
 // Bit N identifies the deferred endpoint. Direction is kept by the separate
 // masks and the complete request is in Xfer[N][direction].
-static atomic_uint_fast16_t s_PendingOut;
-static atomic_uint_fast16_t s_PendingIn;
+// One EasyDMA engine serves every endpoint in both directions, so a transfer
+// request waits its turn. A bitmask per direction could only be drained in
+// some direction order, and any order is a policy. A queue has none: requests
+// start in the order they were made.
+//
+// An endpoint cannot ask for a second transfer in the same direction until the
+// first completes, so one slot per endpoint per direction is always enough and
+// the queue cannot overflow.
+#define NRFUSBD_QUE_DEPTH			(NRFX_USBD_EP_COUNT * 2)
+
+typedef struct __nRF_Usbd_Que {
+	uint8_t EpAddr;				//!< Endpoint address, direction bit included
+	uint16_t Len;				//!< Bytes this transfer moves
+	uint8_t *pBuffer;			//!< DMA buffer for this transfer
+} nRFUsbdQue_t;
+
+alignas(4) static uint8_t s_QueMem[
+	CFIFO_TOTAL_MEMSIZE(NRFUSBD_QUE_DEPTH, sizeof(nRFUsbdQue_t))];
+static hCFifo_t s_hQue;
 static atomic_bool s_PendingEp0Status;
 static atomic_bool s_PendingEp0RcvOut;
 static atomic_bool s_BusSuspended;
@@ -953,18 +972,6 @@ uint32_t nRFUsbdLowestBit(uint32_t Mask)
 	return 31U - (uint32_t)__CLZ(Mask & (uint32_t)(0U - Mask));
 }
 
-static uint8_t nRFUsbdFirstPending(uint16_t Mask)
-{
-	for (uint8_t EpNum = 0; EpNum < NRFX_USBD_EP_COUNT; EpNum++)
-	{
-		if ((Mask & (1U << EpNum)) != 0U)
-		{
-			return EpNum;
-		}
-	}
-
-	return NRFX_USBD_EP_COUNT;
-}
 
 static uint32_t nRFUsbdDmaEndMask(uint8_t EpAddr)
 {
@@ -1162,47 +1169,42 @@ static void nRFUsbdEp0StatusNow(void)
 	atomic_flag_clear(&s_DmaRunning);
 }
 
-static bool nRFUsbdStartOutDmaNow(uint8_t EpNum)
+/**
+ * Start EasyDMA for one queued request. The buffer and length were recorded
+ * when it was queued; what an OUT endpoint actually holds is only known now,
+ * so that is read here.
+ */
+static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 {
-	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
+	const uint8_t epNum = USB_ENDPADDR_NUM(pQue->EpAddr);
+	const bool isIn = USB_ENDPADDR_IS_IN(pQue->EpAddr);
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][isIn ? 1 : 0];
 
 	if (!pXfer->Started || pXfer->ActualLen > pXfer->TotalLen)
 	{
 		return false;
 	}
 
-	const uint16_t Remaining =
-		(uint16_t)(pXfer->TotalLen - pXfer->ActualLen);
-	const uint16_t Received = (uint16_t)NRF_USBD->SIZE.EPOUT[EpNum];
-	const uint16_t TransferLen = Received < Remaining ? Received : Remaining;
-
-	NRF_USBD->EPOUT[EpNum].PTR = (uint32_t)(uintptr_t)pXfer->pBuffer;
-	NRF_USBD->EPOUT[EpNum].MAXCNT = TransferLen;
-	nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPOUT[EpNum], EpNum);
-
-	return true;
-}
-
-static bool nRFUsbdStartInDmaNow(uint8_t EpNum)
-{
-	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
-
-	if (!pXfer->Started || pXfer->ActualLen > pXfer->TotalLen)
+	if (isIn)
 	{
-		return false;
+		NRF_USBD->EPIN[epNum].PTR = (uint32_t)(uintptr_t)pQue->pBuffer;
+		NRF_USBD->EPIN[epNum].MAXCNT = pQue->Len;
+		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPIN[epNum], pQue->EpAddr);
+	}
+	else
+	{
+		const uint16_t received = (uint16_t)NRF_USBD->SIZE.EPOUT[epNum];
+		const uint16_t len = received < pQue->Len ? received : pQue->Len;
+
+		NRF_USBD->EPOUT[epNum].PTR = (uint32_t)(uintptr_t)pQue->pBuffer;
+		NRF_USBD->EPOUT[epNum].MAXCNT = len;
+		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPOUT[epNum], pQue->EpAddr);
 	}
 
-	const uint16_t Remaining =
-		(uint16_t)(pXfer->TotalLen - pXfer->ActualLen);
-	const uint16_t TransferLen = Remaining < pXfer->Mps ? Remaining : pXfer->Mps;
-
-	NRF_USBD->EPIN[EpNum].PTR = (uint32_t)(uintptr_t)pXfer->pBuffer;
-	NRF_USBD->EPIN[EpNum].MAXCNT = TransferLen;
-	nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPIN[EpNum],
-					 (uint8_t)(EpNum | USB_ENDPADDR_DIR_IN));
-
 	return true;
 }
+
+
 
 static void nRFUsbdServicePending(void)
 {
@@ -1251,52 +1253,43 @@ static void nRFUsbdServicePending(void)
 			continue;
 		}
 
-		// IN first. It is only ready again after the host consumes its previous
-		// packet, so it cannot monopolize EasyDMA, while OUT-first can fill the
-		// loopback TX FIFO and stop foreground RX consumption.
-		uint16_t pending = (uint16_t)atomic_load(&s_PendingIn);
-		uint8_t epNum = nRFUsbdFirstPending(pending);
-		if (epNum < NRFX_USBD_EP_COUNT)
+		// Requests are started in the order they were made. There is no
+		// direction order to choose, so neither direction can be held off
+		// by the other.
+		nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoGet(s_hQue);
+		if (pHead != NULL)
 		{
-			atomic_fetch_and(&s_PendingIn, (uint_fast16_t)~(1U << epNum));
-			if (nRFUsbdStartInDmaNow(epNum))
+			// CFifoGet frees the slot, so take a copy before a producer can
+			// reuse it.
+			const nRFUsbdQue_t que = *pHead;
+			const uint8_t epNum = USB_ENDPADDR_NUM(que.EpAddr);
+
+			if (nRFUsbdStartDmaNow(&que))
 			{
 				return;
 			}
 
-			// The request is consumed before the attempt. If the transfer is
-			// still marked started, report the controller failure instead of
-			// leaving the endpoint permanently busy.
+			if (USB_ENDPADDR_IS_IN(que.EpAddr))
 			{
+				// The request is consumed before the attempt. If the transfer
+				// is still marked started, report the controller failure
+				// instead of leaving the endpoint permanently busy.
 				nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][1];
 				if (pXfer->Started)
 				{
 					pXfer->Started = false;
 					atomic_flag_clear(&s_DmaRunning);
-					nRFUsbdEmitXfer((uint8_t)(epNum | USB_ENDPADDR_DIR_IN),
-								 pXfer->ActualLen,
+					nRFUsbdEmitXfer(que.EpAddr, pXfer->ActualLen,
 								 USB_CTRLR_XFER_FAILED);
 					continue;
 				}
 			}
-
-			atomic_flag_clear(&s_DmaRunning);
-			continue;
-		}
-
-		pending = (uint16_t)atomic_load(&s_PendingOut);
-		epNum = nRFUsbdFirstPending(pending);
-		if (epNum < NRFX_USBD_EP_COUNT)
-		{
-			atomic_fetch_and(&s_PendingOut, (uint_fast16_t)~(1U << epNum));
-			if (nRFUsbdStartOutDmaNow(epNum))
+			else
 			{
-				return;
+				// The endpoint still holds the packet after a refused OUT
+				// start. Preserve that so the next receive submission takes it.
+				s_Ctrlr.Xfer[epNum][0].DataReceived = true;
 			}
-
-			// The endpoint still holds the packet after a refused OUT start.
-			// Preserve that fact so the next receive submission can fetch it.
-			s_Ctrlr.Xfer[epNum][0].DataReceived = true;
 
 			atomic_flag_clear(&s_DmaRunning);
 			continue;
@@ -1304,11 +1297,10 @@ static void nRFUsbdServicePending(void)
 
 		atomic_flag_clear(&s_DmaRunning);
 
-		// A request can arrive after the empty-mask reads above but before
+		// A request can arrive after the empty queue read above but before
 		// s_DmaRunning is cleared. Its nested service call sees the flag set
 		// and returns, so recheck after releasing it to avoid losing the wakeup.
-		if (atomic_load(&s_PendingOut) != 0U ||
-			atomic_load(&s_PendingIn) != 0U ||
+		if (CFifoUsed(s_hQue) > 0 ||
 			atomic_load(&s_PendingEp0Status) ||
 			atomic_load(&s_PendingEp0RcvOut))
 		{
@@ -1336,9 +1328,33 @@ bool nRFUsbdDeferFromInterrupt(void)
 	return true;
 }
 
+/**
+ * Put one DMA request on the queue. Filling the block runs with interrupts
+ * off because CFifoPut publishes the slot before the caller writes it, and
+ * the interrupt is the other producer.
+ */
+static void nRFUsbdQueXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Len)
+{
+	const uint32_t state = DisableInterrupt();
+	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_hQue);
+
+	if (pQue != NULL)
+	{
+		pQue->EpAddr = EpAddr;
+		pQue->Len = Len;
+		pQue->pBuffer = pBuffer;
+	}
+
+	EnableInterrupt(state);
+}
+
 static void nRFUsbdQueueOut(uint8_t EpNum)
 {
-	atomic_fetch_or(&s_PendingOut, (uint_fast16_t)(1U << EpNum));
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
+
+	nRFUsbdQueXfer(EpNum, pXfer->pBuffer,
+				 (uint16_t)(pXfer->TotalLen - pXfer->ActualLen));
+
 	if (nRFUsbdDeferFromInterrupt())
 	{
 		return;
@@ -1348,7 +1364,13 @@ static void nRFUsbdQueueOut(uint8_t EpNum)
 
 static void nRFUsbdQueueIn(uint8_t EpNum)
 {
-	atomic_fetch_or(&s_PendingIn, (uint_fast16_t)(1U << EpNum));
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
+	const uint16_t remaining =
+		(uint16_t)(pXfer->TotalLen - pXfer->ActualLen);
+
+	nRFUsbdQueXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN), pXfer->pBuffer,
+				 remaining < pXfer->Mps ? remaining : pXfer->Mps);
+
 	if (nRFUsbdDeferFromInterrupt())
 	{
 		return;
@@ -1384,8 +1406,7 @@ static void nRFUsbdResetState(void)
 	s_Ctrlr.SofEnabled = false;
 	s_Ctrlr.SetupDirIn = false;
 
-	atomic_store(&s_PendingOut, 0);
-	atomic_store(&s_PendingIn, 0);
+	CFifoFlush(s_hQue);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 	atomic_store(&s_BusSuspended, false);
@@ -1410,8 +1431,7 @@ static void nRFUsbdAbortEp0(void)
 		nRFUsbdDmaWait();
 	}
 
-	atomic_fetch_and(&s_PendingOut, (uint_fast16_t)~1U);
-	atomic_fetch_and(&s_PendingIn, (uint_fast16_t)~1U);
+	CFifoFlush(s_hQue);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 
@@ -1442,8 +1462,7 @@ static void nRFUsbdTryEnterLowPower(void)
 		atomic_load(&s_RemoteWakePending) ||
 		atomic_load(&s_HostResumePending) ||
 		(uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE ||
-		atomic_load(&s_PendingOut) != 0U ||
-		atomic_load(&s_PendingIn) != 0U ||
+		CFifoUsed(s_hQue) > 0 ||
 		atomic_load(&s_PendingEp0Status) ||
 		atomic_load(&s_PendingEp0RcvOut))
 	{
@@ -1467,8 +1486,7 @@ static void nRFUsbdTryEnterLowPower(void)
 		atomic_load(&s_RemoteWakePending) ||
 		atomic_load(&s_HostResumePending) ||
 		(uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE ||
-		atomic_load(&s_PendingOut) != 0U ||
-		atomic_load(&s_PendingIn) != 0U ||
+		CFifoUsed(s_hQue) > 0 ||
 		atomic_load(&s_PendingEp0Status) ||
 		atomic_load(&s_PendingEp0RcvOut))
 	{
@@ -1601,6 +1619,13 @@ static void nRFUsbdWakeAllowed(void)
 
 static bool nRFUsbRegInit(UsbCtrlrEvtHandler_t EvtHandler, void *pContext)
 {
+	s_hQue = CFifoInit(s_QueMem, sizeof(s_QueMem), sizeof(nRFUsbdQue_t),
+					   false);
+	if (s_hQue == NULL)
+	{
+		return false;
+	}
+
 	s_Ctrlr.EvtHandler = EvtHandler;
 	s_Ctrlr.pContext = pContext;
 	nRFUsbdResetState();
@@ -1744,12 +1769,10 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 		nRFUsbdDmaWait();
 	}
 
-	const uint_fast16_t bit = (uint_fast16_t)(1U << epNum);
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
 
 	if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
-		atomic_fetch_and(&s_PendingIn, ~bit);
 		NRF_USBD->INTENCLR = (1UL << (USBD_INTEN_ENDEPIN0_Pos + epNum));
 		NRF_USBD->EPINEN &= ~(1UL << epNum);
 		NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
@@ -1757,7 +1780,6 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 	}
 	else
 	{
-		atomic_fetch_and(&s_PendingOut, ~bit);
 		NRF_USBD->INTENCLR = (1UL << (USBD_INTEN_ENDEPOUT0_Pos + epNum));
 		NRF_USBD->EPOUTEN &= ~(1UL << epNum);
 		NRF_USBD->EVENTS_ENDEPOUT[epNum] = 0;
