@@ -107,7 +107,9 @@ static const UsbCfg_t s_UsbCfg = {
 	.pDescContext = nullptr,
 };
 
-// CDC class/control object. Application data uses g_Cdc.Data().
+// CDC class/control object. It inherits the DeviceIntrf transfer methods, so
+// the application sends and receives through the object rather than the C
+// interface.
 UsbdCdc g_Cdc;
 
 static int CdcEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
@@ -126,8 +128,7 @@ static int CdcEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 			{
 				const char *msg = "\r\nIOsonata USB CDC Loopback\r\n";
 
-				DeviceIntrfTx(g_Cdc.Data(), 0,
-							(const uint8_t *)msg, strlen(msg));
+				g_Cdc.Tx(0, (const uint8_t *)msg, (int)strlen(msg));
 			}
 			break;
 
@@ -157,7 +158,6 @@ int main()
 		return -1;
 	}
 
-	DevIntrf_t *pData = g_Cdc.Data();
 
 	// A board on a battery starts with no cable in it, so this failing is
 	// not an error. UsbProcess notices the attach and comes back to it.
@@ -172,7 +172,7 @@ int main()
 
 	    if (pending > 0)
 	    {
-	        int n = DeviceIntrfTx(pData, 0, &buff[offset], pending);
+	        int n = g_Cdc.Tx(0, &buff[offset], pending);
 
 	        if (n > 0)
 	        {
@@ -183,7 +183,7 @@ int main()
 	        continue;
 	    }
 
-	    int l = DeviceIntrfRx(pData, 0, buff, sizeof(buff));
+	    int l = g_Cdc.Rx(0, buff, sizeof(buff));
 
 	    if (l > 0)
 	    {

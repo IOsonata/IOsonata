@@ -111,7 +111,8 @@ static const UsbCfg_t s_UsbCfg = {
 	.MaxPower = 100,
 };
 
-// CDC class/control object. Application data uses g_Cdc.Data().
+// CDC class/control object. It inherits the DeviceIntrf transfer methods, so
+// the application sends through the object rather than the C interface.
 UsbdCdc g_Cdc;
 
 int main()
@@ -132,8 +133,6 @@ int main()
 	}
 
 
-	DevIntrf_t *pData = g_Cdc.Data();
-
 	// A board on a battery starts with no cable in it, so this failing is
 	// not an error. UsbProcess notices the attach and comes back to it.
 	UsbEnable(USB_DEVNO);
@@ -152,7 +151,7 @@ int main()
 		// Demo transfer byte by byte. The value advances only when the octet
 		// was accepted into the FIFO. If the FIFO is full, retry this same byte
 		// while the USB completion interrupt makes room.
-		if (DeviceIntrfTx(pData, 0, &d, 1) > 0)
+		if (g_Cdc.Tx(0, &d, 1) > 0)
 		{
 			d = Prbs8(d);
 		}
@@ -169,7 +168,7 @@ int main()
 
 		while (len > 0)
 		{
-			int l = DeviceIntrfTx(pData, 0, p, len);
+			int l = g_Cdc.Tx(0, p, len);
 
 			len -= l;
 			p += l;

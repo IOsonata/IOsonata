@@ -188,8 +188,8 @@ static bool UsbdCdcDescBuildFunction(uint16_t *pOffset, int FunctionNo,
 									 UsbSpeed_t Speed,
 									 bool HasFunctionString)
 {
-	const uint8_t ctrlIntrf = USBD_CDC_CTRL_INTRF(FunctionNo);
-	const uint8_t dataIntrf = USBD_CDC_DATA_INTRF(FunctionNo);
+	const uint8_t ctrlIntrf = USBD_CDC_CTRL_IF(FunctionNo);
+	const uint8_t dataIntrf = USBD_CDC_DATA_IF(FunctionNo);
 	const uint16_t bulkMps = UsbdCdcDescBulkMps(Speed);
 
 	UsbInrtfAssDesc_t iad = {};

@@ -52,8 +52,8 @@ SOFTWARE.
   */
 
 #define USBD_CDC_FUNC_MAXCNT			7
-#define USBD_CDC_CTRL_INTRF(n)			((uint8_t)((n) * 2U))
-#define USBD_CDC_DATA_INTRF(n)			((uint8_t)(USBD_CDC_CTRL_INTRF(n) + 1U))
+#define USBD_CDC_CTRL_IF(n)			((uint8_t)((n) * 2U))
+#define USBD_CDC_DATA_IF(n)			((uint8_t)(USBD_CDC_CTRL_IF(n) + 1U))
 #define USBD_CDC_NOTIF_EP(n)			USB_ENDPADDR_DIRIN(1U + ((n) * 2U))
 #define USBD_CDC_DATA_EP_NO(n)			((uint8_t)(2U + ((n) * 2U)))
 #define USBD_CDC_DATA_OUT_EP(n)			USB_ENDPADDR_DIROUT(USBD_CDC_DATA_EP_NO(n))
@@ -85,7 +85,7 @@ typedef struct __Usbd_Cdc_Config {
 } UsbdCdcCfg_t;
 
 typedef struct __Usbd_Cdc_Dev {
-	UsbDevIntrf_t Data;
+	UsbDevIntrf_t *pData;			//!< Endpoint data path, supplied at init
 	UsbCdcLineCoding_t LineCoding;
 	UsbCdcLineCoding_t PendingLineCoding;
 	uint16_t ControlLineState;
@@ -105,7 +105,7 @@ typedef struct __Usbd_Cdc_Dev {
 
 class UsbdCdc : public UsbIntrf {
 public:
-	UsbdCdc() { Bind(&vUsbdCdc.Data); }
+	UsbdCdc() = default;
 
 	bool Init(const UsbdCdcCfg_t &Cfg);
 
@@ -123,7 +123,8 @@ private:
 extern "C" {
 #endif
 
-bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg);
+bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, UsbDevIntrf_t * const pData,
+				 const UsbdCdcCfg_t *pCfg);
 
 void UsbdCdcProcess(UsbdCdcDev_t * const pCdc);
 

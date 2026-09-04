@@ -165,22 +165,51 @@ int UsbIntrfTxUsed(UsbDevIntrf_t *pIntrf);
 class UsbIntrf : public DeviceIntrf {
 public:
 	operator DevIntrf_t * () override {
-		return vpUsbDevIntrf != nullptr ? &vpUsbDevIntrf->DevIntrf : nullptr;
+		return &vUsbDevIntrf.DevIntrf;
+	}
+
+	/**
+	 * Bring up the endpoint data path. A derived class supplies the endpoint
+	 * number and its buffers; everything after this it does not manage.
+	 */
+	bool Init(const UsbIntrfCfg_t &Cfg) {
+		return UsbIntrfInit(&vUsbDevIntrf, &Cfg);
 	}
 
 	uint32_t Rate(uint32_t DataRate) override {
-		return vpUsbDevIntrf != nullptr ?
-			DeviceIntrfSetRate(&vpUsbDevIntrf->DevIntrf, DataRate) : 0U;
+		return DeviceIntrfSetRate(&vUsbDevIntrf.DevIntrf, DataRate);
 	}
 
 	uint32_t Rate(void) override {
-		return vpUsbDevIntrf != nullptr ?
-			DeviceIntrfGetRate(&vpUsbDevIntrf->DevIntrf) : 0U;
+		return DeviceIntrfGetRate(&vUsbDevIntrf.DevIntrf);
 	}
 
 	bool RequestToSend(int NbBytes) override {
-		return vpUsbDevIntrf != nullptr &&
-			UsbIntrfRequestToSend(vpUsbDevIntrf, NbBytes);
+		return UsbIntrfRequestToSend(&vUsbDevIntrf, NbBytes);
+	}
+
+	// The inherited versions pass *this, which calls the virtual conversion
+	// operator to reach the same pointer this object already holds. On a byte
+	// at a time stream that indirect call is paid per byte. Rate and
+	// RequestToSend above already take the pointer directly; these do too.
+	__attribute__((always_inline))
+	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTx(&vUsbDevIntrf.DevIntrf, DevAddr, pData, DataLen);
+	}
+
+	__attribute__((always_inline))
+	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRx(&vUsbDevIntrf.DevIntrf, DevAddr, pBuff, BuffLen);
+	}
+
+	__attribute__((always_inline))
+	int TxData(const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTxData(&vUsbDevIntrf.DevIntrf, pData, DataLen);
+	}
+
+	__attribute__((always_inline))
+	int RxData(uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRxData(&vUsbDevIntrf.DevIntrf, pBuff, BuffLen);
 	}
 
 protected:
@@ -188,11 +217,10 @@ protected:
 	UsbIntrf(const UsbIntrf &) = delete;
 	UsbIntrf &operator = (const UsbIntrf &) = delete;
 
-	void Bind(UsbDevIntrf_t *pIntrf) {
-		vpUsbDevIntrf = pIntrf;
-	}
-
-	UsbDevIntrf_t *vpUsbDevIntrf = nullptr;
+	// The endpoint data path is owned here, not pointed at. A polymorphic
+	// object cannot be reinterpreted as the C struct anyway, so there is
+	// nothing to gain from placing it in the derived type and binding to it.
+	UsbDevIntrf_t vUsbDevIntrf = {};
 };
 
 #endif
