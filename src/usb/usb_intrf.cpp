@@ -375,21 +375,11 @@ bool UsbIntrfStartXfer(UsbDevIntrf_t *pIntrf)
 static void UsbIntrfDisable(DevIntrf_t * const pDevIntrf)
 {
 	(void)pDevIntrf;
-
-	atomic_store(&pDevIntrf->EnCnt, 0);
-
 }
 
 static void UsbIntrfEnable(DevIntrf_t * const pDevIntrf)
 {
 	UsbDevIntrf_t *pIntrf = UsbIntrfData(pDevIntrf);
-
-	if (pIntrf == nullptr)
-	{
-		return;
-	}
-
-	atomic_store(&pDevIntrf->EnCnt, 1);
 
 	UsbIntrfRxArm(pIntrf);
 	(void)UsbIntrfStartXfer(pIntrf);
