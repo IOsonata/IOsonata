@@ -147,8 +147,10 @@ queued. A zero-length packet is released without consuming caller space.
 
 When the RX CFifo is full, OUT is left unarmed. USB then backpressures the host
 instead of dropping a packet. Completion reuses the RX buffer immediately,
-before application event callbacks. A read attempts to re-arm OUT only when it
-releases a previously full FIFO.
+before application event callbacks. A read that releases at least one packet
+retries the OUT submission. The controller owns the active-transfer state and
+rejects a duplicate submission when OUT is already armed. This closes the race
+where an OUT completion fills the last slot after foreground checked the FIFO.
 
 CDC DTR is class state only. It drives `IsPortOpen()` and the state-change
 notification; it does not enable or disable the generic receive path.
@@ -235,11 +237,13 @@ The port owns registers, DMA/FIFO access, endpoint busy state and controller
 interrupts. The generic layer owns no MCU-specific facts.
 
 The nRF52 USBD peripheral has one EasyDMA engine shared by every endpoint.
-Endpoint work is therefore recorded in pending masks and started only from
-`USBD_IRQHandler()`. The handler waits for the corresponding ENDEP event before
-another endpoint may program EasyDMA. Starting pending DMA directly from an
-application call or from a nested transfer-completion callback breaks this
-single-owner rule and can leave an IN or OUT request with no completion event.
+The controller records complete DMA descriptors in a fixed CFifo and starts
+them in submission order. The queue has one slot for every IN and OUT endpoint
+direction, and an endpoint direction cannot submit another request until its
+current request completes, so the queue cannot overflow. ENDEP completion
+releases EasyDMA and services the next descriptor. Aborting endpoint zero
+removes only endpoint-zero descriptors; queued work for other endpoints is
+preserved.
 
 ## Function registration
 

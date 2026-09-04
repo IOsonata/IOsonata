@@ -1245,6 +1245,30 @@ static void nRFUsbdQueXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Len)
 	EnableInterrupt(state);
 }
 
+/** Remove one endpoint number without disturbing the order of other work. */
+static void nRFUsbdQueRemoveEp(uint8_t EpNum)
+{
+	const uint32_t state = DisableInterrupt();
+	const int count = CFifoUsed(s_hQue);
+
+	// Rotate exactly the entries that were present on entry. Kept entries go
+	// back at the tail in the same order. The queue has one slot per endpoint
+	// direction, so each get guarantees space for its matching put.
+	for (int i = 0; i < count; i++)
+	{
+		const nRFUsbdQue_t que =
+			*(nRFUsbdQue_t *)CFifoGet(s_hQue);
+		if (USB_ENDPADDR_NUM(que.EpAddr) == EpNum)
+		{
+			continue;
+		}
+
+		*(nRFUsbdQue_t *)CFifoPut(s_hQue) = que;
+	}
+
+	EnableInterrupt(state);
+}
+
 static void nRFUsbdQueueOut(uint8_t EpNum)
 {
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
@@ -1328,7 +1352,7 @@ static void nRFUsbdAbortEp0(void)
 		nRFUsbdDmaWait();
 	}
 
-	CFifoFlush(s_hQue);
+	nRFUsbdQueRemoveEp(0U);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 

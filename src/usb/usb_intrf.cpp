@@ -305,8 +305,6 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer, int Bu
 	}
 
 	int cnt = 0;
-	bool checkedFull = false;
-	bool wasFull = false;
 	bool released = false;
 
 	while (BufferLen > 0)
@@ -317,12 +315,6 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer, int Bu
 		{
 			break;
 		}
-		if (!checkedFull)
-		{
-			wasFull = CFifoAvail(pIntrf->hRxFifo) <= 0;
-			checkedFull = true;
-		}
-
 		const uint16_t len = pkt->Hdr.Length;
 
 		if (len > pIntrf->Mps)
@@ -351,7 +343,10 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer, int Bu
 		cnt += len;
 	}
 
-	if (wasFull && released)
+	// OUT may have stopped because the FIFO became full after foreground
+	// entered this function. Retry whenever storage was released; the
+	// controller owns the active-transfer state and rejects a duplicate arm.
+	if (released)
 	{
 		UsbIntrfRxArm(pIntrf);
 	}

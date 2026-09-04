@@ -87,6 +87,7 @@ bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint8_t *pBuf, uint16_t Len)
 	if (!s_XferOk) { return false; }
 	if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
+		if (s_InBusy) { return false; }
 		s_InBuf = pBuf;
 		s_InLen = Len;
 		s_InBusy = true;
@@ -94,6 +95,7 @@ bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint8_t *pBuf, uint16_t Len)
 	}
 	else
 	{
+		if (s_OutBusy) { return false; }
 		s_OutBuf = pBuf;
 		s_OutLen = Len;
 		s_OutBusy = true;
@@ -227,6 +229,29 @@ static void TestBackpressure(void)
 	CHECK(out[0] == 0U);
 	CHECK(s_OutBusy);
 	CHECK(s_OutBuf == s_RxTransfer);
+}
+
+// Foreground may observe available storage just before the OUT completion
+// interrupt fills the final slot and leaves the endpoint unarmed. Releasing a
+// packet must therefore retry OUT even when the FIFO was not seen full.
+static void TestReleasedStorageRearmsOut(void)
+{
+	CHECK(Setup());
+	const uint8_t in[4] = { 1, 2, 3, 4 };
+	Deliver(in, sizeof(in));
+	CHECK(s_OutBusy);
+
+	// Model the completion interrupt winning after the foreground full check.
+	s_OutBusy = false;
+	s_OutBuf = nullptr;
+	const int submitted = s_OutSubmitCnt;
+
+	uint8_t out[sizeof(in)] = {};
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) ==
+		  (int)sizeof(out));
+	CHECK(memcmp(out, in, sizeof(out)) == 0);
+	CHECK(s_OutBusy);
+	CHECK(s_OutSubmitCnt == submitted + 1);
 }
 
 static void TestWrap(void)
@@ -466,6 +491,7 @@ int main(void)
 		{ "whole packets", TestWholePackets },
 		{ "zero length packet", TestZlp },
 		{ "backpressure", TestBackpressure },
+		{ "released storage rearms", TestReleasedStorageRearmsOut },
 		{ "ring wrap", TestWrap },
 		{ "failed and wrong ep", TestFailedAndWrongEndpoint },
 		{ "rate", TestRate },
