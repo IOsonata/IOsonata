@@ -363,11 +363,11 @@ bool UsbIntrfStartXfer(UsbDevIntrf_t *pIntrf)
 	{
 		return false;
 	}
-	if (!UsbIntrfCanTx(pIntrf))
-	{
-		UsbIntrfSetTxIdle(pIntrf);
-		return false;
-	}
+//	if (!UsbIntrfCanTx(pIntrf))
+//	{
+//		UsbIntrfSetTxIdle(pIntrf);
+//		return false;
+//	}
 
 	return UsbIntrfSubmit(pIntrf);
 }
@@ -375,6 +375,9 @@ bool UsbIntrfStartXfer(UsbDevIntrf_t *pIntrf)
 static void UsbIntrfDisable(DevIntrf_t * const pDevIntrf)
 {
 	(void)pDevIntrf;
+
+	atomic_store(&pDevIntrf->EnCnt, 0);
+
 }
 
 static void UsbIntrfEnable(DevIntrf_t * const pDevIntrf)
@@ -385,6 +388,8 @@ static void UsbIntrfEnable(DevIntrf_t * const pDevIntrf)
 	{
 		return;
 	}
+
+	atomic_store(&pDevIntrf->EnCnt, 1);
 
 	UsbIntrfRxArm(pIntrf);
 	(void)UsbIntrfStartXfer(pIntrf);
@@ -562,7 +567,8 @@ static int UsbIntrfTxPackets(DevIntrf_t * const pDevIntrf,
 
 	EnableInterrupt(state);
 
-	UsbIntrfTxQueued(pIntrf, cnt);
+	//UsbIntrfTxQueued(pIntrf, cnt);
+	(void)UsbIntrfStartXfer(pIntrf);
 
 	return cnt;
 }
@@ -609,7 +615,9 @@ static int UsbIntrfTxBytes(DevIntrf_t * const pDevIntrf,
 
 	EnableInterrupt(state);
 
-	UsbIntrfTxQueued(pIntrf, cnt);
+	(void)UsbIntrfStartXfer(pIntrf);
+
+//	UsbIntrfTxQueued(pIntrf, cnt);
 
 	return cnt;
 }
