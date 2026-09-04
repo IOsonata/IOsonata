@@ -36,6 +36,96 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "usb/usb_intrf.h"
 
+#define USB_INTRF_TX_TIMING
+
+#ifdef USB_INTRF_TX_TIMING
+// Endpoint timing. Off by default; define USB_INTRF_TX_TIMING to build it in.
+// Needs the DWT cycle counter already running, which the PRBS example does in
+// TimingProbeInit. Read the values with a debugger; at 64 MHz one cycle is
+// 15.6 ns.
+//
+// Xfer   submit to completion. How long the packet takes on the bus, which
+//        includes waiting for the host to issue an IN token.
+// Turn   completion to the next submit. How long the device takes to have the
+//        next packet ready, which is all software.
+uint32_t g_TxXferMin = 0xFFFFFFFFU;
+uint32_t g_TxXferMax;
+uint32_t g_TxXferSum;
+uint32_t g_TxXferCnt;
+uint32_t g_TxTurnMin = 0xFFFFFFFFU;
+uint32_t g_TxTurnMax;
+uint32_t g_TxTurnSum;
+uint32_t g_TxTurnCnt;
+// EpXfer   time inside UsbCtrlrEpXfer, so everything the port does to hand
+//          the packet to the controller.
+uint32_t g_TxEpXferMin = 0xFFFFFFFFU;
+uint32_t g_TxEpXferMax;
+uint32_t g_TxEpXferSum;
+uint32_t g_TxEpXferCnt;
+// Cpl   time inside UsbIntrfTxXferComplete, the completion chain that runs
+//       from the interrupt.
+uint32_t g_TxCplMin = 0xFFFFFFFFU;
+uint32_t g_TxCplMax;
+uint32_t g_TxCplSum;
+uint32_t g_TxCplCnt;
+// Payload accounting. Bulk is charged per transaction, so throughput is the
+// transaction rate times the average packet. g_TxBytes over g_TxEpXferCnt is
+// that average, and g_TxFullPkt says how many carried a whole MPS.
+uint32_t g_TxBytes;
+uint32_t g_TxFullPkt;
+static uint32_t s_TxSubmitAt;
+static uint32_t s_TxCompleteAt;
+
+// Records elapsed cycles into one of the sets above when it leaves scope.
+struct UsbIntrfCycleSpan {
+	uint32_t At;
+	uint32_t *pMin;
+	uint32_t *pMax;
+	uint32_t *pSum;
+	uint32_t *pCnt;
+
+	~UsbIntrfCycleSpan()
+	{
+		const uint32_t d = DWT->CYCCNT - At;
+		if (d < *pMin) { *pMin = d; }
+		if (d > *pMax) { *pMax = d; }
+		*pSum += d;
+		(*pCnt)++;
+	}
+};
+
+#define USBINTRF_CYCLE_SPAN(name) \
+	UsbIntrfCycleSpan span = { DWT->CYCCNT, &g_##name##Min, &g_##name##Max, \
+							   &g_##name##Sum, &g_##name##Cnt }; \
+	(void)span
+
+// Counting starts at reset, so the maxima include enumeration. Call this after
+// the port is open to measure the steady state only.
+extern "C" void UsbIntrfTimingReset(void)
+{
+	g_TxXferMin = 0xFFFFFFFFU;
+	g_TxXferMax = 0;
+	g_TxXferSum = 0;
+	g_TxXferCnt = 0;
+	g_TxTurnMin = 0xFFFFFFFFU;
+	g_TxTurnMax = 0;
+	g_TxTurnSum = 0;
+	g_TxTurnCnt = 0;
+	g_TxEpXferMin = 0xFFFFFFFFU;
+	g_TxEpXferMax = 0;
+	g_TxEpXferSum = 0;
+	g_TxEpXferCnt = 0;
+	g_TxCplMin = 0xFFFFFFFFU;
+	g_TxCplMax = 0;
+	g_TxCplSum = 0;
+	g_TxCplCnt = 0;
+	g_TxBytes = 0;
+	g_TxFullPkt = 0;
+	s_TxSubmitAt = 0;
+	s_TxCompleteAt = 0;
+}
+#endif
+
 static UsbDevIntrf_t *UsbIntrfData(DevIntrf_t * const pDevIntrf)
 {
 	if (pDevIntrf == nullptr || pDevIntrf->pDevData == nullptr)
@@ -46,12 +136,23 @@ static UsbDevIntrf_t *UsbIntrfData(DevIntrf_t * const pDevIntrf)
 	return static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
 }
 
+// Producer path accessor. pDevData is set once in UsbIntrfInit and never
+// cleared, so a handler reached through DevIntrf.TxData always has it. The
+// checked form above stays for the public entry points; on the byte path it
+// would cost a call and two compares per queued byte.
+static inline __attribute__((always_inline))
+UsbDevIntrf_t *UsbIntrfDataUnchecked(DevIntrf_t * const pDevIntrf)
+{
+	return static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
+}
+
 static uint8_t *UsbIntrfPktData(UsbPktHdr_t *pPacket)
 {
 	return reinterpret_cast<uint8_t *>(pPacket + 1);
 }
 
-static bool UsbIntrfEnabled(const UsbDevIntrf_t *pIntrf)
+static inline __attribute__((always_inline))
+bool UsbIntrfEnabled(const UsbDevIntrf_t *pIntrf)
 {
 	return pIntrf != nullptr &&
 		atomic_load_explicit(&pIntrf->DevIntrf.EnCnt,
@@ -63,7 +164,8 @@ static uint8_t UsbIntrfRxAddr(const UsbDevIntrf_t *pIntrf)
 	return USB_ENDPADDR_DIROUT(pIntrf->EpNo);
 }
 
-static uint8_t UsbIntrfTxAddr(const UsbDevIntrf_t *pIntrf)
+static inline __attribute__((always_inline))
+uint8_t UsbIntrfTxAddr(const UsbDevIntrf_t *pIntrf)
 {
 	return USB_ENDPADDR_DIRIN(pIntrf->EpNo);
 }
@@ -86,22 +188,48 @@ static void UsbIntrfRxArm(UsbDevIntrf_t *pIntrf)
 	UsbIntrfRxSubmit(pIntrf);
 }
 
-static bool UsbIntrfCanTx(UsbDevIntrf_t *pIntrf)
+static inline __attribute__((always_inline))
+bool UsbIntrfCanTx(UsbDevIntrf_t *pIntrf)
 {
 	return UsbIntrfEnabled(pIntrf) && pIntrf->Mps > 0U &&
 		   pIntrf->pTxBuffer != nullptr;
 }
 
-static void UsbIntrfSetTxIdle(UsbDevIntrf_t *pIntrf)
+static inline __attribute__((always_inline))
+void UsbIntrfSetTxIdle(UsbDevIntrf_t *pIntrf)
 {
 	atomic_store_explicit(&pIntrf->DevIntrf.bTxReady, true,
 						  memory_order_release);
 }
 
-static bool UsbIntrfTakeTx(UsbDevIntrf_t *pIntrf)
+static inline __attribute__((always_inline))
+bool UsbIntrfTakeTx(UsbDevIntrf_t *pIntrf)
 {
 	return atomic_exchange_explicit(&pIntrf->DevIntrf.bTxReady, false,
 									memory_order_acquire);
+}
+
+// Reading the token must not cost a call. In C++ the atomic_exchange_explicit
+// and atomic_load_explicit templates are out of line at -O0, so reaching the
+// builtin takes three nested calls to touch one byte. cfifo.c already uses the
+// builtins directly for its indices; do the same here for the read.
+static_assert(sizeof(atomic_bool) == sizeof(bool),
+			  "atomic_bool must be bool sized to read it in place");
+static_assert(ATOMIC_BOOL_LOCK_FREE == 2,
+			  "atomic_bool must be always lock free to read it in place");
+
+/**
+ * True while a transfer owns the token. The producer runs this per queued
+ * byte, so it is a plain relaxed read: the byte is already in the FIFO and the
+ * completion drains whatever is there, so a stale false only costs one
+ * rejected claim and a stale true costs nothing.
+ */
+static inline __attribute__((always_inline))
+bool UsbIntrfTxHeld(const UsbDevIntrf_t *pIntrf)
+{
+	return !__atomic_load_n(
+		reinterpret_cast<const volatile bool *>(&pIntrf->DevIntrf.bTxReady),
+		__ATOMIC_RELAXED);
 }
 
 static void UsbIntrfTxFailure(UsbDevIntrf_t *pIntrf, uint16_t Length)
@@ -140,15 +268,27 @@ static int UsbIntrfFillOnePacket(UsbDevIntrf_t *pIntrf)
 /** Byte mode fill. CFifoGetMultiple returns one contiguous run up to MPS. */
 static int UsbIntrfFillBytes(UsbDevIntrf_t *pIntrf)
 {
-	int length = (int)pIntrf->Mps;
-	uint8_t *p = CFifoGetMultiple(pIntrf->hTxFifo, &length);
-	if (p == nullptr || length <= 0)
+	uint8_t *pBuffer = pIntrf->pTxBuffer;
+	int remain = (int)pIntrf->Mps;
+	int cnt = 0;
+
+	// Gather across the ring wrap. One CFifoGetMultiple returns only the
+	// contiguous run, so a wrap would otherwise cut a full packet short.
+	while (remain > 0)
 	{
-		return 0;
+		int length = remain;
+		uint8_t *p = CFifoGetMultiple(pIntrf->hTxFifo, &length);
+		if (p == nullptr || length <= 0)
+		{
+			break;
+		}
+
+		memcpy(pBuffer + cnt, p, (size_t)length);
+		cnt += length;
+		remain -= length;
 	}
 
-	memcpy(pIntrf->pTxBuffer, p, (size_t)length);
-	return length;
+	return cnt;
 }
 
 static bool UsbIntrfSubmit(UsbDevIntrf_t *pIntrf)
@@ -156,17 +296,51 @@ static bool UsbIntrfSubmit(UsbDevIntrf_t *pIntrf)
 	const bool packetMode = CFifoBlockSize(pIntrf->hTxFifo) != 1U;
 	const int length = packetMode ? UsbIntrfFillOnePacket(pIntrf) :
 								  UsbIntrfFillBytes(pIntrf);
+
+	// Nothing left in the FIFO is the one thing that releases the flag. While
+	// it is held the producer only queues, so the FIFO accumulates for the
+	// next submission.
 	if (length < 0 || (length == 0 && !packetMode))
 	{
 		UsbIntrfSetTxIdle(pIntrf);
 		return false;
 	}
 
+#ifdef USB_INTRF_TX_TIMING
+	s_TxSubmitAt = DWT->CYCCNT;
+	if (s_TxCompleteAt != 0U)
+	{
+		const uint32_t turn = s_TxSubmitAt - s_TxCompleteAt;
+		if (turn < g_TxTurnMin) { g_TxTurnMin = turn; }
+		if (turn > g_TxTurnMax) { g_TxTurnMax = turn; }
+		g_TxTurnSum += turn;
+		g_TxTurnCnt++;
+	}
+#endif
+
+#ifdef USB_INTRF_TX_TIMING
+	const bool started = UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfTxAddr(pIntrf),
+										pIntrf->pTxBuffer, (uint16_t)length);
+	{
+		const uint32_t ep = DWT->CYCCNT - s_TxSubmitAt;
+		if (ep < g_TxEpXferMin) { g_TxEpXferMin = ep; }
+		if (ep > g_TxEpXferMax) { g_TxEpXferMax = ep; }
+		g_TxEpXferSum += ep;
+		g_TxEpXferCnt++;
+		g_TxBytes += (uint32_t)length;
+		if ((uint32_t)length == (uint32_t)pIntrf->Mps) { g_TxFullPkt++; }
+	}
+	if (started)
+	{
+		return true;
+	}
+#else
 	if (UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfTxAddr(pIntrf), pIntrf->pTxBuffer,
 						(uint16_t)length))
 	{
 		return true;
 	}
+#endif
 
 	UsbIntrfSetTxIdle(pIntrf);
 	if (length > 0)
@@ -177,7 +351,8 @@ static bool UsbIntrfSubmit(UsbDevIntrf_t *pIntrf)
 	return false;
 }
 
-static bool UsbIntrfStartXfer(UsbDevIntrf_t *pIntrf)
+static inline __attribute__((always_inline))
+bool UsbIntrfStartXfer(UsbDevIntrf_t *pIntrf)
 {
 	// Busy is the common producer path. Test ownership first so it returns
 	// without loading enable/configuration state on every queued write.
@@ -303,13 +478,21 @@ static bool UsbIntrfStartTx(DevIntrf_t * const, uint32_t)
 }
 
 /**
- * Queue data and start the endpoint when TX is idle. A busy endpoint already
- * has an owner; its completion drains the FIFO.
+ * Queue and activate. The flag is the whole decision: while a transfer holds
+ * it the producer only appends, so the FIFO accumulates until the completion
+ * comes back for it.
  */
 static inline __attribute__((always_inline))
 void UsbIntrfTxQueued(UsbDevIntrf_t *pIntrf, int Cnt)
 {
 	if (Cnt <= 0 || pIntrf->Mps == 0U)
+	{
+		return;
+	}
+
+	// A transfer in flight is the common case. Filter on a plain read so the
+	// read modify write is only paid when the token looks free.
+	if (UsbIntrfTxHeld(pIntrf))
 	{
 		return;
 	}
@@ -388,12 +571,7 @@ static int UsbIntrfTxPackets(DevIntrf_t * const pDevIntrf,
 static int UsbIntrfTxBytes(DevIntrf_t * const pDevIntrf,
 						   const uint8_t *pData, int DataLen)
 {
-	UsbDevIntrf_t *pIntrf = UsbIntrfData(pDevIntrf);
-
-	if (pIntrf == nullptr || pData == nullptr || DataLen <= 0)
-	{
-		return 0;
-	}
+	UsbDevIntrf_t *pIntrf = UsbIntrfDataUnchecked(pDevIntrf);
 
 	uint32_t state = DisableInterrupt();
 	int cnt = 0;
@@ -407,7 +585,17 @@ static int UsbIntrfTxBytes(DevIntrf_t * const pDevIntrf,
 			break;
 		}
 
-		memcpy(p, pData, (size_t)length);
+		// One byte per call is the CDC stream case, and memcpy is an out of
+		// line call for it. Store it directly instead.
+		if (length == 1)
+		{
+			*p = *pData;
+		}
+		else
+		{
+			memcpy(p, pData, (size_t)length);
+		}
+
 		pData += length;
 		DataLen -= length;
 		cnt += length;
@@ -622,6 +810,20 @@ static void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 		return;
 	}
 
+#ifdef USB_INTRF_TX_TIMING
+	USBINTRF_CYCLE_SPAN(TxCpl);
+
+	s_TxCompleteAt = DWT->CYCCNT;
+	if (s_TxSubmitAt != 0U)
+	{
+		const uint32_t xfer = s_TxCompleteAt - s_TxSubmitAt;
+		if (xfer < g_TxXferMin) { g_TxXferMin = xfer; }
+		if (xfer > g_TxXferMax) { g_TxXferMax = xfer; }
+		g_TxXferSum += xfer;
+		g_TxXferCnt++;
+	}
+#endif
+
 	if (Result != USB_CTRLR_XFER_SUCCESS)
 	{
 		if (Result == USB_CTRLR_XFER_FAILED)
@@ -632,6 +834,8 @@ static void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 		return;
 	}
 
+	// Refill the DMA buffer and go again without touching the flag. Only an
+	// empty FIFO inside UsbIntrfSubmit releases it.
 	if (UsbIntrfCanTx(pIntrf))
 	{
 		if (UsbIntrfSubmit(pIntrf))

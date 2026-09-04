@@ -324,6 +324,8 @@ static void TestTxChaining(void)
 	CompleteIn(MPS);
 	CHECK(s_InBusy && s_InLen == 3U);
 	CHECK(memcmp(s_InBuf, data + MPS * 2U, 3U) == 0);
+
+	// An empty FIFO is the one thing that releases the flag.
 	CompleteIn(3U);
 	CHECK(!s_InBusy);
 	CHECK(s_InSubmitCnt == 3);
@@ -332,6 +334,33 @@ static void TestTxChaining(void)
 	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, tail, sizeof(tail)) == 3);
 	CHECK(s_InBusy && s_InLen == sizeof(tail));
 	CompleteIn(sizeof(tail));
+	CHECK(!s_InBusy);
+}
+
+// While the flag is held the producer only appends, so what arrives during a
+// transfer is still there for the completion to pick up.
+static void TestTxAccumulatesDuringTransfer(void)
+{
+	CHECK(Setup());
+	uint8_t byte = 0xA5;
+
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, &byte, 1) == 1);
+	CHECK(s_InBusy && s_InLen == 1U);
+	CHECK(s_InSubmitCnt == 1);
+
+	// Everything written now is queued, not sent.
+	for (int i = 0; i < 40; i++)
+	{
+		CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, &byte, 1) == 1);
+	}
+	CHECK(s_InSubmitCnt == 1);
+	CHECK(CFifoUsed(s_Intrf.hTxFifo) == 40);
+
+	// The completion takes the whole accumulation in one packet.
+	CompleteIn(1U);
+	CHECK(s_InBusy && s_InLen == 40U);
+	CHECK(s_InSubmitCnt == 2);
+	CompleteIn(40U);
 	CHECK(!s_InBusy);
 }
 
@@ -418,6 +447,7 @@ int main(void)
 		{ "unconfigure", TestUnconfigure },
 		{ "disable then enable", TestDisableEnable },
 		{ "tx chaining", TestTxChaining },
+		{ "tx accumulates", TestTxAccumulatesDuringTransfer },
 		{ "tx packet mode", TestTxPacketMode },
 		{ "memory too small", TestTooSmall },
 	};

@@ -52,10 +52,44 @@ SOFTWARE.
 
 #include <stdint.h>
 
+// Cycle timing probe. Define to measure how the main loop is spending its
+// time. Cortex-M DWT, so it is target specific and off by default.
+//#define TX_TIMING_PROBE
+
 #include "cfifo.h"
 #include "prbs.h"
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
+
+#define TX_TIMING_PROBE
+
+#ifdef TX_TIMING_PROBE
+// Read these in the debugger. Cycles, so divide by the core clock. At 64 MHz
+// one cycle is 15.6 ns.
+//
+// LoopMin/LoopMax  interval between successive DeviceIntrfTx calls. A large
+//                  max means something took the CPU away from this loop.
+// CallMin/CallMax  time inside DeviceIntrfTx itself. A large max means the
+//                  transmit path is where the time goes.
+// Rejects          calls that returned zero, so the byte was not queued.
+//
+// Building usb_intrf.cpp with USB_INTRF_TX_TIMING adds the endpoint side:
+// g_TxXfer* is submit to completion, g_TxTurn* is completion to the next
+// submit. Those need the cycle counter this file starts, so enable both.
+static bool s_TimingArmed = false;
+
+// Supplied by the port and by usb_intrf when they are built with their own
+// timing guards. Both clear what enumeration recorded.
+extern "C" void UsbCtrlrTimingReset(void);
+extern "C" void UsbIntrfTimingReset(void);
+
+static void TimingProbeInit(void)
+{
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	DWT->CYCCNT = 0;
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+}
+#endif
 
 #define BYTE_MODE
 
@@ -116,6 +150,14 @@ UsbdCdc g_Cdc;
 
 int main()
 {
+	uint32_t g_LoopMin = 0xFFFFFFFFU;
+	uint32_t g_LoopMax;
+	uint32_t g_CallMin = 0xFFFFFFFFU;
+	uint32_t g_CallMax;
+	uint32_t g_LoopCnt;
+	uint32_t g_LoopSum;
+	uint32_t g_Rejects;
+
 	uint8_t d = 0xff;
 #ifndef BYTE_MODE
 	uint8_t buff[TEST_BUFSIZE];
@@ -130,6 +172,10 @@ int main()
 	{
 		return -1;
 	}
+
+#ifdef TX_TIMING_PROBE
+	TimingProbeInit();
+#endif
 
 	DevIntrf_t *pData = g_Cdc.Data();
 
@@ -147,14 +193,50 @@ int main()
 			continue;
 		}
 
+#ifdef TX_TIMING_PROBE
+		// Enumeration is long and happens once. Drop what it recorded so the
+		// maxima describe the steady state.
+		if (!s_TimingArmed)
+		{
+			s_TimingArmed = true;
+			UsbCtrlrTimingReset();
+			UsbIntrfTimingReset();
+		}
+#endif
+
 #ifdef BYTE_MODE
 		// Demo transfer byte by byte. The value advances only when the octet
 		// was accepted into the FIFO. If the FIFO is full, retry this same byte
 		// while the USB completion interrupt makes room.
+#ifdef TX_TIMING_PROBE
+		{
+			static uint32_t last;
+			const uint32_t entry = DWT->CYCCNT;
+
+			if (last != 0U)
+			{
+				const uint32_t gap = entry - last;
+				if (gap < g_LoopMin) { g_LoopMin = gap; }
+				if (gap > g_LoopMax) { g_LoopMax = gap; }
+				g_LoopSum += gap;
+				g_LoopCnt++;
+			}
+			last = entry;
+
+			const int n = DeviceIntrfTx(pData, 0, &d, 1);
+
+			const uint32_t call = DWT->CYCCNT - entry;
+			if (call < g_CallMin) { g_CallMin = call; }
+			if (call > g_CallMax) { g_CallMax = call; }
+
+			if (n > 0) { d = Prbs8(d); } else { g_Rejects++; }
+		}
+#else
 		if (DeviceIntrfTx(pData, 0, &d, 1) > 0)
 		{
 			d = Prbs8(d);
 		}
+#endif
 #else
 		// Demo transfer buffer
 		for (int i = 0; i < TEST_BUFSIZE; i++)
