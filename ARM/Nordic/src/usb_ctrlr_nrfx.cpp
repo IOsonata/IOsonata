@@ -1010,6 +1010,19 @@ static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 	nRFUsbdEmit(&evt);
 }
 
+static void nRFUsbdDmaEndIntEnable(uint8_t EpAddr)
+{
+	const uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+
+	if ((uint8_t)atomic_load(&s_DmaEpAddr) == EpAddr)
+	{
+		NRF_USBD->INTENSET = nRFUsbdDmaEndMask(EpAddr);
+	}
+
+	__set_PRIMASK(primask);
+}
+
 /**
  * Retire a completed data IN DMA when its completion interrupt was not needed.
  * EPDATA proves that EasyDMA finished before the host took the packet.
@@ -1037,9 +1050,6 @@ static void nRFUsbdDmaReclaim(void)
 		return;
 	}
 
-	// A competing request may have enabled this interrupt while the DMA was
-	// running. Data IN normally remains interrupt-free.
-	NRF_USBD->INTENCLR = nRFUsbdDmaEndMask((uint8_t)epAddr);
 	*pEvent = 0;
 	__ISB();
 	__DSB();
@@ -1058,6 +1068,7 @@ static void nRFUsbdDmaRelease(void)
 	if (epAddr != NRFX_USBD_DMA_EP_NONE &&
 		USB_ENDPADDR_IS_IN(epAddr) && USB_ENDPADDR_NUM(epAddr) != 0U)
 	{
+		// Data IN enables ENDEPIN only when another endpoint is waiting.
 		NRF_USBD->INTENCLR = nRFUsbdDmaEndMask(epAddr);
 	}
 
@@ -1222,7 +1233,7 @@ static void nRFUsbdServicePending(void)
 					USB_ENDPADDR_IS_IN(epAddr) &&
 					USB_ENDPADDR_NUM(epAddr) != 0U)
 				{
-					NRF_USBD->INTENSET = nRFUsbdDmaEndMask(epAddr);
+					nRFUsbdDmaEndIntEnable(epAddr);
 				}
 				return;
 			}
@@ -1311,27 +1322,60 @@ static void nRFUsbdServicePending(void)
 	}
 }
 
+static inline __attribute__((always_inline))
+bool nRFUsbdDeferFromInterrupt(void)
+{
+	const uint32_t exception = __get_IPSR();
+	if (exception == 0U)
+	{
+		return false;
+	}
+
+	if (exception != (uint32_t)USBD_IRQn + 16U)
+	{
+		NVIC_SetPendingIRQ(USBD_IRQn);
+	}
+
+	return true;
+}
+
 static void nRFUsbdQueueOut(uint8_t EpNum)
 {
 	atomic_fetch_or(&s_PendingOut, (uint_fast16_t)(1U << EpNum));
+	if (nRFUsbdDeferFromInterrupt())
+	{
+		return;
+	}
 	nRFUsbdServicePending();
 }
 
 static void nRFUsbdQueueIn(uint8_t EpNum)
 {
 	atomic_fetch_or(&s_PendingIn, (uint_fast16_t)(1U << EpNum));
+	if (nRFUsbdDeferFromInterrupt())
+	{
+		return;
+	}
 	nRFUsbdServicePending();
 }
 
 static void nRFUsbdQueueEp0Status(void)
 {
 	atomic_store(&s_PendingEp0Status, true);
+	if (nRFUsbdDeferFromInterrupt())
+	{
+		return;
+	}
 	nRFUsbdServicePending();
 }
 
 static void nRFUsbdQueueEp0RcvOut(void)
 {
 	atomic_store(&s_PendingEp0RcvOut, true);
+	if (nRFUsbdDeferFromInterrupt())
+	{
+		return;
+	}
 	nRFUsbdServicePending();
 }
 
@@ -2019,26 +2063,6 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 		if (EpNum > 0U)
 		{
 			nRFUsbdDmaReclaim();
-
-			// Continue the common Bulk IN stream immediately when EasyDMA is
-			// free and no higher-priority or competing endpoint work is queued.
-			// Otherwise leave arbitration to the generic scheduler.
-			if (!atomic_flag_test_and_set(&s_DmaRunning))
-			{
-				if (!atomic_load(&s_HostResumePending) &&
-					!(atomic_load(&s_BusSuspended) &&
-					  !atomic_load(&s_SuspendPending)) &&
-					!atomic_load(&s_PendingEp0Status) &&
-					!atomic_load(&s_PendingEp0RcvOut) &&
-					atomic_load(&s_PendingOut) == 0U &&
-					atomic_load(&s_PendingIn) == 0U &&
-					nRFUsbdStartInDmaNow(EpNum))
-				{
-					return;
-				}
-
-				atomic_flag_clear(&s_DmaRunning);
-			}
 		}
 
 		nRFUsbdQueueIn(EpNum);
@@ -2071,6 +2095,9 @@ extern "C" void USBD_IRQHandler(void)
 	const uint32_t intStatus = nRFUsbdCollectEvents();
 	if (intStatus == 0)
 	{
+		// A transfer requested from another interrupt raises a software USBD
+		// interrupt so EasyDMA still starts from the controller context.
+		nRFUsbdServicePending();
 		return;
 	}
 
@@ -2205,9 +2232,13 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
-	nRFUsbdServicePending();
 	nRFUsbdTryRemoteWake();
 	nRFUsbdTryEnterLowPower();
+
+	// Starting EasyDMA is the last USBD operation in this interrupt. Endpoint
+	// callbacks only queued requests, so no handler below the start can touch
+	// controller registers while the shared DMA engine owns them.
+	nRFUsbdServicePending();
 }
 
 /**
