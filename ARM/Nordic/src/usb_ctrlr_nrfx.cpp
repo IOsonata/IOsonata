@@ -781,6 +781,9 @@ typedef uint_fast16_t atomic_uint_fast16_t;
 #define atomic_load(p) __atomic_load_n((p), __ATOMIC_SEQ_CST)
 #define atomic_store(p, v) __atomic_store_n((p), (v), __ATOMIC_SEQ_CST)
 #define atomic_exchange(p, v) __atomic_exchange_n((p), (v), __ATOMIC_SEQ_CST)
+#define atomic_compare_exchange_strong(p, expected, desired) \
+	__atomic_compare_exchange_n((p), (expected), (desired), false, \
+		__ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
 #define atomic_fetch_or(p, v) __atomic_fetch_or((p), (v), __ATOMIC_SEQ_CST)
 #define atomic_fetch_and(p, v) __atomic_fetch_and((p), (v), __ATOMIC_SEQ_CST)
 #define atomic_flag_test_and_set(p) __atomic_exchange_n((p), true, __ATOMIC_SEQ_CST)
@@ -1007,8 +1010,57 @@ static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 	nRFUsbdEmit(&evt);
 }
 
+/**
+ * Retire a completed data IN DMA when its completion interrupt was not needed.
+ * EPDATA proves that EasyDMA finished before the host took the packet.
+ */
+static void nRFUsbdDmaReclaim(void)
+{
+	uint_fast8_t epAddr = atomic_load(&s_DmaEpAddr);
+
+	if ((uint8_t)epAddr == NRFX_USBD_DMA_EP_NONE ||
+		!USB_ENDPADDR_IS_IN((uint8_t)epAddr) ||
+		USB_ENDPADDR_NUM((uint8_t)epAddr) == 0U)
+	{
+		return;
+	}
+
+	volatile uint32_t *pEvent = nRFUsbdDmaEndEvent((uint8_t)epAddr);
+	if (*pEvent == 0U)
+	{
+		return;
+	}
+
+	if (!atomic_compare_exchange_strong(&s_DmaEpAddr, &epAddr,
+		(uint_fast8_t)NRFX_USBD_DMA_EP_NONE))
+	{
+		return;
+	}
+
+	// A competing request may have enabled this interrupt while the DMA was
+	// running. Data IN normally remains interrupt-free.
+	NRF_USBD->INTENCLR = nRFUsbdDmaEndMask((uint8_t)epAddr);
+	*pEvent = 0;
+	__ISB();
+	__DSB();
+
+	if (nrf52_errata_199())
+	{
+		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
+	}
+
+	atomic_flag_clear(&s_DmaRunning);
+}
+
 static void nRFUsbdDmaRelease(void)
 {
+	const uint8_t epAddr = (uint8_t)atomic_load(&s_DmaEpAddr);
+	if (epAddr != NRFX_USBD_DMA_EP_NONE &&
+		USB_ENDPADDR_IS_IN(epAddr) && USB_ENDPADDR_NUM(epAddr) != 0U)
+	{
+		NRF_USBD->INTENCLR = nRFUsbdDmaEndMask(epAddr);
+	}
+
 	if (nrf52_errata_199())
 	{
 		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
@@ -1030,8 +1082,9 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 		NRFX_USBD_ERRATA_199_REG = 0x00000082UL;
 	}
 
-	// Start from a clear end event so the completion interrupt belongs to this
-	// transfer.
+	// Data IN normally completes without an ENDEPIN interrupt. A competing
+	// request enables it while this DMA is active so it gets an immediate
+	// wakeup; the event must therefore always start clear.
 	*nRFUsbdDmaEndEvent(EpAddr) = 0;
 	__ISB();
 	__DSB();
@@ -1156,9 +1209,23 @@ static void nRFUsbdServicePending(void)
 	{
 		if (atomic_flag_test_and_set(&s_DmaRunning))
 		{
-			// The request bit remains set. The active transfer's ENDEP
-			// interrupt releases EasyDMA and services it.
-			return;
+			// If a data IN DMA has already ended, retire it immediately. If it
+			// is still running, enable its completion interrupt so this deferred
+			// endpoint request is processed as soon as EasyDMA becomes free.
+			nRFUsbdDmaReclaim();
+
+			if (atomic_flag_test_and_set(&s_DmaRunning))
+			{
+				const uint8_t epAddr =
+					(uint8_t)atomic_load(&s_DmaEpAddr);
+				if (epAddr != NRFX_USBD_DMA_EP_NONE &&
+					USB_ENDPADDR_IS_IN(epAddr) &&
+					USB_ENDPADDR_NUM(epAddr) != 0U)
+				{
+					NRF_USBD->INTENSET = nRFUsbdDmaEndMask(epAddr);
+				}
+				return;
+			}
 		}
 
 		if (atomic_exchange(&s_PendingEp0Status, false))
@@ -1228,6 +1295,18 @@ static void nRFUsbdServicePending(void)
 		}
 
 		atomic_flag_clear(&s_DmaRunning);
+
+		// A request can arrive after the empty-mask reads above but before
+		// s_DmaRunning is cleared. Its nested service call sees the flag set
+		// and returns, so recheck after releasing it to avoid losing the wakeup.
+		if (atomic_load(&s_PendingOut) != 0U ||
+			atomic_load(&s_PendingIn) != 0U ||
+			atomic_load(&s_PendingEp0Status) ||
+			atomic_load(&s_PendingEp0RcvOut))
+		{
+			continue;
+		}
+
 		return;
 	}
 }
@@ -1589,9 +1668,9 @@ static bool nRFUsbRegEpOpen(const UsbEndPointDesc_t *pDesc)
 	if (USB_ENDPADDR_IS_IN(epAddr))
 	{
 		NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
-		// IN and OUT endpoints share one EasyDMA engine. ENDEPIN releases it
-		// and services a transfer request that arrived while it was busy.
-		NRF_USBD->INTENSET = (1UL << (USBD_INTEN_ENDEPIN0_Pos + epNum));
+		// Avoid a second interrupt for every IN packet. If another endpoint
+		// requests the shared EasyDMA while this one owns it, the scheduler
+		// enables ENDEPIN until that DMA completes.
 		NRF_USBD->EPINEN |= (1UL << epNum);
 	}
 	else
@@ -1939,6 +2018,8 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 	{
 		if (EpNum > 0U)
 		{
+			nRFUsbdDmaReclaim();
+
 			// Continue the common Bulk IN stream immediately when EasyDMA is
 			// free and no higher-priority or competing endpoint work is queued.
 			// Otherwise leave arbitration to the generic scheduler.
@@ -1965,6 +2046,11 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 	else
 	{
 		pXfer->Started = false;
+
+		if (EpNum > 0U)
+		{
+			nRFUsbdDmaReclaim();
+		}
 
 		{
 #ifdef USB_CTRLR_TX_TIMING
