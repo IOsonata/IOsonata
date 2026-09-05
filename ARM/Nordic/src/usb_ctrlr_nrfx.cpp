@@ -1173,12 +1173,21 @@ static void nRFUsbdServicePending(void)
 		// Requests are started in the order they were made. There is no
 		// direction order to choose, so neither direction can be held off
 		// by the other.
+		// CFifoGet publishes the slot as free before it returns its pointer.
+		// Copy the descriptor with interrupts disabled so an interrupt producer
+		// cannot wrap around and reuse that slot before the copy completes.
+		nRFUsbdQue_t que;
+		const uint32_t state = DisableInterrupt();
 		nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoGet(s_hQue);
-		if (pHead != NULL)
+		const bool haveQue = pHead != NULL;
+		if (haveQue)
 		{
-			// CFifoGet frees the slot, so take a copy before a producer can
-			// reuse it.
-			const nRFUsbdQue_t que = *pHead;
+			que = *pHead;
+		}
+		EnableInterrupt(state);
+
+		if (haveQue)
+		{
 			const uint8_t epNum = USB_ENDPADDR_NUM(que.EpAddr);
 
 			if (nRFUsbdStartDmaNow(&que))
