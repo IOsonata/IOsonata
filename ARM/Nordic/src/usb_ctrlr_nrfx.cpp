@@ -886,7 +886,7 @@ static atomic_uint_fast8_t s_DmaEpAddr;
 // One bit per endpoint direction remains set from queue publication through
 // EasyDMA completion. This enforces the queue-depth invariant in the
 // controller instead of relying on the interface transfer state.
-static atomic_uint_fast32_t s_DmaQueuedMask;
+static atomic_uint_fast16_t s_DmaQueuedMask;
 static uint32_t s_DmaSavedInten;
 // Bit N identifies the deferred endpoint. Direction is kept by the separate
 // masks and the complete request is in Xfer[N][direction].
@@ -1015,8 +1015,7 @@ static void nRFUsbdDmaRelease(void)
 		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
 	}
 
-	atomic_fetch_and_explicit(&s_DmaQueuedMask, ~nRFUsbdEpBit(epAddr),
-						  memory_order_relaxed);
+	atomic_fetch_and(&s_DmaQueuedMask, ~nRFUsbdEpBit(epAddr));
 	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
 	atomic_flag_clear(&s_DmaRunning);
 
@@ -1209,8 +1208,7 @@ static void nRFUsbdServicePending(void)
 				return;
 			}
 
-			atomic_fetch_and_explicit(&s_DmaQueuedMask,
-				~nRFUsbdEpBit(que.EpAddr), memory_order_relaxed);
+			atomic_fetch_and(&s_DmaQueuedMask, ~nRFUsbdEpBit(que.EpAddr));
 
 			if (USB_ENDPADDR_IS_IN(que.EpAddr))
 			{
@@ -1276,8 +1274,7 @@ void nRFUsbdRequestService(void)
 static bool nRFUsbdQueXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Len)
 {
 	const uint32_t epBit = nRFUsbdEpBit(EpAddr);
-	if ((atomic_fetch_or_explicit(&s_DmaQueuedMask, epBit,
-							 memory_order_relaxed) & epBit) != 0U)
+	if ((atomic_fetch_or(&s_DmaQueuedMask, epBit) & epBit) != 0U)
 	{
 		return false;
 	}
@@ -1296,8 +1293,7 @@ static bool nRFUsbdQueXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Len)
 
 	if (pQue == NULL)
 	{
-		atomic_fetch_and_explicit(&s_DmaQueuedMask, ~epBit,
-							  memory_order_relaxed);
+		atomic_fetch_and(&s_DmaQueuedMask, ~epBit);
 		return false;
 	}
 
@@ -1325,10 +1321,9 @@ static void nRFUsbdQueRemoveEp(uint8_t EpNum)
 		*(nRFUsbdQue_t *)CFifoPut(s_hQue) = que;
 	}
 
-	atomic_fetch_and_explicit(&s_DmaQueuedMask,
+	atomic_fetch_and(&s_DmaQueuedMask,
 		~(nRFUsbdEpBit(EpNum) |
-		  nRFUsbdEpBit((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN))),
-		memory_order_relaxed);
+		  nRFUsbdEpBit((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN))));
 	EnableInterrupt(state);
 }
 
@@ -2002,7 +1997,7 @@ static void nRFUsbdHandleOutEnd(uint8_t EpNum)
 static void nRFUsbdHandleOutData(uint8_t EpNum)
 {
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
-	if ((atomic_load_explicit(&s_DmaQueuedMask, memory_order_relaxed) &
+	if ((atomic_load(&s_DmaQueuedMask) &
 		 nRFUsbdEpBit(EpNum)) != 0U)
 	{
 		return;
@@ -2025,7 +2020,7 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
 	const uint8_t epAddr = (uint8_t)(EpNum | USB_ENDPADDR_DIR_IN);
 	if (!pXfer->Started ||
-		(atomic_load_explicit(&s_DmaQueuedMask, memory_order_relaxed) &
+		(atomic_load(&s_DmaQueuedMask) &
 		 nRFUsbdEpBit(epAddr)) != 0U)
 	{
 		return;
