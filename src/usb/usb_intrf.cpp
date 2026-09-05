@@ -44,16 +44,6 @@ static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
 
 alignas(4) static EpSendFct_t s_EpSend = UsbIntrfEpSendByteMode;
 
-/*
-static UsbDevIntrf_t *UsbIntrfData(DevIntrf_t * const pDevIntrf)
-{
-	if (pDevIntrf == nullptr || pDevIntrf->pDevData == nullptr)
-	{
-		return nullptr;
-	}
-
-	return static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
-}*/
 
 static inline __attribute__((always_inline))
 bool UsbIntrfEnabled(const UsbDevIntrf_t *pIntrf)
@@ -225,7 +215,7 @@ static void UsbIntrfDisable(DevIntrf_t * const pDevIntrf)
 
 static void UsbIntrfEnable(DevIntrf_t * const pDevIntrf)
 {
-	UsbDevIntrf_t *pIntrf = (UsbDevIntrf_t*)(pDevIntrf->pDevData);
+	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
 
 	UsbIntrfRxArm(pIntrf);
 //	(void)UsbIntrfStartXfer(pIntrf);
@@ -238,7 +228,8 @@ static void UsbIntrfEnable(DevIntrf_t * const pDevIntrf)
  */
 static uint32_t UsbIntrfGetRate(DevIntrf_t * const pDevIntrf)
 {
-	UsbDevIntrf_t *pIntrf = (UsbDevIntrf_t*)(pDevIntrf->pDevData);
+	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
+
 
 	if (pIntrf == nullptr || pIntrf->Mps == 0U)
 	{
@@ -266,7 +257,7 @@ static bool UsbIntrfStartRx(DevIntrf_t * const, uint32_t)
 /** Consume only complete stored packets, combining packets when they fit. */
 static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer, int BufferLen)
 {
-	UsbDevIntrf_t *pIntrf = (UsbDevIntrf_t*)(pDevIntrf->pDevData);
+	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
 
 	if (pIntrf == nullptr || pIntrf->hRxFifo == nullptr ||
 		pBuffer == nullptr || BufferLen <= 0)
@@ -443,7 +434,7 @@ static void UsbIntrfStopTx(DevIntrf_t * const)
 
 static void UsbIntrfReset(DevIntrf_t * const pDevIntrf)
 {
-	UsbIntrfUnconfigure((UsbDevIntrf_t*)pDevIntrf->pDevData);
+	UsbIntrfUnconfigure(static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData));
 }
 
 static void UsbIntrfPowerOff(DevIntrf_t * const pDevIntrf)
@@ -504,16 +495,15 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	pIntrf->DevIntrf.StartTx = UsbIntrfStartTx;
 	// Chosen once. Byte mode is the CDC hot path and must not pay a mode test
 	// on every call.
-
-	if (pCfg->TxFifoBlkSize > 1)
-	{
-		pIntrf->DevIntrf.TxData = UsbIntrfTxPackets;
-		s_EpSend = UsbIntrfEpSendPktMode;
-	}
-	else
+	if (pCfg->TxFifoBlkSize == 1)
 	{
 		pIntrf->DevIntrf.TxData = UsbIntrfTxBytes;
 		s_EpSend = UsbIntrfEpSendByteMode;
+	}
+	else
+	{
+		pIntrf->DevIntrf.TxData = UsbIntrfTxPackets;
+		s_EpSend = UsbIntrfEpSendPktMode;
 	}
 	pIntrf->DevIntrf.TxSrData = UsbIntrfTxSrData;
 	pIntrf->DevIntrf.StopTx = UsbIntrfStopTx;
