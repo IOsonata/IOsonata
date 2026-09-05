@@ -274,8 +274,7 @@ void UsbCtrlrEpCloseAll(int DevNo);
  * reported. It is never CFifo storage, which can be released sooner. A zero
  * length transfer is valid. One transfer per endpoint direction at a time.
  */
-bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-					uint16_t TotalBytes);
+bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer, uint16_t Length);
 
 /** @brief True while the endpoint direction has a transfer in flight. */
 bool UsbCtrlrEpBusy(int DevNo, uint8_t EpAddr);

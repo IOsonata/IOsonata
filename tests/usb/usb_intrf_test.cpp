@@ -292,8 +292,9 @@ static void TestRate(void)
 	CHECK(DeviceIntrfGetRate(&s_Intrf.DevIntrf) == USB_LINK_RATE_FULL);
 
 	// Any request comes back as the rate already running, the same answer
-	// the getter gives.
-	CHECK(DeviceIntrfSetRate(&s_Intrf.DevIntrf, 5000000000U) ==
+	// the getter gives. 0xFFFFFFFF is the largest rate the parameter can
+	// express, so nothing can ask for more than this.
+	CHECK(DeviceIntrfSetRate(&s_Intrf.DevIntrf, 0xFFFFFFFFU) ==
 		  USB_LINK_RATE_FULL);
 	CHECK(DeviceIntrfSetRate(&s_Intrf.DevIntrf, 1U) == USB_LINK_RATE_FULL);
 

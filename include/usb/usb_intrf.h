@@ -123,9 +123,9 @@ typedef struct __Usb_Interf_Config {
 } UsbIntrfCfg_t;
 
 typedef struct __Usb_Dev_Interf {
+	int DevNo;					//!< USB controller number
 	DevIntrf_t DevIntrf;
 	hCFifo_t hTxFifo;
-	int DevNo;					//!< USB controller number
 	hCFifo_t hRxFifo;			//!< Packet storage, one endpoint packet per block
 	uint32_t RxDropCnt;			//!< Controller/error drops, FIFO full uses backpressure
 	uint8_t *pRxBuffer;			//!< One OUT packet controller buffer
@@ -154,7 +154,6 @@ void UsbIntrfXferComplete(UsbDevIntrf_t *pIntrf, uint8_t EpAddr,
 						  uint16_t Length, UsbCtrlrXferResult_t Result);
 
 bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);
-int UsbIntrfTxUsed(UsbDevIntrf_t *pIntrf);
 
 #ifdef __cplusplus
 }

@@ -3508,37 +3508,58 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 
 void UsbCtrlrIntEnable(int DevNo)
 {
-	if (nRFUsbValidDevNo(DevNo)) { nRFUsbRegIntEnable(); }
+	if (nRFUsbValidDevNo(DevNo))
+	{
+		nRFUsbRegIntEnable();
+	}
 }
 
 void UsbCtrlrIntDisable(int DevNo)
 {
-	if (nRFUsbValidDevNo(DevNo)) { nRFUsbRegIntDisable(); }
+	if (nRFUsbValidDevNo(DevNo))
+	{
+		nRFUsbRegIntDisable();
+	}
 }
 
 void UsbCtrlrConnect(int DevNo)
 {
-	if (nRFUsbValidDevNo(DevNo)) { nRFUsbRegConnect(); }
+	if (nRFUsbValidDevNo(DevNo))
+	{
+		nRFUsbRegConnect();
+	}
 }
 
 void UsbCtrlrDisconnect(int DevNo)
 {
-	if (nRFUsbValidDevNo(DevNo)) { nRFUsbRegDisconnect(); }
+	if (nRFUsbValidDevNo(DevNo))
+	{
+		nRFUsbRegDisconnect();
+	}
 }
 
 void UsbCtrlrRemoteWakeup(int DevNo)
 {
-	if (nRFUsbValidDevNo(DevNo)) { nRFUsbRegRemoteWakeup(); }
+	if (nRFUsbValidDevNo(DevNo))
+	{
+		nRFUsbRegRemoteWakeup();
+	}
 }
 
 void UsbCtrlrSofEnable(int DevNo, bool Enable)
 {
-	if (nRFUsbValidDevNo(DevNo)) { nRFUsbRegSofEnable(Enable); }
+	if (nRFUsbValidDevNo(DevNo))
+	{
+		nRFUsbRegSofEnable(Enable);
+	}
 }
 
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 {
-	if (nRFUsbValidDevNo(DevNo)) { nRFUsbRegSetAddress(Address); }
+	if (nRFUsbValidDevNo(DevNo))
+	{
+		nRFUsbRegSetAddress(Address);
+	}
 }
 
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
@@ -3548,19 +3569,24 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 {
-	if (nRFUsbValidDevNo(DevNo)) { nRFUsbRegEpClose(EpAddr); }
+	if (nRFUsbValidDevNo(DevNo))
+	{
+		nRFUsbRegEpClose(EpAddr);
+	}
 }
 
 void UsbCtrlrEpCloseAll(int DevNo)
 {
-	if (nRFUsbValidDevNo(DevNo)) { nRFUsbRegEpCloseAll(); }
+	if (nRFUsbValidDevNo(DevNo))
+	{
+		nRFUsbRegEpCloseAll();
+	}
 }
 
 bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 					uint16_t TotalBytes)
 {
-	return nRFUsbValidDevNo(DevNo) &&
-		   nRFUsbRegEpXfer(EpAddr, pBuffer, TotalBytes);
+	return nRFUsbValidDevNo(DevNo) && nRFUsbRegEpXfer(EpAddr, pBuffer, TotalBytes);
 }
 
 bool UsbCtrlrEpBusy(int DevNo, uint8_t EpAddr)
@@ -3570,10 +3596,16 @@ bool UsbCtrlrEpBusy(int DevNo, uint8_t EpAddr)
 
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr)
 {
-	if (nRFUsbValidDevNo(DevNo)) { nRFUsbRegEpStall(EpAddr); }
+	if (nRFUsbValidDevNo(DevNo))
+	{
+		nRFUsbRegEpStall(EpAddr);
+	}
 }
 
 void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr)
 {
-	if (nRFUsbValidDevNo(DevNo)) { nRFUsbRegEpClearStall(EpAddr); }
+	if (nRFUsbValidDevNo(DevNo))
+	{
+		nRFUsbRegEpClearStall(EpAddr);
+	}
 }
