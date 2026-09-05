@@ -147,6 +147,10 @@ static bool s_UsbdStarted = false;
 static bool s_UsbdXtalHeld = false;
 static bool s_UsbdVbusLast = false;
 
+#ifdef NRFX_USBD_HAS_USBD
+static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
+#endif
+
 #ifdef NRFX_USBD_HAS_USBHS
 // The nRF52 reads bus power from a register whenever it is asked. The nRF54
 // reports edges only, so the level it leaves behind is kept here.
@@ -736,11 +740,15 @@ static void nRFUsbPowerProcess(void)
 	}
 
 #ifdef NRFX_USBD_HAS_USBD
-	if (s_LowPowerExitPending)
+	// Most USBD registers are unavailable while endpoint EasyDMA is active.
+	// VBUS belongs to POWER and remains safe to poll below.
+	const bool dmaActive = nRFUsbdDmaActive();
+	if (!dmaActive && s_LowPowerExitPending)
 	{
 		UsbdLowPowerExitFinish();
 	}
-	else if (s_UsbdStarted && s_UsbdCfg.bLowPowerSuspend == false &&
+	else if (!dmaActive && s_UsbdStarted &&
+			 s_UsbdCfg.bLowPowerSuspend == false &&
 			 NRF_USBD->LOWPOWER != USBD_LOWPOWER_LOWPOWER_ForceNormal)
 	{
 		UsbdLowPowerExit();
@@ -855,6 +863,12 @@ static atomic_bool s_HostResumePending;
 static atomic_bool s_MacAwake;
 
 
+static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
+{
+	return (uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE;
+}
+
+
 static inline __attribute__((always_inline))
 uint8_t nRFUsbdDir(uint8_t EpAddr)
 {
@@ -923,19 +937,6 @@ static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 	nRFUsbdEmit(&evt);
 }
 
-static void nRFUsbdDmaEndIntEnable(uint8_t EpAddr)
-{
-	const uint32_t primask = __get_PRIMASK();
-	__disable_irq();
-
-	if ((uint8_t)atomic_load(&s_DmaEpAddr) == EpAddr)
-	{
-		NRF_USBD->INTENSET = nRFUsbdDmaEndMask(EpAddr);
-	}
-
-	__set_PRIMASK(primask);
-}
-
 /**
  * Retire a completed data IN DMA when its completion interrupt was not needed.
  * EPDATA proves that EasyDMA finished before the host took the packet.
@@ -977,14 +978,6 @@ static void nRFUsbdDmaReclaim(void)
 
 static void nRFUsbdDmaRelease(void)
 {
-	const uint8_t epAddr = (uint8_t)atomic_load(&s_DmaEpAddr);
-	if (epAddr != NRFX_USBD_DMA_EP_NONE &&
-		USB_ENDPADDR_IS_IN(epAddr) && USB_ENDPADDR_NUM(epAddr) != 0U)
-	{
-		// Data IN enables ENDEPIN only when another endpoint is waiting.
-		NRF_USBD->INTENCLR = nRFUsbdDmaEndMask(epAddr);
-	}
-
 	if (nrf52_errata_199())
 	{
 		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
@@ -997,9 +990,8 @@ static void nRFUsbdDmaRelease(void)
 
 static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 {
-	// Data IN normally completes without an ENDEPIN interrupt. A competing
-	// request enables it while this DMA is active so it gets an immediate
-	// wakeup; the event must therefore always start clear.
+	// Data IN normally completes without an ENDEPIN interrupt. Reclaim and the
+	// interrupt-entry guard inspect this event directly, so it must start clear.
 	*nRFUsbdDmaEndEvent(EpAddr) = 0;
 	__ISB();
 	__DSB();
@@ -1121,21 +1113,12 @@ static void nRFUsbdServicePending(void)
 	{
 		if (atomic_flag_test_and_set(&s_DmaRunning))
 		{
-			// If a data IN DMA has already ended, retire it immediately. If it
-			// is still running, enable its completion interrupt so this deferred
-			// endpoint request is processed as soon as EasyDMA becomes free.
+			// Data IN normally has no completion interrupt. Retire it immediately
+			// if it has ended; otherwise its EPDATA event will resume the queue.
 			nRFUsbdDmaReclaim();
 
 			if (atomic_flag_test_and_set(&s_DmaRunning))
 			{
-				const uint8_t epAddr =
-					(uint8_t)atomic_load(&s_DmaEpAddr);
-				if (epAddr != NRFX_USBD_DMA_EP_NONE &&
-					USB_ENDPADDR_IS_IN(epAddr) &&
-					USB_ENDPADDR_NUM(epAddr) != 0U)
-				{
-					nRFUsbdDmaEndIntEnable(epAddr);
-				}
 				return;
 			}
 		}
@@ -1651,9 +1634,9 @@ static bool nRFUsbRegEpOpen(const UsbEndPointDesc_t *pDesc)
 	if (USB_ENDPADDR_IS_IN(epAddr))
 	{
 		NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
-		// Avoid a second interrupt for every IN packet. If another endpoint
-		// requests the shared EasyDMA while this one owns it, the scheduler
-		// enables ENDEPIN until that DMA completes.
+		// Avoid a second interrupt for every IN packet. EPDATA reclaims normal
+		// completions; an interrupt collision checks ENDEPIN before touching
+		// any other USBD register.
 		NRF_USBD->EPINEN |= (1UL << epNum);
 	}
 	else
@@ -1743,14 +1726,6 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	if (pXfer->Started || pXfer->Mps == 0)
 	{
 		return false;
-	}
-
-	if (USB_ENDPADDR_IS_IN(EpAddr) && epNum > 0 &&
-		(NRF_USBD->EPDATASTATUS & (1UL << epNum)) != 0)
-	{
-		NRF_USBD->EPDATASTATUS = (1UL << epNum);
-		__ISB();
-		__DSB();
 	}
 
 	pXfer->pBuffer = pBuffer;
@@ -2017,6 +1992,18 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 
 extern "C" void USBD_IRQHandler(void)
 {
+	const uint8_t activeDma = (uint8_t)atomic_load(&s_DmaEpAddr);
+	if (activeDma != NRFX_USBD_DMA_EP_NONE)
+	{
+		// Another endpoint may raise EPDATA during this short DMA window. Only
+		// that collision waits; the normal transfer path remains asynchronous.
+		// No other USBD register may be inspected until this event is set.
+		volatile uint32_t *pEndEvent = nRFUsbdDmaEndEvent(activeDma);
+		while (*pEndEvent == 0U)
+		{
+		}
+	}
+
 	const uint32_t intStatus = nRFUsbdCollectEvents();
 	if (intStatus == 0)
 	{
