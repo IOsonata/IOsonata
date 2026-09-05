@@ -122,7 +122,12 @@ typedef struct __Usb_Interf_Config {
 	DevIntrfEvtHandler_t EvtCB;
 } UsbIntrfCfg_t;
 
-typedef struct __Usb_Dev_Interf {
+
+typedef struct __Usb_Dev_Interf		UsbDevIntrf_t;
+
+typedef int (*EpSendFct_t)(UsbDevIntrf_t *pIntrf);
+
+struct __Usb_Dev_Interf {
 	int DevNo;					//!< USB controller number
 	DevIntrf_t DevIntrf;
 	hCFifo_t hTxFifo;
@@ -133,7 +138,9 @@ typedef struct __Usb_Dev_Interf {
 	uint16_t BufferSize;		//!< Capacity of pRxBuffer and pTxBuffer
 	uint16_t Mps;				//!< Active packet size, zero while unconfigured
 	uint8_t EpNo;				//!< Bidirectional endpoint number
-} UsbDevIntrf_t;
+	EpSendFct_t EpSend;
+};
+
 
 #pragma pack(pop)
 

@@ -37,12 +37,11 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "usb/usb_intrf.h"
 
-typedef int (*EpSendFct_t)(UsbDevIntrf_t *pIntrf);
 
 static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf);
 static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
 
-alignas(4) static EpSendFct_t s_EpSend = UsbIntrfEpSendByteMode;
+//alignas(4) static EpSendFct_t s_EpSend = UsbIntrfEpSendByteMode;
 
 static inline __attribute__((always_inline))
 bool UsbIntrfEnabled(const UsbDevIntrf_t *pIntrf)
@@ -481,12 +480,12 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	if (pCfg->TxFifoBlkSize == 1)
 	{
 		pIntrf->DevIntrf.TxData = UsbIntrfTxBytes;
-		s_EpSend = UsbIntrfEpSendByteMode;
+		pIntrf->EpSend = UsbIntrfEpSendByteMode;
 	}
 	else
 	{
 		pIntrf->DevIntrf.TxData = UsbIntrfTxPackets;
-		s_EpSend = UsbIntrfEpSendPktMode;
+		pIntrf->EpSend = UsbIntrfEpSendPktMode;
 	}
 	pIntrf->DevIntrf.TxSrData = UsbIntrfTxSrData;
 	pIntrf->DevIntrf.StopTx = UsbIntrfStopTx;
@@ -623,7 +622,7 @@ static void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 		return;
 	}
 
-	if (s_EpSend(pIntrf))
+	if (pIntrf->EpSend(pIntrf))
 	{
 		return;
 	}
@@ -680,7 +679,7 @@ bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes)
 
 	if (CFifoAvail(pIntrf->hTxFifo) < blocks)
 	{
-		(void)s_EpSend(pIntrf);
+		(void)pIntrf->EpSend(pIntrf);
 	}
 
 	return CFifoAvail(pIntrf->hTxFifo) >= blocks;
