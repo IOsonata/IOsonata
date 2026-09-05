@@ -40,9 +40,11 @@ SOFTWARE.
 typedef int (*EpSendFct_t)(UsbDevIntrf_t *pIntrf);
 
 static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf);
+static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
 
-static EpSendFct_t s_EpSend = UsbIntrfEpSendByteMode;
+alignas(4) static EpSendFct_t s_EpSend = UsbIntrfEpSendByteMode;
 
+/*
 static UsbDevIntrf_t *UsbIntrfData(DevIntrf_t * const pDevIntrf)
 {
 	if (pDevIntrf == nullptr || pDevIntrf->pDevData == nullptr)
@@ -51,22 +53,7 @@ static UsbDevIntrf_t *UsbIntrfData(DevIntrf_t * const pDevIntrf)
 	}
 
 	return static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
-}
-
-// Producer path accessor. pDevData is set once in UsbIntrfInit and never
-// cleared, so a handler reached through DevIntrf.TxData always has it. The
-// checked form above stays for the public entry points; on the byte path it
-// would cost a call and two compares per queued byte.
-static inline __attribute__((always_inline))
-UsbDevIntrf_t *UsbIntrfDataUnchecked(DevIntrf_t * const pDevIntrf)
-{
-	return static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
-}
-
-static uint8_t *UsbIntrfPktData(UsbPktHdr_t *pPacket)
-{
-	return reinterpret_cast<uint8_t *>(pPacket + 1);
-}
+}*/
 
 static inline __attribute__((always_inline))
 bool UsbIntrfEnabled(const UsbDevIntrf_t *pIntrf)
@@ -175,22 +162,19 @@ static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf)
 
 
 	if (UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfTxAddr(pIntrf), pIntrf->pTxBuffer,
-						(uint16_t)cnt))
+						(uint16_t)cnt) == false)
 	{
-
-		return cnt;
+		// A refusal by the controller is a fault, not an idle transmit. The packet
+		// is still staged in the buffer, so releasing the token here would let the
+		// next submission overwrite it. Report and hold until configure or
+		// unconfigure puts the endpoint back to a known state.
+		UsbIntrfTxFailure(pIntrf, (uint16_t)cnt);
 	}
 
-	// A refusal by the controller is a fault, not an idle transmit. The packet
-	// is still staged in the buffer, so releasing the token here would let the
-	// next submission overwrite it. Report and hold until configure or
-	// unconfigure puts the endpoint back to a known state.
-	UsbIntrfTxFailure(pIntrf, (uint16_t)cnt);
-
-	return false;
+	return cnt;
 }
 
-static bool UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf)
+static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf)
 {
 	int cnt = 0;
 
@@ -216,24 +200,21 @@ static bool UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf)
 	{
 		UsbIntrfSetTxIdle(pIntrf);
 
-		return false;
+		return 0;
 	}
 
 
 	if (UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfTxAddr(pIntrf), pIntrf->pTxBuffer,
-						(uint16_t)cnt))
+						(uint16_t)cnt) == false)
 	{
-
-		return true;
+		// A refusal by the controller is a fault, not an idle transmit. The packet
+		// is still staged in the buffer, so releasing the token here would let the
+		// next submission overwrite it. Report and hold until configure or
+		// unconfigure puts the endpoint back to a known state.
+		UsbIntrfTxFailure(pIntrf, (uint16_t)cnt);
 	}
 
-	// A refusal by the controller is a fault, not an idle transmit. The packet
-	// is still staged in the buffer, so releasing the token here would let the
-	// next submission overwrite it. Report and hold until configure or
-	// unconfigure puts the endpoint back to a known state.
-	UsbIntrfTxFailure(pIntrf, (uint16_t)cnt);
-
-	return false;
+	return cnt;
 }
 
 
@@ -244,7 +225,7 @@ static void UsbIntrfDisable(DevIntrf_t * const pDevIntrf)
 
 static void UsbIntrfEnable(DevIntrf_t * const pDevIntrf)
 {
-	UsbDevIntrf_t *pIntrf = UsbIntrfData(pDevIntrf);
+	UsbDevIntrf_t *pIntrf = (UsbDevIntrf_t*)(pDevIntrf->pDevData);
 
 	UsbIntrfRxArm(pIntrf);
 //	(void)UsbIntrfStartXfer(pIntrf);
@@ -257,7 +238,7 @@ static void UsbIntrfEnable(DevIntrf_t * const pDevIntrf)
  */
 static uint32_t UsbIntrfGetRate(DevIntrf_t * const pDevIntrf)
 {
-	UsbDevIntrf_t *pIntrf = UsbIntrfData(pDevIntrf);
+	UsbDevIntrf_t *pIntrf = (UsbDevIntrf_t*)(pDevIntrf->pDevData);
 
 	if (pIntrf == nullptr || pIntrf->Mps == 0U)
 	{
@@ -285,7 +266,7 @@ static bool UsbIntrfStartRx(DevIntrf_t * const, uint32_t)
 /** Consume only complete stored packets, combining packets when they fit. */
 static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer, int BufferLen)
 {
-	UsbDevIntrf_t *pIntrf = UsbIntrfData(pDevIntrf);
+	UsbDevIntrf_t *pIntrf = (UsbDevIntrf_t*)(pDevIntrf->pDevData);
 
 	if (pIntrf == nullptr || pIntrf->hRxFifo == nullptr ||
 		pBuffer == nullptr || BufferLen <= 0)
@@ -462,7 +443,7 @@ static void UsbIntrfStopTx(DevIntrf_t * const)
 
 static void UsbIntrfReset(DevIntrf_t * const pDevIntrf)
 {
-	UsbIntrfUnconfigure(UsbIntrfData(pDevIntrf));
+	UsbIntrfUnconfigure((UsbDevIntrf_t*)pDevIntrf->pDevData);
 }
 
 static void UsbIntrfPowerOff(DevIntrf_t * const pDevIntrf)
@@ -523,8 +504,17 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	pIntrf->DevIntrf.StartTx = UsbIntrfStartTx;
 	// Chosen once. Byte mode is the CDC hot path and must not pay a mode test
 	// on every call.
-	pIntrf->DevIntrf.TxData = pCfg->TxFifoBlkSize == 1U ?
-		UsbIntrfTxBytes : UsbIntrfTxPackets;
+
+	if (pCfg->TxFifoBlkSize > 1)
+	{
+		pIntrf->DevIntrf.TxData = UsbIntrfTxPackets;
+		s_EpSend = UsbIntrfEpSendPktMode;
+	}
+	else
+	{
+		pIntrf->DevIntrf.TxData = UsbIntrfTxBytes;
+		s_EpSend = UsbIntrfEpSendByteMode;
+	}
 	pIntrf->DevIntrf.TxSrData = UsbIntrfTxSrData;
 	pIntrf->DevIntrf.StopTx = UsbIntrfStopTx;
 	pIntrf->DevIntrf.Reset = UsbIntrfReset;
