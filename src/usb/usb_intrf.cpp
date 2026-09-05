@@ -63,13 +63,6 @@ static void UsbIntrfRxArm(UsbDevIntrf_t *pIntrf)
 }
 
 static inline __attribute__((always_inline))
-bool UsbIntrfCanTx(UsbDevIntrf_t *pIntrf)
-{
-	return UsbIntrfEnabled(pIntrf) && pIntrf->Mps > 0U &&
-		   pIntrf->pTxBuffer != nullptr;
-}
-
-static inline __attribute__((always_inline))
 void UsbIntrfSetTxIdle(UsbDevIntrf_t *pIntrf)
 {
 	atomic_store_explicit(&pIntrf->DevIntrf.bTxReady, true,
