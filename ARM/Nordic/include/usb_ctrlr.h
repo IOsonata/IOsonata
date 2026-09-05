@@ -195,6 +195,15 @@ typedef struct __Usb_Ctrlr_Evt {
 typedef void (*UsbCtrlrEvtHandler_t)(int DevNo, const UsbCtrlrEvt_t *pEvt,
 									 void *pContext);
 
+/**
+ * @brief	Non-control endpoint completion callback.
+ *
+ * Registered once with the endpoint DMA buffer. It is called directly from
+ * the controller interrupt, avoiding a function-table search per packet.
+ */
+typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, uint16_t Length,
+									UsbCtrlrXferResult_t Result, void *pContext);
+
 /// What the generic layer hands the port at UsbCtrlrInit. Interrupt priority
 /// and suspend behaviour reach the hardware only through here, so the port
 /// needs them alongside the event callback.
@@ -266,18 +275,29 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpCloseAll(int DevNo);
 
 /**
- * @brief	Start one endpoint transfer.
+ * @brief	Register one non-control endpoint's fixed DMA buffer and callback.
  *
- * TotalBytes is the logical transfer length, not a DMA or FIFO limit. The
- * backend splits it as the hardware requires. pBuffer is controller transfer
- * storage owned by the caller and must stay valid until completion is
- * reported. It is never CFifo storage, which can be released sooner. A zero
- * length transfer is valid. One transfer per endpoint direction at a time.
+ * Registration is software-only and remains valid across bus reset and
+ * endpoint close/open. EpAddr includes direction. The buffer belongs to the
+ * interface and must remain valid until controller reinitialization.
  */
-bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer, uint16_t Length);
+bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+						UsbCtrlrEpHandler_t Handler, void *pContext);
 
-/** @brief True while the endpoint direction has a transfer in flight. */
-bool UsbCtrlrEpBusy(int DevNo, uint8_t EpAddr);
+/** @brief Arm the registered OUT buffer for one maximum-size packet. */
+bool UsbCtrlrEpRxArm(int DevNo, uint8_t EpNo);
+
+/** @brief Send Length bytes from the registered IN buffer. */
+bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint16_t Length);
+
+/**
+ * @brief Start a dynamic endpoint-zero control transfer.
+ *
+ * EP0 is the only endpoint whose buffer and transfer length vary by request.
+ * A zero length transfer is valid.
+ */
+bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+						 uint16_t Length);
 
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);
 

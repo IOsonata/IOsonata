@@ -118,16 +118,19 @@ sequenceDiagram
     participant C as UsbCtrlr
     participant F as RX CFifo
     participant A as Application
-    U->>C: Submit RX buffer
+    U->>C: Register endpoint, RX buffer and callback
+    U->>C: Arm OUT
     C-->>U: OUT complete(length)
     U->>F: Store header and copy packet
-    U->>C: Reuse RX buffer
+    U->>C: Rearm fixed RX buffer
     A->>F: Consume whole packet(s)
 ```
 
-Initialization creates the packet CFifo using the class buffer capacity.
+Initialization creates the packet CFifo using the class buffer capacity and
+registers the OUT and IN buffers with the controller once. Each registration
+also contains the direct completion callback and its `UsbIntrf` context.
 `UsbIntrfConfigure()` records the negotiated MPS, flushes the queues and
-submits the class-owned RX buffer. Every successful OUT completion:
+arms the class-owned RX buffer. Every successful OUT completion:
 
 1. reserves one CFifo block;
 2. stores the received length and copies the controller buffer into it;
@@ -190,7 +193,7 @@ compiles to the same instruction sequence it had before packet mode existed.
 | Question | Single source of truth |
 | --- | --- |
 | Is the `DeviceIntrf` enabled? | inherited atomic `EnCnt` |
-| Is an endpoint transfer active? | `UsbCtrlrEpBusy()` / controller |
+| Is an endpoint transfer active? | controller-private transfer state |
 | Which endpoint directions belong to this data path? | one `EpNo` |
 | Is the pair configured? | `Mps != 0` |
 | Is TX software-owned? | inherited `bTxReady` token |
@@ -202,8 +205,9 @@ address, release flag, TX queue watermark, tail flag or ZLP flag.
 The lifecycle is:
 
 1. `UsbInit()` initializes portable core and controller software state.
-2. A public class such as `UsbdCdcInit()` registers its USB function and calls
-   `UsbIntrfInit()` with application FIFOs, endpoint number and class buffers.
+2. A public class initializes `UsbIntrf` with application FIFOs, endpoint
+   number and class buffers, then registers its USB function. `UsbIntrfInit()`
+   registers both data endpoint directions directly with the controller.
 3. `UsbEnable()` powers the controller, endpoint zero and bus pull-up.
 4. Configuration opens the class endpoints and calls
    `UsbIntrfConfigure(Mps)`, which starts RX.
@@ -216,9 +220,9 @@ The lifecycle is:
 
 ## Port boundary and capabilities
 
-`usb.h` declares the portable `UsbCtrlr` entry points. Each target supplies a
-plain `usb_ctrlr.h` on its include path plus the implementation for its MCU.
-Generic code never switches on a vendor macro.
+Each target supplies a plain `usb_ctrlr.h` on its include path plus the
+implementation for its MCU. Generic code includes that contract and never
+switches on a vendor macro.
 
 The target header publishes compile-time capabilities used for static memory
 sizing:
@@ -232,7 +236,18 @@ USB_HIGHSPEED_CAPABLE(DevNo)
 USB_ISO_SUPPORTED(DevNo)
 ```
 
-`UsbCtrlrEpXfer()` retains the submitted buffer until it reports completion.
+Non-control endpoints register their fixed DMA buffer, completion callback and
+context once with `UsbCtrlrEpRegister()`. `UsbCtrlrEpRxArm()` arms the registered
+OUT buffer and `UsbCtrlrEpSend()` sends from the registered IN buffer. Their
+completion interrupt invokes the registered callback directly; it does not
+scan the USB function table. The controller never advances or replaces these
+fixed data-endpoint pointers.
+
+Endpoint zero is intentionally separate. `UsbCtrlrEp0Xfer()` accepts the
+dynamic buffer selected by the current control request, and its completion is
+routed to the generic USB core. Only the EP0 working pointer may advance while
+the controller splits a control transfer across packets.
+
 The port owns registers, DMA/FIFO access, endpoint busy state and controller
 interrupts. The generic layer owns no MCU-specific facts.
 
@@ -250,7 +265,9 @@ preserved.
 Each class or vendor function registers one `UsbFuncCfg_t` containing its
 interface range, endpoint masks and callbacks. Endpoint zero belongs to the
 generic core; bit zero must be clear in function endpoint masks, and masks may
-not overlap between functions.
+not overlap between functions. These function callbacks handle class requests,
+configuration, reset and fallback dispatch. Normal registered data endpoint
+completions bypass this table.
 
 ## Known gaps
 

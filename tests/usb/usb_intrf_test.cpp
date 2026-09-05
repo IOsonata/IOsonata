@@ -50,6 +50,8 @@ SOFTWARE.
 
 static uint8_t *s_OutBuf;
 static uint8_t *s_InBuf;
+static uint8_t *s_OutRegBuf;
+static uint8_t *s_InRegBuf;
 static uint16_t s_OutLen;
 static uint16_t s_InLen;
 static bool s_OutBusy;
@@ -58,6 +60,10 @@ static int s_OutSubmitCnt;
 static int s_InSubmitCnt;
 static bool s_XferOk = true;
 static bool s_HighSpeed;
+static UsbCtrlrEpHandler_t s_OutHandler;
+static UsbCtrlrEpHandler_t s_InHandler;
+static void *s_OutContext;
+static void *s_InContext;
 
 extern "C" {
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
@@ -76,35 +82,46 @@ void UsbCtrlrSetAddress(int, uint8_t) {}
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
 void UsbCtrlrEpClose(int, uint8_t) {}
 void UsbCtrlrEpCloseAll(int) {}
-bool UsbCtrlrEpBusy(int, uint8_t EpAddr)
-{
-	return USB_ENDPADDR_IS_IN(EpAddr) ? s_InBusy : s_OutBusy;
-}
 void UsbCtrlrEpStall(int, uint8_t) {}
 void UsbCtrlrEpClearStall(int, uint8_t) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint8_t *pBuf, uint16_t Len)
+bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuf,
+						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	if (!s_XferOk) { return false; }
 	if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
-		if (s_InBusy) { return false; }
-		s_InBuf = pBuf;
-		s_InLen = Len;
-		s_InBusy = true;
-		s_InSubmitCnt++;
+		s_InRegBuf = pBuf;
+		s_InHandler = Handler;
+		s_InContext = pContext;
 	}
 	else
 	{
-		if (s_OutBusy) { return false; }
-		s_OutBuf = pBuf;
-		s_OutLen = Len;
-		s_OutBusy = true;
-		s_OutSubmitCnt++;
+		s_OutRegBuf = pBuf;
+		s_OutHandler = Handler;
+		s_OutContext = pContext;
 	}
 	return true;
 }
+bool UsbCtrlrEpRxArm(int, uint8_t)
+{
+	if (!s_XferOk || s_OutBusy) { return false; }
+	s_OutBuf = s_OutRegBuf;
+	s_OutLen = MPS;
+	s_OutBusy = true;
+	s_OutSubmitCnt++;
+	return true;
+}
+bool UsbCtrlrEpSend(int, uint8_t, uint16_t Len)
+{
+	if (!s_XferOk || s_InBusy) { return false; }
+	s_InBuf = s_InRegBuf;
+	s_InLen = Len;
+	s_InBusy = true;
+	s_InSubmitCnt++;
+	return true;
+}
+bool UsbCtrlrEp0Xfer(int, uint8_t, uint8_t *, uint16_t) { return true; }
 }
 
 static int s_Fail;
@@ -127,9 +144,8 @@ static void Deliver(const uint8_t *pData, uint16_t Len)
 	if (!s_OutBusy || s_OutBuf == nullptr) { return; }
 	if (Len > 0U) { memcpy(s_OutBuf, pData, Len); }
 	s_OutBusy = false;
-	s_OutBuf = nullptr;
-	UsbIntrfXferComplete(&s_Intrf, USB_ENDPADDR_DIROUT(EP_NO), Len,
-						 USB_CTRLR_XFER_SUCCESS);
+	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), Len,
+				 USB_CTRLR_XFER_SUCCESS, s_OutContext);
 }
 
 static bool Setup(void)
@@ -395,8 +411,8 @@ static void CompleteIn(uint16_t Len)
 {
 	CHECK(s_InBusy);
 	s_InBusy = false;
-	UsbIntrfXferComplete(&s_Intrf, USB_ENDPADDR_DIRIN(EP_NO), Len,
-						 USB_CTRLR_XFER_SUCCESS);
+	s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), Len,
+				USB_CTRLR_XFER_SUCCESS, s_InContext);
 }
 
 static void TestTxChaining(void)

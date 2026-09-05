@@ -676,8 +676,15 @@ extern "C" void UsbCtrlrSetAddress(int, uint8_t Address)
 extern "C" bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
 extern "C" void UsbCtrlrEpClose(int, uint8_t) {}
 extern "C" void UsbCtrlrEpCloseAll(int) { s_Ctrlr.CloseAllCnt++; }
-extern "C" bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint8_t *pBuffer,
-								 uint16_t Length)
+extern "C" bool UsbCtrlrEpRegister(int, uint8_t, uint8_t *,
+									 UsbCtrlrEpHandler_t, void *)
+{
+	return true;
+}
+extern "C" bool UsbCtrlrEpRxArm(int, uint8_t) { return true; }
+extern "C" bool UsbCtrlrEpSend(int, uint8_t, uint16_t) { return true; }
+extern "C" bool UsbCtrlrEp0Xfer(int, uint8_t EpAddr, uint8_t *pBuffer,
+								  uint16_t Length)
 {
 	if (s_Ctrlr.XferCnt >= XFER_LOG_CNT)
 	{
@@ -695,7 +702,6 @@ extern "C" bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint8_t *pBuffer,
 	}
 	return true;
 }
-extern "C" bool UsbCtrlrEpBusy(int, uint8_t) { return false; }
 extern "C" void UsbCtrlrEpStall(int, uint8_t EpAddr)
 {
 	s_Ctrlr.StallCnt++;

@@ -21,6 +21,9 @@ static uint8_t *s_InBuf;
 static uint16_t s_InLen;
 static bool s_InBusy;
 static bool s_OutBusy;
+static uint8_t *s_OutBuf;
+static UsbCtrlrEpHandler_t s_InHandler;
+static void *s_InContext;
 
 static long s_Packets;
 static long s_Bytes;
@@ -43,31 +46,40 @@ void UsbCtrlrSetAddress(int, uint8_t) {}
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
 void UsbCtrlrEpClose(int, uint8_t) {}
 void UsbCtrlrEpCloseAll(int) {}
-bool UsbCtrlrEpBusy(int, uint8_t EpAddr)
-{
-	return USB_ENDPADDR_IS_IN(EpAddr) ? s_InBusy : s_OutBusy;
-}
 void UsbCtrlrEpStall(int, uint8_t) {}
 void UsbCtrlrEpClearStall(int, uint8_t) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint8_t *pBuf, uint16_t Len)
+bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuf,
+						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
 		s_InBuf = pBuf;
-		s_InLen = Len;
-		s_InBusy = true;
-		s_Packets++;
-		s_Bytes += Len;
-		if (Len == 0U) { s_Zlp++; }
+		s_InHandler = Handler;
+		s_InContext = pContext;
 	}
 	else
 	{
-		s_OutBusy = true;
+		s_OutBuf = pBuf;
 	}
 	return true;
 }
+bool UsbCtrlrEpRxArm(int, uint8_t)
+{
+	s_OutBusy = s_OutBuf != nullptr;
+	return s_OutBusy;
+}
+bool UsbCtrlrEpSend(int, uint8_t, uint16_t Len)
+{
+	s_InLen = Len;
+	s_InBusy = true;
+	s_Packets++;
+	s_Bytes += Len;
+	if (Len == 0U) { s_Zlp++; }
+	return true;
+}
+bool UsbCtrlrEp0Xfer(int, uint8_t, uint8_t *, uint16_t) { return true; }
 }
 
 alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(SLOTS, BUFFER_SIZE)];
@@ -122,8 +134,8 @@ static void Run(int BusTicks, long Iterations)
 			const uint16_t len = s_InLen;
 			s_InBusy = false;
 			due = -1;
-			UsbIntrfXferComplete(&s_Intrf, USB_ENDPADDR_DIRIN(EP_NO), len,
-								 USB_CTRLR_XFER_SUCCESS);
+			s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), len,
+						USB_CTRLR_XFER_SUCCESS, s_InContext);
 			if (s_InBusy) { due = BusTicks; }
 		}
 		else if (due > 0)

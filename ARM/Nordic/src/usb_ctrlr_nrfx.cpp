@@ -76,6 +76,54 @@ bool nRFUsbValidDevNo(int DevNo)
 	return DevNo >= 0 && DevNo < USB_CTRLR_CNT;
 }
 
+enum
+{
+	NRF_USB_EP_COUNT = USB_EPIN_CNT(0) > USB_EPOUT_CNT(0) ?
+		USB_EPIN_CNT(0) : USB_EPOUT_CNT(0),
+};
+
+typedef struct __nRF_Usb_Ep_Registration
+{
+	uint8_t *pBuffer;
+	UsbCtrlrEpHandler_t Handler;
+	void *pContext;
+} nRFUsbEpReg_t;
+
+// Fixed data-endpoint ownership lives outside the active-transfer state so a
+// bus reset can cancel transfers without losing registrations.
+static nRFUsbEpReg_t s_EpReg[NRF_USB_EP_COUNT][2];
+
+static inline __attribute__((always_inline))
+uint8_t nRFUsbEpDir(uint8_t EpAddr)
+{
+	return USB_ENDPADDR_IS_IN(EpAddr) ? 1U : 0U;
+}
+
+static inline __attribute__((always_inline))
+nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpAddr)
+{
+	return &s_EpReg[USB_ENDPADDR_NUM(EpAddr)][nRFUsbEpDir(EpAddr)];
+}
+
+static bool nRFUsbEpRegisteredXfer(uint8_t EpAddr, uint16_t Length,
+								   UsbCtrlrXferResult_t Result)
+{
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
+	if (epNum == 0U || epNum >= NRF_USB_EP_COUNT)
+	{
+		return false;
+	}
+
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
+	if (pReg->Handler == NULL)
+	{
+		return false;
+	}
+
+	pReg->Handler(EpAddr, Length, Result, pReg->pContext);
+	return true;
+}
+
 //
 // Bus power, clock and VBUS. Common to both peripherals, with the part
 // differences handled inline the way uart_nrfx.cpp does.
@@ -915,6 +963,11 @@ static void nRFUsbdEmitSimple(UsbCtrlrEvtType_t Type)
 static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 						 UsbCtrlrXferResult_t Result)
 {
+	if (nRFUsbEpRegisteredXfer(EpAddr, Length, Result))
+	{
+		return;
+	}
+
 	UsbCtrlrEvt_t evt = {};
 	evt.Type = USB_CTRLR_EVT_XFER_CMPL;
 	evt.Xfer.EpAddr = EpAddr;
@@ -1783,10 +1836,10 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	return true;
 }
 
-static bool nRFUsbRegEpBusy(uint8_t EpAddr)
+static uint16_t nRFUsbRegEpMps(uint8_t EpAddr)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	return epNum < NRFX_USBD_EP_COUNT && nRFUsbdGetXfer(EpAddr)->Started;
+	return epNum < NRFX_USBD_EP_COUNT ? nRFUsbdGetXfer(EpAddr)->Mps : 0U;
 }
 
 static void nRFUsbRegEpStall(uint8_t EpAddr)
@@ -1940,7 +1993,7 @@ static void nRFUsbdHandleOutEnd(uint8_t EpNum)
 	}
 
 	const uint16_t transferLen = (uint16_t)NRF_USBD->EPOUT[EpNum].AMOUNT;
-	if (pXfer->pBuffer != NULL)
+	if (EpNum == 0U && pXfer->pBuffer != NULL)
 	{
 		pXfer->pBuffer += transferLen;
 	}
@@ -1984,7 +2037,7 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 	}
 
 	const uint16_t transferLen = (uint16_t)NRF_USBD->EPIN[EpNum].AMOUNT;
-	if (pXfer->pBuffer != NULL)
+	if (EpNum == 0U && pXfer->pBuffer != NULL)
 	{
 		pXfer->pBuffer += transferLen;
 	}
@@ -2429,6 +2482,11 @@ static void nRF54UsbdEmitSimple(UsbCtrlrEvtType_t Type)
 static void nRF54UsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 							  UsbCtrlrXferResult_t Result)
 {
+	if (nRFUsbEpRegisteredXfer(EpAddr, Length, Result))
+	{
+		return;
+	}
+
 	UsbCtrlrEvt_t evt = {
 		.Type = USB_CTRLR_EVT_XFER_CMPL,
 		.Xfer = {
@@ -3311,11 +3369,10 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	return true;
 }
 
-static bool nRFUsbRegEpBusy(uint8_t EpAddr)
+static uint16_t nRFUsbRegEpMps(uint8_t EpAddr)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	return epNum < NRF54_USBD_EP_COUNT &&
-		   nRF54UsbdGetXfer(EpAddr)->Started;
+	return epNum < NRF54_USBD_EP_COUNT ? nRF54UsbdGetXfer(EpAddr)->Mps : 0U;
 }
 
 static void nRFUsbRegEpStall(uint8_t EpAddr)
@@ -3440,6 +3497,8 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 	{
 		return false;
 	}
+
+	memset(s_EpReg, 0, sizeof(s_EpReg));
 
 	// Power first. The register stage must not touch a peripheral that has no
 	// clock, which is why nRFUsbRegInit only sets software state.
@@ -3585,15 +3644,59 @@ void UsbCtrlrEpCloseAll(int DevNo)
 	}
 }
 
-bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-					uint16_t TotalBytes)
+bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	return nRFUsbValidDevNo(DevNo) && nRFUsbRegEpXfer(EpAddr, pBuffer, TotalBytes);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
+	const uint8_t epCount = USB_ENDPADDR_IS_IN(EpAddr) ?
+		USB_EPIN_CNT(0) : USB_EPOUT_CNT(0);
+
+	if (!nRFUsbValidDevNo(DevNo) || epNum == 0U || epNum >= epCount ||
+		(EpAddr & ~(USB_ENDPADDR_DIR_MASK | USB_ENDPADDR_NUM_MASK)) != 0U ||
+		pBuffer == NULL || Handler == NULL)
+	{
+		return false;
+	}
+
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
+	pReg->pBuffer = pBuffer;
+	pReg->Handler = Handler;
+	pReg->pContext = pContext;
+	return true;
 }
 
-bool UsbCtrlrEpBusy(int DevNo, uint8_t EpAddr)
+bool UsbCtrlrEpRxArm(int DevNo, uint8_t EpNo)
 {
-	return nRFUsbValidDevNo(DevNo) && nRFUsbRegEpBusy(EpAddr);
+	const uint8_t epAddr = USB_ENDPADDR_DIROUT(EpNo);
+	if (!nRFUsbValidDevNo(DevNo) || EpNo == 0U ||
+		EpNo >= USB_EPOUT_CNT(0))
+	{
+		return false;
+	}
+
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epAddr);
+	const uint16_t mps = nRFUsbRegEpMps(epAddr);
+	return nRFUsbRegEpXfer(epAddr, pReg->pBuffer, mps);
+}
+
+bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint16_t Length)
+{
+	const uint8_t epAddr = USB_ENDPADDR_DIRIN(EpNo);
+	if (!nRFUsbValidDevNo(DevNo) || EpNo == 0U ||
+		EpNo >= USB_EPIN_CNT(0))
+	{
+		return false;
+	}
+
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epAddr);
+	return nRFUsbRegEpXfer(epAddr, pReg->pBuffer, Length);
+}
+
+bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+						 uint16_t Length)
+{
+	return nRFUsbValidDevNo(DevNo) && USB_ENDPADDR_NUM(EpAddr) == 0U &&
+		nRFUsbRegEpXfer(EpAddr, pBuffer, Length);
 }
 
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr)

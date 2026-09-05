@@ -119,6 +119,9 @@ typedef struct __Usb_Ctrlr_Evt {
 typedef void (*UsbCtrlrEvtHandler_t)(int DevNo, const UsbCtrlrEvt_t *pEvt,
 									 void *pContext);
 
+typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, uint16_t Length,
+									UsbCtrlrXferResult_t Result, void *pContext);
+
 /// What the generic layer hands the port at UsbCtrlrInit. Interrupt priority
 /// and suspend behaviour reach the hardware only through here, so the port
 /// needs them alongside the event callback.
@@ -189,20 +192,12 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpCloseAll(int DevNo);
 
-/**
- * @brief	Start one endpoint transfer.
- *
- * TotalBytes is the logical transfer length, not a DMA or FIFO limit. The
- * backend splits it as the hardware requires. pBuffer is controller transfer
- * storage owned by the caller and must stay valid until completion is
- * reported. It is never CFifo storage, which can be released sooner. A zero
- * length transfer is valid. One transfer per endpoint direction at a time.
- */
-bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-					uint16_t TotalBytes);
-
-/** @brief True while the endpoint direction has a transfer in flight. */
-bool UsbCtrlrEpBusy(int DevNo, uint8_t EpAddr);
+bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+						UsbCtrlrEpHandler_t Handler, void *pContext);
+bool UsbCtrlrEpRxArm(int DevNo, uint8_t EpNo);
+bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint16_t Length);
+bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+						 uint16_t Length);
 
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);
 

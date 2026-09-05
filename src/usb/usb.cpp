@@ -556,7 +556,7 @@ static bool UsbCoreStartStatus(void)
 	s_CtrlState = USB_ENDPADDR_IS_IN(epAddr) ?
 		USB_CTRL_STATUS_IN : USB_CTRL_STATUS_OUT;
 
-	if (!UsbCtrlrEpXfer(s_UsbDevNo, epAddr, nullptr, 0))
+	if (!UsbCtrlrEp0Xfer(s_UsbDevNo, epAddr, nullptr, 0))
 	{
 		UsbCoreStallControl();
 		return false;
@@ -591,7 +591,7 @@ static bool UsbCoreStartIn(const uint8_t *pData, uint16_t Available)
 		(sendLen % s_CoreCfg.Ep0Mps) == 0;
 	s_CtrlState = USB_CTRL_DATA_IN;
 
-	if (!UsbCtrlrEpXfer(s_UsbDevNo, USB_ENDPADDR_DIR_IN, s_CtrlData, sendLen))
+	if (!UsbCtrlrEp0Xfer(s_UsbDevNo, USB_ENDPADDR_DIR_IN, s_CtrlData, sendLen))
 	{
 		return false;
 	}
@@ -619,7 +619,7 @@ static bool UsbCoreStartOut(uint8_t *pData, uint16_t Capacity)
 	s_CtrlActual = 0;
 	s_CtrlState = USB_CTRL_DATA_OUT;
 
-	if (!UsbCtrlrEpXfer(s_UsbDevNo, USB_ENDPADDR_DIR_OUT, pData, s_Setup.wLength))
+	if (!UsbCtrlrEp0Xfer(s_UsbDevNo, USB_ENDPADDR_DIR_OUT, pData, s_Setup.wLength))
 	{
 		return false;
 	}
@@ -1174,7 +1174,7 @@ static void UsbCoreHandleCtrlXfer(const UsbCtrlrXferEvt_t *pXfer)
 			{
 				s_CtrlNeedZlp = false;
 				s_CtrlState = USB_CTRL_DATA_IN_ZLP;
-				if (!UsbCtrlrEpXfer(s_UsbDevNo, USB_ENDPADDR_DIR_IN, nullptr, 0))
+				if (!UsbCtrlrEp0Xfer(s_UsbDevNo, USB_ENDPADDR_DIR_IN, nullptr, 0))
 				{
 					UsbCoreStallControl();
 				}

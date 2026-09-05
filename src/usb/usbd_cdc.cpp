@@ -104,8 +104,7 @@ static void UsbdCdcNotifyPortState(UsbdCdcDev_t *pCdc, bool Open)
 static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 {
 	if (pCdc == nullptr || pCdc->pData->Mps == 0U ||
-		!pCdc->SerialStatePending ||
-		UsbCtrlrEpBusy(pCdc->DevNo, USBD_CDC_NOTIF_EP(pCdc->ItfNo)))
+		!pCdc->SerialStatePending)
 	{
 		return;
 	}
@@ -126,8 +125,9 @@ static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 
 	pCdc->SerialStatePending = false;
 
-	if (!UsbCtrlrEpXfer(pCdc->DevNo, USBD_CDC_NOTIF_EP(pCdc->ItfNo),
-						 pData, USBD_CDC_NOTIFY_LEN))
+	if (!UsbCtrlrEpSend(pCdc->DevNo,
+		USB_ENDPADDR_NUM(USBD_CDC_NOTIF_EP(pCdc->ItfNo)),
+		USBD_CDC_NOTIFY_LEN))
 	{
 		pCdc->SerialStatePending = true;
 	}
@@ -327,6 +327,26 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 	}
 }
 
+static void UsbdCdcNotifXfer(uint8_t, uint16_t,
+							 UsbCtrlrXferResult_t Result, void *pContext)
+{
+	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);
+
+	if (pCdc == nullptr)
+	{
+		return;
+	}
+
+	if (Result == USB_CTRLR_XFER_SUCCESS)
+	{
+		UsbdCdcNotifKick(pCdc);
+	}
+	else if (Result == USB_CTRLR_XFER_FAILED)
+	{
+		pCdc->SerialStatePending = true;
+	}
+}
+
 static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 						UsbCtrlrXferResult_t Result, void *pContext)
 {
@@ -340,19 +360,10 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 	if (USB_ENDPADDR_NUM(EpAddr) == pCdc->pData->EpNo)
 	{
 		UsbIntrfXferComplete(pCdc->pData, EpAddr, Length, Result);
-		return;
 	}
-
-	if (EpAddr == USBD_CDC_NOTIF_EP(pCdc->ItfNo))
+	else if (EpAddr == USBD_CDC_NOTIF_EP(pCdc->ItfNo))
 	{
-		if (Result == USB_CTRLR_XFER_SUCCESS)
-		{
-			UsbdCdcNotifKick(pCdc);
-		}
-		else if (Result == USB_CTRLR_XFER_FAILED)
-		{
-			pCdc->SerialStatePending = true;
-		}
+		UsbdCdcNotifXfer(EpAddr, Length, Result, pCdc);
 	}
 }
 
@@ -416,6 +427,12 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, UsbDevIntrf_t * const pData,
 	pCdc->SerialState = 0U;
 	UsbdCdcCancelBusState(pCdc);
 	UsbdCdcDefaultLineCoding(pCdc);
+
+	if (!UsbCtrlrEpRegister(pCdc->DevNo, USBD_CDC_NOTIF_EP(pCdc->ItfNo),
+		UsbdCdcNotifBuffer(pCdc), UsbdCdcNotifXfer, pCdc))
+	{
+		return false;
+	}
 
 	UsbFuncCfg_t coreCfg = {};
 	coreCfg.FirstInterface = USBD_CDC_CTRL_IF(pCfg->ItfNo);

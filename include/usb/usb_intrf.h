@@ -13,10 +13,12 @@ descriptors, configuration and class/vendor dispatch. The port handles endpoint
 registers, DMA/FIFO access and controller interrupts.
 
 The derived class supplies one RX and one TX controller buffer sized for its
-transfer type. On OUT completion UsbIntrf copies the RX buffer into hRxFifo and
-reuses the same controller buffer. On IN it copies queued TX data into the TX
-buffer before submitting it. Controller buffers therefore never alias CFifo
-storage that can be released while a transfer is active.
+transfer type. UsbIntrf registers both fixed buffers and its direct completion
+callback with the controller during initialization. On OUT completion UsbIntrf
+copies the RX buffer into hRxFifo and reuses the same controller buffer. On IN
+it copies queued TX data into the TX buffer before submitting it. Controller
+buffers therefore never alias CFifo storage that can be released while a
+transfer is active.
 
 UsbPktHdr_t.Length is the actual received data length and may be from zero to
 MPS. DeviceIntrfRx() may consume across packet blocks and present a byte
