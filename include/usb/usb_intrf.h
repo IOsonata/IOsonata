@@ -125,7 +125,8 @@ typedef struct __Usb_Interf_Config {
 
 typedef struct __Usb_Dev_Interf		UsbDevIntrf_t;
 
-typedef int (*EpSendFct_t)(UsbDevIntrf_t *pIntrf);
+/// True when queued data was consumed, including a zero-length packet.
+typedef bool (*EpSendFct_t)(UsbDevIntrf_t *pIntrf);
 
 struct __Usb_Dev_Interf {
 	int DevNo;					//!< USB controller number

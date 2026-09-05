@@ -45,6 +45,8 @@ SOFTWARE.
 #define BUFFER_SIZE	128U
 #define SLOTS		4U
 #define EP_NO		1U
+#define PACKET_SLOTS	3U
+#define PACKET_BLOCK_SIZE (sizeof(UsbPktHdr_t) + MPS)
 
 static uint8_t *s_OutBuf;
 static uint8_t *s_InBuf;
@@ -111,6 +113,8 @@ static int s_Fail;
 
 alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(SLOTS, BUFFER_SIZE)];
 alignas(4) static uint8_t s_TxMem[CFIFO_MEMSIZE(256)];
+alignas(4) static uint8_t s_TxPacketMem[
+	CFIFO_TOTAL_MEMSIZE(PACKET_SLOTS, PACKET_BLOCK_SIZE)];
 alignas(4) static uint8_t s_RxTransfer[BUFFER_SIZE];
 alignas(4) static uint8_t s_TxTransfer[BUFFER_SIZE];
 static UsbDevIntrf_t s_Intrf;
@@ -151,6 +155,38 @@ static bool Setup(void)
 	s_XferOk = true;
 	s_HighSpeed = false;
 	return UsbIntrfInit(&s_Intrf, &cfg) && UsbIntrfConfigure(&s_Intrf, MPS);
+}
+
+static bool SetupPacketMode(void)
+{
+	UsbIntrfCfg_t cfg = {};
+	cfg.DevNo = 0;
+	cfg.EpNo = EP_NO;
+	cfg.bBlocking = true;
+	cfg.pRxFifoMem = s_RxMem;
+	cfg.RxFifoMemSize = (int)sizeof(s_RxMem);
+	cfg.pTxFifoMem = s_TxPacketMem;
+	cfg.TxFifoMemSize = (int)sizeof(s_TxPacketMem);
+	cfg.TxFifoBlkSize = PACKET_BLOCK_SIZE;
+	cfg.BufferSize = BUFFER_SIZE;
+	cfg.pRxBuffer = s_RxTransfer;
+	cfg.pTxBuffer = s_TxTransfer;
+	memset(static_cast<void *>(&s_Intrf), 0, sizeof(s_Intrf));
+	s_OutBuf = nullptr;
+	s_InBuf = nullptr;
+	s_OutBusy = false;
+	s_InBusy = false;
+	s_OutSubmitCnt = 0;
+	s_InSubmitCnt = 0;
+	s_XferOk = true;
+	s_HighSpeed = false;
+	return UsbIntrfInit(&s_Intrf, &cfg) && UsbIntrfConfigure(&s_Intrf, MPS);
+}
+
+static UsbPkt_t *PacketAt(uint8_t *pBlocks, unsigned Index)
+{
+	return reinterpret_cast<UsbPkt_t *>(
+		pBlocks + Index * PACKET_BLOCK_SIZE);
 }
 
 static void TestGeometry(void)
@@ -416,29 +452,14 @@ static void TestTxAccumulatesDuringTransfer(void)
 
 static void TestTxPacketMode(void)
 {
-	constexpr uint32_t blockSize = sizeof(UsbPktHdr_t) + MPS;
-	UsbIntrfCfg_t cfg = {};
-	cfg.DevNo = 0;
-	cfg.EpNo = EP_NO;
-	cfg.pRxFifoMem = s_RxMem;
-	cfg.RxFifoMemSize = (int)sizeof(s_RxMem);
-	cfg.pTxFifoMem = s_TxMem;
-	cfg.TxFifoMemSize = (int)sizeof(s_TxMem);
-	cfg.TxFifoBlkSize = blockSize;
-	cfg.BufferSize = BUFFER_SIZE;
-	cfg.pRxBuffer = s_RxTransfer;
-	cfg.pTxBuffer = s_TxTransfer;
-	memset(static_cast<void *>(&s_Intrf), 0, sizeof(s_Intrf));
-	s_OutBusy = false;
-	s_InBusy = false;
-	s_InSubmitCnt = 0;
-	s_XferOk = true;
-	CHECK(UsbIntrfInit(&s_Intrf, &cfg));
-	CHECK(UsbIntrfConfigure(&s_Intrf, MPS));
+	CHECK(SetupPacketMode());
+	CHECK(UsbIntrfRequestToSend(&s_Intrf, PACKET_BLOCK_SIZE));
+	CHECK(UsbIntrfRequestToSend(&s_Intrf, PACKET_BLOCK_SIZE * 2U));
+	CHECK(!UsbIntrfRequestToSend(&s_Intrf, PACKET_BLOCK_SIZE - 1U));
 
-	alignas(4) uint8_t packets[blockSize * 2U] = {};
-	UsbPkt_t *p1 = reinterpret_cast<UsbPkt_t *>(packets);
-	UsbPkt_t *p2 = reinterpret_cast<UsbPkt_t *>(packets + blockSize);
+	alignas(4) uint8_t packets[PACKET_BLOCK_SIZE * 2U] = {};
+	UsbPkt_t *p1 = PacketAt(packets, 0);
+	UsbPkt_t *p2 = PacketAt(packets, 1);
 	p1->Hdr.Length = MPS;
 	p2->Hdr.Length = 3U;
 	memset(p1->Data, 0x5A, MPS);
@@ -450,36 +471,85 @@ static void TestTxPacketMode(void)
 		  (int)sizeof(packets));
 	CHECK(s_InBusy && s_InLen == MPS);
 	CHECK(memcmp(s_InBuf, p1->Data, MPS) == 0);
+	CHECK(CFifoUsed(s_Intrf.hTxFifo) == 1);
 	CompleteIn(MPS);
 	CHECK(s_InBusy && s_InLen == 3U);
 	CHECK(memcmp(s_InBuf, p2->Data, 3U) == 0);
 	CompleteIn(3U);
 	CHECK(!s_InBusy);
 
-	memset(packets, 0, blockSize);
-	p1->Hdr.Length = 0U;
-	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, packets, blockSize) ==
-		  (int)blockSize);
+	CHECK(CFifoUsed(s_Intrf.hTxFifo) == 0);
+}
+
+static void TestTxPacketZlp(void)
+{
+	CHECK(SetupPacketMode());
+
+	alignas(4) uint8_t packets[PACKET_BLOCK_SIZE * 3U] = {};
+	UsbPkt_t *p1 = PacketAt(packets, 0);
+	UsbPkt_t *zlp = PacketAt(packets, 1);
+	UsbPkt_t *p2 = PacketAt(packets, 2);
+	p1->Hdr.Length = 2U;
+	p1->Data[0] = 0x11U;
+	p1->Data[1] = 0x12U;
+	zlp->Hdr.Length = 0U;
+	p2->Hdr.Length = 1U;
+	p2->Data[0] = 0x21U;
+
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, packets, sizeof(packets)) ==
+		  (int)sizeof(packets));
+	CHECK(s_InBusy && s_InLen == 2U);
+	CHECK(memcmp(s_InBuf, p1->Data, 2U) == 0);
+	CompleteIn(2U);
 	CHECK(s_InBusy && s_InLen == 0U);
 	CompleteIn(0U);
+	CHECK(s_InBusy && s_InLen == 1U);
+	CHECK(s_InBuf[0] == p2->Data[0]);
+	CompleteIn(1U);
 	CHECK(!s_InBusy);
 }
 
-static void TestTooSmall(void)
+static void TestTxPacketFull(void)
 {
-	UsbIntrfCfg_t cfg = {};
-	cfg.DevNo = 0;
-	cfg.EpNo = EP_NO;
-	cfg.pRxFifoMem = s_RxMem;
-	cfg.RxFifoMemSize = 8;
-	cfg.pTxFifoMem = s_TxMem;
-	cfg.TxFifoMemSize = (int)sizeof(s_TxMem);
-	cfg.TxFifoBlkSize = 1U;
-	cfg.BufferSize = BUFFER_SIZE;
-	cfg.pRxBuffer = s_RxTransfer;
-	cfg.pTxBuffer = s_TxTransfer;
-	memset(static_cast<void *>(&s_Intrf), 0, sizeof(s_Intrf));
-	CHECK(!UsbIntrfInit(&s_Intrf, &cfg));
+	CHECK(SetupPacketMode());
+
+	alignas(4) uint8_t first[PACKET_BLOCK_SIZE] = {};
+	UsbPkt_t *pFirst = PacketAt(first, 0);
+	pFirst->Hdr.Length = 1U;
+	pFirst->Data[0] = 0x10U;
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, first, sizeof(first)) ==
+		  (int)sizeof(first));
+	CHECK(s_InBusy && s_InLen == 1U && s_InBuf[0] == 0x10U);
+
+	alignas(4) uint8_t queued[PACKET_BLOCK_SIZE * PACKET_SLOTS] = {};
+	for (unsigned i = 0; i < PACKET_SLOTS; i++)
+	{
+		UsbPkt_t *pkt = PacketAt(queued, i);
+		pkt->Hdr.Length = 1U;
+		pkt->Data[0] = (uint8_t)(0x20U + i);
+	}
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, queued, sizeof(queued)) ==
+		  (int)sizeof(queued));
+	CHECK(CFifoUsed(s_Intrf.hTxFifo) == (int)PACKET_SLOTS);
+	CHECK(!UsbIntrfRequestToSend(&s_Intrf, PACKET_BLOCK_SIZE));
+	CHECK(!UsbIntrfRequestToSend(&s_Intrf, PACKET_BLOCK_SIZE - 1U));
+	CHECK(s_InSubmitCnt == 1);
+	CHECK(s_InBuf[0] == 0x10U);
+	CHECK(CFifoUsed(s_Intrf.hTxFifo) == (int)PACKET_SLOTS);
+
+	alignas(4) uint8_t extra[PACKET_BLOCK_SIZE] = {};
+	PacketAt(extra, 0)->Hdr.Length = 1U;
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, extra, sizeof(extra)) == 0);
+	CHECK(CFifoUsed(s_Intrf.hTxFifo) == (int)PACKET_SLOTS);
+
+	for (unsigned i = 0; i < PACKET_SLOTS; i++)
+	{
+		CompleteIn(1U);
+		CHECK(s_InBusy && s_InLen == 1U);
+		CHECK(s_InBuf[0] == (uint8_t)(0x20U + i));
+	}
+	CompleteIn(1U);
+	CHECK(!s_InBusy);
 }
 
 struct Case { const char *Name; void (*Fn)(void); };
@@ -500,8 +570,9 @@ int main(void)
 		{ "disable then enable", TestDisableEnable },
 		{ "tx chaining", TestTxChaining },
 		{ "tx accumulates", TestTxAccumulatesDuringTransfer },
-		{ "tx packet mode", TestTxPacketMode },
-		{ "memory too small", TestTooSmall },
+		{ "tx packet boundaries", TestTxPacketMode },
+		{ "tx packet ZLP", TestTxPacketZlp },
+		{ "tx packet full", TestTxPacketFull },
 	};
 
 	for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
