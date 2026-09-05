@@ -833,7 +833,6 @@ static void nRFUsbPowerProcess(void)
 typedef bool atomic_flag;
 typedef bool atomic_bool;
 typedef uint_fast8_t atomic_uint_fast8_t;
-typedef uint_fast16_t atomic_uint_fast16_t;
 
 #define ATOMIC_FLAG_INIT false
 #define atomic_load(p) __atomic_load_n((p), __ATOMIC_SEQ_CST)
@@ -842,8 +841,6 @@ typedef uint_fast16_t atomic_uint_fast16_t;
 #define atomic_compare_exchange_strong(p, expected, desired) \
 	__atomic_compare_exchange_n((p), (expected), (desired), false, \
 		__ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
-#define atomic_fetch_or(p, v) __atomic_fetch_or((p), (v), __ATOMIC_SEQ_CST)
-#define atomic_fetch_and(p, v) __atomic_fetch_and((p), (v), __ATOMIC_SEQ_CST)
 #define atomic_flag_test_and_set(p) __atomic_exchange_n((p), true, __ATOMIC_SEQ_CST)
 #define atomic_flag_clear(p) __atomic_store_n((p), false, __ATOMIC_SEQ_CST)
 
@@ -883,10 +880,6 @@ typedef struct __nRF_Usbd_Ctrlr
 static nRFUsbdCtrlr_t s_Ctrlr;
 static atomic_flag s_DmaRunning = ATOMIC_FLAG_INIT;
 static atomic_uint_fast8_t s_DmaEpAddr;
-// One bit per endpoint direction remains set from queue publication through
-// EasyDMA completion. This enforces the queue-depth invariant in the
-// controller instead of relying on the interface transfer state.
-static atomic_uint_fast16_t s_DmaQueuedMask;
 static uint32_t s_DmaSavedInten;
 // Bit N identifies the deferred endpoint. Direction is kept by the separate
 // masks and the complete request is in Xfer[N][direction].
@@ -934,13 +927,6 @@ static inline __attribute__((always_inline))
 nRFUsbdXfer_t *nRFUsbdGetXfer(uint8_t EpAddr)
 {
 	return &s_Ctrlr.Xfer[USB_ENDPADDR_NUM(EpAddr)][nRFUsbdDir(EpAddr)];
-}
-
-static inline __attribute__((always_inline))
-uint32_t nRFUsbdEpBit(uint8_t EpAddr)
-{
-	return 1UL << (USB_ENDPADDR_NUM(EpAddr) +
-		(USB_ENDPADDR_IS_IN(EpAddr) ? NRFX_USBD_EP_COUNT : 0U));
 }
 
 /**
@@ -1008,14 +994,11 @@ static void nRFUsbdDmaRelease(void)
 {
 	const uint32_t primask = __get_PRIMASK();
 	__disable_irq();
-	const uint8_t epAddr = (uint8_t)atomic_load(&s_DmaEpAddr);
-
 	if (nrf52_errata_199())
 	{
 		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
 	}
 
-	atomic_fetch_and(&s_DmaQueuedMask, ~nRFUsbdEpBit(epAddr));
 	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
 	atomic_flag_clear(&s_DmaRunning);
 
@@ -1208,8 +1191,6 @@ static void nRFUsbdServicePending(void)
 				return;
 			}
 
-			atomic_fetch_and(&s_DmaQueuedMask, ~nRFUsbdEpBit(que.EpAddr));
-
 			if (USB_ENDPADDR_IS_IN(que.EpAddr))
 			{
 				// The request is consumed before the attempt. If the transfer
@@ -1271,33 +1252,16 @@ void nRFUsbdRequestService(void)
  * off because CFifoPut publishes the slot before the caller writes it, and
  * the interrupt is the other producer.
  */
-static bool nRFUsbdQueXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Len)
+static void nRFUsbdQueXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Len)
 {
-	const uint32_t epBit = nRFUsbdEpBit(EpAddr);
-	if ((atomic_fetch_or(&s_DmaQueuedMask, epBit) & epBit) != 0U)
-	{
-		return false;
-	}
-
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_hQue);
 
-	if (pQue != NULL)
-	{
-		pQue->EpAddr = EpAddr;
-		pQue->Len = Len;
-		pQue->pBuffer = pBuffer;
-	}
+	pQue->EpAddr = EpAddr;
+	pQue->Len = Len;
+	pQue->pBuffer = pBuffer;
 
 	EnableInterrupt(state);
-
-	if (pQue == NULL)
-	{
-		atomic_fetch_and(&s_DmaQueuedMask, ~epBit);
-		return false;
-	}
-
-	return true;
 }
 
 /** Remove one endpoint number without disturbing the order of other work. */
@@ -1321,9 +1285,6 @@ static void nRFUsbdQueRemoveEp(uint8_t EpNum)
 		*(nRFUsbdQue_t *)CFifoPut(s_hQue) = que;
 	}
 
-	atomic_fetch_and(&s_DmaQueuedMask,
-		~(nRFUsbdEpBit(EpNum) |
-		  nRFUsbdEpBit((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN))));
 	EnableInterrupt(state);
 }
 
@@ -1331,11 +1292,9 @@ static void nRFUsbdQueueOut(uint8_t EpNum)
 {
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
 
-	if (nRFUsbdQueXfer(EpNum, pXfer->pBuffer,
-					(uint16_t)(pXfer->TotalLen - pXfer->ActualLen)))
-	{
-		nRFUsbdRequestService();
-	}
+	nRFUsbdQueXfer(EpNum, pXfer->pBuffer,
+				 (uint16_t)(pXfer->TotalLen - pXfer->ActualLen));
+	nRFUsbdRequestService();
 }
 
 static void nRFUsbdQueueIn(uint8_t EpNum)
@@ -1344,12 +1303,9 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 	const uint16_t remaining =
 		(uint16_t)(pXfer->TotalLen - pXfer->ActualLen);
 
-	if (nRFUsbdQueXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN),
-					pXfer->pBuffer,
-					remaining < pXfer->Mps ? remaining : pXfer->Mps))
-	{
-		nRFUsbdRequestService();
-	}
+	nRFUsbdQueXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN), pXfer->pBuffer,
+				 remaining < pXfer->Mps ? remaining : pXfer->Mps);
+	nRFUsbdRequestService();
 }
 
 static void nRFUsbdQueueEp0Status(void)
@@ -1381,7 +1337,6 @@ static void nRFUsbdResetState(void)
 	atomic_store(&s_HostResumePending, false);
 	atomic_store(&s_MacAwake, true);
 	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
-	atomic_store(&s_DmaQueuedMask, 0U);
 	atomic_flag_clear(&s_DmaRunning);
 
 	if (nrf52_errata_199())
@@ -1782,9 +1737,11 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 		return false;
 	}
 
+	const uint32_t state = DisableInterrupt();
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
 	if (pXfer->Started || pXfer->Mps == 0)
 	{
+		EnableInterrupt(state);
 		return false;
 	}
 
@@ -1815,6 +1772,7 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 		nRFUsbdQueueOut(epNum);
 	}
 
+	EnableInterrupt(state);
 	return true;
 }
 
@@ -1997,12 +1955,6 @@ static void nRFUsbdHandleOutEnd(uint8_t EpNum)
 static void nRFUsbdHandleOutData(uint8_t EpNum)
 {
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
-	if ((atomic_load(&s_DmaQueuedMask) &
-		 nRFUsbdEpBit(EpNum)) != 0U)
-	{
-		return;
-	}
-
 	if (pXfer->Started &&
 		(pXfer->ActualLen < pXfer->TotalLen || pXfer->TotalLen == 0))
 	{
@@ -2019,9 +1971,7 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 {
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
 	const uint8_t epAddr = (uint8_t)(EpNum | USB_ENDPADDR_DIR_IN);
-	if (!pXfer->Started ||
-		(atomic_load(&s_DmaQueuedMask) &
-		 nRFUsbdEpBit(epAddr)) != 0U)
+	if (!pXfer->Started)
 	{
 		return;
 	}
