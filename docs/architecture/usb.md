@@ -254,11 +254,12 @@ interrupts. The generic layer owns no MCU-specific facts.
 The nRF52 USBD peripheral has one EasyDMA engine shared by every endpoint.
 The controller records complete DMA descriptors in a fixed CFifo and starts
 them in submission order. The queue has one slot for every IN and OUT endpoint
-direction, and an endpoint direction cannot submit another request until its
-current request completes, so the queue cannot overflow. ENDEP completion
-releases EasyDMA and services the next descriptor. Aborting endpoint zero
-removes only endpoint-zero descriptors; queued work for other endpoints is
-preserved.
+direction. A controller bitmask permits only one queued or active descriptor
+per endpoint direction, so the queue cannot overflow even if an endpoint-ready
+status is observed again. Only the USBD interrupt consumes the queue and starts
+EasyDMA. ENDEP completion releases EasyDMA and services the next descriptor.
+Aborting endpoint zero removes only endpoint-zero descriptors; queued work for
+other endpoints is preserved.
 
 EasyDMA also owns the nRF52 USBD register block while a transfer is active.
 Before STARTEP the controller saves the enabled interrupt mask and leaves only
