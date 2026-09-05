@@ -44,30 +44,12 @@ static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
 
 alignas(4) static EpSendFct_t s_EpSend = UsbIntrfEpSendByteMode;
 
-
 static inline __attribute__((always_inline))
 bool UsbIntrfEnabled(const UsbDevIntrf_t *pIntrf)
 {
 	return pIntrf != nullptr &&
 		atomic_load_explicit(&pIntrf->DevIntrf.EnCnt,
 							 memory_order_relaxed) > 0;
-}
-
-static uint8_t UsbIntrfRxAddr(const UsbDevIntrf_t *pIntrf)
-{
-	return USB_ENDPADDR_DIROUT(pIntrf->EpNo);
-}
-
-static inline __attribute__((always_inline))
-uint8_t UsbIntrfTxAddr(const UsbDevIntrf_t *pIntrf)
-{
-	return USB_ENDPADDR_DIRIN(pIntrf->EpNo);
-}
-
-static void UsbIntrfRxSubmit(UsbDevIntrf_t *pIntrf)
-{
-	(void)UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfRxAddr(pIntrf),
-						 pIntrf->pRxBuffer, pIntrf->Mps);
 }
 
 static void UsbIntrfRxArm(UsbDevIntrf_t *pIntrf)
@@ -79,7 +61,8 @@ static void UsbIntrfRxArm(UsbDevIntrf_t *pIntrf)
 		return;
 	}
 
-	UsbIntrfRxSubmit(pIntrf);
+	(void)UsbCtrlrEpXfer(pIntrf->DevNo, USB_ENDPADDR_DIROUT(pIntrf->EpNo),
+						 pIntrf->pRxBuffer, pIntrf->Mps);
 }
 
 static inline __attribute__((always_inline))
@@ -151,7 +134,7 @@ static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf)
 	}
 
 
-	if (UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfTxAddr(pIntrf), pIntrf->pTxBuffer,
+	if (UsbCtrlrEpXfer(pIntrf->DevNo, USB_ENDPADDR_DIRIN(pIntrf->EpNo), pIntrf->pTxBuffer,
 						(uint16_t)cnt) == false)
 	{
 		// A refusal by the controller is a fault, not an idle transmit. The packet
@@ -194,7 +177,7 @@ static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf)
 	}
 
 
-	if (UsbCtrlrEpXfer(pIntrf->DevNo, UsbIntrfTxAddr(pIntrf), pIntrf->pTxBuffer,
+	if (UsbCtrlrEpXfer(pIntrf->DevNo, USB_ENDPADDR_DIRIN(pIntrf->EpNo), pIntrf->pTxBuffer,
 						(uint16_t)cnt) == false)
 	{
 		// A refusal by the controller is a fault, not an idle transmit. The packet
@@ -581,7 +564,8 @@ static void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf, uint16_t Length,
 			const int used = CFifoUsed(pIntrf->hRxFifo);
 			if (used < pIntrf->hRxFifo->MaxIdxCnt)
 			{
-				UsbIntrfRxSubmit(pIntrf);
+				(void)UsbCtrlrEpXfer(pIntrf->DevNo, USB_ENDPADDR_DIROUT(pIntrf->EpNo),
+									 pIntrf->pRxBuffer, pIntrf->Mps);
 			}
 
 			if (used >= pIntrf->hRxFifo->MaxIdxCnt &&
