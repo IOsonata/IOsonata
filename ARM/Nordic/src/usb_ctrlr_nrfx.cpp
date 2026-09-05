@@ -1005,13 +1005,7 @@ static void nRFUsbdDmaRelease(void)
 	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
 	atomic_flag_clear(&s_DmaRunning);
 
-	if (dataIn)
-	{
-		// Restore the shared EPDATA source held while data IN owned EasyDMA.
-		// Any endpoint event raised during the copy remained latched.
-		NRF_USBD->INTENSET = USBD_INTEN_EPDATA_Msk;
-	}
-	else
+	if (!dataIn)
 	{
 		// OUT and EP0 mask unrelated USB interrupts while EasyDMA owns the
 		// register block. Those events stayed latched and are serviced now.
@@ -1033,14 +1027,9 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 
 	// Nordic specifies that most USBD registers cannot be accessed while
 	// EasyDMA is active. OUT and EP0 therefore keep only that DMA's END event
-	// and USBRESET enabled. Data IN finishes inside this controller interrupt
-	// and masks only the shared EPDATA source, preventing another endpoint from
-	// pending the USBD handler while the register block is unavailable.
-	if (dataIn)
-	{
-		NRF_USBD->INTENCLR = USBD_INTEN_EPDATA_Msk;
-	}
-	else
+	// and USBRESET enabled. Data IN finishes inside this controller interrupt,
+	// so it leaves the normal mask untouched and needs no second interrupt.
+	if (!dataIn)
 	{
 		s_DmaSavedInten = NRF_USBD->INTEN & NRFUSBD_IRQ_MASK;
 		NRF_USBD->INTENCLR = NRFUSBD_IRQ_MASK;
