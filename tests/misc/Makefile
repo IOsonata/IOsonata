@@ -75,7 +75,7 @@ HEADERS := \
 TARGETS := $(MEMCPY_TARGET) $(CFIFO_TARGET) $(THREAD_TARGET)
 
 .PHONY: all test test-gcc test-clang test-matrix bench compare thread \
-	thread-compare test-tsan clean
+	thread-compare test-tsan bench-memcpy bench-cfifo clean
 
 all: test
 
@@ -108,7 +108,13 @@ thread-compare: $(THREAD_TARGET) $(THREAD_OLD_TARGET) $(TSAN_TARGET) \
 		xargs -I{} echo "2021: {} race reports"
 
 bench: $(BENCH_TARGET)
-	./$(BENCH_TARGET) $(REPEATS)
+	./$(BENCH_TARGET) all $(REPEATS)
+
+bench-memcpy: $(BENCH_TARGET)
+	./$(BENCH_TARGET) memcpy $(REPEATS)
+
+bench-cfifo: $(BENCH_TARGET)
+	./$(BENCH_TARGET) cfifo $(REPEATS)
 
 # Correctness and timing for both versions, one after the other.
 compare: $(CMP_CUR_TARGET) $(CMP_OLD_TARGET)
