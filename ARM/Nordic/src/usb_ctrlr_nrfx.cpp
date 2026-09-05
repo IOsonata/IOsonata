@@ -997,8 +997,6 @@ static void nRFUsbdDmaRelease(void)
 
 static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 {
-	volatile uint32_t *pEndEvent = nRFUsbdDmaEndEvent(EpAddr);
-
 	if (nrf52_errata_199())
 	{
 		NRFX_USBD_ERRATA_199_REG = 0x00000082UL;
@@ -1007,7 +1005,7 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 	// Data IN normally completes without an ENDEPIN interrupt. A competing
 	// request enables it while this DMA is active so it gets an immediate
 	// wakeup; the event must therefore always start clear.
-	*pEndEvent = 0;
+	*nRFUsbdDmaEndEvent(EpAddr) = 0;
 	__ISB();
 	__DSB();
 
@@ -1015,15 +1013,6 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 	*pTask = 1;
 	__ISB();
 	__DSB();
-
-	// The nRF52 USBD block cannot safely accept other register accesses while
-	// EasyDMA is moving one packet between RAM and the endpoint buffer. Finish
-	// this short operation before returning to generic USB event processing.
-	// ENDEPIN/ENDEPOUT is the RAM transfer completion, not completion of the
-	// host transaction; the endpoint queue still arbitrates all directions.
-	while (*pEndEvent == 0U && NRF_USBD->EVENTS_USBRESET == 0U)
-	{
-	}
 }
 
 static void nRFUsbdDmaWait(void)
@@ -1752,6 +1741,14 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	if (pXfer->Started || pXfer->Mps == 0)
 	{
 		return false;
+	}
+
+	if (USB_ENDPADDR_IS_IN(EpAddr) && epNum > 0 &&
+		(NRF_USBD->EPDATASTATUS & (1UL << epNum)) != 0)
+	{
+		NRF_USBD->EPDATASTATUS = (1UL << epNum);
+		__ISB();
+		__DSB();
 	}
 
 	pXfer->pBuffer = pBuffer;
