@@ -260,6 +260,14 @@ releases EasyDMA and services the next descriptor. Aborting endpoint zero
 removes only endpoint-zero descriptors; queued work for other endpoints is
 preserved.
 
+EasyDMA also owns the nRF52 USBD register block while a transfer is active.
+Before STARTEP the controller saves the enabled interrupt mask and leaves only
+that transfer's ENDEP event plus USBRESET enabled. Other USB events remain
+latched in hardware. ENDEP releases EasyDMA, restores the interrupt mask and
+then processes those events. This keeps the queue asynchronous without either
+accessing unsupported USBD registers during DMA or busy-waiting for every
+packet.
+
 ## Function registration
 
 Each class or vendor function registers one `UsbFuncCfg_t` containing its
