@@ -181,6 +181,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/md5.h</locationURI>
 		</link>
 		<link>
+			<name>include/memcpy_fast.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/memcpy_fast.h</locationURI>
+		</link>
+		<link>
 			<name>include/miscdev</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -449,6 +454,11 @@
 			<name>src/md5.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/md5.c</locationURI>
+		</link>
+		<link>
+			<name>src/memcpy_fast.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/memcpy_fast.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/micro-ecc</name>
