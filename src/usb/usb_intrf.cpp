@@ -38,8 +38,8 @@ SOFTWARE.
 #include "usb/usb_intrf.h"
 
 
-static bool UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf);
-static bool UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
+static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf);
+static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
 
 static inline __attribute__((always_inline))
 bool UsbIntrfEnabled(const UsbDevIntrf_t *pIntrf)
@@ -93,7 +93,7 @@ static void UsbIntrfTxFailure(UsbDevIntrf_t *pIntrf, uint16_t Length)
 	}
 }
 
-static bool UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf)
+static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf)
 {
 	int cnt = 0;
 	int length = pIntrf->Mps;
@@ -127,7 +127,7 @@ static bool UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf)
 	{
 		UsbIntrfSetTxIdle(pIntrf);
 
-		return false;
+		return -1;
 	}
 
 
@@ -141,21 +141,21 @@ static bool UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf)
 		UsbIntrfTxFailure(pIntrf, (uint16_t)cnt);
 	}
 
-	return true;
+	return cnt;
 }
 
-static bool UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf)
+static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf)
 {
 	UsbPkt_t *pkt = reinterpret_cast<UsbPkt_t *>(CFifoPeek(pIntrf->hTxFifo));
 
 	if (pkt == nullptr)
 	{
 		UsbIntrfSetTxIdle(pIntrf);
-		return false;
+		return -1;
 	}
 
-	uint16_t cnt = pkt->Hdr.Length;
-	if (cnt > 0U)
+	int cnt = pkt->Hdr.Length;
+	if (cnt > 0)
 	{
 		memcpy(pIntrf->pTxBuffer, pkt->Data, cnt);
 	}
@@ -168,10 +168,10 @@ static bool UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf)
 		// is still staged in the buffer, so releasing the token here would let the
 		// next submission overwrite it. Report and hold until configure or
 		// unconfigure puts the endpoint back to a known state.
-		UsbIntrfTxFailure(pIntrf, cnt);
+		UsbIntrfTxFailure(pIntrf, (uint16_t)cnt);
 	}
 
-	return true;
+	return cnt;
 }
 
 
@@ -605,12 +605,10 @@ static void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 		return;
 	}
 
-	if (pIntrf->EpSend(pIntrf))
+	if (pIntrf->EpSend(pIntrf) >= 0)
 	{
 		return;
 	}
-
-	UsbIntrfSetTxIdle(pIntrf);
 
 	if (pIntrf->DevIntrf.EvtCB != nullptr)
 	{
