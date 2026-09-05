@@ -112,6 +112,7 @@ static const UsbCfg_t s_UsbCfg = {
 
 UsbdCdc g_LoopbackCdc;
 UsbdCdc g_PrbsCdc;
+static atomic_bool s_LoopbackSessionStart = true;
 
 static int LoopbackEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 							  uint8_t *pBuffer, int Len)
@@ -123,6 +124,7 @@ static int LoopbackEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 	{
 		const char *msg = "\r\nIOsonata USB Dual CDC Loopback\r\n";
 
+		atomic_store(&s_LoopbackSessionStart, true);
 		g_LoopbackCdc.Tx(0, reinterpret_cast<const uint8_t *>(msg),
 						 (int)strlen(msg));
 	}
@@ -174,6 +176,14 @@ int main()
 
 			if (length > 0)
 			{
+				// Each host test starts its loopback PRBS from the same seed.
+				// The device remains running across serial-port reopen, so reset
+				// the checker at the first data from each new CDC session.
+				if (atomic_exchange(&s_LoopbackSessionStart, false))
+				{
+					loopbackExpected = Prbs8(0xff);
+				}
+
 				for (int i = 0; i < length; i++)
 				{
 					if (loopbackBuffer[i] != loopbackExpected)
