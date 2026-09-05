@@ -133,7 +133,9 @@ static int LoopbackEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 int main()
 {
 	uint8_t loopbackBuffer[BUFFER_SIZE];
+	uint8_t loopbackExpected = Prbs8(0xff);
 	uint8_t prbs = 0xff;
+	uint32_t loopbackRxErrorNotify = 0;
 	int loopbackPending = 0;
 	int loopbackOffset = 0;
 
@@ -172,16 +174,34 @@ int main()
 
 			if (length > 0)
 			{
+				for (int i = 0; i < length; i++)
+				{
+					if (loopbackBuffer[i] != loopbackExpected)
+					{
+						loopbackRxErrorNotify++;
+					}
+					loopbackExpected = Prbs8(loopbackBuffer[i]);
+				}
+
 				loopbackPending = length;
 				loopbackOffset = 0;
 			}
 		}
 
-		// Advance the PRBS only after this byte has entered the CDC TX CFifo.
-		// The endpoint completion interrupt drains that FIFO independently.
-		if (g_PrbsCdc.IsPortOpen() && g_PrbsCdc.Tx(0, &prbs, 1) > 0)
+		// Zero never occurs in this PRBS sequence. Send one zero for every
+		// discontinuity already observed at the loopback RX boundary, allowing
+		// the host test to distinguish an OUT loss from a later IN loss.
+		uint8_t prbsByte = loopbackRxErrorNotify > 0U ? 0U : prbs;
+		if (g_PrbsCdc.IsPortOpen() && g_PrbsCdc.Tx(0, &prbsByte, 1) > 0)
 		{
-			prbs = Prbs8(prbs);
+			if (loopbackRxErrorNotify > 0U)
+			{
+				loopbackRxErrorNotify--;
+			}
+			else
+			{
+				prbs = Prbs8(prbs);
+			}
 		}
 	}
 

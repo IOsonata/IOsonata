@@ -83,6 +83,25 @@ def check_stream(data, expected):
     return expected, errors
 
 
+def check_prbs_stream(data, expected):
+    errors = 0
+    target_rx_errors = 0
+
+    for value in data:
+        # PRBS8() produces only 1..127. The target inserts zero when its
+        # loopback RX checker sees a discontinuity, without advancing PRBS.
+        if value == 0:
+            target_rx_errors += 1
+            continue
+
+        if expected is not None and value != expected:
+            errors += 1
+
+        expected = prbs8(value)
+
+    return expected, errors, target_rx_errors
+
+
 class TestStats:
     def __init__(self):
         self.lock = threading.Lock()
@@ -91,6 +110,7 @@ class TestStats:
         self.loop_errors = 0
         self.prbs_rx = 0
         self.prbs_errors = 0
+        self.target_rx_errors = 0
         self.io_error = None
 
     def add_loop_tx(self, count):
@@ -102,10 +122,11 @@ class TestStats:
             self.loop_rx += count
             self.loop_errors += errors
 
-    def add_prbs_rx(self, count, errors):
+    def add_prbs_rx(self, count, errors, target_rx_errors):
         with self.lock:
             self.prbs_rx += count
             self.prbs_errors += errors
+            self.target_rx_errors += target_rx_errors
 
     def set_io_error(self, source, error):
         with self.lock:
@@ -115,7 +136,8 @@ class TestStats:
     def snapshot(self):
         with self.lock:
             return (self.loop_tx, self.loop_rx, self.loop_errors,
-                    self.prbs_rx, self.prbs_errors, self.io_error)
+                    self.prbs_rx, self.prbs_errors, self.target_rx_errors,
+                    self.io_error)
 
 
 def parse_args():
@@ -244,8 +266,9 @@ def prbs_reader(comm, stop_event, abort_event, stats, read_size):
             return
 
         if data:
-            expected, errors = check_stream(data, expected)
-            stats.add_prbs_rx(len(data), errors)
+            expected, errors, target_rx_errors = check_prbs_stream(
+                data, expected)
+            stats.add_prbs_rx(len(data), errors, target_rx_errors)
 
 
 def open_serial(port, baud):
@@ -334,7 +357,8 @@ def main():
             while time.monotonic() < end_time and not abort_event.is_set():
                 time.sleep(0.02)
                 now = time.monotonic()
-                loop_tx, loop_rx, loop_errors, prbs_rx, prbs_errors, _ = \
+                loop_tx, loop_rx, loop_errors, prbs_rx, prbs_errors, \
+                    target_rx_errors, _ = \
                     stats.snapshot()
 
                 if loop_rx != observed_loop_rx:
@@ -361,9 +385,10 @@ def main():
 
                     print(
                         "Loop Tx/Rx B/s : %.2f / %.2f, errors %d, "
-                        "pending %d | PRBS Rx B/s : %.2f, errors %d" %
+                        "pending %d | PRBS Rx B/s : %.2f, errors %d, "
+                        "target RX errors %d" %
                         (loop_tx_rate, loop_rx_rate, loop_errors, pending,
-                         prbs_rx_rate, prbs_errors),
+                         prbs_rx_rate, prbs_errors, target_rx_errors),
                         flush=True)
 
                     report_time = now
@@ -387,7 +412,7 @@ def main():
         if not abort_event.is_set():
             drain_deadline = time.monotonic() + args.drain_timeout
             while time.monotonic() < drain_deadline:
-                loop_tx, loop_rx, _, _, _, _ = stats.snapshot()
+                loop_tx, loop_rx, _, _, _, _, _ = stats.snapshot()
                 if loop_rx >= loop_tx:
                     break
                 time.sleep(0.01)
@@ -398,9 +423,10 @@ def main():
             if thread.is_alive():
                 stats.set_io_error("serial read", "reader did not stop")
 
-        loop_tx, loop_rx, loop_errors, prbs_rx, prbs_errors, io_error = \
+        loop_tx, loop_rx, loop_errors, prbs_rx, prbs_errors, \
+            target_rx_errors, io_error = \
             stats.snapshot()
-        active_loop_tx, active_loop_rx, _, active_prbs_rx, _, _ = \
+        active_loop_tx, active_loop_rx, _, active_prbs_rx, _, _, _ = \
             active_snapshot
         elapsed = active_end - start_time
         loop_tx_rate = active_loop_tx / elapsed if elapsed > 0 else 0.0
@@ -417,6 +443,7 @@ def main():
         print("PRBS RX bytes  : %d" % prbs_rx)
         print("PRBS RX B/sec  : %.2f" % prbs_rx_rate)
         print("PRBS errors    : %d" % prbs_errors)
+        print("Target RX errors: %d" % target_rx_errors)
 
         if stall_error is not None:
             print("Stall error    : %s" % stall_error)
@@ -425,7 +452,7 @@ def main():
 
         passed = (io_error is None and stall_error is None and
                   loop_tx > 0 and loop_rx == loop_tx and loop_errors == 0 and
-                  prbs_rx > 0 and prbs_errors == 0)
+                  prbs_rx > 0 and prbs_errors == 0 and target_rx_errors == 0)
         print("Result         : %s" % ("PASS" if passed else "FAIL"))
         return 0 if passed else 1
     finally:
