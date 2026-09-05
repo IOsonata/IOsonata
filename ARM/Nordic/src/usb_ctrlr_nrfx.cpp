@@ -1237,21 +1237,18 @@ static void nRFUsbdServicePending(void)
 	}
 }
 
+/**
+ * DMA requests are consumed only by USBD_IRQHandler. This keeps queue
+ * consumption and every EasyDMA register write in one execution context.
+ * The handler services requests queued by its callbacks before it returns.
+ */
 static inline __attribute__((always_inline))
-bool nRFUsbdDeferFromInterrupt(void)
+void nRFUsbdRequestService(void)
 {
-	const uint32_t exception = __get_IPSR();
-	if (exception == 0U)
-	{
-		return false;
-	}
-
-	if (exception != (uint32_t)USBD_IRQn + 16U)
+	if (__get_IPSR() != (uint32_t)USBD_IRQn + 16U)
 	{
 		NVIC_SetPendingIRQ(USBD_IRQn);
 	}
-
-	return true;
 }
 
 /**
@@ -1304,12 +1301,7 @@ static void nRFUsbdQueueOut(uint8_t EpNum)
 
 	nRFUsbdQueXfer(EpNum, pXfer->pBuffer,
 				 (uint16_t)(pXfer->TotalLen - pXfer->ActualLen));
-
-	if (nRFUsbdDeferFromInterrupt())
-	{
-		return;
-	}
-	nRFUsbdServicePending();
+	nRFUsbdRequestService();
 }
 
 static void nRFUsbdQueueIn(uint8_t EpNum)
@@ -1320,32 +1312,19 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 
 	nRFUsbdQueXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN), pXfer->pBuffer,
 				 remaining < pXfer->Mps ? remaining : pXfer->Mps);
-
-	if (nRFUsbdDeferFromInterrupt())
-	{
-		return;
-	}
-	nRFUsbdServicePending();
+	nRFUsbdRequestService();
 }
 
 static void nRFUsbdQueueEp0Status(void)
 {
 	atomic_store(&s_PendingEp0Status, true);
-	if (nRFUsbdDeferFromInterrupt())
-	{
-		return;
-	}
-	nRFUsbdServicePending();
+	nRFUsbdRequestService();
 }
 
 static void nRFUsbdQueueEp0RcvOut(void)
 {
 	atomic_store(&s_PendingEp0RcvOut, true);
-	if (nRFUsbdDeferFromInterrupt())
-	{
-		return;
-	}
-	nRFUsbdServicePending();
+	nRFUsbdRequestService();
 }
 
 static void nRFUsbdResetState(void)
