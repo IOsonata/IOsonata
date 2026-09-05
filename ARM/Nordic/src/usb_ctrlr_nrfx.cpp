@@ -997,11 +997,6 @@ static void nRFUsbdDmaRelease(void)
 
 static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 {
-	if (nrf52_errata_199())
-	{
-		NRFX_USBD_ERRATA_199_REG = 0x00000082UL;
-	}
-
 	// Data IN normally completes without an ENDEPIN interrupt. A competing
 	// request enables it while this DMA is active so it gets an immediate
 	// wakeup; the event must therefore always start clear.
@@ -1013,6 +1008,13 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 	*pTask = 1;
 	__ISB();
 	__DSB();
+
+	// Errata 199 must be enabled after STARTEP. Setting it before the task can
+	// prevent USBD from capturing the DMA request, leaving no END event.
+	if (nrf52_errata_199())
+	{
+		NRFX_USBD_ERRATA_199_REG = 0x00000082UL;
+	}
 }
 
 static void nRFUsbdDmaWait(void)
