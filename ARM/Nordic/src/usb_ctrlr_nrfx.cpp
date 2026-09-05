@@ -1017,14 +1017,17 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 {
 	const uint32_t primask = __get_PRIMASK();
 	__disable_irq();
+	const bool waitForEnd = USB_ENDPADDR_IS_IN(EpAddr) &&
+		USB_ENDPADDR_NUM(EpAddr) != 0U;
 
 	// Nordic specifies that most USBD registers cannot be accessed while
-	// EasyDMA is active. Keep only this DMA's END event and USBRESET enabled;
-	// every other event remains latched until nRFUsbdDmaRelease restores INTEN.
+	// EasyDMA is active. OUT and EP0 complete asynchronously, so keep only that
+	// DMA's END event and USBRESET enabled. Data IN waits for END below and does
+	// not need another interrupt before EPDATA reports host consumption.
 	s_DmaSavedInten = NRF_USBD->INTEN & NRFUSBD_IRQ_MASK;
 	NRF_USBD->INTENCLR = NRFUSBD_IRQ_MASK;
-	NRF_USBD->INTENSET =
-		nRFUsbdDmaEndMask(EpAddr) | USBD_INTEN_USBRESET_Msk;
+	NRF_USBD->INTENSET = USBD_INTEN_USBRESET_Msk |
+		(waitForEnd ? 0U : nRFUsbdDmaEndMask(EpAddr));
 
 	*nRFUsbdDmaEndEvent(EpAddr) = 0;
 	__ISB();
@@ -1035,14 +1038,29 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 	__ISB();
 	__DSB();
 
-	// Errata 199 must be enabled after STARTEP. Setting it before the task can
-	// prevent USBD from capturing the DMA request, leaving no END event.
 	if (nrf52_errata_199())
 	{
 		NRFX_USBD_ERRATA_199_REG = 0x00000082UL;
 	}
 
 	__set_PRIMASK(primask);
+
+	if (waitForEnd)
+	{
+		volatile uint32_t *pEndEvent = nRFUsbdDmaEndEvent(EpAddr);
+		while (*pEndEvent == 0U && NRF_USBD->EVENTS_USBRESET == 0U)
+		{
+		}
+
+		if (*pEndEvent != 0U)
+		{
+			*pEndEvent = 0;
+			__ISB();
+			__DSB();
+		}
+
+		nRFUsbdDmaRelease();
+	}
 }
 
 static void nRFUsbdDmaWait(void)
@@ -1188,7 +1206,19 @@ static void nRFUsbdServicePending(void)
 
 			if (nRFUsbdStartDmaNow(&que))
 			{
-				return;
+				if (nRFUsbdDmaActive())
+				{
+					return;
+				}
+
+				// Data IN completes its short EasyDMA copy synchronously. A reset
+				// observed during that wait must be handled before more queued work.
+				if (NRF_USBD->EVENTS_USBRESET != 0U)
+				{
+					return;
+				}
+
+				continue;
 			}
 
 			if (USB_ENDPADDR_IS_IN(que.EpAddr))

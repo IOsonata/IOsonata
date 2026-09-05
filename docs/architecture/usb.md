@@ -262,6 +262,11 @@ endpoint-zero descriptors; queued work for other endpoints is preserved.
 The controller serializes the endpoint state transition and descriptor
 publication, so the CFifo is the sole record of pending DMA work.
 
+Data IN waits for its short EasyDMA copy to endpoint RAM inside the controller
+interrupt, releases DMA, and continues the queue immediately. This avoids an
+extra ENDEPIN interrupt for every packet; EPDATA still reports when the host
+consumes the packet. OUT and endpoint zero retain asynchronous END handling.
+
 EasyDMA also owns the nRF52 USBD register block while a transfer is active.
 Before STARTEP the controller saves the enabled interrupt mask and leaves only
 that transfer's ENDEP event plus USBRESET enabled. Other USB events remain
