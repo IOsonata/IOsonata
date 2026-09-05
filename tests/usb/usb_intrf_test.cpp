@@ -238,12 +238,20 @@ static void TestWholePackets(void)
 static void TestZlp(void)
 {
 	CHECK(Setup());
+	uint8_t full[MPS];
+	for (uint32_t i = 0; i < sizeof(full); i++)
+	{
+		full[i] = (uint8_t)i;
+	}
+	Deliver(full, sizeof(full));
 	Deliver(nullptr, 0);
 	const uint8_t in[2] = { 'x', 'y' };
 	Deliver(in, sizeof(in));
-	uint8_t out[4] = {};
-	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 2);
-	CHECK(memcmp(out, in, sizeof(in)) == 0);
+	uint8_t out[MPS + sizeof(in)] = {};
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) ==
+		  (int)sizeof(out));
+	CHECK(memcmp(out, full, sizeof(full)) == 0);
+	CHECK(memcmp(out + sizeof(full), in, sizeof(in)) == 0);
 	CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
 }
 
@@ -489,24 +497,27 @@ static void TestTxPacketZlp(void)
 	UsbPkt_t *p1 = PacketAt(packets, 0);
 	UsbPkt_t *zlp = PacketAt(packets, 1);
 	UsbPkt_t *p2 = PacketAt(packets, 2);
-	p1->Hdr.Length = 2U;
-	p1->Data[0] = 0x11U;
-	p1->Data[1] = 0x12U;
+	p1->Hdr.Length = MPS;
+	memset(p1->Data, 0x11, MPS);
 	zlp->Hdr.Length = 0U;
 	p2->Hdr.Length = 1U;
 	p2->Data[0] = 0x21U;
 
 	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, packets, sizeof(packets)) ==
 		  (int)sizeof(packets));
-	CHECK(s_InBusy && s_InLen == 2U);
-	CHECK(memcmp(s_InBuf, p1->Data, 2U) == 0);
-	CompleteIn(2U);
+	CHECK(s_InBusy && s_InLen == MPS);
+	CHECK(memcmp(s_InBuf, p1->Data, MPS) == 0);
+	CHECK(!atomic_load(&s_Intrf.DevIntrf.bTxReady));
+	CompleteIn(MPS);
 	CHECK(s_InBusy && s_InLen == 0U);
+	CHECK(!atomic_load(&s_Intrf.DevIntrf.bTxReady));
 	CompleteIn(0U);
 	CHECK(s_InBusy && s_InLen == 1U);
 	CHECK(s_InBuf[0] == p2->Data[0]);
+	CHECK(!atomic_load(&s_Intrf.DevIntrf.bTxReady));
 	CompleteIn(1U);
 	CHECK(!s_InBusy);
+	CHECK(atomic_load(&s_Intrf.DevIntrf.bTxReady));
 }
 
 static void TestTxPacketFull(void)
