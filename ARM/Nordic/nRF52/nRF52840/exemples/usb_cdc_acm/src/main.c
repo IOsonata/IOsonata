@@ -110,14 +110,17 @@ static void TxStart(void)
 		return;
 	}
 
+	// Publish the in-flight state before starting the USB transfer. TX_DONE
+	// runs in interrupt context and can otherwise complete a short transfer
+	// before the foreground marks it active, leaving the ring read reserved.
+	s_TxLength = len;
+	s_TxActive = true;
+
 	ret = app_usbd_cdc_acm_write(&s_Cdc, pData, len);
-	if (ret == NRF_SUCCESS)
+	if (ret != NRF_SUCCESS)
 	{
-		s_TxLength = len;
-		s_TxActive = true;
-	}
-	else
-	{
+		s_TxLength = 0;
+		s_TxActive = false;
 		// Release the ring read reservation without consuming data.
 		(void)nrf_ringbuf_free(&s_TxRing, 0);
 	}
