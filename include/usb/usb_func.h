@@ -71,28 +71,16 @@ typedef struct __Usb_Func_Allocation {
 
 #pragma pack(pop)
 
-static inline unsigned UsbFuncPopCount(uint16_t Mask)
-{
-	unsigned count = 0;
-
-	while (Mask != 0U)
-	{
-		count += Mask & 1U;
-		Mask >>= 1;
-	}
-
-	return count;
-}
-
-static inline uint16_t UsbFuncEpMask(unsigned Count)
-{
-	if (Count >= 16U)
-	{
-		return 0xfffeU;
-	}
-
-	return (uint16_t)(((1UL << Count) - 1UL) & ~1UL);
-}
+typedef struct __Usb_Func_Alloc_State {
+	int DevNo;
+	const UsbFuncReq_t *pReq;
+	const UsbFuncCfg_t *pCfg;
+	UsbFuncAlloc_t *pAlloc;
+	uint8_t FirstInterface;
+	uint8_t InLimit;
+	uint8_t OutLimit;
+	uint8_t PairLimit;
+} UsbFuncAllocState_t;
 
 static inline void UsbFuncStoreEndpoints(uint8_t *pEp, unsigned Count,
 										 uint16_t Mask)
@@ -108,6 +96,109 @@ static inline void UsbFuncStoreEndpoints(uint8_t *pEp, unsigned Count,
 	}
 }
 
+static inline bool UsbFuncTryOut(const UsbFuncAllocState_t *pState,
+								 uint8_t Needed, uint8_t StartEp,
+								 uint16_t InMask, uint16_t PairMask,
+								 uint16_t OutMask)
+{
+	if (Needed == 0U)
+	{
+		UsbFuncCfg_t cfg = *pState->pCfg;
+		cfg.FirstInterface = pState->FirstInterface;
+		cfg.InterfaceCount = pState->pReq->InterfaceCount;
+		cfg.EpInMask = InMask | PairMask;
+		cfg.EpOutMask = OutMask | PairMask;
+
+		if (!UsbRegisterFunc(pState->DevNo, &cfg))
+		{
+			return false;
+		}
+
+		memset(pState->pAlloc, 0, sizeof(*pState->pAlloc));
+		pState->pAlloc->FirstInterface = pState->FirstInterface;
+		UsbFuncStoreEndpoints(pState->pAlloc->Bidirectional,
+			pState->pReq->BidirectionalCount, PairMask);
+		UsbFuncStoreEndpoints(pState->pAlloc->In,
+			pState->pReq->InCount, InMask);
+		UsbFuncStoreEndpoints(pState->pAlloc->Out,
+			pState->pReq->OutCount, OutMask);
+		return true;
+	}
+
+	for (uint8_t ep = StartEp; ep < pState->OutLimit; ep++)
+	{
+		const uint16_t bit = (uint16_t)(1U << ep);
+
+		if ((PairMask & bit) != 0U)
+		{
+			continue;
+		}
+
+		if (UsbFuncTryOut(pState, (uint8_t)(Needed - 1U),
+							  (uint8_t)(ep + 1U), InMask, PairMask,
+							  OutMask | bit))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static inline bool UsbFuncTryPair(const UsbFuncAllocState_t *pState,
+								  uint8_t Needed, uint8_t StartEp,
+								  uint16_t InMask, uint16_t PairMask)
+{
+	if (Needed == 0U)
+	{
+		return UsbFuncTryOut(pState, pState->pReq->OutCount, 1U,
+							 InMask, PairMask, 0U);
+	}
+
+	for (uint8_t ep = StartEp; ep < pState->PairLimit; ep++)
+	{
+		const uint16_t bit = (uint16_t)(1U << ep);
+
+		if ((InMask & bit) != 0U)
+		{
+			continue;
+		}
+
+		if (UsbFuncTryPair(pState, (uint8_t)(Needed - 1U),
+							   (uint8_t)(ep + 1U), InMask,
+							   PairMask | bit))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static inline bool UsbFuncTryIn(const UsbFuncAllocState_t *pState,
+								uint8_t Needed, uint8_t StartEp,
+								uint16_t InMask)
+{
+	if (Needed == 0U)
+	{
+		return UsbFuncTryPair(pState, pState->pReq->BidirectionalCount,
+							  1U, InMask, 0U);
+	}
+
+	for (uint8_t ep = StartEp; ep < pState->InLimit; ep++)
+	{
+		const uint16_t bit = (uint16_t)(1U << ep);
+
+		if (UsbFuncTryIn(pState, (uint8_t)(Needed - 1U),
+							 (uint8_t)(ep + 1U), InMask | bit))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 /**
  * @brief	Allocate and register one USB function.
  *
@@ -121,8 +212,7 @@ static inline bool UsbRegisterFuncAuto(int DevNo, const UsbFuncReq_t *pReq,
 									  UsbFuncAlloc_t *pAlloc)
 {
 	if (pReq == nullptr || pCfg == nullptr || pAlloc == nullptr ||
-		DevNo != 0 ||
-		pReq->InterfaceCount > 16U ||
+		DevNo != 0 || pReq->InterfaceCount > 16U ||
 		pReq->BidirectionalCount > USB_FUNC_EP_MAXCNT ||
 		pReq->InCount > USB_FUNC_EP_MAXCNT ||
 		pReq->OutCount > USB_FUNC_EP_MAXCNT)
@@ -130,71 +220,35 @@ static inline bool UsbRegisterFuncAuto(int DevNo, const UsbFuncReq_t *pReq,
 		return false;
 	}
 
-	const unsigned inCount = USB_EPIN_CNT(0) > 16 ? 16U : USB_EPIN_CNT(0);
-	const unsigned outCount = USB_EPOUT_CNT(0) > 16 ? 16U : USB_EPOUT_CNT(0);
-	const uint16_t inAvail = UsbFuncEpMask(inCount);
-	const uint16_t outAvail = UsbFuncEpMask(outCount);
-	const uint16_t pairAvail = inAvail & outAvail;
+	const uint8_t inLimit = USB_EPIN_CNT(0) < 16 ? USB_EPIN_CNT(0) : 16U;
+	const uint8_t outLimit = USB_EPOUT_CNT(0) < 16 ? USB_EPOUT_CNT(0) : 16U;
+	const uint8_t pairLimit = inLimit < outLimit ? inLimit : outLimit;
 
-	if ((unsigned)pReq->BidirectionalCount + pReq->InCount > inCount - 1U ||
-		(unsigned)pReq->BidirectionalCount + pReq->OutCount > outCount - 1U)
+	if (inLimit < 1U || outLimit < 1U ||
+		(unsigned)pReq->BidirectionalCount + pReq->InCount >
+			(unsigned)inLimit - 1U ||
+		(unsigned)pReq->BidirectionalCount + pReq->OutCount >
+			(unsigned)outLimit - 1U)
 	{
 		return false;
 	}
 
-	const unsigned lastFirst = 16U - pReq->InterfaceCount;
+	UsbFuncAllocState_t state = {};
+	state.DevNo = DevNo;
+	state.pReq = pReq;
+	state.pCfg = pCfg;
+	state.pAlloc = pAlloc;
+	state.InLimit = inLimit;
+	state.OutLimit = outLimit;
+	state.PairLimit = pairLimit;
 
+	const unsigned lastFirst = 16U - pReq->InterfaceCount;
 	for (unsigned first = 0; first <= lastFirst; first++)
 	{
-		for (uint32_t inValue = 0; inValue <= inAvail; inValue++)
+		state.FirstInterface = (uint8_t)first;
+		if (UsbFuncTryIn(&state, pReq->InCount, 1U, 0U))
 		{
-			const uint16_t inMask = (uint16_t)inValue;
-			if ((inMask & (uint16_t)~inAvail) != 0U ||
-				UsbFuncPopCount(inMask) != pReq->InCount)
-			{
-				continue;
-			}
-
-			for (uint32_t pairValue = 0; pairValue <= pairAvail; pairValue++)
-			{
-				const uint16_t pairMask = (uint16_t)pairValue;
-				if ((pairMask & (uint16_t)~pairAvail) != 0U ||
-					(pairMask & inMask) != 0U ||
-					UsbFuncPopCount(pairMask) != pReq->BidirectionalCount)
-				{
-					continue;
-				}
-
-				for (uint32_t outValue = 0; outValue <= outAvail; outValue++)
-				{
-					const uint16_t outMask = (uint16_t)outValue;
-					if ((outMask & (uint16_t)~outAvail) != 0U ||
-						(outMask & pairMask) != 0U ||
-						UsbFuncPopCount(outMask) != pReq->OutCount)
-					{
-						continue;
-					}
-
-					UsbFuncCfg_t cfg = *pCfg;
-					cfg.FirstInterface = (uint8_t)first;
-					cfg.InterfaceCount = pReq->InterfaceCount;
-					cfg.EpInMask = pairMask | inMask;
-					cfg.EpOutMask = pairMask | outMask;
-
-					if (!UsbRegisterFunc(DevNo, &cfg))
-					{
-						continue;
-					}
-
-					memset(pAlloc, 0, sizeof(*pAlloc));
-					pAlloc->FirstInterface = (uint8_t)first;
-					UsbFuncStoreEndpoints(pAlloc->Bidirectional,
-						pReq->BidirectionalCount, pairMask);
-					UsbFuncStoreEndpoints(pAlloc->In, pReq->InCount, inMask);
-					UsbFuncStoreEndpoints(pAlloc->Out, pReq->OutCount, outMask);
-					return true;
-				}
-			}
+			return true;
 		}
 	}
 
