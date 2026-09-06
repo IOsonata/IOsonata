@@ -31,7 +31,7 @@ jobs:
           INDEXED_SHA=""
 
           if [ -f .iosonata/index.db ]; then
-            INDEXED_SHA="$(sqlite3 .iosonata/index.db "SELECT CAST(v AS TEXT) FROM meta WHERE k='commit' LIMIT 1;" 2>/dev/null || true)"
+            INDEXED_SHA="$(sqlite3 .iosonata/index.db "SELECT lower(hex(v)) FROM meta WHERE k='commit' LIMIT 1;" 2>/dev/null || true)"
           fi
 
           echo "Latest source commit: ${SOURCE_SHA:-none}"
