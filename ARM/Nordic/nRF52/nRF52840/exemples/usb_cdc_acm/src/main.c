@@ -1,546 +1,250 @@
-/**
- * Copyright (c) 2017 - 2021, Nordic Semiconductor ASA
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form, except as embedded into a Nordic
- *    Semiconductor ASA integrated circuit in a product or a software update for
- *    such product, must reproduce the above copyright notice, this list of
- *    conditions and the following disclaimer in the documentation and/or other
- *    materials provided with the distribution.
- *
- * 3. Neither the name of Nordic Semiconductor ASA nor the names of its
- *    contributors may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
- *
- * 4. This software, with or without modification, must only be used with a
- *    Nordic Semiconductor ASA integrated circuit.
- *
- * 5. Any software provided in binary form under this license must not be reverse
- *    engineered, decompiled, modified and/or disassembled.
- *
- * THIS SOFTWARE IS PROVIDED BY NORDIC SEMICONDUCTOR ASA "AS IS" AND ANY EXPRESS
- * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL NORDIC SEMICONDUCTOR ASA OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
- * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- */
-#include <stdint.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <string.h>
+/**-------------------------------------------------------------------------
+@example	usb_cdc_acm/main.c
 
-#include "nrf.h"
-#include "nrf_drv_usbd.h"
+@brief	Nordic nRF5 SDK USB CDC PRBS transmit performance comparison.
+
+This benchmark uses the same PRBS producer and BYTE_MODE switch as
+usb_cdc_prbs_tx.cpp and tinyusb_cdc_prbs_tx/main.cpp. Only the USB stack calls
+differ, so byte mode and buffered mode exercise the same application workload.
+
+@author	Nguyen Hoan Hoang
+@date	Sep. 6, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------------------------------------------*/
+#include <stdbool.h>
+#include <stdint.h>
+
 #include "nrf_drv_clock.h"
+#include "nrf_drv_usbd.h"
 
 #include "app_error.h"
-#include "app_util.h"
-#include "app_usbd_core.h"
-#include "app_usbd.h"
-#include "app_usbd_string_desc.h"
-#include "app_usbd_cdc_acm.h"
-#include "app_usbd_serial_num.h"
 #include "app_timer.h"
+#include "app_usbd.h"
+#include "app_usbd_cdc_acm.h"
+#include "app_usbd_core.h"
+#include "app_usbd_serial_num.h"
 
-#include "boards.h"
-#include "bsp.h"
-
-#include "nrf_log.h"
-#include "nrf_log_ctrl.h"
-#include "nrf_log_default_backends.h"
-
-#include "cfifo.h"
-#include "coredev/interrupt.h"
 #include "prbs.h"
-#include "usbd_cdc_intrf.h"
 
-/**@file
- * @defgroup usbd_cdc_acm_example main.c
- * @{
- * @ingroup usbd_cdc_acm_example
- * @brief Nordic USBD CDC ACM PRBS transmit stream benchmark
- */
 
-#define LED_USB_RESUME      (BSP_BOARD_LED_0)
-#define LED_CDC_ACM_OPEN    (BSP_BOARD_LED_1)
-#define LED_CDC_ACM_RX      (BSP_BOARD_LED_2)
-#define LED_CDC_ACM_TX      (BSP_BOARD_LED_3)
+#define BYTE_MODE
+
+#define TEST_BUFSIZE			16
 
 #ifndef USBD_POWER_DETECTION
-#define USBD_POWER_DETECTION true
+#define USBD_POWER_DETECTION	true
 #endif
 
-/*
- * 1: direct 64-byte CFifo -> app_usbd_cdc_acm_write benchmark.
- * 0: byte-at-a-time DeviceIntrfTx -> UsbdCdcIntrf benchmark.
- *
- * This may also be selected from the compiler command line with
- * -DUSB_CDC_TEST_DIRECT=0 or -DUSB_CDC_TEST_DIRECT=1.
- */
-#ifndef USB_CDC_TEST_DIRECT
-#define USB_CDC_TEST_DIRECT 1
-#endif
+#define CDC_ACM_COMM_INTERFACE	0
+#define CDC_ACM_COMM_EPIN		NRF_DRV_USBD_EPIN2
 
-/*
- * Direct-mode synchronization diagnostic.
- *
- * 1: wrap each generated byte in DisableInterrupt()/EnableInterrupt().
- * 0: preserve the original direct reference path.
- *
- * CFifo and USB operations remain unchanged. This isolates the cost of the
- * repeated global interrupt guard used by the byte-at-a-time TxData path.
- */
-#ifndef USB_CDC_TEST_DIRECT_IRQ_GUARD
-#define USB_CDC_TEST_DIRECT_IRQ_GUARD 0
-#endif
+#define CDC_ACM_DATA_INTERFACE	1
+#define CDC_ACM_DATA_EPIN		NRF_DRV_USBD_EPIN1
+#define CDC_ACM_DATA_EPOUT		NRF_DRV_USBD_EPOUT1
 
-/*
- * Direct-mode CFifo granularity diagnostic.
- *
- * 1: reserve and copy TX CFifo data one byte at a time.
- * 0: reserve the complete 64-byte USB packet in one CFifo operation.
- *
- * Use with USB_CDC_TEST_DIRECT_IRQ_GUARD=1 to reproduce the critical section
- * used by the byte-at-a-time TxData path while leaving USB dequeue/write intact.
- */
-#ifndef USB_CDC_TEST_DIRECT_BYTE_FIFO
-#define USB_CDC_TEST_DIRECT_BYTE_FIFO 0
-#endif
+static void CdcEvtHandler(app_usbd_class_inst_t const *pInst,
+						  app_usbd_cdc_acm_user_event_t Event);
 
-/*
- * Direct-mode DeviceIntrf StartTx/StopTx diagnostic.
- *
- * 1: execute the generic DeviceIntrfStartTx()/DeviceIntrfStopTx() sequence
- *    once per generated byte using no-op implementation callbacks.
- * 0: no StartTx/StopTx overhead.
- *
- * This reproduces the generic busy-flag and indirect StartTx/StopTx call cost
- * without involving the CDC adapter.
- */
-#ifndef USB_CDC_TEST_DIRECT_START_STOP
-#define USB_CDC_TEST_DIRECT_START_STOP 0
-#endif
+APP_USBD_CDC_ACM_GLOBAL_DEF(s_Cdc,
+						CdcEvtHandler,
+						CDC_ACM_COMM_INTERFACE,
+						CDC_ACM_DATA_INTERFACE,
+						CDC_ACM_COMM_EPIN,
+						CDC_ACM_DATA_EPIN,
+						CDC_ACM_DATA_EPOUT,
+						APP_USBD_CDC_COMM_PROTOCOL_AT_V250);
 
-uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
-uint8_t g_extern_usbd_product_string[12 + 1] = { "Test" };
+// These names are selected by the existing Nordic SDK string configuration.
+uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456" };
+uint8_t g_extern_usbd_product_string[12 + 1] = { "SDK PRBS Tx" };
 
-#if USB_CDC_TEST_DIRECT
+static volatile bool s_PortOpen;
+static volatile bool s_TxReady;
 
-static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
-                                    app_usbd_cdc_acm_user_event_t event);
-
-#define CDC_ACM_COMM_INTERFACE  0
-#define CDC_ACM_COMM_EPIN       NRF_DRV_USBD_EPIN2
-
-#define CDC_ACM_DATA_INTERFACE  1
-#define CDC_ACM_DATA_EPIN       NRF_DRV_USBD_EPIN1
-#define CDC_ACM_DATA_EPOUT      NRF_DRV_USBD_EPOUT1
-
-APP_USBD_CDC_ACM_GLOBAL_DEF(m_test_cdc_acm,
-                            cdc_acm_user_ev_handler,
-                            CDC_ACM_COMM_INTERFACE,
-                            CDC_ACM_DATA_INTERFACE,
-                            CDC_ACM_COMM_EPIN,
-                            CDC_ACM_DATA_EPIN,
-                            CDC_ACM_DATA_EPOUT,
-                            APP_USBD_CDC_COMM_PROTOCOL_AT_V250
-);
-
-#define TX_FIFO_MEMSIZE CFIFO_MEMSIZE(2048)
-
-static uint8_t m_tx_fifo_mem[TX_FIFO_MEMSIZE] __attribute__((aligned(4)));
-static hCFifo_t m_tx_fifo;
-static volatile bool m_port_open;
-static volatile bool m_tx_ready;
-static uint8_t m_prbs = 0xff;
-
-#if USB_CDC_TEST_DIRECT_START_STOP
-static DevIntrf_t m_test_start_stop_intrf;
-
-static bool test_start_tx(DevIntrf_t * p_dev, uint32_t dev_addr)
+static void CdcEvtHandler(app_usbd_class_inst_t const *pInst,
+						  app_usbd_cdc_acm_user_event_t Event)
 {
-    (void)p_dev;
-    (void)dev_addr;
-    return true;
+	(void)pInst;
+
+	switch (Event)
+	{
+		case APP_USBD_CDC_ACM_USER_EVT_PORT_OPEN:
+			s_PortOpen = true;
+			s_TxReady = true;
+			break;
+
+		case APP_USBD_CDC_ACM_USER_EVT_PORT_CLOSE:
+			s_PortOpen = false;
+			s_TxReady = false;
+			break;
+
+		case APP_USBD_CDC_ACM_USER_EVT_TX_DONE:
+			s_TxReady = true;
+			break;
+
+		default:
+			break;
+	}
 }
 
-static void test_stop_tx(DevIntrf_t * p_dev)
+static void UsbEvtHandler(app_usbd_event_type_t Event)
 {
-    (void)p_dev;
+	switch (Event)
+	{
+		case APP_USBD_EVT_STOPPED:
+			s_PortOpen = false;
+			s_TxReady = false;
+			app_usbd_disable();
+			break;
+
+		case APP_USBD_EVT_POWER_DETECTED:
+			if (!nrf_drv_usbd_is_enabled())
+			{
+				app_usbd_enable();
+			}
+			break;
+
+		case APP_USBD_EVT_POWER_REMOVED:
+			s_PortOpen = false;
+			s_TxReady = false;
+			app_usbd_stop();
+			break;
+
+		case APP_USBD_EVT_POWER_READY:
+			app_usbd_start();
+			break;
+
+		default:
+			break;
+	}
 }
-#endif
-
-static uint8_t prbs8(uint8_t cur)
-{
-    uint8_t newbit = (((cur >> 6) ^ (cur >> 5)) & 1U);
-    return (uint8_t)(((cur << 1) | newbit) & 0x7fU);
-}
-
-static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
-                                    app_usbd_cdc_acm_user_event_t event)
-{
-    (void)p_inst;
-
-    switch (event)
-    {
-        case APP_USBD_CDC_ACM_USER_EVT_PORT_OPEN:
-            bsp_board_led_on(LED_CDC_ACM_OPEN);
-            m_prbs = 0xff;
-            CFifoFlush(m_tx_fifo);
-            m_port_open = true;
-            m_tx_ready = true;
-            break;
-
-        case APP_USBD_CDC_ACM_USER_EVT_PORT_CLOSE:
-            m_port_open = false;
-            m_tx_ready = false;
-            bsp_board_led_off(LED_CDC_ACM_OPEN);
-            break;
-
-        case APP_USBD_CDC_ACM_USER_EVT_TX_DONE:
-            m_tx_ready = true;
-            bsp_board_led_invert(LED_CDC_ACM_TX);
-            break;
-
-        case APP_USBD_CDC_ACM_USER_EVT_RX_DONE:
-            bsp_board_led_invert(LED_CDC_ACM_RX);
-            break;
-
-        default:
-            break;
-    }
-}
-
-static void usbd_user_ev_handler(app_usbd_event_type_t event)
-{
-    switch (event)
-    {
-        case APP_USBD_EVT_DRV_SUSPEND:
-            bsp_board_led_off(LED_USB_RESUME);
-            break;
-
-        case APP_USBD_EVT_DRV_RESUME:
-            bsp_board_led_on(LED_USB_RESUME);
-            break;
-
-        case APP_USBD_EVT_STARTED:
-            break;
-
-        case APP_USBD_EVT_STOPPED:
-            app_usbd_disable();
-            m_port_open = false;
-            m_tx_ready = false;
-            bsp_board_leds_off();
-            break;
-
-        case APP_USBD_EVT_POWER_DETECTED:
-            NRF_LOG_INFO("USB power detected");
-            if (!nrf_drv_usbd_is_enabled())
-            {
-                app_usbd_enable();
-            }
-            break;
-
-        case APP_USBD_EVT_POWER_REMOVED:
-            NRF_LOG_INFO("USB power removed");
-            m_port_open = false;
-            m_tx_ready = false;
-            app_usbd_stop();
-            break;
-
-        case APP_USBD_EVT_POWER_READY:
-            NRF_LOG_INFO("USB ready");
-            app_usbd_start();
-            break;
-
-        default:
-            break;
-    }
-}
-
-#else
-
-#define CDC_RXFIFO_MEMSIZE      CFIFO_MEMSIZE(256)
-#define CDC_TXFIFO_MEMSIZE      CFIFO_MEMSIZE(2048)
-
-static uint8_t s_CdcRxFifoMem[CDC_RXFIFO_MEMSIZE] __attribute__((aligned(4)));
-static uint8_t s_CdcTxFifoMem[CDC_TXFIFO_MEMSIZE] __attribute__((aligned(4)));
-static UsbdCdcDevIntrf_t s_CdcIntrf;
-
-static const UsbdCdcIntrfCfg_t s_CdcCfg = {
-    .bBlocking = true,
-    .RxFifoMemSize = sizeof(s_CdcRxFifoMem),
-    .pRxFifoMem = s_CdcRxFifoMem,
-    .TxFifoMemSize = sizeof(s_CdcTxFifoMem),
-    .pTxFifoMem = s_CdcTxFifoMem,
-    .EvtCB = NULL,
-};
-
-static void usbd_user_ev_handler(app_usbd_event_type_t event)
-{
-    switch (event)
-    {
-        case APP_USBD_EVT_DRV_SOF:
-            UsbdCdcIntrfTxKick(&s_CdcIntrf);
-            break;
-
-        case APP_USBD_EVT_DRV_SUSPEND:
-            bsp_board_led_off(LED_USB_RESUME);
-            break;
-
-        case APP_USBD_EVT_DRV_RESUME:
-            bsp_board_led_on(LED_USB_RESUME);
-            break;
-
-        case APP_USBD_EVT_STOPPED:
-            app_usbd_disable();
-            bsp_board_leds_off();
-            break;
-
-        case APP_USBD_EVT_POWER_DETECTED:
-            if (!nrf_drv_usbd_is_enabled())
-            {
-                app_usbd_enable();
-            }
-            break;
-
-        case APP_USBD_EVT_POWER_REMOVED:
-            app_usbd_stop();
-            break;
-
-        case APP_USBD_EVT_POWER_READY:
-            app_usbd_start();
-            break;
-
-        default:
-            break;
-    }
-}
-
-#endif
 
 int main(void)
 {
-    ret_code_t ret;
-#if !USB_CDC_TEST_DIRECT
-    uint8_t data = 0xff;
-#endif
-    static const app_usbd_config_t usbd_config = {
-        .ev_state_proc = usbd_user_ev_handler,
-#if !USB_CDC_TEST_DIRECT
-        .enable_sof = true,
-#endif
-    };
-
-    ret = NRF_LOG_INIT(NULL);
-    APP_ERROR_CHECK(ret);
-
-    ret = nrf_drv_clock_init();
-    APP_ERROR_CHECK(ret);
-
-    nrf_drv_clock_lfclk_request(NULL);
-    while (!nrf_drv_clock_lfclk_is_running())
-    {
-    }
-
-    ret = app_timer_init();
-    APP_ERROR_CHECK(ret);
-
-    bsp_board_init(BSP_INIT_LEDS);
-    app_usbd_serial_num_generate();
-
-#if USB_CDC_TEST_DIRECT
-    m_tx_fifo = CFifoInit(m_tx_fifo_mem, sizeof(m_tx_fifo_mem), 1, true);
-    if (m_tx_fifo == NULL)
-    {
-        return -1;
-    }
-#if USB_CDC_TEST_DIRECT_START_STOP
-    m_test_start_stop_intrf.StartTx = test_start_tx;
-    m_test_start_stop_intrf.StopTx = test_stop_tx;
-    atomic_flag_clear(&m_test_start_stop_intrf.bBusy);
-#endif
-#endif
-
-    ret = app_usbd_init(&usbd_config);
-    APP_ERROR_CHECK(ret);
-
-#if USB_CDC_TEST_DIRECT
-    app_usbd_class_inst_t const * class_cdc_acm =
-        app_usbd_cdc_acm_class_inst_get(&m_test_cdc_acm);
-    ret = app_usbd_class_append(class_cdc_acm);
-    APP_ERROR_CHECK(ret);
+	ret_code_t ret;
+	uint8_t d = 0xff;
+#ifdef BYTE_MODE
+	// app_usbd_cdc_acm_write is asynchronous. Keep the submitted byte in a
+	// separate object so advancing d cannot modify the in-flight DMA buffer.
+	uint8_t txByte = d;
 #else
-    if (!UsbdCdcIntrfInit(&s_CdcIntrf, &s_CdcCfg))
-    {
-        return -1;
-    }
+	uint8_t buff[TEST_BUFSIZE];
+	bool bufferPending = false;
 #endif
 
-    if (USBD_POWER_DETECTION)
-    {
-        ret = app_usbd_power_events_enable();
-        APP_ERROR_CHECK(ret);
-    }
-    else
-    {
-        app_usbd_enable();
-        app_usbd_start();
-    }
+	static const app_usbd_config_t usbCfg = {
+		.ev_state_proc = UsbEvtHandler,
+	};
 
-    while (true)
-    {
+	ret = nrf_drv_clock_init();
+	APP_ERROR_CHECK(ret);
+
+	nrf_drv_clock_lfclk_request(NULL);
+	while (!nrf_drv_clock_lfclk_is_running())
+	{
+	}
+
+	ret = app_timer_init();
+	APP_ERROR_CHECK(ret);
+
+	app_usbd_serial_num_generate();
+
+	ret = app_usbd_init(&usbCfg);
+	APP_ERROR_CHECK(ret);
+
+	app_usbd_class_inst_t const *pCdc =
+		app_usbd_cdc_acm_class_inst_get(&s_Cdc);
+	ret = app_usbd_class_append(pCdc);
+	APP_ERROR_CHECK(ret);
+
+	if (USBD_POWER_DETECTION)
+	{
+		ret = app_usbd_power_events_enable();
+		APP_ERROR_CHECK(ret);
+	}
+	else
+	{
+		app_usbd_enable();
+		app_usbd_start();
+	}
+
+	while (true)
+	{
 #if APP_USBD_CONFIG_EVENT_QUEUE_ENABLE
-        while (app_usbd_event_queue_process())
-        {
-        }
+		while (app_usbd_event_queue_process())
+		{
+		}
 #endif
 
-#if USB_CDC_TEST_DIRECT
-        if (m_port_open && m_tx_ready)
-        {
-#if USB_CDC_TEST_DIRECT_BYTE_FIFO
-            uint8_t next = m_prbs;
-            bool queued = true;
+		if (!s_PortOpen || !s_TxReady)
+		{
+			continue;
+		}
 
-            for (int i = 0; i < NRF_DRV_USBD_EPSIZE; ++i)
-            {
-#if USB_CDC_TEST_DIRECT_START_STOP
-                if (!DeviceIntrfStartTx(&m_test_start_stop_intrf, 0))
-                {
-                    queued = false;
-                    break;
-                }
-#endif
-#if USB_CDC_TEST_DIRECT_IRQ_GUARD
-                uint32_t state = DisableInterrupt();
-#endif
-                int one = 1;
-                uint8_t * p_put = CFifoPutMultiple(m_tx_fifo, &one);
-
-                if (p_put != NULL && one == 1)
-                {
-                    memcpy(p_put, &next, 1);
-                }
-#if USB_CDC_TEST_DIRECT_IRQ_GUARD
-                EnableInterrupt(state);
-#endif
-#if USB_CDC_TEST_DIRECT_START_STOP
-                DeviceIntrfStopTx(&m_test_start_stop_intrf);
-#endif
-                if (p_put == NULL || one != 1)
-                {
-                    queued = false;
-                    break;
-                }
-
-                next = prbs8(next);
-            }
-
-            if (queued)
-            {
-                int count = NRF_DRV_USBD_EPSIZE;
-                uint8_t * p_tx = CFifoGetMultiple(m_tx_fifo, &count);
-
-                if (p_tx != NULL && count == NRF_DRV_USBD_EPSIZE)
-                {
-                    m_tx_ready = false;
-                    ret = app_usbd_cdc_acm_write(&m_test_cdc_acm, p_tx, count);
-
-                    if (ret == NRF_SUCCESS)
-                    {
-                        m_prbs = next;
-                    }
-                    else
-                    {
-                        m_tx_ready = true;
-                    }
-                }
-            }
-            else
-            {
-                CFifoFlush(m_tx_fifo);
-            }
+#ifdef BYTE_MODE
+		// Demo transfer byte by byte. The value advances only when the octet
+		// was accepted. If the endpoint is busy, retry this same byte after the
+		// TX completion callback makes the interface ready again.
+		txByte = d;
+		s_TxReady = false;
+		ret = app_usbd_cdc_acm_write(&s_Cdc, &txByte, 1);
+		if (ret == NRF_SUCCESS)
+		{
+			d = Prbs8(d);
+		}
+		else
+		{
+			s_TxReady = true;
+		}
 #else
-            int count = NRF_DRV_USBD_EPSIZE;
-            uint8_t * p_put = CFifoPutMultiple(m_tx_fifo, &count);
+		// Demo transfer buffer
+		if (!bufferPending)
+		{
+			for (int i = 0; i < TEST_BUFSIZE; i++)
+			{
+				d = Prbs8(d);
+				buff[i] = d;
+			}
+			bufferPending = true;
+		}
 
-            if (p_put != NULL && count == NRF_DRV_USBD_EPSIZE)
-            {
-                uint8_t next = m_prbs;
-                bool generated = true;
-
-                for (int i = 0; i < count; ++i)
-                {
-#if USB_CDC_TEST_DIRECT_START_STOP
-                    if (!DeviceIntrfStartTx(&m_test_start_stop_intrf, 0))
-                    {
-                        generated = false;
-                        break;
-                    }
+		s_TxReady = false;
+		ret = app_usbd_cdc_acm_write(&s_Cdc, buff, TEST_BUFSIZE);
+		if (ret == NRF_SUCCESS)
+		{
+			// Do not refill buff until TX_DONE sets s_TxReady again.
+			bufferPending = false;
+		}
+		else
+		{
+			s_TxReady = true;
+		}
 #endif
-#if USB_CDC_TEST_DIRECT_IRQ_GUARD
-                    uint32_t state = DisableInterrupt();
-#endif
-                    p_put[i] = next;
-                    next = prbs8(next);
-#if USB_CDC_TEST_DIRECT_IRQ_GUARD
-                    EnableInterrupt(state);
-#endif
-#if USB_CDC_TEST_DIRECT_START_STOP
-                    DeviceIntrfStopTx(&m_test_start_stop_intrf);
-#endif
-                }
+	}
 
-                if (!generated)
-                {
-                    CFifoFlush(m_tx_fifo);
-                    continue;
-                }
-
-                count = NRF_DRV_USBD_EPSIZE;
-                uint8_t * p_tx = CFifoGetMultiple(m_tx_fifo, &count);
-
-                if (p_tx != NULL && count == NRF_DRV_USBD_EPSIZE)
-                {
-                    m_tx_ready = false;
-                    ret = app_usbd_cdc_acm_write(&m_test_cdc_acm, p_tx, count);
-
-                    if (ret == NRF_SUCCESS)
-                    {
-                        m_prbs = next;
-                    }
-                    else
-                    {
-                        m_tx_ready = true;
-                    }
-                }
-            }
-#endif
-        }
-
-        UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
-        __WFE();
-#else
-        if (DeviceIntrfTx(&s_CdcIntrf.DevIntrf, 0, &data, 1) == 1)
-        {
-            data = Prbs8(data);
-        }
-#endif
-    }
+	return 0;
 }
-
-/** @} */
