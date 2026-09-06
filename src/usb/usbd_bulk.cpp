@@ -33,7 +33,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "usb/usb_func.h"
+#include "usb_func.h"
 #include "usb/usbd_bulk.h"
 
 static uint8_t *UsbdBulkRxBuffer(UsbdBulkDev_t *pBulk)
