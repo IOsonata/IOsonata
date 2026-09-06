@@ -255,26 +255,26 @@ The nRF52 USBD peripheral has one EasyDMA engine shared by every endpoint.
 The controller records complete DMA descriptors in a fixed CFifo and starts
 them in submission order. The queue has one slot for every IN and OUT endpoint
 direction, and an endpoint direction cannot submit another request until its
-current request completes, so the queue cannot overflow. Only the USBD
-interrupt consumes the queue and starts EasyDMA. ENDEP completion releases
-EasyDMA and services the next descriptor. Aborting endpoint zero removes only
-endpoint-zero descriptors; queued work for other endpoints is preserved.
-The controller serializes the endpoint state transition and descriptor
-publication, so the CFifo is the sole record of pending DMA work.
+current request completes, so the queue cannot overflow. The controller's
+single DMA-owner token serializes queue consumption. A foreground request starts
+immediately when DMA is free; requests made by an interrupt are consumed by the
+USB interrupt before it returns. ENDEP completion releases EasyDMA and services
+the next descriptor. Aborting endpoint zero removes only endpoint-zero
+descriptors; queued work for other endpoints is preserved. The CFifo remains
+the sole record of pending DMA work.
 
-Data IN completes its short EasyDMA copy inside the existing controller
-interrupt. It does not change the interrupt-enable mask and does not generate a
-second ENDEPIN interrupt. The scheduler can therefore start the next queued
-descriptor immediately; EPDATA later reports when the host consumes the copied
-packet. OUT and endpoint zero retain asynchronous END handling.
+Data IN starts asynchronously. It normally completes without a per-packet
+ENDEPIN interrupt because EPDATA later proves that the host consumed the packet.
+If another descriptor is waiting, the controller first reclaims an already
+completed IN DMA or temporarily enables that active endpoint's ENDEPIN interrupt;
+completion then releases DMA and continues the same CFifo. OUT and endpoint zero
+use their normal ENDEP completion interrupts.
 
-EasyDMA also owns the nRF52 USBD register block while a transfer is active.
-For OUT and endpoint-zero transfers, the controller saves the enabled interrupt
-mask and leaves only that transfer's ENDEP event plus USBRESET enabled before
-STARTEP. Other USB events remain latched in hardware; ENDEP releases EasyDMA,
-restores the mask and processes those events. Data IN is already executing in
-the sole queue-consumer context, so it leaves the mask untouched and waits only
-for the endpoint-RAM copy to finish before continuing the queue.
+EasyDMA also owns the nRF52 USBD register block while a transfer is active. An
+interrupt that arrives during an active DMA inspects only that DMA's END event
+and USBRESET. Other USB events stay latched until END releases the engine, after
+which normal event collection resumes. The errata 199 busy marker is set before
+STARTEP and cleared only when DMA ownership is released.
 
 ## Function registration
 

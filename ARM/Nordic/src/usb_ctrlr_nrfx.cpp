@@ -838,6 +838,9 @@ typedef uint_fast8_t atomic_uint_fast8_t;
 #define atomic_load(p) __atomic_load_n((p), __ATOMIC_SEQ_CST)
 #define atomic_store(p, v) __atomic_store_n((p), (v), __ATOMIC_SEQ_CST)
 #define atomic_exchange(p, v) __atomic_exchange_n((p), (v), __ATOMIC_SEQ_CST)
+#define atomic_compare_exchange_strong(p, expected, desired) \
+	__atomic_compare_exchange_n((p), (expected), (desired), false, \
+		__ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
 #define atomic_flag_test_and_set(p) __atomic_exchange_n((p), true, __ATOMIC_SEQ_CST)
 #define atomic_flag_clear(p) __atomic_store_n((p), false, __ATOMIC_SEQ_CST)
 
@@ -877,7 +880,6 @@ typedef struct __nRF_Usbd_Ctrlr
 static nRFUsbdCtrlr_t s_Ctrlr;
 static atomic_flag s_DmaRunning = ATOMIC_FLAG_INIT;
 static atomic_uint_fast8_t s_DmaEpAddr;
-static uint32_t s_DmaSavedInten;
 // One EasyDMA engine serves every endpoint in both directions, so a transfer
 // request waits in this descriptor queue and starts in submission order.
 //
@@ -989,6 +991,55 @@ static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 	nRFUsbdEmit(&evt);
 }
 
+static void nRFUsbdDmaEndIntEnable(uint8_t EpAddr)
+{
+	const uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+
+	if ((uint8_t)atomic_load(&s_DmaEpAddr) == EpAddr)
+	{
+		NRF_USBD->INTENSET = nRFUsbdDmaEndMask(EpAddr);
+	}
+
+	__set_PRIMASK(primask);
+}
+
+/** Retire a data IN DMA whose END event is already latched. */
+static void nRFUsbdDmaReclaim(void)
+{
+	uint_fast8_t epAddr = atomic_load(&s_DmaEpAddr);
+
+	if ((uint8_t)epAddr == NRFX_USBD_DMA_EP_NONE ||
+		!nRFUsbdDataIn((uint8_t)epAddr))
+	{
+		return;
+	}
+
+	volatile uint32_t *pEvent = nRFUsbdDmaEndEvent((uint8_t)epAddr);
+	if (*pEvent == 0U)
+	{
+		return;
+	}
+
+	if (!atomic_compare_exchange_strong(&s_DmaEpAddr, &epAddr,
+		(uint_fast8_t)NRFX_USBD_DMA_EP_NONE))
+	{
+		return;
+	}
+
+	NRF_USBD->INTENCLR = nRFUsbdDmaEndMask((uint8_t)epAddr);
+	*pEvent = 0;
+	__ISB();
+	__DSB();
+
+	if (nrf52_errata_199())
+	{
+		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
+	}
+
+	atomic_flag_clear(&s_DmaRunning);
+}
+
 static void nRFUsbdDmaRelease(void)
 {
 	const uint32_t primask = __get_PRIMASK();
@@ -997,6 +1048,11 @@ static void nRFUsbdDmaRelease(void)
 	const bool dataIn = epAddr != NRFX_USBD_DMA_EP_NONE &&
 		nRFUsbdDataIn(epAddr);
 
+	if (dataIn)
+	{
+		NRF_USBD->INTENCLR = nRFUsbdDmaEndMask(epAddr);
+	}
+
 	if (nrf52_errata_199())
 	{
 		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
@@ -1004,14 +1060,6 @@ static void nRFUsbdDmaRelease(void)
 
 	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
 	atomic_flag_clear(&s_DmaRunning);
-
-	if (!dataIn)
-	{
-		// OUT and EP0 mask unrelated USB interrupts while EasyDMA owns the
-		// register block. Those events stayed latched and are serviced now.
-		NRF_USBD->INTENCLR = NRFUSBD_IRQ_MASK;
-		NRF_USBD->INTENSET = s_DmaSavedInten;
-	}
 	__ISB();
 	__DSB();
 
@@ -1023,54 +1071,23 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 {
 	const uint32_t primask = __get_PRIMASK();
 	__disable_irq();
-	const bool dataIn = nRFUsbdDataIn(EpAddr);
-
-	// Nordic specifies that most USBD registers cannot be accessed while
-	// EasyDMA is active. OUT and EP0 therefore keep only that DMA's END event
-	// and USBRESET enabled. Data IN finishes inside this controller interrupt,
-	// so it leaves the normal mask untouched and needs no second interrupt.
-	if (!dataIn)
-	{
-		s_DmaSavedInten = NRF_USBD->INTEN & NRFUSBD_IRQ_MASK;
-		NRF_USBD->INTENCLR = NRFUSBD_IRQ_MASK;
-		NRF_USBD->INTENSET = USBD_INTEN_USBRESET_Msk |
-			nRFUsbdDmaEndMask(EpAddr);
-	}
 
 	*nRFUsbdDmaEndEvent(EpAddr) = 0;
 	__ISB();
 	__DSB();
+
+	// Nordic's errata 199 workaround marks EasyDMA busy before STARTEP.
+	if (nrf52_errata_199())
+	{
+		NRFX_USBD_ERRATA_199_REG = 0x00000082UL;
+	}
 
 	atomic_store(&s_DmaEpAddr, EpAddr);
 	*pTask = 1;
 	__ISB();
 	__DSB();
 
-	// Errata 199 must be enabled after STARTEP. Setting it before the task can
-	// prevent USBD from capturing the DMA request, leaving no END event.
-	if (nrf52_errata_199())
-	{
-		NRFX_USBD_ERRATA_199_REG = 0x00000082UL;
-	}
-
 	__set_PRIMASK(primask);
-
-	if (dataIn)
-	{
-		volatile uint32_t *pEndEvent = nRFUsbdDmaEndEvent(EpAddr);
-		while (*pEndEvent == 0U && NRF_USBD->EVENTS_USBRESET == 0U)
-		{
-		}
-
-		if (*pEndEvent != 0U)
-		{
-			*pEndEvent = 0;
-			__ISB();
-			__DSB();
-		}
-
-		nRFUsbdDmaRelease();
-	}
 }
 
 static void nRFUsbdDmaWait(void)
@@ -1177,9 +1194,22 @@ static void nRFUsbdServicePending(void)
 	{
 		if (atomic_flag_test_and_set(&s_DmaRunning))
 		{
-			// Only OUT and EP0 remain active after their start call. Their END
-			// interrupt releases ownership and resumes this queue.
-			return;
+			// Data IN normally completes without ENDEPIN interrupts. If it has
+			// already ended, reclaim it now; otherwise its END interrupt resumes
+			// this same queue as soon as another endpoint needs the DMA engine.
+			nRFUsbdDmaReclaim();
+
+			if (atomic_flag_test_and_set(&s_DmaRunning))
+			{
+				const uint8_t epAddr =
+					(uint8_t)atomic_load(&s_DmaEpAddr);
+				if (epAddr != NRFX_USBD_DMA_EP_NONE &&
+					nRFUsbdDataIn(epAddr))
+				{
+					nRFUsbdDmaEndIntEnable(epAddr);
+				}
+				return;
+			}
 		}
 
 		if (atomic_exchange(&s_PendingEp0Status, false))
@@ -1216,19 +1246,7 @@ static void nRFUsbdServicePending(void)
 
 			if (nRFUsbdStartDmaNow(&que))
 			{
-				if (!nRFUsbdDataIn(que.EpAddr))
-				{
-					return;
-				}
-
-				// Data IN finished its short DMA copy synchronously. A reset seen
-				// during that copy must be handled before more queued work.
-				if (NRF_USBD->EVENTS_USBRESET != 0U)
-				{
-					return;
-				}
-
-				continue;
+				return;
 			}
 
 			if (USB_ENDPADDR_IS_IN(que.EpAddr))
@@ -1273,18 +1291,22 @@ static void nRFUsbdServicePending(void)
 	}
 }
 
-/**
- * DMA requests are consumed only by USBD_IRQHandler. This keeps queue
- * consumption and every EasyDMA register write in one execution context.
- * The handler services requests queued by its callbacks before it returns.
- */
+/** Foreground starts free DMA immediately; interrupt producers defer to USB. */
 static inline __attribute__((always_inline))
-void nRFUsbdRequestService(void)
+bool nRFUsbdDeferFromInterrupt(void)
 {
-	if (__get_IPSR() != (uint32_t)USBD_IRQn + 16U)
+	const uint32_t exception = __get_IPSR();
+	if (exception == 0U)
+	{
+		return false;
+	}
+
+	if (exception != (uint32_t)USBD_IRQn + 16U)
 	{
 		NVIC_SetPendingIRQ(USBD_IRQn);
 	}
+
+	return true;
 }
 
 /**
@@ -1334,7 +1356,10 @@ static void nRFUsbdQueueOut(uint8_t EpNum)
 
 	nRFUsbdQueXfer(EpNum, pXfer->pBuffer,
 				 (uint16_t)(pXfer->TotalLen - pXfer->ActualLen));
-	nRFUsbdRequestService();
+	if (!nRFUsbdDeferFromInterrupt())
+	{
+		nRFUsbdServicePending();
+	}
 }
 
 static void nRFUsbdQueueIn(uint8_t EpNum)
@@ -1345,19 +1370,28 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 
 	nRFUsbdQueXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN), pXfer->pBuffer,
 				 remaining < pXfer->Mps ? remaining : pXfer->Mps);
-	nRFUsbdRequestService();
+	if (!nRFUsbdDeferFromInterrupt())
+	{
+		nRFUsbdServicePending();
+	}
 }
 
 static void nRFUsbdQueueEp0Status(void)
 {
 	atomic_store(&s_PendingEp0Status, true);
-	nRFUsbdRequestService();
+	if (!nRFUsbdDeferFromInterrupt())
+	{
+		nRFUsbdServicePending();
+	}
 }
 
 static void nRFUsbdQueueEp0RcvOut(void)
 {
 	atomic_store(&s_PendingEp0RcvOut, true);
-	nRFUsbdRequestService();
+	if (!nRFUsbdDeferFromInterrupt())
+	{
+		nRFUsbdServicePending();
+	}
 }
 
 static void nRFUsbdResetState(void)
@@ -2040,8 +2074,9 @@ extern "C" void USBD_IRQHandler(void)
 	const uint8_t activeDma = (uint8_t)atomic_load(&s_DmaEpAddr);
 	if (activeDma != NRFX_USBD_DMA_EP_NONE)
 	{
-		// Data IN never leaves nRFUsbdDmaStart active. OUT and EP0 mask all
-		// unrelated interrupts, so only their END event or USBRESET can enter.
+		// Most USBD registers cannot be read while EasyDMA owns the peripheral.
+		// Retire only the active DMA here; every other event remains latched for
+		// the normal collector after ownership is released.
 		const bool reset = NRF_USBD->EVENTS_USBRESET != 0U;
 		volatile uint32_t *pEndEvent = nRFUsbdDmaEndEvent(activeDma);
 		if (*pEndEvent == 0U && !reset)
