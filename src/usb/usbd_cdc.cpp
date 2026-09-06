@@ -87,8 +87,7 @@ static uint8_t UsbdCdcNotifInterval(UsbdCdcDev_t *pCdc)
 
 bool UsbdCdcPortIsOpen(const UsbdCdcDev_t * const pCdc)
 {
-	return pCdc != nullptr && pCdc->pData != nullptr &&
-		   pCdc->pData->Mps > 0U &&
+	return pCdc != nullptr && pCdc->pData->Mps > 0U &&
 		   (pCdc->ControlLineState & USB_CDC_CTRL_LINE_STATE_DTR) != 0U;
 }
 
