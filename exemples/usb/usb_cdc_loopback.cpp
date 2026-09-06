@@ -77,9 +77,6 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 	.pRxFifoMem = s_CdcRxFifoMem,
 	.TxFifoMemSize = CDC_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_CdcTxFifoMem,
-	.CtrlIfNo = 0,
-	.NotifyEpNo = 1,
-	.DataEpNo = 2,
 	.DevNo = USB_DEVNO,
 	.EvtCB = CdcEvtHandler,
 };
