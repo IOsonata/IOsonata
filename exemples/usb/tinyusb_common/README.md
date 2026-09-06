@@ -21,9 +21,30 @@ Both implementations use:
 - VID `0x1209`;
 - the same PID as the matching IOsonata benchmark.
 
-The TinyUSB PRBS example uses a 2048-byte CDC TX FIFO. The TinyUSB loopback
-example uses a 1024-byte CDC TX FIFO and a 256-byte CDC RX FIFO, matching the
-queue scale of the corresponding IOsonata benchmarks.
+The FIFO payload capacities are matched to the IOsonata examples:
+
+| Benchmark | RX FIFO | TX FIFO |
+| --- | ---: | ---: |
+| PRBS TX | 256 bytes | 2048 bytes |
+| Loopback | 256 bytes | 1024 bytes |
+
+`CFIFO_MEMSIZE(n)` includes the CFifo header in addition to `n` bytes of byte-mode
+payload storage, so these values compare payload queue capacity rather than raw
+allocation size.
+
+## Eclipse projects
+
+Import these project directories into Eclipse Embedded CDT:
+
+```text
+ARM/Nordic/nRF52/nRF52840/exemples/TinyUsbCdcPrbsTx/ioc
+ARM/Nordic/nRF52/nRF52840/exemples/TinyUsbCdcLoopback/ioc
+```
+
+Each directory contains `.project`, `.cproject`, `Makefile` and `.gitignore`.
+The Eclipse project links the benchmark source and the required TinyUSB source
+files into its `src` folder. The default Eclipse build target is `release`.
+`debug` is also available as a Make Target.
 
 ## TinyUSB version
 
@@ -46,9 +67,7 @@ https://github.com/hathach/tinyusb.git
 
 Checkout tag `0.21.0`.
 
-## Sources to add to each nRF52840 benchmark project
-
-Compile the example `main.cpp` plus these TinyUSB files:
+Each benchmark project compiles the example `main.cpp` plus:
 
 ```text
 external/tinyusb/src/tusb.c
@@ -59,22 +78,11 @@ external/tinyusb/src/class/cdc/cdc_device.c
 external/tinyusb/src/portable/nordic/nrf5x/dcd_nrf5x.c
 ```
 
-Use the matching example directory as an include path so TinyUSB finds its
-`tusb_config.h`, and add:
-
-```text
-external/tinyusb/src
-external/nrfx
-external/nrfx/drivers/include
-external/nrfx/hal
-external/nrfx/bsp/stable/mdk
-```
-
-The existing IOsonata nRF52840 startup, linker script, CMSIS and
-`IOsonata_nRF52840` library can remain in the project. Do not compile the
-IOsonata USB controller source separately into the TinyUSB benchmark
-application. The application provides a strong `USBD_IRQHandler()` that
-forwards the interrupt to TinyUSB.
+The Makefile adds the TinyUSB and nrfx include directories and reuses the
+IOsonata nRF52840 linker script, CMSIS headers and `IOsonata_nRF52840` library.
+Do not compile the IOsonata USB controller source separately into the TinyUSB
+benchmark application. The application provides a strong `USBD_IRQHandler()`
+that forwards the interrupt to TinyUSB.
 
 ## Running the comparison
 
