@@ -36,8 +36,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "usb/usb.h"
-#include "usb/usb_func.h"
+#include "usb_func.h"
 #include "usb/usbd_cdc.h"
 
 static uint8_t *UsbdCdcRxBuffer(UsbdCdcDev_t *pCdc)
