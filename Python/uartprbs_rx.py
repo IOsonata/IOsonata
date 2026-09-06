@@ -3,9 +3,10 @@
 
 @brief  PRBS receive test
 
-
-@param  --port : Serial to use
-        --baud : Bbadrate (default 1MBaud) 
+@param  --port : Serial port to use
+        --baud : Baud rate (default 1MBaud)
+        --read-size : Serial read block size (default 4096)
+        --report-interval : Status report interval in seconds (default 1.0)
 
 @author Hoang Nguyen Hoan
 @date   July 27, 2019
@@ -37,74 +38,86 @@ SOFTWARE.
 ----------------------------------------------------------------------------
 """
 import argparse
-import logging
+import sys
 import time
+
 import serial
-
-
-SLIP_END = 0xC0
-SLIP_ESC = 0xDB
-SLIP_ESC_END = 0xDC
-SLIP_ESC_ESC = 0xDD
 
 
 def prbs8(curval):
     newbit = (((curval >> 6) ^ (curval >> 5)) & 1)
     return ((curval << 1) | newbit) & 0x7f
 
+
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="PRBS UART receiver (raw or SLIP-framed) with CSV/plot and STAT decoding")
-    p.add_argument("--port", required=True, help="Serial port (e.g., /dev/ttyUSB0, /dev/cu.usbserial-XXX, COM5)")
-    p.add_argument("--baud", type=int, default=1_000_000, help="Baud rate (default: 1000000)")
+    p = argparse.ArgumentParser(description="PRBS serial receiver")
+    p.add_argument("--port", required=True,
+                   help="Serial port (e.g., /dev/ttyUSB0, /dev/cu.usbmodemXXX, COM5)")
+    p.add_argument("--baud", type=int, default=1_000_000,
+                   help="Baud rate (default: 1000000)")
+    p.add_argument("--read-size", type=int, default=4096,
+                   help="Bytes per serial read (default: 4096)")
+    p.add_argument("--report-interval", type=float, default=1.0,
+                   help="Status report interval in seconds (default: 1.0)")
     return p.parse_args()
+
 
 def main():
     args = parse_args()
 
+    if args.read_size <= 0:
+        print("ERROR: --read-size must be greater than zero", file=sys.stderr)
+        return 2
+
+    if args.report_interval <= 0:
+        print("ERROR: --report-interval must be greater than zero", file=sys.stderr)
+        return 2
+
     try:
-        comm = serial.Serial(port=args.port, baudrate=args.baud)
+        comm = serial.Serial(port=args.port, baudrate=args.baud, timeout=0.1)
     except Exception as e:
         print(f"ERROR: cannot open {args.port} at {args.baud} baud: {e}", file=sys.stderr)
         return 2
 
-#    comm = serial.Serial(port="/dev/cu.usbmodem142302", baudrate=1000000, rtscts=True)
-    comm.flushInput()
+    comm.reset_input_buffer()
 
-    curval = 0xff
-    byteCount = 0
-    dropcnt = 0
-    deltatime = 0
-    drop = False
-    startTime = time.time()
-    d = comm.read(1)
-    curval = int.from_bytes(d, byteorder = 'little')
-    val = prbs8(curval)
-    while True:
-        try:
-            startTime = time.time()
-            d = comm.read(1)
-            endTime = time.time()
-            deltatime += endTime - startTime
-            curval = int.from_bytes(d, byteorder = 'little')
-            if curval != val:
-                dropcnt += 1
-            val = prbs8(curval)
-            byteCount += 1
+    try:
+        first = b""
+        while not first:
+            first = comm.read(1)
 
-            bytesPerSec = byteCount / deltatime #(endTime - startTime)
+        expected = prbs8(first[0])
+        byte_count = 0
+        drop_count = 0
+        start_time = time.perf_counter()
+        last_report = start_time
 
-            #print("Bytes : {0}".format(bytes))
-            #if drop:
-            #    print("Dropped.... Bytes/sec : {0}".format(bytesPerSec))
-            #else:
-            if (byteCount & 0xff) == 0:
-                print("Bytes/sec : %.2f, drop %d " %(bytesPerSec, dropcnt))
-        except KeyboardInterrupt:
-            print("KeyboardInterrupt. Exiting.")
-            break
+        while True:
+            data = comm.read(args.read_size)
+            if not data:
+                continue
 
-    comm.close()
+            for curval in data:
+                if curval != expected:
+                    drop_count += 1
+                expected = prbs8(curval)
+
+            byte_count += len(data)
+            now = time.perf_counter()
+
+            if now - last_report >= args.report_interval:
+                elapsed = now - start_time
+                bytes_per_sec = byte_count / elapsed if elapsed > 0 else 0.0
+                print("Bytes/sec : %.2f, drop %d " % (bytes_per_sec, drop_count))
+                last_report = now
+
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt. Exiting.")
+    finally:
+        comm.close()
+
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
