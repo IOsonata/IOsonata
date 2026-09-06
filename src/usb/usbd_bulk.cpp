@@ -33,6 +33,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
+#include "usb/usb_func.h"
 #include "usb/usbd_bulk.h"
 
 static uint8_t *UsbdBulkRxBuffer(UsbdBulkDev_t *pBulk)
@@ -158,21 +159,17 @@ static void UsbdBulkReset(void *pContext)
 	}
 }
 
-bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkCfg_t *pCfg,
+bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 					  UsbSpeed_t Speed)
 {
-	if (pDesc == nullptr || pCfg == nullptr || pCfg->ItfNo < 0 ||
-		pCfg->ItfNo > UINT8_MAX || pCfg->EpNo == 0U || pCfg->EpNo > 15U)
+	if (pDesc == nullptr || pBulk == nullptr || pBulk->ItfNo < 0 ||
+		pBulk->ItfNo > UINT8_MAX || pBulk->EpNo == 0U || pBulk->EpNo > 15U)
 	{
 		return false;
 	}
 
-	uint16_t mps = Speed == USB_SPEED_HIGH ? pCfg->HsMps : pCfg->FsMps;
-	if (mps == 0U)
-	{
-		mps = Speed == USB_SPEED_HIGH ? USBD_BULK_HS_MPS : USBD_BULK_FS_MPS;
-	}
-	if (mps > USBD_BULK_MAX_MPS)
+	const uint16_t mps = Speed == USB_SPEED_HIGH ? pBulk->HsMps : pBulk->FsMps;
+	if (mps == 0U || mps > USBD_BULK_MAX_MPS)
 	{
 		return false;
 	}
@@ -180,23 +177,23 @@ bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkCfg_t *pCfg,
 	memset(pDesc, 0, sizeof(*pDesc));
 	pDesc->Interface.bLength = sizeof(pDesc->Interface);
 	pDesc->Interface.bDescriptorType = USB_DESCTYPE_INTERFACE;
-	pDesc->Interface.bInterfaceNumber = (uint8_t)pCfg->ItfNo;
+	pDesc->Interface.bInterfaceNumber = (uint8_t)pBulk->ItfNo;
 	pDesc->Interface.bAlternateSetting = 0U;
 	pDesc->Interface.bNumEndpoints = 2U;
 	pDesc->Interface.bInterfaceClass = USB_INTRFCLASS_VENDOR;
-	pDesc->Interface.bInterfaceSubClass = pCfg->SubClass;
-	pDesc->Interface.bInterfaceProtocol = pCfg->Protocol;
-	pDesc->Interface.iInterface = pCfg->InterfaceString;
+	pDesc->Interface.bInterfaceSubClass = pBulk->SubClass;
+	pDesc->Interface.bInterfaceProtocol = pBulk->Protocol;
+	pDesc->Interface.iInterface = pBulk->InterfaceString;
 
 	pDesc->Out.bLength = sizeof(pDesc->Out);
 	pDesc->Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	pDesc->Out.bEndpointAddress = USB_ENDPADDR_DIROUT(pCfg->EpNo);
+	pDesc->Out.bEndpointAddress = USB_ENDPADDR_DIROUT(pBulk->EpNo);
 	pDesc->Out.bmAttributes = USB_ENDPATT_TRANS_BULK;
 	pDesc->Out.wMaxPacketSize = mps;
 	pDesc->Out.bInterval = 0U;
 
 	pDesc->In = pDesc->Out;
-	pDesc->In.bEndpointAddress = USB_ENDPADDR_DIRIN(pCfg->EpNo);
+	pDesc->In.bEndpointAddress = USB_ENDPADDR_DIRIN(pBulk->EpNo);
 
 	return true;
 }
@@ -207,8 +204,8 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
 {
 	if (pBulk == nullptr || pData == nullptr || pCfg == nullptr ||
 		UsbGetCfg(pCfg->DevNo) == nullptr ||
-		pCfg->ItfNo < 0 || pCfg->ItfNo > UINT8_MAX ||
-		pCfg->EpNo == 0U || pCfg->EpNo > 15U ||
+		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
+		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
 		pCfg->Mode > USBD_BULK_MODE_PACKET)
 	{
 		return false;
@@ -217,9 +214,7 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
 	pBulk->pData = pData;
 	pBulk->RequestHandler = pCfg->RequestHandler;
 	pBulk->pRequestContext = pCfg->pRequestContext;
-	pBulk->ItfNo = pCfg->ItfNo;
 	pBulk->DevNo = pCfg->DevNo;
-	pBulk->EpNo = pCfg->EpNo;
 	pBulk->SubClass = pCfg->SubClass;
 	pBulk->Protocol = pCfg->Protocol;
 	pBulk->InterfaceString = pCfg->InterfaceString;
@@ -233,10 +228,6 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
 	}
 
 	UsbFuncCfg_t coreCfg = {};
-	coreCfg.FirstInterface = (uint8_t)pCfg->ItfNo;
-	coreCfg.InterfaceCount = 1U;
-	coreCfg.EpInMask = (uint16_t)(1U << pCfg->EpNo);
-	coreCfg.EpOutMask = (uint16_t)(1U << pCfg->EpNo);
 	coreCfg.RequestHandler = pCfg->RequestHandler != nullptr ?
 		UsbdBulkRequest : nullptr;
 	coreCfg.ConfigHandler = UsbdBulkConfig;
@@ -247,30 +238,38 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
 	coreCfg.ProcessHandler = nullptr;
 	coreCfg.pContext = pBulk;
 
-	return UsbRegisterFunc(pBulk->DevNo, &coreCfg);
-}
+	UsbFuncReq_t req = {};
+	req.InterfaceCount = 1U;
+	req.BidirectionalCount = 1U;
 
-bool UsbdBulk::Init(const UsbdBulkCfg_t &Cfg)
-{
-	UsbIntrfCfg_t dataCfg = {};
-	dataCfg.bBlocking = Cfg.bBlocking;
-	dataCfg.RxFifoMemSize = Cfg.RxFifoMemSize;
-	dataCfg.pRxFifoMem = Cfg.pRxFifoMem;
-	dataCfg.TxFifoMemSize = Cfg.TxFifoMemSize;
-	dataCfg.pTxFifoMem = Cfg.pTxFifoMem;
-	dataCfg.TxFifoBlkSize = Cfg.Mode == USBD_BULK_MODE_PACKET ?
-		USBD_BULK_PKT_BLKSIZE : 1U;
-	dataCfg.DevNo = Cfg.DevNo;
-	dataCfg.EvtCB = Cfg.EvtCB;
-	dataCfg.EpNo = Cfg.EpNo;
-	dataCfg.BufferSize = (uint16_t)sizeof(vUsbdBulk.RxTransfer);
-	dataCfg.pRxBuffer = UsbdBulkRxBuffer(&vUsbdBulk);
-	dataCfg.pTxBuffer = UsbdBulkTxBuffer(&vUsbdBulk);
-
-	if (!UsbIntrf::Init(dataCfg))
+	UsbFuncAlloc_t alloc = {};
+	if (!UsbRegisterFuncAuto(pBulk->DevNo, &req, &coreCfg, &alloc))
 	{
 		return false;
 	}
 
+	pBulk->ItfNo = alloc.FirstInterface;
+	pBulk->EpNo = alloc.Bidirectional[0];
+
+	UsbIntrfCfg_t dataCfg = {};
+	dataCfg.bBlocking = pCfg->bBlocking;
+	dataCfg.RxFifoMemSize = pCfg->RxFifoMemSize;
+	dataCfg.pRxFifoMem = pCfg->pRxFifoMem;
+	dataCfg.TxFifoMemSize = pCfg->TxFifoMemSize;
+	dataCfg.pTxFifoMem = pCfg->pTxFifoMem;
+	dataCfg.TxFifoBlkSize = pCfg->Mode == USBD_BULK_MODE_PACKET ?
+		USBD_BULK_PKT_BLKSIZE : 1U;
+	dataCfg.DevNo = pBulk->DevNo;
+	dataCfg.EvtCB = pCfg->EvtCB;
+	dataCfg.EpNo = pBulk->EpNo;
+	dataCfg.BufferSize = (uint16_t)sizeof(pBulk->RxTransfer);
+	dataCfg.pRxBuffer = UsbdBulkRxBuffer(pBulk);
+	dataCfg.pTxBuffer = UsbdBulkTxBuffer(pBulk);
+
+	return UsbIntrfInit(pData, &dataCfg);
+}
+
+bool UsbdBulk::Init(const UsbdBulkCfg_t &Cfg)
+{
 	return UsbdBulkInit(&vUsbdBulk, &vUsbDevIntrf, &Cfg);
 }
