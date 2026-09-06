@@ -123,23 +123,6 @@ typedef struct __Usbd_Bulk_Dev {
 #pragma pack(pop)
 
 #ifdef __cplusplus
-
-class UsbdBulk : public UsbIntrf {
-public:
-	UsbdBulk() = default;
-
-	bool Init(const UsbdBulkCfg_t &Cfg);
-
-	DevIntrf_t *Data(void) { return static_cast<DevIntrf_t *>(*this); }
-
-	bool MakeDesc(UsbdBulkDesc_t *pDesc, UsbSpeed_t Speed) const {
-		return UsbdBulkMakeDesc(pDesc, &vUsbdBulk, Speed);
-	}
-
-private:
-	UsbdBulkDev_t vUsbdBulk = {};
-};
-
 extern "C" {
 #endif
 
@@ -153,6 +136,20 @@ bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 
 #ifdef __cplusplus
 }
+
+class UsbdBulk : public UsbIntrf {
+public:
+	UsbdBulk() = default;
+
+	bool Init(const UsbdBulkCfg_t &Cfg);
+
+	DevIntrf_t *Data(void) { return static_cast<DevIntrf_t *>(*this); }
+
+	bool MakeDesc(UsbdBulkDesc_t *pDesc, UsbSpeed_t Speed) const;
+
+private:
+	UsbdBulkDev_t vUsbdBulk = {};
+};
 #endif
 
 /** @} End of group USBD */
