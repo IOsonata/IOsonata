@@ -3,9 +3,10 @@
 
 @brief	TinyUSB CDC PRBS transmit performance comparison.
 
-This benchmark mirrors usb_cdc_prbs_tx.cpp but uses TinyUSB directly. The
-application offers one PRBS byte at a time. TinyUSB's CDC FIFO and completion
-path decide when endpoint packets are submitted.
+This benchmark mirrors usb_cdc_prbs_tx.cpp but uses TinyUSB directly.
+TINYUSB_BENCH_TX_BLOCK_SIZE selects how many PRBS bytes are offered to TinyUSB
+per write call. A value of 1 matches the IOsonata one-byte benchmark. A value
+of 64 measures TinyUSB with one full-speed bulk packet per application write.
 
 @author	Nguyen Hoan Hoang
 @date	Sep. 6, 2026
@@ -39,6 +40,14 @@ SOFTWARE.
 
 #include "prbs.h"
 
+#ifndef TINYUSB_BENCH_TX_BLOCK_SIZE
+#define TINYUSB_BENCH_TX_BLOCK_SIZE	64U
+#endif
+
+#if TINYUSB_BENCH_TX_BLOCK_SIZE == 0 || TINYUSB_BENCH_TX_BLOCK_SIZE > 64
+#error TINYUSB_BENCH_TX_BLOCK_SIZE must be between 1 and 64
+#endif
+
 #define TINYUSB_BENCH_PID		0x0002U
 #define TINYUSB_BENCH_PRODUCT	"TinyUSB CDC PRBS Tx"
 #include "../tinyusb_common/tinyusb_cdc_bench.h"
@@ -46,6 +55,7 @@ SOFTWARE.
 int main()
 {
 	uint8_t d = 0xff;
+	uint8_t tx[TINYUSB_BENCH_TX_BLOCK_SIZE];
 
 	if (!TinyUsbBenchInit())
 	{
@@ -57,14 +67,29 @@ int main()
 		TinyUsbBenchPowerProcess();
 		tud_task_ext(0, false);
 
-		if (!tud_cdc_connected() || tud_cdc_write_available() == 0U)
+		if (!tud_cdc_connected() ||
+			tud_cdc_write_available() < TINYUSB_BENCH_TX_BLOCK_SIZE)
 		{
 			continue;
 		}
 
-		if (tud_cdc_write(&d, 1U) == 1U)
+		uint8_t next = d;
+		for (unsigned i = 0; i < TINYUSB_BENCH_TX_BLOCK_SIZE; i++)
 		{
-			d = Prbs8(d);
+			tx[i] = next;
+			next = Prbs8(next);
+		}
+
+		const uint32_t count =
+			tud_cdc_write(tx, TINYUSB_BENCH_TX_BLOCK_SIZE);
+
+		if (count == TINYUSB_BENCH_TX_BLOCK_SIZE)
+		{
+			d = next;
+		}
+		else if (count > 0U)
+		{
+			d = tx[count];
 		}
 	}
 
