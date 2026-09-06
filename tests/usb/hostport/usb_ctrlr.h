@@ -44,25 +44,17 @@ SOFTWARE.
 
 #include "usb/usb_def.h"
 
-#define USB_CTRLR_CNT					1
-
-#define USB_PASTE3_(a, b, c)			a##b##c
-#define USB_PASTE3(a, b, c)				USB_PASTE3_(a, b, c)
-#define USB_PASTE2_(a, b)				a##b
-#define USB_PASTE2(a, b)				USB_PASTE2_(a, b)
-
-#define USB_PKT_MAXLEN_0_CONTROL		64
-#define USB_PKT_MAXLEN_0_BULK			64
-#define USB_PKT_MAXLEN_0_INT			64
-#define USB_PKT_MAXLEN_0_ISO			1023
-
-#define USB_PKT_MAXLEN(CtrlrNo, TransType) \
-	USB_PASTE3(USB_PKT_MAXLEN_, CtrlrNo, USB_PASTE2(_, TransType))
-
-#define USB_EPIN_CNT(CtrlrNo)			8
-#define USB_EPOUT_CNT(CtrlrNo)			8
-#define USB_HIGHSPEED_CAPABLE(CtrlrNo)	0
-#define USB_ISO_SUPPORTED(CtrlrNo)		1
+enum {
+	USB_CTRLR_CNT = 1,
+	USB_HIGHSPEED_CAPABLE = 0,
+	USB_EPIN_CNT = 8,
+	USB_EPOUT_CNT = 8,
+	USB_PKT_MAXLEN_CONTROL = 64,
+	USB_PKT_MAXLEN_BULK = 64,
+	USB_PKT_MAXLEN_INT = 64,
+	USB_PKT_MAXLEN_ISO = 1023,
+	USB_ISO_SUPPORTED = 1,
+};
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -159,14 +151,12 @@ bool UsbCtrlrStart(int DevNo);
 void UsbCtrlrStop(int DevNo);
 
 /** @brief Bus power and housekeeping pass, called from UsbProcess. */
-void UsbCtrlrProcess(int DevNo);
-
-/** @brief True while bus power is present. */
 bool UsbCtrlrVbusDetected(int DevNo);
 
 /** @brief True when the active connection negotiated high speed. */
 bool UsbCtrlrHighSpeed(int DevNo);
 
+void UsbCtrlrProcess(int DevNo);
 void UsbCtrlrIntEnable(int DevNo);
 void UsbCtrlrIntDisable(int DevNo);
 void UsbCtrlrConnect(int DevNo);
