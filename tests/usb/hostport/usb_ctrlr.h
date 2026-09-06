@@ -44,17 +44,40 @@ SOFTWARE.
 
 #include "usb/usb_def.h"
 
+typedef enum __Usb_Ctrlr_Trans_Type {
+	CONTROL = USB_ENDPATT_TRANS_CONTROL,
+	ISO = USB_ENDPATT_TRANS_ISO,
+	BULK = USB_ENDPATT_TRANS_BULK,
+	INT = USB_ENDPATT_TRANS_INT,
+} UsbCtrlrTransType_t;
+
 enum {
 	USB_CTRLR_CNT = 1,
-	USB_HIGHSPEED_CAPABLE = 0,
-	USB_EPIN_CNT = 8,
-	USB_EPOUT_CNT = 8,
-	USB_PKT_MAXLEN_CONTROL = 64,
-	USB_PKT_MAXLEN_BULK = 64,
-	USB_PKT_MAXLEN_INT = 64,
-	USB_PKT_MAXLEN_ISO = 1023,
-	USB_ISO_SUPPORTED = 1,
+	USB_HIGHSPEED_CAPABLE_0 = 0,
+	USB_EPIN_CNT_0 = 8,
+	USB_EPOUT_CNT_0 = 8,
+	USB_PKT_MAXLEN_0_CONTROL = 64,
+	USB_PKT_MAXLEN_0_BULK = 64,
+	USB_PKT_MAXLEN_0_INT = 64,
+	USB_PKT_MAXLEN_0_ISO = 1023,
+	USB_ISO_SUPPORTED_0 = 1,
 };
+
+#define USB_EPIN_CNT(CtrlrNo) \
+	((CtrlrNo) == 0 ? USB_EPIN_CNT_0 : 0)
+#define USB_EPOUT_CNT(CtrlrNo) \
+	((CtrlrNo) == 0 ? USB_EPOUT_CNT_0 : 0)
+#define USB_HIGHSPEED_CAPABLE(CtrlrNo) \
+	((CtrlrNo) == 0 ? USB_HIGHSPEED_CAPABLE_0 : 0)
+#define USB_ISO_SUPPORTED(CtrlrNo) \
+	((CtrlrNo) == 0 ? USB_ISO_SUPPORTED_0 : 0)
+
+#define USB_PKT_MAXLEN(CtrlrNo, TransType) \
+	((CtrlrNo) != 0 ? 0 : \
+	 (TransType) == CONTROL ? USB_PKT_MAXLEN_0_CONTROL : \
+	 (TransType) == ISO ? USB_PKT_MAXLEN_0_ISO : \
+	 (TransType) == BULK ? USB_PKT_MAXLEN_0_BULK : \
+	 (TransType) == INT ? USB_PKT_MAXLEN_0_INT : 0)
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -128,78 +151,30 @@ typedef struct __Usb_Ctrlr_Config {
 extern "C" {
 #endif
 
-// Every entry point below is implemented by usb_ctrlr_<target>.cpp for this
-// target. The generic USB layer calls only these; an application never does.
-//
-
-/**
- * @brief	Initialize controller software state.
- *
- * Must not touch controller registers, the peripheral may still be unpowered.
- */
 bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg);
-
-/**
- * @brief	Power, clock and PHY up, then prepare endpoint zero.
- *
- * One call. The split into a power stage and a register stage was an artifact
- * of the old usbd.h and usbd_ctrlr.h boundary.
- */
 bool UsbCtrlrStart(int DevNo);
-
-/** @brief Stop the controller and drop its power and clock. */
 void UsbCtrlrStop(int DevNo);
-
-/** @brief Bus power and housekeeping pass, called from UsbProcess. */
-bool UsbCtrlrVbusDetected(int DevNo);
-
-/** @brief True when the active connection negotiated high speed. */
-bool UsbCtrlrHighSpeed(int DevNo);
-
 void UsbCtrlrProcess(int DevNo);
+bool UsbCtrlrVbusDetected(int DevNo);
+bool UsbCtrlrHighSpeed(int DevNo);
 void UsbCtrlrIntEnable(int DevNo);
 void UsbCtrlrIntDisable(int DevNo);
 void UsbCtrlrConnect(int DevNo);
 void UsbCtrlrDisconnect(int DevNo);
-
-/** @brief Request remote wakeup when the controller permits it. */
 void UsbCtrlrRemoteWakeup(int DevNo);
-
-/** @brief Enable or disable SOF events. */
 void UsbCtrlrSofEnable(int DevNo, bool Enable);
-
-/**
- * @brief	Apply a device address when software owns address programming.
- *
- * Controllers that implement SET_ADDRESS in hardware leave this a no-op and
- * report USB_CTRLR_EVT_ADDRESS instead.
- */
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
-
-/** @brief Open one non-control endpoint. Endpoint zero is done by Start. */
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
-
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpCloseAll(int DevNo);
-
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						UsbCtrlrEpHandler_t Handler, void *pContext);
 bool UsbCtrlrEpRxArm(int DevNo, uint8_t EpNo);
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint16_t Length);
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length);
-
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);
-
-/** @brief Clear an endpoint stall and reset its data toggle to DATA0. */
 void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr);
-
-/**
- * @brief	MCU unique id as a printable serial string.
- *
- * Not a USB property. It sits here because UsbInit needs it when pSerial is
- * NULL and only the port can read it.
- */
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);
 
 #ifdef __cplusplus
