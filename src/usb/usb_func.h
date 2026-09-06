@@ -197,6 +197,7 @@ static inline bool UsbRegisterFuncAuto(int DevNo, const UsbFuncReq_t *pReq,
 									  UsbFuncAlloc_t *pAlloc)
 {
 	if (pReq == nullptr || pCfg == nullptr || pAlloc == nullptr ||
+		DevNo < 0 || DevNo >= USB_CTRLR_CNT ||
 		pReq->InterfaceCount > 16U ||
 		pReq->BidirectionalCount > USB_FUNC_EP_MAXCNT ||
 		pReq->InCount > USB_FUNC_EP_MAXCNT ||
@@ -205,10 +206,8 @@ static inline bool UsbRegisterFuncAuto(int DevNo, const UsbFuncReq_t *pReq,
 		return false;
 	}
 
-	const uint8_t inLimit = USB_EPIN_CNT(DevNo) < 16 ?
-		USB_EPIN_CNT(DevNo) : 16U;
-	const uint8_t outLimit = USB_EPOUT_CNT(DevNo) < 16 ?
-		USB_EPOUT_CNT(DevNo) : 16U;
+	const uint8_t inLimit = USB_EPIN_CNT < 16 ? USB_EPIN_CNT : 16U;
+	const uint8_t outLimit = USB_EPOUT_CNT < 16 ? USB_EPOUT_CNT : 16U;
 	const uint8_t pairLimit = inLimit < outLimit ? inLimit : outLimit;
 
 	if (inLimit < 1U || outLimit < 1U ||
