@@ -897,6 +897,13 @@ typedef struct __nRF_Usbd_Que {
 alignas(4) static uint8_t s_QueMem[
 	CFIFO_TOTAL_MEMSIZE(NRFUSBD_QUE_DEPTH, sizeof(nRFUsbdQue_t))];
 static hCFifo_t s_hQue;
+
+// EP0 accepts descriptor and class buffers from the generic USB layer. Those
+// buffers may be const flash or have arbitrary alignment, while nRF52 USBD
+// EasyDMA requires controller-visible, word-aligned RAM. Stage one control
+// packet here in either direction; control transfers are serialized by EP0.
+alignas(4) static uint8_t s_Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
+
 static atomic_bool s_PendingEp0Status;
 static atomic_bool s_PendingEp0RcvOut;
 static atomic_bool s_BusSuspended;
@@ -1353,8 +1360,9 @@ static void nRFUsbdQueRemoveEp(uint8_t EpNum)
 static void nRFUsbdQueueOut(uint8_t EpNum)
 {
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
+	uint8_t *pBuffer = EpNum == 0U ? s_Ep0Bounce : pXfer->pBuffer;
 
-	nRFUsbdQueXfer(EpNum, pXfer->pBuffer,
+	nRFUsbdQueXfer(EpNum, pBuffer,
 				 (uint16_t)(pXfer->TotalLen - pXfer->ActualLen));
 	if (!nRFUsbdDeferFromInterrupt())
 	{
@@ -1367,9 +1375,16 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
 	const uint16_t remaining =
 		(uint16_t)(pXfer->TotalLen - pXfer->ActualLen);
+	const uint16_t length = remaining < pXfer->Mps ? remaining : pXfer->Mps;
+	uint8_t *pBuffer = pXfer->pBuffer;
 
-	nRFUsbdQueXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN), pXfer->pBuffer,
-				 remaining < pXfer->Mps ? remaining : pXfer->Mps);
+	if (EpNum == 0U && length > 0U)
+	{
+		memcpy(s_Ep0Bounce, pBuffer, length);
+		pBuffer = s_Ep0Bounce;
+	}
+
+	nRFUsbdQueXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN), pBuffer, length);
 	if (!nRFUsbdDeferFromInterrupt())
 	{
 		nRFUsbdServicePending();
@@ -2008,6 +2023,10 @@ static void nRFUsbdHandleOutEnd(uint8_t EpNum)
 	const uint16_t transferLen = (uint16_t)NRF_USBD->EPOUT[EpNum].AMOUNT;
 	if (EpNum == 0U && pXfer->pBuffer != NULL)
 	{
+		if (transferLen > 0U)
+		{
+			memcpy(pXfer->pBuffer, s_Ep0Bounce, transferLen);
+		}
 		pXfer->pBuffer += transferLen;
 	}
 	pXfer->ActualLen += transferLen;
