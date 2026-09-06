@@ -36,14 +36,18 @@ SOFTWARE.
 
 #include "usb/usbd_bulk.h"
 
-#define EP_NO		3U
-#define ITF_NO		2
+#define EP_NO		1U
+#define ITF_NO		0
 #define RX_SLOTS	4U
 #define TX_SLOTS	4U
 
 static UsbCfg_t s_UsbCfg;
 static UsbFuncCfg_t s_FuncCfg;
 static bool s_FuncRegistered;
+static uint8_t s_ReservedFirst;
+static uint8_t s_ReservedCount;
+static uint16_t s_ReservedIn;
+static uint16_t s_ReservedOut;
 static UsbEndPointDesc_t s_OpenDesc[2];
 static int s_OpenCount;
 static int s_CloseCount;
@@ -73,6 +77,26 @@ bool UsbRegisterFunc(int DevNo, const UsbFuncCfg_t *pCfg)
 	{
 		return false;
 	}
+
+	if (pCfg->InterfaceCount != 0U && s_ReservedCount != 0U)
+	{
+		const uint16_t firstA = pCfg->FirstInterface;
+		const uint16_t lastA = firstA + pCfg->InterfaceCount;
+		const uint16_t firstB = s_ReservedFirst;
+		const uint16_t lastB = firstB + s_ReservedCount;
+
+		if (firstA < lastB && firstB < lastA)
+		{
+			return false;
+		}
+	}
+
+	if ((pCfg->EpInMask & s_ReservedIn) != 0U ||
+		(pCfg->EpOutMask & s_ReservedOut) != 0U)
+	{
+		return false;
+	}
+
 	s_FuncCfg = *pCfg;
 	s_FuncRegistered = true;
 	return true;
@@ -160,9 +184,7 @@ static UsbdBulkCfg_t MakeCfg(UsbdBulkMode_t Mode)
 		sizeof(s_TxPacketMem) : sizeof(s_TxByteMem);
 	cfg.pTxFifoMem = Mode == USBD_BULK_MODE_PACKET ?
 		s_TxPacketMem : s_TxByteMem;
-	cfg.ItfNo = ITF_NO;
 	cfg.DevNo = 0;
-	cfg.EpNo = EP_NO;
 	cfg.SubClass = 0x12U;
 	cfg.Protocol = 0x34U;
 	cfg.InterfaceString = 5U;
@@ -178,6 +200,10 @@ static void ResetFake(void)
 	memset(&s_FuncCfg, 0, sizeof(s_FuncCfg));
 	memset(s_OpenDesc, 0, sizeof(s_OpenDesc));
 	s_FuncRegistered = false;
+	s_ReservedFirst = 0U;
+	s_ReservedCount = 0U;
+	s_ReservedIn = 0U;
+	s_ReservedOut = 0U;
 	s_OpenCount = 0;
 	s_CloseCount = 0;
 	s_OutBuffer = nullptr;
@@ -199,11 +225,13 @@ static void ResetFake(void)
 static void TestDescriptor(void)
 {
 	ResetFake();
+	UsbdBulk bulk;
 	const UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
 	UsbdBulkDesc_t desc = {};
 
+	CHECK(bulk.Init(cfg));
 	CHECK(sizeof(desc) == sizeof(UsbIntrfDesc_t) + 2U * sizeof(UsbEndPointDesc_t));
-	CHECK(UsbdBulkMakeDesc(&desc, &cfg, USB_SPEED_FULL));
+	CHECK(bulk.MakeDesc(&desc, USB_SPEED_FULL));
 	CHECK(desc.Interface.bLength == sizeof(UsbIntrfDesc_t));
 	CHECK(desc.Interface.bInterfaceNumber == ITF_NO);
 	CHECK(desc.Interface.bNumEndpoints == 2U);
@@ -217,6 +245,25 @@ static void TestDescriptor(void)
 	CHECK(desc.In.bmAttributes == USB_ENDPATT_TRANS_BULK);
 	CHECK(desc.Out.wMaxPacketSize == USBD_BULK_FS_MPS);
 	CHECK(desc.In.wMaxPacketSize == USBD_BULK_FS_MPS);
+}
+
+static void TestAutoPlacement(void)
+{
+	ResetFake();
+	s_ReservedFirst = 0U;
+	s_ReservedCount = 1U;
+	s_ReservedIn = (uint16_t)(1U << 1);
+	s_ReservedOut = (uint16_t)(1U << 1);
+
+	UsbdBulk bulk;
+	const UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
+
+	CHECK(bulk.Init(cfg));
+	CHECK(s_FuncRegistered);
+	CHECK(s_FuncCfg.FirstInterface == 1U);
+	CHECK(s_FuncCfg.InterfaceCount == 1U);
+	CHECK(s_FuncCfg.EpInMask == (1U << 2));
+	CHECK(s_FuncCfg.EpOutMask == (1U << 2));
 }
 
 static void TestByteMode(void)
@@ -293,6 +340,7 @@ static void TestPacketMode(void)
 int main(void)
 {
 	TestDescriptor();
+	TestAutoPlacement();
 	TestByteMode();
 	TestPacketMode();
 
