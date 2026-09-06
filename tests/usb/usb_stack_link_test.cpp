@@ -86,7 +86,9 @@ int main(void)
 	cdc.pRxFifoMem = s_RxMem;
 	cdc.TxFifoMemSize = (int)sizeof(s_TxMem);
 	cdc.pTxFifoMem = s_TxMem;
-	cdc.ItfNo = 0;
+	cdc.CtrlIfNo = 0;
+	cdc.NotifyEpNo = 1;
+	cdc.DataEpNo = 2;
 	cdc.DevNo = 0;
 	if (!s_Cdc.Init(cdc)) { printf("UsbdCdc::Init failed\n"); return 2; }
 	if (s_Cdc.Data() == nullptr) { printf("UsbdCdc data binding failed\n"); return 5; }

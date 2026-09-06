@@ -52,6 +52,10 @@ SOFTWARE.
   */
 
 #define USBD_CDC_FUNC_MAXCNT			7
+
+// Default placement used by the built-in CDC-only descriptor generator.
+// Composite devices may assign different interface and endpoint numbers in
+// UsbdCdcCfg_t without changing the CDC runtime.
 #define USBD_CDC_CTRL_IF(n)			((uint8_t)((n) * 2U))
 #define USBD_CDC_DATA_IF(n)			((uint8_t)(USBD_CDC_CTRL_IF(n) + 1U))
 #define USBD_CDC_NOTIF_EP(n)			USB_ENDPADDR_DIRIN(1U + ((n) * 2U))
@@ -79,7 +83,9 @@ typedef struct __Usbd_Cdc_Config {
 	uint8_t *pRxFifoMem;
 	int TxFifoMemSize;
 	uint8_t *pTxFifoMem;
-	int ItfNo;
+	uint8_t CtrlIfNo;				//!< CDC control interface; data interface is CtrlIfNo + 1
+	uint8_t NotifyEpNo;			//!< Interrupt IN endpoint number
+	uint8_t DataEpNo;				//!< Bulk OUT/IN endpoint number
 	int DevNo;						//!< USB controller number
 	DevIntrfEvtHandler_t EvtCB;
 } UsbdCdcCfg_t;
@@ -91,7 +97,9 @@ typedef struct __Usbd_Cdc_Dev {
 	uint16_t ControlLineState;
 	uint16_t PendingControlLineState;
 	uint16_t SerialState;
-	int ItfNo;
+	uint8_t CtrlIfNo;
+	uint8_t NotifyEpNo;
+	uint8_t DataEpNo;
 	int DevNo;
 	bool SerialStatePending;
 	uint32_t RxTransfer[USBD_CDC_TRANS_WORDS];

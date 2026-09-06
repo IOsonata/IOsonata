@@ -75,7 +75,9 @@ static const UsbdCdcCfg_t s_LoopbackCfg = {
 	.pRxFifoMem = s_LoopbackRxFifoMem,
 	.TxFifoMemSize = LOOPBACK_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_LoopbackTxFifoMem,
-	.ItfNo = 0,
+	.CtrlIfNo = 0,
+	.NotifyEpNo = 1,
+	.DataEpNo = 2,
 	.DevNo = USB_DEVNO,
 	.EvtCB = LoopbackEvtHandler,
 };
@@ -86,7 +88,9 @@ static const UsbdCdcCfg_t s_PrbsCfg = {
 	.pRxFifoMem = s_PrbsRxFifoMem,
 	.TxFifoMemSize = PRBS_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_PrbsTxFifoMem,
-	.ItfNo = 1,
+	.CtrlIfNo = 2,
+	.NotifyEpNo = 3,
+	.DataEpNo = 4,
 	.DevNo = USB_DEVNO,
 	.EvtCB = nullptr,
 };
