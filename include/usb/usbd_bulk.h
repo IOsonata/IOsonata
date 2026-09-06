@@ -1,9 +1,9 @@
 /**-------------------------------------------------------------------------
 @file	usbd_bulk.h
 
-@brief	USB vendor bulk interface.
+@brief	USB custom bulk interface.
 
-UsbdBulk is the public adapter for a vendor-defined interface with one bulk
+UsbdBulk is the public adapter for a custom interface with one bulk
 OUT endpoint and one bulk IN endpoint sharing the same endpoint number. It
 inherits the internal UsbIntrf data path, owns the controller transfer
 buffers, and leaves the RX/TX CFifo storage to the application.
@@ -13,7 +13,7 @@ a one-byte TX CFifo and lets UsbIntrf packetize queued data. Packet mode uses
 one UsbPkt_t block per USB packet, including an explicit zero-length packet.
 
 Interface and endpoint numbers are allocated internally when the function is
-registered. Applications configure the vendor interface behaviour and storage,
+registered. Applications configure the custom interface behaviour and storage,
 not USB topology.
 
 @author	Nguyen Hoan Hoang
@@ -73,7 +73,7 @@ typedef enum __Usbd_Bulk_Mode {
 
 #pragma pack(push, 1)
 
-/// Descriptor fragment for one vendor interface and its endpoint pair.
+/// Descriptor fragment for one custom interface and its endpoint pair.
 typedef struct __Usbd_Bulk_Descriptor {
 	UsbIntrfDesc_t Interface;
 	UsbEndPointDesc_t Out;

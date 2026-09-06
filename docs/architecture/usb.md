@@ -28,8 +28,8 @@ flowchart TD
 | `src/usb/usb_intrf.cpp` | RX/TX FIFO and controller transfer handling |
 | `include/usb/usbd_cdc.h` | Public CDC ACM class and application configuration |
 | `src/usb/usbd_cdc.cpp` | CDC requests, notifications and data-endpoint ownership |
-| `include/usb/usbd_bulk.h` | Public vendor bulk class, configuration and descriptor fragment |
-| `src/usb/usbd_bulk.cpp` | Vendor bulk endpoint lifecycle and function registration |
+| `include/usb/usbd_bulk.h` | Public custom bulk class, configuration and descriptor fragment |
+| `src/usb/usbd_bulk.cpp` | Custom bulk endpoint lifecycle and function registration |
 | `<port>/include/usb_ctrlr.h` | Target controller capabilities |
 | `<port>/src/usb_ctrlr_<family>.cpp` | Registers, DMA and interrupts |
 
@@ -93,7 +93,7 @@ With no earlier function registered, that resolves to control/data interfaces
 resolves to interfaces 2/3, notification endpoint 3 IN, and data endpoint 4
 OUT/IN. The application configuration contains none of those numbers.
 
-A vendor bulk function requests one interface and one bidirectional endpoint
+A custom bulk function requests one interface and one bidirectional endpoint
 number. Bluetooth HCI can use the same mechanism to request one interface, one
 bulk pair and one additional interrupt-IN endpoint without publishing any
 placement in its application configuration.
@@ -338,13 +338,13 @@ state and uses it to initialize `UsbIntrf`, register extra endpoint callbacks,
 build descriptors and validate class requests. Endpoint zero belongs to the
 generic core and is never allocated to a function.
 
-## Vendor bulk class
+## Custom bulk class
 
 `UsbdBulk` is the public class for a customer-defined interface using one bulk
-OUT/IN endpoint pair. The interface descriptor uses vendor class `0xFF`; the
-application can configure subclass, protocol, interface string, FIFO storage,
-packet sizes and byte/packet mode. Interface number and endpoint number are
-not application configuration.
+OUT/IN endpoint pair. The interface descriptor uses USB vendor-specific class
+code `0xFF`; the application can configure subclass, protocol, interface
+string, FIFO storage, packet sizes and byte/packet mode. Interface number and
+endpoint number are not application configuration.
 
 The class requests one interface and one bidirectional endpoint from the
 internal allocator, owns its aligned controller buffers and registers the
@@ -352,7 +352,7 @@ result with the USB core. `UsbdBulk::MakeDesc()` produces the packed interface
 and two-endpoint descriptor fragment using those assigned values, so a
 composite descriptor does not need to duplicate placement policy.
 
-All data moves through the normal `DeviceIntrf` API. Optional vendor control
+All data moves through the normal `DeviceIntrf` API. Optional USB vendor control
 requests are forwarded to the application callback after the core has routed
 them to the allocated interface or endpoint.
 
