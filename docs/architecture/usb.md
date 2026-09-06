@@ -7,8 +7,10 @@ IOsonata.
 ```mermaid
 flowchart TD
     App[Application] --> Class[Public USB class<br/>UsbdCdc, UsbdBulk, ...]
+    Class --> Alloc[Internal function allocator]
     Class --> Intrf[Internal UsbIntrf<br/>endpoint-pair data path]
-    Class --> Core[USB core<br/>Chapter 9 and dispatch]
+    Alloc --> Core[USB core<br/>Chapter 9 and dispatch]
+    Class --> Core
     Intrf --> Port[UsbCtrlr port]
     Core --> Port
     Port --> Hw[Controller hardware]
@@ -21,6 +23,7 @@ flowchart TD
 | `include/usb/usb_def.h` | USB specification definitions, descriptors and requests |
 | `include/usb/usb.h` | Portable USB core and the controller-port contract |
 | `src/usb/usb.cpp` | Endpoint zero, Chapter 9, lifecycle and function dispatch |
+| `src/usb/usb_func.h` | Internal interface/endpoint resource allocation for classes |
 | `include/usb/usb_intrf.h` | Internal `DeviceIntrf` endpoint-pair data path |
 | `src/usb/usb_intrf.cpp` | RX/TX FIFO and controller transfer handling |
 | `include/usb/usbd_cdc.h` | Public CDC ACM class and application configuration |
@@ -46,7 +49,6 @@ classDiagram
     UsbIntrf <|-- UsbdBulk
     UsbIntrf <|-- OtherUsbClass
     class UsbIntrf {
-        #Bind(UsbDevIntrf_t*)
         -endpoint pair transfer
     }
     class UsbdCdc {
@@ -54,18 +56,51 @@ classDiagram
         +IsPortOpen()
         -RX transfer buffer
         -TX transfer buffer
+        -allocated interfaces/endpoints
     }
     class UsbdBulk {
         +Init(UsbdBulkCfg_t)
         +Data()
         -RX transfer buffer
         -TX transfer buffer
+        -allocated interface/endpoint
     }
 ```
 
-The C representation follows the same IOsonata pattern: the base
-`UsbDevIntrf_t` is the first member of the class-specific device structure.
-The C++ public class binds its inherited `UsbIntrf` wrapper to that base.
+The C and C++ forms use the same implementation state. A C++ class inherits
+`UsbIntrf`; its class-specific C state keeps a pointer to that inherited
+`UsbDevIntrf_t` so the C callbacks and C++ wrapper share one data path.
+
+## Interface and endpoint allocation
+
+Applications do not choose USB interface numbers or endpoint numbers. Those
+numbers describe how several functions are composed into one USB device and
+therefore belong to the USB implementation.
+
+Each class declares only the resources it needs during initialization. The
+internal allocator tries the lowest legal placement against the USB core's
+registered interface ranges and endpoint-direction masks. The controller
+capability macros bound which endpoint numbers can be considered.
+
+CDC requests:
+
+- two interfaces;
+- one interrupt-IN endpoint;
+- one bidirectional endpoint number for bulk OUT and IN.
+
+With no earlier function registered, that resolves to control/data interfaces
+0/1, notification endpoint 1 IN, and data endpoint 2 OUT/IN. A second CDC
+resolves to interfaces 2/3, notification endpoint 3 IN, and data endpoint 4
+OUT/IN. The application configuration contains none of those numbers.
+
+A vendor bulk function requests one interface and one bidirectional endpoint
+number. Bluetooth HCI can use the same mechanism to request one interface, one
+bulk pair and one additional interrupt-IN endpoint without publishing any
+placement in its application configuration.
+
+Transfer type and placement are independent. The allocator assigns endpoint
+directions; the class descriptor still decides whether an assigned endpoint is
+bulk, interrupt or another supported transfer type.
 
 ## Endpoint model
 
@@ -74,8 +109,8 @@ and OUT endpoint 1 are distinct USB endpoints and can transfer concurrently.
 They may legally share the number even though each individual endpoint is
 unidirectional.
 
-One `UsbIntrf` instance therefore stores one endpoint number, `EpNo`, and
-represents the class data pair:
+One `UsbIntrf` instance therefore stores one internally assigned endpoint
+number, `EpNo`, and represents the class data pair:
 
 | Operation | Derived address |
 | --- | --- |
@@ -83,8 +118,9 @@ represents the class data pair:
 | Transmit | `USB_ENDPADDR_DIRIN(EpNo)` |
 
 It never stores duplicate RX and TX endpoint addresses. The class owns any
-additional one-way endpoint itself; for example CDC owns its interrupt IN
-notification endpoint separately from its bulk data pair.
+additional one-way endpoint itself; for example CDC owns its allocated
+interrupt-IN notification endpoint separately from its allocated bulk data
+pair.
 
 `DeviceIntrf.DevAddr` is not used for endpoint selection. `DevNo` selects the
 USB controller, never the device address assigned by `SET_ADDRESS`.
@@ -127,7 +163,7 @@ sequenceDiagram
     participant C as UsbCtrlr
     participant F as RX CFifo
     participant A as Application
-    U->>C: Register endpoint, RX buffer and callback
+    U->>C: Register assigned endpoint, RX buffer and callback
     U->>C: Arm OUT
     C-->>U: OUT complete(length)
     U->>F: Store header and copy packet
@@ -206,7 +242,7 @@ compiles to the same instruction sequence it had before packet mode existed.
 | --- | --- |
 | Is the `DeviceIntrf` enabled? | inherited atomic `EnCnt` |
 | Is an endpoint transfer active? | controller-private transfer state |
-| Which endpoint directions belong to this data path? | one `EpNo` |
+| Which endpoint directions belong to this data path? | internally assigned `EpNo` |
 | Is the pair configured? | `Mps != 0` |
 | Is TX software-owned? | inherited `bTxReady` token |
 | Is TX byte or packet mode? | `hTxFifo->BlkSize` |
@@ -217,9 +253,10 @@ address, release flag, TX queue watermark, tail flag or ZLP flag.
 The lifecycle is:
 
 1. `UsbInit()` initializes portable core and controller software state.
-2. A public class initializes `UsbIntrf` with application FIFOs, endpoint
-   number and class buffers, then registers its USB function. `UsbIntrfInit()`
-   registers both data endpoint directions directly with the controller.
+2. A public class requests its interface/endpoint resources from the internal
+   allocator. The assigned numbers are stored only in class implementation
+   state. The class then initializes `UsbIntrf` with the assigned data endpoint,
+   application FIFOs and class buffers and registers any additional endpoint.
 3. `UsbEnable()` powers the controller, endpoint zero and bus pull-up.
 4. Configuration opens the class endpoints and calls
    `UsbIntrfConfigure(Mps)`, which starts RX.
@@ -237,7 +274,7 @@ implementation for its MCU. Generic code includes that contract and never
 switches on a vendor macro.
 
 The target header publishes compile-time capabilities used for static memory
-sizing:
+sizing and allocation bounds:
 
 ```c
 USB_CTRLR_CNT
@@ -290,32 +327,39 @@ STARTEP and cleared only when DMA ownership is released.
 
 ## Function registration
 
-Each class or vendor function registers one `UsbFuncCfg_t` containing its
-interface range, endpoint masks and callbacks. Endpoint zero belongs to the
-generic core; bit zero must be clear in function endpoint masks, and masks may
-not overlap between functions. These function callbacks handle class requests,
-configuration, reset and fallback dispatch. Normal registered data endpoint
-completions bypass this table.
+A USB class does not publish interface ranges or endpoint masks in its
+application config. Internally it describes the number and direction of the
+resources it needs. The allocator tries lowest-numbered candidates and the USB
+core remains the authority that rejects overlapping interface ranges or
+endpoint-direction masks.
+
+Once a candidate is accepted, the class keeps the allocation in its private
+state and uses it to initialize `UsbIntrf`, register extra endpoint callbacks,
+build descriptors and validate class requests. Endpoint zero belongs to the
+generic core and is never allocated to a function.
 
 ## Vendor bulk class
 
 `UsbdBulk` is the public class for a customer-defined interface using one bulk
-OUT/IN endpoint pair. The interface descriptor uses vendor class `0xFF`; its
-subclass, protocol, interface number, string index and endpoint number are
-application configuration. `UsbdBulkMakeDesc()` produces the packed interface
-and two-endpoint descriptor fragment for a standalone or composite device
-descriptor.
+OUT/IN endpoint pair. The interface descriptor uses vendor class `0xFF`; the
+application can configure subclass, protocol, interface string, FIFO storage,
+packet sizes and byte/packet mode. Interface number and endpoint number are
+not application configuration.
 
-The class owns its aligned controller buffers and registers the interface and
-endpoint masks with the USB core. The application supplies only the RX and TX
-CFifo memory and selects byte or packet mode. All data then moves through the
-normal `DeviceIntrf` API. Optional vendor control requests are forwarded to the
-application callback after the core has routed them to this interface.
+The class requests one interface and one bidirectional endpoint from the
+internal allocator, owns its aligned controller buffers and registers the
+result with the USB core. `UsbdBulk::MakeDesc()` produces the packed interface
+and two-endpoint descriptor fragment using those assigned values, so a
+composite descriptor does not need to duplicate placement policy.
+
+All data moves through the normal `DeviceIntrf` API. Optional vendor control
+requests are forwarded to the application callback after the core has routed
+them to the allocated interface or endpoint.
 
 A standard class with additional endpoint roles derives directly from
 `UsbIntrf`, not from `UsbdBulk`. Bluetooth HCI is the example: its ACL endpoint
-pair uses the same packet data path, while HCI commands remain on EP0 and HCI
-events use a separate interrupt-IN endpoint.
+pair can use the same packet data path, while HCI commands remain on EP0 and
+HCI events use a separately allocated interrupt-IN endpoint.
 
 ## Known gaps
 
