@@ -77,7 +77,8 @@ HEADERS := \
 	$(ROOT)/include/usb/usb_def.h \
 	$(ROOT)/include/usb/usb_intrf.h \
 	$(ROOT)/include/usb/usbd_bulk.h \
-	$(ROOT)/include/usb/usbd_cdc.h
+	$(ROOT)/include/usb/usbd_cdc.h \
+	$(ROOT)/src/usb/usb_func.h
 
 TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(BULK_TARGET) $(LINK_TARGET)
 
