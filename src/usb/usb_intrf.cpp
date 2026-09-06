@@ -56,13 +56,24 @@ bool UsbIntrfEnabled(const UsbDevIntrf_t *pIntrf)
 static void UsbIntrfRxArm(UsbDevIntrf_t *pIntrf)
 {
 	if (!UsbIntrfEnabled(pIntrf) || pIntrf->Mps == 0U ||
-		pIntrf->hRxFifo == nullptr || pIntrf->pRxBuffer == nullptr ||
-		CFifoAvail(pIntrf->hRxFifo) <= 0)
+		pIntrf->hRxFifo == nullptr || pIntrf->pRxBuffer == nullptr)
 	{
 		return;
 	}
 
-	(void)UsbCtrlrEpRxArm(pIntrf->DevNo, pIntrf->EpNo);
+	// Counting the free slots and arming the endpoint have to be one step.
+	// Foreground reaches here after releasing a slot, and a completion on any
+	// endpoint can take that slot in between. Arming against a full FIFO
+	// leaves the packet the controller then brings in with nowhere to go, and
+	// it is discarded after the host has already been told it arrived.
+	uint32_t state = DisableInterrupt();
+
+	if (CFifoAvail(pIntrf->hRxFifo) > 0)
+	{
+		(void)UsbCtrlrEpRxArm(pIntrf->DevNo, pIntrf->EpNo);
+	}
+
+	EnableInterrupt(state);
 }
 
 static inline __attribute__((always_inline))
