@@ -7,6 +7,9 @@ CDC owns ACM control requests, line/control state, notifications and the
 controller transfer buffers required by its bulk endpoints. UsbdCdc derives
 from the internal UsbIntrf data path and presents the DeviceIntrf API.
 
+Interface and endpoint numbers are allocated internally when the function is
+registered. Applications configure CDC behaviour and storage only.
+
 @author	Hoang Nguyen Hoan
 @date	May 2, 2024
 
@@ -53,9 +56,9 @@ SOFTWARE.
 
 #define USBD_CDC_FUNC_MAXCNT			7
 
-// Default placement used by the built-in CDC-only descriptor generator.
-// Composite devices may assign different interface and endpoint numbers in
-// UsbdCdcCfg_t without changing the CDC runtime.
+// Built-in CDC descriptor topology. Registration uses the same lowest-free
+// ordering, so ordinary CDC-only devices keep the established descriptor
+// layout without exposing these numbers in UsbdCdcCfg_t.
 #define USBD_CDC_CTRL_IF(n)			((uint8_t)((n) * 2U))
 #define USBD_CDC_DATA_IF(n)			((uint8_t)(USBD_CDC_CTRL_IF(n) + 1U))
 #define USBD_CDC_NOTIF_EP(n)			USB_ENDPADDR_DIRIN(1U + ((n) * 2U))
@@ -83,9 +86,6 @@ typedef struct __Usbd_Cdc_Config {
 	uint8_t *pRxFifoMem;
 	int TxFifoMemSize;
 	uint8_t *pTxFifoMem;
-	uint8_t CtrlIfNo;				//!< CDC control interface; data interface is CtrlIfNo + 1
-	uint8_t NotifyEpNo;			//!< Interrupt IN endpoint number
-	uint8_t DataEpNo;				//!< Bulk OUT/IN endpoint number
 	int DevNo;						//!< USB controller number
 	DevIntrfEvtHandler_t EvtCB;
 } UsbdCdcCfg_t;
@@ -97,9 +97,9 @@ typedef struct __Usbd_Cdc_Dev {
 	uint16_t ControlLineState;
 	uint16_t PendingControlLineState;
 	uint16_t SerialState;
-	uint8_t CtrlIfNo;
-	uint8_t NotifyEpNo;
-	uint8_t DataEpNo;
+	uint8_t CtrlIfNo;				//!< Internal allocation
+	uint8_t NotifyEpNo;			//!< Internal allocation
+	uint8_t DataEpNo;				//!< Internal allocation
 	int DevNo;
 	bool SerialStatePending;
 	uint32_t RxTransfer[USBD_CDC_TRANS_WORDS];
