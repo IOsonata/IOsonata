@@ -12,21 +12,18 @@ This file also declares the UsbCtrlr entry points usb_ctrlr_<target>.cpp
 implements, so the port describes both what it is and what it provides.
 
 The values here describe the silicon, not a class or a configuration. They are
-constants so an application can size CFifo memory and DMA staging buffers
-statically, before any endpoint is configured and without calling into the
-stack.
+compile-time constants so an application can size CFifo memory and DMA staging
+buffers statically, before any endpoint is configured and without calling into
+the stack.
 
-Controller numbering starts at zero and matches the CtrlrNo argument of the
-USB API. Because the accessor macros paste their arguments, CtrlrNo and
-TransType must be literal tokens, not variables.
+Current supported ports expose one USB controller. Runtime APIs still carry
+DevNo so that boundary does not need to change when a multi-controller target
+is added, but static silicon capabilities are plain constants and do not use
+token-pasting accessor macros.
 
 Packet lengths are allocation bounds: the largest packet the controller can
 move on that transfer type at the fastest speed it supports. The value an
-endpoint actually negotiates comes from its descriptor and may be smaller. A
-buffer sized from these macros is large enough at every speed.
-
-TransType tokens match the transfer types in usb_def.h: CONTROL, ISO, BULK,
-INT.
+endpoint actually negotiates comes from its descriptor and may be smaller.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 3, 2026
@@ -70,71 +67,39 @@ SOFTWARE.
   * @{
   */
 
-// Each accessor pastes through a second macro so a named constant expands
-// before it is pasted. Without that, USB_PKT_MAXLEN(USB_DEVNO, BULK) would
-// build the token USB_PKT_MAXLEN_USB_DEVNO_BULK and fail to resolve.
-#define USB_PASTE3_(a, b, c)				a##b##c
-#define USB_PASTE3(a, b, c)					USB_PASTE3_(a, b, c)
-#define USB_PASTE2_(a, b)					a##b
-#define USB_PASTE2(a, b)					USB_PASTE2_(a, b)
-
-/// Maximum packet length in bytes for one controller and transfer type.
-#define USB_PKT_MAXLEN(CtrlrNo, TransType) \
-	USB_PASTE3(USB_PKT_MAXLEN_, CtrlrNo, USB_PASTE2(_, TransType))
-
-/// IN endpoint numbers, including endpoint zero.
-#define USB_EPIN_CNT(CtrlrNo)				USB_PASTE2(USB_EPIN_CNT_, CtrlrNo)
-
-/// OUT endpoint numbers, including endpoint zero.
-#define USB_EPOUT_CNT(CtrlrNo)				USB_PASTE2(USB_EPOUT_CNT_, CtrlrNo)
-
-/// Nonzero when the controller can enumerate at high speed.
-#define USB_HIGHSPEED_CAPABLE(CtrlrNo) \
-	USB_PASTE2(USB_HIGHSPEED_CAPABLE_, CtrlrNo)
-
-/// Nonzero when this port drives the controller's isochronous endpoints.
-#define USB_ISO_SUPPORTED(CtrlrNo)			USB_PASTE2(USB_ISO_SUPPORTED_, CtrlrNo)
-
 #if defined(USBD_PRESENT)
 
-/// Number of USB controllers on this part.
-#define USB_CTRLR_CNT						1
-
 // nRF52840 and nRF5340 USBD. Full speed only. Endpoint numbers 0 through 7 in
-// each direction. Endpoint 8 is isochronous only and is not counted here
-// because usbd_ctrlr_nrf52 does not drive it.
-#define USB_HIGHSPEED_CAPABLE_0				0
-#define USB_EPIN_CNT_0						8
-#define USB_EPOUT_CNT_0						8
-
-#define USB_PKT_MAXLEN_0_CONTROL			64
-#define USB_PKT_MAXLEN_0_BULK				64
-#define USB_PKT_MAXLEN_0_INT				64
-
-// The hardware isochronous endpoint carries a full-speed maximum of 1023
-// bytes. usbd_ctrlr_nrf52 leaves isochronous out, so allocating against this
-// value buys nothing until that changes. USB_ISO_SUPPORTED says which is true.
-#define USB_PKT_MAXLEN_0_ISO				1023
-#define USB_ISO_SUPPORTED_0					0
+// each direction. Endpoint 8 is isochronous only and is not counted because
+// the current port does not drive it.
+enum {
+	USB_CTRLR_CNT = 1,
+	USB_HIGHSPEED_CAPABLE = 0,
+	USB_EPIN_CNT = 8,
+	USB_EPOUT_CNT = 8,
+	USB_PKT_MAXLEN_CONTROL = 64,
+	USB_PKT_MAXLEN_BULK = 64,
+	USB_PKT_MAXLEN_INT = 64,
+	USB_PKT_MAXLEN_ISO = 1023,
+	USB_ISO_SUPPORTED = 0,
+};
 
 #elif defined(USBHS_PRESENT)
 
-/// Number of USB controllers on this part.
-#define USB_CTRLR_CNT						1
-
 // nRF54 USBHS. High speed capable, so the bulk and interrupt bounds are the
-// high-speed maxima. A full-speed host negotiates smaller packets at
-// enumeration and a buffer sized from these still fits.
-#define USB_HIGHSPEED_CAPABLE_0				1
-#define USB_EPIN_CNT_0						16
-#define USB_EPOUT_CNT_0						16
-
-#define USB_PKT_MAXLEN_0_CONTROL			64
-#define USB_PKT_MAXLEN_0_BULK				512
-#define USB_PKT_MAXLEN_0_INT				1024
-
-#define USB_PKT_MAXLEN_0_ISO				1024
-#define USB_ISO_SUPPORTED_0					0
+// high-speed maxima. A full-speed host negotiates smaller packets and buffers
+// sized from these constants still fit.
+enum {
+	USB_CTRLR_CNT = 1,
+	USB_HIGHSPEED_CAPABLE = 1,
+	USB_EPIN_CNT = 16,
+	USB_EPOUT_CNT = 16,
+	USB_PKT_MAXLEN_CONTROL = 64,
+	USB_PKT_MAXLEN_BULK = 512,
+	USB_PKT_MAXLEN_INT = 1024,
+	USB_PKT_MAXLEN_ISO = 1024,
+	USB_ISO_SUPPORTED = 0,
+};
 
 #else
 #error "usb_ctrlr: this part has no USB controller"
