@@ -4,8 +4,9 @@
 @brief	Nordic nRF5 SDK USB CDC PRBS transmit performance comparison.
 
 This benchmark uses the same PRBS producer and BYTE_MODE switch as
-usb_cdc_prbs_tx.cpp and tinyusb_cdc_prbs_tx/main.cpp. Only the USB stack calls
-differ, so byte mode and buffered mode exercise the same application workload.
+usb_cdc_prbs_tx.cpp and tinyusb_cdc_prbs_tx/main.cpp. The application writes
+into the nRF5 SDK ring buffer while the CDC completion path drains queued data
+in USB-sized chunks, matching the queued transmit model used by IOsonata.
 
 @author	Nguyen Hoan Hoang
 @date	Sep. 6, 2026
@@ -47,6 +48,7 @@ SOFTWARE.
 #include "app_usbd_cdc_acm.h"
 #include "app_usbd_core.h"
 #include "app_usbd_serial_num.h"
+#include "nrf_ringbuf.h"
 
 #include "prbs.h"
 
@@ -54,6 +56,7 @@ SOFTWARE.
 #define BYTE_MODE
 
 #define TEST_BUFSIZE			16
+#define TX_RING_SIZE			2048
 
 #ifndef USBD_POWER_DETECTION
 #define USBD_POWER_DETECTION	true
@@ -68,6 +71,7 @@ SOFTWARE.
 
 static void CdcEvtHandler(app_usbd_class_inst_t const *pInst,
 						  app_usbd_cdc_acm_user_event_t Event);
+static void TxStart(void);
 
 APP_USBD_CDC_ACM_GLOBAL_DEF(s_Cdc,
 						CdcEvtHandler,
@@ -78,12 +82,46 @@ APP_USBD_CDC_ACM_GLOBAL_DEF(s_Cdc,
 						CDC_ACM_DATA_EPOUT,
 						APP_USBD_CDC_COMM_PROTOCOL_AT_V250);
 
+NRF_RINGBUF_DEF(s_TxRing, TX_RING_SIZE);
+
 // These names are selected by the existing Nordic SDK string configuration.
 uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456" };
 uint8_t g_extern_usbd_product_string[12 + 1] = { "SDK PRBS Tx" };
 
 static volatile bool s_PortOpen;
-static volatile bool s_TxReady;
+static volatile bool s_TxActive;
+static size_t s_TxLength;
+
+static void TxStart(void)
+{
+	uint8_t *pData;
+	size_t len;
+	ret_code_t ret;
+
+	if (!s_PortOpen || s_TxActive)
+	{
+		return;
+	}
+
+	len = NRF_DRV_USBD_EPSIZE;
+	ret = nrf_ringbuf_get(&s_TxRing, &pData, &len, true);
+	if (ret != NRF_SUCCESS || len == 0)
+	{
+		return;
+	}
+
+	ret = app_usbd_cdc_acm_write(&s_Cdc, pData, len);
+	if (ret == NRF_SUCCESS)
+	{
+		s_TxLength = len;
+		s_TxActive = true;
+	}
+	else
+	{
+		// Release the ring read reservation without consuming data.
+		(void)nrf_ringbuf_free(&s_TxRing, 0);
+	}
+}
 
 static void CdcEvtHandler(app_usbd_class_inst_t const *pInst,
 						  app_usbd_cdc_acm_user_event_t Event)
@@ -93,17 +131,26 @@ static void CdcEvtHandler(app_usbd_class_inst_t const *pInst,
 	switch (Event)
 	{
 		case APP_USBD_CDC_ACM_USER_EVT_PORT_OPEN:
+			nrf_ringbuf_init(&s_TxRing);
+			s_TxLength = 0;
+			s_TxActive = false;
 			s_PortOpen = true;
-			s_TxReady = true;
 			break;
 
 		case APP_USBD_CDC_ACM_USER_EVT_PORT_CLOSE:
 			s_PortOpen = false;
-			s_TxReady = false;
+			s_TxLength = 0;
+			s_TxActive = false;
 			break;
 
 		case APP_USBD_CDC_ACM_USER_EVT_TX_DONE:
-			s_TxReady = true;
+			if (s_TxActive)
+			{
+				(void)nrf_ringbuf_free(&s_TxRing, s_TxLength);
+				s_TxLength = 0;
+				s_TxActive = false;
+			}
+			TxStart();
 			break;
 
 		default:
@@ -117,7 +164,8 @@ static void UsbEvtHandler(app_usbd_event_type_t Event)
 	{
 		case APP_USBD_EVT_STOPPED:
 			s_PortOpen = false;
-			s_TxReady = false;
+			s_TxLength = 0;
+			s_TxActive = false;
 			app_usbd_disable();
 			break;
 
@@ -130,7 +178,8 @@ static void UsbEvtHandler(app_usbd_event_type_t Event)
 
 		case APP_USBD_EVT_POWER_REMOVED:
 			s_PortOpen = false;
-			s_TxReady = false;
+			s_TxLength = 0;
+			s_TxActive = false;
 			app_usbd_stop();
 			break;
 
@@ -147,13 +196,8 @@ int main(void)
 {
 	ret_code_t ret;
 	uint8_t d = 0xff;
-#ifdef BYTE_MODE
-	// app_usbd_cdc_acm_write is asynchronous. Keep the submitted byte in a
-	// separate object so advancing d cannot modify the in-flight DMA buffer.
-	uint8_t txByte = d;
-#else
+#ifndef BYTE_MODE
 	uint8_t buff[TEST_BUFSIZE];
-	bool bufferPending = false;
 #endif
 
 	static const app_usbd_config_t usbCfg = {
@@ -171,6 +215,7 @@ int main(void)
 	ret = app_timer_init();
 	APP_ERROR_CHECK(ret);
 
+	nrf_ringbuf_init(&s_TxRing);
 	app_usbd_serial_num_generate();
 
 	ret = app_usbd_init(&usbCfg);
@@ -200,48 +245,49 @@ int main(void)
 		}
 #endif
 
-		if (!s_PortOpen || !s_TxReady)
+		if (!s_PortOpen)
 		{
 			continue;
 		}
 
 #ifdef BYTE_MODE
-		// Demo transfer byte by byte. The value advances only when the octet
-		// was accepted. If the endpoint is busy, retry this same byte after the
-		// TX completion callback makes the interface ready again.
-		txByte = d;
-		s_TxReady = false;
-		ret = app_usbd_cdc_acm_write(&s_Cdc, &txByte, 1);
-		if (ret == NRF_SUCCESS)
+		// Demo transfer byte by byte. The value advances only when the byte
+		// was accepted into the SDK ring buffer. If the ring is full, retry
+		// this same byte while TX completions make room.
+		size_t len = 1;
+		ret = nrf_ringbuf_cpy_put(&s_TxRing, &d, &len);
+		if (ret == NRF_SUCCESS && len > 0)
 		{
 			d = Prbs8(d);
 		}
-		else
-		{
-			s_TxReady = true;
-		}
+		TxStart();
 #else
 		// Demo transfer buffer
-		if (!bufferPending)
+		for (int i = 0; i < TEST_BUFSIZE; i++)
 		{
-			for (int i = 0; i < TEST_BUFSIZE; i++)
-			{
-				d = Prbs8(d);
-				buff[i] = d;
-			}
-			bufferPending = true;
+			d = Prbs8(d);
+			buff[i] = d;
 		}
 
-		s_TxReady = false;
-		ret = app_usbd_cdc_acm_write(&s_Cdc, buff, TEST_BUFSIZE);
-		if (ret == NRF_SUCCESS)
+		int len = TEST_BUFSIZE;
+		uint8_t *p = buff;
+
+		while (len > 0)
 		{
-			// Do not refill buff until TX_DONE sets s_TxReady again.
-			bufferPending = false;
-		}
-		else
-		{
-			s_TxReady = true;
+			size_t l = (size_t)len;
+			ret = nrf_ringbuf_cpy_put(&s_TxRing, p, &l);
+			if (ret == NRF_SUCCESS)
+			{
+				len -= (int)l;
+				p += l;
+			}
+
+			TxStart();
+
+			if (!s_PortOpen)
+			{
+				break;
+			}
 		}
 #endif
 	}
