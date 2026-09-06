@@ -12,6 +12,10 @@ The interface can operate as a byte stream or as USB packets. Byte mode uses
 a one-byte TX CFifo and lets UsbIntrf packetize queued data. Packet mode uses
 one UsbPkt_t block per USB packet, including an explicit zero-length packet.
 
+Interface and endpoint numbers are allocated internally when the function is
+registered. Applications configure the vendor interface behaviour and storage,
+not USB topology.
+
 @author	Nguyen Hoan Hoang
 @date	Sep. 6, 2026
 
@@ -86,9 +90,7 @@ typedef struct __Usbd_Bulk_Config {
 	uint8_t *pRxFifoMem;
 	int TxFifoMemSize;
 	uint8_t *pTxFifoMem;
-	int ItfNo;
 	int DevNo;
-	uint8_t EpNo;
 	uint8_t SubClass;
 	uint8_t Protocol;
 	uint8_t InterfaceString;
@@ -104,9 +106,9 @@ typedef struct __Usbd_Bulk_Dev {
 	UsbDevIntrf_t *pData;
 	UsbRequestHandler_t RequestHandler;
 	void *pRequestContext;
-	int ItfNo;
+	int ItfNo;					//!< Internal allocation
 	int DevNo;
-	uint8_t EpNo;
+	uint8_t EpNo;				//!< Internal allocation
 	uint8_t SubClass;
 	uint8_t Protocol;
 	uint8_t InterfaceString;
@@ -130,6 +132,10 @@ public:
 
 	DevIntrf_t *Data(void) { return static_cast<DevIntrf_t *>(*this); }
 
+	bool MakeDesc(UsbdBulkDesc_t *pDesc, UsbSpeed_t Speed) const {
+		return UsbdBulkMakeDesc(pDesc, &vUsbdBulk, Speed);
+	}
+
 private:
 	UsbdBulkDev_t vUsbdBulk = {};
 };
@@ -142,7 +148,7 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
 				  const UsbdBulkCfg_t *pCfg);
 
 /** Build the interface plus OUT/IN endpoint descriptor fragment. */
-bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkCfg_t *pCfg,
+bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 					  UsbSpeed_t Speed);
 
 #ifdef __cplusplus
