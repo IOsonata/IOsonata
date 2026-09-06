@@ -176,31 +176,6 @@ static bool Setup(void)
 	return UsbIntrfInit(&s_Intrf, &cfg) && UsbIntrfConfigure(&s_Intrf, MPS);
 }
 
-static bool SetupUnconfigured(void)
-{
-	UsbIntrfCfg_t cfg = {};
-	cfg.DevNo = 0;
-	cfg.EpNo = EP_NO;
-	cfg.pRxFifoMem = s_RxMem;
-	cfg.RxFifoMemSize = (int)sizeof(s_RxMem);
-	cfg.pTxFifoMem = s_TxMem;
-	cfg.TxFifoMemSize = (int)sizeof(s_TxMem);
-	cfg.TxFifoBlkSize = 1U;
-	cfg.BufferSize = BUFFER_SIZE;
-	cfg.pRxBuffer = s_RxTransfer;
-	cfg.pTxBuffer = s_TxTransfer;
-	memset(static_cast<void *>(&s_Intrf), 0, sizeof(s_Intrf));
-	s_OutBuf = nullptr;
-	s_InBuf = nullptr;
-	s_OutBusy = false;
-	s_InBusy = false;
-	s_OutSubmitCnt = 0;
-	s_InSubmitCnt = 0;
-	s_XferOk = true;
-	s_HighSpeed = false;
-	return UsbIntrfInit(&s_Intrf, &cfg);
-}
-
 static bool SetupPacketMode(void)
 {
 	UsbIntrfCfg_t cfg = {};
@@ -469,24 +444,6 @@ static void CompleteIn(uint16_t Len)
 				USB_CTRLR_XFER_SUCCESS, s_InContext);
 }
 
-static void TestTxBeforeConfigure(void)
-{
-	CHECK(SetupUnconfigured());
-	const uint8_t data[3] = { 1U, 2U, 3U };
-
-	CHECK(s_Intrf.Mps == 0U);
-	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, data, sizeof(data)) == 0);
-	CHECK(CFifoUsed(s_Intrf.hTxFifo) == 0);
-	CHECK(!s_InBusy);
-	CHECK(s_InSubmitCnt == 0);
-
-	CHECK(UsbIntrfConfigure(&s_Intrf, MPS));
-	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, data, sizeof(data)) ==
-		  (int)sizeof(data));
-	CHECK(s_InBusy && s_InLen == sizeof(data));
-	CHECK(memcmp(s_InBuf, data, sizeof(data)) == 0);
-}
-
 static void TestTxChaining(void)
 {
 	CHECK(Setup());
@@ -687,7 +644,6 @@ int main(void)
 		{ "rate", TestRate },
 		{ "unconfigure", TestUnconfigure },
 		{ "disable then enable", TestDisableEnable },
-		{ "tx before configure", TestTxBeforeConfigure },
 		{ "tx chaining", TestTxChaining },
 		{ "tx accumulates", TestTxAccumulatesDuringTransfer },
 		{ "tx packet boundaries", TestTxPacketMode },

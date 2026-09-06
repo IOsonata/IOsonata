@@ -359,12 +359,6 @@ static int UsbIntrfTxBytes(DevIntrf_t * const pDevIntrf,
 {
 	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
 
-	if (pIntrf == nullptr || pIntrf->Mps == 0U ||
-		pData == nullptr || DataLen <= 0)
-	{
-		return 0;
-	}
-
 	uint32_t state = DisableInterrupt();
 	int cnt = 0;
 
