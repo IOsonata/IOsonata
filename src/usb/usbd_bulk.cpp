@@ -273,3 +273,8 @@ bool UsbdBulk::Init(const UsbdBulkCfg_t &Cfg)
 {
 	return UsbdBulkInit(&vUsbdBulk, &vUsbDevIntrf, &Cfg);
 }
+
+bool UsbdBulk::MakeDesc(UsbdBulkDesc_t *pDesc, UsbSpeed_t Speed) const
+{
+	return UsbdBulkMakeDesc(pDesc, &vUsbdBulk, Speed);
+}
