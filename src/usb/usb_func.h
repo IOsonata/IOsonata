@@ -206,8 +206,10 @@ static inline bool UsbRegisterFuncAuto(int DevNo, const UsbFuncReq_t *pReq,
 		return false;
 	}
 
-	const uint8_t inLimit = USB_EPIN_CNT < 16 ? USB_EPIN_CNT : 16U;
-	const uint8_t outLimit = USB_EPOUT_CNT < 16 ? USB_EPOUT_CNT : 16U;
+	const uint8_t inLimit = USB_EPIN_CNT(DevNo) < 16 ?
+		USB_EPIN_CNT(DevNo) : 16U;
+	const uint8_t outLimit = USB_EPOUT_CNT(DevNo) < 16 ?
+		USB_EPOUT_CNT(DevNo) : 16U;
 	const uint8_t pairLimit = inLimit < outLimit ? inLimit : outLimit;
 
 	if (inLimit < 1U || outLimit < 1U ||
