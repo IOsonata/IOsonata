@@ -53,7 +53,6 @@ OBJS := \
 	$(BUILD_DIR)/tusb.o \
 	$(BUILD_DIR)/tusb_fifo.o \
 	$(BUILD_DIR)/usbd.o \
-	$(BUILD_DIR)/usbd_control.o \
 	$(BUILD_DIR)/cdc_device.o \
 	$(BUILD_DIR)/dcd_nrf5x.o
 
@@ -69,7 +68,7 @@ debug:
 	$(MAKE) CONFIG=Debug all
 
 check-deps:
-	@test -f "$(TINYUSB_DIR)/src/tusb.c" || (echo "TinyUSB not found at $(TINYUSB_DIR). Checkout TinyUSB 0.21.0 there."; exit 1)
+	@test -f "$(TINYUSB_DIR)/src/tusb.c" || (echo "TinyUSB not found at $(TINYUSB_DIR)."; exit 1)
 	@test -f "$(NRFX_DIR)/bsp/stable/mdk/nrf.h" || (echo "nrfx not found at $(NRFX_DIR)."; exit 1)
 	@test -f "$(IO_ROOT)/ARM/Nordic/nRF52/nRF52840/lib/ioc/$(CONFIG)/libIOsonata_nRF52840.a" || (echo "Build IOsonata_nRF52840 $(CONFIG) first."; exit 1)
 
@@ -86,9 +85,6 @@ $(BUILD_DIR)/tusb_fifo.o: $(TINYUSB_DIR)/src/common/tusb_fifo.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/usbd.o: $(TINYUSB_DIR)/src/device/usbd.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/usbd_control.o: $(TINYUSB_DIR)/src/device/usbd_control.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/cdc_device.o: $(TINYUSB_DIR)/src/class/cdc/cdc_device.c | $(BUILD_DIR)

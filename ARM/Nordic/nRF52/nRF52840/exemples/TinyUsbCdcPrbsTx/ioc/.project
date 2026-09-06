@@ -58,11 +58,6 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb/src/device/usbd.c</locationURI>
 		</link>
 		<link>
-			<name>src/usbd_control.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb/src/device/usbd_control.c</locationURI>
-		</link>
-		<link>
 			<name>src/cdc_device.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb/src/class/cdc/cdc_device.c</locationURI>
