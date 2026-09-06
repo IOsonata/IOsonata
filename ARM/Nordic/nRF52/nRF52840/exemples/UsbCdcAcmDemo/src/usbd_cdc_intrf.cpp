@@ -1,21 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	usbd_cdc_intrf_nrf52.cpp
+@file	usbd_cdc_intrf.cpp
 
-@brief	USBD CDC device interface over the nRF5 SDK app_usbd stack
-
-Nordic implementation of the interface declared in usb/usbd_cdc_intrf.h,
-built on app_usbd and nrfx_usbd. The generic implementation in src/usb runs
-on the device stack in external/tinyusb instead. Both answer the same header,
-so a library build takes one of them and excludes the other.
-
-nRF52 only, and only the parts that have the USBD peripheral : nRF52840,
-nRF52833 and nRF52820. app_usbd ships in the nRF5 SDK, which has no nRF54
-version, and nrfx_usbd drives the nRF52 USBD, which the nRF54LM20 does not
-have. Hence nRF52 in the name and in the directory rather than nrfx.
-
-Work in progress. The class instance is set up but no data path is finished :
-cdc_acm_user_ev_handler has an empty body, Enable, Disable and StopRx are
-unwritten, and TxData fills the FIFO and stops short of sending.
+@brief	Generic implementation of USBD CDC device interface
 
 
 @author	Hoang Nguyen Hoan
@@ -25,7 +11,7 @@ unwritten, and TxData fills the FIFO and stops short of sending.
 
 MIT License
 
-Copyright (c) 2024, I-SYST inc., all rights reserved
+Copyright (c) 2024 I-SYST inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
