@@ -6,7 +6,7 @@ IOsonata.
 
 ```mermaid
 flowchart TD
-    App[Application] --> Class[Public USB class<br/>UsbdCdc, UsbdHid, ...]
+    App[Application] --> Class[Public USB class<br/>UsbdCdc, UsbdBulk, ...]
     Class --> Intrf[Internal UsbIntrf<br/>endpoint-pair data path]
     Class --> Core[USB core<br/>Chapter 9 and dispatch]
     Intrf --> Port[UsbCtrlr port]
@@ -25,6 +25,8 @@ flowchart TD
 | `src/usb/usb_intrf.cpp` | RX/TX FIFO and controller transfer handling |
 | `include/usb/usbd_cdc.h` | Public CDC ACM class and application configuration |
 | `src/usb/usbd_cdc.cpp` | CDC requests, notifications and data-endpoint ownership |
+| `include/usb/usbd_bulk.h` | Public vendor bulk class, configuration and descriptor fragment |
+| `src/usb/usbd_bulk.cpp` | Vendor bulk endpoint lifecycle and function registration |
 | `<port>/include/usb_ctrlr.h` | Target controller capabilities |
 | `<port>/src/usb_ctrlr_<family>.cpp` | Registers, DMA and interrupts |
 
@@ -41,6 +43,7 @@ path inherited by each public USB class.
 classDiagram
     DeviceIntrf <|-- UsbIntrf
     UsbIntrf <|-- UsbdCdc
+    UsbIntrf <|-- UsbdBulk
     UsbIntrf <|-- OtherUsbClass
     class UsbIntrf {
         #Bind(UsbDevIntrf_t*)
@@ -49,6 +52,12 @@ classDiagram
     class UsbdCdc {
         +Init(UsbdCdcCfg_t)
         +IsPortOpen()
+        -RX transfer buffer
+        -TX transfer buffer
+    }
+    class UsbdBulk {
+        +Init(UsbdBulkCfg_t)
+        +Data()
         -RX transfer buffer
         -TX transfer buffer
     }
@@ -167,8 +176,11 @@ TX CFifo mode is selected only by block size:
 
 - Block size 1 is byte-stream mode. `UsbIntrf` packetizes queued bytes up to
   MPS. CDC uses this mode.
-- Block size `sizeof(UsbPktHdr_t) + MPS` is packet mode. Each block describes
-  exactly one packet and packet blocks are never combined.
+- A block large enough for `sizeof(UsbPktHdr_t) + MPS` is packet mode. Each
+  block describes exactly one packet and packet blocks are never combined.
+  A class may size the block for its controller's maximum MPS and use the same
+  storage when that controller negotiates a smaller bus speed. The packet
+  header length must not exceed the active MPS.
 
 An idle producer starts transmission immediately. While IN is busy, producers
 only append to the FIFO. Completion copies and submits the next queued data
@@ -284,6 +296,26 @@ generic core; bit zero must be clear in function endpoint masks, and masks may
 not overlap between functions. These function callbacks handle class requests,
 configuration, reset and fallback dispatch. Normal registered data endpoint
 completions bypass this table.
+
+## Vendor bulk class
+
+`UsbdBulk` is the public class for a customer-defined interface using one bulk
+OUT/IN endpoint pair. The interface descriptor uses vendor class `0xFF`; its
+subclass, protocol, interface number, string index and endpoint number are
+application configuration. `UsbdBulkMakeDesc()` produces the packed interface
+and two-endpoint descriptor fragment for a standalone or composite device
+descriptor.
+
+The class owns its aligned controller buffers and registers the interface and
+endpoint masks with the USB core. The application supplies only the RX and TX
+CFifo memory and selects byte or packet mode. All data then moves through the
+normal `DeviceIntrf` API. Optional vendor control requests are forwarded to the
+application callback after the core has routed them to this interface.
+
+A standard class with additional endpoint roles derives directly from
+`UsbIntrf`, not from `UsbdBulk`. Bluetooth HCI is the example: its ACL endpoint
+pair uses the same packet data path, while HCI commands remain on EP0 and HCI
+events use a separate interrupt-IN endpoint.
 
 ## Known gaps
 

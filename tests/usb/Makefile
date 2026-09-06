@@ -45,6 +45,14 @@ LINK_SOURCES := \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
+BULK_TARGET := $(BUILD_DIR)/usbd_bulk_test
+BULK_SOURCES := \
+	usbd_bulk_test.cpp \
+	$(ROOT)/src/usb/usbd_bulk.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/device_intrf.cpp \
+	$(ROOT)/src/cfifo.c
+
 INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
 INTRF_SOURCES := \
 	usb_intrf_test.cpp \
@@ -68,9 +76,10 @@ HEADERS := \
 	$(ROOT)/include/usb/usb.h \
 	$(ROOT)/include/usb/usb_def.h \
 	$(ROOT)/include/usb/usb_intrf.h \
+	$(ROOT)/include/usb/usbd_bulk.h \
 	$(ROOT)/include/usb/usbd_cdc.h
 
-TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(LINK_TARGET)
+TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(BULK_TARGET) $(LINK_TARGET)
 
 .PHONY: all test test-gcc test-clang test-matrix probe clean
 
@@ -79,6 +88,7 @@ all: test
 test: $(TARGETS)
 	$(TEST_ENV) ./$(CORE_TARGET)
 	$(TEST_ENV) ./$(INTRF_TARGET)
+	$(TEST_ENV) ./$(BULK_TARGET)
 	$(TEST_ENV) ./$(LINK_TARGET)
 
 probe: $(PROBE_TARGET)
@@ -103,6 +113,11 @@ $(INTRF_TARGET): $(INTRF_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
 		$(INTRF_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(BULK_TARGET): $(BULK_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(BULK_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(LINK_TARGET): $(LINK_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
