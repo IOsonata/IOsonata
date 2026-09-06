@@ -3,10 +3,10 @@
 
 @brief	TinyUSB CDC PRBS transmit performance comparison.
 
-This benchmark mirrors usb_cdc_prbs_tx.cpp but uses TinyUSB directly.
-TINYUSB_BENCH_TX_BLOCK_SIZE selects how many PRBS bytes are offered to TinyUSB
-per write call. A value of 1 matches the IOsonata one-byte benchmark. A value
-of 64 measures TinyUSB with one full-speed bulk packet per application write.
+This benchmark uses the same PRBS producer and BYTE_MODE switch as
+usb_cdc_prbs_tx.cpp. Only the USB stack calls differ, so byte mode and buffered
+mode exercise the same application workload for the IOsonata/TinyUSB
+comparison.
 
 @author	Nguyen Hoan Hoang
 @date	Sep. 6, 2026
@@ -40,13 +40,10 @@ SOFTWARE.
 
 #include "prbs.h"
 
-#ifndef TINYUSB_BENCH_TX_BLOCK_SIZE
-#define TINYUSB_BENCH_TX_BLOCK_SIZE	64U
-#endif
 
-#if TINYUSB_BENCH_TX_BLOCK_SIZE == 0 || TINYUSB_BENCH_TX_BLOCK_SIZE > 64
-#error TINYUSB_BENCH_TX_BLOCK_SIZE must be between 1 and 64
-#endif
+#define BYTE_MODE
+
+#define TEST_BUFSIZE			16
 
 #define TINYUSB_BENCH_PID		0x0002U
 #define TINYUSB_BENCH_PRODUCT	"TinyUSB CDC PRBS Tx"
@@ -55,7 +52,9 @@ SOFTWARE.
 int main()
 {
 	uint8_t d = 0xff;
-	uint8_t tx[TINYUSB_BENCH_TX_BLOCK_SIZE];
+#ifndef BYTE_MODE
+	uint8_t buff[TEST_BUFSIZE];
+#endif
 
 	if (!TinyUsbBenchInit())
 	{
@@ -67,30 +66,50 @@ int main()
 		TinyUsbBenchPowerProcess();
 		tud_task_ext(0, false);
 
-		if (!tud_cdc_connected() ||
-			tud_cdc_write_available() < TINYUSB_BENCH_TX_BLOCK_SIZE)
+		if (tud_cdc_connected() == false)
 		{
 			continue;
 		}
 
-		uint8_t next = d;
-		for (unsigned i = 0; i < TINYUSB_BENCH_TX_BLOCK_SIZE; i++)
+#ifdef BYTE_MODE
+		// Demo transfer byte by byte. The value advances only when the octet
+		// was accepted into the FIFO. If the FIFO is full, retry this same byte
+		// while TinyUSB makes room.
+		if (tud_cdc_write_available() > 0U &&
+			tud_cdc_write(&d, 1U) > 0U)
 		{
-			tx[i] = next;
-			next = Prbs8(next);
+			d = Prbs8(d);
+		}
+#else
+		// Demo transfer buffer
+		for (int i = 0; i < TEST_BUFSIZE; i++)
+		{
+			d = Prbs8(d);
+			buff[i] = d;
 		}
 
-		const uint32_t count =
-			tud_cdc_write(tx, TINYUSB_BENCH_TX_BLOCK_SIZE);
+		int len = TEST_BUFSIZE;
+		uint8_t *p = buff;
 
-		if (count == TINYUSB_BENCH_TX_BLOCK_SIZE)
+		while (len > 0)
 		{
-			d = next;
+			uint32_t l = tud_cdc_write(p, static_cast<uint32_t>(len));
+
+			len -= static_cast<int>(l);
+			p += l;
+
+			if (tud_cdc_connected() == false)
+			{
+				break;
+			}
+
+			if (len > 0)
+			{
+				TinyUsbBenchPowerProcess();
+				tud_task_ext(0, false);
+			}
 		}
-		else if (count > 0U)
-		{
-			d = tx[count];
-		}
+#endif
 	}
 
 	return 0;
