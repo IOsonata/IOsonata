@@ -131,8 +131,8 @@ typedef struct __Usb_Dev_Interf		UsbDevIntrf_t;
 typedef int (*EpSendFct_t)(UsbDevIntrf_t *pIntrf);
 
 struct __Usb_Dev_Interf {
-	int DevNo;					//!< USB controller number
 	DevIntrf_t DevIntrf;
+	int DevNo;					//!< USB controller number
 	hCFifo_t hTxFifo;
 	hCFifo_t hRxFifo;			//!< Packet storage, one endpoint packet per block
 	uint32_t RxDropCnt;			//!< Controller/error drops, FIFO full uses backpressure
