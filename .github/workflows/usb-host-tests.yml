@@ -1,0 +1,32 @@
+name: USB Host Tests
+
+on:
+  push:
+    paths:
+      - 'include/usb/**'
+      - 'include/bluetooth/bt_hci_usb.h'
+      - 'src/usb/**'
+      - 'src/bluetooth/bt_hci_usb.cpp'
+      - 'ARM/Nordic/include/usb_ctrlr.h'
+      - 'ARM/Nordic/src/usb_ctrlr_nrfx.cpp'
+      - 'tests/usb/**'
+      - '.github/workflows/usb-host-tests.yml'
+  pull_request:
+    paths:
+      - 'include/usb/**'
+      - 'include/bluetooth/bt_hci_usb.h'
+      - 'src/usb/**'
+      - 'src/bluetooth/bt_hci_usb.cpp'
+      - 'ARM/Nordic/include/usb_ctrlr.h'
+      - 'ARM/Nordic/src/usb_ctrlr_nrfx.cpp'
+      - 'tests/usb/**'
+      - '.github/workflows/usb-host-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: GCC and Clang host matrix
+        run: make -C tests/usb test-matrix
