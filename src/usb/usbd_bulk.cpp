@@ -80,7 +80,7 @@ static bool UsbdBulkConfig(uint8_t Configuration, void *pContext)
 		return false;
 	}
 
-	UsbIntrfUnconfigure(pBulk->pData);
+	UsbIntrfUnconfigure(pBulk->pIntrfData);
 	if (Configuration == 0U)
 	{
 		return true;
@@ -98,7 +98,7 @@ static bool UsbdBulkConfig(uint8_t Configuration, void *pContext)
 		return false;
 	}
 
-	if (!UsbIntrfConfigure(pBulk->pData, mps))
+	if (!UsbIntrfConfigure(pBulk->pIntrfData, mps))
 	{
 		UsbdBulkCloseEndpoints(pBulk);
 		return false;
@@ -145,7 +145,7 @@ static void UsbdBulkXfer(uint8_t EpAddr, uint16_t Length,
 
 	if (pBulk != nullptr)
 	{
-		UsbIntrfXferComplete(pBulk->pData, EpAddr, Length, Result);
+		UsbIntrfXferComplete(pBulk->pIntrfData, EpAddr, Length, Result);
 	}
 }
 
@@ -155,7 +155,7 @@ static void UsbdBulkReset(void *pContext)
 
 	if (pBulk != nullptr)
 	{
-		UsbIntrfUnconfigure(pBulk->pData);
+		UsbIntrfUnconfigure(pBulk->pIntrfData);
 	}
 }
 
@@ -199,10 +199,10 @@ bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 }
 
 bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
-				  UsbDevIntrf_t * const pData,
+				  UsbDevIntrf_t * const pDevIntrf,
 				  const UsbdBulkCfg_t *pCfg)
 {
-	if (pBulk == nullptr || pData == nullptr || pCfg == nullptr ||
+	if (pBulk == nullptr || pDevIntrf == nullptr || pCfg == nullptr ||
 		UsbGetCfg(pCfg->DevNo) == nullptr ||
 		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
 		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
@@ -211,7 +211,7 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
 		return false;
 	}
 
-	pBulk->pData = pData;
+	pBulk->pIntrfData = pDevIntrf;
 	pBulk->RequestHandler = pCfg->RequestHandler;
 	pBulk->pRequestContext = pCfg->pRequestContext;
 	pBulk->DevNo = pCfg->DevNo;
@@ -266,7 +266,7 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
 	dataCfg.pRxBuffer = UsbdBulkRxBuffer(pBulk);
 	dataCfg.pTxBuffer = UsbdBulkTxBuffer(pBulk);
 
-	return UsbIntrfInit(pData, &dataCfg);
+	return UsbIntrfInit(pDevIntrf, &dataCfg);
 }
 
 bool UsbdBulk::Init(const UsbdBulkCfg_t &Cfg)

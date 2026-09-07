@@ -85,12 +85,12 @@ typedef struct __Usbd_Bulk_Descriptor {
 #pragma pack(push, 4)
 
 typedef struct __Usbd_Bulk_Config {
+	int DevNo;
 	bool bBlocking;
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;
 	int TxFifoMemSize;
 	uint8_t *pTxFifoMem;
-	int DevNo;
 	uint8_t SubClass;
 	uint8_t Protocol;
 	uint8_t InterfaceString;
@@ -103,7 +103,7 @@ typedef struct __Usbd_Bulk_Config {
 } UsbdBulkCfg_t;
 
 typedef struct __Usbd_Bulk_Dev {
-	UsbDevIntrf_t *pData;
+	UsbDevIntrf_t *pIntrfData;
 	UsbRequestHandler_t RequestHandler;
 	void *pRequestContext;
 	int ItfNo;					//!< Internal allocation

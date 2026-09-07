@@ -109,17 +109,17 @@ typedef struct __Usbd_Hci_Descriptor {
 #pragma pack(push, 4)
 
 typedef struct __Usbd_Hci_Config {
+	int DevNo;
 	bool bBlocking;
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;
 	int TxFifoMemSize;
 	uint8_t *pTxFifoMem;
-	int DevNo;
 	uint8_t InterfaceString;
 	uint16_t EventFsMps;			//!< Zero selects USBD_HCI_EVENT_FS_MPS
 	uint16_t EventHsMps;			//!< Zero selects USBD_HCI_EVENT_HS_MPS
-	uint16_t AclFsMps;			//!< Zero selects USBD_HCI_ACL_FS_MPS
-	uint16_t AclHsMps;			//!< Zero selects USBD_HCI_ACL_HS_MPS
+	uint16_t AclFsMps;				//!< Zero selects USBD_HCI_ACL_FS_MPS
+	uint16_t AclHsMps;				//!< Zero selects USBD_HCI_ACL_HS_MPS
 	uint8_t EventFsInterval;		//!< Zero selects USBD_HCI_EVENT_FS_INTERVAL
 	uint8_t EventHsInterval;		//!< Zero selects USBD_HCI_EVENT_HS_INTERVAL
 	DevIntrfEvtHandler_t EvtCB;
@@ -129,10 +129,10 @@ typedef struct __Usbd_Hci_Dev {
 	UsbDevIntrf_t *pAcl;
 	UsbdHciRxData_t AclRxData;
 	UsbdHciTxData_t AclTxData;
-	int HciItfNo;				//!< Internal allocation
-	int SyncItfNo;				//!< Internal allocation
+	int HciItfNo;					//!< Internal allocation
+	int SyncItfNo;					//!< Internal allocation
 	int DevNo;
-	uint8_t EventEpNo;			//!< Internal IN endpoint allocation
+	uint8_t EventEpNo;				//!< Internal IN endpoint allocation
 	uint8_t AclEpNo;				//!< Internal bidirectional endpoint allocation
 	uint8_t InterfaceString;
 	uint16_t EventFsMps;

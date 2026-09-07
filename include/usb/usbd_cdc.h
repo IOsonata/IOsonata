@@ -81,17 +81,17 @@ SOFTWARE.
 #pragma pack(push, 4)
 
 typedef struct __Usbd_Cdc_Config {
+	int DevNo;						//!< USB controller number
 	bool bBlocking;
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;
 	int TxFifoMemSize;
 	uint8_t *pTxFifoMem;
-	int DevNo;						//!< USB controller number
 	DevIntrfEvtHandler_t EvtCB;
 } UsbdCdcCfg_t;
 
 typedef struct __Usbd_Cdc_Dev {
-	UsbDevIntrf_t *pData;			//!< Endpoint data path, supplied at init
+	UsbDevIntrf_t *pIntrfData;			//!< Endpoint data path, supplied at init
 	UsbCdcLineCoding_t LineCoding;
 	UsbCdcLineCoding_t PendingLineCoding;
 	uint16_t ControlLineState;
