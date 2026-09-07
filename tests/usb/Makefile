@@ -56,7 +56,10 @@ BULK_SOURCES := \
 HCI_TARGET := $(BUILD_DIR)/usbd_hci_test
 HCI_SOURCES := \
 	usbd_hci_test.cpp \
-	$(ROOT)/src/usb/usbd_hci.cpp
+	$(ROOT)/src/usb/usbd_hci.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/device_intrf.cpp \
+	$(ROOT)/src/cfifo.c
 
 INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
 INTRF_SOURCES := \

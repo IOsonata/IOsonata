@@ -30,6 +30,8 @@ flowchart TD
 | `src/usb/usbd_cdc.cpp` | CDC requests, notifications and data-endpoint ownership |
 | `include/usb/usbd_bulk.h` | Public custom bulk class, configuration and descriptor fragment |
 | `src/usb/usbd_bulk.cpp` | Custom bulk endpoint lifecycle and function registration |
+| `include/usb/usbd_hci.h` | Public legacy Bluetooth HCI transport and descriptor fragment |
+| `src/usb/usbd_hci.cpp` | HCI command, Event and ACL packet transport |
 | `<port>/include/usb_ctrlr.h` | Target controller capabilities |
 | `<port>/src/usb_ctrlr_<family>.cpp` | Registers, DMA and interrupts |
 
@@ -47,6 +49,7 @@ classDiagram
     DeviceIntrf <|-- UsbIntrf
     UsbIntrf <|-- UsbdCdc
     UsbIntrf <|-- UsbdBulk
+    UsbIntrf <|-- UsbdHci
     UsbIntrf <|-- OtherUsbClass
     class UsbIntrf {
         -endpoint pair transfer
@@ -64,6 +67,13 @@ classDiagram
         -RX transfer buffer
         -TX transfer buffer
         -allocated interface/endpoint
+    }
+    class UsbdHci {
+        +Init(UsbdHciCfg_t)
+        +Data()
+        -EP0 Command state
+        -Event IN state
+        -ACL packet assembly
     }
 ```
 
@@ -360,6 +370,31 @@ A standard class with additional endpoint roles derives directly from
 `UsbIntrf`, not from `UsbdBulk`. Bluetooth HCI is the example: its ACL endpoint
 pair can use the same packet data path, while HCI commands remain on EP0 and
 HCI events use a separately allocated interrupt-IN endpoint.
+
+## Bluetooth HCI class
+
+`UsbdHci` implements the legacy Bluetooth USB transport:
+
+| Direction | HCI packet | USB transport |
+| --- | --- | --- |
+| Host to Controller | Command | Class control OUT request on EP0 |
+| Host to Controller | ACL | Bulk OUT |
+| Controller to Host | Event | Interrupt IN |
+| Controller to Host | ACL | Bulk IN |
+
+The second Bluetooth synchronous interface is present at alternate setting
+zero with no endpoints. SCO, ISO and Bulk Serialization are not implemented.
+
+The application supplies packet-mode ACL RX and TX CFifo memory. `UsbdHci`
+owns the command buffer, ACL assembly buffer, Event transfer buffer and the ACL
+controller staging buffers. `DevAddr` selects Command, ACL or Event at the
+`DeviceIntrf` boundary. A successful RX or TX returns one complete HCI packet
+without an H:4 packet-type byte.
+
+ACL packets are assembled from complete physical OUT packets and split into
+packet-mode `UsbIntrf` blocks for IN. The logical HCI header determines the
+packet length. Event IN uses one registered stable buffer; the controller
+packetizes a logical Event longer than the interrupt endpoint MPS.
 
 ## Known gaps
 

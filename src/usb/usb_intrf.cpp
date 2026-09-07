@@ -468,6 +468,7 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	pIntrf->BufferSize = pCfg->BufferSize;
 	pIntrf->Mps = 0U;
 	pIntrf->RxDropCnt = 0U;
+	pIntrf->pClassContext = nullptr;
 
 	pIntrf->DevIntrf.pDevData = pIntrf;
 	pIntrf->DevIntrf.IntPrio = 0;

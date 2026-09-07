@@ -146,6 +146,7 @@ struct __Usb_Dev_Interf {
 	uint16_t Mps;				//!< Active packet size, zero while unconfigured
 	uint8_t EpNo;				//!< Bidirectional endpoint number
 	EpSendFct_t EpSend;
+	void *pClassContext;		//!< Optional derived-class transport state
 };
 
 #ifdef __cplusplus
