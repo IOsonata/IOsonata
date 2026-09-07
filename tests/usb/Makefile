@@ -57,7 +57,7 @@ HCI_TARGET := $(BUILD_DIR)/bt_hci_usb_test
 HCI_SOURCES := \
 	bt_hci_usb_test.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_usb.cpp \
-	$(ROOT)/src/usb/usb_iso_intrf.cpp \
+	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
@@ -71,12 +71,12 @@ INTRF_SOURCES := \
 ISO_TARGET := $(BUILD_DIR)/usb_iso_intrf_test
 ISO_SOURCES := \
 	usb_iso_intrf_test.cpp \
-	$(ROOT)/src/usb/usb_iso_intrf.cpp
+	$(ROOT)/src/usb/usb_iso.cpp
 
 ISO_DUPLEX_TARGET := $(BUILD_DIR)/usb_iso_intrf_duplex_test
 ISO_DUPLEX_SOURCES := \
 	usb_iso_intrf_duplex_test.cpp \
-	$(ROOT)/src/usb/usb_iso_intrf.cpp
+	$(ROOT)/src/usb/usb_iso.cpp
 
 # libusb hardware validation is intentionally not part of the host regression
 # suite. It needs a physical target running exemples/usb/usb_iso_loopback.cpp.
@@ -103,7 +103,7 @@ HEADERS := \
 	$(ROOT)/include/usb/usb.h \
 	$(ROOT)/include/usb/usb_def.h \
 	$(ROOT)/include/usb/usb_intrf.h \
-	$(ROOT)/include/usb/usb_iso_intrf.h \
+	$(ROOT)/include/usb/usb_iso.h \
 	$(ROOT)/include/usb/usbd_bulk.h \
 	$(ROOT)/include/usb/usbd_cdc.h \
 	$(ROOT)/include/bluetooth/bt_hci_usb.h \
