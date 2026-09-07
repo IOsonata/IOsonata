@@ -92,7 +92,8 @@ def run_round(context, handle, ep, alt, mps, seq, timeout_ms):
         "in_done": False,
         "out_done": False,
         "echo": b"",
-        "empty_in": 0,
+        "missed_in": 0,
+        "last_in": None,
         "error": None,
     }
 
@@ -105,23 +106,43 @@ def run_round(context, handle, ep, alt, mps, seq, timeout_ms):
 
     def in_complete(transfer):
         setup = transfer.getISOSetupList()
-        if (
-            transfer.getStatus() != usb1.TRANSFER_COMPLETED
-            or len(setup) != 1
-            or setup[0]["status"] != usb1.TRANSFER_COMPLETED
-        ):
+        if len(setup) != 1:
             fail(transfer_detail("IN", transfer))
             state["in_done"] = True
             return
 
-        actual = setup[0]["actual_length"]
-        if actual == 0 and state["error"] is None:
-            state["empty_in"] += 1
+        packet = setup[0]
+        transfer_status = transfer.getStatus()
+        packet_status = packet["status"]
+        actual = packet["actual_length"]
+        state["last_in"] = transfer_detail("IN", transfer)
+
+        # A full-speed ISO IN token can arrive before the loopback firmware has
+        # received the matching OUT frame and queued its echo. On macOS the
+        # Darwin libusb backend reports that missed service interval as an
+        # overall TRANSFER_ERROR while leaving the packet descriptor COMPLETED
+        # with actual_length == 0. It is not a fatal transport error here: keep
+        # the IN request alive until the OUT frame has produced an echo.
+        if (
+            actual == 0
+            and packet_status == usb1.TRANSFER_COMPLETED
+            and transfer_status in (usb1.TRANSFER_COMPLETED, usb1.TRANSFER_ERROR)
+            and state["error"] is None
+        ):
+            state["missed_in"] += 1
             try:
                 transfer.submit()
             except usb1.USBError as exc:
                 fail(f"IN resubmit failed: {exc}")
                 state["in_done"] = True
+            return
+
+        if (
+            transfer_status != usb1.TRANSFER_COMPLETED
+            or packet_status != usb1.TRANSFER_COMPLETED
+        ):
+            fail(transfer_detail("IN", transfer))
+            state["in_done"] = True
             return
 
         packets = list(transfer.iterISO())
@@ -130,10 +151,10 @@ def run_round(context, handle, ep, alt, mps, seq, timeout_ms):
             state["in_done"] = True
             return
 
-        packet_status, packet_data = packets[0]
-        if packet_status != usb1.TRANSFER_COMPLETED:
+        iter_status, packet_data = packets[0]
+        if iter_status != usb1.TRANSFER_COMPLETED:
             fail(
-                f"IN: iterISO packet={status_name(packet_status)} "
+                f"IN: iterISO packet={status_name(iter_status)} "
                 f"({transfer_detail('IN', transfer)})"
             )
         else:
@@ -171,7 +192,10 @@ def run_round(context, handle, ep, alt, mps, seq, timeout_ms):
     )
 
     try:
-        # Submit IN first so both directions are pending when OUT is scheduled.
+        # Submit IN first. The first IN interval may be missed because the
+        # device cannot echo data until its OUT transaction has completed.
+        # Resubmission keeps IN pending while OUT is active, preserving the
+        # simultaneous bidirectional ISO test.
         in_transfer.submit()
         out_transfer.submit()
 
@@ -191,9 +215,11 @@ def run_round(context, handle, ep, alt, mps, seq, timeout_ms):
         if state["error"] is None and not (
             state["in_done"] and state["out_done"]
         ):
+            detail = state["last_in"] or "no IN completion"
             fail(
                 f"round timeout: in_done={state['in_done']} "
-                f"out_done={state['out_done']}"
+                f"out_done={state['out_done']}, "
+                f"missed IN intervals={state['missed_in']}, last {detail}"
             )
 
         if state["error"] is None and state["echo"] != payload:
@@ -208,19 +234,19 @@ def run_round(context, handle, ep, alt, mps, seq, timeout_ms):
         cancel_transfer(context, in_transfer)
         cancel_transfer(context, out_transfer)
 
-    return state["error"], state["empty_in"]
+    return state["error"], state["missed_in"]
 
 
 def run_alt(context, handle, interface, ep, alt, mps, rounds, timeout_ms):
     handle.setInterfaceAltSetting(interface, 0)
     handle.setInterfaceAltSetting(interface, alt)
 
-    empty_total = 0
+    missed_total = 0
     for seq in range(rounds):
-        error, empty_in = run_round(
+        error, missed_in = run_round(
             context, handle, ep, alt, mps, seq, timeout_ms
         )
-        empty_total += empty_in
+        missed_total += missed_in
         if error is not None:
             print(
                 f"FAIL alt {alt} MPS {mps} round {seq}: {error}",
@@ -230,7 +256,7 @@ def run_alt(context, handle, interface, ep, alt, mps, rounds, timeout_ms):
 
     print(
         f"PASS alt {alt} MPS {mps}: {rounds} simultaneous IN/OUT rounds "
-        f"(empty IN frames {empty_total})"
+        f"(missed/empty IN intervals {missed_total})"
     )
     return True
 
@@ -243,7 +269,7 @@ def manual_suspend_wake(context, handle, args):
     print(f"Suspend/wake phase: alt 6 is open and EP{args.ep} OUT is armed.")
     input("Put the host into real USB/system suspend now. After wake, press Enter.")
 
-    error, empty_in = run_round(
+    error, missed_in = run_round(
         context,
         handle,
         args.ep,
@@ -258,7 +284,7 @@ def manual_suspend_wake(context, handle, args):
 
     print(
         "PASS suspend/wake: existing handle and alt-6 ISO path resumed "
-        f"(empty IN frames {empty_in})"
+        f"(missed/empty IN intervals {missed_in})"
     )
     return True
 
