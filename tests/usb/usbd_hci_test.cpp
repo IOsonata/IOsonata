@@ -58,13 +58,13 @@ static uint8_t s_ReservedFirst;
 static uint8_t s_ReservedCount;
 static uint16_t s_ReservedIn;
 static uint16_t s_ReservedOut;
-static UsbEndPointDesc_t s_OpenDesc[3];
+static UsbEndPointDesc_t s_OpenDesc[16];
 static int s_OpenCount;
 static int s_OpenFailAt;
 static int s_CloseCount;
-static RegisteredEp_t s_Registered[3];
+static RegisteredEp_t s_Registered[5];
 static int s_RegisteredCount;
-static bool s_OutArmed;
+static bool s_OutArmed[16];
 static bool s_InBusy[16];
 static SentPacket_t s_Sent[32];
 static int s_SendCount;
@@ -117,7 +117,7 @@ bool UsbCtrlrHighSpeed(int) { return false; }
 
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 {
-	if (pDesc == nullptr || s_OpenCount >= 3 ||
+	if (pDesc == nullptr || s_OpenCount >= 16 ||
 		s_OpenCount == s_OpenFailAt)
 	{
 		return false;
@@ -126,12 +126,24 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 	return true;
 }
 
-void UsbCtrlrEpClose(int, uint8_t) { s_CloseCount++; }
+void UsbCtrlrEpClose(int, uint8_t EpAddr)
+{
+	s_CloseCount++;
+	const uint8_t epNo = USB_ENDPADDR_NUM(EpAddr);
+	if (USB_ENDPADDR_IS_IN(EpAddr))
+	{
+		s_InBusy[epNo] = false;
+	}
+	else
+	{
+		s_OutArmed[epNo] = false;
+	}
+}
 
 bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	if (pBuffer == nullptr || Handler == nullptr || s_RegisteredCount >= 3)
+	if (pBuffer == nullptr || Handler == nullptr || s_RegisteredCount >= 5)
 	{
 		return false;
 	}
@@ -141,11 +153,11 @@ bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer,
 
 bool UsbCtrlrEpRxArm(int, uint8_t EpNo)
 {
-	if (EpNo != 2U || s_OutArmed)
+	if (EpNo >= 16U || s_OutArmed[EpNo])
 	{
 		return false;
 	}
-	s_OutArmed = true;
+	s_OutArmed[EpNo] = true;
 	return true;
 }
 
@@ -220,6 +232,13 @@ static UsbdHciCfg_t MakeCfg(void)
 	return cfg;
 }
 
+static UsbdHciCfg_t MakeScoCfg(void)
+{
+	UsbdHciCfg_t cfg = MakeCfg();
+	cfg.bSco = true;
+	return cfg;
+}
+
 static RegisteredEp_t *FindRegistered(uint8_t EpAddr)
 {
 	for (int i = 0; i < s_RegisteredCount; i++)
@@ -247,18 +266,18 @@ static void CompleteIn(uint8_t EpNo)
 				  USB_CTRLR_XFER_SUCCESS, pReg->pContext);
 }
 
-static void ReceiveOut(const uint8_t *pData, uint16_t Length)
+static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
 {
-	RegisteredEp_t *pReg = FindRegistered(USB_ENDPADDR_DIROUT(2U));
+	RegisteredEp_t *pReg = FindRegistered(USB_ENDPADDR_DIROUT(EpNo));
 	CHECK(pReg != nullptr);
-	CHECK(s_OutArmed);
-	if (pReg == nullptr || !s_OutArmed)
+	CHECK(EpNo < 16U && s_OutArmed[EpNo]);
+	if (pReg == nullptr || EpNo >= 16U || !s_OutArmed[EpNo])
 	{
 		return;
 	}
 	memcpy(pReg->pBuffer, pData, Length);
-	s_OutArmed = false;
-	pReg->Handler(USB_ENDPADDR_DIROUT(2U), Length,
+	s_OutArmed[EpNo] = false;
+	pReg->Handler(USB_ENDPADDR_DIROUT(EpNo), Length,
 				  USB_CTRLR_XFER_SUCCESS, pReg->pContext);
 }
 
@@ -279,7 +298,7 @@ static void ResetFake(void)
 	s_OpenFailAt = -1;
 	s_CloseCount = 0;
 	s_RegisteredCount = 0;
-	s_OutArmed = false;
+	memset(s_OutArmed, 0, sizeof(s_OutArmed));
 	s_SendCount = 0;
 	s_RxEventCount = 0;
 	s_TxEventCount = 0;
@@ -317,6 +336,45 @@ static void TestDescriptor(void)
 	CHECK(desc.AclOut.wMaxPacketSize == USBD_HCI_ACL_FS_MPS);
 	CHECK(desc.Sync.bInterfaceNumber == 1U);
 	CHECK(desc.Sync.bNumEndpoints == 0U);
+}
+
+static void TestScoDescriptor(void)
+{
+	static const uint16_t mps[USBD_HCI_SCO_ALT_COUNT] = {
+		9U, 17U, 25U, 33U, 49U, 63U,
+	};
+
+	ResetFake();
+	UsbdHci hci;
+	const UsbdHciCfg_t cfg = MakeScoCfg();
+	UsbdHciScoDesc_t desc = {};
+
+	CHECK(hci.Init(cfg));
+	CHECK(s_FuncCfg.EpInMask ==
+		((1U << 1) | (1U << 2) | (1U << 8)));
+	CHECK(s_FuncCfg.EpOutMask == ((1U << 2) | (1U << 8)));
+	CHECK(hci.MakeScoDesc(&desc, USB_SPEED_FULL));
+	CHECK(sizeof(desc) == sizeof(UsbdHciDesc_t) +
+		USBD_HCI_SCO_ALT_COUNT * sizeof(UsbdHciScoAltDesc_t));
+	CHECK(desc.Legacy.EventIn.bEndpointAddress == USB_ENDPADDR_DIRIN(1U));
+	CHECK(desc.Legacy.AclOut.bEndpointAddress == USB_ENDPADDR_DIROUT(2U));
+	for (uint8_t i = 0U; i < USBD_HCI_SCO_ALT_COUNT; i++)
+	{
+		CHECK(desc.Alt[i].Interface.bInterfaceNumber == 1U);
+		CHECK(desc.Alt[i].Interface.bAlternateSetting == i + 1U);
+		CHECK(desc.Alt[i].Interface.bNumEndpoints == 2U);
+		CHECK(desc.Alt[i].Out.bEndpointAddress == USB_ENDPADDR_DIROUT(8U));
+		CHECK(desc.Alt[i].In.bEndpointAddress == USB_ENDPADDR_DIRIN(8U));
+		CHECK(desc.Alt[i].Out.bmAttributes == USB_ENDPATT_TRANS_ISO);
+		CHECK(desc.Alt[i].Out.wMaxPacketSize == mps[i]);
+		CHECK(desc.Alt[i].In.wMaxPacketSize == mps[i]);
+		CHECK(desc.Alt[i].Out.bInterval == USBD_HCI_SCO_FS_INTERVAL);
+	}
+
+	ResetFake();
+	s_ReservedIn = (uint16_t)(1U << 8);
+	UsbdHci collision;
+	CHECK(!collision.Init(cfg));
 }
 
 static void TestAutoPlacement(void)
@@ -363,7 +421,7 @@ static void TestConfiguration(void)
 	CHECK(s_OpenDesc[0].bEndpointAddress == USB_ENDPADDR_DIRIN(1U));
 	CHECK(s_OpenDesc[1].bEndpointAddress == USB_ENDPADDR_DIROUT(2U));
 	CHECK(s_OpenDesc[2].bEndpointAddress == USB_ENDPADDR_DIRIN(2U));
-	CHECK(s_OutArmed);
+	CHECK(s_OutArmed[2U]);
 	CHECK(DeviceIntrfGetRate(hci.Data()) == USB_LINK_RATE_FULL);
 	CHECK(s_FuncCfg.SetInterfaceHandler(0U, 0U, s_FuncCfg.pContext));
 	CHECK(s_FuncCfg.SetInterfaceHandler(1U, 0U, s_FuncCfg.pContext));
@@ -387,6 +445,119 @@ static void TestConfigurationFailure(void)
 								   s_FuncCfg.pContext));
 	CHECK(s_CloseCount == 3);
 	CHECK(DeviceIntrfGetRate(hci.Data()) == 0U);
+}
+
+static void TestScoTransport(void)
+{
+	ResetFake();
+	UsbdHci hci;
+	const UsbdHciCfg_t cfg = MakeScoCfg();
+	CHECK(hci.Init(cfg));
+	CHECK(s_RegisteredCount == 5);
+	CHECK(s_Registered[3].EpAddr == USB_ENDPADDR_DIROUT(8U));
+	CHECK(s_Registered[4].EpAddr == USB_ENDPADDR_DIRIN(8U));
+	CHECK(s_FuncCfg.ConfigHandler(1U, s_FuncCfg.pContext));
+	CHECK(!s_FuncCfg.SetInterfaceHandler(0U, 1U, s_FuncCfg.pContext));
+	CHECK(!s_FuncCfg.SetInterfaceHandler(1U, 7U, s_FuncCfg.pContext));
+	CHECK(s_FuncCfg.SetInterfaceHandler(1U, 1U, s_FuncCfg.pContext));
+	CHECK(s_OpenCount == 5);
+	CHECK(s_OpenDesc[3].bEndpointAddress == USB_ENDPADDR_DIROUT(8U));
+	CHECK(s_OpenDesc[4].bEndpointAddress == USB_ENDPADDR_DIRIN(8U));
+	CHECK(s_OpenDesc[3].bmAttributes == USB_ENDPATT_TRANS_ISO);
+	CHECK(s_OpenDesc[3].wMaxPacketSize == 9U);
+	CHECK(s_OpenDesc[3].bInterval == USBD_HCI_SCO_FS_INTERVAL);
+	CHECK(s_OutArmed[8U]);
+
+	uint8_t packet[20] = {};
+	packet[0] = 0x01U;
+	packet[1] = 0x00U;
+	packet[2] = 17U;
+	for (unsigned i = 3U; i < sizeof(packet); i++)
+	{
+		packet[i] = (uint8_t)(0x20U + i);
+	}
+	ReceiveOut(8U, packet, 9U);
+	ReceiveOut(8U, &packet[9], 9U);
+	ReceiveOut(8U, &packet[18], 2U);
+	CHECK(s_RxEventCount == 1);
+	uint8_t received[sizeof(packet)] = {};
+	CHECK(DeviceIntrfRx(hci.Data(), USBD_HCI_PACKET_SCO,
+		received, sizeof(received)) == (int)sizeof(packet));
+	CHECK(memcmp(received, packet, sizeof(packet)) == 0);
+
+	uint8_t stale[sizeof(packet)] = {};
+	memcpy(stale, packet, sizeof(stale));
+	stale[3] = 0xA5U;
+	ReceiveOut(8U, stale, 9U);
+	ReceiveOut(8U, &stale[9], 9U);
+	ReceiveOut(8U, &stale[18], 2U);
+	packet[3] = 0x5AU;
+	ReceiveOut(8U, packet, 9U);
+	ReceiveOut(8U, &packet[9], 9U);
+	ReceiveOut(8U, &packet[18], 2U);
+	CHECK(DeviceIntrfRx(hci.Data(), USBD_HCI_PACKET_SCO,
+		received, sizeof(received)) == (int)sizeof(packet));
+	CHECK(memcmp(received, packet, sizeof(packet)) == 0);
+
+	CHECK(hci.StartTx(USBD_HCI_PACKET_SCO));
+	CHECK(hci.RequestToSend(sizeof(packet)));
+	CHECK(hci.TxData(packet, sizeof(packet)) == (int)sizeof(packet));
+	hci.StopTx();
+	CHECK(!hci.RequestToSend(sizeof(packet)));
+	CHECK(s_SendCount == 1);
+	CHECK(s_Sent[0].EpAddr == USB_ENDPADDR_DIRIN(8U));
+	CHECK(s_Sent[0].Length == 9U);
+	CHECK(memcmp(s_Sent[0].Data, packet, 9U) == 0);
+	CompleteIn(8U);
+	CHECK(s_SendCount == 2);
+	CHECK(s_Sent[1].Length == 9U);
+	CHECK(memcmp(s_Sent[1].Data, &packet[9], 9U) == 0);
+	CompleteIn(8U);
+	CHECK(s_SendCount == 3);
+	CHECK(s_Sent[2].Length == 2U);
+	CHECK(memcmp(s_Sent[2].Data, &packet[18], 2U) == 0);
+	CompleteIn(8U);
+	CHECK(s_TxEventCount == 1);
+	CHECK(s_LastEvent == DEVINTRF_EVT_TX_READY);
+
+	CHECK(s_FuncCfg.SetInterfaceHandler(1U, 0U, s_FuncCfg.pContext));
+	CHECK(!s_OutArmed[8U]);
+	CHECK(DeviceIntrfTx(hci.Data(), USBD_HCI_PACKET_SCO,
+		packet, sizeof(packet)) == 0);
+	CHECK(DeviceIntrfRx(hci.Data(), USBD_HCI_PACKET_SCO,
+		received, sizeof(received)) == 0);
+}
+
+static void TestScoAlternateLifecycle(void)
+{
+	static const uint16_t mps[USBD_HCI_SCO_ALT_COUNT] = {
+		9U, 17U, 25U, 33U, 49U, 63U,
+	};
+
+	ResetFake();
+	UsbdHci hci;
+	const UsbdHciCfg_t cfg = MakeScoCfg();
+	CHECK(hci.Init(cfg));
+	CHECK(s_FuncCfg.ConfigHandler(1U, s_FuncCfg.pContext));
+
+	for (uint8_t alt = 1U; alt <= USBD_HCI_SCO_ALT_COUNT; alt++)
+	{
+		CHECK(s_FuncCfg.SetInterfaceHandler(1U, alt, s_FuncCfg.pContext));
+		const int outIndex = 3 + 2 * ((int)alt - 1);
+		CHECK(s_OpenDesc[outIndex].bEndpointAddress ==
+			USB_ENDPADDR_DIROUT(8U));
+		CHECK(s_OpenDesc[outIndex].wMaxPacketSize == mps[alt - 1U]);
+		CHECK(s_OpenDesc[outIndex + 1].bEndpointAddress ==
+			USB_ENDPADDR_DIRIN(8U));
+		CHECK(s_OpenDesc[outIndex + 1].wMaxPacketSize == mps[alt - 1U]);
+		CHECK(s_OutArmed[8U]);
+	}
+	CHECK(s_OpenCount == 15);
+	CHECK(!s_FuncCfg.SetInterfaceHandler(1U, 7U, s_FuncCfg.pContext));
+	CHECK(s_OutArmed[8U]);
+	CHECK(s_FuncCfg.SetInterfaceHandler(1U, 0U, s_FuncCfg.pContext));
+	CHECK(!s_OutArmed[8U]);
+	CHECK(s_CloseCount == 12);
 }
 
 static void TestCommand(void)
@@ -461,11 +632,11 @@ static void TestAclReceive(void)
 		packet[i] = (uint8_t)i;
 	}
 
-	ReceiveOut(packet, 64U);
+	ReceiveOut(2U, packet, 64U);
 	uint8_t received[sizeof(packet)] = {};
 	CHECK(DeviceIntrfRx(hci.Data(), USBD_HCI_PACKET_ACL,
 						received, sizeof(received)) == 0);
-	ReceiveOut(&packet[64], 6U);
+	ReceiveOut(2U, &packet[64], 6U);
 	CHECK(DeviceIntrfRx(hci.Data(), USBD_HCI_PACKET_ACL,
 						received, sizeof(received)) == (int)sizeof(packet));
 	CHECK(memcmp(received, packet, sizeof(packet)) == 0);
@@ -560,9 +731,12 @@ static void TestEventTransmit(void)
 int main(void)
 {
 	TestDescriptor();
+	TestScoDescriptor();
 	TestAutoPlacement();
 	TestConfiguration();
 	TestConfigurationFailure();
+	TestScoTransport();
+	TestScoAlternateLifecycle();
 	TestCommand();
 	TestAclReceive();
 	TestAclTransmit();

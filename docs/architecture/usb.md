@@ -30,8 +30,8 @@ flowchart TD
 | `src/usb/usbd_cdc.cpp` | CDC requests, notifications and data-endpoint ownership |
 | `include/usb/usbd_bulk.h` | Public custom bulk class, configuration and descriptor fragment |
 | `src/usb/usbd_bulk.cpp` | Custom bulk endpoint lifecycle and function registration |
-| `include/usb/usbd_hci.h` | Public legacy Bluetooth HCI transport and descriptor fragment |
-| `src/usb/usbd_hci.cpp` | HCI command, Event and ACL packet transport |
+| `include/usb/usbd_hci.h` | Public Bluetooth HCI transport and descriptor fragments |
+| `src/usb/usbd_hci.cpp` | HCI Command, Event, ACL and optional SCO packet transport |
 | `<port>/include/usb_ctrlr.h` | Target controller capabilities |
 | `<port>/src/usb_ctrlr_<family>.cpp` | Registers, DMA and interrupts |
 
@@ -74,6 +74,7 @@ classDiagram
         -EP0 Command state
         -Event IN state
         -ACL packet assembly
+        -optional SCO packet state
     }
 ```
 
@@ -104,9 +105,10 @@ resolves to interfaces 2/3, notification endpoint 3 IN, and data endpoint 4
 OUT/IN. The application configuration contains none of those numbers.
 
 A custom bulk function requests one interface and one bidirectional endpoint
-number. Bluetooth HCI can use the same mechanism to request one interface, one
-bulk pair and one additional interrupt-IN endpoint without publishing any
-placement in its application configuration.
+number. Bluetooth HCI requests two interfaces, one bulk pair and one additional
+interrupt-IN endpoint without publishing any placement in its application
+configuration. When SCO is enabled, it also reserves the controller's
+bidirectional isochronous endpoint number.
 
 Transfer type and placement are independent. The allocator assigns endpoint
 directions; the class descriptor still decides whether an assigned endpoint is
@@ -373,7 +375,7 @@ HCI events use a separately allocated interrupt-IN endpoint.
 
 ## Bluetooth HCI class
 
-`UsbdHci` implements the legacy Bluetooth USB transport:
+`UsbdHci` implements the Bluetooth USB transport:
 
 | Direction | HCI packet | USB transport |
 | --- | --- | --- |
@@ -381,14 +383,20 @@ HCI events use a separately allocated interrupt-IN endpoint.
 | Host to Controller | ACL | Bulk OUT |
 | Controller to Host | Event | Interrupt IN |
 | Controller to Host | ACL | Bulk IN |
+| Either direction, optional | SCO | Isochronous OUT/IN |
 
-The second Bluetooth synchronous interface is present at alternate setting
-zero with no endpoints. SCO, ISO and Bulk Serialization are not implemented.
+The second Bluetooth synchronous interface always has alternate setting zero
+with no endpoints. Setting `UsbdHciCfg_t.bSco` adds alternate settings 1 through
+6 with bidirectional isochronous endpoints using 9, 17, 25, 33, 49 and 63-byte
+packets. On nRF52/nRF53 USBD the controller-constrained allocation uses the
+dedicated endpoint 8; the generic allocator keeps that placement internal.
+Bluetooth ISO packets and Bulk Serialization are not implemented.
 
 The application supplies packet-mode ACL RX and TX CFifo memory. `UsbdHci`
-owns the command buffer, ACL assembly buffer, Event transfer buffer and the ACL
-controller staging buffers. `DevAddr` selects Command, ACL or Event at the
-`DeviceIntrf` boundary. A successful RX or TX returns one complete HCI packet
+owns the command buffer, ACL assembly buffer, Event transfer buffer, SCO packet
+buffers and the controller staging buffers. `DevAddr` selects Command, ACL,
+Event or SCO at the `DeviceIntrf` boundary. A successful RX or TX returns one
+complete HCI packet
 without an H:4 packet-type byte.
 
 ACL packets are assembled from complete physical OUT packets and split into
@@ -399,7 +407,7 @@ the next interrupt packet without changing the registered DMA address.
 
 ## Known gaps
 
-- Isochronous endpoints are not yet driven by a port.
+- Isochronous endpoints are currently driven only by the nRF52/nRF53 USBD port.
   `USB_ISO_SUPPORTED` reports this independently of hardware packet capacity.
 - There is no host-controller layer yet. Role-neutral naming preserves that
   extension point.

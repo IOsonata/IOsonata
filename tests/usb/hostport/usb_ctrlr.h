@@ -3,9 +3,9 @@
 
 @brief	Host test stand in for a port supplied usb_ctrlr.h.
 
-Describes one full speed controller with eight endpoints in each direction.
-The host tests link against a fake controller, so these numbers only have to
-be a valid target shape.
+Describes one full speed controller with ordinary endpoints 0 through 7 and a
+dedicated bidirectional isochronous endpoint 8. The host tests link against a
+fake controller, so these numbers only have to be a valid target shape.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 3, 2026
@@ -59,8 +59,10 @@ enum {
 	USB_PKT_MAXLEN_0_CONTROL = 64,
 	USB_PKT_MAXLEN_0_BULK = 64,
 	USB_PKT_MAXLEN_0_INT = 64,
-	USB_PKT_MAXLEN_0_ISO = 1023,
+	USB_PKT_MAXLEN_0_ISO = 63,
 	USB_ISO_SUPPORTED_0 = 1,
+	USB_ISO_EPIN_MASK_0 = (1U << 8),
+	USB_ISO_EPOUT_MASK_0 = (1U << 8),
 };
 
 #define USB_EPIN_CNT(CtrlrNo) \
@@ -71,6 +73,10 @@ enum {
 	((CtrlrNo) == 0 ? USB_HIGHSPEED_CAPABLE_0 : 0)
 #define USB_ISO_SUPPORTED(CtrlrNo) \
 	((CtrlrNo) == 0 ? USB_ISO_SUPPORTED_0 : 0)
+#define USB_ISO_EPIN_MASK(CtrlrNo) \
+	((CtrlrNo) == 0 ? (uint16_t)USB_ISO_EPIN_MASK_0 : (uint16_t)0U)
+#define USB_ISO_EPOUT_MASK(CtrlrNo) \
+	((CtrlrNo) == 0 ? (uint16_t)USB_ISO_EPOUT_MASK_0 : (uint16_t)0U)
 
 #define USB_PKT_MAXLEN(CtrlrNo, TransType) \
 	((CtrlrNo) != 0 ? 0 : \
