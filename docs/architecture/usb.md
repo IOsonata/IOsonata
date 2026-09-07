@@ -7,6 +7,9 @@ IOsonata.
 ```mermaid
 flowchart TD
     App[Application] --> Class[Public USB class<br/>UsbdCdc, UsbdBulk, ...]
+    Bt[Bluetooth transport<br/>BtHciUsb] --> Alloc
+    Bt --> Intrf
+    Bt --> Core
     Class --> Alloc[Internal function allocator]
     Class --> Intrf[Internal UsbIntrf<br/>endpoint-pair data path]
     Alloc --> Core[USB core<br/>Chapter 9 and dispatch]
@@ -30,14 +33,16 @@ flowchart TD
 | `src/usb/usbd_cdc.cpp` | CDC requests, notifications and data-endpoint ownership |
 | `include/usb/usbd_bulk.h` | Public custom bulk class, configuration and descriptor fragment |
 | `src/usb/usbd_bulk.cpp` | Custom bulk endpoint lifecycle and function registration |
-| `include/usb/usbd_hci.h` | Public Bluetooth HCI transport and descriptor fragments |
-| `src/usb/usbd_hci.cpp` | Legacy and serialized HCI packet transport, with optional SCO endpoints |
+| `include/bluetooth/bt_hci_usb.h` | Public Bluetooth HCI-over-USB transport and descriptor fragments |
+| `src/bluetooth/bt_hci_usb.cpp` | Bluetooth legacy and serialized packet policy over USB endpoints |
 | `<port>/include/usb_ctrlr.h` | Target controller capabilities |
 | `<port>/src/usb_ctrlr_<family>.cpp` | Registers, DMA and interrupts |
 
-The `usbd_` prefix identifies device classes. The `usb_` prefix is role
-neutral. `UsbCtrlr` is also role neutral because the port boundary describes
-controller operations rather than class policy.
+The `usbd_` prefix identifies USB-owned device classes. The `usb_` prefix is
+role neutral. `UsbCtrlr` is also role neutral because the port boundary
+describes controller operations rather than class policy. `BtHciUsb` is under
+`bluetooth/` because it implements Bluetooth HCI packet and transport rules;
+it consumes USB services without making the USB core depend on Bluetooth.
 
 ## Class model
 
@@ -49,8 +54,8 @@ classDiagram
     DeviceIntrf <|-- UsbIntrf
     UsbIntrf <|-- UsbdCdc
     UsbIntrf <|-- UsbdBulk
-    UsbIntrf <|-- UsbdHci
     UsbIntrf <|-- OtherUsbClass
+    UsbIntrf <|-- BtHciUsb
     class UsbIntrf {
         -endpoint pair transfer
     }
@@ -68,8 +73,8 @@ classDiagram
         -TX transfer buffer
         -allocated interface/endpoint
     }
-    class UsbdHci {
-        +Init(UsbdHciCfg_t)
+    class BtHciUsb {
+        +Init(BtHciUsbCfg_t)
         +Data()
         -EP0 Command state
         -Event IN state
@@ -368,14 +373,15 @@ All data moves through the normal `DeviceIntrf` API. Optional USB vendor control
 requests are forwarded to the application callback after the core has routed
 them to the allocated interface or endpoint.
 
-A standard class with additional endpoint roles derives directly from
-`UsbIntrf`, not from `UsbdBulk`. Bluetooth HCI is the example: its ACL endpoint
-pair can use the same packet data path, while HCI commands remain on EP0 and
-HCI events use a separately allocated interrupt-IN endpoint.
+A protocol transport with additional endpoint roles can derive directly from
+`UsbIntrf`, not from `UsbdBulk`. `BtHciUsb` is the example: its ACL endpoint
+pair uses the same USB packet data path, while Bluetooth HCI commands remain
+on EP0 and HCI events use a separately allocated interrupt-IN endpoint.
 
-## Bluetooth HCI class
+## Bluetooth HCI USB transport
 
-`UsbdHci` implements the Bluetooth USB transport:
+`BtHciUsb` implements the Bluetooth HCI USB transport while consuming the USB
+allocator, core dispatch, endpoint-pair data path and controller port:
 
 | Direction | HCI packet | USB transport |
 | --- | --- | --- |
@@ -387,12 +393,12 @@ HCI events use a separately allocated interrupt-IN endpoint.
 | Either direction, serialized mode | Command, Event, ACL, SCO, ISO | Bulk OUT/IN |
 
 The second Bluetooth synchronous interface always has alternate setting zero
-with no endpoints. Setting `UsbdHciCfg_t.bSco` adds alternate settings 1 through
+with no endpoints. Setting `BtHciUsbCfg_t.bSco` adds alternate settings 1 through
 6 with bidirectional isochronous endpoints using 9, 17, 25, 33, 49 and 63-byte
 packets. On nRF52/nRF53 USBD the controller-constrained allocation uses the
 dedicated endpoint 8; the generic allocator keeps that placement internal.
 
-Setting `UsbdHciCfg_t.bBulkSerialization` adds alternate setting 1 to the HCI
+Setting `BtHciUsbCfg_t.bBulkSerialization` adds alternate setting 1 to the HCI
 interface. That alternate contains only the allocator-owned bulk OUT/IN pair.
 Selecting it disables Event IN and routes Command, ACL, SCO, Event and ISO HCI
 packets through bulk with the standard one-byte packet indicator. The packet
@@ -403,7 +409,7 @@ interface changes are rejected while serialized mode is active. Selecting a
 non-zero synchronous alternate prevents switching the HCI interface to
 serialized mode.
 
-The application supplies packet-mode ACL RX and TX CFifo memory. `UsbdHci`
+The application supplies packet-mode ACL RX and TX CFifo memory. `BtHciUsb`
 owns the command buffer, bulk assembly buffer, Event transfer buffer, SCO
 packet buffers and the controller staging buffers. `DevAddr` selects Command,
 ACL, Event, SCO or ISO at the `DeviceIntrf` boundary. A successful RX or TX

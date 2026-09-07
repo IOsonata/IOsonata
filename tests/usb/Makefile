@@ -53,10 +53,10 @@ BULK_SOURCES := \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
-HCI_TARGET := $(BUILD_DIR)/usbd_hci_test
+HCI_TARGET := $(BUILD_DIR)/bt_hci_usb_test
 HCI_SOURCES := \
-	usbd_hci_test.cpp \
-	$(ROOT)/src/usb/usbd_hci.cpp \
+	bt_hci_usb_test.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_usb.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
@@ -86,7 +86,7 @@ HEADERS := \
 	$(ROOT)/include/usb/usb_intrf.h \
 	$(ROOT)/include/usb/usbd_bulk.h \
 	$(ROOT)/include/usb/usbd_cdc.h \
-	$(ROOT)/include/usb/usbd_hci.h \
+	$(ROOT)/include/bluetooth/bt_hci_usb.h \
 	$(ROOT)/src/usb/usb_func.h
 
 TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(BULK_TARGET) $(HCI_TARGET) $(LINK_TARGET)
