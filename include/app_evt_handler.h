@@ -98,10 +98,4 @@ bool AppEvtHandlerIdleRegister(AppEvtHandlerIdle_t Handler);
 }
 #endif
 
-#if defined(__cplusplus) && defined(STM32WBAxx_H) && \
-	defined(HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE) && \
-	defined(ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE)
-#include "bluetooth/bt_wba_event_hook.h"
-#endif
-
 #endif // __APP_EVT_HANDLER_H__

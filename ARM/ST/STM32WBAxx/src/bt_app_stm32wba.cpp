@@ -90,6 +90,7 @@ SOFTWARE.
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_att.h"
 #include "app_evt_handler.h"
+#include "bt_wba_event_router.h"
 
 /******** For DEBUG ************/
 //#define UART_DEBUG_ENABLE
@@ -816,7 +817,7 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 						// and hand the same value to the stack unless the callback
 						// rejected synchronously.
 						uint8_t rnd[8] = {0};
-						(void)hci_le_rand(rnd);
+						(void)BtWbaLeRand(rnd);
 						uint32_t val = ((uint32_t)rnd[0] | ((uint32_t)rnd[1] << 8) |
 										((uint32_t)rnd[2] << 16) | ((uint32_t)rnd[3] << 24)) % 1000000u;
 						BtSmpPasskeyDisplay(connHdl, val);
@@ -829,7 +830,7 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 					{
 						// Input side: the application provides the value the user
 						// reads from the peer through BtSmpPasskeyReply.
-						BtSmpPasskeyRequest(connHdl);
+						BtWbaPasskeyRequest(connHdl);
 					}
 					break;
 				}
@@ -981,7 +982,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	}
 
 	// Register the central HCI event handler with the SVCCTL dispatcher.
-	SVCCTL_RegisterHandler(BtAppHciEvtHandler);
+	BtWbaEventRouterRegister(BtAppHciEvtHandler);
 
 	// Sequencer tasks for HCI-evt drain + BLE host work. These match the
 	// notification hooks above (hci_notify_asynch_evt, BLE_RESUME_FLOW).
@@ -1081,7 +1082,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	if (pCfg->Role & BTAPP_ROLE_OBSERVER)    role |= GAP_OBSERVER_ROLE;
 	if (pCfg->Role & BTAPP_ROLE_BROADCASTER) role |= GAP_BROADCASTER_ROLE;
 
-	ret = aci_gap_init(role,
+	ret = BtWbaGapInitCapture(role,
 	                   0x00,	// privacy disabled by default
 	                   (uint8_t)(pCfg->pDevName ? strlen(pCfg->pDevName) : 0),
 	                   &gapSrvcHdl, &devNameHdl, &appearanceHdl);
@@ -1095,14 +1096,14 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Push the device name into the GAP service char value.
 	if (pCfg->pDevName != NULL)
 	{
-		aci_gatt_update_char_value(gapSrvcHdl, devNameHdl,
+		BtWbaGattUpdateCharValue(gapSrvcHdl, devNameHdl,
 		                           0, (uint8_t)strlen(pCfg->pDevName),
 		                           (uint8_t *)pCfg->pDevName);
 	}
 
 	// Appearance.
 	uint16_t appearance = pCfg->Appearance;
-	aci_gatt_update_char_value(gapSrvcHdl, appearanceHdl,
+	BtWbaGattUpdateCharValue(gapSrvcHdl, appearanceHdl,
 	                           0, sizeof(appearance), (uint8_t *)&appearance);
 
 	// Store the app security type so the GATT layer can gate characteristic
@@ -1320,7 +1321,7 @@ void BtAppGapDeviceNameSet(const char *pDeviceName)
 	// Device name char is at offset 0x0002 from the GAP service start
 	// handle in ST's standard GAP service layout.
 	uint16_t devNameHdl = s_WbaData.GattSrvcStartHdl + 2;
-	aci_gatt_update_char_value(s_WbaData.GattSrvcStartHdl, devNameHdl,
+	BtWbaGattUpdateCharValue(s_WbaData.GattSrvcStartHdl, devNameHdl,
 	                           0, (uint8_t)strlen(pDeviceName),
 	                           (uint8_t *)pDeviceName);
 	BtGapSetDevName(pDeviceName);
