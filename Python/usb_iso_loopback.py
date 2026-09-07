@@ -16,9 +16,10 @@ DEFAULT_INTERFACE = 0
 DEFAULT_EP = 8
 DEFAULT_ROUNDS = 32
 DEFAULT_TIMEOUT_MS = 1000
-ROUND_TIMEOUT_S = 3.0
 
 MPS_BY_ALT = (9, 17, 25, 33, 49, 63)
+BURST_GUARD_FRAMES = 8
+BURST_EXTRA_IN_FRAMES = 16
 
 
 def parse_int(value):
@@ -38,19 +39,6 @@ def status_name(status):
     return names.get(status, str(status))
 
 
-def transfer_detail(label, transfer):
-    setup = transfer.getISOSetupList()
-    if not setup:
-        return f"{label}: transfer={status_name(transfer.getStatus())}, no ISO packet"
-
-    packet = setup[0]
-    return (
-        f"{label}: transfer={status_name(transfer.getStatus())}, "
-        f"packet={status_name(packet['status'])}, "
-        f"requested={packet['length']}, actual={packet['actual_length']}"
-    )
-
-
 def cancel_transfer(context, transfer):
     if not transfer.isSubmitted():
         return
@@ -60,7 +48,8 @@ def cancel_transfer(context, transfer):
     except usb1.USBError:
         pass
 
-    while transfer.isSubmitted():
+    deadline = time.monotonic() + 0.5
+    while transfer.isSubmitted() and time.monotonic() < deadline:
         try:
             context.handleEvents()
         except usb1.USBErrorInterrupted:
@@ -69,137 +58,114 @@ def cancel_transfer(context, transfer):
             break
 
 
-def build_payload(alt, mps, seq):
-    if seq % 3 == 0:
-        length = mps
-    elif seq % 3 == 1:
-        length = max(1, mps - 1)
-    else:
-        length = 1
-
-    data = bytearray((0xA5 ^ alt ^ seq ^ i) & 0xFF for i in range(length))
+def build_payload(alt, length, seq):
+    data = bytearray(
+        ((0xA5 ^ (alt * 13) ^ (seq * 17) ^ (i * 29)) & 0xFF)
+        for i in range(length)
+    )
     if length >= 4:
         data[0] = alt
         data[1] = seq & 0xFF
         data[2] = (seq >> 8) & 0xFF
-        data[3] = (seq >> 16) & 0xFF
+        data[3] = length
     return bytes(data)
 
 
-def run_round(context, handle, ep, alt, mps, seq, timeout_ms):
-    payload = build_payload(alt, mps, seq)
+def packet_summary(setup):
+    counts = {}
+    nonzero = 0
+    for packet in setup:
+        name = status_name(packet["status"])
+        counts[name] = counts.get(name, 0) + 1
+        if packet["actual_length"]:
+            nonzero += 1
+    text = ", ".join(f"{name}={count}" for name, count in sorted(counts.items()))
+    return f"{text}; nonzero={nonzero}/{len(setup)}"
+
+
+def run_burst(
+    context,
+    handle,
+    ep,
+    alt,
+    mps,
+    test_length,
+    rounds,
+    timeout_ms,
+    sequence_base,
+):
+    guard = BURST_GUARD_FRAMES
+    out_count = guard + rounds + guard
+    in_count = out_count + BURST_EXTRA_IN_FRAMES
+
+    payloads = [
+        build_payload(alt, test_length, sequence_base + i)
+        for i in range(out_count)
+    ]
+    out_buffer = b"".join(payloads)
+    out_lengths = [len(payload) for payload in payloads]
+    in_lengths = [mps] * in_count
+
     state = {
         "in_done": False,
         "out_done": False,
-        "echo": b"",
-        "missed_in": 0,
-        "last_in": None,
+        "in_status": None,
+        "out_status": None,
+        "in_setup": [],
+        "out_setup": [],
+        "in_packets": [],
         "error": None,
     }
 
-    in_transfer = handle.getTransfer(iso_packets=1)
-    out_transfer = handle.getTransfer(iso_packets=1)
+    in_transfer = handle.getTransfer(iso_packets=in_count)
+    out_transfer = handle.getTransfer(iso_packets=out_count)
 
     def fail(message):
         if state["error"] is None:
             state["error"] = message
 
     def in_complete(transfer):
-        setup = transfer.getISOSetupList()
-        if len(setup) != 1:
-            fail(transfer_detail("IN", transfer))
-            state["in_done"] = True
-            return
-
-        packet = setup[0]
-        transfer_status = transfer.getStatus()
-        packet_status = packet["status"]
-        actual = packet["actual_length"]
-        state["last_in"] = transfer_detail("IN", transfer)
-
-        # A full-speed ISO IN token can arrive before the loopback firmware has
-        # received the matching OUT frame and queued its echo. On macOS the
-        # Darwin libusb backend reports that missed service interval as an
-        # overall TRANSFER_ERROR while leaving the packet descriptor COMPLETED
-        # with actual_length == 0. It is not a fatal transport error here: keep
-        # the IN request alive until the OUT frame has produced an echo.
-        if (
-            actual == 0
-            and packet_status == usb1.TRANSFER_COMPLETED
-            and transfer_status in (usb1.TRANSFER_COMPLETED, usb1.TRANSFER_ERROR)
-            and state["error"] is None
-        ):
-            state["missed_in"] += 1
-            try:
-                transfer.submit()
-            except usb1.USBError as exc:
-                fail(f"IN resubmit failed: {exc}")
-                state["in_done"] = True
-            return
-
-        if (
-            transfer_status != usb1.TRANSFER_COMPLETED
-            or packet_status != usb1.TRANSFER_COMPLETED
-        ):
-            fail(transfer_detail("IN", transfer))
-            state["in_done"] = True
-            return
-
-        packets = list(transfer.iterISO())
-        if len(packets) != 1:
-            fail(f"IN: expected one ISO packet, got {len(packets)}")
-            state["in_done"] = True
-            return
-
-        iter_status, packet_data = packets[0]
-        if iter_status != usb1.TRANSFER_COMPLETED:
-            fail(
-                f"IN: iterISO packet={status_name(iter_status)} "
-                f"({transfer_detail('IN', transfer)})"
-            )
-        else:
-            state["echo"] = bytes(packet_data)
+        state["in_status"] = transfer.getStatus()
+        state["in_setup"] = list(transfer.getISOSetupList())
+        state["in_packets"] = [
+            (packet_status, bytes(packet_data))
+            for packet_status, packet_data in transfer.iterISO()
+        ]
         state["in_done"] = True
 
     def out_complete(transfer):
-        setup = transfer.getISOSetupList()
-        if (
-            transfer.getStatus() != usb1.TRANSFER_COMPLETED
-            or len(setup) != 1
-            or setup[0]["status"] != usb1.TRANSFER_COMPLETED
-        ):
-            fail(transfer_detail("OUT", transfer))
-        elif setup[0]["actual_length"] != len(payload):
-            fail(
-                f"{transfer_detail('OUT', transfer)}, "
-                f"expected actual={len(payload)}"
-            )
+        state["out_status"] = transfer.getStatus()
+        state["out_setup"] = list(transfer.getISOSetupList())
         state["out_done"] = True
 
     in_transfer.setIsochronous(
         usb1.ENDPOINT_IN | ep,
-        mps,
+        mps * in_count,
         callback=in_complete,
         timeout=timeout_ms,
-        iso_transfer_length_list=[mps],
+        iso_transfer_length_list=in_lengths,
     )
     out_transfer.setIsochronous(
         usb1.ENDPOINT_OUT | ep,
-        payload,
+        out_buffer,
         callback=out_complete,
         timeout=timeout_ms,
-        iso_transfer_length_list=[len(payload)],
+        iso_transfer_length_list=out_lengths,
     )
 
     try:
-        # Submit IN first. The first IN interval may be missed because the
-        # device cannot echo data until its OUT transaction has completed.
-        # Resubmission keeps IN pending while OUT is active, preserving the
-        # simultaneous bidirectional ISO test.
+        # Keep a continuous IN schedule in place before the OUT stream starts.
+        # Unlike bulk, ISO has no retry. A one-frame request/echo transaction can
+        # lose the only echo merely because the host and device chose different
+        # service frames. Multi-packet transfers keep both directions scheduled
+        # for consecutive frames and test the transport as an ISO stream.
         in_transfer.submit()
         out_transfer.submit()
 
-        deadline = time.monotonic() + ROUND_TIMEOUT_S
+        deadline = time.monotonic() + max(
+            3.0,
+            (in_count * 0.002) + (timeout_ms / 1000.0) + 1.0,
+        )
         while (
             state["error"] is None
             and not (state["in_done"] and state["out_done"])
@@ -215,68 +181,162 @@ def run_round(context, handle, ep, alt, mps, seq, timeout_ms):
         if state["error"] is None and not (
             state["in_done"] and state["out_done"]
         ):
-            detail = state["last_in"] or "no IN completion"
             fail(
-                f"round timeout: in_done={state['in_done']} "
-                f"out_done={state['out_done']}, "
-                f"missed IN intervals={state['missed_in']}, last {detail}"
+                f"burst timeout: in_done={state['in_done']} "
+                f"out_done={state['out_done']}"
             )
 
-        if state["error"] is None and state["echo"] != payload:
-            fail(
-                f"data mismatch: sent={payload.hex()} "
-                f"received={state['echo'].hex()}"
+        if state["error"] is not None:
+            return state["error"], None
+
+        if len(state["out_setup"]) != out_count:
+            return (
+                f"OUT descriptor count {len(state['out_setup'])}, "
+                f"expected {out_count}",
+                None,
             )
+
+        for index, packet in enumerate(state["out_setup"]):
+            if (
+                packet["status"] != usb1.TRANSFER_COMPLETED
+                or packet["actual_length"] != out_lengths[index]
+            ):
+                return (
+                    f"OUT packet {index}: status={status_name(packet['status'])}, "
+                    f"requested={out_lengths[index]}, "
+                    f"actual={packet['actual_length']}; "
+                    f"transfer={status_name(state['out_status'])}",
+                    None,
+                )
+
+        received = []
+        bad_packets = []
+        for index, (packet_status, packet_data) in enumerate(state["in_packets"]):
+            if packet_data:
+                if packet_status != usb1.TRANSFER_COMPLETED:
+                    bad_packets.append(
+                        f"{index}:{status_name(packet_status)}/{len(packet_data)}"
+                    )
+                else:
+                    received.append(packet_data)
+
+        if bad_packets:
+            return (
+                "IN packets with data but error status: " + ", ".join(bad_packets[:8]),
+                None,
+            )
+
+        # Match received non-empty frames against the transmitted stream in
+        # order. The leading/trailing guard frames absorb normal host/device
+        # phase differences. Every frame in the middle validation window must
+        # survive; otherwise this is a real ISO drop or corruption.
+        matched = set()
+        next_tx = 0
+        unknown = []
+        for packet_data in received:
+            found = None
+            for tx_index in range(next_tx, len(payloads)):
+                if payloads[tx_index] == packet_data:
+                    found = tx_index
+                    break
+            if found is None:
+                unknown.append(packet_data.hex())
+                continue
+            matched.add(found)
+            next_tx = found + 1
+
+        if unknown:
+            return (
+                "unexpected IN payload(s): " + ", ".join(unknown[:4]),
+                None,
+            )
+
+        first_test = guard
+        last_test = guard + rounds
+        missing = [
+            index - first_test
+            for index in range(first_test, last_test)
+            if index not in matched
+        ]
+        if missing:
+            in_summary = packet_summary(state["in_setup"])
+            return (
+                f"missing validation frame(s) {missing[:16]}; "
+                f"IN transfer={status_name(state['in_status'])}; {in_summary}",
+                None,
+            )
+
+        stats = {
+            "received": len(received),
+            "in_slots": in_count,
+            "matched": len(matched),
+            "out_packets": out_count,
+            "in_status": status_name(state["in_status"]),
+        }
+        return None, stats
 
     except usb1.USBError as exc:
-        fail(f"submit failed: {exc}")
+        return f"submit failed: {exc}", None
     finally:
         cancel_transfer(context, in_transfer)
         cancel_transfer(context, out_transfer)
 
-    return state["error"], state["missed_in"]
-
 
 def run_alt(context, handle, interface, ep, alt, mps, rounds, timeout_ms):
-    handle.setInterfaceAltSetting(interface, 0)
-    handle.setInterfaceAltSetting(interface, alt)
+    lengths = (mps, max(1, mps - 1), 1)
 
-    missed_total = 0
-    for seq in range(rounds):
-        error, missed_in = run_round(
-            context, handle, ep, alt, mps, seq, timeout_ms
+    for mode, length in enumerate(lengths):
+        handle.setInterfaceAltSetting(interface, 0)
+        handle.setInterfaceAltSetting(interface, alt)
+        time.sleep(0.005)
+
+        error, stats = run_burst(
+            context,
+            handle,
+            ep,
+            alt,
+            mps,
+            length,
+            rounds,
+            timeout_ms,
+            sequence_base=mode * 512,
         )
-        missed_total += missed_in
         if error is not None:
             print(
-                f"FAIL alt {alt} MPS {mps} round {seq}: {error}",
+                f"FAIL alt {alt} MPS {mps} length {length}: {error}",
                 file=sys.stderr,
             )
             return False
 
-    print(
-        f"PASS alt {alt} MPS {mps}: {rounds} simultaneous IN/OUT rounds "
-        f"(missed/empty IN intervals {missed_total})"
-    )
+        print(
+            f"PASS alt {alt} MPS {mps} length {length}: "
+            f"{rounds} validation frames "
+            f"(RX {stats['received']}/{stats['in_slots']} ISO slots, "
+            f"IN transfer {stats['in_status']})"
+        )
+
     return True
 
 
 def manual_suspend_wake(context, handle, args):
     handle.setInterfaceAltSetting(args.interface, 0)
     handle.setInterfaceAltSetting(args.interface, 6)
+    time.sleep(0.005)
 
     print()
     print(f"Suspend/wake phase: alt 6 is open and EP{args.ep} OUT is armed.")
     input("Put the host into real USB/system suspend now. After wake, press Enter.")
 
-    error, missed_in = run_round(
+    error, stats = run_burst(
         context,
         handle,
         args.ep,
         6,
         MPS_BY_ALT[5],
-        0xA55A,
+        MPS_BY_ALT[5],
+        max(1, min(args.rounds, 8)),
         args.timeout,
+        sequence_base=0x4000,
     )
     if error is not None:
         print(f"FAIL suspend/wake resume: {error}", file=sys.stderr)
@@ -284,7 +344,7 @@ def manual_suspend_wake(context, handle, args):
 
     print(
         "PASS suspend/wake: existing handle and alt-6 ISO path resumed "
-        f"(missed/empty IN intervals {missed_in})"
+        f"(RX {stats['received']}/{stats['in_slots']} ISO slots)"
     )
     return True
 
@@ -297,7 +357,12 @@ def main():
     parser.add_argument("--pid", type=parse_int, default=DEFAULT_PID)
     parser.add_argument("--interface", type=int, default=DEFAULT_INTERFACE)
     parser.add_argument("--ep", type=int, default=DEFAULT_EP)
-    parser.add_argument("--rounds", type=int, default=DEFAULT_ROUNDS)
+    parser.add_argument(
+        "--rounds",
+        type=int,
+        default=DEFAULT_ROUNDS,
+        help="validated frames per packet length and alternate setting",
+    )
     parser.add_argument(
         "--timeout",
         type=int,
@@ -315,8 +380,8 @@ def main():
 
     if args.ep <= 0 or args.ep > 15:
         parser.error("--ep must be 1..15")
-    if args.rounds <= 0:
-        parser.error("--rounds must be positive")
+    if args.rounds <= 0 or args.rounds > 200:
+        parser.error("--rounds must be 1..200")
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
 
