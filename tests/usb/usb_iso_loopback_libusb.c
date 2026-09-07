@@ -54,8 +54,8 @@ typedef struct __Iso_Xfer_Context {
 
 struct __Iso_Round {
 	libusb_device_handle *Handle;
-	libusb_transfer *In;
-	libusb_transfer *Out;
+	struct libusb_transfer *In;
+	struct libusb_transfer *Out;
 	IsoXferContext_t InContext;
 	IsoXferContext_t OutContext;
 	uint8_t InBuffer[MAX_MPS];
@@ -358,7 +358,6 @@ static int RunAlt(libusb_context *pUsb, libusb_device_handle *pHandle,
 		return rc;
 	}
 
-	unsigned empty = 0U;
 	for (unsigned seq = 0U; seq < Rounds; seq++)
 	{
 		rc = RunRound(pUsb, pHandle, Ep, Alt, Mps, seq);
@@ -369,7 +368,6 @@ static int RunAlt(libusb_context *pUsb, libusb_device_handle *pHandle,
 				Alt, Mps, seq, libusb_error_name(rc));
 			return rc;
 		}
-		(void)empty;
 	}
 	printf("PASS alt %u MPS %u: %u simultaneous IN/OUT rounds\n",
 		Alt, Mps, Rounds);
