@@ -78,6 +78,14 @@ ISO_DUPLEX_SOURCES := \
 	usb_iso_intrf_duplex_test.cpp \
 	$(ROOT)/src/usb/usb_iso_intrf.cpp
 
+# libusb hardware validation is intentionally not part of the host regression
+# suite. It needs a physical target running exemples/usb/usb_iso_loopback.cpp.
+ISO_HW_TARGET := $(BUILD_DIR)/usb_iso_loopback_libusb
+ISO_HW_SOURCE := usb_iso_loopback_libusb.c
+LIBUSB_CFLAGS ?= $(shell pkg-config --cflags libusb-1.0 2>/dev/null)
+LIBUSB_LIBS ?= $(shell pkg-config --libs libusb-1.0 2>/dev/null)
+ISO_HW_ARGS ?= --manual-suspend-wake
+
 # Throughput measurement, not a regression test. Built and run on demand.
 # Sanitizers are left off so the numbers are not distorted.
 PROBE_TARGET := $(BUILD_DIR)/tx_rate_probe
@@ -105,7 +113,7 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(ISO_TARGET) $(ISO_DUPLEX_TARGET) \
 	$(BULK_TARGET) $(HCI_TARGET) $(LINK_TARGET)
 
 .PHONY: all test test-gcc test-clang test-matrix test-nrf-suspend-policy \
-	test-nrf-iso-policy probe clean
+	test-nrf-iso-policy iso-hw-build iso-hw probe clean
 
 all: test
 
@@ -125,6 +133,11 @@ test-nrf-suspend-policy:
 
 test-nrf-iso-policy:
 	python3 ./nrf_usb_iso_policy_test.py
+
+iso-hw-build: $(ISO_HW_TARGET)
+
+iso-hw: $(ISO_HW_TARGET)
+	./$(ISO_HW_TARGET) $(ISO_HW_ARGS)
 
 probe: $(PROBE_TARGET)
 	./$(PROBE_TARGET) $(SOF_TICKS)
@@ -173,6 +186,16 @@ $(LINK_TARGET): $(LINK_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
 		$(LINK_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(ISO_HW_TARGET): $(ISO_HW_SOURCE)
+	@if [ -z "$(strip $(LIBUSB_LIBS))" ]; then \
+		echo "libusb-1.0 not found by pkg-config"; \
+		echo "macOS: brew install libusb pkg-config"; \
+		exit 1; \
+	fi
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(OPT) -g -std=gnu11 -Wall -Wextra $(LIBUSB_CFLAGS) \
+		$(ISO_HW_SOURCE) -o $@ $(LIBUSB_LIBS)
 
 $(PROBE_TARGET): $(PROBE_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
