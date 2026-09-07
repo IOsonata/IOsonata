@@ -1331,6 +1331,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_intrf.h</locationURI>
 		</link>
 		<link>
+			<name>include/usb/usb_iso.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_iso.h</locationURI>
+		</link>
+		<link>
 			<name>include/usb/usb_mscdef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_mscdef.h</locationURI>
@@ -2374,6 +2379,11 @@
 			<name>src/usb/usb_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usb_iso.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_iso.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usbd_bulk.cpp</name>
