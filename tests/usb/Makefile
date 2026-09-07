@@ -2,7 +2,6 @@ ROOT := ../..
 BUILD_DIR := build
 
 CXX ?= g++
-CC ?= gcc
 OPT ?= -O1
 
 # hostport supplies usb_ctrlr.h, the header every real port provides.
@@ -12,9 +11,6 @@ CXXFLAGS ?= $(OPT) -g
 CXXFLAGS += -std=gnu++17 -Wall -Wextra -fno-omit-frame-pointer \
 	-ffunction-sections -fdata-sections -fstack-protector-strong \
 	-D_GLIBCXX_ASSERTIONS
-CFLAGS ?= $(OPT) -g
-CFLAGS += -std=gnu11 -Wall -Wextra -fno-omit-frame-pointer \
-	-ffunction-sections -fdata-sections -fstack-protector-strong
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
@@ -78,12 +74,9 @@ ISO_DUPLEX_SOURCES := \
 	usb_iso_intrf_duplex_test.cpp \
 	$(ROOT)/src/usb/usb_iso.cpp
 
-# libusb hardware validation is intentionally not part of the host regression
-# suite. It needs a physical target running exemples/usb/usb_iso_loopback.cpp.
-ISO_HW_TARGET := $(BUILD_DIR)/usb_iso_loopback_libusb
-ISO_HW_SOURCE := usb_iso_loopback_libusb.c
-LIBUSB_CFLAGS ?= $(shell pkg-config --cflags libusb-1.0 2>/dev/null)
-LIBUSB_LIBS ?= $(shell pkg-config --libs libusb-1.0 2>/dev/null)
+# Physical hardware validation. The Python runner uses python-libusb1 so it
+# still submits real asynchronous isochronous transfers through libusb.
+ISO_HW_SCRIPT := $(ROOT)/Python/usb_iso_loopback.py
 ISO_HW_ARGS ?= --manual-suspend-wake
 
 # Throughput measurement, not a regression test. Built and run on demand.
@@ -134,21 +127,24 @@ test-nrf-suspend-policy:
 test-nrf-iso-policy:
 	python3 ./nrf_usb_iso_policy_test.py
 
-iso-hw-build: $(ISO_HW_TARGET)
+# Kept for compatibility with the previous C hardware runner. This now checks
+# the Python test syntax and does not build a helper executable.
+iso-hw-build: $(ISO_HW_SCRIPT)
+	python3 -c "compile(open('$(ISO_HW_SCRIPT)', encoding='utf-8').read(), '$(ISO_HW_SCRIPT)', 'exec')"
 
-iso-hw: $(ISO_HW_TARGET)
-	./$(ISO_HW_TARGET) $(ISO_HW_ARGS)
+iso-hw: iso-hw-build
+	python3 $(ISO_HW_SCRIPT) $(ISO_HW_ARGS)
 
 probe: $(PROBE_TARGET)
 	./$(PROBE_TARGET) $(SOF_TICKS)
 
 test-gcc:
 	$(MAKE) clean
-	$(MAKE) test CXX=g++ CC=gcc
+	$(MAKE) test CXX=g++
 
 test-clang:
 	$(MAKE) clean
-	$(MAKE) test CXX=clang++ CC=clang
+	$(MAKE) test CXX=clang++
 
 test-matrix: test-gcc test-clang
 
@@ -186,16 +182,6 @@ $(LINK_TARGET): $(LINK_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
 		$(LINK_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
-
-$(ISO_HW_TARGET): $(ISO_HW_SOURCE)
-	@if [ -z "$(strip $(LIBUSB_LIBS))" ]; then \
-		echo "libusb-1.0 not found by pkg-config"; \
-		echo "macOS: brew install libusb pkg-config"; \
-		exit 1; \
-	fi
-	@mkdir -p $(BUILD_DIR)
-	$(CC) $(OPT) -g -std=gnu11 -Wall -Wextra $(LIBUSB_CFLAGS) \
-		$(ISO_HW_SOURCE) -o $@ $(LIBUSB_LIBS)
 
 $(PROBE_TARGET): $(PROBE_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
