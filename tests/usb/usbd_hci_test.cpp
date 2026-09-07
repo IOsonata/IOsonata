@@ -537,9 +537,16 @@ static void TestEventTransmit(void)
 	CHECK(hci.Tx(USBD_HCI_PACKET_EVENT, longEvent, sizeof(longEvent)) ==
 		(int)sizeof(longEvent));
 	CHECK(s_SendCount == 3);
-	CHECK(s_Sent[2].Length == sizeof(longEvent));
+	CHECK(s_Sent[2].Length == USBD_HCI_EVENT_FS_MPS);
+	CHECK(memcmp(s_Sent[2].Data, longEvent, USBD_HCI_EVENT_FS_MPS) == 0);
 	CompleteIn(1U);
-	CHECK(s_SendCount == 3);
+	CHECK(s_SendCount == 4);
+	CHECK(s_Sent[3].Length == sizeof(longEvent) - USBD_HCI_EVENT_FS_MPS);
+	CHECK(memcmp(s_Sent[3].Data, &longEvent[USBD_HCI_EVENT_FS_MPS],
+			s_Sent[3].Length) == 0);
+	CompleteIn(1U);
+	CHECK(s_SendCount == 4);
+	CHECK(s_TxEventCount == 2);
 
 	event[1] = 13U;
 	CHECK(DeviceIntrfTx(hci.Data(), USBD_HCI_PACKET_EVENT,

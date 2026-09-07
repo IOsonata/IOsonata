@@ -393,8 +393,9 @@ without an H:4 packet-type byte.
 
 ACL packets are assembled from complete physical OUT packets and split into
 packet-mode `UsbIntrf` blocks for IN. The logical HCI header determines the
-packet length. Event IN uses one registered stable buffer; the controller
-packetizes a logical Event longer than the interrupt endpoint MPS.
+packet length. Event IN has separate logical-packet storage and a registered
+one-MPS controller buffer. Completion advances the logical offset and stages
+the next interrupt packet without changing the registered DMA address.
 
 ## Known gaps
 

@@ -67,6 +67,11 @@ static uint8_t *UsbdHciEventTxBuffer(UsbdHciDev_t *pHci)
 	return reinterpret_cast<uint8_t *>(pHci->EventTxBuffer);
 }
 
+static uint8_t *UsbdHciEventTxTransfer(UsbdHciDev_t *pHci)
+{
+	return reinterpret_cast<uint8_t *>(pHci->EventTxTransfer);
+}
+
 static uint16_t UsbdHciReadLe16(const uint8_t *pData)
 {
 	return (uint16_t)pData[0] | ((uint16_t)pData[1] << 8);
@@ -151,6 +156,8 @@ static void UsbdHciClearTransport(UsbdHciDev_t *pHci)
 	pHci->AclRxLength = 0U;
 	pHci->AclRxExpected = 0U;
 	pHci->EventTxLength = 0U;
+	pHci->EventTxOffset = 0U;
+	pHci->EventTxChunkLength = 0U;
 }
 
 static void UsbdHciUnconfigure(UsbdHciDev_t *pHci)
@@ -285,6 +292,47 @@ static bool UsbdHciRequest(const UsbSetupData_t *pSetup,
 	return false;
 }
 
+static void UsbdHciClearEventTx(UsbdHciDev_t *pHci)
+{
+	pHci->EventTxActive = false;
+	pHci->EventTxNeedZlp = false;
+	pHci->EventTxZlp = false;
+	pHci->EventTxLength = 0U;
+	pHci->EventTxOffset = 0U;
+	pHci->EventTxChunkLength = 0U;
+}
+
+static void UsbdHciEventTxFailure(UsbdHciDev_t *pHci, uint16_t Length)
+{
+	UsbdHciClearEventTx(pHci);
+	if (pHci->pAcl->DevIntrf.EvtCB != nullptr)
+	{
+		pHci->pAcl->DevIntrf.EvtCB(&pHci->pAcl->DevIntrf,
+								 DEVINTRF_EVT_TX_TIMEOUT, nullptr, Length);
+	}
+}
+
+static bool UsbdHciSendEventChunk(UsbdHciDev_t *pHci)
+{
+	const uint16_t remaining =
+		(uint16_t)(pHci->EventTxLength - pHci->EventTxOffset);
+	const uint16_t mps = UsbdHciEventMps(pHci);
+	pHci->EventTxChunkLength = remaining < mps ? remaining : mps;
+	pHci->EventTxZlp = false;
+	memcpy(UsbdHciEventTxTransfer(pHci),
+		&UsbdHciEventTxBuffer(pHci)[pHci->EventTxOffset],
+		pHci->EventTxChunkLength);
+	return UsbCtrlrEpSend(pHci->DevNo, pHci->EventEpNo,
+		pHci->EventTxChunkLength);
+}
+
+static bool UsbdHciSendEventZlp(UsbdHciDev_t *pHci)
+{
+	pHci->EventTxChunkLength = 0U;
+	pHci->EventTxZlp = true;
+	return UsbCtrlrEpSend(pHci->DevNo, pHci->EventEpNo, 0U);
+}
+
 static void UsbdHciEventComplete(uint8_t, uint16_t Length,
 								 UsbCtrlrXferResult_t Result, void *pContext)
 {
@@ -294,44 +342,39 @@ static void UsbdHciEventComplete(uint8_t, uint16_t Length,
 		return;
 	}
 
-	const uint16_t expected = pHci->EventTxZlp ? 0U : pHci->EventTxLength;
+	const uint16_t expected = pHci->EventTxChunkLength;
 	if (Result != USB_CTRLR_XFER_SUCCESS || Length != expected)
 	{
-		pHci->EventTxActive = false;
-		pHci->EventTxNeedZlp = false;
-		pHci->EventTxZlp = false;
-		pHci->EventTxLength = 0U;
-		if (pHci->pAcl->DevIntrf.EvtCB != nullptr)
-		{
-			pHci->pAcl->DevIntrf.EvtCB(&pHci->pAcl->DevIntrf,
-								 DEVINTRF_EVT_TX_TIMEOUT, nullptr, Length);
-		}
+		UsbdHciEventTxFailure(pHci, Length);
 		return;
 	}
 
-	if (pHci->EventTxNeedZlp && !pHci->EventTxZlp)
+	if (!pHci->EventTxZlp)
 	{
-		pHci->EventTxZlp = true;
-		if (UsbCtrlrEpSend(pHci->DevNo, pHci->EventEpNo, 0U))
+		pHci->EventTxOffset = (uint16_t)(pHci->EventTxOffset +
+			pHci->EventTxChunkLength);
+		if (pHci->EventTxOffset < pHci->EventTxLength)
 		{
+			if (UsbdHciSendEventChunk(pHci))
+			{
+				return;
+			}
+			UsbdHciEventTxFailure(pHci, 0U);
 			return;
 		}
-		pHci->EventTxNeedZlp = false;
-		pHci->EventTxZlp = false;
-		pHci->EventTxActive = false;
-		pHci->EventTxLength = 0U;
-		if (pHci->pAcl->DevIntrf.EvtCB != nullptr)
+
+		if (pHci->EventTxNeedZlp)
 		{
-			pHci->pAcl->DevIntrf.EvtCB(&pHci->pAcl->DevIntrf,
-								 DEVINTRF_EVT_TX_TIMEOUT, nullptr, 0);
+			if (UsbdHciSendEventZlp(pHci))
+			{
+				return;
+			}
+			UsbdHciEventTxFailure(pHci, 0U);
+			return;
 		}
-		return;
 	}
 
-	pHci->EventTxActive = false;
-	pHci->EventTxNeedZlp = false;
-	pHci->EventTxZlp = false;
-	pHci->EventTxLength = 0U;
+	UsbdHciClearEventTx(pHci);
 	if (pHci->pAcl->DevIntrf.EvtCB != nullptr)
 	{
 		pHci->pAcl->DevIntrf.EvtCB(&pHci->pAcl->DevIntrf,
@@ -575,16 +618,14 @@ static int UsbdHciSendEvent(UsbdHciDev_t *pHci, const uint8_t *pData,
 
 	memcpy(UsbdHciEventTxBuffer(pHci), pData, DataLen);
 	pHci->EventTxLength = (uint16_t)DataLen;
+	pHci->EventTxOffset = 0U;
 	pHci->EventTxNeedZlp =
 		((unsigned)DataLen % UsbdHciEventMps(pHci)) == 0U;
 	pHci->EventTxZlp = false;
 	pHci->EventTxActive = true;
-	if (!UsbCtrlrEpSend(pHci->DevNo, pHci->EventEpNo,
-						 pHci->EventTxLength))
+	if (!UsbdHciSendEventChunk(pHci))
 	{
-		pHci->EventTxActive = false;
-		pHci->EventTxNeedZlp = false;
-		pHci->EventTxLength = 0U;
+		UsbdHciClearEventTx(pHci);
 		return 0;
 	}
 
@@ -831,7 +872,7 @@ bool UsbdHciInit(UsbdHciDev_t * const pHci,
 	if (!UsbIntrfInit(pAcl, &dataCfg) ||
 		!UsbCtrlrEpRegister(pHci->DevNo,
 			USB_ENDPADDR_DIRIN(pHci->EventEpNo),
-			UsbdHciEventTxBuffer(pHci), UsbdHciEventComplete, pHci))
+			UsbdHciEventTxTransfer(pHci), UsbdHciEventComplete, pHci))
 	{
 		return false;
 	}

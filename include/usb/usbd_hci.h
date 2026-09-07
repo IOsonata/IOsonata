@@ -69,6 +69,7 @@ SOFTWARE.
 #define USBD_HCI_EVENT_MAX_SIZE			257U
 #define USBD_HCI_PACKET_MAX_SIZE			1024U
 
+#define USBD_HCI_EVENT_MAX_MPS			USB_PKT_MAXLEN(0, INT)
 #define USBD_HCI_ACL_MAX_MPS			USB_PKT_MAXLEN(0, BULK)
 #define USBD_HCI_ACL_PKT_BLKSIZE \
 	USB_INTRF_PKT_BLKSIZE(USBD_HCI_ACL_MAX_MPS)
@@ -152,12 +153,15 @@ typedef struct __Usbd_Hci_Dev {
 	uint16_t AclRxLength;
 	uint16_t AclRxExpected;
 	uint16_t EventTxLength;
+	uint16_t EventTxOffset;
+	uint16_t EventTxChunkLength;
 	uint32_t CommandBuffer[(USBD_HCI_COMMAND_MAX_SIZE + 3U) / 4U];
 	uint32_t AclRxBuffer[(USBD_HCI_PACKET_MAX_SIZE + 3U) / 4U];
 	uint32_t AclRxTransfer[(USBD_HCI_ACL_MAX_MPS + 3U) / 4U];
 	uint32_t AclTxTransfer[(USBD_HCI_ACL_MAX_MPS + 3U) / 4U];
 	uint32_t AclTxPacket[(USBD_HCI_ACL_PKT_BLKSIZE + 3U) / 4U];
 	uint32_t EventTxBuffer[(USBD_HCI_EVENT_MAX_SIZE + 3U) / 4U];
+	uint32_t EventTxTransfer[(USBD_HCI_EVENT_MAX_MPS + 3U) / 4U];
 } UsbdHciDev_t;
 
 #pragma pack(pop)
