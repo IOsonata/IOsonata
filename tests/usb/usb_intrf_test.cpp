@@ -47,6 +47,7 @@ SOFTWARE.
 #define EP_NO		1U
 #define PACKET_SLOTS	3U
 #define PACKET_BLOCK_SIZE (sizeof(UsbPktHdr_t) + MPS)
+#define MAX_PACKET_BLOCK_SIZE (sizeof(UsbPktHdr_t) + BUFFER_SIZE)
 
 static uint8_t *s_OutBuf;
 static uint8_t *s_InBuf;
@@ -132,6 +133,8 @@ alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(SLOTS, BUFFER_SIZE)];
 alignas(4) static uint8_t s_TxMem[CFIFO_MEMSIZE(256)];
 alignas(4) static uint8_t s_TxPacketMem[
 	CFIFO_TOTAL_MEMSIZE(PACKET_SLOTS, PACKET_BLOCK_SIZE)];
+alignas(4) static uint8_t s_TxMaxPacketMem[
+	CFIFO_TOTAL_MEMSIZE(PACKET_SLOTS, MAX_PACKET_BLOCK_SIZE)];
 alignas(4) static uint8_t s_RxTransfer[BUFFER_SIZE];
 alignas(4) static uint8_t s_TxTransfer[BUFFER_SIZE];
 static UsbDevIntrf_t s_Intrf;
@@ -184,6 +187,32 @@ static bool SetupPacketMode(void)
 	cfg.pTxFifoMem = s_TxPacketMem;
 	cfg.TxFifoMemSize = (int)sizeof(s_TxPacketMem);
 	cfg.TxFifoBlkSize = PACKET_BLOCK_SIZE;
+	cfg.BufferSize = BUFFER_SIZE;
+	cfg.pRxBuffer = s_RxTransfer;
+	cfg.pTxBuffer = s_TxTransfer;
+	memset(static_cast<void *>(&s_Intrf), 0, sizeof(s_Intrf));
+	s_OutBuf = nullptr;
+	s_InBuf = nullptr;
+	s_OutBusy = false;
+	s_InBusy = false;
+	s_OutSubmitCnt = 0;
+	s_InSubmitCnt = 0;
+	s_XferOk = true;
+	s_HighSpeed = false;
+	return UsbIntrfInit(&s_Intrf, &cfg) && UsbIntrfConfigure(&s_Intrf, MPS);
+}
+
+static bool SetupMaxPacketMode(void)
+{
+	UsbIntrfCfg_t cfg = {};
+	cfg.DevNo = 0;
+	cfg.EpNo = EP_NO;
+	cfg.bBlocking = true;
+	cfg.pRxFifoMem = s_RxMem;
+	cfg.RxFifoMemSize = (int)sizeof(s_RxMem);
+	cfg.pTxFifoMem = s_TxMaxPacketMem;
+	cfg.TxFifoMemSize = (int)sizeof(s_TxMaxPacketMem);
+	cfg.TxFifoBlkSize = MAX_PACKET_BLOCK_SIZE;
 	cfg.BufferSize = BUFFER_SIZE;
 	cfg.pRxBuffer = s_RxTransfer;
 	cfg.pTxBuffer = s_TxTransfer;
@@ -579,6 +608,26 @@ static void TestTxPacketFull(void)
 	CHECK(!s_InBusy);
 }
 
+static void TestTxPacketMaximumSlot(void)
+{
+	CHECK(SetupMaxPacketMode());
+
+	alignas(4) uint8_t block[MAX_PACKET_BLOCK_SIZE] = {};
+	UsbPkt_t *packet = reinterpret_cast<UsbPkt_t *>(block);
+	packet->Hdr.Length = MPS;
+	memset(packet->Data, 0xA6, MPS);
+
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, block, sizeof(block)) ==
+		  (int)sizeof(block));
+	CHECK(s_InBusy && s_InLen == MPS);
+	CHECK(memcmp(s_InBuf, packet->Data, MPS) == 0);
+	CompleteIn(MPS);
+
+	packet->Hdr.Length = MPS + 1U;
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, block, sizeof(block)) == 0);
+	CHECK(!s_InBusy);
+}
+
 struct Case { const char *Name; void (*Fn)(void); };
 
 int main(void)
@@ -600,6 +649,7 @@ int main(void)
 		{ "tx packet boundaries", TestTxPacketMode },
 		{ "tx packet ZLP", TestTxPacketZlp },
 		{ "tx packet full", TestTxPacketFull },
+		{ "tx packet maximum slot", TestTxPacketMaximumSlot },
 	};
 
 	for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)

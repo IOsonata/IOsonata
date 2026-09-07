@@ -124,12 +124,16 @@ typedef struct __Usb_Interf_Config {
 	DevIntrfEvtHandler_t EvtCB;
 } UsbIntrfCfg_t;
 
+#pragma pack(pop)
 
 typedef struct __Usb_Dev_Interf		UsbDevIntrf_t;
 
 /// Returns -1 when empty, or the submitted transfer length including zero.
 typedef int (*EpSendFct_t)(UsbDevIntrf_t *pIntrf);
 
+// Runtime state uses natural alignment. On Cortex-M this preserves the same
+// layout as a 4-byte packed structure, while 64-bit host tests keep pointer
+// members naturally aligned without reordering the embedded hot-path fields.
 struct __Usb_Dev_Interf {
 	int DevNo;					//!< USB controller number
 	DevIntrf_t DevIntrf;
@@ -143,9 +147,6 @@ struct __Usb_Dev_Interf {
 	uint8_t EpNo;				//!< Bidirectional endpoint number
 	EpSendFct_t EpSend;
 };
-
-
-#pragma pack(pop)
 
 #ifdef __cplusplus
 extern "C" {

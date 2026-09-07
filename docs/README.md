@@ -48,6 +48,16 @@ Documents the C-level interface state, wrapper ownership, transfer sequencing, r
 
 Documents behavioural inheritance, shared virtual `Device` state, multi-function devices, independent devices in one package, configuration-driven variation and object composition.
 
+## USB
+
+### [USB architecture](architecture/usb.md)
+
+Documents the USB core, `UsbIntrf`, class/function allocation, FIFO and DMA ownership, endpoint lifecycle, and controller-port boundary.
+
+### [Custom bulk interface](usb-custom-bulk.md)
+
+Shows how to build a customer-defined USB bulk interface with `UsbdBulk`, including static FIFO setup, descriptor composition, byte and packet modes, and the PyUSB loopback test. The application names its function and protocol while interface and endpoint placement remain internal.
+
 ## Source references
 
 Read architecture and implementation together:

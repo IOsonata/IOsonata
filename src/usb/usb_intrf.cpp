@@ -303,12 +303,13 @@ static bool UsbIntrfStartTx(DevIntrf_t * const, uint32_t)
 static int UsbIntrfTxPackets(DevIntrf_t * const pDevIntrf,
 							 const uint8_t *pData, int DataLen)
 {
-	if (pData == nullptr || DataLen <= 0)
+	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
+
+	if (pIntrf == nullptr || pIntrf->Mps == 0U ||
+		pData == nullptr || DataLen <= 0)
 	{
 		return 0;
 	}
-
-	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
 
 	const int blockSize = (int)CFifoBlockSize(pIntrf->hTxFifo);
 
@@ -317,6 +318,12 @@ static int UsbIntrfTxPackets(DevIntrf_t * const pDevIntrf,
 
 	while (DataLen >= blockSize)
 	{
+		const UsbPkt_t *pPacket = reinterpret_cast<const UsbPkt_t *>(pData);
+		if (pPacket->Hdr.Length > pIntrf->Mps)
+		{
+			break;
+		}
+
 		uint8_t *p = CFifoPut(pIntrf->hTxFifo);
 
 		if (p == nullptr)
@@ -520,7 +527,7 @@ bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps)
 	if (pIntrf == nullptr || Mps == 0U || Mps > pIntrf->BufferSize ||
 		pIntrf->hRxFifo == nullptr ||
 		(CFifoBlockSize(pIntrf->hTxFifo) != 1U &&
-		 CFifoBlockSize(pIntrf->hTxFifo) != sizeof(UsbPktHdr_t) + Mps))
+		 CFifoBlockSize(pIntrf->hTxFifo) < sizeof(UsbPktHdr_t) + Mps))
 	{
 		return false;
 	}

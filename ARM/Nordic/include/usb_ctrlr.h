@@ -12,21 +12,17 @@ This file also declares the UsbCtrlr entry points usb_ctrlr_<target>.cpp
 implements, so the port describes both what it is and what it provides.
 
 The values here describe the silicon, not a class or a configuration. They are
-constants so an application can size CFifo memory and DMA staging buffers
-statically, before any endpoint is configured and without calling into the
-stack.
+compile-time constants so an application can size CFifo memory and DMA staging
+buffers statically, before any endpoint is configured and without calling into
+the stack.
 
-Controller numbering starts at zero and matches the CtrlrNo argument of the
-USB API. Because the accessor macros paste their arguments, CtrlrNo and
-TransType must be literal tokens, not variables.
+Runtime APIs carry DevNo. The current supported ports expose one controller,
+so the capability accessors select controller zero with normal constant
+expressions. They do not construct identifiers with token-pasting macros.
 
 Packet lengths are allocation bounds: the largest packet the controller can
 move on that transfer type at the fastest speed it supports. The value an
-endpoint actually negotiates comes from its descriptor and may be smaller. A
-buffer sized from these macros is large enough at every speed.
-
-TransType tokens match the transfer types in usb_def.h: CONTROL, ISO, BULK,
-INT.
+endpoint actually negotiates comes from its descriptor and may be smaller.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 3, 2026
@@ -70,75 +66,66 @@ SOFTWARE.
   * @{
   */
 
-// Each accessor pastes through a second macro so a named constant expands
-// before it is pasted. Without that, USB_PKT_MAXLEN(USB_DEVNO, BULK) would
-// build the token USB_PKT_MAXLEN_USB_DEVNO_BULK and fail to resolve.
-#define USB_PASTE3_(a, b, c)				a##b##c
-#define USB_PASTE3(a, b, c)					USB_PASTE3_(a, b, c)
-#define USB_PASTE2_(a, b)					a##b
-#define USB_PASTE2(a, b)					USB_PASTE2_(a, b)
-
-/// Maximum packet length in bytes for one controller and transfer type.
-#define USB_PKT_MAXLEN(CtrlrNo, TransType) \
-	USB_PASTE3(USB_PKT_MAXLEN_, CtrlrNo, USB_PASTE2(_, TransType))
-
-/// IN endpoint numbers, including endpoint zero.
-#define USB_EPIN_CNT(CtrlrNo)				USB_PASTE2(USB_EPIN_CNT_, CtrlrNo)
-
-/// OUT endpoint numbers, including endpoint zero.
-#define USB_EPOUT_CNT(CtrlrNo)				USB_PASTE2(USB_EPOUT_CNT_, CtrlrNo)
-
-/// Nonzero when the controller can enumerate at high speed.
-#define USB_HIGHSPEED_CAPABLE(CtrlrNo) \
-	USB_PASTE2(USB_HIGHSPEED_CAPABLE_, CtrlrNo)
-
-/// Nonzero when this port drives the controller's isochronous endpoints.
-#define USB_ISO_SUPPORTED(CtrlrNo)			USB_PASTE2(USB_ISO_SUPPORTED_, CtrlrNo)
+typedef enum __Usb_Ctrlr_Trans_Type {
+	CONTROL = USB_ENDPATT_TRANS_CONTROL,
+	ISO = USB_ENDPATT_TRANS_ISO,
+	BULK = USB_ENDPATT_TRANS_BULK,
+	INT = USB_ENDPATT_TRANS_INT,
+} UsbCtrlrTransType_t;
 
 #if defined(USBD_PRESENT)
 
-/// Number of USB controllers on this part.
-#define USB_CTRLR_CNT						1
-
 // nRF52840 and nRF5340 USBD. Full speed only. Endpoint numbers 0 through 7 in
-// each direction. Endpoint 8 is isochronous only and is not counted here
-// because usbd_ctrlr_nrf52 does not drive it.
-#define USB_HIGHSPEED_CAPABLE_0				0
-#define USB_EPIN_CNT_0						8
-#define USB_EPOUT_CNT_0						8
-
-#define USB_PKT_MAXLEN_0_CONTROL			64
-#define USB_PKT_MAXLEN_0_BULK				64
-#define USB_PKT_MAXLEN_0_INT				64
-
-// The hardware isochronous endpoint carries a full-speed maximum of 1023
-// bytes. usbd_ctrlr_nrf52 leaves isochronous out, so allocating against this
-// value buys nothing until that changes. USB_ISO_SUPPORTED says which is true.
-#define USB_PKT_MAXLEN_0_ISO				1023
-#define USB_ISO_SUPPORTED_0					0
+// each direction. Endpoint 8 is isochronous only and is not counted because
+// the current port does not drive it.
+enum {
+	USB_CTRLR_CNT = 1,
+	USB_HIGHSPEED_CAPABLE_0 = 0,
+	USB_EPIN_CNT_0 = 8,
+	USB_EPOUT_CNT_0 = 8,
+	USB_PKT_MAXLEN_0_CONTROL = 64,
+	USB_PKT_MAXLEN_0_BULK = 64,
+	USB_PKT_MAXLEN_0_INT = 64,
+	USB_PKT_MAXLEN_0_ISO = 1023,
+	USB_ISO_SUPPORTED_0 = 0,
+};
 
 #elif defined(USBHS_PRESENT)
 
-/// Number of USB controllers on this part.
-#define USB_CTRLR_CNT						1
-
 // nRF54 USBHS. High speed capable, so the bulk and interrupt bounds are the
-// high-speed maxima. A full-speed host negotiates smaller packets at
-// enumeration and a buffer sized from these still fits.
-#define USB_HIGHSPEED_CAPABLE_0				1
-#define USB_EPIN_CNT_0						16
-#define USB_EPOUT_CNT_0						16
-
-#define USB_PKT_MAXLEN_0_CONTROL			64
-#define USB_PKT_MAXLEN_0_BULK				512
-#define USB_PKT_MAXLEN_0_INT				1024
-
-#define USB_PKT_MAXLEN_0_ISO				1024
-#define USB_ISO_SUPPORTED_0					0
+// high-speed maxima. A full-speed host negotiates smaller packets and buffers
+// sized from these constants still fit.
+enum {
+	USB_CTRLR_CNT = 1,
+	USB_HIGHSPEED_CAPABLE_0 = 1,
+	USB_EPIN_CNT_0 = 16,
+	USB_EPOUT_CNT_0 = 16,
+	USB_PKT_MAXLEN_0_CONTROL = 64,
+	USB_PKT_MAXLEN_0_BULK = 512,
+	USB_PKT_MAXLEN_0_INT = 1024,
+	USB_PKT_MAXLEN_0_ISO = 1024,
+	USB_ISO_SUPPORTED_0 = 0,
+};
 
 #else
 #error "usb_ctrlr: this part has no USB controller"
 #endif
+
+#define USB_EPIN_CNT(CtrlrNo) \
+	((CtrlrNo) == 0 ? USB_EPIN_CNT_0 : 0)
+#define USB_EPOUT_CNT(CtrlrNo) \
+	((CtrlrNo) == 0 ? USB_EPOUT_CNT_0 : 0)
+#define USB_HIGHSPEED_CAPABLE(CtrlrNo) \
+	((CtrlrNo) == 0 ? USB_HIGHSPEED_CAPABLE_0 : 0)
+#define USB_ISO_SUPPORTED(CtrlrNo) \
+	((CtrlrNo) == 0 ? USB_ISO_SUPPORTED_0 : 0)
+
+#define USB_PKT_MAXLEN(CtrlrNo, TransType) \
+	((CtrlrNo) != 0 ? 0 : \
+	 (TransType) == CONTROL ? USB_PKT_MAXLEN_0_CONTROL : \
+	 (TransType) == ISO ? USB_PKT_MAXLEN_0_ISO : \
+	 (TransType) == BULK ? USB_PKT_MAXLEN_0_BULK : \
+	 (TransType) == INT ? USB_PKT_MAXLEN_0_INT : 0)
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -218,98 +205,30 @@ typedef struct __Usb_Ctrlr_Config {
 extern "C" {
 #endif
 
-// Every entry point below is implemented by usb_ctrlr_<target>.cpp for this
-// target. The generic USB layer calls only these; an application never does.
-//
-
-/**
- * @brief	Initialize controller software state.
- *
- * Must not touch controller registers, the peripheral may still be unpowered.
- */
 bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg);
-
-/**
- * @brief	Power, clock and PHY up, then prepare endpoint zero.
- *
- * One call. The split into a power stage and a register stage was an artifact
- * of the old usbd.h and usbd_ctrlr.h boundary.
- */
 bool UsbCtrlrStart(int DevNo);
-
-/** @brief Stop the controller and drop its power and clock. */
 void UsbCtrlrStop(int DevNo);
-
-/** @brief Bus power and housekeeping pass, called from UsbProcess. */
 void UsbCtrlrProcess(int DevNo);
-
-/** @brief True while bus power is present. */
 bool UsbCtrlrVbusDetected(int DevNo);
-
-/** @brief True when the active connection negotiated high speed. */
 bool UsbCtrlrHighSpeed(int DevNo);
-
 void UsbCtrlrIntEnable(int DevNo);
 void UsbCtrlrIntDisable(int DevNo);
 void UsbCtrlrConnect(int DevNo);
 void UsbCtrlrDisconnect(int DevNo);
-
-/** @brief Request remote wakeup when the controller permits it. */
 void UsbCtrlrRemoteWakeup(int DevNo);
-
-/** @brief Enable or disable SOF events. */
 void UsbCtrlrSofEnable(int DevNo, bool Enable);
-
-/**
- * @brief	Apply a device address when software owns address programming.
- *
- * Controllers that implement SET_ADDRESS in hardware leave this a no-op and
- * report USB_CTRLR_EVT_ADDRESS instead.
- */
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
-
-/** @brief Open one non-control endpoint. Endpoint zero is done by Start. */
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
-
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpCloseAll(int DevNo);
-
-/**
- * @brief	Register one non-control endpoint's fixed DMA buffer and callback.
- *
- * Registration is software-only and remains valid across bus reset and
- * endpoint close/open. EpAddr includes direction. The buffer belongs to the
- * interface and must remain valid until controller reinitialization.
- */
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						UsbCtrlrEpHandler_t Handler, void *pContext);
-
-/** @brief Arm the registered OUT buffer for one maximum-size packet. */
 bool UsbCtrlrEpRxArm(int DevNo, uint8_t EpNo);
-
-/** @brief Send Length bytes from the registered IN buffer. */
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint16_t Length);
-
-/**
- * @brief Start a dynamic endpoint-zero control transfer.
- *
- * EP0 is the only endpoint whose buffer and transfer length vary by request.
- * A zero length transfer is valid.
- */
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length);
-
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);
-
-/** @brief Clear an endpoint stall and reset its data toggle to DATA0. */
 void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr);
-
-/**
- * @brief	MCU unique id as a printable serial string.
- *
- * Not a USB property. It sits here because UsbInit needs it when pSerial is
- * NULL and only the port can read it.
- */
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);
 
 #ifdef __cplusplus
