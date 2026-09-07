@@ -67,6 +67,11 @@ INTRF_SOURCES := \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
+ISO_TARGET := $(BUILD_DIR)/usb_iso_intrf_test
+ISO_SOURCES := \
+	usb_iso_intrf_test.cpp \
+	$(ROOT)/src/usb/usb_iso_intrf.cpp
+
 # Throughput measurement, not a regression test. Built and run on demand.
 # Sanitizers are left off so the numbers are not distorted.
 PROBE_TARGET := $(BUILD_DIR)/tx_rate_probe
@@ -84,12 +89,13 @@ HEADERS := \
 	$(ROOT)/include/usb/usb.h \
 	$(ROOT)/include/usb/usb_def.h \
 	$(ROOT)/include/usb/usb_intrf.h \
+	$(ROOT)/include/usb/usb_iso_intrf.h \
 	$(ROOT)/include/usb/usbd_bulk.h \
 	$(ROOT)/include/usb/usbd_cdc.h \
 	$(ROOT)/include/bluetooth/bt_hci_usb.h \
 	$(ROOT)/src/usb/usb_func.h
 
-TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(BULK_TARGET) $(HCI_TARGET) $(LINK_TARGET)
+TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(ISO_TARGET) $(BULK_TARGET) $(HCI_TARGET) $(LINK_TARGET)
 
 .PHONY: all test test-gcc test-clang test-matrix test-nrf-suspend-policy \
 	test-nrf-iso-policy probe clean
@@ -101,6 +107,7 @@ test: $(TARGETS)
 	$(MAKE) test-nrf-iso-policy
 	$(TEST_ENV) ./$(CORE_TARGET)
 	$(TEST_ENV) ./$(INTRF_TARGET)
+	$(TEST_ENV) ./$(ISO_TARGET)
 	$(TEST_ENV) ./$(BULK_TARGET)
 	$(TEST_ENV) ./$(HCI_TARGET)
 	$(TEST_ENV) ./$(LINK_TARGET)
@@ -133,6 +140,11 @@ $(INTRF_TARGET): $(INTRF_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
 		$(INTRF_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(ISO_TARGET): $(ISO_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(ISO_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(BULK_TARGET): $(BULK_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
