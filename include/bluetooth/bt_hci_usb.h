@@ -6,10 +6,10 @@
 BtHciUsb implements the Bluetooth USB transport. HCI commands arrive on endpoint
 zero, Events use a dedicated interrupt IN endpoint, ACL data uses the inherited
 UsbIntrf bulk endpoint pair, and optional SCO data uses the synchronous
-interface isochronous endpoint pair. Interface and endpoint numbers are
-allocated internally. Optional Bulk Serialization mode adds HCI interface
-alternate setting 1 and carries every HCI packet over the bulk endpoint pair
-with the standard one-byte packet indicator.
+interface through UsbIsoIntrf. Interface and endpoint numbers are allocated
+internally. Optional Bulk Serialization mode adds HCI interface alternate
+setting 1 and carries every HCI packet over the bulk endpoint pair with the
+standard one-byte packet indicator.
 
 One successful DeviceIntrf transfer is one complete HCI packet. DevAddr is the
 HCI packet type. USB packetization remains internal and no H:4 type byte is
@@ -50,6 +50,7 @@ SOFTWARE.
 
 #include "usb/usb.h"
 #include "usb/usb_intrf.h"
+#include "usb/usb_iso_intrf.h"
 
 /** @addtogroup Bluetooth
   * @{
@@ -176,6 +177,7 @@ typedef struct __Bt_Hci_Usb_Config {
 
 typedef struct __Bt_Hci_Usb_Dev {
 	UsbDevIntrf_t *pAcl;
+	UsbIsoIntrf_t ScoIso;
 	BtHciUsbRxData_t AclRxData;
 	BtHciUsbTxData_t AclTxData;
 	DevIntrfEvtHandler_t EvtCB;
@@ -231,9 +233,7 @@ typedef struct __Bt_Hci_Usb_Dev {
 	uint32_t EventTxTransfer[(BT_HCI_USB_EVENT_MAX_MPS + 3U) / 4U];
 	uint32_t ScoRxBuffer[BT_HCI_USB_SCO_RX_BUFFER_COUNT]
 		[(BT_HCI_USB_SCO_MAX_SIZE + 3U) / 4U];
-	uint32_t ScoRxTransfer[(BT_HCI_USB_SCO_MAX_MPS + 3U) / 4U];
 	uint32_t ScoTxBuffer[(BT_HCI_USB_SCO_MAX_SIZE + 3U) / 4U];
-	uint32_t ScoTxTransfer[(BT_HCI_USB_SCO_MAX_MPS + 3U) / 4U];
 } BtHciUsbDev_t;
 
 #pragma pack(pop)
