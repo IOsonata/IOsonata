@@ -72,12 +72,12 @@ static int CdcEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 
 // USB CDC configuration
 static const UsbdCdcCfg_t s_CdcCfg = {
+	.DevNo = USB_DEVNO,
 	.bBlocking = true,
 	.RxFifoMemSize = CDC_RXFIFO_MEMSIZE,
 	.pRxFifoMem = s_CdcRxFifoMem,
 	.TxFifoMemSize = CDC_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_CdcTxFifoMem,
-	.DevNo = USB_DEVNO,
 	.EvtCB = CdcEvtHandler,
 };
 

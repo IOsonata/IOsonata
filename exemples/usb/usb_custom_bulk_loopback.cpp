@@ -84,12 +84,12 @@ static const uint8_t *CustomDescHandler(uint8_t DescType, uint8_t DescIndex,
 										uint16_t *pLength, void *pContext);
 
 static const UsbdBulkCfg_t s_BulkCfg = {
+	.DevNo = USB_DEVNO,
 	.bBlocking = true,
 	.RxFifoMemSize = CUSTOM_RXFIFO_MEMSIZE,
 	.pRxFifoMem = s_RxFifoMem,
 	.TxFifoMemSize = CUSTOM_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_TxFifoMem,
-	.DevNo = USB_DEVNO,
 	.SubClass = 0U,
 	.Protocol = 0U,
 	.InterfaceString = CUSTOM_STR_INTERFACE,

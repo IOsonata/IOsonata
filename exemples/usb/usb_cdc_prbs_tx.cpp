@@ -81,12 +81,12 @@ alignas(4) static uint8_t s_CdcTxFifoMem[CDC_TXFIFO_MEMSIZE];
 // caller retries the same byte. This CFifo policy does not wait for hardware;
 // Tx still returns immediately while the completion interrupt drains the FIFO.
 static const UsbdCdcCfg_t s_CdcCfg = {
+	.DevNo = USB_DEVNO,
 	.bBlocking = true,
 	.RxFifoMemSize = CDC_RXFIFO_MEMSIZE,
 	.pRxFifoMem = s_CdcRxFifoMem,
 	.TxFifoMemSize = CDC_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_CdcTxFifoMem,
-	.DevNo = USB_DEVNO,
 	.EvtCB = nullptr,
 };
 
