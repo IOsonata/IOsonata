@@ -46,7 +46,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "usb/usb.h"
-#include "usb/usb_iso_intrf.h"
+#include "usb/usb_iso.h"
 
 #define USB_DEVNO			0
 #define ISO_INTERFACE_NO	0U
