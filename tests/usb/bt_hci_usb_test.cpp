@@ -70,6 +70,7 @@ static SentPacket_t s_Sent[32];
 static int s_SendCount;
 static int s_RxEventCount;
 static int s_TxEventCount;
+static int s_LastEventLength;
 static DEVINTRF_EVT s_LastEvent;
 static DevIntrf_t *s_LastEventDev;
 
@@ -206,6 +207,7 @@ static int HciEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Evt,
 {
 	s_LastEvent = Evt;
 	s_LastEventDev = pDev;
+	s_LastEventLength = Length;
 	if (Evt == DEVINTRF_EVT_RX_DATA)
 	{
 		s_RxEventCount++;
@@ -309,6 +311,7 @@ static void ResetFake(void)
 	s_SendCount = 0;
 	s_RxEventCount = 0;
 	s_TxEventCount = 0;
+	s_LastEventLength = 0;
 	s_LastEvent = DEVINTRF_EVT_RX_TIMEOUT;
 	s_LastEventDev = nullptr;
 	s_UsbCfg.DevNo = 0;
@@ -674,10 +677,13 @@ static void TestAclReceive(void)
 	}
 
 	ReceiveOut(2U, packet, 64U);
+	CHECK(s_RxEventCount == 0);
 	uint8_t received[sizeof(packet)] = {};
 	CHECK(DeviceIntrfRx(hci.Data(), BT_HCI_USB_PACKET_ACL,
 						received, sizeof(received)) == 0);
 	ReceiveOut(2U, &packet[64], 6U);
+	CHECK(s_RxEventCount == 1);
+	CHECK(s_LastEventLength == (int)sizeof(packet));
 	CHECK(DeviceIntrfRx(hci.Data(), BT_HCI_USB_PACKET_ACL,
 						received, sizeof(received)) == (int)sizeof(packet));
 	CHECK(memcmp(received, packet, sizeof(packet)) == 0);
@@ -777,7 +783,7 @@ static void TestBulkSerialization(void)
 	CHECK(hci.Init(cfg));
 	CHECK(s_FuncCfg.ConfigHandler(1U, s_FuncCfg.pContext));
 	CHECK(s_FuncCfg.SetInterfaceHandler(0U, 1U, s_FuncCfg.pContext));
-	CHECK(s_CloseCount == 1);
+	CHECK(s_CloseCount == 3);
 	CHECK(!s_FuncCfg.SetInterfaceHandler(1U, 0U, s_FuncCfg.pContext));
 
 	UsbSetupData_t setup = {};
@@ -809,9 +815,12 @@ static void TestBulkSerialization(void)
 		iso[i] = (uint8_t)(0x40U + i);
 	}
 	ReceiveOut(2U, iso, 64U);
+	CHECK(s_RxEventCount == 1);
 	CHECK(DeviceIntrfRx(hci.Data(), BT_HCI_USB_PACKET_ISO,
 		received, sizeof(received)) == 0);
 	ReceiveOut(2U, &iso[64], sizeof(iso) - 64U);
+	CHECK(s_RxEventCount == 2);
+	CHECK(s_LastEventLength == 70);
 	CHECK(DeviceIntrfRx(hci.Data(), BT_HCI_USB_PACKET_ISO,
 		received, sizeof(received)) == 70);
 	CHECK(memcmp(received, &iso[1], 70U) == 0);
@@ -838,9 +847,55 @@ static void TestBulkSerialization(void)
 	CompleteIn(2U);
 
 	CHECK(s_FuncCfg.SetInterfaceHandler(0U, 0U, s_FuncCfg.pContext));
-	CHECK(s_OpenCount == 4);
-	CHECK(s_OpenDesc[3].bEndpointAddress == USB_ENDPADDR_DIRIN(1U));
+	CHECK(s_OpenCount == 8);
+	CHECK(s_OpenDesc[7].bEndpointAddress == USB_ENDPADDR_DIRIN(1U));
 	CHECK(!DeviceIntrfStartTx(hci.Data(), BT_HCI_USB_PACKET_ISO));
+}
+
+static void TestBulkReceiveRecovery(void)
+{
+	ResetFake();
+	BtHciUsb hci;
+	const BtHciUsbCfg_t cfg = MakeSerialCfg();
+	CHECK(hci.Init(cfg));
+	CHECK(s_FuncCfg.ConfigHandler(1U, s_FuncCfg.pContext));
+	CHECK(s_FuncCfg.SetInterfaceHandler(0U, 1U, s_FuncCfg.pContext));
+
+	uint8_t partial[64] = {};
+	partial[0] = BT_HCI_USB_PACKET_ISO;
+	partial[1] = 0x01U;
+	partial[3] = 66U;
+	ReceiveOut(2U, partial, sizeof(partial));
+	ReceiveOut(2U, partial, 0U);
+	CHECK(s_RxEventCount == 0);
+
+	const uint8_t command[] = {
+		BT_HCI_USB_PACKET_COMMAND, 0x03U, 0x0CU, 0x00U,
+	};
+	ReceiveOut(2U, command, sizeof(command));
+	CHECK(s_RxEventCount == 1);
+	CHECK(s_LastEventLength == 3);
+	uint8_t received[8] = {};
+	CHECK(DeviceIntrfRx(hci.Data(), BT_HCI_USB_PACKET_COMMAND,
+		received, sizeof(received)) == 3);
+
+	ReceiveOut(2U, partial, sizeof(partial));
+	CHECK(s_FuncCfg.SetInterfaceHandler(0U, 0U, s_FuncCfg.pContext));
+	const uint8_t acl[] = { 0x01U, 0x20U, 0x00U, 0x00U };
+	ReceiveOut(2U, acl, sizeof(acl));
+	CHECK(s_RxEventCount == 2);
+	CHECK(DeviceIntrfRx(hci.Data(), BT_HCI_USB_PACKET_ACL,
+		received, sizeof(received)) == (int)sizeof(acl));
+
+	CHECK(s_FuncCfg.SetInterfaceHandler(0U, 1U, s_FuncCfg.pContext));
+	ReceiveOut(2U, command, sizeof(command));
+	CHECK(s_RxEventCount == 3);
+	ReceiveOut(2U, command, sizeof(command));
+	CHECK(s_RxEventCount == 3);
+	CHECK(s_FuncCfg.SetInterfaceHandler(0U, 0U, s_FuncCfg.pContext));
+	CHECK(s_FuncCfg.SetInterfaceHandler(0U, 1U, s_FuncCfg.pContext));
+	CHECK(DeviceIntrfRx(hci.Data(), BT_HCI_USB_PACKET_COMMAND,
+		received, sizeof(received)) == 0);
 }
 
 int main(void)
@@ -858,6 +913,7 @@ int main(void)
 	TestAclTransmit();
 	TestEventTransmit();
 	TestBulkSerialization();
+	TestBulkReceiveRecovery();
 
 	if (s_Fail != 0)
 	{

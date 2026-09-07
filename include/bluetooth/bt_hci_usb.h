@@ -178,6 +178,7 @@ typedef struct __Bt_Hci_Usb_Dev {
 	UsbDevIntrf_t *pAcl;
 	BtHciUsbRxData_t AclRxData;
 	BtHciUsbTxData_t AclTxData;
+	DevIntrfEvtHandler_t EvtCB;
 	int HciItfNo;					//!< Internal allocation
 	int SyncItfNo;					//!< Internal allocation
 	int DevNo;

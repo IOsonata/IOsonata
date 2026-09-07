@@ -111,6 +111,13 @@ static uint8_t BtHciUsbScoMps(uint8_t Alt)
 		s_BtHciUsbScoMps[Alt - 1U] : 0U;
 }
 
+static int BtHciUsbNotify(BtHciUsbDev_t *pHci, DEVINTRF_EVT Event,
+						  int Length)
+{
+	return pHci->EvtCB != nullptr ?
+		pHci->EvtCB(&pHci->pAcl->DevIntrf, Event, nullptr, Length) : 0;
+}
+
 static uint8_t BtHciUsbFirstEndpoint(uint16_t Mask)
 {
 	for (uint8_t ep = 1U; ep < 16U; ep++)
@@ -248,6 +255,43 @@ static void BtHciUsbClearTransport(BtHciUsbDev_t *pHci)
 	BtHciUsbClearSco(pHci);
 }
 
+static void BtHciUsbClearBulkRx(BtHciUsbDev_t *pHci)
+{
+	pHci->BulkRxType = BT_HCI_USB_PACKET_NONE;
+	pHci->AclRxPending = false;
+	pHci->AclRxLength = 0U;
+	pHci->AclRxExpected = 0U;
+}
+
+static void BtHciUsbClearBulkTransport(BtHciUsbDev_t *pHci)
+{
+	pHci->RxType = BT_HCI_USB_PACKET_NONE;
+	pHci->TxType = BT_HCI_USB_PACKET_NONE;
+	BtHciUsbClearBulkRx(pHci);
+}
+
+static bool BtHciUsbResetBulkTransport(BtHciUsbDev_t *pHci)
+{
+	const uint16_t mps = BtHciUsbAclMps(pHci);
+	UsbCtrlrEpClose(pHci->DevNo, USB_ENDPADDR_DIROUT(pHci->AclEpNo));
+	UsbCtrlrEpClose(pHci->DevNo, USB_ENDPADDR_DIRIN(pHci->AclEpNo));
+	UsbIntrfUnconfigure(pHci->pAcl);
+	BtHciUsbClearBulkTransport(pHci);
+	if (!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIROUT(pHci->AclEpNo),
+			USB_ENDPATT_TRANS_BULK, mps, 0U) ||
+		!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIRIN(pHci->AclEpNo),
+			USB_ENDPATT_TRANS_BULK, mps, 0U) ||
+		!UsbIntrfConfigure(pHci->pAcl, mps))
+	{
+		UsbCtrlrEpClose(pHci->DevNo,
+			USB_ENDPADDR_DIROUT(pHci->AclEpNo));
+		UsbCtrlrEpClose(pHci->DevNo,
+			USB_ENDPADDR_DIRIN(pHci->AclEpNo));
+		return false;
+	}
+	return true;
+}
+
 static void BtHciUsbUnconfigure(BtHciUsbDev_t *pHci)
 {
 	pHci->Configured = false;
@@ -315,6 +359,12 @@ static bool BtHciUsbSetInterface(uint8_t InterfaceNo, uint8_t Alt,
 		{
 			return Alt == pHci->HciAlt;
 		}
+		if (!BtHciUsbResetBulkTransport(pHci))
+		{
+			return false;
+		}
+		pHci->CommandPending = false;
+		pHci->CommandLength = 0U;
 
 		if (Alt == 1U)
 		{
@@ -427,12 +477,8 @@ static bool BtHciUsbRequest(const UsbSetupData_t *pSetup,
 	{
 		pHci->CommandLength = pSetup->wLength;
 		pHci->CommandPending = true;
-		if (pHci->pAcl->DevIntrf.EvtCB != nullptr)
-		{
-			pHci->pAcl->DevIntrf.EvtCB(&pHci->pAcl->DevIntrf,
-								 DEVINTRF_EVT_RX_DATA, nullptr,
-								 pHci->CommandLength);
-		}
+		(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_RX_DATA,
+			pHci->CommandLength);
 		return true;
 	}
 
@@ -458,11 +504,7 @@ static void BtHciUsbClearEventTx(BtHciUsbDev_t *pHci)
 static void BtHciUsbEventTxFailure(BtHciUsbDev_t *pHci, uint16_t Length)
 {
 	BtHciUsbClearEventTx(pHci);
-	if (pHci->pAcl->DevIntrf.EvtCB != nullptr)
-	{
-		pHci->pAcl->DevIntrf.EvtCB(&pHci->pAcl->DevIntrf,
-								 DEVINTRF_EVT_TX_TIMEOUT, nullptr, Length);
-	}
+	(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_TX_TIMEOUT, Length);
 }
 
 static bool BtHciUsbSendEventChunk(BtHciUsbDev_t *pHci)
@@ -528,11 +570,7 @@ static void BtHciUsbEventComplete(uint8_t, uint16_t Length,
 	}
 
 	BtHciUsbClearEventTx(pHci);
-	if (pHci->pAcl->DevIntrf.EvtCB != nullptr)
-	{
-		pHci->pAcl->DevIntrf.EvtCB(&pHci->pAcl->DevIntrf,
-							 DEVINTRF_EVT_TX_READY, nullptr, 0);
-	}
+	(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_TX_READY, 0);
 }
 
 static uint8_t BtHciUsbScoFreeBuffer(const BtHciUsbDev_t *pHci,
@@ -560,12 +598,8 @@ static void BtHciUsbScoPublish(BtHciUsbDev_t *pHci)
 	pHci->ScoRxExpected = 0U;
 	EnableInterrupt(state);
 
-	if (pHci->pAcl->DevIntrf.EvtCB != nullptr)
-	{
-		pHci->pAcl->DevIntrf.EvtCB(&pHci->pAcl->DevIntrf,
-			DEVINTRF_EVT_RX_DATA, nullptr,
-			pHci->ScoRxPacketLength[complete]);
-	}
+	(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_RX_DATA,
+		pHci->ScoRxPacketLength[complete]);
 }
 
 static void BtHciUsbScoReceiveComplete(BtHciUsbDev_t *pHci, uint16_t Length,
@@ -643,11 +677,7 @@ static void BtHciUsbScoSendComplete(BtHciUsbDev_t *pHci, uint16_t Length,
 		Length != pHci->ScoTxChunkLength)
 	{
 		pHci->ScoTxActive = false;
-		if (pHci->pAcl->DevIntrf.EvtCB != nullptr)
-		{
-			pHci->pAcl->DevIntrf.EvtCB(&pHci->pAcl->DevIntrf,
-				DEVINTRF_EVT_TX_TIMEOUT, nullptr, Length);
-		}
+		(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_TX_TIMEOUT, Length);
 		return;
 	}
 
@@ -665,11 +695,7 @@ static void BtHciUsbScoSendComplete(BtHciUsbDev_t *pHci, uint16_t Length,
 	pHci->ScoTxLength = 0U;
 	pHci->ScoTxOffset = 0U;
 	pHci->ScoTxChunkLength = 0U;
-	if (pHci->pAcl->DevIntrf.EvtCB != nullptr)
-	{
-		pHci->pAcl->DevIntrf.EvtCB(&pHci->pAcl->DevIntrf,
-			DEVINTRF_EVT_TX_READY, nullptr, 0);
-	}
+	(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_TX_READY, 0);
 }
 
 static void BtHciUsbXfer(uint8_t EpAddr, uint16_t Length,
@@ -781,8 +807,7 @@ static bool BtHciUsbConsumeAcl(BtHciUsbDev_t *pHci)
 			BT_HCI_USB_PACKET_MAX_SIZE + (pHci->BulkSerialization ? 1U : 0U))
 	{
 		BtHciUsbDropPhysicalAcl(pHci);
-		pHci->AclRxLength = 0U;
-		pHci->AclRxExpected = 0U;
+		BtHciUsbClearBulkRx(pHci);
 		return true;
 	}
 
@@ -790,8 +815,7 @@ static bool BtHciUsbConsumeAcl(BtHciUsbDev_t *pHci)
 		&BtHciUsbAclRxBuffer(pHci)[pHci->AclRxLength], length);
 	if (count != length)
 	{
-		pHci->AclRxLength = 0U;
-		pHci->AclRxExpected = 0U;
+		BtHciUsbClearBulkRx(pHci);
 		return count > 0;
 	}
 
@@ -850,6 +874,47 @@ static bool BtHciUsbConsumeAcl(BtHciUsbDev_t *pHci)
 	}
 
 	return true;
+}
+
+static int BtHciUsbAclEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
+							uint8_t *, int Length)
+{
+	BtHciUsbDev_t *pHci = BtHciUsbFromDev(pDev);
+	if (pHci == nullptr)
+	{
+		return 0;
+	}
+	if (Event == DEVINTRF_EVT_RX_FIFO_FULL)
+	{
+		return 0;
+	}
+	if (Event != DEVINTRF_EVT_RX_DATA)
+	{
+		return BtHciUsbNotify(pHci, Event, Length);
+	}
+	if (pHci->AclRxPending)
+	{
+		return 0;
+	}
+
+	int processed = 0;
+	do
+	{
+		while (!pHci->AclRxPending && BtHciUsbConsumeAcl(pHci))
+		{
+		}
+		if (!pHci->AclRxPending)
+		{
+			break;
+		}
+
+		const uint8_t prefix = pHci->BulkSerialization ? 1U : 0U;
+		processed = BtHciUsbNotify(pHci, DEVINTRF_EVT_RX_DATA,
+			(int)(pHci->AclRxExpected - prefix));
+	}
+	while (!pHci->AclRxPending);
+
+	return processed;
 }
 
 static int BtHciUsbDevRxData(DevIntrf_t * const pDev, uint8_t *pBuffer,
@@ -1351,6 +1416,7 @@ bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
 
 	memset(pHci, 0, sizeof(*pHci));
 	pHci->pAcl = pAcl;
+	pHci->EvtCB = pCfg->EvtCB;
 	pHci->DevNo = pCfg->DevNo;
 	pHci->InterfaceString = pCfg->InterfaceString;
 	pHci->EventFsMps = pCfg->EventFsMps != 0U ?
@@ -1421,7 +1487,7 @@ bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
 	dataCfg.pTxFifoMem = pCfg->pTxFifoMem;
 	dataCfg.TxFifoBlkSize = BT_HCI_USB_ACL_PKT_BLKSIZE;
 	dataCfg.DevNo = pHci->DevNo;
-	dataCfg.EvtCB = pCfg->EvtCB;
+	dataCfg.EvtCB = BtHciUsbAclEvent;
 	dataCfg.EpNo = pHci->AclEpNo;
 	dataCfg.BufferSize = sizeof(pHci->AclRxTransfer);
 	dataCfg.pRxBuffer = BtHciUsbAclRxTransfer(pHci);
