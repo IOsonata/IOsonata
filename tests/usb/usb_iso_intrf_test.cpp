@@ -33,7 +33,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <string.h>
 
-#include "usb/usb_iso_intrf.h"
+#include "usb/usb_iso.h"
 
 typedef struct {
 	uint8_t EpAddr;
