@@ -491,6 +491,30 @@ static void TestConfigurationFailure(void)
 	CHECK(DeviceIntrfGetRate(hci.Data()) == 0U);
 }
 
+static void TestSameAlternateRecovery(void)
+{
+	ResetFake();
+	BtHciUsb hci;
+	const BtHciUsbCfg_t cfg = MakeSerialCfg();
+	CHECK(hci.Init(cfg));
+	CHECK(s_FuncCfg.ConfigHandler(1U, s_FuncCfg.pContext));
+
+	CHECK(s_FuncCfg.SetInterfaceHandler(0U, 0U, s_FuncCfg.pContext));
+	CHECK(s_CloseCount == 3);
+	CHECK(s_OpenCount == 6);
+	CHECK(s_OutArmed[2U]);
+
+	CHECK(s_FuncCfg.SetInterfaceHandler(0U, 1U, s_FuncCfg.pContext));
+	CHECK(s_CloseCount == 6);
+	CHECK(s_OpenCount == 8);
+	CHECK(s_OutArmed[2U]);
+
+	CHECK(s_FuncCfg.SetInterfaceHandler(0U, 1U, s_FuncCfg.pContext));
+	CHECK(s_CloseCount == 9);
+	CHECK(s_OpenCount == 10);
+	CHECK(s_OutArmed[2U]);
+}
+
 static void TestScoTransport(void)
 {
 	ResetFake();
@@ -906,6 +930,7 @@ int main(void)
 	TestAutoPlacement();
 	TestConfiguration();
 	TestConfigurationFailure();
+	TestSameAlternateRecovery();
 	TestScoTransport();
 	TestScoAlternateLifecycle();
 	TestCommand();

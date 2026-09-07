@@ -270,6 +270,8 @@ static void BtHciUsbClearBulkTransport(BtHciUsbDev_t *pHci)
 	BtHciUsbClearBulkRx(pHci);
 }
 
+static void BtHciUsbClearEventTx(BtHciUsbDev_t *pHci);
+
 static bool BtHciUsbResetBulkTransport(BtHciUsbDev_t *pHci)
 {
 	const uint16_t mps = BtHciUsbAclMps(pHci);
@@ -354,10 +356,14 @@ static bool BtHciUsbSetInterface(uint8_t InterfaceNo, uint8_t Alt,
 	if (InterfaceNo == (uint8_t)pHci->HciItfNo)
 	{
 		if (Alt > 1U || (Alt == 1U &&
-			!pHci->BulkSerializationSupported) || Alt == pHci->HciAlt ||
-			pHci->ScoAlt != 0U || pHci->EventTxActive)
+			!pHci->BulkSerializationSupported))
 		{
-			return Alt == pHci->HciAlt;
+			return false;
+		}
+		if (Alt != pHci->HciAlt &&
+			(pHci->ScoAlt != 0U || pHci->EventTxActive))
+		{
+			return false;
 		}
 		if (!BtHciUsbResetBulkTransport(pHci))
 		{
@@ -365,11 +371,12 @@ static bool BtHciUsbSetInterface(uint8_t InterfaceNo, uint8_t Alt,
 		}
 		pHci->CommandPending = false;
 		pHci->CommandLength = 0U;
+		UsbCtrlrEpClose(pHci->DevNo,
+			USB_ENDPADDR_DIRIN(pHci->EventEpNo));
+		BtHciUsbClearEventTx(pHci);
 
 		if (Alt == 1U)
 		{
-			UsbCtrlrEpClose(pHci->DevNo,
-				USB_ENDPADDR_DIRIN(pHci->EventEpNo));
 			pHci->HciAlt = 1U;
 			pHci->BulkSerialization = true;
 			return true;
