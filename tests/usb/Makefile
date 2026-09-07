@@ -91,16 +91,20 @@ HEADERS := \
 
 TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(BULK_TARGET) $(HCI_TARGET) $(LINK_TARGET)
 
-.PHONY: all test test-gcc test-clang test-matrix probe clean
+.PHONY: all test test-gcc test-clang test-matrix test-nrf-suspend-policy probe clean
 
 all: test
 
 test: $(TARGETS)
+	$(MAKE) test-nrf-suspend-policy
 	$(TEST_ENV) ./$(CORE_TARGET)
 	$(TEST_ENV) ./$(INTRF_TARGET)
 	$(TEST_ENV) ./$(BULK_TARGET)
 	$(TEST_ENV) ./$(HCI_TARGET)
 	$(TEST_ENV) ./$(LINK_TARGET)
+
+test-nrf-suspend-policy:
+	python3 ./nrf_usb_suspend_policy_test.py
 
 probe: $(PROBE_TARGET)
 	./$(PROBE_TARGET) $(SOF_TICKS)

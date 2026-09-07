@@ -1468,7 +1468,8 @@ static void nRFUsbdHostResumeDetected(void);
 
 static void nRFUsbdTryEnterLowPower(void)
 {
-	if (!atomic_load(&s_BusSuspended) ||
+	if (!s_UsbdCfg.bLowPowerSuspend ||
+		!atomic_load(&s_BusSuspended) ||
 		!atomic_load(&s_SuspendPending) ||
 		atomic_load(&s_RemoteWakePending) ||
 		atomic_load(&s_HostResumePending) ||
@@ -2146,7 +2147,10 @@ extern "C" void USBD_IRQHandler(void)
 		if ((eventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0 &&
 			!atomic_exchange(&s_BusSuspended, true))
 		{
-			atomic_store(&s_SuspendPending, true);
+			// A bus suspend and a peripheral low-power transition are separate.
+			// When low-power suspend is disabled, retain all endpoint state and
+			// wait for RESUME or SOF without touching USBD LOWPOWER.
+			atomic_store(&s_SuspendPending, s_UsbdCfg.bLowPowerSuspend);
 			atomic_store(&s_RemoteWakePending, false);
 			atomic_store(&s_HostResumePending, false);
 			if ((NRF_USBD->INTEN & USBD_INTEN_SOF_Msk) == 0U)
