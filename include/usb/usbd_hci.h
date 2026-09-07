@@ -7,7 +7,9 @@ UsbdHci implements the Bluetooth USB transport. HCI commands arrive on endpoint
 zero, Events use a dedicated interrupt IN endpoint, ACL data uses the inherited
 UsbIntrf bulk endpoint pair, and optional SCO data uses the synchronous
 interface isochronous endpoint pair. Interface and endpoint numbers are
-allocated internally.
+allocated internally. Optional Bulk Serialization mode adds HCI interface
+alternate setting 1 and carries every HCI packet over the bulk endpoint pair
+with the standard one-byte packet indicator.
 
 One successful DeviceIntrf transfer is one complete HCI packet. DevAddr is the
 HCI packet type. USB packetization remains internal and no H:4 type byte is
@@ -70,6 +72,7 @@ SOFTWARE.
 #define USBD_HCI_EVENT_HEADER_SIZE		2U
 #define USBD_HCI_ACL_HEADER_SIZE			4U
 #define USBD_HCI_SCO_HEADER_SIZE			3U
+#define USBD_HCI_ISO_HEADER_SIZE			4U
 #define USBD_HCI_COMMAND_MAX_SIZE		258U
 #define USBD_HCI_EVENT_MAX_SIZE			257U
 #define USBD_HCI_PACKET_MAX_SIZE			1024U
@@ -119,11 +122,34 @@ typedef struct __Usbd_Hci_Sco_Alt_Descriptor {
 	UsbEndPointDesc_t In;
 } UsbdHciScoAltDesc_t;
 
+typedef struct __Usbd_Hci_Serial_Alt_Descriptor {
+	UsbIntrfDesc_t Interface;
+	UsbEndPointDesc_t Out;
+	UsbEndPointDesc_t In;
+} UsbdHciSerialAltDesc_t;
+
+/// HCI legacy alt-0, serialized alt-1, then synchronous alt-0.
+typedef struct __Usbd_Hci_Serial_Descriptor {
+	UsbInrtfAssDesc_t Association;
+	UsbIntrfDesc_t Hci;
+	UsbEndPointDesc_t EventIn;
+	UsbEndPointDesc_t AclOut;
+	UsbEndPointDesc_t AclIn;
+	UsbdHciSerialAltDesc_t Serialized;
+	UsbIntrfDesc_t Sync;
+} UsbdHciSerialDesc_t;
+
 /// Legacy HCI descriptors followed by synchronous alternates 1 through 6.
 typedef struct __Usbd_Hci_Sco_Descriptor {
 	UsbdHciDesc_t Legacy;
 	UsbdHciScoAltDesc_t Alt[USBD_HCI_SCO_ALT_COUNT];
 } UsbdHciScoDesc_t;
+
+/// Serialized HCI descriptors followed by synchronous alternates 1 through 6.
+typedef struct __Usbd_Hci_Full_Descriptor {
+	UsbdHciSerialDesc_t Base;
+	UsbdHciScoAltDesc_t Alt[USBD_HCI_SCO_ALT_COUNT];
+} UsbdHciFullDesc_t;
 
 #pragma pack(pop)
 
@@ -133,6 +159,7 @@ typedef struct __Usbd_Hci_Config {
 	int DevNo;
 	bool bBlocking;
 	bool bSco;				//!< Add synchronous alternate settings and SCO transport
+	bool bBulkSerialization;	//!< Add HCI alt-1 serialized bulk transport
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;
 	int TxFifoMemSize;
@@ -166,8 +193,11 @@ typedef struct __Usbd_Hci_Dev {
 	uint8_t EventHsInterval;
 	UsbdHciPacketType_t RxType;
 	UsbdHciPacketType_t TxType;
+	UsbdHciPacketType_t BulkRxType;
 	bool Configured;
 	bool ScoEnabled;
+	bool BulkSerializationSupported;
+	bool BulkSerialization;
 	bool CommandPending;
 	bool AclRxPending;
 	bool EventTxActive;
@@ -175,6 +205,7 @@ typedef struct __Usbd_Hci_Dev {
 	bool EventTxZlp;
 	bool ScoTxActive;
 	uint8_t ScoAlt;
+	uint8_t HciAlt;
 	uint8_t ScoRxBuildIndex;
 	uint8_t ScoRxPendingIndex;
 	uint8_t ScoRxReadIndex;
@@ -191,7 +222,7 @@ typedef struct __Usbd_Hci_Dev {
 	uint16_t ScoTxOffset;
 	uint16_t ScoTxChunkLength;
 	uint32_t CommandBuffer[(USBD_HCI_COMMAND_MAX_SIZE + 3U) / 4U];
-	uint32_t AclRxBuffer[(USBD_HCI_PACKET_MAX_SIZE + 3U) / 4U];
+	uint32_t AclRxBuffer[(USBD_HCI_PACKET_MAX_SIZE + 4U) / 4U];
 	uint32_t AclRxTransfer[(USBD_HCI_ACL_MAX_MPS + 3U) / 4U];
 	uint32_t AclTxTransfer[(USBD_HCI_ACL_MAX_MPS + 3U) / 4U];
 	uint32_t AclTxPacket[(USBD_HCI_ACL_PKT_BLKSIZE + 3U) / 4U];
@@ -222,6 +253,14 @@ bool UsbdHciMakeDesc(UsbdHciDesc_t *pDesc, const UsbdHciDev_t *pHci,
 bool UsbdHciMakeScoDesc(UsbdHciScoDesc_t *pDesc,
 						const UsbdHciDev_t *pHci, UsbSpeed_t Speed);
 
+/** Build HCI legacy alt-0, serialized alt-1 and synchronous alt-0. */
+bool UsbdHciMakeSerialDesc(UsbdHciSerialDesc_t *pDesc,
+						   const UsbdHciDev_t *pHci, UsbSpeed_t Speed);
+
+/** Build serialized HCI and all synchronous alternate settings. */
+bool UsbdHciMakeFullDesc(UsbdHciFullDesc_t *pDesc,
+						 const UsbdHciDev_t *pHci, UsbSpeed_t Speed);
+
 bool UsbdHciRequestToSend(UsbdHciDev_t *pHci, int NbBytes);
 
 #ifdef __cplusplus
@@ -243,6 +282,14 @@ public:
 
 	bool MakeScoDesc(UsbdHciScoDesc_t *pDesc, UsbSpeed_t Speed) const {
 		return UsbdHciMakeScoDesc(pDesc, &vUsbdHci, Speed);
+	}
+
+	bool MakeSerialDesc(UsbdHciSerialDesc_t *pDesc, UsbSpeed_t Speed) const {
+		return UsbdHciMakeSerialDesc(pDesc, &vUsbdHci, Speed);
+	}
+
+	bool MakeFullDesc(UsbdHciFullDesc_t *pDesc, UsbSpeed_t Speed) const {
+		return UsbdHciMakeFullDesc(pDesc, &vUsbdHci, Speed);
 	}
 
 	bool RequestToSend(int NbBytes) override {

@@ -155,6 +155,11 @@ static size_t UsbdHciPacketLength(UsbdHciPacketType_t Type,
 			return Available >= USBD_HCI_SCO_HEADER_SIZE ?
 				USBD_HCI_SCO_HEADER_SIZE + (size_t)pPacket[2] : 0U;
 
+		case USBD_HCI_PACKET_ISO:
+			return Available >= USBD_HCI_ISO_HEADER_SIZE ?
+				USBD_HCI_ISO_HEADER_SIZE +
+				(size_t)(UsbdHciReadLe16(&pPacket[2]) & 0x3FFFU) : 0U;
+
 		default:
 			return 0U;
 	}
@@ -228,6 +233,7 @@ static void UsbdHciClearTransport(UsbdHciDev_t *pHci)
 {
 	pHci->RxType = USBD_HCI_PACKET_NONE;
 	pHci->TxType = USBD_HCI_PACKET_NONE;
+	pHci->BulkRxType = USBD_HCI_PACKET_NONE;
 	pHci->CommandPending = false;
 	pHci->AclRxPending = false;
 	pHci->EventTxActive = false;
@@ -245,6 +251,8 @@ static void UsbdHciClearTransport(UsbdHciDev_t *pHci)
 static void UsbdHciUnconfigure(UsbdHciDev_t *pHci)
 {
 	pHci->Configured = false;
+	pHci->HciAlt = 0U;
+	pHci->BulkSerialization = false;
 	UsbIntrfUnconfigure(pHci->pAcl);
 	UsbdHciClearTransport(pHci);
 }
@@ -286,6 +294,8 @@ static bool UsbdHciConfig(uint8_t Configuration, void *pContext)
 	}
 
 	pHci->Configured = true;
+	pHci->HciAlt = 0U;
+	pHci->BulkSerialization = false;
 	return true;
 }
 
@@ -299,10 +309,35 @@ static bool UsbdHciSetInterface(uint8_t InterfaceNo, uint8_t Alt,
 	}
 	if (InterfaceNo == (uint8_t)pHci->HciItfNo)
 	{
-		return Alt == 0U;
+		if (Alt > 1U || (Alt == 1U &&
+			!pHci->BulkSerializationSupported) || Alt == pHci->HciAlt ||
+			pHci->ScoAlt != 0U || pHci->EventTxActive)
+		{
+			return Alt == pHci->HciAlt;
+		}
+
+		if (Alt == 1U)
+		{
+			UsbCtrlrEpClose(pHci->DevNo,
+				USB_ENDPADDR_DIRIN(pHci->EventEpNo));
+			pHci->HciAlt = 1U;
+			pHci->BulkSerialization = true;
+			return true;
+		}
+
+		if (!UsbdHciOpenEndpoint(pHci,
+			USB_ENDPADDR_DIRIN(pHci->EventEpNo), USB_ENDPATT_TRANS_INT,
+			UsbdHciEventMps(pHci), UsbdHciEventInterval(pHci)))
+		{
+			return false;
+		}
+		pHci->HciAlt = 0U;
+		pHci->BulkSerialization = false;
+		return true;
 	}
 	if (InterfaceNo != (uint8_t)pHci->SyncItfNo ||
-		Alt > USBD_HCI_SCO_ALT_COUNT || (!pHci->ScoEnabled && Alt != 0U))
+		pHci->BulkSerialization || Alt > USBD_HCI_SCO_ALT_COUNT ||
+		(!pHci->ScoEnabled && Alt != 0U))
 	{
 		return false;
 	}
@@ -338,7 +373,7 @@ static bool UsbdHciSetInterface(uint8_t InterfaceNo, uint8_t Alt,
 static bool UsbdHciRequestValid(const UsbdHciDev_t *pHci,
 								const UsbSetupData_t *pSetup)
 {
-	if (!pHci->Configured ||
+	if (!pHci->Configured || pHci->BulkSerialization ||
 		(pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) != USB_REQTYPE_DIRDEV ||
 		(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) != USB_REQTYPE_CLASS ||
 		pSetup->bRequest != 0U || pSetup->wValue != 0U ||
@@ -689,10 +724,23 @@ static UsbdHciDev_t *UsbdHciFromDev(DevIntrf_t *pDev)
 static bool UsbdHciDevStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	UsbdHciDev_t *pHci = UsbdHciFromDev(pDev);
-	if (pHci == nullptr || !pHci->Configured ||
-		(DevAddr != USBD_HCI_PACKET_COMMAND &&
-		 DevAddr != USBD_HCI_PACKET_ACL &&
-		 (DevAddr != USBD_HCI_PACKET_SCO || pHci->ScoAlt == 0U)))
+	if (pHci == nullptr || !pHci->Configured)
+	{
+		return false;
+	}
+	if (pHci->BulkSerialization)
+	{
+		if (DevAddr != USBD_HCI_PACKET_COMMAND &&
+			DevAddr != USBD_HCI_PACKET_ACL &&
+			DevAddr != USBD_HCI_PACKET_SCO &&
+			DevAddr != USBD_HCI_PACKET_ISO)
+		{
+			return false;
+		}
+	}
+	else if (DevAddr != USBD_HCI_PACKET_COMMAND &&
+		DevAddr != USBD_HCI_PACKET_ACL &&
+		(DevAddr != USBD_HCI_PACKET_SCO || pHci->ScoAlt == 0U))
 	{
 		return false;
 	}
@@ -712,6 +760,12 @@ static void UsbdHciDropPhysicalAcl(UsbdHciDev_t *pHci)
 	EnableInterrupt(state);
 }
 
+static bool UsbdHciBulkRxTypeValid(UsbdHciPacketType_t Type)
+{
+	return Type == USBD_HCI_PACKET_COMMAND || Type == USBD_HCI_PACKET_ACL ||
+		Type == USBD_HCI_PACKET_SCO || Type == USBD_HCI_PACKET_ISO;
+}
+
 static bool UsbdHciConsumeAcl(UsbdHciDev_t *pHci)
 {
 	UsbPkt_t *pPacket =
@@ -723,7 +777,8 @@ static bool UsbdHciConsumeAcl(UsbdHciDev_t *pHci)
 
 	const uint16_t length = pPacket->Hdr.Length;
 	if (length == 0U || length > pHci->pAcl->Mps ||
-		(size_t)pHci->AclRxLength + length > USBD_HCI_PACKET_MAX_SIZE)
+		(size_t)pHci->AclRxLength + length >
+			USBD_HCI_PACKET_MAX_SIZE + (pHci->BulkSerialization ? 1U : 0U))
 	{
 		UsbdHciDropPhysicalAcl(pHci);
 		pHci->AclRxLength = 0U;
@@ -741,14 +796,38 @@ static bool UsbdHciConsumeAcl(UsbdHciDev_t *pHci)
 	}
 
 	pHci->AclRxLength = (uint16_t)(pHci->AclRxLength + length);
-	if (pHci->AclRxExpected == 0U &&
-		pHci->AclRxLength >= USBD_HCI_ACL_HEADER_SIZE)
+	const uint8_t prefix = pHci->BulkSerialization ? 1U : 0U;
+	if (pHci->BulkSerialization && pHci->AclRxLength != 0U &&
+		pHci->BulkRxType == USBD_HCI_PACKET_NONE)
 	{
-		const size_t expected = UsbdHciPacketLength(USBD_HCI_PACKET_ACL,
-			UsbdHciAclRxBuffer(pHci), pHci->AclRxLength);
-		if (expected > USBD_HCI_PACKET_MAX_SIZE)
+		pHci->BulkRxType =
+			(UsbdHciPacketType_t)UsbdHciAclRxBuffer(pHci)[0];
+		if (!UsbdHciBulkRxTypeValid(pHci->BulkRxType))
 		{
 			pHci->AclRxLength = 0U;
+			pHci->BulkRxType = USBD_HCI_PACKET_NONE;
+			return true;
+		}
+	}
+	else if (!pHci->BulkSerialization)
+	{
+		pHci->BulkRxType = USBD_HCI_PACKET_ACL;
+	}
+
+	const UsbdHciPacketType_t type = pHci->BulkRxType;
+	const uint8_t headerSize = type == USBD_HCI_PACKET_COMMAND ?
+		USBD_HCI_COMMAND_HEADER_SIZE : type == USBD_HCI_PACKET_EVENT ?
+		USBD_HCI_EVENT_HEADER_SIZE : type == USBD_HCI_PACKET_SCO ?
+		USBD_HCI_SCO_HEADER_SIZE : USBD_HCI_ACL_HEADER_SIZE;
+	if (pHci->AclRxExpected == 0U && type != USBD_HCI_PACKET_NONE &&
+		pHci->AclRxLength >= prefix + headerSize)
+	{
+		const size_t expected = prefix + UsbdHciPacketLength(type,
+			&UsbdHciAclRxBuffer(pHci)[prefix], pHci->AclRxLength - prefix);
+		if (expected > USBD_HCI_PACKET_MAX_SIZE + prefix)
+		{
+			pHci->AclRxLength = 0U;
+			pHci->BulkRxType = USBD_HCI_PACKET_NONE;
 			return true;
 		}
 		pHci->AclRxExpected = (uint16_t)expected;
@@ -767,6 +846,7 @@ static bool UsbdHciConsumeAcl(UsbdHciDev_t *pHci)
 	{
 		pHci->AclRxLength = 0U;
 		pHci->AclRxExpected = 0U;
+		pHci->BulkRxType = USBD_HCI_PACKET_NONE;
 	}
 
 	return true;
@@ -781,7 +861,8 @@ static int UsbdHciDevRxData(DevIntrf_t * const pDev, uint8_t *pBuffer,
 		return 0;
 	}
 
-	if (pHci->RxType == USBD_HCI_PACKET_COMMAND && pHci->CommandPending)
+	if (!pHci->BulkSerialization &&
+		pHci->RxType == USBD_HCI_PACKET_COMMAND && pHci->CommandPending)
 	{
 		if (BufferLen < pHci->CommandLength)
 		{
@@ -793,7 +874,8 @@ static int UsbdHciDevRxData(DevIntrf_t * const pDev, uint8_t *pBuffer,
 		pHci->CommandLength = 0U;
 		return count;
 	}
-	if (pHci->RxType == USBD_HCI_PACKET_SCO && pHci->ScoAlt != 0U)
+	if (!pHci->BulkSerialization &&
+		pHci->RxType == USBD_HCI_PACKET_SCO && pHci->ScoAlt != 0U)
 	{
 		const uint32_t state = DisableInterrupt();
 		const uint8_t index = pHci->ScoRxPendingIndex;
@@ -815,7 +897,7 @@ static int UsbdHciDevRxData(DevIntrf_t * const pDev, uint8_t *pBuffer,
 		return length;
 	}
 
-	if (pHci->RxType != USBD_HCI_PACKET_ACL)
+	if (!pHci->BulkSerialization && pHci->RxType != USBD_HCI_PACKET_ACL)
 	{
 		return 0;
 	}
@@ -823,26 +905,43 @@ static int UsbdHciDevRxData(DevIntrf_t * const pDev, uint8_t *pBuffer,
 	while (!pHci->AclRxPending && UsbdHciConsumeAcl(pHci))
 	{
 	}
-	if (!pHci->AclRxPending || BufferLen < pHci->AclRxExpected)
+	const uint8_t prefix = pHci->BulkSerialization ? 1U : 0U;
+	const uint16_t length = (uint16_t)(pHci->AclRxExpected - prefix);
+	if (!pHci->AclRxPending || pHci->BulkRxType != pHci->RxType ||
+		BufferLen < length)
 	{
 		return 0;
 	}
 
-	memcpy(pBuffer, UsbdHciAclRxBuffer(pHci), pHci->AclRxExpected);
-	const int count = pHci->AclRxExpected;
+	memcpy(pBuffer, &UsbdHciAclRxBuffer(pHci)[prefix], length);
+	const int count = length;
 	pHci->AclRxPending = false;
 	pHci->AclRxLength = 0U;
 	pHci->AclRxExpected = 0U;
+	pHci->BulkRxType = USBD_HCI_PACKET_NONE;
 	return count;
 }
 
 static bool UsbdHciDevStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	UsbdHciDev_t *pHci = UsbdHciFromDev(pDev);
-	if (pHci == nullptr || !pHci->Configured ||
-		(DevAddr != USBD_HCI_PACKET_EVENT &&
-		 DevAddr != USBD_HCI_PACKET_ACL &&
-		 (DevAddr != USBD_HCI_PACKET_SCO || pHci->ScoAlt == 0U)))
+	if (pHci == nullptr || !pHci->Configured)
+	{
+		return false;
+	}
+	if (pHci->BulkSerialization)
+	{
+		if (DevAddr != USBD_HCI_PACKET_EVENT &&
+			DevAddr != USBD_HCI_PACKET_ACL &&
+			DevAddr != USBD_HCI_PACKET_SCO &&
+			DevAddr != USBD_HCI_PACKET_ISO)
+		{
+			return false;
+		}
+	}
+	else if (DevAddr != USBD_HCI_PACKET_EVENT &&
+		DevAddr != USBD_HCI_PACKET_ACL &&
+		(DevAddr != USBD_HCI_PACKET_SCO || pHci->ScoAlt == 0U))
 	{
 		return false;
 	}
@@ -855,8 +954,10 @@ static int UsbdHciQueueAcl(UsbdHciDev_t *pHci, const uint8_t *pData,
 						   int DataLen)
 {
 	const uint16_t mps = pHci->pAcl->Mps;
-	const size_t packetCount = ((size_t)DataLen + mps - 1U) / mps;
-	const bool needZlp = ((unsigned)DataLen % mps) == 0U;
+	const uint8_t prefix = pHci->BulkSerialization ? 1U : 0U;
+	const size_t wireLength = (size_t)DataLen + prefix;
+	const size_t packetCount = (wireLength + mps - 1U) / mps;
+	const bool needZlp = (wireLength % mps) == 0U;
 	const size_t blocks = packetCount + (needZlp ? 1U : 0U);
 	if (blocks > INT_MAX ||
 		!UsbIntrfRequestToSend(pHci->pAcl,
@@ -867,20 +968,27 @@ static int UsbdHciQueueAcl(UsbdHciDev_t *pHci, const uint8_t *pData,
 
 	UsbPkt_t *pPacket = UsbdHciAclTxPacket(pHci);
 	pPacket->Hdr.Reserved = 0U;
-	int offset = 0;
-	while (offset < DataLen)
+	size_t wireOffset = 0U;
+	while (wireOffset < wireLength)
 	{
-		const int remaining = DataLen - offset;
+		const size_t remaining = wireLength - wireOffset;
 		const uint16_t length = (uint16_t)(remaining < mps ? remaining : mps);
 		pPacket->Hdr.Length = length;
-		memcpy(pPacket->Data, &pData[offset], length);
+		uint16_t copied = 0U;
+		if (prefix != 0U && wireOffset == 0U)
+		{
+			pPacket->Data[0] = (uint8_t)pHci->TxType;
+			copied = 1U;
+		}
+		const size_t dataOffset = wireOffset + copied - prefix;
+		memcpy(&pPacket->Data[copied], &pData[dataOffset], length - copied);
 		if (pHci->AclTxData(&pHci->pAcl->DevIntrf,
 			reinterpret_cast<uint8_t *>(pPacket),
 			USBD_HCI_ACL_PKT_BLKSIZE) != (int)USBD_HCI_ACL_PKT_BLKSIZE)
 		{
 			return 0;
 		}
-		offset += length;
+		wireOffset += length;
 	}
 
 	if (needZlp)
@@ -952,6 +1060,11 @@ static int UsbdHciDevTxData(DevIntrf_t * const pDev, const uint8_t *pData,
 	{
 		return 0;
 	}
+	if (pHci->BulkSerialization &&
+		DataLen <= (int)USBD_HCI_PACKET_MAX_SIZE)
+	{
+		return UsbdHciQueueAcl(pHci, pData, DataLen);
+	}
 
 	if (pHci->TxType == USBD_HCI_PACKET_EVENT &&
 		DataLen <= (int)USBD_HCI_EVENT_MAX_SIZE)
@@ -1012,6 +1125,23 @@ bool UsbdHciRequestToSend(UsbdHciDev_t *pHci, int NbBytes)
 	if (pHci == nullptr || !pHci->Configured || NbBytes <= 0)
 	{
 		return false;
+	}
+	if (pHci->BulkSerialization)
+	{
+		if ((pHci->TxType != USBD_HCI_PACKET_EVENT &&
+			 pHci->TxType != USBD_HCI_PACKET_ACL &&
+			 pHci->TxType != USBD_HCI_PACKET_SCO &&
+			 pHci->TxType != USBD_HCI_PACKET_ISO) ||
+			NbBytes > (int)USBD_HCI_PACKET_MAX_SIZE)
+		{
+			return false;
+		}
+		const int wireBytes = NbBytes + 1;
+		const uint16_t mps = pHci->pAcl->Mps;
+		const int packets = (wireBytes + mps - 1) / mps;
+		const int blocks = packets + ((wireBytes % mps) == 0 ? 1 : 0);
+		return UsbIntrfRequestToSend(pHci->pAcl,
+			blocks * (int)USBD_HCI_ACL_PKT_BLKSIZE);
 	}
 	if (pHci->TxType == USBD_HCI_PACKET_EVENT)
 	{
@@ -1152,6 +1282,61 @@ bool UsbdHciMakeScoDesc(UsbdHciScoDesc_t *pDesc,
 	return true;
 }
 
+static void UsbdHciMakeSerialAlt(UsbdHciSerialAltDesc_t *pAlt,
+								 const UsbdHciDesc_t *pLegacy)
+{
+	memset(pAlt, 0, sizeof(*pAlt));
+	pAlt->Interface = pLegacy->Hci;
+	pAlt->Interface.bAlternateSetting = 1U;
+	pAlt->Interface.bNumEndpoints = 2U;
+	pAlt->Out = pLegacy->AclOut;
+	pAlt->In = pLegacy->AclIn;
+}
+
+bool UsbdHciMakeSerialDesc(UsbdHciSerialDesc_t *pDesc,
+						   const UsbdHciDev_t *pHci, UsbSpeed_t Speed)
+{
+	if (pDesc == nullptr || pHci == nullptr ||
+		!pHci->BulkSerializationSupported)
+	{
+		return false;
+	}
+
+	UsbdHciDesc_t legacy = {};
+	if (!UsbdHciMakeDesc(&legacy, pHci, Speed))
+	{
+		return false;
+	}
+
+	memset(pDesc, 0, sizeof(*pDesc));
+	pDesc->Association = legacy.Association;
+	pDesc->Hci = legacy.Hci;
+	pDesc->EventIn = legacy.EventIn;
+	pDesc->AclOut = legacy.AclOut;
+	pDesc->AclIn = legacy.AclIn;
+	UsbdHciMakeSerialAlt(&pDesc->Serialized, &legacy);
+	pDesc->Sync = legacy.Sync;
+	return true;
+}
+
+bool UsbdHciMakeFullDesc(UsbdHciFullDesc_t *pDesc,
+						 const UsbdHciDev_t *pHci, UsbSpeed_t Speed)
+{
+	if (pDesc == nullptr || pHci == nullptr || !pHci->ScoEnabled ||
+		!UsbdHciMakeSerialDesc(&pDesc->Base, pHci, Speed))
+	{
+		return false;
+	}
+
+	UsbdHciScoDesc_t sco = {};
+	if (!UsbdHciMakeScoDesc(&sco, pHci, Speed))
+	{
+		return false;
+	}
+	memcpy(pDesc->Alt, sco.Alt, sizeof(pDesc->Alt));
+	return true;
+}
+
 bool UsbdHciInit(UsbdHciDev_t * const pHci,
 				 UsbDevIntrf_t * const pAcl,
 				 const UsbdHciCfg_t *pCfg)
@@ -1177,6 +1362,7 @@ bool UsbdHciInit(UsbdHciDev_t * const pHci,
 	pHci->AclHsMps = pCfg->AclHsMps != 0U ?
 		pCfg->AclHsMps : USBD_HCI_ACL_HS_MPS;
 	pHci->ScoEnabled = pCfg->bSco;
+	pHci->BulkSerializationSupported = pCfg->bBulkSerialization;
 	pHci->EventFsInterval = pCfg->EventFsInterval != 0U ?
 		pCfg->EventFsInterval : USBD_HCI_EVENT_FS_INTERVAL;
 	pHci->EventHsInterval = pCfg->EventHsInterval != 0U ?

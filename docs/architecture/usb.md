@@ -31,7 +31,7 @@ flowchart TD
 | `include/usb/usbd_bulk.h` | Public custom bulk class, configuration and descriptor fragment |
 | `src/usb/usbd_bulk.cpp` | Custom bulk endpoint lifecycle and function registration |
 | `include/usb/usbd_hci.h` | Public Bluetooth HCI transport and descriptor fragments |
-| `src/usb/usbd_hci.cpp` | HCI Command, Event, ACL and optional SCO packet transport |
+| `src/usb/usbd_hci.cpp` | Legacy and serialized HCI packet transport, with optional SCO endpoints |
 | `<port>/include/usb_ctrlr.h` | Target controller capabilities |
 | `<port>/src/usb_ctrlr_<family>.cpp` | Registers, DMA and interrupts |
 
@@ -384,26 +384,37 @@ HCI events use a separately allocated interrupt-IN endpoint.
 | Controller to Host | Event | Interrupt IN |
 | Controller to Host | ACL | Bulk IN |
 | Either direction, optional | SCO | Isochronous OUT/IN |
+| Either direction, serialized mode | Command, Event, ACL, SCO, ISO | Bulk OUT/IN |
 
 The second Bluetooth synchronous interface always has alternate setting zero
 with no endpoints. Setting `UsbdHciCfg_t.bSco` adds alternate settings 1 through
 6 with bidirectional isochronous endpoints using 9, 17, 25, 33, 49 and 63-byte
 packets. On nRF52/nRF53 USBD the controller-constrained allocation uses the
 dedicated endpoint 8; the generic allocator keeps that placement internal.
-Bluetooth ISO packets and Bulk Serialization are not implemented.
+
+Setting `UsbdHciCfg_t.bBulkSerialization` adds alternate setting 1 to the HCI
+interface. That alternate contains only the allocator-owned bulk OUT/IN pair.
+Selecting it disables Event IN and routes Command, ACL, SCO, Event and ISO HCI
+packets through bulk with the standard one-byte packet indicator. The packet
+indicator is removed before RX reaches the application and inserted only on
+serialized TX, so `DevAddr` remains the packet type and a successful operation
+still represents one complete HCI packet. EP0 commands and synchronous
+interface changes are rejected while serialized mode is active. Selecting a
+non-zero synchronous alternate prevents switching the HCI interface to
+serialized mode.
 
 The application supplies packet-mode ACL RX and TX CFifo memory. `UsbdHci`
-owns the command buffer, ACL assembly buffer, Event transfer buffer, SCO packet
-buffers and the controller staging buffers. `DevAddr` selects Command, ACL,
-Event or SCO at the `DeviceIntrf` boundary. A successful RX or TX returns one
-complete HCI packet
-without an H:4 packet-type byte.
+owns the command buffer, bulk assembly buffer, Event transfer buffer, SCO
+packet buffers and the controller staging buffers. `DevAddr` selects Command,
+ACL, Event, SCO or ISO at the `DeviceIntrf` boundary. A successful RX or TX
+returns one complete HCI packet without a packet-type byte.
 
-ACL packets are assembled from complete physical OUT packets and split into
-packet-mode `UsbIntrf` blocks for IN. The logical HCI header determines the
-packet length. Event IN has separate logical-packet storage and a registered
-one-MPS controller buffer. Completion advances the logical offset and stages
-the next interrupt packet without changing the registered DMA address.
+Bulk packets are assembled from complete physical OUT packets and split into
+packet-mode `UsbIntrf` blocks for IN. The selected HCI packet header determines
+the logical length, including the 14-bit ISO data length. Event IN has separate
+logical-packet storage in legacy mode and a registered one-MPS controller
+buffer. Completion advances the logical offset and stages the next interrupt
+packet without changing the registered DMA address.
 
 ## Known gaps
 
