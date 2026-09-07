@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	usb_iso_intrf.cpp
+@file	usb_iso.cpp
 
 @brief	Reusable bidirectional USB isochronous endpoint implementation.
 
@@ -32,7 +32,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "usb/usb_iso_intrf.h"
+#include "usb/usb_iso.h"
 
 static uint8_t *UsbIsoIntrfRxBuffer(UsbIsoIntrf_t *pIntrf)
 {

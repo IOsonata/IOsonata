@@ -36,9 +36,9 @@
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/usb_iso_loopback.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/usb_iso_intrf.cpp</name>
+			<name>src/usb_iso.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/usb/usb_iso_intrf.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/src/usb/usb_iso.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
