@@ -50,7 +50,7 @@ SOFTWARE.
 
 #include "usb/usb.h"
 #include "usb/usb_intrf.h"
-#include "usb/usb_iso_intrf.h"
+#include "usb/usb_iso.h"
 
 /** @addtogroup Bluetooth
   * @{
