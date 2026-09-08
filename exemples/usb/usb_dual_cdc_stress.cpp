@@ -70,22 +70,22 @@ static int LoopbackEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 							  uint8_t *pBuffer, int Len);
 
 static const UsbdCdcCfg_t s_LoopbackCfg = {
+	.DevNo = USB_DEVNO,
 	.bBlocking = true,
 	.RxFifoMemSize = CDC_RXFIFO_MEMSIZE,
 	.pRxFifoMem = s_LoopbackRxFifoMem,
 	.TxFifoMemSize = LOOPBACK_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_LoopbackTxFifoMem,
-	.DevNo = USB_DEVNO,
 	.EvtCB = LoopbackEvtHandler,
 };
 
 static const UsbdCdcCfg_t s_PrbsCfg = {
+	.DevNo = USB_DEVNO,
 	.bBlocking = true,
 	.RxFifoMemSize = CDC_RXFIFO_MEMSIZE,
 	.pRxFifoMem = s_PrbsRxFifoMem,
 	.TxFifoMemSize = PRBS_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_PrbsTxFifoMem,
-	.DevNo = USB_DEVNO,
 	.EvtCB = nullptr,
 };
 
