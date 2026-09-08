@@ -176,7 +176,7 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpCloseAll(int DevNo);
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-						UsbCtrlrEpHandler_t Handler, void *pContext);
+						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext);
 bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length);
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length);

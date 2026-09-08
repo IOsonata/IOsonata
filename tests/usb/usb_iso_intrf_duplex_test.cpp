@@ -32,7 +32,7 @@ static uint16_t s_TxLen;
 static uint8_t s_TxData[USB_ISO_INTRF_MAX_MPS];
 
 extern "C" {
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer,
+bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
 	UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (s_RegCnt >= 2 || pBuffer == nullptr || Handler == nullptr)

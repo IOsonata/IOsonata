@@ -55,7 +55,7 @@ static bool s_ArmFail;
 static bool s_SendFail;
 
 extern "C" {
-bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (DevNo != 0 || pBuffer == nullptr || Handler == nullptr ||

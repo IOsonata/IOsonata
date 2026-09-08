@@ -457,7 +457,7 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, UsbDevIntrf_t * const pDevIntrf,
 
 	if (!UsbCtrlrEpRegister(pCdc->DevNo,
 		USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo),
-		UsbdCdcNotifBuffer(pCdc), UsbdCdcNotifXfer, pCdc))
+		UsbdCdcNotifBuffer(pCdc), false, UsbdCdcNotifXfer, pCdc))
 	{
 		return false;
 	}

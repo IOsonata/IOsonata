@@ -62,7 +62,7 @@ void UsbCtrlrSetAddress(int, uint8_t) {}
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
 void UsbCtrlrEpClose(int, uint8_t) {}
 void UsbCtrlrEpCloseAll(int) {}
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *,
+bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *, bool,
 						UsbCtrlrEpHandler_t, void *)
 {
 	if (s_RegisteredEpCount >= (int)sizeof(s_RegisteredEp))

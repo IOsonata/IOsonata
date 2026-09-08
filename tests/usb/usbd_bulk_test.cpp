@@ -116,7 +116,7 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 
 void UsbCtrlrEpClose(int, uint8_t) { s_CloseCount++; }
 
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer,
+bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (USB_ENDPADDR_IS_IN(EpAddr))

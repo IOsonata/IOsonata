@@ -92,6 +92,7 @@ typedef struct __nRF_Usb_Ep_Registration
 	uint8_t *pBuffer;
 	UsbCtrlrEpHandler_t Handler;
 	void *pContext;
+	bool bBlocking;
 } nRFUsbEpReg_t;
 
 // Fixed data-endpoint ownership lives outside the active-transfer state so a
@@ -1976,6 +1977,28 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	return true;
 }
 
+static inline __attribute__((always_inline))
+bool nRFUsbRegDataEpXfer(uint8_t EpAddr, uint16_t Length)
+{
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
+	if (epNum == NRFX_USBD_ISO_EP_NO)
+	{
+		return nRFUsbRegEpXfer(EpAddr, NULL, Length);
+	}
+
+	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
+	pXfer->TotalLen = Length;
+	pXfer->ActualLen = 0U;
+	pXfer->Started = true;
+
+	nRFUsbdQueXfer(EpAddr, Length);
+	if (!nRFUsbdDeferFromInterrupt())
+	{
+		nRFUsbdServicePending();
+	}
+	return true;
+}
+
 static uint16_t nRFUsbRegEpMps(uint8_t EpAddr)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
@@ -2163,8 +2186,17 @@ static void nRFUsbdHandleOutData(uint8_t EpNum)
 {
 	if (EpNum != 0U)
 	{
-		(void)nRFUsbEpRegisteredEvent(EpNum, USB_CTRLR_EVT_DRDY, 0U,
-								 USB_CTRLR_XFER_SUCCESS);
+		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNum);
+		if (pReg->bBlocking)
+		{
+			nRFUsbEpRegisteredEvent(EpNum, USB_CTRLR_EVT_DRDY, 0U,
+							 USB_CTRLR_XFER_SUCCESS);
+		}
+		else
+		{
+			(void)nRFUsbRegDataEpXfer(EpNum,
+				nRFUsbdGetXfer(EpNum)->Mps);
+		}
 		return;
 	}
 
@@ -2414,8 +2446,17 @@ extern "C" void USBD_IRQHandler(void)
 					(size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
 					0U : (uint16_t)size;
 				atomic_store(&s_IsoOutReady, true);
-				(void)nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO,
-					USB_CTRLR_EVT_DRDY, 0U, USB_CTRLR_XFER_SUCCESS);
+				nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(NRFX_USBD_ISO_EP_NO);
+				if (pReg->bBlocking)
+				{
+					nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO,
+						USB_CTRLR_EVT_DRDY, 0U, USB_CTRLR_XFER_SUCCESS);
+				}
+				else
+				{
+					(void)nRFUsbRegDataEpXfer(NRFX_USBD_ISO_EP_NO,
+						nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO)->Mps);
+				}
 			}
 		}
 
@@ -2706,8 +2747,9 @@ static void nRF54UsbdEmitSimple(UsbCtrlrEvtType_t Type)
 static void nRF54UsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 							  UsbCtrlrXferResult_t Result)
 {
-	if (nRFUsbEpRegisteredEvent(EpAddr, USB_CTRLR_EVT_XFER_CMPL, Length, Result))
+	if (USB_ENDPADDR_NUM(EpAddr) != 0U)
 	{
+		nRFUsbEpRegisteredEvent(EpAddr, USB_CTRLR_EVT_XFER_CMPL, Length, Result);
 		return;
 	}
 
@@ -3577,6 +3619,12 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	return true;
 }
 
+static inline __attribute__((always_inline))
+bool nRFUsbRegDataEpXfer(uint8_t EpAddr, uint16_t Length)
+{
+	return nRFUsbRegEpXfer(EpAddr, NULL, Length);
+}
+
 static uint16_t nRFUsbRegEpMps(uint8_t EpAddr)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
@@ -3853,7 +3901,7 @@ void UsbCtrlrEpCloseAll(int DevNo)
 }
 
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-						UsbCtrlrEpHandler_t Handler, void *pContext)
+						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	if (!nRFUsbValidDevNo(DevNo) || epNum == 0U ||
@@ -3868,13 +3916,14 @@ bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 	pReg->pBuffer = pBuffer;
 	pReg->Handler = Handler;
 	pReg->pContext = pContext;
+	pReg->bBlocking = bBlocking;
 	return true;
 }
 
 bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
 {
 	(void)DevNo;
-	return nRFUsbRegEpXfer(EpAddr, NULL, Length);
+	return nRFUsbRegDataEpXfer(EpAddr, Length);
 }
 
 

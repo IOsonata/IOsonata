@@ -1498,7 +1498,7 @@ bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
 	if (!UsbIntrfInit(pAcl, &dataCfg) ||
 		!UsbCtrlrEpRegister(pHci->DevNo,
 			USB_ENDPADDR_DIRIN(pHci->EventEpNo),
-			BtHciUsbEventTxTransfer(pHci), BtHciUsbEventComplete, pHci) ||
+			BtHciUsbEventTxTransfer(pHci), false, BtHciUsbEventComplete, pHci) ||
 		(pHci->ScoEnabled && !UsbIsoIntrfInit(&pHci->ScoIso, &isoCfg)))
 	{
 		return false;

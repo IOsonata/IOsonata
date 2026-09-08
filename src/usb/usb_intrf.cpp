@@ -58,7 +58,7 @@ static void UsbIntrfRxResumePending(UsbDevIntrf_t *pIntrf);
 static inline __attribute__((always_inline))
 void UsbIntrfRxSubmit(UsbDevIntrf_t *pIntrf)
 {
-	if (pIntrf->bBlocking && CFifoAvail(pIntrf->hRxFifo) <= 0)
+	if (CFifoAvail(pIntrf->hRxFifo) <= 0)
 	{
 		pIntrf->RxPending = true;
 		return;
@@ -470,10 +470,10 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 
 	if (!UsbCtrlrEpRegister(pIntrf->DevNo,
 		USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->pRxBuffer,
-		UsbIntrfCtrlrEvent, pIntrf) ||
+		pCfg->bBlocking, UsbIntrfCtrlrEvent, pIntrf) ||
 		!UsbCtrlrEpRegister(pIntrf->DevNo,
 		USB_ENDPADDR_DIRIN(pIntrf->EpNo), pIntrf->pTxBuffer,
-		UsbIntrfCtrlrEvent, pIntrf))
+		pCfg->bBlocking, UsbIntrfCtrlrEvent, pIntrf))
 	{
 		return false;
 	}

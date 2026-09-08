@@ -141,7 +141,7 @@ void UsbCtrlrEpClose(int, uint8_t EpAddr)
 	}
 }
 
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer,
+bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (pBuffer == nullptr || Handler == nullptr || s_RegisteredCount >= 5)

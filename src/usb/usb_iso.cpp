@@ -166,10 +166,10 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, const UsbIsoIntrfCfg_t *pCfg)
 
 	if (!UsbCtrlrEpRegister(pIntrf->DevNo,
 			USB_ENDPADDR_DIROUT(pIntrf->EpNo), UsbIsoIntrfRxBuffer(pIntrf),
-			UsbIsoIntrfComplete, pIntrf) ||
+			false, UsbIsoIntrfComplete, pIntrf) ||
 		!UsbCtrlrEpRegister(pIntrf->DevNo,
 			USB_ENDPADDR_DIRIN(pIntrf->EpNo), UsbIsoIntrfTxBuffer(pIntrf),
-			UsbIsoIntrfComplete, pIntrf))
+			false, UsbIsoIntrfComplete, pIntrf))
 	{
 		return false;
 	}

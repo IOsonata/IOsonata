@@ -15,6 +15,7 @@ static UsbCtrlrEpHandler_t s_InHandler;
 static void *s_OutContext;
 static void *s_InContext;
 static bool s_HwOutReady;
+static bool s_OutBlocking;
 static bool s_OutDma;
 static bool s_InDma;
 static uint16_t s_HwOutLength;
@@ -49,7 +50,7 @@ void UsbCtrlrEpStall(int, uint8_t) {}
 void UsbCtrlrEpClearStall(int, uint8_t) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer,
+bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
                         UsbCtrlrEpHandler_t Handler, void *pContext)
 {
     if (USB_ENDPADDR_IS_IN(EpAddr))
@@ -63,6 +64,7 @@ bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer,
         s_OutBuffer = pBuffer;
         s_OutHandler = Handler;
         s_OutContext = pContext;
+        s_OutBlocking = Blocking;
     }
     return pBuffer != nullptr && Handler != nullptr;
 }
@@ -105,6 +107,7 @@ static bool Setup(bool Blocking)
     s_OutContext = nullptr;
     s_InContext = nullptr;
     s_HwOutReady = false;
+    s_OutBlocking = true;
     s_OutDma = false;
     s_InDma = false;
     s_HwOutLength = 0;
@@ -136,8 +139,16 @@ static bool Drdy(const uint8_t *pData, uint16_t Length)
     if (Length > 0) memcpy(s_HwOut, pData, Length);
     s_HwOutLength = Length;
     s_HwOutReady = true;
-    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
-                 Length, USB_CTRLR_XFER_SUCCESS, s_OutContext);
+    if (s_OutBlocking)
+    {
+        s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
+                     Length, USB_CTRLR_XFER_SUCCESS, s_OutContext);
+    }
+    else
+    {
+        s_OutDma = true;
+        s_OutSubmit++;
+    }
     return s_OutDma;
 }
 
