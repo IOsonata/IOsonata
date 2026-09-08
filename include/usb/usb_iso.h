@@ -1,21 +1,21 @@
 /**-------------------------------------------------------------------------
 @file	usb_iso.h
 
-@brief	Reusable bidirectional USB isochronous endpoint interface.
+@brief	USB isochronous endpoint-pair interface built on UsbIntrf.
 
-UsbIsoIntrf owns the USB transport mechanics for one bidirectional isochronous
-endpoint number. It owns fixed DMA staging buffers, opens and closes both
-endpoint directions, keeps one OUT transfer armed, accepts at most one IN frame
-at a time, and reports frame completions to the class above it. The class owns
-all protocol packet assembly and segmentation.
+UsbIsoIntrf adds isochronous endpoint lifecycle and frame callbacks to the
+reusable UsbIntrf data path. UsbIntrf owns the fixed DMA staging buffers,
+CFifo transport, controller registration and transfer completion hot path.
+UsbIsoIntrf only opens/closes the endpoint pair, preserves one-frame-at-a-time
+TX semantics for its frame API and translates DeviceIntrf events to frame
+callbacks.
 
-The interface has no packet-format knowledge and performs no dynamic
-allocation. A zero-length frame is a valid isochronous frame. Failed or
-cancelled transfers are reported and counted rather than retried as protocol
-data. Suspend stops new submissions; resume restores the OUT arm.
+The controller is registered non-blocking for ISO OUT. A received frame goes
+directly from the controller event to EasyDMA and reaches UsbIntrf only at
+transfer completion. There is no DRDY round trip and no receive arm state.
 
 @author	Hoang Nguyen Hoan
-@date	Sep. 7, 2026
+@date	Sep. 8, 2026
 
 @license
 
@@ -47,17 +47,23 @@ SOFTWARE.
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "usb/usb.h"
+#include "usb/usb_intrf.h"
 
 /** @addtogroup USBD
   * @{
   */
 
-// IOsonata currently exposes one USB controller per target. Keep the staging
-// bound compile-time so every UsbIsoIntrf instance is self contained.
 #define USB_ISO_INTRF_MAX_MPS		((uint16_t)USB_PKT_MAXLEN(0, ISO))
 #define USB_ISO_INTRF_BUFFER_WORDS \
-	((USB_ISO_INTRF_MAX_MPS > 0U ? USB_ISO_INTRF_MAX_MPS : 1U) + 3U) / 4U
+	(((USB_ISO_INTRF_MAX_MPS > 0U ? USB_ISO_INTRF_MAX_MPS : 1U) + 3U) / 4U)
+#define USB_ISO_INTRF_PKT_BLKSIZE \
+	USB_INTRF_PKT_BLKSIZE(USB_ISO_INTRF_MAX_MPS)
+#define USB_ISO_INTRF_FIFO_MEMSIZE \
+	CFIFO_TOTAL_MEMSIZE(1U, USB_ISO_INTRF_PKT_BLKSIZE)
+#define USB_ISO_INTRF_FIFO_WORDS \
+	((USB_ISO_INTRF_FIFO_MEMSIZE + 3U) / 4U)
+#define USB_ISO_INTRF_PACKET_WORDS \
+	((USB_ISO_INTRF_PKT_BLKSIZE + 3U) / 4U)
 
 typedef struct __Usb_Iso_Interf UsbIsoIntrf_t;
 
@@ -73,8 +79,8 @@ typedef void (*UsbIsoIntrfTxHandler_t)(UsbIsoIntrf_t *pIntrf,
 #pragma pack(push, 4)
 
 typedef struct __Usb_Iso_Interf_Config {
-	int DevNo;					//!< USB controller number
-	uint8_t EpNo;				//!< Bidirectional isochronous endpoint number
+	int DevNo;
+	uint8_t EpNo;
 	UsbIsoIntrfRxHandler_t RxHandler;
 	UsbIsoIntrfTxHandler_t TxHandler;
 	void *pContext;
@@ -83,7 +89,7 @@ typedef struct __Usb_Iso_Interf_Config {
 #pragma pack(pop)
 
 struct __Usb_Iso_Interf {
-	int DevNo;
+	UsbDevIntrf_t *pIntrfData;
 	void *pContext;
 	UsbIsoIntrfRxHandler_t RxHandler;
 	UsbIsoIntrfTxHandler_t TxHandler;
@@ -97,38 +103,37 @@ struct __Usb_Iso_Interf {
 	uint8_t Interval;
 	bool Opened;
 	bool Suspended;
-	bool RxArmed;
 	bool TxActive;
+
+	// C callers use LocalData. The C++ derived class binds pIntrfData to the
+	// UsbIntrf base object instead, so both paths use the same implementation.
+	UsbDevIntrf_t LocalData;
+
+	// One frame is sufficient because frame callbacks are delivered from the
+	// completion path and SendFrame intentionally permits only one active IN.
+	uint32_t RxFifoMem[USB_ISO_INTRF_FIFO_WORDS];
+	uint32_t TxFifoMem[USB_ISO_INTRF_FIFO_WORDS];
 	uint32_t RxBuffer[USB_ISO_INTRF_BUFFER_WORDS];
 	uint32_t TxBuffer[USB_ISO_INTRF_BUFFER_WORDS];
+	uint32_t TxPacket[USB_ISO_INTRF_PACKET_WORDS];
 };
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/** Register the fixed DMA buffers and completion callbacks. */
+/** Initialize a C instance using its embedded UsbIntrf data object. */
 bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, const UsbIsoIntrfCfg_t *pCfg);
 
-/** Open both endpoint directions and arm OUT for the first service interval. */
+/** Bind an ISO wrapper to an existing UsbIntrf data object. */
+bool UsbIsoIntrfInitData(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
+						 const UsbIsoIntrfCfg_t *pCfg);
+
 bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval);
-
-/** Close both directions and discard active USB frame state. */
 void UsbIsoIntrfClose(UsbIsoIntrf_t *pIntrf);
-
-/** Bus reset lifecycle entry. Closes the endpoint and clears frame state. */
 void UsbIsoIntrfReset(UsbIsoIntrf_t *pIntrf);
-
-/** Pause submissions while the bus is suspended. */
 void UsbIsoIntrfSuspend(UsbIsoIntrf_t *pIntrf);
-
-/** Resume submissions and restore the OUT arm. */
 bool UsbIsoIntrfResume(UsbIsoIntrf_t *pIntrf);
-
-/**
- * Submit exactly one IN frame. Length may be zero through the active MPS.
- * Returns false while another IN frame is active or while suspended/closed.
- */
 bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 						  uint16_t Length);
 
@@ -140,6 +145,34 @@ static inline bool UsbIsoIntrfTxReady(const UsbIsoIntrf_t *pIntrf)
 
 #ifdef __cplusplus
 }
+
+class UsbIsoIntrf : public UsbIntrf {
+public:
+	UsbIsoIntrf() = default;
+
+	bool Init(const UsbIsoIntrfCfg_t &Cfg) {
+		return UsbIsoIntrfInitData(&vUsbIsoIntrf, &vUsbDevIntrf, &Cfg);
+	}
+
+	bool Open(uint16_t Mps, uint8_t Interval) {
+		return UsbIsoIntrfOpen(&vUsbIsoIntrf, Mps, Interval);
+	}
+
+	void Close(void) { UsbIsoIntrfClose(&vUsbIsoIntrf); }
+	void Reset(void) { UsbIsoIntrfReset(&vUsbIsoIntrf); }
+	void Suspend(void) { UsbIsoIntrfSuspend(&vUsbIsoIntrf); }
+	bool Resume(void) { return UsbIsoIntrfResume(&vUsbIsoIntrf); }
+
+	bool SendFrame(const uint8_t *pData, uint16_t Length) {
+		return UsbIsoIntrfSendFrame(&vUsbIsoIntrf, pData, Length);
+	}
+
+	bool TxReady(void) const { return UsbIsoIntrfTxReady(&vUsbIsoIntrf); }
+	DevIntrf_t *Data(void) { return static_cast<DevIntrf_t *>(*this); }
+
+private:
+	UsbIsoIntrf_t vUsbIsoIntrf = {};
+};
 #endif
 
 /** @} End of group USBD */

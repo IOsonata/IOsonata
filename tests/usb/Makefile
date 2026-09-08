@@ -4,7 +4,9 @@ BUILD_DIR := build
 CXX ?= g++
 OPT ?= -O1
 
+# hostport supplies usb_ctrlr.h, the header every real port provides.
 CPPFLAGS += -I$(ROOT)/include -Ihostport
+
 CXXFLAGS ?= $(OPT) -g
 CXXFLAGS += -std=gnu++17 -Wall -Wextra -fno-omit-frame-pointer \
 	-ffunction-sections -fdata-sections -fstack-protector-strong \
@@ -23,18 +25,125 @@ SANITIZERS ?= -fsanitize=address,undefined -fno-sanitize-recover=all
 TEST_ENV := ASAN_OPTIONS=$(ASAN_RUNTIME_OPTIONS) \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
 
+CORE_TARGET := $(BUILD_DIR)/usb_core_test
+CORE_SOURCES := \
+	usb_core_test.cpp \
+	$(ROOT)/src/usb/usb.cpp \
+	$(ROOT)/src/usb/usbd_cdc_desc.cpp
+
+LINK_TARGET := $(BUILD_DIR)/usb_stack_link_test
+LINK_SOURCES := \
+	usb_stack_link_test.cpp \
+	$(ROOT)/src/usb/usb.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/usb/usbd_cdc.cpp \
+	$(ROOT)/src/usb/usbd_cdc_desc.cpp \
+	$(ROOT)/src/device_intrf.cpp \
+	$(ROOT)/src/cfifo.c
+
+BULK_TARGET := $(BUILD_DIR)/usbd_bulk_test
+BULK_SOURCES := \
+	usbd_bulk_test.cpp \
+	$(ROOT)/src/usb/usbd_bulk.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/device_intrf.cpp \
+	$(ROOT)/src/cfifo.c
+
+HCI_TARGET := $(BUILD_DIR)/bt_hci_usb_test
+HCI_SOURCES := \
+	bt_hci_usb_test.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_usb.cpp \
+	$(ROOT)/src/usb/usb_iso.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/device_intrf.cpp \
+	$(ROOT)/src/cfifo.c
+
+INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
+INTRF_SOURCES := \
+	usb_intrf_test.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/cfifo.c
+
 RX_EVENT_TARGET := $(BUILD_DIR)/usb_rx_event_test
 RX_EVENT_SOURCES := \
 	usb_rx_event_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
-.PHONY: all test test-gcc test-clang test-matrix clean
+ISO_TARGET := $(BUILD_DIR)/usb_iso_intrf_test
+ISO_SOURCES := \
+	usb_iso_intrf_test.cpp \
+	$(ROOT)/src/usb/usb_iso.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/cfifo.c
+
+ISO_DUPLEX_TARGET := $(BUILD_DIR)/usb_iso_intrf_duplex_test
+ISO_DUPLEX_SOURCES := \
+	usb_iso_intrf_duplex_test.cpp \
+	$(ROOT)/src/usb/usb_iso.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/cfifo.c
+
+# Physical hardware validation. The Python runner uses python-libusb1 so it
+# still submits real asynchronous isochronous transfers through libusb.
+ISO_HW_SCRIPT := $(ROOT)/Python/usb_iso_loopback.py
+ISO_HW_ARGS ?= --manual-suspend-wake
+
+# Throughput measurement, not a regression test. Built and run on demand.
+# Sanitizers are left off so the numbers are not distorted.
+PROBE_TARGET := $(BUILD_DIR)/tx_rate_probe
+PROBE_SOURCES := \
+	tx_rate_probe.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/cfifo.c
+
+SOF_TICKS ?= 500
+
+HEADERS := \
+	hostport/usb_ctrlr.h \
+	$(ROOT)/include/usb/usb.h \
+	$(ROOT)/include/usb/usb_def.h \
+	$(ROOT)/include/usb/usb_intrf.h \
+	$(ROOT)/include/usb/usb_iso.h \
+	$(ROOT)/include/usb/usbd_bulk.h \
+	$(ROOT)/include/usb/usbd_cdc.h \
+	$(ROOT)/include/bluetooth/bt_hci_usb.h \
+	$(ROOT)/src/usb/usb_func.h
+
+TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
+	$(ISO_TARGET) $(ISO_DUPLEX_TARGET) $(BULK_TARGET) $(HCI_TARGET) $(LINK_TARGET)
+
+.PHONY: all test test-gcc test-clang test-matrix test-nrf-suspend-policy \
+	test-nrf-iso-policy iso-hw-build iso-hw probe clean
 
 all: test
 
-test: $(RX_EVENT_TARGET)
+test: $(TARGETS)
+	$(MAKE) test-nrf-suspend-policy
+	$(MAKE) test-nrf-iso-policy
+	$(TEST_ENV) ./$(CORE_TARGET)
+	$(TEST_ENV) ./$(INTRF_TARGET)
 	$(TEST_ENV) ./$(RX_EVENT_TARGET)
+	$(TEST_ENV) ./$(ISO_TARGET)
+	$(TEST_ENV) ./$(ISO_DUPLEX_TARGET)
+	$(TEST_ENV) ./$(BULK_TARGET)
+	$(TEST_ENV) ./$(HCI_TARGET)
+	$(TEST_ENV) ./$(LINK_TARGET)
+
+test-nrf-suspend-policy:
+	python3 ./nrf_usb_suspend_policy_test.py
+
+test-nrf-iso-policy:
+	python3 ./nrf_usb_iso_policy_test.py
+
+iso-hw-build: $(ISO_HW_SCRIPT)
+	python3 -c "compile(open('$(ISO_HW_SCRIPT)', encoding='utf-8').read(), '$(ISO_HW_SCRIPT)', 'exec')"
+
+iso-hw: iso-hw-build
+	python3 $(ISO_HW_SCRIPT) $(ISO_HW_ARGS)
+
+probe: $(PROBE_TARGET)
+	./$(PROBE_TARGET) $(SOF_TICKS)
 
 test-gcc:
 	$(MAKE) clean
@@ -46,11 +155,50 @@ test-clang:
 
 test-matrix: test-gcc test-clang
 
-$(RX_EVENT_TARGET): $(RX_EVENT_SOURCES) hostport/usb_ctrlr.h \
-	$(ROOT)/include/usb/usb_intrf.h $(ROOT)/include/cfifo.h
+$(CORE_TARGET): $(CORE_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
+		$(CORE_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(INTRF_TARGET): $(INTRF_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(INTRF_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(RX_EVENT_TARGET): $(RX_EVENT_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
 		$(RX_EVENT_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(ISO_TARGET): $(ISO_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(ISO_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(ISO_DUPLEX_TARGET): $(ISO_DUPLEX_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(ISO_DUPLEX_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(BULK_TARGET): $(BULK_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(BULK_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(HCI_TARGET): $(HCI_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(HCI_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(LINK_TARGET): $(LINK_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(LINK_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(PROBE_TARGET): $(PROBE_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++ \
+		$(PROBE_SOURCES) -o $@ $(LDFLAGS)
 
 clean:
 	rm -rf $(BUILD_DIR)
