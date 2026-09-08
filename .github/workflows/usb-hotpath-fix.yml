@@ -1,0 +1,28 @@
+name: USB hot-path fix
+
+on:
+  push:
+    paths:
+      - 'tests/usb/fix_cleanup_pattern.py'
+      - '.github/workflows/usb-hotpath-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: usb_rx_arch_test
+          fetch-depth: 0
+      - name: Fix cleanup guard
+        run: python3 tests/usb/fix_cleanup_pattern.py
+      - name: Commit cleanup script
+        run: |
+          git config user.name hnhoan
+          git config user.email hnhoan@i-syst.com
+          git add tests/usb/cleanup_usb_hotpath.py
+          git commit -m 'Fix USB hot-path cleanup guard'
+          git push origin HEAD:usb_rx_arch_test
