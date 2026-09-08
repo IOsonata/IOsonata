@@ -46,22 +46,6 @@ static void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf, uint16_t Length,
 								   UsbCtrlrXferResult_t Result);
 static void UsbIntrfRxResumePending(UsbDevIntrf_t *pIntrf);
 
-/** Service only a DRDY event that was previously deferred. */
-static void UsbIntrfRxResumePending(UsbDevIntrf_t *pIntrf)
-{
-	if (!pIntrf->RxPending)
-	{
-		return;
-	}
-
-	if (pIntrf->RxPending && CFifoAvail(pIntrf->hRxFifo) > 0)
-	{
-		(void)UsbCtrlrEpXfer(pIntrf->DevNo,
-							USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps);
-		pIntrf->RxPending = false;
-	}
-}
-
 static inline __attribute__((always_inline))
 void UsbIntrfSetTxIdle(UsbDevIntrf_t *pIntrf)
 {
@@ -190,7 +174,6 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 	}
 
 	int cnt = 0;
-	bool released = false;
 
 	while (BufferLen > 0)
 	{
@@ -213,15 +196,15 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 		}
 
 		(void)CFifoGet(pIntrf->hRxFifo);
-		released = true;
 		pBuffer += len;
 		BufferLen -= len;
 		cnt += len;
 	}
 
-	if (released && pIntrf->RxPending)
+	if (cnt > 0 && pIntrf->RxPending)
 	{
-		UsbIntrfRxResumePending(pIntrf);
+		pIntrf->RxPending = false;
+		(void)UsbCtrlrEpXfer(pIntrf->DevNo, USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps);
 	}
 
 	return cnt;
