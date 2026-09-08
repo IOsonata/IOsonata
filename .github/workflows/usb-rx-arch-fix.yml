@@ -1,0 +1,36 @@
+name: Fix USB RX architecture transform
+
+on:
+  push:
+    paths:
+      - '.github/workflows/usb-rx-arch-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: usb_rx_arch_test
+          fetch-depth: 0
+      - name: Correct transform assertion
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/workflows/usb-rx-arch-apply.yml')
+          s = p.read_text()
+          old = "          rep(path, 'pQue->pBuffer', 'pBuffer', count=2)\n"
+          new = """          rep(path,\n              'NRF_USBD->EPIN[epNum].PTR = (uint32_t)(uintptr_t)pQue->pBuffer;',\n              'NRF_USBD->EPIN[epNum].PTR = (uint32_t)(uintptr_t)pBuffer;')\n          rep(path,\n              'NRF_USBD->EPOUT[epNum].PTR = (uint32_t)(uintptr_t)pQue->pBuffer;',\n              'NRF_USBD->EPOUT[epNum].PTR = (uint32_t)(uintptr_t)pBuffer;')\n"""
+          if s.count(old) != 1:
+              raise SystemExit('expected transform line not found exactly once')
+          p.write_text(s.replace(old, new))
+          PY
+          rm .github/workflows/usb-rx-arch-fix.yml
+          git config user.name hnhoan
+          git config user.email hnhoan@i-syst.com
+          git add .github/workflows/usb-rx-arch-apply.yml .github/workflows/usb-rx-arch-fix.yml
+          git commit -m 'Fix USB architecture transform guard'
+          git push origin HEAD:usb_rx_arch_test
