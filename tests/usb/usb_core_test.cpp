@@ -105,10 +105,6 @@ typedef struct {
 	uint8_t LastConfig;
 	int SetIfCnt;
 	uint8_t LastAlt;
-	int XferCnt;
-	uint8_t LastXferEp;
-	uint16_t LastXferLen;
-	UsbCtrlrXferResult_t LastXferResult;
 	int ResetCnt;
 	int SofCnt;
 	uint16_t LastFrame;
@@ -252,15 +248,6 @@ static bool SetInterface(uint8_t, uint8_t Alternate, void *)
 	return true;
 }
 
-static void FunctionXfer(uint8_t EpAddr, uint16_t Length,
-						 UsbCtrlrXferResult_t Result, void *)
-{
-	s_Func.XferCnt++;
-	s_Func.LastXferEp = EpAddr;
-	s_Func.LastXferLen = Length;
-	s_Func.LastXferResult = Result;
-}
-
 static void FunctionReset(void *)
 {
 	s_Func.ResetCnt++;
@@ -302,7 +289,6 @@ static bool Fixture(bool WithSetInterface = true)
 	func.RequestHandler = Request;
 	func.ConfigHandler = Configure;
 	func.SetInterfaceHandler = WithSetInterface ? SetInterface : nullptr;
-	func.XferHandler = FunctionXfer;
 	func.ResetHandler = FunctionReset;
 	func.SofHandler = FunctionSof;
 	if (!UsbRegisterFunc(TEST_DEVNO, &func))
@@ -626,12 +612,12 @@ static bool TestResetSuspendAndDispatch(void)
 	sof.FrameNo = 1234;
 	s_Ctrlr.Handler(TEST_DEVNO, &sof, s_Ctrlr.pContext);
 	CHECK(s_Func.SofCnt == 1 && s_Func.LastFrame == 1234);
+
+	// Non-control endpoint events are delivered by UsbCtrlrEpHandler_t,
+	// not through the global controller event handler. A stray global data
+	// completion therefore has no function-level dispatch path.
 	Complete(EP1_IN, 37);
-	CHECK(s_Func.XferCnt == 1 && s_Func.LastXferEp == EP1_IN &&
-		s_Func.LastXferLen == 37);
-	Complete(EP1_OUT, 12, USB_CTRLR_XFER_CANCELLED);
-	CHECK(s_Func.XferCnt == 2 &&
-		s_Func.LastXferResult == USB_CTRLR_XFER_CANCELLED);
+	CHECK(s_Func.SofCnt == 1 && s_Func.ResetCnt == 0);
 
 	Event(USB_CTRLR_EVT_RESET);
 	CHECK(UsbGetAddress(TEST_DEVNO) == 0 && UsbGetConfiguration(TEST_DEVNO) == 0);

@@ -40,10 +40,6 @@ SOFTWARE.
 
 static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf);
 static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
-static void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf, uint16_t Length,
-								   UsbCtrlrXferResult_t Result);
-static void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf, uint16_t Length,
-								   UsbCtrlrXferResult_t Result);
 static void UsbIntrfRxResumePending(UsbDevIntrf_t *pIntrf);
 
 static inline __attribute__((always_inline))
@@ -545,88 +541,6 @@ void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf)
 		CFifoFlush(pIntrf->hTxFifo);
 	}
 	UsbIntrfSetTxIdle(pIntrf);
-}
-
-static void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf, uint16_t Length,
-								UsbCtrlrXferResult_t Result)
-{
-	if (Result == USB_CTRLR_XFER_SUCCESS)
-	{
-		UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(
-			CFifoPut(pIntrf->hRxFifo));
-		pPacket->Hdr.Length = Length;
-		pPacket->Hdr.Reserved = 0U;
-		if (Length > 0U)
-		{
-			memcpy(pPacket->Data, pIntrf->pRxBuffer, Length);
-		}
-
-		if (pIntrf->DevIntrf.EvtCB != nullptr)
-		{
-			const int used = CFifoUsed(pIntrf->hRxFifo);
-			if (used >= pIntrf->hRxFifo->MaxIdxCnt)
-			{
-				pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-								   DEVINTRF_EVT_RX_FIFO_FULL, nullptr, used);
-			}
-			pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-							   DEVINTRF_EVT_RX_DATA, nullptr, used);
-		}
-		return;
-	}
-
-	if (Result == USB_CTRLR_XFER_FAILED)
-	{
-		pIntrf->RxDropCnt++;
-		if (pIntrf->DevIntrf.EvtCB != nullptr)
-		{
-			pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-							   DEVINTRF_EVT_RX_TIMEOUT, nullptr, Length);
-		}
-	}
-}
-
-static void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
-								uint16_t Length, UsbCtrlrXferResult_t Result)
-{
-	if (Result != USB_CTRLR_XFER_SUCCESS)
-	{
-		if (Result == USB_CTRLR_XFER_FAILED)
-		{
-			UsbIntrfTxFailure(pIntrf, Length);
-		}
-		return;
-	}
-
-	if (pIntrf->EpSend(pIntrf) >= 0)
-	{
-		return;
-	}
-
-	if (pIntrf->DevIntrf.EvtCB != nullptr)
-	{
-		pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-							   DEVINTRF_EVT_TX_FIFO_EMPTY,
-							   nullptr, 0);
-	}
-}
-
-void UsbIntrfXferComplete(UsbDevIntrf_t *pIntrf, uint8_t EpAddr,
-						  uint16_t Length, UsbCtrlrXferResult_t Result)
-{
-	if (pIntrf == nullptr || USB_ENDPADDR_NUM(EpAddr) != pIntrf->EpNo)
-	{
-		return;
-	}
-
-	if (USB_ENDPADDR_IS_IN(EpAddr))
-	{
-		UsbIntrfTxXferComplete(pIntrf, Length, Result);
-	}
-	else
-	{
-		UsbIntrfRxXferComplete(pIntrf, Length, Result);
-	}
 }
 
 bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes)

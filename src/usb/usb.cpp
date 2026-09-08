@@ -85,10 +85,9 @@ static UsbCoreCfg_t s_CoreCfg;
 static UsbFuncCfg_t s_CoreFunc[USB_CORE_FUNC_MAXCNT];
 static int s_CoreFuncCnt;
 // Endpoint to function index, [0] OUT and [1] IN. Ownership masks are fixed
-// once a function registers and may not overlap, so this answer never changes
-// after registration. Every transfer completion needs it, and a completion
-// runs in the USB interrupt, which is time the application is not filling the
-// Tx CFifo. Minus one means no function owns that endpoint.
+// once a function registers and may not overlap. They route endpoint-recipient
+// requests; data endpoint events go directly to their registered callbacks.
+// Minus one means no function owns that endpoint.
 static int8_t s_CoreEpFunc[2][16];
 
 static bool s_CoreInitialized;
@@ -1266,17 +1265,6 @@ static void UsbCoreCtrlrEvent(int, const UsbCtrlrEvt_t *pEvt, void *)
 			{
 				UsbCoreHandleCtrlXfer(&pEvt->Xfer);
 			}
-			else
-			{
-				const int func = UsbCoreFindEndpointFunction(pEvt->Xfer.EpAddr);
-				if (func >= 0 && s_CoreFunc[func].XferHandler != nullptr)
-				{
-					s_CoreFunc[func].XferHandler(pEvt->Xfer.EpAddr,
-										 pEvt->Xfer.Length,
-										 pEvt->Xfer.Result,
-										 s_CoreFunc[func].pContext);
-				}
-			}
 			break;
 
 		case USB_CTRLR_EVT_SUSPEND:
@@ -1348,8 +1336,7 @@ static bool UsbCoreRegisterFunction(const UsbFuncCfg_t *pCfg)
 		return false;
 	}
 
-	if (((pCfg->EpInMask | pCfg->EpOutMask) & 1U) != 0 ||
-		((pCfg->EpInMask | pCfg->EpOutMask) != 0 && pCfg->XferHandler == nullptr))
+	if (((pCfg->EpInMask | pCfg->EpOutMask) & 1U) != 0)
 	{
 		return false;
 	}

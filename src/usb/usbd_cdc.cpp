@@ -324,9 +324,9 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 	}
 }
 
-static void UsbdCdcNotifXfer(uint8_t, UsbCtrlrEvtType_t Event,
-							 uint16_t, UsbCtrlrXferResult_t Result,
-							 void *pContext)
+static void UsbdCdcNotifCtrlrEvent(uint8_t, UsbCtrlrEvtType_t Event,
+								  uint16_t, UsbCtrlrXferResult_t Result,
+								  void *pContext)
 {
 	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);
 
@@ -342,27 +342,6 @@ static void UsbdCdcNotifXfer(uint8_t, UsbCtrlrEvtType_t Event,
 	else if (Result == USB_CTRLR_XFER_FAILED)
 	{
 		pCdc->SerialStatePending = true;
-	}
-}
-
-static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
-						UsbCtrlrXferResult_t Result, void *pContext)
-{
-	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);
-
-	if (pCdc == nullptr)
-	{
-		return;
-	}
-
-	if (USB_ENDPADDR_NUM(EpAddr) == pCdc->pIntrfData->EpNo)
-	{
-		UsbIntrfXferComplete(pCdc->pIntrfData, EpAddr, Length, Result);
-	}
-	else if (EpAddr == USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo))
-	{
-		UsbdCdcNotifXfer(EpAddr, USB_CTRLR_EVT_XFER_CMPL,
-			Length, Result, pCdc);
 	}
 }
 
@@ -415,7 +394,6 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, UsbDevIntrf_t * const pDevIntrf,
 	coreCfg.RequestHandler = UsbdCdcRequest;
 	coreCfg.ConfigHandler = UsbdCdcConfig;
 	coreCfg.SetInterfaceHandler = nullptr;
-	coreCfg.XferHandler = UsbdCdcXfer;
 	coreCfg.ResetHandler = UsbdCdcReset;
 	coreCfg.SofHandler = nullptr;
 	coreCfg.ProcessHandler = UsbdCdcPump;
@@ -457,7 +435,7 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, UsbDevIntrf_t * const pDevIntrf,
 
 	if (!UsbCtrlrEpRegister(pCdc->DevNo,
 		USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo),
-		UsbdCdcNotifBuffer(pCdc), false, UsbdCdcNotifXfer, pCdc))
+		UsbdCdcNotifBuffer(pCdc), false, UsbdCdcNotifCtrlrEvent, pCdc))
 	{
 		return false;
 	}

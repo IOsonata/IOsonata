@@ -698,26 +698,6 @@ static void BtHciUsbScoSendFrameComplete(UsbIsoIntrf_t *, uint16_t Length,
 	(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_TX_READY, 0);
 }
 
-static void BtHciUsbXfer(uint8_t EpAddr, uint16_t Length,
-						UsbCtrlrXferResult_t Result, void *pContext)
-{
-	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
-	if (pHci == nullptr)
-	{
-		return;
-	}
-
-	if (USB_ENDPADDR_NUM(EpAddr) == pHci->AclEpNo)
-	{
-		UsbIntrfXferComplete(pHci->pAcl, EpAddr, Length, Result);
-	}
-	else if (EpAddr == USB_ENDPADDR_DIRIN(pHci->EventEpNo))
-	{
-		BtHciUsbEventComplete(EpAddr, USB_CTRLR_EVT_XFER_CMPL,
-			Length, Result, pHci);
-	}
-}
-
 static void BtHciUsbReset(void *pContext)
 {
 	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
@@ -1448,7 +1428,6 @@ bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
 	coreCfg.RequestHandler = BtHciUsbRequest;
 	coreCfg.ConfigHandler = BtHciUsbConfig;
 	coreCfg.SetInterfaceHandler = BtHciUsbSetInterface;
-	coreCfg.XferHandler = BtHciUsbXfer;
 	coreCfg.ResetHandler = BtHciUsbReset;
 	coreCfg.pContext = pHci;
 

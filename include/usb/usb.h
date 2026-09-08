@@ -88,6 +88,8 @@ typedef void (*UsbEvtHandler_t)(int DevNo, UsbEvt_t Evt);
 
 //
 // Function layer. One registration per class or vendor function.
+// Non-control endpoint events go directly from the controller to the endpoint
+// callback registered with UsbCtrlrEpRegister; they are not function events.
 //
 
 /// Control transfer stage a request handler is being called for.
@@ -109,8 +111,6 @@ typedef bool (*UsbRequestHandler_t)(const UsbSetupData_t *pSetup,
 typedef bool (*UsbConfigHandler_t)(uint8_t Configuration, void *pContext);
 typedef bool (*UsbSetInterfaceHandler_t)(uint8_t InterfaceNo, uint8_t Alt,
 										 void *pContext);
-typedef void (*UsbXferHandler_t)(uint8_t EpAddr, uint16_t Length,
-								 UsbCtrlrXferResult_t Result, void *pContext);
 typedef void (*UsbResetHandler_t)(void *pContext);
 typedef void (*UsbSofHandler_t)(uint16_t FrameNo, void *pContext);
 
@@ -130,7 +130,6 @@ typedef struct __Usb_Func_Config {
 	UsbRequestHandler_t RequestHandler;
 	UsbConfigHandler_t ConfigHandler;
 	UsbSetInterfaceHandler_t SetInterfaceHandler;
-	UsbXferHandler_t XferHandler;
 	UsbResetHandler_t ResetHandler;
 	UsbSofHandler_t SofHandler;		//!< Optional, NULL when not needed
 	UsbProcessHandler_t ProcessHandler;	//!< Optional, polled from UsbProcess

@@ -138,17 +138,6 @@ static bool UsbdBulkRequest(const UsbSetupData_t *pSetup,
 								 pBulk->pRequestContext);
 }
 
-static void UsbdBulkXfer(uint8_t EpAddr, uint16_t Length,
-						 UsbCtrlrXferResult_t Result, void *pContext)
-{
-	UsbdBulkDev_t *pBulk = static_cast<UsbdBulkDev_t *>(pContext);
-
-	if (pBulk != nullptr)
-	{
-		UsbIntrfXferComplete(pBulk->pIntrfData, EpAddr, Length, Result);
-	}
-}
-
 static void UsbdBulkReset(void *pContext)
 {
 	UsbdBulkDev_t *pBulk = static_cast<UsbdBulkDev_t *>(pContext);
@@ -232,7 +221,6 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
 		UsbdBulkRequest : nullptr;
 	coreCfg.ConfigHandler = UsbdBulkConfig;
 	coreCfg.SetInterfaceHandler = nullptr;
-	coreCfg.XferHandler = UsbdBulkXfer;
 	coreCfg.ResetHandler = UsbdBulkReset;
 	coreCfg.SofHandler = nullptr;
 	coreCfg.ProcessHandler = nullptr;

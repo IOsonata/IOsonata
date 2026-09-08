@@ -153,8 +153,6 @@ extern "C" {
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg);
 bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps);
 void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf);
-void UsbIntrfXferComplete(UsbDevIntrf_t *pIntrf, uint8_t EpAddr,
-						  uint16_t Length, UsbCtrlrXferResult_t Result);
 bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);
 
 #ifdef __cplusplus
