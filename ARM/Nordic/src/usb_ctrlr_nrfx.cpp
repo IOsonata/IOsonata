@@ -110,24 +110,12 @@ nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpAddr)
 	return &s_EpReg[USB_ENDPADDR_NUM(EpAddr)][nRFUsbEpDir(EpAddr)];
 }
 
-static bool nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
-									uint16_t Length,
-									UsbCtrlrXferResult_t Result)
+static inline __attribute__((always_inline))
+void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
+								 uint16_t Length, UsbCtrlrXferResult_t Result)
 {
-	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	if (epNum == 0U || epNum >= NRF_USB_EP_COUNT)
-	{
-		return false;
-	}
-
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
-	if (pReg->Handler == NULL)
-	{
-		return false;
-	}
-
 	pReg->Handler(EpAddr, Event, Length, Result, pReg->pContext);
-	return true;
 }
 
 //
@@ -1008,8 +996,9 @@ static void nRFUsbdEmitSimple(UsbCtrlrEvtType_t Type)
 static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 						 UsbCtrlrXferResult_t Result)
 {
-	if (nRFUsbEpRegisteredEvent(EpAddr, USB_CTRLR_EVT_XFER_CMPL, Length, Result))
+	if (USB_ENDPADDR_NUM(EpAddr) != 0U)
 	{
+		nRFUsbEpRegisteredEvent(EpAddr, USB_CTRLR_EVT_XFER_CMPL, Length, Result);
 		return;
 	}
 
@@ -1223,12 +1212,6 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 	uint8_t *pBuffer = epNum == 0U ? s_Ep0Bounce :
 		nRFUsbGetEpReg(pQue->EpAddr)->pBuffer;
 
-	if (pBuffer == NULL || !pXfer->Started ||
-		pXfer->ActualLen > pXfer->TotalLen)
-	{
-		return false;
-	}
-
 	if (isIn)
 	{
 		NRF_USBD->EPIN[epNum].PTR = (uint32_t)(uintptr_t)pBuffer;
@@ -1387,11 +1370,8 @@ static void nRFUsbdQueXfer(uint8_t EpAddr, uint16_t Len)
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_hQue);
 
-	if (pQue != NULL)
-	{
-		pQue->EpAddr = EpAddr;
-		pQue->Len = Len;
-	}
+	pQue->EpAddr = EpAddr;
+	pQue->Len = Len;
 
 	EnableInterrupt(state);
 }
@@ -1948,20 +1928,8 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	uint8_t *pDmaBuffer = epNum == 0U ? pBuffer :
 		nRFUsbGetEpReg(EpAddr)->pBuffer;
 
-	if (epNum >= NRFX_USBD_EP_COUNT ||
-		(TotalBytes > 0U && pDmaBuffer == NULL) ||
-		atomic_load(&s_BusSuspended))
-	{
-		return false;
-	}
-
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
-	if (pXfer->Started || pXfer->Mps == 0U)
-	{
-		EnableInterrupt(state);
-		return false;
-	}
 
 	pXfer->pBuffer = epNum == 0U ? pBuffer : NULL;
 	pXfer->TotalLen = TotalBytes;
@@ -3565,23 +3533,7 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	uint8_t *pDmaBuffer = epNum == 0U ? pBuffer :
 		nRFUsbGetEpReg(EpAddr)->pBuffer;
-	if (!s_Ctrlr.Started || epNum >= NRF54_USBD_EP_COUNT ||
-		(TotalBytes > 0U && pDmaBuffer == NULL))
-	{
-		return false;
-	}
-
 	nRF54UsbdXfer_t *pXfer = nRF54UsbdGetXfer(EpAddr);
-	if (pXfer->Started || pXfer->Mps == 0U)
-	{
-		return false;
-	}
-
-	if (epNum != 0U && TotalBytes > 0U &&
-		(((uintptr_t)pDmaBuffer & 0x3U) != 0U))
-	{
-		return false;
-	}
 
 	pXfer->pBuffer = epNum == 0U ? pBuffer : NULL;
 	pXfer->TotalLen = TotalBytes;
@@ -3921,20 +3873,7 @@ bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 
 bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
 {
-	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	if (!nRFUsbValidDevNo(DevNo) || epNum == 0U ||
-		epNum >= NRF_USB_EP_COUNT ||
-		(EpAddr & ~(USB_ENDPADDR_DIR_MASK | USB_ENDPADDR_NUM_MASK)) != 0U)
-	{
-		return false;
-	}
-
-	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
-	if (pReg->pBuffer == NULL || pReg->Handler == NULL)
-	{
-		return false;
-	}
-
+	(void)DevNo;
 	return nRFUsbRegEpXfer(EpAddr, NULL, Length);
 }
 

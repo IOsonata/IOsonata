@@ -46,14 +46,6 @@ static void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf, uint16_t Length,
 								   UsbCtrlrXferResult_t Result);
 static void UsbIntrfRxResumePending(UsbDevIntrf_t *pIntrf);
 
-static inline __attribute__((always_inline))
-bool UsbIntrfEnabled(const UsbDevIntrf_t *pIntrf)
-{
-	return pIntrf != nullptr &&
-		atomic_load_explicit(&pIntrf->DevIntrf.EnCnt,
-							 memory_order_relaxed) > 0;
-}
-
 /**
  * Submit the DMA request for one controller DRDY indication.
  *
@@ -63,60 +55,34 @@ bool UsbIntrfEnabled(const UsbDevIntrf_t *pIntrf)
  * CFifo availability; CFifoPut() applies the non-blocking overflow policy on
  * completion.
  */
-static bool UsbIntrfRxSubmit(UsbDevIntrf_t *pIntrf)
+static inline __attribute__((always_inline))
+void UsbIntrfRxSubmit(UsbDevIntrf_t *pIntrf)
 {
-	if (pIntrf == nullptr || pIntrf->Mps == 0U ||
-		pIntrf->hRxFifo == nullptr || pIntrf->pRxBuffer == nullptr)
-	{
-		return false;
-	}
-
-	// DRDY happened already. If the interface is temporarily disabled, retain
-	// that fact and let Enable service this same pending controller packet.
-	if (!UsbIntrfEnabled(pIntrf))
-	{
-		pIntrf->RxPending = true;
-		return false;
-	}
-
 	if (pIntrf->bBlocking && CFifoAvail(pIntrf->hRxFifo) <= 0)
 	{
 		pIntrf->RxPending = true;
-		return false;
+		return;
 	}
 
-	if (!UsbCtrlrEpXfer(pIntrf->DevNo,
-						USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps))
-	{
-		// A valid DRDY submission is expected to fit the controller request
-		// queue. Preserve the indication if the controller refuses it so it is
-		// not silently lost.
-		pIntrf->RxPending = true;
-		return false;
-	}
-
+	(void)UsbCtrlrEpXfer(pIntrf->DevNo,
+						USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps);
 	pIntrf->RxPending = false;
-	return true;
 }
 
 /** Service only a DRDY event that was previously deferred. */
 static void UsbIntrfRxResumePending(UsbDevIntrf_t *pIntrf)
 {
-	if (pIntrf == nullptr || !pIntrf->RxPending || pIntrf->Mps == 0U ||
-		pIntrf->hRxFifo == nullptr || !UsbIntrfEnabled(pIntrf))
+	if (!pIntrf->RxPending)
 	{
 		return;
 	}
 
 	const uint32_t state = DisableInterrupt();
-	if (pIntrf->RxPending &&
-		(!pIntrf->bBlocking || CFifoAvail(pIntrf->hRxFifo) > 0))
+	if (pIntrf->RxPending && CFifoAvail(pIntrf->hRxFifo) > 0)
 	{
-		if (UsbCtrlrEpXfer(pIntrf->DevNo,
-							USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps))
-		{
-			pIntrf->RxPending = false;
-		}
+		(void)UsbCtrlrEpXfer(pIntrf->DevNo,
+							USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps);
+		pIntrf->RxPending = false;
 	}
 	EnableInterrupt(state);
 }
@@ -176,11 +142,8 @@ static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf)
 		return -1;
 	}
 
-	if (!UsbCtrlrEpXfer(pIntrf->DevNo,
-						USB_ENDPADDR_DIRIN(pIntrf->EpNo), (uint16_t)cnt))
-	{
-		UsbIntrfTxFailure(pIntrf, (uint16_t)cnt);
-	}
+	(void)UsbCtrlrEpXfer(pIntrf->DevNo,
+						 USB_ENDPADDR_DIRIN(pIntrf->EpNo), (uint16_t)cnt);
 
 	return cnt;
 }
@@ -202,11 +165,8 @@ static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf)
 	}
 	(void)CFifoGet(pIntrf->hTxFifo);
 
-	if (!UsbCtrlrEpXfer(pIntrf->DevNo,
-						USB_ENDPADDR_DIRIN(pIntrf->EpNo), (uint16_t)cnt))
-	{
-		UsbIntrfTxFailure(pIntrf, (uint16_t)cnt);
-	}
+	(void)UsbCtrlrEpXfer(pIntrf->DevNo,
+						 USB_ENDPADDR_DIRIN(pIntrf->EpNo), (uint16_t)cnt);
 
 	return cnt;
 }
@@ -218,11 +178,7 @@ static void UsbIntrfDisable(DevIntrf_t * const pDevIntrf)
 
 static void UsbIntrfEnable(DevIntrf_t * const pDevIntrf)
 {
-	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
-	if (pIntrf != nullptr && pIntrf->RxPending)
-	{
-		UsbIntrfRxResumePending(pIntrf);
-	}
+	(void)pDevIntrf;
 }
 
 static uint32_t UsbIntrfGetRate(DevIntrf_t * const pDevIntrf)
@@ -430,26 +386,21 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 							   void *pContext)
 {
 	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pContext);
-	if (pIntrf == nullptr || USB_ENDPADDR_NUM(EpAddr) != pIntrf->EpNo)
-	{
-		return;
-	}
 
 	if (Event == USB_CTRLR_EVT_DRDY)
 	{
-		if (!USB_ENDPADDR_IS_IN(EpAddr))
-		{
-			(void)UsbIntrfRxSubmit(pIntrf);
-		}
+		UsbIntrfRxSubmit(pIntrf);
 		return;
 	}
 
-	if (Event != USB_CTRLR_EVT_XFER_CMPL)
+	if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
-		return;
+		UsbIntrfTxXferComplete(pIntrf, Length, Result);
 	}
-
-	UsbIntrfXferComplete(pIntrf, EpAddr, Length, Result);
+	else
+	{
+		UsbIntrfRxXferComplete(pIntrf, Length, Result);
+	}
 }
 
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
@@ -582,49 +533,38 @@ void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf)
 static void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf, uint16_t Length,
 								UsbCtrlrXferResult_t Result)
 {
-	if (Result == USB_CTRLR_XFER_SUCCESS && pIntrf->Mps > 0U &&
-		Length <= pIntrf->Mps && UsbIntrfEnabled(pIntrf) &&
-		pIntrf->hRxFifo != nullptr)
+	if (Result == USB_CTRLR_XFER_SUCCESS)
 	{
 		UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(
 			CFifoPut(pIntrf->hRxFifo));
-		if (pPacket != nullptr)
+		pPacket->Hdr.Length = Length;
+		pPacket->Hdr.Reserved = 0U;
+		if (Length > 0U)
 		{
-			pPacket->Hdr.Length = Length;
-			pPacket->Hdr.Reserved = 0U;
-			if (Length > 0U)
-			{
-				memcpy(pPacket->Data, pIntrf->pRxBuffer, Length);
-			}
-
-			const int used = CFifoUsed(pIntrf->hRxFifo);
-			if (pIntrf->bBlocking && used >= pIntrf->hRxFifo->MaxIdxCnt &&
-				pIntrf->DevIntrf.EvtCB != nullptr)
-			{
-				pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-									   DEVINTRF_EVT_RX_FIFO_FULL,
-									   nullptr, used);
-			}
-
-			if (pIntrf->DevIntrf.EvtCB != nullptr)
-			{
-				pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-									   DEVINTRF_EVT_RX_DATA,
-									   nullptr, used);
-			}
-			return;
+			memcpy(pPacket->Data, pIntrf->pRxBuffer, Length);
 		}
 
-		pIntrf->RxDropCnt++;
+		if (pIntrf->DevIntrf.EvtCB != nullptr)
+		{
+			const int used = CFifoUsed(pIntrf->hRxFifo);
+			if (pIntrf->bBlocking && used >= pIntrf->hRxFifo->MaxIdxCnt)
+			{
+				pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
+								   DEVINTRF_EVT_RX_FIFO_FULL, nullptr, used);
+			}
+			pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
+							   DEVINTRF_EVT_RX_DATA, nullptr, used);
+		}
+		return;
 	}
-	else if (Result == USB_CTRLR_XFER_FAILED)
+
+	if (Result == USB_CTRLR_XFER_FAILED)
 	{
 		pIntrf->RxDropCnt++;
 		if (pIntrf->DevIntrf.EvtCB != nullptr)
 		{
 			pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-								   DEVINTRF_EVT_RX_TIMEOUT,
-								   nullptr, Length);
+							   DEVINTRF_EVT_RX_TIMEOUT, nullptr, Length);
 		}
 	}
 }
@@ -632,11 +572,6 @@ static void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf, uint16_t Length,
 static void UsbIntrfTxXferComplete(UsbDevIntrf_t *pIntrf,
 								uint16_t Length, UsbCtrlrXferResult_t Result)
 {
-	if (pIntrf == nullptr || pIntrf->hTxFifo == nullptr)
-	{
-		return;
-	}
-
 	if (Result != USB_CTRLR_XFER_SUCCESS)
 	{
 		if (Result == USB_CTRLR_XFER_FAILED)
