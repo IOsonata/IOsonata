@@ -157,6 +157,7 @@ typedef enum __Usb_Ctrlr_Evt_Type {
 	USB_CTRLR_EVT_SETUP,		//!< New EP0 SETUP request
 	USB_CTRLR_EVT_DRDY,			//!< Data is ready in the device to be retrieved
 	USB_CTRLR_EVT_XFER_CMPL,	//!< Endpoint transfer completed
+	USB_CTRLR_EVT_CANCEL,		//!< Endpoint transfer cancelled
 	USB_CTRLR_EVT_SUSPEND,		//!< Bus entered suspend
 	USB_CTRLR_EVT_RESUME,		//!< Bus resumed
 	USB_CTRLR_EVT_SOF,			//!< Start of frame
@@ -192,7 +193,7 @@ typedef void (*UsbCtrlrEvtHandler_t)(int DevNo, const UsbCtrlrEvt_t *pEvt,
 									 void *pContext);
 
 /**
- * @brief	Non-control endpoint completion callback.
+ * @brief	Non-control endpoint event callback.
  *
  * Registered once with the endpoint DMA buffer. It is called directly from
  * the controller interrupt, avoiding a function-table search per packet.
