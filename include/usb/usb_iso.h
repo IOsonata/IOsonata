@@ -1,18 +1,22 @@
 /**-------------------------------------------------------------------------
 @file	usb_iso.h
 
-@brief	USB isochronous endpoint-pair interface built on UsbIntrf.
+@brief	Reusable USB isochronous interface.
 
-UsbIsoIntrf adds isochronous endpoint lifecycle and frame callbacks to the
-reusable UsbIntrf data path. UsbIntrf owns the fixed DMA staging buffers,
-CFifo transport, controller registration and transfer completion hot path.
-UsbIsoIntrf only opens/closes the endpoint pair, preserves one-frame-at-a-time
-TX semantics for its frame API and translates DeviceIntrf events to frame
-callbacks.
+UsbIsoIntrf is the isochronous specialization of UsbIntrf. UsbIntrf remains the
+single endpoint-pair data engine: it owns the RX/TX CFifos, fixed controller
+buffers, endpoint registration, UsbCtrlrEpXfer submissions and transfer
+completion callback. UsbIsoIntrf configures that engine in non-blocking packet
+mode and owns only isochronous endpoint lifecycle and frame semantics.
 
-The controller is registered non-blocking for ISO OUT. A received frame goes
-directly from the controller event to EasyDMA and reaches UsbIntrf only at
-transfer completion. There is no DRDY round trip and no receive arm state.
+The layering is therefore:
+
+    UsbIsoIntrf
+        -> UsbIntrf (non-blocking packet mode)
+            -> UsbCtrlrEpXfer / registered endpoint callback
+
+No ISO transfer is routed through UsbCore or a USB function callback, and
+UsbIsoIntrf does not register a second controller completion path.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 8, 2026
@@ -80,7 +84,8 @@ typedef void (*UsbIsoIntrfTxHandler_t)(UsbIsoIntrf_t *pIntrf,
 
 typedef struct __Usb_Iso_Interf_Config {
 	int DevNo;
-	uint8_t EpNo;
+	uint8_t EpNo;					//!< Internally allocated ISO endpoint number
+	uint8_t Attributes;			//!< ISO sync/usage bits; zero = no-sync data
 	UsbIsoIntrfRxHandler_t RxHandler;
 	UsbIsoIntrfTxHandler_t TxHandler;
 	void *pContext;
@@ -101,20 +106,26 @@ struct __Usb_Iso_Interf {
 	uint16_t TxLength;
 	uint8_t EpNo;
 	uint8_t Interval;
+	uint8_t Attributes;
 	bool Opened;
 	bool Suspended;
 	bool TxActive;
 
-	// C callers use LocalData. The C++ derived class binds pIntrfData to the
-	// UsbIntrf base object instead, so both paths use the same implementation.
+	// C callers use LocalData. The C++ class binds pIntrfData to its inherited
+	// UsbIntrf object so both forms use the same UsbIntrf implementation.
 	UsbDevIntrf_t LocalData;
 
-	// One frame is sufficient because frame callbacks are delivered from the
-	// completion path and SendFrame intentionally permits only one active IN.
+	// UsbIntrf requires CFifos even though ISO is not a queued/retried transport.
+	// One packet slot per direction is enough: RX is drained by the ISO adapter
+	// on completion and SendFrame permits only one active IN frame.
 	uint32_t RxFifoMem[USB_ISO_INTRF_FIFO_WORDS];
 	uint32_t TxFifoMem[USB_ISO_INTRF_FIFO_WORDS];
+
+	// Fixed controller DMA staging buffers registered once by UsbIntrfInit().
 	uint32_t RxBuffer[USB_ISO_INTRF_BUFFER_WORDS];
 	uint32_t TxBuffer[USB_ISO_INTRF_BUFFER_WORDS];
+
+	// One UsbIntrf packet-mode block used to queue SendFrame through UsbIntrf.
 	uint32_t TxPacket[USB_ISO_INTRF_PACKET_WORDS];
 };
 
@@ -125,15 +136,18 @@ extern "C" {
 /** Initialize a C instance using its embedded UsbIntrf data object. */
 bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, const UsbIsoIntrfCfg_t *pCfg);
 
-/** Bind an ISO wrapper to an existing UsbIntrf data object. */
+/** Bind an ISO specialization to an existing UsbIntrf data object. */
 bool UsbIsoIntrfInitData(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 						 const UsbIsoIntrfCfg_t *pCfg);
 
+/** Open the internally assigned endpoint pair as isochronous. */
 bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval);
 void UsbIsoIntrfClose(UsbIsoIntrf_t *pIntrf);
 void UsbIsoIntrfReset(UsbIsoIntrf_t *pIntrf);
 void UsbIsoIntrfSuspend(UsbIsoIntrf_t *pIntrf);
 bool UsbIsoIntrfResume(UsbIsoIntrf_t *pIntrf);
+
+/** Queue one ISO IN frame through UsbIntrf packet mode. */
 bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 						  uint16_t Length);
 

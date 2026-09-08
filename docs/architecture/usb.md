@@ -1,151 +1,181 @@
 # USB Architecture
 
-IOsonata keeps the application-facing USB API simple. Applications instantiate
-the USB device/function they need, initialize it, and use its normal interface.
-Applications do not assign USB interface numbers or endpoint numbers.
-
-The USB implementation allocates those resources internally and connects each
-function to the generic USB controller layer.
-
-```mermaid
-flowchart TD
-    App[Application] --> Class[Public device/function\nUsbdCdc, UsbdBulk, BtHciUsb, ...]
-    Class --> Alloc[Internal USB resource allocator]
-    Class --> Core[UsbCore\nChapter 9 and control requests]
-    Class --> Data[UsbIntrf\nstream/packet data path when needed]
-    Alloc --> Core
-    Data --> Ctrlr[UsbCtrlr]
-    Class --> Ctrlr
-    Core --> Ctrlr
-    Ctrlr --> Hw[USB controller hardware]
-```
-
-For an application developer the intended model is therefore:
+IOsonata keeps USB simple at the application boundary and explicit internally.
+An application instantiates the USB device/function it needs and initializes it.
+Interface numbers, endpoint numbers, descriptor placement and endpoint callbacks
+are allocated and connected inside the USB stack.
 
 ```text
-instantiate device/function
-        |
-        v
-      Init()
-        |
-        v
-    UsbEnable()
-        |
-        v
-use the class or DeviceIntrf API
+Application
+    |
+    +-- UsbdCdc
+    +-- UsbdBulk
+    +-- other USB device/function classes
+            |
+            v
+       automatic USB resource allocation
 ```
 
-Endpoint placement, interface numbering, endpoint callbacks, descriptors and
-controller transactions remain implementation details.
+Applications do not select endpoint numbers.
 
-## Architectural rules
+## Complete data-path model
 
-These rules define the USB layering and must remain true when new classes or
-transfer types are added.
-
-1. Applications never choose interface or endpoint numbers.
-2. USB classes declare resource requirements; the internal allocator assigns
-   legal interface and endpoint numbers.
-3. The controller does not know CDC, HCI, HID, Bluetooth packet formats, FIFO
-   formats or other class policy.
-4. Endpoint transfer type is established when an endpoint is opened. A normal
-   endpoint transaction uses the same controller transfer primitive regardless
-   of whether the endpoint is Bulk, Interrupt or Isochronous.
-5. Non-control endpoint events go directly from the controller to the callback
-   registered for that endpoint. They are never routed through the USB function
-   table or through another class.
-6. `UsbIntrf` is a reusable stream/packet data path. It is not the universal
-   owner of every USB endpoint type.
-7. Interrupt endpoints are owned directly by the function that defines the
-   notification/event protocol.
-8. The reusable isochronous layer must receive controller endpoint events
-   directly. Bluetooth SCO policy belongs above that layer.
-9. Endpoint ownership masks in `UsbCore` exist for composition and Chapter 9
-   endpoint-recipient requests. They are not a data-completion dispatch table.
-10. The data path uses static storage. No USB transfer path requires dynamic
-    allocation.
-
-The important internal boundary is:
+`UsbIntrf` is the common bidirectional endpoint-pair data engine. CDC, custom
+Bulk and Isochronous all reuse it.
 
 ```text
-                    UsbCtrlr
-                       |
-            +----------+----------+
-            |                     |
-      controller/core          endpoint
-          events                events
-            |                     |
-          UsbCore          registered owner
-                                  |
-                    +-------------+-------------+
-                    |             |             |
-                 UsbIntrf      class-owned   UsbIsoIntrf
-                 Bulk/data     Interrupt      Isochronous
+                              UsbIntrf
+                    generic endpoint-pair engine
+                 fixed RX/TX controller DMA staging
+                       CFifo RX/TX transport
+                    endpoint registration/callback
+                           UsbCtrlrEpXfer
+                               |
+             +-----------------+-----------------+
+             |                                   |
+         specializations / users of UsbIntrf     |
+             |                                   |
+      +------+------+                            |
+      |             |                            |
+   UsbdCdc       UsbdBulk                    UsbIsoIntrf
+      |             |                            |
+   Bulk EP       Bulk EP                       ISO EP
+   byte mode     byte/packet mode          non-blocking packet mode
 ```
 
-## Public classes and automatic resource allocation
+The inheritance view is intentionally small:
 
-A public USB class describes what it needs, not where it should be placed.
-`UsbRegisterFuncAuto()` finds the lowest legal placement accepted by the USB
-core and controller capabilities.
+```text
+                    UsbIntrf
+                  /    |     \
+                 /     |      \
+          UsbdCdc   UsbdBulk   UsbIsoIntrf
+```
 
-Examples:
+The endpoint transfer type and the `UsbIntrf` CFifo mode are independent.
+Opening an endpoint as Bulk or Isochronous does not create a different
+controller transfer API.
 
-- CDC ACM requests two interfaces, one Interrupt IN endpoint and one
-  bidirectional Bulk endpoint number.
-- A vendor Bulk function requests one interface and one bidirectional Bulk
-  endpoint number.
-- Bluetooth HCI requests its HCI/synchronous interfaces, an Interrupt IN Event
-  endpoint, a bidirectional Bulk ACL endpoint number, and, when SCO is enabled,
-  a controller-supported bidirectional Isochronous endpoint number.
+## CDC
 
-The resulting numbers are stored only in private class state and used to build
-that class's descriptors and open its endpoints. They are never added to the
-application configuration merely to expose USB placement.
+CDC ACM uses `UsbIntrf` for its Bulk data endpoint pair.
 
-Fixed endpoint constraints are also internal. For example, a controller with a
-dedicated ISO endpoint advertises that through controller capability masks and
-the allocator satisfies the constraint without involving the application.
+```text
+UsbdCdc
+   |
+   +-- Bulk OUT/IN ----------> UsbIntrf
+   |                              |
+   |                         UsbCtrlrEpXfer
+   |
+   +-- Interrupt IN ---------> direct class-owned endpoint
+       notifications
+```
+
+CDC byte data uses `UsbIntrf` byte-stream TX mode. CDC notification is not part
+of the data stream, so the Interrupt IN endpoint is owned directly by `UsbdCdc`.
+
+## Custom Bulk
+
+`UsbdBulk` is a thin public specialization of `UsbIntrf`.
+
+```text
+UsbdBulk
+    |
+    v
+UsbIntrf
+    |
+    +-- byte-stream mode
+    |
+    +-- packet mode
+    |
+    v
+Bulk OUT/IN endpoints
+```
+
+`UsbdBulk` owns the descriptor policy and static controller buffers. `UsbIntrf`
+owns queuing, staging and endpoint transfer completion.
+
+## Isochronous
+
+Isochronous is another `UsbIntrf` specialization, not a separate transfer
+engine.
+
+```text
+UsbIsoIntrf
+    |
+    v
+UsbIntrf
+(non-blocking packet mode)
+    |
+    v
+Isochronous OUT/IN endpoints
+    |
+    v
+UsbCtrlrEpXfer / endpoint callback
+```
+
+`UsbIsoIntrf` owns only ISO-specific behavior:
+
+- open/close the endpoint pair as Isochronous;
+- ISO maximum packet size and service interval;
+- ISO synchronization/usage descriptor attributes;
+- suspend/resume/reset state;
+- frame-facing convenience callbacks and counters.
+
+`UsbIntrf` continues to own the transfer machinery:
+
+- fixed RX/TX controller buffers;
+- endpoint registration;
+- the controller endpoint callback;
+- RX/TX CFifos;
+- packet-mode staging;
+- `UsbCtrlrEpXfer()` submission;
+- transfer completion handling.
+
+ISO always configures `UsbIntrf` with `bBlocking = false`. An isochronous
+service opportunity cannot be backpressured and retried like Bulk. If software
+cannot keep up, data is missed/dropped according to the non-blocking path rather
+than delaying the USB service interval.
+
+There is no path of the form:
+
+```text
+UsbCtrlr -> UsbCore -> class -> UsbIsoIntrf
+```
+
+and there is no independent ISO controller callback beside the one registered
+by `UsbIntrf`.
 
 ## Controller boundary
 
-Every target provides `usb_ctrlr.h` and a matching controller implementation.
-Portable USB code never switches on a vendor macro.
+Every target provides `usb_ctrlr.h` and its controller implementation. Portable
+USB code does not depend on MCU-specific register definitions.
 
-The controller interface has four main concepts:
-
-```text
-Init
-Endpoint Open/Close
-Endpoint Xfer
-Event Callback
-```
-
-Support operations such as stall/clear-stall, remote wakeup, connect/disconnect
-and controller start/stop surround those four concepts but do not change the
-data-path model.
-
-### Initialization and controller-wide events
-
-`UsbInit()` installs the controller/core callback through `UsbCtrlrInit()`.
-Controller-wide USB events such as Reset, Suspend, Resume and SOF are delivered
-there because they affect the whole device rather than one non-control endpoint.
-
-EP0 is owned by `UsbCore`. A SETUP packet originates on EP0 and EP0 transfer
-completion belongs to the control-transfer state machine. The current port API
-delivers those EP0-specific events to `UsbCore` through the callback installed
-at controller initialization. This is an EP0 implementation detail; it must not
-become a route for non-control endpoint completions.
-
-Conceptually:
+The central controller concepts are:
 
 ```text
-USB bus / protocol engine
-        |
-        +-- Reset/Suspend/Resume/SOF --> UsbCore callback
-        |
-        +-- EP0 SETUP / EP0 complete --> UsbCore control state machine
+UsbCtrlrInit
+UsbCtrlrEpOpen / UsbCtrlrEpClose
+UsbCtrlrEpXfer
+Event callback
 ```
+
+Support operations such as start/stop, connect/disconnect, stall, remote wakeup
+and SOF enable surround those operations.
+
+### Controller initialization
+
+`UsbInit()` calls `UsbCtrlrInit()` and installs the device-wide/core callback.
+This callback handles controller-wide events such as:
+
+```text
+RESET
+SUSPEND
+RESUME
+SOF
+```
+
+EP0 setup/control state is also owned by `UsbCore`.
 
 ### Endpoint configuration
 
@@ -153,42 +183,29 @@ USB bus / protocol engine
 
 ```text
 endpoint address and direction
-transfer type: Control / Bulk / Interrupt / Isochronous
+transfer type: Control / Isochronous / Bulk / Interrupt
 maximum packet size
-service/polling interval where applicable
+interval where applicable
+ISO synchronization/usage attributes where applicable
 ```
 
-The transfer type belongs here. It must not create separate controller APIs such
-as `BulkXfer()`, `InterruptXfer()` or `IsoXfer()`.
+There are no class-specific controller transfer calls such as `CdcXfer()`,
+`BulkXfer()` or `IsoXfer()`.
 
-### Endpoint registration and transfer
+### Endpoint transfer
 
-Non-control endpoints register their static controller buffer, endpoint event
-callback and context once. `UsbCtrlrEpXfer()` then submits a transaction using
-that endpoint's registered buffer.
+Non-control data endpoints use one common operation:
 
 ```text
-endpoint owner
-    |
-    +-- register buffer + callback
-    +-- open endpoint descriptor
-    +-- UsbCtrlrEpXfer(endpoint, length)
-    |
-    <-- endpoint callback(event, length, result)
+UsbCtrlrEpXfer(DevNo, EpAddr, Length)
 ```
 
-The fixed-buffer registration is an IOsonata implementation choice that keeps
-DMA staging static. It does not change the USB abstraction: the controller
-still sees an endpoint transfer, not a CDC transfer, HCI transfer or ISO frame.
+The controller already knows the endpoint type because it was established by
+`UsbCtrlrEpOpen()`.
 
-EP0 currently has `UsbCtrlrEp0Xfer()` because the control state machine chooses
-a different data pointer for each request. Semantically it is still an endpoint
-transaction. The special entry point exists for EP0's dynamic control-stage
-buffer, not because Control is routed through a class-specific transfer API.
-
-## Endpoint events
-
-Non-control endpoint events are direct:
+Endpoint callbacks are registered with the endpoint owner and are delivered
+directly. Nonzero endpoint completion is not routed through the USB function
+table.
 
 ```text
 controller interrupt
@@ -200,278 +217,167 @@ registered endpoint callback
 endpoint owner
 ```
 
-There is no path of the form:
+For CDC/Bulk/ISO data pairs, that endpoint owner is `UsbIntrf`.
 
-```text
-controller -> UsbCore -> UsbFuncCfg -> class -> endpoint owner
-```
+## Control endpoint
 
-for data completion.
-
-This direct rule applies equally to Bulk, Interrupt and Isochronous endpoints.
-Only the owner and the semantics above the callback differ.
-
-`UsbCtrlrEvtType_t` is currently shared by the controller/core callback and
-endpoint callbacks. That type sharing must not be interpreted as shared event
-routing. Nonzero endpoint transfer events are delivered only to their registered
-endpoint callback.
-
-## Control transfers
-
-`UsbCore` owns endpoint zero and the USB control-transfer state machine:
+EP0 is special because Control transfers have protocol stages:
 
 ```text
 SETUP
   |
-  +-- DATA stage when present
+  +-- DATA
   |
-  +-- STATUS stage
+  +-- STATUS
 ```
 
-`UsbCore` handles standard Chapter 9 requests and dispatches class/vendor
-requests to the registered function that owns the addressed interface or
-endpoint. The function table is therefore a control-request ownership table,
-not a data endpoint event router.
+`UsbCore` owns that state machine and Chapter 9 processing. The controller may
+use a separate EP0 transfer entry point because each control request can select
+a different buffer, while ordinary data endpoints use fixed registered DMA
+buffers.
 
-Control data moves through the controller EP0 transfer primitive. Classes never
-own EP0 directly.
+This does not change the endpoint architecture: EP0 is still controller-driven,
+but its protocol owner is `UsbCore` rather than `UsbIntrf`.
 
-## Bulk/data path: UsbIntrf
+## Interrupt endpoints
 
-`UsbIntrf` is the reusable `DeviceIntrf` implementation for class data that
-needs FIFO-backed stream or packet behavior.
+Interrupt endpoints are normally event/notification endpoints rather than
+stream data endpoints. A class owns them directly when no `UsbIntrf` stream or
+packet transport is needed.
+
+CDC ACM notification is the reference pattern:
 
 ```text
-Application / class
+class state changes
         |
-     DeviceIntrf
+        v
+build notification
         |
-     UsbIntrf
+        v
+UsbCtrlrEpXfer(Interrupt IN)
         |
-  UsbCtrlrEpXfer
-        |
-    controller
+        v
+class endpoint callback
 ```
 
-One `UsbIntrf` instance represents one internally assigned bidirectional
-endpoint number:
+The host schedules Interrupt polling according to `bInterval`.
+
+## Automatic interface and endpoint allocation
+
+USB functions request resources; applications do not assign them.
+
+The internal allocator receives requirements such as:
+
+```text
+number of interfaces
+number of bidirectional endpoint numbers
+number of IN-only endpoints
+number of OUT-only endpoints
+controller-constrained endpoint masks
+```
+
+It finds the lowest legal placement accepted by the USB core and controller
+capabilities. The assigned numbers remain private class state and are used for
+endpoint registration, descriptor construction and control-request ownership.
+
+A controller with a dedicated ISO endpoint advertises it through ISO capability
+masks. The allocator satisfies that restriction internally.
+
+## UsbIntrf responsibilities
+
+One `UsbIntrf` instance represents one bidirectional endpoint number:
 
 ```text
 OUT = receive
 IN  = transmit
 ```
 
-The derived class supplies static RX/TX controller buffers and application FIFO
-storage. `UsbIntrf` owns packet/stream queuing and copies between FIFO storage
-and controller staging buffers. The controller owns hardware busy state, DMA
-arbitration and transfer completion.
+The derived class supplies fixed controller RX/TX buffers. `UsbIntrf` registers
+those buffers once and later submits only endpoint address and length.
 
-`UsbIntrf` is appropriate for CDC Bulk data, vendor Bulk data and HCI ACL data.
-It is not a reason to force unrelated Interrupt or Isochronous semantics through
-the same FIFO/event layer.
-
-### RX
-
-The controller reports endpoint receive readiness/completion to the registered
-`UsbIntrf` callback. `UsbIntrf` decides whether storage is available, submits the
-OUT transfer, copies the completed packet into its RX CFifo and notifies the
-`DeviceIntrf` consumer.
-
-Blocking/backpressure versus overwrite/drop behavior is `UsbIntrf` policy, not
-USB class policy.
-
-### TX
-
-Foreground code queues bytes or packet blocks in the TX CFifo. When TX becomes
-software-owned, `UsbIntrf` stages up to the active MPS in its fixed TX controller
-buffer and calls `UsbCtrlrEpXfer()`. Completion stages the next queued transfer
-until the FIFO is empty.
-
-TX byte mode and packet mode are selected by CFifo block size; USB transfer type
-and FIFO mode remain independent concepts.
-
-## Interrupt endpoints
-
-Interrupt endpoints are event-oriented and normally need no `UsbIntrf` wrapper.
-The class that defines the event owns the endpoint directly.
-
-CDC ACM notification is the model:
+RX packet boundaries are preserved internally with:
 
 ```text
-CDC serial state changes
-        |
-        v
-build SERIAL_STATE notification
-        |
-        v
-UsbCtrlrEpXfer(Interrupt IN)
-        |
-        v
-CDC notification endpoint callback
+UsbPktHdr_t { Length }
++ packet payload storage
 ```
 
-Bluetooth HCI Event uses the same controller pattern with Bluetooth event
-packet semantics above it.
-
-`bInterval` describes host scheduling. It does not require a firmware timer that
-periodically pushes data. Firmware queues an event when it has one; the USB
-controller/host schedule determines when the Interrupt transaction occurs.
-
-## Isochronous endpoints
-
-Isochronous is a distinct USB transfer type, not a form of Interrupt transfer.
-It uses the same controller endpoint transfer primitive but has different
-higher-level semantics: periodic service, no retransmission, and meaningful
-missed/empty service intervals.
-
-The target reusable architecture is:
+TX mode is selected by CFifo block size:
 
 ```text
-USB controller
-    |
-    v
-UsbIsoIntrf
-    |
-    v
-BtHciUsb SCO
+block size 1
+    -> byte-stream mode
+
+block size UsbPktHdr_t + packet storage
+    -> packet mode
 ```
 
-`UsbIsoIntrf` owns generic USB isochronous behavior:
-
-- bidirectional Isochronous endpoint lifecycle;
-- static DMA staging;
-- one transfer opportunity per USB service interval;
-- IN/OUT start and completion;
-- reset, suspend and resume handling;
-- missed and empty service-interval handling;
-- no dynamic allocation;
-- no Bluetooth packet knowledge.
-
-`BtHciUsb` owns Bluetooth behavior:
-
-- synchronous-interface alternate settings;
-- SCO header parsing and complete-packet assembly;
-- segmentation of complete SCO packets into USB ISO frames;
-- HCI packet-type routing.
-
-The following layering is specifically forbidden:
+Transfer type and CFifo mode are separate. For example:
 
 ```text
-controller -> UsbCore -> BtHciUsb -> UsbIsoIntrf
-controller -> UsbIntrf -> DeviceIntrf event -> UsbIsoIntrf
+CDC       = Bulk + byte mode
+UsbdBulk  = Bulk + byte or packet mode
+ISO       = Isochronous + non-blocking packet mode
 ```
-
-The existing `usb_iso.*` implementation on this development branch predates
-this architecture decision and currently builds `UsbIsoIntrf` on `UsbIntrf`.
-It is transitional code and must not be extended as the reference architecture.
-The reusable ISO implementation must be refactored to register directly with
-the controller before ISO work is considered complete.
-
-## Function registration
-
-The USB function table exists for composition and control-request dispatch.
-Each registered function records its private interface range and endpoint
-ownership masks so `UsbCore` can:
-
-- reject overlapping allocations;
-- route interface-recipient control requests;
-- route endpoint-recipient control requests;
-- maintain Chapter 9 halt and alternate-setting state.
-
-It does not route non-control endpoint transfer events.
 
 ## Storage ownership
 
-There is no heap allocation in the USB data path.
+The USB data path uses static storage.
 
-| Storage | Owner | Purpose |
-| --- | --- | --- |
-| Application RX/TX FIFO memory | Public class configuration | Queued application data |
-| Bulk/data RX/TX staging | Derived class / `UsbIntrf` | Fixed controller DMA buffers |
-| Interrupt staging | Endpoint-owning class | Small event/notification transfer |
-| Future ISO staging | `UsbIsoIntrf` | Fixed per-service-interval transfer buffers |
-| Hardware/DMA descriptors | Controller port | Controller transaction state |
+```text
+Derived class / specialization
+    -> RX/TX controller DMA staging
 
-Controller buffers and FIFO storage are separate. Removing that distinction
-would allow foreground FIFO reuse while DMA still owns the transfer buffer.
+UsbIntrf
+    -> RX/TX CFifo transport
+
+UsbCtrlr port
+    -> hardware/DMA transaction state
+```
+
+CFifo storage and controller DMA staging are intentionally separate so queued
+software storage can be reused without modifying memory currently owned by the
+controller.
 
 ## Lifecycle
 
-At the application level:
+The application view is:
 
 ```text
 UsbInit
-  |
+   |
 class Init calls
-  |
+   |
 UsbEnable
-  |
-host enumerates and selects configuration
-  |
-classes open their internally allocated endpoints
+   |
+host enumeration/configuration
+   |
+class endpoints open
 ```
 
 Internally:
 
-1. `UsbInit()` initializes portable state and calls `UsbCtrlrInit()`, installing
-   the controller/core event callback.
-2. Each class requests interfaces/endpoints from the internal allocator.
-3. Each endpoint owner registers its static controller buffer and direct
-   callback.
-4. `UsbEnable()` starts the controller and connects the device.
-5. Configuration/alternate-setting handlers open the descriptors for the
-   already allocated endpoints.
-6. Transfers use the controller endpoint transfer primitive.
-7. Reset/unconfiguration closes active endpoints and clears class transfer
-   state while static resource ownership remains known.
+1. `UsbInit()` initializes `UsbCore` and the controller.
+2. Each class requests its interfaces/endpoints from the internal allocator.
+3. Data classes initialize their inherited `UsbIntrf` with the allocated
+   endpoint number, static buffers and CFifos.
+4. `UsbIntrfInit()` registers the endpoint buffers and callback.
+5. Configuration or alternate-setting selection opens the endpoint descriptors.
+6. Transfers use `UsbCtrlrEpXfer()`.
+7. Reset/unconfiguration closes endpoints and clears active transport state.
 
-## Controller responsibilities
+## Rules for new USB work
 
-The controller port owns only hardware behavior:
+Keep these invariants when adding a new class or transfer type:
 
-- peripheral power/clock and interrupt control;
-- endpoint register configuration;
-- DMA/FIFO programming;
-- active-transfer/busy state;
-- controller-specific arbitration;
-- conversion of hardware events into controller/core or endpoint callbacks.
-
-The controller must not own class packet assembly, application FIFO semantics,
-Bluetooth framing, CDC state or automatic class dispatch.
-
-Controller capability macros publish static hardware limits such as:
-
-```c
-USB_CTRLR_CNT
-USB_PKT_MAXLEN(DevNo, TransType)
-USB_EPIN_CNT(DevNo)
-USB_EPOUT_CNT(DevNo)
-USB_HIGHSPEED_CAPABLE(DevNo)
-USB_ISO_SUPPORTED(DevNo)
-USB_ISO_EPIN_MASK(DevNo)
-USB_ISO_EPOUT_MASK(DevNo)
-```
-
-These are consumed internally by class storage sizing and the resource
-allocator. They do not expose endpoint placement to the application.
-
-## Pre-ISO checklist
-
-Before extending the current ISO implementation, verify these invariants:
-
-- [x] Applications do not configure interface/endpoint numbers.
-- [x] Function resources are assigned by the internal allocator.
-- [x] Nonzero endpoint completions are delivered directly to registered
-      endpoint callbacks.
-- [x] `UsbCtrlrEpXfer()` is the common non-control endpoint transfer primitive.
-- [x] Bulk/stream data uses `UsbIntrf` without class-level completion forwarding.
-- [x] Interrupt endpoints such as CDC notification and HCI Event are owned
-      directly by their classes.
-- [ ] Remove controller knowledge of `UsbIntrf` blocking/nonblocking FIFO policy.
-- [ ] Refactor `UsbIsoIntrf` so controller events terminate directly in
-      `UsbIsoIntrf`, not in `UsbIntrf`.
-- [ ] Re-run USB core, Bulk, CDC, HCI and hardware regression tests after that
-      foundation is complete.
-
-Do not add ISO behavior to `BtHciUsb` until the unchecked controller/ISO
-layering items above are resolved.
+1. Applications do not choose interface or endpoint numbers.
+2. Resource allocation remains internal.
+3. `UsbCtrlr` contains hardware behavior, not class protocol behavior.
+4. `UsbCtrlrEpXfer()` remains the common non-control endpoint transfer call.
+5. Nonzero endpoint events go directly to the registered endpoint owner.
+6. `UsbIntrf` remains the common endpoint-pair data engine.
+7. CDC and Bulk use `UsbIntrf`; ISO is `UsbIntrf` in non-blocking packet mode.
+8. Class-owned Interrupt endpoints do not need to pass through `UsbIntrf` when
+   they are only notifications/events.
+9. `UsbCore` owns EP0 and Chapter 9, not data endpoint completion routing.
+10. Do not duplicate endpoint transfer machinery inside a specialization.

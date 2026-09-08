@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	usb_iso.cpp
 
-@brief	USB isochronous endpoint-pair implementation on UsbIntrf.
+@brief	USB isochronous specialization of UsbIntrf.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 8, 2026
@@ -62,19 +62,41 @@ static bool UsbIsoIntrfEpSupported(int DevNo, uint8_t EpNo)
 		(USB_ISO_EPOUT_MASK(DevNo) & bit) != 0U;
 }
 
+static bool UsbIsoIntrfOpenEndpoint(UsbIsoIntrf_t *pIntrf, uint8_t EpAddr)
+{
+	UsbEndPointDesc_t desc = {};
+	desc.bLength = sizeof(desc);
+	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
+	desc.bEndpointAddress = EpAddr;
+	desc.bmAttributes = USB_ENDPATT_TRANS_ISO | pIntrf->Attributes;
+	desc.wMaxPacketSize = pIntrf->Mps;
+	desc.bInterval = pIntrf->Interval;
+
+	return UsbCtrlrEpOpen(pIntrf->pIntrfData->DevNo, &desc);
+}
+
+static void UsbIsoIntrfSetTxIdle(UsbDevIntrf_t *pData)
+{
+	atomic_store_explicit(&pData->DevIntrf.bTxReady, true,
+						  memory_order_release);
+}
+
+// UsbIntrf remains the controller endpoint owner. This callback is only the
+// DeviceIntrf-facing ISO adapter above UsbIntrf; it never receives controller
+// events directly and never submits an endpoint transfer itself.
 static int UsbIsoIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 								uint8_t *, int Length)
 {
 	UsbDevIntrf_t *pData = static_cast<UsbDevIntrf_t *>(pDev->pDevData);
-	UsbIsoIntrf_t *pIntrf = static_cast<UsbIsoIntrf_t *>(pData->pClassContext);
+	UsbIsoIntrf_t *pIntrf = pData != nullptr ?
+		static_cast<UsbIsoIntrf_t *>(pData->pClassContext) : nullptr;
+	if (pIntrf == nullptr)
+	{
+		return 0;
+	}
 
 	switch (Event)
 	{
-		case DEVINTRF_EVT_RX_FIFO_FULL:
-			// Application-facing fullness is consumed internally here. RX_DATA
-			// immediately drains this one-frame transport FIFO below.
-			return 0;
-
 		case DEVINTRF_EVT_RX_DATA:
 		{
 			UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(
@@ -84,25 +106,25 @@ static int UsbIsoIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 				return 0;
 			}
 
-			const uint16_t len = pPacket->Hdr.Length;
+			const uint16_t length = pPacket->Hdr.Length;
 			UsbCtrlrXferResult_t result = USB_CTRLR_XFER_SUCCESS;
-			if (len > pIntrf->Mps)
+			if (length > pIntrf->Mps)
 			{
 				result = USB_CTRLR_XFER_FAILED;
 				pIntrf->RxMissCnt++;
 			}
-			else if (len == 0U)
+			else if (length == 0U)
 			{
 				pIntrf->RxEmptyCnt++;
 			}
 
 			if (pIntrf->RxHandler != nullptr)
 			{
-				pIntrf->RxHandler(pIntrf, pPacket->Data, len, result,
+				pIntrf->RxHandler(pIntrf, pPacket->Data, length, result,
 					pIntrf->pContext);
 			}
 			(void)CFifoGet(pData->hRxFifo);
-			return len;
+			return length;
 		}
 
 		case DEVINTRF_EVT_RX_TIMEOUT:
@@ -110,8 +132,8 @@ static int UsbIsoIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 			if (pIntrf->RxHandler != nullptr)
 			{
 				pIntrf->RxHandler(pIntrf, pData->pRxBuffer,
-					(uint16_t)Length, USB_CTRLR_XFER_FAILED,
-					pIntrf->pContext);
+					Length > 0 ? (uint16_t)Length : 0U,
+					USB_CTRLR_XFER_FAILED, pIntrf->pContext);
 			}
 			return 0;
 
@@ -131,8 +153,8 @@ static int UsbIsoIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 			}
 			if (pIntrf->TxHandler != nullptr)
 			{
-				pIntrf->TxHandler(pIntrf, length, USB_CTRLR_XFER_SUCCESS,
-					pIntrf->pContext);
+				pIntrf->TxHandler(pIntrf, length,
+					USB_CTRLR_XFER_SUCCESS, pIntrf->pContext);
 			}
 			return length;
 		}
@@ -144,8 +166,7 @@ static int UsbIsoIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 			pIntrf->TxLength = 0U;
 			pIntrf->TxMissCnt++;
 			CFifoFlush(pData->hTxFifo);
-			atomic_store_explicit(&pData->DevIntrf.bTxReady, true,
-				memory_order_release);
+			UsbIsoIntrfSetTxIdle(pData);
 			if (pIntrf->TxHandler != nullptr)
 			{
 				pIntrf->TxHandler(pIntrf,
@@ -176,22 +197,24 @@ bool UsbIsoIntrfInitData(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	pIntrf->RxHandler = pCfg->RxHandler;
 	pIntrf->TxHandler = pCfg->TxHandler;
 	pIntrf->EpNo = pCfg->EpNo;
+	pIntrf->Attributes = pCfg->Attributes &
+		(USB_ENDPATT_ISO_SYNC_MASK | USB_ENDPATT_ISO_USAGE_MASK);
 
-	UsbIntrfCfg_t dataCfg = {};
-	dataCfg.DevNo = pCfg->DevNo;
-	dataCfg.EpNo = pCfg->EpNo;
-	dataCfg.bBlocking = false;
-	dataCfg.RxFifoMemSize = (int)sizeof(pIntrf->RxFifoMem);
-	dataCfg.pRxFifoMem = reinterpret_cast<uint8_t *>(pIntrf->RxFifoMem);
-	dataCfg.TxFifoMemSize = (int)sizeof(pIntrf->TxFifoMem);
-	dataCfg.pTxFifoMem = reinterpret_cast<uint8_t *>(pIntrf->TxFifoMem);
-	dataCfg.TxFifoBlkSize = USB_ISO_INTRF_PKT_BLKSIZE;
-	dataCfg.BufferSize = USB_ISO_INTRF_MAX_MPS;
-	dataCfg.pRxBuffer = UsbIsoIntrfRxBuffer(pIntrf);
-	dataCfg.pTxBuffer = UsbIsoIntrfTxBuffer(pIntrf);
-	dataCfg.EvtCB = UsbIsoIntrfDataEvent;
+	UsbIntrfCfg_t cfg = {};
+	cfg.DevNo = pCfg->DevNo;
+	cfg.EpNo = pCfg->EpNo;
+	cfg.bBlocking = false;
+	cfg.RxFifoMemSize = (int)sizeof(pIntrf->RxFifoMem);
+	cfg.pRxFifoMem = reinterpret_cast<uint8_t *>(pIntrf->RxFifoMem);
+	cfg.TxFifoMemSize = (int)sizeof(pIntrf->TxFifoMem);
+	cfg.pTxFifoMem = reinterpret_cast<uint8_t *>(pIntrf->TxFifoMem);
+	cfg.TxFifoBlkSize = USB_ISO_INTRF_PKT_BLKSIZE;
+	cfg.BufferSize = USB_ISO_INTRF_MAX_MPS;
+	cfg.pRxBuffer = UsbIsoIntrfRxBuffer(pIntrf);
+	cfg.pTxBuffer = UsbIsoIntrfTxBuffer(pIntrf);
+	cfg.EvtCB = UsbIsoIntrfDataEvent;
 
-	if (!UsbIntrfInit(pData, &dataCfg))
+	if (!UsbIntrfInit(pData, &cfg))
 	{
 		pIntrf->pIntrfData = nullptr;
 		return false;
@@ -231,29 +254,11 @@ bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval)
 	pIntrf->TxActive = false;
 	pIntrf->TxLength = 0U;
 
-	UsbEndPointDesc_t desc = {};
-	desc.bLength = sizeof(desc);
-	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	desc.bmAttributes = USB_ENDPATT_TRANS_ISO;
-	desc.wMaxPacketSize = Mps;
-	desc.bInterval = Interval;
-
-	// Configure and open IN first. Opening non-blocking OUT makes it eligible
-	// for direct controller DMA on the next service interval.
-	desc.bEndpointAddress = USB_ENDPADDR_DIRIN(pIntrf->EpNo);
-	if (!UsbCtrlrEpOpen(pIntrf->pIntrfData->DevNo, &desc))
+	if (!UsbIsoIntrfOpenEndpoint(pIntrf, USB_ENDPADDR_DIRIN(pIntrf->EpNo)) ||
+		!UsbIsoIntrfOpenEndpoint(pIntrf, USB_ENDPADDR_DIROUT(pIntrf->EpNo)))
 	{
-		UsbIntrfUnconfigure(pIntrf->pIntrfData);
-		pIntrf->Mps = 0U;
-		pIntrf->Interval = 0U;
-		return false;
-	}
-
-	pIntrf->Opened = true;
-	desc.bEndpointAddress = USB_ENDPADDR_DIROUT(pIntrf->EpNo);
-	if (!UsbCtrlrEpOpen(pIntrf->pIntrfData->DevNo, &desc))
-	{
-		pIntrf->Opened = false;
+		UsbCtrlrEpClose(pIntrf->pIntrfData->DevNo,
+			USB_ENDPADDR_DIROUT(pIntrf->EpNo));
 		UsbCtrlrEpClose(pIntrf->pIntrfData->DevNo,
 			USB_ENDPADDR_DIRIN(pIntrf->EpNo));
 		UsbIntrfUnconfigure(pIntrf->pIntrfData);
@@ -262,6 +267,7 @@ bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval)
 		return false;
 	}
 
+	pIntrf->Opened = true;
 	return true;
 }
 
@@ -335,7 +341,7 @@ bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 	UsbPkt_t *pPacket = UsbIsoIntrfTxPacket(pIntrf);
 	pPacket->Hdr.Length = Length;
 	pPacket->Hdr.Reserved = 0U;
-	if (Length != 0U)
+	if (Length > 0U)
 	{
 		memcpy(pPacket->Data, pData, Length);
 	}
