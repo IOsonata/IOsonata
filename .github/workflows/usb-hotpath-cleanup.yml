@@ -1,0 +1,34 @@
+name: USB hot-path cleanup
+
+on:
+  push:
+    paths:
+      - 'tests/usb/cleanup_usb_hotpath.py'
+      - '.github/workflows/usb-hotpath-cleanup.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: usb_rx_arch_test
+          fetch-depth: 0
+      - name: Apply hot-path cleanup
+        run: python3 tests/usb/cleanup_usb_hotpath.py
+      - name: Host validation
+        run: |
+          make -C tests/usb test-matrix
+          g++ -Iinclude -Itests/usb/hostport -std=gnu++17 -Wall -Wextra -fsyntax-only \
+            src/usb/usbd_cdc.cpp src/usb/usbd_bulk.cpp src/usb/usb_iso.cpp \
+            src/bluetooth/bt_hci_usb.cpp
+      - name: Commit source changes
+        run: |
+          git config user.name hnhoan
+          git config user.email hnhoan@i-syst.com
+          git add src/usb/usb_intrf.cpp ARM/Nordic/src/usb_ctrlr_nrfx.cpp
+          git commit -m 'Remove redundant USB hot-path validation'
+          git push origin HEAD:usb_rx_arch_test
