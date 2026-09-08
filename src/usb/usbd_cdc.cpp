@@ -125,7 +125,8 @@ static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 
 	pCdc->SerialStatePending = false;
 
-	if (!UsbCtrlrEpSend(pCdc->DevNo, pCdc->NotifyEpNo, USBD_CDC_NOTIFY_LEN))
+	if (!UsbCtrlrEpXfer(pCdc->DevNo, USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo),
+						 USBD_CDC_NOTIFY_LEN))
 	{
 		pCdc->SerialStatePending = true;
 	}
@@ -188,24 +189,22 @@ static bool UsbdCdcConfig(uint8_t Configuration, void *pContext)
 
 	const uint16_t dataMps = UsbdCdcMps(pCdc);
 
+	if (!UsbIntrfConfigure(pCdc->pIntrfData, dataMps))
+	{
+		return false;
+	}
+
 	if (!UsbdCdcOpenEndpoint(pCdc, USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo),
 							 USB_ENDPATT_TRANS_INT,
 							 USBD_CDC_NOTIF_MPS,
 							 UsbdCdcNotifInterval(pCdc)) ||
-		!UsbdCdcOpenEndpoint(pCdc, USB_ENDPADDR_DIROUT(pCdc->DataEpNo),
-							 USB_ENDPATT_TRANS_BULK,
-							 dataMps, 0U) ||
 		!UsbdCdcOpenEndpoint(pCdc, USB_ENDPADDR_DIRIN(pCdc->DataEpNo),
-							 USB_ENDPATT_TRANS_BULK,
-							 dataMps, 0U))
+							 USB_ENDPATT_TRANS_BULK, dataMps, 0U) ||
+		!UsbdCdcOpenEndpoint(pCdc, USB_ENDPADDR_DIROUT(pCdc->DataEpNo),
+							 USB_ENDPATT_TRANS_BULK, dataMps, 0U))
 	{
 		UsbdCdcCloseEndpoints(pCdc);
-		return false;
-	}
-
-	if (!UsbIntrfConfigure(pCdc->pIntrfData, dataMps))
-	{
-		UsbdCdcCloseEndpoints(pCdc);
+		UsbIntrfUnconfigure(pCdc->pIntrfData);
 		return false;
 	}
 
@@ -325,12 +324,13 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 	}
 }
 
-static void UsbdCdcNotifXfer(uint8_t, uint16_t,
-							 UsbCtrlrXferResult_t Result, void *pContext)
+static void UsbdCdcNotifXfer(uint8_t, UsbCtrlrEvtType_t Event,
+							 uint16_t, UsbCtrlrXferResult_t Result,
+							 void *pContext)
 {
 	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);
 
-	if (pCdc == nullptr)
+	if (pCdc == nullptr || Event != USB_CTRLR_EVT_XFER_CMPL)
 	{
 		return;
 	}
@@ -361,7 +361,8 @@ static void UsbdCdcXfer(uint8_t EpAddr, uint16_t Length,
 	}
 	else if (EpAddr == USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo))
 	{
-		UsbdCdcNotifXfer(EpAddr, Length, Result, pCdc);
+		UsbdCdcNotifXfer(EpAddr, USB_CTRLR_EVT_XFER_CMPL,
+			Length, Result, pCdc);
 	}
 }
 

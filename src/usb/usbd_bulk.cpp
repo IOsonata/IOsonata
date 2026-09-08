@@ -91,16 +91,16 @@ static bool UsbdBulkConfig(uint8_t Configuration, void *pContext)
 	}
 
 	const uint16_t mps = UsbdBulkMps(pBulk);
-	if (!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIROUT(pBulk->EpNo), mps) ||
-		!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIRIN(pBulk->EpNo), mps))
+	if (!UsbIntrfConfigure(pBulk->pIntrfData, mps))
 	{
-		UsbdBulkCloseEndpoints(pBulk);
 		return false;
 	}
 
-	if (!UsbIntrfConfigure(pBulk->pIntrfData, mps))
+	if (!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIRIN(pBulk->EpNo), mps) ||
+		!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIROUT(pBulk->EpNo), mps))
 	{
 		UsbdBulkCloseEndpoints(pBulk);
+		UsbIntrfUnconfigure(pBulk->pIntrfData);
 		return false;
 	}
 

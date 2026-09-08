@@ -264,16 +264,22 @@ static bool BtHciUsbResetBulkTransport(BtHciUsbDev_t *pHci)
 	UsbCtrlrEpClose(pHci->DevNo, USB_ENDPADDR_DIRIN(pHci->AclEpNo));
 	UsbIntrfUnconfigure(pHci->pAcl);
 	BtHciUsbClearBulkTransport(pHci);
-	if (!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIROUT(pHci->AclEpNo),
+
+	if (!UsbIntrfConfigure(pHci->pAcl, mps))
+	{
+		return false;
+	}
+
+	if (!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIRIN(pHci->AclEpNo),
 			USB_ENDPATT_TRANS_BULK, mps, 0U) ||
-		!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIRIN(pHci->AclEpNo),
-			USB_ENDPATT_TRANS_BULK, mps, 0U) ||
-		!UsbIntrfConfigure(pHci->pAcl, mps))
+		!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIROUT(pHci->AclEpNo),
+			USB_ENDPATT_TRANS_BULK, mps, 0U))
 	{
 		UsbCtrlrEpClose(pHci->DevNo,
 			USB_ENDPADDR_DIROUT(pHci->AclEpNo));
 		UsbCtrlrEpClose(pHci->DevNo,
 			USB_ENDPADDR_DIRIN(pHci->AclEpNo));
+		UsbIntrfUnconfigure(pHci->pAcl);
 		return false;
 	}
 	return true;
@@ -315,13 +321,17 @@ static bool BtHciUsbConfig(uint8_t Configuration, void *pContext)
 	const uint16_t aclMps = BtHciUsbAclMps(pHci);
 	const uint8_t eventInterval = BtHciUsbEventInterval(pHci);
 
+	if (!UsbIntrfConfigure(pHci->pAcl, aclMps))
+	{
+		return false;
+	}
+
 	if (!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIRIN(pHci->EventEpNo),
 							 USB_ENDPATT_TRANS_INT, eventMps, eventInterval) ||
-		!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIROUT(pHci->AclEpNo),
-							 USB_ENDPATT_TRANS_BULK, aclMps, 0U) ||
 		!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIRIN(pHci->AclEpNo),
 							 USB_ENDPATT_TRANS_BULK, aclMps, 0U) ||
-		!UsbIntrfConfigure(pHci->pAcl, aclMps))
+		!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIROUT(pHci->AclEpNo),
+							 USB_ENDPATT_TRANS_BULK, aclMps, 0U))
 	{
 		BtHciUsbUnconfigure(pHci);
 		BtHciUsbCloseEndpoints(pHci);
@@ -503,7 +513,7 @@ static bool BtHciUsbSendEventChunk(BtHciUsbDev_t *pHci)
 	memcpy(BtHciUsbEventTxTransfer(pHci),
 		&BtHciUsbEventTxBuffer(pHci)[pHci->EventTxOffset],
 		pHci->EventTxChunkLength);
-	return UsbCtrlrEpSend(pHci->DevNo, pHci->EventEpNo,
+	return UsbCtrlrEpXfer(pHci->DevNo, USB_ENDPADDR_DIRIN(pHci->EventEpNo),
 		pHci->EventTxChunkLength);
 }
 
@@ -511,14 +521,16 @@ static bool BtHciUsbSendEventZlp(BtHciUsbDev_t *pHci)
 {
 	pHci->EventTxChunkLength = 0U;
 	pHci->EventTxZlp = true;
-	return UsbCtrlrEpSend(pHci->DevNo, pHci->EventEpNo, 0U);
+	return UsbCtrlrEpXfer(pHci->DevNo, USB_ENDPADDR_DIRIN(pHci->EventEpNo), 0U);
 }
 
-static void BtHciUsbEventComplete(uint8_t, uint16_t Length,
+static void BtHciUsbEventComplete(uint8_t, UsbCtrlrEvtType_t Event,
+								 uint16_t Length,
 								 UsbCtrlrXferResult_t Result, void *pContext)
 {
 	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
-	if (pHci == nullptr || !pHci->EventTxActive)
+	if (pHci == nullptr || Event != USB_CTRLR_EVT_XFER_CMPL ||
+		!pHci->EventTxActive)
 	{
 		return;
 	}
@@ -701,7 +713,8 @@ static void BtHciUsbXfer(uint8_t EpAddr, uint16_t Length,
 	}
 	else if (EpAddr == USB_ENDPADDR_DIRIN(pHci->EventEpNo))
 	{
-		BtHciUsbEventComplete(EpAddr, Length, Result, pHci);
+		BtHciUsbEventComplete(EpAddr, USB_CTRLR_EVT_XFER_CMPL,
+			Length, Result, pHci);
 	}
 }
 
@@ -758,13 +771,8 @@ static bool BtHciUsbDevStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 
 static void BtHciUsbDropPhysicalAcl(BtHciUsbDev_t *pHci)
 {
-	const uint32_t state = DisableInterrupt();
-	(void)CFifoGet(pHci->pAcl->hRxFifo);
-	if (pHci->pAcl->Mps != 0U && CFifoAvail(pHci->pAcl->hRxFifo) > 0)
-	{
-		(void)UsbCtrlrEpRxArm(pHci->DevNo, pHci->AclEpNo);
-	}
-	EnableInterrupt(state);
+	(void)pHci->AclRxData(&pHci->pAcl->DevIntrf,
+		BtHciUsbAclRxBuffer(pHci), pHci->pAcl->Mps);
 }
 
 static bool BtHciUsbBulkRxTypeValid(BtHciUsbPacketType_t Type)

@@ -155,6 +155,7 @@ typedef enum __Usb_Ctrlr_Xfer_Result {
 typedef enum __Usb_Ctrlr_Evt_Type {
 	USB_CTRLR_EVT_RESET,		//!< USB bus reset
 	USB_CTRLR_EVT_SETUP,		//!< New EP0 SETUP request
+	USB_CTRLR_EVT_DRDY,		//!< Data is ready in the device to be retrieved
 	USB_CTRLR_EVT_XFER_CMPL,	//!< Endpoint transfer completed
 	USB_CTRLR_EVT_SUSPEND,		//!< Bus entered suspend
 	USB_CTRLR_EVT_RESUME,		//!< Bus resumed
@@ -196,8 +197,9 @@ typedef void (*UsbCtrlrEvtHandler_t)(int DevNo, const UsbCtrlrEvt_t *pEvt,
  * Registered once with the endpoint DMA buffer. It is called directly from
  * the controller interrupt, avoiding a function-table search per packet.
  */
-typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, uint16_t Length,
-									UsbCtrlrXferResult_t Result, void *pContext);
+typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
+									uint16_t Length, UsbCtrlrXferResult_t Result,
+									void *pContext);
 
 /// What the generic layer hands the port at UsbCtrlrInit. Interrupt priority
 /// and suspend behaviour reach the hardware only through here, so the port
@@ -231,8 +233,7 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpCloseAll(int DevNo);
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						UsbCtrlrEpHandler_t Handler, void *pContext);
-bool UsbCtrlrEpRxArm(int DevNo, uint8_t EpNo);
-bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint16_t Length);
+bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length);
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length);
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);

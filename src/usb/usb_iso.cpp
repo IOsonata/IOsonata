@@ -58,28 +58,35 @@ static bool UsbIsoIntrfEpSupported(const UsbIsoIntrf_t *pIntrf)
 		(USB_ISO_EPOUT_MASK(pIntrf->DevNo) & bit) != 0U;
 }
 
-static bool UsbIsoIntrfArmRx(UsbIsoIntrf_t *pIntrf)
-{
-	if (pIntrf == nullptr || !pIntrf->Opened || pIntrf->Suspended ||
-		pIntrf->RxArmed)
-	{
-		return false;
-	}
-
-	if (!UsbCtrlrEpRxArm(pIntrf->DevNo, pIntrf->EpNo))
-	{
-		return false;
-	}
-
-	pIntrf->RxArmed = true;
-	return true;
-}
-
-static void UsbIsoIntrfComplete(uint8_t EpAddr, uint16_t Length,
+static void UsbIsoIntrfComplete(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
+								uint16_t Length,
 								UsbCtrlrXferResult_t Result, void *pContext)
 {
 	UsbIsoIntrf_t *pIntrf = static_cast<UsbIsoIntrf_t *>(pContext);
 	if (pIntrf == nullptr || USB_ENDPADDR_NUM(EpAddr) != pIntrf->EpNo)
+	{
+		return;
+	}
+
+	if (Event == USB_CTRLR_EVT_DRDY)
+	{
+		if (USB_ENDPADDR_IS_IN(EpAddr) || !pIntrf->Opened ||
+			pIntrf->Suspended || pIntrf->RxArmed)
+		{
+			return;
+		}
+		if (UsbCtrlrEpXfer(pIntrf->DevNo, EpAddr, pIntrf->Mps))
+		{
+			pIntrf->RxArmed = true;
+		}
+		else
+		{
+			pIntrf->RxMissCnt++;
+		}
+		return;
+	}
+
+	if (Event != USB_CTRLR_EVT_XFER_CMPL)
 	{
 		return;
 	}
@@ -135,11 +142,6 @@ static void UsbIsoIntrfComplete(uint8_t EpAddr, uint16_t Length,
 	{
 		pIntrf->RxHandler(pIntrf, UsbIsoIntrfRxBuffer(pIntrf), Length,
 			result, pIntrf->pContext);
-	}
-
-	if (pIntrf->Opened && !pIntrf->Suspended)
-	{
-		(void)UsbIsoIntrfArmRx(pIntrf);
 	}
 }
 
@@ -212,12 +214,6 @@ bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval)
 	pIntrf->TxActive = false;
 	pIntrf->TxLength = 0U;
 
-	if (!UsbIsoIntrfArmRx(pIntrf))
-	{
-		UsbIsoIntrfClose(pIntrf);
-		return false;
-	}
-
 	return true;
 }
 
@@ -273,7 +269,7 @@ bool UsbIsoIntrfResume(UsbIsoIntrf_t *pIntrf)
 	}
 
 	pIntrf->Suspended = false;
-	return pIntrf->RxArmed || UsbIsoIntrfArmRx(pIntrf);
+	return true;
 }
 
 bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
@@ -293,7 +289,7 @@ bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 
 	pIntrf->TxLength = Length;
 	pIntrf->TxActive = true;
-	if (!UsbCtrlrEpSend(pIntrf->DevNo, pIntrf->EpNo, Length))
+	if (!UsbCtrlrEpXfer(pIntrf->DevNo, USB_ENDPADDR_DIRIN(pIntrf->EpNo), Length))
 	{
 		pIntrf->TxActive = false;
 		pIntrf->TxLength = 0U;

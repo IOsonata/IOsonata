@@ -110,8 +110,9 @@ nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpAddr)
 	return &s_EpReg[USB_ENDPADDR_NUM(EpAddr)][nRFUsbEpDir(EpAddr)];
 }
 
-static bool nRFUsbEpRegisteredXfer(uint8_t EpAddr, uint16_t Length,
-								   UsbCtrlrXferResult_t Result)
+static bool nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
+									uint16_t Length,
+									UsbCtrlrXferResult_t Result)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	if (epNum == 0U || epNum >= NRF_USB_EP_COUNT)
@@ -125,7 +126,7 @@ static bool nRFUsbEpRegisteredXfer(uint8_t EpAddr, uint16_t Length,
 		return false;
 	}
 
-	pReg->Handler(EpAddr, Length, Result, pReg->pContext);
+	pReg->Handler(EpAddr, Event, Length, Result, pReg->pContext);
 	return true;
 }
 
@@ -899,7 +900,6 @@ static atomic_uint_fast8_t s_DmaEpAddr;
 typedef struct __nRF_Usbd_Que {
 	uint8_t EpAddr;				//!< Endpoint address, direction bit included
 	uint16_t Len;				//!< Bytes this transfer moves
-	uint8_t *pBuffer;			//!< DMA buffer for this transfer
 } nRFUsbdQue_t;
 
 alignas(4) static uint8_t s_QueMem[
@@ -1008,7 +1008,7 @@ static void nRFUsbdEmitSimple(UsbCtrlrEvtType_t Type)
 static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 						 UsbCtrlrXferResult_t Result)
 {
-	if (nRFUsbEpRegisteredXfer(EpAddr, Length, Result))
+	if (nRFUsbEpRegisteredEvent(EpAddr, USB_CTRLR_EVT_XFER_CMPL, Length, Result))
 	{
 		return;
 	}
@@ -1186,7 +1186,7 @@ static bool nRFUsbdStartIsoNow(void)
 		pIn->Started)
 	{
 		atomic_store(&s_IsoInReady, false);
-		NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)pIn->pBuffer;
+		NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)nRFUsbGetEpReg(inAddr)->pBuffer;
 		NRF_USBD->ISOIN.MAXCNT = pIn->TotalLen;
 		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTISOIN, inAddr);
 		return true;
@@ -1199,7 +1199,8 @@ static bool nRFUsbdStartIsoNow(void)
 		atomic_store(&s_IsoOutReady, false);
 		const uint16_t len = s_IsoOutSize < pOut->TotalLen ?
 			s_IsoOutSize : pOut->TotalLen;
-		NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)pOut->pBuffer;
+		NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)
+			nRFUsbGetEpReg(NRFX_USBD_ISO_EP_NO)->pBuffer;
 		NRF_USBD->ISOOUT.MAXCNT = len;
 		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTISOOUT,
 			NRFX_USBD_ISO_EP_NO);
@@ -1219,15 +1220,18 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 	const uint8_t epNum = USB_ENDPADDR_NUM(pQue->EpAddr);
 	const bool isIn = USB_ENDPADDR_IS_IN(pQue->EpAddr);
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][isIn ? 1 : 0];
+	uint8_t *pBuffer = epNum == 0U ? s_Ep0Bounce :
+		nRFUsbGetEpReg(pQue->EpAddr)->pBuffer;
 
-	if (!pXfer->Started || pXfer->ActualLen > pXfer->TotalLen)
+	if (pBuffer == NULL || !pXfer->Started ||
+		pXfer->ActualLen > pXfer->TotalLen)
 	{
 		return false;
 	}
 
 	if (isIn)
 	{
-		NRF_USBD->EPIN[epNum].PTR = (uint32_t)(uintptr_t)pQue->pBuffer;
+		NRF_USBD->EPIN[epNum].PTR = (uint32_t)(uintptr_t)pBuffer;
 		NRF_USBD->EPIN[epNum].MAXCNT = pQue->Len;
 		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPIN[epNum], pQue->EpAddr);
 	}
@@ -1236,7 +1240,7 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 		const uint16_t received = (uint16_t)NRF_USBD->SIZE.EPOUT[epNum];
 		const uint16_t len = received < pQue->Len ? received : pQue->Len;
 
-		NRF_USBD->EPOUT[epNum].PTR = (uint32_t)(uintptr_t)pQue->pBuffer;
+		NRF_USBD->EPOUT[epNum].PTR = (uint32_t)(uintptr_t)pBuffer;
 		NRF_USBD->EPOUT[epNum].MAXCNT = len;
 		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPOUT[epNum], pQue->EpAddr);
 	}
@@ -1319,26 +1323,15 @@ static void nRFUsbdServicePending(void)
 				return;
 			}
 
-			if (USB_ENDPADDR_IS_IN(que.EpAddr))
+			nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum]
+				[USB_ENDPADDR_IS_IN(que.EpAddr) ? 1 : 0];
+			if (pXfer->Started)
 			{
-				// The request is consumed before the attempt. If the transfer
-				// is still marked started, report the controller failure
-				// instead of leaving the endpoint permanently busy.
-				nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][1];
-				if (pXfer->Started)
-				{
-					pXfer->Started = false;
-					atomic_flag_clear(&s_DmaRunning);
-					nRFUsbdEmitXfer(que.EpAddr, pXfer->ActualLen,
-								 USB_CTRLR_XFER_FAILED);
-					continue;
-				}
-			}
-			else
-			{
-				// The endpoint still holds the packet after a refused OUT
-				// start. Preserve that so the next receive submission takes it.
-				s_Ctrlr.Xfer[epNum][0].DataReceived = true;
+				pXfer->Started = false;
+				atomic_flag_clear(&s_DmaRunning);
+				nRFUsbdEmitXfer(que.EpAddr, pXfer->ActualLen,
+							 USB_CTRLR_XFER_FAILED);
+				continue;
 			}
 
 			atomic_flag_clear(&s_DmaRunning);
@@ -1389,14 +1382,16 @@ bool nRFUsbdDeferFromInterrupt(void)
  * off because CFifoPut publishes the slot before the caller writes it, and
  * the interrupt is the other producer.
  */
-static void nRFUsbdQueXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Len)
+static void nRFUsbdQueXfer(uint8_t EpAddr, uint16_t Len)
 {
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_hQue);
 
-	pQue->EpAddr = EpAddr;
-	pQue->Len = Len;
-	pQue->pBuffer = pBuffer;
+	if (pQue != NULL)
+	{
+		pQue->EpAddr = EpAddr;
+		pQue->Len = Len;
+	}
 
 	EnableInterrupt(state);
 }
@@ -1428,9 +1423,8 @@ static void nRFUsbdQueRemoveEp(uint8_t EpNum)
 static void nRFUsbdQueueOut(uint8_t EpNum)
 {
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
-	uint8_t *pBuffer = EpNum == 0U ? s_Ep0Bounce : pXfer->pBuffer;
 
-	nRFUsbdQueXfer(EpNum, pBuffer,
+	nRFUsbdQueXfer(EpNum,
 				 (uint16_t)(pXfer->TotalLen - pXfer->ActualLen));
 	if (!nRFUsbdDeferFromInterrupt())
 	{
@@ -1444,15 +1438,13 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 	const uint16_t remaining =
 		(uint16_t)(pXfer->TotalLen - pXfer->ActualLen);
 	const uint16_t length = remaining < pXfer->Mps ? remaining : pXfer->Mps;
-	uint8_t *pBuffer = pXfer->pBuffer;
 
 	if (EpNum == 0U && length > 0U)
 	{
-		memcpy(s_Ep0Bounce, pBuffer, length);
-		pBuffer = s_Ep0Bounce;
+		memcpy(s_Ep0Bounce, pXfer->pBuffer, length);
 	}
 
-	nRFUsbdQueXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN), pBuffer, length);
+	nRFUsbdQueXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN), length);
 	if (!nRFUsbdDeferFromInterrupt())
 	{
 		nRFUsbdServicePending();
@@ -1953,9 +1945,11 @@ static void nRFUsbRegEpCloseAll(void)
 static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
+	uint8_t *pDmaBuffer = epNum == 0U ? pBuffer :
+		nRFUsbGetEpReg(EpAddr)->pBuffer;
 
 	if (epNum >= NRFX_USBD_EP_COUNT ||
-		(TotalBytes > 0 && pBuffer == NULL) ||
+		(TotalBytes > 0U && pDmaBuffer == NULL) ||
 		atomic_load(&s_BusSuspended))
 	{
 		return false;
@@ -1963,15 +1957,15 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
-	if (pXfer->Started || pXfer->Mps == 0)
+	if (pXfer->Started || pXfer->Mps == 0U)
 	{
 		EnableInterrupt(state);
 		return false;
 	}
 
-	pXfer->pBuffer = pBuffer;
+	pXfer->pBuffer = epNum == 0U ? pBuffer : NULL;
 	pXfer->TotalLen = TotalBytes;
-	pXfer->ActualLen = 0;
+	pXfer->ActualLen = 0U;
 	pXfer->Started = true;
 	if (epNum == NRFX_USBD_ISO_EP_NO)
 	{
@@ -1990,7 +1984,7 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	}
 
 	const bool controlStatus =
-		epNum == 0 && TotalBytes == 0 &&
+		epNum == 0U && TotalBytes == 0U &&
 		USB_ENDPADDR_IS_IN(EpAddr) != s_Ctrlr.SetupDirIn;
 
 	if (controlStatus)
@@ -2001,13 +1995,12 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	{
 		nRFUsbdQueueIn(epNum);
 	}
-	else if (epNum == 0)
+	else if (epNum == 0U)
 	{
 		nRFUsbdQueueEp0RcvOut();
 	}
-	else if (pXfer->DataReceived)
+	else
 	{
-		pXfer->DataReceived = false;
 		nRFUsbdQueueOut(epNum);
 	}
 
@@ -2200,12 +2193,19 @@ static void nRFUsbdHandleOutEnd(uint8_t EpNum)
 
 static void nRFUsbdHandleOutData(uint8_t EpNum)
 {
-	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
+	if (EpNum != 0U)
+	{
+		(void)nRFUsbEpRegisteredEvent(EpNum, USB_CTRLR_EVT_DRDY, 0U,
+								 USB_CTRLR_XFER_SUCCESS);
+		return;
+	}
+
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[0][0];
 	if (pXfer->Started &&
-		(pXfer->ActualLen < pXfer->TotalLen || pXfer->TotalLen == 0))
+		(pXfer->ActualLen < pXfer->TotalLen || pXfer->TotalLen == 0U))
 	{
 		pXfer->DataReceived = false;
-		nRFUsbdQueueOut(EpNum);
+		nRFUsbdQueueOut(0U);
 	}
 	else
 	{
@@ -2446,6 +2446,8 @@ extern "C" void USBD_IRQHandler(void)
 					(size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
 					0U : (uint16_t)size;
 				atomic_store(&s_IsoOutReady, true);
+				(void)nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO,
+					USB_CTRLR_EVT_DRDY, 0U, USB_CTRLR_XFER_SUCCESS);
 			}
 		}
 
@@ -2736,7 +2738,7 @@ static void nRF54UsbdEmitSimple(UsbCtrlrEvtType_t Type)
 static void nRF54UsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 							  UsbCtrlrXferResult_t Result)
 {
-	if (nRFUsbEpRegisteredXfer(EpAddr, Length, Result))
+	if (nRFUsbEpRegisteredEvent(EpAddr, USB_CTRLR_EVT_XFER_CMPL, Length, Result))
 	{
 		return;
 	}
@@ -3561,8 +3563,10 @@ static void nRFUsbRegEpCloseAll(void)
 static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
+	uint8_t *pDmaBuffer = epNum == 0U ? pBuffer :
+		nRFUsbGetEpReg(EpAddr)->pBuffer;
 	if (!s_Ctrlr.Started || epNum >= NRF54_USBD_EP_COUNT ||
-		(TotalBytes > 0U && pBuffer == NULL))
+		(TotalBytes > 0U && pDmaBuffer == NULL))
 	{
 		return false;
 	}
@@ -3574,14 +3578,12 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	}
 
 	if (epNum != 0U && TotalBytes > 0U &&
-		(((uintptr_t)pBuffer & 0x3U) != 0U))
+		(((uintptr_t)pDmaBuffer & 0x3U) != 0U))
 	{
-		// nRF54LM20 has instruction cache only. Buffer DMA therefore needs no
-		// data-cache maintenance, but the DMA address must remain word aligned.
 		return false;
 	}
 
-	pXfer->pBuffer = pBuffer;
+	pXfer->pBuffer = epNum == 0U ? pBuffer : NULL;
 	pXfer->TotalLen = TotalBytes;
 	pXfer->ActualLen = 0U;
 	pXfer->ChunkLen = 0U;
@@ -3607,14 +3609,14 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 
 	if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
-		NRF54_USBD_DIEPDMA(epNum) = (uint32_t)(uintptr_t)pBuffer;
+		NRF54_USBD_DIEPDMA(epNum) = (uint32_t)(uintptr_t)pDmaBuffer;
 		NRF54_USBD_DIEPTSIZ(epNum) = size;
 		NRF54_USBD_DIEPCTL(epNum) |=
 			NRF54_USBD_DEPCTL_CNAK | NRF54_USBD_DEPCTL_EPENA;
 	}
 	else
 	{
-		NRF54_USBD_DOEPDMA(epNum) = (uint32_t)(uintptr_t)pBuffer;
+		NRF54_USBD_DOEPDMA(epNum) = (uint32_t)(uintptr_t)pDmaBuffer;
 		NRF54_USBD_DOEPTSIZ(epNum) = size;
 		NRF54_USBD_DOEPCTL(epNum) |=
 			NRF54_USBD_DEPCTL_CNAK | NRF54_USBD_DEPCTL_EPENA;
@@ -3917,32 +3919,25 @@ bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 	return true;
 }
 
-bool UsbCtrlrEpRxArm(int DevNo, uint8_t EpNo)
+bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
 {
-	const uint8_t epAddr = USB_ENDPADDR_DIROUT(EpNo);
-	if (!nRFUsbValidDevNo(DevNo) || EpNo == 0U ||
-		EpNo >= NRF_USB_EP_COUNT)
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
+	if (!nRFUsbValidDevNo(DevNo) || epNum == 0U ||
+		epNum >= NRF_USB_EP_COUNT ||
+		(EpAddr & ~(USB_ENDPADDR_DIR_MASK | USB_ENDPADDR_NUM_MASK)) != 0U)
 	{
 		return false;
 	}
 
-	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epAddr);
-	const uint16_t mps = nRFUsbRegEpMps(epAddr);
-	return nRFUsbRegEpXfer(epAddr, pReg->pBuffer, mps);
-}
-
-bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint16_t Length)
-{
-	const uint8_t epAddr = USB_ENDPADDR_DIRIN(EpNo);
-	if (!nRFUsbValidDevNo(DevNo) || EpNo == 0U ||
-		EpNo >= NRF_USB_EP_COUNT)
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
+	if (pReg->pBuffer == NULL || pReg->Handler == NULL)
 	{
 		return false;
 	}
 
-	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epAddr);
-	return nRFUsbRegEpXfer(epAddr, pReg->pBuffer, Length);
+	return nRFUsbRegEpXfer(EpAddr, NULL, Length);
 }
+
 
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length)
