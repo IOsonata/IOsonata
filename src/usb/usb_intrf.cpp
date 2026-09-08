@@ -377,10 +377,10 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 {
 	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pContext);
 
+#if 0
 	if (Event == USB_CTRLR_EVT_DRDY)
 	{
 		UsbIntrfRxSubmit(pIntrf);
-		return;
 	}
 
 	if (USB_ENDPADDR_IS_IN(EpAddr))
@@ -391,6 +391,89 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 	{
 		UsbIntrfRxXferComplete(pIntrf, Length, Result);
 	}
+
+#else
+	switch (Event)
+	{
+		case USB_CTRLR_EVT_DRDY:
+			{
+				if (CFifoAvail(pIntrf->hRxFifo) <= 0)
+				{
+					pIntrf->RxPending = true;
+
+					if (pIntrf->DevIntrf.EvtCB != nullptr)
+					{
+						pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
+										   DEVINTRF_EVT_RX_FIFO_FULL, nullptr, 0);
+					}
+					return;
+				}
+
+				(void)UsbCtrlrEpXfer(pIntrf->DevNo,
+									USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps);
+				pIntrf->RxPending = false;
+				return;
+			}
+			break;
+		case USB_CTRLR_EVT_XFER_CMPL:
+			{
+				if (USB_ENDPADDR_IS_IN(EpAddr))
+				{
+					if (Result == USB_CTRLR_XFER_FAILED)
+					{
+						UsbIntrfTxFailure(pIntrf, Length);
+						return;
+					}
+
+					if (pIntrf->EpSend(pIntrf) >= 0)
+					{
+						return;
+					}
+
+					if (pIntrf->DevIntrf.EvtCB != nullptr)
+					{
+						pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
+											   DEVINTRF_EVT_TX_FIFO_EMPTY,
+											   nullptr, 0);
+					}
+				}
+				else
+				{
+					if (Result == USB_CTRLR_XFER_SUCCESS)
+					{
+						UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(
+							CFifoPut(pIntrf->hRxFifo));
+						pPacket->Hdr.Length = Length;
+						pPacket->Hdr.Reserved = 0U;
+						if (Length > 0U)
+						{
+							memcpy(pPacket->Data, pIntrf->pRxBuffer, Length);
+						}
+
+						if (pIntrf->DevIntrf.EvtCB != nullptr)
+						{
+							const int used = CFifoUsed(pIntrf->hRxFifo);
+							pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
+											   DEVINTRF_EVT_RX_DATA, nullptr, used);
+						}
+						return;
+					}
+
+					if (Result == USB_CTRLR_XFER_FAILED)
+					{
+						pIntrf->RxDropCnt++;
+						if (pIntrf->DevIntrf.EvtCB != nullptr)
+						{
+							pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
+											   DEVINTRF_EVT_RX_TIMEOUT, nullptr, Length);
+						}
+					}
+
+				}
+			}
+			break;
+	}
+#endif
 }
 
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
