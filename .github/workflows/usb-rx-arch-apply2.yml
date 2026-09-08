@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'tests/usb/apply_rx_arch.py'
+      - 'tests/usb/apply_rx_arch_fix.py'
       - '.github/workflows/usb-rx-arch-apply2.yml'
 
 permissions:
@@ -18,7 +19,9 @@ jobs:
           ref: usb_rx_arch_test
           fetch-depth: 0
       - name: Apply source transform
-        run: python3 tests/usb/apply_rx_arch.py
+        run: |
+          python3 tests/usb/apply_rx_arch.py
+          python3 tests/usb/apply_rx_arch_fix.py
       - name: Focused host validation
         run: |
           make -C tests/usb test-matrix
