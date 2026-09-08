@@ -77,14 +77,12 @@ static void UsbIntrfRxResumePending(UsbDevIntrf_t *pIntrf)
 		return;
 	}
 
-	const uint32_t state = DisableInterrupt();
 	if (pIntrf->RxPending && CFifoAvail(pIntrf->hRxFifo) > 0)
 	{
 		(void)UsbCtrlrEpXfer(pIntrf->DevNo,
 							USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps);
 		pIntrf->RxPending = false;
 	}
-	EnableInterrupt(state);
 }
 
 static inline __attribute__((always_inline))
@@ -209,8 +207,7 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 {
 	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
 
-	if (pIntrf == nullptr || pIntrf->hRxFifo == nullptr ||
-		pBuffer == nullptr || BufferLen <= 0)
+	if (pBuffer == nullptr || BufferLen <= 0)
 	{
 		return 0;
 	}
@@ -227,13 +224,6 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 		}
 
 		const uint16_t len = pkt->Hdr.Length;
-		if (len > pIntrf->Mps)
-		{
-			(void)CFifoGet(pIntrf->hRxFifo);
-			pIntrf->RxDropCnt++;
-			released = true;
-			continue;
-		}
 
 		if (BufferLen < (int)len)
 		{
@@ -547,7 +537,7 @@ static void UsbIntrfRxXferComplete(UsbDevIntrf_t *pIntrf, uint16_t Length,
 		if (pIntrf->DevIntrf.EvtCB != nullptr)
 		{
 			const int used = CFifoUsed(pIntrf->hRxFifo);
-			if (pIntrf->bBlocking && used >= pIntrf->hRxFifo->MaxIdxCnt)
+			if (CFifoAvail(pIntrf->hRxFifo) == 0)
 			{
 				pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
 								   DEVINTRF_EVT_RX_FIFO_FULL, nullptr, used);
