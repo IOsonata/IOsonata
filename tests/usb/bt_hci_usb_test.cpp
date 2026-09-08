@@ -362,14 +362,14 @@ static void TestConfigurationAndAcl(void)
     CHECK(s_OutSubmitCount == 1);
     CHECK(s_RxEventCount == 1);
     uint8_t out[sizeof(acl)] = {};
-    CHECK(DeviceIntrfRx(hci.Data(), BT_HCI_USB_PACKET_ACL, out, sizeof(out)) ==
-          (int)sizeof(acl));
+    CHECK(hci.Data()->RxData(hci.Data(), out, sizeof(out)) == (int)sizeof(acl));
+    DeviceIntrfStopRx(hci.Data());
     CHECK(memcmp(out, acl, sizeof(acl)) == 0);
 
     CHECK(DeviceIntrfStartTx(hci.Data(), BT_HCI_USB_PACKET_ACL));
     CHECK(hci.RequestToSend(sizeof(acl)));
-    CHECK(DeviceIntrfTx(hci.Data(), BT_HCI_USB_PACKET_ACL, acl, sizeof(acl)) ==
-          (int)sizeof(acl));
+    CHECK(hci.Data()->TxData(hci.Data(), acl, sizeof(acl)) == (int)sizeof(acl));
+    DeviceIntrfStopTx(hci.Data());
     CHECK(s_SendCount == 1);
     CHECK(s_Sent[0].EpAddr == USB_ENDPADDR_DIRIN(2U));
     CHECK(s_Sent[0].Length == sizeof(acl));
@@ -409,9 +409,12 @@ static void TestCommandAndEvent(void)
 
     const uint8_t evt[] = { 0x0EU, 0x01U, 0x00U };
     CHECK(DeviceIntrfStartTx(hci.Data(), BT_HCI_USB_PACKET_EVENT));
-    CHECK(DeviceIntrfTx(hci.Data(), BT_HCI_USB_PACKET_EVENT, evt, sizeof(evt)) ==
-          (int)sizeof(evt));
-    CHECK(s_Sent[s_SendCount - 1].EpAddr == USB_ENDPADDR_DIRIN(1U));
+    CHECK(hci.RequestToSend(sizeof(evt)));
+    CHECK(hci.Data()->TxData(hci.Data(), evt, sizeof(evt)) == (int)sizeof(evt));
+    DeviceIntrfStopTx(hci.Data());
+    CHECK(s_SendCount == 1);
+    if (s_SendCount > 0)
+        CHECK(s_Sent[s_SendCount - 1].EpAddr == USB_ENDPADDR_DIRIN(1U));
     CompleteIn(1U);
     CHECK(s_LastEvent == DEVINTRF_EVT_TX_READY);
 }
@@ -441,26 +444,33 @@ static void TestScoTransport(void)
     for (unsigned i = 3U; i < sizeof(packet); i++) packet[i] = (uint8_t)(0x20U + i);
 
     const int beforeOutSubmit = s_OutSubmitCount;
+    CHECK(DeviceIntrfStartRx(hci.Data(), BT_HCI_USB_PACKET_SCO));
     ReceiveOut(8U, packet, 9U);
     ReceiveOut(8U, &packet[9], 9U);
     ReceiveOut(8U, &packet[18], 2U);
     CHECK(s_OutSubmitCount == beforeOutSubmit); // non-blocking: no DRDY round trip
     CHECK(s_RxEventCount == 1);
     uint8_t received[sizeof(packet)] = {};
-    CHECK(DeviceIntrfRx(hci.Data(), BT_HCI_USB_PACKET_SCO,
-                        received, sizeof(received)) == (int)sizeof(packet));
+    CHECK(hci.Data()->RxData(hci.Data(), received, sizeof(received)) ==
+          (int)sizeof(packet));
+    DeviceIntrfStopRx(hci.Data());
     CHECK(memcmp(received, packet, sizeof(packet)) == 0);
 
     CHECK(DeviceIntrfStartTx(hci.Data(), BT_HCI_USB_PACKET_SCO));
     CHECK(hci.RequestToSend(sizeof(packet)));
-    CHECK(DeviceIntrfTx(hci.Data(), BT_HCI_USB_PACKET_SCO,
-                        packet, sizeof(packet)) == (int)sizeof(packet));
-    CHECK(s_Sent[s_SendCount - 1].EpAddr == USB_ENDPADDR_DIRIN(8U));
-    CHECK(s_Sent[s_SendCount - 1].Length == 9U);
+    CHECK(hci.Data()->TxData(hci.Data(), packet, sizeof(packet)) ==
+          (int)sizeof(packet));
+    DeviceIntrfStopTx(hci.Data());
+    CHECK(s_SendCount > 0);
+    if (s_SendCount > 0)
+    {
+        CHECK(s_Sent[s_SendCount - 1].EpAddr == USB_ENDPADDR_DIRIN(8U));
+        CHECK(s_Sent[s_SendCount - 1].Length == 9U);
+    }
     CompleteIn(8U);
-    CHECK(s_Sent[s_SendCount - 1].Length == 9U);
+    CHECK(s_SendCount > 0 && s_Sent[s_SendCount - 1].Length == 9U);
     CompleteIn(8U);
-    CHECK(s_Sent[s_SendCount - 1].Length == 2U);
+    CHECK(s_SendCount > 0 && s_Sent[s_SendCount - 1].Length == 2U);
     CompleteIn(8U);
     CHECK(s_LastEvent == DEVINTRF_EVT_TX_READY);
 
