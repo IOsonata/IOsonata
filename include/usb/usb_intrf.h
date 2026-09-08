@@ -10,15 +10,24 @@ DeviceIntrf DevAddr is not used to select an endpoint on each transfer.
 
 The generic layer in usb.cpp handles endpoint zero, Chapter 9 requests,
 descriptors, configuration and class/vendor dispatch. The port handles endpoint
-registers, DMA/FIFO access and controller interrupts.
+registers, DMA access and controller interrupts.
 
-The derived class supplies one RX and one TX controller buffer sized for its
-transfer type. UsbIntrf registers both fixed buffers and its direct completion
-callback with the controller during initialization. On OUT completion UsbIntrf
-copies the RX buffer into hRxFifo and reuses the same controller buffer. On IN
-it copies queued TX data into the TX buffer before submitting it. Controller
-buffers therefore never alias CFifo storage that can be released while a
-transfer is active.
+The derived class supplies one fixed RX and one fixed TX controller buffer sized
+for its transfer type. UsbIntrf registers both buffers once during Init(). DMA
+requests therefore carry only endpoint and length; the controller obtains the
+fixed buffer from the endpoint registration when the request is started.
+
+RX is event driven. USB_CTRLR_EVT_DRDY means data is ready in the controller to
+be retrieved. In blocking mode UsbIntrf submits the OUT DMA only when hRxFifo
+has a free packet slot; otherwise it remembers the one pending controller event
+until foreground releases storage. In non-blocking mode it submits the DMA
+immediately and lets the non-blocking CFifo overflow policy discard old data if
+necessary. Transfer completion only copies the fixed RX buffer into hRxFifo; it
+does not arm or submit another receive.
+
+For IN, UsbIntrf copies queued TX data into the fixed TX staging buffer before
+submitting the registered endpoint transfer. Controller buffers therefore
+never alias CFifo storage that can be released while a transfer is active.
 
 UsbPktHdr_t.Length is the actual received data length and may be from zero to
 MPS. DeviceIntrfRx() may consume across packet blocks and present a byte
@@ -35,15 +44,10 @@ settings.
 
 The application supplies RX and TX CFifo memory through the public USB class.
 The class supplies its controller buffers and endpoint number to UsbIntrf.
-The actual MPS is applied after the bus speed is known and the class opens both
-directions of the endpoint.
+The actual MPS is applied after the bus speed is known.
 
 Generic code must not assume a 64-byte packet, a specific USB speed, or a
 specific controller.
-
-There is no DTR style gating in this layer. USB OUT flow control is lossless:
-when receive storage is full the endpoint is left unarmed so the host is
-backpressured by USB.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 1, 2026
@@ -87,66 +91,59 @@ SOFTWARE.
   * @{
   */
 
-/// Bytes one stored packet occupies, header plus payload, word aligned.
 #define USB_INTRF_PKT_BLKSIZE(Mps) \
 	((uint32_t)((sizeof(UsbPktHdr_t) + (uint32_t)(Mps) + 3U) & ~3U))
 
-/// RX memory holding NbPkt packet slots for an Mps byte endpoint, including
-/// the CFifo header that CFifoInit carves out of the same buffer.
 #define USB_INTRF_RXMEM_SIZE(NbPkt, Mps) \
 	CFIFO_TOTAL_MEMSIZE(NbPkt, USB_INTRF_PKT_BLKSIZE(Mps))
 
 #pragma pack(push, 4)
 
 typedef struct __Usb_Packet_Header {
-	uint16_t Length;			//!< Actual packet length, from zero through MPS
-	uint16_t Reserved;			//!< Keeps the packet payload word aligned
+	uint16_t Length;
+	uint16_t Reserved;
 } UsbPktHdr_t;
 
-// This structure must be cast to memory block, no allocate
 typedef struct __Usb_Packet {
 	UsbPktHdr_t Hdr;
-	uint8_t Data[1];			//!< Variable length
+	uint8_t Data[1];
 } UsbPkt_t;
 
 typedef struct __Usb_Interf_Config {
-	int DevNo;					//!< USB controller number
-	uint8_t EpNo;				//!< Bidirectional endpoint number, never an address
+	int DevNo;
+	uint8_t EpNo;
 	bool bBlocking;
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;
 	int TxFifoMemSize;
 	uint8_t *pTxFifoMem;
-	uint16_t TxFifoBlkSize;		//!< 1 for byte mode, header plus MPS for packet mode
-	uint16_t BufferSize;		//!< Capacity of each controller transfer buffer
-	uint8_t *pRxBuffer;			//!< OUT transfer buffer supplied by derived class
-	uint8_t *pTxBuffer;			//!< IN transfer buffer supplied by derived class
+	uint16_t TxFifoBlkSize;
+	uint16_t BufferSize;
+	uint8_t *pRxBuffer;
+	uint8_t *pTxBuffer;
 	DevIntrfEvtHandler_t EvtCB;
 } UsbIntrfCfg_t;
 
 #pragma pack(pop)
 
 typedef struct __Usb_Dev_Interf		UsbDevIntrf_t;
-
-/// Returns -1 when empty, or the submitted transfer length including zero.
 typedef int (*EpSendFct_t)(UsbDevIntrf_t *pIntrf);
 
-// Runtime state uses natural alignment. On Cortex-M this preserves the same
-// layout as a 4-byte packed structure, while 64-bit host tests keep pointer
-// members naturally aligned without reordering the embedded hot-path fields.
 struct __Usb_Dev_Interf {
-	int DevNo;					//!< USB controller number
+	int DevNo;
 	DevIntrf_t DevIntrf;
 	hCFifo_t hTxFifo;
-	hCFifo_t hRxFifo;			//!< Packet storage, one endpoint packet per block
-	uint32_t RxDropCnt;			//!< Controller/error drops, FIFO full uses backpressure
-	uint8_t *pRxBuffer;			//!< One OUT packet controller buffer
-	uint8_t *pTxBuffer;			//!< One IN packet controller buffer
-	uint16_t BufferSize;		//!< Capacity of pRxBuffer and pTxBuffer
-	uint16_t Mps;				//!< Active packet size, zero while unconfigured
-	uint8_t EpNo;				//!< Bidirectional endpoint number
+	hCFifo_t hRxFifo;
+	uint32_t RxDropCnt;
+	uint8_t *pRxBuffer;
+	uint8_t *pTxBuffer;
+	uint16_t BufferSize;
+	uint16_t Mps;
+	uint8_t EpNo;
+	bool bBlocking;
+	bool RxPending;
 	EpSendFct_t EpSend;
-	void *pClassContext;		//!< Optional derived-class transport state
+	void *pClassContext;
 };
 
 #ifdef __cplusplus
@@ -154,17 +151,10 @@ extern "C" {
 #endif
 
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg);
-
-/** Apply the negotiated MPS after both endpoint directions are open. */
 bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps);
-
-/** Stop both directions and flush data on bus reset or unconfigure. */
 void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf);
-
-/** Completion for either direction of EpNo, called from the USB interrupt. */
 void UsbIntrfXferComplete(UsbDevIntrf_t *pIntrf, uint8_t EpAddr,
 						  uint16_t Length, UsbCtrlrXferResult_t Result);
-
 bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);
 
 #ifdef __cplusplus
@@ -179,10 +169,6 @@ public:
 		return &vUsbDevIntrf.DevIntrf;
 	}
 
-	/**
-	 * Bring up the endpoint data path. A derived class supplies the endpoint
-	 * number and its buffers; everything after this it does not manage.
-	 */
 	bool Init(const UsbIntrfCfg_t &Cfg) {
 		return UsbIntrfInit(&vUsbDevIntrf, &Cfg);
 	}
@@ -199,10 +185,6 @@ public:
 		return UsbIntrfRequestToSend(&vUsbDevIntrf, NbBytes);
 	}
 
-	// The inherited versions pass *this, which calls the virtual conversion
-	// operator to reach the same pointer this object already holds. On a byte
-	// at a time stream that indirect call is paid per byte. Rate and
-	// RequestToSend above already take the pointer directly; these do too.
 	__attribute__((always_inline))
 	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
 		return DeviceIntrfTx(&vUsbDevIntrf.DevIntrf, DevAddr, pData, DataLen);
@@ -228,9 +210,6 @@ protected:
 	UsbIntrf(const UsbIntrf &) = delete;
 	UsbIntrf &operator = (const UsbIntrf &) = delete;
 
-	// The endpoint data path is owned here, not pointed at. A polymorphic
-	// object cannot be reinterpreted as the C struct anyway, so there is
-	// nothing to gain from placing it in the derived type and binding to it.
 	UsbDevIntrf_t vUsbDevIntrf = {};
 };
 

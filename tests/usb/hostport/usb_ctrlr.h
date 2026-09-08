@@ -85,17 +85,6 @@ enum {
 	 (TransType) == BULK ? USB_PKT_MAXLEN_0_BULK : \
 	 (TransType) == INT ? USB_PKT_MAXLEN_0_INT : 0)
 
-
-//////////////////////////////////////////////////////////////////////////////
-// Public. What the generic USB layer sees and what usb_ctrlr_<target>.cpp
-// must implement. Helpers private to the port stay in the port source, or in
-// a private section below when several port files share them.
-//////////////////////////////////////////////////////////////////////////////
-
-//
-// Controller layer. Events come from the USB interrupt.
-//
-
 typedef enum __Usb_Ctrlr_Xfer_Result {
 	USB_CTRLR_XFER_SUCCESS,
 	USB_CTRLR_XFER_FAILED,
@@ -103,13 +92,14 @@ typedef enum __Usb_Ctrlr_Xfer_Result {
 } UsbCtrlrXferResult_t;
 
 typedef enum __Usb_Ctrlr_Evt_Type {
-	USB_CTRLR_EVT_RESET,		//!< USB bus reset
-	USB_CTRLR_EVT_SETUP,		//!< New EP0 SETUP request
-	USB_CTRLR_EVT_XFER_CMPL,	//!< Endpoint transfer completed
-	USB_CTRLR_EVT_SUSPEND,		//!< Bus entered suspend
-	USB_CTRLR_EVT_RESUME,		//!< Bus resumed
-	USB_CTRLR_EVT_SOF,			//!< Start of frame
-	USB_CTRLR_EVT_ADDRESS,		//!< Hardware accepted SET_ADDRESS itself
+	USB_CTRLR_EVT_RESET,
+	USB_CTRLR_EVT_SETUP,
+	USB_CTRLR_EVT_XFER_CMPL,
+	USB_CTRLR_EVT_SUSPEND,
+	USB_CTRLR_EVT_RESUME,
+	USB_CTRLR_EVT_SOF,
+	USB_CTRLR_EVT_ADDRESS,
+	USB_CTRLR_EVT_DRDY,
 } UsbCtrlrEvtType_t;
 
 #pragma pack(push, 4)
@@ -132,23 +122,17 @@ typedef struct __Usb_Ctrlr_Evt {
 
 #pragma pack(pop)
 
-/**
- * @brief	Controller event callback, called from the USB interrupt.
- *
- * Must stay bounded and must not retain pEvt after it returns.
- */
 typedef void (*UsbCtrlrEvtHandler_t)(int DevNo, const UsbCtrlrEvt_t *pEvt,
 									 void *pContext);
 
-typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, uint16_t Length,
-									UsbCtrlrXferResult_t Result, void *pContext);
+typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
+									uint16_t Length,
+									UsbCtrlrXferResult_t Result,
+									void *pContext);
 
-/// What the generic layer hands the port at UsbCtrlrInit. Interrupt priority
-/// and suspend behaviour reach the hardware only through here, so the port
-/// needs them alongside the event callback.
 typedef struct __Usb_Ctrlr_Config {
-	int IntPrio;					//!< Interrupt priority of the USB peripheral
-	bool bLowPowerSuspend;			//!< true - Sit in USB low power while suspended
+	int IntPrio;
+	bool bLowPowerSuspend;
 	UsbCtrlrEvtHandler_t EvtHandler;
 	void *pContext;
 } UsbCtrlrCfg_t;
@@ -175,8 +159,7 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpCloseAll(int DevNo);
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						UsbCtrlrEpHandler_t Handler, void *pContext);
-bool UsbCtrlrEpRxArm(int DevNo, uint8_t EpNo);
-bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint16_t Length);
+bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length);
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length);
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);
