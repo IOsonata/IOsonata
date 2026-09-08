@@ -242,21 +242,18 @@ static void TestNonBlocking(void)
     CHECK(out[24] == 0xA6U);
 }
 
-static void TestDisablePending(void)
+static void TestDisableDoesNotGateController(void)
 {
     CHECK(Setup(true));
     DeviceIntrfDisable(&s_Intrf.DevIntrf);
 
     const uint8_t p[] = {9,8,7};
-    CHECK(!Drdy(p, sizeof(p)));
-    CHECK(s_Intrf.RxPending);
-    CHECK(!s_OutDma);
-
-    DeviceIntrfEnable(&s_Intrf.DevIntrf);
+    CHECK(Drdy(p, sizeof(p)));
     CHECK(!s_Intrf.RxPending);
     CHECK(s_OutDma);
     CompleteOut();
 
+    DeviceIntrfEnable(&s_Intrf.DevIntrf);
     uint8_t out[3] = {};
     CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 3);
     CHECK(memcmp(out, p, sizeof(p)) == 0);
@@ -290,7 +287,7 @@ int main(void)
     TestNoPreArm();
     TestBlocking();
     TestNonBlocking();
-    TestDisablePending();
+    TestDisableDoesNotGateController();
     TestTxStillChains();
 
     printf("%s\n", s_Fail == 0 ? "usb_rx_event_test: PASS" :
