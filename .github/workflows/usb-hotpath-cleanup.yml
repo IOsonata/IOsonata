@@ -3,7 +3,7 @@ name: USB hot-path cleanup
 on:
   push:
     paths:
-      - 'tests/usb/cleanup_usb_hotpath.py'
+      - 'tests/usb/cleanup_usb_hotpath_v2.py'
       - '.github/workflows/usb-hotpath-cleanup.yml'
 
 permissions:
@@ -18,7 +18,7 @@ jobs:
           ref: usb_rx_arch_test
           fetch-depth: 0
       - name: Apply hot-path cleanup
-        run: python3 tests/usb/cleanup_usb_hotpath.py
+        run: python3 tests/usb/cleanup_usb_hotpath_v2.py
       - name: Host validation
         run: |
           make -C tests/usb test-matrix
