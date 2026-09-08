@@ -7,6 +7,7 @@
 #define BUFFER_SIZE 128U
 #define RX_SLOTS 4U
 #define EP_NO 1U
+#define EVENT_LOG_SIZE 32U
 
 static uint8_t *s_OutBuffer;
 static uint8_t *s_InBuffer;
@@ -23,11 +24,30 @@ static uint16_t s_InLength;
 static uint8_t s_HwOut[BUFFER_SIZE];
 static int s_OutSubmit;
 static int s_InSubmit;
+static int s_RxDataEvent;
+static int s_RxFullEvent;
+static int s_TxEmptyEvent;
+static int s_TxTimeoutEvent;
+static DEVINTRF_EVT s_EventLog[EVENT_LOG_SIZE];
+static unsigned s_EventCount;
 static int s_Fail;
 
 #define CHECK(c) do { if (!(c)) { \
     printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; \
 } } while (0)
+
+static int AppEvent(DevIntrf_t * const, DEVINTRF_EVT Event,
+                    uint8_t *, int Length)
+{
+    if (s_EventCount < EVENT_LOG_SIZE)
+        s_EventLog[s_EventCount++] = Event;
+
+    if (Event == DEVINTRF_EVT_RX_DATA) s_RxDataEvent++;
+    if (Event == DEVINTRF_EVT_RX_FIFO_FULL) s_RxFullEvent++;
+    if (Event == DEVINTRF_EVT_TX_FIFO_EMPTY) s_TxEmptyEvent++;
+    if (Event == DEVINTRF_EVT_TX_TIMEOUT) s_TxTimeoutEvent++;
+    return Length;
+}
 
 extern "C" {
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
@@ -80,7 +100,7 @@ bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
         return true;
     }
 
-    // OUT DMA must only be submitted after DRDY.
+    // OUT DMA must only be submitted after DRDY for blocking endpoints.
     if (!s_HwOutReady || s_OutDma) return false;
     s_OutDma = true;
     s_OutSubmit++;
@@ -100,6 +120,7 @@ static bool Setup(bool Blocking)
 {
     memset(&s_Intrf, 0, sizeof(s_Intrf));
     memset(s_HwOut, 0, sizeof(s_HwOut));
+    memset(s_EventLog, 0, sizeof(s_EventLog));
     s_OutBuffer = nullptr;
     s_InBuffer = nullptr;
     s_OutHandler = nullptr;
@@ -114,6 +135,11 @@ static bool Setup(bool Blocking)
     s_InLength = 0;
     s_OutSubmit = 0;
     s_InSubmit = 0;
+    s_RxDataEvent = 0;
+    s_RxFullEvent = 0;
+    s_TxEmptyEvent = 0;
+    s_TxTimeoutEvent = 0;
+    s_EventCount = 0U;
 
     UsbIntrfCfg_t cfg = {};
     cfg.DevNo = 0;
@@ -127,6 +153,7 @@ static bool Setup(bool Blocking)
     cfg.BufferSize = BUFFER_SIZE;
     cfg.pRxBuffer = s_RxDma;
     cfg.pTxBuffer = s_TxDma;
+    cfg.EvtCB = AppEvent;
 
     return UsbIntrfInit(&s_Intrf, &cfg) &&
            UsbIntrfConfigure(&s_Intrf, MPS);
@@ -146,6 +173,7 @@ static bool Drdy(const uint8_t *pData, uint16_t Length)
     }
     else
     {
+        // Non-blocking EPDATA goes straight to controller DMA; there is no DRDY callback.
         s_OutDma = true;
         s_OutSubmit++;
     }
@@ -185,6 +213,8 @@ static void TestNoPreArm(void)
     CHECK(s_OutSubmit == 1);
     CHECK(!s_OutDma);
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == 1);
+    CHECK(s_RxDataEvent == 1);
+    CHECK(s_RxFullEvent == 0);
 
     uint8_t out[3] = {};
     CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 3);
@@ -204,6 +234,14 @@ static void TestBlocking(void)
     }
     CHECK(CFifoAvail(s_Intrf.hRxFifo) == 0);
     CHECK(s_OutSubmit == (int)RX_SLOTS);
+    CHECK(s_RxDataEvent == (int)RX_SLOTS);
+    CHECK(s_RxFullEvent == 1);
+    CHECK(s_EventCount >= 2U);
+    if (s_EventCount >= 2U)
+    {
+        CHECK(s_EventLog[s_EventCount - 2U] == DEVINTRF_EVT_RX_FIFO_FULL);
+        CHECK(s_EventLog[s_EventCount - 1U] == DEVINTRF_EVT_RX_DATA);
+    }
 
     uint8_t pending[8] = {0xA5};
     CHECK(!Drdy(pending, sizeof(pending)));
@@ -211,6 +249,8 @@ static void TestBlocking(void)
     CHECK(!s_OutDma);
     CHECK(s_Intrf.RxPending);
     CHECK(s_OutSubmit == (int)RX_SLOTS);
+    CHECK(s_RxDataEvent == (int)RX_SLOTS);
+    CHECK(s_RxFullEvent == 1);
 
     uint8_t out[8] = {};
     CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
@@ -221,6 +261,8 @@ static void TestBlocking(void)
 
     CompleteOut();
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == (int)RX_SLOTS);
+    CHECK(s_RxDataEvent == (int)RX_SLOTS + 1);
+    CHECK(s_RxFullEvent == 2);
 }
 
 static void TestNonBlocking(void)
@@ -235,6 +277,14 @@ static void TestNonBlocking(void)
     }
     CHECK(CFifoAvail(s_Intrf.hRxFifo) == 0);
     CHECK(s_Intrf.hRxFifo->DropCnt == 0U);
+    CHECK(s_RxFullEvent == 1);
+    CHECK(s_RxDataEvent == (int)RX_SLOTS);
+    CHECK(s_EventCount >= 2U);
+    if (s_EventCount >= 2U)
+    {
+        CHECK(s_EventLog[s_EventCount - 2U] == DEVINTRF_EVT_RX_FIFO_FULL);
+        CHECK(s_EventLog[s_EventCount - 1U] == DEVINTRF_EVT_RX_DATA);
+    }
 
     uint8_t newest[8] = {0xA6};
     CHECK(Drdy(newest, sizeof(newest)));
@@ -243,6 +293,8 @@ static void TestNonBlocking(void)
     CompleteOut();
     CHECK(s_Intrf.hRxFifo->DropCnt == 1U);
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == (int)RX_SLOTS);
+    CHECK(s_RxFullEvent == 2);
+    CHECK(s_RxDataEvent == (int)RX_SLOTS + 1);
 
     uint8_t out[RX_SLOTS * 8] = {};
     CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) ==
@@ -251,6 +303,42 @@ static void TestNonBlocking(void)
     CHECK(out[8] == 2U);
     CHECK(out[16] == 3U);
     CHECK(out[24] == 0xA6U);
+}
+
+static void TestCancelIsNotCompletion(void)
+{
+    CHECK(Setup(true));
+    uint8_t data[MPS + 3U];
+    for (unsigned i = 0; i < sizeof(data); i++) data[i] = (uint8_t)i;
+
+    CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, data, sizeof(data)) ==
+          (int)sizeof(data));
+    CHECK(s_InDma && s_InSubmit == 1);
+    const int queued = CFifoUsed(s_Intrf.hTxFifo);
+    CHECK(queued == 3);
+
+    // The controller has cancelled the active transfer before delivering CANCEL.
+    s_InDma = false;
+    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_CANCEL,
+                MPS, USB_CTRLR_XFER_CANCELLED, s_InContext);
+    CHECK(!s_InDma);
+    CHECK(s_InSubmit == 1);
+    CHECK(CFifoUsed(s_Intrf.hTxFifo) == queued);
+    CHECK(s_TxEmptyEvent == 0);
+    CHECK(s_TxTimeoutEvent == 0);
+
+    CHECK(Setup(true));
+    const uint8_t p[] = {4,5,6,7};
+    CHECK(Drdy(p, sizeof(p)));
+    CHECK(s_OutDma);
+    s_OutDma = false;
+    s_HwOutReady = false;
+    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_CANCEL,
+                 0U, USB_CTRLR_XFER_CANCELLED, s_OutContext);
+    CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
+    CHECK(!s_Intrf.RxPending);
+    CHECK(s_RxDataEvent == 0);
+    CHECK(s_RxFullEvent == 0);
 }
 
 static void TestDisableDoesNotGateController(void)
@@ -291,6 +379,7 @@ static void TestTxStillChains(void)
     s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
                 3U, USB_CTRLR_XFER_SUCCESS, s_InContext);
     CHECK(!s_InDma);
+    CHECK(s_TxEmptyEvent == 1);
 }
 
 int main(void)
@@ -298,6 +387,7 @@ int main(void)
     TestNoPreArm();
     TestBlocking();
     TestNonBlocking();
+    TestCancelIsNotCompletion();
     TestDisableDoesNotGateController();
     TestTxStillChains();
 
