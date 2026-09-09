@@ -172,6 +172,17 @@ typedef struct __Bt_Hci_Usb_Config {
 	uint16_t AclHsMps;				//!< Zero selects BT_HCI_USB_ACL_HS_MPS
 	uint8_t EventFsInterval;		//!< Zero selects BT_HCI_USB_EVENT_FS_INTERVAL
 	uint8_t EventHsInterval;		//!< Zero selects BT_HCI_USB_EVENT_HS_INTERVAL
+	// Descriptor fragment buffers. Init fills the one matching the selected
+	// layout with the allocated interface and endpoint numbers and the
+	// controller speed MPS, so the application places it in its configuration
+	// descriptor and does not build it separately. Set the buffer for the
+	// chosen bSco/bBulkSerialization combination and leave the rest null:
+	// pDesc when neither flag is set, pScoDesc for bSco only, pSerialDesc for
+	// bBulkSerialization only, pFullDesc when both are set.
+	BtHciUsbDesc_t *pDesc;
+	BtHciUsbScoDesc_t *pScoDesc;
+	BtHciUsbSerialDesc_t *pSerialDesc;
+	BtHciUsbFullDesc_t *pFullDesc;
 	DevIntrfEvtHandler_t EvtCB;
 } BtHciUsbCfg_t;
 
@@ -246,22 +257,6 @@ extern "C" {
 
 bool BtHciUsbInit(BtHciUsbDev_t * const pHci, const BtHciUsbCfg_t *pCfg);
 
-/** Build the Bluetooth IAD, HCI interface/endpoints and sync alt-0 fragment. */
-bool BtHciUsbMakeDesc(BtHciUsbDesc_t *pDesc, const BtHciUsbDev_t *pHci,
-					 UsbSpeed_t Speed);
-
-/** Build the legacy fragment followed by synchronous alternates 1 through 6. */
-bool BtHciUsbMakeScoDesc(BtHciUsbScoDesc_t *pDesc,
-						const BtHciUsbDev_t *pHci, UsbSpeed_t Speed);
-
-/** Build HCI legacy alt-0, serialized alt-1 and synchronous alt-0. */
-bool BtHciUsbMakeSerialDesc(BtHciUsbSerialDesc_t *pDesc,
-						   const BtHciUsbDev_t *pHci, UsbSpeed_t Speed);
-
-/** Build serialized HCI and all synchronous alternate settings. */
-bool BtHciUsbMakeFullDesc(BtHciUsbFullDesc_t *pDesc,
-						 const BtHciUsbDev_t *pHci, UsbSpeed_t Speed);
-
 bool BtHciUsbRequestToSend(BtHciUsbDev_t *pHci, int NbBytes);
 
 #ifdef __cplusplus
@@ -309,22 +304,6 @@ public:
 	__attribute__((always_inline))
 	int RxData(uint8_t *pBuff, int BuffLen) override {
 		return DeviceIntrfRxData(&vBtHciUsb.IntrfData.DevIntrf, pBuff, BuffLen);
-	}
-
-	bool MakeDesc(BtHciUsbDesc_t *pDesc, UsbSpeed_t Speed) const {
-		return BtHciUsbMakeDesc(pDesc, &vBtHciUsb, Speed);
-	}
-
-	bool MakeScoDesc(BtHciUsbScoDesc_t *pDesc, UsbSpeed_t Speed) const {
-		return BtHciUsbMakeScoDesc(pDesc, &vBtHciUsb, Speed);
-	}
-
-	bool MakeSerialDesc(BtHciUsbSerialDesc_t *pDesc, UsbSpeed_t Speed) const {
-		return BtHciUsbMakeSerialDesc(pDesc, &vBtHciUsb, Speed);
-	}
-
-	bool MakeFullDesc(BtHciUsbFullDesc_t *pDesc, UsbSpeed_t Speed) const {
-		return BtHciUsbMakeFullDesc(pDesc, &vBtHciUsb, Speed);
 	}
 
 	bool RequestToSend(int NbBytes) override {

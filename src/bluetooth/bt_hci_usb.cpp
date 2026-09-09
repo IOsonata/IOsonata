@@ -1206,7 +1206,7 @@ bool BtHciUsbRequestToSend(BtHciUsbDev_t *pHci, int NbBytes)
 		blocks * (int)BT_HCI_USB_ACL_PKT_BLKSIZE);
 }
 
-bool BtHciUsbMakeDesc(BtHciUsbDesc_t *pDesc, const BtHciUsbDev_t *pHci,
+static bool BtHciUsbMakeDesc(BtHciUsbDesc_t *pDesc, const BtHciUsbDev_t *pHci,
 					 UsbSpeed_t Speed)
 {
 	if (pDesc == nullptr || pHci == nullptr ||
@@ -1283,7 +1283,7 @@ bool BtHciUsbMakeDesc(BtHciUsbDesc_t *pDesc, const BtHciUsbDev_t *pHci,
 	return true;
 }
 
-bool BtHciUsbMakeScoDesc(BtHciUsbScoDesc_t *pDesc,
+static bool BtHciUsbMakeScoDesc(BtHciUsbScoDesc_t *pDesc,
 						const BtHciUsbDev_t *pHci, UsbSpeed_t Speed)
 {
 	if (pDesc == nullptr || pHci == nullptr || !pHci->ScoEnabled ||
@@ -1333,7 +1333,7 @@ static void BtHciUsbMakeSerialAlt(BtHciUsbSerialAltDesc_t *pAlt,
 	pAlt->In = pLegacy->AclIn;
 }
 
-bool BtHciUsbMakeSerialDesc(BtHciUsbSerialDesc_t *pDesc,
+static bool BtHciUsbMakeSerialDesc(BtHciUsbSerialDesc_t *pDesc,
 						   const BtHciUsbDev_t *pHci, UsbSpeed_t Speed)
 {
 	if (pDesc == nullptr || pHci == nullptr ||
@@ -1359,7 +1359,7 @@ bool BtHciUsbMakeSerialDesc(BtHciUsbSerialDesc_t *pDesc,
 	return true;
 }
 
-bool BtHciUsbMakeFullDesc(BtHciUsbFullDesc_t *pDesc,
+static bool BtHciUsbMakeFullDesc(BtHciUsbFullDesc_t *pDesc,
 						 const BtHciUsbDev_t *pHci, UsbSpeed_t Speed)
 {
 	if (pDesc == nullptr || pHci == nullptr || !pHci->ScoEnabled ||
@@ -1482,5 +1482,24 @@ bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
 	}
 
 	BtHciUsbInitDevIntrf(pHci);
+
+	// The interface and endpoint numbers are known now, so build the descriptor
+	// fragment into the application buffer that matches the selected layout. The
+	// controller speed selects the MPS. A buffer that does not match the
+	// bSco/bBulkSerialization flags is rejected by its builder.
+	const UsbSpeed_t speed = USB_HIGHSPEED_CAPABLE(pHci->DevNo) ?
+		USB_SPEED_HIGH : USB_SPEED_FULL;
+	if ((pCfg->pDesc != nullptr &&
+			!BtHciUsbMakeDesc(pCfg->pDesc, pHci, speed)) ||
+		(pCfg->pScoDesc != nullptr &&
+			!BtHciUsbMakeScoDesc(pCfg->pScoDesc, pHci, speed)) ||
+		(pCfg->pSerialDesc != nullptr &&
+			!BtHciUsbMakeSerialDesc(pCfg->pSerialDesc, pHci, speed)) ||
+		(pCfg->pFullDesc != nullptr &&
+			!BtHciUsbMakeFullDesc(pCfg->pFullDesc, pHci, speed)))
+	{
+		return false;
+	}
+
 	return true;
 }
