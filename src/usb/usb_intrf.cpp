@@ -453,13 +453,6 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 		case USB_CTRLR_EVT_DRDY:
 			if (pIntrf->Mode == USB_INTRF_MODE_ISO)
 			{
-				if (UsbIntrfIsoReady(pIntrf->pRxIsoBuffer))
-				{
-					pIntrf->RxDropCnt++;
-					return;
-				}
-				(void)UsbCtrlrEpXfer(pIntrf->DevNo,
-					USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps);
 				return;
 			}
 
@@ -697,13 +690,9 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	atomic_store(&pIntrf->DevIntrf.bTxReady, true);
 	atomic_store(&pIntrf->DevIntrf.bNoStop, false);
 
-	// ISO OUT uses controller DRDY so UsbIntrf can refuse the current frame
-	// when its one RX slot is still owned by the consumer. This does not turn
-	// ISO into a retryable transport; a refused service opportunity is dropped.
-	const bool rxBlocking = mode == USB_INTRF_MODE_ISO ? true : pCfg->bBlocking;
 	if (!UsbCtrlrEpRegister(pIntrf->DevNo,
 		USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->pRxBuffer,
-		rxBlocking, UsbIntrfCtrlrEvent, pIntrf) ||
+		pCfg->bBlocking, UsbIntrfCtrlrEvent, pIntrf) ||
 		!UsbCtrlrEpRegister(pIntrf->DevNo,
 		USB_ENDPADDR_DIRIN(pIntrf->EpNo), pIntrf->pTxBuffer,
 		pCfg->bBlocking, UsbIntrfCtrlrEvent, pIntrf))

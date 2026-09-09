@@ -181,22 +181,14 @@ static void Receive(const uint8_t *pData, uint16_t Length,
 					UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
 {
 	CHECK(s_OutHandler != nullptr);
-	CHECK(s_OutBlocking);
+	CHECK(!s_OutBlocking);
 	CHECK(Length <= USB_ISO_INTRF_MAX_MPS);
 	CHECK(!s_OutBusy);
 	if (Length > 0U)
-		memcpy(s_OutData, pData, Length);
-	s_OutLength = Length;
+		memcpy(s_OutBuffer, pData, Length);
 
-	// The controller reports the ISO OUT service opportunity first. UsbIntrf
-	// starts the direct ISO DMA only if its single RX slot is free.
-	s_OutHandler(USB_ENDPADDR_DIROUT(8U), USB_CTRLR_EVT_DRDY,
-		0U, USB_CTRLR_XFER_SUCCESS, s_OutContext);
-	CHECK(s_OutBusy);
-	if (!s_OutBusy)
-		return;
-
-	s_OutBusy = false;
+	// The controller owns ISO OUT service and DMAs directly into the buffer
+	// registered by UsbIntrfInit. Generic UsbIntrf only receives completion.
 	s_OutHandler(USB_ENDPADDR_DIROUT(8U), USB_CTRLR_EVT_XFER_CMPL,
 		Length, Result, s_OutContext);
 }
@@ -225,7 +217,7 @@ static void TestLifecycle(void)
 	CHECK(iso.pIntrfData->hTxFifo == nullptr);
 	CHECK(iso.pIntrfData->pRxIsoBuffer != nullptr);
 	CHECK(iso.pIntrfData->pTxIsoBuffer != nullptr);
-	CHECK(s_OutBlocking);
+	CHECK(!s_OutBlocking);
 	CHECK(s_OutXferCount == 0);
 
 	CHECK(UsbIsoIntrfOpen(&iso, 25U, 1U));
@@ -256,17 +248,17 @@ static void TestRx(void)
 	CHECK(s_LastRxResult == USB_CTRLR_XFER_SUCCESS);
 	CHECK(memcmp(s_LastRx, data, sizeof(data)) == 0);
 	CHECK(!((iso.pIntrfData->pRxIsoBuffer->Hdr.Flags & USB_INTRF_ISO_READY) != 0U));
-	CHECK(s_OutXferCount == 1);
+	CHECK(s_OutXferCount == 0);
 
 	Receive(nullptr, 0U);
 	CHECK(s_RxCount == 2 && iso.RxEmptyCnt == 1U);
-	CHECK(s_OutXferCount == 2);
+	CHECK(s_OutXferCount == 0);
 
 	Receive(nullptr, 0U, USB_CTRLR_XFER_FAILED);
 	CHECK(s_RxCount == 3);
 	CHECK(s_LastRxResult == USB_CTRLR_XFER_FAILED);
 	CHECK(iso.RxMissCnt == 1U);
-	CHECK(s_OutXferCount == 3);
+	CHECK(s_OutXferCount == 0);
 }
 
 static void TestTx(void)
