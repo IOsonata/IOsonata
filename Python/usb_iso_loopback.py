@@ -194,8 +194,14 @@ def run_burst(
         "error": None,
     }
 
+    # python-libusb1 rejects a per-frame ISO length of 0, so a zero-length
+    # OUT burst cannot be submitted through this API. For the ZLP case drive
+    # the IN endpoint alone and rely on the device ISOINCONFIG=ZeroData idle
+    # response to produce the zero-length IN frames the validator checks for.
+    zlp = (test_length == 0)
+
     in_transfer = handle.getTransfer(iso_packets=in_count)
-    out_transfer = handle.getTransfer(iso_packets=out_count)
+    out_transfer = None if zlp else handle.getTransfer(iso_packets=out_count)
 
     def fail(message):
         if state["error"] is None:
@@ -222,19 +228,24 @@ def run_burst(
         timeout=timeout_ms,
         iso_transfer_length_list=in_lengths,
     )
-    out_transfer.setIsochronous(
-        usb1.ENDPOINT_OUT | ep,
-        out_buffer,
-        callback=out_complete,
-        timeout=timeout_ms,
-        iso_transfer_length_list=out_lengths,
-    )
+    if zlp:
+        # No OUT transfer to send or wait on.
+        state["out_done"] = True
+    else:
+        out_transfer.setIsochronous(
+            usb1.ENDPOINT_OUT | ep,
+            out_buffer,
+            callback=out_complete,
+            timeout=timeout_ms,
+            iso_transfer_length_list=out_lengths,
+        )
 
     try:
         # Keep IN service scheduled before OUT. ISO has no retry, so a
         # one-transfer-at-a-time bulk-style request/echo test is invalid.
         in_transfer.submit()
-        out_transfer.submit()
+        if not zlp:
+            out_transfer.submit()
 
         deadline = time.monotonic() + max(
             3.0,
@@ -263,25 +274,26 @@ def run_burst(
         if state["error"] is not None:
             return state["error"], None
 
-        if len(state["out_setup"]) != out_count:
-            return (
-                f"OUT descriptor count {len(state['out_setup'])}, "
-                f"expected {out_count}",
-                None,
-            )
-
-        for index, packet in enumerate(state["out_setup"]):
-            if (
-                packet["status"] != usb1.TRANSFER_COMPLETED
-                or packet["actual_length"] != out_lengths[index]
-            ):
+        if not zlp:
+            if len(state["out_setup"]) != out_count:
                 return (
-                    f"OUT packet {index}: status={status_name(packet['status'])}, "
-                    f"requested={out_lengths[index]}, "
-                    f"actual={packet['actual_length']}; "
-                    f"transfer={status_name(state['out_status'])}",
+                    f"OUT descriptor count {len(state['out_setup'])}, "
+                    f"expected {out_count}",
                     None,
                 )
+
+            for index, packet in enumerate(state["out_setup"]):
+                if (
+                    packet["status"] != usb1.TRANSFER_COMPLETED
+                    or packet["actual_length"] != out_lengths[index]
+                ):
+                    return (
+                        f"OUT packet {index}: status={status_name(packet['status'])}, "
+                        f"requested={out_lengths[index]}, "
+                        f"actual={packet['actual_length']}; "
+                        f"transfer={status_name(state['out_status'])}",
+                        None,
+                    )
 
         if test_length == 0:
             completed_zero = [
@@ -377,7 +389,8 @@ def run_burst(
         return f"submit failed: {exc}", None
     finally:
         cancel_transfer(context, in_transfer)
-        cancel_transfer(context, out_transfer)
+        if out_transfer is not None:
+            cancel_transfer(context, out_transfer)
 
 
 def run_alt(context, handle, interface, ep, alt, mps, rounds, timeout_ms):
