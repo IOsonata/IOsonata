@@ -1,0 +1,64 @@
+name: One-shot nRF52 USB FIFO scheduler fix
+
+on:
+  push:
+    branches:
+      - usb_rx_arch_test
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'Apply nRF52 USB FIFO scheduler fix'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: usb_rx_arch_test
+          fetch-depth: 0
+
+      - name: Patch scheduler
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('ARM/Nordic/src/usb_ctrlr_nrfx.cpp')
+          s = path.read_text()
+
+          # The DMA owner is retired only by its END interrupt. Remove the
+          # opportunistic IN-DMA reclaim path used by service submission.
+          start = s.index('static void nRFUsbdDmaEndIntEnable(uint8_t EpAddr)')
+          end = s.index('static void nRFUsbdDmaRelease(void)', start)
+          s = s[:start] + s[end:]
+
+          old = '''\tatomic_store(&s_DmaEpAddr, EpAddr);\n\t*pTask = 1;\n'''
+          new = '''\tatomic_store(&s_DmaEpAddr, EpAddr);\n\n\t// The DMA END interrupt owns retirement and starts the next queued request.\n\t// OUT and ISO END interrupts are enabled when their endpoints are opened;\n\t// ordinary data IN enables ENDEPIN for the lifetime of this DMA transfer.\n\tif (nRFUsbdDataIn(EpAddr) &&\n\t\tUSB_ENDPADDR_NUM(EpAddr) != NRFX_USBD_ISO_EP_NO)\n\t{\n\t\tNRF_USBD->INTENSET = nRFUsbdDmaEndMask(EpAddr);\n\t}\n\n\t*pTask = 1;\n'''
+          if s.count(old) != 1:
+              raise SystemExit(f'unexpected DMA start match count: {s.count(old)}')
+          s = s.replace(old, new, 1)
+
+          service = s.index('static void nRFUsbdServicePending(void)')
+          busy = s.index('\t\tif (atomic_flag_test_and_set(&s_DmaRunning))', service)
+          next_work = s.index('\t\tif (atomic_exchange(&s_PendingEp0Status, false))', busy)
+          replacement = '''\t\t// A transfer is already active. Its END interrupt releases the DMA\n\t\t// owner and calls this scheduler again for exactly one next request.\n\t\tif (atomic_flag_test_and_set(&s_DmaRunning))\n\t\t{\n\t\t\treturn;\n\t\t}\n\n'''
+          s = s[:busy] + replacement + s[next_work:]
+
+          if 'nRFUsbdDmaReclaim' in s or 'nRFUsbdDmaEndIntEnable' in s:
+              raise SystemExit('obsolete DMA reclaim path remains')
+
+          path.write_text(s)
+          PY
+
+          git diff --check
+          git diff -- ARM/Nordic/src/usb_ctrlr_nrfx.cpp
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ARM/Nordic/src/usb_ctrlr_nrfx.cpp
+          git commit -m 'Fix nRF52 USB FIFO scheduler'
+          git push origin HEAD:usb_rx_arch_test
