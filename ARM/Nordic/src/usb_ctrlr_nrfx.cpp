@@ -1011,56 +1011,6 @@ static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 	nRFUsbdEmit(&evt);
 }
 
-static void nRFUsbdDmaEndIntEnable(uint8_t EpAddr)
-{
-	const uint32_t primask = __get_PRIMASK();
-	__disable_irq();
-
-	if ((uint8_t)atomic_load(&s_DmaEpAddr) == EpAddr)
-	{
-		NRF_USBD->INTENSET = nRFUsbdDmaEndMask(EpAddr);
-	}
-
-	__set_PRIMASK(primask);
-}
-
-/** Retire a data IN DMA whose END event is already latched. */
-static void nRFUsbdDmaReclaim(void)
-{
-	uint_fast8_t epAddr = atomic_load(&s_DmaEpAddr);
-
-	if ((uint8_t)epAddr == NRFX_USBD_DMA_EP_NONE ||
-		!nRFUsbdDataIn((uint8_t)epAddr) ||
-		USB_ENDPADDR_NUM((uint8_t)epAddr) == NRFX_USBD_ISO_EP_NO)
-	{
-		return;
-	}
-
-	volatile uint32_t *pEvent = nRFUsbdDmaEndEvent((uint8_t)epAddr);
-	if (*pEvent == 0U)
-	{
-		return;
-	}
-
-	if (!atomic_compare_exchange_strong(&s_DmaEpAddr, &epAddr,
-		(uint_fast8_t)NRFX_USBD_DMA_EP_NONE))
-	{
-		return;
-	}
-
-	NRF_USBD->INTENCLR = nRFUsbdDmaEndMask((uint8_t)epAddr);
-	*pEvent = 0;
-	__ISB();
-	__DSB();
-
-	if (nrf52_errata_199())
-	{
-		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
-	}
-
-	atomic_flag_clear(&s_DmaRunning);
-}
-
 static void nRFUsbdDmaRelease(void)
 {
 	const uint32_t primask = __get_PRIMASK();
@@ -1105,6 +1055,16 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 	}
 
 	atomic_store(&s_DmaEpAddr, EpAddr);
+
+	// The DMA END interrupt owns retirement and starts the next queued request.
+	// OUT and ISO END interrupts are enabled when their endpoints are opened;
+	// ordinary data IN enables ENDEPIN for the lifetime of this DMA transfer.
+	if (nRFUsbdDataIn(EpAddr) &&
+		USB_ENDPADDR_NUM(EpAddr) != NRFX_USBD_ISO_EP_NO)
+	{
+		NRF_USBD->INTENSET = nRFUsbdDmaEndMask(EpAddr);
+	}
+
 	*pTask = 1;
 	__ISB();
 	__DSB();
@@ -1243,24 +1203,11 @@ static void nRFUsbdServicePending(void)
 
 	for (;;)
 	{
+		// A transfer is already active. Its END interrupt releases the DMA
+		// owner and calls this scheduler again for exactly one next request.
 		if (atomic_flag_test_and_set(&s_DmaRunning))
 		{
-			// Data IN normally completes without ENDEPIN interrupts. If it has
-			// already ended, reclaim it now; otherwise its END interrupt resumes
-			// this same queue as soon as another endpoint needs the DMA engine.
-			nRFUsbdDmaReclaim();
-
-			if (atomic_flag_test_and_set(&s_DmaRunning))
-			{
-				const uint8_t epAddr =
-					(uint8_t)atomic_load(&s_DmaEpAddr);
-				if (epAddr != NRFX_USBD_DMA_EP_NONE &&
-					nRFUsbdDataIn(epAddr))
-				{
-					nRFUsbdDmaEndIntEnable(epAddr);
-				}
-				return;
-			}
+			return;
 		}
 
 		if (atomic_exchange(&s_PendingEp0Status, false))
