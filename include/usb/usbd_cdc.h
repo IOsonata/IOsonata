@@ -113,17 +113,59 @@ typedef struct __Usbd_Cdc_Dev {
 
 #ifdef __cplusplus
 
+extern "C" {
+#endif
+
+bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg);
+
+void UsbdCdcProcess(UsbdCdcDev_t * const pCdc);
+
+bool UsbdCdcPortIsOpen(const UsbdCdcDev_t * const pCdc);
+
+const UsbCdcLineCoding_t *UsbdCdcLineCoding(const UsbdCdcDev_t * const pCdc);
+
+uint16_t UsbdCdcControlLineState(const UsbdCdcDev_t * const pCdc);
+
+void UsbdCdcSetSerialState(UsbdCdcDev_t * const pCdc, uint16_t SerialState);
+
+const uint8_t *UsbdCdcDescHandler(uint8_t DescType, uint8_t DescIndex,
+								  uint16_t LangId, UsbSpeed_t Speed,
+								  uint16_t *pLength, void *pContext);
+
+static inline int UsbdCdcRx(UsbdCdcDev_t * const pCdc, uint8_t *pBuff, int BuffLen) {
+	return DeviceIntrfRx(&pCdc->IntrfData.DevIntrf, 0, pBuff, BuffLen);
+}
+
+static inline int UsbdCdcTx(UsbdCdcDev_t * const pCdc, const uint8_t *pData, int DataLen) {
+	return DeviceIntrfTx(&pCdc->IntrfData.DevIntrf, 0, pData, DataLen);
+}
+
+static inline void UsbdCdcEnable(UsbdCdcDev_t * const pCdc) {
+	DeviceIntrfEnable(&pCdc->IntrfData.DevIntrf);
+}
+
+static inline void UsbdCdcDisable(UsbdCdcDev_t * const pCdc) {
+	DeviceIntrfDisable(&pCdc->IntrfData.DevIntrf);
+}
+
+static inline UsbdCdcDev_t *UsbdCdcGetDevHandle(DevIntrf_t * const pDevIntrf) {
+	return (UsbdCdcDev_t *)((UsbDevIntrf_t *)pDevIntrf->pDevData)->pClassContext;
+}
+
+#ifdef __cplusplus
+}
+
 class UsbdCdc : public DeviceIntrf {
 public:
 	UsbdCdc() = default;
 	UsbdCdc(const UsbdCdc &) = delete;
 	UsbdCdc &operator = (const UsbdCdc &) = delete;
 
-	bool Init(const UsbdCdcCfg_t &Cfg);
-
 	operator DevIntrf_t * () override { return &vUsbdCdc.IntrfData.DevIntrf; }
 	operator UsbdCdcDev_t * () { return &vUsbdCdc; }
 	DevIntrf_t *Data(void) { return &vUsbdCdc.IntrfData.DevIntrf; }
+
+	bool Init(const UsbdCdcCfg_t &Cfg) { return UsbdCdcInit(&vUsbdCdc, &Cfg); }
 
 	uint32_t Rate(uint32_t DataRate) override {
 		return DeviceIntrfSetRate(&vUsbdCdc.IntrfData.DevIntrf, DataRate);
@@ -166,53 +208,6 @@ private:
 	UsbdCdcDev_t vUsbdCdc = {};
 };
 
-extern "C" {
-#endif
-
-bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg);
-
-void UsbdCdcProcess(UsbdCdcDev_t * const pCdc);
-
-bool UsbdCdcPortIsOpen(const UsbdCdcDev_t * const pCdc);
-
-const UsbCdcLineCoding_t *UsbdCdcLineCoding(const UsbdCdcDev_t * const pCdc);
-
-uint16_t UsbdCdcControlLineState(const UsbdCdcDev_t * const pCdc);
-
-void UsbdCdcSetSerialState(UsbdCdcDev_t * const pCdc, uint16_t SerialState);
-
-const uint8_t *UsbdCdcDescHandler(uint8_t DescType,
-								  uint8_t DescIndex,
-								  uint16_t LangId,
-								  UsbSpeed_t Speed,
-								  uint16_t *pLength,
-								  void *pContext);
-
-static inline int UsbdCdcRx(UsbdCdcDev_t * const pCdc, uint8_t *pBuff,
-							int BuffLen) {
-	return DeviceIntrfRx(&pCdc->IntrfData.DevIntrf, 0, pBuff, BuffLen);
-}
-
-static inline int UsbdCdcTx(UsbdCdcDev_t * const pCdc, const uint8_t *pData,
-							int DataLen) {
-	return DeviceIntrfTx(&pCdc->IntrfData.DevIntrf, 0, pData, DataLen);
-}
-
-static inline void UsbdCdcEnable(UsbdCdcDev_t * const pCdc) {
-	DeviceIntrfEnable(&pCdc->IntrfData.DevIntrf);
-}
-
-static inline void UsbdCdcDisable(UsbdCdcDev_t * const pCdc) {
-	DeviceIntrfDisable(&pCdc->IntrfData.DevIntrf);
-}
-
-static inline UsbdCdcDev_t *UsbdCdcGetDevHandle(DevIntrf_t * const pDevIntrf) {
-	return (UsbdCdcDev_t *)
-		((UsbDevIntrf_t *)pDevIntrf->pDevData)->pClassContext;
-}
-
-#ifdef __cplusplus
-}
 #endif
 
 /** @} End of group USBD */

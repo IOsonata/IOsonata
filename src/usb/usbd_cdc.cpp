@@ -475,11 +475,6 @@ void UsbdCdcSetSerialState(UsbdCdcDev_t * const pCdc, uint16_t SerialState)
 	UsbdCdcNotifKick(pCdc);
 }
 
-bool UsbdCdc::Init(const UsbdCdcCfg_t &Cfg)
-{
-	return UsbdCdcInit(&vUsbdCdc, &Cfg);
-}
-
 bool UsbdCdc::IsPortOpen(void)
 {
 	return UsbdCdcPortIsOpen(&vUsbdCdc);

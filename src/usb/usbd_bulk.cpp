@@ -148,7 +148,7 @@ static void UsbdBulkReset(void *pContext)
 	}
 }
 
-bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
+static bool UsbdBulkFillDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 					  UsbSpeed_t Speed)
 {
 	if (pDesc == nullptr || pBulk == nullptr || pBulk->ItfNo < 0 ||
@@ -258,15 +258,18 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk, const UsbdBulkCfg_t *pCfg)
 
 	pBulk->IntrfData.pClassContext = pBulk;
 
+	// The interface and endpoint numbers are known now, so build the descriptor
+	// fragment into the application buffer. The controller speed selects the MPS.
+	if (pCfg->pDesc != nullptr)
+	{
+		const UsbSpeed_t speed = USB_HIGHSPEED_CAPABLE(pBulk->DevNo) ?
+			USB_SPEED_HIGH : USB_SPEED_FULL;
+		if (!UsbdBulkFillDesc(pCfg->pDesc, pBulk, speed))
+		{
+			return false;
+		}
+	}
+
 	return true;
 }
 
-bool UsbdBulk::Init(const UsbdBulkCfg_t &Cfg)
-{
-	return UsbdBulkInit(&vUsbdBulk, &Cfg);
-}
-
-bool UsbdBulk::MakeDesc(UsbdBulkDesc_t *pDesc, UsbSpeed_t Speed) const
-{
-	return UsbdBulkMakeDesc(pDesc, &vUsbdBulk, Speed);
-}

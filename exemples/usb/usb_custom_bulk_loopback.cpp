@@ -96,6 +96,7 @@ static const UsbdBulkCfg_t s_BulkCfg = {
 	.FsMps = 0U,
 	.HsMps = 0U,
 	.Mode = USBD_BULK_MODE_BYTE,
+	.pDesc = &s_ConfigDesc.Bulk,
 	.RequestHandler = nullptr,
 	.pRequestContext = nullptr,
 	.EvtCB = nullptr,
@@ -189,9 +190,11 @@ static const uint8_t *CustomConfigurationDescriptor(UsbSpeed_t Speed,
 												 bool OtherSpeed,
 												 uint16_t *pLength)
 {
+	// The bulk interface and endpoint fragment (s_ConfigDesc.Bulk) was filled
+	// by UsbdBulk::Init. Only the configuration header is assembled here.
+	(void)Speed;
 	const UsbCfg_t *pCfg = UsbGetCfg(USB_DEVNO);
-	if (pCfg == nullptr || pLength == nullptr ||
-		!g_CustomBulk.MakeDesc(&s_ConfigDesc.Bulk, Speed))
+	if (pCfg == nullptr || pLength == nullptr)
 	{
 		return nullptr;
 	}

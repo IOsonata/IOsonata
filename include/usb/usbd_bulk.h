@@ -97,6 +97,11 @@ typedef struct __Usbd_Bulk_Config {
 	uint16_t FsMps;				//!< Zero selects USBD_BULK_FS_MPS
 	uint16_t HsMps;				//!< Zero selects USBD_BULK_HS_MPS
 	UsbdBulkMode_t Mode;
+	// Interface plus OUT/IN endpoint descriptor fragment. Init fills this with
+	// the allocated interface and endpoint numbers and the controller speed
+	// MPS, so the application places it in its configuration descriptor and
+	// does not build it separately. Leave null when the fragment is not needed.
+	UsbdBulkDesc_t *pDesc;
 	UsbRequestHandler_t RequestHandler;	//!< Optional vendor request handler
 	void *pRequestContext;
 	DevIntrfEvtHandler_t EvtCB;
@@ -145,10 +150,6 @@ static inline UsbdBulkDev_t *UsbdBulkGetDevHandle(DevIntrf_t * const pDevIntrf) 
 		((UsbDevIntrf_t *)pDevIntrf->pDevData)->pClassContext;
 }
 
-/** Build the interface plus OUT/IN endpoint descriptor fragment. */
-bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
-					  UsbSpeed_t Speed);
-
 #ifdef __cplusplus
 }
 
@@ -158,11 +159,11 @@ public:
 	UsbdBulk(const UsbdBulk &) = delete;
 	UsbdBulk &operator = (const UsbdBulk &) = delete;
 
-	bool Init(const UsbdBulkCfg_t &Cfg);
-
 	operator DevIntrf_t * () override { return &vUsbdBulk.IntrfData.DevIntrf; }
 	operator UsbdBulkDev_t * () { return &vUsbdBulk; }
 	DevIntrf_t *Data(void) { return &vUsbdBulk.IntrfData.DevIntrf; }
+
+	bool Init(const UsbdBulkCfg_t &Cfg) { return UsbdBulkInit(&vUsbdBulk, &Cfg); }
 
 	uint32_t Rate(uint32_t DataRate) override {
 		return DeviceIntrfSetRate(&vUsbdBulk.IntrfData.DevIntrf, DataRate);
@@ -195,8 +196,6 @@ public:
 	int RxData(uint8_t *pBuff, int BuffLen) override {
 		return DeviceIntrfRxData(&vUsbdBulk.IntrfData.DevIntrf, pBuff, BuffLen);
 	}
-
-	bool MakeDesc(UsbdBulkDesc_t *pDesc, UsbSpeed_t Speed) const;
 
 private:
 	UsbdBulkDev_t vUsbdBulk = {};
