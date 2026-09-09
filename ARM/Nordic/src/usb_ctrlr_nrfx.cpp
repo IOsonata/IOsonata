@@ -1027,28 +1027,26 @@ static void nRFUsbdDmaEndIntEnable(uint8_t EpAddr)
 /** Retire a data IN DMA whose END event is already latched. */
 static void nRFUsbdDmaReclaim(void)
 {
-	uint_fast8_t epAddr = atomic_load(&s_DmaEpAddr);
+	const uint32_t primask = __get_PRIMASK();
+	__disable_irq();
 
-	if ((uint8_t)epAddr == NRFX_USBD_DMA_EP_NONE ||
-		!nRFUsbdDataIn((uint8_t)epAddr) ||
-		USB_ENDPADDR_NUM((uint8_t)epAddr) == NRFX_USBD_ISO_EP_NO)
+	const uint8_t epAddr = (uint8_t)atomic_load(&s_DmaEpAddr);
+	if (epAddr == NRFX_USBD_DMA_EP_NONE ||
+		!nRFUsbdDataIn(epAddr) ||
+		USB_ENDPADDR_NUM(epAddr) == NRFX_USBD_ISO_EP_NO)
 	{
+		__set_PRIMASK(primask);
 		return;
 	}
 
-	volatile uint32_t *pEvent = nRFUsbdDmaEndEvent((uint8_t)epAddr);
+	volatile uint32_t *pEvent = nRFUsbdDmaEndEvent(epAddr);
 	if (*pEvent == 0U)
 	{
+		__set_PRIMASK(primask);
 		return;
 	}
 
-	if (!atomic_compare_exchange_strong(&s_DmaEpAddr, &epAddr,
-		(uint_fast8_t)NRFX_USBD_DMA_EP_NONE))
-	{
-		return;
-	}
-
-	NRF_USBD->INTENCLR = nRFUsbdDmaEndMask((uint8_t)epAddr);
+	NRF_USBD->INTENCLR = nRFUsbdDmaEndMask(epAddr);
 	*pEvent = 0;
 	__ISB();
 	__DSB();
@@ -1058,7 +1056,12 @@ static void nRFUsbdDmaReclaim(void)
 		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
 	}
 
+	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
 	atomic_flag_clear(&s_DmaRunning);
+	__ISB();
+	__DSB();
+
+	__set_PRIMASK(primask);
 }
 
 static void nRFUsbdDmaRelease(void)
