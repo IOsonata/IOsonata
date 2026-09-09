@@ -62,6 +62,11 @@ SOFTWARE.
 
 #define LOOPBACK_BUFFER_SIZE	USB_PKT_MAXLEN(USB_DEVNO, BULK)
 
+#define CUSTOM_TRACE_GET_REQ		0x5AU
+#define CUSTOM_TRACE_RESET_REQ		0x5BU
+#define CUSTOM_TRACE_MAGIC			0x314B4C42UL
+#define CUSTOM_TRACE_WORDS			16U
+
 alignas(4) static uint8_t s_RxFifoMem[CUSTOM_RXFIFO_MEMSIZE];
 alignas(4) static uint8_t s_TxFifoMem[CUSTOM_TXFIFO_MEMSIZE];
 
@@ -74,14 +79,34 @@ typedef struct __Custom_Config_Descriptor {
 } CustomConfigDesc_t;
 #pragma pack(pop)
 
+typedef struct __Custom_Bulk_Trace {
+	volatile uint32_t RxDataEvt;
+	volatile uint32_t RxFifoFullEvt;
+	volatile uint32_t RxTimeoutEvt;
+	volatile uint32_t TxTimeoutEvt;
+	volatile uint32_t TxEmptyEvt;
+	volatile uint32_t AppRxBytes;
+	volatile uint32_t AppTxBytes;
+	volatile uint32_t AppTxZero;
+} CustomBulkTrace_t;
+
 static UsbDevDesc_t s_DeviceDesc;
 static UsbDevQualDesc_t s_QualifierDesc;
 static CustomConfigDesc_t s_ConfigDesc;
 static uint8_t s_StringDesc[2U + (CUSTOM_STR_MAXLEN * 2U)];
+static CustomBulkTrace_t s_Trace;
+alignas(4) static uint32_t s_TraceReply[CUSTOM_TRACE_WORDS];
+static volatile int s_LoopPending;
+static volatile int s_LoopOffset;
 
 static const uint8_t *CustomDescHandler(uint8_t DescType, uint8_t DescIndex,
 										uint16_t LangId, UsbSpeed_t Speed,
 										uint16_t *pLength, void *pContext);
+static bool CustomRequestHandler(const UsbSetupData_t *pSetup,
+								 UsbCtrlStage_t Stage, uint8_t **ppData,
+								 uint16_t *pLength, void *pContext);
+static int CustomEventHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
+							  uint8_t *pBuffer, int Len);
 
 static const UsbdBulkCfg_t s_BulkCfg = {
 	.DevNo = USB_DEVNO,
@@ -96,9 +121,9 @@ static const UsbdBulkCfg_t s_BulkCfg = {
 	.FsMps = 0U,
 	.HsMps = 0U,
 	.Mode = USBD_BULK_MODE_BYTE,
-	.RequestHandler = nullptr,
+	.RequestHandler = CustomRequestHandler,
 	.pRequestContext = nullptr,
-	.EvtCB = nullptr,
+	.EvtCB = CustomEventHandler,
 };
 
 // These VID/PID values are for the example. Use IDs assigned to your product
@@ -121,6 +146,146 @@ static const UsbCfg_t s_UsbCfg = {
 	.DescHandler = CustomDescHandler,
 	.pDescContext = nullptr,
 };
+
+static void CustomTraceReset(void)
+{
+	memset((void *)&s_Trace, 0, sizeof(s_Trace));
+}
+
+static void CustomTraceSnapshot(void)
+{
+	UsbdBulkDev_t *pBulk = UsbdBulkGetDevHandle(g_CustomBulk.Data());
+	if (pBulk == nullptr)
+	{
+		memset(s_TraceReply, 0, sizeof(s_TraceReply));
+		return;
+	}
+
+	UsbDevIntrf_t *pIntrf = &pBulk->IntrfData;
+	const uint32_t topology =
+		(uint32_t)UsbGetConfiguration(USB_DEVNO) |
+		((uint32_t)((uint8_t)pBulk->ItfNo) << 8) |
+		((uint32_t)pBulk->EpNo << 16);
+	const uint32_t flags =
+		(pIntrf->RxPending ? 1UL : 0UL) |
+		(atomic_load(&pIntrf->DevIntrf.bTxReady) ? 2UL : 0UL) |
+		((uint32_t)pIntrf->RxDropCnt << 16);
+	const uint32_t rxUsed = pIntrf->hRxFifo != nullptr ?
+		(uint32_t)CFifoUsed(pIntrf->hRxFifo) : 0U;
+	const uint32_t rxAvail = pIntrf->hRxFifo != nullptr ?
+		(uint32_t)CFifoAvail(pIntrf->hRxFifo) : 0U;
+	const uint32_t txUsed = pIntrf->hTxFifo != nullptr ?
+		(uint32_t)CFifoUsed(pIntrf->hTxFifo) : 0U;
+	const uint32_t pending = s_LoopPending > 0 ?
+		(uint32_t)s_LoopPending : 0U;
+
+	s_TraceReply[0] = CUSTOM_TRACE_MAGIC;
+	s_TraceReply[1] = 1U;
+	s_TraceReply[2] = topology;
+	s_TraceReply[3] = pIntrf->Mps;
+	s_TraceReply[4] = flags;
+	s_TraceReply[5] = rxUsed;
+	s_TraceReply[6] = rxAvail;
+	s_TraceReply[7] = (txUsed & 0xFFFFUL) | ((pending & 0xFFFFUL) << 16);
+	s_TraceReply[8] = s_Trace.RxDataEvt;
+	s_TraceReply[9] = s_Trace.RxFifoFullEvt;
+	s_TraceReply[10] = s_Trace.RxTimeoutEvt;
+	s_TraceReply[11] = s_Trace.TxTimeoutEvt;
+	s_TraceReply[12] = s_Trace.TxEmptyEvt;
+	s_TraceReply[13] = s_Trace.AppRxBytes;
+	s_TraceReply[14] = s_Trace.AppTxBytes;
+	s_TraceReply[15] = s_Trace.AppTxZero;
+}
+
+static bool CustomRequestHandler(const UsbSetupData_t *pSetup,
+								 UsbCtrlStage_t Stage, uint8_t **ppData,
+								 uint16_t *pLength, void *pContext)
+{
+	(void)pContext;
+
+	if (pSetup == nullptr || pLength == nullptr ||
+		(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) != USB_REQTYPE_VEND ||
+		(pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT) !=
+			USB_REQTYPE_INTERFACE || pSetup->wValue != 0U)
+	{
+		return false;
+	}
+
+	if (pSetup->bRequest == CUSTOM_TRACE_GET_REQ)
+	{
+		if ((pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) !=
+			USB_REQTYPE_DIRHOST || pSetup->wLength != sizeof(s_TraceReply))
+		{
+			return false;
+		}
+
+		if (Stage == USB_CTRL_SETUP)
+		{
+			if (ppData == nullptr)
+			{
+				return false;
+			}
+			CustomTraceSnapshot();
+			*ppData = reinterpret_cast<uint8_t *>(s_TraceReply);
+			*pLength = sizeof(s_TraceReply);
+		}
+		return true;
+	}
+
+	if (pSetup->bRequest == CUSTOM_TRACE_RESET_REQ)
+	{
+		if ((pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) !=
+			USB_REQTYPE_DIRDEV || pSetup->wLength != 0U)
+		{
+			return false;
+		}
+
+		if (Stage == USB_CTRL_SETUP)
+		{
+			CustomTraceReset();
+			*pLength = 0U;
+		}
+		return true;
+	}
+
+	return false;
+}
+
+static int CustomEventHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
+							  uint8_t *pBuffer, int Len)
+{
+	(void)pDev;
+	(void)pBuffer;
+	(void)Len;
+
+	switch (EvtId)
+	{
+		case DEVINTRF_EVT_RX_DATA:
+			s_Trace.RxDataEvt++;
+			break;
+
+		case DEVINTRF_EVT_RX_FIFO_FULL:
+			s_Trace.RxFifoFullEvt++;
+			break;
+
+		case DEVINTRF_EVT_RX_TIMEOUT:
+			s_Trace.RxTimeoutEvt++;
+			break;
+
+		case DEVINTRF_EVT_TX_TIMEOUT:
+			s_Trace.TxTimeoutEvt++;
+			break;
+
+		case DEVINTRF_EVT_TX_FIFO_EMPTY:
+			s_Trace.TxEmptyEvt++;
+			break;
+
+		default:
+			break;
+	}
+
+	return 0;
+}
 
 static uint8_t CustomMaxPower(const UsbCfg_t *pCfg)
 {
@@ -352,20 +517,26 @@ int main()
 	// when VBUS appears, so a false result here is not fatal.
 	(void)UsbEnable(USB_DEVNO);
 
-	int pending = 0;
-	int offset = 0;
+	s_LoopPending = 0;
+	s_LoopOffset = 0;
+	CustomTraceReset();
 
 	while (1)
 	{
 		UsbProcess(USB_DEVNO);
 
-		if (pending > 0)
+		if (s_LoopPending > 0)
 		{
-			int n = g_CustomBulk.TxData(&buffer[offset], pending);
+			int n = g_CustomBulk.TxData(&buffer[s_LoopOffset], s_LoopPending);
 			if (n > 0)
 			{
-				offset += n;
-				pending -= n;
+				s_Trace.AppTxBytes += (uint32_t)n;
+				s_LoopOffset += n;
+				s_LoopPending -= n;
+			}
+			else
+			{
+				s_Trace.AppTxZero++;
 			}
 			continue;
 		}
@@ -373,8 +544,9 @@ int main()
 		int len = g_CustomBulk.RxData(buffer, sizeof(buffer));
 		if (len > 0)
 		{
-			pending = len;
-			offset = 0;
+			s_Trace.AppRxBytes += (uint32_t)len;
+			s_LoopPending = len;
+			s_LoopOffset = 0;
 		}
 	}
 
