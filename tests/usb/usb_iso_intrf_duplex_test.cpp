@@ -4,8 +4,8 @@
 
 #include "usb/usb_iso.h"
 
-static_assert(std::is_base_of<UsbIntrf, UsbIsoIntrf>::value,
-	"UsbIsoIntrf must derive from UsbIntrf");
+static_assert(std::is_base_of<DeviceIntrf, UsbIsoIntrf>::value,
+	"UsbIsoIntrf must present the DeviceIntrf API");
 
 static uint8_t *s_OutBuffer;
 static uint8_t *s_InBuffer;
@@ -141,9 +141,9 @@ int main(void)
 	cfg.TxHandler = TxFrame;
 
 	CHECK(UsbIsoIntrfInit(&iso, &cfg));
-	CHECK(iso.pIntrfData->Mode == USB_INTRF_MODE_ISO);
-	CHECK(iso.pIntrfData->hRxFifo == nullptr);
-	CHECK(iso.pIntrfData->hTxFifo == nullptr);
+	CHECK(iso.IntrfData.Mode == USB_INTRF_MODE_ISO);
+	CHECK(iso.IntrfData.hRxFifo == nullptr);
+	CHECK(iso.IntrfData.hTxFifo == nullptr);
 	CHECK(UsbIsoIntrfOpen(&iso, 49U, 1U));
 	CHECK(s_OpenCount == 2);
 

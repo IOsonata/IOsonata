@@ -175,8 +175,12 @@ typedef struct __Bt_Hci_Usb_Config {
 	DevIntrfEvtHandler_t EvtCB;
 } BtHciUsbCfg_t;
 
+#pragma pack(pop)
+
+// Natural alignment: IntrfData and ScoIso embed DevIntrf_t whose pointer and
+// atomic members must stay naturally aligned on 64-bit host test builds.
 typedef struct __Bt_Hci_Usb_Dev {
-	UsbDevIntrf_t *pAcl;
+	UsbDevIntrf_t IntrfData;		//!< ACL endpoint data path, owned by value
 	UsbIsoIntrf_t ScoIso;
 	BtHciUsbRxData_t AclRxData;
 	BtHciUsbTxData_t AclTxData;
@@ -236,15 +240,11 @@ typedef struct __Bt_Hci_Usb_Dev {
 	uint32_t ScoTxBuffer[(BT_HCI_USB_SCO_MAX_SIZE + 3U) / 4U];
 } BtHciUsbDev_t;
 
-#pragma pack(pop)
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
-				 UsbDevIntrf_t * const pAcl,
-				 const BtHciUsbCfg_t *pCfg);
+bool BtHciUsbInit(BtHciUsbDev_t * const pHci, const BtHciUsbCfg_t *pCfg);
 
 /** Build the Bluetooth IAD, HCI interface/endpoints and sync alt-0 fragment. */
 bool BtHciUsbMakeDesc(BtHciUsbDesc_t *pDesc, const BtHciUsbDev_t *pHci,
@@ -267,15 +267,49 @@ bool BtHciUsbRequestToSend(BtHciUsbDev_t *pHci, int NbBytes);
 #ifdef __cplusplus
 }
 
-class BtHciUsb : public UsbIntrf {
+class BtHciUsb : public DeviceIntrf {
 public:
 	BtHciUsb() = default;
+	BtHciUsb(const BtHciUsb &) = delete;
+	BtHciUsb &operator = (const BtHciUsb &) = delete;
 
 	bool Init(const BtHciUsbCfg_t &Cfg) {
-		return BtHciUsbInit(&vBtHciUsb, &vUsbDevIntrf, &Cfg);
+		return BtHciUsbInit(&vBtHciUsb, &Cfg);
 	}
 
-	DevIntrf_t *Data(void) { return static_cast<DevIntrf_t *>(*this); }
+	operator DevIntrf_t * () override {
+		return &vBtHciUsb.IntrfData.DevIntrf;
+	}
+	operator BtHciUsbDev_t * () { return &vBtHciUsb; }
+	DevIntrf_t *Data(void) { return &vBtHciUsb.IntrfData.DevIntrf; }
+
+	uint32_t Rate(uint32_t DataRate) override {
+		return DeviceIntrfSetRate(&vBtHciUsb.IntrfData.DevIntrf, DataRate);
+	}
+
+	uint32_t Rate(void) override {
+		return DeviceIntrfGetRate(&vBtHciUsb.IntrfData.DevIntrf);
+	}
+
+	__attribute__((always_inline))
+	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTx(&vBtHciUsb.IntrfData.DevIntrf, DevAddr, pData, DataLen);
+	}
+
+	__attribute__((always_inline))
+	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRx(&vBtHciUsb.IntrfData.DevIntrf, DevAddr, pBuff, BuffLen);
+	}
+
+	__attribute__((always_inline))
+	int TxData(const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTxData(&vBtHciUsb.IntrfData.DevIntrf, pData, DataLen);
+	}
+
+	__attribute__((always_inline))
+	int RxData(uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRxData(&vBtHciUsb.IntrfData.DevIntrf, pBuff, BuffLen);
+	}
 
 	bool MakeDesc(BtHciUsbDesc_t *pDesc, UsbSpeed_t Speed) const {
 		return BtHciUsbMakeDesc(pDesc, &vBtHciUsb, Speed);

@@ -87,15 +87,15 @@ static uint8_t UsbdCdcNotifInterval(UsbdCdcDev_t *pCdc)
 
 bool UsbdCdcPortIsOpen(const UsbdCdcDev_t * const pCdc)
 {
-	return pCdc != nullptr && pCdc->pIntrfData->Mps > 0U &&
+	return pCdc != nullptr && pCdc->IntrfData.Mps > 0U &&
 		   (pCdc->ControlLineState & USB_CDC_CTRL_LINE_STATE_DTR) != 0U;
 }
 
 static void UsbdCdcNotifyPortState(UsbdCdcDev_t *pCdc, bool Open)
 {
-	if (pCdc->pIntrfData->DevIntrf.EvtCB != nullptr)
+	if (pCdc->IntrfData.DevIntrf.EvtCB != nullptr)
 	{
-		pCdc->pIntrfData->DevIntrf.EvtCB(&pCdc->pIntrfData->DevIntrf,
+		pCdc->IntrfData.DevIntrf.EvtCB(&pCdc->IntrfData.DevIntrf,
 								 DEVINTRF_EVT_STATECHG,
 								 nullptr, Open ? 1 : 0);
 	}
@@ -103,8 +103,8 @@ static void UsbdCdcNotifyPortState(UsbdCdcDev_t *pCdc, bool Open)
 
 static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 {
-	if (pCdc == nullptr || pCdc->pIntrfData == nullptr ||
-		pCdc->pIntrfData->Mps == 0U || !pCdc->SerialStatePending)
+	if (pCdc == nullptr || pCdc->IntrfData.Mps == 0U ||
+		!pCdc->SerialStatePending)
 	{
 		return;
 	}
@@ -156,7 +156,7 @@ static void UsbdCdcCloseEndpoints(UsbdCdcDev_t *pCdc)
 static void UsbdCdcCancelBusState(UsbdCdcDev_t *pCdc)
 {
 	pCdc->SerialStatePending = false;
-	UsbIntrfUnconfigure(pCdc->pIntrfData);
+	UsbIntrfUnconfigure(&pCdc->IntrfData);
 }
 
 static bool UsbdCdcConfig(uint8_t Configuration, void *pContext)
@@ -189,7 +189,7 @@ static bool UsbdCdcConfig(uint8_t Configuration, void *pContext)
 
 	const uint16_t dataMps = UsbdCdcMps(pCdc);
 
-	if (!UsbIntrfConfigure(pCdc->pIntrfData, dataMps))
+	if (!UsbIntrfConfigure(&pCdc->IntrfData, dataMps))
 	{
 		return false;
 	}
@@ -204,7 +204,7 @@ static bool UsbdCdcConfig(uint8_t Configuration, void *pContext)
 							 USB_ENDPATT_TRANS_BULK, dataMps, 0U))
 	{
 		UsbdCdcCloseEndpoints(pCdc);
-		UsbIntrfUnconfigure(pCdc->pIntrfData);
+		UsbIntrfUnconfigure(&pCdc->IntrfData);
 		return false;
 	}
 
@@ -223,7 +223,7 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);
 
 	if (pSetup == nullptr || pCdc == nullptr || pLength == nullptr ||
-		pCdc->pIntrfData == nullptr || pCdc->pIntrfData->Mps == 0U ||
+		pCdc->IntrfData.Mps == 0U ||
 		(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) != USB_REQTYPE_CLASS ||
 		(pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT) !=
 			USB_REQTYPE_INTERFACE ||
@@ -371,10 +371,9 @@ static void UsbdCdcPump(void *pContext)
 	UsbdCdcProcess(static_cast<UsbdCdcDev_t *>(pContext));
 }
 
-bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, UsbDevIntrf_t * const pDevIntrf,
-				 const UsbdCdcCfg_t *pCfg)
+bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 {
-	if (pCdc == nullptr || pDevIntrf == nullptr || pCfg == nullptr ||
+	if (pCdc == nullptr || pCfg == nullptr ||
 		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
 		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
 		UsbGetCfg(pCfg->DevNo) == nullptr)
@@ -382,7 +381,6 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, UsbDevIntrf_t * const pDevIntrf,
 		return false;
 	}
 
-	pCdc->pIntrfData = pDevIntrf;
 	pCdc->DevNo = pCfg->DevNo;
 	pCdc->ControlLineState = 0U;
 	pCdc->PendingControlLineState = 0U;
@@ -428,10 +426,12 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, UsbDevIntrf_t * const pDevIntrf,
 	dataCfg.pRxBuffer = UsbdCdcRxBuffer(pCdc);
 	dataCfg.pTxBuffer = UsbdCdcTxBuffer(pCdc);
 
-	if (!UsbIntrfInit(pDevIntrf, &dataCfg))
+	if (!UsbIntrfInit(&pCdc->IntrfData, &dataCfg))
 	{
 		return false;
 	}
+
+	pCdc->IntrfData.pClassContext = pCdc;
 
 	if (!UsbCtrlrEpRegister(pCdc->DevNo,
 		USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo),
@@ -477,7 +477,7 @@ void UsbdCdcSetSerialState(UsbdCdcDev_t * const pCdc, uint16_t SerialState)
 
 bool UsbdCdc::Init(const UsbdCdcCfg_t &Cfg)
 {
-	return UsbdCdcInit(&vUsbdCdc, &vUsbDevIntrf, &Cfg);
+	return UsbdCdcInit(&vUsbdCdc, &Cfg);
 }
 
 bool UsbdCdc::IsPortOpen(void)

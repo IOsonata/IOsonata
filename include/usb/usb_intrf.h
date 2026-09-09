@@ -171,59 +171,6 @@ bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);
 }
 #endif
 
-#ifdef __cplusplus
-
-class UsbIntrf : public DeviceIntrf {
-public:
-	operator DevIntrf_t * () override {
-		return &vUsbDevIntrf.DevIntrf;
-	}
-
-	bool Init(const UsbIntrfCfg_t &Cfg) {
-		return UsbIntrfInit(&vUsbDevIntrf, &Cfg);
-	}
-
-	uint32_t Rate(uint32_t DataRate) override {
-		return DeviceIntrfSetRate(&vUsbDevIntrf.DevIntrf, DataRate);
-	}
-
-	uint32_t Rate(void) override {
-		return DeviceIntrfGetRate(&vUsbDevIntrf.DevIntrf);
-	}
-
-	bool RequestToSend(int NbBytes) override {
-		return UsbIntrfRequestToSend(&vUsbDevIntrf, NbBytes);
-	}
-
-	__attribute__((always_inline))
-	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
-		return DeviceIntrfTx(&vUsbDevIntrf.DevIntrf, DevAddr, pData, DataLen);
-	}
-
-	__attribute__((always_inline))
-	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRx(&vUsbDevIntrf.DevIntrf, DevAddr, pBuff, BuffLen);
-	}
-
-	__attribute__((always_inline))
-	int TxData(const uint8_t *pData, int DataLen) override {
-		return DeviceIntrfTxData(&vUsbDevIntrf.DevIntrf, pData, DataLen);
-	}
-
-	__attribute__((always_inline))
-	int RxData(uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRxData(&vUsbDevIntrf.DevIntrf, pBuff, BuffLen);
-	}
-
-protected:
-	UsbIntrf() = default;
-	UsbIntrf(const UsbIntrf &) = delete;
-	UsbIntrf &operator = (const UsbIntrf &) = delete;
-
-	UsbDevIntrf_t vUsbDevIntrf = {};
-};
-
-#endif
 
 /** @} End of group USBD */
 

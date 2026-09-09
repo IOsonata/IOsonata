@@ -80,7 +80,7 @@ static bool UsbdBulkConfig(uint8_t Configuration, void *pContext)
 		return false;
 	}
 
-	UsbIntrfUnconfigure(pBulk->pIntrfData);
+	UsbIntrfUnconfigure(&pBulk->IntrfData);
 	if (Configuration == 0U)
 	{
 		return true;
@@ -91,7 +91,7 @@ static bool UsbdBulkConfig(uint8_t Configuration, void *pContext)
 	}
 
 	const uint16_t mps = UsbdBulkMps(pBulk);
-	if (!UsbIntrfConfigure(pBulk->pIntrfData, mps))
+	if (!UsbIntrfConfigure(&pBulk->IntrfData, mps))
 	{
 		return false;
 	}
@@ -100,7 +100,7 @@ static bool UsbdBulkConfig(uint8_t Configuration, void *pContext)
 		!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIROUT(pBulk->EpNo), mps))
 	{
 		UsbdBulkCloseEndpoints(pBulk);
-		UsbIntrfUnconfigure(pBulk->pIntrfData);
+		UsbIntrfUnconfigure(&pBulk->IntrfData);
 		return false;
 	}
 
@@ -144,7 +144,7 @@ static void UsbdBulkReset(void *pContext)
 
 	if (pBulk != nullptr)
 	{
-		UsbIntrfUnconfigure(pBulk->pIntrfData);
+		UsbIntrfUnconfigure(&pBulk->IntrfData);
 	}
 }
 
@@ -187,11 +187,9 @@ bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 	return true;
 }
 
-bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
-				  UsbDevIntrf_t * const pDevIntrf,
-				  const UsbdBulkCfg_t *pCfg)
+bool UsbdBulkInit(UsbdBulkDev_t * const pBulk, const UsbdBulkCfg_t *pCfg)
 {
-	if (pBulk == nullptr || pDevIntrf == nullptr || pCfg == nullptr ||
+	if (pBulk == nullptr || pCfg == nullptr ||
 		UsbGetCfg(pCfg->DevNo) == nullptr ||
 		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
 		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
@@ -200,7 +198,6 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
 		return false;
 	}
 
-	pBulk->pIntrfData = pDevIntrf;
 	pBulk->RequestHandler = pCfg->RequestHandler;
 	pBulk->pRequestContext = pCfg->pRequestContext;
 	pBulk->DevNo = pCfg->DevNo;
@@ -254,12 +251,19 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
 	dataCfg.pRxBuffer = UsbdBulkRxBuffer(pBulk);
 	dataCfg.pTxBuffer = UsbdBulkTxBuffer(pBulk);
 
-	return UsbIntrfInit(pDevIntrf, &dataCfg);
+	if (!UsbIntrfInit(&pBulk->IntrfData, &dataCfg))
+	{
+		return false;
+	}
+
+	pBulk->IntrfData.pClassContext = pBulk;
+
+	return true;
 }
 
 bool UsbdBulk::Init(const UsbdBulkCfg_t &Cfg)
 {
-	return UsbdBulkInit(&vUsbdBulk, &vUsbDevIntrf, &Cfg);
+	return UsbdBulkInit(&vUsbdBulk, &Cfg);
 }
 
 bool UsbdBulk::MakeDesc(UsbdBulkDesc_t *pDesc, UsbSpeed_t Speed) const

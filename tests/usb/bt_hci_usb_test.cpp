@@ -62,8 +62,7 @@ const UsbCfg_t *UsbGetCfg(int DevNo)
 bool UsbRegisterFunc(int DevNo, const UsbFuncCfg_t *pCfg)
 {
     if (DevNo != 0 || pCfg == nullptr ||
-        (((pCfg->EpInMask | pCfg->EpOutMask) & 1U) != 0U) ||
-        ((pCfg->EpInMask | pCfg->EpOutMask) != 0U && pCfg->XferHandler == nullptr))
+        (((pCfg->EpInMask | pCfg->EpOutMask) & 1U) != 0U))
         return false;
 
     if (pCfg->InterfaceCount != 0U && s_ReservedCount != 0U)

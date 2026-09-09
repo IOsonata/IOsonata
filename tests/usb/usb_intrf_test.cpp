@@ -350,12 +350,12 @@ static void TestWrap(void)
 static void TestFailedAndWrongEndpoint(void)
 {
     CHECK(Setup());
+    // Endpoint routing is the controller's job now: completions arrive only
+    // through the registered handler, so only the failed-result path remains
+    // observable at this layer.
     const int used = CFifoUsed(s_Intrf.hRxFifo);
-    UsbIntrfXferComplete(&s_Intrf, USB_ENDPADDR_DIROUT(2U), 0,
-                         USB_CTRLR_XFER_FAILED);
-    CHECK(s_Intrf.RxDropCnt == 0U);
-    UsbIntrfXferComplete(&s_Intrf, USB_ENDPADDR_DIROUT(EP_NO), 0,
-                         USB_CTRLR_XFER_FAILED);
+    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL, 0,
+                 USB_CTRLR_XFER_FAILED, s_OutContext);
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == used);
     CHECK(s_Intrf.RxDropCnt == 1U);
     CHECK(s_OutSubmitCnt == 0);

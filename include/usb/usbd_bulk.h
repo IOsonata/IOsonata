@@ -102,8 +102,12 @@ typedef struct __Usbd_Bulk_Config {
 	DevIntrfEvtHandler_t EvtCB;
 } UsbdBulkCfg_t;
 
+#pragma pack(pop)
+
+// Natural alignment: IntrfData embeds DevIntrf_t whose pointer and atomic
+// members must stay naturally aligned on 64-bit host test builds.
 typedef struct __Usbd_Bulk_Dev {
-	UsbDevIntrf_t *pIntrfData;
+	UsbDevIntrf_t IntrfData;		//!< Endpoint data path, owned by value
 	UsbRequestHandler_t RequestHandler;
 	void *pRequestContext;
 	int ItfNo;					//!< Internal allocation
@@ -120,15 +124,26 @@ typedef struct __Usbd_Bulk_Dev {
 						 sizeof(uint32_t)];
 } UsbdBulkDev_t;
 
-#pragma pack(pop)
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
-				  UsbDevIntrf_t * const pData,
-				  const UsbdBulkCfg_t *pCfg);
+bool UsbdBulkInit(UsbdBulkDev_t * const pBulk, const UsbdBulkCfg_t *pCfg);
+
+static inline int UsbdBulkRx(UsbdBulkDev_t * const pBulk, uint8_t *pBuff,
+							 int BuffLen) {
+	return DeviceIntrfRx(&pBulk->IntrfData.DevIntrf, 0, pBuff, BuffLen);
+}
+
+static inline int UsbdBulkTx(UsbdBulkDev_t * const pBulk, const uint8_t *pData,
+							 int DataLen) {
+	return DeviceIntrfTx(&pBulk->IntrfData.DevIntrf, 0, pData, DataLen);
+}
+
+static inline UsbdBulkDev_t *UsbdBulkGetDevHandle(DevIntrf_t * const pDevIntrf) {
+	return (UsbdBulkDev_t *)
+		((UsbDevIntrf_t *)pDevIntrf->pDevData)->pClassContext;
+}
 
 /** Build the interface plus OUT/IN endpoint descriptor fragment. */
 bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
@@ -137,13 +152,49 @@ bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 #ifdef __cplusplus
 }
 
-class UsbdBulk : public UsbIntrf {
+class UsbdBulk : public DeviceIntrf {
 public:
 	UsbdBulk() = default;
+	UsbdBulk(const UsbdBulk &) = delete;
+	UsbdBulk &operator = (const UsbdBulk &) = delete;
 
 	bool Init(const UsbdBulkCfg_t &Cfg);
 
-	DevIntrf_t *Data(void) { return static_cast<DevIntrf_t *>(*this); }
+	operator DevIntrf_t * () override { return &vUsbdBulk.IntrfData.DevIntrf; }
+	operator UsbdBulkDev_t * () { return &vUsbdBulk; }
+	DevIntrf_t *Data(void) { return &vUsbdBulk.IntrfData.DevIntrf; }
+
+	uint32_t Rate(uint32_t DataRate) override {
+		return DeviceIntrfSetRate(&vUsbdBulk.IntrfData.DevIntrf, DataRate);
+	}
+
+	uint32_t Rate(void) override {
+		return DeviceIntrfGetRate(&vUsbdBulk.IntrfData.DevIntrf);
+	}
+
+	bool RequestToSend(int NbBytes) override {
+		return UsbIntrfRequestToSend(&vUsbdBulk.IntrfData, NbBytes);
+	}
+
+	__attribute__((always_inline))
+	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTx(&vUsbdBulk.IntrfData.DevIntrf, DevAddr, pData, DataLen);
+	}
+
+	__attribute__((always_inline))
+	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRx(&vUsbdBulk.IntrfData.DevIntrf, DevAddr, pBuff, BuffLen);
+	}
+
+	__attribute__((always_inline))
+	int TxData(const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTxData(&vUsbdBulk.IntrfData.DevIntrf, pData, DataLen);
+	}
+
+	__attribute__((always_inline))
+	int RxData(uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRxData(&vUsbdBulk.IntrfData.DevIntrf, pBuff, BuffLen);
+	}
 
 	bool MakeDesc(UsbdBulkDesc_t *pDesc, UsbSpeed_t Speed) const;
 

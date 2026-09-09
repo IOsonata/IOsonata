@@ -88,7 +88,7 @@ typedef struct __Usb_Iso_Interf_Config {
 #pragma pack(pop)
 
 struct __Usb_Iso_Interf {
-	UsbDevIntrf_t *pIntrfData;
+	UsbDevIntrf_t IntrfData;		//!< Endpoint data path, owned by value
 	void *pContext;
 	UsbIsoIntrfRxHandler_t RxHandler;
 	UsbIsoIntrfTxHandler_t TxHandler;
@@ -103,10 +103,6 @@ struct __Usb_Iso_Interf {
 	bool Opened;
 	bool Suspended;
 
-	// C callers use LocalData. The C++ class binds pIntrfData to its inherited
-	// UsbIntrf object so both forms use the same UsbIntrf implementation.
-	UsbDevIntrf_t LocalData;
-
 	// One current packet per direction. UsbIntrf ISO mode uses the packet
 	// header as ownership state and registers the Data portion for DMA.
 	uint32_t RxBuffer[USB_ISO_INTRF_PACKET_WORDS];
@@ -117,12 +113,8 @@ struct __Usb_Iso_Interf {
 extern "C" {
 #endif
 
-/** Initialize a C instance using its embedded UsbIntrf data object. */
+/** Initialize an ISO interface using its embedded UsbIntrf data object. */
 bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, const UsbIsoIntrfCfg_t *pCfg);
-
-/** Bind an ISO specialization to an existing UsbIntrf data object. */
-bool UsbIsoIntrfInitData(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
-						 const UsbIsoIntrfCfg_t *pCfg);
 
 /** Open the internally assigned endpoint pair as isochronous. */
 bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval);
@@ -137,21 +129,60 @@ bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 
 static inline bool UsbIsoIntrfTxReady(const UsbIsoIntrf_t *pIntrf)
 {
-	return pIntrf != nullptr && pIntrf->pIntrfData != nullptr &&
+	return pIntrf != nullptr &&
 		pIntrf->Opened && !pIntrf->Suspended &&
-		atomic_load_explicit(&pIntrf->pIntrfData->DevIntrf.bTxReady,
+		atomic_load_explicit(&pIntrf->IntrfData.DevIntrf.bTxReady,
 			memory_order_acquire);
 }
 
 #ifdef __cplusplus
 }
 
-class UsbIsoIntrf : public UsbIntrf {
+class UsbIsoIntrf : public DeviceIntrf {
 public:
 	UsbIsoIntrf() = default;
+	UsbIsoIntrf(const UsbIsoIntrf &) = delete;
+	UsbIsoIntrf &operator = (const UsbIsoIntrf &) = delete;
 
 	bool Init(const UsbIsoIntrfCfg_t &Cfg) {
-		return UsbIsoIntrfInitData(&vUsbIsoIntrf, &vUsbDevIntrf, &Cfg);
+		return UsbIsoIntrfInit(&vUsbIsoIntrf, &Cfg);
+	}
+
+	operator DevIntrf_t * () override {
+		return &vUsbIsoIntrf.IntrfData.DevIntrf;
+	}
+	operator UsbIsoIntrf_t * () { return &vUsbIsoIntrf; }
+
+	uint32_t Rate(uint32_t DataRate) override {
+		return DeviceIntrfSetRate(&vUsbIsoIntrf.IntrfData.DevIntrf, DataRate);
+	}
+
+	uint32_t Rate(void) override {
+		return DeviceIntrfGetRate(&vUsbIsoIntrf.IntrfData.DevIntrf);
+	}
+
+	bool RequestToSend(int NbBytes) override {
+		return UsbIntrfRequestToSend(&vUsbIsoIntrf.IntrfData, NbBytes);
+	}
+
+	__attribute__((always_inline))
+	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTx(&vUsbIsoIntrf.IntrfData.DevIntrf, DevAddr, pData, DataLen);
+	}
+
+	__attribute__((always_inline))
+	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRx(&vUsbIsoIntrf.IntrfData.DevIntrf, DevAddr, pBuff, BuffLen);
+	}
+
+	__attribute__((always_inline))
+	int TxData(const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTxData(&vUsbIsoIntrf.IntrfData.DevIntrf, pData, DataLen);
+	}
+
+	__attribute__((always_inline))
+	int RxData(uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRxData(&vUsbIsoIntrf.IntrfData.DevIntrf, pBuff, BuffLen);
 	}
 
 	bool Open(uint16_t Mps, uint8_t Interval) {
@@ -168,7 +199,7 @@ public:
 	}
 
 	bool TxReady(void) const { return UsbIsoIntrfTxReady(&vUsbIsoIntrf); }
-	DevIntrf_t *Data(void) { return static_cast<DevIntrf_t *>(*this); }
+	DevIntrf_t *Data(void) { return &vUsbIsoIntrf.IntrfData.DevIntrf; }
 
 private:
 	UsbIsoIntrf_t vUsbIsoIntrf = {};
