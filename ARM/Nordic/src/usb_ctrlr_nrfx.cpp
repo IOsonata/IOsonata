@@ -1216,6 +1216,13 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 	uint8_t *pBuffer = epNum == 0U ? s_Ep0Bounce :
 		nRFUsbGetEpReg(pQue->EpAddr)->pBuffer;
 
+	// A queued request can become stale after completion, reset or a
+	// refused duplicate submission. Never start DMA for inactive state.
+	if (!pXfer->Started || pXfer->ActualLen > pXfer->TotalLen)
+	{
+		return false;
+	}
+
 	if (isIn)
 	{
 		NRF_USBD->EPIN[epNum].PTR = (uint32_t)(uintptr_t)pBuffer;
@@ -1234,7 +1241,6 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 	return true;
 }
-
 
 static void nRFUsbdServicePending(void)
 {
@@ -1989,12 +1995,21 @@ bool nRFUsbRegDataEpXfer(uint8_t EpAddr, uint16_t Length)
 		return nRFUsbRegEpXfer(EpAddr, NULL, Length);
 	}
 
+	const uint32_t state = DisableInterrupt();
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
+	if (pXfer->Started || pXfer->Mps == 0U)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+
 	pXfer->TotalLen = Length;
 	pXfer->ActualLen = 0U;
 	pXfer->Started = true;
 
 	nRFUsbdQueXfer(EpAddr, Length);
+	EnableInterrupt(state);
+
 	if (!nRFUsbdDeferFromInterrupt())
 	{
 		nRFUsbdServicePending();
@@ -2173,15 +2188,37 @@ static void nRFUsbdHandleOutEnd(uint8_t EpNum)
 
 	if (transferLen == pXfer->Mps && pXfer->ActualLen < pXfer->TotalLen)
 	{
-		if (EpNum == 0)
+		if (EpNum == 0U)
 		{
 			nRFUsbdQueueEp0RcvOut();
 		}
 	}
 	else
 	{
+		const bool dataPending = EpNum != 0U && pXfer->DataReceived;
 		pXfer->Started = false;
+		if (EpNum != 0U)
+		{
+			pXfer->DataReceived = false;
+		}
+
+		// Publish the completed packet before asking the owner about the
+		// next buffered OUT packet. The owner may become full on this one.
 		nRFUsbdEmitXfer(EpNum, pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
+
+		if (dataPending)
+		{
+			nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNum);
+			if (pReg->bBlocking)
+			{
+				nRFUsbEpRegisteredEvent(EpNum, USB_CTRLR_EVT_DRDY, 0U,
+					USB_CTRLR_XFER_SUCCESS);
+			}
+			else
+			{
+				(void)nRFUsbRegDataEpXfer(EpNum, pXfer->Mps);
+			}
+		}
 	}
 }
 
@@ -2189,16 +2226,26 @@ static void nRFUsbdHandleOutData(uint8_t EpNum)
 {
 	if (EpNum != 0U)
 	{
+		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
+		if (pXfer->Started)
+		{
+			// nRF52 data endpoints can report another OUT packet while the
+			// current packet is still waiting for or using shared EasyDMA.
+			// Keep one pending indication instead of submitting the same
+			// endpoint twice against one transfer state object.
+			pXfer->DataReceived = true;
+			return;
+		}
+
 		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNum);
 		if (pReg->bBlocking)
 		{
 			nRFUsbEpRegisteredEvent(EpNum, USB_CTRLR_EVT_DRDY, 0U,
-							 USB_CTRLR_XFER_SUCCESS);
+				USB_CTRLR_XFER_SUCCESS);
 		}
 		else
 		{
-			(void)nRFUsbRegDataEpXfer(EpNum,
-				nRFUsbdGetXfer(EpNum)->Mps);
+			(void)nRFUsbRegDataEpXfer(EpNum, pXfer->Mps);
 		}
 		return;
 	}
