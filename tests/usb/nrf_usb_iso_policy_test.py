@@ -37,7 +37,7 @@ assert "USB_ISO_EPIN_MASK_0 = (1U << 8)" in header
 assert "USB_ISO_EPOUT_MASK_0 = (1U << 8)" in header
 assert "NRF_USB_EP_COUNT = 9" in source
 assert "USBD_ISOSPLIT_SPLIT_HalfIN" in open_ep
-assert "USBD_ISOINCONFIG_RESPONSE_NoResp" in open_ep
+assert "USBD_ISOINCONFIG_RESPONSE_ZeroData" in open_ep
 assert service.index("nRFUsbdStartIsoNow()") < service.index("CFifoGet(s_hQue)")
 assert "NRF_USBD->SIZE.ISOOUT" in interrupt
 assert "nRFUsbdHandleIsoInEnd();" in interrupt
