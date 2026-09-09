@@ -4,19 +4,19 @@
 @brief	Reusable USB isochronous interface.
 
 UsbIsoIntrf is the isochronous specialization of UsbIntrf. UsbIntrf remains the
-single endpoint-pair data engine: it owns the RX/TX CFifos, fixed controller
-buffers, endpoint registration, UsbCtrlrEpXfer submissions and transfer
-completion callback. UsbIsoIntrf configures that engine in non-blocking packet
-mode and owns only isochronous endpoint lifecycle and frame semantics.
+single endpoint-pair DeviceIntrf implementation, but ISO selects a different
+data policy from byte/packet traffic: one statically reserved RX slot and one
+TX slot, no CFifo queue.
 
 The layering is therefore:
 
     UsbIsoIntrf
-        -> UsbIntrf (non-blocking packet mode)
-            -> UsbCtrlrEpXfer / registered endpoint callback
+        -> UsbIntrf (ISO mode)
+            -> registered endpoint callback / controller ISO scheduling
 
-No ISO transfer is routed through UsbCore or a USB function callback, and
-UsbIsoIntrf does not register a second controller completion path.
+Each ISO slot is one UsbPkt_t-sized block. Hdr.Reserved carries the
+USB_INTRF_ISO_READY flag and Hdr.Length carries the current payload length.
+Length zero is therefore a valid ISO packet and is distinct from a free slot.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 8, 2026
@@ -58,14 +58,8 @@ SOFTWARE.
   */
 
 #define USB_ISO_INTRF_MAX_MPS		((uint16_t)USB_PKT_MAXLEN(0, ISO))
-#define USB_ISO_INTRF_BUFFER_WORDS \
-	(((USB_ISO_INTRF_MAX_MPS > 0U ? USB_ISO_INTRF_MAX_MPS : 1U) + 3U) / 4U)
 #define USB_ISO_INTRF_PKT_BLKSIZE \
 	USB_INTRF_PKT_BLKSIZE(USB_ISO_INTRF_MAX_MPS)
-#define USB_ISO_INTRF_FIFO_MEMSIZE \
-	CFIFO_TOTAL_MEMSIZE(1U, USB_ISO_INTRF_PKT_BLKSIZE)
-#define USB_ISO_INTRF_FIFO_WORDS \
-	((USB_ISO_INTRF_FIFO_MEMSIZE + 3U) / 4U)
 #define USB_ISO_INTRF_PACKET_WORDS \
 	((USB_ISO_INTRF_PKT_BLKSIZE + 3U) / 4U)
 
@@ -103,30 +97,20 @@ struct __Usb_Iso_Interf {
 	uint32_t RxEmptyCnt;
 	uint32_t TxEmptyCnt;
 	uint16_t Mps;
-	uint16_t TxLength;
 	uint8_t EpNo;
 	uint8_t Interval;
 	uint8_t Attributes;
 	bool Opened;
 	bool Suspended;
-	bool TxActive;
 
 	// C callers use LocalData. The C++ class binds pIntrfData to its inherited
 	// UsbIntrf object so both forms use the same UsbIntrf implementation.
 	UsbDevIntrf_t LocalData;
 
-	// UsbIntrf requires CFifos even though ISO is not a queued/retried transport.
-	// One packet slot per direction is enough: RX is drained by the ISO adapter
-	// on completion and SendFrame permits only one active IN frame.
-	uint32_t RxFifoMem[USB_ISO_INTRF_FIFO_WORDS];
-	uint32_t TxFifoMem[USB_ISO_INTRF_FIFO_WORDS];
-
-	// Fixed controller DMA staging buffers registered once by UsbIntrfInit().
-	uint32_t RxBuffer[USB_ISO_INTRF_BUFFER_WORDS];
-	uint32_t TxBuffer[USB_ISO_INTRF_BUFFER_WORDS];
-
-	// One UsbIntrf packet-mode block used to queue SendFrame through UsbIntrf.
-	uint32_t TxPacket[USB_ISO_INTRF_PACKET_WORDS];
+	// One current packet per direction. UsbIntrf ISO mode uses the packet
+	// header as ownership state and registers the Data portion for DMA.
+	uint32_t RxBuffer[USB_ISO_INTRF_PACKET_WORDS];
+	uint32_t TxBuffer[USB_ISO_INTRF_PACKET_WORDS];
 };
 
 #ifdef __cplusplus
@@ -147,14 +131,16 @@ void UsbIsoIntrfReset(UsbIsoIntrf_t *pIntrf);
 void UsbIsoIntrfSuspend(UsbIsoIntrf_t *pIntrf);
 bool UsbIsoIntrfResume(UsbIsoIntrf_t *pIntrf);
 
-/** Queue one ISO IN frame through UsbIntrf packet mode. */
+/** Publish one ISO IN frame into the current TX slot. */
 bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 						  uint16_t Length);
 
 static inline bool UsbIsoIntrfTxReady(const UsbIsoIntrf_t *pIntrf)
 {
-	return pIntrf != nullptr && pIntrf->Opened && !pIntrf->Suspended &&
-		!pIntrf->TxActive;
+	return pIntrf != nullptr && pIntrf->pIntrfData != nullptr &&
+		pIntrf->Opened && !pIntrf->Suspended &&
+		atomic_load_explicit(&pIntrf->pIntrfData->DevIntrf.bTxReady,
+			memory_order_acquire);
 }
 
 #ifdef __cplusplus

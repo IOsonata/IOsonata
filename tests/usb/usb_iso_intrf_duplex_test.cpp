@@ -13,8 +13,11 @@ static UsbCtrlrEpHandler_t s_OutHandler;
 static UsbCtrlrEpHandler_t s_InHandler;
 static void *s_OutContext;
 static void *s_InContext;
+static bool s_OutBusy;
 static bool s_InBusy;
+static uint16_t s_OutLength;
 static uint16_t s_InLength;
+static uint8_t s_OutData[USB_ISO_INTRF_MAX_MPS];
 static uint8_t s_InData[USB_ISO_INTRF_MAX_MPS];
 static int s_OpenCount;
 static int s_CloseCount;
@@ -64,8 +67,11 @@ bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
 {
 	if (!USB_ENDPADDR_IS_IN(EpAddr))
 	{
+		if (s_OutBusy) return false;
+		s_OutBusy = true;
 		s_OutXferCount++;
-		return false;
+		if (s_OutLength > 0U) memcpy(s_OutBuffer, s_OutData, s_OutLength);
+		return true;
 	}
 	if (s_InBusy || Length > sizeof(s_InData))
 		return false;
@@ -106,7 +112,13 @@ static void TxFrame(UsbIsoIntrf_t *, uint16_t,
 
 static void Receive(const uint8_t *pData, uint16_t Length)
 {
-	if (Length > 0U) memcpy(s_OutBuffer, pData, Length);
+	if (Length > 0U) memcpy(s_OutData, pData, Length);
+	s_OutLength = Length;
+	s_OutHandler(USB_ENDPADDR_DIROUT(8U), USB_CTRLR_EVT_DRDY,
+		0U, USB_CTRLR_XFER_SUCCESS, s_OutContext);
+	CHECK(s_OutBusy);
+	if (!s_OutBusy) return;
+	s_OutBusy = false;
 	s_OutHandler(USB_ENDPADDR_DIROUT(8U), USB_CTRLR_EVT_XFER_CMPL,
 		Length, USB_CTRLR_XFER_SUCCESS, s_OutContext);
 }
@@ -130,6 +142,9 @@ int main(void)
 	cfg.TxHandler = TxFrame;
 
 	CHECK(UsbIsoIntrfInit(&iso, &cfg));
+	CHECK(iso.pIntrfData->Mode == USB_INTRF_MODE_ISO);
+	CHECK(iso.pIntrfData->hRxFifo == nullptr);
+	CHECK(iso.pIntrfData->hTxFifo == nullptr);
 	CHECK(UsbIsoIntrfOpen(&iso, 49U, 1U));
 	CHECK(s_OpenCount == 2);
 
@@ -139,17 +154,18 @@ int main(void)
 	CHECK(s_InBusy);
 	CHECK(memcmp(s_InData, tx, sizeof(tx)) == 0);
 
-	// OUT is controller-direct and must remain independent while IN is active.
+	// USB is serial, but the logical IN and OUT slots are independent. An OUT
+	// service can complete while the IN slot remains owned by its transfer.
 	Receive(rx, sizeof(rx));
 	CHECK(s_RxCount == 1);
 	CHECK(s_LastRxLen == sizeof(rx));
 	CHECK(memcmp(s_LastRx, rx, sizeof(rx)) == 0);
 	CHECK(s_InBusy);
-	CHECK(s_OutXferCount == 0);
+	CHECK(s_OutXferCount == 1);
 
 	CompleteIn();
 	CHECK(s_TxCount == 1);
-	CHECK(!iso.TxActive);
+	CHECK(UsbIsoIntrfTxReady(&iso));
 
 	UsbIsoIntrfClose(&iso);
 	CHECK(s_CloseCount == 2);

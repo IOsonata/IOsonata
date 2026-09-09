@@ -37,10 +37,8 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "usb/usb_intrf.h"
 
-
 static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf);
 static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
-static void UsbIntrfRxResumePending(UsbDevIntrf_t *pIntrf);
 
 static inline __attribute__((always_inline))
 void UsbIntrfSetTxIdle(UsbDevIntrf_t *pIntrf)
@@ -54,6 +52,23 @@ bool UsbIntrfTakeTx(UsbDevIntrf_t *pIntrf)
 {
 	return atomic_exchange_explicit(&pIntrf->DevIntrf.bTxReady, false,
 									memory_order_acquire);
+}
+
+static inline __attribute__((always_inline))
+bool UsbIntrfIsoReady(const UsbPkt_t *pPacket)
+{
+	return pPacket != nullptr &&
+		(pPacket->Hdr.Reserved & USB_INTRF_ISO_READY) != 0U;
+}
+
+static inline __attribute__((always_inline))
+void UsbIntrfIsoClear(UsbPkt_t *pPacket)
+{
+	if (pPacket != nullptr)
+	{
+		pPacket->Hdr.Length = 0U;
+		pPacket->Hdr.Reserved = 0U;
+	}
 }
 
 static void UsbIntrfTxFailure(UsbDevIntrf_t *pIntrf, uint16_t Length)
@@ -200,10 +215,45 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 	if (cnt > 0 && pIntrf->RxPending)
 	{
 		pIntrf->RxPending = false;
-		(void)UsbCtrlrEpXfer(pIntrf->DevNo, USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps);
+		(void)UsbCtrlrEpXfer(pIntrf->DevNo,
+			USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps);
 	}
 
 	return cnt;
+}
+
+static int UsbIntrfRxIso(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
+						 int BufferLen)
+{
+	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
+	if (pIntrf == nullptr || pIntrf->Mode != USB_INTRF_MODE_ISO ||
+		pIntrf->pRxIsoBuffer == nullptr || BufferLen < 0)
+	{
+		return 0;
+	}
+
+	const uint32_t state = DisableInterrupt();
+	UsbPkt_t *pPacket = pIntrf->pRxIsoBuffer;
+	if (!UsbIntrfIsoReady(pPacket))
+	{
+		EnableInterrupt(state);
+		return 0;
+	}
+
+	const uint16_t len = pPacket->Hdr.Length;
+	if ((len > 0U && pBuffer == nullptr) || BufferLen < (int)len)
+	{
+		EnableInterrupt(state);
+		return 0;
+	}
+
+	if (len > 0U)
+	{
+		memcpy(pBuffer, pPacket->Data, len);
+	}
+	UsbIntrfIsoClear(pPacket);
+	EnableInterrupt(state);
+	return len;
 }
 
 static void UsbIntrfStopRx(DevIntrf_t * const)
@@ -301,6 +351,43 @@ static int UsbIntrfTxBytes(DevIntrf_t * const pDevIntrf,
 	return cnt;
 }
 
+static int UsbIntrfTxIso(DevIntrf_t * const pDevIntrf,
+						 const uint8_t *pData, int DataLen)
+{
+	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
+	if (pIntrf == nullptr || pIntrf->Mode != USB_INTRF_MODE_ISO ||
+		pIntrf->Mps == 0U || pIntrf->pTxIsoBuffer == nullptr ||
+		DataLen < 0 || DataLen > (int)pIntrf->Mps ||
+		(DataLen > 0 && pData == nullptr))
+	{
+		return 0;
+	}
+
+	if (!UsbIntrfTakeTx(pIntrf))
+	{
+		return 0;
+	}
+
+	UsbPkt_t *pPacket = pIntrf->pTxIsoBuffer;
+	if (DataLen > 0)
+	{
+		memcpy(pPacket->Data, pData, (size_t)DataLen);
+	}
+	pPacket->Hdr.Length = (uint16_t)DataLen;
+	pPacket->Hdr.Reserved = USB_INTRF_ISO_READY;
+
+	if (!UsbCtrlrEpXfer(pIntrf->DevNo,
+		USB_ENDPADDR_DIRIN(pIntrf->EpNo), (uint16_t)DataLen))
+	{
+		UsbIntrfIsoClear(pPacket);
+		UsbIntrfSetTxIdle(pIntrf);
+		UsbIntrfTxFailure(pIntrf, (uint16_t)DataLen);
+		return 0;
+	}
+
+	return DataLen;
+}
+
 static int UsbIntrfTxSrData(DevIntrf_t * const pDevIntrf,
 							 const uint8_t *pData, int DataLen)
 {
@@ -326,6 +413,34 @@ static void *UsbIntrfGetHandle(DevIntrf_t * const pDevIntrf)
 	return pDevIntrf->pDevData;
 }
 
+static void UsbIntrfIsoRxComplete(UsbDevIntrf_t *pIntrf, uint16_t Length)
+{
+	UsbPkt_t *pPacket = pIntrf->pRxIsoBuffer;
+	if (pPacket == nullptr || Length > pIntrf->Mps)
+	{
+		pIntrf->RxDropCnt++;
+		return;
+	}
+
+	if (UsbIntrfIsoReady(pPacket))
+	{
+		pIntrf->RxDropCnt++;
+	}
+
+	pPacket->Hdr.Length = Length;
+	pPacket->Hdr.Reserved = USB_INTRF_ISO_READY;
+
+	if (pIntrf->DevIntrf.EvtCB != nullptr)
+	{
+		const int processed = pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
+			DEVINTRF_EVT_RX_DATA, pPacket->Data, Length);
+		if (processed >= (int)Length)
+		{
+			UsbIntrfIsoClear(pPacket);
+		}
+	}
+}
+
 static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 							   uint16_t Length,
 							   UsbCtrlrXferResult_t Result,
@@ -336,6 +451,18 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 	switch (Event)
 	{
 		case USB_CTRLR_EVT_DRDY:
+			if (pIntrf->Mode == USB_INTRF_MODE_ISO)
+			{
+				if (UsbIntrfIsoReady(pIntrf->pRxIsoBuffer))
+				{
+					pIntrf->RxDropCnt++;
+					return;
+				}
+				(void)UsbCtrlrEpXfer(pIntrf->DevNo,
+					USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps);
+				return;
+			}
+
 			if (CFifoAvail(pIntrf->hRxFifo) <= 0)
 			{
 				pIntrf->RxPending = true;
@@ -343,13 +470,34 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 			}
 
 			(void)UsbCtrlrEpXfer(pIntrf->DevNo,
-								USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps);
+				USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps);
 			pIntrf->RxPending = false;
 			return;
 
 		case USB_CTRLR_EVT_XFER_CMPL:
 			if (USB_ENDPADDR_IS_IN(EpAddr))
 			{
+				if (pIntrf->Mode == USB_INTRF_MODE_ISO)
+				{
+					const uint16_t requested = pIntrf->pTxIsoBuffer != nullptr ?
+						pIntrf->pTxIsoBuffer->Hdr.Length : Length;
+					UsbIntrfIsoClear(pIntrf->pTxIsoBuffer);
+					UsbIntrfSetTxIdle(pIntrf);
+
+					if (Result != USB_CTRLR_XFER_SUCCESS)
+					{
+						UsbIntrfTxFailure(pIntrf, requested);
+						return;
+					}
+
+					if (pIntrf->DevIntrf.EvtCB != nullptr)
+					{
+						pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
+							DEVINTRF_EVT_TX_FIFO_EMPTY, nullptr, Length);
+					}
+					return;
+				}
+
 				if (Result == USB_CTRLR_XFER_FAILED)
 				{
 					UsbIntrfTxFailure(pIntrf, Length);
@@ -364,14 +512,19 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 				if (pIntrf->DevIntrf.EvtCB != nullptr)
 				{
 					pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-										   DEVINTRF_EVT_TX_FIFO_EMPTY,
-										   nullptr, 0);
+						DEVINTRF_EVT_TX_FIFO_EMPTY, nullptr, 0);
 				}
 				return;
 			}
 
 			if (Result == USB_CTRLR_XFER_SUCCESS)
 			{
+				if (pIntrf->Mode == USB_INTRF_MODE_ISO)
+				{
+					UsbIntrfIsoRxComplete(pIntrf, Length);
+					return;
+				}
+
 				UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(
 					CFifoPut(pIntrf->hRxFifo));
 				pPacket->Hdr.Length = Length;
@@ -387,11 +540,10 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 					if (used >= pIntrf->hRxFifo->MaxIdxCnt)
 					{
 						pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-										   DEVINTRF_EVT_RX_FIFO_FULL,
-										   nullptr, used);
+							DEVINTRF_EVT_RX_FIFO_FULL, nullptr, used);
 					}
 					pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-										   DEVINTRF_EVT_RX_DATA, nullptr, used);
+						DEVINTRF_EVT_RX_DATA, nullptr, used);
 				}
 				return;
 			}
@@ -402,13 +554,18 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 				if (pIntrf->DevIntrf.EvtCB != nullptr)
 				{
 					pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-										   DEVINTRF_EVT_RX_TIMEOUT,
-										   nullptr, Length);
+						DEVINTRF_EVT_RX_TIMEOUT, nullptr, Length);
 				}
 			}
 			return;
 
 		case USB_CTRLR_EVT_CANCEL:
+			if (pIntrf->Mode == USB_INTRF_MODE_ISO &&
+				USB_ENDPADDR_IS_IN(EpAddr))
+			{
+				UsbIntrfIsoClear(pIntrf->pTxIsoBuffer);
+				UsbIntrfSetTxIdle(pIntrf);
+			}
 			return;
 
 		default:
@@ -420,39 +577,75 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 {
 	if (pIntrf == nullptr || pCfg == nullptr ||
 		pCfg->EpNo == 0U || pCfg->EpNo > USB_ENDPADDR_NUM_MASK ||
-		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
-		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
 		pCfg->pRxBuffer == nullptr || pCfg->pTxBuffer == nullptr ||
-		pCfg->BufferSize == 0U || pCfg->TxFifoBlkSize == 0U ||
-		(((uintptr_t)pCfg->pRxFifoMem & 3U) != 0U) ||
-		(((uintptr_t)pCfg->pTxFifoMem & 3U) != 0U) ||
+		pCfg->BufferSize == 0U ||
 		(((uintptr_t)pCfg->pRxBuffer & 3U) != 0U) ||
 		(((uintptr_t)pCfg->pTxBuffer & 3U) != 0U))
 	{
 		return false;
 	}
 
-	pIntrf->hTxFifo = CFifoInit(pCfg->pTxFifoMem,
-								 (uint32_t)pCfg->TxFifoMemSize,
-								 pCfg->TxFifoBlkSize, pCfg->bBlocking);
-	pIntrf->hRxFifo = CFifoInit(pCfg->pRxFifoMem,
-								 (uint32_t)pCfg->RxFifoMemSize,
-								 USB_INTRF_PKT_BLKSIZE(pCfg->BufferSize),
-								 pCfg->bBlocking);
-	if (pIntrf->hTxFifo == nullptr || pIntrf->hRxFifo == nullptr)
+	UsbIntrfMode_t mode = pCfg->Mode;
+	if (mode == USB_INTRF_MODE_AUTO)
+	{
+		mode = pCfg->TxFifoBlkSize == 1U ?
+			USB_INTRF_MODE_BYTE : USB_INTRF_MODE_PACKET;
+	}
+	if (mode != USB_INTRF_MODE_BYTE && mode != USB_INTRF_MODE_PACKET &&
+		mode != USB_INTRF_MODE_ISO)
 	{
 		return false;
 	}
 
+	pIntrf->hTxFifo = nullptr;
+	pIntrf->hRxFifo = nullptr;
+	pIntrf->pRxIsoBuffer = nullptr;
+	pIntrf->pTxIsoBuffer = nullptr;
+
+	if (mode == USB_INTRF_MODE_ISO)
+	{
+		pIntrf->pRxIsoBuffer = reinterpret_cast<UsbPkt_t *>(pCfg->pRxBuffer);
+		pIntrf->pTxIsoBuffer = reinterpret_cast<UsbPkt_t *>(pCfg->pTxBuffer);
+		UsbIntrfIsoClear(pIntrf->pRxIsoBuffer);
+		UsbIntrfIsoClear(pIntrf->pTxIsoBuffer);
+		pIntrf->pRxBuffer = pIntrf->pRxIsoBuffer->Data;
+		pIntrf->pTxBuffer = pIntrf->pTxIsoBuffer->Data;
+	}
+	else
+	{
+		if (pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
+			pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
+			pCfg->TxFifoBlkSize == 0U ||
+			(((uintptr_t)pCfg->pRxFifoMem & 3U) != 0U) ||
+			(((uintptr_t)pCfg->pTxFifoMem & 3U) != 0U))
+		{
+			return false;
+		}
+
+		pIntrf->hTxFifo = CFifoInit(pCfg->pTxFifoMem,
+			(uint32_t)pCfg->TxFifoMemSize, pCfg->TxFifoBlkSize,
+			pCfg->bBlocking);
+		pIntrf->hRxFifo = CFifoInit(pCfg->pRxFifoMem,
+			(uint32_t)pCfg->RxFifoMemSize,
+			USB_INTRF_PKT_BLKSIZE(pCfg->BufferSize), pCfg->bBlocking);
+		if (pIntrf->hTxFifo == nullptr || pIntrf->hRxFifo == nullptr)
+		{
+			return false;
+		}
+
+		pIntrf->pRxBuffer = pCfg->pRxBuffer;
+		pIntrf->pTxBuffer = pCfg->pTxBuffer;
+	}
+
 	pIntrf->DevNo = pCfg->DevNo;
 	pIntrf->EpNo = pCfg->EpNo;
-	pIntrf->pRxBuffer = pCfg->pRxBuffer;
-	pIntrf->pTxBuffer = pCfg->pTxBuffer;
 	pIntrf->BufferSize = pCfg->BufferSize;
 	pIntrf->Mps = 0U;
 	pIntrf->RxDropCnt = 0U;
 	pIntrf->bBlocking = pCfg->bBlocking;
 	pIntrf->RxPending = false;
+	pIntrf->Mode = mode;
+	pIntrf->EpSend = nullptr;
 	pIntrf->pClassContext = nullptr;
 
 	pIntrf->DevIntrf.pDevData = pIntrf;
@@ -467,19 +660,32 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	pIntrf->DevIntrf.GetRate = UsbIntrfGetRate;
 	pIntrf->DevIntrf.SetRate = UsbIntrfSetRate;
 	pIntrf->DevIntrf.StartRx = UsbIntrfStartRx;
-	pIntrf->DevIntrf.RxData = UsbIntrfRxData;
 	pIntrf->DevIntrf.StopRx = UsbIntrfStopRx;
 	pIntrf->DevIntrf.StartTx = UsbIntrfStartTx;
-	if (pCfg->TxFifoBlkSize == 1)
+
+	switch (mode)
 	{
-		pIntrf->DevIntrf.TxData = UsbIntrfTxBytes;
-		pIntrf->EpSend = UsbIntrfEpSendByteMode;
+		case USB_INTRF_MODE_BYTE:
+			pIntrf->DevIntrf.RxData = UsbIntrfRxData;
+			pIntrf->DevIntrf.TxData = UsbIntrfTxBytes;
+			pIntrf->EpSend = UsbIntrfEpSendByteMode;
+			break;
+
+		case USB_INTRF_MODE_PACKET:
+			pIntrf->DevIntrf.RxData = UsbIntrfRxData;
+			pIntrf->DevIntrf.TxData = UsbIntrfTxPackets;
+			pIntrf->EpSend = UsbIntrfEpSendPktMode;
+			break;
+
+		case USB_INTRF_MODE_ISO:
+			pIntrf->DevIntrf.RxData = UsbIntrfRxIso;
+			pIntrf->DevIntrf.TxData = UsbIntrfTxIso;
+			break;
+
+		default:
+			return false;
 	}
-	else
-	{
-		pIntrf->DevIntrf.TxData = UsbIntrfTxPackets;
-		pIntrf->EpSend = UsbIntrfEpSendPktMode;
-	}
+
 	pIntrf->DevIntrf.TxSrData = UsbIntrfTxSrData;
 	pIntrf->DevIntrf.StopTx = UsbIntrfStopTx;
 	pIntrf->DevIntrf.Reset = UsbIntrfReset;
@@ -491,9 +697,13 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	atomic_store(&pIntrf->DevIntrf.bTxReady, true);
 	atomic_store(&pIntrf->DevIntrf.bNoStop, false);
 
+	// ISO OUT uses controller DRDY so UsbIntrf can refuse the current frame
+	// when its one RX slot is still owned by the consumer. This does not turn
+	// ISO into a retryable transport; a refused service opportunity is dropped.
+	const bool rxBlocking = mode == USB_INTRF_MODE_ISO ? true : pCfg->bBlocking;
 	if (!UsbCtrlrEpRegister(pIntrf->DevNo,
 		USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->pRxBuffer,
-		pCfg->bBlocking, UsbIntrfCtrlrEvent, pIntrf) ||
+		rxBlocking, UsbIntrfCtrlrEvent, pIntrf) ||
 		!UsbCtrlrEpRegister(pIntrf->DevNo,
 		USB_ENDPADDR_DIRIN(pIntrf->EpNo), pIntrf->pTxBuffer,
 		pCfg->bBlocking, UsbIntrfCtrlrEvent, pIntrf))
@@ -507,18 +717,33 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 
 bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps)
 {
-	if (pIntrf == nullptr || Mps == 0U || Mps > pIntrf->BufferSize ||
-		pIntrf->hRxFifo == nullptr || pIntrf->hTxFifo == nullptr ||
-		(CFifoBlockSize(pIntrf->hTxFifo) != 1U &&
-		 CFifoBlockSize(pIntrf->hTxFifo) < sizeof(UsbPktHdr_t) + Mps))
+	if (pIntrf == nullptr || Mps == 0U || Mps > pIntrf->BufferSize)
 	{
 		return false;
 	}
 
+	if (pIntrf->Mode != USB_INTRF_MODE_ISO)
+	{
+		if (pIntrf->hRxFifo == nullptr || pIntrf->hTxFifo == nullptr ||
+			(CFifoBlockSize(pIntrf->hTxFifo) != 1U &&
+			 CFifoBlockSize(pIntrf->hTxFifo) < sizeof(UsbPktHdr_t) + Mps))
+		{
+			return false;
+		}
+	}
+
 	pIntrf->Mps = Mps;
 	pIntrf->RxPending = false;
-	CFifoFlush(pIntrf->hRxFifo);
-	CFifoFlush(pIntrf->hTxFifo);
+	if (pIntrf->Mode == USB_INTRF_MODE_ISO)
+	{
+		UsbIntrfIsoClear(pIntrf->pRxIsoBuffer);
+		UsbIntrfIsoClear(pIntrf->pTxIsoBuffer);
+	}
+	else
+	{
+		CFifoFlush(pIntrf->hRxFifo);
+		CFifoFlush(pIntrf->hTxFifo);
+	}
 	UsbIntrfSetTxIdle(pIntrf);
 	return true;
 }
@@ -532,20 +757,42 @@ void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf)
 
 	pIntrf->Mps = 0U;
 	pIntrf->RxPending = false;
-	if (pIntrf->hRxFifo != nullptr)
+	if (pIntrf->Mode == USB_INTRF_MODE_ISO)
 	{
-		CFifoFlush(pIntrf->hRxFifo);
+		UsbIntrfIsoClear(pIntrf->pRxIsoBuffer);
+		UsbIntrfIsoClear(pIntrf->pTxIsoBuffer);
 	}
-	if (pIntrf->hTxFifo != nullptr)
+	else
 	{
-		CFifoFlush(pIntrf->hTxFifo);
+		if (pIntrf->hRxFifo != nullptr)
+		{
+			CFifoFlush(pIntrf->hRxFifo);
+		}
+		if (pIntrf->hTxFifo != nullptr)
+		{
+			CFifoFlush(pIntrf->hTxFifo);
+		}
 	}
 	UsbIntrfSetTxIdle(pIntrf);
 }
 
 bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes)
 {
-	if (pIntrf == nullptr || pIntrf->hTxFifo == nullptr || NbBytes <= 0)
+	if (pIntrf == nullptr || NbBytes < 0)
+	{
+		return false;
+	}
+
+	if (pIntrf->Mode == USB_INTRF_MODE_ISO)
+	{
+		return pIntrf->Mps > 0U && NbBytes <= (int)pIntrf->Mps &&
+			pIntrf->pTxIsoBuffer != nullptr &&
+			atomic_load_explicit(&pIntrf->DevIntrf.bTxReady,
+				memory_order_acquire) &&
+			!UsbIntrfIsoReady(pIntrf->pTxIsoBuffer);
+	}
+
+	if (pIntrf->hTxFifo == nullptr || NbBytes <= 0)
 	{
 		return false;
 	}
@@ -571,6 +818,13 @@ bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes)
 
 int UsbIntrfTxUsed(UsbDevIntrf_t *pIntrf)
 {
-	return pIntrf != nullptr && pIntrf->hTxFifo != nullptr ?
-		   CFifoUsed(pIntrf->hTxFifo) : 0;
+	if (pIntrf == nullptr)
+	{
+		return 0;
+	}
+	if (pIntrf->Mode == USB_INTRF_MODE_ISO)
+	{
+		return UsbIntrfIsoReady(pIntrf->pTxIsoBuffer) ? 1 : 0;
+	}
+	return pIntrf->hTxFifo != nullptr ? CFifoUsed(pIntrf->hTxFifo) : 0;
 }

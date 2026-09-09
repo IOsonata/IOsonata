@@ -34,21 +34,6 @@ SOFTWARE.
 
 #include "usb/usb_iso.h"
 
-static uint8_t *UsbIsoIntrfRxBuffer(UsbIsoIntrf_t *pIntrf)
-{
-	return reinterpret_cast<uint8_t *>(pIntrf->RxBuffer);
-}
-
-static uint8_t *UsbIsoIntrfTxBuffer(UsbIsoIntrf_t *pIntrf)
-{
-	return reinterpret_cast<uint8_t *>(pIntrf->TxBuffer);
-}
-
-static UsbPkt_t *UsbIsoIntrfTxPacket(UsbIsoIntrf_t *pIntrf)
-{
-	return reinterpret_cast<UsbPkt_t *>(pIntrf->TxPacket);
-}
-
 static bool UsbIsoIntrfEpSupported(int DevNo, uint8_t EpNo)
 {
 	if (DevNo < 0 || DevNo >= USB_CTRLR_CNT || EpNo == 0U || EpNo > 15U ||
@@ -75,17 +60,10 @@ static bool UsbIsoIntrfOpenEndpoint(UsbIsoIntrf_t *pIntrf, uint8_t EpAddr)
 	return UsbCtrlrEpOpen(pIntrf->pIntrfData->DevNo, &desc);
 }
 
-static void UsbIsoIntrfSetTxIdle(UsbDevIntrf_t *pData)
-{
-	atomic_store_explicit(&pData->DevIntrf.bTxReady, true,
-						  memory_order_release);
-}
-
-// UsbIntrf remains the controller endpoint owner. This callback is only the
-// DeviceIntrf-facing ISO adapter above UsbIntrf; it never receives controller
-// events directly and never submits an endpoint transfer itself.
+// UsbIntrf owns DeviceIntrf and the controller endpoint callback. ISO events
+// carry the current transfer buffer directly because ISO mode has no CFifo.
 static int UsbIsoIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
-								uint8_t *, int Length)
+								uint8_t *pBuffer, int Length)
 {
 	UsbDevIntrf_t *pData = static_cast<UsbDevIntrf_t *>(pDev->pDevData);
 	UsbIsoIntrf_t *pIntrf = pData != nullptr ?
@@ -98,34 +76,21 @@ static int UsbIsoIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 	switch (Event)
 	{
 		case DEVINTRF_EVT_RX_DATA:
-		{
-			UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(
-				CFifoPeek(pData->hRxFifo));
-			if (pPacket == nullptr)
+			if (Length < 0 || Length > (int)pIntrf->Mps)
 			{
+				pIntrf->RxMissCnt++;
 				return 0;
 			}
-
-			const uint16_t length = pPacket->Hdr.Length;
-			UsbCtrlrXferResult_t result = USB_CTRLR_XFER_SUCCESS;
-			if (length > pIntrf->Mps)
-			{
-				result = USB_CTRLR_XFER_FAILED;
-				pIntrf->RxMissCnt++;
-			}
-			else if (length == 0U)
+			if (Length == 0)
 			{
 				pIntrf->RxEmptyCnt++;
 			}
-
 			if (pIntrf->RxHandler != nullptr)
 			{
-				pIntrf->RxHandler(pIntrf, pPacket->Data, length, result,
-					pIntrf->pContext);
+				pIntrf->RxHandler(pIntrf, pBuffer, (uint16_t)Length,
+					USB_CTRLR_XFER_SUCCESS, pIntrf->pContext);
 			}
-			(void)CFifoGet(pData->hRxFifo);
-			return length;
-		}
+			return Length;
 
 		case DEVINTRF_EVT_RX_TIMEOUT:
 			pIntrf->RxMissCnt++;
@@ -138,43 +103,27 @@ static int UsbIsoIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 			return 0;
 
 		case DEVINTRF_EVT_TX_FIFO_EMPTY:
-		{
-			if (!pIntrf->TxActive)
-			{
-				return 0;
-			}
-
-			const uint16_t length = pIntrf->TxLength;
-			pIntrf->TxActive = false;
-			pIntrf->TxLength = 0U;
-			if (length == 0U)
+			if (Length == 0)
 			{
 				pIntrf->TxEmptyCnt++;
 			}
 			if (pIntrf->TxHandler != nullptr)
 			{
-				pIntrf->TxHandler(pIntrf, length,
+				pIntrf->TxHandler(pIntrf,
+					Length > 0 ? (uint16_t)Length : 0U,
 					USB_CTRLR_XFER_SUCCESS, pIntrf->pContext);
 			}
-			return length;
-		}
+			return Length;
 
 		case DEVINTRF_EVT_TX_TIMEOUT:
-		{
-			const uint16_t length = pIntrf->TxLength;
-			pIntrf->TxActive = false;
-			pIntrf->TxLength = 0U;
 			pIntrf->TxMissCnt++;
-			CFifoFlush(pData->hTxFifo);
-			UsbIsoIntrfSetTxIdle(pData);
 			if (pIntrf->TxHandler != nullptr)
 			{
 				pIntrf->TxHandler(pIntrf,
-					Length > 0 ? (uint16_t)Length : length,
+					Length > 0 ? (uint16_t)Length : 0U,
 					USB_CTRLR_XFER_FAILED, pIntrf->pContext);
 			}
 			return 0;
-		}
 
 		default:
 			return 0;
@@ -204,14 +153,10 @@ bool UsbIsoIntrfInitData(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	cfg.DevNo = pCfg->DevNo;
 	cfg.EpNo = pCfg->EpNo;
 	cfg.bBlocking = false;
-	cfg.RxFifoMemSize = (int)sizeof(pIntrf->RxFifoMem);
-	cfg.pRxFifoMem = reinterpret_cast<uint8_t *>(pIntrf->RxFifoMem);
-	cfg.TxFifoMemSize = (int)sizeof(pIntrf->TxFifoMem);
-	cfg.pTxFifoMem = reinterpret_cast<uint8_t *>(pIntrf->TxFifoMem);
-	cfg.TxFifoBlkSize = USB_ISO_INTRF_PKT_BLKSIZE;
+	cfg.Mode = USB_INTRF_MODE_ISO;
 	cfg.BufferSize = USB_ISO_INTRF_MAX_MPS;
-	cfg.pRxBuffer = UsbIsoIntrfRxBuffer(pIntrf);
-	cfg.pTxBuffer = UsbIsoIntrfTxBuffer(pIntrf);
+	cfg.pRxBuffer = reinterpret_cast<uint8_t *>(pIntrf->RxBuffer);
+	cfg.pTxBuffer = reinterpret_cast<uint8_t *>(pIntrf->TxBuffer);
 	cfg.EvtCB = UsbIsoIntrfDataEvent;
 
 	if (!UsbIntrfInit(pData, &cfg))
@@ -251,8 +196,6 @@ bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval)
 	pIntrf->Mps = Mps;
 	pIntrf->Interval = Interval;
 	pIntrf->Suspended = false;
-	pIntrf->TxActive = false;
-	pIntrf->TxLength = 0U;
 
 	if (!UsbIsoIntrfOpenEndpoint(pIntrf, USB_ENDPADDR_DIRIN(pIntrf->EpNo)) ||
 		!UsbIsoIntrfOpenEndpoint(pIntrf, USB_ENDPADDR_DIROUT(pIntrf->EpNo)))
@@ -289,10 +232,8 @@ void UsbIsoIntrfClose(UsbIsoIntrf_t *pIntrf)
 	UsbIntrfUnconfigure(pIntrf->pIntrfData);
 	pIntrf->Opened = false;
 	pIntrf->Suspended = false;
-	pIntrf->TxActive = false;
 	pIntrf->Mps = 0U;
 	pIntrf->Interval = 0U;
-	pIntrf->TxLength = 0U;
 }
 
 void UsbIsoIntrfReset(UsbIsoIntrf_t *pIntrf)
@@ -332,32 +273,23 @@ bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 						  uint16_t Length)
 {
 	if (pIntrf == nullptr || pIntrf->pIntrfData == nullptr ||
-		!pIntrf->Opened || pIntrf->Suspended || pIntrf->TxActive ||
-		Length > pIntrf->Mps || (Length != 0U && pData == nullptr))
+		!pIntrf->Opened || pIntrf->Suspended || Length > pIntrf->Mps ||
+		(Length != 0U && pData == nullptr) ||
+		!UsbIntrfRequestToSend(pIntrf->pIntrfData, Length))
 	{
 		return false;
 	}
 
-	UsbPkt_t *pPacket = UsbIsoIntrfTxPacket(pIntrf);
-	pPacket->Hdr.Length = Length;
-	pPacket->Hdr.Reserved = 0U;
-	if (Length > 0U)
+	const int sent = DeviceIntrfTxData(&pIntrf->pIntrfData->DevIntrf,
+		pData, (int)Length);
+	if (Length != 0U)
 	{
-		memcpy(pPacket->Data, pData, Length);
+		return sent == (int)Length;
 	}
 
-	pIntrf->TxLength = Length;
-	pIntrf->TxActive = true;
-	const int queued = DeviceIntrfTxData(&pIntrf->pIntrfData->DevIntrf,
-		reinterpret_cast<const uint8_t *>(pPacket),
-		(int)USB_ISO_INTRF_PKT_BLKSIZE);
-	if (queued != (int)USB_ISO_INTRF_PKT_BLKSIZE)
-	{
-		pIntrf->TxActive = false;
-		pIntrf->TxLength = 0U;
-		pIntrf->TxMissCnt++;
-		return false;
-	}
-
-	return true;
+	// A successful zero-length ISO packet returns zero bytes by definition.
+	// bTxReady was claimed by UsbIntrfTxIso and is restored on failure or
+	// completion, so false here means the ZLP is pending in the current slot.
+	return !atomic_load_explicit(&pIntrf->pIntrfData->DevIntrf.bTxReady,
+		memory_order_acquire);
 }

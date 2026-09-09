@@ -12,39 +12,35 @@ The generic layer in usb.cpp handles endpoint zero, Chapter 9 requests,
 descriptors, configuration and class/vendor dispatch. The port handles endpoint
 registers, DMA access and controller interrupts.
 
+UsbIntrf supports three data policies. Byte and packet modes use CFifo storage
+because their transfers may wait in software. ISO mode does not queue packets:
+it owns one statically reserved RX slot and one TX slot. Each ISO slot is a
+UsbPkt_t whose Hdr.Flags bit USB_INTRF_ISO_READY publishes whether the slot
+contains a current packet; Hdr.Length remains the actual payload length and may
+be zero.
+
 The derived class supplies one fixed RX and one fixed TX controller buffer sized
-for its transfer type. UsbIntrf registers both buffers once during Init(). DMA
-requests therefore carry only endpoint and length; the controller obtains the
-fixed buffer from the endpoint registration when the request is started.
+for its transfer type. In byte and packet mode those are DMA staging buffers.
+In ISO mode the supplied buffers include UsbPktHdr_t followed by the payload;
+UsbIntrf registers the Data portion with the controller and uses the header as
+the single-slot ownership state.
 
 RX is event driven. USB_CTRLR_EVT_DRDY means data is ready in the controller to
-be retrieved. In blocking mode UsbIntrf submits the OUT DMA only when hRxFifo
-has a free packet slot; otherwise it remembers the one pending controller event
-until foreground releases storage. In non-blocking mode it submits the DMA
-immediately and lets the non-blocking CFifo overflow policy discard old data if
-necessary. Transfer completion only copies the fixed RX buffer into hRxFifo; it
-does not arm or submit another receive.
+be retrieved. Byte and packet modes use the existing CFifo blocking/non-blocking
+policy. ISO OUT is non-blocking and the controller services the current ISO
+opportunity directly; completion publishes the single RX slot instead of
+placing data into a FIFO.
 
-For IN, UsbIntrf copies queued TX data into the fixed TX staging buffer before
-submitting the registered endpoint transfer. Controller buffers therefore
-never alias CFifo storage that can be released while a transfer is active.
+For IN, byte and packet modes copy queued TX data into fixed staging before
+submitting the endpoint transfer. ISO TxData copies one current frame into the
+single TX slot and submits the ISO endpoint transfer; the controller port may
+schedule that transfer according to its ISO service timing without entering its
+ordinary DMA request queue.
 
-UsbPktHdr_t.Length is the actual received data length and may be from zero to
-MPS. DeviceIntrfRx() may consume across packet blocks and present a byte
-stream.
-
-TX CFifo mode is selected by block size. BlkSize 1 provides byte-stream
-accumulation and UsbIntrf packetizes queued bytes up to the endpoint MPS. In
-packet mode, each CFifo block contains UsbPktHdr_t followed by storage for one
-endpoint packet. The caller splits its data into USB packets and pushes one
-CFifo block per packet. UsbPktHdr_t.Length is the actual packet data length and
-may be from zero to MPS. UsbIntrf sends the stored packet length without
-combining packet blocks. USB transfer type and CFifo block size are separate
-settings.
-
-The application supplies RX and TX CFifo memory through the public USB class.
-The class supplies its controller buffers and endpoint number to UsbIntrf.
-The actual MPS is applied after the bus speed is known.
+UsbPktHdr_t.Length is the actual data length and may be from zero to MPS.
+UsbPktHdr_t.Flags is zero in ordinary packet mode. ISO mode uses bit
+USB_INTRF_ISO_READY as the slot-ready flag. Reserved remains a source-compatible
+alias for existing packet-mode code.
 
 Generic code must not assume a 64-byte packet, a specific USB speed, or a
 specific controller.
@@ -97,11 +93,16 @@ SOFTWARE.
 #define USB_INTRF_RXMEM_SIZE(NbPkt, Mps) \
 	CFIFO_TOTAL_MEMSIZE(NbPkt, USB_INTRF_PKT_BLKSIZE(Mps))
 
+#define USB_INTRF_ISO_READY			1U
+
 #pragma pack(push, 4)
 
 typedef struct __Usb_Packet_Header {
 	uint16_t Length;
-	uint16_t Reserved;
+	union {
+		uint16_t Flags;
+		uint16_t Reserved;
+	};
 } UsbPktHdr_t;
 
 typedef struct __Usb_Packet {
@@ -109,10 +110,18 @@ typedef struct __Usb_Packet {
 	uint8_t Data[1];
 } UsbPkt_t;
 
+typedef enum __Usb_Interf_Mode {
+	USB_INTRF_MODE_AUTO = 0,
+	USB_INTRF_MODE_BYTE,
+	USB_INTRF_MODE_PACKET,
+	USB_INTRF_MODE_ISO,
+} UsbIntrfMode_t;
+
 typedef struct __Usb_Interf_Config {
 	int DevNo;
 	uint8_t EpNo;
 	bool bBlocking;
+	UsbIntrfMode_t Mode;
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;
 	int TxFifoMemSize;
@@ -137,11 +146,14 @@ struct __Usb_Dev_Interf {
 	uint32_t RxDropCnt;
 	uint8_t *pRxBuffer;
 	uint8_t *pTxBuffer;
+	UsbPkt_t *pRxIsoBuffer;
+	UsbPkt_t *pTxIsoBuffer;
 	uint16_t BufferSize;
 	uint16_t Mps;
 	uint8_t EpNo;
 	bool bBlocking;
 	bool RxPending;
+	UsbIntrfMode_t Mode;
 	EpSendFct_t EpSend;
 	void *pClassContext;
 };
