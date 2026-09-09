@@ -54,41 +54,6 @@ bool UsbIntrfTakeTx(UsbDevIntrf_t *pIntrf)
 									memory_order_acquire);
 }
 
-static bool UsbIntrfRxSubmit(UsbDevIntrf_t *pIntrf)
-{
-	if (pIntrf == nullptr || pIntrf->Mode == USB_INTRF_MODE_ISO ||
-		pIntrf->Mps == 0U || pIntrf->hRxFifo == nullptr ||
-		CFifoAvail(pIntrf->hRxFifo) <= 0)
-	{
-		return false;
-	}
-
-	if (atomic_exchange_explicit(&pIntrf->RxActive, true,
-								 memory_order_acq_rel))
-	{
-		return false;
-	}
-
-	if (!UsbCtrlrEpXfer(pIntrf->DevNo,
-		USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps))
-	{
-		atomic_store_explicit(&pIntrf->RxActive, false,
-							  memory_order_release);
-		return false;
-	}
-
-	return true;
-}
-
-static inline __attribute__((always_inline))
-void UsbIntrfRxKick(UsbDevIntrf_t *pIntrf)
-{
-	if (pIntrf->RxPending && UsbIntrfRxSubmit(pIntrf))
-	{
-		pIntrf->RxPending = false;
-	}
-}
-
 static inline __attribute__((always_inline))
 bool UsbIntrfIsoReady(const UsbPkt_t *pPacket)
 {
@@ -247,9 +212,11 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 		cnt += len;
 	}
 
-	if (cnt > 0)
+	if (cnt > 0 && pIntrf->RxPending)
 	{
-		UsbIntrfRxKick(pIntrf);
+		pIntrf->RxPending = false;
+		(void)UsbCtrlrEpXfer(pIntrf->DevNo,
+			USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps);
 	}
 
 	return cnt;
@@ -484,13 +451,20 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 	switch (Event)
 	{
 		case USB_CTRLR_EVT_DRDY:
-			if (pIntrf->Mode == USB_INTRF_MODE_ISO || pIntrf->Mps == 0U)
+			if (pIntrf->Mode == USB_INTRF_MODE_ISO)
 			{
 				return;
 			}
 
-			pIntrf->RxPending = true;
-			UsbIntrfRxKick(pIntrf);
+			if (CFifoAvail(pIntrf->hRxFifo) <= 0)
+			{
+				pIntrf->RxPending = true;
+				return;
+			}
+
+			(void)UsbCtrlrEpXfer(pIntrf->DevNo,
+				USB_ENDPADDR_DIROUT(pIntrf->EpNo), pIntrf->Mps);
+			pIntrf->RxPending = false;
 			return;
 
 		case USB_CTRLR_EVT_XFER_CMPL:
@@ -536,9 +510,6 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 				return;
 			}
 
-			atomic_store_explicit(&pIntrf->RxActive, false,
-							  memory_order_release);
-
 			if (Result == USB_CTRLR_XFER_SUCCESS)
 			{
 				if (pIntrf->Mode == USB_INTRF_MODE_ISO)
@@ -567,8 +538,6 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 					pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
 						DEVINTRF_EVT_RX_DATA, nullptr, used);
 				}
-
-				UsbIntrfRxKick(pIntrf);
 				return;
 			}
 
@@ -580,7 +549,6 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 					pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
 						DEVINTRF_EVT_RX_TIMEOUT, nullptr, Length);
 				}
-				UsbIntrfRxKick(pIntrf);
 			}
 			return;
 
@@ -590,12 +558,6 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 			{
 				UsbIntrfIsoClear(pIntrf->pTxIsoBuffer);
 				UsbIntrfSetTxIdle(pIntrf);
-			}
-			else if (!USB_ENDPADDR_IS_IN(EpAddr))
-			{
-				atomic_store_explicit(&pIntrf->RxActive, false,
-								  memory_order_release);
-				pIntrf->RxPending = false;
 			}
 			return;
 
@@ -675,7 +637,6 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	pIntrf->RxDropCnt = 0U;
 	pIntrf->bBlocking = pCfg->bBlocking;
 	pIntrf->RxPending = false;
-	atomic_store_explicit(&pIntrf->RxActive, false, memory_order_relaxed);
 	pIntrf->Mode = mode;
 	pIntrf->EpSend = nullptr;
 	pIntrf->pClassContext = nullptr;
@@ -762,7 +723,6 @@ bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps)
 
 	pIntrf->Mps = Mps;
 	pIntrf->RxPending = false;
-	atomic_store_explicit(&pIntrf->RxActive, false, memory_order_relaxed);
 	if (pIntrf->Mode == USB_INTRF_MODE_ISO)
 	{
 		UsbIntrfIsoClear(pIntrf->pRxIsoBuffer);
@@ -786,7 +746,6 @@ void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf)
 
 	pIntrf->Mps = 0U;
 	pIntrf->RxPending = false;
-	atomic_store_explicit(&pIntrf->RxActive, false, memory_order_relaxed);
 	if (pIntrf->Mode == USB_INTRF_MODE_ISO)
 	{
 		UsbIntrfIsoClear(pIntrf->pRxIsoBuffer);
