@@ -153,6 +153,7 @@ struct __Usb_Dev_Interf {
 	uint8_t EpNo;
 	bool bBlocking;
 	bool RxPending;
+	atomic_bool RxActive;
 	UsbIntrfMode_t Mode;
 	EpSendFct_t EpSend;
 	void *pClassContext;
