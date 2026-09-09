@@ -81,6 +81,17 @@ def find_device(args):
     return matches[0]
 
 
+def ensure_configuration(device, reconfigure=False):
+    if reconfigure:
+        device.set_configuration()
+        return
+
+    try:
+        device.get_active_configuration()
+    except usb.core.USBError:
+        device.set_configuration()
+
+
 def find_custom_interface(device):
     config = device.get_active_configuration()
 
@@ -132,6 +143,11 @@ def main():
     )
     parser.add_argument("--cycles", type=int, default=100)
     parser.add_argument("--timeout", type=int, default=1000, help="USB timeout in ms")
+    parser.add_argument(
+        "--reconfigure",
+        action="store_true",
+        help="force SET_CONFIGURATION even when the device is already configured",
+    )
     args = parser.parse_args()
 
     try:
@@ -141,7 +157,7 @@ def main():
         print("Result         : FAIL")
         return 1
 
-    device.set_configuration()
+    ensure_configuration(device, args.reconfigure)
     interface, ep_out, ep_in = find_custom_interface(device)
     interface_no = interface.bInterfaceNumber
     interface_name = get_string(device, interface.iInterface)

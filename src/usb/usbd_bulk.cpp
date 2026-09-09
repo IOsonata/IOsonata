@@ -80,18 +80,15 @@ static bool UsbdBulkConfig(uint8_t Configuration, void *pContext)
 		return false;
 	}
 
+	UsbIntrfUnconfigure(&pBulk->IntrfData);
 	if (Configuration == 0U)
 	{
-		UsbdBulkCloseEndpoints(pBulk);
-		UsbIntrfUnconfigure(&pBulk->IntrfData);
 		return true;
 	}
 	if (Configuration != USBD_BULK_CONFIG_VALUE)
 	{
 		return false;
 	}
-
-	UsbIntrfUnconfigure(&pBulk->IntrfData);
 
 	const uint16_t mps = UsbdBulkMps(pBulk);
 	if (!UsbIntrfConfigure(&pBulk->IntrfData, mps))

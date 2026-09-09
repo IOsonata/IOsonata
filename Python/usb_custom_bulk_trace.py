@@ -11,6 +11,7 @@ import usb.util
 
 from usb_custom_bulk_loopback import (
     DEFAULT_PRODUCT,
+    ensure_configuration,
     find_custom_interface,
     find_device,
     get_string,
@@ -119,6 +120,11 @@ def main():
     parser.add_argument("--serial")
     parser.add_argument("--cycles", type=int, default=100)
     parser.add_argument("--timeout", type=int, default=1000, help="USB timeout in ms")
+    parser.add_argument(
+        "--reconfigure",
+        action="store_true",
+        help="force SET_CONFIGURATION even when the device is already configured",
+    )
     args = parser.parse_args()
 
     try:
@@ -128,7 +134,7 @@ def main():
         print("Result         : FAIL")
         return 1
 
-    device.set_configuration()
+    ensure_configuration(device, args.reconfigure)
     interface, ep_out, ep_in = find_custom_interface(device)
     interface_no = interface.bInterfaceNumber
     interface_name = get_string(device, interface.iInterface)
