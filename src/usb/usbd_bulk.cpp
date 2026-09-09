@@ -80,9 +80,10 @@ static bool UsbdBulkConfig(uint8_t Configuration, void *pContext)
 		return false;
 	}
 
-	UsbIntrfUnconfigure(&pBulk->IntrfData);
 	if (Configuration == 0U)
 	{
+		UsbdBulkCloseEndpoints(pBulk);
+		UsbIntrfUnconfigure(&pBulk->IntrfData);
 		return true;
 	}
 	if (Configuration != USBD_BULK_CONFIG_VALUE)
@@ -90,17 +91,19 @@ static bool UsbdBulkConfig(uint8_t Configuration, void *pContext)
 		return false;
 	}
 
+	UsbIntrfUnconfigure(&pBulk->IntrfData);
+
 	const uint16_t mps = UsbdBulkMps(pBulk);
+	if (!UsbIntrfConfigure(&pBulk->IntrfData, mps))
+	{
+		return false;
+	}
+
 	if (!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIROUT(pBulk->EpNo), mps) ||
 		!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIRIN(pBulk->EpNo), mps))
 	{
 		UsbdBulkCloseEndpoints(pBulk);
-		return false;
-	}
-
-	if (!UsbIntrfConfigure(&pBulk->IntrfData, mps))
-	{
-		UsbdBulkCloseEndpoints(pBulk);
+		UsbIntrfUnconfigure(&pBulk->IntrfData);
 		return false;
 	}
 
