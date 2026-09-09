@@ -15,6 +15,10 @@ buffer registered by UsbIntrf. UsbIsoIntrf publishes the completed frame to the
 callback, and the callback echoes it through the single ISO TX slot. There is
 no CFifo and no obsolete function-level endpoint completion callback.
 
+A vendor/interface IN request (bRequest 0x5A) returns loopback-only diagnostic
+counters. It is intentionally outside UsbIsoIntrf so the reusable ISO layer does
+not acquire test or class semantics.
+
 @author	Hoang Nguyen Hoan
 @date	Sep. 9, 2026
 
@@ -52,6 +56,11 @@ SOFTWARE.
 #define USB_DEVNO			0
 #define ISO_CONFIG_VALUE	1U
 #define ISO_ALT_COUNT		6U
+#define ISO_REQ_GET_DIAG	0x5AU
+
+#define ISO_DIAG_FLAG_OPENED		(1U << 0)
+#define ISO_DIAG_FLAG_SUSPENDED	(1U << 1)
+#define ISO_DIAG_FLAG_TX_READY		(1U << 2)
 
 #define ISO_STR_MANUFACTURER	1U
 #define ISO_STR_PRODUCT		2U
@@ -75,18 +84,46 @@ typedef struct __Iso_Config_Descriptor {
 	UsbIntrfDesc_t Alt0;
 	IsoAltDesc_t Alt[ISO_ALT_COUNT];
 } IsoConfigDesc_t;
+
+typedef struct __Iso_Diag {
+	uint32_t SofCnt;
+	uint32_t RxCnt;
+	uint32_t TxSubmitCnt;
+	uint32_t TxDoneCnt;
+	uint32_t TxFailCnt;
+	uint32_t LoopbackDropCnt;
+	uint32_t RxMissCnt;
+	uint32_t TxMissCnt;
+	uint32_t RxEmptyCnt;
+	uint32_t TxEmptyCnt;
+	uint16_t LastRxLength;
+	uint16_t LastTxLength;
+	uint16_t Mps;
+	uint8_t Alt;
+	uint8_t Flags;
+} IsoDiag_t;
 #pragma pack(pop)
+
+static_assert(sizeof(IsoDiag_t) == 48U, "ISO diagnostic wire format changed");
 
 static UsbIsoIntrf_t s_Iso;
 static bool s_Configured;
 static uint8_t s_Alt;
 static uint8_t s_InterfaceNo;
 static uint8_t s_EpNo;
+static uint32_t s_SofCnt;
+static uint32_t s_RxCnt;
+static uint32_t s_TxSubmitCnt;
+static uint32_t s_TxDoneCnt;
+static uint32_t s_TxFailCnt;
 static uint32_t s_LoopbackDropCnt;
+static uint16_t s_LastRxLength;
+static uint16_t s_LastTxLength;
 
 static UsbDevDesc_t s_DeviceDesc;
 static UsbDevQualDesc_t s_QualifierDesc;
 static IsoConfigDesc_t s_ConfigDesc;
+static IsoDiag_t s_DiagReply;
 static uint8_t s_StringDesc[2U + (ISO_STR_MAXLEN * 2U)];
 
 static uint8_t IsoFirstEndpoint(uint16_t Mask)
@@ -102,6 +139,54 @@ static uint8_t IsoFirstEndpoint(uint16_t Mask)
 	return 0U;
 }
 
+static void IsoClearDiag(void)
+{
+	s_SofCnt = 0U;
+	s_RxCnt = 0U;
+	s_TxSubmitCnt = 0U;
+	s_TxDoneCnt = 0U;
+	s_TxFailCnt = 0U;
+	s_LoopbackDropCnt = 0U;
+	s_LastRxLength = 0U;
+	s_LastTxLength = 0U;
+	s_Iso.RxMissCnt = 0U;
+	s_Iso.TxMissCnt = 0U;
+	s_Iso.RxEmptyCnt = 0U;
+	s_Iso.TxEmptyCnt = 0U;
+}
+
+static void IsoBuildDiag(void)
+{
+	memset(&s_DiagReply, 0, sizeof(s_DiagReply));
+	s_DiagReply.SofCnt = s_SofCnt;
+	s_DiagReply.RxCnt = s_RxCnt;
+	s_DiagReply.TxSubmitCnt = s_TxSubmitCnt;
+	s_DiagReply.TxDoneCnt = s_TxDoneCnt;
+	s_DiagReply.TxFailCnt = s_TxFailCnt;
+	s_DiagReply.LoopbackDropCnt = s_LoopbackDropCnt;
+	s_DiagReply.RxMissCnt = s_Iso.RxMissCnt;
+	s_DiagReply.TxMissCnt = s_Iso.TxMissCnt;
+	s_DiagReply.RxEmptyCnt = s_Iso.RxEmptyCnt;
+	s_DiagReply.TxEmptyCnt = s_Iso.TxEmptyCnt;
+	s_DiagReply.LastRxLength = s_LastRxLength;
+	s_DiagReply.LastTxLength = s_LastTxLength;
+	s_DiagReply.Mps = s_Iso.Mps;
+	s_DiagReply.Alt = s_Alt;
+
+	if (s_Iso.Opened)
+	{
+		s_DiagReply.Flags |= ISO_DIAG_FLAG_OPENED;
+	}
+	if (s_Iso.Suspended)
+	{
+		s_DiagReply.Flags |= ISO_DIAG_FLAG_SUSPENDED;
+	}
+	if (UsbIsoIntrfTxReady(&s_Iso))
+	{
+		s_DiagReply.Flags |= ISO_DIAG_FLAG_TX_READY;
+	}
+}
+
 static void IsoRxFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 					   uint16_t Length, UsbCtrlrXferResult_t Result,
 					   void *pContext)
@@ -114,9 +199,16 @@ static void IsoRxFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 		return;
 	}
 
+	s_RxCnt++;
+	s_LastRxLength = Length;
+
 	// The callback owns the current RX frame only for this call. SendFrame
 	// copies it into the independent ISO TX slot before returning.
-	if (!UsbIsoIntrfSendFrame(&s_Iso, pData, Length))
+	if (UsbIsoIntrfSendFrame(&s_Iso, pData, Length))
+	{
+		s_TxSubmitCnt++;
+	}
+	else
 	{
 		// ISO is deadline driven. A busy TX slot means this service
 		// opportunity is missed; never queue stale data for a later frame.
@@ -124,9 +216,44 @@ static void IsoRxFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 	}
 }
 
-static void IsoTxFrame(UsbIsoIntrf_t *, uint16_t,
-					   UsbCtrlrXferResult_t, void *)
+static void IsoTxFrame(UsbIsoIntrf_t *, uint16_t Length,
+					   UsbCtrlrXferResult_t Result, void *)
 {
+	s_LastTxLength = Length;
+	if (Result == USB_CTRLR_XFER_SUCCESS)
+	{
+		s_TxDoneCnt++;
+	}
+	else
+	{
+		s_TxFailCnt++;
+	}
+}
+
+static bool IsoRequest(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+					   uint8_t **ppData, uint16_t *pLength, void *)
+{
+	if (pSetup == nullptr)
+	{
+		return false;
+	}
+	if (Stage != USB_CTRL_SETUP)
+	{
+		return true;
+	}
+	if (ppData == nullptr || pLength == nullptr ||
+		pSetup->bmRequestType !=
+			(USB_REQTYPE_DIRHOST | USB_REQTYPE_VEND | USB_REQTYPE_INTERFACE) ||
+		pSetup->bRequest != ISO_REQ_GET_DIAG || pSetup->wValue != 0U ||
+		pSetup->wIndex != s_InterfaceNo || pSetup->wLength != sizeof(IsoDiag_t))
+	{
+		return false;
+	}
+
+	IsoBuildDiag();
+	*ppData = reinterpret_cast<uint8_t *>(&s_DiagReply);
+	*pLength = sizeof(s_DiagReply);
+	return true;
 }
 
 static bool IsoConfig(uint8_t Configuration, void *)
@@ -162,6 +289,7 @@ static bool IsoSetInterface(uint8_t InterfaceNo, uint8_t Alt, void *)
 		return true;
 	}
 
+	IsoClearDiag();
 	const uint8_t interval = UsbCtrlrHighSpeed(USB_DEVNO) ? 4U : 1U;
 	if (!UsbIsoIntrfOpen(&s_Iso, s_IsoMps[Alt - 1U], interval))
 	{
@@ -177,6 +305,15 @@ static void IsoReset(void *)
 	s_Configured = false;
 	s_Alt = 0U;
 	UsbIsoIntrfReset(&s_Iso);
+	IsoClearDiag();
+}
+
+static void IsoSof(uint16_t, void *)
+{
+	if (s_Configured && s_Alt != 0U)
+	{
+		s_SofCnt++;
+	}
 }
 
 static void IsoProcess(void *)
@@ -215,9 +352,11 @@ static bool IsoRegisterFunction(void)
 	const uint16_t epBit = (uint16_t)(1U << epNo);
 
 	UsbFuncCfg_t coreCfg = {};
+	coreCfg.RequestHandler = IsoRequest;
 	coreCfg.ConfigHandler = IsoConfig;
 	coreCfg.SetInterfaceHandler = IsoSetInterface;
 	coreCfg.ResetHandler = IsoReset;
+	coreCfg.SofHandler = IsoSof;
 	coreCfg.ProcessHandler = IsoProcess;
 
 	// The ISO endpoint is controller constrained. Reserve one supported
