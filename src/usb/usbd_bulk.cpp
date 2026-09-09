@@ -96,8 +96,8 @@ static bool UsbdBulkConfig(uint8_t Configuration, void *pContext)
 		return false;
 	}
 
-	if (!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIROUT(pBulk->EpNo), mps) ||
-		!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIRIN(pBulk->EpNo), mps))
+	if (!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIRIN(pBulk->EpNo), mps) ||
+		!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIROUT(pBulk->EpNo), mps))
 	{
 		UsbdBulkCloseEndpoints(pBulk);
 		UsbIntrfUnconfigure(&pBulk->IntrfData);
