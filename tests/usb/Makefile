@@ -49,15 +49,6 @@ BULK_SOURCES := \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
-HCI_TARGET := $(BUILD_DIR)/bt_hci_usb_test
-HCI_SOURCES := \
-	bt_hci_usb_test.cpp \
-	$(ROOT)/src/bluetooth/bt_hci_usb.cpp \
-	$(ROOT)/src/usb/usb_iso.cpp \
-	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/device_intrf.cpp \
-	$(ROOT)/src/cfifo.c
-
 INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
 INTRF_SOURCES := \
 	usb_intrf_test.cpp \
@@ -107,11 +98,10 @@ HEADERS := \
 	$(ROOT)/include/usb/usb_iso.h \
 	$(ROOT)/include/usb/usbd_bulk.h \
 	$(ROOT)/include/usb/usbd_cdc.h \
-	$(ROOT)/include/bluetooth/bt_hci_usb.h \
 	$(ROOT)/src/usb/usb_func.h
 
 TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
-	$(ISO_TARGET) $(ISO_DUPLEX_TARGET) $(BULK_TARGET) $(HCI_TARGET) $(LINK_TARGET)
+	$(ISO_TARGET) $(ISO_DUPLEX_TARGET) $(BULK_TARGET) $(LINK_TARGET)
 
 .PHONY: all test test-gcc test-clang test-matrix test-nrf-suspend-policy \
 	test-nrf-iso-policy iso-hw-build iso-hw probe clean
@@ -127,7 +117,6 @@ test: $(TARGETS)
 	$(TEST_ENV) ./$(ISO_TARGET)
 	$(TEST_ENV) ./$(ISO_DUPLEX_TARGET)
 	$(TEST_ENV) ./$(BULK_TARGET)
-	$(TEST_ENV) ./$(HCI_TARGET)
 	$(TEST_ENV) ./$(LINK_TARGET)
 
 test-nrf-suspend-policy:
@@ -184,11 +173,6 @@ $(BULK_TARGET): $(BULK_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
 		$(BULK_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
-
-$(HCI_TARGET): $(HCI_SOURCES) $(HEADERS)
-	@mkdir -p $(BUILD_DIR)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
-		$(HCI_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(LINK_TARGET): $(LINK_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)

@@ -232,12 +232,12 @@ static void TestDescriptor(void)
 {
     ResetFake();
     UsbdBulk bulk;
-    const UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
+    UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
     UsbdBulkDesc_t desc = {};
+    cfg.pDesc = &desc;
 
     CHECK(bulk.Init(cfg));
     CHECK(sizeof(desc) == sizeof(UsbIntrfDesc_t) + 2U * sizeof(UsbEndPointDesc_t));
-    CHECK(bulk.MakeDesc(&desc, USB_SPEED_FULL));
     CHECK(desc.Interface.bInterfaceNumber == ITF_NO);
     CHECK(desc.Interface.bNumEndpoints == 2U);
     CHECK(desc.Interface.bInterfaceClass == USB_INTRFCLASS_VENDOR);

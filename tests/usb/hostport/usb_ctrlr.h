@@ -3,9 +3,10 @@
 
 @brief	Host test stand in for a port supplied usb_ctrlr.h.
 
-Describes one full speed controller with ordinary endpoints 0 through 7 and a
-dedicated bidirectional isochronous endpoint 8. The host tests link against a
-fake controller, so these numbers only have to be a valid target shape.
+Describes one full speed controller with ordinary endpoints 0 through 7 and
+dedicated bidirectional isochronous endpoints 8 and 9. The host tests link
+against a fake controller, so these numbers only have to be a valid target
+shape.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 3, 2026
@@ -61,8 +62,8 @@ enum {
 	USB_PKT_MAXLEN_0_INT = 64,
 	USB_PKT_MAXLEN_0_ISO = 63,
 	USB_ISO_SUPPORTED_0 = 1,
-	USB_ISO_EPIN_MASK_0 = (1U << 8),
-	USB_ISO_EPOUT_MASK_0 = (1U << 8),
+	USB_ISO_EPIN_MASK_0 = (1U << 8) | (1U << 9),
+	USB_ISO_EPOUT_MASK_0 = (1U << 8) | (1U << 9),
 };
 
 #define USB_EPIN_CNT(CtrlrNo) \

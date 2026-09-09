@@ -4,9 +4,7 @@ on:
   push:
     paths:
       - 'include/usb/**'
-      - 'include/bluetooth/bt_hci_usb.h'
       - 'src/usb/**'
-      - 'src/bluetooth/bt_hci_usb.cpp'
       - 'ARM/Nordic/include/usb_ctrlr.h'
       - 'ARM/Nordic/src/usb_ctrlr_nrfx.cpp'
       - 'tests/usb/**'
@@ -16,9 +14,7 @@ on:
   pull_request:
     paths:
       - 'include/usb/**'
-      - 'include/bluetooth/bt_hci_usb.h'
       - 'src/usb/**'
-      - 'src/bluetooth/bt_hci_usb.cpp'
       - 'ARM/Nordic/include/usb_ctrlr.h'
       - 'ARM/Nordic/src/usb_ctrlr_nrfx.cpp'
       - 'tests/usb/**'
