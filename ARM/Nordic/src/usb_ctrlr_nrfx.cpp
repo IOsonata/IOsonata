@@ -913,6 +913,14 @@ static atomic_bool s_IsoOutOpen;
 static atomic_bool s_IsoInReady;
 static atomic_bool s_IsoOutReady;
 static uint16_t s_IsoOutSize;
+// Bitmask of open non-ISO data IN endpoints (bit n = EPIN n). A data IN
+// retires its DMA lazily, so a completed IN keeps the shared engine until the
+// next controller event runs the reclaim step. When the host stops polling
+// between transfers there is no such event, so the engine stays held and the
+// next OUT stalls after the hardware double buffer fills. Keeping the SOF
+// interrupt on while any lazy IN is open runs the reclaim once per frame, which
+// releases the idle owner and starts the queued OUT within 1 ms.
+static volatile uint16_t s_LazyInMask;
 
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
@@ -1027,26 +1035,28 @@ static void nRFUsbdDmaEndIntEnable(uint8_t EpAddr)
 /** Retire a data IN DMA whose END event is already latched. */
 static void nRFUsbdDmaReclaim(void)
 {
-	const uint32_t primask = __get_PRIMASK();
-	__disable_irq();
+	uint_fast8_t epAddr = atomic_load(&s_DmaEpAddr);
 
-	const uint8_t epAddr = (uint8_t)atomic_load(&s_DmaEpAddr);
-	if (epAddr == NRFX_USBD_DMA_EP_NONE ||
-		!nRFUsbdDataIn(epAddr) ||
-		USB_ENDPADDR_NUM(epAddr) == NRFX_USBD_ISO_EP_NO)
+	if ((uint8_t)epAddr == NRFX_USBD_DMA_EP_NONE ||
+		!nRFUsbdDataIn((uint8_t)epAddr) ||
+		USB_ENDPADDR_NUM((uint8_t)epAddr) == NRFX_USBD_ISO_EP_NO)
 	{
-		__set_PRIMASK(primask);
 		return;
 	}
 
-	volatile uint32_t *pEvent = nRFUsbdDmaEndEvent(epAddr);
+	volatile uint32_t *pEvent = nRFUsbdDmaEndEvent((uint8_t)epAddr);
 	if (*pEvent == 0U)
 	{
-		__set_PRIMASK(primask);
 		return;
 	}
 
-	NRF_USBD->INTENCLR = nRFUsbdDmaEndMask(epAddr);
+	if (!atomic_compare_exchange_strong(&s_DmaEpAddr, &epAddr,
+		(uint_fast8_t)NRFX_USBD_DMA_EP_NONE))
+	{
+		return;
+	}
+
+	NRF_USBD->INTENCLR = nRFUsbdDmaEndMask((uint8_t)epAddr);
 	*pEvent = 0;
 	__ISB();
 	__DSB();
@@ -1056,12 +1066,7 @@ static void nRFUsbdDmaReclaim(void)
 		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
 	}
 
-	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
 	atomic_flag_clear(&s_DmaRunning);
-	__ISB();
-	__DSB();
-
-	__set_PRIMASK(primask);
 }
 
 static void nRFUsbdDmaRelease(void)
@@ -1474,6 +1479,7 @@ static void nRFUsbdResetState(void)
 	atomic_store(&s_IsoInReady, false);
 	atomic_store(&s_IsoOutReady, false);
 	s_IsoOutSize = 0U;
+	s_LazyInMask = 0U;
 	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
 	atomic_flag_clear(&s_DmaRunning);
 
@@ -1830,6 +1836,11 @@ static bool nRFUsbRegEpOpen(const UsbEndPointDesc_t *pDesc)
 		// Data IN completes its short DMA copy in the controller interrupt.
 		// EPDATA later reports when the host consumed the copied packet.
 		NRF_USBD->EPINEN |= (1UL << epNum);
+		// Keep a per-frame reclaim running so an idle IN never holds the
+		// shared DMA engine across a host pause.
+		s_LazyInMask |= (uint16_t)(1U << epNum);
+		NRF_USBD->EVENTS_SOF = 0;
+		NRF_USBD->INTENSET = USBD_INTEN_SOF_Msk;
 	}
 	else
 	{
@@ -1880,7 +1891,8 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 			NRF_USBD->EPOUTEN &= ~(1UL << NRFX_USBD_ISO_EP_NO);
 			NRF_USBD->EVENTS_ENDISOOUT = 0;
 		}
-		if (!s_Ctrlr.SofEnabled && !atomic_load(&s_IsoInOpen) &&
+		if (!s_Ctrlr.SofEnabled && s_LazyInMask == 0U &&
+			!atomic_load(&s_IsoInOpen) &&
 			!atomic_load(&s_IsoOutOpen) && !atomic_load(&s_BusSuspended))
 		{
 			NRF_USBD->INTENCLR = USBD_INTEN_SOF_Msk;
@@ -1892,6 +1904,13 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 		NRF_USBD->EPINEN &= ~(1UL << epNum);
 		NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
 		NRF_USBD->EPDATASTATUS = (1UL << epNum);
+		s_LazyInMask &= (uint16_t)~(1U << epNum);
+		if (!s_Ctrlr.SofEnabled && s_LazyInMask == 0U &&
+			!atomic_load(&s_IsoInOpen) && !atomic_load(&s_IsoOutOpen) &&
+			!atomic_load(&s_BusSuspended))
+		{
+			NRF_USBD->INTENCLR = USBD_INTEN_SOF_Msk;
+		}
 	}
 	else
 	{
@@ -2471,7 +2490,8 @@ extern "C" void USBD_IRQHandler(void)
 			nRFUsbdEmit(&evt);
 		}
 
-		if (!s_Ctrlr.SofEnabled && !atomic_load(&s_IsoInOpen) &&
+		if (!s_Ctrlr.SofEnabled && s_LazyInMask == 0U &&
+			!atomic_load(&s_IsoInOpen) &&
 			!atomic_load(&s_IsoOutOpen) && !atomic_load(&s_BusSuspended))
 		{
 			NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
