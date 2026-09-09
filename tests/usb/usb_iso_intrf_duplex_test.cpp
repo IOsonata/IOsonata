@@ -112,13 +112,12 @@ static void TxFrame(UsbIsoIntrf_t *, uint16_t,
 
 static void Receive(const uint8_t *pData, uint16_t Length)
 {
-	if (Length > 0U) memcpy(s_OutData, pData, Length);
-	s_OutLength = Length;
-	s_OutHandler(USB_ENDPADDR_DIROUT(8U), USB_CTRLR_EVT_DRDY,
-		0U, USB_CTRLR_XFER_SUCCESS, s_OutContext);
-	CHECK(s_OutBusy);
-	if (!s_OutBusy) return;
-	s_OutBusy = false;
+	CHECK(s_OutHandler != nullptr);
+	CHECK(!s_OutBusy);
+	if (Length > 0U) memcpy(s_OutBuffer, pData, Length);
+
+	// ISO OUT DMA is controller owned and lands directly in the registered
+	// buffer. UsbIntrf receives only the transfer-complete notification.
 	s_OutHandler(USB_ENDPADDR_DIROUT(8U), USB_CTRLR_EVT_XFER_CMPL,
 		Length, USB_CTRLR_XFER_SUCCESS, s_OutContext);
 }
@@ -161,10 +160,21 @@ int main(void)
 	CHECK(s_LastRxLen == sizeof(rx));
 	CHECK(memcmp(s_LastRx, rx, sizeof(rx)) == 0);
 	CHECK(s_InBusy);
-	CHECK(s_OutXferCount == 1);
+	CHECK(s_OutXferCount == 0);
 
 	CompleteIn();
 	CHECK(s_TxCount == 1);
+	CHECK(UsbIsoIntrfTxReady(&iso));
+
+	// Zero-length traffic is a valid frame, not an idle/free-slot marker.
+	CHECK(UsbIsoIntrfSendFrame(&iso, nullptr, 0U));
+	CHECK(s_InBusy);
+	CHECK(s_InLength == 0U);
+	Receive(nullptr, 0U);
+	CHECK(s_RxCount == 2);
+	CHECK(s_LastRxLen == 0U);
+	CompleteIn();
+	CHECK(s_TxCount == 2);
 	CHECK(UsbIsoIntrfTxReady(&iso));
 
 	UsbIsoIntrfClose(&iso);

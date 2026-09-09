@@ -1,22 +1,22 @@
 /**-------------------------------------------------------------------------
 @example	usb_iso_loopback.cpp
 
-@brief	USB isochronous EP8 loopback for UsbIsoIntrf hardware validation.
+@brief	USB isochronous loopback for UsbIsoIntrf hardware validation.
 
 This example deliberately contains no Bluetooth logic. It exposes one vendor
 specific interface with alternate setting 0 disabled and alternate settings
-1 through 6 using bidirectional isochronous endpoint 8. The maximum packet
-sizes match the Bluetooth synchronous-interface sizes so the same endpoint
-capability used by BtHciUsb is exercised without HCI packet semantics.
+1 through 6 using one controller-supported bidirectional isochronous endpoint.
+The function selects its interface and endpoint internally from the USB core
+allocator and controller ISO capability masks; the application does not assign
+USB topology.
 
-The host test is tests/usb/usb_iso_loopback_libusb.c. Each completed OUT frame
-is copied by UsbIsoIntrf into its static DMA staging and queued back on IN.
-UsbIsoIntrf owns endpoint open/close, DMA staging, RX re-arm, IN completion,
-and suspend/resume state. This file owns only the test descriptor and echo
-policy.
+The host test is Python/usb_iso_loopback.py. ISO OUT DMA lands directly in the
+buffer registered by UsbIntrf. UsbIsoIntrf publishes the completed frame to the
+callback, and the callback echoes it through the single ISO TX slot. There is
+no CFifo and no obsolete function-level endpoint completion callback.
 
 @author	Hoang Nguyen Hoan
-@date	Sep. 7, 2026
+@date	Sep. 9, 2026
 
 @license
 
@@ -47,10 +47,9 @@ SOFTWARE.
 
 #include "usb/usb.h"
 #include "usb/usb_iso.h"
+#include "../../src/usb/usb_func.h"
 
 #define USB_DEVNO			0
-#define ISO_INTERFACE_NO	0U
-#define ISO_EP_NO			8U
 #define ISO_CONFIG_VALUE	1U
 #define ISO_ALT_COUNT		6U
 
@@ -81,12 +80,27 @@ typedef struct __Iso_Config_Descriptor {
 static UsbIsoIntrf_t s_Iso;
 static bool s_Configured;
 static uint8_t s_Alt;
+static uint8_t s_InterfaceNo;
+static uint8_t s_EpNo;
 static uint32_t s_LoopbackDropCnt;
 
 static UsbDevDesc_t s_DeviceDesc;
 static UsbDevQualDesc_t s_QualifierDesc;
 static IsoConfigDesc_t s_ConfigDesc;
 static uint8_t s_StringDesc[2U + (ISO_STR_MAXLEN * 2U)];
+
+static uint8_t IsoFirstEndpoint(uint16_t Mask)
+{
+	for (uint8_t ep = 1U; ep < 16U; ep++)
+	{
+		if ((Mask & (uint16_t)(1U << ep)) != 0U)
+		{
+			return ep;
+		}
+	}
+
+	return 0U;
+}
 
 static void IsoRxFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 					   uint16_t Length, UsbCtrlrXferResult_t Result,
@@ -100,11 +114,12 @@ static void IsoRxFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 		return;
 	}
 
-	// UsbIsoIntrf copies this data into its own IN DMA staging before returning.
-	// A busy IN slot means this service interval could not be echoed; do not
-	// queue protocol state here because this is a transport-policy test only.
+	// The callback owns the current RX frame only for this call. SendFrame
+	// copies it into the independent ISO TX slot before returning.
 	if (!UsbIsoIntrfSendFrame(&s_Iso, pData, Length))
 	{
+		// ISO is deadline driven. A busy TX slot means this service
+		// opportunity is missed; never queue stale data for a later frame.
 		s_LoopbackDropCnt++;
 	}
 }
@@ -135,7 +150,7 @@ static bool IsoConfig(uint8_t Configuration, void *)
 
 static bool IsoSetInterface(uint8_t InterfaceNo, uint8_t Alt, void *)
 {
-	if (!s_Configured || InterfaceNo != ISO_INTERFACE_NO || Alt > ISO_ALT_COUNT)
+	if (!s_Configured || InterfaceNo != s_InterfaceNo || Alt > ISO_ALT_COUNT)
 	{
 		return false;
 	}
@@ -155,12 +170,6 @@ static bool IsoSetInterface(uint8_t InterfaceNo, uint8_t Alt, void *)
 
 	s_Alt = Alt;
 	return true;
-}
-
-static void IsoXfer(uint8_t, uint16_t, UsbCtrlrXferResult_t, void *)
-{
-	// EP8 uses the callback registered by UsbIsoIntrf. This function exists so
-	// the USB core can record ownership of the endpoint in UsbFuncCfg_t.
 }
 
 static void IsoReset(void *)
@@ -186,6 +195,47 @@ static void IsoProcess(void *)
 	{
 		(void)UsbIsoIntrfResume(&s_Iso);
 	}
+}
+
+static bool IsoRegisterFunction(void)
+{
+	if (!USB_ISO_SUPPORTED(USB_DEVNO))
+	{
+		return false;
+	}
+
+	const uint16_t isoMask = (uint16_t)(
+		USB_ISO_EPIN_MASK(USB_DEVNO) & USB_ISO_EPOUT_MASK(USB_DEVNO));
+	const uint8_t epNo = IsoFirstEndpoint(isoMask);
+	if (epNo == 0U)
+	{
+		return false;
+	}
+
+	const uint16_t epBit = (uint16_t)(1U << epNo);
+
+	UsbFuncCfg_t coreCfg = {};
+	coreCfg.ConfigHandler = IsoConfig;
+	coreCfg.SetInterfaceHandler = IsoSetInterface;
+	coreCfg.ResetHandler = IsoReset;
+	coreCfg.ProcessHandler = IsoProcess;
+
+	// The ISO endpoint is controller constrained. Reserve one supported
+	// bidirectional endpoint while the allocator chooses the interface number.
+	UsbFuncReq_t req = {};
+	req.InterfaceCount = 1U;
+	req.FixedInMask = epBit;
+	req.FixedOutMask = epBit;
+
+	UsbFuncAlloc_t alloc = {};
+	if (!UsbRegisterFuncAuto(USB_DEVNO, &req, &coreCfg, &alloc))
+	{
+		return false;
+	}
+
+	s_InterfaceNo = alloc.FirstInterface;
+	s_EpNo = epNo;
+	return true;
 }
 
 static uint8_t IsoMaxPower(const UsbCfg_t *pCfg)
@@ -248,7 +298,7 @@ static const uint8_t *IsoConfigurationDescriptor(UsbSpeed_t Speed,
 											 uint16_t *pLength)
 {
 	const UsbCfg_t *pCfg = UsbGetCfg(USB_DEVNO);
-	if (pCfg == nullptr || pLength == nullptr)
+	if (pCfg == nullptr || pLength == nullptr || s_EpNo == 0U)
 	{
 		return nullptr;
 	}
@@ -269,7 +319,7 @@ static const uint8_t *IsoConfigurationDescriptor(UsbSpeed_t Speed,
 
 	s_ConfigDesc.Alt0.bLength = sizeof(s_ConfigDesc.Alt0);
 	s_ConfigDesc.Alt0.bDescriptorType = USB_DESCTYPE_INTERFACE;
-	s_ConfigDesc.Alt0.bInterfaceNumber = ISO_INTERFACE_NO;
+	s_ConfigDesc.Alt0.bInterfaceNumber = s_InterfaceNo;
 	s_ConfigDesc.Alt0.bAlternateSetting = 0U;
 	s_ConfigDesc.Alt0.bNumEndpoints = 0U;
 	s_ConfigDesc.Alt0.bInterfaceClass = USB_INTRFCLASS_VENDOR;
@@ -285,13 +335,13 @@ static const uint8_t *IsoConfigurationDescriptor(UsbSpeed_t Speed,
 
 		pAlt->Out.bLength = sizeof(pAlt->Out);
 		pAlt->Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-		pAlt->Out.bEndpointAddress = USB_ENDPADDR_DIROUT(ISO_EP_NO);
+		pAlt->Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_EpNo);
 		pAlt->Out.bmAttributes = USB_ENDPATT_TRANS_ISO;
 		pAlt->Out.wMaxPacketSize = s_IsoMps[i];
 		pAlt->Out.bInterval = interval;
 
 		pAlt->In = pAlt->Out;
-		pAlt->In.bEndpointAddress = USB_ENDPADDR_DIRIN(ISO_EP_NO);
+		pAlt->In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_EpNo);
 	}
 
 	*pLength = sizeof(s_ConfigDesc);
@@ -420,34 +470,17 @@ static const UsbCfg_t s_UsbCfg = {
 
 int main()
 {
-	if (!UsbInit(&s_UsbCfg) || !USB_ISO_SUPPORTED(USB_DEVNO) ||
-		(USB_ISO_EPIN_MASK(USB_DEVNO) & (1U << ISO_EP_NO)) == 0U ||
-		(USB_ISO_EPOUT_MASK(USB_DEVNO) & (1U << ISO_EP_NO)) == 0U)
+	if (!UsbInit(&s_UsbCfg) || !IsoRegisterFunction())
 	{
 		return -1;
 	}
 
 	UsbIsoIntrfCfg_t isoCfg = {};
 	isoCfg.DevNo = USB_DEVNO;
-	isoCfg.EpNo = ISO_EP_NO;
+	isoCfg.EpNo = s_EpNo;
 	isoCfg.RxHandler = IsoRxFrame;
 	isoCfg.TxHandler = IsoTxFrame;
 	if (!UsbIsoIntrfInit(&s_Iso, &isoCfg))
-	{
-		return -1;
-	}
-
-	UsbFuncCfg_t func = {};
-	func.FirstInterface = ISO_INTERFACE_NO;
-	func.InterfaceCount = 1U;
-	func.EpInMask = (uint16_t)(1U << ISO_EP_NO);
-	func.EpOutMask = (uint16_t)(1U << ISO_EP_NO);
-	func.ConfigHandler = IsoConfig;
-	func.SetInterfaceHandler = IsoSetInterface;
-	func.XferHandler = IsoXfer;
-	func.ResetHandler = IsoReset;
-	func.ProcessHandler = IsoProcess;
-	if (!UsbRegisterFunc(USB_DEVNO, &func))
 	{
 		return -1;
 	}

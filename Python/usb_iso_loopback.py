@@ -12,14 +12,14 @@ except ImportError:
 
 DEFAULT_VID = 0x1209
 DEFAULT_PID = 0x0003
-DEFAULT_INTERFACE = 0
-DEFAULT_EP = 8
 DEFAULT_ROUNDS = 32
 DEFAULT_TIMEOUT_MS = 1000
 
 MPS_BY_ALT = (9, 17, 25, 33, 49, 63)
 BURST_GUARD_FRAMES = 8
 BURST_EXTRA_IN_FRAMES = 16
+USB_ENDPOINT_TRANSFER_TYPE_MASK = 0x03
+USB_ENDPOINT_TRANSFER_TYPE_ISO = 0x01
 
 
 def parse_int(value):
@@ -83,6 +83,83 @@ def packet_summary(setup):
     return f"{text}; nonzero={nonzero}/{len(setup)}"
 
 
+def discover_iso_loopback(device, interface_override=None, ep_override=None):
+    """Find the vendor interface whose alt 1..6 match the loopback descriptors."""
+    candidates = {}
+
+    for setting in device.iterSettings():
+        interface = setting.getNumber()
+        alt = setting.getAlternateSetting()
+        if interface_override is not None and interface != interface_override:
+            continue
+        if alt < 1 or alt > len(MPS_BY_ALT):
+            continue
+        if setting.getClass() != 0xFF:
+            continue
+
+        endpoints = list(setting.iterEndpoints())
+        if len(endpoints) != 2:
+            continue
+
+        in_ep = None
+        out_ep = None
+        for endpoint in endpoints:
+            if (
+                endpoint.getAttributes() & USB_ENDPOINT_TRANSFER_TYPE_MASK
+            ) != USB_ENDPOINT_TRANSFER_TYPE_ISO:
+                continue
+
+            address = endpoint.getAddress()
+            ep = address & 0x0F
+            if ep_override is not None and ep != ep_override:
+                continue
+
+            if address & usb1.ENDPOINT_IN:
+                in_ep = endpoint
+            else:
+                out_ep = endpoint
+
+        if in_ep is None or out_ep is None:
+            continue
+
+        in_no = in_ep.getAddress() & 0x0F
+        out_no = out_ep.getAddress() & 0x0F
+        if in_no == 0 or in_no != out_no:
+            continue
+
+        expected_mps = MPS_BY_ALT[alt - 1]
+        if (
+            in_ep.getMaxPacketSize() != expected_mps
+            or out_ep.getMaxPacketSize() != expected_mps
+        ):
+            continue
+
+        key = (interface, in_no)
+        candidates.setdefault(key, set()).add(alt)
+
+    expected_alts = set(range(1, len(MPS_BY_ALT) + 1))
+    matches = [
+        key for key, alts in candidates.items()
+        if expected_alts.issubset(alts)
+    ]
+
+    if not matches:
+        detail = ""
+        if interface_override is not None:
+            detail += f" interface {interface_override}"
+        if ep_override is not None:
+            detail += f" EP{ep_override}"
+        raise RuntimeError(
+            "No IOsonata generic ISO loopback interface matching alt1..alt6"
+            + detail
+        )
+    if len(matches) > 1:
+        text = ", ".join(f"interface {i} EP{ep}" for i, ep in matches)
+        raise RuntimeError(f"Multiple ISO loopback interfaces match: {text}")
+
+    return matches[0]
+
+
 def run_burst(
     context,
     handle,
@@ -103,7 +180,7 @@ def run_burst(
         for i in range(out_count)
     ]
     out_buffer = b"".join(payloads)
-    out_lengths = [len(payload) for payload in payloads]
+    out_lengths = [test_length] * out_count
     in_lengths = [mps] * in_count
 
     state = {
@@ -154,11 +231,8 @@ def run_burst(
     )
 
     try:
-        # Keep a continuous IN schedule in place before the OUT stream starts.
-        # Unlike bulk, ISO has no retry. A one-frame request/echo transaction can
-        # lose the only echo merely because the host and device chose different
-        # service frames. Multi-packet transfers keep both directions scheduled
-        # for consecutive frames and test the transport as an ISO stream.
+        # Keep IN service scheduled before OUT. ISO has no retry, so a
+        # one-transfer-at-a-time bulk-style request/echo test is invalid.
         in_transfer.submit()
         out_transfer.submit()
 
@@ -209,6 +283,31 @@ def run_burst(
                     None,
                 )
 
+        if test_length == 0:
+            completed_zero = [
+                index
+                for index, (packet_status, packet_data)
+                in enumerate(state["in_packets"])
+                if packet_status == usb1.TRANSFER_COMPLETED and len(packet_data) == 0
+            ]
+            if len(completed_zero) < rounds:
+                return (
+                    f"zero-length echo count {len(completed_zero)}, "
+                    f"expected at least {rounds}; "
+                    f"IN transfer={status_name(state['in_status'])}; "
+                    f"{packet_summary(state['in_setup'])}",
+                    None,
+                )
+
+            stats = {
+                "received": len(completed_zero),
+                "in_slots": in_count,
+                "matched": min(len(completed_zero), rounds),
+                "out_packets": out_count,
+                "in_status": status_name(state["in_status"]),
+            }
+            return None, stats
+
         received = []
         bad_packets = []
         for index, (packet_status, packet_data) in enumerate(state["in_packets"]):
@@ -226,10 +325,9 @@ def run_burst(
                 None,
             )
 
-        # Match received non-empty frames against the transmitted stream in
-        # order. The leading/trailing guard frames absorb normal host/device
-        # phase differences. Every frame in the middle validation window must
-        # survive; otherwise this is a real ISO drop or corruption.
+        # Match non-empty echoes in order. Guard frames absorb the normal
+        # host/device phase offset; every frame in the validation window must
+        # survive or the test reports a drop/corruption.
         matched = set()
         next_tx = 0
         unknown = []
@@ -259,10 +357,10 @@ def run_burst(
             if index not in matched
         ]
         if missing:
-            in_summary = packet_summary(state["in_setup"])
             return (
                 f"missing validation frame(s) {missing[:16]}; "
-                f"IN transfer={status_name(state['in_status'])}; {in_summary}",
+                f"IN transfer={status_name(state['in_status'])}; "
+                f"{packet_summary(state['in_setup'])}",
                 None,
             )
 
@@ -283,7 +381,7 @@ def run_burst(
 
 
 def run_alt(context, handle, interface, ep, alt, mps, rounds, timeout_ms):
-    lengths = (mps, max(1, mps - 1), 1)
+    lengths = (mps, mps - 1, 1, 0)
 
     for mode, length in enumerate(lengths):
         handle.setInterfaceAltSetting(interface, 0)
@@ -308,9 +406,10 @@ def run_alt(context, handle, interface, ep, alt, mps, rounds, timeout_ms):
             )
             return False
 
+        label = "zero-length ISO packets" if length == 0 else "validation frames"
         print(
             f"PASS alt {alt} MPS {mps} length {length}: "
-            f"{rounds} validation frames "
+            f"{rounds} {label} "
             f"(RX {stats['received']}/{stats['in_slots']} ISO slots, "
             f"IN transfer {stats['in_status']})"
         )
@@ -318,24 +417,24 @@ def run_alt(context, handle, interface, ep, alt, mps, rounds, timeout_ms):
     return True
 
 
-def manual_suspend_wake(context, handle, args):
-    handle.setInterfaceAltSetting(args.interface, 0)
-    handle.setInterfaceAltSetting(args.interface, 6)
+def manual_suspend_wake(context, handle, interface, ep, rounds, timeout_ms):
+    handle.setInterfaceAltSetting(interface, 0)
+    handle.setInterfaceAltSetting(interface, 6)
     time.sleep(0.005)
 
     print()
-    print(f"Suspend/wake phase: alt 6 is open and EP{args.ep} OUT is armed.")
+    print(f"Suspend/wake phase: alt 6 is open on interface {interface}, EP{ep}.")
     input("Put the host into real USB/system suspend now. After wake, press Enter.")
 
     error, stats = run_burst(
         context,
         handle,
-        args.ep,
+        ep,
         6,
         MPS_BY_ALT[5],
         MPS_BY_ALT[5],
-        max(1, min(args.rounds, 8)),
-        args.timeout,
+        max(1, min(rounds, 8)),
+        timeout_ms,
         sequence_base=0x4000,
     )
     if error is not None:
@@ -351,12 +450,22 @@ def manual_suspend_wake(context, handle, args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Exercise the IOsonata UsbIsoLoopback example"
+        description="Exercise the IOsonata generic UsbIsoIntrf loopback example"
     )
     parser.add_argument("--vid", type=parse_int, default=DEFAULT_VID)
     parser.add_argument("--pid", type=parse_int, default=DEFAULT_PID)
-    parser.add_argument("--interface", type=int, default=DEFAULT_INTERFACE)
-    parser.add_argument("--ep", type=int, default=DEFAULT_EP)
+    parser.add_argument(
+        "--interface",
+        type=int,
+        default=None,
+        help="optional interface override; default discovers descriptor topology",
+    )
+    parser.add_argument(
+        "--ep",
+        type=int,
+        default=None,
+        help="optional endpoint-number override; default discovers descriptor topology",
+    )
     parser.add_argument(
         "--rounds",
         type=int,
@@ -378,7 +487,9 @@ def main():
         print("Result         : FAIL")
         return 2
 
-    if args.ep <= 0 or args.ep > 15:
+    if args.interface is not None and (args.interface < 0 or args.interface > 255):
+        parser.error("--interface must be 0..255")
+    if args.ep is not None and (args.ep <= 0 or args.ep > 15):
         parser.error("--ep must be 1..15")
     if args.rounds <= 0 or args.rounds > 200:
         parser.error("--rounds must be 1..200")
@@ -387,15 +498,22 @@ def main():
 
     try:
         with usb1.USBContext() as context:
-            handle = context.openByVendorIDAndProductID(
+            device = context.getByVendorIDAndProductID(
                 args.vid,
                 args.pid,
                 skip_on_error=True,
             )
-            if handle is None:
+            if device is None:
                 raise RuntimeError(
                     f"Device {args.vid:04x}:{args.pid:04x} not found"
                 )
+
+            interface, ep = discover_iso_loopback(
+                device,
+                interface_override=args.interface,
+                ep_override=args.ep,
+            )
+            handle = device.open()
 
             try:
                 try:
@@ -403,18 +521,18 @@ def main():
                 except (AttributeError, usb1.USBError):
                     pass
 
-                with handle.claimInterface(args.interface):
+                with handle.claimInterface(interface):
                     print(
                         f"USB ISO loopback {args.vid:04x}:{args.pid:04x} "
-                        f"interface {args.interface} EP{args.ep}"
+                        f"interface {interface} EP{ep}"
                     )
 
                     for alt, mps in enumerate(MPS_BY_ALT, start=1):
                         if not run_alt(
                             context,
                             handle,
-                            args.interface,
-                            args.ep,
+                            interface,
+                            ep,
                             alt,
                             mps,
                             args.rounds,
@@ -424,7 +542,14 @@ def main():
                             return 1
 
                     if args.manual_suspend_wake:
-                        if not manual_suspend_wake(context, handle, args):
+                        if not manual_suspend_wake(
+                            context,
+                            handle,
+                            interface,
+                            ep,
+                            args.rounds,
+                            args.timeout,
+                        ):
                             print("Result         : FAIL")
                             return 1
                     else:
@@ -433,7 +558,7 @@ def main():
                             "for full hardware validation."
                         )
 
-                    handle.setInterfaceAltSetting(args.interface, 0)
+                    handle.setInterfaceAltSetting(interface, 0)
             finally:
                 handle.close()
 
