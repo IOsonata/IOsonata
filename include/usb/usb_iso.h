@@ -11,11 +11,11 @@ TX slot, no CFifo queue.
 The layering is therefore:
 
     UsbIsoIntrf
-        -> UsbIntrf (ISO mode)
+        -> UsbIntrf (DIRECT mode)
             -> registered endpoint callback / controller ISO scheduling
 
 Each ISO slot is one UsbPkt_t-sized block. Hdr.Reserved carries the
-USB_INTRF_ISO_READY flag and Hdr.Length carries the current payload length.
+USB_INTRF_SLOT_READY flag and Hdr.Length carries the current payload length.
 Length zero is therefore a valid ISO packet and is distinct from a free slot.
 
 @author	Hoang Nguyen Hoan
@@ -104,7 +104,7 @@ struct __Usb_Iso_Interf {
 	bool Opened;
 	bool Suspended;
 
-	// One current packet per direction. UsbIntrf ISO mode uses the packet
+	// One current packet per direction. UsbIntrf DIRECT mode uses the packet
 	// header as ownership state and registers the Data portion for DMA.
 	uint32_t RxBuffer[USB_ISO_INTRF_PACKET_WORDS];
 	uint32_t TxBuffer[USB_ISO_INTRF_PACKET_WORDS];

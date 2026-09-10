@@ -13,33 +13,32 @@ descriptors, configuration and class/vendor dispatch. The port handles endpoint
 registers, DMA access and controller interrupts.
 
 UsbIntrf supports three data policies. Byte and packet modes use CFifo storage
-because their transfers may wait in software. ISO mode does not queue packets:
-it owns one statically reserved RX slot and one TX slot. Each ISO slot is a
-UsbPkt_t whose Hdr.Flags bit USB_INTRF_ISO_READY publishes whether the slot
+because their transfers may wait in software. Direct mode does not queue packets:
+it owns one statically reserved RX slot and one TX slot. Each direct slot is a
+UsbPkt_t whose Hdr.Flags bit USB_INTRF_SLOT_READY publishes whether the slot
 contains a current packet; Hdr.Length remains the actual payload length and may
 be zero.
 
 The derived class supplies one fixed RX and one fixed TX controller buffer sized
 for its transfer type. In byte and packet mode those are DMA staging buffers.
-In ISO mode the supplied buffers include UsbPktHdr_t followed by the payload;
+In direct mode the supplied buffers include UsbPktHdr_t followed by the payload;
 UsbIntrf registers the Data portion with the controller and uses the header as
 the single-slot ownership state.
 
 RX is event driven. USB_CTRLR_EVT_DRDY means data is ready in the controller to
 be retrieved. Byte and packet modes use the existing CFifo blocking/non-blocking
-policy. ISO OUT is non-blocking and the controller services the current ISO
-opportunity directly; completion publishes the single RX slot instead of
-placing data into a FIFO.
+policy. A direct specialization selects whether the controller uses DRDY or
+services OUT transfers directly. Completion publishes the single RX slot
+instead of placing data into a FIFO.
 
 For IN, byte and packet modes copy queued TX data into fixed staging before
-submitting the endpoint transfer. ISO TxData copies one current frame into the
-single TX slot and submits the ISO endpoint transfer; the controller port may
-schedule that transfer according to its ISO service timing without entering its
-ordinary DMA request queue.
+submitting the endpoint transfer. Direct TxData copies one current packet into
+the single TX slot and submits the endpoint transfer. The endpoint transfer type
+and its scheduling remain properties of the specialization and controller.
 
 UsbPktHdr_t.Length is the actual data length and may be from zero to MPS.
-UsbPktHdr_t.Flags is zero in ordinary packet mode. ISO mode uses bit
-USB_INTRF_ISO_READY as the slot-ready flag. Reserved remains a source-compatible
+UsbPktHdr_t.Flags is zero in ordinary packet mode. Direct mode uses bit
+USB_INTRF_SLOT_READY as the slot-ready flag. Reserved remains a source-compatible
 alias for existing packet-mode code.
 
 Generic code must not assume a 64-byte packet, a specific USB speed, or a
@@ -93,7 +92,7 @@ SOFTWARE.
 #define USB_INTRF_RXMEM_SIZE(NbPkt, Mps) \
 	CFIFO_TOTAL_MEMSIZE(NbPkt, USB_INTRF_PKT_BLKSIZE(Mps))
 
-#define USB_INTRF_ISO_READY			1U
+#define USB_INTRF_SLOT_READY			1U
 
 #pragma pack(push, 4)
 
@@ -114,13 +113,14 @@ typedef enum __Usb_Interf_Mode {
 	USB_INTRF_MODE_AUTO = 0,
 	USB_INTRF_MODE_BYTE,
 	USB_INTRF_MODE_PACKET,
-	USB_INTRF_MODE_ISO,
+	USB_INTRF_MODE_DIRECT,
 } UsbIntrfMode_t;
 
 typedef struct __Usb_Interf_Config {
 	int DevNo;
 	uint8_t EpNo;
-	bool bBlocking;
+	bool bBlocking;				//!< CFifo/controller blocking policy
+	bool bRxPrearm;				//!< Keep a DIRECT OUT transfer armed
 	UsbIntrfMode_t Mode;
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;
@@ -146,12 +146,13 @@ struct __Usb_Dev_Interf {
 	uint32_t RxDropCnt;
 	uint8_t *pRxBuffer;
 	uint8_t *pTxBuffer;
-	UsbPkt_t *pRxIsoBuffer;
-	UsbPkt_t *pTxIsoBuffer;
+	UsbPkt_t *pRxDirectBuffer;
+	UsbPkt_t *pTxDirectBuffer;
 	uint16_t BufferSize;
 	uint16_t Mps;
 	uint8_t EpNo;
 	bool bBlocking;
+	bool bRxPrearm;
 	bool RxPending;
 	UsbIntrfMode_t Mode;
 	EpSendFct_t EpSend;
@@ -165,6 +166,7 @@ extern "C" {
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg);
 bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps);
 void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf);
+bool UsbIntrfArmRx(UsbDevIntrf_t *pIntrf);
 bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);
 
 #ifdef __cplusplus

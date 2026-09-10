@@ -211,11 +211,11 @@ static void TestLifecycle(void)
 	UsbIsoIntrf_t iso = {};
 	auto cfg = MakeCfg();
 	CHECK(UsbIsoIntrfInit(&iso, &cfg));
-	CHECK(iso.IntrfData.Mode == USB_INTRF_MODE_ISO);
+	CHECK(iso.IntrfData.Mode == USB_INTRF_MODE_DIRECT);
 	CHECK(iso.IntrfData.hRxFifo == nullptr);
 	CHECK(iso.IntrfData.hTxFifo == nullptr);
-	CHECK(iso.IntrfData.pRxIsoBuffer != nullptr);
-	CHECK(iso.IntrfData.pTxIsoBuffer != nullptr);
+	CHECK(iso.IntrfData.pRxDirectBuffer != nullptr);
+	CHECK(iso.IntrfData.pTxDirectBuffer != nullptr);
 	CHECK(!s_OutBlocking);
 	CHECK(s_OutXferCount == 0);
 
@@ -246,7 +246,7 @@ static void TestRx(void)
 	CHECK(s_LastRxLength == sizeof(data));
 	CHECK(s_LastRxResult == USB_CTRLR_XFER_SUCCESS);
 	CHECK(memcmp(s_LastRx, data, sizeof(data)) == 0);
-	CHECK(!((iso.IntrfData.pRxIsoBuffer->Hdr.Flags & USB_INTRF_ISO_READY) != 0U));
+	CHECK(!((iso.IntrfData.pRxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) != 0U));
 	CHECK(s_OutXferCount == 0);
 
 	Receive(nullptr, 0U);
@@ -272,13 +272,13 @@ static void TestTx(void)
 	CHECK(UsbIsoIntrfSendFrame(&iso, frame, sizeof(frame)));
 	CHECK(s_InBusy && s_InLength == sizeof(frame));
 	CHECK(memcmp(s_InData, frame, sizeof(frame)) == 0);
-	CHECK((iso.IntrfData.pTxIsoBuffer->Hdr.Flags & USB_INTRF_ISO_READY) != 0U);
+	CHECK((iso.IntrfData.pTxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) != 0U);
 	CHECK(!UsbIsoIntrfSendFrame(&iso, frame, sizeof(frame)));
 	CompleteIn();
 	CHECK(UsbIsoIntrfTxReady(&iso) && s_TxCount == 1);
 	CHECK(s_LastTxLength == sizeof(frame));
 	CHECK(s_LastTxResult == USB_CTRLR_XFER_SUCCESS);
-	CHECK((iso.IntrfData.pTxIsoBuffer->Hdr.Flags & USB_INTRF_ISO_READY) == 0U);
+	CHECK((iso.IntrfData.pTxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) == 0U);
 
 	CHECK(UsbIsoIntrfSendFrame(&iso, nullptr, 0U));
 	CompleteIn();

@@ -63,6 +63,12 @@ RX_EVENT_SOURCES := \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
+DIRECT_TARGET := $(BUILD_DIR)/usb_direct_intrf_test
+DIRECT_SOURCES := \
+	usb_direct_intrf_test.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/cfifo.c
+
 ISO_TARGET := $(BUILD_DIR)/usb_iso_intrf_test
 ISO_SOURCES := \
 	usb_iso_intrf_test.cpp \
@@ -74,6 +80,13 @@ ISO_DUPLEX_TARGET := $(BUILD_DIR)/usb_iso_intrf_duplex_test
 ISO_DUPLEX_SOURCES := \
 	usb_iso_intrf_duplex_test.cpp \
 	$(ROOT)/src/usb/usb_iso.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/cfifo.c
+
+INT_TARGET := $(BUILD_DIR)/usb_int_intrf_test
+INT_SOURCES := \
+	usb_int_intrf_test.cpp \
+	$(ROOT)/src/usb/usb_int.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -97,16 +110,19 @@ HEADERS := \
 	$(ROOT)/include/usb/usb.h \
 	$(ROOT)/include/usb/usb_def.h \
 	$(ROOT)/include/usb/usb_intrf.h \
+	$(ROOT)/include/usb/usb_int.h \
 	$(ROOT)/include/usb/usb_iso.h \
 	$(ROOT)/include/usb/usbd_bulk.h \
 	$(ROOT)/include/usb/usbd_cdc.h \
 	$(ROOT)/src/usb/usb_func.h
 
 TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
-	$(ISO_TARGET) $(ISO_DUPLEX_TARGET) $(BULK_TARGET) $(LINK_TARGET)
+	$(DIRECT_TARGET) $(ISO_TARGET) $(ISO_DUPLEX_TARGET) $(INT_TARGET) \
+	$(BULK_TARGET) $(LINK_TARGET)
 
 .PHONY: all test test-c-header test-gcc test-clang test-matrix \
-	test-nrf-suspend-policy test-nrf-iso-policy iso-hw-build iso-hw probe clean
+	test-nrf-suspend-policy test-nrf-iso-policy test-nrf-int-policy \
+	iso-hw-build iso-hw probe clean
 
 all: test
 
@@ -114,17 +130,22 @@ test: $(TARGETS)
 	$(MAKE) test-c-header
 	$(MAKE) test-nrf-suspend-policy
 	$(MAKE) test-nrf-iso-policy
+	$(MAKE) test-nrf-int-policy
 	$(TEST_ENV) ./$(CORE_TARGET)
 	$(TEST_ENV) ./$(INTRF_TARGET)
 	$(TEST_ENV) ./$(RX_EVENT_TARGET)
+	$(TEST_ENV) ./$(DIRECT_TARGET)
 	$(TEST_ENV) ./$(ISO_TARGET)
 	$(TEST_ENV) ./$(ISO_DUPLEX_TARGET)
+	$(TEST_ENV) ./$(INT_TARGET)
 	$(TEST_ENV) ./$(BULK_TARGET)
 	$(TEST_ENV) ./$(LINK_TARGET)
 
 test-c-header:
-	@printf '%s\n' '#include "usb/usb_iso.h"' \
-		'int main(void) { return UsbIsoIntrfTxReady((const UsbIsoIntrf_t *)0) ? 1 : 0; }' | \
+	@printf '%s\n' '#include "usb/usb_iso.h"' '#include "usb/usb_int.h"' \
+		'int main(void) {' \
+		' return UsbIsoIntrfTxReady((const UsbIsoIntrf_t *)0) ||' \
+		'  UsbIntIntrfTxReady((const UsbIntIntrf_t *)0) ? 1 : 0;' '}' | \
 		$(CC) $(CPPFLAGS) $(CFLAGS) -x c -fsyntax-only -
 
 test-nrf-suspend-policy:
@@ -132,6 +153,9 @@ test-nrf-suspend-policy:
 
 test-nrf-iso-policy:
 	python3 ./nrf_usb_iso_policy_test.py
+
+test-nrf-int-policy:
+	python3 ./nrf_usb_int_policy_test.py
 
 iso-hw-build: $(ISO_HW_SCRIPT)
 	python3 -c "compile(open('$(ISO_HW_SCRIPT)', encoding='utf-8').read(), '$(ISO_HW_SCRIPT)', 'exec')"
@@ -167,6 +191,11 @@ $(RX_EVENT_TARGET): $(RX_EVENT_SOURCES) $(HEADERS)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
 		$(RX_EVENT_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
+$(DIRECT_TARGET): $(DIRECT_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(DIRECT_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
 $(ISO_TARGET): $(ISO_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
@@ -176,6 +205,11 @@ $(ISO_DUPLEX_TARGET): $(ISO_DUPLEX_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
 		$(ISO_DUPLEX_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(INT_TARGET): $(INT_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(INT_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(BULK_TARGET): $(BULK_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)

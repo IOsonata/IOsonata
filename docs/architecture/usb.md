@@ -23,6 +23,7 @@ Examples:
 ```text
 usb_intrf.*      UsbIntrf       role-neutral endpoint-pair data engine
 usb_iso.*        UsbIsoIntrf    role-neutral ISO specialization
+usb_int.*        UsbIntIntrf    role-neutral Interrupt specialization
 
 usbd_cdc.*       UsbdCdc        USB device CDC ACM
 usbd_bulk.*      UsbdBulk       USB device custom Bulk function
@@ -31,9 +32,9 @@ usbh_*           future USB host class/driver layer
 ```
 
 The current stack implements USB device mode. Host support does not exist yet.
-The architectural requirement is that `UsbIntrf` and `UsbIsoIntrf` stay free of
-device-only class/enumeration policy so they can be reused when a host layer is
-added.
+The architectural requirement is that `UsbIntrf`, `UsbIsoIntrf` and
+`UsbIntIntrf` stay free of device-only class/enumeration policy so they can be
+reused when a host layer is added.
 
 Role-specific behavior belongs above them:
 
@@ -42,11 +43,11 @@ Role-specific behavior belongs above them:
                     role-neutral data path
                       /       |       \
                      /        |        \
-              UsbdCdc     UsbdBulk   UsbIsoIntrf
-                                       /      \
-                                      /        \
-                              device-side    future host-side
-                               ISO class       ISO class
+              UsbdCdc     UsbdBulk   UsbIsoIntrf / UsbIntIntrf
+                                                /      \
+                                               /        \
+                                       device-side    future host-side
+                                          class           class
 ```
 
 Device-side responsibilities such as device descriptors, `SET_CONFIGURATION`,
@@ -57,29 +58,28 @@ Future host-side responsibilities such as device enumeration, selecting a
 configuration, claiming an interface and selecting an alternate setting also do
 not belong in `UsbIsoIntrf`.
 
-`UsbIsoIntrf` owns only the reusable ISO transport behavior shared by both
-roles.
+`UsbIsoIntrf` and `UsbIntIntrf` own only reusable transfer-type behavior shared
+by both roles.
 
 ## Current device-side data-path model
 
 `UsbIntrf` is the common bidirectional endpoint-pair data engine. CDC, custom
-Bulk and Isochronous all reuse it.
+Bulk, Isochronous and Interrupt all reuse it.
 
 ```text
                               UsbIntrf
                     generic endpoint-pair engine
                  fixed RX/TX controller DMA staging
-                       CFifo RX/TX transport
+                    selected RX/TX data policy
                     endpoint registration/callback
                            UsbCtrlrEpXfer
                                |
               +----------------+----------------+
               |                |                |
-           UsbdCdc          UsbdBulk        UsbIsoIntrf
-              |                |                |
-           Bulk EP          Bulk EP           ISO EP
-           byte mode        byte/packet       non-blocking
-                            mode              packet mode
+           UsbdCdc          UsbdBulk        UsbIsoIntrf / UsbIntIntrf
+              |                |                         |
+           Bulk EP          Bulk EP                  ISO / INT EP
+           BYTE mode        BYTE/PACKET              DIRECT mode
 ```
 
 The inheritance view is intentionally small:
@@ -88,12 +88,12 @@ The inheritance view is intentionally small:
                     UsbIntrf
                   /    |     \
                  /     |      \
-          UsbdCdc   UsbdBulk   UsbIsoIntrf
+          UsbdCdc   UsbdBulk   UsbIsoIntrf / UsbIntIntrf
 ```
 
-The endpoint transfer type and the `UsbIntrf` CFifo mode are independent.
-Opening an endpoint as Bulk or Isochronous does not create a different
-controller transfer API.
+The endpoint transfer type and the `UsbIntrf` data-path mode are independent.
+Opening an endpoint as Bulk, Isochronous or Interrupt does not create a
+different controller transfer API.
 
 ## CDC
 
@@ -150,7 +150,7 @@ UsbIsoIntrf
         |
         v
 UsbIntrf
-(non-blocking packet mode)
+(DIRECT mode)
         |
         v
 Isochronous OUT/IN endpoints
@@ -168,7 +168,7 @@ logic.
 - open/configure an endpoint pair as Isochronous;
 - ISO maximum packet size and service interval;
 - ISO synchronization/usage attributes;
-- non-blocking transport selection;
+- DIRECT data-policy selection;
 - reset/suspend/resume transport state;
 - frame-facing convenience callbacks and counters.
 
@@ -177,8 +177,8 @@ logic.
 - fixed RX/TX controller buffers;
 - endpoint registration;
 - the endpoint callback;
-- RX/TX CFifos;
-- packet-mode staging;
+- BYTE/PACKET CFifos and DIRECT slots;
+- packet-mode and direct-mode staging;
 - endpoint transfer submission;
 - transfer completion handling.
 
@@ -189,6 +189,35 @@ than delaying the service interval.
 
 There is no independent ISO controller transfer engine and no class-level
 completion forwarding path.
+
+## Interrupt transfer
+
+`UsbIntIntrf` is the role-neutral Interrupt specialization of `UsbIntrf`. It
+uses the same DIRECT storage policy as `UsbIsoIntrf`, but opens its endpoint
+pair with `USB_ENDPATT_TRANS_INT` and owns the interrupt polling interval.
+
+```text
+USB class/function
+        |
+        v
+UsbIntIntrf
+        |
+        v
+UsbIntrf (DIRECT mode)
+        |
+        v
+Interrupt OUT/IN endpoints
+```
+
+DIRECT describes only software storage: one current RX slot, one current TX
+slot and no CFifo. It does not describe how an OUT transfer is started. A
+controller that reports `USB_CTRLR_EVT_DRDY` uses the blocking path. A
+controller whose receive DMA must be armed before traffic advertises
+`USB_OUT_PREARM`. ISO keeps its controller-scheduled OUT behavior. These
+choices do not introduce ISO or Interrupt modes into `UsbIntrf`.
+
+`UsbIntIntrf` contains no HID report or descriptor behavior. A future `UsbdHid`
+layer may use it without moving HID semantics into the reusable transport.
 
 ## Controller boundary
 
@@ -268,8 +297,8 @@ registered endpoint callback
 endpoint owner
 ```
 
-For CDC/Bulk/ISO data pairs in the current device stack, that endpoint owner is
-`UsbIntrf`.
+For CDC/Bulk/ISO/Interrupt data pairs in the current device stack, that endpoint
+owner is `UsbIntrf`.
 
 ## Control endpoint
 
@@ -357,7 +386,7 @@ UsbPktHdr_t { Length }
 + packet payload storage
 ```
 
-TX mode is selected by CFifo block size:
+BYTE/PACKET mode is selected by CFifo block size:
 
 ```text
 block size 1
@@ -367,12 +396,13 @@ block size UsbPktHdr_t + packet storage
     -> packet mode
 ```
 
-Transfer type and CFifo mode are separate:
+Transfer type and data-path mode are separate:
 
 ```text
 CDC       = Bulk + byte mode
 UsbdBulk  = Bulk + byte or packet mode
-ISO       = Isochronous + non-blocking packet mode
+UsbIsoIntrf = Isochronous + DIRECT mode
+UsbIntIntrf = Interrupt + DIRECT mode
 ```
 
 ## Storage ownership
@@ -384,7 +414,7 @@ Derived class / specialization
     -> RX/TX controller DMA staging
 
 UsbIntrf
-    -> RX/TX CFifo transport
+    -> BYTE/PACKET CFifos or DIRECT slot ownership
 
 UsbCtrlr port
     -> hardware/DMA transaction state
@@ -424,7 +454,7 @@ Internally:
 
 This lifecycle describes the current device stack only. Future host enumeration
 and interface selection belong in `usbh_*` and must not change the reusable
-`UsbIntrf` / `UsbIsoIntrf` transport model.
+`UsbIntrf`, `UsbIsoIntrf` or `UsbIntIntrf` transport model.
 
 ## Rules for new USB work
 
@@ -440,7 +470,7 @@ Keep these invariants when adding a class, transfer type or future host support:
    Isochronous operation.
 8. Nonzero endpoint events go directly to the registered endpoint owner.
 9. `UsbIntrf` remains the common endpoint-pair data engine.
-10. CDC and Bulk use `UsbIntrf`; ISO is `UsbIntrf` in non-blocking packet mode.
+10. CDC and Bulk use BYTE/PACKET; ISO and Interrupt specializations use DIRECT.
 11. `UsbIsoIntrf` must not contain device descriptors, device Chapter 9 policy,
     host enumeration policy or class-specific packet semantics.
 12. Class-owned Interrupt endpoints do not need to pass through `UsbIntrf` when
@@ -449,3 +479,4 @@ Keep these invariants when adding a class, transfer type or future host support:
     completion routing.
 14. Do not duplicate endpoint transfer machinery inside a specialization or a
     future role-specific class.
+15. HID report and descriptor semantics do not belong in `UsbIntIntrf`.

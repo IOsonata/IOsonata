@@ -77,7 +77,8 @@ typedef enum __Usb_Ctrlr_Trans_Type {
 
 // nRF52840 and nRF5340 USBD. Full speed only. Endpoint numbers 0 through 7
 // are control, bulk or interrupt. Endpoint 8 is the dedicated isochronous
-// endpoint in both directions.
+// endpoint in both directions. Ordinary OUT data is reported through DRDY
+// before EasyDMA can retrieve it.
 enum {
 	USB_CTRLR_CNT = 1,
 	USB_HIGHSPEED_CAPABLE_0 = 0,
@@ -90,13 +91,15 @@ enum {
 	USB_ISO_SUPPORTED_0 = 1,
 	USB_ISO_EPIN_MASK_0 = (1U << 8),
 	USB_ISO_EPOUT_MASK_0 = (1U << 8),
+	USB_OUT_PREARM_0 = 0,
 };
 
 #elif defined(USBHS_PRESENT)
 
 // nRF54 USBHS. High speed capable, so the bulk and interrupt bounds are the
 // high-speed maxima. A full-speed host negotiates smaller packets and buffers
-// sized from these constants still fit.
+// sized from these constants still fit. Its buffer-DMA OUT endpoints must be
+// armed before the host transfer.
 enum {
 	USB_CTRLR_CNT = 1,
 	USB_HIGHSPEED_CAPABLE_0 = 1,
@@ -109,6 +112,7 @@ enum {
 	USB_ISO_SUPPORTED_0 = 0,
 	USB_ISO_EPIN_MASK_0 = 0,
 	USB_ISO_EPOUT_MASK_0 = 0,
+	USB_OUT_PREARM_0 = 1,
 };
 
 #else
@@ -127,6 +131,8 @@ enum {
 	((CtrlrNo) == 0 ? USB_ISO_EPIN_MASK_0 : 0U)
 #define USB_ISO_EPOUT_MASK(CtrlrNo) \
 	((CtrlrNo) == 0 ? USB_ISO_EPOUT_MASK_0 : 0U)
+#define USB_OUT_PREARM(CtrlrNo) \
+	((CtrlrNo) == 0 ? USB_OUT_PREARM_0 : 0)
 
 #define USB_PKT_MAXLEN(CtrlrNo, TransType) \
 	((CtrlrNo) != 0 ? 0 : \

@@ -141,7 +141,7 @@ int main(void)
 	cfg.TxHandler = TxFrame;
 
 	CHECK(UsbIsoIntrfInit(&iso, &cfg));
-	CHECK(iso.IntrfData.Mode == USB_INTRF_MODE_ISO);
+	CHECK(iso.IntrfData.Mode == USB_INTRF_MODE_DIRECT);
 	CHECK(iso.IntrfData.hRxFifo == nullptr);
 	CHECK(iso.IntrfData.hTxFifo == nullptr);
 	CHECK(UsbIsoIntrfOpen(&iso, 49U, 1U));
