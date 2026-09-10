@@ -1351,6 +1351,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc.h</locationURI>
 		</link>
 		<link>
+			<name>include/usb/usbd_hid.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_hid.h</locationURI>
+		</link>
+		<link>
 			<name>src/Fusion/Fusion.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/Fusion.h</locationURI>
@@ -2399,6 +2404,11 @@
 			<name>src/usb/usbd_cdc_desc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_desc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_hid.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_hid.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/vqf/cpp</name>
