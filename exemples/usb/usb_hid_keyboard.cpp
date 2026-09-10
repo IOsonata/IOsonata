@@ -3,8 +3,8 @@
 
 @brief	USB HID boot keyboard demo
 
-Button 1 sends an A key press while held. The keyboard LED output report
-drives LED 1 from the host Caps Lock state.
+Button 1 sends an A key press while held. Button 2 sends Caps Lock so the
+keyboard LED output report returned by the host can drive LED 1.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 10, 2026
@@ -50,6 +50,7 @@ SOFTWARE.
 #define HID_STR_INTERFACE	4U
 #define HID_STR_MAXLEN		32U
 #define HID_KEY_A			0x04U
+#define HID_KEY_CAPS_LOCK	0x39U
 #define HID_LED_CAPS_LOCK	(1U << 1)
 #define HID_DEBOUNCE_COUNT	5U
 
@@ -117,6 +118,35 @@ static uint8_t s_StringDesc[2U + (HID_STR_MAXLEN * 2U)];
 static const uint8_t *HidDescHandler(uint8_t DescType, uint8_t DescIndex,
 								 uint16_t LangId, UsbSpeed_t Speed,
 								 uint16_t *pLength, void *pContext);
+
+static bool ButtonDebounce(bool Pressed, bool &Candidate, bool &Stable,
+						   uint8_t &Count)
+{
+	if (Pressed != Candidate)
+	{
+		Candidate = Pressed;
+		Count = 0U;
+		return false;
+	}
+	if (Count < HID_DEBOUNCE_COUNT)
+	{
+		Count++;
+		if (Count == HID_DEBOUNCE_COUNT && Candidate != Stable)
+		{
+			Stable = Candidate;
+			return true;
+		}
+	}
+	return false;
+}
+
+static void KeyboardReportUpdate(bool APressed, bool CapsPressed)
+{
+	memset(&s_Report, 0, sizeof(s_Report));
+	s_Report.Key[0] = APressed ? HID_KEY_A : 0U;
+	s_Report.Key[1] = CapsPressed ? HID_KEY_CAPS_LOCK : 0U;
+	s_ReportPending = true;
+}
 
 static void KeyboardLedApply(uint8_t Report)
 {
@@ -379,6 +409,9 @@ int main()
 {
 	IOPinConfig(HID_BUTTON_PORT, HID_BUTTON_PIN, HID_BUTTON_PINOP,
 		IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	IOPinConfig(HID_CAPS_BUTTON_PORT, HID_CAPS_BUTTON_PIN,
+		HID_CAPS_BUTTON_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP,
+		IOPINTYPE_NORMAL);
 	IOPinConfig(HID_LED_PORT, HID_LED_PIN, HID_LED_PINOP,
 		IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
 	KeyboardLedApply(0U);
@@ -390,9 +423,13 @@ int main()
 	(void)UsbEnable(USB_DEVNO);
 
 	bool suspended = false;
-	bool stablePressed = IOPinRead(HID_BUTTON_PORT, HID_BUTTON_PIN) == 0;
-	bool candidatePressed = stablePressed;
-	uint8_t debounce = 0U;
+	bool aStable = IOPinRead(HID_BUTTON_PORT, HID_BUTTON_PIN) == 0;
+	bool aCandidate = aStable;
+	uint8_t aDebounce = 0U;
+	bool capsStable = IOPinRead(HID_CAPS_BUTTON_PORT,
+		HID_CAPS_BUTTON_PIN) == 0;
+	bool capsCandidate = capsStable;
+	uint8_t capsDebounce = 0U;
 
 	while (1)
 	{
@@ -405,23 +442,17 @@ int main()
 			else (void)g_Hid.Resume();
 		}
 
-		const bool pressed = IOPinRead(HID_BUTTON_PORT, HID_BUTTON_PIN) == 0;
-		if (pressed != candidatePressed)
+		const bool aPressed = IOPinRead(HID_BUTTON_PORT,
+			HID_BUTTON_PIN) == 0;
+		const bool capsPressed = IOPinRead(HID_CAPS_BUTTON_PORT,
+			HID_CAPS_BUTTON_PIN) == 0;
+		const bool aChanged = ButtonDebounce(aPressed, aCandidate, aStable,
+			aDebounce);
+		const bool capsChanged = ButtonDebounce(capsPressed, capsCandidate,
+			capsStable, capsDebounce);
+		if (aChanged || capsChanged)
 		{
-			candidatePressed = pressed;
-			debounce = 0U;
-		}
-		else if (debounce < HID_DEBOUNCE_COUNT)
-		{
-			debounce++;
-			if (debounce == HID_DEBOUNCE_COUNT &&
-				candidatePressed != stablePressed)
-			{
-				stablePressed = candidatePressed;
-				memset(&s_Report, 0, sizeof(s_Report));
-				s_Report.Key[0] = stablePressed ? HID_KEY_A : 0U;
-				s_ReportPending = true;
-			}
+			KeyboardReportUpdate(aStable, capsStable);
 		}
 
 		if (!suspended && s_ReportPending &&

@@ -14,17 +14,19 @@ ARM/Nordic/nRF52/nRF52840/exemples/UsbHidKeyboard/ioc
 Hardware: Nordic nRF52840 DK.
 
 - Button 1: P0.11, active low
+- Button 2: P0.12, active low
 - LED 1: P0.13, active low
 - USB: nRF52840 native USB connector
 
 The device enumerates as a boot-protocol keyboard. Holding Button 1 sends the
-HID usage for the `A` key; releasing it sends the empty keyboard report. The
-Caps Lock bit received through either the Interrupt OUT endpoint or
-`SET_REPORT` controls LED 1.
+HID usage for the `A` key. Button 2 sends Caps Lock, allowing the host to
+return the Caps Lock LED state to this same keyboard. The Caps Lock bit
+received through either the Interrupt OUT endpoint or `SET_REPORT` controls
+LED 1.
 
 Build and flash the project, select a text field on the host, and press Button
-1. One `a` should be entered for each press. Toggle Caps Lock to check the LED
-output report.
+1. One `a` should be entered for each press. Press Button 2 to toggle Caps Lock
+and verify that LED 1 follows the host state.
 
 The example VID/PID is `1209:0006`. These values are application configuration,
 not values owned by `UsbdHid`.

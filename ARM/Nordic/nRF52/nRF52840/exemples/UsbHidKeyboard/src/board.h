@@ -38,6 +38,11 @@ SOFTWARE.
 #define HID_BUTTON_PIN		11
 #define HID_BUTTON_PINOP	0
 
+// Nordic nRF52840 DK Button 2, active low.
+#define HID_CAPS_BUTTON_PORT		0
+#define HID_CAPS_BUTTON_PIN		12
+#define HID_CAPS_BUTTON_PINOP	0
+
 // Nordic nRF52840 DK LED 1, active low.
 #define HID_LED_PORT			0
 #define HID_LED_PIN			13
