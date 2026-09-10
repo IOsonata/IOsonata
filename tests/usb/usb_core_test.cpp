@@ -271,7 +271,8 @@ static void ClassSof(uint16_t FrameNo, void *)
 	s_Class.LastFrame = FrameNo;
 }
 
-static bool Fixture(bool WithSetInterface = true)
+static bool Fixture(bool WithSetInterface = true,
+					UsbDeviceClass *pClass = nullptr)
 {
 	memset(&s_Ctrlr, 0, sizeof(s_Ctrlr));
 	memset(&s_Class, 0, sizeof(s_Class));
@@ -304,6 +305,10 @@ static bool Fixture(bool WithSetInterface = true)
 	cls.ResetHandler = ClassReset;
 	cls.SofHandler = ClassSof;
 	if (!UsbdClassRegister(TEST_DEVNO, &cls))
+	{
+		return false;
+	}
+	if (pClass != nullptr && !UsbClassRegister(TEST_DEVNO, pClass))
 	{
 		return false;
 	}
@@ -697,6 +702,22 @@ static bool TestCommonClassBase(void)
 	return true;
 }
 
+static bool TestClassObjectRegistry(void)
+{
+	static TestUsbDeviceClass device;
+	device.ResetCnt = 0;
+	device.ProcessCnt = 0;
+
+	CHECK(Fixture(true, &device));
+	UsbProcess(TEST_DEVNO);
+	CHECK(device.ProcessCnt == 1);
+	CHECK(!UsbClassRegister(TEST_DEVNO, &device));
+
+	Event(USB_CTRLR_EVT_RESET);
+	CHECK(device.ResetCnt == 1);
+	return true;
+}
+
 static bool TestResetSuspendAndDispatch(void)
 {
 	CHECK(Fixture());
@@ -828,6 +849,7 @@ int main(void)
 		{ "SET_INTERFACE requires handler", TestInterfaceRequiresHandler },
 		{ "class control lifecycle", TestClassControl },
 		{ "common class base", TestCommonClassBase },
+		{ "class object registry", TestClassObjectRegistry },
 		{ "reset suspend and dispatch", TestResetSuspendAndDispatch },
 	};
 

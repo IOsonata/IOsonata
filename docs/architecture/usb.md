@@ -77,6 +77,10 @@ role-neutral `UsbIntrf` data path remains separate so a concrete CDC, HID or
 vendor class can combine class control with the same RX/TX interface
 implementation.
 
+The USB subsystem keeps statically owned class objects in one `UsbClass *`
+array. Shared reset and application-context processing dispatch through that
+array without testing device versus host controller mode inside each class.
+
 ## Current device-side data-path model
 
 `UsbIntrf` is the common bidirectional endpoint-pair data engine. CDC, custom

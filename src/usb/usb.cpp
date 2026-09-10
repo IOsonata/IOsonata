@@ -84,6 +84,8 @@ typedef enum __Usbd_Core_Ctrl_State {
 static UsbCoreCfg_t s_CoreCfg;
 static UsbdClassCfg_t s_CoreClass[USB_CORE_CLASS_MAXCNT];
 static int s_CoreClassCnt;
+static UsbClass *s_CoreObject[USB_CORE_CLASS_MAXCNT];
+static int s_CoreObjectCnt;
 // Endpoint to class index, [0] OUT and [1] IN. Ownership masks are fixed once
 // a class registers and may not overlap. They route endpoint-recipient
 // requests; data endpoint events go directly to their registered callbacks.
@@ -1231,6 +1233,11 @@ static void UsbCoreNotifyReset(void)
 			s_CoreClass[i].ResetHandler(s_CoreClass[i].pContext);
 		}
 	}
+
+	for (int i = 0; i < s_CoreObjectCnt; i++)
+	{
+		s_CoreObject[i]->Reset();
+	}
 }
 
 static void UsbCoreResetDeviceState(bool NotifyClasses)
@@ -1322,10 +1329,12 @@ static bool UsbCoreInit(const UsbCoreCfg_t *pCfg)
 	}
 
 	memset(s_CoreClass, 0, sizeof(s_CoreClass));
+	memset(s_CoreObject, 0, sizeof(s_CoreObject));
 	// Minus one is no owner. Zero would claim class zero owns every
 	// endpoint, so this cannot be left to static initialization.
 	memset(s_CoreEpClass, -1, sizeof(s_CoreEpClass));
 	s_CoreClassCnt = 0;
+	s_CoreObjectCnt = 0;
 	s_CoreInitialized = false;
 	s_CoreStarted = false;
 	UsbCoreResetDeviceState(false);
@@ -1397,6 +1406,26 @@ static bool UsbCoreRegisterClass(const UsbdClassCfg_t *pCfg)
 	}
 
 	s_CoreClassCnt++;
+	return true;
+}
+
+static bool UsbCoreRegisterObject(UsbClass *pClass)
+{
+	if (!s_CoreInitialized || pClass == nullptr || s_CoreStarted ||
+		s_CoreObjectCnt >= USB_CORE_CLASS_MAXCNT)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < s_CoreObjectCnt; i++)
+	{
+		if (s_CoreObject[i] == pClass)
+		{
+			return false;
+		}
+	}
+
+	s_CoreObject[s_CoreObjectCnt++] = pClass;
 	return true;
 }
 
@@ -1664,6 +1693,11 @@ static void UsbDevProcess(void)
 			s_CoreClass[i].ProcessHandler(s_CoreClass[i].pContext);
 		}
 	}
+
+	for (int i = 0; i < s_CoreObjectCnt; i++)
+	{
+		s_CoreObject[i]->Process();
+	}
 }
 
 static bool UsbDevMounted(void)
@@ -1715,6 +1749,11 @@ bool UsbInit(const UsbCfg_t *pCfg)
 bool UsbdClassRegister(int DevNo, const UsbdClassCfg_t *pCfg)
 {
 	return DevNo == s_UsbDevNo && UsbCoreRegisterClass(pCfg);
+}
+
+bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass)
+{
+	return DevNo == s_UsbDevNo && UsbCoreRegisterObject(pClass);
 }
 
 bool UsbEnable(int DevNo)

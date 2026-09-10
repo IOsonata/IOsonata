@@ -286,6 +286,9 @@ protected:
 	UsbHostClass() = default;
 	~UsbHostClass() = default;
 };
+
+/// Register one statically owned device class object with the USB subsystem.
+bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass);
 #endif
 
 /** @} End of group USB */
