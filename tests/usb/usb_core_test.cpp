@@ -700,9 +700,12 @@ static bool TestClassObjectRegistry(void)
 	device.ConfigurationValue = 0;
 	device.RejectConfig = false;
 
-	CHECK(Fixture(true, &device));
+	CHECK(Fixture(false, &device));
 	CHECK(SetAddress(5) && SetConfig(1));
 	CHECK(device.ConfigCnt == 1 && device.ConfigurationValue == 1);
+	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 1, 0, 0);
+	CHECK(device.Interface == 0 && device.Option == 1);
+	Complete(EP0_IN, 0);
 	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
 	CHECK(device.ControlCnt == 1 && device.LastStage == USB_CTRL_SETUP);
 	Complete(EP0_IN, 0);

@@ -984,14 +984,21 @@ static bool UsbCoreHandleSetInterface(void)
 	}
 
 	const int cls = UsbCoreFindClass(interfaceNo);
-	if (cls < 0 || s_CoreClass[cls].SetInterfaceHandler == nullptr)
+	if (cls < 0)
 	{
 		return false;
 	}
 
 	const uint8_t oldAlternate = s_Alternate[interfaceNo];
-	if (!s_CoreClass[cls].SetInterfaceHandler(interfaceNo, alternate,
-											 s_CoreClass[cls].pContext))
+	bool selected = s_CoreClass[cls].SetInterfaceHandler != nullptr &&
+		s_CoreClass[cls].SetInterfaceHandler(interfaceNo, alternate,
+											  s_CoreClass[cls].pContext);
+	for (int i = 0; !selected && i < s_CoreObjectCnt; i++)
+	{
+		selected = static_cast<UsbDeviceClass *>(s_CoreObject[i])->
+			SelectInterface(interfaceNo, alternate);
+	}
+	if (!selected)
 	{
 		return false;
 	}

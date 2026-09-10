@@ -143,7 +143,7 @@ bt_hci_usb_test_DEPS := \
 	$(ROOT)/include/usb/usb_def.h \
 	$(ROOT)/include/usb/usb_intrf.h \
 	$(ROOT)/include/usb/usb_iso.h \
-	$(ROOT)/src/usb/usbd_epalloc.h \
+	$(ROOT)/include/usb/usbd_epalloc.h \
 	$(ROOT)/tests/usb/hostport/usb_ctrlr.h
 
 bt_l2cap_signal_test_SOURCES := \

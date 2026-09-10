@@ -86,6 +86,11 @@ Its control requests, configuration selection, reset and deferred pump run
 through the virtual class API. The C API continues to use C callback adapters
 over the same `UsbdCdcDev_t` implementation.
 
+The C++ `BtHciUsb` object also derives from `UsbDeviceClass` and
+`DeviceIntrf`. HCI and SCO alternate-setting selection runs through
+`SelectInterface()`; the underlying endpoint open/close logic is shared with
+the C callback adapter.
+
 ## Current device-side data-path model
 
 `UsbIntrf` is the common bidirectional endpoint-pair data engine. CDC, custom

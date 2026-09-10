@@ -262,15 +262,14 @@ bool BtHciUsbRequestToSend(BtHciUsbDev_t *pHci, int NbBytes);
 #ifdef __cplusplus
 }
 
-class BtHciUsb : public DeviceIntrf {
+class BtHciUsb : public UsbDeviceClass, public DeviceIntrf {
 public:
 	BtHciUsb() = default;
 	BtHciUsb(const BtHciUsb &) = delete;
 	BtHciUsb &operator = (const BtHciUsb &) = delete;
 
-	bool Init(const BtHciUsbCfg_t &Cfg) {
-		return BtHciUsbInit(&vBtHciUsb, &Cfg);
-	}
+	bool Init(const BtHciUsbCfg_t &Cfg);
+	bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) override;
 
 	operator DevIntrf_t * () override {
 		return &vBtHciUsb.IntrfData.DevIntrf;

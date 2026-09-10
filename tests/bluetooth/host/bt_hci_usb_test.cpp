@@ -28,6 +28,7 @@ typedef struct {
 
 static UsbCfg_t s_UsbCfg;
 static UsbdClassCfg_t s_ClassCfg;
+static UsbDeviceClass *s_ClassObject;
 static bool s_FuncRegistered;
 static uint8_t s_ReservedFirst;
 static uint8_t s_ReservedCount;
@@ -164,6 +165,14 @@ void UsbCtrlrEpClearStall(int, uint8_t) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 }
 
+bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass)
+{
+    if (DevNo != 0 || pClass == nullptr || s_ClassObject != nullptr)
+        return false;
+    s_ClassObject = pClass;
+    return true;
+}
+
 static int s_Fail;
 #define CHECK(c) do { if (!(c)) { \
     printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; } } while (0)
@@ -273,6 +282,7 @@ static void ResetFake(void)
     memset(s_HwOut, 0, sizeof(s_HwOut));
     memset(s_Sent, 0, sizeof(s_Sent));
     s_FuncRegistered = false;
+    s_ClassObject = nullptr;
     s_ReservedFirst = 0U;
     s_ReservedCount = 0U;
     s_ReservedIn = 0U;
@@ -434,6 +444,8 @@ static void TestConfigurationAndAcl(void)
     ResetFake();
     BtHciUsb hci;
     CHECK(hci.Init(MakeCfg()));
+    CHECK(s_ClassObject == &hci);
+    CHECK(s_ClassCfg.SetInterfaceHandler == nullptr);
     CHECK(s_RegisteredCount == 3);
     CHECK(FindRegistered(USB_ENDPADDR_DIROUT(2U))->Blocking);
     CHECK(s_ClassCfg.ConfigHandler(BT_HCI_USB_CONFIG_VALUE, s_ClassCfg.pContext));
@@ -442,7 +454,7 @@ static void TestConfigurationAndAcl(void)
     CHECK(s_OpenDesc[1].bEndpointAddress == USB_ENDPADDR_DIRIN(2U));
     CHECK(s_OpenDesc[2].bEndpointAddress == USB_ENDPADDR_DIROUT(2U));
     CHECK(s_OutSubmitCount == 0);
-    CHECK(s_ClassCfg.SetInterfaceHandler(1U, 0U, s_ClassCfg.pContext));
+    CHECK(hci.SelectInterface(1U, 0U));
 
     uint8_t acl[8] = { 0x01,0x00,0x04,0x00, 0x11,0x22,0x33,0x44 };
     CHECK(DeviceIntrfStartRx(hci.Data(), BT_HCI_USB_PACKET_ACL));
@@ -557,16 +569,16 @@ static void TestBulkSerialization(void)
     BtHciUsb hci;
     CHECK(hci.Init(MakeCfg(false, true)));
     CHECK(s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
-    CHECK(s_ClassCfg.SetInterfaceHandler(0U, 1U, s_ClassCfg.pContext));
+    CHECK(hci.SelectInterface(0U, 1U));
     BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(hci);
     CHECK(pHci->HciAlt == 1U && pHci->BulkSerialization);
 
     const int sameAltOpen = s_OpenCount;
     const int sameAltClose = s_CloseCount;
-    CHECK(s_ClassCfg.SetInterfaceHandler(0U, 1U, s_ClassCfg.pContext));
+    CHECK(hci.SelectInterface(0U, 1U));
     CHECK(s_OpenCount == sameAltOpen);
     CHECK(s_CloseCount == sameAltClose);
-    CHECK(s_ClassCfg.SetInterfaceHandler(1U, 0U, s_ClassCfg.pContext));
+    CHECK(hci.SelectInterface(1U, 0U));
     CHECK(s_OpenCount == sameAltOpen);
     CHECK(s_CloseCount == sameAltClose);
 
@@ -598,7 +610,7 @@ static void TestBulkSerialization(void)
     CompleteIn(2U);
 
     s_OpenFailAt = s_OpenCount + 2;
-    CHECK(!s_ClassCfg.SetInterfaceHandler(0U, 0U, s_ClassCfg.pContext));
+    CHECK(!hci.SelectInterface(0U, 0U));
     CHECK(pHci->HciAlt == 1U);
     CHECK(pHci->BulkSerialization);
     CHECK(DeviceIntrfGetRate(hci.Data()) != 0U);
@@ -613,7 +625,7 @@ static void TestScoTransport(void)
     RegisteredEp_t *scoOut = FindRegistered(USB_ENDPADDR_DIROUT(8U));
     CHECK(scoOut != nullptr && !scoOut->Blocking);
     CHECK(s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
-    CHECK(s_ClassCfg.SetInterfaceHandler(1U, 1U, s_ClassCfg.pContext));
+    CHECK(hci.SelectInterface(1U, 1U));
 
     // Base endpoints 0..2, then ISO opens IN before OUT.
     CHECK(s_OpenCount == 5);
@@ -659,7 +671,7 @@ static void TestScoTransport(void)
     CompleteIn(8U);
     CHECK(s_LastEvent == DEVINTRF_EVT_TX_READY);
 
-    CHECK(s_ClassCfg.SetInterfaceHandler(1U, 0U, s_ClassCfg.pContext));
+    CHECK(hci.SelectInterface(1U, 0U));
     CHECK(DeviceIntrfTx(hci.Data(), BT_HCI_USB_PACKET_SCO,
                         packet, sizeof(packet)) == 0);
 }
@@ -670,7 +682,7 @@ static void TestScoBackpressure(void)
     BtHciUsb hci;
     CHECK(hci.Init(MakeCfg(true)));
     CHECK(s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
-    CHECK(s_ClassCfg.SetInterfaceHandler(1U, 1U, s_ClassCfg.pContext));
+    CHECK(hci.SelectInterface(1U, 1U));
     CHECK(DeviceIntrfStartRx(hci.Data(), BT_HCI_USB_PACKET_SCO));
 
     const uint8_t first[] = { 0x01U,0x00U,0x02U,0x11U,0x22U };
@@ -704,7 +716,7 @@ static void TestScoAlternateLifecycle(void)
     for (uint8_t alt = 1U; alt <= BT_HCI_USB_SCO_ALT_COUNT; alt++)
     {
         const int before = s_OpenCount;
-        CHECK(s_ClassCfg.SetInterfaceHandler(1U, alt, s_ClassCfg.pContext));
+        CHECK(hci.SelectInterface(1U, alt));
         CHECK(s_OpenCount == before + 2);
         CHECK(s_OpenDesc[before].bEndpointAddress == USB_ENDPADDR_DIRIN(8U));
         CHECK(s_OpenDesc[before + 1].bEndpointAddress == USB_ENDPADDR_DIROUT(8U));
@@ -712,19 +724,19 @@ static void TestScoAlternateLifecycle(void)
 
         const int sameAltOpen = s_OpenCount;
         const int sameAltClose = s_CloseCount;
-        CHECK(s_ClassCfg.SetInterfaceHandler(1U, alt, s_ClassCfg.pContext));
+        CHECK(hci.SelectInterface(1U, alt));
         CHECK(s_OpenCount == sameAltOpen);
         CHECK(s_CloseCount == sameAltClose);
     }
-    CHECK(!s_ClassCfg.SetInterfaceHandler(1U, 7U, s_ClassCfg.pContext));
+    CHECK(!hci.SelectInterface(1U, 7U));
 
     s_OpenFailAt = s_OpenCount;
-    CHECK(!s_ClassCfg.SetInterfaceHandler(1U, 5U, s_ClassCfg.pContext));
+    CHECK(!hci.SelectInterface(1U, 5U));
     CHECK(pHci->ScoAlt == 6U);
     CHECK(pHci->ScoIso.Opened);
     CHECK(pHci->ScoIso.Mps == mps[5]);
 
-    CHECK(s_ClassCfg.SetInterfaceHandler(1U, 0U, s_ClassCfg.pContext));
+    CHECK(hci.SelectInterface(1U, 0U));
     CHECK(pHci->ScoAlt == 0U);
 }
 

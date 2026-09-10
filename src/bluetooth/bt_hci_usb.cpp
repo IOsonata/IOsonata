@@ -34,7 +34,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "coredev/interrupt.h"
-#include "../usb/usbd_epalloc.h"
+#include "usb/usbd_epalloc.h"
 #include "bluetooth/bt_hci_usb.h"
 
 #ifndef USB_ISO_EPIN_MASK
@@ -1416,8 +1416,9 @@ static bool BtHciUsbMakeFullDesc(BtHciUsbFullDesc_t *pDesc,
 	return true;
 }
 
-bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
-				 const BtHciUsbCfg_t *pCfg)
+static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
+								 const BtHciUsbCfg_t *pCfg,
+								 UsbDeviceClass *pClass)
 {
 	if (pHci == nullptr || pCfg == nullptr ||
 		UsbGetCfg(pCfg->DevNo) == nullptr ||
@@ -1483,7 +1484,8 @@ bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
 	UsbdClassCfg_t coreCfg = {};
 	coreCfg.RequestHandler = BtHciUsbRequest;
 	coreCfg.ConfigHandler = BtHciUsbConfig;
-	coreCfg.SetInterfaceHandler = BtHciUsbSetInterface;
+	coreCfg.SetInterfaceHandler =
+		pClass == nullptr ? BtHciUsbSetInterface : nullptr;
 	coreCfg.ResetHandler = BtHciUsbReset;
 	coreCfg.pContext = pHci;
 
@@ -1580,5 +1582,21 @@ bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
 		return false;
 	}
 
-	return true;
+	return pClass == nullptr || UsbClassRegister(pHci->DevNo, pClass);
+}
+
+bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
+				 const BtHciUsbCfg_t *pCfg)
+{
+	return BtHciUsbInitInternal(pHci, pCfg, nullptr);
+}
+
+bool BtHciUsb::Init(const BtHciUsbCfg_t &Cfg)
+{
+	return BtHciUsbInitInternal(&vBtHciUsb, &Cfg, this);
+}
+
+bool BtHciUsb::SelectInterface(uint8_t InterfaceNo, uint8_t Option)
+{
+	return BtHciUsbSetInterface(InterfaceNo, Option, &vBtHciUsb);
 }
