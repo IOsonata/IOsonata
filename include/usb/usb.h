@@ -269,12 +269,6 @@ public:
 		return false;
 	}
 
-	/// Tell the device core whether this class needs SOF events.
-	virtual bool SofEnabled() const { return false; }
-
-	/// Receive a SOF event when SofEnabled() returns true.
-	virtual void Sof(uint16_t FrameNo) { (void)FrameNo; }
-
 protected:
 	UsbDeviceClass() = default;
 	~UsbDeviceClass() = default;

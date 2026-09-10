@@ -638,16 +638,12 @@ public:
 		Option = OptionValue;
 		return true;
 	}
-	bool SofEnabled() const override { return true; }
-	void Sof(uint16_t FrameNo) override { Frame = FrameNo; }
-
 	int ResetCnt = 0;
 	int ProcessCnt = 0;
 	UsbCtrlStage_t LastStage = USB_CTRL_ABORT;
 	uint8_t ConfigurationValue = 0;
 	uint8_t Interface = 0;
 	uint8_t Option = 0;
-	uint16_t Frame = 0;
 };
 
 class EmptyUsbDeviceClass : public UsbDeviceClass {};
@@ -689,16 +685,10 @@ static bool TestCommonClassBase(void)
 	CHECK(device.ConfigurationValue == 2);
 	CHECK(pDevice->SelectInterface(3, 4));
 	CHECK(device.Interface == 3 && device.Option == 4);
-	CHECK(pDevice->SofEnabled());
-	pDevice->Sof(123);
-	CHECK(device.Frame == 123);
-
 	pDevice = &emptyDevice;
 	CHECK(!pDevice->Control(&setup, USB_CTRL_SETUP, &pData, &length));
 	CHECK(pDevice->SelectConfig(1));
 	CHECK(!pDevice->SelectInterface(0, 1));
-	CHECK(!pDevice->SofEnabled());
-	pDevice->Sof(123);
 	return true;
 }
 
