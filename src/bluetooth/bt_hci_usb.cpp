@@ -34,7 +34,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "coredev/interrupt.h"
-#include "../usb/usb_func.h"
+#include "../usb/usbd_epalloc.h"
 #include "bluetooth/bt_hci_usb.h"
 
 #ifndef USB_ISO_EPIN_MASK
@@ -1487,17 +1487,17 @@ bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
 	coreCfg.ResetHandler = BtHciUsbReset;
 	coreCfg.pContext = pHci;
 
-	UsbFuncReq_t req = {};
+	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 2U;
 	req.BidirectionalCount = 1U;
 	req.InCount = 1U;
 
-	UsbFuncAlloc_t alloc = {};
+	UsbdEpAllocRes_t alloc = {};
 	uint8_t scoEp = 0U;
 	bool registered = false;
 	if (!pHci->ScoEnabled)
 	{
-		registered = UsbRegisterFuncAuto(pHci->DevNo, &req, &coreCfg, &alloc);
+		registered = UsbdEpAlloc(pHci->DevNo, &req, &coreCfg, &alloc);
 	}
 	else
 	{
@@ -1511,7 +1511,7 @@ bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
 
 			req.FixedInMask = bit;
 			req.FixedOutMask = bit;
-			if (UsbRegisterFuncAuto(pHci->DevNo, &req, &coreCfg, &alloc))
+			if (UsbdEpAlloc(pHci->DevNo, &req, &coreCfg, &alloc))
 			{
 				scoEp = ep;
 				registered = true;

@@ -40,6 +40,7 @@ LINK_SOURCES := \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/usb/usbd_cdc.cpp \
 	$(ROOT)/src/usb/usbd_cdc_desc.cpp \
+	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -47,6 +48,7 @@ BULK_TARGET := $(BUILD_DIR)/usbd_bulk_test
 BULK_SOURCES := \
 	usbd_bulk_test.cpp \
 	$(ROOT)/src/usb/usbd_bulk.cpp \
+	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
@@ -55,6 +57,7 @@ HID_TARGET := $(BUILD_DIR)/usbd_hid_test
 HID_SOURCES := \
 	usbd_hid_test.cpp \
 	$(ROOT)/src/usb/usbd_hid.cpp \
+	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_int.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/device_intrf.cpp \
@@ -137,7 +140,7 @@ HEADERS := \
 	$(ROOT)/include/usb/usbd_bulk.h \
 	$(ROOT)/include/usb/usbd_hid.h \
 	$(ROOT)/include/usb/usbd_cdc.h \
-	$(ROOT)/src/usb/usb_func.h
+	$(ROOT)/src/usb/usbd_epalloc.h
 
 TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 	$(DIRECT_TARGET) $(ISO_TARGET) $(ISO_DUPLEX_TARGET) $(INT_TARGET) \

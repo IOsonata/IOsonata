@@ -133,6 +133,7 @@ bt_hci_usb_test_CPPFLAGS := -I$(ROOT)/tests/usb/hostport
 bt_hci_usb_test_SOURCES := \
 	bt_hci_usb_test.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_usb.cpp \
+	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/device_intrf.cpp
@@ -142,7 +143,7 @@ bt_hci_usb_test_DEPS := \
 	$(ROOT)/include/usb/usb_def.h \
 	$(ROOT)/include/usb/usb_intrf.h \
 	$(ROOT)/include/usb/usb_iso.h \
-	$(ROOT)/src/usb/usb_func.h \
+	$(ROOT)/src/usb/usbd_epalloc.h \
 	$(ROOT)/tests/usb/hostport/usb_ctrlr.h
 
 bt_l2cap_signal_test_SOURCES := \

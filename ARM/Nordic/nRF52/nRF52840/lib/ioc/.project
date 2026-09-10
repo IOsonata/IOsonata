@@ -1351,6 +1351,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc.h</locationURI>
 		</link>
 		<link>
+			<name>include/usb/usbd_epalloc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_epalloc.h</locationURI>
+		</link>
+		<link>
 			<name>include/usb/usbd_hid.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_hid.h</locationURI>
@@ -2404,6 +2409,11 @@
 			<name>src/usb/usbd_cdc_desc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_desc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_epalloc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_epalloc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usbd_hid.cpp</name>

@@ -33,7 +33,7 @@ SOFTWARE.
 #include <limits.h>
 #include <string.h>
 
-#include "usb_func.h"
+#include "usb/usbd_epalloc.h"
 #include "usb/usbd_hid.h"
 
 static uint16_t UsbdHidMps(const UsbdHidDev_t *pHid)
@@ -396,12 +396,12 @@ bool UsbdHidInit(UsbdHidDev_t *pHid, const UsbdHidCfg_t *pCfg)
 	coreCfg.ResetHandler = UsbdHidReset;
 	coreCfg.pContext = pHid;
 
-	UsbFuncReq_t req = {};
+	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 1U;
 	req.BidirectionalCount = 1U;
 
-	UsbFuncAlloc_t alloc = {};
-	if (!UsbRegisterFuncAuto(pHid->DevNo, &req, &coreCfg, &alloc))
+	UsbdEpAllocRes_t alloc = {};
+	if (!UsbdEpAlloc(pHid->DevNo, &req, &coreCfg, &alloc))
 	{
 		return false;
 	}

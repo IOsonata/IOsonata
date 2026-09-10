@@ -36,7 +36,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "usb_func.h"
+#include "usb/usbd_epalloc.h"
 #include "usb/usbd_cdc.h"
 
 static uint8_t *UsbdCdcRxBuffer(UsbdCdcDev_t *pCdc)
@@ -397,13 +397,13 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 	coreCfg.ProcessHandler = UsbdCdcPump;
 	coreCfg.pContext = pCdc;
 
-	UsbFuncReq_t req = {};
+	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 2U;
 	req.BidirectionalCount = 1U;
 	req.InCount = 1U;
 
-	UsbFuncAlloc_t alloc = {};
-	if (!UsbRegisterFuncAuto(pCdc->DevNo, &req, &coreCfg, &alloc))
+	UsbdEpAllocRes_t alloc = {};
+	if (!UsbdEpAlloc(pCdc->DevNo, &req, &coreCfg, &alloc))
 	{
 		return false;
 	}

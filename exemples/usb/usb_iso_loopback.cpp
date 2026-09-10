@@ -51,7 +51,7 @@ SOFTWARE.
 
 #include "usb/usb.h"
 #include "usb/usb_iso.h"
-#include "../../src/usb/usb_func.h"
+#include "usb/usbd_epalloc.h"
 
 #define USB_DEVNO			0
 #define ISO_CONFIG_VALUE	1U
@@ -361,13 +361,13 @@ static bool IsoRegisterFunction(void)
 
 	// The ISO endpoint is controller constrained. Reserve one supported
 	// bidirectional endpoint while the allocator chooses the interface number.
-	UsbFuncReq_t req = {};
+	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 1U;
 	req.FixedInMask = epBit;
 	req.FixedOutMask = epBit;
 
-	UsbFuncAlloc_t alloc = {};
-	if (!UsbRegisterFuncAuto(USB_DEVNO, &req, &coreCfg, &alloc))
+	UsbdEpAllocRes_t alloc = {};
+	if (!UsbdEpAlloc(USB_DEVNO, &req, &coreCfg, &alloc))
 	{
 		return false;
 	}

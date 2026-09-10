@@ -45,7 +45,7 @@ SOFTWARE.
 
 #include "usb/usb.h"
 #include "usb/usb_int.h"
-#include "../../src/usb/usb_func.h"
+#include "usb/usbd_epalloc.h"
 
 #define USB_DEVNO			0
 #define INT_CONFIG_VALUE	1U
@@ -54,7 +54,7 @@ SOFTWARE.
 #define INT_REQ_GET_DIAG	0x5BU
 
 #define INT_DIAG_FLAG_OPENED		(1U << 0)
-#define INT_DIAG_FLAG_SUSPENDED	(1U << 1)
+#define INT_DIAG_FLAG_SUSPENDED		(1U << 1)
 #define INT_DIAG_FLAG_TX_READY		(1U << 2)
 
 #define INT_STR_MANUFACTURER	1U
@@ -308,12 +308,12 @@ static bool IntRegisterFunction(void)
 	coreCfg.ResetHandler = IntReset;
 	coreCfg.ProcessHandler = IntProcess;
 
-	UsbFuncReq_t req = {};
+	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 1U;
 	req.BidirectionalCount = 1U;
 
-	UsbFuncAlloc_t alloc = {};
-	if (!UsbRegisterFuncAuto(USB_DEVNO, &req, &coreCfg, &alloc))
+	UsbdEpAllocRes_t alloc = {};
+	if (!UsbdEpAlloc(USB_DEVNO, &req, &coreCfg, &alloc))
 	{
 		return false;
 	}

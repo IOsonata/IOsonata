@@ -33,7 +33,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "usb_func.h"
+#include "usb/usbd_epalloc.h"
 #include "usb/usbd_bulk.h"
 
 static uint8_t *UsbdBulkRxBuffer(UsbdBulkDev_t *pBulk)
@@ -223,12 +223,12 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk, const UsbdBulkCfg_t *pCfg)
 	coreCfg.ProcessHandler = nullptr;
 	coreCfg.pContext = pBulk;
 
-	UsbFuncReq_t req = {};
+	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 1U;
 	req.BidirectionalCount = 1U;
 
-	UsbFuncAlloc_t alloc = {};
-	if (!UsbRegisterFuncAuto(pBulk->DevNo, &req, &coreCfg, &alloc))
+	UsbdEpAllocRes_t alloc = {};
+	if (!UsbdEpAlloc(pBulk->DevNo, &req, &coreCfg, &alloc))
 	{
 		return false;
 	}
