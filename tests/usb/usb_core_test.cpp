@@ -86,8 +86,6 @@ typedef struct {
 	int ConnectCnt;
 	int DisconnectCnt;
 	int RemoteWakeCnt;
-	int SofEnableCnt;
-	int SofDisableCnt;
 	int SetAddressCnt;
 	int CloseAllCnt;
 	int StallCnt;
@@ -106,8 +104,6 @@ typedef struct {
 	int SetIfCnt;
 	uint8_t LastAlt;
 	int ResetCnt;
-	int SofCnt;
-	uint16_t LastFrame;
 	uint8_t CtrlBuffer[16];
 } FuncState_t;
 
@@ -265,12 +261,6 @@ static void ClassReset(void *)
 	s_Class.ResetCnt++;
 }
 
-static void ClassSof(uint16_t FrameNo, void *)
-{
-	s_Class.SofCnt++;
-	s_Class.LastFrame = FrameNo;
-}
-
 static bool Fixture(bool WithSetInterface = true,
 					UsbDeviceClass *pClass = nullptr)
 {
@@ -303,7 +293,6 @@ static bool Fixture(bool WithSetInterface = true,
 	cls.ConfigHandler = Configure;
 	cls.SetInterfaceHandler = WithSetInterface ? SetInterface : nullptr;
 	cls.ResetHandler = ClassReset;
-	cls.SofHandler = ClassSof;
 	if (!UsbdClassRegister(TEST_DEVNO, &cls))
 	{
 		return false;
@@ -444,8 +433,6 @@ static bool TestConfiguration(void)
 	CHECK(SetAddress(5));
 	CHECK(SetConfig(1));
 	CHECK(UsbConfigured(TEST_DEVNO) && s_Class.LastConfig == 1);
-	CHECK(s_Ctrlr.SofEnableCnt == 1);
-
 	Setup(STD_DEV_IN, USB_REQ_GET_CONFIGURATION, 0, 0, 1);
 	CHECK(LastXfer()->Length == 1 && LastXfer()->Data[0] == 1);
 	Complete(EP0_IN, 1);
@@ -724,17 +711,11 @@ static bool TestResetSuspendAndDispatch(void)
 	Event(USB_CTRLR_EVT_RESUME);
 	CHECK(!UsbSuspended(TEST_DEVNO) && !UsbRemoteWakeup(TEST_DEVNO));
 
-	UsbCtrlrEvt_t sof = {};
-	sof.Type = USB_CTRLR_EVT_SOF;
-	sof.FrameNo = 1234;
-	s_Ctrlr.Handler(TEST_DEVNO, &sof, s_Ctrlr.pContext);
-	CHECK(s_Class.SofCnt == 1 && s_Class.LastFrame == 1234);
-
 	// Non-control endpoint events are delivered by UsbCtrlrEpHandler_t,
 	// not through the global controller event handler. A stray global data
 	// completion therefore has no class-level dispatch path.
 	Complete(EP1_IN, 37);
-	CHECK(s_Class.SofCnt == 1 && s_Class.ResetCnt == 0);
+	CHECK(s_Class.ResetCnt == 0);
 
 	Event(USB_CTRLR_EVT_RESET);
 	CHECK(UsbGetAddress(TEST_DEVNO) == 0 && UsbGetConfiguration(TEST_DEVNO) == 0);
@@ -767,10 +748,6 @@ extern "C" void UsbCtrlrIntDisable(int) { s_Ctrlr.IntDisableCnt++; }
 extern "C" void UsbCtrlrConnect(int) { s_Ctrlr.ConnectCnt++; }
 extern "C" void UsbCtrlrDisconnect(int) { s_Ctrlr.DisconnectCnt++; }
 extern "C" void UsbCtrlrRemoteWakeup(int) { s_Ctrlr.RemoteWakeCnt++; }
-extern "C" void UsbCtrlrSofEnable(int, bool Enable)
-{
-	Enable ? s_Ctrlr.SofEnableCnt++ : s_Ctrlr.SofDisableCnt++;
-}
 extern "C" void UsbCtrlrSetAddress(int, uint8_t Address)
 {
 	s_Ctrlr.SetAddressCnt++;

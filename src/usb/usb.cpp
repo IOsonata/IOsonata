@@ -655,27 +655,12 @@ static void UsbCoreClearEndpointState(void)
 	memset(s_Alternate, 0, sizeof(s_Alternate));
 }
 
-static bool UsbCoreWantSof(void)
-{
-	for (int i = 0; i < s_CoreClassCnt; i++)
-	{
-		if (s_CoreClass[i].SofHandler != nullptr)
-		{
-			return true;
-		}
-	}
-
-	return false;
-}
-
 static void UsbCoreUnconfigureClasses(void)
 {
 	if (s_Configuration == 0)
 	{
 		return;
 	}
-
-	UsbCtrlrSofEnable(s_UsbDevNo, false);
 
 	for (int i = 0; i < s_CoreClassCnt; i++)
 	{
@@ -733,12 +718,6 @@ static bool UsbCoreApplyConfiguration(uint8_t Configuration)
 
 	s_Configuration = Configuration;
 	s_NumInterfaces = pConfigDesc[4];
-
-	// Controllers drop SOF on bus reset, so enable it per configuration
-	if (UsbCoreWantSof())
-	{
-		UsbCtrlrSofEnable(s_UsbDevNo, true);
-	}
 
 	return true;
 }
@@ -1290,20 +1269,6 @@ static void UsbCoreCtrlrEvent(int, const UsbCtrlrEvt_t *pEvt, void *)
 
 		case USB_CTRLR_EVT_ADDRESS:
 			s_Address = pEvt->Address;
-			break;
-
-		case USB_CTRLR_EVT_SOF:
-			if (s_Configuration != 0)
-			{
-				for (int i = 0; i < s_CoreClassCnt; i++)
-				{
-					if (s_CoreClass[i].SofHandler != nullptr)
-					{
-						s_CoreClass[i].SofHandler(pEvt->FrameNo,
-												 s_CoreClass[i].pContext);
-					}
-				}
-			}
 			break;
 
 		default:

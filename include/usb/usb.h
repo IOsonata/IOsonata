@@ -120,7 +120,6 @@ typedef bool (*UsbdClassConfigHandler_t)(uint8_t Configuration, void *pContext);
 typedef bool (*UsbdClassSetInterfaceHandler_t)(uint8_t InterfaceNo, uint8_t Alt,
 										 void *pContext);
 typedef void (*UsbdClassResetHandler_t)(void *pContext);
-typedef void (*UsbdClassSofHandler_t)(uint16_t FrameNo, void *pContext);
 
 /// Polled from UsbProcess in application context. Work a class cannot do
 /// inside the USB interrupt goes here.
@@ -140,7 +139,6 @@ typedef struct __Usbd_Class_Config {
 	UsbdClassConfigHandler_t ConfigHandler;
 	UsbdClassSetInterfaceHandler_t SetInterfaceHandler;
 	UsbdClassResetHandler_t ResetHandler;
-	UsbdClassSofHandler_t SofHandler;		//!< Optional, NULL when not needed
 	UsbdClassProcessHandler_t ProcessHandler;	//!< Optional, polled from UsbProcess
 	void *pContext;
 } UsbdClassCfg_t;

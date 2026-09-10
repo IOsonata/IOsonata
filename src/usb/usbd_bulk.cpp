@@ -219,7 +219,6 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk, const UsbdBulkCfg_t *pCfg)
 	coreCfg.ConfigHandler = UsbdBulkConfig;
 	coreCfg.SetInterfaceHandler = nullptr;
 	coreCfg.ResetHandler = UsbdBulkReset;
-	coreCfg.SofHandler = nullptr;
 	coreCfg.ProcessHandler = nullptr;
 	coreCfg.pContext = pBulk;
 
@@ -272,4 +271,3 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk, const UsbdBulkCfg_t *pCfg)
 
 	return true;
 }
-

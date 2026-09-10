@@ -86,7 +86,7 @@ typedef struct __Iso_Config_Descriptor {
 } IsoConfigDesc_t;
 
 typedef struct __Iso_Diag {
-	uint32_t SofCnt;
+	uint32_t Reserved;
 	uint32_t RxCnt;
 	uint32_t TxSubmitCnt;
 	uint32_t TxDoneCnt;
@@ -111,7 +111,6 @@ static bool s_Configured;
 static uint8_t s_Alt;
 static uint8_t s_InterfaceNo;
 static uint8_t s_EpNo;
-static uint32_t s_SofCnt;
 static uint32_t s_RxCnt;
 static uint32_t s_TxSubmitCnt;
 static uint32_t s_TxDoneCnt;
@@ -141,7 +140,6 @@ static uint8_t IsoFirstEndpoint(uint16_t Mask)
 
 static void IsoClearDiag(void)
 {
-	s_SofCnt = 0U;
 	s_RxCnt = 0U;
 	s_TxSubmitCnt = 0U;
 	s_TxDoneCnt = 0U;
@@ -158,7 +156,6 @@ static void IsoClearDiag(void)
 static void IsoBuildDiag(void)
 {
 	memset(&s_DiagReply, 0, sizeof(s_DiagReply));
-	s_DiagReply.SofCnt = s_SofCnt;
 	s_DiagReply.RxCnt = s_RxCnt;
 	s_DiagReply.TxSubmitCnt = s_TxSubmitCnt;
 	s_DiagReply.TxDoneCnt = s_TxDoneCnt;
@@ -308,14 +305,6 @@ static void IsoReset(void *)
 	IsoClearDiag();
 }
 
-static void IsoSof(uint16_t, void *)
-{
-	if (s_Configured && s_Alt != 0U)
-	{
-		s_SofCnt++;
-	}
-}
-
 static void IsoProcess(void *)
 {
 	if (!s_Configured || s_Alt == 0U)
@@ -356,7 +345,6 @@ static bool IsoRegisterFunction(void)
 	coreCfg.ConfigHandler = IsoConfig;
 	coreCfg.SetInterfaceHandler = IsoSetInterface;
 	coreCfg.ResetHandler = IsoReset;
-	coreCfg.SofHandler = IsoSof;
 	coreCfg.ProcessHandler = IsoProcess;
 
 	// The ISO endpoint is controller constrained. Reserve one supported

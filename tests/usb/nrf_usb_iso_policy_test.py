@@ -42,5 +42,11 @@ assert service.index("nRFUsbdStartIsoNow()") < service.index("CFifoGet(s_hQue)")
 assert "NRF_USBD->SIZE.ISOOUT" in interrupt
 assert "nRFUsbdHandleIsoInEnd();" in interrupt
 assert "nRFUsbdHandleIsoOutEnd();" in interrupt
+assert interrupt.index("atomic_load(&s_IsoInOpen)") < interrupt.index(
+    "if (s_Ctrlr.SofEnabled)"
+)
+assert interrupt.index("atomic_load(&s_IsoOutOpen)") < interrupt.index(
+    "if (s_Ctrlr.SofEnabled)"
+)
 
 print("nrf_usb_iso_policy_test: PASS")

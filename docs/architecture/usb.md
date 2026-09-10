@@ -292,6 +292,10 @@ Event callback
 Support operations such as start/stop, connect/disconnect, stall, remote wakeup
 and SOF enable surround those operations.
 
+SOF is a controller/core timing event, not a device-class callback. A controller
+may consume SOF internally to schedule open isochronous endpoints. The core does
+not distribute every frame to `UsbDeviceClass` objects.
+
 The controller API is intentionally transfer-type agnostic. Endpoint type is
 established when the endpoint/pipe is configured; the transfer operation remains
 the common endpoint transaction primitive.
@@ -305,7 +309,6 @@ core callback for device-wide events such as:
 RESET
 SUSPEND
 RESUME
-SOF
 ```
 
 EP0 setup/control state is owned by `UsbCore`.

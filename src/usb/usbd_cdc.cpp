@@ -393,7 +393,6 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 	coreCfg.ConfigHandler = UsbdCdcConfig;
 	coreCfg.SetInterfaceHandler = nullptr;
 	coreCfg.ResetHandler = UsbdCdcReset;
-	coreCfg.SofHandler = nullptr;
 	coreCfg.ProcessHandler = UsbdCdcPump;
 	coreCfg.pContext = pCdc;
 
