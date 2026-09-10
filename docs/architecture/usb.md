@@ -210,11 +210,11 @@ Interrupt OUT/IN endpoints
 ```
 
 DIRECT describes only software storage: one current RX slot, one current TX
-slot and no CFifo. It does not describe how an OUT transfer is started. A
-controller that reports `USB_CTRLR_EVT_DRDY` uses the blocking path. A
-controller whose receive DMA must be armed before traffic advertises
-`USB_OUT_PREARM`. ISO keeps its controller-scheduled OUT behavior. These
-choices do not introduce ISO or Interrupt modes into `UsbIntrf`.
+slot and no CFifo. ISO selects the existing non-blocking behavior, so DIRECT
+ignores `USB_CTRLR_EVT_DRDY` while the ISO controller path services scheduled
+opportunities. Interrupt selects the existing blocking behavior, so DIRECT
+services `USB_CTRLR_EVT_DRDY` through the normal controller transfer call.
+There is no separate RX arm or re-arm API.
 
 `UsbIntIntrf` contains no HID report or descriptor behavior. A future `UsbdHid`
 layer may use it without moving HID semantics into the reusable transport.

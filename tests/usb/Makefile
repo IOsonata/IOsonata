@@ -127,7 +127,7 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 	$(BULK_TARGET) $(LINK_TARGET)
 
 .PHONY: all test test-c-header test-gcc test-clang test-matrix \
-	test-nrf-suspend-policy test-nrf-iso-policy test-nrf-int-policy \
+	test-nrf-suspend-policy test-nrf-iso-policy \
 	iso-hw-build iso-hw int-hw-build int-hw probe clean
 
 all: test
@@ -136,7 +136,6 @@ test: $(TARGETS)
 	$(MAKE) test-c-header
 	$(MAKE) test-nrf-suspend-policy
 	$(MAKE) test-nrf-iso-policy
-	$(MAKE) test-nrf-int-policy
 	$(TEST_ENV) ./$(CORE_TARGET)
 	$(TEST_ENV) ./$(INTRF_TARGET)
 	$(TEST_ENV) ./$(RX_EVENT_TARGET)
@@ -159,9 +158,6 @@ test-nrf-suspend-policy:
 
 test-nrf-iso-policy:
 	python3 ./nrf_usb_iso_policy_test.py
-
-test-nrf-int-policy:
-	python3 ./nrf_usb_int_policy_test.py
 
 iso-hw-build: $(ISO_HW_SCRIPT)
 	python3 -c "compile(open('$(ISO_HW_SCRIPT)', encoding='utf-8').read(), '$(ISO_HW_SCRIPT)', 'exec')"

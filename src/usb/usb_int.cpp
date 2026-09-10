@@ -140,8 +140,7 @@ bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, const UsbIntIntrfCfg_t *pCfg)
 	UsbIntrfCfg_t cfg = {};
 	cfg.DevNo = pCfg->DevNo;
 	cfg.EpNo = pCfg->EpNo;
-	cfg.bBlocking = !USB_OUT_PREARM(pCfg->DevNo);
-	cfg.bRxPrearm = USB_OUT_PREARM(pCfg->DevNo);
+	cfg.bBlocking = true;
 	cfg.Mode = USB_INTRF_MODE_DIRECT;
 	cfg.BufferSize = USB_INT_INTRF_MAX_MPS;
 	cfg.pRxBuffer = reinterpret_cast<uint8_t *>(pIntrf->RxBuffer);
@@ -180,9 +179,7 @@ bool UsbIntIntrfOpen(UsbIntIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval)
 	pIntrf->Suspended = false;
 
 	if (!UsbIntIntrfOpenEndpoint(pIntrf, USB_ENDPADDR_DIRIN(pIntrf->EpNo)) ||
-		!UsbIntIntrfOpenEndpoint(pIntrf, USB_ENDPADDR_DIROUT(pIntrf->EpNo)) ||
-		(pIntrf->IntrfData.bRxPrearm &&
-		 !UsbIntrfArmRx(&pIntrf->IntrfData)))
+		!UsbIntIntrfOpenEndpoint(pIntrf, USB_ENDPADDR_DIROUT(pIntrf->EpNo)))
 	{
 		UsbCtrlrEpClose(pIntrf->IntrfData.DevNo,
 			USB_ENDPADDR_DIROUT(pIntrf->EpNo));

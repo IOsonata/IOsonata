@@ -64,7 +64,6 @@ enum {
 	USB_ISO_SUPPORTED_0 = 1,
 	USB_ISO_EPIN_MASK_0 = (1U << 8) | (1U << 9),
 	USB_ISO_EPOUT_MASK_0 = (1U << 8) | (1U << 9),
-	USB_OUT_PREARM_0 = 0,
 };
 
 #define USB_EPIN_CNT(CtrlrNo) \
@@ -79,9 +78,6 @@ enum {
 	((CtrlrNo) == 0 ? (uint16_t)USB_ISO_EPIN_MASK_0 : (uint16_t)0U)
 #define USB_ISO_EPOUT_MASK(CtrlrNo) \
 	((CtrlrNo) == 0 ? (uint16_t)USB_ISO_EPOUT_MASK_0 : (uint16_t)0U)
-#define USB_OUT_PREARM(CtrlrNo) \
-	((CtrlrNo) == 0 ? USB_OUT_PREARM_0 : 0)
-
 #define USB_PKT_MAXLEN(CtrlrNo, TransType) \
 	((CtrlrNo) != 0 ? 0 : \
 	 (TransType) == CONTROL ? USB_PKT_MAXLEN_0_CONTROL : \

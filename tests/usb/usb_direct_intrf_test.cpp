@@ -94,13 +94,12 @@ static void ResetFake(void)
 }
 
 static bool Init(UsbDevIntrf_t *pIntrf, uint32_t *pRx, uint32_t *pTx,
-				 bool Blocking = false, bool Prearm = false)
+				 bool Blocking = false)
 {
 	UsbIntrfCfg_t cfg = {};
 	cfg.DevNo = 0;
 	cfg.EpNo = 3U;
 	cfg.bBlocking = Blocking;
-	cfg.bRxPrearm = Prearm;
 	cfg.Mode = USB_INTRF_MODE_DIRECT;
 	cfg.BufferSize = 16U;
 	cfg.pRxBuffer = reinterpret_cast<uint8_t *>(pRx);
@@ -171,7 +170,7 @@ static void TestRxOwnershipAndDrop(void)
 	CHECK(intrf.RxDropCnt == 2U);
 }
 
-static void TestDrdyAndPrearm(void)
+static void TestDrdyPolicy(void)
 {
 	ResetFake();
 	UsbDevIntrf_t intrf = {};
@@ -184,17 +183,12 @@ static void TestDrdyAndPrearm(void)
 	CHECK(s_OutXferCount == 1);
 
 	ResetFake();
-	UsbDevIntrf_t prearm = {};
-	CHECK(Init(&prearm, rx, tx, false, true));
-	CHECK(UsbIntrfConfigure(&prearm, 8U));
-	CHECK(UsbIntrfArmRx(&prearm));
-	CHECK(s_OutXferCount == 1);
-	const uint8_t data = 7U;
-	RxComplete(&data, 1U);
-	CHECK(prearm.RxPending);
-	uint8_t out = 0U;
-	CHECK(DeviceIntrfRxData(&prearm.DevIntrf, &out, 1) == 1);
-	CHECK(out == data && s_OutXferCount == 2 && !prearm.RxPending);
+	UsbDevIntrf_t nonblocking = {};
+	CHECK(Init(&nonblocking, rx, tx, false));
+	CHECK(UsbIntrfConfigure(&nonblocking, 8U));
+	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, 0U,
+		USB_CTRLR_XFER_SUCCESS, s_OutContext);
+	CHECK(s_OutXferCount == 0);
 }
 
 static void TestTx(void)
@@ -227,7 +221,7 @@ int main(void)
 {
 	TestValidation();
 	TestRxOwnershipAndDrop();
-	TestDrdyAndPrearm();
+	TestDrdyPolicy();
 	TestTx();
 	printf("%s\n", s_Fail == 0 ? "usb_direct_intrf_test: PASS" :
 		"usb_direct_intrf_test: FAIL");

@@ -13,6 +13,7 @@ static UsbCtrlrEpHandler_t s_OutHandler;
 static UsbCtrlrEpHandler_t s_InHandler;
 static void *s_OutContext;
 static void *s_InContext;
+static bool s_OutBlocking;
 static UsbEndPointDesc_t s_Open[4];
 static int s_OpenCount;
 static int s_CloseCount;
@@ -39,7 +40,7 @@ void UsbCtrlrEpStall(int, uint8_t) {}
 void UsbCtrlrEpClearStall(int, uint8_t) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
+bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (USB_ENDPADDR_IS_IN(EpAddr))
@@ -53,6 +54,7 @@ bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
 		s_OutBuffer = pBuffer;
 		s_OutHandler = Handler;
 		s_OutContext = pContext;
+		s_OutBlocking = Blocking;
 	}
 	return pBuffer != nullptr && Handler != nullptr;
 }
@@ -129,6 +131,7 @@ static void ResetFake(void)
 	s_InHandler = nullptr;
 	s_OutContext = nullptr;
 	s_InContext = nullptr;
+	s_OutBlocking = false;
 	memset(s_Open, 0, sizeof(s_Open));
 	memset(s_LastRx, 0, sizeof(s_LastRx));
 	s_OpenCount = 0;
@@ -188,6 +191,7 @@ static void TestLifecycleAndValidation(void)
 	CHECK(intrf.IntrfData.Mode == USB_INTRF_MODE_DIRECT);
 	CHECK(intrf.IntrfData.hRxFifo == nullptr);
 	CHECK(intrf.IntrfData.hTxFifo == nullptr);
+	CHECK(s_OutBlocking);
 	CHECK(!UsbIntIntrfOpen(&intrf, 0U, 1U));
 	CHECK(!UsbIntIntrfOpen(&intrf, 65U, 1U));
 	CHECK(!UsbIntIntrfOpen(&intrf, 8U, 0U));

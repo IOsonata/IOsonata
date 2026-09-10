@@ -119,8 +119,7 @@ typedef enum __Usb_Interf_Mode {
 typedef struct __Usb_Interf_Config {
 	int DevNo;
 	uint8_t EpNo;
-	bool bBlocking;				//!< CFifo/controller blocking policy
-	bool bRxPrearm;				//!< Keep a DIRECT OUT transfer armed
+	bool bBlocking;
 	UsbIntrfMode_t Mode;
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;
@@ -152,7 +151,6 @@ struct __Usb_Dev_Interf {
 	uint16_t Mps;
 	uint8_t EpNo;
 	bool bBlocking;
-	bool bRxPrearm;
 	bool RxPending;
 	UsbIntrfMode_t Mode;
 	EpSendFct_t EpSend;
@@ -166,7 +164,6 @@ extern "C" {
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg);
 bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps);
 void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf);
-bool UsbIntrfArmRx(UsbDevIntrf_t *pIntrf);
 bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);
 
 #ifdef __cplusplus
