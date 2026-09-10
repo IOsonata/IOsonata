@@ -105,6 +105,8 @@ typedef struct __Usbd_Hid_Config {
 #pragma pack(pop)
 
 struct __Usbd_Hid_Dev {
+	int DevNo;
+	int ItfNo;					//!< Internal allocation
 	UsbIntIntrf_t IntIntrf;
 	const uint8_t *pReportDesc;
 	UsbRequestHandler_t ReportHandler;
@@ -113,8 +115,6 @@ struct __Usbd_Hid_Dev {
 	UsbdHidTxHandler_t TxHandler;
 	void *pContext;
 	UsbHidDesc_t HidDesc;
-	int ItfNo;					//!< Internal allocation
-	int DevNo;
 	uint16_t ReportDescLength;
 	uint16_t BcdHid;
 	uint16_t FsMps;
