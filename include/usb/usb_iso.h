@@ -49,6 +49,7 @@ SOFTWARE.
 #define __USB_ISO_H__
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "usb/usb_intrf.h"
@@ -129,7 +130,7 @@ bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 
 static inline bool UsbIsoIntrfTxReady(const UsbIsoIntrf_t *pIntrf)
 {
-	return pIntrf != nullptr &&
+	return pIntrf != NULL &&
 		pIntrf->Opened && !pIntrf->Suspended &&
 		atomic_load_explicit(&pIntrf->IntrfData.DevIntrf.bTxReady,
 			memory_order_acquire);

@@ -1,12 +1,14 @@
 ROOT := ../..
 BUILD_DIR := build
 
+CC ?= cc
 CXX ?= g++
 OPT ?= -O1
 
 # hostport supplies usb_ctrlr.h, the header every real port provides.
 CPPFLAGS += -I$(ROOT)/include -Ihostport
 
+CFLAGS ?= -std=gnu17 -Wall -Wextra -Werror -Wshadow -Wundef
 CXXFLAGS ?= $(OPT) -g
 CXXFLAGS += -std=gnu++17 -Wall -Wextra -fno-omit-frame-pointer \
 	-ffunction-sections -fdata-sections -fstack-protector-strong \
@@ -103,12 +105,13 @@ HEADERS := \
 TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 	$(ISO_TARGET) $(ISO_DUPLEX_TARGET) $(BULK_TARGET) $(LINK_TARGET)
 
-.PHONY: all test test-gcc test-clang test-matrix test-nrf-suspend-policy \
-	test-nrf-iso-policy iso-hw-build iso-hw probe clean
+.PHONY: all test test-c-header test-gcc test-clang test-matrix \
+	test-nrf-suspend-policy test-nrf-iso-policy iso-hw-build iso-hw probe clean
 
 all: test
 
 test: $(TARGETS)
+	$(MAKE) test-c-header
 	$(MAKE) test-nrf-suspend-policy
 	$(MAKE) test-nrf-iso-policy
 	$(TEST_ENV) ./$(CORE_TARGET)
@@ -118,6 +121,11 @@ test: $(TARGETS)
 	$(TEST_ENV) ./$(ISO_DUPLEX_TARGET)
 	$(TEST_ENV) ./$(BULK_TARGET)
 	$(TEST_ENV) ./$(LINK_TARGET)
+
+test-c-header:
+	@printf '%s\n' '#include "usb/usb_iso.h"' \
+		'int main(void) { return UsbIsoIntrfTxReady((const UsbIsoIntrf_t *)0) ? 1 : 0; }' | \
+		$(CC) $(CPPFLAGS) $(CFLAGS) -x c -fsyntax-only -
 
 test-nrf-suspend-policy:
 	python3 ./nrf_usb_suspend_policy_test.py
