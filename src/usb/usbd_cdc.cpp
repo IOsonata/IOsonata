@@ -404,7 +404,7 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	req.InCount = 1U;
 
 	UsbdEpAllocRes_t alloc = {};
-	if (!UsbdEpAlloc(pCdc->DevNo, &req, &coreCfg, &alloc))
+	if (!UsbdEpAlloc(pCdc->DevNo, &req, &coreCfg, pClass, &alloc))
 	{
 		return false;
 	}
@@ -441,7 +441,7 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 		return false;
 	}
 
-	return pClass == nullptr || UsbClassRegister(pCdc->DevNo, pClass);
+	return true;
 }
 
 bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)

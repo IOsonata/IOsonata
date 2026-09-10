@@ -1499,7 +1499,7 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 	bool registered = false;
 	if (!pHci->ScoEnabled)
 	{
-		registered = UsbdEpAlloc(pHci->DevNo, &req, &coreCfg, &alloc);
+		registered = UsbdEpAlloc(pHci->DevNo, &req, &coreCfg, pClass, &alloc);
 	}
 	else
 	{
@@ -1513,7 +1513,7 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 
 			req.FixedInMask = bit;
 			req.FixedOutMask = bit;
-			if (UsbdEpAlloc(pHci->DevNo, &req, &coreCfg, &alloc))
+			if (UsbdEpAlloc(pHci->DevNo, &req, &coreCfg, pClass, &alloc))
 			{
 				scoEp = ep;
 				registered = true;
@@ -1582,7 +1582,7 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 		return false;
 	}
 
-	return pClass == nullptr || UsbClassRegister(pHci->DevNo, pClass);
+	return true;
 }
 
 bool BtHciUsbInit(BtHciUsbDev_t * const pHci,

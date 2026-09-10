@@ -230,7 +230,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 	req.BidirectionalCount = 1U;
 
 	UsbdEpAllocRes_t alloc = {};
-	if (!UsbdEpAlloc(pBulk->DevNo, &req, &coreCfg, &alloc))
+	if (!UsbdEpAlloc(pBulk->DevNo, &req, &coreCfg, pClass, &alloc))
 	{
 		return false;
 	}
@@ -272,7 +272,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 		}
 	}
 
-	return pClass == nullptr || UsbClassRegister(pBulk->DevNo, pClass);
+	return true;
 }
 
 bool UsbdBulkInit(UsbdBulkDev_t * const pBulk, const UsbdBulkCfg_t *pCfg)

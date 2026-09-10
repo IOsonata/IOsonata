@@ -104,6 +104,7 @@ typedef struct {
 	int SetIfCnt;
 	uint8_t LastAlt;
 	int ResetCnt;
+	int ProcessCnt;
 	uint8_t CtrlBuffer[16];
 } FuncState_t;
 
@@ -261,6 +262,11 @@ static void ClassReset(void *)
 	s_Class.ResetCnt++;
 }
 
+static void ClassProcess(void *)
+{
+	s_Class.ProcessCnt++;
+}
+
 static bool Fixture(bool WithSetInterface = true,
 					UsbDeviceClass *pClass = nullptr)
 {
@@ -289,15 +295,15 @@ static bool Fixture(bool WithSetInterface = true,
 	cls.InterfaceCount = 1;
 	cls.EpInMask = (1U << 1) | (1U << 2);
 	cls.EpOutMask = (1U << 1);
-	cls.RequestHandler = pClass == nullptr ? Request : nullptr;
+	cls.RequestHandler = Request;
 	cls.ConfigHandler = Configure;
 	cls.SetInterfaceHandler = WithSetInterface ? SetInterface : nullptr;
 	cls.ResetHandler = ClassReset;
-	if (!UsbdClassRegister(TEST_DEVNO, &cls))
-	{
-		return false;
-	}
-	if (pClass != nullptr && !UsbClassRegister(TEST_DEVNO, pClass))
+	cls.ProcessHandler = ClassProcess;
+	const bool registered = pClass != nullptr ?
+		UsbClassRegister(TEST_DEVNO, &cls, pClass) :
+		UsbdClassRegister(TEST_DEVNO, &cls);
+	if (!registered)
 	{
 		return false;
 	}
@@ -725,12 +731,17 @@ static bool TestClassObjectRegistry(void)
 	Complete(EP0_OUT, 0);
 	UsbProcess(TEST_DEVNO);
 	CHECK(device.ProcessCnt == 1);
-	CHECK(!UsbClassRegister(TEST_DEVNO, &device));
+	CHECK(s_Class.ProcessCnt == 0);
+	UsbdClassCfg_t duplicate = {};
+	CHECK(!UsbClassRegister(TEST_DEVNO, &duplicate, &device));
 	CHECK(SetConfig(0));
 	CHECK(device.ConfigCnt == 2 && device.ConfigurationValue == 0);
 
 	Event(USB_CTRLR_EVT_RESET);
 	CHECK(device.ResetCnt == 1);
+	CHECK(s_Class.StageCnt == 0 && s_Class.ConfigCnt == 0 &&
+		s_Class.SetIfCnt == 0 && s_Class.ResetCnt == 0 &&
+		s_Class.ProcessCnt == 0);
 	return true;
 }
 
@@ -745,7 +756,7 @@ static bool TestClassObjectConfigRollback(void)
 	Setup(STD_DEV_OUT, USB_REQ_SET_CONFIGURATION, 1, 0, 0);
 	CHECK(s_Ctrlr.StallCnt == stalls + 1);
 	CHECK(UsbGetConfiguration(TEST_DEVNO) == 0);
-	CHECK(s_Class.ConfigCnt == 2 && s_Class.LastConfig == 0);
+	CHECK(s_Class.ConfigCnt == 0);
 	CHECK(device.ConfigCnt == 2 && device.ConfigurationValue == 0);
 	return true;
 }
@@ -771,6 +782,8 @@ static bool TestResetSuspendAndDispatch(void)
 	// completion therefore has no class-level dispatch path.
 	Complete(EP1_IN, 37);
 	CHECK(s_Class.ResetCnt == 0);
+	UsbProcess(TEST_DEVNO);
+	CHECK(s_Class.ProcessCnt == 1);
 
 	Event(USB_CTRLR_EVT_RESET);
 	CHECK(UsbGetAddress(TEST_DEVNO) == 0 && UsbGetConfiguration(TEST_DEVNO) == 0);

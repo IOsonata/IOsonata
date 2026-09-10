@@ -403,7 +403,7 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	req.BidirectionalCount = 1U;
 
 	UsbdEpAllocRes_t alloc = {};
-	if (!UsbdEpAlloc(pHid->DevNo, &req, &coreCfg, &alloc))
+	if (!UsbdEpAlloc(pHid->DevNo, &req, &coreCfg, pClass, &alloc))
 	{
 		return false;
 	}
@@ -430,7 +430,7 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 			return false;
 		}
 	}
-	return pClass == nullptr || UsbClassRegister(pHid->DevNo, pClass);
+	return true;
 }
 
 bool UsbdHidInit(UsbdHidDev_t *pHid, const UsbdHidCfg_t *pCfg)

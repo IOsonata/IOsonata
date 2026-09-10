@@ -188,10 +188,10 @@ extern "C" {
 bool UsbInit(const UsbCfg_t *pCfg);
 
 /**
- * @brief	Register one USB device class instance.
+ * @brief	Register one C USB device class through a static object adapter.
  *
  * Registration is static and expected to be complete before the device is
- * connected to the bus.
+ * connected to the bus. The core stores and dispatches only class objects.
  */
 bool UsbdClassRegister(int DevNo, const UsbdClassCfg_t *pCfg);
 
@@ -267,9 +267,23 @@ public:
 		return false;
 	}
 
+	uint8_t FirstInterface(void) const { return vFirstInterface; }
+	uint8_t InterfaceCount(void) const { return vInterfaceCount; }
+	uint16_t EpInMask(void) const { return vEpInMask; }
+	uint16_t EpOutMask(void) const { return vEpOutMask; }
+
 protected:
 	UsbDeviceClass() = default;
 	~UsbDeviceClass() = default;
+
+private:
+	friend bool UsbClassRegister(int DevNo, const UsbdClassCfg_t *pCfg,
+								 UsbDeviceClass *pClass);
+
+	uint8_t vFirstInterface = 0;
+	uint8_t vInterfaceCount = 0;
+	uint16_t vEpInMask = 0;
+	uint16_t vEpOutMask = 0;
 };
 
 /// Base for a class driver used by the local USB host.
@@ -279,8 +293,9 @@ protected:
 	~UsbHostClass() = default;
 };
 
-/// Register one statically owned device class object with the USB subsystem.
-bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass);
+/// Atomically register one statically owned C++ device class and its ownership.
+bool UsbClassRegister(int DevNo, const UsbdClassCfg_t *pCfg,
+					  UsbDeviceClass *pClass);
 #endif
 
 /** @} End of group USB */

@@ -73,4 +73,11 @@ typedef struct __Usbd_EpAlloc_Res {
 bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
 				 const UsbdClassCfg_t *pCfg, UsbdEpAllocRes_t *pRes);
 
+#ifdef __cplusplus
+/// Atomically register pClass with the topology selected by the allocator.
+bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
+				 const UsbdClassCfg_t *pCfg, UsbDeviceClass *pClass,
+				 UsbdEpAllocRes_t *pRes);
+#endif
+
 #endif	// __USBD_EPALLOC_H__

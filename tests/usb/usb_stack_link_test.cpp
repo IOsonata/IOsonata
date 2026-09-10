@@ -185,7 +185,8 @@ int main(void)
 	}
 	// C++ CDC objects register through the common UsbClass object array.
 	// Registering the same object a second time must be rejected.
-	if (UsbClassRegister(0, &s_Cdc0))
+	UsbdClassCfg_t duplicate = {};
+	if (UsbClassRegister(0, &duplicate, &s_Cdc0))
 	{
 		printf("UsbdCdc class object was not registered\n");
 		return 7;

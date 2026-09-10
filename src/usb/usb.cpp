@@ -81,11 +81,52 @@ typedef enum __Usbd_Core_Ctrl_State {
 	USB_CTRL_STATUS_OUT,
 } UsbCoreCtrlState_t;
 
+/// C compatibility object. The core sees the same UsbDeviceClass interface
+/// for native C++ classes and C callback-based class implementations.
+class UsbDeviceClassAdapter final : public UsbDeviceClass {
+public:
+	void Bind(const UsbdClassCfg_t &Cfg) { vCfg = Cfg; }
+
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+				 uint8_t **ppData, uint16_t *pLength) override {
+		return vCfg.RequestHandler != nullptr &&
+			vCfg.RequestHandler(pSetup, Stage, ppData, pLength,
+				vCfg.pContext);
+	}
+
+	bool SelectConfig(uint8_t ConfigValue) override {
+		return vCfg.ConfigHandler == nullptr ||
+			vCfg.ConfigHandler(ConfigValue, vCfg.pContext);
+	}
+
+	bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) override {
+		return vCfg.SetInterfaceHandler != nullptr &&
+			vCfg.SetInterfaceHandler(InterfaceNo, Option, vCfg.pContext);
+	}
+
+	void Reset(void) override {
+		if (vCfg.ResetHandler != nullptr)
+		{
+			vCfg.ResetHandler(vCfg.pContext);
+		}
+	}
+
+	void Process(void) override {
+		if (vCfg.ProcessHandler != nullptr)
+		{
+			vCfg.ProcessHandler(vCfg.pContext);
+		}
+	}
+
+private:
+	UsbdClassCfg_t vCfg = {};
+};
+
 static UsbCoreCfg_t s_CoreCfg;
-static UsbdClassCfg_t s_CoreClass[USB_CORE_CLASS_MAXCNT];
-static int s_CoreClassCnt;
 static UsbClass *s_CoreObject[USB_CORE_CLASS_MAXCNT];
 static int s_CoreObjectCnt;
+static UsbDeviceClassAdapter s_CoreAdapter[USB_CORE_CLASS_MAXCNT];
+static int s_CoreAdapterCnt;
 // Endpoint to class index, [0] OUT and [1] IN. Ownership masks are fixed once
 // a class registers and may not overlap. They route endpoint-recipient
 // requests; data endpoint events go directly to their registered callbacks.
@@ -108,7 +149,6 @@ static uint16_t s_HaltOut;
 static UsbCoreCtrlState_t s_CtrlState;
 static UsbSetupData_t s_Setup;
 static int s_ActiveClass;
-static UsbDeviceClass *s_ActiveObject;
 static uint8_t *s_CtrlData;
 static uint16_t s_CtrlDataLen;
 static uint16_t s_CtrlActual;
@@ -466,10 +506,12 @@ static bool UsbCoreEndpointExists(uint8_t EpAddr)
 
 static int UsbCoreFindClass(uint8_t InterfaceNo)
 {
-	for (int i = 0; i < s_CoreClassCnt; i++)
+	for (int i = 0; i < s_CoreObjectCnt; i++)
 	{
-		const uint8_t first = s_CoreClass[i].FirstInterface;
-		const uint8_t count = s_CoreClass[i].InterfaceCount;
+		const UsbDeviceClass *pClass =
+			static_cast<const UsbDeviceClass *>(s_CoreObject[i]);
+		const uint8_t first = pClass->FirstInterface();
+		const uint8_t count = pClass->InterfaceCount();
 
 		if (count != 0 && InterfaceNo >= first &&
 			InterfaceNo < (uint8_t)(first + count))
@@ -501,7 +543,6 @@ static void UsbCoreResetControl(void)
 {
 	s_CtrlState = USB_CTRL_IDLE;
 	s_ActiveClass = -1;
-	s_ActiveObject = nullptr;
 	s_CtrlData = nullptr;
 	s_CtrlDataLen = 0;
 	s_CtrlActual = 0;
@@ -524,32 +565,18 @@ static bool UsbCoreInvokeActive(UsbCtrlStage_t Stage,
 {
 	uint8_t *pData = s_CtrlData;
 	uint16_t len = Length;
-	if (s_ActiveObject != nullptr)
-	{
-		return s_ActiveObject->Control(&s_Setup, Stage, &pData, &len);
-	}
-
-	if (s_ActiveClass < 0 || s_ActiveClass >= s_CoreClassCnt)
+	if (s_ActiveClass < 0 || s_ActiveClass >= s_CoreObjectCnt)
 	{
 		return true;
 	}
 
-	UsbdClassRequestHandler_t handler =
-		s_CoreClass[s_ActiveClass].RequestHandler;
-
-	if (handler == nullptr)
-	{
-		return true;
-	}
-
-	return handler(&s_Setup, Stage, &pData, &len,
-				   s_CoreClass[s_ActiveClass].pContext);
+	return static_cast<UsbDeviceClass *>(s_CoreObject[s_ActiveClass])->
+		Control(&s_Setup, Stage, &pData, &len);
 }
 
 static void UsbCoreAbortControl(void)
 {
-	if (s_ActiveObject != nullptr ||
-		(s_ActiveClass >= 0 && s_ActiveClass < s_CoreClassCnt))
+	if (s_ActiveClass >= 0 && s_ActiveClass < s_CoreObjectCnt)
 	{
 		(void)UsbCoreInvokeActive(USB_CTRL_ABORT, s_CtrlActual);
 	}
@@ -662,6 +689,12 @@ static void UsbCoreClearEndpointState(void)
 	memset(s_Alternate, 0, sizeof(s_Alternate));
 }
 
+static bool UsbCoreSelectConfig(int Index, uint8_t Configuration)
+{
+	return static_cast<UsbDeviceClass *>(s_CoreObject[Index])->
+		SelectConfig(Configuration);
+}
+
 static void UsbCoreUnconfigureClasses(void)
 {
 	if (s_Configuration == 0)
@@ -669,18 +702,9 @@ static void UsbCoreUnconfigureClasses(void)
 		return;
 	}
 
-	for (int i = 0; i < s_CoreClassCnt; i++)
-	{
-		if (s_CoreClass[i].ConfigHandler != nullptr)
-		{
-			(void)s_CoreClass[i].ConfigHandler(0,
-									   s_CoreClass[i].pContext);
-		}
-	}
-
 	for (int i = 0; i < s_CoreObjectCnt; i++)
 	{
-		(void)static_cast<UsbDeviceClass *>(s_CoreObject[i])->SelectConfig(0);
+		(void)UsbCoreSelectConfig(i, 0);
 	}
 }
 
@@ -709,43 +733,13 @@ static bool UsbCoreApplyConfiguration(uint8_t Configuration)
 		return true;
 	}
 
-	for (int i = 0; i < s_CoreClassCnt; i++)
-	{
-		if (s_CoreClass[i].ConfigHandler != nullptr &&
-			!s_CoreClass[i].ConfigHandler(Configuration,
-									  s_CoreClass[i].pContext))
-		{
-			for (int n = 0; n <= i; n++)
-			{
-				if (s_CoreClass[n].ConfigHandler != nullptr)
-				{
-					(void)s_CoreClass[n].ConfigHandler(0,
-										   s_CoreClass[n].pContext);
-				}
-			}
-			UsbCtrlrEpCloseAll(s_UsbDevNo);
-			return false;
-		}
-	}
-
 	for (int i = 0; i < s_CoreObjectCnt; i++)
 	{
-		UsbDeviceClass *pClass =
-			static_cast<UsbDeviceClass *>(s_CoreObject[i]);
-		if (!pClass->SelectConfig(Configuration))
+		if (!UsbCoreSelectConfig(i, Configuration))
 		{
-			for (int n = 0; n < s_CoreClassCnt; n++)
-			{
-				if (s_CoreClass[n].ConfigHandler != nullptr)
-				{
-					(void)s_CoreClass[n].ConfigHandler(0,
-										   s_CoreClass[n].pContext);
-				}
-			}
 			for (int n = 0; n <= i; n++)
 			{
-				(void)static_cast<UsbDeviceClass *>(s_CoreObject[n])->
-					SelectConfig(0);
+				(void)UsbCoreSelectConfig(n, 0);
 			}
 			UsbCtrlrEpCloseAll(s_UsbDevNo);
 			return false;
@@ -990,14 +984,9 @@ static bool UsbCoreHandleSetInterface(void)
 	}
 
 	const uint8_t oldAlternate = s_Alternate[interfaceNo];
-	bool selected = s_CoreClass[cls].SetInterfaceHandler != nullptr &&
-		s_CoreClass[cls].SetInterfaceHandler(interfaceNo, alternate,
-											  s_CoreClass[cls].pContext);
-	for (int i = 0; !selected && i < s_CoreObjectCnt; i++)
-	{
-		selected = static_cast<UsbDeviceClass *>(s_CoreObject[i])->
+	const bool selected =
+		static_cast<UsbDeviceClass *>(s_CoreObject[cls])->
 			SelectInterface(interfaceNo, alternate);
-	}
 	if (!selected)
 	{
 		return false;
@@ -1069,17 +1058,12 @@ static bool UsbCoreHandleStandard(void)
 
 static bool UsbCoreCallClassSetup(int Index)
 {
-	UsbdClassRequestHandler_t handler = s_CoreClass[Index].RequestHandler;
-	if (handler == nullptr)
-	{
-		return false;
-	}
-
 	uint8_t *pData = nullptr;
 	uint16_t len = 0;
-
-	if (!handler(&s_Setup, USB_CTRL_SETUP, &pData, &len,
-				 s_CoreClass[Index].pContext))
+	const bool handled =
+		static_cast<UsbDeviceClass *>(s_CoreObject[Index])->
+			Control(&s_Setup, USB_CTRL_SETUP, &pData, &len);
+	if (!handled)
 	{
 		return false;
 	}
@@ -1102,49 +1086,6 @@ static bool UsbCoreCallClassSetup(int Index)
 	return UsbCoreStartOut(pData, len);
 }
 
-static bool UsbCoreCallObjectSetup(int Index)
-{
-	UsbDeviceClass *pClass =
-		static_cast<UsbDeviceClass *>(s_CoreObject[Index]);
-	uint8_t *pData = nullptr;
-	uint16_t len = 0;
-
-	if (!pClass->Control(&s_Setup, USB_CTRL_SETUP, &pData, &len))
-	{
-		return false;
-	}
-
-	s_ActiveObject = pClass;
-
-	if (s_Setup.wLength == 0)
-	{
-		s_CtrlData = pData;
-		s_CtrlDataLen = 0;
-		s_CtrlActual = 0;
-		return UsbCoreStartStatus();
-	}
-
-	if (UsbCoreDirIn(&s_Setup))
-	{
-		return UsbCoreStartIn(pData, len);
-	}
-
-	return UsbCoreStartOut(pData, len);
-}
-
-static bool UsbCoreCallObjectsSetup(void)
-{
-	for (int i = 0; i < s_CoreObjectCnt; i++)
-	{
-		if (UsbCoreCallObjectSetup(i))
-		{
-			return true;
-		}
-	}
-
-	return false;
-}
-
 static bool UsbCoreHandleClassRequest(void)
 {
 	const uint8_t recipient = UsbCoreRecipient(&s_Setup);
@@ -1164,8 +1105,7 @@ static bool UsbCoreHandleClassRequest(void)
 		}
 
 		const int cls = UsbCoreFindClass(interfaceNo);
-		return cls >= 0 &&
-			(UsbCoreCallClassSetup(cls) || UsbCoreCallObjectsSetup());
+		return cls >= 0 && UsbCoreCallClassSetup(cls);
 	}
 
 	if (recipient == USB_REQTYPE_ENDPOINT)
@@ -1183,11 +1123,10 @@ static bool UsbCoreHandleClassRequest(void)
 		}
 
 		const int cls = UsbCoreFindEndpointClass(epAddr);
-		return cls >= 0 &&
-			(UsbCoreCallClassSetup(cls) || UsbCoreCallObjectsSetup());
+		return cls >= 0 && UsbCoreCallClassSetup(cls);
 	}
 
-	for (int i = 0; i < s_CoreClassCnt; i++)
+	for (int i = 0; i < s_CoreObjectCnt; i++)
 	{
 		if (UsbCoreCallClassSetup(i))
 		{
@@ -1195,7 +1134,7 @@ static bool UsbCoreHandleClassRequest(void)
 		}
 	}
 
-	return UsbCoreCallObjectsSetup();
+	return false;
 }
 
 static void UsbCoreHandleSetup(const UsbSetupData_t *pSetup)
@@ -1293,14 +1232,6 @@ static void UsbCoreNotifyReset(void)
 {
 	UsbCoreUnconfigureClasses();
 
-	for (int i = 0; i < s_CoreClassCnt; i++)
-	{
-		if (s_CoreClass[i].ResetHandler != nullptr)
-		{
-			s_CoreClass[i].ResetHandler(s_CoreClass[i].pContext);
-		}
-	}
-
 	for (int i = 0; i < s_CoreObjectCnt; i++)
 	{
 		s_CoreObject[i]->Reset();
@@ -1381,13 +1312,12 @@ static bool UsbCoreInit(const UsbCoreCfg_t *pCfg)
 		return false;
 	}
 
-	memset(s_CoreClass, 0, sizeof(s_CoreClass));
 	memset(s_CoreObject, 0, sizeof(s_CoreObject));
 	// Minus one is no owner. Zero would claim class zero owns every
 	// endpoint, so this cannot be left to static initialization.
 	memset(s_CoreEpClass, -1, sizeof(s_CoreEpClass));
-	s_CoreClassCnt = 0;
 	s_CoreObjectCnt = 0;
+	s_CoreAdapterCnt = 0;
 	s_CoreInitialized = false;
 	s_CoreStarted = false;
 	UsbCoreResetDeviceState(false);
@@ -1396,10 +1326,12 @@ static bool UsbCoreInit(const UsbCoreCfg_t *pCfg)
 	return true;
 }
 
-static bool UsbCoreRegisterClass(const UsbdClassCfg_t *pCfg)
+static bool UsbCoreRegisterObject(const UsbdClassCfg_t *pCfg,
+								  UsbDeviceClass *pClass)
 {
-	if (!s_CoreInitialized || pCfg == nullptr || s_CoreStarted ||
-		s_CoreClassCnt >= USB_CORE_CLASS_MAXCNT)
+	if (!s_CoreInitialized || pCfg == nullptr || pClass == nullptr ||
+		s_CoreStarted ||
+		s_CoreObjectCnt >= USB_CORE_CLASS_MAXCNT)
 	{
 		return false;
 	}
@@ -1418,14 +1350,17 @@ static bool UsbCoreRegisterClass(const UsbdClassCfg_t *pCfg)
 			return false;
 		}
 
-		for (int i = 0; i < s_CoreClassCnt; i++)
+		for (int i = 0; i < s_CoreObjectCnt; i++)
 		{
+			const UsbDeviceClass *pRegistered =
+				static_cast<const UsbDeviceClass *>(s_CoreObject[i]);
 			const uint16_t firstA = pCfg->FirstInterface;
 			const uint16_t lastA = last;
-			const uint16_t firstB = s_CoreClass[i].FirstInterface;
-			const uint16_t lastB = firstB + s_CoreClass[i].InterfaceCount;
+			const uint16_t firstB = pRegistered->FirstInterface();
+			const uint16_t lastB =
+				firstB + pRegistered->InterfaceCount();
 
-			if (s_CoreClass[i].InterfaceCount != 0 &&
+			if (pRegistered->InterfaceCount() != 0 &&
 				firstA < lastB && firstB < lastA)
 			{
 				return false;
@@ -1433,16 +1368,19 @@ static bool UsbCoreRegisterClass(const UsbdClassCfg_t *pCfg)
 		}
 	}
 
-	for (int i = 0; i < s_CoreClassCnt; i++)
+	for (int i = 0; i < s_CoreObjectCnt; i++)
 	{
-		if ((pCfg->EpInMask & s_CoreClass[i].EpInMask) != 0 ||
-			(pCfg->EpOutMask & s_CoreClass[i].EpOutMask) != 0)
+		const UsbDeviceClass *pRegistered =
+			static_cast<const UsbDeviceClass *>(s_CoreObject[i]);
+		if (pRegistered == pClass ||
+			(pCfg->EpInMask & pRegistered->EpInMask()) != 0 ||
+			(pCfg->EpOutMask & pRegistered->EpOutMask()) != 0)
 		{
 			return false;
 		}
 	}
 
-	memcpy(&s_CoreClass[s_CoreClassCnt], pCfg, sizeof(*pCfg));
+	s_CoreObject[s_CoreObjectCnt] = pClass;
 
 	for (int ep = 1; ep < 16; ep++)
 	{
@@ -1450,35 +1388,15 @@ static bool UsbCoreRegisterClass(const UsbdClassCfg_t *pCfg)
 
 		if ((pCfg->EpInMask & bit) != 0)
 		{
-			s_CoreEpClass[1][ep] = (int8_t)s_CoreClassCnt;
+			s_CoreEpClass[1][ep] = (int8_t)s_CoreObjectCnt;
 		}
 		if ((pCfg->EpOutMask & bit) != 0)
 		{
-			s_CoreEpClass[0][ep] = (int8_t)s_CoreClassCnt;
+			s_CoreEpClass[0][ep] = (int8_t)s_CoreObjectCnt;
 		}
 	}
 
-	s_CoreClassCnt++;
-	return true;
-}
-
-static bool UsbCoreRegisterObject(UsbClass *pClass)
-{
-	if (!s_CoreInitialized || pClass == nullptr || s_CoreStarted ||
-		s_CoreObjectCnt >= USB_CORE_CLASS_MAXCNT)
-	{
-		return false;
-	}
-
-	for (int i = 0; i < s_CoreObjectCnt; i++)
-	{
-		if (s_CoreObject[i] == pClass)
-		{
-			return false;
-		}
-	}
-
-	s_CoreObject[s_CoreObjectCnt++] = pClass;
+	s_CoreObjectCnt++;
 	return true;
 }
 
@@ -1739,14 +1657,6 @@ static void UsbDevProcess(void)
 		}
 	}
 
-	for (int i = 0; i < s_CoreClassCnt; i++)
-	{
-		if (s_CoreClass[i].ProcessHandler != nullptr)
-		{
-			s_CoreClass[i].ProcessHandler(s_CoreClass[i].pContext);
-		}
-	}
-
 	for (int i = 0; i < s_CoreObjectCnt; i++)
 	{
 		s_CoreObject[i]->Process();
@@ -1801,12 +1711,35 @@ bool UsbInit(const UsbCfg_t *pCfg)
 
 bool UsbdClassRegister(int DevNo, const UsbdClassCfg_t *pCfg)
 {
-	return DevNo == s_UsbDevNo && UsbCoreRegisterClass(pCfg);
+	if (DevNo != s_UsbDevNo || pCfg == nullptr ||
+		s_CoreAdapterCnt >= USB_CORE_CLASS_MAXCNT)
+	{
+		return false;
+	}
+
+	UsbDeviceClassAdapter *pAdapter = &s_CoreAdapter[s_CoreAdapterCnt];
+	pAdapter->Bind(*pCfg);
+	if (!UsbClassRegister(DevNo, pCfg, pAdapter))
+	{
+		return false;
+	}
+	s_CoreAdapterCnt++;
+	return true;
 }
 
-bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass)
+bool UsbClassRegister(int DevNo, const UsbdClassCfg_t *pCfg,
+					  UsbDeviceClass *pClass)
 {
-	return DevNo == s_UsbDevNo && UsbCoreRegisterObject(pClass);
+	if (DevNo != s_UsbDevNo || !UsbCoreRegisterObject(pCfg, pClass))
+	{
+		return false;
+	}
+
+	pClass->vFirstInterface = pCfg->FirstInterface;
+	pClass->vInterfaceCount = pCfg->InterfaceCount;
+	pClass->vEpInMask = pCfg->EpInMask;
+	pClass->vEpOutMask = pCfg->EpOutMask;
+	return true;
 }
 
 bool UsbEnable(int DevNo)

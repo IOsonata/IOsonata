@@ -165,9 +165,11 @@ void UsbCtrlrEpClearStall(int, uint8_t) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 }
 
-bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass)
+bool UsbClassRegister(int DevNo, const UsbdClassCfg_t *pCfg,
+                      UsbDeviceClass *pClass)
 {
-    if (DevNo != 0 || pClass == nullptr || s_ClassObject != nullptr)
+    if (pClass == nullptr || s_ClassObject != nullptr ||
+        !UsbdClassRegister(DevNo, pCfg))
         return false;
     s_ClassObject = pClass;
     return true;

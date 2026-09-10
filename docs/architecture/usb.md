@@ -80,6 +80,14 @@ implementation.
 The USB subsystem keeps statically owned class objects in one `UsbClass *`
 array. Shared reset and application-context processing dispatch through that
 array without testing device versus host controller mode inside each class.
+Device interface and endpoint ownership is stored by `UsbDeviceClass`, so
+control, configuration, interface selection, reset and processing each use one
+object dispatch path. There is no callback registry in the core.
+
+The C API is preserved by fixed, statically owned `UsbDeviceClass` adapter
+objects. `UsbdClassRegister()` copies a C callback table into an adapter and
+registers that adapter in the same object array. Native C++ classes register
+their topology and object atomically through `UsbClassRegister()`.
 
 The C++ `UsbdCdc` object derives from both `UsbDeviceClass` and `DeviceIntrf`.
 Its control requests, configuration selection, reset and deferred pump run
@@ -90,6 +98,10 @@ The C++ `BtHciUsb` object also derives from `UsbDeviceClass` and
 `DeviceIntrf`. HCI command control transfers, configuration selection, HCI
 and SCO interface options, and reset run through the virtual class API. The
 underlying request and endpoint logic is shared with the C callback adapters.
+
+`UsbdBulk` and `UsbdHid` follow the same model. Their C++ initializers leave
+the compatibility callbacks null and register the class object; their C
+initializers retain the callback API through a static adapter object.
 
 ## Current device-side data-path model
 
