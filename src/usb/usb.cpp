@@ -1699,6 +1699,13 @@ bool UsbInit(const UsbCfg_t *pCfg)
 		return false;
 	}
 
+	// Host and OTG need a dual role controller. The current targets are device
+	// only, so reject the other roles rather than pretend to support them.
+	if (pCfg->Mode != USB_MODE_DEVICE)
+	{
+		return false;
+	}
+
 	s_UsbDevNo = pCfg->DevNo;
 	s_UsbVbusLast = false;
 

@@ -78,6 +78,14 @@ typedef enum __Usb_Speed {
 	USB_SPEED_HIGH				//!< 480 Mbit/s
 } UsbSpeed_t;
 
+/// Operating role. Host and OTG need a dual role controller; UsbInit rejects
+/// them on device only silicon.
+typedef enum __Usb_Mode {
+	USB_MODE_DEVICE,			//!< Peripheral, responds to a host
+	USB_MODE_HOST,				//!< Host, enumerates and drives devices
+	USB_MODE_OTG				//!< Dual role, starts from the ID pin
+} UsbMode_t;
+
 /// Cable events. Reported from UsbProcess, never from an interrupt.
 typedef enum __Usb_Evt {
 	USB_EVT_ATTACHED,			//!< Bus power appeared
@@ -140,6 +148,7 @@ typedef struct __Usb_Func_Config {
 /// not here, they come from usb_ctrlr.h for this DevNo.
 typedef struct __Usb_Config {
 	int DevNo;						//!< USB controller number, not the USB device address
+	UsbMode_t Mode;					//!< Device, host or OTG. Host and OTG need dual role silicon
 	uint16_t Vid;					//!< USB vendor id
 	uint16_t Pid;					//!< USB product id
 	uint16_t DevVer;				//!< Device release, BCD, 0x0100 is version 1.00
