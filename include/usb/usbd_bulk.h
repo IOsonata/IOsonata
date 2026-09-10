@@ -153,7 +153,7 @@ static inline UsbdBulkDev_t *UsbdBulkGetDevHandle(DevIntrf_t * const pDevIntrf) 
 #ifdef __cplusplus
 }
 
-class UsbdBulk : public DeviceIntrf {
+class UsbdBulk : public UsbDeviceClass, public DeviceIntrf {
 public:
 	UsbdBulk() = default;
 	UsbdBulk(const UsbdBulk &) = delete;
@@ -163,7 +163,11 @@ public:
 	operator UsbdBulkDev_t * () { return &vUsbdBulk; }
 	DevIntrf_t *Data(void) { return &vUsbdBulk.IntrfData.DevIntrf; }
 
-	bool Init(const UsbdBulkCfg_t &Cfg) { return UsbdBulkInit(&vUsbdBulk, &Cfg); }
+	bool Init(const UsbdBulkCfg_t &Cfg);
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+				 uint8_t **ppData, uint16_t *pLength) override;
+	bool SelectConfig(uint8_t ConfigValue) override;
+	void Reset(void) override;
 
 	uint32_t Rate(uint32_t DataRate) override {
 		return DeviceIntrfSetRate(&vUsbdBulk.IntrfData.DevIntrf, DataRate);

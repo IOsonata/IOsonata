@@ -187,7 +187,9 @@ static bool UsbdBulkFillDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 	return true;
 }
 
-bool UsbdBulkInit(UsbdBulkDev_t * const pBulk, const UsbdBulkCfg_t *pCfg)
+static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
+								 const UsbdBulkCfg_t *pCfg,
+								 UsbDeviceClass *pClass)
 {
 	if (pBulk == nullptr || pCfg == nullptr ||
 		UsbGetCfg(pCfg->DevNo) == nullptr ||
@@ -214,11 +216,12 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk, const UsbdBulkCfg_t *pCfg)
 	}
 
 	UsbdClassCfg_t coreCfg = {};
-	coreCfg.RequestHandler = pCfg->RequestHandler != nullptr ?
+	coreCfg.RequestHandler =
+		pClass == nullptr && pCfg->RequestHandler != nullptr ?
 		UsbdBulkRequest : nullptr;
-	coreCfg.ConfigHandler = UsbdBulkConfig;
+	coreCfg.ConfigHandler = pClass == nullptr ? UsbdBulkConfig : nullptr;
 	coreCfg.SetInterfaceHandler = nullptr;
-	coreCfg.ResetHandler = UsbdBulkReset;
+	coreCfg.ResetHandler = pClass == nullptr ? UsbdBulkReset : nullptr;
 	coreCfg.ProcessHandler = nullptr;
 	coreCfg.pContext = pBulk;
 
@@ -269,5 +272,31 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk, const UsbdBulkCfg_t *pCfg)
 		}
 	}
 
-	return true;
+	return pClass == nullptr || UsbClassRegister(pBulk->DevNo, pClass);
+}
+
+bool UsbdBulkInit(UsbdBulkDev_t * const pBulk, const UsbdBulkCfg_t *pCfg)
+{
+	return UsbdBulkInitInternal(pBulk, pCfg, nullptr);
+}
+
+bool UsbdBulk::Init(const UsbdBulkCfg_t &Cfg)
+{
+	return UsbdBulkInitInternal(&vUsbdBulk, &Cfg, this);
+}
+
+bool UsbdBulk::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+						uint8_t **ppData, uint16_t *pLength)
+{
+	return UsbdBulkRequest(pSetup, Stage, ppData, pLength, &vUsbdBulk);
+}
+
+bool UsbdBulk::SelectConfig(uint8_t ConfigValue)
+{
+	return UsbdBulkConfig(ConfigValue, &vUsbdBulk);
+}
+
+void UsbdBulk::Reset(void)
+{
+	UsbdBulkReset(&vUsbdBulk);
 }

@@ -16,6 +16,7 @@
 
 static UsbCfg_t s_UsbCfg;
 static UsbdClassCfg_t s_ClassCfg;
+static UsbDeviceClass *s_ClassObject;
 static bool s_ClassRegistered;
 static uint8_t s_ReservedFirst;
 static uint8_t s_ReservedCount;
@@ -126,6 +127,14 @@ bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
 bool UsbCtrlrEp0Xfer(int, uint8_t, uint8_t *, uint16_t) { return true; }
 }
 
+bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass)
+{
+    if (DevNo != 0 || pClass == nullptr || s_ClassObject != nullptr)
+        return false;
+    s_ClassObject = pClass;
+    return true;
+}
+
 static int s_Fail;
 #define CHECK(c) do { if (!(c)) { \
     printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; } } while (0)
@@ -167,6 +176,7 @@ static void ResetFake(void)
     memset(&s_ClassCfg, 0, sizeof(s_ClassCfg));
     memset(s_OpenDesc, 0, sizeof(s_OpenDesc));
     memset(s_HwOut, 0, sizeof(s_HwOut));
+    s_ClassObject = nullptr;
     s_ClassRegistered = false;
     s_ReservedFirst = 0U;
     s_ReservedCount = 0U;
@@ -266,6 +276,35 @@ static void TestAutoPlacement(void)
     CHECK(s_ClassCfg.EpOutMask == (1U << 2));
 }
 
+static void TestCApiAdapters(void)
+{
+    ResetFake();
+    UsbdBulkDev_t bulk = {};
+    const UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
+
+    CHECK(UsbdBulkInit(&bulk, &cfg));
+    CHECK(s_ClassObject == nullptr);
+    CHECK(s_ClassCfg.RequestHandler != nullptr);
+    CHECK(s_ClassCfg.ConfigHandler != nullptr);
+    CHECK(s_ClassCfg.SetInterfaceHandler == nullptr);
+    CHECK(s_ClassCfg.ResetHandler != nullptr);
+    CHECK(s_ClassCfg.ProcessHandler == nullptr);
+    CHECK(s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
+    CHECK(bulk.IntrfData.Mps == USBD_BULK_FS_MPS);
+
+    UsbSetupData_t setup = {};
+    setup.bmRequestType = USB_REQTYPE_VEND | USB_REQTYPE_INTERFACE;
+    setup.wIndex = ITF_NO;
+    uint16_t length = 0U;
+    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_SETUP, nullptr, &length,
+                                    s_ClassCfg.pContext));
+    CHECK(s_RequestCount == 1);
+    CHECK(s_RequestContext == &s_RequestContext);
+
+    s_ClassCfg.ResetHandler(s_ClassCfg.pContext);
+    CHECK(bulk.IntrfData.Mps == 0U);
+}
+
 static void TestByteMode(void)
 {
     ResetFake();
@@ -274,11 +313,17 @@ static void TestByteMode(void)
 
     CHECK(bulk.Init(cfg));
     CHECK(s_ClassRegistered);
+    CHECK(s_ClassObject == &bulk);
+    CHECK(s_ClassCfg.RequestHandler == nullptr);
+    CHECK(s_ClassCfg.ConfigHandler == nullptr);
+    CHECK(s_ClassCfg.SetInterfaceHandler == nullptr);
+    CHECK(s_ClassCfg.ResetHandler == nullptr);
+    CHECK(s_ClassCfg.ProcessHandler == nullptr);
     CHECK(s_OutBuffer != nullptr && s_InBuffer != nullptr);
     CHECK(s_OutBuffer != s_InBuffer);
     CHECK(s_OutSubmitCount == 0);
 
-    CHECK(s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
+    CHECK(bulk.SelectConfig(1U));
     CHECK(s_OpenCount == 2);
     CHECK(s_OpenDesc[0].bEndpointAddress == USB_ENDPADDR_DIRIN(EP_NO));
     CHECK(s_OpenDesc[1].bEndpointAddress == USB_ENDPADDR_DIROUT(EP_NO));
@@ -303,12 +348,14 @@ static void TestByteMode(void)
     setup.bmRequestType = USB_REQTYPE_VEND | USB_REQTYPE_INTERFACE;
     setup.wIndex = ITF_NO;
     uint16_t length = 0U;
-    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_SETUP, nullptr, &length,
-                                   s_ClassCfg.pContext));
+    CHECK(bulk.Control(&setup, USB_CTRL_SETUP, nullptr, &length));
     CHECK(s_RequestCount == 1);
     CHECK(s_RequestContext == &s_RequestContext);
 
-    CHECK(s_ClassCfg.ConfigHandler(0U, s_ClassCfg.pContext));
+    bulk.Reset();
+    CHECK(DeviceIntrfGetRate(bulk.Data()) == 0U);
+
+    CHECK(bulk.SelectConfig(0U));
     CHECK(DeviceIntrfGetRate(bulk.Data()) == 0U);
 }
 
@@ -318,7 +365,7 @@ static void TestPacketMode(void)
     UsbdBulk bulk;
     const UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_PACKET);
     CHECK(bulk.Init(cfg));
-    CHECK(s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
+    CHECK(bulk.SelectConfig(1U));
 
     alignas(4) uint8_t block[USBD_BULK_PKT_BLKSIZE] = {};
     UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(block);
@@ -334,6 +381,7 @@ int main(void)
 {
     TestDescriptor();
     TestAutoPlacement();
+    TestCApiAdapters();
     TestByteMode();
     TestPacketMode();
 
