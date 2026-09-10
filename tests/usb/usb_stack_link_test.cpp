@@ -45,8 +45,15 @@ SOFTWARE.
 
 static uint8_t s_RegisteredEp[6];
 static int s_RegisteredEpCount;
+static UsbCtrlrEvtHandler_t s_CoreHandler;
+static void *s_CoreContext;
 
-bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
+bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *pCfg)
+{
+	s_CoreHandler = pCfg->EvtHandler;
+	s_CoreContext = pCfg->pContext;
+	return true;
+}
 bool UsbCtrlrStart(int) { return true; }
 void UsbCtrlrStop(int) {}
 void UsbCtrlrProcess(int) {}
@@ -159,6 +166,18 @@ int main(void)
 		printf("UsbEnable failed\n");
 		return 3;
 	}
+
+	UsbdCdcDev_t *pCdc0 = s_Cdc0;
+	pCdc0->LineCoding.dwDTERate = 9600U;
+	UsbCtrlrEvt_t reset = {};
+	reset.Type = USB_CTRLR_EVT_RESET;
+	s_CoreHandler(0, &reset, s_CoreContext);
+	if (pCdc0->LineCoding.dwDTERate != 115200U)
+	{
+		printf("UsbdCdc virtual reset was not dispatched\n");
+		return 8;
+	}
+
 	UsbProcess(0);
 	printf("UsbInit, dual UsbdCdc Init, UsbEnable, UsbProcess all completed\n");
 	return UsbConfigured(0) ? 4 : 0;

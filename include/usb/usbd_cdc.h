@@ -166,6 +166,7 @@ public:
 	DevIntrf_t *Data(void) { return &vUsbdCdc.IntrfData.DevIntrf; }
 
 	bool Init(const UsbdCdcCfg_t &Cfg);
+	void Reset(void) override;
 	void Process(void) override;
 
 	uint32_t Rate(uint32_t DataRate) override {

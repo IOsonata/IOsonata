@@ -394,7 +394,7 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	coreCfg.RequestHandler = UsbdCdcRequest;
 	coreCfg.ConfigHandler = UsbdCdcConfig;
 	coreCfg.SetInterfaceHandler = nullptr;
-	coreCfg.ResetHandler = UsbdCdcReset;
+	coreCfg.ResetHandler = pClass == nullptr ? UsbdCdcReset : nullptr;
 	coreCfg.ProcessHandler = pClass == nullptr ? UsbdCdcPump : nullptr;
 	coreCfg.pContext = pCdc;
 
@@ -462,6 +462,11 @@ void UsbdCdcProcess(UsbdCdcDev_t * const pCdc)
 bool UsbdCdc::Init(const UsbdCdcCfg_t &Cfg)
 {
 	return UsbdCdcInitInternal(&vUsbdCdc, &Cfg, this);
+}
+
+void UsbdCdc::Reset(void)
+{
+	UsbdCdcReset(&vUsbdCdc);
 }
 
 void UsbdCdc::Process(void)
