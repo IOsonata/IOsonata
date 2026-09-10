@@ -1482,7 +1482,7 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 	}
 
 	UsbdClassCfg_t coreCfg = {};
-	coreCfg.RequestHandler = BtHciUsbRequest;
+	coreCfg.RequestHandler = pClass == nullptr ? BtHciUsbRequest : nullptr;
 	coreCfg.ConfigHandler = BtHciUsbConfig;
 	coreCfg.SetInterfaceHandler =
 		pClass == nullptr ? BtHciUsbSetInterface : nullptr;
@@ -1594,6 +1594,12 @@ bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
 bool BtHciUsb::Init(const BtHciUsbCfg_t &Cfg)
 {
 	return BtHciUsbInitInternal(&vBtHciUsb, &Cfg, this);
+}
+
+bool BtHciUsb::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+						uint8_t **ppData, uint16_t *pLength)
+{
+	return BtHciUsbRequest(pSetup, Stage, ppData, pLength, &vBtHciUsb);
 }
 
 bool BtHciUsb::SelectInterface(uint8_t InterfaceNo, uint8_t Option)

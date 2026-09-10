@@ -445,6 +445,7 @@ static void TestConfigurationAndAcl(void)
     BtHciUsb hci;
     CHECK(hci.Init(MakeCfg()));
     CHECK(s_ClassObject == &hci);
+    CHECK(s_ClassCfg.RequestHandler == nullptr);
     CHECK(s_ClassCfg.SetInterfaceHandler == nullptr);
     CHECK(s_RegisteredCount == 3);
     CHECK(FindRegistered(USB_ENDPADDR_DIROUT(2U))->Blocking);
@@ -516,17 +517,13 @@ static void TestCommandAndEvent(void)
     setup.wLength = BT_HCI_USB_COMMAND_HEADER_SIZE - 1U;
     uint8_t *pData = nullptr;
     uint16_t length = 0U;
-    CHECK(!s_ClassCfg.RequestHandler(&setup, USB_CTRL_SETUP, &pData, &length,
-                                    s_ClassCfg.pContext));
+    CHECK(!hci.Control(&setup, USB_CTRL_SETUP, &pData, &length));
 
     setup.wLength = sizeof(cmd);
-    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_SETUP, &pData, &length,
-                                   s_ClassCfg.pContext));
+    CHECK(hci.Control(&setup, USB_CTRL_SETUP, &pData, &length));
     memcpy(pData, cmd, sizeof(cmd));
-    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_DATA, &pData, &length,
-                                   s_ClassCfg.pContext));
-    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_COMPLETE, &pData, &length,
-                                   s_ClassCfg.pContext));
+    CHECK(hci.Control(&setup, USB_CTRL_DATA, &pData, &length));
+    CHECK(hci.Control(&setup, USB_CTRL_COMPLETE, &pData, &length));
     CHECK(s_RxEventCount == 1);
     uint8_t rx[8] = {};
     CHECK(DeviceIntrfRx(hci.Data(), BT_HCI_USB_PACKET_COMMAND, rx, sizeof(rx)) == 3);
@@ -539,13 +536,10 @@ static void TestCommandAndEvent(void)
     setup.wLength = sizeof(cmd);
     pData = nullptr;
     length = 0U;
-    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_SETUP, &pData, &length,
-                                   s_ClassCfg.pContext));
+    CHECK(hci.Control(&setup, USB_CTRL_SETUP, &pData, &length));
     memcpy(pData, cmd, sizeof(cmd));
-    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_DATA, &pData, &length,
-                                   s_ClassCfg.pContext));
-    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_COMPLETE, &pData, &length,
-                                   s_ClassCfg.pContext));
+    CHECK(hci.Control(&setup, USB_CTRL_DATA, &pData, &length));
+    CHECK(hci.Control(&setup, USB_CTRL_COMPLETE, &pData, &length));
     CHECK(s_RxEventCount == 2);
     memset(rx, 0, sizeof(rx));
     CHECK(DeviceIntrfRx(hci.Data(), BT_HCI_USB_PACKET_COMMAND, rx, sizeof(rx)) == 3);

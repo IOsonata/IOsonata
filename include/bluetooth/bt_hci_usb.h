@@ -269,6 +269,8 @@ public:
 	BtHciUsb &operator = (const BtHciUsb &) = delete;
 
 	bool Init(const BtHciUsbCfg_t &Cfg);
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+				 uint8_t **ppData, uint16_t *pLength) override;
 	bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) override;
 
 	operator DevIntrf_t * () override {
