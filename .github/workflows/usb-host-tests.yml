@@ -9,7 +9,10 @@ on:
       - 'ARM/Nordic/src/usb_ctrlr_nrfx.cpp'
       - 'tests/usb/**'
       - 'Python/usb_iso_loopback.py'
+      - 'Python/usb_int_loopback.py'
       - 'exemples/usb/usb_iso_loopback.cpp'
+      - 'exemples/usb/usb_int_loopback.cpp'
+      - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbIntLoopback/**'
       - '.github/workflows/usb-host-tests.yml'
   pull_request:
     paths:
@@ -19,7 +22,10 @@ on:
       - 'ARM/Nordic/src/usb_ctrlr_nrfx.cpp'
       - 'tests/usb/**'
       - 'Python/usb_iso_loopback.py'
+      - 'Python/usb_int_loopback.py'
       - 'exemples/usb/usb_iso_loopback.cpp'
+      - 'exemples/usb/usb_int_loopback.cpp'
+      - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbIntLoopback/**'
       - '.github/workflows/usb-host-tests.yml'
   workflow_dispatch:
 
@@ -30,8 +36,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: GCC and Clang host matrix
         run: make -C tests/usb test-matrix
-      - name: Check Python ISO hardware runner
+      - name: Check USB hardware runners
         run: |
-          python3 -m pip install libusb1
+          python3 -m pip install libusb1 pyusb
           python3 -c "import usb1; assert hasattr(usb1.USBTransfer, 'setIsochronous')"
           make -C tests/usb iso-hw-build
+          make -C tests/usb int-hw-build
