@@ -289,7 +289,7 @@ static bool Fixture(bool WithSetInterface = true,
 	cls.InterfaceCount = 1;
 	cls.EpInMask = (1U << 1) | (1U << 2);
 	cls.EpOutMask = (1U << 1);
-	cls.RequestHandler = Request;
+	cls.RequestHandler = pClass == nullptr ? Request : nullptr;
 	cls.ConfigHandler = Configure;
 	cls.SetInterfaceHandler = WithSetInterface ? SetInterface : nullptr;
 	cls.ResetHandler = ClassReset;
@@ -611,9 +611,15 @@ class TestUsbDeviceClass : public UsbDeviceClass {
 public:
 	void Reset() override { ResetCnt++; }
 	void Process() override { ProcessCnt++; }
-	bool Control(const UsbSetupData_t *, UsbCtrlStage_t Stage,
-				 uint8_t **, uint16_t *) override {
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+				 uint8_t **ppData, uint16_t *pLength) override {
+		ControlCnt++;
 		LastStage = Stage;
+		if (Stage == USB_CTRL_SETUP && pSetup->wLength != 0)
+		{
+			*ppData = ControlData;
+			*pLength = sizeof(ControlData);
+		}
 		return true;
 	}
 	bool SelectConfig(uint8_t ConfigValue) override {
@@ -628,12 +634,14 @@ public:
 	}
 	int ResetCnt = 0;
 	int ProcessCnt = 0;
+	int ControlCnt = 0;
 	int ConfigCnt = 0;
 	bool RejectConfig = false;
 	UsbCtrlStage_t LastStage = USB_CTRL_ABORT;
 	uint8_t ConfigurationValue = 0;
 	uint8_t Interface = 0;
 	uint8_t Option = 0;
+	uint8_t ControlData[4] = {};
 };
 
 class EmptyUsbDeviceClass : public UsbDeviceClass {};
@@ -687,6 +695,7 @@ static bool TestClassObjectRegistry(void)
 	static TestUsbDeviceClass device;
 	device.ResetCnt = 0;
 	device.ProcessCnt = 0;
+	device.ControlCnt = 0;
 	device.ConfigCnt = 0;
 	device.ConfigurationValue = 0;
 	device.RejectConfig = false;
@@ -694,6 +703,23 @@ static bool TestClassObjectRegistry(void)
 	CHECK(Fixture(true, &device));
 	CHECK(SetAddress(5) && SetConfig(1));
 	CHECK(device.ConfigCnt == 1 && device.ConfigurationValue == 1);
+	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
+	CHECK(device.ControlCnt == 1 && device.LastStage == USB_CTRL_SETUP);
+	Complete(EP0_IN, 0);
+	CHECK(device.ControlCnt == 2 && device.LastStage == USB_CTRL_COMPLETE);
+	Setup(CLASS_IF_OUT, CLASS_OUT_DATA, 0, 0, 4);
+	CHECK(device.ControlCnt == 3 && device.LastStage == USB_CTRL_SETUP);
+	CHECK(LastXfer()->EpAddr == EP0_OUT && LastXfer()->Length == 4);
+	Complete(EP0_OUT, 4);
+	CHECK(device.ControlCnt == 4 && device.LastStage == USB_CTRL_DATA);
+	Complete(EP0_IN, 0);
+	CHECK(device.ControlCnt == 5 && device.LastStage == USB_CTRL_COMPLETE);
+	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
+	Setup(STD_DEV_IN, USB_REQ_GET_DESCRIPTOR,
+		  (uint16_t)(USB_DESCTYPE_DEVICE << 8), 0, 8);
+	CHECK(device.ControlCnt == 7 && device.LastStage == USB_CTRL_ABORT);
+	Complete(EP0_IN, 8);
+	Complete(EP0_OUT, 0);
 	UsbProcess(TEST_DEVNO);
 	CHECK(device.ProcessCnt == 1);
 	CHECK(!UsbClassRegister(TEST_DEVNO, &device));

@@ -108,6 +108,7 @@ static uint16_t s_HaltOut;
 static UsbCoreCtrlState_t s_CtrlState;
 static UsbSetupData_t s_Setup;
 static int s_ActiveClass;
+static UsbDeviceClass *s_ActiveObject;
 static uint8_t *s_CtrlData;
 static uint16_t s_CtrlDataLen;
 static uint16_t s_CtrlActual;
@@ -500,6 +501,7 @@ static void UsbCoreResetControl(void)
 {
 	s_CtrlState = USB_CTRL_IDLE;
 	s_ActiveClass = -1;
+	s_ActiveObject = nullptr;
 	s_CtrlData = nullptr;
 	s_CtrlDataLen = 0;
 	s_CtrlActual = 0;
@@ -520,6 +522,13 @@ static void UsbCoreStallControl(void)
 static bool UsbCoreInvokeActive(UsbCtrlStage_t Stage,
 								 uint16_t Length)
 {
+	uint8_t *pData = s_CtrlData;
+	uint16_t len = Length;
+	if (s_ActiveObject != nullptr)
+	{
+		return s_ActiveObject->Control(&s_Setup, Stage, &pData, &len);
+	}
+
 	if (s_ActiveClass < 0 || s_ActiveClass >= s_CoreClassCnt)
 	{
 		return true;
@@ -533,16 +542,14 @@ static bool UsbCoreInvokeActive(UsbCtrlStage_t Stage,
 		return true;
 	}
 
-	uint8_t *pData = s_CtrlData;
-	uint16_t len = Length;
-
 	return handler(&s_Setup, Stage, &pData, &len,
 				   s_CoreClass[s_ActiveClass].pContext);
 }
 
 static void UsbCoreAbortControl(void)
 {
-	if (s_ActiveClass >= 0 && s_ActiveClass < s_CoreClassCnt)
+	if (s_ActiveObject != nullptr ||
+		(s_ActiveClass >= 0 && s_ActiveClass < s_CoreClassCnt))
 	{
 		(void)UsbCoreInvokeActive(USB_CTRL_ABORT, s_CtrlActual);
 	}
@@ -1088,6 +1095,49 @@ static bool UsbCoreCallClassSetup(int Index)
 	return UsbCoreStartOut(pData, len);
 }
 
+static bool UsbCoreCallObjectSetup(int Index)
+{
+	UsbDeviceClass *pClass =
+		static_cast<UsbDeviceClass *>(s_CoreObject[Index]);
+	uint8_t *pData = nullptr;
+	uint16_t len = 0;
+
+	if (!pClass->Control(&s_Setup, USB_CTRL_SETUP, &pData, &len))
+	{
+		return false;
+	}
+
+	s_ActiveObject = pClass;
+
+	if (s_Setup.wLength == 0)
+	{
+		s_CtrlData = pData;
+		s_CtrlDataLen = 0;
+		s_CtrlActual = 0;
+		return UsbCoreStartStatus();
+	}
+
+	if (UsbCoreDirIn(&s_Setup))
+	{
+		return UsbCoreStartIn(pData, len);
+	}
+
+	return UsbCoreStartOut(pData, len);
+}
+
+static bool UsbCoreCallObjectsSetup(void)
+{
+	for (int i = 0; i < s_CoreObjectCnt; i++)
+	{
+		if (UsbCoreCallObjectSetup(i))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static bool UsbCoreHandleClassRequest(void)
 {
 	const uint8_t recipient = UsbCoreRecipient(&s_Setup);
@@ -1107,7 +1157,8 @@ static bool UsbCoreHandleClassRequest(void)
 		}
 
 		const int cls = UsbCoreFindClass(interfaceNo);
-		return cls >= 0 && UsbCoreCallClassSetup(cls);
+		return cls >= 0 &&
+			(UsbCoreCallClassSetup(cls) || UsbCoreCallObjectsSetup());
 	}
 
 	if (recipient == USB_REQTYPE_ENDPOINT)
@@ -1125,7 +1176,8 @@ static bool UsbCoreHandleClassRequest(void)
 		}
 
 		const int cls = UsbCoreFindEndpointClass(epAddr);
-		return cls >= 0 && UsbCoreCallClassSetup(cls);
+		return cls >= 0 &&
+			(UsbCoreCallClassSetup(cls) || UsbCoreCallObjectsSetup());
 	}
 
 	for (int i = 0; i < s_CoreClassCnt; i++)
@@ -1136,7 +1188,7 @@ static bool UsbCoreHandleClassRequest(void)
 		}
 	}
 
-	return false;
+	return UsbCoreCallObjectsSetup();
 }
 
 static void UsbCoreHandleSetup(const UsbSetupData_t *pSetup)

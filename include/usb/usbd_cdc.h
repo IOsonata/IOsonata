@@ -168,6 +168,8 @@ public:
 	bool Init(const UsbdCdcCfg_t &Cfg);
 	void Reset(void) override;
 	void Process(void) override;
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+				 uint8_t **ppData, uint16_t *pLength) override;
 	bool SelectConfig(uint8_t ConfigValue) override;
 
 	uint32_t Rate(uint32_t DataRate) override {
