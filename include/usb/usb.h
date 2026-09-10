@@ -256,16 +256,16 @@ public:
 		return false;
 	}
 
-	/// Apply or remove the active device configuration.
-	virtual bool Configure(uint8_t Configuration) {
-		(void)Configuration;
+	/// Select a device configuration, or zero for the unconfigured state.
+	virtual bool SelectConfig(uint8_t ConfigValue) {
+		(void)ConfigValue;
 		return true;
 	}
 
-	/// Select an advertised alternate setting owned by this class.
-	virtual bool SelectAlternate(uint8_t InterfaceNo, uint8_t Alternate) {
+	/// Select an advertised option for an interface owned by this class.
+	virtual bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) {
 		(void)InterfaceNo;
-		(void)Alternate;
+		(void)Option;
 		return false;
 	}
 

@@ -629,13 +629,13 @@ public:
 		LastStage = Stage;
 		return true;
 	}
-	bool Configure(uint8_t Configuration) override {
-		ConfigurationValue = Configuration;
+	bool SelectConfig(uint8_t ConfigValue) override {
+		ConfigurationValue = ConfigValue;
 		return true;
 	}
-	bool SelectAlternate(uint8_t InterfaceNo, uint8_t Alt) override {
+	bool SelectInterface(uint8_t InterfaceNo, uint8_t OptionValue) override {
 		Interface = InterfaceNo;
-		Alternate = Alt;
+		Option = OptionValue;
 		return true;
 	}
 	bool SofEnabled() const override { return true; }
@@ -646,7 +646,7 @@ public:
 	UsbCtrlStage_t LastStage = USB_CTRL_ABORT;
 	uint8_t ConfigurationValue = 0;
 	uint8_t Interface = 0;
-	uint8_t Alternate = 0;
+	uint8_t Option = 0;
 	uint16_t Frame = 0;
 };
 
@@ -685,18 +685,18 @@ static bool TestCommonClassBase(void)
 	uint16_t length = 0;
 	CHECK(pDevice->Control(&setup, USB_CTRL_SETUP, &pData, &length));
 	CHECK(device.LastStage == USB_CTRL_SETUP);
-	CHECK(pDevice->Configure(2));
+	CHECK(pDevice->SelectConfig(2));
 	CHECK(device.ConfigurationValue == 2);
-	CHECK(pDevice->SelectAlternate(3, 4));
-	CHECK(device.Interface == 3 && device.Alternate == 4);
+	CHECK(pDevice->SelectInterface(3, 4));
+	CHECK(device.Interface == 3 && device.Option == 4);
 	CHECK(pDevice->SofEnabled());
 	pDevice->Sof(123);
 	CHECK(device.Frame == 123);
 
 	pDevice = &emptyDevice;
 	CHECK(!pDevice->Control(&setup, USB_CTRL_SETUP, &pData, &length));
-	CHECK(pDevice->Configure(1));
-	CHECK(!pDevice->SelectAlternate(0, 1));
+	CHECK(pDevice->SelectConfig(1));
+	CHECK(!pDevice->SelectInterface(0, 1));
 	CHECK(!pDevice->SofEnabled());
 	pDevice->Sof(123);
 	return true;
