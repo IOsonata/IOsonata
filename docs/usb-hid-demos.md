@@ -11,11 +11,11 @@ Project:
 ARM/Nordic/nRF52/nRF52840/exemples/UsbHidKeyboard/ioc
 ```
 
-Hardware: Nordic nRF52840 DK.
+Hardware: I-SYST IBK-NRF52840.
 
-- Button 1: P0.11, active low
-- Button 2: P0.12, active low
-- LED 1: P0.13, active low
+- Button 1: P0.13, active low
+- Button 2: P0.4, active low
+- LED 1: P0.30, active low
 - USB: nRF52840 native USB connector
 
 The device enumerates as a boot-protocol keyboard. Holding Button 1 sends the

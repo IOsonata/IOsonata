@@ -54,6 +54,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.1475305" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;../../src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
@@ -73,6 +74,7 @@
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.315812607" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.2100481799" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;../../src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
@@ -191,6 +193,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.310893114" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;../../src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
@@ -210,6 +213,7 @@
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.1674848907" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.2071793250" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;../../src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>

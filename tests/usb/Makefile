@@ -127,7 +127,8 @@ HID_KEYBOARD_PROJECT := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHidKeyboar
 HID_3D_MOUSE_FIRMWARE := $(ROOT)/exemples/usb/usb_hid_3d_mouse.cpp
 HID_3D_MOUSE_BOARD := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHid3dMouse/src/board.h
 HID_3D_MOUSE_PROJECT := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHid3dMouse/ioc/.project
-HID_DEMO_CPPFLAGS := $(CPPFLAGS) -Idemo_hostport -I$(ROOT)/Linux/include
+HID_DEMO_CPPFLAGS := $(CPPFLAGS) -Idemo_hostport -I$(ROOT)/Linux/include \
+	-I$(ROOT)/ARM/Nordic/nRF52/include
 
 # Throughput measurement, not a regression test. Built and run on demand.
 # Sanitizers are left off so the numbers are not distorted.
