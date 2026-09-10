@@ -70,8 +70,8 @@ UsbClass
 `-- UsbHostClass
 ```
 
-`UsbClass` provides `Reset()` and `Process()`. `UsbDeviceClass` adds control
-request, configuration, alternate-setting and optional SOF methods. Host
+`UsbClass` provides `Reset()` and `Process()`. `UsbDeviceClass` adds `Control()`,
+configuration, `SelectAlternate()` and optional SOF methods. Host
 matching, attach and detach behavior belongs to `UsbHostClass`. The
 role-neutral `UsbIntrf` data path remains separate so a concrete CDC, HID or
 vendor class can combine class control with the same RX/TX interface

@@ -624,7 +624,7 @@ class TestUsbDeviceClass : public UsbDeviceClass {
 public:
 	void Reset() override { ResetCnt++; }
 	void Process() override { ProcessCnt++; }
-	bool Request(const UsbSetupData_t *, UsbCtrlStage_t Stage,
+	bool Control(const UsbSetupData_t *, UsbCtrlStage_t Stage,
 				 uint8_t **, uint16_t *) override {
 		LastStage = Stage;
 		return true;
@@ -633,7 +633,7 @@ public:
 		ConfigurationValue = Configuration;
 		return true;
 	}
-	bool SetInterface(uint8_t InterfaceNo, uint8_t Alt) override {
+	bool SelectAlternate(uint8_t InterfaceNo, uint8_t Alt) override {
 		Interface = InterfaceNo;
 		Alternate = Alt;
 		return true;
@@ -683,20 +683,20 @@ static bool TestCommonClassBase(void)
 	UsbSetupData_t setup = {};
 	uint8_t *pData = nullptr;
 	uint16_t length = 0;
-	CHECK(pDevice->Request(&setup, USB_CTRL_SETUP, &pData, &length));
+	CHECK(pDevice->Control(&setup, USB_CTRL_SETUP, &pData, &length));
 	CHECK(device.LastStage == USB_CTRL_SETUP);
 	CHECK(pDevice->Configure(2));
 	CHECK(device.ConfigurationValue == 2);
-	CHECK(pDevice->SetInterface(3, 4));
+	CHECK(pDevice->SelectAlternate(3, 4));
 	CHECK(device.Interface == 3 && device.Alternate == 4);
 	CHECK(pDevice->SofEnabled());
 	pDevice->Sof(123);
 	CHECK(device.Frame == 123);
 
 	pDevice = &emptyDevice;
-	CHECK(!pDevice->Request(&setup, USB_CTRL_SETUP, &pData, &length));
+	CHECK(!pDevice->Control(&setup, USB_CTRL_SETUP, &pData, &length));
 	CHECK(pDevice->Configure(1));
-	CHECK(!pDevice->SetInterface(0, 1));
+	CHECK(!pDevice->SelectAlternate(0, 1));
 	CHECK(!pDevice->SofEnabled());
 	pDevice->Sof(123);
 	return true;
