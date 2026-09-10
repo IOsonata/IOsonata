@@ -271,7 +271,9 @@ public:
 	bool Init(const BtHciUsbCfg_t &Cfg);
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 				 uint8_t **ppData, uint16_t *pLength) override;
+	bool SelectConfig(uint8_t ConfigValue) override;
 	bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) override;
+	void Reset() override;
 
 	operator DevIntrf_t * () override {
 		return &vBtHciUsb.IntrfData.DevIntrf;

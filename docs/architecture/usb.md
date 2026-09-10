@@ -87,10 +87,9 @@ through the virtual class API. The C API continues to use C callback adapters
 over the same `UsbdCdcDev_t` implementation.
 
 The C++ `BtHciUsb` object also derives from `UsbDeviceClass` and
-`DeviceIntrf`. HCI command control transfers run through `Control()`, while
-HCI and SCO alternate-setting selection runs through `SelectInterface()`.
-The underlying request and endpoint logic is shared with the C callback
-adapters.
+`DeviceIntrf`. HCI command control transfers, configuration selection, HCI
+and SCO interface options, and reset run through the virtual class API. The
+underlying request and endpoint logic is shared with the C callback adapters.
 
 ## Current device-side data-path model
 
