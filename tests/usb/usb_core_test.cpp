@@ -619,10 +619,33 @@ class TestUsbDeviceClass : public UsbDeviceClass {
 public:
 	void Reset() override { ResetCnt++; }
 	void Process() override { ProcessCnt++; }
+	bool Request(const UsbSetupData_t *, UsbCtrlStage_t Stage,
+				 uint8_t **, uint16_t *) override {
+		LastStage = Stage;
+		return true;
+	}
+	bool Configure(uint8_t Configuration) override {
+		ConfigurationValue = Configuration;
+		return true;
+	}
+	bool SetInterface(uint8_t InterfaceNo, uint8_t Alt) override {
+		Interface = InterfaceNo;
+		Alternate = Alt;
+		return true;
+	}
+	bool SofEnabled() const override { return true; }
+	void Sof(uint16_t FrameNo) override { Frame = FrameNo; }
 
 	int ResetCnt = 0;
 	int ProcessCnt = 0;
+	UsbCtrlStage_t LastStage = USB_CTRL_ABORT;
+	uint8_t ConfigurationValue = 0;
+	uint8_t Interface = 0;
+	uint8_t Alternate = 0;
+	uint16_t Frame = 0;
 };
+
+class EmptyUsbDeviceClass : public UsbDeviceClass {};
 
 class TestUsbHostClass : public UsbHostClass {
 public:
@@ -636,6 +659,7 @@ public:
 static bool TestCommonClassBase(void)
 {
 	TestUsbDeviceClass device;
+	EmptyUsbDeviceClass emptyDevice;
 	TestUsbHostClass host;
 	UsbClass *classes[] = { &device, &host };
 
@@ -649,6 +673,27 @@ static bool TestCommonClassBase(void)
 	CHECK(device.ProcessCnt == 1);
 	CHECK(host.ResetCnt == 1);
 	CHECK(host.ProcessCnt == 1);
+
+	UsbDeviceClass *pDevice = &device;
+	UsbSetupData_t setup = {};
+	uint8_t *pData = nullptr;
+	uint16_t length = 0;
+	CHECK(pDevice->Request(&setup, USB_CTRL_SETUP, &pData, &length));
+	CHECK(device.LastStage == USB_CTRL_SETUP);
+	CHECK(pDevice->Configure(2));
+	CHECK(device.ConfigurationValue == 2);
+	CHECK(pDevice->SetInterface(3, 4));
+	CHECK(device.Interface == 3 && device.Alternate == 4);
+	CHECK(pDevice->SofEnabled());
+	pDevice->Sof(123);
+	CHECK(device.Frame == 123);
+
+	pDevice = &emptyDevice;
+	CHECK(!pDevice->Request(&setup, USB_CTRL_SETUP, &pData, &length));
+	CHECK(pDevice->Configure(1));
+	CHECK(!pDevice->SetInterface(0, 1));
+	CHECK(!pDevice->SofEnabled());
+	pDevice->Sof(123);
 	return true;
 }
 

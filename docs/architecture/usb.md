@@ -70,11 +70,12 @@ UsbClass
 `-- UsbHostClass
 ```
 
-`UsbClass` provides `Reset()` and `Process()`. Device EP0 behavior belongs to
-`UsbDeviceClass`; host matching, attach and detach behavior belongs to
-`UsbHostClass`. The role-neutral `UsbIntrf` data path remains separate so a
-concrete CDC, HID or vendor class can combine class control with the same RX/TX
-interface implementation.
+`UsbClass` provides `Reset()` and `Process()`. `UsbDeviceClass` adds control
+request, configuration, alternate-setting and optional SOF methods. Host
+matching, attach and detach behavior belongs to `UsbHostClass`. The
+role-neutral `UsbIntrf` data path remains separate so a concrete CDC, HID or
+vendor class can combine class control with the same RX/TX interface
+implementation.
 
 ## Current device-side data-path model
 

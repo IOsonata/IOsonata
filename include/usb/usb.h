@@ -245,6 +245,36 @@ protected:
 
 /// Base for a class implemented by the local USB device.
 class UsbDeviceClass : public UsbClass {
+public:
+	/// Handle one class, vendor or interface descriptor control request.
+	virtual bool Request(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+						 uint8_t **ppData, uint16_t *pLength) {
+		(void)pSetup;
+		(void)Stage;
+		(void)ppData;
+		(void)pLength;
+		return false;
+	}
+
+	/// Apply or remove the active device configuration.
+	virtual bool Configure(uint8_t Configuration) {
+		(void)Configuration;
+		return true;
+	}
+
+	/// Select an alternate setting owned by this class.
+	virtual bool SetInterface(uint8_t InterfaceNo, uint8_t Alt) {
+		(void)InterfaceNo;
+		(void)Alt;
+		return false;
+	}
+
+	/// Tell the device core whether this class needs SOF events.
+	virtual bool SofEnabled() const { return false; }
+
+	/// Receive a SOF event when SofEnabled() returns true.
+	virtual void Sof(uint16_t FrameNo) { (void)FrameNo; }
+
 protected:
 	UsbDeviceClass() = default;
 	~UsbDeviceClass() = default;
