@@ -61,6 +61,21 @@ not belong in `UsbIsoIntrf`.
 `UsbIsoIntrf` and `UsbIntIntrf` own only reusable transfer-type behavior shared
 by both roles.
 
+The C++ class hierarchy has one common lifecycle base and distinct bases for
+role-specific control behavior:
+
+```text
+UsbClass
+|-- UsbDeviceClass
+`-- UsbHostClass
+```
+
+`UsbClass` provides `Reset()` and `Process()`. Device EP0 behavior belongs to
+`UsbDeviceClass`; host matching, attach and detach behavior belongs to
+`UsbHostClass`. The role-neutral `UsbIntrf` data path remains separate so a
+concrete CDC, HID or vendor class can combine class control with the same RX/TX
+interface implementation.
+
 ## Current device-side data-path model
 
 `UsbIntrf` is the common bidirectional endpoint-pair data engine. CDC, custom

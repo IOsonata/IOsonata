@@ -615,6 +615,43 @@ static bool TestClassControl(void)
 	return true;
 }
 
+class TestUsbDeviceClass : public UsbDeviceClass {
+public:
+	void Reset() override { ResetCnt++; }
+	void Process() override { ProcessCnt++; }
+
+	int ResetCnt = 0;
+	int ProcessCnt = 0;
+};
+
+class TestUsbHostClass : public UsbHostClass {
+public:
+	void Reset() override { ResetCnt++; }
+	void Process() override { ProcessCnt++; }
+
+	int ResetCnt = 0;
+	int ProcessCnt = 0;
+};
+
+static bool TestCommonClassBase(void)
+{
+	TestUsbDeviceClass device;
+	TestUsbHostClass host;
+	UsbClass *classes[] = { &device, &host };
+
+	for (UsbClass *pClass : classes)
+	{
+		pClass->Reset();
+		pClass->Process();
+	}
+
+	CHECK(device.ResetCnt == 1);
+	CHECK(device.ProcessCnt == 1);
+	CHECK(host.ResetCnt == 1);
+	CHECK(host.ProcessCnt == 1);
+	return true;
+}
+
 static bool TestResetSuspendAndDispatch(void)
 {
 	CHECK(Fixture());
@@ -745,6 +782,7 @@ int main(void)
 		{ "alternate interface and halt", TestInterfaceAndHalt },
 		{ "SET_INTERFACE requires handler", TestInterfaceRequiresHandler },
 		{ "class control lifecycle", TestClassControl },
+		{ "common class base", TestCommonClassBase },
 		{ "reset suspend and dispatch", TestResetSuspendAndDispatch },
 	};
 

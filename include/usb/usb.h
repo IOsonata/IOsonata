@@ -227,6 +227,35 @@ const char *UsbGetSerial(int DevNo);
 
 #ifdef __cplusplus
 }
+
+/// Common lifecycle for statically owned USB class objects.
+/// Role-specific routing is provided by the device and host class bases.
+class UsbClass {
+public:
+	UsbClass(const UsbClass &) = delete;
+	UsbClass &operator = (const UsbClass &) = delete;
+
+	virtual void Reset() {}
+	virtual void Process() {}
+
+protected:
+	UsbClass() = default;
+	~UsbClass() = default;
+};
+
+/// Base for a class implemented by the local USB device.
+class UsbDeviceClass : public UsbClass {
+protected:
+	UsbDeviceClass() = default;
+	~UsbDeviceClass() = default;
+};
+
+/// Base for a class driver used by the local USB host.
+class UsbHostClass : public UsbClass {
+protected:
+	UsbHostClass() = default;
+	~UsbHostClass() = default;
+};
 #endif
 
 /** @} End of group USB */
