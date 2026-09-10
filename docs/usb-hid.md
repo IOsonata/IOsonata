@@ -69,3 +69,9 @@ For the manual suspend/resume phase:
 The runner discovers the HID by VID/PID and product string, opens it through
 the native HID driver, sends 64-byte output reports and verifies the matching
 input reports. Use `--serial` when more than one matching device is attached.
+
+## Application demos
+
+The [HID demos](usb-hid-demos.md) build a boot keyboard and a BMI323-driven
+six-axis Multi-axis Controller above this same class. Report meanings and
+board configuration remain in the applications.

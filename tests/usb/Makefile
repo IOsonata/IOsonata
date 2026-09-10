@@ -119,6 +119,16 @@ HID_HW_SCRIPT := $(ROOT)/Python/usb_hid_loopback.py
 HID_HW_FIRMWARE := $(ROOT)/exemples/usb/usb_hid_loopback.cpp
 HID_HW_ARGS ?= --manual-suspend-wake
 
+# HID application demos. demo_hostport replaces target GPIO register access
+# during host syntax checks; the IOcomposer projects use the real nRF52 port.
+HID_KEYBOARD_FIRMWARE := $(ROOT)/exemples/usb/usb_hid_keyboard.cpp
+HID_KEYBOARD_BOARD := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHidKeyboard/src/board.h
+HID_KEYBOARD_PROJECT := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHidKeyboard/ioc/.project
+HID_3D_MOUSE_FIRMWARE := $(ROOT)/exemples/usb/usb_hid_3d_mouse.cpp
+HID_3D_MOUSE_BOARD := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHid3dMouse/src/board.h
+HID_3D_MOUSE_PROJECT := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHid3dMouse/ioc/.project
+HID_DEMO_CPPFLAGS := $(CPPFLAGS) -Idemo_hostport -I$(ROOT)/Linux/include
+
 # Throughput measurement, not a regression test. Built and run on demand.
 # Sanitizers are left off so the numbers are not distorted.
 PROBE_TARGET := $(BUILD_DIR)/tx_rate_probe
@@ -140,7 +150,7 @@ HEADERS := \
 	$(ROOT)/include/usb/usbd_bulk.h \
 	$(ROOT)/include/usb/usbd_hid.h \
 	$(ROOT)/include/usb/usbd_cdc.h \
-	$(ROOT)/src/usb/usbd_epalloc.h
+	$(ROOT)/include/usb/usbd_epalloc.h
 
 TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 	$(DIRECT_TARGET) $(ISO_TARGET) $(ISO_DUPLEX_TARGET) $(INT_TARGET) \
@@ -148,7 +158,8 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 
 .PHONY: all test test-c-header test-gcc test-clang test-matrix \
 	test-nrf-suspend-policy test-nrf-iso-policy \
-	iso-hw-build iso-hw int-hw-build int-hw hid-hw-build hid-hw probe clean
+	iso-hw-build iso-hw int-hw-build int-hw hid-hw-build hid-hw \
+	hid-demo-build probe clean
 
 all: test
 
@@ -201,6 +212,18 @@ hid-hw-build: $(HID_HW_SCRIPT) $(HID_HW_FIRMWARE)
 
 hid-hw: hid-hw-build
 	python3 $(HID_HW_SCRIPT) $(HID_HW_ARGS)
+
+hid-demo-build: $(HID_KEYBOARD_FIRMWARE) $(HID_KEYBOARD_BOARD) \
+		$(HID_KEYBOARD_PROJECT) $(HID_3D_MOUSE_FIRMWARE) \
+		$(HID_3D_MOUSE_BOARD) $(HID_3D_MOUSE_PROJECT) \
+		demo_hostport/iopinctrl.h
+	grep -q 'src/sensors/ag_bmi323.cpp' $(HID_3D_MOUSE_PROJECT)
+	$(CXX) $(HID_DEMO_CPPFLAGS) $(CXXFLAGS) \
+		-I$(dir $(HID_KEYBOARD_BOARD)) -x c++ -fsyntax-only \
+		$(HID_KEYBOARD_FIRMWARE)
+	$(CXX) $(HID_DEMO_CPPFLAGS) $(CXXFLAGS) \
+		-I$(dir $(HID_3D_MOUSE_BOARD)) -x c++ -fsyntax-only \
+		$(HID_3D_MOUSE_FIRMWARE)
 
 probe: $(PROBE_TARGET)
 	./$(PROBE_TARGET) $(SOF_TICKS)
