@@ -507,6 +507,7 @@ static void UsbCoreResetControl(void)
 }
 
 static void UsbCoreAbortControl(void);
+static bool UsbCoreHandleFunctionRequest(void);
 
 static void UsbCoreStallControl(void)
 {
@@ -1010,7 +1011,12 @@ static bool UsbCoreHandleStandard(void)
 			return UsbCoreStartStatus();
 
 		case USB_REQ_GET_DESCRIPTOR:
-			return UsbCoreHandleGetDescriptor();
+			if (UsbCoreRecipient(&s_Setup) == USB_REQTYPE_DEVICE)
+			{
+				return UsbCoreHandleGetDescriptor();
+			}
+			return UsbCoreRecipient(&s_Setup) == USB_REQTYPE_INTERFACE &&
+				UsbCoreHandleFunctionRequest();
 
 		case USB_REQ_GET_CONFIGURATION:
 			if (!UsbCoreDirIn(&s_Setup) ||

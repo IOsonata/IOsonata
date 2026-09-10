@@ -10,9 +10,12 @@ on:
       - 'tests/usb/**'
       - 'Python/usb_iso_loopback.py'
       - 'Python/usb_int_loopback.py'
+      - 'Python/usb_hid_loopback.py'
       - 'exemples/usb/usb_iso_loopback.cpp'
       - 'exemples/usb/usb_int_loopback.cpp'
+      - 'exemples/usb/usb_hid_loopback.cpp'
       - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbIntLoopback/**'
+      - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbHidLoopback/**'
       - '.github/workflows/usb-host-tests.yml'
   pull_request:
     paths:
@@ -23,9 +26,12 @@ on:
       - 'tests/usb/**'
       - 'Python/usb_iso_loopback.py'
       - 'Python/usb_int_loopback.py'
+      - 'Python/usb_hid_loopback.py'
       - 'exemples/usb/usb_iso_loopback.cpp'
       - 'exemples/usb/usb_int_loopback.cpp'
+      - 'exemples/usb/usb_hid_loopback.cpp'
       - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbIntLoopback/**'
+      - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbHidLoopback/**'
       - '.github/workflows/usb-host-tests.yml'
   workflow_dispatch:
 
@@ -42,3 +48,4 @@ jobs:
           python3 -c "import usb1; assert hasattr(usb1.USBTransfer, 'setIsochronous')"
           make -C tests/usb iso-hw-build
           make -C tests/usb int-hw-build
+          make -C tests/usb hid-hw-build

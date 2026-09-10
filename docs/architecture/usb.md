@@ -27,6 +27,7 @@ usb_int.*        UsbIntIntrf    role-neutral Interrupt specialization
 
 usbd_cdc.*       UsbdCdc        USB device CDC ACM
 usbd_bulk.*      UsbdBulk       USB device custom Bulk function
+usbd_hid.*       UsbdHid        USB device HID function
 
 usbh_*           future USB host class/driver layer
 ```
@@ -46,8 +47,7 @@ Role-specific behavior belongs above them:
               UsbdCdc     UsbdBulk   UsbIsoIntrf / UsbIntIntrf
                                                 /      \
                                                /        \
-                                       device-side    future host-side
-                                          class           class
+                                         UsbdHid      future host-side
 ```
 
 Device-side responsibilities such as device descriptors, `SET_CONFIGURATION`,
@@ -216,8 +216,8 @@ opportunities. Interrupt selects the existing blocking behavior, so DIRECT
 services `USB_CTRLR_EVT_DRDY` through the normal controller transfer call.
 There is no separate RX arm or re-arm API.
 
-`UsbIntIntrf` contains no HID report or descriptor behavior. A future `UsbdHid`
-layer may use it without moving HID semantics into the reusable transport.
+`UsbIntIntrf` contains no HID report or descriptor behavior. `UsbdHid` embeds
+it and owns the device-side HID descriptor, class requests and report policy.
 
 The nRF52840 `UsbIntLoopback` project and
 [`Python/usb_int_loopback.py`](../../Python/usb_int_loopback.py) exercise the
@@ -225,6 +225,35 @@ transport on hardware without adding class semantics. The test selects three
 interrupt intervals, checks alternate-setting close/open behavior, transfers
 zero- through maximum-length packets in both directions, forces and recovers
 from a busy TX slot, and offers a manual suspend/wake phase.
+
+## HID
+
+`UsbdHid` follows the same device-function pattern as `UsbdBulk` and
+`BtHciUsb`: it registers its function, receives allocated interface and
+endpoint numbers, fills a descriptor fragment supplied by the application and
+opens its endpoints when configuration 1 becomes active.
+
+```text
+UsbdHid
+    |
+    +-- HID descriptor and class requests
+    +-- application report descriptor
+    |
+    v
+UsbIntIntrf
+    |
+    v
+Interrupt OUT/IN endpoint pair
+```
+
+The application supplies the report descriptor and the staged handler for
+`GET_REPORT` and `SET_REPORT`. `UsbdHid` handles the HID descriptor,
+`GET/SET_IDLE` and boot-subclass `GET/SET_PROTOCOL`. All USB and HID constants
+and descriptor structures come from `usb_def.h` and `usb_hiddef.h`.
+
+The `UsbHidLoopback` nRF52840 project uses a vendor-page 64-byte input/output
+report and is exercised through the native host HID driver by
+[`Python/usb_hid_loopback.py`](../../Python/usb_hid_loopback.py).
 
 ## Controller boundary
 
@@ -410,6 +439,7 @@ CDC       = Bulk + byte mode
 UsbdBulk  = Bulk + byte or packet mode
 UsbIsoIntrf = Isochronous + DIRECT mode
 UsbIntIntrf = Interrupt + DIRECT mode
+UsbdHid   = HID class + UsbIntIntrf
 ```
 
 ## Storage ownership
@@ -486,4 +516,5 @@ Keep these invariants when adding a class, transfer type or future host support:
     completion routing.
 14. Do not duplicate endpoint transfer machinery inside a specialization or a
     future role-specific class.
-15. HID report and descriptor semantics do not belong in `UsbIntIntrf`.
+15. HID report and descriptor semantics belong in `UsbdHid`, not
+    `UsbIntIntrf`.

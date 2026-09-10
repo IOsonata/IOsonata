@@ -231,6 +231,18 @@ static bool Request(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 		*pLength = sizeof(s_Func.CtrlBuffer);
 		return true;
 	}
+	if ((pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) ==
+			USB_REQTYPE_STANDARD &&
+		pSetup->bRequest == USB_REQ_GET_DESCRIPTOR &&
+		(uint8_t)(pSetup->wValue >> 8) == USB_DESCTYPE_HID_REPORT)
+	{
+		s_Func.CtrlBuffer[0] = 0x05U;
+		s_Func.CtrlBuffer[1] = 0x01U;
+		s_Func.CtrlBuffer[2] = 0x09U;
+		*ppData = s_Func.CtrlBuffer;
+		*pLength = 3U;
+		return true;
+	}
 	return false;
 }
 
@@ -534,6 +546,18 @@ static bool TestFunctionControl(void)
 	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Func.StageCnt == 0);
 
 	CHECK(SetConfig(1));
+	s_Func.StageCnt = 0;
+
+	Setup(STD_IF_IN, USB_REQ_GET_DESCRIPTOR,
+		(uint16_t)(USB_DESCTYPE_HID_REPORT << 8), 0, 3);
+	CHECK(s_Func.StageCnt == 1 && s_Func.Stage[0] == USB_CTRL_SETUP);
+	CHECK(LastXfer()->EpAddr == EP0_IN && LastXfer()->Length == 3);
+	CHECK(LastXfer()->Data[0] == 0x05U && LastXfer()->Data[1] == 0x01U &&
+		LastXfer()->Data[2] == 0x09U);
+	Complete(EP0_IN, 3);
+	Complete(EP0_OUT, 0);
+	CHECK(s_Func.StageCnt == 3 && s_Func.Stage[1] == USB_CTRL_DATA &&
+		s_Func.Stage[2] == USB_CTRL_COMPLETE);
 	s_Func.StageCnt = 0;
 
 	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);

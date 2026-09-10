@@ -51,6 +51,15 @@ BULK_SOURCES := \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
+HID_TARGET := $(BUILD_DIR)/usbd_hid_test
+HID_SOURCES := \
+	usbd_hid_test.cpp \
+	$(ROOT)/src/usb/usbd_hid.cpp \
+	$(ROOT)/src/usb/usb_int.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/device_intrf.cpp \
+	$(ROOT)/src/cfifo.c
+
 INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
 INTRF_SOURCES := \
 	usb_intrf_test.cpp \
@@ -101,6 +110,12 @@ INT_HW_SCRIPT := $(ROOT)/Python/usb_int_loopback.py
 INT_HW_FIRMWARE := $(ROOT)/exemples/usb/usb_int_loopback.cpp
 INT_HW_ARGS ?= --manual-suspend-wake
 
+# HID class hardware validation. The Python runner uses hidapi so the native
+# host HID driver remains the owner of the interface.
+HID_HW_SCRIPT := $(ROOT)/Python/usb_hid_loopback.py
+HID_HW_FIRMWARE := $(ROOT)/exemples/usb/usb_hid_loopback.cpp
+HID_HW_ARGS ?= --manual-suspend-wake
+
 # Throughput measurement, not a regression test. Built and run on demand.
 # Sanitizers are left off so the numbers are not distorted.
 PROBE_TARGET := $(BUILD_DIR)/tx_rate_probe
@@ -115,20 +130,22 @@ HEADERS := \
 	hostport/usb_ctrlr.h \
 	$(ROOT)/include/usb/usb.h \
 	$(ROOT)/include/usb/usb_def.h \
+	$(ROOT)/include/usb/usb_hiddef.h \
 	$(ROOT)/include/usb/usb_intrf.h \
 	$(ROOT)/include/usb/usb_int.h \
 	$(ROOT)/include/usb/usb_iso.h \
 	$(ROOT)/include/usb/usbd_bulk.h \
+	$(ROOT)/include/usb/usbd_hid.h \
 	$(ROOT)/include/usb/usbd_cdc.h \
 	$(ROOT)/src/usb/usb_func.h
 
 TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 	$(DIRECT_TARGET) $(ISO_TARGET) $(ISO_DUPLEX_TARGET) $(INT_TARGET) \
-	$(BULK_TARGET) $(LINK_TARGET)
+	$(BULK_TARGET) $(HID_TARGET) $(LINK_TARGET)
 
 .PHONY: all test test-c-header test-gcc test-clang test-matrix \
 	test-nrf-suspend-policy test-nrf-iso-policy \
-	iso-hw-build iso-hw int-hw-build int-hw probe clean
+	iso-hw-build iso-hw int-hw-build int-hw hid-hw-build hid-hw probe clean
 
 all: test
 
@@ -144,13 +161,16 @@ test: $(TARGETS)
 	$(TEST_ENV) ./$(ISO_DUPLEX_TARGET)
 	$(TEST_ENV) ./$(INT_TARGET)
 	$(TEST_ENV) ./$(BULK_TARGET)
+	$(TEST_ENV) ./$(HID_TARGET)
 	$(TEST_ENV) ./$(LINK_TARGET)
 
 test-c-header:
 	@printf '%s\n' '#include "usb/usb_iso.h"' '#include "usb/usb_int.h"' \
+		'#include "usb/usbd_hid.h"' \
 		'int main(void) {' \
 		' return UsbIsoIntrfTxReady((const UsbIsoIntrf_t *)0) ||' \
-		'  UsbIntIntrfTxReady((const UsbIntIntrf_t *)0) ? 1 : 0;' '}' | \
+		'  UsbIntIntrfTxReady((const UsbIntIntrf_t *)0) ||' \
+		'  UsbdHidTxReady((const UsbdHidDev_t *)0) ? 1 : 0;' '}' | \
 		$(CC) $(CPPFLAGS) $(CFLAGS) -x c -fsyntax-only -
 
 test-nrf-suspend-policy:
@@ -171,6 +191,13 @@ int-hw-build: $(INT_HW_SCRIPT) $(INT_HW_FIRMWARE)
 
 int-hw: int-hw-build
 	python3 $(INT_HW_SCRIPT) $(INT_HW_ARGS)
+
+hid-hw-build: $(HID_HW_SCRIPT) $(HID_HW_FIRMWARE)
+	python3 -c "compile(open('$(HID_HW_SCRIPT)', encoding='utf-8').read(), '$(HID_HW_SCRIPT)', 'exec')"
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only $(HID_HW_FIRMWARE)
+
+hid-hw: hid-hw-build
+	python3 $(HID_HW_SCRIPT) $(HID_HW_ARGS)
 
 probe: $(PROBE_TARGET)
 	./$(PROBE_TARGET) $(SOF_TICKS)
@@ -224,6 +251,11 @@ $(BULK_TARGET): $(BULK_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
 		$(BULK_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(HID_TARGET): $(HID_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(HID_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(LINK_TARGET): $(LINK_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)

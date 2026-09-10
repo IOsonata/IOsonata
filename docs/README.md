@@ -58,6 +58,10 @@ Documents the USB core, `UsbIntrf`, class/function allocation, FIFO and DMA owne
 
 Shows how to build a customer-defined USB bulk interface with `UsbdBulk`, including static FIFO setup, descriptor composition, byte and packet modes, and the PyUSB loopback test. The application names its function and protocol while interface and endpoint placement remain internal.
 
+### [USB HID](usb-hid.md)
+
+Shows how `UsbdHid` layers HID descriptors and class requests over `UsbIntIntrf`, with an application-supplied report descriptor and a native HID-driver loopback test.
+
 ## Source references
 
 Read architecture and implementation together:
