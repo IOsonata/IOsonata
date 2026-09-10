@@ -371,7 +371,9 @@ static void UsbdCdcPump(void *pContext)
 	UsbdCdcProcess(static_cast<UsbdCdcDev_t *>(pContext));
 }
 
-bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
+static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
+								const UsbdCdcCfg_t *pCfg,
+								UsbDeviceClass *pClass)
 {
 	if (pCdc == nullptr || pCfg == nullptr ||
 		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
@@ -393,7 +395,7 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 	coreCfg.ConfigHandler = UsbdCdcConfig;
 	coreCfg.SetInterfaceHandler = nullptr;
 	coreCfg.ResetHandler = UsbdCdcReset;
-	coreCfg.ProcessHandler = UsbdCdcPump;
+	coreCfg.ProcessHandler = pClass == nullptr ? UsbdCdcPump : nullptr;
 	coreCfg.pContext = pCdc;
 
 	UsbdEpAllocReq_t req = {};
@@ -439,7 +441,12 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 		return false;
 	}
 
-	return true;
+	return pClass == nullptr || UsbClassRegister(pCdc->DevNo, pClass);
+}
+
+bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
+{
+	return UsbdCdcInitInternal(pCdc, pCfg, nullptr);
 }
 
 void UsbdCdcProcess(UsbdCdcDev_t * const pCdc)
@@ -450,6 +457,16 @@ void UsbdCdcProcess(UsbdCdcDev_t * const pCdc)
 	}
 
 	UsbdCdcNotifKick(pCdc);
+}
+
+bool UsbdCdc::Init(const UsbdCdcCfg_t &Cfg)
+{
+	return UsbdCdcInitInternal(&vUsbdCdc, &Cfg, this);
+}
+
+void UsbdCdc::Process(void)
+{
+	UsbdCdcProcess(&vUsbdCdc);
 }
 
 const UsbCdcLineCoding_t *UsbdCdcLineCoding(const UsbdCdcDev_t * const pCdc)

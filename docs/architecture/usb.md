@@ -81,6 +81,10 @@ The USB subsystem keeps statically owned class objects in one `UsbClass *`
 array. Shared reset and application-context processing dispatch through that
 array without testing device versus host controller mode inside each class.
 
+The C++ `UsbdCdc` object derives from both `UsbDeviceClass` and `DeviceIntrf`.
+Its deferred pump runs through `UsbClass::Process()`. The C API continues to use
+the C callback adapter over the same `UsbdCdcDev_t` implementation.
+
 ## Current device-side data-path model
 
 `UsbIntrf` is the common bidirectional endpoint-pair data engine. CDC, custom

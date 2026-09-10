@@ -155,7 +155,7 @@ static inline UsbdCdcDev_t *UsbdCdcGetDevHandle(DevIntrf_t * const pDevIntrf) {
 #ifdef __cplusplus
 }
 
-class UsbdCdc : public DeviceIntrf {
+class UsbdCdc : public UsbDeviceClass, public DeviceIntrf {
 public:
 	UsbdCdc() = default;
 	UsbdCdc(const UsbdCdc &) = delete;
@@ -165,7 +165,8 @@ public:
 	operator UsbdCdcDev_t * () { return &vUsbdCdc; }
 	DevIntrf_t *Data(void) { return &vUsbdCdc.IntrfData.DevIntrf; }
 
-	bool Init(const UsbdCdcCfg_t &Cfg) { return UsbdCdcInit(&vUsbdCdc, &Cfg); }
+	bool Init(const UsbdCdcCfg_t &Cfg);
+	void Process(void) override;
 
 	uint32_t Rate(uint32_t DataRate) override {
 		return DeviceIntrfSetRate(&vUsbdCdc.IntrfData.DevIntrf, DataRate);

@@ -130,6 +130,13 @@ int main(void)
 		printf("UsbdCdc data binding failed\n");
 		return 5;
 	}
+	// C++ CDC objects register through the common UsbClass object array.
+	// Registering the same object a second time must be rejected.
+	if (UsbClassRegister(0, &s_Cdc0))
+	{
+		printf("UsbdCdc class object was not registered\n");
+		return 7;
+	}
 
 	// UsbIntrf registers data OUT then data IN, followed by the class
 	// notification IN endpoint. No application configuration supplied any
