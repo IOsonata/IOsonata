@@ -143,8 +143,15 @@ static bool ButtonDebounce(bool Pressed, bool &Candidate, bool &Stable,
 static void KeyboardReportUpdate(bool APressed, bool CapsPressed)
 {
 	memset(&s_Report, 0, sizeof(s_Report));
-	s_Report.Key[0] = APressed ? HID_KEY_A : 0U;
-	s_Report.Key[1] = CapsPressed ? HID_KEY_CAPS_LOCK : 0U;
+	uint8_t index = 0U;
+	if (APressed)
+	{
+		s_Report.Key[index++] = HID_KEY_A;
+	}
+	if (CapsPressed)
+	{
+		s_Report.Key[index] = HID_KEY_CAPS_LOCK;
+	}
 	s_ReportPending = true;
 }
 
