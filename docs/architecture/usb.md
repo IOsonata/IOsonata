@@ -219,6 +219,13 @@ choices do not introduce ISO or Interrupt modes into `UsbIntrf`.
 `UsbIntIntrf` contains no HID report or descriptor behavior. A future `UsbdHid`
 layer may use it without moving HID semantics into the reusable transport.
 
+The nRF52840 `UsbIntLoopback` project and
+[`Python/usb_int_loopback.py`](../../Python/usb_int_loopback.py) exercise the
+transport on hardware without adding class semantics. The test selects three
+interrupt intervals, checks alternate-setting close/open behavior, transfers
+zero- through maximum-length packets in both directions, forces and recovers
+from a busy TX slot, and offers a manual suspend/wake phase.
+
 ## Controller boundary
 
 Every target provides `usb_ctrlr.h` and its controller implementation. Portable

@@ -95,6 +95,12 @@ INT_SOURCES := \
 ISO_HW_SCRIPT := $(ROOT)/Python/usb_iso_loopback.py
 ISO_HW_ARGS ?= --manual-suspend-wake
 
+# Physical interrupt-transfer validation. The IOcomposer firmware project is
+# ARM/Nordic/nRF52/nRF52840/exemples/UsbIntLoopback/ioc.
+INT_HW_SCRIPT := $(ROOT)/Python/usb_int_loopback.py
+INT_HW_FIRMWARE := $(ROOT)/exemples/usb/usb_int_loopback.cpp
+INT_HW_ARGS ?= --manual-suspend-wake
+
 # Throughput measurement, not a regression test. Built and run on demand.
 # Sanitizers are left off so the numbers are not distorted.
 PROBE_TARGET := $(BUILD_DIR)/tx_rate_probe
@@ -122,7 +128,7 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 
 .PHONY: all test test-c-header test-gcc test-clang test-matrix \
 	test-nrf-suspend-policy test-nrf-iso-policy test-nrf-int-policy \
-	iso-hw-build iso-hw probe clean
+	iso-hw-build iso-hw int-hw-build int-hw probe clean
 
 all: test
 
@@ -162,6 +168,13 @@ iso-hw-build: $(ISO_HW_SCRIPT)
 
 iso-hw: iso-hw-build
 	python3 $(ISO_HW_SCRIPT) $(ISO_HW_ARGS)
+
+int-hw-build: $(INT_HW_SCRIPT) $(INT_HW_FIRMWARE)
+	python3 -c "compile(open('$(INT_HW_SCRIPT)', encoding='utf-8').read(), '$(INT_HW_SCRIPT)', 'exec')"
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only $(INT_HW_FIRMWARE)
+
+int-hw: int-hw-build
+	python3 $(INT_HW_SCRIPT) $(INT_HW_ARGS)
 
 probe: $(PROBE_TARGET)
 	./$(PROBE_TARGET) $(SOF_TICKS)
