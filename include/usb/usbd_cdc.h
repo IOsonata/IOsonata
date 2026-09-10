@@ -168,6 +168,7 @@ public:
 	bool Init(const UsbdCdcCfg_t &Cfg);
 	void Reset(void) override;
 	void Process(void) override;
+	bool SelectConfig(uint8_t ConfigValue) override;
 
 	uint32_t Rate(uint32_t DataRate) override {
 		return DeviceIntrfSetRate(&vUsbdCdc.IntrfData.DevIntrf, DataRate);

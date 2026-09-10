@@ -670,6 +670,11 @@ static void UsbCoreUnconfigureClasses(void)
 									   s_CoreClass[i].pContext);
 		}
 	}
+
+	for (int i = 0; i < s_CoreObjectCnt; i++)
+	{
+		(void)static_cast<UsbDeviceClass *>(s_CoreObject[i])->SelectConfig(0);
+	}
 }
 
 static bool UsbCoreApplyConfiguration(uint8_t Configuration)
@@ -710,6 +715,30 @@ static bool UsbCoreApplyConfiguration(uint8_t Configuration)
 					(void)s_CoreClass[n].ConfigHandler(0,
 										   s_CoreClass[n].pContext);
 				}
+			}
+			UsbCtrlrEpCloseAll(s_UsbDevNo);
+			return false;
+		}
+	}
+
+	for (int i = 0; i < s_CoreObjectCnt; i++)
+	{
+		UsbDeviceClass *pClass =
+			static_cast<UsbDeviceClass *>(s_CoreObject[i]);
+		if (!pClass->SelectConfig(Configuration))
+		{
+			for (int n = 0; n < s_CoreClassCnt; n++)
+			{
+				if (s_CoreClass[n].ConfigHandler != nullptr)
+				{
+					(void)s_CoreClass[n].ConfigHandler(0,
+										   s_CoreClass[n].pContext);
+				}
+			}
+			for (int n = 0; n <= i; n++)
+			{
+				(void)static_cast<UsbDeviceClass *>(s_CoreObject[n])->
+					SelectConfig(0);
 			}
 			UsbCtrlrEpCloseAll(s_UsbDevNo);
 			return false;

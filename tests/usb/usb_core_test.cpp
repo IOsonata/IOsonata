@@ -617,8 +617,9 @@ public:
 		return true;
 	}
 	bool SelectConfig(uint8_t ConfigValue) override {
+		ConfigCnt++;
 		ConfigurationValue = ConfigValue;
-		return true;
+		return ConfigValue == 0 || !RejectConfig;
 	}
 	bool SelectInterface(uint8_t InterfaceNo, uint8_t OptionValue) override {
 		Interface = InterfaceNo;
@@ -627,6 +628,8 @@ public:
 	}
 	int ResetCnt = 0;
 	int ProcessCnt = 0;
+	int ConfigCnt = 0;
+	bool RejectConfig = false;
 	UsbCtrlStage_t LastStage = USB_CTRL_ABORT;
 	uint8_t ConfigurationValue = 0;
 	uint8_t Interface = 0;
@@ -684,14 +687,37 @@ static bool TestClassObjectRegistry(void)
 	static TestUsbDeviceClass device;
 	device.ResetCnt = 0;
 	device.ProcessCnt = 0;
+	device.ConfigCnt = 0;
+	device.ConfigurationValue = 0;
+	device.RejectConfig = false;
 
 	CHECK(Fixture(true, &device));
+	CHECK(SetAddress(5) && SetConfig(1));
+	CHECK(device.ConfigCnt == 1 && device.ConfigurationValue == 1);
 	UsbProcess(TEST_DEVNO);
 	CHECK(device.ProcessCnt == 1);
 	CHECK(!UsbClassRegister(TEST_DEVNO, &device));
+	CHECK(SetConfig(0));
+	CHECK(device.ConfigCnt == 2 && device.ConfigurationValue == 0);
 
 	Event(USB_CTRLR_EVT_RESET);
 	CHECK(device.ResetCnt == 1);
+	return true;
+}
+
+static bool TestClassObjectConfigRollback(void)
+{
+	TestUsbDeviceClass device;
+	device.RejectConfig = true;
+
+	CHECK(Fixture(true, &device));
+	CHECK(SetAddress(5));
+	const int stalls = s_Ctrlr.StallCnt;
+	Setup(STD_DEV_OUT, USB_REQ_SET_CONFIGURATION, 1, 0, 0);
+	CHECK(s_Ctrlr.StallCnt == stalls + 1);
+	CHECK(UsbGetConfiguration(TEST_DEVNO) == 0);
+	CHECK(s_Class.ConfigCnt == 2 && s_Class.LastConfig == 0);
+	CHECK(device.ConfigCnt == 2 && device.ConfigurationValue == 0);
 	return true;
 }
 
@@ -817,6 +843,7 @@ int main(void)
 		{ "class control lifecycle", TestClassControl },
 		{ "common class base", TestCommonClassBase },
 		{ "class object registry", TestClassObjectRegistry },
+		{ "class object configuration rollback", TestClassObjectConfigRollback },
 		{ "reset suspend and dispatch", TestResetSuspendAndDispatch },
 	};
 
