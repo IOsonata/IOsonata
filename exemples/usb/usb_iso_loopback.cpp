@@ -351,7 +351,7 @@ static bool IsoRegisterFunction(void)
 
 	const uint16_t epBit = (uint16_t)(1U << epNo);
 
-	UsbFuncCfg_t coreCfg = {};
+	UsbdClassCfg_t coreCfg = {};
 	coreCfg.RequestHandler = IsoRequest;
 	coreCfg.ConfigHandler = IsoConfig;
 	coreCfg.SetInterfaceHandler = IsoSetInterface;

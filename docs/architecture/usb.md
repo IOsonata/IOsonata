@@ -1,7 +1,7 @@
 # USB Architecture
 
 IOsonata keeps USB simple at the application boundary and explicit internally.
-An application instantiates the USB class/function it needs and initializes it.
+An application instantiates the USB class it needs and initializes it.
 Interface numbers, endpoint numbers, descriptor placement and endpoint callbacks
 are allocated and connected inside the USB stack.
 
@@ -14,7 +14,7 @@ policy that only makes sense for USB device mode or only for USB host mode.
 
 ```text
 usb_*      reusable USB infrastructure
-usbd_*     USB device-side classes/functions
+usbd_*     USB device-side classes
 usbh_*     future USB host-side classes/drivers
 ```
 
@@ -26,8 +26,8 @@ usb_iso.*        UsbIsoIntrf    role-neutral ISO specialization
 usb_int.*        UsbIntIntrf    role-neutral Interrupt specialization
 
 usbd_cdc.*       UsbdCdc        USB device CDC ACM
-usbd_bulk.*      UsbdBulk       USB device custom Bulk function
-usbd_hid.*       UsbdHid        USB device HID function
+usbd_bulk.*      UsbdBulk       USB device custom Bulk class
+usbd_hid.*       UsbdHid        USB device HID class
 
 usbh_*           future USB host class/driver layer
 ```
@@ -51,7 +51,7 @@ Role-specific behavior belongs above them:
 ```
 
 Device-side responsibilities such as device descriptors, `SET_CONFIGURATION`,
-`SET_INTERFACE`, device function allocation and Chapter 9 ownership do not
+`SET_INTERFACE`, device class allocation and Chapter 9 ownership do not
 belong in `UsbIsoIntrf`.
 
 Future host-side responsibilities such as device enumeration, selecting a
@@ -143,7 +143,7 @@ a separate endpoint transfer engine.
 Current device-side path:
 
 ```text
-USB device class/function
+USB device class
         |
         v
 UsbIsoIntrf
@@ -197,7 +197,7 @@ uses the same DIRECT storage policy as `UsbIsoIntrf`, but opens its endpoint
 pair with `USB_ENDPATT_TRANS_INT` and owns the interrupt polling interval.
 
 ```text
-USB class/function
+USB class
         |
         v
 UsbIntIntrf
@@ -228,8 +228,8 @@ from a busy TX slot, and offers a manual suspend/wake phase.
 
 ## HID
 
-`UsbdHid` follows the same device-function pattern as `UsbdBulk` and
-`BtHciUsb`: it registers its function, receives allocated interface and
+`UsbdHid` follows the same device-class pattern as `UsbdBulk` and
+`BtHciUsb`: it registers its class instance, receives allocated interface and
 endpoint numbers, fills a descriptor fragment supplied by the application and
 opens its endpoints when configuration 1 becomes active.
 
@@ -321,7 +321,7 @@ The controller already knows the endpoint type because it was established when
 the endpoint was opened/configured.
 
 Endpoint callbacks are delivered directly to the registered endpoint owner.
-Nonzero endpoint completion is not routed through the USB function table.
+Nonzero endpoint completion is not routed through the USB class table.
 
 ```text
 controller interrupt
@@ -376,7 +376,7 @@ class endpoint callback
 ## Automatic interface and endpoint allocation
 
 Automatic interface/endpoint allocation is currently a device-side composition
-facility. USB device functions request resources; applications do not assign
+facility. USB device classes request resources; applications do not assign
 them.
 
 The internal allocator receives requirements such as:
@@ -498,7 +498,7 @@ and interface selection belong in `usbh_*` and must not change the reusable
 Keep these invariants when adding a class, transfer type or future host support:
 
 1. `usb_*` remains role-neutral reusable USB infrastructure.
-2. `usbd_*` contains USB device-side class/function behavior.
+2. `usbd_*` contains USB device-side class behavior.
 3. Future `usbh_*` contains USB host-side class/driver behavior.
 4. Applications do not choose device-side interface or endpoint numbers.
 5. Device resource allocation remains internal to the device stack.

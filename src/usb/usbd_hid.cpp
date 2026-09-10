@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	usbd_hid.cpp
 
-@brief	Generic USB HID device function implementation.
+@brief	Generic USB HID device class implementation.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 10, 2026
@@ -390,7 +390,7 @@ bool UsbdHidInit(UsbdHidDev_t *pHid, const UsbdHidCfg_t *pCfg)
 	pHid->HidDesc.RepDesc[0].bDescriptorType = USB_DESCTYPE_HID_REPORT;
 	pHid->HidDesc.RepDesc[0].wDescriptorLength = pHid->ReportDescLength;
 
-	UsbFuncCfg_t coreCfg = {};
+	UsbdClassCfg_t coreCfg = {};
 	coreCfg.RequestHandler = UsbdHidRequest;
 	coreCfg.ConfigHandler = UsbdHidConfig;
 	coreCfg.ResetHandler = UsbdHidReset;

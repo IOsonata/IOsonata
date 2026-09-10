@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	usbd_hid_test.cpp
 
-@brief	Host tests for the generic USB HID device function.
+@brief	Host tests for the generic USB HID device class.
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
 #include <string.h>
@@ -12,7 +12,7 @@
 #define ITF_NO	0
 
 static UsbCfg_t s_UsbCfg;
-static UsbFuncCfg_t s_FuncCfg;
+static UsbdClassCfg_t s_ClassCfg;
 static bool s_Registered;
 static uint8_t s_ReservedFirst;
 static uint8_t s_ReservedCount;
@@ -38,7 +38,7 @@ const UsbCfg_t *UsbGetCfg(int DevNo)
 	return DevNo == 0 ? &s_UsbCfg : nullptr;
 }
 
-bool UsbRegisterFunc(int DevNo, const UsbFuncCfg_t *pCfg)
+bool UsbdClassRegister(int DevNo, const UsbdClassCfg_t *pCfg)
 {
 	if (DevNo != 0 || pCfg == nullptr)
 	{
@@ -60,7 +60,7 @@ bool UsbRegisterFunc(int DevNo, const UsbFuncCfg_t *pCfg)
 	{
 		return false;
 	}
-	s_FuncCfg = *pCfg;
+	s_ClassCfg = *pCfg;
 	s_Registered = true;
 	return true;
 }
@@ -203,7 +203,7 @@ static UsbdHidCfg_t MakeCfg(void)
 static void ResetFake(void)
 {
 	memset(&s_UsbCfg, 0, sizeof(s_UsbCfg));
-	memset(&s_FuncCfg, 0, sizeof(s_FuncCfg));
+	memset(&s_ClassCfg, 0, sizeof(s_ClassCfg));
 	memset(s_Open, 0, sizeof(s_Open));
 	memset(s_LastRx, 0, sizeof(s_LastRx));
 	memset(s_ReportStage, 0, sizeof(s_ReportStage));
@@ -258,8 +258,8 @@ static void Receive(const uint8_t *pData, uint16_t Length)
 static bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 					uint8_t **ppData, uint16_t *pLength)
 {
-	return s_FuncCfg.RequestHandler(pSetup, Stage, ppData, pLength,
-		s_FuncCfg.pContext);
+	return s_ClassCfg.RequestHandler(pSetup, Stage, ppData, pLength,
+		s_ClassCfg.pContext);
 }
 
 static void TestDescriptorAndPlacement(void)
@@ -276,9 +276,9 @@ static void TestDescriptorAndPlacement(void)
 	cfg.pDesc = &desc;
 	CHECK(hid.Init(cfg));
 	CHECK(s_Registered);
-	CHECK(s_FuncCfg.FirstInterface == 1U);
-	CHECK(s_FuncCfg.EpInMask == (1U << 2));
-	CHECK(s_FuncCfg.EpOutMask == (1U << 2));
+	CHECK(s_ClassCfg.FirstInterface == 1U);
+	CHECK(s_ClassCfg.EpInMask == (1U << 2));
+	CHECK(s_ClassCfg.EpOutMask == (1U << 2));
 	CHECK(desc.Interface.bInterfaceNumber == 1U);
 	CHECK(desc.Interface.bNumEndpoints == 2U);
 	CHECK(desc.Interface.bInterfaceClass == USB_INTRFCLASS_HID);
@@ -301,8 +301,8 @@ static void TestDataAndLifecycle(void)
 	const UsbdHidCfg_t cfg = MakeCfg();
 	CHECK(hid.Init(cfg));
 	CHECK(s_OutBlocking);
-	CHECK(s_FuncCfg.ConfigHandler(USBD_HID_CONFIG_VALUE,
-		s_FuncCfg.pContext));
+	CHECK(s_ClassCfg.ConfigHandler(USBD_HID_CONFIG_VALUE,
+		s_ClassCfg.pContext));
 	CHECK(s_OpenCount == 2);
 	CHECK(s_Open[0].bEndpointAddress == USB_ENDPADDR_DIRIN(EP_NO));
 	CHECK(s_Open[1].bEndpointAddress == USB_ENDPADDR_DIROUT(EP_NO));
@@ -335,7 +335,7 @@ static void TestDataAndLifecycle(void)
 	CHECK(hid.SendReport(tx, sizeof(tx)));
 	CompleteIn();
 
-	CHECK(s_FuncCfg.ConfigHandler(0U, s_FuncCfg.pContext));
+	CHECK(s_ClassCfg.ConfigHandler(0U, s_ClassCfg.pContext));
 	CHECK(!hid.SendReport(tx, sizeof(tx)));
 	CHECK(s_CloseCount == 2);
 }
@@ -419,7 +419,7 @@ static void TestControlRequests(void)
 	setup.wIndex = 1U;
 	CHECK(!Control(&setup, USB_CTRL_SETUP, &pData, &length));
 
-	s_FuncCfg.ResetHandler(s_FuncCfg.pContext);
+	s_ClassCfg.ResetHandler(s_ClassCfg.pContext);
 	CHECK(!hid.Resume());
 }
 

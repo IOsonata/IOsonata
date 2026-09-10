@@ -69,7 +69,7 @@ typedef struct __Usb_Func_Allocation {
 typedef struct __Usb_Func_Alloc_State {
 	int DevNo;
 	const UsbFuncReq_t *pReq;
-	const UsbFuncCfg_t *pCfg;
+	const UsbdClassCfg_t *pCfg;
 	UsbFuncAlloc_t *pAlloc;
 	uint8_t FirstInterface;
 	uint8_t InLimit;
@@ -109,13 +109,13 @@ static inline bool UsbFuncTryOut(const UsbFuncAllocState_t *pState,
 {
 	if (Needed == 0U)
 	{
-		UsbFuncCfg_t cfg = *pState->pCfg;
+		UsbdClassCfg_t cfg = *pState->pCfg;
 		cfg.FirstInterface = pState->FirstInterface;
 		cfg.InterfaceCount = pState->pReq->InterfaceCount;
 		cfg.EpInMask = InMask | PairMask;
 		cfg.EpOutMask = OutMask | PairMask;
 
-		if (!UsbRegisterFunc(pState->DevNo, &cfg))
+		if (!UsbdClassRegister(pState->DevNo, &cfg))
 		{
 			return false;
 		}
@@ -212,8 +212,8 @@ static inline bool UsbFuncTryIn(const UsbFuncAllocState_t *pState,
 	return false;
 }
 
-static inline bool UsbRegisterFuncAuto(int DevNo, const UsbFuncReq_t *pReq,
-									  const UsbFuncCfg_t *pCfg,
+static inline bool UsbdClassRegisterAuto(int DevNo, const UsbFuncReq_t *pReq,
+									  const UsbdClassCfg_t *pCfg,
 									  UsbFuncAlloc_t *pAlloc)
 {
 	if (pReq == nullptr || pCfg == nullptr || pAlloc == nullptr ||

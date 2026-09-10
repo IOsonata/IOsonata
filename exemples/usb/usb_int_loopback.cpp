@@ -301,7 +301,7 @@ static void IntProcess(void *)
 
 static bool IntRegisterFunction(void)
 {
-	UsbFuncCfg_t coreCfg = {};
+	UsbdClassCfg_t coreCfg = {};
 	coreCfg.RequestHandler = IntRequest;
 	coreCfg.ConfigHandler = IntConfig;
 	coreCfg.SetInterfaceHandler = IntSetInterface;

@@ -213,7 +213,7 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk, const UsbdBulkCfg_t *pCfg)
 		return false;
 	}
 
-	UsbFuncCfg_t coreCfg = {};
+	UsbdClassCfg_t coreCfg = {};
 	coreCfg.RequestHandler = pCfg->RequestHandler != nullptr ?
 		UsbdBulkRequest : nullptr;
 	coreCfg.ConfigHandler = UsbdBulkConfig;

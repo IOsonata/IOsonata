@@ -71,6 +71,6 @@ typedef struct __Usbd_EpAlloc_Res {
 /// register pCfg with the core at that placement and return the assigned
 /// numbers in pRes. Returns false when no placement fits.
 bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
-				 const UsbFuncCfg_t *pCfg, UsbdEpAllocRes_t *pRes);
+				 const UsbdClassCfg_t *pCfg, UsbdEpAllocRes_t *pRes);
 
 #endif	// __USBD_EPALLOC_H__

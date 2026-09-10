@@ -15,8 +15,8 @@
 #define TX_SLOTS   4U
 
 static UsbCfg_t s_UsbCfg;
-static UsbFuncCfg_t s_FuncCfg;
-static bool s_FuncRegistered;
+static UsbdClassCfg_t s_ClassCfg;
+static bool s_ClassRegistered;
 static uint8_t s_ReservedFirst;
 static uint8_t s_ReservedCount;
 static uint16_t s_ReservedIn;
@@ -49,7 +49,7 @@ const UsbCfg_t *UsbGetCfg(int DevNo)
     return DevNo == 0 ? &s_UsbCfg : nullptr;
 }
 
-bool UsbRegisterFunc(int DevNo, const UsbFuncCfg_t *pCfg)
+bool UsbdClassRegister(int DevNo, const UsbdClassCfg_t *pCfg)
 {
     if (DevNo != 0 || pCfg == nullptr)
         return false;
@@ -68,8 +68,8 @@ bool UsbRegisterFunc(int DevNo, const UsbFuncCfg_t *pCfg)
         (pCfg->EpOutMask & s_ReservedOut) != 0U)
         return false;
 
-    s_FuncCfg = *pCfg;
-    s_FuncRegistered = true;
+    s_ClassCfg = *pCfg;
+    s_ClassRegistered = true;
     return true;
 }
 
@@ -164,10 +164,10 @@ static UsbdBulkCfg_t MakeCfg(UsbdBulkMode_t Mode)
 static void ResetFake(void)
 {
     memset(&s_UsbCfg, 0, sizeof(s_UsbCfg));
-    memset(&s_FuncCfg, 0, sizeof(s_FuncCfg));
+    memset(&s_ClassCfg, 0, sizeof(s_ClassCfg));
     memset(s_OpenDesc, 0, sizeof(s_OpenDesc));
     memset(s_HwOut, 0, sizeof(s_HwOut));
-    s_FuncRegistered = false;
+    s_ClassRegistered = false;
     s_ReservedFirst = 0U;
     s_ReservedCount = 0U;
     s_ReservedIn = 0U;
@@ -260,10 +260,10 @@ static void TestAutoPlacement(void)
     UsbdBulk bulk;
     const UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
     CHECK(bulk.Init(cfg));
-    CHECK(s_FuncRegistered);
-    CHECK(s_FuncCfg.FirstInterface == 1U);
-    CHECK(s_FuncCfg.EpInMask == (1U << 2));
-    CHECK(s_FuncCfg.EpOutMask == (1U << 2));
+    CHECK(s_ClassRegistered);
+    CHECK(s_ClassCfg.FirstInterface == 1U);
+    CHECK(s_ClassCfg.EpInMask == (1U << 2));
+    CHECK(s_ClassCfg.EpOutMask == (1U << 2));
 }
 
 static void TestByteMode(void)
@@ -273,12 +273,12 @@ static void TestByteMode(void)
     const UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
 
     CHECK(bulk.Init(cfg));
-    CHECK(s_FuncRegistered);
+    CHECK(s_ClassRegistered);
     CHECK(s_OutBuffer != nullptr && s_InBuffer != nullptr);
     CHECK(s_OutBuffer != s_InBuffer);
     CHECK(s_OutSubmitCount == 0);
 
-    CHECK(s_FuncCfg.ConfigHandler(1U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
     CHECK(s_OpenCount == 2);
     CHECK(s_OpenDesc[0].bEndpointAddress == USB_ENDPADDR_DIRIN(EP_NO));
     CHECK(s_OpenDesc[1].bEndpointAddress == USB_ENDPADDR_DIROUT(EP_NO));
@@ -303,12 +303,12 @@ static void TestByteMode(void)
     setup.bmRequestType = USB_REQTYPE_VEND | USB_REQTYPE_INTERFACE;
     setup.wIndex = ITF_NO;
     uint16_t length = 0U;
-    CHECK(s_FuncCfg.RequestHandler(&setup, USB_CTRL_SETUP, nullptr, &length,
-                                   s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_SETUP, nullptr, &length,
+                                   s_ClassCfg.pContext));
     CHECK(s_RequestCount == 1);
     CHECK(s_RequestContext == &s_RequestContext);
 
-    CHECK(s_FuncCfg.ConfigHandler(0U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.ConfigHandler(0U, s_ClassCfg.pContext));
     CHECK(DeviceIntrfGetRate(bulk.Data()) == 0U);
 }
 
@@ -318,7 +318,7 @@ static void TestPacketMode(void)
     UsbdBulk bulk;
     const UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_PACKET);
     CHECK(bulk.Init(cfg));
-    CHECK(s_FuncCfg.ConfigHandler(1U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
 
     alignas(4) uint8_t block[USBD_BULK_PKT_BLKSIZE] = {};
     UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(block);

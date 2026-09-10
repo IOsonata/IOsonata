@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	usbd_hid.h
 
-@brief	Generic USB HID device function.
+@brief	Generic USB HID device class.
 
 UsbdHid owns HID descriptors and class requests. Interrupt report transport is
 provided by the embedded UsbIntIntrf. The application supplies the report
@@ -95,7 +95,7 @@ typedef struct __Usbd_Hid_Config {
 	uint8_t CountryCode;
 	uint8_t InterfaceString;
 	UsbdHidDesc_t *pDesc;
-	UsbRequestHandler_t ReportHandler;	//!< GET_REPORT and SET_REPORT only
+	UsbdClassRequestHandler_t ReportHandler;	//!< GET_REPORT and SET_REPORT only
 	void *pReportContext;
 	UsbdHidRxHandler_t RxHandler;
 	UsbdHidTxHandler_t TxHandler;
@@ -109,7 +109,7 @@ struct __Usbd_Hid_Dev {
 	int ItfNo;					//!< Internal allocation
 	UsbIntIntrf_t IntIntrf;
 	const uint8_t *pReportDesc;
-	UsbRequestHandler_t ReportHandler;
+	UsbdClassRequestHandler_t ReportHandler;
 	void *pReportContext;
 	UsbdHidRxHandler_t RxHandler;
 	UsbdHidTxHandler_t TxHandler;

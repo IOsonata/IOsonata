@@ -27,7 +27,7 @@ typedef struct {
 } SentPacket_t;
 
 static UsbCfg_t s_UsbCfg;
-static UsbFuncCfg_t s_FuncCfg;
+static UsbdClassCfg_t s_ClassCfg;
 static bool s_FuncRegistered;
 static uint8_t s_ReservedFirst;
 static uint8_t s_ReservedCount;
@@ -59,7 +59,7 @@ const UsbCfg_t *UsbGetCfg(int DevNo)
     return DevNo == 0 ? &s_UsbCfg : nullptr;
 }
 
-bool UsbRegisterFunc(int DevNo, const UsbFuncCfg_t *pCfg)
+bool UsbdClassRegister(int DevNo, const UsbdClassCfg_t *pCfg)
 {
     if (DevNo != 0 || pCfg == nullptr ||
         (((pCfg->EpInMask | pCfg->EpOutMask) & 1U) != 0U))
@@ -78,7 +78,7 @@ bool UsbRegisterFunc(int DevNo, const UsbFuncCfg_t *pCfg)
         (pCfg->EpOutMask & s_ReservedOut) != 0U)
         return false;
 
-    s_FuncCfg = *pCfg;
+    s_ClassCfg = *pCfg;
     s_FuncRegistered = true;
     return true;
 }
@@ -263,7 +263,7 @@ static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
 static void ResetFake(void)
 {
     memset(&s_UsbCfg, 0, sizeof(s_UsbCfg));
-    memset(&s_FuncCfg, 0, sizeof(s_FuncCfg));
+    memset(&s_ClassCfg, 0, sizeof(s_ClassCfg));
     memset(s_OpenDesc, 0, sizeof(s_OpenDesc));
     memset(s_Registered, 0, sizeof(s_Registered));
     memset(s_InBusy, 0, sizeof(s_InBusy));
@@ -400,9 +400,9 @@ static void TestAutoPlacement(void)
     BtHciUsbCfg_t cfg = MakeCfg();
     cfg.pDesc = &desc;
     CHECK(hci.Init(cfg));
-    CHECK(s_FuncCfg.FirstInterface == 2U);
-    CHECK(s_FuncCfg.EpInMask == ((1U << 2) | (1U << 3)));
-    CHECK(s_FuncCfg.EpOutMask == (1U << 3));
+    CHECK(s_ClassCfg.FirstInterface == 2U);
+    CHECK(s_ClassCfg.EpInMask == ((1U << 2) | (1U << 3)));
+    CHECK(s_ClassCfg.EpOutMask == (1U << 3));
     CHECK(desc.EventIn.bEndpointAddress == USB_ENDPADDR_DIRIN(2U));
     CHECK(desc.AclOut.bEndpointAddress == USB_ENDPADDR_DIROUT(3U));
 }
@@ -417,8 +417,8 @@ static void TestScoAutoPlacement(void)
     BtHciUsbCfg_t cfg = MakeCfg(true);
     cfg.pScoDesc = &desc;
     CHECK(hci.Init(cfg));
-    CHECK(s_FuncCfg.EpInMask == ((1U << 1) | (1U << 2) | (1U << 9)));
-    CHECK(s_FuncCfg.EpOutMask == ((1U << 2) | (1U << 9)));
+    CHECK(s_ClassCfg.EpInMask == ((1U << 1) | (1U << 2) | (1U << 9)));
+    CHECK(s_ClassCfg.EpOutMask == ((1U << 2) | (1U << 9)));
     CHECK(desc.Alt[0].Out.bEndpointAddress == USB_ENDPADDR_DIROUT(9U));
     CHECK(desc.Alt[0].In.bEndpointAddress == USB_ENDPADDR_DIRIN(9U));
 
@@ -436,13 +436,13 @@ static void TestConfigurationAndAcl(void)
     CHECK(hci.Init(MakeCfg()));
     CHECK(s_RegisteredCount == 3);
     CHECK(FindRegistered(USB_ENDPADDR_DIROUT(2U))->Blocking);
-    CHECK(s_FuncCfg.ConfigHandler(BT_HCI_USB_CONFIG_VALUE, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.ConfigHandler(BT_HCI_USB_CONFIG_VALUE, s_ClassCfg.pContext));
     CHECK(s_OpenCount == 3);
     CHECK(s_OpenDesc[0].bEndpointAddress == USB_ENDPADDR_DIRIN(1U));
     CHECK(s_OpenDesc[1].bEndpointAddress == USB_ENDPADDR_DIRIN(2U));
     CHECK(s_OpenDesc[2].bEndpointAddress == USB_ENDPADDR_DIROUT(2U));
     CHECK(s_OutSubmitCount == 0);
-    CHECK(s_FuncCfg.SetInterfaceHandler(1U, 0U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.SetInterfaceHandler(1U, 0U, s_ClassCfg.pContext));
 
     uint8_t acl[8] = { 0x01,0x00,0x04,0x00, 0x11,0x22,0x33,0x44 };
     CHECK(DeviceIntrfStartRx(hci.Data(), BT_HCI_USB_PACKET_ACL));
@@ -464,7 +464,7 @@ static void TestConfigurationAndAcl(void)
     CHECK(memcmp(s_Sent[0].Data, acl, sizeof(acl)) == 0);
     CompleteIn(2U);
 
-    CHECK(s_FuncCfg.ConfigHandler(0U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.ConfigHandler(0U, s_ClassCfg.pContext));
     CHECK(DeviceIntrfGetRate(hci.Data()) == 0U);
 }
 
@@ -473,7 +473,7 @@ static void TestBulkZlpPreservesNextPacket(void)
     ResetFake();
     BtHciUsb hci;
     CHECK(hci.Init(MakeCfg()));
-    CHECK(s_FuncCfg.ConfigHandler(1U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
     CHECK(DeviceIntrfStartRx(hci.Data(), BT_HCI_USB_PACKET_ACL));
 
     const uint8_t acl[] = { 0x01U,0x00U,0x04U,0x00U, 0x11U,0x22U,0x33U,0x44U };
@@ -494,7 +494,7 @@ static void TestCommandAndEvent(void)
     ResetFake();
     BtHciUsb hci;
     CHECK(hci.Init(MakeCfg()));
-    CHECK(s_FuncCfg.ConfigHandler(1U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
 
     const uint8_t cmd[] = { 0x03U, 0x0CU, 0x00U };
     UsbSetupData_t setup = {};
@@ -504,17 +504,17 @@ static void TestCommandAndEvent(void)
     setup.wLength = BT_HCI_USB_COMMAND_HEADER_SIZE - 1U;
     uint8_t *pData = nullptr;
     uint16_t length = 0U;
-    CHECK(!s_FuncCfg.RequestHandler(&setup, USB_CTRL_SETUP, &pData, &length,
-                                    s_FuncCfg.pContext));
+    CHECK(!s_ClassCfg.RequestHandler(&setup, USB_CTRL_SETUP, &pData, &length,
+                                    s_ClassCfg.pContext));
 
     setup.wLength = sizeof(cmd);
-    CHECK(s_FuncCfg.RequestHandler(&setup, USB_CTRL_SETUP, &pData, &length,
-                                   s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_SETUP, &pData, &length,
+                                   s_ClassCfg.pContext));
     memcpy(pData, cmd, sizeof(cmd));
-    CHECK(s_FuncCfg.RequestHandler(&setup, USB_CTRL_DATA, &pData, &length,
-                                   s_FuncCfg.pContext));
-    CHECK(s_FuncCfg.RequestHandler(&setup, USB_CTRL_COMPLETE, &pData, &length,
-                                   s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_DATA, &pData, &length,
+                                   s_ClassCfg.pContext));
+    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_COMPLETE, &pData, &length,
+                                   s_ClassCfg.pContext));
     CHECK(s_RxEventCount == 1);
     uint8_t rx[8] = {};
     CHECK(DeviceIntrfRx(hci.Data(), BT_HCI_USB_PACKET_COMMAND, rx, sizeof(rx)) == 3);
@@ -527,13 +527,13 @@ static void TestCommandAndEvent(void)
     setup.wLength = sizeof(cmd);
     pData = nullptr;
     length = 0U;
-    CHECK(s_FuncCfg.RequestHandler(&setup, USB_CTRL_SETUP, &pData, &length,
-                                   s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_SETUP, &pData, &length,
+                                   s_ClassCfg.pContext));
     memcpy(pData, cmd, sizeof(cmd));
-    CHECK(s_FuncCfg.RequestHandler(&setup, USB_CTRL_DATA, &pData, &length,
-                                   s_FuncCfg.pContext));
-    CHECK(s_FuncCfg.RequestHandler(&setup, USB_CTRL_COMPLETE, &pData, &length,
-                                   s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_DATA, &pData, &length,
+                                   s_ClassCfg.pContext));
+    CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_COMPLETE, &pData, &length,
+                                   s_ClassCfg.pContext));
     CHECK(s_RxEventCount == 2);
     memset(rx, 0, sizeof(rx));
     CHECK(DeviceIntrfRx(hci.Data(), BT_HCI_USB_PACKET_COMMAND, rx, sizeof(rx)) == 3);
@@ -556,17 +556,17 @@ static void TestBulkSerialization(void)
     ResetFake();
     BtHciUsb hci;
     CHECK(hci.Init(MakeCfg(false, true)));
-    CHECK(s_FuncCfg.ConfigHandler(1U, s_FuncCfg.pContext));
-    CHECK(s_FuncCfg.SetInterfaceHandler(0U, 1U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
+    CHECK(s_ClassCfg.SetInterfaceHandler(0U, 1U, s_ClassCfg.pContext));
     BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(hci);
     CHECK(pHci->HciAlt == 1U && pHci->BulkSerialization);
 
     const int sameAltOpen = s_OpenCount;
     const int sameAltClose = s_CloseCount;
-    CHECK(s_FuncCfg.SetInterfaceHandler(0U, 1U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.SetInterfaceHandler(0U, 1U, s_ClassCfg.pContext));
     CHECK(s_OpenCount == sameAltOpen);
     CHECK(s_CloseCount == sameAltClose);
-    CHECK(s_FuncCfg.SetInterfaceHandler(1U, 0U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.SetInterfaceHandler(1U, 0U, s_ClassCfg.pContext));
     CHECK(s_OpenCount == sameAltOpen);
     CHECK(s_CloseCount == sameAltClose);
 
@@ -598,7 +598,7 @@ static void TestBulkSerialization(void)
     CompleteIn(2U);
 
     s_OpenFailAt = s_OpenCount + 2;
-    CHECK(!s_FuncCfg.SetInterfaceHandler(0U, 0U, s_FuncCfg.pContext));
+    CHECK(!s_ClassCfg.SetInterfaceHandler(0U, 0U, s_ClassCfg.pContext));
     CHECK(pHci->HciAlt == 1U);
     CHECK(pHci->BulkSerialization);
     CHECK(DeviceIntrfGetRate(hci.Data()) != 0U);
@@ -612,8 +612,8 @@ static void TestScoTransport(void)
     CHECK(s_RegisteredCount == 5);
     RegisteredEp_t *scoOut = FindRegistered(USB_ENDPADDR_DIROUT(8U));
     CHECK(scoOut != nullptr && !scoOut->Blocking);
-    CHECK(s_FuncCfg.ConfigHandler(1U, s_FuncCfg.pContext));
-    CHECK(s_FuncCfg.SetInterfaceHandler(1U, 1U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
+    CHECK(s_ClassCfg.SetInterfaceHandler(1U, 1U, s_ClassCfg.pContext));
 
     // Base endpoints 0..2, then ISO opens IN before OUT.
     CHECK(s_OpenCount == 5);
@@ -659,7 +659,7 @@ static void TestScoTransport(void)
     CompleteIn(8U);
     CHECK(s_LastEvent == DEVINTRF_EVT_TX_READY);
 
-    CHECK(s_FuncCfg.SetInterfaceHandler(1U, 0U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.SetInterfaceHandler(1U, 0U, s_ClassCfg.pContext));
     CHECK(DeviceIntrfTx(hci.Data(), BT_HCI_USB_PACKET_SCO,
                         packet, sizeof(packet)) == 0);
 }
@@ -669,8 +669,8 @@ static void TestScoBackpressure(void)
     ResetFake();
     BtHciUsb hci;
     CHECK(hci.Init(MakeCfg(true)));
-    CHECK(s_FuncCfg.ConfigHandler(1U, s_FuncCfg.pContext));
-    CHECK(s_FuncCfg.SetInterfaceHandler(1U, 1U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
+    CHECK(s_ClassCfg.SetInterfaceHandler(1U, 1U, s_ClassCfg.pContext));
     CHECK(DeviceIntrfStartRx(hci.Data(), BT_HCI_USB_PACKET_SCO));
 
     const uint8_t first[] = { 0x01U,0x00U,0x02U,0x11U,0x22U };
@@ -698,13 +698,13 @@ static void TestScoAlternateLifecycle(void)
     ResetFake();
     BtHciUsb hci;
     CHECK(hci.Init(MakeCfg(true)));
-    CHECK(s_FuncCfg.ConfigHandler(1U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
     BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(hci);
     static const uint16_t mps[BT_HCI_USB_SCO_ALT_COUNT] = {9U,17U,25U,33U,49U,63U};
     for (uint8_t alt = 1U; alt <= BT_HCI_USB_SCO_ALT_COUNT; alt++)
     {
         const int before = s_OpenCount;
-        CHECK(s_FuncCfg.SetInterfaceHandler(1U, alt, s_FuncCfg.pContext));
+        CHECK(s_ClassCfg.SetInterfaceHandler(1U, alt, s_ClassCfg.pContext));
         CHECK(s_OpenCount == before + 2);
         CHECK(s_OpenDesc[before].bEndpointAddress == USB_ENDPADDR_DIRIN(8U));
         CHECK(s_OpenDesc[before + 1].bEndpointAddress == USB_ENDPADDR_DIROUT(8U));
@@ -712,19 +712,19 @@ static void TestScoAlternateLifecycle(void)
 
         const int sameAltOpen = s_OpenCount;
         const int sameAltClose = s_CloseCount;
-        CHECK(s_FuncCfg.SetInterfaceHandler(1U, alt, s_FuncCfg.pContext));
+        CHECK(s_ClassCfg.SetInterfaceHandler(1U, alt, s_ClassCfg.pContext));
         CHECK(s_OpenCount == sameAltOpen);
         CHECK(s_CloseCount == sameAltClose);
     }
-    CHECK(!s_FuncCfg.SetInterfaceHandler(1U, 7U, s_FuncCfg.pContext));
+    CHECK(!s_ClassCfg.SetInterfaceHandler(1U, 7U, s_ClassCfg.pContext));
 
     s_OpenFailAt = s_OpenCount;
-    CHECK(!s_FuncCfg.SetInterfaceHandler(1U, 5U, s_FuncCfg.pContext));
+    CHECK(!s_ClassCfg.SetInterfaceHandler(1U, 5U, s_ClassCfg.pContext));
     CHECK(pHci->ScoAlt == 6U);
     CHECK(pHci->ScoIso.Opened);
     CHECK(pHci->ScoIso.Mps == mps[5]);
 
-    CHECK(s_FuncCfg.SetInterfaceHandler(1U, 0U, s_FuncCfg.pContext));
+    CHECK(s_ClassCfg.SetInterfaceHandler(1U, 0U, s_ClassCfg.pContext));
     CHECK(pHci->ScoAlt == 0U);
 }
 
@@ -734,7 +734,7 @@ static void TestConfigurationFailure(void)
     BtHciUsb hci;
     CHECK(hci.Init(MakeCfg()));
     s_OpenFailAt = 1;
-    CHECK(!s_FuncCfg.ConfigHandler(1U, s_FuncCfg.pContext));
+    CHECK(!s_ClassCfg.ConfigHandler(1U, s_ClassCfg.pContext));
     CHECK(DeviceIntrfGetRate(hci.Data()) == 0U);
 }
 

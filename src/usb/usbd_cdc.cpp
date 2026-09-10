@@ -388,7 +388,7 @@ bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
 	pCdc->SerialStatePending = false;
 	UsbdCdcDefaultLineCoding(pCdc);
 
-	UsbFuncCfg_t coreCfg = {};
+	UsbdClassCfg_t coreCfg = {};
 	coreCfg.RequestHandler = UsbdCdcRequest;
 	coreCfg.ConfigHandler = UsbdCdcConfig;
 	coreCfg.SetInterfaceHandler = nullptr;

@@ -1480,7 +1480,7 @@ bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
 		return false;
 	}
 
-	UsbFuncCfg_t coreCfg = {};
+	UsbdClassCfg_t coreCfg = {};
 	coreCfg.RequestHandler = BtHciUsbRequest;
 	coreCfg.ConfigHandler = BtHciUsbConfig;
 	coreCfg.SetInterfaceHandler = BtHciUsbSetInterface;

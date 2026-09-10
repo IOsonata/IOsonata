@@ -3,7 +3,7 @@
 
 @brief	Generic USB layer.
 
-Identity, Chapter 9 and function dispatch in one place. usb_dev.cpp held the
+Identity, Chapter 9 and device class dispatch in one place. usb_dev.cpp held the
 application entry points and usbd_core.cpp held the protocol engine, which
 meant two init calls and two config structs carrying the same interrupt
 priority. UsbInit() is now one call.
@@ -56,7 +56,7 @@ static int s_UsbDevNo = 0;
 /// Bus power level at the previous UsbProcess pass, for edge reporting.
 static bool s_UsbVbusLast = false;
 
-#define USB_CORE_FUNC_MAXCNT		8
+#define USB_CORE_CLASS_MAXCNT		8
 #define USB_CORE_INTRF_MAXCNT		16
 
 /// Chapter 9 settings. Built by UsbInit from UsbCfg_t and usb_ctrlr.h, never
@@ -82,13 +82,13 @@ typedef enum __Usbd_Core_Ctrl_State {
 } UsbCoreCtrlState_t;
 
 static UsbCoreCfg_t s_CoreCfg;
-static UsbFuncCfg_t s_CoreFunc[USB_CORE_FUNC_MAXCNT];
-static int s_CoreFuncCnt;
-// Endpoint to function index, [0] OUT and [1] IN. Ownership masks are fixed
-// once a function registers and may not overlap. They route endpoint-recipient
+static UsbdClassCfg_t s_CoreClass[USB_CORE_CLASS_MAXCNT];
+static int s_CoreClassCnt;
+// Endpoint to class index, [0] OUT and [1] IN. Ownership masks are fixed once
+// a class registers and may not overlap. They route endpoint-recipient
 // requests; data endpoint events go directly to their registered callbacks.
-// Minus one means no function owns that endpoint.
-static int8_t s_CoreEpFunc[2][16];
+// Minus one means no class owns that endpoint.
+static int8_t s_CoreEpClass[2][16];
 
 static bool s_CoreInitialized;
 static bool s_CoreStarted;
@@ -105,7 +105,7 @@ static uint16_t s_HaltOut;
 
 static UsbCoreCtrlState_t s_CtrlState;
 static UsbSetupData_t s_Setup;
-static int s_ActiveFunc;
+static int s_ActiveClass;
 static uint8_t *s_CtrlData;
 static uint16_t s_CtrlDataLen;
 static uint16_t s_CtrlActual;
@@ -461,12 +461,12 @@ static bool UsbCoreEndpointExists(uint8_t EpAddr)
 	return false;
 }
 
-static int UsbCoreFindFunction(uint8_t InterfaceNo)
+static int UsbCoreFindClass(uint8_t InterfaceNo)
 {
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreClassCnt; i++)
 	{
-		const uint8_t first = s_CoreFunc[i].FirstInterface;
-		const uint8_t count = s_CoreFunc[i].InterfaceCount;
+		const uint8_t first = s_CoreClass[i].FirstInterface;
+		const uint8_t count = s_CoreClass[i].InterfaceCount;
 
 		if (count != 0 && InterfaceNo >= first &&
 			InterfaceNo < (uint8_t)(first + count))
@@ -478,7 +478,7 @@ static int UsbCoreFindFunction(uint8_t InterfaceNo)
 	return -1;
 }
 
-static int UsbCoreFindEndpointFunction(uint8_t EpAddr)
+static int UsbCoreFindEndpointClass(uint8_t EpAddr)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	if (epNum == 0)
@@ -491,13 +491,13 @@ static int UsbCoreFindEndpointFunction(uint8_t EpAddr)
 		return -1;
 	}
 
-	return s_CoreEpFunc[USB_ENDPADDR_IS_IN(EpAddr) ? 1 : 0][epNum];
+	return s_CoreEpClass[USB_ENDPADDR_IS_IN(EpAddr) ? 1 : 0][epNum];
 }
 
 static void UsbCoreResetControl(void)
 {
 	s_CtrlState = USB_CTRL_IDLE;
-	s_ActiveFunc = -1;
+	s_ActiveClass = -1;
 	s_CtrlData = nullptr;
 	s_CtrlDataLen = 0;
 	s_CtrlActual = 0;
@@ -507,7 +507,7 @@ static void UsbCoreResetControl(void)
 }
 
 static void UsbCoreAbortControl(void);
-static bool UsbCoreHandleFunctionRequest(void);
+static bool UsbCoreHandleClassRequest(void);
 
 static void UsbCoreStallControl(void)
 {
@@ -518,13 +518,13 @@ static void UsbCoreStallControl(void)
 static bool UsbCoreInvokeActive(UsbCtrlStage_t Stage,
 								 uint16_t Length)
 {
-	if (s_ActiveFunc < 0 || s_ActiveFunc >= s_CoreFuncCnt)
+	if (s_ActiveClass < 0 || s_ActiveClass >= s_CoreClassCnt)
 	{
 		return true;
 	}
 
-	UsbRequestHandler_t handler =
-		s_CoreFunc[s_ActiveFunc].RequestHandler;
+	UsbdClassRequestHandler_t handler =
+		s_CoreClass[s_ActiveClass].RequestHandler;
 
 	if (handler == nullptr)
 	{
@@ -535,12 +535,12 @@ static bool UsbCoreInvokeActive(UsbCtrlStage_t Stage,
 	uint16_t len = Length;
 
 	return handler(&s_Setup, Stage, &pData, &len,
-				   s_CoreFunc[s_ActiveFunc].pContext);
+				   s_CoreClass[s_ActiveClass].pContext);
 }
 
 static void UsbCoreAbortControl(void)
 {
-	if (s_ActiveFunc >= 0 && s_ActiveFunc < s_CoreFuncCnt)
+	if (s_ActiveClass >= 0 && s_ActiveClass < s_CoreClassCnt)
 	{
 		(void)UsbCoreInvokeActive(USB_CTRL_ABORT, s_CtrlActual);
 	}
@@ -655,9 +655,9 @@ static void UsbCoreClearEndpointState(void)
 
 static bool UsbCoreWantSof(void)
 {
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreClassCnt; i++)
 	{
-		if (s_CoreFunc[i].SofHandler != nullptr)
+		if (s_CoreClass[i].SofHandler != nullptr)
 		{
 			return true;
 		}
@@ -666,7 +666,7 @@ static bool UsbCoreWantSof(void)
 	return false;
 }
 
-static void UsbCoreUnconfigureFunctions(void)
+static void UsbCoreUnconfigureClasses(void)
 {
 	if (s_Configuration == 0)
 	{
@@ -675,12 +675,12 @@ static void UsbCoreUnconfigureFunctions(void)
 
 	UsbCtrlrSofEnable(s_UsbDevNo, false);
 
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreClassCnt; i++)
 	{
-		if (s_CoreFunc[i].ConfigHandler != nullptr)
+		if (s_CoreClass[i].ConfigHandler != nullptr)
 		{
-			(void)s_CoreFunc[i].ConfigHandler(0,
-									   s_CoreFunc[i].pContext);
+			(void)s_CoreClass[i].ConfigHandler(0,
+									   s_CoreClass[i].pContext);
 		}
 	}
 }
@@ -699,7 +699,7 @@ static bool UsbCoreApplyConfiguration(uint8_t Configuration)
 		}
 	}
 
-	UsbCoreUnconfigureFunctions();
+	UsbCoreUnconfigureClasses();
 	UsbCtrlrEpCloseAll(s_UsbDevNo);
 	s_Configuration = 0;
 	s_NumInterfaces = 0;
@@ -710,18 +710,18 @@ static bool UsbCoreApplyConfiguration(uint8_t Configuration)
 		return true;
 	}
 
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreClassCnt; i++)
 	{
-		if (s_CoreFunc[i].ConfigHandler != nullptr &&
-			!s_CoreFunc[i].ConfigHandler(Configuration,
-									  s_CoreFunc[i].pContext))
+		if (s_CoreClass[i].ConfigHandler != nullptr &&
+			!s_CoreClass[i].ConfigHandler(Configuration,
+									  s_CoreClass[i].pContext))
 		{
 			for (int n = 0; n <= i; n++)
 			{
-				if (s_CoreFunc[n].ConfigHandler != nullptr)
+				if (s_CoreClass[n].ConfigHandler != nullptr)
 				{
-					(void)s_CoreFunc[n].ConfigHandler(0,
-										   s_CoreFunc[n].pContext);
+					(void)s_CoreClass[n].ConfigHandler(0,
+										   s_CoreClass[n].pContext);
 				}
 			}
 			UsbCtrlrEpCloseAll(s_UsbDevNo);
@@ -966,15 +966,15 @@ static bool UsbCoreHandleSetInterface(void)
 		return false;
 	}
 
-	const int func = UsbCoreFindFunction(interfaceNo);
-	if (func < 0 || s_CoreFunc[func].SetInterfaceHandler == nullptr)
+	const int cls = UsbCoreFindClass(interfaceNo);
+	if (cls < 0 || s_CoreClass[cls].SetInterfaceHandler == nullptr)
 	{
 		return false;
 	}
 
 	const uint8_t oldAlternate = s_Alternate[interfaceNo];
-	if (!s_CoreFunc[func].SetInterfaceHandler(interfaceNo, alternate,
-											 s_CoreFunc[func].pContext))
+	if (!s_CoreClass[cls].SetInterfaceHandler(interfaceNo, alternate,
+											 s_CoreClass[cls].pContext))
 	{
 		return false;
 	}
@@ -1016,7 +1016,7 @@ static bool UsbCoreHandleStandard(void)
 				return UsbCoreHandleGetDescriptor();
 			}
 			return UsbCoreRecipient(&s_Setup) == USB_REQTYPE_INTERFACE &&
-				UsbCoreHandleFunctionRequest();
+				UsbCoreHandleClassRequest();
 
 		case USB_REQ_GET_CONFIGURATION:
 			if (!UsbCoreDirIn(&s_Setup) ||
@@ -1043,9 +1043,9 @@ static bool UsbCoreHandleStandard(void)
 	}
 }
 
-static bool UsbCoreCallFunctionSetup(int Index)
+static bool UsbCoreCallClassSetup(int Index)
 {
-	UsbRequestHandler_t handler = s_CoreFunc[Index].RequestHandler;
+	UsbdClassRequestHandler_t handler = s_CoreClass[Index].RequestHandler;
 	if (handler == nullptr)
 	{
 		return false;
@@ -1055,12 +1055,12 @@ static bool UsbCoreCallFunctionSetup(int Index)
 	uint16_t len = 0;
 
 	if (!handler(&s_Setup, USB_CTRL_SETUP, &pData, &len,
-				 s_CoreFunc[Index].pContext))
+				 s_CoreClass[Index].pContext))
 	{
 		return false;
 	}
 
-	s_ActiveFunc = Index;
+	s_ActiveClass = Index;
 
 	if (s_Setup.wLength == 0)
 	{
@@ -1078,7 +1078,7 @@ static bool UsbCoreCallFunctionSetup(int Index)
 	return UsbCoreStartOut(pData, len);
 }
 
-static bool UsbCoreHandleFunctionRequest(void)
+static bool UsbCoreHandleClassRequest(void)
 {
 	const uint8_t recipient = UsbCoreRecipient(&s_Setup);
 
@@ -1096,8 +1096,8 @@ static bool UsbCoreHandleFunctionRequest(void)
 			return false;
 		}
 
-		const int func = UsbCoreFindFunction(interfaceNo);
-		return func >= 0 && UsbCoreCallFunctionSetup(func);
+		const int cls = UsbCoreFindClass(interfaceNo);
+		return cls >= 0 && UsbCoreCallClassSetup(cls);
 	}
 
 	if (recipient == USB_REQTYPE_ENDPOINT)
@@ -1114,13 +1114,13 @@ static bool UsbCoreHandleFunctionRequest(void)
 			return false;
 		}
 
-		const int func = UsbCoreFindEndpointFunction(epAddr);
-		return func >= 0 && UsbCoreCallFunctionSetup(func);
+		const int cls = UsbCoreFindEndpointClass(epAddr);
+		return cls >= 0 && UsbCoreCallClassSetup(cls);
 	}
 
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreClassCnt; i++)
 	{
-		if (UsbCoreCallFunctionSetup(i))
+		if (UsbCoreCallClassSetup(i))
 		{
 			return true;
 		}
@@ -1148,7 +1148,7 @@ static void UsbCoreHandleSetup(const UsbSetupData_t *pSetup)
 	}
 	else if (type == USB_REQTYPE_CLASS || type == USB_REQTYPE_VEND)
 	{
-		handled = UsbCoreHandleFunctionRequest();
+		handled = UsbCoreHandleClassRequest();
 	}
 
 	if (!handled)
@@ -1222,22 +1222,22 @@ static void UsbCoreHandleCtrlXfer(const UsbCtrlrXferEvt_t *pXfer)
 
 static void UsbCoreNotifyReset(void)
 {
-	UsbCoreUnconfigureFunctions();
+	UsbCoreUnconfigureClasses();
 
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreClassCnt; i++)
 	{
-		if (s_CoreFunc[i].ResetHandler != nullptr)
+		if (s_CoreClass[i].ResetHandler != nullptr)
 		{
-			s_CoreFunc[i].ResetHandler(s_CoreFunc[i].pContext);
+			s_CoreClass[i].ResetHandler(s_CoreClass[i].pContext);
 		}
 	}
 }
 
-static void UsbCoreResetDeviceState(bool NotifyFunctions)
+static void UsbCoreResetDeviceState(bool NotifyClasses)
 {
 	UsbCoreAbortControl();
 
-	if (NotifyFunctions)
+	if (NotifyClasses)
 	{
 		UsbCoreNotifyReset();
 	}
@@ -1288,12 +1288,12 @@ static void UsbCoreCtrlrEvent(int, const UsbCtrlrEvt_t *pEvt, void *)
 		case USB_CTRLR_EVT_SOF:
 			if (s_Configuration != 0)
 			{
-				for (int i = 0; i < s_CoreFuncCnt; i++)
+				for (int i = 0; i < s_CoreClassCnt; i++)
 				{
-					if (s_CoreFunc[i].SofHandler != nullptr)
+					if (s_CoreClass[i].SofHandler != nullptr)
 					{
-						s_CoreFunc[i].SofHandler(pEvt->FrameNo,
-												 s_CoreFunc[i].pContext);
+						s_CoreClass[i].SofHandler(pEvt->FrameNo,
+												 s_CoreClass[i].pContext);
 					}
 				}
 			}
@@ -1321,11 +1321,11 @@ static bool UsbCoreInit(const UsbCoreCfg_t *pCfg)
 		return false;
 	}
 
-	memset(s_CoreFunc, 0, sizeof(s_CoreFunc));
-	// Minus one is no owner. Zero would claim function zero owns every
+	memset(s_CoreClass, 0, sizeof(s_CoreClass));
+	// Minus one is no owner. Zero would claim class zero owns every
 	// endpoint, so this cannot be left to static initialization.
-	memset(s_CoreEpFunc, -1, sizeof(s_CoreEpFunc));
-	s_CoreFuncCnt = 0;
+	memset(s_CoreEpClass, -1, sizeof(s_CoreEpClass));
+	s_CoreClassCnt = 0;
 	s_CoreInitialized = false;
 	s_CoreStarted = false;
 	UsbCoreResetDeviceState(false);
@@ -1334,10 +1334,10 @@ static bool UsbCoreInit(const UsbCoreCfg_t *pCfg)
 	return true;
 }
 
-static bool UsbCoreRegisterFunction(const UsbFuncCfg_t *pCfg)
+static bool UsbCoreRegisterClass(const UsbdClassCfg_t *pCfg)
 {
 	if (!s_CoreInitialized || pCfg == nullptr || s_CoreStarted ||
-		s_CoreFuncCnt >= USB_CORE_FUNC_MAXCNT)
+		s_CoreClassCnt >= USB_CORE_CLASS_MAXCNT)
 	{
 		return false;
 	}
@@ -1356,14 +1356,14 @@ static bool UsbCoreRegisterFunction(const UsbFuncCfg_t *pCfg)
 			return false;
 		}
 
-		for (int i = 0; i < s_CoreFuncCnt; i++)
+		for (int i = 0; i < s_CoreClassCnt; i++)
 		{
 			const uint16_t firstA = pCfg->FirstInterface;
 			const uint16_t lastA = last;
-			const uint16_t firstB = s_CoreFunc[i].FirstInterface;
-			const uint16_t lastB = firstB + s_CoreFunc[i].InterfaceCount;
+			const uint16_t firstB = s_CoreClass[i].FirstInterface;
+			const uint16_t lastB = firstB + s_CoreClass[i].InterfaceCount;
 
-			if (s_CoreFunc[i].InterfaceCount != 0 &&
+			if (s_CoreClass[i].InterfaceCount != 0 &&
 				firstA < lastB && firstB < lastA)
 			{
 				return false;
@@ -1371,16 +1371,16 @@ static bool UsbCoreRegisterFunction(const UsbFuncCfg_t *pCfg)
 		}
 	}
 
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreClassCnt; i++)
 	{
-		if ((pCfg->EpInMask & s_CoreFunc[i].EpInMask) != 0 ||
-			(pCfg->EpOutMask & s_CoreFunc[i].EpOutMask) != 0)
+		if ((pCfg->EpInMask & s_CoreClass[i].EpInMask) != 0 ||
+			(pCfg->EpOutMask & s_CoreClass[i].EpOutMask) != 0)
 		{
 			return false;
 		}
 	}
 
-	memcpy(&s_CoreFunc[s_CoreFuncCnt], pCfg, sizeof(*pCfg));
+	memcpy(&s_CoreClass[s_CoreClassCnt], pCfg, sizeof(*pCfg));
 
 	for (int ep = 1; ep < 16; ep++)
 	{
@@ -1388,15 +1388,15 @@ static bool UsbCoreRegisterFunction(const UsbFuncCfg_t *pCfg)
 
 		if ((pCfg->EpInMask & bit) != 0)
 		{
-			s_CoreEpFunc[1][ep] = (int8_t)s_CoreFuncCnt;
+			s_CoreEpClass[1][ep] = (int8_t)s_CoreClassCnt;
 		}
 		if ((pCfg->EpOutMask & bit) != 0)
 		{
-			s_CoreEpFunc[0][ep] = (int8_t)s_CoreFuncCnt;
+			s_CoreEpClass[0][ep] = (int8_t)s_CoreClassCnt;
 		}
 	}
 
-	s_CoreFuncCnt++;
+	s_CoreClassCnt++;
 	return true;
 }
 
@@ -1657,11 +1657,11 @@ static void UsbDevProcess(void)
 		}
 	}
 
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreClassCnt; i++)
 	{
-		if (s_CoreFunc[i].ProcessHandler != nullptr)
+		if (s_CoreClass[i].ProcessHandler != nullptr)
 		{
-			s_CoreFunc[i].ProcessHandler(s_CoreFunc[i].pContext);
+			s_CoreClass[i].ProcessHandler(s_CoreClass[i].pContext);
 		}
 	}
 }
@@ -1712,9 +1712,9 @@ bool UsbInit(const UsbCfg_t *pCfg)
 	return UsbDevInit(pCfg);
 }
 
-bool UsbRegisterFunc(int DevNo, const UsbFuncCfg_t *pCfg)
+bool UsbdClassRegister(int DevNo, const UsbdClassCfg_t *pCfg)
 {
-	return DevNo == s_UsbDevNo && UsbCoreRegisterFunction(pCfg);
+	return DevNo == s_UsbDevNo && UsbCoreRegisterClass(pCfg);
 }
 
 bool UsbEnable(int DevNo)

@@ -3,11 +3,11 @@
 
 @brief	Generic USB layer.
 
-One master init for a USB controller, then the class or function inits, the
+One master init for a USB controller, then the device class inits, the
 same shape as BtAppInit followed by service registration.
 
 	UsbInit(&cfg);			// controller, protocol engine, identity
-	UsbCdcInit(&cdc, &cdccfg);	// one call per function
+	UsbCdcInit(&cdc, &cdccfg);	// one call per class instance
 	UsbEnable();			// connect to the bus
 
 Everything below this header that does not change from one target to the next
@@ -95,9 +95,9 @@ typedef enum __Usb_Evt {
 typedef void (*UsbEvtHandler_t)(int DevNo, UsbEvt_t Evt);
 
 //
-// Function layer. One registration per class or vendor function.
+// Device class layer. One registration per class instance.
 // Non-control endpoint events go directly from the controller to the endpoint
-// callback registered with UsbCtrlrEpRegister; they are not function events.
+// callback registered with UsbCtrlrEpRegister; they are not class events.
 //
 
 /// Control transfer stage a request handler is being called for.
@@ -112,37 +112,38 @@ typedef const uint8_t *(*UsbDescHandler_t)(uint8_t DescType, uint8_t DescIndex,
 										   uint16_t LangId, UsbSpeed_t Speed,
 										   uint16_t *pLength, void *pContext);
 
-typedef bool (*UsbRequestHandler_t)(const UsbSetupData_t *pSetup,
+typedef bool (*UsbdClassRequestHandler_t)(const UsbSetupData_t *pSetup,
 									UsbCtrlStage_t Stage, uint8_t **ppData,
 									uint16_t *pLength, void *pContext);
 
-typedef bool (*UsbConfigHandler_t)(uint8_t Configuration, void *pContext);
-typedef bool (*UsbSetInterfaceHandler_t)(uint8_t InterfaceNo, uint8_t Alt,
+typedef bool (*UsbdClassConfigHandler_t)(uint8_t Configuration, void *pContext);
+typedef bool (*UsbdClassSetInterfaceHandler_t)(uint8_t InterfaceNo, uint8_t Alt,
 										 void *pContext);
-typedef void (*UsbResetHandler_t)(void *pContext);
-typedef void (*UsbSofHandler_t)(uint16_t FrameNo, void *pContext);
+typedef void (*UsbdClassResetHandler_t)(void *pContext);
+typedef void (*UsbdClassSofHandler_t)(uint16_t FrameNo, void *pContext);
 
-/// Polled from UsbProcess in application context. Work a function cannot do
+/// Polled from UsbProcess in application context. Work a class cannot do
 /// inside the USB interrupt goes here.
-typedef void (*UsbProcessHandler_t)(void *pContext);
+typedef void (*UsbdClassProcessHandler_t)(void *pContext);
 
 #pragma pack(push, 4)
 
-/// One USB function. Endpoint zero belongs to the generic layer, so bit zero
-/// must be clear in both masks, and masks may not overlap between functions.
-typedef struct __Usb_Func_Config {
-	uint8_t FirstInterface;			//!< First interface owned by function
+/// One device class instance. Endpoint zero belongs to the generic layer, so
+/// bit zero must be clear in both masks, and masks may not overlap between
+/// class instances.
+typedef struct __Usbd_Class_Config {
+	uint8_t FirstInterface;			//!< First interface owned by class instance
 	uint8_t InterfaceCount;			//!< Number of interfaces, zero for none
 	uint16_t EpInMask;				//!< IN endpoint ownership, bit n = endpoint n
 	uint16_t EpOutMask;				//!< OUT endpoint ownership, bit n = endpoint n
-	UsbRequestHandler_t RequestHandler;
-	UsbConfigHandler_t ConfigHandler;
-	UsbSetInterfaceHandler_t SetInterfaceHandler;
-	UsbResetHandler_t ResetHandler;
-	UsbSofHandler_t SofHandler;		//!< Optional, NULL when not needed
-	UsbProcessHandler_t ProcessHandler;	//!< Optional, polled from UsbProcess
+	UsbdClassRequestHandler_t RequestHandler;
+	UsbdClassConfigHandler_t ConfigHandler;
+	UsbdClassSetInterfaceHandler_t SetInterfaceHandler;
+	UsbdClassResetHandler_t ResetHandler;
+	UsbdClassSofHandler_t SofHandler;		//!< Optional, NULL when not needed
+	UsbdClassProcessHandler_t ProcessHandler;	//!< Optional, polled from UsbProcess
 	void *pContext;
-} UsbFuncCfg_t;
+} UsbdClassCfg_t;
 
 /// Everything UsbInit needs. Endpoint zero packet size and maximum speed are
 /// not here, they come from usb_ctrlr.h for this DevNo.
@@ -182,19 +183,19 @@ extern "C" {
  * @brief	Bring up one USB controller and its protocol engine.
  *
  * Records the identity, initializes the controller software state and the
- * hardware power and clock path, and leaves the bus alone. Functions are
+ * hardware power and clock path, and leaves the bus alone. Device classes are
  * registered after this and before UsbEnable. Fails when DevNo is not a
  * controller this target has.
  */
 bool UsbInit(const UsbCfg_t *pCfg);
 
 /**
- * @brief	Register one USB function.
+ * @brief	Register one USB device class instance.
  *
  * Registration is static and expected to be complete before the device is
  * connected to the bus.
  */
-bool UsbRegisterFunc(int DevNo, const UsbFuncCfg_t *pCfg);
+bool UsbdClassRegister(int DevNo, const UsbdClassCfg_t *pCfg);
 
 /** @brief Enable the controller interrupt and connect the bus pull-up. */
 bool UsbEnable(int DevNo);
