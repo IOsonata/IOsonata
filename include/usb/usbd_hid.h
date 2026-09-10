@@ -153,13 +153,17 @@ static inline bool UsbdHidTxReady(const UsbdHidDev_t *pHid)
 #ifdef __cplusplus
 }
 
-class UsbdHid : public DeviceIntrf {
+class UsbdHid : public UsbDeviceClass, public DeviceIntrf {
 public:
 	UsbdHid() = default;
 	UsbdHid(const UsbdHid &) = delete;
 	UsbdHid &operator = (const UsbdHid &) = delete;
 
-	bool Init(const UsbdHidCfg_t &Cfg) { return UsbdHidInit(&vUsbdHid, &Cfg); }
+	bool Init(const UsbdHidCfg_t &Cfg);
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+				 uint8_t **ppData, uint16_t *pLength) override;
+	bool SelectConfig(uint8_t ConfigValue) override;
+	void Reset(void) override;
 
 	operator DevIntrf_t * () override {
 		return &vUsbdHid.IntIntrf.IntrfData.DevIntrf;
