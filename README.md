@@ -409,7 +409,7 @@ Generic reusable examples are under [`exemples/`](exemples/). Buildable MCU proj
 
 See [Getting Started](docs/getting-started.md), the
 [Quick Reference](docs/quick-reference.md) and the
-[USB Device Guide](docs/usb.md) for additional workflows.
+[USB User Guide](docs/usb-user-guide.md) for additional workflows.
 
 ---
 

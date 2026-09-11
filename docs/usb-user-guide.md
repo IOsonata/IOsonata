@@ -1,4 +1,4 @@
-# USB Device Guide
+# USB User Guide
 
 IOsonata provides a composable USB device stack for the nRF52840 native USB
 controller. Applications select device classes and provide static storage;

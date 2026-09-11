@@ -215,7 +215,7 @@ USB applications call `UsbInit()`, initialize every class object, call
 only after the registered classes have produced a valid configuration
 descriptor.
 
-Use the [USB Device Guide](usb.md) for class selection, complete example paths,
+Use the [USB User Guide](usb-user-guide.md) for class selection, complete example paths,
 host dependencies, Mass Storage safety and hardware-test commands.
 
 ## Using an RTOS
@@ -261,7 +261,7 @@ Run the MCU-library builder again, clean the application and relink it.
 
 - [Documentation index](README.md)
 - [Quick Reference](quick-reference.md)
-- [USB Device Guide](usb.md)
+- [USB User Guide](usb-user-guide.md)
 - [Architecture overview](architecture/README.md)
 - [IOcomposer workflow](architecture/iocomposer-workflow.md)
 - [Dependencies](dependencies.md)

@@ -18,7 +18,7 @@ The book remains useful for the object-design model and historical background, b
 1. [Project README](../README.md) — project scope, precompiled-library model, benchmarks and hardware references.
 2. [Getting Started](getting-started.md) — install IOcomposer, build an MCU library, open an example, flash and debug.
 3. [Quick Reference](quick-reference.md) — commands, project actions and common configuration examples.
-4. [USB Device Guide](usb.md) — build, configure and test the supported USB device functions.
+4. [USB User Guide](usb-user-guide.md) — build, configure and test the supported USB device functions.
 5. [FAQ](FAQ.md) — concise answers about the architecture, target projects and build model.
 6. [Supported Targets](supported-targets.md) — current hardware-validation baselines and target-status rules.
 7. [Dependencies](dependencies.md) — tool, SDK and optional-library boundaries.
@@ -55,7 +55,7 @@ Documents behavioural inheritance, shared virtual `Device` state, multi-function
 
 Documents the USB core, `UsbIntrf`, class/function allocation, FIFO and DMA ownership, endpoint lifecycle, and controller-port boundary.
 
-### [USB Device Guide](usb.md)
+### [USB User Guide](usb-user-guide.md)
 
 Shows how to build, configure and test CDC ACM, custom Bulk, HID, Mass Storage,
 Interrupt and Isochronous examples. It includes the common initialization

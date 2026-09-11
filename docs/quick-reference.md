@@ -214,7 +214,7 @@ Supported probes depend on the target configuration and can include IDAP-Link, J
 | Motion/environment sensors | `MotionSensorDemo`, `TPHDemo` |
 
 USB device examples currently target the nRF52840 native USB controller. See
-the [USB Device Guide](usb.md) for initialization, host dependencies and test
+the [USB User Guide](usb-user-guide.md) for initialization, host dependencies and test
 commands.
 
 ## Change board, MCU or RTOS

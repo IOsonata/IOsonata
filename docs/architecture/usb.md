@@ -297,7 +297,7 @@ There is no separate RX arm or re-arm API.
 it and owns the device-side HID descriptor, class requests and report policy.
 
 The nRF52840 `UsbIntLoopback` project exercises this transport without adding
-class semantics. See the [USB Device Guide](../usb.md) for its build and host
+class semantics. See the [USB User Guide](../usb-user-guide.md) for its build and host
 test procedure.
 
 ## HID

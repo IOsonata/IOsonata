@@ -140,6 +140,6 @@ See [IOcomposer workflow](iocomposer-workflow.md).
 - [Device inheritance and polymorphic composition](device-composition.md)
 - [USB architecture](usb.md)
 - [Getting started](../getting-started.md)
-- [USB device guide](../usb.md)
+- [USB user guide](../usb-user-guide.md)
 - [Quick reference](../quick-reference.md)
 - [Supported targets](../supported-targets.md)
