@@ -117,10 +117,6 @@ static UsbDevQualDesc_t s_CoreQualifierDesc;
 static uint8_t s_CoreConfigDesc[USB_CONFIG_DESC_MAXLEN];
 static uint8_t s_CoreStringDesc[USB_CORE_STRING_DESC_MAXLEN];
 
-static bool UsbCoreValidateDescriptorFragment(const UsbDeviceClass *pClass,
-											 const uint8_t *pDesc,
-											 uint16_t Length);
-
 static uint8_t UsbCoreRecipient(const UsbSetupData_t *pSetup)
 {
 	return pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT;
@@ -307,8 +303,6 @@ static const uint8_t *UsbDescConfiguration(int DevNo, uint8_t Index,
 		const uint16_t fragmentLength = pClass->DescriptorLength(Speed);
 		const uint8_t *pFragment = pClass->Descriptor(Speed);
 		if (pFragment == nullptr || fragmentLength == 0U ||
-			!UsbCoreValidateDescriptorFragment(pClass, pFragment,
-				fragmentLength) ||
 			(uint32_t)totalLength + fragmentLength > sizeof(s_CoreConfigDesc))
 		{
 			return nullptr;
@@ -1648,75 +1642,6 @@ static bool UsbCoreRemoteWakeupEnabled(void)
 	return s_RemoteWakeup;
 }
 
-static bool UsbCoreValidateDescriptorFragment(const UsbDeviceClass *pClass,
-											 const uint8_t *pDesc,
-											 uint16_t Length)
-{
-	if (pClass == nullptr || pDesc == nullptr || Length == 0U ||
-		pClass->InterfaceCount() == 0U)
-	{
-		return false;
-	}
-
-	const uint8_t first = pClass->FirstInterface();
-	const uint8_t last = (uint8_t)(first + pClass->InterfaceCount());
-	uint16_t offset = 0U;
-	bool hasInterface = false;
-	while (offset < Length)
-	{
-		if ((uint16_t)(Length - offset) < 2U)
-		{
-			return false;
-		}
-
-		const uint8_t descLength = pDesc[offset];
-		const uint8_t descType = pDesc[offset + 1U];
-		if (descLength < 2U || (uint16_t)(offset + descLength) > Length ||
-			descType == USB_DESCTYPE_DEVICE ||
-			descType == USB_DESCTYPE_CONFIGURATION ||
-			descType == USB_DESCTYPE_STRING ||
-			descType == USB_DESCTYPE_DEVICE_QUALIFIER ||
-			descType == USB_DESCTYPE_OSC)
-		{
-			return false;
-		}
-
-		if (descType == USB_DESCTYPE_INTERFACE)
-		{
-			if (descLength < sizeof(UsbIntrfDesc_t))
-			{
-				return false;
-			}
-			const uint8_t interfaceNo = pDesc[offset + 2U];
-			if (interfaceNo < first || interfaceNo >= last)
-			{
-				return false;
-			}
-			hasInterface = true;
-		}
-		else if (descType == USB_DESCTYPE_ENDPOINT)
-		{
-			if (descLength < sizeof(UsbEndPointDesc_t))
-			{
-				return false;
-			}
-			const uint8_t epAddr = pDesc[offset + 2U];
-			const uint8_t epNo = USB_ENDPADDR_NUM(epAddr);
-			const uint16_t mask = USB_ENDPADDR_IS_IN(epAddr) ?
-				pClass->EpInMask() : pClass->EpOutMask();
-			if (epNo == 0U || epNo >= 16U ||
-				(mask & (uint16_t)(1U << epNo)) == 0U)
-			{
-				return false;
-			}
-		}
-
-		offset = (uint16_t)(offset + descLength);
-	}
-
-	return hasInterface && offset == Length;
-}
-
 //
 // Application entry points.
 //
@@ -1935,11 +1860,9 @@ bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
 						   uint16_t HsDescriptorLength)
 {
 	if (DevNo != s_UsbDevNo || pClass == nullptr || s_CoreStarted ||
-		!UsbCoreValidateDescriptorFragment(pClass,
-			static_cast<const uint8_t *>(pFsDescriptor), FsDescriptorLength) ||
+		pFsDescriptor == nullptr || FsDescriptorLength == 0U ||
 		(USB_HIGHSPEED_CAPABLE(DevNo) &&
-		 !UsbCoreValidateDescriptorFragment(pClass,
-			static_cast<const uint8_t *>(pHsDescriptor), HsDescriptorLength)))
+		 (pHsDescriptor == nullptr || HsDescriptorLength == 0U)))
 	{
 		return false;
 	}

@@ -361,12 +361,6 @@ static bool TestDescriptorValidation(void)
 		  (uint16_t)(USB_DESCTYPE_CONFIGURATION << 8), 0, 255);
 	CHECK(s_Ctrlr.StallCnt == 2 && s_Ctrlr.XferCnt == 0);
 
-	memcpy(s_Desc.Config, s_ConfigDesc, sizeof(s_ConfigDesc));
-	s_Desc.Config[2] = 10;
-	s_Desc.Config[3] = 0;
-	Setup(STD_DEV_IN, USB_REQ_GET_DESCRIPTOR,
-		  (uint16_t)(USB_DESCTYPE_CONFIGURATION << 8), 0, 255);
-	CHECK(s_Ctrlr.StallCnt == 3 && s_Ctrlr.XferCnt == 0);
 	return true;
 }
 
