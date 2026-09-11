@@ -202,12 +202,20 @@ Supported probes depend on the target configuration and can include IDAP-Link, J
 | UART throughput | `UartPrbsTxTest` / `exemples/uart/uart_prbs_tx.cpp` |
 | I2C master | `I2CMasterDemo` / `exemples/i2c/i2c_master_demo.cpp` |
 | SPI master | `SPIMasterDemo` / `exemples/spi/spi_master_demo.cpp` |
+| USB CDC ACM | `UsbCdcLoopback` / `exemples/usb/usb_cdc_loopback.cpp` |
+| USB custom Bulk | `UsbCustomBulkLoopback` / `exemples/usb/usb_custom_bulk_loopback.cpp` |
+| USB HID | `UsbHidLoopback` / `exemples/usb/usb_hid_loopback.cpp` |
+| USB Mass Storage | `UsbMscRamDisk` / `exemples/usb/usb_msc_ramdisk.cpp` |
 | Bluetooth advertising | `BleAdvertiser` |
 | UART over Bluetooth | `UartBleDemo` |
 | FreeRTOS integration | `UartBleFreeRTOS`, `UartPrbsTxTestFreeRTOS` |
 | TaktOS integration | `UartBleTaktOS`, `UartPrbsTxTestTaktOS` |
 | NVM/storage | projects using `exemples/storage/` |
 | Motion/environment sensors | `MotionSensorDemo`, `TPHDemo` |
+
+USB device examples currently target the nRF52840 native USB controller. See
+the [USB Device Guide](usb.md) for initialization, host dependencies and test
+commands.
 
 ## Change board, MCU or RTOS
 

@@ -18,9 +18,10 @@ The book remains useful for the object-design model and historical background, b
 1. [Project README](../README.md) — project scope, precompiled-library model, benchmarks and hardware references.
 2. [Getting Started](getting-started.md) — install IOcomposer, build an MCU library, open an example, flash and debug.
 3. [Quick Reference](quick-reference.md) — commands, project actions and common configuration examples.
-4. [FAQ](FAQ.md) — concise answers about the architecture, target projects and build model.
-5. [Supported Targets](supported-targets.md) — current hardware-validation baselines and target-status rules.
-6. [Dependencies](dependencies.md) — tool, SDK and optional-library boundaries.
+4. [USB Device Guide](usb.md) — build, configure and test the supported USB device functions.
+5. [FAQ](FAQ.md) — concise answers about the architecture, target projects and build model.
+6. [Supported Targets](supported-targets.md) — current hardware-validation baselines and target-status rules.
+7. [Dependencies](dependencies.md) — tool, SDK and optional-library boundaries.
 
 ## Architecture
 
@@ -54,25 +55,12 @@ Documents behavioural inheritance, shared virtual `Device` state, multi-function
 
 Documents the USB core, `UsbIntrf`, class/function allocation, FIFO and DMA ownership, endpoint lifecycle, and controller-port boundary.
 
-### [Custom bulk interface](usb-custom-bulk.md)
+### [USB Device Guide](usb.md)
 
-Shows how to build a customer-defined USB bulk interface with `UsbdBulk`, including static FIFO setup, descriptor composition, byte and packet modes, and the PyUSB loopback test. The application names its function and protocol while interface and endpoint placement remain internal.
-
-### [USB HID](usb-hid.md)
-
-Shows how `UsbdHid` layers HID descriptors and class requests over `UsbIntIntrf`, with an application-supplied report descriptor and a native HID-driver loopback test.
-
-### [USB Mass Storage](usb-msc.md)
-
-Shows how `UsbdMsc` layers Bulk-Only Transport and SCSI policy over packet-mode
-`UsbIntrf`, with a caller-owned `DiskIO`, bounded sector storage and a static
-RAM-disk hardware example.
-
-### [USB HID demos](usb-hid-demos.md)
-
-Builds a boot keyboard from an nRF52840 DK button and a six-axis HID controller
-from the Bosch BMI323 application board without adding report semantics to
-`UsbdHid`.
+Shows how to build, configure and test CDC ACM, custom Bulk, HID, Mass Storage,
+Interrupt and Isochronous examples. It includes the common initialization
+lifecycle, static-storage rules, host-runner commands, reconnect behavior and
+troubleshooting.
 
 ## Source references
 

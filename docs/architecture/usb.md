@@ -72,7 +72,8 @@ UsbClass
 ```
 
 `UsbClass` provides `Reset()` and `Process()`. `UsbDeviceClass` adds `Control()`,
-`SelectConfig()` and `SelectInterface()`. Host
+`SelectConfig()`, `SelectInterface()` and `Detach()`. `Detach()` lets a class
+distinguish physical VBUS removal from a bus reset or unconfiguration. Host
 matching, attach and detach behavior belongs to `UsbHostClass`. The
 role-neutral `UsbIntrf` data path remains separate so a concrete CDC, HID or
 vendor class can combine class control with the same RX/TX interface
@@ -295,12 +296,9 @@ There is no separate RX arm or re-arm API.
 `UsbIntIntrf` contains no HID report or descriptor behavior. `UsbdHid` embeds
 it and owns the device-side HID descriptor, class requests and report policy.
 
-The nRF52840 `UsbIntLoopback` project and
-[`Python/usb_int_loopback.py`](../../Python/usb_int_loopback.py) exercise the
-transport on hardware without adding class semantics. The test selects three
-interrupt intervals, checks alternate-setting close/open behavior, transfers
-zero- through maximum-length packets in both directions, forces and recovers
-from a busy TX slot, and offers a manual suspend/wake phase.
+The nRF52840 `UsbIntLoopback` project exercises this transport without adding
+class semantics. See the [USB Device Guide](../usb.md) for its build and host
+test procedure.
 
 ## HID
 
@@ -567,9 +565,14 @@ Internally:
 4. `UsbIntrfInit()` registers the endpoint buffers and callback.
 5. Each class builds and registers its static full/high-speed configuration
    descriptor fragments with the generic layer.
-6. Configuration or alternate-setting selection opens the endpoint descriptors.
-7. Transfers use `UsbCtrlrEpXfer()`.
-8. Reset/unconfiguration closes endpoints and clears active transport state.
+6. `UsbEnable()` assembles and validates the complete configuration descriptor
+   before it connects the controller.
+7. Configuration or alternate-setting selection opens the endpoint descriptors.
+8. Transfers use `UsbCtrlrEpXfer()`.
+9. Reset/unconfiguration closes endpoints and clears active transport state.
+10. VBUS removal calls each device class `Detach()` before the application
+    cable event. This permits physical-removal policy, such as reloading a
+    removable MSC medium, without applying it to every bus reset.
 
 This lifecycle describes the current device stack only. Future host enumeration
 and interface selection belong in `usbh_*` and must not change the reusable

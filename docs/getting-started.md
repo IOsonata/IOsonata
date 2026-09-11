@@ -176,7 +176,8 @@ exemples/
 ├── spi/
 ├── storage/
 ├── bluetooth/
-└── sensor/
+├── sensor/
+└── usb/
 ```
 
 Each supported MCU normally has target projects that reference the shared source and provide target-specific build and board configuration. Current migrated projects use an `ioc/` directory below the example, such as `ARM/Nordic/nRF52/nRF52832/exemples/Blinky/ioc/`. Source belongs inside a target project only when the example is genuinely target-specific.
@@ -190,9 +191,32 @@ Useful starting points include:
 - `SPIMasterDemo` - `exemples/spi/spi_master_demo.cpp`;
 - storage examples under `exemples/storage/`;
 - Bluetooth examples under `exemples/bluetooth/`;
-- sensor examples under `exemples/sensor/`.
+- sensor examples under `exemples/sensor/`;
+- USB device examples under `exemples/usb/`.
 
 Use the [Quick Reference](quick-reference.md) for interface configuration examples and common project actions.
+
+## USB first run
+
+USB device examples currently use the nRF52840 native USB controller. Build
+the nRF52840 IOsonata library, then open one of the target projects below
+`ARM/Nordic/nRF52/nRF52840/exemples/`.
+
+For a first enumeration test, use `UsbCdcLoopback/ioc`. Flash the application,
+connect the target's native USB port, identify the serial port assigned by the
+host, and run:
+
+```bash
+./.venv/bin/python3 Python/usb_cdc_loopback.py --port /dev/cu.usbmodemXXXX
+```
+
+USB applications call `UsbInit()`, initialize every class object, call
+`UsbEnable()`, and continue calling `UsbProcess()`. The controller connects
+only after the registered classes have produced a valid configuration
+descriptor.
+
+Use the [USB Device Guide](usb.md) for class selection, complete example paths,
+host dependencies, Mass Storage safety and hardware-test commands.
 
 ## Using an RTOS
 
@@ -237,6 +261,7 @@ Run the MCU-library builder again, clean the application and relink it.
 
 - [Documentation index](README.md)
 - [Quick Reference](quick-reference.md)
+- [USB Device Guide](usb.md)
 - [Architecture overview](architecture/README.md)
 - [IOcomposer workflow](architecture/iocomposer-workflow.md)
 - [Dependencies](dependencies.md)

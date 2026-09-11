@@ -138,6 +138,8 @@ See [IOcomposer workflow](iocomposer-workflow.md).
 - [IOcomposer workflow](iocomposer-workflow.md)
 - [DeviceIntrf implementer notes](devintrf-implementer-notes.md)
 - [Device inheritance and polymorphic composition](device-composition.md)
+- [USB architecture](usb.md)
 - [Getting started](../getting-started.md)
+- [USB device guide](../usb.md)
 - [Quick reference](../quick-reference.md)
 - [Supported targets](../supported-targets.md)
