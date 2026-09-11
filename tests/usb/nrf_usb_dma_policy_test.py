@@ -25,41 +25,25 @@ def function_body(source: str, signature: str) -> str:
 
 source = SOURCE.read_text(encoding="utf-8")
 dma_start = function_body(source, "static void nRFUsbdDmaStart(")
+service = function_body(source, "static void nRFUsbdServicePending(void)")
 interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
 
-assert "s_CtrlrBusy" in source
+assert "nRFUsbdDmaReclaim" not in source
+assert "nRFUsbdDmaEndIntEnable" not in source
+assert "s_LazyInMask" not in source
 assert "INTENSET" not in dma_start, "DMA start must not enable ENDEPIN"
-assert "const uint32_t epStatus = NRF_USBD->EPSTATUS" in dma_start
-assert "NRF_USBD->EPSTATUS = epStatus" in dma_start
-assert "epDataPending = NRF_USBD->EVENTS_EPDATA != 0U" in interrupt
-assert interrupt.index("NRF_USBD->EVENTS_EPDATA = 0") < interrupt.index(
-    "dataStatus = NRF_USBD->EPDATASTATUS"
-)
-assert "const uint32_t epStatus = NRF_USBD->EPSTATUS" in interrupt
-assert "dataDmaStatus = epStatus & dataStatus" in interrupt
-assert "__CLZ(dmaStatus)" in interrupt
-assert "dmaBit - (dmaBit >> 4U) * 6U" in interrupt
-assert "dmaBit == NRFX_USBD_ISO_EP_NO" in interrupt
-assert "const bool endPending = *pEndEvent != 0U" in interrupt
-assert "dmaBit - 1U < NRFX_USBD_DATA_EP_COUNT - 1U" in interrupt
-assert "&NRF_USBD->EVENTS_ENDEPIN[0]" in interrupt
-assert "NRF_USBD->EPSTATUS = epStatus" in interrupt
+assert "atomic_store(&s_DmaEpAddr, EpAddr)" in dma_start
+assert "nRFUsbdDmaEndEvent(activeDma)" in interrupt
 assert interrupt.index("*pEndEvent = 0") < interrupt.index(
     "nRFUsbdDmaRelease();"
 )
 assert interrupt.index("nRFUsbdDmaRelease();") < interrupt.index(
-    "nRFUsbdCollectEvents();"
+    "nRFUsbdCollectEvents()"
 )
-assert "~USBD_INTEN_EPDATA_Msk" in source
-assert "if (!epDataPending)" in interrupt
+assert "USBD_INTEN_EPDATA_Msk" in interrupt
 assert interrupt.rindex("nRFUsbdServicePending();") > interrupt.index(
     "USBD_INTEN_EPDATA_Msk"
 )
-
-for dma_bit, expected in list(enumerate([*range(8), 9])) + list(
-    zip(range(16, 25), range(10, 19))
-):
-    end_offset = dma_bit - (dma_bit >> 4) * 6 + (dma_bit == 8)
-    assert end_offset == expected
+assert "nRFUsbdDmaReclaim" not in service
 
 print("nrf_usb_dma_policy_test: PASS")
