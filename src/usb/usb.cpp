@@ -1410,6 +1410,14 @@ static void UsbCoreNotifyReset(void)
 	}
 }
 
+static void UsbCoreNotifyDetach(void)
+{
+	for (int i = 0; i < s_CoreObjectCnt; i++)
+	{
+		static_cast<UsbDeviceClass *>(s_CoreObject[i])->Detach();
+	}
+}
+
 static void UsbCoreResetDeviceState(bool NotifyClasses)
 {
 	UsbCoreAbortControl();
@@ -1955,6 +1963,10 @@ void UsbProcess(int DevNo)
 	if (vbus != s_UsbVbusLast)
 	{
 		s_UsbVbusLast = vbus;
+		if (!vbus)
+		{
+			UsbCoreNotifyDetach();
+		}
 
 		if (s_UsbDevCfg.EvtHandler != nullptr)
 		{

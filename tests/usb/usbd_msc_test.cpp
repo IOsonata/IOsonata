@@ -723,6 +723,13 @@ static void TestMediumEjectAndRestart(void)
 	RunInCommand(msc, cbw);
 	pCsw = LastCsw();
 	CHECK(pCsw != nullptr && pCsw->bCSWStatus == USB_MSC_CMDSTATUS_FAILED);
+
+	msc.Detach();
+	msc.Reset();
+	CHECK(msc.SelectConfig(1U));
+	cbw = MakeCbw(75U, 0U, false, USB_MSC_SCSI_TEST_UNIT_READY, 6U);
+	RunInCommand(msc, cbw);
+	CheckPassedCsw(75U);
 }
 
 static void TestMalformedCbwAndResetRecovery(void)

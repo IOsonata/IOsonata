@@ -1088,6 +1088,18 @@ bool UsbdMsc::SelectConfig(uint8_t ConfigValue)
 	return true;
 }
 
+void UsbdMsc::Detach(void)
+{
+	if (vUsbdMsc.pDisk != nullptr)
+	{
+		vUsbdMsc.pDisk->Flush();
+		vUsbdMsc.pDisk->Reset();
+	}
+	vUsbdMsc.bMediumPresent = true;
+	vUsbdMsc.bMediumReady = true;
+	vUsbdMsc.bRemovalPrevented = false;
+}
+
 void UsbdMsc::Reset(void)
 {
 	if (vUsbdMsc.bConfigured)

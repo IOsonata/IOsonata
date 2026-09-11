@@ -227,6 +227,9 @@ protected:
 /// Base for a class implemented by the local USB device.
 class UsbDeviceClass : public UsbClass {
 public:
+	/// Notify the class that USB bus power was removed.
+	virtual void Detach() {}
+
 	/// Handle one class, vendor or interface descriptor control transfer.
 	virtual bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 						 uint8_t **ppData, uint16_t *pLength) {

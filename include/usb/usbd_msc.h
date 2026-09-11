@@ -160,6 +160,7 @@ public:
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 				 uint8_t **ppData, uint16_t *pLength) override;
 	bool SelectConfig(uint8_t ConfigValue) override;
+	void Detach(void) override;
 	void Reset(void) override;
 	void Process(void) override;
 

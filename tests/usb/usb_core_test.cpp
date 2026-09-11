@@ -116,6 +116,7 @@ typedef struct {
 static CtrlrState_t s_Ctrlr;
 static FuncState_t s_Class;
 static DescState_t s_Desc;
+static bool s_VbusDetected = true;
 
 // One interface: alternate 0 owns EP1 OUT/IN, alternate 1 owns EP2 IN.
 static const uint8_t s_ConfigDesc[] = {
@@ -261,6 +262,7 @@ static bool Fixture(bool WithSetInterface = true,
 	memset(&s_Ctrlr, 0, sizeof(s_Ctrlr));
 	memset(&s_Class, 0, sizeof(s_Class));
 	memset(&s_Desc, 0, sizeof(s_Desc));
+	s_VbusDetected = true;
 	memcpy(s_Desc.Config, s_ConfigDesc, sizeof(s_ConfigDesc));
 	s_Desc.ConfigLen = sizeof(s_ConfigDesc);
 
@@ -620,6 +622,7 @@ static bool TestClassControl(void)
 
 class TestUsbDeviceClass : public UsbDeviceClass {
 public:
+	void Detach() override { DetachCnt++; }
 	void Reset() override { ResetCnt++; }
 	void Process() override { ProcessCnt++; }
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
@@ -644,6 +647,7 @@ public:
 		return true;
 	}
 	int ResetCnt = 0;
+	int DetachCnt = 0;
 	int ProcessCnt = 0;
 	int ControlCnt = 0;
 	int ConfigCnt = 0;
@@ -678,8 +682,10 @@ static bool TestCommonClassBase(void)
 		pClass->Reset();
 		pClass->Process();
 	}
+	device.Detach();
 
 	CHECK(device.ResetCnt == 1);
+	CHECK(device.DetachCnt == 1);
 	CHECK(device.ProcessCnt == 1);
 	CHECK(host.ResetCnt == 1);
 	CHECK(host.ProcessCnt == 1);
@@ -705,6 +711,7 @@ static bool TestClassObjectRegistry(void)
 {
 	static TestUsbDeviceClass device;
 	device.ResetCnt = 0;
+	device.DetachCnt = 0;
 	device.ProcessCnt = 0;
 	device.ControlCnt = 0;
 	device.ConfigCnt = 0;
@@ -736,6 +743,14 @@ static bool TestClassObjectRegistry(void)
 	Complete(EP0_OUT, 0);
 	UsbProcess(TEST_DEVNO);
 	CHECK(device.ProcessCnt == 1);
+	s_VbusDetected = false;
+	UsbProcess(TEST_DEVNO);
+	CHECK(device.DetachCnt == 1);
+	UsbProcess(TEST_DEVNO);
+	CHECK(device.DetachCnt == 1);
+	s_VbusDetected = true;
+	UsbProcess(TEST_DEVNO);
+	CHECK(device.DetachCnt == 1);
 	CHECK(s_Class.ProcessCnt == 0);
 	CHECK(!UsbClassRegister(TEST_DEVNO, &device, 0, 0, 0, 0));
 	CHECK(SetConfig(0));
@@ -813,7 +828,7 @@ extern "C" bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 extern "C" bool UsbCtrlrStart(int) { return true; }
 extern "C" void UsbCtrlrStop(int) {}
 extern "C" void UsbCtrlrProcess(int) {}
-extern "C" bool UsbCtrlrVbusDetected(int) { return true; }
+extern "C" bool UsbCtrlrVbusDetected(int) { return s_VbusDetected; }
 extern "C" bool UsbCtrlrHighSpeed(int) { return false; }
 extern "C" void UsbCtrlrIntEnable(int) { s_Ctrlr.IntEnableCnt++; }
 extern "C" void UsbCtrlrIntDisable(int) { s_Ctrlr.IntDisableCnt++; }

@@ -73,3 +73,7 @@ ending at the final RAM-disk sector. The runner also verifies prevented removal,
 logical eject and reload, performs a BOT reset, and sends 50 repeated
 `TEST UNIT READY` commands. Do not use `--write-test` with firmware that maps
 MSC to persistent or shared storage.
+
+Logical eject remains effective across BOT and USB bus reset. Removing USB bus
+power reloads the statically configured medium so it is available after the
+cable is reconnected.
