@@ -2196,15 +2196,15 @@ extern "C" void USBD_IRQHandler(void)
 		// interrupt.
 		const bool reset = NRF_USBD->EVENTS_USBRESET != 0U;
 		const uint32_t dmaBit = 31U - (uint32_t)__CLZ(epStatus);
-		const uint32_t dmaDir = dmaBit >> 4U;
-		const uint32_t dmaEpNum = dmaBit & 0xFU;
-		const uint32_t endOffset = dmaEpNum +
-			dmaDir * NRFX_USBD_ENDEPOUT_WORD_OFFSET +
-			((dmaEpNum >> 3U) & (dmaDir ^ 1U));
+		// EPSTATUS OUT bits begin at 16 while ENDEPOUT begins six event words
+		// earlier. ENDISOIN is the one-word gap following EP0DATADONE.
+		const uint32_t endOffset = dmaBit - (dmaBit >> 4U) * 6U +
+			(dmaBit == NRFX_USBD_ISO_EP_NO);
 		volatile uint32_t *pEndEvent = (volatile uint32_t *)
 			((uintptr_t)&NRF_USBD->EVENTS_ENDEPIN[0] +
 			 endOffset * sizeof(uint32_t));
-		if (*pEndEvent == 0U && !reset)
+		const bool endPending = *pEndEvent != 0U;
+		if (!endPending && !reset)
 		{
 			return;
 		}
@@ -2216,8 +2216,7 @@ extern "C" void USBD_IRQHandler(void)
 
 		// Leave an OUT/EP0 END event set for the normal event collector. A
 		// data IN END only releases DMA; transfer completion is still EPDATA.
-		if (*pEndEvent != 0U && dmaDir == 0U && dmaEpNum != 0U &&
-			dmaEpNum != NRFX_USBD_ISO_EP_NO)
+		if (endPending && dmaBit - 1U < NRFX_USBD_DATA_EP_COUNT - 1U)
 		{
 			*pEndEvent = 0;
 			__ISB();

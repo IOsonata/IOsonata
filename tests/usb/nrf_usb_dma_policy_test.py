@@ -33,9 +33,10 @@ assert "const uint32_t epStatus = NRF_USBD->EPSTATUS" in dma_start
 assert "NRF_USBD->EPSTATUS = epStatus" in dma_start
 assert "const uint32_t epStatus = NRF_USBD->EPSTATUS" in interrupt
 assert "__CLZ(epStatus)" in interrupt
-assert "dmaDir = dmaBit >> 4U" in interrupt
-assert "dmaEpNum = dmaBit & 0xFU" in interrupt
-assert "dmaDir * NRFX_USBD_ENDEPOUT_WORD_OFFSET" in interrupt
+assert "dmaBit - (dmaBit >> 4U) * 6U" in interrupt
+assert "dmaBit == NRFX_USBD_ISO_EP_NO" in interrupt
+assert "const bool endPending = *pEndEvent != 0U" in interrupt
+assert "dmaBit - 1U < NRFX_USBD_DATA_EP_COUNT - 1U" in interrupt
 assert "&NRF_USBD->EVENTS_ENDEPIN[0]" in interrupt
 assert "NRF_USBD->EPSTATUS = epStatus" in interrupt
 assert interrupt.index("*pEndEvent = 0") < interrupt.index(
@@ -50,5 +51,11 @@ assert interrupt.index("nRFUsbdCollectEvents();") < interrupt.index(
 assert interrupt.rindex("nRFUsbdServicePending();") > interrupt.index(
     "USBD_INTEN_EPDATA_Msk"
 )
+
+for dma_bit, expected in list(enumerate([*range(8), 9])) + list(
+    zip(range(16, 25), range(10, 19))
+):
+    end_offset = dma_bit - (dma_bit >> 4) * 6 + (dma_bit == 8)
+    assert end_offset == expected
 
 print("nrf_usb_dma_policy_test: PASS")
