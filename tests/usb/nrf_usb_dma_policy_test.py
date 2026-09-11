@@ -33,18 +33,21 @@ assert "const uint32_t epStatus = NRF_USBD->EPSTATUS" in dma_start
 assert "NRF_USBD->EPSTATUS = epStatus" in dma_start
 assert "epDataPending = NRF_USBD->EVENTS_EPDATA != 0U" in interrupt
 assert interrupt.index("NRF_USBD->EVENTS_EPDATA") < interrupt.index(
+    "NRF_USBD->EPDATASTATUS"
+)
+assert interrupt.index("NRF_USBD->EPDATASTATUS") < interrupt.index(
     "NRF_USBD->EPSTATUS"
 )
-assert "dmaIn = dmaStatus & dmaEpMask" in interrupt
-assert "dmaOut = (dmaStatus >> 16U) & dmaEpMask" in interrupt
+assert "dataDmaStatus = epStatus & dataStatus" in interrupt
+assert "__CLZ(dmaStatus)" in interrupt
 assert "NRF_USBD->EVENTS_ENDEPIN[dmaEpNum]" in interrupt
 assert "NRF_USBD->EVENTS_ENDEPOUT[dmaEpNum]" in interrupt
-assert "NRF_USBD->EPSTATUS = dmaStatus" in interrupt
+assert "NRF_USBD->EPSTATUS = epStatus" in interrupt
 assert interrupt.index("*pEndEvent = 0") < interrupt.index(
     "nRFUsbdDmaRelease();"
 )
 assert interrupt.index("nRFUsbdDmaRelease();") < interrupt.index(
-    "NRF_USBD->EPDATASTATUS"
+    "NRF_USBD->EPDATASTATUS = dataStatus"
 )
 assert interrupt.rindex("nRFUsbdServicePending();") > interrupt.index(
     "USBD_INTEN_EPDATA_Msk"
