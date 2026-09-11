@@ -407,7 +407,9 @@ In IOcomposer:
 
 Generic reusable examples are under [`exemples/`](exemples/). Buildable MCU projects are under each target's `exemples/` directory.
 
-See [Getting Started](docs/getting-started.md) and the [Quick Reference](docs/quick-reference.md) for additional workflows.
+See [Getting Started](docs/getting-started.md), the
+[Quick Reference](docs/quick-reference.md) and the
+[USB User Guide](docs/usb-user-guide.md) for additional workflows.
 
 ---
 
