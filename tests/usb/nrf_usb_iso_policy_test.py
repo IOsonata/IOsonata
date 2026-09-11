@@ -42,10 +42,13 @@ assert service.index("nRFUsbdStartIsoNow()") < service.index("CFifoGet(s_hQue)")
 assert "NRF_USBD->SIZE.ISOOUT" in interrupt
 assert "nRFUsbdHandleIsoInEnd();" in interrupt
 assert "nRFUsbdHandleIsoOutEnd();" in interrupt
-assert interrupt.index("atomic_load(&s_IsoInOpen)") < interrupt.index(
+assert interrupt.index("uint32_t stateFlags = atomic_load(&s_State)") < interrupt.index(
     "if (s_Ctrlr.SofEnabled)"
 )
-assert interrupt.index("atomic_load(&s_IsoOutOpen)") < interrupt.index(
+assert interrupt.index("NRFX_USBD_STATE_ISO_IN_OPEN") < interrupt.index(
+    "if (s_Ctrlr.SofEnabled)"
+)
+assert interrupt.index("NRFX_USBD_STATE_ISO_OUT_OPEN") < interrupt.index(
     "if (s_Ctrlr.SofEnabled)"
 )
 

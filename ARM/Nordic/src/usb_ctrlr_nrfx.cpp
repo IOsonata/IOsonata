@@ -183,8 +183,10 @@ void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 #endif
 
 // One USB controller per part, so the common power/clock state is file scope.
-// Controller interrupts are owned by the corresponding UsbdCtrlr backend.
-static UsbCtrlrCfg_t s_UsbdCfg;
+// The event callback and context live in the controller backend; only these
+// two power-layer settings need to be retained here.
+static uint8_t s_UsbdIntPrio;
+static bool s_UsbdLowPowerSuspend;
 static bool s_UsbdInitialized = false;
 static bool s_UsbdStarted = false;
 static bool s_UsbdXtalHeld = false;
@@ -677,7 +679,8 @@ static bool nRFUsbPowerInit(const UsbCtrlrCfg_t *pCfg)
 		return false;
 	}
 
-	memcpy(&s_UsbdCfg, pCfg, sizeof(UsbCtrlrCfg_t));
+	s_UsbdIntPrio = (uint8_t)pCfg->IntPrio;
+	s_UsbdLowPowerSuspend = pCfg->bLowPowerSuspend;
 
 #ifdef NRFX_USBD_HAS_USBHS
 	// Start the regulator here so VBUS state is available before the native
@@ -727,9 +730,9 @@ static bool nRFUsbPowerStart(void)
 	s_UsbdXtalHeld = true;
 
 #ifdef NRFX_USBD_HAS_USBD
-	NVIC_SetPriority(USBD_IRQn, s_UsbdCfg.IntPrio);
+	NVIC_SetPriority(USBD_IRQn, s_UsbdIntPrio);
 #else
-	NVIC_SetPriority(USBHS_IRQn, s_UsbdCfg.IntPrio);
+	NVIC_SetPriority(USBHS_IRQn, s_UsbdIntPrio);
 #endif
 
 	if (UsbdStartCtrlr() == false)
@@ -791,7 +794,7 @@ static void nRFUsbPowerProcess(void)
 		UsbdLowPowerExitFinish();
 	}
 	else if (!dmaActive && s_UsbdStarted &&
-			 s_UsbdCfg.bLowPowerSuspend == false &&
+			 s_UsbdLowPowerSuspend == false &&
 			 NRF_USBD->LOWPOWER != USBD_LOWPOWER_LOWPOWER_ForceNormal)
 	{
 		UsbdLowPowerExit();
@@ -826,12 +829,12 @@ static void nRFUsbPowerProcess(void)
  * library. These GCC builtins generate the same lock-free operations used by
  * the previous C11 atomic implementation on Cortex-M4. */
 typedef bool atomic_flag;
-typedef bool atomic_bool;
 
 #define ATOMIC_FLAG_INIT false
 #define atomic_load(p) __atomic_load_n((p), __ATOMIC_SEQ_CST)
 #define atomic_store(p, v) __atomic_store_n((p), (v), __ATOMIC_SEQ_CST)
-#define atomic_exchange(p, v) __atomic_exchange_n((p), (v), __ATOMIC_SEQ_CST)
+#define atomic_fetch_or(p, v) __atomic_fetch_or((p), (v), __ATOMIC_SEQ_CST)
+#define atomic_fetch_and(p, v) __atomic_fetch_and((p), (v), __ATOMIC_SEQ_CST)
 #define atomic_flag_test_and_set(p) __atomic_exchange_n((p), true, __ATOMIC_SEQ_CST)
 #define atomic_flag_clear(p) __atomic_store_n((p), false, __ATOMIC_SEQ_CST)
 
@@ -899,17 +902,22 @@ static hCFifo_t s_hQue;
 // packet here in either direction; control transfers are serialized by EP0.
 alignas(4) static uint8_t s_Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
 
-static atomic_bool s_PendingEp0Status;
-static atomic_bool s_PendingEp0RcvOut;
-static atomic_bool s_BusSuspended;
-static atomic_bool s_SuspendPending;
-static atomic_bool s_RemoteWakePending;
-static atomic_bool s_HostResumePending;
-static atomic_bool s_MacAwake;
-static atomic_bool s_IsoInOpen;
-static atomic_bool s_IsoOutOpen;
-static atomic_bool s_IsoInReady;
-static atomic_bool s_IsoOutReady;
+enum
+{
+	NRFX_USBD_STATE_EP0_STATUS = 1UL << 0,
+	NRFX_USBD_STATE_EP0_RCVOUT = 1UL << 1,
+	NRFX_USBD_STATE_BUS_SUSPENDED = 1UL << 2,
+	NRFX_USBD_STATE_SUSPEND_PENDING = 1UL << 3,
+	NRFX_USBD_STATE_REMOTE_WAKE_PENDING = 1UL << 4,
+	NRFX_USBD_STATE_HOST_RESUME_PENDING = 1UL << 5,
+	NRFX_USBD_STATE_MAC_AWAKE = 1UL << 6,
+	NRFX_USBD_STATE_ISO_IN_OPEN = 1UL << 7,
+	NRFX_USBD_STATE_ISO_OUT_OPEN = 1UL << 8,
+	NRFX_USBD_STATE_ISO_IN_READY = 1UL << 9,
+	NRFX_USBD_STATE_ISO_OUT_READY = 1UL << 10,
+};
+
+static uint32_t s_State;
 static uint16_t s_IsoOutSize;
 
 
@@ -1102,10 +1110,13 @@ static bool nRFUsbdStartIsoNow(void)
 {
 	const uint8_t inAddr = USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO);
 	nRFUsbdXfer_t *pIn = nRFUsbdGetXfer(inAddr);
-	if (atomic_load(&s_IsoInOpen) && atomic_load(&s_IsoInReady) &&
+	uint32_t stateFlags = atomic_load(&s_State);
+	if ((stateFlags & (NRFX_USBD_STATE_ISO_IN_OPEN |
+		NRFX_USBD_STATE_ISO_IN_READY)) ==
+		(NRFX_USBD_STATE_ISO_IN_OPEN | NRFX_USBD_STATE_ISO_IN_READY) &&
 		pIn->Started)
 	{
-		atomic_store(&s_IsoInReady, false);
+		atomic_fetch_and(&s_State, ~NRFX_USBD_STATE_ISO_IN_READY);
 		NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)nRFUsbGetEpReg(inAddr)->pBuffer;
 		NRF_USBD->ISOIN.MAXCNT = pIn->TotalLen;
 		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTISOIN, inAddr);
@@ -1113,10 +1124,13 @@ static bool nRFUsbdStartIsoNow(void)
 	}
 
 	nRFUsbdXfer_t *pOut = nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO);
-	if (atomic_load(&s_IsoOutOpen) && atomic_load(&s_IsoOutReady) &&
+	stateFlags = atomic_load(&s_State);
+	if ((stateFlags & (NRFX_USBD_STATE_ISO_OUT_OPEN |
+		NRFX_USBD_STATE_ISO_OUT_READY)) ==
+		(NRFX_USBD_STATE_ISO_OUT_OPEN | NRFX_USBD_STATE_ISO_OUT_READY) &&
 		pOut->Started)
 	{
-		atomic_store(&s_IsoOutReady, false);
+		atomic_fetch_and(&s_State, ~NRFX_USBD_STATE_ISO_OUT_READY);
 		const uint16_t len = s_IsoOutSize < pOut->TotalLen ?
 			s_IsoOutSize : pOut->TotalLen;
 		NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)
@@ -1165,8 +1179,11 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 static void nRFUsbdServicePending(void)
 {
-	if (atomic_load(&s_HostResumePending) ||
-		(atomic_load(&s_BusSuspended) && !atomic_load(&s_SuspendPending)))
+	uint32_t stateFlags = atomic_load(&s_State);
+	if ((stateFlags & NRFX_USBD_STATE_HOST_RESUME_PENDING) != 0U ||
+		(stateFlags & (NRFX_USBD_STATE_BUS_SUSPENDED |
+		 NRFX_USBD_STATE_SUSPEND_PENDING)) ==
+		 NRFX_USBD_STATE_BUS_SUSPENDED)
 	{
 		return;
 	}
@@ -1178,13 +1195,15 @@ static void nRFUsbdServicePending(void)
 			return;
 		}
 
-		if (atomic_exchange(&s_PendingEp0Status, false))
+		if ((atomic_fetch_and(&s_State, ~NRFX_USBD_STATE_EP0_STATUS) &
+			 NRFX_USBD_STATE_EP0_STATUS) != 0U)
 		{
 			nRFUsbdEp0StatusNow();
 			continue;
 		}
 
-		if (atomic_exchange(&s_PendingEp0RcvOut, false))
+		if ((atomic_fetch_and(&s_State, ~NRFX_USBD_STATE_EP0_RCVOUT) &
+			 NRFX_USBD_STATE_EP0_RCVOUT) != 0U)
 		{
 			nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
 			continue;
@@ -1242,13 +1261,14 @@ static void nRFUsbdServicePending(void)
 		// A request can arrive after the empty queue read above but before
 		// s_CtrlrBusy is cleared. Its nested service call sees the flag set
 		// and returns, so recheck after releasing it to avoid losing the wakeup.
+		stateFlags = atomic_load(&s_State);
 		if (CFifoUsed(s_hQue) > 0 ||
-			atomic_load(&s_PendingEp0Status) ||
-			atomic_load(&s_PendingEp0RcvOut) ||
-			(atomic_load(&s_IsoInReady) &&
+			(stateFlags & (NRFX_USBD_STATE_EP0_STATUS |
+			 NRFX_USBD_STATE_EP0_RCVOUT)) != 0U ||
+			((stateFlags & NRFX_USBD_STATE_ISO_IN_READY) != 0U &&
 			 nRFUsbdGetXfer(USB_ENDPADDR_DIRIN(
 				NRFX_USBD_ISO_EP_NO))->Started) ||
-			(atomic_load(&s_IsoOutReady) &&
+			((stateFlags & NRFX_USBD_STATE_ISO_OUT_READY) != 0U &&
 			 nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO)->Started))
 		{
 			continue;
@@ -1349,7 +1369,7 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 
 static void nRFUsbdQueueEp0Status(void)
 {
-	atomic_store(&s_PendingEp0Status, true);
+	atomic_fetch_or(&s_State, NRFX_USBD_STATE_EP0_STATUS);
 	if (!nRFUsbdDeferFromInterrupt())
 	{
 		nRFUsbdServicePending();
@@ -1358,7 +1378,7 @@ static void nRFUsbdQueueEp0Status(void)
 
 static void nRFUsbdQueueEp0RcvOut(void)
 {
-	atomic_store(&s_PendingEp0RcvOut, true);
+	atomic_fetch_or(&s_State, NRFX_USBD_STATE_EP0_RCVOUT);
 	if (!nRFUsbdDeferFromInterrupt())
 	{
 		nRFUsbdServicePending();
@@ -1374,17 +1394,7 @@ static void nRFUsbdResetState(void)
 	s_Ctrlr.SetupDirIn = false;
 
 	CFifoFlush(s_hQue);
-	atomic_store(&s_PendingEp0Status, false);
-	atomic_store(&s_PendingEp0RcvOut, false);
-	atomic_store(&s_BusSuspended, false);
-	atomic_store(&s_SuspendPending, false);
-	atomic_store(&s_RemoteWakePending, false);
-	atomic_store(&s_HostResumePending, false);
-	atomic_store(&s_MacAwake, true);
-	atomic_store(&s_IsoInOpen, false);
-	atomic_store(&s_IsoOutOpen, false);
-	atomic_store(&s_IsoInReady, false);
-	atomic_store(&s_IsoOutReady, false);
+	atomic_store(&s_State, NRFX_USBD_STATE_MAC_AWAKE);
 	s_IsoOutSize = 0U;
 	atomic_flag_clear(&s_CtrlrBusy);
 
@@ -1402,8 +1412,8 @@ static void nRFUsbdAbortEp0(void)
 	}
 
 	nRFUsbdQueRemoveEp(0U);
-	atomic_store(&s_PendingEp0Status, false);
-	atomic_store(&s_PendingEp0RcvOut, false);
+	atomic_fetch_and(&s_State, ~(NRFX_USBD_STATE_EP0_STATUS |
+		NRFX_USBD_STATE_EP0_RCVOUT));
 
 	for (uint8_t dir = 0; dir < 2U; dir++)
 	{
@@ -1427,15 +1437,18 @@ static void nRFUsbdHostResumeDetected(void);
 
 static void nRFUsbdTryEnterLowPower(void)
 {
-	if (!s_UsbdCfg.bLowPowerSuspend ||
-		!atomic_load(&s_BusSuspended) ||
-		!atomic_load(&s_SuspendPending) ||
-		atomic_load(&s_RemoteWakePending) ||
-		atomic_load(&s_HostResumePending) ||
+	uint32_t stateFlags = atomic_load(&s_State);
+	if (!s_UsbdLowPowerSuspend ||
+		(stateFlags & (NRFX_USBD_STATE_BUS_SUSPENDED |
+		 NRFX_USBD_STATE_SUSPEND_PENDING)) !=
+		(NRFX_USBD_STATE_BUS_SUSPENDED |
+		 NRFX_USBD_STATE_SUSPEND_PENDING) ||
+		(stateFlags & (NRFX_USBD_STATE_REMOTE_WAKE_PENDING |
+		 NRFX_USBD_STATE_HOST_RESUME_PENDING |
+		 NRFX_USBD_STATE_EP0_STATUS |
+		 NRFX_USBD_STATE_EP0_RCVOUT)) != 0U ||
 		atomic_load(&s_CtrlrBusy) ||
-		CFifoUsed(s_hQue) > 0 ||
-		atomic_load(&s_PendingEp0Status) ||
-		atomic_load(&s_PendingEp0RcvOut))
+		CFifoUsed(s_hQue) > 0)
 	{
 		return;
 	}
@@ -1452,14 +1465,17 @@ static void nRFUsbdTryEnterLowPower(void)
 		return;
 	}
 
-	if (!atomic_load(&s_BusSuspended) ||
-		!atomic_load(&s_SuspendPending) ||
-		atomic_load(&s_RemoteWakePending) ||
-		atomic_load(&s_HostResumePending) ||
+	stateFlags = atomic_load(&s_State);
+	if ((stateFlags & (NRFX_USBD_STATE_BUS_SUSPENDED |
+		 NRFX_USBD_STATE_SUSPEND_PENDING)) !=
+		(NRFX_USBD_STATE_BUS_SUSPENDED |
+		 NRFX_USBD_STATE_SUSPEND_PENDING) ||
+		(stateFlags & (NRFX_USBD_STATE_REMOTE_WAKE_PENDING |
+		 NRFX_USBD_STATE_HOST_RESUME_PENDING |
+		 NRFX_USBD_STATE_EP0_STATUS |
+		 NRFX_USBD_STATE_EP0_RCVOUT)) != 0U ||
 		nRFUsbdDmaActive() ||
-		CFifoUsed(s_hQue) > 0 ||
-		atomic_load(&s_PendingEp0Status) ||
-		atomic_load(&s_PendingEp0RcvOut))
+		CFifoUsed(s_hQue) > 0)
 	{
 		atomic_flag_clear(&s_CtrlrBusy);
 		return;
@@ -1473,7 +1489,7 @@ static void nRFUsbdTryEnterLowPower(void)
 		return;
 	}
 
-	atomic_store(&s_MacAwake, false);
+	atomic_fetch_and(&s_State, ~NRFX_USBD_STATE_MAC_AWAKE);
 	NRF_USBD->LOWPOWER =
 		USBD_LOWPOWER_LOWPOWER_LowPower << USBD_LOWPOWER_LOWPOWER_Pos;
 	(void)NRF_USBD->LOWPOWER;
@@ -1488,9 +1504,11 @@ static void nRFUsbdTryEnterLowPower(void)
 		return;
 	}
 
-	if (atomic_load(&s_RemoteWakePending) || !atomic_load(&s_SuspendPending))
+	stateFlags = atomic_load(&s_State);
+	if ((stateFlags & NRFX_USBD_STATE_REMOTE_WAKE_PENDING) != 0U ||
+		(stateFlags & NRFX_USBD_STATE_SUSPEND_PENDING) == 0U)
 	{
-		atomic_store(&s_SuspendPending, false);
+		atomic_fetch_and(&s_State, ~NRFX_USBD_STATE_SUSPEND_PENDING);
 		NRF_USBD->LOWPOWER =
 			USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos;
 		__ISB();
@@ -1499,16 +1517,18 @@ static void nRFUsbdTryEnterLowPower(void)
 		return;
 	}
 
-	atomic_store(&s_SuspendPending, false);
+	atomic_fetch_and(&s_State, ~NRFX_USBD_STATE_SUSPEND_PENDING);
 	atomic_flag_clear(&s_CtrlrBusy);
 }
 
 static void nRFUsbdTryRemoteWake(void)
 {
-	if (!atomic_load(&s_RemoteWakePending) ||
-		!atomic_load(&s_BusSuspended) ||
-		atomic_load(&s_HostResumePending) ||
-		!atomic_load(&s_MacAwake) ||
+	uint32_t stateFlags = atomic_load(&s_State);
+	if ((stateFlags & (NRFX_USBD_STATE_REMOTE_WAKE_PENDING |
+		 NRFX_USBD_STATE_BUS_SUSPENDED | NRFX_USBD_STATE_MAC_AWAKE)) !=
+		(NRFX_USBD_STATE_REMOTE_WAKE_PENDING |
+		 NRFX_USBD_STATE_BUS_SUSPENDED | NRFX_USBD_STATE_MAC_AWAKE) ||
+		(stateFlags & NRFX_USBD_STATE_HOST_RESUME_PENDING) != 0U ||
 		NRF_USBD->LOWPOWER !=
 			(USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos))
 	{
@@ -1520,17 +1540,19 @@ static void nRFUsbdTryRemoteWake(void)
 		return;
 	}
 
-	if (!atomic_load(&s_RemoteWakePending) ||
-		!atomic_load(&s_BusSuspended) ||
-		atomic_load(&s_HostResumePending) ||
-		!atomic_load(&s_MacAwake) ||
+	stateFlags = atomic_load(&s_State);
+	if ((stateFlags & (NRFX_USBD_STATE_REMOTE_WAKE_PENDING |
+		 NRFX_USBD_STATE_BUS_SUSPENDED | NRFX_USBD_STATE_MAC_AWAKE)) !=
+		(NRFX_USBD_STATE_REMOTE_WAKE_PENDING |
+		 NRFX_USBD_STATE_BUS_SUSPENDED | NRFX_USBD_STATE_MAC_AWAKE) ||
+		(stateFlags & NRFX_USBD_STATE_HOST_RESUME_PENDING) != 0U ||
 		nRFUsbdDmaActive())
 	{
 		atomic_flag_clear(&s_CtrlrBusy);
 		return;
 	}
 
-	atomic_store(&s_RemoteWakePending, false);
+	atomic_fetch_and(&s_State, ~NRFX_USBD_STATE_REMOTE_WAKE_PENDING);
 	NRF_USBD->DPDMVALUE = USBD_DPDMVALUE_STATE_Resume;
 	NRF_USBD->TASKS_DPDMDRIVE = 1;
 	__ISB();
@@ -1546,20 +1568,22 @@ static void nRFUsbdTryRemoteWake(void)
 
 static void nRFUsbdHostResumeDetected(void)
 {
-	if (!atomic_load(&s_BusSuspended))
+	uint32_t stateFlags = atomic_load(&s_State);
+	if ((stateFlags & NRFX_USBD_STATE_BUS_SUSPENDED) == 0U)
 	{
 		return;
 	}
 
-	atomic_store(&s_BusSuspended, false);
-	atomic_store(&s_SuspendPending, false);
-	atomic_store(&s_RemoteWakePending, false);
+	atomic_fetch_and(&s_State, ~(NRFX_USBD_STATE_BUS_SUSPENDED |
+		NRFX_USBD_STATE_SUSPEND_PENDING |
+		NRFX_USBD_STATE_REMOTE_WAKE_PENDING));
 
-	if (!atomic_load(&s_MacAwake) ||
+	stateFlags = atomic_load(&s_State);
+	if ((stateFlags & NRFX_USBD_STATE_MAC_AWAKE) == 0U ||
 		NRF_USBD->LOWPOWER !=
 			(USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos))
 	{
-		atomic_store(&s_HostResumePending, true);
+		atomic_fetch_or(&s_State, NRFX_USBD_STATE_HOST_RESUME_PENDING);
 		if (NRF_USBD->LOWPOWER !=
 			(USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos))
 		{
@@ -1571,15 +1595,16 @@ static void nRFUsbdHostResumeDetected(void)
 		return;
 	}
 
-	atomic_store(&s_HostResumePending, false);
+	atomic_fetch_and(&s_State, ~NRFX_USBD_STATE_HOST_RESUME_PENDING);
 	nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
 }
 
 static void nRFUsbdWakeAllowed(void)
 {
-	atomic_store(&s_MacAwake, true);
+	atomic_fetch_or(&s_State, NRFX_USBD_STATE_MAC_AWAKE);
 
-	if (atomic_exchange(&s_HostResumePending, false))
+	if ((atomic_fetch_and(&s_State, ~NRFX_USBD_STATE_HOST_RESUME_PENDING) &
+		 NRFX_USBD_STATE_HOST_RESUME_PENDING) != 0U)
 	{
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
 		return;
@@ -1631,13 +1656,15 @@ static void nRFUsbRegDisconnect(void)
 
 static void nRFUsbRegRemoteWakeup(void)
 {
-	if (!atomic_load(&s_BusSuspended) || atomic_load(&s_HostResumePending))
+	const uint32_t stateFlags = atomic_load(&s_State);
+	if ((stateFlags & NRFX_USBD_STATE_BUS_SUSPENDED) == 0U ||
+		(stateFlags & NRFX_USBD_STATE_HOST_RESUME_PENDING) != 0U)
 	{
 		return;
 	}
 
-	atomic_store(&s_SuspendPending, false);
-	atomic_store(&s_RemoteWakePending, true);
+	atomic_fetch_and(&s_State, ~NRFX_USBD_STATE_SUSPEND_PENDING);
+	atomic_fetch_or(&s_State, NRFX_USBD_STATE_REMOTE_WAKE_PENDING);
 
 	if (NRF_USBD->LOWPOWER !=
 		(USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos))
@@ -1662,8 +1689,9 @@ static void nRFUsbRegSofEnable(bool Enable)
 	}
 	else
 	{
-		if (!atomic_load(&s_IsoInOpen) && !atomic_load(&s_IsoOutOpen) &&
-			!atomic_load(&s_BusSuspended))
+		if ((atomic_load(&s_State) & (NRFX_USBD_STATE_ISO_IN_OPEN |
+			NRFX_USBD_STATE_ISO_OUT_OPEN |
+			NRFX_USBD_STATE_BUS_SUSPENDED)) == 0U)
 		{
 			NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
 		}
@@ -1716,16 +1744,16 @@ static bool nRFUsbRegEpOpen(const UsbEndPointDesc_t *pDesc)
 			NRF_USBD->EVENTS_ENDISOIN = 0;
 			NRF_USBD->INTENSET = USBD_INTEN_ENDISOIN_Msk;
 			NRF_USBD->EPINEN |= (1UL << NRFX_USBD_ISO_EP_NO);
-			atomic_store(&s_IsoInOpen, true);
-			atomic_store(&s_IsoInReady, false);
+			atomic_fetch_and(&s_State, ~NRFX_USBD_STATE_ISO_IN_READY);
+			atomic_fetch_or(&s_State, NRFX_USBD_STATE_ISO_IN_OPEN);
 		}
 		else
 		{
 			NRF_USBD->EVENTS_ENDISOOUT = 0;
 			NRF_USBD->INTENSET = USBD_INTEN_ENDISOOUT_Msk;
 			NRF_USBD->EPOUTEN |= (1UL << NRFX_USBD_ISO_EP_NO);
-			atomic_store(&s_IsoOutOpen, true);
-			atomic_store(&s_IsoOutReady, false);
+			atomic_fetch_and(&s_State, ~NRFX_USBD_STATE_ISO_OUT_READY);
+			atomic_fetch_or(&s_State, NRFX_USBD_STATE_ISO_OUT_OPEN);
 		}
 		NRF_USBD->EVENTS_SOF = 0;
 		NRF_USBD->INTENSET = USBD_INTEN_SOF_Msk;
@@ -1778,23 +1806,24 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 	{
 		if (USB_ENDPADDR_IS_IN(EpAddr))
 		{
-			atomic_store(&s_IsoInOpen, false);
-			atomic_store(&s_IsoInReady, false);
+			atomic_fetch_and(&s_State, ~(NRFX_USBD_STATE_ISO_IN_OPEN |
+				NRFX_USBD_STATE_ISO_IN_READY));
 			NRF_USBD->INTENCLR = USBD_INTEN_ENDISOIN_Msk;
 			NRF_USBD->EPINEN &= ~(1UL << NRFX_USBD_ISO_EP_NO);
 			NRF_USBD->EVENTS_ENDISOIN = 0;
 		}
 		else
 		{
-			atomic_store(&s_IsoOutOpen, false);
-			atomic_store(&s_IsoOutReady, false);
+			atomic_fetch_and(&s_State, ~(NRFX_USBD_STATE_ISO_OUT_OPEN |
+				NRFX_USBD_STATE_ISO_OUT_READY));
 			NRF_USBD->INTENCLR = USBD_INTEN_ENDISOOUT_Msk;
 			NRF_USBD->EPOUTEN &= ~(1UL << NRFX_USBD_ISO_EP_NO);
 			NRF_USBD->EVENTS_ENDISOOUT = 0;
 		}
 		if (!s_Ctrlr.SofEnabled &&
-			!atomic_load(&s_IsoInOpen) &&
-			!atomic_load(&s_IsoOutOpen) && !atomic_load(&s_BusSuspended))
+			(atomic_load(&s_State) & (NRFX_USBD_STATE_ISO_IN_OPEN |
+			 NRFX_USBD_STATE_ISO_OUT_OPEN |
+			 NRFX_USBD_STATE_BUS_SUSPENDED)) == 0U)
 		{
 			NRF_USBD->INTENCLR = USBD_INTEN_SOF_Msk;
 		}
@@ -2254,16 +2283,23 @@ extern "C" void USBD_IRQHandler(void)
 	if ((intStatus & USBD_INTEN_USBEVENT_Msk) != 0)
 	{
 		if ((eventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0 &&
-			!atomic_exchange(&s_BusSuspended, true))
+			(atomic_fetch_or(&s_State, NRFX_USBD_STATE_BUS_SUSPENDED) &
+			 NRFX_USBD_STATE_BUS_SUSPENDED) == 0U)
 		{
 			// A bus suspend and a peripheral low-power transition are separate.
 			// When low-power suspend is disabled, retain all endpoint state and
 			// wait for RESUME or SOF without touching USBD LOWPOWER.
-			atomic_store(&s_SuspendPending, s_UsbdCfg.bLowPowerSuspend);
-			atomic_store(&s_RemoteWakePending, false);
-			atomic_store(&s_HostResumePending, false);
-			atomic_store(&s_IsoInReady, false);
-			atomic_store(&s_IsoOutReady, false);
+			atomic_fetch_and(&s_State,
+				~(NRFX_USBD_STATE_SUSPEND_PENDING |
+				  NRFX_USBD_STATE_REMOTE_WAKE_PENDING |
+				  NRFX_USBD_STATE_HOST_RESUME_PENDING |
+				  NRFX_USBD_STATE_ISO_IN_READY |
+				  NRFX_USBD_STATE_ISO_OUT_READY));
+			if (s_UsbdLowPowerSuspend)
+			{
+				atomic_fetch_or(&s_State,
+					NRFX_USBD_STATE_SUSPEND_PENDING);
+			}
 			if ((NRF_USBD->INTEN & USBD_INTEN_SOF_Msk) == 0U)
 			{
 				NRF_USBD->EVENTS_SOF = 0;
@@ -2360,11 +2396,12 @@ extern "C" void USBD_IRQHandler(void)
 	if ((intStatus & USBD_INTEN_SOF_Msk) != 0)
 	{
 		nRFUsbdHostResumeDetected();
-		if (atomic_load(&s_IsoInOpen))
+		uint32_t stateFlags = atomic_load(&s_State);
+		if ((stateFlags & NRFX_USBD_STATE_ISO_IN_OPEN) != 0U)
 		{
-			atomic_store(&s_IsoInReady, true);
+			atomic_fetch_or(&s_State, NRFX_USBD_STATE_ISO_IN_READY);
 		}
-		if (atomic_load(&s_IsoOutOpen))
+		if ((stateFlags & NRFX_USBD_STATE_ISO_OUT_OPEN) != 0U)
 		{
 			const uint32_t size = NRF_USBD->SIZE.ISOOUT;
 			if (size != 0U)
@@ -2372,7 +2409,7 @@ extern "C" void USBD_IRQHandler(void)
 				s_IsoOutSize =
 					(size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
 					0U : (uint16_t)size;
-				atomic_store(&s_IsoOutReady, true);
+				atomic_fetch_or(&s_State, NRFX_USBD_STATE_ISO_OUT_READY);
 				nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(NRFX_USBD_ISO_EP_NO);
 				if (pReg->bBlocking)
 				{
@@ -2396,8 +2433,9 @@ extern "C" void USBD_IRQHandler(void)
 		}
 
 		if (!s_Ctrlr.SofEnabled &&
-			!atomic_load(&s_IsoInOpen) &&
-			!atomic_load(&s_IsoOutOpen) && !atomic_load(&s_BusSuspended))
+			(atomic_load(&s_State) & (NRFX_USBD_STATE_ISO_IN_OPEN |
+			 NRFX_USBD_STATE_ISO_OUT_OPEN |
+			 NRFX_USBD_STATE_BUS_SUSPENDED)) == 0U)
 		{
 			NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
 		}
