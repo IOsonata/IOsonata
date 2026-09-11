@@ -74,6 +74,31 @@ static void UsbdMscFail(UsbdMscDev_t *pMsc, uint8_t Key, uint8_t Asc)
 	UsbdMscSetSense(pMsc, Key, Asc);
 }
 
+static void UsbdMscFail(UsbdMscDev_t *pMsc, uint8_t Key, uint8_t Asc,
+							 uint8_t Ascq)
+{
+	pMsc->bCommandFailed = true;
+	UsbdMscSetSense(pMsc, Key, Asc, Ascq);
+}
+
+static bool UsbdMscMediumReady(UsbdMscDev_t *pMsc)
+{
+	if (!pMsc->bMediumPresent)
+	{
+		UsbdMscFail(pMsc, USB_MSC_SENSE_NOT_READY,
+			USB_MSC_ASC_MEDIUM_NOT_PRESENT);
+		return false;
+	}
+	if (!pMsc->bMediumReady)
+	{
+		UsbdMscFail(pMsc, USB_MSC_SENSE_NOT_READY,
+			USB_MSC_ASC_LUN_NOT_READY,
+			USB_MSC_ASCQ_INITIALIZING_REQUIRED);
+		return false;
+	}
+	return true;
+}
+
 static void UsbdMscCopyInquiry(char *pDest, size_t Length,
 							const char *pSource)
 {
@@ -219,6 +244,7 @@ static void UsbdMscResetBot(UsbdMscDev_t *pMsc, bool ResetMedium)
 	}
 	if (ResetMedium && pMsc->pDisk != nullptr)
 	{
+		pMsc->bRemovalPrevented = false;
 		pMsc->pDisk->Reset();
 	}
 }
@@ -401,6 +427,10 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 				UsbdMscFail(pMsc, USB_MSC_SENSE_ILLEGAL_REQUEST,
 					USB_MSC_ASC_INVALID_FIELD);
 			}
+			else
+			{
+				(void)UsbdMscMediumReady(pMsc);
+			}
 			return USBD_MSC_DATA_NONE;
 
 		case USB_MSC_SCSI_REQUEST_SENSE:
@@ -424,11 +454,15 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 					USB_MSC_ASC_INVALID_FIELD);
 				return USBD_MSC_DATA_NONE;
 			}
+			pMsc->DeviceLength = 8U;
+			if (!UsbdMscMediumReady(pMsc))
+			{
+				return USBD_MSC_DATA_IN;
+			}
 			memset(pMsc->Response, 0, sizeof(pMsc->Response));
 			UsbdMscPutBe32(&pMsc->Response[0], pMsc->SectorCount - 1U);
 			UsbdMscPutBe32(&pMsc->Response[4], pMsc->SectorSize);
 			pMsc->ResponseLength = 8U;
-			pMsc->DeviceLength = 8U;
 			return USBD_MSC_DATA_IN;
 
 		case USB_MSC_SCSI_MODE_SENSE_6:
@@ -456,6 +490,12 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 			pMsc->Lba = UsbdMscGetBe32(&cdb[2]);
 			blocks = UsbdMscGetBe16(&cdb[7]);
 			pMsc->BlocksRemaining = blocks;
+			pMsc->DeviceLength = blocks * (uint32_t)pMsc->SectorSize;
+			if (!UsbdMscMediumReady(pMsc))
+			{
+				return cdb[0] == USB_MSC_SCSI_READ_10 ?
+					USBD_MSC_DATA_IN : USBD_MSC_DATA_OUT;
+			}
 			if (!UsbdMscRangeValid(pMsc, pMsc->Lba, blocks))
 			{
 				UsbdMscFail(pMsc, USB_MSC_SENSE_ILLEGAL_REQUEST,
@@ -463,7 +503,6 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 				return cdb[0] == USB_MSC_SCSI_READ_10 ?
 					USBD_MSC_DATA_IN : USBD_MSC_DATA_OUT;
 			}
-			pMsc->DeviceLength = blocks * (uint32_t)pMsc->SectorSize;
 			if (cdb[0] == USB_MSC_SCSI_WRITE_10 && pMsc->bReadOnly)
 			{
 				UsbdMscFail(pMsc, USB_MSC_SENSE_DATA_PROTECT,
@@ -478,6 +517,10 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 				UsbdMscFail(pMsc, USB_MSC_SENSE_ILLEGAL_REQUEST,
 					USB_MSC_ASC_INVALID_FIELD);
 			}
+			else
+			{
+				pMsc->bRemovalPrevented = (cdb[4] & 1U) != 0U;
+			}
 			return USBD_MSC_DATA_NONE;
 
 		case USB_MSC_SCSI_START_STOP_UNIT:
@@ -485,6 +528,32 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 			{
 				UsbdMscFail(pMsc, USB_MSC_SENSE_ILLEGAL_REQUEST,
 					USB_MSC_ASC_INVALID_FIELD);
+			}
+			else if ((cdb[4] & 2U) != 0U && !pMsc->bRemovable)
+			{
+				UsbdMscFail(pMsc, USB_MSC_SENSE_ILLEGAL_REQUEST,
+					USB_MSC_ASC_INVALID_FIELD);
+			}
+			else if ((cdb[4] & 3U) == 2U && pMsc->bRemovalPrevented)
+			{
+				UsbdMscFail(pMsc, USB_MSC_SENSE_ILLEGAL_REQUEST,
+					USB_MSC_ASC_MEDIUM_REMOVAL_PREVENTED,
+					USB_MSC_ASCQ_REMOVAL_PREVENTED);
+			}
+			else if ((cdb[4] & 1U) != 0U)
+			{
+				pMsc->pDisk->Reset();
+				pMsc->bMediumPresent = true;
+				pMsc->bMediumReady = true;
+			}
+			else
+			{
+				pMsc->pDisk->Flush();
+				pMsc->bMediumReady = false;
+				if ((cdb[4] & 2U) != 0U)
+				{
+					pMsc->bMediumPresent = false;
+				}
 			}
 			return USBD_MSC_DATA_NONE;
 
@@ -497,6 +566,10 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 			}
 			pMsc->Lba = UsbdMscGetBe32(&cdb[2]);
 			blocks = UsbdMscGetBe16(&cdb[7]);
+			if (!UsbdMscMediumReady(pMsc))
+			{
+				return USBD_MSC_DATA_NONE;
+			}
 			if (!UsbdMscRangeValid(pMsc, pMsc->Lba, blocks))
 			{
 				UsbdMscFail(pMsc, USB_MSC_SENSE_ILLEGAL_REQUEST,
@@ -510,7 +583,7 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 				UsbdMscFail(pMsc, USB_MSC_SENSE_ILLEGAL_REQUEST,
 					USB_MSC_ASC_INVALID_FIELD);
 			}
-			else
+			else if (UsbdMscMediumReady(pMsc))
 			{
 				pMsc->pDisk->Flush();
 			}
@@ -850,6 +923,9 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 	pMsc->SectorCount = sectorCount;
 	pMsc->bReadOnly = pCfg->bReadOnly;
 	pMsc->bRemovable = pCfg->bRemovable;
+	pMsc->bMediumPresent = true;
+	pMsc->bMediumReady = true;
+	pMsc->bRemovalPrevented = false;
 	pMsc->InterfaceString = pCfg->InterfaceString;
 	pMsc->FsMps = pCfg->FsMps != 0U ? pCfg->FsMps : USBD_MSC_FS_MPS;
 	pMsc->HsMps = pCfg->HsMps != 0U ? pCfg->HsMps : USBD_MSC_HS_MPS;

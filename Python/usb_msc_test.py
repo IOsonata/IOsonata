@@ -64,7 +64,8 @@ def main():
 
     tag = 0
 
-    def command(cdb, data_len=0, direction_in=False, data_out=None):
+    def command(cdb, data_len=0, direction_in=False, data_out=None,
+                expected_status=0, expected_residue=0):
         nonlocal tag
         tag += 1
         cdb = bytes(cdb)
@@ -83,7 +84,7 @@ def main():
         signature, csw_tag, residue, status = struct.unpack("<IIIB", csw)
         if signature != CSW_SIGNATURE or csw_tag != tag:
             raise RuntimeError("invalid CSW")
-        if status != 0 or residue != 0:
+        if status != expected_status or residue != expected_residue:
             raise RuntimeError(f"command failed: status={status} residue={residue}")
         return payload
 
@@ -121,12 +122,27 @@ def main():
         ep_in.clear_halt()
         ep_out.clear_halt()
         command([0x00, 0, 0, 0, 0, 0])
+
+        command([0x1E, 0, 0, 0, 1, 0])
+        command([0x1B, 0, 0, 0, 2, 0], expected_status=1)
+        sense = command([0x03, 0, 0, 0, 18, 0], 18, True)
+        if (sense[2], sense[12], sense[13]) != (0x05, 0x53, 0x02):
+            raise RuntimeError("prevented-removal sense mismatch")
+        command([0x1E, 0, 0, 0, 0, 0])
+        command([0x1B, 0, 0, 0, 2, 0])
+        command([0x00, 0, 0, 0, 0, 0], expected_status=1)
+        sense = command([0x03, 0, 0, 0, 18, 0], 18, True)
+        if (sense[2], sense[12]) != (0x02, 0x3A):
+            raise RuntimeError("ejected-medium sense mismatch")
+        command([0x1B, 0, 0, 0, 3, 0])
+        command([0x00, 0, 0, 0, 0, 0])
         for _ in range(50):
             command([0x00, 0, 0, 0, 0, 0])
         print("Vendor/Product :", inquiry[8:32].decode("ascii").rstrip())
         print("Capacity       :", (last_lba + 1) * sector_size, "bytes")
         print("Sector size    :", sector_size)
         print("Write test     :", "PASS" if args.write_test else "skipped")
+        print("Eject/reload   : PASS")
         print("Repeated TUR   : PASS (50)")
         print("Result         : PASS")
         return 0

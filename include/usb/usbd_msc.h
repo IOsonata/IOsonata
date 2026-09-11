@@ -97,6 +97,9 @@ typedef struct __Usbd_Msc_Dev {
 	uint16_t HsMps;
 	bool bReadOnly;
 	bool bRemovable;
+	bool bMediumPresent;
+	bool bMediumReady;
+	bool bRemovalPrevented;
 	bool bConfigured;
 	bool bCommandFailed;
 	bool bPhaseError;

@@ -69,6 +69,7 @@ python3 Python/usb_msc_test.py --write-test
 ```
 
 The write test saves, overwrites, hash-verifies and restores a 16-sector range
-ending at the final RAM-disk sector. The runner also performs a BOT reset and
-50 repeated `TEST UNIT READY` commands. Do not use `--write-test` with firmware
-that maps MSC to persistent or shared storage.
+ending at the final RAM-disk sector. The runner also verifies prevented removal,
+logical eject and reload, performs a BOT reset, and sends 50 repeated
+`TEST UNIT READY` commands. Do not use `--write-test` with firmware that maps
+MSC to persistent or shared storage.

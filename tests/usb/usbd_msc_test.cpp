@@ -447,7 +447,7 @@ static void TestReadOnlyCommands(void)
 	CheckPassedCsw(7U);
 
 	cbw = MakeCbw(8U, 0U, false, USB_MSC_SCSI_START_STOP_UNIT, 6U);
-	cbw.CBWCB[4] = 2U;
+	cbw.CBWCB[4] = 1U;
 	RunInCommand(msc, cbw);
 	CheckPassedCsw(8U);
 
@@ -628,6 +628,103 @@ static void BulkReset(UsbdMsc &Msc)
 	CHECK(Msc.Control(&setup, USB_CTRL_SETUP, nullptr, nullptr));
 }
 
+static void TestMediumEjectAndRestart(void)
+{
+	ResetFake();
+	RamDisk disk;
+	disk.Fill();
+	alignas(4) uint8_t sector[SECTOR_SIZE];
+	UsbdMsc msc;
+	CHECK(msc.Init(MakeCfg(disk, sector)));
+	CHECK(msc.SelectConfig(1U));
+
+	UsbMscCmdBlkWrapper_t cbw = MakeCbw(60U, 0U, false,
+		USB_MSC_SCSI_PREVENT_ALLOW, 6U);
+	cbw.CBWCB[4] = 1U;
+	RunInCommand(msc, cbw);
+	CheckPassedCsw(60U);
+
+	cbw = MakeCbw(61U, 0U, false, USB_MSC_SCSI_START_STOP_UNIT, 6U);
+	cbw.CBWCB[4] = 2U;
+	RunInCommand(msc, cbw);
+	const UsbMscCmdStatusWrapper_t *pCsw = LastCsw();
+	CHECK(pCsw != nullptr && pCsw->bCSWStatus == USB_MSC_CMDSTATUS_FAILED);
+
+	cbw = MakeCbw(62U, 18U, true, USB_MSC_SCSI_REQUEST_SENSE, 6U);
+	cbw.CBWCB[4] = 18U;
+	RunInCommand(msc, cbw);
+	CHECK(s_Capture[2] == USB_MSC_SENSE_ILLEGAL_REQUEST);
+	CHECK(s_Capture[12] == USB_MSC_ASC_MEDIUM_REMOVAL_PREVENTED);
+	CHECK(s_Capture[13] == USB_MSC_ASCQ_REMOVAL_PREVENTED);
+	CheckPassedCsw(62U);
+
+	cbw = MakeCbw(63U, 0U, false, USB_MSC_SCSI_PREVENT_ALLOW, 6U);
+	RunInCommand(msc, cbw);
+	CheckPassedCsw(63U);
+
+	cbw = MakeCbw(64U, 0U, false, USB_MSC_SCSI_START_STOP_UNIT, 6U);
+	cbw.CBWCB[4] = 2U;
+	RunInCommand(msc, cbw);
+	CheckPassedCsw(64U);
+
+	BulkReset(msc);
+	cbw = MakeCbw(65U, 0U, false, USB_MSC_SCSI_TEST_UNIT_READY, 6U);
+	RunInCommand(msc, cbw);
+	pCsw = LastCsw();
+	CHECK(pCsw != nullptr && pCsw->bCSWStatus == USB_MSC_CMDSTATUS_FAILED);
+
+	cbw = MakeCbw(66U, 18U, true, USB_MSC_SCSI_REQUEST_SENSE, 6U);
+	cbw.CBWCB[4] = 18U;
+	RunInCommand(msc, cbw);
+	CHECK(s_Capture[2] == USB_MSC_SENSE_NOT_READY);
+	CHECK(s_Capture[12] == USB_MSC_ASC_MEDIUM_NOT_PRESENT);
+	CheckPassedCsw(66U);
+
+	cbw = MakeCbw(67U, 8U, true, USB_MSC_SCSI_READ_CAPACITY_10, 10U);
+	s_CaptureLength = 0U;
+	SendCbw(msc, cbw);
+	CHECK(s_HaltIn);
+	CHECK(UsbEpSetHalt(0, USB_ENDPADDR_DIRIN(EP_NO), false));
+	Pump(msc);
+	pCsw = LastCsw();
+	CHECK(pCsw != nullptr && pCsw->dCSWDataResidue == 8U);
+	CHECK(pCsw != nullptr && pCsw->bCSWStatus == USB_MSC_CMDSTATUS_FAILED);
+
+	cbw = MakeCbw(68U, 0U, false, USB_MSC_SCSI_START_STOP_UNIT, 6U);
+	cbw.CBWCB[4] = 3U;
+	RunInCommand(msc, cbw);
+	CheckPassedCsw(68U);
+	CHECK(disk.ResetCount == 1);
+
+	cbw = MakeCbw(69U, 0U, false, USB_MSC_SCSI_START_STOP_UNIT, 6U);
+	RunInCommand(msc, cbw);
+	CheckPassedCsw(69U);
+	cbw = MakeCbw(70U, 0U, false, USB_MSC_SCSI_TEST_UNIT_READY, 6U);
+	RunInCommand(msc, cbw);
+	pCsw = LastCsw();
+	CHECK(pCsw != nullptr && pCsw->bCSWStatus == USB_MSC_CMDSTATUS_FAILED);
+	cbw = MakeCbw(71U, 18U, true, USB_MSC_SCSI_REQUEST_SENSE, 6U);
+	cbw.CBWCB[4] = 18U;
+	RunInCommand(msc, cbw);
+	CHECK(s_Capture[12] == USB_MSC_ASC_LUN_NOT_READY);
+	CHECK(s_Capture[13] == USB_MSC_ASCQ_INITIALIZING_REQUIRED);
+
+	cbw = MakeCbw(72U, 0U, false, USB_MSC_SCSI_START_STOP_UNIT, 6U);
+	cbw.CBWCB[4] = 1U;
+	RunInCommand(msc, cbw);
+	CheckPassedCsw(72U);
+
+	cbw = MakeCbw(73U, 0U, false, USB_MSC_SCSI_START_STOP_UNIT, 6U);
+	cbw.CBWCB[4] = 2U;
+	RunInCommand(msc, cbw);
+	msc.Reset();
+	CHECK(msc.SelectConfig(1U));
+	cbw = MakeCbw(74U, 0U, false, USB_MSC_SCSI_TEST_UNIT_READY, 6U);
+	RunInCommand(msc, cbw);
+	pCsw = LastCsw();
+	CHECK(pCsw != nullptr && pCsw->bCSWStatus == USB_MSC_CMDSTATUS_FAILED);
+}
+
 static void TestMalformedCbwAndResetRecovery(void)
 {
 	ResetFake();
@@ -769,6 +866,7 @@ int main(void)
 	TestFailuresSenseResidueAndPhase();
 	TestReadOnlyAndStorageFailure();
 	TestWriteFailure();
+	TestMediumEjectAndRestart();
 	TestMalformedCbwAndResetRecovery();
 	TestResetAcrossPhasesAndReconnect();
 	TestSectorBufferBounds();
