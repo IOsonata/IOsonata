@@ -161,7 +161,10 @@ int main(void)
 	cfg.DevNo = 0;
 	cfg.Vid = 0x1209;
 	cfg.Pid = 1;
-	cfg.NbCdc = 2;
+	cfg.DeviceClass = USB_DEVCLASS_MISC;
+	cfg.DeviceSubClass = 2U;
+	cfg.DeviceProtocol = 1U;
+	cfg.bRemoteWakeup = true;
 	if (!UsbInit(&cfg))
 	{
 		printf("UsbInit failed\n");
@@ -182,6 +185,26 @@ int main(void)
 	{
 		printf("UsbdCdc data binding failed\n");
 		return 5;
+	}
+	uint16_t descriptorLength = 0U;
+	const uint8_t *pDescriptor = UsbGetDescriptor(0,
+		USB_DESCTYPE_CONFIGURATION, 0U, 0U, USB_SPEED_FULL,
+		&descriptorLength);
+	if (pDescriptor == nullptr ||
+		descriptorLength != sizeof(UsbCfgDesc_t) + 2U * sizeof(UsbdCdcDesc_t) ||
+		pDescriptor[4] != 4U ||
+		pDescriptor[1] != USB_DESCTYPE_CONFIGURATION)
+	{
+		printf("CDC descriptor composition failed\n");
+		return 8;
+	}
+	const UsbdCdcDesc_t *pCdcDesc = reinterpret_cast<const UsbdCdcDesc_t *>(
+		pDescriptor + sizeof(UsbCfgDesc_t));
+	if (pCdcDesc[0].Association.bFirstInterface != 0U ||
+		pCdcDesc[1].Association.bFirstInterface != 2U)
+	{
+		printf("CDC descriptor order failed\n");
+		return 9;
 	}
 	// C++ CDC objects register through the common UsbClass object array.
 	// Registering the same object a second time must be rejected.

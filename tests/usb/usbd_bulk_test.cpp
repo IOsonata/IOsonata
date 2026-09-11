@@ -21,6 +21,8 @@ static uint8_t s_ReservedFirst;
 static uint8_t s_ReservedCount;
 static uint16_t s_ReservedIn;
 static uint16_t s_ReservedOut;
+static const uint8_t *s_FsDescriptor;
+static uint16_t s_FsDescriptorLength;
 static UsbEndPointDesc_t s_OpenDesc[2];
 static int s_OpenCount;
 static int s_CloseCount;
@@ -127,6 +129,19 @@ bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
     return true;
 }
 
+bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
+						   const void *pFsDescriptor,
+						   uint16_t FsDescriptorLength,
+						   const void *, uint16_t)
+{
+	if (DevNo != 0 || pClass != s_ClassObject || pFsDescriptor == nullptr ||
+		FsDescriptorLength == 0U)
+		return false;
+	s_FsDescriptor = static_cast<const uint8_t *>(pFsDescriptor);
+	s_FsDescriptorLength = FsDescriptorLength;
+	return true;
+}
+
 static int s_Fail;
 #define CHECK(c) do { if (!(c)) { \
     printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; } } while (0)
@@ -163,6 +178,8 @@ static void ResetFake(void)
     s_ReservedCount = 0U;
     s_ReservedIn = 0U;
     s_ReservedOut = 0U;
+	s_FsDescriptor = nullptr;
+	s_FsDescriptorLength = 0U;
     s_OpenCount = 0;
     s_CloseCount = 0;
     s_OutBuffer = nullptr;
@@ -222,10 +239,11 @@ static void TestDescriptor(void)
     ResetFake();
     UsbdBulk bulk;
     UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
-    UsbdBulkDesc_t desc = {};
-    cfg.pDesc = &desc;
 
     CHECK(bulk.Init(cfg));
+	CHECK(s_FsDescriptorLength == sizeof(UsbdBulkDesc_t));
+	const UsbdBulkDesc_t &desc =
+		*reinterpret_cast<const UsbdBulkDesc_t *>(s_FsDescriptor);
     CHECK(sizeof(desc) == sizeof(UsbIntrfDesc_t) + 2U * sizeof(UsbEndPointDesc_t));
     CHECK(desc.Interface.bInterfaceNumber == ITF_NO);
     CHECK(desc.Interface.bNumEndpoints == 2U);

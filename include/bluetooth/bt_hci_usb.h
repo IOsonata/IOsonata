@@ -152,6 +152,13 @@ typedef struct __Bt_Hci_Usb_Full_Descriptor {
 	BtHciUsbScoAltDesc_t Alt[BT_HCI_USB_SCO_ALT_COUNT];
 } BtHciUsbFullDesc_t;
 
+typedef union __Bt_Hci_Usb_Descriptor_Buffer {
+	BtHciUsbDesc_t Legacy;
+	BtHciUsbScoDesc_t Sco;
+	BtHciUsbSerialDesc_t Serial;
+	BtHciUsbFullDesc_t Full;
+} BtHciUsbDescBuffer_t;
+
 #pragma pack(pop)
 
 #pragma pack(push, 4)
@@ -172,17 +179,6 @@ typedef struct __Bt_Hci_Usb_Config {
 	uint16_t AclHsMps;				//!< Zero selects BT_HCI_USB_ACL_HS_MPS
 	uint8_t EventFsInterval;		//!< Zero selects BT_HCI_USB_EVENT_FS_INTERVAL
 	uint8_t EventHsInterval;		//!< Zero selects BT_HCI_USB_EVENT_HS_INTERVAL
-	// Descriptor fragment buffers. Init fills the one matching the selected
-	// layout with the allocated interface and endpoint numbers and the
-	// controller speed MPS, so the application places it in its configuration
-	// descriptor and does not build it separately. Set the buffer for the
-	// chosen bSco/bBulkSerialization combination and leave the rest null:
-	// pDesc when neither flag is set, pScoDesc for bSco only, pSerialDesc for
-	// bBulkSerialization only, pFullDesc when both are set.
-	BtHciUsbDesc_t *pDesc;
-	BtHciUsbScoDesc_t *pScoDesc;
-	BtHciUsbSerialDesc_t *pSerialDesc;
-	BtHciUsbFullDesc_t *pFullDesc;
 	DevIntrfEvtHandler_t EvtCB;
 } BtHciUsbCfg_t;
 
@@ -209,6 +205,8 @@ typedef struct __Bt_Hci_Usb_Dev {
 	uint16_t AclHsMps;
 	uint8_t EventFsInterval;
 	uint8_t EventHsInterval;
+	BtHciUsbDescBuffer_t FsDesc;
+	BtHciUsbDescBuffer_t HsDesc;
 	BtHciUsbPacketType_t RxType;
 	BtHciUsbPacketType_t TxType;
 	BtHciUsbPacketType_t BulkRxType;

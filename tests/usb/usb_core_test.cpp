@@ -111,23 +111,14 @@ typedef struct {
 typedef struct {
 	uint8_t Config[64];
 	uint16_t ConfigLen;
-	uint8_t String64[64];
 } DescState_t;
 
 static CtrlrState_t s_Ctrlr;
 static FuncState_t s_Class;
 static DescState_t s_Desc;
 
-static const uint8_t s_DeviceDesc[] = {
-	18, USB_DESCTYPE_DEVICE, 0x00, 0x02, 0, 0, 0, 64,
-	0x34, 0x12, 0x78, 0x56, 0x00, 0x01, 1, 2, 3, 1
-};
-
 // One interface: alternate 0 owns EP1 OUT/IN, alternate 1 owns EP2 IN.
 static const uint8_t s_ConfigDesc[] = {
-	9, USB_DESCTYPE_CONFIGURATION, 48, 0, 1, 1, 0,
-	(uint8_t)(USB_CONFATT_RESERVED | USB_CONFATT_SELF_POWERED |
-		USB_CONFATT_REMOTE_WAKEUP), 50,
 	9, USB_DESCTYPE_INTERFACE, 0, 0, 2, USB_INTRFCLASS_VENDOR, 0, 0, 0,
 	7, USB_DESCTYPE_ENDPOINT, EP1_OUT, 2, 64, 0, 0,
 	7, USB_DESCTYPE_ENDPOINT, EP1_IN, 2, 64, 0, 0,
@@ -178,28 +169,6 @@ static void Event(UsbCtrlrEvtType_t Type)
 	UsbCtrlrEvt_t evt = {};
 	evt.Type = Type;
 	s_Ctrlr.Handler(TEST_DEVNO, &evt, s_Ctrlr.pContext);
-}
-
-static const uint8_t *Descriptor(uint8_t Type, uint8_t Index, uint16_t,
-								 UsbSpeed_t, uint16_t *pLength, void *)
-{
-	if (Type == USB_DESCTYPE_DEVICE && Index == 0)
-	{
-		*pLength = sizeof(s_DeviceDesc);
-		return s_DeviceDesc;
-	}
-	if (Type == USB_DESCTYPE_CONFIGURATION && Index == 0)
-	{
-		*pLength = s_Desc.ConfigLen;
-		return s_Desc.Config;
-	}
-	if (Type == USB_DESCTYPE_STRING && Index == 1)
-	{
-		*pLength = sizeof(s_Desc.String64);
-		return s_Desc.String64;
-	}
-	*pLength = 0;
-	return nullptr;
 }
 
 static bool Request(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
@@ -293,9 +262,7 @@ static bool Fixture(bool WithSetInterface = true,
 	memset(&s_Class, 0, sizeof(s_Class));
 	memset(&s_Desc, 0, sizeof(s_Desc));
 	memcpy(s_Desc.Config, s_ConfigDesc, sizeof(s_ConfigDesc));
-	s_Desc.ConfigLen = sizeof(s_Desc.Config);
-	s_Desc.String64[0] = sizeof(s_Desc.String64);
-	s_Desc.String64[1] = USB_DESCTYPE_STRING;
+	s_Desc.ConfigLen = sizeof(s_ConfigDesc);
 
 	// Endpoint zero packet size and maximum speed are no longer given here.
 	// They come from usb_ctrlr.h for this controller number.
@@ -303,7 +270,10 @@ static bool Fixture(bool WithSetInterface = true,
 	core.DevNo = TEST_DEVNO;
 	core.Vid = 0x1209;
 	core.Pid = 0x0001;
-	core.DescHandler = Descriptor;
+	core.pManufacturer = "1234567890123456789012345678901";
+	core.bSelfPowered = true;
+	core.bRemoteWakeup = true;
+	core.MaxPower = 100U;
 	if (!UsbInit(&core))
 	{
 		return false;
@@ -316,7 +286,11 @@ static bool Fixture(bool WithSetInterface = true,
 	{
 		return false;
 	}
-	UsbEnable(TEST_DEVNO);
+	if (!UsbDescriptorRegister(TEST_DEVNO, pObject,
+		s_Desc.Config, s_Desc.ConfigLen) || !UsbEnable(TEST_DEVNO))
+	{
+		return false;
+	}
 	return s_Ctrlr.Handler != nullptr && s_Ctrlr.IntEnableCnt == 1 &&
 		s_Ctrlr.ConnectCnt == 1;
 }
@@ -363,7 +337,7 @@ static bool TestDescriptors(void)
 	Setup(STD_DEV_IN, USB_REQ_GET_DESCRIPTOR,
 		  (uint16_t)(USB_DESCTYPE_CONFIGURATION << 8), 0, 255);
 	CHECK(s_Ctrlr.XferCnt == base + 1);
-	CHECK(LastXfer()->Length == sizeof(s_ConfigDesc));
+	CHECK(LastXfer()->Length == sizeof(UsbCfgDesc_t) + sizeof(s_ConfigDesc));
 
 	int stalls = s_Ctrlr.StallCnt;
 	Setup(STD_DEV_IN, USB_REQ_GET_DESCRIPTOR,
@@ -376,13 +350,12 @@ static bool TestDescriptorValidation(void)
 {
 	CHECK(Fixture());
 	ClearCtrlrLog();
-	s_Desc.ConfigLen = sizeof(s_ConfigDesc) - 1;
+	s_Desc.Config[32] = 6U;
 	Setup(STD_DEV_IN, USB_REQ_GET_DESCRIPTOR,
 		  (uint16_t)(USB_DESCTYPE_CONFIGURATION << 8), 0, 255);
 	CHECK(s_Ctrlr.StallCnt == 1 && s_Ctrlr.XferCnt == 0);
 
 	memcpy(s_Desc.Config, s_ConfigDesc, sizeof(s_ConfigDesc));
-	s_Desc.ConfigLen = sizeof(s_Desc.Config);
 	s_Desc.Config[9] = 1;
 	Setup(STD_DEV_IN, USB_REQ_GET_DESCRIPTOR,
 		  (uint16_t)(USB_DESCTYPE_CONFIGURATION << 8), 0, 255);
@@ -587,14 +560,14 @@ static bool TestClassControl(void)
 
 	// Keep the class registered for interface 0, but remove interface 0
 	// from the active descriptor. Dispatch must follow the descriptor.
-	s_Desc.Config[11] = 1;
-	s_Desc.Config[34] = 1;
+	s_Desc.Config[2] = 1;
+	s_Desc.Config[25] = 1;
 	s_Class.StageCnt = 0;
 	stalls = s_Ctrlr.StallCnt;
 	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
 	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Class.StageCnt == 0);
-	s_Desc.Config[11] = 0;
-	s_Desc.Config[34] = 0;
+	s_Desc.Config[2] = 0;
+	s_Desc.Config[25] = 0;
 
 	s_Class.StageCnt = 0;
 	Setup(CLASS_IF_OUT, CLASS_OUT_DATA, 0, 0, 4);

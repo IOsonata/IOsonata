@@ -78,6 +78,23 @@ SOFTWARE.
 #define USBD_CDC_NOTIFY_WORDS \
 	((USBD_CDC_NOTIFY_LEN + sizeof(uint32_t) - 1U) / sizeof(uint32_t))
 
+#pragma pack(push, 1)
+
+typedef struct __Usbd_Cdc_Descriptor {
+	UsbInrtfAssDesc_t Association;
+	UsbIntrfDesc_t Control;
+	UsbCdcHeaderDesc_t Header;
+	UsbCdcCallMngmtDesc_t CallManagement;
+	UsbCdcACMDesc_t Acm;
+	UsbCdcUnionDesc_t Union;
+	UsbEndPointDesc_t Notification;
+	UsbIntrfDesc_t Data;
+	UsbEndPointDesc_t Out;
+	UsbEndPointDesc_t In;
+} UsbdCdcDesc_t;
+
+#pragma pack(pop)
+
 #pragma pack(push, 4)
 
 typedef struct __Usbd_Cdc_Config {
@@ -105,6 +122,8 @@ typedef struct __Usbd_Cdc_Dev {
 	uint8_t NotifyEpNo;			//!< Internal allocation
 	uint8_t DataEpNo;				//!< Internal allocation
 	int DevNo;
+	UsbdCdcDesc_t FsDesc;
+	UsbdCdcDesc_t HsDesc;
 	bool SerialStatePending;
 	uint32_t RxTransfer[USBD_CDC_TRANS_WORDS];
 	uint32_t TxTransfer[USBD_CDC_TRANS_WORDS];
@@ -126,9 +145,8 @@ uint16_t UsbdCdcControlLineState(const UsbdCdcDev_t * const pCdc);
 
 void UsbdCdcSetSerialState(UsbdCdcDev_t * const pCdc, uint16_t SerialState);
 
-const uint8_t *UsbdCdcDescHandler(uint8_t DescType, uint8_t DescIndex,
-								  uint16_t LangId, UsbSpeed_t Speed,
-								  uint16_t *pLength, void *pContext);
+bool UsbdCdcMakeDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
+						 UsbSpeed_t Speed, bool HasFunctionString);
 
 static inline int UsbdCdcRx(UsbdCdcDev_t * const pCdc, uint8_t *pBuff, int BuffLen) {
 	return DeviceIntrfRx(&pCdc->IntrfData.DevIntrf, 0, pBuff, BuffLen);

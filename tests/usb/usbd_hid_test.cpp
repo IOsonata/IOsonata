@@ -18,6 +18,8 @@ static uint8_t s_ReservedFirst;
 static uint8_t s_ReservedCount;
 static uint16_t s_ReservedIn;
 static uint16_t s_ReservedOut;
+static const uint8_t *s_FsDescriptor;
+static uint16_t s_FsDescriptorLength;
 static UsbEndPointDesc_t s_Open[2];
 static int s_OpenCount;
 static int s_CloseCount;
@@ -118,6 +120,21 @@ bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
 	s_ReservedIn = EpInMask;
 	s_ReservedOut = EpOutMask;
 	s_Registered = true;
+	return true;
+}
+
+bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
+						   const void *pFsDescriptor,
+						   uint16_t FsDescriptorLength,
+						   const void *, uint16_t)
+{
+	if (DevNo != 0 || pClass != s_ClassObject || pFsDescriptor == nullptr ||
+		FsDescriptorLength == 0U)
+	{
+		return false;
+	}
+	s_FsDescriptor = static_cast<const uint8_t *>(pFsDescriptor);
+	s_FsDescriptorLength = FsDescriptorLength;
 	return true;
 }
 
@@ -233,6 +250,8 @@ static void ResetFake(void)
 	s_ReservedCount = 0U;
 	s_ReservedIn = 0U;
 	s_ReservedOut = 0U;
+	s_FsDescriptor = nullptr;
+	s_FsDescriptorLength = 0U;
 	s_OpenCount = 0;
 	s_CloseCount = 0;
 	s_OutBuffer = nullptr;
@@ -289,10 +308,11 @@ static void TestDescriptorAndPlacement(void)
 	s_ReservedOut = (uint16_t)(1U << 1);
 
 	TestHid hid;
-	UsbdHidDesc_t desc = {};
 	UsbdHidCfg_t cfg = MakeCfg();
-	cfg.pDesc = &desc;
 	CHECK(hid.Init(cfg));
+	CHECK(s_FsDescriptorLength == sizeof(UsbdHidDesc_t));
+	const UsbdHidDesc_t &desc =
+		*reinterpret_cast<const UsbdHidDesc_t *>(s_FsDescriptor);
 	CHECK(s_Registered);
 	CHECK(s_ClassObject == &hid);
 	CHECK(s_ReservedFirst == 1U);

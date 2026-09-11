@@ -396,16 +396,25 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 		return false;
 	}
 
-	if (pCfg->pDesc != nullptr)
+	if (!UsbdHidFillDesc(&pHid->FsDesc, pHid, USB_SPEED_FULL))
 	{
-		const UsbSpeed_t speed = USB_HIGHSPEED_CAPABLE(pHid->DevNo) ?
-			USB_SPEED_HIGH : USB_SPEED_FULL;
-		if (!UsbdHidFillDesc(pCfg->pDesc, pHid, speed))
+		return false;
+	}
+
+	const void *pHsDesc = nullptr;
+	uint16_t hsDescLength = 0U;
+	if (USB_HIGHSPEED_CAPABLE(pHid->DevNo))
+	{
+		if (!UsbdHidFillDesc(&pHid->HsDesc, pHid, USB_SPEED_HIGH))
 		{
 			return false;
 		}
+		pHsDesc = &pHid->HsDesc;
+		hsDescLength = sizeof(pHid->HsDesc);
 	}
-	return true;
+
+	return UsbDescriptorRegister(pHid->DevNo, pClass,
+		&pHid->FsDesc, sizeof(pHid->FsDesc), pHsDesc, hsDescLength);
 }
 
 bool UsbdHid::Init(const UsbdHidCfg_t &Cfg)
