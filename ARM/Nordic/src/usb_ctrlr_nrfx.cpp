@@ -833,6 +833,9 @@ typedef uint_fast8_t atomic_uint_fast8_t;
 #define atomic_load(p) __atomic_load_n((p), __ATOMIC_SEQ_CST)
 #define atomic_store(p, v) __atomic_store_n((p), (v), __ATOMIC_SEQ_CST)
 #define atomic_exchange(p, v) __atomic_exchange_n((p), (v), __ATOMIC_SEQ_CST)
+#define atomic_compare_exchange_strong(p, expected, desired) \
+	__atomic_compare_exchange_n((p), (expected), (desired), false, \
+		__ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
 #define atomic_flag_test_and_set(p) __atomic_exchange_n((p), true, __ATOMIC_SEQ_CST)
 #define atomic_flag_clear(p) __atomic_store_n((p), false, __ATOMIC_SEQ_CST)
 
@@ -910,6 +913,14 @@ static atomic_bool s_IsoOutOpen;
 static atomic_bool s_IsoInReady;
 static atomic_bool s_IsoOutReady;
 static uint16_t s_IsoOutSize;
+// Bitmask of open non-ISO data IN endpoints (bit n = EPIN n). A data IN
+// retires its DMA lazily, so a completed IN keeps the shared engine until the
+// next controller event runs the reclaim step. When the host stops polling
+// between transfers there is no such event, so the engine stays held and the
+// next OUT stalls after the hardware double buffer fills. Keeping the SOF
+// interrupt on while any lazy IN is open runs the reclaim once per frame, which
+// releases the idle owner and starts the queued OUT within 1 ms.
+static volatile uint16_t s_LazyInMask;
 
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
@@ -1008,6 +1019,56 @@ static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 	nRFUsbdEmit(&evt);
 }
 
+static void nRFUsbdDmaEndIntEnable(uint8_t EpAddr)
+{
+	const uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+
+	if ((uint8_t)atomic_load(&s_DmaEpAddr) == EpAddr)
+	{
+		NRF_USBD->INTENSET = nRFUsbdDmaEndMask(EpAddr);
+	}
+
+	__set_PRIMASK(primask);
+}
+
+/** Retire a data IN DMA whose END event is already latched. */
+static void nRFUsbdDmaReclaim(void)
+{
+	uint_fast8_t epAddr = atomic_load(&s_DmaEpAddr);
+
+	if ((uint8_t)epAddr == NRFX_USBD_DMA_EP_NONE ||
+		!nRFUsbdDataIn((uint8_t)epAddr) ||
+		USB_ENDPADDR_NUM((uint8_t)epAddr) == NRFX_USBD_ISO_EP_NO)
+	{
+		return;
+	}
+
+	volatile uint32_t *pEvent = nRFUsbdDmaEndEvent((uint8_t)epAddr);
+	if (*pEvent == 0U)
+	{
+		return;
+	}
+
+	if (!atomic_compare_exchange_strong(&s_DmaEpAddr, &epAddr,
+		(uint_fast8_t)NRFX_USBD_DMA_EP_NONE))
+	{
+		return;
+	}
+
+	NRF_USBD->INTENCLR = nRFUsbdDmaEndMask((uint8_t)epAddr);
+	*pEvent = 0;
+	__ISB();
+	__DSB();
+
+	if (nrf52_errata_199())
+	{
+		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
+	}
+
+	atomic_flag_clear(&s_DmaRunning);
+}
+
 static void nRFUsbdDmaRelease(void)
 {
 	const uint32_t primask = __get_PRIMASK();
@@ -1052,11 +1113,6 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 	}
 
 	atomic_store(&s_DmaEpAddr, EpAddr);
-	if (nRFUsbdDataIn(EpAddr) &&
-		USB_ENDPADDR_NUM(EpAddr) != NRFX_USBD_ISO_EP_NO)
-	{
-		NRF_USBD->INTENSET = nRFUsbdDmaEndMask(EpAddr);
-	}
 	*pTask = 1;
 	__ISB();
 	__DSB();
@@ -1197,7 +1253,22 @@ static void nRFUsbdServicePending(void)
 	{
 		if (atomic_flag_test_and_set(&s_DmaRunning))
 		{
-			return;
+			// Data IN normally completes without ENDEPIN interrupts. If it has
+			// already ended, reclaim it now; otherwise its END interrupt resumes
+			// this same queue as soon as another endpoint needs the DMA engine.
+			nRFUsbdDmaReclaim();
+
+			if (atomic_flag_test_and_set(&s_DmaRunning))
+			{
+				const uint8_t epAddr =
+					(uint8_t)atomic_load(&s_DmaEpAddr);
+				if (epAddr != NRFX_USBD_DMA_EP_NONE &&
+					nRFUsbdDataIn(epAddr))
+				{
+					nRFUsbdDmaEndIntEnable(epAddr);
+				}
+				return;
+			}
 		}
 
 		if (atomic_exchange(&s_PendingEp0Status, false))
@@ -1408,6 +1479,7 @@ static void nRFUsbdResetState(void)
 	atomic_store(&s_IsoInReady, false);
 	atomic_store(&s_IsoOutReady, false);
 	s_IsoOutSize = 0U;
+	s_LazyInMask = 0U;
 	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
 	atomic_flag_clear(&s_DmaRunning);
 
@@ -1764,6 +1836,11 @@ static bool nRFUsbRegEpOpen(const UsbEndPointDesc_t *pDesc)
 		// Data IN completes its short DMA copy in the controller interrupt.
 		// EPDATA later reports when the host consumed the copied packet.
 		NRF_USBD->EPINEN |= (1UL << epNum);
+		// Keep a per-frame reclaim running so an idle IN never holds the
+		// shared DMA engine across a host pause.
+		s_LazyInMask |= (uint16_t)(1U << epNum);
+		NRF_USBD->EVENTS_SOF = 0;
+		NRF_USBD->INTENSET = USBD_INTEN_SOF_Msk;
 	}
 	else
 	{
@@ -1814,7 +1891,7 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 			NRF_USBD->EPOUTEN &= ~(1UL << NRFX_USBD_ISO_EP_NO);
 			NRF_USBD->EVENTS_ENDISOOUT = 0;
 		}
-		if (!s_Ctrlr.SofEnabled &&
+		if (!s_Ctrlr.SofEnabled && s_LazyInMask == 0U &&
 			!atomic_load(&s_IsoInOpen) &&
 			!atomic_load(&s_IsoOutOpen) && !atomic_load(&s_BusSuspended))
 		{
@@ -1827,6 +1904,13 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 		NRF_USBD->EPINEN &= ~(1UL << epNum);
 		NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
 		NRF_USBD->EPDATASTATUS = (1UL << epNum);
+		s_LazyInMask &= (uint16_t)~(1U << epNum);
+		if (!s_Ctrlr.SofEnabled && s_LazyInMask == 0U &&
+			!atomic_load(&s_IsoInOpen) && !atomic_load(&s_IsoOutOpen) &&
+			!atomic_load(&s_BusSuspended))
+		{
+			NRF_USBD->INTENCLR = USBD_INTEN_SOF_Msk;
+		}
 	}
 	else
 	{
@@ -2406,7 +2490,7 @@ extern "C" void USBD_IRQHandler(void)
 			nRFUsbdEmit(&evt);
 		}
 
-		if (!s_Ctrlr.SofEnabled &&
+		if (!s_Ctrlr.SofEnabled && s_LazyInMask == 0U &&
 			!atomic_load(&s_IsoInOpen) &&
 			!atomic_load(&s_IsoOutOpen) && !atomic_load(&s_BusSuspended))
 		{
