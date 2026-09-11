@@ -842,6 +842,8 @@ enum
 	NRFX_USBD_ISO_EP_NO = 8,
 	NRFX_USBD_MAX_PACKET_SIZE = 64,
 	NRFX_USBD_ISO_MAX_PACKET_SIZE = 512,
+	// ENDEPOUT[0] is 10 words after ENDEPIN[0] in the event register block.
+	NRFX_USBD_ENDEPOUT_WORD_OFFSET = 10,
 };
 
 #define NRFX_USBD_IRQ_EVENT_COUNT	(USBD_INTEN_EPDATA_Pos + 1)
@@ -1007,25 +1009,14 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 	const uint32_t epStatus = NRF_USBD->EPSTATUS;
 	NRF_USBD->EPSTATUS = epStatus;
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	if (epNum == NRFX_USBD_ISO_EP_NO)
-	{
-		if (USB_ENDPADDR_IS_IN(EpAddr))
-		{
-			NRF_USBD->EVENTS_ENDISOIN = 0;
-		}
-		else
-		{
-			NRF_USBD->EVENTS_ENDISOOUT = 0;
-		}
-	}
-	else if (USB_ENDPADDR_IS_IN(EpAddr))
-	{
-		NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
-	}
-	else
-	{
-		NRF_USBD->EVENTS_ENDEPOUT[epNum] = 0;
-	}
+	const uint32_t dmaDir = USB_ENDPADDR_IS_IN(EpAddr) ? 0U : 1U;
+	const uint32_t endOffset = epNum +
+		dmaDir * NRFX_USBD_ENDEPOUT_WORD_OFFSET +
+		((epNum >> 3U) & (dmaDir ^ 1U));
+	volatile uint32_t *pEndEvent = (volatile uint32_t *)
+		((uintptr_t)&NRF_USBD->EVENTS_ENDEPIN[0] +
+		 endOffset * sizeof(uint32_t));
+	*pEndEvent = 0;
 	__ISB();
 	__DSB();
 
@@ -1059,19 +1050,14 @@ static void nRFUsbdDmaWait(void)
 		}
 
 		const uint32_t dmaBit = 31U - (uint32_t)__CLZ(epStatus);
-		const bool isIn = dmaBit < 16U;
-		const uint8_t epNum = (uint8_t)(isIn ? dmaBit : dmaBit - 16U);
-		volatile uint32_t *pEvent;
-		if (epNum == NRFX_USBD_ISO_EP_NO)
-		{
-			pEvent = isIn ? &NRF_USBD->EVENTS_ENDISOIN :
-				&NRF_USBD->EVENTS_ENDISOOUT;
-		}
-		else
-		{
-			pEvent = isIn ? &NRF_USBD->EVENTS_ENDEPIN[epNum] :
-				&NRF_USBD->EVENTS_ENDEPOUT[epNum];
-		}
+		const uint32_t dmaDir = dmaBit >> 4U;
+		const uint32_t epNum = dmaBit & 0xFU;
+		const uint32_t endOffset = epNum +
+			dmaDir * NRFX_USBD_ENDEPOUT_WORD_OFFSET +
+			((epNum >> 3U) & (dmaDir ^ 1U));
+		volatile uint32_t *pEvent = (volatile uint32_t *)
+			((uintptr_t)&NRF_USBD->EVENTS_ENDEPIN[0] +
+			 endOffset * sizeof(uint32_t));
 		if (*pEvent == 0U)
 		{
 			continue;
@@ -2222,19 +2208,14 @@ extern "C" void USBD_IRQHandler(void)
 		// observes the latched ENDEPIN event here.
 		const bool reset = NRF_USBD->EVENTS_USBRESET != 0U;
 		const uint32_t dmaBit = 31U - (uint32_t)__CLZ(dmaStatus);
-		const bool dmaIsIn = dmaBit < 16U;
-		const uint8_t dmaEpNum = (uint8_t)(dmaIsIn ? dmaBit : dmaBit - 16U);
-		volatile uint32_t *pEndEvent;
-		if (dmaEpNum == NRFX_USBD_ISO_EP_NO)
-		{
-			pEndEvent = dmaIsIn ? &NRF_USBD->EVENTS_ENDISOIN :
-				&NRF_USBD->EVENTS_ENDISOOUT;
-		}
-		else
-		{
-			pEndEvent = dmaIsIn ? &NRF_USBD->EVENTS_ENDEPIN[dmaEpNum] :
-				&NRF_USBD->EVENTS_ENDEPOUT[dmaEpNum];
-		}
+		const uint32_t dmaDir = dmaBit >> 4U;
+		const uint32_t dmaEpNum = dmaBit & 0xFU;
+		const uint32_t endOffset = dmaEpNum +
+			dmaDir * NRFX_USBD_ENDEPOUT_WORD_OFFSET +
+			((dmaEpNum >> 3U) & (dmaDir ^ 1U));
+		volatile uint32_t *pEndEvent = (volatile uint32_t *)
+			((uintptr_t)&NRF_USBD->EVENTS_ENDEPIN[0] +
+			 endOffset * sizeof(uint32_t));
 		if (*pEndEvent == 0U && !reset)
 		{
 			return;
@@ -2247,7 +2228,7 @@ extern "C" void USBD_IRQHandler(void)
 
 		// Leave an OUT/EP0 END event set for the normal event collector. A
 		// data IN END only releases DMA; transfer completion is still EPDATA.
-		if (*pEndEvent != 0U && dmaIsIn && dmaEpNum != 0U &&
+		if (*pEndEvent != 0U && dmaDir == 0U && dmaEpNum != 0U &&
 			dmaEpNum != NRFX_USBD_ISO_EP_NO)
 		{
 			*pEndEvent = 0;

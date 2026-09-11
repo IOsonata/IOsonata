@@ -40,8 +40,10 @@ assert interrupt.index("NRF_USBD->EPDATASTATUS") < interrupt.index(
 )
 assert "dataDmaStatus = epStatus & dataStatus" in interrupt
 assert "__CLZ(dmaStatus)" in interrupt
-assert "NRF_USBD->EVENTS_ENDEPIN[dmaEpNum]" in interrupt
-assert "NRF_USBD->EVENTS_ENDEPOUT[dmaEpNum]" in interrupt
+assert "dmaDir = dmaBit >> 4U" in interrupt
+assert "dmaEpNum = dmaBit & 0xFU" in interrupt
+assert "dmaDir * NRFX_USBD_ENDEPOUT_WORD_OFFSET" in interrupt
+assert "&NRF_USBD->EVENTS_ENDEPIN[0]" in interrupt
 assert "NRF_USBD->EPSTATUS = epStatus" in interrupt
 assert interrupt.index("*pEndEvent = 0") < interrupt.index(
     "nRFUsbdDmaRelease();"
