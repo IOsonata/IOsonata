@@ -37,9 +37,14 @@ assert "nRFUsbdCollectEvents" not in source
 assert "INTENSET" not in dma_start, "DMA start must not enable ENDEPIN"
 assert "NRF_USBD->EPSTATUS = oldStatus" in dma_start
 assert "nRFUsbdEpStatusBit(EpAddr)" in dma_start
-assert "nRFUsbdDmaEndEvent(epStatus)" in interrupt
+assert "nRFUsbdDmaEndEvent(completed)" in interrupt
 assert interrupt.index("NRF_USBD->EVENTS_EPDATA") < interrupt.index(
     "dataStatus = NRF_USBD->EPDATASTATUS"
+)
+assert "epStatus & NRF_USBD->EPDATASTATUS" in interrupt
+assert "__CLZ(completed)" in interrupt
+assert interrupt.index("epStatus & NRF_USBD->EPDATASTATUS") < interrupt.index(
+    "NRF_USBD->EPDATASTATUS = dataDmaStatus"
 )
 assert interrupt.index("NRF_USBD->EPSTATUS = epStatus") < interrupt.index(
     "nRFUsbdDmaRelease();"

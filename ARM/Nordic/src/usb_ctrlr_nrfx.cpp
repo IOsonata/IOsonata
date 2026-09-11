@@ -1060,6 +1060,7 @@ static void nRFUsbdDmaWait(void)
 		}
 
 		NRF_USBD->EPSTATUS = epStatus;
+		NRF_USBD->EPDATASTATUS = epStatus;
 		*pEvent = 0;
 		__ISB();
 		__DSB();
@@ -2181,26 +2182,43 @@ extern "C" void USBD_IRQHandler(void)
 	{
 		dataStatus = NRF_USBD->EPDATASTATUS;
 		NRF_USBD->EVENTS_EPDATA = 0;
-		NRF_USBD->EPDATASTATUS = dataStatus;
 	}
 
 	const bool resetPending = NRF_USBD->EVENTS_USBRESET != 0U;
 
-	// EPSTATUS is the single EasyDMA owner. Convert its one set bit directly
-	// to the corresponding END event instead of scanning the event registers.
+	// For data endpoints, the intersection is the completed EasyDMA transfer:
+	// EPSTATUS identifies the DMA owner and EPDATASTATUS identifies the endpoint
+	// whose USB transaction was acknowledged. EP0 and ISO use dedicated events.
 	const uint32_t epStatus = NRF_USBD->EPSTATUS;
 	if (epStatus != 0U)
 	{
-		const uint32_t dmaBit = 31U - (uint32_t)__CLZ(epStatus);
+		const uint32_t dataDmaStatus =
+			epStatus & NRF_USBD->EPDATASTATUS;
+		const uint32_t specialDmaMask =
+			(1UL << 0) | (1UL << NRFX_USBD_ISO_EP_NO) |
+			(1UL << 16) | (1UL << (16U + NRFX_USBD_ISO_EP_NO));
+		uint32_t completed = dataDmaStatus != 0U ?
+			dataDmaStatus : (epStatus & specialDmaMask);
+		if (completed == 0U)
+		{
+			if (!resetPending)
+			{
+				return;
+			}
+			completed = epStatus;
+		}
+
+		const uint32_t dmaBit = 31U - (uint32_t)__CLZ(completed);
 		const uint32_t dmaEpNum = dmaBit & 0xFU;
 		const bool dmaIn = dmaBit < 16U;
-		volatile uint32_t *pEndEvent = nRFUsbdDmaEndEvent(epStatus);
+		volatile uint32_t *pEndEvent = nRFUsbdDmaEndEvent(completed);
 		if (*pEndEvent == 0U && !resetPending)
 		{
 			return;
 		}
 
 		NRF_USBD->EPSTATUS = epStatus;
+		NRF_USBD->EPDATASTATUS = dataDmaStatus;
 		*pEndEvent = 0;
 		__ISB();
 		__DSB();
