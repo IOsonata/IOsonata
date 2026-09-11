@@ -191,7 +191,7 @@ public:
 	}
 
 	void Close(void) { UsbIsoIntrfClose(&vUsbIsoIntrf); }
-	void Reset(void) { UsbIsoIntrfReset(&vUsbIsoIntrf); }
+	void Reset(void) override { UsbIsoIntrfReset(&vUsbIsoIntrf); }
 	void Suspend(void) { UsbIsoIntrfSuspend(&vUsbIsoIntrf); }
 	bool Resume(void) { return UsbIsoIntrfResume(&vUsbIsoIntrf); }
 
