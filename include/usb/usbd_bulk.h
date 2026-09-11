@@ -102,6 +102,8 @@ typedef struct __Usbd_Bulk_Config {
 	// MPS, so the application places it in its configuration descriptor and
 	// does not build it separately. Leave null when the fragment is not needed.
 	UsbdBulkDesc_t *pDesc;
+	UsbdClassRequestHandler_t RequestHandler;	//!< Optional vendor request handler
+	void *pRequestContext;
 	DevIntrfEvtHandler_t EvtCB;
 } UsbdBulkCfg_t;
 
@@ -111,6 +113,8 @@ typedef struct __Usbd_Bulk_Config {
 // members must stay naturally aligned on 64-bit host test builds.
 typedef struct __Usbd_Bulk_Dev {
 	UsbDevIntrf_t IntrfData;		//!< Endpoint data path, owned by value
+	UsbdClassRequestHandler_t RequestHandler;
+	void *pRequestContext;
 	int ItfNo;					//!< Internal allocation
 	int DevNo;
 	uint8_t EpNo;				//!< Internal allocation
@@ -128,6 +132,8 @@ typedef struct __Usbd_Bulk_Dev {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+bool UsbdBulkInit(UsbdBulkDev_t * const pBulk, const UsbdBulkCfg_t *pCfg);
 
 static inline int UsbdBulkRx(UsbdBulkDev_t * const pBulk, uint8_t *pBuff,
 							 int BuffLen) {

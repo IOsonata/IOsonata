@@ -97,6 +97,8 @@ static const UsbdBulkCfg_t s_BulkCfg = {
 	.HsMps = 0U,
 	.Mode = USBD_BULK_MODE_BYTE,
 	.pDesc = &s_ConfigDesc.Bulk,
+	.RequestHandler = nullptr,
+	.pRequestContext = nullptr,
 	.EvtCB = nullptr,
 };
 

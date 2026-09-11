@@ -1,14 +1,12 @@
 /**-------------------------------------------------------------------------
-@file	usbd_epalloc.cpp
+@file	usb_func.h
 
-@brief	Internal USB device interface/endpoint allocator.
+@brief	Internal USB function resource allocation.
 
-Recursive backtracking search over the endpoint space, lowest numbers
-first, IN only endpoints placed before bidirectional pairs, pairs before
-OUT only. Controller-constrained endpoints requested through the fixed
-masks are excluded from the search and merged into the registered masks.
-Each complete candidate is offered to the core; the first placement the
-core accepts is returned to the caller.
+USB classes describe how many interfaces and endpoint directions they need.
+This helper finds the lowest free placement accepted by the USB core and
+returns the assigned numbers to the class implementation. Applications do not
+choose interface or endpoint numbers.
 
 @author	Nguyen Hoan Hoang
 @date	Sep. 6, 2026
@@ -38,23 +36,49 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#ifndef __USB_FUNC_H__
+#define __USB_FUNC_H__
+
+#include <stdint.h>
 #include <string.h>
 
-#include "usb/usbd_epalloc.h"
+#include "usb/usb.h"
 
-typedef struct __Usbd_EpAlloc_State {
+#define USB_FUNC_EP_MAXCNT		4U
+
+#pragma pack(push, 4)
+
+typedef struct __Usb_Func_Requirement {
+	uint8_t InterfaceCount;
+	uint8_t BidirectionalCount;
+	uint8_t InCount;
+	uint8_t OutCount;
+	uint16_t FixedInMask;		//!< Controller-constrained IN endpoints
+	uint16_t FixedOutMask;		//!< Controller-constrained OUT endpoints
+} UsbFuncReq_t;
+
+typedef struct __Usb_Func_Allocation {
+	uint8_t FirstInterface;
+	uint8_t Bidirectional[USB_FUNC_EP_MAXCNT];
+	uint8_t In[USB_FUNC_EP_MAXCNT];
+	uint8_t Out[USB_FUNC_EP_MAXCNT];
+} UsbFuncAlloc_t;
+
+#pragma pack(pop)
+
+typedef struct __Usb_Func_Alloc_State {
 	int DevNo;
-	const UsbdEpAllocReq_t *pReq;
+	const UsbFuncReq_t *pReq;
 	const UsbdClassCfg_t *pCfg;
-	UsbDeviceClass *pClass;
-	UsbdEpAllocRes_t *pRes;
+	UsbFuncAlloc_t *pAlloc;
 	uint8_t FirstInterface;
 	uint8_t InLimit;
 	uint8_t OutLimit;
 	uint8_t PairLimit;
-} UsbdEpAllocState_t;
+} UsbFuncAllocState_t;
 
-static void EpAllocStore(uint8_t *pEp, unsigned Count, uint16_t Mask)
+static inline void UsbFuncStoreEndpoints(uint8_t *pEp, unsigned Count,
+										 uint16_t Mask)
 {
 	unsigned count = 0;
 
@@ -67,7 +91,7 @@ static void EpAllocStore(uint8_t *pEp, unsigned Count, uint16_t Mask)
 	}
 }
 
-static unsigned EpAllocMaskCount(uint16_t Mask)
+static inline unsigned UsbFuncMaskCount(uint16_t Mask)
 {
 	unsigned count = 0U;
 	while (Mask != 0U)
@@ -78,9 +102,10 @@ static unsigned EpAllocMaskCount(uint16_t Mask)
 	return count;
 }
 
-static bool EpAllocTryOut(const UsbdEpAllocState_t *pState, uint8_t Needed,
-						  uint8_t StartEp, uint16_t InMask,
-						  uint16_t PairMask, uint16_t OutMask)
+static inline bool UsbFuncTryOut(const UsbFuncAllocState_t *pState,
+								 uint8_t Needed, uint8_t StartEp,
+								 uint16_t InMask, uint16_t PairMask,
+								 uint16_t OutMask)
 {
 	if (Needed == 0U)
 	{
@@ -90,21 +115,20 @@ static bool EpAllocTryOut(const UsbdEpAllocState_t *pState, uint8_t Needed,
 		cfg.EpInMask = InMask | PairMask;
 		cfg.EpOutMask = OutMask | PairMask;
 
-		const bool registered = pState->pClass != nullptr ?
-			UsbClassRegister(pState->DevNo, &cfg, pState->pClass) :
-			UsbdClassRegister(pState->DevNo, &cfg);
-		if (!registered)
+		if (!UsbdClassRegister(pState->DevNo, &cfg))
 		{
 			return false;
 		}
 
-		memset(pState->pRes, 0, sizeof(*pState->pRes));
-		pState->pRes->FirstInterface = pState->FirstInterface;
-		EpAllocStore(pState->pRes->Bidirectional,
+		memset(pState->pAlloc, 0, sizeof(*pState->pAlloc));
+		pState->pAlloc->FirstInterface = pState->FirstInterface;
+		UsbFuncStoreEndpoints(pState->pAlloc->Bidirectional,
 			pState->pReq->BidirectionalCount, PairMask);
-		EpAllocStore(pState->pRes->In, pState->pReq->InCount,
+		UsbFuncStoreEndpoints(pState->pAlloc->In,
+			pState->pReq->InCount,
 			(uint16_t)(InMask & ~pState->pReq->FixedInMask));
-		EpAllocStore(pState->pRes->Out, pState->pReq->OutCount,
+		UsbFuncStoreEndpoints(pState->pAlloc->Out,
+			pState->pReq->OutCount,
 			(uint16_t)(OutMask & ~pState->pReq->FixedOutMask));
 		return true;
 	}
@@ -119,9 +143,9 @@ static bool EpAllocTryOut(const UsbdEpAllocState_t *pState, uint8_t Needed,
 			continue;
 		}
 
-		if (EpAllocTryOut(pState, (uint8_t)(Needed - 1U),
-						  (uint8_t)(ep + 1U), InMask, PairMask,
-						  OutMask | bit))
+		if (UsbFuncTryOut(pState, (uint8_t)(Needed - 1U),
+							  (uint8_t)(ep + 1U), InMask, PairMask,
+							  OutMask | bit))
 		{
 			return true;
 		}
@@ -130,13 +154,13 @@ static bool EpAllocTryOut(const UsbdEpAllocState_t *pState, uint8_t Needed,
 	return false;
 }
 
-static bool EpAllocTryPair(const UsbdEpAllocState_t *pState, uint8_t Needed,
-						   uint8_t StartEp, uint16_t InMask,
-						   uint16_t PairMask)
+static inline bool UsbFuncTryPair(const UsbFuncAllocState_t *pState,
+								  uint8_t Needed, uint8_t StartEp,
+								  uint16_t InMask, uint16_t PairMask)
 {
 	if (Needed == 0U)
 	{
-		return EpAllocTryOut(pState, pState->pReq->OutCount, 1U,
+		return UsbFuncTryOut(pState, pState->pReq->OutCount, 1U,
 							 InMask, PairMask, pState->pReq->FixedOutMask);
 	}
 
@@ -149,8 +173,9 @@ static bool EpAllocTryPair(const UsbdEpAllocState_t *pState, uint8_t Needed,
 			continue;
 		}
 
-		if (EpAllocTryPair(pState, (uint8_t)(Needed - 1U),
-						   (uint8_t)(ep + 1U), InMask, PairMask | bit))
+		if (UsbFuncTryPair(pState, (uint8_t)(Needed - 1U),
+							   (uint8_t)(ep + 1U), InMask,
+							   PairMask | bit))
 		{
 			return true;
 		}
@@ -159,12 +184,13 @@ static bool EpAllocTryPair(const UsbdEpAllocState_t *pState, uint8_t Needed,
 	return false;
 }
 
-static bool EpAllocTryIn(const UsbdEpAllocState_t *pState, uint8_t Needed,
-						 uint8_t StartEp, uint16_t InMask)
+static inline bool UsbFuncTryIn(const UsbFuncAllocState_t *pState,
+								uint8_t Needed, uint8_t StartEp,
+								uint16_t InMask)
 {
 	if (Needed == 0U)
 	{
-		return EpAllocTryPair(pState, pState->pReq->BidirectionalCount,
+		return UsbFuncTryPair(pState, pState->pReq->BidirectionalCount,
 							  1U, InMask, 0U);
 	}
 
@@ -176,8 +202,8 @@ static bool EpAllocTryIn(const UsbdEpAllocState_t *pState, uint8_t Needed,
 			continue;
 		}
 
-		if (EpAllocTryIn(pState, (uint8_t)(Needed - 1U),
-						 (uint8_t)(ep + 1U), InMask | bit))
+		if (UsbFuncTryIn(pState, (uint8_t)(Needed - 1U),
+							 (uint8_t)(ep + 1U), InMask | bit))
 		{
 			return true;
 		}
@@ -186,16 +212,16 @@ static bool EpAllocTryIn(const UsbdEpAllocState_t *pState, uint8_t Needed,
 	return false;
 }
 
-bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
-				 const UsbdClassCfg_t *pCfg, UsbDeviceClass *pClass,
-				 UsbdEpAllocRes_t *pRes)
+static inline bool UsbdClassRegisterAuto(int DevNo, const UsbFuncReq_t *pReq,
+									  const UsbdClassCfg_t *pCfg,
+									  UsbFuncAlloc_t *pAlloc)
 {
-	if (pReq == nullptr || pCfg == nullptr || pRes == nullptr ||
+	if (pReq == nullptr || pCfg == nullptr || pAlloc == nullptr ||
 		DevNo < 0 || DevNo >= USB_CTRLR_CNT ||
 		pReq->InterfaceCount > 16U ||
-		pReq->BidirectionalCount > USBD_EPALLOC_EP_MAXCNT ||
-		pReq->InCount > USBD_EPALLOC_EP_MAXCNT ||
-		pReq->OutCount > USBD_EPALLOC_EP_MAXCNT)
+		pReq->BidirectionalCount > USB_FUNC_EP_MAXCNT ||
+		pReq->InCount > USB_FUNC_EP_MAXCNT ||
+		pReq->OutCount > USB_FUNC_EP_MAXCNT)
 	{
 		return false;
 	}
@@ -212,22 +238,21 @@ bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
 
 	if (inLimit < 1U || outLimit < 1U ||
 		((pReq->FixedInMask | pReq->FixedOutMask) & 1U) != 0U ||
-		EpAllocMaskCount(fixedInDynamic) +
+		UsbFuncMaskCount(fixedInDynamic) +
 			(unsigned)pReq->BidirectionalCount + pReq->InCount >
 			(unsigned)inLimit - 1U ||
-		EpAllocMaskCount(fixedOutDynamic) +
+		UsbFuncMaskCount(fixedOutDynamic) +
 			(unsigned)pReq->BidirectionalCount + pReq->OutCount >
 			(unsigned)outLimit - 1U)
 	{
 		return false;
 	}
 
-	UsbdEpAllocState_t state = {};
+	UsbFuncAllocState_t state = {};
 	state.DevNo = DevNo;
 	state.pReq = pReq;
 	state.pCfg = pCfg;
-	state.pClass = pClass;
-	state.pRes = pRes;
+	state.pAlloc = pAlloc;
 	state.InLimit = inLimit;
 	state.OutLimit = outLimit;
 	state.PairLimit = pairLimit;
@@ -236,7 +261,8 @@ bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
 	for (unsigned first = 0; first <= lastFirst; first++)
 	{
 		state.FirstInterface = (uint8_t)first;
-		if (EpAllocTryIn(&state, pReq->InCount, 1U, pReq->FixedInMask))
+		if (UsbFuncTryIn(&state, pReq->InCount, 1U,
+							 pReq->FixedInMask))
 		{
 			return true;
 		}
@@ -245,8 +271,4 @@ bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
 	return false;
 }
 
-bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
-				 const UsbdClassCfg_t *pCfg, UsbdEpAllocRes_t *pRes)
-{
-	return UsbdEpAlloc(DevNo, pReq, pCfg, nullptr, pRes);
-}
+#endif	// __USB_FUNC_H__

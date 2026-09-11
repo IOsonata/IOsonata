@@ -71,8 +71,10 @@ static void UsbdBulkCloseEndpoints(UsbdBulkDev_t *pBulk)
 	UsbCtrlrEpClose(pBulk->DevNo, USB_ENDPADDR_DIRIN(pBulk->EpNo));
 }
 
-static bool UsbdBulkConfig(UsbdBulkDev_t *pBulk, uint8_t Configuration)
+static bool UsbdBulkConfig(uint8_t Configuration, void *pContext)
 {
+	UsbdBulkDev_t *pBulk = static_cast<UsbdBulkDev_t *>(pContext);
+
 	if (pBulk == nullptr)
 	{
 		return false;
@@ -105,8 +107,41 @@ static bool UsbdBulkConfig(UsbdBulkDev_t *pBulk, uint8_t Configuration)
 	return true;
 }
 
-static void UsbdBulkReset(UsbdBulkDev_t *pBulk)
+static bool UsbdBulkRequest(const UsbSetupData_t *pSetup,
+							UsbCtrlStage_t Stage, uint8_t **ppData,
+							uint16_t *pLength, void *pContext)
 {
+	UsbdBulkDev_t *pBulk = static_cast<UsbdBulkDev_t *>(pContext);
+
+	if (pBulk == nullptr || pBulk->RequestHandler == nullptr ||
+		pSetup == nullptr)
+	{
+		return false;
+	}
+
+	const uint8_t recipient =
+		pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT;
+	if (recipient == USB_REQTYPE_INTERFACE &&
+		((pSetup->wIndex & 0xFF00U) != 0U ||
+		 (uint8_t)pSetup->wIndex != (uint8_t)pBulk->ItfNo))
+	{
+		return false;
+	}
+	if (recipient == USB_REQTYPE_ENDPOINT &&
+		((pSetup->wIndex & 0xFF00U) != 0U ||
+		 USB_ENDPADDR_NUM((uint8_t)pSetup->wIndex) != pBulk->EpNo))
+	{
+		return false;
+	}
+
+	return pBulk->RequestHandler(pSetup, Stage, ppData, pLength,
+								 pBulk->pRequestContext);
+}
+
+static void UsbdBulkReset(void *pContext)
+{
+	UsbdBulkDev_t *pBulk = static_cast<UsbdBulkDev_t *>(pContext);
+
 	if (pBulk != nullptr)
 	{
 		UsbIntrfUnconfigure(&pBulk->IntrfData);
@@ -156,7 +191,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 								 const UsbdBulkCfg_t *pCfg,
 								 UsbDeviceClass *pClass)
 {
-	if (pBulk == nullptr || pCfg == nullptr || pClass == nullptr ||
+	if (pBulk == nullptr || pCfg == nullptr ||
 		UsbGetCfg(pCfg->DevNo) == nullptr ||
 		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
 		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
@@ -165,6 +200,8 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 		return false;
 	}
 
+	pBulk->RequestHandler = pCfg->RequestHandler;
+	pBulk->pRequestContext = pCfg->pRequestContext;
 	pBulk->DevNo = pCfg->DevNo;
 	pBulk->SubClass = pCfg->SubClass;
 	pBulk->Protocol = pCfg->Protocol;
@@ -178,12 +215,22 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 		return false;
 	}
 
+	UsbdClassCfg_t coreCfg = {};
+	coreCfg.RequestHandler =
+		pClass == nullptr && pCfg->RequestHandler != nullptr ?
+		UsbdBulkRequest : nullptr;
+	coreCfg.ConfigHandler = pClass == nullptr ? UsbdBulkConfig : nullptr;
+	coreCfg.SetInterfaceHandler = nullptr;
+	coreCfg.ResetHandler = pClass == nullptr ? UsbdBulkReset : nullptr;
+	coreCfg.ProcessHandler = nullptr;
+	coreCfg.pContext = pBulk;
+
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 1U;
 	req.BidirectionalCount = 1U;
 
 	UsbdEpAllocRes_t alloc = {};
-	if (!UsbdEpAlloc(pBulk->DevNo, &req, pClass, &alloc))
+	if (!UsbdEpAlloc(pBulk->DevNo, &req, &coreCfg, pClass, &alloc))
 	{
 		return false;
 	}
@@ -228,6 +275,11 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 	return true;
 }
 
+bool UsbdBulkInit(UsbdBulkDev_t * const pBulk, const UsbdBulkCfg_t *pCfg)
+{
+	return UsbdBulkInitInternal(pBulk, pCfg, nullptr);
+}
+
 bool UsbdBulk::Init(const UsbdBulkCfg_t &Cfg)
 {
 	return UsbdBulkInitInternal(&vUsbdBulk, &Cfg, this);
@@ -236,16 +288,12 @@ bool UsbdBulk::Init(const UsbdBulkCfg_t &Cfg)
 bool UsbdBulk::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 						uint8_t **ppData, uint16_t *pLength)
 {
-	(void)pSetup;
-	(void)Stage;
-	(void)ppData;
-	(void)pLength;
-	return false;
+	return UsbdBulkRequest(pSetup, Stage, ppData, pLength, &vUsbdBulk);
 }
 
 bool UsbdBulk::SelectConfig(uint8_t ConfigValue)
 {
-	return UsbdBulkConfig(&vUsbdBulk, ConfigValue);
+	return UsbdBulkConfig(ConfigValue, &vUsbdBulk);
 }
 
 void UsbdBulk::Reset(void)

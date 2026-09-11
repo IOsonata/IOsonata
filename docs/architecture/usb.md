@@ -84,21 +84,24 @@ Device interface and endpoint ownership is stored by `UsbDeviceClass`, so
 control, configuration, interface selection, reset and processing each use one
 object dispatch path. There is no callback registry in the core.
 
-Device classes register their topology and statically owned object atomically
-through `UsbClassRegister()`. The core has no device-class callback
-registration API or callback adapter.
+The C API is preserved by fixed, statically owned `UsbDeviceClass` adapter
+objects. `UsbdClassRegister()` copies a C callback table into an adapter and
+registers that adapter in the same object array. Native C++ classes register
+their topology and object atomically through `UsbClassRegister()`.
 
-The `UsbdCdc` object derives from both `UsbDeviceClass` and `DeviceIntrf`.
+The C++ `UsbdCdc` object derives from both `UsbDeviceClass` and `DeviceIntrf`.
 Its control requests, configuration selection, reset and deferred pump run
-through the virtual class API.
+through the virtual class API. The C API continues to use C callback adapters
+over the same `UsbdCdcDev_t` implementation.
 
 The C++ `BtHciUsb` object also derives from `UsbDeviceClass` and
 `DeviceIntrf`. HCI command control transfers, configuration selection, HCI
 and SCO interface options, and reset run through the virtual class API. The
-underlying request and endpoint logic is reused by its virtual methods.
+underlying request and endpoint logic is shared with the C callback adapters.
 
-`UsbdBulk` and `UsbdHid` follow the same model and register their class objects
-directly.
+`UsbdBulk` and `UsbdHid` follow the same model. Their C++ initializers leave
+the compatibility callbacks null and register the class object; their C
+initializers retain the callback API through a static adapter object.
 
 ## Current device-side data-path model
 

@@ -108,7 +108,36 @@ typedef enum __Usb_Ctrl_Stage {
 	USB_CTRL_ABORT,				//!< Transfer abandoned, drop anything staged
 } UsbCtrlStage_t;
 
+typedef bool (*UsbdClassRequestHandler_t)(const UsbSetupData_t *pSetup,
+									UsbCtrlStage_t Stage, uint8_t **ppData,
+									uint16_t *pLength, void *pContext);
+
+typedef bool (*UsbdClassConfigHandler_t)(uint8_t Configuration, void *pContext);
+typedef bool (*UsbdClassSetInterfaceHandler_t)(uint8_t InterfaceNo, uint8_t Alt,
+										 void *pContext);
+typedef void (*UsbdClassResetHandler_t)(void *pContext);
+
+/// Polled from UsbProcess in application context. Work a class cannot do
+/// inside the USB interrupt goes here.
+typedef void (*UsbdClassProcessHandler_t)(void *pContext);
+
 #pragma pack(push, 4)
+
+/// One device class instance. Endpoint zero belongs to the generic layer, so
+/// bit zero must be clear in both masks, and masks may not overlap between
+/// class instances.
+typedef struct __Usbd_Class_Config {
+	uint8_t FirstInterface;			//!< First interface owned by class instance
+	uint8_t InterfaceCount;			//!< Number of interfaces, zero for none
+	uint16_t EpInMask;				//!< IN endpoint ownership, bit n = endpoint n
+	uint16_t EpOutMask;				//!< OUT endpoint ownership, bit n = endpoint n
+	UsbdClassRequestHandler_t RequestHandler;
+	UsbdClassConfigHandler_t ConfigHandler;
+	UsbdClassSetInterfaceHandler_t SetInterfaceHandler;
+	UsbdClassResetHandler_t ResetHandler;
+	UsbdClassProcessHandler_t ProcessHandler;	//!< Optional, polled from UsbProcess
+	void *pContext;
+} UsbdClassCfg_t;
 
 /// Everything UsbInit needs. Endpoint zero packet size and maximum speed are
 /// not here, they come from usb_ctrlr.h for this DevNo.
@@ -151,6 +180,14 @@ extern "C" {
  * controller this target has.
  */
 bool UsbInit(const UsbCfg_t *pCfg);
+
+/**
+ * @brief	Register one C USB device class through a static object adapter.
+ *
+ * Registration is static and expected to be complete before the device is
+ * connected to the bus. The core stores and dispatches only class objects.
+ */
+bool UsbdClassRegister(int DevNo, const UsbdClassCfg_t *pCfg);
 
 /** @brief Enable the controller interrupt and connect the bus pull-up. */
 bool UsbEnable(int DevNo);
@@ -245,9 +282,8 @@ protected:
 	~UsbDeviceClass() = default;
 
 private:
-	friend bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
-								 uint8_t FirstInterface, uint8_t InterfaceCount,
-								 uint16_t EpInMask, uint16_t EpOutMask);
+	friend bool UsbClassRegister(int DevNo, const UsbdClassCfg_t *pCfg,
+								 UsbDeviceClass *pClass);
 
 	uint8_t vFirstInterface = 0;
 	uint8_t vInterfaceCount = 0;
@@ -262,10 +298,9 @@ protected:
 	~UsbHostClass() = default;
 };
 
-/// Atomically register one statically owned device class and its ownership.
-bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
-					  uint8_t FirstInterface, uint8_t InterfaceCount,
-					  uint16_t EpInMask, uint16_t EpOutMask);
+/// Atomically register one statically owned C++ device class and its ownership.
+bool UsbClassRegister(int DevNo, const UsbdClassCfg_t *pCfg,
+					  UsbDeviceClass *pClass);
 #endif
 
 /** @} End of group USB */

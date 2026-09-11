@@ -67,12 +67,17 @@ typedef struct __Usbd_EpAlloc_Res {
 
 #pragma pack(pop)
 
-#ifdef __cplusplus
 /// Find the lowest free interface/endpoint placement satisfying pReq,
-/// atomically register pClass with that topology and return the assigned
+/// register pCfg with the core at that placement and return the assigned
 /// numbers in pRes. Returns false when no placement fits.
 bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
-				 UsbDeviceClass *pClass, UsbdEpAllocRes_t *pRes);
+				 const UsbdClassCfg_t *pCfg, UsbdEpAllocRes_t *pRes);
+
+#ifdef __cplusplus
+/// Atomically register pClass with the topology selected by the allocator.
+bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
+				 const UsbdClassCfg_t *pCfg, UsbDeviceClass *pClass,
+				 UsbdEpAllocRes_t *pRes);
 #endif
 
 #endif	// __USBD_EPALLOC_H__

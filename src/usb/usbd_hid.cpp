@@ -74,8 +74,9 @@ static void UsbdHidUnconfigure(UsbdHidDev_t *pHid)
 	pHid->Configured = false;
 }
 
-static bool UsbdHidConfig(UsbdHidDev_t *pHid, uint8_t Configuration)
+static bool UsbdHidConfig(uint8_t Configuration, void *pContext)
 {
+	UsbdHidDev_t *pHid = static_cast<UsbdHidDev_t *>(pContext);
 	if (pHid == nullptr)
 	{
 		return false;
@@ -97,8 +98,9 @@ static bool UsbdHidConfig(UsbdHidDev_t *pHid, uint8_t Configuration)
 	return true;
 }
 
-static void UsbdHidReset(UsbdHidDev_t *pHid)
+static void UsbdHidReset(void *pContext)
 {
+	UsbdHidDev_t *pHid = static_cast<UsbdHidDev_t *>(pContext);
 	if (pHid != nullptr)
 	{
 		UsbIntIntrfReset(&pHid->IntIntrf);
@@ -165,8 +167,22 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 	switch (pSetup->bRequest)
 	{
 		case USB_HID_REQ_GET_REPORT:
+			if (!dirIn || pSetup->wLength == 0U ||
+				pHid->ReportHandler == nullptr)
+			{
+				return false;
+			}
+			return pHid->ReportHandler(pSetup, Stage, ppData, pLength,
+				pHid->pReportContext);
+
 		case USB_HID_REQ_SET_REPORT:
-			return false;
+			if (dirIn || pSetup->wLength == 0U ||
+				pHid->ReportHandler == nullptr)
+			{
+				return false;
+			}
+			return pHid->ReportHandler(pSetup, Stage, ppData, pLength,
+				pHid->pReportContext);
 
 		case USB_HID_REQ_GET_IDLE:
 			if (!dirIn || pSetup->wLength != 1U ||
@@ -257,8 +273,9 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 
 static bool UsbdHidRequest(const UsbSetupData_t *pSetup,
 						   UsbCtrlStage_t Stage, uint8_t **ppData,
-						   uint16_t *pLength, UsbdHidDev_t *pHid)
+						   uint16_t *pLength, void *pContext)
 {
+	UsbdHidDev_t *pHid = static_cast<UsbdHidDev_t *>(pContext);
 	if (pHid == nullptr || pLength == nullptr ||
 		!UsbdHidInterfaceRequest(pHid, pSetup))
 	{
@@ -323,7 +340,7 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 								const UsbdHidCfg_t *pCfg,
 								UsbDeviceClass *pClass)
 {
-	if (pHid == nullptr || pCfg == nullptr || pClass == nullptr ||
+	if (pHid == nullptr || pCfg == nullptr ||
 		UsbGetCfg(pCfg->DevNo) == nullptr || pCfg->pReportDesc == nullptr ||
 		pCfg->ReportDescLength == 0U ||
 		pCfg->SubClass > USB_HID_SUBCLASS_BOOT ||
@@ -351,6 +368,8 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	pHid->Protocol = pCfg->Protocol;
 	pHid->CountryCode = pCfg->CountryCode;
 	pHid->InterfaceString = pCfg->InterfaceString;
+	pHid->ReportHandler = pCfg->ReportHandler;
+	pHid->pReportContext = pCfg->pReportContext;
 	pHid->RxHandler = pCfg->RxHandler;
 	pHid->TxHandler = pCfg->TxHandler;
 	pHid->pContext = pCfg->pContext;
@@ -373,12 +392,18 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	pHid->HidDesc.RepDesc[0].bDescriptorType = USB_DESCTYPE_HID_REPORT;
 	pHid->HidDesc.RepDesc[0].wDescriptorLength = pHid->ReportDescLength;
 
+	UsbdClassCfg_t coreCfg = {};
+	coreCfg.RequestHandler = pClass == nullptr ? UsbdHidRequest : nullptr;
+	coreCfg.ConfigHandler = pClass == nullptr ? UsbdHidConfig : nullptr;
+	coreCfg.ResetHandler = pClass == nullptr ? UsbdHidReset : nullptr;
+	coreCfg.pContext = pHid;
+
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 1U;
 	req.BidirectionalCount = 1U;
 
 	UsbdEpAllocRes_t alloc = {};
-	if (!UsbdEpAlloc(pHid->DevNo, &req, pClass, &alloc))
+	if (!UsbdEpAlloc(pHid->DevNo, &req, &coreCfg, pClass, &alloc))
 	{
 		return false;
 	}
@@ -408,6 +433,11 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	return true;
 }
 
+bool UsbdHidInit(UsbdHidDev_t *pHid, const UsbdHidCfg_t *pCfg)
+{
+	return UsbdHidInitInternal(pHid, pCfg, nullptr);
+}
+
 bool UsbdHid::Init(const UsbdHidCfg_t &Cfg)
 {
 	return UsbdHidInitInternal(&vUsbdHid, &Cfg, this);
@@ -421,7 +451,7 @@ bool UsbdHid::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 
 bool UsbdHid::SelectConfig(uint8_t ConfigValue)
 {
-	return UsbdHidConfig(&vUsbdHid, ConfigValue);
+	return UsbdHidConfig(ConfigValue, &vUsbdHid);
 }
 
 void UsbdHid::Reset(void)

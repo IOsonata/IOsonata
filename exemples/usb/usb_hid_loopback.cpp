@@ -63,27 +63,7 @@ static const uint8_t s_ReportDesc[] = {
 	0xC0U,
 };
 
-static bool HidReportRequest(const UsbSetupData_t *pSetup,
-							 UsbCtrlStage_t Stage, uint8_t **ppData,
-							 uint16_t *pLength);
-
-class HidLoopback final : public UsbdHid {
-public:
-	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-				 uint8_t **ppData, uint16_t *pLength) override {
-		if (pSetup != nullptr &&
-			(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) ==
-				USB_REQTYPE_CLASS &&
-			(pSetup->bRequest == USB_HID_REQ_GET_REPORT ||
-			 pSetup->bRequest == USB_HID_REQ_SET_REPORT))
-		{
-			return HidReportRequest(pSetup, Stage, ppData, pLength);
-		}
-		return UsbdHid::Control(pSetup, Stage, ppData, pLength);
-	}
-};
-
-static HidLoopback g_Hid;
+static UsbdHid g_Hid;
 static uint8_t s_Pending[HID_REPORT_SIZE];
 static uint16_t s_PendingLength;
 static uint8_t s_ControlReport[HID_REPORT_SIZE];
@@ -134,7 +114,7 @@ static void HidTx(UsbdHidDev_t *, uint16_t, UsbCtrlrXferResult_t Result,
 
 static bool HidReportRequest(const UsbSetupData_t *pSetup,
 							 UsbCtrlStage_t Stage, uint8_t **ppData,
-							 uint16_t *pLength)
+							 uint16_t *pLength, void *)
 {
 	if (pSetup == nullptr || pLength == nullptr)
 	{
@@ -176,6 +156,8 @@ static const UsbdHidCfg_t s_HidCfg = {
 	.CountryCode = 0U,
 	.InterfaceString = HID_STR_INTERFACE,
 	.pDesc = &s_ConfigDesc.Hid,
+	.ReportHandler = HidReportRequest,
+	.pReportContext = nullptr,
 	.RxHandler = HidRx,
 	.TxHandler = HidTx,
 	.pContext = nullptr,
