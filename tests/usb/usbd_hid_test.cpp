@@ -12,13 +12,14 @@
 #define ITF_NO	0
 
 static UsbCfg_t s_UsbCfg;
-static UsbdClassCfg_t s_ClassCfg;
 static UsbDeviceClass *s_ClassObject;
 static bool s_Registered;
 static uint8_t s_ReservedFirst;
 static uint8_t s_ReservedCount;
 static uint16_t s_ReservedIn;
 static uint16_t s_ReservedOut;
+static const uint8_t *s_FsDescriptor;
+static uint16_t s_FsDescriptorLength;
 static UsbEndPointDesc_t s_Open[2];
 static int s_OpenCount;
 static int s_CloseCount;
@@ -37,33 +38,6 @@ extern "C" {
 const UsbCfg_t *UsbGetCfg(int DevNo)
 {
 	return DevNo == 0 ? &s_UsbCfg : nullptr;
-}
-
-bool UsbdClassRegister(int DevNo, const UsbdClassCfg_t *pCfg)
-{
-	if (DevNo != 0 || pCfg == nullptr)
-	{
-		return false;
-	}
-	if (pCfg->InterfaceCount != 0U && s_ReservedCount != 0U)
-	{
-		const unsigned firstA = pCfg->FirstInterface;
-		const unsigned lastA = firstA + pCfg->InterfaceCount;
-		const unsigned firstB = s_ReservedFirst;
-		const unsigned lastB = firstB + s_ReservedCount;
-		if (firstA < lastB && firstB < lastA)
-		{
-			return false;
-		}
-	}
-	if ((pCfg->EpInMask & s_ReservedIn) != 0U ||
-		(pCfg->EpOutMask & s_ReservedOut) != 0U)
-	{
-		return false;
-	}
-	s_ClassCfg = *pCfg;
-	s_Registered = true;
-	return true;
 }
 
 bool UsbCtrlrHighSpeed(int) { return false; }
@@ -118,15 +92,49 @@ bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
 bool UsbCtrlrEp0Xfer(int, uint8_t, uint8_t *, uint16_t) { return true; }
 }
 
-bool UsbClassRegister(int DevNo, const UsbdClassCfg_t *pCfg,
-					  UsbDeviceClass *pClass)
+bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
+					  uint8_t FirstInterface, uint8_t InterfaceCount,
+					  uint16_t EpInMask, uint16_t EpOutMask)
 {
-	if (pClass == nullptr || s_ClassObject != nullptr ||
-		!UsbdClassRegister(DevNo, pCfg))
+	if (DevNo != 0 || pClass == nullptr || s_ClassObject != nullptr)
+	{
+		return false;
+	}
+	if (InterfaceCount != 0U && s_ReservedCount != 0U)
+	{
+		const unsigned lastA = FirstInterface + InterfaceCount;
+		const unsigned lastB = s_ReservedFirst + s_ReservedCount;
+		if (FirstInterface < lastB && s_ReservedFirst < lastA)
+		{
+			return false;
+		}
+	}
+	if ((EpInMask & s_ReservedIn) != 0U ||
+		(EpOutMask & s_ReservedOut) != 0U)
 	{
 		return false;
 	}
 	s_ClassObject = pClass;
+	s_ReservedFirst = FirstInterface;
+	s_ReservedCount = InterfaceCount;
+	s_ReservedIn = EpInMask;
+	s_ReservedOut = EpOutMask;
+	s_Registered = true;
+	return true;
+}
+
+bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
+						   const void *pFsDescriptor,
+						   uint16_t FsDescriptorLength,
+						   const void *, uint16_t)
+{
+	if (DevNo != 0 || pClass != s_ClassObject || pFsDescriptor == nullptr ||
+		FsDescriptorLength == 0U)
+	{
+		return false;
+	}
+	s_FsDescriptor = static_cast<const uint8_t *>(pFsDescriptor);
+	s_FsDescriptorLength = FsDescriptorLength;
 	return true;
 }
 
@@ -151,7 +159,6 @@ static uint16_t s_LastTxLength;
 static uint8_t s_LastRx[USBD_HID_FS_MPS];
 static int s_ReportStageCount;
 static UsbCtrlStage_t s_ReportStage[4];
-static void *s_ReportContext;
 static uint8_t s_ControlReport[8];
 
 static void HidRx(UsbdHidDev_t *, const uint8_t *pData, uint16_t Length,
@@ -175,10 +182,8 @@ static void HidTx(UsbdHidDev_t *, uint16_t Length,
 }
 
 static bool ReportRequest(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-						  uint8_t **ppData, uint16_t *pLength,
-						  void *pContext)
+						  uint8_t **ppData, uint16_t *pLength)
 {
-	s_ReportContext = pContext;
 	if (s_ReportStageCount < 4)
 	{
 		s_ReportStage[s_ReportStageCount++] = Stage;
@@ -196,6 +201,26 @@ static bool ReportRequest(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	return true;
 }
 
+class TestHid final : public UsbdHid {
+public:
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+				 uint8_t **ppData, uint16_t *pLength) override {
+		if (pSetup != nullptr &&
+			(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) ==
+				USB_REQTYPE_CLASS &&
+			(pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT) ==
+				USB_REQTYPE_INTERFACE &&
+			(pSetup->wIndex & 0xFF00U) == 0U &&
+			(uint8_t)pSetup->wIndex == FirstInterface() &&
+			(pSetup->bRequest == USB_HID_REQ_GET_REPORT ||
+			 pSetup->bRequest == USB_HID_REQ_SET_REPORT))
+		{
+			return ReportRequest(pSetup, Stage, ppData, pLength);
+		}
+		return UsbdHid::Control(pSetup, Stage, ppData, pLength);
+	}
+};
+
 static UsbdHidCfg_t MakeCfg(void)
 {
 	UsbdHidCfg_t cfg = {};
@@ -206,8 +231,6 @@ static UsbdHidCfg_t MakeCfg(void)
 	cfg.Protocol = USB_HID_PROT_KEYBOARD;
 	cfg.CountryCode = 33U;
 	cfg.InterfaceString = 4U;
-	cfg.ReportHandler = ReportRequest;
-	cfg.pReportContext = &s_ReportContext;
 	cfg.RxHandler = HidRx;
 	cfg.TxHandler = HidTx;
 	return cfg;
@@ -216,7 +239,6 @@ static UsbdHidCfg_t MakeCfg(void)
 static void ResetFake(void)
 {
 	memset(&s_UsbCfg, 0, sizeof(s_UsbCfg));
-	memset(&s_ClassCfg, 0, sizeof(s_ClassCfg));
 	memset(s_Open, 0, sizeof(s_Open));
 	memset(s_LastRx, 0, sizeof(s_LastRx));
 	memset(s_ReportStage, 0, sizeof(s_ReportStage));
@@ -228,6 +250,8 @@ static void ResetFake(void)
 	s_ReservedCount = 0U;
 	s_ReservedIn = 0U;
 	s_ReservedOut = 0U;
+	s_FsDescriptor = nullptr;
+	s_FsDescriptorLength = 0U;
 	s_OpenCount = 0;
 	s_CloseCount = 0;
 	s_OutBuffer = nullptr;
@@ -245,7 +269,6 @@ static void ResetFake(void)
 	s_LastRxLength = 0U;
 	s_LastTxLength = 0U;
 	s_ReportStageCount = 0;
-	s_ReportContext = nullptr;
 }
 
 static void CompleteIn(void)
@@ -284,21 +307,17 @@ static void TestDescriptorAndPlacement(void)
 	s_ReservedIn = (uint16_t)(1U << 1);
 	s_ReservedOut = (uint16_t)(1U << 1);
 
-	UsbdHid hid;
-	UsbdHidDesc_t desc = {};
+	TestHid hid;
 	UsbdHidCfg_t cfg = MakeCfg();
-	cfg.pDesc = &desc;
 	CHECK(hid.Init(cfg));
+	CHECK(s_FsDescriptorLength == sizeof(UsbdHidDesc_t));
+	const UsbdHidDesc_t &desc =
+		*reinterpret_cast<const UsbdHidDesc_t *>(s_FsDescriptor);
 	CHECK(s_Registered);
 	CHECK(s_ClassObject == &hid);
-	CHECK(s_ClassCfg.RequestHandler == nullptr);
-	CHECK(s_ClassCfg.ConfigHandler == nullptr);
-	CHECK(s_ClassCfg.SetInterfaceHandler == nullptr);
-	CHECK(s_ClassCfg.ResetHandler == nullptr);
-	CHECK(s_ClassCfg.ProcessHandler == nullptr);
-	CHECK(s_ClassCfg.FirstInterface == 1U);
-	CHECK(s_ClassCfg.EpInMask == (1U << 2));
-	CHECK(s_ClassCfg.EpOutMask == (1U << 2));
+	CHECK(s_ReservedFirst == 1U);
+	CHECK(s_ReservedIn == (1U << 2));
+	CHECK(s_ReservedOut == (1U << 2));
 	CHECK(desc.Interface.bInterfaceNumber == 1U);
 	CHECK(desc.Interface.bNumEndpoints == 2U);
 	CHECK(desc.Interface.bInterfaceClass == USB_INTRFCLASS_HID);
@@ -314,44 +333,10 @@ static void TestDescriptorAndPlacement(void)
 	CHECK(desc.Out.bmAttributes == USB_ENDPATT_TRANS_INT);
 }
 
-static void TestCApiAdapters(void)
-{
-	ResetFake();
-	UsbdHidDev_t hid = {};
-	const UsbdHidCfg_t cfg = MakeCfg();
-
-	CHECK(UsbdHidInit(&hid, &cfg));
-	CHECK(s_ClassObject == nullptr);
-	CHECK(s_ClassCfg.RequestHandler != nullptr);
-	CHECK(s_ClassCfg.ConfigHandler != nullptr);
-	CHECK(s_ClassCfg.SetInterfaceHandler == nullptr);
-	CHECK(s_ClassCfg.ResetHandler != nullptr);
-	CHECK(s_ClassCfg.ProcessHandler == nullptr);
-	CHECK(s_ClassCfg.ConfigHandler(USBD_HID_CONFIG_VALUE,
-		s_ClassCfg.pContext));
-	CHECK(hid.Configured);
-
-	UsbSetupData_t setup = {};
-	setup.bmRequestType = USB_REQTYPE_DIRHOST | USB_REQTYPE_STANDARD |
-		USB_REQTYPE_INTERFACE;
-	setup.bRequest = USB_REQ_GET_DESCRIPTOR;
-	setup.wIndex = ITF_NO;
-	setup.wLength = 255U;
-	setup.wValue = (uint16_t)(USB_DESCTYPE_HID_REPORT << 8);
-	uint8_t *pData = nullptr;
-	uint16_t length = 0U;
-	CHECK(s_ClassCfg.RequestHandler(&setup, USB_CTRL_SETUP, &pData, &length,
-		s_ClassCfg.pContext));
-	CHECK(pData == s_ReportDesc && length == sizeof(s_ReportDesc));
-
-	s_ClassCfg.ResetHandler(s_ClassCfg.pContext);
-	CHECK(!hid.Configured);
-}
-
 static void TestDataAndLifecycle(void)
 {
 	ResetFake();
-	UsbdHid hid;
+	TestHid hid;
 	const UsbdHidCfg_t cfg = MakeCfg();
 	CHECK(hid.Init(cfg));
 	CHECK(s_OutBlocking);
@@ -396,7 +381,7 @@ static void TestDataAndLifecycle(void)
 static void TestControlRequests(void)
 {
 	ResetFake();
-	UsbdHid hid;
+	TestHid hid;
 	const UsbdHidCfg_t cfg = MakeCfg();
 	CHECK(hid.Init(cfg));
 	CHECK(hid.SelectConfig(USBD_HID_CONFIG_VALUE));
@@ -456,7 +441,6 @@ static void TestControlRequests(void)
 	CHECK(s_ReportStageCount == 2);
 	CHECK(s_ReportStage[0] == USB_CTRL_SETUP);
 	CHECK(s_ReportStage[1] == USB_CTRL_COMPLETE);
-	CHECK(s_ReportContext == &s_ReportContext);
 
 	setup.bmRequestType = USB_REQTYPE_DIRDEV | USB_REQTYPE_CLASS |
 		USB_REQTYPE_INTERFACE;
@@ -480,7 +464,7 @@ static void TestControlRequests(void)
 static void TestValidation(void)
 {
 	ResetFake();
-	UsbdHid hid;
+	TestHid hid;
 	UsbdHidCfg_t cfg = MakeCfg();
 	cfg.pReportDesc = nullptr;
 	CHECK(!hid.Init(cfg));
@@ -499,7 +483,6 @@ static void TestValidation(void)
 int main(void)
 {
 	TestDescriptorAndPlacement();
-	TestCApiAdapters();
 	TestDataAndLifecycle();
 	TestControlRequests();
 	TestValidation();

@@ -159,10 +159,8 @@ static void UsbdCdcCancelBusState(UsbdCdcDev_t *pCdc)
 	UsbIntrfUnconfigure(&pCdc->IntrfData);
 }
 
-static bool UsbdCdcConfig(uint8_t Configuration, void *pContext)
+static bool UsbdCdcConfig(UsbdCdcDev_t *pCdc, uint8_t Configuration)
 {
-	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);
-
 	if (pCdc == nullptr)
 	{
 		return false;
@@ -218,10 +216,8 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 						   UsbCtrlStage_t Stage,
 						   uint8_t **ppData,
 						   uint16_t *pLength,
-						   void *pContext)
+						   UsbdCdcDev_t *pCdc)
 {
-	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);
-
 	if (pSetup == nullptr || pCdc == nullptr || pLength == nullptr ||
 		pCdc->IntrfData.Mps == 0U ||
 		(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) != USB_REQTYPE_CLASS ||
@@ -345,10 +341,8 @@ static void UsbdCdcNotifCtrlrEvent(uint8_t, UsbCtrlrEvtType_t Event,
 	}
 }
 
-static void UsbdCdcReset(void *pContext)
+static void UsbdCdcReset(UsbdCdcDev_t *pCdc)
 {
-	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);
-
 	if (pCdc == nullptr)
 	{
 		return;
@@ -366,16 +360,11 @@ static void UsbdCdcReset(void *pContext)
 	UsbdCdcDefaultLineCoding(pCdc);
 }
 
-static void UsbdCdcPump(void *pContext)
-{
-	UsbdCdcProcess(static_cast<UsbdCdcDev_t *>(pContext));
-}
-
 static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 								const UsbdCdcCfg_t *pCfg,
 								UsbDeviceClass *pClass)
 {
-	if (pCdc == nullptr || pCfg == nullptr ||
+	if (pCdc == nullptr || pCfg == nullptr || pClass == nullptr ||
 		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
 		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
 		UsbGetCfg(pCfg->DevNo) == nullptr)
@@ -390,21 +379,13 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	pCdc->SerialStatePending = false;
 	UsbdCdcDefaultLineCoding(pCdc);
 
-	UsbdClassCfg_t coreCfg = {};
-	coreCfg.RequestHandler = pClass == nullptr ? UsbdCdcRequest : nullptr;
-	coreCfg.ConfigHandler = pClass == nullptr ? UsbdCdcConfig : nullptr;
-	coreCfg.SetInterfaceHandler = nullptr;
-	coreCfg.ResetHandler = pClass == nullptr ? UsbdCdcReset : nullptr;
-	coreCfg.ProcessHandler = pClass == nullptr ? UsbdCdcPump : nullptr;
-	coreCfg.pContext = pCdc;
-
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 2U;
 	req.BidirectionalCount = 1U;
 	req.InCount = 1U;
 
 	UsbdEpAllocRes_t alloc = {};
-	if (!UsbdEpAlloc(pCdc->DevNo, &req, &coreCfg, pClass, &alloc))
+	if (!UsbdEpAlloc(pCdc->DevNo, &req, pClass, &alloc))
 	{
 		return false;
 	}
@@ -441,12 +422,33 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 		return false;
 	}
 
-	return true;
-}
+	const UsbCfg_t *pUsbCfg = UsbGetCfg(pCdc->DevNo);
+	if (!UsbdCdcMakeDesc(&pCdc->FsDesc, pCdc, USB_SPEED_FULL,
+		pUsbCfg != nullptr && pUsbCfg->pFuncName != nullptr))
+	{
+		return false;
+	}
 
-bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg)
-{
-	return UsbdCdcInitInternal(pCdc, pCfg, nullptr);
+	const void *pHsDesc = nullptr;
+	uint16_t hsDescLength = 0U;
+	if (USB_HIGHSPEED_CAPABLE(pCdc->DevNo))
+	{
+		if (!UsbdCdcMakeDesc(&pCdc->HsDesc, pCdc, USB_SPEED_HIGH,
+			pUsbCfg != nullptr && pUsbCfg->pFuncName != nullptr))
+		{
+			return false;
+		}
+		pHsDesc = &pCdc->HsDesc;
+		hsDescLength = sizeof(pCdc->HsDesc);
+	}
+
+	if (!UsbDescriptorRegister(pCdc->DevNo, pClass,
+		&pCdc->FsDesc, sizeof(pCdc->FsDesc), pHsDesc, hsDescLength))
+	{
+		return false;
+	}
+
+	return true;
 }
 
 void UsbdCdcProcess(UsbdCdcDev_t * const pCdc)
@@ -482,7 +484,7 @@ bool UsbdCdc::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 
 bool UsbdCdc::SelectConfig(uint8_t ConfigValue)
 {
-	return UsbdCdcConfig(ConfigValue, &vUsbdCdc);
+	return UsbdCdcConfig(&vUsbdCdc, ConfigValue);
 }
 
 const UsbCdcLineCoding_t *UsbdCdcLineCoding(const UsbdCdcDev_t * const pCdc)

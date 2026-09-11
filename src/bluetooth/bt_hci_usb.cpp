@@ -313,10 +313,8 @@ static void BtHciUsbUnconfigure(BtHciUsbDev_t *pHci)
 	BtHciUsbClearTransport(pHci);
 }
 
-static bool BtHciUsbConfig(uint8_t Configuration, void *pContext)
+static bool BtHciUsbConfig(BtHciUsbDev_t *pHci, uint8_t Configuration)
 {
-	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
-
 	if (pHci == nullptr)
 	{
 		return false;
@@ -359,10 +357,9 @@ static bool BtHciUsbConfig(uint8_t Configuration, void *pContext)
 	return true;
 }
 
-static bool BtHciUsbSetInterface(uint8_t InterfaceNo, uint8_t Alt,
-								void *pContext)
+static bool BtHciUsbSetInterface(BtHciUsbDev_t *pHci,
+								uint8_t InterfaceNo, uint8_t Alt)
 {
-	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
 	if (pHci == nullptr || !pHci->Configured)
 	{
 		return false;
@@ -457,9 +454,8 @@ static bool BtHciUsbRequestValid(const BtHciUsbDev_t *pHci,
 
 static bool BtHciUsbRequest(const UsbSetupData_t *pSetup,
 						   UsbCtrlStage_t Stage, uint8_t **ppData,
-						   uint16_t *pLength, void *pContext)
+						   uint16_t *pLength, BtHciUsbDev_t *pHci)
 {
-	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
 	if (pHci == nullptr || pSetup == nullptr || pLength == nullptr ||
 		!BtHciUsbRequestValid(pHci, pSetup))
 	{
@@ -724,9 +720,8 @@ static void BtHciUsbScoSendFrameComplete(UsbIsoIntrf_t *, uint16_t Length,
 	(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_TX_READY, 0);
 }
 
-static void BtHciUsbReset(void *pContext)
+static void BtHciUsbReset(BtHciUsbDev_t *pHci)
 {
-	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
 	if (pHci != nullptr)
 	{
 		BtHciUsbUnconfigure(pHci);
@@ -1416,32 +1411,50 @@ static bool BtHciUsbMakeFullDesc(BtHciUsbFullDesc_t *pDesc,
 	return true;
 }
 
-static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
-								 const BtHciUsbCfg_t *pCfg,
-								 UsbDeviceClass *pClass)
+static bool BtHciUsbMakeRegisteredDesc(BtHciUsbDescBuffer_t *pDesc,
+									   const BtHciUsbDev_t *pHci,
+									   UsbSpeed_t Speed,
+									   const void **ppData,
+									   uint16_t *pLength)
 {
-	if (pHci == nullptr || pCfg == nullptr ||
-		UsbGetCfg(pCfg->DevNo) == nullptr ||
-		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
-		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0)
+	if (pDesc == nullptr || pHci == nullptr || ppData == nullptr ||
+		pLength == nullptr)
 	{
 		return false;
 	}
 
-	const unsigned descCount =
-		(pCfg->pDesc != nullptr ? 1U : 0U) +
-		(pCfg->pScoDesc != nullptr ? 1U : 0U) +
-		(pCfg->pSerialDesc != nullptr ? 1U : 0U) +
-		(pCfg->pFullDesc != nullptr ? 1U : 0U);
-	if (descCount > 1U ||
-		(pCfg->pDesc != nullptr &&
-			(pCfg->bSco || pCfg->bBulkSerialization)) ||
-		(pCfg->pScoDesc != nullptr &&
-			(!pCfg->bSco || pCfg->bBulkSerialization)) ||
-		(pCfg->pSerialDesc != nullptr &&
-			(pCfg->bSco || !pCfg->bBulkSerialization)) ||
-		(pCfg->pFullDesc != nullptr &&
-			(!pCfg->bSco || !pCfg->bBulkSerialization)))
+	if (pHci->ScoEnabled && pHci->BulkSerializationSupported)
+	{
+		*ppData = &pDesc->Full;
+		*pLength = sizeof(pDesc->Full);
+		return BtHciUsbMakeFullDesc(&pDesc->Full, pHci, Speed);
+	}
+	if (pHci->ScoEnabled)
+	{
+		*ppData = &pDesc->Sco;
+		*pLength = sizeof(pDesc->Sco);
+		return BtHciUsbMakeScoDesc(&pDesc->Sco, pHci, Speed);
+	}
+	if (pHci->BulkSerializationSupported)
+	{
+		*ppData = &pDesc->Serial;
+		*pLength = sizeof(pDesc->Serial);
+		return BtHciUsbMakeSerialDesc(&pDesc->Serial, pHci, Speed);
+	}
+
+	*ppData = &pDesc->Legacy;
+	*pLength = sizeof(pDesc->Legacy);
+	return BtHciUsbMakeDesc(&pDesc->Legacy, pHci, Speed);
+}
+
+static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
+								 const BtHciUsbCfg_t *pCfg,
+								 UsbDeviceClass *pClass)
+{
+	if (pHci == nullptr || pCfg == nullptr || pClass == nullptr ||
+		UsbGetCfg(pCfg->DevNo) == nullptr ||
+		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
+		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0)
 	{
 		return false;
 	}
@@ -1481,14 +1494,6 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 		return false;
 	}
 
-	UsbdClassCfg_t coreCfg = {};
-	coreCfg.RequestHandler = pClass == nullptr ? BtHciUsbRequest : nullptr;
-	coreCfg.ConfigHandler = pClass == nullptr ? BtHciUsbConfig : nullptr;
-	coreCfg.SetInterfaceHandler =
-		pClass == nullptr ? BtHciUsbSetInterface : nullptr;
-	coreCfg.ResetHandler = pClass == nullptr ? BtHciUsbReset : nullptr;
-	coreCfg.pContext = pHci;
-
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 2U;
 	req.BidirectionalCount = 1U;
@@ -1499,7 +1504,7 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 	bool registered = false;
 	if (!pHci->ScoEnabled)
 	{
-		registered = UsbdEpAlloc(pHci->DevNo, &req, &coreCfg, pClass, &alloc);
+		registered = UsbdEpAlloc(pHci->DevNo, &req, pClass, &alloc);
 	}
 	else
 	{
@@ -1513,7 +1518,7 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 
 			req.FixedInMask = bit;
 			req.FixedOutMask = bit;
-			if (UsbdEpAlloc(pHci->DevNo, &req, &coreCfg, pClass, &alloc))
+			if (UsbdEpAlloc(pHci->DevNo, &req, pClass, &alloc))
 			{
 				scoEp = ep;
 				registered = true;
@@ -1564,31 +1569,25 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 
 	BtHciUsbInitDevIntrf(pHci);
 
-	// The interface and endpoint numbers are known now, so build the descriptor
-	// fragment into the application buffer that matches the selected layout. The
-	// controller speed selects the MPS. A buffer that does not match the
-	// bSco/bBulkSerialization flags is rejected by its builder.
-	const UsbSpeed_t speed = USB_HIGHSPEED_CAPABLE(pHci->DevNo) ?
-		USB_SPEED_HIGH : USB_SPEED_FULL;
-	if ((pCfg->pDesc != nullptr &&
-			!BtHciUsbMakeDesc(pCfg->pDesc, pHci, speed)) ||
-		(pCfg->pScoDesc != nullptr &&
-			!BtHciUsbMakeScoDesc(pCfg->pScoDesc, pHci, speed)) ||
-		(pCfg->pSerialDesc != nullptr &&
-			!BtHciUsbMakeSerialDesc(pCfg->pSerialDesc, pHci, speed)) ||
-		(pCfg->pFullDesc != nullptr &&
-			!BtHciUsbMakeFullDesc(pCfg->pFullDesc, pHci, speed)))
+	const void *pFsDesc = nullptr;
+	uint16_t fsDescLength = 0U;
+	if (!BtHciUsbMakeRegisteredDesc(&pHci->FsDesc, pHci, USB_SPEED_FULL,
+		&pFsDesc, &fsDescLength))
 	{
 		return false;
 	}
 
-	return true;
-}
+	const void *pHsDesc = nullptr;
+	uint16_t hsDescLength = 0U;
+	if (USB_HIGHSPEED_CAPABLE(pHci->DevNo) &&
+		!BtHciUsbMakeRegisteredDesc(&pHci->HsDesc, pHci, USB_SPEED_HIGH,
+			&pHsDesc, &hsDescLength))
+	{
+		return false;
+	}
 
-bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
-				 const BtHciUsbCfg_t *pCfg)
-{
-	return BtHciUsbInitInternal(pHci, pCfg, nullptr);
+	return UsbDescriptorRegister(pHci->DevNo, pClass,
+		pFsDesc, fsDescLength, pHsDesc, hsDescLength);
 }
 
 bool BtHciUsb::Init(const BtHciUsbCfg_t &Cfg)
@@ -1604,12 +1603,12 @@ bool BtHciUsb::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 
 bool BtHciUsb::SelectConfig(uint8_t ConfigValue)
 {
-	return BtHciUsbConfig(ConfigValue, &vBtHciUsb);
+	return BtHciUsbConfig(&vBtHciUsb, ConfigValue);
 }
 
 bool BtHciUsb::SelectInterface(uint8_t InterfaceNo, uint8_t Option)
 {
-	return BtHciUsbSetInterface(InterfaceNo, Option, &vBtHciUsb);
+	return BtHciUsbSetInterface(&vBtHciUsb, InterfaceNo, Option);
 }
 
 void BtHciUsb::Reset()
