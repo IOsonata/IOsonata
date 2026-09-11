@@ -54,6 +54,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
+#include <stdatomic.h>
 #include <string.h>
 
 #include "nrf.h"
@@ -73,7 +74,7 @@ SOFTWARE.
 static inline __attribute__((always_inline))
 bool nRFUsbValidDevNo(int DevNo)
 {
-	return DevNo >= 0 && DevNo < USB_CTRLR_CNT;
+	return DevNo == 0;
 }
 
 enum
@@ -184,7 +185,8 @@ void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 
 // One USB controller per part, so the common power/clock state is file scope.
 // Controller interrupts are owned by the corresponding UsbdCtrlr backend.
-static UsbCtrlrCfg_t s_UsbdCfg;
+static uint8_t s_UsbdIntPrio;
+static bool s_UsbdLowPowerSuspend;
 static bool s_UsbdInitialized = false;
 static bool s_UsbdStarted = false;
 static bool s_UsbdXtalHeld = false;
@@ -677,7 +679,8 @@ static bool nRFUsbPowerInit(const UsbCtrlrCfg_t *pCfg)
 		return false;
 	}
 
-	memcpy(&s_UsbdCfg, pCfg, sizeof(UsbCtrlrCfg_t));
+	s_UsbdIntPrio = pCfg->IntPrio;
+	s_UsbdLowPowerSuspend = pCfg->bLowPowerSuspend;
 
 #ifdef NRFX_USBD_HAS_USBHS
 	// Start the regulator here so VBUS state is available before the native
@@ -727,9 +730,9 @@ static bool nRFUsbPowerStart(void)
 	s_UsbdXtalHeld = true;
 
 #ifdef NRFX_USBD_HAS_USBD
-	NVIC_SetPriority(USBD_IRQn, s_UsbdCfg.IntPrio);
+	NVIC_SetPriority(USBD_IRQn, s_UsbdIntPrio);
 #else
-	NVIC_SetPriority(USBHS_IRQn, s_UsbdCfg.IntPrio);
+	NVIC_SetPriority(USBHS_IRQn, s_UsbdIntPrio);
 #endif
 
 	if (UsbdStartCtrlr() == false)
@@ -791,7 +794,7 @@ static void nRFUsbPowerProcess(void)
 		UsbdLowPowerExitFinish();
 	}
 	else if (!dmaActive && s_UsbdStarted &&
-			 s_UsbdCfg.bLowPowerSuspend == false &&
+			 s_UsbdLowPowerSuspend == false &&
 			 NRF_USBD->LOWPOWER != USBD_LOWPOWER_LOWPOWER_ForceNormal)
 	{
 		UsbdLowPowerExit();
@@ -821,20 +824,6 @@ static void nRFUsbPowerProcess(void)
 #ifndef USBD_PRESENT
 #error "usbd_ctrlr_nrf52: this part has no USBD peripheral"
 #endif
-
-/* Keep the ISR/application synchronization independent of the C++ standard
- * library. These GCC builtins generate the same lock-free operations used by
- * the previous C11 atomic implementation on Cortex-M4. */
-typedef bool atomic_flag;
-typedef bool atomic_bool;
-typedef uint_fast8_t atomic_uint_fast8_t;
-
-#define ATOMIC_FLAG_INIT false
-#define atomic_load(p) __atomic_load_n((p), __ATOMIC_SEQ_CST)
-#define atomic_store(p, v) __atomic_store_n((p), (v), __ATOMIC_SEQ_CST)
-#define atomic_exchange(p, v) __atomic_exchange_n((p), (v), __ATOMIC_SEQ_CST)
-#define atomic_flag_test_and_set(p) __atomic_exchange_n((p), true, __ATOMIC_SEQ_CST)
-#define atomic_flag_clear(p) __atomic_store_n((p), false, __ATOMIC_SEQ_CST)
 
 enum
 {
@@ -1423,7 +1412,7 @@ static void nRFUsbdHostResumeDetected(void);
 
 static void nRFUsbdTryEnterLowPower(void)
 {
-	if (!s_UsbdCfg.bLowPowerSuspend ||
+	if (!s_UsbdLowPowerSuspend ||
 		!atomic_load(&s_BusSuspended) ||
 		!atomic_load(&s_SuspendPending) ||
 		atomic_load(&s_RemoteWakePending) ||
@@ -2243,7 +2232,7 @@ extern "C" void USBD_IRQHandler(void)
 			// A bus suspend and a peripheral low-power transition are separate.
 			// When low-power suspend is disabled, retain all endpoint state and
 			// wait for RESUME or SOF without touching USBD LOWPOWER.
-			atomic_store(&s_SuspendPending, s_UsbdCfg.bLowPowerSuspend);
+			atomic_store(&s_SuspendPending, s_UsbdLowPowerSuspend);
 			atomic_store(&s_RemoteWakePending, false);
 			atomic_store(&s_HostResumePending, false);
 			atomic_store(&s_IsoInReady, false);
