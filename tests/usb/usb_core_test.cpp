@@ -321,6 +321,26 @@ static bool SetConfig(uint8_t Value)
 	return true;
 }
 
+static bool TestEnableStartsController(void)
+{
+	memset(&s_Ctrlr, 0, sizeof(s_Ctrlr));
+
+	UsbCfg_t core = {};
+	core.DevNo = TEST_DEVNO;
+	core.Mode = USB_MODE_DEVICE;
+	core.Vid = 0x1209U;
+	core.Pid = 0x0001U;
+	CHECK(UsbInit(&core));
+
+	// Starting the controller is a lifecycle operation. Configuration
+	// descriptors are served and validated by EP0 when the host asks for them;
+	// their registration must not suppress the bus pull-up.
+	CHECK(UsbEnable(TEST_DEVNO));
+	CHECK(s_Ctrlr.IntEnableCnt == 1);
+	CHECK(s_Ctrlr.ConnectCnt == 1);
+	return true;
+}
+
 static bool TestDescriptors(void)
 {
 	CHECK(Fixture());
@@ -850,6 +870,7 @@ typedef struct { const char *pName; TestHandler_t Handler; } TestCase_t;
 int main(void)
 {
 	static const TestCase_t tests[] = {
+		{ "enable starts controller", TestEnableStartsController },
 		{ "descriptors", TestDescriptors },
 		{ "descriptor validation", TestDescriptorValidation },
 		{ "control terminating ZLP", TestControlZlp },

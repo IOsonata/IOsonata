@@ -1718,13 +1718,6 @@ static bool UsbDevEnable(void)
 		return true;
 	}
 
-	uint16_t descriptorLength = 0U;
-	if (UsbGetDescriptor(s_UsbDevNo, USB_DESCTYPE_CONFIGURATION, 0U, 0U,
-		UsbGetSpeed(s_UsbDevNo), &descriptorLength) == nullptr)
-	{
-		return false;
-	}
-
 	// One call. Power, clock and PHY come up and endpoint zero is prepared.
 	if (!UsbCtrlrStart(s_UsbDevNo))
 	{
