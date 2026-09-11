@@ -31,8 +31,13 @@ assert "s_CtrlrBusy" in source
 assert "INTENSET" not in dma_start, "DMA start must not enable ENDEPIN"
 assert "const uint32_t epStatus = NRF_USBD->EPSTATUS" in dma_start
 assert "NRF_USBD->EPSTATUS = epStatus" in dma_start
+assert "epDataPending = NRF_USBD->EVENTS_EPDATA != 0U" in interrupt
+assert interrupt.index("NRF_USBD->EVENTS_EPDATA = 0") < interrupt.index(
+    "dataStatus = NRF_USBD->EPDATASTATUS"
+)
 assert "const uint32_t epStatus = NRF_USBD->EPSTATUS" in interrupt
-assert "__CLZ(epStatus)" in interrupt
+assert "dataDmaStatus = epStatus & dataStatus" in interrupt
+assert "__CLZ(dmaStatus)" in interrupt
 assert "dmaBit - (dmaBit >> 4U) * 6U" in interrupt
 assert "dmaBit == NRFX_USBD_ISO_EP_NO" in interrupt
 assert "const bool endPending = *pEndEvent != 0U" in interrupt
@@ -45,9 +50,8 @@ assert interrupt.index("*pEndEvent = 0") < interrupt.index(
 assert interrupt.index("nRFUsbdDmaRelease();") < interrupt.index(
     "nRFUsbdCollectEvents();"
 )
-assert interrupt.index("nRFUsbdCollectEvents();") < interrupt.index(
-    "NRF_USBD->EPDATASTATUS"
-)
+assert "~USBD_INTEN_EPDATA_Msk" in source
+assert "if (!epDataPending)" in interrupt
 assert interrupt.rindex("nRFUsbdServicePending();") > interrupt.index(
     "USBD_INTEN_EPDATA_Msk"
 )

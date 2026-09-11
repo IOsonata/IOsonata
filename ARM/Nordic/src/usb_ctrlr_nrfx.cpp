@@ -2000,7 +2000,11 @@ static uint32_t nRFUsbdCollectEvents(void)
 	// have to be read to find which fired. Only the bits set in INTEN can be
 	// pending, so walk those; the rest are provably zero and testing them
 	// costs on every entry.
-	uint32_t enabled = NRF_USBD->INTEN & NRFUSBD_IRQ_MASK;
+	// EPDATA and EPDATASTATUS are captured together at interrupt entry. Keep
+	// EPDATA out of this collector so a new endpoint event cannot be cleared
+	// after the status snapshot that belongs to the current interrupt.
+	uint32_t enabled = NRF_USBD->INTEN & NRFUSBD_IRQ_MASK &
+		~USBD_INTEN_EPDATA_Msk;
 	uint32_t intStatus = 0;
 	volatile uint32_t *pEvent = &NRF_USBD->EVENTS_USBRESET;
 
@@ -2216,15 +2220,30 @@ static void nRFUsbdHandleIsoOutEnd(void)
 
 extern "C" void USBD_IRQHandler(void)
 {
+	const bool epDataPending = NRF_USBD->EVENTS_EPDATA != 0U;
+	uint32_t dataStatus = 0U;
+	if (epDataPending)
+	{
+		// Clear the aggregate event before taking its status snapshot. A new
+		// transaction after this point sets EPDATA again for the next IRQ.
+		NRF_USBD->EVENTS_EPDATA = 0;
+		dataStatus = NRF_USBD->EPDATASTATUS;
+		NRF_USBD->EPDATASTATUS = dataStatus;
+		__ISB();
+		__DSB();
+	}
+
 	const uint32_t epStatus = NRF_USBD->EPSTATUS;
 	if (epStatus != 0U)
 	{
-		// EPSTATUS identifies the completed EasyDMA endpoint. Confirm its END
-		// event, release the controller, then process the remaining USB events.
-		// Data IN completes through EPDATA, so ENDEPIN does not need a separate
-		// interrupt.
+		// A data IN completion is the endpoint present in both status registers.
+		// EP0, ISO and OUT DMA complete through their enabled END interrupt and
+		// therefore use EPSTATUS directly.
 		const bool reset = NRF_USBD->EVENTS_USBRESET != 0U;
-		const uint32_t dmaBit = 31U - (uint32_t)__CLZ(epStatus);
+		const uint32_t dataDmaStatus = epStatus & dataStatus;
+		const uint32_t dmaStatus = dataDmaStatus != 0U ?
+			dataDmaStatus : epStatus;
+		const uint32_t dmaBit = 31U - (uint32_t)__CLZ(dmaStatus);
 		// EPSTATUS OUT bits begin at 16 while ENDEPOUT begins six event words
 		// earlier. ENDISOIN is the one-word gap following EP0DATADONE.
 		const uint32_t endOffset = dmaBit - (dmaBit >> 4U) * 6U +
@@ -2235,27 +2254,37 @@ extern "C" void USBD_IRQHandler(void)
 		const bool endPending = *pEndEvent != 0U;
 		if (!endPending && !reset)
 		{
-			return;
+			// EPDATA may belong to a previously loaded endpoint while EasyDMA is
+			// busy with another one. Process that endpoint below without releasing
+			// the current DMA owner.
+			if (!epDataPending)
+			{
+				return;
+			}
 		}
-
-		// EPSTATUS selects which endpoint's END event belongs to this DMA.
-		// EPSTATUS is write-one-to-clear; the END event is cleared with zero
-		// below for data IN, or by the event collector for the other endpoints.
-		NRF_USBD->EPSTATUS = epStatus;
-
-		// Leave an OUT/EP0 END event set for the normal event collector. A
-		// data IN END only releases DMA; transfer completion is still EPDATA.
-		if (endPending && dmaBit - 1U < NRFX_USBD_DATA_EP_COUNT - 1U)
+		else
 		{
-			*pEndEvent = 0;
-			__ISB();
-			__DSB();
-		}
+			// EPSTATUS is write-one-to-clear. Leave OUT/EP0 END set for the
+			// normal event collector; data IN completes through EPDATA.
+			NRF_USBD->EPSTATUS = epStatus;
 
-		nRFUsbdDmaRelease();
+			if (endPending &&
+				dmaBit - 1U < NRFX_USBD_DATA_EP_COUNT - 1U)
+			{
+				*pEndEvent = 0;
+				__ISB();
+				__DSB();
+			}
+
+			nRFUsbdDmaRelease();
+		}
 	}
 
-	const uint32_t intStatus = nRFUsbdCollectEvents();
+	uint32_t intStatus = nRFUsbdCollectEvents();
+	if (epDataPending)
+	{
+		intStatus |= USBD_INTEN_EPDATA_Msk;
+	}
 	if (intStatus == 0)
 	{
 		// A transfer requested from another interrupt raises a software USBD
@@ -2332,11 +2361,6 @@ extern "C" void USBD_IRQHandler(void)
 
 	if ((intStatus & (USBD_INTEN_EPDATA_Msk | USBD_INTEN_EP0DATADONE_Msk)) != 0)
 	{
-		const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
-		NRF_USBD->EPDATASTATUS = dataStatus;
-		__ISB();
-		__DSB();
-
 		const uint32_t epMask =
 			(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
 		uint32_t outData = (dataStatus >> 16U) & epMask;
