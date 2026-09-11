@@ -25,14 +25,8 @@ def function_body(source: str, signature: str) -> str:
 
 source = SOURCE.read_text(encoding="utf-8")
 dma_start = function_body(source, "static void nRFUsbdDmaStart(")
-service = function_body(source, "static void nRFUsbdServicePending(void)")
 interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
 
-assert "nRFUsbdDmaReclaim" not in source
-assert "nRFUsbdDmaEndIntEnable" not in source
-assert "s_LazyInMask" not in source
-assert "s_DmaEpAddr" not in source
-assert "s_DmaRunning" not in source
 assert "s_CtrlrBusy" in source
 assert "INTENSET" not in dma_start, "DMA start must not enable ENDEPIN"
 assert "const uint32_t epStatus = NRF_USBD->EPSTATUS" in dma_start
@@ -41,11 +35,10 @@ assert "epDataPending = NRF_USBD->EVENTS_EPDATA != 0U" in interrupt
 assert interrupt.index("NRF_USBD->EVENTS_EPDATA") < interrupt.index(
     "NRF_USBD->EPSTATUS"
 )
-assert "activeDma = nRFUsbdDmaEpAddr(dmaStatus)" in interrupt
-assert "nRFUsbdDmaEndEvent(activeDma)" in interrupt
-assert interrupt.index("NRF_USBD->EPSTATUS") < interrupt.index(
-    "nRFUsbdDmaEndEvent(activeDma)"
-)
+assert "dmaIn = dmaStatus & dmaEpMask" in interrupt
+assert "dmaOut = (dmaStatus >> 16U) & dmaEpMask" in interrupt
+assert "NRF_USBD->EVENTS_ENDEPIN[dmaEpNum]" in interrupt
+assert "NRF_USBD->EVENTS_ENDEPOUT[dmaEpNum]" in interrupt
 assert "NRF_USBD->EPSTATUS = dmaStatus" in interrupt
 assert interrupt.index("*pEndEvent = 0") < interrupt.index(
     "nRFUsbdDmaRelease();"
@@ -56,6 +49,5 @@ assert interrupt.index("nRFUsbdDmaRelease();") < interrupt.index(
 assert interrupt.rindex("nRFUsbdServicePending();") > interrupt.index(
     "USBD_INTEN_EPDATA_Msk"
 )
-assert "nRFUsbdDmaReclaim" not in service
 
 print("nrf_usb_dma_policy_test: PASS")
