@@ -41,8 +41,12 @@ SOFTWARE.
 #include <stdint.h>
 
 #ifdef __cplusplus
-	#include <atomic>
-	using namespace std;
+	#if defined(__GNUC__) && defined(__arm__)
+		#include "atomic_gcc.h"
+	#else
+		#include <atomic>
+		using namespace std;
+	#endif
 #else
 #include <stdbool.h>
 #include <stdatomic.h>
