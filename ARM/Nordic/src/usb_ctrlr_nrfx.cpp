@@ -1965,7 +1965,10 @@ static uint32_t nRFUsbdCollectEvents(void)
 	// have to be read to find which fired. Only the bits set in INTEN can be
 	// pending, so walk those; the rest are provably zero and testing them
 	// costs on every entry.
-	uint32_t enabled = NRF_USBD->INTEN & NRFUSBD_IRQ_MASK;
+	// EPDATA is consumed explicitly at interrupt entry together with its two
+	// status registers. The generic collector handles every other event.
+	uint32_t enabled = NRF_USBD->INTEN & NRFUSBD_IRQ_MASK &
+		~USBD_INTEN_EPDATA_Msk;
 	uint32_t intStatus = 0;
 	volatile uint32_t *pEvent = &NRF_USBD->EVENTS_USBRESET;
 
@@ -2181,6 +2184,9 @@ static void nRFUsbdHandleIsoOutEnd(void)
 
 extern "C" void USBD_IRQHandler(void)
 {
+	// Read the aggregate data event first. Its status bits stay latched until
+	// they can be consumed safely below.
+	const bool epDataPending = NRF_USBD->EVENTS_EPDATA != 0U;
 	const uint8_t activeDma = (uint8_t)atomic_load(&s_DmaEpAddr);
 	if (activeDma != NRFX_USBD_DMA_EP_NONE)
 	{
@@ -2210,7 +2216,27 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdDmaRelease();
 	}
 
-	const uint32_t intStatus = nRFUsbdCollectEvents();
+	uint32_t dataStatus = 0U;
+	if (epDataPending)
+	{
+		NRF_USBD->EVENTS_EPDATA = 0;
+		dataStatus = NRF_USBD->EPDATASTATUS;
+		NRF_USBD->EPDATASTATUS = dataStatus;
+
+		// EPSTATUS accompanies EVENTS_STARTED. It confirms that EasyDMA
+		// captured an endpoint's PTR/MAXCNT registers; it is not the DMA END
+		// event. EPDATA for IN can only occur after ENDEPIN was latched above.
+		const uint32_t epStatus = NRF_USBD->EPSTATUS;
+		NRF_USBD->EPSTATUS = epStatus;
+		__ISB();
+		__DSB();
+	}
+
+	uint32_t intStatus = nRFUsbdCollectEvents();
+	if (epDataPending)
+	{
+		intStatus |= USBD_INTEN_EPDATA_Msk;
+	}
 	if (intStatus == 0)
 	{
 		// A transfer requested from another interrupt raises a software USBD
@@ -2278,14 +2304,8 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdHandleOutEnd((uint8_t)epNum);
 	}
 
-	uint32_t dataStatus = 0;
 	if ((intStatus & (USBD_INTEN_EPDATA_Msk | USBD_INTEN_EP0DATADONE_Msk)) != 0)
 	{
-		dataStatus = NRF_USBD->EPDATASTATUS;
-		NRF_USBD->EPDATASTATUS = dataStatus;
-		__ISB();
-		__DSB();
-
 		const uint32_t epMask =
 			(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
 		uint32_t outData = (dataStatus >> 16U) & epMask;
