@@ -31,7 +31,8 @@ CORE_TARGET := $(BUILD_DIR)/usb_core_test
 CORE_SOURCES := \
 	usb_core_test.cpp \
 	$(ROOT)/src/usb/usb.cpp \
-	$(ROOT)/src/usb/usbd_cdc_desc.cpp
+	$(ROOT)/src/usb/usbd_cdc_desc.cpp \
+	$(ROOT)/src/usb/usbd_epalloc.cpp
 
 LINK_TARGET := $(BUILD_DIR)/usb_stack_link_test
 LINK_SOURCES := \

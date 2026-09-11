@@ -55,8 +55,13 @@ static int s_UsbDevNo = 0;
 /// Bus power level at the previous UsbProcess pass, for edge reporting.
 static bool s_UsbVbusLast = false;
 
-#define USB_CORE_CLASS_MAXCNT		8
+#define USB_CORE_CLASS_MAXCNT \
+	(USB_EPIN_CNT(0) > USB_EPOUT_CNT(0) ? \
+	 USB_EPIN_CNT(0) : USB_EPOUT_CNT(0))
 #define USB_CORE_INTRF_MAXCNT		16
+
+static_assert(USB_CORE_CLASS_MAXCNT > 0 && USB_CORE_CLASS_MAXCNT <= 16,
+	"USB endpoint count must fit the 16-bit endpoint ownership masks");
 
 /// Chapter 9 settings. Built by UsbInit from UsbCfg_t and usb_ctrlr.h, never
 /// supplied by an application, which is why it is no longer in a header.

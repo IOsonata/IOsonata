@@ -38,6 +38,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "usb/usb.h"
+#include "usb/usbd_epalloc.h"
 
 #define TEST_DEVNO		0
 
@@ -670,6 +671,50 @@ public:
 	int ProcessCnt = 0;
 };
 
+static bool TestEndpointAllocatorExhaustion(void)
+{
+	memset(&s_Ctrlr, 0, sizeof(s_Ctrlr));
+
+	UsbCfg_t core = {};
+	core.DevNo = TEST_DEVNO;
+	core.Vid = 0x1209;
+	core.Pid = 0x0001;
+	CHECK(UsbInit(&core));
+
+	TestUsbDeviceClass device[9];
+	UsbdEpAllocReq_t req = {};
+	req.InterfaceCount = 1U;
+	req.BidirectionalCount = 1U;
+
+	for (uint8_t i = 0U; i < 7U; i++)
+	{
+		UsbdEpAllocRes_t alloc = {};
+		CHECK(UsbdEpAlloc(TEST_DEVNO, &req, &device[i], &alloc));
+		CHECK(alloc.FirstInterface == i);
+		CHECK(alloc.Bidirectional[0] == (uint8_t)(i + 1U));
+	}
+
+	UsbdEpAllocRes_t alloc = {};
+	CHECK(!UsbdEpAlloc(TEST_DEVNO, &req, &device[7], &alloc));
+
+	// The target's fixed ISO endpoint is outside the ordinary EP1..EP7
+	// allocator range but still participates in core ownership checking.
+	req = {};
+	req.InterfaceCount = 1U;
+	req.FixedInMask = (uint16_t)(1U << 8);
+	req.FixedOutMask = (uint16_t)(1U << 8);
+	CHECK(UsbdEpAlloc(TEST_DEVNO, &req, &device[7], &alloc));
+	CHECK(alloc.FirstInterface == 7U);
+	CHECK(!UsbdEpAlloc(TEST_DEVNO, &req, &device[8], &alloc));
+
+	// Eight endpoint-owning device classes are registered. Even an otherwise
+	// free interface cannot exceed the target-sized class object table.
+	req = {};
+	req.InterfaceCount = 1U;
+	CHECK(!UsbdEpAlloc(TEST_DEVNO, &req, &device[8], &alloc));
+	return true;
+}
+
 static bool TestCommonClassBase(void)
 {
 	TestUsbDeviceClass device;
@@ -903,6 +948,7 @@ int main(void)
 		{ "alternate interface and halt", TestInterfaceAndHalt },
 		{ "SET_INTERFACE requires handler", TestInterfaceRequiresHandler },
 		{ "class control lifecycle", TestClassControl },
+		{ "endpoint allocator exhaustion", TestEndpointAllocatorExhaustion },
 		{ "common class base", TestCommonClassBase },
 		{ "class object registry", TestClassObjectRegistry },
 		{ "class object configuration rollback", TestClassObjectConfigRollback },
