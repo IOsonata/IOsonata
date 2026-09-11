@@ -422,32 +422,6 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 		return false;
 	}
 
-	const UsbCfg_t *pUsbCfg = UsbGetCfg(pCdc->DevNo);
-	if (!UsbdCdcMakeDesc(&pCdc->FsDesc, pCdc, USB_SPEED_FULL,
-		pUsbCfg != nullptr && pUsbCfg->pFuncName != nullptr))
-	{
-		return false;
-	}
-
-	const void *pHsDesc = nullptr;
-	uint16_t hsDescLength = 0U;
-	if (USB_HIGHSPEED_CAPABLE(pCdc->DevNo))
-	{
-		if (!UsbdCdcMakeDesc(&pCdc->HsDesc, pCdc, USB_SPEED_HIGH,
-			pUsbCfg != nullptr && pUsbCfg->pFuncName != nullptr))
-		{
-			return false;
-		}
-		pHsDesc = &pCdc->HsDesc;
-		hsDescLength = sizeof(pCdc->HsDesc);
-	}
-
-	if (!UsbDescriptorRegister(pCdc->DevNo, pClass,
-		&pCdc->FsDesc, sizeof(pCdc->FsDesc), pHsDesc, hsDescLength))
-	{
-		return false;
-	}
-
 	return true;
 }
 

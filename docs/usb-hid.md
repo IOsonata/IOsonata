@@ -28,7 +28,7 @@ reports, serve HID descriptors or handle HID requests.
 `UsbdHid` follows the same device-function pattern as `UsbdBulk`:
 
 - one interface and one bidirectional endpoint number are allocated internally;
-- the class owns and registers its full/high-speed descriptor fragments;
+- the application supplies storage for the descriptor fragment;
 - configuration opens the Interrupt OUT/IN endpoint pair;
 - reset and unconfiguration close the transport;
 - no dynamic allocation is used.
@@ -40,15 +40,16 @@ The application supplies:
 - a report descriptor and its length;
 - HID subclass, protocol and country code;
 - full/high-speed MPS and polling intervals, or zero for defaults;
+- a staged `ReportHandler` for `GET_REPORT` and `SET_REPORT`;
 - optional Interrupt OUT/IN completion callbacks;
+- a `UsbdHidDesc_t` inside its configuration descriptor.
 
 USB constants and standard descriptors are defined in `usb_def.h`. HID request
 codes, report types and HID descriptors are defined in `usb_hiddef.h`.
 
 `UsbdHid` handles `GET_DESCRIPTOR` for the HID and report descriptors,
 `GET_IDLE`, `SET_IDLE`, and boot-subclass `GET_PROTOCOL` and `SET_PROTOCOL`.
-Report payload policy stays in an application `UsbdHid` subclass that overrides
-`Control()` and delegates unhandled requests to `UsbdHid::Control()`.
+Report payload policy stays in the application callback.
 
 ## Hardware test
 

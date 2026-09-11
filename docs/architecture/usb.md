@@ -88,12 +88,6 @@ Device classes register their topology and statically owned object atomically
 through `UsbClassRegister()`. The core has no device-class callback
 registration API or callback adapter.
 
-Device, configuration, qualifier and string descriptors are assembled by the
-procedural generic layer. Each registered class owns static full-speed and,
-when supported, high-speed configuration fragments and registers them through
-`UsbDescriptorRegister()`. Applications provide identity and strings in
-`UsbCfg_t`; they do not provide descriptor callbacks or descriptor contexts.
-
 The `UsbdCdc` object derives from both `UsbDeviceClass` and `DeviceIntrf`.
 Its control requests, configuration selection, reset and deferred pump run
 through the virtual class API.
@@ -275,7 +269,7 @@ from a busy TX slot, and offers a manual suspend/wake phase.
 
 `UsbdHid` follows the same device-class pattern as `UsbdBulk` and
 `BtHciUsb`: it registers its class instance, receives allocated interface and
-endpoint numbers, builds and registers its static descriptor fragments, and
+endpoint numbers, fills a descriptor fragment supplied by the application and
 opens its endpoints when configuration 1 becomes active.
 
 ```text
@@ -533,11 +527,9 @@ Internally:
 3. Data classes initialize their inherited `UsbIntrf` with the allocated
    endpoint number, static buffers and CFifos.
 4. `UsbIntrfInit()` registers the endpoint buffers and callback.
-5. Each class builds and registers its static full/high-speed configuration
-   descriptor fragments with the generic layer.
-6. Configuration or alternate-setting selection opens the endpoint descriptors.
-7. Transfers use `UsbCtrlrEpXfer()`.
-8. Reset/unconfiguration closes endpoints and clears active transport state.
+5. Configuration or alternate-setting selection opens the endpoint descriptors.
+6. Transfers use `UsbCtrlrEpXfer()`.
+7. Reset/unconfiguration closes endpoints and clears active transport state.
 
 This lifecycle describes the current device stack only. Future host enumeration
 and interface selection belong in `usbh_*` and must not change the reusable

@@ -62,7 +62,11 @@ SOFTWARE.
 #define ISO_DIAG_FLAG_SUSPENDED	(1U << 1)
 #define ISO_DIAG_FLAG_TX_READY		(1U << 2)
 
+#define ISO_STR_MANUFACTURER	1U
+#define ISO_STR_PRODUCT		2U
+#define ISO_STR_SERIAL			3U
 #define ISO_STR_INTERFACE		4U
+#define ISO_STR_MAXLEN			40U
 
 static const uint16_t s_IsoMps[ISO_ALT_COUNT] = {
 	9U, 17U, 25U, 33U, 49U, 63U,
@@ -75,10 +79,11 @@ typedef struct __Iso_Alt_Descriptor {
 	UsbEndPointDesc_t In;
 } IsoAltDesc_t;
 
-typedef struct __Iso_Function_Descriptor {
+typedef struct __Iso_Config_Descriptor {
+	UsbCfgDesc_t Config;
 	UsbIntrfDesc_t Alt0;
 	IsoAltDesc_t Alt[ISO_ALT_COUNT];
-} IsoFunctionDesc_t;
+} IsoConfigDesc_t;
 
 typedef struct __Iso_Diag {
 	uint32_t Reserved;
@@ -114,9 +119,11 @@ static uint32_t s_LoopbackDropCnt;
 static uint16_t s_LastRxLength;
 static uint16_t s_LastTxLength;
 
-static IsoFunctionDesc_t s_FsFunctionDesc;
-static IsoFunctionDesc_t s_HsFunctionDesc;
+static UsbDevDesc_t s_DeviceDesc;
+static UsbDevQualDesc_t s_QualifierDesc;
+static IsoConfigDesc_t s_ConfigDesc;
 static IsoDiag_t s_DiagReply;
+static uint8_t s_StringDesc[2U + (ISO_STR_MAXLEN * 2U)];
 
 static uint8_t IsoFirstEndpoint(uint16_t Mask)
 {
@@ -316,41 +323,6 @@ static void IsoProcess(void)
 	}
 }
 
-static bool IsoBuildFunctionDesc(IsoFunctionDesc_t *pDesc, UsbSpeed_t Speed)
-{
-	if (pDesc == nullptr || s_EpNo == 0U)
-	{
-		return false;
-	}
-
-	memset(pDesc, 0, sizeof(*pDesc));
-	pDesc->Alt0.bLength = sizeof(pDesc->Alt0);
-	pDesc->Alt0.bDescriptorType = USB_DESCTYPE_INTERFACE;
-	pDesc->Alt0.bInterfaceNumber = s_InterfaceNo;
-	pDesc->Alt0.bAlternateSetting = 0U;
-	pDesc->Alt0.bNumEndpoints = 0U;
-	pDesc->Alt0.bInterfaceClass = USB_INTRFCLASS_VENDOR;
-	pDesc->Alt0.iInterface = ISO_STR_INTERFACE;
-
-	const uint8_t interval = Speed == USB_SPEED_HIGH ? 4U : 1U;
-	for (uint8_t i = 0U; i < ISO_ALT_COUNT; i++)
-	{
-		IsoAltDesc_t *pAlt = &pDesc->Alt[i];
-		pAlt->Interface = pDesc->Alt0;
-		pAlt->Interface.bAlternateSetting = (uint8_t)(i + 1U);
-		pAlt->Interface.bNumEndpoints = 2U;
-		pAlt->Out.bLength = sizeof(pAlt->Out);
-		pAlt->Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-		pAlt->Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_EpNo);
-		pAlt->Out.bmAttributes = USB_ENDPATT_TRANS_ISO;
-		pAlt->Out.wMaxPacketSize = s_IsoMps[i];
-		pAlt->Out.bInterval = interval;
-		pAlt->In = pAlt->Out;
-		pAlt->In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_EpNo);
-	}
-	return true;
-}
-
 static bool IsoRegisterFunction(void)
 {
 	if (!USB_ISO_SUPPORTED(USB_DEVNO))
@@ -400,28 +372,223 @@ static bool IsoRegisterFunction(void)
 
 	s_InterfaceNo = alloc.FirstInterface;
 	s_EpNo = epNo;
-	if (!IsoBuildFunctionDesc(&s_FsFunctionDesc, USB_SPEED_FULL))
+	return true;
+}
+
+static uint8_t IsoMaxPower(const UsbCfg_t *pCfg)
+{
+	if (pCfg == nullptr || pCfg->bSelfPowered)
 	{
-		return false;
+		return 0U;
 	}
-	const void *pHsDesc = nullptr;
-	uint16_t hsDescLength = 0U;
-	if (USB_HIGHSPEED_CAPABLE(USB_DEVNO))
+	uint32_t units = ((uint32_t)pCfg->MaxPower + 1U) / 2U;
+	return units > 255U ? 255U : (uint8_t)units;
+}
+
+static const uint8_t *IsoDeviceDescriptor(uint16_t *pLength)
+{
+	const UsbCfg_t *pCfg = UsbGetCfg(USB_DEVNO);
+	if (pCfg == nullptr || pLength == nullptr)
 	{
-		if (!IsoBuildFunctionDesc(&s_HsFunctionDesc, USB_SPEED_HIGH))
-		{
-			return false;
-		}
-		pHsDesc = &s_HsFunctionDesc;
-		hsDescLength = sizeof(s_HsFunctionDesc);
+		return nullptr;
 	}
-	return UsbDescriptorRegister(USB_DEVNO, &s_Class,
-		&s_FsFunctionDesc, sizeof(s_FsFunctionDesc), pHsDesc, hsDescLength);
+
+	memset(&s_DeviceDesc, 0, sizeof(s_DeviceDesc));
+	s_DeviceDesc.bLength = sizeof(s_DeviceDesc);
+	s_DeviceDesc.bDescriptorType = USB_DESCTYPE_DEVICE;
+	s_DeviceDesc.bcdUSB = 0x0200U;
+	s_DeviceDesc.bDeviceClass = USB_DEVCLASS_NONE;
+	s_DeviceDesc.bMaxPacketSize = USB_PKT_MAXLEN(USB_DEVNO, CONTROL);
+	s_DeviceDesc.idVendor = pCfg->Vid;
+	s_DeviceDesc.idProduct = pCfg->Pid;
+	s_DeviceDesc.bcdDevice = pCfg->DevVer;
+	s_DeviceDesc.iManufacturer = pCfg->pManufacturer != nullptr ?
+		ISO_STR_MANUFACTURER : 0U;
+	s_DeviceDesc.iProduct = pCfg->pProduct != nullptr ? ISO_STR_PRODUCT : 0U;
+	s_DeviceDesc.iSerialNumber = UsbGetSerial(USB_DEVNO) != nullptr ?
+		ISO_STR_SERIAL : 0U;
+	s_DeviceDesc.bNumConfigurations = 1U;
+	*pLength = sizeof(s_DeviceDesc);
+	return reinterpret_cast<const uint8_t *>(&s_DeviceDesc);
+}
+
+static const uint8_t *IsoQualifierDescriptor(uint16_t *pLength)
+{
+	if (pLength == nullptr || !USB_HIGHSPEED_CAPABLE(USB_DEVNO))
+	{
+		return nullptr;
+	}
+
+	memset(&s_QualifierDesc, 0, sizeof(s_QualifierDesc));
+	s_QualifierDesc.bLength = sizeof(s_QualifierDesc);
+	s_QualifierDesc.bDescriptorType = USB_DESCTYPE_DEVICE_QUALIFIER;
+	s_QualifierDesc.bcdUSB = 0x0200U;
+	s_QualifierDesc.bDeviceClass = USB_DEVCLASS_NONE;
+	s_QualifierDesc.bMaxPacketSize0 = USB_PKT_MAXLEN(USB_DEVNO, CONTROL);
+	s_QualifierDesc.bNumConfigurations = 1U;
+	*pLength = sizeof(s_QualifierDesc);
+	return reinterpret_cast<const uint8_t *>(&s_QualifierDesc);
+}
+
+static const uint8_t *IsoConfigurationDescriptor(UsbSpeed_t Speed,
+											 bool OtherSpeed,
+											 uint16_t *pLength)
+{
+	const UsbCfg_t *pCfg = UsbGetCfg(USB_DEVNO);
+	if (pCfg == nullptr || pLength == nullptr || s_EpNo == 0U)
+	{
+		return nullptr;
+	}
+
+	memset(&s_ConfigDesc, 0, sizeof(s_ConfigDesc));
+	s_ConfigDesc.Config.bLength = sizeof(s_ConfigDesc.Config);
+	s_ConfigDesc.Config.bDescriptorType = OtherSpeed ?
+		USB_DESCTYPE_OSC : USB_DESCTYPE_CONFIGURATION;
+	s_ConfigDesc.Config.wTotalLength = sizeof(s_ConfigDesc);
+	s_ConfigDesc.Config.bNumInterfaces = 1U;
+	s_ConfigDesc.Config.bConfigurationValue = ISO_CONFIG_VALUE;
+	s_ConfigDesc.Config.bmAttributes = USB_CONFATT_RESERVED;
+	if (pCfg->bSelfPowered)
+	{
+		s_ConfigDesc.Config.bmAttributes |= USB_CONFATT_SELF_POWERED;
+	}
+	s_ConfigDesc.Config.bMaxPower = IsoMaxPower(pCfg);
+
+	s_ConfigDesc.Alt0.bLength = sizeof(s_ConfigDesc.Alt0);
+	s_ConfigDesc.Alt0.bDescriptorType = USB_DESCTYPE_INTERFACE;
+	s_ConfigDesc.Alt0.bInterfaceNumber = s_InterfaceNo;
+	s_ConfigDesc.Alt0.bAlternateSetting = 0U;
+	s_ConfigDesc.Alt0.bNumEndpoints = 0U;
+	s_ConfigDesc.Alt0.bInterfaceClass = USB_INTRFCLASS_VENDOR;
+	s_ConfigDesc.Alt0.iInterface = ISO_STR_INTERFACE;
+
+	const uint8_t interval = Speed == USB_SPEED_HIGH ? 4U : 1U;
+	for (uint8_t i = 0U; i < ISO_ALT_COUNT; i++)
+	{
+		IsoAltDesc_t *pAlt = &s_ConfigDesc.Alt[i];
+		pAlt->Interface = s_ConfigDesc.Alt0;
+		pAlt->Interface.bAlternateSetting = (uint8_t)(i + 1U);
+		pAlt->Interface.bNumEndpoints = 2U;
+
+		pAlt->Out.bLength = sizeof(pAlt->Out);
+		pAlt->Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
+		pAlt->Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_EpNo);
+		pAlt->Out.bmAttributes = USB_ENDPATT_TRANS_ISO;
+		pAlt->Out.wMaxPacketSize = s_IsoMps[i];
+		pAlt->Out.bInterval = interval;
+
+		pAlt->In = pAlt->Out;
+		pAlt->In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_EpNo);
+	}
+
+	*pLength = sizeof(s_ConfigDesc);
+	return reinterpret_cast<const uint8_t *>(&s_ConfigDesc);
+}
+
+static const uint8_t *IsoStringDescriptor(uint8_t Index, uint16_t LangId,
+										  uint16_t *pLength)
+{
+	if (pLength == nullptr)
+	{
+		return nullptr;
+	}
+	if (Index == 0U)
+	{
+		s_StringDesc[0] = 4U;
+		s_StringDesc[1] = USB_DESCTYPE_STRING;
+		s_StringDesc[2] = 0x09U;
+		s_StringDesc[3] = 0x04U;
+		*pLength = 4U;
+		return s_StringDesc;
+	}
+	if (Index > ISO_STR_INTERFACE ||
+		(LangId != 0U && LangId != 0x0409U))
+	{
+		return nullptr;
+	}
+
+	const UsbCfg_t *pCfg = UsbGetCfg(USB_DEVNO);
+	if (pCfg == nullptr)
+	{
+		return nullptr;
+	}
+
+	const char *pStr = nullptr;
+	switch (Index)
+	{
+		case ISO_STR_MANUFACTURER:
+			pStr = pCfg->pManufacturer;
+			break;
+		case ISO_STR_PRODUCT:
+			pStr = pCfg->pProduct;
+			break;
+		case ISO_STR_SERIAL:
+			pStr = UsbGetSerial(USB_DEVNO);
+			break;
+		case ISO_STR_INTERFACE:
+			pStr = pCfg->pFuncName;
+			break;
+		default:
+			return nullptr;
+	}
+	if (pStr == nullptr)
+	{
+		return nullptr;
+	}
+
+	size_t length = strlen(pStr);
+	if (length > ISO_STR_MAXLEN)
+	{
+		length = ISO_STR_MAXLEN;
+	}
+	s_StringDesc[0] = (uint8_t)(2U + (length * 2U));
+	s_StringDesc[1] = USB_DESCTYPE_STRING;
+	for (size_t i = 0U; i < length; i++)
+	{
+		s_StringDesc[2U + (i * 2U)] = (uint8_t)pStr[i];
+		s_StringDesc[3U + (i * 2U)] = 0U;
+	}
+	*pLength = s_StringDesc[0];
+	return s_StringDesc;
+}
+
+const uint8_t *UsbGetDescriptor(int DevNo, uint8_t DescType,
+								 uint8_t DescIndex, uint16_t LangId,
+								 UsbSpeed_t Speed, uint16_t *pLength)
+{
+	(void)DevNo;
+	if (pLength == nullptr)
+	{
+		return nullptr;
+	}
+	*pLength = 0U;
+
+	switch (DescType)
+	{
+		case USB_DESCTYPE_DEVICE:
+			return DescIndex == 0U ? IsoDeviceDescriptor(pLength) : nullptr;
+		case USB_DESCTYPE_CONFIGURATION:
+			return DescIndex == 0U ?
+				IsoConfigurationDescriptor(Speed, false, pLength) : nullptr;
+		case USB_DESCTYPE_STRING:
+			return IsoStringDescriptor(DescIndex, LangId, pLength);
+		case USB_DESCTYPE_DEVICE_QUALIFIER:
+			return DescIndex == 0U ? IsoQualifierDescriptor(pLength) : nullptr;
+		case USB_DESCTYPE_OSC:
+			if (DescIndex != 0U || !USB_HIGHSPEED_CAPABLE(USB_DEVNO))
+			{
+				return nullptr;
+			}
+			return IsoConfigurationDescriptor(
+				Speed == USB_SPEED_HIGH ? USB_SPEED_FULL : USB_SPEED_HIGH,
+				true, pLength);
+		default:
+			return nullptr;
+	}
 }
 
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
-	.Mode = USB_MODE_DEVICE,
 	.Vid = 0x1209,
 	.Pid = 0x0003,
 	.DevVer = 0x0100,
@@ -429,12 +596,9 @@ static const UsbCfg_t s_UsbCfg = {
 	.pProduct = "IOsonata USB ISO Loopback",
 	.pSerial = nullptr,
 	.pFuncName = "USB ISO Loopback",
+	.NbCdc = 0,
 	.IntPrio = 6,
-	.DeviceClass = USB_DEVCLASS_NONE,
-	.DeviceSubClass = 0U,
-	.DeviceProtocol = 0U,
 	.bSelfPowered = false,
-	.bRemoteWakeup = false,
 	.bLowPowerSuspend = false,
 	.MaxPower = 100,
 	.EvtHandler = nullptr,

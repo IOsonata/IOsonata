@@ -96,7 +96,6 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 // own vendor and product id here before shipping anything.
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
-	.Mode = USB_MODE_DEVICE,
 	.Vid = 0x1209,
 	.Pid = 0x0002,
 	.DevVer = 0x0100,
@@ -104,15 +103,11 @@ static const UsbCfg_t s_UsbCfg = {
 	.pProduct = "IOsonata CDC PRBS Tx",
 	.pSerial = nullptr,			// Taken from the MCU unique id
 	.pFuncName = "IOsonata CDC",
+	.NbCdc = 1,
 	.IntPrio = 6,
-	.DeviceClass = USB_DEVCLASS_MISC,
-	.DeviceSubClass = 2U,
-	.DeviceProtocol = 1U,
 	.bSelfPowered = false,
-	.bRemoteWakeup = true,
 	.bLowPowerSuspend = false,
 	.MaxPower = 100,
-	.EvtHandler = nullptr,
 };
 
 // CDC class/control object. It inherits the DeviceIntrf transfer methods, so

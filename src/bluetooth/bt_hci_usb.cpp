@@ -1411,42 +1411,6 @@ static bool BtHciUsbMakeFullDesc(BtHciUsbFullDesc_t *pDesc,
 	return true;
 }
 
-static bool BtHciUsbMakeRegisteredDesc(BtHciUsbDescBuffer_t *pDesc,
-									   const BtHciUsbDev_t *pHci,
-									   UsbSpeed_t Speed,
-									   const void **ppData,
-									   uint16_t *pLength)
-{
-	if (pDesc == nullptr || pHci == nullptr || ppData == nullptr ||
-		pLength == nullptr)
-	{
-		return false;
-	}
-
-	if (pHci->ScoEnabled && pHci->BulkSerializationSupported)
-	{
-		*ppData = &pDesc->Full;
-		*pLength = sizeof(pDesc->Full);
-		return BtHciUsbMakeFullDesc(&pDesc->Full, pHci, Speed);
-	}
-	if (pHci->ScoEnabled)
-	{
-		*ppData = &pDesc->Sco;
-		*pLength = sizeof(pDesc->Sco);
-		return BtHciUsbMakeScoDesc(&pDesc->Sco, pHci, Speed);
-	}
-	if (pHci->BulkSerializationSupported)
-	{
-		*ppData = &pDesc->Serial;
-		*pLength = sizeof(pDesc->Serial);
-		return BtHciUsbMakeSerialDesc(&pDesc->Serial, pHci, Speed);
-	}
-
-	*ppData = &pDesc->Legacy;
-	*pLength = sizeof(pDesc->Legacy);
-	return BtHciUsbMakeDesc(&pDesc->Legacy, pHci, Speed);
-}
-
 static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 								 const BtHciUsbCfg_t *pCfg,
 								 UsbDeviceClass *pClass)
@@ -1455,6 +1419,24 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 		UsbGetCfg(pCfg->DevNo) == nullptr ||
 		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
 		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0)
+	{
+		return false;
+	}
+
+	const unsigned descCount =
+		(pCfg->pDesc != nullptr ? 1U : 0U) +
+		(pCfg->pScoDesc != nullptr ? 1U : 0U) +
+		(pCfg->pSerialDesc != nullptr ? 1U : 0U) +
+		(pCfg->pFullDesc != nullptr ? 1U : 0U);
+	if (descCount > 1U ||
+		(pCfg->pDesc != nullptr &&
+			(pCfg->bSco || pCfg->bBulkSerialization)) ||
+		(pCfg->pScoDesc != nullptr &&
+			(!pCfg->bSco || pCfg->bBulkSerialization)) ||
+		(pCfg->pSerialDesc != nullptr &&
+			(pCfg->bSco || !pCfg->bBulkSerialization)) ||
+		(pCfg->pFullDesc != nullptr &&
+			(!pCfg->bSco || !pCfg->bBulkSerialization)))
 	{
 		return false;
 	}
@@ -1569,25 +1551,25 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 
 	BtHciUsbInitDevIntrf(pHci);
 
-	const void *pFsDesc = nullptr;
-	uint16_t fsDescLength = 0U;
-	if (!BtHciUsbMakeRegisteredDesc(&pHci->FsDesc, pHci, USB_SPEED_FULL,
-		&pFsDesc, &fsDescLength))
+	// The interface and endpoint numbers are known now, so build the descriptor
+	// fragment into the application buffer that matches the selected layout. The
+	// controller speed selects the MPS. A buffer that does not match the
+	// bSco/bBulkSerialization flags is rejected by its builder.
+	const UsbSpeed_t speed = USB_HIGHSPEED_CAPABLE(pHci->DevNo) ?
+		USB_SPEED_HIGH : USB_SPEED_FULL;
+	if ((pCfg->pDesc != nullptr &&
+			!BtHciUsbMakeDesc(pCfg->pDesc, pHci, speed)) ||
+		(pCfg->pScoDesc != nullptr &&
+			!BtHciUsbMakeScoDesc(pCfg->pScoDesc, pHci, speed)) ||
+		(pCfg->pSerialDesc != nullptr &&
+			!BtHciUsbMakeSerialDesc(pCfg->pSerialDesc, pHci, speed)) ||
+		(pCfg->pFullDesc != nullptr &&
+			!BtHciUsbMakeFullDesc(pCfg->pFullDesc, pHci, speed)))
 	{
 		return false;
 	}
 
-	const void *pHsDesc = nullptr;
-	uint16_t hsDescLength = 0U;
-	if (USB_HIGHSPEED_CAPABLE(pHci->DevNo) &&
-		!BtHciUsbMakeRegisteredDesc(&pHci->HsDesc, pHci, USB_SPEED_HIGH,
-			&pHsDesc, &hsDescLength))
-	{
-		return false;
-	}
-
-	return UsbDescriptorRegister(pHci->DevNo, pClass,
-		pFsDesc, fsDescLength, pHsDesc, hsDescLength);
+	return true;
 }
 
 bool BtHciUsb::Init(const BtHciUsbCfg_t &Cfg)

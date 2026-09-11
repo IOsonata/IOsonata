@@ -33,8 +33,6 @@ static uint8_t s_ReservedFirst;
 static uint8_t s_ReservedCount;
 static uint16_t s_ReservedIn;
 static uint16_t s_ReservedOut;
-static const uint8_t *s_FsDescriptor;
-static uint16_t s_FsDescriptorLength;
 static UsbEndPointDesc_t s_OpenDesc[32];
 static int s_OpenCount;
 static int s_OpenFailAt;
@@ -170,19 +168,6 @@ bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
     return true;
 }
 
-bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
-						   const void *pFsDescriptor,
-						   uint16_t FsDescriptorLength,
-						   const void *, uint16_t)
-{
-	if (DevNo != 0 || pClass != s_ClassObject || pFsDescriptor == nullptr ||
-		FsDescriptorLength == 0U)
-		return false;
-	s_FsDescriptor = static_cast<const uint8_t *>(pFsDescriptor);
-	s_FsDescriptorLength = FsDescriptorLength;
-	return true;
-}
-
 static int s_Fail;
 #define CHECK(c) do { if (!(c)) { \
     printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; } } while (0)
@@ -296,8 +281,6 @@ static void ResetFake(void)
     s_ReservedCount = 0U;
     s_ReservedIn = 0U;
     s_ReservedOut = 0U;
-	s_FsDescriptor = nullptr;
-	s_FsDescriptorLength = 0U;
     s_OpenCount = 0;
     s_OpenFailAt = -1;
     s_CloseCount = 0;
@@ -338,11 +321,10 @@ static void TestDescriptors(void)
 {
     ResetFake();
     BtHciUsb hci;
+    BtHciUsbDesc_t desc = {};
     BtHciUsbCfg_t cfg = MakeCfg();
+    cfg.pDesc = &desc;
     CHECK(hci.Init(cfg));
-	CHECK(s_FsDescriptorLength == sizeof(BtHciUsbDesc_t));
-	const BtHciUsbDesc_t &desc =
-		*reinterpret_cast<const BtHciUsbDesc_t *>(s_FsDescriptor);
     CHECK(desc.Association.bFirstInterface == 0U);
     CHECK(desc.Association.bInterfaceCount == 2U);
     CHECK(desc.EventIn.bEndpointAddress == USB_ENDPADDR_DIRIN(1U));
@@ -352,11 +334,10 @@ static void TestDescriptors(void)
 
     ResetFake();
     BtHciUsb sco;
+    BtHciUsbScoDesc_t scoDesc = {};
     cfg = MakeCfg(true);
+    cfg.pScoDesc = &scoDesc;
     CHECK(sco.Init(cfg));
-	CHECK(s_FsDescriptorLength == sizeof(BtHciUsbScoDesc_t));
-	const BtHciUsbScoDesc_t &scoDesc =
-		*reinterpret_cast<const BtHciUsbScoDesc_t *>(s_FsDescriptor);
     static const uint16_t mps[BT_HCI_USB_SCO_ALT_COUNT] = {9U,17U,25U,33U,49U,63U};
     for (uint8_t i = 0U; i < BT_HCI_USB_SCO_ALT_COUNT; i++)
     {
@@ -368,11 +349,10 @@ static void TestDescriptors(void)
 
     ResetFake();
     BtHciUsb serial;
+    BtHciUsbSerialDesc_t serialDesc = {};
     cfg = MakeCfg(false, true);
+    cfg.pSerialDesc = &serialDesc;
     CHECK(serial.Init(cfg));
-	CHECK(s_FsDescriptorLength == sizeof(BtHciUsbSerialDesc_t));
-	const BtHciUsbSerialDesc_t &serialDesc =
-		*reinterpret_cast<const BtHciUsbSerialDesc_t *>(s_FsDescriptor);
     CHECK(serialDesc.Serialized.Interface.bAlternateSetting == 1U);
     CHECK(serialDesc.Serialized.Interface.bNumEndpoints == 2U);
 }
@@ -380,12 +360,33 @@ static void TestDescriptors(void)
 static void TestDescriptorSelection(void)
 {
     ResetFake();
-	BtHciUsb validFull;
-	BtHciUsbCfg_t cfg = MakeCfg(true, true);
-	CHECK(validFull.Init(cfg));
-	CHECK(s_FsDescriptorLength == sizeof(BtHciUsbFullDesc_t));
-	const BtHciUsbFullDesc_t &full =
-		*reinterpret_cast<const BtHciUsbFullDesc_t *>(s_FsDescriptor);
+    BtHciUsb wrongLegacy;
+    BtHciUsbDesc_t legacy = {};
+    BtHciUsbCfg_t cfg = MakeCfg(true);
+    cfg.pDesc = &legacy;
+    CHECK(!wrongLegacy.Init(cfg));
+
+    ResetFake();
+    BtHciUsb wrongSco;
+    BtHciUsbScoDesc_t sco = {};
+    cfg = MakeCfg(true, true);
+    cfg.pScoDesc = &sco;
+    CHECK(!wrongSco.Init(cfg));
+
+    ResetFake();
+    BtHciUsb multiple;
+    BtHciUsbFullDesc_t full = {};
+    cfg = MakeCfg(true, true);
+    cfg.pScoDesc = &sco;
+    cfg.pFullDesc = &full;
+    CHECK(!multiple.Init(cfg));
+
+    ResetFake();
+    BtHciUsb validFull;
+    memset(&full, 0, sizeof(full));
+    cfg = MakeCfg(true, true);
+    cfg.pFullDesc = &full;
+    CHECK(validFull.Init(cfg));
     CHECK(full.Base.Serialized.Interface.bAlternateSetting == 1U);
     CHECK(full.Alt[0].Out.bEndpointAddress == USB_ENDPADDR_DIROUT(8U));
     CHECK(full.Alt[0].In.bEndpointAddress == USB_ENDPADDR_DIRIN(8U));
@@ -399,10 +400,10 @@ static void TestAutoPlacement(void)
     s_ReservedIn = (uint16_t)(1U << 1);
     s_ReservedOut = (uint16_t)(1U << 1);
     BtHciUsb hci;
+    BtHciUsbDesc_t desc = {};
     BtHciUsbCfg_t cfg = MakeCfg();
+    cfg.pDesc = &desc;
     CHECK(hci.Init(cfg));
-	const BtHciUsbDesc_t &desc =
-		*reinterpret_cast<const BtHciUsbDesc_t *>(s_FsDescriptor);
     CHECK(s_ReservedFirst == 2U);
     CHECK(s_ReservedIn == ((1U << 2) | (1U << 3)));
     CHECK(s_ReservedOut == (1U << 3));
@@ -416,10 +417,10 @@ static void TestScoAutoPlacement(void)
     s_ReservedIn = (uint16_t)(1U << 8);
     s_ReservedOut = (uint16_t)(1U << 8);
     BtHciUsb hci;
+    BtHciUsbScoDesc_t desc = {};
     BtHciUsbCfg_t cfg = MakeCfg(true);
+    cfg.pScoDesc = &desc;
     CHECK(hci.Init(cfg));
-	const BtHciUsbScoDesc_t &desc =
-		*reinterpret_cast<const BtHciUsbScoDesc_t *>(s_FsDescriptor);
     CHECK(s_ReservedIn == ((1U << 1) | (1U << 2) | (1U << 9)));
     CHECK(s_ReservedOut == ((1U << 2) | (1U << 9)));
     CHECK(desc.Alt[0].Out.bEndpointAddress == USB_ENDPADDR_DIROUT(9U));

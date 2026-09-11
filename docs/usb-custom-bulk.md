@@ -79,15 +79,30 @@ if (!g_CustomBulk.Init(s_BulkCfg))
 
 ## Descriptors
 
-Descriptor delivery is part of the generic USB layer. `UsbInit()` records the
-device identity and strings. `UsbdBulk::Init()` builds full-speed and, where
-supported, high-speed interface fragments using the allocated interface and
-endpoint numbers, then registers those static fragments with the generic layer.
+A custom USB device implements the standard `UsbGetDescriptor()` API for its
+device, configuration and string descriptors. The procedural core calls this
+API directly; `UsbCfg_t` contains no descriptor callback pointer or context.
 
-On `GET_DESCRIPTOR`, the generic layer builds the device, configuration,
-qualifier and string descriptors and concatenates registered class fragments.
-The application does not provide a descriptor callback, descriptor context or
-configuration-descriptor storage.
+`UsbdBulk::Init()` fills the descriptor fragment supplied in
+`UsbdBulkCfg_t::pDesc` with the allocated interface and bulk OUT/IN endpoints:
+
+```cpp
+#pragma pack(push, 1)
+typedef struct __Custom_Config_Descriptor {
+    UsbCfgDesc_t Config;
+    UsbdBulkDesc_t Bulk;
+} CustomConfigDesc_t;
+#pragma pack(pop)
+
+static CustomConfigDesc_t s_ConfigDesc;
+
+// In the UsbdBulkCfg_t initializer:
+.pDesc = &s_ConfigDesc.Bulk,
+```
+
+The application still owns the overall configuration descriptor because it decides which USB functions are present. `MakeDesc()` prevents the application from duplicating the interface and endpoint numbers selected by the allocator.
+
+The loopback example contains the complete descriptor handler, including manufacturer, product, serial and interface strings.
 
 ## Vendor control requests
 
@@ -150,7 +165,7 @@ static UsbdBulk g_TestPort;
 static UsbdBulk g_DataLink;
 ```
 
-Change the product and interface strings, subclass and protocol to match the application. Use VID/PID values assigned to the actual product before shipping.
+Change the product and interface strings, subclass, protocol and optional request handler to match the application. Use VID/PID values assigned to the actual product before shipping.
 
 Do not add fixed interface or endpoint numbers to the application configuration. The allocator is responsible for placement.
 
