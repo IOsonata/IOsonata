@@ -36,7 +36,8 @@ assert "if (!s_UsbdLowPowerSuspend ||" in enter_low_power, (
     "USBD low-power entry must be disabled when bLowPowerSuspend is false"
 )
 assert (
-    "atomic_store(&s_SuspendPending, s_UsbdLowPowerSuspend);" in interrupt
+    "if (s_UsbdLowPowerSuspend)" in interrupt
+    and "NRFX_USBD_STATE_SUSPEND_PENDING" in interrupt
 ), "bus suspend must not request peripheral low-power unconditionally"
 assert "nRFUsbdHostResumeDetected();" in sof, (
     "SOF handling must retain the anomaly-211 host-resume recovery path"
