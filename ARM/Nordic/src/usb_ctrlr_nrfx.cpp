@@ -2181,7 +2181,6 @@ extern "C" void USBD_IRQHandler(void)
 	if (epDataPending)
 	{
 		dataStatus = NRF_USBD->EPDATASTATUS;
-		NRF_USBD->EVENTS_EPDATA = 0;
 	}
 
 	const bool resetPending = NRF_USBD->EVENTS_USBRESET != 0U;
@@ -2190,10 +2189,10 @@ extern "C" void USBD_IRQHandler(void)
 	// EPSTATUS identifies the DMA owner and EPDATASTATUS identifies the endpoint
 	// whose USB transaction was acknowledged. EP0 and ISO use dedicated events.
 	const uint32_t epStatus = NRF_USBD->EPSTATUS;
+	uint32_t dataDmaStatus = 0U;
 	if (epStatus != 0U)
 	{
-		const uint32_t dataDmaStatus =
-			epStatus & NRF_USBD->EPDATASTATUS;
+		dataDmaStatus = epStatus & NRF_USBD->EPDATASTATUS;
 		const uint32_t specialDmaMask =
 			(1UL << 0) | (1UL << NRFX_USBD_ISO_EP_NO) |
 			(1UL << 16) | (1UL << (16U + NRFX_USBD_ISO_EP_NO));
@@ -2242,6 +2241,15 @@ extern "C" void USBD_IRQHandler(void)
 				nRFUsbdHandleOutEnd((uint8_t)dmaEpNum);
 			}
 		}
+	}
+
+	if (epDataPending)
+	{
+		NRF_USBD->EVENTS_EPDATA = 0;
+		// An OUT status bit stays latched from data arrival through ENDEPOUT.
+		// Do not present that retired packet as a new OUT transaction when this
+		// interrupt also reports data on another endpoint.
+		dataStatus &= ~(dataDmaStatus & 0xFFFF0000UL);
 	}
 
 	const bool usbEventPending = NRF_USBD->EVENTS_USBEVENT != 0U;

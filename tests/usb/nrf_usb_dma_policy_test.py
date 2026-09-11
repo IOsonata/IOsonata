@@ -46,6 +46,9 @@ assert "__CLZ(completed)" in interrupt
 assert interrupt.index("epStatus & NRF_USBD->EPDATASTATUS") < interrupt.index(
     "NRF_USBD->EPDATASTATUS = dataDmaStatus"
 )
+assert interrupt.index("if (*pEndEvent == 0U") < interrupt.index(
+    "NRF_USBD->EVENTS_EPDATA = 0"
+)
 assert interrupt.index("NRF_USBD->EPSTATUS = epStatus") < interrupt.index(
     "nRFUsbdDmaRelease();"
 )
