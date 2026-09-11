@@ -255,8 +255,6 @@ typedef struct __Bt_Hci_Usb_Dev {
 extern "C" {
 #endif
 
-bool BtHciUsbInit(BtHciUsbDev_t * const pHci, const BtHciUsbCfg_t *pCfg);
-
 bool BtHciUsbRequestToSend(BtHciUsbDev_t *pHci, int NbBytes);
 
 #ifdef __cplusplus

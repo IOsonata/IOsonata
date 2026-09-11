@@ -45,7 +45,6 @@ SOFTWARE.
 typedef struct __Usbd_EpAlloc_State {
 	int DevNo;
 	const UsbdEpAllocReq_t *pReq;
-	const UsbdClassCfg_t *pCfg;
 	UsbDeviceClass *pClass;
 	UsbdEpAllocRes_t *pRes;
 	uint8_t FirstInterface;
@@ -84,16 +83,9 @@ static bool EpAllocTryOut(const UsbdEpAllocState_t *pState, uint8_t Needed,
 {
 	if (Needed == 0U)
 	{
-		UsbdClassCfg_t cfg = *pState->pCfg;
-		cfg.FirstInterface = pState->FirstInterface;
-		cfg.InterfaceCount = pState->pReq->InterfaceCount;
-		cfg.EpInMask = InMask | PairMask;
-		cfg.EpOutMask = OutMask | PairMask;
-
-		const bool registered = pState->pClass != nullptr ?
-			UsbClassRegister(pState->DevNo, &cfg, pState->pClass) :
-			UsbdClassRegister(pState->DevNo, &cfg);
-		if (!registered)
+		if (!UsbClassRegister(pState->DevNo, pState->pClass,
+			pState->FirstInterface, pState->pReq->InterfaceCount,
+			InMask | PairMask, OutMask | PairMask))
 		{
 			return false;
 		}
@@ -187,10 +179,9 @@ static bool EpAllocTryIn(const UsbdEpAllocState_t *pState, uint8_t Needed,
 }
 
 bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
-				 const UsbdClassCfg_t *pCfg, UsbDeviceClass *pClass,
-				 UsbdEpAllocRes_t *pRes)
+				 UsbDeviceClass *pClass, UsbdEpAllocRes_t *pRes)
 {
-	if (pReq == nullptr || pCfg == nullptr || pRes == nullptr ||
+	if (pReq == nullptr || pClass == nullptr || pRes == nullptr ||
 		DevNo < 0 || DevNo >= USB_CTRLR_CNT ||
 		pReq->InterfaceCount > 16U ||
 		pReq->BidirectionalCount > USBD_EPALLOC_EP_MAXCNT ||
@@ -225,7 +216,6 @@ bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
 	UsbdEpAllocState_t state = {};
 	state.DevNo = DevNo;
 	state.pReq = pReq;
-	state.pCfg = pCfg;
 	state.pClass = pClass;
 	state.pRes = pRes;
 	state.InLimit = inLimit;
@@ -243,10 +233,4 @@ bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
 	}
 
 	return false;
-}
-
-bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
-				 const UsbdClassCfg_t *pCfg, UsbdEpAllocRes_t *pRes)
-{
-	return UsbdEpAlloc(DevNo, pReq, pCfg, nullptr, pRes);
 }

@@ -95,8 +95,6 @@ typedef struct __Usbd_Hid_Config {
 	uint8_t CountryCode;
 	uint8_t InterfaceString;
 	UsbdHidDesc_t *pDesc;
-	UsbdClassRequestHandler_t ReportHandler;	//!< GET_REPORT and SET_REPORT only
-	void *pReportContext;
 	UsbdHidRxHandler_t RxHandler;
 	UsbdHidTxHandler_t TxHandler;
 	void *pContext;
@@ -109,8 +107,6 @@ struct __Usbd_Hid_Dev {
 	int ItfNo;					//!< Internal allocation
 	UsbIntIntrf_t IntIntrf;
 	const uint8_t *pReportDesc;
-	UsbdClassRequestHandler_t ReportHandler;
-	void *pReportContext;
 	UsbdHidRxHandler_t RxHandler;
 	UsbdHidTxHandler_t TxHandler;
 	void *pContext;
@@ -139,7 +135,6 @@ struct __Usbd_Hid_Dev {
 extern "C" {
 #endif
 
-bool UsbdHidInit(UsbdHidDev_t *pHid, const UsbdHidCfg_t *pCfg);
 bool UsbdHidSendReport(UsbdHidDev_t *pHid, const uint8_t *pData,
 					   uint16_t Length);
 void UsbdHidSuspend(UsbdHidDev_t *pHid);

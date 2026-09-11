@@ -116,8 +116,6 @@ typedef struct __Usbd_Cdc_Dev {
 extern "C" {
 #endif
 
-bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, const UsbdCdcCfg_t *pCfg);
-
 void UsbdCdcProcess(UsbdCdcDev_t * const pCdc);
 
 bool UsbdCdcPortIsOpen(const UsbdCdcDev_t * const pCdc);

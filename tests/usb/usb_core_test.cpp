@@ -203,7 +203,7 @@ static const uint8_t *Descriptor(uint8_t Type, uint8_t Index, uint16_t,
 }
 
 static bool Request(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-					uint8_t **ppData, uint16_t *pLength, void *)
+					uint8_t **ppData, uint16_t *pLength)
 {
 	if (s_Class.StageCnt < STAGE_LOG_CNT)
 	{
@@ -243,29 +243,48 @@ static bool Request(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	return false;
 }
 
-static bool Configure(uint8_t Value, void *)
+static bool Configure(uint8_t Value)
 {
 	s_Class.ConfigCnt++;
 	s_Class.LastConfig = Value;
 	return true;
 }
 
-static bool SetInterface(uint8_t, uint8_t Alternate, void *)
+static bool SetInterface(uint8_t, uint8_t Alternate)
 {
 	s_Class.SetIfCnt++;
 	s_Class.LastAlt = Alternate;
 	return true;
 }
 
-static void ClassReset(void *)
+static void ClassReset(void)
 {
 	s_Class.ResetCnt++;
 }
 
-static void ClassProcess(void *)
+static void ClassProcess(void)
 {
 	s_Class.ProcessCnt++;
 }
+
+class FixtureUsbDeviceClass final : public UsbDeviceClass {
+public:
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+				 uint8_t **ppData, uint16_t *pLength) override {
+		return Request(pSetup, Stage, ppData, pLength);
+	}
+	bool SelectConfig(uint8_t ConfigValue) override {
+		return Configure(ConfigValue);
+	}
+	bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) override {
+		return vWithSetInterface && SetInterface(InterfaceNo, Option);
+	}
+	void Reset(void) override { ClassReset(); }
+	void Process(void) override { ClassProcess(); }
+	bool vWithSetInterface = true;
+};
+
+static FixtureUsbDeviceClass s_FixtureClass;
 
 static bool Fixture(bool WithSetInterface = true,
 					UsbDeviceClass *pClass = nullptr)
@@ -290,20 +309,10 @@ static bool Fixture(bool WithSetInterface = true,
 		return false;
 	}
 
-	UsbdClassCfg_t cls = {};
-	cls.FirstInterface = 0;
-	cls.InterfaceCount = 1;
-	cls.EpInMask = (1U << 1) | (1U << 2);
-	cls.EpOutMask = (1U << 1);
-	cls.RequestHandler = Request;
-	cls.ConfigHandler = Configure;
-	cls.SetInterfaceHandler = WithSetInterface ? SetInterface : nullptr;
-	cls.ResetHandler = ClassReset;
-	cls.ProcessHandler = ClassProcess;
-	const bool registered = pClass != nullptr ?
-		UsbClassRegister(TEST_DEVNO, &cls, pClass) :
-		UsbdClassRegister(TEST_DEVNO, &cls);
-	if (!registered)
+	s_FixtureClass.vWithSetInterface = WithSetInterface;
+	UsbDeviceClass *pObject = pClass != nullptr ? pClass : &s_FixtureClass;
+	if (!UsbClassRegister(TEST_DEVNO, pObject, 0, 1,
+		(1U << 1) | (1U << 2), (1U << 1)))
 	{
 		return false;
 	}
@@ -732,8 +741,7 @@ static bool TestClassObjectRegistry(void)
 	UsbProcess(TEST_DEVNO);
 	CHECK(device.ProcessCnt == 1);
 	CHECK(s_Class.ProcessCnt == 0);
-	UsbdClassCfg_t duplicate = {};
-	CHECK(!UsbClassRegister(TEST_DEVNO, &duplicate, &device));
+	CHECK(!UsbClassRegister(TEST_DEVNO, &device, 0, 0, 0, 0));
 	CHECK(SetConfig(0));
 	CHECK(device.ConfigCnt == 2 && device.ConfigurationValue == 0);
 

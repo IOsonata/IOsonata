@@ -18,7 +18,6 @@ The application chooses the behavior and storage for the custom interface:
 - RX and TX FIFO memory;
 - byte-stream or packet TX mode;
 - optional full-speed and high-speed packet sizes;
-- optional control-request handler;
 - optional `DeviceIntrf` event callback.
 
 The application does **not** choose an interface number or endpoint number. `UsbdBulk` requests one interface and one bidirectional bulk endpoint number from the internal USB function allocator.
@@ -56,8 +55,6 @@ static const UsbdBulkCfg_t s_BulkCfg = {
     .FsMps = 0U,
     .HsMps = 0U,
     .Mode = USBD_BULK_MODE_BYTE,
-    .RequestHandler = nullptr,
-    .pRequestContext = nullptr,
     .EvtCB = nullptr,
 };
 ```
@@ -84,7 +81,8 @@ if (!g_CustomBulk.Init(s_BulkCfg))
 
 A custom USB device supplies its device, configuration and string descriptors through `UsbCfg_t::DescHandler`.
 
-`UsbdBulk::MakeDesc()` fills the descriptor fragment for the allocated interface and its bulk OUT/IN endpoints:
+`UsbdBulk::Init()` fills the descriptor fragment supplied in
+`UsbdBulkCfg_t::pDesc` with the allocated interface and bulk OUT/IN endpoints:
 
 ```cpp
 #pragma pack(push, 1)
@@ -96,15 +94,20 @@ typedef struct __Custom_Config_Descriptor {
 
 static CustomConfigDesc_t s_ConfigDesc;
 
-if (!g_CustomBulk.MakeDesc(&s_ConfigDesc.Bulk, Speed))
-{
-    return nullptr;
-}
+// In the UsbdBulkCfg_t initializer:
+.pDesc = &s_ConfigDesc.Bulk,
 ```
 
 The application still owns the overall configuration descriptor because it decides which USB functions are present. `MakeDesc()` prevents the application from duplicating the interface and endpoint numbers selected by the allocator.
 
 The loopback example contains the complete descriptor handler, including manufacturer, product, serial and interface strings.
+
+## Vendor control requests
+
+Derive the application class from `UsbdBulk` and override `Control()` when the
+vendor interface needs endpoint-zero requests. Return `UsbdBulk::Control()` for
+requests the derived class does not handle. This keeps control routing on the
+registered class object instead of adding a function-pointer registration path.
 
 ## Sending and receiving
 

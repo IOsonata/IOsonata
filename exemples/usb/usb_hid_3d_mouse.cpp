@@ -171,7 +171,26 @@ static const GyroSensorCfg_t s_GyroCfg = {
 static SPI g_Spi;
 static Timer g_Timer;
 static AgBmi323 g_Imu;
-static UsbdHid g_Hid;
+static bool HidReportRequest(const UsbSetupData_t *pSetup,
+							 UsbCtrlStage_t Stage, uint8_t **ppData,
+							 uint16_t *pLength);
+
+class Hid3dMouse final : public UsbdHid {
+public:
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+				 uint8_t **ppData, uint16_t *pLength) override {
+		if (pSetup != nullptr &&
+			(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) ==
+				USB_REQTYPE_CLASS &&
+			pSetup->bRequest == USB_HID_REQ_GET_REPORT)
+		{
+			return HidReportRequest(pSetup, Stage, ppData, pLength);
+		}
+		return UsbdHid::Control(pSetup, Stage, ppData, pLength);
+	}
+};
+
+static Hid3dMouse g_Hid;
 static Hid3dMouseReport_t s_Report;
 static int32_t s_AccelCenter[3];
 static int32_t s_GyroCenter[3];
@@ -187,7 +206,7 @@ static const uint8_t *HidDescHandler(uint8_t DescType, uint8_t DescIndex,
 
 static bool HidReportRequest(const UsbSetupData_t *pSetup,
 							 UsbCtrlStage_t Stage, uint8_t **ppData,
-							 uint16_t *pLength, void *)
+							 uint16_t *pLength)
 {
 	if (pSetup == nullptr || pLength == nullptr ||
 		pSetup->bRequest != USB_HID_REQ_GET_REPORT ||
@@ -222,8 +241,6 @@ static const UsbdHidCfg_t s_HidCfg = {
 	.CountryCode = 0U,
 	.InterfaceString = HID_STR_INTERFACE,
 	.pDesc = &s_ConfigDesc.Hid,
-	.ReportHandler = HidReportRequest,
-	.pReportContext = nullptr,
 	.RxHandler = nullptr,
 	.TxHandler = nullptr,
 	.pContext = nullptr,

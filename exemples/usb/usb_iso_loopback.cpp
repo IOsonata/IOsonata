@@ -227,8 +227,8 @@ static void IsoTxFrame(UsbIsoIntrf_t *, uint16_t Length,
 	}
 }
 
-static bool IsoRequest(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-					   uint8_t **ppData, uint16_t *pLength, void *)
+static bool IsoControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+					   uint8_t **ppData, uint16_t *pLength)
 {
 	if (pSetup == nullptr)
 	{
@@ -253,7 +253,7 @@ static bool IsoRequest(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	return true;
 }
 
-static bool IsoConfig(uint8_t Configuration, void *)
+static bool IsoSelectConfig(uint8_t Configuration)
 {
 	UsbIsoIntrfClose(&s_Iso);
 	s_Configured = false;
@@ -272,7 +272,7 @@ static bool IsoConfig(uint8_t Configuration, void *)
 	return true;
 }
 
-static bool IsoSetInterface(uint8_t InterfaceNo, uint8_t Alt, void *)
+static bool IsoSelectInterface(uint8_t InterfaceNo, uint8_t Alt)
 {
 	if (!s_Configured || InterfaceNo != s_InterfaceNo || Alt > ISO_ALT_COUNT)
 	{
@@ -297,7 +297,7 @@ static bool IsoSetInterface(uint8_t InterfaceNo, uint8_t Alt, void *)
 	return true;
 }
 
-static void IsoReset(void *)
+static void IsoReset(void)
 {
 	s_Configured = false;
 	s_Alt = 0U;
@@ -305,7 +305,7 @@ static void IsoReset(void *)
 	IsoClearDiag();
 }
 
-static void IsoProcess(void *)
+static void IsoProcess(void)
 {
 	if (!s_Configured || s_Alt == 0U)
 	{
@@ -340,12 +340,22 @@ static bool IsoRegisterFunction(void)
 
 	const uint16_t epBit = (uint16_t)(1U << epNo);
 
-	UsbdClassCfg_t coreCfg = {};
-	coreCfg.RequestHandler = IsoRequest;
-	coreCfg.ConfigHandler = IsoConfig;
-	coreCfg.SetInterfaceHandler = IsoSetInterface;
-	coreCfg.ResetHandler = IsoReset;
-	coreCfg.ProcessHandler = IsoProcess;
+	class IsoLoopbackClass final : public UsbDeviceClass {
+	public:
+		bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+					 uint8_t **ppData, uint16_t *pLength) override {
+			return IsoControl(pSetup, Stage, ppData, pLength);
+		}
+		bool SelectConfig(uint8_t ConfigValue) override {
+			return IsoSelectConfig(ConfigValue);
+		}
+		bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) override {
+			return IsoSelectInterface(InterfaceNo, Option);
+		}
+		void Reset(void) override { IsoReset(); }
+		void Process(void) override { IsoProcess(); }
+	};
+	static IsoLoopbackClass s_Class;
 
 	// The ISO endpoint is controller constrained. Reserve one supported
 	// bidirectional endpoint while the allocator chooses the interface number.
@@ -355,7 +365,7 @@ static bool IsoRegisterFunction(void)
 	req.FixedOutMask = epBit;
 
 	UsbdEpAllocRes_t alloc = {};
-	if (!UsbdEpAlloc(USB_DEVNO, &req, &coreCfg, &alloc))
+	if (!UsbdEpAlloc(USB_DEVNO, &req, &s_Class, &alloc))
 	{
 		return false;
 	}

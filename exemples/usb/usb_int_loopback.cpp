@@ -204,8 +204,8 @@ static void IntTxPacket(UsbIntIntrf_t *, uint16_t Length,
 	}
 }
 
-static bool IntRequest(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-					   uint8_t **ppData, uint16_t *pLength, void *)
+static bool IntControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+					   uint8_t **ppData, uint16_t *pLength)
 {
 	if (pSetup == nullptr)
 	{
@@ -230,7 +230,7 @@ static bool IntRequest(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	return true;
 }
 
-static bool IntConfig(uint8_t Configuration, void *)
+static bool IntSelectConfig(uint8_t Configuration)
 {
 	UsbIntIntrfClose(&s_Int);
 	s_Configured = false;
@@ -249,7 +249,7 @@ static bool IntConfig(uint8_t Configuration, void *)
 	return true;
 }
 
-static bool IntSetInterface(uint8_t InterfaceNo, uint8_t Alt, void *)
+static bool IntSelectInterface(uint8_t InterfaceNo, uint8_t Alt)
 {
 	if (!s_Configured || InterfaceNo != s_InterfaceNo || Alt > INT_ALT_COUNT)
 	{
@@ -273,7 +273,7 @@ static bool IntSetInterface(uint8_t InterfaceNo, uint8_t Alt, void *)
 	return true;
 }
 
-static void IntReset(void *)
+static void IntReset(void)
 {
 	s_Configured = false;
 	s_Alt = 0U;
@@ -281,7 +281,7 @@ static void IntReset(void *)
 	IntClearDiag();
 }
 
-static void IntProcess(void *)
+static void IntProcess(void)
 {
 	if (!s_Configured || s_Alt == 0U)
 	{
@@ -301,19 +301,29 @@ static void IntProcess(void *)
 
 static bool IntRegisterFunction(void)
 {
-	UsbdClassCfg_t coreCfg = {};
-	coreCfg.RequestHandler = IntRequest;
-	coreCfg.ConfigHandler = IntConfig;
-	coreCfg.SetInterfaceHandler = IntSetInterface;
-	coreCfg.ResetHandler = IntReset;
-	coreCfg.ProcessHandler = IntProcess;
+	class IntLoopbackClass final : public UsbDeviceClass {
+	public:
+		bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+					 uint8_t **ppData, uint16_t *pLength) override {
+			return IntControl(pSetup, Stage, ppData, pLength);
+		}
+		bool SelectConfig(uint8_t ConfigValue) override {
+			return IntSelectConfig(ConfigValue);
+		}
+		bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) override {
+			return IntSelectInterface(InterfaceNo, Option);
+		}
+		void Reset(void) override { IntReset(); }
+		void Process(void) override { IntProcess(); }
+	};
+	static IntLoopbackClass s_Class;
 
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 1U;
 	req.BidirectionalCount = 1U;
 
 	UsbdEpAllocRes_t alloc = {};
-	if (!UsbdEpAlloc(USB_DEVNO, &req, &coreCfg, &alloc))
+	if (!UsbdEpAlloc(USB_DEVNO, &req, &s_Class, &alloc))
 	{
 		return false;
 	}

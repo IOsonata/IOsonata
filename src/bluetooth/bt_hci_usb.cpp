@@ -313,10 +313,8 @@ static void BtHciUsbUnconfigure(BtHciUsbDev_t *pHci)
 	BtHciUsbClearTransport(pHci);
 }
 
-static bool BtHciUsbConfig(uint8_t Configuration, void *pContext)
+static bool BtHciUsbConfig(BtHciUsbDev_t *pHci, uint8_t Configuration)
 {
-	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
-
 	if (pHci == nullptr)
 	{
 		return false;
@@ -359,10 +357,9 @@ static bool BtHciUsbConfig(uint8_t Configuration, void *pContext)
 	return true;
 }
 
-static bool BtHciUsbSetInterface(uint8_t InterfaceNo, uint8_t Alt,
-								void *pContext)
+static bool BtHciUsbSetInterface(BtHciUsbDev_t *pHci,
+								uint8_t InterfaceNo, uint8_t Alt)
 {
-	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
 	if (pHci == nullptr || !pHci->Configured)
 	{
 		return false;
@@ -457,9 +454,8 @@ static bool BtHciUsbRequestValid(const BtHciUsbDev_t *pHci,
 
 static bool BtHciUsbRequest(const UsbSetupData_t *pSetup,
 						   UsbCtrlStage_t Stage, uint8_t **ppData,
-						   uint16_t *pLength, void *pContext)
+						   uint16_t *pLength, BtHciUsbDev_t *pHci)
 {
-	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
 	if (pHci == nullptr || pSetup == nullptr || pLength == nullptr ||
 		!BtHciUsbRequestValid(pHci, pSetup))
 	{
@@ -724,9 +720,8 @@ static void BtHciUsbScoSendFrameComplete(UsbIsoIntrf_t *, uint16_t Length,
 	(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_TX_READY, 0);
 }
 
-static void BtHciUsbReset(void *pContext)
+static void BtHciUsbReset(BtHciUsbDev_t *pHci)
 {
-	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
 	if (pHci != nullptr)
 	{
 		BtHciUsbUnconfigure(pHci);
@@ -1420,7 +1415,7 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 								 const BtHciUsbCfg_t *pCfg,
 								 UsbDeviceClass *pClass)
 {
-	if (pHci == nullptr || pCfg == nullptr ||
+	if (pHci == nullptr || pCfg == nullptr || pClass == nullptr ||
 		UsbGetCfg(pCfg->DevNo) == nullptr ||
 		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
 		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0)
@@ -1481,14 +1476,6 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 		return false;
 	}
 
-	UsbdClassCfg_t coreCfg = {};
-	coreCfg.RequestHandler = pClass == nullptr ? BtHciUsbRequest : nullptr;
-	coreCfg.ConfigHandler = pClass == nullptr ? BtHciUsbConfig : nullptr;
-	coreCfg.SetInterfaceHandler =
-		pClass == nullptr ? BtHciUsbSetInterface : nullptr;
-	coreCfg.ResetHandler = pClass == nullptr ? BtHciUsbReset : nullptr;
-	coreCfg.pContext = pHci;
-
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 2U;
 	req.BidirectionalCount = 1U;
@@ -1499,7 +1486,7 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 	bool registered = false;
 	if (!pHci->ScoEnabled)
 	{
-		registered = UsbdEpAlloc(pHci->DevNo, &req, &coreCfg, pClass, &alloc);
+		registered = UsbdEpAlloc(pHci->DevNo, &req, pClass, &alloc);
 	}
 	else
 	{
@@ -1513,7 +1500,7 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 
 			req.FixedInMask = bit;
 			req.FixedOutMask = bit;
-			if (UsbdEpAlloc(pHci->DevNo, &req, &coreCfg, pClass, &alloc))
+			if (UsbdEpAlloc(pHci->DevNo, &req, pClass, &alloc))
 			{
 				scoEp = ep;
 				registered = true;
@@ -1585,12 +1572,6 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 	return true;
 }
 
-bool BtHciUsbInit(BtHciUsbDev_t * const pHci,
-				 const BtHciUsbCfg_t *pCfg)
-{
-	return BtHciUsbInitInternal(pHci, pCfg, nullptr);
-}
-
 bool BtHciUsb::Init(const BtHciUsbCfg_t &Cfg)
 {
 	return BtHciUsbInitInternal(&vBtHciUsb, &Cfg, this);
@@ -1604,12 +1585,12 @@ bool BtHciUsb::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 
 bool BtHciUsb::SelectConfig(uint8_t ConfigValue)
 {
-	return BtHciUsbConfig(ConfigValue, &vBtHciUsb);
+	return BtHciUsbConfig(&vBtHciUsb, ConfigValue);
 }
 
 bool BtHciUsb::SelectInterface(uint8_t InterfaceNo, uint8_t Option)
 {
-	return BtHciUsbSetInterface(InterfaceNo, Option, &vBtHciUsb);
+	return BtHciUsbSetInterface(&vBtHciUsb, InterfaceNo, Option);
 }
 
 void BtHciUsb::Reset()
