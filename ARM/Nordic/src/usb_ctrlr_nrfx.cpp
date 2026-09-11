@@ -2175,10 +2175,7 @@ static void nRFUsbdHandleIsoOutEnd(void)
 
 extern "C" void USBD_IRQHandler(void)
 {
-	const uint32_t enabled = NRF_USBD->INTEN;
-	const bool epDataPending =
-		(enabled & USBD_INTEN_EPDATA_Msk) != 0U &&
-		NRF_USBD->EVENTS_EPDATA != 0U;
+	const bool epDataPending = NRF_USBD->EVENTS_EPDATA != 0U;
 	uint32_t dataStatus = 0U;
 	if (epDataPending)
 	{
@@ -2187,9 +2184,7 @@ extern "C" void USBD_IRQHandler(void)
 		NRF_USBD->EPDATASTATUS = dataStatus;
 	}
 
-	const bool resetPending =
-		(enabled & USBD_INTEN_USBRESET_Msk) != 0U &&
-		NRF_USBD->EVENTS_USBRESET != 0U;
+	const bool resetPending = NRF_USBD->EVENTS_USBRESET != 0U;
 
 	// EPSTATUS is the single EasyDMA owner. Convert its one set bit directly
 	// to the corresponding END event instead of scanning the event registers.
@@ -2231,30 +2226,14 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
-	const bool usbEventPending =
-		(enabled & USBD_INTEN_USBEVENT_Msk) != 0U &&
-		NRF_USBD->EVENTS_USBEVENT != 0U;
-	const bool setupPending =
-		(enabled & USBD_INTEN_EP0SETUP_Msk) != 0U &&
-		NRF_USBD->EVENTS_EP0SETUP != 0U;
-	const bool ep0DataPending =
-		(enabled & USBD_INTEN_EP0DATADONE_Msk) != 0U &&
-		NRF_USBD->EVENTS_EP0DATADONE != 0U;
-	const bool ep0InEndPending =
-		(enabled & USBD_INTEN_ENDEPIN0_Msk) != 0U &&
-		NRF_USBD->EVENTS_ENDEPIN[0] != 0U;
-	const bool ep0OutEndPending =
-		(enabled & USBD_INTEN_ENDEPOUT0_Msk) != 0U &&
-		NRF_USBD->EVENTS_ENDEPOUT[0] != 0U;
-	const bool isoInEndPending =
-		(enabled & USBD_INTEN_ENDISOIN_Msk) != 0U &&
-		NRF_USBD->EVENTS_ENDISOIN != 0U;
-	const bool isoOutEndPending =
-		(enabled & USBD_INTEN_ENDISOOUT_Msk) != 0U &&
-		NRF_USBD->EVENTS_ENDISOOUT != 0U;
-	const bool sofPending =
-		(enabled & USBD_INTEN_SOF_Msk) != 0U &&
-		NRF_USBD->EVENTS_SOF != 0U;
+	const bool usbEventPending = NRF_USBD->EVENTS_USBEVENT != 0U;
+	const bool setupPending = NRF_USBD->EVENTS_EP0SETUP != 0U;
+	const bool ep0DataPending = NRF_USBD->EVENTS_EP0DATADONE != 0U;
+	const bool ep0InEndPending = NRF_USBD->EVENTS_ENDEPIN[0] != 0U;
+	const bool ep0OutEndPending = NRF_USBD->EVENTS_ENDEPOUT[0] != 0U;
+	const bool isoInEndPending = NRF_USBD->EVENTS_ENDISOIN != 0U;
+	const bool isoOutEndPending = NRF_USBD->EVENTS_ENDISOOUT != 0U;
+	const bool sofPending = NRF_USBD->EVENTS_SOF != 0U;
 
 	if (resetPending)
 	{
@@ -2321,10 +2300,7 @@ extern "C" void USBD_IRQHandler(void)
 				atomic_fetch_or(&s_State,
 					NRFX_USBD_STATE_SUSPEND_PENDING);
 			}
-			if ((NRF_USBD->INTEN & USBD_INTEN_SOF_Msk) == 0U)
-			{
-				NRF_USBD->EVENTS_SOF = 0;
-			}
+			NRF_USBD->EVENTS_SOF = 0;
 			NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
 			nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
 		}

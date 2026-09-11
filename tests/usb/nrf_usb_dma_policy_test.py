@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Guard nRF52 IN completion without a second per-packet interrupt."""
 
+import re
 from pathlib import Path
 
 
@@ -46,9 +47,9 @@ assert interrupt.index("NRF_USBD->EPSTATUS = epStatus") < interrupt.index(
 assert interrupt.index("*pEndEvent = 0") < interrupt.index(
     "nRFUsbdDmaRelease();"
 )
-assert "USBD_INTEN_EPDATA_Msk" in interrupt
+assert re.search(r"NRF_USBD->INTEN\b", interrupt) is None
 assert interrupt.rindex("nRFUsbdServicePending();") > interrupt.index(
-    "USBD_INTEN_EPDATA_Msk"
+    "NRF_USBD->EVENTS_EPDATA"
 )
 assert "nRFUsbdDmaReclaim" not in service
 
