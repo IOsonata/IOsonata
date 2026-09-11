@@ -465,11 +465,21 @@ static bool TestInterfaceAndHalt(void)
 	Setup(STD_EP_OUT, USB_REQ_SET_FEATURE,
 		  USB_FEATSEL_ENDPOINT_HALT, EP1_IN, 0);
 	CHECK(s_Ctrlr.LastStallEp == EP1_IN);
+	CHECK(UsbEpHalted(TEST_DEVNO, EP1_IN));
+	CHECK(!UsbEpHalted(TEST_DEVNO, EP2_IN));
 	Complete(EP0_IN, 0);
 	Setup(STD_EP_IN, USB_REQ_GET_STATUS, 0, EP1_IN, 2);
 	CHECK((LastXfer()->Data[0] & USB_ENDPSTATUS_HALT) != 0);
 	Complete(EP0_IN, 2);
 	Complete(EP0_OUT, 0);
+
+	CHECK(UsbEpSetHalt(TEST_DEVNO, EP1_OUT, true));
+	CHECK(UsbEpHalted(TEST_DEVNO, EP1_OUT));
+	CHECK(s_Ctrlr.LastStallEp == EP1_OUT);
+	CHECK(UsbEpSetHalt(TEST_DEVNO, EP1_OUT, false));
+	CHECK(!UsbEpHalted(TEST_DEVNO, EP1_OUT));
+	CHECK(s_Ctrlr.LastClearStallEp == EP1_OUT);
+	CHECK(!UsbEpSetHalt(TEST_DEVNO, EP2_IN, true));
 
 	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 1, 0, 0);
 	CHECK(s_Class.SetIfCnt == 1 && s_Class.LastAlt == 1);

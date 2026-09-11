@@ -14,15 +14,18 @@ on:
       - 'Python/usb_iso_loopback.py'
       - 'Python/usb_int_loopback.py'
       - 'Python/usb_hid_loopback.py'
+      - 'Python/usb_msc_test.py'
       - 'exemples/usb/usb_iso_loopback.cpp'
       - 'exemples/usb/usb_int_loopback.cpp'
       - 'exemples/usb/usb_hid_loopback.cpp'
       - 'exemples/usb/usb_hid_keyboard.cpp'
       - 'exemples/usb/usb_hid_3d_mouse.cpp'
+      - 'exemples/usb/usb_msc_ramdisk.cpp'
       - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbIntLoopback/**'
       - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbHidLoopback/**'
       - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbHidKeyboard/**'
       - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbHid3dMouse/**'
+      - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbMscRamDisk/**'
       - '.github/workflows/usb-host-tests.yml'
   pull_request:
     paths:
@@ -37,15 +40,18 @@ on:
       - 'Python/usb_iso_loopback.py'
       - 'Python/usb_int_loopback.py'
       - 'Python/usb_hid_loopback.py'
+      - 'Python/usb_msc_test.py'
       - 'exemples/usb/usb_iso_loopback.cpp'
       - 'exemples/usb/usb_int_loopback.cpp'
       - 'exemples/usb/usb_hid_loopback.cpp'
       - 'exemples/usb/usb_hid_keyboard.cpp'
       - 'exemples/usb/usb_hid_3d_mouse.cpp'
+      - 'exemples/usb/usb_msc_ramdisk.cpp'
       - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbIntLoopback/**'
       - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbHidLoopback/**'
       - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbHidKeyboard/**'
       - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbHid3dMouse/**'
+      - 'ARM/Nordic/nRF52/nRF52840/exemples/UsbMscRamDisk/**'
       - '.github/workflows/usb-host-tests.yml'
   workflow_dispatch:
 
@@ -63,4 +69,5 @@ jobs:
           make -C tests/usb iso-hw-build
           make -C tests/usb int-hw-build
           make -C tests/usb hid-hw-build
+          make -C tests/usb msc-hw-build
           make -C tests/usb hid-demo-build

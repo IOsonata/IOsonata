@@ -63,6 +63,16 @@ HID_SOURCES := \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
+MSC_TARGET := $(BUILD_DIR)/usbd_msc_test
+MSC_SOURCES := \
+	usbd_msc_test.cpp \
+	$(ROOT)/src/usb/usbd_msc.cpp \
+	$(ROOT)/src/usb/usbd_epalloc.cpp \
+	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/device_intrf.cpp \
+	$(ROOT)/src/storage/diskio_impl.cpp \
+	$(ROOT)/src/cfifo.c
+
 INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
 INTRF_SOURCES := \
 	usb_intrf_test.cpp \
@@ -119,6 +129,13 @@ HID_HW_SCRIPT := $(ROOT)/Python/usb_hid_loopback.py
 HID_HW_FIRMWARE := $(ROOT)/exemples/usb/usb_hid_loopback.cpp
 HID_HW_ARGS ?= --manual-suspend-wake
 
+# MSC class hardware validation. --write-test is safe only with the dedicated
+# RAM disk example because the runner writes and restores the final sector.
+MSC_HW_SCRIPT := $(ROOT)/Python/usb_msc_test.py
+MSC_HW_FIRMWARE := $(ROOT)/exemples/usb/usb_msc_ramdisk.cpp
+MSC_HW_PROJECT := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbMscRamDisk/ioc/.project
+MSC_HW_ARGS ?=
+
 # HID application demos. demo_hostport replaces target GPIO register access
 # during host syntax checks; the IOcomposer projects use the real nRF52 port.
 HID_KEYBOARD_FIRMWARE := $(ROOT)/exemples/usb/usb_hid_keyboard.cpp
@@ -150,6 +167,8 @@ HEADERS := \
 	$(ROOT)/include/usb/usb_iso.h \
 	$(ROOT)/include/usb/usbd_bulk.h \
 	$(ROOT)/include/usb/usbd_hid.h \
+	$(ROOT)/include/usb/usbd_msc.h \
+	$(ROOT)/include/usb/usb_mscdef.h \
 	$(ROOT)/include/usb/usbd_cdc.h \
 	$(ROOT)/include/usb/usbd_epalloc.h
 
@@ -157,10 +176,12 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 	$(DIRECT_TARGET) $(ISO_TARGET) $(ISO_DUPLEX_TARGET) $(INT_TARGET) \
 	$(BULK_TARGET) $(HID_TARGET) $(LINK_TARGET)
 
+TARGETS += $(MSC_TARGET)
+
 .PHONY: all test test-c-header test-gcc test-clang test-matrix \
 	test-nrf-suspend-policy test-nrf-iso-policy \
 	iso-hw-build iso-hw int-hw-build int-hw hid-hw-build hid-hw \
-	hid-demo-build probe clean
+	msc-hw-build msc-hw hid-demo-build probe clean
 
 all: test
 
@@ -177,11 +198,12 @@ test: $(TARGETS)
 	$(TEST_ENV) ./$(INT_TARGET)
 	$(TEST_ENV) ./$(BULK_TARGET)
 	$(TEST_ENV) ./$(HID_TARGET)
+	$(TEST_ENV) ./$(MSC_TARGET)
 	$(TEST_ENV) ./$(LINK_TARGET)
 
 test-c-header:
 	@printf '%s\n' '#include "usb/usb_iso.h"' '#include "usb/usb_int.h"' \
-		'#include "usb/usbd_hid.h"' \
+		'#include "usb/usbd_hid.h"' '#include "usb/usb_mscdef.h"' \
 		'int main(void) {' \
 		' return UsbIsoIntrfTxReady((const UsbIsoIntrf_t *)0) ||' \
 		'  UsbIntIntrfTxReady((const UsbIntIntrf_t *)0) ||' \
@@ -213,6 +235,13 @@ hid-hw-build: $(HID_HW_SCRIPT) $(HID_HW_FIRMWARE)
 
 hid-hw: hid-hw-build
 	python3 $(HID_HW_SCRIPT) $(HID_HW_ARGS)
+
+msc-hw-build: $(MSC_HW_SCRIPT) $(MSC_HW_FIRMWARE) $(MSC_HW_PROJECT)
+	python3 -c "compile(open('$(MSC_HW_SCRIPT)', encoding='utf-8').read(), '$(MSC_HW_SCRIPT)', 'exec')"
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only $(MSC_HW_FIRMWARE)
+
+msc-hw: msc-hw-build
+	python3 $(MSC_HW_SCRIPT) $(MSC_HW_ARGS)
 
 hid-demo-build: $(HID_KEYBOARD_FIRMWARE) $(HID_KEYBOARD_BOARD) \
 		$(HID_KEYBOARD_PROJECT) $(HID_3D_MOUSE_FIRMWARE) \
@@ -283,6 +312,11 @@ $(HID_TARGET): $(HID_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
 		$(HID_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(MSC_TARGET): $(MSC_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(MSC_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(LINK_TARGET): $(LINK_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)

@@ -28,6 +28,7 @@ usb_int.*        UsbIntIntrf    role-neutral Interrupt specialization
 usbd_cdc.*       UsbdCdc        USB device CDC ACM
 usbd_bulk.*      UsbdBulk       USB device custom Bulk class
 usbd_hid.*       UsbdHid        USB device HID class
+usbd_msc.*       UsbdMsc        USB device Mass Storage BOT/SCSI class
 
 usbh_*           future USB host class/driver layer
 ```
@@ -103,8 +104,8 @@ The C++ `BtHciUsb` object also derives from `UsbDeviceClass` and
 and SCO interface options, and reset run through the virtual class API. The
 underlying request and endpoint logic is reused by its virtual methods.
 
-`UsbdBulk` and `UsbdHid` follow the same model and register their class objects
-directly.
+`UsbdBulk`, `UsbdHid` and `UsbdMsc` follow the same model and register their
+class objects directly.
 
 ## Current device-side data-path model
 
@@ -121,7 +122,7 @@ Bulk, Isochronous and Interrupt all reuse it.
                                |
               +----------------+----------------+
               |                |                |
-           UsbdCdc          UsbdBulk        UsbIsoIntrf / UsbIntIntrf
+           UsbdCdc      UsbdBulk / UsbdMsc  UsbIsoIntrf / UsbIntIntrf
               |                |                         |
            Bulk EP          Bulk EP                  ISO / INT EP
            BYTE mode        BYTE/PACKET              DIRECT mode
@@ -179,6 +180,36 @@ Bulk OUT/IN endpoints
 
 `UsbdBulk` owns device-side descriptor policy and static controller buffers.
 `UsbIntrf` owns queuing, staging and endpoint transfer completion.
+
+## Mass Storage
+
+`UsbdMsc` uses packet-mode `UsbIntrf` for one Bulk OUT/IN endpoint pair. USB
+packets remain transport units; the BOT transfer length and SCSI sector size
+are tracked independently.
+
+```text
+UsbdMsc
+    |
+    +-- BOT state, CBW/CSW and reset recovery
+    +-- SCSI command and sense policy
+    +-- caller-owned DiskIO and sector buffer
+    |
+    v
+UsbIntrf (PACKET mode)
+    |
+    v
+Bulk OUT/IN endpoint pair
+```
+
+The class owns fixed endpoint FIFOs and DMA staging. The application supplies
+a statically owned `DiskIO` and a statically allocated sector buffer. Class
+initialization rejects a medium whose reported sector size exceeds that
+buffer. `DiskIO` remains responsible for physical read, write, reset and cache
+flush behavior.
+
+Substantial SCSI and storage work runs from `UsbdMsc::Process()`, not from the
+USB interrupt. Malformed CBWs and phase errors use the core endpoint-halt state
+so standard `CLEAR_FEATURE(ENDPOINT_HALT)` requests complete BOT recovery.
 
 ## Isochronous
 
@@ -485,6 +516,7 @@ Transfer type and data-path mode are separate:
 ```text
 CDC       = Bulk + byte mode
 UsbdBulk  = Bulk + byte or packet mode
+UsbdMsc   = Mass Storage BOT/SCSI + Bulk packet mode
 UsbIsoIntrf = Isochronous + DIRECT mode
 UsbIntIntrf = Interrupt + DIRECT mode
 UsbdHid   = HID class + UsbIntIntrf
@@ -568,3 +600,4 @@ Keep these invariants when adding a class, transfer type or future host support:
     future role-specific class.
 15. HID report and descriptor semantics belong in `UsbdHid`, not
     `UsbIntIntrf`.
+16. BOT and SCSI command semantics belong in `UsbdMsc`, not `UsbIntrf`.

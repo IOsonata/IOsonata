@@ -62,6 +62,12 @@ Shows how to build a customer-defined USB bulk interface with `UsbdBulk`, includ
 
 Shows how `UsbdHid` layers HID descriptors and class requests over `UsbIntIntrf`, with an application-supplied report descriptor and a native HID-driver loopback test.
 
+### [USB Mass Storage](usb-msc.md)
+
+Shows how `UsbdMsc` layers Bulk-Only Transport and SCSI policy over packet-mode
+`UsbIntrf`, with a caller-owned `DiskIO`, bounded sector storage and a static
+RAM-disk hardware example.
+
 ### [USB HID demos](usb-hid-demos.md)
 
 Builds a boot keyboard from an nRF52840 DK button and a six-axis HID controller

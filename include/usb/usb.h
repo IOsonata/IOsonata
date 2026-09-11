@@ -179,6 +179,14 @@ uint8_t UsbGetAlternate(int DevNo, uint8_t InterfaceNo);
 bool UsbRemoteWakeupEnabled(int DevNo);
 bool UsbRemoteWakeup(int DevNo);
 
+/// Set or clear a non-control endpoint halt through the core state tracker.
+/// Device classes use this for protocol-defined stalls. The host clears the
+/// halt with the standard CLEAR_FEATURE request.
+bool UsbEpSetHalt(int DevNo, uint8_t EpAddr, bool Halt);
+
+/// Return the halt state tracked by the generic device core.
+bool UsbEpHalted(int DevNo, uint8_t EpAddr);
+
 /** @brief Configuration this controller was initialized with, NULL before init. */
 const UsbCfg_t *UsbGetCfg(int DevNo);
 

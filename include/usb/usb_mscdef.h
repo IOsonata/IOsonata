@@ -88,6 +88,40 @@ typedef enum __USB_MSC_Request_Code {
 
 #define USB_MSC_CBW_SIGNATURE		0x43425355
 #define USB_MSC_CSW_SIGNATURE		0x53425355
+#define USB_MSC_CBW_FLAG_IN			0x80U
+#define USB_MSC_CBW_FLAG_RESERVED	0x7FU
+
+typedef enum __USB_MSC_Scsi_Command {
+	USB_MSC_SCSI_TEST_UNIT_READY		= 0x00,
+	USB_MSC_SCSI_REQUEST_SENSE		= 0x03,
+	USB_MSC_SCSI_INQUIRY				= 0x12,
+	USB_MSC_SCSI_MODE_SENSE_6		= 0x1A,
+	USB_MSC_SCSI_START_STOP_UNIT		= 0x1B,
+	USB_MSC_SCSI_PREVENT_ALLOW		= 0x1E,
+	USB_MSC_SCSI_READ_CAPACITY_10	= 0x25,
+	USB_MSC_SCSI_READ_10				= 0x28,
+	USB_MSC_SCSI_WRITE_10			= 0x2A,
+	USB_MSC_SCSI_VERIFY_10			= 0x2F,
+	USB_MSC_SCSI_SYNCHRONIZE_CACHE	= 0x35,
+} USB_MSC_SCSI_CMD;
+
+typedef enum __USB_MSC_Sense_Key {
+	USB_MSC_SENSE_NONE				= 0x00,
+	USB_MSC_SENSE_NOT_READY			= 0x02,
+	USB_MSC_SENSE_MEDIUM_ERROR		= 0x03,
+	USB_MSC_SENSE_ILLEGAL_REQUEST	= 0x05,
+	USB_MSC_SENSE_DATA_PROTECT		= 0x07,
+} USB_MSC_SENSE_KEY;
+
+typedef enum __USB_MSC_Additional_Sense_Code {
+	USB_MSC_ASC_WRITE_ERROR			= 0x0C,
+	USB_MSC_ASC_UNRECOVERED_READ	= 0x11,
+	USB_MSC_ASC_INVALID_COMMAND		= 0x20,
+	USB_MSC_ASC_LBA_OUT_OF_RANGE	= 0x21,
+	USB_MSC_ASC_INVALID_FIELD		= 0x24,
+	USB_MSC_ASC_WRITE_PROTECTED		= 0x27,
+	USB_MSC_ASC_MEDIUM_NOT_PRESENT	= 0x3A,
+} USB_MSC_ASC;
 
 typedef enum __USB_MSC_Command_Status {
 	USB_MSC_CMDSTATUS_PASS	= 0,
@@ -134,6 +168,18 @@ typedef struct __USB_Msc_Command_Status_Wrapper {
 } UsbMscCmdStatusWrapper_t;
 
 #pragma pack(pop)
+
+#if defined(__cplusplus)
+static_assert(sizeof(UsbMscCmdBlkWrapper_t) == 31,
+	"USB MSC CBW must be 31 bytes");
+static_assert(sizeof(UsbMscCmdStatusWrapper_t) == 13,
+	"USB MSC CSW must be 13 bytes");
+#else
+_Static_assert(sizeof(UsbMscCmdBlkWrapper_t) == 31,
+	"USB MSC CBW must be 31 bytes");
+_Static_assert(sizeof(UsbMscCmdStatusWrapper_t) == 13,
+	"USB MSC CSW must be 13 bytes");
+#endif
 
 /** @} end group USB */
 

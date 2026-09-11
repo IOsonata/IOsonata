@@ -1989,6 +1989,25 @@ bool UsbRemoteWakeup(int DevNo)
 	return DevNo == s_UsbDevNo && UsbCoreRemoteWakeup();
 }
 
+bool UsbEpSetHalt(int DevNo, uint8_t EpAddr, bool Halt)
+{
+	if (DevNo != s_UsbDevNo || USB_ENDPADDR_NUM(EpAddr) == 0U ||
+		(EpAddr & 0x70U) != 0U || !UsbCoreEndpointExists(EpAddr))
+	{
+		return false;
+	}
+
+	UsbCoreSetEndpointHalt(EpAddr, Halt);
+	return true;
+}
+
+bool UsbEpHalted(int DevNo, uint8_t EpAddr)
+{
+	return DevNo == s_UsbDevNo && USB_ENDPADDR_NUM(EpAddr) != 0U &&
+		(EpAddr & 0x70U) == 0U && UsbCoreEndpointExists(EpAddr) &&
+		UsbCoreEndpointHalted(EpAddr);
+}
+
 const UsbCfg_t *UsbGetCfg(int DevNo)
 {
 	return DevNo == s_UsbDevNo ? UsbDevGetCfg() : nullptr;
