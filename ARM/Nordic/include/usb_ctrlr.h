@@ -75,9 +75,9 @@ typedef enum __Usb_Ctrlr_Trans_Type {
 
 #if defined(USBD_PRESENT)
 
-// nRF52840 and nRF5340 USBD. Full speed only. Endpoint numbers 0 through 7 in
-// each direction. Endpoint 8 is isochronous only and is not counted because
-// the current port does not drive it.
+// nRF52840 and nRF5340 USBD. Full speed only. Endpoint numbers 0 through 7
+// are control, bulk or interrupt. Endpoint 8 is the dedicated isochronous
+// endpoint in both directions.
 enum {
 	USB_CTRLR_CNT = 1,
 	USB_HIGHSPEED_CAPABLE_0 = 0,
@@ -86,8 +86,10 @@ enum {
 	USB_PKT_MAXLEN_0_CONTROL = 64,
 	USB_PKT_MAXLEN_0_BULK = 64,
 	USB_PKT_MAXLEN_0_INT = 64,
-	USB_PKT_MAXLEN_0_ISO = 1023,
-	USB_ISO_SUPPORTED_0 = 0,
+	USB_PKT_MAXLEN_0_ISO = 512,
+	USB_ISO_SUPPORTED_0 = 1,
+	USB_ISO_EPIN_MASK_0 = (1U << 8),
+	USB_ISO_EPOUT_MASK_0 = (1U << 8),
 };
 
 #elif defined(USBHS_PRESENT)
@@ -105,6 +107,8 @@ enum {
 	USB_PKT_MAXLEN_0_INT = 1024,
 	USB_PKT_MAXLEN_0_ISO = 1024,
 	USB_ISO_SUPPORTED_0 = 0,
+	USB_ISO_EPIN_MASK_0 = 0,
+	USB_ISO_EPOUT_MASK_0 = 0,
 };
 
 #else
@@ -119,7 +123,10 @@ enum {
 	((CtrlrNo) == 0 ? USB_HIGHSPEED_CAPABLE_0 : 0)
 #define USB_ISO_SUPPORTED(CtrlrNo) \
 	((CtrlrNo) == 0 ? USB_ISO_SUPPORTED_0 : 0)
-
+#define USB_ISO_EPIN_MASK(CtrlrNo) \
+	((CtrlrNo) == 0 ? USB_ISO_EPIN_MASK_0 : 0U)
+#define USB_ISO_EPOUT_MASK(CtrlrNo) \
+	((CtrlrNo) == 0 ? USB_ISO_EPOUT_MASK_0 : 0U)
 #define USB_PKT_MAXLEN(CtrlrNo, TransType) \
 	((CtrlrNo) != 0 ? 0 : \
 	 (TransType) == CONTROL ? USB_PKT_MAXLEN_0_CONTROL : \
@@ -147,7 +154,9 @@ typedef enum __Usb_Ctrlr_Xfer_Result {
 typedef enum __Usb_Ctrlr_Evt_Type {
 	USB_CTRLR_EVT_RESET,		//!< USB bus reset
 	USB_CTRLR_EVT_SETUP,		//!< New EP0 SETUP request
+	USB_CTRLR_EVT_DRDY,			//!< Data is ready in the device to be retrieved
 	USB_CTRLR_EVT_XFER_CMPL,	//!< Endpoint transfer completed
+	USB_CTRLR_EVT_CANCEL,		//!< Endpoint transfer cancelled
 	USB_CTRLR_EVT_SUSPEND,		//!< Bus entered suspend
 	USB_CTRLR_EVT_RESUME,		//!< Bus resumed
 	USB_CTRLR_EVT_SOF,			//!< Start of frame
@@ -183,13 +192,14 @@ typedef void (*UsbCtrlrEvtHandler_t)(int DevNo, const UsbCtrlrEvt_t *pEvt,
 									 void *pContext);
 
 /**
- * @brief	Non-control endpoint completion callback.
+ * @brief	Non-control endpoint event callback.
  *
  * Registered once with the endpoint DMA buffer. It is called directly from
  * the controller interrupt, avoiding a function-table search per packet.
  */
-typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, uint16_t Length,
-									UsbCtrlrXferResult_t Result, void *pContext);
+typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
+									uint16_t Length, UsbCtrlrXferResult_t Result,
+									void *pContext);
 
 /// What the generic layer hands the port at UsbCtrlrInit. Interrupt priority
 /// and suspend behaviour reach the hardware only through here, so the port
@@ -222,9 +232,8 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpCloseAll(int DevNo);
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-						UsbCtrlrEpHandler_t Handler, void *pContext);
-bool UsbCtrlrEpRxArm(int DevNo, uint8_t EpNo);
-bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint16_t Length);
+						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext);
+bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length);
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length);
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);

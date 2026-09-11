@@ -33,7 +33,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "usb_func.h"
+#include "usb/usbd_epalloc.h"
 #include "usb/usbd_bulk.h"
 
 static uint8_t *UsbdBulkRxBuffer(UsbdBulkDev_t *pBulk)
@@ -71,16 +71,14 @@ static void UsbdBulkCloseEndpoints(UsbdBulkDev_t *pBulk)
 	UsbCtrlrEpClose(pBulk->DevNo, USB_ENDPADDR_DIRIN(pBulk->EpNo));
 }
 
-static bool UsbdBulkConfig(uint8_t Configuration, void *pContext)
+static bool UsbdBulkConfig(UsbdBulkDev_t *pBulk, uint8_t Configuration)
 {
-	UsbdBulkDev_t *pBulk = static_cast<UsbdBulkDev_t *>(pContext);
-
 	if (pBulk == nullptr)
 	{
 		return false;
 	}
 
-	UsbIntrfUnconfigure(pBulk->pData);
+	UsbIntrfUnconfigure(&pBulk->IntrfData);
 	if (Configuration == 0U)
 	{
 		return true;
@@ -91,75 +89,31 @@ static bool UsbdBulkConfig(uint8_t Configuration, void *pContext)
 	}
 
 	const uint16_t mps = UsbdBulkMps(pBulk);
-	if (!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIROUT(pBulk->EpNo), mps) ||
-		!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIRIN(pBulk->EpNo), mps))
+	if (!UsbIntrfConfigure(&pBulk->IntrfData, mps))
 	{
-		UsbdBulkCloseEndpoints(pBulk);
 		return false;
 	}
 
-	if (!UsbIntrfConfigure(pBulk->pData, mps))
+	if (!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIRIN(pBulk->EpNo), mps) ||
+		!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIROUT(pBulk->EpNo), mps))
 	{
 		UsbdBulkCloseEndpoints(pBulk);
+		UsbIntrfUnconfigure(&pBulk->IntrfData);
 		return false;
 	}
 
 	return true;
 }
 
-static bool UsbdBulkRequest(const UsbSetupData_t *pSetup,
-							UsbCtrlStage_t Stage, uint8_t **ppData,
-							uint16_t *pLength, void *pContext)
+static void UsbdBulkReset(UsbdBulkDev_t *pBulk)
 {
-	UsbdBulkDev_t *pBulk = static_cast<UsbdBulkDev_t *>(pContext);
-
-	if (pBulk == nullptr || pBulk->RequestHandler == nullptr ||
-		pSetup == nullptr)
-	{
-		return false;
-	}
-
-	const uint8_t recipient =
-		pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT;
-	if (recipient == USB_REQTYPE_INTERFACE &&
-		((pSetup->wIndex & 0xFF00U) != 0U ||
-		 (uint8_t)pSetup->wIndex != (uint8_t)pBulk->ItfNo))
-	{
-		return false;
-	}
-	if (recipient == USB_REQTYPE_ENDPOINT &&
-		((pSetup->wIndex & 0xFF00U) != 0U ||
-		 USB_ENDPADDR_NUM((uint8_t)pSetup->wIndex) != pBulk->EpNo))
-	{
-		return false;
-	}
-
-	return pBulk->RequestHandler(pSetup, Stage, ppData, pLength,
-								 pBulk->pRequestContext);
-}
-
-static void UsbdBulkXfer(uint8_t EpAddr, uint16_t Length,
-						 UsbCtrlrXferResult_t Result, void *pContext)
-{
-	UsbdBulkDev_t *pBulk = static_cast<UsbdBulkDev_t *>(pContext);
-
 	if (pBulk != nullptr)
 	{
-		UsbIntrfXferComplete(pBulk->pData, EpAddr, Length, Result);
+		UsbIntrfUnconfigure(&pBulk->IntrfData);
 	}
 }
 
-static void UsbdBulkReset(void *pContext)
-{
-	UsbdBulkDev_t *pBulk = static_cast<UsbdBulkDev_t *>(pContext);
-
-	if (pBulk != nullptr)
-	{
-		UsbIntrfUnconfigure(pBulk->pData);
-	}
-}
-
-bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
+static bool UsbdBulkFillDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 					  UsbSpeed_t Speed)
 {
 	if (pDesc == nullptr || pBulk == nullptr || pBulk->ItfNo < 0 ||
@@ -198,11 +152,11 @@ bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 	return true;
 }
 
-bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
-				  UsbDevIntrf_t * const pData,
-				  const UsbdBulkCfg_t *pCfg)
+static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
+								 const UsbdBulkCfg_t *pCfg,
+								 UsbDeviceClass *pClass)
 {
-	if (pBulk == nullptr || pData == nullptr || pCfg == nullptr ||
+	if (pBulk == nullptr || pCfg == nullptr || pClass == nullptr ||
 		UsbGetCfg(pCfg->DevNo) == nullptr ||
 		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
 		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
@@ -211,9 +165,6 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
 		return false;
 	}
 
-	pBulk->pData = pData;
-	pBulk->RequestHandler = pCfg->RequestHandler;
-	pBulk->pRequestContext = pCfg->pRequestContext;
 	pBulk->DevNo = pCfg->DevNo;
 	pBulk->SubClass = pCfg->SubClass;
 	pBulk->Protocol = pCfg->Protocol;
@@ -227,23 +178,12 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
 		return false;
 	}
 
-	UsbFuncCfg_t coreCfg = {};
-	coreCfg.RequestHandler = pCfg->RequestHandler != nullptr ?
-		UsbdBulkRequest : nullptr;
-	coreCfg.ConfigHandler = UsbdBulkConfig;
-	coreCfg.SetInterfaceHandler = nullptr;
-	coreCfg.XferHandler = UsbdBulkXfer;
-	coreCfg.ResetHandler = UsbdBulkReset;
-	coreCfg.SofHandler = nullptr;
-	coreCfg.ProcessHandler = nullptr;
-	coreCfg.pContext = pBulk;
-
-	UsbFuncReq_t req = {};
+	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 1U;
 	req.BidirectionalCount = 1U;
 
-	UsbFuncAlloc_t alloc = {};
-	if (!UsbRegisterFuncAuto(pBulk->DevNo, &req, &coreCfg, &alloc))
+	UsbdEpAllocRes_t alloc = {};
+	if (!UsbdEpAlloc(pBulk->DevNo, &req, pClass, &alloc))
 	{
 		return false;
 	}
@@ -266,15 +206,55 @@ bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
 	dataCfg.pRxBuffer = UsbdBulkRxBuffer(pBulk);
 	dataCfg.pTxBuffer = UsbdBulkTxBuffer(pBulk);
 
-	return UsbIntrfInit(pData, &dataCfg);
+	if (!UsbIntrfInit(&pBulk->IntrfData, &dataCfg))
+	{
+		return false;
+	}
+
+	pBulk->IntrfData.pClassContext = pBulk;
+
+	if (!UsbdBulkFillDesc(&pBulk->FsDesc, pBulk, USB_SPEED_FULL))
+	{
+		return false;
+	}
+
+	const void *pHsDesc = nullptr;
+	uint16_t hsDescLength = 0U;
+	if (USB_HIGHSPEED_CAPABLE(pBulk->DevNo))
+	{
+		if (!UsbdBulkFillDesc(&pBulk->HsDesc, pBulk, USB_SPEED_HIGH))
+		{
+			return false;
+		}
+		pHsDesc = &pBulk->HsDesc;
+		hsDescLength = sizeof(pBulk->HsDesc);
+	}
+
+	return UsbDescriptorRegister(pBulk->DevNo, pClass,
+		&pBulk->FsDesc, sizeof(pBulk->FsDesc), pHsDesc, hsDescLength);
 }
 
 bool UsbdBulk::Init(const UsbdBulkCfg_t &Cfg)
 {
-	return UsbdBulkInit(&vUsbdBulk, &vUsbDevIntrf, &Cfg);
+	return UsbdBulkInitInternal(&vUsbdBulk, &Cfg, this);
 }
 
-bool UsbdBulk::MakeDesc(UsbdBulkDesc_t *pDesc, UsbSpeed_t Speed) const
+bool UsbdBulk::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+						uint8_t **ppData, uint16_t *pLength)
 {
-	return UsbdBulkMakeDesc(pDesc, &vUsbdBulk, Speed);
+	(void)pSetup;
+	(void)Stage;
+	(void)ppData;
+	(void)pLength;
+	return false;
+}
+
+bool UsbdBulk::SelectConfig(uint8_t ConfigValue)
+{
+	return UsbdBulkConfig(&vUsbdBulk, ConfigValue);
+}
+
+void UsbdBulk::Reset(void)
+{
+	UsbdBulkReset(&vUsbdBulk);
 }

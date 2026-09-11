@@ -70,27 +70,28 @@ static int LoopbackEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 							  uint8_t *pBuffer, int Len);
 
 static const UsbdCdcCfg_t s_LoopbackCfg = {
+	.DevNo = USB_DEVNO,
 	.bBlocking = true,
 	.RxFifoMemSize = CDC_RXFIFO_MEMSIZE,
 	.pRxFifoMem = s_LoopbackRxFifoMem,
 	.TxFifoMemSize = LOOPBACK_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_LoopbackTxFifoMem,
-	.DevNo = USB_DEVNO,
 	.EvtCB = LoopbackEvtHandler,
 };
 
 static const UsbdCdcCfg_t s_PrbsCfg = {
+	.DevNo = USB_DEVNO,
 	.bBlocking = true,
 	.RxFifoMemSize = CDC_RXFIFO_MEMSIZE,
 	.pRxFifoMem = s_PrbsRxFifoMem,
 	.TxFifoMemSize = PRBS_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_PrbsTxFifoMem,
-	.DevNo = USB_DEVNO,
 	.EvtCB = nullptr,
 };
 
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
+	.Mode = USB_MODE_DEVICE,
 	.Vid = 0x1209,
 	.Pid = 0x0003,
 	.DevVer = 0x0100,
@@ -98,14 +99,15 @@ static const UsbCfg_t s_UsbCfg = {
 	.pProduct = "IOsonata Dual CDC Stress",
 	.pSerial = nullptr,
 	.pFuncName = "IOsonata CDC",
-	.NbCdc = 2,
 	.IntPrio = 6,
+	.DeviceClass = USB_DEVCLASS_MISC,
+	.DeviceSubClass = 2U,
+	.DeviceProtocol = 1U,
 	.bSelfPowered = false,
+	.bRemoteWakeup = true,
 	.bLowPowerSuspend = false,
 	.MaxPower = 100,
 	.EvtHandler = nullptr,
-	.DescHandler = nullptr,
-	.pDescContext = nullptr,
 };
 
 UsbdCdc g_LoopbackCdc;

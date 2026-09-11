@@ -1,26 +1,22 @@
 /**-------------------------------------------------------------------------
-@file	bt_wba_event_hook.h
+@file	bt_wba_event_router.h
 
 @brief	STM32WBA BLE event validation and native GAP/GATT routing.
 
-Included only after the STM32WBA BLE middleware headers are visible. It wraps
-SVCCTL_RegisterHandler so malformed variable-length discovery events are
-dropped before the port parser reads them, notification completion is matched
-by connection/attribute handle, indication confirmation is kept separate from
-the notification completion ring, and connection-parameter events are routed
-to the per-link GAP state machine.
+This private STM32WBA router is included after the vendor BLE middleware
+headers. It validates malformed variable-length discovery events before the
+port parser reads them, matches notification completion by connection and
+attribute handle, keeps indication confirmation separate from the notification
+completion ring, and routes connection-parameter events to the per-link GAP
+state machine.
 
-The same source-level hook captures the one aci_gap_init result and retains the
-native GAP handles. It also corrects the old BtAppGapDeviceNameSet path, which
-used the GAP value-handle offset instead of the characteristic handle returned
-by aci_gap_init.
+The private wrappers also capture the one aci_gap_init result and retain the
+native GAP handles. They correct the old BtAppGapDeviceNameSet path, which used
+the GAP value-handle offset instead of the characteristic handle returned by
+aci_gap_init.
 ----------------------------------------------------------------------------*/
-#ifndef __BT_WBA_EVENT_HOOK_H__
-#define __BT_WBA_EVENT_HOOK_H__
-
-#if defined(__cplusplus) && defined(STM32WBAxx_H) && \
-	defined(HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE) && \
-	defined(ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE)
+#ifndef __BT_WBA_EVENT_ROUTER_H__
+#define __BT_WBA_EVENT_ROUTER_H__
 
 #include <stddef.h>
 #include <stdint.h>
@@ -168,7 +164,7 @@ static uint16_t s_BtWbaGapSrvcHdl = BT_ATT_HANDLE_INVALID;
 static uint16_t s_BtWbaDevNameCharHdl = BT_ATT_HANDLE_INVALID;
 static bool s_BtWbaPasskeyRandValid = true;
 
-static SVCCTL_UserEvtFlowStatus_t BtWbaEventHookDispatch(void *pPayload)
+static SVCCTL_UserEvtFlowStatus_t BtWbaEventRouterDispatch(void *pPayload)
 {
 	if (pPayload == nullptr)
 	{
@@ -313,10 +309,10 @@ static SVCCTL_UserEvtFlowStatus_t BtWbaEventHookDispatch(void *pPayload)
 		s_BtWbaOriginalHandler(pPayload) : SVCCTL_UserEvtFlowEnable;
 }
 
-static inline void BtWbaEventHookRegister(BtWbaUserEvtHandler_t Handler)
+static inline void BtWbaEventRouterRegister(BtWbaUserEvtHandler_t Handler)
 {
 	s_BtWbaOriginalHandler = Handler;
-	SVCCTL_RegisterHandler(BtWbaEventHookDispatch);
+	SVCCTL_RegisterHandler(BtWbaEventRouterDispatch);
 }
 
 static inline tBleStatus BtWbaGapInitCapture(uint8_t Role,
@@ -382,34 +378,4 @@ static inline void BtWbaPasskeyRequest(uint16_t ConnHdl)
 	BtSmpPasskeyRequest(ConnHdl);
 }
 
-// Preserve the vendor calls inside the wrappers above, then replace subsequent
-// source-level calls in bt_app_stm32wba.cpp. Some CubeWBA releases expose these
-// spellings as macros rather than plain function declarations.
-#ifdef SVCCTL_RegisterHandler
-#undef SVCCTL_RegisterHandler
-#endif
-#define SVCCTL_RegisterHandler(handler) BtWbaEventHookRegister(handler)
-
-#ifdef aci_gap_init
-#undef aci_gap_init
-#endif
-#define aci_gap_init(...) BtWbaGapInitCapture(__VA_ARGS__)
-
-#ifdef aci_gatt_update_char_value
-#undef aci_gatt_update_char_value
-#endif
-#define aci_gatt_update_char_value(...) BtWbaGattUpdateCharValue(__VA_ARGS__)
-
-#ifdef hci_le_rand
-#undef hci_le_rand
-#endif
-#define hci_le_rand(...) BtWbaLeRand(__VA_ARGS__)
-
-#ifdef BtSmpPasskeyRequest
-#undef BtSmpPasskeyRequest
-#endif
-#define BtSmpPasskeyRequest(...) BtWbaPasskeyRequest(__VA_ARGS__)
-
-#endif // STM32WBA BLE headers visible
-
-#endif // __BT_WBA_EVENT_HOOK_H__
+#endif // __BT_WBA_EVENT_ROUTER_H__

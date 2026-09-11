@@ -3,7 +3,7 @@
 
 @brief	Generic USB layer.
 
-Identity, Chapter 9 and function dispatch in one place. usb_dev.cpp held the
+Identity, Chapter 9 and device class dispatch in one place. usb_dev.cpp held the
 application entry points and usbd_core.cpp held the protocol engine, which
 meant two init calls and two config structs carrying the same interrupt
 priority. UsbInit() is now one call.
@@ -48,7 +48,6 @@ SOFTWARE.
 #include <string.h>
 
 #include "usb/usb.h"
-#include "usb/usbd_cdc.h"
 
 /// Controller this instance drives, set by UsbInit.
 static int s_UsbDevNo = 0;
@@ -56,21 +55,23 @@ static int s_UsbDevNo = 0;
 /// Bus power level at the previous UsbProcess pass, for edge reporting.
 static bool s_UsbVbusLast = false;
 
-#define USB_CORE_FUNC_MAXCNT		8
+#define USB_CORE_CLASS_MAXCNT		8
 #define USB_CORE_INTRF_MAXCNT		16
 
 /// Chapter 9 settings. Built by UsbInit from UsbCfg_t and usb_ctrlr.h, never
 /// supplied by an application, which is why it is no longer in a header.
 typedef struct __Usb_Core_Config {
-	UsbDescHandler_t DescHandler;	//!< Device descriptor provider
-	void *pDescContext;				//!< Descriptor callback context
-	UsbSpeed_t Speed;				//!< Current bus speed for descriptors
 	uint8_t Ep0Mps;					//!< EP0 max packet size
 } UsbCoreCfg_t;
 
 #define USBD_CORE_EP0_MPS_DEFAULT		64U
 #define USBD_CORE_DEVICE_DESC_LEN		((uint16_t)sizeof(UsbDevDesc_t))
 #define USBD_CORE_CONFIG_DESC_LEN		((uint16_t)sizeof(UsbCfgDesc_t))
+#define USB_CORE_STRING_DESC_MAXLEN		66U
+#define USB_CORE_STR_MANUFACTURER		1U
+#define USB_CORE_STR_PRODUCT			2U
+#define USB_CORE_STR_SERIAL			3U
+#define USB_CORE_STR_FUNCTION			4U
 
 typedef enum __Usbd_Core_Ctrl_State {
 	USB_CTRL_IDLE,
@@ -82,14 +83,13 @@ typedef enum __Usbd_Core_Ctrl_State {
 } UsbCoreCtrlState_t;
 
 static UsbCoreCfg_t s_CoreCfg;
-static UsbFuncCfg_t s_CoreFunc[USB_CORE_FUNC_MAXCNT];
-static int s_CoreFuncCnt;
-// Endpoint to function index, [0] OUT and [1] IN. Ownership masks are fixed
-// once a function registers and may not overlap, so this answer never changes
-// after registration. Every transfer completion needs it, and a completion
-// runs in the USB interrupt, which is time the application is not filling the
-// Tx CFifo. Minus one means no function owns that endpoint.
-static int8_t s_CoreEpFunc[2][16];
+static UsbClass *s_CoreObject[USB_CORE_CLASS_MAXCNT];
+static int s_CoreObjectCnt;
+// Endpoint to class index, [0] OUT and [1] IN. Ownership masks are fixed once
+// a class registers and may not overlap. They route endpoint-recipient
+// requests; data endpoint events go directly to their registered callbacks.
+// Minus one means no class owns that endpoint.
+static int8_t s_CoreEpClass[2][16];
 
 static bool s_CoreInitialized;
 static bool s_CoreStarted;
@@ -106,12 +106,16 @@ static uint16_t s_HaltOut;
 
 static UsbCoreCtrlState_t s_CtrlState;
 static UsbSetupData_t s_Setup;
-static int s_ActiveFunc;
+static int s_ActiveClass;
 static uint8_t *s_CtrlData;
 static uint16_t s_CtrlDataLen;
 static uint16_t s_CtrlActual;
 static bool s_CtrlNeedZlp;
 static uint8_t s_CtrlReply[2];
+static UsbDevDesc_t s_CoreDeviceDesc;
+static UsbDevQualDesc_t s_CoreQualifierDesc;
+static uint8_t s_CoreConfigDesc[USB_CONFIG_DESC_MAXLEN];
+static uint8_t s_CoreStringDesc[USB_CORE_STRING_DESC_MAXLEN];
 
 static uint8_t UsbCoreRecipient(const UsbSetupData_t *pSetup)
 {
@@ -131,14 +135,224 @@ static bool UsbCoreValidEp0Mps(uint8_t Mps)
 static const uint8_t *UsbCoreGetDescriptor(uint8_t Type, uint8_t Index,
 										uint16_t LangId, uint16_t *pLength)
 {
-	if (pLength == nullptr || s_CoreCfg.DescHandler == nullptr)
+	return UsbGetDescriptor(s_UsbDevNo, Type, Index, LangId,
+		UsbGetSpeed(s_UsbDevNo), pLength);
+}
+
+static uint8_t UsbDescMaxPower(const UsbCfg_t *pCfg)
+{
+	if (pCfg == nullptr || pCfg->bSelfPowered)
+	{
+		return 0U;
+	}
+
+	const uint32_t units = ((uint32_t)pCfg->MaxPower + 1U) / 2U;
+	return units > 255U ? 255U : (uint8_t)units;
+}
+
+static const uint8_t *UsbDescDevice(int DevNo, uint8_t Index,
+									uint16_t *pLength)
+{
+	const UsbCfg_t *pCfg = UsbGetCfg(DevNo);
+	if (pCfg == nullptr || pLength == nullptr || Index != 0U)
 	{
 		return nullptr;
 	}
 
-	*pLength = 0;
-	return s_CoreCfg.DescHandler(Type, Index, LangId, s_CoreCfg.Speed,
-								 pLength, s_CoreCfg.pDescContext);
+	memset(&s_CoreDeviceDesc, 0, sizeof(s_CoreDeviceDesc));
+	s_CoreDeviceDesc.bLength = sizeof(s_CoreDeviceDesc);
+	s_CoreDeviceDesc.bDescriptorType = USB_DESCTYPE_DEVICE;
+	s_CoreDeviceDesc.bcdUSB = 0x0200U;
+	s_CoreDeviceDesc.bDeviceClass = pCfg->DeviceClass;
+	s_CoreDeviceDesc.bDeviceSubClass = pCfg->DeviceSubClass;
+	s_CoreDeviceDesc.bDeviceProtocol = pCfg->DeviceProtocol;
+	s_CoreDeviceDesc.bMaxPacketSize = USB_PKT_MAXLEN(DevNo, CONTROL);
+	s_CoreDeviceDesc.idVendor = pCfg->Vid;
+	s_CoreDeviceDesc.idProduct = pCfg->Pid;
+	s_CoreDeviceDesc.bcdDevice = pCfg->DevVer;
+	s_CoreDeviceDesc.iManufacturer = pCfg->pManufacturer != nullptr ?
+		USB_CORE_STR_MANUFACTURER : 0U;
+	s_CoreDeviceDesc.iProduct = pCfg->pProduct != nullptr ?
+		USB_CORE_STR_PRODUCT : 0U;
+	s_CoreDeviceDesc.iSerialNumber = UsbGetSerial(DevNo) != nullptr ?
+		USB_CORE_STR_SERIAL : 0U;
+	s_CoreDeviceDesc.bNumConfigurations = 1U;
+
+	*pLength = sizeof(s_CoreDeviceDesc);
+	return reinterpret_cast<const uint8_t *>(&s_CoreDeviceDesc);
+}
+
+static const uint8_t *UsbDescQualifier(int DevNo, uint8_t Index,
+									   uint16_t *pLength)
+{
+	const UsbCfg_t *pCfg = UsbGetCfg(DevNo);
+	if (pCfg == nullptr || pLength == nullptr || Index != 0U ||
+		!USB_HIGHSPEED_CAPABLE(DevNo))
+	{
+		return nullptr;
+	}
+
+	memset(&s_CoreQualifierDesc, 0, sizeof(s_CoreQualifierDesc));
+	s_CoreQualifierDesc.bLength = sizeof(s_CoreQualifierDesc);
+	s_CoreQualifierDesc.bDescriptorType = USB_DESCTYPE_DEVICE_QUALIFIER;
+	s_CoreQualifierDesc.bcdUSB = 0x0200U;
+	s_CoreQualifierDesc.bDeviceClass = pCfg->DeviceClass;
+	s_CoreQualifierDesc.bDeviceSubClass = pCfg->DeviceSubClass;
+	s_CoreQualifierDesc.bDeviceProtocol = pCfg->DeviceProtocol;
+	s_CoreQualifierDesc.bMaxPacketSize0 = USB_PKT_MAXLEN(DevNo, CONTROL);
+	s_CoreQualifierDesc.bNumConfigurations = 1U;
+
+	*pLength = sizeof(s_CoreQualifierDesc);
+	return reinterpret_cast<const uint8_t *>(&s_CoreQualifierDesc);
+}
+
+static const uint8_t *UsbDescString(int DevNo, uint8_t Index,
+								 uint16_t LangId, uint16_t *pLength)
+{
+	if (pLength == nullptr)
+	{
+		return nullptr;
+	}
+
+	if (Index == 0U)
+	{
+		s_CoreStringDesc[0] = 4U;
+		s_CoreStringDesc[1] = USB_DESCTYPE_STRING;
+		s_CoreStringDesc[2] = 0x09U;
+		s_CoreStringDesc[3] = 0x04U;
+		*pLength = 4U;
+		return s_CoreStringDesc;
+	}
+
+	if (LangId != 0U && LangId != 0x0409U)
+	{
+		return nullptr;
+	}
+
+	const UsbCfg_t *pCfg = UsbGetCfg(DevNo);
+	if (pCfg == nullptr)
+	{
+		return nullptr;
+	}
+
+	const char *pString = nullptr;
+	switch (Index)
+	{
+		case USB_CORE_STR_MANUFACTURER:
+			pString = pCfg->pManufacturer;
+			break;
+		case USB_CORE_STR_PRODUCT:
+			pString = pCfg->pProduct;
+			break;
+		case USB_CORE_STR_SERIAL:
+			pString = UsbGetSerial(DevNo);
+			break;
+		case USB_CORE_STR_FUNCTION:
+			pString = pCfg->pFuncName;
+			break;
+		default:
+			return nullptr;
+	}
+
+	if (pString == nullptr)
+	{
+		return nullptr;
+	}
+
+	size_t length = strlen(pString);
+	const size_t maxLength = (sizeof(s_CoreStringDesc) - 2U) / 2U;
+	if (length > maxLength)
+	{
+		length = maxLength;
+	}
+
+	s_CoreStringDesc[0] = (uint8_t)(2U + length * 2U);
+	s_CoreStringDesc[1] = USB_DESCTYPE_STRING;
+	for (size_t i = 0; i < length; i++)
+	{
+		s_CoreStringDesc[2U + i * 2U] = (uint8_t)pString[i];
+		s_CoreStringDesc[3U + i * 2U] = 0U;
+	}
+
+	*pLength = s_CoreStringDesc[0];
+	return s_CoreStringDesc;
+}
+
+static const uint8_t *UsbDescConfiguration(int DevNo, uint8_t Index,
+										UsbSpeed_t Speed, bool OtherSpeed,
+										uint16_t *pLength)
+{
+	const UsbCfg_t *pCfg = UsbGetCfg(DevNo);
+	if (pCfg == nullptr || pLength == nullptr || Index != 0U ||
+		(OtherSpeed && !USB_HIGHSPEED_CAPABLE(DevNo)))
+	{
+		return nullptr;
+	}
+
+	if (OtherSpeed)
+	{
+		Speed = Speed == USB_SPEED_HIGH ? USB_SPEED_FULL : USB_SPEED_HIGH;
+	}
+
+	uint16_t totalLength = sizeof(UsbCfgDesc_t);
+	uint8_t interfaceCount = 0U;
+	for (int i = 0; i < s_CoreObjectCnt; i++)
+	{
+		const UsbDeviceClass *pClass =
+			static_cast<const UsbDeviceClass *>(s_CoreObject[i]);
+		const uint16_t fragmentLength = pClass->DescriptorLength(Speed);
+		const uint8_t *pFragment = pClass->Descriptor(Speed);
+		if (pFragment == nullptr || fragmentLength == 0U ||
+			(uint32_t)totalLength + fragmentLength > sizeof(s_CoreConfigDesc))
+		{
+			return nullptr;
+		}
+		totalLength = (uint16_t)(totalLength + fragmentLength);
+		const uint8_t last = (uint8_t)(pClass->FirstInterface() +
+			pClass->InterfaceCount());
+		if (last > interfaceCount)
+		{
+			interfaceCount = last;
+		}
+	}
+
+	if (s_CoreObjectCnt == 0 || interfaceCount == 0U)
+	{
+		return nullptr;
+	}
+
+	UsbCfgDesc_t config = {};
+	config.bLength = sizeof(config);
+	config.bDescriptorType = OtherSpeed ?
+		USB_DESCTYPE_OSC : USB_DESCTYPE_CONFIGURATION;
+	config.wTotalLength = totalLength;
+	config.bNumInterfaces = interfaceCount;
+	config.bConfigurationValue = 1U;
+	config.bmAttributes = USB_CONFATT_RESERVED;
+	if (pCfg->bSelfPowered)
+	{
+		config.bmAttributes |= USB_CONFATT_SELF_POWERED;
+	}
+	if (pCfg->bRemoteWakeup)
+	{
+		config.bmAttributes |= USB_CONFATT_REMOTE_WAKEUP;
+	}
+	config.bMaxPower = UsbDescMaxPower(pCfg);
+
+	memcpy(s_CoreConfigDesc, &config, sizeof(config));
+	uint16_t offset = sizeof(config);
+	for (int i = 0; i < s_CoreObjectCnt; i++)
+	{
+		const UsbDeviceClass *pClass =
+			static_cast<const UsbDeviceClass *>(s_CoreObject[i]);
+		const uint16_t fragmentLength = pClass->DescriptorLength(Speed);
+		memcpy(&s_CoreConfigDesc[offset], pClass->Descriptor(Speed),
+			fragmentLength);
+		offset = (uint16_t)(offset + fragmentLength);
+	}
+
+	*pLength = totalLength;
+	return s_CoreConfigDesc;
 }
 
 static bool UsbCoreValidateConfigDescriptor(const uint8_t *pDesc,
@@ -462,12 +676,14 @@ static bool UsbCoreEndpointExists(uint8_t EpAddr)
 	return false;
 }
 
-static int UsbCoreFindFunction(uint8_t InterfaceNo)
+static int UsbCoreFindClass(uint8_t InterfaceNo)
 {
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreObjectCnt; i++)
 	{
-		const uint8_t first = s_CoreFunc[i].FirstInterface;
-		const uint8_t count = s_CoreFunc[i].InterfaceCount;
+		const UsbDeviceClass *pClass =
+			static_cast<const UsbDeviceClass *>(s_CoreObject[i]);
+		const uint8_t first = pClass->FirstInterface();
+		const uint8_t count = pClass->InterfaceCount();
 
 		if (count != 0 && InterfaceNo >= first &&
 			InterfaceNo < (uint8_t)(first + count))
@@ -479,7 +695,7 @@ static int UsbCoreFindFunction(uint8_t InterfaceNo)
 	return -1;
 }
 
-static int UsbCoreFindEndpointFunction(uint8_t EpAddr)
+static int UsbCoreFindEndpointClass(uint8_t EpAddr)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	if (epNum == 0)
@@ -492,13 +708,13 @@ static int UsbCoreFindEndpointFunction(uint8_t EpAddr)
 		return -1;
 	}
 
-	return s_CoreEpFunc[USB_ENDPADDR_IS_IN(EpAddr) ? 1 : 0][epNum];
+	return s_CoreEpClass[USB_ENDPADDR_IS_IN(EpAddr) ? 1 : 0][epNum];
 }
 
 static void UsbCoreResetControl(void)
 {
 	s_CtrlState = USB_CTRL_IDLE;
-	s_ActiveFunc = -1;
+	s_ActiveClass = -1;
 	s_CtrlData = nullptr;
 	s_CtrlDataLen = 0;
 	s_CtrlActual = 0;
@@ -508,6 +724,7 @@ static void UsbCoreResetControl(void)
 }
 
 static void UsbCoreAbortControl(void);
+static bool UsbCoreHandleClassRequest(void);
 
 static void UsbCoreStallControl(void)
 {
@@ -518,29 +735,20 @@ static void UsbCoreStallControl(void)
 static bool UsbCoreInvokeActive(UsbCtrlStage_t Stage,
 								 uint16_t Length)
 {
-	if (s_ActiveFunc < 0 || s_ActiveFunc >= s_CoreFuncCnt)
-	{
-		return true;
-	}
-
-	UsbRequestHandler_t handler =
-		s_CoreFunc[s_ActiveFunc].RequestHandler;
-
-	if (handler == nullptr)
-	{
-		return true;
-	}
-
 	uint8_t *pData = s_CtrlData;
 	uint16_t len = Length;
+	if (s_ActiveClass < 0 || s_ActiveClass >= s_CoreObjectCnt)
+	{
+		return true;
+	}
 
-	return handler(&s_Setup, Stage, &pData, &len,
-				   s_CoreFunc[s_ActiveFunc].pContext);
+	return static_cast<UsbDeviceClass *>(s_CoreObject[s_ActiveClass])->
+		Control(&s_Setup, Stage, &pData, &len);
 }
 
 static void UsbCoreAbortControl(void)
 {
-	if (s_ActiveFunc >= 0 && s_ActiveFunc < s_CoreFuncCnt)
+	if (s_ActiveClass >= 0 && s_ActiveClass < s_CoreObjectCnt)
 	{
 		(void)UsbCoreInvokeActive(USB_CTRL_ABORT, s_CtrlActual);
 	}
@@ -653,35 +861,22 @@ static void UsbCoreClearEndpointState(void)
 	memset(s_Alternate, 0, sizeof(s_Alternate));
 }
 
-static bool UsbCoreWantSof(void)
+static bool UsbCoreSelectConfig(int Index, uint8_t Configuration)
 {
-	for (int i = 0; i < s_CoreFuncCnt; i++)
-	{
-		if (s_CoreFunc[i].SofHandler != nullptr)
-		{
-			return true;
-		}
-	}
-
-	return false;
+	return static_cast<UsbDeviceClass *>(s_CoreObject[Index])->
+		SelectConfig(Configuration);
 }
 
-static void UsbCoreUnconfigureFunctions(void)
+static void UsbCoreUnconfigureClasses(void)
 {
 	if (s_Configuration == 0)
 	{
 		return;
 	}
 
-	UsbCtrlrSofEnable(s_UsbDevNo, false);
-
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreObjectCnt; i++)
 	{
-		if (s_CoreFunc[i].ConfigHandler != nullptr)
-		{
-			(void)s_CoreFunc[i].ConfigHandler(0,
-									   s_CoreFunc[i].pContext);
-		}
+		(void)UsbCoreSelectConfig(i, 0);
 	}
 }
 
@@ -699,7 +894,7 @@ static bool UsbCoreApplyConfiguration(uint8_t Configuration)
 		}
 	}
 
-	UsbCoreUnconfigureFunctions();
+	UsbCoreUnconfigureClasses();
 	UsbCtrlrEpCloseAll(s_UsbDevNo);
 	s_Configuration = 0;
 	s_NumInterfaces = 0;
@@ -710,19 +905,13 @@ static bool UsbCoreApplyConfiguration(uint8_t Configuration)
 		return true;
 	}
 
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreObjectCnt; i++)
 	{
-		if (s_CoreFunc[i].ConfigHandler != nullptr &&
-			!s_CoreFunc[i].ConfigHandler(Configuration,
-									  s_CoreFunc[i].pContext))
+		if (!UsbCoreSelectConfig(i, Configuration))
 		{
 			for (int n = 0; n <= i; n++)
 			{
-				if (s_CoreFunc[n].ConfigHandler != nullptr)
-				{
-					(void)s_CoreFunc[n].ConfigHandler(0,
-										   s_CoreFunc[n].pContext);
-				}
+				(void)UsbCoreSelectConfig(n, 0);
 			}
 			UsbCtrlrEpCloseAll(s_UsbDevNo);
 			return false;
@@ -731,12 +920,6 @@ static bool UsbCoreApplyConfiguration(uint8_t Configuration)
 
 	s_Configuration = Configuration;
 	s_NumInterfaces = pConfigDesc[4];
-
-	// Controllers drop SOF on bus reset, so enable it per configuration
-	if (UsbCoreWantSof())
-	{
-		UsbCtrlrSofEnable(s_UsbDevNo, true);
-	}
 
 	return true;
 }
@@ -966,15 +1149,17 @@ static bool UsbCoreHandleSetInterface(void)
 		return false;
 	}
 
-	const int func = UsbCoreFindFunction(interfaceNo);
-	if (func < 0 || s_CoreFunc[func].SetInterfaceHandler == nullptr)
+	const int cls = UsbCoreFindClass(interfaceNo);
+	if (cls < 0)
 	{
 		return false;
 	}
 
 	const uint8_t oldAlternate = s_Alternate[interfaceNo];
-	if (!s_CoreFunc[func].SetInterfaceHandler(interfaceNo, alternate,
-											 s_CoreFunc[func].pContext))
+	const bool selected =
+		static_cast<UsbDeviceClass *>(s_CoreObject[cls])->
+			SelectInterface(interfaceNo, alternate);
+	if (!selected)
 	{
 		return false;
 	}
@@ -1011,7 +1196,12 @@ static bool UsbCoreHandleStandard(void)
 			return UsbCoreStartStatus();
 
 		case USB_REQ_GET_DESCRIPTOR:
-			return UsbCoreHandleGetDescriptor();
+			if (UsbCoreRecipient(&s_Setup) == USB_REQTYPE_DEVICE)
+			{
+				return UsbCoreHandleGetDescriptor();
+			}
+			return UsbCoreRecipient(&s_Setup) == USB_REQTYPE_INTERFACE &&
+				UsbCoreHandleClassRequest();
 
 		case USB_REQ_GET_CONFIGURATION:
 			if (!UsbCoreDirIn(&s_Setup) ||
@@ -1038,24 +1228,19 @@ static bool UsbCoreHandleStandard(void)
 	}
 }
 
-static bool UsbCoreCallFunctionSetup(int Index)
+static bool UsbCoreCallClassSetup(int Index)
 {
-	UsbRequestHandler_t handler = s_CoreFunc[Index].RequestHandler;
-	if (handler == nullptr)
-	{
-		return false;
-	}
-
 	uint8_t *pData = nullptr;
 	uint16_t len = 0;
-
-	if (!handler(&s_Setup, USB_CTRL_SETUP, &pData, &len,
-				 s_CoreFunc[Index].pContext))
+	const bool handled =
+		static_cast<UsbDeviceClass *>(s_CoreObject[Index])->
+			Control(&s_Setup, USB_CTRL_SETUP, &pData, &len);
+	if (!handled)
 	{
 		return false;
 	}
 
-	s_ActiveFunc = Index;
+	s_ActiveClass = Index;
 
 	if (s_Setup.wLength == 0)
 	{
@@ -1073,7 +1258,7 @@ static bool UsbCoreCallFunctionSetup(int Index)
 	return UsbCoreStartOut(pData, len);
 }
 
-static bool UsbCoreHandleFunctionRequest(void)
+static bool UsbCoreHandleClassRequest(void)
 {
 	const uint8_t recipient = UsbCoreRecipient(&s_Setup);
 
@@ -1091,8 +1276,8 @@ static bool UsbCoreHandleFunctionRequest(void)
 			return false;
 		}
 
-		const int func = UsbCoreFindFunction(interfaceNo);
-		return func >= 0 && UsbCoreCallFunctionSetup(func);
+		const int cls = UsbCoreFindClass(interfaceNo);
+		return cls >= 0 && UsbCoreCallClassSetup(cls);
 	}
 
 	if (recipient == USB_REQTYPE_ENDPOINT)
@@ -1109,13 +1294,13 @@ static bool UsbCoreHandleFunctionRequest(void)
 			return false;
 		}
 
-		const int func = UsbCoreFindEndpointFunction(epAddr);
-		return func >= 0 && UsbCoreCallFunctionSetup(func);
+		const int cls = UsbCoreFindEndpointClass(epAddr);
+		return cls >= 0 && UsbCoreCallClassSetup(cls);
 	}
 
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreObjectCnt; i++)
 	{
-		if (UsbCoreCallFunctionSetup(i))
+		if (UsbCoreCallClassSetup(i))
 		{
 			return true;
 		}
@@ -1143,7 +1328,7 @@ static void UsbCoreHandleSetup(const UsbSetupData_t *pSetup)
 	}
 	else if (type == USB_REQTYPE_CLASS || type == USB_REQTYPE_VEND)
 	{
-		handled = UsbCoreHandleFunctionRequest();
+		handled = UsbCoreHandleClassRequest();
 	}
 
 	if (!handled)
@@ -1217,22 +1402,27 @@ static void UsbCoreHandleCtrlXfer(const UsbCtrlrXferEvt_t *pXfer)
 
 static void UsbCoreNotifyReset(void)
 {
-	UsbCoreUnconfigureFunctions();
+	UsbCoreUnconfigureClasses();
 
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreObjectCnt; i++)
 	{
-		if (s_CoreFunc[i].ResetHandler != nullptr)
-		{
-			s_CoreFunc[i].ResetHandler(s_CoreFunc[i].pContext);
-		}
+		s_CoreObject[i]->Reset();
 	}
 }
 
-static void UsbCoreResetDeviceState(bool NotifyFunctions)
+static void UsbCoreNotifyDetach(void)
+{
+	for (int i = 0; i < s_CoreObjectCnt; i++)
+	{
+		static_cast<UsbDeviceClass *>(s_CoreObject[i])->Detach();
+	}
+}
+
+static void UsbCoreResetDeviceState(bool NotifyClasses)
 {
 	UsbCoreAbortControl();
 
-	if (NotifyFunctions)
+	if (NotifyClasses)
 	{
 		UsbCoreNotifyReset();
 	}
@@ -1266,17 +1456,6 @@ static void UsbCoreCtrlrEvent(int, const UsbCtrlrEvt_t *pEvt, void *)
 			{
 				UsbCoreHandleCtrlXfer(&pEvt->Xfer);
 			}
-			else
-			{
-				const int func = UsbCoreFindEndpointFunction(pEvt->Xfer.EpAddr);
-				if (func >= 0 && s_CoreFunc[func].XferHandler != nullptr)
-				{
-					s_CoreFunc[func].XferHandler(pEvt->Xfer.EpAddr,
-										 pEvt->Xfer.Length,
-										 pEvt->Xfer.Result,
-										 s_CoreFunc[func].pContext);
-				}
-			}
 			break;
 
 		case USB_CTRLR_EVT_SUSPEND:
@@ -1291,20 +1470,6 @@ static void UsbCoreCtrlrEvent(int, const UsbCtrlrEvt_t *pEvt, void *)
 			s_Address = pEvt->Address;
 			break;
 
-		case USB_CTRLR_EVT_SOF:
-			if (s_Configuration != 0)
-			{
-				for (int i = 0; i < s_CoreFuncCnt; i++)
-				{
-					if (s_CoreFunc[i].SofHandler != nullptr)
-					{
-						s_CoreFunc[i].SofHandler(pEvt->FrameNo,
-												 s_CoreFunc[i].pContext);
-					}
-				}
-			}
-			break;
-
 		default:
 			break;
 	}
@@ -1312,7 +1477,7 @@ static void UsbCoreCtrlrEvent(int, const UsbCtrlrEvt_t *pEvt, void *)
 
 static bool UsbCoreInit(const UsbCoreCfg_t *pCfg)
 {
-	if (pCfg == nullptr || pCfg->DescHandler == nullptr)
+	if (pCfg == nullptr)
 	{
 		return false;
 	}
@@ -1327,11 +1492,11 @@ static bool UsbCoreInit(const UsbCoreCfg_t *pCfg)
 		return false;
 	}
 
-	memset(s_CoreFunc, 0, sizeof(s_CoreFunc));
-	// Minus one is no owner. Zero would claim function zero owns every
+	memset(s_CoreObject, 0, sizeof(s_CoreObject));
+	// Minus one is no owner. Zero would claim class zero owns every
 	// endpoint, so this cannot be left to static initialization.
-	memset(s_CoreEpFunc, -1, sizeof(s_CoreEpFunc));
-	s_CoreFuncCnt = 0;
+	memset(s_CoreEpClass, -1, sizeof(s_CoreEpClass));
+	s_CoreObjectCnt = 0;
 	s_CoreInitialized = false;
 	s_CoreStarted = false;
 	UsbCoreResetDeviceState(false);
@@ -1340,37 +1505,44 @@ static bool UsbCoreInit(const UsbCoreCfg_t *pCfg)
 	return true;
 }
 
-static bool UsbCoreRegisterFunction(const UsbFuncCfg_t *pCfg)
+static bool UsbCoreRegisterObject(UsbDeviceClass *pClass,
+								  uint8_t FirstInterface,
+								  uint8_t InterfaceCount,
+								  uint16_t EpInMask,
+								  uint16_t EpOutMask)
 {
-	if (!s_CoreInitialized || pCfg == nullptr || s_CoreStarted ||
-		s_CoreFuncCnt >= USB_CORE_FUNC_MAXCNT)
+	if (!s_CoreInitialized || pClass == nullptr ||
+		s_CoreStarted ||
+		s_CoreObjectCnt >= USB_CORE_CLASS_MAXCNT)
 	{
 		return false;
 	}
 
-	if (((pCfg->EpInMask | pCfg->EpOutMask) & 1U) != 0 ||
-		((pCfg->EpInMask | pCfg->EpOutMask) != 0 && pCfg->XferHandler == nullptr))
+	if (((EpInMask | EpOutMask) & 1U) != 0)
 	{
 		return false;
 	}
 
-	if (pCfg->InterfaceCount != 0)
+	if (InterfaceCount != 0)
 	{
-		const uint16_t last = (uint16_t)pCfg->FirstInterface +
-			(uint16_t)pCfg->InterfaceCount;
+		const uint16_t last = (uint16_t)FirstInterface +
+			(uint16_t)InterfaceCount;
 		if (last > USB_CORE_INTRF_MAXCNT)
 		{
 			return false;
 		}
 
-		for (int i = 0; i < s_CoreFuncCnt; i++)
+		for (int i = 0; i < s_CoreObjectCnt; i++)
 		{
-			const uint16_t firstA = pCfg->FirstInterface;
+			const UsbDeviceClass *pRegistered =
+				static_cast<const UsbDeviceClass *>(s_CoreObject[i]);
+			const uint16_t firstA = FirstInterface;
 			const uint16_t lastA = last;
-			const uint16_t firstB = s_CoreFunc[i].FirstInterface;
-			const uint16_t lastB = firstB + s_CoreFunc[i].InterfaceCount;
+			const uint16_t firstB = pRegistered->FirstInterface();
+			const uint16_t lastB =
+				firstB + pRegistered->InterfaceCount();
 
-			if (s_CoreFunc[i].InterfaceCount != 0 &&
+			if (pRegistered->InterfaceCount() != 0 &&
 				firstA < lastB && firstB < lastA)
 			{
 				return false;
@@ -1378,32 +1550,35 @@ static bool UsbCoreRegisterFunction(const UsbFuncCfg_t *pCfg)
 		}
 	}
 
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreObjectCnt; i++)
 	{
-		if ((pCfg->EpInMask & s_CoreFunc[i].EpInMask) != 0 ||
-			(pCfg->EpOutMask & s_CoreFunc[i].EpOutMask) != 0)
+		const UsbDeviceClass *pRegistered =
+			static_cast<const UsbDeviceClass *>(s_CoreObject[i]);
+		if (pRegistered == pClass ||
+			(EpInMask & pRegistered->EpInMask()) != 0 ||
+			(EpOutMask & pRegistered->EpOutMask()) != 0)
 		{
 			return false;
 		}
 	}
 
-	memcpy(&s_CoreFunc[s_CoreFuncCnt], pCfg, sizeof(*pCfg));
+	s_CoreObject[s_CoreObjectCnt] = pClass;
 
 	for (int ep = 1; ep < 16; ep++)
 	{
 		const uint16_t bit = (uint16_t)(1U << ep);
 
-		if ((pCfg->EpInMask & bit) != 0)
+		if ((EpInMask & bit) != 0)
 		{
-			s_CoreEpFunc[1][ep] = (int8_t)s_CoreFuncCnt;
+			s_CoreEpClass[1][ep] = (int8_t)s_CoreObjectCnt;
 		}
-		if ((pCfg->EpOutMask & bit) != 0)
+		if ((EpOutMask & bit) != 0)
 		{
-			s_CoreEpFunc[0][ep] = (int8_t)s_CoreFuncCnt;
+			s_CoreEpClass[0][ep] = (int8_t)s_CoreObjectCnt;
 		}
 	}
 
-	s_CoreFuncCnt++;
+	s_CoreObjectCnt++;
 	return true;
 }
 
@@ -1486,33 +1661,6 @@ static char s_UsbDevSerial[USB_SERIAL_MAXLEN];
 static bool s_UsbDevInitialized;
 static bool s_UsbDevStarted;
 
-static int UsbDevMaxCdcCount(void)
-{
-	// The CDC topology uses endpoint 1 for notification and endpoint 2 for
-	// bulk on the first function, then advances both by two. Endpoint counts
-	// include EP0, so the smaller direction decides how many fit.
-	const int maxIn = ((int)USB_EPIN_CNT(0) - 1) / 2;
-	const int maxOut = ((int)USB_EPOUT_CNT(0) - 1) / 2;
-	const int maxCdc = maxIn < maxOut ? maxIn : maxOut;
-
-	return maxCdc < USBD_CDC_FUNC_MAXCNT ? maxCdc : USBD_CDC_FUNC_MAXCNT;
-}
-
-static const uint8_t *UsbDevDescHandler(uint8_t DescType,
-									uint8_t DescIndex,
-									uint16_t LangId,
-									UsbSpeed_t,
-									uint16_t *pLength,
-									void *pContext)
-{
-	const UsbSpeed_t speed = UsbCtrlrHighSpeed(s_UsbDevNo) ?
-		USB_SPEED_HIGH : USB_SPEED_FULL;
-
-	return UsbdCdcDescHandler(DescType, DescIndex, LangId, speed,
-							 pLength, pContext);
-}
-
-
 static bool UsbDevInit(const UsbCfg_t *pCfg)
 {
 	if (pCfg == nullptr || pCfg->Vid == 0 || pCfg->Pid == 0)
@@ -1520,25 +1668,9 @@ static bool UsbDevInit(const UsbCfg_t *pCfg)
 		return false;
 	}
 
-	const int maxCdc = UsbDevMaxCdcCount();
-	if (maxCdc < 1)
-	{
-		return false;
-	}
-
 	s_UsbDevInitialized = false;
 	s_UsbDevStarted = false;
 	memcpy(&s_UsbDevCfg, pCfg, sizeof(s_UsbDevCfg));
-
-	if (s_UsbDevCfg.NbCdc < 1)
-	{
-		s_UsbDevCfg.NbCdc = 1;
-	}
-
-	if (s_UsbDevCfg.NbCdc > maxCdc)
-	{
-		s_UsbDevCfg.NbCdc = maxCdc;
-	}
 
 	if (s_UsbDevCfg.MaxPower == 0)
 	{
@@ -1569,24 +1701,8 @@ static bool UsbDevInit(const UsbCfg_t *pCfg)
 		return false;
 	}
 
-	// A supplied handler replaces the built in builder. That is how a device
-	// that is not CDC, or one with a composite descriptor set of its own,
-	// gets its descriptors out.
 	UsbCoreCfg_t coreCfg = {};
-	if (s_UsbDevCfg.DescHandler != nullptr)
-	{
-		coreCfg.DescHandler = s_UsbDevCfg.DescHandler;
-		coreCfg.pDescContext = s_UsbDevCfg.pDescContext;
-	}
-	else
-	{
-		coreCfg.DescHandler = UsbDevDescHandler;
-		coreCfg.pDescContext = nullptr;
-	}
-	// Speed and endpoint zero packet size come from usb_ctrlr.h now. The
-	// capability record that used to carry them is gone.
-	coreCfg.Speed = USB_HIGHSPEED_CAPABLE(0) ? USB_SPEED_HIGH : USB_SPEED_FULL;
-	coreCfg.Ep0Mps = USB_PKT_MAXLEN(0, CONTROL);
+	coreCfg.Ep0Mps = USB_PKT_MAXLEN(s_UsbDevNo, CONTROL);
 
 	if (!UsbCoreInit(&coreCfg))
 	{
@@ -1608,6 +1724,13 @@ static bool UsbDevEnable(void)
 	if (s_UsbDevStarted)
 	{
 		return true;
+	}
+
+	uint16_t descriptorLength = 0U;
+	if (UsbGetDescriptor(s_UsbDevNo, USB_DESCTYPE_CONFIGURATION, 0U, 0U,
+		UsbGetSpeed(s_UsbDevNo), &descriptorLength) == nullptr)
+	{
+		return false;
 	}
 
 	// One call. Power, clock and PHY come up and endpoint zero is prepared.
@@ -1664,12 +1787,9 @@ static void UsbDevProcess(void)
 		}
 	}
 
-	for (int i = 0; i < s_CoreFuncCnt; i++)
+	for (int i = 0; i < s_CoreObjectCnt; i++)
 	{
-		if (s_CoreFunc[i].ProcessHandler != nullptr)
-		{
-			s_CoreFunc[i].ProcessHandler(s_CoreFunc[i].pContext);
-		}
+		s_CoreObject[i]->Process();
 	}
 }
 
@@ -1706,15 +1826,111 @@ bool UsbInit(const UsbCfg_t *pCfg)
 		return false;
 	}
 
+	// Host and OTG need a dual role controller. The current targets are device
+	// only, so reject the other roles rather than pretend to support them.
+	if (pCfg->Mode != USB_MODE_DEVICE)
+	{
+		return false;
+	}
+
 	s_UsbDevNo = pCfg->DevNo;
 	s_UsbVbusLast = false;
 
 	return UsbDevInit(pCfg);
 }
 
-bool UsbRegisterFunc(int DevNo, const UsbFuncCfg_t *pCfg)
+bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
+					  uint8_t FirstInterface, uint8_t InterfaceCount,
+					  uint16_t EpInMask, uint16_t EpOutMask)
 {
-	return DevNo == s_UsbDevNo && UsbCoreRegisterFunction(pCfg);
+	if (DevNo != s_UsbDevNo ||
+		!UsbCoreRegisterObject(pClass, FirstInterface, InterfaceCount,
+			EpInMask, EpOutMask))
+	{
+		return false;
+	}
+
+	pClass->vFirstInterface = FirstInterface;
+	pClass->vInterfaceCount = InterfaceCount;
+	pClass->vEpInMask = EpInMask;
+	pClass->vEpOutMask = EpOutMask;
+	pClass->vFsDescriptor = nullptr;
+	pClass->vHsDescriptor = nullptr;
+	pClass->vFsDescriptorLength = 0U;
+	pClass->vHsDescriptorLength = 0U;
+	return true;
+}
+
+bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
+						   const void *pFsDescriptor,
+						   uint16_t FsDescriptorLength,
+						   const void *pHsDescriptor,
+						   uint16_t HsDescriptorLength)
+{
+	if (DevNo != s_UsbDevNo || pClass == nullptr || s_CoreStarted ||
+		pFsDescriptor == nullptr || FsDescriptorLength == 0U ||
+		(USB_HIGHSPEED_CAPABLE(DevNo) &&
+		 (pHsDescriptor == nullptr || HsDescriptorLength == 0U)))
+	{
+		return false;
+	}
+
+	bool registered = false;
+	for (int i = 0; i < s_CoreObjectCnt; i++)
+	{
+		if (s_CoreObject[i] == pClass)
+		{
+			registered = true;
+			break;
+		}
+	}
+	if (!registered || pClass->vFsDescriptor != nullptr ||
+		pClass->vHsDescriptor != nullptr)
+	{
+		return false;
+	}
+
+	pClass->vFsDescriptor = static_cast<const uint8_t *>(pFsDescriptor);
+	pClass->vFsDescriptorLength = FsDescriptorLength;
+	if (USB_HIGHSPEED_CAPABLE(DevNo))
+	{
+		pClass->vHsDescriptor = static_cast<const uint8_t *>(pHsDescriptor);
+		pClass->vHsDescriptorLength = HsDescriptorLength;
+	}
+	else
+	{
+		pClass->vHsDescriptor = pClass->vFsDescriptor;
+		pClass->vHsDescriptorLength = pClass->vFsDescriptorLength;
+	}
+	return true;
+}
+
+const uint8_t *UsbGetDescriptor(int DevNo, uint8_t Type, uint8_t Index,
+								 uint16_t LangId, UsbSpeed_t Speed,
+								 uint16_t *pLength)
+{
+	if (pLength == nullptr || DevNo != s_UsbDevNo ||
+		UsbGetCfg(DevNo) == nullptr)
+	{
+		return nullptr;
+	}
+
+	*pLength = 0U;
+	switch (Type)
+	{
+		case USB_DESCTYPE_DEVICE:
+			return UsbDescDevice(DevNo, Index, pLength);
+		case USB_DESCTYPE_CONFIGURATION:
+			return UsbDescConfiguration(DevNo, Index, Speed, false, pLength);
+		case USB_DESCTYPE_STRING:
+			return UsbDescString(DevNo, Index, LangId, pLength);
+		case USB_DESCTYPE_DEVICE_QUALIFIER:
+			return UsbDescQualifier(DevNo, Index, pLength);
+		case USB_DESCTYPE_OSC:
+			return UsbDescConfiguration(DevNo, Index, Speed, true, pLength);
+		default:
+			return nullptr;
+	}
 }
 
 bool UsbEnable(int DevNo)
@@ -1747,6 +1963,10 @@ void UsbProcess(int DevNo)
 	if (vbus != s_UsbVbusLast)
 	{
 		s_UsbVbusLast = vbus;
+		if (!vbus)
+		{
+			UsbCoreNotifyDetach();
+		}
 
 		if (s_UsbDevCfg.EvtHandler != nullptr)
 		{
@@ -1779,6 +1999,25 @@ bool UsbRemoteWakeupEnabled(int DevNo)
 bool UsbRemoteWakeup(int DevNo)
 {
 	return DevNo == s_UsbDevNo && UsbCoreRemoteWakeup();
+}
+
+bool UsbEpSetHalt(int DevNo, uint8_t EpAddr, bool Halt)
+{
+	if (DevNo != s_UsbDevNo || USB_ENDPADDR_NUM(EpAddr) == 0U ||
+		(EpAddr & 0x70U) != 0U || !UsbCoreEndpointExists(EpAddr))
+	{
+		return false;
+	}
+
+	UsbCoreSetEndpointHalt(EpAddr, Halt);
+	return true;
+}
+
+bool UsbEpHalted(int DevNo, uint8_t EpAddr)
+{
+	return DevNo == s_UsbDevNo && USB_ENDPADDR_NUM(EpAddr) != 0U &&
+		(EpAddr & 0x70U) == 0U && UsbCoreEndpointExists(EpAddr) &&
+		UsbCoreEndpointHalted(EpAddr);
 }
 
 const UsbCfg_t *UsbGetCfg(int DevNo)

@@ -45,8 +45,19 @@ SOFTWARE.
 
 static uint8_t s_RegisteredEp[6];
 static int s_RegisteredEpCount;
+static UsbCtrlrEvtHandler_t s_CoreHandler;
+static void *s_CoreContext;
+static int s_EpOpenCount;
+static int s_Ep0XferCount;
+static uint8_t s_LastEp0Addr;
+static uint16_t s_LastEp0Length;
 
-bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
+bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *pCfg)
+{
+	s_CoreHandler = pCfg->EvtHandler;
+	s_CoreContext = pCfg->pContext;
+	return true;
+}
 bool UsbCtrlrStart(int) { return true; }
 void UsbCtrlrStop(int) {}
 void UsbCtrlrProcess(int) {}
@@ -59,10 +70,14 @@ void UsbCtrlrDisconnect(int) {}
 void UsbCtrlrRemoteWakeup(int) {}
 void UsbCtrlrSofEnable(int, bool) {}
 void UsbCtrlrSetAddress(int, uint8_t) {}
-bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
+bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *)
+{
+	s_EpOpenCount++;
+	return true;
+}
 void UsbCtrlrEpClose(int, uint8_t) {}
 void UsbCtrlrEpCloseAll(int) {}
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *,
+bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *, bool,
 						UsbCtrlrEpHandler_t, void *)
 {
 	if (s_RegisteredEpCount >= (int)sizeof(s_RegisteredEp))
@@ -73,9 +88,14 @@ bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *,
 	s_RegisteredEp[s_RegisteredEpCount++] = EpAddr;
 	return true;
 }
-bool UsbCtrlrEpRxArm(int, uint8_t) { return true; }
-bool UsbCtrlrEpSend(int, uint8_t, uint16_t) { return true; }
-bool UsbCtrlrEp0Xfer(int, uint8_t, uint8_t *, uint16_t) { return true; }
+bool UsbCtrlrEpXfer(int, uint8_t, uint16_t) { return true; }
+bool UsbCtrlrEp0Xfer(int, uint8_t EpAddr, uint8_t *, uint16_t Length)
+{
+	s_Ep0XferCount++;
+	s_LastEp0Addr = EpAddr;
+	s_LastEp0Length = Length;
+	return true;
+}
 void UsbCtrlrEpStall(int, uint8_t) {}
 void UsbCtrlrEpClearStall(int, uint8_t) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
@@ -89,6 +109,38 @@ alignas(4) static uint8_t s_RxMem1[RX_MEM_SIZE];
 alignas(4) static uint8_t s_TxMem1[TX_MEM_SIZE];
 static UsbdCdc s_Cdc0;
 static UsbdCdc s_Cdc1;
+
+static void Setup(uint8_t Request, uint16_t Value)
+{
+	UsbCtrlrEvt_t evt = {};
+	evt.Type = USB_CTRLR_EVT_SETUP;
+	evt.Setup.bmRequestType = USB_REQTYPE_DIRDEV | USB_REQTYPE_STANDARD |
+		USB_REQTYPE_DEVICE;
+	evt.Setup.bRequest = Request;
+	evt.Setup.wValue = Value;
+	s_CoreHandler(0, &evt, s_CoreContext);
+}
+
+static void CompleteEp0In(void)
+{
+	UsbCtrlrEvt_t evt = {};
+	evt.Type = USB_CTRLR_EVT_XFER_CMPL;
+	evt.Xfer.EpAddr = USB_ENDPADDR_DIRIN(0);
+	evt.Xfer.Result = USB_CTRLR_XFER_SUCCESS;
+	s_CoreHandler(0, &evt, s_CoreContext);
+}
+
+static void SetControlLineState(uint8_t InterfaceNo, uint16_t State)
+{
+	UsbCtrlrEvt_t evt = {};
+	evt.Type = USB_CTRLR_EVT_SETUP;
+	evt.Setup.bmRequestType = USB_REQTYPE_DIRDEV | USB_REQTYPE_CLASS |
+		USB_REQTYPE_INTERFACE;
+	evt.Setup.bRequest = USB_CDC_REQ_SET_CTRL_LINE_STATE;
+	evt.Setup.wValue = State;
+	evt.Setup.wIndex = InterfaceNo;
+	s_CoreHandler(0, &evt, s_CoreContext);
+}
 
 static UsbdCdcCfg_t CdcCfg(uint8_t *pRx, int RxSize,
 						   uint8_t *pTx, int TxSize)
@@ -109,7 +161,10 @@ int main(void)
 	cfg.DevNo = 0;
 	cfg.Vid = 0x1209;
 	cfg.Pid = 1;
-	cfg.NbCdc = 2;
+	cfg.DeviceClass = USB_DEVCLASS_MISC;
+	cfg.DeviceSubClass = 2U;
+	cfg.DeviceProtocol = 1U;
+	cfg.bRemoteWakeup = true;
 	if (!UsbInit(&cfg))
 	{
 		printf("UsbInit failed\n");
@@ -130,6 +185,33 @@ int main(void)
 	{
 		printf("UsbdCdc data binding failed\n");
 		return 5;
+	}
+	uint16_t descriptorLength = 0U;
+	const uint8_t *pDescriptor = UsbGetDescriptor(0,
+		USB_DESCTYPE_CONFIGURATION, 0U, 0U, USB_SPEED_FULL,
+		&descriptorLength);
+	if (pDescriptor == nullptr ||
+		descriptorLength != sizeof(UsbCfgDesc_t) + 2U * sizeof(UsbdCdcDesc_t) ||
+		pDescriptor[4] != 4U ||
+		pDescriptor[1] != USB_DESCTYPE_CONFIGURATION)
+	{
+		printf("CDC descriptor composition failed\n");
+		return 8;
+	}
+	const UsbdCdcDesc_t *pCdcDesc = reinterpret_cast<const UsbdCdcDesc_t *>(
+		pDescriptor + sizeof(UsbCfgDesc_t));
+	if (pCdcDesc[0].Association.bFirstInterface != 0U ||
+		pCdcDesc[1].Association.bFirstInterface != 2U)
+	{
+		printf("CDC descriptor order failed\n");
+		return 9;
+	}
+	// C++ CDC objects register through the common UsbClass object array.
+	// Registering the same object a second time must be rejected.
+	if (UsbClassRegister(0, &s_Cdc0, 0, 0, 0, 0))
+	{
+		printf("UsbdCdc class object was not registered\n");
+		return 7;
 	}
 
 	// UsbIntrf registers data OUT then data IN, followed by the class
@@ -153,7 +235,58 @@ int main(void)
 		printf("UsbEnable failed\n");
 		return 3;
 	}
+
+	UsbdCdcDev_t *pCdc0 = s_Cdc0;
+	pCdc0->LineCoding.dwDTERate = 9600U;
+	UsbCtrlrEvt_t reset = {};
+	reset.Type = USB_CTRLR_EVT_RESET;
+	s_CoreHandler(0, &reset, s_CoreContext);
+	if (pCdc0->LineCoding.dwDTERate != 115200U)
+	{
+		printf("UsbdCdc virtual reset was not dispatched\n");
+		return 8;
+	}
+
+	Setup(USB_REQ_SET_ADDRESS, 5U);
+	if (s_Ep0XferCount != 1 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
+		s_LastEp0Length != 0U || UsbGetAddress(0) != 0U)
+	{
+		printf("CDC SET_ADDRESS setup failed\n");
+		return 9;
+	}
+	CompleteEp0In();
+	if (UsbGetAddress(0) != 5U)
+	{
+		printf("CDC SET_ADDRESS completion failed\n");
+		return 10;
+	}
+
+	Setup(USB_REQ_SET_CONFIGURATION, 1U);
+	if (s_Ep0XferCount != 2 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
+		s_LastEp0Length != 0U || !UsbConfigured(0) || s_EpOpenCount != 6 ||
+		pCdc0->IntrfData.Mps != USB_PKT_MAXLEN(0, BULK) ||
+		((UsbdCdcDev_t *)s_Cdc1)->IntrfData.Mps != USB_PKT_MAXLEN(0, BULK))
+	{
+		printf("C++ CDC configuration was not applied\n");
+		return 11;
+	}
+	CompleteEp0In();
+
+	SetControlLineState(pCdc0->CtrlIfNo, USB_CDC_CTRL_LINE_STATE_DTR);
+	if (s_Ep0XferCount != 3 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
+		s_LastEp0Length != 0U || s_Cdc0.IsPortOpen())
+	{
+		printf("C++ CDC Control setup was not dispatched\n");
+		return 12;
+	}
+	CompleteEp0In();
+	if (!s_Cdc0.IsPortOpen())
+	{
+		printf("C++ CDC Control completion was not dispatched\n");
+		return 13;
+	}
+
 	UsbProcess(0);
 	printf("UsbInit, dual UsbdCdc Init, UsbEnable, UsbProcess all completed\n");
-	return UsbConfigured(0) ? 4 : 0;
+	return UsbConfigured(0) ? 0 : 4;
 }

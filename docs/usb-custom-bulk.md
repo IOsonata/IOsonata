@@ -18,7 +18,6 @@ The application chooses the behavior and storage for the custom interface:
 - RX and TX FIFO memory;
 - byte-stream or packet TX mode;
 - optional full-speed and high-speed packet sizes;
-- optional control-request handler;
 - optional `DeviceIntrf` event callback.
 
 The application does **not** choose an interface number or endpoint number. `UsbdBulk` requests one interface and one bidirectional bulk endpoint number from the internal USB function allocator.
@@ -56,8 +55,6 @@ static const UsbdBulkCfg_t s_BulkCfg = {
     .FsMps = 0U,
     .HsMps = 0U,
     .Mode = USBD_BULK_MODE_BYTE,
-    .RequestHandler = nullptr,
-    .pRequestContext = nullptr,
     .EvtCB = nullptr,
 };
 ```
@@ -82,29 +79,22 @@ if (!g_CustomBulk.Init(s_BulkCfg))
 
 ## Descriptors
 
-A custom USB device supplies its device, configuration and string descriptors through `UsbCfg_t::DescHandler`.
+Descriptor delivery is part of the generic USB layer. `UsbInit()` records the
+device identity and strings. `UsbdBulk::Init()` builds full-speed and, where
+supported, high-speed interface fragments using the allocated interface and
+endpoint numbers, then registers those static fragments with the generic layer.
 
-`UsbdBulk::MakeDesc()` fills the descriptor fragment for the allocated interface and its bulk OUT/IN endpoints:
+On `GET_DESCRIPTOR`, the generic layer builds the device, configuration,
+qualifier and string descriptors and concatenates registered class fragments.
+The application does not provide a descriptor callback, descriptor context or
+configuration-descriptor storage.
 
-```cpp
-#pragma pack(push, 1)
-typedef struct __Custom_Config_Descriptor {
-    UsbCfgDesc_t Config;
-    UsbdBulkDesc_t Bulk;
-} CustomConfigDesc_t;
-#pragma pack(pop)
+## Vendor control requests
 
-static CustomConfigDesc_t s_ConfigDesc;
-
-if (!g_CustomBulk.MakeDesc(&s_ConfigDesc.Bulk, Speed))
-{
-    return nullptr;
-}
-```
-
-The application still owns the overall configuration descriptor because it decides which USB functions are present. `MakeDesc()` prevents the application from duplicating the interface and endpoint numbers selected by the allocator.
-
-The loopback example contains the complete descriptor handler, including manufacturer, product, serial and interface strings.
+Derive the application class from `UsbdBulk` and override `Control()` when the
+vendor interface needs endpoint-zero requests. Return `UsbdBulk::Control()` for
+requests the derived class does not handle. This keeps control routing on the
+registered class object instead of adding a function-pointer registration path.
 
 ## Sending and receiving
 
@@ -160,7 +150,7 @@ static UsbdBulk g_TestPort;
 static UsbdBulk g_DataLink;
 ```
 
-Change the product and interface strings, subclass, protocol and optional request handler to match the application. Use VID/PID values assigned to the actual product before shipping.
+Change the product and interface strings, subclass and protocol to match the application. Use VID/PID values assigned to the actual product before shipping.
 
 Do not add fixed interface or endpoint numbers to the application configuration. The allocator is responsible for placement.
 

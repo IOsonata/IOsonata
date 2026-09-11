@@ -72,12 +72,12 @@ static int CdcEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 
 // USB CDC configuration
 static const UsbdCdcCfg_t s_CdcCfg = {
+	.DevNo = USB_DEVNO,
 	.bBlocking = true,
 	.RxFifoMemSize = CDC_RXFIFO_MEMSIZE,
 	.pRxFifoMem = s_CdcRxFifoMem,
 	.TxFifoMemSize = CDC_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_CdcTxFifoMem,
-	.DevNo = USB_DEVNO,
 	.EvtCB = CdcEvtHandler,
 };
 
@@ -89,6 +89,7 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 // driver and a saved COM port from somebody else's board.
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
+	.Mode = USB_MODE_DEVICE,
 	.Vid = 0x1209,
 	.Pid = 0x0001,
 	.DevVer = 0x0100,
@@ -96,14 +97,15 @@ static const UsbCfg_t s_UsbCfg = {
 	.pProduct = "IOsonata CDC Loopback",
 	.pSerial = nullptr,			// Taken from the MCU unique id
 	.pFuncName = "IOsonata CDC",
-	.NbCdc = 1,
 	.IntPrio = 6,
+	.DeviceClass = USB_DEVCLASS_MISC,
+	.DeviceSubClass = 2U,
+	.DeviceProtocol = 1U,
 	.bSelfPowered = false,
+	.bRemoteWakeup = true,
 	.bLowPowerSuspend = false,
 	.MaxPower = 100,
 	.EvtHandler = nullptr,
-	.DescHandler = nullptr,
-	.pDescContext = nullptr,
 };
 
 // CDC class/control object. It inherits the DeviceIntrf transfer methods, so

@@ -1,372 +1,603 @@
 # USB Architecture
 
-The USB device stack separates portable USB behavior from controller hardware
-and exposes class data through the same `DeviceIntrf` API used by the rest of
-IOsonata.
+IOsonata keeps USB simple at the application boundary and explicit internally.
+An application instantiates the USB class it needs and initializes it.
+Interface numbers, endpoint numbers, descriptor placement and endpoint callbacks
+are allocated and connected inside the USB stack.
 
-```mermaid
-flowchart TD
-    App[Application] --> Class[Public USB class<br/>UsbdCdc, UsbdBulk, ...]
-    Class --> Alloc[Internal function allocator]
-    Class --> Intrf[Internal UsbIntrf<br/>endpoint-pair data path]
-    Alloc --> Core[USB core<br/>Chapter 9 and dispatch]
-    Class --> Core
-    Intrf --> Port[UsbCtrlr port]
-    Core --> Port
-    Port --> Hw[Controller hardware]
+Applications do not select endpoint numbers.
+
+## Naming and USB role model
+
+The `usb_*` layer is role-neutral USB infrastructure. It must not accumulate
+policy that only makes sense for USB device mode or only for USB host mode.
+
+```text
+usb_*      reusable USB infrastructure
+usbd_*     USB device-side classes
+usbh_*     future USB host-side classes/drivers
 ```
 
-## Files and responsibilities
+Examples:
 
-| File | Responsibility |
-| --- | --- |
-| `include/usb/usb_def.h` | USB specification definitions, descriptors and requests |
-| `include/usb/usb.h` | Portable USB core and the controller-port contract |
-| `src/usb/usb.cpp` | Endpoint zero, Chapter 9, lifecycle and function dispatch |
-| `src/usb/usb_func.h` | Internal interface/endpoint resource allocation for classes |
-| `include/usb/usb_intrf.h` | Internal `DeviceIntrf` endpoint-pair data path |
-| `src/usb/usb_intrf.cpp` | RX/TX FIFO and controller transfer handling |
-| `include/usb/usbd_cdc.h` | Public CDC ACM class and application configuration |
-| `src/usb/usbd_cdc.cpp` | CDC requests, notifications and data-endpoint ownership |
-| `include/usb/usbd_bulk.h` | Public custom bulk class, configuration and descriptor fragment |
-| `src/usb/usbd_bulk.cpp` | Custom bulk endpoint lifecycle and function registration |
-| `<port>/include/usb_ctrlr.h` | Target controller capabilities |
-| `<port>/src/usb_ctrlr_<family>.cpp` | Registers, DMA and interrupts |
+```text
+usb_intrf.*      UsbIntrf       role-neutral endpoint-pair data engine
+usb_iso.*        UsbIsoIntrf    role-neutral ISO specialization
+usb_int.*        UsbIntIntrf    role-neutral Interrupt specialization
 
-The `usbd_` prefix identifies device classes. The `usb_` prefix is role
-neutral. `UsbCtrlr` is also role neutral because the port boundary describes
-controller operations rather than class policy.
+usbd_cdc.*       UsbdCdc        USB device CDC ACM
+usbd_bulk.*      UsbdBulk       USB device custom Bulk class
+usbd_hid.*       UsbdHid        USB device HID class
+usbd_msc.*       UsbdMsc        USB device Mass Storage BOT/SCSI class
 
-## Class model
-
-`UsbIntrf` is not a public application object. It is the reusable endpoint data
-path inherited by each public USB class.
-
-```mermaid
-classDiagram
-    DeviceIntrf <|-- UsbIntrf
-    UsbIntrf <|-- UsbdCdc
-    UsbIntrf <|-- UsbdBulk
-    UsbIntrf <|-- OtherUsbClass
-    class UsbIntrf {
-        -endpoint pair transfer
-    }
-    class UsbdCdc {
-        +Init(UsbdCdcCfg_t)
-        +IsPortOpen()
-        -RX transfer buffer
-        -TX transfer buffer
-        -allocated interfaces/endpoints
-    }
-    class UsbdBulk {
-        +Init(UsbdBulkCfg_t)
-        +Data()
-        -RX transfer buffer
-        -TX transfer buffer
-        -allocated interface/endpoint
-    }
+usbh_*           future USB host class/driver layer
 ```
 
-The C and C++ forms use the same implementation state. A C++ class inherits
-`UsbIntrf`; its class-specific C state keeps a pointer to that inherited
-`UsbDevIntrf_t` so the C callbacks and C++ wrapper share one data path.
+The current stack implements USB device mode. Host support does not exist yet.
+The architectural requirement is that `UsbIntrf`, `UsbIsoIntrf` and
+`UsbIntIntrf` stay free of device-only class/enumeration policy so they can be
+reused when a host layer is added.
 
-## Interface and endpoint allocation
+Role-specific behavior belongs above them:
 
-Applications do not choose USB interface numbers or endpoint numbers. Those
-numbers describe how several functions are composed into one USB device and
-therefore belong to the USB implementation.
+```text
+                         UsbIntrf
+                    role-neutral data path
+                      /       |       \
+                     /        |        \
+              UsbdCdc     UsbdBulk   UsbIsoIntrf / UsbIntIntrf
+                                                /      \
+                                               /        \
+                                         UsbdHid      future host-side
+```
 
-Each class declares only the resources it needs during initialization. The
-internal allocator tries the lowest legal placement against the USB core's
-registered interface ranges and endpoint-direction masks. The controller
-capability macros bound which endpoint numbers can be considered.
+Device-side responsibilities such as device descriptors, `SET_CONFIGURATION`,
+`SET_INTERFACE`, device class allocation and Chapter 9 ownership do not
+belong in `UsbIsoIntrf`.
 
-CDC requests:
+Future host-side responsibilities such as device enumeration, selecting a
+configuration, claiming an interface and selecting an alternate setting also do
+not belong in `UsbIsoIntrf`.
 
-- two interfaces;
-- one interrupt-IN endpoint;
-- one bidirectional endpoint number for bulk OUT and IN.
+`UsbIsoIntrf` and `UsbIntIntrf` own only reusable transfer-type behavior shared
+by both roles.
 
-With no earlier function registered, that resolves to control/data interfaces
-0/1, notification endpoint 1 IN, and data endpoint 2 OUT/IN. A second CDC
-resolves to interfaces 2/3, notification endpoint 3 IN, and data endpoint 4
-OUT/IN. The application configuration contains none of those numbers.
+The C++ class hierarchy has one common lifecycle base and distinct bases for
+role-specific control behavior:
 
-A custom bulk function requests one interface and one bidirectional endpoint
-number. Bluetooth HCI can use the same mechanism to request one interface, one
-bulk pair and one additional interrupt-IN endpoint without publishing any
-placement in its application configuration.
+```text
+UsbClass
+|-- UsbDeviceClass
+`-- UsbHostClass
+```
 
-Transfer type and placement are independent. The allocator assigns endpoint
-directions; the class descriptor still decides whether an assigned endpoint is
-bulk, interrupt or another supported transfer type.
+`UsbClass` provides `Reset()` and `Process()`. `UsbDeviceClass` adds `Control()`,
+`SelectConfig()` and `SelectInterface()`. Host
+matching, attach and detach behavior belongs to `UsbHostClass`. The
+role-neutral `UsbIntrf` data path remains separate so a concrete CDC, HID or
+vendor class can combine class control with the same RX/TX interface
+implementation.
 
-## Endpoint model
+The USB subsystem keeps statically owned class objects in one `UsbClass *`
+array. Shared reset and application-context processing dispatch through that
+array without testing device versus host controller mode inside each class.
+Device interface and endpoint ownership is stored by `UsbDeviceClass`, so
+control, configuration, interface selection, reset and processing each use one
+object dispatch path. There is no callback registry in the core.
 
-An endpoint address is a direction bit plus an endpoint number. IN endpoint 1
-and OUT endpoint 1 are distinct USB endpoints and can transfer concurrently.
-They may legally share the number even though each individual endpoint is
-unidirectional.
+Device classes register their topology and statically owned object atomically
+through `UsbClassRegister()`. The core has no device-class callback
+registration API or callback adapter.
 
-One `UsbIntrf` instance therefore stores one internally assigned endpoint
-number, `EpNo`, and represents the class data pair:
+Device, configuration, qualifier and string descriptors are assembled by the
+procedural generic layer. Each registered class owns static full-speed and,
+when supported, high-speed configuration fragments and registers them through
+`UsbDescriptorRegister()`. Applications provide identity and strings in
+`UsbCfg_t`; they do not provide descriptor callbacks or descriptor contexts.
 
-| Operation | Derived address |
-| --- | --- |
-| Receive | `USB_ENDPADDR_DIROUT(EpNo)` |
-| Transmit | `USB_ENDPADDR_DIRIN(EpNo)` |
+The `UsbdCdc` object derives from both `UsbDeviceClass` and `DeviceIntrf`.
+Its control requests, configuration selection, reset and deferred pump run
+through the virtual class API.
 
-It never stores duplicate RX and TX endpoint addresses. The class owns any
-additional one-way endpoint itself; for example CDC owns its allocated
-interrupt-IN notification endpoint separately from its allocated bulk data
-pair.
+The C++ `BtHciUsb` object also derives from `UsbDeviceClass` and
+`DeviceIntrf`. HCI command control transfers, configuration selection, HCI
+and SCO interface options, and reset run through the virtual class API. The
+underlying request and endpoint logic is reused by its virtual methods.
 
-`DeviceIntrf.DevAddr` is not used for endpoint selection. `DevNo` selects the
-USB controller, never the device address assigned by `SET_ADDRESS`.
+`UsbdBulk`, `UsbdHid` and `UsbdMsc` follow the same model and register their
+class objects directly.
+
+## Current device-side data-path model
+
+`UsbIntrf` is the common bidirectional endpoint-pair data engine. CDC, custom
+Bulk, Isochronous and Interrupt all reuse it.
+
+```text
+                              UsbIntrf
+                    generic endpoint-pair engine
+                 fixed RX/TX controller DMA staging
+                    selected RX/TX data policy
+                    endpoint registration/callback
+                           UsbCtrlrEpXfer
+                               |
+              +----------------+----------------+
+              |                |                |
+           UsbdCdc      UsbdBulk / UsbdMsc  UsbIsoIntrf / UsbIntIntrf
+              |                |                         |
+           Bulk EP          Bulk EP                  ISO / INT EP
+           BYTE mode        BYTE/PACKET              DIRECT mode
+```
+
+The inheritance view is intentionally small:
+
+```text
+                    UsbIntrf
+                  /    |     \
+                 /     |      \
+          UsbdCdc   UsbdBulk   UsbIsoIntrf / UsbIntIntrf
+```
+
+The endpoint transfer type and the `UsbIntrf` data-path mode are independent.
+Opening an endpoint as Bulk, Isochronous or Interrupt does not create a
+different controller transfer API.
+
+## CDC
+
+CDC ACM uses `UsbIntrf` for its Bulk data endpoint pair.
+
+```text
+UsbdCdc
+   |
+   +-- Bulk OUT/IN ----------> UsbIntrf
+   |                              |
+   |                         UsbCtrlrEpXfer
+   |
+   +-- Interrupt IN ---------> direct class-owned endpoint
+       notifications
+```
+
+CDC byte data uses `UsbIntrf` byte-stream TX mode. CDC notification is not part
+of the data stream, so the Interrupt IN endpoint is owned directly by
+`UsbdCdc`.
+
+## Custom Bulk
+
+`UsbdBulk` is a thin device-side specialization of `UsbIntrf`.
+
+```text
+UsbdBulk
+    |
+    v
+UsbIntrf
+    |
+    +-- byte-stream mode
+    |
+    +-- packet mode
+    |
+    v
+Bulk OUT/IN endpoints
+```
+
+`UsbdBulk` owns device-side descriptor policy and static controller buffers.
+`UsbIntrf` owns queuing, staging and endpoint transfer completion.
+
+## Mass Storage
+
+`UsbdMsc` uses packet-mode `UsbIntrf` for one Bulk OUT/IN endpoint pair. USB
+packets remain transport units; the BOT transfer length and SCSI sector size
+are tracked independently.
+
+```text
+UsbdMsc
+    |
+    +-- BOT state, CBW/CSW and reset recovery
+    +-- SCSI command and sense policy
+    +-- caller-owned DiskIO and sector buffer
+    |
+    v
+UsbIntrf (PACKET mode)
+    |
+    v
+Bulk OUT/IN endpoint pair
+```
+
+The class owns fixed endpoint FIFOs and DMA staging. The application supplies
+a statically owned `DiskIO` and a statically allocated sector buffer. Class
+initialization rejects a medium whose reported sector size exceeds that
+buffer. `DiskIO` remains responsible for physical read, write, reset and cache
+flush behavior.
+
+Substantial SCSI and storage work runs from `UsbdMsc::Process()`, not from the
+USB interrupt. Malformed CBWs and phase errors use the core endpoint-halt state
+so standard `CLEAR_FEATURE(ENDPOINT_HALT)` requests complete BOT recovery.
+
+## Isochronous
+
+`UsbIsoIntrf` is the role-neutral Isochronous specialization of `UsbIntrf`, not
+a separate endpoint transfer engine.
+
+Current device-side path:
+
+```text
+USB device class
+        |
+        v
+UsbIsoIntrf
+        |
+        v
+UsbIntrf
+(DIRECT mode)
+        |
+        v
+Isochronous OUT/IN endpoints
+        |
+        v
+UsbCtrlrEpXfer / endpoint callback
+```
+
+Future host-side classes should reuse the same `UsbIsoIntrf` transport layer
+instead of introducing a separate `UsbhIsoIntrf` with duplicated transfer
+logic.
+
+`UsbIsoIntrf` owns only ISO-specific behavior:
+
+- open/configure an endpoint pair as Isochronous;
+- ISO maximum packet size and service interval;
+- ISO synchronization/usage attributes;
+- DIRECT data-policy selection;
+- reset/suspend/resume transport state;
+- frame-facing convenience callbacks and counters.
+
+`UsbIntrf` continues to own the common endpoint transfer machinery:
+
+- fixed RX/TX controller buffers;
+- endpoint registration;
+- the endpoint callback;
+- BYTE/PACKET CFifos and DIRECT slots;
+- packet-mode and direct-mode staging;
+- endpoint transfer submission;
+- transfer completion handling.
+
+ISO always configures `UsbIntrf` with `bBlocking = false`. An isochronous
+service opportunity cannot be backpressured and retried like Bulk. If software
+cannot keep up, data is missed/dropped according to the non-blocking path rather
+than delaying the service interval.
+
+There is no independent ISO controller transfer engine and no class-level
+completion forwarding path.
+
+## Interrupt transfer
+
+`UsbIntIntrf` is the role-neutral Interrupt specialization of `UsbIntrf`. It
+uses the same DIRECT storage policy as `UsbIsoIntrf`, but opens its endpoint
+pair with `USB_ENDPATT_TRANS_INT` and owns the interrupt polling interval.
+
+```text
+USB class
+        |
+        v
+UsbIntIntrf
+        |
+        v
+UsbIntrf (DIRECT mode)
+        |
+        v
+Interrupt OUT/IN endpoints
+```
+
+DIRECT describes only software storage: one current RX slot, one current TX
+slot and no CFifo. ISO selects the existing non-blocking behavior, so DIRECT
+ignores `USB_CTRLR_EVT_DRDY` while the ISO controller path services scheduled
+opportunities. Interrupt selects the existing blocking behavior, so DIRECT
+services `USB_CTRLR_EVT_DRDY` through the normal controller transfer call.
+There is no separate RX arm or re-arm API.
+
+`UsbIntIntrf` contains no HID report or descriptor behavior. `UsbdHid` embeds
+it and owns the device-side HID descriptor, class requests and report policy.
+
+The nRF52840 `UsbIntLoopback` project and
+[`Python/usb_int_loopback.py`](../../Python/usb_int_loopback.py) exercise the
+transport on hardware without adding class semantics. The test selects three
+interrupt intervals, checks alternate-setting close/open behavior, transfers
+zero- through maximum-length packets in both directions, forces and recovers
+from a busy TX slot, and offers a manual suspend/wake phase.
+
+## HID
+
+`UsbdHid` follows the same device-class pattern as `UsbdBulk` and
+`BtHciUsb`: it registers its class instance, receives allocated interface and
+endpoint numbers, builds and registers its static descriptor fragments, and
+opens its endpoints when configuration 1 becomes active.
+
+```text
+UsbdHid
+    |
+    +-- HID descriptor and class requests
+    +-- application report descriptor
+    |
+    v
+UsbIntIntrf
+    |
+    v
+Interrupt OUT/IN endpoint pair
+```
+
+The application supplies the report descriptor and the staged handler for
+`GET_REPORT` and `SET_REPORT`. `UsbdHid` handles the HID descriptor,
+`GET/SET_IDLE` and boot-subclass `GET/SET_PROTOCOL`. All USB and HID constants
+and descriptor structures come from `usb_def.h` and `usb_hiddef.h`.
+
+The `UsbHidLoopback` nRF52840 project uses a vendor-page 64-byte input/output
+report and is exercised through the native host HID driver by
+[`Python/usb_hid_loopback.py`](../../Python/usb_hid_loopback.py).
+
+## Controller boundary
+
+Every target provides `usb_ctrlr.h` and its controller implementation. Portable
+USB code does not depend on MCU-specific register definitions.
+
+The central controller concepts are:
+
+```text
+UsbCtrlrInit
+UsbCtrlrEpOpen / UsbCtrlrEpClose
+UsbCtrlrEpXfer
+Event callback
+```
+
+Support operations such as start/stop, connect/disconnect, stall, remote wakeup
+and SOF enable surround those operations.
+
+SOF is a controller/core timing event, not a device-class callback. A controller
+may consume SOF internally to schedule open isochronous endpoints. The core does
+not distribute every frame to `UsbDeviceClass` objects.
+
+The controller API is intentionally transfer-type agnostic. Endpoint type is
+established when the endpoint/pipe is configured; the transfer operation remains
+the common endpoint transaction primitive.
+
+### Current device initialization
+
+In the current device stack, `UsbInit()` calls `UsbCtrlrInit()` and installs the
+core callback for device-wide events such as:
+
+```text
+RESET
+SUSPEND
+RESUME
+```
+
+EP0 setup/control state is owned by `UsbCore`.
+
+This device-core behavior is not part of `UsbIntrf` or `UsbIsoIntrf` and must
+not be pushed into those role-neutral layers.
+
+### Endpoint configuration
+
+`UsbCtrlrEpOpen()` receives an endpoint descriptor in the current device port.
+The descriptor establishes:
+
+```text
+endpoint address and direction
+transfer type: Control / Isochronous / Bulk / Interrupt
+maximum packet size
+interval where applicable
+ISO synchronization/usage attributes where applicable
+```
+
+There are no class-specific controller transfer calls such as `CdcXfer()`,
+`BulkXfer()` or `IsoXfer()`.
+
+### Endpoint transfer
+
+Non-control data endpoints use one common operation:
+
+```text
+UsbCtrlrEpXfer(DevNo, EpAddr, Length)
+```
+
+The controller already knows the endpoint type because it was established when
+the endpoint was opened/configured.
+
+Endpoint callbacks are delivered directly to the registered endpoint owner.
+Nonzero endpoint completion is not routed through the USB class table.
+
+```text
+controller interrupt
+        |
+        v
+registered endpoint callback
+        |
+        v
+endpoint owner
+```
+
+For CDC/Bulk/ISO/Interrupt data pairs in the current device stack, that endpoint
+owner is `UsbIntrf`.
+
+## Control endpoint
+
+EP0 is device-side protocol infrastructure. Control transfers have:
+
+```text
+SETUP
+  |
+  +-- DATA
+  |
+  +-- STATUS
+```
+
+`UsbCore` owns that state machine and Chapter 9 processing. This is intentionally
+outside `UsbIntrf` and `UsbIsoIntrf` so the reusable data layers do not become
+device-mode specific.
+
+## Interrupt endpoints
+
+Interrupt endpoints are normally event/notification endpoints rather than
+stream data endpoints. A device class owns them directly when no `UsbIntrf`
+stream or packet transport is needed.
+
+CDC ACM notification is the reference device-side pattern:
+
+```text
+class state changes
+        |
+        v
+build notification
+        |
+        v
+UsbCtrlrEpXfer(Interrupt IN)
+        |
+        v
+class endpoint callback
+```
+
+## Automatic interface and endpoint allocation
+
+Automatic interface/endpoint allocation is currently a device-side composition
+facility. USB device classes request resources; applications do not assign
+them.
+
+The internal allocator receives requirements such as:
+
+```text
+number of interfaces
+number of bidirectional endpoint numbers
+number of IN-only endpoints
+number of OUT-only endpoints
+controller-constrained endpoint masks
+```
+
+It finds the lowest legal placement accepted by the USB core and controller
+capabilities. Assigned numbers remain private device-class state and are used
+for endpoint registration, descriptor construction and control-request
+ownership.
+
+A controller with a dedicated ISO endpoint advertises it through ISO capability
+masks. The allocator satisfies that restriction internally.
+
+This allocator is not part of `UsbIsoIntrf`; a future host stack will have its
+own role-specific discovery/allocation process above the same reusable transport
+layer.
+
+## UsbIntrf responsibilities
+
+One `UsbIntrf` instance represents one bidirectional transfer channel. In the
+current USB device implementation this maps to one endpoint number:
+
+```text
+OUT = receive
+IN  = transmit
+```
+
+The derived/specialized layer supplies fixed controller RX/TX buffers.
+`UsbIntrf` registers those buffers once and later submits only endpoint address
+and length.
+
+RX packet boundaries are preserved internally with:
+
+```text
+UsbPktHdr_t { Length }
++ packet payload storage
+```
+
+BYTE/PACKET mode is selected by CFifo block size:
+
+```text
+block size 1
+    -> byte-stream mode
+
+block size UsbPktHdr_t + packet storage
+    -> packet mode
+```
+
+Transfer type and data-path mode are separate:
+
+```text
+CDC       = Bulk + byte mode
+UsbdBulk  = Bulk + byte or packet mode
+UsbdMsc   = Mass Storage BOT/SCSI + Bulk packet mode
+UsbIsoIntrf = Isochronous + DIRECT mode
+UsbIntIntrf = Interrupt + DIRECT mode
+UsbdHid   = HID class + UsbIntIntrf
+```
 
 ## Storage ownership
 
-There is no heap allocation in the data path.
+The USB data path uses static storage.
 
-| Storage | Supplied by | Lifetime and use |
-| --- | --- | --- |
-| RX CFifo memory | Application in public class config | Queued packets awaiting the application |
-| TX CFifo memory | Application in public class config | Bytes or packets awaiting transmission |
-| RX controller buffer | Derived USB class | One active OUT transfer, reused after every completion |
-| TX controller buffer | Derived USB class | One active IN transfer, reused after every completion |
+```text
+Derived class / specialization
+    -> RX/TX controller DMA staging
 
-The derived class sizes controller buffers for its transfer type. CDC bulk
-uses `USB_PKT_MAXLEN(0, BULK)`; a HID class can use its interrupt packet size
-instead. The RX CFifo is built once at that same static maximum. The negotiated
-MPS is applied only after the device speed is known and the class opens both
-endpoint directions.
+UsbIntrf
+    -> BYTE/PACKET CFifos or DIRECT slot ownership
 
-Applications size RX packet storage statically using the controller's compile
-time maximum:
-
-```c
-#define CDC_RXFIFO_MEMSIZE \
-    USB_INTRF_RXMEM_SIZE(4, USB_PKT_MAXLEN(0, BULK))
+UsbCtrlr port
+    -> hardware/DMA transaction state
 ```
 
-Each RX CFifo block is a word-aligned `UsbPktHdr_t` followed by space for one
-packet. `UsbPktHdr_t.Length` preserves short, full and zero-length packets.
+CFifo storage and controller DMA staging are intentionally separate so queued
+software storage can be reused without modifying memory currently owned by the
+controller.
 
-## Receive path
+## Current device lifecycle
 
-RX uses one stable controller buffer and one copy on completion:
+The application view is:
 
-```mermaid
-sequenceDiagram
-    participant U as UsbIntrf
-    participant C as UsbCtrlr
-    participant F as RX CFifo
-    participant A as Application
-    U->>C: Register assigned endpoint, RX buffer and callback
-    U->>C: Arm OUT
-    C-->>U: OUT complete(length)
-    U->>F: Store header and copy packet
-    U->>C: Rearm fixed RX buffer
-    A->>F: Consume whole packet(s)
+```text
+UsbInit
+   |
+class Init calls
+   |
+UsbEnable
+   |
+host enumeration/configuration
+   |
+class endpoints open
 ```
 
-Initialization creates the packet CFifo using the class buffer capacity and
-registers the OUT and IN buffers with the controller once. Each registration
-also contains the direct completion callback and its `UsbIntrf` context.
-`UsbIntrfConfigure()` records the negotiated MPS, flushes the queues and
-arms the class-owned RX buffer. Every successful OUT completion:
+Internally:
 
-1. reserves one CFifo block;
-2. stores the received length and copies the controller buffer into it;
-3. notifies the application after the copy is complete;
-4. resubmits the same controller buffer when another block is available.
+1. `UsbInit()` initializes `UsbCore` and the device controller.
+2. Each device class requests its interfaces/endpoints from the internal
+   allocator.
+3. Data classes initialize their inherited `UsbIntrf` with the allocated
+   endpoint number, static buffers and CFifos.
+4. `UsbIntrfInit()` registers the endpoint buffers and callback.
+5. Each class builds and registers its static full/high-speed configuration
+   descriptor fragments with the generic layer.
+6. Configuration or alternate-setting selection opens the endpoint descriptors.
+7. Transfers use `UsbCtrlrEpXfer()`.
+8. Reset/unconfiguration closes endpoints and clears active transport state.
 
-There is no RX lock and no RX active flag. The USB interrupt is the sole RX
-producer and foreground code is the sole consumer on the supported single-core
-targets. The interrupt finishes the copy before foreground execution resumes.
-The controller already owns the hardware busy state, so duplicating it in
-`UsbIntrf` would only create another state to synchronize.
+This lifecycle describes the current device stack only. Future host enumeration
+and interface selection belong in `usbh_*` and must not change the reusable
+`UsbIntrf`, `UsbIsoIntrf` or `UsbIntIntrf` transport model.
 
-`DeviceIntrfRxData()` consumes only complete packet blocks. It may combine
-several complete packets in the caller's buffer, but it never splits the head
-packet. If the head packet does not fit, it returns zero and leaves that packet
-queued. A zero-length packet is released without consuming caller space.
+## Rules for new USB work
 
-When the RX CFifo is full, OUT is left unarmed. USB then backpressures the host
-instead of dropping a packet. Completion reuses the RX buffer immediately,
-before application event callbacks. A read that releases at least one packet
-retries the OUT submission. The controller owns the active-transfer state and
-rejects a duplicate submission when OUT is already armed. This closes the race
-where an OUT completion fills the last slot after foreground checked the FIFO.
+Keep these invariants when adding a class, transfer type or future host support:
 
-CDC DTR is class state only. It drives `IsPortOpen()` and the state-change
-notification; it does not enable or disable the generic receive path.
-
-## Transmit path
-
-TX always copies queued data into the class-owned TX controller buffer before
-submission, because the controller retains that buffer until completion.
-
-TX CFifo mode is selected only by block size:
-
-- Block size 1 is byte-stream mode. `UsbIntrf` packetizes queued bytes up to
-  MPS. CDC uses this mode.
-- A block large enough for `sizeof(UsbPktHdr_t) + MPS` is packet mode. Each
-  block describes exactly one packet and packet blocks are never combined.
-  A class may size the block for its controller's maximum MPS and use the same
-  storage when that controller negotiates a smaller bus speed. The packet
-  header length must not exceed the active MPS.
-
-An idle producer starts transmission immediately. While IN is busy, producers
-only append to the FIFO. Completion copies and submits the next queued data
-while it still owns the inherited `DeviceIntrf.bTxReady` token.
-
-In byte-stream mode each submission calls `CFifoGetMultiple()` once with MPS as
-the requested count. The returned contiguous byte count is copied to the TX
-controller buffer and submitted immediately. Completion repeats the same
-operation. A partial packet is not delayed, and there is no SOF tail scheduler
-or separate ZLP state.
-
-Byte mode and packet mode are separate `DevIntrf.TxData` handlers, chosen once
-in `UsbIntrfInit()` from the CFifo block size. Byte mode is the CDC hot path and
-runs once per `DeviceIntrfTx()` call, so a one byte write walks all of it; a
-mode test at the top would be paid on every byte. Split this way the byte path
-compiles to the same instruction sequence it had before packet mode existed.
-
-## Minimal state and lifecycle
-
-`UsbIntrf` deliberately does not mirror state already owned elsewhere:
-
-| Question | Single source of truth |
-| --- | --- |
-| Is the `DeviceIntrf` enabled? | inherited atomic `EnCnt` |
-| Is an endpoint transfer active? | controller-private transfer state |
-| Which endpoint directions belong to this data path? | internally assigned `EpNo` |
-| Is the pair configured? | `Mps != 0` |
-| Is TX software-owned? | inherited `bTxReady` token |
-| Is TX byte or packet mode? | `hTxFifo->BlkSize` |
-
-There is no `bEnabled`, `RxActive`, `RxAccepting`, separate RX/TX endpoint
-address, release flag, TX queue watermark, tail flag or ZLP flag.
-
-The lifecycle is:
-
-1. `UsbInit()` initializes portable core and controller software state.
-2. A public class requests its interface/endpoint resources from the internal
-   allocator. The assigned numbers are stored only in class implementation
-   state. The class then initializes `UsbIntrf` with the assigned data endpoint,
-   application FIFOs and class buffers and registers any additional endpoint.
-3. `UsbEnable()` powers the controller, endpoint zero and bus pull-up.
-4. Configuration opens the class endpoints and calls
-   `UsbIntrfConfigure(Mps)`, which starts RX.
-5. Reset or unconfiguration closes endpoints and calls
-   `UsbIntrfUnconfigure()`, which clears MPS and flushes both FIFOs.
-
-`Enable()` also attempts RX/TX submission. This makes the inherited
-`DeviceIntrf` enable transition sufficient; it does not introduce a separate
-`RxKick` state machine.
-
-## Port boundary and capabilities
-
-Each target supplies a plain `usb_ctrlr.h` on its include path plus the
-implementation for its MCU. Generic code includes that contract and never
-switches on a vendor macro.
-
-The target header publishes compile-time capabilities used for static memory
-sizing and allocation bounds:
-
-```c
-USB_CTRLR_CNT
-USB_PKT_MAXLEN(DevNo, TransType)
-USB_EPIN_CNT(DevNo)
-USB_EPOUT_CNT(DevNo)
-USB_HIGHSPEED_CAPABLE(DevNo)
-USB_ISO_SUPPORTED(DevNo)
-```
-
-Non-control endpoints register their fixed DMA buffer, completion callback and
-context once with `UsbCtrlrEpRegister()`. `UsbCtrlrEpRxArm()` arms the registered
-OUT buffer and `UsbCtrlrEpSend()` sends from the registered IN buffer. Their
-completion interrupt invokes the registered callback directly; it does not
-scan the USB function table. The controller never advances or replaces these
-fixed data-endpoint pointers.
-
-Endpoint zero is intentionally separate. `UsbCtrlrEp0Xfer()` accepts the
-dynamic buffer selected by the current control request, and its completion is
-routed to the generic USB core. Only the EP0 working pointer may advance while
-the controller splits a control transfer across packets.
-
-The port owns registers, DMA/FIFO access, endpoint busy state and controller
-interrupts. The generic layer owns no MCU-specific facts.
-
-The nRF52 USBD peripheral has one EasyDMA engine shared by every endpoint.
-The controller records complete DMA descriptors in a fixed CFifo and starts
-them in submission order. The queue has one slot for every IN and OUT endpoint
-direction, and an endpoint direction cannot submit another request until its
-current request completes, so the queue cannot overflow. The controller's
-single DMA-owner token serializes queue consumption. A foreground request starts
-immediately when DMA is free; requests made by an interrupt are consumed by the
-USB interrupt before it returns. ENDEP completion releases EasyDMA and services
-the next descriptor. Aborting endpoint zero removes only endpoint-zero
-descriptors; queued work for other endpoints is preserved. The CFifo remains
-the sole record of pending DMA work.
-
-Data IN starts asynchronously. It normally completes without a per-packet
-ENDEPIN interrupt because EPDATA later proves that the host consumed the packet.
-If another descriptor is waiting, the controller first reclaims an already
-completed IN DMA or temporarily enables that active endpoint's ENDEPIN interrupt;
-completion then releases DMA and continues the same CFifo. OUT and endpoint zero
-use their normal ENDEP completion interrupts.
-
-EasyDMA also owns the nRF52 USBD register block while a transfer is active. An
-interrupt that arrives during an active DMA inspects only that DMA's END event
-and USBRESET. Other USB events stay latched until END releases the engine, after
-which normal event collection resumes. The errata 199 busy marker is set before
-STARTEP and cleared only when DMA ownership is released.
-
-## Function registration
-
-A USB class does not publish interface ranges or endpoint masks in its
-application config. Internally it describes the number and direction of the
-resources it needs. The allocator tries lowest-numbered candidates and the USB
-core remains the authority that rejects overlapping interface ranges or
-endpoint-direction masks.
-
-Once a candidate is accepted, the class keeps the allocation in its private
-state and uses it to initialize `UsbIntrf`, register extra endpoint callbacks,
-build descriptors and validate class requests. Endpoint zero belongs to the
-generic core and is never allocated to a function.
-
-## Custom bulk class
-
-`UsbdBulk` is the public class for a customer-defined interface using one bulk
-OUT/IN endpoint pair. The interface descriptor uses USB vendor-specific class
-code `0xFF`; the application can configure subclass, protocol, interface
-string, FIFO storage, packet sizes and byte/packet mode. Interface number and
-endpoint number are not application configuration.
-
-The class requests one interface and one bidirectional endpoint from the
-internal allocator, owns its aligned controller buffers and registers the
-result with the USB core. `UsbdBulk::MakeDesc()` produces the packed interface
-and two-endpoint descriptor fragment using those assigned values, so a
-composite descriptor does not need to duplicate placement policy.
-
-All data moves through the normal `DeviceIntrf` API. Optional USB vendor control
-requests are forwarded to the application callback after the core has routed
-them to the allocated interface or endpoint.
-
-A standard class with additional endpoint roles derives directly from
-`UsbIntrf`, not from `UsbdBulk`. Bluetooth HCI is the example: its ACL endpoint
-pair can use the same packet data path, while HCI commands remain on EP0 and
-HCI events use a separately allocated interrupt-IN endpoint.
-
-## Known gaps
-
-- Isochronous endpoints are not yet driven by a port.
-  `USB_ISO_SUPPORTED` reports this independently of hardware packet capacity.
-- There is no host-controller layer yet. Role-neutral naming preserves that
-  extension point.
-- Current ports hold one file-scope controller state because all supported
-  parts report `USB_CTRLR_CNT == 1`; the public signatures already carry
-  `DevNo` for a future multi-controller port.
+1. `usb_*` remains role-neutral reusable USB infrastructure.
+2. `usbd_*` contains USB device-side class behavior.
+3. Future `usbh_*` contains USB host-side class/driver behavior.
+4. Applications do not choose device-side interface or endpoint numbers.
+5. Device resource allocation remains internal to the device stack.
+6. `UsbCtrlr` contains hardware behavior, not class protocol behavior.
+7. The endpoint transfer primitive remains common across Bulk, Interrupt and
+   Isochronous operation.
+8. Nonzero endpoint events go directly to the registered endpoint owner.
+9. `UsbIntrf` remains the common endpoint-pair data engine.
+10. CDC and Bulk use BYTE/PACKET; ISO and Interrupt specializations use DIRECT.
+11. `UsbIsoIntrf` must not contain device descriptors, device Chapter 9 policy,
+    host enumeration policy or class-specific packet semantics.
+12. Class-owned Interrupt endpoints do not need to pass through `UsbIntrf` when
+    they are only notifications/events.
+13. `UsbCore` owns current device EP0 and Chapter 9 processing, not data endpoint
+    completion routing.
+14. Do not duplicate endpoint transfer machinery inside a specialization or a
+    future role-specific class.
+15. HID report and descriptor semantics belong in `UsbdHid`, not
+    `UsbIntIntrf`.
+16. BOT and SCSI command semantics belong in `UsbdMsc`, not `UsbIntrf`.

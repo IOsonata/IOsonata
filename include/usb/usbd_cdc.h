@@ -78,20 +78,41 @@ SOFTWARE.
 #define USBD_CDC_NOTIFY_WORDS \
 	((USBD_CDC_NOTIFY_LEN + sizeof(uint32_t) - 1U) / sizeof(uint32_t))
 
+#pragma pack(push, 1)
+
+typedef struct __Usbd_Cdc_Descriptor {
+	UsbInrtfAssDesc_t Association;
+	UsbIntrfDesc_t Control;
+	UsbCdcHeaderDesc_t Header;
+	UsbCdcCallMngmtDesc_t CallManagement;
+	UsbCdcACMDesc_t Acm;
+	UsbCdcUnionDesc_t Union;
+	UsbEndPointDesc_t Notification;
+	UsbIntrfDesc_t Data;
+	UsbEndPointDesc_t Out;
+	UsbEndPointDesc_t In;
+} UsbdCdcDesc_t;
+
+#pragma pack(pop)
+
 #pragma pack(push, 4)
 
 typedef struct __Usbd_Cdc_Config {
+	int DevNo;						//!< USB controller number
 	bool bBlocking;
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;
 	int TxFifoMemSize;
 	uint8_t *pTxFifoMem;
-	int DevNo;						//!< USB controller number
 	DevIntrfEvtHandler_t EvtCB;
 } UsbdCdcCfg_t;
 
+#pragma pack(pop)
+
+// Natural alignment: IntrfData embeds DevIntrf_t whose pointer and atomic
+// members must stay naturally aligned on 64-bit host test builds.
 typedef struct __Usbd_Cdc_Dev {
-	UsbDevIntrf_t *pData;			//!< Endpoint data path, supplied at init
+	UsbDevIntrf_t IntrfData;		//!< Endpoint data path, owned by value
 	UsbCdcLineCoding_t LineCoding;
 	UsbCdcLineCoding_t PendingLineCoding;
 	uint16_t ControlLineState;
@@ -101,38 +122,18 @@ typedef struct __Usbd_Cdc_Dev {
 	uint8_t NotifyEpNo;			//!< Internal allocation
 	uint8_t DataEpNo;				//!< Internal allocation
 	int DevNo;
+	UsbdCdcDesc_t FsDesc;
+	UsbdCdcDesc_t HsDesc;
 	bool SerialStatePending;
 	uint32_t RxTransfer[USBD_CDC_TRANS_WORDS];
 	uint32_t TxTransfer[USBD_CDC_TRANS_WORDS];
 	uint32_t NotifTransfer[USBD_CDC_NOTIFY_WORDS];
 } UsbdCdcDev_t;
 
-#pragma pack(pop)
-
 #ifdef __cplusplus
-
-class UsbdCdc : public UsbIntrf {
-public:
-	UsbdCdc() = default;
-
-	bool Init(const UsbdCdcCfg_t &Cfg);
-
-	DevIntrf_t *Data(void) { return static_cast<DevIntrf_t *>(*this); }
-
-	bool IsPortOpen(void);
-	const UsbCdcLineCoding_t *LineCoding(void);
-	uint16_t ControlLineState(void);
-	void SetSerialState(uint16_t SerialState);
-
-private:
-	UsbdCdcDev_t vUsbdCdc = {};
-};
 
 extern "C" {
 #endif
-
-bool UsbdCdcInit(UsbdCdcDev_t * const pCdc, UsbDevIntrf_t * const pData,
-				 const UsbdCdcCfg_t *pCfg);
 
 void UsbdCdcProcess(UsbdCdcDev_t * const pCdc);
 
@@ -144,15 +145,90 @@ uint16_t UsbdCdcControlLineState(const UsbdCdcDev_t * const pCdc);
 
 void UsbdCdcSetSerialState(UsbdCdcDev_t * const pCdc, uint16_t SerialState);
 
-const uint8_t *UsbdCdcDescHandler(uint8_t DescType,
-								  uint8_t DescIndex,
-								  uint16_t LangId,
-								  UsbSpeed_t Speed,
-								  uint16_t *pLength,
-								  void *pContext);
+bool UsbdCdcMakeDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
+						 UsbSpeed_t Speed, bool HasFunctionString);
+
+static inline int UsbdCdcRx(UsbdCdcDev_t * const pCdc, uint8_t *pBuff, int BuffLen) {
+	return DeviceIntrfRx(&pCdc->IntrfData.DevIntrf, 0, pBuff, BuffLen);
+}
+
+static inline int UsbdCdcTx(UsbdCdcDev_t * const pCdc, const uint8_t *pData, int DataLen) {
+	return DeviceIntrfTx(&pCdc->IntrfData.DevIntrf, 0, pData, DataLen);
+}
+
+static inline void UsbdCdcEnable(UsbdCdcDev_t * const pCdc) {
+	DeviceIntrfEnable(&pCdc->IntrfData.DevIntrf);
+}
+
+static inline void UsbdCdcDisable(UsbdCdcDev_t * const pCdc) {
+	DeviceIntrfDisable(&pCdc->IntrfData.DevIntrf);
+}
+
+static inline UsbdCdcDev_t *UsbdCdcGetDevHandle(DevIntrf_t * const pDevIntrf) {
+	return (UsbdCdcDev_t *)((UsbDevIntrf_t *)pDevIntrf->pDevData)->pClassContext;
+}
 
 #ifdef __cplusplus
 }
+
+class UsbdCdc : public UsbDeviceClass, public DeviceIntrf {
+public:
+	UsbdCdc() = default;
+	UsbdCdc(const UsbdCdc &) = delete;
+	UsbdCdc &operator = (const UsbdCdc &) = delete;
+
+	operator DevIntrf_t * () override { return &vUsbdCdc.IntrfData.DevIntrf; }
+	operator UsbdCdcDev_t * () { return &vUsbdCdc; }
+	DevIntrf_t *Data(void) { return &vUsbdCdc.IntrfData.DevIntrf; }
+
+	bool Init(const UsbdCdcCfg_t &Cfg);
+	void Reset(void) override;
+	void Process(void) override;
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+				 uint8_t **ppData, uint16_t *pLength) override;
+	bool SelectConfig(uint8_t ConfigValue) override;
+
+	uint32_t Rate(uint32_t DataRate) override {
+		return DeviceIntrfSetRate(&vUsbdCdc.IntrfData.DevIntrf, DataRate);
+	}
+
+	uint32_t Rate(void) override {
+		return DeviceIntrfGetRate(&vUsbdCdc.IntrfData.DevIntrf);
+	}
+
+	bool RequestToSend(int NbBytes) override {
+		return UsbIntrfRequestToSend(&vUsbdCdc.IntrfData, NbBytes);
+	}
+
+	__attribute__((always_inline))
+	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTx(&vUsbdCdc.IntrfData.DevIntrf, DevAddr, pData, DataLen);
+	}
+
+	__attribute__((always_inline))
+	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRx(&vUsbdCdc.IntrfData.DevIntrf, DevAddr, pBuff, BuffLen);
+	}
+
+	__attribute__((always_inline))
+	int TxData(const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTxData(&vUsbdCdc.IntrfData.DevIntrf, pData, DataLen);
+	}
+
+	__attribute__((always_inline))
+	int RxData(uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRxData(&vUsbdCdc.IntrfData.DevIntrf, pBuff, BuffLen);
+	}
+
+	bool IsPortOpen(void);
+	const UsbCdcLineCoding_t *LineCoding(void);
+	uint16_t ControlLineState(void);
+	void SetSerialState(uint16_t SerialState);
+
+private:
+	UsbdCdcDev_t vUsbdCdc = {};
+};
+
 #endif
 
 /** @} End of group USBD */

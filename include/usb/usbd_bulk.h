@@ -85,27 +85,27 @@ typedef struct __Usbd_Bulk_Descriptor {
 #pragma pack(push, 4)
 
 typedef struct __Usbd_Bulk_Config {
+	int DevNo;
 	bool bBlocking;
 	int RxFifoMemSize;
 	uint8_t *pRxFifoMem;
 	int TxFifoMemSize;
 	uint8_t *pTxFifoMem;
-	int DevNo;
 	uint8_t SubClass;
 	uint8_t Protocol;
 	uint8_t InterfaceString;
 	uint16_t FsMps;				//!< Zero selects USBD_BULK_FS_MPS
 	uint16_t HsMps;				//!< Zero selects USBD_BULK_HS_MPS
 	UsbdBulkMode_t Mode;
-	UsbRequestHandler_t RequestHandler;	//!< Optional vendor request handler
-	void *pRequestContext;
 	DevIntrfEvtHandler_t EvtCB;
 } UsbdBulkCfg_t;
 
+#pragma pack(pop)
+
+// Natural alignment: IntrfData embeds DevIntrf_t whose pointer and atomic
+// members must stay naturally aligned on 64-bit host test builds.
 typedef struct __Usbd_Bulk_Dev {
-	UsbDevIntrf_t *pData;
-	UsbRequestHandler_t RequestHandler;
-	void *pRequestContext;
+	UsbDevIntrf_t IntrfData;		//!< Endpoint data path, owned by value
 	int ItfNo;					//!< Internal allocation
 	int DevNo;
 	uint8_t EpNo;				//!< Internal allocation
@@ -114,38 +114,83 @@ typedef struct __Usbd_Bulk_Dev {
 	uint8_t InterfaceString;
 	uint16_t FsMps;
 	uint16_t HsMps;
+	UsbdBulkDesc_t FsDesc;
+	UsbdBulkDesc_t HsDesc;
 	uint32_t RxTransfer[(USBD_BULK_MAX_MPS + sizeof(uint32_t) - 1U) /
 						 sizeof(uint32_t)];
 	uint32_t TxTransfer[(USBD_BULK_MAX_MPS + sizeof(uint32_t) - 1U) /
 						 sizeof(uint32_t)];
 } UsbdBulkDev_t;
 
-#pragma pack(pop)
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-bool UsbdBulkInit(UsbdBulkDev_t * const pBulk,
-				  UsbDevIntrf_t * const pData,
-				  const UsbdBulkCfg_t *pCfg);
+static inline int UsbdBulkRx(UsbdBulkDev_t * const pBulk, uint8_t *pBuff,
+							 int BuffLen) {
+	return DeviceIntrfRx(&pBulk->IntrfData.DevIntrf, 0, pBuff, BuffLen);
+}
 
-/** Build the interface plus OUT/IN endpoint descriptor fragment. */
-bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
-					  UsbSpeed_t Speed);
+static inline int UsbdBulkTx(UsbdBulkDev_t * const pBulk, const uint8_t *pData,
+							 int DataLen) {
+	return DeviceIntrfTx(&pBulk->IntrfData.DevIntrf, 0, pData, DataLen);
+}
+
+static inline UsbdBulkDev_t *UsbdBulkGetDevHandle(DevIntrf_t * const pDevIntrf) {
+	return (UsbdBulkDev_t *)
+		((UsbDevIntrf_t *)pDevIntrf->pDevData)->pClassContext;
+}
 
 #ifdef __cplusplus
 }
 
-class UsbdBulk : public UsbIntrf {
+class UsbdBulk : public UsbDeviceClass, public DeviceIntrf {
 public:
 	UsbdBulk() = default;
+	UsbdBulk(const UsbdBulk &) = delete;
+	UsbdBulk &operator = (const UsbdBulk &) = delete;
+
+	operator DevIntrf_t * () override { return &vUsbdBulk.IntrfData.DevIntrf; }
+	operator UsbdBulkDev_t * () { return &vUsbdBulk; }
+	DevIntrf_t *Data(void) { return &vUsbdBulk.IntrfData.DevIntrf; }
 
 	bool Init(const UsbdBulkCfg_t &Cfg);
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+				 uint8_t **ppData, uint16_t *pLength) override;
+	bool SelectConfig(uint8_t ConfigValue) override;
+	void Reset(void) override;
 
-	DevIntrf_t *Data(void) { return static_cast<DevIntrf_t *>(*this); }
+	uint32_t Rate(uint32_t DataRate) override {
+		return DeviceIntrfSetRate(&vUsbdBulk.IntrfData.DevIntrf, DataRate);
+	}
 
-	bool MakeDesc(UsbdBulkDesc_t *pDesc, UsbSpeed_t Speed) const;
+	uint32_t Rate(void) override {
+		return DeviceIntrfGetRate(&vUsbdBulk.IntrfData.DevIntrf);
+	}
+
+	bool RequestToSend(int NbBytes) override {
+		return UsbIntrfRequestToSend(&vUsbdBulk.IntrfData, NbBytes);
+	}
+
+	__attribute__((always_inline))
+	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTx(&vUsbdBulk.IntrfData.DevIntrf, DevAddr, pData, DataLen);
+	}
+
+	__attribute__((always_inline))
+	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRx(&vUsbdBulk.IntrfData.DevIntrf, DevAddr, pBuff, BuffLen);
+	}
+
+	__attribute__((always_inline))
+	int TxData(const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTxData(&vUsbdBulk.IntrfData.DevIntrf, pData, DataLen);
+	}
+
+	__attribute__((always_inline))
+	int RxData(uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRxData(&vUsbdBulk.IntrfData.DevIntrf, pBuff, BuffLen);
+	}
 
 private:
 	UsbdBulkDev_t vUsbdBulk = {};

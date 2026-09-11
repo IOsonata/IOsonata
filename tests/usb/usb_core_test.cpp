@@ -4,7 +4,7 @@
 @brief	Host regression tests for the native IOsonata USB device core.
 
 Links the production usb.cpp against a fake controller so Chapter 9,
-EP0 sequencing and USB function dispatch can be exercised without hardware.
+EP0 sequencing and USB device class dispatch can be exercised without hardware.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 2, 2026
@@ -86,8 +86,6 @@ typedef struct {
 	int ConnectCnt;
 	int DisconnectCnt;
 	int RemoteWakeCnt;
-	int SofEnableCnt;
-	int SofDisableCnt;
 	int SetAddressCnt;
 	int CloseAllCnt;
 	int StallCnt;
@@ -105,36 +103,23 @@ typedef struct {
 	uint8_t LastConfig;
 	int SetIfCnt;
 	uint8_t LastAlt;
-	int XferCnt;
-	uint8_t LastXferEp;
-	uint16_t LastXferLen;
-	UsbCtrlrXferResult_t LastXferResult;
 	int ResetCnt;
-	int SofCnt;
-	uint16_t LastFrame;
+	int ProcessCnt;
 	uint8_t CtrlBuffer[16];
 } FuncState_t;
 
 typedef struct {
 	uint8_t Config[64];
 	uint16_t ConfigLen;
-	uint8_t String64[64];
 } DescState_t;
 
 static CtrlrState_t s_Ctrlr;
-static FuncState_t s_Func;
+static FuncState_t s_Class;
 static DescState_t s_Desc;
-
-static const uint8_t s_DeviceDesc[] = {
-	18, USB_DESCTYPE_DEVICE, 0x00, 0x02, 0, 0, 0, 64,
-	0x34, 0x12, 0x78, 0x56, 0x00, 0x01, 1, 2, 3, 1
-};
+static bool s_VbusDetected = true;
 
 // One interface: alternate 0 owns EP1 OUT/IN, alternate 1 owns EP2 IN.
 static const uint8_t s_ConfigDesc[] = {
-	9, USB_DESCTYPE_CONFIGURATION, 48, 0, 1, 1, 0,
-	(uint8_t)(USB_CONFATT_RESERVED | USB_CONFATT_SELF_POWERED |
-		USB_CONFATT_REMOTE_WAKEUP), 50,
 	9, USB_DESCTYPE_INTERFACE, 0, 0, 2, USB_INTRFCLASS_VENDOR, 0, 0, 0,
 	7, USB_DESCTYPE_ENDPOINT, EP1_OUT, 2, 64, 0, 0,
 	7, USB_DESCTYPE_ENDPOINT, EP1_IN, 2, 64, 0, 0,
@@ -187,36 +172,14 @@ static void Event(UsbCtrlrEvtType_t Type)
 	s_Ctrlr.Handler(TEST_DEVNO, &evt, s_Ctrlr.pContext);
 }
 
-static const uint8_t *Descriptor(uint8_t Type, uint8_t Index, uint16_t,
-								 UsbSpeed_t, uint16_t *pLength, void *)
-{
-	if (Type == USB_DESCTYPE_DEVICE && Index == 0)
-	{
-		*pLength = sizeof(s_DeviceDesc);
-		return s_DeviceDesc;
-	}
-	if (Type == USB_DESCTYPE_CONFIGURATION && Index == 0)
-	{
-		*pLength = s_Desc.ConfigLen;
-		return s_Desc.Config;
-	}
-	if (Type == USB_DESCTYPE_STRING && Index == 1)
-	{
-		*pLength = sizeof(s_Desc.String64);
-		return s_Desc.String64;
-	}
-	*pLength = 0;
-	return nullptr;
-}
-
 static bool Request(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-					uint8_t **ppData, uint16_t *pLength, void *)
+					uint8_t **ppData, uint16_t *pLength)
 {
-	if (s_Func.StageCnt < STAGE_LOG_CNT)
+	if (s_Class.StageCnt < STAGE_LOG_CNT)
 	{
-		s_Func.Stage[s_Func.StageCnt] = Stage;
-		s_Func.StageLen[s_Func.StageCnt] = pLength != nullptr ? *pLength : 0;
-		s_Func.StageCnt++;
+		s_Class.Stage[s_Class.StageCnt] = Stage;
+		s_Class.StageLen[s_Class.StageCnt] = pLength != nullptr ? *pLength : 0;
+		s_Class.StageCnt++;
 	}
 	if (Stage != USB_CTRL_SETUP)
 	{
@@ -229,58 +192,79 @@ static bool Request(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 		return true;
 	}
 	if (pSetup->bRequest == CLASS_OUT_DATA &&
-		pSetup->wLength <= sizeof(s_Func.CtrlBuffer))
+		pSetup->wLength <= sizeof(s_Class.CtrlBuffer))
 	{
-		*ppData = s_Func.CtrlBuffer;
-		*pLength = sizeof(s_Func.CtrlBuffer);
+		*ppData = s_Class.CtrlBuffer;
+		*pLength = sizeof(s_Class.CtrlBuffer);
+		return true;
+	}
+	if ((pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) ==
+			USB_REQTYPE_STANDARD &&
+		pSetup->bRequest == USB_REQ_GET_DESCRIPTOR &&
+		(uint8_t)(pSetup->wValue >> 8) == USB_DESCTYPE_HID_REPORT)
+	{
+		s_Class.CtrlBuffer[0] = 0x05U;
+		s_Class.CtrlBuffer[1] = 0x01U;
+		s_Class.CtrlBuffer[2] = 0x09U;
+		*ppData = s_Class.CtrlBuffer;
+		*pLength = 3U;
 		return true;
 	}
 	return false;
 }
 
-static bool Configure(uint8_t Value, void *)
+static bool Configure(uint8_t Value)
 {
-	s_Func.ConfigCnt++;
-	s_Func.LastConfig = Value;
+	s_Class.ConfigCnt++;
+	s_Class.LastConfig = Value;
 	return true;
 }
 
-static bool SetInterface(uint8_t, uint8_t Alternate, void *)
+static bool SetInterface(uint8_t, uint8_t Alternate)
 {
-	s_Func.SetIfCnt++;
-	s_Func.LastAlt = Alternate;
+	s_Class.SetIfCnt++;
+	s_Class.LastAlt = Alternate;
 	return true;
 }
 
-static void FunctionXfer(uint8_t EpAddr, uint16_t Length,
-						 UsbCtrlrXferResult_t Result, void *)
+static void ClassReset(void)
 {
-	s_Func.XferCnt++;
-	s_Func.LastXferEp = EpAddr;
-	s_Func.LastXferLen = Length;
-	s_Func.LastXferResult = Result;
+	s_Class.ResetCnt++;
 }
 
-static void FunctionReset(void *)
+static void ClassProcess(void)
 {
-	s_Func.ResetCnt++;
+	s_Class.ProcessCnt++;
 }
 
-static void FunctionSof(uint16_t FrameNo, void *)
-{
-	s_Func.SofCnt++;
-	s_Func.LastFrame = FrameNo;
-}
+class FixtureUsbDeviceClass final : public UsbDeviceClass {
+public:
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+				 uint8_t **ppData, uint16_t *pLength) override {
+		return Request(pSetup, Stage, ppData, pLength);
+	}
+	bool SelectConfig(uint8_t ConfigValue) override {
+		return Configure(ConfigValue);
+	}
+	bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) override {
+		return vWithSetInterface && SetInterface(InterfaceNo, Option);
+	}
+	void Reset(void) override { ClassReset(); }
+	void Process(void) override { ClassProcess(); }
+	bool vWithSetInterface = true;
+};
 
-static bool Fixture(bool WithSetInterface = true)
+static FixtureUsbDeviceClass s_FixtureClass;
+
+static bool Fixture(bool WithSetInterface = true,
+					UsbDeviceClass *pClass = nullptr)
 {
 	memset(&s_Ctrlr, 0, sizeof(s_Ctrlr));
-	memset(&s_Func, 0, sizeof(s_Func));
+	memset(&s_Class, 0, sizeof(s_Class));
 	memset(&s_Desc, 0, sizeof(s_Desc));
+	s_VbusDetected = true;
 	memcpy(s_Desc.Config, s_ConfigDesc, sizeof(s_ConfigDesc));
-	s_Desc.ConfigLen = sizeof(s_Desc.Config);
-	s_Desc.String64[0] = sizeof(s_Desc.String64);
-	s_Desc.String64[1] = USB_DESCTYPE_STRING;
+	s_Desc.ConfigLen = sizeof(s_ConfigDesc);
 
 	// Endpoint zero packet size and maximum speed are no longer given here.
 	// They come from usb_ctrlr.h for this controller number.
@@ -288,28 +272,27 @@ static bool Fixture(bool WithSetInterface = true)
 	core.DevNo = TEST_DEVNO;
 	core.Vid = 0x1209;
 	core.Pid = 0x0001;
-	core.DescHandler = Descriptor;
+	core.pManufacturer = "1234567890123456789012345678901";
+	core.bSelfPowered = true;
+	core.bRemoteWakeup = true;
+	core.MaxPower = 100U;
 	if (!UsbInit(&core))
 	{
 		return false;
 	}
 
-	UsbFuncCfg_t func = {};
-	func.FirstInterface = 0;
-	func.InterfaceCount = 1;
-	func.EpInMask = (1U << 1) | (1U << 2);
-	func.EpOutMask = (1U << 1);
-	func.RequestHandler = Request;
-	func.ConfigHandler = Configure;
-	func.SetInterfaceHandler = WithSetInterface ? SetInterface : nullptr;
-	func.XferHandler = FunctionXfer;
-	func.ResetHandler = FunctionReset;
-	func.SofHandler = FunctionSof;
-	if (!UsbRegisterFunc(TEST_DEVNO, &func))
+	s_FixtureClass.vWithSetInterface = WithSetInterface;
+	UsbDeviceClass *pObject = pClass != nullptr ? pClass : &s_FixtureClass;
+	if (!UsbClassRegister(TEST_DEVNO, pObject, 0, 1,
+		(1U << 1) | (1U << 2), (1U << 1)))
 	{
 		return false;
 	}
-	UsbEnable(TEST_DEVNO);
+	if (!UsbDescriptorRegister(TEST_DEVNO, pObject,
+		s_Desc.Config, s_Desc.ConfigLen) || !UsbEnable(TEST_DEVNO))
+	{
+		return false;
+	}
 	return s_Ctrlr.Handler != nullptr && s_Ctrlr.IntEnableCnt == 1 &&
 		s_Ctrlr.ConnectCnt == 1;
 }
@@ -340,6 +323,25 @@ static bool SetConfig(uint8_t Value)
 	return true;
 }
 
+static bool TestEnableRequiresDescriptor(void)
+{
+	memset(&s_Ctrlr, 0, sizeof(s_Ctrlr));
+
+	UsbCfg_t core = {};
+	core.DevNo = TEST_DEVNO;
+	core.Mode = USB_MODE_DEVICE;
+	core.Vid = 0x1209U;
+	core.Pid = 0x0001U;
+	CHECK(UsbInit(&core));
+
+	// The controller must remain disconnected until a class has registered a
+	// valid configuration descriptor for EP0 to serve.
+	CHECK(!UsbEnable(TEST_DEVNO));
+	CHECK(s_Ctrlr.IntEnableCnt == 0);
+	CHECK(s_Ctrlr.ConnectCnt == 0);
+	return true;
+}
+
 static bool TestDescriptors(void)
 {
 	CHECK(Fixture());
@@ -356,7 +358,7 @@ static bool TestDescriptors(void)
 	Setup(STD_DEV_IN, USB_REQ_GET_DESCRIPTOR,
 		  (uint16_t)(USB_DESCTYPE_CONFIGURATION << 8), 0, 255);
 	CHECK(s_Ctrlr.XferCnt == base + 1);
-	CHECK(LastXfer()->Length == sizeof(s_ConfigDesc));
+	CHECK(LastXfer()->Length == sizeof(UsbCfgDesc_t) + sizeof(s_ConfigDesc));
 
 	int stalls = s_Ctrlr.StallCnt;
 	Setup(STD_DEV_IN, USB_REQ_GET_DESCRIPTOR,
@@ -369,24 +371,17 @@ static bool TestDescriptorValidation(void)
 {
 	CHECK(Fixture());
 	ClearCtrlrLog();
-	s_Desc.ConfigLen = sizeof(s_ConfigDesc) - 1;
+	s_Desc.Config[32] = 6U;
 	Setup(STD_DEV_IN, USB_REQ_GET_DESCRIPTOR,
 		  (uint16_t)(USB_DESCTYPE_CONFIGURATION << 8), 0, 255);
 	CHECK(s_Ctrlr.StallCnt == 1 && s_Ctrlr.XferCnt == 0);
 
 	memcpy(s_Desc.Config, s_ConfigDesc, sizeof(s_ConfigDesc));
-	s_Desc.ConfigLen = sizeof(s_Desc.Config);
 	s_Desc.Config[9] = 1;
 	Setup(STD_DEV_IN, USB_REQ_GET_DESCRIPTOR,
 		  (uint16_t)(USB_DESCTYPE_CONFIGURATION << 8), 0, 255);
 	CHECK(s_Ctrlr.StallCnt == 2 && s_Ctrlr.XferCnt == 0);
 
-	memcpy(s_Desc.Config, s_ConfigDesc, sizeof(s_ConfigDesc));
-	s_Desc.Config[2] = 10;
-	s_Desc.Config[3] = 0;
-	Setup(STD_DEV_IN, USB_REQ_GET_DESCRIPTOR,
-		  (uint16_t)(USB_DESCTYPE_CONFIGURATION << 8), 0, 255);
-	CHECK(s_Ctrlr.StallCnt == 3 && s_Ctrlr.XferCnt == 0);
 	return true;
 }
 
@@ -440,16 +435,14 @@ static bool TestConfiguration(void)
 	CHECK(s_Ctrlr.StallCnt == 1 && UsbGetConfiguration(TEST_DEVNO) == 0);
 	CHECK(SetAddress(5));
 	CHECK(SetConfig(1));
-	CHECK(UsbConfigured(TEST_DEVNO) && s_Func.LastConfig == 1);
-	CHECK(s_Ctrlr.SofEnableCnt == 1);
-
+	CHECK(UsbConfigured(TEST_DEVNO) && s_Class.LastConfig == 1);
 	Setup(STD_DEV_IN, USB_REQ_GET_CONFIGURATION, 0, 0, 1);
 	CHECK(LastXfer()->Length == 1 && LastXfer()->Data[0] == 1);
 	Complete(EP0_IN, 1);
 	Complete(EP0_OUT, 0);
 
 	CHECK(SetConfig(0));
-	CHECK(!UsbConfigured(TEST_DEVNO) && s_Func.LastConfig == 0);
+	CHECK(!UsbConfigured(TEST_DEVNO) && s_Class.LastConfig == 0);
 	int stalls = s_Ctrlr.StallCnt;
 	Setup(STD_DEV_OUT, USB_REQ_SET_CONFIGURATION, 2, 0, 0);
 	CHECK(s_Ctrlr.StallCnt == stalls + 1 && UsbGetConfiguration(TEST_DEVNO) == 0);
@@ -474,14 +467,24 @@ static bool TestInterfaceAndHalt(void)
 	Setup(STD_EP_OUT, USB_REQ_SET_FEATURE,
 		  USB_FEATSEL_ENDPOINT_HALT, EP1_IN, 0);
 	CHECK(s_Ctrlr.LastStallEp == EP1_IN);
+	CHECK(UsbEpHalted(TEST_DEVNO, EP1_IN));
+	CHECK(!UsbEpHalted(TEST_DEVNO, EP2_IN));
 	Complete(EP0_IN, 0);
 	Setup(STD_EP_IN, USB_REQ_GET_STATUS, 0, EP1_IN, 2);
 	CHECK((LastXfer()->Data[0] & USB_ENDPSTATUS_HALT) != 0);
 	Complete(EP0_IN, 2);
 	Complete(EP0_OUT, 0);
 
+	CHECK(UsbEpSetHalt(TEST_DEVNO, EP1_OUT, true));
+	CHECK(UsbEpHalted(TEST_DEVNO, EP1_OUT));
+	CHECK(s_Ctrlr.LastStallEp == EP1_OUT);
+	CHECK(UsbEpSetHalt(TEST_DEVNO, EP1_OUT, false));
+	CHECK(!UsbEpHalted(TEST_DEVNO, EP1_OUT));
+	CHECK(s_Ctrlr.LastClearStallEp == EP1_OUT);
+	CHECK(!UsbEpSetHalt(TEST_DEVNO, EP2_IN, true));
+
 	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 1, 0, 0);
-	CHECK(s_Func.SetIfCnt == 1 && s_Func.LastAlt == 1);
+	CHECK(s_Class.SetIfCnt == 1 && s_Class.LastAlt == 1);
 	CHECK(UsbGetAlternate(TEST_DEVNO, 0) == 1);
 	Complete(EP0_IN, 0);
 
@@ -495,7 +498,7 @@ static bool TestInterfaceAndHalt(void)
 	CHECK(s_Ctrlr.StallCnt == stalls + 1);
 
 	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 0, 0, 0);
-	CHECK(s_Func.SetIfCnt == 2 && s_Func.LastAlt == 0);
+	CHECK(s_Class.SetIfCnt == 2 && s_Class.LastAlt == 0);
 	CHECK(UsbGetAlternate(TEST_DEVNO, 0) == 0);
 	Complete(EP0_IN, 0);
 
@@ -509,7 +512,7 @@ static bool TestInterfaceAndHalt(void)
 	CHECK(s_Ctrlr.LastStallEp == EP1_IN);
 	Complete(EP0_IN, 0);
 	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 0, 0, 0);
-	CHECK(s_Func.SetIfCnt == 3 && UsbGetAlternate(TEST_DEVNO, 0) == 0);
+	CHECK(s_Class.SetIfCnt == 3 && UsbGetAlternate(TEST_DEVNO, 0) == 0);
 	Complete(EP0_IN, 0);
 
 	Setup(STD_EP_IN, USB_REQ_GET_STATUS, 0, EP1_IN, 2);
@@ -528,80 +531,252 @@ static bool TestInterfaceRequiresHandler(void)
 	const int stalls = s_Ctrlr.StallCnt;
 	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 0, 0, 0);
 	CHECK(s_Ctrlr.StallCnt == stalls + 1);
-	CHECK(s_Func.SetIfCnt == 0 && UsbGetAlternate(TEST_DEVNO, 0) == 0);
+	CHECK(s_Class.SetIfCnt == 0 && UsbGetAlternate(TEST_DEVNO, 0) == 0);
 	return true;
 }
 
-static bool TestFunctionControl(void)
+static bool TestClassControl(void)
 {
 	CHECK(Fixture());
 	ClearCtrlrLog();
 	CHECK(SetAddress(2));
 
-	s_Func.StageCnt = 0;
+	s_Class.StageCnt = 0;
 	int stalls = s_Ctrlr.StallCnt;
 	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
-	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Func.StageCnt == 0);
+	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Class.StageCnt == 0);
 
 	stalls = s_Ctrlr.StallCnt;
 	Setup(CLASS_EP_OUT, CLASS_NO_DATA, 0, EP1_OUT, 0);
-	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Func.StageCnt == 0);
+	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Class.StageCnt == 0);
 
 	CHECK(SetConfig(1));
-	s_Func.StageCnt = 0;
+	s_Class.StageCnt = 0;
+
+	Setup(STD_IF_IN, USB_REQ_GET_DESCRIPTOR,
+		(uint16_t)(USB_DESCTYPE_HID_REPORT << 8), 0, 3);
+	CHECK(s_Class.StageCnt == 1 && s_Class.Stage[0] == USB_CTRL_SETUP);
+	CHECK(LastXfer()->EpAddr == EP0_IN && LastXfer()->Length == 3);
+	CHECK(LastXfer()->Data[0] == 0x05U && LastXfer()->Data[1] == 0x01U &&
+		LastXfer()->Data[2] == 0x09U);
+	Complete(EP0_IN, 3);
+	Complete(EP0_OUT, 0);
+	CHECK(s_Class.StageCnt == 3 && s_Class.Stage[1] == USB_CTRL_DATA &&
+		s_Class.Stage[2] == USB_CTRL_COMPLETE);
+	s_Class.StageCnt = 0;
 
 	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
-	CHECK(s_Func.StageCnt == 1 && s_Func.Stage[0] == USB_CTRL_SETUP);
+	CHECK(s_Class.StageCnt == 1 && s_Class.Stage[0] == USB_CTRL_SETUP);
 	Complete(EP0_IN, 0);
-	CHECK(s_Func.StageCnt == 2 &&
-		s_Func.Stage[1] == USB_CTRL_COMPLETE);
+	CHECK(s_Class.StageCnt == 2 &&
+		s_Class.Stage[1] == USB_CTRL_COMPLETE);
 
-	s_Func.StageCnt = 0;
+	s_Class.StageCnt = 0;
 	Setup(CLASS_EP_OUT, CLASS_NO_DATA, 0, EP1_OUT, 0);
-	CHECK(s_Func.StageCnt == 1 && s_Func.Stage[0] == USB_CTRL_SETUP);
+	CHECK(s_Class.StageCnt == 1 && s_Class.Stage[0] == USB_CTRL_SETUP);
 	Complete(EP0_IN, 0);
-	CHECK(s_Func.StageCnt == 2 &&
-		s_Func.Stage[1] == USB_CTRL_COMPLETE);
+	CHECK(s_Class.StageCnt == 2 &&
+		s_Class.Stage[1] == USB_CTRL_COMPLETE);
 
-	s_Func.StageCnt = 0;
+	s_Class.StageCnt = 0;
 	stalls = s_Ctrlr.StallCnt;
 	Setup(CLASS_EP_OUT, CLASS_NO_DATA, 0, EP2_IN, 0);
-	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Func.StageCnt == 0);
+	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Class.StageCnt == 0);
 
-	// Keep the function registered for interface 0, but remove interface 0
+	// Keep the class registered for interface 0, but remove interface 0
 	// from the active descriptor. Dispatch must follow the descriptor.
-	s_Desc.Config[11] = 1;
-	s_Desc.Config[34] = 1;
-	s_Func.StageCnt = 0;
+	s_Desc.Config[2] = 1;
+	s_Desc.Config[25] = 1;
+	s_Class.StageCnt = 0;
 	stalls = s_Ctrlr.StallCnt;
 	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
-	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Func.StageCnt == 0);
-	s_Desc.Config[11] = 0;
-	s_Desc.Config[34] = 0;
+	CHECK(s_Ctrlr.StallCnt == stalls + 1 && s_Class.StageCnt == 0);
+	s_Desc.Config[2] = 0;
+	s_Desc.Config[25] = 0;
 
-	s_Func.StageCnt = 0;
+	s_Class.StageCnt = 0;
 	Setup(CLASS_IF_OUT, CLASS_OUT_DATA, 0, 0, 4);
 	CHECK(LastXfer()->EpAddr == EP0_OUT && LastXfer()->Length == 4);
 	Complete(EP0_OUT, 4);
-	CHECK(s_Func.StageCnt == 2 && s_Func.Stage[1] == USB_CTRL_DATA &&
-		s_Func.StageLen[1] == 4);
+	CHECK(s_Class.StageCnt == 2 && s_Class.Stage[1] == USB_CTRL_DATA &&
+		s_Class.StageLen[1] == 4);
 	Complete(EP0_IN, 0);
-	CHECK(s_Func.StageCnt == 3 &&
-		s_Func.Stage[2] == USB_CTRL_COMPLETE && s_Func.StageLen[2] == 4);
+	CHECK(s_Class.StageCnt == 3 &&
+		s_Class.Stage[2] == USB_CTRL_COMPLETE && s_Class.StageLen[2] == 4);
 
-	s_Func.StageCnt = 0;
+	s_Class.StageCnt = 0;
 	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
 	Setup(STD_DEV_IN, USB_REQ_GET_DESCRIPTOR,
 		  (uint16_t)(USB_DESCTYPE_DEVICE << 8), 0, 8);
-	CHECK(s_Func.StageCnt == 2 && s_Func.Stage[1] == USB_CTRL_ABORT);
+	CHECK(s_Class.StageCnt == 2 && s_Class.Stage[1] == USB_CTRL_ABORT);
 	Complete(EP0_IN, 8);
 	Complete(EP0_OUT, 0);
 
-	s_Func.StageCnt = 0;
+	s_Class.StageCnt = 0;
 	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
 	UsbDisable(TEST_DEVNO);
-	CHECK(s_Func.StageCnt == 2 && s_Func.Stage[1] == USB_CTRL_ABORT);
+	CHECK(s_Class.StageCnt == 2 && s_Class.Stage[1] == USB_CTRL_ABORT);
 	CHECK(s_Ctrlr.DisconnectCnt == 1 && s_Ctrlr.IntDisableCnt == 1);
+	return true;
+}
+
+class TestUsbDeviceClass : public UsbDeviceClass {
+public:
+	void Detach() override { DetachCnt++; }
+	void Reset() override { ResetCnt++; }
+	void Process() override { ProcessCnt++; }
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+				 uint8_t **ppData, uint16_t *pLength) override {
+		ControlCnt++;
+		LastStage = Stage;
+		if (Stage == USB_CTRL_SETUP && pSetup->wLength != 0)
+		{
+			*ppData = ControlData;
+			*pLength = sizeof(ControlData);
+		}
+		return true;
+	}
+	bool SelectConfig(uint8_t ConfigValue) override {
+		ConfigCnt++;
+		ConfigurationValue = ConfigValue;
+		return ConfigValue == 0 || !RejectConfig;
+	}
+	bool SelectInterface(uint8_t InterfaceNo, uint8_t OptionValue) override {
+		Interface = InterfaceNo;
+		Option = OptionValue;
+		return true;
+	}
+	int ResetCnt = 0;
+	int DetachCnt = 0;
+	int ProcessCnt = 0;
+	int ControlCnt = 0;
+	int ConfigCnt = 0;
+	bool RejectConfig = false;
+	UsbCtrlStage_t LastStage = USB_CTRL_ABORT;
+	uint8_t ConfigurationValue = 0;
+	uint8_t Interface = 0;
+	uint8_t Option = 0;
+	uint8_t ControlData[4] = {};
+};
+
+class EmptyUsbDeviceClass : public UsbDeviceClass {};
+
+class TestUsbHostClass : public UsbHostClass {
+public:
+	void Reset() override { ResetCnt++; }
+	void Process() override { ProcessCnt++; }
+
+	int ResetCnt = 0;
+	int ProcessCnt = 0;
+};
+
+static bool TestCommonClassBase(void)
+{
+	TestUsbDeviceClass device;
+	EmptyUsbDeviceClass emptyDevice;
+	TestUsbHostClass host;
+	UsbClass *classes[] = { &device, &host };
+
+	for (UsbClass *pClass : classes)
+	{
+		pClass->Reset();
+		pClass->Process();
+	}
+	device.Detach();
+
+	CHECK(device.ResetCnt == 1);
+	CHECK(device.DetachCnt == 1);
+	CHECK(device.ProcessCnt == 1);
+	CHECK(host.ResetCnt == 1);
+	CHECK(host.ProcessCnt == 1);
+
+	UsbDeviceClass *pDevice = &device;
+	UsbSetupData_t setup = {};
+	uint8_t *pData = nullptr;
+	uint16_t length = 0;
+	CHECK(pDevice->Control(&setup, USB_CTRL_SETUP, &pData, &length));
+	CHECK(device.LastStage == USB_CTRL_SETUP);
+	CHECK(pDevice->SelectConfig(2));
+	CHECK(device.ConfigurationValue == 2);
+	CHECK(pDevice->SelectInterface(3, 4));
+	CHECK(device.Interface == 3 && device.Option == 4);
+	pDevice = &emptyDevice;
+	CHECK(!pDevice->Control(&setup, USB_CTRL_SETUP, &pData, &length));
+	CHECK(pDevice->SelectConfig(1));
+	CHECK(!pDevice->SelectInterface(0, 1));
+	return true;
+}
+
+static bool TestClassObjectRegistry(void)
+{
+	static TestUsbDeviceClass device;
+	device.ResetCnt = 0;
+	device.DetachCnt = 0;
+	device.ProcessCnt = 0;
+	device.ControlCnt = 0;
+	device.ConfigCnt = 0;
+	device.ConfigurationValue = 0;
+	device.RejectConfig = false;
+
+	CHECK(Fixture(false, &device));
+	CHECK(SetAddress(5) && SetConfig(1));
+	CHECK(device.ConfigCnt == 1 && device.ConfigurationValue == 1);
+	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 1, 0, 0);
+	CHECK(device.Interface == 0 && device.Option == 1);
+	Complete(EP0_IN, 0);
+	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
+	CHECK(device.ControlCnt == 1 && device.LastStage == USB_CTRL_SETUP);
+	Complete(EP0_IN, 0);
+	CHECK(device.ControlCnt == 2 && device.LastStage == USB_CTRL_COMPLETE);
+	Setup(CLASS_IF_OUT, CLASS_OUT_DATA, 0, 0, 4);
+	CHECK(device.ControlCnt == 3 && device.LastStage == USB_CTRL_SETUP);
+	CHECK(LastXfer()->EpAddr == EP0_OUT && LastXfer()->Length == 4);
+	Complete(EP0_OUT, 4);
+	CHECK(device.ControlCnt == 4 && device.LastStage == USB_CTRL_DATA);
+	Complete(EP0_IN, 0);
+	CHECK(device.ControlCnt == 5 && device.LastStage == USB_CTRL_COMPLETE);
+	Setup(CLASS_IF_OUT, CLASS_NO_DATA, 0, 0, 0);
+	Setup(STD_DEV_IN, USB_REQ_GET_DESCRIPTOR,
+		  (uint16_t)(USB_DESCTYPE_DEVICE << 8), 0, 8);
+	CHECK(device.ControlCnt == 7 && device.LastStage == USB_CTRL_ABORT);
+	Complete(EP0_IN, 8);
+	Complete(EP0_OUT, 0);
+	UsbProcess(TEST_DEVNO);
+	CHECK(device.ProcessCnt == 1);
+	s_VbusDetected = false;
+	UsbProcess(TEST_DEVNO);
+	CHECK(device.DetachCnt == 1);
+	UsbProcess(TEST_DEVNO);
+	CHECK(device.DetachCnt == 1);
+	s_VbusDetected = true;
+	UsbProcess(TEST_DEVNO);
+	CHECK(device.DetachCnt == 1);
+	CHECK(s_Class.ProcessCnt == 0);
+	CHECK(!UsbClassRegister(TEST_DEVNO, &device, 0, 0, 0, 0));
+	CHECK(SetConfig(0));
+	CHECK(device.ConfigCnt == 2 && device.ConfigurationValue == 0);
+
+	Event(USB_CTRLR_EVT_RESET);
+	CHECK(device.ResetCnt == 1);
+	CHECK(s_Class.StageCnt == 0 && s_Class.ConfigCnt == 0 &&
+		s_Class.SetIfCnt == 0 && s_Class.ResetCnt == 0 &&
+		s_Class.ProcessCnt == 0);
+	return true;
+}
+
+static bool TestClassObjectConfigRollback(void)
+{
+	TestUsbDeviceClass device;
+	device.RejectConfig = true;
+
+	CHECK(Fixture(true, &device));
+	CHECK(SetAddress(5));
+	const int stalls = s_Ctrlr.StallCnt;
+	Setup(STD_DEV_OUT, USB_REQ_SET_CONFIGURATION, 1, 0, 0);
+	CHECK(s_Ctrlr.StallCnt == stalls + 1);
+	CHECK(UsbGetConfiguration(TEST_DEVNO) == 0);
+	CHECK(s_Class.ConfigCnt == 0);
+	CHECK(device.ConfigCnt == 2 && device.ConfigurationValue == 0);
 	return true;
 }
 
@@ -621,22 +796,18 @@ static bool TestResetSuspendAndDispatch(void)
 	Event(USB_CTRLR_EVT_RESUME);
 	CHECK(!UsbSuspended(TEST_DEVNO) && !UsbRemoteWakeup(TEST_DEVNO));
 
-	UsbCtrlrEvt_t sof = {};
-	sof.Type = USB_CTRLR_EVT_SOF;
-	sof.FrameNo = 1234;
-	s_Ctrlr.Handler(TEST_DEVNO, &sof, s_Ctrlr.pContext);
-	CHECK(s_Func.SofCnt == 1 && s_Func.LastFrame == 1234);
+	// Non-control endpoint events are delivered by UsbCtrlrEpHandler_t,
+	// not through the global controller event handler. A stray global data
+	// completion therefore has no class-level dispatch path.
 	Complete(EP1_IN, 37);
-	CHECK(s_Func.XferCnt == 1 && s_Func.LastXferEp == EP1_IN &&
-		s_Func.LastXferLen == 37);
-	Complete(EP1_OUT, 12, USB_CTRLR_XFER_CANCELLED);
-	CHECK(s_Func.XferCnt == 2 &&
-		s_Func.LastXferResult == USB_CTRLR_XFER_CANCELLED);
+	CHECK(s_Class.ResetCnt == 0);
+	UsbProcess(TEST_DEVNO);
+	CHECK(s_Class.ProcessCnt == 1);
 
 	Event(USB_CTRLR_EVT_RESET);
 	CHECK(UsbGetAddress(TEST_DEVNO) == 0 && UsbGetConfiguration(TEST_DEVNO) == 0);
 	CHECK(!UsbRemoteWakeupEnabled(TEST_DEVNO) && UsbGetAlternate(TEST_DEVNO, 0) == 0);
-	CHECK(s_Func.ResetCnt == 1);
+	CHECK(s_Class.ResetCnt == 1);
 	return true;
 }
 
@@ -657,17 +828,13 @@ extern "C" bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 extern "C" bool UsbCtrlrStart(int) { return true; }
 extern "C" void UsbCtrlrStop(int) {}
 extern "C" void UsbCtrlrProcess(int) {}
-extern "C" bool UsbCtrlrVbusDetected(int) { return true; }
+extern "C" bool UsbCtrlrVbusDetected(int) { return s_VbusDetected; }
 extern "C" bool UsbCtrlrHighSpeed(int) { return false; }
 extern "C" void UsbCtrlrIntEnable(int) { s_Ctrlr.IntEnableCnt++; }
 extern "C" void UsbCtrlrIntDisable(int) { s_Ctrlr.IntDisableCnt++; }
 extern "C" void UsbCtrlrConnect(int) { s_Ctrlr.ConnectCnt++; }
 extern "C" void UsbCtrlrDisconnect(int) { s_Ctrlr.DisconnectCnt++; }
 extern "C" void UsbCtrlrRemoteWakeup(int) { s_Ctrlr.RemoteWakeCnt++; }
-extern "C" void UsbCtrlrSofEnable(int, bool Enable)
-{
-	Enable ? s_Ctrlr.SofEnableCnt++ : s_Ctrlr.SofDisableCnt++;
-}
 extern "C" void UsbCtrlrSetAddress(int, uint8_t Address)
 {
 	s_Ctrlr.SetAddressCnt++;
@@ -676,7 +843,7 @@ extern "C" void UsbCtrlrSetAddress(int, uint8_t Address)
 extern "C" bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
 extern "C" void UsbCtrlrEpClose(int, uint8_t) {}
 extern "C" void UsbCtrlrEpCloseAll(int) { s_Ctrlr.CloseAllCnt++; }
-extern "C" bool UsbCtrlrEpRegister(int, uint8_t, uint8_t *,
+extern "C" bool UsbCtrlrEpRegister(int, uint8_t, uint8_t *, bool,
 									 UsbCtrlrEpHandler_t, void *)
 {
 	return true;
@@ -727,6 +894,7 @@ typedef struct { const char *pName; TestHandler_t Handler; } TestCase_t;
 int main(void)
 {
 	static const TestCase_t tests[] = {
+		{ "enable requires descriptor", TestEnableRequiresDescriptor },
 		{ "descriptors", TestDescriptors },
 		{ "descriptor validation", TestDescriptorValidation },
 		{ "control terminating ZLP", TestControlZlp },
@@ -734,7 +902,10 @@ int main(void)
 		{ "configuration", TestConfiguration },
 		{ "alternate interface and halt", TestInterfaceAndHalt },
 		{ "SET_INTERFACE requires handler", TestInterfaceRequiresHandler },
-		{ "function control lifecycle", TestFunctionControl },
+		{ "class control lifecycle", TestClassControl },
+		{ "common class base", TestCommonClassBase },
+		{ "class object registry", TestClassObjectRegistry },
+		{ "class object configuration rollback", TestClassObjectConfigRollback },
 		{ "reset suspend and dispatch", TestResetSuspendAndDispatch },
 	};
 

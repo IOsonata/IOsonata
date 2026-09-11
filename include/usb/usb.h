@@ -3,11 +3,11 @@
 
 @brief	Generic USB layer.
 
-One master init for a USB controller, then the class or function inits, the
+One master init for a USB controller, then the device class inits, the
 same shape as BtAppInit followed by service registration.
 
 	UsbInit(&cfg);			// controller, protocol engine, identity
-	UsbCdcInit(&cdc, &cdccfg);	// one call per function
+	cdc.Init(cdccfg);			// one call per class instance
 	UsbEnable();			// connect to the bus
 
 Everything below this header that does not change from one target to the next
@@ -71,12 +71,24 @@ SOFTWARE.
 #define USB_LINK_RATE_FULL			12000000U
 #define USB_LINK_RATE_HIGH			480000000U
 
+#ifndef USB_CONFIG_DESC_MAXLEN
+#define USB_CONFIG_DESC_MAXLEN		1024U
+#endif
+
 /// Bus speed. What the controller can do is USB_HIGHSPEED_CAPABLE() at compile
 /// time. This is what enumeration actually negotiated.
 typedef enum __Usb_Speed {
 	USB_SPEED_FULL,				//!< 12 Mbit/s
 	USB_SPEED_HIGH				//!< 480 Mbit/s
 } UsbSpeed_t;
+
+/// Operating role. Host and OTG need a dual role controller; UsbInit rejects
+/// them on device only silicon.
+typedef enum __Usb_Mode {
+	USB_MODE_DEVICE,			//!< Peripheral, responds to a host
+	USB_MODE_HOST,				//!< Host, enumerates and drives devices
+	USB_MODE_OTG				//!< Dual role, starts from the ID pin
+} UsbMode_t;
 
 /// Cable events. Reported from UsbProcess, never from an interrupt.
 typedef enum __Usb_Evt {
@@ -87,7 +99,9 @@ typedef enum __Usb_Evt {
 typedef void (*UsbEvtHandler_t)(int DevNo, UsbEvt_t Evt);
 
 //
-// Function layer. One registration per class or vendor function.
+// Device class layer. One registration per class instance.
+// Non-control endpoint events go directly from the controller to the endpoint
+// callback registered with UsbCtrlrEpRegister; they are not class events.
 //
 
 /// Control transfer stage a request handler is being called for.
@@ -98,49 +112,13 @@ typedef enum __Usb_Ctrl_Stage {
 	USB_CTRL_ABORT,				//!< Transfer abandoned, drop anything staged
 } UsbCtrlStage_t;
 
-typedef const uint8_t *(*UsbDescHandler_t)(uint8_t DescType, uint8_t DescIndex,
-										   uint16_t LangId, UsbSpeed_t Speed,
-										   uint16_t *pLength, void *pContext);
-
-typedef bool (*UsbRequestHandler_t)(const UsbSetupData_t *pSetup,
-									UsbCtrlStage_t Stage, uint8_t **ppData,
-									uint16_t *pLength, void *pContext);
-
-typedef bool (*UsbConfigHandler_t)(uint8_t Configuration, void *pContext);
-typedef bool (*UsbSetInterfaceHandler_t)(uint8_t InterfaceNo, uint8_t Alt,
-										 void *pContext);
-typedef void (*UsbXferHandler_t)(uint8_t EpAddr, uint16_t Length,
-								 UsbCtrlrXferResult_t Result, void *pContext);
-typedef void (*UsbResetHandler_t)(void *pContext);
-typedef void (*UsbSofHandler_t)(uint16_t FrameNo, void *pContext);
-
-/// Polled from UsbProcess in application context. Work a function cannot do
-/// inside the USB interrupt goes here.
-typedef void (*UsbProcessHandler_t)(void *pContext);
-
 #pragma pack(push, 4)
-
-/// One USB function. Endpoint zero belongs to the generic layer, so bit zero
-/// must be clear in both masks, and masks may not overlap between functions.
-typedef struct __Usb_Func_Config {
-	uint8_t FirstInterface;			//!< First interface owned by function
-	uint8_t InterfaceCount;			//!< Number of interfaces, zero for none
-	uint16_t EpInMask;				//!< IN endpoint ownership, bit n = endpoint n
-	uint16_t EpOutMask;				//!< OUT endpoint ownership, bit n = endpoint n
-	UsbRequestHandler_t RequestHandler;
-	UsbConfigHandler_t ConfigHandler;
-	UsbSetInterfaceHandler_t SetInterfaceHandler;
-	UsbXferHandler_t XferHandler;
-	UsbResetHandler_t ResetHandler;
-	UsbSofHandler_t SofHandler;		//!< Optional, NULL when not needed
-	UsbProcessHandler_t ProcessHandler;	//!< Optional, polled from UsbProcess
-	void *pContext;
-} UsbFuncCfg_t;
 
 /// Everything UsbInit needs. Endpoint zero packet size and maximum speed are
 /// not here, they come from usb_ctrlr.h for this DevNo.
 typedef struct __Usb_Config {
 	int DevNo;						//!< USB controller number, not the USB device address
+	UsbMode_t Mode;					//!< Device, host or OTG. Host and OTG need dual role silicon
 	uint16_t Vid;					//!< USB vendor id
 	uint16_t Pid;					//!< USB product id
 	uint16_t DevVer;				//!< Device release, BCD, 0x0100 is version 1.00
@@ -148,16 +126,17 @@ typedef struct __Usb_Config {
 	const char *pProduct;			//!< Product string, NULL for none
 	const char *pSerial;			//!< Serial string, NULL to take the MCU unique id
 	const char *pFuncName;			//!< Function name string, NULL for none
-	int NbCdc;						//!< Number of CDC ACM functions, 0 uses 1
 	int IntPrio;					//!< Interrupt priority of the USB peripheral
+	uint8_t DeviceClass;			//!< Device descriptor class, zero uses interface classes
+	uint8_t DeviceSubClass;		//!< Device descriptor subclass
+	uint8_t DeviceProtocol;		//!< Device descriptor protocol
 	bool bSelfPowered;				//!< true - Device does not draw from the bus
+	bool bRemoteWakeup;			//!< true - Device advertises remote wakeup support
 	bool bLowPowerSuspend;			//!< true - Sit in USB low power while the host
 									//!< suspends. Leave false on a device that has
 									//!< to come back without a power cycle
 	uint16_t MaxPower;				//!< Bus current drawn in mA, ignored when self powered
 	UsbEvtHandler_t EvtHandler;		//!< Cable event callback, may be NULL
-	UsbDescHandler_t DescHandler;	//!< NULL uses the built in descriptor builder
-	void *pDescContext;				//!< Descriptor callback context
 } UsbCfg_t;
 
 #pragma pack(pop)
@@ -174,19 +153,11 @@ extern "C" {
  * @brief	Bring up one USB controller and its protocol engine.
  *
  * Records the identity, initializes the controller software state and the
- * hardware power and clock path, and leaves the bus alone. Functions are
+ * hardware power and clock path, and leaves the bus alone. Device classes are
  * registered after this and before UsbEnable. Fails when DevNo is not a
  * controller this target has.
  */
 bool UsbInit(const UsbCfg_t *pCfg);
-
-/**
- * @brief	Register one USB function.
- *
- * Registration is static and expected to be complete before the device is
- * connected to the bus.
- */
-bool UsbRegisterFunc(int DevNo, const UsbFuncCfg_t *pCfg);
 
 /** @brief Enable the controller interrupt and connect the bus pull-up. */
 bool UsbEnable(int DevNo);
@@ -208,16 +179,137 @@ uint8_t UsbGetAlternate(int DevNo, uint8_t InterfaceNo);
 bool UsbRemoteWakeupEnabled(int DevNo);
 bool UsbRemoteWakeup(int DevNo);
 
+/// Set or clear a non-control endpoint halt through the core state tracker.
+/// Device classes use this for protocol-defined stalls. The host clears the
+/// halt with the standard CLEAR_FEATURE request.
+bool UsbEpSetHalt(int DevNo, uint8_t EpAddr, bool Halt);
+
+/// Return the halt state tracked by the generic device core.
+bool UsbEpHalted(int DevNo, uint8_t EpAddr);
+
 /** @brief Configuration this controller was initialized with, NULL before init. */
 const UsbCfg_t *UsbGetCfg(int DevNo);
 
 /** @brief Serial string in use, either the configured one or the MCU unique id. */
 const char *UsbGetSerial(int DevNo);
 
+/**
+ * @brief Return a descriptor assembled by the generic device layer.
+ *
+ * Device, qualifier and string descriptors come from UsbCfg_t. Configuration
+ * descriptors are a generic header followed by class fragments registered
+ * during class Init(). Applications normally do not call this directly.
+ */
+const uint8_t *UsbGetDescriptor(int DevNo, uint8_t Type, uint8_t Index,
+								 uint16_t LangId, UsbSpeed_t Speed,
+								 uint16_t *pLength);
+
 //
 
 #ifdef __cplusplus
 }
+
+/// Common lifecycle for statically owned USB class objects.
+/// Role-specific routing is provided by the device and host class bases.
+class UsbClass {
+public:
+	UsbClass(const UsbClass &) = delete;
+	UsbClass &operator = (const UsbClass &) = delete;
+
+	virtual void Reset() {}
+	virtual void Process() {}
+
+protected:
+	UsbClass() = default;
+	~UsbClass() = default;
+};
+
+/// Base for a class implemented by the local USB device.
+class UsbDeviceClass : public UsbClass {
+public:
+	/// Notify the class that USB bus power was removed.
+	virtual void Detach() {}
+
+	/// Handle one class, vendor or interface descriptor control transfer.
+	virtual bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+						 uint8_t **ppData, uint16_t *pLength) {
+		(void)pSetup;
+		(void)Stage;
+		(void)ppData;
+		(void)pLength;
+		return false;
+	}
+
+	/// Select a device configuration, or zero for the unconfigured state.
+	virtual bool SelectConfig(uint8_t ConfigValue) {
+		(void)ConfigValue;
+		return true;
+	}
+
+	/// Select an advertised option for an interface owned by this class.
+	virtual bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) {
+		(void)InterfaceNo;
+		(void)Option;
+		return false;
+	}
+
+	uint8_t FirstInterface(void) const { return vFirstInterface; }
+	uint8_t InterfaceCount(void) const { return vInterfaceCount; }
+	uint16_t EpInMask(void) const { return vEpInMask; }
+	uint16_t EpOutMask(void) const { return vEpOutMask; }
+	const uint8_t *Descriptor(UsbSpeed_t Speed) const {
+		return Speed == USB_SPEED_HIGH ? vHsDescriptor : vFsDescriptor;
+	}
+	uint16_t DescriptorLength(UsbSpeed_t Speed) const {
+		return Speed == USB_SPEED_HIGH ? vHsDescriptorLength :
+			vFsDescriptorLength;
+	}
+
+protected:
+	UsbDeviceClass() = default;
+	~UsbDeviceClass() = default;
+
+private:
+	friend bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
+								 uint8_t FirstInterface, uint8_t InterfaceCount,
+								 uint16_t EpInMask, uint16_t EpOutMask);
+	friend bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
+									 const void *pFsDescriptor,
+									 uint16_t FsDescriptorLength,
+									 const void *pHsDescriptor,
+									 uint16_t HsDescriptorLength);
+
+	uint8_t vFirstInterface = 0;
+	uint8_t vInterfaceCount = 0;
+	uint16_t vEpInMask = 0;
+	uint16_t vEpOutMask = 0;
+	const uint8_t *vFsDescriptor = nullptr;
+	const uint8_t *vHsDescriptor = nullptr;
+	uint16_t vFsDescriptorLength = 0;
+	uint16_t vHsDescriptorLength = 0;
+};
+
+/// Base for a class driver used by the local USB host.
+class UsbHostClass : public UsbClass {
+protected:
+	UsbHostClass() = default;
+	~UsbHostClass() = default;
+};
+
+/// Atomically register one statically owned device class and its ownership.
+bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
+					  uint8_t FirstInterface, uint8_t InterfaceCount,
+					  uint16_t EpInMask, uint16_t EpOutMask);
+
+/// Register the static configuration descriptor fragment owned by pClass.
+/// Full-speed data is required. High-speed data is required only on a
+/// high-speed-capable controller. The generic layer supplies the configuration
+/// descriptor header and concatenates fragments in class registration order.
+bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
+						   const void *pFsDescriptor,
+						   uint16_t FsDescriptorLength,
+						   const void *pHsDescriptor = nullptr,
+						   uint16_t HsDescriptorLength = 0);
 #endif
 
 /** @} End of group USB */

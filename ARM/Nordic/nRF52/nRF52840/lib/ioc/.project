@@ -641,6 +641,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci.h</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/bt_hci_usb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_usb.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/bt_hcievt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hcievt.h</locationURI>
@@ -1326,6 +1331,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_intrf.h</locationURI>
 		</link>
 		<link>
+			<name>include/usb/usb_iso.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_iso.h</locationURI>
+		</link>
+		<link>
 			<name>include/usb/usb_mscdef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_mscdef.h</locationURI>
@@ -1339,6 +1349,21 @@
 			<name>include/usb/usbd_cdc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_epalloc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_epalloc.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_hid.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_hid.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_msc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_msc.h</locationURI>
 		</link>
 		<link>
 			<name>src/Fusion/Fusion.h</name>
@@ -1514,6 +1539,11 @@
 			<name>src/bluetooth/bt_hci_host.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_host.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_hci_usb.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_usb.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_id_sd.cpp</name>
@@ -2366,6 +2396,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_intrf.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/usb/usb_iso.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_iso.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/usb/usbd_bulk.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_bulk.cpp</locationURI>
@@ -2379,6 +2414,21 @@
 			<name>src/usb/usbd_cdc_desc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_desc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_epalloc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_epalloc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_hid.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_hid.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_msc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_msc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/vqf/cpp</name>

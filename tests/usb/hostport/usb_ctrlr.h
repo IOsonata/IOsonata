@@ -3,9 +3,10 @@
 
 @brief	Host test stand in for a port supplied usb_ctrlr.h.
 
-Describes one full speed controller with eight endpoints in each direction.
-The host tests link against a fake controller, so these numbers only have to
-be a valid target shape.
+Describes one full speed controller with ordinary endpoints 0 through 7 and
+dedicated bidirectional isochronous endpoints 8 and 9. The host tests link
+against a fake controller, so these numbers only have to be a valid target
+shape.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 3, 2026
@@ -59,8 +60,10 @@ enum {
 	USB_PKT_MAXLEN_0_CONTROL = 64,
 	USB_PKT_MAXLEN_0_BULK = 64,
 	USB_PKT_MAXLEN_0_INT = 64,
-	USB_PKT_MAXLEN_0_ISO = 1023,
+	USB_PKT_MAXLEN_0_ISO = 63,
 	USB_ISO_SUPPORTED_0 = 1,
+	USB_ISO_EPIN_MASK_0 = (1U << 8) | (1U << 9),
+	USB_ISO_EPOUT_MASK_0 = (1U << 8) | (1U << 9),
 };
 
 #define USB_EPIN_CNT(CtrlrNo) \
@@ -71,7 +74,10 @@ enum {
 	((CtrlrNo) == 0 ? USB_HIGHSPEED_CAPABLE_0 : 0)
 #define USB_ISO_SUPPORTED(CtrlrNo) \
 	((CtrlrNo) == 0 ? USB_ISO_SUPPORTED_0 : 0)
-
+#define USB_ISO_EPIN_MASK(CtrlrNo) \
+	((CtrlrNo) == 0 ? (uint16_t)USB_ISO_EPIN_MASK_0 : (uint16_t)0U)
+#define USB_ISO_EPOUT_MASK(CtrlrNo) \
+	((CtrlrNo) == 0 ? (uint16_t)USB_ISO_EPOUT_MASK_0 : (uint16_t)0U)
 #define USB_PKT_MAXLEN(CtrlrNo, TransType) \
 	((CtrlrNo) != 0 ? 0 : \
 	 (TransType) == CONTROL ? USB_PKT_MAXLEN_0_CONTROL : \
@@ -99,7 +105,9 @@ typedef enum __Usb_Ctrlr_Xfer_Result {
 typedef enum __Usb_Ctrlr_Evt_Type {
 	USB_CTRLR_EVT_RESET,		//!< USB bus reset
 	USB_CTRLR_EVT_SETUP,		//!< New EP0 SETUP request
+	USB_CTRLR_EVT_DRDY,		//!< Data is ready in the device to be retrieved
 	USB_CTRLR_EVT_XFER_CMPL,	//!< Endpoint transfer completed
+	USB_CTRLR_EVT_CANCEL,		//!< Endpoint transfer cancelled
 	USB_CTRLR_EVT_SUSPEND,		//!< Bus entered suspend
 	USB_CTRLR_EVT_RESUME,		//!< Bus resumed
 	USB_CTRLR_EVT_SOF,			//!< Start of frame
@@ -134,8 +142,9 @@ typedef struct __Usb_Ctrlr_Evt {
 typedef void (*UsbCtrlrEvtHandler_t)(int DevNo, const UsbCtrlrEvt_t *pEvt,
 									 void *pContext);
 
-typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, uint16_t Length,
-									UsbCtrlrXferResult_t Result, void *pContext);
+typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
+									uint16_t Length, UsbCtrlrXferResult_t Result,
+									void *pContext);
 
 /// What the generic layer hands the port at UsbCtrlrInit. Interrupt priority
 /// and suspend behaviour reach the hardware only through here, so the port
@@ -168,9 +177,8 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpCloseAll(int DevNo);
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-						UsbCtrlrEpHandler_t Handler, void *pContext);
-bool UsbCtrlrEpRxArm(int DevNo, uint8_t EpNo);
-bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint16_t Length);
+						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext);
+bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length);
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length);
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);
