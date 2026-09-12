@@ -2210,7 +2210,7 @@ extern "C" void USBD_IRQHandler(void)
 	}
 
 	const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
-	bool xferComplete = NRF_USBD->EVENTS_EP0DATADONE != 0U ||
+	bool xferComplete = NRF_USBD->EVENTS_ENDEPIN[0] != 0U ||
 						NRF_USBD->EVENTS_ENDEPOUT[0] != 0U ||
 						NRF_USBD->EVENTS_ENDISOIN != 0U ||
 						NRF_USBD->EVENTS_ENDISOOUT != 0U;
@@ -2247,7 +2247,17 @@ extern "C" void USBD_IRQHandler(void)
 
 		if (epin)
 		{
-			nRFUsbdHandleInData(31U - (uint32_t)__CLZ(epin));
+			const uint32_t epNum = 31U - (uint32_t)__CLZ(epin);
+			if (epNum == 0U)
+			{
+				// ENDEPIN0 only releases EasyDMA. EP0DATADONE below
+				// advances the control transfer after the host ACK.
+				NRF_USBD->EVENTS_ENDEPIN[0] = 0;
+			}
+			else
+			{
+				nRFUsbdHandleInData((uint8_t)epNum);
+			}
 		}
 		else if (epout)
 		{
@@ -2283,9 +2293,16 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdAbortEp0();
 		nRFUsbdSetupEvent();
 	}
-	else if (ep0DataDone && !s_Ctrlr.SetupDirIn)
+	else if (ep0DataDone)
 	{
-		nRFUsbdHandleOutData(0);
+		if (s_Ctrlr.SetupDirIn)
+		{
+			nRFUsbdHandleInData(0);
+		}
+		else
+		{
+			nRFUsbdHandleOutData(0);
+		}
 	}
 
 	if (NRF_USBD->EVENTS_EPDATA != 0U)
