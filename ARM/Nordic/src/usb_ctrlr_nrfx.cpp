@@ -2209,12 +2209,7 @@ extern "C" void USBD_IRQHandler(void)
 	}
 
 	const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
-	const bool ep0InDma = (dmaStatus & (1UL << 0)) != 0U;
-	const bool ep0OutDma = (dmaStatus & (1UL << 16)) != 0U;
-	bool xferComplete =
-		(ep0InDma && (NRF_USBD->EVENTS_EP0DATADONE != 0U ||
-			NRF_USBD->EVENTS_ENDEPIN[0] != 0U)) ||
-		(ep0OutDma && NRF_USBD->EVENTS_ENDEPOUT[0] != 0U) ||
+	bool xferComplete = NRF_USBD->EVENTS_EP0DATADONE != 0U ||
 		NRF_USBD->EVENTS_ENDISOIN != 0U ||
 		NRF_USBD->EVENTS_ENDISOOUT != 0U;
 
