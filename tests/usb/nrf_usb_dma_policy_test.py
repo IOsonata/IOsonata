@@ -31,9 +31,12 @@ interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
 assert "nRFUsbdDmaReclaim" not in source
 assert "nRFUsbdDmaEndIntEnable" not in source
 assert "s_LazyInMask" not in source
+assert "s_DmaEpAddr" not in source
 assert "INTENSET" not in dma_start, "DMA start must not enable ENDEPIN"
-assert "atomic_store(&s_DmaEpAddr, EpAddr)" in dma_start
-assert "nRFUsbdDmaEndEvent(activeDma)" in interrupt
+assert "NRF_USBD->EPSTATUS = epStatus" in dma_start
+assert "dmaStatus & NRF_USBD->EPDATASTATUS" in interrupt
+assert "31U - (uint32_t)__CLZ(inEpStatus)" in interrupt
+assert "31U - (uint32_t)__CLZ(outEpStatus)" in interrupt
 assert interrupt.index("*pEndEvent = 0") < interrupt.index(
     "nRFUsbdDmaRelease();"
 )
@@ -41,11 +44,6 @@ assert interrupt.index("nRFUsbdDmaRelease();") < interrupt.index(
     "nRFUsbdCollectEvents()"
 )
 assert "USBD_INTEN_EPDATA_Msk" in interrupt
-assert "NRF_USBD->EPSTATUS & epDataStatus" in interrupt
-assert "31U - (uint32_t)__CLZ(outData)" in interrupt
-assert "31U - (uint32_t)__CLZ(inData)" in interrupt
-assert "while (outData != 0U)" not in interrupt
-assert "while (inData != 0U)" not in interrupt
 assert interrupt.rindex("nRFUsbdServicePending();") > interrupt.index(
     "USBD_INTEN_EPDATA_Msk"
 )
