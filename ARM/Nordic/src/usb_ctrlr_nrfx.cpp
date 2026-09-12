@@ -1032,17 +1032,15 @@ static void nRFUsbdDmaWait(void)
 			return;
 		}
 
-		const uint32_t epStatus = NRF_USBD->EPSTATUS &
-			(((1UL << NRFX_USBD_EP_COUNT) - 1UL) |
-			 (((1UL << NRFX_USBD_EP_COUNT) - 1UL) << 16U));
+		const uint32_t epStatus = NRF_USBD->EPSTATUS;
 		if (epStatus == 0U)
 		{
 			continue;
 		}
 
-		const bool isIn =
-			(epStatus & ((1UL << NRFX_USBD_EP_COUNT) - 1UL)) != 0U;
-		const uint32_t epBits = isIn ? epStatus : epStatus >> 16U;
+		const uint32_t inBits = epStatus & 0xFFFFU;
+		const bool isIn = inBits != 0U;
+		const uint32_t epBits = isIn ? inBits : epStatus >> 16U;
 		const uint8_t epAddr = (uint8_t)(31U - (uint32_t)__CLZ(epBits)) |
 			(isIn ? USB_ENDPADDR_DIR_IN : 0U);
 		volatile uint32_t *pEvent = nRFUsbdDmaEndEvent(epAddr);
@@ -2274,35 +2272,23 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
-	const uint32_t dmaStatus = NRF_USBD->EPSTATUS &
-		(((1UL << NRFX_USBD_EP_COUNT) - 1UL) |
-		 (((1UL << NRFX_USBD_EP_COUNT) - 1UL) << 16U));
-	const uint32_t isoStatus = dmaStatus &
-		((1UL << NRFX_USBD_ISO_EP_NO) |
-		 (1UL << (16U + NRFX_USBD_ISO_EP_NO)));
-	if (isoStatus != 0U)
+	const bool isoInEnd = NRF_USBD->EVENTS_ENDISOIN != 0U;
+	const bool isoOutEnd = NRF_USBD->EVENTS_ENDISOOUT != 0U;
+	if (isoInEnd || isoOutEnd)
 	{
-		volatile uint32_t *pEndEvent =
-			(isoStatus & (1UL << NRFX_USBD_ISO_EP_NO)) != 0U ?
-			&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
-		if (*pEndEvent == 0U)
-		{
-			return;
-		}
-
-		NRF_USBD->EPSTATUS = isoStatus;
+		NRF_USBD->EPSTATUS = 1UL << (NRFX_USBD_ISO_EP_NO +
+			(isoInEnd ? 0U : 16U));
 		nRFUsbdDmaRelease();
 	}
 	else
 	{
-		const uint32_t dataDmaStatus = dmaStatus &
-			NRF_USBD->EPDATASTATUS &
-			~((1UL << 0) | (1UL << 16));
-		if (dataDmaStatus != 0U)
+		const uint32_t epStatus =
+			NRF_USBD->EPSTATUS & NRF_USBD->EPDATASTATUS;
+		if (epStatus != 0U)
 		{
-			const bool isIn =
-				(dataDmaStatus & ((1UL << NRFX_USBD_EP_COUNT) - 1UL)) != 0U;
-			const uint32_t epBits = isIn ? dataDmaStatus : dataDmaStatus >> 16U;
+			const uint32_t inBits = epStatus & 0xFFFFU;
+			const bool isIn = inBits != 0U;
+			const uint32_t epBits = isIn ? inBits : epStatus >> 16U;
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(epBits);
 			volatile uint32_t *pEndEvent = isIn ?
 				&NRF_USBD->EVENTS_ENDEPIN[epNum] :
