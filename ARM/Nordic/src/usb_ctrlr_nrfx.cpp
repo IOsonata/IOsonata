@@ -832,7 +832,6 @@ enum
 	NRFX_USBD_ISO_EP_NO = 8,
 	NRFX_USBD_MAX_PACKET_SIZE = 64,
 	NRFX_USBD_ISO_MAX_PACKET_SIZE = 512,
-	NRFX_USBD_DMA_EP_NONE = 0xFFU,
 };
 
 #define NRFX_USBD_IRQ_EVENT_COUNT	(USBD_INTEN_EPDATA_Pos + 1)
@@ -863,7 +862,6 @@ typedef struct __nRF_Usbd_Ctrlr
 
 static nRFUsbdCtrlr_t s_Ctrlr;
 static atomic_flag s_DmaRunning = ATOMIC_FLAG_INIT;
-static atomic_uint_fast8_t s_DmaEpAddr;
 // One EasyDMA engine serves every endpoint in both directions, so a transfer
 // request waits in this descriptor queue and starts in submission order.
 //
@@ -903,7 +901,7 @@ static uint16_t s_IsoOutSize;
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
 {
-	return (uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE;
+	return atomic_flag_test(&s_DmaRunning);
 }
 
 
@@ -993,7 +991,6 @@ static void nRFUsbdDmaRelease(void)
 		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
 	}
 
-	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
 	atomic_flag_clear(&s_DmaRunning);
 	__ISB();
 	__DSB();
@@ -1008,6 +1005,7 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 	__disable_irq();
 
 	*nRFUsbdDmaEndEvent(EpAddr) = 0;
+	NRF_USBD->EPSTATUS = NRF_USBD->EPSTATUS;
 	__ISB();
 	__DSB();
 
@@ -1017,7 +1015,6 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 		NRFX_USBD_ERRATA_199_REG = 0x00000082UL;
 	}
 
-	atomic_store(&s_DmaEpAddr, EpAddr);
 	*pTask = 1;
 	__ISB();
 	__DSB();
@@ -1027,30 +1024,40 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 
 static void nRFUsbdDmaWait(void)
 {
-	for (;;)
+	while (atomic_flag_test(&s_DmaRunning))
 	{
-		const uint8_t epAddr = (uint8_t)atomic_load(&s_DmaEpAddr);
-		if (epAddr == NRFX_USBD_DMA_EP_NONE)
-		{
-			return;
-		}
-
 		if (NRF_USBD->EVENTS_USBRESET != 0U)
 		{
 			nRFUsbdDmaRelease();
 			return;
 		}
 
+		const uint32_t epStatus = NRF_USBD->EPSTATUS &
+			(((1UL << NRFX_USBD_EP_COUNT) - 1UL) |
+			 (((1UL << NRFX_USBD_EP_COUNT) - 1UL) << 16U));
+		if (epStatus == 0U)
+		{
+			continue;
+		}
+
+		const bool isIn =
+			(epStatus & ((1UL << NRFX_USBD_EP_COUNT) - 1UL)) != 0U;
+		const uint32_t epBits = isIn ? epStatus : epStatus >> 16U;
+		const uint8_t epAddr = (uint8_t)(31U - (uint32_t)__CLZ(epBits)) |
+			(isIn ? USB_ENDPADDR_DIR_IN : 0U);
 		volatile uint32_t *pEvent = nRFUsbdDmaEndEvent(epAddr);
 		if (*pEvent == 0U)
 		{
 			continue;
 		}
 
+		NRF_USBD->EPSTATUS = 1UL << (USB_ENDPADDR_NUM(epAddr) +
+			(isIn ? 0U : 16U));
 		*pEvent = 0;
 		__ISB();
 		__DSB();
 		nRFUsbdDmaRelease();
+		return;
 	}
 }
 
@@ -1369,7 +1376,6 @@ static void nRFUsbdResetState(void)
 	atomic_store(&s_IsoInReady, false);
 	atomic_store(&s_IsoOutReady, false);
 	s_IsoOutSize = 0U;
-	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
 	atomic_flag_clear(&s_DmaRunning);
 
 	if (nrf52_errata_199())
@@ -1426,7 +1432,7 @@ static void nRFUsbdTryEnterLowPower(void)
 		!atomic_load(&s_SuspendPending) ||
 		atomic_load(&s_RemoteWakePending) ||
 		atomic_load(&s_HostResumePending) ||
-		(uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE ||
+		nRFUsbdDmaActive() ||
 		CFifoUsed(s_hQue) > 0 ||
 		atomic_load(&s_PendingEp0Status) ||
 		atomic_load(&s_PendingEp0RcvOut))
@@ -1450,7 +1456,6 @@ static void nRFUsbdTryEnterLowPower(void)
 		!atomic_load(&s_SuspendPending) ||
 		atomic_load(&s_RemoteWakePending) ||
 		atomic_load(&s_HostResumePending) ||
-		(uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE ||
 		CFifoUsed(s_hQue) > 0 ||
 		atomic_load(&s_PendingEp0Status) ||
 		atomic_load(&s_PendingEp0RcvOut))
@@ -1517,8 +1522,7 @@ static void nRFUsbdTryRemoteWake(void)
 	if (!atomic_load(&s_RemoteWakePending) ||
 		!atomic_load(&s_BusSuspended) ||
 		atomic_load(&s_HostResumePending) ||
-		!atomic_load(&s_MacAwake) ||
-		(uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE)
+		!atomic_load(&s_MacAwake))
 	{
 		atomic_flag_clear(&s_DmaRunning);
 		return;
@@ -1760,9 +1764,21 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 		return;
 	}
 
-	if ((uint8_t)atomic_load(&s_DmaEpAddr) == EpAddr)
+	if (nRFUsbdDmaActive())
 	{
-		nRFUsbdDmaWait();
+		const uint32_t epStatusBit = 1UL << (epNum +
+			(USB_ENDPADDR_IS_IN(EpAddr) ? 0U : 16U));
+		uint32_t dmaStatus;
+		do
+		{
+			dmaStatus = NRF_USBD->EPSTATUS;
+		} while (dmaStatus == 0U && nRFUsbdDmaActive() &&
+			NRF_USBD->EVENTS_USBRESET == 0U);
+
+		if ((dmaStatus & epStatusBit) != 0U)
+		{
+			nRFUsbdDmaWait();
+		}
 	}
 
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
@@ -1988,7 +2004,7 @@ static uint32_t nRFUsbdCollectEvents(void)
 
 static void nRFUsbdBusReset(void)
 {
-	if ((uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE)
+	if (nRFUsbdDmaActive())
 	{
 		nRFUsbdDmaRelease();
 	}
@@ -2258,33 +2274,60 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
-	const uint8_t activeDma = (uint8_t)atomic_load(&s_DmaEpAddr);
-	if (activeDma != NRFX_USBD_DMA_EP_NONE &&
-		USB_ENDPADDR_NUM(activeDma) != 0U)
+	const uint32_t dmaStatus = NRF_USBD->EPSTATUS &
+		(((1UL << NRFX_USBD_EP_COUNT) - 1UL) |
+		 (((1UL << NRFX_USBD_EP_COUNT) - 1UL) << 16U));
+	const uint32_t isoStatus = dmaStatus &
+		((1UL << NRFX_USBD_ISO_EP_NO) |
+		 (1UL << (16U + NRFX_USBD_ISO_EP_NO)));
+	if (isoStatus != 0U)
 	{
-		// Most USBD registers cannot be read while EasyDMA owns the peripheral.
-		// Retire only the active DMA here; every other event remains latched for
-		// the normal collector after ownership is released. Data IN does not
-		// enable ENDEPIN: its EPDATA interrupt arrives after DMA has ended and
-		// observes the latched ENDEPIN event here.
-		volatile uint32_t *pEndEvent = nRFUsbdDmaEndEvent(activeDma);
+		volatile uint32_t *pEndEvent =
+			(isoStatus & (1UL << NRFX_USBD_ISO_EP_NO)) != 0U ?
+			&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
 		if (*pEndEvent == 0U)
 		{
 			return;
 		}
 
-		// Leave an OUT/EP0 END event set for the normal event collector. A
-		// data IN END only releases DMA; transfer completion is still EPDATA.
-		if (*pEndEvent != 0U && USB_ENDPADDR_IS_IN(activeDma) &&
-			USB_ENDPADDR_NUM(activeDma) != 0U &&
-			USB_ENDPADDR_NUM(activeDma) != NRFX_USBD_ISO_EP_NO)
-		{
-			*pEndEvent = 0;
-			__ISB();
-			__DSB();
-		}
-
+		NRF_USBD->EPSTATUS = isoStatus;
 		nRFUsbdDmaRelease();
+	}
+	else
+	{
+		const uint32_t dataDmaStatus = dmaStatus &
+			~((1UL << 0) | (1UL << 16));
+		if (dataDmaStatus != 0U)
+		{
+			const bool isIn =
+				(dataDmaStatus & ((1UL << NRFX_USBD_EP_COUNT) - 1UL)) != 0U;
+			const uint32_t epBits = isIn ? dataDmaStatus : dataDmaStatus >> 16U;
+			const uint32_t epNum = 31U - (uint32_t)__CLZ(epBits);
+			volatile uint32_t *pEndEvent = isIn ?
+				&NRF_USBD->EVENTS_ENDEPIN[epNum] :
+				&NRF_USBD->EVENTS_ENDEPOUT[epNum];
+			if (*pEndEvent == 0U)
+			{
+				return;
+			}
+
+			NRF_USBD->EPSTATUS = 1UL << (epNum + (isIn ? 0U : 16U));
+			// Data IN completes on EPDATA. ENDEPIN is not enabled, so clear
+			// its latched event after it releases the shared DMA engine.
+			if (isIn)
+			{
+				*pEndEvent = 0;
+				__ISB();
+				__DSB();
+			}
+
+			nRFUsbdDmaRelease();
+		}
+		else if (nRFUsbdDmaActive())
+		{
+			// STARTEP has run but hardware has not captured its registers yet.
+			return;
+		}
 	}
 
 	const uint32_t intStatus = nRFUsbdCollectEvents();
