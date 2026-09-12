@@ -2184,62 +2184,58 @@ extern "C" void USBD_IRQHandler(void)
 	}
 
 	const bool resetPending = NRF_USBD->EVENTS_USBRESET != 0U;
+	const bool usbEventPending = NRF_USBD->EVENTS_USBEVENT != 0U;
+	const bool setupPending = NRF_USBD->EVENTS_EP0SETUP != 0U;
+	const bool ep0DataPending = NRF_USBD->EVENTS_EP0DATADONE != 0U;
+	const bool ep0InEndPending = NRF_USBD->EVENTS_ENDEPIN[0] != 0U;
+	const bool ep0OutEndPending = NRF_USBD->EVENTS_ENDEPOUT[0] != 0U;
+	const bool isoInEndPending = NRF_USBD->EVENTS_ENDISOIN != 0U;
+	const bool isoOutEndPending = NRF_USBD->EVENTS_ENDISOOUT != 0U;
+	const bool sofPending = NRF_USBD->EVENTS_SOF != 0U;
 
-	// For data endpoints, the intersection is the completed EasyDMA transfer:
-	// EPSTATUS identifies the DMA owner and EPDATASTATUS identifies the endpoint
-	// whose USB transaction was acknowledged. EP0 and ISO use dedicated events.
 	const uint32_t epStatus = NRF_USBD->EPSTATUS;
-	uint32_t dataDmaStatus = 0U;
-	if (epStatus != 0U)
+	const uint32_t dataDmaStatus =
+		epStatus & NRF_USBD->EPDATASTATUS;
+	const uint32_t inDmaStatus = dataDmaStatus & 0xFFFFUL;
+	const uint32_t outDmaStatus = dataDmaStatus >> 16U;
+	if (dataDmaStatus != 0U)
 	{
-		dataDmaStatus = epStatus & NRF_USBD->EPDATASTATUS;
-		const uint32_t specialDmaMask =
-			(1UL << 0) | (1UL << NRFX_USBD_ISO_EP_NO) |
-			(1UL << 16) | (1UL << (16U + NRFX_USBD_ISO_EP_NO));
-		uint32_t completed = dataDmaStatus != 0U ?
-			dataDmaStatus : (epStatus & specialDmaMask);
-		if (completed == 0U)
-		{
-			if (!resetPending)
-			{
-				return;
-			}
-			completed = epStatus;
-		}
-
-		const uint32_t dmaBit = 31U - (uint32_t)__CLZ(completed);
-		const uint32_t dmaEpNum = dmaBit & 0xFU;
-		const bool dmaIn = dmaBit < 16U;
-		volatile uint32_t *pEndEvent = nRFUsbdDmaEndEvent(completed);
+		const bool dmaIn = inDmaStatus != 0U;
+		const uint32_t dmaEpNum = 31U - (uint32_t)__CLZ(
+			dmaIn ? inDmaStatus : outDmaStatus);
+		volatile uint32_t *pEndEvent = dmaIn ?
+			&NRF_USBD->EVENTS_ENDEPIN[dmaEpNum] :
+			&NRF_USBD->EVENTS_ENDEPOUT[dmaEpNum];
 		if (*pEndEvent == 0U && !resetPending)
 		{
 			return;
 		}
 
-		NRF_USBD->EPSTATUS = epStatus;
+		NRF_USBD->EPSTATUS = dataDmaStatus;
 		NRF_USBD->EPDATASTATUS = dataDmaStatus;
 		*pEndEvent = 0;
 		__ISB();
 		__DSB();
 		nRFUsbdDmaRelease();
 
-		if (!resetPending)
+		if (!resetPending && !dmaIn)
 		{
-			if (dmaEpNum == NRFX_USBD_ISO_EP_NO)
-			{
-				if (dmaIn)
-				{
-					nRFUsbdHandleIsoInEnd();
-				}
-				else
-				{
-					nRFUsbdHandleIsoOutEnd();
-				}
-			}
-			else if (!dmaIn)
-			{
-				nRFUsbdHandleOutEnd((uint8_t)dmaEpNum);
-			}
+			nRFUsbdHandleOutEnd((uint8_t)dmaEpNum);
+		}
+	}
+	else if (epStatus != 0U)
+	{
+		const bool specialDmaDone =
+			(ep0InEndPending && (epStatus & (1UL << 0)) != 0U) ||
+			(ep0OutEndPending && (epStatus & (1UL << 16)) != 0U) ||
+			(isoInEndPending &&
+			 (epStatus & (1UL << NRFX_USBD_ISO_EP_NO)) != 0U) ||
+			(isoOutEndPending &&
+			 (epStatus & (1UL << (16U + NRFX_USBD_ISO_EP_NO))) != 0U);
+		if (specialDmaDone || resetPending)
+		{
+			NRF_USBD->EPSTATUS = epStatus;
+			nRFUsbdDmaRelease();
 		}
 	}
 
@@ -2251,15 +2247,6 @@ extern "C" void USBD_IRQHandler(void)
 		// interrupt also reports data on another endpoint.
 		dataStatus &= ~(dataDmaStatus & 0xFFFF0000UL);
 	}
-
-	const bool usbEventPending = NRF_USBD->EVENTS_USBEVENT != 0U;
-	const bool setupPending = NRF_USBD->EVENTS_EP0SETUP != 0U;
-	const bool ep0DataPending = NRF_USBD->EVENTS_EP0DATADONE != 0U;
-	const bool ep0InEndPending = NRF_USBD->EVENTS_ENDEPIN[0] != 0U;
-	const bool ep0OutEndPending = NRF_USBD->EVENTS_ENDEPOUT[0] != 0U;
-	const bool isoInEndPending = NRF_USBD->EVENTS_ENDISOIN != 0U;
-	const bool isoOutEndPending = NRF_USBD->EVENTS_ENDISOOUT != 0U;
-	const bool sofPending = NRF_USBD->EVENTS_SOF != 0U;
 
 	if (resetPending)
 	{
