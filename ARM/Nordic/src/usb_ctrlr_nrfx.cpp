@@ -1349,16 +1349,6 @@ static void nRFUsbdQueueEp0Status(void)
 
 static void nRFUsbdQueueEp0RcvOut(void)
 {
-	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[0][0];
-	const uint16_t remaining =
-		(uint16_t)(pXfer->TotalLen - pXfer->ActualLen);
-	const uint16_t length = remaining < pXfer->Mps ? remaining : pXfer->Mps;
-
-	// EP0RCVOUT allows the host transaction. Prepare its EasyDMA destination
-	// first, as required by the control-write sequence.
-	NRF_USBD->EPOUT[0].PTR = (uint32_t)(uintptr_t)s_Ep0Bounce;
-	NRF_USBD->EPOUT[0].MAXCNT = length;
-
 	atomic_store(&s_PendingEp0RcvOut, true);
 	if (!nRFUsbdDeferFromInterrupt())
 	{
@@ -2218,65 +2208,12 @@ extern "C" void USBD_IRQHandler(void)
 		return;
 	}
 
-	// Bus state events do not use EasyDMA. Process them even when an endpoint
-	// transfer is still running; endpoint events remain latched below.
-	if (NRF_USBD->EVENTS_USBEVENT != 0U)
-	{
-		NRF_USBD->EVENTS_USBEVENT = 0;
-		const uint32_t eventCause = NRF_USBD->EVENTCAUSE;
-		NRF_USBD->EVENTCAUSE = eventCause;
-		__ISB();
-		__DSB();
-
-		if ((eventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0U &&
-			!atomic_exchange(&s_BusSuspended, true))
-		{
-			atomic_store(&s_SuspendPending, s_UsbdLowPowerSuspend);
-			atomic_store(&s_RemoteWakePending, false);
-			atomic_store(&s_HostResumePending, false);
-			atomic_store(&s_IsoInReady, false);
-			atomic_store(&s_IsoOutReady, false);
-			if (!s_Ctrlr.SofEnabled &&
-				!atomic_load(&s_IsoInOpen) &&
-				!atomic_load(&s_IsoOutOpen))
-			{
-				NRF_USBD->EVENTS_SOF = 0;
-			}
-			NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
-			nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
-		}
-
-		if ((eventCause & USBD_EVENTCAUSE_RESUME_Msk) != 0U)
-		{
-			nRFUsbdHostResumeDetected();
-		}
-
-		if ((eventCause & USBD_EVENTCAUSE_USBWUALLOWED_Msk) != 0U)
-		{
-			nRFUsbdWakeAllowed();
-		}
-	}
-
 	const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
-	bool xferComplete = false;
+	bool xferComplete = NRF_USBD->EVENTS_EP0DATADONE != 0U ||
+		NRF_USBD->EVENTS_ENDISOIN != 0U ||
+		NRF_USBD->EVENTS_ENDISOOUT != 0U;
 
-	if ((dmaStatus & (1UL << 0)) != 0U)
-	{
-		xferComplete = NRF_USBD->EVENTS_ENDEPIN[0] != 0U;
-	}
-	else if ((dmaStatus & (1UL << 16)) != 0U)
-	{
-		xferComplete = NRF_USBD->EVENTS_ENDEPOUT[0] != 0U;
-	}
-	else if ((dmaStatus & (1UL << NRFX_USBD_ISO_EP_NO)) != 0U)
-	{
-		xferComplete = NRF_USBD->EVENTS_ENDISOIN != 0U;
-	}
-	else if ((dmaStatus & (1UL << (16U + NRFX_USBD_ISO_EP_NO))) != 0U)
-	{
-		xferComplete = NRF_USBD->EVENTS_ENDISOOUT != 0U;
-	}
-	else if (dmaStatus != 0U)
+	if (!xferComplete && NRF_USBD->EVENTS_EPDATA != 0U)
 	{
 		const uint32_t xferStatus = NRF_USBD->EPDATASTATUS & dmaStatus;
 		const uint32_t inStatus = xferStatus & 0xFFFFUL;
@@ -2292,11 +2229,6 @@ extern "C" void USBD_IRQHandler(void)
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(outStatus);
 			xferComplete = NRF_USBD->EVENTS_ENDEPOUT[epNum] != 0U;
 		}
-	}
-
-	if (nRFUsbdDmaActive() && !xferComplete)
-	{
-		return;
 	}
 
 	if (xferComplete && dmaStatus != 0U)
@@ -2388,6 +2320,47 @@ extern "C" void USBD_IRQHandler(void)
 		// interrupt so EasyDMA still starts from the controller context.
 		nRFUsbdServicePending();
 		return;
+	}
+
+	uint32_t eventCause = 0;
+	if ((intStatus & USBD_INTEN_USBEVENT_Msk) != 0)
+	{
+		eventCause = NRF_USBD->EVENTCAUSE;
+		NRF_USBD->EVENTCAUSE = eventCause;
+		__ISB();
+		__DSB();
+	}
+
+	if ((intStatus & USBD_INTEN_USBEVENT_Msk) != 0)
+	{
+		if ((eventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0 &&
+			!atomic_exchange(&s_BusSuspended, true))
+		{
+			// A bus suspend and a peripheral low-power transition are separate.
+			// When low-power suspend is disabled, retain all endpoint state and
+			// wait for RESUME or SOF without touching USBD LOWPOWER.
+			atomic_store(&s_SuspendPending, s_UsbdLowPowerSuspend);
+			atomic_store(&s_RemoteWakePending, false);
+			atomic_store(&s_HostResumePending, false);
+			atomic_store(&s_IsoInReady, false);
+			atomic_store(&s_IsoOutReady, false);
+			if ((NRF_USBD->INTEN & USBD_INTEN_SOF_Msk) == 0U)
+			{
+				NRF_USBD->EVENTS_SOF = 0;
+			}
+			NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
+			nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
+		}
+
+		if ((eventCause & USBD_EVENTCAUSE_RESUME_Msk) != 0)
+		{
+			nRFUsbdHostResumeDetected();
+		}
+
+		if ((eventCause & USBD_EVENTCAUSE_USBWUALLOWED_Msk) != 0)
+		{
+			nRFUsbdWakeAllowed();
+		}
 	}
 
 	// Endpoint zero was handled above.
