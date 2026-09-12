@@ -56,6 +56,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdatomic.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "nrf.h"
 #include "nrf_peripherals.h"
@@ -2050,46 +2051,82 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
+	uint32_t epidx = 0;
+	uint32_t epdir = 0;
 	const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
-	bool xferComplete = NRF_USBD->EVENTS_EP0DATADONE != 0U ||
-						NRF_USBD->EVENTS_ENDEPOUT[0] != 0U ||
-						NRF_USBD->EVENTS_ENDISOIN != 0U ||
-						NRF_USBD->EVENTS_ENDISOOUT != 0U;
+	bool xferComplete = 0;
 
-	const uint32_t xferStatus = NRF_USBD->EPDATASTATUS & dmaStatus;
-	if (xferStatus != 0U)
+	const bool ep0DataDone = NRF_USBD->EVENTS_EP0DATADONE != 0U;
+	if (ep0DataDone)
 	{
-		const uint32_t inStatus = xferStatus & 0xFFFFUL;
-		const uint32_t outStatus = xferStatus >> 16U;
-
-		if (inStatus != 0U)
+		NRF_USBD->EVENTS_EP0DATADONE = 0;
+		if (s_Ctrlr.SetupDirIn)
 		{
-			const uint32_t epNum = 31U - (uint32_t)__CLZ(inStatus);
-			xferComplete = NRF_USBD->EVENTS_ENDEPIN[epNum] != 0U;
-		}
-		else if (outStatus != 0U)
-		{
-			const uint32_t epNum = 31U - (uint32_t)__CLZ(outStatus);
-			xferComplete = NRF_USBD->EVENTS_ENDEPOUT[epNum] != 0U;
+			epdir = 0;
+			epidx = 0;
+			xferComplete = true;
 		}
 	}
+	else if (NRF_USBD->EVENTS_ENDEPOUT[0] != 0U)
+	{
+		epdir = 1;
+		epidx = 0;
+		xferComplete = true;
+	}
+	else if (NRF_USBD->EVENTS_ENDISOIN != 0U)
+	{
+		epdir = 0;
+		epidx = 8;
+		xferComplete = true;
+		NRF_USBD->EVENTS_ENDISOIN = 0;
+	}
+	else if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
+	{
+		epdir = 1;
+		epidx = 8;
+		xferComplete = true;
+		NRF_USBD->EVENTS_ENDISOOUT = 0;
+	}
+	else if (NRF_USBD->EVENTS_EPDATA != 0U)
+	{
+		NRF_USBD->EVENTS_EPDATA = 0;
 
+		const uint32_t xferStatus = NRF_USBD->EPDATASTATUS & dmaStatus;
+
+		if (xferStatus != 0U)
+		{
+			const uint32_t inStatus = xferStatus & 0xFFFFUL;
+			const uint32_t outStatus = xferStatus >> 16U;
+
+			if (inStatus != 0U)
+			{
+				epidx = 31U - (uint32_t)__CLZ(inStatus);
+				epdir = 0;
+				xferComplete = NRF_USBD->EVENTS_ENDEPIN[epidx] != 0U;
+
+			}
+			else if (outStatus != 0U)
+			{
+				epidx = 31U - (uint32_t)__CLZ(outStatus);
+				epdir = 1;
+				xferComplete = NRF_USBD->EVENTS_ENDEPOUT[epidx] != 0U;
+			}
+		}
+	}
 	if (xferComplete)
 	{
+		printf("xfer %d %d\n", epidx, epdir);
+
 		NRF_USBD->EPSTATUS = dmaStatus;
 		nRFUsbdDmaRelease();
 
-		const uint32_t epin = dmaStatus & 0xFFFFUL;
-		const uint32_t epout = dmaStatus >> 16U;
-		if (epin != 0U)
+		if (epdir == 1U)
 		{
-			nRFUsbdHandleInData(
-				(uint8_t)(31U - (uint32_t)__CLZ(epin)));
+			nRFUsbdHandleOutEnd(epidx);
 		}
-		else if (epout != 0U)
+		else
 		{
-			nRFUsbdHandleOutEnd(
-				(uint8_t)(31U - (uint32_t)__CLZ(epout)));
+			nRFUsbdHandleInData(epidx);
 		}
 	}
 	else if (nRFUsbdDmaActive())
@@ -2099,21 +2136,18 @@ extern "C" void USBD_IRQHandler(void)
 
 	// Endpoint zero is handled completely before the non-control data path.
 	const bool ep0Setup = NRF_USBD->EVENTS_EP0SETUP != 0U;
-	const bool ep0DataDone = NRF_USBD->EVENTS_EP0DATADONE != 0U;
 
 	if (ep0Setup)
 	{
 		NRF_USBD->EVENTS_EP0SETUP = 0;
-	}
-	if (ep0DataDone)
-	{
-		NRF_USBD->EVENTS_EP0DATADONE = 0;
 	}
 	__ISB();
 	__DSB();
 
 	if (ep0Setup)
 	{
+		printf("ep0setup\n");
+
 		nRFUsbdHostResumeDetected();
 		nRFUsbdAbortEp0();
 		nRFUsbdSetupEvent();
@@ -2125,33 +2159,6 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdHandleOutData(0);
 	}
 
-	if (NRF_USBD->EVENTS_EPDATA != 0U)
-	{
-		NRF_USBD->EVENTS_EPDATA = 0;
-		const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
-		const uint32_t epMask =
-			(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
-		uint32_t outData = (dataStatus >> 16U) & epMask;
-		uint32_t inData = dataStatus & epMask;
-		// Keep OUT status latched until its END interrupt finishes the RAM copy.
-		NRF_USBD->EPDATASTATUS = inData;
-		__ISB();
-		__DSB();
-
-		while (outData != 0U)
-		{
-			const uint32_t epNum = nRFUsbdLowestBit(outData);
-			outData &= outData - 1U;
-			nRFUsbdHandleOutData((uint8_t)epNum);
-		}
-
-		while (inData != 0U)
-		{
-			const uint32_t epNum = nRFUsbdLowestBit(inData);
-			inData &= inData - 1U;
-			nRFUsbdHandleInData((uint8_t)epNum);
-		}
-	}
 
 	if (NRF_USBD->EVENTS_SOF != 0U)
 	{

@@ -70,9 +70,9 @@ reset = interrupt.index("NRF_USBD->EVENTS_USBRESET")
 bus_event = interrupt.index("NRF_USBD->EVENTS_USBEVENT")
 dma_status = interrupt.index("const uint32_t dmaStatus")
 ep0 = interrupt.index("const bool ep0Setup")
-epdata = interrupt.index("NRF_USBD->EVENTS_EPDATA", ep0)
-sof = interrupt.index("NRF_USBD->EVENTS_SOF", epdata)
-assert reset < bus_event < dma_status < ep0 < epdata < sof
+epdata = interrupt.index("NRF_USBD->EVENTS_EPDATA", dma_status)
+sof = interrupt.index("NRF_USBD->EVENTS_SOF", ep0)
+assert reset < bus_event < dma_status < epdata < ep0 < sof
 assert interrupt.index("nRFUsbdBusReset();") < dma_status
 assert "nRFUsbdCollectEvents" not in source
 assert "NRF_USBD->INTEN &" not in interrupt
@@ -81,10 +81,14 @@ assert "__CLZ(inStatus)" in interrupt[dma_status:ep0]
 assert "__CLZ(outStatus)" in interrupt[dma_status:ep0]
 assert "NRF_USBD->EPSTATUS = dmaStatus" in interrupt[dma_status:ep0]
 assert "nRFUsbdDmaRelease();" in interrupt[dma_status:ep0]
-assert "__CLZ(epin)" in interrupt[dma_status:ep0]
-assert "__CLZ(epout)" in interrupt[dma_status:ep0]
+assert "const bool ep0DataDone" in interrupt[dma_status:ep0]
+assert "if (s_Ctrlr.SetupDirIn)" in interrupt[dma_status:ep0]
+assert "NRF_USBD->EVENTS_ENDEPOUT[0]" in interrupt[dma_status:ep0]
+assert "nRFUsbdHandleInData(epidx)" in interrupt[dma_status:ep0]
+out_decode = interrupt[interrupt.index("else if (outStatus", dma_status):ep0]
+assert "epdir = 1;" in out_decode
 assert "else if (nRFUsbdDmaActive())" in interrupt[dma_status:ep0]
-setup_dispatch = interrupt[interrupt.index("if (ep0Setup)", ep0):epdata]
+setup_dispatch = interrupt[interrupt.index("if (ep0Setup)", ep0):sof]
 assert setup_dispatch.index("nRFUsbdSetupEvent();") < setup_dispatch.index(
     "nRFUsbdServicePending();"
 )
