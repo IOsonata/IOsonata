@@ -14,7 +14,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="${cross_rm} -rf" description="" id="iosonata.tinyusb.dualcdc.debug.config" name="Debug" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.dockerdpath=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=" parent="ilg.gnuarmeclipse.managedbuild.cross.config.elf.debug">
+				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="${cross_rm} -rf" description="" id="iosonata.tinyusb.dualcdc.debug.config" name="Debug" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.dockerdpath=,org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=" parent="ilg.gnuarmeclipse.managedbuild.cross.config.elf.debug">
 					<folderInfo id="iosonata.tinyusb.dualcdc.debug.folder" name="/" resourcePath="">
 						<toolChain id="iosonata.tinyusb.dualcdc.debug.toolchain" name="Cross ARM GCC" superClass="ilg.gnuarmeclipse.managedbuild.cross.toolchain.elf.debug">
 							<option id="iosonata.tinyusb.dualcdc.debug.opt" name="Optimization Level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level" value="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.none" valueType="enumerated"/>
@@ -49,33 +49,77 @@
 								<inputType id="iosonata.tinyusb.dualcdc.debug.asmin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
 							</tool>
 							<tool id="iosonata.tinyusb.dualcdc.debug.ccompiler" name="Cross ARM C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="false" id="iosonata.tinyusb.dualcdc.debug.cdefs" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" valueType="definedSymbols"><listOptionValue builtIn="false" value="NRF52840_XXAA"/></option>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="false" id="iosonata.tinyusb.dualcdc.debug.cinc" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" valueType="includePath"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../exemples/usb/tinyusb_dual_cdc_stress&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../CMSIS/Core/Include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/tinyusb/src&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/drivers/include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/hal&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable&quot;"/></option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.tinyusb.dualcdc.debug.cdefs" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="NRF52840_XXAA"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.tinyusb.dualcdc.debug.cinc" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../exemples/usb/tinyusb_dual_cdc_stress&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/tinyusb/src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/drivers/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable&quot;"/>
+								</option>
 								<option id="iosonata.tinyusb.dualcdc.debug.cstd" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="iosonata.tinyusb.dualcdc.debug.cin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
 							<tool id="iosonata.tinyusb.dualcdc.debug.cppcompiler" name="Cross ARM C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="false" id="iosonata.tinyusb.dualcdc.debug.cppdefs" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" valueType="definedSymbols"><listOptionValue builtIn="false" value="NRF52840_XXAA"/></option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.tinyusb.dualcdc.debug.cppdefs" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="NRF52840_XXAA"/>
+								</option>
 								<option id="iosonata.tinyusb.dualcdc.debug.nortti" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="iosonata.tinyusb.dualcdc.debug.noexc" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="false" id="iosonata.tinyusb.dualcdc.debug.cppinc" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" valueType="includePath"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../exemples/usb/tinyusb_dual_cdc_stress&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../CMSIS/Core/Include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/tinyusb/src&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/drivers/include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/hal&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable&quot;"/></option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.tinyusb.dualcdc.debug.cppinc" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../exemples/usb/tinyusb_dual_cdc_stress&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/tinyusb/src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/drivers/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable&quot;"/>
+								</option>
 								<option id="iosonata.tinyusb.dualcdc.debug.cppstd" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
 								<inputType id="iosonata.tinyusb.dualcdc.debug.cppin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
 							<tool id="iosonata.tinyusb.dualcdc.debug.clinker" name="Cross ARM C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
 								<option id="iosonata.tinyusb.dualcdc.debug.clinkgc" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.gcsections" value="true" valueType="boolean"/>
 								<option id="iosonata.tinyusb.dualcdc.debug.clinkother" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other" value="-Wl,--start-group -lgcc -lc -lm -Wl,--end-group" valueType="string"/>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.tinyusb.dualcdc.debug.clinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" valueType="stringList"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../ldscript/gcc_nrf52840_xxaa.ld&quot;"/></option>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.tinyusb.dualcdc.debug.clinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.libs" valueType="libs"><listOptionValue builtIn="false" value="IOsonata_nRF52840"/></option>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.tinyusb.dualcdc.debug.clinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Debug&quot;"/></option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.tinyusb.dualcdc.debug.clinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" valueType="stringList">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../ldscript/gcc_nrf52840_xxaa.ld&quot;"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.tinyusb.dualcdc.debug.clinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.libs" valueType="libs">
+									<listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.tinyusb.dualcdc.debug.clinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Debug&quot;"/>
+								</option>
 								<option id="iosonata.tinyusb.dualcdc.debug.clinknano" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.usenewlibnano" value="true" valueType="boolean"/>
 							</tool>
 							<tool id="iosonata.tinyusb.dualcdc.debug.cpplinker" name="Cross ARM C++ Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker">
 								<option id="iosonata.tinyusb.dualcdc.debug.cpplinkgc" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections" value="true" valueType="boolean"/>
-								<option id="iosonata.tinyusb.dualcdc.debug.cpplinkother" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" value="-Wl,--start-group -lgcc -lc -lm -Wl,--end-group" valueType="string"/>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="false" id="iosonata.tinyusb.dualcdc.debug.cpplinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" valueType="stringList"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../ldscript/gcc_nrf52840_xxaa.ld&quot;"/></option>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="false" id="iosonata.tinyusb.dualcdc.debug.cpplinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.libs" valueType="libs"><listOptionValue builtIn="false" value="IOsonata_nRF52840"/></option>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="false" id="iosonata.tinyusb.dualcdc.debug.cpplinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" valueType="libPaths"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Debug&quot;"/></option>
+								<option id="iosonata.tinyusb.dualcdc.debug.cpplinkother" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" value="--specs=rdimon.specs -Wl,--start-group -lgcc -lc -lm -lrdimon -Wl,--end-group" valueType="string"/>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.tinyusb.dualcdc.debug.cpplinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" useByScannerDiscovery="false" valueType="stringList">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../ldscript/gcc_nrf52840_xxaa.ld&quot;"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.tinyusb.dualcdc.debug.cpplinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.libs" useByScannerDiscovery="false" valueType="libs">
+									<listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.tinyusb.dualcdc.debug.cpplinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" useByScannerDiscovery="false" valueType="libPaths">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Debug&quot;"/>
+								</option>
 								<option id="iosonata.tinyusb.dualcdc.debug.cpplinknano" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano" value="true" valueType="boolean"/>
 								<inputType id="iosonata.tinyusb.dualcdc.debug.cpplinkin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input">
 									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
@@ -104,4 +148,5 @@
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
 	<storageModule moduleId="scannerConfiguration"/>
+	<storageModule moduleId="refreshScope"/>
 </cproject>
