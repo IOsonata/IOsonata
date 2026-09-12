@@ -29,6 +29,8 @@ header = HEADER.read_text(encoding="utf-8")
 source = SOURCE.read_text(encoding="utf-8")
 open_ep = function_body(source, "static bool nRFUsbRegEpOpen(")
 service = function_body(source, "static void nRFUsbdServicePending(void)")
+handle_in = function_body(source, "static void nRFUsbdHandleInData(uint8_t EpNum)")
+handle_out = function_body(source, "static void nRFUsbdHandleOutEnd(uint8_t EpNum)")
 interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
 
 assert "USB_EPIN_CNT_0 = 8" in header and "USB_EPOUT_CNT_0 = 8" in header
@@ -40,8 +42,10 @@ assert "USBD_ISOSPLIT_SPLIT_HalfIN" in open_ep
 assert "USBD_ISOINCONFIG_RESPONSE_ZeroData" in open_ep
 assert service.index("nRFUsbdStartIsoNow()") < service.index("CFifoGet(s_hQue)")
 assert "NRF_USBD->SIZE.ISOOUT" in interrupt
-assert "nRFUsbdHandleIsoInEnd();" in interrupt
-assert "nRFUsbdHandleIsoOutEnd();" in interrupt
+assert "NRF_USBD->ISOIN.AMOUNT" in handle_in
+assert "NRF_USBD->ISOOUT.AMOUNT" in handle_out
+assert "nRFUsbdHandleInData(epNum)" in interrupt
+assert "nRFUsbdHandleOutEnd(epNum)" in interrupt
 assert interrupt.index("atomic_load(&s_IsoInOpen)") < interrupt.index(
     "if (s_Ctrlr.SofEnabled)"
 )
