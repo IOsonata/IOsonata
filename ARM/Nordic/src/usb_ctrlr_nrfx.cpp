@@ -1005,6 +1005,7 @@ static void nRFUsbdEp0StatusNow(void)
 	const uint8_t epAddr = s_Ctrlr.SetupDirIn ?
 		USB_ENDPADDR_DIR_OUT : USB_ENDPADDR_DIR_IN;
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(epAddr);
+	printf("ep0status started=%u\n", pXfer->Started);
 
 	NRF_USBD->TASKS_EP0STATUS = 1;
 	__ISB();
@@ -1987,6 +1988,14 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
 	const uint8_t epAddr = (uint8_t)(EpNum | USB_ENDPADDR_DIR_IN);
+	if (EpNum == 0U)
+	{
+		printf("in0 started=%u amount=%u actual=%u total=%u\n",
+			pXfer->Started,
+			(unsigned)NRF_USBD->EPIN[0].AMOUNT,
+			pXfer->ActualLen,
+			pXfer->TotalLen);
+	}
 	if (!pXfer->Started)
 	{
 		return;
