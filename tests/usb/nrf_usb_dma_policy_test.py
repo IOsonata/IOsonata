@@ -38,13 +38,17 @@ assert "nRFUsbdDmaEndEvent(activeDma)" in interrupt
 assert "s_DmaEpAddr" not in abort_ep0
 assert "NRF_USBD->EPSTATUS" in abort_ep0
 assert "nRFUsbdDmaWait" not in abort_ep0
+reset = interrupt.index("NRF_USBD->EVENTS_USBRESET")
+ep0 = interrupt.index("const uint32_t ep0Status")
 data_dma = interrupt.index("const uint8_t activeDma")
+collector = interrupt.index("nRFUsbdCollectEvents()")
+assert reset < ep0 < data_dma < collector
+assert interrupt.index("nRFUsbdBusReset();") < ep0
+assert interrupt.index("nRFUsbdSetupEvent();") < data_dma
 assert interrupt.index("*pEndEvent = 0", data_dma) < interrupt.index(
     "nRFUsbdDmaRelease();", data_dma
 )
-assert interrupt.index("nRFUsbdDmaRelease();") < interrupt.index(
-    "nRFUsbdCollectEvents()"
-)
+assert interrupt.index("nRFUsbdDmaRelease();") < collector
 assert "USBD_INTEN_EPDATA_Msk" in interrupt
 assert interrupt.rindex("nRFUsbdServicePending();") > interrupt.index(
     "USBD_INTEN_EPDATA_Msk"

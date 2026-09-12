@@ -2179,7 +2179,19 @@ static void nRFUsbdHandleIsoOutEnd(void)
 
 extern "C" void USBD_IRQHandler(void)
 {
-	const bool reset = NRF_USBD->EVENTS_USBRESET != 0U;
+	// Reset invalidates every transfer, so handle it before looking at any
+	// endpoint state.
+	if (NRF_USBD->EVENTS_USBRESET != 0U)
+	{
+		NRF_USBD->EVENTS_USBRESET = 0;
+		__ISB();
+		__DSB();
+		nRFUsbdBusReset();
+		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESET);
+		return;
+	}
+
+	// Endpoint zero is handled completely before the non-control data path.
 	const uint32_t ep0Status =
 		NRF_USBD->EPSTATUS & ((1UL << 0) | (1UL << 16));
 	if (ep0Status != 0U)
@@ -2187,13 +2199,63 @@ extern "C" void USBD_IRQHandler(void)
 		volatile uint32_t *pEndEvent = (ep0Status & (1UL << 0)) != 0U ?
 			&NRF_USBD->EVENTS_ENDEPIN[0] :
 			&NRF_USBD->EVENTS_ENDEPOUT[0];
-		if (*pEndEvent == 0U && !reset)
+		if (*pEndEvent == 0U)
 		{
 			return;
 		}
 
 		NRF_USBD->EPSTATUS = ep0Status;
 		nRFUsbdDmaRelease();
+	}
+
+	const bool ep0Setup = NRF_USBD->EVENTS_EP0SETUP != 0U;
+	const bool ep0DataDone = NRF_USBD->EVENTS_EP0DATADONE != 0U;
+	const bool ep0InEnd = NRF_USBD->EVENTS_ENDEPIN[0] != 0U;
+	const bool ep0OutEnd = NRF_USBD->EVENTS_ENDEPOUT[0] != 0U;
+
+	if (ep0Setup)
+	{
+		NRF_USBD->EVENTS_EP0SETUP = 0;
+	}
+	if (ep0DataDone)
+	{
+		NRF_USBD->EVENTS_EP0DATADONE = 0;
+	}
+	if (ep0InEnd)
+	{
+		NRF_USBD->EVENTS_ENDEPIN[0] = 0;
+	}
+	if (ep0OutEnd)
+	{
+		NRF_USBD->EVENTS_ENDEPOUT[0] = 0;
+	}
+	__ISB();
+	__DSB();
+
+	if (ep0Setup)
+	{
+		nRFUsbdHostResumeDetected();
+		nRFUsbdAbortEp0();
+		nRFUsbdSetupEvent();
+	}
+	else
+	{
+		if (ep0OutEnd)
+		{
+			nRFUsbdHandleOutEnd(0);
+		}
+
+		if (ep0DataDone)
+		{
+			if (s_Ctrlr.SetupDirIn)
+			{
+				nRFUsbdHandleInData(0);
+			}
+			else
+			{
+				nRFUsbdHandleOutData(0);
+			}
+		}
 	}
 
 	const uint8_t activeDma = (uint8_t)atomic_load(&s_DmaEpAddr);
@@ -2206,7 +2268,7 @@ extern "C" void USBD_IRQHandler(void)
 		// enable ENDEPIN: its EPDATA interrupt arrives after DMA has ended and
 		// observes the latched ENDEPIN event here.
 		volatile uint32_t *pEndEvent = nRFUsbdDmaEndEvent(activeDma);
-		if (*pEndEvent == 0U && !reset)
+		if (*pEndEvent == 0U)
 		{
 			return;
 		}
@@ -2243,13 +2305,6 @@ extern "C" void USBD_IRQHandler(void)
 		__DSB();
 	}
 
-	if ((intStatus & USBD_INTEN_USBRESET_Msk) != 0)
-	{
-		nRFUsbdBusReset();
-		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESET);
-		return;
-	}
-
 	if ((intStatus & USBD_INTEN_USBEVENT_Msk) != 0)
 	{
 		if ((eventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0 &&
@@ -2282,7 +2337,7 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
-	// Endpoint zero is handled further down with the setup sequence.
+	// Endpoint zero was handled above.
 	uint32_t outEnd = (intStatus >> USBD_INTEN_ENDEPOUT0_Pos) &
 					  (uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
 
@@ -2294,7 +2349,7 @@ extern "C" void USBD_IRQHandler(void)
 	}
 
 	uint32_t dataStatus = 0;
-	if ((intStatus & (USBD_INTEN_EPDATA_Msk | USBD_INTEN_EP0DATADONE_Msk)) != 0)
+	if ((intStatus & USBD_INTEN_EPDATA_Msk) != 0)
 	{
 		dataStatus = NRF_USBD->EPDATASTATUS;
 		NRF_USBD->EPDATASTATUS = dataStatus;
@@ -2328,33 +2383,6 @@ extern "C" void USBD_IRQHandler(void)
 	if ((intStatus & USBD_INTEN_ENDISOOUT_Msk) != 0U)
 	{
 		nRFUsbdHandleIsoOutEnd();
-	}
-
-	const bool setupPending = (intStatus & USBD_INTEN_EP0SETUP_Msk) != 0;
-	if (setupPending)
-	{
-		nRFUsbdHostResumeDetected();
-		nRFUsbdAbortEp0();
-		nRFUsbdSetupEvent();
-	}
-	else
-	{
-		if ((intStatus & USBD_INTEN_ENDEPOUT0_Msk) != 0)
-		{
-			nRFUsbdHandleOutEnd(0);
-		}
-
-		if ((intStatus & USBD_INTEN_EP0DATADONE_Msk) != 0)
-		{
-			if (s_Ctrlr.SetupDirIn)
-			{
-				nRFUsbdHandleInData(0);
-			}
-			else
-			{
-				nRFUsbdHandleOutData(0);
-			}
-		}
 	}
 
 	if ((intStatus & USBD_INTEN_SOF_Msk) != 0)
