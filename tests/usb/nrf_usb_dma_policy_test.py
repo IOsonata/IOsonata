@@ -43,20 +43,20 @@ assert "__CLZ(epBits)" in dma_wait
 assert "NRF_USBD->EPSTATUS" in abort_ep0
 assert "nRFUsbdDmaWait" not in abort_ep0
 reset = interrupt.index("NRF_USBD->EVENTS_USBRESET")
-ep0 = interrupt.index("const uint32_t ep0Status")
-iso = interrupt.index("const bool isoInEnd")
-data_dma = interrupt.index(
-    "NRF_USBD->EPSTATUS & NRF_USBD->EPDATASTATUS", iso
-)
+dma_status = interrupt.index("const uint32_t dmaStatus")
+ep0 = interrupt.index("const bool ep0Setup")
 collector = interrupt.index("nRFUsbdCollectEvents()")
-assert reset < ep0 < iso < data_dma < collector
-assert interrupt.index("nRFUsbdBusReset();") < ep0
-assert interrupt.index("nRFUsbdSetupEvent();") < iso
-assert "EVENTS_ENDISOIN" in interrupt[iso:data_dma]
-assert "EVENTS_ENDISOOUT" in interrupt[iso:data_dma]
-assert "__CLZ(epBits)" in interrupt[data_dma:collector]
-assert "NRF_USBD->EPSTATUS =" in interrupt[data_dma:collector]
-assert interrupt.index("nRFUsbdDmaRelease();") < collector
+assert reset < dma_status < ep0 < collector
+assert interrupt.index("nRFUsbdBusReset();") < dma_status
+assert "EVENTS_EP0DATADONE" in interrupt[dma_status:ep0]
+assert "EVENTS_ENDISOIN" in interrupt[dma_status:ep0]
+assert "EVENTS_ENDISOOUT" in interrupt[dma_status:ep0]
+assert "NRF_USBD->EPDATASTATUS & dmaStatus" in interrupt[dma_status:ep0]
+assert "__CLZ(inStatus)" in interrupt[dma_status:ep0]
+assert "__CLZ(outStatus)" in interrupt[dma_status:ep0]
+assert "NRF_USBD->EPSTATUS = dmaStatus" in interrupt[dma_status:ep0]
+assert "NRFX_USBD_EASYDMA_BUSY_REG_FREE" in interrupt[dma_status:ep0]
+assert "atomic_flag_clear(&s_DmaRunning)" in interrupt[dma_status:ep0]
 assert "USBD_INTEN_EPDATA_Msk" in interrupt
 assert interrupt.rindex("nRFUsbdServicePending();") > interrupt.index(
     "USBD_INTEN_EPDATA_Msk"

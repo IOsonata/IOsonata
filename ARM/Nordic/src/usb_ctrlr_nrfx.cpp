@@ -838,8 +838,11 @@ enum
 #define NRFUSBD_IRQ_MASK \
 	((uint32_t)((1ULL << NRFX_USBD_IRQ_EVENT_COUNT) - 1ULL))
 
-#define NRFX_USBD_ERRATA_199_REG \
+#define NRFX_USBD_EASYDMA_BUSY_REG \
 	(*((volatile uint32_t *)0x40027C1CUL))
+#define NRFX_USBD_ERRATA_199_REG		NRFX_USBD_EASYDMA_BUSY_REG
+#define NRFX_USBD_EASYDMA_BUSY_REG_BUSY	0x82UL
+#define NRFX_USBD_EASYDMA_BUSY_REG_FREE	0UL
 
 typedef struct __nRF_Usbd_Xfer
 {
@@ -988,7 +991,7 @@ static void nRFUsbdDmaRelease(void)
 
 	if (nrf52_errata_199())
 	{
-		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
+		NRFX_USBD_ERRATA_199_REG = NRFX_USBD_EASYDMA_BUSY_REG_FREE;
 	}
 
 	atomic_flag_clear(&s_DmaRunning);
@@ -1012,7 +1015,7 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 	// Nordic's errata 199 workaround marks EasyDMA busy before STARTEP.
 	if (nrf52_errata_199())
 	{
-		NRFX_USBD_ERRATA_199_REG = 0x00000082UL;
+		NRFX_USBD_ERRATA_199_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
 	}
 
 	*pTask = 1;
@@ -1378,7 +1381,7 @@ static void nRFUsbdResetState(void)
 
 	if (nrf52_errata_199())
 	{
-		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
+		NRFX_USBD_ERRATA_199_REG = NRFX_USBD_EASYDMA_BUSY_REG_FREE;
 	}
 }
 
@@ -2205,23 +2208,42 @@ extern "C" void USBD_IRQHandler(void)
 		return;
 	}
 
-	// Endpoint zero is handled completely before the non-control data path.
-	const uint32_t ep0Status =
-		NRF_USBD->EPSTATUS & ((1UL << 0) | (1UL << 16));
-	if (ep0Status != 0U)
-	{
-		volatile uint32_t *pEndEvent = (ep0Status & (1UL << 0)) != 0U ?
-			&NRF_USBD->EVENTS_ENDEPIN[0] :
-			&NRF_USBD->EVENTS_ENDEPOUT[0];
-		if (*pEndEvent == 0U)
-		{
-			return;
-		}
+	const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
+	bool xferComplete = NRF_USBD->EVENTS_EP0DATADONE != 0U ||
+		NRF_USBD->EVENTS_ENDISOIN != 0U ||
+		NRF_USBD->EVENTS_ENDISOOUT != 0U;
 
-		NRF_USBD->EPSTATUS = ep0Status;
-		nRFUsbdDmaRelease();
+	if (!xferComplete && NRF_USBD->EVENTS_EPDATA != 0U)
+	{
+		const uint32_t xferStatus = NRF_USBD->EPDATASTATUS & dmaStatus;
+		const uint32_t inStatus = xferStatus & 0xFFFFUL;
+		const uint32_t outStatus = xferStatus >> 16UL;
+
+		if (inStatus != 0U)
+		{
+			const uint32_t epNum = 31U - (uint32_t)__CLZ(inStatus);
+			xferComplete = NRF_USBD->EVENTS_ENDEPIN[epNum] != 0U;
+		}
+		else if (outStatus != 0U)
+		{
+			const uint32_t epNum = 31U - (uint32_t)__CLZ(outStatus);
+			xferComplete = NRF_USBD->EVENTS_ENDEPOUT[epNum] != 0U;
+		}
 	}
 
+	if (xferComplete)
+	{
+		NRF_USBD->EPSTATUS = dmaStatus;
+		if (nrf52_errata_199())
+		{
+			NRFX_USBD_ERRATA_199_REG = NRFX_USBD_EASYDMA_BUSY_REG_FREE;
+		}
+		atomic_flag_clear(&s_DmaRunning);
+		__ISB();
+		__DSB();
+	}
+
+	// Endpoint zero is handled completely before the non-control data path.
 	const bool ep0Setup = NRF_USBD->EVENTS_EP0SETUP != 0U;
 	const bool ep0DataDone = NRF_USBD->EVENTS_EP0DATADONE != 0U;
 	const bool ep0InEnd = NRF_USBD->EVENTS_ENDEPIN[0] != 0U;
@@ -2269,53 +2291,6 @@ extern "C" void USBD_IRQHandler(void)
 			{
 				nRFUsbdHandleOutData(0);
 			}
-		}
-	}
-
-	const bool isoInEnd = NRF_USBD->EVENTS_ENDISOIN != 0U;
-	const bool isoOutEnd = NRF_USBD->EVENTS_ENDISOOUT != 0U;
-	if (isoInEnd || isoOutEnd)
-	{
-		NRF_USBD->EPSTATUS = 1UL << (NRFX_USBD_ISO_EP_NO +
-			(isoInEnd ? 0U : 16U));
-		nRFUsbdDmaRelease();
-	}
-	else
-	{
-		const uint32_t epStatus =
-			NRF_USBD->EPSTATUS & NRF_USBD->EPDATASTATUS;
-		if (epStatus != 0U)
-		{
-			const uint32_t inBits = epStatus & 0xFFFFU;
-			const bool isIn = inBits != 0U;
-			const uint32_t epBits = isIn ? inBits : epStatus >> 16U;
-			const uint32_t epNum = 31U - (uint32_t)__CLZ(epBits);
-			volatile uint32_t *pEndEvent = isIn ?
-				&NRF_USBD->EVENTS_ENDEPIN[epNum] :
-				&NRF_USBD->EVENTS_ENDEPOUT[epNum];
-			if (*pEndEvent == 0U)
-			{
-				return;
-			}
-
-			const uint32_t epBit = 1UL << (epNum + (isIn ? 0U : 16U));
-			NRF_USBD->EPSTATUS = epBit;
-			NRF_USBD->EPDATASTATUS = epBit;
-			// Data IN completes on EPDATA. ENDEPIN is not enabled, so clear
-			// its latched event after it releases the shared DMA engine.
-			if (isIn)
-			{
-				*pEndEvent = 0;
-				__ISB();
-				__DSB();
-			}
-
-			nRFUsbdDmaRelease();
-		}
-		else if (nRFUsbdDmaActive())
-		{
-			// STARTEP has run but hardware has not captured its registers yet.
-			return;
 		}
 	}
 
