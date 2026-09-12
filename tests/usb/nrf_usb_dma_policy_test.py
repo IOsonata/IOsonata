@@ -26,6 +26,7 @@ def function_body(source: str, signature: str) -> str:
 source = SOURCE.read_text(encoding="utf-8")
 dma_start = function_body(source, "static void nRFUsbdDmaStart(")
 service = function_body(source, "static void nRFUsbdServicePending(void)")
+schedule = function_body(source, "void nRFUsbdSchedule(void)")
 abort_ep0 = function_body(source, "static void nRFUsbdAbortEp0(void)")
 handle_in = function_body(source, "static void nRFUsbdHandleInData(uint8_t EpNum)")
 handle_out = function_body(source, "static void nRFUsbdHandleOutEnd(uint8_t EpNum)")
@@ -44,6 +45,9 @@ assert "NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY" in dma_sta
 assert dma_start.index("NRFX_USBD_EASYDMA_BUSY_REG") < dma_start.index("*pTask = 1")
 assert "return NRFX_USBD_EASYDMA_BUSY_REG ==" in source
 assert "nRFUsbdDmaActive()" in service
+assert "nRFUsbdDmaActive" not in schedule
+assert "nRFUsbdDeferFromInterrupt()" in schedule
+assert "nRFUsbdServicePending();" in schedule
 assert "NVIC_SetPendingIRQ(USBD_IRQn)" in source
 assert "NRF_USBD->EPSTATUS" in abort_ep0
 assert "NRF_USBD->ISOIN.AMOUNT" in handle_in

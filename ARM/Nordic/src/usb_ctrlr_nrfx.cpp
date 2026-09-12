@@ -1160,6 +1160,15 @@ bool nRFUsbdDeferFromInterrupt(void)
 	return true;
 }
 
+static inline __attribute__((always_inline))
+void nRFUsbdSchedule(void)
+{
+	if (!nRFUsbdDeferFromInterrupt())
+	{
+		nRFUsbdServicePending();
+	}
+}
+
 /**
  * Put one DMA request on the queue. Filling the block runs with interrupts
  * off because CFifoPut publishes the slot before the caller writes it, and
