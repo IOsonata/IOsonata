@@ -1932,6 +1932,10 @@ static void nRFUsbdHandleOutEnd(uint8_t EpNum)
 	{
 		pXfer->Started = false;
 		nRFUsbdEmitXfer(EpNum, pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
+		if (EpNum == 0U && atomic_exchange(&s_PendingEp0Status, false))
+		{
+			nRFUsbdEp0StatusNow();
+		}
 	}
 }
 
@@ -2007,6 +2011,10 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 		pXfer->Started = false;
 		nRFUsbdEmitXfer(epAddr, pXfer->ActualLen,
 						 USB_CTRLR_XFER_SUCCESS);
+		if (EpNum == 0U && atomic_exchange(&s_PendingEp0Status, false))
+		{
+			nRFUsbdEp0StatusNow();
+		}
 	}
 }
 

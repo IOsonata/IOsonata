@@ -58,6 +58,10 @@ assert "NRF_USBD->ISOOUT.AMOUNT" in handle_out
 assert "NRF_USBD->EPOUT[EpNum].AMOUNT" in handle_out
 assert "EpNum != NRFX_USBD_ISO_EP_NO" in handle_out
 assert "NRF_USBD->EVENTS_ENDISOOUT = 0" in handle_out
+assert "atomic_exchange(&s_PendingEp0Status, false)" in handle_in
+assert "nRFUsbdEp0StatusNow();" in handle_in
+assert "atomic_exchange(&s_PendingEp0Status, false)" in handle_out
+assert "nRFUsbdEp0StatusNow();" in handle_out
 assert "nRFUsbdHandleIsoInEnd" not in source
 assert "nRFUsbdHandleIsoOutEnd" not in source
 assert "USBD_INTEN_ENDISOIN_Msk" in open_ep
