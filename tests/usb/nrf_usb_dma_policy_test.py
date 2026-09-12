@@ -64,7 +64,6 @@ assert reset < bus_event < dma_status < ep0 < epdata < sof
 assert interrupt.index("nRFUsbdBusReset();") < dma_status
 assert "nRFUsbdCollectEvents" not in source
 assert "NRF_USBD->INTEN &" not in interrupt
-assert "EVENTS_ENDEPIN[0]" in interrupt[dma_status:ep0]
 assert "EVENTS_ENDEPOUT[0]" in interrupt[dma_status:ep0]
 assert "EVENTS_ENDISOIN" in interrupt[dma_status:ep0]
 assert "EVENTS_ENDISOOUT" in interrupt[dma_status:ep0]
@@ -74,14 +73,10 @@ assert "__CLZ(outStatus)" in interrupt[dma_status:ep0]
 assert "NRF_USBD->EPSTATUS = dmaStatus" in interrupt[dma_status:ep0]
 assert "NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_FREE" in interrupt[dma_status:ep0]
 assert "atomic_flag_clear(&s_DmaRunning)" in interrupt[dma_status:ep0]
-assert "const uint32_t epNum = 31U - (uint32_t)__CLZ(epin)" in interrupt[dma_status:ep0]
-assert "if (epNum == 0U)" in interrupt[dma_status:ep0]
-assert "NRF_USBD->EVENTS_ENDEPIN[0] = 0" in interrupt[dma_status:ep0]
-assert "nRFUsbdHandleInData((uint8_t)epNum)" in interrupt[dma_status:ep0]
+assert "nRFUsbdHandleInData(31U - (uint32_t)__CLZ(epin))" in interrupt[dma_status:ep0]
 assert "nRFUsbdHandleOutEnd(31U - (uint32_t)__CLZ(epout))" in interrupt[dma_status:ep0]
-assert "if (s_Ctrlr.SetupDirIn)" in interrupt[ep0:epdata]
-assert "nRFUsbdHandleInData(0)" in interrupt[ep0:epdata]
-assert "EVENTS_EP0DATADONE" not in interrupt[dma_status:interrupt.index("const uint32_t xferStatus")]
+assert "EVENTS_EP0DATADONE" in interrupt[dma_status:interrupt.index("const uint32_t xferStatus")]
+assert "USBD_INTEN_ENDEPIN0_Msk" not in source
 assert interrupt.rindex("nRFUsbdServicePending();") > sof
 assert "nRFUsbdDmaReclaim" not in service
 
