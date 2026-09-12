@@ -2170,14 +2170,9 @@ static void nRFUsbdHandleIsoOutEnd(void)
 
 extern "C" void USBD_IRQHandler(void)
 {
-	const uint8_t activeDma = (uint8_t)atomic_load(&s_DmaEpAddr);
-	if (activeDma != NRFX_USBD_DMA_EP_NONE)
+	const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
+	if (dmaStatus != 0U)
 	{
-		// Most USBD registers cannot be read while EasyDMA owns the peripheral.
-		// Retire only the active DMA here; every other event remains latched for
-		// the normal collector after ownership is released. Data IN does not
-		// enable ENDEPIN: its EPDATA interrupt arrives after DMA has ended and
-		// observes the latched ENDEPIN event here.
 		const bool reset = NRF_USBD->EVENTS_USBRESET != 0U;
 		volatile uint32_t *pEndEvent = NULL;
 		bool dataIn = false;
@@ -2202,7 +2197,7 @@ extern "C" void USBD_IRQHandler(void)
 			else
 			{
 				const uint32_t epStatus =
-					NRF_USBD->EPSTATUS & NRF_USBD->EPDATASTATUS;
+					dmaStatus & NRF_USBD->EPDATASTATUS;
 				const uint32_t inEpStatus = epStatus & 0xFFFFUL;
 				const uint32_t outEpStatus = epStatus >> 16U;
 				if (inEpStatus != 0U)
@@ -2238,6 +2233,7 @@ extern "C" void USBD_IRQHandler(void)
 			__DSB();
 		}
 
+		NRF_USBD->EPSTATUS = dmaStatus;
 		nRFUsbdDmaRelease();
 	}
 
