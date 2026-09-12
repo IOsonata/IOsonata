@@ -26,6 +26,7 @@ def function_body(source: str, signature: str) -> str:
 source = SOURCE.read_text(encoding="utf-8")
 dma_start = function_body(source, "static void nRFUsbdDmaStart(")
 service = function_body(source, "static void nRFUsbdServicePending(void)")
+abort_ep0 = function_body(source, "static void nRFUsbdAbortEp0(void)")
 interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
 
 assert "nRFUsbdDmaReclaim" not in source
@@ -34,8 +35,12 @@ assert "s_LazyInMask" not in source
 assert "INTENSET" not in dma_start, "DMA start must not enable ENDEPIN"
 assert "atomic_store(&s_DmaEpAddr, EpAddr)" in dma_start
 assert "nRFUsbdDmaEndEvent(activeDma)" in interrupt
-assert interrupt.index("*pEndEvent = 0") < interrupt.index(
-    "nRFUsbdDmaRelease();"
+assert "s_DmaEpAddr" not in abort_ep0
+assert "NRF_USBD->EPSTATUS" in abort_ep0
+assert "nRFUsbdDmaWait" not in abort_ep0
+data_dma = interrupt.index("const uint8_t activeDma")
+assert interrupt.index("*pEndEvent = 0", data_dma) < interrupt.index(
+    "nRFUsbdDmaRelease();", data_dma
 )
 assert interrupt.index("nRFUsbdDmaRelease();") < interrupt.index(
     "nRFUsbdCollectEvents()"
