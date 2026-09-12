@@ -2059,6 +2059,7 @@ extern "C" void USBD_IRQHandler(void)
 	const bool ep0DataDone = NRF_USBD->EVENTS_EP0DATADONE != 0U;
 	if (ep0DataDone)
 	{
+		printf("s_Ctrlr.SetupDirIn = %x\n", s_Ctrlr.SetupDirIn);
 		NRF_USBD->EVENTS_EP0DATADONE = 0;
 		if (s_Ctrlr.SetupDirIn)
 		{
@@ -2069,6 +2070,7 @@ extern "C" void USBD_IRQHandler(void)
 	}
 	else if (NRF_USBD->EVENTS_ENDEPOUT[0] != 0U)
 	{
+		printf("ENDEP0OUT, ep0DataDone = %x\n", ep0DataDone);
 		epdir = 1;
 		epidx = 0;
 		xferComplete = true;
@@ -2127,6 +2129,12 @@ extern "C" void USBD_IRQHandler(void)
 		else
 		{
 			nRFUsbdHandleInData(epidx);
+		}
+
+		if (epidx == 0U)
+		{
+			nRFUsbdServicePending();
+			return;
 		}
 	}
 	else if (nRFUsbdDmaActive())

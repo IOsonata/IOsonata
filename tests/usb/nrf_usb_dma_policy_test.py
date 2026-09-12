@@ -85,6 +85,14 @@ assert "const bool ep0DataDone" in interrupt[dma_status:ep0]
 assert "if (s_Ctrlr.SetupDirIn)" in interrupt[dma_status:ep0]
 assert "NRF_USBD->EVENTS_ENDEPOUT[0]" in interrupt[dma_status:ep0]
 assert "nRFUsbdHandleInData(epidx)" in interrupt[dma_status:ep0]
+ep0_complete = interrupt[interrupt.index("if (xferComplete)", dma_status):ep0]
+assert "if (epidx == 0U)" in ep0_complete
+assert ep0_complete.index("if (epidx == 0U)") < ep0_complete.index(
+    "nRFUsbdServicePending();"
+)
+assert ep0_complete.index("nRFUsbdServicePending();") < ep0_complete.index(
+    "return;"
+)
 out_decode = interrupt[interrupt.index("else if (outStatus", dma_status):ep0]
 assert "epdir = 1;" in out_decode
 assert "else if (nRFUsbdDmaActive())" in interrupt[dma_status:ep0]
