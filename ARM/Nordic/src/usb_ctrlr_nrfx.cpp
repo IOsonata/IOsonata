@@ -838,8 +838,8 @@ enum
 #define NRFUSBD_IRQ_MASK \
 	((uint32_t)((1ULL << NRFX_USBD_IRQ_EVENT_COUNT) - 1ULL))
 
-#define NRFX_USBD_EASYDMA_BUSY_REG \
-	(*((volatile uint32_t *)0x40027C1CUL))
+// This errata register serves as the EasyDMA busy flag described in errata 199.
+#define NRFX_USBD_EASYDMA_BUSY_REG	(*((volatile uint32_t *)0x40027C1CUL))
 #define NRFX_USBD_ERRATA_199_REG		NRFX_USBD_EASYDMA_BUSY_REG
 #define NRFX_USBD_EASYDMA_BUSY_REG_BUSY	0x82UL
 #define NRFX_USBD_EASYDMA_BUSY_REG_FREE	0UL
@@ -2209,6 +2209,7 @@ extern "C" void USBD_IRQHandler(void)
 	}
 
 	const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
+	uint8_t dataEpAddr = 0U;
 	bool xferComplete = NRF_USBD->EVENTS_EP0DATADONE != 0U ||
 		NRF_USBD->EVENTS_ENDISOIN != 0U ||
 		NRF_USBD->EVENTS_ENDISOOUT != 0U;
@@ -2223,24 +2224,41 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(inStatus);
 			xferComplete = NRF_USBD->EVENTS_ENDEPIN[epNum] != 0U;
+			dataEpAddr = xferComplete ?
+				(uint8_t)(epNum | USB_ENDPADDR_DIR_IN) : 0U;
 		}
 		else if (outStatus != 0U)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(outStatus);
 			xferComplete = NRF_USBD->EVENTS_ENDEPOUT[epNum] != 0U;
+			dataEpAddr = xferComplete ? (uint8_t)epNum : 0U;
 		}
 	}
 
 	if (xferComplete)
 	{
 		NRF_USBD->EPSTATUS = dmaStatus;
-		if (nrf52_errata_199())
-		{
-			NRFX_USBD_ERRATA_199_REG = NRFX_USBD_EASYDMA_BUSY_REG_FREE;
-		}
+		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_FREE;
 		atomic_flag_clear(&s_DmaRunning);
 		__ISB();
 		__DSB();
+
+		if (dataEpAddr != 0U)
+		{
+			const uint8_t epNum = USB_ENDPADDR_NUM(dataEpAddr);
+			NRF_USBD->EPDATASTATUS = 1UL << (epNum +
+				(USB_ENDPADDR_IS_IN(dataEpAddr) ? 0U : 16U));
+			if (USB_ENDPADDR_IS_IN(dataEpAddr))
+			{
+				NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
+				nRFUsbdHandleInData(epNum);
+			}
+			else
+			{
+				NRF_USBD->EVENTS_ENDEPOUT[epNum] = 0;
+				nRFUsbdHandleOutEnd(epNum);
+			}
+		}
 	}
 
 	// Endpoint zero is handled completely before the non-control data path.
