@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Guard nRF52 IN completion without a second per-packet interrupt."""
 
-import re
 from pathlib import Path
 
 
@@ -32,33 +31,23 @@ interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
 assert "nRFUsbdDmaReclaim" not in source
 assert "nRFUsbdDmaEndIntEnable" not in source
 assert "s_LazyInMask" not in source
-assert "s_DmaEpAddr" not in source
-assert "nRFUsbdCollectEvents" not in source
 assert "INTENSET" not in dma_start, "DMA start must not enable ENDEPIN"
-assert "NRF_USBD->EPSTATUS = oldStatus" in dma_start
-assert "nRFUsbdEpStatusBit(EpAddr)" in dma_start
-assert interrupt.index("NRF_USBD->EVENTS_EPDATA") < interrupt.index(
-    "dataStatus = NRF_USBD->EPDATASTATUS"
-)
-assert "epStatus & NRF_USBD->EPDATASTATUS" in interrupt
-assert "dataDmaStatus & 0xFFFFUL" in interrupt
-assert "dataDmaStatus >> 16U" in interrupt
-assert "dmaIn ? inDmaStatus : outDmaStatus" in interrupt
-assert interrupt.index("epStatus & NRF_USBD->EPDATASTATUS") < interrupt.index(
-    "NRF_USBD->EPDATASTATUS = dataDmaStatus"
-)
-assert interrupt.index("if (*pEndEvent == 0U") < interrupt.index(
-    "NRF_USBD->EVENTS_EPDATA = 0"
-)
-assert interrupt.index("NRF_USBD->EPSTATUS = dataDmaStatus") < interrupt.index(
-    "nRFUsbdDmaRelease();"
-)
+assert "atomic_store(&s_DmaEpAddr, EpAddr)" in dma_start
+assert "nRFUsbdDmaEndEvent(activeDma)" in interrupt
 assert interrupt.index("*pEndEvent = 0") < interrupt.index(
     "nRFUsbdDmaRelease();"
 )
-assert re.search(r"NRF_USBD->INTEN\b", interrupt) is None
+assert interrupt.index("nRFUsbdDmaRelease();") < interrupt.index(
+    "nRFUsbdCollectEvents()"
+)
+assert "USBD_INTEN_EPDATA_Msk" in interrupt
+assert "NRF_USBD->EPSTATUS & epDataStatus" in interrupt
+assert "31U - (uint32_t)__CLZ(outData)" in interrupt
+assert "31U - (uint32_t)__CLZ(inData)" in interrupt
+assert "while (outData != 0U)" not in interrupt
+assert "while (inData != 0U)" not in interrupt
 assert interrupt.rindex("nRFUsbdServicePending();") > interrupt.index(
-    "NRF_USBD->EVENTS_EPDATA"
+    "USBD_INTEN_EPDATA_Msk"
 )
 assert "nRFUsbdDmaReclaim" not in service
 
