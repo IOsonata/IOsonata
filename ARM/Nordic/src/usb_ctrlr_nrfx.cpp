@@ -2117,6 +2117,8 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdHostResumeDetected();
 		nRFUsbdAbortEp0();
 		nRFUsbdSetupEvent();
+		nRFUsbdServicePending();
+		return;
 	}
 	else if (ep0DataDone && !s_Ctrlr.SetupDirIn)
 	{

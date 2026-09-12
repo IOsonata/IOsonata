@@ -84,6 +84,13 @@ assert "nRFUsbdDmaRelease();" in interrupt[dma_status:ep0]
 assert "__CLZ(epin)" in interrupt[dma_status:ep0]
 assert "__CLZ(epout)" in interrupt[dma_status:ep0]
 assert "else if (nRFUsbdDmaActive())" in interrupt[dma_status:ep0]
+setup_dispatch = interrupt[interrupt.index("if (ep0Setup)", ep0):epdata]
+assert setup_dispatch.index("nRFUsbdSetupEvent();") < setup_dispatch.index(
+    "nRFUsbdServicePending();"
+)
+assert setup_dispatch.index("nRFUsbdServicePending();") < setup_dispatch.index(
+    "return;"
+)
 assert interrupt.rindex("nRFUsbdServicePending();") > sof
 
 print("nrf_usb_dma_policy_test: PASS")
