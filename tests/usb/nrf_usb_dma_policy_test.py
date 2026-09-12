@@ -33,17 +33,7 @@ assert "nRFUsbdDmaEndIntEnable" not in source
 assert "s_LazyInMask" not in source
 assert "INTENSET" not in dma_start, "DMA start must not enable ENDEPIN"
 assert "atomic_store(&s_DmaEpAddr, EpAddr)" in dma_start
-assert "s_DmaEpAddr" not in interrupt
-assert "dmaStatus & NRF_USBD->EPDATASTATUS" in interrupt
-assert "31U - (uint32_t)__CLZ(inEpStatus)" in interrupt
-assert "31U - (uint32_t)__CLZ(outEpStatus)" in interrupt
-assert "NRF_USBD->EVENTS_ENDEPIN[0]" in interrupt
-assert "NRF_USBD->EVENTS_ENDEPOUT[0]" in interrupt
-assert "NRF_USBD->EVENTS_ENDISOIN" in interrupt
-assert "NRF_USBD->EVENTS_ENDISOOUT" in interrupt
-assert interrupt.index("NRF_USBD->EPSTATUS = dmaStatus") < interrupt.index(
-    "nRFUsbdDmaRelease();"
-)
+assert "nRFUsbdDmaEndEvent(activeDma)" in interrupt
 assert interrupt.index("*pEndEvent = 0") < interrupt.index(
     "nRFUsbdDmaRelease();"
 )

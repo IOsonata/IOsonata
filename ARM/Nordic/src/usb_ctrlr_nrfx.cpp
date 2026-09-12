@@ -2170,70 +2170,32 @@ static void nRFUsbdHandleIsoOutEnd(void)
 
 extern "C" void USBD_IRQHandler(void)
 {
-	const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
-	if (dmaStatus != 0U)
+	const uint8_t activeDma = (uint8_t)atomic_load(&s_DmaEpAddr);
+	if (activeDma != NRFX_USBD_DMA_EP_NONE)
 	{
+		// Most USBD registers cannot be read while EasyDMA owns the peripheral.
+		// Retire only the active DMA here; every other event remains latched for
+		// the normal collector after ownership is released. Data IN does not
+		// enable ENDEPIN: its EPDATA interrupt arrives after DMA has ended and
+		// observes the latched ENDEPIN event here.
 		const bool reset = NRF_USBD->EVENTS_USBRESET != 0U;
-		volatile uint32_t *pEndEvent = NULL;
-		bool dataIn = false;
-		if (!reset)
-		{
-			if (NRF_USBD->EVENTS_ENDEPIN[0] != 0U)
-			{
-				pEndEvent = &NRF_USBD->EVENTS_ENDEPIN[0];
-			}
-			else if (NRF_USBD->EVENTS_ENDEPOUT[0] != 0U)
-			{
-				pEndEvent = &NRF_USBD->EVENTS_ENDEPOUT[0];
-			}
-			else if (NRF_USBD->EVENTS_ENDISOIN != 0U)
-			{
-				pEndEvent = &NRF_USBD->EVENTS_ENDISOIN;
-			}
-			else if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
-			{
-				pEndEvent = &NRF_USBD->EVENTS_ENDISOOUT;
-			}
-			else
-			{
-				const uint32_t epStatus =
-					dmaStatus & NRF_USBD->EPDATASTATUS;
-				const uint32_t inEpStatus = epStatus & 0xFFFFUL;
-				const uint32_t outEpStatus = epStatus >> 16U;
-				if (inEpStatus != 0U)
-				{
-					const uint32_t inEpIdx =
-						31U - (uint32_t)__CLZ(inEpStatus);
-					pEndEvent = inEpIdx == NRFX_USBD_ISO_EP_NO ?
-						&NRF_USBD->EVENTS_ENDISOIN :
-						&NRF_USBD->EVENTS_ENDEPIN[inEpIdx];
-					dataIn = true;
-				}
-				else if (outEpStatus != 0U)
-				{
-					const uint32_t outEpIdx =
-						31U - (uint32_t)__CLZ(outEpStatus);
-					pEndEvent = outEpIdx == NRFX_USBD_ISO_EP_NO ?
-						&NRF_USBD->EVENTS_ENDISOOUT :
-						&NRF_USBD->EVENTS_ENDEPOUT[outEpIdx];
-				}
-			}
-		}
-		if (!reset && (pEndEvent == NULL || *pEndEvent == 0U))
+		volatile uint32_t *pEndEvent = nRFUsbdDmaEndEvent(activeDma);
+		if (*pEndEvent == 0U && !reset)
 		{
 			return;
 		}
 
 		// Leave an OUT/EP0 END event set for the normal event collector. A
 		// data IN END only releases DMA; transfer completion is still EPDATA.
-		if (!reset && dataIn)
+		if (*pEndEvent != 0U && USB_ENDPADDR_IS_IN(activeDma) &&
+			USB_ENDPADDR_NUM(activeDma) != 0U &&
+			USB_ENDPADDR_NUM(activeDma) != NRFX_USBD_ISO_EP_NO)
 		{
 			*pEndEvent = 0;
 			__ISB();
 			__DSB();
 		}
 
-		NRF_USBD->EPSTATUS = dmaStatus;
 		nRFUsbdDmaRelease();
 	}
 
