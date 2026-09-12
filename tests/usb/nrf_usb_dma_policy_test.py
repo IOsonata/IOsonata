@@ -59,6 +59,10 @@ assert "NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_FREE" in interru
 assert "atomic_flag_clear(&s_DmaRunning)" in interrupt[dma_status:ep0]
 assert "nRFUsbdHandleInData(epNum)" in interrupt[dma_status:ep0]
 assert "nRFUsbdHandleOutEnd(epNum)" in interrupt[dma_status:ep0]
+assert "nRFUsbdHandleInData(0)" in interrupt[dma_status:ep0]
+assert "nRFUsbdHandleOutEnd(0)" in interrupt[dma_status:ep0]
+assert "nRFUsbdHandleIsoInEnd()" in interrupt[dma_status:ep0]
+assert "nRFUsbdHandleIsoOutEnd()" in interrupt[dma_status:ep0]
 assert "USBD_INTEN_EPDATA_Msk" in interrupt
 assert interrupt.rindex("nRFUsbdServicePending();") > interrupt.index(
     "USBD_INTEN_EPDATA_Msk"

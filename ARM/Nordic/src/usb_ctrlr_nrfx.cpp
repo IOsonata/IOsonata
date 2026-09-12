@@ -2209,8 +2209,12 @@ extern "C" void USBD_IRQHandler(void)
 	}
 
 	const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
-	uint8_t dataEpAddr = 0U;
-	bool xferComplete = NRF_USBD->EVENTS_EP0DATADONE != 0U ||
+	const bool ep0InDma = (dmaStatus & (1UL << 0)) != 0U;
+	const bool ep0OutDma = (dmaStatus & (1UL << 16)) != 0U;
+	bool xferComplete =
+		(ep0InDma && (NRF_USBD->EVENTS_EP0DATADONE != 0U ||
+			NRF_USBD->EVENTS_ENDEPIN[0] != 0U)) ||
+		(ep0OutDma && NRF_USBD->EVENTS_ENDEPOUT[0] != 0U) ||
 		NRF_USBD->EVENTS_ENDISOIN != 0U ||
 		NRF_USBD->EVENTS_ENDISOOUT != 0U;
 
@@ -2224,31 +2228,58 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(inStatus);
 			xferComplete = NRF_USBD->EVENTS_ENDEPIN[epNum] != 0U;
-			dataEpAddr = xferComplete ?
-				(uint8_t)(epNum | USB_ENDPADDR_DIR_IN) : 0U;
 		}
 		else if (outStatus != 0U)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(outStatus);
 			xferComplete = NRF_USBD->EVENTS_ENDEPOUT[epNum] != 0U;
-			dataEpAddr = xferComplete ? (uint8_t)epNum : 0U;
 		}
 	}
 
-	if (xferComplete)
+	if (xferComplete && dmaStatus != 0U)
 	{
+		const uint32_t inStatus = dmaStatus & 0xFFFFUL;
+		const bool isIn = inStatus != 0U;
+		const uint32_t epStatus = isIn ? inStatus : dmaStatus >> 16U;
+		const uint8_t epNum = (uint8_t)(31U - (uint32_t)__CLZ(epStatus));
+
 		NRF_USBD->EPSTATUS = dmaStatus;
 		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_FREE;
 		atomic_flag_clear(&s_DmaRunning);
 		__ISB();
 		__DSB();
 
-		if (dataEpAddr != 0U)
+		if (epNum == 0U)
 		{
-			const uint8_t epNum = USB_ENDPADDR_NUM(dataEpAddr);
+			if (isIn)
+			{
+				NRF_USBD->EVENTS_ENDEPIN[0] = 0;
+				nRFUsbdHandleInData(0);
+			}
+			else
+			{
+				NRF_USBD->EVENTS_ENDEPOUT[0] = 0;
+				nRFUsbdHandleOutEnd(0);
+			}
+		}
+		else if (epNum == NRFX_USBD_ISO_EP_NO)
+		{
+			if (isIn)
+			{
+				NRF_USBD->EVENTS_ENDISOIN = 0;
+				nRFUsbdHandleIsoInEnd();
+			}
+			else
+			{
+				NRF_USBD->EVENTS_ENDISOOUT = 0;
+				nRFUsbdHandleIsoOutEnd();
+			}
+		}
+		else
+		{
 			NRF_USBD->EPDATASTATUS = 1UL << (epNum +
-				(USB_ENDPADDR_IS_IN(dataEpAddr) ? 0U : 16U));
-			if (USB_ENDPADDR_IS_IN(dataEpAddr))
+				(isIn ? 0U : 16U));
+			if (isIn)
 			{
 				NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
 				nRFUsbdHandleInData(epNum);
@@ -2264,8 +2295,6 @@ extern "C" void USBD_IRQHandler(void)
 	// Endpoint zero is handled completely before the non-control data path.
 	const bool ep0Setup = NRF_USBD->EVENTS_EP0SETUP != 0U;
 	const bool ep0DataDone = NRF_USBD->EVENTS_EP0DATADONE != 0U;
-	const bool ep0InEnd = NRF_USBD->EVENTS_ENDEPIN[0] != 0U;
-	const bool ep0OutEnd = NRF_USBD->EVENTS_ENDEPOUT[0] != 0U;
 
 	if (ep0Setup)
 	{
@@ -2274,14 +2303,6 @@ extern "C" void USBD_IRQHandler(void)
 	if (ep0DataDone)
 	{
 		NRF_USBD->EVENTS_EP0DATADONE = 0;
-	}
-	if (ep0InEnd)
-	{
-		NRF_USBD->EVENTS_ENDEPIN[0] = 0;
-	}
-	if (ep0OutEnd)
-	{
-		NRF_USBD->EVENTS_ENDEPOUT[0] = 0;
 	}
 	__ISB();
 	__DSB();
@@ -2292,24 +2313,9 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdAbortEp0();
 		nRFUsbdSetupEvent();
 	}
-	else
+	else if (ep0DataDone && !s_Ctrlr.SetupDirIn)
 	{
-		if (ep0OutEnd)
-		{
-			nRFUsbdHandleOutEnd(0);
-		}
-
-		if (ep0DataDone)
-		{
-			if (s_Ctrlr.SetupDirIn)
-			{
-				nRFUsbdHandleInData(0);
-			}
-			else
-			{
-				nRFUsbdHandleOutData(0);
-			}
-		}
+		nRFUsbdHandleOutData(0);
 	}
 
 	const uint32_t intStatus = nRFUsbdCollectEvents();
@@ -2400,15 +2406,6 @@ extern "C" void USBD_IRQHandler(void)
 			inData &= inData - 1U;
 			nRFUsbdHandleInData((uint8_t)epNum);
 		}
-	}
-
-	if ((intStatus & USBD_INTEN_ENDISOIN_Msk) != 0U)
-	{
-		nRFUsbdHandleIsoInEnd();
-	}
-	if ((intStatus & USBD_INTEN_ENDISOOUT_Msk) != 0U)
-	{
-		nRFUsbdHandleIsoOutEnd();
 	}
 
 	if ((intStatus & USBD_INTEN_SOF_Msk) != 0)
