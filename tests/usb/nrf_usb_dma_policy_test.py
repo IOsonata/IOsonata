@@ -51,6 +51,7 @@ assert interrupt.index("nRFUsbdBusReset();") < ep0
 assert interrupt.index("nRFUsbdSetupEvent();") < data_dma
 assert "const uint32_t isoStatus" in interrupt
 assert "__CLZ(epBits)" in interrupt
+assert "NRF_USBD->EPDATASTATUS &" in interrupt[data_dma:collector]
 assert "NRF_USBD->EPSTATUS =" in interrupt[data_dma:collector]
 assert interrupt.index("nRFUsbdDmaRelease();") < collector
 assert "USBD_INTEN_EPDATA_Msk" in interrupt

@@ -2296,6 +2296,7 @@ extern "C" void USBD_IRQHandler(void)
 	else
 	{
 		const uint32_t dataDmaStatus = dmaStatus &
+			NRF_USBD->EPDATASTATUS &
 			~((1UL << 0) | (1UL << 16));
 		if (dataDmaStatus != 0U)
 		{
@@ -2311,7 +2312,9 @@ extern "C" void USBD_IRQHandler(void)
 				return;
 			}
 
-			NRF_USBD->EPSTATUS = 1UL << (epNum + (isIn ? 0U : 16U));
+			const uint32_t epBit = 1UL << (epNum + (isIn ? 0U : 16U));
+			NRF_USBD->EPSTATUS = epBit;
+			NRF_USBD->EPDATASTATUS = epBit;
 			// Data IN completes on EPDATA. ENDEPIN is not enabled, so clear
 			// its latched event after it releases the shared DMA engine.
 			if (isIn)
@@ -2395,14 +2398,15 @@ extern "C" void USBD_IRQHandler(void)
 	if ((intStatus & USBD_INTEN_EPDATA_Msk) != 0)
 	{
 		dataStatus = NRF_USBD->EPDATASTATUS;
-		NRF_USBD->EPDATASTATUS = dataStatus;
-		__ISB();
-		__DSB();
-
 		const uint32_t epMask =
 			(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
 		uint32_t outData = (dataStatus >> 16U) & epMask;
 		uint32_t inData = dataStatus & epMask;
+		// OUT status identifies the endpoint again when its EasyDMA copy ends.
+		// Keep it latched until EPSTATUS & EPDATASTATUS selects that transfer.
+		NRF_USBD->EPDATASTATUS = inData;
+		__ISB();
+		__DSB();
 
 		while (outData != 0U)
 		{
