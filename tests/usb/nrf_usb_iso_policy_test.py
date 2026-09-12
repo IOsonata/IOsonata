@@ -44,8 +44,8 @@ assert service.index("nRFUsbdStartIsoNow()") < service.index("CFifoGet(s_hQue)")
 assert "NRF_USBD->SIZE.ISOOUT" in interrupt
 assert "NRF_USBD->ISOIN.AMOUNT" in handle_in
 assert "NRF_USBD->ISOOUT.AMOUNT" in handle_out
-assert "nRFUsbdHandleInData(epNum)" in interrupt
-assert "nRFUsbdHandleOutEnd(epNum)" in interrupt
+assert "nRFUsbdHandleInData(" in interrupt
+assert "nRFUsbdHandleOutEnd(" in interrupt
 assert interrupt.index("atomic_load(&s_IsoInOpen)") < interrupt.index(
     "if (s_Ctrlr.SofEnabled)"
 )

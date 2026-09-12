@@ -1138,18 +1138,26 @@ static void nRFUsbdServicePending(void)
 			nRFUsbdStartDmaNow(&que);
 			return;
 		}
+
 		return;
 	}
 }
 
-/** Queue producers wake the controller; only USBD_IRQHandler starts DMA. */
+/** Foreground starts free DMA immediately; other interrupt producers defer. */
 static inline __attribute__((always_inline))
-void nRFUsbdSchedule(void)
+bool nRFUsbdDeferFromInterrupt(void)
 {
-	if (__get_IPSR() != (uint32_t)USBD_IRQn + 16U)
+	const uint32_t exception = __get_IPSR();
+	if (exception == 0U)
+	{
+		return false;
+	}
+
+	if (exception != (uint32_t)USBD_IRQn + 16U)
 	{
 		NVIC_SetPendingIRQ(USBD_IRQn);
 	}
+	return true;
 }
 
 /**
@@ -1870,9 +1878,17 @@ static void nRFUsbdSetupEvent(void)
 
 static void nRFUsbdHandleOutEnd(uint8_t EpNum)
 {
-	if (EpNum != 0U && EpNum != NRFX_USBD_ISO_EP_NO)
+	if (EpNum == NRFX_USBD_ISO_EP_NO)
 	{
-		NRF_USBD->EPDATASTATUS = 1UL << (16U + EpNum);
+		NRF_USBD->EVENTS_ENDISOOUT = 0;
+	}
+	else
+	{
+		NRF_USBD->EVENTS_ENDEPOUT[EpNum] = 0;
+		if (EpNum != 0U)
+		{
+			NRF_USBD->EPDATASTATUS = 1UL << (16U + EpNum);
+		}
 	}
 
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
@@ -1942,9 +1958,17 @@ static void nRFUsbdHandleOutData(uint8_t EpNum)
 
 static void nRFUsbdHandleInData(uint8_t EpNum)
 {
-	if (EpNum != 0U && EpNum != NRFX_USBD_ISO_EP_NO)
+	if (EpNum == NRFX_USBD_ISO_EP_NO)
 	{
-		NRF_USBD->EPDATASTATUS = 1UL << EpNum;
+		NRF_USBD->EVENTS_ENDISOIN = 0;
+	}
+	else
+	{
+		NRF_USBD->EVENTS_ENDEPIN[EpNum] = 0;
+		if (EpNum != 0U)
+		{
+			NRF_USBD->EPDATASTATUS = 1UL << EpNum;
+		}
 	}
 
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
@@ -2018,85 +2042,50 @@ extern "C" void USBD_IRQHandler(void)
 	}
 
 	const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
-	uint32_t completeStatus = 0U;
+	bool xferComplete = NRF_USBD->EVENTS_EP0DATADONE != 0U ||
+						NRF_USBD->EVENTS_ENDEPOUT[0] != 0U ||
+						NRF_USBD->EVENTS_ENDISOIN != 0U ||
+						NRF_USBD->EVENTS_ENDISOOUT != 0U;
 
-	// EP0 and ISO have dedicated completion events. Normal data endpoints
-	// identify the completed direction and endpoint through the two status
-	// registers, then CLZ selects the corresponding END event.
-	if ((dmaStatus & ((1UL << 0) | (1UL << 16))) != 0U)
+	const uint32_t xferStatus = NRF_USBD->EPDATASTATUS & dmaStatus;
+	if (xferStatus != 0U)
 	{
-		if (((dmaStatus & (1UL << 0)) != 0U &&
-			 NRF_USBD->EVENTS_EP0DATADONE != 0U) ||
-			((dmaStatus & (1UL << 16)) != 0U &&
-			 NRF_USBD->EVENTS_ENDEPOUT[0] != 0U))
+		const uint32_t inStatus = xferStatus & 0xFFFFUL;
+		const uint32_t outStatus = xferStatus >> 16U;
+
+		if (inStatus != 0U)
 		{
-			completeStatus = dmaStatus;
+			const uint32_t epNum = 31U - (uint32_t)__CLZ(inStatus);
+			xferComplete = NRF_USBD->EVENTS_ENDEPIN[epNum] != 0U;
 		}
-	}
-	else if ((dmaStatus & ((1UL << NRFX_USBD_ISO_EP_NO) |
-		(1UL << (16U + NRFX_USBD_ISO_EP_NO)))) != 0U)
-	{
-		if (((dmaStatus & (1UL << NRFX_USBD_ISO_EP_NO)) != 0U &&
-			 NRF_USBD->EVENTS_ENDISOIN != 0U) ||
-			((dmaStatus & (1UL << (16U + NRFX_USBD_ISO_EP_NO))) != 0U &&
-			 NRF_USBD->EVENTS_ENDISOOUT != 0U))
+		else if (outStatus != 0U)
 		{
-			completeStatus = dmaStatus;
-		}
-	}
-	else
-	{
-		completeStatus = NRF_USBD->EPDATASTATUS & dmaStatus;
-		if (completeStatus != 0U)
-		{
-			const uint32_t inStatus = completeStatus & 0xFFFFUL;
-			if (inStatus != 0U)
-			{
-				const uint32_t epNum =
-					31U - (uint32_t)__CLZ(inStatus);
-				if (NRF_USBD->EVENTS_ENDEPIN[epNum] == 0U)
-				{
-					completeStatus = 0U;
-				}
-			}
-			else
-			{
-				const uint32_t epNum = 31U -
-					(uint32_t)__CLZ(completeStatus >> 16U);
-				if (NRF_USBD->EVENTS_ENDEPOUT[epNum] == 0U)
-				{
-					completeStatus = 0U;
-				}
-			}
+			const uint32_t epNum = 31U - (uint32_t)__CLZ(outStatus);
+			xferComplete = NRF_USBD->EVENTS_ENDEPOUT[epNum] != 0U;
 		}
 	}
 
-	if (nRFUsbdDmaActive() && completeStatus == 0U)
+	if (xferComplete)
 	{
-		return;
-	}
-
-	if (completeStatus != 0U)
-	{
-		NRF_USBD->EPSTATUS = completeStatus;
-		const uint32_t inStatus = completeStatus & 0xFFFFUL;
-		const bool isIn = inStatus != 0U;
-		const uint32_t epStatus = isIn ? inStatus : completeStatus >> 16U;
-		const uint8_t epNum =
-			(uint8_t)(31U - (uint32_t)__CLZ(epStatus));
-		volatile uint32_t *pEndEvent = nRFUsbdDmaEndEvent(
-			(uint8_t)(epNum | (isIn ? USB_ENDPADDR_DIR_IN : 0U)));
-		*pEndEvent = 0;
+		NRF_USBD->EPSTATUS = dmaStatus;
 		nRFUsbdDmaRelease();
 
-		if (isIn)
+		const uint32_t epin = dmaStatus & 0xFFFFUL;
+		const uint32_t epout = dmaStatus >> 16U;
+		if (epin != 0U)
 		{
-			nRFUsbdHandleInData(epNum);
+			nRFUsbdHandleInData(
+				(uint8_t)(31U - (uint32_t)__CLZ(epin)));
 		}
-		else
+		else if (epout != 0U)
 		{
-			nRFUsbdHandleOutEnd(epNum);
+			nRFUsbdHandleOutEnd(
+				(uint8_t)(31U - (uint32_t)__CLZ(epout)));
 		}
+	}
+	else if (nRFUsbdDmaActive())
+	{
+		return;
 	}
 
 	// Endpoint zero is handled completely before the non-control data path.

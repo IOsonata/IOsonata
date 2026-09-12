@@ -49,9 +49,11 @@ assert "NRF_USBD->EPSTATUS" in abort_ep0
 assert "NRF_USBD->ISOIN.AMOUNT" in handle_in
 assert "NRF_USBD->EPIN[EpNum].AMOUNT" in handle_in
 assert "EpNum != NRFX_USBD_ISO_EP_NO" in handle_in
+assert "NRF_USBD->EVENTS_ENDISOIN = 0" in handle_in
 assert "NRF_USBD->ISOOUT.AMOUNT" in handle_out
 assert "NRF_USBD->EPOUT[EpNum].AMOUNT" in handle_out
 assert "EpNum != NRFX_USBD_ISO_EP_NO" in handle_out
+assert "NRF_USBD->EVENTS_ENDISOOUT = 0" in handle_out
 assert "nRFUsbdHandleIsoInEnd" not in source
 assert "nRFUsbdHandleIsoOutEnd" not in source
 assert "USBD_INTEN_ENDISOIN_Msk" in open_ep
@@ -70,18 +72,14 @@ assert reset < bus_event < dma_status < ep0 < epdata < sof
 assert interrupt.index("nRFUsbdBusReset();") < dma_status
 assert "nRFUsbdCollectEvents" not in source
 assert "NRF_USBD->INTEN &" not in interrupt
-assert "EVENTS_EP0DATADONE" in interrupt[dma_status:ep0]
-assert "EVENTS_ENDEPOUT[0]" in interrupt[dma_status:ep0]
-assert "EVENTS_ENDISOIN" in interrupt[dma_status:ep0]
-assert "EVENTS_ENDISOOUT" in interrupt[dma_status:ep0]
 assert "NRF_USBD->EPDATASTATUS & dmaStatus" in interrupt[dma_status:ep0]
 assert "__CLZ(inStatus)" in interrupt[dma_status:ep0]
-assert "__CLZ(completeStatus >> 16U)" in interrupt[dma_status:ep0]
-assert "NRF_USBD->EPSTATUS = completeStatus" in interrupt[dma_status:ep0]
+assert "__CLZ(outStatus)" in interrupt[dma_status:ep0]
+assert "NRF_USBD->EPSTATUS = dmaStatus" in interrupt[dma_status:ep0]
 assert "nRFUsbdDmaRelease();" in interrupt[dma_status:ep0]
-assert "nRFUsbdHandleInData(epNum)" in interrupt[dma_status:ep0]
-assert "nRFUsbdHandleOutEnd(epNum)" in interrupt[dma_status:ep0]
-assert "nRFUsbdDmaActive() && completeStatus == 0U" in interrupt[dma_status:ep0]
+assert "__CLZ(epin)" in interrupt[dma_status:ep0]
+assert "__CLZ(epout)" in interrupt[dma_status:ep0]
+assert "else if (nRFUsbdDmaActive())" in interrupt[dma_status:ep0]
 assert interrupt.rindex("nRFUsbdServicePending();") > sof
 
 print("nrf_usb_dma_policy_test: PASS")
