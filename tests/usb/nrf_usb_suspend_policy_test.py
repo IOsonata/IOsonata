@@ -29,7 +29,7 @@ def brace_body(source: str, brace: int) -> str:
 source = SOURCE.read_text(encoding="utf-8")
 enter_low_power = function_body(source, "static void nRFUsbdTryEnterLowPower(void)")
 interrupt = function_body(source, "extern \"C\" void USBD_IRQHandler(void)")
-sof_start = interrupt.index("if ((intStatus & USBD_INTEN_SOF_Msk) != 0)")
+sof_start = interrupt.index("if (NRF_USBD->EVENTS_SOF != 0U)")
 sof = brace_body(interrupt, interrupt.index("{", sof_start))
 
 assert "if (!s_UsbdLowPowerSuspend ||" in enter_low_power, (

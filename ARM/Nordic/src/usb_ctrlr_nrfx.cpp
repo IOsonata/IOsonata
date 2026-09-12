@@ -834,10 +834,6 @@ enum
 	NRFX_USBD_ISO_MAX_PACKET_SIZE = 512,
 };
 
-#define NRFX_USBD_IRQ_EVENT_COUNT	(USBD_INTEN_EPDATA_Pos + 1)
-#define NRFUSBD_IRQ_MASK \
-	((uint32_t)((1ULL << NRFX_USBD_IRQ_EVENT_COUNT) - 1ULL))
-
 // This errata register serves as the EasyDMA busy flag described in errata 199.
 #define NRFX_USBD_EASYDMA_BUSY_REG	(*((volatile uint32_t *)0x40027C1CUL))
 #define NRFX_USBD_ERRATA_199_REG		NRFX_USBD_EASYDMA_BUSY_REG
@@ -1349,6 +1345,13 @@ static void nRFUsbdQueueEp0Status(void)
 
 static void nRFUsbdQueueEp0RcvOut(void)
 {
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[0][0];
+	const uint16_t remaining =
+		(uint16_t)(pXfer->TotalLen - pXfer->ActualLen);
+	NRF_USBD->EPOUT[0].PTR = (uint32_t)(uintptr_t)s_Ep0Bounce;
+	NRF_USBD->EPOUT[0].MAXCNT = remaining < pXfer->Mps ?
+		remaining : pXfer->Mps;
+
 	atomic_store(&s_PendingEp0RcvOut, true);
 	if (!nRFUsbdDeferFromInterrupt())
 	{
@@ -1536,10 +1539,6 @@ static void nRFUsbdTryRemoteWake(void)
 	__DSB();
 	atomic_flag_clear(&s_DmaRunning);
 
-	if ((NRF_USBD->INTEN & USBD_INTEN_SOF_Msk) == 0U)
-	{
-		NRF_USBD->EVENTS_SOF = 0;
-	}
 	NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
 }
 
@@ -1974,35 +1973,6 @@ static void nRFUsbRegEpClearStall(uint8_t EpAddr)
 	__DSB();
 }
 
-static uint32_t nRFUsbdCollectEvents(void)
-{
-	// One IRQ line and no aggregate pending register, so the enabled events
-	// have to be read to find which fired. Only the bits set in INTEN can be
-	// pending, so walk those; the rest are provably zero and testing them
-	// costs on every entry.
-	uint32_t enabled = NRF_USBD->INTEN & NRFUSBD_IRQ_MASK;
-	uint32_t intStatus = 0;
-	volatile uint32_t *pEvent = &NRF_USBD->EVENTS_USBRESET;
-
-	while (enabled != 0U)
-	{
-		const uint32_t index = nRFUsbdLowestBit(enabled);
-		enabled &= enabled - 1U;
-
-		if (pEvent[index] == 0U)
-		{
-			continue;
-		}
-
-		intStatus |= (1UL << index);
-		pEvent[index] = 0;
-		__ISB();
-		__DSB();
-	}
-
-	return intStatus;
-}
-
 static void nRFUsbdBusReset(void)
 {
 	if (nRFUsbdDmaActive())
@@ -2076,13 +2046,28 @@ static void nRFUsbdSetupEvent(void)
 
 static void nRFUsbdHandleOutEnd(uint8_t EpNum)
 {
+	if (EpNum == NRFX_USBD_ISO_EP_NO)
+	{
+		NRF_USBD->EVENTS_ENDISOOUT = 0;
+	}
+	else
+	{
+		NRF_USBD->EVENTS_ENDEPOUT[EpNum] = 0;
+		if (EpNum != 0U)
+		{
+			NRF_USBD->EPDATASTATUS = 1UL << (16U + EpNum);
+		}
+	}
+
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
 	if (!pXfer->Started)
 	{
 		return;
 	}
 
-	const uint16_t transferLen = (uint16_t)NRF_USBD->EPOUT[EpNum].AMOUNT;
+	const uint16_t transferLen = EpNum == NRFX_USBD_ISO_EP_NO ?
+		(uint16_t)NRF_USBD->ISOOUT.AMOUNT :
+		(uint16_t)NRF_USBD->EPOUT[EpNum].AMOUNT;
 	if (EpNum == 0U && pXfer->pBuffer != NULL)
 	{
 		if (transferLen > 0U)
@@ -2093,7 +2078,8 @@ static void nRFUsbdHandleOutEnd(uint8_t EpNum)
 	}
 	pXfer->ActualLen += transferLen;
 
-	if (transferLen == pXfer->Mps && pXfer->ActualLen < pXfer->TotalLen)
+	if (EpNum != NRFX_USBD_ISO_EP_NO && transferLen == pXfer->Mps &&
+		pXfer->ActualLen < pXfer->TotalLen)
 	{
 		if (EpNum == 0)
 		{
@@ -2140,6 +2126,19 @@ static void nRFUsbdHandleOutData(uint8_t EpNum)
 
 static void nRFUsbdHandleInData(uint8_t EpNum)
 {
+	if (EpNum == NRFX_USBD_ISO_EP_NO)
+	{
+		NRF_USBD->EVENTS_ENDISOIN = 0;
+	}
+	else
+	{
+		NRF_USBD->EVENTS_ENDEPIN[EpNum] = 0;
+		if (EpNum != 0U)
+		{
+			NRF_USBD->EPDATASTATUS = 1UL << EpNum;
+		}
+	}
+
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
 	const uint8_t epAddr = (uint8_t)(EpNum | USB_ENDPADDR_DIR_IN);
 	if (!pXfer->Started)
@@ -2147,14 +2146,17 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 		return;
 	}
 
-	const uint16_t transferLen = (uint16_t)NRF_USBD->EPIN[EpNum].AMOUNT;
+	const uint16_t transferLen = EpNum == NRFX_USBD_ISO_EP_NO ?
+		(uint16_t)NRF_USBD->ISOIN.AMOUNT :
+		(uint16_t)NRF_USBD->EPIN[EpNum].AMOUNT;
 	if (EpNum == 0U && pXfer->pBuffer != NULL)
 	{
 		pXfer->pBuffer += transferLen;
 	}
 	pXfer->ActualLen += transferLen;
 
-	if (pXfer->ActualLen < pXfer->TotalLen)
+	if (EpNum != NRFX_USBD_ISO_EP_NO &&
+		pXfer->ActualLen < pXfer->TotalLen)
 	{
 		nRFUsbdQueueIn(EpNum);
 	}
@@ -2164,34 +2166,6 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 		nRFUsbdEmitXfer(epAddr, pXfer->ActualLen,
 						 USB_CTRLR_XFER_SUCCESS);
 	}
-}
-
-static void nRFUsbdHandleIsoInEnd(void)
-{
-	const uint8_t epAddr = USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO);
-	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(epAddr);
-	if (!pXfer->Started)
-	{
-		return;
-	}
-
-	pXfer->ActualLen = (uint16_t)NRF_USBD->ISOIN.AMOUNT;
-	pXfer->Started = false;
-	nRFUsbdEmitXfer(epAddr, pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
-}
-
-static void nRFUsbdHandleIsoOutEnd(void)
-{
-	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO);
-	if (!pXfer->Started)
-	{
-		return;
-	}
-
-	pXfer->ActualLen = (uint16_t)NRF_USBD->ISOOUT.AMOUNT;
-	pXfer->Started = false;
-	nRFUsbdEmitXfer(NRFX_USBD_ISO_EP_NO, pXfer->ActualLen,
-		USB_CTRLR_XFER_SUCCESS);
 }
 
 extern "C" void USBD_IRQHandler(void)
@@ -2208,14 +2182,42 @@ extern "C" void USBD_IRQHandler(void)
 		return;
 	}
 
+	if (NRF_USBD->EVENTS_USBEVENT != 0U)
+	{
+		NRF_USBD->EVENTS_USBEVENT = 0;
+		const uint32_t eventCause = NRF_USBD->EVENTCAUSE;
+		NRF_USBD->EVENTCAUSE = eventCause;
+
+		if ((eventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0U &&
+			!atomic_exchange(&s_BusSuspended, true))
+		{
+			atomic_store(&s_SuspendPending, s_UsbdLowPowerSuspend);
+			atomic_store(&s_RemoteWakePending, false);
+			atomic_store(&s_HostResumePending, false);
+			atomic_store(&s_IsoInReady, false);
+			atomic_store(&s_IsoOutReady, false);
+			NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
+			nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
+		}
+		if ((eventCause & USBD_EVENTCAUSE_RESUME_Msk) != 0U)
+		{
+			nRFUsbdHostResumeDetected();
+		}
+		if ((eventCause & USBD_EVENTCAUSE_USBWUALLOWED_Msk) != 0U)
+		{
+			nRFUsbdWakeAllowed();
+		}
+	}
+
 	const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
 	bool xferComplete = NRF_USBD->EVENTS_EP0DATADONE != 0U ||
-		NRF_USBD->EVENTS_ENDISOIN != 0U ||
-		NRF_USBD->EVENTS_ENDISOOUT != 0U;
+						NRF_USBD->EVENTS_ENDEPOUT[0] != 0U ||
+						NRF_USBD->EVENTS_ENDISOIN != 0U ||
+						NRF_USBD->EVENTS_ENDISOOUT != 0U;
 
-	if (!xferComplete && NRF_USBD->EVENTS_EPDATA != 0U)
+	const uint32_t xferStatus = NRF_USBD->EPDATASTATUS & dmaStatus;
+	if (xferStatus != 0U)
 	{
-		const uint32_t xferStatus = NRF_USBD->EPDATASTATUS & dmaStatus;
 		const uint32_t inStatus = xferStatus & 0xFFFFUL;
 		const uint32_t outStatus = xferStatus >> 16UL;
 
@@ -2231,12 +2233,8 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
-	if (xferComplete && dmaStatus != 0U)
+	if (xferComplete != 0U)
 	{
-		const uint32_t inStatus = dmaStatus & 0xFFFFUL;
-		const bool isIn = inStatus != 0U;
-		const uint32_t epStatus = isIn ? inStatus : dmaStatus >> 16U;
-		const uint8_t epNum = (uint8_t)(31U - (uint32_t)__CLZ(epStatus));
 
 		NRF_USBD->EPSTATUS = dmaStatus;
 		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_FREE;
@@ -2244,46 +2242,23 @@ extern "C" void USBD_IRQHandler(void)
 		__ISB();
 		__DSB();
 
-		if (epNum == 0U)
+		uint32_t epin = dmaStatus & 0xFFFFUL;
+		uint32_t epout = dmaStatus >> 16UL;
+
+		if (epin)
 		{
-			if (isIn)
-			{
-				NRF_USBD->EVENTS_ENDEPIN[0] = 0;
-				nRFUsbdHandleInData(0);
-			}
-			else
-			{
-				NRF_USBD->EVENTS_ENDEPOUT[0] = 0;
-				nRFUsbdHandleOutEnd(0);
-			}
+			nRFUsbdHandleInData(31U - (uint32_t)__CLZ(epin));
 		}
-		else if (epNum == NRFX_USBD_ISO_EP_NO)
+		else if (epout)
 		{
-			if (isIn)
-			{
-				NRF_USBD->EVENTS_ENDISOIN = 0;
-				nRFUsbdHandleIsoInEnd();
-			}
-			else
-			{
-				NRF_USBD->EVENTS_ENDISOOUT = 0;
-				nRFUsbdHandleIsoOutEnd();
-			}
+			nRFUsbdHandleOutEnd(31U - (uint32_t)__CLZ(epout));
 		}
-		else
+	}
+	else
+	{
+		if (NRFX_USBD_EASYDMA_BUSY_REG == NRFX_USBD_EASYDMA_BUSY_REG_BUSY)
 		{
-			NRF_USBD->EPDATASTATUS = 1UL << (epNum +
-				(isIn ? 0U : 16U));
-			if (isIn)
-			{
-				NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
-				nRFUsbdHandleInData(epNum);
-			}
-			else
-			{
-				NRF_USBD->EVENTS_ENDEPOUT[epNum] = 0;
-				nRFUsbdHandleOutEnd(epNum);
-			}
+			return;
 		}
 	}
 
@@ -2313,71 +2288,10 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdHandleOutData(0);
 	}
 
-	const uint32_t intStatus = nRFUsbdCollectEvents();
-	if (intStatus == 0)
+	if (NRF_USBD->EVENTS_EPDATA != 0U)
 	{
-		// A transfer requested from another interrupt raises a software USBD
-		// interrupt so EasyDMA still starts from the controller context.
-		nRFUsbdServicePending();
-		return;
-	}
-
-	uint32_t eventCause = 0;
-	if ((intStatus & USBD_INTEN_USBEVENT_Msk) != 0)
-	{
-		eventCause = NRF_USBD->EVENTCAUSE;
-		NRF_USBD->EVENTCAUSE = eventCause;
-		__ISB();
-		__DSB();
-	}
-
-	if ((intStatus & USBD_INTEN_USBEVENT_Msk) != 0)
-	{
-		if ((eventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0 &&
-			!atomic_exchange(&s_BusSuspended, true))
-		{
-			// A bus suspend and a peripheral low-power transition are separate.
-			// When low-power suspend is disabled, retain all endpoint state and
-			// wait for RESUME or SOF without touching USBD LOWPOWER.
-			atomic_store(&s_SuspendPending, s_UsbdLowPowerSuspend);
-			atomic_store(&s_RemoteWakePending, false);
-			atomic_store(&s_HostResumePending, false);
-			atomic_store(&s_IsoInReady, false);
-			atomic_store(&s_IsoOutReady, false);
-			if ((NRF_USBD->INTEN & USBD_INTEN_SOF_Msk) == 0U)
-			{
-				NRF_USBD->EVENTS_SOF = 0;
-			}
-			NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
-			nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
-		}
-
-		if ((eventCause & USBD_EVENTCAUSE_RESUME_Msk) != 0)
-		{
-			nRFUsbdHostResumeDetected();
-		}
-
-		if ((eventCause & USBD_EVENTCAUSE_USBWUALLOWED_Msk) != 0)
-		{
-			nRFUsbdWakeAllowed();
-		}
-	}
-
-	// Endpoint zero was handled above.
-	uint32_t outEnd = (intStatus >> USBD_INTEN_ENDEPOUT0_Pos) &
-					  (uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
-
-	while (outEnd != 0U)
-	{
-		const uint32_t epNum = nRFUsbdLowestBit(outEnd);
-		outEnd &= outEnd - 1U;
-		nRFUsbdHandleOutEnd((uint8_t)epNum);
-	}
-
-	uint32_t dataStatus = 0;
-	if ((intStatus & USBD_INTEN_EPDATA_Msk) != 0)
-	{
-		dataStatus = NRF_USBD->EPDATASTATUS;
+		NRF_USBD->EVENTS_EPDATA = 0;
+		const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
 		const uint32_t epMask =
 			(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
 		uint32_t outData = (dataStatus >> 16U) & epMask;
@@ -2403,8 +2317,9 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
-	if ((intStatus & USBD_INTEN_SOF_Msk) != 0)
+	if (NRF_USBD->EVENTS_SOF != 0U)
 	{
+		NRF_USBD->EVENTS_SOF = 0;
 		nRFUsbdHostResumeDetected();
 		if (atomic_load(&s_IsoInOpen))
 		{
