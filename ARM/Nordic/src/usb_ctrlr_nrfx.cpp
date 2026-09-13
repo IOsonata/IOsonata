@@ -1010,6 +1010,10 @@ static void nRFUsbdEp0StatusNow(void)
 		USB_ENDPADDR_DIR_OUT : USB_ENDPADDR_DIR_IN;
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(epAddr);
 
+	printf("EP0 ctrl status dir=%s started=%u setupIn=%u\n",
+		USB_ENDPADDR_IS_IN(epAddr) ? "IN" : "OUT",
+		(unsigned)pXfer->Started, (unsigned)s_Ctrlr.SetupDirIn);
+
 	NRF_USBD->TASKS_EP0STATUS = 1;
 	__ISB();
 	__DSB();
@@ -1141,6 +1145,12 @@ static void nRFUsbdServicePending(void)
 
 		if (haveQue)
 		{
+			if (USB_ENDPADDR_NUM(que.EpAddr) == 0U)
+			{
+				printf("EP0 ctrl dma-start dir=%s len=%u\n",
+					USB_ENDPADDR_IS_IN(que.EpAddr) ? "IN" : "OUT",
+					que.Len);
+			}
 			nRFUsbdStartDmaNow(&que);
 			return;
 		}
@@ -1288,6 +1298,11 @@ static void nRFUsbdAbortEp0(void)
 {
 	const uint32_t ep0Status =
 		NRF_USBD->EPSTATUS & ((1UL << 0) | (1UL << 16));
+	printf("EP0 ctrl abort status=%08lx pending=%08lx q=%d in=%u out=%u\n",
+		(unsigned long)ep0Status,
+		(unsigned long)atomic_load(&s_XferCompleteEvt), CFifoUsed(s_hQue),
+		(unsigned)s_Ctrlr.Xfer[0][1].Started,
+		(unsigned)s_Ctrlr.Xfer[0][0].Started);
 	if (ep0Status != 0U)
 	{
 		NRF_USBD->EPSTATUS = ep0Status;
@@ -1737,6 +1752,15 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 		epNum == 0U && TotalBytes == 0U &&
 		USB_ENDPADDR_IS_IN(EpAddr) != s_Ctrlr.SetupDirIn;
 
+	if (epNum == 0U)
+	{
+		printf("EP0 ctrl xfer dir=%s len=%u status=%u setupIn=%u dma=%u pending=%08lx\n",
+			USB_ENDPADDR_IS_IN(EpAddr) ? "IN" : "OUT", TotalBytes,
+			(unsigned)controlStatus, (unsigned)s_Ctrlr.SetupDirIn,
+			(unsigned)nRFUsbdDmaActive(),
+			(unsigned long)atomic_load(&s_XferCompleteEvt));
+	}
+
 	if (controlStatus)
 	{
 		nRFUsbdQueueEp0Status();
@@ -1880,6 +1904,10 @@ static void nRFUsbdSetupEvent(void)
 	s_Ctrlr.SetupDirIn =
 		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0;
 
+	printf("EP0 ctrl setup bm=%02x req=%02x val=%04x idx=%04x len=%u\n",
+		evt.Setup.bmRequestType, evt.Setup.bRequest, evt.Setup.wValue,
+		evt.Setup.wIndex, evt.Setup.wLength);
+
 	const bool setAddress =
 		(evt.Setup.bmRequestType &
 		 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0 &&
@@ -1887,6 +1915,8 @@ static void nRFUsbdSetupEvent(void)
 
 	if (setAddress)
 	{
+		printf("EP0 ctrl set-address address=%u\n",
+			(unsigned)(evt.Setup.wValue & 0x7FU));
 		UsbCtrlrEvt_t addrEvt = {};
 		addrEvt.Type = USB_CTRLR_EVT_ADDRESS;
 		addrEvt.Address = (uint8_t)(evt.Setup.wValue & 0x7FU);

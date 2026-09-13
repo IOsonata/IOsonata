@@ -45,6 +45,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <stdio.h>
 #include <string.h>
 
 #include "app_evt_handler.h"
@@ -1287,6 +1288,10 @@ static void UsbDevProcessSetup(const UsbSetupData_t *pSetup)
 		return;
 	}
 
+	printf("EP0 core setup bm=%02x req=%02x val=%04x idx=%04x len=%u state=%u\n",
+		pSetup->bmRequestType, pSetup->bRequest, pSetup->wValue,
+		pSetup->wIndex, pSetup->wLength, (unsigned)s_CtrlState);
+
 	UsbCoreAbortControl();
 	memcpy(&s_Setup, pSetup, sizeof(s_Setup));
 
@@ -1403,12 +1408,28 @@ static void UsbDevProcessSetup(const UsbSetupData_t *pSetup)
 
 	if (!handled)
 	{
+		printf("EP0 core stall req=%02x state=%u\n", s_Setup.bRequest,
+			(unsigned)s_CtrlState);
 		UsbCoreStallControl();
+	}
+	else
+	{
+		printf("EP0 core handled req=%02x state=%u data=%u actual=%u inq=%d\n",
+			s_Setup.bRequest, (unsigned)s_CtrlState, s_CtrlDataLen,
+			s_CtrlActual, CFifoUsed(s_hCtrlIn));
 	}
 }
 
 static void UsbCoreHandleCtrlXfer(const UsbCtrlrXferEvt_t *pXfer)
 {
+	if (pXfer != nullptr)
+	{
+		printf("EP0 core complete ep=%02x len=%u result=%u state=%u actual=%u data=%u inq=%d\n",
+			pXfer->EpAddr, pXfer->Length, (unsigned)pXfer->Result,
+			(unsigned)s_CtrlState, s_CtrlActual, s_CtrlDataLen,
+			CFifoUsed(s_hCtrlIn));
+	}
+
 	if (pXfer == nullptr || pXfer->Result != USB_CTRLR_XFER_SUCCESS)
 	{
 		UsbCoreStallControl();
