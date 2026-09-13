@@ -814,50 +814,6 @@ static bool UsbCoreStartInPacket(void)
 		length != 0U ? s_CtrlInBuffer : nullptr, length);
 }
 
-static bool UsbCoreQueueIn(const uint8_t *pData, uint16_t Length,
-						   bool AddZlp)
-{
-	CFifoFlush(s_hCtrlIn);
-	uint16_t offset = 0U;
-
-	do
-	{
-		const uint16_t remaining = (uint16_t)(Length - offset);
-		const uint16_t packetLength = remaining < s_CoreCfg.Ep0Mps ?
-			remaining : s_CoreCfg.Ep0Mps;
-		UsbCoreEp0Packet_t *pPacket =
-			reinterpret_cast<UsbCoreEp0Packet_t *>(CFifoPut(s_hCtrlIn));
-		if (pPacket == nullptr)
-		{
-			CFifoFlush(s_hCtrlIn);
-			return false;
-		}
-
-		pPacket->Length = packetLength;
-		pPacket->Reserved = 0U;
-		if (packetLength != 0U)
-		{
-			memcpy(pPacket->Data, &pData[offset], packetLength);
-		}
-		offset = (uint16_t)(offset + packetLength);
-	} while (offset < Length);
-
-	if (AddZlp && Length != 0U)
-	{
-		UsbCoreEp0Packet_t *pPacket =
-			reinterpret_cast<UsbCoreEp0Packet_t *>(CFifoPut(s_hCtrlIn));
-		if (pPacket == nullptr)
-		{
-			CFifoFlush(s_hCtrlIn);
-			return false;
-		}
-		pPacket->Length = 0U;
-		pPacket->Reserved = 0U;
-	}
-
-	return true;
-}
-
 static bool UsbCoreStartIn(const uint8_t *pData, uint16_t Available)
 {
 	if (s_Setup.wLength == 0)
@@ -884,13 +840,44 @@ static bool UsbCoreStartIn(const uint8_t *pData, uint16_t Available)
 		(sendLen % s_CoreCfg.Ep0Mps) == 0;
 	s_CtrlState = USB_CTRL_DATA_IN;
 
-	if (!UsbCoreQueueIn(pData, sendLen, needZlp) ||
-		!UsbCoreStartInPacket())
+	CFifoFlush(s_hCtrlIn);
+	uint16_t offset = 0U;
+	do
 	{
-		return false;
+		const uint16_t remaining = (uint16_t)(sendLen - offset);
+		const uint16_t packetLength = remaining < s_CoreCfg.Ep0Mps ?
+			remaining : s_CoreCfg.Ep0Mps;
+		UsbCoreEp0Packet_t *pPacket =
+			reinterpret_cast<UsbCoreEp0Packet_t *>(CFifoPut(s_hCtrlIn));
+		if (pPacket == nullptr)
+		{
+			CFifoFlush(s_hCtrlIn);
+			return false;
+		}
+
+		pPacket->Length = packetLength;
+		pPacket->Reserved = 0U;
+		if (packetLength != 0U)
+		{
+			memcpy(pPacket->Data, &pData[offset], packetLength);
+		}
+		offset = (uint16_t)(offset + packetLength);
+	} while (offset < sendLen);
+
+	if (needZlp && sendLen != 0U)
+	{
+		UsbCoreEp0Packet_t *pPacket =
+			reinterpret_cast<UsbCoreEp0Packet_t *>(CFifoPut(s_hCtrlIn));
+		if (pPacket == nullptr)
+		{
+			CFifoFlush(s_hCtrlIn);
+			return false;
+		}
+		pPacket->Length = 0U;
+		pPacket->Reserved = 0U;
 	}
 
-	return true;
+	return UsbCoreStartInPacket();
 }
 
 static bool UsbCoreStartOut(uint8_t *pData, uint16_t Capacity)
@@ -1033,49 +1020,6 @@ static bool UsbCoreEndpointHalted(uint8_t EpAddr)
 	const uint16_t mask = USB_ENDPADDR_IS_IN(EpAddr) ? s_HaltIn : s_HaltOut;
 
 	return (mask & bit) != 0;
-}
-
-static bool UsbCoreHandleGetDescriptor(void)
-{
-	if (!UsbCoreDirIn(&s_Setup) ||
-		UsbCoreRecipient(&s_Setup) != USB_REQTYPE_DEVICE)
-	{
-		return false;
-	}
-
-	const uint8_t type = (uint8_t)(s_Setup.wValue >> 8);
-	const uint8_t index = (uint8_t)s_Setup.wValue;
-
-	if (type != USB_DESCTYPE_STRING && s_Setup.wIndex != 0U)
-	{
-		return false;
-	}
-
-	uint16_t len;
-	const uint8_t *pDesc;
-	if (type == USB_DESCTYPE_CONFIGURATION || type == USB_DESCTYPE_OSC)
-	{
-		pDesc = UsbCoreGetConfigDescriptor(type, index, &len);
-	}
-	else
-	{
-		pDesc = UsbCoreGetDescriptor(type, index, s_Setup.wIndex, &len);
-	}
-
-	if (pDesc == nullptr)
-	{
-		return false;
-	}
-
-	if (type == USB_DESCTYPE_DEVICE && len >= 8U &&
-		UsbCoreValidEp0Mps(pDesc[7]))
-	{
-		// Keep the control-transfer termination calculation aligned with the
-		// descriptor advertised to the host.
-		s_CoreCfg.Ep0Mps = pDesc[7];
-	}
-
-	return UsbCoreStartIn(pDesc, len);
 }
 
 static bool UsbCoreHandleGetStatus(void)
@@ -1255,65 +1199,6 @@ static bool UsbCoreHandleSetInterface(void)
 	return UsbCoreStartStatus();
 }
 
-static bool UsbCoreHandleStandard(void)
-{
-	switch (s_Setup.bRequest)
-	{
-		case USB_REQ_GET_STATUS:
-			return UsbCoreHandleGetStatus();
-
-		case USB_REQ_CLEAR_FEATURE:
-			return UsbCoreHandleFeature(false);
-
-		case USB_REQ_SET_FEATURE:
-			return UsbCoreHandleFeature(true);
-
-		case USB_REQ_SET_ADDRESS:
-			if (UsbCoreDirIn(&s_Setup) ||
-				UsbCoreRecipient(&s_Setup) != USB_REQTYPE_DEVICE ||
-				s_Setup.wIndex != 0 || s_Setup.wLength != 0 ||
-				s_Setup.wValue > 127U || s_Configuration != 0)
-			{
-				return false;
-			}
-			s_PendingAddress = (uint8_t)s_Setup.wValue;
-			s_AddressPending = true;
-			UsbCtrlrSetAddress(s_UsbDevNo, s_PendingAddress);
-			return UsbCoreStartStatus();
-
-		case USB_REQ_GET_DESCRIPTOR:
-			if (UsbCoreRecipient(&s_Setup) == USB_REQTYPE_DEVICE)
-			{
-				return UsbCoreHandleGetDescriptor();
-			}
-			return UsbCoreRecipient(&s_Setup) == USB_REQTYPE_INTERFACE &&
-				UsbCoreHandleClassRequest();
-
-		case USB_REQ_GET_CONFIGURATION:
-			if (!UsbCoreDirIn(&s_Setup) ||
-				UsbCoreRecipient(&s_Setup) != USB_REQTYPE_DEVICE ||
-				s_Setup.wValue != 0 || s_Setup.wIndex != 0 ||
-				s_Setup.wLength != 1)
-			{
-				return false;
-			}
-			s_CtrlReply[0] = s_Configuration;
-			return UsbCoreStartIn(s_CtrlReply, 1);
-
-		case USB_REQ_SET_CONFIGURATION:
-			return UsbCoreHandleSetConfiguration();
-
-		case USB_REQ_GET_INTERFACE:
-			return UsbCoreHandleGetInterface();
-
-		case USB_REQ_SET_INTERFACE:
-			return UsbCoreHandleSetInterface();
-
-		default:
-			return false;
-	}
-}
-
 static bool UsbCoreCallClassSetup(int Index)
 {
 	uint8_t *pData = nullptr;
@@ -1410,7 +1295,106 @@ static void UsbCoreHandleSetup(const UsbSetupData_t *pSetup)
 
 	if (type == USB_REQTYPE_STANDARD)
 	{
-		handled = UsbCoreHandleStandard();
+		switch (s_Setup.bRequest)
+		{
+			case USB_REQ_GET_STATUS:
+				handled = UsbCoreHandleGetStatus();
+				break;
+
+			case USB_REQ_CLEAR_FEATURE:
+				handled = UsbCoreHandleFeature(false);
+				break;
+
+			case USB_REQ_SET_FEATURE:
+				handled = UsbCoreHandleFeature(true);
+				break;
+
+			case USB_REQ_SET_ADDRESS:
+				if (!UsbCoreDirIn(&s_Setup) &&
+					UsbCoreRecipient(&s_Setup) == USB_REQTYPE_DEVICE &&
+					s_Setup.wIndex == 0 && s_Setup.wLength == 0 &&
+					s_Setup.wValue <= 127U && s_Configuration == 0)
+				{
+					s_PendingAddress = (uint8_t)s_Setup.wValue;
+					s_AddressPending = true;
+					UsbCtrlrSetAddress(s_UsbDevNo, s_PendingAddress);
+					handled = UsbCoreStartStatus();
+				}
+				break;
+
+			case USB_REQ_GET_DESCRIPTOR:
+			{
+				const uint8_t recipient = UsbCoreRecipient(&s_Setup);
+				if (recipient == USB_REQTYPE_DEVICE)
+				{
+					if (!UsbCoreDirIn(&s_Setup))
+					{
+						break;
+					}
+
+					const uint8_t descType = (uint8_t)(s_Setup.wValue >> 8);
+					const uint8_t index = (uint8_t)s_Setup.wValue;
+					if (descType != USB_DESCTYPE_STRING && s_Setup.wIndex != 0U)
+					{
+						break;
+					}
+
+					uint16_t len;
+					const uint8_t *pDesc =
+						descType == USB_DESCTYPE_CONFIGURATION ||
+						descType == USB_DESCTYPE_OSC ?
+							UsbCoreGetConfigDescriptor(descType, index, &len) :
+							UsbCoreGetDescriptor(descType, index,
+								s_Setup.wIndex, &len);
+
+					if (pDesc == nullptr)
+					{
+						break;
+					}
+
+					if (descType == USB_DESCTYPE_DEVICE && len >= 8U &&
+						UsbCoreValidEp0Mps(pDesc[7]))
+					{
+						// Keep control-transfer termination aligned with
+						// the max packet size advertised to the host.
+						s_CoreCfg.Ep0Mps = pDesc[7];
+					}
+
+					handled = UsbCoreStartIn(pDesc, len);
+				}
+				else if (recipient == USB_REQTYPE_INTERFACE)
+				{
+					handled = UsbCoreHandleClassRequest();
+				}
+				break;
+			}
+
+			case USB_REQ_GET_CONFIGURATION:
+				if (UsbCoreDirIn(&s_Setup) &&
+					UsbCoreRecipient(&s_Setup) == USB_REQTYPE_DEVICE &&
+					s_Setup.wValue == 0 && s_Setup.wIndex == 0 &&
+					s_Setup.wLength == 1)
+				{
+					s_CtrlReply[0] = s_Configuration;
+					handled = UsbCoreStartIn(s_CtrlReply, 1);
+				}
+				break;
+
+			case USB_REQ_SET_CONFIGURATION:
+				handled = UsbCoreHandleSetConfiguration();
+				break;
+
+			case USB_REQ_GET_INTERFACE:
+				handled = UsbCoreHandleGetInterface();
+				break;
+
+			case USB_REQ_SET_INTERFACE:
+				handled = UsbCoreHandleSetInterface();
+				break;
+
+			default:
+				break;
+		}
 	}
 	else if (type == USB_REQTYPE_CLASS || type == USB_REQTYPE_VEND)
 	{
