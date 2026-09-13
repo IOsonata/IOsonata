@@ -425,14 +425,16 @@ static bool TestControlInPackets(void)
 	Setup(CLASS_IF_IN, CLASS_IN_DATA, 0, 0, 141);
 	CHECK(s_Ctrlr.XferCnt == 1 && LastXfer()->EpAddr == EP0_IN);
 	CHECK(LastXfer()->Length == 64 && LastXfer()->Data[0] == 0U);
+	uint8_t *pDmaBuffer = LastXfer()->pBuffer;
+	CHECK(pDmaBuffer != nullptr);
 
 	Complete(EP0_IN, 64);
 	CHECK(s_Ctrlr.XferCnt == 2 && LastXfer()->Length == 64);
-	CHECK(LastXfer()->Data[0] == 64U);
+	CHECK(LastXfer()->pBuffer == pDmaBuffer && LastXfer()->Data[0] == 64U);
 
 	Complete(EP0_IN, 64);
 	CHECK(s_Ctrlr.XferCnt == 3 && LastXfer()->Length == 13);
-	CHECK(LastXfer()->Data[0] == 128U);
+	CHECK(LastXfer()->pBuffer == pDmaBuffer && LastXfer()->Data[0] == 128U);
 
 	Complete(EP0_IN, 13);
 	CHECK(s_Ctrlr.XferCnt == 4 && LastXfer()->EpAddr == EP0_OUT &&

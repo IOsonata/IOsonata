@@ -127,6 +127,7 @@ alignas(4) static uint8_t s_CtrlInMem[
 	CFIFO_TOTAL_MEMSIZE(USB_CORE_EP0_IN_PKT_COUNT,
 		sizeof(UsbCoreEp0Packet_t))];
 static hCFifo_t s_hCtrlIn;
+alignas(4) static uint8_t s_CtrlInBuffer[USBD_CORE_EP0_MPS_DEFAULT];
 static uint8_t s_CtrlReply[2];
 static UsbDevDesc_t s_CoreDeviceDesc;
 static UsbDevQualDesc_t s_CoreQualifierDesc;
@@ -795,15 +796,21 @@ static bool UsbCoreStartStatus(void)
 static bool UsbCoreStartInPacket(void)
 {
 	UsbCoreEp0Packet_t *pPacket =
-		reinterpret_cast<UsbCoreEp0Packet_t *>(CFifoGet(s_hCtrlIn));
+		reinterpret_cast<UsbCoreEp0Packet_t *>(CFifoPeek(s_hCtrlIn));
 	if (pPacket == nullptr || pPacket->Length > s_CoreCfg.Ep0Mps)
 	{
 		return false;
 	}
 
+	const uint16_t length = pPacket->Length;
+	if (length != 0U)
+	{
+		memcpy(s_CtrlInBuffer, pPacket->Data, length);
+	}
+	(void)CFifoGet(s_hCtrlIn);
+
 	return UsbCtrlrEp0Xfer(s_UsbDevNo, USB_ENDPADDR_DIR_IN,
-		pPacket->Length != 0U ? pPacket->Data : nullptr,
-		pPacket->Length);
+		length != 0U ? s_CtrlInBuffer : nullptr, length);
 }
 
 static bool UsbCoreQueueIn(const uint8_t *pData, uint16_t Length,
