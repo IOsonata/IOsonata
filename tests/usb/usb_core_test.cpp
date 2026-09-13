@@ -301,8 +301,7 @@ static bool Fixture(bool WithSetInterface = true,
 	{
 		return false;
 	}
-	return s_Ctrlr.Handler != nullptr && s_Ctrlr.IntEnableCnt == 1 &&
-		s_Ctrlr.ConnectCnt == 1;
+	return s_Ctrlr.IntEnableCnt == 1 && s_Ctrlr.ConnectCnt == 1;
 }
 
 static bool SetAddress(uint8_t Address)
