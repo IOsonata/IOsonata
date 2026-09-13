@@ -883,6 +883,15 @@ static hCFifo_t s_hQue;
 #define NRFUSBD_XFER_EVT_PROCESSING	(1UL << 30)
 static atomic_uint_fast32_t s_XferCompleteEvt;
 
+// Packed EP0 progress counters, one byte each:
+// [7:0] queued, [15:8] DMA started, [23:16] hardware completed,
+// [31:24] AppEvt completion processed. Reported and cleared by the next SETUP.
+static atomic_uint_fast32_t s_Ep0Trace;
+#define NRFUSBD_EP0_TRACE_QUEUED			(1UL << 0)
+#define NRFUSBD_EP0_TRACE_DMA_STARTED		(1UL << 8)
+#define NRFUSBD_EP0_TRACE_HW_COMPLETE		(1UL << 16)
+#define NRFUSBD_EP0_TRACE_PROCESSED		(1UL << 24)
+
 // EP0 accepts descriptor and class buffers from the generic USB layer. Those
 // buffers may be const flash or have arbitrary alignment, while nRF52 USBD
 // EasyDMA requires controller-visible, word-aligned RAM. Stage one control
@@ -1062,6 +1071,10 @@ static bool nRFUsbdStartIsoNow(void)
 static void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(pQue->EpAddr);
+	if (epNum == 0U)
+	{
+		atomic_fetch_add(&s_Ep0Trace, NRFUSBD_EP0_TRACE_DMA_STARTED);
+	}
 	const bool isIn = USB_ENDPADDR_IS_IN(pQue->EpAddr);
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][isIn ? 1 : 0];
 	uint8_t *pBuffer = epNum == 0U ? s_Ep0Bounce :
@@ -1182,6 +1195,11 @@ void nRFUsbdSchedule(void)
  */
 static void nRFUsbdQueXfer(uint8_t EpAddr, uint16_t Len)
 {
+	if (USB_ENDPADDR_NUM(EpAddr) == 0U)
+	{
+		atomic_fetch_add(&s_Ep0Trace, NRFUSBD_EP0_TRACE_QUEUED);
+	}
+
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_hQue);
 
@@ -1269,6 +1287,7 @@ static void nRFUsbdResetState(void)
 
 	CFifoFlush(s_hQue);
 	atomic_store(&s_XferCompleteEvt, 0U);
+	atomic_store(&s_Ep0Trace, 0U);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 	atomic_store(&s_BusSuspended, false);
@@ -1880,9 +1899,10 @@ static void nRFUsbdSetupEvent(void)
 	s_Ctrlr.SetupDirIn =
 		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0;
 
-	printf("S %02x %02x %04x %04x %u\n", evt.Setup.bmRequestType,
-		evt.Setup.bRequest, evt.Setup.wValue, evt.Setup.wIndex,
-		evt.Setup.wLength);
+	const uint32_t ep0Trace = (uint32_t)atomic_exchange(&s_Ep0Trace, 0U);
+	printf("S %02x %02x %04x %04x %u p=%08x\n",
+		evt.Setup.bmRequestType, evt.Setup.bRequest, evt.Setup.wValue,
+		evt.Setup.wIndex, evt.Setup.wLength, ep0Trace);
 
 	const bool setAddress =
 		(evt.Setup.bmRequestType &
@@ -2018,7 +2038,7 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 
 	if (epNum == 0U)
 	{
-		printf("C %c %u\n", (epEvent & 0x80U) != 0U ? 'O' : 'I', amount);
+		atomic_fetch_add(&s_Ep0Trace, NRFUSBD_EP0_TRACE_PROCESSED);
 	}
 
 	if ((epEvent & 0x80U) != 0U)
@@ -2197,6 +2217,10 @@ extern "C" void USBD_IRQHandler(void)
 		NRF_USBD->EPSTATUS = dmaStatus;
 		nRFUsbdDmaRelease();
 
+		if (epidx == 0U)
+		{
+			atomic_fetch_add(&s_Ep0Trace, NRFUSBD_EP0_TRACE_HW_COMPLETE);
+		}
 		nRFUsbdQueueXferComplete((epdir<<7) | epidx, amount);
 	}
 	else if (nRFUsbdDmaActive())
