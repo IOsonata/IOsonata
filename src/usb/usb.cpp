@@ -47,6 +47,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
+#include "cfifo.h"
 #include "usb/usb.h"
 
 /// Controller this instance drives, set by UsbInit.
@@ -69,7 +70,7 @@ typedef struct __Usb_Core_Config {
 	uint8_t Ep0Mps;					//!< EP0 max packet size
 } UsbCoreCfg_t;
 
-#define USBD_CORE_EP0_MPS_DEFAULT		64U
+#define USBD_CORE_EP0_MPS_DEFAULT		USB_PKT_MAXLEN(0, CONTROL)
 #define USBD_CORE_DEVICE_DESC_LEN		((uint16_t)sizeof(UsbDevDesc_t))
 #define USBD_CORE_CONFIG_DESC_LEN		((uint16_t)sizeof(UsbCfgDesc_t))
 #define USB_CORE_STRING_DESC_MAXLEN		66U
@@ -77,11 +78,18 @@ typedef struct __Usb_Core_Config {
 #define USB_CORE_STR_PRODUCT			2U
 #define USB_CORE_STR_SERIAL			3U
 #define USB_CORE_STR_FUNCTION			4U
+#define USB_CORE_EP0_IN_PKT_COUNT \
+	(USB_CONFIG_DESC_MAXLEN / USBD_CORE_EP0_MPS_DEFAULT + 1U)
+
+typedef struct __Usb_Core_Ep0_Packet {
+	uint16_t Length;
+	uint16_t Reserved;
+	uint8_t Data[USBD_CORE_EP0_MPS_DEFAULT];
+} UsbCoreEp0Packet_t;
 
 typedef enum __Usbd_Core_Ctrl_State {
 	USB_CTRL_IDLE,
 	USB_CTRL_DATA_IN,
-	USB_CTRL_DATA_IN_ZLP,
 	USB_CTRL_DATA_OUT,
 	USB_CTRL_STATUS_IN,
 	USB_CTRL_STATUS_OUT,
@@ -115,7 +123,10 @@ static int s_ActiveClass;
 static uint8_t *s_CtrlData;
 static uint16_t s_CtrlDataLen;
 static uint16_t s_CtrlActual;
-static bool s_CtrlNeedZlp;
+alignas(4) static uint8_t s_CtrlInMem[
+	CFIFO_TOTAL_MEMSIZE(USB_CORE_EP0_IN_PKT_COUNT,
+		sizeof(UsbCoreEp0Packet_t))];
+static hCFifo_t s_hCtrlIn;
 static uint8_t s_CtrlReply[2];
 static UsbDevDesc_t s_CoreDeviceDesc;
 static UsbDevQualDesc_t s_CoreQualifierDesc;
@@ -723,7 +734,10 @@ static void UsbCoreResetControl(void)
 	s_CtrlData = nullptr;
 	s_CtrlDataLen = 0;
 	s_CtrlActual = 0;
-	s_CtrlNeedZlp = false;
+	if (s_hCtrlIn != nullptr)
+	{
+		CFifoFlush(s_hCtrlIn);
+	}
 	s_PendingAddress = 0;
 	s_AddressPending = false;
 }
@@ -778,6 +792,64 @@ static bool UsbCoreStartStatus(void)
 	return true;
 }
 
+static bool UsbCoreStartInPacket(void)
+{
+	UsbCoreEp0Packet_t *pPacket =
+		reinterpret_cast<UsbCoreEp0Packet_t *>(CFifoGet(s_hCtrlIn));
+	if (pPacket == nullptr || pPacket->Length > s_CoreCfg.Ep0Mps)
+	{
+		return false;
+	}
+
+	return UsbCtrlrEp0Xfer(s_UsbDevNo, USB_ENDPADDR_DIR_IN,
+		pPacket->Length != 0U ? pPacket->Data : nullptr,
+		pPacket->Length);
+}
+
+static bool UsbCoreQueueIn(const uint8_t *pData, uint16_t Length,
+						   bool AddZlp)
+{
+	CFifoFlush(s_hCtrlIn);
+	uint16_t offset = 0U;
+
+	do
+	{
+		const uint16_t remaining = (uint16_t)(Length - offset);
+		const uint16_t packetLength = remaining < s_CoreCfg.Ep0Mps ?
+			remaining : s_CoreCfg.Ep0Mps;
+		UsbCoreEp0Packet_t *pPacket =
+			reinterpret_cast<UsbCoreEp0Packet_t *>(CFifoPut(s_hCtrlIn));
+		if (pPacket == nullptr)
+		{
+			CFifoFlush(s_hCtrlIn);
+			return false;
+		}
+
+		pPacket->Length = packetLength;
+		pPacket->Reserved = 0U;
+		if (packetLength != 0U)
+		{
+			memcpy(pPacket->Data, &pData[offset], packetLength);
+		}
+		offset = (uint16_t)(offset + packetLength);
+	} while (offset < Length);
+
+	if (AddZlp && Length != 0U)
+	{
+		UsbCoreEp0Packet_t *pPacket =
+			reinterpret_cast<UsbCoreEp0Packet_t *>(CFifoPut(s_hCtrlIn));
+		if (pPacket == nullptr)
+		{
+			CFifoFlush(s_hCtrlIn);
+			return false;
+		}
+		pPacket->Length = 0U;
+		pPacket->Reserved = 0U;
+	}
+
+	return true;
+}
+
 static bool UsbCoreStartIn(const uint8_t *pData, uint16_t Available)
 {
 	if (s_Setup.wLength == 0)
@@ -799,12 +871,13 @@ static bool UsbCoreStartIn(const uint8_t *pData, uint16_t Available)
 	s_CtrlData = const_cast<uint8_t *>(pData);
 	s_CtrlDataLen = sendLen;
 	s_CtrlActual = 0;
-	s_CtrlNeedZlp =
+	const bool needZlp =
 		sendLen > 0 && sendLen < s_Setup.wLength &&
 		(sendLen % s_CoreCfg.Ep0Mps) == 0;
 	s_CtrlState = USB_CTRL_DATA_IN;
 
-	if (!UsbCtrlrEp0Xfer(s_UsbDevNo, USB_ENDPADDR_DIR_IN, s_CtrlData, sendLen))
+	if (!UsbCoreQueueIn(pData, sendLen, needZlp) ||
+		!UsbCoreStartInPacket())
 	{
 		return false;
 	}
@@ -1353,28 +1426,36 @@ static void UsbCoreHandleCtrlXfer(const UsbCtrlrXferEvt_t *pXfer)
 	switch (s_CtrlState)
 	{
 		case USB_CTRL_DATA_IN:
-			s_CtrlActual = pXfer->Length;
-			if (!UsbCoreInvokeActive(USB_CTRL_DATA, s_CtrlActual))
+			if (s_CtrlActual > s_CtrlDataLen ||
+				pXfer->Length > s_CoreCfg.Ep0Mps ||
+				pXfer->Length > (uint16_t)(s_CtrlDataLen - s_CtrlActual))
 			{
 				UsbCoreStallControl();
 				return;
 			}
 
-			if (s_CtrlNeedZlp)
+			s_CtrlActual = (uint16_t)(s_CtrlActual + pXfer->Length);
+			if (CFifoUsed(s_hCtrlIn) > 0)
 			{
-				s_CtrlNeedZlp = false;
-				s_CtrlState = USB_CTRL_DATA_IN_ZLP;
-				if (!UsbCtrlrEp0Xfer(s_UsbDevNo, USB_ENDPADDR_DIR_IN, nullptr, 0))
+				if (!UsbCoreStartInPacket())
 				{
 					UsbCoreStallControl();
 				}
 				return;
 			}
 
-			(void)UsbCoreStartStatus();
-			break;
+			if (s_CtrlActual != s_CtrlDataLen)
+			{
+				UsbCoreStallControl();
+				return;
+			}
 
-		case USB_CTRL_DATA_IN_ZLP:
+			if (!UsbCoreInvokeActive(USB_CTRL_DATA, s_CtrlActual))
+			{
+				UsbCoreStallControl();
+				return;
+			}
+
 			(void)UsbCoreStartStatus();
 			break;
 
@@ -1493,6 +1574,13 @@ static bool UsbCoreInit(const UsbCoreCfg_t *pCfg)
 		s_CoreCfg.Ep0Mps = USBD_CORE_EP0_MPS_DEFAULT;
 	}
 	else if (!UsbCoreValidEp0Mps(s_CoreCfg.Ep0Mps))
+	{
+		return false;
+	}
+
+	s_hCtrlIn = CFifoInit(s_CtrlInMem, sizeof(s_CtrlInMem),
+		sizeof(UsbCoreEp0Packet_t), true);
+	if (s_hCtrlIn == nullptr)
 	{
 		return false;
 	}

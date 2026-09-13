@@ -55,10 +55,12 @@ SOFTWARE.
 #define STD_IF_IN		0x81U
 #define STD_EP_IN		0x82U
 #define CLASS_IF_OUT	0x21U
+#define CLASS_IF_IN		0xA1U
 #define CLASS_EP_OUT	0x22U
 
 #define CLASS_NO_DATA	0x40U
 #define CLASS_OUT_DATA	0x41U
+#define CLASS_IN_DATA	0x42U
 #define XFER_LOG_CNT	32
 #define STAGE_LOG_CNT	16
 
@@ -106,7 +108,7 @@ typedef struct {
 	uint8_t LastAlt;
 	int ResetCnt;
 	int ProcessCnt;
-	uint8_t CtrlBuffer[16];
+	uint8_t CtrlBuffer[160];
 } FuncState_t;
 
 typedef struct {
@@ -197,6 +199,17 @@ static bool Request(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	{
 		*ppData = s_Class.CtrlBuffer;
 		*pLength = sizeof(s_Class.CtrlBuffer);
+		return true;
+	}
+	if (pSetup->bRequest == CLASS_IN_DATA &&
+		pSetup->wLength <= sizeof(s_Class.CtrlBuffer))
+	{
+		for (uint16_t i = 0; i < pSetup->wLength; i++)
+		{
+			s_Class.CtrlBuffer[i] = (uint8_t)i;
+		}
+		*ppData = s_Class.CtrlBuffer;
+		*pLength = pSetup->wLength;
 		return true;
 	}
 	if ((pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) ==
@@ -399,6 +412,34 @@ static bool TestControlZlp(void)
 	Complete(EP0_IN, 0);
 	CHECK(s_Ctrlr.XferCnt == 3 && LastXfer()->EpAddr == EP0_OUT &&
 		LastXfer()->Length == 0);
+	Complete(EP0_OUT, 0);
+	return true;
+}
+
+static bool TestControlInPackets(void)
+{
+	CHECK(Fixture());
+	CHECK(SetAddress(2) && SetConfig(1));
+	ClearCtrlrLog();
+	s_Class.StageCnt = 0;
+	Setup(CLASS_IF_IN, CLASS_IN_DATA, 0, 0, 141);
+	CHECK(s_Ctrlr.XferCnt == 1 && LastXfer()->EpAddr == EP0_IN);
+	CHECK(LastXfer()->Length == 64 && LastXfer()->Data[0] == 0U);
+
+	Complete(EP0_IN, 64);
+	CHECK(s_Ctrlr.XferCnt == 2 && LastXfer()->Length == 64);
+	CHECK(LastXfer()->Data[0] == 64U);
+
+	Complete(EP0_IN, 64);
+	CHECK(s_Ctrlr.XferCnt == 3 && LastXfer()->Length == 13);
+	CHECK(LastXfer()->Data[0] == 128U);
+
+	Complete(EP0_IN, 13);
+	CHECK(s_Ctrlr.XferCnt == 4 && LastXfer()->EpAddr == EP0_OUT &&
+		LastXfer()->Length == 0U);
+	CHECK(s_Class.StageCnt >= 2 &&
+		s_Class.Stage[s_Class.StageCnt - 1] == USB_CTRL_DATA &&
+		s_Class.StageLen[s_Class.StageCnt - 1] == 141U);
 	Complete(EP0_OUT, 0);
 	return true;
 }
@@ -943,6 +984,7 @@ int main(void)
 		{ "descriptors", TestDescriptors },
 		{ "descriptor validation", TestDescriptorValidation },
 		{ "control terminating ZLP", TestControlZlp },
+		{ "control IN packets", TestControlInPackets },
 		{ "SET_ADDRESS", TestAddress },
 		{ "configuration", TestConfiguration },
 		{ "alternate interface and halt", TestInterfaceAndHalt },
