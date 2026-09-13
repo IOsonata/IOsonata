@@ -80,8 +80,6 @@ typedef struct {
 } XferLog_t;
 
 typedef struct {
-	UsbCtrlrEvtHandler_t Handler;
-	void *pContext;
 	XferLog_t Xfer[XFER_LOG_CNT];
 	int XferCnt;
 	int IntEnableCnt;
@@ -137,11 +135,7 @@ static const XferLog_t *LastXfer(void)
 
 static void ClearCtrlrLog(void)
 {
-	UsbCtrlrEvtHandler_t handler = s_Ctrlr.Handler;
-	void *pContext = s_Ctrlr.pContext;
 	memset(&s_Ctrlr, 0, sizeof(s_Ctrlr));
-	s_Ctrlr.Handler = handler;
-	s_Ctrlr.pContext = pContext;
 }
 
 static void Setup(uint8_t Type, uint8_t Request, uint16_t Value,
@@ -154,7 +148,7 @@ static void Setup(uint8_t Type, uint8_t Request, uint16_t Value,
 	evt.Setup.wValue = Value;
 	evt.Setup.wIndex = Index;
 	evt.Setup.wLength = Length;
-	s_Ctrlr.Handler(TEST_DEVNO, &evt, s_Ctrlr.pContext);
+	UsbDevProcessEvent(TEST_DEVNO, &evt);
 }
 
 static void Complete(uint8_t EpAddr, uint16_t Length,
@@ -165,14 +159,14 @@ static void Complete(uint8_t EpAddr, uint16_t Length,
 	evt.Xfer.EpAddr = EpAddr;
 	evt.Xfer.Length = Length;
 	evt.Xfer.Result = Result;
-	s_Ctrlr.Handler(TEST_DEVNO, &evt, s_Ctrlr.pContext);
+	UsbDevProcessEvent(TEST_DEVNO, &evt);
 }
 
 static void Event(UsbCtrlrEvtType_t Type)
 {
 	UsbCtrlrEvt_t evt = {};
 	evt.Type = Type;
-	s_Ctrlr.Handler(TEST_DEVNO, &evt, s_Ctrlr.pContext);
+	UsbDevProcessEvent(TEST_DEVNO, &evt);
 }
 
 static bool Request(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
@@ -885,8 +879,8 @@ static bool TestResetSuspendAndDispatch(void)
 	CHECK(!UsbSuspended(TEST_DEVNO) && !UsbRemoteWakeup(TEST_DEVNO));
 
 	// Non-control endpoint events are delivered by UsbCtrlrEpHandler_t,
-	// not through the global controller event handler. A stray global data
-	// completion therefore has no class-level dispatch path.
+	// not through the device-core event path. A stray data completion there
+	// therefore has no class-level dispatch path.
 	Complete(EP1_IN, 37);
 	CHECK(s_Class.ResetCnt == 0);
 	UsbProcess(TEST_DEVNO);
@@ -904,14 +898,7 @@ static bool TestResetSuspendAndDispatch(void)
 //
 extern "C" bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 {
-	if (DevNo != TEST_DEVNO || pCfg == nullptr ||
-		pCfg->EvtHandler == nullptr)
-	{
-		return false;
-	}
-	s_Ctrlr.Handler = pCfg->EvtHandler;
-	s_Ctrlr.pContext = pCfg->pContext;
-	return true;
+	return DevNo == TEST_DEVNO && pCfg != nullptr;
 }
 extern "C" bool UsbCtrlrStart(int) { return true; }
 extern "C" void UsbCtrlrStop(int) {}

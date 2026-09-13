@@ -184,14 +184,6 @@ typedef struct __Usb_Ctrlr_Evt {
 #pragma pack(pop)
 
 /**
- * @brief	Controller event callback, called from the USB interrupt.
- *
- * Must stay bounded and must not retain pEvt after it returns.
- */
-typedef void (*UsbCtrlrEvtHandler_t)(int DevNo, const UsbCtrlrEvt_t *pEvt,
-									 void *pContext);
-
-/**
  * @brief	Non-control endpoint event callback.
  *
  * Registered once with the endpoint DMA buffer. It is called directly from
@@ -201,14 +193,10 @@ typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 									uint16_t Length, UsbCtrlrXferResult_t Result,
 									void *pContext);
 
-/// What the generic layer hands the port at UsbCtrlrInit. Interrupt priority
-/// and suspend behaviour reach the hardware only through here, so the port
-/// needs them alongside the event callback.
+/// What the generic layer hands the port at UsbCtrlrInit.
 typedef struct __Usb_Ctrlr_Config {
 	int IntPrio;					//!< Interrupt priority of the USB peripheral
 	bool bLowPowerSuspend;			//!< true - Sit in USB low power while suspended
-	UsbCtrlrEvtHandler_t EvtHandler;
-	void *pContext;
 } UsbCtrlrCfg_t;
 
 #ifdef __cplusplus
