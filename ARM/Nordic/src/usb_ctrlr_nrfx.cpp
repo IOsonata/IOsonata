@@ -2192,7 +2192,14 @@ extern "C" void USBD_IRQHandler(void)
 		NRF_USBD->EPSTATUS = dmaStatus;
 		nRFUsbdDmaRelease();
 
-		nRFUsbdQueueXferComplete((epdir<<7) | epidx, amount);
+		if (epdir == 1U)
+		{
+			nRFUsbdHandleOutEnd(epidx, amount);
+		}
+		else
+		{
+			nRFUsbdHandleInData(epidx, amount);
+		}
 	}
 	else if (nRFUsbdDmaActive())
 	{
