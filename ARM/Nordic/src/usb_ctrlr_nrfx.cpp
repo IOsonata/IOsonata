@@ -887,6 +887,10 @@ static atomic_uint_fast32_t s_XferCompleteEvt;
 // [7:0] queued, [15:8] DMA started, [23:16] hardware completed,
 // [31:24] AppEvt completion processed. Reported and cleared by the next SETUP.
 static atomic_uint_fast32_t s_Ep0Trace;
+static atomic_uint_fast32_t s_Ep0StatusTrace;
+#define NRFUSBD_EP0_STATUS_QUEUED			(1UL << 0)
+#define NRFUSBD_EP0_STATUS_TASK				(1UL << 1)
+#define NRFUSBD_EP0_STATUS_DONE				(1UL << 2)
 #define NRFUSBD_EP0_TRACE_QUEUED			(1UL << 0)
 #define NRFUSBD_EP0_TRACE_DMA_STARTED		(1UL << 8)
 #define NRFUSBD_EP0_TRACE_HW_COMPLETE		(1UL << 16)
@@ -1015,6 +1019,7 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 
 static void nRFUsbdEp0StatusNow(void)
 {
+	atomic_fetch_or(&s_Ep0StatusTrace, NRFUSBD_EP0_STATUS_TASK);
 	const uint8_t epAddr = s_Ctrlr.SetupDirIn ?
 		USB_ENDPADDR_DIR_OUT : USB_ENDPADDR_DIR_IN;
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(epAddr);
@@ -1260,6 +1265,7 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 
 static void nRFUsbdQueueEp0Status(void)
 {
+	atomic_fetch_or(&s_Ep0StatusTrace, NRFUSBD_EP0_STATUS_QUEUED);
 	atomic_store(&s_PendingEp0Status, true);
 	nRFUsbdSchedule();
 }
@@ -1288,6 +1294,7 @@ static void nRFUsbdResetState(void)
 	CFifoFlush(s_hQue);
 	atomic_store(&s_XferCompleteEvt, 0U);
 	atomic_store(&s_Ep0Trace, 0U);
+	atomic_store(&s_Ep0StatusTrace, 0U);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 	atomic_store(&s_BusSuspended, false);
@@ -1900,9 +1907,11 @@ static void nRFUsbdSetupEvent(void)
 		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0;
 
 	const uint32_t ep0Trace = (uint32_t)atomic_exchange(&s_Ep0Trace, 0U);
-	printf("S %02x %02x %04x %04x %u p=%08x\n",
+	const uint32_t statusTrace =
+		(uint32_t)atomic_exchange(&s_Ep0StatusTrace, 0U);
+	printf("S %02x %02x %04x %04x %u p=%08x t=%x\n",
 		evt.Setup.bmRequestType, evt.Setup.bRequest, evt.Setup.wValue,
-		evt.Setup.wIndex, evt.Setup.wLength, ep0Trace);
+		evt.Setup.wIndex, evt.Setup.wLength, ep0Trace, statusTrace);
 
 	const bool setAddress =
 		(evt.Setup.bmRequestType &
@@ -2142,6 +2151,11 @@ extern "C" void USBD_IRQHandler(void)
 			epdir = 1;
 			epidx = 0;
 			xferComplete = true;
+		}
+		else
+		{
+			atomic_fetch_or(&s_Ep0StatusTrace,
+				NRFUSBD_EP0_STATUS_DONE);
 		}
 	}
 	else if (NRF_USBD->EVENTS_ENDISOIN != 0U)
