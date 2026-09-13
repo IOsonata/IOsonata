@@ -1900,10 +1900,25 @@ static void nRFUsbdSetupEvent(void)
 		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0;
 
 	const uint32_t ep0Trace = (uint32_t)atomic_exchange(&s_Ep0Trace, 0U);
-	if (evt.Setup.bRequest == USB_REQ_GET_DESCRIPTOR &&
-		(uint8_t)(evt.Setup.wValue >> 8) == USB_DESCTYPE_CONFIGURATION)
+	if (evt.Setup.bRequest == USB_REQ_GET_DESCRIPTOR)
 	{
-		printf("G %u %08x\n", evt.Setup.wLength, ep0Trace);
+		const uint8_t descType = (uint8_t)(evt.Setup.wValue >> 8);
+		if (descType == USB_DESCTYPE_CONFIGURATION)
+		{
+			printf("G %u %08x\n", evt.Setup.wLength, ep0Trace);
+		}
+		else if (descType == USB_DESCTYPE_DEVICE)
+		{
+			puts("D");
+		}
+		else if (descType == USB_DESCTYPE_STRING)
+		{
+			puts("S");
+		}
+	}
+	else if (evt.Setup.bRequest == USB_REQ_SET_ADDRESS)
+	{
+		puts("A");
 	}
 	else if (evt.Setup.bRequest == USB_REQ_SET_CONFIGURATION)
 	{
