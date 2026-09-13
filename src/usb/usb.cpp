@@ -47,6 +47,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
+#include "app_evt_handler.h"
 #include "cfifo.h"
 #include "usb/usb.h"
 
@@ -1929,6 +1930,11 @@ bool UsbInit(const UsbCfg_t *pCfg)
 	// Host and OTG need a dual role controller. The current targets are device
 	// only, so reject the other roles rather than pretend to support them.
 	if (pCfg->Mode != USB_MODE_DEVICE)
+	{
+		return false;
+	}
+
+	if (!AppEvtHandlerInit(nullptr, 0U))
 	{
 		return false;
 	}
