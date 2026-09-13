@@ -1068,13 +1068,6 @@ static void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 	{
 		NRF_USBD->EPIN[epNum].PTR = (uint32_t)(uintptr_t)pBuffer;
 		NRF_USBD->EPIN[epNum].MAXCNT = pQue->Len;
-		if (epNum == 0U)
-		{
-//			printf("data %02x %02x %02x %02x len=%u\n",
-//				(unsigned)s_Ep0Bounce[0], (unsigned)s_Ep0Bounce[1],
-//				(unsigned)s_Ep0Bounce[2], (unsigned)s_Ep0Bounce[3],
-//				(unsigned)pQue->Len);
-		}
 		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPIN[epNum], pQue->EpAddr);
 	}
 	else
@@ -1707,8 +1700,6 @@ static void nRFUsbRegEpCloseAll(void)
 static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	uint8_t *pDmaBuffer = epNum == 0U ? pBuffer :
-		nRFUsbGetEpReg(EpAddr)->pBuffer;
 
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
@@ -1873,12 +1864,6 @@ static void nRFUsbdSetupEvent(void)
 		((uint16_t)NRF_USBD->WINDEXH << 8);
 	evt.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
 		((uint16_t)NRF_USBD->WLENGTHH << 8);
-	printf("setup %02x %02x %04x %04x %04x\n",
-		(unsigned)evt.Setup.bmRequestType,
-		(unsigned)evt.Setup.bRequest,
-		(unsigned)evt.Setup.wValue,
-		(unsigned)evt.Setup.wIndex,
-		(unsigned)evt.Setup.wLength);
 
 	s_Ctrlr.SetupDirIn =
 		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0;
@@ -1890,7 +1875,6 @@ static void nRFUsbdSetupEvent(void)
 
 	if (setAddress)
 	{
-		printf("setAddress\n");
 		UsbCtrlrEvt_t addrEvt = {};
 		addrEvt.Type = USB_CTRLR_EVT_ADDRESS;
 		addrEvt.Address = (uint8_t)(evt.Setup.wValue & 0x7FU);
@@ -1989,14 +1973,6 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
 	const uint8_t epAddr = (uint8_t)(EpNum | USB_ENDPADDR_DIR_IN);
-	if (EpNum == 0U)
-	{
-//		printf("in0 started=%u amount=%u actual=%u total=%u\n",
-//			pXfer->Started,
-//			(unsigned)NRF_USBD->EPIN[0].AMOUNT,
-//			pXfer->ActualLen,
-//			pXfer->TotalLen);
-	}
 	if (!pXfer->Started)
 	{
 		return;
@@ -2076,7 +2052,6 @@ extern "C" void USBD_IRQHandler(void)
 
 	if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
 	{
-//		printf("s_Ctrlr.SetupDirIn = %x\n", s_Ctrlr.SetupDirIn);
 		NRF_USBD->EVENTS_EP0DATADONE = 0;
 		if (NRF_USBD->EVENTS_ENDEPIN[0] != 0U)
 		{
@@ -2087,7 +2062,6 @@ extern "C" void USBD_IRQHandler(void)
 		}
 		else if (NRF_USBD->EVENTS_ENDEPOUT[0] != 0U)
 		{
-//		printf("ENDEP0OUT, ep0DataDone = %x\n", ep0DataDone);
 			NRF_USBD->EVENTS_ENDEPOUT[0] = 0;
 			epdir = 1;
 			epidx = 0;
@@ -2136,8 +2110,6 @@ extern "C" void USBD_IRQHandler(void)
 	}
 	if (xferComplete)
 	{
-//		printf("xfer %d %d\n", epidx, epdir);
-
 		NRF_USBD->EPSTATUS = dmaStatus;
 		nRFUsbdDmaRelease();
 
@@ -2162,27 +2134,13 @@ extern "C" void USBD_IRQHandler(void)
 		NRF_USBD->EVENTS_EP0SETUP = 0;
 		__ISB();
 		__DSB();
-//printf("EP0SETUP\n");
-/*
-		    setup.bmRequestType = BMREQUESTTYPE;
-		    setup.bRequest      = BREQUEST;
-		    setup.wValue        = WVALUEL | WVALUEH << 8;
-		    setup.wIndex        = WINDEXL | WINDEXH << 8;
-		    setup.wLength       = WLENGTHL | WLENGTHH << 8;
-
-		    ProcessControl(setup);*/
-#if 1
 		nRFUsbdHostResumeDetected();
 		nRFUsbdAbortEp0();
 		nRFUsbdSetupEvent();
 		nRFUsbdServicePending();
-#endif
 		return;
 	}
-//	else if (ep0DataDone && !s_Ctrlr.SetupDirIn)
-//	{
-		nRFUsbdHandleOutData(0);
-//	}
+	nRFUsbdHandleOutData(0);
 
 
 	if (NRF_USBD->EVENTS_SOF != 0U)
