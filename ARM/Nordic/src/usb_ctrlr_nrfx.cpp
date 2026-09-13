@@ -882,6 +882,13 @@ static hCFifo_t s_hQue;
 #define NRFUSBD_XFER_EVT_PROCESSING	(1UL << 30)
 static atomic_uint_fast32_t s_XferCompleteEvt;
 
+// Nonintrusive debugger snapshot for the current EP0 request. No printing:
+// 0 setup count, 1 bmRequestType|bRequest<<8|wValue<<16,
+// 2 wIndex|wLength<<16, 3 queued, 4 DMA started,
+// 5 hardware completed, 6 AppEvt processed.
+extern "C" volatile uint32_t g_UsbEp0Dbg[7];
+volatile uint32_t g_UsbEp0Dbg[7];
+
 
 // EP0 accepts descriptor and class buffers from the generic USB layer. Those
 // buffers may be const flash or have arbitrary alignment, while nRF52 USBD
@@ -1062,6 +1069,10 @@ static bool nRFUsbdStartIsoNow(void)
 static void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(pQue->EpAddr);
+	if (epNum == 0U)
+	{
+		g_UsbEp0Dbg[4]++;
+	}
 	const bool isIn = USB_ENDPADDR_IS_IN(pQue->EpAddr);
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][isIn ? 1 : 0];
 	uint8_t *pBuffer = epNum == 0U ? s_Ep0Bounce :
@@ -1182,6 +1193,11 @@ void nRFUsbdSchedule(void)
  */
 static void nRFUsbdQueXfer(uint8_t EpAddr, uint16_t Len)
 {
+	if (USB_ENDPADDR_NUM(EpAddr) == 0U)
+	{
+		g_UsbEp0Dbg[3]++;
+	}
+
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_hQue);
 
@@ -1880,6 +1896,16 @@ static void nRFUsbdSetupEvent(void)
 	s_Ctrlr.SetupDirIn =
 		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0;
 
+	g_UsbEp0Dbg[0]++;
+	g_UsbEp0Dbg[1] = (uint32_t)evt.Setup.bmRequestType |
+		((uint32_t)evt.Setup.bRequest << 8U) |
+		((uint32_t)evt.Setup.wValue << 16U);
+	g_UsbEp0Dbg[2] = (uint32_t)evt.Setup.wIndex |
+		((uint32_t)evt.Setup.wLength << 16U);
+	g_UsbEp0Dbg[3] = 0U;
+	g_UsbEp0Dbg[4] = 0U;
+	g_UsbEp0Dbg[5] = 0U;
+	g_UsbEp0Dbg[6] = 0U;
 
 	const bool setAddress =
 		(evt.Setup.bmRequestType &
@@ -2012,6 +2038,11 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	const uint8_t epEvent = (uint8_t)Evt;
 	const uint8_t epNum = epEvent & 0x0FU;
 	const uint16_t amount = (uint16_t)(Evt >> 8U);
+
+	if (epNum == 0U)
+	{
+		g_UsbEp0Dbg[6]++;
+	}
 
 	if ((epEvent & 0x80U) != 0U)
 	{
@@ -2185,6 +2216,10 @@ extern "C" void USBD_IRQHandler(void)
 		NRF_USBD->EPSTATUS = dmaStatus;
 		nRFUsbdDmaRelease();
 
+		if (epidx == 0U)
+		{
+			g_UsbEp0Dbg[5]++;
+		}
 		nRFUsbdQueueXferComplete((epdir<<7) | epidx, amount);
 	}
 	else if (nRFUsbdDmaActive())
