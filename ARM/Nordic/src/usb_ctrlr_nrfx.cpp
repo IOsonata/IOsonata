@@ -2066,7 +2066,13 @@ static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 	const uint32_t evt = NRFUSBD_XFER_EVT_VALID |
 		((uint32_t)Amount << 8U) | EpEvent;
 	atomic_store(&s_XferCompleteEvt, evt);
-	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete);
+	const bool queued = AppEvtHandlerQue(evt, NULL,
+		nRFUsbdProcessXferComplete);
+	if ((EpEvent & 0x0FU) == 0U)
+	{
+		printf("EP0 appq evt=%08lx queued=%u\n", (unsigned long)evt,
+			(unsigned)queued);
+	}
 }
 
 static void nRFUsbdDrainXferComplete(void)
@@ -3608,6 +3614,13 @@ void UsbCtrlrProcess(int DevNo)
 	{
 		nRFUsbPowerProcess();
 #if defined(USBD_PRESENT)
+		const uint32_t pending =
+			(uint32_t)atomic_load(&s_XferCompleteEvt);
+		if ((pending & NRFUSBD_XFER_EVT_VALID) != 0U)
+		{
+			printf("EP0 ctrl process pending=%08lx\n",
+				(unsigned long)pending);
+		}
 		AppEvtHandlerDispatch();
 		nRFUsbdDrainXferComplete();
 #endif
