@@ -156,6 +156,18 @@ jobs:
               '''\t\tcase DEVINTRF_EVT_RX_DATA:\n\t\t\t// RX completion is deferred through AppEvtHandler and runs in the\n\t\t\t// main-loop context. The loop below consumes the committed packet data.\n\t\t\tbreak;\n''',
               'document deferred USB callback context')
           p.write_text(s)
+
+          p = Path("tests/usb/Makefile")
+          s = p.read_text()
+          s = replace_once(s,
+              '''CORE_SOURCES := \\\n\tusb_core_test.cpp \\\n\t$(ROOT)/src/usb/usb.cpp \\\n''',
+              '''CORE_SOURCES := \\\n\tusb_core_test.cpp \\\n\t$(ROOT)/src/usb/usb.cpp \\\n\t$(ROOT)/src/app_evt_handler.cpp \\\n''',
+              'link AppEvt into USB core test')
+          s = replace_once(s,
+              '''LINK_SOURCES := \\\n\tusb_stack_link_test.cpp \\\n\t$(ROOT)/src/usb/usb.cpp \\\n''',
+              '''LINK_SOURCES := \\\n\tusb_stack_link_test.cpp \\\n\t$(ROOT)/src/usb/usb.cpp \\\n\t$(ROOT)/src/app_evt_handler.cpp \\\n''',
+              'link AppEvt into USB stack test')
+          p.write_text(s)
           PY
 
       - name: Validate patch
@@ -166,6 +178,7 @@ jobs:
           grep -n 'AppEvtHandlerIdleRegister(nRFUsbdDrainXferComplete)' ARM/Nordic/src/usb_ctrlr_nrfx.cpp
           grep -n 'AppEvtHandlerExec();' ARM/Nordic/src/usb_ctrlr_nrfx.cpp
           grep -n 'AppEvtHandlerExec();' exemples/usb/usb_cdc_prbs_tx.cpp
+          grep -n 'src/app_evt_handler.cpp' tests/usb/Makefile
 
       - name: Run USB host tests
         shell: bash
@@ -177,6 +190,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add ARM/Nordic/src/usb_ctrlr_nrfx.cpp src/app_evt_handler.cpp \
-                  exemples/usb/usb_cdc_prbs_tx.cpp exemples/usb/usb_cdc_loopback.cpp
+                  exemples/usb/usb_cdc_prbs_tx.cpp exemples/usb/usb_cdc_loopback.cpp \
+                  tests/usb/Makefile
           git commit -m "Complete USB AppEvtHandler workflow"
           git push origin HEAD:usb_optimize_appevt
