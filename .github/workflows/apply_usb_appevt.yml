@@ -1,0 +1,182 @@
+name: Apply USB AppEvt workflow patch
+
+on:
+  push:
+    branches:
+      - usb_optimize_appevt
+    paths:
+      - .github/workflows/apply_usb_appevt.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: usb_optimize_appevt
+          fetch-depth: 0
+
+      - name: Apply exact source edits
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, name):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{name}: expected 1 match, found {count}")
+              return text.replace(old, new, 1)
+
+          p = Path("ARM/Nordic/src/usb_ctrlr_nrfx.cpp")
+          s = p.read_text()
+
+          s = replace_once(s,
+              '#include <string.h>\n#include <stdio.h>\n',
+              '#include <string.h>\n',
+              'remove USB debug stdio')
+
+          s = replace_once(s,
+              'static atomic_uint_fast32_t s_XferCompleteEvt;\n',
+              'static atomic_uint_fast32_t s_XferCompleteEvt;\n'
+              'static atomic_bool s_XferCompleteQueued;\n',
+              'add AppEvt queue state')
+
+          s = replace_once(s,
+              'static uint16_t s_IsoOutSize;\n\n\nstatic inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)\n',
+              'static uint16_t s_IsoOutSize;\n\n'
+              'static void nRFUsbdDrainXferComplete(void);\n\n\n'
+              'static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)\n',
+              'forward declare USB AppEvt idle pump')
+
+          s = replace_once(s,
+              '\tatomic_store(&s_XferCompleteEvt, 0U);\n'
+              '\tatomic_store(&s_PendingEp0Status, false);\n',
+              '\tatomic_store(&s_XferCompleteEvt, 0U);\n'
+              '\tatomic_store(&s_XferCompleteQueued, false);\n'
+              '\tatomic_store(&s_PendingEp0Status, false);\n',
+              'reset AppEvt queue state')
+
+          s = replace_once(s,
+              '\ts_Ctrlr.EvtHandler = EvtHandler;\n'
+              '\ts_Ctrlr.pContext = pContext;\n'
+              '\tnRFUsbdResetState();\n'
+              '\treturn true;\n',
+              '\ts_Ctrlr.EvtHandler = EvtHandler;\n'
+              '\ts_Ctrlr.pContext = pContext;\n'
+              '\tnRFUsbdResetState();\n'
+              '\treturn AppEvtHandlerIdleRegister(nRFUsbdDrainXferComplete);\n',
+              'register USB AppEvt idle pump')
+
+          s = replace_once(s,
+              '\tconst uint8_t epEvent = (uint8_t)Evt;\n'
+              '\tconst uint8_t epNum = epEvent & 0x0FU;\n'
+              '\tconst uint16_t amount = (uint16_t)(Evt >> 8U);\n\n'
+              '\tprintf("epEvent = %d, %d, %d\\n", epEvent, epNum, amount);\n',
+              '\tatomic_store(&s_XferCompleteQueued, false);\n\n'
+              '\tconst uint8_t epEvent = (uint8_t)Evt;\n'
+              '\tconst uint8_t epNum = epEvent & 0x0FU;\n'
+              '\tconst uint16_t amount = (uint16_t)(Evt >> 8U);\n',
+              'remove USB completion printf and claim queued event')
+
+          s = replace_once(s,
+              '\tatomic_store(&s_XferCompleteEvt, evt);\n'
+              '\t(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete);\n',
+              '\tatomic_store(&s_XferCompleteEvt, evt);\n'
+              '\tatomic_store(&s_XferCompleteQueued,\n'
+              '\t\tAppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete));\n',
+              'track AppEvt enqueue result')
+
+          s = replace_once(s,
+              '\tif ((evt & NRFUSBD_XFER_EVT_VALID) != 0U)\n'
+              '\t{\n'
+              '\t\tnRFUsbdProcessXferComplete(evt, NULL);\n'
+              '\t}\n',
+              '\tif ((evt & NRFUSBD_XFER_EVT_VALID) != 0U &&\n'
+              '\t\t!atomic_load(&s_XferCompleteQueued))\n'
+              '\t{\n'
+              '\t\tnRFUsbdProcessXferComplete(evt, NULL);\n'
+              '\t}\n',
+              'make idle pump queue-full fallback only')
+
+          s = replace_once(s,
+              '#if defined(USBD_PRESENT)\n'
+              '\t\tAppEvtHandlerDispatch();\n'
+              '\t\tnRFUsbdDrainXferComplete();\n'
+              '#endif\n',
+              '#if defined(USBD_PRESENT)\n'
+              '\t\tAppEvtHandlerExec();\n'
+              '#endif\n',
+              'run AppEvt workflow from USB main-loop process')
+
+          p.write_text(s)
+
+          p = Path("src/app_evt_handler.cpp")
+          s = p.read_text()
+          s = replace_once(s,
+              '#include "cfifo.h"\n#include "app_evt_handler.h"\n',
+              '#include "cfifo.h"\n#include "coredev/interrupt.h"\n#include "app_evt_handler.h"\n',
+              'add AppEvt critical-section support')
+
+          s = replace_once(s,
+              '''\tAppEvtHandlerQue_t *p =\n\t\t(AppEvtHandlerQue_t *)CFifoPut(s_hAppEvtHandlerFifo);\n\n\tif (p != nullptr)\n\t{\n\t\tp->EvtId = EvtId;\n\t\tp->pCtx = pCtx;\n\t\tp->Handler = Handler;\n\t\treturn true;\n\t}\n\n\treturn false;\n''',
+              '''\tconst uint32_t state = DisableInterrupt();\n\tAppEvtHandlerQue_t *p =\n\t\t(AppEvtHandlerQue_t *)CFifoPut(s_hAppEvtHandlerFifo);\n\n\tif (p != nullptr)\n\t{\n\t\tp->EvtId = EvtId;\n\t\tp->pCtx = pCtx;\n\t\tp->Handler = Handler;\n\t}\n\n\tEnableInterrupt(state);\n\treturn p != nullptr;\n''',
+              'serialize AppEvt producers')
+
+          s = replace_once(s,
+              '''\tAppEvtHandlerQue_t *p =\n\t\t(AppEvtHandlerQue_t *)CFifoGet(s_hAppEvtHandlerFifo);\n\n\tif (p != nullptr && p->Handler != nullptr)\n\t{\n\t\tp->Handler(p->EvtId, p->pCtx);\n\t}\n''',
+              '''\tAppEvtHandlerQue_t evt = {};\n\tconst uint32_t state = DisableInterrupt();\n\tAppEvtHandlerQue_t *p =\n\t\t(AppEvtHandlerQue_t *)CFifoGet(s_hAppEvtHandlerFifo);\n\tif (p != nullptr)\n\t{\n\t\tevt = *p;\n\t}\n\tEnableInterrupt(state);\n\n\tif (p != nullptr && evt.Handler != nullptr)\n\t{\n\t\tevt.Handler(evt.EvtId, evt.pCtx);\n\t}\n''',
+              'copy dispatched AppEvt before releasing slot')
+
+          s = replace_once(s,
+              '''\t\twhile (cnt-- > 0)\n\t\t{\n\t\t\tAppEvtHandlerQue_t *p =\n\t\t\t\t(AppEvtHandlerQue_t *)CFifoGet(s_hAppEvtHandlerFifo);\n\n\t\t\tif (p == nullptr)\n\t\t\t{\n\t\t\t\tbreak;\n\t\t\t}\n\n\t\t\tif (p->Handler != nullptr)\n\t\t\t{\n\t\t\t\tp->Handler(p->EvtId, p->pCtx);\n\t\t\t}\n\t\t}\n''',
+              '''\t\twhile (cnt-- > 0)\n\t\t{\n\t\t\tAppEvtHandlerQue_t evt = {};\n\t\t\tconst uint32_t state = DisableInterrupt();\n\t\t\tAppEvtHandlerQue_t *p =\n\t\t\t\t(AppEvtHandlerQue_t *)CFifoGet(s_hAppEvtHandlerFifo);\n\t\t\tif (p != nullptr)\n\t\t\t{\n\t\t\t\tevt = *p;\n\t\t\t}\n\t\t\tEnableInterrupt(state);\n\n\t\t\tif (p == nullptr)\n\t\t\t{\n\t\t\t\tbreak;\n\t\t\t}\n\n\t\t\tif (evt.Handler != nullptr)\n\t\t\t{\n\t\t\t\tevt.Handler(evt.EvtId, evt.pCtx);\n\t\t\t}\n\t\t}\n''',
+              'copy executed AppEvt before releasing slot')
+          p.write_text(s)
+
+          p = Path("exemples/usb/usb_cdc_prbs_tx.cpp")
+          s = p.read_text()
+          s = replace_once(s,
+              '#include "cfifo.h"\n#include "prbs.h"\n',
+              '#include "app_evt_handler.h"\n#include "cfifo.h"\n#include "prbs.h"\n',
+              'include AppEvt API in USB PRBS example')
+          s = replace_once(s,
+              '''\t\tif (g_Cdc.IsPortOpen() == false)\n\t\t{\n\t\t\tUsbProcess(USB_DEVNO);\n\t\t\tcontinue;\n\t\t}\n\n#ifdef BYTE_MODE\n''',
+              '''\t\tif (g_Cdc.IsPortOpen() == false)\n\t\t{\n\t\t\tUsbProcess(USB_DEVNO);\n\t\t\tcontinue;\n\t\t}\n\n\t\t// USB completion callbacks are deferred out of the IRQ through the\n\t\t// application event queue. Keep that queue moving while the benchmark\n\t\t// intentionally avoids the heavier USB lifecycle pump.\n\t\tAppEvtHandlerExec();\n\n#ifdef BYTE_MODE\n''',
+              'pump AppEvt after CDC port opens')
+          p.write_text(s)
+
+          p = Path("exemples/usb/usb_cdc_loopback.cpp")
+          s = p.read_text()
+          s = replace_once(s,
+              '''\t\tcase DEVINTRF_EVT_RX_DATA:\n\t\t\t// RX completion runs in the USB interrupt. Keep this callback short;\n\t\t\t// the main loop consumes the committed packet-ring data below.\n\t\t\tbreak;\n''',
+              '''\t\tcase DEVINTRF_EVT_RX_DATA:\n\t\t\t// RX completion is deferred through AppEvtHandler and runs in the\n\t\t\t// main-loop context. The loop below consumes the committed packet data.\n\t\t\tbreak;\n''',
+              'document deferred USB callback context')
+          p.write_text(s)
+          PY
+
+      - name: Validate patch
+        shell: bash
+        run: |
+          git diff --check
+          ! grep -n 'printf("epEvent' ARM/Nordic/src/usb_ctrlr_nrfx.cpp
+          grep -n 'AppEvtHandlerIdleRegister(nRFUsbdDrainXferComplete)' ARM/Nordic/src/usb_ctrlr_nrfx.cpp
+          grep -n 'AppEvtHandlerExec();' ARM/Nordic/src/usb_ctrlr_nrfx.cpp
+          grep -n 'AppEvtHandlerExec();' exemples/usb/usb_cdc_prbs_tx.cpp
+
+      - name: Run USB host tests
+        shell: bash
+        run: make -C tests/usb test
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ARM/Nordic/src/usb_ctrlr_nrfx.cpp src/app_evt_handler.cpp \
+                  exemples/usb/usb_cdc_prbs_tx.cpp exemples/usb/usb_cdc_loopback.cpp
+          git commit -m "Complete USB AppEvtHandler workflow"
+          git push origin HEAD:usb_optimize_appevt
