@@ -890,7 +890,6 @@ static atomic_uint_fast32_t s_XferCompleteEvt;
 alignas(4) static uint8_t s_Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
 
 static atomic_bool s_PendingEp0Status;
-static atomic_bool s_Ep0StatusShortcutDone;
 static atomic_bool s_PendingEp0RcvOut;
 static atomic_bool s_BusSuspended;
 static atomic_bool s_SuspendPending;
@@ -1011,10 +1010,7 @@ static void nRFUsbdEp0StatusNow(void)
 		USB_ENDPADDR_DIR_OUT : USB_ENDPADDR_DIR_IN;
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(epAddr);
 
-	if (!atomic_exchange(&s_Ep0StatusShortcutDone, false))
-	{
-		NRF_USBD->TASKS_EP0STATUS = 1;
-	}
+	NRF_USBD->TASKS_EP0STATUS = 1;
 	__ISB();
 	__DSB();
 
@@ -1073,22 +1069,6 @@ static void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 	if (isIn)
 	{
-		if (epNum == 0U)
-		{
-			const bool finalShortPacket = pQue->Len < pXfer->Mps;
-			uint32_t shorts = NRF_USBD->SHORTS;
-			if (finalShortPacket)
-			{
-				shorts |= USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
-			}
-			else
-			{
-				shorts &= ~USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
-			}
-			NRF_USBD->SHORTS = shorts;
-			atomic_store(&s_Ep0StatusShortcutDone, false);
-		}
-
 		NRF_USBD->EPIN[epNum].PTR = (uint32_t)(uintptr_t)pBuffer;
 		NRF_USBD->EPIN[epNum].MAXCNT = pQue->Len;
 		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPIN[epNum], pQue->EpAddr);
@@ -1289,10 +1269,7 @@ static void nRFUsbdResetState(void)
 
 	CFifoFlush(s_hQue);
 	atomic_store(&s_XferCompleteEvt, 0U);
-	NRF_USBD->SHORTS &=
-		~USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
 	atomic_store(&s_PendingEp0Status, false);
-	atomic_store(&s_Ep0StatusShortcutDone, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 	atomic_store(&s_BusSuspended, false);
 	atomic_store(&s_SuspendPending, false);
@@ -1327,10 +1304,7 @@ static void nRFUsbdAbortEp0(void)
 		(void)atomic_compare_exchange_strong(&s_XferCompleteEvt,
 			&pending, 0U);
 	}
-	NRF_USBD->SHORTS &=
-		~USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
 	atomic_store(&s_PendingEp0Status, false);
-	atomic_store(&s_Ep0StatusShortcutDone, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 
 	for (uint8_t dir = 0; dir < 2U; dir++)
@@ -2125,13 +2099,6 @@ extern "C" void USBD_IRQHandler(void)
 		if (NRF_USBD->EVENTS_ENDEPIN[0] != 0U)
 		{
 			NRF_USBD->EVENTS_ENDEPIN[0] = 0;
-			if ((NRF_USBD->SHORTS &
-				 USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk) != 0U)
-			{
-				NRF_USBD->SHORTS &=
-					~USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
-				atomic_store(&s_Ep0StatusShortcutDone, true);
-			}
 			epdir = 0;
 			epidx = 0;
 			xferComplete = true;
