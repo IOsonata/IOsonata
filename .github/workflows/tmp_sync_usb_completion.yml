@@ -1,0 +1,72 @@
+name: Temporary nRF52 USB completion patch
+
+on:
+  push:
+    branches:
+      - tmp_sync_usb_completion_20260913
+    paths:
+      - .github/workflows/tmp_sync_usb_completion.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tmp_sync_usb_completion_20260913
+          fetch-depth: 0
+
+      - name: Apply exact controller change
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("ARM/Nordic/src/usb_ctrlr_nrfx.cpp")
+          text = path.read_text()
+          old = '''\t\tNRF_USBD->EPSTATUS = dmaStatus;
+          \t\tnRFUsbdDmaRelease();
+
+          \t\tnRFUsbdQueueXferComplete((epdir<<7) | epidx, amount);
+          '''
+          new = '''\t\tNRF_USBD->EPSTATUS = dmaStatus;
+          \t\tnRFUsbdDmaRelease();
+
+          \t\tif (epdir == 1U)
+          \t\t{
+          \t\t\tnRFUsbdHandleOutEnd(epidx, amount);
+          \t\t}
+          \t\telse
+          \t\t{
+          \t\t\tnRFUsbdHandleInData(epidx, amount);
+          \t\t}
+          '''
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f"expected exactly one completion handoff, found {count}")
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Validate exact diff
+        shell: bash
+        run: |
+          git diff --check
+          test "$(git diff --name-only | wc -l | tr -d ' ')" = "1"
+          test "$(git diff --name-only)" = "ARM/Nordic/src/usb_ctrlr_nrfx.cpp"
+          test "$(git diff --numstat -- ARM/Nordic/src/usb_ctrlr_nrfx.cpp)" = $'8\t1\tARM/Nordic/src/usb_ctrlr_nrfx.cpp'
+          ! grep -q 'nRFUsbdQueueXferComplete((epdir<<7) | epidx, amount);' ARM/Nordic/src/usb_ctrlr_nrfx.cpp
+          grep -q 'nRFUsbdHandleOutEnd(epidx, amount);' ARM/Nordic/src/usb_ctrlr_nrfx.cpp
+          grep -q 'nRFUsbdHandleInData(epidx, amount);' ARM/Nordic/src/usb_ctrlr_nrfx.cpp
+
+      - name: Commit only the net controller change
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ARM/Nordic/src/usb_ctrlr_nrfx.cpp
+          git rm .github/workflows/tmp_sync_usb_completion.yml
+          git commit -m "Complete nRF52 USB transfers in IRQ"
+          git push origin HEAD:tmp_sync_usb_completion_20260913
