@@ -1089,15 +1089,17 @@ static void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 }
 
-
+#if 1
 static void nRFUsbdServicePending(void)
 {
+	printf("nRFUsbdServicePending\n");
 	if (atomic_load(&s_HostResumePending) ||
-		(atomic_load(&s_BusSuspended) && !atomic_load(&s_SuspendPending)) ||
-		atomic_load(&s_XferCompleteEvt) != 0U)
+		(atomic_load(&s_BusSuspended) && !atomic_load(&s_SuspendPending)))// ||
+//		atomic_load(&s_XferCompleteEvt) != 0U)
 	{
 		return;
 	}
+printf("nRFUsbdServicePending\n");
 
 	for (;;)
 	{
@@ -1152,11 +1154,14 @@ static void nRFUsbdServicePending(void)
 		return;
 	}
 }
+#endif
 
 /** Foreground starts free DMA immediately; other interrupt producers defer. */
 static inline __attribute__((always_inline))
 bool nRFUsbdDeferFromInterrupt(void)
 {
+	return true;
+
 	const uint32_t exception = __get_IPSR();
 	if (exception == 0U)
 	{
@@ -1173,7 +1178,7 @@ bool nRFUsbdDeferFromInterrupt(void)
 static inline __attribute__((always_inline))
 void nRFUsbdSchedule(void)
 {
-	if (!nRFUsbdDeferFromInterrupt())
+	//if (!nRFUsbdDeferFromInterrupt())
 	{
 		nRFUsbdServicePending();
 	}
@@ -1722,6 +1727,8 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
 
+	printf("nRFUsbRegEpXfer %d\n", EpAddr);
+
 	pXfer->pBuffer = epNum == 0U ? pBuffer : NULL;
 	pXfer->TotalLen = TotalBytes;
 	pXfer->ActualLen = 0U;
@@ -1749,6 +1756,7 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	}
 	else if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
+		printf("nRFUsbdQueueIn %d\n", epNum);
 		nRFUsbdQueueIn(epNum);
 	}
 	else if (epNum == 0U)
@@ -1883,6 +1891,7 @@ static void nRFUsbdSetupEvent(void)
 	evt.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
 		((uint16_t)NRF_USBD->WLENGTHH << 8);
 
+	printf("Setup: %x %d %d %d %d\n", evt.Setup.bmRequestType, evt.Setup.bRequest, evt.Setup.wValue, evt.Setup.wIndex, evt.Setup.wLength);
 	s_Ctrlr.SetupDirIn =
 		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0;
 
@@ -1890,6 +1899,7 @@ static void nRFUsbdSetupEvent(void)
 		(evt.Setup.bmRequestType &
 		 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0 &&
 		evt.Setup.bRequest == USB_REQ_SET_ADDRESS;
+
 
 	if (setAddress)
 	{
@@ -2005,18 +2015,18 @@ static void nRFUsbdHandleInData(uint8_t EpNum, uint16_t TransferLen)
 
 static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 {
-	(void)pContext;
-	uint_fast32_t expected = Evt;
-	if ((Evt & NRFUSBD_XFER_EVT_VALID) == 0U ||
-		!atomic_compare_exchange_strong(&s_XferCompleteEvt, &expected,
-			NRFUSBD_XFER_EVT_PROCESSING))
-	{
-		return;
-	}
+//	(void)pContext;
+//	uint_fast32_t expected = Evt;
+//	if ((Evt & NRFUSBD_XFER_EVT_VALID) == 0U ||
+///		!atomic_compare_exchange_strong(&s_XferCompleteEvt, &expected,
+//			NRFUSBD_XFER_EVT_PROCESSING))
+//	{
+//		return;
+//	}
 
 	const uint8_t epEvent = (uint8_t)Evt;
-	const uint8_t epNum = epEvent & 0x0FU;
-	const uint16_t amount = (uint16_t)(Evt >> 8U);
+	const uint8_t epNum = epEvent & 0x7FU;
+	const uint16_t amount = (uint16_t)(Evt >> 8U) & 0xFFFF;
 
 	printf("epEvent = %d, %d, %d\n", epEvent, epNum, amount);
 
@@ -2033,8 +2043,13 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 		nRFUsbdHandleInData(epNum, amount);
 	}
 
-	atomic_store(&s_XferCompleteEvt, 0U);
-	nRFUsbdServicePending();
+	//atomic_store(&s_XferCompleteEvt, 0U);
+	//nRFUsbdServicePending();
+}
+
+static void nRFUsbdProcessSetup(uint32_t Evt, void *pContext)
+{
+	nRFUsbdSetupEvent();
 }
 
 static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
@@ -2192,7 +2207,7 @@ extern "C" void USBD_IRQHandler(void)
 		NRF_USBD->EPSTATUS = dmaStatus;
 		nRFUsbdDmaRelease();
 
-		nRFUsbdQueueXferComplete((epdir<<7) | epidx, amount);
+		(void)AppEvtHandlerQue((epdir<<7) | epidx | (amount < 8) | NRFUSBD_XFER_EVT_VALID, NULL, nRFUsbdProcessXferComplete);
 	}
 	else if (nRFUsbdDmaActive())
 	{
@@ -2207,8 +2222,9 @@ extern "C" void USBD_IRQHandler(void)
 		__DSB();
 		nRFUsbdHostResumeDetected();
 		nRFUsbdAbortEp0();
-		nRFUsbdSetupEvent();
-		nRFUsbdServicePending();
+		(void)AppEvtHandlerQue(0, NULL, nRFUsbdProcessSetup);
+//		nRFUsbdSetupEvent();
+//		nRFUsbdServicePending();
 		return;
 	}
 	if (atomic_load(&s_XferCompleteEvt) == 0U)
@@ -2270,7 +2286,7 @@ extern "C" void USBD_IRQHandler(void)
 	// Starting EasyDMA is the last USBD operation in this interrupt. Endpoint
 	// callbacks only queued requests, so no handler below the start can touch
 	// controller registers while the shared DMA engine owns them.
-	nRFUsbdServicePending();
+	//nRFUsbdServicePending();
 }
 
 /**
@@ -3593,11 +3609,10 @@ void UsbCtrlrProcess(int DevNo)
 {
 	if (nRFUsbValidDevNo(DevNo))
 	{
+		printf("UsbCtrlrProcess\n");
 		nRFUsbPowerProcess();
-#if defined(USBD_PRESENT)
 		AppEvtHandlerDispatch();
 		nRFUsbdDrainXferComplete();
-#endif
 	}
 }
 
@@ -3723,6 +3738,7 @@ bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length)
 {
+	printf("UsbCtrlrEp0Xfer\n");
 	return nRFUsbValidDevNo(DevNo) && USB_ENDPADDR_NUM(EpAddr) == 0U &&
 		nRFUsbRegEpXfer(EpAddr, pBuffer, Length);
 }
