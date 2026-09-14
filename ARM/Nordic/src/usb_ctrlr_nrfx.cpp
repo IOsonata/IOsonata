@@ -2364,6 +2364,84 @@ static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete);
 }
 
+static void nRFUsbdHandleBusEvent(uint32_t EventCause)
+{
+	if ((EventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0 &&
+		!atomic_exchange(&s_BusSuspended, true))
+	{
+		// A bus suspend and a peripheral low-power transition are separate.
+		// When low-power suspend is disabled, retain all endpoint state and
+		// wait for RESUME or SOF without touching USBD LOWPOWER.
+		atomic_store(&s_SuspendPending, s_UsbdLowPowerSuspend);
+		atomic_store(&s_RemoteWakePending, false);
+		atomic_store(&s_HostResumePending, false);
+		atomic_store(&s_IsoInReady, false);
+		atomic_store(&s_IsoOutReady, false);
+		NRF_USBD->EVENTS_SOF = 0U;
+		NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
+		nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
+	}
+
+	if ((EventCause & USBD_EVENTCAUSE_RESUME_Msk) != 0)
+	{
+		nRFUsbdHostResumeDetected();
+	}
+
+	if ((EventCause & USBD_EVENTCAUSE_USBWUALLOWED_Msk) != 0)
+	{
+		nRFUsbdWakeAllowed();
+	}
+}
+
+static void nRFUsbdHandleSof(void)
+{
+	nRFUsbdHostResumeDetected();
+
+	if (atomic_load(&s_IsoInOpen))
+	{
+		atomic_store(&s_IsoInReady, true);
+	}
+
+	if (atomic_load(&s_IsoOutOpen))
+	{
+		const uint32_t size = NRF_USBD->SIZE.ISOOUT;
+		if (size != 0U)
+		{
+			s_IsoOutSize = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
+				0U : (uint16_t)size;
+			atomic_store(&s_IsoOutReady, true);
+
+			nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(NRFX_USBD_ISO_EP_NO);
+			if (pReg->bBlocking)
+			{
+				nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO,
+					USB_CTRLR_EVT_DRDY, 0U, USB_CTRLR_XFER_SUCCESS);
+			}
+			else
+			{
+				(void)nRFUsbRegDataEpXfer(NRFX_USBD_ISO_EP_NO,
+					nRFUsbdMps(NRFX_USBD_ISO_EP_NO));
+			}
+		}
+	}
+
+	if (s_Ctrlr.SofEnabled)
+	{
+		UsbCtrlrEvt_t evt = {};
+		evt.Type = USB_CTRLR_EVT_SOF;
+		evt.FrameNo = (uint16_t)NRF_USBD->FRAMECNTR;
+		nRFUsbdEmit(&evt);
+	}
+
+	if (!s_Ctrlr.SofEnabled &&
+		!atomic_load(&s_IsoInOpen) &&
+		!atomic_load(&s_IsoOutOpen) &&
+		!atomic_load(&s_BusSuspended))
+	{
+		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
+	}
+}
+
 extern "C" void USBD_IRQHandler(void)
 {
 	uint8_t completedDma = NRFX_USBD_DMA_EP_NONE;
@@ -2425,31 +2503,7 @@ extern "C" void USBD_IRQHandler(void)
 		__ISB();
 		__DSB();
 
-		if ((eventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0 &&
-			!atomic_exchange(&s_BusSuspended, true))
-		{
-			// A bus suspend and a peripheral low-power transition are separate.
-			// When low-power suspend is disabled, retain all endpoint state and
-			// wait for RESUME or SOF without touching USBD LOWPOWER.
-			atomic_store(&s_SuspendPending, s_UsbdLowPowerSuspend);
-			atomic_store(&s_RemoteWakePending, false);
-			atomic_store(&s_HostResumePending, false);
-			atomic_store(&s_IsoInReady, false);
-			atomic_store(&s_IsoOutReady, false);
-			NRF_USBD->EVENTS_SOF = 0U;
-			NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
-			nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
-		}
-
-		if ((eventCause & USBD_EVENTCAUSE_RESUME_Msk) != 0)
-		{
-			nRFUsbdHostResumeDetected();
-		}
-
-		if ((eventCause & USBD_EVENTCAUSE_USBWUALLOWED_Msk) != 0)
-		{
-			nRFUsbdWakeAllowed();
-		}
+		nRFUsbdHandleBusEvent(eventCause);
 	}
 
 	// Endpoint zero is handled further down with the setup sequence.
@@ -2558,48 +2612,7 @@ extern "C" void USBD_IRQHandler(void)
 		__ISB();
 		__DSB();
 
-		nRFUsbdHostResumeDetected();
-		if (atomic_load(&s_IsoInOpen))
-		{
-			atomic_store(&s_IsoInReady, true);
-		}
-		if (atomic_load(&s_IsoOutOpen))
-		{
-			const uint32_t size = NRF_USBD->SIZE.ISOOUT;
-			if (size != 0U)
-			{
-				s_IsoOutSize =
-					(size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
-					0U : (uint16_t)size;
-				atomic_store(&s_IsoOutReady, true);
-				nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(NRFX_USBD_ISO_EP_NO);
-				if (pReg->bBlocking)
-				{
-					nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO,
-						USB_CTRLR_EVT_DRDY, 0U, USB_CTRLR_XFER_SUCCESS);
-				}
-				else
-				{
-					(void)nRFUsbRegDataEpXfer(NRFX_USBD_ISO_EP_NO,
-						nRFUsbdMps(NRFX_USBD_ISO_EP_NO));
-				}
-			}
-		}
-
-		if (s_Ctrlr.SofEnabled)
-		{
-			UsbCtrlrEvt_t evt = {};
-			evt.Type = USB_CTRLR_EVT_SOF;
-			evt.FrameNo = (uint16_t)NRF_USBD->FRAMECNTR;
-			nRFUsbdEmit(&evt);
-		}
-
-		if (!s_Ctrlr.SofEnabled &&
-			!atomic_load(&s_IsoInOpen) &&
-			!atomic_load(&s_IsoOutOpen) && !atomic_load(&s_BusSuspended))
-		{
-			NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
-		}
+		nRFUsbdHandleSof();
 	}
 
 	nRFUsbdTryRemoteWake();
