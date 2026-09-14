@@ -2468,22 +2468,17 @@ extern "C" void USBD_IRQHandler(void)
 		__ISB();
 		__DSB();
 
-		const uint32_t epMask =
-			(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
-		uint32_t outData = (dataStatus >> 16U) & epMask;
-		uint32_t inData = dataStatus & epMask;
-
-		while (outData != 0U)
+		const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
+		if (outData != 0U)
 		{
-			const uint32_t epNum = nRFUsbdLowestBit(outData);
-			outData &= outData - 1U;
+			const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
 			nRFUsbdQueueOutData((uint8_t)epNum);
 		}
 
-		while (inData != 0U)
+		const uint32_t inData = dataStatus & 0xFEU;
+		if (inData != 0U)
 		{
-			const uint32_t epNum = nRFUsbdLowestBit(inData);
-			inData &= inData - 1U;
+			const uint32_t epNum = 31U - (uint32_t)__CLZ(inData);
 			nRFUsbdQueueXferComplete((uint8_t)epNum,
 				(uint16_t)NRF_USBD->EPIN[epNum].AMOUNT);
 		}
