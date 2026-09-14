@@ -2160,8 +2160,11 @@ static void nRFUsbdBusReset(void)
 	nRFUsbdResetState();
 }
 
-static void nRFUsbdSetupEvent(void)
+static void nRFUsbdProcessEp0Setup(void)
 {
+	nRFUsbdHostResumeDetected();
+	nRFUsbdAbortEp0();
+
 	UsbCtrlrEvt_t evt = {};
 	evt.Type = USB_CTRLR_EVT_SETUP;
 	evt.Setup.bmRequestType = (uint8_t)NRF_USBD->BMREQUESTTYPE;
@@ -2576,9 +2579,7 @@ extern "C" void USBD_IRQHandler(void)
 		__ISB();
 		__DSB();
 
-		nRFUsbdHostResumeDetected();
-		nRFUsbdAbortEp0();
-		nRFUsbdSetupEvent();
+		nRFUsbdProcessEp0Setup();
 	}
 	else
 	{
