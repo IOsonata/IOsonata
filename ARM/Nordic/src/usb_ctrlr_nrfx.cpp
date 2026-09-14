@@ -185,6 +185,62 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
 static bool s_UsbdVbusLevel = false;
 #endif
 
+//
+// nRF52 USBD constants and types.
+//
+#if defined(USBD_PRESENT)
+
+#define NRFX_USBD_IRQ_EVENT_COUNT	(USBD_INTEN_EPDATA_Pos + 1)
+#define NRFUSBD_IRQ_MASK \
+	((uint32_t)((1ULL << NRFX_USBD_IRQ_EVENT_COUNT) - 1ULL))
+
+// Errata 199's hardware-visible EasyDMA busy register is also the shared DMA
+// ownership flag: 0x82 before STARTEP and zero after ENDEP.
+#define NRFX_USBD_EASYDMA_BUSY_REG			(*((volatile uint32_t *)0x40027C1CUL))
+#define NRFX_USBD_EASYDMA_BUSY_REG_BUSY		0x82UL
+#define NRFX_USBD_EASYDMA_BUSY_REG_CLEAR	0UL
+
+#define NRFUSBD_QUE_DEPTH			(NRFX_USBD_EP_COUNT * 2)
+
+enum
+{
+	NRFX_USBD_DATA_EP_COUNT = 8,
+	NRFX_USBD_EP_COUNT = 9,
+	NRFX_USBD_ISO_EP_NO = 8,
+	NRFX_USBD_MAX_PACKET_SIZE = 64,
+	NRFX_USBD_ISO_MAX_PACKET_SIZE = 512,
+	NRFX_USBD_DMA_EP_NONE = 0xFFU,
+};
+
+typedef struct __nRF_Usbd_Xfer
+{
+	uint8_t *pBuffer;
+	uint16_t TotalLen;
+	volatile uint16_t ActualLen;
+	volatile bool DataReceived;
+	volatile bool Started;
+} nRFUsbdXfer_t;
+
+typedef struct __nRF_Usbd_Ctrlr
+{
+	nRFUsbdXfer_t Xfer[NRFX_USBD_EP_COUNT][2];
+	bool SofEnabled;
+	bool SetupDirIn;
+} nRFUsbdCtrlr_t;
+
+// One EasyDMA engine serves every endpoint in both directions, so a transfer
+// request waits in this descriptor queue and starts in submission order.
+//
+// An endpoint cannot ask for a second transfer in the same direction until the
+// first completes, so one slot per endpoint per direction is always enough and
+// the queue cannot overflow.
+typedef struct __nRF_Usbd_Que {
+	uint8_t EpAddr;				//!< Endpoint address, direction bit included
+	uint16_t Len;				//!< Bytes this transfer moves
+} nRFUsbdQue_t;
+
+#endif
+
 /// Only DevNo 0 exists on every nRF part shipped so far.
 static inline __attribute__((always_inline))
 bool nRFUsbValidDevNo(int DevNo)
@@ -820,55 +876,6 @@ static void nRFUsbPowerProcess(void)
 //
 
 #if defined(USBD_PRESENT)
-
-#define NRFX_USBD_IRQ_EVENT_COUNT	(USBD_INTEN_EPDATA_Pos + 1)
-#define NRFUSBD_IRQ_MASK \
-	((uint32_t)((1ULL << NRFX_USBD_IRQ_EVENT_COUNT) - 1ULL))
-
-// Errata 199's hardware-visible EasyDMA busy register is also the shared DMA
-// ownership flag: 0x82 before STARTEP and zero after ENDEP.
-#define NRFX_USBD_EASYDMA_BUSY_REG			(*((volatile uint32_t *)0x40027C1CUL))
-#define NRFX_USBD_EASYDMA_BUSY_REG_BUSY		0x82UL
-#define NRFX_USBD_EASYDMA_BUSY_REG_CLEAR	0UL
-
-#define NRFUSBD_QUE_DEPTH			(NRFX_USBD_EP_COUNT * 2)
-
-enum
-{
-	NRFX_USBD_DATA_EP_COUNT = 8,
-	NRFX_USBD_EP_COUNT = 9,
-	NRFX_USBD_ISO_EP_NO = 8,
-	NRFX_USBD_MAX_PACKET_SIZE = 64,
-	NRFX_USBD_ISO_MAX_PACKET_SIZE = 512,
-	NRFX_USBD_DMA_EP_NONE = 0xFFU,
-};
-
-typedef struct __nRF_Usbd_Xfer
-{
-	uint8_t *pBuffer;
-	uint16_t TotalLen;
-	volatile uint16_t ActualLen;
-	volatile bool DataReceived;
-	volatile bool Started;
-} nRFUsbdXfer_t;
-
-typedef struct __nRF_Usbd_Ctrlr
-{
-	nRFUsbdXfer_t Xfer[NRFX_USBD_EP_COUNT][2];
-	bool SofEnabled;
-	bool SetupDirIn;
-} nRFUsbdCtrlr_t;
-
-// One EasyDMA engine serves every endpoint in both directions, so a transfer
-// request waits in this descriptor queue and starts in submission order.
-//
-// An endpoint cannot ask for a second transfer in the same direction until the
-// first completes, so one slot per endpoint per direction is always enough and
-// the queue cannot overflow.
-typedef struct __nRF_Usbd_Que {
-	uint8_t EpAddr;				//!< Endpoint address, direction bit included
-	uint16_t Len;				//!< Bytes this transfer moves
-} nRFUsbdQue_t;
 
 static nRFUsbdCtrlr_t s_Ctrlr;
 alignas(4) static uint8_t s_QueMem[
