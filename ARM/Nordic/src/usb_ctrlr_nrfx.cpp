@@ -236,20 +236,6 @@ typedef struct __nRF_Usbd_Que {
 	uint16_t Len;				//!< Bytes this transfer moves
 } nRFUsbdQue_t;
 
-typedef struct __nRF_Usbd_Event_Status
-{
-	uint8_t EndIn;
-	uint8_t EndOut;
-	bool UsbReset;
-	bool Started;
-	bool Ep0DataDone;
-	bool EndIsoIn;
-	bool EndIsoOut;
-	bool Sof;
-	bool UsbEvent;
-	bool Ep0Setup;
-	bool EpData;
-} nRFUsbdEventStatus_t;
 
 #endif
 
@@ -2136,101 +2122,6 @@ static void nRFUsbRegEpClearStall(uint8_t EpAddr)
 	__DSB();
 }
 
-static bool nRFUsbdTakeEvent(volatile uint32_t *pEvent)
-{
-	if (*pEvent == 0U)
-	{
-		return false;
-	}
-
-	*pEvent = 0U;
-	return true;
-}
-
-static bool nRFUsbdCollectEvents(nRFUsbdEventStatus_t *pStatus)
-{
-	*pStatus = {};
-	pStatus->UsbReset = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_USBRESET);
-	pStatus->Started = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_STARTED);
-
-	pStatus->Ep0DataDone =
-		nRFUsbdTakeEvent(&NRF_USBD->EVENTS_EP0DATADONE);
-
-	uint32_t t = NRF_USBD->EPDATASTATUS;
-	uint32_t d = NRF_USBD->EPSTATUS;
-
-	if (NRF_USBD->EVENTS_EPDATA)
-	{
-
-		uint32_t EndIn = 0;
-		uint32_t idx = 0;
-
-		if (t & 0xFFFFU)
-		{
-			idx = 31 - __CLZ(t & 0xFFFFU);
-			if (NRF_USBD->EVENTS_ENDEPIN[idx])
-			{
-				pStatus->EndIn = t & 0xFFFFU;
-				NRF_USBD->EVENTS_ENDEPIN[idx] = 0;
-			}
-		}
-/*
-		if (t >> 16U)
-		{
-			idx = 31 - __CLZ(t >> 16U);
-			if (NRF_USBD->EVENTS_ENDEPOUT[idx])
-			{
-				pStatus->EndOut = t >> 16U;
-				NRF_USBD->EVENTS_ENDEPOUT[idx] = 0;
-			}
-		}*/
-/*
-		for (uint8_t epNum = 0U; epNum < NRFX_USBD_DATA_EP_COUNT; epNum++)
-		{
-			if (nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDEPIN[epNum]))
-			{
-				pStatus->EndIn |= (uint8_t)(1U << epNum);
-			}
-		}
-
-		if (pStatus->EndIn != EndIn)
-		{
-			printf("%d %x %x %x\n", idx, t, pStatus->EndIn, EndIn);
-		}*/
-	}
-	else if (pStatus->Ep0DataDone)
-	{
-		if (nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDEPIN[0]))
-		{
-			pStatus->EndIn |= (uint8_t)(1U << 0);
-		}
-	}
-
-	pStatus->EndIsoIn = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDISOIN);
-
-
-
-	pStatus->EndIsoOut = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDISOOUT);
-	pStatus->Sof = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_SOF);
-	pStatus->UsbEvent = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_USBEVENT);
-	pStatus->Ep0Setup = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_EP0SETUP);
-	pStatus->EpData = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_EPDATA);
-
-	const bool any = pStatus->UsbReset || pStatus->Started ||
-		pStatus->EndIn != 0U || pStatus->EndOut != 0U ||
-		pStatus->Ep0DataDone || pStatus->EndIsoIn ||
-		pStatus->EndIsoOut || pStatus->Sof || pStatus->UsbEvent ||
-		pStatus->Ep0Setup || pStatus->EpData;
-
-	if (any)
-	{
-		__ISB();
-		__DSB();
-	}
-
-	return any;
-}
-
 static void nRFUsbdBusReset(void)
 {
 	if (nRFUsbdDmaActive())
@@ -2476,9 +2367,6 @@ static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 extern "C" void USBD_IRQHandler(void)
 {
 	uint8_t completedDma = NRFX_USBD_DMA_EP_NONE;
-	bool completedOut = false;
-	nRFUsbdEventStatus_t eventStatus;
-	uint32_t eventCause = 0;
 
 	if (nRFUsbdDmaActive())
 	{
@@ -2509,36 +2397,34 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdDmaRelease(completedDma);
 	}
 
-	completedOut =
+	const bool completedOut =
 		completedDma != NRFX_USBD_DMA_EP_NONE &&
 		!USB_ENDPADDR_IS_IN(completedDma) &&
 		USB_ENDPADDR_NUM(completedDma) != NRFX_USBD_ISO_EP_NO;
 
-	if (!nRFUsbdCollectEvents(&eventStatus) && !completedOut)
+	if (NRF_USBD->EVENTS_STARTED != 0U)
 	{
-		// A transfer requested from another interrupt raises a software USBD
-		// interrupt so EasyDMA still starts from the controller context.
-		nRFUsbdServicePending();
-		return;
+		NRF_USBD->EVENTS_STARTED = 0U;
 	}
 
-	if (eventStatus.UsbEvent)
+	if (NRF_USBD->EVENTS_USBRESET != 0U)
 	{
-		eventCause = NRF_USBD->EVENTCAUSE;
-		NRF_USBD->EVENTCAUSE = eventCause;
+		NRF_USBD->EVENTS_USBRESET = 0U;
 		__ISB();
 		__DSB();
-	}
-
-	if (eventStatus.UsbReset)
-	{
 		nRFUsbdBusReset();
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESET);
 		return;
 	}
 
-	if (eventStatus.UsbEvent)
+	if (NRF_USBD->EVENTS_USBEVENT != 0U)
 	{
+		NRF_USBD->EVENTS_USBEVENT = 0U;
+		const uint32_t eventCause = NRF_USBD->EVENTCAUSE;
+		NRF_USBD->EVENTCAUSE = eventCause;
+		__ISB();
+		__DSB();
+
 		if ((eventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0 &&
 			!atomic_exchange(&s_BusSuspended, true))
 		{
@@ -2574,10 +2460,10 @@ extern "C" void USBD_IRQHandler(void)
 			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 	}
 
-	uint32_t dataStatus = 0;
-	if (eventStatus.EpData || eventStatus.Ep0DataDone)
+	if (NRF_USBD->EVENTS_EPDATA != 0U)
 	{
-		dataStatus = NRF_USBD->EPDATASTATUS;
+		NRF_USBD->EVENTS_EPDATA = 0U;
+		const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
 		NRF_USBD->EPDATASTATUS = dataStatus;
 		__ISB();
 		__DSB();
@@ -2603,21 +2489,31 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
-	if (eventStatus.EndIsoIn)
+	if (NRF_USBD->EVENTS_ENDISOIN != 0U)
 	{
+		NRF_USBD->EVENTS_ENDISOIN = 0U;
 		nRFUsbdQueueXferComplete(NRFX_USBD_ISO_EP_NO,
 			(uint16_t)NRF_USBD->ISOIN.AMOUNT);
 	}
-	if (eventStatus.EndIsoOut)
+
+	if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
 	{
+		NRF_USBD->EVENTS_ENDISOOUT = 0U;
 		nRFUsbdQueueXferComplete(
 			(uint8_t)(0x80U | NRFX_USBD_ISO_EP_NO),
 			(uint16_t)NRF_USBD->ISOOUT.AMOUNT);
 	}
 
-	const bool setupPending = eventStatus.Ep0Setup;
-	if (setupPending)
+	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
 	{
+		NRF_USBD->EVENTS_EP0SETUP = 0U;
+
+		// A new SETUP aborts the previous control transfer. Discard any
+		// simultaneously latched completion from that old transfer.
+		NRF_USBD->EVENTS_EP0DATADONE = 0U;
+		__ISB();
+		__DSB();
+
 		nRFUsbdHostResumeDetected();
 		nRFUsbdAbortEp0();
 		nRFUsbdSetupEvent();
@@ -2630,8 +2526,12 @@ extern "C" void USBD_IRQHandler(void)
 				(uint16_t)NRF_USBD->EPOUT[0].AMOUNT);
 		}
 
-		if (eventStatus.Ep0DataDone)
+		if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
 		{
+			NRF_USBD->EVENTS_EP0DATADONE = 0U;
+			__ISB();
+			__DSB();
+
 			if (s_Ctrlr.SetupDirIn)
 			{
 				nRFUsbdQueueXferComplete(0U,
@@ -2644,8 +2544,12 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
-	if (eventStatus.Sof)
+	if (NRF_USBD->EVENTS_SOF != 0U)
 	{
+		NRF_USBD->EVENTS_SOF = 0U;
+		__ISB();
+		__DSB();
+
 		nRFUsbdHostResumeDetected();
 		if (atomic_load(&s_IsoInOpen))
 		{
