@@ -211,6 +211,8 @@ enum
 	NRFX_USBD_EP0_IDLE = 0U,
 	NRFX_USBD_EP0_PENDING,
 	NRFX_USBD_EP0_ACTIVE,
+	NRFX_USBD_ISO_OUT_OPEN = 1U,
+	NRFX_USBD_ISO_IN_OPEN = 2U,
 };
 
 typedef struct __nRF_Usbd_Xfer
@@ -277,8 +279,7 @@ static atomic_bool s_SuspendPending;
 static atomic_bool s_RemoteWakePending;
 static atomic_bool s_HostResumePending;
 static atomic_bool s_MacAwake;
-static atomic_bool s_IsoInOpen;
-static atomic_bool s_IsoOutOpen;
+static atomic_uint_fast8_t s_IsoOpen;
 static atomic_bool s_IsoInReady;
 static atomic_bool s_IsoOutReady;
 static uint16_t s_IsoOutSize;
@@ -1336,8 +1337,9 @@ static bool nRFUsbdStartIsoNow(void)
 {
 	const uint8_t inAddr = USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO);
 	nRFUsbdXfer_t *pIn = nRFUsbdGetXfer(inAddr);
-	if (atomic_load(&s_IsoInOpen) && atomic_load(&s_IsoInReady) &&
-		pIn->Started)
+	const uint_fast8_t isoOpen = atomic_load(&s_IsoOpen);
+	if ((isoOpen & NRFX_USBD_ISO_IN_OPEN) != 0U &&
+		atomic_load(&s_IsoInReady) && pIn->Started)
 	{
 		atomic_store(&s_IsoInReady, false);
 		NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)nRFUsbGetEpReg(inAddr)->pBuffer;
@@ -1347,8 +1349,8 @@ static bool nRFUsbdStartIsoNow(void)
 	}
 
 	nRFUsbdXfer_t *pOut = nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO);
-	if (atomic_load(&s_IsoOutOpen) && atomic_load(&s_IsoOutReady) &&
-		pOut->Started)
+	if ((isoOpen & NRFX_USBD_ISO_OUT_OPEN) != 0U &&
+		atomic_load(&s_IsoOutReady) && pOut->Started)
 	{
 		atomic_store(&s_IsoOutReady, false);
 		const uint16_t len = s_IsoOutSize < pOut->TotalLen ?
@@ -1659,8 +1661,7 @@ static void nRFUsbdResetState(void)
 	atomic_store(&s_RemoteWakePending, false);
 	atomic_store(&s_HostResumePending, false);
 	atomic_store(&s_MacAwake, true);
-	atomic_store(&s_IsoInOpen, false);
-	atomic_store(&s_IsoOutOpen, false);
+	atomic_store(&s_IsoOpen, 0U);
 	atomic_store(&s_IsoInReady, false);
 	atomic_store(&s_IsoOutReady, false);
 	s_IsoOutSize = 0U;
@@ -1923,7 +1924,7 @@ static void nRFUsbRegSofEnable(bool Enable)
 	}
 	else
 	{
-		if (!atomic_load(&s_IsoInOpen) && !atomic_load(&s_IsoOutOpen) &&
+		if (atomic_load(&s_IsoOpen) == 0U &&
 			!atomic_load(&s_BusSuspended))
 		{
 			NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
@@ -1977,7 +1978,7 @@ static bool nRFUsbRegEpOpen(const UsbEndPointDesc_t *pDesc)
 			NRF_USBD->EVENTS_ENDISOIN = 0;
 			NRF_USBD->INTENSET = USBD_INTEN_ENDISOIN_Msk;
 			NRF_USBD->EPINEN |= (1UL << NRFX_USBD_ISO_EP_NO);
-			atomic_store(&s_IsoInOpen, true);
+			atomic_fetch_or(&s_IsoOpen, NRFX_USBD_ISO_IN_OPEN);
 			atomic_store(&s_IsoInReady, false);
 		}
 		else
@@ -1985,7 +1986,7 @@ static bool nRFUsbRegEpOpen(const UsbEndPointDesc_t *pDesc)
 			NRF_USBD->EVENTS_ENDISOOUT = 0;
 			NRF_USBD->INTENSET = USBD_INTEN_ENDISOOUT_Msk;
 			NRF_USBD->EPOUTEN |= (1UL << NRFX_USBD_ISO_EP_NO);
-			atomic_store(&s_IsoOutOpen, true);
+			atomic_fetch_or(&s_IsoOpen, NRFX_USBD_ISO_OUT_OPEN);
 			atomic_store(&s_IsoOutReady, false);
 		}
 		NRF_USBD->EVENTS_SOF = 0;
@@ -2037,7 +2038,8 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 	{
 		if (USB_ENDPADDR_IS_IN(EpAddr))
 		{
-			atomic_store(&s_IsoInOpen, false);
+			atomic_fetch_and(&s_IsoOpen,
+				(uint_fast8_t)~NRFX_USBD_ISO_IN_OPEN);
 			atomic_store(&s_IsoInReady, false);
 			NRF_USBD->INTENCLR = USBD_INTEN_ENDISOIN_Msk;
 			NRF_USBD->EPINEN &= ~(1UL << NRFX_USBD_ISO_EP_NO);
@@ -2045,15 +2047,15 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 		}
 		else
 		{
-			atomic_store(&s_IsoOutOpen, false);
+			atomic_fetch_and(&s_IsoOpen,
+				(uint_fast8_t)~NRFX_USBD_ISO_OUT_OPEN);
 			atomic_store(&s_IsoOutReady, false);
 			NRF_USBD->INTENCLR = USBD_INTEN_ENDISOOUT_Msk;
 			NRF_USBD->EPOUTEN &= ~(1UL << NRFX_USBD_ISO_EP_NO);
 			NRF_USBD->EVENTS_ENDISOOUT = 0;
 		}
-		if (!s_Ctrlr.SofEnabled &&
-			!atomic_load(&s_IsoInOpen) &&
-			!atomic_load(&s_IsoOutOpen) && !atomic_load(&s_BusSuspended))
+		if (!s_Ctrlr.SofEnabled && atomic_load(&s_IsoOpen) == 0U &&
+			!atomic_load(&s_BusSuspended))
 		{
 			NRF_USBD->INTENCLR = USBD_INTEN_SOF_Msk;
 		}
@@ -2543,12 +2545,13 @@ static void nRFUsbdHandleSof(void)
 {
 	nRFUsbdHostResumeDetected();
 
-	if (atomic_load(&s_IsoInOpen))
+	const uint_fast8_t isoOpen = atomic_load(&s_IsoOpen);
+	if ((isoOpen & NRFX_USBD_ISO_IN_OPEN) != 0U)
 	{
 		atomic_store(&s_IsoInReady, true);
 	}
 
-	if (atomic_load(&s_IsoOutOpen))
+	if ((isoOpen & NRFX_USBD_ISO_OUT_OPEN) != 0U)
 	{
 		const uint32_t size = NRF_USBD->SIZE.ISOOUT;
 		if (size != 0U)
@@ -2579,9 +2582,7 @@ static void nRFUsbdHandleSof(void)
 		nRFUsbdEmit(&evt);
 	}
 
-	if (!s_Ctrlr.SofEnabled &&
-		!atomic_load(&s_IsoInOpen) &&
-		!atomic_load(&s_IsoOutOpen) &&
+	if (!s_Ctrlr.SofEnabled && isoOpen == 0U &&
 		!atomic_load(&s_BusSuspended))
 	{
 		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
