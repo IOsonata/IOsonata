@@ -62,6 +62,7 @@ SOFTWARE.
 #include "nrf_erratas.h"
 #include "hal/nrf_ficr.h"
 
+#include "app_evt_handler.h"
 #include "cfifo.h"
 #include "coredev/interrupt.h"
 #include "usb/usb.h"
@@ -882,6 +883,13 @@ alignas(4) static uint8_t s_QueMem[
 	CFIFO_TOTAL_MEMSIZE(NRFUSBD_QUE_DEPTH, sizeof(nRFUsbdQue_t))];
 static hCFifo_t s_hQue;
 
+// One bit per endpoint and direction remains set from ISR capture through
+// foreground completion processing. Captured lengths are stable while their
+// bit is set because DMA scheduling is held until every pending completion is
+// retired.
+static atomic_uint_fast32_t s_XferCompleteEvt;
+static uint16_t s_XferCompleteAmount[NRFX_USBD_EP_COUNT][2];
+
 // EP0 accepts descriptor and class buffers from the generic USB layer. Those
 // buffers may be const flash or have arbitrary alignment, while nRF52 USBD
 // EasyDMA requires controller-visible, word-aligned RAM. Stage one control
@@ -1148,7 +1156,8 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 static void nRFUsbdServicePending(void)
 {
 	if (atomic_load(&s_HostResumePending) ||
-		(atomic_load(&s_BusSuspended) && !atomic_load(&s_SuspendPending)))
+		(atomic_load(&s_BusSuspended) && !atomic_load(&s_SuspendPending)) ||
+		atomic_load(&s_XferCompleteEvt) != 0U)
 	{
 		return;
 	}
@@ -1356,6 +1365,7 @@ static void nRFUsbdResetState(void)
 	s_Ctrlr.SetupDirIn = false;
 
 	CFifoFlush(s_hQue);
+	atomic_store(&s_XferCompleteEvt, 0U);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 	atomic_store(&s_BusSuspended, false);
@@ -1386,6 +1396,8 @@ static void nRFUsbdAbortEp0(void)
 	}
 
 	nRFUsbdQueRemoveEp(0U);
+	atomic_fetch_and(&s_XferCompleteEvt,
+		~((uint_fast32_t)1U | ((uint_fast32_t)1U << 16U)));
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 
@@ -1418,6 +1430,7 @@ static void nRFUsbdTryEnterLowPower(void)
 		atomic_load(&s_HostResumePending) ||
 		(uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE ||
 		CFifoUsed(s_hQue) > 0 ||
+		atomic_load(&s_XferCompleteEvt) != 0U ||
 		atomic_load(&s_PendingEp0Status) ||
 		atomic_load(&s_PendingEp0RcvOut))
 	{
@@ -1442,6 +1455,7 @@ static void nRFUsbdTryEnterLowPower(void)
 		atomic_load(&s_HostResumePending) ||
 		(uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE ||
 		CFifoUsed(s_hQue) > 0 ||
+		atomic_load(&s_XferCompleteEvt) != 0U ||
 		atomic_load(&s_PendingEp0Status) ||
 		atomic_load(&s_PendingEp0RcvOut))
 	{
@@ -2045,7 +2059,7 @@ static void nRFUsbdSetupEvent(void)
 	nRFUsbdEmit(&evt);
 }
 
-static void nRFUsbdHandleOutEnd(uint8_t EpNum)
+static void nRFUsbdHandleOutEnd(uint8_t EpNum, uint16_t TransferLen)
 {
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
 	if (!pXfer->Started)
@@ -2053,18 +2067,17 @@ static void nRFUsbdHandleOutEnd(uint8_t EpNum)
 		return;
 	}
 
-	const uint16_t transferLen = (uint16_t)NRF_USBD->EPOUT[EpNum].AMOUNT;
 	if (EpNum == 0U && pXfer->pBuffer != NULL)
 	{
-		if (transferLen > 0U)
+		if (TransferLen > 0U)
 		{
-			memcpy(pXfer->pBuffer, s_Ep0Bounce, transferLen);
+			memcpy(pXfer->pBuffer, s_Ep0Bounce, TransferLen);
 		}
-		pXfer->pBuffer += transferLen;
+		pXfer->pBuffer += TransferLen;
 	}
-	pXfer->ActualLen += transferLen;
+	pXfer->ActualLen += TransferLen;
 
-	if (transferLen == pXfer->Mps && pXfer->ActualLen < pXfer->TotalLen)
+	if (TransferLen == pXfer->Mps && pXfer->ActualLen < pXfer->TotalLen)
 	{
 		if (EpNum == 0)
 		{
@@ -2109,7 +2122,7 @@ static void nRFUsbdHandleOutData(uint8_t EpNum)
 	}
 }
 
-static void nRFUsbdHandleInData(uint8_t EpNum)
+static void nRFUsbdHandleInData(uint8_t EpNum, uint16_t TransferLen)
 {
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
 	const uint8_t epAddr = (uint8_t)(EpNum | USB_ENDPADDR_DIR_IN);
@@ -2118,12 +2131,11 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 		return;
 	}
 
-	const uint16_t transferLen = (uint16_t)NRF_USBD->EPIN[EpNum].AMOUNT;
 	if (EpNum == 0U && pXfer->pBuffer != NULL)
 	{
-		pXfer->pBuffer += transferLen;
+		pXfer->pBuffer += TransferLen;
 	}
-	pXfer->ActualLen += transferLen;
+	pXfer->ActualLen += TransferLen;
 
 	if (pXfer->ActualLen < pXfer->TotalLen)
 	{
@@ -2137,7 +2149,7 @@ static void nRFUsbdHandleInData(uint8_t EpNum)
 	}
 }
 
-static void nRFUsbdHandleIsoInEnd(void)
+static void nRFUsbdHandleIsoInEnd(uint16_t TransferLen)
 {
 	const uint8_t epAddr = USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO);
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(epAddr);
@@ -2146,12 +2158,12 @@ static void nRFUsbdHandleIsoInEnd(void)
 		return;
 	}
 
-	pXfer->ActualLen = (uint16_t)NRF_USBD->ISOIN.AMOUNT;
+	pXfer->ActualLen = TransferLen;
 	pXfer->Started = false;
 	nRFUsbdEmitXfer(epAddr, pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
 }
 
-static void nRFUsbdHandleIsoOutEnd(void)
+static void nRFUsbdHandleIsoOutEnd(uint16_t TransferLen)
 {
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO);
 	if (!pXfer->Started)
@@ -2159,10 +2171,88 @@ static void nRFUsbdHandleIsoOutEnd(void)
 		return;
 	}
 
-	pXfer->ActualLen = (uint16_t)NRF_USBD->ISOOUT.AMOUNT;
+	pXfer->ActualLen = TransferLen;
 	pXfer->Started = false;
 	nRFUsbdEmitXfer(NRFX_USBD_ISO_EP_NO, pXfer->ActualLen,
 		USB_CTRLR_XFER_SUCCESS);
+}
+
+static inline __attribute__((always_inline))
+uint32_t nRFUsbdXferCompleteBit(uint8_t EpEvent)
+{
+	const uint32_t epNum = EpEvent & USB_ENDPADDR_NUM_MASK;
+	return 1UL << (epNum + ((EpEvent & 0x80U) != 0U ? 0U : 16U));
+}
+
+static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
+{
+	(void)pContext;
+	const uint8_t epEvent = (uint8_t)Evt;
+	const uint8_t epNum = epEvent & USB_ENDPADDR_NUM_MASK;
+	const uint32_t bit = nRFUsbdXferCompleteBit(epEvent);
+	if ((atomic_load(&s_XferCompleteEvt) & bit) == 0U)
+	{
+		return;
+	}
+
+	const uint16_t amount =
+		s_XferCompleteAmount[epNum][(epEvent & 0x80U) != 0U ? 0U : 1U];
+
+	if (epNum == NRFX_USBD_ISO_EP_NO)
+	{
+		if ((epEvent & 0x80U) != 0U)
+		{
+			nRFUsbdHandleIsoOutEnd(amount);
+		}
+		else
+		{
+			nRFUsbdHandleIsoInEnd(amount);
+		}
+	}
+	else if ((epEvent & 0x80U) != 0U)
+	{
+		nRFUsbdHandleOutEnd(epNum, amount);
+		if (epNum == 0U)
+		{
+			nRFUsbdHandleOutData(0U);
+		}
+	}
+	else
+	{
+		nRFUsbdHandleInData(epNum, amount);
+	}
+
+	atomic_fetch_and(&s_XferCompleteEvt, ~(uint_fast32_t)bit);
+	nRFUsbdServicePending();
+}
+
+static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
+{
+	const uint8_t epNum = EpEvent & USB_ENDPADDR_NUM_MASK;
+	const uint8_t dir = (EpEvent & 0x80U) != 0U ? 0U : 1U;
+	const uint32_t bit = nRFUsbdXferCompleteBit(EpEvent);
+
+	s_XferCompleteAmount[epNum][dir] = Amount;
+	atomic_fetch_or(&s_XferCompleteEvt, bit);
+	(void)AppEvtHandlerQue(EpEvent, NULL, nRFUsbdProcessXferComplete);
+}
+
+static void nRFUsbdDrainXferComplete(void)
+{
+	for (;;)
+	{
+		const uint32_t pending =
+			(uint32_t)atomic_load(&s_XferCompleteEvt);
+		if (pending == 0U)
+		{
+			return;
+		}
+
+		const uint32_t bitNo = nRFUsbdLowestBit(pending);
+		const uint8_t epEvent = bitNo < 16U ?
+			(uint8_t)(0x80U | bitNo) : (uint8_t)(bitNo - 16U);
+		nRFUsbdProcessXferComplete(epEvent, NULL);
+	}
 }
 
 extern "C" void USBD_IRQHandler(void)
@@ -2261,7 +2351,8 @@ extern "C" void USBD_IRQHandler(void)
 	{
 		const uint32_t epNum = nRFUsbdLowestBit(outEnd);
 		outEnd &= outEnd - 1U;
-		nRFUsbdHandleOutEnd((uint8_t)epNum);
+		nRFUsbdQueueXferComplete((uint8_t)(0x80U | epNum),
+			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 	}
 
 	uint32_t dataStatus = 0;
@@ -2288,17 +2379,21 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			const uint32_t epNum = nRFUsbdLowestBit(inData);
 			inData &= inData - 1U;
-			nRFUsbdHandleInData((uint8_t)epNum);
+			nRFUsbdQueueXferComplete((uint8_t)epNum,
+				(uint16_t)NRF_USBD->EPIN[epNum].AMOUNT);
 		}
 	}
 
 	if ((intStatus & USBD_INTEN_ENDISOIN_Msk) != 0U)
 	{
-		nRFUsbdHandleIsoInEnd();
+		nRFUsbdQueueXferComplete(NRFX_USBD_ISO_EP_NO,
+			(uint16_t)NRF_USBD->ISOIN.AMOUNT);
 	}
 	if ((intStatus & USBD_INTEN_ENDISOOUT_Msk) != 0U)
 	{
-		nRFUsbdHandleIsoOutEnd();
+		nRFUsbdQueueXferComplete(
+			(uint8_t)(0x80U | NRFX_USBD_ISO_EP_NO),
+			(uint16_t)NRF_USBD->ISOOUT.AMOUNT);
 	}
 
 	const bool setupPending = (intStatus & USBD_INTEN_EP0SETUP_Msk) != 0;
@@ -2312,16 +2407,18 @@ extern "C" void USBD_IRQHandler(void)
 	{
 		if ((intStatus & USBD_INTEN_ENDEPOUT0_Msk) != 0)
 		{
-			nRFUsbdHandleOutEnd(0);
+			nRFUsbdQueueXferComplete(0x80U,
+				(uint16_t)NRF_USBD->EPOUT[0].AMOUNT);
 		}
 
 		if ((intStatus & USBD_INTEN_EP0DATADONE_Msk) != 0)
 		{
 			if (s_Ctrlr.SetupDirIn)
 			{
-				nRFUsbdHandleInData(0);
+				nRFUsbdQueueXferComplete(0U,
+					(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
 			}
-			else
+			else if ((atomic_load(&s_XferCompleteEvt) & 1U) == 0U)
 			{
 				nRFUsbdHandleOutData(0);
 			}
@@ -3693,6 +3790,10 @@ void UsbCtrlrProcess(int DevNo)
 	if (nRFUsbValidDevNo(DevNo))
 	{
 		nRFUsbPowerProcess();
+#if defined(USBD_PRESENT)
+		AppEvtHandlerDispatch();
+		nRFUsbdDrainXferComplete();
+#endif
 	}
 }
 
