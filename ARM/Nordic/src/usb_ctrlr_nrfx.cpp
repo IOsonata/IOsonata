@@ -269,7 +269,6 @@ static hCFifo_t s_hQue;
 // identifies a dedicated ISO DMA.
 static atomic_uint_fast32_t s_XferCompleteEvt;
 static atomic_uint_fast32_t s_PendingOutData;
-static uint16_t s_XferCompleteAmount[NRFX_USBD_EP_COUNT][2];
 static uint32_t s_XferCompleteToken[NRFX_USBD_EP_COUNT][2];
 static uint32_t s_XferCompleteSerial;
 
@@ -2421,7 +2420,7 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 		return;
 	}
 
-	const uint16_t amount = s_XferCompleteAmount[epNum][dir];
+	const uint16_t amount = (uint16_t)(Evt >> 8U);
 
 	if (epNum == NRFX_USBD_ISO_EP_NO)
 	{
@@ -2477,8 +2476,8 @@ static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 		return;
 	}
 
-	const uint32_t evt = (++s_XferCompleteSerial << 8U) | EpEvent;
-	s_XferCompleteAmount[epNum][dir] = Amount;
+	const uint32_t evt = (++s_XferCompleteSerial << 24U) |
+		((uint32_t)Amount << 8U) | EpEvent;
 	s_XferCompleteToken[epNum][dir] = evt;
 	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete);
 }
