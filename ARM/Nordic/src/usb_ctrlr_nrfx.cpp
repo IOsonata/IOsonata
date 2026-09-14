@@ -2524,39 +2524,37 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
-	// Endpoint zero is handled further down with the setup sequence.
-	uint32_t outEnd = (eventStatus.XferComplete >> 16U) &
+	// One shared EasyDMA channel can complete only one data endpoint at a time.
+	// Endpoint zero is handled separately below.
+	const uint32_t epMask =
 		(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
-
-	while (outEnd != 0U)
+	const uint32_t dataEpMask = epMask | (epMask << 16U);
+	const uint32_t xferComplete = eventStatus.XferComplete & dataEpMask;
+	if (xferComplete != 0U)
 	{
-		const uint32_t epNum = nRFUsbdLowestBit(outEnd);
-		outEnd &= outEnd - 1U;
-		nRFUsbdQueueXferComplete((uint8_t)(0x80U | epNum),
-			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
+		const uint32_t epBit = 31U - (uint32_t)__CLZ(xferComplete);
+		if (epBit >= 16U)
+		{
+			const uint32_t epNum = epBit - 16U;
+			nRFUsbdQueueXferComplete((uint8_t)(0x80U | epNum),
+				(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
+		}
+		else
+		{
+			nRFUsbdQueueXferComplete((uint8_t)epBit,
+				(uint16_t)NRF_USBD->EPIN[epBit].AMOUNT);
+		}
 	}
 
-	if (eventStatus.EpData || eventStatus.Ep0DataDone ||
-		eventStatus.XferComplete != 0U)
+	if (eventStatus.EpData || eventStatus.Ep0DataDone)
 	{
-		const uint32_t epMask =
-			(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
 		uint32_t outData = (eventStatus.PendingOut >> 16U) & epMask;
-		uint32_t inData = eventStatus.XferComplete & epMask;
 
 		while (outData != 0U)
 		{
 			const uint32_t epNum = nRFUsbdLowestBit(outData);
 			outData &= outData - 1U;
 			nRFUsbdQueueOutData((uint8_t)epNum);
-		}
-
-		while (inData != 0U)
-		{
-			const uint32_t epNum = nRFUsbdLowestBit(inData);
-			inData &= inData - 1U;
-			nRFUsbdQueueXferComplete((uint8_t)epNum,
-				(uint16_t)NRF_USBD->EPIN[epNum].AMOUNT);
 		}
 	}
 
