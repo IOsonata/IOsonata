@@ -143,24 +143,29 @@ int main()
 
 	while (1)
 	{
-		// Process deferred controller completions as well as the USB lifecycle.
-		// The next Bulk IN transfer is queued from the completion AppEvt.
-		UsbProcess(USB_DEVNO);
-
 		if (g_Cdc.IsPortOpen() == false)
 		{
+			UsbProcess(USB_DEVNO);
 			continue;
 		}
 
 #ifdef BYTE_MODE
 		// Demo transfer byte by byte. The value advances only when the octet
-		// was accepted into the FIFO. If the FIFO is full, retry this same byte
-		// while the USB completion interrupt makes room.
+		// was accepted into the FIFO. Process deferred completions only when
+		// backpressure prevents this byte from entering the FIFO.
 		if (g_Cdc.Tx(0, &d, 1) > 0)
 		{
 			d = Prbs8(d);
 		}
+		else
+		{
+			UsbProcess(USB_DEVNO);
+		}
 #else
+		// Preserve the existing buffered-mode event-processing behavior for a
+		// separate measurement.
+		UsbProcess(USB_DEVNO);
+
 		// Demo transfer buffer
 		for (int i = 0; i < TEST_BUFSIZE; i++)
 		{
