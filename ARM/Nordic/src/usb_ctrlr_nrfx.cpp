@@ -237,10 +237,8 @@ typedef struct __nRF_Usbd_Que {
 
 typedef struct __nRF_Usbd_Event_Status
 {
-	uint32_t XferComplete;
-	uint32_t PendingOut;
-	bool EndEp0In;
-	bool EndEp0Out;
+	uint8_t EndIn;
+	uint8_t EndOut;
 	bool UsbReset;
 	bool Started;
 	bool Ep0DataDone;
@@ -263,6 +261,12 @@ static nRFUsbdCtrlr_t s_Ctrlr;
 alignas(4) static uint8_t s_QueMem[
 	CFIFO_TOTAL_MEMSIZE(NRFUSBD_QUE_DEPTH, sizeof(nRFUsbdQue_t))];
 static hCFifo_t s_hQue;
+
+// One bit per endpoint and direction remains set from ISR capture through
+// foreground completion processing. This tracks deferred USB completions.
+// EasyDMA ownership is tracked by the hardware BUSY register. The retained
+// CFifo head identifies ordinary and EP0 DMA until ENDEP; the ENDISO event
+// identifies a dedicated ISO DMA.
 
 // EP0 accepts descriptor and class buffers from the generic USB layer. Those
 // buffers may be const flash or have arbitrary alignment, while nRF52 USBD
@@ -2147,61 +2151,35 @@ static bool nRFUsbdCollectEvents(nRFUsbdEventStatus_t *pStatus)
 	*pStatus = {};
 	pStatus->UsbReset = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_USBRESET);
 	pStatus->Started = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_STARTED);
-	pStatus->EndEp0In =
-		nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDEPIN[0]);
-	pStatus->EndEp0Out =
-		nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDEPOUT[0]);
+
+	for (uint8_t epNum = 0U; epNum < NRFX_USBD_DATA_EP_COUNT; epNum++)
+	{
+		if (nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDEPIN[epNum]))
+		{
+			pStatus->EndIn |= (uint8_t)(1U << epNum);
+		}
+	}
+
 	pStatus->Ep0DataDone =
 		nRFUsbdTakeEvent(&NRF_USBD->EVENTS_EP0DATADONE);
 	pStatus->EndIsoIn = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDISOIN);
+
+	for (uint8_t epNum = 0U; epNum < NRFX_USBD_DATA_EP_COUNT; epNum++)
+	{
+		if (nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDEPOUT[epNum]))
+		{
+			pStatus->EndOut |= (uint8_t)(1U << epNum);
+		}
+	}
+
 	pStatus->EndIsoOut = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDISOOUT);
 	pStatus->Sof = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_SOF);
 	pStatus->UsbEvent = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_USBEVENT);
 	pStatus->Ep0Setup = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_EP0SETUP);
 	pStatus->EpData = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_EPDATA);
 
-	const uint32_t epDataStatus = NRF_USBD->EPDATASTATUS;
-	const uint32_t epStatus = NRF_USBD->EPSTATUS;
-	const uint32_t epMask =
-		(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
-	const uint32_t dataEpMask = epMask | (epMask << 16U);
-	// EPSTATUS stays set while an OUT packet is waiting for EasyDMA.
-	// Once EasyDMA completes, the endpoint's status bit is clear and its
-	// matching ENDEP event identifies the completed endpoint/direction.
-	const uint32_t completeCandidate =
-		epDataStatus & ~epStatus & dataEpMask;
-	if (completeCandidate != 0U)
-	{
-		const uint32_t epBit =
-			31U - (uint32_t)__CLZ(completeCandidate);
-		const uint32_t epNum = epBit >= 16U ? epBit - 16U : epBit;
-		volatile uint32_t *pEndEvent = epBit >= 16U ?
-			&NRF_USBD->EVENTS_ENDEPOUT[epNum] :
-			&NRF_USBD->EVENTS_ENDEPIN[epNum];
-		if (nRFUsbdTakeEvent(pEndEvent))
-		{
-			pStatus->XferComplete = 1UL << epBit;
-		}
-	}
-
-	pStatus->PendingOut =
-		epDataStatus & epStatus & (epMask << 16U);
-
-	const uint32_t clearDataStatus = pStatus->XferComplete |
-		(pStatus->Ep0DataDone ?
-			(epDataStatus & ((1UL << 16U) | 1UL)) : 0U);
-	if (clearDataStatus != 0U)
-	{
-		NRF_USBD->EPDATASTATUS = clearDataStatus;
-	}
-	if (pStatus->XferComplete != 0U)
-	{
-		NRF_USBD->EPSTATUS = pStatus->XferComplete;
-	}
-
 	const bool any = pStatus->UsbReset || pStatus->Started ||
-		pStatus->EndEp0In || pStatus->EndEp0Out ||
-		pStatus->XferComplete != 0U ||
+		pStatus->EndIn != 0U || pStatus->EndOut != 0U ||
 		pStatus->Ep0DataDone || pStatus->EndIsoIn ||
 		pStatus->EndIsoOut || pStatus->Sof || pStatus->UsbEvent ||
 		pStatus->Ep0Setup || pStatus->EpData;
@@ -2472,8 +2450,19 @@ extern "C" void USBD_IRQHandler(void)
 			return;
 		}
 
-		// Keep the endpoint END event latched. The event collector combines it
-		// with EPDATASTATUS and EPSTATUS before accepting the completion.
+		// Leave an OUT/EP0 END event set for the normal event collector. A
+		// data IN END only releases DMA; transfer completion is still EPDATA.
+		if (complete && USB_ENDPADDR_IS_IN(activeDma) &&
+			USB_ENDPADDR_NUM(activeDma) != 0U &&
+			USB_ENDPADDR_NUM(activeDma) != NRFX_USBD_ISO_EP_NO)
+		{
+			volatile uint32_t *pEndEvent =
+				nRFUsbdDmaEndEvent(activeDma);
+			*pEndEvent = 0;
+			__ISB();
+			__DSB();
+		}
+
 		nRFUsbdDmaRelease(activeDma);
 	}
 
@@ -2531,37 +2520,44 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
-	// One shared EasyDMA channel can complete only one data endpoint at a time.
-	// Endpoint zero is handled separately below.
-	const uint32_t epMask =
+	// Endpoint zero is handled further down with the setup sequence.
+	uint32_t outEnd = (uint32_t)eventStatus.EndOut &
 		(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
-	const uint32_t dataEpMask = epMask | (epMask << 16U);
-	const uint32_t xferComplete = eventStatus.XferComplete & dataEpMask;
-	if (xferComplete != 0U)
+
+	while (outEnd != 0U)
 	{
-		const uint32_t epBit = 31U - (uint32_t)__CLZ(xferComplete);
-		if (epBit >= 16U)
-		{
-			const uint32_t epNum = epBit - 16U;
-			nRFUsbdQueueXferComplete((uint8_t)(0x80U | epNum),
-				(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
-		}
-		else
-		{
-			nRFUsbdQueueXferComplete((uint8_t)epBit,
-				(uint16_t)NRF_USBD->EPIN[epBit].AMOUNT);
-		}
+		const uint32_t epNum = nRFUsbdLowestBit(outEnd);
+		outEnd &= outEnd - 1U;
+		nRFUsbdQueueXferComplete((uint8_t)(0x80U | epNum),
+			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 	}
 
+	uint32_t dataStatus = 0;
 	if (eventStatus.EpData || eventStatus.Ep0DataDone)
 	{
-		uint32_t outData = (eventStatus.PendingOut >> 16U) & epMask;
+		dataStatus = NRF_USBD->EPDATASTATUS;
+		NRF_USBD->EPDATASTATUS = dataStatus;
+		__ISB();
+		__DSB();
+
+		const uint32_t epMask =
+			(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
+		uint32_t outData = (dataStatus >> 16U) & epMask;
+		uint32_t inData = dataStatus & epMask;
 
 		while (outData != 0U)
 		{
 			const uint32_t epNum = nRFUsbdLowestBit(outData);
 			outData &= outData - 1U;
 			nRFUsbdQueueOutData((uint8_t)epNum);
+		}
+
+		while (inData != 0U)
+		{
+			const uint32_t epNum = nRFUsbdLowestBit(inData);
+			inData &= inData - 1U;
+			nRFUsbdQueueXferComplete((uint8_t)epNum,
+				(uint16_t)NRF_USBD->EPIN[epNum].AMOUNT);
 		}
 	}
 
@@ -2586,11 +2582,12 @@ extern "C" void USBD_IRQHandler(void)
 	}
 	else
 	{
-		if (eventStatus.EndEp0Out)
+		if ((eventStatus.EndOut & 1U) != 0U)
 		{
 			nRFUsbdQueueXferComplete(0x80U,
 				(uint16_t)NRF_USBD->EPOUT[0].AMOUNT);
 		}
+
 		if (eventStatus.Ep0DataDone)
 		{
 			if (s_Ctrlr.SetupDirIn)
