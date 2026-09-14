@@ -1535,24 +1535,6 @@ static void nRFUsbdServicePending(void)
 	}
 }
 
-/** Foreground starts free DMA immediately; interrupt producers defer to USB. */
-static inline __attribute__((always_inline))
-bool nRFUsbdDeferFromInterrupt(void)
-{
-	const uint32_t exception = __get_IPSR();
-	if (exception == 0U)
-	{
-		return false;
-	}
-
-	if (exception != (uint32_t)USBD_IRQn + 16U)
-	{
-		NVIC_SetPendingIRQ(USBD_IRQn);
-	}
-
-	return true;
-}
-
 /**
  * Put one DMA request on the queue. Filling the block runs with interrupts
  * off because CFifoPut publishes the slot before the caller writes it, and
@@ -1607,7 +1589,7 @@ static void nRFUsbdQueueOut(uint8_t EpNum)
 
 	nRFUsbdQueXfer(EpNum,
 				 (uint16_t)(pXfer->TotalLen - pXfer->ActualLen));
-	if (EpNum != 0U && !nRFUsbdDeferFromInterrupt())
+	if (EpNum != 0U)
 	{
 		nRFUsbdServicePending();
 	}
@@ -1628,7 +1610,7 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 	}
 
 	nRFUsbdQueXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN), length);
-	if (EpNum != 0U && !nRFUsbdDeferFromInterrupt())
+	if (EpNum != 0U)
 	{
 		nRFUsbdServicePending();
 	}
@@ -2123,10 +2105,7 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 			return false;
 		}
 		EnableInterrupt(state);
-		if (!nRFUsbdDeferFromInterrupt())
-		{
-			nRFUsbdServiceIso();
-		}
+		nRFUsbdServiceIso();
 		return true;
 	}
 
@@ -2170,10 +2149,7 @@ bool nRFUsbRegDataEpXfer(uint8_t EpAddr, uint16_t Length)
 	pXfer->Started = true;
 
 	nRFUsbdQueXfer(EpAddr, Length);
-	if (!nRFUsbdDeferFromInterrupt())
-	{
-		nRFUsbdServicePending();
-	}
+	nRFUsbdServicePending();
 	return true;
 }
 
