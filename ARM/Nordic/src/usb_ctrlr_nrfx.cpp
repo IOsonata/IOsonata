@@ -2449,6 +2449,27 @@ static void nRFUsbdHandleIsoOutEnd(uint16_t TransferLen)
 		USB_CTRLR_XFER_SUCCESS);
 }
 
+static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
+{
+	(void)pContext;
+	const uint16_t amount = (uint16_t)(Evt >> 8U);
+
+	if ((Evt & 0x80U) != 0U)
+	{
+		// OUT data remains in the endpoint DMA buffer until its
+		// completion callback consumes it.
+		nRFUsbdHandleIsoOutEnd(amount);
+	}
+	else
+	{
+		// IN data has already been consumed by the controller.
+		nRFUsbdHandleIsoInEnd(amount);
+	}
+
+	nRFUsbdServiceIso();
+	nRFUsbdServicePending();
+}
+
 static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 {
 	(void)pContext;
@@ -2456,21 +2477,7 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	const uint8_t epNum = epEvent & USB_ENDPADDR_NUM_MASK;
 	const uint16_t amount = (uint16_t)(Evt >> 8U);
 
-	if (epNum == NRFX_USBD_ISO_EP_NO)
-	{
-		if ((epEvent & 0x80U) != 0U)
-		{
-			// OUT data remains in the endpoint DMA buffer until its
-			// completion callback consumes it.
-			nRFUsbdHandleIsoOutEnd(amount);
-		}
-		else
-		{
-			// IN data has already been consumed by the controller.
-			nRFUsbdHandleIsoInEnd(amount);
-		}
-	}
-	else if ((epEvent & 0x80U) != 0U)
+	if ((epEvent & 0x80U) != 0U)
 	{
 		// UsbIntrf copies the OUT DMA buffer from this completion callback.
 		// A later OUT-ready AppEvt follows it in FIFO order.
@@ -2511,6 +2518,12 @@ static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 {
 	const uint32_t evt = ((uint32_t)Amount << 8U) | EpEvent;
 	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete);
+}
+
+static void nRFUsbdQueueIsoComplete(bool Out, uint16_t Amount)
+{
+	const uint32_t evt = ((uint32_t)Amount << 8U) | (Out ? 0x80U : 0U);
+	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessIsoComplete);
 }
 
 static void nRFUsbdHandleBusEvent(uint32_t EventCause)
@@ -2717,15 +2730,14 @@ extern "C" void USBD_IRQHandler(void)
 	if (NRF_USBD->EVENTS_ENDISOIN != 0U)
 	{
 		NRF_USBD->EVENTS_ENDISOIN = 0U;
-		nRFUsbdQueueXferComplete(NRFX_USBD_ISO_EP_NO,
+		nRFUsbdQueueIsoComplete(false,
 			(uint16_t)NRF_USBD->ISOIN.AMOUNT);
 	}
 
 	if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
 	{
 		NRF_USBD->EVENTS_ENDISOOUT = 0U;
-		nRFUsbdQueueXferComplete(
-			(uint8_t)(0x80U | NRFX_USBD_ISO_EP_NO),
+		nRFUsbdQueueIsoComplete(true,
 			(uint16_t)NRF_USBD->ISOOUT.AMOUNT);
 	}
 
