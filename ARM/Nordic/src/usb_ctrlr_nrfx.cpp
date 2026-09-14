@@ -2209,18 +2209,6 @@ static bool nRFUsbdCollectEvents(nRFUsbdEventStatus_t *pStatus)
 	pStatus->EndIsoIn = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDISOIN);
 
 
-	for (uint8_t epNum = 0U; epNum < NRFX_USBD_DATA_EP_COUNT; epNum++)
-	{
-		if (nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDEPOUT[epNum]))
-		{
-			pStatus->EndOut |= (uint8_t)(1U << epNum);
-		}
-	}
-
-	if (pStatus->EndOut)
-	{
-		//printf("%x %x %x %x\n", NRF_USBD->EVENTS_EPDATA, d, t, pStatus->EndOut);
-	}
 
 	pStatus->EndIsoOut = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDISOOUT);
 	pStatus->Sof = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_SOF);
@@ -2487,37 +2475,46 @@ static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 
 extern "C" void USBD_IRQHandler(void)
 {
+	uint8_t completedDma = NRFX_USBD_DMA_EP_NONE;
+	bool completedOut = false;
+	nRFUsbdEventStatus_t eventStatus;
+	uint32_t eventCause = 0;
+
 	if (nRFUsbdDmaActive())
 	{
 		// Most USBD registers cannot be read while EasyDMA owns the peripheral.
 		// The retained CFifo head identifies ordinary/EP0 DMA; ENDISO identifies
 		// a dedicated ISO DMA. Other events remain latched until DMA releases.
 		const bool reset = NRF_USBD->EVENTS_USBRESET != 0U;
-		uint8_t activeDma = NRFX_USBD_DMA_EP_NONE;
-		const bool complete = nRFUsbdDmaComplete(&activeDma);
+		const bool complete = nRFUsbdDmaComplete(&completedDma);
 		if (!complete && !reset)
 		{
 			return;
 		}
 
-		// Leave an OUT/EP0 END event set for the normal event collector. A
-		// data IN END only releases DMA; transfer completion is still EPDATA.
-		if (complete && USB_ENDPADDR_IS_IN(activeDma) &&
-			USB_ENDPADDR_NUM(activeDma) != 0U &&
-			USB_ENDPADDR_NUM(activeDma) != NRFX_USBD_ISO_EP_NO)
+		// The retained CFifo head already identifies the only ordinary DMA
+		// completion. Clear that exact END event instead of scanning every
+		// endpoint after releasing the shared DMA channel. ISO remains handled
+		// by its dedicated END event below.
+		if (complete &&
+			USB_ENDPADDR_NUM(completedDma) != NRFX_USBD_ISO_EP_NO)
 		{
 			volatile uint32_t *pEndEvent =
-				nRFUsbdDmaEndEvent(activeDma);
-			*pEndEvent = 0;
+				nRFUsbdDmaEndEvent(completedDma);
+			*pEndEvent = 0U;
 			__ISB();
 			__DSB();
 		}
 
-		nRFUsbdDmaRelease(activeDma);
+		nRFUsbdDmaRelease(completedDma);
 	}
 
-	nRFUsbdEventStatus_t eventStatus;
-	if (!nRFUsbdCollectEvents(&eventStatus))
+	completedOut =
+		completedDma != NRFX_USBD_DMA_EP_NONE &&
+		!USB_ENDPADDR_IS_IN(completedDma) &&
+		USB_ENDPADDR_NUM(completedDma) != NRFX_USBD_ISO_EP_NO;
+
+	if (!nRFUsbdCollectEvents(&eventStatus) && !completedOut)
 	{
 		// A transfer requested from another interrupt raises a software USBD
 		// interrupt so EasyDMA still starts from the controller context.
@@ -2525,7 +2522,6 @@ extern "C" void USBD_IRQHandler(void)
 		return;
 	}
 
-	uint32_t eventCause = 0;
 	if (eventStatus.UsbEvent)
 	{
 		eventCause = NRF_USBD->EVENTCAUSE;
@@ -2571,13 +2567,9 @@ extern "C" void USBD_IRQHandler(void)
 	}
 
 	// Endpoint zero is handled further down with the setup sequence.
-	uint32_t outEnd = (uint32_t)eventStatus.EndOut &
-		(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
-
-	while (outEnd != 0U)
+	if (completedOut && USB_ENDPADDR_NUM(completedDma) != 0U)
 	{
-		const uint32_t epNum = nRFUsbdLowestBit(outEnd);
-		outEnd &= outEnd - 1U;
+		const uint8_t epNum = USB_ENDPADDR_NUM(completedDma);
 		nRFUsbdQueueXferComplete((uint8_t)(0x80U | epNum),
 			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 	}
@@ -2632,7 +2624,7 @@ extern "C" void USBD_IRQHandler(void)
 	}
 	else
 	{
-		if ((eventStatus.EndOut & 1U) != 0U)
+		if (completedOut && USB_ENDPADDR_NUM(completedDma) == 0U)
 		{
 			nRFUsbdQueueXferComplete(0x80U,
 				(uint16_t)NRF_USBD->EPOUT[0].AMOUNT);
