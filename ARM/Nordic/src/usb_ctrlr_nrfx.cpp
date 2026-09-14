@@ -269,8 +269,6 @@ static hCFifo_t s_hQue;
 // identifies a dedicated ISO DMA.
 static atomic_uint_fast32_t s_XferCompleteEvt;
 static atomic_uint_fast32_t s_PendingOutData;
-static uint32_t s_XferCompleteToken[NRFX_USBD_EP_COUNT][2];
-static uint32_t s_XferCompleteSerial;
 
 // EP0 accepts descriptor and class buffers from the generic USB layer. Those
 // buffers may be const flash or have arbitrary alignment, while nRF52 USBD
@@ -2412,10 +2410,8 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	(void)pContext;
 	const uint8_t epEvent = (uint8_t)Evt;
 	const uint8_t epNum = epEvent & USB_ENDPADDR_NUM_MASK;
-	const uint8_t dir = (epEvent & 0x80U) != 0U ? 0U : 1U;
 	const uint32_t bit = nRFUsbdXferCompleteBit(epEvent);
-	if ((atomic_load(&s_XferCompleteEvt) & bit) == 0U ||
-		s_XferCompleteToken[epNum][dir] != Evt)
+	if ((atomic_load(&s_XferCompleteEvt) & bit) == 0U)
 	{
 		return;
 	}
@@ -2464,8 +2460,6 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 
 static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 {
-	const uint8_t epNum = EpEvent & USB_ENDPADDR_NUM_MASK;
-	const uint8_t dir = (EpEvent & 0x80U) != 0U ? 0U : 1U;
 	const uint32_t bit = nRFUsbdXferCompleteBit(EpEvent);
 
 	// One outstanding record per endpoint/direction is sufficient. IN retires
@@ -2476,9 +2470,7 @@ static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 		return;
 	}
 
-	const uint32_t evt = (++s_XferCompleteSerial << 24U) |
-		((uint32_t)Amount << 8U) | EpEvent;
-	s_XferCompleteToken[epNum][dir] = evt;
+	const uint32_t evt = ((uint32_t)Amount << 8U) | EpEvent;
 	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete);
 }
 
