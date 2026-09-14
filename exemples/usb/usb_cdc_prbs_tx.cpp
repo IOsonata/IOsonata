@@ -180,8 +180,15 @@ int main()
 		{
 			int l = g_Cdc.Tx(0, p, len);
 
-			len -= l;
-			p += l;
+			if (l > 0)
+			{
+				len -= l;
+				p += l;
+			}
+			else
+			{
+				UsbProcess(USB_DEVNO);
+			}
 
 			if (g_Cdc.IsPortOpen() == false)
 			{
