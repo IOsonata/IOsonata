@@ -840,11 +840,11 @@ enum
 #define NRFUSBD_IRQ_MASK \
 	((uint32_t)((1ULL << NRFX_USBD_IRQ_EVENT_COUNT) - 1ULL))
 
-// Software-owned EasyDMA running flag from the errata 199 workaround.
+// Errata 199's hardware-visible EasyDMA busy register. On affected parts the
+// controller requires 0x82 before STARTEP and zero after ENDEP.
 #define NRFX_USBD_EASYDMA_BUSY_REG			(*((volatile uint32_t *)0x40027C1CUL))
 #define NRFX_USBD_EASYDMA_BUSY_REG_BUSY		0x82UL
 #define NRFX_USBD_EASYDMA_BUSY_REG_CLEAR	0UL
-#define NRFX_USBD_ERRATA_199_REG			NRFX_USBD_EASYDMA_BUSY_REG
 
 typedef struct __nRF_Usbd_Xfer
 {
@@ -864,7 +864,6 @@ typedef struct __nRF_Usbd_Ctrlr
 } nRFUsbdCtrlr_t;
 
 static nRFUsbdCtrlr_t s_Ctrlr;
-static atomic_flag s_DmaRunning = ATOMIC_FLAG_INIT;
 static atomic_uint_fast8_t s_DmaEpAddr;
 // One EasyDMA engine serves every endpoint in both directions, so a transfer
 // request waits in this descriptor queue and starts in submission order.
@@ -885,7 +884,8 @@ static hCFifo_t s_hQue;
 
 // One bit per endpoint and direction remains set from ISR capture through
 // foreground completion processing. This tracks deferred USB completions, not
-// EasyDMA ownership; s_DmaEpAddr and ENDEP serialize the one shared DMA engine.
+// EasyDMA ownership; the errata-199 BUSY register serializes the shared engine,
+// while s_DmaEpAddr identifies the endpoint whose ENDEP completes.
 static atomic_uint_fast32_t s_XferCompleteEvt;
 static atomic_uint_fast32_t s_XferCompleteFallback;
 static atomic_uint_fast32_t s_PendingOutData;
@@ -915,6 +915,12 @@ static uint16_t s_IsoOutSize;
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
 {
+	if (nrf52_errata_199())
+	{
+		return NRFX_USBD_EASYDMA_BUSY_REG ==
+			NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
+	}
+
 	return (uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE;
 }
 
@@ -1000,11 +1006,10 @@ static void nRFUsbdDmaRelease(void)
 
 	if (nrf52_errata_199())
 	{
-		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
+		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
 	}
 
 	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
-	atomic_flag_clear(&s_DmaRunning);
 	__ISB();
 	__DSB();
 
@@ -1024,7 +1029,7 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 	// Nordic's errata 199 workaround marks EasyDMA busy before STARTEP.
 	if (nrf52_errata_199())
 	{
-		NRFX_USBD_ERRATA_199_REG = 0x00000082UL;
+		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
 	}
 
 	atomic_store(&s_DmaEpAddr, EpAddr);
@@ -1069,10 +1074,9 @@ static void nRFUsbdNoDmaTask(volatile uint32_t *pTask)
 	*pTask = 1;
 	__ISB();
 	__DSB();
-	atomic_flag_clear(&s_DmaRunning);
 }
 
-static void nRFUsbdEp0StatusNow(void)
+static bool nRFUsbdEp0StatusNow(uint8_t *pEpAddr)
 {
 	const uint8_t epAddr = s_Ctrlr.SetupDirIn ?
 		USB_ENDPADDR_DIR_OUT : USB_ENDPADDR_DIR_IN;
@@ -1085,10 +1089,11 @@ static void nRFUsbdEp0StatusNow(void)
 	if (pXfer->Started && pXfer->TotalLen == 0U)
 	{
 		pXfer->Started = false;
-		nRFUsbdEmitXfer(epAddr, 0, USB_CTRLR_XFER_SUCCESS);
+		*pEpAddr = epAddr;
+		return true;
 	}
 
-	atomic_flag_clear(&s_DmaRunning);
+	return false;
 }
 
 static bool nRFUsbdStartIsoNow(void)
@@ -1166,20 +1171,32 @@ static void nRFUsbdServicePending(void)
 
 	for (;;)
 	{
-		if (atomic_flag_test_and_set(&s_DmaRunning))
+		// BUSY is the active EasyDMA state. Keep interrupts disabled only
+		// through selection, dequeue, PTR/MAXCNT setup and TASKS_STARTEP so
+		// another context cannot select a second descriptor in that window.
+		const uint32_t state = DisableInterrupt();
+		if (nRFUsbdDmaActive())
 		{
+			EnableInterrupt(state);
 			return;
 		}
 
 		if (atomic_exchange(&s_PendingEp0Status, false))
 		{
-			nRFUsbdEp0StatusNow();
+			uint8_t epAddr = 0U;
+			const bool complete = nRFUsbdEp0StatusNow(&epAddr);
+			EnableInterrupt(state);
+			if (complete)
+			{
+				nRFUsbdEmitXfer(epAddr, 0, USB_CTRLR_XFER_SUCCESS);
+			}
 			continue;
 		}
 
 		if (atomic_exchange(&s_PendingEp0RcvOut, false))
 		{
 			nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
+			EnableInterrupt(state);
 			continue;
 		}
 
@@ -1187,31 +1204,27 @@ static void nRFUsbdServicePending(void)
 		// Give them priority over asynchronous endpoint work after EP0.
 		if (nRFUsbdStartIsoNow())
 		{
+			EnableInterrupt(state);
 			return;
 		}
 
-		// Requests are started in the order they were made. There is no
-		// direction order to choose, so neither direction can be held off
-		// by the other.
-		// CFifoGet publishes the slot as free before it returns its pointer.
-		// Copy the descriptor with interrupts disabled so an interrupt producer
-		// cannot wrap around and reuse that slot before the copy completes.
+		// Requests are started in the order they were made. CFifoGet publishes
+		// the slot as free before returning its pointer; interrupts remain
+		// disabled until the descriptor is copied and its DMA task is started.
 		nRFUsbdQue_t que;
-		const uint32_t state = DisableInterrupt();
 		nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoGet(s_hQue);
 		const bool haveQue = pHead != NULL;
 		if (haveQue)
 		{
 			que = *pHead;
 		}
-		EnableInterrupt(state);
 
 		if (haveQue)
 		{
 			const uint8_t epNum = USB_ENDPADDR_NUM(que.EpAddr);
-
 			if (nRFUsbdStartDmaNow(&que))
 			{
+				EnableInterrupt(state);
 				return;
 			}
 
@@ -1220,29 +1233,29 @@ static void nRFUsbdServicePending(void)
 			if (pXfer->Started)
 			{
 				pXfer->Started = false;
-				atomic_flag_clear(&s_DmaRunning);
-				nRFUsbdEmitXfer(que.EpAddr, pXfer->ActualLen,
-							 USB_CTRLR_XFER_FAILED);
+				const uint16_t actualLen = pXfer->ActualLen;
+				EnableInterrupt(state);
+				nRFUsbdEmitXfer(que.EpAddr, actualLen,
+					USB_CTRLR_XFER_FAILED);
 				continue;
 			}
 
-			atomic_flag_clear(&s_DmaRunning);
+			EnableInterrupt(state);
 			continue;
 		}
 
-		atomic_flag_clear(&s_DmaRunning);
-
-		// A request can arrive after the empty queue read above but before
-		// s_DmaRunning is cleared. Its nested service call sees the flag set
-		// and returns, so recheck after releasing it to avoid losing the wakeup.
-		if (CFifoUsed(s_hQue) > 0 ||
+		const bool retry =
+			CFifoUsed(s_hQue) > 0 ||
 			atomic_load(&s_PendingEp0Status) ||
 			atomic_load(&s_PendingEp0RcvOut) ||
 			(atomic_load(&s_IsoInReady) &&
 			 nRFUsbdGetXfer(USB_ENDPADDR_DIRIN(
 				NRFX_USBD_ISO_EP_NO))->Started) ||
 			(atomic_load(&s_IsoOutReady) &&
-			 nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO)->Started))
+			 nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO)->Started);
+		EnableInterrupt(state);
+
+		if (retry)
 		{
 			continue;
 		}
@@ -1383,11 +1396,10 @@ static void nRFUsbdResetState(void)
 	atomic_store(&s_IsoOutReady, false);
 	s_IsoOutSize = 0U;
 	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
-	atomic_flag_clear(&s_DmaRunning);
 
 	if (nrf52_errata_199())
 	{
-		NRFX_USBD_ERRATA_199_REG = 0x00000000UL;
+		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
 	}
 }
 
@@ -1435,7 +1447,7 @@ static void nRFUsbdTryEnterLowPower(void)
 		!atomic_load(&s_SuspendPending) ||
 		atomic_load(&s_RemoteWakePending) ||
 		atomic_load(&s_HostResumePending) ||
-		(uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE ||
+		nRFUsbdDmaActive() ||
 		CFifoUsed(s_hQue) > 0 ||
 		atomic_load(&s_XferCompleteEvt) != 0U ||
 		atomic_load(&s_PendingEp0Status) ||
@@ -1451,29 +1463,25 @@ static void nRFUsbdTryEnterLowPower(void)
 		return;
 	}
 
-	if (atomic_flag_test_and_set(&s_DmaRunning))
-	{
-		return;
-	}
-
+	const uint32_t irqState = DisableInterrupt();
 	if (!atomic_load(&s_BusSuspended) ||
 		!atomic_load(&s_SuspendPending) ||
 		atomic_load(&s_RemoteWakePending) ||
 		atomic_load(&s_HostResumePending) ||
-		(uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE ||
+		nRFUsbdDmaActive() ||
 		CFifoUsed(s_hQue) > 0 ||
 		atomic_load(&s_XferCompleteEvt) != 0U ||
 		atomic_load(&s_PendingEp0Status) ||
 		atomic_load(&s_PendingEp0RcvOut))
 	{
-		atomic_flag_clear(&s_DmaRunning);
+		EnableInterrupt(irqState);
 		return;
 	}
 
 	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
 		NRF_USBD->EVENTS_SOF != 0U)
 	{
-		atomic_flag_clear(&s_DmaRunning);
+		EnableInterrupt(irqState);
 		nRFUsbdHostResumeDetected();
 		return;
 	}
@@ -1488,7 +1496,7 @@ static void nRFUsbdTryEnterLowPower(void)
 	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
 		NRF_USBD->EVENTS_SOF != 0U)
 	{
-		atomic_flag_clear(&s_DmaRunning);
+		EnableInterrupt(irqState);
 		nRFUsbdHostResumeDetected();
 		return;
 	}
@@ -1500,12 +1508,12 @@ static void nRFUsbdTryEnterLowPower(void)
 			USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos;
 		__ISB();
 		__DSB();
-		atomic_flag_clear(&s_DmaRunning);
+		EnableInterrupt(irqState);
 		return;
 	}
 
 	atomic_store(&s_SuspendPending, false);
-	atomic_flag_clear(&s_DmaRunning);
+	EnableInterrupt(irqState);
 }
 
 static void nRFUsbdTryRemoteWake(void)
@@ -1520,18 +1528,14 @@ static void nRFUsbdTryRemoteWake(void)
 		return;
 	}
 
-	if (atomic_flag_test_and_set(&s_DmaRunning))
-	{
-		return;
-	}
-
+	const uint32_t irqState = DisableInterrupt();
 	if (!atomic_load(&s_RemoteWakePending) ||
 		!atomic_load(&s_BusSuspended) ||
 		atomic_load(&s_HostResumePending) ||
 		!atomic_load(&s_MacAwake) ||
-		(uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE)
+		nRFUsbdDmaActive())
 	{
-		atomic_flag_clear(&s_DmaRunning);
+		EnableInterrupt(irqState);
 		return;
 	}
 
@@ -1540,7 +1544,7 @@ static void nRFUsbdTryRemoteWake(void)
 	NRF_USBD->TASKS_DPDMDRIVE = 1;
 	__ISB();
 	__DSB();
-	atomic_flag_clear(&s_DmaRunning);
+	EnableInterrupt(irqState);
 
 	if ((NRF_USBD->INTEN & USBD_INTEN_SOF_Msk) == 0U)
 	{
