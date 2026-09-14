@@ -143,11 +143,12 @@ int main()
 
 	while (1)
 	{
-		// Pump only the USB lifecycle while waiting for the host. Once the port
-		// is open, Bulk IN progress is entirely completion-interrupt driven.
+		// Process deferred controller completions as well as the USB lifecycle.
+		// The next Bulk IN transfer is queued from the completion AppEvt.
+		UsbProcess(USB_DEVNO);
+
 		if (g_Cdc.IsPortOpen() == false)
 		{
-			UsbProcess(USB_DEVNO);
 			continue;
 		}
 
