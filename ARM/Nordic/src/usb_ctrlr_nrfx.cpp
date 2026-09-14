@@ -1967,31 +1967,30 @@ static void nRFUsbRegEpClearStall(uint8_t EpAddr)
 
 static uint32_t nRFUsbdCollectEvents(void)
 {
-	// One IRQ line and no aggregate pending register, so the enabled events
-	// have to be read to find which fired. Only the bits set in INTEN can be
-	// pending, so walk those; the rest are provably zero and testing them
-	// costs on every entry.
-	uint32_t enabled = NRF_USBD->INTEN & NRFUSBD_IRQ_MASK;
-	uint32_t intStatus = 0;
+	// INTEN controls whether an event asserts the IRQ; it is not event status.
+	// Read every EVENTS register because a disabled source can remain latched
+	// and must still be consumed when another source brings us into the ISR.
+	uint32_t events = NRFUSBD_IRQ_MASK;
+	uint32_t eventStatus = 0;
 	volatile uint32_t *pEvent = &NRF_USBD->EVENTS_USBRESET;
 
-	while (enabled != 0U)
+	while (events != 0U)
 	{
-		const uint32_t index = nRFUsbdLowestBit(enabled);
-		enabled &= enabled - 1U;
+		const uint32_t index = nRFUsbdLowestBit(events);
+		events &= events - 1U;
 
 		if (pEvent[index] == 0U)
 		{
 			continue;
 		}
 
-		intStatus |= (1UL << index);
+		eventStatus |= (1UL << index);
 		pEvent[index] = 0;
 		__ISB();
 		__DSB();
 	}
 
-	return intStatus;
+	return eventStatus;
 }
 
 static void nRFUsbdBusReset(void)
