@@ -198,6 +198,7 @@ static bool s_UsbdVbusLevel = false;
 #define NRFX_USBD_EASYDMA_BUSY_REG_CLEAR	0UL
 
 #define NRFUSBD_QUE_DEPTH			(NRFX_USBD_EP_COUNT * 2)
+#define NRFUSBD_EP0_QUE_DEPTH		1U
 
 enum
 {
@@ -252,7 +253,10 @@ typedef struct __nRF_Usbd_Que {
 static nRFUsbdCtrlr_t s_Ctrlr;
 alignas(4) static uint8_t s_QueMem[
 	CFIFO_TOTAL_MEMSIZE(NRFUSBD_QUE_DEPTH, sizeof(nRFUsbdQue_t))];
+alignas(4) static uint8_t s_Ep0QueMem[
+	CFIFO_TOTAL_MEMSIZE(NRFUSBD_EP0_QUE_DEPTH, sizeof(nRFUsbdQue_t))];
 static hCFifo_t s_hQue;
+static hCFifo_t s_hEp0Que;
 
 // One bit per endpoint and direction remains set from ISR capture through
 // foreground completion processing. This tracks deferred USB completions.
@@ -1177,22 +1181,37 @@ static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 	nRFUsbdEmit(&evt);
 }
 
+static inline __attribute__((always_inline))
+void nRFUsbdDmaUnlock(void)
+{
+	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
+	__ISB();
+	__DSB();
+}
+
 static void nRFUsbdDmaRelease(uint8_t EpAddr)
 {
 	const uint32_t primask = __get_PRIMASK();
 	__disable_irq();
 
-	// Ordinary and EP0 DMA retain the CFifo head until ENDEP. ISO is selected
-	// from its dedicated state and therefore has no CFifo entry to consume.
+	// Ordinary and EP0 DMA retain their CFifo head until ENDEP. ISO is
+	// selected from dedicated state and therefore has no CFifo entry.
 	if (EpAddr != NRFX_USBD_DMA_EP_NONE &&
 		USB_ENDPADDR_NUM(EpAddr) != NRFX_USBD_ISO_EP_NO)
 	{
-		(void)CFifoGet(s_hQue);
+		hCFifo_t hQue = USB_ENDPADDR_NUM(EpAddr) == 0U ?
+			s_hEp0Que : s_hQue;
+		(void)CFifoGet(hQue);
 	}
 
-	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
-	__ISB();
-	__DSB();
+	// EP0 retains the errata lock across all of its packets. Its control
+	// transaction releases the lock only when the final packet is complete.
+	if (EpAddr == NRFX_USBD_DMA_EP_NONE ||
+		USB_ENDPADDR_NUM(EpAddr) != 0U ||
+		atomic_load(&s_Ctrlr.SetupState) != NRFX_USBD_EP0_SETUP_ACTIVE)
+	{
+		nRFUsbdDmaUnlock();
+	}
 
 	__set_PRIMASK(primask);
 }
@@ -1222,7 +1241,14 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
  */
 static bool nRFUsbdDmaComplete(uint8_t *pEpAddr)
 {
-	nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoPeek(s_hQue);
+	nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoPeek(s_hEp0Que);
+	if (pHead != NULL && *nRFUsbdDmaEndEvent(pHead->EpAddr) != 0U)
+	{
+		*pEpAddr = pHead->EpAddr;
+		return true;
+	}
+
+	pHead = (nRFUsbdQue_t *)CFifoPeek(s_hQue);
 	if (pHead != NULL && *nRFUsbdDmaEndEvent(pHead->EpAddr) != 0U)
 	{
 		*pEpAddr = pHead->EpAddr;
@@ -1249,6 +1275,15 @@ static void nRFUsbdDmaWait(void)
 {
 	while (nRFUsbdDmaActive())
 	{
+		// EP0 keeps the errata register locked after ENDEP while it waits for
+		// the host acknowledgement. A forced stop may release that ownership.
+		if (atomic_load(&s_Ctrlr.SetupState) ==
+			NRFX_USBD_EP0_SETUP_ACTIVE && CFifoUsed(s_hEp0Que) == 0)
+		{
+			nRFUsbdDmaUnlock();
+			return;
+		}
+
 		if (NRF_USBD->EVENTS_USBRESET != 0U)
 		{
 			nRFUsbdDmaRelease(NRFX_USBD_DMA_EP_NONE);
@@ -1362,6 +1397,72 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 }
 
 
+static void nRFUsbdServiceEp0(void)
+{
+	const uint32_t state = DisableInterrupt();
+	if (atomic_load(&s_Ctrlr.SetupState) != NRFX_USBD_EP0_SETUP_ACTIVE)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+
+	if (atomic_exchange(&s_PendingEp0Status, false))
+	{
+		// The data stage is complete. Release the retained errata lock only
+		// now, immediately before starting the control status stage.
+		if (nRFUsbdDmaActive())
+		{
+			nRFUsbdDmaUnlock();
+		}
+
+		uint8_t epAddr = 0U;
+		const bool complete = nRFUsbdEp0StatusNow(&epAddr);
+		EnableInterrupt(state);
+		if (complete)
+		{
+			nRFUsbdEmitXfer(epAddr, 0U, USB_CTRLR_XFER_SUCCESS);
+		}
+
+		uint_fast8_t expected = NRFX_USBD_EP0_SETUP_ACTIVE;
+		(void)atomic_compare_exchange_strong(&s_Ctrlr.SetupState, &expected,
+			NRFX_USBD_EP0_SETUP_IDLE);
+		return;
+	}
+
+	if (atomic_exchange(&s_PendingEp0RcvOut, false))
+	{
+		nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
+		EnableInterrupt(state);
+		return;
+	}
+
+	// The EP0 FIFO is separate from ordinary endpoint work. The first packet
+	// acquires EasyDMA; later packets restart EP0 while the errata lock remains
+	// held, so another endpoint can never run between control packets.
+	nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoPeek(s_hEp0Que);
+	if (pHead != NULL)
+	{
+		nRFUsbdStartDmaNow(pHead);
+		EnableInterrupt(state);
+		return;
+	}
+
+	// A handled zero-data request or a stalled request has no queued data or
+	// status DMA. End EP0 ownership so ordinary endpoint work may continue.
+	if (!s_Ctrlr.Xfer[0][0].Started && !s_Ctrlr.Xfer[0][1].Started)
+	{
+		if (nRFUsbdDmaActive())
+		{
+			nRFUsbdDmaUnlock();
+		}
+		uint_fast8_t expected = NRFX_USBD_EP0_SETUP_ACTIVE;
+		(void)atomic_compare_exchange_strong(&s_Ctrlr.SetupState, &expected,
+			NRFX_USBD_EP0_SETUP_IDLE);
+	}
+
+	EnableInterrupt(state);
+}
+
 static void nRFUsbdServicePending(void)
 {
 	if (atomic_load(&s_Ctrlr.SetupState) != NRFX_USBD_EP0_SETUP_IDLE ||
@@ -1468,7 +1569,8 @@ bool nRFUsbdDeferFromInterrupt(void)
 static void nRFUsbdQueXfer(uint8_t EpAddr, uint16_t Len)
 {
 	const uint32_t state = DisableInterrupt();
-	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_hQue);
+	hCFifo_t hQue = USB_ENDPADDR_NUM(EpAddr) == 0U ? s_hEp0Que : s_hQue;
+	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(hQue);
 
 	pQue->EpAddr = EpAddr;
 	pQue->Len = Len;
@@ -1480,6 +1582,13 @@ static void nRFUsbdQueXfer(uint8_t EpAddr, uint16_t Len)
 static void nRFUsbdQueRemoveEp(uint8_t EpNum)
 {
 	const uint32_t state = DisableInterrupt();
+	if (EpNum == 0U)
+	{
+		CFifoFlush(s_hEp0Que);
+		EnableInterrupt(state);
+		return;
+	}
+
 	const int count = CFifoUsed(s_hQue);
 
 	// Rotate exactly the entries that were present on entry. Kept entries go
@@ -1560,6 +1669,7 @@ static void nRFUsbdResetState(void)
 	s_Ctrlr.SetupDirIn = false;
 
 	CFifoFlush(s_hQue);
+	CFifoFlush(s_hEp0Que);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 	atomic_store(&s_BusSuspended, false);
@@ -1761,7 +1871,9 @@ static bool nRFUsbRegInit(void)
 {
 	s_hQue = CFifoInit(s_QueMem, sizeof(s_QueMem), sizeof(nRFUsbdQue_t),
 					   false);
-	if (s_hQue == NULL)
+	s_hEp0Que = CFifoInit(s_Ep0QueMem, sizeof(s_Ep0QueMem),
+						  sizeof(nRFUsbdQue_t), true);
+	if (s_hQue == NULL || s_hEp0Que == NULL)
 	{
 		return false;
 	}
@@ -2226,14 +2338,11 @@ static void nRFUsbdProcessEp0Setup(uint32_t Evt, void *pContext)
 		nRFUsbdEmit(&evt);
 	}
 
-	uint_fast8_t expected = NRFX_USBD_EP0_SETUP_ACTIVE;
-	if (atomic_compare_exchange_strong(&s_Ctrlr.SetupState, &expected,
-		NRFX_USBD_EP0_SETUP_IDLE))
-	{
-		// UsbDevProcessEvent may have queued the data or status stage while the
-		// setup lock was held. It is safe to start it only after that call exits.
-		nRFUsbdServicePending();
-	}
+	// UsbDevProcessEvent queued the EP0 data or status stage while EP0 owned
+	// the scheduler. Start only EP0 here and retain ownership until its final
+	// packet completes.
+	nRFUsbdServiceEp0();
+	nRFUsbdServicePending();
 }
 
 static void nRFUsbdHandleOutEnd(uint8_t EpNum, uint16_t TransferLen)
@@ -2386,13 +2495,22 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 		nRFUsbdHandleInData(epNum, amount);
 	}
 
+	if (epNum == 0U)
+	{
+		nRFUsbdServiceEp0();
+	}
 	nRFUsbdServicePending();
 }
 
 static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 {
 	(void)pContext;
-	nRFUsbdHandleOutData((uint8_t)Evt);
+	const uint8_t epNum = (uint8_t)Evt;
+	nRFUsbdHandleOutData(epNum);
+	if (epNum == 0U)
+	{
+		nRFUsbdServiceEp0();
+	}
 	nRFUsbdServicePending();
 }
 
@@ -2498,7 +2616,17 @@ extern "C" void USBD_IRQHandler(void)
 		const bool complete = nRFUsbdDmaComplete(&completedDma);
 		if (!complete && !reset)
 		{
-			return;
+			// After an EP0 ENDEP, the errata register intentionally remains
+			// locked while no EasyDMA task is running. EP0DATADONE or a new
+			// SETUP must still be processed during that ownership interval.
+			const bool ep0Retained =
+				atomic_load(&s_Ctrlr.SetupState) ==
+					NRFX_USBD_EP0_SETUP_ACTIVE &&
+				CFifoUsed(s_hEp0Que) == 0;
+			if (!ep0Retained)
+			{
+				return;
+			}
 		}
 
 		// The retained CFifo head already identifies the only ordinary DMA
@@ -2629,6 +2757,16 @@ extern "C" void USBD_IRQHandler(void)
 			((uint16_t)NRF_USBD->WINDEXH << 8);
 		evt.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
 			((uint16_t)NRF_USBD->WLENGTHH << 8);
+
+		// A new SETUP terminates the previous control transaction. If EP0 was
+		// retaining the errata lock between packets, release that old ownership
+		// before the new setup processor waits for EasyDMA.
+		if (atomic_load(&s_Ctrlr.SetupState) ==
+			NRFX_USBD_EP0_SETUP_ACTIVE && nRFUsbdDmaActive() &&
+			CFifoUsed(s_hEp0Que) == 0)
+		{
+			nRFUsbdDmaUnlock();
+		}
 
 		s_Ctrlr.SetupEvent = evt;
 		atomic_store(&s_Ctrlr.SetupState, NRFX_USBD_EP0_SETUP_PENDING);
