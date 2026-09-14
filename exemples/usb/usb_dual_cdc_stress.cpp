@@ -54,6 +54,7 @@ SOFTWARE.
 
 #define USB_DEVNO				0
 #define BUFFER_SIZE				USB_PKT_MAXLEN(USB_DEVNO, BULK)
+#define PRBS_BUFFER_SIZE		16
 
 #define CDC_RXFIFO_PKTCNT		4
 #define CDC_RXFIFO_MEMSIZE \
@@ -135,6 +136,7 @@ static int LoopbackEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 int main()
 {
 	uint8_t loopbackBuffer[BUFFER_SIZE];
+	uint8_t prbsBuffer[PRBS_BUFFER_SIZE];
 	uint8_t loopbackExpected = Prbs8(0xff);
 	uint8_t prbs = 0xff;
 	uint32_t loopbackRxErrorNotify = 0;
@@ -198,19 +200,36 @@ int main()
 			}
 		}
 
-		// Zero never occurs in this PRBS sequence. Send one zero for every
-		// discontinuity already observed at the loopback RX boundary, allowing
-		// the host test to distinguish an OUT loss from a later IN loss.
-		uint8_t prbsByte = loopbackRxErrorNotify > 0U ? 0U : prbs;
-		if (g_PrbsCdc.IsPortOpen() && g_PrbsCdc.Tx(0, &prbsByte, 1) > 0)
+		if (g_PrbsCdc.IsPortOpen())
 		{
+			// Zero never occurs in this PRBS sequence. Send one zero for every
+			// discontinuity observed at the loopback RX boundary so the host can
+			// distinguish an OUT loss from a later IN loss.
 			if (loopbackRxErrorNotify > 0U)
 			{
-				loopbackRxErrorNotify--;
+				uint8_t errorNotify = 0U;
+
+				if (g_PrbsCdc.Tx(0, &errorNotify, 1) > 0)
+				{
+					loopbackRxErrorNotify--;
+				}
 			}
 			else
 			{
-				prbs = Prbs8(prbs);
+				// Batch application writes while retaining the exact PRBS state
+				// for any suffix that the Tx FIFO cannot accept this pass.
+				uint8_t value = prbs;
+				for (int i = 0; i < PRBS_BUFFER_SIZE; i++)
+				{
+					prbsBuffer[i] = value;
+					value = Prbs8(value);
+				}
+
+				int length = g_PrbsCdc.Tx(0, prbsBuffer, sizeof(prbsBuffer));
+				for (int i = 0; i < length; i++)
+				{
+					prbs = Prbs8(prbs);
+				}
 			}
 		}
 	}
