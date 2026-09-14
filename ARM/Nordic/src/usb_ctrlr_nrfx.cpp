@@ -2190,6 +2190,13 @@ uint32_t nRFUsbdXferCompleteBit(uint8_t EpEvent)
 	return 1UL << (epNum + ((EpEvent & 0x80U) != 0U ? 0U : 16U));
 }
 
+static inline __attribute__((always_inline))
+void nRFUsbdRetireXferComplete(uint32_t Bit)
+{
+	atomic_fetch_and(&s_XferCompleteFallback, ~(uint_fast32_t)Bit);
+	atomic_fetch_and(&s_XferCompleteEvt, ~(uint_fast32_t)Bit);
+}
+
 static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 {
 	(void)pContext;
@@ -2205,26 +2212,30 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 
 	const uint16_t amount = s_XferCompleteAmount[epNum][dir];
 
-	// Retire this record before invoking a completion handler. The handler may
-	// start the next transfer on the same endpoint from foreground; that new
-	// completion must be able to claim its bit even if its IRQ preempts us.
-	atomic_fetch_and(&s_XferCompleteFallback, ~(uint_fast32_t)bit);
-	atomic_fetch_and(&s_XferCompleteEvt, ~(uint_fast32_t)bit);
-
 	if (epNum == NRFX_USBD_ISO_EP_NO)
 	{
 		if ((epEvent & 0x80U) != 0U)
 		{
+			// OUT data remains in the endpoint DMA buffer until its callback
+			// consumes it. Retire after that callback.
 			nRFUsbdHandleIsoOutEnd(amount);
+			nRFUsbdRetireXferComplete(bit);
 		}
 		else
 		{
+			// IN data has already been consumed by the controller. Retire
+			// before its callback can start the next IN transfer.
+			nRFUsbdRetireXferComplete(bit);
 			nRFUsbdHandleIsoInEnd(amount);
 		}
 	}
 	else if ((epEvent & 0x80U) != 0U)
 	{
+		// UsbIntrf copies the OUT DMA buffer from this callback. Keep the
+		// completion pending until the copy finishes, then retire it before
+		// replaying OUT-ready and starting the next DMA into that buffer.
 		nRFUsbdHandleOutEnd(epNum, amount);
+		nRFUsbdRetireXferComplete(bit);
 		const uint_fast32_t outDataBit = (uint_fast32_t)1U << epNum;
 		if ((atomic_fetch_and(&s_PendingOutData, ~outDataBit) &
 			 outDataBit) != 0U)
@@ -2234,6 +2245,7 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	}
 	else
 	{
+		nRFUsbdRetireXferComplete(bit);
 		nRFUsbdHandleInData(epNum, amount);
 	}
 
@@ -2246,9 +2258,9 @@ static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 	const uint8_t dir = (EpEvent & 0x80U) != 0U ? 0U : 1U;
 	const uint32_t bit = nRFUsbdXferCompleteBit(EpEvent);
 
-	// One outstanding record per endpoint/direction is sufficient. Its bit is
-	// retired before the foreground callback can start that endpoint again;
-	// other endpoints may use EasyDMA after the current ENDEP releases it.
+	// One outstanding record per endpoint/direction is sufficient. IN retires
+	// before its callback; OUT retires after its callback has consumed the DMA
+	// buffer and before a held OUT-ready event starts the next transfer.
 	if ((atomic_fetch_or(&s_XferCompleteEvt, bit) & bit) != 0U)
 	{
 		return;
