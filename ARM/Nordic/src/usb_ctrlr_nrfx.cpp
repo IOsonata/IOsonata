@@ -267,7 +267,6 @@ static hCFifo_t s_hQue;
 // EasyDMA ownership is tracked by the hardware BUSY register. The retained
 // CFifo head identifies ordinary and EP0 DMA until ENDEP; the ENDISO event
 // identifies a dedicated ISO DMA.
-static atomic_uint_fast32_t s_XferCompleteEvt;
 
 // EP0 accepts descriptor and class buffers from the generic USB layer. Those
 // buffers may be const flash or have arbitrary alignment, while nRF52 USBD
@@ -1565,7 +1564,6 @@ static void nRFUsbdResetState(void)
 	s_Ctrlr.SetupDirIn = false;
 
 	CFifoFlush(s_hQue);
-	atomic_store(&s_XferCompleteEvt, 0U);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 	atomic_store(&s_BusSuspended, false);
@@ -1589,9 +1587,6 @@ static void nRFUsbdAbortEp0(void)
 	}
 
 	nRFUsbdQueRemoveEp(0U);
-	const uint_fast32_t ep0CompletionMask =
-		(uint_fast32_t)1U | ((uint_fast32_t)1U << 16U);
-	atomic_fetch_and(&s_XferCompleteEvt, ~ep0CompletionMask);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 
@@ -1621,7 +1616,6 @@ static void nRFUsbdTryEnterLowPower(void)
 		atomic_load(&s_HostResumePending) ||
 		nRFUsbdDmaActive() ||
 		CFifoUsed(s_hQue) > 0 ||
-		atomic_load(&s_XferCompleteEvt) != 0U ||
 		atomic_load(&s_PendingEp0Status) ||
 		atomic_load(&s_PendingEp0RcvOut))
 	{
@@ -1642,7 +1636,6 @@ static void nRFUsbdTryEnterLowPower(void)
 		atomic_load(&s_HostResumePending) ||
 		nRFUsbdDmaActive() ||
 		CFifoUsed(s_hQue) > 0 ||
-		atomic_load(&s_XferCompleteEvt) != 0U ||
 		atomic_load(&s_PendingEp0Status) ||
 		atomic_load(&s_PendingEp0RcvOut))
 	{
@@ -2389,30 +2382,11 @@ static void nRFUsbdHandleIsoOutEnd(uint16_t TransferLen)
 		USB_CTRLR_XFER_SUCCESS);
 }
 
-static inline __attribute__((always_inline))
-uint32_t nRFUsbdXferCompleteBit(uint8_t EpEvent)
-{
-	const uint32_t epNum = EpEvent & USB_ENDPADDR_NUM_MASK;
-	return 1UL << (epNum + ((EpEvent & 0x80U) != 0U ? 0U : 16U));
-}
-
-static inline __attribute__((always_inline))
-void nRFUsbdRetireXferComplete(uint32_t Bit)
-{
-	atomic_fetch_and(&s_XferCompleteEvt, ~(uint_fast32_t)Bit);
-}
-
 static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 {
 	(void)pContext;
 	const uint8_t epEvent = (uint8_t)Evt;
 	const uint8_t epNum = epEvent & USB_ENDPADDR_NUM_MASK;
-	const uint32_t bit = nRFUsbdXferCompleteBit(epEvent);
-	if ((atomic_load(&s_XferCompleteEvt) & bit) == 0U)
-	{
-		return;
-	}
-
 	const uint16_t amount = (uint16_t)(Evt >> 8U);
 
 	if (epNum == NRFX_USBD_ISO_EP_NO)
@@ -2422,13 +2396,11 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 			// OUT data remains in the endpoint DMA buffer until its callback
 			// consumes it. Retire after that callback.
 			nRFUsbdHandleIsoOutEnd(amount);
-			nRFUsbdRetireXferComplete(bit);
 		}
 		else
 		{
 			// IN data has already been consumed by the controller. Retire
 			// before its callback can start the next IN transfer.
-			nRFUsbdRetireXferComplete(bit);
 			nRFUsbdHandleIsoInEnd(amount);
 		}
 	}
@@ -2438,11 +2410,9 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 		// completion pending until the copy finishes, then retire it before
 		// replaying OUT-ready and starting the next DMA into that buffer.
 		nRFUsbdHandleOutEnd(epNum, amount);
-		nRFUsbdRetireXferComplete(bit);
 	}
 	else
 	{
-		nRFUsbdRetireXferComplete(bit);
 		nRFUsbdHandleInData(epNum, amount);
 	}
 
@@ -2463,16 +2433,6 @@ static void nRFUsbdQueueOutData(uint8_t EpNum)
 
 static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 {
-	const uint32_t bit = nRFUsbdXferCompleteBit(EpEvent);
-
-	// One outstanding record per endpoint/direction is sufficient. IN retires
-	// before its callback; OUT retires after its callback has consumed the DMA
-	// buffer and before a held OUT-ready event starts the next transfer.
-	if ((atomic_fetch_or(&s_XferCompleteEvt, bit) & bit) != 0U)
-	{
-		return;
-	}
-
 	const uint32_t evt = ((uint32_t)Amount << 8U) | EpEvent;
 	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete);
 }
@@ -2591,15 +2551,7 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			const uint32_t epNum = nRFUsbdLowestBit(outData);
 			outData &= outData - 1U;
-			const uint_fast32_t bit = (uint_fast32_t)1U << epNum;
-			if ((atomic_load(&s_XferCompleteEvt) & bit) != 0U)
-			{
-				nRFUsbdQueueOutData((uint8_t)epNum);
-			}
-			else
-			{
-				nRFUsbdHandleOutData((uint8_t)epNum);
-			}
+			nRFUsbdQueueOutData((uint8_t)epNum);
 		}
 
 		while (inData != 0U)
@@ -2645,13 +2597,9 @@ extern "C" void USBD_IRQHandler(void)
 				nRFUsbdQueueXferComplete(0U,
 					(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
 			}
-			else if ((atomic_load(&s_XferCompleteEvt) & 1U) != 0U)
-			{
-				nRFUsbdQueueOutData(0U);
-			}
 			else
 			{
-				nRFUsbdHandleOutData(0);
+				nRFUsbdQueueOutData(0U);
 			}
 		}
 	}
@@ -3855,16 +3803,7 @@ void UsbCtrlrProcess(int DevNo)
 	{
 		nRFUsbPowerProcess();
 #if defined(USBD_PRESENT)
-		AppEvtHandlerDispatch();
-
-		// Retire a queued USB completion in FIFO order during this process pass.
-		// If another subsystem was ahead of it, continue until USB completion
-		// has run or the normal AppEvt execution limit is reached.
-		int count = APPEVT_HANDLER_EXEC_MAX_COUNT - 1;
-		while (count-- > 0 && atomic_load(&s_XferCompleteEvt) != 0U)
-		{
-			AppEvtHandlerDispatch();
-		}
+		AppEvtHandlerExec();
 #endif
 	}
 }
