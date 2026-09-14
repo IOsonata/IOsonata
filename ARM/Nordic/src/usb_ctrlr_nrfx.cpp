@@ -89,19 +89,14 @@ SOFTWARE.
 #endif
 
 
-// The same reasoning as nvm_nrfx: a SoftDevice build does not always define
-// SOFTDEVICE_PRESENT, and on the nRF54L one archive serves SoftDevice, link
-// controller and bare metal alike. The path is compiled in and the choice is
-// made at run time, because getting it wrong the other way drives the clock
-// while the SoftDevice owns it, and that is not a compile error.
-#if defined(SOFTDEVICE_PRESENT) || defined(S112) || defined(S113) || \
-	defined(S132) || defined(S140) || defined(S145)
-#define NRFX_USBD_SOFTDEVICE				1
-#elif defined(NRF54L_SERIES) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
-#define NRFX_USBD_SOFTDEVICE				1
+// A legacy nRF52 SoftDevice owns HFCLK while it is enabled. Only clock
+// request/release needs the SoftDevice API; USB controller operation does not.
+#if defined(NRF52_SERIES) && \
+	(defined(SOFTDEVICE_PRESENT) || defined(S140))
+#define NRFX_USBD_SOFTDEVICE_CLOCK			1
 #endif
 
-#ifdef NRFX_USBD_SOFTDEVICE
+#ifdef NRFX_USBD_SOFTDEVICE_CLOCK
 #include "nrf_soc.h"
 #include "nrf_sdm.h"
 #include "nrf_error.h"
@@ -217,7 +212,7 @@ void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 	pReg->Handler(EpAddr, Event, Length, Result, pReg->pContext);
 }
 
-#ifdef NRFX_USBD_SOFTDEVICE
+#ifdef NRFX_USBD_SOFTDEVICE_CLOCK
 /**
  * Whether a SoftDevice is programmed at all.
  *
@@ -255,7 +250,7 @@ static bool UsbdSdRunning(void)
 
 __attribute__((weak)) bool UsbdXtalRequest(void)
 {
-#ifdef NRFX_USBD_SOFTDEVICE
+#ifdef NRFX_USBD_SOFTDEVICE_CLOCK
 	if (UsbdSdRunning())
 	{
 		uint32_t running = 0;
@@ -334,7 +329,7 @@ __attribute__((weak)) bool UsbdXtalRequest(void)
 
 __attribute__((weak)) void UsbdXtalRelease(void)
 {
-#ifdef NRFX_USBD_SOFTDEVICE
+#ifdef NRFX_USBD_SOFTDEVICE_CLOCK
 	if (UsbdSdRunning())
 	{
 		(void)sd_clock_hfclk_release();
