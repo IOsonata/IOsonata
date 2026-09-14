@@ -2393,22 +2393,20 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	{
 		if ((epEvent & 0x80U) != 0U)
 		{
-			// OUT data remains in the endpoint DMA buffer until its callback
-			// consumes it. Retire after that callback.
+			// OUT data remains in the endpoint DMA buffer until its
+			// completion callback consumes it.
 			nRFUsbdHandleIsoOutEnd(amount);
 		}
 		else
 		{
-			// IN data has already been consumed by the controller. Retire
-			// before its callback can start the next IN transfer.
+			// IN data has already been consumed by the controller.
 			nRFUsbdHandleIsoInEnd(amount);
 		}
 	}
 	else if ((epEvent & 0x80U) != 0U)
 	{
-		// UsbIntrf copies the OUT DMA buffer from this callback. Keep the
-		// completion pending until the copy finishes, then retire it before
-		// replaying OUT-ready and starting the next DMA into that buffer.
+		// UsbIntrf copies the OUT DMA buffer from this completion callback.
+		// A later OUT-ready AppEvt follows it in FIFO order.
 		nRFUsbdHandleOutEnd(epNum, amount);
 	}
 	else
