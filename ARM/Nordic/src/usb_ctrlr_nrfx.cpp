@@ -888,7 +888,10 @@ static hCFifo_t s_hQue;
 // bit is set because DMA scheduling is held until every pending completion is
 // retired.
 static atomic_uint_fast32_t s_XferCompleteEvt;
+static atomic_uint_fast32_t s_XferCompleteFallback;
 static uint16_t s_XferCompleteAmount[NRFX_USBD_EP_COUNT][2];
+static uint32_t s_XferCompleteToken[NRFX_USBD_EP_COUNT][2];
+static uint32_t s_XferCompleteSerial;
 
 // EP0 accepts descriptor and class buffers from the generic USB layer. Those
 // buffers may be const flash or have arbitrary alignment, while nRF52 USBD
@@ -1366,6 +1369,7 @@ static void nRFUsbdResetState(void)
 
 	CFifoFlush(s_hQue);
 	atomic_store(&s_XferCompleteEvt, 0U);
+	atomic_store(&s_XferCompleteFallback, 0U);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 	atomic_store(&s_BusSuspended, false);
@@ -1396,8 +1400,10 @@ static void nRFUsbdAbortEp0(void)
 	}
 
 	nRFUsbdQueRemoveEp(0U);
-	atomic_fetch_and(&s_XferCompleteEvt,
-		~((uint_fast32_t)1U | ((uint_fast32_t)1U << 16U)));
+	const uint_fast32_t ep0CompletionMask =
+		(uint_fast32_t)1U | ((uint_fast32_t)1U << 16U);
+	atomic_fetch_and(&s_XferCompleteEvt, ~ep0CompletionMask);
+	atomic_fetch_and(&s_XferCompleteFallback, ~ep0CompletionMask);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 
@@ -2189,14 +2195,15 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	(void)pContext;
 	const uint8_t epEvent = (uint8_t)Evt;
 	const uint8_t epNum = epEvent & USB_ENDPADDR_NUM_MASK;
+	const uint8_t dir = (epEvent & 0x80U) != 0U ? 0U : 1U;
 	const uint32_t bit = nRFUsbdXferCompleteBit(epEvent);
-	if ((atomic_load(&s_XferCompleteEvt) & bit) == 0U)
+	if ((atomic_load(&s_XferCompleteEvt) & bit) == 0U ||
+		s_XferCompleteToken[epNum][dir] != Evt)
 	{
 		return;
 	}
 
-	const uint16_t amount =
-		s_XferCompleteAmount[epNum][(epEvent & 0x80U) != 0U ? 0U : 1U];
+	const uint16_t amount = s_XferCompleteAmount[epNum][dir];
 
 	if (epNum == NRFX_USBD_ISO_EP_NO)
 	{
@@ -2222,6 +2229,7 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 		nRFUsbdHandleInData(epNum, amount);
 	}
 
+	atomic_fetch_and(&s_XferCompleteFallback, ~(uint_fast32_t)bit);
 	atomic_fetch_and(&s_XferCompleteEvt, ~(uint_fast32_t)bit);
 	nRFUsbdServicePending();
 }
@@ -2232,26 +2240,40 @@ static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 	const uint8_t dir = (EpEvent & 0x80U) != 0U ? 0U : 1U;
 	const uint32_t bit = nRFUsbdXferCompleteBit(EpEvent);
 
+	// A pending bit holds DMA scheduling, so the same endpoint cannot produce
+	// another completion until this one is processed.
+	if ((atomic_fetch_or(&s_XferCompleteEvt, bit) & bit) != 0U)
+	{
+		return;
+	}
+
+	const uint32_t evt = (++s_XferCompleteSerial << 8U) | EpEvent;
 	s_XferCompleteAmount[epNum][dir] = Amount;
-	atomic_fetch_or(&s_XferCompleteEvt, bit);
-	(void)AppEvtHandlerQue(EpEvent, NULL, nRFUsbdProcessXferComplete);
+	s_XferCompleteToken[epNum][dir] = evt;
+	if (!AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete))
+	{
+		atomic_fetch_or(&s_XferCompleteFallback, bit);
+	}
 }
 
 static void nRFUsbdDrainXferComplete(void)
 {
 	for (;;)
 	{
-		const uint32_t pending =
-			(uint32_t)atomic_load(&s_XferCompleteEvt);
-		if (pending == 0U)
+		const uint32_t fallback =
+			(uint32_t)atomic_load(&s_XferCompleteFallback);
+		if (fallback == 0U)
 		{
 			return;
 		}
 
-		const uint32_t bitNo = nRFUsbdLowestBit(pending);
+		const uint32_t bitNo = nRFUsbdLowestBit(fallback);
 		const uint8_t epEvent = bitNo < 16U ?
 			(uint8_t)(0x80U | bitNo) : (uint8_t)(bitNo - 16U);
-		nRFUsbdProcessXferComplete(epEvent, NULL);
+		const uint8_t epNum = epEvent & USB_ENDPADDR_NUM_MASK;
+		const uint8_t dir = (epEvent & 0x80U) != 0U ? 0U : 1U;
+		nRFUsbdProcessXferComplete(
+			s_XferCompleteToken[epNum][dir], NULL);
 	}
 }
 
