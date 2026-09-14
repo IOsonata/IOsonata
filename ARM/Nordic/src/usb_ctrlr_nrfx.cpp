@@ -2580,10 +2580,7 @@ extern "C" void USBD_IRQHandler(void)
 			atomic_store(&s_HostResumePending, false);
 			atomic_store(&s_IsoInReady, false);
 			atomic_store(&s_IsoOutReady, false);
-			if ((NRF_USBD->INTEN & USBD_INTEN_SOF_Msk) == 0U)
-			{
-				NRF_USBD->EVENTS_SOF = 0;
-			}
+			NRF_USBD->EVENTS_SOF = 0U;
 			NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
 			nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
 		}
