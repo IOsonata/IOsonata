@@ -1485,25 +1485,6 @@ static void nRFUsbdServicePending(void)
 			return;
 		}
 
-		if (atomic_exchange(&s_PendingEp0Status, false))
-		{
-			uint8_t epAddr = 0U;
-			const bool complete = nRFUsbdEp0StatusNow(&epAddr);
-			EnableInterrupt(state);
-			if (complete)
-			{
-				nRFUsbdEmitXfer(epAddr, 0, USB_CTRLR_XFER_SUCCESS);
-			}
-			continue;
-		}
-
-		if (atomic_exchange(&s_PendingEp0RcvOut, false))
-		{
-			nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
-			EnableInterrupt(state);
-			continue;
-		}
-
 		// The dedicated isochronous buffers are available once per frame.
 		// Give them priority over asynchronous endpoint work after EP0.
 		if (nRFUsbdStartIsoNow())
@@ -1525,8 +1506,6 @@ static void nRFUsbdServicePending(void)
 
 		const bool retry =
 			CFifoUsed(s_hQue) > 0 ||
-			atomic_load(&s_PendingEp0Status) ||
-			atomic_load(&s_PendingEp0RcvOut) ||
 			(atomic_load(&s_IsoInReady) &&
 			 nRFUsbdGetXfer(USB_ENDPADDR_DIRIN(
 				NRFX_USBD_ISO_EP_NO))->Started) ||
