@@ -57,7 +57,7 @@ SOFTWARE.
 #include "usb/usbd_cdc.h"
 
 
-#define BYTE_MODE
+// #define BYTE_MODE
 
 #define USB_DEVNO				0
 
