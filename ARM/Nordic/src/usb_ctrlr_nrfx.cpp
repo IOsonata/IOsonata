@@ -94,6 +94,7 @@ typedef struct __nRF_Usb_Ep_Registration
 	uint8_t *pBuffer;
 	UsbCtrlrEpHandler_t Handler;
 	void *pContext;
+	uint16_t Mps;
 	bool bBlocking;
 } nRFUsbEpReg_t;
 
@@ -851,7 +852,6 @@ typedef struct __nRF_Usbd_Xfer
 	uint8_t *pBuffer;
 	uint16_t TotalLen;
 	volatile uint16_t ActualLen;
-	uint16_t Mps;
 	volatile bool DataReceived;
 	volatile bool Started;
 } nRFUsbdXfer_t;
@@ -936,6 +936,13 @@ static inline __attribute__((always_inline))
 nRFUsbdXfer_t *nRFUsbdGetXfer(uint8_t EpAddr)
 {
 	return &s_Ctrlr.Xfer[USB_ENDPADDR_NUM(EpAddr)][nRFUsbdDir(EpAddr)];
+}
+
+static inline __attribute__((always_inline))
+uint16_t nRFUsbdMps(uint8_t EpAddr)
+{
+	return USB_ENDPADDR_NUM(EpAddr) == 0U ?
+		NRFX_USBD_MAX_PACKET_SIZE : nRFUsbGetEpReg(EpAddr)->Mps;
 }
 
 /**
@@ -1332,7 +1339,9 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
 	const uint16_t remaining =
 		(uint16_t)(pXfer->TotalLen - pXfer->ActualLen);
-	const uint16_t length = remaining < pXfer->Mps ? remaining : pXfer->Mps;
+	const uint16_t mps =
+		nRFUsbdMps((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN));
+	const uint16_t length = remaining < mps ? remaining : mps;
 
 	if (EpNum == 0U && length > 0U)
 	{
@@ -1367,8 +1376,6 @@ static void nRFUsbdQueueEp0RcvOut(void)
 static void nRFUsbdResetState(void)
 {
 	memset(s_Ctrlr.Xfer, 0, sizeof(s_Ctrlr.Xfer));
-	s_Ctrlr.Xfer[0][0].Mps = NRFX_USBD_MAX_PACKET_SIZE;
-	s_Ctrlr.Xfer[0][1].Mps = NRFX_USBD_MAX_PACKET_SIZE;
 	s_Ctrlr.SofEnabled = false;
 	s_Ctrlr.SetupDirIn = false;
 
@@ -1413,7 +1420,6 @@ static void nRFUsbdAbortEp0(void)
 		pXfer->pBuffer = NULL;
 		pXfer->TotalLen = 0;
 		pXfer->ActualLen = 0;
-		pXfer->Mps = NRFX_USBD_MAX_PACKET_SIZE;
 		pXfer->DataReceived = false;
 		pXfer->Started = false;
 	}
@@ -1692,7 +1698,7 @@ static bool nRFUsbRegEpOpen(const UsbEndPointDesc_t *pDesc)
 	}
 
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(epAddr);
-	pXfer->Mps = pDesc->wMaxPacketSize;
+	nRFUsbGetEpReg(epAddr)->Mps = pDesc->wMaxPacketSize;
 	pXfer->Started = false;
 	pXfer->DataReceived = false;
 
@@ -1812,7 +1818,7 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 	pXfer->ActualLen = 0;
 	pXfer->TotalLen = 0;
 	pXfer->pBuffer = NULL;
-	pXfer->Mps = 0;
+	nRFUsbGetEpReg(EpAddr)->Mps = 0U;
 	__ISB();
 	__DSB();
 }
@@ -1846,7 +1852,7 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	pXfer->Started = true;
 	if (epNum == NRFX_USBD_ISO_EP_NO)
 	{
-		if (TotalBytes > pXfer->Mps)
+		if (TotalBytes > nRFUsbdMps(EpAddr))
 		{
 			pXfer->Started = false;
 			EnableInterrupt(state);
@@ -1910,7 +1916,7 @@ bool nRFUsbRegDataEpXfer(uint8_t EpAddr, uint16_t Length)
 static uint16_t nRFUsbRegEpMps(uint8_t EpAddr)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	return epNum < NRFX_USBD_EP_COUNT ? nRFUsbdGetXfer(EpAddr)->Mps : 0U;
+	return epNum < NRFX_USBD_EP_COUNT ? nRFUsbdMps(EpAddr) : 0U;
 }
 
 static void nRFUsbRegEpStall(uint8_t EpAddr)
@@ -2074,7 +2080,8 @@ static void nRFUsbdHandleOutEnd(uint8_t EpNum, uint16_t TransferLen)
 	}
 	pXfer->ActualLen += TransferLen;
 
-	if (TransferLen == pXfer->Mps && pXfer->ActualLen < pXfer->TotalLen)
+	if (TransferLen == nRFUsbdMps(EpNum) &&
+		pXfer->ActualLen < pXfer->TotalLen)
 	{
 		if (EpNum == 0)
 		{
@@ -2100,8 +2107,7 @@ static void nRFUsbdHandleOutData(uint8_t EpNum)
 		}
 		else
 		{
-			(void)nRFUsbRegDataEpXfer(EpNum,
-				nRFUsbdGetXfer(EpNum)->Mps);
+			(void)nRFUsbRegDataEpXfer(EpNum, nRFUsbdMps(EpNum));
 		}
 		return;
 	}
@@ -2494,7 +2500,7 @@ extern "C" void USBD_IRQHandler(void)
 				else
 				{
 					(void)nRFUsbRegDataEpXfer(NRFX_USBD_ISO_EP_NO,
-						nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO)->Mps);
+						nRFUsbdMps(NRFX_USBD_ISO_EP_NO));
 				}
 			}
 		}
