@@ -56,6 +56,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdatomic.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "nrf.h"
 #include "nrf_peripherals.h"
@@ -2152,17 +2153,61 @@ static bool nRFUsbdCollectEvents(nRFUsbdEventStatus_t *pStatus)
 	pStatus->UsbReset = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_USBRESET);
 	pStatus->Started = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_STARTED);
 
-	for (uint8_t epNum = 0U; epNum < NRFX_USBD_DATA_EP_COUNT; epNum++)
+	pStatus->Ep0DataDone =
+		nRFUsbdTakeEvent(&NRF_USBD->EVENTS_EP0DATADONE);
+
+	uint32_t t = NRF_USBD->EPDATASTATUS;
+	uint32_t d = NRF_USBD->EPSTATUS;
+
+	if (NRF_USBD->EVENTS_EPDATA)
 	{
-		if (nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDEPIN[epNum]))
+
+		uint32_t EndIn = 0;
+		uint32_t idx = 0;
+
+		if (t & 0xFFFFU)
 		{
-			pStatus->EndIn |= (uint8_t)(1U << epNum);
+			idx = 31 - __CLZ(t & 0xFFFFU);
+			if (NRF_USBD->EVENTS_ENDEPIN[idx])
+			{
+				pStatus->EndIn = t & 0xFFFFU;
+				NRF_USBD->EVENTS_ENDEPIN[idx] = 0;
+			}
+		}
+/*
+		if (t >> 16U)
+		{
+			idx = 31 - __CLZ(t >> 16U);
+			if (NRF_USBD->EVENTS_ENDEPOUT[idx])
+			{
+				pStatus->EndOut = t >> 16U;
+				NRF_USBD->EVENTS_ENDEPOUT[idx] = 0;
+			}
+		}*/
+/*
+		for (uint8_t epNum = 0U; epNum < NRFX_USBD_DATA_EP_COUNT; epNum++)
+		{
+			if (nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDEPIN[epNum]))
+			{
+				pStatus->EndIn |= (uint8_t)(1U << epNum);
+			}
+		}
+
+		if (pStatus->EndIn != EndIn)
+		{
+			printf("%d %x %x %x\n", idx, t, pStatus->EndIn, EndIn);
+		}*/
+	}
+	else if (pStatus->Ep0DataDone)
+	{
+		if (nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDEPIN[0]))
+		{
+			pStatus->EndIn |= (uint8_t)(1U << 0);
 		}
 	}
 
-	pStatus->Ep0DataDone =
-		nRFUsbdTakeEvent(&NRF_USBD->EVENTS_EP0DATADONE);
 	pStatus->EndIsoIn = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDISOIN);
+
 
 	for (uint8_t epNum = 0U; epNum < NRFX_USBD_DATA_EP_COUNT; epNum++)
 	{
@@ -2170,6 +2215,11 @@ static bool nRFUsbdCollectEvents(nRFUsbdEventStatus_t *pStatus)
 		{
 			pStatus->EndOut |= (uint8_t)(1U << epNum);
 		}
+	}
+
+	if (pStatus->EndOut)
+	{
+		//printf("%x %x %x %x\n", NRF_USBD->EVENTS_EPDATA, d, t, pStatus->EndOut);
 	}
 
 	pStatus->EndIsoOut = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDISOOUT);
