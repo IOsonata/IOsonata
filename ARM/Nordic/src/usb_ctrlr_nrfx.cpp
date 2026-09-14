@@ -221,7 +221,6 @@ typedef struct __nRF_Usbd_Xfer
 typedef struct __nRF_Usbd_Ctrlr
 {
 	nRFUsbdXfer_t Xfer[NRFX_USBD_EP_COUNT][2];
-	UsbCtrlrEvt_t SetupEvt;
 	bool SofEnabled;
 	bool SetupDirIn;
 } nRFUsbdCtrlr_t;
@@ -262,7 +261,6 @@ static hCFifo_t s_hQue;
 // packet here in either direction; control transfers are serialized by EP0.
 alignas(4) static uint8_t s_Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
 
-static atomic_bool s_PendingSetup;
 static atomic_bool s_PendingEp0Status;
 static atomic_bool s_PendingEp0RcvOut;
 static atomic_bool s_BusSuspended;
@@ -1361,8 +1359,7 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 static void nRFUsbdServicePending(void)
 {
-	if (atomic_load(&s_PendingSetup) ||
-		atomic_load(&s_HostResumePending) ||
+	if (atomic_load(&s_HostResumePending) ||
 		(atomic_load(&s_BusSuspended) && !atomic_load(&s_SuspendPending)))
 	{
 		return;
@@ -1554,7 +1551,6 @@ static void nRFUsbdResetState(void)
 	s_Ctrlr.SetupDirIn = false;
 
 	CFifoFlush(s_hQue);
-	atomic_store(&s_PendingSetup, false);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 	atomic_store(&s_BusSuspended, false);
@@ -1607,7 +1603,6 @@ static void nRFUsbdTryEnterLowPower(void)
 		atomic_load(&s_HostResumePending) ||
 		nRFUsbdDmaActive() ||
 		CFifoUsed(s_hQue) > 0 ||
-		atomic_load(&s_PendingSetup) ||
 		atomic_load(&s_PendingEp0Status) ||
 		atomic_load(&s_PendingEp0RcvOut))
 	{
@@ -1628,7 +1623,6 @@ static void nRFUsbdTryEnterLowPower(void)
 		atomic_load(&s_HostResumePending) ||
 		nRFUsbdDmaActive() ||
 		CFifoUsed(s_hQue) > 0 ||
-		atomic_load(&s_PendingSetup) ||
 		atomic_load(&s_PendingEp0Status) ||
 		atomic_load(&s_PendingEp0RcvOut))
 	{
@@ -2166,26 +2160,6 @@ static void nRFUsbdBusReset(void)
 	nRFUsbdResetState();
 }
 
-static void nRFUsbdProcessSetup(uint32_t Evt, void *pContext)
-{
-	(void)Evt;
-	(void)pContext;
-
-	const uint32_t state = DisableInterrupt();
-	if (!atomic_load(&s_PendingSetup))
-	{
-		EnableInterrupt(state);
-		return;
-	}
-
-	const UsbCtrlrEvt_t evt = s_Ctrlr.SetupEvt;
-	atomic_store(&s_PendingSetup, false);
-	EnableInterrupt(state);
-
-	nRFUsbdEmit(&evt);
-	nRFUsbdServicePending();
-}
-
 static void nRFUsbdSetupEvent(void)
 {
 	UsbCtrlrEvt_t evt = {};
@@ -2202,20 +2176,21 @@ static void nRFUsbdSetupEvent(void)
 	s_Ctrlr.SetupDirIn =
 		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0;
 
-	if ((evt.Setup.bmRequestType &
+	const bool setAddress =
+		(evt.Setup.bmRequestType &
 		 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0 &&
-		evt.Setup.bRequest == USB_REQ_SET_ADDRESS)
+		evt.Setup.bRequest == USB_REQ_SET_ADDRESS;
+
+	if (setAddress)
 	{
-		evt.Type = USB_CTRLR_EVT_ADDRESS;
-		evt.Address = (uint8_t)(evt.Setup.wValue & 0x7FU);
+		UsbCtrlrEvt_t addrEvt = {};
+		addrEvt.Type = USB_CTRLR_EVT_ADDRESS;
+		addrEvt.Address = (uint8_t)(evt.Setup.wValue & 0x7FU);
+		nRFUsbdEmit(&addrEvt);
+		return;
 	}
 
-	s_Ctrlr.SetupEvt = evt;
-	if (!atomic_exchange(&s_PendingSetup, true) &&
-		!AppEvtHandlerQue(0U, NULL, nRFUsbdProcessSetup))
-	{
-		atomic_store(&s_PendingSetup, false);
-	}
+	nRFUsbdEmit(&evt);
 }
 
 static void nRFUsbdHandleOutEnd(uint8_t EpNum, uint16_t TransferLen)
@@ -2643,6 +2618,10 @@ extern "C" void USBD_IRQHandler(void)
 	nRFUsbdTryRemoteWake();
 	nRFUsbdTryEnterLowPower();
 
+	// Starting EasyDMA is the last USBD operation in this interrupt. Endpoint
+	// callbacks only queued requests, so no handler below the start can touch
+	// controller registers while the shared DMA engine owns them.
+	nRFUsbdServicePending();
 }
 
 /**
