@@ -237,8 +237,8 @@ typedef struct __nRF_Usbd_Que {
 
 typedef struct __nRF_Usbd_Event_Status
 {
-	uint32_t EpStatus;
-	uint32_t EpDataStatus;
+	uint32_t XferComplete;
+	uint32_t PendingOut;
 	bool UsbReset;
 	bool Started;
 	bool Ep0DataDone;
@@ -2154,20 +2154,19 @@ static bool nRFUsbdCollectEvents(nRFUsbdEventStatus_t *pStatus)
 	pStatus->Ep0Setup = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_EP0SETUP);
 	pStatus->EpData = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_EPDATA);
 
-	pStatus->EpStatus = NRF_USBD->EPSTATUS;
-	if (pStatus->EpStatus != 0U)
-	{
-		NRF_USBD->EPSTATUS = pStatus->EpStatus;
-	}
+	const uint32_t epDataStatus = NRF_USBD->EPDATASTATUS;
+	const uint32_t epStatus = NRF_USBD->EPSTATUS;
+	pStatus->XferComplete = epDataStatus & epStatus;
+	pStatus->PendingOut = epDataStatus & ~epStatus & 0xFFFF0000UL;
 
-	if (pStatus->EpData || pStatus->Ep0DataDone)
+	if (pStatus->XferComplete != 0U)
 	{
-		pStatus->EpDataStatus = NRF_USBD->EPDATASTATUS;
-		NRF_USBD->EPDATASTATUS = pStatus->EpDataStatus;
+		NRF_USBD->EPDATASTATUS = pStatus->XferComplete;
+		NRF_USBD->EPSTATUS = pStatus->XferComplete;
 	}
 
 	const bool any = pStatus->UsbReset || pStatus->Started ||
-		pStatus->EpStatus != 0U || pStatus->EpDataStatus != 0U ||
+		pStatus->XferComplete != 0U ||
 		pStatus->Ep0DataDone || pStatus->EndIsoIn ||
 		pStatus->EndIsoOut || pStatus->Sof || pStatus->UsbEvent ||
 		pStatus->Ep0Setup || pStatus->EpData;
@@ -2508,7 +2507,7 @@ extern "C" void USBD_IRQHandler(void)
 	}
 
 	// Endpoint zero is handled further down with the setup sequence.
-	uint32_t outEnd = (eventStatus.EpStatus >> 16U) &
+	uint32_t outEnd = (eventStatus.XferComplete >> 16U) &
 		(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
 
 	while (outEnd != 0U)
@@ -2519,13 +2518,13 @@ extern "C" void USBD_IRQHandler(void)
 			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 	}
 
-	if (eventStatus.EpData || eventStatus.Ep0DataDone)
+	if (eventStatus.EpData || eventStatus.Ep0DataDone ||
+		eventStatus.XferComplete != 0U)
 	{
-		const uint32_t dataStatus = eventStatus.EpDataStatus;
 		const uint32_t epMask =
 			(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
-		uint32_t outData = (dataStatus >> 16U) & epMask;
-		uint32_t inData = dataStatus & epMask;
+		uint32_t outData = (eventStatus.PendingOut >> 16U) & epMask;
+		uint32_t inData = eventStatus.XferComplete & epMask;
 
 		while (outData != 0U)
 		{
@@ -2564,23 +2563,20 @@ extern "C" void USBD_IRQHandler(void)
 	}
 	else
 	{
-		if ((eventStatus.EpStatus & (1UL << 16U)) != 0U)
+		if ((eventStatus.XferComplete & (1UL << 16U)) != 0U)
 		{
 			nRFUsbdQueueXferComplete(0x80U,
 				(uint16_t)NRF_USBD->EPOUT[0].AMOUNT);
 		}
-
-		if (eventStatus.Ep0DataDone)
+		if ((eventStatus.XferComplete & 1UL) != 0U)
 		{
-			if (s_Ctrlr.SetupDirIn)
-			{
-				nRFUsbdQueueXferComplete(0U,
-					(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
-			}
-			else
-			{
-				nRFUsbdQueueOutData(0U);
-			}
+			nRFUsbdQueueXferComplete(0U,
+				(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
+		}
+		if ((eventStatus.PendingOut & (1UL << 16U)) != 0U &&
+			(eventStatus.EpData || eventStatus.Ep0DataDone))
+		{
+			nRFUsbdQueueOutData(0U);
 		}
 	}
 
