@@ -889,6 +889,7 @@ static hCFifo_t s_hQue;
 // retired.
 static atomic_uint_fast32_t s_XferCompleteEvt;
 static atomic_uint_fast32_t s_XferCompleteFallback;
+static atomic_uint_fast32_t s_PendingOutData;
 static uint16_t s_XferCompleteAmount[NRFX_USBD_EP_COUNT][2];
 static uint32_t s_XferCompleteToken[NRFX_USBD_EP_COUNT][2];
 static uint32_t s_XferCompleteSerial;
@@ -1370,6 +1371,7 @@ static void nRFUsbdResetState(void)
 	CFifoFlush(s_hQue);
 	atomic_store(&s_XferCompleteEvt, 0U);
 	atomic_store(&s_XferCompleteFallback, 0U);
+	atomic_store(&s_PendingOutData, 0U);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 	atomic_store(&s_BusSuspended, false);
@@ -1404,6 +1406,7 @@ static void nRFUsbdAbortEp0(void)
 		(uint_fast32_t)1U | ((uint_fast32_t)1U << 16U);
 	atomic_fetch_and(&s_XferCompleteEvt, ~ep0CompletionMask);
 	atomic_fetch_and(&s_XferCompleteFallback, ~ep0CompletionMask);
+	atomic_fetch_and(&s_PendingOutData, ~(uint_fast32_t)1U);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 
@@ -2218,6 +2221,12 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	else if ((epEvent & 0x80U) != 0U)
 	{
 		nRFUsbdHandleOutEnd(epNum, amount);
+		const uint_fast32_t outDataBit = (uint_fast32_t)1U << epNum;
+		if ((atomic_fetch_and(&s_PendingOutData, ~outDataBit) &
+			 outDataBit) != 0U)
+		{
+			nRFUsbdHandleOutData(epNum);
+		}
 	}
 	else
 	{
@@ -2389,7 +2398,15 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			const uint32_t epNum = nRFUsbdLowestBit(outData);
 			outData &= outData - 1U;
-			nRFUsbdHandleOutData((uint8_t)epNum);
+			const uint_fast32_t bit = (uint_fast32_t)1U << epNum;
+			if ((atomic_load(&s_XferCompleteEvt) & bit) != 0U)
+			{
+				atomic_fetch_or(&s_PendingOutData, bit);
+			}
+			else
+			{
+				nRFUsbdHandleOutData((uint8_t)epNum);
+			}
 		}
 
 		while (inData != 0U)
@@ -2435,7 +2452,11 @@ extern "C" void USBD_IRQHandler(void)
 				nRFUsbdQueueXferComplete(0U,
 					(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
 			}
-			else if ((atomic_load(&s_XferCompleteEvt) & 1U) == 0U)
+			else if ((atomic_load(&s_XferCompleteEvt) & 1U) != 0U)
+			{
+				atomic_fetch_or(&s_PendingOutData, 1U);
+			}
+			else
 			{
 				nRFUsbdHandleOutData(0);
 			}
