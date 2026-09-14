@@ -241,6 +241,51 @@ typedef struct __nRF_Usbd_Que {
 
 #endif
 
+//
+// nRF52 USBD state.
+//
+#if defined(USBD_PRESENT)
+
+static nRFUsbdCtrlr_t s_Ctrlr;
+alignas(4) static uint8_t s_QueMem[
+	CFIFO_TOTAL_MEMSIZE(NRFUSBD_QUE_DEPTH, sizeof(nRFUsbdQue_t))];
+static hCFifo_t s_hQue;
+
+// One bit per endpoint and direction remains set from ISR capture through
+// foreground completion processing. This tracks deferred USB completions.
+// EasyDMA ownership is tracked by the hardware BUSY register. The retained
+// CFifo head identifies ordinary and EP0 DMA until ENDEP; the ENDISO event
+// identifies a dedicated ISO DMA.
+static atomic_uint_fast32_t s_XferCompleteEvt;
+static atomic_uint_fast32_t s_XferCompleteFallback;
+static atomic_uint_fast32_t s_PendingOutData;
+static uint16_t s_XferCompleteAmount[NRFX_USBD_EP_COUNT][2];
+static uint32_t s_XferCompleteToken[NRFX_USBD_EP_COUNT][2];
+static uint32_t s_XferCompleteSerial;
+
+// EP0 accepts descriptor and class buffers from the generic USB layer. Those
+// buffers may be const flash or have arbitrary alignment, while nRF52 USBD
+// EasyDMA requires controller-visible, word-aligned RAM. Stage one control
+// packet here in either direction; control transfers are serialized by EP0.
+alignas(4) static uint8_t s_Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
+
+static atomic_bool s_PendingEp0Status;
+static atomic_bool s_PendingEp0RcvOut;
+static atomic_bool s_BusSuspended;
+static atomic_bool s_SuspendPending;
+static atomic_bool s_RemoteWakePending;
+static atomic_bool s_HostResumePending;
+static atomic_bool s_MacAwake;
+static atomic_bool s_IsoInOpen;
+static atomic_bool s_IsoOutOpen;
+static atomic_bool s_IsoInReady;
+static atomic_bool s_IsoOutReady;
+static uint16_t s_IsoOutSize;
+
+static void nRFUsbdHostResumeDetected(void);
+
+#endif
+
 /// Only DevNo 0 exists on every nRF part shipped so far.
 static inline __attribute__((always_inline))
 bool nRFUsbValidDevNo(int DevNo)
@@ -876,44 +921,6 @@ static void nRFUsbPowerProcess(void)
 //
 
 #if defined(USBD_PRESENT)
-
-static nRFUsbdCtrlr_t s_Ctrlr;
-alignas(4) static uint8_t s_QueMem[
-	CFIFO_TOTAL_MEMSIZE(NRFUSBD_QUE_DEPTH, sizeof(nRFUsbdQue_t))];
-static hCFifo_t s_hQue;
-
-// One bit per endpoint and direction remains set from ISR capture through
-// foreground completion processing. This tracks deferred USB completions.
-// EasyDMA ownership is tracked by the hardware BUSY register. The retained
-// CFifo head identifies ordinary and EP0 DMA until ENDEP; the ENDISO event
-// identifies a dedicated ISO DMA.
-static atomic_uint_fast32_t s_XferCompleteEvt;
-static atomic_uint_fast32_t s_XferCompleteFallback;
-static atomic_uint_fast32_t s_PendingOutData;
-static uint16_t s_XferCompleteAmount[NRFX_USBD_EP_COUNT][2];
-static uint32_t s_XferCompleteToken[NRFX_USBD_EP_COUNT][2];
-static uint32_t s_XferCompleteSerial;
-
-// EP0 accepts descriptor and class buffers from the generic USB layer. Those
-// buffers may be const flash or have arbitrary alignment, while nRF52 USBD
-// EasyDMA requires controller-visible, word-aligned RAM. Stage one control
-// packet here in either direction; control transfers are serialized by EP0.
-alignas(4) static uint8_t s_Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
-
-static atomic_bool s_PendingEp0Status;
-static atomic_bool s_PendingEp0RcvOut;
-static atomic_bool s_BusSuspended;
-static atomic_bool s_SuspendPending;
-static atomic_bool s_RemoteWakePending;
-static atomic_bool s_HostResumePending;
-static atomic_bool s_MacAwake;
-static atomic_bool s_IsoInOpen;
-static atomic_bool s_IsoOutOpen;
-static atomic_bool s_IsoInReady;
-static atomic_bool s_IsoOutReady;
-static uint16_t s_IsoOutSize;
-
-static void nRFUsbdHostResumeDetected(void);
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
 {
