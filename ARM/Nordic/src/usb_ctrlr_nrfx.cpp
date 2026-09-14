@@ -239,6 +239,8 @@ typedef struct __nRF_Usbd_Event_Status
 {
 	uint32_t XferComplete;
 	uint32_t PendingOut;
+	bool EndEp0In;
+	bool EndEp0Out;
 	bool UsbReset;
 	bool Started;
 	bool Ep0DataDone;
@@ -2145,6 +2147,10 @@ static bool nRFUsbdCollectEvents(nRFUsbdEventStatus_t *pStatus)
 	*pStatus = {};
 	pStatus->UsbReset = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_USBRESET);
 	pStatus->Started = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_STARTED);
+	pStatus->EndEp0In =
+		nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDEPIN[0]);
+	pStatus->EndEp0Out =
+		nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDEPOUT[0]);
 	pStatus->Ep0DataDone =
 		nRFUsbdTakeEvent(&NRF_USBD->EVENTS_EP0DATADONE);
 	pStatus->EndIsoIn = nRFUsbdTakeEvent(&NRF_USBD->EVENTS_ENDISOIN);
@@ -2156,16 +2162,27 @@ static bool nRFUsbdCollectEvents(nRFUsbdEventStatus_t *pStatus)
 
 	const uint32_t epDataStatus = NRF_USBD->EPDATASTATUS;
 	const uint32_t epStatus = NRF_USBD->EPSTATUS;
-	pStatus->XferComplete = epDataStatus & epStatus;
-	pStatus->PendingOut = epDataStatus & ~epStatus & 0xFFFF0000UL;
+	const uint32_t epMask =
+		(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
+	const uint32_t dataEpMask = epMask | (epMask << 16U);
+	pStatus->XferComplete = epDataStatus & epStatus & dataEpMask;
+	pStatus->PendingOut =
+		epDataStatus & ~epStatus & (epMask << 16U);
 
+	const uint32_t clearDataStatus = pStatus->XferComplete |
+		(pStatus->Ep0DataDone ?
+			(epDataStatus & ((1UL << 16U) | 1UL)) : 0U);
+	if (clearDataStatus != 0U)
+	{
+		NRF_USBD->EPDATASTATUS = clearDataStatus;
+	}
 	if (pStatus->XferComplete != 0U)
 	{
-		NRF_USBD->EPDATASTATUS = pStatus->XferComplete;
 		NRF_USBD->EPSTATUS = pStatus->XferComplete;
 	}
 
 	const bool any = pStatus->UsbReset || pStatus->Started ||
+		pStatus->EndEp0In || pStatus->EndEp0Out ||
 		pStatus->XferComplete != 0U ||
 		pStatus->Ep0DataDone || pStatus->EndIsoIn ||
 		pStatus->EndIsoOut || pStatus->Sof || pStatus->UsbEvent ||
@@ -2440,6 +2457,7 @@ extern "C" void USBD_IRQHandler(void)
 		// EPSTATUS identifies the completed ordinary endpoint without scanning
 		// every ENDEP register. ISO completion still uses its dedicated event.
 		if (complete &&
+			USB_ENDPADDR_NUM(activeDma) != 0U &&
 			USB_ENDPADDR_NUM(activeDma) != NRFX_USBD_ISO_EP_NO)
 		{
 			volatile uint32_t *pEndEvent =
@@ -2563,20 +2581,22 @@ extern "C" void USBD_IRQHandler(void)
 	}
 	else
 	{
-		if ((eventStatus.XferComplete & (1UL << 16U)) != 0U)
+		if (eventStatus.EndEp0Out)
 		{
 			nRFUsbdQueueXferComplete(0x80U,
 				(uint16_t)NRF_USBD->EPOUT[0].AMOUNT);
 		}
-		if ((eventStatus.XferComplete & 1UL) != 0U)
+		if (eventStatus.Ep0DataDone)
 		{
-			nRFUsbdQueueXferComplete(0U,
-				(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
-		}
-		if ((eventStatus.PendingOut & (1UL << 16U)) != 0U &&
-			(eventStatus.EpData || eventStatus.Ep0DataDone))
-		{
-			nRFUsbdQueueOutData(0U);
+			if (s_Ctrlr.SetupDirIn)
+			{
+				nRFUsbdQueueXferComplete(0U,
+					(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
+			}
+			else
+			{
+				nRFUsbdQueueOutData(0U);
+			}
 		}
 	}
 
