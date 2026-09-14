@@ -154,7 +154,7 @@ int main()
 
 	while (1)
 	{
-		UsbProcess(USB_DEVNO);
+		bool progress = false;
 
 		// Service at most one loopback operation per pass so the PRBS producer
 		// below always gets a chance to queue data as well.
@@ -167,6 +167,7 @@ int main()
 			{
 				loopbackOffset += length;
 				loopbackPending -= length;
+				progress = true;
 			}
 		}
 		else
@@ -176,6 +177,8 @@ int main()
 
 			if (length > 0)
 			{
+				progress = true;
+
 				// Each host test starts its loopback PRBS from the same seed.
 				// The device remains running across serial-port reopen, so reset
 				// the checker at the first data from each new CDC session.
@@ -204,6 +207,8 @@ int main()
 		uint8_t prbsByte = loopbackRxErrorNotify > 0U ? 0U : prbs;
 		if (g_PrbsCdc.IsPortOpen() && g_PrbsCdc.Tx(0, &prbsByte, 1) > 0)
 		{
+			progress = true;
+
 			if (loopbackRxErrorNotify > 0U)
 			{
 				loopbackRxErrorNotify--;
@@ -212,6 +217,13 @@ int main()
 			{
 				prbs = Prbs8(prbs);
 			}
+		}
+
+		// Drain deferred completions and lifecycle events only when neither CDC
+		// application path made progress during this pass.
+		if (progress == false)
+		{
+			UsbProcess(USB_DEVNO);
 		}
 	}
 
