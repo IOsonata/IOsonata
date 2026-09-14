@@ -2165,7 +2165,22 @@ static bool nRFUsbdCollectEvents(nRFUsbdEventStatus_t *pStatus)
 	const uint32_t epMask =
 		(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
 	const uint32_t dataEpMask = epMask | (epMask << 16U);
-	pStatus->XferComplete = epDataStatus & epStatus & dataEpMask;
+	const uint32_t completeCandidate =
+		epDataStatus & epStatus & dataEpMask;
+	if (completeCandidate != 0U)
+	{
+		const uint32_t epBit =
+			31U - (uint32_t)__CLZ(completeCandidate);
+		const uint32_t epNum = epBit >= 16U ? epBit - 16U : epBit;
+		volatile uint32_t *pEndEvent = epBit >= 16U ?
+			&NRF_USBD->EVENTS_ENDEPOUT[epNum] :
+			&NRF_USBD->EVENTS_ENDEPIN[epNum];
+		if (nRFUsbdTakeEvent(pEndEvent))
+		{
+			pStatus->XferComplete = 1UL << epBit;
+		}
+	}
+
 	pStatus->PendingOut =
 		epDataStatus & ~epStatus & (epMask << 16U);
 
@@ -2454,19 +2469,8 @@ extern "C" void USBD_IRQHandler(void)
 			return;
 		}
 
-		// EPSTATUS identifies the completed ordinary endpoint without scanning
-		// every ENDEP register. ISO completion still uses its dedicated event.
-		if (complete &&
-			USB_ENDPADDR_NUM(activeDma) != 0U &&
-			USB_ENDPADDR_NUM(activeDma) != NRFX_USBD_ISO_EP_NO)
-		{
-			volatile uint32_t *pEndEvent =
-				nRFUsbdDmaEndEvent(activeDma);
-			*pEndEvent = 0;
-			__ISB();
-			__DSB();
-		}
-
+		// Keep the endpoint END event latched. The event collector combines it
+		// with EPDATASTATUS and EPSTATUS before accepting the completion.
 		nRFUsbdDmaRelease(activeDma);
 	}
 
