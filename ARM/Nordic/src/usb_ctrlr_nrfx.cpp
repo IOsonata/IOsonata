@@ -2165,8 +2165,11 @@ static bool nRFUsbdCollectEvents(nRFUsbdEventStatus_t *pStatus)
 	const uint32_t epMask =
 		(uint32_t)(((1UL << NRFX_USBD_DATA_EP_COUNT) - 1UL) & ~1UL);
 	const uint32_t dataEpMask = epMask | (epMask << 16U);
+	// EPSTATUS stays set while an OUT packet is waiting for EasyDMA.
+	// Once EasyDMA completes, the endpoint's status bit is clear and its
+	// matching ENDEP event identifies the completed endpoint/direction.
 	const uint32_t completeCandidate =
-		epDataStatus & epStatus & dataEpMask;
+		epDataStatus & ~epStatus & dataEpMask;
 	if (completeCandidate != 0U)
 	{
 		const uint32_t epBit =
@@ -2182,7 +2185,7 @@ static bool nRFUsbdCollectEvents(nRFUsbdEventStatus_t *pStatus)
 	}
 
 	pStatus->PendingOut =
-		epDataStatus & ~epStatus & (epMask << 16U);
+		epDataStatus & epStatus & (epMask << 16U);
 
 	const uint32_t clearDataStatus = pStatus->XferComplete |
 		(pStatus->Ep0DataDone ?
