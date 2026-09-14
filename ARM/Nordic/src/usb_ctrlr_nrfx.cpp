@@ -71,13 +71,6 @@ SOFTWARE.
 #error "usb_ctrlr_nrfx: this part has no USB controller"
 #endif
 
-/// Only DevNo 0 exists on every nRF part shipped so far.
-static inline __attribute__((always_inline))
-bool nRFUsbValidDevNo(int DevNo)
-{
-	return DevNo == 0;
-}
-
 enum
 {
 #if defined(USBD_PRESENT)
@@ -101,26 +94,6 @@ typedef struct __nRF_Usb_Ep_Registration
 // Fixed data-endpoint ownership lives outside the active-transfer state so a
 // bus reset can cancel transfers without losing registrations.
 static nRFUsbEpReg_t s_EpReg[NRF_USB_EP_COUNT][2];
-
-static inline __attribute__((always_inline))
-uint8_t nRFUsbEpDir(uint8_t EpAddr)
-{
-	return USB_ENDPADDR_IS_IN(EpAddr) ? 1U : 0U;
-}
-
-static inline __attribute__((always_inline))
-nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpAddr)
-{
-	return &s_EpReg[USB_ENDPADDR_NUM(EpAddr)][nRFUsbEpDir(EpAddr)];
-}
-
-static inline __attribute__((always_inline))
-void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
-								 uint16_t Length, UsbCtrlrXferResult_t Result)
-{
-	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
-	pReg->Handler(EpAddr, Event, Length, Result, pReg->pContext);
-}
 
 //
 // Bus power, clock and VBUS. Common to both peripherals, with the part
@@ -195,6 +168,7 @@ static bool s_UsbdXtalHeld = false;
 static bool s_UsbdVbusLast = false;
 
 #ifdef NRFX_USBD_HAS_USBD
+static bool s_LowPowerExitPending = false;
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
 #endif
 
@@ -203,6 +177,33 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
 // reports edges only, so the level it leaves behind is kept here.
 static bool s_UsbdVbusLevel = false;
 #endif
+
+/// Only DevNo 0 exists on every nRF part shipped so far.
+static inline __attribute__((always_inline))
+bool nRFUsbValidDevNo(int DevNo)
+{
+	return DevNo == 0;
+}
+
+static inline __attribute__((always_inline))
+uint8_t nRFUsbEpDir(uint8_t EpAddr)
+{
+	return USB_ENDPADDR_IS_IN(EpAddr) ? 1U : 0U;
+}
+
+static inline __attribute__((always_inline))
+nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpAddr)
+{
+	return &s_EpReg[USB_ENDPADDR_NUM(EpAddr)][nRFUsbEpDir(EpAddr)];
+}
+
+static inline __attribute__((always_inline))
+void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
+								 uint16_t Length, UsbCtrlrXferResult_t Result)
+{
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
+	pReg->Handler(EpAddr, Event, Length, Result, pReg->pContext);
+}
 
 #ifdef NRFX_USBD_SOFTDEVICE
 /**
@@ -419,8 +420,6 @@ static void UsbdErrataRevert(void)
  * by the time this returns, so the request is raised and the next call
  * finishes it.
  */
-static bool s_LowPowerExitPending = false;
-
 static void UsbdLowPowerExitFinish(void)
 {
 	if (!s_LowPowerExitPending ||
@@ -911,6 +910,8 @@ static atomic_bool s_IsoOutOpen;
 static atomic_bool s_IsoInReady;
 static atomic_bool s_IsoOutReady;
 static uint16_t s_IsoOutSize;
+
+static void nRFUsbdHostResumeDetected(void);
 
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
@@ -1430,8 +1431,6 @@ static void nRFUsbdAbortEp0(void)
 	__ISB();
 	__DSB();
 }
-
-static void nRFUsbdHostResumeDetected(void);
 
 static void nRFUsbdTryEnterLowPower(void)
 {
