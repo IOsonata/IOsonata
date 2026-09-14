@@ -17,7 +17,7 @@
 				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="${cross_rm} -rf" description="" id="iosonata.tinyusb.dualcdc.debug.config" name="Debug" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.dockerdpath=,org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=" parent="ilg.gnuarmeclipse.managedbuild.cross.config.elf.debug">
 					<folderInfo id="iosonata.tinyusb.dualcdc.debug.folder" name="/" resourcePath="">
 						<toolChain id="iosonata.tinyusb.dualcdc.debug.toolchain" name="Cross ARM GCC" superClass="ilg.gnuarmeclipse.managedbuild.cross.toolchain.elf.debug">
-							<option id="iosonata.tinyusb.dualcdc.debug.opt" name="Optimization Level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level" value="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.none" valueType="enumerated"/>
+							<option id="iosonata.tinyusb.dualcdc.debug.opt" name="Optimization Level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level" value="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.debug" valueType="enumerated"/>
 							<option id="iosonata.tinyusb.dualcdc.debug.msglen" name="Message length (-fmessage-length=0)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.messagelength" value="true" valueType="boolean"/>
 							<option id="iosonata.tinyusb.dualcdc.debug.signedchar" name="'char' is signed (-fsigned-char)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.signedchar" value="true" valueType="boolean"/>
 							<option id="iosonata.tinyusb.dualcdc.debug.funcsec" name="Function sections (-ffunction-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.functionsections" value="true" valueType="boolean"/>
@@ -148,4 +148,5 @@
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
 	<storageModule moduleId="scannerConfiguration"/>
+	<storageModule moduleId="refreshScope"/>
 </cproject>
