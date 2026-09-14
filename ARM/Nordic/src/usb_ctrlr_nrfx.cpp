@@ -71,30 +71,6 @@ SOFTWARE.
 #error "usb_ctrlr_nrfx: this part has no USB controller"
 #endif
 
-enum
-{
-#if defined(USBD_PRESENT)
-	// The ordinary endpoint count excludes the dedicated ISO endpoint 8.
-	NRF_USB_EP_COUNT = 9,
-#else
-	NRF_USB_EP_COUNT = USB_EPIN_CNT(0) > USB_EPOUT_CNT(0) ?
-		USB_EPIN_CNT(0) : USB_EPOUT_CNT(0),
-#endif
-};
-
-typedef struct __nRF_Usb_Ep_Registration
-{
-	uint8_t *pBuffer;
-	UsbCtrlrEpHandler_t Handler;
-	void *pContext;
-	uint16_t Mps;
-	bool bBlocking;
-} nRFUsbEpReg_t;
-
-// Fixed data-endpoint ownership lives outside the active-transfer state so a
-// bus reset can cancel transfers without losing registrations.
-static nRFUsbEpReg_t s_EpReg[NRF_USB_EP_COUNT][2];
-
 //
 // Bus power, clock and VBUS. Common to both peripherals, with the part
 // differences handled inline the way uart_nrfx.cpp does.
@@ -157,6 +133,42 @@ static nRFUsbEpReg_t s_EpReg[NRF_USB_EP_COUNT][2];
 #define NRFX_USBD_REG32(a)					(*(volatile uint32_t *)(a))
 
 #endif
+
+#ifdef NRFX_USBD_HAS_USBHS
+
+// Undocumented VREGUSB status register. The events below report the edges and
+// are in the MDK, but the level is not, and something has to answer what the
+// state is at start up before any edge has happened. Offset and bit are as
+// used by Zephyr's regulator_nrf_vregusb driver, which says in its own source
+// that the register is not part of NRF_VREGUSB_Type.
+#define NRFX_USBD_VREGUSB_STATUS_OFS		0x400UL
+#define NRFX_USBD_VREGUSB_STATUS_VBUSDET	(1UL << 2)
+
+#endif
+
+enum
+{
+#if defined(USBD_PRESENT)
+	// The ordinary endpoint count excludes the dedicated ISO endpoint 8.
+	NRF_USB_EP_COUNT = 9,
+#else
+	NRF_USB_EP_COUNT = USB_EPIN_CNT(0) > USB_EPOUT_CNT(0) ?
+		USB_EPIN_CNT(0) : USB_EPOUT_CNT(0),
+#endif
+};
+
+typedef struct __nRF_Usb_Ep_Registration
+{
+	uint8_t *pBuffer;
+	UsbCtrlrEpHandler_t Handler;
+	void *pContext;
+	uint16_t Mps;
+	bool bBlocking;
+} nRFUsbEpReg_t;
+
+// Fixed data-endpoint ownership lives outside the active-transfer state so a
+// bus reset can cancel transfers without losing registrations.
+static nRFUsbEpReg_t s_EpReg[NRF_USB_EP_COUNT][2];
 
 // One USB controller per part, so the common power/clock state is file scope.
 // Controller interrupts are owned by the corresponding UsbdCtrlr backend.
@@ -536,14 +548,6 @@ static void UsbdStopCtrlr(void)
 
 #ifdef NRFX_USBD_HAS_USBHS
 
-// Undocumented VREGUSB status register. The events below report the edges and
-// are in the MDK, but the level is not, and something has to answer what the
-// state is at start up before any edge has happened. Offset and bit are as
-// used by Zephyr's regulator_nrf_vregusb driver, which says in its own source
-// that the register is not part of NRF_VREGUSB_Type.
-#define NRFX_USBD_VREGUSB_STATUS_OFS		0x400UL
-#define NRFX_USBD_VREGUSB_STATUS_VBUSDET	(1UL << 2)
-
 /**
  * Consume the VBUS edges the regulator has recorded and answer the level they
  * leave behind. Polled rather than taken as an interrupt for the same reason
@@ -822,9 +826,17 @@ static void nRFUsbPowerProcess(void)
 
 #if defined(USBD_PRESENT)
 
-#ifndef USBD_PRESENT
-#error "usbd_ctrlr_nrf52: this part has no USBD peripheral"
-#endif
+#define NRFX_USBD_IRQ_EVENT_COUNT	(USBD_INTEN_EPDATA_Pos + 1)
+#define NRFUSBD_IRQ_MASK \
+	((uint32_t)((1ULL << NRFX_USBD_IRQ_EVENT_COUNT) - 1ULL))
+
+// Errata 199's hardware-visible EasyDMA busy register is also the shared DMA
+// ownership flag: 0x82 before STARTEP and zero after ENDEP.
+#define NRFX_USBD_EASYDMA_BUSY_REG			(*((volatile uint32_t *)0x40027C1CUL))
+#define NRFX_USBD_EASYDMA_BUSY_REG_BUSY		0x82UL
+#define NRFX_USBD_EASYDMA_BUSY_REG_CLEAR	0UL
+
+#define NRFUSBD_QUE_DEPTH			(NRFX_USBD_EP_COUNT * 2)
 
 enum
 {
@@ -835,16 +847,6 @@ enum
 	NRFX_USBD_ISO_MAX_PACKET_SIZE = 512,
 	NRFX_USBD_DMA_EP_NONE = 0xFFU,
 };
-
-#define NRFX_USBD_IRQ_EVENT_COUNT	(USBD_INTEN_EPDATA_Pos + 1)
-#define NRFUSBD_IRQ_MASK \
-	((uint32_t)((1ULL << NRFX_USBD_IRQ_EVENT_COUNT) - 1ULL))
-
-// Errata 199's hardware-visible EasyDMA busy register is also the shared DMA
-// ownership flag: 0x82 before STARTEP and zero after ENDEP.
-#define NRFX_USBD_EASYDMA_BUSY_REG			(*((volatile uint32_t *)0x40027C1CUL))
-#define NRFX_USBD_EASYDMA_BUSY_REG_BUSY		0x82UL
-#define NRFX_USBD_EASYDMA_BUSY_REG_CLEAR	0UL
 
 typedef struct __nRF_Usbd_Xfer
 {
@@ -862,20 +864,18 @@ typedef struct __nRF_Usbd_Ctrlr
 	bool SetupDirIn;
 } nRFUsbdCtrlr_t;
 
-static nRFUsbdCtrlr_t s_Ctrlr;
 // One EasyDMA engine serves every endpoint in both directions, so a transfer
 // request waits in this descriptor queue and starts in submission order.
 //
 // An endpoint cannot ask for a second transfer in the same direction until the
 // first completes, so one slot per endpoint per direction is always enough and
 // the queue cannot overflow.
-#define NRFUSBD_QUE_DEPTH			(NRFX_USBD_EP_COUNT * 2)
-
 typedef struct __nRF_Usbd_Que {
 	uint8_t EpAddr;				//!< Endpoint address, direction bit included
 	uint16_t Len;				//!< Bytes this transfer moves
 } nRFUsbdQue_t;
 
+static nRFUsbdCtrlr_t s_Ctrlr;
 alignas(4) static uint8_t s_QueMem[
 	CFIFO_TOTAL_MEMSIZE(NRFUSBD_QUE_DEPTH, sizeof(nRFUsbdQue_t))];
 static hCFifo_t s_hQue;
@@ -912,7 +912,6 @@ static atomic_bool s_IsoOutReady;
 static uint16_t s_IsoOutSize;
 
 static void nRFUsbdHostResumeDetected(void);
-
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
 {
@@ -2548,10 +2547,6 @@ static bool nRFUsbRegHighSpeed(void)
 
 
 #elif defined(USBHS_PRESENT)
-
-#ifndef USBHS_PRESENT
-#error "usbd_ctrlr_nrf54: this part has no USBHS peripheral"
-#endif
 
 #ifndef USBHSCORE_PRESENT
 #error "usbd_ctrlr_nrf54: this part has no USBHS core"
