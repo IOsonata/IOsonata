@@ -208,6 +208,7 @@ enum
 	NRFX_USBD_MAX_PACKET_SIZE = 64,
 	NRFX_USBD_ISO_MAX_PACKET_SIZE = 512,
 	NRFX_USBD_DMA_EP_NONE = 0xFFU,
+	NRFX_USBD_XFER_EVT_OUT = 0x80U,
 	NRFX_USBD_EP0_IDLE = 0U,
 	NRFX_USBD_EP0_PENDING,
 	NRFX_USBD_EP0_ACTIVE,
@@ -259,12 +260,6 @@ alignas(4) static uint8_t s_Ep0QueMem[
 	CFIFO_TOTAL_MEMSIZE(NRFUSBD_EP0_QUE_DEPTH, sizeof(nRFUsbdQue_t))];
 static hCFifo_t s_hQue;
 static hCFifo_t s_hEp0Que;
-
-// One bit per endpoint and direction remains set from ISR capture through
-// foreground completion processing. This tracks deferred USB completions.
-// EasyDMA ownership is tracked by the hardware BUSY register. The retained
-// CFifo head identifies ordinary and EP0 DMA until ENDEP; the ENDISO event
-// identifies a dedicated ISO DMA.
 
 // EP0 accepts descriptor and class buffers from the generic USB layer. Those
 // buffers may be const flash or have arbitrary alignment, while nRF52 USBD
@@ -2456,10 +2451,11 @@ static void nRFUsbdHandleIsoOutEnd(uint16_t TransferLen)
 
 static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 {
-	(void)pContext;
 	const uint16_t amount = (uint16_t)(Evt >> 8U);
 
-	if ((Evt & 0x80U) != 0U)
+	(void)pContext;
+
+	if ((Evt & NRFX_USBD_XFER_EVT_OUT) != 0U)
 	{
 		// OUT data remains in the endpoint DMA buffer until its
 		// completion callback consumes it.
@@ -2477,12 +2473,13 @@ static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 
 static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 {
-	(void)pContext;
 	const uint8_t epEvent = (uint8_t)Evt;
 	const uint8_t epNum = epEvent & USB_ENDPADDR_NUM_MASK;
 	const uint16_t amount = (uint16_t)(Evt >> 8U);
 
-	if ((epEvent & 0x80U) != 0U)
+	(void)pContext;
+
+	if ((epEvent & NRFX_USBD_XFER_EVT_OUT) != 0U)
 	{
 		// UsbIntrf copies the OUT DMA buffer from this completion callback.
 		// A later OUT-ready AppEvt follows it in FIFO order.
@@ -2503,8 +2500,10 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 
 static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 {
-	(void)pContext;
 	const uint8_t epNum = (uint8_t)Evt;
+
+	(void)pContext;
+
 	nRFUsbdHandleOutData(epNum);
 	if (epNum == 0U)
 	{
@@ -2527,7 +2526,7 @@ static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 
 static void nRFUsbdQueueIsoComplete(bool Out, uint16_t Amount)
 {
-	const uint32_t evt = ((uint32_t)Amount << 8U) | (Out ? 0x80U : 0U);
+	const uint32_t evt = ((uint32_t)Amount << 8U) | (Out ? NRFX_USBD_XFER_EVT_OUT : 0U);
 	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessIsoComplete);
 }
 
@@ -2691,7 +2690,7 @@ extern "C" void USBD_IRQHandler(void)
 	if (completedOut && USB_ENDPADDR_NUM(completedDma) != 0U)
 	{
 		const uint8_t epNum = USB_ENDPADDR_NUM(completedDma);
-		nRFUsbdQueueXferComplete((uint8_t)(0x80U | epNum),
+		nRFUsbdQueueXferComplete((uint8_t)(NRFX_USBD_XFER_EVT_OUT | epNum),
 			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 	}
 
@@ -2785,7 +2784,7 @@ extern "C" void USBD_IRQHandler(void)
 	{
 		if (completedOut && USB_ENDPADDR_NUM(completedDma) == 0U)
 		{
-			nRFUsbdQueueXferComplete(0x80U,
+			nRFUsbdQueueXferComplete(NRFX_USBD_XFER_EVT_OUT,
 				(uint16_t)NRF_USBD->EPOUT[0].AMOUNT);
 		}
 
