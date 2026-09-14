@@ -207,6 +207,9 @@ enum
 	NRFX_USBD_MAX_PACKET_SIZE = 64,
 	NRFX_USBD_ISO_MAX_PACKET_SIZE = 512,
 	NRFX_USBD_DMA_EP_NONE = 0xFFU,
+	NRFX_USBD_EP0_SETUP_IDLE = 0U,
+	NRFX_USBD_EP0_SETUP_PENDING,
+	NRFX_USBD_EP0_SETUP_ACTIVE,
 };
 
 typedef struct __nRF_Usbd_Xfer
@@ -221,6 +224,8 @@ typedef struct __nRF_Usbd_Xfer
 typedef struct __nRF_Usbd_Ctrlr
 {
 	nRFUsbdXfer_t Xfer[NRFX_USBD_EP_COUNT][2];
+	UsbCtrlrEvt_t SetupEvent;
+	atomic_uint_fast8_t SetupState;
 	bool SofEnabled;
 	bool SetupDirIn;
 } nRFUsbdCtrlr_t;
@@ -1359,7 +1364,8 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 static void nRFUsbdServicePending(void)
 {
-	if (atomic_load(&s_HostResumePending) ||
+	if (atomic_load(&s_Ctrlr.SetupState) != NRFX_USBD_EP0_SETUP_IDLE ||
+		atomic_load(&s_HostResumePending) ||
 		(atomic_load(&s_BusSuspended) && !atomic_load(&s_SuspendPending)))
 	{
 		return;
@@ -1371,7 +1377,8 @@ static void nRFUsbdServicePending(void)
 		// through head selection, PTR/MAXCNT setup and TASKS_STARTEP so
 		// another context cannot select a second transfer in that window.
 		const uint32_t state = DisableInterrupt();
-		if (nRFUsbdDmaActive())
+		if (nRFUsbdDmaActive() ||
+			atomic_load(&s_Ctrlr.SetupState) != NRFX_USBD_EP0_SETUP_IDLE)
 		{
 			EnableInterrupt(state);
 			return;
@@ -1547,6 +1554,8 @@ static void nRFUsbdQueueEp0RcvOut(void)
 static void nRFUsbdResetState(void)
 {
 	memset(s_Ctrlr.Xfer, 0, sizeof(s_Ctrlr.Xfer));
+	memset(&s_Ctrlr.SetupEvent, 0, sizeof(s_Ctrlr.SetupEvent));
+	atomic_store(&s_Ctrlr.SetupState, NRFX_USBD_EP0_SETUP_IDLE);
 	s_Ctrlr.SofEnabled = false;
 	s_Ctrlr.SetupDirIn = false;
 
@@ -1568,11 +1577,8 @@ static void nRFUsbdResetState(void)
 
 static void nRFUsbdAbortEp0(void)
 {
-	if (nRFUsbdDmaActive())
-	{
-		nRFUsbdDmaWait();
-	}
-
+	// The SETUP processor enters only after the completion interrupt releases
+	// EasyDMA, then holds SetupState until the control request is dispatched.
 	nRFUsbdQueRemoveEp(0U);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
@@ -1601,6 +1607,7 @@ static void nRFUsbdTryEnterLowPower(void)
 		!atomic_load(&s_SuspendPending) ||
 		atomic_load(&s_RemoteWakePending) ||
 		atomic_load(&s_HostResumePending) ||
+		atomic_load(&s_Ctrlr.SetupState) != NRFX_USBD_EP0_SETUP_IDLE ||
 		nRFUsbdDmaActive() ||
 		CFifoUsed(s_hQue) > 0 ||
 		atomic_load(&s_PendingEp0Status) ||
@@ -1621,6 +1628,7 @@ static void nRFUsbdTryEnterLowPower(void)
 		!atomic_load(&s_SuspendPending) ||
 		atomic_load(&s_RemoteWakePending) ||
 		atomic_load(&s_HostResumePending) ||
+		atomic_load(&s_Ctrlr.SetupState) != NRFX_USBD_EP0_SETUP_IDLE ||
 		nRFUsbdDmaActive() ||
 		CFifoUsed(s_hQue) > 0 ||
 		atomic_load(&s_PendingEp0Status) ||
@@ -2160,28 +2168,50 @@ static void nRFUsbdBusReset(void)
 	nRFUsbdResetState();
 }
 
-static void nRFUsbdProcessEp0Setup(void)
+static void nRFUsbdProcessEp0Setup(uint32_t Evt, void *pContext)
 {
+	(void)Evt;
+	(void)pContext;
+
+	UsbCtrlrEvt_t evt;
+	for (;;)
+	{
+		// Interrupts remain enabled while the active DMA finishes. Only its
+		// completion interrupt releases the shared EasyDMA engine.
+		while (nRFUsbdDmaActive())
+		{
+		}
+
+		const uint32_t irqState = DisableInterrupt();
+		if (nRFUsbdDmaActive())
+		{
+			EnableInterrupt(irqState);
+			continue;
+		}
+
+		uint_fast8_t expected = NRFX_USBD_EP0_SETUP_PENDING;
+		if (!atomic_compare_exchange_strong(&s_Ctrlr.SetupState, &expected,
+			NRFX_USBD_EP0_SETUP_ACTIVE))
+		{
+			EnableInterrupt(irqState);
+			return;
+		}
+
+		// The ISR may capture a later SETUP while this one is processed. Work
+		// from a private copy so the later AppEvt can abort this transaction.
+		evt = s_Ctrlr.SetupEvent;
+		s_Ctrlr.SetupDirIn =
+			(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0U;
+		EnableInterrupt(irqState);
+		break;
+	}
+
 	nRFUsbdHostResumeDetected();
 	nRFUsbdAbortEp0();
 
-	UsbCtrlrEvt_t evt = {};
-	evt.Type = USB_CTRLR_EVT_SETUP;
-	evt.Setup.bmRequestType = (uint8_t)NRF_USBD->BMREQUESTTYPE;
-	evt.Setup.bRequest = (uint8_t)NRF_USBD->BREQUEST;
-	evt.Setup.wValue = (uint16_t)NRF_USBD->WVALUEL |
-		((uint16_t)NRF_USBD->WVALUEH << 8);
-	evt.Setup.wIndex = (uint16_t)NRF_USBD->WINDEXL |
-		((uint16_t)NRF_USBD->WINDEXH << 8);
-	evt.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
-		((uint16_t)NRF_USBD->WLENGTHH << 8);
-
-	s_Ctrlr.SetupDirIn =
-		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0;
-
 	const bool setAddress =
 		(evt.Setup.bmRequestType &
-		 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0 &&
+		 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0U &&
 		evt.Setup.bRequest == USB_REQ_SET_ADDRESS;
 
 	if (setAddress)
@@ -2190,10 +2220,20 @@ static void nRFUsbdProcessEp0Setup(void)
 		addrEvt.Type = USB_CTRLR_EVT_ADDRESS;
 		addrEvt.Address = (uint8_t)(evt.Setup.wValue & 0x7FU);
 		nRFUsbdEmit(&addrEvt);
-		return;
+	}
+	else
+	{
+		nRFUsbdEmit(&evt);
 	}
 
-	nRFUsbdEmit(&evt);
+	uint_fast8_t expected = NRFX_USBD_EP0_SETUP_ACTIVE;
+	if (atomic_compare_exchange_strong(&s_Ctrlr.SetupState, &expected,
+		NRFX_USBD_EP0_SETUP_IDLE))
+	{
+		// UsbDevProcessEvent may have queued the data or status stage while the
+		// setup lock was held. It is safe to start it only after that call exits.
+		nRFUsbdServicePending();
+	}
 }
 
 static void nRFUsbdHandleOutEnd(uint8_t EpNum, uint16_t TransferLen)
@@ -2579,7 +2619,20 @@ extern "C" void USBD_IRQHandler(void)
 		__ISB();
 		__DSB();
 
-		nRFUsbdProcessEp0Setup();
+		UsbCtrlrEvt_t evt = {};
+		evt.Type = USB_CTRLR_EVT_SETUP;
+		evt.Setup.bmRequestType = (uint8_t)NRF_USBD->BMREQUESTTYPE;
+		evt.Setup.bRequest = (uint8_t)NRF_USBD->BREQUEST;
+		evt.Setup.wValue = (uint16_t)NRF_USBD->WVALUEL |
+			((uint16_t)NRF_USBD->WVALUEH << 8);
+		evt.Setup.wIndex = (uint16_t)NRF_USBD->WINDEXL |
+			((uint16_t)NRF_USBD->WINDEXH << 8);
+		evt.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
+			((uint16_t)NRF_USBD->WLENGTHH << 8);
+
+		s_Ctrlr.SetupEvent = evt;
+		atomic_store(&s_Ctrlr.SetupState, NRFX_USBD_EP0_SETUP_PENDING);
+		(void)AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEp0Setup);
 	}
 	else
 	{
