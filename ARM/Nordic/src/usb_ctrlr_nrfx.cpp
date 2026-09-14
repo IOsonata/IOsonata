@@ -839,8 +839,11 @@ enum
 #define NRFUSBD_IRQ_MASK \
 	((uint32_t)((1ULL << NRFX_USBD_IRQ_EVENT_COUNT) - 1ULL))
 
-#define NRFX_USBD_ERRATA_199_REG \
-	(*((volatile uint32_t *)0x40027C1CUL))
+// Software-owned EasyDMA running flag from the errata 199 workaround.
+#define NRFX_USBD_EASYDMA_BUSY_REG			(*((volatile uint32_t *)0x40027C1CUL))
+#define NRFX_USBD_EASYDMA_BUSY_REG_BUSY		0x82UL
+#define NRFX_USBD_EASYDMA_BUSY_REG_CLEAR	0UL
+#define NRFX_USBD_ERRATA_199_REG			NRFX_USBD_EASYDMA_BUSY_REG
 
 typedef struct __nRF_Usbd_Xfer
 {
