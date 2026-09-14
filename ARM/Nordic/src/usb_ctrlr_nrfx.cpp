@@ -1364,6 +1364,30 @@ static bool nRFUsbdStartIsoNow(void)
 	return false;
 }
 
+static inline __attribute__((always_inline))
+bool nRFUsbdIsoPending(void)
+{
+	return
+		(atomic_load(&s_IsoInReady) &&
+		 nRFUsbdGetXfer(USB_ENDPADDR_DIRIN(
+			 NRFX_USBD_ISO_EP_NO))->Started) ||
+		(atomic_load(&s_IsoOutReady) &&
+		 nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO)->Started);
+}
+
+static void nRFUsbdServiceIso(void)
+{
+	const uint32_t state = DisableInterrupt();
+	if (atomic_load(&s_Ctrlr.Ep0State) == NRFX_USBD_EP0_IDLE &&
+		!atomic_load(&s_HostResumePending) &&
+		(!atomic_load(&s_BusSuspended) || atomic_load(&s_SuspendPending)) &&
+		!nRFUsbdDmaActive())
+	{
+		(void)nRFUsbdStartIsoNow();
+	}
+	EnableInterrupt(state);
+}
+
 /**
  * Start EasyDMA for one queued request. The buffer and length were recorded
  * when it was queued; what an OUT endpoint actually holds is only known now,
@@ -1467,6 +1491,7 @@ static void nRFUsbdServicePending(void)
 {
 	if (atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE ||
 		atomic_load(&s_HostResumePending) ||
+		nRFUsbdIsoPending() ||
 		(atomic_load(&s_BusSuspended) && !atomic_load(&s_SuspendPending)))
 	{
 		return;
@@ -1478,16 +1503,8 @@ static void nRFUsbdServicePending(void)
 		// through head selection, PTR/MAXCNT setup and TASKS_STARTEP so
 		// another context cannot select a second transfer in that window.
 		const uint32_t state = DisableInterrupt();
-		if (nRFUsbdDmaActive() ||
+		if (nRFUsbdDmaActive() || nRFUsbdIsoPending() ||
 			atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE)
-		{
-			EnableInterrupt(state);
-			return;
-		}
-
-		// The dedicated isochronous buffers are available once per frame.
-		// Give them priority over asynchronous endpoint work after EP0.
-		if (nRFUsbdStartIsoNow())
 		{
 			EnableInterrupt(state);
 			return;
@@ -1504,13 +1521,7 @@ static void nRFUsbdServicePending(void)
 			return;
 		}
 
-		const bool retry =
-			CFifoUsed(s_hQue) > 0 ||
-			(atomic_load(&s_IsoInReady) &&
-			 nRFUsbdGetXfer(USB_ENDPADDR_DIRIN(
-				NRFX_USBD_ISO_EP_NO))->Started) ||
-			(atomic_load(&s_IsoOutReady) &&
-			 nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO)->Started);
+		const bool retry = CFifoUsed(s_hQue) > 0;
 		EnableInterrupt(state);
 
 		if (retry)
@@ -2111,7 +2122,7 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 		EnableInterrupt(state);
 		if (!nRFUsbdDeferFromInterrupt())
 		{
-			nRFUsbdServicePending();
+			nRFUsbdServiceIso();
 		}
 		return true;
 	}
@@ -2313,6 +2324,7 @@ static void nRFUsbdProcessEp0Setup(uint32_t Evt, void *pContext)
 	// the scheduler. Start only EP0 here and retain ownership until its final
 	// packet completes.
 	nRFUsbdServiceEp0();
+	nRFUsbdServiceIso();
 	nRFUsbdServicePending();
 }
 
@@ -2470,6 +2482,7 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	{
 		nRFUsbdServiceEp0();
 	}
+	nRFUsbdServiceIso();
 	nRFUsbdServicePending();
 }
 
@@ -2482,6 +2495,7 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 	{
 		nRFUsbdServiceEp0();
 	}
+	nRFUsbdServiceIso();
 	nRFUsbdServicePending();
 }
 
@@ -2572,6 +2586,10 @@ static void nRFUsbdHandleSof(void)
 	{
 		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
 	}
+
+	// ISO is bound to this service interval. Start it here when EasyDMA is
+	// free; otherwise the current DMA completion retries it before bulk work.
+	nRFUsbdServiceIso();
 }
 
 extern "C" void USBD_IRQHandler(void)
