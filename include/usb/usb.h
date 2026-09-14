@@ -159,6 +159,9 @@ extern "C" {
  */
 bool UsbInit(const UsbCfg_t *pCfg);
 
+/** @brief Process one hardware-controller event in the USB device core. */
+void UsbDevProcessEvent(int DevNo, const UsbCtrlrEvt_t *pEvt);
+
 /** @brief Enable the controller interrupt and connect the bus pull-up. */
 bool UsbEnable(int DevNo);
 

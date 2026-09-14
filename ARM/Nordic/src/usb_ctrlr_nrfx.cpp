@@ -858,8 +858,6 @@ typedef struct __nRF_Usbd_Xfer
 typedef struct __nRF_Usbd_Ctrlr
 {
 	nRFUsbdXfer_t Xfer[NRFX_USBD_EP_COUNT][2];
-	UsbCtrlrEvtHandler_t EvtHandler;
-	void *pContext;
 	bool SofEnabled;
 	bool SetupDirIn;
 } nRFUsbdCtrlr_t;
@@ -954,12 +952,10 @@ static volatile uint32_t *nRFUsbdDmaEndEvent(uint8_t EpAddr)
 		&NRF_USBD->EVENTS_ENDEPOUT[epNum];
 }
 
-static void nRFUsbdEmit(const UsbCtrlrEvt_t *pEvt)
+static inline __attribute__((always_inline))
+void nRFUsbdEmit(const UsbCtrlrEvt_t *pEvt)
 {
-	if (s_Ctrlr.EvtHandler != NULL)
-	{
-		s_Ctrlr.EvtHandler(0, pEvt, s_Ctrlr.pContext);
-	}
+	UsbDevProcessEvent(0, pEvt);
 }
 
 static void nRFUsbdEmitSimple(UsbCtrlrEvtType_t Type)
@@ -1576,7 +1572,7 @@ static void nRFUsbdWakeAllowed(void)
 	nRFUsbdTryRemoteWake();
 }
 
-static bool nRFUsbRegInit(UsbCtrlrEvtHandler_t EvtHandler, void *pContext)
+static bool nRFUsbRegInit(void)
 {
 	s_hQue = CFifoInit(s_QueMem, sizeof(s_QueMem), sizeof(nRFUsbdQue_t),
 					   false);
@@ -1585,8 +1581,6 @@ static bool nRFUsbRegInit(UsbCtrlrEvtHandler_t EvtHandler, void *pContext)
 		return false;
 	}
 
-	s_Ctrlr.EvtHandler = EvtHandler;
-	s_Ctrlr.pContext = pContext;
 	nRFUsbdResetState();
 	return true;
 }
@@ -2559,8 +2553,6 @@ typedef struct __nRF54_Usbd_Xfer
 typedef struct __nRF54_Usbd_Ctrlr
 {
 	nRF54UsbdXfer_t Xfer[NRF54_USBD_EP_COUNT][2];
-	UsbCtrlrEvtHandler_t EvtHandler;
-	void *pContext;
 	uint16_t TxFifoWords[NRF54_USBD_EP_COUNT];
 	uint16_t FifoTop;
 	uint16_t RxWords;
@@ -2635,12 +2627,10 @@ static bool nRF54UsbdFlushRx(void)
 						  NRF54_USBD_GRSTCTL_RXFFLSH);
 }
 
-static void nRF54UsbdEmit(const UsbCtrlrEvt_t *pEvt)
+static inline __attribute__((always_inline))
+void nRF54UsbdEmit(const UsbCtrlrEvt_t *pEvt)
 {
-	if (s_Ctrlr.EvtHandler != NULL)
-	{
-		s_Ctrlr.EvtHandler(0, pEvt, s_Ctrlr.pContext);
-	}
+	UsbDevProcessEvent(0, pEvt);
 }
 
 static void nRF54UsbdEmitSimple(UsbCtrlrEvtType_t Type)
@@ -2697,12 +2687,7 @@ static bool nRF54UsbdCoreReset(void)
 
 static void nRF54UsbdResetSoftware(void)
 {
-	UsbCtrlrEvtHandler_t handler = s_Ctrlr.EvtHandler;
-	void *context = s_Ctrlr.pContext;
-
 	memset(&s_Ctrlr, 0, sizeof(s_Ctrlr));
-	s_Ctrlr.EvtHandler = handler;
-	s_Ctrlr.pContext = context;
 	s_Ctrlr.Xfer[0][0].Mps = NRF54_USBD_EP0_MPS;
 	s_Ctrlr.Xfer[0][1].Mps = NRF54_USBD_EP0_MPS;
 }
@@ -3185,11 +3170,9 @@ static void nRF54UsbdOutInterrupt(void)
 	}
 }
 
-static bool nRFUsbRegInit(UsbCtrlrEvtHandler_t EvtHandler, void *pContext)
+static bool nRFUsbRegInit(void)
 {
 	memset(&s_Ctrlr, 0, sizeof(s_Ctrlr));
-	s_Ctrlr.EvtHandler = EvtHandler;
-	s_Ctrlr.pContext = pContext;
 	s_Ctrlr.Xfer[0][0].Mps = NRF54_USBD_EP0_MPS;
 	s_Ctrlr.Xfer[0][1].Mps = NRF54_USBD_EP0_MPS;
 	return true;
@@ -3668,7 +3651,7 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 		return false;
 	}
 
-	return nRFUsbRegInit(pCfg->EvtHandler, pCfg->pContext);
+	return nRFUsbRegInit();
 }
 
 bool UsbCtrlrStart(int DevNo)

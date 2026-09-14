@@ -1314,7 +1314,7 @@ static bool UsbCoreHandleClassRequest(void)
 	return false;
 }
 
-static void UsbCoreHandleSetup(const UsbSetupData_t *pSetup)
+static void UsbDevProcessSetup(const UsbSetupData_t *pSetup)
 {
 	if (pSetup == nullptr)
 	{
@@ -1439,8 +1439,9 @@ static void UsbCoreResetDeviceState(bool NotifyClasses)
 	UsbCoreClearEndpointState();
 }
 
-static void UsbCoreCtrlrEvent(int, const UsbCtrlrEvt_t *pEvt, void *)
+void UsbDevProcessEvent(int DevNo, const UsbCtrlrEvt_t *pEvt)
 {
+	(void)DevNo;
 	if (pEvt == nullptr)
 	{
 		return;
@@ -1453,7 +1454,7 @@ static void UsbCoreCtrlrEvent(int, const UsbCtrlrEvt_t *pEvt, void *)
 			break;
 
 		case USB_CTRLR_EVT_SETUP:
-			UsbCoreHandleSetup(&pEvt->Setup);
+			UsbDevProcessSetup(&pEvt->Setup);
 			break;
 
 		case USB_CTRLR_EVT_XFER_CMPL:
@@ -1698,8 +1699,6 @@ static bool UsbDevInit(const UsbCfg_t *pCfg)
 	UsbCtrlrCfg_t ctrlrCfg = {};
 	ctrlrCfg.IntPrio = s_UsbDevCfg.IntPrio;
 	ctrlrCfg.bLowPowerSuspend = s_UsbDevCfg.bLowPowerSuspend;
-	ctrlrCfg.EvtHandler = UsbCoreCtrlrEvent;
-	ctrlrCfg.pContext = nullptr;
 
 	if (!UsbCtrlrInit(s_UsbDevNo, &ctrlrCfg))
 	{
