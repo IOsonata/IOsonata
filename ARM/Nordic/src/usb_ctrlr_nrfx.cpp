@@ -840,8 +840,8 @@ enum
 #define NRFUSBD_IRQ_MASK \
 	((uint32_t)((1ULL << NRFX_USBD_IRQ_EVENT_COUNT) - 1ULL))
 
-// Errata 199's hardware-visible EasyDMA busy register. On affected parts the
-// controller requires 0x82 before STARTEP and zero after ENDEP.
+// Errata 199's hardware-visible EasyDMA busy register is also the shared DMA
+// ownership flag: 0x82 before STARTEP and zero after ENDEP.
 #define NRFX_USBD_EASYDMA_BUSY_REG			(*((volatile uint32_t *)0x40027C1CUL))
 #define NRFX_USBD_EASYDMA_BUSY_REG_BUSY		0x82UL
 #define NRFX_USBD_EASYDMA_BUSY_REG_CLEAR	0UL
@@ -864,7 +864,6 @@ typedef struct __nRF_Usbd_Ctrlr
 } nRFUsbdCtrlr_t;
 
 static nRFUsbdCtrlr_t s_Ctrlr;
-static atomic_uint_fast8_t s_DmaEpAddr;
 // One EasyDMA engine serves every endpoint in both directions, so a transfer
 // request waits in this descriptor queue and starts in submission order.
 //
@@ -883,9 +882,10 @@ alignas(4) static uint8_t s_QueMem[
 static hCFifo_t s_hQue;
 
 // One bit per endpoint and direction remains set from ISR capture through
-// foreground completion processing. This tracks deferred USB completions, not
-// EasyDMA ownership; the errata-199 BUSY register serializes the shared engine,
-// while s_DmaEpAddr identifies the endpoint whose ENDEP completes.
+// foreground completion processing. This tracks deferred USB completions.
+// EasyDMA ownership is tracked by the hardware BUSY register. The retained
+// CFifo head identifies ordinary and EP0 DMA until ENDEP; the ENDISO event
+// identifies a dedicated ISO DMA.
 static atomic_uint_fast32_t s_XferCompleteEvt;
 static atomic_uint_fast32_t s_XferCompleteFallback;
 static atomic_uint_fast32_t s_PendingOutData;
@@ -915,13 +915,8 @@ static uint16_t s_IsoOutSize;
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
 {
-	if (nrf52_errata_199())
-	{
-		return NRFX_USBD_EASYDMA_BUSY_REG ==
-			NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
-	}
-
-	return (uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE;
+	return NRFX_USBD_EASYDMA_BUSY_REG ==
+		NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
 }
 
 
@@ -999,17 +994,20 @@ static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 	nRFUsbdEmit(&evt);
 }
 
-static void nRFUsbdDmaRelease(void)
+static void nRFUsbdDmaRelease(uint8_t EpAddr)
 {
 	const uint32_t primask = __get_PRIMASK();
 	__disable_irq();
 
-	if (nrf52_errata_199())
+	// Ordinary and EP0 DMA retain the CFifo head until ENDEP. ISO is selected
+	// from its dedicated state and therefore has no CFifo entry to consume.
+	if (EpAddr != NRFX_USBD_DMA_EP_NONE &&
+		USB_ENDPADDR_NUM(EpAddr) != NRFX_USBD_ISO_EP_NO)
 	{
-		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
+		(void)CFifoGet(s_hQue);
 	}
 
-	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
+	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
 	__ISB();
 	__DSB();
 
@@ -1026,13 +1024,7 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 	__ISB();
 	__DSB();
 
-	// Nordic's errata 199 workaround marks EasyDMA busy before STARTEP.
-	if (nrf52_errata_199())
-	{
-		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
-	}
-
-	atomic_store(&s_DmaEpAddr, EpAddr);
+	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
 	*pTask = 1;
 	__ISB();
 	__DSB();
@@ -1040,34 +1032,60 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 	__set_PRIMASK(primask);
 }
 
+
+/**
+ * Resolve the single completed DMA from its retained CFifo head or dedicated
+ * ISO END event. Only one of these events can represent an active DMA.
+ */
+static bool nRFUsbdDmaComplete(uint8_t *pEpAddr)
+{
+	nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoPeek(s_hQue);
+	if (pHead != NULL && *nRFUsbdDmaEndEvent(pHead->EpAddr) != 0U)
+	{
+		*pEpAddr = pHead->EpAddr;
+		return true;
+	}
+
+	if (NRF_USBD->EVENTS_ENDISOIN != 0U)
+	{
+		*pEpAddr = USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO);
+		return true;
+	}
+
+	if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
+	{
+		*pEpAddr = NRFX_USBD_ISO_EP_NO;
+		return true;
+	}
+
+	return false;
+}
+
+
 static void nRFUsbdDmaWait(void)
 {
-	for (;;)
+	while (nRFUsbdDmaActive())
 	{
-		const uint8_t epAddr = (uint8_t)atomic_load(&s_DmaEpAddr);
-		if (epAddr == NRFX_USBD_DMA_EP_NONE)
-		{
-			return;
-		}
-
 		if (NRF_USBD->EVENTS_USBRESET != 0U)
 		{
-			nRFUsbdDmaRelease();
+			nRFUsbdDmaRelease(NRFX_USBD_DMA_EP_NONE);
 			return;
 		}
 
-		volatile uint32_t *pEvent = nRFUsbdDmaEndEvent(epAddr);
-		if (*pEvent == 0U)
+		uint8_t epAddr;
+		if (!nRFUsbdDmaComplete(&epAddr))
 		{
 			continue;
 		}
 
+		volatile uint32_t *pEvent = nRFUsbdDmaEndEvent(epAddr);
 		*pEvent = 0;
 		__ISB();
 		__DSB();
-		nRFUsbdDmaRelease();
+		nRFUsbdDmaRelease(epAddr);
 	}
 }
+
 
 static void nRFUsbdNoDmaTask(volatile uint32_t *pTask)
 {
@@ -1172,8 +1190,8 @@ static void nRFUsbdServicePending(void)
 	for (;;)
 	{
 		// BUSY is the active EasyDMA state. Keep interrupts disabled only
-		// through selection, dequeue, PTR/MAXCNT setup and TASKS_STARTEP so
-		// another context cannot select a second descriptor in that window.
+		// through head selection, PTR/MAXCNT setup and TASKS_STARTEP so
+		// another context cannot select a second transfer in that window.
 		const uint32_t state = DisableInterrupt();
 		if (nRFUsbdDmaActive())
 		{
@@ -1208,40 +1226,15 @@ static void nRFUsbdServicePending(void)
 			return;
 		}
 
-		// Requests are started in the order they were made. CFifoGet publishes
-		// the slot as free before returning its pointer; interrupts remain
-		// disabled until the descriptor is copied and its DMA task is started.
-		nRFUsbdQue_t que;
-		nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoGet(s_hQue);
-		const bool haveQue = pHead != NULL;
-		if (haveQue)
+		// Keep the head owned by the CFifo while EasyDMA uses it. ENDEP
+		// consumes exactly this entry, so the head itself is the active
+		// endpoint/direction record.
+		nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoPeek(s_hQue);
+		if (pHead != NULL)
 		{
-			que = *pHead;
-		}
-
-		if (haveQue)
-		{
-			const uint8_t epNum = USB_ENDPADDR_NUM(que.EpAddr);
-			if (nRFUsbdStartDmaNow(&que))
-			{
-				EnableInterrupt(state);
-				return;
-			}
-
-			nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum]
-				[USB_ENDPADDR_IS_IN(que.EpAddr) ? 1 : 0];
-			if (pXfer->Started)
-			{
-				pXfer->Started = false;
-				const uint16_t actualLen = pXfer->ActualLen;
-				EnableInterrupt(state);
-				nRFUsbdEmitXfer(que.EpAddr, actualLen,
-					USB_CTRLR_XFER_FAILED);
-				continue;
-			}
-
+			nRFUsbdStartDmaNow(pHead);
 			EnableInterrupt(state);
-			continue;
+			return;
 		}
 
 		const bool retry =
@@ -1395,18 +1388,12 @@ static void nRFUsbdResetState(void)
 	atomic_store(&s_IsoInReady, false);
 	atomic_store(&s_IsoOutReady, false);
 	s_IsoOutSize = 0U;
-	atomic_store(&s_DmaEpAddr, NRFX_USBD_DMA_EP_NONE);
-
-	if (nrf52_errata_199())
-	{
-		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
-	}
+	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
 }
 
 static void nRFUsbdAbortEp0(void)
 {
-	const uint8_t dmaEpAddr = (uint8_t)atomic_load(&s_DmaEpAddr);
-	if (dmaEpAddr != NRFX_USBD_DMA_EP_NONE && USB_ENDPADDR_NUM(dmaEpAddr) == 0U)
+	if (nRFUsbdDmaActive())
 	{
 		nRFUsbdDmaWait();
 	}
@@ -1773,7 +1760,7 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 		return;
 	}
 
-	if ((uint8_t)atomic_load(&s_DmaEpAddr) == EpAddr)
+	if (nRFUsbdDmaActive())
 	{
 		nRFUsbdDmaWait();
 	}
@@ -2000,9 +1987,9 @@ static uint32_t nRFUsbdCollectEvents(void)
 
 static void nRFUsbdBusReset(void)
 {
-	if ((uint8_t)atomic_load(&s_DmaEpAddr) != NRFX_USBD_DMA_EP_NONE)
+	if (nRFUsbdDmaActive())
 	{
-		nRFUsbdDmaRelease();
+		nRFUsbdDmaRelease(NRFX_USBD_DMA_EP_NONE);
 	}
 
 	NRF_USBD->EPOUTEN = 1UL;
@@ -2302,33 +2289,33 @@ static void nRFUsbdDrainXferComplete(void)
 
 extern "C" void USBD_IRQHandler(void)
 {
-	const uint8_t activeDma = (uint8_t)atomic_load(&s_DmaEpAddr);
-	if (activeDma != NRFX_USBD_DMA_EP_NONE)
+	if (nRFUsbdDmaActive())
 	{
 		// Most USBD registers cannot be read while EasyDMA owns the peripheral.
-		// Retire only the active DMA here; every other event remains latched for
-		// the normal collector after ownership is released. Data IN does not
-		// enable ENDEPIN: its EPDATA interrupt arrives after DMA has ended and
-		// observes the latched ENDEPIN event here.
+		// The retained CFifo head identifies ordinary/EP0 DMA; ENDISO identifies
+		// a dedicated ISO DMA. Other events remain latched until DMA releases.
 		const bool reset = NRF_USBD->EVENTS_USBRESET != 0U;
-		volatile uint32_t *pEndEvent = nRFUsbdDmaEndEvent(activeDma);
-		if (*pEndEvent == 0U && !reset)
+		uint8_t activeDma = NRFX_USBD_DMA_EP_NONE;
+		const bool complete = nRFUsbdDmaComplete(&activeDma);
+		if (!complete && !reset)
 		{
 			return;
 		}
 
 		// Leave an OUT/EP0 END event set for the normal event collector. A
 		// data IN END only releases DMA; transfer completion is still EPDATA.
-		if (*pEndEvent != 0U && USB_ENDPADDR_IS_IN(activeDma) &&
+		if (complete && USB_ENDPADDR_IS_IN(activeDma) &&
 			USB_ENDPADDR_NUM(activeDma) != 0U &&
 			USB_ENDPADDR_NUM(activeDma) != NRFX_USBD_ISO_EP_NO)
 		{
+			volatile uint32_t *pEndEvent =
+				nRFUsbdDmaEndEvent(activeDma);
 			*pEndEvent = 0;
 			__ISB();
 			__DSB();
 		}
 
-		nRFUsbdDmaRelease();
+		nRFUsbdDmaRelease(activeDma);
 	}
 
 	const uint32_t intStatus = nRFUsbdCollectEvents();
