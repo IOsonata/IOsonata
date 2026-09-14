@@ -2460,18 +2460,21 @@ extern "C" void USBD_IRQHandler(void)
 			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 	}
 
-	if (NRF_USBD->EVENTS_EPDATA != 0U)
+	if (NRF_USBD->EVENTS_EPDATA != 0U ||
+		(NRF_USBD->EPDATASTATUS & 0x00FE00FEUL) != 0U)
 	{
+		// Clear the event first so a new endpoint event remains observable.
+		// Service at most one endpoint per direction in this interrupt. Any
+		// remaining status bits are retained and serviced by a pending IRQ.
 		NRF_USBD->EVENTS_EPDATA = 0U;
 		const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
-		NRF_USBD->EPDATASTATUS = dataStatus;
-		__ISB();
-		__DSB();
+		uint32_t servicedStatus = dataStatus & 0x00010001UL;
 
 		const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
 		if (outData != 0U)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
+			servicedStatus |= 1UL << (epNum + 16U);
 			nRFUsbdQueueOutData((uint8_t)epNum);
 		}
 
@@ -2479,8 +2482,18 @@ extern "C" void USBD_IRQHandler(void)
 		if (inData != 0U)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(inData);
+			servicedStatus |= 1UL << epNum;
 			nRFUsbdQueueXferComplete((uint8_t)epNum,
 				(uint16_t)NRF_USBD->EPIN[epNum].AMOUNT);
+		}
+
+		NRF_USBD->EPDATASTATUS = servicedStatus;
+		__ISB();
+		__DSB();
+
+		if ((dataStatus & 0x00FE00FEUL & ~servicedStatus) != 0U)
+		{
+			NVIC_SetPendingIRQ(USBD_IRQn);
 		}
 	}
 
