@@ -2205,6 +2205,12 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 
 	const uint16_t amount = s_XferCompleteAmount[epNum][dir];
 
+	// Retire this record before invoking a completion handler. The handler may
+	// start the next transfer on the same endpoint from foreground; that new
+	// completion must be able to claim its bit even if its IRQ preempts us.
+	atomic_fetch_and(&s_XferCompleteFallback, ~(uint_fast32_t)bit);
+	atomic_fetch_and(&s_XferCompleteEvt, ~(uint_fast32_t)bit);
+
 	if (epNum == NRFX_USBD_ISO_EP_NO)
 	{
 		if ((epEvent & 0x80U) != 0U)
@@ -2231,8 +2237,6 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 		nRFUsbdHandleInData(epNum, amount);
 	}
 
-	atomic_fetch_and(&s_XferCompleteFallback, ~(uint_fast32_t)bit);
-	atomic_fetch_and(&s_XferCompleteEvt, ~(uint_fast32_t)bit);
 	nRFUsbdServicePending();
 }
 
@@ -2242,9 +2246,9 @@ static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 	const uint8_t dir = (EpEvent & 0x80U) != 0U ? 0U : 1U;
 	const uint32_t bit = nRFUsbdXferCompleteBit(EpEvent);
 
-	// The same endpoint cannot produce another completion until its deferred
-	// handler advances that endpoint's transfer state. Other endpoints may use
-	// EasyDMA after the current ENDEP releases the shared channel.
+	// One outstanding record per endpoint/direction is sufficient. Its bit is
+	// retired before the foreground callback can start that endpoint again;
+	// other endpoints may use EasyDMA after the current ENDEP releases it.
 	if ((atomic_fetch_or(&s_XferCompleteEvt, bit) & bit) != 0U)
 	{
 		return;
