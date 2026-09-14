@@ -93,10 +93,10 @@ SOFTWARE.
 // request/release needs the SoftDevice API; USB controller operation does not.
 #if defined(NRF52_SERIES) && \
 	(defined(SOFTDEVICE_PRESENT) || defined(S140))
-#define NRFX_USBD_SOFTDEVICE_CLOCK			1
+#define SOFTDEVICE_PRESENT			1
 #endif
 
-#ifdef NRFX_USBD_SOFTDEVICE_CLOCK
+#ifdef SOFTDEVICE_PRESENT
 #include "nrf_soc.h"
 #include "nrf_sdm.h"
 #include "nrf_error.h"
@@ -494,7 +494,7 @@ void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 	pReg->Handler(EpAddr, Event, Length, Result, pReg->pContext);
 }
 
-#ifdef NRFX_USBD_SOFTDEVICE_CLOCK
+#ifdef SOFTDEVICE_PRESENT
 /**
  * Whether a SoftDevice is programmed at all.
  *
@@ -532,7 +532,7 @@ static bool UsbdSdRunning(void)
 
 __attribute__((weak)) bool UsbdXtalRequest(void)
 {
-#ifdef NRFX_USBD_SOFTDEVICE_CLOCK
+#ifdef SOFTDEVICE_PRESENT
 	if (UsbdSdRunning())
 	{
 		uint32_t running = 0;
@@ -611,7 +611,7 @@ __attribute__((weak)) bool UsbdXtalRequest(void)
 
 __attribute__((weak)) void UsbdXtalRelease(void)
 {
-#ifdef NRFX_USBD_SOFTDEVICE_CLOCK
+#ifdef SOFTDEVICE_PRESENT
 	if (UsbdSdRunning())
 	{
 		(void)sd_clock_hfclk_release();
