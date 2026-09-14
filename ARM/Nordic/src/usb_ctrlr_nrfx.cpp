@@ -208,9 +208,9 @@ enum
 	NRFX_USBD_MAX_PACKET_SIZE = 64,
 	NRFX_USBD_ISO_MAX_PACKET_SIZE = 512,
 	NRFX_USBD_DMA_EP_NONE = 0xFFU,
-	NRFX_USBD_EP0_SETUP_IDLE = 0U,
-	NRFX_USBD_EP0_SETUP_PENDING,
-	NRFX_USBD_EP0_SETUP_ACTIVE,
+	NRFX_USBD_EP0_IDLE = 0U,
+	NRFX_USBD_EP0_PENDING,
+	NRFX_USBD_EP0_ACTIVE,
 };
 
 typedef struct __nRF_Usbd_Xfer
@@ -226,7 +226,7 @@ typedef struct __nRF_Usbd_Ctrlr
 {
 	nRFUsbdXfer_t Xfer[NRFX_USBD_EP_COUNT][2];
 	UsbCtrlrEvt_t SetupEvent;
-	atomic_uint_fast8_t SetupState;
+	atomic_uint_fast8_t Ep0State;
 	bool SofEnabled;
 	bool SetupDirIn;
 } nRFUsbdCtrlr_t;
@@ -1208,7 +1208,7 @@ static void nRFUsbdDmaRelease(uint8_t EpAddr)
 	// transaction releases the lock only when the final packet is complete.
 	if (EpAddr == NRFX_USBD_DMA_EP_NONE ||
 		USB_ENDPADDR_NUM(EpAddr) != 0U ||
-		atomic_load(&s_Ctrlr.SetupState) != NRFX_USBD_EP0_SETUP_ACTIVE)
+		atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_ACTIVE)
 	{
 		nRFUsbdDmaUnlock();
 	}
@@ -1277,8 +1277,8 @@ static void nRFUsbdDmaWait(void)
 	{
 		// EP0 keeps the errata register locked after ENDEP while it waits for
 		// the host acknowledgement. A forced stop may release that ownership.
-		if (atomic_load(&s_Ctrlr.SetupState) ==
-			NRFX_USBD_EP0_SETUP_ACTIVE && CFifoUsed(s_hEp0Que) == 0)
+		if (atomic_load(&s_Ctrlr.Ep0State) ==
+			NRFX_USBD_EP0_ACTIVE && CFifoUsed(s_hEp0Que) == 0)
 		{
 			nRFUsbdDmaUnlock();
 			return;
@@ -1400,7 +1400,7 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 static void nRFUsbdServiceEp0(void)
 {
 	const uint32_t state = DisableInterrupt();
-	if (atomic_load(&s_Ctrlr.SetupState) != NRFX_USBD_EP0_SETUP_ACTIVE)
+	if (atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_ACTIVE)
 	{
 		EnableInterrupt(state);
 		return;
@@ -1423,9 +1423,9 @@ static void nRFUsbdServiceEp0(void)
 			nRFUsbdEmitXfer(epAddr, 0U, USB_CTRLR_XFER_SUCCESS);
 		}
 
-		uint_fast8_t expected = NRFX_USBD_EP0_SETUP_ACTIVE;
-		(void)atomic_compare_exchange_strong(&s_Ctrlr.SetupState, &expected,
-			NRFX_USBD_EP0_SETUP_IDLE);
+		uint_fast8_t expected = NRFX_USBD_EP0_ACTIVE;
+		(void)atomic_compare_exchange_strong(&s_Ctrlr.Ep0State, &expected,
+			NRFX_USBD_EP0_IDLE);
 		return;
 	}
 
@@ -1455,9 +1455,9 @@ static void nRFUsbdServiceEp0(void)
 		{
 			nRFUsbdDmaUnlock();
 		}
-		uint_fast8_t expected = NRFX_USBD_EP0_SETUP_ACTIVE;
-		(void)atomic_compare_exchange_strong(&s_Ctrlr.SetupState, &expected,
-			NRFX_USBD_EP0_SETUP_IDLE);
+		uint_fast8_t expected = NRFX_USBD_EP0_ACTIVE;
+		(void)atomic_compare_exchange_strong(&s_Ctrlr.Ep0State, &expected,
+			NRFX_USBD_EP0_IDLE);
 	}
 
 	EnableInterrupt(state);
@@ -1465,7 +1465,7 @@ static void nRFUsbdServiceEp0(void)
 
 static void nRFUsbdServicePending(void)
 {
-	if (atomic_load(&s_Ctrlr.SetupState) != NRFX_USBD_EP0_SETUP_IDLE ||
+	if (atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE ||
 		atomic_load(&s_HostResumePending) ||
 		(atomic_load(&s_BusSuspended) && !atomic_load(&s_SuspendPending)))
 	{
@@ -1479,7 +1479,7 @@ static void nRFUsbdServicePending(void)
 		// another context cannot select a second transfer in that window.
 		const uint32_t state = DisableInterrupt();
 		if (nRFUsbdDmaActive() ||
-			atomic_load(&s_Ctrlr.SetupState) != NRFX_USBD_EP0_SETUP_IDLE)
+			atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE)
 		{
 			EnableInterrupt(state);
 			return;
@@ -1594,7 +1594,7 @@ static void nRFUsbdQueueOut(uint8_t EpNum)
 
 	nRFUsbdQueXfer(EpNum,
 				 (uint16_t)(pXfer->TotalLen - pXfer->ActualLen));
-	if (!nRFUsbdDeferFromInterrupt())
+	if (EpNum != 0U && !nRFUsbdDeferFromInterrupt())
 	{
 		nRFUsbdServicePending();
 	}
@@ -1615,7 +1615,7 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 	}
 
 	nRFUsbdQueXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN), length);
-	if (!nRFUsbdDeferFromInterrupt())
+	if (EpNum != 0U && !nRFUsbdDeferFromInterrupt())
 	{
 		nRFUsbdServicePending();
 	}
@@ -1624,26 +1624,18 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 static void nRFUsbdQueueEp0Status(void)
 {
 	atomic_store(&s_PendingEp0Status, true);
-	if (!nRFUsbdDeferFromInterrupt())
-	{
-		nRFUsbdServicePending();
-	}
 }
 
 static void nRFUsbdQueueEp0RcvOut(void)
 {
 	atomic_store(&s_PendingEp0RcvOut, true);
-	if (!nRFUsbdDeferFromInterrupt())
-	{
-		nRFUsbdServicePending();
-	}
 }
 
 static void nRFUsbdResetState(void)
 {
 	memset(s_Ctrlr.Xfer, 0, sizeof(s_Ctrlr.Xfer));
 	memset(&s_Ctrlr.SetupEvent, 0, sizeof(s_Ctrlr.SetupEvent));
-	atomic_store(&s_Ctrlr.SetupState, NRFX_USBD_EP0_SETUP_IDLE);
+	atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_IDLE);
 	s_Ctrlr.SofEnabled = false;
 	s_Ctrlr.SetupDirIn = false;
 
@@ -1666,8 +1658,8 @@ static void nRFUsbdResetState(void)
 
 static void nRFUsbdAbortEp0(void)
 {
-	// The SETUP processor enters only after the completion interrupt releases
-	// EasyDMA, then holds SetupState until the control request is dispatched.
+	// The SETUP processor enters only after the previous DMA is complete.
+	// Ep0State then owns the scheduler through the entire control transaction.
 	nRFUsbdQueRemoveEp(0U);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
@@ -1696,7 +1688,7 @@ static void nRFUsbdTryEnterLowPower(void)
 		!atomic_load(&s_SuspendPending) ||
 		atomic_load(&s_RemoteWakePending) ||
 		atomic_load(&s_HostResumePending) ||
-		atomic_load(&s_Ctrlr.SetupState) != NRFX_USBD_EP0_SETUP_IDLE ||
+		atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE ||
 		nRFUsbdDmaActive() ||
 		CFifoUsed(s_hQue) > 0 ||
 		atomic_load(&s_PendingEp0Status) ||
@@ -1717,7 +1709,7 @@ static void nRFUsbdTryEnterLowPower(void)
 		!atomic_load(&s_SuspendPending) ||
 		atomic_load(&s_RemoteWakePending) ||
 		atomic_load(&s_HostResumePending) ||
-		atomic_load(&s_Ctrlr.SetupState) != NRFX_USBD_EP0_SETUP_IDLE ||
+		atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE ||
 		nRFUsbdDmaActive() ||
 		CFifoUsed(s_hQue) > 0 ||
 		atomic_load(&s_PendingEp0Status) ||
@@ -2280,9 +2272,9 @@ static void nRFUsbdProcessEp0Setup(uint32_t Evt, void *pContext)
 			continue;
 		}
 
-		uint_fast8_t expected = NRFX_USBD_EP0_SETUP_PENDING;
-		if (!atomic_compare_exchange_strong(&s_Ctrlr.SetupState, &expected,
-			NRFX_USBD_EP0_SETUP_ACTIVE))
+		uint_fast8_t expected = NRFX_USBD_EP0_PENDING;
+		if (!atomic_compare_exchange_strong(&s_Ctrlr.Ep0State, &expected,
+			NRFX_USBD_EP0_ACTIVE))
 		{
 			EnableInterrupt(irqState);
 			return;
@@ -2599,8 +2591,8 @@ extern "C" void USBD_IRQHandler(void)
 			// locked while no EasyDMA task is running. EP0DATADONE or a new
 			// SETUP must still be processed during that ownership interval.
 			const bool ep0Retained =
-				atomic_load(&s_Ctrlr.SetupState) ==
-					NRFX_USBD_EP0_SETUP_ACTIVE &&
+				atomic_load(&s_Ctrlr.Ep0State) ==
+					NRFX_USBD_EP0_ACTIVE &&
 				CFifoUsed(s_hEp0Que) == 0;
 			if (!ep0Retained)
 			{
@@ -2740,15 +2732,15 @@ extern "C" void USBD_IRQHandler(void)
 		// A new SETUP terminates the previous control transaction. If EP0 was
 		// retaining the errata lock between packets, release that old ownership
 		// before the new setup processor waits for EasyDMA.
-		if (atomic_load(&s_Ctrlr.SetupState) ==
-			NRFX_USBD_EP0_SETUP_ACTIVE && nRFUsbdDmaActive() &&
+		if (atomic_load(&s_Ctrlr.Ep0State) ==
+			NRFX_USBD_EP0_ACTIVE && nRFUsbdDmaActive() &&
 			CFifoUsed(s_hEp0Que) == 0)
 		{
 			nRFUsbdDmaUnlock();
 		}
 
 		s_Ctrlr.SetupEvent = evt;
-		atomic_store(&s_Ctrlr.SetupState, NRFX_USBD_EP0_SETUP_PENDING);
+		atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_PENDING);
 		(void)AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEp0Setup);
 	}
 	else
