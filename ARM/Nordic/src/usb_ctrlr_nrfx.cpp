@@ -262,12 +262,6 @@ alignas(4) static uint8_t s_QueMem[
 	CFIFO_TOTAL_MEMSIZE(NRFUSBD_QUE_DEPTH, sizeof(nRFUsbdQue_t))];
 static hCFifo_t s_hQue;
 
-// One bit per endpoint and direction remains set from ISR capture through
-// foreground completion processing. This tracks deferred USB completions.
-// EasyDMA ownership is tracked by the hardware BUSY register. The retained
-// CFifo head identifies ordinary and EP0 DMA until ENDEP; the ENDISO event
-// identifies a dedicated ISO DMA.
-
 // EP0 accepts descriptor and class buffers from the generic USB layer. Those
 // buffers may be const flash or have arbitrary alignment, while nRF52 USBD
 // EasyDMA requires controller-visible, word-aligned RAM. Stage one control
