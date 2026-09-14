@@ -1379,6 +1379,11 @@ bool nRFUsbdIsoPending(void)
 
 static void nRFUsbdServiceIso(void)
 {
+	if (!nRFUsbdIsoPending())
+	{
+		return;
+	}
+
 	const uint32_t state = DisableInterrupt();
 	if (atomic_load(&s_Ctrlr.Ep0State) == NRFX_USBD_EP0_IDLE &&
 		!atomic_load(&s_HostResumePending) &&
