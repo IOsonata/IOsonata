@@ -2618,10 +2618,6 @@ extern "C" void USBD_IRQHandler(void)
 	nRFUsbdTryRemoteWake();
 	nRFUsbdTryEnterLowPower();
 
-	// Starting EasyDMA is the last USBD operation in this interrupt. Endpoint
-	// callbacks only queued requests, so no handler below the start can touch
-	// controller registers while the shared DMA engine owns them.
-	nRFUsbdServicePending();
 }
 
 /**
