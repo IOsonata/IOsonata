@@ -2792,6 +2792,16 @@ extern "C" void USBD_IRQHandler(void)
 	}
 
 	nRFUsbdTryRemoteWake();
+
+	// ENDEP released the shared EasyDMA channel above. Start one request that
+	// was already queued behind it without waiting for foreground AppEvt
+	// processing. Endpoint completion callbacks remain deferred.
+	if (completedDma != NRFX_USBD_DMA_EP_NONE && !nRFUsbdDmaActive())
+	{
+		nRFUsbdServiceIso();
+		nRFUsbdServicePending();
+	}
+
 	nRFUsbdTryEnterLowPower();
 
 }
