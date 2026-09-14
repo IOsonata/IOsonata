@@ -268,7 +268,6 @@ static hCFifo_t s_hQue;
 // CFifo head identifies ordinary and EP0 DMA until ENDEP; the ENDISO event
 // identifies a dedicated ISO DMA.
 static atomic_uint_fast32_t s_XferCompleteEvt;
-static atomic_uint_fast32_t s_PendingOutData;
 
 // EP0 accepts descriptor and class buffers from the generic USB layer. Those
 // buffers may be const flash or have arbitrary alignment, while nRF52 USBD
@@ -1567,7 +1566,6 @@ static void nRFUsbdResetState(void)
 
 	CFifoFlush(s_hQue);
 	atomic_store(&s_XferCompleteEvt, 0U);
-	atomic_store(&s_PendingOutData, 0U);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 	atomic_store(&s_BusSuspended, false);
@@ -1594,7 +1592,6 @@ static void nRFUsbdAbortEp0(void)
 	const uint_fast32_t ep0CompletionMask =
 		(uint_fast32_t)1U | ((uint_fast32_t)1U << 16U);
 	atomic_fetch_and(&s_XferCompleteEvt, ~ep0CompletionMask);
-	atomic_fetch_and(&s_PendingOutData, ~(uint_fast32_t)1U);
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 
@@ -2442,12 +2439,6 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 		// replaying OUT-ready and starting the next DMA into that buffer.
 		nRFUsbdHandleOutEnd(epNum, amount);
 		nRFUsbdRetireXferComplete(bit);
-		const uint_fast32_t outDataBit = (uint_fast32_t)1U << epNum;
-		if ((atomic_fetch_and(&s_PendingOutData, ~outDataBit) &
-			 outDataBit) != 0U)
-		{
-			nRFUsbdHandleOutData(epNum);
-		}
 	}
 	else
 	{
@@ -2456,6 +2447,18 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	}
 
 	nRFUsbdServicePending();
+}
+
+static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
+{
+	(void)pContext;
+	nRFUsbdHandleOutData((uint8_t)Evt);
+	nRFUsbdServicePending();
+}
+
+static void nRFUsbdQueueOutData(uint8_t EpNum)
+{
+	(void)AppEvtHandlerQue(EpNum, NULL, nRFUsbdProcessOutData);
 }
 
 static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
@@ -2591,7 +2594,7 @@ extern "C" void USBD_IRQHandler(void)
 			const uint_fast32_t bit = (uint_fast32_t)1U << epNum;
 			if ((atomic_load(&s_XferCompleteEvt) & bit) != 0U)
 			{
-				atomic_fetch_or(&s_PendingOutData, bit);
+				nRFUsbdQueueOutData((uint8_t)epNum);
 			}
 			else
 			{
@@ -2644,7 +2647,7 @@ extern "C" void USBD_IRQHandler(void)
 			}
 			else if ((atomic_load(&s_XferCompleteEvt) & 1U) != 0U)
 			{
-				atomic_fetch_or(&s_PendingOutData, 1U);
+				nRFUsbdQueueOutData(0U);
 			}
 			else
 			{
