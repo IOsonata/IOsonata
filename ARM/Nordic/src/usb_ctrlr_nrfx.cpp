@@ -2657,7 +2657,7 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			nRFUsbdDmaUnlock();
 		}
-		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
+		//NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
 
 		s_Ctrlr.SetupEvent = evt;
 		atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_PENDING);
@@ -4111,6 +4111,13 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, uint16_t Length)
 	}
 
 	int cnt = 0;
+
+	if (Length <= 0)
+	{
+		NRF_USBD->TASKS_EP0STATUS = 1;
+
+		return 0;
+	}
 
 	while (Length > 0)
 	{

@@ -806,7 +806,7 @@ static bool UsbCoreStartIn(const uint8_t *pData, uint16_t Available)
 	s_CtrlState = USB_CTRL_DATA_IN;
 
 #if 1
-	if (UsbCtrlrEp0Send(s_UsbDevNo, s_CtrlData, sendLen) <= 0)
+	if (UsbCtrlrEp0Send(s_UsbDevNo, s_CtrlData, sendLen) < 0)
 	{
 		return false;
 	}
