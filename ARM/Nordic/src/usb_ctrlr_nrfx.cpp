@@ -56,7 +56,6 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdatomic.h>
 #include <string.h>
-#include <stdio.h>
 
 #include "nrf.h"
 #include "nrf_peripherals.h"
@@ -2600,8 +2599,6 @@ extern "C" void USBD_IRQHandler(void)
 			evt.Setup.bRequest == USB_REQ_SET_ADDRESS;
 		if (setAddress)
 		{
-			printf("EP0 ADDRESS IRQ value=%u\n",
-				(unsigned)(evt.Setup.wValue & 0x7FU));
 			UsbCtrlrEvt_t addrEvt = {};
 			addrEvt.Type = USB_CTRLR_EVT_ADDRESS;
 			addrEvt.Address = (uint8_t)(evt.Setup.wValue & 0x7FU);
