@@ -2702,11 +2702,13 @@ extern "C" void USBD_IRQHandler(void)
 		const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
 		uint32_t servicedStatus = dataStatus & 0x00010001UL;
 
-		const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
-		if (outData != 0U)
+		uint32_t outData = (dataStatus >> 16U) & 0xFEU;
+		while (outData != 0U)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
-			servicedStatus |= 1UL << (epNum + 16U);
+			const uint32_t epBit = 1UL << epNum;
+			outData &= ~epBit;
+			servicedStatus |= epBit << 16U;
 			if (!nRFUsbdQueueOutDataFromInterrupt((uint8_t)epNum))
 			{
 				nRFUsbdQueueOutData((uint8_t)epNum);
