@@ -1486,7 +1486,6 @@ void UsbDevProcessEvent(int DevNo, const UsbCtrlrEvt_t *pEvt)
 			break;
 
 		case USB_CTRLR_EVT_ADDRESS:
-			printf("EP0 ADDRESS CORE value=%u\n", (unsigned)pEvt->Address);
 			s_Address = pEvt->Address;
 			break;
 
