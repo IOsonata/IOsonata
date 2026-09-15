@@ -1547,16 +1547,22 @@ static void nRFUsbdServicePending(void)
  * off because CFifoPut publishes the slot before the caller writes it, and
  * the interrupt is the other producer.
  */
-static void nRFUsbdQueXfer(uint8_t EpAddr, uint16_t Len)
+static bool nRFUsbdQueXfer(uint8_t EpAddr, uint16_t Len)
 {
 	const uint32_t state = DisableInterrupt();
 	hCFifo_t hQue = USB_ENDPADDR_NUM(EpAddr) == 0U ? s_hEp0Que : s_hQue;
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(hQue);
+	if (pQue == NULL)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
 
 	pQue->EpAddr = EpAddr;
 	pQue->Len = Len;
 
 	EnableInterrupt(state);
+	return true;
 }
 
 /** Remove one endpoint number without disturbing the order of other work. */
@@ -2487,11 +2493,21 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 
 	(void)pContext;
 
-	nRFUsbdHandleOutData(epNum);
-	if (epNum == 0U)
+	if (epNum != 0U)
 	{
-		nRFUsbdServiceEp0();
+		if (!nRFUsbdQueXfer(epNum, nRFUsbdMps(epNum)))
+		{
+			// Keep exactly one retry alive until the shared DMA CFifo has
+			// room. AppEvt processes it on a later foreground pass.
+			(void)AppEvtHandlerQue(Evt, NULL, nRFUsbdProcessOutData);
+			return;
+		}
+		nRFUsbdServicePending();
+		return;
 	}
+
+	nRFUsbdHandleOutData(0U);
+	nRFUsbdServiceEp0();
 	nRFUsbdServiceIso();
 	nRFUsbdServicePending();
 }
@@ -2695,8 +2711,11 @@ extern "C" void USBD_IRQHandler(void)
 			outData &= ~epBit;
 			servicedStatus |= epBit << 16U;
 
-			nRFUsbdQueXfer((uint8_t)epNum,
-				nRFUsbdMps((uint8_t)epNum));
+			if (!nRFUsbdQueXfer((uint8_t)epNum,
+				nRFUsbdMps((uint8_t)epNum)))
+			{
+				nRFUsbdQueueOutData((uint8_t)epNum);
+			}
 		}
 
 		const uint32_t inData = dataStatus & 0xFEU;
