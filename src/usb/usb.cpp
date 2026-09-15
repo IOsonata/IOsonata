@@ -46,7 +46,6 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <string.h>
-#include <stdio.h>
 
 #include "app_evt_handler.h"
 #include "usb/usb.h"
@@ -105,6 +104,9 @@ static bool s_RemoteWakeup;
 static uint8_t s_Address;
 static uint8_t s_PendingAddress;
 static bool s_AddressPending;
+
+// Temporary zero-I/O EP0 diagnostic. Inspect through SWD.
+volatile uint32_t g_UsbCoreTrace;
 static uint8_t s_Configuration;
 static uint8_t s_NumInterfaces;
 static uint8_t s_Alternate[USB_CORE_INTRF_MAXCNT];
@@ -735,10 +737,8 @@ static bool UsbCoreHandleClassRequest(void);
 
 static void UsbCoreStallControl(void)
 {
-	printf("EP0 STALL rt=%02x r=%02x v=%04x address=%u config=%u\n",
-		(unsigned)s_Setup.bmRequestType, (unsigned)s_Setup.bRequest,
-		(unsigned)s_Setup.wValue, (unsigned)s_Address,
-		(unsigned)s_Configuration);
+	g_UsbCoreTrace = 0xF0000000UL |
+		((uint32_t)s_Setup.bRequest << 16U) | s_Setup.wValue;
 	UsbCoreAbortControl();
 	UsbCtrlrEpStall(s_UsbDevNo, 0);
 }
@@ -1111,8 +1111,8 @@ static bool UsbCoreHandleFeature(bool Set)
 
 static bool UsbCoreHandleSetConfiguration(void)
 {
-	printf("EP0 CONFIG CORE value=%u address=%u\n",
-		(unsigned)s_Setup.wValue, (unsigned)s_Address);
+	g_UsbCoreTrace = 0xC1000000UL |
+		((uint32_t)s_Address << 8U) | (uint8_t)s_Setup.wValue;
 	if (UsbCoreDirIn(&s_Setup) ||
 		UsbCoreRecipient(&s_Setup) != USB_REQTYPE_DEVICE ||
 		s_Setup.wIndex != 0 || s_Setup.wLength != 0 ||
@@ -1126,7 +1126,7 @@ static bool UsbCoreHandleSetConfiguration(void)
 		return false;
 	}
 
-	printf("EP0 CONFIG OK value=%u\n", (unsigned)s_Setup.wValue);
+	g_UsbCoreTrace = 0xC2000000UL | (uint8_t)s_Setup.wValue;
 	return UsbCoreStartStatus();
 }
 
@@ -1489,8 +1489,9 @@ void UsbDevProcessEvent(int DevNo, const UsbCtrlrEvt_t *pEvt)
 			break;
 
 		case USB_CTRLR_EVT_ADDRESS:
-			printf("EP0 ADDRESS CORE value=%u\n", (unsigned)pEvt->Address);
+			g_UsbCoreTrace = 0xB1000000UL | pEvt->Address;
 			s_Address = pEvt->Address;
+			g_UsbCoreTrace = 0xB2000000UL | pEvt->Address;
 			break;
 
 		default:
