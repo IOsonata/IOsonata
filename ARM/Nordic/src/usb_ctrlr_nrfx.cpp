@@ -2617,11 +2617,7 @@ extern "C" void USBD_IRQHandler(void)
 		__ISB();
 		__DSB();
 
-		if (!AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEP0Setup))
-		{
-			// Do not lose SETUP if the application event queue is full.
-			nRFUsbdProcessEP0Setup(0U, NULL);
-		}
+		(void)AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEP0Setup);
 
 	}
 
