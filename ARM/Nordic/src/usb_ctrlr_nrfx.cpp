@@ -56,7 +56,6 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdatomic.h>
 #include <string.h>
-#include <stdio.h>
 
 #include "nrf.h"
 #include "nrf_peripherals.h"
@@ -212,7 +211,6 @@ enum
 	NRFX_USBD_XFER_EVT_OUT = 0x80U,
 	NRFX_USBD_XFER_EVT_BUF1 = 0x40U,
 	NRFX_USBD_EP0_IDLE = 0U,
-	NRFX_USBD_EP0_PENDING,
 	NRFX_USBD_EP0_ACTIVE,
 	NRFX_USBD_ISO_OUT_OPEN = 1U,
 	NRFX_USBD_ISO_IN_OPEN = 2U,
@@ -236,7 +234,6 @@ typedef struct __nRF_Usbd_Ctrlr
 {
 	nRFUsbdEp0Stage_t Ep0[2];
 	nRFUsbdIsoReq_t Iso[2];
-	UsbCtrlrEvt_t SetupEvent;
 	atomic_uint_fast8_t Ep0State;
 	bool SofEnabled;
 	bool SetupDirIn;
@@ -1627,7 +1624,6 @@ static void nRFUsbdResetState(void)
 {
 	memset(s_Ctrlr.Ep0, 0, sizeof(s_Ctrlr.Ep0));
 	memset(s_Ctrlr.Iso, 0, sizeof(s_Ctrlr.Iso));
-	memset(&s_Ctrlr.SetupEvent, 0, sizeof(s_Ctrlr.SetupEvent));
 	atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_IDLE);
 	s_Ctrlr.SofEnabled = false;
 	s_Ctrlr.SetupDirIn = false;
@@ -2239,74 +2235,6 @@ static void nRFUsbdBusReset(void)
 	nRFUsbdResetState();
 }
 
-static void nRFUsbdProcessEp0Setup(uint32_t Evt, void *pContext)
-{
-	(void)Evt;
-	(void)pContext;
-
-	UsbCtrlrEvt_t evt;
-	for (;;)
-	{
-		// Interrupts remain enabled while the active DMA finishes. Only its
-		// completion interrupt releases the shared EasyDMA engine.
-		while (nRFUsbdDmaActive())
-		{
-		}
-
-		const uint32_t irqState = DisableInterrupt();
-		if (nRFUsbdDmaActive())
-		{
-			EnableInterrupt(irqState);
-			continue;
-		}
-
-		uint_fast8_t expected = NRFX_USBD_EP0_PENDING;
-		if (!atomic_compare_exchange_strong(&s_Ctrlr.Ep0State, &expected,
-			NRFX_USBD_EP0_ACTIVE))
-		{
-			EnableInterrupt(irqState);
-			return;
-		}
-
-		// The ISR may capture a later SETUP while this one is processed. Work
-		// from a private copy so the later AppEvt can abort this transaction.
-		evt = s_Ctrlr.SetupEvent;
-		s_Ctrlr.SetupDirIn =
-			(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0U;
-		EnableInterrupt(irqState);
-		break;
-	}
-
-	nRFUsbdHostResumeDetected();
-	nRFUsbdAbortEp0();
-
-	const bool setAddress =
-		(evt.Setup.bmRequestType &
-		 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0U &&
-		evt.Setup.bRequest == USB_REQ_SET_ADDRESS;
-
-	if (setAddress)
-	{
-		printf("EP0 ADDRESS APP value=%u\n",
-			(unsigned)(evt.Setup.wValue & 0x7FU));
-		UsbCtrlrEvt_t addrEvt = {};
-		addrEvt.Type = USB_CTRLR_EVT_ADDRESS;
-		addrEvt.Address = (uint8_t)(evt.Setup.wValue & 0x7FU);
-		nRFUsbdEmit(&addrEvt);
-	}
-	else
-	{
-		nRFUsbdEmit(&evt);
-	}
-
-	// UsbDevProcessEvent queued the EP0 data or status stage while EP0 owned
-	// the scheduler. Start only EP0 here and retain ownership until its final
-	// packet completes.
-	//nRFUsbdServiceEp0();
-	//nRFUsbdServiceIso();
-	//nRFUsbdStartNextDma();
-}
-
 static void nRFUsbdHandleOutEnd(uint8_t EpNum, uint16_t TransferLen,
 								 uint8_t *pData = NULL)
 {
@@ -2660,14 +2588,26 @@ extern "C" void USBD_IRQHandler(void)
 		}
 		//NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
 
-		s_Ctrlr.SetupEvent = evt;
-		atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_PENDING);
-		const bool queued =
-			AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEp0Setup);
-		if (evt.Setup.bRequest == USB_REQ_SET_ADDRESS)
+		nRFUsbdHostResumeDetected();
+		nRFUsbdAbortEp0();
+		s_Ctrlr.SetupDirIn =
+			(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0U;
+		atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_ACTIVE);
+
+		const bool setAddress =
+			(evt.Setup.bmRequestType &
+			 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0U &&
+			evt.Setup.bRequest == USB_REQ_SET_ADDRESS;
+		if (setAddress)
 		{
-			printf("EP0 ADDRESS IRQ value=%u queued=%u\n",
-				(unsigned)(evt.Setup.wValue & 0x7FU), (unsigned)queued);
+			UsbCtrlrEvt_t addrEvt = {};
+			addrEvt.Type = USB_CTRLR_EVT_ADDRESS;
+			addrEvt.Address = (uint8_t)(evt.Setup.wValue & 0x7FU);
+			nRFUsbdEmit(&addrEvt);
+		}
+		else
+		{
+			nRFUsbdEmit(&evt);
 		}
 	}
 
