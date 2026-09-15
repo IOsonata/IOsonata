@@ -1536,45 +1536,6 @@ static void nRFUsbdServicePending(void)
 }
 
 /**
- * Launch an OUT request that is already at the DMA FIFO head. EPDATA uses
- * this before deferring DRDY so an already-prepared receive rolls directly
- * into EasyDMA. A different endpoint or direction retains FIFO order and is
- * handled by the normal AppEvt path.
- */
-static bool nRFUsbdTryStartQueuedOut(uint8_t EpNum)
-{
-	if (atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE ||
-		atomic_load(&s_HostResumePending) ||
-		nRFUsbdIsoPending() ||
-		(atomic_load(&s_BusSuspended) && !atomic_load(&s_SuspendPending)) ||
-		NRF_USBD->EVENTS_EP0SETUP != 0U ||
-		(NRF_USBD->EVENTS_SOF != 0U && atomic_load(&s_IsoOpen) != 0U))
-	{
-		return false;
-	}
-
-	const uint32_t state = DisableInterrupt();
-	if (nRFUsbdDmaActive() || nRFUsbdIsoPending() ||
-		atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE)
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-
-	nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoPeek(s_hQue);
-	if (pHead == NULL || USB_ENDPADDR_IS_IN(pHead->EpAddr) ||
-		USB_ENDPADDR_NUM(pHead->EpAddr) != EpNum)
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-
-	nRFUsbdStartDmaNow(pHead);
-	EnableInterrupt(state);
-	return true;
-}
-
-/**
  * Put one DMA request on the queue. Filling the block runs with interrupts
  * off because CFifoPut publishes the slot before the caller writes it, and
  * the interrupt is the other producer.
@@ -2718,40 +2679,27 @@ extern "C" void USBD_IRQHandler(void)
 		NRF_USBD->EVENTS_EPDATA = 0U;
 		const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
 		uint32_t servicedStatus = dataStatus & 0x00010001UL;
-		uint8_t outEpNum = NRFX_USBD_DMA_EP_NONE;
-		uint8_t inEpNum = NRFX_USBD_DMA_EP_NONE;
 
 		const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
 		if (outData != 0U)
 		{
-			outEpNum = (uint8_t)(31U - (uint32_t)__CLZ(outData));
-			servicedStatus |= 1UL << (outEpNum + 16U);
+			const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
+			servicedStatus |= 1UL << (epNum + 16U);
+			nRFUsbdQueueOutData((uint8_t)epNum);
 		}
 
 		const uint32_t inData = dataStatus & 0xFEU;
 		if (inData != 0U)
 		{
-			inEpNum = (uint8_t)(31U - (uint32_t)__CLZ(inData));
-			servicedStatus |= 1UL << inEpNum;
+			const uint32_t epNum = 31U - (uint32_t)__CLZ(inData);
+			servicedStatus |= 1UL << epNum;
+			nRFUsbdQueueXferComplete((uint8_t)epNum,
+				(uint16_t)NRF_USBD->EPIN[epNum].AMOUNT);
 		}
 
-		// Acknowledge the selected status bits before starting OUT EasyDMA so
-		// a later packet cannot be cleared as part of this interrupt.
 		NRF_USBD->EPDATASTATUS = servicedStatus;
 		__ISB();
 		__DSB();
-
-		if (outEpNum != NRFX_USBD_DMA_EP_NONE &&
-			!nRFUsbdTryStartQueuedOut(outEpNum))
-		{
-			nRFUsbdQueueOutData(outEpNum);
-		}
-
-		if (inEpNum != NRFX_USBD_DMA_EP_NONE)
-		{
-			nRFUsbdQueueXferComplete(inEpNum,
-				(uint16_t)NRF_USBD->EPIN[inEpNum].AMOUNT);
-		}
 
 		if ((dataStatus & 0x00FE00FEUL & ~servicedStatus) != 0U)
 		{
