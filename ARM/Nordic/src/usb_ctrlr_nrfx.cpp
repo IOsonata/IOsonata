@@ -2300,9 +2300,9 @@ static void nRFUsbdProcessEp0Setup(uint32_t Evt, void *pContext)
 	// UsbDevProcessEvent queued the EP0 data or status stage while EP0 owned
 	// the scheduler. Start only EP0 here and retain ownership until its final
 	// packet completes.
-	nRFUsbdServiceEp0();
-	nRFUsbdServiceIso();
-	nRFUsbdStartNextDma();
+	//nRFUsbdServiceEp0();
+	//nRFUsbdServiceIso();
+	//nRFUsbdStartNextDma();
 }
 
 static void nRFUsbdHandleOutEnd(uint8_t EpNum, uint16_t TransferLen,
@@ -2657,6 +2657,7 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			nRFUsbdDmaUnlock();
 		}
+		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
 
 		s_Ctrlr.SetupEvent = evt;
 		atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_PENDING);

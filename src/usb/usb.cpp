@@ -805,10 +805,17 @@ static bool UsbCoreStartIn(const uint8_t *pData, uint16_t Available)
 		(sendLen % s_CoreCfg.Ep0Mps) == 0;
 	s_CtrlState = USB_CTRL_DATA_IN;
 
+#if 1
+	if (UsbCtrlrEp0Send(s_UsbDevNo, s_CtrlData, sendLen) <= 0)
+	{
+		return false;
+	}
+#else
 	if (!UsbCtrlrEp0Xfer(s_UsbDevNo, USB_ENDPADDR_DIR_IN, s_CtrlData, sendLen))
 	{
 		return false;
 	}
+#endif
 
 	return true;
 }
