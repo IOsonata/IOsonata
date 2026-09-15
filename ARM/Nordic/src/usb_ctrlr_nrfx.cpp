@@ -2393,7 +2393,12 @@ static bool nRFUsbdQueueOutDataFromInterrupt(uint8_t EpNum)
 		return false;
 	}
 
-	return nRFUsbRegDataEpXfer(EpNum, nRFUsbdMps(EpNum));
+	const uint16_t length = nRFUsbdMps(EpNum);
+	pXfer->TotalLen = length;
+	pXfer->ActualLen = 0U;
+	pXfer->Started = true;
+	nRFUsbdQueXfer(EpNum, length);
+	return true;
 }
 
 static void nRFUsbdHandleInData(uint8_t EpNum, uint16_t TransferLen)
@@ -2703,16 +2708,28 @@ extern "C" void USBD_IRQHandler(void)
 		uint32_t servicedStatus = dataStatus & 0x00010001UL;
 
 		uint32_t outData = (dataStatus >> 16U) & 0xFEU;
+		bool outQueued = false;
 		while (outData != 0U)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
 			const uint32_t epBit = 1UL << epNum;
 			outData &= ~epBit;
 			servicedStatus |= epBit << 16U;
-			if (!nRFUsbdQueueOutDataFromInterrupt((uint8_t)epNum))
+			if (nRFUsbdQueueOutDataFromInterrupt((uint8_t)epNum))
+			{
+				outQueued = true;
+			}
+			else
 			{
 				nRFUsbdQueueOutData((uint8_t)epNum);
 			}
+		}
+
+		// Populate the DMA CFifo with every ready OUT endpoint first. Then
+		// select and start only its head through the shared EasyDMA service.
+		if (outQueued)
+		{
+			nRFUsbdServicePending();
 		}
 
 		const uint32_t inData = dataStatus & 0xFEU;
