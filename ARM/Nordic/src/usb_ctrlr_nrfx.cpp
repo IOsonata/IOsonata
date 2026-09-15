@@ -1496,50 +1496,25 @@ static void nRFUsbdServiceEp0(void)
 	EnableInterrupt(state);
 }
 
-static void nRFUsbdServicePending(void)
+static void nRFUsbdStartNextDma(void)
 {
-	if (atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE ||
-		atomic_load(&s_HostResumePending) ||
-		nRFUsbdIsoPending() ||
-		(atomic_load(&s_BusSuspended) && !atomic_load(&s_SuspendPending)))
+	// One EasyDMA channel consumes one head from the shared ordinary IN/OUT
+	// CFifo. EP0 and a ready ISO interval retain their dedicated priority.
+	const uint32_t state = DisableInterrupt();
+	if (!nRFUsbdDmaActive() &&
+		atomic_load(&s_Ctrlr.Ep0State) == NRFX_USBD_EP0_IDLE &&
+		!nRFUsbdIsoPending() &&
+		!atomic_load(&s_HostResumePending) &&
+		(!atomic_load(&s_BusSuspended) ||
+		 atomic_load(&s_SuspendPending)))
 	{
-		return;
-	}
-
-	for (;;)
-	{
-		// BUSY is the active EasyDMA state. Keep interrupts disabled only
-		// through head selection, PTR/MAXCNT setup and TASKS_STARTEP so
-		// another context cannot select a second transfer in that window.
-		const uint32_t state = DisableInterrupt();
-		if (nRFUsbdDmaActive() || nRFUsbdIsoPending() ||
-			atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE)
-		{
-			EnableInterrupt(state);
-			return;
-		}
-
-		// Keep the head owned by the CFifo while EasyDMA uses it. ENDEP
-		// consumes exactly this entry, so the head itself is the active
-		// endpoint/direction record.
 		nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoPeek(s_hQue);
 		if (pHead != NULL)
 		{
 			nRFUsbdStartDmaNow(pHead);
-			EnableInterrupt(state);
-			return;
 		}
-
-		const bool retry = CFifoUsed(s_hQue) > 0;
-		EnableInterrupt(state);
-
-		if (retry)
-		{
-			continue;
-		}
-
-		return;
 	}
+	EnableInterrupt(state);
 }
 
 /**
@@ -1604,7 +1579,7 @@ static void nRFUsbdQueueOut(uint8_t EpNum)
 				 (uint16_t)(pXfer->TotalLen - pXfer->ActualLen));
 	if (EpNum != 0U)
 	{
-		nRFUsbdServicePending();
+		nRFUsbdStartNextDma();
 	}
 }
 
@@ -1625,7 +1600,7 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 	nRFUsbdQueXfer((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN), length);
 	if (EpNum != 0U)
 	{
-		nRFUsbdServicePending();
+		nRFUsbdStartNextDma();
 	}
 }
 
@@ -2162,7 +2137,7 @@ bool nRFUsbRegDataEpXfer(uint8_t EpAddr, uint16_t Length)
 	pXfer->Started = true;
 
 	nRFUsbdQueXfer(EpAddr, Length);
-	nRFUsbdServicePending();
+	nRFUsbdStartNextDma();
 	return true;
 }
 
@@ -2317,7 +2292,7 @@ static void nRFUsbdProcessEp0Setup(uint32_t Evt, void *pContext)
 	// packet completes.
 	nRFUsbdServiceEp0();
 	nRFUsbdServiceIso();
-	nRFUsbdServicePending();
+	nRFUsbdStartNextDma();
 }
 
 static void nRFUsbdHandleOutEnd(uint8_t EpNum, uint16_t TransferLen)
@@ -2457,7 +2432,7 @@ static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 	}
 
 	nRFUsbdServiceIso();
-	nRFUsbdServicePending();
+	nRFUsbdStartNextDma();
 }
 
 static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
@@ -2483,7 +2458,7 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	{
 		nRFUsbdServiceEp0();
 		nRFUsbdServiceIso();
-		nRFUsbdServicePending();
+		nRFUsbdStartNextDma();
 	}
 }
 
@@ -2502,14 +2477,14 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 			(void)AppEvtHandlerQue(Evt, NULL, nRFUsbdProcessOutData);
 			return;
 		}
-		nRFUsbdServicePending();
+		nRFUsbdStartNextDma();
 		return;
 	}
 
 	nRFUsbdHandleOutData(0U);
 	nRFUsbdServiceEp0();
 	nRFUsbdServiceIso();
-	nRFUsbdServicePending();
+	nRFUsbdStartNextDma();
 }
 
 static void nRFUsbdQueueOutData(uint8_t EpNum)
@@ -2727,7 +2702,7 @@ extern "C" void USBD_IRQHandler(void)
 
 		// Every ready OUT request is now in the shared DMA CFifo. Service its
 		// single IN/OUT head once before deferring captured IN completions.
-		nRFUsbdServicePending();
+		nRFUsbdStartNextDma();
 
 		while (inData != 0U)
 		{
@@ -2838,7 +2813,7 @@ extern "C" void USBD_IRQHandler(void)
 	if (completedDma != NRFX_USBD_DMA_EP_NONE && !nRFUsbdDmaActive())
 	{
 		nRFUsbdServiceIso();
-		nRFUsbdServicePending();
+		nRFUsbdStartNextDma();
 	}
 
 	nRFUsbdTryEnterLowPower();
