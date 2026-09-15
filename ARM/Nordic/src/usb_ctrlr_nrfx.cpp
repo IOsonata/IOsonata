@@ -1336,11 +1336,6 @@ static bool nRFUsbdEp0StatusNow(uint8_t *pEpAddr)
 		USB_ENDPADDR_DIR_OUT : USB_ENDPADDR_DIR_IN;
 	nRFUsbdEp0Stage_t *pStage = nRFUsbdGetEp0Stage(epAddr);
 
-	printf("EP0 STATUS service dir=%s active=%u busy=%lu q=%d\n",
-		USB_ENDPADDR_IS_IN(epAddr) ? "IN" : "OUT",
-		(unsigned)pStage->Active,
-		(unsigned long)NRFX_USBD_EASYDMA_BUSY_REG,
-		CFifoUsed(s_hEp0Que));
 	NRF_USBD->TASKS_EP0STATUS = 1;
 	__ISB();
 	__DSB();
@@ -2284,11 +2279,6 @@ static void nRFUsbdProcessEp0Setup(uint32_t Evt, void *pContext)
 
 	nRFUsbdHostResumeDetected();
 	nRFUsbdAbortEp0();
-	printf("EP0 APP SETUP rt=%02x r=%02x v=%04x i=%04x l=%u dir=%s\n",
-		(unsigned)evt.Setup.bmRequestType, (unsigned)evt.Setup.bRequest,
-		(unsigned)evt.Setup.wValue, (unsigned)evt.Setup.wIndex,
-		(unsigned)evt.Setup.wLength,
-		s_Ctrlr.SetupDirIn ? "IN" : "OUT");
 
 	const bool setAddress =
 		(evt.Setup.bmRequestType &
@@ -2297,6 +2287,8 @@ static void nRFUsbdProcessEp0Setup(uint32_t Evt, void *pContext)
 
 	if (setAddress)
 	{
+		printf("EP0 ADDRESS APP value=%u\n",
+			(unsigned)(evt.Setup.wValue & 0x7FU));
 		UsbCtrlrEvt_t addrEvt = {};
 		addrEvt.Type = USB_CTRLR_EVT_ADDRESS;
 		addrEvt.Address = (uint8_t)(evt.Setup.wValue & 0x7FU);
@@ -2306,13 +2298,6 @@ static void nRFUsbdProcessEp0Setup(uint32_t Evt, void *pContext)
 	{
 		nRFUsbdEmit(&evt);
 	}
-
-	printf("EP0 APP SETUP done state=%u busy=%lu q=%d status=%u rcv=%u\n",
-		(unsigned)atomic_load(&s_Ctrlr.Ep0State),
-		(unsigned long)NRFX_USBD_EASYDMA_BUSY_REG,
-		CFifoUsed(s_hEp0Que),
-		(unsigned)atomic_load(&s_PendingEp0Status),
-		(unsigned)atomic_load(&s_PendingEp0RcvOut));
 
 	// UsbDevProcessEvent queued the EP0 data or status stage while EP0 owned
 	// the scheduler. Start only EP0 here and retain ownership until its final
@@ -2467,15 +2452,6 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	const uint16_t amount = (uint16_t)(Evt >> 8U);
 
 	(void)pContext;
-	if (epNum == 0U)
-	{
-		printf("EP0 APP COMPLETE dir=%s amount=%u state=%u busy=%lu q=%d\n",
-			(epEvent & NRFX_USBD_XFER_EVT_OUT) != 0U ? "OUT" : "IN",
-			amount, (unsigned)atomic_load(&s_Ctrlr.Ep0State),
-			(unsigned long)NRFX_USBD_EASYDMA_BUSY_REG,
-			CFifoUsed(s_hEp0Que));
-	}
-
 	if ((epEvent & NRFX_USBD_XFER_EVT_OUT) != 0U)
 	{
 		uint8_t *pData = NULL;
@@ -2660,9 +2636,6 @@ extern "C" void USBD_IRQHandler(void)
 	const bool setupPending = NRF_USBD->EVENTS_EP0SETUP != 0U;
 	if (setupPending)
 	{
-		const uint32_t dataPending = NRF_USBD->EVENTS_EP0DATADONE;
-		const uint32_t endInPending = NRF_USBD->EVENTS_ENDEPIN[0];
-		const uint32_t endOutPending = NRF_USBD->EVENTS_ENDEPOUT[0];
 		NRF_USBD->EVENTS_EP0SETUP = 0U;
 		NRF_USBD->EVENTS_EP0DATADONE = 0U;
 		__ISB();
@@ -2679,16 +2652,6 @@ extern "C" void USBD_IRQHandler(void)
 		evt.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
 			((uint16_t)NRF_USBD->WLENGTHH << 8);
 
-		printf("EP0 IRQ SETUP rt=%02x r=%02x v=%04x i=%04x l=%u data=%lu in=%lu out=%lu state=%u busy=%lu q=%d\n",
-			(unsigned)evt.Setup.bmRequestType, (unsigned)evt.Setup.bRequest,
-			(unsigned)evt.Setup.wValue, (unsigned)evt.Setup.wIndex,
-			(unsigned)evt.Setup.wLength,
-			(unsigned long)dataPending, (unsigned long)endInPending,
-			(unsigned long)endOutPending,
-			(unsigned)atomic_load(&s_Ctrlr.Ep0State),
-			(unsigned long)NRFX_USBD_EASYDMA_BUSY_REG,
-			CFifoUsed(s_hEp0Que));
-
 		if (atomic_load(&s_Ctrlr.Ep0State) ==
 			NRFX_USBD_EP0_ACTIVE && nRFUsbdDmaActive() &&
 			CFifoUsed(s_hEp0Que) == 0)
@@ -2701,18 +2664,15 @@ extern "C" void USBD_IRQHandler(void)
 		atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_PENDING);
 		const bool queued =
 			AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEp0Setup);
-		printf("EP0 IRQ SETUP queued=%u\n", (unsigned)queued);
+		if (evt.Setup.bRequest == USB_REQ_SET_ADDRESS)
+		{
+			printf("EP0 ADDRESS IRQ value=%u queued=%u\n",
+				(unsigned)(evt.Setup.wValue & 0x7FU), (unsigned)queued);
+		}
 	}
 
 	if (!setupPending && NRF_USBD->EVENTS_EP0DATADONE)
 	{
-		printf("EP0 IRQ DATA in=%lu out=%lu epstatus=%08lx shorts=%08lx busy=%lu q=%d\n",
-			(unsigned long)NRF_USBD->EVENTS_ENDEPIN[0],
-			(unsigned long)NRF_USBD->EVENTS_ENDEPOUT[0],
-			(unsigned long)NRF_USBD->EPSTATUS,
-			(unsigned long)NRF_USBD->SHORTS,
-			(unsigned long)NRFX_USBD_EASYDMA_BUSY_REG,
-			CFifoUsed(s_hEp0Que));
 		NRF_USBD->EVENTS_EP0DATADONE = 0U;
 
 		if (NRF_USBD->EVENTS_ENDEPIN[0] != 0U)
@@ -2722,15 +2682,12 @@ extern "C" void USBD_IRQHandler(void)
 
 			// Release buffer
 			(void)CFifoGet(s_hEp0Que);
-//printf("%d\n", amount);
 			nRFUsbdQueueXferComplete(0U, amount);
 
 			nRFDmaEP0Pkt_t *p = (nRFDmaEP0Pkt_t*)CFifoPeek(s_hEp0Que);
 
 			if (p)
 			{
-				printf("EP0 IRQ NEXT len=%u q=%d\n", (unsigned)p->Len,
-					CFifoUsed(s_hEp0Que));
 				NRF_USBD->EPIN[0].PTR = (uint32_t)p->Payload;
 				NRF_USBD->EPIN[0].MAXCNT = p->Len;
 
@@ -2746,8 +2703,6 @@ extern "C" void USBD_IRQHandler(void)
 			}
 			else
 			{
-				printf("EP0 IRQ STATUS after IN amount=%u\n",
-					(unsigned)amount);
 				NRF_USBD->TASKS_EP0STATUS = 1;
 			}
 
@@ -4162,14 +4117,9 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, uint16_t Length)
 	}
 
 	int cnt = 0;
-	printf("EP0 SEND len=%u state=%u busy=%lu q=%d\n", (unsigned)Length,
-		(unsigned)atomic_load(&s_Ctrlr.Ep0State),
-		(unsigned long)NRFX_USBD_EASYDMA_BUSY_REG,
-		CFifoUsed(s_hEp0Que));
 
 	if (Length <= 0)
 	{
-		printf("EP0 SEND STATUS direct\n");
 		NRF_USBD->TASKS_EP0STATUS = 1;
 
 		return 0;
@@ -4203,9 +4153,6 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, uint16_t Length)
 
 		if (p)
 		{
-			printf("EP0 SEND START len=%u q=%d\n", (unsigned)p->Len,
-				CFifoUsed(s_hEp0Que));
-
 			NRF_USBD->EPIN[0].PTR = (uint32_t)p->Payload;
 			NRF_USBD->EPIN[0].MAXCNT = p->Len;
 
