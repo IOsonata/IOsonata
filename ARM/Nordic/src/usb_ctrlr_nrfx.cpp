@@ -1414,6 +1414,13 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 		const uint16_t received = (uint16_t)NRF_USBD->SIZE.EPOUT[epNum];
 		const uint16_t len = received < pQue->Len ? received : pQue->Len;
 
+		if (epNum != 0U)
+		{
+			pXfer->TotalLen = pQue->Len;
+			pXfer->ActualLen = 0U;
+			pXfer->Started = true;
+		}
+
 		NRF_USBD->EPOUT[epNum].PTR = (uint32_t)(uintptr_t)pBuffer;
 		NRF_USBD->EPOUT[epNum].MAXCNT = len;
 		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPOUT[epNum], pQue->EpAddr);
@@ -2469,9 +2476,9 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	if (epNum == 0U)
 	{
 		nRFUsbdServiceEp0();
+		nRFUsbdServiceIso();
+		nRFUsbdServicePending();
 	}
-	nRFUsbdServiceIso();
-	nRFUsbdServicePending();
 }
 
 static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
@@ -2591,6 +2598,7 @@ static void nRFUsbdHandleSof(void)
 extern "C" void USBD_IRQHandler(void)
 {
 	uint8_t completedDma = NRFX_USBD_DMA_EP_NONE;
+	uint16_t completedOutAmount = 0U;
 
 	if (nRFUsbdDmaActive())
 	{
@@ -2628,6 +2636,14 @@ extern "C" void USBD_IRQHandler(void)
 			__DSB();
 		}
 
+		if (complete && !USB_ENDPADDR_IS_IN(completedDma) &&
+			USB_ENDPADDR_NUM(completedDma) != 0U &&
+			USB_ENDPADDR_NUM(completedDma) != NRFX_USBD_ISO_EP_NO)
+		{
+			completedOutAmount =
+				(uint16_t)NRF_USBD->EPOUT[USB_ENDPADDR_NUM(completedDma)].AMOUNT;
+		}
+
 		nRFUsbdDmaRelease(completedDma);
 	}
 
@@ -2663,38 +2679,43 @@ extern "C" void USBD_IRQHandler(void)
 	}
 
 	// Endpoint zero is handled further down with the setup sequence.
-	if (completedOut && USB_ENDPADDR_NUM(completedDma) != 0U)
-	{
-		const uint8_t epNum = USB_ENDPADDR_NUM(completedDma);
-		nRFUsbdQueueXferComplete((uint8_t)(NRFX_USBD_XFER_EVT_OUT | epNum),
-			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
-	}
 
 	if (NRF_USBD->EVENTS_EPDATA != 0U ||
 		(NRF_USBD->EPDATASTATUS & 0x00FE00FEUL) != 0U)
 	{
-		// Clear the event first so a new endpoint event remains observable.
-		// Service at most one endpoint per direction in this interrupt. Any
-		// remaining status bits are retained and serviced by a pending IRQ.
 		NRF_USBD->EVENTS_EPDATA = 0U;
 		const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
 		uint32_t servicedStatus = dataStatus & 0x00010001UL;
 
-		const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
-		if (outData != 0U)
+		uint32_t outData = (dataStatus >> 16U) & 0xFEU;
+		while (outData != 0U)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
-			servicedStatus |= 1UL << (epNum + 16U);
-			nRFUsbdQueueOutData((uint8_t)epNum);
+			const uint32_t epBit = 1UL << epNum;
+			outData &= ~epBit;
+			servicedStatus |= epBit << 16U;
+
+			nRFUsbEpReg_t *pReg = nRFUsbGetEpReg((uint8_t)epNum);
+			if (pReg->bBlocking)
+			{
+				nRFUsbdQueueOutData((uint8_t)epNum);
+			}
+			else
+			{
+				nRFUsbdQueXfer((uint8_t)epNum,
+					nRFUsbdMps((uint8_t)epNum));
+			}
 		}
 
 		const uint32_t inData = dataStatus & 0xFEU;
+		uint8_t completedIn = NRFX_USBD_DMA_EP_NONE;
+		uint16_t completedInAmount = 0U;
 		if (inData != 0U)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(inData);
 			servicedStatus |= 1UL << epNum;
-			nRFUsbdQueueXferComplete((uint8_t)epNum,
-				(uint16_t)NRF_USBD->EPIN[epNum].AMOUNT);
+			completedIn = (uint8_t)epNum;
+			completedInAmount = (uint16_t)NRF_USBD->EPIN[epNum].AMOUNT;
 		}
 
 		NRF_USBD->EPDATASTATUS = servicedStatus;
@@ -2705,6 +2726,24 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			NVIC_SetPendingIRQ(USBD_IRQn);
 		}
+
+		// All ready non-blocking OUT endpoints are now in the same DMA CFifo
+		// as pending IN work. Start at most its single shared head before
+		// deferring endpoint completion to foreground processing.
+		nRFUsbdServicePending();
+
+		if (completedIn != NRFX_USBD_DMA_EP_NONE)
+		{
+			nRFUsbdQueueXferComplete(completedIn, completedInAmount);
+		}
+	}
+
+	if (completedOut)
+	{
+		const uint8_t epNum = USB_ENDPADDR_NUM(completedDma);
+		nRFUsbdQueueXferComplete(
+			(uint8_t)(NRFX_USBD_XFER_EVT_OUT | epNum),
+			completedOutAmount);
 	}
 
 	if (NRF_USBD->EVENTS_ENDISOIN != 0U)
