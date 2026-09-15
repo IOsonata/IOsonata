@@ -321,7 +321,8 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 }
 
 static void UsbdCdcNotifCtrlrEvent(uint8_t, UsbCtrlrEvtType_t Event,
-								  uint16_t, UsbCtrlrXferResult_t Result,
+								  uint8_t *, uint16_t,
+								  UsbCtrlrXferResult_t Result,
 								  void *pContext)
 {
 	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);

@@ -536,7 +536,7 @@ static bool BtHciUsbSendEventZlp(BtHciUsbDev_t *pHci)
 }
 
 static void BtHciUsbEventComplete(uint8_t, UsbCtrlrEvtType_t Event,
-								 uint16_t Length,
+								 uint8_t *, uint16_t Length,
 								 UsbCtrlrXferResult_t Result, void *pContext)
 {
 	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
