@@ -135,8 +135,8 @@ typedef struct __Usb_Ctrlr_Evt {
 #pragma pack(pop)
 
 typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
-									uint16_t Length, UsbCtrlrXferResult_t Result,
-									void *pContext);
+									uint8_t *pData, uint16_t Length,
+									UsbCtrlrXferResult_t Result, void *pContext);
 
 /// What the generic layer hands the port at UsbCtrlrInit.
 typedef struct __Usb_Ctrlr_Config {

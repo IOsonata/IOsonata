@@ -115,7 +115,7 @@ static void RxComplete(const uint8_t *pData, uint16_t Length,
 	{
 		memcpy(s_OutBuffer, pData, Length);
 	}
-	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_XFER_CMPL,
+	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_XFER_CMPL, s_OutBuffer,
 		Length, Result, s_OutContext);
 }
 
@@ -178,7 +178,7 @@ static void TestDrdyPolicy(void)
 	alignas(4) uint32_t tx[5] = {};
 	CHECK(Init(&intrf, rx, tx, true));
 	CHECK(UsbIntrfConfigure(&intrf, 8U));
-	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, 0U,
+	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, s_OutBuffer, 0U,
 		USB_CTRLR_XFER_SUCCESS, s_OutContext);
 	CHECK(s_OutXferCount == 1);
 
@@ -186,7 +186,7 @@ static void TestDrdyPolicy(void)
 	UsbDevIntrf_t nonblocking = {};
 	CHECK(Init(&nonblocking, rx, tx, false));
 	CHECK(UsbIntrfConfigure(&nonblocking, 8U));
-	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, 0U,
+	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, s_OutBuffer, 0U,
 		USB_CTRLR_XFER_SUCCESS, s_OutContext);
 	CHECK(s_OutXferCount == 0);
 }
@@ -203,12 +203,12 @@ static void TestTx(void)
 	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, data, sizeof(data)) == 3);
 	CHECK(s_InLength == 3U && memcmp(s_InBuffer, data, sizeof(data)) == 0);
 	CHECK(!UsbIntrfRequestToSend(&intrf, 1));
-	s_InHandler(USB_ENDPADDR_DIRIN(3U), USB_CTRLR_EVT_XFER_CMPL, 3U,
+	s_InHandler(USB_ENDPADDR_DIRIN(3U), USB_CTRLR_EVT_XFER_CMPL, s_InBuffer, 3U,
 		USB_CTRLR_XFER_SUCCESS, s_InContext);
 	CHECK(UsbIntrfRequestToSend(&intrf, 0));
 	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, nullptr, 0) == 0);
 	CHECK(!atomic_load(&intrf.DevIntrf.bTxReady));
-	s_InHandler(USB_ENDPADDR_DIRIN(3U), USB_CTRLR_EVT_CANCEL, 0U,
+	s_InHandler(USB_ENDPADDR_DIRIN(3U), USB_CTRLR_EVT_CANCEL, s_InBuffer, 0U,
 		USB_CTRLR_XFER_CANCELLED, s_InContext);
 	CHECK(atomic_load(&intrf.DevIntrf.bTxReady));
 

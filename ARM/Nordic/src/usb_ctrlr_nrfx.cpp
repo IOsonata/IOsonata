@@ -209,6 +209,7 @@ enum
 	NRFX_USBD_ISO_MAX_PACKET_SIZE = 512,
 	NRFX_USBD_DMA_EP_NONE = 0xFFU,
 	NRFX_USBD_XFER_EVT_OUT = 0x80U,
+	NRFX_USBD_XFER_EVT_BUF1 = 0x40U,
 	NRFX_USBD_EP0_IDLE = 0U,
 	NRFX_USBD_EP0_PENDING,
 	NRFX_USBD_EP0_ACTIVE,
@@ -272,6 +273,12 @@ static hCFifo_t s_hEp0Que;
 // EasyDMA requires controller-visible, word-aligned RAM. Stage one control
 // packet here in either direction; control transfers are serialized by EP0.
 alignas(4) static uint8_t s_Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
+
+// Ordinary OUT uses two controller DMA buffers. The completed buffer is
+// consumed synchronously by UsbIntrf while the other buffer receives.
+alignas(4) static uint8_t
+	s_OutDmaBuffer[2][NRFX_USBD_MAX_PACKET_SIZE];
+static uint8_t s_OutDmaIdx;
 
 static atomic_bool s_PendingEp0Status;
 static atomic_bool s_PendingEp0RcvOut;
@@ -480,10 +487,12 @@ nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpAddr)
 
 static inline __attribute__((always_inline))
 void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
-								 uint16_t Length, UsbCtrlrXferResult_t Result)
+								 uint16_t Length, UsbCtrlrXferResult_t Result,
+								 uint8_t *pData = NULL)
 {
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
-	pReg->Handler(EpAddr, Event, Length, Result, pReg->pContext);
+	pReg->Handler(EpAddr, Event, pData != NULL ? pData : pReg->pBuffer,
+		Length, Result, pReg->pContext);
 }
 
 #ifdef SOFTDEVICE_PRESENT
@@ -1173,11 +1182,13 @@ static void nRFUsbdEmitSimple(UsbCtrlrEvtType_t Type)
 }
 
 static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
-						 UsbCtrlrXferResult_t Result)
+							 UsbCtrlrXferResult_t Result,
+							 uint8_t *pData = NULL)
 {
 	if (USB_ENDPADDR_NUM(EpAddr) != 0U)
 	{
-		nRFUsbEpRegisteredEvent(EpAddr, USB_CTRLR_EVT_XFER_CMPL, Length, Result);
+		nRFUsbEpRegisteredEvent(EpAddr, USB_CTRLR_EVT_XFER_CMPL, Length,
+			Result, pData);
 		return;
 	}
 
@@ -1417,6 +1428,10 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 	{
 		const uint16_t received = (uint16_t)NRF_USBD->SIZE.EPOUT[epNum];
 		const uint16_t len = received < pQue->Len ? received : pQue->Len;
+		if (epNum != 0U)
+		{
+			pBuffer = s_OutDmaBuffer[s_OutDmaIdx];
+		}
 
 		NRF_USBD->EPOUT[epNum].PTR = (uint32_t)(uintptr_t)pBuffer;
 		NRF_USBD->EPOUT[epNum].MAXCNT = len;
@@ -1612,6 +1627,7 @@ static void nRFUsbdResetState(void)
 
 	CFifoFlush(s_hQue);
 	CFifoFlush(s_hEp0Que);
+	s_OutDmaIdx = 0U;
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
 	atomic_store(&s_BusSuspended, false);
@@ -2282,11 +2298,12 @@ static void nRFUsbdProcessEp0Setup(uint32_t Evt, void *pContext)
 	nRFUsbdStartNextDma();
 }
 
-static void nRFUsbdHandleOutEnd(uint8_t EpNum, uint16_t TransferLen)
+static void nRFUsbdHandleOutEnd(uint8_t EpNum, uint16_t TransferLen,
+								 uint8_t *pData = NULL)
 {
 	if (EpNum != 0U)
 	{
-		nRFUsbdEmitXfer(EpNum, TransferLen, USB_CTRLR_XFER_SUCCESS);
+		nRFUsbdEmitXfer(EpNum, TransferLen, USB_CTRLR_XFER_SUCCESS, pData);
 		return;
 	}
 
@@ -2429,9 +2446,14 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 
 	if ((epEvent & NRFX_USBD_XFER_EVT_OUT) != 0U)
 	{
-		// UsbIntrf copies the OUT DMA buffer from this completion callback.
-		// A later OUT-ready AppEvt follows it in FIFO order.
-		nRFUsbdHandleOutEnd(epNum, amount);
+		uint8_t *pData = NULL;
+		if (epNum != 0U)
+		{
+			const uint8_t idx =
+				(epEvent & NRFX_USBD_XFER_EVT_BUF1) != 0U ? 1U : 0U;
+			pData = s_OutDmaBuffer[idx];
+		}
+		nRFUsbdHandleOutEnd(epNum, amount, pData);
 	}
 	else
 	{
@@ -2448,22 +2470,8 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 
 static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 {
-	const uint8_t epNum = (uint8_t)Evt;
-
+	(void)Evt;
 	(void)pContext;
-
-	if (epNum != 0U)
-	{
-		if (!nRFUsbdQueXfer(epNum, nRFUsbdMps(epNum)))
-		{
-			// Keep exactly one retry alive until the shared DMA CFifo has
-			// room. AppEvt processes it on a later foreground pass.
-			(void)AppEvtHandlerQue(Evt, NULL, nRFUsbdProcessOutData);
-			return;
-		}
-		nRFUsbdStartNextDma();
-		return;
-	}
 
 	nRFUsbdHandleOutData(0U);
 	nRFUsbdServiceEp0();
@@ -2480,6 +2488,13 @@ static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 {
 	const uint32_t evt = ((uint32_t)Amount << 8U) | EpEvent;
 	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete);
+}
+
+static void nRFUsbdQueueOutComplete(uint8_t EpNum, uint16_t Amount,
+									uint8_t BufferIdx)
+{
+	nRFUsbdQueueXferComplete((uint8_t)(NRFX_USBD_XFER_EVT_OUT |
+		(BufferIdx != 0U ? NRFX_USBD_XFER_EVT_BUF1 : 0U) | EpNum), Amount);
 }
 
 static void nRFUsbdQueueIsoComplete(bool Out, uint16_t Amount)
@@ -2573,6 +2588,7 @@ static void nRFUsbdHandleSof(void)
 extern "C" void USBD_IRQHandler(void)
 {
 	uint8_t completedDma = NRFX_USBD_DMA_EP_NONE;
+	uint8_t completedOutBuffer = 0U;
 	uint16_t completedAmount = 0U;
 	const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
 
@@ -2642,6 +2658,14 @@ extern "C" void USBD_IRQHandler(void)
 				completedAmount = USB_ENDPADDR_IS_IN(completedDma) ?
 					(uint16_t)NRF_USBD->EPIN[epNum].AMOUNT :
 					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT;
+			}
+
+			if (epNum != 0U &&
+				epNum != NRFX_USBD_ISO_EP_NO &&
+				!USB_ENDPADDR_IS_IN(completedDma))
+			{
+				completedOutBuffer = s_OutDmaIdx;
+				s_OutDmaIdx ^= 1U;
 			}
 
 			*nRFUsbdDmaEndEvent(completedDma) = 0U;
@@ -2724,20 +2748,26 @@ extern "C" void USBD_IRQHandler(void)
 		NRF_USBD->EVENTS_EPDATA = 0U;
 		const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
 		uint32_t outData = (dataStatus >> 16U) & 0xFEU;
+		uint32_t clearStatus = dataStatus & ~0x00FE0000UL;
 		inData = dataStatus & 0xFEU;
 
 		while (outData != 0U)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
-			outData &= ~(1UL << epNum);
+			const uint32_t epBit = 1UL << epNum;
 			if (!nRFUsbdQueXfer((uint8_t)epNum,
 				nRFUsbdMps((uint8_t)epNum)))
 			{
-				nRFUsbdQueueOutData((uint8_t)epNum);
+				break;
 			}
+
+			outData &= ~epBit;
+			clearStatus |= epBit << 16U;
 		}
 
-		NRF_USBD->EPDATASTATUS = dataStatus;
+		// A full DMA CFifo leaves unqueued OUT status asserted. The next
+		// DMA-completion interrupt retries it after a queue slot is released.
+		NRF_USBD->EPDATASTATUS = clearStatus;
 		__ISB();
 		__DSB();
 	}
@@ -2757,10 +2787,8 @@ extern "C" void USBD_IRQHandler(void)
 		USB_ENDPADDR_NUM(completedDma) != NRFX_USBD_ISO_EP_NO &&
 		!USB_ENDPADDR_IS_IN(completedDma))
 	{
-		nRFUsbdQueueXferComplete(
-			(uint8_t)(NRFX_USBD_XFER_EVT_OUT |
-				USB_ENDPADDR_NUM(completedDma)),
-			completedAmount);
+		nRFUsbdQueueOutComplete(USB_ENDPADDR_NUM(completedDma),
+			completedAmount, completedOutBuffer);
 	}
 
 	while (inData != 0U)

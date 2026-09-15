@@ -194,7 +194,7 @@ static bool Drdy(const uint8_t *pData, uint16_t Len)
 
     if (s_OutBlocking)
     {
-        s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
+        s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY, s_OutRegBuf,
                      Len, USB_CTRLR_XFER_SUCCESS, s_OutContext);
     }
     else
@@ -220,7 +220,7 @@ static void CompleteOut(UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
 
     s_HwOutReady = false;
     s_OutDma = false;
-    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
+    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL, s_OutRegBuf,
                  len, Result, s_OutContext);
 }
 
@@ -238,7 +238,7 @@ static void CompleteIn(uint16_t Len,
     if (!s_InBusy)
         return;
     s_InBusy = false;
-    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
+    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL, s_InRegBuf,
                 Len, Result, s_InContext);
 }
 
@@ -354,7 +354,7 @@ static void TestFailedAndWrongEndpoint(void)
     // through the registered handler, so only the failed-result path remains
     // observable at this layer.
     const int used = CFifoUsed(s_Intrf.hRxFifo);
-    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL, 0,
+    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL, s_OutRegBuf, 0,
                  USB_CTRLR_XFER_FAILED, s_OutContext);
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == used);
     CHECK(s_Intrf.RxDropCnt == 1U);

@@ -186,12 +186,12 @@ typedef struct __Usb_Ctrlr_Evt {
 /**
  * @brief	Non-control endpoint event callback.
  *
- * Registered once with the endpoint DMA buffer. It is called directly from
- * the controller interrupt, avoiding a function-table search per packet.
+ * Registered once with the endpoint DMA buffer. The controller supplies the completed DMA buffer to the endpoint owner. The
+ * callback consumes or copies that buffer before returning.
  */
 typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
-									uint16_t Length, UsbCtrlrXferResult_t Result,
-									void *pContext);
+									uint8_t *pData, uint16_t Length,
+									UsbCtrlrXferResult_t Result, void *pContext);
 
 /// What the generic layer hands the port at UsbCtrlrInit.
 typedef struct __Usb_Ctrlr_Config {

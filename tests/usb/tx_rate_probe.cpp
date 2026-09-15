@@ -134,7 +134,8 @@ static void Run(int BusTicks, long Iterations)
 			const uint16_t len = s_InLen;
 			s_InBusy = false;
 			due = -1;
-			s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), len,
+			s_InHandler(USB_ENDPADDR_DIRIN(EP_NO),
+						USB_CTRLR_EVT_XFER_CMPL, s_InBuf, len,
 						USB_CTRLR_XFER_SUCCESS, s_InContext);
 			if (s_InBusy) { due = BusTicks; }
 		}

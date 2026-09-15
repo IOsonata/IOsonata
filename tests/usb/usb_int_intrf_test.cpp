@@ -160,7 +160,7 @@ static UsbIntIntrfCfg_t MakeCfg(void)
 
 static void Drdy(void)
 {
-	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, 0U,
+	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, s_OutBuffer, 0U,
 		USB_CTRLR_XFER_SUCCESS, s_OutContext);
 }
 
@@ -172,13 +172,13 @@ static void Receive(const uint8_t *pData, uint16_t Length,
 	{
 		memcpy(s_OutBuffer, pData, Length);
 	}
-	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_XFER_CMPL,
+	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_XFER_CMPL, s_OutBuffer,
 		Length, Result, s_OutContext);
 }
 
 static void CompleteIn(UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
 {
-	s_InHandler(USB_ENDPADDR_DIRIN(3U), USB_CTRLR_EVT_XFER_CMPL,
+	s_InHandler(USB_ENDPADDR_DIRIN(3U), USB_CTRLR_EVT_XFER_CMPL, s_InBuffer,
 		s_InLength, Result, s_InContext);
 }
 

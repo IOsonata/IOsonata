@@ -168,7 +168,7 @@ static bool Drdy(const uint8_t *pData, uint16_t Length)
     s_HwOutReady = true;
     if (s_OutBlocking)
     {
-        s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
+        s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY, s_OutBuffer,
                      Length, USB_CTRLR_XFER_SUCCESS, s_OutContext);
     }
     else
@@ -190,7 +190,7 @@ static void CompleteOut(void)
     uint16_t len = s_HwOutLength;
     s_HwOutReady = false;
     s_OutDma = false;
-    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
+    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL, s_OutBuffer,
                  len, USB_CTRLR_XFER_SUCCESS, s_OutContext);
 }
 
@@ -319,7 +319,7 @@ static void TestCancelIsNotCompletion(void)
 
     // The controller has cancelled the active transfer before delivering CANCEL.
     s_InDma = false;
-    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_CANCEL,
+    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_CANCEL, s_InBuffer,
                 MPS, USB_CTRLR_XFER_CANCELLED, s_InContext);
     CHECK(!s_InDma);
     CHECK(s_InSubmit == 1);
@@ -333,7 +333,7 @@ static void TestCancelIsNotCompletion(void)
     CHECK(s_OutDma);
     s_OutDma = false;
     s_HwOutReady = false;
-    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_CANCEL,
+    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_CANCEL, s_OutBuffer,
                  0U, USB_CTRLR_XFER_CANCELLED, s_OutContext);
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
     CHECK(!s_Intrf.RxPending);
@@ -370,13 +370,13 @@ static void TestTxStillChains(void)
     CHECK(memcmp(s_InBuffer, data, MPS) == 0);
 
     s_InDma = false;
-    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
+    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL, s_InBuffer,
                 MPS, USB_CTRLR_XFER_SUCCESS, s_InContext);
     CHECK(s_InDma && s_InLength == 3U && s_InSubmit == 2);
     CHECK(memcmp(s_InBuffer, data + MPS, 3U) == 0);
 
     s_InDma = false;
-    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
+    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL, s_InBuffer,
                 3U, USB_CTRLR_XFER_SUCCESS, s_InContext);
     CHECK(!s_InDma);
     CHECK(s_TxEmptyEvent == 1);

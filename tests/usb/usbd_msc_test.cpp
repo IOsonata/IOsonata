@@ -250,7 +250,7 @@ static void DeliverOut(const uint8_t *pData, uint16_t Length)
 		memcpy(s_OutData, pData, Length);
 	s_OutLength = Length;
 	s_OutReady = true;
-	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
+	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY, s_OutBuffer,
 		Length, USB_CTRLR_XFER_SUCCESS, s_OutContext);
 	if (!s_OutDma)
 		return;
@@ -258,7 +258,7 @@ static void DeliverOut(const uint8_t *pData, uint16_t Length)
 		memcpy(s_OutBuffer, s_OutData, Length);
 	s_OutReady = false;
 	s_OutDma = false;
-	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
+	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL, s_OutBuffer,
 		s_OutLength, USB_CTRLR_XFER_SUCCESS, s_OutContext);
 }
 
@@ -275,7 +275,7 @@ static void CompleteIn(void)
 	}
 	const uint16_t length = s_InLength;
 	s_InBusy = false;
-	s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
+	s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL, s_InBuffer,
 		length, USB_CTRLR_XFER_SUCCESS, s_InContext);
 }
 

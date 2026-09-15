@@ -420,7 +420,8 @@ static void *UsbIntrfGetHandle(DevIntrf_t * const pDevIntrf)
 	return pDevIntrf->pDevData;
 }
 
-static void UsbIntrfDirectRxComplete(UsbDevIntrf_t *pIntrf, uint16_t Length)
+static void UsbIntrfDirectRxComplete(UsbDevIntrf_t *pIntrf,
+									  const uint8_t *pData, uint16_t Length)
 {
 	UsbPkt_t *pPacket = pIntrf->pRxDirectBuffer;
 	if (pPacket == nullptr || Length > pIntrf->Mps)
@@ -434,6 +435,10 @@ static void UsbIntrfDirectRxComplete(UsbDevIntrf_t *pIntrf, uint16_t Length)
 		pIntrf->RxDropCnt++;
 	}
 
+	if (Length > 0U && pData != pPacket->Data)
+	{
+		memcpy(pPacket->Data, pData, Length);
+	}
 	pPacket->Hdr.Length = Length;
 	pPacket->Hdr.Reserved = USB_INTRF_SLOT_READY;
 
@@ -449,7 +454,7 @@ static void UsbIntrfDirectRxComplete(UsbDevIntrf_t *pIntrf, uint16_t Length)
 }
 
 static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
-							   uint16_t Length,
+							   uint8_t *pData, uint16_t Length,
 							   UsbCtrlrXferResult_t Result,
 							   void *pContext)
 {
@@ -532,7 +537,7 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 			{
 				if (pIntrf->Mode == USB_INTRF_MODE_DIRECT)
 				{
-					UsbIntrfDirectRxComplete(pIntrf, Length);
+					UsbIntrfDirectRxComplete(pIntrf, pData, Length);
 					return;
 				}
 
@@ -542,7 +547,7 @@ static void UsbIntrfCtrlrEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 				pPacket->Hdr.Reserved = 0U;
 				if (Length > 0U)
 				{
-					memcpy(pPacket->Data, pIntrf->pRxBuffer, Length);
+					memcpy(pPacket->Data, pData, Length);
 				}
 
 				if (pIntrf->DevIntrf.EvtCB != nullptr)

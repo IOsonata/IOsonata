@@ -189,7 +189,7 @@ static void Receive(const uint8_t *pData, uint16_t Length,
 
 	// The controller owns ISO OUT service and DMAs directly into the buffer
 	// registered by UsbIntrfInit. Generic UsbIntrf only receives completion.
-	s_OutHandler(USB_ENDPADDR_DIROUT(8U), USB_CTRLR_EVT_XFER_CMPL,
+	s_OutHandler(USB_ENDPADDR_DIROUT(8U), USB_CTRLR_EVT_XFER_CMPL, s_OutBuffer,
 		Length, Result, s_OutContext);
 }
 
@@ -201,7 +201,7 @@ static void CompleteIn(UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
 		return;
 	const uint16_t len = s_InLength;
 	s_InBusy = false;
-	s_InHandler(USB_ENDPADDR_DIRIN(8U), USB_CTRLR_EVT_XFER_CMPL,
+	s_InHandler(USB_ENDPADDR_DIRIN(8U), USB_CTRLR_EVT_XFER_CMPL, s_InBuffer,
 		len, Result, s_InContext);
 }
 
