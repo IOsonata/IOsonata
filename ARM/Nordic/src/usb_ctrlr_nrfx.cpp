@@ -2726,6 +2726,14 @@ extern "C" void USBD_IRQHandler(void)
 		uint32_t outData = (dataStatus >> 16U) & 0xFEU;
 		inData = dataStatus & 0xFEU;
 
+		// An OUT bit that also identifies the completed EasyDMA transaction
+		// is completion status, not another packet to append to the DMA CFifo.
+		if (completedDma != NRFX_USBD_DMA_EP_NONE &&
+			!USB_ENDPADDR_IS_IN(completedDma))
+		{
+			outData &= ~(1UL << USB_ENDPADDR_NUM(completedDma));
+		}
+
 		while (outData != 0U)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
