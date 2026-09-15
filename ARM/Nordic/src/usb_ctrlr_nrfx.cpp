@@ -63,6 +63,7 @@ SOFTWARE.
 #include "nrf_erratas.h"
 #include "hal/nrf_ficr.h"
 
+#include "istddef.h"
 #include "app_evt_handler.h"
 #include "cfifo.h"
 #include "coredev/interrupt.h"
@@ -198,7 +199,7 @@ static bool s_UsbdVbusLevel = false;
 #define NRFX_USBD_EASYDMA_BUSY_REG_CLEAR	0UL
 
 #define NRFUSBD_QUE_DEPTH			(NRFX_USBD_EP_COUNT * 2)
-#define NRFUSBD_EP0_QUE_DEPTH		1U
+#define NRFUSBD_EP0_QUE_DEPTH		4U
 
 enum
 {
@@ -252,6 +253,11 @@ typedef struct __nRF_Usbd_Que {
 	uint16_t Len;				//!< Bytes this transfer moves
 } nRFUsbdQue_t;
 
+typedef struct _nRF_DMA_EP0_Packet {
+	uint16_t Len;				//!< Payload length
+	uint16_t Resv;
+	uint8_t Payload[USB_PKT_MAXLEN_0_CONTROL];
+} nRFDmaEP0Pkt_t;
 
 #endif
 
@@ -263,9 +269,11 @@ typedef struct __nRF_Usbd_Que {
 static nRFUsbdCtrlr_t s_Ctrlr;
 alignas(4) static uint8_t s_QueMem[
 	CFIFO_TOTAL_MEMSIZE(NRFUSBD_QUE_DEPTH, sizeof(nRFUsbdQue_t))];
-alignas(4) static uint8_t s_Ep0QueMem[
-	CFIFO_TOTAL_MEMSIZE(NRFUSBD_EP0_QUE_DEPTH, sizeof(nRFUsbdQue_t))];
+
 static hCFifo_t s_hQue;
+
+alignas(4) static uint8_t s_Ep0QueMem[
+	CFIFO_TOTAL_MEMSIZE(NRFUSBD_EP0_QUE_DEPTH, sizeof(nRFDmaEP0Pkt_t))];
 static hCFifo_t s_hEp0Que;
 
 // EP0 accepts descriptor and class buffers from the generic USB layer. Those
@@ -1106,8 +1114,7 @@ static void nRFUsbPowerProcess(void)
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
 {
-	return NRFX_USBD_EASYDMA_BUSY_REG ==
-		NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
+	return NRFX_USBD_EASYDMA_BUSY_REG == NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
 }
 
 
@@ -2664,8 +2671,34 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
 			const uint16_t amount = (uint16_t)NRF_USBD->EPIN[0].AMOUNT;
-			nRFUsbdDmaRelease(USB_ENDPADDR_DIR_IN);
+
+			// Release buffer
+			(void)CFifoGet(s_hEp0Que);
+//printf("%d\n", amount);
 			nRFUsbdQueueXferComplete(0U, amount);
+
+			nRFDmaEP0Pkt_t *p = (nRFDmaEP0Pkt_t*)CFifoPeek(s_hEp0Que);
+
+			if (p)
+			{
+				NRF_USBD->EPIN[0].PTR = (uint32_t)p->Payload;
+				NRF_USBD->EPIN[0].MAXCNT = p->Len;
+
+				if (p->Len < USB_PKT_MAXLEN_0_CONTROL)
+				{
+					NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
+				}
+				else
+				{
+					NRF_USBD->SHORTS = 0;
+				}
+				NRF_USBD->TASKS_STARTEPIN[0] = 1;
+			}
+			else
+			{
+				NRF_USBD->TASKS_EP0STATUS = 1;
+			}
+
 		}
 		else if (NRF_USBD->EVENTS_ENDEPOUT[0] != 0U)
 		{
@@ -4053,8 +4086,81 @@ bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length)
 {
+#if 1
+	if (EpAddr < 16)
+	{
+		return UsbCtrlrEp0Send(DevNo, pBuffer, Length) > 0;
+	}
+	else
+	{
+		return nRFUsbValidDevNo(DevNo) && USB_ENDPADDR_NUM(EpAddr) == 0U &&
+			nRFUsbRegEpXfer(EpAddr, pBuffer, Length);
+	}
+#else
 	return nRFUsbValidDevNo(DevNo) && USB_ENDPADDR_NUM(EpAddr) == 0U &&
 		nRFUsbRegEpXfer(EpAddr, pBuffer, Length);
+#endif
+}
+
+int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, uint16_t Length)
+{
+	if (DevNo != 0)
+	{
+		return -1;
+	}
+
+	int cnt = 0;
+
+	while (Length > 0)
+	{
+		int l = min(Length, USB_PKT_MAXLEN_0_CONTROL);
+		nRFDmaEP0Pkt_t *p = (nRFDmaEP0Pkt_t*)CFifoPut(s_hEp0Que);
+
+		if (p == nullptr)
+		{
+			break;
+		}
+
+		memcpy(p->Payload, pBuffer, l);
+
+		p->Len = l;
+		pBuffer += l;
+		Length -= l;
+		cnt += l;
+	}
+
+	uint32_t state = DisableInterrupt();
+
+	printf("UsbCtrlrEp0Send %x\n", NRFX_USBD_EASYDMA_BUSY_REG);
+
+	if (NRFX_USBD_EASYDMA_BUSY_REG == NRFX_USBD_EASYDMA_BUSY_REG_CLEAR)
+	{
+		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
+
+		nRFDmaEP0Pkt_t *p = (nRFDmaEP0Pkt_t*)CFifoPeek(s_hEp0Que);
+
+		if (p)
+		{
+			printf("%d\n", p->Len);
+
+			NRF_USBD->EPIN[0].PTR = (uint32_t)p->Payload;
+			NRF_USBD->EPIN[0].MAXCNT = p->Len;
+
+			if (p->Len < USB_PKT_MAXLEN_0_CONTROL)
+			{
+				NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
+			}
+			else
+			{
+				NRF_USBD->SHORTS = 0;
+			}
+			NRF_USBD->TASKS_STARTEPIN[0] = 1;
+		}
+	}
+
+	EnableInterrupt(state);
+
+	return cnt;
 }
 
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr)
