@@ -1111,6 +1111,8 @@ static bool UsbCoreHandleFeature(bool Set)
 
 static bool UsbCoreHandleSetConfiguration(void)
 {
+	printf("EP0 CONFIG CORE value=%u address=%u\n",
+		(unsigned)s_Setup.wValue, (unsigned)s_Address);
 	if (UsbCoreDirIn(&s_Setup) ||
 		UsbCoreRecipient(&s_Setup) != USB_REQTYPE_DEVICE ||
 		s_Setup.wIndex != 0 || s_Setup.wLength != 0 ||
@@ -1124,6 +1126,7 @@ static bool UsbCoreHandleSetConfiguration(void)
 		return false;
 	}
 
+	printf("EP0 CONFIG OK value=%u\n", (unsigned)s_Setup.wValue);
 	return UsbCoreStartStatus();
 }
 
@@ -1486,6 +1489,7 @@ void UsbDevProcessEvent(int DevNo, const UsbCtrlrEvt_t *pEvt)
 			break;
 
 		case USB_CTRLR_EVT_ADDRESS:
+			printf("EP0 ADDRESS CORE value=%u\n", (unsigned)pEvt->Address);
 			s_Address = pEvt->Address;
 			break;
 
