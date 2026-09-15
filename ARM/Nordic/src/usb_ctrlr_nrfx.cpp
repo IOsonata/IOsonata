@@ -2415,6 +2415,8 @@ static void nRFUsbdHandleIsoOutEnd(uint16_t TransferLen)
 		USB_CTRLR_XFER_SUCCESS);
 }
 
+static void nRFUsbdQueueOutData(uint8_t EpNum);
+
 static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 {
 	const uint16_t amount = (uint16_t)(Evt >> 8U);
