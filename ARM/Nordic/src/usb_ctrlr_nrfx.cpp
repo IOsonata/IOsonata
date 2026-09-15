@@ -2586,7 +2586,6 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			nRFUsbdDmaUnlock();
 		}
-		//NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
 
 		nRFUsbdHostResumeDetected();
 		nRFUsbdAbortEp0();
