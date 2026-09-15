@@ -56,6 +56,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdatomic.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "nrf.h"
 #include "nrf_peripherals.h"
@@ -2545,36 +2546,26 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	setup.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
 		((uint16_t)NRF_USBD->WLENGTHH << 8);
 
-	nRFUsbdHostResumeDetected();
-
-	// A new SETUP cancels the preceding control transaction. EP0 owns
-	// EasyDMA while active; leave an ordinary endpoint DMA untouched.
-	if (atomic_load(&s_Ctrlr.Ep0State) == NRFX_USBD_EP0_ACTIVE &&
-		nRFUsbdDmaActive())
-	{
-		nRFUsbdDmaUnlock();
-	}
-	nRFUsbdAbortEp0();
-
-	s_Ctrlr.SetupDirIn =
-		(setup.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0U;
-	atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_ACTIVE);
-
 	const bool setAddress =
 		(setup.Setup.bmRequestType &
 		 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0U &&
 		setup.Setup.bRequest == USB_REQ_SET_ADDRESS;
+
+	printf("EP0 SETUP rt=%02x r=%02x v=%04x i=%04x l=%u %c\n",
+		setup.Setup.bmRequestType, setup.Setup.bRequest,
+		setup.Setup.wValue, setup.Setup.wIndex, setup.Setup.wLength,
+		setAddress ? 'A' : 'S');
+
 	if (setAddress)
 	{
 		UsbCtrlrEvt_t address = {};
 		address.Type = USB_CTRLR_EVT_ADDRESS;
 		address.Address = (uint8_t)(setup.Setup.wValue & 0x7FU);
-		nRFUsbdEmit(&address);
-		atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_IDLE);
+		UsbDevProcessEvent(0, &address);
 		return;
 	}
 
-	nRFUsbdEmit(&setup);
+	UsbDevProcessEvent(0, &setup);
 }
 
 extern "C" void USBD_IRQHandler(void)
