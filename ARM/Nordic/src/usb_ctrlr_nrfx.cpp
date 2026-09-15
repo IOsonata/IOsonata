@@ -1414,13 +1414,6 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 		const uint16_t received = (uint16_t)NRF_USBD->SIZE.EPOUT[epNum];
 		const uint16_t len = received < pQue->Len ? received : pQue->Len;
 
-		if (epNum != 0U)
-		{
-			pXfer->TotalLen = pQue->Len;
-			pXfer->ActualLen = 0U;
-			pXfer->Started = true;
-		}
-
 		NRF_USBD->EPOUT[epNum].PTR = (uint32_t)(uintptr_t)pBuffer;
 		NRF_USBD->EPOUT[epNum].MAXCNT = len;
 		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPOUT[epNum], pQue->EpAddr);
@@ -1535,6 +1528,15 @@ static bool nRFUsbdQueXfer(uint8_t EpAddr, uint16_t Len)
 
 	pQue->EpAddr = EpAddr;
 	pQue->Len = Len;
+
+	if (USB_ENDPADDR_NUM(EpAddr) != 0U &&
+		!USB_ENDPADDR_IS_IN(EpAddr))
+	{
+		nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
+		pXfer->TotalLen = Len;
+		pXfer->ActualLen = 0U;
+		pXfer->Started = true;
+	}
 
 	EnableInterrupt(state);
 	return true;
@@ -2445,9 +2447,33 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 
 	if ((epEvent & NRFX_USBD_XFER_EVT_OUT) != 0U)
 	{
-		// UsbIntrf copies the OUT DMA buffer from this completion callback.
-		// A later OUT-ready AppEvt follows it in FIFO order.
+		// The endpoint callback consumes the completed DMA buffer before a
+		// packet that became ready meanwhile can reuse that same buffer.
 		nRFUsbdHandleOutEnd(epNum, amount);
+
+		if (epNum != 0U)
+		{
+			bool pendingOut = false;
+			bool queuedOut = false;
+			const uint32_t state = DisableInterrupt();
+			nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][0];
+			if (pXfer->DataReceived && !pXfer->Started)
+			{
+				pXfer->DataReceived = false;
+				pendingOut = true;
+				queuedOut = nRFUsbdQueXfer(epNum, nRFUsbdMps(epNum));
+			}
+			EnableInterrupt(state);
+
+			if (pendingOut && !queuedOut)
+			{
+				nRFUsbdQueueOutData(epNum);
+			}
+			else if (queuedOut)
+			{
+				nRFUsbdStartNextDma();
+			}
+		}
 	}
 	else
 	{
@@ -2686,7 +2712,14 @@ extern "C" void USBD_IRQHandler(void)
 			outData &= ~epBit;
 			servicedStatus |= epBit << 16U;
 
-			if (!nRFUsbdQueXfer((uint8_t)epNum,
+			nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][0];
+			if (pXfer->Started)
+			{
+				// This endpoint's DMA buffer remains owned by its queued
+				// completion AppEvt. Remember one newly ready hardware packet.
+				pXfer->DataReceived = true;
+			}
+			else if (!nRFUsbdQueXfer((uint8_t)epNum,
 				nRFUsbdMps((uint8_t)epNum)))
 			{
 				nRFUsbdQueueOutData((uint8_t)epNum);
