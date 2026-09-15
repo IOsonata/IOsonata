@@ -2695,16 +2695,8 @@ extern "C" void USBD_IRQHandler(void)
 			outData &= ~epBit;
 			servicedStatus |= epBit << 16U;
 
-			nRFUsbEpReg_t *pReg = nRFUsbGetEpReg((uint8_t)epNum);
-			if (pReg->bBlocking)
-			{
-				nRFUsbdQueueOutData((uint8_t)epNum);
-			}
-			else
-			{
-				nRFUsbdQueXfer((uint8_t)epNum,
-					nRFUsbdMps((uint8_t)epNum));
-			}
+			nRFUsbdQueXfer((uint8_t)epNum,
+				nRFUsbdMps((uint8_t)epNum));
 		}
 
 		const uint32_t inData = dataStatus & 0xFEU;
