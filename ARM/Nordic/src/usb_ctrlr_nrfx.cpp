@@ -2718,34 +2718,23 @@ extern "C" void USBD_IRQHandler(void)
 			}
 		}
 
-		const uint32_t inData = dataStatus & 0xFEU;
-		uint8_t completedIn = NRFX_USBD_DMA_EP_NONE;
-		uint16_t completedInAmount = 0U;
-		if (inData != 0U)
-		{
-			const uint32_t epNum = 31U - (uint32_t)__CLZ(inData);
-			servicedStatus |= 1UL << epNum;
-			completedIn = (uint8_t)epNum;
-			completedInAmount = (uint16_t)NRF_USBD->EPIN[epNum].AMOUNT;
-		}
+		uint32_t inData = dataStatus & 0xFEU;
+		servicedStatus |= inData;
 
 		NRF_USBD->EPDATASTATUS = servicedStatus;
 		__ISB();
 		__DSB();
 
-		if ((dataStatus & 0x00FE00FEUL & ~servicedStatus) != 0U)
-		{
-			NVIC_SetPendingIRQ(USBD_IRQn);
-		}
-
-		// All ready non-blocking OUT endpoints are now in the same DMA CFifo
-		// as pending IN work. Start at most its single shared head before
-		// deferring endpoint completion to foreground processing.
+		// Every ready OUT request is now in the shared DMA CFifo. Service its
+		// single IN/OUT head once before deferring captured IN completions.
 		nRFUsbdServicePending();
 
-		if (completedIn != NRFX_USBD_DMA_EP_NONE)
+		while (inData != 0U)
 		{
-			nRFUsbdQueueXferComplete(completedIn, completedInAmount);
+			const uint32_t epNum = 31U - (uint32_t)__CLZ(inData);
+			inData &= ~(1UL << epNum);
+			nRFUsbdQueueXferComplete((uint8_t)epNum,
+				(uint16_t)NRF_USBD->EPIN[epNum].AMOUNT);
 		}
 	}
 
