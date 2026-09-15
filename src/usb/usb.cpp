@@ -46,6 +46,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <string.h>
+#include <stdio.h>
 
 #include "app_evt_handler.h"
 #include "usb/usb.h"
@@ -734,6 +735,10 @@ static bool UsbCoreHandleClassRequest(void);
 
 static void UsbCoreStallControl(void)
 {
+	printf("EP0 STALL rt=%02x r=%02x v=%04x address=%u config=%u\n",
+		(unsigned)s_Setup.bmRequestType, (unsigned)s_Setup.bRequest,
+		(unsigned)s_Setup.wValue, (unsigned)s_Address,
+		(unsigned)s_Configuration);
 	UsbCoreAbortControl();
 	UsbCtrlrEpStall(s_UsbDevNo, 0);
 }
@@ -1481,6 +1486,7 @@ void UsbDevProcessEvent(int DevNo, const UsbCtrlrEvt_t *pEvt)
 			break;
 
 		case USB_CTRLR_EVT_ADDRESS:
+			printf("EP0 ADDRESS CORE value=%u\n", (unsigned)pEvt->Address);
 			s_Address = pEvt->Address;
 			break;
 
