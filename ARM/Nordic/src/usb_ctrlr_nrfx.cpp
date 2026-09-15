@@ -297,6 +297,9 @@ static atomic_bool s_IsoInReady;
 static atomic_bool s_IsoOutReady;
 static uint16_t s_IsoOutSize;
 
+// Temporary zero-I/O EP0 diagnostic. Inspect through SWD.
+volatile uint32_t g_UsbEp0Trace;
+
 static void nRFUsbdHostResumeDetected(void);
 
 #endif
@@ -2602,7 +2605,9 @@ extern "C" void USBD_IRQHandler(void)
 			UsbCtrlrEvt_t addrEvt = {};
 			addrEvt.Type = USB_CTRLR_EVT_ADDRESS;
 			addrEvt.Address = (uint8_t)(evt.Setup.wValue & 0x7FU);
+			g_UsbEp0Trace = 0xA1000000UL | addrEvt.Address;
 			nRFUsbdEmit(&addrEvt);
+			g_UsbEp0Trace = 0xA2000000UL | addrEvt.Address;
 		}
 		else
 		{
