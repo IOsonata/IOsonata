@@ -1190,20 +1190,6 @@ static void nRFUsbdDmaRelease(uint8_t EpAddr)
 	const uint32_t primask = __get_PRIMASK();
 	__disable_irq();
 
-	// EPSTATUS is the hardware identity of the one EasyDMA transaction. Clear
-	// only that transaction after its exact ENDEP event has been captured.
-	if (EpAddr == NRFX_USBD_DMA_EP_NONE)
-	{
-		const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
-		NRF_USBD->EPSTATUS = dmaStatus;
-	}
-	else
-	{
-		const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-		NRF_USBD->EPSTATUS = USB_ENDPADDR_IS_IN(EpAddr) ?
-			(1UL << epNum) : (1UL << (epNum + 16U));
-	}
-
 	// Ordinary and EP0 DMA retain their CFifo head until ENDEP. ISO is
 	// selected from dedicated state and therefore has no CFifo entry.
 	if (EpAddr != NRFX_USBD_DMA_EP_NONE &&
@@ -1246,30 +1232,38 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 
 
 /**
- * Resolve the single completed DMA from the endpoint status captured by
- * hardware. EPSTATUS supplies endpoint and direction; the matching ENDEP
- * register confirms that the DMA buffer is safe to retire.
+ * Resolve the single completed DMA from its retained CFifo head or dedicated
+ * ISO END event. Only one of these events can represent an active DMA.
  */
 static bool nRFUsbdDmaComplete(uint8_t *pEpAddr)
 {
-	const uint32_t dmaStatus = NRF_USBD->EPSTATUS & 0x01FF01FFUL;
-	if (dmaStatus == 0U)
+	nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoPeek(s_hEp0Que);
+	if (pHead != NULL && *nRFUsbdDmaEndEvent(pHead->EpAddr) != 0U)
 	{
-		return false;
+		*pEpAddr = pHead->EpAddr;
+		return true;
 	}
 
-	const uint32_t epIndex = nRFUsbdLowestBit(dmaStatus);
-	const uint8_t epAddr = epIndex < 16U ?
-		USB_ENDPADDR_DIRIN((uint8_t)epIndex) :
-		(uint8_t)(epIndex - 16U);
-
-	if (*nRFUsbdDmaEndEvent(epAddr) == 0U)
+	pHead = (nRFUsbdQue_t *)CFifoPeek(s_hQue);
+	if (pHead != NULL && *nRFUsbdDmaEndEvent(pHead->EpAddr) != 0U)
 	{
-		return false;
+		*pEpAddr = pHead->EpAddr;
+		return true;
 	}
 
-	*pEpAddr = epAddr;
-	return true;
+	if (NRF_USBD->EVENTS_ENDISOIN != 0U)
+	{
+		*pEpAddr = USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO);
+		return true;
+	}
+
+	if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
+	{
+		*pEpAddr = NRFX_USBD_ISO_EP_NO;
+		return true;
+	}
+
+	return false;
 }
 
 
