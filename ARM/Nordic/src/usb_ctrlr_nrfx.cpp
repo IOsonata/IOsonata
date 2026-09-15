@@ -56,6 +56,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdatomic.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "nrf.h"
 #include "nrf_peripherals.h"
@@ -2532,6 +2533,25 @@ static void nRFUsbdHandleSof(void)
 	nRFUsbdServiceIso();
 }
 
+static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
+{
+	UsbCtrlrEvt_t evt = {};
+
+	evt.Type = USB_CTRLR_EVT_SETUP;
+	evt.Setup.bmRequestType = (uint8_t)NRF_USBD->BMREQUESTTYPE;
+	evt.Setup.bRequest = (uint8_t)NRF_USBD->BREQUEST;
+	evt.Setup.wValue = (uint16_t)NRF_USBD->WVALUEL |
+		((uint16_t)NRF_USBD->WVALUEH << 8);
+	evt.Setup.wIndex = (uint16_t)NRF_USBD->WINDEXL |
+		((uint16_t)NRF_USBD->WINDEXH << 8);
+	evt.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
+		((uint16_t)NRF_USBD->WLENGTHH << 8);
+
+	UsbDevProcessEvent(USB_CTRLR_EVT_SETUP, &evt);
+
+}
+
+
 extern "C" void USBD_IRQHandler(void)
 {
 	nRFUsbdQue_t *dmaque = nullptr;
@@ -2572,6 +2592,9 @@ extern "C" void USBD_IRQHandler(void)
 		__ISB();
 		__DSB();
 
+		(void)AppEvtHandlerQue(0, nullptr, nRFUsbdProcessEP0Setup);
+
+#if 0
 		UsbCtrlrEvt_t evt = {};
 		evt.Type = USB_CTRLR_EVT_SETUP;
 		evt.Setup.bmRequestType = (uint8_t)NRF_USBD->BMREQUESTTYPE;
@@ -2613,6 +2636,8 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			nRFUsbdEmit(&evt);
 		}
+#endif
+
 	}
 
 	if (!setupPending && NRF_USBD->EVENTS_EP0DATADONE)
@@ -2635,11 +2660,11 @@ extern "C" void USBD_IRQHandler(void)
 				NRF_USBD->EPIN[0].PTR = (uint32_t)p->Payload;
 				NRF_USBD->EPIN[0].MAXCNT = p->Len;
 
-				if (p->Len < USB_PKT_MAXLEN_0_CONTROL)
+				//if (p->Len < USB_PKT_MAXLEN_0_CONTROL)
 				{
-					NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
+				//	NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
 				}
-				else
+			//	else
 				{
 					NRF_USBD->SHORTS = 0;
 				}
@@ -2648,6 +2673,7 @@ extern "C" void USBD_IRQHandler(void)
 			else
 			{
 				NRF_USBD->TASKS_EP0STATUS = 1;
+				NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
 			}
 
 		}
@@ -4097,16 +4123,17 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, uint16_t Length)
 
 		if (p)
 		{
+			printf("%d\n", p->Len);
 			NRF_USBD->EPIN[0].PTR = (uint32_t)p->Payload;
 			NRF_USBD->EPIN[0].MAXCNT = p->Len;
 
-			if (p->Len < USB_PKT_MAXLEN_0_CONTROL)
+//			if (p->Len < USB_PKT_MAXLEN_0_CONTROL)
 			{
-				NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
+//				NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
 			}
-			else
+//			else
 			{
-				NRF_USBD->SHORTS = 0;
+//				NRF_USBD->SHORTS = 0;
 			}
 			NRF_USBD->TASKS_STARTEPIN[0] = 1;
 		}
