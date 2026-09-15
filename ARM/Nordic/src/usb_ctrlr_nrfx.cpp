@@ -56,7 +56,6 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdatomic.h>
 #include <string.h>
-#include <stdio.h>
 
 #include "nrf.h"
 #include "nrf_peripherals.h"
@@ -257,6 +256,12 @@ typedef struct _nRF_DMA_EP0_Packet {
 	uint8_t Payload[USB_PKT_MAXLEN_0_CONTROL];
 } nRFDmaEP0Pkt_t;
 
+typedef struct __nRF_Usbd_Setup_Slot
+{
+	UsbCtrlrEvt_t Event;
+	atomic_bool Busy;
+} nRFUsbdSetupSlot_t;
+
 #endif
 
 //
@@ -273,6 +278,10 @@ static hCFifo_t s_hQue;
 alignas(4) static uint8_t s_Ep0QueMem[
 	CFIFO_TOTAL_MEMSIZE(NRFUSBD_EP0_QUE_DEPTH, sizeof(nRFDmaEP0Pkt_t))];
 static hCFifo_t s_hEp0Que;
+
+// SETUP registers hold only the most recently received request. Keep a small
+// set of snapshots for callbacks waiting in the application event queue.
+static nRFUsbdSetupSlot_t s_Ep0SetupSlot[NRFUSBD_EP0_QUE_DEPTH];
 
 // EP0 accepts descriptor and class buffers from the generic USB layer. Those
 // buffers may be const flash or have arbitrary alignment, while nRF52 USBD
@@ -297,9 +306,6 @@ static atomic_uint_fast8_t s_IsoOpen;
 static atomic_bool s_IsoInReady;
 static atomic_bool s_IsoOutReady;
 static uint16_t s_IsoOutSize;
-
-// Temporary zero-I/O EP0 diagnostic. Inspect through SWD.
-volatile uint32_t g_UsbEp0Trace;
 
 static void nRFUsbdHostResumeDetected(void);
 
@@ -1634,6 +1640,10 @@ static void nRFUsbdResetState(void)
 
 	CFifoFlush(s_hQue);
 	CFifoFlush(s_hEp0Que);
+	for (uint8_t i = 0U; i < NRFUSBD_EP0_QUE_DEPTH; i++)
+	{
+		atomic_store(&s_Ep0SetupSlot[i].Busy, false);
+	}
 	s_OutDmaIdx = 0U;
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
@@ -2533,22 +2543,70 @@ static void nRFUsbdHandleSof(void)
 	nRFUsbdServiceIso();
 }
 
+static void nRFUsbdCaptureEP0Setup(UsbCtrlrEvt_t *pEvt)
+{
+	*pEvt = {};
+	pEvt->Type = USB_CTRLR_EVT_SETUP;
+	pEvt->Setup.bmRequestType = (uint8_t)NRF_USBD->BMREQUESTTYPE;
+	pEvt->Setup.bRequest = (uint8_t)NRF_USBD->BREQUEST;
+	pEvt->Setup.wValue = (uint16_t)NRF_USBD->WVALUEL |
+		((uint16_t)NRF_USBD->WVALUEH << 8);
+	pEvt->Setup.wIndex = (uint16_t)NRF_USBD->WINDEXL |
+		((uint16_t)NRF_USBD->WINDEXH << 8);
+	pEvt->Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
+		((uint16_t)NRF_USBD->WLENGTHH << 8);
+}
+
 static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 {
-	UsbCtrlrEvt_t evt = {};
+	if (pContext == NULL)
+	{
+		return;
+	}
 
-	evt.Type = USB_CTRLR_EVT_SETUP;
-	evt.Setup.bmRequestType = (uint8_t)NRF_USBD->BMREQUESTTYPE;
-	evt.Setup.bRequest = (uint8_t)NRF_USBD->BREQUEST;
-	evt.Setup.wValue = (uint16_t)NRF_USBD->WVALUEL |
-		((uint16_t)NRF_USBD->WVALUEH << 8);
-	evt.Setup.wIndex = (uint16_t)NRF_USBD->WINDEXL |
-		((uint16_t)NRF_USBD->WINDEXH << 8);
-	evt.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
-		((uint16_t)NRF_USBD->WLENGTHH << 8);
+	// Copy before releasing a queued slot. The ISR may reuse that slot as soon
+	// as Busy becomes false.
+	UsbCtrlrEvt_t setup =
+		Evt != 0U ?
+			static_cast<nRFUsbdSetupSlot_t *>(pContext)->Event :
+			*static_cast<UsbCtrlrEvt_t *>(pContext);
+	if (Evt != 0U)
+	{
+		atomic_store(
+			&static_cast<nRFUsbdSetupSlot_t *>(pContext)->Busy, false);
+	}
 
-	UsbDevProcessEvent(USB_CTRLR_EVT_SETUP, &evt);
+	nRFUsbdHostResumeDetected();
 
+	// A new SETUP packet cancels the preceding control transaction. EP0 owns
+	// EasyDMA while its state is ACTIVE, so only release the errata lock in
+	// that state; an ordinary endpoint DMA must not be disturbed.
+	if (atomic_load(&s_Ctrlr.Ep0State) == NRFX_USBD_EP0_ACTIVE &&
+		nRFUsbdDmaActive())
+	{
+		nRFUsbdDmaUnlock();
+	}
+	nRFUsbdAbortEp0();
+
+	s_Ctrlr.SetupDirIn =
+		(setup.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0U;
+	atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_ACTIVE);
+
+	const bool setAddress =
+		(setup.Setup.bmRequestType &
+		 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0U &&
+		setup.Setup.bRequest == USB_REQ_SET_ADDRESS;
+	if (setAddress)
+	{
+		UsbCtrlrEvt_t address = {};
+		address.Type = USB_CTRLR_EVT_ADDRESS;
+		address.Address = (uint8_t)(setup.Setup.wValue & 0x7FU);
+		nRFUsbdEmit(&address);
+		atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_IDLE);
+		return;
+	}
+
+	nRFUsbdEmit(&setup);
 }
 
 
@@ -2587,56 +2645,39 @@ extern "C" void USBD_IRQHandler(void)
 	const bool setupPending = NRF_USBD->EVENTS_EP0SETUP != 0U;
 	if (setupPending)
 	{
+		nRFUsbdSetupSlot_t *pSlot = NULL;
+		for (uint8_t i = 0U; i < NRFUSBD_EP0_QUE_DEPTH; i++)
+		{
+			bool expected = false;
+			if (atomic_compare_exchange_strong(
+					&s_Ep0SetupSlot[i].Busy, &expected, true))
+			{
+				pSlot = &s_Ep0SetupSlot[i];
+				break;
+			}
+		}
+
+		UsbCtrlrEvt_t immediate;
+		UsbCtrlrEvt_t *pSetup =
+			pSlot != NULL ? &pSlot->Event : &immediate;
+		nRFUsbdCaptureEP0Setup(pSetup);
+
 		NRF_USBD->EVENTS_EP0SETUP = 0U;
 		NRF_USBD->EVENTS_EP0DATADONE = 0U;
 		__ISB();
 		__DSB();
 
-		(void)AppEvtHandlerQue(0, nullptr, nRFUsbdProcessEP0Setup);
-
-#if 0
-		UsbCtrlrEvt_t evt = {};
-		evt.Type = USB_CTRLR_EVT_SETUP;
-		evt.Setup.bmRequestType = (uint8_t)NRF_USBD->BMREQUESTTYPE;
-		evt.Setup.bRequest = (uint8_t)NRF_USBD->BREQUEST;
-		evt.Setup.wValue = (uint16_t)NRF_USBD->WVALUEL |
-			((uint16_t)NRF_USBD->WVALUEH << 8);
-		evt.Setup.wIndex = (uint16_t)NRF_USBD->WINDEXL |
-			((uint16_t)NRF_USBD->WINDEXH << 8);
-		evt.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
-			((uint16_t)NRF_USBD->WLENGTHH << 8);
-
-		if (atomic_load(&s_Ctrlr.Ep0State) ==
-			NRFX_USBD_EP0_ACTIVE && nRFUsbdDmaActive() &&
-			CFifoUsed(s_hEp0Que) == 0)
+		if (pSlot == NULL)
 		{
-			nRFUsbdDmaUnlock();
+			// A SETUP cannot be dropped. This is only the overload fallback;
+			// normal requests run from the application event queue.
+			nRFUsbdProcessEP0Setup(0U, &immediate);
 		}
-
-		nRFUsbdHostResumeDetected();
-		nRFUsbdAbortEp0();
-		s_Ctrlr.SetupDirIn =
-			(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) != 0U;
-		atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_ACTIVE);
-
-		const bool setAddress =
-			(evt.Setup.bmRequestType &
-			 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0U &&
-			evt.Setup.bRequest == USB_REQ_SET_ADDRESS;
-		if (setAddress)
+		else if (!AppEvtHandlerQue(
+				1U, pSlot, nRFUsbdProcessEP0Setup))
 		{
-			UsbCtrlrEvt_t addrEvt = {};
-			addrEvt.Type = USB_CTRLR_EVT_ADDRESS;
-			addrEvt.Address = (uint8_t)(evt.Setup.wValue & 0x7FU);
-			g_UsbEp0Trace = 0xA1000000UL | addrEvt.Address;
-			nRFUsbdEmit(&addrEvt);
-			g_UsbEp0Trace = 0xA2000000UL | addrEvt.Address;
+			nRFUsbdProcessEP0Setup(1U, pSlot);
 		}
-		else
-		{
-			nRFUsbdEmit(&evt);
-		}
-#endif
 
 	}
 
@@ -4123,7 +4164,6 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, uint16_t Length)
 
 		if (p)
 		{
-			printf("%d\n", p->Len);
 			NRF_USBD->EPIN[0].PTR = (uint32_t)p->Payload;
 			NRF_USBD->EPIN[0].MAXCNT = p->Len;
 
