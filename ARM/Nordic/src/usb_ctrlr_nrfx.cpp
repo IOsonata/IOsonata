@@ -2370,27 +2370,6 @@ static void nRFUsbdHandleOutData(uint8_t EpNum)
 	}
 }
 
-// Queue ordinary non-blocking OUT readiness directly from EPDATA so the
-// shared EasyDMA channel can roll before foreground completion processing.
-// A still-started transfer owns its DMA buffer until its AppEvt callback.
-static bool nRFUsbdQueueOutDataFromInterrupt(uint8_t EpNum)
-{
-	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNum);
-	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
-
-	if (pReg->bBlocking || pXfer->Started)
-	{
-		return false;
-	}
-
-	const uint16_t length = nRFUsbdMps(EpNum);
-	pXfer->TotalLen = length;
-	pXfer->ActualLen = 0U;
-	pXfer->Started = true;
-	nRFUsbdQueXfer(EpNum, length);
-	return true;
-}
-
 static void nRFUsbdHandleInData(uint8_t EpNum, uint16_t TransferLen)
 {
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
@@ -2490,9 +2469,9 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	if (epNum == 0U)
 	{
 		nRFUsbdServiceEp0();
-		nRFUsbdServiceIso();
-		nRFUsbdServicePending();
 	}
+	nRFUsbdServiceIso();
+	nRFUsbdServicePending();
 }
 
 static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
@@ -2684,8 +2663,12 @@ extern "C" void USBD_IRQHandler(void)
 	}
 
 	// Endpoint zero is handled further down with the setup sequence.
-	// Ordinary completion is queued after EPDATA has had an opportunity to
-	// add and launch newly ready OUT work.
+	if (completedOut && USB_ENDPADDR_NUM(completedDma) != 0U)
+	{
+		const uint8_t epNum = USB_ENDPADDR_NUM(completedDma);
+		nRFUsbdQueueXferComplete((uint8_t)(NRFX_USBD_XFER_EVT_OUT | epNum),
+			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
+	}
 
 	if (NRF_USBD->EVENTS_EPDATA != 0U ||
 		(NRF_USBD->EPDATASTATUS & 0x00FE00FEUL) != 0U)
@@ -2697,29 +2680,12 @@ extern "C" void USBD_IRQHandler(void)
 		const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
 		uint32_t servicedStatus = dataStatus & 0x00010001UL;
 
-		uint32_t outData = (dataStatus >> 16U) & 0xFEU;
-		bool outQueued = false;
-		while (outData != 0U)
+		const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
+		if (outData != 0U)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
-			const uint32_t epBit = 1UL << epNum;
-			outData &= ~epBit;
-			servicedStatus |= epBit << 16U;
-			if (nRFUsbdQueueOutDataFromInterrupt((uint8_t)epNum))
-			{
-				outQueued = true;
-			}
-			else
-			{
-				nRFUsbdQueueOutData((uint8_t)epNum);
-			}
-		}
-
-		// Populate the DMA CFifo with every ready OUT endpoint first. Then
-		// select and start only its head through the shared EasyDMA service.
-		if (outQueued)
-		{
-			nRFUsbdServicePending();
+			servicedStatus |= 1UL << (epNum + 16U);
+			nRFUsbdQueueOutData((uint8_t)epNum);
 		}
 
 		const uint32_t inData = dataStatus & 0xFEU;
@@ -2739,16 +2705,6 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			NVIC_SetPendingIRQ(USBD_IRQn);
 		}
-	}
-
-	// A newly ready ordinary OUT request has already entered the DMA CFifo
-	// and, when the channel was free, started before this completion is
-	// deferred to foreground processing.
-	if (completedOut && USB_ENDPADDR_NUM(completedDma) != 0U)
-	{
-		const uint8_t epNum = USB_ENDPADDR_NUM(completedDma);
-		nRFUsbdQueueXferComplete((uint8_t)(NRFX_USBD_XFER_EVT_OUT | epNum),
-			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 	}
 
 	if (NRF_USBD->EVENTS_ENDISOIN != 0U)
