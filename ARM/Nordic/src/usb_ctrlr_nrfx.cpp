@@ -1251,16 +1251,6 @@ static bool nRFUsbdDmaComplete(uint8_t *pEpAddr)
 		return true;
 	}
 
-	// A newly ready ordinary OUT request has already entered the DMA CFifo
-	// and, when the channel was free, started before this completion is
-	// deferred to foreground processing.
-	if (completedOut && USB_ENDPADDR_NUM(completedDma) != 0U)
-	{
-		const uint8_t epNum = USB_ENDPADDR_NUM(completedDma);
-		nRFUsbdQueueXferComplete((uint8_t)(NRFX_USBD_XFER_EVT_OUT | epNum),
-			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
-	}
-
 	if (NRF_USBD->EVENTS_ENDISOIN != 0U)
 	{
 		*pEpAddr = USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO);
@@ -2749,6 +2739,16 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			NVIC_SetPendingIRQ(USBD_IRQn);
 		}
+	}
+
+	// A newly ready ordinary OUT request has already entered the DMA CFifo
+	// and, when the channel was free, started before this completion is
+	// deferred to foreground processing.
+	if (completedOut && USB_ENDPADDR_NUM(completedDma) != 0U)
+	{
+		const uint8_t epNum = USB_ENDPADDR_NUM(completedDma);
+		nRFUsbdQueueXferComplete((uint8_t)(NRFX_USBD_XFER_EVT_OUT | epNum),
+			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 	}
 
 	if (NRF_USBD->EVENTS_ENDISOIN != 0U)
