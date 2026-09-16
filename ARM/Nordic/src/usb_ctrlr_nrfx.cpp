@@ -2150,8 +2150,6 @@ bool nRFUsbRegDataEpXfer(uint8_t EpAddr, uint16_t Length)
 	}
 
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
-	pXfer->TotalLen = Length;
-	pXfer->ActualLen = 0U;
 	pXfer->Started = true;
 
 	nRFUsbdQueXfer(EpAddr, Length);
@@ -2472,7 +2470,6 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 		return;
 	}
 
-	pXfer->ActualLen = amount;
 	pXfer->Started = false;
 	nRFUsbEpRegisteredEvent(epAddr, USB_CTRLR_EVT_XFER_CMPL,
 		amount, USB_CTRLR_XFER_SUCCESS);
@@ -2504,8 +2501,6 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 	else
 	{
 		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][0];
-		pXfer->TotalLen = pReg->Mps;
-		pXfer->ActualLen = 0U;
 		pXfer->Started = true;
 
 		nRFUsbdQueXfer(epNum, pReg->Mps);
