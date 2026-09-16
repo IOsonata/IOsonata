@@ -2681,7 +2681,7 @@ extern "C" void USBD_IRQHandler(void)
 		if (s_Ep0Trace34 == 1U)
 		{
 			g_UsbEp0Trace |= 0x04U;
-			printf("EP0 34 DATA\n");
+			printf("EP0 34 DATA q=%d\n", CFifoUsed(s_hEp0Que));
 		}
 
 		if (s_Ep0InDmaDone)
@@ -2691,10 +2691,19 @@ extern "C" void USBD_IRQHandler(void)
 
 			// The host accepted the packet; its staging slot can now be reused.
 			(void)CFifoGet(s_hEp0Que);
+			if (s_Ep0Trace34 == 1U)
+			{
+				printf("EP0 34 RELEASE q=%d\n", CFifoUsed(s_hEp0Que));
+			}
 			nRFUsbdQueueXferComplete(0U, amount);
 
 			nRFDmaEP0Pkt_t *p =
 				(nRFDmaEP0Pkt_t *)CFifoPeek(s_hEp0Que);
+		if (s_Ep0Trace34 == 1U && p != NULL)
+		{
+			printf("EP0 34 MORE p=%08lx len=%u\n",
+				(unsigned long)(uintptr_t)p, p->Len);
+		}
 			if (p != NULL)
 			{
 				NRF_USBD->EPIN[0].PTR = (uint32_t)p->Payload;
@@ -4120,6 +4129,12 @@ bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, uint16_t Length)
 {
+	if (s_Ep0Trace34 == 1U)
+	{
+		printf("EP0 34 SEND len=%u q=%d\n",
+			Length, CFifoUsed(s_hEp0Que));
+	}
+
 	if (DevNo != 0)
 	{
 		return -1;
@@ -4150,6 +4165,12 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, uint16_t Length)
 		pBuffer += l;
 		Length -= l;
 		cnt += l;
+	}
+
+	if (s_Ep0Trace34 == 1U)
+	{
+		printf("EP0 34 QUEUED cnt=%d q=%d\n",
+			cnt, CFifoUsed(s_hEp0Que));
 	}
 
 	uint32_t state = DisableInterrupt();
