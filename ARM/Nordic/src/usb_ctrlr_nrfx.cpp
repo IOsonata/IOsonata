@@ -2457,6 +2457,26 @@ static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 	nRFUsbdServicePending();
 }
 
+static void nRFUsbdProcessEp0Complete(uint32_t Evt, void *pContext)
+{
+	const uint16_t amount = (uint16_t)(Evt >> 8U);
+
+	(void)pContext;
+
+	if ((Evt & NRFX_USBD_XFER_EVT_OUT) != 0U)
+	{
+		nRFUsbdHandleOutEnd(0U, amount);
+	}
+	else
+	{
+		nRFUsbdHandleInData(0U, amount);
+	}
+
+	nRFUsbdServiceEp0();
+	nRFUsbdServiceIso();
+	nRFUsbdServicePending();
+}
+
 static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 {
 	const uint8_t epEvent = (uint8_t)Evt;
@@ -2476,10 +2496,6 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 		nRFUsbdHandleInData(epNum, amount);
 	}
 
-	if (epNum == 0U)
-	{
-		nRFUsbdServiceEp0();
-	}
 	nRFUsbdServiceIso();
 	nRFUsbdServicePending();
 }
@@ -2502,6 +2518,13 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 static void nRFUsbdQueueOutData(uint8_t EpNum)
 {
 	(void)AppEvtHandlerQue(EpNum, NULL, nRFUsbdProcessOutData);
+}
+
+static void nRFUsbdQueueEp0Complete(bool Out, uint16_t Amount)
+{
+	const uint32_t evt = ((uint32_t)Amount << 8U) |
+		(Out ? NRFX_USBD_XFER_EVT_OUT : 0U);
+	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessEp0Complete);
 }
 
 static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
@@ -2742,9 +2765,8 @@ extern "C" void USBD_IRQHandler(void)
 			nRFEPPkt_t *p = (nRFEPPkt_t*)CFifoGet(s_hEp0Que);
 			//nRFUsbdQueueXferComplete(0U,
 			//	(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
-			uint32_t amount = NRF_USBD->EPIN[0].AMOUNT;
-			const uint32_t evt = (amount << 8U) | 0;
-			(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete);
+			const uint16_t amount = (uint16_t)NRF_USBD->EPIN[0].AMOUNT;
+			nRFUsbdQueueEp0Complete(false, amount);
 
 			NRF_USBD->EVENTS_ENDEPIN[0] = 0;
 
@@ -2840,7 +2862,7 @@ extern "C" void USBD_IRQHandler(void)
 	{
 		if (completedOut && USB_ENDPADDR_NUM(completedDma) == 0U)
 		{
-			nRFUsbdQueueXferComplete(NRFX_USBD_XFER_EVT_OUT,
+			nRFUsbdQueueEp0Complete(true,
 				(uint16_t)NRF_USBD->EPOUT[0].AMOUNT);
 		}
 
