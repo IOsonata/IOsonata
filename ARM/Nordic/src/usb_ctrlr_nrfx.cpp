@@ -2350,23 +2350,8 @@ static void nRFUsbdHandleOutEnd(uint8_t EpNum, uint16_t TransferLen)
 	}
 }
 
-static void nRFUsbdHandleOutData(uint8_t EpNum)
+static void nRFUsbdHandleEp0OutData(void)
 {
-	if (EpNum != 0U)
-	{
-		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNum);
-		if (pReg->bBlocking)
-		{
-			nRFUsbEpRegisteredEvent(EpNum, USB_CTRLR_EVT_DRDY, 0U,
-							 USB_CTRLR_XFER_SUCCESS);
-		}
-		else
-		{
-			(void)nRFUsbRegDataEpXfer(EpNum, nRFUsbdMps(EpNum));
-		}
-		return;
-	}
-
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[0][0];
 	if (pXfer->Started &&
 		(pXfer->ActualLen < pXfer->TotalLen || pXfer->TotalLen == 0U))
@@ -2495,7 +2480,15 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	{
 		nRFUsbdHandleInData(epNum, amount);
 	}
+}
 
+static void nRFUsbdProcessEp0OutData(uint32_t Evt, void *pContext)
+{
+	(void)Evt;
+	(void)pContext;
+
+	nRFUsbdHandleEp0OutData();
+	nRFUsbdServiceEp0();
 	nRFUsbdServiceIso();
 	nRFUsbdServicePending();
 }
@@ -2503,16 +2496,19 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 {
 	const uint8_t epNum = (uint8_t)Evt;
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum);
 
 	(void)pContext;
 
-	nRFUsbdHandleOutData(epNum);
-	if (epNum == 0U)
+	if (pReg->bBlocking)
 	{
-		nRFUsbdServiceEp0();
+		nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U,
+			USB_CTRLR_XFER_SUCCESS);
 	}
-	nRFUsbdServiceIso();
-	nRFUsbdServicePending();
+	else
+	{
+		(void)nRFUsbRegDataEpXfer(epNum, nRFUsbdMps(epNum));
+	}
 }
 
 static void nRFUsbdQueueOutData(uint8_t EpNum)
@@ -2773,7 +2769,7 @@ extern "C" void USBD_IRQHandler(void)
 		else
 		{
 //			nRFUsbdQueueOutData(0U);
-			(void)AppEvtHandlerQue(0, NULL, nRFUsbdProcessOutData);
+			(void)AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEp0OutData);
 		}
 	}
 	else if (NRF_USBD->EVENTS_EPDATA != 0U ||
