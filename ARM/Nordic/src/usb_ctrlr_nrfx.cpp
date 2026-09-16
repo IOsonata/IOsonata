@@ -2245,8 +2245,8 @@ static void nRFUsbdBusReset(void)
 		USBD_INTEN_EPDATA_Msk |
 		USBD_INTEN_EP0SETUP_Msk |
 		USBD_INTEN_EP0DATADONE_Msk |
+		USBD_INTEN_ENDEPIN0_Msk |
 		USBD_INTEN_ENDEPOUT0_Msk;
-//		USBD_INTEN_ENDEPIN0_Msk |
 
 	nRFUsbdResetState();
 }
@@ -2457,26 +2457,6 @@ static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 	nRFUsbdServicePending();
 }
 
-static void nRFUsbdProcessEp0Complete(uint32_t Evt, void *pContext)
-{
-	const uint16_t amount = (uint16_t)(Evt >> 8U);
-
-	(void)pContext;
-
-	if ((Evt & NRFX_USBD_XFER_EVT_OUT) != 0U)
-	{
-		nRFUsbdHandleOutEnd(0U, amount);
-	}
-	else
-	{
-		nRFUsbdHandleInData(0U, amount);
-	}
-
-	nRFUsbdServiceEp0();
-	nRFUsbdServiceIso();
-	nRFUsbdServicePending();
-}
-
 static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 {
 	const uint8_t epEvent = (uint8_t)Evt;
@@ -2496,6 +2476,10 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 		nRFUsbdHandleInData(epNum, amount);
 	}
 
+	if (epNum == 0U)
+	{
+		nRFUsbdServiceEp0();
+	}
 	nRFUsbdServiceIso();
 	nRFUsbdServicePending();
 }
@@ -2518,13 +2502,6 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 static void nRFUsbdQueueOutData(uint8_t EpNum)
 {
 	(void)AppEvtHandlerQue(EpNum, NULL, nRFUsbdProcessOutData);
-}
-
-static void nRFUsbdQueueEp0Complete(bool Out, uint16_t Amount)
-{
-	const uint32_t evt = ((uint32_t)Amount << 8U) |
-		(Out ? NRFX_USBD_XFER_EVT_OUT : 0U);
-	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessEp0Complete);
 }
 
 static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
@@ -2653,8 +2630,7 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 
 extern "C" void USBD_IRQHandler(void)
 {
-	volatile uint32_t dmastatus = NRF_USBD->EPSTATUS;
-	volatile uint32_t endep0in = NRF_USBD->EVENTS_ENDEPIN[0];
+	uint32_t dmastatus = NRF_USBD->EPSTATUS;
 	uint8_t completedDma = NRFX_USBD_DMA_EP_NONE;
 
 	if (nRFUsbdDmaActive())
@@ -2752,63 +2728,34 @@ extern "C" void USBD_IRQHandler(void)
 
 	if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
 	{
+		volatile bool endep0in = NRF_USBD->EVENTS_ENDEPIN[0];
 
 		NRF_USBD->EVENTS_EP0DATADONE = 0U;
+		NRF_USBD->EVENTS_ENDEPIN[0] = 0;
 		__ISB();
 		__DSB();
 
-		if (endep0in)
-		//if (s_Ctrlr.SetupDirIn)
-//		if (NRF_USBD->EVENTS_ENDEPIN[0] != 0)
+		if ((dmastatus & 1) == 0 || endep0in == 0)
 		{
-		//	printf("%x %x\n", dmastatus, endep0in);
-			nRFEPPkt_t *p = (nRFEPPkt_t*)CFifoGet(s_hEp0Que);
+			printf("%x %x", dmastatus, endep0in);
+		}
+		//if (endep0in)
+		if (s_Ctrlr.SetupDirIn)
+		{
 			//nRFUsbdQueueXferComplete(0U,
 			//	(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
-			const uint16_t amount = (uint16_t)NRF_USBD->EPIN[0].AMOUNT;
-			nRFUsbdQueueEp0Complete(false, amount);
-
-			NRF_USBD->EVENTS_ENDEPIN[0] = 0;
-
-			p = (nRFEPPkt_t*)CFifoPeek(s_hEp0Que);
-
-			if (p)
-			{
-				s_Ctrlr.SetupDirIn = true;
-
-				NRF_USBD->EVENTS_EP0DATADONE = 0U;
-				NRF_USBD->EVENTS_ENDEPIN[0] = 0;
-
-				NRF_USBD->EPIN[0].MAXCNT = p->Hdr.Len;
-				NRF_USBD->EPIN[0].PTR = (uint32_t)p;
-
-				//if (p->Hdr.Len < NRFX_USBD_MAX_PACKET_SIZE)
-				//{
-				//	NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
-				//}
-				//else
-				//{
-			//		NRF_USBD->SHORTS = 0;
-			//	}
-				NRF_USBD->TASKS_STARTEPIN[0] = 1U;
-			}
-			else
-			{
-				NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
-
-				NRF_USBD->TASKS_EP0STATUS = 1;
-			}
+			uint32_t amount = NRF_USBD->EPIN[0].AMOUNT;
+			const uint32_t evt = (amount << 8U) | 0;
+			(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete);
 		}
-		else if (NRF_USBD->EVENTS_ENDEPOUT[0] != 0)
+		else
 		{
 //			nRFUsbdQueueOutData(0U);
 			(void)AppEvtHandlerQue(0, NULL, nRFUsbdProcessOutData);
 		}
 	}
-	else
-	if (dmastatus != 0)
-//	if (NRF_USBD->EVENTS_EPDATA != 0U )
-//		(NRF_USBD->EPDATASTATUS & 0x00FE00FEUL) != 0U)
+	else if (NRF_USBD->EVENTS_EPDATA != 0U ||
+		(NRF_USBD->EPDATASTATUS & 0x00FE00FEUL) != 0U)
 	{
 		// Clear the event first so a new endpoint event remains observable.
 		// Service at most one endpoint per direction in this interrupt. Any
@@ -2862,7 +2809,7 @@ extern "C" void USBD_IRQHandler(void)
 	{
 		if (completedOut && USB_ENDPADDR_NUM(completedDma) == 0U)
 		{
-			nRFUsbdQueueEp0Complete(true,
+			nRFUsbdQueueXferComplete(NRFX_USBD_XFER_EVT_OUT,
 				(uint16_t)NRF_USBD->EPOUT[0].AMOUNT);
 		}
 
@@ -2890,7 +2837,6 @@ extern "C" void USBD_IRQHandler(void)
 
 	nRFUsbdTryEnterLowPower();
 
-	//NRF_USBD->EPSTATUS = dmastatus;
 }
 
 /**
@@ -4171,10 +4117,7 @@ bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 {
 	int cnt = 0;
-if (pBuffer == nullptr || Length <= 0)
-{
-	printf("ZPL\n");
-}
+
 	do
 	{
 		int l = min(Length, NRFX_USBD_MAX_PACKET_SIZE);
@@ -4197,11 +4140,8 @@ if (pBuffer == nullptr || Length <= 0)
 		Length -= l;
 	} while  (Length > 0);
 
-//	printf("EP0 - %x\n", NRFX_USBD_EASYDMA_BUSY_REG);
-
-	if (NRFX_USBD_EASYDMA_BUSY_REG == 0)
+	if (NRFX_USBD_EASYDMA_BUSY_REG == NRFX_USBD_EASYDMA_BUSY_REG_CLEAR)
 	{
-//		printf("EP0Send\n");
 		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
 		nRFEPPkt_t *p = (nRFEPPkt_t*)CFifoPeek(s_hEp0Que);
 
@@ -4215,14 +4155,14 @@ if (pBuffer == nullptr || Length <= 0)
 			NRF_USBD->EPIN[0].MAXCNT = p->Hdr.Len;
 			NRF_USBD->EPIN[0].PTR = (uint32_t)p;
 
-			//if (p->Hdr.Len < NRFX_USBD_MAX_PACKET_SIZE)
-			//{
-			//	NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
-			//}
-			//else
-			//{
-		//		NRF_USBD->SHORTS = 0;
-		//	}
+			if (p->Hdr.Len < NRFX_USBD_MAX_PACKET_SIZE)
+			{
+				NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
+			}
+			else
+			{
+				NRF_USBD->SHORTS = 0;
+			}
 			NRF_USBD->TASKS_STARTEPIN[0] = 1U;
 		}
 	}
