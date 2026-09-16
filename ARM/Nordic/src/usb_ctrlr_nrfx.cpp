@@ -297,13 +297,6 @@ static atomic_bool s_IsoInReady;
 static atomic_bool s_IsoOutReady;
 static uint16_t s_IsoOutSize;
 
-// EP0 EasyDMA completion precedes EP0DATADONE. Latch the DMA result so the
-// two independently delivered interrupts can be processed in order.
-static bool s_Ep0InDmaDone;
-static bool s_Ep0OutDmaDone;
-static uint16_t s_Ep0InAmount;
-static uint16_t s_Ep0OutAmount;
-
 static void nRFUsbdHostResumeDetected(void);
 
 #endif
@@ -1637,10 +1630,6 @@ static void nRFUsbdResetState(void)
 
 	CFifoFlush(s_hQue);
 	CFifoFlush(s_hEp0Que);
-	s_Ep0InDmaDone = false;
-	s_Ep0OutDmaDone = false;
-	s_Ep0InAmount = 0U;
-	s_Ep0OutAmount = 0U;
 	s_OutDmaIdx = 0U;
 	atomic_store(&s_PendingEp0Status, false);
 	atomic_store(&s_PendingEp0RcvOut, false);
@@ -2610,10 +2599,6 @@ extern "C" void USBD_IRQHandler(void)
 	{
 		NRF_USBD->EVENTS_EP0SETUP = 0U;
 		NRF_USBD->EVENTS_EP0DATADONE = 0U;
-		NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
-		NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
-		s_Ep0InDmaDone = false;
-		s_Ep0OutDmaDone = false;
 		__ISB();
 		__DSB();
 
@@ -2621,32 +2606,15 @@ extern "C" void USBD_IRQHandler(void)
 
 	}
 
-	if (!setupPending)
-	{
-		if (NRF_USBD->EVENTS_ENDEPIN[0] != 0U)
-		{
-			NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
-			s_Ep0InAmount = (uint16_t)NRF_USBD->EPIN[0].AMOUNT;
-			s_Ep0InDmaDone = true;
-		}
-
-		if (NRF_USBD->EVENTS_ENDEPOUT[0] != 0U)
-		{
-			NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
-			s_Ep0OutAmount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
-			s_Ep0OutDmaDone = true;
-		}
-	}
-
 	if (!setupPending && NRF_USBD->EVENTS_EP0DATADONE != 0U)
 	{
 		NRF_USBD->EVENTS_EP0DATADONE = 0U;
-		if (s_Ep0InDmaDone)
-		{
-			const uint16_t amount = s_Ep0InAmount;
-			s_Ep0InDmaDone = false;
 
-			// The host accepted the packet; its staging slot can now be reused.
+		if (NRF_USBD->EVENTS_ENDEPIN[0] != 0U)
+		{
+			NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
+			const uint16_t amount = (uint16_t)NRF_USBD->EPIN[0].AMOUNT;
+
 			(void)CFifoGet(s_hEp0Que);
 			nRFUsbdQueueXferComplete(0U, amount);
 
@@ -2666,16 +2634,18 @@ extern "C" void USBD_IRQHandler(void)
 					NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
 			}
 		}
-		else if (s_Ep0OutDmaDone)
+		else if (NRF_USBD->EVENTS_ENDEPOUT[0] != 0U)
 		{
-			const uint16_t amount = s_Ep0OutAmount;
-			s_Ep0OutDmaDone = false;
+			NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
+			const uint16_t amount =
+				(uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
 			nRFUsbdDmaRelease(USB_ENDPADDR_DIR_OUT);
 			nRFUsbdQueueXferComplete(
 				NRFX_USBD_XFER_EVT_OUT, amount);
 			nRFUsbdQueueOutData(0U);
 		}
 	}
+
 	else if (NRF_USBD->EVENTS_ENDISOIN != 0U)
 	{
 		NRF_USBD->EVENTS_ENDISOIN = 0U;
