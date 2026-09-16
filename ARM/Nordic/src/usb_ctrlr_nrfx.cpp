@@ -1501,22 +1501,18 @@ static void nRFUsbdServiceEp0(void)
 
 static void nRFUsbdServicePending(void)
 {
-	if (atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE ||
-		atomic_load(&s_HostResumePending) ||
-		nRFUsbdIsoPending() ||
-		(atomic_load(&s_BusSuspended) && !atomic_load(&s_SuspendPending)))
-	{
-		return;
-	}
-
 	for (;;)
 	{
-		// BUSY is the active EasyDMA state. Keep interrupts disabled only
-		// through head selection, PTR/MAXCNT setup and TASKS_STARTEP so
-		// another context cannot select a second transfer in that window.
+		// Select and start under one gate. Rechecking the same EP0 and ISO
+		// state before and after masking interrupts added work to every packet;
+		// masking first closes that race with a single set of tests.
 		const uint32_t state = DisableInterrupt();
-		if (nRFUsbdDmaActive() || nRFUsbdIsoPending() ||
-			atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE)
+		if (nRFUsbdDmaActive() ||
+			atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE ||
+			atomic_load(&s_HostResumePending) ||
+			nRFUsbdIsoPending() ||
+			(atomic_load(&s_BusSuspended) &&
+			 !atomic_load(&s_SuspendPending)))
 		{
 			EnableInterrupt(state);
 			return;
