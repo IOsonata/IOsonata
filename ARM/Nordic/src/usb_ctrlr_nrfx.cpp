@@ -56,7 +56,6 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdatomic.h>
 #include <string.h>
-#include <stdio.h>
 
 #include "nrf.h"
 #include "nrf_peripherals.h"
@@ -304,13 +303,6 @@ static bool s_Ep0InDmaDone;
 static bool s_Ep0OutDmaDone;
 static uint16_t s_Ep0InAmount;
 static uint16_t s_Ep0OutAmount;
-
-// Temporary focused trace for the final 34-byte string descriptor.
-// Bit 0: SETUP, bit 1: ENDEPIN0, bit 2: EP0DATADONE,
-// bit 3: EP0STATUS started, bit 4: next SETUP received.
-// Bits 31:16 retain the ENDEPIN0 AMOUNT.
-volatile uint32_t g_UsbEp0Trace;
-static volatile uint8_t s_Ep0Trace34;
 
 static void nRFUsbdHostResumeDetected(void);
 
@@ -2564,28 +2556,10 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	setup.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
 		((uint16_t)NRF_USBD->WLENGTHH << 8);
 
-	if (s_Ep0Trace34 == 2U)
-	{
-		g_UsbEp0Trace |= 0x10U;
-		s_Ep0Trace34 = 0U;
-	}
-
 	const bool setAddress =
 		(setup.Setup.bmRequestType &
 		 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0U &&
 		setup.Setup.bRequest == USB_REQ_SET_ADDRESS;
-
-	const bool trace34 =
-		setup.Setup.bmRequestType == 0x80U &&
-		setup.Setup.bRequest == USB_REQ_GET_DESCRIPTOR &&
-		setup.Setup.wValue == 0x0303U &&
-		setup.Setup.wLength == 34U;
-	if (trace34)
-	{
-		s_Ep0Trace34 = 1U;
-		g_UsbEp0Trace = 0x01U;
-		printf("EP0 34 APP enter\n");
-	}
 
 	if (setAddress)
 	{
@@ -2597,11 +2571,6 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	}
 
 	UsbDevProcessEvent(0, &setup);
-
-	if (trace34)
-	{
-		printf("EP0 34 APP sent\n");
-	}
 }
 
 extern "C" void USBD_IRQHandler(void)
@@ -2659,12 +2628,6 @@ extern "C" void USBD_IRQHandler(void)
 			NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
 			s_Ep0InAmount = (uint16_t)NRF_USBD->EPIN[0].AMOUNT;
 			s_Ep0InDmaDone = true;
-			if (s_Ep0Trace34 == 1U)
-			{
-				g_UsbEp0Trace |=
-					((uint32_t)s_Ep0InAmount << 16U) | 0x02U;
-				printf("EP0 34 DMA\n");
-			}
 		}
 
 		if (NRF_USBD->EVENTS_ENDEPOUT[0] != 0U)
@@ -2678,12 +2641,6 @@ extern "C" void USBD_IRQHandler(void)
 	if (!setupPending && NRF_USBD->EVENTS_EP0DATADONE != 0U)
 	{
 		NRF_USBD->EVENTS_EP0DATADONE = 0U;
-		if (s_Ep0Trace34 == 1U)
-		{
-			g_UsbEp0Trace |= 0x04U;
-			printf("EP0 34 DATA q=%d\n", CFifoUsed(s_hEp0Que));
-		}
-
 		if (s_Ep0InDmaDone)
 		{
 			const uint16_t amount = s_Ep0InAmount;
@@ -2691,19 +2648,10 @@ extern "C" void USBD_IRQHandler(void)
 
 			// The host accepted the packet; its staging slot can now be reused.
 			(void)CFifoGet(s_hEp0Que);
-			if (s_Ep0Trace34 == 1U)
-			{
-				printf("EP0 34 RELEASE q=%d\n", CFifoUsed(s_hEp0Que));
-			}
 			nRFUsbdQueueXferComplete(0U, amount);
 
 			nRFDmaEP0Pkt_t *p =
 				(nRFDmaEP0Pkt_t *)CFifoPeek(s_hEp0Que);
-		if (s_Ep0Trace34 == 1U && p != NULL)
-		{
-			printf("EP0 34 MORE p=%08lx len=%u\n",
-				(unsigned long)(uintptr_t)p, p->Len);
-		}
 			if (p != NULL)
 			{
 				NRF_USBD->EPIN[0].PTR = (uint32_t)p->Payload;
@@ -2716,12 +2664,6 @@ extern "C" void USBD_IRQHandler(void)
 				NRF_USBD->TASKS_EP0STATUS = 1U;
 				NRFX_USBD_EASYDMA_BUSY_REG =
 					NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
-				if (s_Ep0Trace34 == 1U)
-				{
-					s_Ep0Trace34 = 2U;
-					g_UsbEp0Trace |= 0x08U;
-					printf("EP0 34 STATUS\n");
-				}
 			}
 		}
 		else if (s_Ep0OutDmaDone)
@@ -4129,12 +4071,6 @@ bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, uint16_t Length)
 {
-	if (s_Ep0Trace34 == 1U)
-	{
-		printf("EP0 34 SEND len=%u q=%d\n",
-			Length, CFifoUsed(s_hEp0Que));
-	}
-
 	if (DevNo != 0)
 	{
 		return -1;
@@ -4165,12 +4101,6 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, uint16_t Length)
 		pBuffer += l;
 		Length -= l;
 		cnt += l;
-	}
-
-	if (s_Ep0Trace34 == 1U)
-	{
-		printf("EP0 34 QUEUED cnt=%d q=%d\n",
-			cnt, CFifoUsed(s_hEp0Que));
 	}
 
 	uint32_t state = DisableInterrupt();
