@@ -2816,14 +2816,10 @@ extern "C" void USBD_IRQHandler(void)
 			(uint16_t)NRF_USBD->ISOOUT.AMOUNT);
 	}
 
-	//else
+	if (completedOut && USB_ENDPADDR_NUM(completedDma) == 0U)
 	{
-		if (completedOut && USB_ENDPADDR_NUM(completedDma) == 0U)
-		{
-			nRFUsbdQueueEp0Complete(true,
-				(uint16_t)NRF_USBD->EPOUT[0].AMOUNT);
-		}
-
+		nRFUsbdQueueEp0Complete(true,
+			(uint16_t)NRF_USBD->EPOUT[0].AMOUNT);
 	}
 
 	if (NRF_USBD->EVENTS_SOF != 0U)
@@ -2835,18 +2831,33 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdHandleSof();
 	}
 
-	nRFUsbdTryRemoteWake();
-
-	// ENDEP released the shared EasyDMA channel above. Start one request that
-	// was already queued behind it without waiting for foreground AppEvt
-	// processing. Endpoint completion callbacks remain deferred.
-	if (completedDma != NRFX_USBD_DMA_EP_NONE && !nRFUsbdDmaActive())
+	if (atomic_load(&s_RemoteWakePending))
 	{
-		nRFUsbdServiceIso();
-		nRFUsbdServicePending();
+		nRFUsbdTryRemoteWake();
 	}
 
-	nRFUsbdTryEnterLowPower();
+	// ENDEP released the shared EasyDMA channel above. ISO has priority when
+	// it is open; ordinary CDC traffic avoids the ISO service path entirely.
+	if (completedDma != NRFX_USBD_DMA_EP_NONE && !nRFUsbdDmaActive())
+	{
+		if (atomic_load(&s_IsoOpen) == 0U)
+		{
+			nRFUsbdServicePending();
+		}
+		else
+		{
+			nRFUsbdServiceIso();
+			if (!nRFUsbdDmaActive())
+			{
+				nRFUsbdServicePending();
+			}
+		}
+	}
+
+	if (s_UsbdLowPowerSuspend && atomic_load(&s_BusSuspended))
+	{
+		nRFUsbdTryEnterLowPower();
+	}
 
 }
 
