@@ -298,6 +298,9 @@ static atomic_bool s_IsoInReady;
 static atomic_bool s_IsoOutReady;
 static uint16_t s_IsoOutSize;
 
+// Temporary focused trace for the final 34-byte string descriptor.
+static volatile uint8_t s_Ep0Trace34;
+
 static void nRFUsbdHostResumeDetected(void);
 
 #endif
@@ -2546,15 +2549,29 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	setup.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
 		((uint16_t)NRF_USBD->WLENGTHH << 8);
 
+	if (s_Ep0Trace34 == 2U)
+	{
+		printf("EP0 34 NEXT rt=%02x r=%02x v=%04x l=%u\n",
+			setup.Setup.bmRequestType, setup.Setup.bRequest,
+			setup.Setup.wValue, setup.Setup.wLength);
+		s_Ep0Trace34 = 0U;
+	}
+
 	const bool setAddress =
 		(setup.Setup.bmRequestType &
 		 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0U &&
 		setup.Setup.bRequest == USB_REQ_SET_ADDRESS;
 
-	printf("EP0 SETUP rt=%02x r=%02x v=%04x i=%04x l=%u %c\n",
-		setup.Setup.bmRequestType, setup.Setup.bRequest,
-		setup.Setup.wValue, setup.Setup.wIndex, setup.Setup.wLength,
-		setAddress ? 'A' : 'S');
+	const bool trace34 =
+		setup.Setup.bmRequestType == 0x80U &&
+		setup.Setup.bRequest == USB_REQ_GET_DESCRIPTOR &&
+		setup.Setup.wValue == 0x0303U &&
+		setup.Setup.wLength == 34U;
+	if (trace34)
+	{
+		s_Ep0Trace34 = 1U;
+		printf("EP0 34 SETUP\n");
+	}
 
 	if (setAddress)
 	{
@@ -2566,12 +2583,32 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	}
 
 	UsbDevProcessEvent(0, &setup);
+
+	if (trace34)
+	{
+		printf("EP0 34 DISPATCH q=%d busy=%02lx max=%lu\n",
+			CFifoUsed(s_hEp0Que),
+			(unsigned long)NRFX_USBD_EASYDMA_BUSY_REG,
+			(unsigned long)NRF_USBD->EPIN[0].MAXCNT);
+	}
 }
 
 extern "C" void USBD_IRQHandler(void)
 {
 	nRFUsbdQue_t *dmaque = nullptr;
 	uint32_t dmastatus = NRF_USBD->EPSTATUS;
+
+	if (s_Ep0Trace34 == 1U &&
+		(NRF_USBD->EVENTS_EP0DATADONE != 0U ||
+		 NRF_USBD->EVENTS_ENDEPIN[0] != 0U))
+	{
+		printf("EP0 34 IRQ data=%lu end=%lu amount=%lu q=%d busy=%02lx\n",
+			(unsigned long)NRF_USBD->EVENTS_EP0DATADONE,
+			(unsigned long)NRF_USBD->EVENTS_ENDEPIN[0],
+			(unsigned long)NRF_USBD->EPIN[0].AMOUNT,
+			CFifoUsed(s_hEp0Que),
+			(unsigned long)NRFX_USBD_EASYDMA_BUSY_REG);
+	}
 
 	if (NRF_USBD->EVENTS_STARTED != 0U)
 	{
@@ -2646,6 +2683,11 @@ extern "C" void USBD_IRQHandler(void)
 			{
 				NRF_USBD->TASKS_EP0STATUS = 1;
 				NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
+				if (s_Ep0Trace34 == 1U)
+				{
+					s_Ep0Trace34 = 2U;
+					printf("EP0 34 STATUS\n");
+				}
 			}
 
 		}
