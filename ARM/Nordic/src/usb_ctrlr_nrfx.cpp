@@ -2548,20 +2548,6 @@ static void nRFUsbdHandleSof(void)
 	nRFUsbdServiceIso();
 }
 
-static void nRFUsbdPrintEP0Trace(uint32_t Evt, void *pContext)
-{
-	(void)pContext;
-	printf("EP0 34 trace=%02lx amount=%lu\n",
-		(unsigned long)(Evt & 0xFFU),
-		(unsigned long)(Evt >> 16U));
-}
-
-static inline void nRFUsbdQueueEP0Trace(void)
-{
-	(void)AppEvtHandlerQue(
-		g_UsbEp0Trace, NULL, nRFUsbdPrintEP0Trace);
-}
-
 static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 {
 	(void)Evt;
@@ -2677,7 +2663,7 @@ extern "C" void USBD_IRQHandler(void)
 			{
 				g_UsbEp0Trace |=
 					((uint32_t)s_Ep0InAmount << 16U) | 0x02U;
-				nRFUsbdQueueEP0Trace();
+				printf("EP0 34 DMA\n");
 			}
 		}
 
@@ -2695,7 +2681,7 @@ extern "C" void USBD_IRQHandler(void)
 		if (s_Ep0Trace34 == 1U)
 		{
 			g_UsbEp0Trace |= 0x04U;
-			nRFUsbdQueueEP0Trace();
+			printf("EP0 34 DATA\n");
 		}
 
 		if (s_Ep0InDmaDone)
@@ -2725,7 +2711,7 @@ extern "C" void USBD_IRQHandler(void)
 				{
 					s_Ep0Trace34 = 2U;
 					g_UsbEp0Trace |= 0x08U;
-					nRFUsbdQueueEP0Trace();
+					printf("EP0 34 STATUS\n");
 				}
 			}
 		}
