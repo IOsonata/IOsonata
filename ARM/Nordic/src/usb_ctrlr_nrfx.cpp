@@ -2761,36 +2761,9 @@ extern "C" void USBD_IRQHandler(void)
 		__ISB();
 		__DSB();
 
-#if 0
-		UsbCtrlrEvt_t evt = {};
-		evt.Type = USB_CTRLR_EVT_SETUP;
-		evt.Setup.bmRequestType = (uint8_t)NRF_USBD->BMREQUESTTYPE;
-		evt.Setup.bRequest = (uint8_t)NRF_USBD->BREQUEST;
-		evt.Setup.wValue = (uint16_t)NRF_USBD->WVALUEL |
-			((uint16_t)NRF_USBD->WVALUEH << 8);
-		evt.Setup.wIndex = (uint16_t)NRF_USBD->WINDEXL |
-			((uint16_t)NRF_USBD->WINDEXH << 8);
-		evt.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
-			((uint16_t)NRF_USBD->WLENGTHH << 8);
-
-		// A new SETUP terminates the previous control transaction. If EP0 was
-		// retaining the errata lock between packets, release that old ownership
-		// before the new setup processor waits for EasyDMA.
-		if (atomic_load(&s_Ctrlr.Ep0State) ==
-			NRFX_USBD_EP0_ACTIVE && nRFUsbdDmaActive() &&
-			CFifoUsed(s_hEp0Que) == 0)
-		{
-			nRFUsbdDmaUnlock();
-		}
-
-		s_Ctrlr.SetupEvent = evt;
-		atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_PENDING);
-#else
 		(void)AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEP0Setup);
 
 		return;
-#endif
-
 	}
 	else
 	{
