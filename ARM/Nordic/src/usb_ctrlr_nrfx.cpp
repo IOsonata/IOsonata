@@ -56,7 +56,6 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdatomic.h>
 #include <string.h>
-#include <stdio.h>
 
 #include "nrf.h"
 #include "nrf_peripherals.h"
@@ -306,6 +305,10 @@ static uint16_t s_Ep0InAmount;
 static uint16_t s_Ep0OutAmount;
 
 // Temporary focused trace for the final 34-byte string descriptor.
+// Bit 0: SETUP, bit 1: ENDEPIN0, bit 2: EP0DATADONE,
+// bit 3: EP0STATUS started, bit 4: next SETUP received.
+// Bits 31:16 retain the ENDEPIN0 AMOUNT.
+volatile uint32_t g_UsbEp0Trace;
 static volatile uint8_t s_Ep0Trace34;
 
 static void nRFUsbdHostResumeDetected(void);
@@ -2562,9 +2565,7 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 
 	if (s_Ep0Trace34 == 2U)
 	{
-		printf("EP0 34 NEXT rt=%02x r=%02x v=%04x l=%u\n",
-			setup.Setup.bmRequestType, setup.Setup.bRequest,
-			setup.Setup.wValue, setup.Setup.wLength);
+		g_UsbEp0Trace |= 0x10U;
 		s_Ep0Trace34 = 0U;
 	}
 
@@ -2581,7 +2582,7 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	if (trace34)
 	{
 		s_Ep0Trace34 = 1U;
-		printf("EP0 34 SETUP\n");
+		g_UsbEp0Trace = 0x01U;
 	}
 
 	if (setAddress)
@@ -2653,7 +2654,8 @@ extern "C" void USBD_IRQHandler(void)
 			s_Ep0InDmaDone = true;
 			if (s_Ep0Trace34 == 1U)
 			{
-				printf("EP0 34 DMA amount=%u\n", s_Ep0InAmount);
+				g_UsbEp0Trace |=
+					((uint32_t)s_Ep0InAmount << 16U) | 0x02U;
 			}
 		}
 
@@ -2668,6 +2670,10 @@ extern "C" void USBD_IRQHandler(void)
 	if (!setupPending && NRF_USBD->EVENTS_EP0DATADONE != 0U)
 	{
 		NRF_USBD->EVENTS_EP0DATADONE = 0U;
+		if (s_Ep0Trace34 == 1U)
+		{
+			g_UsbEp0Trace |= 0x04U;
+		}
 
 		if (s_Ep0InDmaDone)
 		{
@@ -2695,7 +2701,7 @@ extern "C" void USBD_IRQHandler(void)
 				if (s_Ep0Trace34 == 1U)
 				{
 					s_Ep0Trace34 = 2U;
-					printf("EP0 34 DATA STATUS\n");
+					g_UsbEp0Trace |= 0x08U;
 				}
 			}
 		}
