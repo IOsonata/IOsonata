@@ -2241,7 +2241,7 @@ static void nRFUsbdBusReset(void)
 	nRFUsbdResetState();
 }
 
-static void nRFUsbdProcessEp0Setup(uint32_t Evt, void *pContext)
+static void nRFUsbdProcessEp0SetupEx(uint32_t Evt, void *pContext)
 {
 	(void)Evt;
 	(void)pContext;
@@ -2588,6 +2588,36 @@ static void nRFUsbdHandleSof(void)
 	nRFUsbdServiceIso();
 }
 
+static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
+{
+	UsbCtrlrEvt_t evt = {};
+	evt.Type = USB_CTRLR_EVT_SETUP;
+	evt.Setup.bmRequestType = (uint8_t)NRF_USBD->BMREQUESTTYPE;
+	evt.Setup.bRequest = (uint8_t)NRF_USBD->BREQUEST;
+	evt.Setup.wValue = (uint16_t)NRF_USBD->WVALUEL |
+		((uint16_t)NRF_USBD->WVALUEH << 8);
+	evt.Setup.wIndex = (uint16_t)NRF_USBD->WINDEXL |
+		((uint16_t)NRF_USBD->WINDEXH << 8);
+	evt.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
+		((uint16_t)NRF_USBD->WLENGTHH << 8);
+
+	// A new SETUP terminates the previous control transaction. If EP0 was
+	// retaining the errata lock between packets, release that old ownership
+	// before the new setup processor waits for EasyDMA.
+	if (atomic_load(&s_Ctrlr.Ep0State) ==
+		NRFX_USBD_EP0_ACTIVE && nRFUsbdDmaActive() &&
+		CFifoUsed(s_hEp0Que) == 0)
+	{
+		nRFUsbdDmaUnlock();
+	}
+
+	s_Ctrlr.SetupEvent = evt;
+	atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_PENDING);
+
+	nRFUsbdProcessEp0SetupEx(Evt, pContext);
+}
+
+
 extern "C" void USBD_IRQHandler(void)
 {
 	uint8_t completedDma = NRFX_USBD_DMA_EP_NONE;
@@ -2731,6 +2761,7 @@ extern "C" void USBD_IRQHandler(void)
 		__ISB();
 		__DSB();
 
+#if 0
 		UsbCtrlrEvt_t evt = {};
 		evt.Type = USB_CTRLR_EVT_SETUP;
 		evt.Setup.bmRequestType = (uint8_t)NRF_USBD->BMREQUESTTYPE;
@@ -2754,7 +2785,12 @@ extern "C" void USBD_IRQHandler(void)
 
 		s_Ctrlr.SetupEvent = evt;
 		atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_PENDING);
-		(void)AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEp0Setup);
+#else
+		(void)AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEP0Setup);
+
+		return;
+#endif
+
 	}
 	else
 	{
