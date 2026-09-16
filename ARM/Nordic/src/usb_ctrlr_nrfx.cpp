@@ -2245,7 +2245,6 @@ static void nRFUsbdBusReset(void)
 		USBD_INTEN_EPDATA_Msk |
 		USBD_INTEN_EP0SETUP_Msk |
 		USBD_INTEN_EP0DATADONE_Msk |
-		USBD_INTEN_ENDEPIN0_Msk |
 		USBD_INTEN_ENDEPOUT0_Msk;
 
 	nRFUsbdResetState();
@@ -2650,6 +2649,7 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 
 extern "C" void USBD_IRQHandler(void)
 {
+	uint32_t endep0in = NRF_USBD->EVENTS_ENDEPIN[0];
 	uint32_t dmastatus = NRF_USBD->EPSTATUS;
 	uint8_t completedDma = NRFX_USBD_DMA_EP_NONE;
 
@@ -2748,7 +2748,6 @@ extern "C" void USBD_IRQHandler(void)
 
 	if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
 	{
-		volatile bool endep0in = NRF_USBD->EVENTS_ENDEPIN[0];
 
 		NRF_USBD->EVENTS_EP0DATADONE = 0U;
 		NRF_USBD->EVENTS_ENDEPIN[0] = 0;
@@ -2759,8 +2758,8 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			printf("%x %x", dmastatus, endep0in);
 		}
-		//if (endep0in)
-		if (s_Ctrlr.SetupDirIn)
+		if (endep0in)
+		//if (s_Ctrlr.SetupDirIn)
 		{
 			//nRFUsbdQueueXferComplete(0U,
 			//	(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
