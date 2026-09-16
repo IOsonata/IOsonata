@@ -2462,23 +2462,55 @@ static void nRFUsbdProcessEp0Complete(uint32_t Evt, void *pContext)
 	nRFUsbdServicePending();
 }
 
-static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
+static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
 {
-	const uint8_t epEvent = (uint8_t)Evt;
-	const uint8_t epNum = epEvent & USB_ENDPADDR_NUM_MASK;
+	const uint8_t epNum = (uint8_t)Evt;
+	const uint8_t epAddr = (uint8_t)(epNum | USB_ENDPADDR_DIR_IN);
 	const uint16_t amount = (uint16_t)(Evt >> 8U);
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][1];
 
 	(void)pContext;
 
-	if ((epEvent & NRFX_USBD_XFER_EVT_OUT) != 0U)
+	// A reset or endpoint close may invalidate a deferred completion.
+	if (!pXfer->Started)
 	{
-		// UsbIntrf copies the OUT DMA buffer from this completion callback.
-		// A later OUT-ready AppEvt follows it in FIFO order.
-		nRFUsbdHandleOutEnd(epNum, amount);
+		return;
+	}
+
+	pXfer->ActualLen += amount;
+	if (pXfer->ActualLen < pXfer->TotalLen)
+	{
+		nRFUsbdQueueIn(epNum);
 	}
 	else
 	{
-		nRFUsbdHandleInData(epNum, amount);
+		pXfer->Started = false;
+		nRFUsbEpRegisteredEvent(epAddr, USB_CTRLR_EVT_XFER_CMPL,
+			pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
+	}
+}
+
+static void nRFUsbdProcessOutComplete(uint32_t Evt, void *pContext)
+{
+	const uint8_t epNum = (uint8_t)Evt;
+	const uint16_t amount = (uint16_t)(Evt >> 8U);
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][0];
+
+	(void)pContext;
+
+	// A reset or endpoint close may invalidate a deferred completion.
+	if (!pXfer->Started)
+	{
+		return;
+	}
+
+	pXfer->ActualLen += amount;
+	if (amount != nRFUsbGetEpReg(epNum)->Mps ||
+		pXfer->ActualLen >= pXfer->TotalLen)
+	{
+		pXfer->Started = false;
+		nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_XFER_CMPL,
+			pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
 	}
 }
 
@@ -2507,7 +2539,7 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 	}
 	else
 	{
-		(void)nRFUsbRegDataEpXfer(epNum, nRFUsbdMps(epNum));
+		(void)nRFUsbRegDataEpXfer(epNum, pReg->Mps);
 	}
 }
 
@@ -2521,12 +2553,6 @@ static void nRFUsbdQueueEp0Complete(bool Out, uint16_t Amount)
 	const uint32_t evt = ((uint32_t)Amount << 8U) |
 		(Out ? NRFX_USBD_XFER_EVT_OUT : 0U);
 	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessEp0Complete);
-}
-
-static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
-{
-	const uint32_t evt = ((uint32_t)Amount << 8U) | EpEvent;
-	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete);
 }
 
 static void nRFUsbdQueueIsoComplete(bool Out, uint16_t Amount)
@@ -2726,8 +2752,9 @@ extern "C" void USBD_IRQHandler(void)
 	if (completedOut && USB_ENDPADDR_NUM(completedDma) != 0U)
 	{
 		const uint8_t epNum = USB_ENDPADDR_NUM(completedDma);
-		nRFUsbdQueueXferComplete((uint8_t)(NRFX_USBD_XFER_EVT_OUT | epNum),
-			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
+		const uint32_t evt =
+			(NRF_USBD->EPOUT[epNum].AMOUNT << 8U) | epNum;
+		(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessOutComplete);
 	}
 
 	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
@@ -2794,9 +2821,10 @@ extern "C" void USBD_IRQHandler(void)
 		if (inData != 0U)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(inData);
+			const uint32_t evt =
+				(NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum;
 			servicedStatus |= 1UL << epNum;
-			nRFUsbdQueueXferComplete((uint8_t)epNum,
-				(uint16_t)NRF_USBD->EPIN[epNum].AMOUNT);
+			(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete);
 		}
 
 		NRF_USBD->EPDATASTATUS = servicedStatus;
