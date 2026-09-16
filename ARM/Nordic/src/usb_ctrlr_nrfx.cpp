@@ -2458,49 +2458,24 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	const uint8_t epEvent = (uint8_t)Evt;
 	const uint8_t epNum = epEvent & USB_ENDPADDR_NUM_MASK;
 	const uint16_t amount = (uint16_t)(Evt >> 8U);
+	const bool out = (epEvent & NRFX_USBD_XFER_EVT_OUT) != 0U;
+	const uint8_t epAddr = out ? epNum :
+		(uint8_t)(epNum | USB_ENDPADDR_DIR_IN);
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][out ? 0 : 1];
 
 	(void)pContext;
 
-	if ((epEvent & NRFX_USBD_XFER_EVT_OUT) != 0U)
+	// UsbIntrf packetizes regular endpoints. One queued request is one DMA
+	// transaction, so only EP0 needs multi-packet completion processing.
+	if (!pXfer->Started)
 	{
-		// UsbIntrf copies the OUT DMA buffer from this completion callback.
-		// A later OUT-ready AppEvt follows it in FIFO order.
-		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][0];
-		if (!pXfer->Started)
-		{
-			return;
-		}
-
-		pXfer->ActualLen += amount;
-		if (amount != nRFUsbGetEpReg(epNum)->Mps ||
-			pXfer->ActualLen >= pXfer->TotalLen)
-		{
-			pXfer->Started = false;
-			nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_XFER_CMPL,
-				pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
-		}
+		return;
 	}
-	else
-	{
-		const uint8_t epAddr = (uint8_t)(epNum | USB_ENDPADDR_DIR_IN);
-		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][1];
-		if (!pXfer->Started)
-		{
-			return;
-		}
 
-		pXfer->ActualLen += amount;
-		if (pXfer->ActualLen < pXfer->TotalLen)
-		{
-			nRFUsbdQueueIn(epNum);
-		}
-		else
-		{
-			pXfer->Started = false;
-			nRFUsbEpRegisteredEvent(epAddr, USB_CTRLR_EVT_XFER_CMPL,
-				pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
-		}
-	}
+	pXfer->ActualLen = amount;
+	pXfer->Started = false;
+	nRFUsbEpRegisteredEvent(epAddr, USB_CTRLR_EVT_XFER_CMPL,
+		amount, USB_CTRLR_XFER_SUCCESS);
 }
 
 static void nRFUsbdProcessEp0OutData(uint32_t Evt, void *pContext)
