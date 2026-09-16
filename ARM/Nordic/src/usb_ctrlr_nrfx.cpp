@@ -199,7 +199,7 @@ static bool s_UsbdVbusLevel = false;
 #define NRFX_USBD_EASYDMA_BUSY_REG_CLEAR	0UL
 
 #define NRFUSBD_QUE_DEPTH			(NRFX_USBD_EP_COUNT * 2)
-#define NRFUSBD_EP0_QUE_DEPTH		1U
+#define NRFUSBD_EP0_QUE_DEPTH		4U
 
 enum
 {
@@ -2244,9 +2244,9 @@ static void nRFUsbdBusReset(void)
 		USBD_INTEN_USBEVENT_Msk |
 		USBD_INTEN_EPDATA_Msk |
 		USBD_INTEN_EP0SETUP_Msk |
-		USBD_INTEN_EP0DATADONE_Msk |
-		USBD_INTEN_ENDEPIN0_Msk |
-		USBD_INTEN_ENDEPOUT0_Msk;
+		USBD_INTEN_EP0DATADONE_Msk;// |
+//		USBD_INTEN_ENDEPIN0_Msk |
+//		USBD_INTEN_ENDEPOUT0_Msk;
 
 	nRFUsbdResetState();
 }
@@ -2630,7 +2630,8 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 
 extern "C" void USBD_IRQHandler(void)
 {
-	uint32_t dmastatus = NRF_USBD->EPSTATUS;
+	volatile uint32_t dmastatus = NRF_USBD->EPSTATUS;
+	volatile uint32_t endep0in = NRF_USBD->EVENTS_ENDEPIN[0];
 	uint8_t completedDma = NRFX_USBD_DMA_EP_NONE;
 
 	if (nRFUsbdDmaActive())
@@ -2725,37 +2726,38 @@ extern "C" void USBD_IRQHandler(void)
 
 		return;
 	}
+	printf("%x %x\n", dmastatus, endep0in);
 
 	if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
 	{
-		volatile bool endep0in = NRF_USBD->EVENTS_ENDEPIN[0];
 
 		NRF_USBD->EVENTS_EP0DATADONE = 0U;
-		NRF_USBD->EVENTS_ENDEPIN[0] = 0;
 		__ISB();
 		__DSB();
-
-		if ((dmastatus & 1) == 0 || endep0in == 0)
-		{
-			printf("%x %x", dmastatus, endep0in);
-		}
-		//if (endep0in)
+printf("%x %x\n", dmastatus, endep0in);
+//		if (endep0in)
 		if (s_Ctrlr.SetupDirIn)
+//		if (NRF_USBD->EVENTS_ENDEPIN[0] != 0)
 		{
+			nRFEPPkt_t *p = (nRFEPPkt_t*)CFifoGet(s_hEp0Que);
 			//nRFUsbdQueueXferComplete(0U,
 			//	(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
 			uint32_t amount = NRF_USBD->EPIN[0].AMOUNT;
 			const uint32_t evt = (amount << 8U) | 0;
 			(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete);
+
+			NRF_USBD->EVENTS_ENDEPIN[0] = 0;
 		}
-		else
+		else if (NRF_USBD->EVENTS_ENDEPOUT[0] != 0)
 		{
 //			nRFUsbdQueueOutData(0U);
 			(void)AppEvtHandlerQue(0, NULL, nRFUsbdProcessOutData);
 		}
 	}
-	else if (NRF_USBD->EVENTS_EPDATA != 0U ||
-		(NRF_USBD->EPDATASTATUS & 0x00FE00FEUL) != 0U)
+
+	if (dmastatus != 0)
+//	if (NRF_USBD->EVENTS_EPDATA != 0U )
+//		(NRF_USBD->EPDATASTATUS & 0x00FE00FEUL) != 0U)
 	{
 		// Clear the event first so a new endpoint event remains observable.
 		// Service at most one endpoint per direction in this interrupt. Any
@@ -2837,6 +2839,7 @@ extern "C" void USBD_IRQHandler(void)
 
 	nRFUsbdTryEnterLowPower();
 
+	//NRF_USBD->EPSTATUS = dmastatus;
 }
 
 /**
@@ -4114,15 +4117,13 @@ bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 		nRFUsbRegEpXfer(EpAddr, pBuffer, Length);
 }
 
-int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, uint16_t Length)
+int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 {
-	if (pBuffer == nullptr)
-	{
-		return -1;
-	}
-
 	int cnt = 0;
-
+if (pBuffer == nullptr || Length <= 0)
+{
+	printf("ZPL\n");
+}
 	do
 	{
 		int l = min(Length, NRFX_USBD_MAX_PACKET_SIZE);
@@ -4134,7 +4135,7 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, uint16_t Length)
 			break;
 		}
 
-		if (l > 0)
+		if (l > 0 && pBuffer != nullptr)
 		{
 			memcpy(p->Payload, pBuffer, l);
 		}
@@ -4160,14 +4161,14 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, uint16_t Length)
 			NRF_USBD->EPIN[0].MAXCNT = p->Hdr.Len;
 			NRF_USBD->EPIN[0].PTR = (uint32_t)p;
 
-			if (p->Hdr.Len < NRFX_USBD_MAX_PACKET_SIZE)
-			{
-				NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
-			}
-			else
-			{
-				NRF_USBD->SHORTS = 0;
-			}
+			//if (p->Hdr.Len < NRFX_USBD_MAX_PACKET_SIZE)
+			//{
+			//	NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
+			//}
+			//else
+			//{
+		//		NRF_USBD->SHORTS = 0;
+		//	}
 			NRF_USBD->TASKS_STARTEPIN[0] = 1U;
 		}
 	}
