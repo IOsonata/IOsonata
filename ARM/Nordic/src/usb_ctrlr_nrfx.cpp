@@ -1228,48 +1228,39 @@ static uint8_t nRFUsbdDmaFinish(bool PreserveIsoEvent)
 	__disable_irq();
 
 	uint8_t epAddr = NRFX_USBD_DMA_EP_NONE;
-	hCFifo_t hQue = NULL;
 	volatile uint32_t *pEndEvent = NULL;
 
-	nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoPeek(s_hEp0Que);
+	// Only one shared EasyDMA owner is possible. EP0 ACTIVE owns the EP0
+	// queue; PENDING still permits an ordinary transfer to be completing.
+	const bool ep0Active =
+		atomic_load(&s_Ctrlr.Ep0State) == NRFX_USBD_EP0_ACTIVE;
+	hCFifo_t hQue = ep0Active ? s_hEp0Que : s_hQue;
+	nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoPeek(hQue);
 	if (pHead != NULL)
 	{
 		volatile uint32_t *pEvent = nRFUsbdDmaEndEvent(pHead->EpAddr);
 		if (*pEvent != 0U)
 		{
 			epAddr = pHead->EpAddr;
-			hQue = s_hEp0Que;
 			pEndEvent = pEvent;
 		}
 	}
 
-	if (epAddr == NRFX_USBD_DMA_EP_NONE)
-	{
-		pHead = (nRFUsbdQue_t *)CFifoPeek(s_hQue);
-		if (pHead != NULL)
-		{
-			volatile uint32_t *pEvent =
-				nRFUsbdDmaEndEvent(pHead->EpAddr);
-			if (*pEvent != 0U)
-			{
-				epAddr = pHead->EpAddr;
-				hQue = s_hQue;
-				pEndEvent = pEvent;
-			}
-		}
-	}
-
+	// CDC never opens the dedicated ISO DMA, so avoid those MMIO reads on
+	// every ordinary completion.
 	if (epAddr == NRFX_USBD_DMA_EP_NONE &&
-		NRF_USBD->EVENTS_ENDISOIN != 0U)
+		atomic_load(&s_IsoOpen) != 0U)
 	{
-		epAddr = USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO);
-		pEndEvent = &NRF_USBD->EVENTS_ENDISOIN;
-	}
-	else if (epAddr == NRFX_USBD_DMA_EP_NONE &&
-		NRF_USBD->EVENTS_ENDISOOUT != 0U)
-	{
-		epAddr = NRFX_USBD_ISO_EP_NO;
-		pEndEvent = &NRF_USBD->EVENTS_ENDISOOUT;
+		if (NRF_USBD->EVENTS_ENDISOIN != 0U)
+		{
+			epAddr = USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO);
+			pEndEvent = &NRF_USBD->EVENTS_ENDISOIN;
+		}
+		else if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
+		{
+			epAddr = NRFX_USBD_ISO_EP_NO;
+			pEndEvent = &NRF_USBD->EVENTS_ENDISOOUT;
+		}
 	}
 
 	if (epAddr == NRFX_USBD_DMA_EP_NONE)
@@ -1286,7 +1277,7 @@ static uint8_t nRFUsbdDmaFinish(bool PreserveIsoEvent)
 		__DSB();
 	}
 
-	if (hQue != NULL)
+	if (epNum != NRFX_USBD_ISO_EP_NO)
 	{
 		(void)CFifoGet(hQue);
 	}
@@ -2802,18 +2793,21 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
-	if (NRF_USBD->EVENTS_ENDISOIN != 0U)
+	if (atomic_load(&s_IsoOpen) != 0U)
 	{
-		NRF_USBD->EVENTS_ENDISOIN = 0U;
-		nRFUsbdQueueIsoComplete(false,
-			(uint16_t)NRF_USBD->ISOIN.AMOUNT);
-	}
+		if (NRF_USBD->EVENTS_ENDISOIN != 0U)
+		{
+			NRF_USBD->EVENTS_ENDISOIN = 0U;
+			nRFUsbdQueueIsoComplete(false,
+				(uint16_t)NRF_USBD->ISOIN.AMOUNT);
+		}
 
-	if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
-	{
-		NRF_USBD->EVENTS_ENDISOOUT = 0U;
-		nRFUsbdQueueIsoComplete(true,
-			(uint16_t)NRF_USBD->ISOOUT.AMOUNT);
+		if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
+		{
+			NRF_USBD->EVENTS_ENDISOOUT = 0U;
+			nRFUsbdQueueIsoComplete(true,
+				(uint16_t)NRF_USBD->ISOOUT.AMOUNT);
+		}
 	}
 
 	if (completedOut && USB_ENDPADDR_NUM(completedDma) == 0U)
