@@ -2244,9 +2244,9 @@ static void nRFUsbdBusReset(void)
 		USBD_INTEN_USBEVENT_Msk |
 		USBD_INTEN_EPDATA_Msk |
 		USBD_INTEN_EP0SETUP_Msk |
-		USBD_INTEN_EP0DATADONE_Msk;// |
+		USBD_INTEN_EP0DATADONE_Msk |
+		USBD_INTEN_ENDEPOUT0_Msk;
 //		USBD_INTEN_ENDEPIN0_Msk |
-//		USBD_INTEN_ENDEPOUT0_Msk;
 
 	nRFUsbdResetState();
 }
@@ -2726,7 +2726,6 @@ extern "C" void USBD_IRQHandler(void)
 
 		return;
 	}
-	printf("%x %x\n", dmastatus, endep0in);
 
 	if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
 	{
@@ -2734,11 +2733,12 @@ extern "C" void USBD_IRQHandler(void)
 		NRF_USBD->EVENTS_EP0DATADONE = 0U;
 		__ISB();
 		__DSB();
-printf("%x %x\n", dmastatus, endep0in);
-//		if (endep0in)
-		if (s_Ctrlr.SetupDirIn)
+
+		if (endep0in)
+		//if (s_Ctrlr.SetupDirIn)
 //		if (NRF_USBD->EVENTS_ENDEPIN[0] != 0)
 		{
+		//	printf("%x %x\n", dmastatus, endep0in);
 			nRFEPPkt_t *p = (nRFEPPkt_t*)CFifoGet(s_hEp0Que);
 			//nRFUsbdQueueXferComplete(0U,
 			//	(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
@@ -2747,6 +2747,35 @@ printf("%x %x\n", dmastatus, endep0in);
 			(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete);
 
 			NRF_USBD->EVENTS_ENDEPIN[0] = 0;
+
+			p = (nRFEPPkt_t*)CFifoPeek(s_hEp0Que);
+
+			if (p)
+			{
+				s_Ctrlr.SetupDirIn = true;
+
+				NRF_USBD->EVENTS_EP0DATADONE = 0U;
+				NRF_USBD->EVENTS_ENDEPIN[0] = 0;
+
+				NRF_USBD->EPIN[0].MAXCNT = p->Hdr.Len;
+				NRF_USBD->EPIN[0].PTR = (uint32_t)p;
+
+				//if (p->Hdr.Len < NRFX_USBD_MAX_PACKET_SIZE)
+				//{
+				//	NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
+				//}
+				//else
+				//{
+			//		NRF_USBD->SHORTS = 0;
+			//	}
+				NRF_USBD->TASKS_STARTEPIN[0] = 1U;
+			}
+			else
+			{
+				NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
+
+				NRF_USBD->TASKS_EP0STATUS = 1;
+			}
 		}
 		else if (NRF_USBD->EVENTS_ENDEPOUT[0] != 0)
 		{
@@ -2754,7 +2783,7 @@ printf("%x %x\n", dmastatus, endep0in);
 			(void)AppEvtHandlerQue(0, NULL, nRFUsbdProcessOutData);
 		}
 	}
-
+	else
 	if (dmastatus != 0)
 //	if (NRF_USBD->EVENTS_EPDATA != 0U )
 //		(NRF_USBD->EPDATASTATUS & 0x00FE00FEUL) != 0U)
@@ -4146,8 +4175,11 @@ if (pBuffer == nullptr || Length <= 0)
 		Length -= l;
 	} while  (Length > 0);
 
-	if (!nRFUsbdDmaActive)
+//	printf("EP0 - %x\n", NRFX_USBD_EASYDMA_BUSY_REG);
+
+	if (NRFX_USBD_EASYDMA_BUSY_REG == 0)
 	{
+//		printf("EP0Send\n");
 		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
 		nRFEPPkt_t *p = (nRFEPPkt_t*)CFifoPeek(s_hEp0Que);
 
