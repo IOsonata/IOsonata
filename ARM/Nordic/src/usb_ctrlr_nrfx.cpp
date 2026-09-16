@@ -2316,15 +2316,15 @@ static void nRFUsbdProcessEp0SetupEx(uint32_t Evt, void *pContext)
 	nRFUsbdServicePending();
 }
 
-static void nRFUsbdHandleOutEnd(uint8_t EpNum, uint16_t TransferLen)
+static void nRFUsbdHandleEp0OutEnd(uint16_t TransferLen)
 {
-	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[0][0];
 	if (!pXfer->Started)
 	{
 		return;
 	}
 
-	if (EpNum == 0U && pXfer->pBuffer != NULL)
+	if (pXfer->pBuffer != NULL)
 	{
 		if (TransferLen > 0U)
 		{
@@ -2334,18 +2334,15 @@ static void nRFUsbdHandleOutEnd(uint8_t EpNum, uint16_t TransferLen)
 	}
 	pXfer->ActualLen += TransferLen;
 
-	if (TransferLen == nRFUsbdMps(EpNum) &&
+	if (TransferLen == NRFX_USBD_MAX_PACKET_SIZE &&
 		pXfer->ActualLen < pXfer->TotalLen)
 	{
-		if (EpNum == 0)
-		{
-			nRFUsbdQueueEp0RcvOut();
-		}
+		nRFUsbdQueueEp0RcvOut();
 	}
 	else
 	{
 		pXfer->Started = false;
-		nRFUsbdEmitXfer(EpNum, pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
+		nRFUsbdEmitXfer(0U, pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
 	}
 }
 
@@ -2364,16 +2361,15 @@ static void nRFUsbdHandleEp0OutData(void)
 	}
 }
 
-static void nRFUsbdHandleInData(uint8_t EpNum, uint16_t TransferLen)
+static void nRFUsbdHandleEp0InData(uint16_t TransferLen)
 {
-	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
-	const uint8_t epAddr = (uint8_t)(EpNum | USB_ENDPADDR_DIR_IN);
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[0][1];
 	if (!pXfer->Started)
 	{
 		return;
 	}
 
-	if (EpNum == 0U && pXfer->pBuffer != NULL)
+	if (pXfer->pBuffer != NULL)
 	{
 		pXfer->pBuffer += TransferLen;
 	}
@@ -2381,13 +2377,13 @@ static void nRFUsbdHandleInData(uint8_t EpNum, uint16_t TransferLen)
 
 	if (pXfer->ActualLen < pXfer->TotalLen)
 	{
-		nRFUsbdQueueIn(EpNum);
+		nRFUsbdQueueIn(0U);
 	}
 	else
 	{
 		pXfer->Started = false;
-		nRFUsbdEmitXfer(epAddr, pXfer->ActualLen,
-						 USB_CTRLR_XFER_SUCCESS);
+		nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, pXfer->ActualLen,
+			USB_CTRLR_XFER_SUCCESS);
 	}
 }
 
@@ -2449,11 +2445,11 @@ static void nRFUsbdProcessEp0Complete(uint32_t Evt, void *pContext)
 
 	if ((Evt & NRFX_USBD_XFER_EVT_OUT) != 0U)
 	{
-		nRFUsbdHandleOutEnd(0U, amount);
+		nRFUsbdHandleEp0OutEnd(amount);
 	}
 	else
 	{
-		nRFUsbdHandleInData(0U, amount);
+		nRFUsbdHandleEp0InData(amount);
 	}
 
 	nRFUsbdServiceEp0();
@@ -2473,11 +2469,41 @@ static void nRFUsbdProcessXferComplete(uint32_t Evt, void *pContext)
 	{
 		// UsbIntrf copies the OUT DMA buffer from this completion callback.
 		// A later OUT-ready AppEvt follows it in FIFO order.
-		nRFUsbdHandleOutEnd(epNum, amount);
+		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][0];
+		if (!pXfer->Started)
+		{
+			return;
+		}
+
+		pXfer->ActualLen += amount;
+		if (amount != nRFUsbGetEpReg(epNum)->Mps ||
+			pXfer->ActualLen >= pXfer->TotalLen)
+		{
+			pXfer->Started = false;
+			nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_XFER_CMPL,
+				pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
+		}
 	}
 	else
 	{
-		nRFUsbdHandleInData(epNum, amount);
+		const uint8_t epAddr = (uint8_t)(epNum | USB_ENDPADDR_DIR_IN);
+		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][1];
+		if (!pXfer->Started)
+		{
+			return;
+		}
+
+		pXfer->ActualLen += amount;
+		if (pXfer->ActualLen < pXfer->TotalLen)
+		{
+			nRFUsbdQueueIn(epNum);
+		}
+		else
+		{
+			pXfer->Started = false;
+			nRFUsbEpRegisteredEvent(epAddr, USB_CTRLR_EVT_XFER_CMPL,
+				pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
+		}
 	}
 }
 
