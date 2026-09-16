@@ -2507,13 +2507,14 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 	}
 	else
 	{
-		(void)nRFUsbRegDataEpXfer(epNum, nRFUsbdMps(epNum));
-	}
-}
+		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][0];
+		pXfer->TotalLen = pReg->Mps;
+		pXfer->ActualLen = 0U;
+		pXfer->Started = true;
 
-static void nRFUsbdQueueOutData(uint8_t EpNum)
-{
-	(void)AppEvtHandlerQue(EpNum, NULL, nRFUsbdProcessOutData);
+		nRFUsbdQueXfer(epNum, pReg->Mps);
+		nRFUsbdServicePending();
+	}
 }
 
 static void nRFUsbdQueueEp0Complete(bool Out, uint16_t Amount)
@@ -2787,7 +2788,7 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
 			servicedStatus |= 1UL << (epNum + 16U);
-			nRFUsbdQueueOutData((uint8_t)epNum);
+			(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
 		}
 
 		const uint32_t inData = dataStatus & 0xFEU;
