@@ -2700,6 +2700,39 @@ extern "C" void USBD_IRQHandler(void)
 			(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 	}
 
+	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
+	{
+		NRF_USBD->EVENTS_EP0SETUP = 0U;
+
+		// A new SETUP aborts the previous control transfer. Discard any
+		// simultaneously latched completion from that old transfer.
+		NRF_USBD->EVENTS_EP0DATADONE = 0U;
+		__ISB();
+		__DSB();
+
+		(void)AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEP0Setup);
+
+		return;
+	}
+
+	if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
+	{
+		NRF_USBD->EVENTS_EP0DATADONE = 0U;
+		__ISB();
+		__DSB();
+
+		if (s_Ctrlr.SetupDirIn)
+		{
+			nRFUsbdQueueXferComplete(0U,
+				(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
+		}
+		else
+		{
+			nRFUsbdQueueOutData(0U);
+		}
+	}
+	else
+
 	if (NRF_USBD->EVENTS_EPDATA != 0U ||
 		(NRF_USBD->EPDATASTATUS & 0x00FE00FEUL) != 0U)
 	{
@@ -2751,21 +2784,7 @@ extern "C" void USBD_IRQHandler(void)
 			(uint16_t)NRF_USBD->ISOOUT.AMOUNT);
 	}
 
-	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
-	{
-		NRF_USBD->EVENTS_EP0SETUP = 0U;
-
-		// A new SETUP aborts the previous control transfer. Discard any
-		// simultaneously latched completion from that old transfer.
-		NRF_USBD->EVENTS_EP0DATADONE = 0U;
-		__ISB();
-		__DSB();
-
-		(void)AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEP0Setup);
-
-		return;
-	}
-	else
+	//else
 	{
 		if (completedOut && USB_ENDPADDR_NUM(completedDma) == 0U)
 		{
@@ -2773,22 +2792,6 @@ extern "C" void USBD_IRQHandler(void)
 				(uint16_t)NRF_USBD->EPOUT[0].AMOUNT);
 		}
 
-		if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
-		{
-			NRF_USBD->EVENTS_EP0DATADONE = 0U;
-			__ISB();
-			__DSB();
-
-			if (s_Ctrlr.SetupDirIn)
-			{
-				nRFUsbdQueueXferComplete(0U,
-					(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
-			}
-			else
-			{
-				nRFUsbdQueueOutData(0U);
-			}
-		}
 	}
 
 	if (NRF_USBD->EVENTS_SOF != 0U)
