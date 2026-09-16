@@ -2598,7 +2598,7 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	{
 		s_Ep0Trace34 = 1U;
 		g_UsbEp0Trace = 0x01U;
-		nRFUsbdQueueEP0Trace();
+		printf("EP0 34 APP enter\n");
 	}
 
 	if (setAddress)
@@ -2611,6 +2611,11 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	}
 
 	UsbDevProcessEvent(0, &setup);
+
+	if (trace34)
+	{
+		printf("EP0 34 APP sent\n");
+	}
 }
 
 extern "C" void USBD_IRQHandler(void)
