@@ -1460,6 +1460,14 @@ bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 	return true;
 }
 
+static inline __attribute__((always_inline))
+void nRFUsbdStartQueuedDma(void)
+{
+	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoGet(s_hQue);
+	if (pQue != NULL)
+		nRFUsbdStartDmaNow(pQue);
+}
+
 
 static void nRFUsbdServiceEp0(void)
 {
@@ -1544,11 +1552,7 @@ static void nRFUsbdServicePending(void)
 	// Interrupts remain disabled while nRFUsbdStartDmaNow consumes the two
 	// descriptor fields, so the removed CFifo slot cannot be reused here.
 	// Completion ownership is recorded by EPSTATUS and matching ENDEP.
-	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoGet(s_hQue);
-	if (pQue != NULL)
-	{
-		nRFUsbdStartDmaNow(pQue);
-	}
+	nRFUsbdStartQueuedDma();
 
 	EnableInterrupt(state);
 }
@@ -2727,11 +2731,7 @@ extern "C" void USBD_IRQHandler(void)
 			NRF_USBD->EVENTS_EP0SETUP == 0U &&
 			NRF_USBD->EVENTS_USBEVENT == 0U)
 		{
-			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoGet(s_hQue);
-			if (pQue != NULL)
-			{
-				nRFUsbdStartDmaNow(pQue);
-			}
+			nRFUsbdStartQueuedDma();
 		}
 	}
 
