@@ -2681,9 +2681,9 @@ extern "C" void USBD_IRQHandler(void)
 {
 	uint32_t endep0in = NRF_USBD->EVENTS_ENDEPIN[0];
 	uint32_t dmastatus = NRF_USBD->EPSTATUS;
+	uint32_t outData = 0U;
 	uint8_t completedDma = NRFX_USBD_DMA_EP_NONE;
 	uint16_t completedOutAmount = 0U;
-	bool regularOutQueued = false;
 	const uint_fast8_t isoOpen = atomic_load(&s_IsoOpen);
 
 	// Reset cancels any active DMA and must not wait for ENDEP.
@@ -2806,7 +2806,7 @@ extern "C" void USBD_IRQHandler(void)
 		const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
 		uint32_t servicedStatus = dataStatus & 0x00010001UL;
 
-		const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
+		outData = (dataStatus >> 16U) & 0xFEU;
 		if (outData != 0U)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
@@ -2829,7 +2829,6 @@ extern "C" void USBD_IRQHandler(void)
 				pQue->EpNum = (uint8_t)epNum;
 				pQue->Dir = 0U;
 				pQue->Len = pReg->Mps;
-				regularOutQueued = true;
 			}
 		}
 
@@ -2891,7 +2890,7 @@ extern "C" void USBD_IRQHandler(void)
 
 	// ENDEP released the shared EasyDMA channel above. ISO has priority when
 	// it is open; ordinary CDC traffic avoids the ISO service path entirely.
-	if (completedDma != NRFX_USBD_DMA_EP_NONE || regularOutQueued)
+	if (completedDma != NRFX_USBD_DMA_EP_NONE || outData != 0U)
 	{
 		if (isoOpen != 0U)
 		{
