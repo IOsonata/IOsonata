@@ -2500,23 +2500,13 @@ static void nRFUsbdProcessEp0OutData(uint32_t Evt, void *pContext)
 static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 {
 	const uint8_t epNum = (uint8_t)Evt;
-	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum);
 
 	(void)pContext;
 
-	if (pReg->bBlocking)
-	{
-		nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U,
-			USB_CTRLR_XFER_SUCCESS);
-	}
-	else
-	{
-		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[epNum][0];
-		pXfer->Started = true;
-
-		nRFUsbdQueXfer(epNum, pReg->Mps);
-		nRFUsbdServicePending();
-	}
+	// Only blocking endpoints reach AppEvt. Nonblocking OUT is queued for
+	// EasyDMA directly from EPDATASTATUS in the ISR.
+	nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U,
+		USB_CTRLR_XFER_SUCCESS);
 }
 
 static void nRFUsbdQueueEp0Complete(bool Out, uint16_t Amount)
@@ -2655,6 +2645,9 @@ extern "C" void USBD_IRQHandler(void)
 	uint32_t endep0in = NRF_USBD->EVENTS_ENDEPIN[0];
 	uint32_t dmastatus = NRF_USBD->EPSTATUS;
 	uint8_t completedDma = NRFX_USBD_DMA_EP_NONE;
+	uint16_t completedOutAmount = 0U;
+	bool completionNeedsService = false;
+	bool regularOutQueued = false;
 
 	// Reset cancels any active DMA and must not wait for ENDEP.
 	if (NRF_USBD->EVENTS_USBRESET != 0U)
@@ -2677,6 +2670,33 @@ extern "C" void USBD_IRQHandler(void)
 		if (completedDma == NRFX_USBD_DMA_EP_NONE)
 		{
 			return;
+		}
+
+		completionNeedsService = true;
+		const uint8_t completedEp = USB_ENDPADDR_NUM(completedDma);
+		const bool regularComplete = completedEp > 0U &&
+			completedEp < NRFX_USBD_ISO_EP_NO;
+		if (regularComplete && !USB_ENDPADDR_IS_IN(completedDma))
+		{
+			// Snapshot before another OUT DMA can update this register.
+			completedOutAmount =
+				(uint16_t)NRF_USBD->EPOUT[completedEp].AMOUNT;
+		}
+
+		// A regular completion proves EP0 was idle and the bus was running
+		// when this DMA started. With no newly-latched control or bus event,
+		// start the next queued regular DMA now. Completion notification and
+		// the remaining ISR work proceed while that DMA is active.
+		if (regularComplete && atomic_load(&s_IsoOpen) == 0U &&
+			NRF_USBD->EVENTS_EP0SETUP == 0U &&
+			NRF_USBD->EVENTS_USBEVENT == 0U)
+		{
+			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoGet(s_hQue);
+			if (pQue != NULL)
+			{
+				nRFUsbdStartDmaNow(pQue);
+			}
+			completionNeedsService = false;
 		}
 	}
 
@@ -2703,7 +2723,7 @@ extern "C" void USBD_IRQHandler(void)
 	{
 		nRFUsbdQueueXferComplete(
 			(uint8_t)(NRFX_USBD_XFER_EVT_OUT | completedDma),
-			(uint16_t)NRF_USBD->EPOUT[completedDma].AMOUNT);
+			completedOutAmount);
 	}
 
 	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
@@ -2758,7 +2778,25 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
 			servicedStatus |= 1UL << (epNum + 16U);
-			(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
+
+			nRFUsbEpReg_t *pReg = nRFUsbGetEpReg((uint8_t)epNum);
+			if (pReg->bBlocking)
+			{
+				(void)AppEvtHandlerQue(epNum, NULL,
+					nRFUsbdProcessOutData);
+			}
+			else
+			{
+				// EPDATASTATUS already identifies the ready OUT endpoint.
+				// Publish its DMA request here instead of waiting for AppEvt;
+				// the ISR tail starts it after all USBD status is consumed.
+				s_Ctrlr.Xfer[epNum][0].Started = true;
+				nRFUsbdQue_t *pQue =
+					(nRFUsbdQue_t *)CFifoPut(s_hQue);
+				pQue->EpAddr = (uint8_t)epNum;
+				pQue->Len = pReg->Mps;
+				regularOutQueued = true;
+			}
 		}
 
 		const uint32_t inData = dataStatus & 0xFEU;
@@ -2819,7 +2857,8 @@ extern "C" void USBD_IRQHandler(void)
 
 	// ENDEP released the shared EasyDMA channel above. ISO has priority when
 	// it is open; ordinary CDC traffic avoids the ISO service path entirely.
-	if (completedDma != NRFX_USBD_DMA_EP_NONE && !nRFUsbdDmaActive())
+	if ((completionNeedsService || regularOutQueued) &&
+		!nRFUsbdDmaActive())
 	{
 		if (atomic_load(&s_IsoOpen) == 0U)
 		{
