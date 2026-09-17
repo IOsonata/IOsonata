@@ -1096,10 +1096,7 @@ static void nRFUsbdServiceEp0(void)
 	{
 		// The data stage is complete. Release the retained errata lock only
 		// now, immediately before starting the control status stage.
-		if (nRFUsbdDmaActive())
-		{
-			nRFUsbdDmaUnlock();
-		}
+		nRFUsbdDmaUnlock();
 
 		const uint8_t epAddr = nRFUsbdEp0StatusNow();
 		EnableInterrupt(state);
@@ -1243,11 +1240,6 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 	const uint16_t length = remaining < mps ? remaining : mps;
 
 	nRFUsbdQueXferDir(EpNum, true, length);
-}
-
-static void nRFUsbdQueueEp0Status(void)
-{
-	atomic_store(&s_PendingEp0Status, true);
 }
 
 static void nRFUsbdQueueEp0RcvOut(void)
@@ -1736,7 +1728,7 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 
 	if (controlStatus)
 	{
-		nRFUsbdQueueEp0Status();
+		atomic_store(&s_PendingEp0Status, true);
 	}
 	else if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
@@ -2018,6 +2010,13 @@ static void nRFUsbdProcessEp0Complete(uint32_t Evt, void *pContext)
 	{
 		nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, amount,
 			USB_CTRLR_XFER_SUCCESS);
+		atomic_store(&s_PendingEp0Status, false);
+		const uint8_t epAddr = nRFUsbdEp0StatusNow();
+		nRFUsbdEmitXfer(epAddr, 0U, USB_CTRLR_XFER_SUCCESS);
+		atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_IDLE);
+		nRFUsbdServiceIso();
+		nRFUsbdResumeQueuedDma();
+		return;
 	}
 
 	nRFUsbdServiceEp0();
