@@ -165,7 +165,6 @@ typedef struct __nRF_Usbd_Xfer
 	uint8_t *pBuffer;
 	uint16_t TotalLen;
 	volatile uint16_t ActualLen;
-	volatile bool DataReceived;
 } nRFUsbdXfer_t;
 
 typedef struct __nRF_Usbd_Ctrlr
@@ -1125,6 +1124,11 @@ static void nRFUsbdServiceEp0(void)
 	nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoPeek(s_hEp0Que);
 	if (pHead != NULL)
 	{
+		if (nRFUsbdDmaActive())
+		{
+			EnableInterrupt(state);
+			return;
+		}
 		nRFUsbdStartDmaNow(pHead);
 		EnableInterrupt(state);
 		return;
@@ -1238,11 +1242,6 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 		nRFUsbdMps((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN));
 	const uint16_t length = remaining < mps ? remaining : mps;
 
-	if (EpNum == 0U && length > 0U)
-	{
-		memcpy(s_Ep0Bounce, pXfer->pBuffer, length);
-	}
-
 	nRFUsbdQueXferDir(EpNum, true, length);
 }
 
@@ -1294,7 +1293,6 @@ static void nRFUsbdAbortEp0(void)
 		pXfer->pBuffer = NULL;
 		pXfer->TotalLen = 0;
 		pXfer->ActualLen = 0;
-		pXfer->DataReceived = false;
 	}
 
 	NRF_USBD->EVENTS_ENDEPIN[0] = 0;
@@ -1467,7 +1465,7 @@ static bool nRFUsbRegInit(void)
 	s_hQue = CFifoInit(s_QueMem, sizeof(s_QueMem), sizeof(nRFUsbdQue_t),
 					   false);
 	s_hEp0Que = CFifoInit(s_Ep0QueMem, sizeof(s_Ep0QueMem),
-						  sizeof(nRFUsbdQue_t), true);
+						  sizeof(nRFEPPkt_t), true);
 	if (s_hQue == NULL || s_hEp0Que == NULL)
 	{
 		return false;
@@ -1573,7 +1571,6 @@ static bool nRFUsbRegEpOpen(const UsbEndPointDesc_t *pDesc)
 
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(epAddr);
 	nRFUsbGetEpReg(epAddr)->Mps = pDesc->wMaxPacketSize;
-	pXfer->DataReceived = false;
 
 	if (iso)
 	{
@@ -1687,7 +1684,6 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 		NRF_USBD->SIZE.EPOUT[epNum] = 0;
 	}
 
-	pXfer->DataReceived = false;
 	pXfer->ActualLen = 0;
 	pXfer->TotalLen = 0;
 	pXfer->pBuffer = NULL;
@@ -1964,33 +1960,7 @@ static void nRFUsbdHandleEp0OutData(void)
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[0][0];
 	if (pXfer->ActualLen < pXfer->TotalLen || pXfer->TotalLen == 0U)
 	{
-		pXfer->DataReceived = false;
 		nRFUsbdQueueOut(0U);
-	}
-	else
-	{
-		pXfer->DataReceived = true;
-	}
-}
-
-static void nRFUsbdHandleEp0InData(uint16_t TransferLen)
-{
-	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[0][1];
-
-	if (pXfer->pBuffer != NULL)
-	{
-		pXfer->pBuffer += TransferLen;
-	}
-	pXfer->ActualLen += TransferLen;
-
-	if (pXfer->ActualLen < pXfer->TotalLen)
-	{
-		nRFUsbdQueueIn(0U);
-	}
-	else
-	{
-		nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, pXfer->ActualLen,
-			USB_CTRLR_XFER_SUCCESS);
 	}
 }
 
@@ -2046,7 +2016,8 @@ static void nRFUsbdProcessEp0Complete(uint32_t Evt, void *pContext)
 	}
 	else
 	{
-		nRFUsbdHandleEp0InData(amount);
+		nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, amount,
+			USB_CTRLR_XFER_SUCCESS);
 	}
 
 	nRFUsbdServiceEp0();
@@ -2246,7 +2217,6 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 
 extern "C" void USBD_IRQHandler(void)
 {
-	uint32_t endep0in = NRF_USBD->EVENTS_ENDEPIN[0];
 	uint32_t dmastatus = NRF_USBD->EPSTATUS;
 	uint32_t outData = 0U;
 	uint8_t completedDma = NRFX_USBD_DMA_EP_NONE;
@@ -2268,7 +2238,7 @@ extern "C" void USBD_IRQHandler(void)
 	// ENDEP confirms completion; otherwise leave all events latched and wait.
 	// EPSTATUS == 0 means there is no captured DMA, even if the errata busy
 	// register is intentionally retaining EP0 ownership.
-	if (dmastatus != 0U)
+	if (dmastatus > 1U)
 	{
 		completedDma = nRFUsbdDmaFinishLocked(dmastatus, true);
 		if (completedDma == NRFX_USBD_DMA_EP_NONE)
@@ -2345,17 +2315,30 @@ extern "C" void USBD_IRQHandler(void)
 		__ISB();
 		__DSB();
 
-		if (endep0in)
-		//if (s_Ctrlr.SetupDirIn)
+		if ((dmastatus & 1U) != 0U)
 		{
-			//nRFUsbdQueueXferComplete(0U,
-			//	(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
-			nRFUsbdQueueEp0Complete(false,
-				(uint16_t)NRF_USBD->EPIN[0].AMOUNT);
+			NRF_USBD->EPSTATUS = 1U;
+			__DSB();
+			(void)CFifoGet(s_hEp0Que);
+
+			nRFEPPkt_t *p = (nRFEPPkt_t *)CFifoPeek(s_hEp0Que);
+			if (p != NULL)
+			{
+				NRF_USBD->EPIN[0].PTR =
+					(uint32_t)(uintptr_t)p->Payload;
+				NRF_USBD->EPIN[0].MAXCNT = p->Hdr.Len;
+				nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPIN[0],
+					0U, true);
+			}
+			else
+			{
+				nRFUsbdDmaUnlock();
+				nRFUsbdQueueEp0Complete(false,
+					s_Ctrlr.Xfer[0][1].TotalLen);
+			}
 		}
 		else
 		{
-//			nRFUsbdQueueOutData(0U);
 			(void)AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEp0OutData);
 		}
 	}
@@ -2688,62 +2671,55 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length)
 {
-	return nRFUsbValidDevNo(DevNo) && USB_ENDPADDR_NUM(EpAddr) == 0U &&
-		nRFUsbRegEpXfer(EpAddr, pBuffer, Length);
+	if (!nRFUsbValidDevNo(DevNo) || USB_ENDPADDR_NUM(EpAddr) != 0U)
+	{
+		return false;
+	}
+
+	if (USB_ENDPADDR_IS_IN(EpAddr) && s_Ctrlr.SetupDirIn)
+	{
+		return UsbCtrlrEp0Send(DevNo, pBuffer, Length) == Length;
+	}
+
+	return nRFUsbRegEpXfer(EpAddr, pBuffer, Length);
 }
 
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 {
 	int cnt = 0;
 
+	(void)DevNo;
+	s_Ctrlr.Xfer[0][1].TotalLen = (uint16_t)Length;
+
 	do
 	{
-		int l = min(Length, NRFX_USBD_MAX_PACKET_SIZE);
+		const int l = min(Length, NRFX_USBD_MAX_PACKET_SIZE);
 
 		nRFEPPkt_t *p = (nRFEPPkt_t*)CFifoPut(s_hEp0Que);
 
-		if (p == nullptr)
-		{
-			break;
-		}
-
-		if (l > 0 && pBuffer != nullptr)
+		if (l > 0)
 		{
 			memcpy(p->Payload, pBuffer, l);
+			pBuffer += l;
 		}
 		p->Hdr.EpNum = 0U;
 		p->Hdr.Dir = 1U;
 		p->Hdr.Len = l;
-		pBuffer += l;
-		cnt +=l;
+		cnt += l;
 		Length -= l;
-	} while  (Length > 0);
+	} while (Length > 0);
 
 	if (NRFX_USBD_EASYDMA_BUSY_REG == NRFX_USBD_EASYDMA_BUSY_REG_CLEAR)
 	{
 		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
-		nRFEPPkt_t *p = (nRFEPPkt_t*)CFifoPeek(s_hEp0Que);
+		s_Ctrlr.SetupDirIn = true;
+		NRF_USBD->EVENTS_EP0DATADONE = 0U;
+		NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
 
-		if (p)
-		{
-			s_Ctrlr.SetupDirIn = true;
-
-			NRF_USBD->EVENTS_EP0DATADONE = 0U;
-			NRF_USBD->EVENTS_ENDEPIN[0] = 0;
-
-			NRF_USBD->EPIN[0].MAXCNT = p->Hdr.Len;
-			NRF_USBD->EPIN[0].PTR = (uint32_t)p;
-
-			if (p->Hdr.Len < NRFX_USBD_MAX_PACKET_SIZE)
-			{
-				NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
-			}
-			else
-			{
-				NRF_USBD->SHORTS = 0;
-			}
-			NRF_USBD->TASKS_STARTEPIN[0] = 1U;
-		}
+		nRFEPPkt_t *p = (nRFEPPkt_t *)CFifoPeek(s_hEp0Que);
+		NRF_USBD->EPIN[0].PTR = (uint32_t)(uintptr_t)p->Payload;
+		NRF_USBD->EPIN[0].MAXCNT = p->Hdr.Len;
+		NRF_USBD->TASKS_STARTEPIN[0] = 1U;
 	}
 
 	return cnt;
