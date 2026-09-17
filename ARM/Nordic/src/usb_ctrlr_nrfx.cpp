@@ -1570,6 +1570,14 @@ static void nRFUsbdQueXferDir(uint8_t EpNum, bool In, uint16_t Len)
 	pQue->Dir = In ? 1U : 0U;
 	pQue->Len = Len;
 
+	if (EpNum != 0U && !nRFUsbdDmaActive() &&
+		atomic_load(&s_Ctrlr.Ep0State) == NRFX_USBD_EP0_IDLE &&
+		!atomic_load(&s_HostResumePending) && !nRFUsbdIsoPending() &&
+		(!atomic_load(&s_BusSuspended) || atomic_load(&s_SuspendPending)))
+	{
+		nRFUsbdStartQueuedDma();
+	}
+
 	EnableInterrupt(state);
 }
 
@@ -1610,10 +1618,6 @@ static void nRFUsbdQueueOut(uint8_t EpNum)
 
 	nRFUsbdQueXferDir(EpNum, false,
 				 (uint16_t)(pXfer->TotalLen - pXfer->ActualLen));
-	if (EpNum != 0U)
-	{
-		nRFUsbdServicePending();
-	}
 }
 
 static void nRFUsbdQueueIn(uint8_t EpNum)
@@ -1631,10 +1635,6 @@ static void nRFUsbdQueueIn(uint8_t EpNum)
 	}
 
 	nRFUsbdQueXferDir(EpNum, true, length);
-	if (EpNum != 0U)
-	{
-		nRFUsbdServicePending();
-	}
 }
 
 static void nRFUsbdQueueEp0Status(void)
@@ -2168,7 +2168,6 @@ bool nRFUsbRegDataEpXferDir(uint8_t EpNum, bool In, uint16_t Length)
 	pXfer->Started = true;
 
 	nRFUsbdQueXferDir(EpNum, In, Length);
-	nRFUsbdServicePending();
 	return true;
 }
 
