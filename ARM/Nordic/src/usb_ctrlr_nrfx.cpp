@@ -2744,10 +2744,6 @@ extern "C" void USBD_IRQHandler(void)
 		__ISB();
 		__DSB();
 
-		if ((dmastatus & 1) == 0 || endep0in == 0)
-		{
-			printf("%x %x", dmastatus, endep0in);
-		}
 		if (endep0in)
 		//if (s_Ctrlr.SetupDirIn)
 		{
