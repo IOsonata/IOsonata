@@ -2894,21 +2894,13 @@ extern "C" void USBD_IRQHandler(void)
 
 	// ENDEP released the shared EasyDMA channel above. ISO has priority when
 	// it is open; ordinary CDC traffic avoids the ISO service path entirely.
-	if ((completionNeedsService || regularOutQueued) &&
-		!nRFUsbdDmaActive())
+	if (completionNeedsService || regularOutQueued)
 	{
-		if (isoOpen == 0U)
-		{
-			nRFUsbdServicePending();
-		}
-		else
+		if (isoOpen != 0U)
 		{
 			nRFUsbdServiceIso();
-			if (!nRFUsbdDmaActive())
-			{
-				nRFUsbdServicePending();
-			}
 		}
+		nRFUsbdServicePending();
 	}
 
 	if (s_UsbdLowPowerSuspend && atomic_load(&s_BusSuspended))
