@@ -1432,7 +1432,7 @@ static void nRFUsbdServiceIso(void)
  * holds is only known now, so that is read here.
  */
 static inline __attribute__((always_inline))
-bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
+void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 {
 	const uint8_t epNum = pQue->EpNum;
 	const bool isIn = pQue->Dir != 0U;
@@ -1456,8 +1456,6 @@ bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPOUT[epNum],
 			epNum, false);
 	}
-
-	return true;
 }
 
 static inline __attribute__((always_inline))
