@@ -2014,13 +2014,13 @@ static void nRFUsbdProcessEp0Complete(uint32_t Evt, void *pContext)
 		const uint8_t epAddr = nRFUsbdEp0StatusNow();
 		nRFUsbdEmitXfer(epAddr, 0U, USB_CTRLR_XFER_SUCCESS);
 		atomic_store(&s_Ctrlr.Ep0State, NRFX_USBD_EP0_IDLE);
-		nRFUsbdServiceIso();
-		nRFUsbdResumeQueuedDma();
+//		nRFUsbdServiceIso();
+//		nRFUsbdResumeQueuedDma();
 		return;
 	}
 
-	nRFUsbdServiceEp0();
-	nRFUsbdServiceIso();
+	//nRFUsbdServiceEp0();
+//	nRFUsbdServiceIso();
 	nRFUsbdResumeQueuedDma();
 }
 
@@ -2326,6 +2326,14 @@ extern "C" void USBD_IRQHandler(void)
 				NRF_USBD->EPIN[0].PTR =
 					(uint32_t)(uintptr_t)p->Payload;
 				NRF_USBD->EPIN[0].MAXCNT = p->Hdr.Len;
+
+				NRF_USBD->SHORTS = 0;
+
+				if (p->Hdr.Len < NRFX_USBD_MAX_PACKET_SIZE)
+				{
+					NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
+				}
+
 				nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPIN[0],
 					0U, true);
 			}
@@ -2718,7 +2726,15 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 		nRFEPPkt_t *p = (nRFEPPkt_t *)CFifoPeek(s_hEp0Que);
 		NRF_USBD->EPIN[0].PTR = (uint32_t)(uintptr_t)p->Payload;
 		NRF_USBD->EPIN[0].MAXCNT = p->Hdr.Len;
+
+		NRF_USBD->SHORTS = 0;
+
+		if (p->Hdr.Len < NRFX_USBD_MAX_PACKET_SIZE)
+		{
+			NRF_USBD->SHORTS = USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk;
+		}
 		NRF_USBD->TASKS_STARTEPIN[0] = 1U;
+
 	}
 
 	return cnt;
