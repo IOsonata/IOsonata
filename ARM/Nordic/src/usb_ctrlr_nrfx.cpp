@@ -1533,9 +1533,8 @@ static void nRFUsbdServiceEp0(void)
 	EnableInterrupt(state);
 }
 
-static void nRFUsbdServicePending(void)
+static inline __attribute__((always_inline)) void nRFUsbdResumeQueuedDmaLocked(void)
 {
-	const uint32_t state = DisableInterrupt();
 	if (nRFUsbdDmaActive() ||
 		atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE ||
 		atomic_load(&s_HostResumePending) ||
@@ -1543,15 +1542,15 @@ static void nRFUsbdServicePending(void)
 		(atomic_load(&s_BusSuspended) &&
 		 !atomic_load(&s_SuspendPending)))
 	{
-		EnableInterrupt(state);
 		return;
 	}
 
-	// Interrupts remain disabled while nRFUsbdStartDmaNow consumes the two
-	// descriptor fields, so the removed CFifo slot cannot be reused here.
-	// Completion ownership is recorded by EPSTATUS and matching ENDEP.
 	nRFUsbdStartQueuedDma();
-
+}
+static void nRFUsbdResumeQueuedDma(void)
+{
+	const uint32_t state = DisableInterrupt();
+	nRFUsbdResumeQueuedDmaLocked();
 	EnableInterrupt(state);
 }
 
@@ -2330,7 +2329,7 @@ static void nRFUsbdProcessEp0SetupEx(uint32_t Evt, void *pContext)
 	// packet completes.
 	nRFUsbdServiceEp0();
 	nRFUsbdServiceIso();
-	nRFUsbdServicePending();
+	nRFUsbdResumeQueuedDma();
 }
 
 static void nRFUsbdHandleEp0OutEnd(uint16_t TransferLen)
@@ -2451,7 +2450,7 @@ static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 	}
 
 	nRFUsbdServiceIso();
-	nRFUsbdServicePending();
+	nRFUsbdResumeQueuedDma();
 }
 
 static void nRFUsbdProcessEp0Complete(uint32_t Evt, void *pContext)
@@ -2471,7 +2470,7 @@ static void nRFUsbdProcessEp0Complete(uint32_t Evt, void *pContext)
 
 	nRFUsbdServiceEp0();
 	nRFUsbdServiceIso();
-	nRFUsbdServicePending();
+	nRFUsbdResumeQueuedDma();
 }
 
 static void nRFUsbdProcessOutComplete(uint32_t Evt, void *pContext)
@@ -2523,7 +2522,7 @@ static void nRFUsbdProcessEp0OutData(uint32_t Evt, void *pContext)
 	nRFUsbdHandleEp0OutData();
 	nRFUsbdServiceEp0();
 	nRFUsbdServiceIso();
-	nRFUsbdServicePending();
+	nRFUsbdResumeQueuedDma();
 }
 
 static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
@@ -2893,7 +2892,7 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			nRFUsbdServiceIso();
 		}
-		nRFUsbdServicePending();
+		nRFUsbdResumeQueuedDmaLocked();
 	}
 
 	if (s_UsbdLowPowerSuspend && atomic_load(&s_BusSuspended))
