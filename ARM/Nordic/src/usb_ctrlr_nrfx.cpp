@@ -1230,26 +1230,28 @@ static uint8_t nRFUsbdDmaFinish(uint32_t DmaStatus,
 
 	uint8_t epAddr = NRFX_USBD_DMA_EP_NONE;
 	volatile uint32_t *pEndEvent = NULL;
-	uint32_t epStatusMask = DmaStatus & 0xFFU;
+	uint32_t epStatusMask = DmaStatus & 0x00FF00FFUL;
 
-	// EPSTATUS is a write-one-to-clear bitmap of the endpoint whose EasyDMA
-	// registers were captured. It identifies the endpoint number; the matching
-	// END event identifies the direction and confirms completion.
+	// EPSTATUS is a write-one-to-clear bitmap. EPIN[0..7] occupy bits 0..7
+	// and EPOUT[0..7] occupy bits 16..23. The selected bit identifies both
+	// endpoint and direction; its matching END event confirms completion.
 	if (epStatusMask != 0U)
 	{
-		const uint8_t epNum =
+		const uint8_t statusBit =
 			(uint8_t)(31U - (uint32_t)__CLZ(epStatusMask));
-		epStatusMask = 1UL << epNum;
+		const bool out = statusBit >= 16U;
+		const uint8_t epNum = out ?
+			(uint8_t)(statusBit - 16U) : statusBit;
+		epStatusMask = 1UL << statusBit;
 
-		if (NRF_USBD->EVENTS_ENDEPIN[epNum] != 0U)
+		volatile uint32_t *pEvent = out ?
+			&NRF_USBD->EVENTS_ENDEPOUT[epNum] :
+			&NRF_USBD->EVENTS_ENDEPIN[epNum];
+		if (*pEvent != 0U)
 		{
-			epAddr = (uint8_t)(epNum | USB_ENDPADDR_DIR_IN);
-			pEndEvent = &NRF_USBD->EVENTS_ENDEPIN[epNum];
-		}
-		else if (NRF_USBD->EVENTS_ENDEPOUT[epNum] != 0U)
-		{
-			epAddr = epNum;
-			pEndEvent = &NRF_USBD->EVENTS_ENDEPOUT[epNum];
+			epAddr = out ? epNum :
+				(uint8_t)(epNum | USB_ENDPADDR_DIR_IN);
+			pEndEvent = pEvent;
 		}
 	}
 	else if (NRF_USBD->EVENTS_ENDISOIN != 0U)
