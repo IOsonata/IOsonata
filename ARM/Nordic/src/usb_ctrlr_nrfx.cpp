@@ -1217,10 +1217,9 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
 /**
  * Finish the one active EasyDMA transaction.
  *
- * Ordinary and EP0 transfers retain their queue head until ENDEP, which
- * identifies both the endpoint and the queue entry to consume. ISO has
- * dedicated END events and no queue entry. The ISR preserves ISO END so its
- * existing event section can queue the completion in the same order as before.
+ * EPSTATUS plus the matching END event identifies an ordinary completion.
+ * Regular queue entries are consumed when DMA starts; EP0 retains its queue
+ * head for its separate packet path. ISO has dedicated END events.
  */
 static uint8_t nRFUsbdDmaFinish(uint32_t DmaStatus,
 	bool PreserveIsoEvent)
@@ -1290,10 +1289,12 @@ static uint8_t nRFUsbdDmaFinish(uint32_t DmaStatus,
 		__DSB();
 	}
 
-	if (epNum != NRFX_USBD_ISO_EP_NO)
+	// EP0 keeps its entry until DMA completion because its separate packet
+	// path may use queue-backed storage. Regular entries were consumed when
+	// their DMA started, and ISO has no queue entry.
+	if (epNum == 0U)
 	{
-		hCFifo_t hQue = epNum == 0U ? s_hEp0Que : s_hQue;
-		(void)CFifoGet(hQue);
+		(void)CFifoGet(s_hEp0Que);
 	}
 
 	// EP0 retains the errata lock between its data packets and status stage.
@@ -1525,44 +1526,28 @@ static void nRFUsbdServiceEp0(void)
 
 static void nRFUsbdServicePending(void)
 {
-	for (;;)
+	const uint32_t state = DisableInterrupt();
+	if (nRFUsbdDmaActive() ||
+		atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE ||
+		atomic_load(&s_HostResumePending) ||
+		nRFUsbdIsoPending() ||
+		(atomic_load(&s_BusSuspended) &&
+		 !atomic_load(&s_SuspendPending)))
 	{
-		// Select and start under one gate. Rechecking the same EP0 and ISO
-		// state before and after masking interrupts added work to every packet;
-		// masking first closes that race with a single set of tests.
-		const uint32_t state = DisableInterrupt();
-		if (nRFUsbdDmaActive() ||
-			atomic_load(&s_Ctrlr.Ep0State) != NRFX_USBD_EP0_IDLE ||
-			atomic_load(&s_HostResumePending) ||
-			nRFUsbdIsoPending() ||
-			(atomic_load(&s_BusSuspended) &&
-			 !atomic_load(&s_SuspendPending)))
-		{
-			EnableInterrupt(state);
-			return;
-		}
-
-		// Keep the head owned by the CFifo while EasyDMA uses it. ENDEP
-		// consumes exactly this entry, so the head itself is the active
-		// endpoint/direction record.
-		nRFUsbdQue_t *pHead = (nRFUsbdQue_t *)CFifoPeek(s_hQue);
-		if (pHead != NULL)
-		{
-			nRFUsbdStartDmaNow(pHead);
-			EnableInterrupt(state);
-			return;
-		}
-
-		const bool retry = CFifoUsed(s_hQue) > 0;
 		EnableInterrupt(state);
-
-		if (retry)
-		{
-			continue;
-		}
-
 		return;
 	}
+
+	// Interrupts remain disabled while nRFUsbdStartDmaNow consumes the two
+	// descriptor fields, so the removed CFifo slot cannot be reused here.
+	// Completion ownership is recorded by EPSTATUS and matching ENDEP.
+	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoGet(s_hQue);
+	if (pQue != NULL)
+	{
+		nRFUsbdStartDmaNow(pQue);
+	}
+
+	EnableInterrupt(state);
 }
 
 /**
