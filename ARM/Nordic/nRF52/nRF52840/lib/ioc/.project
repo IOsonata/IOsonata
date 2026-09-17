@@ -2386,9 +2386,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/usb/usb_ctrlr_nrfx.cpp</name>
+			<name>src/usb/usb_ctrlr_nrf52.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/usb_ctrlr_nrfx.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usb_ctrlr_nrf52.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usb_intrf.cpp</name>

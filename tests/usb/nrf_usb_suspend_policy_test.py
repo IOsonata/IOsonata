@@ -4,7 +4,7 @@
 from pathlib import Path
 
 
-SOURCE = Path(__file__).parents[2] / "ARM/Nordic/src/usb_ctrlr_nrfx.cpp"
+SOURCE = Path(__file__).parents[2] / "ARM/Nordic/src/usb_ctrlr_nrf52.cpp"
 
 
 def function_body(source: str, signature: str) -> str:
@@ -28,15 +28,14 @@ def brace_body(source: str, brace: int) -> str:
 
 source = SOURCE.read_text(encoding="utf-8")
 enter_low_power = function_body(source, "static void nRFUsbdTryEnterLowPower(void)")
-interrupt = function_body(source, "extern \"C\" void USBD_IRQHandler(void)")
-sof_start = interrupt.index("if ((intStatus & USBD_INTEN_SOF_Msk) != 0)")
-sof = brace_body(interrupt, interrupt.index("{", sof_start))
+bus_event = function_body(source, "static void nRFUsbdHandleBusEvent(")
+sof = function_body(source, "static void nRFUsbdHandleSof(void)")
 
 assert "if (!s_UsbdLowPowerSuspend ||" in enter_low_power, (
     "USBD low-power entry must be disabled when bLowPowerSuspend is false"
 )
 assert (
-    "atomic_store(&s_SuspendPending, s_UsbdLowPowerSuspend);" in interrupt
+    "atomic_store(&s_SuspendPending, s_UsbdLowPowerSuspend);" in bus_event
 ), "bus suspend must not request peripheral low-power unconditionally"
 assert "nRFUsbdHostResumeDetected();" in sof, (
     "SOF handling must retain the anomaly-211 host-resume recovery path"

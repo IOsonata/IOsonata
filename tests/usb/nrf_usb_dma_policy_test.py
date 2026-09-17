@@ -4,7 +4,7 @@
 from pathlib import Path
 
 
-SOURCE = Path(__file__).parents[2] / "ARM/Nordic/src/usb_ctrlr_nrfx.cpp"
+SOURCE = Path(__file__).parents[2] / "ARM/Nordic/src/usb_ctrlr_nrf52.cpp"
 
 
 def function_body(source: str, signature: str) -> str:
@@ -24,26 +24,26 @@ def function_body(source: str, signature: str) -> str:
 
 
 source = SOURCE.read_text(encoding="utf-8")
-dma_start = function_body(source, "static void nRFUsbdDmaStart(")
-service = function_body(source, "static void nRFUsbdServicePending(void)")
+dma_start = function_body(source, "void nRFUsbdDmaStartLocked(")
+dma_finish = function_body(source, "uint8_t nRFUsbdDmaFinishLocked(")
 interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
 
 assert "nRFUsbdDmaReclaim" not in source
 assert "nRFUsbdDmaEndIntEnable" not in source
 assert "s_LazyInMask" not in source
 assert "INTENSET" not in dma_start, "DMA start must not enable ENDEPIN"
-assert "atomic_store(&s_DmaEpAddr, EpAddr)" in dma_start
-assert "nRFUsbdDmaEndEvent(activeDma)" in interrupt
-assert interrupt.index("*pEndEvent = 0") < interrupt.index(
-    "nRFUsbdDmaRelease();"
+assert "NRFX_USBD_EASYDMA_BUSY_REG_BUSY" in dma_start
+assert "*pTask = 1" in dma_start
+assert "DmaStatus & 0x00FF00FFUL" in dma_finish
+assert "EVENTS_ENDEPOUT[epNum]" in dma_finish
+assert "EVENTS_ENDEPIN[epNum]" in dma_finish
+assert "nRFUsbdDmaUnlock();" in dma_finish
+assert interrupt.index("nRFUsbdDmaFinishLocked(") < interrupt.index(
+    "nRFUsbdStartQueuedDma();"
 )
-assert interrupt.index("nRFUsbdDmaRelease();") < interrupt.index(
-    "nRFUsbdCollectEvents()"
+assert "NRF_USBD->EPDATASTATUS" in interrupt
+assert interrupt.rindex("nRFUsbdResumeQueuedDmaLocked();") > interrupt.index(
+    "NRF_USBD->EPDATASTATUS"
 )
-assert "USBD_INTEN_EPDATA_Msk" in interrupt
-assert interrupt.rindex("nRFUsbdServicePending();") > interrupt.index(
-    "USBD_INTEN_EPDATA_Msk"
-)
-assert "nRFUsbdDmaReclaim" not in service
 
 print("nrf_usb_dma_policy_test: PASS")

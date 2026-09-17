@@ -31,9 +31,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/usb_ctrlr_nrfx.cpp</name>
+			<name>src/usb_ctrlr_nrf52.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/usb_ctrlr_nrfx.cpp</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/src/usb_ctrlr_nrf52.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb_dual_cdc_stress.cpp</name>
