@@ -1192,25 +1192,19 @@ static inline __attribute__((always_inline))
 void nRFUsbdDmaUnlock(void)
 {
 	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
-	__ISB();
 	__DSB();
 }
 
-static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
+/** Start EasyDMA while the caller already excludes the USBD interrupt. */
+static inline __attribute__((always_inline))
+void nRFUsbdDmaStartLocked(volatile uint32_t *pTask, uint8_t EpAddr)
 {
-	const uint32_t primask = __get_PRIMASK();
-	__disable_irq();
-
 	*nRFUsbdDmaEndEvent(EpAddr) = 0;
-	__ISB();
 	__DSB();
 
 	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
 	*pTask = 1;
-	__ISB();
 	__DSB();
-
-	__set_PRIMASK(primask);
 }
 
 
@@ -1221,12 +1215,10 @@ static void nRFUsbdDmaStart(volatile uint32_t *pTask, uint8_t EpAddr)
  * Regular queue entries are consumed when DMA starts; EP0 retains its queue
  * head for its separate packet path. ISO has dedicated END events.
  */
-static uint8_t nRFUsbdDmaFinish(uint32_t DmaStatus,
+static inline __attribute__((always_inline))
+uint8_t nRFUsbdDmaFinishLocked(uint32_t DmaStatus,
 	bool PreserveIsoEvent)
 {
-	const uint32_t primask = __get_PRIMASK();
-	__disable_irq();
-
 	uint8_t epAddr = NRFX_USBD_DMA_EP_NONE;
 	volatile uint32_t *pEndEvent = NULL;
 	uint32_t epStatusMask = DmaStatus & 0x00FF00FFUL;
@@ -1268,7 +1260,6 @@ static uint8_t nRFUsbdDmaFinish(uint32_t DmaStatus,
 
 	if (epAddr == NRFX_USBD_DMA_EP_NONE)
 	{
-		__set_PRIMASK(primask);
 		return epAddr;
 	}
 
@@ -1276,8 +1267,6 @@ static uint8_t nRFUsbdDmaFinish(uint32_t DmaStatus,
 	if (!PreserveIsoEvent || epNum != NRFX_USBD_ISO_EP_NO)
 	{
 		*pEndEvent = 0U;
-		__ISB();
-		__DSB();
 	}
 
 	// Retire the exact captured endpoint after its END event. This includes
@@ -1285,9 +1274,10 @@ static uint8_t nRFUsbdDmaFinish(uint32_t DmaStatus,
 	if (epStatusMask != 0U)
 	{
 		NRF_USBD->EPSTATUS = epStatusMask;
-		__ISB();
-		__DSB();
 	}
+	// Device-memory writes are ordered. One completion barrier retires both
+	// W1C stores before the DMA ownership lock is released.
+	__DSB();
 
 	// EP0 keeps its entry until DMA completion because its separate packet
 	// path may use queue-backed storage. Regular entries were consumed when
@@ -1304,6 +1294,17 @@ static uint8_t nRFUsbdDmaFinish(uint32_t DmaStatus,
 		nRFUsbdDmaUnlock();
 	}
 
+	return epAddr;
+}
+
+/** Foreground wrapper for forced-stop/wait paths. */
+static uint8_t nRFUsbdDmaFinish(uint32_t DmaStatus,
+	bool PreserveIsoEvent)
+{
+	const uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+	const uint8_t epAddr =
+		nRFUsbdDmaFinishLocked(DmaStatus, PreserveIsoEvent);
 	__set_PRIMASK(primask);
 	return epAddr;
 }
@@ -1374,7 +1375,7 @@ static bool nRFUsbdStartIsoNow(void)
 		atomic_store(&s_IsoInReady, false);
 		NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)nRFUsbGetEpReg(inAddr)->pBuffer;
 		NRF_USBD->ISOIN.MAXCNT = pIn->TotalLen;
-		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTISOIN, inAddr);
+		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOIN, inAddr);
 		return true;
 	}
 
@@ -1388,7 +1389,7 @@ static bool nRFUsbdStartIsoNow(void)
 		NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)
 			nRFUsbGetEpReg(NRFX_USBD_ISO_EP_NO)->pBuffer;
 		NRF_USBD->ISOOUT.MAXCNT = len;
-		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTISOOUT,
+		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
 			NRFX_USBD_ISO_EP_NO);
 		return true;
 	}
@@ -1430,7 +1431,8 @@ static void nRFUsbdServiceIso(void)
  * when it was queued; what an OUT endpoint actually holds is only known now,
  * so that is read here.
  */
-static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
+static inline __attribute__((always_inline))
+bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(pQue->EpAddr);
 	const bool isIn = USB_ENDPADDR_IS_IN(pQue->EpAddr);
@@ -1442,7 +1444,8 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 	{
 		NRF_USBD->EPIN[epNum].PTR = (uint32_t)(uintptr_t)pBuffer;
 		NRF_USBD->EPIN[epNum].MAXCNT = pQue->Len;
-		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPIN[epNum], pQue->EpAddr);
+		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPIN[epNum],
+			pQue->EpAddr);
 	}
 	else
 	{
@@ -1451,7 +1454,8 @@ static bool nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 		NRF_USBD->EPOUT[epNum].PTR = (uint32_t)(uintptr_t)pBuffer;
 		NRF_USBD->EPOUT[epNum].MAXCNT = len;
-		nRFUsbdDmaStart(&NRF_USBD->TASKS_STARTEPOUT[epNum], pQue->EpAddr);
+		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPOUT[epNum],
+			pQue->EpAddr);
 	}
 
 	return true;
@@ -2516,7 +2520,8 @@ static void nRFUsbdQueueEp0Complete(bool Out, uint16_t Amount)
 	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessEp0Complete);
 }
 
-static void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
+static inline __attribute__((always_inline))
+void nRFUsbdQueueXferComplete(uint8_t EpEvent, uint16_t Amount)
 {
 	const uint32_t evt = ((uint32_t)Amount << 8U) | EpEvent;
 	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessXferComplete);
@@ -2648,6 +2653,7 @@ extern "C" void USBD_IRQHandler(void)
 	uint16_t completedOutAmount = 0U;
 	bool completionNeedsService = false;
 	bool regularOutQueued = false;
+	const uint_fast8_t isoOpen = atomic_load(&s_IsoOpen);
 
 	// Reset cancels any active DMA and must not wait for ENDEP.
 	if (NRF_USBD->EVENTS_USBRESET != 0U)
@@ -2666,7 +2672,7 @@ extern "C" void USBD_IRQHandler(void)
 	// register is intentionally retaining EP0 ownership.
 	if (dmastatus != 0U)
 	{
-		completedDma = nRFUsbdDmaFinish(dmastatus, true);
+		completedDma = nRFUsbdDmaFinishLocked(dmastatus, true);
 		if (completedDma == NRFX_USBD_DMA_EP_NONE)
 		{
 			return;
@@ -2687,7 +2693,7 @@ extern "C" void USBD_IRQHandler(void)
 		// when this DMA started. With no newly-latched control or bus event,
 		// start the next queued regular DMA now. Completion notification and
 		// the remaining ISR work proceed while that DMA is active.
-		if (regularComplete && atomic_load(&s_IsoOpen) == 0U &&
+		if (regularComplete && isoOpen == 0U &&
 			NRF_USBD->EVENTS_EP0SETUP == 0U &&
 			NRF_USBD->EVENTS_USBEVENT == 0U)
 		{
@@ -2818,7 +2824,7 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
-	if (atomic_load(&s_IsoOpen) != 0U)
+	if (isoOpen != 0U)
 	{
 		if (NRF_USBD->EVENTS_ENDISOIN != 0U)
 		{
@@ -2860,7 +2866,7 @@ extern "C" void USBD_IRQHandler(void)
 	if ((completionNeedsService || regularOutQueued) &&
 		!nRFUsbdDmaActive())
 	{
-		if (atomic_load(&s_IsoOpen) == 0U)
+		if (isoOpen == 0U)
 		{
 			nRFUsbdServicePending();
 		}
