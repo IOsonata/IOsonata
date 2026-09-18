@@ -2205,21 +2205,21 @@ extern "C" void USBD_IRQHandler(void)
 			servicedStatus |= 1UL << (epNum + 16U);
 
 			nRFUsbEpReg_t *pReg = nRFUsbGetEpReg((uint8_t)epNum);
-			if (pReg->bBlocking)
+			// EPDATASTATUS already identifies the ready OUT endpoint.
+			// Publish its DMA request here instead of waiting for AppEvt;
+			// the ISR tail starts it after all USBD status is consumed.
+			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_hQue);
+
+			if (pQue)
 			{
-				(void)AppEvtHandlerQue(epNum, NULL,
-					nRFUsbdProcessOutData);
-			}
-			else
-			{
-				// EPDATASTATUS already identifies the ready OUT endpoint.
-				// Publish its DMA request here instead of waiting for AppEvt;
-				// the ISR tail starts it after all USBD status is consumed.
-				nRFUsbdQue_t *pQue =
-					(nRFUsbdQue_t *)CFifoPut(s_hQue);
 				pQue->EpNum = (uint8_t)epNum;
 				pQue->Dir = 0U;
 				pQue->Len = pReg->Mps;
+			}
+			else
+			{
+				(void)AppEvtHandlerQue(epNum, NULL,
+					nRFUsbdProcessOutData);
 			}
 		}
 
