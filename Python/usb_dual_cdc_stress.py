@@ -12,6 +12,7 @@ exercise controller DMA arbitration across multiple endpoints.
         --prbs-port   CDC port for the PRBS transmit function
         --baud        CDC line coding value (default 1000000)
         --duration    Active test duration in seconds (default 60)
+        --trace       Host-side startup and I/O activity diagnostics
 
 @author Hoang Nguyen Hoan
 @date   Sep. 5, 2026
@@ -140,6 +141,132 @@ class TestStats:
                     self.io_error)
 
 
+class HostTrace:
+    """Record host calls; never print from the traffic threads."""
+
+    def __init__(self, enabled=False):
+        self.enabled = enabled
+        self.started = time.monotonic()
+        self.lock = threading.Lock()
+        self.streams = {
+            name: dict(calls=0, returns=0, empty=0, short=0, bytes=0,
+                       first=None, last=None, last_return=None, pending=None,
+                       requested=0, sample=None, error=None)
+            for name in ("loop TX", "loop RX", "PRBS RX")
+        }
+
+    def event(self, message):
+        if self.enabled:
+            print("TRACE +%.3fs %s" %
+                  (time.monotonic() - self.started, message), flush=True)
+
+    @staticmethod
+    def property(comm, name):
+        try:
+            return getattr(comm, name)
+        except (OSError, serial.SerialException, AttributeError,
+                NotImplementedError) as error:
+            return "unavailable (%s)" % error
+
+    def port(self, label, comm):
+        if self.enabled:
+            self.event("%s port=%s host_dtr=%s in_waiting=%s out_waiting=%s "
+                       "read_timeout=%s write_timeout=%s" %
+                       (label, comm.port, self.property(comm, "dtr"),
+                        self.property(comm, "in_waiting"),
+                        self.property(comm, "out_waiting"),
+                        comm.timeout, comm.write_timeout))
+
+    def before_flush(self, label, comm, direction):
+        if self.enabled:
+            name = "in_waiting" if direction == "input" else "out_waiting"
+            self.event("%s resetting %s buffer; host queued bytes=%s" %
+                       (label, direction, self.property(comm, name)))
+
+    def begin(self, source, requested):
+        if self.enabled:
+            with self.lock:
+                stream = self.streams[source]
+                stream["calls"] += 1
+                stream["pending"] = time.monotonic()
+                stream["requested"] = requested
+
+    def finish(self, source, count=0, data=None, error=None):
+        if self.enabled:
+            with self.lock:
+                stream = self.streams[source]
+                now = time.monotonic()
+                stream["pending"] = None
+                stream["last_return"] = now
+                if error is not None:
+                    stream["error"] = repr(error)
+                    return
+                stream["returns"] += 1
+                stream["bytes"] += count
+                if count == 0:
+                    stream["empty"] += 1
+                elif count < stream["requested"]:
+                    stream["short"] += 1
+                if count > 0:
+                    if stream["first"] is None:
+                        stream["first"] = now
+                        if data is not None:
+                            stream["sample"] = data[:16].hex(" ")
+                    stream["last"] = now
+
+    def snapshot(self, reason, stats, ports, threads):
+        if not self.enabled:
+            return
+        with self.lock:
+            streams = {name: dict(value)
+                       for name, value in self.streams.items()}
+        now = time.monotonic()
+        loop_tx, loop_rx, _, prbs_rx, _, _, io_error = stats.snapshot()
+        self.event("%s: loop_tx=%d loop_rx=%d pending=%d prbs_rx=%d" %
+                   (reason, loop_tx, loop_rx, loop_tx - loop_rx, prbs_rx))
+
+        def age(when):
+            return "never" if when is None else "%.3fs ago" % (now - when)
+
+        for thread in threads:
+            stream = streams[thread.name]
+            pending = stream["pending"]
+            call = ("idle" if pending is None else
+                    "pending %dB for %.3fs" %
+                    (stream["requested"], now - pending))
+            first = ("never" if stream["first"] is None else
+                     "+%.3fs" % (stream["first"] - self.started))
+            self.event("%s alive=%s calls=%d returns=%d empty=%d short=%d "
+                       "bytes=%d first_data=%s last_data=%s last_return=%s "
+                       "call=%s" %
+                       (thread.name, thread.is_alive(), stream["calls"],
+                        stream["returns"], stream["empty"], stream["short"],
+                        stream["bytes"], first, age(stream["last"]),
+                        age(stream["last_return"]), call))
+            if stream["sample"] is not None:
+                self.event("%s first read prefix: %s" %
+                           (thread.name, stream["sample"]))
+            if stream["error"] is not None:
+                self.event("%s exception: %s" %
+                           (thread.name, stream["error"]))
+        for label, comm in ports:
+            self.port(label, comm)
+        if io_error is not None:
+            self.event("I/O error: %s" % io_error)
+        if "stalled" in reason:
+            for name in ("loop RX", "PRBS RX"):
+                stream = streams[name]
+                if stream["first"] is None:
+                    self.event("%s: no bytes reached Python during the active "
+                               "test; %d empty reads returned" %
+                               (name, stream["empty"]))
+                else:
+                    self.event("%s: traffic started; last bytes %s" %
+                               (name, age(stream["last"])))
+            self.event("Host trace cannot distinguish firmware submission, "
+                       "DMA, or AppEvt stalls.")
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="IOsonata simultaneous dual-CDC stress test")
@@ -170,25 +297,34 @@ def parse_args():
     parser.add_argument(
         "--stall-timeout", type=float, default=3.0,
         help="maximum time either active stream may stop (default: 3)")
+    parser.add_argument(
+        "--trace", action="store_true",
+        help="log host startup, DTR errors, I/O activity and live stall state")
     return parser.parse_args()
 
 
-def hold_port_closed(comm):
+def hold_port_closed(comm, trace, label):
+    trace.event("%s requesting DTR=False" % label)
     try:
         comm.dtr = False
+        trace.event("%s DTR=False setter returned successfully" % label)
         time.sleep(0.05)
-    except (OSError, serial.SerialException):
-        pass
+    except (OSError, serial.SerialException) as error:
+        trace.event("%s DTR=False FAILED: %r" % (label, error))
 
+    trace.before_flush(label, comm, "input")
     comm.reset_input_buffer()
+    trace.before_flush(label, comm, "output")
     comm.reset_output_buffer()
 
 
-def open_loopback_port(comm):
+def open_loopback_port(comm, trace):
+    trace.event("loop requesting DTR=True")
     try:
         comm.dtr = True
-    except (OSError, serial.SerialException):
-        pass
+        trace.event("loop DTR=True setter returned successfully")
+    except (OSError, serial.SerialException) as error:
+        trace.event("loop DTR=True FAILED: %r" % error)
 
     deadline = time.monotonic() + 1.0
     received = bytearray()
@@ -203,19 +339,25 @@ def open_loopback_port(comm):
                 break
 
     # The banner is not part of the loopback PRBS stream.
+    trace.event("loop banner wait: received=%d banner_found=%s prefix=%r" %
+                (len(received), LOOPBACK_BANNER in received,
+                 bytes(received[:64])))
     time.sleep(0.05)
+    trace.before_flush("loop", comm, "input")
     comm.reset_input_buffer()
     return LOOPBACK_BANNER in received
 
 
-def open_prbs_port(comm):
+def open_prbs_port(comm, trace):
+    trace.event("PRBS requesting DTR=True")
     try:
         comm.dtr = True
-    except (OSError, serial.SerialException):
-        pass
+        trace.event("PRBS DTR=True setter returned successfully")
+    except (OSError, serial.SerialException) as error:
+        trace.event("PRBS DTR=True FAILED: %r" % error)
 
 
-def loopback_writer(comm, stop_event, abort_event, stats, block_size):
+def loopback_writer(comm, stop_event, abort_event, stats, block_size, trace):
     state = 0xff
     pending = b""
 
@@ -224,9 +366,12 @@ def loopback_writer(comm, stop_event, abort_event, stats, block_size):
             pending, state = make_prbs_block(state, block_size)
 
         try:
+            trace.begin("loop TX", len(pending))
             count = comm.write(pending)
+            trace.finish("loop TX", count)
         except (OSError, serial.SerialException,
                 serial.SerialTimeoutException) as error:
+            trace.finish("loop TX", error=error)
             stats.set_io_error("loopback write", error)
             abort_event.set()
             return
@@ -236,13 +381,16 @@ def loopback_writer(comm, stop_event, abort_event, stats, block_size):
             pending = pending[count:]
 
 
-def loopback_reader(comm, stop_event, abort_event, stats, read_size):
+def loopback_reader(comm, stop_event, abort_event, stats, read_size, trace):
     expected = prbs8(0xff)
 
     while not stop_event.is_set() and not abort_event.is_set():
         try:
+            trace.begin("loop RX", read_size)
             data = comm.read(read_size)
+            trace.finish("loop RX", len(data), data)
         except (OSError, serial.SerialException) as error:
+            trace.finish("loop RX", error=error)
             stats.set_io_error("loopback read", error)
             abort_event.set()
             return
@@ -252,15 +400,18 @@ def loopback_reader(comm, stop_event, abort_event, stats, read_size):
             stats.add_loop_rx(len(data), errors)
 
 
-def prbs_reader(comm, stop_event, abort_event, stats, read_size):
+def prbs_reader(comm, stop_event, abort_event, stats, read_size, trace):
     # Synchronize to the first byte observed. The device may have transmitted
     # before the host reader thread was scheduled.
     expected = None
 
     while not stop_event.is_set() and not abort_event.is_set():
         try:
+            trace.begin("PRBS RX", read_size)
             data = comm.read(read_size)
+            trace.finish("PRBS RX", len(data), data)
         except (OSError, serial.SerialException) as error:
+            trace.finish("PRBS RX", error=error)
             stats.set_io_error("PRBS read", error)
             abort_event.set()
             return
@@ -283,6 +434,7 @@ def open_serial(port, baud):
 
 def main():
     args = parse_args()
+    trace = HostTrace(args.trace)
 
     if (args.loop_port == args.prbs_port or args.duration <= 0 or
             args.block <= 0 or args.read_size <= 0 or args.report <= 0 or
@@ -294,9 +446,16 @@ def main():
     loop_comm = None
     prbs_comm = None
 
+    trace.event("Host diagnostics enabled; host_dtr is the requested host "
+                "state, not firmware acknowledgement. TX bytes are accepted "
+                "by the host driver, not proof of device reception.")
     try:
+        trace.event("opening loop port %s" % args.loop_port)
         loop_comm = open_serial(args.loop_port, args.baud)
+        trace.port("loop", loop_comm)
+        trace.event("opening PRBS port %s" % args.prbs_port)
         prbs_comm = open_serial(args.prbs_port, args.baud)
+        trace.port("PRBS", prbs_comm)
     except (OSError, serial.SerialException) as error:
         print("ERROR: cannot open both CDC ports: %s" % error,
               file=sys.stderr)
@@ -307,15 +466,15 @@ def main():
         return 2
 
     try:
-        hold_port_closed(loop_comm)
-        hold_port_closed(prbs_comm)
+        hold_port_closed(loop_comm, trace, "loop")
+        hold_port_closed(prbs_comm, trace, "PRBS")
 
-        if open_loopback_port(loop_comm):
+        if open_loopback_port(loop_comm, trace):
             print("Connected to IOsonata USB Dual CDC Loopback")
         else:
             print("WARNING: loopback banner not detected")
 
-        open_prbs_port(prbs_comm)
+        open_prbs_port(prbs_comm, trace)
 
         traffic_stop = threading.Event()
         reader_stop = threading.Event()
@@ -323,18 +482,22 @@ def main():
         stats = TestStats()
         threads = [
             threading.Thread(
+                name="loop TX",
                 target=loopback_writer,
-                args=(loop_comm, traffic_stop, abort_event, stats, args.block),
+                args=(loop_comm, traffic_stop, abort_event, stats, args.block,
+                      trace),
                 daemon=True),
             threading.Thread(
+                name="loop RX",
                 target=loopback_reader,
                 args=(loop_comm, reader_stop, abort_event, stats,
-                      args.read_size),
+                      args.read_size, trace),
                 daemon=True),
             threading.Thread(
+                name="PRBS RX",
                 target=prbs_reader,
                 args=(prbs_comm, reader_stop, abort_event, stats,
-                      args.read_size),
+                      args.read_size, trace),
                 daemon=True),
         ]
 
@@ -349,7 +512,11 @@ def main():
         observed_loop_rx = 0
         observed_prbs_rx = 0
         stall_error = None
+        ports = (("loop", loop_comm), ("PRBS", prbs_comm))
 
+        trace.event("starting traffic threads; duration=%.3fs "
+                    "stall_timeout=%.3fs" %
+                    (args.duration, args.stall_timeout))
         for thread in threads:
             thread.start()
 
@@ -390,6 +557,7 @@ def main():
                         (loop_tx_rate, loop_rx_rate, loop_errors, pending,
                          prbs_rx_rate, prbs_errors, target_rx_errors),
                         flush=True)
+                    trace.snapshot("active", stats, ports, threads)
 
                     report_time = now
                     report_loop_tx = loop_tx
@@ -398,6 +566,8 @@ def main():
         except KeyboardInterrupt:
             print("KeyboardInterrupt. Stopping test.")
 
+        # Capture the live failure before stopping threads or draining data.
+        trace.snapshot(stall_error or "stopping traffic", stats, ports, threads)
         traffic_stop.set()
         threads[0].join(timeout=1.5)
         if threads[0].is_alive():
@@ -423,6 +593,7 @@ def main():
             if thread.is_alive():
                 stats.set_io_error("serial read", "reader did not stop")
 
+        trace.snapshot("after drain", stats, ports, threads)
         loop_tx, loop_rx, loop_errors, prbs_rx, prbs_errors, \
             target_rx_errors, io_error = \
             stats.snapshot()
@@ -456,6 +627,7 @@ def main():
         print("Result         : %s" % ("PASS" if passed else "FAIL"))
         return 0 if passed else 1
     finally:
+        trace.event("closing both ports")
         loop_comm.close()
         prbs_comm.close()
 
