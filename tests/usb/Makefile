@@ -183,7 +183,7 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 TARGETS += $(MSC_TARGET)
 
 .PHONY: all test test-c-header test-gcc test-clang test-matrix \
-	test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy \
+	test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma \
 	iso-hw-build iso-hw int-hw-build int-hw hid-hw-build hid-hw \
 	msc-hw-build msc-hw hid-demo-build probe clean
 
@@ -193,6 +193,7 @@ test: $(TARGETS)
 	$(MAKE) test-c-header
 	$(MAKE) test-nrf-suspend-policy
 	$(MAKE) test-nrf-iso-policy
+	$(MAKE) test-nrf-iso-dma
 	$(MAKE) test-nrf-dma-policy
 	$(TEST_ENV) ./$(CORE_TARGET)
 	$(TEST_ENV) ./$(INTRF_TARGET)
@@ -220,6 +221,9 @@ test-nrf-suspend-policy:
 
 test-nrf-iso-policy:
 	python3 ./nrf_usb_iso_policy_test.py
+
+test-nrf-iso-dma:
+	CXX=$(CXX) python3 ./nrf_usb_iso_dma_test.py
 
 test-nrf-dma-policy:
 	python3 ./nrf_usb_dma_policy_test.py
