@@ -41,6 +41,7 @@ SOFTWARE.
 
 #include "cfifo.h"
 #include "app_evt_handler.h"
+#include "coredev/interrupt.h"
 
 #define APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE \
 	CFIFO_TOTAL_MEMSIZE(APPEVT_HANDLER_QUE_DEFAULT_SIZE, sizeof(AppEvtHandlerQue_t))
@@ -88,10 +89,23 @@ bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
 		p->EvtId = EvtId;
 		p->pCtx = pCtx;
 		p->Handler = Handler;
-		return true;
 	}
 
-	return false;
+	return p != nullptr;
+}
+
+// CFifoGet releases its slot before returning it. Copy the event while IRQ
+// producers are excluded, then invoke the local copy with interrupts restored.
+static bool AppEvtHandlerGet(AppEvtHandlerQue_t *pEvt)
+{
+	AppEvtHandlerQue_t *p =
+		(AppEvtHandlerQue_t *)CFifoGet(s_hAppEvtHandlerFifo);
+	if (p != nullptr)
+	{
+		*pEvt = *p;
+	}
+
+	return p != nullptr;
 }
 
 bool AppEvtHandlerIdleRegister(AppEvtHandlerIdle_t Handler)
@@ -125,12 +139,10 @@ void AppEvtHandlerDispatch(void)
 		return;
 	}
 
-	AppEvtHandlerQue_t *p =
-		(AppEvtHandlerQue_t *)CFifoGet(s_hAppEvtHandlerFifo);
-
-	if (p != nullptr && p->Handler != nullptr)
+	AppEvtHandlerQue_t evt;
+	if (AppEvtHandlerGet(&evt) && evt.Handler != nullptr)
 	{
-		p->Handler(p->EvtId, p->pCtx);
+		evt.Handler(evt.EvtId, evt.pCtx);
 	}
 }
 
@@ -142,17 +154,15 @@ void AppEvtHandlerExec(void)
 
 		while (cnt-- > 0)
 		{
-			AppEvtHandlerQue_t *p =
-				(AppEvtHandlerQue_t *)CFifoGet(s_hAppEvtHandlerFifo);
-
-			if (p == nullptr)
+			AppEvtHandlerQue_t evt;
+			if (!AppEvtHandlerGet(&evt))
 			{
 				break;
 			}
 
-			if (p->Handler != nullptr)
+			if (evt.Handler != nullptr)
 			{
-				p->Handler(p->EvtId, p->pCtx);
+				evt.Handler(evt.EvtId, evt.pCtx);
 			}
 		}
 	}
