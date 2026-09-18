@@ -2260,7 +2260,7 @@ extern "C" void USBD_IRQHandler(void)
 
 		if ((dataStatus & 0x00FE00FEUL & ~servicedStatus) != 0U)
 		{
-//			NVIC_SetPendingIRQ(USBD_IRQn);
+			NVIC_SetPendingIRQ(USBD_IRQn);
 		}
 	}
 
