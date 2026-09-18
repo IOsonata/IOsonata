@@ -44,8 +44,14 @@ assert "TASKS_STARTISOIN" in start_iso
 assert "TASKS_STARTISOOUT" in start_iso
 assert "nRFUsbdStartIsoNow()" in service_iso
 assert "NRF_USBD->SIZE.ISOOUT" in handle_sof
-assert "NRF_USBD->EVENTS_ENDISOIN" in interrupt
-assert "NRF_USBD->EVENTS_ENDISOOUT" in interrupt
+finish_iso = function_body(source, "static bool nRFUsbdFinishIsoDma(bool In)\n{")
+assert "NRF_USBD->EVENTS_ENDISOIN" in finish_iso
+assert "NRF_USBD->EVENTS_ENDISOOUT" in finish_iso
+assert finish_iso.index("if (*pEnd == 0U)") < finish_iso.index("nRFUsbdDmaUnlock();")
+assert finish_iso.index("NRF_USBD->EPSTATUS =") < finish_iso.index("nRFUsbdDmaUnlock();")
+assert "nRFUsbdFinishIsoDma(true);" in interrupt
+assert "nRFUsbdFinishIsoDma(false);" in interrupt
+assert "dmastatus & 0x01000100UL" in interrupt
 # SOF services ISO, and the shared scheduler gives it priority before
 # selecting regular queue work. These calls no longer sit directly in the ISR.
 queued = function_body(source, "void nRFUsbdStartQueuedDma(void)")

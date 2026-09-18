@@ -220,6 +220,14 @@ static atomic_uint_fast8_t s_IsoOpen;
 static atomic_bool s_IsoInReady;
 static atomic_bool s_IsoOutReady;
 static uint16_t s_IsoOutSize;
+// ISO slots stay owned through their deferred completion. A non-NULL Xfer
+// buffer means an accepted request still waiting for its frame/DMA turn.
+static atomic_uint_fast8_t s_IsoBusy;
+static atomic_uint_fast8_t s_IsoComplete;
+static uint32_t s_IsoGeneration[2];
+
+static bool nRFUsbdFinishIsoDma(bool In);
+static void nRFUsbdRetryIsoComplete(void);
 
 static void nRFUsbdHostResumeDetected(void);
 
@@ -869,15 +877,13 @@ uint8_t nRFUsbdDmaFinishLocked(uint32_t DmaStatus,
 	}
 	else if (NRF_USBD->EVENTS_ENDISOIN != 0U)
 	{
-		epAddr = USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO);
-		pEndEvent = &NRF_USBD->EVENTS_ENDISOIN;
-		epStatusMask = DmaStatus & (1UL << 8U);
+		(void)nRFUsbdFinishIsoDma(true);
+		return USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO);
 	}
 	else if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
 	{
-		epAddr = NRFX_USBD_ISO_EP_NO;
-		pEndEvent = &NRF_USBD->EVENTS_ENDISOOUT;
-		epStatusMask = DmaStatus & (1UL << 24U);
+		(void)nRFUsbdFinishIsoDma(false);
+		return NRFX_USBD_ISO_EP_NO;
 	}
 
 	if (epAddr == NRFX_USBD_DMA_EP_NONE)
@@ -958,11 +964,12 @@ static bool nRFUsbdStartIsoNow(void)
 	nRFUsbdXfer_t *pIn = nRFUsbdGetXfer(inAddr);
 	const uint_fast8_t isoOpen = atomic_load(&s_IsoOpen);
 	if ((isoOpen & NRFX_USBD_ISO_IN_OPEN) != 0U &&
-		atomic_load(&s_IsoInReady))
+		atomic_load(&s_IsoInReady) && pIn->pBuffer != NULL)
 	{
 		atomic_store(&s_IsoInReady, false);
 		NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)nRFUsbGetEpReg(inAddr)->pBuffer;
 		NRF_USBD->ISOIN.MAXCNT = pIn->TotalLen;
+		pIn->pBuffer = NULL;
 		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOIN,
 			NRFX_USBD_ISO_EP_NO, true);
 		return true;
@@ -970,7 +977,7 @@ static bool nRFUsbdStartIsoNow(void)
 
 	nRFUsbdXfer_t *pOut = nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO);
 	if ((isoOpen & NRFX_USBD_ISO_OUT_OPEN) != 0U &&
-		atomic_load(&s_IsoOutReady))
+		atomic_load(&s_IsoOutReady) && pOut->pBuffer != NULL)
 	{
 		atomic_store(&s_IsoOutReady, false);
 		const uint16_t len = s_IsoOutSize < pOut->TotalLen ?
@@ -978,6 +985,7 @@ static bool nRFUsbdStartIsoNow(void)
 		NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)
 			nRFUsbGetEpReg(NRFX_USBD_ISO_EP_NO)->pBuffer;
 		NRF_USBD->ISOOUT.MAXCNT = len;
+		pOut->pBuffer = NULL;
 		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
 			NRFX_USBD_ISO_EP_NO, false);
 		return true;
@@ -1171,6 +1179,10 @@ static void nRFUsbdResetState(void)
 	atomic_store(&s_IsoInReady, false);
 	atomic_store(&s_IsoOutReady, false);
 	s_IsoOutSize = 0U;
+	atomic_store(&s_IsoBusy, 0U);
+	atomic_store(&s_IsoComplete, 0U);
+	++s_IsoGeneration[0];
+	++s_IsoGeneration[1];
 	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
 }
 
@@ -1459,6 +1471,9 @@ static bool nRFUsbRegEpOpen(const UsbEndPointDesc_t *pDesc)
 
 	if (iso)
 	{
+		if (!AppEvtHandlerIdleRegister(nRFUsbdRetryIsoComplete))
+			return false;
+
 		// Both directions share the 1024-byte ISO buffer. HalfIN gives each
 		// direction 512 bytes, which is more than the Bluetooth SCO maximum.
 		NRF_USBD->ISOSPLIT =
@@ -1521,6 +1536,9 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 		return;
 	}
 
+	// Exclude SOF submission while retiring and closing an ISO direction.
+	const uint32_t isoState = epNum == NRFX_USBD_ISO_EP_NO ?
+		DisableInterrupt() : 0U;
 	if (nRFUsbdDmaActive())
 	{
 		nRFUsbdDmaWait();
@@ -1529,6 +1547,14 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
 	if (epNum == NRFX_USBD_ISO_EP_NO)
 	{
+		const uint8_t dir = nRFUsbdDir(EpAddr);
+		const uint_fast8_t bit = 1U << dir;
+		++s_IsoGeneration[dir];
+		atomic_fetch_and(&s_IsoBusy, (uint_fast8_t)~bit);
+		atomic_fetch_and(&s_IsoComplete, (uint_fast8_t)~bit);
+		pXfer->pBuffer = NULL;
+		pXfer->TotalLen = 0U;
+		pXfer->ActualLen = 0U;
 		if (USB_ENDPADDR_IS_IN(EpAddr))
 		{
 			atomic_fetch_and(&s_IsoOpen,
@@ -1552,6 +1578,10 @@ static void nRFUsbRegEpClose(uint8_t EpAddr)
 		{
 			NRF_USBD->INTENCLR = USBD_INTEN_SOF_Msk;
 		}
+		nRFUsbGetEpReg(EpAddr)->Mps = 0U;
+		__DSB();
+		EnableInterrupt(isoState);
+		return;
 	}
 	else if (USB_ENDPADDR_IS_IN(EpAddr))
 	{
@@ -1591,6 +1621,31 @@ static void nRFUsbRegEpCloseAll(void)
 	NRF_USBD->EPINEN = 1UL;
 }
 
+static bool nRFUsbRegIsoXfer(uint8_t EpAddr, uint16_t Length)
+{
+	const uint8_t dir = nRFUsbdDir(EpAddr);
+	const uint_fast8_t bit = 1U << dir;
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
+	const uint32_t state = DisableInterrupt();
+	if ((atomic_load(&s_IsoOpen) & bit) == 0U ||
+		(atomic_load(&s_IsoBusy) & bit) != 0U ||
+		pReg->pBuffer == NULL || pReg->Handler == NULL ||
+		Length > pReg->Mps)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+
+	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
+	pXfer->pBuffer = pReg->pBuffer;
+	pXfer->TotalLen = Length;
+	pXfer->ActualLen = 0U;
+	atomic_fetch_or(&s_IsoBusy, bit);
+	nRFUsbdServiceIso();
+	EnableInterrupt(state);
+	return true;
+}
+
 static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
@@ -1600,17 +1655,6 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	pXfer->pBuffer = epNum == 0U ? pBuffer : NULL;
 	pXfer->TotalLen = TotalBytes;
 	pXfer->ActualLen = 0U;
-	if (epNum == NRFX_USBD_ISO_EP_NO)
-	{
-		if (TotalBytes > nRFUsbdMps(EpAddr))
-		{
-			EnableInterrupt(state);
-			return false;
-		}
-		EnableInterrupt(state);
-		nRFUsbdServiceIso();
-		return true;
-	}
 
 	const bool controlStatus =
 		epNum == 0U && TotalBytes == 0U &&
@@ -1652,7 +1696,7 @@ bool nRFUsbRegDataEpXferDir(uint8_t EpNum, bool In, uint16_t Length)
 	if (EpNum == NRFX_USBD_ISO_EP_NO)
 	{
 		const uint8_t epAddr = In ? USB_ENDPADDR_DIRIN(EpNum) : EpNum;
-		return nRFUsbRegEpXfer(epAddr, NULL, Length);
+		return nRFUsbRegIsoXfer(epAddr, Length);
 	}
 
 	nRFUsbdQueXferDir(EpNum, In, Length);
@@ -1789,44 +1833,75 @@ static void nRFUsbdHandleEp0OutData(void)
 	}
 }
 
-static void nRFUsbdHandleIsoInEnd(uint16_t TransferLen)
-{
-	const uint8_t epAddr = USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO);
-	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(epAddr);
-
-	pXfer->ActualLen = TransferLen;
-	nRFUsbdEmitXfer(epAddr, pXfer->ActualLen, USB_CTRLR_XFER_SUCCESS);
-}
-
-static void nRFUsbdHandleIsoOutEnd(uint16_t TransferLen)
-{
-	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO);
-
-	pXfer->ActualLen = TransferLen;
-	nRFUsbdEmitXfer(NRFX_USBD_ISO_EP_NO, pXfer->ActualLen,
-		USB_CTRLR_XFER_SUCCESS);
-}
-
 static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 {
-	const uint16_t amount = (uint16_t)(Evt >> 8U);
-
 	(void)pContext;
-
-	if ((Evt & NRFX_USBD_XFER_EVT_OUT) != 0U)
+	const uint8_t dir = (uint8_t)(Evt & 1U);
+	const uint_fast8_t bit = 1U << dir;
+	const uint32_t generation = Evt >> 1U;
+	uint32_t state = DisableInterrupt();
+	if (generation != (s_IsoGeneration[dir] & 0x7FFFFFFFUL) ||
+		(atomic_load(&s_IsoOpen) & atomic_load(&s_IsoBusy) & bit) == 0U)
 	{
-		// OUT data remains in the endpoint DMA buffer until its
-		// completion callback consumes it.
-		nRFUsbdHandleIsoOutEnd(amount);
-	}
-	else
-	{
-		// IN data has already been consumed by the controller.
-		nRFUsbdHandleIsoInEnd(amount);
+		EnableInterrupt(state);
+		return;
 	}
 
-	nRFUsbdServiceIso();
-	nRFUsbdResumeQueuedDma();
+	const uint8_t epAddr = dir != 0U ?
+		USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO) : NRFX_USBD_ISO_EP_NO;
+	const uint16_t amount = nRFUsbdGetXfer(epAddr)->ActualLen;
+	// IN DMA has copied the TX payload into controller memory. Release it
+	// before calling the handler so that handler may submit the next frame.
+	if (dir != 0U)
+		atomic_fetch_and(&s_IsoBusy, (uint_fast8_t)~bit);
+	EnableInterrupt(state);
+
+	nRFUsbEpRegisteredEvent(epAddr, USB_CTRLR_EVT_XFER_CMPL,
+		amount, USB_CTRLR_XFER_SUCCESS);
+
+	// OUT DMA memory is still the callback's source until it returns.
+	state = DisableInterrupt();
+	if (dir == 0U && generation == (s_IsoGeneration[dir] & 0x7FFFFFFFUL))
+		atomic_fetch_and(&s_IsoBusy, (uint_fast8_t)~bit);
+	nRFUsbdResumeQueuedDmaLocked();
+	EnableInterrupt(state);
+}
+
+// A full AppEvt queue retains the completion and buffer ownership. The idle
+// hook retries publication after foreground dispatch makes room.
+static void nRFUsbdRetryIsoComplete(void)
+{
+	if (atomic_load(&s_IsoComplete) == 0U)
+		return;
+	const uint32_t state = DisableInterrupt();
+	for (uint8_t dir = 0U; dir < 2U; ++dir)
+	{
+		const uint_fast8_t bit = 1U << dir;
+		if ((atomic_load(&s_IsoComplete) & bit) != 0U &&
+			AppEvtHandlerQue((s_IsoGeneration[dir] << 1U) | dir,
+				NULL, nRFUsbdProcessIsoComplete))
+			atomic_fetch_and(&s_IsoComplete, (uint_fast8_t)~bit);
+	}
+	EnableInterrupt(state);
+}
+
+static bool nRFUsbdFinishIsoDma(bool In)
+{
+	volatile uint32_t *pEnd = In ?
+		&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
+	if (*pEnd == 0U)
+		return false;
+
+	const uint8_t dir = In ? 1U : 0U;
+	s_Ctrlr.Xfer[NRFX_USBD_ISO_EP_NO][dir].ActualLen = (uint16_t)(In ?
+		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
+	*pEnd = 0U;
+	NRF_USBD->EPSTATUS = In ? (1UL << 8U) : (1UL << 24U);
+	__DSB();
+	nRFUsbdDmaUnlock();
+	atomic_fetch_or(&s_IsoComplete, (uint_fast8_t)(1U << dir));
+	nRFUsbdRetryIsoComplete();
+	return true;
 }
 
 static void nRFUsbdProcessEp0Complete(uint32_t Evt, void *pContext)
@@ -1917,12 +1992,6 @@ void nRFUsbdQueueInComplete(uint8_t EpNum, uint16_t Amount)
 	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete);
 }
 
-static void nRFUsbdQueueIsoComplete(bool Out, uint16_t Amount)
-{
-	const uint32_t evt = ((uint32_t)Amount << 8U) | (Out ? NRFX_USBD_XFER_EVT_OUT : 0U);
-	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessIsoComplete);
-}
-
 static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 {
 	if ((EventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0U &&
@@ -1966,22 +2035,30 @@ static void nRFUsbdHandleSof(void)
 	if ((isoOpen & NRFX_USBD_ISO_OUT_OPEN) != 0U)
 	{
 		const uint32_t size = NRF_USBD->SIZE.ISOOUT;
-		if (size != 0U)
+		// ISO OUT is a current-frame slot, not a backlog. Keep the DMA
+		// buffer stable until its deferred completion callback returns.
+		nRFUsbdXfer_t *pOut = nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO);
+		const bool waiting = pOut->pBuffer != NULL;
+		if ((atomic_load(&s_IsoBusy) & NRFX_USBD_ISO_OUT_OPEN) == 0U || waiting)
 		{
-			s_IsoOutSize = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
-				0U : (uint16_t)size;
-			atomic_store(&s_IsoOutReady, true);
-
-			nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(NRFX_USBD_ISO_EP_NO);
-			if (pReg->bBlocking)
+			atomic_store(&s_IsoOutReady, size != 0U);
+			if (size != 0U)
 			{
-				nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO,
-					USB_CTRLR_EVT_DRDY, 0U, USB_CTRLR_XFER_SUCCESS);
-			}
-			else
-			{
-				(void)nRFUsbRegDataEpXfer(NRFX_USBD_ISO_EP_NO,
-					nRFUsbdMps(NRFX_USBD_ISO_EP_NO));
+				s_IsoOutSize = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
+					0U : (uint16_t)size;
+				if (!waiting)
+				{
+					nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(NRFX_USBD_ISO_EP_NO);
+					if (pReg->bBlocking)
+					{
+						nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO,
+							USB_CTRLR_EVT_DRDY, 0U, USB_CTRLR_XFER_SUCCESS);
+					}
+					else
+					{
+						(void)nRFUsbRegIsoXfer(NRFX_USBD_ISO_EP_NO, pReg->Mps);
+					}
+				}
 			}
 		}
 	}
@@ -2121,8 +2198,10 @@ extern "C" void USBD_IRQHandler(void)
 			}
 			break;
 		case 0x00000100U: // ISO IN
+			(void)nRFUsbdFinishIsoDma(true);
 			break;
 		case 0x01000000U: // ISO OUT
+			(void)nRFUsbdFinishIsoDma(false);
 			break;
 		default:          // EP1-7 IN/OUT
 		{
@@ -2233,22 +2312,6 @@ extern "C" void USBD_IRQHandler(void)
 		}
 	}
 
-	if (isoOpen != 0U)
-	{
-		if (NRF_USBD->EVENTS_ENDISOIN != 0U)
-		{
-			NRF_USBD->EVENTS_ENDISOIN = 0U;
-			nRFUsbdQueueIsoComplete(false,
-				(uint16_t)NRF_USBD->ISOIN.AMOUNT);
-		}
-
-		if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
-		{
-			NRF_USBD->EVENTS_ENDISOOUT = 0U;
-			nRFUsbdQueueIsoComplete(true,
-				(uint16_t)NRF_USBD->ISOOUT.AMOUNT);
-		}
-	}
 
 	if (NRF_USBD->EVENTS_SOF != 0U)
 	{
@@ -2293,6 +2356,9 @@ extern "C" void USBD_IRQHandler(void)
 		}
 		nRFUsbdResumeQueuedDmaLocked();
 	}
+
+	if (isoOpen != 0U && (dmastatus & 0x01000100UL) != 0U)
+		nRFUsbdResumeQueuedDmaLocked();
 
 	if (s_UsbdLowPowerSuspend && atomic_load(&s_BusSuspended))
 	{
