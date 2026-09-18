@@ -2212,37 +2212,6 @@ extern "C" void USBD_IRQHandler(void)
 			const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
 			servicedStatus |= 1UL << (epNum + 16U);
 
-			nRFUsbEpReg_t *pReg = nRFUsbGetEpReg((uint8_t)epNum);
-#if 0
-			if (pReg->bBlocking)
-			{
-				(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
-			}
-			else
-			{
-				// EPDATASTATUS already identifies the ready OUT endpoint.
-				// Publish its DMA request here instead of waiting for AppEvt;
-				// the ISR tail starts it after all USBD status is consumed.
-				nRFUsbdQue_t *pQue =
-					(nRFUsbdQue_t *)CFifoPut(s_hQue);
-				pQue->EpNum = (uint8_t)epNum;
-				pQue->Dir = 0U;
-				pQue->Len = pReg->Mps;
-			}
-#else
-			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_hQue);
-
-			if (s_hQue)
-			{
-				pQue->EpNum = (uint8_t)epNum;
-				pQue->Dir = 0U;
-				pQue->Len = pReg->Mps;
-			}
-			else
-			{
-				(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
-			}
-#endif
 		}
 
 		const uint32_t inData = dataStatus & 0xFEU;
@@ -2260,7 +2229,7 @@ extern "C" void USBD_IRQHandler(void)
 
 		if ((dataStatus & 0x00FE00FEUL & ~servicedStatus) != 0U)
 		{
-			NVIC_SetPendingIRQ(USBD_IRQn);
+//			NVIC_SetPendingIRQ(USBD_IRQn);
 		}
 	}
 
@@ -2299,6 +2268,29 @@ extern "C" void USBD_IRQHandler(void)
 	// it is open; ordinary CDC traffic avoids the ISO service path entirely.
 	if (outData != 0U)
 	{
+		const uint8_t epNum = (uint8_t)(31U - (uint32_t)__CLZ(outData));
+		nRFUsbEpReg_t *pReg = &s_EpReg[epNum][0];
+		if (pReg->bBlocking)
+		{
+			// EPDATASTATUS is cleared before DRDY may start another DMA.
+			// UsbIntrf checks RX space and sets RxPending when it is full.
+			pReg->Handler(epNum, USB_CTRLR_EVT_DRDY, 0U,
+				USB_CTRLR_XFER_SUCCESS, pReg->pContext);
+		}
+		else
+		{
+			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_hQue);
+			if (pQue != NULL)
+			{
+				pQue->EpNum = epNum;
+				pQue->Dir = 0U;
+				pQue->Len = pReg->Mps;
+			}
+			else
+			{
+				(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
+			}
+		}
 		nRFUsbdResumeQueuedDmaLocked();
 	}
 
