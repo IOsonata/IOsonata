@@ -139,7 +139,9 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
 #define NRFX_USBD_EASYDMA_BUSY_REG_BUSY		0x82UL
 #define NRFX_USBD_EASYDMA_BUSY_REG_CLEAR	0UL
 
-#define NRFUSBD_QUE_DEPTH			(NRFX_USBD_EP_COUNT * 2)
+// EP1-7 have fourteen regular directions. Sixteen slots let CFifo use its
+// mask indexing path; EP0 and ISO do not occupy this queue.
+#define NRFUSBD_QUE_DEPTH			16U
 #define NRFUSBD_EP0_QUE_DEPTH		4U
 
 enum
@@ -1049,7 +1051,8 @@ void nRFUsbdStartQueuedDma(void)
 		nRFUsbdStartDmaNow(pQue);
 		return;
 	}
-	if (nRFUsbdStartIsoNow())
+	// No ISO endpoint is open during CDC-only traffic.
+	if (atomic_load(&s_IsoOpen) != 0U && nRFUsbdStartIsoNow())
 		return;
 
 	pQue = (nRFUsbdQue_t *)CFifoGet(s_hQue);
@@ -1082,7 +1085,8 @@ static void nRFUsbdResumeQueuedDma(void)
  * off because CFifoPut publishes the slot before the caller writes it, and
  * the interrupt is the other producer.
  */
-static void nRFUsbdQueXferDir(uint8_t EpNum, bool In, uint16_t Len)
+static inline __attribute__((always_inline))
+void nRFUsbdQueXferDir(uint8_t EpNum, bool In, uint16_t Len)
 {
 	const uint32_t state = DisableInterrupt();
 	hCFifo_t hQue = EpNum == 0U ? s_hEp0Que : s_hQue;
@@ -2123,29 +2127,32 @@ extern "C" void USBD_IRQHandler(void)
 		case 0x01000000U: // ISO OUT
 			break;
 		default:          // EP1-7 IN/OUT
-			const uint8_t completedDma =
-				nRFUsbdDmaFinishLocked(dmastatus, true);
-			if (completedDma == NRFX_USBD_DMA_EP_NONE)
-			{
+		{
+			// EP0 and ISO were separated above. Retire the one regular DMA
+			// directly; IN application completion still waits for EPDATA.
+			const uint32_t statusBit = 31U - (uint32_t)__CLZ(dmastatus);
+			const uint8_t epNum = (uint8_t)(statusBit & 7U);
+			const bool out = statusBit >= 16U;
+			volatile uint32_t *pEnd = out ?
+				&NRF_USBD->EVENTS_ENDEPOUT[epNum] :
+				&NRF_USBD->EVENTS_ENDEPIN[epNum];
+			if (*pEnd == 0U)
 				return;
-			}
 
-			const uint8_t completedEp = USB_ENDPADDR_NUM(completedDma);
-			const bool regularComplete = completedEp > 0U &&
-				completedEp < NRFX_USBD_ISO_EP_NO;
-			if (regularComplete && !USB_ENDPADDR_IS_IN(completedDma))
-			{
-				nRFUsbdQueueOutComplete(completedDma,
-					(uint16_t)NRF_USBD->EPOUT[completedEp].AMOUNT);
-			}
+			*pEnd = 0U;
+			NRF_USBD->EPSTATUS = 1UL << statusBit;
+			__DSB();
+			nRFUsbdDmaUnlock();
 
-			if (regularComplete &&
-				NRF_USBD->EVENTS_EP0SETUP == 0U &&
+			if (out)
+				nRFUsbdQueueOutComplete(epNum,
+					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
+
+			if (NRF_USBD->EVENTS_EP0SETUP == 0U &&
 				NRF_USBD->EVENTS_USBEVENT == 0U)
-			{
 				nRFUsbdStartQueuedDma();
-			}
 			break;
+		}
 	}
 
 	if (NRF_USBD->EVENTS_STARTED != 0U)
@@ -2205,21 +2212,21 @@ extern "C" void USBD_IRQHandler(void)
 			servicedStatus |= 1UL << (epNum + 16U);
 
 			nRFUsbEpReg_t *pReg = nRFUsbGetEpReg((uint8_t)epNum);
-			// EPDATASTATUS already identifies the ready OUT endpoint.
-			// Publish its DMA request here instead of waiting for AppEvt;
-			// the ISR tail starts it after all USBD status is consumed.
-			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_hQue);
-
-			if (pQue)
-			{
-				pQue->EpNum = (uint8_t)epNum;
-				pQue->Dir = 0U;
-				pQue->Len = pReg->Mps;
-			}
-			else
+			if (pReg->bBlocking)
 			{
 				(void)AppEvtHandlerQue(epNum, NULL,
 					nRFUsbdProcessOutData);
+			}
+			else
+			{
+				// EPDATASTATUS already identifies the ready OUT endpoint.
+				// Publish its DMA request here instead of waiting for AppEvt;
+				// the ISR tail starts it after all USBD status is consumed.
+				nRFUsbdQue_t *pQue =
+					(nRFUsbdQue_t *)CFifoPut(s_hQue);
+				pQue->EpNum = (uint8_t)epNum;
+				pQue->Dir = 0U;
+				pQue->Len = pReg->Mps;
 			}
 		}
 
