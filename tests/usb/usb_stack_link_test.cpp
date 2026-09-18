@@ -45,8 +45,6 @@ SOFTWARE.
 
 static uint8_t s_RegisteredEp[6];
 static int s_RegisteredEpCount;
-static UsbCtrlrEvtHandler_t s_CoreHandler;
-static void *s_CoreContext;
 static int s_EpOpenCount;
 static int s_Ep0XferCount;
 static uint8_t s_LastEp0Addr;
@@ -54,9 +52,7 @@ static uint16_t s_LastEp0Length;
 
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *pCfg)
 {
-	s_CoreHandler = pCfg->EvtHandler;
-	s_CoreContext = pCfg->pContext;
-	return true;
+	return pCfg != nullptr;
 }
 bool UsbCtrlrStart(int) { return true; }
 void UsbCtrlrStop(int) {}
@@ -118,7 +114,7 @@ static void Setup(uint8_t Request, uint16_t Value)
 		USB_REQTYPE_DEVICE;
 	evt.Setup.bRequest = Request;
 	evt.Setup.wValue = Value;
-	s_CoreHandler(0, &evt, s_CoreContext);
+	UsbDevProcessEvent(0, &evt);
 }
 
 static void CompleteEp0In(void)
@@ -127,7 +123,7 @@ static void CompleteEp0In(void)
 	evt.Type = USB_CTRLR_EVT_XFER_CMPL;
 	evt.Xfer.EpAddr = USB_ENDPADDR_DIRIN(0);
 	evt.Xfer.Result = USB_CTRLR_XFER_SUCCESS;
-	s_CoreHandler(0, &evt, s_CoreContext);
+	UsbDevProcessEvent(0, &evt);
 }
 
 static void SetControlLineState(uint8_t InterfaceNo, uint16_t State)
@@ -139,7 +135,7 @@ static void SetControlLineState(uint8_t InterfaceNo, uint16_t State)
 	evt.Setup.bRequest = USB_CDC_REQ_SET_CTRL_LINE_STATE;
 	evt.Setup.wValue = State;
 	evt.Setup.wIndex = InterfaceNo;
-	s_CoreHandler(0, &evt, s_CoreContext);
+	UsbDevProcessEvent(0, &evt);
 }
 
 static UsbdCdcCfg_t CdcCfg(uint8_t *pRx, int RxSize,
@@ -240,7 +236,7 @@ int main(void)
 	pCdc0->LineCoding.dwDTERate = 9600U;
 	UsbCtrlrEvt_t reset = {};
 	reset.Type = USB_CTRLR_EVT_RESET;
-	s_CoreHandler(0, &reset, s_CoreContext);
+	UsbDevProcessEvent(0, &reset);
 	if (pCdc0->LineCoding.dwDTERate != 115200U)
 	{
 		printf("UsbdCdc virtual reset was not dispatched\n");

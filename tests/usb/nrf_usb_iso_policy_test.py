@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
 HEADER = ROOT / "ARM/Nordic/include/usb_ctrlr.h"
-SOURCE = ROOT / "ARM/Nordic/src/usb_ctrlr_nrfx.cpp"
+SOURCE = ROOT / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp"
 
 
 def function_body(source: str, signature: str) -> str:
@@ -28,7 +28,9 @@ def function_body(source: str, signature: str) -> str:
 header = HEADER.read_text(encoding="utf-8")
 source = SOURCE.read_text(encoding="utf-8")
 open_ep = function_body(source, "static bool nRFUsbRegEpOpen(")
-service = function_body(source, "static void nRFUsbdServicePending(void)")
+start_iso = function_body(source, "static bool nRFUsbdStartIsoNow(void)")
+service_iso = function_body(source, "static void nRFUsbdServiceIso(void)")
+handle_sof = function_body(source, "static void nRFUsbdHandleSof(void)")
 interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
 
 assert "USB_EPIN_CNT_0 = 8" in header and "USB_EPOUT_CNT_0 = 8" in header
@@ -38,15 +40,19 @@ assert "USB_ISO_EPOUT_MASK_0 = (1U << 8)" in header
 assert "NRF_USB_EP_COUNT = 9" in source
 assert "USBD_ISOSPLIT_SPLIT_HalfIN" in open_ep
 assert "USBD_ISOINCONFIG_RESPONSE_ZeroData" in open_ep
-assert service.index("nRFUsbdStartIsoNow()") < service.index("CFifoGet(s_hQue)")
-assert "NRF_USBD->SIZE.ISOOUT" in interrupt
-assert "nRFUsbdHandleIsoInEnd();" in interrupt
-assert "nRFUsbdHandleIsoOutEnd();" in interrupt
-assert interrupt.index("atomic_load(&s_IsoInOpen)") < interrupt.index(
-    "if (s_Ctrlr.SofEnabled)"
-)
-assert interrupt.index("atomic_load(&s_IsoOutOpen)") < interrupt.index(
-    "if (s_Ctrlr.SofEnabled)"
+assert "TASKS_STARTISOIN" in start_iso
+assert "TASKS_STARTISOOUT" in start_iso
+assert "nRFUsbdStartIsoNow()" in service_iso
+assert "NRF_USBD->SIZE.ISOOUT" in handle_sof
+assert "NRF_USBD->EVENTS_ENDISOIN" in interrupt
+assert "NRF_USBD->EVENTS_ENDISOOUT" in interrupt
+# SOF services ISO, and the shared scheduler gives it priority before
+# selecting regular queue work. These calls no longer sit directly in the ISR.
+queued = function_body(source, "void nRFUsbdStartQueuedDma(void)")
+assert "nRFUsbdServiceIso();" in handle_sof
+assert queued.index("nRFUsbdStartIsoNow()") < queued.index("CFifoGet(s_hQue)")
+assert interrupt.index("nRFUsbdHandleSof();") < interrupt.index(
+    "nRFUsbdResumeQueuedDmaLocked();"
 )
 
 print("nrf_usb_iso_policy_test: PASS")

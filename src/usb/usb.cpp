@@ -47,6 +47,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 
 /// Controller this instance drives, set by UsbInit.
@@ -55,8 +56,13 @@ static int s_UsbDevNo = 0;
 /// Bus power level at the previous UsbProcess pass, for edge reporting.
 static bool s_UsbVbusLast = false;
 
-#define USB_CORE_CLASS_MAXCNT		8
+#define USB_CORE_CLASS_MAXCNT \
+	(USB_EPIN_CNT(0) > USB_EPOUT_CNT(0) ? \
+	 USB_EPIN_CNT(0) : USB_EPOUT_CNT(0))
 #define USB_CORE_INTRF_MAXCNT		16
+
+static_assert(USB_CORE_CLASS_MAXCNT > 0 && USB_CORE_CLASS_MAXCNT <= 16,
+	"USB endpoint count must fit the 16-bit endpoint ownership masks");
 
 /// Chapter 9 settings. Built by UsbInit from UsbCfg_t and usb_ctrlr.h, never
 /// supplied by an application, which is why it is no longer in a header.
@@ -1309,7 +1315,7 @@ static bool UsbCoreHandleClassRequest(void)
 	return false;
 }
 
-static void UsbCoreHandleSetup(const UsbSetupData_t *pSetup)
+static void UsbDevProcessSetup(const UsbSetupData_t *pSetup)
 {
 	if (pSetup == nullptr)
 	{
@@ -1434,8 +1440,9 @@ static void UsbCoreResetDeviceState(bool NotifyClasses)
 	UsbCoreClearEndpointState();
 }
 
-static void UsbCoreCtrlrEvent(int, const UsbCtrlrEvt_t *pEvt, void *)
+void UsbDevProcessEvent(int DevNo, const UsbCtrlrEvt_t *pEvt)
 {
+	(void)DevNo;
 	if (pEvt == nullptr)
 	{
 		return;
@@ -1448,7 +1455,7 @@ static void UsbCoreCtrlrEvent(int, const UsbCtrlrEvt_t *pEvt, void *)
 			break;
 
 		case USB_CTRLR_EVT_SETUP:
-			UsbCoreHandleSetup(&pEvt->Setup);
+			UsbDevProcessSetup(&pEvt->Setup);
 			break;
 
 		case USB_CTRLR_EVT_XFER_CMPL:
@@ -1693,8 +1700,6 @@ static bool UsbDevInit(const UsbCfg_t *pCfg)
 	UsbCtrlrCfg_t ctrlrCfg = {};
 	ctrlrCfg.IntPrio = s_UsbDevCfg.IntPrio;
 	ctrlrCfg.bLowPowerSuspend = s_UsbDevCfg.bLowPowerSuspend;
-	ctrlrCfg.EvtHandler = UsbCoreCtrlrEvent;
-	ctrlrCfg.pContext = nullptr;
 
 	if (!UsbCtrlrInit(s_UsbDevNo, &ctrlrCfg))
 	{
@@ -1829,6 +1834,11 @@ bool UsbInit(const UsbCfg_t *pCfg)
 	// Host and OTG need a dual role controller. The current targets are device
 	// only, so reject the other roles rather than pretend to support them.
 	if (pCfg->Mode != USB_MODE_DEVICE)
+	{
+		return false;
+	}
+
+	if (!AppEvtHandlerInit(nullptr, 0U))
 	{
 		return false;
 	}

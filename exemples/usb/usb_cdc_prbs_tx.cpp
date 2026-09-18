@@ -57,7 +57,7 @@ SOFTWARE.
 #include "usb/usbd_cdc.h"
 
 
-#define BYTE_MODE
+// #define BYTE_MODE
 
 #define USB_DEVNO				0
 
@@ -143,8 +143,6 @@ int main()
 
 	while (1)
 	{
-		// Pump only the USB lifecycle while waiting for the host. Once the port
-		// is open, Bulk IN progress is entirely completion-interrupt driven.
 		if (g_Cdc.IsPortOpen() == false)
 		{
 			UsbProcess(USB_DEVNO);
@@ -153,13 +151,21 @@ int main()
 
 #ifdef BYTE_MODE
 		// Demo transfer byte by byte. The value advances only when the octet
-		// was accepted into the FIFO. If the FIFO is full, retry this same byte
-		// while the USB completion interrupt makes room.
+		// was accepted into the FIFO. Process deferred completions only when
+		// backpressure prevents this byte from entering the FIFO.
 		if (g_Cdc.Tx(0, &d, 1) > 0)
 		{
 			d = Prbs8(d);
 		}
+		else
+		{
+			UsbProcess(USB_DEVNO);
+		}
 #else
+		// Preserve the existing buffered-mode event-processing behavior for a
+		// separate measurement.
+		UsbProcess(USB_DEVNO);
+
 		// Demo transfer buffer
 		for (int i = 0; i < TEST_BUFSIZE; i++)
 		{
@@ -174,8 +180,15 @@ int main()
 		{
 			int l = g_Cdc.Tx(0, p, len);
 
-			len -= l;
-			p += l;
+			if (l > 0)
+			{
+				len -= l;
+				p += l;
+			}
+			else
+			{
+				UsbProcess(USB_DEVNO);
+			}
 
 			if (g_Cdc.IsPortOpen() == false)
 			{

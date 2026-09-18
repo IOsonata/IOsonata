@@ -41,7 +41,11 @@ SOFTWARE.
 #include <stdint.h>
 
 #ifdef __cplusplus
+#if __cplusplus > 202002L
+	#include <stdatomic.h>
+#else
 	#include <atomic>
+#endif
 	using namespace std;
 #else
 #include <stdbool.h>

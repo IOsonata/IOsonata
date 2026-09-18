@@ -3056,9 +3056,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/usb/usb_ctrlr_nrfx.cpp</name>
+			<name>src/usb/usb_ctrlr_nrf54.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/usb_ctrlr_nrfx.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usb_ctrlr_nrf54.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usbd_core.cpp</name>

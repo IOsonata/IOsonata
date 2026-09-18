@@ -134,26 +134,14 @@ typedef struct __Usb_Ctrlr_Evt {
 
 #pragma pack(pop)
 
-/**
- * @brief	Controller event callback, called from the USB interrupt.
- *
- * Must stay bounded and must not retain pEvt after it returns.
- */
-typedef void (*UsbCtrlrEvtHandler_t)(int DevNo, const UsbCtrlrEvt_t *pEvt,
-									 void *pContext);
-
 typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 									uint16_t Length, UsbCtrlrXferResult_t Result,
 									void *pContext);
 
-/// What the generic layer hands the port at UsbCtrlrInit. Interrupt priority
-/// and suspend behaviour reach the hardware only through here, so the port
-/// needs them alongside the event callback.
+/// What the generic layer hands the port at UsbCtrlrInit.
 typedef struct __Usb_Ctrlr_Config {
 	int IntPrio;					//!< Interrupt priority of the USB peripheral
 	bool bLowPowerSuspend;			//!< true - Sit in USB low power while suspended
-	UsbCtrlrEvtHandler_t EvtHandler;
-	void *pContext;
 } UsbCtrlrCfg_t;
 
 #ifdef __cplusplus
@@ -179,6 +167,18 @@ void UsbCtrlrEpCloseAll(int DevNo);
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext);
 bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length);
+
+// Adapt the directional production API to the existing fake-controller logs.
+static inline bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
+{
+	return UsbCtrlrEpXfer(DevNo, (uint8_t)(EpNum | 0x80U), Length);
+}
+
+static inline bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
+{
+	return UsbCtrlrEpXfer(DevNo, (uint8_t)(EpNum & 0x7FU), Length);
+}
+
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length);
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);

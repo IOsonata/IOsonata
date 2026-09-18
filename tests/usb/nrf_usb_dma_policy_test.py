@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Guard nRF52 DMA retirement and host-consumed IN completion."""
+
+from pathlib import Path
+
+
+SOURCE = Path(__file__).parents[2] / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp"
+
+
+def function_body(source: str, signature: str) -> str:
+    start = source.index(signature)
+    brace = source.index("{", start)
+    depth = 0
+
+    for pos in range(brace, len(source)):
+        if source[pos] == "{":
+            depth += 1
+        elif source[pos] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[brace + 1 : pos]
+
+    raise AssertionError("unterminated brace block")
+
+
+source = SOURCE.read_text(encoding="utf-8")
+dma_start = function_body(source, "void nRFUsbdDmaStartLocked(")
+dma_finish = function_body(source, "uint8_t nRFUsbdDmaFinishLocked(")
+interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
+
+assert "nRFUsbdDmaReclaim" not in source
+assert "nRFUsbdDmaEndIntEnable" not in source
+assert "s_LazyInMask" not in source
+assert "INTENSET" not in dma_start, "DMA start must not enable ENDEPIN"
+assert "NRFX_USBD_EASYDMA_BUSY_REG_BUSY" in dma_start
+assert "*pTask = 1" in dma_start
+assert "DmaStatus & 0x00FF00FFUL" in dma_finish
+assert "EVENTS_ENDEPOUT[epNum]" in dma_finish
+assert "EVENTS_ENDEPIN[epNum]" in dma_finish
+assert "nRFUsbdDmaUnlock();" in dma_finish
+# Regular DMA retirement is now inline in the ISR, while the helper remains
+# for the separate lifecycle paths. Verify the same ordering at its new site.
+regular = interrupt[interrupt.index("default:          // EP1-7 IN/OUT") :]
+regular = regular[:regular.index("if (NRF_USBD->EVENTS_STARTED")]
+assert regular.index("if (*pEnd == 0U)") < regular.index("*pEnd = 0U;")
+assert regular.index("*pEnd = 0U;") < regular.index("nRFUsbdDmaUnlock();")
+assert regular.index("nRFUsbdDmaUnlock();") < regular.index("nRFUsbdStartQueuedDma();")
+assert regular.index("nRFUsbdProcessOutComplete(evt, nullptr);") < regular.index(
+    "nRFUsbdStartQueuedDma();"
+)
+assert "nRFUsbdQueueInComplete" not in regular
+assert interrupt.index("const uint32_t inData = dataStatus & 0xFEU;") < interrupt.index(
+    "nRFUsbdQueueInComplete("
+)
+assert "NRF_USBD->EPDATASTATUS" in interrupt
+assert interrupt.rindex("nRFUsbdResumeQueuedDmaLocked();") > interrupt.index(
+    "NRF_USBD->EPDATASTATUS"
+)
+
+print("nrf_usb_dma_policy_test: PASS")

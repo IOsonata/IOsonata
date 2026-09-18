@@ -31,11 +31,15 @@ CORE_TARGET := $(BUILD_DIR)/usb_core_test
 CORE_SOURCES := \
 	usb_core_test.cpp \
 	$(ROOT)/src/usb/usb.cpp \
-	$(ROOT)/src/usb/usbd_cdc_desc.cpp
+	$(ROOT)/src/usb/usbd_cdc_desc.cpp \
+	$(ROOT)/src/usb/usbd_epalloc.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/cfifo.c
 
 LINK_TARGET := $(BUILD_DIR)/usb_stack_link_test
 LINK_SOURCES := \
 	usb_stack_link_test.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/usb/usb.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/usb/usbd_cdc.cpp \
@@ -179,7 +183,7 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 TARGETS += $(MSC_TARGET)
 
 .PHONY: all test test-c-header test-gcc test-clang test-matrix \
-	test-nrf-suspend-policy test-nrf-iso-policy \
+	test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy \
 	iso-hw-build iso-hw int-hw-build int-hw hid-hw-build hid-hw \
 	msc-hw-build msc-hw hid-demo-build probe clean
 
@@ -189,6 +193,7 @@ test: $(TARGETS)
 	$(MAKE) test-c-header
 	$(MAKE) test-nrf-suspend-policy
 	$(MAKE) test-nrf-iso-policy
+	$(MAKE) test-nrf-dma-policy
 	$(TEST_ENV) ./$(CORE_TARGET)
 	$(TEST_ENV) ./$(INTRF_TARGET)
 	$(TEST_ENV) ./$(RX_EVENT_TARGET)
@@ -215,6 +220,9 @@ test-nrf-suspend-policy:
 
 test-nrf-iso-policy:
 	python3 ./nrf_usb_iso_policy_test.py
+
+test-nrf-dma-policy:
+	python3 ./nrf_usb_dma_policy_test.py
 
 iso-hw-build: $(ISO_HW_SCRIPT)
 	python3 -c "compile(open('$(ISO_HW_SCRIPT)', encoding='utf-8').read(), '$(ISO_HW_SCRIPT)', 'exec')"

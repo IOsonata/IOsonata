@@ -172,8 +172,25 @@ static cmpresult_t uECC_vli_cmp_unsafe(const uECC_word_t *left,
                                        const uECC_word_t *right,
                                        wordcount_t num_words);
 
-#if (uECC_PLATFORM == uECC_arm || uECC_PLATFORM == uECC_arm_thumb || \
-        uECC_PLATFORM == uECC_arm_thumb2)
+/* The hand written ARM assembly in asm_arm.inc allocates and clobbers r7.
+   GCC reserves r7 as the Thumb frame pointer unless this translation unit is
+   compiled with -fomit-frame-pointer, which is what produces:
+
+       error: r7 cannot be used in 'asm' here
+
+   Nordic builds their micro_ecc_lib with -fomit-frame-pointer for exactly this
+   reason. Until that flag is added for this file, use the portable C code.
+   uECC_OPTIMIZATION_LEVEL still selects the fast C modular reduction in
+   curve-specific.inc, so P-256 remains fast enough for LESC pairing.
+
+   To re-enable the assembly: add -fomit-frame-pointer to this file's compiler
+   flags and define uECC_ARM_USE_ASM=1. */
+#ifndef uECC_ARM_USE_ASM
+    #define uECC_ARM_USE_ASM 0
+#endif
+
+#if uECC_ARM_USE_ASM && (uECC_PLATFORM == uECC_arm || \
+        uECC_PLATFORM == uECC_arm_thumb || uECC_PLATFORM == uECC_arm_thumb2)
     #include "asm_arm.inc"
 #endif
 
