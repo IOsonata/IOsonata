@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
 HEADER = ROOT / "ARM/Nordic/include/usb_ctrlr.h"
-SOURCE = ROOT / "ARM/Nordic/src/usb_ctrlr_nrf52.cpp"
+SOURCE = ROOT / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp"
 
 
 def function_body(source: str, signature: str) -> str:
@@ -46,7 +46,12 @@ assert "nRFUsbdStartIsoNow()" in service_iso
 assert "NRF_USBD->SIZE.ISOOUT" in handle_sof
 assert "NRF_USBD->EVENTS_ENDISOIN" in interrupt
 assert "NRF_USBD->EVENTS_ENDISOOUT" in interrupt
-assert interrupt.index("nRFUsbdServiceIso();") < interrupt.index(
+# SOF services ISO, and the shared scheduler gives it priority before
+# selecting regular queue work. These calls no longer sit directly in the ISR.
+queued = function_body(source, "void nRFUsbdStartQueuedDma(void)")
+assert "nRFUsbdServiceIso();" in handle_sof
+assert queued.index("nRFUsbdStartIsoNow()") < queued.index("CFifoGet(s_hQue)")
+assert interrupt.index("nRFUsbdHandleSof();") < interrupt.index(
     "nRFUsbdResumeQueuedDmaLocked();"
 )
 

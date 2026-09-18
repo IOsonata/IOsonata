@@ -4,7 +4,7 @@
 from pathlib import Path
 
 
-SOURCE = Path(__file__).parents[2] / "ARM/Nordic/src/usb_ctrlr_nrf52.cpp"
+SOURCE = Path(__file__).parents[2] / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp"
 
 
 def function_body(source: str, signature: str) -> str:

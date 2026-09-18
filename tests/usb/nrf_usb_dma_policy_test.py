@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Guard nRF52 IN completion without a second per-packet interrupt."""
+"""Guard nRF52 DMA retirement and host-consumed IN completion."""
 
 from pathlib import Path
 
 
-SOURCE = Path(__file__).parents[2] / "ARM/Nordic/src/usb_ctrlr_nrf52.cpp"
+SOURCE = Path(__file__).parents[2] / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp"
 
 
 def function_body(source: str, signature: str) -> str:
@@ -38,8 +38,19 @@ assert "DmaStatus & 0x00FF00FFUL" in dma_finish
 assert "EVENTS_ENDEPOUT[epNum]" in dma_finish
 assert "EVENTS_ENDEPIN[epNum]" in dma_finish
 assert "nRFUsbdDmaUnlock();" in dma_finish
-assert interrupt.index("nRFUsbdDmaFinishLocked(") < interrupt.index(
+# Regular DMA retirement is now inline in the ISR, while the helper remains
+# for the separate lifecycle paths. Verify the same ordering at its new site.
+regular = interrupt[interrupt.index("default:          // EP1-7 IN/OUT") :]
+regular = regular[:regular.index("if (NRF_USBD->EVENTS_STARTED")]
+assert regular.index("if (*pEnd == 0U)") < regular.index("*pEnd = 0U;")
+assert regular.index("*pEnd = 0U;") < regular.index("nRFUsbdDmaUnlock();")
+assert regular.index("nRFUsbdDmaUnlock();") < regular.index("nRFUsbdStartQueuedDma();")
+assert regular.index("nRFUsbdProcessOutComplete(evt, nullptr);") < regular.index(
     "nRFUsbdStartQueuedDma();"
+)
+assert "nRFUsbdQueueInComplete" not in regular
+assert interrupt.index("const uint32_t inData = dataStatus & 0xFEU;") < interrupt.index(
+    "nRFUsbdQueueInComplete("
 )
 assert "NRF_USBD->EPDATASTATUS" in interrupt
 assert interrupt.rindex("nRFUsbdResumeQueuedDmaLocked();") > interrupt.index(

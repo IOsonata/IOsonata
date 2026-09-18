@@ -167,6 +167,18 @@ void UsbCtrlrEpCloseAll(int DevNo);
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext);
 bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length);
+
+// Adapt the directional production API to the existing fake-controller logs.
+static inline bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
+{
+	return UsbCtrlrEpXfer(DevNo, (uint8_t)(EpNum | 0x80U), Length);
+}
+
+static inline bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
+{
+	return UsbCtrlrEpXfer(DevNo, (uint8_t)(EpNum & 0x7FU), Length);
+}
+
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length);
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);
