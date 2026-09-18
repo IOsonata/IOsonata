@@ -2143,8 +2143,11 @@ extern "C" void USBD_IRQHandler(void)
 			nRFUsbdDmaUnlock();
 
 			if (out)
-				nRFUsbdQueueOutComplete(epNum,
-					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
+			{
+				//nRFUsbdQueueOutComplete(epNum, (uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
+				uint32_t evt = epNum | (NRF_USBD->EPOUT[epNum].AMOUNT << 8U);
+				nRFUsbdProcessOutComplete(evt, nullptr);
+			}
 
 			if (NRF_USBD->EVENTS_EP0SETUP == 0U &&
 				NRF_USBD->EVENTS_USBEVENT == 0U)
@@ -2210,10 +2213,10 @@ extern "C" void USBD_IRQHandler(void)
 			servicedStatus |= 1UL << (epNum + 16U);
 
 			nRFUsbEpReg_t *pReg = nRFUsbGetEpReg((uint8_t)epNum);
+#if 0
 			if (pReg->bBlocking)
 			{
-				(void)AppEvtHandlerQue(epNum, NULL,
-					nRFUsbdProcessOutData);
+				(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
 			}
 			else
 			{
@@ -2226,6 +2229,20 @@ extern "C" void USBD_IRQHandler(void)
 				pQue->Dir = 0U;
 				pQue->Len = pReg->Mps;
 			}
+#else
+			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_hQue);
+
+			if (s_hQue)
+			{
+				pQue->EpNum = (uint8_t)epNum;
+				pQue->Dir = 0U;
+				pQue->Len = pReg->Mps;
+			}
+			else
+			{
+				(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
+			}
+#endif
 		}
 
 		const uint32_t inData = dataStatus & 0xFEU;
@@ -2243,7 +2260,7 @@ extern "C" void USBD_IRQHandler(void)
 
 		if ((dataStatus & 0x00FE00FEUL & ~servicedStatus) != 0U)
 		{
-			NVIC_SetPendingIRQ(USBD_IRQn);
+//			NVIC_SetPendingIRQ(USBD_IRQn);
 		}
 	}
 
