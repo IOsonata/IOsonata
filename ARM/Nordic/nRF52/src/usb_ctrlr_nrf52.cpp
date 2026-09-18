@@ -1050,19 +1050,18 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 	}
 }
 
-static inline __attribute__((always_inline))
-void nRFUsbdStartQueuedDma(void)
+// Share the scheduler across ISR and foreground callers instead of expanding
+// the DMA register setup at each call site.
+static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 {
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPeek(s_hEp0Que);
-	if (pQue != NULL)
+	if (pQue == NULL)
 	{
-		nRFUsbdStartDmaNow(pQue);
-		return;
+		if (nRFUsbdStartIsoNow())
+			return;
+		pQue = (nRFUsbdQue_t *)CFifoGet(s_hQue);
 	}
-	if (nRFUsbdStartIsoNow())
-		return;
 
-	pQue = (nRFUsbdQue_t *)CFifoGet(s_hQue);
 	if (pQue != NULL)
 		nRFUsbdStartDmaNow(pQue);
 }
