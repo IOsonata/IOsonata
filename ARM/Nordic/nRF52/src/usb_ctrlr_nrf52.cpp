@@ -1051,8 +1051,7 @@ void nRFUsbdStartQueuedDma(void)
 		nRFUsbdStartDmaNow(pQue);
 		return;
 	}
-	// No ISO endpoint is open during CDC-only traffic.
-	if (atomic_load(&s_IsoOpen) != 0U && nRFUsbdStartIsoNow())
+	if (nRFUsbdStartIsoNow())
 		return;
 
 	pQue = (nRFUsbdQue_t *)CFifoGet(s_hQue);
@@ -1085,8 +1084,7 @@ static void nRFUsbdResumeQueuedDma(void)
  * off because CFifoPut publishes the slot before the caller writes it, and
  * the interrupt is the other producer.
  */
-static inline __attribute__((always_inline))
-void nRFUsbdQueXferDir(uint8_t EpNum, bool In, uint16_t Len)
+static void nRFUsbdQueXferDir(uint8_t EpNum, bool In, uint16_t Len)
 {
 	const uint32_t state = DisableInterrupt();
 	hCFifo_t hQue = EpNum == 0U ? s_hEp0Que : s_hQue;
