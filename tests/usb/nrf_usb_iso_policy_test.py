@@ -8,7 +8,7 @@ ROOT = Path(__file__).parents[2]
 HEADER = ROOT / "ARM/Nordic/include/usb_ctrlr.h"
 BASE = ROOT / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp"
 ISO = ROOT / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52_iso.cpp"
-PRIV = ROOT / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52_priv.h"
+
 
 
 def function_body(source: str, signature: str) -> str:
@@ -28,7 +28,7 @@ def function_body(source: str, signature: str) -> str:
 header = HEADER.read_text(encoding="utf-8")
 base = BASE.read_text(encoding="utf-8")
 iso = ISO.read_text(encoding="utf-8")
-priv = PRIV.read_text(encoding="utf-8")
+
 
 open_ep = function_body(iso, "bool nRFUsbdIsoEpOpen(")
 start_iso = function_body(iso, "static bool nRFUsbdStartIsoNow(void)")
@@ -44,7 +44,8 @@ assert "USB_PKT_MAXLEN_0_ISO = 512" in header
 assert "USB_ISO_EPIN_MASK_0 = (1U << 8)" in header
 assert "USB_ISO_EPOUT_MASK_0 = (1U << 8)" in header
 assert "USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)" in header
-assert "NRF_USB_EP_COUNT = 9" in priv
+assert "NRF_USB_EP_COUNT = 9" in header
+assert "#if defined(USB_CTRLR_NRF52_IMPLEMENTATION)" in header
 
 assert "USBD_ISOSPLIT_SPLIT_HalfIN" in open_ep
 assert "USBD_ISOINCONFIG_RESPONSE_ZeroData" in open_ep

@@ -52,8 +52,10 @@ SOFTWARE.
 #include "app_evt_handler.h"
 #include "cfifo.h"
 #include "coredev/interrupt.h"
+
+#define USB_CTRLR_NRF52_IMPLEMENTATION
 #include "usb/usb.h"
-#include "usb_ctrlr_nrf52_priv.h"
+#undef USB_CTRLR_NRF52_IMPLEMENTATION
 
 
 // Bus power, clock and VBUS.

@@ -11,8 +11,8 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 BASE_SOURCE = ROOT / 'ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp'
 ISO_SOURCE = ROOT / 'ARM/Nordic/nRF52/src/usb_ctrlr_nrf52_iso.cpp'
-PRIV_SOURCE = ROOT / 'ARM/Nordic/nRF52/src/usb_ctrlr_nrf52_priv.h'
-src = '\n'.join((PRIV_SOURCE.read_text(), BASE_SOURCE.read_text(), ISO_SOURCE.read_text()))
+HEADER_SOURCE = ROOT / 'ARM/Nordic/include/usb_ctrlr.h'
+src = '\n'.join((HEADER_SOURCE.read_text(), BASE_SOURCE.read_text(), ISO_SOURCE.read_text()))
 
 def function(name):
     import re

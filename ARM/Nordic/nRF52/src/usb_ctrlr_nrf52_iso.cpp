@@ -12,7 +12,10 @@ pull the ISO scheduler, SOF processing or deferred completion path.
 #include "nrf.h"
 #include "app_evt_handler.h"
 #include "coredev/interrupt.h"
-#include "usb_ctrlr_nrf52_priv.h"
+
+#define USB_CTRLR_NRF52_IMPLEMENTATION
+#include "usb_ctrlr.h"
+#undef USB_CTRLR_NRF52_IMPLEMENTATION
 
 #define NRFX_USBD_EASYDMA_BUSY_REG			(*((volatile uint32_t *)0x40027C1CUL))
 #define NRFX_USBD_EASYDMA_BUSY_REG_BUSY		0x82UL
