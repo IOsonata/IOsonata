@@ -9,6 +9,14 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 src = (ROOT / 'ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp').read_text()
 
+# Start/stop pairing ownership moved to the usb core: UsbCtrlrStart is not
+# idempotent and UsbCtrlrStop pairs with one successful start, so the core
+# must guard both behind its started flag.
+core = (ROOT / 'src/usb/usb.cpp').read_text()
+assert 'if (s_UsbDevStarted)' in core
+assert 'if (!s_UsbDevStarted)' in core
+assert core.index('UsbCtrlrStart(') < core.index('s_UsbDevStarted = true;')
+
 
 def function(name):
     match = re.search(r'(?:bool|void)\s+' + name + r'\([^;{}]*\)\s*\{', src)
@@ -25,14 +33,14 @@ code = r'''
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
-struct {uint8_t IntPrio;bool LowPowerSuspend,Initialized,Started;} s_Usbd;
+struct {uint8_t IntPrio;bool LowPowerSuspend;} s_Usbd;
 bool cable, clockOK, readyOK;
 unsigned requests, releases, clockRefs, starts, resets, waits, dispatches;
 unsigned irqDisables, irqPriority;
 constexpr int USBD_IRQn=7;
 struct {uint32_t INTEN,USBPULLUP,ENABLE,LOWPOWER;} regs;
 auto *NRF_USBD=&regs;
-bool UsbCtrlrVbusDetected(int dev){assert(dev==0);return cable;}
+bool UsbCtrlrVbusDetected(int dev){(void)dev;return cable;}
 bool UsbdXtalRequest(){++requests;if(clockOK)++clockRefs;return clockOK;}
 void UsbdXtalRelease(){assert(clockRefs==1);--clockRefs;++releases;}
 bool UsbdStartCtrlr(){++starts;return readyOK;}
@@ -45,7 +53,7 @@ void __ISB(){}
 void __DSB(){}
 void AppEvtHandlerExec(){++dispatches;}
 void init(){
- s_Usbd={6,false,true,false};
+ s_Usbd={6,false};
  cable=clockOK=readyOK=true;
  requests=releases=clockRefs=starts=resets=waits=dispatches=irqDisables=0;
  irqPriority=0;regs={0xFFFF,1,1,0};
@@ -54,25 +62,26 @@ void init(){
 code += '\n'.join(function(n) for n in ['UsbCtrlrStart', 'UsbCtrlrStop', 'UsbCtrlrProcess'])
 code += r'''
 int main(){
- for(unsigned initial=0;initial<2;++initial)
+ // Start/stop pairing and DevNo validation moved to the usb core
+ // (s_UsbDevStarted); the controller owns only clock and peripheral state.
  for(unsigned attached=0;attached<2;++attached)
  for(unsigned clock=0;clock<2;++clock)
  for(unsigned ready=0;ready<2;++ready){
-  init();s_Usbd.Initialized=initial;cable=attached;clockOK=clock;readyOK=ready;
-  const bool success=initial && attached && clock && ready;
+  init();cable=attached;clockOK=clock;readyOK=ready;
+  const bool success=attached && clock && ready;
   assert(UsbCtrlrStart(0)==success);
-  assert(s_Usbd.Started==success && clockRefs==unsigned(success));
-  assert(requests==unsigned(initial && attached));
-  assert(starts==unsigned(initial && attached && clock));
-  assert(releases==unsigned(initial && attached && clock && !ready));
-  unsigned req=requests,rel=releases;
-  if(success){assert(UsbCtrlrStart(0));assert(requests==req);}
-  UsbCtrlrStop(0);
-  assert(!s_Usbd.Started && clockRefs==0);
-  assert(releases==rel+unsigned(success));
-  assert(irqDisables==unsigned(success));
-  if(success)assert(regs.INTEN==0 && regs.USBPULLUP==0 && regs.ENABLE==0);
-  rel=releases;UsbCtrlrStop(0);assert(releases==rel);
+  assert(clockRefs==unsigned(success));
+  assert(requests==unsigned(attached));
+  assert(starts==unsigned(attached && clock));
+  // A failed controller start releases the clock it requested.
+  assert(releases==unsigned(attached && clock && !ready));
+  if(success){
+   assert(irqPriority==6);
+   UsbCtrlrStop(0);
+   assert(clockRefs==0 && releases==1 && irqDisables==1);
+   assert(waits==1 && resets==1);
+   assert(regs.INTEN==0 && regs.USBPULLUP==0 && regs.ENABLE==0);
+  }
  }
  init();
  for(unsigned n=0;n<8;++n){
@@ -80,14 +89,12 @@ int main(){
   UsbCtrlrStop(0);assert(clockRefs==0);
  }
  assert(requests==8 && releases==8);
- init();assert(!UsbCtrlrStart(1));UsbCtrlrStop(1);UsbCtrlrProcess(1);
- assert(requests==0 && releases==0 && resets==0 && dispatches==0);
- for(unsigned started=0;started<2;++started)for(unsigned low=0;low<2;++low){
-  init();s_Usbd.Started=started;regs.LOWPOWER=low;
+ for(unsigned low=0;low<2;++low){
+  init();regs.LOWPOWER=low;
   UsbCtrlrProcess(0);
   assert(dispatches==1 && regs.LOWPOWER==low && requests==0 && releases==0);
  }
- puts("PASS: lifecycle balances clock ownership on success/failure, repeated start/stop, and invalid controller calls");
+ puts("PASS: lifecycle balances clock ownership on success/failure and repeated start/stop");
  puts("PASS: foreground processing dispatches AppEvt without a second peripheral power owner");
 }
 '''

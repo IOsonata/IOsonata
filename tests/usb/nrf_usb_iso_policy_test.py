@@ -55,11 +55,14 @@ assert "nRFUsbdStartIsoNow()" in service_iso
 assert "NRF_USBD->SIZE.ISOOUT" in iso_sof
 assert "NRF_USBD->EVENTS_ENDISOIN" in finish_iso
 assert "NRF_USBD->EVENTS_ENDISOOUT" in finish_iso
+# The channel release moved into the shared nRFUsbdDmaUnlock helper; the
+# ordering policy is unchanged: END is checked and EPSTATUS written before
+# the channel is released.
 assert finish_iso.index("if (*pEnd == 0U)") < finish_iso.index(
-    "NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR"
+    "nRFUsbdDmaUnlock();"
 )
 assert finish_iso.index("NRF_USBD->EPSTATUS =") < finish_iso.index(
-    "NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR"
+    "nRFUsbdDmaUnlock();"
 )
 
 assert "extern bool nRFUsbdIsoStart(void) __attribute__((weak));" in base

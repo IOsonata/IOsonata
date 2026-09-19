@@ -110,7 +110,7 @@ bool nRFUsbRegDataEpXfer(uint8_t,uint16_t);
 names = ['UsbdSync','nRFUsbdDmaEndBit','nRFUsbdDmaEndEvent','nRFUsbdDir','nRFUsbEpDir',
          'nRFUsbGetEpReg','nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaUnlock',
          'nRFUsbdDmaStartLocked','nRFUsbdEpHwEnable','nRFUsbdSofRelease',
-         'nRFIsoDir','nRFIsoReg','nRFUsbdStartIsoNow',
+         'nRFIsoDir','nRFIsoReg','nRFIsoHwEnable','nRFUsbdStartIsoNow',
          'nRFUsbdServiceIso','nRFUsbRegIsoXfer','nRFUsbdProcessIsoComplete',
          'nRFUsbdRetryIsoComplete','nRFUsbdFinishIsoDma','nRFUsbdIsoStart',
          'nRFUsbdIsoService','nRFUsbdIsoFinishDma','nRFUsbdIsoSof',
