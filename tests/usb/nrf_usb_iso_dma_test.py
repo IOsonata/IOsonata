@@ -14,7 +14,7 @@ src = SOURCE.read_text()
 
 def function(name):
     import re
-    match = re.search(r'(?:void|bool|uint8_t|uint16_t|uint32_t|nRFUsbdXfer_t \*|nRFUsbEpReg_t \*)\s*'
+    match = re.search(r'(?:void|bool|uint8_t|uint16_t|uint32_t|volatile uint32_t \*|nRFUsbdXfer_t \*|nRFUsbEpReg_t \*)\s*'
                       + name + r'\([^;{}]*\)\s*\{', src)
     assert match, name
     brace = src.index('{', match.start())
@@ -38,7 +38,8 @@ constexpr uint8_t NRFX_USBD_ISO_EP_NO=8;
 constexpr uint_fast8_t NRFX_USBD_ISO_IN_OPEN=2, NRFX_USBD_ISO_OUT_OPEN=1;
 constexpr uint32_t USBD_SIZE_ISOOUT_ZERO_Msk=1UL<<16;
 constexpr uint32_t USBD_INTENCLR_SOF_Msk=1, USBD_INTEN_SOF_Msk=1;
-constexpr uint32_t USBD_INTEN_ENDISOIN_Msk=2, USBD_INTEN_ENDISOOUT_Msk=4;
+constexpr unsigned USBD_INTEN_ENDISOIN_Pos=11;
+constexpr uint32_t USBD_INTEN_ENDISOIN_Msk=1U<<11, USBD_INTEN_ENDISOOUT_Msk=1U<<20;
 constexpr unsigned USBD_INTEN_ENDEPIN0_Pos=2, USBD_INTEN_ENDEPOUT0_Pos=12;
 constexpr unsigned NRFX_USBD_EP_COUNT=9;
 constexpr unsigned NRFX_USBD_MAX_PACKET_SIZE=64;
@@ -50,8 +51,9 @@ struct W1C {uint32_t bits=0; operator uint32_t()const{return bits;}
 struct Task {uint32_t value=0;void operator=(uint32_t);};
 struct Endpoint {uint32_t PTR=0,MAXCNT=0,AMOUNT=0;};
 struct Registers {
- uint32_t EVENTS_ENDISOIN=0,EVENTS_ENDISOOUT=0;
- uint32_t EVENTS_ENDEPIN[8]={},EVENTS_ENDEPOUT[8]={};
+ uint32_t EVENTS_USBRESET=0,EVENTS_STARTED=0,EVENTS_ENDEPIN[8]={};
+ uint32_t EVENTS_EP0DATADONE=0,EVENTS_ENDISOIN=0;
+ uint32_t EVENTS_ENDEPOUT[8]={},EVENTS_ENDISOOUT=0;
  uint32_t TASKS_STARTEPIN[8]={},TASKS_STARTEPOUT[8]={};
  // Task is modeled through the barrier below: hardware latches at task issue.
  uint32_t TASKS_STARTISOIN=0,TASKS_STARTISOOUT=0;
@@ -98,18 +100,13 @@ void nRFUsbdResumeQueuedDmaLocked();
 void nRFUsbdDmaWait();
 bool nRFUsbRegDataEpXfer(uint8_t,uint16_t);
 '''
-# DmaEndEvent has a volatile pointer return that the simple extractor omits.
-end_event = '''volatile uint32_t *nRFUsbdDmaEndEvent(uint8_t ep, bool in) {
- if(ep==8)return in?&regs.EVENTS_ENDISOIN:&regs.EVENTS_ENDISOOUT;
- return in?&regs.EVENTS_ENDEPIN[ep]:&regs.EVENTS_ENDEPOUT[ep];
-}\n'''
-names = ['nRFUsbdDir','nRFUsbEpDir','nRFUsbGetEpReg',
+names = ['nRFUsbdDmaEndBit','nRFUsbdDmaEndEvent','nRFUsbdDir','nRFUsbEpDir','nRFUsbGetEpReg',
          'nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaUnlock',
          'nRFUsbdDmaStartLocked','nRFUsbdStartIsoNow','nRFUsbdIsoPending',
          'nRFUsbdServiceIso','nRFUsbRegIsoXfer','nRFUsbdProcessIsoComplete',
          'nRFUsbdRetryIsoComplete','nRFUsbdFinishIsoDma','UsbCtrlrEpClose',
          'nRFUsbdHandleSof']
-code = preamble + end_event + '\n'.join(function(n) for n in names)
+code = preamble + '\n'.join(function(n) for n in names)
 code += r'''
 bool nRFUsbRegDataEpXfer(uint8_t ep,uint16_t length){return nRFUsbRegIsoXfer(ep,length);}
 void nRFUsbdDmaWait(){if(dmaBusy)assert(nRFUsbdFinishIsoDma(activeDir!=0));}

@@ -40,6 +40,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
+#include <stddef.h>
 #include <stdatomic.h>
 #include <string.h>
 
@@ -121,9 +122,7 @@ static uint8_t s_UsbdIntPrio;
 static bool s_UsbdLowPowerSuspend;
 static bool s_UsbdInitialized = false;
 static bool s_UsbdStarted = false;
-static bool s_UsbdXtalHeld = false;
 
-static bool s_LowPowerExitPending = false;
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
 
 
@@ -429,64 +428,6 @@ static void UsbdErrataRevert(void)
 	}
 }
 
-/**
- * The part does not leave USB low power on its own. The native controller
- * writes LOWPOWER on suspend and signals resume, but no driver anywhere
- * writes ForceNormal except the remote wakeup path, which is the device
- * asking the host to wake, not the other way round. Without this the board is
- * gone after the host sleeps and needs a power cycle.
- */
-/**
- * Leave USBD low power without waiting.
- *
- * Requesting the exit and observing READY are separate steps here. Spinning
- * for READY put a bound of NRFX_USBD_READY_WAIT_LOOPS iterations directly
- * under the application main loop, which is around a hundred milliseconds at
- * 64 MHz if the bit is slow to arrive. Nothing needs the exit to have finished
- * by the time this returns, so the request is raised and the next call
- * finishes it.
- */
-static void UsbdLowPowerExitFinish(void)
-{
-	if (!s_LowPowerExitPending ||
-		(NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_READY_Msk) == 0U)
-	{
-		return;
-	}
-
-	NRF_USBD->EVENTCAUSE = USBD_EVENTCAUSE_READY_Msk;
-
-	if (nrf52_errata_171())
-	{
-		UsbdErrataWrite(NRFX_USBD_ERRATA_171_REG, 0x00000000UL);
-	}
-
-	s_LowPowerExitPending = false;
-}
-
-static void UsbdLowPowerExit(void)
-{
-	// Retire a request raised by an earlier call before looking at anything
-	// else. Only this clears the errata register the request set.
-	UsbdLowPowerExitFinish();
-
-	if (s_LowPowerExitPending ||
-		NRF_USBD->LOWPOWER == USBD_LOWPOWER_LOWPOWER_ForceNormal)
-	{
-		return;
-	}
-
-	NRF_USBD->EVENTCAUSE = USBD_EVENTCAUSE_READY_Msk;
-	NRF_USBD->LOWPOWER = USBD_LOWPOWER_LOWPOWER_ForceNormal;
-
-	if (nrf52_errata_171())
-	{
-		UsbdErrataWrite(NRFX_USBD_ERRATA_171_REG, 0x000000C0UL);
-	}
-
-	s_LowPowerExitPending = true;
-}
-
 static bool UsbdStartCtrlr(void)
 {
 	NRF_USBD->EVENTCAUSE = USBD_EVENTCAUSE_READY_Msk;
@@ -567,18 +508,37 @@ uint8_t nRFUsbdDir(uint8_t EpAddr)
 	return USB_ENDPADDR_IS_IN(EpAddr) ? 1U : 0U;
 }
 
+// USBD interrupt bits index the event registers from EVENTS_USBRESET.
+// Decode END once for endpoint open/close; EP0DATADONE separates regular
+// IN from ISO IN in the event register bank.
 static inline __attribute__((always_inline))
-volatile uint32_t *nRFUsbdDmaEndEvent(uint8_t EpNum, bool In)
+uint8_t nRFUsbdDmaEndBit(uint8_t EpNum, bool In)
 {
-	if (EpNum == NRFX_USBD_ISO_EP_NO)
-	{
-		return In ?
-			&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
-	}
-
-	return In ? &NRF_USBD->EVENTS_ENDEPIN[EpNum] :
-		&NRF_USBD->EVENTS_ENDEPOUT[EpNum];
+	return In ? (EpNum == NRFX_USBD_ISO_EP_NO ?
+		USBD_INTEN_ENDISOIN_Pos : USBD_INTEN_ENDEPIN0_Pos + EpNum) :
+		USBD_INTEN_ENDEPOUT0_Pos + EpNum;
 }
+
+static inline __attribute__((always_inline))
+volatile uint32_t *nRFUsbdDmaEndEvent(uint8_t EndBit)
+{
+	return (volatile uint32_t *)((uintptr_t)&NRF_USBD->EVENTS_USBRESET +
+		EndBit * sizeof(uint32_t));
+}
+
+static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDEPIN) -
+	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
+	USBD_INTEN_ENDEPIN0_Pos * sizeof(uint32_t), "USBD IN event layout");
+static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDISOIN) -
+	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
+	USBD_INTEN_ENDISOIN_Pos * sizeof(uint32_t), "USBD ISO IN event layout");
+static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDEPOUT) -
+	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
+	USBD_INTEN_ENDEPOUT0_Pos * sizeof(uint32_t), "USBD OUT event layout");
+static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDISOOUT) -
+	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
+	(USBD_INTEN_ENDEPOUT0_Pos + NRFX_USBD_ISO_EP_NO) * sizeof(uint32_t),
+	"USBD ISO OUT event layout");
 
 static inline __attribute__((always_inline))
 void nRFUsbdEmit(const UsbCtrlrEvt_t *pEvt)
@@ -1740,14 +1700,12 @@ bool UsbCtrlrStart(int DevNo)
 		return false;
 	}
 
-	s_UsbdXtalHeld = true;
 
 	NVIC_SetPriority(USBD_IRQn, s_UsbdIntPrio);
 
 	if (UsbdStartCtrlr() == false)
 	{
 		UsbdXtalRelease();
-		s_UsbdXtalHeld = false;
 		return false;
 	}
 
@@ -1780,39 +1738,18 @@ void UsbCtrlrStop(int DevNo)
 	__ISB();
 	__DSB();
 
-	if (s_UsbdXtalHeld)
-	{
-		UsbdXtalRelease();
-		s_UsbdXtalHeld = false;
-	}
+	// A successful start owns one clock request; a failed start releases it.
+	UsbdXtalRelease();
 
 	s_UsbdStarted = false;
 }
 
+// Suspend and wake are owned by the USBEVENT/SOF handlers. With low-power
+// suspend disabled, this driver never enters peripheral low-power mode.
 void UsbCtrlrProcess(int DevNo)
 {
-	if (DevNo != 0)
-	{
-		return;
-	}
-
-	if (s_UsbdInitialized)
-	{
-		// POWER may be read while USBD EasyDMA is active, but most USBD registers
-		// may not. Leave the low-power state untouched until the DMA END event.
-		const bool dmaActive = nRFUsbdDmaActive();
-		if (!dmaActive && s_LowPowerExitPending)
-		{
-			UsbdLowPowerExitFinish();
-		}
-		else if (!dmaActive && s_UsbdStarted &&
-				 s_UsbdLowPowerSuspend == false &&
-				 NRF_USBD->LOWPOWER != USBD_LOWPOWER_LOWPOWER_ForceNormal)
-		{
-			UsbdLowPowerExit();
-		}
-	}
-	AppEvtHandlerExec();
+	if (DevNo == 0)
+		AppEvtHandlerExec();
 }
 
 bool UsbCtrlrVbusDetected(int DevNo)
@@ -2008,12 +1945,11 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 			USBD_ISOINCONFIG_RESPONSE_Pos;
 	}
 
-	*nRFUsbdDmaEndEvent(epNum, in) = 0U;
+	const uint8_t endBit = nRFUsbdDmaEndBit(epNum, in);
+	*nRFUsbdDmaEndEvent(endBit) = 0U;
 	if (iso || !in)
 	{
-		NRF_USBD->INTENSET = iso ?
-			(in ? USBD_INTEN_ENDISOIN_Msk : USBD_INTEN_ENDISOOUT_Msk) :
-			(1UL << (USBD_INTEN_ENDEPOUT0_Pos + epNum));
+		NRF_USBD->INTENSET = 1UL << endBit;
 	}
 	volatile uint32_t *pEnable = in ? &NRF_USBD->EPINEN : &NRF_USBD->EPOUTEN;
 	*pEnable |= 1UL << epNum;
@@ -2078,14 +2014,11 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 		atomic_store(in ? &s_EventState.IsoInReady : &s_EventState.IsoOutReady, false);
 	}
 
-	const uint32_t endMask = iso ?
-		(in ? USBD_INTEN_ENDISOIN_Msk : USBD_INTEN_ENDISOOUT_Msk) :
-		(1UL << ((in ? USBD_INTEN_ENDEPIN0_Pos :
-			USBD_INTEN_ENDEPOUT0_Pos) + epNum));
+	const uint8_t endBit = nRFUsbdDmaEndBit(epNum, in);
 	volatile uint32_t *pEnable = in ? &NRF_USBD->EPINEN : &NRF_USBD->EPOUTEN;
-	NRF_USBD->INTENCLR = endMask;
+	NRF_USBD->INTENCLR = 1UL << endBit;
 	*pEnable &= ~(1UL << epNum);
-	*nRFUsbdDmaEndEvent(epNum, in) = 0U;
+	*nRFUsbdDmaEndEvent(endBit) = 0U;
 
 	if (iso)
 	{
