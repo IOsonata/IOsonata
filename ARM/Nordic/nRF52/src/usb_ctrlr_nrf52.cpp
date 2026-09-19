@@ -155,8 +155,8 @@ typedef struct __nRF_Usbd_Que {
 } nRFUsbdQue_t;
 
 typedef struct __nRF_Ep_Packet {
-	uint16_t Len;
 	uint16_t Resv;
+	uint16_t Len;
 	uint8_t Payload[NRFX_USBD_MAX_PACKET_SIZE];
 } nRFEPPkt_t;
 
