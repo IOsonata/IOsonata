@@ -471,8 +471,7 @@ uint8_t nRFUsbdDir(uint8_t EpAddr)
 static inline __attribute__((always_inline))
 uint8_t nRFUsbdDmaEndBit(uint8_t EpNum, bool In)
 {
-	return In ? (EpNum == NRFX_USBD_ISO_EP_NO ?
-		USBD_INTEN_ENDISOIN_Pos : USBD_INTEN_ENDEPIN0_Pos + EpNum) :
+	return In ? USBD_INTEN_ENDEPIN0_Pos + EpNum :
 		USBD_INTEN_ENDEPOUT0_Pos + EpNum;
 }
 
@@ -486,16 +485,9 @@ volatile uint32_t *nRFUsbdDmaEndEvent(uint8_t EndBit)
 static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDEPIN) -
 	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
 	USBD_INTEN_ENDEPIN0_Pos * sizeof(uint32_t), "USBD IN event layout");
-static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDISOIN) -
-	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
-	USBD_INTEN_ENDISOIN_Pos * sizeof(uint32_t), "USBD ISO IN event layout");
 static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDEPOUT) -
 	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
 	USBD_INTEN_ENDEPOUT0_Pos * sizeof(uint32_t), "USBD OUT event layout");
-static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDISOOUT) -
-	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
-	(USBD_INTEN_ENDEPOUT0_Pos + NRFX_USBD_ISO_EP_NO) * sizeof(uint32_t),
-	"USBD ISO OUT event layout");
 
 static inline __attribute__((always_inline))
 void nRFUsbdEmit(const UsbCtrlrEvt_t *pEvt)
@@ -505,7 +497,8 @@ void nRFUsbdEmit(const UsbCtrlrEvt_t *pEvt)
 
 // Endpoint interrupt, END event and enable-mask writes shared by open and
 // close.
-__attribute__((noinline)) void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
+static __attribute__((noinline))
+void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 {
 	const uint8_t endBit = nRFUsbdDmaEndBit(EpNum, In);
 	volatile uint32_t *pEnable = In ? &NRF_USBD->EPINEN : &NRF_USBD->EPOUTEN;
@@ -514,9 +507,9 @@ __attribute__((noinline)) void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool En
 	if (Enable)
 	{
 		*nRFUsbdDmaEndEvent(endBit) = 0U;
-		// Regular IN completion remains host-consumed EPDATA; no ENDEPIN
-		// interrupt.
-		if (EpNum == NRFX_USBD_ISO_EP_NO || !In)
+		// Regular IN completion is host-consumed EPDATA, so only OUT needs
+		// an END interrupt.
+		if (!In)
 		{
 			NRF_USBD->INTENSET = 1UL << endBit;
 		}

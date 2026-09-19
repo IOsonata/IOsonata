@@ -60,6 +60,30 @@ nRFUsbEpReg_t *nRFIsoReg(uint8_t EpAddr)
 	return &s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO][nRFIsoDir(EpAddr)];
 }
 
+static __attribute__((noinline))
+void nRFIsoHwEnable(bool In, bool Enable)
+{
+	volatile uint32_t *pEnd = In ?
+		&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
+	volatile uint32_t *pEnable = In ? &NRF_USBD->EPINEN : &NRF_USBD->EPOUTEN;
+	const uint32_t msk = 1UL << NRFX_USBD_ISO_EP_NO;
+	const uint32_t endMsk = In ?
+		USBD_INTEN_ENDISOIN_Msk : USBD_INTEN_ENDISOOUT_Msk;
+
+	if (Enable)
+	{
+		*pEnd = 0U;
+		NRF_USBD->INTENSET = endMsk;
+		*pEnable |= msk;
+	}
+	else
+	{
+		NRF_USBD->INTENCLR = endMsk;
+		*pEnable &= ~msk;
+		*pEnd = 0U;
+	}
+}
+
 
 
 static bool nRFUsbdStartIsoNow(void)
@@ -331,7 +355,7 @@ bool nRFUsbdIsoEpOpen(const UsbEndPointDesc_t *pDesc)
 	NRF_USBD->ISOINCONFIG =
 		USBD_ISOINCONFIG_RESPONSE_ZeroData << USBD_ISOINCONFIG_RESPONSE_Pos;
 
-	nRFUsbdEpHwEnable(NRFX_USBD_ISO_EP_NO, in, true);
+	nRFIsoHwEnable(in, true);
 
 	const uint8_t dir = in ? 1U : 0U;
 	const uint32_t state = DisableInterrupt();
@@ -365,7 +389,7 @@ void nRFUsbdIsoEpClose(uint8_t EpAddr)
 	pXfer->TotalLen = 0U;
 	pXfer->ActualLen = 0U;
 
-	nRFUsbdEpHwEnable(NRFX_USBD_ISO_EP_NO, in, false);
+	nRFIsoHwEnable(in, false);
 	nRFUsbdSofRelease();
 
 	nRFIsoReg(EpAddr)->Mps = 0U;
