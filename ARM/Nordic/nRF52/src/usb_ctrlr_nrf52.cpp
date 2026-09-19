@@ -346,33 +346,38 @@ static void UsbdErrataWrite(uint32_t Reg, uint32_t Value)
 }
 
 /**
- * Errata 187 and 171 bracket USBD enable. Apply order is 187 then 171;
- * revert order is 171 then 187, followed by errata 166 restoration.
- * This matches Nordic's sequence.
+ * Errata 187 and 171 are applied around the enable and taken away again once
+ * the controller reports itself ready. Errata 166 is undone at the same time.
+ * Nordic's own driver does exactly this and the order matters : the writes
+ * before the enable are what make the enable work.
  */
-static __attribute__((noinline)) void UsbdErrataSet(bool Apply)
+static void Usbd171Write(uint32_t Value)
 {
-	if (Apply)
-	{
-		if (nrf52_errata_187())
-		{
-			UsbdErrataWrite(NRFX_USBD_ERRATA_187_REG, 0x00000003UL);
-		}
-		if (nrf52_errata_171())
-		{
-			UsbdErrataWrite(NRFX_USBD_ERRATA_171_REG, 0x000000C0UL);
-		}
-		return;
-	}
-
 	if (nrf52_errata_171())
 	{
-		UsbdErrataWrite(NRFX_USBD_ERRATA_171_REG, 0x00000000UL);
+		UsbdErrataWrite(NRFX_USBD_ERRATA_171_REG, Value);
 	}
+}
+
+static void UsbdErrataApply(void)
+{
+	if (nrf52_errata_187())
+	{
+		UsbdErrataWrite(NRFX_USBD_ERRATA_187_REG, 0x00000003UL);
+	}
+
+	Usbd171Write(0x000000C0UL);
+}
+
+static void UsbdErrataRevert(void)
+{
+	Usbd171Write(0x00000000UL);
+
 	if (nrf52_errata_187())
 	{
 		UsbdErrataWrite(NRFX_USBD_ERRATA_187_REG, 0x00000000UL);
 	}
+
 	if (nrf52_errata_166())
 	{
 		NRFX_USBD_REG32(NRFX_USBD_ERRATA_166_REG_A) = 0x7E3UL;
@@ -403,7 +408,7 @@ static bool UsbdStartCtrlr(void)
 	NRF_USBD->EVENTCAUSE = USBD_EVENTCAUSE_READY_Msk;
 	UsbdSync();
 
-	UsbdErrataSet(true);
+	UsbdErrataApply();
 
 	NRF_USBD->ENABLE = 1;
 	UsbdSync();
@@ -411,7 +416,7 @@ static bool UsbdStartCtrlr(void)
 	if (!UsbdWaitReady(&NRF_USBD->EVENTCAUSE, USBD_EVENTCAUSE_READY_Msk,
 					   NRFX_USBD_READY_WAIT_LOOPS))
 	{
-		UsbdErrataSet(false);
+		UsbdErrataRevert();
 		NRF_USBD->ENABLE = 0;
 		return false;
 	}
@@ -419,7 +424,7 @@ static bool UsbdStartCtrlr(void)
 	NRF_USBD->EVENTCAUSE = USBD_EVENTCAUSE_READY_Msk;
 	UsbdSync();
 
-	UsbdErrataSet(false);
+	UsbdErrataRevert();
 
 	// The regulator reports itself usable separately from the controller, and
 	// pulling up before it does gives the host a device that cannot answer.
