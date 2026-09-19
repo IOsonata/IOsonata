@@ -61,7 +61,7 @@ struct Registers {
 } regs;
 auto *NRF_USBD=&regs;
 struct nRFUsbdXfer_t {uint8_t *pBuffer;uint16_t TotalLen;volatile uint16_t ActualLen;};
-struct {nRFUsbdXfer_t Xfer[9][2];bool SofEnabled;} s_Ctrlr;
+struct {nRFUsbdXfer_t Ep0[2],Iso[2];bool SofEnabled;} s_Ctrlr;
 struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;uint16_t Mps;bool bBlocking;};
 nRFUsbEpReg_t s_EpReg[9][2];
 atomic_bool s_BusSuspended=false,s_SuspendPending=false,s_HostResumePending=false;
@@ -100,11 +100,11 @@ bool nRFUsbRegDataEpXfer(uint8_t,uint16_t);
 end_event = '''volatile uint32_t *nRFUsbdDmaEndEvent(uint8_t ep, bool in) {
  assert(ep==8);return in?&regs.EVENTS_ENDISOIN:&regs.EVENTS_ENDISOOUT;
 }\n'''
-names = ['nRFUsbdDir','nRFUsbEpDir','nRFUsbGetEpReg','nRFUsbdGetXfer',
-         'nRFUsbdMps','nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaUnlock',
+names = ['nRFUsbdDir','nRFUsbEpDir','nRFUsbGetEpReg',
+         'nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaUnlock',
          'nRFUsbdDmaStartLocked','nRFUsbdStartIsoNow','nRFUsbdIsoPending',
          'nRFUsbdServiceIso','nRFUsbRegIsoXfer','nRFUsbdProcessIsoComplete',
-         'nRFUsbdRetryIsoComplete','nRFUsbdFinishIsoDma','nRFUsbRegEpClose',
+         'nRFUsbdRetryIsoComplete','nRFUsbdFinishIsoDma','UsbCtrlrEpClose',
          'nRFUsbdHandleSof']
 code = preamble + end_event + '\n'.join(function(n) for n in names)
 code += r'''
@@ -178,7 +178,7 @@ int main(){
  AppEvtHandlerExec();assert(callbacks[0]==1 && s_IsoBusy==0);
  puts("PASS: full real AppEvt queue retains completion, retries, and does not retain EasyDMA");
 
- init();frame(17);finish(false);nRFUsbRegEpClose(8);
+ init();frame(17);finish(false);UsbCtrlrEpClose(0,8);
  s_IsoOpen|=1;s_EpReg[8][0].Mps=9;frame(9);finish(false);
  AppEvtHandlerExec();assert(callbacks[0]==1 && lengths[0]==9 && s_IsoBusy==0);
  puts("PASS: close/reopen discards old callback without releasing the new transfer");

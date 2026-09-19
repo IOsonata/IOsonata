@@ -96,7 +96,6 @@ SOFTWARE.
 #define NRFX_USBD_REG32(a)					(*(volatile uint32_t *)(a))
 
 
-
 enum
 {
 	// The ordinary endpoint count excludes the dedicated ISO endpoint 8.
@@ -123,7 +122,6 @@ static bool s_UsbdLowPowerSuspend;
 static bool s_UsbdInitialized = false;
 static bool s_UsbdStarted = false;
 static bool s_UsbdXtalHeld = false;
-static bool s_UsbdVbusLast = false;
 
 static bool s_LowPowerExitPending = false;
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
@@ -168,7 +166,9 @@ typedef struct __nRF_Usbd_Xfer
 
 typedef struct __nRF_Usbd_Ctrlr
 {
-	nRFUsbdXfer_t Xfer[NRFX_USBD_EP_COUNT][2];
+	// Regular endpoints use registered buffers and queued packet lengths.
+	nRFUsbdXfer_t Ep0[2];
+	nRFUsbdXfer_t Iso[2];
 	bool SofEnabled;
 } nRFUsbdCtrlr_t;
 
@@ -231,13 +231,6 @@ static void nRFUsbdRetryIsoComplete(void);
 
 static void nRFUsbdHostResumeDetected(void);
 
-
-/// Only DevNo 0 exists on every nRF part shipped so far.
-static inline __attribute__((always_inline))
-bool nRFUsbValidDevNo(int DevNo)
-{
-	return DevNo == 0;
-}
 
 static inline __attribute__((always_inline))
 uint8_t nRFUsbEpDir(uint8_t EpAddr)
@@ -551,181 +544,6 @@ static bool UsbdStartCtrlr(void)
 	return true;
 }
 
-static void UsbdStopCtrlr(void)
-{
-	NRF_USBD->INTEN = 0;
-	NRF_USBD->USBPULLUP = 0;
-	NRF_USBD->ENABLE = 0;
-	__ISB();
-	__DSB();
-}
-
-
-
-static bool nRFUsbVbusDetected(void)
-{
-	return (NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk) != 0;
-}
-
-static UsbSpeed_t nRFUsbMaxSpeed(void)
-{
-	return USB_SPEED_FULL;
-}
-
-static size_t nRFUsbSerial(char *pBuff, size_t BuffLen)
-{
-	static const char hex[] = "0123456789ABCDEF";
-	size_t cnt = 0;
-
-	if (pBuff == nullptr || BuffLen == 0)
-	{
-		return 0;
-	}
-
-	// nrf_ficr_deviceid_get and not FICR->DEVICEID, because the nRF52 keeps
-	// the id flat and the nRF54 keeps it under INFO, and the HAL already knows
-	// which.
-	for (int i = 0; i < 2; i++)
-	{
-		uint32_t id = nrf_ficr_deviceid_get(NRF_FICR, (uint32_t)i);
-
-		for (int n = 7; n >= 0; n--)
-		{
-			if (cnt + 1 >= BuffLen)
-			{
-				pBuff[cnt] = '\0';
-				return cnt;
-			}
-
-			pBuff[cnt++] = hex[(id >> (n * 4)) & 0x0F];
-		}
-	}
-
-	pBuff[cnt] = '\0';
-
-	return cnt;
-}
-
-static bool nRFUsbPowerInit(const UsbCtrlrCfg_t *pCfg)
-{
-	if (pCfg == nullptr)
-	{
-		return false;
-	}
-
-	s_UsbdIntPrio = pCfg->IntPrio;
-	s_UsbdLowPowerSuspend = pCfg->bLowPowerSuspend;
-
-
-	s_UsbdInitialized = true;
-	s_UsbdStarted = false;
-	s_UsbdVbusLast = nRFUsbVbusDetected();
-
-	return true;
-}
-
-static bool nRFUsbPowerStart(void)
-{
-	if (s_UsbdInitialized == false)
-	{
-		return false;
-	}
-
-	if (s_UsbdStarted)
-	{
-		return true;
-	}
-
-	if (nRFUsbVbusDetected() == false)
-	{
-		// No cable. Not a failure: the poll in UsbdProcess reports the attach
-		// and the caller comes back.
-		return false;
-	}
-
-	if (UsbdXtalRequest() == false)
-	{
-		return false;
-	}
-
-	s_UsbdXtalHeld = true;
-
-	NVIC_SetPriority(USBD_IRQn, s_UsbdIntPrio);
-
-	if (UsbdStartCtrlr() == false)
-	{
-		UsbdXtalRelease();
-		s_UsbdXtalHeld = false;
-		return false;
-	}
-
-	s_UsbdStarted = true;
-	s_UsbdVbusLast = true;
-
-	return true;
-}
-
-static void nRFUsbPowerStop(void)
-{
-	if (s_UsbdStarted == false)
-	{
-		return;
-	}
-
-	// Stop the controller interrupt before powering down the wrapper.
-	NVIC_DisableIRQ(USBD_IRQn);
-
-	UsbdStopCtrlr();
-
-	if (s_UsbdXtalHeld)
-	{
-		UsbdXtalRelease();
-		s_UsbdXtalHeld = false;
-	}
-
-	s_UsbdStarted = false;
-}
-
-/**
- * Called from the application main loop through UsbCtrlrProcess. It must cost
- * nothing when there is nothing to do: a pending low power exit to retire, or
- * a VBUS edge. Neither waits.
- */
-static void nRFUsbPowerProcess(void)
-{
-	if (s_UsbdInitialized == false)
-	{
-		return;
-	}
-
-	// POWER may be read while USBD EasyDMA is active, but most USBD registers
-	// may not. Leave the low-power state untouched until the DMA END event.
-	const bool dmaActive = nRFUsbdDmaActive();
-	if (!dmaActive && s_LowPowerExitPending)
-	{
-		UsbdLowPowerExitFinish();
-	}
-	else if (!dmaActive && s_UsbdStarted &&
-			 s_UsbdLowPowerSuspend == false &&
-			 NRF_USBD->LOWPOWER != USBD_LOWPOWER_LOWPOWER_ForceNormal)
-	{
-		UsbdLowPowerExit();
-	}
-
-	const bool vbus = nRFUsbVbusDetected();
-
-	if (vbus == s_UsbdVbusLast)
-	{
-		return;
-	}
-
-	// The port reports bus power state through UsbCtrlrVbusDetected(). Turning
-	// an edge into USB_EVT_ATTACHED or USB_EVT_DETACHED for the application is
-	// the generic layer's job, so there is no cable callback here. The edge is
-	// still tracked because the low power path above needs it.
-	s_UsbdVbusLast = vbus;
-}
-
 //
 // Endpoint and DMA registers. Exactly one of these compiles.
 //
@@ -743,37 +561,6 @@ uint8_t nRFUsbdDir(uint8_t EpAddr)
 {
 	return USB_ENDPADDR_IS_IN(EpAddr) ? 1U : 0U;
 }
-
-static inline __attribute__((always_inline))
-bool nRFUsbdDataIn(uint8_t EpAddr)
-{
-	return USB_ENDPADDR_IS_IN(EpAddr) && USB_ENDPADDR_NUM(EpAddr) != 0U;
-}
-
-static inline __attribute__((always_inline))
-nRFUsbdXfer_t *nRFUsbdGetXfer(uint8_t EpAddr)
-{
-	return &s_Ctrlr.Xfer[USB_ENDPADDR_NUM(EpAddr)][nRFUsbdDir(EpAddr)];
-}
-
-static inline __attribute__((always_inline))
-uint16_t nRFUsbdMps(uint8_t EpAddr)
-{
-	return USB_ENDPADDR_NUM(EpAddr) == 0U ?
-		NRFX_USBD_MAX_PACKET_SIZE : nRFUsbGetEpReg(EpAddr)->Mps;
-}
-
-/**
- * Lowest set bit position. Walking a mask this way visits only the bits that
- * are set, in ascending order, instead of testing every position. CLZ is one
- * cycle on Cortex-M, and this is on the interrupt entry path.
- */
-static inline __attribute__((always_inline))
-uint32_t nRFUsbdLowestBit(uint32_t Mask)
-{
-	return 31U - (uint32_t)__CLZ(Mask & (uint32_t)(0U - Mask));
-}
-
 
 static inline __attribute__((always_inline))
 volatile uint32_t *nRFUsbdDmaEndEvent(uint8_t EpNum, bool In)
@@ -961,7 +748,7 @@ static void nRFUsbdNoDmaTask(volatile uint32_t *pTask)
 static bool nRFUsbdStartIsoNow(void)
 {
 	const uint8_t inAddr = USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO);
-	nRFUsbdXfer_t *pIn = nRFUsbdGetXfer(inAddr);
+	nRFUsbdXfer_t *pIn = &s_Ctrlr.Iso[1];
 	const uint_fast8_t isoOpen = atomic_load(&s_IsoOpen);
 	if ((isoOpen & NRFX_USBD_ISO_IN_OPEN) != 0U &&
 		atomic_load(&s_IsoInReady) && pIn->pBuffer != NULL)
@@ -975,7 +762,7 @@ static bool nRFUsbdStartIsoNow(void)
 		return true;
 	}
 
-	nRFUsbdXfer_t *pOut = nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO);
+	nRFUsbdXfer_t *pOut = &s_Ctrlr.Iso[0];
 	if ((isoOpen & NRFX_USBD_ISO_OUT_OPEN) != 0U &&
 		atomic_load(&s_IsoOutReady) && pOut->pBuffer != NULL)
 	{
@@ -1067,7 +854,8 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 }
 
 
-static inline __attribute__((always_inline)) void nRFUsbdResumeQueuedDmaLocked(void)
+// Keep the DMA/suspend gate shared by submission and completion paths.
+static __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 {
 	if (nRFUsbdDmaActive() ||
 		atomic_load(&s_HostResumePending) ||
@@ -1101,12 +889,7 @@ static void nRFUsbdQueXferDir(uint8_t EpNum, bool In, uint16_t Len)
 	pQue->Dir = In ? 1U : 0U;
 	pQue->Len = Len;
 
-	if (!nRFUsbdDmaActive() &&
-		!atomic_load(&s_HostResumePending) &&
-		(!atomic_load(&s_BusSuspended) || atomic_load(&s_SuspendPending)))
-	{
-		nRFUsbdStartQueuedDma();
-	}
+	nRFUsbdResumeQueuedDmaLocked();
 
 	EnableInterrupt(state);
 }
@@ -1142,30 +925,28 @@ static void nRFUsbdQueRemoveEp(uint8_t EpNum)
 	EnableInterrupt(state);
 }
 
-static void nRFUsbdQueueOut(uint8_t EpNum)
+static void nRFUsbdQueueEp0Out(void)
 {
-	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][0];
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Ep0[0];
 
-	nRFUsbdQueXferDir(EpNum, false,
+	nRFUsbdQueXferDir(0U, false,
 				 (uint16_t)(pXfer->TotalLen - pXfer->ActualLen));
 }
 
-static void nRFUsbdQueueIn(uint8_t EpNum)
+static void nRFUsbdQueueEp0In(void)
 {
-	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[EpNum][1];
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Ep0[1];
 	const uint16_t remaining =
 		(uint16_t)(pXfer->TotalLen - pXfer->ActualLen);
-	const uint16_t mps =
-		nRFUsbdMps((uint8_t)(EpNum | USB_ENDPADDR_DIR_IN));
+	const uint16_t mps = NRFX_USBD_MAX_PACKET_SIZE;
 	const uint16_t length = remaining < mps ? remaining : mps;
 
-	nRFUsbdQueXferDir(EpNum, true, length);
+	nRFUsbdQueXferDir(0U, true, length);
 }
 
 static void nRFUsbdResetState(void)
 {
-	memset(s_Ctrlr.Xfer, 0, sizeof(s_Ctrlr.Xfer));
-	s_Ctrlr.SofEnabled = false;
+	memset(&s_Ctrlr, 0, sizeof(s_Ctrlr));
 
 	CFifoFlush(s_hQue);
 	CFifoFlush(s_hEp0Que);
@@ -1191,7 +972,7 @@ static void nRFUsbdAbortEp0(void)
 
 	for (uint8_t dir = 0; dir < 2U; dir++)
 	{
-		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[0][dir];
+		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Ep0[dir];
 		pXfer->pBuffer = NULL;
 		pXfer->TotalLen = 0;
 		pXfer->ActualLen = 0;
@@ -1356,270 +1137,6 @@ static void nRFUsbdWakeAllowed(void)
 	nRFUsbdTryRemoteWake();
 }
 
-static bool nRFUsbRegInit(void)
-{
-	s_hQue = CFifoInit(s_QueMem, sizeof(s_QueMem), sizeof(nRFUsbdQue_t),
-					   false);
-	s_hEp0Que = CFifoInit(s_Ep0QueMem, sizeof(s_Ep0QueMem),
-						  sizeof(nRFEPPkt_t), true);
-	if (s_hQue == NULL || s_hEp0Que == NULL)
-	{
-		return false;
-	}
-
-	nRFUsbdResetState();
-	return true;
-}
-
-static void nRFUsbRegStop(void)
-{
-	nRFUsbdDmaWait();
-	nRFUsbdResetState();
-}
-
-static void nRFUsbRegIntEnable(void)
-{
-	NVIC_EnableIRQ(USBD_IRQn);
-}
-
-static void nRFUsbRegIntDisable(void)
-{
-	NVIC_DisableIRQ(USBD_IRQn);
-}
-
-static void nRFUsbRegConnect(void)
-{
-	NRF_USBD->USBPULLUP = 1;
-}
-
-static void nRFUsbRegDisconnect(void)
-{
-	NRF_USBD->USBPULLUP = 0;
-}
-
-static void nRFUsbRegRemoteWakeup(void)
-{
-	if (!atomic_load(&s_BusSuspended) || atomic_load(&s_HostResumePending))
-	{
-		return;
-	}
-
-	atomic_store(&s_SuspendPending, false);
-	atomic_store(&s_RemoteWakePending, true);
-
-	if (NRF_USBD->LOWPOWER !=
-		(USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos))
-	{
-		NRF_USBD->LOWPOWER =
-			USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos;
-		__ISB();
-		__DSB();
-	}
-
-	nRFUsbdTryRemoteWake();
-}
-
-static void nRFUsbRegSofEnable(bool Enable)
-{
-	s_Ctrlr.SofEnabled = Enable;
-
-	if (Enable)
-	{
-		NRF_USBD->EVENTS_SOF = 0;
-		NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
-	}
-	else
-	{
-		if (atomic_load(&s_IsoOpen) == 0U &&
-			!atomic_load(&s_BusSuspended))
-		{
-			NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
-		}
-	}
-}
-
-static void nRFUsbRegSetAddress(uint8_t Address)
-{
-	(void)Address;
-}
-
-static bool nRFUsbRegEpOpen(const UsbEndPointDesc_t *pDesc)
-{
-	if (pDesc == NULL)
-	{
-		return false;
-	}
-
-	const uint8_t epAddr = pDesc->bEndpointAddress;
-	const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
-	const uint8_t type = pDesc->bmAttributes & 0x03U;
-
-	const bool iso = epNum == NRFX_USBD_ISO_EP_NO;
-	if (epNum == 0 || epNum >= NRFX_USBD_EP_COUNT ||
-		(iso ? type != USB_ENDPATT_TRANS_ISO :
-		 (type != USB_ENDPATT_TRANS_BULK && type != USB_ENDPATT_TRANS_INT)) ||
-		pDesc->wMaxPacketSize == 0 ||
-		pDesc->wMaxPacketSize > (iso ? NRFX_USBD_ISO_MAX_PACKET_SIZE :
-			NRFX_USBD_MAX_PACKET_SIZE))
-	{
-		return false;
-	}
-
-	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(epAddr);
-	nRFUsbGetEpReg(epAddr)->Mps = pDesc->wMaxPacketSize;
-
-	if (iso)
-	{
-		if (!AppEvtHandlerIdleRegister(nRFUsbdRetryIsoComplete))
-			return false;
-
-		// Both directions share the 1024-byte ISO buffer. HalfIN gives each
-		// direction 512 bytes, which is more than the Bluetooth SCO maximum.
-		NRF_USBD->ISOSPLIT =
-			USBD_ISOSPLIT_SPLIT_HalfIN << USBD_ISOSPLIT_SPLIT_Pos;
-		NRF_USBD->ISOINCONFIG =
-			USBD_ISOINCONFIG_RESPONSE_ZeroData <<
-			USBD_ISOINCONFIG_RESPONSE_Pos;
-		if (USB_ENDPADDR_IS_IN(epAddr))
-		{
-			NRF_USBD->EVENTS_ENDISOIN = 0;
-			NRF_USBD->INTENSET = USBD_INTEN_ENDISOIN_Msk;
-			NRF_USBD->EPINEN |= (1UL << NRFX_USBD_ISO_EP_NO);
-			atomic_fetch_or(&s_IsoOpen, NRFX_USBD_ISO_IN_OPEN);
-			atomic_store(&s_IsoInReady, false);
-		}
-		else
-		{
-			NRF_USBD->EVENTS_ENDISOOUT = 0;
-			NRF_USBD->INTENSET = USBD_INTEN_ENDISOOUT_Msk;
-			NRF_USBD->EPOUTEN |= (1UL << NRFX_USBD_ISO_EP_NO);
-			atomic_fetch_or(&s_IsoOpen, NRFX_USBD_ISO_OUT_OPEN);
-			atomic_store(&s_IsoOutReady, false);
-		}
-		NRF_USBD->EVENTS_SOF = 0;
-		NRF_USBD->INTENSET = USBD_INTEN_SOF_Msk;
-		__ISB();
-		__DSB();
-		return true;
-	}
-
-	if (USB_ENDPADDR_IS_IN(epAddr))
-	{
-		NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
-		// Data IN completes its short DMA copy in the controller interrupt.
-		// EPDATA later reports when the host consumed the copied packet.
-		NRF_USBD->EPINEN |= (1UL << epNum);
-	}
-	else
-	{
-		NRF_USBD->EVENTS_ENDEPOUT[epNum] = 0;
-		NRF_USBD->INTENSET = (1UL << (USBD_INTEN_ENDEPOUT0_Pos + epNum));
-		NRF_USBD->EPOUTEN |= (1UL << epNum);
-		NRF_USBD->SIZE.EPOUT[epNum] = 0;
-	}
-
-	NRF_USBD->EPSTALL =
-		(USBD_EPSTALL_STALL_UnStall << USBD_EPSTALL_STALL_Pos) | epAddr;
-	NRF_USBD->DTOGGLE =
-		(USBD_DTOGGLE_VALUE_Data0 << USBD_DTOGGLE_VALUE_Pos) | epAddr;
-	__ISB();
-	__DSB();
-	return true;
-}
-
-static void nRFUsbRegEpClose(uint8_t EpAddr)
-{
-	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	if (epNum == 0 || epNum >= NRFX_USBD_EP_COUNT)
-	{
-		return;
-	}
-
-	// Exclude SOF submission while retiring and closing an ISO direction.
-	const uint32_t isoState = epNum == NRFX_USBD_ISO_EP_NO ?
-		DisableInterrupt() : 0U;
-	if (nRFUsbdDmaActive())
-	{
-		nRFUsbdDmaWait();
-	}
-
-	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
-	if (epNum == NRFX_USBD_ISO_EP_NO)
-	{
-		const uint8_t dir = nRFUsbdDir(EpAddr);
-		const uint_fast8_t bit = 1U << dir;
-		++s_IsoGeneration[dir];
-		atomic_fetch_and(&s_IsoBusy, (uint_fast8_t)~bit);
-		atomic_fetch_and(&s_IsoComplete, (uint_fast8_t)~bit);
-		pXfer->pBuffer = NULL;
-		pXfer->TotalLen = 0U;
-		pXfer->ActualLen = 0U;
-		if (USB_ENDPADDR_IS_IN(EpAddr))
-		{
-			atomic_fetch_and(&s_IsoOpen,
-				(uint_fast8_t)~NRFX_USBD_ISO_IN_OPEN);
-			atomic_store(&s_IsoInReady, false);
-			NRF_USBD->INTENCLR = USBD_INTEN_ENDISOIN_Msk;
-			NRF_USBD->EPINEN &= ~(1UL << NRFX_USBD_ISO_EP_NO);
-			NRF_USBD->EVENTS_ENDISOIN = 0;
-		}
-		else
-		{
-			atomic_fetch_and(&s_IsoOpen,
-				(uint_fast8_t)~NRFX_USBD_ISO_OUT_OPEN);
-			atomic_store(&s_IsoOutReady, false);
-			NRF_USBD->INTENCLR = USBD_INTEN_ENDISOOUT_Msk;
-			NRF_USBD->EPOUTEN &= ~(1UL << NRFX_USBD_ISO_EP_NO);
-			NRF_USBD->EVENTS_ENDISOOUT = 0;
-		}
-		if (!s_Ctrlr.SofEnabled && atomic_load(&s_IsoOpen) == 0U &&
-			!atomic_load(&s_BusSuspended))
-		{
-			NRF_USBD->INTENCLR = USBD_INTEN_SOF_Msk;
-		}
-		nRFUsbGetEpReg(EpAddr)->Mps = 0U;
-		__DSB();
-		EnableInterrupt(isoState);
-		return;
-	}
-	else if (USB_ENDPADDR_IS_IN(EpAddr))
-	{
-		NRF_USBD->INTENCLR = (1UL << (USBD_INTEN_ENDEPIN0_Pos + epNum));
-		NRF_USBD->EPINEN &= ~(1UL << epNum);
-		NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
-		NRF_USBD->EPDATASTATUS = (1UL << epNum);
-	}
-	else
-	{
-		NRF_USBD->INTENCLR = (1UL << (USBD_INTEN_ENDEPOUT0_Pos + epNum));
-		NRF_USBD->EPOUTEN &= ~(1UL << epNum);
-		NRF_USBD->EVENTS_ENDEPOUT[epNum] = 0;
-		NRF_USBD->EPDATASTATUS = (1UL << (16U + epNum));
-		NRF_USBD->SIZE.EPOUT[epNum] = 0;
-	}
-
-	pXfer->ActualLen = 0;
-	pXfer->TotalLen = 0;
-	pXfer->pBuffer = NULL;
-	nRFUsbGetEpReg(EpAddr)->Mps = 0U;
-	__ISB();
-	__DSB();
-}
-
-static void nRFUsbRegEpCloseAll(void)
-{
-	nRFUsbdDmaWait();
-
-	for (uint8_t epNum = 1; epNum < NRFX_USBD_EP_COUNT; epNum++)
-	{
-		nRFUsbRegEpClose(epNum);
-		nRFUsbRegEpClose((uint8_t)(epNum | USB_ENDPADDR_DIR_IN));
-	}
-
-	NRF_USBD->EPOUTEN = 1UL;
-	NRF_USBD->EPINEN = 1UL;
-}
-
 static bool nRFUsbRegIsoXfer(uint8_t EpAddr, uint16_t Length)
 {
 	const uint8_t dir = nRFUsbdDir(EpAddr);
@@ -1635,7 +1152,7 @@ static bool nRFUsbRegIsoXfer(uint8_t EpAddr, uint16_t Length)
 		return false;
 	}
 
-	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Iso[dir];
 	pXfer->pBuffer = pReg->pBuffer;
 	pXfer->TotalLen = Length;
 	pXfer->ActualLen = 0U;
@@ -1643,120 +1160,6 @@ static bool nRFUsbRegIsoXfer(uint8_t EpAddr, uint16_t Length)
 	nRFUsbdServiceIso();
 	EnableInterrupt(state);
 	return true;
-}
-
-static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes)
-{
-	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	const uint32_t state = DisableInterrupt();
-	nRFUsbdXfer_t *pXfer = nRFUsbdGetXfer(EpAddr);
-
-	pXfer->pBuffer = epNum == 0U ? pBuffer : NULL;
-	pXfer->TotalLen = TotalBytes;
-	pXfer->ActualLen = 0U;
-
-	const bool controlStatus =
-		epNum == 0U && TotalBytes == 0U &&
-		USB_ENDPADDR_IS_IN(EpAddr) !=
-		((NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) != 0U);
-
-	if (controlStatus)
-	{
-		if ((NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U ||
-			(NRF_USBD->SHORTS &
-			 USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk) == 0U)
-		{
-			nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0STATUS);
-		}
-		EnableInterrupt(state);
-		nRFUsbdEmitXfer(EpAddr, 0U, USB_CTRLR_XFER_SUCCESS);
-		return true;
-	}
-	else if (USB_ENDPADDR_IS_IN(EpAddr))
-	{
-		nRFUsbdQueueIn(epNum);
-	}
-	else if (epNum == 0U)
-	{
-		nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
-	}
-	else
-	{
-		nRFUsbdQueueOut(epNum);
-	}
-
-	EnableInterrupt(state);
-	return true;
-}
-
-static inline __attribute__((always_inline))
-bool nRFUsbRegDataEpXferDir(uint8_t EpNum, bool In, uint16_t Length)
-{
-	if (EpNum == NRFX_USBD_ISO_EP_NO)
-	{
-		const uint8_t epAddr = In ? USB_ENDPADDR_DIRIN(EpNum) : EpNum;
-		return nRFUsbRegIsoXfer(epAddr, Length);
-	}
-
-	nRFUsbdQueXferDir(EpNum, In, Length);
-	return true;
-}
-
-static inline __attribute__((always_inline))
-bool nRFUsbRegDataEpXfer(uint8_t EpAddr, uint16_t Length)
-{
-	return nRFUsbRegDataEpXferDir(USB_ENDPADDR_NUM(EpAddr),
-		USB_ENDPADDR_IS_IN(EpAddr), Length);
-}
-
-static uint16_t nRFUsbRegEpMps(uint8_t EpAddr)
-{
-	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	return epNum < NRFX_USBD_EP_COUNT ? nRFUsbdMps(EpAddr) : 0U;
-}
-
-static void nRFUsbRegEpStall(uint8_t EpAddr)
-{
-	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	if (epNum >= NRFX_USBD_EP_COUNT || epNum == NRFX_USBD_ISO_EP_NO)
-	{
-		return;
-	}
-
-	if (epNum == 0)
-	{
-		NRF_USBD->TASKS_EP0STALL = 1;
-	}
-	else
-	{
-		NRF_USBD->EPSTALL =
-			(USBD_EPSTALL_STALL_Stall << USBD_EPSTALL_STALL_Pos) | EpAddr;
-	}
-	__ISB();
-	__DSB();
-}
-
-static void nRFUsbRegEpClearStall(uint8_t EpAddr)
-{
-	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	if (epNum == 0 || epNum >= NRFX_USBD_EP_COUNT ||
-		epNum == NRFX_USBD_ISO_EP_NO)
-	{
-		return;
-	}
-
-	NRF_USBD->DTOGGLE = EpAddr;
-	NRF_USBD->DTOGGLE =
-		(USBD_DTOGGLE_VALUE_Data0 << USBD_DTOGGLE_VALUE_Pos) | EpAddr;
-	NRF_USBD->EPSTALL =
-		(USBD_EPSTALL_STALL_UnStall << USBD_EPSTALL_STALL_Pos) | EpAddr;
-
-	if (!USB_ENDPADDR_IS_IN(EpAddr))
-	{
-		NRF_USBD->SIZE.EPOUT[epNum] = 0;
-	}
-	__ISB();
-	__DSB();
 }
 
 static void nRFUsbdBusReset(void)
@@ -1800,7 +1203,7 @@ static void nRFUsbdBusReset(void)
 
 static void nRFUsbdHandleEp0OutEnd(uint16_t TransferLen)
 {
-	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[0][0];
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Ep0[0];
 
 	if (pXfer->pBuffer != NULL)
 	{
@@ -1825,10 +1228,10 @@ static void nRFUsbdHandleEp0OutEnd(uint16_t TransferLen)
 
 static void nRFUsbdHandleEp0OutData(void)
 {
-	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Xfer[0][0];
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Ep0[0];
 	if (pXfer->ActualLen < pXfer->TotalLen || pXfer->TotalLen == 0U)
 	{
-		nRFUsbdQueueOut(0U);
+		nRFUsbdQueueEp0Out();
 	}
 }
 
@@ -1848,7 +1251,7 @@ static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 
 	const uint8_t epAddr = dir != 0U ?
 		USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO) : NRFX_USBD_ISO_EP_NO;
-	const uint16_t amount = nRFUsbdGetXfer(epAddr)->ActualLen;
+	const uint16_t amount = s_Ctrlr.Iso[dir].ActualLen;
 	// IN DMA has copied the TX payload into controller memory. Release it
 	// before calling the handler so that handler may submit the next frame.
 	if (dir != 0U)
@@ -1892,7 +1295,7 @@ static bool nRFUsbdFinishIsoDma(bool In)
 		return false;
 
 	const uint8_t dir = In ? 1U : 0U;
-	s_Ctrlr.Xfer[NRFX_USBD_ISO_EP_NO][dir].ActualLen = (uint16_t)(In ?
+	s_Ctrlr.Iso[dir].ActualLen = (uint16_t)(In ?
 		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
 	*pEnd = 0U;
 	NRF_USBD->EPSTATUS = In ? (1UL << 8U) : (1UL << 24U);
@@ -2036,7 +1439,7 @@ static void nRFUsbdHandleSof(void)
 		const uint32_t size = NRF_USBD->SIZE.ISOOUT;
 		// ISO OUT is a current-frame slot, not a backlog. Keep the DMA
 		// buffer stable until its deferred completion callback returns.
-		nRFUsbdXfer_t *pOut = nRFUsbdGetXfer(NRFX_USBD_ISO_EP_NO);
+		nRFUsbdXfer_t *pOut = &s_Ctrlr.Iso[0];
 		const bool waiting = pOut->pBuffer != NULL;
 		if ((atomic_load(&s_IsoBusy) & NRFX_USBD_ISO_OUT_OPEN) == 0U || waiting)
 		{
@@ -2176,7 +1579,7 @@ extern "C" void USBD_IRQHandler(void)
 				{
 					nRFUsbdDmaUnlock();
 					nRFUsbdQueueEp0Complete(false,
-						s_Ctrlr.Xfer[0][1].TotalLen);
+						s_Ctrlr.Ep0[1].TotalLen);
 				}
 			}
 			break;
@@ -2366,189 +1769,483 @@ extern "C" void USBD_IRQHandler(void)
 
 }
 
-/**
- * USBD has no second register stage. The power stage leaves the peripheral
- * enabled and endpoint zero is prepared when the bus reset arrives, so there
- * is nothing to do between the two. It was a weak default in usbd_ctrlr.cpp
- * before, which hid the fact that this backend never implemented it.
- */
-static bool nRFUsbRegStart(void)
-{
-	return true;
-}
-
-/** USBD is full speed only, USB_HIGHSPEED_CAPABLE(0) is 0 for these parts. */
-static bool nRFUsbRegHighSpeed(void)
-{
-	return false;
-}
-
-
-
-//
-// Entry points declared in usb.h. Each validates DevNo and then runs the
-// power stage and the register stage in the order the hardware needs.
-//
+// Public controller API.
 
 bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 {
-	if (!nRFUsbValidDevNo(DevNo) || pCfg == NULL)
+	if (DevNo != 0 || pCfg == NULL)
 	{
 		return false;
 	}
 
 	memset(s_EpReg, 0, sizeof(s_EpReg));
 
-	// Power first. The register stage must not touch a peripheral that has no
-	// clock, which is why nRFUsbRegInit only sets software state.
-	if (!nRFUsbPowerInit(pCfg))
+	s_UsbdIntPrio = pCfg->IntPrio;
+	s_UsbdLowPowerSuspend = pCfg->bLowPowerSuspend;
+
+
+	s_UsbdInitialized = true;
+	s_UsbdStarted = false;
+
+	s_hQue = CFifoInit(s_QueMem, sizeof(s_QueMem), sizeof(nRFUsbdQue_t),
+					   false);
+	s_hEp0Que = CFifoInit(s_Ep0QueMem, sizeof(s_Ep0QueMem),
+						  sizeof(nRFEPPkt_t), true);
+	if (s_hQue == NULL || s_hEp0Que == NULL)
 	{
 		return false;
 	}
 
-	return nRFUsbRegInit();
+	nRFUsbdResetState();
+	return true;
 }
 
 bool UsbCtrlrStart(int DevNo)
 {
-	if (!nRFUsbValidDevNo(DevNo))
+	if (DevNo != 0)
 	{
 		return false;
 	}
 
-	// One call where usbd.h and usbd_ctrlr.h used to need two. Power, clock
-	// and PHY come up, then endpoint zero is prepared.
-	if (!nRFUsbPowerStart())
+	if (s_UsbdInitialized == false)
 	{
 		return false;
 	}
 
-	if (!nRFUsbRegStart())
+	if (s_UsbdStarted)
 	{
-		nRFUsbPowerStop();
+		return true;
+	}
+
+	if (UsbCtrlrVbusDetected(DevNo) == false)
+	{
+		// No cable. Not a failure: the poll in UsbdProcess reports the attach
+		// and the caller comes back.
 		return false;
 	}
+
+	if (UsbdXtalRequest() == false)
+	{
+		return false;
+	}
+
+	s_UsbdXtalHeld = true;
+
+	NVIC_SetPriority(USBD_IRQn, s_UsbdIntPrio);
+
+	if (UsbdStartCtrlr() == false)
+	{
+		UsbdXtalRelease();
+		s_UsbdXtalHeld = false;
+		return false;
+	}
+
+	s_UsbdStarted = true;
 
 	return true;
 }
 
 void UsbCtrlrStop(int DevNo)
 {
-	if (!nRFUsbValidDevNo(DevNo))
+	if (DevNo != 0)
 	{
 		return;
 	}
 
-	nRFUsbRegStop();
-	nRFUsbPowerStop();
+	nRFUsbdDmaWait();
+	nRFUsbdResetState();
+
+	if (s_UsbdStarted == false)
+	{
+		return;
+	}
+
+	// Stop the controller interrupt before powering down the wrapper.
+	NVIC_DisableIRQ(USBD_IRQn);
+
+	NRF_USBD->INTEN = 0;
+	NRF_USBD->USBPULLUP = 0;
+	NRF_USBD->ENABLE = 0;
+	__ISB();
+	__DSB();
+
+	if (s_UsbdXtalHeld)
+	{
+		UsbdXtalRelease();
+		s_UsbdXtalHeld = false;
+	}
+
+	s_UsbdStarted = false;
 }
 
 void UsbCtrlrProcess(int DevNo)
 {
-	if (nRFUsbValidDevNo(DevNo))
+	if (DevNo != 0)
 	{
-		nRFUsbPowerProcess();
-		AppEvtHandlerExec();
+		return;
 	}
+
+	if (s_UsbdInitialized)
+	{
+		// POWER may be read while USBD EasyDMA is active, but most USBD registers
+		// may not. Leave the low-power state untouched until the DMA END event.
+		const bool dmaActive = nRFUsbdDmaActive();
+		if (!dmaActive && s_LowPowerExitPending)
+		{
+			UsbdLowPowerExitFinish();
+		}
+		else if (!dmaActive && s_UsbdStarted &&
+				 s_UsbdLowPowerSuspend == false &&
+				 NRF_USBD->LOWPOWER != USBD_LOWPOWER_LOWPOWER_ForceNormal)
+		{
+			UsbdLowPowerExit();
+		}
+	}
+	AppEvtHandlerExec();
 }
 
 bool UsbCtrlrVbusDetected(int DevNo)
 {
-	return nRFUsbValidDevNo(DevNo) && nRFUsbVbusDetected();
+	return DevNo == 0 &&
+		(NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk) != 0;
 }
 
 bool UsbCtrlrHighSpeed(int DevNo)
 {
-	return nRFUsbValidDevNo(DevNo) && nRFUsbRegHighSpeed();
+	(void)DevNo;
+	return false;
 }
 
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 {
-	return nRFUsbValidDevNo(DevNo) ? nRFUsbSerial(pBuff, BuffLen) : 0;
+	if (DevNo != 0)
+	{
+		return 0;
+	}
+
+	static const char hex[] = "0123456789ABCDEF";
+	size_t cnt = 0;
+
+	if (pBuff == nullptr || BuffLen == 0)
+	{
+		return 0;
+	}
+
+	// nrf_ficr_deviceid_get and not FICR->DEVICEID, because the nRF52 keeps
+	// the id flat and the nRF54 keeps it under INFO, and the HAL already knows
+	// which.
+	for (int i = 0; i < 2; i++)
+	{
+		uint32_t id = nrf_ficr_deviceid_get(NRF_FICR, (uint32_t)i);
+
+		for (int n = 7; n >= 0; n--)
+		{
+			if (cnt + 1 >= BuffLen)
+			{
+				pBuff[cnt] = '\0';
+				return cnt;
+			}
+
+			pBuff[cnt++] = hex[(id >> (n * 4)) & 0x0F];
+		}
+	}
+
+	pBuff[cnt] = '\0';
+
+	return cnt;
 }
 
 void UsbCtrlrIntEnable(int DevNo)
 {
-	if (nRFUsbValidDevNo(DevNo))
+	if (DevNo != 0)
 	{
-		nRFUsbRegIntEnable();
+		return;
 	}
+
+	NVIC_EnableIRQ(USBD_IRQn);
 }
 
 void UsbCtrlrIntDisable(int DevNo)
 {
-	if (nRFUsbValidDevNo(DevNo))
+	if (DevNo != 0)
 	{
-		nRFUsbRegIntDisable();
+		return;
 	}
+
+	NVIC_DisableIRQ(USBD_IRQn);
 }
 
 void UsbCtrlrConnect(int DevNo)
 {
-	if (nRFUsbValidDevNo(DevNo))
+	if (DevNo != 0)
 	{
-		nRFUsbRegConnect();
+		return;
 	}
+
+	NRF_USBD->USBPULLUP = 1;
 }
 
 void UsbCtrlrDisconnect(int DevNo)
 {
-	if (nRFUsbValidDevNo(DevNo))
+	if (DevNo != 0)
 	{
-		nRFUsbRegDisconnect();
+		return;
 	}
+
+	NRF_USBD->USBPULLUP = 0;
 }
 
 void UsbCtrlrRemoteWakeup(int DevNo)
 {
-	if (nRFUsbValidDevNo(DevNo))
+	if (DevNo != 0)
 	{
-		nRFUsbRegRemoteWakeup();
+		return;
 	}
+
+	if (!atomic_load(&s_BusSuspended) || atomic_load(&s_HostResumePending))
+	{
+		return;
+	}
+
+	atomic_store(&s_SuspendPending, false);
+	atomic_store(&s_RemoteWakePending, true);
+
+	if (NRF_USBD->LOWPOWER !=
+		(USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos))
+	{
+		NRF_USBD->LOWPOWER =
+			USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos;
+		__ISB();
+		__DSB();
+	}
+
+	nRFUsbdTryRemoteWake();
 }
 
 void UsbCtrlrSofEnable(int DevNo, bool Enable)
 {
-	if (nRFUsbValidDevNo(DevNo))
+	if (DevNo != 0)
 	{
-		nRFUsbRegSofEnable(Enable);
+		return;
+	}
+
+	s_Ctrlr.SofEnabled = Enable;
+
+	if (Enable)
+	{
+		NRF_USBD->EVENTS_SOF = 0;
+		NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
+	}
+	else
+	{
+		if (atomic_load(&s_IsoOpen) == 0U &&
+			!atomic_load(&s_BusSuspended))
+		{
+			NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
+		}
 	}
 }
 
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 {
-	if (nRFUsbValidDevNo(DevNo))
-	{
-		nRFUsbRegSetAddress(Address);
-	}
+	// USBD applies SET_ADDRESS in hardware.
+	(void)DevNo;
+	(void)Address;
 }
 
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 {
-	return nRFUsbValidDevNo(DevNo) && nRFUsbRegEpOpen(pDesc);
+	if (DevNo != 0)
+	{
+		return false;
+	}
+
+	if (pDesc == NULL)
+	{
+		return false;
+	}
+
+	const uint8_t epAddr = pDesc->bEndpointAddress;
+	const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
+	const uint8_t type = pDesc->bmAttributes & 0x03U;
+
+	const bool iso = epNum == NRFX_USBD_ISO_EP_NO;
+	if (epNum == 0 || epNum >= NRFX_USBD_EP_COUNT ||
+		(iso ? type != USB_ENDPATT_TRANS_ISO :
+		 (type != USB_ENDPATT_TRANS_BULK && type != USB_ENDPATT_TRANS_INT)) ||
+		pDesc->wMaxPacketSize == 0 ||
+		pDesc->wMaxPacketSize > (iso ? NRFX_USBD_ISO_MAX_PACKET_SIZE :
+			NRFX_USBD_MAX_PACKET_SIZE))
+	{
+		return false;
+	}
+
+	nRFUsbGetEpReg(epAddr)->Mps = pDesc->wMaxPacketSize;
+
+	if (iso)
+	{
+		if (!AppEvtHandlerIdleRegister(nRFUsbdRetryIsoComplete))
+			return false;
+
+		// Both directions share the 1024-byte ISO buffer. HalfIN gives each
+		// direction 512 bytes, which is more than the Bluetooth SCO maximum.
+		NRF_USBD->ISOSPLIT =
+			USBD_ISOSPLIT_SPLIT_HalfIN << USBD_ISOSPLIT_SPLIT_Pos;
+		NRF_USBD->ISOINCONFIG =
+			USBD_ISOINCONFIG_RESPONSE_ZeroData <<
+			USBD_ISOINCONFIG_RESPONSE_Pos;
+		if (USB_ENDPADDR_IS_IN(epAddr))
+		{
+			NRF_USBD->EVENTS_ENDISOIN = 0;
+			NRF_USBD->INTENSET = USBD_INTEN_ENDISOIN_Msk;
+			NRF_USBD->EPINEN |= (1UL << NRFX_USBD_ISO_EP_NO);
+			atomic_fetch_or(&s_IsoOpen, NRFX_USBD_ISO_IN_OPEN);
+			atomic_store(&s_IsoInReady, false);
+		}
+		else
+		{
+			NRF_USBD->EVENTS_ENDISOOUT = 0;
+			NRF_USBD->INTENSET = USBD_INTEN_ENDISOOUT_Msk;
+			NRF_USBD->EPOUTEN |= (1UL << NRFX_USBD_ISO_EP_NO);
+			atomic_fetch_or(&s_IsoOpen, NRFX_USBD_ISO_OUT_OPEN);
+			atomic_store(&s_IsoOutReady, false);
+		}
+		NRF_USBD->EVENTS_SOF = 0;
+		NRF_USBD->INTENSET = USBD_INTEN_SOF_Msk;
+		__ISB();
+		__DSB();
+		return true;
+	}
+
+	if (USB_ENDPADDR_IS_IN(epAddr))
+	{
+		NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
+		// Data IN completes its short DMA copy in the controller interrupt.
+		// EPDATA later reports when the host consumed the copied packet.
+		NRF_USBD->EPINEN |= (1UL << epNum);
+	}
+	else
+	{
+		NRF_USBD->EVENTS_ENDEPOUT[epNum] = 0;
+		NRF_USBD->INTENSET = (1UL << (USBD_INTEN_ENDEPOUT0_Pos + epNum));
+		NRF_USBD->EPOUTEN |= (1UL << epNum);
+		NRF_USBD->SIZE.EPOUT[epNum] = 0;
+	}
+
+	NRF_USBD->EPSTALL =
+		(USBD_EPSTALL_STALL_UnStall << USBD_EPSTALL_STALL_Pos) | epAddr;
+	NRF_USBD->DTOGGLE =
+		(USBD_DTOGGLE_VALUE_Data0 << USBD_DTOGGLE_VALUE_Pos) | epAddr;
+	__ISB();
+	__DSB();
+	return true;
 }
 
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 {
-	if (nRFUsbValidDevNo(DevNo))
+	if (DevNo != 0)
 	{
-		nRFUsbRegEpClose(EpAddr);
+		return;
 	}
+
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
+	if (epNum == 0 || epNum >= NRFX_USBD_EP_COUNT)
+	{
+		return;
+	}
+
+	// Exclude SOF submission while retiring and closing an ISO direction.
+	const uint32_t isoState = epNum == NRFX_USBD_ISO_EP_NO ?
+		DisableInterrupt() : 0U;
+	if (nRFUsbdDmaActive())
+	{
+		nRFUsbdDmaWait();
+	}
+
+	if (epNum == NRFX_USBD_ISO_EP_NO)
+	{
+		const uint8_t dir = nRFUsbdDir(EpAddr);
+		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Iso[dir];
+		const uint_fast8_t bit = 1U << dir;
+		++s_IsoGeneration[dir];
+		atomic_fetch_and(&s_IsoBusy, (uint_fast8_t)~bit);
+		atomic_fetch_and(&s_IsoComplete, (uint_fast8_t)~bit);
+		pXfer->pBuffer = NULL;
+		pXfer->TotalLen = 0U;
+		pXfer->ActualLen = 0U;
+		if (USB_ENDPADDR_IS_IN(EpAddr))
+		{
+			atomic_fetch_and(&s_IsoOpen,
+				(uint_fast8_t)~NRFX_USBD_ISO_IN_OPEN);
+			atomic_store(&s_IsoInReady, false);
+			NRF_USBD->INTENCLR = USBD_INTEN_ENDISOIN_Msk;
+			NRF_USBD->EPINEN &= ~(1UL << NRFX_USBD_ISO_EP_NO);
+			NRF_USBD->EVENTS_ENDISOIN = 0;
+		}
+		else
+		{
+			atomic_fetch_and(&s_IsoOpen,
+				(uint_fast8_t)~NRFX_USBD_ISO_OUT_OPEN);
+			atomic_store(&s_IsoOutReady, false);
+			NRF_USBD->INTENCLR = USBD_INTEN_ENDISOOUT_Msk;
+			NRF_USBD->EPOUTEN &= ~(1UL << NRFX_USBD_ISO_EP_NO);
+			NRF_USBD->EVENTS_ENDISOOUT = 0;
+		}
+		if (!s_Ctrlr.SofEnabled && atomic_load(&s_IsoOpen) == 0U &&
+			!atomic_load(&s_BusSuspended))
+		{
+			NRF_USBD->INTENCLR = USBD_INTEN_SOF_Msk;
+		}
+		nRFUsbGetEpReg(EpAddr)->Mps = 0U;
+		__DSB();
+		EnableInterrupt(isoState);
+		return;
+	}
+	else if (USB_ENDPADDR_IS_IN(EpAddr))
+	{
+		NRF_USBD->INTENCLR = (1UL << (USBD_INTEN_ENDEPIN0_Pos + epNum));
+		NRF_USBD->EPINEN &= ~(1UL << epNum);
+		NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
+		NRF_USBD->EPDATASTATUS = (1UL << epNum);
+	}
+	else
+	{
+		NRF_USBD->INTENCLR = (1UL << (USBD_INTEN_ENDEPOUT0_Pos + epNum));
+		NRF_USBD->EPOUTEN &= ~(1UL << epNum);
+		NRF_USBD->EVENTS_ENDEPOUT[epNum] = 0;
+		NRF_USBD->EPDATASTATUS = (1UL << (16U + epNum));
+		NRF_USBD->SIZE.EPOUT[epNum] = 0;
+	}
+
+	nRFUsbGetEpReg(EpAddr)->Mps = 0U;
+	__ISB();
+	__DSB();
 }
 
 void UsbCtrlrEpCloseAll(int DevNo)
 {
-	if (nRFUsbValidDevNo(DevNo))
+	if (DevNo != 0)
 	{
-		nRFUsbRegEpCloseAll();
+		return;
 	}
+
+	nRFUsbdDmaWait();
+
+	for (uint8_t epNum = 1; epNum < NRFX_USBD_EP_COUNT; epNum++)
+	{
+		UsbCtrlrEpClose(DevNo, epNum);
+		UsbCtrlrEpClose(DevNo, (uint8_t)(epNum | USB_ENDPADDR_DIR_IN));
+	}
+
+	NRF_USBD->EPOUTEN = 1UL;
+	NRF_USBD->EPINEN = 1UL;
 }
 
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	if (!nRFUsbValidDevNo(DevNo) || epNum == 0U ||
+	if (DevNo != 0 || epNum == 0U ||
 		epNum >= NRF_USB_EP_COUNT ||
 		(EpAddr & ~(USB_ENDPADDR_DIR_MASK | USB_ENDPADDR_NUM_MASK)) != 0U ||
 		pBuffer == NULL || Handler == NULL)
@@ -2567,26 +2264,46 @@ bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
 {
 	(void)DevNo;
-	return nRFUsbRegDataEpXfer(EpAddr, Length);
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
+	const bool in = USB_ENDPADDR_IS_IN(EpAddr);
+	if (epNum == NRFX_USBD_ISO_EP_NO)
+	{
+		return nRFUsbRegIsoXfer(in ? USB_ENDPADDR_DIRIN(epNum) : epNum, Length);
+	}
+
+	nRFUsbdQueXferDir(epNum, in, Length);
+	return true;
 }
 
 bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
 {
 	(void)DevNo;
-	return nRFUsbRegDataEpXferDir(EpNum, false, Length);
+	if (EpNum == NRFX_USBD_ISO_EP_NO)
+	{
+		return nRFUsbRegIsoXfer(EpNum, Length);
+	}
+
+	nRFUsbdQueXferDir(EpNum, false, Length);
+	return true;
 }
 
 bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
 {
 	(void)DevNo;
-	return nRFUsbRegDataEpXferDir(EpNum, true, Length);
+	if (EpNum == NRFX_USBD_ISO_EP_NO)
+	{
+		return nRFUsbRegIsoXfer(USB_ENDPADDR_DIRIN(EpNum), Length);
+	}
+
+	nRFUsbdQueXferDir(EpNum, true, Length);
+	return true;
 }
 
 
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length)
 {
-	if (!nRFUsbValidDevNo(DevNo) || USB_ENDPADDR_NUM(EpAddr) != 0U)
+	if (DevNo != 0 || USB_ENDPADDR_NUM(EpAddr) != 0U)
 	{
 		return false;
 	}
@@ -2597,7 +2314,41 @@ bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 		return UsbCtrlrEp0Send(DevNo, pBuffer, Length) == Length;
 	}
 
-	return nRFUsbRegEpXfer(EpAddr, pBuffer, Length);
+	const uint32_t state = DisableInterrupt();
+	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Ep0[nRFUsbdDir(EpAddr)];
+
+	pXfer->pBuffer = pBuffer;
+	pXfer->TotalLen = Length;
+	pXfer->ActualLen = 0U;
+
+	const bool controlStatus =
+		Length == 0U &&
+		USB_ENDPADDR_IS_IN(EpAddr) !=
+		((NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) != 0U);
+
+	if (controlStatus)
+	{
+		if ((NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U ||
+			(NRF_USBD->SHORTS &
+			 USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk) == 0U)
+		{
+			nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0STATUS);
+		}
+		EnableInterrupt(state);
+		nRFUsbdEmitXfer(EpAddr, 0U, USB_CTRLR_XFER_SUCCESS);
+		return true;
+	}
+	else if (USB_ENDPADDR_IS_IN(EpAddr))
+	{
+		nRFUsbdQueueEp0In();
+	}
+	else
+	{
+		nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
+	}
+
+	EnableInterrupt(state);
+	return true;
 }
 
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
@@ -2605,7 +2356,7 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 	int cnt = 0;
 
 	(void)DevNo;
-	s_Ctrlr.Xfer[0][1].TotalLen = (uint16_t)Length;
+	s_Ctrlr.Ep0[1].TotalLen = (uint16_t)Length;
 
 	do
 	{
@@ -2650,16 +2401,54 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr)
 {
-	if (nRFUsbValidDevNo(DevNo))
+	if (DevNo != 0)
 	{
-		nRFUsbRegEpStall(EpAddr);
+		return;
 	}
+
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
+	if (epNum >= NRFX_USBD_EP_COUNT || epNum == NRFX_USBD_ISO_EP_NO)
+	{
+		return;
+	}
+
+	if (epNum == 0)
+	{
+		NRF_USBD->TASKS_EP0STALL = 1;
+	}
+	else
+	{
+		NRF_USBD->EPSTALL =
+			(USBD_EPSTALL_STALL_Stall << USBD_EPSTALL_STALL_Pos) | EpAddr;
+	}
+	__ISB();
+	__DSB();
 }
 
 void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr)
 {
-	if (nRFUsbValidDevNo(DevNo))
+	if (DevNo != 0)
 	{
-		nRFUsbRegEpClearStall(EpAddr);
+		return;
 	}
+
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
+	if (epNum == 0 || epNum >= NRFX_USBD_EP_COUNT ||
+		epNum == NRFX_USBD_ISO_EP_NO)
+	{
+		return;
+	}
+
+	NRF_USBD->DTOGGLE = EpAddr;
+	NRF_USBD->DTOGGLE =
+		(USBD_DTOGGLE_VALUE_Data0 << USBD_DTOGGLE_VALUE_Pos) | EpAddr;
+	NRF_USBD->EPSTALL =
+		(USBD_EPSTALL_STALL_UnStall << USBD_EPSTALL_STALL_Pos) | EpAddr;
+
+	if (!USB_ENDPADDR_IS_IN(EpAddr))
+	{
+		NRF_USBD->SIZE.EPOUT[epNum] = 0;
+	}
+	__ISB();
+	__DSB();
 }

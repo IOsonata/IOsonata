@@ -27,7 +27,7 @@ def function_body(source: str, signature: str) -> str:
 
 header = HEADER.read_text(encoding="utf-8")
 source = SOURCE.read_text(encoding="utf-8")
-open_ep = function_body(source, "static bool nRFUsbRegEpOpen(")
+open_ep = function_body(source, "bool UsbCtrlrEpOpen(")
 start_iso = function_body(source, "static bool nRFUsbdStartIsoNow(void)")
 service_iso = function_body(source, "static void nRFUsbdServiceIso(void)")
 handle_sof = function_body(source, "static void nRFUsbdHandleSof(void)")
