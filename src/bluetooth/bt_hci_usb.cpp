@@ -322,7 +322,6 @@ static bool BtHciUsbConfig(BtHciUsbDev_t *pHci, uint8_t Configuration)
 
 	const uint16_t eventMps = BtHciUsbEventMps(pHci);
 	const uint16_t aclMps = BtHciUsbAclMps(pHci);
-	const uint8_t eventInterval = BtHciUsbEventInterval(pHci);
 
 	if (!UsbIntrfConfigure(&pHci->IntrfData, aclMps))
 	{
