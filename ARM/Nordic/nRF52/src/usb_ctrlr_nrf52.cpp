@@ -195,7 +195,7 @@ uint8_t nRFUsbEpDir(uint8_t EpAddr)
 static __attribute__((noinline))
 nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpAddr)
 {
-	return &s_Usbd.EpReg[USB_ENDPADDR_NUM(EpAddr)][nRFUsbEpDir(EpAddr)];
+	return &s_Usbd.EpReg[USB_ENDPADDR_NUM(EpAddr) - 1U][nRFUsbEpDir(EpAddr)];
 }
 
 // Share callback dispatch across regular and ISO event paths.
@@ -577,8 +577,8 @@ void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
 
 
 // Retire one regular-endpoint DMA identified by its EPSTATUS bit index.
-// Returns false while its END event has not fired. Only EP0 retains its
-// queue entry until DMA completion, so that entry is consumed here.
+// Returns false while its END event has not fired. Release the queue entry
+// only after DMA has finished reading it, including inline alignment scratch.
 static __attribute__((noinline)) bool nRFUsbdRetireDma(uint32_t StatusBit)
 {
 	const uint8_t epNum = (uint8_t)(StatusBit & 7U);
@@ -593,14 +593,7 @@ static __attribute__((noinline)) bool nRFUsbdRetireDma(uint32_t StatusBit)
 
 	*pEnd = 0U;
 	NRF_USBD->EPSTATUS = 1UL << StatusBit;
-	if (epNum == 0U)
-	{
-		(void)CFifoGet(s_Usbd.hEp0Que);
-	}
-	else
-	{
-		(void)CFifoGet(s_Usbd.hQue);
-	}
+	(void)CFifoGet(epNum == 0U ? s_Usbd.hEp0Que : s_Usbd.hQue);
 	// Unlock's DSB completes END, EPSTATUS and busy-register writes before
 	// the OUT callback or another DMA can use this buffer.
 	nRFUsbdDmaUnlock();
@@ -675,7 +668,7 @@ __attribute__((noinline)) void nRFUsbdSofRelease(void)
 
 
 /**
- * Start EasyDMA for one queued directional request. Endpoint number and
+ * Start EasyDMA for one regular queued request. Endpoint number and
  * direction stay separate in the scheduler; what an OUT endpoint actually
  * holds is only known now, so that is read here.
  */
@@ -686,12 +679,7 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 	const bool isIn = pQue->Dir != NRFX_USBD_QUE_OUT;
 	const uint8_t *pBuffer;
 
-	if (epNum == 0U)
-	{
-		pBuffer = isIn ? ((const nRFEPPkt_t *)pQue)->Payload :
-			s_Usbd.Ep0Bounce;
-	}
-	else if (pQue->Dir == NRFX_USBD_QUE_IN_FIFO)
+	if (pQue->Dir == NRFX_USBD_QUE_IN_FIFO)
 	{
 		pBuffer = CFifoPeek(pQue->hFifo);
 	}
@@ -708,12 +696,10 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 	volatile USBD_EPIN_Type *pEp;
 	volatile uint32_t *pTask;
-	volatile uint32_t *pEnd;
 	if (isIn)
 	{
 		pEp = &NRF_USBD->EPIN[epNum];
 		pTask = &NRF_USBD->TASKS_STARTEPIN[epNum];
-		pEnd = &NRF_USBD->EVENTS_ENDEPIN[epNum];
 	}
 	else
 	{
@@ -729,16 +715,10 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 			offsetof(USBD_EPIN_Type, MAXCNT), "EPIN/EPOUT layout");
 		pEp = (volatile USBD_EPIN_Type *)&NRF_USBD->EPOUT[epNum];
 		pTask = &NRF_USBD->TASKS_STARTEPOUT[epNum];
-		pEnd = &NRF_USBD->EVENTS_ENDEPOUT[epNum];
 	}
 
 	pEp->PTR = (uint32_t)(uintptr_t)pBuffer;
 	pEp->MAXCNT = len;
-	if (epNum == 0U)
-	{
-		*pEnd = 0U;
-		__DSB();
-	}
 	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
 	*pTask = 1U;
 	__DSB();
@@ -748,14 +728,18 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 // the DMA register setup at each call site.
 static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 {
-	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPeek(s_Usbd.hEp0Que);
-	if (pQue == NULL)
+	const nRFEPPkt_t *pEp0 = (const nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
+	if (pEp0 != NULL)
 	{
-		if (nRFUsbdIsoStart != nullptr && nRFUsbdIsoStart())
-			return;
-		pQue = (nRFUsbdQue_t *)CFifoPeek(s_Usbd.hQue);
+		nRFUsbdEp0InProgram(pEp0);
+		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPIN[0],
+			&NRF_USBD->EVENTS_ENDEPIN[0]);
+		return;
 	}
 
+	if (nRFUsbdIsoStart != nullptr && nRFUsbdIsoStart())
+		return;
+	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPeek(s_Usbd.hQue);
 	if (pQue != NULL)
 		nRFUsbdStartDmaNow(pQue);
 }
@@ -797,40 +781,9 @@ static __attribute__((noinline)) void nRFUsbdQueXferDir(uint8_t EpNum, bool In, 
 	pQue->Dir = In ? NRFX_USBD_QUE_IN_BUFFER : NRFX_USBD_QUE_OUT;
 	pQue->Len = Len;
 	pQue->pBuffer = EpNum == 0U ? NULL :
-		s_Usbd.EpReg[EpNum][In ? 1 : 0].pBuffer;
+		s_Usbd.EpReg[EpNum - 1U][In ? 1 : 0].pBuffer;
 
 	nRFUsbdResumeQueuedDmaLocked();
-
-	EnableInterrupt(state);
-}
-
-/** Remove one endpoint number without disturbing the order of other work. */
-static void nRFUsbdQueRemoveEp(uint8_t EpNum)
-{
-	const uint32_t state = DisableInterrupt();
-	if (EpNum == 0U)
-	{
-		CFifoFlush(s_Usbd.hEp0Que);
-		EnableInterrupt(state);
-		return;
-	}
-
-	const int count = CFifoUsed(s_Usbd.hQue);
-
-	// Rotate exactly the entries that were present on entry. Kept entries go
-	// back at the tail in the same order. The queue has one slot per endpoint
-	// direction, so each get guarantees space for its matching put.
-	for (int i = 0; i < count; i++)
-	{
-		const nRFUsbdQue_t que =
-			*(nRFUsbdQue_t *)CFifoGet(s_Usbd.hQue);
-		if (que.EpNum == EpNum)
-		{
-			continue;
-		}
-
-		*(nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue) = que;
-	}
 
 	EnableInterrupt(state);
 }
@@ -871,7 +824,9 @@ static void nRFUsbdResetState(void)
 
 static void nRFUsbdAbortEp0(void)
 {
-	nRFUsbdQueRemoveEp(0U);
+	const uint32_t state = DisableInterrupt();
+	CFifoFlush(s_Usbd.hEp0Que);
+	EnableInterrupt(state);
 
 	memset(&s_Usbd.Ctrlr.Ep0, 0, sizeof(s_Usbd.Ctrlr.Ep0));
 
@@ -1227,7 +1182,7 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	(void)Evt;
 	(void)pContext;
 
-	UsbCtrlrEvt_t evt = {};
+	UsbCtrlrEvt_t evt;
 	evt.Type = USB_CTRLR_EVT_SETUP;
 
 	// BMREQUESTTYPE through WLENGTHH are eight consecutive byte-wide
@@ -1444,7 +1399,7 @@ extern "C" void USBD_IRQHandler(void)
 	if (outEp != 0U)
 	{
 		const uint8_t epNum = outEp;
-		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[epNum][0];
+		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[epNum - 1U][0];
 		if (pReg->bBlocking)
 		{
 			// EPDATASTATUS is cleared before DRDY may start another DMA.
@@ -1717,8 +1672,6 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 
 void UsbCtrlrEpCloseAll(int DevNo)
 {
-	nRFUsbdDmaWait();
-
 	for (uint8_t epNum = 1; epNum < NRFX_USBD_EP_COUNT; epNum++)
 	{
 		UsbCtrlrEpClose(DevNo, epNum);
@@ -1765,7 +1718,7 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 {
 	if (EpNum == NRFX_USBD_ISO_EP_NO)
 	{
-		s_Usbd.EpReg[EpNum][1].pBuffer = pBuffer;
+		s_Usbd.EpReg[EpNum - 1U][1].pBuffer = pBuffer;
 		return UsbCtrlrEpXfer(DevNo, USB_ENDPADDR_DIRIN(EpNum), Length);
 	}
 
@@ -1776,7 +1729,7 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 
 	if (pBuffer == NULL)
 	{
-		hCFifo_t hFifo = (hCFifo_t)s_Usbd.EpReg[EpNum][1].pBuffer;
+		hCFifo_t hFifo = (hCFifo_t)s_Usbd.EpReg[EpNum - 1U][1].pBuffer;
 		uint8_t *pData = CFifoPeek(hFifo);
 		const uint32_t misalign = (uint32_t)(uintptr_t)pData & 3U;
 		if (misalign != 0U)
@@ -1786,7 +1739,6 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 			{
 				pQue->Len = repair;
 			}
-			pQue->Scratch = 0U;
 			memcpy(&pQue->Scratch, pData, pQue->Len);
 			pQue->Dir = NRFX_USBD_QUE_IN_SCRATCH;
 		}

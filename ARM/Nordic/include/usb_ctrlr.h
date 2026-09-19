@@ -316,7 +316,8 @@ typedef struct __nRF_Usbd_State
 	uint8_t IntPrio;
 	bool LowPowerSuspend;
 	nRFUsbdCtrlr_t Ctrlr;
-	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT][2];
+	// Non-control endpoints 1-8; EP0 uses Ctrlr.Ep0 above.
+	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT - 1][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
 } nRFUsbdState_t;
 

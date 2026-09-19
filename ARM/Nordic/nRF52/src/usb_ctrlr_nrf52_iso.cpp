@@ -57,7 +57,7 @@ uint8_t nRFIsoDir(uint8_t EpAddr)
 static inline __attribute__((always_inline))
 nRFUsbEpReg_t *nRFIsoReg(uint8_t EpAddr)
 {
-	return &s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO][nRFIsoDir(EpAddr)];
+	return &s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][nRFIsoDir(EpAddr)];
 }
 
 static __attribute__((noinline))
@@ -125,7 +125,7 @@ static bool nRFUsbdStartIsoNow(void)
 
 		s_Usbd.Flags = flags & ~((uint32_t)USBD_FLAG_ISO_OUT_READY << dir);
 		pEp->PTR = (uint32_t)(uintptr_t)
-			s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO][dir].pBuffer;
+			s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir].pBuffer;
 		pEp->MAXCNT = len;
 		pXfer->pBuffer = NULL;
 		nRFUsbdDmaStartLocked(pTask, pEnd);
@@ -308,7 +308,7 @@ void nRFUsbdIsoSof(void)
 				if (!waiting)
 				{
 					nRFUsbEpReg_t *pReg =
-						&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO][0];
+						&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
 					if (pReg->bBlocking)
 					{
 						nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO,

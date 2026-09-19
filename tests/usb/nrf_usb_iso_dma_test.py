@@ -77,7 +77,7 @@ struct {
  volatile uint32_t Flags=0;
  uint32_t IsoGeneration[2]={};uint16_t IsoOutSize=0;
  struct {nRFUsbdXfer_t Ep0[2],Iso[2];bool SofEnabled;} Ctrlr;
- nRFUsbEpReg_t EpReg[9][2];
+ nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue;
 } s_Usbd;
 alignas(8) uint8_t queueMemory[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
@@ -176,8 +176,8 @@ void init(){
  dmaBusy=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
  ++s_Usbd.IsoGeneration[0];++s_Usbd.IsoGeneration[1];
- s_Usbd.EpReg[8][0]={outBuffer,callback,nullptr,512,false};
- s_Usbd.EpReg[8][1]={inBuffer,callback,nullptr,512,false};
+ s_Usbd.EpReg[7][0]={outBuffer,callback,nullptr,512,false};
+ s_Usbd.EpReg[7][1]={inBuffer,callback,nullptr,512,false};
  memset(inBuffer,0xA5,sizeof(inBuffer));memset(hostOut,0x5A,sizeof(hostOut));
  assert(AppEvtHandlerInit(nullptr,0));assert(AppEvtHandlerIdleRegister(nRFUsbdRetryIsoComplete));
 }
@@ -200,7 +200,7 @@ int main(){
    int skip=offset;if(skip)assert(CFifoGetMultiple(fifo,&skip)==data);
    data=CFifoPeek(fifo);assert((uintptr_t(data)&3U)==offset);
    const auto get=fifo->GetIdx,put=fifo->PutIdx;
-   s_Usbd.EpReg[ep][1].pBuffer=(uint8_t*)fifo;
+   s_Usbd.EpReg[ep-1][1].pBuffer=(uint8_t*)fifo;
    assert(productionEpInXfer(0,ep,nullptr,length));
    assert(irqMask==masked && CFifoUsed(s_Usbd.hQue)==1);
    assert(fifo->GetIdx==get && fifo->PutIdx==put && CFifoPeek(fifo)==data);
@@ -224,10 +224,10 @@ int main(){
 
  const uint16_t inLengths[]={0,9,17,33,512};
  for(uint16_t length : inLengths){
-  init();s_Usbd.EpReg[8][1].pBuffer=nullptr;
+  init();s_Usbd.EpReg[7][1].pBuffer=nullptr;
   assert(productionEpInXfer(0,8,inBuffer,length));
   assert(CFifoUsed(s_Usbd.hQue)==0 && (ISO_BUSY()&2));
-  assert(s_Usbd.EpReg[8][1].pBuffer==inBuffer && !dmaBusy);
+  assert(s_Usbd.EpReg[7][1].pBuffer==inBuffer && !dmaBusy);
   frame();assert(isoStarts[1]==1 && regs.ISOIN.MAXCNT==length);
   assert(regs.ISOIN.PTR==uint32_t(uintptr_t(inBuffer)));
   assert(!memcmp(wireIn,inBuffer,length));
@@ -281,7 +281,7 @@ int main(){
  puts("PASS: full real AppEvt queue retains completion, retries, and does not retain EasyDMA");
 
  init();frame(17);finish(false);UsbCtrlrEpClose(0,8);
- s_Usbd.Flags|=USBD_FLAG_ISO_OUT_OPEN;s_Usbd.EpReg[8][0].MaxPacketSize=9;frame(9);finish(false);
+ s_Usbd.Flags|=USBD_FLAG_ISO_OUT_OPEN;s_Usbd.EpReg[7][0].MaxPacketSize=9;frame(9);finish(false);
  AppEvtHandlerExec();assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
  puts("PASS: close/reopen discards old callback without releasing the new transfer");
 
@@ -315,7 +315,7 @@ int main(){
    assert(regs.EVENTS_ENDEPIN[n]==unsigned(!(n==ep&&dir)));
    assert(regs.EVENTS_ENDEPOUT[n]==unsigned(!(n==ep&&!dir)));
    assert(regs.SIZE.EPOUT[n]==((n==ep&&!dir)?0U:64U));
-   for(unsigned d=0;d<2;++d)assert(s_Usbd.EpReg[n][d].MaxPacketSize==((n==ep&&d==dir)?0U:64U));
+   for(unsigned d=0;d<2;++d)assert(s_Usbd.EpReg[n][d].MaxPacketSize==((n+1==ep&&d==dir)?0U:64U));
   }
  }
  puts("PASS: regular close affects only the selected endpoint/direction and preserves IRQ state");
