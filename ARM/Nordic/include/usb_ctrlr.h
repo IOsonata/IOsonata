@@ -281,6 +281,7 @@ typedef struct __nRF_Usbd_Xfer
 typedef struct __nRF_Usbd_Ctrlr
 {
 	nRFUsbdXfer_t Ep0[2];
+	nRFUsbdXfer_t Iso[2];
 	bool SofEnabled;
 } nRFUsbdCtrlr_t;
 
@@ -308,12 +309,14 @@ typedef struct __nRF_Usbd_State
 	volatile uint32_t Flags;
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;
+	uint32_t IsoGeneration[2];
+	uint16_t IsoOutSize;
 	uint8_t IntPrio;
 	bool LowPowerSuspend;
 	bool Initialized;
 	bool Started;
 	nRFUsbdCtrlr_t Ctrlr;
-	nRFUsbEpReg_t EpReg[NRFX_USBD_DATA_EP_COUNT][2];
+	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
 } nRFUsbdState_t;
 

@@ -170,9 +170,6 @@ extern bool nRFUsbdIsoFinishDma(uint32_t DmaStatus) __attribute__((weak));
 extern void nRFUsbdIsoSof(void) __attribute__((weak));
 extern bool nRFUsbdIsoEpOpen(const UsbEndPointDesc_t *pDesc) __attribute__((weak));
 extern void nRFUsbdIsoEpClose(uint8_t EpAddr) __attribute__((weak));
-extern bool nRFUsbdIsoEpRegister(uint8_t EpAddr, uint8_t *pBuffer,
-	bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext)
-	__attribute__((weak));
 extern bool nRFUsbdIsoXfer(uint8_t EpAddr, uint16_t Length) __attribute__((weak));
 
 static void nRFUsbdHostResumeDetected(void);
@@ -843,6 +840,9 @@ static void nRFUsbdResetState(void)
 	CFifoFlush(s_Usbd.hQue);
 	CFifoFlush(s_Usbd.hEp0Que);
 	s_Usbd.Flags = USBD_FLAG_MAC_AWAKE;
+	s_Usbd.IsoOutSize = 0U;
+	++s_Usbd.IsoGeneration[0];
+	++s_Usbd.IsoGeneration[1];
 	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
 }
 
@@ -1789,13 +1789,6 @@ bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 		pBuffer == NULL || Handler == NULL)
 	{
 		return false;
-	}
-
-	if (epNum == NRFX_USBD_ISO_EP_NO)
-	{
-		return nRFUsbdIsoEpRegister != nullptr &&
-			nRFUsbdIsoEpRegister(EpAddr, pBuffer, bBlocking,
-				Handler, pContext);
 	}
 
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
