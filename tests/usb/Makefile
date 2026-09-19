@@ -184,6 +184,7 @@ TARGETS += $(MSC_TARGET)
 
 .PHONY: all test test-c-header test-gcc test-clang test-matrix \
 	test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma test-nrf-lifecycle \
+	test-nrf-fifo-queue \
 	iso-hw-build iso-hw int-hw-build int-hw hid-hw-build hid-hw \
 	msc-hw-build msc-hw hid-demo-build probe clean
 
@@ -231,6 +232,10 @@ test-nrf-lifecycle:
 
 test-nrf-dma-policy:
 	python3 ./nrf_usb_dma_policy_test.py
+
+# The register model uses a non-PIE Linux executable for 32-bit DMA pointers.
+test-nrf-fifo-queue:
+	CXX=$(CXX) python3 ./nrf_usb_fifo_queue_test.py
 
 iso-hw-build: $(ISO_HW_SCRIPT)
 	python3 -c "compile(open('$(ISO_HW_SCRIPT)', encoding='utf-8').read(), '$(ISO_HW_SCRIPT)', 'exec')"

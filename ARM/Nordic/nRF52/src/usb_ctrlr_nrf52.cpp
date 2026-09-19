@@ -127,9 +127,9 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
 #define NRFX_USBD_EASYDMA_BUSY_REG_BUSY		0x82UL
 #define NRFX_USBD_EASYDMA_BUSY_REG_CLEAR	0UL
 
-// EP1-7 have fourteen regular directions. Sixteen slots let CFifo use its
-// mask indexing path; EP0 and ISO do not occupy this queue.
-#define NRFUSBD_QUE_DEPTH			16U
+// EP1-7 can queue seven OUT entries and fourteen IN entries (scratch plus
+// FIFO). Keep a power-of-two depth; EP0 and ISO do not occupy this queue.
+#define NRFUSBD_QUE_DEPTH			32U
 #define NRFUSBD_EP0_QUE_DEPTH		4U
 
 enum
@@ -576,8 +576,8 @@ void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
 
 
 // Retire one regular-endpoint DMA identified by its EPSTATUS bit index.
-// Returns false while its END event has not fired. Only EP0 retains its
-// queue entry until DMA completion, so that entry is consumed here.
+// Returns false while its END event has not fired. The queue owns its source
+// through END. Regular IN keeps END latched until the host consumes the packet.
 static __attribute__((noinline)) bool nRFUsbdRetireDma(uint32_t StatusBit)
 {
 	const uint8_t epNum = (uint8_t)(StatusBit & 7U);
@@ -590,7 +590,8 @@ static __attribute__((noinline)) bool nRFUsbdRetireDma(uint32_t StatusBit)
 		return false;
 	}
 
-	*pEnd = 0U;
+	if (StatusBit >= 16U || epNum == 0U)
+		*pEnd = 0U;
 	NRF_USBD->EPSTATUS = 1UL << StatusBit;
 	if (epNum == 0U)
 	{
@@ -684,6 +685,9 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 	const uint8_t epNum = pQue->EpNum;
 	const bool isIn = pQue->Dir != NRFX_USBD_QUE_OUT;
 	const uint8_t *pBuffer;
+
+	if (epNum != 0U && isIn && NRF_USBD->EVENTS_ENDEPIN[epNum] != 0U)
+		return;
 
 	if (epNum == 0U)
 	{
@@ -807,24 +811,39 @@ static void nRFUsbdQueInFifo(uint8_t EpNum, hCFifo_t hFifo, uint16_t Len)
 {
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
-	uint8_t *pData = CFifoPeek(hFifo);
+	int count = Len;
+	uint8_t *pData = CFifoPeekMultiple(hFifo, &count);
 	const uint32_t misalign = (uint32_t)(uintptr_t)pData & 3U;
 
 	pQue->EpNum = EpNum;
-	pQue->Len = Len;
+	pQue->Len = (uint16_t)count;
 
 	if (misalign != 0U)
 	{
-		const uint16_t repair = (uint16_t)(4U - misalign);
-		if (pQue->Len > repair)
-		{
-			pQue->Len = repair;
-		}
+		const int repair = (int)(4U - misalign);
+		if (count > repair)
+			count = repair;
+		pData = CFifoGetMultiple(hFifo, &count);
+		pQue->Len = (uint16_t)count;
 		pQue->Scratch = 0U;
-		memcpy(&pQue->Scratch, pData, pQue->Len);
+		memcpy(&pQue->Scratch, pData, (size_t)count);
 		pQue->Dir = NRFX_USBD_QUE_IN_SCRATCH;
+
+		// Only the copied prefix is consumed now. The aligned run remains in
+		// the TX FIFO until its host completion. A full queue defers that run.
+		pQue = NULL;
+		if (count == repair && CFifoAvail(s_Usbd.hQue) > 0)
+		{
+			count = s_Usbd.EpReg[EpNum][1].MaxPacketSize;
+			if (CFifoPeekMultiple(hFifo, &count) != NULL)
+			{
+				pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
+				pQue->EpNum = EpNum;
+				pQue->Len = (uint16_t)count;
+			}
+		}
 	}
-	else
+	if (pQue != NULL)
 	{
 		pQue->hFifo = hFifo;
 		pQue->Dir = NRFX_USBD_QUE_IN_FIFO;
@@ -848,8 +867,8 @@ static void nRFUsbdQueRemoveEp(uint8_t EpNum)
 	const int count = CFifoUsed(s_Usbd.hQue);
 
 	// Rotate exactly the entries that were present on entry. Kept entries go
-	// back at the tail in the same order. The queue has one slot per endpoint
-	// direction, so each get guarantees space for its matching put.
+	// back at the tail in the same order. Each get guarantees space for its
+	// matching put.
 	for (int i = 0; i < count; i++)
 	{
 		const nRFUsbdQue_t que =
@@ -1194,6 +1213,18 @@ void nRFUsbdQueueOutComplete(uint8_t EpNum, uint16_t Amount)
 static inline __attribute__((always_inline))
 void nRFUsbdQueueInComplete(uint8_t EpNum, uint16_t Amount)
 {
+	NRF_USBD->EVENTS_ENDEPIN[EpNum] = 0U;
+	const uintptr_t source = NRF_USBD->EPIN[EpNum].PTR;
+	if (source - (uintptr_t)s_QueMem < sizeof(s_QueMem))
+	{
+		// Scratch bytes were removed when queued. An already queued FIFO run
+		// continues directly; otherwise a zero-length completion requests more.
+		nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPeek(s_Usbd.hQue);
+		if (pQue != NULL && pQue->EpNum == EpNum &&
+			pQue->Dir == NRFX_USBD_QUE_IN_FIFO)
+			return;
+		Amount = 0U;
+	}
 	const uint32_t evt = ((uint32_t)Amount << 8U) | EpNum;
 	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete);
 }
@@ -1456,6 +1487,7 @@ extern "C" void USBD_IRQHandler(void)
 		// by the pending interrupt they keep raised.
 		NRF_USBD->EPDATASTATUS = servicedStatus;
 		UsbdSync();
+		nRFUsbdResumeQueuedDmaLocked();
 	}
 
 
