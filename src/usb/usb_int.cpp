@@ -149,25 +149,25 @@ bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, const UsbIntIntrfCfg_t *pCfg)
 	return true;
 }
 
-bool UsbIntIntrfOpen(UsbIntIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval)
+bool UsbIntIntrfOpen(UsbIntIntrf_t *pIntrf, uint16_t PacketSize, uint8_t Interval)
 {
 	if (pIntrf == nullptr ||
 		!UsbIntIntrfEpSupported(pIntrf->IntrfData.DevNo, pIntrf->EpNo) ||
-		Mps == 0U || Mps > USB_INT_INTRF_MAX_MPS || Interval == 0U ||
+		PacketSize == 0U || PacketSize > USB_INT_INTRF_MAX_MPS || Interval == 0U ||
 		(!UsbCtrlrHighSpeed(pIntrf->IntrfData.DevNo) &&
-		 Mps > USB_INT_INTRF_FS_MPS) ||
+		 PacketSize > USB_INT_INTRF_FS_MPS) ||
 		(UsbCtrlrHighSpeed(pIntrf->IntrfData.DevNo) && Interval > 16U))
 	{
 		return false;
 	}
 
 	UsbIntIntrfClose(pIntrf);
-	if (!UsbIntrfConfigure(&pIntrf->IntrfData, Mps))
+	if (!UsbIntrfConfigure(&pIntrf->IntrfData, PacketSize))
 	{
 		return false;
 	}
 
-	pIntrf->Mps = Mps;
+	pIntrf->Mps = PacketSize;
 	pIntrf->Interval = Interval;
 	pIntrf->Suspended = false;
 

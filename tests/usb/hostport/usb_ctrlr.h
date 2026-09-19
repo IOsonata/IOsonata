@@ -166,14 +166,14 @@ void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
 
 static inline bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr,
-									 uint8_t Type, uint16_t Mps)
+									 uint8_t Type, uint16_t PacketSize)
 {
 	UsbEndPointDesc_t desc = {0};
 	desc.bLength = sizeof(desc);
 	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
 	desc.bEndpointAddress = EpAddr;
 	desc.bmAttributes = Type;
-	desc.wMaxPacketSize = Mps;
+	desc.wMaxPacketSize = PacketSize;
 	return UsbCtrlrEpOpen(DevNo, &desc);
 }
 

@@ -226,7 +226,7 @@ void UsbCtrlrRemoteWakeup(int DevNo);
 void UsbCtrlrSofEnable(int DevNo, bool Enable);
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
-bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type, uint16_t Mps);
+bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type, uint16_t PacketSize);
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpCloseAll(int DevNo);
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
@@ -313,9 +313,9 @@ typedef struct __nRF_Usbd_State
 	uint8_t IntPrio;
 	bool LowPowerSuspend;
 	nRFUsbdCtrlr_t Ctrlr;
-	uint16_t EpOutMps[NRF_USB_EP_COUNT];
+	uint16_t EpOutPacketSize[NRF_USB_EP_COUNT];
 	uint16_t EpOutBlocking;
-	uint16_t IsoInMps;
+	uint16_t IsoInPacketSize;
 	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
 } nRFUsbdState_t;

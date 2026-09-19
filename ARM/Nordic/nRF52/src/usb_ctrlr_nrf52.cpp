@@ -1430,7 +1430,7 @@ extern "C" void USBD_IRQHandler(void)
 			{
 				pQue->EpNum = epNum;
 				pQue->Dir = 0U;
-				pQue->Len = s_Usbd.EpOutMps[epNum];
+				pQue->Len = s_Usbd.EpOutPacketSize[epNum];
 			}
 			else
 			{
@@ -1632,21 +1632,22 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 	return nRFUsbdIsoEpOpen != nullptr && nRFUsbdIsoEpOpen(pDesc);
 }
 
-bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type, uint16_t Mps)
+bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type,
+						 uint16_t PacketSize)
 {
 	(void)DevNo;
 	(void)Type;
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	const bool in = USB_ENDPADDR_IS_IN(EpAddr);
 	if (epNum == 0U || epNum >= NRFX_USBD_DATA_EP_COUNT ||
-		Mps == 0U || Mps > NRFX_USBD_MAX_PACKET_SIZE)
+		PacketSize == 0U || PacketSize > NRFX_USBD_MAX_PACKET_SIZE)
 	{
 		return false;
 	}
 
 	if (!in)
 	{
-		s_Usbd.EpOutMps[epNum] = Mps;
+		s_Usbd.EpOutPacketSize[epNum] = PacketSize;
 	}
 	nRFUsbdEpHwEnable(epNum, in, true);
 
@@ -1689,7 +1690,7 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 	if (!in)
 	{
 		NRF_USBD->SIZE.EPOUT[epNum] = 0;
-		s_Usbd.EpOutMps[epNum] = 0U;
+		s_Usbd.EpOutPacketSize[epNum] = 0U;
 	}
 	UsbdSync();
 }

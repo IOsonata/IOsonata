@@ -169,9 +169,9 @@ static uint8_t BtHciUsbEventInterval(const BtHciUsbDev_t *pHci)
 }
 
 static bool BtHciUsbOpenEndpoint(BtHciUsbDev_t *pHci, uint8_t EpAddr,
-								 uint8_t TransferType, uint16_t Mps)
+								 uint8_t TransferType, uint16_t PacketSize)
 {
-	return UsbCtrlrEpOpenData(pHci->DevNo, EpAddr, TransferType, Mps);
+	return UsbCtrlrEpOpenData(pHci->DevNo, EpAddr, TransferType, PacketSize);
 }
 
 static void BtHciUsbCloseEndpoints(BtHciUsbDev_t *pHci)

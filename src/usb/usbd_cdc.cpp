@@ -133,9 +133,9 @@ static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 }
 
 static bool UsbdCdcOpenEndpoint(UsbdCdcDev_t *pCdc, uint8_t EpAddr,
-								uint8_t Type, uint16_t Mps)
+								uint8_t Type, uint16_t PacketSize)
 {
-	return UsbCtrlrEpOpenData(pCdc->DevNo, EpAddr, Type, Mps);
+	return UsbCtrlrEpOpenData(pCdc->DevNo, EpAddr, Type, PacketSize);
 }
 
 static void UsbdCdcCloseEndpoints(UsbdCdcDev_t *pCdc)

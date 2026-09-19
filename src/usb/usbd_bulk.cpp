@@ -52,10 +52,10 @@ static uint16_t UsbdBulkMps(const UsbdBulkDev_t *pBulk)
 }
 
 static bool UsbdBulkOpenEndpoint(UsbdBulkDev_t *pBulk, uint8_t EpAddr,
-								 uint16_t Mps)
+								 uint16_t PacketSize)
 {
 	return UsbCtrlrEpOpenData(pBulk->DevNo, EpAddr,
-		USB_ENDPATT_TRANS_BULK, Mps);
+		USB_ENDPATT_TRANS_BULK, PacketSize);
 }
 
 static void UsbdBulkCloseEndpoints(UsbdBulkDev_t *pBulk)
