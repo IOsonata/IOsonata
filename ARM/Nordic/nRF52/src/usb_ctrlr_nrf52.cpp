@@ -622,22 +622,18 @@ static __attribute__((noinline)) void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, 
 
 // Initialize the active event fields; UsbDevProcessEvent reads only that
 // variant.
-static void nRFUsbdEmitSimple(UsbCtrlrEvtType_t Type)
+static __attribute__((noinline)) void nRFUsbdEmitSimple(UsbCtrlrEvtType_t Type)
 {
 	UsbCtrlrEvt_t evt;
 	evt.Type = Type;
 	nRFUsbdEmit(&evt);
 }
 
-static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
+// EP0 only: registered endpoints complete through their handler, never
+// through the core event path.
+static __attribute__((noinline)) void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 						 UsbCtrlrXferResult_t Result)
 {
-	if (USB_ENDPADDR_NUM(EpAddr) != 0U)
-	{
-		nRFUsbEpRegisteredEvent(EpAddr, USB_CTRLR_EVT_XFER_CMPL, Length, Result);
-		return;
-	}
-
 	UsbCtrlrEvt_t evt;
 	evt.Type = USB_CTRLR_EVT_XFER_CMPL;
 	evt.Xfer.EpAddr = EpAddr;
@@ -712,11 +708,8 @@ static void nRFUsbdDmaWait(void)
 		{
 			(void)nRFUsbdRetireDma(31U - (uint32_t)__CLZ(dmaStatus));
 		}
-		else if (NRF_USBD->EVENTS_ENDISOIN != 0U)
-		{
-			(void)nRFUsbdFinishIsoDma(true);
-		}
-		else if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
+		// FinishIsoDma tests its own END event and refuses a clear one.
+		else if (!nRFUsbdFinishIsoDma(true))
 		{
 			(void)nRFUsbdFinishIsoDma(false);
 		}
@@ -811,18 +804,20 @@ static bool nRFUsbdStartIsoNow(void)
 	return false;
 }
 
+// Callers exclude the interrupt: RegIsoXfer holds DisableInterrupt and
+// HandleSof runs in the ISR itself.
 static void nRFUsbdServiceIso(void)
 {
-	if ((s_Usbd.Flags &
+	const uint32_t flags = s_Usbd.Flags;
+	if ((flags &
 		 (USBD_FLAG_ISO_IN_READY | USBD_FLAG_ISO_OUT_READY)) == 0U)
 	{
 		return;
 	}
 
-	const uint32_t state = DisableInterrupt();
 	// Not host-resume pending, and either not suspended or the low power
 	// entry is still pending.
-	const uint32_t gate = s_Usbd.Flags &
+	const uint32_t gate = flags &
 		(USBD_FLAG_HOST_RESUME | USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND);
 	if ((gate & USBD_FLAG_HOST_RESUME) == 0U &&
 		(gate != USBD_FLAG_SUSPENDED) &&
@@ -830,7 +825,6 @@ static void nRFUsbdServiceIso(void)
 	{
 		(void)nRFUsbdStartIsoNow();
 	}
-	EnableInterrupt(state);
 }
 
 /**
@@ -933,7 +927,7 @@ static void nRFUsbdResumeQueuedDma(void)
  * off because CFifoPut publishes the slot before the caller writes it, and
  * the interrupt is the other producer.
  */
-static void nRFUsbdQueXferDir(uint8_t EpNum, bool In, uint16_t Len)
+static __attribute__((noinline)) void nRFUsbdQueXferDir(uint8_t EpNum, bool In, uint16_t Len)
 {
 	const uint32_t state = DisableInterrupt();
 	hCFifo_t hQue = EpNum == 0U ? s_Usbd.hEp0Que : s_Usbd.hQue;
@@ -1025,32 +1019,25 @@ static void nRFUsbdAbortEp0(void)
 	UsbdSync();
 }
 
+// ISR context only: this interrupt is the sole mutator of the wake state,
+// so no interrupt exclusion is needed here.
 static void nRFUsbdTryEnterLowPower(void)
 {
 	const uint32_t entryMask = USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND |
 		USBD_FLAG_REMOTE_WAKE | USBD_FLAG_HOST_RESUME;
 	const uint32_t entryWant = USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND;
 
-	if (!s_Usbd.LowPowerSuspend || (s_Usbd.Flags & entryWant) != entryWant)
-	{
-		return;
-	}
-
-	// Check ownership and wake state once, with interrupts excluded.
-
-	const uint32_t irqState = DisableInterrupt();
-	if ((s_Usbd.Flags & entryMask) != entryWant ||
+	if (!s_Usbd.LowPowerSuspend ||
+		(s_Usbd.Flags & entryMask) != entryWant ||
 		nRFUsbdDmaActive() ||
 		CFifoUsed(s_Usbd.hQue) > 0)
 	{
-		EnableInterrupt(irqState);
 		return;
 	}
 
 	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
 		NRF_USBD->EVENTS_SOF != 0U)
 	{
-		EnableInterrupt(irqState);
 		nRFUsbdHostResumeDetected();
 		return;
 	}
@@ -1064,15 +1051,12 @@ static void nRFUsbdTryEnterLowPower(void)
 	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
 		NRF_USBD->EVENTS_SOF != 0U)
 	{
-		EnableInterrupt(irqState);
 		nRFUsbdHostResumeDetected();
 		return;
 	}
 
-	// No software wake state changes while interrupts remain excluded.
 	// Hardware resume is handled by the RESUME/SOF check above.
 	s_Usbd.Flags &= ~(uint32_t)USBD_FLAG_SUSPEND_PEND;
-	EnableInterrupt(irqState);
 }
 
 static void nRFUsbdTryRemoteWake(void)
@@ -1764,14 +1748,13 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 		return false;
 	}
 
-	memset(s_Usbd.EpReg, 0, sizeof(s_Usbd.EpReg));
+	// Registrations, transfer state and flags all restart from zero;
+	// ResetState below rebuilds what must not be zero.
+	memset(&s_Usbd, 0, sizeof(s_Usbd));
 
 	s_Usbd.IntPrio = pCfg->IntPrio;
 	s_Usbd.LowPowerSuspend = pCfg->bLowPowerSuspend;
-
-
 	s_Usbd.Initialized = true;
-	s_Usbd.Started = false;
 
 	s_Usbd.hQue = CFifoInit(s_QueMem, sizeof(s_QueMem), sizeof(nRFUsbdQue_t),
 					   false);
@@ -1988,12 +1971,7 @@ void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 {
-	if (DevNo != 0)
-	{
-		return false;
-	}
-
-	if (pDesc == NULL)
+	if (DevNo != 0 || pDesc == NULL)
 	{
 		return false;
 	}
@@ -2004,9 +1982,10 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 
 	const bool iso = epNum == NRFX_USBD_ISO_EP_NO;
 	const bool in = USB_ENDPADDR_IS_IN(epAddr);
+	// type is masked to 0..3: below BULK rejects control and non-ISO 1.
 	if (epNum == 0 || epNum >= NRFX_USBD_EP_COUNT ||
 		(iso ? type != USB_ENDPATT_TRANS_ISO :
-		 (type != USB_ENDPATT_TRANS_BULK && type != USB_ENDPATT_TRANS_INT)) ||
+		 type < USB_ENDPATT_TRANS_BULK) ||
 		pDesc->wMaxPacketSize == 0 ||
 		pDesc->wMaxPacketSize > (iso ? NRFX_USBD_ISO_MAX_PACKET_SIZE :
 			NRFX_USBD_MAX_PACKET_SIZE))
