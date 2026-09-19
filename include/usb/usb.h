@@ -202,6 +202,13 @@ const char *UsbGetSerial(int DevNo);
  * Device, qualifier and string descriptors come from UsbCfg_t. Configuration
  * descriptors are a generic header followed by class fragments registered
  * during class Init(). Applications normally do not call this directly.
+ *
+ * The default is a weak symbol. A flash-constrained application may define a
+ * strong UsbGetDescriptor that returns prebuilt static descriptors; the weak
+ * default and the runtime configuration assembly it drives are then removed by
+ * the linker's unused-section pass. A replacement must handle every descriptor
+ * type it is asked for and, when using static descriptors, must set interface
+ * and endpoint numbers to match how the endpoints are actually opened.
  */
 const uint8_t *UsbGetDescriptor(int DevNo, uint8_t Type, uint8_t Index,
 								 uint16_t LangId, UsbSpeed_t Speed,

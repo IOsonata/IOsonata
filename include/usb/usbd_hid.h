@@ -141,6 +141,13 @@ bool UsbdHidSendReport(UsbdHidDev_t *pHid, const uint8_t *pData,
 void UsbdHidSuspend(UsbdHidDev_t *pHid);
 bool UsbdHidResume(UsbdHidDev_t *pHid);
 
+// Builds the HID configuration fragment at run time. Weak: an application
+// building fully static descriptors may define a strong replacement, which the
+// linker then substitutes and the default is removed. Pair with a strong
+// UsbGetDescriptor so the assembled configuration matches the static fragment.
+bool UsbdHidMakeDesc(UsbdHidDesc_t *pDesc, const UsbdHidDev_t *pHid,
+					 UsbSpeed_t Speed);
+
 static inline bool UsbdHidTxReady(const UsbdHidDev_t *pHid)
 {
 	return pHid != NULL && UsbIntIntrfTxReady(&pHid->IntIntrf);

@@ -141,6 +141,13 @@ static inline UsbdBulkDev_t *UsbdBulkGetDevHandle(DevIntrf_t * const pDevIntrf) 
 		((UsbDevIntrf_t *)pDevIntrf->pDevData)->pClassContext;
 }
 
+// Builds the vendor bulk configuration fragment at run time. Weak: an
+// application building fully static descriptors may define a strong
+// replacement, which the linker substitutes and the default is removed. Pair
+// with a strong UsbGetDescriptor so the assembled configuration matches.
+bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
+					  UsbSpeed_t Speed);
+
 #ifdef __cplusplus
 }
 

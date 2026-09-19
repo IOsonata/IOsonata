@@ -1915,6 +1915,13 @@ bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
 	return true;
 }
 
+// Weak so a flash-constrained application can supply a strong replacement
+// that returns prebuilt static descriptors. When overridden, this default
+// and the runtime configuration assembly it drives (including s_CoreConfigDesc)
+// are dropped by the linker's unused-section removal. A replacement owns every
+// descriptor type it is asked for (device, configuration, string) and, in the
+// static case, owns interface and endpoint numbering.
+__attribute__((weak))
 const uint8_t *UsbGetDescriptor(int DevNo, uint8_t Type, uint8_t Index,
 								 uint16_t LangId, UsbSpeed_t Speed,
 								 uint16_t *pLength)

@@ -146,6 +146,14 @@ typedef struct __Usbd_Msc_Dev {
 	uint8_t MaxLun;
 } UsbdMscDev_t;
 
+// Builds the MSC configuration fragment at run time. Weak: an application
+// building fully static descriptors may define a strong replacement, which the
+// linker substitutes and the default is removed. Pair with a strong
+// UsbGetDescriptor so the assembled configuration matches. This class is C++
+// only, so a replacement matches the C++ symbol.
+bool UsbdMscMakeDesc(UsbdMscDesc_t *pDesc, const UsbdMscDev_t *pMsc,
+					 UsbSpeed_t Speed);
+
 class UsbdMsc : public UsbDeviceClass, public DeviceIntrf {
 public:
 	UsbdMsc() = default;
