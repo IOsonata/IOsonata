@@ -330,7 +330,10 @@ static void TestFlush(void)
 	}
 
 	CHECK(CFifoUsed(h) > 0);
+	CHECK(h->PutIdx != 0U);
 	CFifoFlush(h);
+	CHECK(h->PutIdx == 0U);
+	CHECK(h->GetIdx == 0U);
 	CHECK(CFifoUsed(h) == 0);
 	CHECK(CFifoAvail(h) == (int)POW2_SLOTS);
 	CHECK(CFifoPeek(h) == nullptr);

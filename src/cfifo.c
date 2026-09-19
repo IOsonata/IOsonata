@@ -268,8 +268,8 @@ void CFifoFlush(hCFifo_t const pFifo)
 		return;
 	}
 
-	uint32_t putIdx = CFIFO_ATOMIC_LOAD(&pFifo->PutIdx, __ATOMIC_RELAXED);
-	CFIFO_ATOMIC_STORE(&pFifo->GetIdx, putIdx, __ATOMIC_RELEASE);
+	CFIFO_ATOMIC_STORE(&pFifo->PutIdx, 0U, __ATOMIC_RELAXED);
+	CFIFO_ATOMIC_STORE(&pFifo->GetIdx, 0U, __ATOMIC_RELEASE);
 }
 
 int CFifoAvail(hCFifo_t const pFifo)
