@@ -266,13 +266,9 @@ typedef struct __nRF_Usb_Ep_Registration
 	uint8_t *pBuffer;
 	UsbCtrlrEpHandler_t Handler;
 	void *pContext;
+	uint16_t Mps;
+	bool bBlocking;
 } nRFUsbEpReg_t;
-
-enum
-{
-	NRF_USB_EPOUT_CFG_BLOCKING = 0x8000U,
-	NRF_USB_EPOUT_CFG_MPS_MASK = 0x7FFFU,
-};
 
 #pragma pack(push, 4)
 
@@ -319,8 +315,6 @@ typedef struct __nRF_Usbd_State
 	uint8_t IntPrio;
 	bool LowPowerSuspend;
 	nRFUsbdCtrlr_t Ctrlr;
-	uint16_t EpOutCfg[NRF_USB_EP_COUNT];
-	uint16_t IsoInMps;
 	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
 } nRFUsbdState_t;

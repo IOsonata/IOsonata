@@ -1416,8 +1416,8 @@ extern "C" void USBD_IRQHandler(void)
 	if (outEp != 0U)
 	{
 		const uint8_t epNum = outEp;
-		const uint16_t cfg = s_Usbd.EpOutCfg[epNum];
-		if ((cfg & NRF_USB_EPOUT_CFG_BLOCKING) != 0U)
+		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[epNum][0];
+		if (pReg->bBlocking)
 		{
 			// EPDATASTATUS is cleared before DRDY may start another DMA.
 			// UsbIntrf checks RX space and sets RxPending when it is full.
@@ -1431,7 +1431,7 @@ extern "C" void USBD_IRQHandler(void)
 			{
 				pQue->EpNum = epNum;
 				pQue->Dir = 0U;
-				pQue->Len = cfg & NRF_USB_EPOUT_CFG_MPS_MASK;
+				pQue->Len = pReg->Mps;
 			}
 			else
 			{
@@ -1645,11 +1645,7 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type, uint16_t Mps)
 		return false;
 	}
 
-	if (!in)
-	{
-		s_Usbd.EpOutCfg[epNum] =
-			(s_Usbd.EpOutCfg[epNum] & NRF_USB_EPOUT_CFG_BLOCKING) | Mps;
-	}
+	nRFUsbGetEpReg(EpAddr)->Mps = Mps;
 	nRFUsbdEpHwEnable(epNum, in, true);
 
 	if (!in)
@@ -1691,8 +1687,8 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 	if (!in)
 	{
 		NRF_USBD->SIZE.EPOUT[epNum] = 0;
-		s_Usbd.EpOutCfg[epNum] &= NRF_USB_EPOUT_CFG_BLOCKING;
 	}
+	nRFUsbGetEpReg(EpAddr)->Mps = 0U;
 	UsbdSync();
 }
 
@@ -1724,12 +1720,7 @@ bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 	pReg->pBuffer = pBuffer;
 	pReg->Handler = Handler;
 	pReg->pContext = pContext;
-	if (!USB_ENDPADDR_IS_IN(EpAddr))
-	{
-		s_Usbd.EpOutCfg[epNum] =
-			(s_Usbd.EpOutCfg[epNum] & NRF_USB_EPOUT_CFG_MPS_MASK) |
-			(bBlocking ? NRF_USB_EPOUT_CFG_BLOCKING : 0U);
-	}
+	pReg->bBlocking = bBlocking;
 	return true;
 }
 
