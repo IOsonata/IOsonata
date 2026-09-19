@@ -177,10 +177,15 @@ static void nRFUsbdHostResumeDetected(void);
 
 
 static inline __attribute__((always_inline))
+uint8_t nRFUsbEpDir(uint8_t EpAddr)
+{
+	return USB_ENDPADDR_IS_IN(EpAddr) ? 1U : 0U;
+}
+
+static __attribute__((noinline))
 nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpAddr)
 {
-	return &s_Usbd.EpReg[USB_ENDPADDR_NUM(EpAddr)]
-		[USB_ENDPADDR_IS_IN(EpAddr) ? 1U : 0U];
+	return &s_Usbd.EpReg[USB_ENDPADDR_NUM(EpAddr)][nRFUsbEpDir(EpAddr)];
 }
 
 // Share callback dispatch across regular and ISO event paths.
