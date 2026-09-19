@@ -9,8 +9,10 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = ROOT / 'ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp'
-src = SOURCE.read_text()
+BASE_SOURCE = ROOT / 'ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp'
+ISO_SOURCE = ROOT / 'ARM/Nordic/nRF52/src/usb_ctrlr_nrf52_iso.cpp'
+PRIV_SOURCE = ROOT / 'ARM/Nordic/nRF52/src/usb_ctrlr_nrf52_priv.h'
+src = '\n'.join((PRIV_SOURCE.read_text(), BASE_SOURCE.read_text(), ISO_SOURCE.read_text()))
 
 def function(name):
     import re
@@ -108,10 +110,11 @@ bool nRFUsbRegDataEpXfer(uint8_t,uint16_t);
 names = ['UsbdSync','nRFUsbdDmaEndBit','nRFUsbdDmaEndEvent','nRFUsbdDir','nRFUsbEpDir',
          'nRFUsbGetEpReg','nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaUnlock',
          'nRFUsbdDmaStartLocked','nRFUsbdEpHwEnable','nRFUsbdSofRelease',
-         'nRFUsbdStartIsoNow',
+         'nRFIsoDir','nRFIsoReg','nRFIsoRegisteredEvent','nRFUsbdStartIsoNow',
          'nRFUsbdServiceIso','nRFUsbRegIsoXfer','nRFUsbdProcessIsoComplete',
-         'nRFUsbdRetryIsoComplete','nRFUsbdFinishIsoDma','UsbCtrlrEpClose',
-         'nRFUsbdHandleSof']
+         'nRFUsbdRetryIsoComplete','nRFUsbdFinishIsoDma','nRFUsbdIsoStart',
+         'nRFUsbdIsoService','nRFUsbdIsoFinishDma','nRFUsbdIsoSof',
+         'nRFUsbdIsoEpClose','UsbCtrlrEpClose','nRFUsbdHandleSof']
 import re as _re
 flag_enum = _re.search(r'enum\s*\{[^}]*USBD_FLAG_ISO_IN_CMPL[^}]*\};', src)
 assert flag_enum, 'USBD_FLAG enum not found in driver source'

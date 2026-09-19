@@ -134,6 +134,12 @@ enum {
 	 (TransType) == BULK ? USB_PKT_MAXLEN_0_BULK : \
 	 (TransType) == INT ? USB_PKT_MAXLEN_0_INT : 0)
 
+#if defined(USBD_PRESENT)
+#define USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)
+#else
+#define USB_CTRLR_ISO_INIT(DevNo) false
+#endif
+
 
 //////////////////////////////////////////////////////////////////////////////
 // Public. What the generic USB layer sees and what usb_ctrlr_<target>.cpp
@@ -209,6 +215,9 @@ void UsbCtrlrStop(int DevNo);
 void UsbCtrlrProcess(int DevNo);
 bool UsbCtrlrVbusDetected(int DevNo);
 bool UsbCtrlrHighSpeed(int DevNo);
+#if defined(USBD_PRESENT)
+bool UsbCtrlrIsoInit(int DevNo);
+#endif
 void UsbCtrlrIntEnable(int DevNo);
 void UsbCtrlrIntDisable(int DevNo);
 void UsbCtrlrConnect(int DevNo);

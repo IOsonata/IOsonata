@@ -85,6 +85,8 @@ enum {
 	 (TransType) == BULK ? USB_PKT_MAXLEN_0_BULK : \
 	 (TransType) == INT ? USB_PKT_MAXLEN_0_INT : 0)
 
+#define USB_CTRLR_ISO_INIT(DevNo) true
+
 
 //////////////////////////////////////////////////////////////////////////////
 // Public. What the generic USB layer sees and what usb_ctrlr_<target>.cpp

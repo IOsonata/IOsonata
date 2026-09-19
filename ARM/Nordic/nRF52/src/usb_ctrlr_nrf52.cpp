@@ -53,6 +53,7 @@ SOFTWARE.
 #include "cfifo.h"
 #include "coredev/interrupt.h"
 #include "usb/usb.h"
+#include "usb_ctrlr_nrf52_priv.h"
 
 
 // Bus power, clock and VBUS.
@@ -112,21 +113,6 @@ static __attribute__((noinline)) void UsbdSync(void)
 }
 
 
-enum
-{
-	// The ordinary endpoint count excludes the dedicated ISO endpoint 8.
-	NRF_USB_EP_COUNT = 9,
-};
-
-typedef struct __nRF_Usb_Ep_Registration
-{
-	uint8_t *pBuffer;
-	UsbCtrlrEpHandler_t Handler;
-	void *pContext;
-	uint16_t Mps;
-	bool bBlocking;
-} nRFUsbEpReg_t;
-
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
 
 
@@ -147,39 +133,11 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
 
 enum
 {
-	NRFX_USBD_DATA_EP_COUNT = 8,
-	NRFX_USBD_EP_COUNT = 9,
-	NRFX_USBD_ISO_EP_NO = 8,
-	NRFX_USBD_MAX_PACKET_SIZE = 64,
-	NRFX_USBD_ISO_MAX_PACKET_SIZE = 512,
 	NRFX_USBD_XFER_EVT_OUT = 0x80U,
-	NRFX_USBD_ISO_OUT_OPEN = 1U,
-	NRFX_USBD_ISO_IN_OPEN = 2U,
 };
 
 #pragma pack(push, 4)
 
-typedef struct __nRF_Usbd_Xfer
-{
-	uint8_t *pBuffer;
-	uint16_t TotalLen;
-	volatile uint16_t ActualLen;
-} nRFUsbdXfer_t;
-
-typedef struct __nRF_Usbd_Ctrlr
-{
-	// Regular endpoints use registered buffers and queued packet lengths.
-	nRFUsbdXfer_t Ep0[2];
-	nRFUsbdXfer_t Iso[2];
-	bool SofEnabled;
-} nRFUsbdCtrlr_t;
-
-// One EasyDMA engine serves every endpoint in both directions, so a transfer
-// request waits in this descriptor queue and starts in submission order.
-//
-// An endpoint cannot ask for a second transfer in the same direction until the
-// first completes, so one slot per endpoint per direction is always enough and
-// the queue cannot overflow.
 typedef struct __nRF_Usbd_Que {
 	uint8_t EpNum;				//!< Hardware endpoint number
 	uint8_t Dir;					//!< 0 for OUT, 1 for IN
@@ -204,64 +162,15 @@ alignas(4) static uint8_t s_QueMem[
 alignas(4) static uint8_t s_Ep0QueMem[
 	CFIFO_TOTAL_MEMSIZE(NRFUSBD_EP0_QUE_DEPTH, sizeof(nRFEPPkt_t))];
 
-// Event and ISO state packed in one volatile word. This part is single core:
-// the ISR and thread code exchange these bits under DisableInterrupt wherever
-// a read-modify-write or a multi-bit decision needs to be one step, and a
-// lone aligned load or store needs nothing more. Packing turns the compound
-// predicates below into one load and one masked compare each.
-//
-// The four ISO groups keep OUT in the low bit so that the IN bit of each
-// group is the OUT bit shifted by the direction index.
-enum
-{
-	USBD_FLAG_SUSPENDED     = 0x0001U,	//!< Bus suspend observed
-	USBD_FLAG_SUSPEND_PEND  = 0x0002U,	//!< Low power entry pending
-	USBD_FLAG_REMOTE_WAKE   = 0x0004U,	//!< Remote wakeup requested
-	USBD_FLAG_HOST_RESUME   = 0x0008U,	//!< Host resume seen, MAC asleep
-	USBD_FLAG_MAC_AWAKE     = 0x0010U,	//!< Controller out of low power
-	USBD_FLAG_ISO_OUT_READY = 0x0100U,	//!< ISO frame slot available
-	USBD_FLAG_ISO_IN_READY  = 0x0200U,
-	USBD_FLAG_ISO_OUT_OPEN  = 0x0400U,	//!< ISO direction open
-	USBD_FLAG_ISO_IN_OPEN   = 0x0800U,
-	// ISO buffers remain owned through deferred completion. A non-NULL
-	// transfer buffer identifies a request waiting for its frame/DMA turn.
-	USBD_FLAG_ISO_OUT_BUSY  = 0x1000U,	//!< ISO transfer owned
-	USBD_FLAG_ISO_IN_BUSY   = 0x2000U,
-	USBD_FLAG_ISO_OUT_CMPL  = 0x4000U,	//!< ISO completion to publish
-	USBD_FLAG_ISO_IN_CMPL   = 0x8000U,
-};
+nRFUsbdState_t s_Usbd;
 
-// One state block: every hot function then addresses its fields from a
-// single literal base instead of one literal per file-scope object.
-typedef struct __nRF_Usbd_State
-{
-	volatile uint32_t Flags;
-	hCFifo_t hQue;
-	hCFifo_t hEp0Que;
-	uint32_t IsoGeneration[2];
-	uint16_t IsoOutSize;
-	// One USB controller per part, so the common power/clock state sits in
-	// the same block. Controller interrupts are owned by the backend.
-	uint8_t IntPrio;
-	bool LowPowerSuspend;
-	bool Initialized;
-	bool Started;
-	nRFUsbdCtrlr_t Ctrlr;
-	// Fixed data-endpoint ownership lives outside the active-transfer state
-	// so a bus reset can cancel transfers without losing registrations.
-	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT][2];
-	// EP0 accepts descriptor and class buffers from the generic USB layer.
-	// Those buffers may be const flash or have arbitrary alignment, while
-	// nRF52 USBD EasyDMA requires controller-visible, word-aligned RAM.
-	// Stage one control packet here in either direction; control transfers
-	// are serialized by EP0.
-	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
-} nRFUsbdState_t;
-
-static nRFUsbdState_t s_Usbd;
-
-static bool nRFUsbdFinishIsoDma(bool In);
-static void nRFUsbdRetryIsoComplete(void);
+extern bool nRFUsbdIsoStart(void) __attribute__((weak));
+extern void nRFUsbdIsoService(void) __attribute__((weak));
+extern bool nRFUsbdIsoFinishDma(uint32_t DmaStatus) __attribute__((weak));
+extern void nRFUsbdIsoSof(void) __attribute__((weak));
+extern bool nRFUsbdIsoEpOpen(const UsbEndPointDesc_t *pDesc) __attribute__((weak));
+extern void nRFUsbdIsoEpClose(uint8_t EpAddr) __attribute__((weak));
+extern bool nRFUsbdIsoXfer(uint8_t EpAddr, uint16_t Length) __attribute__((weak));
 
 static void nRFUsbdHostResumeDetected(void);
 
@@ -691,7 +600,7 @@ static __attribute__((noinline)) bool nRFUsbdRetireDma(uint32_t StatusBit)
 }
 
 /** Retire active DMA before a foreground stop or endpoint close. */
-static void nRFUsbdDmaWait(void)
+void nRFUsbdDmaWait(void)
 {
 	while (nRFUsbdDmaActive())
 	{
@@ -708,10 +617,9 @@ static void nRFUsbdDmaWait(void)
 		{
 			(void)nRFUsbdRetireDma(31U - (uint32_t)__CLZ(dmaStatus));
 		}
-		// FinishIsoDma tests its own END event and refuses a clear one.
-		else if (!nRFUsbdFinishIsoDma(true))
+		else if (nRFUsbdIsoFinishDma != nullptr)
 		{
-			(void)nRFUsbdFinishIsoDma(false);
+			(void)nRFUsbdIsoFinishDma(0U);
 		}
 		__set_PRIMASK(primask);
 	}
@@ -752,80 +660,11 @@ static __attribute__((noinline)) void nRFUsbdSofRelease(void)
 	}
 }
 
-static bool nRFUsbdStartIsoNow(void)
-{
-	const uint32_t flags = s_Usbd.Flags;
 
-	static_assert(offsetof(USBD_ISOOUT_Type, MAXCNT) ==
-		offsetof(USBD_ISOIN_Type, MAXCNT), "ISO register layout");
-
-	// IN first, then OUT: the established service priority.
-	for (int8_t dir = 1; dir >= 0; dir--)
-	{
-		const uint32_t need = (uint32_t)(USBD_FLAG_ISO_OUT_OPEN |
-			USBD_FLAG_ISO_OUT_READY) << dir;
-		nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Iso[dir];
-
-		if ((flags & need) != need || pXfer->pBuffer == NULL)
-		{
-			continue;
-		}
-
-		uint16_t len = pXfer->TotalLen;
-		volatile USBD_ISOIN_Type *pEp;
-		volatile uint32_t *pTask;
-		volatile uint32_t *pEnd;
-		if (dir != 0)
-		{
-			pEp = &NRF_USBD->ISOIN;
-			pTask = &NRF_USBD->TASKS_STARTISOIN;
-			pEnd = &NRF_USBD->EVENTS_ENDISOIN;
-		}
-		else
-		{
-			if (s_Usbd.IsoOutSize < len)
-			{
-				len = s_Usbd.IsoOutSize;
-			}
-			pEp = (volatile USBD_ISOIN_Type *)&NRF_USBD->ISOOUT;
-			pTask = &NRF_USBD->TASKS_STARTISOOUT;
-			pEnd = &NRF_USBD->EVENTS_ENDISOOUT;
-		}
-
-		s_Usbd.Flags = flags & ~((uint32_t)USBD_FLAG_ISO_OUT_READY << dir);
-		pEp->PTR = (uint32_t)(uintptr_t)
-			s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO][dir].pBuffer;
-		pEp->MAXCNT = len;
-		pXfer->pBuffer = NULL;
-		nRFUsbdDmaStartLocked(pTask, pEnd);
-		return true;
-	}
-
-	return false;
-}
 
 // Callers exclude the interrupt: RegIsoXfer holds DisableInterrupt and
 // HandleSof runs in the ISR itself.
-static void nRFUsbdServiceIso(void)
-{
-	const uint32_t flags = s_Usbd.Flags;
-	if ((flags &
-		 (USBD_FLAG_ISO_IN_READY | USBD_FLAG_ISO_OUT_READY)) == 0U)
-	{
-		return;
-	}
 
-	// Not host-resume pending, and either not suspended or the low power
-	// entry is still pending.
-	const uint32_t gate = flags &
-		(USBD_FLAG_HOST_RESUME | USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND);
-	if ((gate & USBD_FLAG_HOST_RESUME) == 0U &&
-		(gate != USBD_FLAG_SUSPENDED) &&
-		!nRFUsbdDmaActive())
-	{
-		(void)nRFUsbdStartIsoNow();
-	}
-}
 
 /**
  * Start EasyDMA for one queued directional request. Endpoint number and
@@ -891,7 +730,7 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPeek(s_Usbd.hEp0Que);
 	if (pQue == NULL)
 	{
-		if (nRFUsbdStartIsoNow())
+		if (nRFUsbdIsoStart != nullptr && nRFUsbdIsoStart())
 			return;
 		pQue = (nRFUsbdQue_t *)CFifoGet(s_Usbd.hQue);
 	}
@@ -902,7 +741,7 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 
 
 // Keep the DMA/suspend gate shared by submission and completion paths.
-static __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
+__attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 {
 	const uint32_t gate = s_Usbd.Flags &
 		(USBD_FLAG_HOST_RESUME | USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND);
@@ -1136,30 +975,7 @@ static void nRFUsbdWakeAllowed(void)
 	nRFUsbdTryRemoteWake();
 }
 
-static bool nRFUsbRegIsoXfer(uint8_t EpAddr, uint16_t Length)
-{
-	const uint8_t dir = nRFUsbdDir(EpAddr);
-	const uint32_t openBusy = (uint32_t)(USBD_FLAG_ISO_OUT_OPEN |
-		USBD_FLAG_ISO_OUT_BUSY) << dir;
-	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
-	const uint32_t state = DisableInterrupt();
-	if ((s_Usbd.Flags & openBusy) != (uint32_t)USBD_FLAG_ISO_OUT_OPEN << dir ||
-		pReg->pBuffer == NULL || pReg->Handler == NULL ||
-		Length > pReg->Mps)
-	{
-		EnableInterrupt(state);
-		return false;
-	}
 
-	nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Iso[dir];
-	pXfer->pBuffer = pReg->pBuffer;
-	pXfer->TotalLen = Length;
-	pXfer->ActualLen = 0U;
-	s_Usbd.Flags |= (uint32_t)USBD_FLAG_ISO_OUT_BUSY << dir;
-	nRFUsbdServiceIso();
-	EnableInterrupt(state);
-	return true;
-}
 
 static void nRFUsbdBusReset(void)
 {
@@ -1236,81 +1052,13 @@ static void nRFUsbdHandleEp0OutData(void)
 }
 #endif
 
-static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
-{
-	(void)pContext;
-	const uint8_t dir = (uint8_t)(Evt & 1U);
-	const uint32_t busyBit = (uint32_t)USBD_FLAG_ISO_OUT_BUSY << dir;
-	const uint32_t openBusy = ((uint32_t)USBD_FLAG_ISO_OUT_OPEN << dir) |
-		busyBit;
-	const uint32_t generation = Evt >> 1U;
-	uint32_t state = DisableInterrupt();
-	if (generation != (s_Usbd.IsoGeneration[dir] & 0x7FFFFFFFUL) ||
-		(s_Usbd.Flags & openBusy) != openBusy)
-	{
-		EnableInterrupt(state);
-		return;
-	}
 
-	const uint8_t epAddr = dir != 0U ?
-		USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO) :
-		(uint8_t)NRFX_USBD_ISO_EP_NO;
-	const uint16_t amount = s_Usbd.Ctrlr.Iso[dir].ActualLen;
-	// IN DMA has copied the TX payload into controller memory. Release it
-	// before calling the handler so that handler may submit the next frame.
-	if (dir != 0U)
-		s_Usbd.Flags &= ~busyBit;
-	EnableInterrupt(state);
-
-	nRFUsbEpRegisteredEvent(epAddr, USB_CTRLR_EVT_XFER_CMPL,
-		amount, USB_CTRLR_XFER_SUCCESS);
-
-	// OUT DMA memory is still the callback's source until it returns.
-	state = DisableInterrupt();
-	if (dir == 0U && generation == (s_Usbd.IsoGeneration[dir] & 0x7FFFFFFFUL))
-		s_Usbd.Flags &= ~busyBit;
-	nRFUsbdResumeQueuedDmaLocked();
-	EnableInterrupt(state);
-}
 
 // A full AppEvt queue retains the completion and buffer ownership. The idle
 // hook retries publication after foreground dispatch makes room.
-static void nRFUsbdRetryIsoComplete(void)
-{
-	if ((s_Usbd.Flags &
-		 (USBD_FLAG_ISO_OUT_CMPL | USBD_FLAG_ISO_IN_CMPL)) == 0U)
-		return;
-	const uint32_t state = DisableInterrupt();
-	for (uint8_t dir = 0U; dir < 2U; ++dir)
-	{
-		const uint32_t bit = (uint32_t)USBD_FLAG_ISO_OUT_CMPL << dir;
-		if ((s_Usbd.Flags & bit) != 0U &&
-			AppEvtHandlerQue((s_Usbd.IsoGeneration[dir] << 1U) | dir,
-				NULL, nRFUsbdProcessIsoComplete))
-			s_Usbd.Flags &= ~bit;
-	}
-	EnableInterrupt(state);
-}
 
-static bool nRFUsbdFinishIsoDma(bool In)
-{
-	volatile uint32_t *pEnd = In ?
-		&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
-	if (*pEnd == 0U)
-		return false;
 
-	const uint8_t dir = In ? 1U : 0U;
-	const volatile USBD_ISOIN_Type *pEp = In ? &NRF_USBD->ISOIN :
-		(const volatile USBD_ISOIN_Type *)&NRF_USBD->ISOOUT;
-	s_Usbd.Ctrlr.Iso[dir].ActualLen = (uint16_t)pEp->AMOUNT;
-	*pEnd = 0U;
-	NRF_USBD->EPSTATUS = In ? (1UL << 8U) : (1UL << 24U);
-	__DSB();
-	nRFUsbdDmaUnlock();
-	s_Usbd.Flags |= (uint32_t)USBD_FLAG_ISO_OUT_CMPL << dir;
-	nRFUsbdRetryIsoComplete();
-	return true;
-}
+
 
 static void nRFUsbdProcessEp0Complete(uint32_t Evt, void *pContext)
 {
@@ -1431,45 +1179,9 @@ static void nRFUsbdHandleSof(void)
 {
 	nRFUsbdHostResumeDetected();
 
-	const uint32_t flags = s_Usbd.Flags;
-	if ((flags & USBD_FLAG_ISO_IN_OPEN) != 0U)
+	if (nRFUsbdIsoSof != nullptr)
 	{
-		s_Usbd.Flags |= USBD_FLAG_ISO_IN_READY;
-	}
-
-	if ((flags & USBD_FLAG_ISO_OUT_OPEN) != 0U)
-	{
-		const uint32_t size = NRF_USBD->SIZE.ISOOUT;
-		// ISO OUT is a current-frame slot, not a backlog. Keep the DMA
-		// buffer stable until its deferred completion callback returns.
-		nRFUsbdXfer_t *pOut = &s_Usbd.Ctrlr.Iso[0];
-		const bool waiting = pOut->pBuffer != NULL;
-		if ((flags & USBD_FLAG_ISO_OUT_BUSY) == 0U || waiting)
-		{
-			if (size != 0U)
-			{
-				s_Usbd.Flags |= USBD_FLAG_ISO_OUT_READY;
-				s_Usbd.IsoOutSize = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
-					0U : (uint16_t)size;
-				if (!waiting)
-				{
-					nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(NRFX_USBD_ISO_EP_NO);
-					if (pReg->bBlocking)
-					{
-						nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO,
-							USB_CTRLR_EVT_DRDY, 0U, USB_CTRLR_XFER_SUCCESS);
-					}
-					else
-					{
-						(void)nRFUsbRegIsoXfer(NRFX_USBD_ISO_EP_NO, pReg->Mps);
-					}
-				}
-			}
-			else
-			{
-				s_Usbd.Flags &= ~(uint32_t)USBD_FLAG_ISO_OUT_READY;
-			}
-		}
+		nRFUsbdIsoSof();
 	}
 
 	if (s_Usbd.Ctrlr.SofEnabled)
@@ -1482,9 +1194,10 @@ static void nRFUsbdHandleSof(void)
 
 	nRFUsbdSofRelease();
 
-	// ISO is bound to this service interval. Start it here when EasyDMA is
-	// free; otherwise the current DMA completion retries it before bulk work.
-	nRFUsbdServiceIso();
+	if (nRFUsbdIsoService != nullptr)
+	{
+		nRFUsbdIsoService();
+	}
 }
 
 static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
@@ -1600,7 +1313,10 @@ extern "C" void USBD_IRQHandler(void)
 			break;
 		case 0x00000100U: // ISO IN
 		case 0x01000000U: // ISO OUT
-			(void)nRFUsbdFinishIsoDma(dmastatus == 0x00000100U);
+			if (nRFUsbdIsoFinishDma != nullptr)
+			{
+				(void)nRFUsbdIsoFinishDma(dmastatus);
+			}
 			break;
 		default:          // EP1-7 IN/OUT
 		{
@@ -1978,59 +1694,30 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 
 	const uint8_t epAddr = pDesc->bEndpointAddress;
 	const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
-	const uint8_t type = pDesc->bmAttributes & 0x03U;
+	if (epNum == NRFX_USBD_ISO_EP_NO)
+	{
+		return nRFUsbdIsoEpOpen != nullptr && nRFUsbdIsoEpOpen(pDesc);
+	}
 
-	const bool iso = epNum == NRFX_USBD_ISO_EP_NO;
+	const uint8_t type = pDesc->bmAttributes & 0x03U;
 	const bool in = USB_ENDPADDR_IS_IN(epAddr);
-	// type is masked to 0..3: below BULK rejects control and non-ISO 1.
-	if (epNum == 0 || epNum >= NRFX_USBD_EP_COUNT ||
-		(iso ? type != USB_ENDPATT_TRANS_ISO :
-		 type < USB_ENDPATT_TRANS_BULK) ||
-		pDesc->wMaxPacketSize == 0 ||
-		pDesc->wMaxPacketSize > (iso ? NRFX_USBD_ISO_MAX_PACKET_SIZE :
-			NRFX_USBD_MAX_PACKET_SIZE))
+	if (epNum == 0U || epNum >= NRFX_USBD_DATA_EP_COUNT ||
+		type < USB_ENDPATT_TRANS_BULK ||
+		pDesc->wMaxPacketSize == 0U ||
+		pDesc->wMaxPacketSize > NRFX_USBD_MAX_PACKET_SIZE)
 	{
 		return false;
 	}
 
 	nRFUsbGetEpReg(epAddr)->Mps = pDesc->wMaxPacketSize;
-
-	if (iso)
-	{
-		if (!AppEvtHandlerIdleRegister(nRFUsbdRetryIsoComplete))
-			return false;
-
-		// Both directions share the 1024-byte ISO buffer. HalfIN gives each
-		// direction 512 bytes, which is more than the Bluetooth SCO maximum.
-		NRF_USBD->ISOSPLIT =
-			USBD_ISOSPLIT_SPLIT_HalfIN << USBD_ISOSPLIT_SPLIT_Pos;
-		NRF_USBD->ISOINCONFIG =
-			USBD_ISOINCONFIG_RESPONSE_ZeroData <<
-			USBD_ISOINCONFIG_RESPONSE_Pos;
-	}
-
 	nRFUsbdEpHwEnable(epNum, in, true);
 
-	if (iso)
-	{
-		const uint8_t dir = in ? 1U : 0U;
-		const uint32_t state = DisableInterrupt();
-		s_Usbd.Flags = (s_Usbd.Flags &
-			~((uint32_t)USBD_FLAG_ISO_OUT_READY << dir)) |
-			((uint32_t)USBD_FLAG_ISO_OUT_OPEN << dir);
-		EnableInterrupt(state);
-		nRFUsbdSofAcquire();
-	}
-	else
-	{
-		// Regular IN completion remains host-consumed EPDATA; no ENDEPIN IRQ.
-		if (!in)
-			NRF_USBD->SIZE.EPOUT[epNum] = 0U;
-		NRF_USBD->EPSTALL =
-			(USBD_EPSTALL_STALL_UnStall << USBD_EPSTALL_STALL_Pos) | epAddr;
-		NRF_USBD->DTOGGLE =
-			(USBD_DTOGGLE_VALUE_Data0 << USBD_DTOGGLE_VALUE_Pos) | epAddr;
-	}
+	if (!in)
+		NRF_USBD->SIZE.EPOUT[epNum] = 0U;
+	NRF_USBD->EPSTALL =
+		(USBD_EPSTALL_STALL_UnStall << USBD_EPSTALL_STALL_Pos) | epAddr;
+	NRF_USBD->DTOGGLE =
+		(USBD_DTOGGLE_VALUE_Data0 << USBD_DTOGGLE_VALUE_Pos) | epAddr;
 	UsbdSync();
 	return true;
 }
@@ -2043,46 +1730,27 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 	}
 
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	if (epNum == 0 || epNum >= NRFX_USBD_EP_COUNT)
+	if (epNum == 0U || epNum >= NRFX_USBD_EP_COUNT)
 	{
 		return;
 	}
 
-	const bool iso = epNum == NRFX_USBD_ISO_EP_NO;
+	if (epNum == NRFX_USBD_ISO_EP_NO)
+	{
+		if (nRFUsbdIsoEpClose != nullptr)
+		{
+			nRFUsbdIsoEpClose(EpAddr);
+		}
+		return;
+	}
+
 	const bool in = USB_ENDPADDR_IS_IN(EpAddr);
-	// Exclude SOF submission while retiring and closing an ISO direction.
-	const uint32_t isoState = iso ? DisableInterrupt() : 0U;
 	if (nRFUsbdDmaActive())
 	{
 		nRFUsbdDmaWait();
 	}
 
-	if (iso)
-	{
-		const uint8_t dir = in ? 1U : 0U;
-		nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Iso[dir];
-		++s_Usbd.IsoGeneration[dir];
-		s_Usbd.Flags &= ~((uint32_t)(USBD_FLAG_ISO_OUT_BUSY |
-			USBD_FLAG_ISO_OUT_CMPL | USBD_FLAG_ISO_OUT_OPEN |
-			USBD_FLAG_ISO_OUT_READY) << dir);
-		pXfer->pBuffer = NULL;
-		pXfer->TotalLen = 0U;
-		pXfer->ActualLen = 0U;
-	}
-
 	nRFUsbdEpHwEnable(epNum, in, false);
-
-	if (iso)
-	{
-		nRFUsbdSofRelease();
-		nRFUsbGetEpReg(EpAddr)->Mps = 0U;
-		__DSB();
-		EnableInterrupt(isoState);
-		return;
-	}
-
-	// Mps stays valid until the endpoint status is cleared: a racing EPDATA
-	// interrupt in this window still queues the final packet at full size.
 	NRF_USBD->EPDATASTATUS = 1UL << (epNum + (in ? 0U : 16U));
 	if (!in)
 	{
@@ -2137,7 +1805,8 @@ bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	if (epNum == NRFX_USBD_ISO_EP_NO)
 	{
-		return nRFUsbRegIsoXfer(EpAddr, Length);
+		return nRFUsbdIsoXfer != nullptr &&
+			nRFUsbdIsoXfer(EpAddr, Length);
 	}
 
 	nRFUsbdQueXferDir(epNum, USB_ENDPADDR_IS_IN(EpAddr), Length);

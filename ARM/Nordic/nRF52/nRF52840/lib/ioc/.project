@@ -2391,6 +2391,16 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/usb_ctrlr_nrf52.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/usb/usb_ctrlr_nrf52_iso.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/usb_ctrlr_nrf52_iso.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usb_ctrlr_nrf52_priv.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/usb_ctrlr_nrf52_priv.h</locationURI>
+		</link>
+		<link>
 			<name>src/usb/usb_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_intrf.cpp</locationURI>
