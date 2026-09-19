@@ -1506,13 +1506,18 @@ bool UsbCtrlrStart(int DevNo)
 void UsbCtrlrStop(int DevNo)
 {
 	(void)DevNo;
+	nRFUsbdDmaWait();
 	nRFUsbdResetState();
 
-	// UsbCoreStop has already disconnected, disabled the IRQ and closed all
-	// endpoints. Shut down the peripheral wrapper and release its clock.
+	// Stop the controller interrupt before powering down the wrapper.
+	NVIC_DisableIRQ(USBD_IRQn);
+
 	NRF_USBD->INTEN = 0;
+	NRF_USBD->USBPULLUP = 0;
 	NRF_USBD->ENABLE = 0;
 	UsbdSync();
+
+	// A successful start owns one clock request; a failed start releases it.
 	UsbdXtalRelease();
 }
 
