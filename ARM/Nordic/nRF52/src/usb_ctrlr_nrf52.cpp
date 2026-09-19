@@ -1545,21 +1545,17 @@ bool UsbCtrlrHighSpeed(int DevNo)
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 {
 	(void)DevNo;
-	if (pBuff == NULL || BuffLen == 0)
-	{
-		return 0;
-	}
-
-	const size_t count = BuffLen > 16U ? 16U : BuffLen - 1U;
+	(void)BuffLen;
 	const uint32_t id[2] = {nrf_ficr_deviceid_get(NRF_FICR, 0U),
 		nrf_ficr_deviceid_get(NRF_FICR, 1U)};
-	for (size_t i = 0; i < count; ++i)
+
+	for (size_t i = 0; i < 16U; ++i)
 	{
 		const unsigned digit = (id[i >> 3U] >> (28U - ((i & 7U) << 2U))) & 15U;
 		pBuff[i] = (char)(digit + (digit < 10U ? '0' : 'A' - 10));
 	}
-	pBuff[count] = '\0';
-	return count;
+	pBuff[16] = '\0';
+	return 16U;
 }
 
 void UsbCtrlrIntEnable(int DevNo)
