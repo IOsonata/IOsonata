@@ -465,30 +465,6 @@ uint8_t nRFUsbdDir(uint8_t EpAddr)
 	return USB_ENDPADDR_IS_IN(EpAddr) ? 1U : 0U;
 }
 
-// USBD interrupt bits index the event registers from EVENTS_USBRESET.
-// Decode END once for endpoint open/close; EP0DATADONE separates regular
-// IN from ISO IN in the event register bank.
-static inline __attribute__((always_inline))
-uint8_t nRFUsbdDmaEndBit(uint8_t EpNum, bool In)
-{
-	return In ? USBD_INTEN_ENDEPIN0_Pos + EpNum :
-		USBD_INTEN_ENDEPOUT0_Pos + EpNum;
-}
-
-static inline __attribute__((always_inline))
-volatile uint32_t *nRFUsbdDmaEndEvent(uint8_t EndBit)
-{
-	return (volatile uint32_t *)((uintptr_t)&NRF_USBD->EVENTS_USBRESET +
-		EndBit * sizeof(uint32_t));
-}
-
-static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDEPIN) -
-	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
-	USBD_INTEN_ENDEPIN0_Pos * sizeof(uint32_t), "USBD IN event layout");
-static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDEPOUT) -
-	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
-	USBD_INTEN_ENDEPOUT0_Pos * sizeof(uint32_t), "USBD OUT event layout");
-
 static inline __attribute__((always_inline))
 void nRFUsbdEmit(const UsbCtrlrEvt_t *pEvt)
 {
@@ -500,26 +476,28 @@ void nRFUsbdEmit(const UsbCtrlrEvt_t *pEvt)
 static __attribute__((noinline))
 void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 {
-	const uint8_t endBit = nRFUsbdDmaEndBit(EpNum, In);
 	volatile uint32_t *pEnable = In ? &NRF_USBD->EPINEN : &NRF_USBD->EPOUTEN;
+	volatile uint32_t *pEnd = In ?
+		&NRF_USBD->EVENTS_ENDEPIN[EpNum] : &NRF_USBD->EVENTS_ENDEPOUT[EpNum];
 	const uint32_t msk = 1UL << EpNum;
 
+	*pEnd = 0U;
 	if (Enable)
 	{
-		*nRFUsbdDmaEndEvent(endBit) = 0U;
 		// Regular IN completion is host-consumed EPDATA, so only OUT needs
 		// an END interrupt.
 		if (!In)
 		{
-			NRF_USBD->INTENSET = 1UL << endBit;
+			NRF_USBD->INTENSET =
+				1UL << (USBD_INTEN_ENDEPOUT0_Pos + EpNum);
 		}
 		*pEnable |= msk;
 	}
 	else
 	{
-		NRF_USBD->INTENCLR = 1UL << endBit;
+		NRF_USBD->INTENCLR = 1UL <<
+			((In ? USBD_INTEN_ENDEPIN0_Pos : USBD_INTEN_ENDEPOUT0_Pos) + EpNum);
 		*pEnable &= ~msk;
-		*nRFUsbdDmaEndEvent(endBit) = 0U;
 	}
 }
 
