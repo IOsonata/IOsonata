@@ -184,7 +184,7 @@ static void TestFullBehaviour(void)
 	CHECK(g2 != nullptr && BlockIs(g2, 1U));
 }
 
-// PeekMultiple returns only the consecutive run and never advances GetIdx.
+// PeekMultiple returns only the consecutive run and never changes either index.
 static void TestPeekMultiple(void)
 {
 	hCFifo_t h = CFifoInit(s_Pow2Mem, sizeof(s_Pow2Mem), BLK, true);
@@ -206,11 +206,13 @@ static void TestPeekMultiple(void)
 	}
 
 	const uint32_t getIdx = h->GetIdx;
+	const uint32_t putIdx = h->PutIdx;
 	int cnt = 4;
 	const uint8_t *p = CFifoPeekMultiple(h, &cnt);
 	CHECK(p != nullptr);
 	CHECK(cnt == 2);
 	CHECK(h->GetIdx == getIdx);
+	CHECK(h->PutIdx == putIdx);
 	CHECK(CFifoUsed(h) == 4);
 	CHECK(p != nullptr && BlockIs(p, 0x30U));
 	CHECK(p != nullptr && BlockIs(p + BLK, 0x31U));
@@ -220,6 +222,10 @@ static void TestPeekMultiple(void)
 	CHECK(CFifoPeekMultiple(h, &again) == p);
 	CHECK(again == 2);
 	CHECK(h->GetIdx == getIdx);
+	CHECK(h->PutIdx == putIdx);
+	CHECK(CFifoUsed(h) == 4);
+	CHECK(p != nullptr && BlockIs(p, 0x30U));
+	CHECK(p != nullptr && BlockIs(p + BLK, 0x31U));
 
 	// Requested count smaller than the span is respected.
 	int one = 1;
@@ -229,15 +235,48 @@ static void TestPeekMultiple(void)
 
 	// Null count is the single-block Peek form.
 	CHECK(CFifoPeekMultiple(h, nullptr) == p);
+	CHECK(h->GetIdx == getIdx);
+	CHECK(h->PutIdx == putIdx);
 
-	// Empty and invalid count behavior.
-	CFifoFlush(h);
-	cnt = 4;
-	CHECK(CFifoPeekMultiple(h, &cnt) == nullptr);
-	CHECK(cnt == 0);
+	// Invalid counts must also leave a populated FIFO untouched.
 	cnt = 0;
 	CHECK(CFifoPeekMultiple(h, &cnt) == nullptr);
 	CHECK(cnt == 0);
+	cnt = -3;
+	CHECK(CFifoPeekMultiple(h, &cnt) == nullptr);
+	CHECK(cnt == 0);
+	CHECK(h->GetIdx == getIdx);
+	CHECK(h->PutIdx == putIdx);
+	CHECK(CFifoUsed(h) == 4);
+
+	// Consuming the first run exposes the second run at the buffer start.
+	cnt = 2;
+	CHECK(CFifoGetMultiple(h, &cnt) == p);
+	CHECK(cnt == 2);
+	cnt = 2;
+	p = CFifoPeekMultiple(h, &cnt);
+	CHECK(p == h->pMemStart);
+	CHECK(cnt == 2);
+	CHECK(p != nullptr && BlockIs(p, 0x32U));
+	CHECK(p != nullptr && BlockIs(p + BLK, 0x33U));
+
+	// More is requested than is used, with room before the physical end.
+	cnt = 100;
+	CHECK(CFifoPeekMultiple(h, &cnt) == p);
+	CHECK(cnt == 2);
+	CHECK(CFifoUsed(h) == 2);
+	CHECK(h->GetIdx == getIdx + 2U);
+	CHECK(h->PutIdx == putIdx);
+
+	// Empty peeks report zero without resetting the drained FIFO indices.
+	CHECK(CFifoGetMultiple(h, &cnt) == p);
+	cnt = 4;
+	CHECK(CFifoPeekMultiple(h, &cnt) == nullptr);
+	CHECK(cnt == 0);
+	CHECK(CFifoPeekMultiple(h, nullptr) == nullptr);
+	CHECK(CFifoUsed(h) == 0);
+	CHECK(h->GetIdx == putIdx);
+	CHECK(h->PutIdx == putIdx);
 }
 
 // A get of more than one block returns only the run before the wrap.
@@ -532,6 +571,7 @@ static void TestUsedAvailInvariant(void)
 	int cnt = 4;
 	CHECK(CFifoPeekMultiple(nullptr, &cnt) == nullptr);
 	CHECK(cnt == 0);
+	CHECK(CFifoPeekMultiple(nullptr, nullptr) == nullptr);
 	CFifoFlush(nullptr);
 }
 
