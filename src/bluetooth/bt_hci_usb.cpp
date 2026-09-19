@@ -169,9 +169,9 @@ static uint8_t BtHciUsbEventInterval(const BtHciUsbDev_t *pHci)
 }
 
 static bool BtHciUsbOpenEndpoint(BtHciUsbDev_t *pHci, uint8_t EpAddr,
-								 uint8_t TransferType, uint16_t PacketSize)
+								 uint8_t TransferType, uint16_t MaxPacketSize)
 {
-	return UsbCtrlrEpOpenData(pHci->DevNo, EpAddr, TransferType, PacketSize);
+	return UsbCtrlrEpOpenData(pHci->DevNo, EpAddr, TransferType, MaxPacketSize);
 }
 
 static void BtHciUsbCloseEndpoints(BtHciUsbDev_t *pHci)
@@ -1248,8 +1248,8 @@ static bool BtHciUsbMakeDesc(BtHciUsbDesc_t *pDesc, const BtHciUsbDev_t *pHci,
 	const uint8_t eventInterval = Speed == USB_SPEED_HIGH ?
 		pHci->EventHsInterval : pHci->EventFsInterval;
 
-	if (eventMps == 0U || eventMps > USB_PKT_MAXLEN(pHci->DevNo, INT) ||
-		aclMps == 0U || aclMps > USB_PKT_MAXLEN(pHci->DevNo, BULK) ||
+	if (eventMps == 0U || eventMps > USB_DEV_PKT_LEN_MAX(pHci->DevNo, INT) ||
+		aclMps == 0U || aclMps > USB_DEV_PKT_LEN_MAX(pHci->DevNo, BULK) ||
 		eventInterval == 0U)
 	{
 		return false;
@@ -1469,15 +1469,15 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 
 	const uint16_t isoMask = (uint16_t)(USB_ISO_EPIN_MASK(pHci->DevNo) &
 		USB_ISO_EPOUT_MASK(pHci->DevNo));
-	if (pHci->EventFsMps > USB_PKT_MAXLEN(pHci->DevNo, INT) ||
-		pHci->AclFsMps > USB_PKT_MAXLEN(pHci->DevNo, BULK) ||
+	if (pHci->EventFsMps > USB_DEV_PKT_LEN_MAX(pHci->DevNo, INT) ||
+		pHci->AclFsMps > USB_DEV_PKT_LEN_MAX(pHci->DevNo, BULK) ||
 		pHci->AclFsMps > BT_HCI_USB_ACL_MAX_MPS ||
 		(pHci->ScoEnabled && (!USB_ISO_SUPPORTED(pHci->DevNo) ||
-		 isoMask == 0U || USB_PKT_MAXLEN(pHci->DevNo, ISO) <
+		 isoMask == 0U || USB_DEV_PKT_LEN_MAX(pHci->DevNo, ISO) <
 			BT_HCI_USB_SCO_MAX_MPS)) ||
 		(USB_HIGHSPEED_CAPABLE(pHci->DevNo) &&
-		 (pHci->EventHsMps > USB_PKT_MAXLEN(pHci->DevNo, INT) ||
-		  pHci->AclHsMps > USB_PKT_MAXLEN(pHci->DevNo, BULK) ||
+		 (pHci->EventHsMps > USB_DEV_PKT_LEN_MAX(pHci->DevNo, INT) ||
+		  pHci->AclHsMps > USB_DEV_PKT_LEN_MAX(pHci->DevNo, BULK) ||
 		  pHci->AclHsMps > BT_HCI_USB_ACL_MAX_MPS)))
 	{
 		return false;

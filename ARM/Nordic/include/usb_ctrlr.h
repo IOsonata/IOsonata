@@ -83,10 +83,10 @@ enum {
 	USB_HIGHSPEED_CAPABLE_0 = 0,
 	USB_EPIN_CNT_0 = 8,
 	USB_EPOUT_CNT_0 = 8,
-	USB_PKT_MAXLEN_0_CONTROL = 64,
-	USB_PKT_MAXLEN_0_BULK = 64,
-	USB_PKT_MAXLEN_0_INT = 64,
-	USB_PKT_MAXLEN_0_ISO = 512,
+	USB_DEV0_CONTROL_PKT_LEN_MAX = 64,
+	USB_DEV0_BULK_PKT_LEN_MAX = 64,
+	USB_DEV0_INT_PKT_LEN_MAX = 64,
+	USB_DEV0_ISO_PKT_LEN_MAX = 512,
 	USB_ISO_SUPPORTED_0 = 1,
 	USB_ISO_EPIN_MASK_0 = (1U << 8),
 	USB_ISO_EPOUT_MASK_0 = (1U << 8),
@@ -102,10 +102,10 @@ enum {
 	USB_HIGHSPEED_CAPABLE_0 = 1,
 	USB_EPIN_CNT_0 = 16,
 	USB_EPOUT_CNT_0 = 16,
-	USB_PKT_MAXLEN_0_CONTROL = 64,
-	USB_PKT_MAXLEN_0_BULK = 512,
-	USB_PKT_MAXLEN_0_INT = 1024,
-	USB_PKT_MAXLEN_0_ISO = 1024,
+	USB_DEV0_CONTROL_PKT_LEN_MAX = 64,
+	USB_DEV0_BULK_PKT_LEN_MAX = 512,
+	USB_DEV0_INT_PKT_LEN_MAX = 1024,
+	USB_DEV0_ISO_PKT_LEN_MAX = 1024,
 	USB_ISO_SUPPORTED_0 = 0,
 	USB_ISO_EPIN_MASK_0 = 0,
 	USB_ISO_EPOUT_MASK_0 = 0,
@@ -127,12 +127,12 @@ enum {
 	((CtrlrNo) == 0 ? USB_ISO_EPIN_MASK_0 : 0U)
 #define USB_ISO_EPOUT_MASK(CtrlrNo) \
 	((CtrlrNo) == 0 ? USB_ISO_EPOUT_MASK_0 : 0U)
-#define USB_PKT_MAXLEN(CtrlrNo, TransType) \
-	((CtrlrNo) != 0 ? 0 : \
-	 (TransType) == CONTROL ? USB_PKT_MAXLEN_0_CONTROL : \
-	 (TransType) == ISO ? USB_PKT_MAXLEN_0_ISO : \
-	 (TransType) == BULK ? USB_PKT_MAXLEN_0_BULK : \
-	 (TransType) == INT ? USB_PKT_MAXLEN_0_INT : 0)
+#define USB_DEV_PKT_LEN_MAX(DevNo, TransType) \
+	((DevNo) != 0 ? 0 : \
+	 (TransType) == CONTROL ? USB_DEV0_CONTROL_PKT_LEN_MAX : \
+	 (TransType) == ISO ? USB_DEV0_ISO_PKT_LEN_MAX : \
+	 (TransType) == BULK ? USB_DEV0_BULK_PKT_LEN_MAX : \
+	 (TransType) == INT ? USB_DEV0_INT_PKT_LEN_MAX : 0)
 
 #if defined(USBD_PRESENT)
 #define USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)
@@ -226,7 +226,7 @@ void UsbCtrlrRemoteWakeup(int DevNo);
 void UsbCtrlrSofEnable(int DevNo, bool Enable);
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
-bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type, uint16_t PacketSize);
+bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type, uint16_t MaxPacketSize);
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpCloseAll(int DevNo);
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
@@ -313,9 +313,9 @@ typedef struct __nRF_Usbd_State
 	uint8_t IntPrio;
 	bool LowPowerSuspend;
 	nRFUsbdCtrlr_t Ctrlr;
-	uint16_t EpOutPacketSize[NRF_USB_EP_COUNT];
+	uint16_t EpOutMaxPacketSize[NRF_USB_EP_COUNT];
 	uint16_t EpOutBlocking;
-	uint16_t IsoInPacketSize;
+	uint16_t IsoInMaxPacketSize;
 	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
 } nRFUsbdState_t;

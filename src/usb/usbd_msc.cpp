@@ -117,10 +117,10 @@ static void UsbdMscCopyInquiry(char *pDest, size_t Length,
 }
 
 static bool UsbdMscOpenEndpoint(UsbdMscDev_t *pMsc, uint8_t EpAddr,
-								uint16_t PacketSize)
+								uint16_t MaxPacketSize)
 {
 	return UsbCtrlrEpOpenData(pMsc->DevNo, EpAddr,
-		USB_ENDPATT_TRANS_BULK, PacketSize);
+		USB_ENDPATT_TRANS_BULK, MaxPacketSize);
 }
 
 static void UsbdMscCloseEndpoints(UsbdMscDev_t *pMsc)

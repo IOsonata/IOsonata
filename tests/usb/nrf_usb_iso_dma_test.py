@@ -75,7 +75,7 @@ struct {
  volatile uint32_t Flags=0;
  uint32_t IsoGeneration[2]={};uint16_t IsoOutSize=0;
  struct {nRFUsbdXfer_t Ep0[2],Iso[2];bool SofEnabled;} Ctrlr;
- uint16_t EpOutPacketSize[9]={};uint16_t EpOutBlocking=0;uint16_t IsoInPacketSize=0;
+ uint16_t EpOutMaxPacketSize[9]={};uint16_t EpOutBlocking=0;uint16_t IsoInMaxPacketSize=0;
  nRFUsbEpReg_t EpReg[9][2];
 } s_Usbd;
 #define ISO_OPEN() ((s_Usbd.Flags / USBD_FLAG_ISO_OUT_OPEN) & 3u)
@@ -154,7 +154,7 @@ void callback(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,UsbCtrlrXferRes
 }
 void init(){
  regs={};s_Usbd.Ctrlr={};memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
- memset(s_Usbd.EpOutPacketSize,0,sizeof(s_Usbd.EpOutPacketSize));s_Usbd.EpOutBlocking=0;s_Usbd.IsoInPacketSize=0;
+ memset(s_Usbd.EpOutMaxPacketSize,0,sizeof(s_Usbd.EpOutMaxPacketSize));s_Usbd.EpOutBlocking=0;s_Usbd.IsoInMaxPacketSize=0;
  // Both ISO directions open; every other flag (busy, complete, ready,
  // suspend group) cleared, exactly the former per-field init.
  s_Usbd.Flags=USBD_FLAG_ISO_OUT_OPEN|USBD_FLAG_ISO_IN_OPEN;
@@ -163,7 +163,7 @@ void init(){
  ++s_Usbd.IsoGeneration[0];++s_Usbd.IsoGeneration[1];
  s_Usbd.EpReg[8][0]={outBuffer,callback,nullptr};
  s_Usbd.EpReg[8][1]={inBuffer,callback,nullptr};
- s_Usbd.EpOutPacketSize[8]=512;s_Usbd.IsoInPacketSize=512;
+ s_Usbd.EpOutMaxPacketSize[8]=512;s_Usbd.IsoInMaxPacketSize=512;
  memset(inBuffer,0xA5,sizeof(inBuffer));memset(hostOut,0x5A,sizeof(hostOut));
  assert(AppEvtHandlerInit(nullptr,0));assert(AppEvtHandlerIdleRegister(nRFUsbdRetryIsoComplete));
 }
@@ -214,7 +214,7 @@ int main(){
  puts("PASS: full real AppEvt queue retains completion, retries, and does not retain EasyDMA");
 
  init();frame(17);finish(false);UsbCtrlrEpClose(0,8);
- s_Usbd.Flags|=USBD_FLAG_ISO_OUT_OPEN;s_Usbd.EpOutPacketSize[8]=9;frame(9);finish(false);
+ s_Usbd.Flags|=USBD_FLAG_ISO_OUT_OPEN;s_Usbd.EpOutMaxPacketSize[8]=9;frame(9);finish(false);
  AppEvtHandlerExec();assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
  puts("PASS: close/reopen discards old callback without releasing the new transfer");
 
@@ -236,7 +236,7 @@ int main(){
   regs.EPDATASTATUS.bits=0x00FF00FF;
   for(unsigned n=0;n<8;++n){
    regs.EVENTS_ENDEPIN[n]=regs.EVENTS_ENDEPOUT[n]=1;
-   regs.SIZE.EPOUT[n]=64;s_Usbd.EpOutPacketSize[n]=64;
+   regs.SIZE.EPOUT[n]=64;s_Usbd.EpOutMaxPacketSize[n]=64;
   }
   UsbCtrlrEpClose(0,ep|(dir?0x80:0));
   assert(irqMask==masked && ISO_OPEN()==3 && ISO_BUSY()==0);
@@ -248,7 +248,7 @@ int main(){
    assert(regs.EVENTS_ENDEPIN[n]==unsigned(!(n==ep&&dir)));
    assert(regs.EVENTS_ENDEPOUT[n]==unsigned(!(n==ep&&!dir)));
    assert(regs.SIZE.EPOUT[n]==((n==ep&&!dir)?0U:64U));
-   assert(s_Usbd.EpOutPacketSize[n]==((n==ep&&!dir)?0U:64U));
+   assert(s_Usbd.EpOutMaxPacketSize[n]==((n==ep&&!dir)?0U:64U));
   }
  }
  puts("PASS: regular close affects only the selected endpoint/direction and preserves IRQ state");

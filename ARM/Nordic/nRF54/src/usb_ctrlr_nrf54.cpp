@@ -1779,10 +1779,10 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 }
 
 bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type,
-						 uint16_t PacketSize)
+						 uint16_t MaxPacketSize)
 {
 	return nRFUsbValidDevNo(DevNo) &&
-		nRFUsbRegEpOpen(EpAddr, Type, PacketSize);
+		nRFUsbRegEpOpen(EpAddr, Type, MaxPacketSize);
 }
 
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)

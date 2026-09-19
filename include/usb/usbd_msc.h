@@ -26,7 +26,7 @@ does not allocate or own the medium or the sector-transfer buffer.
 #define USBD_MSC_CONFIG_VALUE			1U
 #define USBD_MSC_FS_MPS				64U
 #define USBD_MSC_HS_MPS				512U
-#define USBD_MSC_MAX_MPS			USB_PKT_MAXLEN(0, BULK)
+#define USBD_MSC_MAX_MPS			USB_DEV_PKT_LEN_MAX(0, BULK)
 #define USBD_MSC_FIFO_PKT_COUNT		2U
 #define USBD_MSC_PKT_BLKSIZE			USB_INTRF_PKT_BLKSIZE(USBD_MSC_MAX_MPS)
 #define USBD_MSC_RXFIFO_MEMSIZE \

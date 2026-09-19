@@ -57,10 +57,10 @@ enum {
 	USB_HIGHSPEED_CAPABLE_0 = 0,
 	USB_EPIN_CNT_0 = 8,
 	USB_EPOUT_CNT_0 = 8,
-	USB_PKT_MAXLEN_0_CONTROL = 64,
-	USB_PKT_MAXLEN_0_BULK = 64,
-	USB_PKT_MAXLEN_0_INT = 64,
-	USB_PKT_MAXLEN_0_ISO = 63,
+	USB_DEV0_CONTROL_PKT_LEN_MAX = 64,
+	USB_DEV0_BULK_PKT_LEN_MAX = 64,
+	USB_DEV0_INT_PKT_LEN_MAX = 64,
+	USB_DEV0_ISO_PKT_LEN_MAX = 63,
 	USB_ISO_SUPPORTED_0 = 1,
 	USB_ISO_EPIN_MASK_0 = (1U << 8) | (1U << 9),
 	USB_ISO_EPOUT_MASK_0 = (1U << 8) | (1U << 9),
@@ -78,12 +78,12 @@ enum {
 	((CtrlrNo) == 0 ? (uint16_t)USB_ISO_EPIN_MASK_0 : (uint16_t)0U)
 #define USB_ISO_EPOUT_MASK(CtrlrNo) \
 	((CtrlrNo) == 0 ? (uint16_t)USB_ISO_EPOUT_MASK_0 : (uint16_t)0U)
-#define USB_PKT_MAXLEN(CtrlrNo, TransType) \
-	((CtrlrNo) != 0 ? 0 : \
-	 (TransType) == CONTROL ? USB_PKT_MAXLEN_0_CONTROL : \
-	 (TransType) == ISO ? USB_PKT_MAXLEN_0_ISO : \
-	 (TransType) == BULK ? USB_PKT_MAXLEN_0_BULK : \
-	 (TransType) == INT ? USB_PKT_MAXLEN_0_INT : 0)
+#define USB_DEV_PKT_LEN_MAX(DevNo, TransType) \
+	((DevNo) != 0 ? 0 : \
+	 (TransType) == CONTROL ? USB_DEV0_CONTROL_PKT_LEN_MAX : \
+	 (TransType) == ISO ? USB_DEV0_ISO_PKT_LEN_MAX : \
+	 (TransType) == BULK ? USB_DEV0_BULK_PKT_LEN_MAX : \
+	 (TransType) == INT ? USB_DEV0_INT_PKT_LEN_MAX : 0)
 
 #define USB_CTRLR_ISO_INIT(DevNo) true
 
@@ -166,14 +166,14 @@ void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
 
 static inline bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr,
-									 uint8_t Type, uint16_t PacketSize)
+									 uint8_t Type, uint16_t MaxPacketSize)
 {
 	UsbEndPointDesc_t desc = {0};
 	desc.bLength = sizeof(desc);
 	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
 	desc.bEndpointAddress = EpAddr;
 	desc.bmAttributes = Type;
-	desc.wMaxPacketSize = PacketSize;
+	desc.wMaxPacketSize = MaxPacketSize;
 	return UsbCtrlrEpOpen(DevNo, &desc);
 }
 

@@ -74,7 +74,7 @@ SOFTWARE.
 
 #define USBD_CDC_NOTIFY_LEN				(sizeof(UsbCdcNotification_t) + 2U)
 #define USBD_CDC_TRANS_WORDS \
-	((USB_PKT_MAXLEN(0, BULK) + sizeof(uint32_t) - 1U) / sizeof(uint32_t))
+	((USB_DEV_PKT_LEN_MAX(0, BULK) + sizeof(uint32_t) - 1U) / sizeof(uint32_t))
 #define USBD_CDC_NOTIFY_WORDS \
 	((USBD_CDC_NOTIFY_LEN + sizeof(uint32_t) - 1U) / sizeof(uint32_t))
 
