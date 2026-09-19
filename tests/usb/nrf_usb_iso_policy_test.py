@@ -45,7 +45,7 @@ assert "USB_ISO_EPIN_MASK_0 = (1U << 8)" in header
 assert "USB_ISO_EPOUT_MASK_0 = (1U << 8)" in header
 assert "USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)" in header
 assert "NRF_USB_EP_COUNT = 9" in header
-assert "#if defined(USB_CTRLR_NRF52_IMPLEMENTATION)" in header
+assert "#if defined(USBD_PRESENT)" in header
 
 assert "USBD_ISOSPLIT_SPLIT_HalfIN" in open_ep
 assert "USBD_ISOINCONFIG_RESPONSE_ZeroData" in open_ep

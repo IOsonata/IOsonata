@@ -244,8 +244,10 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);
 }
 #endif
 
-#if defined(USB_CTRLR_NRF52_IMPLEMENTATION)
+#if defined(USBD_PRESENT)
 
+// Shared nRF52 USBD implementation state used by the base and optional ISO
+// archive members. This is a target-family header; nRF54 USBHS does not see it.
 #include "cfifo.h"
 
 enum
@@ -323,7 +325,7 @@ extern nRFUsbdState_t s_Usbd;
 void nRFUsbdDmaWait(void);
 void nRFUsbdResumeQueuedDmaLocked(void);
 
-#endif // USB_CTRLR_NRF52_IMPLEMENTATION
+#endif // USBD_PRESENT
 
 /** @} End of group USB */
 
