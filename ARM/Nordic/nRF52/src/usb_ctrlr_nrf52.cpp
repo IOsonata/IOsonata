@@ -155,7 +155,8 @@ typedef struct __nRF_Usbd_Que {
 } nRFUsbdQue_t;
 
 typedef struct __nRF_Ep_Packet {
-	nRFUsbdQue_t Hdr;
+	uint16_t Len;
+	uint16_t Resv;
 	uint8_t Payload[NRFX_USBD_MAX_PACKET_SIZE];
 } nRFEPPkt_t;
 
@@ -637,8 +638,8 @@ void nRFUsbdDmaWait(void)
 static __attribute__((noinline)) void nRFUsbdEp0InProgram(const nRFEPPkt_t *p)
 {
 	NRF_USBD->EPIN[0].PTR = (uint32_t)(uintptr_t)p->Payload;
-	NRF_USBD->EPIN[0].MAXCNT = p->Hdr.Len;
-	NRF_USBD->SHORTS = p->Hdr.Len < NRFX_USBD_MAX_PACKET_SIZE ?
+	NRF_USBD->EPIN[0].MAXCNT = p->Len;
+	NRF_USBD->SHORTS = p->Len < NRFX_USBD_MAX_PACKET_SIZE ?
 		USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk : 0U;
 }
 
@@ -1875,9 +1876,8 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 			memcpy(p->Payload, pBuffer, l);
 			pBuffer += l;
 		}
-		p->Hdr.EpNum = 0U;
-		p->Hdr.Dir = 1U;
-		p->Hdr.Len = l;
+
+		p->Len = l;
 		cnt += l;
 		Length -= l;
 	} while (Length > 0);
