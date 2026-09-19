@@ -184,6 +184,62 @@ static void TestFullBehaviour(void)
 	CHECK(g2 != nullptr && BlockIs(g2, 1U));
 }
 
+// PeekMultiple returns only the consecutive run and never advances GetIdx.
+static void TestPeekMultiple(void)
+{
+	hCFifo_t h = CFifoInit(s_Pow2Mem, sizeof(s_Pow2Mem), BLK, true);
+	if (h == nullptr) { CHECK(false); return; }
+
+	// Move both logical indices close to the physical end while keeping empty.
+	for (unsigned i = 0; i < POW2_SLOTS - 2U; i++)
+	{
+		uint8_t *p = CFifoPut(h);
+		if (p != nullptr) { FillBlock(p, 0xEEU); }
+		(void)CFifoGet(h);
+	}
+
+	for (unsigned i = 0; i < 4U; i++)
+	{
+		uint8_t *p = CFifoPut(h);
+		CHECK(p != nullptr);
+		if (p != nullptr) { FillBlock(p, (uint8_t)(0x30U + i)); }
+	}
+
+	const uint32_t getIdx = h->GetIdx;
+	int cnt = 4;
+	const uint8_t *p = CFifoPeekMultiple(h, &cnt);
+	CHECK(p != nullptr);
+	CHECK(cnt == 2);
+	CHECK(h->GetIdx == getIdx);
+	CHECK(CFifoUsed(h) == 4);
+	CHECK(p != nullptr && BlockIs(p, 0x30U));
+	CHECK(p != nullptr && BlockIs(p + BLK, 0x31U));
+
+	// Repeating the peek returns the same span because nothing was consumed.
+	int again = 4;
+	CHECK(CFifoPeekMultiple(h, &again) == p);
+	CHECK(again == 2);
+	CHECK(h->GetIdx == getIdx);
+
+	// Requested count smaller than the span is respected.
+	int one = 1;
+	CHECK(CFifoPeekMultiple(h, &one) == p);
+	CHECK(one == 1);
+	CHECK(h->GetIdx == getIdx);
+
+	// Null count is the single-block Peek form.
+	CHECK(CFifoPeekMultiple(h, nullptr) == p);
+
+	// Empty and invalid count behavior.
+	CFifoFlush(h);
+	cnt = 4;
+	CHECK(CFifoPeekMultiple(h, &cnt) == nullptr);
+	CHECK(cnt == 0);
+	cnt = 0;
+	CHECK(CFifoPeekMultiple(h, &cnt) == nullptr);
+	CHECK(cnt == 0);
+}
+
 // A get of more than one block returns only the run before the wrap.
 static void TestGetMultipleContiguous(void)
 {
@@ -473,6 +529,9 @@ static void TestUsedAvailInvariant(void)
 	CHECK(CFifoGet(nullptr) == nullptr);
 	CHECK(CFifoPut(nullptr) == nullptr);
 	CHECK(CFifoPeek(nullptr) == nullptr);
+	int cnt = 4;
+	CHECK(CFifoPeekMultiple(nullptr, &cnt) == nullptr);
+	CHECK(cnt == 0);
 	CFifoFlush(nullptr);
 }
 
@@ -485,6 +544,7 @@ int main(void)
 		{ "geometry and accessors", TestGeometryAndAccessors },
 		{ "single round trip", TestSingleRoundTrip },
 		{ "full behaviour", TestFullBehaviour },
+		{ "peek multiple", TestPeekMultiple },
 		{ "get multiple contiguous", TestGetMultipleContiguous },
 		{ "get multiple stops at wrap", TestGetMultipleStopsAtWrap },
 		{ "put multiple", TestPutMultiple },

@@ -98,6 +98,44 @@ hCFifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize,
 	return pFifo;
 }
 
+uint8_t *CFifoPeekMultiple(hCFifo_t const pFifo, int *pCnt)
+{
+	if (pCnt == NULL)
+	{
+		return CFifoPeek(pFifo);
+	}
+	if (pFifo == NULL || *pCnt <= 0)
+	{
+		*pCnt = 0;
+		return NULL;
+	}
+
+	uint32_t getIdx = CFIFO_ATOMIC_LOAD(&pFifo->GetIdx, __ATOMIC_RELAXED);
+	uint32_t putIdx = CFIFO_ATOMIC_LOAD(&pFifo->PutIdx, __ATOMIC_ACQUIRE);
+	uint32_t used = putIdx - getIdx;
+	if (used == 0U)
+	{
+		*pCnt = 0;
+		return NULL;
+	}
+
+	uint32_t count = (uint32_t)*pCnt;
+	if (count > used)
+	{
+		count = used;
+	}
+
+	uint32_t slot = cfifo_slot(pFifo, getIdx);
+	uint32_t contiguous = (uint32_t)pFifo->MaxIdxCnt - slot;
+	if (count > contiguous)
+	{
+		count = contiguous;
+	}
+
+	*pCnt = (int)count;
+	return cfifo_addr(pFifo, slot);
+}
+
 uint8_t *CFifoGet(hCFifo_t const pFifo)
 {
 	if (pFifo == NULL)

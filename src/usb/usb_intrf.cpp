@@ -83,24 +83,12 @@ static void UsbIntrfTxFailure(UsbDevIntrf_t *pIntrf, uint16_t Length)
 
 static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf)
 {
-	uint8_t *pData = CFifoPeek(pIntrf->hTxFifo);
+	int cnt = (int)pIntrf->Mps;
+	uint8_t *pData = CFifoPeekMultiple(pIntrf->hTxFifo, &cnt);
 	if (pData == nullptr)
 	{
 		UsbIntrfSetTxIdle(pIntrf);
 		return -1;
-	}
-
-	int cnt = CFifoUsed(pIntrf->hTxFifo);
-	if (cnt > (int)pIntrf->Mps)
-	{
-		cnt = (int)pIntrf->Mps;
-	}
-
-	const int contiguous = (int)(pIntrf->hTxFifo->pMemStart +
-		pIntrf->hTxFifo->MaxIdxCnt - pData);
-	if (cnt > contiguous)
-	{
-		cnt = contiguous;
 	}
 
 #if defined(NRF52_SERIES)

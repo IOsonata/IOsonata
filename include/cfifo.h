@@ -134,6 +134,20 @@ static inline uint8_t *CFifoPeek(hCFifo_t const pFifo)
 }
 
 /**
+ * @brief	Inspect consecutive FIFO blocks without consuming them.
+ *
+ * The returned span is limited by both the number of used blocks and the
+ * physical end of the circular buffer. GetIdx is not modified.
+ *
+ * @param	hFifo : CFIFO handle
+ * @param	pCnt  : Maximum number of blocks to inspect\n
+ * 					On return number of consecutive blocks available
+ *
+ * @return	Pointer to first FIFO block, or NULL when empty.
+ */
+uint8_t *CFifoPeekMultiple(hCFifo_t const hFifo, int *pCnt);
+
+/**
  * @brief	Retrieve FIFO data by returning pointer to FIFO memory block for reading.
  *
  * This function returns a direct pointer to FIFO memory to quickly retrieve data.
