@@ -803,37 +803,6 @@ static __attribute__((noinline)) void nRFUsbdQueXferDir(uint8_t EpNum, bool In, 
 	EnableInterrupt(state);
 }
 
-static void nRFUsbdQueInFifo(uint8_t EpNum, hCFifo_t hFifo, uint16_t Len)
-{
-	const uint32_t state = DisableInterrupt();
-	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
-	uint8_t *pData = CFifoPeek(hFifo);
-	const uint32_t misalign = (uint32_t)(uintptr_t)pData & 3U;
-
-	pQue->EpNum = EpNum;
-	pQue->Len = Len;
-
-	if (misalign != 0U)
-	{
-		const uint16_t repair = (uint16_t)(4U - misalign);
-		if (pQue->Len > repair)
-		{
-			pQue->Len = repair;
-		}
-		pQue->Scratch = 0U;
-		memcpy(&pQue->Scratch, pData, pQue->Len);
-		pQue->Dir = NRFX_USBD_QUE_IN_SCRATCH;
-	}
-	else
-	{
-		pQue->hFifo = hFifo;
-		pQue->Dir = NRFX_USBD_QUE_IN_FIFO;
-	}
-
-	nRFUsbdResumeQueuedDmaLocked();
-	EnableInterrupt(state);
-}
-
 /** Remove one endpoint number without disturbing the order of other work. */
 static void nRFUsbdQueRemoveEp(uint8_t EpNum)
 {
@@ -1527,10 +1496,6 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 					   false);
 	s_Usbd.hEp0Que = CFifoInit(s_Ep0QueMem, sizeof(s_Ep0QueMem),
 						  sizeof(nRFEPPkt_t), true);
-	if (s_Usbd.hQue == NULL || s_Usbd.hEp0Que == NULL)
-	{
-		return false;
-	}
 
 	nRFUsbdResetState();
 	return true;
@@ -1608,10 +1573,11 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 
 	for (uint8_t word = 0U; word < 2U; ++word)
 	{
-		const uint32_t id = nrf_ficr_deviceid_get(NRF_FICR, word);
-		for (int8_t shift = 28; shift >= 0; shift -= 4)
+		uint32_t id = nrf_ficr_deviceid_get(NRF_FICR, word);
+		for (uint8_t digitNo = 0; digitNo < 8U; ++digitNo)
 		{
-			const unsigned digit = (id >> shift) & 15U;
+			const unsigned digit = id >> 28U;
+			id <<= 4U;
 			*p++ = (char)(digit + (digit < 10U ? '0' : 'A' - 10));
 		}
 	}
@@ -1736,10 +1702,7 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 	}
 
 	const bool in = USB_ENDPADDR_IS_IN(EpAddr);
-	if (nRFUsbdDmaActive())
-	{
-		nRFUsbdDmaWait();
-	}
+	nRFUsbdDmaWait();
 
 	nRFUsbdEpHwEnable(epNum, in, false);
 	NRF_USBD->EPDATASTATUS = 1UL << (epNum + (in ? 0U : 16U));
@@ -1805,22 +1768,40 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		return UsbCtrlrEpXfer(DevNo, USB_ENDPADDR_DIRIN(EpNum), Length);
 	}
 
+	const uint32_t state = DisableInterrupt();
+	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
+	pQue->EpNum = EpNum;
+	pQue->Len = Length;
+
 	if (pBuffer == NULL)
 	{
-		nRFUsbdQueInFifo(EpNum,
-			(hCFifo_t)s_Usbd.EpReg[EpNum][1].pBuffer, Length);
+		hCFifo_t hFifo = (hCFifo_t)s_Usbd.EpReg[EpNum][1].pBuffer;
+		uint8_t *pData = CFifoPeek(hFifo);
+		const uint32_t misalign = (uint32_t)(uintptr_t)pData & 3U;
+		if (misalign != 0U)
+		{
+			const uint16_t repair = (uint16_t)(4U - misalign);
+			if (pQue->Len > repair)
+			{
+				pQue->Len = repair;
+			}
+			pQue->Scratch = 0U;
+			memcpy(&pQue->Scratch, pData, pQue->Len);
+			pQue->Dir = NRFX_USBD_QUE_IN_SCRATCH;
+		}
+		else
+		{
+			pQue->hFifo = hFifo;
+			pQue->Dir = NRFX_USBD_QUE_IN_FIFO;
+		}
 	}
 	else
 	{
-		const uint32_t state = DisableInterrupt();
-		nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
-		pQue->EpNum = EpNum;
 		pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
-		pQue->Len = Length;
 		pQue->pBuffer = pBuffer;
-		nRFUsbdResumeQueuedDmaLocked();
-		EnableInterrupt(state);
 	}
+	nRFUsbdResumeQueuedDmaLocked();
+	EnableInterrupt(state);
 	return true;
 }
 

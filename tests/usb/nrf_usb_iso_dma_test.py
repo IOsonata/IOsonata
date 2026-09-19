@@ -111,7 +111,6 @@ void nRFUsbdResumeQueuedDmaLocked();
 void nRFUsbdDmaWait();
 bool nRFUsbRegDataEpXfer(uint8_t,uint16_t);
 void nRFUsbdQueXferDir(uint8_t,bool,uint16_t){assert(false);}
-void nRFUsbdQueInFifo(uint8_t,hCFifo_t,uint16_t){assert(false);}
 bool productionEpInXfer(int,uint8_t,uint8_t*,uint16_t);
 '''
 names = ['UsbdSync','nRFUsbdDmaEndBit','nRFUsbdDmaEndEvent','nRFUsbdDir','nRFUsbEpDir',
@@ -184,6 +183,45 @@ void init(){
 }
 void dummy(uint32_t,void*){}
 int main(){
+ alignas(8) uint8_t txMemory[CFIFO_TOTAL_MEMSIZE(128,1)];
+ const uint16_t regularLengths[]={1,2,3,4,9,64};
+ for(unsigned masked=0;masked<2;++masked)for(uint8_t ep=1;ep<8;++ep){
+  init();irqMask=masked;
+  assert(productionEpInXfer(0,ep,inBuffer,0));
+  auto *entry=(nRFUsbdQue_t*)CFifoGet(s_Usbd.hQue);
+  assert(entry && entry->EpNum==ep && entry->Dir==NRFX_USBD_QUE_IN_BUFFER);
+  assert(entry->Len==0 && entry->pBuffer==inBuffer && irqMask==masked);
+  for(unsigned offset=0;offset<4;++offset)for(uint16_t length:regularLengths){
+   init();irqMask=masked;
+   auto fifo=CFifoInit(txMemory,sizeof(txMemory),1,true);
+   int count=100;auto *data=CFifoPutMultiple(fifo,&count);
+   assert(data && count==100);
+   for(int i=0;i<count;++i)data[i]=uint8_t(i);
+   int skip=offset;if(skip)assert(CFifoGetMultiple(fifo,&skip)==data);
+   data=CFifoPeek(fifo);assert((uintptr_t(data)&3U)==offset);
+   const auto get=fifo->GetIdx,put=fifo->PutIdx;
+   s_Usbd.EpReg[ep][1].pBuffer=(uint8_t*)fifo;
+   assert(productionEpInXfer(0,ep,nullptr,length));
+   assert(irqMask==masked && CFifoUsed(s_Usbd.hQue)==1);
+   assert(fifo->GetIdx==get && fifo->PutIdx==put && CFifoPeek(fifo)==data);
+   entry=(nRFUsbdQue_t*)CFifoGet(s_Usbd.hQue);
+   assert(entry->EpNum==ep);
+   if(offset){
+    assert(entry->Dir==NRFX_USBD_QUE_IN_SCRATCH);
+    assert(entry->Len==(length<4-offset?length:4-offset));
+    assert(!memcmp(&entry->Scratch,data,entry->Len));
+   }else{
+    assert(entry->Dir==NRFX_USBD_QUE_IN_FIFO);
+    assert(entry->Len==length && entry->hFifo==fifo);
+   }
+   assert(productionEpInXfer(0,ep,inBuffer,length));
+   entry=(nRFUsbdQue_t*)CFifoGet(s_Usbd.hQue);
+   assert(entry->EpNum==ep && entry->Dir==NRFX_USBD_QUE_IN_BUFFER);
+   assert(entry->Len==length && entry->pBuffer==inBuffer && irqMask==masked);
+  }
+ }
+ puts("PASS: regular IN preserves direct/FIFO/scratch sources, FIFO ownership and IRQ state");
+
  const uint16_t inLengths[]={0,9,17,33,512};
  for(uint16_t length : inLengths){
   init();s_Usbd.EpReg[8][1].pBuffer=nullptr;
