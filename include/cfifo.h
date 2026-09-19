@@ -134,53 +134,6 @@ static inline uint8_t *CFifoPeek(hCFifo_t const pFifo)
 }
 
 /**
- * @brief Inspect consecutive FIFO blocks without consuming them.
- *
- * @param hFifo : CFIFO handle
- * @param pCnt  : Requested block count; returns consecutive available count
- *
- * @return Pointer to first block, or NULL when empty.
- */
-static inline uint8_t *CFifoPeekMultiple(hCFifo_t const pFifo, int *pCnt)
-{
-	if (pCnt == NULL)
-	{
-		return CFifoPeek(pFifo);
-	}
-	if (pFifo == NULL || *pCnt <= 0)
-	{
-		*pCnt = 0;
-		return NULL;
-	}
-
-	const uint32_t getIdx = __atomic_load_n(&pFifo->GetIdx, __ATOMIC_RELAXED);
-	const uint32_t putIdx = __atomic_load_n(&pFifo->PutIdx, __ATOMIC_ACQUIRE);
-	const uint32_t used = putIdx - getIdx;
-	if (used == 0U)
-	{
-		*pCnt = 0;
-		return NULL;
-	}
-
-	uint32_t count = (uint32_t)*pCnt;
-	if (count > used)
-	{
-		count = used;
-	}
-	const uint32_t max = (uint32_t)pFifo->MaxIdxCnt;
-	const uint32_t slot = pFifo->Mask ? (getIdx & pFifo->Mask) :
-		(uint32_t)(getIdx % max);
-	const uint32_t contiguous = max - slot;
-	if (count > contiguous)
-	{
-		count = contiguous;
-	}
-
-	*pCnt = (int)count;
-	return pFifo->pMemStart + slot * pFifo->BlkSize;
-}
-
-/**
  * @brief	Retrieve FIFO data by returning pointer to FIFO memory block for reading.
  *
  * This function returns a direct pointer to FIFO memory to quickly retrieve data.
