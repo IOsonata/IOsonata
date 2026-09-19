@@ -25,8 +25,7 @@ code = r'''
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
-bool s_UsbdInitialized, s_UsbdStarted;
-uint8_t s_UsbdIntPrio;
+struct {uint8_t IntPrio;bool LowPowerSuspend,Initialized,Started;} s_Usbd;
 bool cable, clockOK, readyOK;
 unsigned requests, releases, clockRefs, starts, resets, waits, dispatches;
 unsigned irqDisables, irqPriority;
@@ -41,11 +40,12 @@ void NVIC_SetPriority(int irq,uint8_t p){assert(irq==USBD_IRQn);irqPriority=p;}
 void NVIC_DisableIRQ(int irq){assert(irq==USBD_IRQn);++irqDisables;}
 void nRFUsbdDmaWait(){++waits;}
 void nRFUsbdResetState(){++resets;}
+void UsbdSync(){}
 void __ISB(){}
 void __DSB(){}
 void AppEvtHandlerExec(){++dispatches;}
 void init(){
- s_UsbdInitialized=true;s_UsbdStarted=false;s_UsbdIntPrio=6;
+ s_Usbd={6,false,true,false};
  cable=clockOK=readyOK=true;
  requests=releases=clockRefs=starts=resets=waits=dispatches=irqDisables=0;
  irqPriority=0;regs={0xFFFF,1,1,0};
@@ -58,17 +58,17 @@ int main(){
  for(unsigned attached=0;attached<2;++attached)
  for(unsigned clock=0;clock<2;++clock)
  for(unsigned ready=0;ready<2;++ready){
-  init();s_UsbdInitialized=initial;cable=attached;clockOK=clock;readyOK=ready;
+  init();s_Usbd.Initialized=initial;cable=attached;clockOK=clock;readyOK=ready;
   const bool success=initial && attached && clock && ready;
   assert(UsbCtrlrStart(0)==success);
-  assert(s_UsbdStarted==success && clockRefs==unsigned(success));
+  assert(s_Usbd.Started==success && clockRefs==unsigned(success));
   assert(requests==unsigned(initial && attached));
   assert(starts==unsigned(initial && attached && clock));
   assert(releases==unsigned(initial && attached && clock && !ready));
   unsigned req=requests,rel=releases;
   if(success){assert(UsbCtrlrStart(0));assert(requests==req);}
   UsbCtrlrStop(0);
-  assert(!s_UsbdStarted && clockRefs==0);
+  assert(!s_Usbd.Started && clockRefs==0);
   assert(releases==rel+unsigned(success));
   assert(irqDisables==unsigned(success));
   if(success)assert(regs.INTEN==0 && regs.USBPULLUP==0 && regs.ENABLE==0);
@@ -83,7 +83,7 @@ int main(){
  init();assert(!UsbCtrlrStart(1));UsbCtrlrStop(1);UsbCtrlrProcess(1);
  assert(requests==0 && releases==0 && resets==0 && dispatches==0);
  for(unsigned started=0;started<2;++started)for(unsigned low=0;low<2;++low){
-  init();s_UsbdStarted=started;regs.LOWPOWER=low;
+  init();s_Usbd.Started=started;regs.LOWPOWER=low;
   UsbCtrlrProcess(0);
   assert(dispatches==1 && regs.LOWPOWER==low && requests==0 && releases==0);
  }

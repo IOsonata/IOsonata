@@ -49,14 +49,14 @@ assert "NRF_USBD->EVENTS_ENDISOIN" in finish_iso
 assert "NRF_USBD->EVENTS_ENDISOOUT" in finish_iso
 assert finish_iso.index("if (*pEnd == 0U)") < finish_iso.index("nRFUsbdDmaUnlock();")
 assert finish_iso.index("NRF_USBD->EPSTATUS =") < finish_iso.index("nRFUsbdDmaUnlock();")
-assert "nRFUsbdFinishIsoDma(true);" in interrupt
-assert "nRFUsbdFinishIsoDma(false);" in interrupt
+# The two ISO END cases share one call keyed on the ISO IN status bit.
+assert "nRFUsbdFinishIsoDma(dmastatus == 0x00000100U);" in interrupt
 assert "dmastatus & 0x01000100UL" in interrupt
 # SOF services ISO, and the shared scheduler gives it priority before
 # selecting regular queue work. These calls no longer sit directly in the ISR.
 queued = function_body(source, "void nRFUsbdStartQueuedDma(void)")
 assert "nRFUsbdServiceIso();" in handle_sof
-assert queued.index("nRFUsbdStartIsoNow()") < queued.index("CFifoGet(s_hQue)")
+assert queued.index("nRFUsbdStartIsoNow()") < queued.index("CFifoGet(s_Usbd.hQue)")
 assert interrupt.index("nRFUsbdHandleSof();") < interrupt.index(
     "nRFUsbdResumeQueuedDmaLocked();"
 )
