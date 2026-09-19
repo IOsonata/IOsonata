@@ -53,7 +53,7 @@ SOFTWARE.
 #include "usb/usbd_cdc.h"
 
 #define USB_DEVNO				0
-#define BUFFER_SIZE				USB_PKT_MAXLEN(USB_DEVNO, BULK)
+#define BUFFER_SIZE				USB_CTRLR_PKT_LEN_MAX(USB_DEVNO, BULK)
 
 #define CDC_RXFIFO_PKTCNT		4
 #define CDC_RXFIFO_MEMSIZE \

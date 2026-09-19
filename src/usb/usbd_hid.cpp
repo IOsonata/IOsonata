@@ -277,7 +277,12 @@ static bool UsbdHidRequest(const UsbSetupData_t *pSetup,
 	return false;
 }
 
-static bool UsbdHidFillDesc(UsbdHidDesc_t *pDesc,
+// Weak so an application can replace runtime fragment building with a static
+// fragment. When overridden, this default is dropped by unused-section removal.
+// Pair a replacement with a strong UsbGetDescriptor for fully static
+// descriptors, or the assembled configuration will not match.
+__attribute__((weak))
+bool UsbdHidMakeDesc(UsbdHidDesc_t *pDesc,
 							const UsbdHidDev_t *pHid, UsbSpeed_t Speed)
 {
 	if (pDesc == nullptr || pHid == nullptr || pHid->ItfNo < 0 ||
@@ -396,7 +401,7 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 		return false;
 	}
 
-	if (!UsbdHidFillDesc(&pHid->FsDesc, pHid, USB_SPEED_FULL))
+	if (!UsbdHidMakeDesc(&pHid->FsDesc, pHid, USB_SPEED_FULL))
 	{
 		return false;
 	}
@@ -405,7 +410,7 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	uint16_t hsDescLength = 0U;
 	if (USB_HIGHSPEED_CAPABLE(pHid->DevNo))
 	{
-		if (!UsbdHidFillDesc(&pHid->HsDesc, pHid, USB_SPEED_HIGH))
+		if (!UsbdHidMakeDesc(&pHid->HsDesc, pHid, USB_SPEED_HIGH))
 		{
 			return false;
 		}

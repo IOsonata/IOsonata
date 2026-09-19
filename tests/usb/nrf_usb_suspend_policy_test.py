@@ -31,11 +31,11 @@ enter_low_power = function_body(source, "static void nRFUsbdTryEnterLowPower(voi
 bus_event = function_body(source, "static void nRFUsbdHandleBusEvent(")
 sof = function_body(source, "static void nRFUsbdHandleSof(void)")
 
-assert "if (!s_UsbdLowPowerSuspend ||" in enter_low_power, (
+assert "if (!s_Usbd.LowPowerSuspend ||" in enter_low_power, (
     "USBD low-power entry must be disabled when bLowPowerSuspend is false"
 )
-assert (
-    "atomic_store(&s_SuspendPending, s_UsbdLowPowerSuspend);" in bus_event
+assert "s_Usbd.LowPowerSuspend ?" in bus_event and (
+    "USBD_FLAG_SUSPEND_PEND : 0U" in bus_event
 ), "bus suspend must not request peripheral low-power unconditionally"
 assert "nRFUsbdHostResumeDetected();" in sof, (
     "SOF handling must retain the anomaly-211 host-resume recovery path"

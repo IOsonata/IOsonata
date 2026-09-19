@@ -117,16 +117,10 @@ static void UsbdMscCopyInquiry(char *pDest, size_t Length,
 }
 
 static bool UsbdMscOpenEndpoint(UsbdMscDev_t *pMsc, uint8_t EpAddr,
-								uint16_t Mps)
+								uint16_t MaxPacketSize)
 {
-	UsbEndPointDesc_t desc = {};
-	desc.bLength = sizeof(desc);
-	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	desc.bEndpointAddress = EpAddr;
-	desc.bmAttributes = USB_ENDPATT_TRANS_BULK;
-	desc.wMaxPacketSize = Mps;
-	desc.bInterval = 0U;
-	return UsbCtrlrEpOpen(pMsc->DevNo, &desc);
+	return UsbCtrlrEpOpenData(pMsc->DevNo, EpAddr,
+		USB_ENDPATT_TRANS_BULK, MaxPacketSize);
 }
 
 static void UsbdMscCloseEndpoints(UsbdMscDev_t *pMsc)
@@ -164,7 +158,13 @@ static bool UsbdMscRestartEndpoints(UsbdMscDev_t *pMsc)
 	return true;
 }
 
-static bool UsbdMscFillDesc(UsbdMscDesc_t *pDesc,
+// Weak so an application can replace runtime fragment building with a static
+// fragment. When overridden, this default is dropped by unused-section removal.
+// Pair a replacement with a strong UsbGetDescriptor for fully static
+// descriptors, or the assembled configuration will not match. This class is
+// C++ only, so an override matches the C++ symbol.
+__attribute__((weak))
+bool UsbdMscMakeDesc(UsbdMscDesc_t *pDesc,
 							 const UsbdMscDev_t *pMsc, UsbSpeed_t Speed)
 {
 	if (pDesc == nullptr || pMsc == nullptr || pMsc->ItfNo < 0 ||
@@ -974,7 +974,7 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 	}
 	pMsc->IntrfData.pClassContext = pMsc;
 
-	if (!UsbdMscFillDesc(&pMsc->FsDesc, pMsc, USB_SPEED_FULL))
+	if (!UsbdMscMakeDesc(&pMsc->FsDesc, pMsc, USB_SPEED_FULL))
 	{
 		return false;
 	}
@@ -982,7 +982,7 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 	uint16_t hsDescLength = 0U;
 	if (USB_HIGHSPEED_CAPABLE(pMsc->DevNo))
 	{
-		if (!UsbdMscFillDesc(&pMsc->HsDesc, pMsc, USB_SPEED_HIGH))
+		if (!UsbdMscMakeDesc(&pMsc->HsDesc, pMsc, USB_SPEED_HIGH))
 		{
 			return false;
 		}

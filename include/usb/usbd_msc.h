@@ -26,7 +26,7 @@ does not allocate or own the medium or the sector-transfer buffer.
 #define USBD_MSC_CONFIG_VALUE			1U
 #define USBD_MSC_FS_MPS				64U
 #define USBD_MSC_HS_MPS				512U
-#define USBD_MSC_MAX_MPS			USB_PKT_MAXLEN(0, BULK)
+#define USBD_MSC_MAX_MPS			USB_CTRLR_PKT_LEN_MAX(0, BULK)
 #define USBD_MSC_FIFO_PKT_COUNT		2U
 #define USBD_MSC_PKT_BLKSIZE			USB_INTRF_PKT_BLKSIZE(USBD_MSC_MAX_MPS)
 #define USBD_MSC_RXFIFO_MEMSIZE \
@@ -145,6 +145,14 @@ typedef struct __Usbd_Msc_Dev {
 					 sizeof(uint32_t)];
 	uint8_t MaxLun;
 } UsbdMscDev_t;
+
+// Builds the MSC configuration fragment at run time. Weak: an application
+// building fully static descriptors may define a strong replacement, which the
+// linker substitutes and the default is removed. Pair with a strong
+// UsbGetDescriptor so the assembled configuration matches. This class is C++
+// only, so a replacement matches the C++ symbol.
+bool UsbdMscMakeDesc(UsbdMscDesc_t *pDesc, const UsbdMscDev_t *pMsc,
+					 UsbSpeed_t Speed);
 
 class UsbdMsc : public UsbDeviceClass, public DeviceIntrf {
 public:

@@ -1350,17 +1350,14 @@ static void nRFUsbRegSetAddress(uint8_t Address)
 	s_Ctrlr.AddressPending = true;
 }
 
-static bool nRFUsbRegEpOpen(const UsbEndPointDesc_t *pDesc)
+static bool nRFUsbRegEpOpen(uint8_t epAddr, uint8_t type, uint16_t mps)
 {
-	if (!s_Ctrlr.Started || pDesc == NULL)
+	if (!s_Ctrlr.Started)
 	{
 		return false;
 	}
 
-	const uint8_t epAddr = pDesc->bEndpointAddress;
 	const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
-	const uint8_t type = pDesc->bmAttributes & 0x03U;
-	const uint16_t mps = pDesc->wMaxPacketSize;
 
 	if (epNum == 0U || epNum >= NRF54_USBD_EP_COUNT ||
 		(type != USB_ENDPATT_TRANS_BULK &&
@@ -1776,7 +1773,16 @@ void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 {
-	return nRFUsbValidDevNo(DevNo) && nRFUsbRegEpOpen(pDesc);
+	return nRFUsbValidDevNo(DevNo) && pDesc != NULL &&
+		nRFUsbRegEpOpen(pDesc->bEndpointAddress,
+			pDesc->bmAttributes & 0x03U, pDesc->wMaxPacketSize);
+}
+
+bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type,
+						 uint16_t MaxPacketSize)
+{
+	return nRFUsbValidDevNo(DevNo) &&
+		nRFUsbRegEpOpen(EpAddr, Type, MaxPacketSize);
 }
 
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)

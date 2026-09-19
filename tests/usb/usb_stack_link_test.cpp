@@ -96,7 +96,7 @@ void UsbCtrlrEpStall(int, uint8_t) {}
 void UsbCtrlrEpClearStall(int, uint8_t) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-#define RX_MEM_SIZE USB_INTRF_RXMEM_SIZE(4, USB_PKT_MAXLEN(0, BULK))
+#define RX_MEM_SIZE USB_INTRF_RXMEM_SIZE(4, USB_CTRLR_PKT_LEN_MAX(0, BULK))
 #define TX_MEM_SIZE CFIFO_MEMSIZE(1024)
 
 alignas(4) static uint8_t s_RxMem0[RX_MEM_SIZE];
@@ -260,8 +260,8 @@ int main(void)
 	Setup(USB_REQ_SET_CONFIGURATION, 1U);
 	if (s_Ep0XferCount != 2 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
 		s_LastEp0Length != 0U || !UsbConfigured(0) || s_EpOpenCount != 6 ||
-		pCdc0->IntrfData.Mps != USB_PKT_MAXLEN(0, BULK) ||
-		((UsbdCdcDev_t *)s_Cdc1)->IntrfData.Mps != USB_PKT_MAXLEN(0, BULK))
+		pCdc0->IntrfData.Mps != USB_CTRLR_PKT_LEN_MAX(0, BULK) ||
+		((UsbdCdcDev_t *)s_Cdc1)->IntrfData.Mps != USB_CTRLR_PKT_LEN_MAX(0, BULK))
 	{
 		printf("C++ CDC configuration was not applied\n");
 		return 11;

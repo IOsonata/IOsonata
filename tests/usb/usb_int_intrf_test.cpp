@@ -203,7 +203,6 @@ static void TestLifecycleAndValidation(void)
 	CHECK(s_OpenCount == 2);
 	CHECK(s_Open[0].bmAttributes == USB_ENDPATT_TRANS_INT);
 	CHECK(s_Open[1].bmAttributes == USB_ENDPATT_TRANS_INT);
-	CHECK(s_Open[0].bInterval == 4U && s_Open[1].bInterval == 4U);
 	CHECK(s_Open[0].bEndpointAddress == USB_ENDPADDR_DIRIN(3U));
 	CHECK(s_Open[1].bEndpointAddress == USB_ENDPADDR_DIROUT(3U));
 	UsbIntIntrfClose(&intrf);

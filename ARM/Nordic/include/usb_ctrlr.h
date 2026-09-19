@@ -83,10 +83,10 @@ enum {
 	USB_HIGHSPEED_CAPABLE_0 = 0,
 	USB_EPIN_CNT_0 = 8,
 	USB_EPOUT_CNT_0 = 8,
-	USB_PKT_MAXLEN_0_CONTROL = 64,
-	USB_PKT_MAXLEN_0_BULK = 64,
-	USB_PKT_MAXLEN_0_INT = 64,
-	USB_PKT_MAXLEN_0_ISO = 512,
+	USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
+	USB_CTRLR0_BULK_PKT_LEN_MAX = 64,
+	USB_CTRLR0_INT_PKT_LEN_MAX = 64,
+	USB_CTRLR0_ISO_PKT_LEN_MAX = 512,
 	USB_ISO_SUPPORTED_0 = 1,
 	USB_ISO_EPIN_MASK_0 = (1U << 8),
 	USB_ISO_EPOUT_MASK_0 = (1U << 8),
@@ -102,10 +102,10 @@ enum {
 	USB_HIGHSPEED_CAPABLE_0 = 1,
 	USB_EPIN_CNT_0 = 16,
 	USB_EPOUT_CNT_0 = 16,
-	USB_PKT_MAXLEN_0_CONTROL = 64,
-	USB_PKT_MAXLEN_0_BULK = 512,
-	USB_PKT_MAXLEN_0_INT = 1024,
-	USB_PKT_MAXLEN_0_ISO = 1024,
+	USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
+	USB_CTRLR0_BULK_PKT_LEN_MAX = 512,
+	USB_CTRLR0_INT_PKT_LEN_MAX = 1024,
+	USB_CTRLR0_ISO_PKT_LEN_MAX = 1024,
 	USB_ISO_SUPPORTED_0 = 0,
 	USB_ISO_EPIN_MASK_0 = 0,
 	USB_ISO_EPOUT_MASK_0 = 0,
@@ -127,12 +127,18 @@ enum {
 	((CtrlrNo) == 0 ? USB_ISO_EPIN_MASK_0 : 0U)
 #define USB_ISO_EPOUT_MASK(CtrlrNo) \
 	((CtrlrNo) == 0 ? USB_ISO_EPOUT_MASK_0 : 0U)
-#define USB_PKT_MAXLEN(CtrlrNo, TransType) \
+#define USB_CTRLR_PKT_LEN_MAX(CtrlrNo, TransType) \
 	((CtrlrNo) != 0 ? 0 : \
-	 (TransType) == CONTROL ? USB_PKT_MAXLEN_0_CONTROL : \
-	 (TransType) == ISO ? USB_PKT_MAXLEN_0_ISO : \
-	 (TransType) == BULK ? USB_PKT_MAXLEN_0_BULK : \
-	 (TransType) == INT ? USB_PKT_MAXLEN_0_INT : 0)
+	 (TransType) == CONTROL ? USB_CTRLR0_CONTROL_PKT_LEN_MAX : \
+	 (TransType) == ISO ? USB_CTRLR0_ISO_PKT_LEN_MAX : \
+	 (TransType) == BULK ? USB_CTRLR0_BULK_PKT_LEN_MAX : \
+	 (TransType) == INT ? USB_CTRLR0_INT_PKT_LEN_MAX : 0)
+
+#if defined(USBD_PRESENT)
+#define USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)
+#else
+#define USB_CTRLR_ISO_INIT(DevNo) false
+#endif
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -209,6 +215,9 @@ void UsbCtrlrStop(int DevNo);
 void UsbCtrlrProcess(int DevNo);
 bool UsbCtrlrVbusDetected(int DevNo);
 bool UsbCtrlrHighSpeed(int DevNo);
+#if defined(USBD_PRESENT)
+bool UsbCtrlrIsoInit(int DevNo);
+#endif
 void UsbCtrlrIntEnable(int DevNo);
 void UsbCtrlrIntDisable(int DevNo);
 void UsbCtrlrConnect(int DevNo);
@@ -217,6 +226,7 @@ void UsbCtrlrRemoteWakeup(int DevNo);
 void UsbCtrlrSofEnable(int DevNo, bool Enable);
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
+bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type, uint16_t MaxPacketSize);
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpCloseAll(int DevNo);
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
@@ -234,6 +244,93 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);
 #ifdef __cplusplus
 }
 #endif
+
+#if defined(USBD_PRESENT)
+
+// Shared nRF52 USBD implementation state used by the base and optional ISO
+// archive members. This is a target-family header; nRF54 USBHS does not see it.
+#include "cfifo.h"
+
+enum
+{
+	NRF_USB_EP_COUNT = 9,
+	NRFX_USBD_DATA_EP_COUNT = 8,
+	NRFX_USBD_EP_COUNT = 9,
+	NRFX_USBD_ISO_EP_NO = 8,
+	NRFX_USBD_MAX_PACKET_SIZE = 64,
+	NRFX_USBD_ISO_MAX_PACKET_SIZE = 512,
+};
+
+typedef struct __nRF_Usb_Ep_Registration
+{
+	uint8_t *pBuffer;
+	UsbCtrlrEpHandler_t Handler;
+	void *pContext;
+	uint16_t MaxPacketSize;
+	bool bBlocking;
+} nRFUsbEpReg_t;
+
+#pragma pack(push, 4)
+
+typedef struct __nRF_Usbd_Xfer
+{
+	uint8_t *pBuffer;
+	uint16_t TotalLen;
+	volatile uint16_t ActualLen;
+} nRFUsbdXfer_t;
+
+typedef struct __nRF_Usbd_Ctrlr
+{
+	nRFUsbdXfer_t Ep0[2];
+	nRFUsbdXfer_t Iso[2];
+	bool SofEnabled;
+} nRFUsbdCtrlr_t;
+
+#pragma pack(pop)
+
+enum
+{
+	USBD_FLAG_SUSPENDED     = 0x0001U,
+	USBD_FLAG_SUSPEND_PEND  = 0x0002U,
+	USBD_FLAG_REMOTE_WAKE   = 0x0004U,
+	USBD_FLAG_HOST_RESUME   = 0x0008U,
+	USBD_FLAG_MAC_AWAKE     = 0x0010U,
+	USBD_FLAG_ISO_OUT_READY = 0x0100U,
+	USBD_FLAG_ISO_IN_READY  = 0x0200U,
+	USBD_FLAG_ISO_OUT_OPEN  = 0x0400U,
+	USBD_FLAG_ISO_IN_OPEN   = 0x0800U,
+	USBD_FLAG_ISO_OUT_BUSY  = 0x1000U,
+	USBD_FLAG_ISO_IN_BUSY   = 0x2000U,
+	USBD_FLAG_ISO_OUT_CMPL  = 0x4000U,
+	USBD_FLAG_ISO_IN_CMPL   = 0x8000U,
+};
+
+typedef struct __nRF_Usbd_State
+{
+	volatile uint32_t Flags;
+	hCFifo_t hQue;
+	hCFifo_t hEp0Que;
+	uint32_t IsoGeneration[2];
+	uint16_t IsoOutSize;
+	uint8_t IntPrio;
+	bool LowPowerSuspend;
+	nRFUsbdCtrlr_t Ctrlr;
+	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT][2];
+	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
+} nRFUsbdState_t;
+
+extern nRFUsbdState_t s_Usbd;
+
+void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
+							 uint16_t Length, UsbCtrlrXferResult_t Result);
+void nRFUsbdDmaUnlock(void);
+void nRFUsbdDmaStartLocked(volatile uint32_t *pTask, volatile uint32_t *pEnd);
+void nRFUsbdSofAcquire(void);
+void nRFUsbdSofRelease(void);
+void nRFUsbdDmaWait(void);
+void nRFUsbdResumeQueuedDmaLocked(void);
+
+#endif // USBD_PRESENT
 
 /** @} End of group USB */
 

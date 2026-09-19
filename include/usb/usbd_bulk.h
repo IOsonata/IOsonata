@@ -61,7 +61,7 @@ SOFTWARE.
 #define USBD_BULK_CONFIG_VALUE			1U
 #define USBD_BULK_FS_MPS				64U
 #define USBD_BULK_HS_MPS				512U
-#define USBD_BULK_MAX_MPS				USB_PKT_MAXLEN(0, BULK)
+#define USBD_BULK_MAX_MPS				USB_CTRLR_PKT_LEN_MAX(0, BULK)
 #define USBD_BULK_PKT_BLKSIZE			USB_INTRF_PKT_BLKSIZE(USBD_BULK_MAX_MPS)
 #define USBD_BULK_RXMEM_SIZE(NbPkt)		USB_INTRF_RXMEM_SIZE((NbPkt), USBD_BULK_MAX_MPS)
 #define USBD_BULK_TXMEM_SIZE(NbPkt)		CFIFO_TOTAL_MEMSIZE((NbPkt), USBD_BULK_PKT_BLKSIZE)
@@ -140,6 +140,13 @@ static inline UsbdBulkDev_t *UsbdBulkGetDevHandle(DevIntrf_t * const pDevIntrf) 
 	return (UsbdBulkDev_t *)
 		((UsbDevIntrf_t *)pDevIntrf->pDevData)->pClassContext;
 }
+
+// Builds the vendor bulk configuration fragment at run time. Weak: an
+// application building fully static descriptors may define a strong
+// replacement, which the linker substitutes and the default is removed. Pair
+// with a strong UsbGetDescriptor so the assembled configuration matches.
+bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
+					  UsbSpeed_t Speed);
 
 #ifdef __cplusplus
 }

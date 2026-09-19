@@ -169,18 +169,9 @@ static uint8_t BtHciUsbEventInterval(const BtHciUsbDev_t *pHci)
 }
 
 static bool BtHciUsbOpenEndpoint(BtHciUsbDev_t *pHci, uint8_t EpAddr,
-								 uint8_t TransferType, uint16_t Mps,
-								 uint8_t Interval)
+								 uint8_t TransferType, uint16_t MaxPacketSize)
 {
-	UsbEndPointDesc_t desc = {};
-	desc.bLength = sizeof(desc);
-	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	desc.bEndpointAddress = EpAddr;
-	desc.bmAttributes = TransferType;
-	desc.wMaxPacketSize = Mps;
-	desc.bInterval = Interval;
-
-	return UsbCtrlrEpOpen(pHci->DevNo, &desc);
+	return UsbCtrlrEpOpenData(pHci->DevNo, EpAddr, TransferType, MaxPacketSize);
 }
 
 static void BtHciUsbCloseEndpoints(BtHciUsbDev_t *pHci)
@@ -261,9 +252,9 @@ static bool BtHciUsbResetBulkTransport(BtHciUsbDev_t *pHci)
 	}
 
 	if (!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIRIN(pHci->AclEpNo),
-			USB_ENDPATT_TRANS_BULK, mps, 0U) ||
+			USB_ENDPATT_TRANS_BULK, mps) ||
 		!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIROUT(pHci->AclEpNo),
-			USB_ENDPATT_TRANS_BULK, mps, 0U))
+			USB_ENDPATT_TRANS_BULK, mps))
 	{
 		UsbCtrlrEpClose(pHci->DevNo,
 			USB_ENDPADDR_DIROUT(pHci->AclEpNo));
@@ -289,8 +280,7 @@ static bool BtHciUsbOpenHciAlt(BtHciUsbDev_t *pHci, uint8_t Alt)
 
 	if (Alt == 0U &&
 		!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIRIN(pHci->EventEpNo),
-			USB_ENDPATT_TRANS_INT, BtHciUsbEventMps(pHci),
-			BtHciUsbEventInterval(pHci)))
+			USB_ENDPATT_TRANS_INT, BtHciUsbEventMps(pHci)))
 	{
 		return false;
 	}
@@ -332,7 +322,6 @@ static bool BtHciUsbConfig(BtHciUsbDev_t *pHci, uint8_t Configuration)
 
 	const uint16_t eventMps = BtHciUsbEventMps(pHci);
 	const uint16_t aclMps = BtHciUsbAclMps(pHci);
-	const uint8_t eventInterval = BtHciUsbEventInterval(pHci);
 
 	if (!UsbIntrfConfigure(&pHci->IntrfData, aclMps))
 	{
@@ -340,11 +329,11 @@ static bool BtHciUsbConfig(BtHciUsbDev_t *pHci, uint8_t Configuration)
 	}
 
 	if (!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIRIN(pHci->EventEpNo),
-							 USB_ENDPATT_TRANS_INT, eventMps, eventInterval) ||
+							 USB_ENDPATT_TRANS_INT, eventMps) ||
 		!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIRIN(pHci->AclEpNo),
-							 USB_ENDPATT_TRANS_BULK, aclMps, 0U) ||
+							 USB_ENDPATT_TRANS_BULK, aclMps) ||
 		!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIROUT(pHci->AclEpNo),
-							 USB_ENDPATT_TRANS_BULK, aclMps, 0U))
+							 USB_ENDPATT_TRANS_BULK, aclMps))
 	{
 		BtHciUsbUnconfigure(pHci);
 		BtHciUsbCloseEndpoints(pHci);
@@ -1259,8 +1248,8 @@ static bool BtHciUsbMakeDesc(BtHciUsbDesc_t *pDesc, const BtHciUsbDev_t *pHci,
 	const uint8_t eventInterval = Speed == USB_SPEED_HIGH ?
 		pHci->EventHsInterval : pHci->EventFsInterval;
 
-	if (eventMps == 0U || eventMps > USB_PKT_MAXLEN(pHci->DevNo, INT) ||
-		aclMps == 0U || aclMps > USB_PKT_MAXLEN(pHci->DevNo, BULK) ||
+	if (eventMps == 0U || eventMps > USB_CTRLR_PKT_LEN_MAX(pHci->DevNo, INT) ||
+		aclMps == 0U || aclMps > USB_CTRLR_PKT_LEN_MAX(pHci->DevNo, BULK) ||
 		eventInterval == 0U)
 	{
 		return false;
@@ -1480,15 +1469,15 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 
 	const uint16_t isoMask = (uint16_t)(USB_ISO_EPIN_MASK(pHci->DevNo) &
 		USB_ISO_EPOUT_MASK(pHci->DevNo));
-	if (pHci->EventFsMps > USB_PKT_MAXLEN(pHci->DevNo, INT) ||
-		pHci->AclFsMps > USB_PKT_MAXLEN(pHci->DevNo, BULK) ||
+	if (pHci->EventFsMps > USB_CTRLR_PKT_LEN_MAX(pHci->DevNo, INT) ||
+		pHci->AclFsMps > USB_CTRLR_PKT_LEN_MAX(pHci->DevNo, BULK) ||
 		pHci->AclFsMps > BT_HCI_USB_ACL_MAX_MPS ||
 		(pHci->ScoEnabled && (!USB_ISO_SUPPORTED(pHci->DevNo) ||
-		 isoMask == 0U || USB_PKT_MAXLEN(pHci->DevNo, ISO) <
+		 isoMask == 0U || USB_CTRLR_PKT_LEN_MAX(pHci->DevNo, ISO) <
 			BT_HCI_USB_SCO_MAX_MPS)) ||
 		(USB_HIGHSPEED_CAPABLE(pHci->DevNo) &&
-		 (pHci->EventHsMps > USB_PKT_MAXLEN(pHci->DevNo, INT) ||
-		  pHci->AclHsMps > USB_PKT_MAXLEN(pHci->DevNo, BULK) ||
+		 (pHci->EventHsMps > USB_CTRLR_PKT_LEN_MAX(pHci->DevNo, INT) ||
+		  pHci->AclHsMps > USB_CTRLR_PKT_LEN_MAX(pHci->DevNo, BULK) ||
 		  pHci->AclHsMps > BT_HCI_USB_ACL_MAX_MPS)))
 	{
 		return false;

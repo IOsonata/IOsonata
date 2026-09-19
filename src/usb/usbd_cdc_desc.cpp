@@ -27,6 +27,11 @@ static_assert(sizeof(UsbInrtfAssDesc_t) == 8U, "USB IAD size");
 static_assert(sizeof(UsbIntrfDesc_t) == 9U, "USB interface descriptor size");
 static_assert(sizeof(UsbEndPointDesc_t) == 7U, "USB endpoint descriptor size");
 
+// Weak so an application can replace runtime fragment building with a static
+// fragment. When overridden, this default is dropped by unused-section removal.
+// Pair a replacement here with a strong UsbGetDescriptor when building fully
+// static descriptors, otherwise the assembled configuration will not match.
+__attribute__((weak))
 bool UsbdCdcMakeDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
 					 UsbSpeed_t Speed, bool HasFunctionString)
 {

@@ -594,6 +594,47 @@ static void UsbIntrfCtrlrInEvent(uint8_t, UsbCtrlrEvtType_t Event,
 	}
 }
 
+// The fourteen mandatory DevIntrf entries in declaration order, copied in
+// one block from flash instead of fourteen separate stores. RxData/TxData
+// carry the byte-mode defaults; the mode switch overrides them.
+typedef struct
+{
+	void (*Disable)(DevIntrf_t * const);
+	void (*Enable)(DevIntrf_t * const);
+	uint32_t (*GetRate)(DevIntrf_t * const);
+	uint32_t (*SetRate)(DevIntrf_t * const, uint32_t);
+	bool (*StartRx)(DevIntrf_t * const, uint32_t);
+	int (*RxData)(DevIntrf_t * const, uint8_t *, int);
+	void (*StopRx)(DevIntrf_t * const);
+	bool (*StartTx)(DevIntrf_t * const, uint32_t);
+	int (*TxData)(DevIntrf_t * const, const uint8_t *, int);
+	int (*TxSrData)(DevIntrf_t * const, const uint8_t *, int);
+	void (*StopTx)(DevIntrf_t * const);
+	void (*Reset)(DevIntrf_t * const);
+	void (*PowerOff)(DevIntrf_t * const);
+	void *(*GetHandle)(DevIntrf_t * const);
+} UsbIntrfOps_t;
+
+static const UsbIntrfOps_t s_UsbIntrfOps = {
+	UsbIntrfDisable, UsbIntrfEnable, UsbIntrfGetRate, UsbIntrfSetRate,
+	UsbIntrfStartRx, UsbIntrfRxData, UsbIntrfStopRx, UsbIntrfStartTx,
+	UsbIntrfTxBytes, UsbIntrfTxSrData, UsbIntrfStopTx, UsbIntrfReset,
+	UsbIntrfPowerOff, UsbIntrfGetHandle,
+};
+
+static_assert(sizeof(UsbIntrfOps_t) ==
+	offsetof(DevIntrf_t, GetHandle) - offsetof(DevIntrf_t, Disable) +
+	sizeof(void *), "DevIntrf op block layout");
+static_assert(offsetof(UsbIntrfOps_t, RxData) ==
+	offsetof(DevIntrf_t, RxData) - offsetof(DevIntrf_t, Disable),
+	"DevIntrf RxData position");
+static_assert(offsetof(UsbIntrfOps_t, TxData) ==
+	offsetof(DevIntrf_t, TxData) - offsetof(DevIntrf_t, Disable),
+	"DevIntrf TxData position");
+static_assert(offsetof(UsbIntrfOps_t, GetHandle) ==
+	offsetof(DevIntrf_t, GetHandle) - offsetof(DevIntrf_t, Disable),
+	"DevIntrf GetHandle position");
+
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 {
 	if (pIntrf == nullptr || pCfg == nullptr ||
@@ -618,10 +659,10 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 		return false;
 	}
 
-	pIntrf->hTxFifo = nullptr;
-	pIntrf->hRxFifo = nullptr;
-	pIntrf->pRxDirectBuffer = nullptr;
-	pIntrf->pTxDirectBuffer = nullptr;
+	// Every zeroed field in one clear; only the nonzero fields are
+	// assigned below. The atomic members are re-initialized with their
+	// proper atomic stores at the end of this function.
+	memset(static_cast<void *>(pIntrf), 0, sizeof(*pIntrf));
 
 	if (mode == USB_INTRF_MODE_DIRECT)
 	{
@@ -661,39 +702,24 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	pIntrf->DevNo = pCfg->DevNo;
 	pIntrf->EpNo = pCfg->EpNo;
 	pIntrf->BufferSize = pCfg->BufferSize;
-	pIntrf->Mps = 0U;
-	pIntrf->RxDropCnt = 0U;
 	pIntrf->bBlocking = pCfg->bBlocking;
-	pIntrf->RxPending = false;
 	pIntrf->Mode = mode;
-	pIntrf->EpSend = nullptr;
-	pIntrf->pClassContext = nullptr;
 
 	pIntrf->DevIntrf.pDevData = pIntrf;
-	pIntrf->DevIntrf.IntPrio = 0;
 	pIntrf->DevIntrf.EvtCB = pCfg->EvtCB;
-	pIntrf->DevIntrf.MaxRetry = 0;
 	pIntrf->DevIntrf.Type = DEVINTRF_TYPE_USB;
 	pIntrf->DevIntrf.bDma = true;
 	pIntrf->DevIntrf.bIntEn = true;
-	pIntrf->DevIntrf.Disable = UsbIntrfDisable;
-	pIntrf->DevIntrf.Enable = UsbIntrfEnable;
-	pIntrf->DevIntrf.GetRate = UsbIntrfGetRate;
-	pIntrf->DevIntrf.SetRate = UsbIntrfSetRate;
-	pIntrf->DevIntrf.StartRx = UsbIntrfStartRx;
-	pIntrf->DevIntrf.StopRx = UsbIntrfStopRx;
-	pIntrf->DevIntrf.StartTx = UsbIntrfStartTx;
+	memcpy(&pIntrf->DevIntrf.Disable, &s_UsbIntrfOps,
+		   sizeof(s_UsbIntrfOps));
 
 	switch (mode)
 	{
 		case USB_INTRF_MODE_BYTE:
-			pIntrf->DevIntrf.RxData = UsbIntrfRxData;
-			pIntrf->DevIntrf.TxData = UsbIntrfTxBytes;
 			pIntrf->EpSend = UsbIntrfEpSendByteMode;
 			break;
 
 		case USB_INTRF_MODE_PACKET:
-			pIntrf->DevIntrf.RxData = UsbIntrfRxData;
 			pIntrf->DevIntrf.TxData = UsbIntrfTxPackets;
 			pIntrf->EpSend = UsbIntrfEpSendPktMode;
 			break;
@@ -706,12 +732,6 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 		default:
 			return false;
 	}
-
-	pIntrf->DevIntrf.TxSrData = UsbIntrfTxSrData;
-	pIntrf->DevIntrf.StopTx = UsbIntrfStopTx;
-	pIntrf->DevIntrf.Reset = UsbIntrfReset;
-	pIntrf->DevIntrf.PowerOff = UsbIntrfPowerOff;
-	pIntrf->DevIntrf.GetHandle = UsbIntrfGetHandle;
 
 	atomic_flag_clear(&pIntrf->DevIntrf.bBusy);
 	atomic_store(&pIntrf->DevIntrf.EnCnt, 0);

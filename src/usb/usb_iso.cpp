@@ -134,7 +134,8 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, const UsbIsoIntrfCfg_t *pCfg)
 {
 	if (pIntrf == nullptr || pCfg == nullptr ||
 		USB_ISO_INTRF_MAX_MPS == 0U ||
-		!UsbIsoIntrfEpSupported(pCfg->DevNo, pCfg->EpNo))
+		!UsbIsoIntrfEpSupported(pCfg->DevNo, pCfg->EpNo) ||
+		!USB_CTRLR_ISO_INIT(pCfg->DevNo))
 	{
 		return false;
 	}

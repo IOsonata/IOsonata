@@ -52,17 +52,10 @@ static uint16_t UsbdBulkMps(const UsbdBulkDev_t *pBulk)
 }
 
 static bool UsbdBulkOpenEndpoint(UsbdBulkDev_t *pBulk, uint8_t EpAddr,
-								 uint16_t Mps)
+								 uint16_t MaxPacketSize)
 {
-	UsbEndPointDesc_t desc = {};
-	desc.bLength = sizeof(desc);
-	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	desc.bEndpointAddress = EpAddr;
-	desc.bmAttributes = USB_ENDPATT_TRANS_BULK;
-	desc.wMaxPacketSize = Mps;
-	desc.bInterval = 0U;
-
-	return UsbCtrlrEpOpen(pBulk->DevNo, &desc);
+	return UsbCtrlrEpOpenData(pBulk->DevNo, EpAddr,
+		USB_ENDPATT_TRANS_BULK, MaxPacketSize);
 }
 
 static void UsbdBulkCloseEndpoints(UsbdBulkDev_t *pBulk)
@@ -113,7 +106,12 @@ static void UsbdBulkReset(UsbdBulkDev_t *pBulk)
 	}
 }
 
-static bool UsbdBulkFillDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
+// Weak so an application can replace runtime fragment building with a static
+// fragment. When overridden, this default is dropped by unused-section removal.
+// Pair a replacement with a strong UsbGetDescriptor for fully static
+// descriptors, or the assembled configuration will not match.
+__attribute__((weak))
+bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 					  UsbSpeed_t Speed)
 {
 	if (pDesc == nullptr || pBulk == nullptr || pBulk->ItfNo < 0 ||
@@ -213,7 +211,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 
 	pBulk->IntrfData.pClassContext = pBulk;
 
-	if (!UsbdBulkFillDesc(&pBulk->FsDesc, pBulk, USB_SPEED_FULL))
+	if (!UsbdBulkMakeDesc(&pBulk->FsDesc, pBulk, USB_SPEED_FULL))
 	{
 		return false;
 	}
@@ -222,7 +220,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 	uint16_t hsDescLength = 0U;
 	if (USB_HIGHSPEED_CAPABLE(pBulk->DevNo))
 	{
-		if (!UsbdBulkFillDesc(&pBulk->HsDesc, pBulk, USB_SPEED_HIGH))
+		if (!UsbdBulkMakeDesc(&pBulk->HsDesc, pBulk, USB_SPEED_HIGH))
 		{
 			return false;
 		}

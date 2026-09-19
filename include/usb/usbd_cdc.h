@@ -74,7 +74,7 @@ SOFTWARE.
 
 #define USBD_CDC_NOTIFY_LEN				(sizeof(UsbCdcNotification_t) + 2U)
 #define USBD_CDC_TRANS_WORDS \
-	((USB_PKT_MAXLEN(0, BULK) + sizeof(uint32_t) - 1U) / sizeof(uint32_t))
+	((USB_CTRLR_PKT_LEN_MAX(0, BULK) + sizeof(uint32_t) - 1U) / sizeof(uint32_t))
 #define USBD_CDC_NOTIFY_WORDS \
 	((USBD_CDC_NOTIFY_LEN + sizeof(uint32_t) - 1U) / sizeof(uint32_t))
 
@@ -145,6 +145,11 @@ uint16_t UsbdCdcControlLineState(const UsbdCdcDev_t * const pCdc);
 
 void UsbdCdcSetSerialState(UsbdCdcDev_t * const pCdc, uint16_t SerialState);
 
+// The default builds the CDC configuration fragment at run time and is a weak
+// symbol. An application building fully static descriptors may define a strong
+// replacement; the weak default is then removed by unused-section removal. Pair
+// such a replacement with a strong UsbGetDescriptor, or the assembled
+// configuration will not match the static fragment.
 bool UsbdCdcMakeDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
 						 UsbSpeed_t Speed, bool HasFunctionString);
 

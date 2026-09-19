@@ -25,7 +25,8 @@ def function_body(source: str, signature: str) -> str:
 
 source = SOURCE.read_text(encoding="utf-8")
 dma_start = function_body(source, "void nRFUsbdDmaStartLocked(")
-dma_finish = function_body(source, "uint8_t nRFUsbdDmaFinishLocked(")
+dma_finish = function_body(source, "void nRFUsbdDmaWait(void)")
+retire = function_body(source, "bool nRFUsbdRetireDma(uint32_t StatusBit)")
 interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
 
 assert "nRFUsbdDmaReclaim" not in source
@@ -34,18 +35,21 @@ assert "s_LazyInMask" not in source
 assert "INTENSET" not in dma_start, "DMA start must not enable ENDEPIN"
 assert "NRFX_USBD_EASYDMA_BUSY_REG_BUSY" in dma_start
 assert "*pTask = 1" in dma_start
-assert "DmaStatus & 0x00FF00FFUL" in dma_finish
-assert "EVENTS_ENDEPOUT[epNum]" in dma_finish
-assert "EVENTS_ENDEPIN[epNum]" in dma_finish
-assert "nRFUsbdDmaUnlock();" in dma_finish
-# Regular DMA retirement is now inline in the ISR, while the helper remains
-# for the separate lifecycle paths. Verify the same ordering at its new site.
+# Retirement is shared by the ISR default case and the foreground wait
+# through nRFUsbdRetireDma; the ordering policy lives in that helper now.
+assert "NRF_USBD->EPSTATUS & 0x00FF00FFUL" in dma_finish
+assert "nRFUsbdRetireDma(" in dma_finish
+assert "EVENTS_ENDEPOUT[epNum]" in retire
+assert "EVENTS_ENDEPIN[epNum]" in retire
+assert "nRFUsbdDmaUnlock();" in retire
+assert retire.index("if (*pEnd == 0U)") < retire.index("*pEnd = 0U;")
+assert retire.index("*pEnd = 0U;") < retire.index("nRFUsbdDmaUnlock();")
 regular = interrupt[interrupt.index("default:          // EP1-7 IN/OUT") :]
-regular = regular[:regular.index("if (NRF_USBD->EVENTS_STARTED")]
-assert regular.index("if (*pEnd == 0U)") < regular.index("*pEnd = 0U;")
-assert regular.index("*pEnd = 0U;") < regular.index("nRFUsbdDmaUnlock();")
-assert regular.index("nRFUsbdDmaUnlock();") < regular.index("nRFUsbdStartQueuedDma();")
-assert regular.index("nRFUsbdProcessOutComplete(evt, nullptr);") < regular.index(
+regular = regular[:regular.index("if (NRF_USBD->EVENTS_USBEVENT")]
+assert regular.index("nRFUsbdRetireDma(statusBit)") < regular.index(
+    "nRFUsbEpRegisteredEvent("
+)
+assert regular.index("nRFUsbEpRegisteredEvent(") < regular.index(
     "nRFUsbdStartQueuedDma();"
 )
 assert "nRFUsbdQueueInComplete" not in regular
