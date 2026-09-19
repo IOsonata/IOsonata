@@ -1821,19 +1821,6 @@ bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
 	return nRFUsbRegDataEpXfer(EpAddr, Length);
 }
 
-bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
-{
-	(void)DevNo;
-	return nRFUsbRegDataEpXfer(EpNum, Length);
-}
-
-bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
-{
-	(void)DevNo;
-	return nRFUsbRegDataEpXfer(USB_ENDPADDR_DIRIN(EpNum), Length);
-}
-
-
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length)
 {

@@ -231,8 +231,16 @@ void UsbCtrlrEpCloseAll(int DevNo);
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext);
 bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length);
-bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length);
-bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length);
+
+static inline bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
+{
+	return UsbCtrlrEpXfer(DevNo, EpNum, Length);
+}
+
+static inline bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
+{
+	return UsbCtrlrEpXfer(DevNo, USB_ENDPADDR_DIRIN(EpNum), Length);
+}
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length);
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
