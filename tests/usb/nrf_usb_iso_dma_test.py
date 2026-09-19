@@ -65,7 +65,9 @@ struct Registers {
 } regs;
 auto *NRF_USBD=&regs;
 struct nRFUsbdXfer_t {uint8_t *pBuffer;uint16_t TotalLen;volatile uint16_t ActualLen;};
-struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;uint16_t Mps;bool bBlocking;};
+struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;};
+constexpr uint16_t NRF_USB_EPOUT_CFG_BLOCKING=0x8000U;
+constexpr uint16_t NRF_USB_EPOUT_CFG_MPS_MASK=0x7FFFU;
 typedef Endpoint USBD_ISOIN_Type;
 typedef Endpoint USBD_ISOOUT_Type;
 FLAG_ENUM
@@ -75,6 +77,7 @@ struct {
  volatile uint32_t Flags=0;
  uint32_t IsoGeneration[2]={};uint16_t IsoOutSize=0;
  struct {nRFUsbdXfer_t Ep0[2],Iso[2];bool SofEnabled;} Ctrlr;
+ uint16_t EpOutCfg[9]={};uint16_t IsoInMps=0;
  nRFUsbEpReg_t EpReg[9][2];
 } s_Usbd;
 #define ISO_OPEN() ((s_Usbd.Flags / USBD_FLAG_ISO_OUT_OPEN) & 3u)
@@ -153,14 +156,16 @@ void callback(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,UsbCtrlrXferRes
 }
 void init(){
  regs={};s_Usbd.Ctrlr={};memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
+ memset(s_Usbd.EpOutCfg,0,sizeof(s_Usbd.EpOutCfg));s_Usbd.IsoInMps=0;
  // Both ISO directions open; every other flag (busy, complete, ready,
  // suspend group) cleared, exactly the former per-field init.
  s_Usbd.Flags=USBD_FLAG_ISO_OUT_OPEN|USBD_FLAG_ISO_IN_OPEN;
  dmaBusy=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
  ++s_Usbd.IsoGeneration[0];++s_Usbd.IsoGeneration[1];
- s_Usbd.EpReg[8][0]={outBuffer,callback,nullptr,512,false};
- s_Usbd.EpReg[8][1]={inBuffer,callback,nullptr,512,false};
+ s_Usbd.EpReg[8][0]={outBuffer,callback,nullptr};
+ s_Usbd.EpReg[8][1]={inBuffer,callback,nullptr};
+ s_Usbd.EpOutCfg[8]=512;s_Usbd.IsoInMps=512;
  memset(inBuffer,0xA5,sizeof(inBuffer));memset(hostOut,0x5A,sizeof(hostOut));
  assert(AppEvtHandlerInit(nullptr,0));assert(AppEvtHandlerIdleRegister(nRFUsbdRetryIsoComplete));
 }
@@ -211,7 +216,7 @@ int main(){
  puts("PASS: full real AppEvt queue retains completion, retries, and does not retain EasyDMA");
 
  init();frame(17);finish(false);UsbCtrlrEpClose(0,8);
- s_Usbd.Flags|=USBD_FLAG_ISO_OUT_OPEN;s_Usbd.EpReg[8][0].Mps=9;frame(9);finish(false);
+ s_Usbd.Flags|=USBD_FLAG_ISO_OUT_OPEN;s_Usbd.EpOutCfg[8]=9;frame(9);finish(false);
  AppEvtHandlerExec();assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
  puts("PASS: close/reopen discards old callback without releasing the new transfer");
 
@@ -233,7 +238,7 @@ int main(){
   regs.EPDATASTATUS.bits=0x00FF00FF;
   for(unsigned n=0;n<8;++n){
    regs.EVENTS_ENDEPIN[n]=regs.EVENTS_ENDEPOUT[n]=1;
-   regs.SIZE.EPOUT[n]=64;s_Usbd.EpReg[n][0].Mps=s_Usbd.EpReg[n][1].Mps=64;
+   regs.SIZE.EPOUT[n]=64;s_Usbd.EpOutCfg[n]=64;
   }
   UsbCtrlrEpClose(0,ep|(dir?0x80:0));
   assert(irqMask==masked && ISO_OPEN()==3 && ISO_BUSY()==0);
@@ -245,7 +250,8 @@ int main(){
    assert(regs.EVENTS_ENDEPIN[n]==unsigned(!(n==ep&&dir)));
    assert(regs.EVENTS_ENDEPOUT[n]==unsigned(!(n==ep&&!dir)));
    assert(regs.SIZE.EPOUT[n]==((n==ep&&!dir)?0U:64U));
-   for(unsigned d=0;d<2;++d)assert(s_Usbd.EpReg[n][d].Mps==((n==ep&&d==dir)?0U:64U));
+   assert((s_Usbd.EpOutCfg[n]&NRF_USB_EPOUT_CFG_MPS_MASK)==
+    ((n==ep&&!dir)?0U:64U));
   }
  }
  puts("PASS: regular close affects only the selected endpoint/direction and preserves IRQ state");

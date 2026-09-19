@@ -158,9 +158,11 @@ static bool nRFUsbRegIsoXfer(uint8_t EpAddr, uint16_t Length)
 	const uint32_t openBusy = (uint32_t)(USBD_FLAG_ISO_OUT_OPEN |
 		USBD_FLAG_ISO_OUT_BUSY) << dir;
 	nRFUsbEpReg_t *pReg = nRFIsoReg(EpAddr);
+	const uint16_t mps = dir != 0U ? s_Usbd.IsoInMps :
+		(s_Usbd.EpOutCfg[NRFX_USBD_ISO_EP_NO] & NRF_USB_EPOUT_CFG_MPS_MASK);
 	const uint32_t state = DisableInterrupt();
 	if ((s_Usbd.Flags & openBusy) != (uint32_t)USBD_FLAG_ISO_OUT_OPEN << dir ||
-		pReg->pBuffer == NULL || pReg->Handler == NULL || Length > pReg->Mps)
+		pReg->pBuffer == NULL || pReg->Handler == NULL || Length > mps)
 	{
 		EnableInterrupt(state);
 		return false;
@@ -306,16 +308,17 @@ void nRFUsbdIsoSof(void)
 					(size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ? 0U : (uint16_t)size;
 				if (!waiting)
 				{
-					nRFUsbEpReg_t *pReg =
-						&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO][0];
-					if (pReg->bBlocking)
+					const uint16_t cfg =
+						s_Usbd.EpOutCfg[NRFX_USBD_ISO_EP_NO];
+					if ((cfg & NRF_USB_EPOUT_CFG_BLOCKING) != 0U)
 					{
 						nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO,
 							USB_CTRLR_EVT_DRDY, 0U, USB_CTRLR_XFER_SUCCESS);
 					}
 					else
 					{
-						(void)nRFUsbRegIsoXfer(NRFX_USBD_ISO_EP_NO, pReg->Mps);
+						(void)nRFUsbRegIsoXfer(NRFX_USBD_ISO_EP_NO,
+							cfg & NRF_USB_EPOUT_CFG_MPS_MASK);
 					}
 				}
 			}
@@ -344,7 +347,16 @@ bool nRFUsbdIsoEpOpen(const UsbEndPointDesc_t *pDesc)
 		return false;
 	}
 
-	nRFIsoReg(epAddr)->Mps = pDesc->wMaxPacketSize;
+	if (in)
+	{
+		s_Usbd.IsoInMps = pDesc->wMaxPacketSize;
+	}
+	else
+	{
+		s_Usbd.EpOutCfg[NRFX_USBD_ISO_EP_NO] =
+			(s_Usbd.EpOutCfg[NRFX_USBD_ISO_EP_NO] &
+			 NRF_USB_EPOUT_CFG_BLOCKING) | pDesc->wMaxPacketSize;
+	}
 	if (!AppEvtHandlerIdleRegister(nRFUsbdRetryIsoComplete))
 	{
 		return false;
@@ -392,7 +404,15 @@ void nRFUsbdIsoEpClose(uint8_t EpAddr)
 	nRFIsoHwEnable(in, false);
 	nRFUsbdSofRelease();
 
-	nRFIsoReg(EpAddr)->Mps = 0U;
+	if (in)
+	{
+		s_Usbd.IsoInMps = 0U;
+	}
+	else
+	{
+		s_Usbd.EpOutCfg[NRFX_USBD_ISO_EP_NO] &=
+			NRF_USB_EPOUT_CFG_BLOCKING;
+	}
 	__DSB();
 	EnableInterrupt(state);
 }
