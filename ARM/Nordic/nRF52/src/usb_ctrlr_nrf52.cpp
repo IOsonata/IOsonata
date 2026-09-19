@@ -188,7 +188,7 @@ nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpAddr)
 }
 
 // Share callback dispatch across regular and ISO event paths.
-static __attribute__((noinline))
+__attribute__((noinline))
 void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 								 uint16_t Length, UsbCtrlrXferResult_t Result)
 {
@@ -504,7 +504,7 @@ void nRFUsbdEmit(const UsbCtrlrEvt_t *pEvt)
 
 // Endpoint interrupt, END event and enable-mask writes shared by open and
 // close.
-static __attribute__((noinline)) void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
+__attribute__((noinline)) void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 {
 	const uint8_t endBit = nRFUsbdDmaEndBit(EpNum, In);
 	volatile uint32_t *pEnable = In ? &NRF_USBD->EPINEN : &NRF_USBD->EPOUTEN;
@@ -551,7 +551,7 @@ static __attribute__((noinline)) void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t L
 	nRFUsbdEmit(&evt);
 }
 
-static __attribute__((noinline))
+__attribute__((noinline))
 void nRFUsbdDmaUnlock(void)
 {
 	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
@@ -559,7 +559,7 @@ void nRFUsbdDmaUnlock(void)
 }
 
 /** Start EasyDMA while the caller already excludes the USBD interrupt. */
-static __attribute__((noinline))
+__attribute__((noinline))
 void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
 	volatile uint32_t *pEnd)
 {
@@ -644,13 +644,13 @@ static __attribute__((noinline)) void nRFUsbdNoDmaTask(volatile uint32_t *pTask)
 // The SOF interrupt is shared: application SOF events, open ISO endpoints
 // and suspend-time resume detection all need it. Acquire clears a stale
 // event first; release drops it only when nothing needs it anymore.
-static __attribute__((noinline)) void nRFUsbdSofAcquire(void)
+__attribute__((noinline)) void nRFUsbdSofAcquire(void)
 {
 	NRF_USBD->EVENTS_SOF = 0U;
 	NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
 }
 
-static __attribute__((noinline)) void nRFUsbdSofRelease(void)
+__attribute__((noinline)) void nRFUsbdSofRelease(void)
 {
 	if (!s_Usbd.Ctrlr.SofEnabled &&
 		(s_Usbd.Flags & (USBD_FLAG_ISO_IN_OPEN | USBD_FLAG_ISO_OUT_OPEN |
