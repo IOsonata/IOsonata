@@ -989,21 +989,12 @@ static void nRFUsbdTryEnterLowPower(void)
 {
 	if (!s_UsbdLowPowerSuspend ||
 		!atomic_load(&s_BusSuspended) ||
-		!atomic_load(&s_SuspendPending) ||
-		atomic_load(&s_RemoteWakePending) ||
-		atomic_load(&s_HostResumePending) ||
-		nRFUsbdDmaActive() ||
-		CFifoUsed(s_hQue) > 0)
+		!atomic_load(&s_SuspendPending))
 	{
 		return;
 	}
 
-	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
-		NRF_USBD->EVENTS_SOF != 0U)
-	{
-		nRFUsbdHostResumeDetected();
-		return;
-	}
+	// Check ownership and wake state once, with interrupts excluded.
 
 	const uint32_t irqState = DisableInterrupt();
 	if (!atomic_load(&s_BusSuspended) ||
@@ -1040,17 +1031,8 @@ static void nRFUsbdTryEnterLowPower(void)
 		return;
 	}
 
-	if (atomic_load(&s_RemoteWakePending) || !atomic_load(&s_SuspendPending))
-	{
-		atomic_store(&s_SuspendPending, false);
-		NRF_USBD->LOWPOWER =
-			USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos;
-		__ISB();
-		__DSB();
-		EnableInterrupt(irqState);
-		return;
-	}
-
+	// No software wake state changes while interrupts remain excluded.
+	// Hardware resume is handled by the RESUME/SOF check above.
 	atomic_store(&s_SuspendPending, false);
 	EnableInterrupt(irqState);
 }
@@ -2154,17 +2136,18 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 		return;
 	}
 
+	const bool iso = epNum == NRFX_USBD_ISO_EP_NO;
+	const bool in = USB_ENDPADDR_IS_IN(EpAddr);
 	// Exclude SOF submission while retiring and closing an ISO direction.
-	const uint32_t isoState = epNum == NRFX_USBD_ISO_EP_NO ?
-		DisableInterrupt() : 0U;
+	const uint32_t isoState = iso ? DisableInterrupt() : 0U;
 	if (nRFUsbdDmaActive())
 	{
 		nRFUsbdDmaWait();
 	}
 
-	if (epNum == NRFX_USBD_ISO_EP_NO)
+	if (iso)
 	{
-		const uint8_t dir = nRFUsbdDir(EpAddr);
+		const uint8_t dir = in ? 1U : 0U;
 		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Iso[dir];
 		const uint_fast8_t bit = 1U << dir;
 		++s_IsoGeneration[dir];
@@ -2173,24 +2156,21 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 		pXfer->pBuffer = NULL;
 		pXfer->TotalLen = 0U;
 		pXfer->ActualLen = 0U;
-		if (USB_ENDPADDR_IS_IN(EpAddr))
-		{
-			atomic_fetch_and(&s_IsoOpen,
-				(uint_fast8_t)~NRFX_USBD_ISO_IN_OPEN);
-			atomic_store(&s_IsoInReady, false);
-			NRF_USBD->INTENCLR = USBD_INTEN_ENDISOIN_Msk;
-			NRF_USBD->EPINEN &= ~(1UL << NRFX_USBD_ISO_EP_NO);
-			NRF_USBD->EVENTS_ENDISOIN = 0;
-		}
-		else
-		{
-			atomic_fetch_and(&s_IsoOpen,
-				(uint_fast8_t)~NRFX_USBD_ISO_OUT_OPEN);
-			atomic_store(&s_IsoOutReady, false);
-			NRF_USBD->INTENCLR = USBD_INTEN_ENDISOOUT_Msk;
-			NRF_USBD->EPOUTEN &= ~(1UL << NRFX_USBD_ISO_EP_NO);
-			NRF_USBD->EVENTS_ENDISOOUT = 0;
-		}
+		atomic_fetch_and(&s_IsoOpen, (uint_fast8_t)~bit);
+		atomic_store(in ? &s_IsoInReady : &s_IsoOutReady, false);
+	}
+
+	const uint32_t endMask = iso ?
+		(in ? USBD_INTEN_ENDISOIN_Msk : USBD_INTEN_ENDISOOUT_Msk) :
+		(1UL << ((in ? USBD_INTEN_ENDEPIN0_Pos :
+			USBD_INTEN_ENDEPOUT0_Pos) + epNum));
+	volatile uint32_t *pEnable = in ? &NRF_USBD->EPINEN : &NRF_USBD->EPOUTEN;
+	NRF_USBD->INTENCLR = endMask;
+	*pEnable &= ~(1UL << epNum);
+	*nRFUsbdDmaEndEvent(epNum, in) = 0U;
+
+	if (iso)
+	{
 		if (!s_Ctrlr.SofEnabled && atomic_load(&s_IsoOpen) == 0U &&
 			!atomic_load(&s_BusSuspended))
 		{
@@ -2201,22 +2181,12 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 		EnableInterrupt(isoState);
 		return;
 	}
-	else if (USB_ENDPADDR_IS_IN(EpAddr))
+
+	NRF_USBD->EPDATASTATUS = 1UL << (epNum + (in ? 0U : 16U));
+	if (!in)
 	{
-		NRF_USBD->INTENCLR = (1UL << (USBD_INTEN_ENDEPIN0_Pos + epNum));
-		NRF_USBD->EPINEN &= ~(1UL << epNum);
-		NRF_USBD->EVENTS_ENDEPIN[epNum] = 0;
-		NRF_USBD->EPDATASTATUS = (1UL << epNum);
-	}
-	else
-	{
-		NRF_USBD->INTENCLR = (1UL << (USBD_INTEN_ENDEPOUT0_Pos + epNum));
-		NRF_USBD->EPOUTEN &= ~(1UL << epNum);
-		NRF_USBD->EVENTS_ENDEPOUT[epNum] = 0;
-		NRF_USBD->EPDATASTATUS = (1UL << (16U + epNum));
 		NRF_USBD->SIZE.EPOUT[epNum] = 0;
 	}
-
 	nRFUsbGetEpReg(EpAddr)->Mps = 0U;
 	__ISB();
 	__DSB();

@@ -98,7 +98,8 @@ bool nRFUsbRegDataEpXfer(uint8_t,uint16_t);
 '''
 # DmaEndEvent has a volatile pointer return that the simple extractor omits.
 end_event = '''volatile uint32_t *nRFUsbdDmaEndEvent(uint8_t ep, bool in) {
- assert(ep==8);return in?&regs.EVENTS_ENDISOIN:&regs.EVENTS_ENDISOOUT;
+ if(ep==8)return in?&regs.EVENTS_ENDISOIN:&regs.EVENTS_ENDISOOUT;
+ return in?&regs.EVENTS_ENDEPIN[ep]:&regs.EVENTS_ENDEPOUT[ep];
 }\n'''
 names = ['nRFUsbdDir','nRFUsbEpDir','nRFUsbGetEpReg',
          'nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaUnlock',
@@ -195,6 +196,28 @@ int main(){
  s_BusSuspended=false;frame();assert(dmaBusy);finish(true);AppEvtHandlerExec();
  assert(callbacks[1]==1);
  puts("PASS: suspended submission waits until resume");
+
+ for(unsigned ep=1;ep<8;++ep)for(unsigned dir=0;dir<2;++dir)for(unsigned masked=0;masked<2;++masked){
+  init();irqMask=masked;regs.EPINEN=regs.EPOUTEN=0x1FF;
+  regs.EPDATASTATUS.bits=0x00FF00FF;
+  for(unsigned n=0;n<8;++n){
+   regs.EVENTS_ENDEPIN[n]=regs.EVENTS_ENDEPOUT[n]=1;
+   regs.SIZE.EPOUT[n]=64;s_EpReg[n][0].Mps=s_EpReg[n][1].Mps=64;
+  }
+  UsbCtrlrEpClose(0,ep|(dir?0x80:0));
+  assert(irqMask==masked && s_IsoOpen==3 && s_IsoBusy==0);
+  assert(regs.EPINEN==(dir?(0x1FFU&~(1U<<ep)):0x1FFU));
+  assert(regs.EPOUTEN==(!dir?(0x1FFU&~(1U<<ep)):0x1FFU));
+  assert(regs.INTENCLR==(1U<<((dir?USBD_INTEN_ENDEPIN0_Pos:USBD_INTEN_ENDEPOUT0_Pos)+ep)));
+  assert(regs.EPDATASTATUS.bits==(0x00FF00FFU&~(1U<<(ep+(dir?0:16)))));
+  for(unsigned n=0;n<8;++n){
+   assert(regs.EVENTS_ENDEPIN[n]==unsigned(!(n==ep&&dir)));
+   assert(regs.EVENTS_ENDEPOUT[n]==unsigned(!(n==ep&&!dir)));
+   assert(regs.SIZE.EPOUT[n]==((n==ep&&!dir)?0U:64U));
+   for(unsigned d=0;d<2;++d)assert(s_EpReg[n][d].Mps==((n==ep&&d==dir)?0U:64U));
+  }
+ }
+ puts("PASS: regular close affects only the selected endpoint/direction and preserves IRQ state");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='iosonata-iso-') as temp:
