@@ -83,37 +83,33 @@ static void UsbIntrfTxFailure(UsbDevIntrf_t *pIntrf, uint16_t Length)
 
 static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf)
 {
-	int cnt = 0;
-	int length = pIntrf->Mps;
-	uint8_t *buff = pIntrf->pTxBuffer;
-	uint32_t state = DisableInterrupt();
-
-	while (length > 0)
-	{
-		int l = length;
-		uint8_t *p = CFifoGetMultiple(pIntrf->hTxFifo, &l);
-
-		if (p == nullptr)
-		{
-			break;
-		}
-
-		memcpy(buff, p, l);
-		length -= l;
-		buff += l;
-		cnt += l;
-	}
-
-	EnableInterrupt(state);
-
-	if (cnt <= 0)
+	uint8_t *pData = CFifoPeek(pIntrf->hTxFifo);
+	if (pData == nullptr)
 	{
 		UsbIntrfSetTxIdle(pIntrf);
 		return -1;
 	}
 
-	(void)UsbCtrlrEpInXfer(pIntrf->DevNo, pIntrf->EpNo,
-		pIntrf->pTxBuffer, (uint16_t)cnt);
+	int cnt = CFifoUsed(pIntrf->hTxFifo);
+	if (cnt > (int)pIntrf->Mps)
+	{
+		cnt = (int)pIntrf->Mps;
+	}
+
+	const int contiguous = (int)(pIntrf->hTxFifo->pMemStart +
+		pIntrf->hTxFifo->MaxIdxCnt - pData);
+	if (cnt > contiguous)
+	{
+		cnt = contiguous;
+	}
+
+#if defined(NRF52_SERIES)
+	(void)UsbCtrlrEpInXfer(pIntrf->DevNo, pIntrf->EpNo, nullptr,
+		(uint16_t)cnt);
+#else
+	(void)UsbCtrlrEpInXfer(pIntrf->DevNo, pIntrf->EpNo, pData,
+		(uint16_t)cnt);
+#endif
 	return cnt;
 }
 
@@ -589,6 +585,11 @@ static void UsbIntrfCtrlrInEvent(uint8_t, UsbCtrlrEvtType_t Event,
 	{
 		(void)CFifoGet(pIntrf->hTxFifo);
 	}
+	else if (pIntrf->Mode == USB_INTRF_MODE_BYTE)
+	{
+		int count = Length;
+		(void)CFifoGetMultiple(pIntrf->hTxFifo, &count);
+	}
 
 	if (Result == USB_CTRLR_XFER_FAILED)
 	{
@@ -761,10 +762,17 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	{
 		UsbCtrlrEpAlloc(pIntrf->DevNo, USB_ENDPADDR_DIROUT(pIntrf->EpNo),
 			pIntrf->pRxBuffer, pCfg->bBlocking, UsbIntrfCtrlrOutEvent, pIntrf);
-		UsbCtrlrEpAlloc(pIntrf->DevNo, USB_ENDPADDR_DIRIN(pIntrf->EpNo),
-			pIntrf->Mode == USB_INTRF_MODE_DIRECT &&
+		uint8_t *pTxSource = pIntrf->Mode == USB_INTRF_MODE_DIRECT &&
 			pIntrf->pTxDirectBuffer != nullptr ? pIntrf->pTxDirectBuffer->Data :
-			nullptr, pCfg->bBlocking, UsbIntrfCtrlrInEvent, pIntrf);
+			nullptr;
+#if defined(NRF52_SERIES)
+		if (pIntrf->Mode == USB_INTRF_MODE_BYTE)
+		{
+			pTxSource = reinterpret_cast<uint8_t *>(pIntrf->hTxFifo);
+		}
+#endif
+		UsbCtrlrEpAlloc(pIntrf->DevNo, USB_ENDPADDR_DIRIN(pIntrf->EpNo),
+			pTxSource, pCfg->bBlocking, UsbIntrfCtrlrInEvent, pIntrf);
 	}
 
 	DeviceIntrfEnable(&pIntrf->DevIntrf);

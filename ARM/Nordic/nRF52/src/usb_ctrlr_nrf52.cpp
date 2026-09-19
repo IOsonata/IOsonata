@@ -135,14 +135,23 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
 enum
 {
 	NRFX_USBD_XFER_EVT_OUT = 0x80U,
+	NRFX_USBD_QUE_OUT = 0U,
+	NRFX_USBD_QUE_IN_BUFFER = 1U,
+	NRFX_USBD_QUE_IN_FIFO = 2U,
+	NRFX_USBD_QUE_IN_SCRATCH = 3U,
 };
 
 #pragma pack(push, 4)
 
 typedef struct __nRF_Usbd_Que {
 	uint8_t EpNum;				//!< Hardware endpoint number
-	uint8_t Dir;					//!< 0 for OUT, 1 for IN
+	uint8_t Dir;					//!< Queue source/direction
 	uint16_t Len;				//!< Bytes this transfer moves
+	union {
+		uint8_t *pBuffer;		//!< OUT or direct IN DMA buffer
+		hCFifo_t hFifo;			//!< Byte-mode IN source FIFO
+		uint32_t Scratch;		//!< Aligned byte-mode IN repair
+	};
 } nRFUsbdQue_t;
 
 typedef struct __nRF_Ep_Packet {
@@ -587,6 +596,10 @@ static __attribute__((noinline)) bool nRFUsbdRetireDma(uint32_t StatusBit)
 	{
 		(void)CFifoGet(s_Usbd.hEp0Que);
 	}
+	else
+	{
+		(void)CFifoGet(s_Usbd.hQue);
+	}
 	// Unlock's DSB completes END, EPSTATUS and busy-register writes before
 	// the OUT callback or another DMA can use this buffer.
 	nRFUsbdDmaUnlock();
@@ -669,10 +682,27 @@ static inline __attribute__((always_inline))
 void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 {
 	const uint8_t epNum = pQue->EpNum;
-	const bool isIn = pQue->Dir != 0U;
-	const uint8_t *pBuffer = epNum == 0U ?
-		(isIn ? ((const nRFEPPkt_t *)pQue)->Payload : s_Usbd.Ep0Bounce) :
-		s_Usbd.EpReg[epNum][isIn ? 1 : 0].pBuffer;
+	const bool isIn = pQue->Dir != NRFX_USBD_QUE_OUT;
+	const uint8_t *pBuffer;
+
+	if (epNum == 0U)
+	{
+		pBuffer = isIn ? ((const nRFEPPkt_t *)pQue)->Payload :
+			s_Usbd.Ep0Bounce;
+	}
+	else if (pQue->Dir == NRFX_USBD_QUE_IN_FIFO)
+	{
+		pBuffer = CFifoPeek(pQue->hFifo);
+	}
+	else if (pQue->Dir == NRFX_USBD_QUE_IN_SCRATCH)
+	{
+		pBuffer = (const uint8_t *)&pQue->Scratch;
+	}
+	else
+	{
+		pBuffer = pQue->pBuffer;
+	}
+
 	uint16_t len = pQue->Len;
 
 	volatile USBD_EPIN_Type *pEp;
@@ -722,7 +752,7 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 	{
 		if (nRFUsbdIsoStart != nullptr && nRFUsbdIsoStart())
 			return;
-		pQue = (nRFUsbdQue_t *)CFifoGet(s_Usbd.hQue);
+		pQue = (nRFUsbdQue_t *)CFifoPeek(s_Usbd.hQue);
 	}
 
 	if (pQue != NULL)
@@ -763,11 +793,44 @@ static __attribute__((noinline)) void nRFUsbdQueXferDir(uint8_t EpNum, bool In, 
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(hQue);
 
 	pQue->EpNum = EpNum;
-	pQue->Dir = In ? 1U : 0U;
+	pQue->Dir = In ? NRFX_USBD_QUE_IN_BUFFER : NRFX_USBD_QUE_OUT;
 	pQue->Len = Len;
+	pQue->pBuffer = EpNum == 0U ? NULL :
+		s_Usbd.EpReg[EpNum][In ? 1 : 0].pBuffer;
 
 	nRFUsbdResumeQueuedDmaLocked();
 
+	EnableInterrupt(state);
+}
+
+static void nRFUsbdQueInFifo(uint8_t EpNum, hCFifo_t hFifo, uint16_t Len)
+{
+	const uint32_t state = DisableInterrupt();
+	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
+	uint8_t *pData = CFifoPeek(hFifo);
+	const uint32_t misalign = (uint32_t)(uintptr_t)pData & 3U;
+
+	pQue->EpNum = EpNum;
+	pQue->Len = Len;
+
+	if (misalign != 0U)
+	{
+		const uint16_t repair = (uint16_t)(4U - misalign);
+		if (pQue->Len > repair)
+		{
+			pQue->Len = repair;
+		}
+		pQue->Scratch = 0U;
+		memcpy(&pQue->Scratch, pData, pQue->Len);
+		pQue->Dir = NRFX_USBD_QUE_IN_SCRATCH;
+	}
+	else
+	{
+		pQue->hFifo = hFifo;
+		pQue->Dir = NRFX_USBD_QUE_IN_FIFO;
+	}
+
+	nRFUsbdResumeQueuedDmaLocked();
 	EnableInterrupt(state);
 }
 
@@ -1736,9 +1799,24 @@ bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
 bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 						 uint16_t Length)
 {
-	s_Usbd.EpReg[EpNum][1].pBuffer = pBuffer;
-	return UsbCtrlrEpXfer(DevNo, (uint8_t)(EpNum | USB_ENDPADDR_DIR_IN),
-		Length);
+	(void)DevNo;
+	if (pBuffer == NULL)
+	{
+		nRFUsbdQueInFifo(EpNum,
+			(hCFifo_t)s_Usbd.EpReg[EpNum][1].pBuffer, Length);
+	}
+	else
+	{
+		const uint32_t state = DisableInterrupt();
+		nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
+		pQue->EpNum = EpNum;
+		pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
+		pQue->Len = Length;
+		pQue->pBuffer = pBuffer;
+		nRFUsbdResumeQueuedDmaLocked();
+		EnableInterrupt(state);
+	}
+	return true;
 }
 
 
