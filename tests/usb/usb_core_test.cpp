@@ -874,10 +874,10 @@ extern "C" void UsbCtrlrSetAddress(int, uint8_t Address)
 extern "C" bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
 extern "C" void UsbCtrlrEpClose(int, uint8_t) {}
 extern "C" void UsbCtrlrEpCloseAll(int) { s_Ctrlr.CloseAllCnt++; }
-extern "C" bool UsbCtrlrEpRegister(int, uint8_t, uint8_t *, bool,
+extern "C" void UsbCtrlrEpAlloc(int, uint8_t, uint8_t *, bool,
 									 UsbCtrlrEpHandler_t, void *)
 {
-	return true;
+	return;
 }
 extern "C" bool UsbCtrlrEpRxArm(int, uint8_t) { return true; }
 extern "C" bool UsbCtrlrEpSend(int, uint8_t, uint16_t) { return true; }

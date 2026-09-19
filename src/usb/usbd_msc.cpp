@@ -943,20 +943,8 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 	UsbdMscCopyInquiry(pMsc->Revision, sizeof(pMsc->Revision),
 		pCfg->pRevision != nullptr ? pCfg->pRevision : "1.00");
 
-	UsbdEpAllocReq_t req = {};
-	req.InterfaceCount = 1U;
-	req.BidirectionalCount = 1U;
-	UsbdEpAllocRes_t alloc = {};
-	if (!UsbdEpAlloc(pMsc->DevNo, &req, pClass, &alloc))
-	{
-		return false;
-	}
-	pMsc->ItfNo = alloc.FirstInterface;
-	pMsc->EpNo = alloc.Bidirectional[0];
-
 	UsbIntrfCfg_t intrfCfg = {};
 	intrfCfg.DevNo = pMsc->DevNo;
-	intrfCfg.EpNo = pMsc->EpNo;
 	intrfCfg.bBlocking = true;
 	intrfCfg.Mode = USB_INTRF_MODE_PACKET;
 	intrfCfg.RxFifoMemSize = sizeof(pMsc->RxFifo);
@@ -973,6 +961,21 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 		return false;
 	}
 	pMsc->IntrfData.pClassContext = pMsc;
+
+	UsbdEpAllocPairBind_t dataBind = {};
+	UsbIntrfAllocBind(&pMsc->IntrfData, &intrfCfg, &dataBind);
+	UsbdEpAllocReq_t req = {};
+	req.InterfaceCount = 1U;
+	req.BidirectionalCount = 1U;
+	req.pBidirectionalBind = &dataBind;
+	UsbdEpAllocRes_t alloc = {};
+	if (!UsbdEpAlloc(pMsc->DevNo, &req, pClass, &alloc))
+	{
+		return false;
+	}
+	pMsc->ItfNo = alloc.FirstInterface;
+	pMsc->EpNo = alloc.Bidirectional[0];
+	pMsc->IntrfData.EpNo = pMsc->EpNo;
 
 	if (!UsbdMscMakeDesc(&pMsc->FsDesc, pMsc, USB_SPEED_FULL))
 	{

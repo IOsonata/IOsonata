@@ -73,16 +73,16 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *)
 }
 void UsbCtrlrEpClose(int, uint8_t) {}
 void UsbCtrlrEpCloseAll(int) {}
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *, bool,
+void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *, bool,
 						UsbCtrlrEpHandler_t, void *)
 {
 	if (s_RegisteredEpCount >= (int)sizeof(s_RegisteredEp))
 	{
-		return false;
+		return;
 	}
 
 	s_RegisteredEp[s_RegisteredEpCount++] = EpAddr;
-	return true;
+	return;
 }
 bool UsbCtrlrEpXfer(int, uint8_t, uint16_t) { return true; }
 bool UsbCtrlrEp0Xfer(int, uint8_t EpAddr, uint8_t *, uint16_t Length)

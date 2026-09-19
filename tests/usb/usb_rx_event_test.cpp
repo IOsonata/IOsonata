@@ -70,7 +70,7 @@ void UsbCtrlrEpStall(int, uint8_t) {}
 void UsbCtrlrEpClearStall(int, uint8_t) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
+void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
                         UsbCtrlrEpHandler_t Handler, void *pContext)
 {
     if (USB_ENDPADDR_IS_IN(EpAddr))
@@ -86,7 +86,6 @@ bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
         s_OutContext = pContext;
         s_OutBlocking = Blocking;
     }
-    return pBuffer != nullptr && Handler != nullptr;
 }
 
 bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)

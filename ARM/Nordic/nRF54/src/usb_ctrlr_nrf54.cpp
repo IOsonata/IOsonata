@@ -1801,24 +1801,19 @@ void UsbCtrlrEpCloseAll(int DevNo)
 	}
 }
 
-bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext)
+void UsbCtrlrEpAlloc(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+					 bool bBlocking,
+					 UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	if (!nRFUsbValidDevNo(DevNo) || epNum == 0U ||
-		epNum >= NRF_USB_EP_COUNT ||
-		(EpAddr & ~(USB_ENDPADDR_DIR_MASK | USB_ENDPADDR_NUM_MASK)) != 0U ||
-		pBuffer == NULL || Handler == NULL)
+	if (!nRFUsbValidDevNo(DevNo))
 	{
-		return false;
+		return;
 	}
-
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
 	pReg->pBuffer = pBuffer;
 	pReg->Handler = Handler;
 	pReg->pContext = pContext;
 	pReg->bBlocking = bBlocking;
-	return true;
 }
 
 bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
@@ -1833,9 +1828,11 @@ bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
 	return nRFUsbRegDataEpXfer(EpNum, Length);
 }
 
-bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
+bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
+						 uint16_t Length)
 {
 	(void)DevNo;
+	nRFUsbGetEpReg(USB_ENDPADDR_DIRIN(EpNum))->pBuffer = pBuffer;
 	return nRFUsbRegDataEpXfer(USB_ENDPADDR_DIRIN(EpNum), Length);
 }
 

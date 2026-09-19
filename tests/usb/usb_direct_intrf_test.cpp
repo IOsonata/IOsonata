@@ -34,7 +34,7 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
 void UsbCtrlrEpClose(int, uint8_t) {}
 void UsbCtrlrEpCloseAll(int) {}
 
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
+void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (USB_ENDPADDR_IS_IN(EpAddr))
@@ -49,7 +49,7 @@ bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
 		s_OutHandler = Handler;
 		s_OutContext = pContext;
 	}
-	return true;
+	return;
 }
 
 bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)

@@ -370,10 +370,38 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	pCdc->SerialStatePending = false;
 	UsbdCdcDefaultLineCoding(pCdc);
 
+	UsbIntrfCfg_t dataCfg = {};
+	dataCfg.bBlocking = pCfg->bBlocking;
+	dataCfg.RxFifoMemSize = pCfg->RxFifoMemSize;
+	dataCfg.pRxFifoMem = pCfg->pRxFifoMem;
+	dataCfg.TxFifoMemSize = pCfg->TxFifoMemSize;
+	dataCfg.pTxFifoMem = pCfg->pTxFifoMem;
+	dataCfg.TxFifoBlkSize = 1U;
+	dataCfg.DevNo = pCdc->DevNo;
+	dataCfg.EvtCB = pCfg->EvtCB;
+	dataCfg.BufferSize = (uint16_t)sizeof(pCdc->RxTransfer);
+	dataCfg.pRxBuffer = UsbdCdcRxBuffer(pCdc);
+	dataCfg.pTxBuffer = UsbdCdcTxBuffer(pCdc);
+
+	if (!UsbIntrfInit(&pCdc->IntrfData, &dataCfg))
+	{
+		return false;
+	}
+	pCdc->IntrfData.pClassContext = pCdc;
+
+	UsbdEpAllocPairBind_t dataBind = {};
+	UsbIntrfAllocBind(&pCdc->IntrfData, &dataCfg, &dataBind);
+	UsbdEpAllocBind_t notifyBind = {};
+	notifyBind.pBuffer = UsbdCdcNotifBuffer(pCdc);
+	notifyBind.Handler = UsbdCdcNotifCtrlrEvent;
+	notifyBind.pContext = pCdc;
+
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 2U;
 	req.BidirectionalCount = 1U;
 	req.InCount = 1U;
+	req.pBidirectionalBind = &dataBind;
+	req.pInBind = &notifyBind;
 
 	UsbdEpAllocRes_t alloc = {};
 	if (!UsbdEpAlloc(pCdc->DevNo, &req, pClass, &alloc))
@@ -384,34 +412,7 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	pCdc->CtrlIfNo = alloc.FirstInterface;
 	pCdc->NotifyEpNo = alloc.In[0];
 	pCdc->DataEpNo = alloc.Bidirectional[0];
-
-	UsbIntrfCfg_t dataCfg = {};
-	dataCfg.bBlocking = pCfg->bBlocking;
-	dataCfg.RxFifoMemSize = pCfg->RxFifoMemSize;
-	dataCfg.pRxFifoMem = pCfg->pRxFifoMem;
-	dataCfg.TxFifoMemSize = pCfg->TxFifoMemSize;
-	dataCfg.pTxFifoMem = pCfg->pTxFifoMem;
-	dataCfg.TxFifoBlkSize = 1U;
-	dataCfg.DevNo = pCdc->DevNo;
-	dataCfg.EvtCB = pCfg->EvtCB;
-	dataCfg.EpNo = pCdc->DataEpNo;
-	dataCfg.BufferSize = (uint16_t)sizeof(pCdc->RxTransfer);
-	dataCfg.pRxBuffer = UsbdCdcRxBuffer(pCdc);
-	dataCfg.pTxBuffer = UsbdCdcTxBuffer(pCdc);
-
-	if (!UsbIntrfInit(&pCdc->IntrfData, &dataCfg))
-	{
-		return false;
-	}
-
-	pCdc->IntrfData.pClassContext = pCdc;
-
-	if (!UsbCtrlrEpRegister(pCdc->DevNo,
-		USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo),
-		UsbdCdcNotifBuffer(pCdc), false, UsbdCdcNotifCtrlrEvent, pCdc))
-	{
-		return false;
-	}
+	pCdc->IntrfData.EpNo = pCdc->DataEpNo;
 
 	const UsbCfg_t *pUsbCfg = UsbGetCfg(pCdc->DevNo);
 	if (!UsbdCdcMakeDesc(&pCdc->FsDesc, pCdc, USB_SPEED_FULL,

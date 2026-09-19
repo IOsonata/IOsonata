@@ -675,8 +675,6 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 		s_Usbd.EpReg[epNum][isIn ? 1 : 0].pBuffer;
 	uint16_t len = pQue->Len;
 
-	// EPIN and EPOUT carry the same PTR/MAXCNT/AMOUNT block, so one write
-	// sequence serves both directions.
 	volatile USBD_EPIN_Type *pEp;
 	volatile uint32_t *pTask;
 	volatile uint32_t *pEnd;
@@ -705,8 +703,6 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 	pEp->PTR = (uint32_t)(uintptr_t)pBuffer;
 	pEp->MAXCNT = len;
-	// Regular END is cleared at open and at matching DMA retirement, before
-	// the channel is released. Only EP0 needs its separate start-time clear.
 	if (epNum == 0U)
 	{
 		*pEnd = 0U;
@@ -1092,7 +1088,6 @@ static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
 	const uint16_t amount = (uint16_t)(Evt >> 8U);
 
 	(void)pContext;
-
 	nRFUsbEpRegisteredEvent((uint8_t)(epNum | USB_ENDPADDR_DIR_IN),
 		USB_CTRLR_EVT_XFER_CMPL, amount, USB_CTRLR_XFER_SUCCESS);
 }
@@ -1707,22 +1702,16 @@ void UsbCtrlrEpCloseAll(int DevNo)
 	NRF_USBD->EPINEN = 1UL;
 }
 
-bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext)
+void UsbCtrlrEpAlloc(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+					 bool bBlocking,
+					 UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	(void)DevNo;
-	if (epNum == 0U || epNum >= NRF_USB_EP_COUNT)
-	{
-		return false;
-	}
-
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
 	pReg->pBuffer = pBuffer;
 	pReg->Handler = Handler;
 	pReg->pContext = pContext;
 	pReg->bBlocking = bBlocking;
-	return true;
 }
 
 bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
@@ -1744,10 +1733,12 @@ bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
 	return UsbCtrlrEpXfer(DevNo, EpNum, Length);
 }
 
-bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
+bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
+						 uint16_t Length)
 {
+	s_Usbd.EpReg[EpNum][1].pBuffer = pBuffer;
 	return UsbCtrlrEpXfer(DevNo, (uint8_t)(EpNum | USB_ENDPADDR_DIR_IN),
-						  Length);
+		Length);
 }
 
 

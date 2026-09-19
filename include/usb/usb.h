@@ -101,7 +101,7 @@ typedef void (*UsbEvtHandler_t)(int DevNo, UsbEvt_t Evt);
 //
 // Device class layer. One registration per class instance.
 // Non-control endpoint events go directly from the controller to the endpoint
-// callback registered with UsbCtrlrEpRegister; they are not class events.
+// binding established by the endpoint allocator; they are not class events.
 //
 
 /// Control transfer stage a request handler is being called for.

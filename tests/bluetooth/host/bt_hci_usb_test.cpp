@@ -88,15 +88,15 @@ void UsbCtrlrEpClose(int, uint8_t EpAddr)
 }
 void UsbCtrlrEpCloseAll(int) {}
 
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
+void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
                         UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-    if (pBuffer == nullptr || Handler == nullptr || s_RegisteredCount >= 5)
-        return false;
+    if (Handler == nullptr || s_RegisteredCount >= 5)
+        return;
     s_Registered[s_RegisteredCount++] = {
         EpAddr, pBuffer, Blocking, Handler, pContext
     };
-    return true;
+    return;
 }
 
 bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)

@@ -229,11 +229,12 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
 bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type, uint16_t MaxPacketSize);
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpCloseAll(int DevNo);
-bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext);
+void UsbCtrlrEpAlloc(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+					 bool bBlocking,
+					 UsbCtrlrEpHandler_t Handler, void *pContext);
 bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length);
 bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length);
-bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length);
+bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length);
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
