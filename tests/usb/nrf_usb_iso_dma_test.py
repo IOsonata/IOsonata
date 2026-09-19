@@ -64,10 +64,12 @@ struct nRFUsbdXfer_t {uint8_t *pBuffer;uint16_t TotalLen;volatile uint16_t Actua
 struct {nRFUsbdXfer_t Ep0[2],Iso[2];bool SofEnabled;} s_Ctrlr;
 struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;uint16_t Mps;bool bBlocking;};
 nRFUsbEpReg_t s_EpReg[9][2];
-atomic_bool s_BusSuspended=false,s_SuspendPending=false,s_HostResumePending=false;
-atomic_bool s_IsoInReady=false,s_IsoOutReady=false;
-atomic_uint_fast8_t s_IsoOpen=0,s_IsoBusy=0,s_IsoComplete=0;
-uint32_t s_IsoGeneration[2]={};uint16_t s_IsoOutSize=0;
+struct {
+ atomic_bool BusSuspended=false,SuspendPending=false,HostResumePending=false;
+ atomic_bool IsoInReady=false,IsoOutReady=false;
+ atomic_uint_fast8_t IsoOpen=0,IsoBusy=0,IsoComplete=0;
+ uint32_t IsoGeneration[2]={};uint16_t IsoOutSize=0;
+} s_EventState;
 bool s_UsbdLowPowerSuspend=false;
 unsigned irqMask=0,isoStarts[2]={},regularStarts=0;
 unsigned activeDir=0;
@@ -81,7 +83,7 @@ void __DSB(){
  if(regs.TASKS_STARTISOIN || regs.TASKS_STARTISOOUT){
   activeDir=regs.TASKS_STARTISOIN?1:0;
   assert(dmaBusy==0x82);assert(regs.EPSTATUS.bits==0);
-  assert(s_IsoBusy & (1U<<activeDir));
+  assert(s_EventState.IsoBusy & (1U<<activeDir));
   regs.EPSTATUS.bits=1UL<<(activeDir?8:24);
   ++isoStarts[activeDir];
   if(activeDir) memcpy(wireIn,inBuffer,regs.ISOIN.MAXCNT);
@@ -112,7 +114,7 @@ code += r'''
 bool nRFUsbRegDataEpXfer(uint8_t ep,uint16_t length){return nRFUsbRegIsoXfer(ep,length);}
 void nRFUsbdDmaWait(){if(dmaBusy)assert(nRFUsbdFinishIsoDma(activeDir!=0));}
 void nRFUsbdResumeQueuedDmaLocked(){
- if(dmaBusy||s_HostResumePending||(s_BusSuspended&&!s_SuspendPending))return;
+ if(dmaBusy||s_EventState.HostResumePending||(s_EventState.BusSuspended&&!s_EventState.SuspendPending))return;
  if(!nRFUsbdStartIsoNow())++regularStarts;
 }
 void finish(bool in){
@@ -130,7 +132,7 @@ void callback(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,UsbCtrlrXferRes
  assert(event==USB_CTRLR_EVT_XFER_CMPL && !irqMask);
  unsigned dir=USB_ENDPADDR_IS_IN(ep)?1:0;++callbacks[dir];lengths[dir]=length;
  if(!dir){
-  assert(s_IsoBusy&1);uint8_t copy[512];memcpy(copy,outBuffer,length);
+  assert(s_EventState.IsoBusy&1);uint8_t copy[512];memcpy(copy,outBuffer,length);
   if(interruptCopy){
    auto before=isoStarts[0];memset(hostOut,0xDD,sizeof(hostOut));frame(17);
    assert(isoStarts[0]==before && !memcmp(copy,outBuffer,length));
@@ -139,11 +141,11 @@ void callback(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,UsbCtrlrXferRes
 }
 void init(){
  regs={};s_Ctrlr={};memset(s_EpReg,0,sizeof(s_EpReg));
- s_IsoOpen=3;s_IsoBusy=0;s_IsoComplete=0;s_IsoInReady=false;s_IsoOutReady=false;
- s_BusSuspended=false;s_SuspendPending=false;s_HostResumePending=false;
+ s_EventState.IsoOpen=3;s_EventState.IsoBusy=0;s_EventState.IsoComplete=0;s_EventState.IsoInReady=false;s_EventState.IsoOutReady=false;
+ s_EventState.BusSuspended=false;s_EventState.SuspendPending=false;s_EventState.HostResumePending=false;
  dmaBusy=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
- ++s_IsoGeneration[0];++s_IsoGeneration[1];
+ ++s_EventState.IsoGeneration[0];++s_EventState.IsoGeneration[1];
  s_EpReg[8][0]={outBuffer,callback,nullptr,512,false};
  s_EpReg[8][1]={inBuffer,callback,nullptr,512,false};
  memset(inBuffer,0xA5,sizeof(inBuffer));memset(hostOut,0x5A,sizeof(hostOut));
@@ -151,11 +153,25 @@ void init(){
 }
 void dummy(uint32_t,void*){}
 int main(){
+ for(unsigned queued=0;queued<=4;++queued)for(unsigned masked=0;masked<2;++masked){
+  init();for(unsigned n=0;n<queued;++n)assert(AppEvtHandlerQue(n,nullptr,dummy));
+  // Both END events retired while publication was deferred.
+  s_EventState.IsoBusy=3;s_EventState.IsoComplete=3;irqMask=masked;
+  nRFUsbdRetryIsoComplete();
+  assert(irqMask==masked && s_EventState.IsoBusy==3);
+  assert(s_EventState.IsoComplete==(queued==4?3U:queued==3?2U:0U));
+  assert(callbacks[0]==0 && callbacks[1]==0);
+  irqMask=0;AppEvtHandlerExec();AppEvtHandlerExec();
+  assert(callbacks[0]==1 && callbacks[1]==1);
+  assert(s_EventState.IsoBusy==0 && s_EventState.IsoComplete==0);
+ }
+ puts("PASS: paired ISO completion retry preserves partial/full queue state and delivers each callback once");
+
  init();frame();assert(isoStarts[1]==0); // no unsolicited IN ZLP/DMA
  assert(nRFUsbRegIsoXfer(0x88,9));assert(dmaBusy && isoStarts[1]==1);
  assert(!nRFUsbdFinishIsoDma(true));assert(dmaBusy); // matching END required
  finish(true);assert(callbacks[1]==0);frame();assert(isoStarts[1]==1);
- AppEvtHandlerExec();assert(callbacks[1]==1 && lengths[1]==9 && !(s_IsoBusy&2));
+ AppEvtHandlerExec();assert(callbacks[1]==1 && lengths[1]==9 && !(s_EventState.IsoBusy&2));
  frame();assert(isoStarts[1]==1); // never retransmit previous payload
  puts("PASS: ISO IN requires a request, retires only at END, completes once, never repeats old data");
 
@@ -163,37 +179,37 @@ int main(){
  frame(17);assert(activeDir==1 && isoStarts[1]==1 && isoStarts[0]==0);
  finish(true);assert(dmaBusy && activeDir==0);finish(false);
  AppEvtHandlerExec();assert(callbacks[0]==1 && callbacks[1]==1);
- assert(lengths[0]==17 && lengths[1]==33 && s_IsoBusy==0 && regularStarts>0);
+ assert(lengths[0]==17 && lengths[1]==33 && s_EventState.IsoBusy==0 && regularStarts>0);
  puts("PASS: duplex ISO uses one DMA; both completions delivered; shared scheduler resumes");
 
  init();frame(17);finish(false);interruptCopy=true;
  for(int i=0;i<3;++i)frame(17);
  assert(isoStarts[0]==1 && callbacks[0]==0);
- AppEvtHandlerExec();assert(callbacks[0]==1 && s_IsoBusy==0 && isoStarts[0]==1);
+ AppEvtHandlerExec();assert(callbacks[0]==1 && s_EventState.IsoBusy==0 && isoStarts[0]==1);
  frame(9);assert(isoStarts[0]==2);finish(false);interruptCopy=false;AppEvtHandlerExec();
  puts("PASS: delayed OUT callback and SOF during copy cannot overwrite the RX buffer");
 
  init();for(int i=0;i<4;++i)assert(AppEvtHandlerQue(i,nullptr,dummy));
- frame(25);finish(false);assert(s_IsoComplete==1 && s_IsoBusy==1 && !dmaBusy);
- AppEvtHandlerExec();assert(callbacks[0]==0 && s_IsoComplete==0 && s_IsoBusy==1);
- AppEvtHandlerExec();assert(callbacks[0]==1 && s_IsoBusy==0);
+ frame(25);finish(false);assert(s_EventState.IsoComplete==1 && s_EventState.IsoBusy==1 && !dmaBusy);
+ AppEvtHandlerExec();assert(callbacks[0]==0 && s_EventState.IsoComplete==0 && s_EventState.IsoBusy==1);
+ AppEvtHandlerExec();assert(callbacks[0]==1 && s_EventState.IsoBusy==0);
  puts("PASS: full real AppEvt queue retains completion, retries, and does not retain EasyDMA");
 
  init();frame(17);finish(false);UsbCtrlrEpClose(0,8);
- s_IsoOpen|=1;s_EpReg[8][0].Mps=9;frame(9);finish(false);
- AppEvtHandlerExec();assert(callbacks[0]==1 && lengths[0]==9 && s_IsoBusy==0);
+ s_EventState.IsoOpen|=1;s_EpReg[8][0].Mps=9;frame(9);finish(false);
+ AppEvtHandlerExec();assert(callbacks[0]==1 && lengths[0]==9 && s_EventState.IsoBusy==0);
  puts("PASS: close/reopen discards old callback without releasing the new transfer");
 
  init();assert(nRFUsbRegIsoXfer(0x88,0));frame(0,true);
  finish(true);finish(false);AppEvtHandlerExec();
  assert(callbacks[0]==1 && callbacks[1]==1 && lengths[0]==0 && lengths[1]==0);
  init();assert(nRFUsbRegIsoXfer(0x88,512));frame();finish(true);
- chainIn=true;AppEvtHandlerExec();assert(s_IsoBusy&2);frame();finish(true);AppEvtHandlerExec();
+ chainIn=true;AppEvtHandlerExec();assert(s_EventState.IsoBusy&2);frame();finish(true);AppEvtHandlerExec();
  assert(callbacks[1]==2 && lengths[1]==9);
  puts("PASS: explicit ZLPs, 512-byte IN and callback submission are supported");
 
- init();s_BusSuspended=true;assert(nRFUsbRegIsoXfer(0x88,17));frame();assert(!dmaBusy);
- s_BusSuspended=false;frame();assert(dmaBusy);finish(true);AppEvtHandlerExec();
+ init();s_EventState.BusSuspended=true;assert(nRFUsbRegIsoXfer(0x88,17));frame();assert(!dmaBusy);
+ s_EventState.BusSuspended=false;frame();assert(dmaBusy);finish(true);AppEvtHandlerExec();
  assert(callbacks[1]==1);
  puts("PASS: suspended submission waits until resume");
 
@@ -205,7 +221,7 @@ int main(){
    regs.SIZE.EPOUT[n]=64;s_EpReg[n][0].Mps=s_EpReg[n][1].Mps=64;
   }
   UsbCtrlrEpClose(0,ep|(dir?0x80:0));
-  assert(irqMask==masked && s_IsoOpen==3 && s_IsoBusy==0);
+  assert(irqMask==masked && s_EventState.IsoOpen==3 && s_EventState.IsoBusy==0);
   assert(regs.EPINEN==(dir?(0x1FFU&~(1U<<ep)):0x1FFU));
   assert(regs.EPOUTEN==(!dir?(0x1FFU&~(1U<<ep)):0x1FFU));
   assert(regs.INTENCLR==(1U<<((dir?USBD_INTEN_ENDEPIN0_Pos:USBD_INTEN_ENDEPOUT0_Pos)+ep)));

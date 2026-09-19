@@ -210,20 +210,25 @@ static hCFifo_t s_hEp0Que;
 // packet here in either direction; control transfers are serialized by EP0.
 alignas(4) static uint8_t s_Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
 
-static atomic_bool s_BusSuspended;
-static atomic_bool s_SuspendPending;
-static atomic_bool s_RemoteWakePending;
-static atomic_bool s_HostResumePending;
-static atomic_bool s_MacAwake;
-static atomic_uint_fast8_t s_IsoOpen;
-static atomic_bool s_IsoInReady;
-static atomic_bool s_IsoOutReady;
-static uint16_t s_IsoOutSize;
-// ISO slots stay owned through their deferred completion. A non-NULL Xfer
-// buffer means an accepted request still waiting for its frame/DMA turn.
-static atomic_uint_fast8_t s_IsoBusy;
-static atomic_uint_fast8_t s_IsoComplete;
-static uint32_t s_IsoGeneration[2];
+// Keep event state together so the controller can address it from one base.
+// Every field retains its existing atomic type and ordering.
+static struct
+{
+	atomic_bool BusSuspended;
+	atomic_bool SuspendPending;
+	atomic_bool RemoteWakePending;
+	atomic_bool HostResumePending;
+	atomic_bool MacAwake;
+	atomic_bool IsoInReady;
+	atomic_bool IsoOutReady;
+	uint16_t IsoOutSize;
+	atomic_uint_fast8_t IsoOpen;
+	// ISO buffers remain owned through deferred completion. A non-NULL
+	// transfer buffer identifies a request waiting for its frame/DMA turn.
+	atomic_uint_fast8_t IsoBusy;
+	atomic_uint_fast8_t IsoComplete;
+	uint32_t IsoGeneration[2];
+} s_EventState;
 
 static bool nRFUsbdFinishIsoDma(bool In);
 static void nRFUsbdRetryIsoComplete(void);
@@ -243,7 +248,8 @@ nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpAddr)
 	return &s_EpReg[USB_ENDPADDR_NUM(EpAddr)][nRFUsbEpDir(EpAddr)];
 }
 
-static inline __attribute__((always_inline))
+// Share callback dispatch across regular and ISO event paths.
+static __attribute__((noinline))
 void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 								 uint16_t Length, UsbCtrlrXferResult_t Result)
 {
@@ -678,14 +684,14 @@ static void nRFUsbdNoDmaTask(volatile uint32_t *pTask)
 
 static bool nRFUsbdStartIsoNow(void)
 {
-	const uint_fast8_t isoOpen = atomic_load(&s_IsoOpen);
+	const uint_fast8_t isoOpen = atomic_load(&s_EventState.IsoOpen);
 	nRFUsbdXfer_t *pXfer = &s_Ctrlr.Iso[1];
 	volatile uint32_t *pTask;
 	volatile uint32_t *pEnd;
 	if ((isoOpen & NRFX_USBD_ISO_IN_OPEN) != 0U &&
-		atomic_load(&s_IsoInReady) && pXfer->pBuffer != NULL)
+		atomic_load(&s_EventState.IsoInReady) && pXfer->pBuffer != NULL)
 	{
-		atomic_store(&s_IsoInReady, false);
+		atomic_store(&s_EventState.IsoInReady, false);
 		NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)s_EpReg[NRFX_USBD_ISO_EP_NO][1].pBuffer;
 		NRF_USBD->ISOIN.MAXCNT = pXfer->TotalLen;
 		pTask = &NRF_USBD->TASKS_STARTISOIN;
@@ -695,12 +701,12 @@ static bool nRFUsbdStartIsoNow(void)
 	{
 		pXfer = &s_Ctrlr.Iso[0];
 		if ((isoOpen & NRFX_USBD_ISO_OUT_OPEN) == 0U ||
-			!atomic_load(&s_IsoOutReady) || pXfer->pBuffer == NULL)
+			!atomic_load(&s_EventState.IsoOutReady) || pXfer->pBuffer == NULL)
 			return false;
 
-		atomic_store(&s_IsoOutReady, false);
-		const uint16_t len = s_IsoOutSize < pXfer->TotalLen ?
-			s_IsoOutSize : pXfer->TotalLen;
+		atomic_store(&s_EventState.IsoOutReady, false);
+		const uint16_t len = s_EventState.IsoOutSize < pXfer->TotalLen ?
+			s_EventState.IsoOutSize : pXfer->TotalLen;
 		NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)
 			s_EpReg[NRFX_USBD_ISO_EP_NO][0].pBuffer;
 		NRF_USBD->ISOOUT.MAXCNT = len;
@@ -716,7 +722,7 @@ static bool nRFUsbdStartIsoNow(void)
 static inline __attribute__((always_inline))
 bool nRFUsbdIsoPending(void)
 {
-	return atomic_load(&s_IsoInReady) || atomic_load(&s_IsoOutReady);
+	return atomic_load(&s_EventState.IsoInReady) || atomic_load(&s_EventState.IsoOutReady);
 }
 
 static void nRFUsbdServiceIso(void)
@@ -727,8 +733,8 @@ static void nRFUsbdServiceIso(void)
 	}
 
 	const uint32_t state = DisableInterrupt();
-	if (!atomic_load(&s_HostResumePending) &&
-		(!atomic_load(&s_BusSuspended) || atomic_load(&s_SuspendPending)) &&
+	if (!atomic_load(&s_EventState.HostResumePending) &&
+		(!atomic_load(&s_EventState.BusSuspended) || atomic_load(&s_EventState.SuspendPending)) &&
 		!nRFUsbdDmaActive())
 	{
 		(void)nRFUsbdStartIsoNow();
@@ -793,9 +799,9 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 static __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 {
 	if (nRFUsbdDmaActive() ||
-		atomic_load(&s_HostResumePending) ||
-		(atomic_load(&s_BusSuspended) &&
-		 !atomic_load(&s_SuspendPending)))
+		atomic_load(&s_EventState.HostResumePending) ||
+		(atomic_load(&s_EventState.BusSuspended) &&
+		 !atomic_load(&s_EventState.SuspendPending)))
 	{
 		return;
 	}
@@ -885,19 +891,19 @@ static void nRFUsbdResetState(void)
 
 	CFifoFlush(s_hQue);
 	CFifoFlush(s_hEp0Que);
-	atomic_store(&s_BusSuspended, false);
-	atomic_store(&s_SuspendPending, false);
-	atomic_store(&s_RemoteWakePending, false);
-	atomic_store(&s_HostResumePending, false);
-	atomic_store(&s_MacAwake, true);
-	atomic_store(&s_IsoOpen, 0U);
-	atomic_store(&s_IsoInReady, false);
-	atomic_store(&s_IsoOutReady, false);
-	s_IsoOutSize = 0U;
-	atomic_store(&s_IsoBusy, 0U);
-	atomic_store(&s_IsoComplete, 0U);
-	++s_IsoGeneration[0];
-	++s_IsoGeneration[1];
+	atomic_store(&s_EventState.BusSuspended, false);
+	atomic_store(&s_EventState.SuspendPending, false);
+	atomic_store(&s_EventState.RemoteWakePending, false);
+	atomic_store(&s_EventState.HostResumePending, false);
+	atomic_store(&s_EventState.MacAwake, true);
+	atomic_store(&s_EventState.IsoOpen, 0U);
+	atomic_store(&s_EventState.IsoInReady, false);
+	atomic_store(&s_EventState.IsoOutReady, false);
+	s_EventState.IsoOutSize = 0U;
+	atomic_store(&s_EventState.IsoBusy, 0U);
+	atomic_store(&s_EventState.IsoComplete, 0U);
+	++s_EventState.IsoGeneration[0];
+	++s_EventState.IsoGeneration[1];
 	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
 }
 
@@ -923,8 +929,8 @@ static void nRFUsbdAbortEp0(void)
 static void nRFUsbdTryEnterLowPower(void)
 {
 	if (!s_UsbdLowPowerSuspend ||
-		!atomic_load(&s_BusSuspended) ||
-		!atomic_load(&s_SuspendPending))
+		!atomic_load(&s_EventState.BusSuspended) ||
+		!atomic_load(&s_EventState.SuspendPending))
 	{
 		return;
 	}
@@ -932,10 +938,10 @@ static void nRFUsbdTryEnterLowPower(void)
 	// Check ownership and wake state once, with interrupts excluded.
 
 	const uint32_t irqState = DisableInterrupt();
-	if (!atomic_load(&s_BusSuspended) ||
-		!atomic_load(&s_SuspendPending) ||
-		atomic_load(&s_RemoteWakePending) ||
-		atomic_load(&s_HostResumePending) ||
+	if (!atomic_load(&s_EventState.BusSuspended) ||
+		!atomic_load(&s_EventState.SuspendPending) ||
+		atomic_load(&s_EventState.RemoteWakePending) ||
+		atomic_load(&s_EventState.HostResumePending) ||
 		nRFUsbdDmaActive() ||
 		CFifoUsed(s_hQue) > 0)
 	{
@@ -951,7 +957,7 @@ static void nRFUsbdTryEnterLowPower(void)
 		return;
 	}
 
-	atomic_store(&s_MacAwake, false);
+	atomic_store(&s_EventState.MacAwake, false);
 	NRF_USBD->LOWPOWER =
 		USBD_LOWPOWER_LOWPOWER_LowPower << USBD_LOWPOWER_LOWPOWER_Pos;
 	(void)NRF_USBD->LOWPOWER;
@@ -968,23 +974,23 @@ static void nRFUsbdTryEnterLowPower(void)
 
 	// No software wake state changes while interrupts remain excluded.
 	// Hardware resume is handled by the RESUME/SOF check above.
-	atomic_store(&s_SuspendPending, false);
+	atomic_store(&s_EventState.SuspendPending, false);
 	EnableInterrupt(irqState);
 }
 
 static void nRFUsbdTryRemoteWake(void)
 {
-	if (!atomic_load(&s_RemoteWakePending))
+	if (!atomic_load(&s_EventState.RemoteWakePending))
 	{
 		return;
 	}
 
 	// Validate the wake request once while interrupts are excluded.
 	const uint32_t irqState = DisableInterrupt();
-	if (!atomic_load(&s_RemoteWakePending) ||
-		!atomic_load(&s_BusSuspended) ||
-		atomic_load(&s_HostResumePending) ||
-		!atomic_load(&s_MacAwake) ||
+	if (!atomic_load(&s_EventState.RemoteWakePending) ||
+		!atomic_load(&s_EventState.BusSuspended) ||
+		atomic_load(&s_EventState.HostResumePending) ||
+		!atomic_load(&s_EventState.MacAwake) ||
 		nRFUsbdDmaActive() ||
 		NRF_USBD->LOWPOWER !=
 			(USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos))
@@ -993,7 +999,7 @@ static void nRFUsbdTryRemoteWake(void)
 		return;
 	}
 
-	atomic_store(&s_RemoteWakePending, false);
+	atomic_store(&s_EventState.RemoteWakePending, false);
 	NRF_USBD->DPDMVALUE = USBD_DPDMVALUE_STATE_Resume;
 	NRF_USBD->TASKS_DPDMDRIVE = 1;
 	__ISB();
@@ -1009,20 +1015,20 @@ static void nRFUsbdTryRemoteWake(void)
 
 static void nRFUsbdHostResumeDetected(void)
 {
-	if (!atomic_load(&s_BusSuspended))
+	if (!atomic_load(&s_EventState.BusSuspended))
 	{
 		return;
 	}
 
-	atomic_store(&s_BusSuspended, false);
-	atomic_store(&s_SuspendPending, false);
-	atomic_store(&s_RemoteWakePending, false);
+	atomic_store(&s_EventState.BusSuspended, false);
+	atomic_store(&s_EventState.SuspendPending, false);
+	atomic_store(&s_EventState.RemoteWakePending, false);
 
-	if (!atomic_load(&s_MacAwake) ||
+	if (!atomic_load(&s_EventState.MacAwake) ||
 		NRF_USBD->LOWPOWER !=
 			(USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos))
 	{
-		atomic_store(&s_HostResumePending, true);
+		atomic_store(&s_EventState.HostResumePending, true);
 		if (NRF_USBD->LOWPOWER !=
 			(USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos))
 		{
@@ -1034,17 +1040,17 @@ static void nRFUsbdHostResumeDetected(void)
 		return;
 	}
 
-	atomic_store(&s_HostResumePending, false);
+	atomic_store(&s_EventState.HostResumePending, false);
 	nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
 }
 
 static void nRFUsbdWakeAllowed(void)
 {
-	atomic_store(&s_MacAwake, true);
+	atomic_store(&s_EventState.MacAwake, true);
 
-	if (atomic_load(&s_HostResumePending))
+	if (atomic_load(&s_EventState.HostResumePending))
 	{
-		atomic_store(&s_HostResumePending, false);
+		atomic_store(&s_EventState.HostResumePending, false);
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
 		return;
 	}
@@ -1058,8 +1064,8 @@ static bool nRFUsbRegIsoXfer(uint8_t EpAddr, uint16_t Length)
 	const uint_fast8_t bit = 1U << dir;
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
 	const uint32_t state = DisableInterrupt();
-	if ((atomic_load(&s_IsoOpen) & bit) == 0U ||
-		(atomic_load(&s_IsoBusy) & bit) != 0U ||
+	if ((atomic_load(&s_EventState.IsoOpen) & bit) == 0U ||
+		(atomic_load(&s_EventState.IsoBusy) & bit) != 0U ||
 		pReg->pBuffer == NULL || pReg->Handler == NULL ||
 		Length > pReg->Mps)
 	{
@@ -1071,7 +1077,7 @@ static bool nRFUsbRegIsoXfer(uint8_t EpAddr, uint16_t Length)
 	pXfer->pBuffer = pReg->pBuffer;
 	pXfer->TotalLen = Length;
 	pXfer->ActualLen = 0U;
-	atomic_fetch_or(&s_IsoBusy, bit);
+	atomic_fetch_or(&s_EventState.IsoBusy, bit);
 	nRFUsbdServiceIso();
 	EnableInterrupt(state);
 	return true;
@@ -1157,8 +1163,8 @@ static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 	const uint_fast8_t bit = 1U << dir;
 	const uint32_t generation = Evt >> 1U;
 	uint32_t state = DisableInterrupt();
-	if (generation != (s_IsoGeneration[dir] & 0x7FFFFFFFUL) ||
-		(atomic_load(&s_IsoOpen) & atomic_load(&s_IsoBusy) & bit) == 0U)
+	if (generation != (s_EventState.IsoGeneration[dir] & 0x7FFFFFFFUL) ||
+		(atomic_load(&s_EventState.IsoOpen) & atomic_load(&s_EventState.IsoBusy) & bit) == 0U)
 	{
 		EnableInterrupt(state);
 		return;
@@ -1170,7 +1176,7 @@ static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 	// IN DMA has copied the TX payload into controller memory. Release it
 	// before calling the handler so that handler may submit the next frame.
 	if (dir != 0U)
-		atomic_fetch_and(&s_IsoBusy, (uint_fast8_t)~bit);
+		atomic_fetch_and(&s_EventState.IsoBusy, (uint_fast8_t)~bit);
 	EnableInterrupt(state);
 
 	nRFUsbEpRegisteredEvent(epAddr, USB_CTRLR_EVT_XFER_CMPL,
@@ -1178,8 +1184,8 @@ static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 
 	// OUT DMA memory is still the callback's source until it returns.
 	state = DisableInterrupt();
-	if (dir == 0U && generation == (s_IsoGeneration[dir] & 0x7FFFFFFFUL))
-		atomic_fetch_and(&s_IsoBusy, (uint_fast8_t)~bit);
+	if (dir == 0U && generation == (s_EventState.IsoGeneration[dir] & 0x7FFFFFFFUL))
+		atomic_fetch_and(&s_EventState.IsoBusy, (uint_fast8_t)~bit);
 	nRFUsbdResumeQueuedDmaLocked();
 	EnableInterrupt(state);
 }
@@ -1188,16 +1194,16 @@ static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 // hook retries publication after foreground dispatch makes room.
 static void nRFUsbdRetryIsoComplete(void)
 {
-	if (atomic_load(&s_IsoComplete) == 0U)
+	if (atomic_load(&s_EventState.IsoComplete) == 0U)
 		return;
 	const uint32_t state = DisableInterrupt();
 	for (uint8_t dir = 0U; dir < 2U; ++dir)
 	{
 		const uint_fast8_t bit = 1U << dir;
-		if ((atomic_load(&s_IsoComplete) & bit) != 0U &&
-			AppEvtHandlerQue((s_IsoGeneration[dir] << 1U) | dir,
+		if ((atomic_load(&s_EventState.IsoComplete) & bit) != 0U &&
+			AppEvtHandlerQue((s_EventState.IsoGeneration[dir] << 1U) | dir,
 				NULL, nRFUsbdProcessIsoComplete))
-			atomic_fetch_and(&s_IsoComplete, (uint_fast8_t)~bit);
+			atomic_fetch_and(&s_EventState.IsoComplete, (uint_fast8_t)~bit);
 	}
 	EnableInterrupt(state);
 }
@@ -1216,7 +1222,7 @@ static bool nRFUsbdFinishIsoDma(bool In)
 	NRF_USBD->EPSTATUS = In ? (1UL << 8U) : (1UL << 24U);
 	__DSB();
 	nRFUsbdDmaUnlock();
-	atomic_fetch_or(&s_IsoComplete, (uint_fast8_t)(1U << dir));
+	atomic_fetch_or(&s_EventState.IsoComplete, (uint_fast8_t)(1U << dir));
 	nRFUsbdRetryIsoComplete();
 	return true;
 }
@@ -1249,9 +1255,8 @@ static void nRFUsbdProcessOutComplete(uint32_t Evt, void *pContext)
 
 	// UsbIntrf packetizes regular endpoints. One queued request is one DMA
 	// transaction, so only EP0 needs multi-packet completion processing.
-	nRFUsbEpReg_t *pReg = &s_EpReg[epNum][0];
-	pReg->Handler(epNum, USB_CTRLR_EVT_XFER_CMPL, amount,
-		USB_CTRLR_XFER_SUCCESS, pReg->pContext);
+	nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_XFER_CMPL, amount,
+		USB_CTRLR_XFER_SUCCESS);
 }
 
 static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
@@ -1261,10 +1266,8 @@ static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
 
 	(void)pContext;
 
-	nRFUsbEpReg_t *pReg = &s_EpReg[epNum][1];
-	pReg->Handler((uint8_t)(epNum | USB_ENDPADDR_DIR_IN),
-		USB_CTRLR_EVT_XFER_CMPL, amount, USB_CTRLR_XFER_SUCCESS,
-		pReg->pContext);
+	nRFUsbEpRegisteredEvent((uint8_t)(epNum | USB_ENDPADDR_DIR_IN),
+		USB_CTRLR_EVT_XFER_CMPL, amount, USB_CTRLR_XFER_SUCCESS);
 }
 
 static void nRFUsbdProcessEp0OutData(uint32_t Evt, void *pContext)
@@ -1283,9 +1286,8 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 
 	// Only blocking endpoints reach AppEvt. Nonblocking OUT is queued for
 	// EasyDMA directly from EPDATASTATUS in the ISR.
-	nRFUsbEpReg_t *pReg = &s_EpReg[epNum][0];
-	pReg->Handler(epNum, USB_CTRLR_EVT_DRDY, 0U,
-		USB_CTRLR_XFER_SUCCESS, pReg->pContext);
+	nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U,
+		USB_CTRLR_XFER_SUCCESS);
 }
 
 static void nRFUsbdQueueEp0Complete(bool Out, uint16_t Amount)
@@ -1312,17 +1314,17 @@ void nRFUsbdQueueInComplete(uint8_t EpNum, uint16_t Amount)
 static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 {
 	if ((EventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0U &&
-		!atomic_load(&s_BusSuspended))
+		!atomic_load(&s_EventState.BusSuspended))
 	{
-		atomic_store(&s_BusSuspended, true);
+		atomic_store(&s_EventState.BusSuspended, true);
 		// A bus suspend and a peripheral low-power transition are separate.
 		// When low-power suspend is disabled, retain all endpoint state and
 		// wait for RESUME or SOF without touching USBD LOWPOWER.
-		atomic_store(&s_SuspendPending, s_UsbdLowPowerSuspend);
-		atomic_store(&s_RemoteWakePending, false);
-		atomic_store(&s_HostResumePending, false);
-		atomic_store(&s_IsoInReady, false);
-		atomic_store(&s_IsoOutReady, false);
+		atomic_store(&s_EventState.SuspendPending, s_UsbdLowPowerSuspend);
+		atomic_store(&s_EventState.RemoteWakePending, false);
+		atomic_store(&s_EventState.HostResumePending, false);
+		atomic_store(&s_EventState.IsoInReady, false);
+		atomic_store(&s_EventState.IsoOutReady, false);
 		NRF_USBD->EVENTS_SOF = 0U;
 		NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
@@ -1343,10 +1345,10 @@ static void nRFUsbdHandleSof(void)
 {
 	nRFUsbdHostResumeDetected();
 
-	const uint_fast8_t isoOpen = atomic_load(&s_IsoOpen);
+	const uint_fast8_t isoOpen = atomic_load(&s_EventState.IsoOpen);
 	if ((isoOpen & NRFX_USBD_ISO_IN_OPEN) != 0U)
 	{
-		atomic_store(&s_IsoInReady, true);
+		atomic_store(&s_EventState.IsoInReady, true);
 	}
 
 	if ((isoOpen & NRFX_USBD_ISO_OUT_OPEN) != 0U)
@@ -1356,12 +1358,12 @@ static void nRFUsbdHandleSof(void)
 		// buffer stable until its deferred completion callback returns.
 		nRFUsbdXfer_t *pOut = &s_Ctrlr.Iso[0];
 		const bool waiting = pOut->pBuffer != NULL;
-		if ((atomic_load(&s_IsoBusy) & NRFX_USBD_ISO_OUT_OPEN) == 0U || waiting)
+		if ((atomic_load(&s_EventState.IsoBusy) & NRFX_USBD_ISO_OUT_OPEN) == 0U || waiting)
 		{
-			atomic_store(&s_IsoOutReady, size != 0U);
+			atomic_store(&s_EventState.IsoOutReady, size != 0U);
 			if (size != 0U)
 			{
-				s_IsoOutSize = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
+				s_EventState.IsoOutSize = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
 					0U : (uint16_t)size;
 				if (!waiting)
 				{
@@ -1389,7 +1391,7 @@ static void nRFUsbdHandleSof(void)
 	}
 
 	if (!s_Ctrlr.SofEnabled && isoOpen == 0U &&
-		!atomic_load(&s_BusSuspended))
+		!atomic_load(&s_EventState.BusSuspended))
 	{
 		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
 	}
@@ -1639,10 +1641,7 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdHandleSof();
 	}
 
-	if (atomic_load(&s_RemoteWakePending))
-	{
-		nRFUsbdTryRemoteWake();
-	}
+	nRFUsbdTryRemoteWake();
 
 	// ENDEP released the shared EasyDMA channel above. ISO has priority when
 	// it is open; ordinary CDC traffic avoids the ISO service path entirely.
@@ -1654,8 +1653,8 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			// EPDATASTATUS is cleared before DRDY may start another DMA.
 			// UsbIntrf checks RX space and sets RxPending when it is full.
-			pReg->Handler(epNum, USB_CTRLR_EVT_DRDY, 0U,
-				USB_CTRLR_XFER_SUCCESS, pReg->pContext);
+			nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U,
+				USB_CTRLR_XFER_SUCCESS);
 		}
 		else
 		{
@@ -1674,13 +1673,10 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdResumeQueuedDmaLocked();
 	}
 
-	if ((dmastatus & 0x01000100UL) != 0U && atomic_load(&s_IsoOpen) != 0U)
+	if ((dmastatus & 0x01000100UL) != 0U && atomic_load(&s_EventState.IsoOpen) != 0U)
 		nRFUsbdResumeQueuedDmaLocked();
 
-	if (s_UsbdLowPowerSuspend && atomic_load(&s_BusSuspended))
-	{
-		nRFUsbdTryEnterLowPower();
-	}
+	nRFUsbdTryEnterLowPower();
 
 }
 
@@ -1917,13 +1913,13 @@ void UsbCtrlrRemoteWakeup(int DevNo)
 		return;
 	}
 
-	if (!atomic_load(&s_BusSuspended) || atomic_load(&s_HostResumePending))
+	if (!atomic_load(&s_EventState.BusSuspended) || atomic_load(&s_EventState.HostResumePending))
 	{
 		return;
 	}
 
-	atomic_store(&s_SuspendPending, false);
-	atomic_store(&s_RemoteWakePending, true);
+	atomic_store(&s_EventState.SuspendPending, false);
+	atomic_store(&s_EventState.RemoteWakePending, true);
 
 	if (NRF_USBD->LOWPOWER !=
 		(USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos))
@@ -1953,8 +1949,8 @@ void UsbCtrlrSofEnable(int DevNo, bool Enable)
 	}
 	else
 	{
-		if (atomic_load(&s_IsoOpen) == 0U &&
-			!atomic_load(&s_BusSuspended))
+		if (atomic_load(&s_EventState.IsoOpen) == 0U &&
+			!atomic_load(&s_EventState.BusSuspended))
 		{
 			NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
 		}
@@ -2024,9 +2020,9 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 
 	if (iso)
 	{
-		atomic_fetch_or(&s_IsoOpen, (uint_fast8_t)(in ?
+		atomic_fetch_or(&s_EventState.IsoOpen, (uint_fast8_t)(in ?
 			NRFX_USBD_ISO_IN_OPEN : NRFX_USBD_ISO_OUT_OPEN));
-		atomic_store(in ? &s_IsoInReady : &s_IsoOutReady, false);
+		atomic_store(in ? &s_EventState.IsoInReady : &s_EventState.IsoOutReady, false);
 		NRF_USBD->EVENTS_SOF = 0U;
 		NRF_USBD->INTENSET = USBD_INTEN_SOF_Msk;
 	}
@@ -2072,14 +2068,14 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 		const uint8_t dir = in ? 1U : 0U;
 		nRFUsbdXfer_t *pXfer = &s_Ctrlr.Iso[dir];
 		const uint_fast8_t bit = 1U << dir;
-		++s_IsoGeneration[dir];
-		atomic_fetch_and(&s_IsoBusy, (uint_fast8_t)~bit);
-		atomic_fetch_and(&s_IsoComplete, (uint_fast8_t)~bit);
+		++s_EventState.IsoGeneration[dir];
+		atomic_fetch_and(&s_EventState.IsoBusy, (uint_fast8_t)~bit);
+		atomic_fetch_and(&s_EventState.IsoComplete, (uint_fast8_t)~bit);
 		pXfer->pBuffer = NULL;
 		pXfer->TotalLen = 0U;
 		pXfer->ActualLen = 0U;
-		atomic_fetch_and(&s_IsoOpen, (uint_fast8_t)~bit);
-		atomic_store(in ? &s_IsoInReady : &s_IsoOutReady, false);
+		atomic_fetch_and(&s_EventState.IsoOpen, (uint_fast8_t)~bit);
+		atomic_store(in ? &s_EventState.IsoInReady : &s_EventState.IsoOutReady, false);
 	}
 
 	const uint32_t endMask = iso ?
@@ -2093,8 +2089,8 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 
 	if (iso)
 	{
-		if (!s_Ctrlr.SofEnabled && atomic_load(&s_IsoOpen) == 0U &&
-			!atomic_load(&s_BusSuspended))
+		if (!s_Ctrlr.SofEnabled && atomic_load(&s_EventState.IsoOpen) == 0U &&
+			!atomic_load(&s_EventState.BusSuspended))
 		{
 			NRF_USBD->INTENCLR = USBD_INTEN_SOF_Msk;
 		}
