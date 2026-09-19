@@ -1631,11 +1631,6 @@ void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 {
 	(void)DevNo;
-	if (pDesc == NULL)
-	{
-		return false;
-	}
-
 	const uint8_t epAddr = pDesc->bEndpointAddress;
 	const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
 	if (epNum == NRFX_USBD_ISO_EP_NO)
@@ -1643,10 +1638,8 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 		return nRFUsbdIsoEpOpen != nullptr && nRFUsbdIsoEpOpen(pDesc);
 	}
 
-	const uint8_t type = pDesc->bmAttributes & 0x03U;
 	const bool in = USB_ENDPADDR_IS_IN(epAddr);
 	if (epNum == 0U || epNum >= NRFX_USBD_DATA_EP_COUNT ||
-		type < USB_ENDPATT_TRANS_BULK ||
 		pDesc->wMaxPacketSize == 0U ||
 		pDesc->wMaxPacketSize > NRFX_USBD_MAX_PACKET_SIZE)
 	{
@@ -1719,10 +1712,7 @@ bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	(void)DevNo;
-	if (epNum == 0U ||
-		epNum >= NRF_USB_EP_COUNT ||
-		(EpAddr & ~(USB_ENDPADDR_DIR_MASK | USB_ENDPADDR_NUM_MASK)) != 0U ||
-		pBuffer == NULL || Handler == NULL)
+	if (epNum == 0U || epNum >= NRF_USB_EP_COUNT)
 	{
 		return false;
 	}
