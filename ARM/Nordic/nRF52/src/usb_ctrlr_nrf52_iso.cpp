@@ -158,11 +158,10 @@ static bool nRFUsbRegIsoXfer(uint8_t EpAddr, uint16_t Length)
 	const uint32_t openBusy = (uint32_t)(USBD_FLAG_ISO_OUT_OPEN |
 		USBD_FLAG_ISO_OUT_BUSY) << dir;
 	nRFUsbEpReg_t *pReg = nRFIsoReg(EpAddr);
-	const uint16_t maxPacketSize = dir != 0U ? s_Usbd.IsoInMaxPacketSize :
-		s_Usbd.EpOutMaxPacketSize[NRFX_USBD_ISO_EP_NO];
 	const uint32_t state = DisableInterrupt();
 	if ((s_Usbd.Flags & openBusy) != (uint32_t)USBD_FLAG_ISO_OUT_OPEN << dir ||
-		pReg->pBuffer == NULL || pReg->Handler == NULL || Length > maxPacketSize)
+		pReg->pBuffer == NULL || pReg->Handler == NULL ||
+		Length > pReg->MaxPacketSize)
 	{
 		EnableInterrupt(state);
 		return false;
@@ -308,8 +307,9 @@ void nRFUsbdIsoSof(void)
 					(size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ? 0U : (uint16_t)size;
 				if (!waiting)
 				{
-					if ((s_Usbd.EpOutBlocking &
-						 (1U << NRFX_USBD_ISO_EP_NO)) != 0U)
+					nRFUsbEpReg_t *pReg =
+						&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO][0];
+					if (pReg->bBlocking)
 					{
 						nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO,
 							USB_CTRLR_EVT_DRDY, 0U, USB_CTRLR_XFER_SUCCESS);
@@ -317,7 +317,7 @@ void nRFUsbdIsoSof(void)
 					else
 					{
 						(void)nRFUsbRegIsoXfer(NRFX_USBD_ISO_EP_NO,
-							s_Usbd.EpOutMaxPacketSize[NRFX_USBD_ISO_EP_NO]);
+							pReg->MaxPacketSize);
 					}
 				}
 			}
@@ -346,14 +346,7 @@ bool nRFUsbdIsoEpOpen(const UsbEndPointDesc_t *pDesc)
 		return false;
 	}
 
-	if (in)
-	{
-		s_Usbd.IsoInMaxPacketSize = pDesc->wMaxPacketSize;
-	}
-	else
-	{
-		s_Usbd.EpOutMaxPacketSize[NRFX_USBD_ISO_EP_NO] = pDesc->wMaxPacketSize;
-	}
+	nRFIsoReg(epAddr)->MaxPacketSize = pDesc->wMaxPacketSize;
 	if (!AppEvtHandlerIdleRegister(nRFUsbdRetryIsoComplete))
 	{
 		return false;
@@ -401,14 +394,7 @@ void nRFUsbdIsoEpClose(uint8_t EpAddr)
 	nRFIsoHwEnable(in, false);
 	nRFUsbdSofRelease();
 
-	if (in)
-	{
-		s_Usbd.IsoInMaxPacketSize = 0U;
-	}
-	else
-	{
-		s_Usbd.EpOutMaxPacketSize[NRFX_USBD_ISO_EP_NO] = 0U;
-	}
+	nRFIsoReg(EpAddr)->MaxPacketSize = 0U;
 	__DSB();
 	EnableInterrupt(state);
 }
