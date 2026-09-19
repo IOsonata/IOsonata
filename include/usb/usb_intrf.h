@@ -144,6 +144,7 @@ struct __Usb_Dev_Interf {
 	hCFifo_t hRxFifo;
 	uint32_t RxDropCnt;
 	uint8_t *pRxBuffer;
+	uint8_t *pTxBuffer;
 	UsbPkt_t *pRxDirectBuffer;
 	UsbPkt_t *pTxDirectBuffer;
 	uint16_t BufferSize;
