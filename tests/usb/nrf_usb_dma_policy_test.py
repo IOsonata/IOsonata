@@ -25,7 +25,7 @@ def function_body(source: str, signature: str) -> str:
 
 source = SOURCE.read_text(encoding="utf-8")
 dma_start = function_body(source, "void nRFUsbdDmaStartLocked(")
-dma_finish = function_body(source, "static void nRFUsbdDmaWait(void)")
+dma_finish = function_body(source, "void nRFUsbdDmaWait(void)")
 retire = function_body(source, "bool nRFUsbdRetireDma(uint32_t StatusBit)")
 interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
 
