@@ -369,7 +369,7 @@ static void UsbdErrataApply(void)
 	Usbd171Write(0x000000C0UL);
 }
 
-static void UsbdErrataRevert(void)
+static __attribute__((noinline)) void UsbdErrataRevert(void)
 {
 	Usbd171Write(0x00000000UL);
 
