@@ -240,7 +240,6 @@ typedef struct __Bt_Hci_Usb_Dev {
 	uint32_t CommandBuffer[(BT_HCI_USB_COMMAND_MAX_SIZE + 3U) / 4U];
 	uint32_t AclRxBuffer[(BT_HCI_USB_PACKET_MAX_SIZE + 4U) / 4U];
 	uint32_t AclRxTransfer[(BT_HCI_USB_ACL_MAX_MPS + 3U) / 4U];
-	uint32_t AclTxTransfer[(BT_HCI_USB_ACL_MAX_MPS + 3U) / 4U];
 	uint32_t AclTxPacket[(BT_HCI_USB_ACL_PKT_BLKSIZE + 3U) / 4U];
 	uint32_t EventTxBuffer[(BT_HCI_USB_EVENT_MAX_SIZE + 3U) / 4U];
 	uint32_t EventTxTransfer[(BT_HCI_USB_EVENT_MAX_MPS + 3U) / 4U];

@@ -679,7 +679,6 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 		UsbIntrfDirectClear(pIntrf->pRxDirectBuffer);
 		UsbIntrfDirectClear(pIntrf->pTxDirectBuffer);
 		pIntrf->pRxBuffer = pIntrf->pRxDirectBuffer->Data;
-		pIntrf->pTxBuffer = pIntrf->pTxDirectBuffer->Data;
 	}
 	else
 	{
@@ -704,7 +703,6 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 		}
 
 		pIntrf->pRxBuffer = pCfg->pRxBuffer;
-		pIntrf->pTxBuffer = pCfg->pTxBuffer;
 	}
 
 	pIntrf->DevNo = pCfg->DevNo;

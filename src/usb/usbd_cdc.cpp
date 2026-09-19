@@ -3,7 +3,7 @@
 
 @brief	USB CDC ACM class adapter.
 
-CDC owns ACM control requests, notifications and its bulk controller buffers.
+CDC owns ACM control requests, notifications and its bulk OUT transfer buffer.
 The inherited UsbIntrf owns the application FIFO data path.
 
 @author	Hoang Nguyen Hoan
@@ -42,11 +42,6 @@ SOFTWARE.
 static uint8_t *UsbdCdcRxBuffer(UsbdCdcDev_t *pCdc)
 {
 	return reinterpret_cast<uint8_t *>(pCdc->RxTransfer);
-}
-
-static uint8_t *UsbdCdcTxBuffer(UsbdCdcDev_t *pCdc)
-{
-	return reinterpret_cast<uint8_t *>(pCdc->TxTransfer);
 }
 
 static uint8_t *UsbdCdcNotifBuffer(UsbdCdcDev_t *pCdc)
@@ -397,7 +392,6 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	dataCfg.EpNo = pCdc->DataEpNo;
 	dataCfg.BufferSize = (uint16_t)sizeof(pCdc->RxTransfer);
 	dataCfg.pRxBuffer = UsbdCdcRxBuffer(pCdc);
-	dataCfg.pTxBuffer = UsbdCdcTxBuffer(pCdc);
 
 	if (!UsbIntrfInit(&pCdc->IntrfData, &dataCfg))
 	{

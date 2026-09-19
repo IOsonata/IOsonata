@@ -137,8 +137,6 @@ typedef struct __Usbd_Msc_Dev {
 					 sizeof(uint32_t)];
 	uint32_t RxTransfer[(USBD_MSC_MAX_MPS + sizeof(uint32_t) - 1U) /
 					 sizeof(uint32_t)];
-	uint32_t TxTransfer[(USBD_MSC_MAX_MPS + sizeof(uint32_t) - 1U) /
-					 sizeof(uint32_t)];
 	uint32_t TxPacket[(USBD_MSC_PKT_BLKSIZE + sizeof(uint32_t) - 1U) /
 					 sizeof(uint32_t)];
 	uint32_t RxPacket[(USBD_MSC_MAX_MPS + sizeof(uint32_t) - 1U) /

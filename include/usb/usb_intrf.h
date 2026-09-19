@@ -19,9 +19,9 @@ UsbPkt_t whose Hdr.Flags bit USB_INTRF_SLOT_READY publishes whether the slot
 contains a current packet; Hdr.Length remains the actual payload length and may
 be zero.
 
-The derived class supplies one fixed RX and one fixed TX controller buffer sized
-for its transfer type. In byte and packet mode those are DMA staging buffers.
-In direct mode the supplied buffers include UsbPktHdr_t followed by the payload;
+The derived class supplies one fixed RX controller buffer sized for its transfer
+type. Byte and packet modes use the TX CFifo as the transfer source. Direct mode
+supplies both RX and TX buffers, each with UsbPktHdr_t followed by the payload;
 UsbIntrf registers the Data portion with the controller and uses the header as
 the single-slot ownership state.
 
@@ -31,8 +31,8 @@ policy. A direct specialization selects whether the controller uses DRDY or
 services OUT transfers directly. Completion publishes the single RX slot
 instead of placing data into a FIFO.
 
-For IN, byte and packet modes copy queued TX data into fixed staging before
-submitting the endpoint transfer. Direct TxData copies one current packet into
+For IN, byte and packet modes retain queued TX data until host consumption
+completes the endpoint transfer. Direct TxData copies one current packet into
 the single TX slot and submits the endpoint transfer. The endpoint transfer type
 and its scheduling remain properties of the specialization and controller.
 
@@ -128,7 +128,7 @@ typedef struct __Usb_Interf_Config {
 	uint16_t TxFifoBlkSize;
 	uint16_t BufferSize;
 	uint8_t *pRxBuffer;
-	uint8_t *pTxBuffer;
+	uint8_t *pTxBuffer;		//!< Direct-mode TX slot; unused in byte/packet modes
 	DevIntrfEvtHandler_t EvtCB;
 } UsbIntrfCfg_t;
 
@@ -144,7 +144,6 @@ struct __Usb_Dev_Interf {
 	hCFifo_t hRxFifo;
 	uint32_t RxDropCnt;
 	uint8_t *pRxBuffer;
-	uint8_t *pTxBuffer;
 	UsbPkt_t *pRxDirectBuffer;
 	UsbPkt_t *pTxDirectBuffer;
 	uint16_t BufferSize;

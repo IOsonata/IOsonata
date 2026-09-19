@@ -5,8 +5,8 @@
 
 UsbdBulk is the public adapter for a custom interface with one bulk
 OUT endpoint and one bulk IN endpoint sharing the same endpoint number. It
-inherits the internal UsbIntrf data path, owns the controller transfer
-buffers, and leaves the RX/TX CFifo storage to the application.
+inherits the internal UsbIntrf data path, owns the OUT transfer buffer,
+and leaves the RX/TX CFifo storage to the application.
 
 The interface can operate as a byte stream or as USB packets. Byte mode uses
 a one-byte TX CFifo and lets UsbIntrf packetize queued data. Packet mode uses
@@ -117,8 +117,6 @@ typedef struct __Usbd_Bulk_Dev {
 	UsbdBulkDesc_t FsDesc;
 	UsbdBulkDesc_t HsDesc;
 	uint32_t RxTransfer[(USBD_BULK_MAX_MPS + sizeof(uint32_t) - 1U) /
-						 sizeof(uint32_t)];
-	uint32_t TxTransfer[(USBD_BULK_MAX_MPS + sizeof(uint32_t) - 1U) /
 						 sizeof(uint32_t)];
 } UsbdBulkDev_t;
 

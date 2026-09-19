@@ -4,8 +4,8 @@
 @brief	USB CDC ACM class adapter.
 
 CDC owns ACM control requests, line/control state, notifications and the
-controller transfer buffers required by its bulk endpoints. UsbdCdc derives
-from the internal UsbIntrf data path and presents the DeviceIntrf API.
+bulk OUT transfer buffer. UsbdCdc derives from the internal UsbIntrf data path
+and presents the DeviceIntrf API.
 
 Interface and endpoint numbers are allocated internally when the function is
 registered. Applications configure CDC behaviour and storage only.
@@ -126,7 +126,6 @@ typedef struct __Usbd_Cdc_Dev {
 	UsbdCdcDesc_t HsDesc;
 	bool SerialStatePending;
 	uint32_t RxTransfer[USBD_CDC_TRANS_WORDS];
-	uint32_t TxTransfer[USBD_CDC_TRANS_WORDS];
 	uint32_t NotifTransfer[USBD_CDC_NOTIFY_WORDS];
 } UsbdCdcDev_t;
 

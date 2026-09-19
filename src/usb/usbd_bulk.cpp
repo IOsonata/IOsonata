@@ -41,11 +41,6 @@ static uint8_t *UsbdBulkRxBuffer(UsbdBulkDev_t *pBulk)
 	return reinterpret_cast<uint8_t *>(pBulk->RxTransfer);
 }
 
-static uint8_t *UsbdBulkTxBuffer(UsbdBulkDev_t *pBulk)
-{
-	return reinterpret_cast<uint8_t *>(pBulk->TxTransfer);
-}
-
 static uint16_t UsbdBulkMps(const UsbdBulkDev_t *pBulk)
 {
 	return UsbCtrlrHighSpeed(pBulk->DevNo) ? pBulk->HsMps : pBulk->FsMps;
@@ -202,7 +197,6 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 	dataCfg.EpNo = pBulk->EpNo;
 	dataCfg.BufferSize = (uint16_t)sizeof(pBulk->RxTransfer);
 	dataCfg.pRxBuffer = UsbdBulkRxBuffer(pBulk);
-	dataCfg.pTxBuffer = UsbdBulkTxBuffer(pBulk);
 
 	if (!UsbIntrfInit(&pBulk->IntrfData, &dataCfg))
 	{

@@ -63,11 +63,6 @@ static uint8_t *BtHciUsbAclRxTransfer(BtHciUsbDev_t *pHci)
 	return reinterpret_cast<uint8_t *>(pHci->AclRxTransfer);
 }
 
-static uint8_t *BtHciUsbAclTxTransfer(BtHciUsbDev_t *pHci)
-{
-	return reinterpret_cast<uint8_t *>(pHci->AclTxTransfer);
-}
-
 static UsbPkt_t *BtHciUsbAclTxPacket(BtHciUsbDev_t *pHci)
 {
 	return reinterpret_cast<UsbPkt_t *>(pHci->AclTxPacket);
@@ -1538,7 +1533,6 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 	dataCfg.EpNo = pHci->AclEpNo;
 	dataCfg.BufferSize = sizeof(pHci->AclRxTransfer);
 	dataCfg.pRxBuffer = BtHciUsbAclRxTransfer(pHci);
-	dataCfg.pTxBuffer = BtHciUsbAclTxTransfer(pHci);
 
 	UsbIsoIntrfCfg_t isoCfg = {};
 	isoCfg.DevNo = pHci->DevNo;
