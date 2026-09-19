@@ -98,36 +98,6 @@ static bool EpAllocTryOut(const UsbdEpAllocState_t *pState, uint8_t Needed,
 			(uint16_t)(InMask & ~pState->pReq->FixedInMask));
 		EpAllocStore(pState->pRes->Out, pState->pReq->OutCount,
 			(uint16_t)(OutMask & ~pState->pReq->FixedOutMask));
-
-		if (pState->pReq->pBidirectionalBind != nullptr)
-		{
-			for (uint8_t i = 0U; i < pState->pReq->BidirectionalCount; i++)
-			{
-				const uint8_t ep = pState->pRes->Bidirectional[i];
-				UsbdEpBind(pState->DevNo, USB_ENDPADDR_DIROUT(ep),
-					&pState->pReq->pBidirectionalBind[i].Out);
-				UsbdEpBind(pState->DevNo, USB_ENDPADDR_DIRIN(ep),
-					&pState->pReq->pBidirectionalBind[i].In);
-			}
-		}
-		if (pState->pReq->pInBind != nullptr)
-		{
-			for (uint8_t i = 0U; i < pState->pReq->InCount; i++)
-			{
-				UsbdEpBind(pState->DevNo,
-					USB_ENDPADDR_DIRIN(pState->pRes->In[i]),
-					&pState->pReq->pInBind[i]);
-			}
-		}
-		if (pState->pReq->pOutBind != nullptr)
-		{
-			for (uint8_t i = 0U; i < pState->pReq->OutCount; i++)
-			{
-				UsbdEpBind(pState->DevNo,
-					USB_ENDPADDR_DIROUT(pState->pRes->Out[i]),
-					&pState->pReq->pOutBind[i]);
-			}
-		}
 		return true;
 	}
 

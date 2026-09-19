@@ -1483,38 +1483,10 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 		return false;
 	}
 
-	UsbIntrfCfg_t dataCfg = {};
-	dataCfg.bBlocking = pCfg->bBlocking;
-	dataCfg.RxFifoMemSize = pCfg->RxFifoMemSize;
-	dataCfg.pRxFifoMem = pCfg->pRxFifoMem;
-	dataCfg.TxFifoMemSize = pCfg->TxFifoMemSize;
-	dataCfg.pTxFifoMem = pCfg->pTxFifoMem;
-	dataCfg.TxFifoBlkSize = BT_HCI_USB_ACL_PKT_BLKSIZE;
-	dataCfg.DevNo = pHci->DevNo;
-	dataCfg.EvtCB = BtHciUsbAclEvent;
-	dataCfg.BufferSize = sizeof(pHci->AclRxTransfer);
-	dataCfg.pRxBuffer = BtHciUsbAclRxTransfer(pHci);
-	dataCfg.pTxBuffer = BtHciUsbAclTxTransfer(pHci);
-
-	if (!UsbIntrfInit(&pHci->IntrfData, &dataCfg))
-	{
-		return false;
-	}
-	pHci->IntrfData.pClassContext = pHci;
-
-	UsbdEpAllocPairBind_t dataBind = {};
-	UsbIntrfAllocBind(&pHci->IntrfData, &dataCfg, &dataBind);
-	UsbdEpAllocBind_t eventBind = {};
-	eventBind.pBuffer = BtHciUsbEventTxTransfer(pHci);
-	eventBind.Handler = BtHciUsbEventComplete;
-	eventBind.pContext = pHci;
-
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 2U;
 	req.BidirectionalCount = 1U;
 	req.InCount = 1U;
-	req.pBidirectionalBind = &dataBind;
-	req.pInBind = &eventBind;
 
 	UsbdEpAllocRes_t alloc = {};
 	uint8_t scoEp = 0U;
@@ -1553,7 +1525,20 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 	pHci->EventEpNo = alloc.In[0];
 	pHci->AclEpNo = alloc.Bidirectional[0];
 	pHci->ScoEpNo = scoEp;
-	pHci->IntrfData.EpNo = pHci->AclEpNo;
+
+	UsbIntrfCfg_t dataCfg = {};
+	dataCfg.bBlocking = pCfg->bBlocking;
+	dataCfg.RxFifoMemSize = pCfg->RxFifoMemSize;
+	dataCfg.pRxFifoMem = pCfg->pRxFifoMem;
+	dataCfg.TxFifoMemSize = pCfg->TxFifoMemSize;
+	dataCfg.pTxFifoMem = pCfg->pTxFifoMem;
+	dataCfg.TxFifoBlkSize = BT_HCI_USB_ACL_PKT_BLKSIZE;
+	dataCfg.DevNo = pHci->DevNo;
+	dataCfg.EvtCB = BtHciUsbAclEvent;
+	dataCfg.EpNo = pHci->AclEpNo;
+	dataCfg.BufferSize = sizeof(pHci->AclRxTransfer);
+	dataCfg.pRxBuffer = BtHciUsbAclRxTransfer(pHci);
+	dataCfg.pTxBuffer = BtHciUsbAclTxTransfer(pHci);
 
 	UsbIsoIntrfCfg_t isoCfg = {};
 	isoCfg.DevNo = pHci->DevNo;
@@ -1562,10 +1547,13 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 	isoCfg.TxHandler = BtHciUsbScoSendFrameComplete;
 	isoCfg.pContext = pHci;
 
-	if (pHci->ScoEnabled && !UsbIsoIntrfInit(&pHci->ScoIso, &isoCfg))
+	if (!UsbIntrfInit(&pHci->IntrfData, &dataCfg) ||
+		(pHci->ScoEnabled && !UsbIsoIntrfInit(&pHci->ScoIso, &isoCfg)))
 	{
 		return false;
 	}
+	UsbCtrlrEpAlloc(pHci->DevNo, USB_ENDPADDR_DIRIN(pHci->EventEpNo),
+		BtHciUsbEventTxTransfer(pHci), false, BtHciUsbEventComplete, pHci);
 
 	BtHciUsbInitDevIntrf(pHci);
 

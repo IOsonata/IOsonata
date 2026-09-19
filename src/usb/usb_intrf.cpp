@@ -633,24 +633,6 @@ static_assert(offsetof(UsbIntrfOps_t, GetHandle) ==
 	offsetof(DevIntrf_t, GetHandle) - offsetof(DevIntrf_t, Disable),
 	"DevIntrf GetHandle position");
 
-void UsbIntrfAllocBind(UsbDevIntrf_t *pIntrf,
-						const UsbIntrfCfg_t *pCfg, UsbdEpAllocPairBind_t *pBind)
-{
-	memset(pBind, 0, sizeof(*pBind));
-	pBind->Out.hFifo = pIntrf->hRxFifo;
-	pBind->Out.pBuffer = pIntrf->pRxBuffer;
-	pBind->Out.Handler = UsbIntrfCtrlrOutEvent;
-	pBind->Out.pContext = pIntrf;
-	pBind->Out.MaxPacketSize = pCfg->BufferSize;
-	pBind->Out.bBlocking = pCfg->bBlocking;
-	pBind->In.hFifo = pIntrf->hTxFifo;
-	pBind->In.pBuffer = pIntrf->Mode == USB_INTRF_MODE_DIRECT &&
-		pIntrf->pTxDirectBuffer != nullptr ? pIntrf->pTxDirectBuffer->Data : nullptr;
-	pBind->In.Handler = UsbIntrfCtrlrInEvent;
-	pBind->In.pContext = pIntrf;
-	pBind->In.MaxPacketSize = pCfg->BufferSize;
-	pBind->In.bBlocking = pCfg->bBlocking;
-}
 
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 {
@@ -759,12 +741,12 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 
 	if (pIntrf->EpNo != 0U)
 	{
-		UsbdEpAllocPairBind_t bind = {};
-		UsbIntrfAllocBind(pIntrf, pCfg, &bind);
-		UsbdEpBind(pIntrf->DevNo, USB_ENDPADDR_DIROUT(pIntrf->EpNo),
-			&bind.Out);
-		UsbdEpBind(pIntrf->DevNo, USB_ENDPADDR_DIRIN(pIntrf->EpNo),
-			&bind.In);
+		UsbCtrlrEpAlloc(pIntrf->DevNo, USB_ENDPADDR_DIROUT(pIntrf->EpNo),
+			pIntrf->pRxBuffer, pCfg->bBlocking, UsbIntrfCtrlrOutEvent, pIntrf);
+		UsbCtrlrEpAlloc(pIntrf->DevNo, USB_ENDPADDR_DIRIN(pIntrf->EpNo),
+			pIntrf->Mode == USB_INTRF_MODE_DIRECT &&
+			pIntrf->pTxDirectBuffer != nullptr ? pIntrf->pTxDirectBuffer->Data :
+			nullptr, pCfg->bBlocking, UsbIntrfCtrlrInEvent, pIntrf);
 	}
 
 	DeviceIntrfEnable(&pIntrf->DevIntrf);

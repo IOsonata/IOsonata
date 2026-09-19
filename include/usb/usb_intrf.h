@@ -81,7 +81,6 @@ SOFTWARE.
 #include "cfifo.h"
 #include "device_intrf.h"
 #include "usb/usb.h"
-#include "usb/usbd_epalloc.h"
 
 /** @addtogroup USBD
   * @{
@@ -162,8 +161,6 @@ extern "C" {
 #endif
 
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg);
-void UsbIntrfAllocBind(UsbDevIntrf_t *pIntrf,
-						const UsbIntrfCfg_t *pCfg, UsbdEpAllocPairBind_t *pBind);
 bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps);
 void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf);
 bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);

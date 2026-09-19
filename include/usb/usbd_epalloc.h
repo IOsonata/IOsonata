@@ -41,27 +41,11 @@ SOFTWARE.
 
 #include <stdint.h>
 
-#include "cfifo.h"
 #include "usb/usb.h"
 
 #define USBD_EPALLOC_EP_MAXCNT		4U
 
 #pragma pack(push, 4)
-
-/// Internal resources permanently bound to one endpoint direction.
-typedef struct __Usbd_EpAlloc_Bind {
-	hCFifo_t hFifo;
-	uint8_t *pBuffer;
-	UsbCtrlrEpHandler_t Handler;
-	void *pContext;
-	uint16_t MaxPacketSize;
-	bool bBlocking;
-} UsbdEpAllocBind_t;
-
-typedef struct __Usbd_EpAlloc_Pair_Bind {
-	UsbdEpAllocBind_t Out;
-	UsbdEpAllocBind_t In;
-} UsbdEpAllocPairBind_t;
 
 /// What a class needs : interface count and endpoint counts per direction
 typedef struct __Usbd_EpAlloc_Req {
@@ -71,9 +55,6 @@ typedef struct __Usbd_EpAlloc_Req {
 	uint8_t OutCount;
 	uint16_t FixedInMask;		//!< Controller-constrained IN endpoints
 	uint16_t FixedOutMask;		//!< Controller-constrained OUT endpoints
-	const UsbdEpAllocPairBind_t *pBidirectionalBind;
-	const UsbdEpAllocBind_t *pInBind;
-	const UsbdEpAllocBind_t *pOutBind;
 } UsbdEpAllocReq_t;
 
 /// What the allocator assigned : concrete interface and endpoint numbers
@@ -87,14 +68,6 @@ typedef struct __Usbd_EpAlloc_Res {
 #pragma pack(pop)
 
 #ifdef __cplusplus
-
-static inline void UsbdEpBind(int DevNo, uint8_t EpAddr,
-						 const UsbdEpAllocBind_t *pBind)
-{
-	UsbCtrlrEpAlloc(DevNo, EpAddr, pBind->pBuffer, pBind->bBlocking,
-		pBind->Handler, pBind->pContext);
-}
-
 /// Find the lowest free interface/endpoint placement satisfying pReq,
 /// atomically register pClass with that topology and return the assigned
 /// numbers in pRes. Returns false when no placement fits.

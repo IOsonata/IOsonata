@@ -176,6 +176,19 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 		return false;
 	}
 
+	UsbdEpAllocReq_t req = {};
+	req.InterfaceCount = 1U;
+	req.BidirectionalCount = 1U;
+
+	UsbdEpAllocRes_t alloc = {};
+	if (!UsbdEpAlloc(pBulk->DevNo, &req, pClass, &alloc))
+	{
+		return false;
+	}
+
+	pBulk->ItfNo = alloc.FirstInterface;
+	pBulk->EpNo = alloc.Bidirectional[0];
+
 	UsbIntrfCfg_t dataCfg = {};
 	dataCfg.bBlocking = pCfg->bBlocking;
 	dataCfg.RxFifoMemSize = pCfg->RxFifoMemSize;
@@ -186,6 +199,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 		USBD_BULK_PKT_BLKSIZE : 1U;
 	dataCfg.DevNo = pBulk->DevNo;
 	dataCfg.EvtCB = pCfg->EvtCB;
+	dataCfg.EpNo = pBulk->EpNo;
 	dataCfg.BufferSize = (uint16_t)sizeof(pBulk->RxTransfer);
 	dataCfg.pRxBuffer = UsbdBulkRxBuffer(pBulk);
 	dataCfg.pTxBuffer = UsbdBulkTxBuffer(pBulk);
@@ -194,25 +208,8 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 	{
 		return false;
 	}
+
 	pBulk->IntrfData.pClassContext = pBulk;
-
-	UsbdEpAllocPairBind_t dataBind = {};
-	UsbIntrfAllocBind(&pBulk->IntrfData, &dataCfg, &dataBind);
-
-	UsbdEpAllocReq_t req = {};
-	req.InterfaceCount = 1U;
-	req.BidirectionalCount = 1U;
-	req.pBidirectionalBind = &dataBind;
-
-	UsbdEpAllocRes_t alloc = {};
-	if (!UsbdEpAlloc(pBulk->DevNo, &req, pClass, &alloc))
-	{
-		return false;
-	}
-
-	pBulk->ItfNo = alloc.FirstInterface;
-	pBulk->EpNo = alloc.Bidirectional[0];
-	pBulk->IntrfData.EpNo = pBulk->EpNo;
 
 	if (!UsbdBulkMakeDesc(&pBulk->FsDesc, pBulk, USB_SPEED_FULL))
 	{
