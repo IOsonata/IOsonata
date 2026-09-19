@@ -711,7 +711,16 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 	pEp->PTR = (uint32_t)(uintptr_t)pBuffer;
 	pEp->MAXCNT = len;
-	nRFUsbdDmaStartLocked(pTask, pEnd);
+	// Regular END is cleared at open and at matching DMA retirement, before
+	// the channel is released. Only EP0 needs its separate start-time clear.
+	if (epNum == 0U)
+	{
+		*pEnd = 0U;
+		__DSB();
+	}
+	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
+	*pTask = 1U;
+	__DSB();
 }
 
 // Share the scheduler across ISR and foreground callers instead of expanding
