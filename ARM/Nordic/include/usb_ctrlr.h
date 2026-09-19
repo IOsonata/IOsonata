@@ -79,7 +79,7 @@ typedef enum __Usb_Ctrlr_Trans_Type {
 // are control, bulk or interrupt. Endpoint 8 is the dedicated isochronous
 // endpoint in both directions.
 enum {
-	USB_CTRLR_CNT = 1,
+	USB_DEV_COUNT = 1,
 	USB_HIGHSPEED_CAPABLE_0 = 0,
 	USB_EPIN_CNT_0 = 8,
 	USB_EPOUT_CNT_0 = 8,
@@ -98,7 +98,7 @@ enum {
 // high-speed maxima. A full-speed host negotiates smaller packets and buffers
 // sized from these constants still fit.
 enum {
-	USB_CTRLR_CNT = 1,
+	USB_DEV_COUNT = 1,
 	USB_HIGHSPEED_CAPABLE_0 = 1,
 	USB_EPIN_CNT_0 = 16,
 	USB_EPOUT_CNT_0 = 16,

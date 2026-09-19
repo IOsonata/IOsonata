@@ -15,7 +15,7 @@ USB_EVT_ATTACHED and USB_EVT_DETACHED to the application itself.
 
 DevNo is stored at init and passed to every UsbCtrlr call. The state here is
 still file scope, so one controller is initialized at a time. That matches
-every part shipped so far, where USB_CTRLR_CNT is 1.
+every part shipped so far, where USB_DEV_COUNT is 1.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 3, 2026
@@ -1827,7 +1827,7 @@ static const char *UsbDevGetSerial(void)
 
 bool UsbInit(const UsbCfg_t *pCfg)
 {
-	if (pCfg == nullptr || pCfg->DevNo < 0 || pCfg->DevNo >= USB_CTRLR_CNT)
+	if (pCfg == nullptr || pCfg->DevNo < 0 || pCfg->DevNo >= USB_DEV_COUNT)
 	{
 		return false;
 	}

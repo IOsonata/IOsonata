@@ -36,7 +36,7 @@ SOFTWARE.
 
 static bool UsbIntIntrfEpSupported(int DevNo, uint8_t EpNo)
 {
-	return DevNo >= 0 && DevNo < USB_CTRLR_CNT && EpNo > 0U &&
+	return DevNo >= 0 && DevNo < USB_DEV_COUNT && EpNo > 0U &&
 		EpNo < USB_EPIN_CNT(DevNo) && EpNo < USB_EPOUT_CNT(DevNo) &&
 		USB_INT_INTRF_MAX_MPS > 0U;
 }

@@ -182,7 +182,7 @@ bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
 				 UsbDeviceClass *pClass, UsbdEpAllocRes_t *pRes)
 {
 	if (pReq == nullptr || pClass == nullptr || pRes == nullptr ||
-		DevNo < 0 || DevNo >= USB_CTRLR_CNT ||
+		DevNo < 0 || DevNo >= USB_DEV_COUNT ||
 		pReq->InterfaceCount > 16U ||
 		pReq->BidirectionalCount > USBD_EPALLOC_EP_MAXCNT ||
 		pReq->InCount > USBD_EPALLOC_EP_MAXCNT ||

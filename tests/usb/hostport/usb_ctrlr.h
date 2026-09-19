@@ -53,7 +53,7 @@ typedef enum __Usb_Ctrlr_Trans_Type {
 } UsbCtrlrTransType_t;
 
 enum {
-	USB_CTRLR_CNT = 1,
+	USB_DEV_COUNT = 1,
 	USB_HIGHSPEED_CAPABLE_0 = 0,
 	USB_EPIN_CNT_0 = 8,
 	USB_EPOUT_CNT_0 = 8,
