@@ -35,6 +35,7 @@ preamble = r'''
 #include <cstdio>
 #include "usb/usb.h"
 #include "app_evt_handler.h"
+#include "cfifo.h"
 using namespace std;
 constexpr uint8_t NRFX_USBD_ISO_EP_NO=8;
 constexpr uint_fast8_t NRFX_USBD_ISO_IN_OPEN=2, NRFX_USBD_ISO_OUT_OPEN=1;
@@ -69,6 +70,7 @@ struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContex
 typedef Endpoint USBD_ISOIN_Type;
 typedef Endpoint USBD_ISOOUT_Type;
 FLAG_ENUM
+QUEUE_TYPES
 // One state block, as in the driver; the flag word carries the former
 // atomic fields at the same OUT-low/IN-high bit pairing.
 struct {
@@ -76,7 +78,9 @@ struct {
  uint32_t IsoGeneration[2]={};uint16_t IsoOutSize=0;
  struct {nRFUsbdXfer_t Ep0[2],Iso[2];bool SofEnabled;} Ctrlr;
  nRFUsbEpReg_t EpReg[9][2];
+ hCFifo_t hQue;
 } s_Usbd;
+alignas(8) uint8_t queueMemory[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
 #define ISO_OPEN() ((s_Usbd.Flags / USBD_FLAG_ISO_OUT_OPEN) & 3u)
 #define ISO_BUSY() ((s_Usbd.Flags / USBD_FLAG_ISO_OUT_BUSY) & 3u)
 #define ISO_CMPL() ((s_Usbd.Flags / USBD_FLAG_ISO_OUT_CMPL) & 3u)
@@ -106,6 +110,9 @@ void nRFUsbdRetryIsoComplete();
 void nRFUsbdResumeQueuedDmaLocked();
 void nRFUsbdDmaWait();
 bool nRFUsbRegDataEpXfer(uint8_t,uint16_t);
+void nRFUsbdQueXferDir(uint8_t,bool,uint16_t){assert(false);}
+void nRFUsbdQueInFifo(uint8_t,hCFifo_t,uint16_t){assert(false);}
+bool productionEpInXfer(int,uint8_t,uint8_t*,uint16_t);
 '''
 names = ['UsbdSync','nRFUsbdDmaEndBit','nRFUsbdDmaEndEvent','nRFUsbdDir','nRFUsbEpDir',
          'nRFUsbGetEpReg','nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaUnlock',
@@ -114,12 +121,21 @@ names = ['UsbdSync','nRFUsbdDmaEndBit','nRFUsbdDmaEndEvent','nRFUsbdDir','nRFUsb
          'nRFUsbdServiceIso','nRFUsbRegIsoXfer','nRFUsbdProcessIsoComplete',
          'nRFUsbdRetryIsoComplete','nRFUsbdFinishIsoDma','nRFUsbdIsoStart',
          'nRFUsbdIsoService','nRFUsbdIsoFinishDma','nRFUsbdIsoSof',
-         'nRFUsbdIsoEpClose','UsbCtrlrEpClose','nRFUsbdHandleSof']
+         'nRFUsbdIsoEpClose','UsbCtrlrEpClose','nRFUsbdHandleSof',
+         'nRFUsbdIsoXfer','UsbCtrlrEpXfer']
 import re as _re
 flag_enum = _re.search(r'enum\s*\{[^}]*USBD_FLAG_ISO_IN_CMPL[^}]*\};', src)
 assert flag_enum, 'USBD_FLAG enum not found in driver source'
 code = preamble.replace('FLAG_ENUM', flag_enum.group(0))
+queue_enum = _re.search(r'enum\s*\{[^}]*NRFX_USBD_QUE_IN_SCRATCH[^}]*\};', src)
+queue_type = _re.search(r'typedef struct __nRF_Usbd_Que \{.*?\} nRFUsbdQue_t;',
+                        src, _re.S)
+assert queue_enum and queue_type
+code = code.replace('QUEUE_TYPES', queue_enum.group(0) + '\n#pragma pack(push,4)\n' +
+                    queue_type.group(0) + '\n#pragma pack(pop)\n')
 code += '\n'.join(function(n) for n in names)
+# Exercise the production entry point instead of the hostport inline adapter.
+code += function('UsbCtrlrEpInXfer').replace('UsbCtrlrEpInXfer(', 'productionEpInXfer(')
 code += r'''
 bool nRFUsbRegDataEpXfer(uint8_t ep,uint16_t length){return nRFUsbRegIsoXfer(ep,length);}
 void nRFUsbdDmaWait(){if(dmaBusy)assert(nRFUsbdFinishIsoDma(activeDir!=0));}
@@ -149,10 +165,12 @@ void callback(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,UsbCtrlrXferRes
    auto before=isoStarts[0];memset(hostOut,0xDD,sizeof(hostOut));frame(17);
    assert(isoStarts[0]==before && !memcmp(copy,outBuffer,length));
   }
- }else if(chainIn){chainIn=false;assert(nRFUsbRegIsoXfer(0x88,9));}
+ }else if(chainIn){chainIn=false;assert(productionEpInXfer(0,8,inBuffer,9));}
 }
 void init(){
  regs={};s_Usbd.Ctrlr={};memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
+ s_Usbd.hQue=CFifoInit(queueMemory,sizeof(queueMemory),sizeof(nRFUsbdQue_t),true);
+ assert(s_Usbd.hQue);
  // Both ISO directions open; every other flag (busy, complete, ready,
  // suspend group) cleared, exactly the former per-field init.
  s_Usbd.Flags=USBD_FLAG_ISO_OUT_OPEN|USBD_FLAG_ISO_IN_OPEN;
@@ -166,6 +184,20 @@ void init(){
 }
 void dummy(uint32_t,void*){}
 int main(){
+ const uint16_t inLengths[]={0,9,17,33,512};
+ for(uint16_t length : inLengths){
+  init();s_Usbd.EpReg[8][1].pBuffer=nullptr;
+  assert(productionEpInXfer(0,8,inBuffer,length));
+  assert(CFifoUsed(s_Usbd.hQue)==0 && (ISO_BUSY()&2));
+  assert(s_Usbd.EpReg[8][1].pBuffer==inBuffer && !dmaBusy);
+  frame();assert(isoStarts[1]==1 && regs.ISOIN.MAXCNT==length);
+  assert(regs.ISOIN.PTR==uint32_t(uintptr_t(inBuffer)));
+  assert(!memcmp(wireIn,inBuffer,length));
+  finish(true);AppEvtHandlerExec();
+  assert(callbacks[1]==1 && lengths[1]==length && ISO_BUSY()==0);
+ }
+ puts("PASS: public IN entry point routes EP8 through ISO DMA without using the regular queue");
+
  for(unsigned queued=0;queued<=4;++queued)for(unsigned masked=0;masked<2;++masked){
   init();for(unsigned n=0;n<queued;++n)assert(AppEvtHandlerQue(n,nullptr,dummy));
   // Both END events retired while publication was deferred.

@@ -1799,7 +1799,12 @@ bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
 bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 						 uint16_t Length)
 {
-	(void)DevNo;
+	if (EpNum == NRFX_USBD_ISO_EP_NO)
+	{
+		s_Usbd.EpReg[EpNum][1].pBuffer = pBuffer;
+		return UsbCtrlrEpXfer(DevNo, USB_ENDPADDR_DIRIN(EpNum), Length);
+	}
+
 	if (pBuffer == NULL)
 	{
 		nRFUsbdQueInFifo(EpNum,
