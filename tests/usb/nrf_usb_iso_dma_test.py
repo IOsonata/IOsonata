@@ -73,10 +73,15 @@ FLAG_ENUM
 // atomic fields at the same OUT-low/IN-high bit pairing.
 struct {
  volatile uint32_t Flags=0;
- uint32_t IsoGeneration[2]={};uint16_t IsoOutSize=0;
- struct {nRFUsbdXfer_t Ep0[2],Iso[2];bool SofEnabled;} Ctrlr;
- nRFUsbEpReg_t EpReg[9][2];
+ struct {nRFUsbdXfer_t Ep0[2];bool SofEnabled;} Ctrlr;
+ nRFUsbEpReg_t EpReg[8][2];
 } s_Usbd;
+struct {
+ uint32_t Generation[2]={};
+ nRFUsbdXfer_t Xfer[2]={};
+ nRFUsbEpReg_t EpReg[2]={};
+ uint16_t OutSize=0;
+} s_Iso;
 #define ISO_OPEN() ((s_Usbd.Flags / USBD_FLAG_ISO_OUT_OPEN) & 3u)
 #define ISO_BUSY() ((s_Usbd.Flags / USBD_FLAG_ISO_OUT_BUSY) & 3u)
 #define ISO_CMPL() ((s_Usbd.Flags / USBD_FLAG_ISO_OUT_CMPL) & 3u)
@@ -158,9 +163,9 @@ void init(){
  s_Usbd.Flags=USBD_FLAG_ISO_OUT_OPEN|USBD_FLAG_ISO_IN_OPEN;
  dmaBusy=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
- ++s_Usbd.IsoGeneration[0];++s_Usbd.IsoGeneration[1];
- s_Usbd.EpReg[8][0]={outBuffer,callback,nullptr,512,false};
- s_Usbd.EpReg[8][1]={inBuffer,callback,nullptr,512,false};
+ ++s_Iso.Generation[0];++s_Iso.Generation[1];
+ s_Iso.EpReg[0]={outBuffer,callback,nullptr,512,false};
+ s_Iso.EpReg[1]={inBuffer,callback,nullptr,512,false};
  memset(inBuffer,0xA5,sizeof(inBuffer));memset(hostOut,0x5A,sizeof(hostOut));
  assert(AppEvtHandlerInit(nullptr,0));assert(AppEvtHandlerIdleRegister(nRFUsbdRetryIsoComplete));
 }
@@ -211,7 +216,7 @@ int main(){
  puts("PASS: full real AppEvt queue retains completion, retries, and does not retain EasyDMA");
 
  init();frame(17);finish(false);UsbCtrlrEpClose(0,8);
- s_Usbd.Flags|=USBD_FLAG_ISO_OUT_OPEN;s_Usbd.EpReg[8][0].Mps=9;frame(9);finish(false);
+ s_Usbd.Flags|=USBD_FLAG_ISO_OUT_OPEN;s_Iso.EpReg[0].Mps=9;frame(9);finish(false);
  AppEvtHandlerExec();assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
  puts("PASS: close/reopen discards old callback without releasing the new transfer");
 
