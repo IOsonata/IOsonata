@@ -43,15 +43,8 @@ static bool UsbIntIntrfEpSupported(int DevNo, uint8_t EpNo)
 
 static bool UsbIntIntrfOpenEndpoint(UsbIntIntrf_t *pIntrf, uint8_t EpAddr)
 {
-	UsbEndPointDesc_t desc = {};
-	desc.bLength = sizeof(desc);
-	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	desc.bEndpointAddress = EpAddr;
-	desc.bmAttributes = USB_ENDPATT_TRANS_INT;
-	desc.wMaxPacketSize = pIntrf->Mps;
-	desc.bInterval = pIntrf->Interval;
-
-	return UsbCtrlrEpOpen(pIntrf->IntrfData.DevNo, &desc);
+	return UsbCtrlrEpOpenData(pIntrf->IntrfData.DevNo, EpAddr,
+		USB_ENDPATT_TRANS_INT, pIntrf->Mps);
 }
 
 static int UsbIntIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,

@@ -54,15 +54,8 @@ static uint16_t UsbdBulkMps(const UsbdBulkDev_t *pBulk)
 static bool UsbdBulkOpenEndpoint(UsbdBulkDev_t *pBulk, uint8_t EpAddr,
 								 uint16_t Mps)
 {
-	UsbEndPointDesc_t desc = {};
-	desc.bLength = sizeof(desc);
-	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	desc.bEndpointAddress = EpAddr;
-	desc.bmAttributes = USB_ENDPATT_TRANS_BULK;
-	desc.wMaxPacketSize = Mps;
-	desc.bInterval = 0U;
-
-	return UsbCtrlrEpOpen(pBulk->DevNo, &desc);
+	return UsbCtrlrEpOpenData(pBulk->DevNo, EpAddr,
+		USB_ENDPATT_TRANS_BULK, Mps);
 }
 
 static void UsbdBulkCloseEndpoints(UsbdBulkDev_t *pBulk)

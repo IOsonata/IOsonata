@@ -164,6 +164,19 @@ void UsbCtrlrRemoteWakeup(int DevNo);
 void UsbCtrlrSofEnable(int DevNo, bool Enable);
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
+
+static inline bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr,
+									 uint8_t Type, uint16_t Mps)
+{
+	UsbEndPointDesc_t desc = {0};
+	desc.bLength = sizeof(desc);
+	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
+	desc.bEndpointAddress = EpAddr;
+	desc.bmAttributes = Type;
+	desc.wMaxPacketSize = Mps;
+	return UsbCtrlrEpOpen(DevNo, &desc);
+}
+
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpCloseAll(int DevNo);
 bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,

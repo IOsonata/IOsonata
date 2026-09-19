@@ -132,18 +132,10 @@ static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 	}
 }
 
-static bool UsbdCdcOpenEndpoint(UsbdCdcDev_t *pCdc, uint8_t EpAddr, uint8_t Type,
-								uint16_t Mps, uint8_t Interval)
+static bool UsbdCdcOpenEndpoint(UsbdCdcDev_t *pCdc, uint8_t EpAddr,
+								uint8_t Type, uint16_t Mps)
 {
-	UsbEndPointDesc_t desc = {};
-	desc.bLength = sizeof(desc);
-	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	desc.bEndpointAddress = EpAddr;
-	desc.bmAttributes = Type;
-	desc.wMaxPacketSize = Mps;
-	desc.bInterval = Interval;
-
-	return UsbCtrlrEpOpen(pCdc->DevNo, &desc);
+	return UsbCtrlrEpOpenData(pCdc->DevNo, EpAddr, Type, Mps);
 }
 
 static void UsbdCdcCloseEndpoints(UsbdCdcDev_t *pCdc)
@@ -194,12 +186,11 @@ static bool UsbdCdcConfig(UsbdCdcDev_t *pCdc, uint8_t Configuration)
 
 	if (!UsbdCdcOpenEndpoint(pCdc, USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo),
 							 USB_ENDPATT_TRANS_INT,
-							 USBD_CDC_NOTIF_MPS,
-							 UsbdCdcNotifInterval(pCdc)) ||
+							 USBD_CDC_NOTIF_MPS) ||
 		!UsbdCdcOpenEndpoint(pCdc, USB_ENDPADDR_DIRIN(pCdc->DataEpNo),
-							 USB_ENDPATT_TRANS_BULK, dataMps, 0U) ||
+							 USB_ENDPATT_TRANS_BULK, dataMps) ||
 		!UsbdCdcOpenEndpoint(pCdc, USB_ENDPADDR_DIROUT(pCdc->DataEpNo),
-							 USB_ENDPATT_TRANS_BULK, dataMps, 0U))
+							 USB_ENDPATT_TRANS_BULK, dataMps))
 	{
 		UsbdCdcCloseEndpoints(pCdc);
 		UsbIntrfUnconfigure(&pCdc->IntrfData);

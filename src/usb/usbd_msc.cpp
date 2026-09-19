@@ -119,14 +119,8 @@ static void UsbdMscCopyInquiry(char *pDest, size_t Length,
 static bool UsbdMscOpenEndpoint(UsbdMscDev_t *pMsc, uint8_t EpAddr,
 								uint16_t Mps)
 {
-	UsbEndPointDesc_t desc = {};
-	desc.bLength = sizeof(desc);
-	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	desc.bEndpointAddress = EpAddr;
-	desc.bmAttributes = USB_ENDPATT_TRANS_BULK;
-	desc.wMaxPacketSize = Mps;
-	desc.bInterval = 0U;
-	return UsbCtrlrEpOpen(pMsc->DevNo, &desc);
+	return UsbCtrlrEpOpenData(pMsc->DevNo, EpAddr,
+		USB_ENDPATT_TRANS_BULK, Mps);
 }
 
 static void UsbdMscCloseEndpoints(UsbdMscDev_t *pMsc)

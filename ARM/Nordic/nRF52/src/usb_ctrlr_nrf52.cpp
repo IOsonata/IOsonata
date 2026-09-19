@@ -1630,30 +1630,30 @@ void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 {
 	(void)DevNo;
-	const uint8_t epAddr = pDesc->bEndpointAddress;
-	const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
-	if (epNum == NRFX_USBD_ISO_EP_NO)
-	{
-		return nRFUsbdIsoEpOpen != nullptr && nRFUsbdIsoEpOpen(pDesc);
-	}
+	return nRFUsbdIsoEpOpen != nullptr && nRFUsbdIsoEpOpen(pDesc);
+}
 
-	const bool in = USB_ENDPADDR_IS_IN(epAddr);
+bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type, uint16_t Mps)
+{
+	(void)DevNo;
+	(void)Type;
+	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
+	const bool in = USB_ENDPADDR_IS_IN(EpAddr);
 	if (epNum == 0U || epNum >= NRFX_USBD_DATA_EP_COUNT ||
-		pDesc->wMaxPacketSize == 0U ||
-		pDesc->wMaxPacketSize > NRFX_USBD_MAX_PACKET_SIZE)
+		Mps == 0U || Mps > NRFX_USBD_MAX_PACKET_SIZE)
 	{
 		return false;
 	}
 
-	nRFUsbGetEpReg(epAddr)->Mps = pDesc->wMaxPacketSize;
+	nRFUsbGetEpReg(EpAddr)->Mps = Mps;
 	nRFUsbdEpHwEnable(epNum, in, true);
 
 	if (!in)
 		NRF_USBD->SIZE.EPOUT[epNum] = 0U;
 	NRF_USBD->EPSTALL =
-		(USBD_EPSTALL_STALL_UnStall << USBD_EPSTALL_STALL_Pos) | epAddr;
+		(USBD_EPSTALL_STALL_UnStall << USBD_EPSTALL_STALL_Pos) | EpAddr;
 	NRF_USBD->DTOGGLE =
-		(USBD_DTOGGLE_VALUE_Data0 << USBD_DTOGGLE_VALUE_Pos) | epAddr;
+		(USBD_DTOGGLE_VALUE_Data0 << USBD_DTOGGLE_VALUE_Pos) | EpAddr;
 	UsbdSync();
 	return true;
 }
