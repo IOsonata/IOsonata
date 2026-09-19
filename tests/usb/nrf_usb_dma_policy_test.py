@@ -41,7 +41,7 @@ assert "nRFUsbdDmaUnlock();" in dma_finish
 # Regular DMA retirement is now inline in the ISR, while the helper remains
 # for the separate lifecycle paths. Verify the same ordering at its new site.
 regular = interrupt[interrupt.index("default:          // EP1-7 IN/OUT") :]
-regular = regular[:regular.index("if (NRF_USBD->EVENTS_STARTED")]
+regular = regular[:regular.index("if (NRF_USBD->EVENTS_USBEVENT")]
 assert regular.index("if (*pEnd == 0U)") < regular.index("*pEnd = 0U;")
 assert regular.index("*pEnd = 0U;") < regular.index("nRFUsbdDmaUnlock();")
 assert regular.index("nRFUsbdDmaUnlock();") < regular.index("nRFUsbdStartQueuedDma();")

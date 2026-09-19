@@ -546,9 +546,10 @@ void nRFUsbdEmit(const UsbCtrlrEvt_t *pEvt)
 	UsbDevProcessEvent(0, pEvt);
 }
 
+// Initialize the active event fields; UsbDevProcessEvent reads only that variant.
 static void nRFUsbdEmitSimple(UsbCtrlrEvtType_t Type)
 {
-	UsbCtrlrEvt_t evt = {};
+	UsbCtrlrEvt_t evt;
 	evt.Type = Type;
 	nRFUsbdEmit(&evt);
 }
@@ -562,7 +563,7 @@ static void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 		return;
 	}
 
-	UsbCtrlrEvt_t evt = {};
+	UsbCtrlrEvt_t evt;
 	evt.Type = USB_CTRLR_EVT_XFER_CMPL;
 	evt.Xfer.EpAddr = EpAddr;
 	evt.Xfer.Length = Length;
@@ -735,7 +736,16 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 		pTask = &NRF_USBD->TASKS_STARTEPOUT[epNum];
 		pEnd = &NRF_USBD->EVENTS_ENDEPOUT[epNum];
 	}
-	nRFUsbdDmaStartLocked(pTask, pEnd);
+	// Regular END is cleared at open and at matching DMA retirement, before
+	// the channel is released. Only EP0 needs its separate start-time clear.
+	if (epNum == 0U)
+	{
+		*pEnd = 0U;
+		__DSB();
+	}
+	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
+	*pTask = 1U;
+	__DSB();
 }
 
 // Share the scheduler across ISR and foreground callers instead of expanding
@@ -1344,7 +1354,7 @@ static void nRFUsbdHandleSof(void)
 
 	if (s_Ctrlr.SofEnabled)
 	{
-		UsbCtrlrEvt_t evt = {};
+		UsbCtrlrEvt_t evt;
 		evt.Type = USB_CTRLR_EVT_SOF;
 		evt.FrameNo = (uint16_t)NRF_USBD->FRAMECNTR;
 		nRFUsbdEmit(&evt);
@@ -1361,6 +1371,11 @@ static void nRFUsbdHandleSof(void)
 	nRFUsbdServiceIso();
 }
 
+static_assert(sizeof(UsbSetupData_t) == 8U, "USB SETUP packet size");
+static_assert(offsetof(NRF_USBD_Type, WLENGTHH) -
+	offsetof(NRF_USBD_Type, BMREQUESTTYPE) == 7U * sizeof(uint32_t),
+	"USBD SETUP register layout");
+
 static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 {
 	(void)Evt;
@@ -1368,14 +1383,14 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 
 	UsbCtrlrEvt_t evt = {};
 	evt.Type = USB_CTRLR_EVT_SETUP;
-	evt.Setup.bmRequestType = (uint8_t)NRF_USBD->BMREQUESTTYPE;
-	evt.Setup.bRequest = (uint8_t)NRF_USBD->BREQUEST;
-	evt.Setup.wValue = (uint16_t)NRF_USBD->WVALUEL |
-		((uint16_t)NRF_USBD->WVALUEH << 8);
-	evt.Setup.wIndex = (uint16_t)NRF_USBD->WINDEXL |
-		((uint16_t)NRF_USBD->WINDEXH << 8);
-	evt.Setup.wLength = (uint16_t)NRF_USBD->WLENGTHL |
-		((uint16_t)NRF_USBD->WLENGTHH << 8);
+	// SETUP bytes occupy consecutive 32-bit registers in wire order.
+	// Read each low byte once; the setup structure is packed little-endian.
+	uint8_t *pSetup = (uint8_t *)&evt.Setup;
+	for (unsigned i = 0; i < sizeof(evt.Setup); ++i)
+	{
+		pSetup[i] = (uint8_t)*(volatile const uint32_t *)
+			((uintptr_t)&NRF_USBD->BMREQUESTTYPE + i * sizeof(uint32_t));
+	}
 
 	while (nRFUsbdDmaActive())
 	{
@@ -1391,15 +1406,11 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 
 	if (setAddress)
 	{
-		UsbCtrlrEvt_t addrEvt = {};
-		addrEvt.Type = USB_CTRLR_EVT_ADDRESS;
-		addrEvt.Address = (uint8_t)(evt.Setup.wValue & 0x7FU);
-		nRFUsbdEmit(&addrEvt);
+		const uint8_t address = (uint8_t)(evt.Setup.wValue & 0x7FU);
+		evt.Type = USB_CTRLR_EVT_ADDRESS;
+		evt.Address = address;
 	}
-	else
-	{
-		nRFUsbdEmit(&evt);
-	}
+	nRFUsbdEmit(&evt);
 }
 
 
@@ -1497,7 +1508,8 @@ extern "C" void USBD_IRQHandler(void)
 
 			*pEnd = 0U;
 			NRF_USBD->EPSTATUS = 1UL << statusBit;
-			__DSB();
+			// Unlock's DSB completes END, EPSTATUS and busy-register writes
+			// before the OUT callback or another DMA can use this buffer.
 			nRFUsbdDmaUnlock();
 
 			if (out)
@@ -1512,11 +1524,6 @@ extern "C" void USBD_IRQHandler(void)
 				nRFUsbdStartQueuedDma();
 			break;
 		}
-	}
-
-	if (NRF_USBD->EVENTS_STARTED != 0U)
-	{
-		NRF_USBD->EVENTS_STARTED = 0U;
 	}
 
 	if (NRF_USBD->EVENTS_USBEVENT != 0U)
@@ -1766,41 +1773,20 @@ bool UsbCtrlrHighSpeed(int DevNo)
 
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 {
-	if (DevNo != 0)
+	if (DevNo != 0 || pBuff == NULL || BuffLen == 0)
 	{
 		return 0;
 	}
-
-	static const char hex[] = "0123456789ABCDEF";
-	size_t cnt = 0;
-
-	if (pBuff == nullptr || BuffLen == 0)
+	const size_t count = BuffLen > 16U ? 16U : BuffLen - 1U;
+	const uint32_t id[2] = {nrf_ficr_deviceid_get(NRF_FICR, 0U),
+		nrf_ficr_deviceid_get(NRF_FICR, 1U)};
+	for (size_t i = 0; i < count; ++i)
 	{
-		return 0;
+		const unsigned digit = (id[i >> 3U] >> (28U - ((i & 7U) << 2U))) & 15U;
+		pBuff[i] = (char)(digit + (digit < 10U ? '0' : 'A' - 10));
 	}
-
-	// nrf_ficr_deviceid_get and not FICR->DEVICEID, because the nRF52 keeps
-	// the id flat and the nRF54 keeps it under INFO, and the HAL already knows
-	// which.
-	for (int i = 0; i < 2; i++)
-	{
-		uint32_t id = nrf_ficr_deviceid_get(NRF_FICR, (uint32_t)i);
-
-		for (int n = 7; n >= 0; n--)
-		{
-			if (cnt + 1 >= BuffLen)
-			{
-				pBuff[cnt] = '\0';
-				return cnt;
-			}
-
-			pBuff[cnt++] = hex[(id >> (n * 4)) & 0x0F];
-		}
-	}
-
-	pBuff[cnt] = '\0';
-
-	return cnt;
+	pBuff[count] = '\0';
+	return count;
 }
 
 void UsbCtrlrIntEnable(int DevNo)
