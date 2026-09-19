@@ -251,7 +251,7 @@ static __attribute__((noinline)) bool UsbdWaitReady(const volatile uint32_t *pRe
 	return (*pReg & Msk) != 0U;
 }
 
-__attribute__((weak)) bool UsbdXtalRequest(void)
+static bool UsbdXtalRequest(void)
 {
 #ifdef SOFTDEVICE_PRESENT
 	if (UsbdSdRunning())
@@ -303,7 +303,7 @@ __attribute__((weak)) bool UsbdXtalRequest(void)
 	return false;
 }
 
-__attribute__((weak)) void UsbdXtalRelease(void)
+static inline void UsbdXtalRelease(void)
 {
 #ifdef SOFTDEVICE_PRESENT
 	if (UsbdSdRunning())
