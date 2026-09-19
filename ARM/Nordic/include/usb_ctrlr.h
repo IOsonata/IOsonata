@@ -313,8 +313,6 @@ typedef struct __nRF_Usbd_State
 	uint16_t IsoOutSize;
 	uint8_t IntPrio;
 	bool LowPowerSuspend;
-	bool Initialized;
-	bool Started;
 	nRFUsbdCtrlr_t Ctrlr;
 	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];

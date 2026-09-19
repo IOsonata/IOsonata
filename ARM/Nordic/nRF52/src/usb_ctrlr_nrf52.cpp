@@ -8,8 +8,9 @@ owns bus power, clock and VBUS handling, endpoint events and the single shared
 EasyDMA channel.
 
 DevNo selects the controller. Every nRF part has exactly one, USB_CTRLR_CNT is
-1, so the entry points validate DevNo and the state stays a singleton. Arraying
-it is work for the first part that carries two.
+1. UsbCtrlrInit validates DevNo; later entry points receive that stored,
+validated controller number and the state stays a singleton. Arraying it is
+work for the first part that carries two.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 3, 2026
@@ -1470,7 +1471,6 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 
 	s_Usbd.IntPrio = pCfg->IntPrio;
 	s_Usbd.LowPowerSuspend = pCfg->bLowPowerSuspend;
-	s_Usbd.Initialized = true;
 
 	s_Usbd.hQue = CFifoInit(s_QueMem, sizeof(s_QueMem), sizeof(nRFUsbdQue_t),
 					   false);
@@ -1487,21 +1487,6 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 
 bool UsbCtrlrStart(int DevNo)
 {
-	if (DevNo != 0)
-	{
-		return false;
-	}
-
-	if (s_Usbd.Initialized == false)
-	{
-		return false;
-	}
-
-	if (s_Usbd.Started)
-	{
-		return true;
-	}
-
 	if (UsbCtrlrVbusDetected(DevNo) == false)
 	{
 		// No cable. Not a failure: the poll in UsbdProcess reports the attach
@@ -1522,25 +1507,14 @@ bool UsbCtrlrStart(int DevNo)
 		return false;
 	}
 
-	s_Usbd.Started = true;
-
 	return true;
 }
 
 void UsbCtrlrStop(int DevNo)
 {
-	if (DevNo != 0)
-	{
-		return;
-	}
-
+	(void)DevNo;
 	nRFUsbdDmaWait();
 	nRFUsbdResetState();
-
-	if (s_Usbd.Started == false)
-	{
-		return;
-	}
 
 	// Stop the controller interrupt before powering down the wrapper.
 	NVIC_DisableIRQ(USBD_IRQn);
@@ -1552,22 +1526,21 @@ void UsbCtrlrStop(int DevNo)
 
 	// A successful start owns one clock request; a failed start releases it.
 	UsbdXtalRelease();
-
-	s_Usbd.Started = false;
 }
 
 // Suspend and wake are owned by the USBEVENT/SOF handlers. With low-power
 // suspend disabled, this driver never enters peripheral low-power mode.
 void UsbCtrlrProcess(int DevNo)
 {
-	if (DevNo == 0)
-		AppEvtHandlerExec();
+	(void)DevNo;
+	AppEvtHandlerExec();
 }
 
 bool UsbCtrlrVbusDetected(int DevNo)
 {
-	return DevNo == 0 &&
-		(NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk) != 0;
+	(void)DevNo;
+	return (NRF_POWER->USBREGSTATUS &
+		POWER_USBREGSTATUS_VBUSDETECT_Msk) != 0;
 }
 
 bool UsbCtrlrHighSpeed(int DevNo)
@@ -1578,7 +1551,8 @@ bool UsbCtrlrHighSpeed(int DevNo)
 
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 {
-	if (DevNo != 0 || pBuff == NULL || BuffLen == 0)
+	(void)DevNo;
+	if (pBuff == NULL || BuffLen == 0)
 	{
 		return 0;
 	}
@@ -1597,51 +1571,31 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 
 void UsbCtrlrIntEnable(int DevNo)
 {
-	if (DevNo != 0)
-	{
-		return;
-	}
-
+	(void)DevNo;
 	NVIC_EnableIRQ(USBD_IRQn);
 }
 
 void UsbCtrlrIntDisable(int DevNo)
 {
-	if (DevNo != 0)
-	{
-		return;
-	}
-
+	(void)DevNo;
 	NVIC_DisableIRQ(USBD_IRQn);
 }
 
 void UsbCtrlrConnect(int DevNo)
 {
-	if (DevNo != 0)
-	{
-		return;
-	}
-
+	(void)DevNo;
 	NRF_USBD->USBPULLUP = 1;
 }
 
 void UsbCtrlrDisconnect(int DevNo)
 {
-	if (DevNo != 0)
-	{
-		return;
-	}
-
+	(void)DevNo;
 	NRF_USBD->USBPULLUP = 0;
 }
 
 void UsbCtrlrRemoteWakeup(int DevNo)
 {
-	if (DevNo != 0)
-	{
-		return;
-	}
-
+	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
 	const uint32_t flags = s_Usbd.Flags;
 	if ((flags & (USBD_FLAG_SUSPENDED | USBD_FLAG_HOST_RESUME)) !=
@@ -1661,11 +1615,7 @@ void UsbCtrlrRemoteWakeup(int DevNo)
 
 void UsbCtrlrSofEnable(int DevNo, bool Enable)
 {
-	if (DevNo != 0)
-	{
-		return;
-	}
-
+	(void)DevNo;
 	s_Usbd.Ctrlr.SofEnabled = Enable;
 
 	if (Enable)
@@ -1687,7 +1637,8 @@ void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 {
-	if (DevNo != 0 || pDesc == NULL)
+	(void)DevNo;
+	if (pDesc == NULL)
 	{
 		return false;
 	}
@@ -1724,11 +1675,7 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 
 void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 {
-	if (DevNo != 0)
-	{
-		return;
-	}
-
+	(void)DevNo;
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	if (epNum == 0U || epNum >= NRFX_USBD_EP_COUNT)
 	{
@@ -1762,11 +1709,6 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 
 void UsbCtrlrEpCloseAll(int DevNo)
 {
-	if (DevNo != 0)
-	{
-		return;
-	}
-
 	nRFUsbdDmaWait();
 
 	for (uint8_t epNum = 1; epNum < NRFX_USBD_EP_COUNT; epNum++)
@@ -1783,7 +1725,8 @@ bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	if (DevNo != 0 || epNum == 0U ||
+	(void)DevNo;
+	if (epNum == 0U ||
 		epNum >= NRF_USB_EP_COUNT ||
 		(EpAddr & ~(USB_ENDPADDR_DIR_MASK | USB_ENDPADDR_NUM_MASK)) != 0U ||
 		pBuffer == NULL || Handler == NULL)
@@ -1828,7 +1771,8 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length)
 {
-	if (DevNo != 0 || USB_ENDPADDR_NUM(EpAddr) != 0U)
+	(void)DevNo;
+	if (USB_ENDPADDR_NUM(EpAddr) != 0U)
 	{
 		return false;
 	}
@@ -1915,11 +1859,7 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr)
 {
-	if (DevNo != 0)
-	{
-		return;
-	}
-
+	(void)DevNo;
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	if (epNum >= NRFX_USBD_EP_COUNT || epNum == NRFX_USBD_ISO_EP_NO)
 	{
@@ -1940,11 +1880,7 @@ void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr)
 
 void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr)
 {
-	if (DevNo != 0)
-	{
-		return;
-	}
-
+	(void)DevNo;
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	if (epNum == 0 || epNum >= NRFX_USBD_EP_COUNT ||
 		epNum == NRFX_USBD_ISO_EP_NO)
