@@ -6,7 +6,7 @@
 Direct register implementation for the high-speed USBHS peripheral. The port
 owns VREGUSB, HFCLK24M, the USBHS core and its endpoint DMA/FIFO configuration.
 
-DevNo selects the controller. Every nRF part has exactly one, USB_DEV_COUNT is
+DevNo selects the controller. Every nRF part has exactly one, USB_CTRLR_CNT is
 1, so the entry points validate DevNo and the state stays a singleton. Arraying
 it is work for the first part that carries two.
 

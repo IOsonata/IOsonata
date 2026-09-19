@@ -55,13 +55,13 @@ SOFTWARE.
 
 #define USB_DEVNO				0
 
-#define BUFFER_SIZE				USB_DEV_PKT_LEN_MAX(USB_DEVNO, BULK)
+#define BUFFER_SIZE				USB_CTRLR_PKT_LEN_MAX(USB_DEVNO, BULK)
 
 // The application owns queued RX/TX memory. UsbdCdc owns the controller
 // transfer buffers and copies completed OUT packets into this RX packet FIFO.
 #define CDC_RXFIFO_PKTCNT		4
 #define CDC_RXFIFO_MEMSIZE \
-	USB_INTRF_RXMEM_SIZE(CDC_RXFIFO_PKTCNT, USB_DEV_PKT_LEN_MAX(USB_DEVNO, BULK))
+	USB_INTRF_RXMEM_SIZE(CDC_RXFIFO_PKTCNT, USB_CTRLR_PKT_LEN_MAX(USB_DEVNO, BULK))
 #define CDC_TXFIFO_MEMSIZE		CFIFO_MEMSIZE(1024)
 
 alignas(4) static uint8_t s_CdcRxFifoMem[CDC_RXFIFO_MEMSIZE];

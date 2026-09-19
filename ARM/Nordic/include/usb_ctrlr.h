@@ -79,14 +79,14 @@ typedef enum __Usb_Ctrlr_Trans_Type {
 // are control, bulk or interrupt. Endpoint 8 is the dedicated isochronous
 // endpoint in both directions.
 enum {
-	USB_DEV_COUNT = 1,
+	USB_CTRLR_CNT = 1,
 	USB_HIGHSPEED_CAPABLE_0 = 0,
 	USB_EPIN_CNT_0 = 8,
 	USB_EPOUT_CNT_0 = 8,
-	USB_DEV0_CONTROL_PKT_LEN_MAX = 64,
-	USB_DEV0_BULK_PKT_LEN_MAX = 64,
-	USB_DEV0_INT_PKT_LEN_MAX = 64,
-	USB_DEV0_ISO_PKT_LEN_MAX = 512,
+	USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
+	USB_CTRLR0_BULK_PKT_LEN_MAX = 64,
+	USB_CTRLR0_INT_PKT_LEN_MAX = 64,
+	USB_CTRLR0_ISO_PKT_LEN_MAX = 512,
 	USB_ISO_SUPPORTED_0 = 1,
 	USB_ISO_EPIN_MASK_0 = (1U << 8),
 	USB_ISO_EPOUT_MASK_0 = (1U << 8),
@@ -98,14 +98,14 @@ enum {
 // high-speed maxima. A full-speed host negotiates smaller packets and buffers
 // sized from these constants still fit.
 enum {
-	USB_DEV_COUNT = 1,
+	USB_CTRLR_CNT = 1,
 	USB_HIGHSPEED_CAPABLE_0 = 1,
 	USB_EPIN_CNT_0 = 16,
 	USB_EPOUT_CNT_0 = 16,
-	USB_DEV0_CONTROL_PKT_LEN_MAX = 64,
-	USB_DEV0_BULK_PKT_LEN_MAX = 512,
-	USB_DEV0_INT_PKT_LEN_MAX = 1024,
-	USB_DEV0_ISO_PKT_LEN_MAX = 1024,
+	USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
+	USB_CTRLR0_BULK_PKT_LEN_MAX = 512,
+	USB_CTRLR0_INT_PKT_LEN_MAX = 1024,
+	USB_CTRLR0_ISO_PKT_LEN_MAX = 1024,
 	USB_ISO_SUPPORTED_0 = 0,
 	USB_ISO_EPIN_MASK_0 = 0,
 	USB_ISO_EPOUT_MASK_0 = 0,
@@ -127,12 +127,12 @@ enum {
 	((CtrlrNo) == 0 ? USB_ISO_EPIN_MASK_0 : 0U)
 #define USB_ISO_EPOUT_MASK(CtrlrNo) \
 	((CtrlrNo) == 0 ? USB_ISO_EPOUT_MASK_0 : 0U)
-#define USB_DEV_PKT_LEN_MAX(DevNo, TransType) \
-	((DevNo) != 0 ? 0 : \
-	 (TransType) == CONTROL ? USB_DEV0_CONTROL_PKT_LEN_MAX : \
-	 (TransType) == ISO ? USB_DEV0_ISO_PKT_LEN_MAX : \
-	 (TransType) == BULK ? USB_DEV0_BULK_PKT_LEN_MAX : \
-	 (TransType) == INT ? USB_DEV0_INT_PKT_LEN_MAX : 0)
+#define USB_CTRLR_PKT_LEN_MAX(CtrlrNo, TransType) \
+	((CtrlrNo) != 0 ? 0 : \
+	 (TransType) == CONTROL ? USB_CTRLR0_CONTROL_PKT_LEN_MAX : \
+	 (TransType) == ISO ? USB_CTRLR0_ISO_PKT_LEN_MAX : \
+	 (TransType) == BULK ? USB_CTRLR0_BULK_PKT_LEN_MAX : \
+	 (TransType) == INT ? USB_CTRLR0_INT_PKT_LEN_MAX : 0)
 
 #if defined(USBD_PRESENT)
 #define USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)

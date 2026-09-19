@@ -40,7 +40,7 @@ handle_sof = function_body(base, "static void nRFUsbdHandleSof(void)")
 queued = function_body(base, "void nRFUsbdStartQueuedDma(void)")
 
 assert "USB_EPIN_CNT_0 = 8" in header and "USB_EPOUT_CNT_0 = 8" in header
-assert "USB_DEV0_ISO_PKT_LEN_MAX = 512" in header
+assert "USB_CTRLR0_ISO_PKT_LEN_MAX = 512" in header
 assert "USB_ISO_EPIN_MASK_0 = (1U << 8)" in header
 assert "USB_ISO_EPOUT_MASK_0 = (1U << 8)" in header
 assert "USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)" in header

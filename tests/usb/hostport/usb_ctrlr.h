@@ -53,14 +53,14 @@ typedef enum __Usb_Ctrlr_Trans_Type {
 } UsbCtrlrTransType_t;
 
 enum {
-	USB_DEV_COUNT = 1,
+	USB_CTRLR_CNT = 1,
 	USB_HIGHSPEED_CAPABLE_0 = 0,
 	USB_EPIN_CNT_0 = 8,
 	USB_EPOUT_CNT_0 = 8,
-	USB_DEV0_CONTROL_PKT_LEN_MAX = 64,
-	USB_DEV0_BULK_PKT_LEN_MAX = 64,
-	USB_DEV0_INT_PKT_LEN_MAX = 64,
-	USB_DEV0_ISO_PKT_LEN_MAX = 63,
+	USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
+	USB_CTRLR0_BULK_PKT_LEN_MAX = 64,
+	USB_CTRLR0_INT_PKT_LEN_MAX = 64,
+	USB_CTRLR0_ISO_PKT_LEN_MAX = 63,
 	USB_ISO_SUPPORTED_0 = 1,
 	USB_ISO_EPIN_MASK_0 = (1U << 8) | (1U << 9),
 	USB_ISO_EPOUT_MASK_0 = (1U << 8) | (1U << 9),
@@ -78,12 +78,12 @@ enum {
 	((CtrlrNo) == 0 ? (uint16_t)USB_ISO_EPIN_MASK_0 : (uint16_t)0U)
 #define USB_ISO_EPOUT_MASK(CtrlrNo) \
 	((CtrlrNo) == 0 ? (uint16_t)USB_ISO_EPOUT_MASK_0 : (uint16_t)0U)
-#define USB_DEV_PKT_LEN_MAX(DevNo, TransType) \
-	((DevNo) != 0 ? 0 : \
-	 (TransType) == CONTROL ? USB_DEV0_CONTROL_PKT_LEN_MAX : \
-	 (TransType) == ISO ? USB_DEV0_ISO_PKT_LEN_MAX : \
-	 (TransType) == BULK ? USB_DEV0_BULK_PKT_LEN_MAX : \
-	 (TransType) == INT ? USB_DEV0_INT_PKT_LEN_MAX : 0)
+#define USB_CTRLR_PKT_LEN_MAX(CtrlrNo, TransType) \
+	((CtrlrNo) != 0 ? 0 : \
+	 (TransType) == CONTROL ? USB_CTRLR0_CONTROL_PKT_LEN_MAX : \
+	 (TransType) == ISO ? USB_CTRLR0_ISO_PKT_LEN_MAX : \
+	 (TransType) == BULK ? USB_CTRLR0_BULK_PKT_LEN_MAX : \
+	 (TransType) == INT ? USB_CTRLR0_INT_PKT_LEN_MAX : 0)
 
 #define USB_CTRLR_ISO_INIT(DevNo) true
 

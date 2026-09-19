@@ -36,7 +36,7 @@ SOFTWARE.
 
 static bool UsbIsoIntrfEpSupported(int DevNo, uint8_t EpNo)
 {
-	if (DevNo < 0 || DevNo >= USB_DEV_COUNT || EpNo == 0U || EpNo > 15U ||
+	if (DevNo < 0 || DevNo >= USB_CTRLR_CNT || EpNo == 0U || EpNo > 15U ||
 		!USB_ISO_SUPPORTED(DevNo))
 	{
 		return false;

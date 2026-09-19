@@ -7,7 +7,7 @@ Direct register implementation for the full-speed USBD peripheral. The port
 owns bus power, clock and VBUS handling, endpoint events and the single shared
 EasyDMA channel.
 
-DevNo selects the controller. Every nRF part has exactly one, USB_DEV_COUNT is
+DevNo selects the controller. Every nRF part has exactly one, USB_CTRLR_CNT is
 1. UsbCtrlrInit validates DevNo; later entry points receive that stored,
 validated controller number and the state stays a singleton. Arraying it is
 work for the first part that carries two.

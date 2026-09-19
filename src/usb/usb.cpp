@@ -15,7 +15,7 @@ USB_EVT_ATTACHED and USB_EVT_DETACHED to the application itself.
 
 DevNo is stored at init and passed to every UsbCtrlr call. The state here is
 still file scope, so one controller is initialized at a time. That matches
-every part shipped so far, where USB_DEV_COUNT is 1.
+every part shipped so far, where USB_CTRLR_CNT is 1.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 3, 2026
@@ -173,7 +173,7 @@ static const uint8_t *UsbDescDevice(int DevNo, uint8_t Index,
 	s_Core.DeviceDesc.bDeviceClass = pCfg->DeviceClass;
 	s_Core.DeviceDesc.bDeviceSubClass = pCfg->DeviceSubClass;
 	s_Core.DeviceDesc.bDeviceProtocol = pCfg->DeviceProtocol;
-	s_Core.DeviceDesc.bMaxPacketSize = USB_DEV_PKT_LEN_MAX(DevNo, CONTROL);
+	s_Core.DeviceDesc.bMaxPacketSize = USB_CTRLR_PKT_LEN_MAX(DevNo, CONTROL);
 	s_Core.DeviceDesc.idVendor = pCfg->Vid;
 	s_Core.DeviceDesc.idProduct = pCfg->Pid;
 	s_Core.DeviceDesc.bcdDevice = pCfg->DevVer;
@@ -206,7 +206,7 @@ static const uint8_t *UsbDescQualifier(int DevNo, uint8_t Index,
 	s_Core.QualifierDesc.bDeviceClass = pCfg->DeviceClass;
 	s_Core.QualifierDesc.bDeviceSubClass = pCfg->DeviceSubClass;
 	s_Core.QualifierDesc.bDeviceProtocol = pCfg->DeviceProtocol;
-	s_Core.QualifierDesc.bMaxPacketSize0 = USB_DEV_PKT_LEN_MAX(DevNo, CONTROL);
+	s_Core.QualifierDesc.bMaxPacketSize0 = USB_CTRLR_PKT_LEN_MAX(DevNo, CONTROL);
 	s_Core.QualifierDesc.bNumConfigurations = 1U;
 
 	*pLength = sizeof(s_Core.QualifierDesc);
@@ -1708,7 +1708,7 @@ static bool UsbDevInit(const UsbCfg_t *pCfg)
 	}
 
 	UsbCoreCfg_t coreCfg = {};
-	coreCfg.Ep0Mps = USB_DEV_PKT_LEN_MAX(s_Core.DevNo, CONTROL);
+	coreCfg.Ep0Mps = USB_CTRLR_PKT_LEN_MAX(s_Core.DevNo, CONTROL);
 
 	if (!UsbCoreInit(&coreCfg))
 	{
@@ -1827,7 +1827,7 @@ static const char *UsbDevGetSerial(void)
 
 bool UsbInit(const UsbCfg_t *pCfg)
 {
-	if (pCfg == nullptr || pCfg->DevNo < 0 || pCfg->DevNo >= USB_DEV_COUNT)
+	if (pCfg == nullptr || pCfg->DevNo < 0 || pCfg->DevNo >= USB_CTRLR_CNT)
 	{
 		return false;
 	}
