@@ -25,7 +25,7 @@ def function_body(source: str, signature: str) -> str:
 
 source = SOURCE.read_text(encoding="utf-8")
 dma_start = function_body(source, "void nRFUsbdDmaStartLocked(")
-dma_finish = function_body(source, "uint8_t nRFUsbdDmaFinishLocked(")
+dma_finish = function_body(source, "static void nRFUsbdDmaWait(void)")
 interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
 
 assert "nRFUsbdDmaReclaim" not in source
@@ -34,7 +34,7 @@ assert "s_LazyInMask" not in source
 assert "INTENSET" not in dma_start, "DMA start must not enable ENDEPIN"
 assert "NRFX_USBD_EASYDMA_BUSY_REG_BUSY" in dma_start
 assert "*pTask = 1" in dma_start
-assert "DmaStatus & 0x00FF00FFUL" in dma_finish
+assert "NRF_USBD->EPSTATUS & 0x00FF00FFUL" in dma_finish
 assert "EVENTS_ENDEPOUT[epNum]" in dma_finish
 assert "EVENTS_ENDEPIN[epNum]" in dma_finish
 assert "nRFUsbdDmaUnlock();" in dma_finish
