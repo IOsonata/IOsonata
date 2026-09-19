@@ -1546,15 +1546,18 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 {
 	(void)DevNo;
 	(void)BuffLen;
-	const uint32_t id[2] = {nrf_ficr_deviceid_get(NRF_FICR, 0U),
-		nrf_ficr_deviceid_get(NRF_FICR, 1U)};
+	char *p = pBuff;
 
-	for (size_t i = 0; i < 16U; ++i)
+	for (uint8_t word = 0U; word < 2U; ++word)
 	{
-		const unsigned digit = (id[i >> 3U] >> (28U - ((i & 7U) << 2U))) & 15U;
-		pBuff[i] = (char)(digit + (digit < 10U ? '0' : 'A' - 10));
+		const uint32_t id = nrf_ficr_deviceid_get(NRF_FICR, word);
+		for (int8_t shift = 28; shift >= 0; shift -= 4)
+		{
+			const unsigned digit = (id >> shift) & 15U;
+			*p++ = (char)(digit + (digit < 10U ? '0' : 'A' - 10));
+		}
 	}
-	pBuff[16] = '\0';
+	*p = '\0';
 	return 16U;
 }
 
