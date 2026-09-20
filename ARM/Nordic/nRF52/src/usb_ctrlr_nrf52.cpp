@@ -632,14 +632,16 @@ void nRFUsbdDmaWait(void)
 	}
 }
 
-// Program EP0 IN for one staged packet and arm the status-stage short when
-// the packet is short. The caller owns EasyDMA.
-static __attribute__((noinline)) void nRFUsbdEp0InProgram(const nRFEPPkt_t *p)
+// Program and start one staged EP0 IN packet, arming the status-stage short
+// when the packet is short. The caller already owns EasyDMA.
+static __attribute__((noinline)) void nRFUsbdEp0InStart(const nRFEPPkt_t *p)
 {
 	NRF_USBD->EPIN[0].PTR = (uint32_t)(uintptr_t)p->Payload;
 	NRF_USBD->EPIN[0].MAXCNT = p->Len;
 	NRF_USBD->SHORTS = p->Len < NRFX_USBD_MAX_PACKET_SIZE ?
 		USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk : 0U;
+	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPIN[0],
+		&NRF_USBD->EVENTS_ENDEPIN[0]);
 }
 
 static __attribute__((noinline)) void nRFUsbdNoDmaTask(volatile uint32_t *pTask)
@@ -747,9 +749,7 @@ static inline __attribute__((always_inline)) bool nRFUsbdEp0StartPending(void)
 		return false;
 	}
 
-	nRFUsbdEp0InProgram(pEp0);
-	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPIN[0],
-		&NRF_USBD->EVENTS_ENDEPIN[0]);
+	nRFUsbdEp0InStart(pEp0);
 	return true;
 }
 
@@ -831,18 +831,6 @@ static void nRFUsbdQueueEp0Out(void)
 	EnableInterrupt(state);
 }
 #endif
-
-static void nRFUsbdQueueEp0In(void)
-{
-	nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Ep0[1];
-	const uint16_t remaining =
-		(uint16_t)(pXfer->TotalLen - pXfer->ActualLen);
-	const uint16_t mps = NRFX_USBD_MAX_PACKET_SIZE;
-	const uint16_t length = remaining < mps ? remaining : mps;
-
-	nRFUsbdQueXferDir(0U, true, length);
-	nRFUsbdResumeQueuedDmaLocked();
-}
 
 static void nRFUsbdResetState(void)
 {
@@ -1288,10 +1276,7 @@ extern "C" void USBD_IRQHandler(void)
 					(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
 				if (p != NULL)
 				{
-					nRFUsbdEp0InProgram(p);
-					nRFUsbdDmaStartLocked(
-						&NRF_USBD->TASKS_STARTEPIN[0],
-						&NRF_USBD->EVENTS_ENDEPIN[0]);
+					nRFUsbdEp0InStart(p);
 				}
 				else
 				{
@@ -1713,6 +1698,8 @@ void UsbCtrlrEpAlloc(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 	pReg->bBlocking = bBlocking;
 }
 
+// Keep the ISO dispatch in one copy for the directional wrappers.
+__attribute__((noinline))
 bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
 {
 	(void)DevNo;
@@ -1789,7 +1776,6 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 						 uint16_t Length)
 {
-	(void)DevNo;
 	if (USB_ENDPADDR_NUM(EpAddr) != 0U)
 	{
 		return false;
@@ -1799,24 +1785,12 @@ bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 	const bool reqIn =
 		(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) != 0U;
 
-	if (in && reqIn)
-	{
-		return UsbCtrlrEp0Send(DevNo, pBuffer, Length) == Length;
-	}
-
-	const uint32_t state = DisableInterrupt();
-	nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Ep0[in ? 1 : 0];
-
-	pXfer->pBuffer = pBuffer;
-	pXfer->TotalLen = Length;
-	pXfer->ActualLen = 0U;
-
 	if (Length == 0U && in != reqIn)
 	{
-		// Control status stage.
+		// Control status stage; a short IN packet may already have armed it.
+		const uint32_t state = DisableInterrupt();
 		if (!reqIn ||
-			(NRF_USBD->SHORTS &
-			 USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk) == 0U)
+			(NRF_USBD->SHORTS & USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk) == 0U)
 		{
 			nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0STATUS);
 		}
@@ -1824,15 +1798,18 @@ bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 		nRFUsbdEmitXfer(EpAddr, 0U, USB_CTRLR_XFER_SUCCESS);
 		return true;
 	}
-	else if (in)
+
+	if (in)
 	{
-		nRFUsbdQueueEp0In();
-	}
-	else
-	{
-		nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
+		return UsbCtrlrEp0Send(DevNo, pBuffer, Length) == Length;
 	}
 
+	const uint32_t state = DisableInterrupt();
+	nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Ep0[0];
+	pXfer->pBuffer = pBuffer;
+	pXfer->TotalLen = Length;
+	pXfer->ActualLen = 0U;
+	nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
 	EnableInterrupt(state);
 	return true;
 }
@@ -1864,10 +1841,8 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 	{
 		nRFUsbdDmaLock();
 		NRF_USBD->EVENTS_EP0DATADONE = 0U;
-		NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
 
-		nRFUsbdEp0InProgram((nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que));
-		NRF_USBD->TASKS_STARTEPIN[0] = 1U;
+		nRFUsbdEp0InStart((nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que));
 	}
 
 	return cnt;

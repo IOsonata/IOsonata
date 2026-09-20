@@ -103,6 +103,7 @@ struct NRF_USBD_Type {
  uint32_t TASKS_STARTEPOUT[8],TASKS_STARTISOOUT,afterTasks;
  uint32_t EVENTS_ENDEPIN[8],EVENTS_ENDEPOUT[8],EVENTS_EP0DATADONE,SHORTS,EVENTS_EPDATA;
  uint32_t EVENTS_EP0SETUP,EVENTS_USBEVENT,EVENTS_SOF,EVENTS_USBRESET;
+ uint32_t TASKS_EP0STATUS,TASKS_EP0RCVOUT;
  uint32_t EPOUTEN,EPINEN,INTEN,INTENCLR,INTENSET;
  uint32_t LOWPOWER,DPDMVALUE,TASKS_DPDMDRIVE,FRAMECNTR;
  struct {uint32_t EPOUT[8];} SIZE;
@@ -134,9 +135,14 @@ void nRFUsbdProcessOutData(uint32_t,void*);
 bool isoAtSof;
 void nRFUsbdIsoSof(){if(isoAtSof)isoReady=true;}
 unsigned resets,suspends,resumes,setups;
+unsigned controlEvents;
+UsbCtrlrXferEvt_t controlEvent;
 void nRFUsbdProcessEP0Setup(uint32_t,void*);
 void (*setupHandler)(const UsbCtrlrEvt_t*);
 void nRFUsbdEmit(const UsbCtrlrEvt_t *event){
+ if(event->Type==USB_CTRLR_EVT_XFER_CMPL){
+  ++controlEvents;controlEvent=event->Xfer;return;
+ }
  assert(event->Type==USB_CTRLR_EVT_SETUP);++setups;
  if(setupHandler)setupHandler(event);
 }
@@ -156,6 +162,8 @@ for tag, name in [('__nRF_Usbd_Que', 'nRFUsbdQue_t'), ('__nRF_Ep_Packet', 'nRFEP
     code += match.group(0) + '\n'
 code += re.search(r'typedef struct __nRF_Usb_Ep_Registration\s*\{.*?\} nRFUsbEpReg_t;',
     header, re.S).group(0) + '\n'
+code += re.search(r'typedef struct __nRF_Usbd_Xfer\s*\{.*?\} nRFUsbdXfer_t;',
+    header, re.S).group(0) + '\n'
 code += re.search(r'enum\s*\{[^}]*USBD_FLAG_SUSPENDED[^}]*\};', header).group(0) + '\n'
 code += r'''
 #pragma pack(pop)
@@ -166,7 +174,7 @@ struct {
  bool LowPowerSuspend;
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue,hEp0Que;
- struct {struct {uint16_t TotalLen;} Ep0[2];bool SofEnabled;} Ctrlr;
+ struct {nRFUsbdXfer_t Ep0[2];bool SofEnabled;} Ctrlr;
  alignas(4) uint8_t Ep0Bounce[64];
 } s_Usbd;
 alignas(8) uint8_t queueMem[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
@@ -180,12 +188,13 @@ code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
     if name in ('nRFUsbdQueXferDir', 'UsbCtrlrEpInXfer') else function(name)
     for name in [
     'nRFUsbdDmaActive', 'nRFUsbdDmaLock', 'nRFUsbdDmaUnlock', 'nRFUsbdDmaStartLocked', 'nRFUsbdRetireDma', 'nRFUsbdDmaWait',
-    'nRFUsbdEp0InProgram', 'nRFUsbdStartDmaNow', 'nRFUsbdDmaAllowed',
+    'nRFUsbdEp0InStart', 'nRFUsbdStartDmaNow', 'nRFUsbdDmaAllowed',
     'nRFUsbdEp0StartPending', 'nRFUsbdStartQueuedDma',
     'nRFUsbdResumeQueuedDmaLocked', 'nRFUsbdResumeQueuedDma', 'nRFUsbdQueXferDir', 'UsbCtrlrEpXfer',
     'UsbCtrlrEpInXfer', 'UsbCtrlrEpOutXfer',
     'nRFUsbEpDir', 'nRFUsbGetEpReg', 'nRFUsbEpRegisteredEvent',
     'nRFUsbdProcessInComplete', 'nRFUsbdQueueInComplete', 'UsbCtrlrEp0Send',
+    'nRFUsbdNoDmaTask', 'nRFUsbdEmitXfer', 'UsbCtrlrEp0Xfer',
     'UsbCtrlrEpAlloc', 'nRFUsbdProcessOutData', 'UsbCtrlrProcess',
     'UsbdIsForceNormal', 'UsbdForceNormal', 'nRFUsbdTryRemoteWake',
     'nRFUsbdHostResumeDetected', 'nRFUsbdWakeAllowed', 'nRFUsbdSofAcquire',
@@ -214,6 +223,7 @@ code += r'''
 void init(){
  regs={};dmaBusy=0;isoReady=false;isoChecks=isoEnd=0;irqMask=0;resets=0;
  dmaLocks=dmaUnlocks=ep0Completions=ep0Length=0;
+ controlEvents=0;controlEvent={};
  isoAtSof=false;suspends=resumes=setups=0;s_Usbd.LowPowerSuspend=false;
  setupHandler=nullptr;
  s_Usbd.Ctrlr={};
@@ -270,7 +280,7 @@ void setupResponseHandler(const UsbCtrlrEvt_t *event){
   interrupt();
   assert(dmaBusy && regs.TASKS_STARTEPOUT[1]);
  }
- assert(UsbCtrlrEp0Send(0,setupResponse,sizeof(setupResponse))==18);
+ assert(UsbCtrlrEp0Xfer(0,0x80,setupResponse,sizeof(setupResponse)));
  assert(bool(regs.TASKS_STARTEPIN[0])==!interruptSetup);
 }
 int main(int argc,char **argv){
@@ -280,7 +290,8 @@ int main(int argc,char **argv){
  const int lengths[]={0,1,9,63,64,65,129};
  for(int length:lengths){
   init();assert(UsbCtrlrEpInXfer(0,1,data,9));
-  assert(UsbCtrlrEp0Send(0,data,length)==length);
+  regs.BMREQUESTTYPE=0x80;
+  assert(UsbCtrlrEp0Xfer(0,0x80,data,length));
   assert(regs.TASKS_STARTEPIN[0]==0);
   int offset=0,count=std::max(1,(length+63)/64);
   assert(CFifoUsed(s_Usbd.hEp0Que)==count);
@@ -306,6 +317,34 @@ int main(int argc,char **argv){
   nRFUsbdResumeQueuedDmaLocked();assert(isoChecks==1);
  }
  puts("PASS: ISR hands regular DMA to queued EP0, then EP0 chains its own packets and status SHORTS");
+
+ // Status stages complete without DMA. An IN data ZLP follows the SETUP
+ // direction and must still be queued.
+ for(unsigned reqIn:{0U,0x80U})for(bool shortArmed:{false,true})
+ for(unsigned mask:{0U,1U}){
+  init();irqMask=mask;regs.BMREQUESTTYPE=reqIn;
+  regs.SHORTS=shortArmed?USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk:0U;
+  const uint8_t address=reqIn?0U:0x80U;
+  assert(UsbCtrlrEp0Xfer(0,address,nullptr,0));
+  assert(irqMask==mask && !dmaLocks && !dmaUnlocks && !dmaBusy);
+  assert(!CFifoUsed(s_Usbd.hEp0Que) && !CFifoUsed(s_Usbd.hQue));
+  assert(!regs.TASKS_EP0RCVOUT && !regs.TASKS_STARTEPIN[0]);
+  assert(regs.TASKS_EP0STATUS==unsigned(!reqIn || !shortArmed));
+  assert(controlEvents==1 && controlEvent.EpAddr==address && controlEvent.Length==0);
+  assert(controlEvent.Result==USB_CTRLR_XFER_SUCCESS);
+ }
+ for(int length:lengths)for(unsigned mask:{0U,1U}){
+  init();irqMask=mask;
+  assert(UsbCtrlrEp0Xfer(0,0,data,length));
+  assert(s_Usbd.Ctrlr.Ep0[0].pBuffer==data);
+  assert(s_Usbd.Ctrlr.Ep0[0].TotalLen==length && !s_Usbd.Ctrlr.Ep0[0].ActualLen);
+  assert(regs.TASKS_EP0RCVOUT==1 && !regs.TASKS_EP0STATUS);
+  assert(irqMask==mask && !dmaBusy && !controlEvents);
+  assert(!CFifoUsed(s_Usbd.hEp0Que) && !CFifoUsed(s_Usbd.hQue));
+ }
+ init();assert(!UsbCtrlrEp0Xfer(0,0x81,data,9));
+ assert(!dmaBusy && !CFifoUsed(s_Usbd.hEp0Que) && !controlEvents);
+ puts("PASS: EP0 distinguishes IN data/ZLP, OUT receive, and both status directions");
 
  for(bool preempt:{false,true}){
   init();interruptSetup=preempt;setupOutCompletions=0;
