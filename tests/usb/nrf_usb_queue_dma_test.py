@@ -100,10 +100,14 @@ auto *NRF_USBD=&regs;
 void __DSB(){}
 void UsbdSync(){}
 bool isoReady;
-unsigned isoChecks;
+unsigned isoChecks,isoEnd;
 bool nRFUsbdIsoStart(){++isoChecks;return isoReady;}
 void nRFUsbdIsoService(){if(!dmaBusy && isoReady)(void)nRFUsbdIsoStart();}
-bool nRFUsbdIsoFinishDma(uint32_t){assert(false);return false;}
+bool nRFUsbdIsoFinishDma(uint32_t status){
+ assert(status==0x100U || status==0x1000000U);
+ if(!isoEnd)return false;
+ isoEnd=0;regs.EPSTATUS=status;dmaBusy=0;return true;
+}
 void nRFUsbdQueueEp0Complete(bool,uint16_t){assert(false);}
 void nRFUsbdHostResumeDetected();
 void nRFUsbdProcessOutData(uint32_t,void*);
@@ -182,7 +186,7 @@ code += '\nvoid dataEvent(){const auto state=DisableInterrupt();uint8_t outEp=0;
 code += source[start:end] + '\nEnableInterrupt(state);}\n'
 code += r'''
 void init(){
- regs={};dmaBusy=0;isoReady=false;isoChecks=0;irqMask=0;resets=0;
+ regs={};dmaBusy=0;isoReady=false;isoChecks=isoEnd=0;irqMask=0;resets=0;
  isoAtSof=false;suspends=resumes=setups=0;s_Usbd.LowPowerSuspend=false;
  s_Usbd.Ctrlr={};
  s_Usbd.Flags=USBD_FLAG_MAC_AWAKE;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
@@ -198,6 +202,7 @@ void interrupt(){const auto state=irqMask;USBD_IRQHandler();assert(irqMask==stat
 void outComplete(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t len,
  UsbCtrlrXferResult_t result,void *context){
  assert(event==USB_CTRLR_EVT_XFER_CMPL && result==USB_CTRLR_XFER_SUCCESS);
+ assert(!dmaBusy); // Preserve the completed buffer before starting next DMA.
  UsbIntrfCtrlrOutEvent(ep,event,len,result,context);
 }
 void retire(unsigned ep,bool in){
@@ -304,25 +309,66 @@ int main(int argc,char **argv){
  assert(dmaBusy && regs.TASKS_STARTEPOUT[3]);
  puts("PASS: ENDEP restarts queued DMA before EPDATA/SOF; ready ISO wins the next handoff");
 
+ // ISO END shares the immediate handoff. A frame becoming ready later in
+ // this ISR must not postpone an already queued regular transfer.
+ for(unsigned status:{0x100U,0x1000000U}){
+  init();dmaBusy=0x82;
+  s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
+  assert(UsbCtrlrEpInXfer(0,2,data,9));
+  regs.EPSTATUS.bits=status;
+  interrupt(); // EPSTATUS alone is not completion.
+  assert(dmaBusy && !isoChecks && !regs.TASKS_STARTEPIN[2]);
+  assert(CFifoUsed(s_Usbd.hQue)==1);
+  isoEnd=1;isoAtSof=true;regs.EVENTS_SOF=1;
+  interrupt();
+  assert(!isoEnd && !regs.EPSTATUS.bits && !regs.EVENTS_SOF);
+  assert(isoChecks==1 && isoReady && regs.TASKS_STARTEPIN[2] && dmaBusy);
+  assert(CFifoUsed(s_Usbd.hQue)==1); // ISO did not dequeue regular data.
+ }
+ puts("PASS: ISO IN/OUT END immediately hands off DMA before SOF, without dequeuing regular data");
+
+ // A previously processed suspend/wake gate still applies when END arrives
+ // later. Completion may drain low-power suspend, but must not bypass an
+ // ordinary suspend or a host resume still waiting for USBWUALLOWED.
+ for(unsigned status:{2U,0x100U,0x1000000U})
+ for(unsigned gate:{0U,unsigned(USBD_FLAG_SUSPENDED),unsigned(USBD_FLAG_HOST_RESUME),
+  unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND)}){
+  init();dmaBusy=0x82;
+  if(status==2U)assert(UsbCtrlrEpInXfer(0,1,data,9));
+  else s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
+  assert(UsbCtrlrEpInXfer(0,2,data+64,9));
+  s_Usbd.Flags|=gate;
+  regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
+  interrupt();
+  const bool allowed=gate==0U || gate==unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND);
+  assert(bool(dmaBusy)==allowed && bool(regs.TASKS_STARTEPIN[2])==allowed);
+  assert(isoChecks==unsigned(allowed) && CFifoUsed(s_Usbd.hQue)==1);
+ }
+ puts("PASS: immediate completion handoff preserves suspend and host-resume gates");
+
  // SETUP must defer control handling without starting another queued DMA.
- init();
- assert(UsbCtrlrEpInXfer(0,1,data,9));
- assert(UsbCtrlrEpInXfer(0,2,data+64,9));
- regs.EPSTATUS.bits=1U<<1;regs.EVENTS_ENDEPIN[1]=1;
- regs.EVENTS_EP0SETUP=1;regs.EVENTS_EP0DATADONE=1;isoChecks=0;
- interrupt();
- assert(!dmaBusy && !isoChecks && !regs.TASKS_STARTEPIN[2]);
- assert(!regs.EVENTS_EP0SETUP && !regs.EVENTS_EP0DATADONE && !setups);
- AppEvtHandlerExec();assert(setups==1);
+ for(unsigned status:{2U,0x100U,0x1000000U}){
+  init();dmaBusy=0x82;
+  if(status==2U)assert(UsbCtrlrEpInXfer(0,1,data,9));
+  else s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
+  assert(UsbCtrlrEpInXfer(0,2,data+64,9));
+  regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
+  regs.EVENTS_EP0SETUP=1;regs.EVENTS_EP0DATADONE=1;isoChecks=0;
+  interrupt();
+  assert(!dmaBusy && !isoChecks && !regs.TASKS_STARTEPIN[2]);
+  assert(!regs.EVENTS_EP0SETUP && !regs.EVENTS_EP0DATADONE && !setups);
+  AppEvtHandlerExec();assert(setups==1);
+ }
  puts("PASS: SETUP defers control handling and prevents a premature DMA restart");
 
  // Suspend blocks the early restart. Low-power suspend drains queued DMA
  // before entering LOWPOWER; ordinary suspend retains it.
- for(bool lowPower:{false,true}){
-  init();s_Usbd.LowPowerSuspend=lowPower;
-  assert(UsbCtrlrEpInXfer(0,1,data,9));
+ for(unsigned status:{2U,0x100U,0x1000000U})for(bool lowPower:{false,true}){
+  init();dmaBusy=0x82;s_Usbd.LowPowerSuspend=lowPower;
+  if(status==2U)assert(UsbCtrlrEpInXfer(0,1,data,9));
+  else s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
   assert(UsbCtrlrEpInXfer(0,2,data+64,9));
-  regs.EPSTATUS.bits=1U<<1;regs.EVENTS_ENDEPIN[1]=1;
+  regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   regs.EVENTS_USBEVENT=1;regs.EVENTCAUSE.bits=USBD_EVENTCAUSE_SUSPEND_Msk;
   interrupt();
   assert(suspends==1 && CFifoUsed(s_Usbd.hQue)==1 && !regs.LOWPOWER);

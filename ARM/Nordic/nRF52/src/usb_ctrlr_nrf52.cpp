@@ -723,10 +723,18 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 	__DSB();
 }
 
-// Share the scheduler across ISR and foreground callers instead of expanding
-// the DMA register setup at each call site.
+// Completion calls this with DMA released; submissions check busy first.
+// Share the suspend gate and queue selection without rechecking DMA here.
 static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 {
+	const uint32_t gate = s_Usbd.Flags &
+		(USBD_FLAG_HOST_RESUME | USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND);
+	if ((gate & USBD_FLAG_HOST_RESUME) != 0U ||
+		gate == USBD_FLAG_SUSPENDED)
+	{
+		return;
+	}
+
 	const nRFEPPkt_t *pEp0 = (const nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
 	if (pEp0 != NULL)
 	{
@@ -744,17 +752,11 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 }
 
 
-// Keep the DMA/suspend gate shared by submission and completion paths.
+// Submission may find DMA busy; completion already released the channel.
 __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 {
-	const uint32_t gate = s_Usbd.Flags &
-		(USBD_FLAG_HOST_RESUME | USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND);
-	if (nRFUsbdDmaActive() ||
-		(gate & USBD_FLAG_HOST_RESUME) != 0U ||
-		gate == USBD_FLAG_SUSPENDED)
-	{
+	if (nRFUsbdDmaActive())
 		return;
-	}
 
 	nRFUsbdStartQueuedDma();
 }
@@ -1293,10 +1295,9 @@ extern "C" void USBD_IRQHandler(void)
 			break;
 		case 0x00000100U: // ISO IN
 		case 0x01000000U: // ISO OUT
-			if (nRFUsbdIsoFinishDma != nullptr)
-			{
-				(void)nRFUsbdIsoFinishDma(dmastatus);
-			}
+			if (nRFUsbdIsoFinishDma != nullptr &&
+				nRFUsbdIsoFinishDma(dmastatus))
+				goto dmaComplete;
 			break;
 		default:          // EP1-7 IN/OUT
 		{
@@ -1313,14 +1314,14 @@ extern "C" void USBD_IRQHandler(void)
 					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT,
 					USB_CTRLR_XFER_SUCCESS);
 			}
-
-			// Launch the next DMA before EPDATA/SOF work. Moving this to
-			// the ISR tail loses the overlap and reduces CDC throughput.
+		}
+		dmaComplete:
+			// Completion released DMA and handled any regular OUT buffer.
+			// Restart before EPDATA/SOF work; SETUP and bus events take precedence.
 			if (NRF_USBD->EVENTS_EP0SETUP == 0U &&
 				NRF_USBD->EVENTS_USBEVENT == 0U)
 				nRFUsbdStartQueuedDma();
 			break;
-		}
 	}
 
 	if (NRF_USBD->EVENTS_USBEVENT != 0U)
@@ -1393,16 +1394,11 @@ extern "C" void USBD_IRQHandler(void)
 
 	nRFUsbdTryRemoteWake();
 
-	// ENDEP released the shared EasyDMA channel above. ISO has priority when
-	// it is open; ordinary CDC traffic avoids the ISO service path entirely.
+	// Queue newly received OUT data; completion already restarted pending DMA.
 	if (outEp != 0U)
 	{
 		nRFUsbdProcessOutData(outEp, NULL);
 	}
-
-	if ((dmastatus & 0x01000100UL) != 0U &&
-		(s_Usbd.Flags & (USBD_FLAG_ISO_IN_OPEN | USBD_FLAG_ISO_OUT_OPEN)) != 0U)
-		nRFUsbdResumeQueuedDmaLocked();
 
 	nRFUsbdTryEnterLowPower();
 

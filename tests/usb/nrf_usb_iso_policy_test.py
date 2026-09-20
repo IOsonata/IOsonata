@@ -71,7 +71,7 @@ assert (
     "__attribute__((weak));"
 ) in base
 assert "bool UsbCtrlrIsoInit(int DevNo)" in iso
-assert "nRFUsbdIsoFinishDma(dmastatus);" in interrupt
+assert "nRFUsbdIsoFinishDma(dmastatus)" in interrupt
 assert "nRFUsbdIsoSof();" in handle_sof
 assert "nRFUsbdIsoService();" in handle_sof
 # Regular entries stay queued until DMA retirement, so the scheduler peeks

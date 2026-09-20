@@ -39,6 +39,8 @@ assert "*pTask = 1" in dma_start
 # through nRFUsbdRetireDma; the ordering policy lives in that helper now.
 assert "NRF_USBD->EPSTATUS & 0x00FF00FFUL" in dma_finish
 assert "nRFUsbdRetireDma(" in dma_finish
+assert "nRFUsbdStartQueuedDma" not in dma_finish + retire
+assert "nRFUsbdResumeQueuedDma" not in dma_finish + retire
 assert "EVENTS_ENDEPOUT[epNum]" in retire
 assert "EVENTS_ENDEPIN[epNum]" in retire
 assert "nRFUsbdDmaUnlock();" in retire
@@ -60,8 +62,7 @@ assert interrupt.index("const uint32_t inData = dataStatus & 0xFEU;") < interrup
     "nRFUsbdQueueInComplete("
 )
 assert "NRF_USBD->EPDATASTATUS" in interrupt
-assert interrupt.rindex("nRFUsbdResumeQueuedDmaLocked();") > interrupt.index(
-    "NRF_USBD->EPDATASTATUS"
-)
+assert "nRFUsbdResumeQueuedDmaLocked();" not in interrupt, "completion must not wait for the ISR tail"
+assert interrupt.count("nRFUsbdStartQueuedDma();") == 1
 
 print("nrf_usb_dma_policy_test: PASS")
