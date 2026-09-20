@@ -248,17 +248,16 @@ static bool UsbdSdRunning(void)
 static __attribute__((noinline)) bool UsbdWaitReady(const volatile uint32_t *pReg, uint32_t Msk,
 						  uint32_t Loops)
 {
-	for (uint32_t i = 0; i < Loops; i++)
+	// Include the final readiness read after the requested wait iterations.
+	do
 	{
 		if ((*pReg & Msk) != 0U)
 		{
 			return true;
 		}
-	}
+	} while (Loops-- != 0U);
 
-	// One re-read after exhaustion, as the original loops had: a bit that
-	// lands between the last iteration and this check still counts.
-	return (*pReg & Msk) != 0U;
+	return false;
 }
 
 static bool UsbdXtalRequest(void)
@@ -1812,7 +1811,7 @@ bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 {
-	int cnt = 0;
+	const int cnt = Length;
 
 	(void)DevNo;
 	s_Usbd.Ctrlr.Ep0[1].TotalLen = (uint16_t)Length;
@@ -1830,9 +1829,8 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 		}
 
 		p->Len = l;
-		cnt += l;
 		Length -= l;
-	} while (Length > 0);
+	} while (Length != 0);
 
 	if (NRFX_USBD_EASYDMA_BUSY_REG == NRFX_USBD_EASYDMA_BUSY_REG_CLEAR)
 	{
