@@ -139,7 +139,7 @@ unsigned controlEvents;
 UsbCtrlrXferEvt_t controlEvent;
 void nRFUsbdProcessEP0Setup(uint32_t,void*);
 void (*setupHandler)(const UsbCtrlrEvt_t*);
-void nRFUsbdEmit(const UsbCtrlrEvt_t *event){
+void UsbDevProcessEvent(int,const UsbCtrlrEvt_t *event){
  if(event->Type==USB_CTRLR_EVT_XFER_CMPL){
   ++controlEvents;controlEvent=event->Xfer;return;
  }
@@ -189,7 +189,7 @@ code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
     for name in [
     'nRFUsbdDmaActive', 'nRFUsbdDmaLock', 'nRFUsbdDmaUnlock', 'nRFUsbdDmaStartLocked', 'nRFUsbdRetireDma', 'nRFUsbdDmaWait',
     'nRFUsbdEp0InStart', 'nRFUsbdStartDmaNow', 'nRFUsbdDmaAllowed',
-    'nRFUsbdEp0StartPending', 'nRFUsbdStartQueuedDma',
+    'nRFUsbdStartQueuedDma',
     'nRFUsbdResumeQueuedDmaLocked', 'nRFUsbdResumeQueuedDma', 'nRFUsbdQueXferDir', 'UsbCtrlrEpXfer',
     'UsbCtrlrEpInXfer', 'UsbCtrlrEpOutXfer',
     'nRFUsbGetEpReg', 'nRFUsbEpRegisteredEvent',
@@ -384,6 +384,25 @@ int main(int argc,char **argv){
   assert(CFifoUsed(s_Usbd.hEp0Que)==1 && !CFifoUsed(s_Usbd.hQue));
  }
  puts("PASS: regular/ISO handoff to EP0 preserves suspend and host-resume gates without relocking");
+
+ // Exercise every combination of the four power flags at submission.
+ // A denied request stays queued without touching the hardware lock.
+ for(unsigned gate=0;gate<16;++gate)for(unsigned mask:{0U,1U}){
+  init();irqMask=mask;s_Usbd.Flags=USBD_FLAG_MAC_AWAKE|gate;
+  assert(UsbCtrlrEpInXfer(0,1,data,9));
+  const bool allowed=!(gate&USBD_FLAG_HOST_RESUME) &&
+   (!(gate&USBD_FLAG_SUSPENDED) || (gate&USBD_FLAG_SUSPEND_PEND));
+  assert(bool(dmaBusy)==allowed && dmaLocks==unsigned(allowed) && !dmaUnlocks);
+  assert(CFifoUsed(s_Usbd.hQue)==1 && irqMask==mask);
+  assert(bool(regs.TASKS_STARTEPIN[1])==allowed);
+  if(!allowed){
+   s_Usbd.Flags=USBD_FLAG_MAC_AWAKE;
+   const unsigned state=DisableInterrupt();nRFUsbdResumeQueuedDmaLocked();EnableInterrupt(state);
+   assert(dmaBusy && dmaLocks==1 && !dmaUnlocks && regs.TASKS_STARTEPIN[1]);
+   assert(CFifoUsed(s_Usbd.hQue)==1 && irqMask==mask);
+  }
+ }
+ puts("PASS: every power-gate combination preserves queued data; denied submissions never lock DMA");
 
  // EP0 chaining retains the original lock until the last host-consumed
  // packet. ENDEP alone must neither dequeue a packet nor release the lock.
@@ -833,6 +852,7 @@ int main(int argc,char **argv){
  assert(CFifoPut(s_Usbd.hQue) && CFifoPut(s_Usbd.hEp0Que));
  regs.EVENTS_USBRESET=1;interrupt();
  assert(resets==1 && !dmaBusy && !regs.EVENTS_USBRESET);
+ assert(!dmaLocks && dmaUnlocks==1); // ResetState releases once after cancelling queues.
  for(unsigned ep=0;ep<8;++ep)assert(!regs.TASKS_STARTEPIN[ep] && !regs.TASKS_STARTEPOUT[ep]);
  assert(!regs.TASKS_STARTISOIN && !regs.TASKS_STARTISOOUT);
  assert(regs.beforeTasks==0x12345678 && regs.afterTasks==0x87654321);

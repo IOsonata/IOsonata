@@ -72,7 +72,7 @@ assert "nRFUsbdResumeQueuedDmaLocked();" not in interrupt, "completion must not 
 assert interrupt.count("nRFUsbdStartQueuedDma();") == 1
 assert "hEp0Que" not in queued + resume
 assert "nRFUsbdEp0" not in queued + resume
-assert regular.index("nRFUsbdEp0StartPending()") < regular.index(
+assert regular.index("nRFUsbdEp0InStart(pEp0)") < regular.index(
     "nRFUsbdStartQueuedDma();"
 ), "pending EP0 belongs to the ISR handoff, before non-control scheduling"
 

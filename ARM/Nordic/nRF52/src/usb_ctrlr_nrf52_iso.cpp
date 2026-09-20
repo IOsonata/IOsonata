@@ -44,22 +44,6 @@ SOFTWARE.
 
 #include "usb_ctrlr.h"
 
-#define NRFX_USBD_EASYDMA_BUSY_REG			(*((volatile uint32_t *)0x40027C1CUL))
-#define NRFX_USBD_EASYDMA_BUSY_REG_BUSY		0x82UL
-#define NRFX_USBD_EASYDMA_BUSY_REG_CLEAR	0UL
-
-static inline __attribute__((always_inline))
-uint8_t nRFIsoDir(uint8_t EpAddr)
-{
-	return USB_ENDPADDR_IS_IN(EpAddr) ? 1U : 0U;
-}
-
-static inline __attribute__((always_inline))
-nRFUsbEpReg_t *nRFIsoReg(uint8_t EpAddr)
-{
-	return &s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][nRFIsoDir(EpAddr)];
-}
-
 static __attribute__((noinline))
 void nRFIsoHwEnable(bool In, bool Enable)
 {
@@ -87,7 +71,7 @@ void nRFIsoHwEnable(bool In, bool Enable)
 
 
 // The shared scheduler already owns the channel lock.
-static bool nRFUsbdStartIsoNow(void)
+bool nRFUsbdIsoStart(void)
 {
 	const uint32_t flags = s_Usbd.Flags;
 	static_assert(offsetof(USBD_ISOOUT_Type, MAXCNT) ==
@@ -135,7 +119,7 @@ static bool nRFUsbdStartIsoNow(void)
 	return false;
 }
 
-static void nRFUsbdServiceIso(void)
+void nRFUsbdIsoService(void)
 {
 	if ((s_Usbd.Flags & (USBD_FLAG_ISO_IN_READY | USBD_FLAG_ISO_OUT_READY)) != 0U)
 	{
@@ -143,12 +127,12 @@ static void nRFUsbdServiceIso(void)
 	}
 }
 
-static bool nRFUsbRegIsoXfer(uint8_t EpAddr, uint16_t Length)
+bool nRFUsbdIsoXfer(uint8_t EpAddr, uint16_t Length)
 {
-	const uint8_t dir = nRFIsoDir(EpAddr);
+	const uint8_t dir = USB_ENDPADDR_IS_IN(EpAddr);
 	const uint32_t openBusy = (uint32_t)(USBD_FLAG_ISO_OUT_OPEN |
 		USBD_FLAG_ISO_OUT_BUSY) << dir;
-	nRFUsbEpReg_t *pReg = nRFIsoReg(EpAddr);
+	nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir];
 	const uint32_t state = DisableInterrupt();
 	if ((s_Usbd.Flags & openBusy) != (uint32_t)USBD_FLAG_ISO_OUT_OPEN << dir ||
 		pReg->pBuffer == NULL || pReg->Handler == NULL ||
@@ -163,7 +147,7 @@ static bool nRFUsbRegIsoXfer(uint8_t EpAddr, uint16_t Length)
 	pXfer->TotalLen = Length;
 	pXfer->ActualLen = 0U;
 	s_Usbd.Flags |= (uint32_t)USBD_FLAG_ISO_OUT_BUSY << dir;
-	nRFUsbdServiceIso();
+	nRFUsbdIsoService();
 	EnableInterrupt(state);
 	return true;
 }
@@ -247,16 +231,6 @@ static bool nRFUsbdFinishIsoDma(bool In)
 	return true;
 }
 
-bool nRFUsbdIsoStart(void)
-{
-	return nRFUsbdStartIsoNow();
-}
-
-void nRFUsbdIsoService(void)
-{
-	nRFUsbdServiceIso();
-}
-
 bool nRFUsbdIsoFinishDma(uint32_t DmaStatus)
 {
 	if (DmaStatus == 0x00000100U)
@@ -305,7 +279,7 @@ void nRFUsbdIsoSof(void)
 					}
 					else
 					{
-						(void)nRFUsbRegIsoXfer(NRFX_USBD_ISO_EP_NO,
+						(void)nRFUsbdIsoXfer(NRFX_USBD_ISO_EP_NO,
 							pReg->MaxPacketSize);
 					}
 				}
@@ -335,7 +309,7 @@ bool nRFUsbdIsoEpOpen(const UsbEndPointDesc_t *pDesc)
 		return false;
 	}
 
-	nRFIsoReg(epAddr)->MaxPacketSize = pDesc->wMaxPacketSize;
+	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][in].MaxPacketSize = pDesc->wMaxPacketSize;
 	if (!AppEvtHandlerIdleRegister(nRFUsbdRetryIsoComplete))
 	{
 		return false;
@@ -366,10 +340,7 @@ void nRFUsbdIsoEpClose(uint8_t EpAddr)
 	const bool in = USB_ENDPADDR_IS_IN(EpAddr);
 	const uint8_t dir = in ? 1U : 0U;
 	const uint32_t state = DisableInterrupt();
-	if (NRFX_USBD_EASYDMA_BUSY_REG == NRFX_USBD_EASYDMA_BUSY_REG_BUSY)
-	{
-		nRFUsbdDmaWait();
-	}
+	nRFUsbdDmaWait();
 
 	nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Iso[dir];
 	++s_Usbd.IsoGeneration[dir];
@@ -383,12 +354,7 @@ void nRFUsbdIsoEpClose(uint8_t EpAddr)
 	nRFIsoHwEnable(in, false);
 	nRFUsbdSofRelease();
 
-	nRFIsoReg(EpAddr)->MaxPacketSize = 0U;
+	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir].MaxPacketSize = 0U;
 	__DSB();
 	EnableInterrupt(state);
-}
-
-bool nRFUsbdIsoXfer(uint8_t EpAddr, uint16_t Length)
-{
-	return nRFUsbRegIsoXfer(EpAddr, Length);
 }

@@ -66,7 +66,83 @@ void init(){
 '''
 code += '\n'.join(function(n) for n in ['UsbCtrlrStart', 'UsbCtrlrStop', 'UsbCtrlrProcess'])
 code += r'''
+namespace startup {
+constexpr uint32_t USBD_EVENTCAUSE_READY_Msk=1,POWER_USBREGSTATUS_OUTPUTRDY_Msk=2;
+constexpr uint32_t USBD_INTEN_USBRESET_Msk=1,NRFX_USBD_READY_WAIT_LOOPS=3;
+struct {uint32_t EVENTCAUSE,ENABLE,EVENTS_USBRESET,INTEN,INTENCLR,INTENSET;} regs;
+struct {uint32_t USBREGSTATUS;} power;
+auto *NRF_USBD=&regs;
+auto *NRF_POWER=&power;
+bool peripheralReady,regulatorReady;
+unsigned applies,reverts,peripheralWaits,regulatorWaits,clearedIrqs;
+void UsbdErrataApply(){++applies;assert(!regs.ENABLE);}
+void UsbdErrataRevert(){++reverts;assert(regs.ENABLE && peripheralWaits==1);}
+void NVIC_ClearPendingIRQ(int irq){assert(irq==USBD_IRQn);++clearedIrqs;}
+bool UsbdWaitReady(const volatile uint32_t *reg,uint32_t mask,uint32_t loops){
+ assert(loops==NRFX_USBD_READY_WAIT_LOOPS && regs.ENABLE);
+ if(reg==&regs.EVENTCAUSE){
+  assert(applies==1 && !reverts && mask==USBD_EVENTCAUSE_READY_Msk);
+  ++peripheralWaits;return peripheralReady;
+ }
+ assert(reg==&power.USBREGSTATUS && mask==POWER_USBREGSTATUS_OUTPUTRDY_Msk);
+ assert(reverts==1 && peripheralReady);++regulatorWaits;return regulatorReady;
+}
+'''
+code += function('UsbdStartCtrlr')
+code += r'''
+void check(){
+ for(unsigned controller=0;controller<2;++controller)
+ for(unsigned regulator=0;regulator<2;++regulator){
+  regs={0,0,1,0xFFFF,0,0};peripheralReady=controller;regulatorReady=regulator;
+  applies=reverts=peripheralWaits=regulatorWaits=clearedIrqs=0;
+  const bool success=controller && regulator;
+  assert(UsbdStartCtrlr()==success && regs.ENABLE==unsigned(success));
+  assert(applies==1 && reverts==1 && peripheralWaits==1);
+  assert(regulatorWaits==controller && clearedIrqs==unsigned(success));
+  if(success)assert(!regs.EVENTS_USBRESET && regs.INTENCLR==0xFFFF &&
+   regs.INTENSET==USBD_INTEN_USBRESET_Msk);
+  else assert(regs.EVENTS_USBRESET && !regs.INTENCLR && !regs.INTENSET);
+ }
+ puts("PASS: startup restores errata once, disables on either timeout, and arms IRQ only when both ready");
+}
+}
+namespace clock_request {
+#define SOFTDEVICE_PRESENT 1
+constexpr uint32_t NRF_SUCCESS=0,NRFX_USBD_XTAL_WAIT_LOOPS=3;
+constexpr uint32_t CLOCK_HFCLKSTAT_STATE_Msk=2,CLOCK_HFCLKSTAT_SRC_Msk=1;
+constexpr uint32_t CLOCK_HFCLKSTAT_SRC_Xtal=1,CLOCK_HFCLKSTAT_SRC_Pos=0;
+struct {uint32_t HFCLKSTAT,EVENTS_HFCLKSTARTED,TASKS_HFCLKSTART;} clock;
+auto *NRF_CLOCK=&clock;
+bool requestOK,pollOK,running;
+unsigned requested,released,polls;
+bool UsbdSdRunning(){return true;}
+uint32_t sd_clock_hfclk_request(){++requested;return requestOK?NRF_SUCCESS:1;}
+uint32_t sd_clock_hfclk_release(){++released;return NRF_SUCCESS;}
+uint32_t sd_clock_hfclk_is_running(uint32_t *value){
+ ++polls;*value=running;return pollOK?NRF_SUCCESS:1;
+}
+bool UsbdWaitReady(const volatile uint32_t*,uint32_t,uint32_t){assert(false);return false;}
+'''
+code += function('UsbdXtalRequest')
+code += r'''
+#undef SOFTDEVICE_PRESENT
+void check(){
+ for(unsigned request=0;request<2;++request)
+ for(unsigned poll=0;poll<2;++poll)
+ for(unsigned run=0;run<2;++run){
+  requestOK=request;pollOK=poll;running=run;requested=released=polls=0;
+  const bool success=request && poll && run;
+  assert(UsbdXtalRequest()==success && requested==1);
+  assert(released==unsigned(request && !success));
+  assert(polls==(request?(poll && !run?NRFX_USBD_XTAL_WAIT_LOOPS:1):0));
+ }
+ puts("PASS: SoftDevice clock request releases on poll error or timeout, but not on success or request failure");
+}
+}
+'''
+code += r'''
 int main(){
+ startup::check();clock_request::check();
  // Start/stop pairing and DevNo validation moved to the usb core
  // (s_UsbDevStarted); the controller owns only clock and peripheral state.
  for(unsigned attached=0;attached<2;++attached)

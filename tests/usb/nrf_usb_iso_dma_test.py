@@ -113,7 +113,7 @@ void __DSB(){
  }
 }
 void nRFUsbdHostResumeDetected(){}
-void nRFUsbdEmit(const UsbCtrlrEvt_t*){}
+void UsbDevProcessEvent(int,const UsbCtrlrEvt_t*){}
 void nRFUsbdRetryIsoComplete();
 void nRFUsbdResumeQueuedDmaLocked();
 void nRFUsbdDmaWait();
@@ -121,16 +121,16 @@ bool nRFUsbRegDataEpXfer(uint8_t,uint16_t);
 bool nRFUsbdQueXferDir(uint8_t,bool,uint16_t){assert(false);return false;}
 bool productionEpInXfer(int,uint8_t,uint8_t*,uint16_t);
 '''
-names = ['UsbdSync','nRFUsbdDmaEndBit','nRFUsbdDmaEndEvent',
+names = ['UsbdSync',
          'nRFUsbGetEpReg','nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaLock','nRFUsbdDmaUnlock',
          'nRFUsbdDmaStartLocked','nRFUsbdEpHwEnable','nRFUsbdSofRelease',
          'nRFUsbdResumeQueuedDma',
-         'nRFIsoDir','nRFIsoReg','nRFIsoHwEnable','nRFUsbdStartIsoNow',
-         'nRFUsbdServiceIso','nRFUsbRegIsoXfer','nRFUsbdProcessIsoComplete',
-         'nRFUsbdRetryIsoComplete','nRFUsbdFinishIsoDma','nRFUsbdIsoStart',
-         'nRFUsbdIsoService','nRFUsbdIsoFinishDma','nRFUsbdIsoSof',
+         'nRFIsoHwEnable','nRFUsbdIsoStart',
+         'nRFUsbdIsoService','nRFUsbdIsoXfer','nRFUsbdProcessIsoComplete',
+         'nRFUsbdRetryIsoComplete','nRFUsbdFinishIsoDma',
+         'nRFUsbdIsoFinishDma','nRFUsbdIsoSof',
          'nRFUsbdIsoEpClose','UsbCtrlrEpClose','nRFUsbdHandleSof',
-         'nRFUsbdIsoXfer','UsbCtrlrEpXfer']
+         'UsbCtrlrEpXfer']
 import re as _re
 flag_enum = _re.search(r'enum\s*\{[^}]*USBD_FLAG_ISO_IN_CMPL[^}]*\};', src)
 assert flag_enum, 'USBD_FLAG enum not found in driver source'
@@ -145,7 +145,7 @@ code += '\n'.join(function(n) for n in names)
 # Exercise the production entry point instead of the hostport inline adapter.
 code += function('UsbCtrlrEpInXfer').replace('UsbCtrlrEpInXfer(', 'productionEpInXfer(')
 code += r'''
-bool nRFUsbRegDataEpXfer(uint8_t ep,uint16_t length){return nRFUsbRegIsoXfer(ep,length);}
+bool nRFUsbRegDataEpXfer(uint8_t ep,uint16_t length){return nRFUsbdIsoXfer(ep,length);}
 void nRFUsbdDmaWait(){
  if(dmaBusy){assert(nRFUsbdFinishIsoDma(activeDir!=0));nRFUsbdDmaUnlock();}
 }
@@ -154,7 +154,7 @@ void nRFUsbdResumeQueuedDmaLocked(){
   (USBD_FLAG_HOST_RESUME|USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND);
  if(dmaBusy||(gate&USBD_FLAG_HOST_RESUME)||gate==USBD_FLAG_SUSPENDED)return;
  nRFUsbdDmaLock();
- if(!nRFUsbdStartIsoNow()){++regularStarts;nRFUsbdDmaUnlock();}
+ if(!nRFUsbdIsoStart()){++regularStarts;nRFUsbdDmaUnlock();}
 }
 void finish(bool in){
  assert(dmaBusy && activeDir==unsigned(in));
@@ -162,7 +162,7 @@ void finish(bool in){
  else{regs.ISOOUT.AMOUNT=regs.ISOOUT.MAXCNT;regs.EVENTS_ENDISOOUT=1;}
  const unsigned locks=dmaLocks,unlocks=dmaUnlocks;
  assert(nRFUsbdFinishIsoDma(in));assert(dmaBusy && regs.EPSTATUS.bits==0);
- if(!nRFUsbdStartIsoNow()){++regularStarts;nRFUsbdDmaUnlock();}
+ if(!nRFUsbdIsoStart()){++regularStarts;nRFUsbdDmaUnlock();}
  assert(dmaLocks==locks && dmaUnlocks==unlocks+unsigned(!dmaBusy));
 }
 void frame(uint16_t length=0,bool zero=false){
@@ -280,14 +280,14 @@ int main(){
  puts("PASS: paired ISO completion retry preserves partial/full queue state and delivers each callback once");
 
  init();frame();assert(isoStarts[1]==0); // no unsolicited IN ZLP/DMA
- assert(nRFUsbRegIsoXfer(0x88,9));assert(dmaBusy && isoStarts[1]==1);
+ assert(nRFUsbdIsoXfer(0x88,9));assert(dmaBusy && isoStarts[1]==1);
  assert(!nRFUsbdFinishIsoDma(true));assert(dmaBusy); // matching END required
  finish(true);assert(callbacks[1]==0);frame();assert(isoStarts[1]==1);
  AppEvtHandlerExec();assert(callbacks[1]==1 && lengths[1]==9 && !(ISO_BUSY()&2));
  frame();assert(isoStarts[1]==1); // never retransmit previous payload
  puts("PASS: ISO IN requires a request, retires only at END, completes once, never repeats old data");
 
- init();assert(nRFUsbRegIsoXfer(0x88,33));assert(!dmaBusy);
+ init();assert(nRFUsbdIsoXfer(0x88,33));assert(!dmaBusy);
  frame(17);assert(activeDir==1 && isoStarts[1]==1 && isoStarts[0]==0);
  finish(true);assert(dmaBusy && activeDir==0);finish(false);
  AppEvtHandlerExec();assert(callbacks[0]==1 && callbacks[1]==1);
@@ -312,15 +312,15 @@ int main(){
  AppEvtHandlerExec();assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
  puts("PASS: close/reopen discards old callback without releasing the new transfer");
 
- init();assert(nRFUsbRegIsoXfer(0x88,0));frame(0,true);
+ init();assert(nRFUsbdIsoXfer(0x88,0));frame(0,true);
  finish(true);finish(false);AppEvtHandlerExec();
  assert(callbacks[0]==1 && callbacks[1]==1 && lengths[0]==0 && lengths[1]==0);
- init();assert(nRFUsbRegIsoXfer(0x88,512));frame();finish(true);
+ init();assert(nRFUsbdIsoXfer(0x88,512));frame();finish(true);
  chainIn=true;AppEvtHandlerExec();assert(ISO_BUSY()&2);frame();finish(true);AppEvtHandlerExec();
  assert(callbacks[1]==2 && lengths[1]==9);
  puts("PASS: explicit ZLPs, 512-byte IN and callback submission are supported");
 
- init();s_Usbd.Flags|=USBD_FLAG_SUSPENDED;assert(nRFUsbRegIsoXfer(0x88,17));frame();assert(!dmaBusy);
+ init();s_Usbd.Flags|=USBD_FLAG_SUSPENDED;assert(nRFUsbdIsoXfer(0x88,17));frame();assert(!dmaBusy);
  s_Usbd.Flags&=~(uint32_t)USBD_FLAG_SUSPENDED;frame();assert(dmaBusy);finish(true);AppEvtHandlerExec();
  assert(callbacks[1]==1);
  puts("PASS: suspended submission waits until resume");

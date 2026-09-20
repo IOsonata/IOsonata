@@ -31,8 +31,8 @@ iso = ISO.read_text(encoding="utf-8")
 
 
 open_ep = function_body(iso, "bool nRFUsbdIsoEpOpen(")
-start_iso = function_body(iso, "static bool nRFUsbdStartIsoNow(void)")
-service_iso = function_body(iso, "static void nRFUsbdServiceIso(void)")
+start_iso = function_body(iso, "bool nRFUsbdIsoStart(void)")
+service_iso = function_body(iso, "void nRFUsbdIsoService(void)")
 iso_sof = function_body(iso, "void nRFUsbdIsoSof(void)")
 finish_iso = function_body(iso, "static bool nRFUsbdFinishIsoDma(bool In)")
 interrupt = function_body(base, 'extern "C" void USBD_IRQHandler(void)')
