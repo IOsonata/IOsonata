@@ -964,13 +964,16 @@ static void nRFUsbdBusReset(void)
 	NRF_USBD->EPOUTEN = 1UL;
 	NRF_USBD->EPINEN = 1UL;
 
-	for (uint8_t epNum = 0; epNum < NRFX_USBD_DATA_EP_COUNT; epNum++)
+	// STARTEPIN[8], STARTISOIN, STARTEPOUT[8] and STARTISOOUT are eighteen
+	// consecutive task registers; clear them in one pass.
+	static_assert(offsetof(NRF_USBD_Type, TASKS_STARTISOOUT) -
+		offsetof(NRF_USBD_Type, TASKS_STARTEPIN) == 17U * sizeof(uint32_t),
+		"USBD start task layout");
+	volatile uint32_t *pTask = &NRF_USBD->TASKS_STARTEPIN[0];
+	for (uint8_t i = 0; i < 18U; i++)
 	{
-		NRF_USBD->TASKS_STARTEPIN[epNum] = 0;
-		NRF_USBD->TASKS_STARTEPOUT[epNum] = 0;
+		pTask[i] = 0;
 	}
-	NRF_USBD->TASKS_STARTISOIN = 0;
-	NRF_USBD->TASKS_STARTISOOUT = 0;
 
 	const uint32_t epStatus = NRF_USBD->EPSTATUS;
 	NRF_USBD->EPSTATUS = epStatus;
@@ -1050,27 +1053,13 @@ static void nRFUsbdProcessEp0Complete(uint32_t Evt, void *pContext)
 	nRFUsbdResumeQueuedDma();
 }
 
-static void nRFUsbdProcessOutComplete(uint32_t Evt, void *pContext)
-{
-	const uint8_t epNum = (uint8_t)Evt;
-	const uint16_t amount = (uint16_t)(Evt >> 8U);
-
-	(void)pContext;
-
-	// UsbIntrf packetizes regular endpoints. One queued request is one DMA
-	// transaction, so only EP0 needs multi-packet completion processing.
-	nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_XFER_CMPL, amount,
-		USB_CTRLR_XFER_SUCCESS);
-}
-
 static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
 {
-	const uint8_t epNum = (uint8_t)Evt;
-	const uint16_t amount = (uint16_t)(Evt >> 8U);
-
 	(void)pContext;
-	nRFUsbEpRegisteredEvent((uint8_t)(epNum | USB_ENDPADDR_DIR_IN),
-		USB_CTRLR_EVT_XFER_CMPL, amount, USB_CTRLR_XFER_SUCCESS);
+
+	// The event carries the full IN endpoint address in its low byte.
+	nRFUsbEpRegisteredEvent((uint8_t)Evt, USB_CTRLR_EVT_XFER_CMPL,
+		(uint16_t)(Evt >> 8U), USB_CTRLR_XFER_SUCCESS);
 }
 
 #if NRFX_USBD_EP0_OUT_QUE
@@ -1102,20 +1091,14 @@ static __attribute__((noinline)) void nRFUsbdQueueEp0Complete(bool Out, uint16_t
 	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessEp0Complete);
 }
 
-static inline __attribute__((always_inline))
-void nRFUsbdQueueOutComplete(uint8_t EpNum, uint16_t Amount)
-{
-	const uint32_t evt = ((uint32_t)Amount << 8U) | EpNum;
-	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessOutComplete);
-}
-
 // InData is nonzero. Return only the status bit accepted by AppEvt; a full
 // queue leaves it in EPDATASTATUS for UsbCtrlrProcess to retry.
 static __attribute__((noinline))
 uint32_t nRFUsbdQueueInComplete(uint32_t InData)
 {
 	const uint32_t epNum = 31U - (uint32_t)__CLZ(InData);
-	const uint32_t evt = (NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum;
+	const uint32_t evt = (NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum |
+		USB_ENDPADDR_DIR_IN;
 	return (uint32_t)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete) << epNum;
 }
 
@@ -1405,8 +1388,10 @@ extern "C" void USBD_IRQHandler(void)
 			if (pQue != NULL)
 			{
 				pQue->EpNum = epNum;
-				pQue->Dir = 0U;
+				pQue->Dir = NRFX_USBD_QUE_OUT;
 				pQue->Len = pReg->MaxPacketSize;
+				// Initialize the destination even when this slot last held IN data.
+				pQue->pBuffer = pReg->pBuffer;
 			}
 			else
 			{

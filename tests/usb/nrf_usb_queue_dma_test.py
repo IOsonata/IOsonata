@@ -5,6 +5,8 @@ EP0 can wait behind regular DMA; its compact packet header is not a regular
 queue header. This register simulation checks that handoff and DMA ownership.
 Packet IN also runs the production UsbIntrf producer/completion and AppEvt
 dispatch, so ENDEP and host-consumption ownership are checked separately.
+Nonblocking OUT runs the production ISR and UsbIntrf RX completion against
+recycled DMA entries, including FIFO overflow and direct slots.
 
 Use --full-appevt to fill AppEvt before each packet completion and verify
 foreground retry without another USB interrupt.
@@ -45,9 +47,11 @@ code = r'''
 #include "app_evt_handler.h"
 // Bypass the legacy host adapter; exercise the production directional API.
 #define UsbCtrlrEpInXfer HostUsbCtrlrEpInXfer
+#define UsbCtrlrEpOutXfer HostUsbCtrlrEpOutXfer
 #include "usb/usb_intrf.h"
 #undef UsbCtrlrEpInXfer
-bool UsbCtrlrEpXfer(int,uint8_t,uint16_t){assert(false);return false;}
+#undef UsbCtrlrEpOutXfer
+bool nRFUsbdIsoXfer(uint8_t,uint16_t){assert(false);return false;}
 uint32_t irqMask;
 uint32_t DisableInterrupt(){auto old=irqMask;irqMask=1;return old;}
 void EnableInterrupt(uint32_t old){irqMask=old;}
@@ -55,9 +59,13 @@ unsigned __CLZ(uint32_t value){assert(value);return __builtin_clz(value);}
 using std::min;
 constexpr int NRFX_USBD_MAX_PACKET_SIZE=64;
 constexpr int NRFX_USBD_ISO_EP_NO=8;
+constexpr int NRFX_USBD_DATA_EP_COUNT=8;
 constexpr uint32_t NRFX_USBD_EASYDMA_BUSY_REG_BUSY=0x82;
 constexpr uint32_t NRFX_USBD_EASYDMA_BUSY_REG_CLEAR=0;
 constexpr uint32_t USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk=1;
+constexpr uint32_t USBD_INTEN_USBRESET_Msk=1U,USBD_INTEN_USBEVENT_Msk=1U<<22;
+constexpr uint32_t USBD_INTEN_EPDATA_Msk=1U<<24,USBD_INTEN_EP0SETUP_Msk=1U<<23;
+constexpr uint32_t USBD_INTEN_EP0DATADONE_Msk=1U<<10,USBD_INTEN_ENDEPOUT0_Msk=1U<<12;
 uint32_t dmaBusy;
 #define NRFX_USBD_EASYDMA_BUSY_REG dmaBusy
 struct Endpoint {uint32_t PTR,MAXCNT,AMOUNT;};
@@ -68,12 +76,15 @@ struct W1C {
  operator uint32_t() const{return bits;}
  void operator=(uint32_t value){bits&=~value;}
 };
-struct {
+struct NRF_USBD_Type {
  Endpoint EPIN[8],EPOUT[8];
- uint32_t TASKS_STARTEPIN[8],TASKS_STARTEPOUT[8];
+ uint32_t beforeTasks,TASKS_STARTEPIN[8],TASKS_STARTISOIN;
+ uint32_t TASKS_STARTEPOUT[8],TASKS_STARTISOOUT,afterTasks;
  uint32_t EVENTS_ENDEPIN[8],EVENTS_ENDEPOUT[8],EVENTS_EP0DATADONE,SHORTS,EVENTS_EPDATA;
+ uint32_t EVENTS_EP0SETUP,EVENTS_USBEVENT,EVENTS_SOF,EVENTS_USBRESET;
+ uint32_t EPOUTEN,EPINEN,INTEN,INTENCLR,INTENSET;
  struct {uint32_t EPOUT[8];} SIZE;
- W1C EPSTATUS,EPDATASTATUS;
+ W1C EPSTATUS,EPDATASTATUS,EVENTCAUSE;
 } regs;
 auto *NRF_USBD=&regs;
 void __DSB(){}
@@ -81,6 +92,15 @@ void UsbdSync(){}
 bool isoReady;
 unsigned isoChecks;
 bool nRFUsbdIsoStart(){++isoChecks;return isoReady;}
+bool nRFUsbdIsoFinishDma(uint32_t){assert(false);return false;}
+void nRFUsbdQueueEp0Complete(bool,uint16_t){assert(false);}
+void nRFUsbdHandleBusEvent(uint32_t){assert(false);}
+void nRFUsbdProcessEP0Setup(uint32_t,void*){assert(false);}
+void nRFUsbdHandleSof(){assert(false);}
+void nRFUsbdTryRemoteWake(){}
+void nRFUsbdTryEnterLowPower(){}
+unsigned resets;
+void nRFUsbdEmitSimple(UsbCtrlrEvtType_t event){assert(event==USB_CTRLR_EVT_RESET);++resets;}
 '''
 queue_enum = re.search(r'enum\s*\{[^}]*NRFX_USBD_QUE_IN_SCRATCH[^}]*\};', source)
 assert queue_enum
@@ -96,6 +116,8 @@ code += r'''
 #pragma pack(pop)
 struct {
  uint32_t Flags;
+ uint32_t IsoGeneration[2];
+ uint16_t IsoOutSize;
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue,hEp0Que;
  struct {struct {uint16_t TotalLen;} Ep0[2];} Ctrlr;
@@ -107,14 +129,17 @@ alignas(8) uint8_t ep0Mem[CFIFO_TOTAL_MEMSIZE(4,sizeof(nRFEPPkt_t))];
 code += '\n'.join(function(name) for name in [
     'nRFUsbdDmaActive', 'nRFUsbdDmaUnlock', 'nRFUsbdDmaStartLocked', 'nRFUsbdRetireDma',
     'nRFUsbdEp0InProgram', 'nRFUsbdStartDmaNow', 'nRFUsbdStartQueuedDma',
-    'nRFUsbdResumeQueuedDmaLocked', 'UsbCtrlrEpInXfer',
+    'nRFUsbdResumeQueuedDmaLocked', 'nRFUsbdQueXferDir', 'UsbCtrlrEpXfer',
+    'UsbCtrlrEpInXfer', 'UsbCtrlrEpOutXfer',
     'nRFUsbEpDir', 'nRFUsbGetEpReg', 'nRFUsbEpRegisteredEvent',
     'nRFUsbdProcessInComplete', 'nRFUsbdQueueInComplete', 'UsbCtrlrEp0Send',
-    'UsbCtrlrProcess'])
+    'UsbCtrlrProcess', 'UsbCtrlrEpAlloc', 'nRFUsbdProcessOutData',
+    'nRFUsbdResetState', 'nRFUsbdBusReset', 'USBD_IRQHandler'])
 code += '\n'.join(function(name, intrf_source) for name in [
     'UsbIntrfSetTxIdle', 'UsbIntrfTakeTx', 'UsbIntrfDirectClear',
     'UsbIntrfTxFailure', 'UsbIntrfEpSendPktMode', 'UsbIntrfTxPackets',
-    'UsbIntrfCtrlrInEvent'])
+    'UsbIntrfCtrlrInEvent', 'UsbIntrfDirectReady', 'UsbIntrfDirectRxComplete',
+    'UsbIntrfCtrlrOutEvent', 'UsbIntrfRxData', 'UsbIntrfRxDirect'])
 # Exercise the actual ISR acknowledgement block, not a hand-coded queue call.
 start = source.index('if (NRF_USBD->EVENTS_EPDATA != 0U ||')
 end = source.index('{', start) + 1
@@ -126,7 +151,7 @@ code += '\nvoid dataEvent(){const auto state=DisableInterrupt();uint8_t outEp=0;
 code += source[start:end] + '\nEnableInterrupt(state);}\n'
 code += r'''
 void init(){
- regs={};dmaBusy=0;isoReady=false;isoChecks=0;irqMask=0;
+ regs={};dmaBusy=0;isoReady=false;isoChecks=0;irqMask=0;resets=0;
  s_Usbd.Flags=0;
  assert(AppEvtHandlerInit(nullptr,0));
  memset(ep0Mem,0xA5,sizeof(ep0Mem));
@@ -134,6 +159,7 @@ void init(){
  s_Usbd.hEp0Que=CFifoInit(ep0Mem,sizeof(ep0Mem),sizeof(nRFEPPkt_t),true);
  assert(s_Usbd.hQue && s_Usbd.hEp0Que);
 }
+void interrupt(){const auto state=DisableInterrupt();USBD_IRQHandler();EnableInterrupt(state);}
 void retire(unsigned ep,bool in){
  const unsigned bit=ep+(in?0:16);
  auto &event=in?regs.EVENTS_ENDEPIN[ep]:regs.EVENTS_ENDEPOUT[ep];
@@ -196,6 +222,102 @@ int main(int argc,char **argv){
   assert(CFifoUsed(s_Usbd.hQue)==0 && CFifoUsed(fifo)==64 && CFifoPeek(fifo)==head);
  }
  puts("PASS: ISO priority, regular DMA sources, OUT length and ENDEP queue ownership");
+
+ // Poison every recycled DMA slot with a different destination. The actual
+ // OUT ISR must replace it before DMA starts, including when IN owns DMA.
+ for(auto mode:{USB_INTRF_MODE_BYTE,USB_INTRF_MODE_PACKET,USB_INTRF_MODE_DIRECT})
+ for(unsigned ep=1;ep<8;++ep){
+  init();
+  s_Usbd.hQue=CFifoInit(queueMem,sizeof(queueMem),sizeof(nRFUsbdQue_t),false);
+  alignas(8) uint8_t decoy[64];memset(decoy,0xA5,sizeof(decoy));
+  for(unsigned slot=0;slot<16;++slot){
+   auto *q=(nRFUsbdQue_t*)CFifoPut(s_Usbd.hQue);
+   q->EpNum=7;q->Dir=NRFX_USBD_QUE_IN_BUFFER;q->Len=64;q->pBuffer=decoy;
+   assert(CFifoGet(s_Usbd.hQue)==(uint8_t*)q);
+  }
+  alignas(8) struct {uint32_t before;uint8_t slot[USB_INTRF_PKT_BLKSIZE(64)];uint32_t after;} rx={};
+  rx.before=rx.after=0xAC1357DE;
+  auto *direct=(UsbPkt_t*)rx.slot;
+  alignas(8) uint8_t rxMem[USB_INTRF_RXMEM_SIZE(3,64)];
+  UsbDevIntrf_t intrf={};
+  intrf.DevIntrf.pDevData=&intrf;intrf.Mode=mode;intrf.EpNo=ep;intrf.Mps=64;
+  intrf.hRxFifo=CFifoInit(rxMem,sizeof(rxMem),USB_INTRF_PKT_BLKSIZE(64),false);
+  intrf.pRxBuffer=direct->Data;
+  if(mode==USB_INTRF_MODE_DIRECT)intrf.pRxDirectBuffer=direct;
+  UsbCtrlrEpAlloc(0,ep,intrf.pRxBuffer,false,UsbIntrfCtrlrOutEvent,&intrf);
+  s_Usbd.EpReg[ep-1][0].MaxPacketSize=64;
+  const unsigned received[]={0,1,9,63,64};
+  for(unsigned packet=0;packet<20;++packet){
+   const unsigned len=received[packet%5];
+   assert(UsbCtrlrEpInXfer(0,7,data,7));
+   regs.SIZE.EPOUT[ep]=len;regs.EPDATASTATUS.bits=1U<<(ep+16);
+   regs.EVENTS_EPDATA=1;interrupt();
+   assert(CFifoUsed(s_Usbd.hQue)==2 && !regs.EPDATASTATUS.bits);
+   assert(!intrf.RxPending);
+   regs.EPSTATUS.bits=1U<<7;regs.EVENTS_ENDEPIN[7]=1;interrupt();
+   auto *q=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
+   assert(q && q->EpNum==ep && q->Dir==NRFX_USBD_QUE_OUT && q->Len==64);
+   assert(q->pBuffer==intrf.pRxBuffer);
+   assert(regs.EPOUT[ep].PTR==uint32_t(uintptr_t(intrf.pRxBuffer)));
+   assert(regs.EPOUT[ep].MAXCNT==len && dmaBusy==0x82);
+   memset(q->pBuffer,0x80+packet,len); // Simulated host payload through EasyDMA.
+   regs.EPOUT[ep].AMOUNT=len;regs.EPSTATUS.bits=1U<<(ep+16);
+   regs.EVENTS_ENDEPOUT[ep]=1;interrupt();
+   assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==0);
+   assert(!regs.EVENTS_ENDEPOUT[ep] && !regs.EPSTATUS.bits);
+   assert(rx.before==0xAC1357DE && rx.after==0xAC1357DE);
+   for(auto byte:decoy)assert(byte==0xA5);
+   if(mode==USB_INTRF_MODE_DIRECT){
+    assert(UsbIntrfDirectReady(direct) && direct->Hdr.Length==len);
+    assert(intrf.RxDropCnt==packet);
+   }else{
+    assert(CFifoUsed(intrf.hRxFifo)==int(std::min(packet+1,3U)));
+    auto *oldest=(UsbPkt_t*)CFifoPeek(intrf.hRxFifo);
+    const unsigned first=packet<3?0:packet-2;
+    assert(oldest->Hdr.Length==received[first%5]);
+    for(unsigned i=0;i<oldest->Hdr.Length;++i)assert(oldest->Data[i]==0x80+first);
+   }
+  }
+  uint8_t output[192]={};
+  if(mode==USB_INTRF_MODE_DIRECT){
+   assert(UsbIntrfRxDirect(&intrf.DevIntrf,output,sizeof(output))==64);
+   for(unsigned i=0;i<64;++i)assert(output[i]==0x80+19);
+   assert(!UsbIntrfDirectReady(direct));
+  }else{
+   assert(intrf.hRxFifo->DropCnt==17);
+   assert(UsbIntrfRxData(&intrf.DevIntrf,output,sizeof(output))==9+63+64);
+   unsigned offset=0;
+   for(unsigned packet=17;packet<20;++packet)
+    for(unsigned i=0;i<received[packet%5];++i)assert(output[offset++]==0x80+packet);
+   assert(CFifoUsed(intrf.hRxFifo)==0);
+  }
+ }
+ puts("PASS: nonblocking OUT EP1-7 replaces stale DMA destinations and receives full/short/ZLP");
+ puts("      in byte, packet and direct modes; FIFO and direct overwrite policies are preserved");
+
+ // The reset loop must cover all eighteen start tasks and no adjacent task.
+ init();dmaBusy=0x82;
+ for(unsigned ep=0;ep<8;++ep)regs.TASKS_STARTEPIN[ep]=regs.TASKS_STARTEPOUT[ep]=0xFFFFFFFF;
+ regs.TASKS_STARTISOIN=regs.TASKS_STARTISOOUT=0xFFFFFFFF;
+ regs.beforeTasks=0x12345678;regs.afterTasks=0x87654321;
+ regs.EPSTATUS.bits=0x01010101;regs.EPDATASTATUS.bits=0x01FF01FF;
+ regs.EVENTCAUSE.bits=0xFFFF;regs.EVENTS_USBEVENT=1;regs.INTEN=0xFFFFFFFF;
+ s_Usbd.IsoGeneration[0]=4;s_Usbd.IsoGeneration[1]=8;s_Usbd.IsoOutSize=33;
+ assert(CFifoPut(s_Usbd.hQue) && CFifoPut(s_Usbd.hEp0Que));
+ regs.EVENTS_USBRESET=1;interrupt();
+ assert(resets==1 && !dmaBusy && !regs.EVENTS_USBRESET);
+ for(unsigned ep=0;ep<8;++ep)assert(!regs.TASKS_STARTEPIN[ep] && !regs.TASKS_STARTEPOUT[ep]);
+ assert(!regs.TASKS_STARTISOIN && !regs.TASKS_STARTISOOUT);
+ assert(regs.beforeTasks==0x12345678 && regs.afterTasks==0x87654321);
+ assert(!regs.EPSTATUS.bits && !regs.EPDATASTATUS.bits && !regs.EVENTCAUSE.bits);
+ assert(!regs.EVENTS_USBEVENT && regs.EPOUTEN==1 && regs.EPINEN==1);
+ assert(regs.INTENCLR==0xFFFFFFFF && regs.INTENSET==(USBD_INTEN_USBRESET_Msk |
+  USBD_INTEN_USBEVENT_Msk | USBD_INTEN_EPDATA_Msk | USBD_INTEN_EP0SETUP_Msk |
+  USBD_INTEN_EP0DATADONE_Msk | USBD_INTEN_ENDEPOUT0_Msk));
+ assert(CFifoUsed(s_Usbd.hQue)==0 && CFifoUsed(s_Usbd.hEp0Que)==0);
+ assert(s_Usbd.Flags==USBD_FLAG_MAC_AWAKE && !s_Usbd.IsoOutSize);
+ assert(s_Usbd.IsoGeneration[0]==5 && s_Usbd.IsoGeneration[1]==9);
+ puts("PASS: bus reset clears all regular/ISO start tasks and preserves adjacent registers");
 
  // Three TX slots exercise physical wrap; repeated batches wrap hQue too.
  // Packet data stays owned even when ENDEP has freed the DMA queue slot.
