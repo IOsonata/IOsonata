@@ -263,6 +263,11 @@ bool nRFUsbdIsoStart(void)
 	return nRFUsbdStartIsoNow();
 }
 
+void nRFUsbdIsoService(void)
+{
+	nRFUsbdServiceIso();
+}
+
 bool nRFUsbdIsoFinishDma(uint32_t DmaStatus)
 {
 	if (DmaStatus == 0x00000100U)

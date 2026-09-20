@@ -49,11 +49,12 @@ regular = regular[:regular.index("if (NRF_USBD->EVENTS_USBEVENT")]
 assert regular.index("nRFUsbdRetireDma(statusBit)") < regular.index(
     "nRFUsbEpRegisteredEvent("
 )
-assert "nRFUsbdStartQueuedDma();" not in regular
-assert interrupt.index("nRFUsbEpRegisteredEvent(") < interrupt.index(
-    "nRFUsbdResumeQueuedDmaLocked();"
+assert regular.index("nRFUsbEpRegisteredEvent(") < regular.index(
+    "nRFUsbdStartQueuedDma();"
 )
-assert interrupt.count("nRFUsbdResumeQueuedDmaLocked();") == 1
+assert interrupt.index("nRFUsbdStartQueuedDma();") < interrupt.index(
+    "if (NRF_USBD->EVENTS_EPDATA != 0U ||"
+), "queued DMA must overlap EPDATA/SOF processing, not wait for the ISR tail"
 assert "nRFUsbdQueueInComplete" not in regular
 assert interrupt.index("const uint32_t inData = dataStatus & 0xFEU;") < interrupt.index(
     "nRFUsbdQueueInComplete("

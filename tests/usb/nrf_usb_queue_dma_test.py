@@ -102,6 +102,7 @@ void UsbdSync(){}
 bool isoReady;
 unsigned isoChecks;
 bool nRFUsbdIsoStart(){++isoChecks;return isoReady;}
+void nRFUsbdIsoService(){if(!dmaBusy && isoReady)(void)nRFUsbdIsoStart();}
 bool nRFUsbdIsoFinishDma(uint32_t){assert(false);return false;}
 void nRFUsbdQueueEp0Complete(bool,uint16_t){assert(false);}
 void nRFUsbdHostResumeDetected();
@@ -156,7 +157,7 @@ code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
     'UsbCtrlrEpInXfer', 'UsbCtrlrEpOutXfer',
     'nRFUsbEpDir', 'nRFUsbGetEpReg', 'nRFUsbEpRegisteredEvent',
     'nRFUsbdProcessInComplete', 'nRFUsbdQueueInComplete', 'UsbCtrlrEp0Send',
-    'UsbCtrlrEpAlloc', 'nRFUsbdQueueOutData', 'nRFUsbdProcessOutData', 'UsbCtrlrProcess',
+    'UsbCtrlrEpAlloc', 'nRFUsbdProcessOutData', 'UsbCtrlrProcess',
     'UsbdIsForceNormal', 'UsbdForceNormal', 'nRFUsbdTryRemoteWake',
     'nRFUsbdHostResumeDetected', 'nRFUsbdWakeAllowed', 'nRFUsbdSofAcquire',
     'nRFUsbdSofRelease', 'nRFUsbdHandleBusEvent', 'nRFUsbdHandleSof',
@@ -283,8 +284,8 @@ int main(int argc,char **argv){
  }
  puts("PASS: public DMA submission holds exclusion and restores the caller's IRQ mask");
 
- // Collect simultaneous events before selecting the next DMA owner.
- // One completed IN leaves another queued while a fresh SOF makes ISO ready.
+ // Restart an already queued transfer immediately after ENDEP, overlapping
+ // it with EPDATA/SOF work. ISO becoming ready later waits for that DMA.
  init();
  assert(UsbCtrlrEpInXfer(0,1,data,9));
  assert(UsbCtrlrEpInXfer(0,2,data+64,9));
@@ -294,12 +295,14 @@ int main(int argc,char **argv){
  regs.EPDATASTATUS.bits=1U<<19;regs.EVENTS_EPDATA=1;regs.SIZE.EPOUT[3]=9;
  isoAtSof=true;regs.EVENTS_SOF=1;isoChecks=0;
  interrupt();
- assert(isoChecks==1 && isoReady && !regs.TASKS_STARTEPIN[2]);
+ assert(isoChecks==1 && isoReady && regs.TASKS_STARTEPIN[2] && dmaBusy);
  assert(!regs.TASKS_STARTEPOUT[3] && !regs.EPDATASTATUS.bits);
  assert(CFifoUsed(s_Usbd.hQue)==2 && !regs.EVENTS_SOF);
+ retire(2,true);nRFUsbdResumeQueuedDmaLocked();
+ assert(isoChecks==2 && !regs.TASKS_STARTEPOUT[3]);
  isoReady=false;nRFUsbdResumeQueuedDmaLocked();
- assert(dmaBusy && regs.TASKS_STARTEPIN[2]);
- puts("PASS: simultaneous ENDEP, EPDATA and SOF preserve queue order and ISO priority");
+ assert(dmaBusy && regs.TASKS_STARTEPOUT[3]);
+ puts("PASS: ENDEP restarts queued DMA before EPDATA/SOF; ready ISO wins the next handoff");
 
  // SETUP must defer control handling without starting another queued DMA.
  init();
@@ -313,8 +316,8 @@ int main(int argc,char **argv){
  AppEvtHandlerExec();assert(setups==1);
  puts("PASS: SETUP defers control handling and prevents a premature DMA restart");
 
- // Suspend gates the common scheduler until host resume. Low-power suspend
- // drains queued DMA before entering LOWPOWER; ordinary suspend retains it.
+ // Suspend blocks the early restart. Low-power suspend drains queued DMA
+ // before entering LOWPOWER; ordinary suspend retains it.
  for(bool lowPower:{false,true}){
   init();s_Usbd.LowPowerSuspend=lowPower;
   assert(UsbCtrlrEpInXfer(0,1,data,9));
@@ -323,6 +326,8 @@ int main(int argc,char **argv){
   regs.EVENTS_USBEVENT=1;regs.EVENTCAUSE.bits=USBD_EVENTCAUSE_SUSPEND_Msk;
   interrupt();
   assert(suspends==1 && CFifoUsed(s_Usbd.hQue)==1 && !regs.LOWPOWER);
+  // Deferred completions and new submissions use this same resume gate.
+  nRFUsbdResumeQueuedDma();
   assert(bool(dmaBusy)==lowPower);
   if(lowPower){
    regs.EPSTATUS.bits=1U<<2;regs.EVENTS_ENDEPIN[2]=1;interrupt();
@@ -334,7 +339,10 @@ int main(int argc,char **argv){
    assert(!resumes && (s_Usbd.Flags&USBD_FLAG_HOST_RESUME));
    regs.EVENTS_USBEVENT=1;regs.EVENTCAUSE.bits=USBD_EVENTCAUSE_USBWUALLOWED_Msk;
    interrupt();
-  }else assert(dmaBusy && regs.TASKS_STARTEPIN[2]);
+  }else{
+   nRFUsbdResumeQueuedDma();
+   assert(dmaBusy && regs.TASKS_STARTEPIN[2]);
+  }
   assert(resumes==1 && !(s_Usbd.Flags&USBD_FLAG_HOST_RESUME));
  }
  // USBWUALLOWED permits remote wake; a simultaneous SOF means the host has
