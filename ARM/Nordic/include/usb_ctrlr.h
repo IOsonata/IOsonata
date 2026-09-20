@@ -308,14 +308,16 @@ enum
 
 typedef struct __nRF_Usbd_State
 {
+	// Small configuration offsets and a transfer block before queue metadata
+	// let Thumb use shorter loads/stores without adding padding.
+	uint8_t IntPrio;
+	bool LowPowerSuspend;
+	uint16_t IsoOutSize;
+	nRFUsbdCtrlr_t Ctrlr;
 	volatile uint32_t Flags;
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;
 	uint32_t IsoGeneration[2];
-	uint16_t IsoOutSize;
-	uint8_t IntPrio;
-	bool LowPowerSuspend;
-	nRFUsbdCtrlr_t Ctrlr;
 	// Non-control endpoints 1-8; EP0 uses Ctrlr.Ep0 above.
 	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT - 1][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
