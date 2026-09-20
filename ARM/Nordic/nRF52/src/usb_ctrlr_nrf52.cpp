@@ -1116,64 +1116,60 @@ extern "C" void USBD_IRQHandler(void)
 	switch (dmastatus)
 	{
 		case 0x00000001U: // EP0 IN
-			if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
+		{
+			if (NRF_USBD->EVENTS_EP0DATADONE == 0U)
+				break;
+
+			NRF_USBD->EVENTS_EP0DATADONE = 0U;
+			NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
+			NRF_USBD->EPSTATUS = dmastatus;
+			__DSB();
+
+			if (NRF_USBD->EVENTS_EP0SETUP != 0U)
 			{
-				NRF_USBD->EVENTS_EP0DATADONE = 0U;
-				NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
-				NRF_USBD->EPSTATUS = dmastatus;
-				__DSB();
-
-				if (NRF_USBD->EVENTS_EP0SETUP != 0U)
-				{
-					nRFUsbdDmaUnlock();
-					break;
-				}
-
-				(void)CFifoGet(s_Usbd.hEp0Que);
-				nRFEPPkt_t *p =
-					(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
-				if (p != NULL)
-				{
-					nRFUsbdEp0InStart(p);
-				}
-				else
-				{
-					nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN,
-						s_Usbd.Ctrlr.Ep0[1].TotalLen);
-					goto dmaComplete;
-				}
+				nRFUsbdDmaUnlock();
+				break;
 			}
-			break;
 
+			(void)CFifoGet(s_Usbd.hEp0Que);
+			nRFEPPkt_t *p = (nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
+			if (p != NULL)
+			{
+				nRFUsbdEp0InStart(p);
+				break;
+			}
+
+			nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, s_Usbd.Ctrlr.Ep0[1].TotalLen);
+			goto dmaComplete;
+		}
 		case 0U:
 			// OUT data-ready may arrive while the DMA channel is idle.
-			if (NRF_USBD->EVENTS_EP0DATADONE != 0U && !nRFUsbdDmaActive())
-			{
-				nRFUsbdDmaLock();
-				goto dmaComplete;
-			}
-			break;
+			if (NRF_USBD->EVENTS_EP0DATADONE == 0U || nRFUsbdDmaActive())
+				break;
+			nRFUsbdDmaLock();
+			goto dmaComplete;
 
 		case 0x00010000U: // EP0 OUT
-			if (NRF_USBD->EVENTS_ENDEPOUT[0] != 0U)
-			{
-				NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
-				NRF_USBD->EPSTATUS = dmastatus;
-				__DSB();
+		{
+			if (NRF_USBD->EVENTS_ENDEPOUT[0] == 0U)
+				break;
 
-				if (NRF_USBD->EVENTS_EP0SETUP == 0U)
-				{
-					nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Ep0[0];
-					const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
-					pXfer->ActualLen += amount;
-					nRFUsbdEmitXfer(0U, amount);
-					if (amount == NRFX_USBD_MAX_PACKET_SIZE &&
-						pXfer->ActualLen < pXfer->TotalLen)
-						nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
-				}
+			NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
+			NRF_USBD->EPSTATUS = dmastatus;
+			__DSB();
+
+			if (NRF_USBD->EVENTS_EP0SETUP != 0U)
 				goto dmaComplete;
-			}
-			break;
+
+			nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Ep0[0];
+			const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
+			pXfer->ActualLen += amount;
+			nRFUsbdEmitXfer(0U, amount);
+			if (amount == NRFX_USBD_MAX_PACKET_SIZE &&
+				pXfer->ActualLen < pXfer->TotalLen)
+				nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
+			goto dmaComplete;
+		}
 		case 0x00000100U: // ISO IN
 		case 0x01000000U: // ISO OUT
 			if (nRFUsbdIsoFinishDma != nullptr &&
