@@ -129,8 +129,14 @@ struct {
 } s_Usbd;
 alignas(8) uint8_t queueMem[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
 alignas(8) uint8_t ep0Mem[CFIFO_TOTAL_MEMSIZE(4,sizeof(nRFEPPkt_t))];
+uint8_t *checkedDmaQueuePut(hCFifo_t fifo){
+ assert(irqMask==1); // Queue publication and initialization exclude the ISR.
+ return CFifoPut(fifo);
+}
 '''
-code += '\n'.join(function(name) for name in [
+code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
+    if name in ('nRFUsbdQueXferDir', 'UsbCtrlrEpInXfer') else function(name)
+    for name in [
     'nRFUsbdDmaActive', 'nRFUsbdDmaUnlock', 'nRFUsbdDmaStartLocked', 'nRFUsbdRetireDma',
     'nRFUsbdEp0InProgram', 'nRFUsbdStartDmaNow', 'nRFUsbdStartQueuedDma',
     'nRFUsbdResumeQueuedDmaLocked', 'nRFUsbdResumeQueuedDma', 'nRFUsbdQueXferDir', 'UsbCtrlrEpXfer',
@@ -234,6 +240,27 @@ int main(int argc,char **argv){
   assert(CFifoUsed(s_Usbd.hQue)==0 && CFifoUsed(fifo)==64 && CFifoPeek(fifo)==head);
  }
  puts("PASS: ISO priority, regular DMA sources, OUT length and ENDEP queue ownership");
+
+ // Public submissions own exclusion through queue initialization and DMA
+ // restart, and restore the caller's mask on both success and refusal.
+ for(unsigned masked:{0U,1U}){
+  init();irqMask=masked;
+  s_Usbd.EpReg[1][1].pBuffer=data;
+  assert(UsbCtrlrEpXfer(0,0x82,9) && irqMask==masked && dmaBusy);
+  auto *entry=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
+  assert(entry->EpNum==2 && entry->Dir==NRFX_USBD_QUE_IN_BUFFER);
+  assert(entry->Len==9 && entry->pBuffer==data);
+  s_Usbd.EpReg[0][0].pBuffer=data+64;
+  assert(UsbCtrlrEpOutXfer(0,1,64) && irqMask==masked);
+  assert(CFifoUsed(s_Usbd.hQue)==2);
+  assert(!UsbCtrlrEpOutXfer(0,3,64) && irqMask==masked);
+  assert(CFifoUsed(s_Usbd.hQue)==2); // A withheld buffer publishes no entry.
+  retire(2,true);
+  entry=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
+  assert(entry->EpNum==1 && entry->Dir==NRFX_USBD_QUE_OUT);
+  assert(entry->Len==64 && entry->pBuffer==data+64);
+ }
+ puts("PASS: public DMA submission holds exclusion and restores the caller's IRQ mask");
 
  // Poison every recycled DMA slot with a different destination. The actual
  // OUT ISR must replace it before DMA starts, including when IN owns DMA.

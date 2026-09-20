@@ -766,26 +766,22 @@ static void nRFUsbdResumeQueuedDma(void)
 }
 
 /**
- * Put one DMA request on the queue. Filling the block runs with interrupts
- * off because CFifoPut publishes the slot before the caller writes it, and
- * the interrupt is the other producer. The caller resumes DMA after any
- * required EPDATASTATUS acknowledgement.
+ * Put one DMA request on the queue with interrupts already excluded by the
+ * caller: CFifoPut publishes the slot before the caller writes it. The caller
+ * resumes DMA after any required EPDATASTATUS acknowledgement.
  */
 static __attribute__((noinline)) bool nRFUsbdQueXferDir(uint8_t EpNum, bool In, uint16_t Len)
 {
-	const uint32_t state = DisableInterrupt();
 	uint8_t *pBuffer = EpNum == 0U ? NULL :
 		s_Usbd.EpReg[EpNum - 1U][In ? 1 : 0].pBuffer;
 	if (EpNum != 0U && !In && pBuffer == NULL)
 	{
-		EnableInterrupt(state);
 		return false;
 	}
 	hCFifo_t hQue = EpNum == 0U ? s_Usbd.hEp0Que : s_Usbd.hQue;
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(hQue);
 	if (pQue == NULL)
 	{
-		EnableInterrupt(state);
 		return false;
 	}
 
@@ -794,18 +790,19 @@ static __attribute__((noinline)) bool nRFUsbdQueXferDir(uint8_t EpNum, bool In, 
 	pQue->Len = Len;
 	pQue->pBuffer = pBuffer;
 
-	EnableInterrupt(state);
 	return true;
 }
 
 #if NRFX_USBD_EP0_OUT_QUE
 static void nRFUsbdQueueEp0Out(void)
 {
+	const uint32_t state = DisableInterrupt();
 	nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Ep0[0];
 
 	nRFUsbdQueXferDir(0U, false,
 				 (uint16_t)(pXfer->TotalLen - pXfer->ActualLen));
-	nRFUsbdResumeQueuedDma();
+	nRFUsbdResumeQueuedDmaLocked();
+	EnableInterrupt(state);
 }
 #endif
 
@@ -818,7 +815,7 @@ static void nRFUsbdQueueEp0In(void)
 	const uint16_t length = remaining < mps ? remaining : mps;
 
 	nRFUsbdQueXferDir(0U, true, length);
-	nRFUsbdResumeQueuedDma();
+	nRFUsbdResumeQueuedDmaLocked();
 }
 
 static void nRFUsbdResetState(void)
@@ -1700,8 +1697,10 @@ bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
 			nRFUsbdIsoXfer(EpAddr, Length);
 	}
 
+	const uint32_t state = DisableInterrupt();
 	const bool queued = nRFUsbdQueXferDir(epNum, USB_ENDPADDR_IS_IN(EpAddr), Length);
-	nRFUsbdResumeQueuedDma();
+	nRFUsbdResumeQueuedDmaLocked();
+	EnableInterrupt(state);
 	return queued;
 }
 
