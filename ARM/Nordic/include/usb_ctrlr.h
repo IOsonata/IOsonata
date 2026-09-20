@@ -325,8 +325,8 @@ typedef struct __nRF_Usbd_State
 
 extern nRFUsbdState_t s_Usbd;
 
-void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
-							 uint16_t Length, UsbCtrlrXferResult_t Result);
+void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
+							 UsbCtrlrEvtType_t Event, uint16_t Length);
 void nRFUsbdDmaUnlock(void);
 void nRFUsbdDmaStartLocked(volatile uint32_t *pTask, volatile uint32_t *pEnd);
 void nRFUsbdSofAcquire(void);

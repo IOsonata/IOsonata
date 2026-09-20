@@ -192,7 +192,7 @@ code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
     'nRFUsbdEp0StartPending', 'nRFUsbdStartQueuedDma',
     'nRFUsbdResumeQueuedDmaLocked', 'nRFUsbdResumeQueuedDma', 'nRFUsbdQueXferDir', 'UsbCtrlrEpXfer',
     'UsbCtrlrEpInXfer', 'UsbCtrlrEpOutXfer',
-    'nRFUsbEpDir', 'nRFUsbGetEpReg', 'nRFUsbEpRegisteredEvent',
+    'nRFUsbGetEpReg', 'nRFUsbEpRegisteredEvent',
     'nRFUsbdProcessInComplete', 'nRFUsbdQueueInComplete', 'UsbCtrlrEp0Send',
     'nRFUsbdNoDmaTask', 'nRFUsbdEmitXfer', 'UsbCtrlrEp0Xfer',
     'UsbCtrlrEpAlloc', 'nRFUsbdProcessOutData', 'UsbCtrlrProcess',

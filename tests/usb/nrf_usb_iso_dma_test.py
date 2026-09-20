@@ -121,7 +121,7 @@ bool nRFUsbRegDataEpXfer(uint8_t,uint16_t);
 bool nRFUsbdQueXferDir(uint8_t,bool,uint16_t){assert(false);return false;}
 bool productionEpInXfer(int,uint8_t,uint8_t*,uint16_t);
 '''
-names = ['UsbdSync','nRFUsbdDmaEndBit','nRFUsbdDmaEndEvent','nRFUsbdDir','nRFUsbEpDir',
+names = ['UsbdSync','nRFUsbdDmaEndBit','nRFUsbdDmaEndEvent',
          'nRFUsbGetEpReg','nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaLock','nRFUsbdDmaUnlock',
          'nRFUsbdDmaStartLocked','nRFUsbdEpHwEnable','nRFUsbdSofRelease',
          'nRFUsbdResumeQueuedDma',
@@ -169,8 +169,9 @@ void frame(uint16_t length=0,bool zero=false){
  ++regs.FRAMECNTR;regs.SIZE.ISOOUT=zero?USBD_SIZE_ISOOUT_ZERO_Msk:length;
  nRFUsbdHandleSof();
 }
-void callback(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,UsbCtrlrXferResult_t,void*){
+void callback(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,UsbCtrlrXferResult_t result,void*){
  assert(event==USB_CTRLR_EVT_XFER_CMPL && !irqMask);
+ assert(USB_ENDPADDR_NUM(ep)==8 && result==USB_CTRLR_XFER_SUCCESS);
  unsigned dir=USB_ENDPADDR_IS_IN(ep)?1:0;++callbacks[dir];lengths[dir]=length;
  if(!dir){
   assert(ISO_BUSY()&1);uint8_t copy[512];memcpy(copy,outBuffer,length);
@@ -197,6 +198,18 @@ void init(){
 }
 void dummy(uint32_t,void*){}
 int main(){
+ init();unsigned ready=0;
+ s_Usbd.EpReg[7][0].bBlocking=true;
+ s_Usbd.EpReg[7][0].pContext=&ready;
+ s_Usbd.EpReg[7][0].Handler=[](uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
+  UsbCtrlrXferResult_t result,void *context){
+  assert(ep==8 && event==USB_CTRLR_EVT_DRDY && length==0);
+  assert(result==USB_CTRLR_XFER_SUCCESS);++*(unsigned*)context;
+ };
+ frame(9);
+ assert(ready==1 && !isoStarts[0] && !dmaBusy);
+ puts("PASS: ISO DRDY dispatch preserves endpoint, event, success and registered context");
+
  alignas(8) uint8_t txMemory[CFIFO_TOTAL_MEMSIZE(128,1)];
  const uint16_t regularLengths[]={1,2,3,4,9,64};
  for(unsigned masked=0;masked<2;++masked)for(uint8_t ep=1;ep<8;++ep){

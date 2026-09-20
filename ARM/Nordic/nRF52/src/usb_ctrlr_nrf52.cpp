@@ -186,25 +186,21 @@ extern bool nRFUsbdIsoXfer(uint8_t EpAddr, uint16_t Length) __attribute__((weak)
 static void nRFUsbdHostResumeDetected(void);
 
 
-static inline __attribute__((always_inline))
-uint8_t nRFUsbEpDir(uint8_t EpAddr)
-{
-	return USB_ENDPADDR_IS_IN(EpAddr) ? 1U : 0U;
-}
-
 static __attribute__((noinline))
-nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpAddr)
+nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpNum, uint8_t Dir)
 {
-	return &s_Usbd.EpReg[USB_ENDPADDR_NUM(EpAddr) - 1U][nRFUsbEpDir(EpAddr)];
+	return &s_Usbd.EpReg[EpNum - 1U][Dir];
 }
 
-// Share callback dispatch across regular and ISO event paths.
+// Internal callers already know endpoint number and direction. Form the USB
+// address only for the registered callback; these events always report success.
 __attribute__((noinline))
-void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
-								 uint16_t Length, UsbCtrlrXferResult_t Result)
+void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
+	UsbCtrlrEvtType_t Event, uint16_t Length)
 {
-	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
-	pReg->Handler(EpAddr, Event, Length, Result, pReg->pContext);
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNum, Dir);
+	pReg->Handler(EpNum | (Dir * USB_ENDPADDR_DIR_IN), Event, Length,
+		USB_CTRLR_XFER_SUCCESS, pReg->pContext);
 }
 
 #ifdef SOFTDEVICE_PRESENT
@@ -467,12 +463,6 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
 		NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
 }
 
-
-static inline __attribute__((always_inline))
-uint8_t nRFUsbdDir(uint8_t EpAddr)
-{
-	return USB_ENDPADDR_IS_IN(EpAddr) ? 1U : 0U;
-}
 
 // USBD interrupt bits index the event registers from EVENTS_USBRESET.
 // Decode END once for endpoint open/close; EP0DATADONE separates regular
@@ -1080,9 +1070,9 @@ static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
 {
 	(void)pContext;
 
-	// The event carries the full IN endpoint address in its low byte.
-	nRFUsbEpRegisteredEvent((uint8_t)Evt, USB_CTRLR_EVT_XFER_CMPL,
-		(uint16_t)(Evt >> 8U), USB_CTRLR_XFER_SUCCESS);
+	// This callback handles IN; the event carries only the endpoint number.
+	nRFUsbEpRegisteredEvent((uint8_t)Evt, 1U,
+		USB_CTRLR_EVT_XFER_CMPL, (uint16_t)(Evt >> 8U));
 }
 
 #if NRFX_USBD_EP0_OUT_QUE
@@ -1135,8 +1125,7 @@ static __attribute__((noinline))
 uint32_t nRFUsbdQueueInComplete(uint32_t InData)
 {
 	const uint32_t epNum = 31U - (uint32_t)__CLZ(InData);
-	const uint32_t evt = (NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum |
-		USB_ENDPADDR_DIR_IN;
+	const uint32_t evt = (NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum;
 	return (uint32_t)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete) << epNum;
 }
 
@@ -1319,9 +1308,8 @@ extern "C" void USBD_IRQHandler(void)
 
 			if (statusBit >= 16U)
 			{
-				nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_XFER_CMPL,
-					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT,
-					USB_CTRLR_XFER_SUCCESS);
+				nRFUsbEpRegisteredEvent(epNum, 0U, USB_CTRLR_EVT_XFER_CMPL,
+					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 			}
 		}
 		dmaComplete:
@@ -1630,7 +1618,7 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type,
 		return false;
 	}
 
-	nRFUsbGetEpReg(EpAddr)->MaxPacketSize = MaxPacketSize;
+	nRFUsbGetEpReg(epNum, in)->MaxPacketSize = MaxPacketSize;
 	nRFUsbdEpHwEnable(epNum, in, true);
 
 	if (!in)
@@ -1670,7 +1658,7 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 	{
 		NRF_USBD->SIZE.EPOUT[epNum] = 0;
 	}
-	nRFUsbGetEpReg(EpAddr)->MaxPacketSize = 0U;
+	nRFUsbGetEpReg(epNum, in)->MaxPacketSize = 0U;
 	UsbdSync();
 }
 
@@ -1691,7 +1679,8 @@ void UsbCtrlrEpAlloc(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 					 UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	(void)DevNo;
-	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(USB_ENDPADDR_NUM(EpAddr),
+		USB_ENDPADDR_IS_IN(EpAddr));
 	pReg->pBuffer = pBuffer;
 	pReg->Handler = Handler;
 	pReg->pContext = pContext;

@@ -183,8 +183,6 @@ static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 		return;
 	}
 
-	const uint8_t epAddr = dir != 0U ?
-		USB_ENDPADDR_DIRIN(NRFX_USBD_ISO_EP_NO) : (uint8_t)NRFX_USBD_ISO_EP_NO;
 	const uint16_t amount = s_Usbd.Ctrlr.Iso[dir].ActualLen;
 	if (dir != 0U)
 	{
@@ -192,8 +190,8 @@ static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 	}
 	EnableInterrupt(state);
 
-	nRFUsbEpRegisteredEvent(epAddr, USB_CTRLR_EVT_XFER_CMPL,
-		amount, USB_CTRLR_XFER_SUCCESS);
+	nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, dir,
+		USB_CTRLR_EVT_XFER_CMPL, amount);
 
 	state = DisableInterrupt();
 	if (dir == 0U &&
@@ -302,8 +300,8 @@ void nRFUsbdIsoSof(void)
 						&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
 					if (pReg->bBlocking)
 					{
-						nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO,
-							USB_CTRLR_EVT_DRDY, 0U, USB_CTRLR_XFER_SUCCESS);
+						nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, 0U,
+							USB_CTRLR_EVT_DRDY, 0U);
 					}
 					else
 					{
