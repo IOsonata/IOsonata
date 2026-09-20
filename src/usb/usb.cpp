@@ -1335,7 +1335,7 @@ static void UsbDevProcessSetup(const UsbSetupData_t *pSetup)
 	}
 }
 
-static void UsbCoreHandleCtrlXfer(const UsbCtrlrXferEvt_t *pXfer)
+static void UsbCoreProcessEp0Complete(const UsbCtrlrXferEvt_t *pXfer)
 {
 	if (pXfer == nullptr || pXfer->Result != USB_CTRLR_XFER_SUCCESS)
 	{
@@ -1458,7 +1458,7 @@ void UsbDevProcessEvent(int DevNo, const UsbCtrlrEvt_t *pEvt)
 		case USB_CTRLR_EVT_XFER_CMPL:
 			if (USB_ENDPADDR_NUM(pEvt->Xfer.EpAddr) == 0)
 			{
-				UsbCoreHandleCtrlXfer(&pEvt->Xfer);
+				UsbCoreProcessEp0Complete(&pEvt->Xfer);
 			}
 			break;
 
