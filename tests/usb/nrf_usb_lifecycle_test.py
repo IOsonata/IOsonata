@@ -55,6 +55,8 @@ void AppEvtHandlerExec(){++dispatches;}
 uint32_t DisableInterrupt(){return 0;}
 void EnableInterrupt(uint32_t){}
 uint32_t nRFUsbdQueueInComplete(uint32_t){assert(false);return 0;}
+unsigned __CLZ(uint32_t){assert(false);return 0;}
+void nRFUsbdProcessOutData(uint32_t,void*){assert(false);}
 void init(){
  s_Usbd={6,false};
  cable=clockOK=readyOK=true;

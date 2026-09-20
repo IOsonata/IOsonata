@@ -133,17 +133,20 @@ alignas(8) uint8_t ep0Mem[CFIFO_TOTAL_MEMSIZE(4,sizeof(nRFEPPkt_t))];
 code += '\n'.join(function(name) for name in [
     'nRFUsbdDmaActive', 'nRFUsbdDmaUnlock', 'nRFUsbdDmaStartLocked', 'nRFUsbdRetireDma',
     'nRFUsbdEp0InProgram', 'nRFUsbdStartDmaNow', 'nRFUsbdStartQueuedDma',
-    'nRFUsbdResumeQueuedDmaLocked', 'nRFUsbdQueXferDir', 'UsbCtrlrEpXfer',
+    'nRFUsbdResumeQueuedDmaLocked', 'nRFUsbdResumeQueuedDma', 'nRFUsbdQueXferDir', 'UsbCtrlrEpXfer',
     'UsbCtrlrEpInXfer', 'UsbCtrlrEpOutXfer',
     'nRFUsbEpDir', 'nRFUsbGetEpReg', 'nRFUsbEpRegisteredEvent',
     'nRFUsbdProcessInComplete', 'nRFUsbdQueueInComplete', 'UsbCtrlrEp0Send',
-    'UsbCtrlrProcess', 'UsbCtrlrEpAlloc', 'nRFUsbdProcessOutData',
+    'UsbCtrlrEpAlloc', 'nRFUsbdProcessOutData', 'UsbCtrlrProcess',
     'nRFUsbdResetState', 'nRFUsbdBusReset', 'USBD_IRQHandler'])
+code += re.search(r'static constexpr uint16_t USB_INTRF_RX_DRDY[^;]+;', intrf_source).group(0)
+code += '\nvoid UsbIntrfCtrlrOutEvent(uint8_t,UsbCtrlrEvtType_t,uint16_t,UsbCtrlrXferResult_t,void*);\n'
 code += '\n'.join(function(name, intrf_source) for name in [
     'UsbIntrfSetTxIdle', 'UsbIntrfTakeTx', 'UsbIntrfDirectClear',
     'UsbIntrfTxFailure', 'UsbIntrfEpSendPktMode', 'UsbIntrfTxPackets',
     'UsbIntrfCtrlrInEvent', 'UsbIntrfDirectReady', 'UsbIntrfDirectRxComplete',
-    'UsbIntrfCtrlrOutEvent', 'UsbIntrfRxData', 'UsbIntrfRxDirect'])
+    'UsbIntrfRegisterRx', 'UsbIntrfReleaseRx', 'UsbIntrfCompleteRx', 'UsbIntrfRetryRx',
+    'UsbIntrfCtrlrOutEvent', 'UsbIntrfRxData', 'UsbIntrfRxDirect', 'UsbIntrfUnconfigure'])
 # Exercise the actual ISR acknowledgement block, not a hand-coded queue call.
 start = source.index('if (NRF_USBD->EVENTS_EPDATA != 0U ||')
 end = source.index('{', start) + 1
@@ -156,7 +159,7 @@ code += source[start:end] + '\nEnableInterrupt(state);}\n'
 code += r'''
 void init(){
  regs={};dmaBusy=0;isoReady=false;isoChecks=0;irqMask=0;resets=0;
- s_Usbd.Flags=0;
+ s_Usbd.Flags=0;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  assert(AppEvtHandlerInit(nullptr,0));
  memset(ep0Mem,0xA5,sizeof(ep0Mem));
  s_Usbd.hQue=CFifoInit(queueMem,sizeof(queueMem),sizeof(nRFUsbdQue_t),dmaQueueBlocking);
@@ -237,6 +240,7 @@ int main(int argc,char **argv){
  for(bool blocking:{false,true})
  for(auto mode:{USB_INTRF_MODE_BYTE,USB_INTRF_MODE_PACKET,USB_INTRF_MODE_DIRECT})
  for(unsigned ep=1;ep<8;++ep){
+  if(blocking && mode!=USB_INTRF_MODE_DIRECT)continue; // Covered by lossless overflow below.
   init();
   alignas(8) uint8_t decoy[64];memset(decoy,0xA5,sizeof(decoy));
   for(unsigned slot=0;slot<16;++slot){
@@ -315,8 +319,98 @@ int main(int argc,char **argv){
    UsbIntrfRxData(&intrf.DevIntrf,output,sizeof(output)))==64);
   for(unsigned i=0;i<64;++i)assert(output[i]==0xE1);
  }
- puts("PASS: OUT EP1-7 queues DMA without DRDY for both blocking settings and all RX modes");
- puts("      full/short/ZLP, FIFO reject-new/replace-oldest, direct replacement and recovery");
+ puts("PASS: OUT EP1-7 queues DMA without DRDY in byte, packet and direct modes");
+ puts("      full/short/ZLP, nonblocking FIFO/direct replacement and recovery");
+
+ // Reproduce the hardware failure: four unread packets fill RX; the fifth
+ // completed packet must wait in its DMA buffer rather than disappear.
+ for(auto mode:{USB_INTRF_MODE_BYTE,USB_INTRF_MODE_PACKET})
+ for(unsigned ep:{1U,7U})
+ for(unsigned length:{0U,1U,9U,63U,64U})for(bool fullEvents:{false,true}){
+  init();
+  alignas(8) uint8_t rxMem[USB_INTRF_RXMEM_SIZE(4,64)];
+  alignas(4) uint8_t rx[64]={},other[64]={};
+  UsbDevIntrf_t intrf={};
+  intrf.DevIntrf.pDevData=&intrf;intrf.EpNo=ep;intrf.Mps=64;
+  intrf.Mode=mode;intrf.bBlocking=true;intrf.pRxBuffer=rx;
+  intrf.hRxFifo=CFifoInit(rxMem,sizeof(rxMem),USB_INTRF_PKT_BLKSIZE(64),true);
+  UsbCtrlrEpAlloc(0,ep,rx,true,outComplete,&intrf);
+  s_Usbd.EpReg[ep-1][0].MaxPacketSize=64;
+  const uint32_t outBit=1U<<(ep+16);
+  auto finish=[&](unsigned len,unsigned value){
+   assert(dmaBusy && regs.EPOUT[ep].PTR==uint32_t(uintptr_t(rx)));
+   memset(rx,value,len);
+   regs.EPOUT[ep].AMOUNT=len;regs.EPSTATUS.bits=outBit;
+   regs.EVENTS_ENDEPOUT[ep]=1;interrupt();
+  };
+  auto receive=[&](unsigned len,unsigned value){
+   regs.SIZE.EPOUT[ep]=len;regs.EPDATASTATUS.bits|=outBit;
+   regs.EVENTS_EPDATA=1;interrupt();finish(len,value);
+  };
+  for(unsigned p=0;p<4;++p)receive(64,0xA0+p);
+  if(fullEvents)while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
+  receive(length,0xE5);
+  assert(intrf.RxPending==length+2 && !intrf.RxDropCnt);
+  assert(s_Usbd.EpReg[ep-1][0].pBuffer==nullptr);
+  assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==0 && CFifoUsed(intrf.hRxFifo)==4);
+  UsbCtrlrProcess(0); // A retry while RX is still full must remain pending.
+  if(fullEvents)while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
+  // The next host packet remains in the endpoint. It cannot overwrite E5,
+  // even when both the RX FIFO and AppEvt are full.
+  regs.TASKS_STARTEPOUT[ep]=0;
+  regs.SIZE.EPOUT[ep]=64;regs.EPDATASTATUS.bits|=outBit;
+  regs.EVENTS_EPDATA=1;interrupt();
+  UsbCtrlrProcess(0);interrupt();
+  assert((regs.EPDATASTATUS.bits&outBit) && !regs.TASKS_STARTEPOUT[ep]);
+  assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==0);
+  for(unsigned i=0;i<length;++i)assert(rx[i]==0xE5);
+  // Unrelated OUT and IN endpoints continue while either EP1 or EP7 is held.
+  unsigned otherComplete=0;
+  UsbCtrlrEpAlloc(0,2,other,true,
+   [](uint8_t ep,UsbCtrlrEvtType_t evt,uint16_t len,UsbCtrlrXferResult_t,void *ctx){
+    assert(ep==2 && evt==USB_CTRLR_EVT_XFER_CMPL && len==1);++*(unsigned*)ctx;
+   },&otherComplete);
+  s_Usbd.EpReg[1][0].MaxPacketSize=64;
+  regs.SIZE.EPOUT[2]=1;regs.EPDATASTATUS.bits|=1U<<18;regs.EVENTS_EPDATA=1;
+  interrupt();UsbCtrlrProcess(0);
+  assert(regs.EPOUT[2].PTR==uint32_t(uintptr_t(other)));
+  regs.EPOUT[2].AMOUNT=1;regs.EPSTATUS.bits=1U<<18;regs.EVENTS_ENDEPOUT[2]=1;
+  interrupt();assert(otherComplete==1);
+  assert(UsbCtrlrEpInXfer(0,3,data,7));retire(3,true);
+  uint8_t output[256]={};
+  assert(UsbIntrfRxData(&intrf.DevIntrf,output,64)==64);
+  for(unsigned i=0;i<64;++i)assert(output[i]==0xA0);
+  assert(!intrf.RxPending && !intrf.RxDropCnt && CFifoUsed(intrf.hRxFifo)==4);
+  assert(s_Usbd.EpReg[ep-1][0].pBuffer==rx);
+  UsbCtrlrProcess(0);
+  assert(!regs.EPDATASTATUS.bits && CFifoUsed(s_Usbd.hQue)==1);
+  assert(dmaBusy && regs.TASKS_STARTEPOUT[ep]);
+  assert(UsbIntrfRxData(&intrf.DevIntrf,output,sizeof(output))==int(192+length));
+  for(unsigned p=0;p<3;++p)for(unsigned i=0;i<64;++i)assert(output[p*64+i]==0xA1+p);
+  for(unsigned i=0;i<length;++i)assert(output[192+i]==0xE5);
+  assert(CFifoUsed(intrf.hRxFifo)==0);
+  finish(64,0xF6);
+  assert(UsbIntrfRxData(&intrf.DevIntrf,output,64)==64);
+  for(unsigned i=0;i<64;++i)assert(output[i]==0xF6);
+  UsbCtrlrProcess(0);UsbCtrlrProcess(0);
+  assert(!intrf.RxDropCnt && !intrf.RxPending && CFifoUsed(intrf.hRxFifo)==0);
+  assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==0); // No duplicate AppEvt enqueue/copy.
+
+  // Cancellation releases the held buffer; queued retry callbacks become no-ops.
+  for(unsigned p=0;p<4;++p)receive(64,0xB0+p);
+  receive(length,0xE7);assert(intrf.RxPending==length+2);
+  UsbIntrfUnconfigure(&intrf);AppEvtHandlerExec();
+  assert(!intrf.RxPending && CFifoUsed(intrf.hRxFifo)==0);
+  assert(s_Usbd.EpReg[ep-1][0].pBuffer==rx);
+  // Exercise a failed put under the interface's nonblocking policy.
+  intrf.Mps=64;intrf.bBlocking=false;
+  for(unsigned p=0;p<4;++p)receive(64,0xC0+p);
+  receive(length,0xE8);AppEvtHandlerExec();
+  assert(intrf.RxDropCnt==1 && !intrf.RxPending);
+  assert(s_Usbd.EpReg[ep-1][0].pBuffer==rx && CFifoUsed(intrf.hRxFifo)==4);
+ }
+ puts("PASS: blocking RX overflow retries full/short/ZLP without loss or buffer overwrite");
+ puts("      other endpoints progress; full AppEvt recovers; cancellation and nonblocking rejection");
 
  // Force saturation even though sixteen entries exceed the fourteen regular
  // endpoint directions. Retry must preserve the active inline scratch and
@@ -340,7 +434,7 @@ int main(int argc,char **argv){
   s_Usbd.EpReg[0][0].MaxPacketSize=64;
   regs.SIZE.EPOUT[1]=len;regs.EPDATASTATUS.bits=1U<<17;regs.EVENTS_EPDATA=1;
   interrupt();
-  assert(!regs.EPDATASTATUS.bits && !regs.TASKS_STARTEPOUT[1]);
+  assert(regs.EPDATASTATUS.bits==(1U<<17) && !regs.TASKS_STARTEPOUT[1]);
   AppEvtHandlerDispatch(); // Still full: retry must put itself back in AppEvt.
   AppEvtHandlerExec(); // Remains bounded while DMA has not finished.
   assert(!UsbCtrlrEpInXfer(0,2,data,7) && !irqMask);
@@ -351,6 +445,7 @@ int main(int argc,char **argv){
   retire(7,true);
   AppEvtHandlerDispatch(); // One free slot accepts the deferred OUT.
   assert(CFifoUsed(s_Usbd.hQue)==16 && s_Usbd.hQue->PutIdx==put+1);
+  assert(!regs.EPDATASTATUS.bits);
   for(unsigned slot=1;slot<16;++slot){
    auto *q=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
    assert(q && q->EpNum==7 && q->Scratch==0xA5010203+slot);
@@ -469,7 +564,7 @@ int main(int argc,char **argv){
  puts("      ENDEP preserves TX data, host completion releases exactly one packet");
 
  // Seven pending IN endpoints exceed the default AppEvt capacity of four.
- // A full queue must leave all seven latched, while OUT status is serviced.
+ // A full AppEvt queue must leave all seven latched; OUT retry shares the status register.
  init();
  unsigned calls[8]={},amounts[8]={};
  struct Completion {unsigned *calls,*amounts;} completion={calls,amounts};
@@ -484,12 +579,13 @@ int main(int argc,char **argv){
   regs.EPIN[ep].AMOUNT=ep==7?0:ep*9;
  }
  while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
+ s_Usbd.EpReg[3][0].pBuffer=data;s_Usbd.EpReg[1][0].pBuffer=data+64;
  regs.EPDATASTATUS.bits=0xFEU | (1U<<20) | (1U<<18) | 0x10001U;
  regs.EVENTS_EPDATA=1;dataEvent();
- assert(regs.EPDATASTATUS.bits==(0xFEU | (1U<<18)));
- // No further USB interrupt is needed; retry must leave OUT status alone.
+ assert(regs.EPDATASTATUS.bits==(0xFEU | (1U<<20) | (1U<<18)));
+ // No further USB interrupt is needed; IN acknowledgements must not erase OUT requests.
  for(unsigned pass=0;pass<10;++pass)UsbCtrlrProcess(0);
- assert(regs.EPDATASTATUS.bits==(1U<<18));
+ assert(!regs.EPDATASTATUS.bits && CFifoUsed(s_Usbd.hQue)==2);
  for(unsigned ep=1;ep<8;++ep){
   assert(calls[ep]==1 && amounts[ep]==(ep==7?0:ep*9));
  }
@@ -500,7 +596,7 @@ int main(int argc,char **argv){
  regs.EPDATASTATUS=1U<<3;
  UsbCtrlrProcess(0);UsbCtrlrProcess(0);
  assert(calls[3]==1 && !regs.EPDATASTATUS.bits);
- puts("PASS: full AppEvt retry drains all seven IN completions once, preserves OUT status,");
+ puts("PASS: full AppEvt retry drains all seven IN completions once, also queues retained OUT requests once,");
  puts("      and honors cancellation by clearing the retained hardware status");
 }
 '''

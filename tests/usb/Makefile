@@ -54,6 +54,7 @@ BULK_SOURCES := \
 	$(ROOT)/src/usb/usbd_bulk.cpp \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -64,6 +65,7 @@ HID_SOURCES := \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_int.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -73,6 +75,7 @@ MSC_SOURCES := \
 	$(ROOT)/src/usb/usbd_msc.cpp \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/storage/diskio_impl.cpp \
 	$(ROOT)/src/cfifo.c
@@ -81,18 +84,21 @@ INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
 INTRF_SOURCES := \
 	usb_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/cfifo.c
 
 RX_EVENT_TARGET := $(BUILD_DIR)/usb_rx_event_test
 RX_EVENT_SOURCES := \
 	usb_rx_event_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/cfifo.c
 
 DIRECT_TARGET := $(BUILD_DIR)/usb_direct_intrf_test
 DIRECT_SOURCES := \
 	usb_direct_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/cfifo.c
 
 ISO_TARGET := $(BUILD_DIR)/usb_iso_intrf_test
@@ -100,6 +106,7 @@ ISO_SOURCES := \
 	usb_iso_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/cfifo.c
 
 ISO_DUPLEX_TARGET := $(BUILD_DIR)/usb_iso_intrf_duplex_test
@@ -107,6 +114,7 @@ ISO_DUPLEX_SOURCES := \
 	usb_iso_intrf_duplex_test.cpp \
 	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/cfifo.c
 
 INT_TARGET := $(BUILD_DIR)/usb_int_intrf_test
@@ -114,6 +122,7 @@ INT_SOURCES := \
 	usb_int_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_int.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/cfifo.c
 
 # Physical hardware validation. The Python runner uses python-libusb1 so it
@@ -157,6 +166,7 @@ PROBE_TARGET := $(BUILD_DIR)/tx_rate_probe
 PROBE_SOURCES := \
 	tx_rate_probe.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/cfifo.c
 
 SOF_TICKS ?= 500

@@ -297,11 +297,19 @@ The regular DMA queue rejects an enqueue when full, preserving queued and
 active transfers. An OUT request that cannot enter the queue is deferred to
 AppEvt, whose callback retries the enqueue directly without a DRDY callback.
 
-For BYTE/PACKET RX, CFifo owns the full-buffer policy: blocking rejects the
-new packet and non-blocking replaces the oldest. A rejected completion
-increments `RxDropCnt`. Blocking CFifo configuration does not pause regular
-nRF52 OUT reception. The generic DRDY path remains available to controllers
-that request a transfer through the interface before completing it.
+For BYTE/PACKET RX, a failed CFifo put defers the completion through AppEvt
+when `bBlocking` is true. The completed packet stays in the existing RX DMA
+buffer, which is withheld from the controller until the copy succeeds. The
+pending field retains its length, including zero-length packets. Reading RX
+also retries after freeing a slot, so a full AppEvt queue cannot lose that
+completion. A failed put with `bBlocking` false increments `RxDropCnt` and drops
+the packet. Successful non-blocking CFifo puts keep their replace-oldest policy.
+
+The nRF52 retains the next OUT request in `EPDATASTATUS` until it can enter the
+DMA queue, including while the registered RX buffer is withheld. AppEvt and
+foreground retries consume that status bit once before starting DMA. Other
+endpoints continue to use the shared DMA channel. The generic DRDY path remains
+available to controllers that request a transfer through the interface first.
 
 `UsbIntIntrf` contains no HID report or descriptor behavior. `UsbdHid` embeds
 it and owns the device-side HID descriptor, class requests and report policy.

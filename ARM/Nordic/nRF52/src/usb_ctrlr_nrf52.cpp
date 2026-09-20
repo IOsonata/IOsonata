@@ -768,11 +768,19 @@ static void nRFUsbdResumeQueuedDma(void)
 /**
  * Put one DMA request on the queue. Filling the block runs with interrupts
  * off because CFifoPut publishes the slot before the caller writes it, and
- * the interrupt is the other producer.
+ * the interrupt is the other producer. The caller resumes DMA after any
+ * required EPDATASTATUS acknowledgement.
  */
 static __attribute__((noinline)) bool nRFUsbdQueXferDir(uint8_t EpNum, bool In, uint16_t Len)
 {
 	const uint32_t state = DisableInterrupt();
+	uint8_t *pBuffer = EpNum == 0U ? NULL :
+		s_Usbd.EpReg[EpNum - 1U][In ? 1 : 0].pBuffer;
+	if (EpNum != 0U && !In && pBuffer == NULL)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
 	hCFifo_t hQue = EpNum == 0U ? s_Usbd.hEp0Que : s_Usbd.hQue;
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(hQue);
 	if (pQue == NULL)
@@ -784,10 +792,7 @@ static __attribute__((noinline)) bool nRFUsbdQueXferDir(uint8_t EpNum, bool In, 
 	pQue->EpNum = EpNum;
 	pQue->Dir = In ? NRFX_USBD_QUE_IN_BUFFER : NRFX_USBD_QUE_OUT;
 	pQue->Len = Len;
-	pQue->pBuffer = EpNum == 0U ? NULL :
-		s_Usbd.EpReg[EpNum - 1U][In ? 1 : 0].pBuffer;
-
-	nRFUsbdResumeQueuedDmaLocked();
+	pQue->pBuffer = pBuffer;
 
 	EnableInterrupt(state);
 	return true;
@@ -800,6 +805,7 @@ static void nRFUsbdQueueEp0Out(void)
 
 	nRFUsbdQueXferDir(0U, false,
 				 (uint16_t)(pXfer->TotalLen - pXfer->ActualLen));
+	nRFUsbdResumeQueuedDma();
 }
 #endif
 
@@ -812,6 +818,7 @@ static void nRFUsbdQueueEp0In(void)
 	const uint16_t length = remaining < mps ? remaining : mps;
 
 	nRFUsbdQueXferDir(0U, true, length);
+	nRFUsbdResumeQueuedDma();
 }
 
 static void nRFUsbdResetState(void)
@@ -1083,13 +1090,26 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 	const uint8_t epNum = (uint8_t)Evt;
 	(void)pContext;
 
-	const uint16_t len = s_Usbd.EpReg[epNum - 1U][0].MaxPacketSize;
-	if (!nRFUsbdQueXferDir(epNum, false, len))
+	const uint32_t state = DisableInterrupt();
+	const uint32_t bit = 1UL << (epNum + 16U);
+	// A latched OUT bit owns the request until DMA can be queued. AppEvt
+	// retries may overlap; only the first accepted enqueue consumes it.
+	if ((NRF_USBD->EPDATASTATUS & bit) != 0U)
 	{
-		const uint32_t state = DisableInterrupt();
-		(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
-		EnableInterrupt(state);
+		const uint16_t len = s_Usbd.EpReg[epNum - 1U][0].MaxPacketSize;
+		if (nRFUsbdQueXferDir(epNum, false, len))
+		{
+			// Acknowledge before starting DMA, which can admit the next packet.
+			NRF_USBD->EPDATASTATUS = bit;
+			__DSB();
+			nRFUsbdResumeQueuedDmaLocked();
+		}
+		else
+		{
+			(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
+		}
 	}
+	EnableInterrupt(state);
 }
 
 static __attribute__((noinline)) void nRFUsbdQueueEp0Complete(bool Out, uint16_t Amount)
@@ -1351,8 +1371,6 @@ extern "C" void USBD_IRQHandler(void)
 		if (outData != 0U)
 		{
 			outEp = (uint8_t)(31U - (uint32_t)__CLZ(outData));
-			servicedStatus |= 1UL << (outEp + 16U);
-
 		}
 
 		const uint32_t inData = dataStatus & 0xFEU;
@@ -1474,6 +1492,14 @@ void UsbCtrlrProcess(int DevNo)
 	{
 		NRF_USBD->EPDATASTATUS = nRFUsbdQueueInComplete(inData);
 		__DSB();
+	}
+	uint32_t outData = (NRF_USBD->EPDATASTATUS >> 16U) & 0xFEU;
+	while (outData != 0U)
+	{
+		const uint8_t epNum = (uint8_t)(31U - (uint32_t)__CLZ(outData));
+		outData &= ~(1UL << epNum);
+		// A held RX buffer must not starve another pending endpoint.
+		nRFUsbdProcessOutData(epNum, NULL);
 	}
 	EnableInterrupt(state);
 }
@@ -1674,7 +1700,9 @@ bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
 			nRFUsbdIsoXfer(EpAddr, Length);
 	}
 
-	return nRFUsbdQueXferDir(epNum, USB_ENDPADDR_IS_IN(EpAddr), Length);
+	const bool queued = nRFUsbdQueXferDir(epNum, USB_ENDPADDR_IS_IN(EpAddr), Length);
+	nRFUsbdResumeQueuedDma();
+	return queued;
 }
 
 bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)

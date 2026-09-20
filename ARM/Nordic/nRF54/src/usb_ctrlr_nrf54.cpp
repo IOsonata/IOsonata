@@ -46,6 +46,7 @@ SOFTWARE.
 #include "hal/nrf_ficr.h"
 
 #include "istddef.h"
+#include "app_evt_handler.h"
 #include "coredev/interrupt.h"
 #include "usb/usb.h"
 
@@ -1468,6 +1469,10 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	uint8_t *pDmaBuffer = epNum == 0U ? pBuffer :
 		nRFUsbGetEpReg(EpAddr)->pBuffer;
+	if (epNum != 0U && !USB_ENDPADDR_IS_IN(EpAddr) && pDmaBuffer == NULL)
+	{
+		return false;
+	}
 	nRF54UsbdXfer_t *pXfer = nRF54UsbdGetXfer(EpAddr);
 
 	pXfer->pBuffer = epNum == 0U ? pBuffer : NULL;
@@ -1697,6 +1702,7 @@ void UsbCtrlrProcess(int DevNo)
 	if (nRFUsbValidDevNo(DevNo))
 	{
 		nRFUsbPowerProcess();
+		AppEvtHandlerExec();
 	}
 }
 

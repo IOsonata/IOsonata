@@ -26,11 +26,12 @@ UsbIntrf registers the Data portion with the controller and uses the header as
 the single-slot ownership state.
 
 RX is event driven. USB_CTRLR_EVT_DRDY means data is ready in the controller to
-be retrieved. Controllers may also service OUT transfers directly. Byte and
-packet completions use CFifo's full-buffer policy: blocking rejects the new
-packet and non-blocking replaces the oldest packet. A rejected completion
-increments RxDropCnt. Direct completion publishes the single RX slot instead
-of placing data into a FIFO, replacing any unread packet.
+be retrieved. Controllers may also service OUT transfers directly. If a byte
+or packet completion cannot enter the RX CFifo, blocking mode retains its DMA
+buffer and retries through AppEvt. Non-blocking mode drops a rejected completion
+and increments RxDropCnt; ordinary non-blocking CFifo puts replace the oldest
+packet when full. Direct completion publishes the single RX slot instead of
+placing data into a FIFO, replacing any unread packet.
 
 For IN, byte and packet modes retain queued TX data until host consumption
 completes the endpoint transfer. Direct TxData copies one current packet into
@@ -149,9 +150,9 @@ struct __Usb_Dev_Interf {
 	UsbPkt_t *pTxDirectBuffer;
 	uint16_t BufferSize;
 	uint16_t Mps;
-	uint8_t EpNo;
-	bool bBlocking;
-	bool RxPending;
+	uint16_t RxPending;		//!< 0: idle, 1: DRDY, otherwise RX length + 2
+	uint8_t EpNo : 7;
+	bool bBlocking : 1;
 	UsbIntrfMode_t Mode;
 	EpSendFct_t EpSend;
 	void *pClassContext;
