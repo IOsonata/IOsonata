@@ -46,7 +46,7 @@ SOFTWARE.
 static uint8_t s_RegisteredEp[6];
 static int s_RegisteredEpCount;
 static int s_EpOpenCount;
-static int s_Ep0XferCount;
+static int s_Ep0EventCount;
 static uint8_t s_LastEp0Addr;
 static uint16_t s_LastEp0Length;
 
@@ -85,12 +85,20 @@ void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *, bool,
 	return;
 }
 bool UsbCtrlrEpXfer(int, uint8_t, uint16_t) { return true; }
-bool UsbCtrlrEp0Xfer(int, uint8_t EpAddr, uint8_t *, uint16_t Length)
+static bool RecordEp0(uint8_t EpAddr, uint16_t Length)
 {
-	s_Ep0XferCount++;
+	s_Ep0EventCount++;
 	s_LastEp0Addr = EpAddr;
 	s_LastEp0Length = Length;
 	return true;
+}
+int UsbCtrlrEp0Send(int, uint8_t *, int Length)
+{
+	return RecordEp0(USB_ENDPADDR_DIR_IN, Length) ? Length : -1;
+}
+bool UsbCtrlrEp0Status(int, uint8_t EpAddr)
+{
+	return RecordEp0(EpAddr, 0);
 }
 void UsbCtrlrEpStall(int, uint8_t) {}
 void UsbCtrlrEpClearStall(int, uint8_t) {}
@@ -244,7 +252,7 @@ int main(void)
 	}
 
 	Setup(USB_REQ_SET_ADDRESS, 5U);
-	if (s_Ep0XferCount != 1 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
+	if (s_Ep0EventCount != 1 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
 		s_LastEp0Length != 0U || UsbGetAddress(0) != 0U)
 	{
 		printf("CDC SET_ADDRESS setup failed\n");
@@ -258,7 +266,7 @@ int main(void)
 	}
 
 	Setup(USB_REQ_SET_CONFIGURATION, 1U);
-	if (s_Ep0XferCount != 2 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
+	if (s_Ep0EventCount != 2 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
 		s_LastEp0Length != 0U || !UsbConfigured(0) || s_EpOpenCount != 6 ||
 		pCdc0->IntrfData.Mps != USB_CTRLR_PKT_LEN_MAX(0, BULK) ||
 		((UsbdCdcDev_t *)s_Cdc1)->IntrfData.Mps != USB_CTRLR_PKT_LEN_MAX(0, BULK))
@@ -269,7 +277,7 @@ int main(void)
 	CompleteEp0In();
 
 	SetControlLineState(pCdc0->CtrlIfNo, USB_CDC_CTRL_LINE_STATE_DTR);
-	if (s_Ep0XferCount != 3 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
+	if (s_Ep0EventCount != 3 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
 		s_LastEp0Length != 0U || s_Cdc0.IsPortOpen())
 	{
 		printf("C++ CDC Control setup was not dispatched\n");

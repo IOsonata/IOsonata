@@ -81,7 +81,6 @@ bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
 		memcpy(s_InData, s_InBuffer, Length);
 	return true;
 }
-bool UsbCtrlrEp0Xfer(int, uint8_t, uint8_t *, uint16_t) { return true; }
 }
 
 static int s_Fail;

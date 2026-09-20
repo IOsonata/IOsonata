@@ -126,7 +126,6 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
 
 enum
 {
-	NRFX_USBD_XFER_EVT_OUT = 0x80U,
 	NRFX_USBD_QUE_OUT = 0U,
 	NRFX_USBD_QUE_IN_BUFFER = 1U,
 	NRFX_USBD_QUE_IN_FIFO = 2U,
@@ -510,6 +509,7 @@ static __attribute__((noinline)) void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t L
 	evt.Xfer.EpAddr = EpAddr;
 	evt.Xfer.Length = Length;
 	evt.Xfer.Result = USB_CTRLR_XFER_SUCCESS;
+	evt.Xfer.pBuffer = s_Usbd.Ep0Bounce;
 	UsbDevProcessEvent(0, &evt);
 }
 
@@ -717,13 +717,6 @@ __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 	nRFUsbdDmaLock();
 	nRFUsbdStartQueuedDma();
 }
-static void nRFUsbdResumeQueuedDma(void)
-{
-	const uint32_t state = DisableInterrupt();
-	nRFUsbdResumeQueuedDmaLocked();
-	EnableInterrupt(state);
-}
-
 /**
  * Put one regular DMA request on the queue with interrupts already excluded by the
  * caller: CFifoPut publishes the slot before the caller writes it. The caller
@@ -931,50 +924,6 @@ static void nRFUsbdBusReset(void)
 	nRFUsbdResetState();
 }
 
-static void nRFUsbdHandleEp0OutEnd(uint16_t TransferLen)
-{
-	nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Ep0[0];
-
-	if (pXfer->pBuffer != NULL)
-	{
-		if (TransferLen > 0U)
-		{
-			memcpy(pXfer->pBuffer, s_Usbd.Ep0Bounce, TransferLen);
-		}
-		pXfer->pBuffer += TransferLen;
-	}
-	pXfer->ActualLen += TransferLen;
-
-	if (TransferLen == NRFX_USBD_MAX_PACKET_SIZE &&
-		pXfer->ActualLen < pXfer->TotalLen)
-	{
-		nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
-	}
-	else
-	{
-		nRFUsbdEmitXfer(0U, pXfer->ActualLen);
-	}
-}
-
-
-static void nRFUsbdProcessEp0Complete(uint32_t Evt, void *pContext)
-{
-	const uint16_t amount = (uint16_t)(Evt >> 8U);
-
-	(void)pContext;
-
-	if ((Evt & NRFX_USBD_XFER_EVT_OUT) != 0U)
-	{
-		nRFUsbdHandleEp0OutEnd(amount);
-	}
-	else
-	{
-		nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, amount);
-	}
-
-	nRFUsbdResumeQueuedDma();
-}
-
 static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
 {
 	(void)pContext;
@@ -1010,13 +959,6 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 		}
 	}
 	EnableInterrupt(state);
-}
-
-static __attribute__((noinline)) void nRFUsbdQueueEp0Complete(bool Out, uint16_t Amount)
-{
-	const uint32_t evt = ((uint32_t)Amount << 8U) |
-		(Out ? (uint32_t)NRFX_USBD_XFER_EVT_OUT : 0U);
-	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessEp0Complete);
 }
 
 // InData is nonzero. Return only the status bit accepted by AppEvt; a full
@@ -1124,6 +1066,15 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	}
 
 	UsbDevProcessEvent(0, &evt);
+
+	if (evt.Type == USB_CTRLR_EVT_SETUP &&
+		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) == 0U &&
+		evt.Setup.wLength != 0U)
+	{
+		s_Usbd.Ctrlr.Ep0[0].TotalLen = evt.Setup.wLength;
+		NRF_USBD->SHORTS = 0U;
+		nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
+	}
 }
 
 // Callers exclude the USB ISR. Keep SETUP latched until AppEvt accepts it;
@@ -1187,14 +1138,20 @@ extern "C" void USBD_IRQHandler(void)
 				}
 				else
 				{
-					nRFUsbdDmaUnlock();
-					nRFUsbdQueueEp0Complete(false,
+					nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN,
 						s_Usbd.Ctrlr.Ep0[1].TotalLen);
+					goto dmaComplete;
 				}
 			}
 			break;
 
 		case 0U:
+			// OUT data-ready may arrive while the DMA channel is idle.
+			if (NRF_USBD->EVENTS_EP0DATADONE != 0U && !nRFUsbdDmaActive())
+			{
+				nRFUsbdDmaLock();
+				goto dmaComplete;
+			}
 			break;
 
 		case 0x00010000U: // EP0 OUT
@@ -1204,9 +1161,17 @@ extern "C" void USBD_IRQHandler(void)
 				NRF_USBD->EPSTATUS = dmastatus;
 				__DSB();
 
-				nRFUsbdDmaUnlock();
-				nRFUsbdQueueEp0Complete(true,
-					(uint16_t)NRF_USBD->EPOUT[0].AMOUNT);
+				if (NRF_USBD->EVENTS_EP0SETUP == 0U)
+				{
+					nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Ep0[0];
+					const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
+					pXfer->ActualLen += amount;
+					nRFUsbdEmitXfer(0U, amount);
+					if (amount == NRFX_USBD_MAX_PACKET_SIZE &&
+						pXfer->ActualLen < pXfer->TotalLen)
+						nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
+				}
+				goto dmaComplete;
 			}
 			break;
 		case 0x00000100U: // ISO IN
@@ -1236,6 +1201,20 @@ extern "C" void USBD_IRQHandler(void)
 			if (NRF_USBD->EVENTS_EP0SETUP == 0U &&
 				NRF_USBD->EVENTS_USBEVENT == 0U && nRFUsbdDmaAllowed())
 			{
+				// EP0DATADONE retains OUT readiness while another endpoint owns DMA.
+				if (NRF_USBD->EVENTS_EP0DATADONE != 0U &&
+					(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
+				{
+					NRF_USBD->EVENTS_EP0DATADONE = 0U;
+					NRF_USBD->EPOUT[0].PTR = (uint32_t)(uintptr_t)s_Usbd.Ep0Bounce;
+					NRF_USBD->EPOUT[0].MAXCNT = min(
+						(int)(s_Usbd.Ctrlr.Ep0[0].TotalLen - s_Usbd.Ctrlr.Ep0[0].ActualLen),
+						NRFX_USBD_MAX_PACKET_SIZE);
+					nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPOUT[0],
+						&NRF_USBD->EVENTS_ENDEPOUT[0]);
+					break;
+				}
+
 				// SETUP's idle wait can be interrupted by a data submission.
 				// Give its queued control response the retained channel first.
 				const nRFEPPkt_t *pEp0 =
@@ -1671,44 +1650,18 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 }
 
 
-bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-						 uint16_t Length)
+bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr)
 {
-	if (USB_ENDPADDR_NUM(EpAddr) != 0U)
-	{
-		return false;
-	}
-
-	const bool in = USB_ENDPADDR_IS_IN(EpAddr);
-	const bool reqIn =
-		(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) != 0U;
-
-	if (Length == 0U && in != reqIn)
-	{
-		// Control status stage; a short IN packet may already have armed it.
-		const uint32_t state = DisableInterrupt();
-		if (!reqIn ||
-			(NRF_USBD->SHORTS & USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk) == 0U)
-		{
-			nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0STATUS);
-		}
-		EnableInterrupt(state);
-		nRFUsbdEmitXfer(EpAddr, 0U);
-		return true;
-	}
-
-	if (in)
-	{
-		return UsbCtrlrEp0Send(DevNo, pBuffer, Length) == Length;
-	}
-
+	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
-	nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Ep0[0];
-	pXfer->pBuffer = pBuffer;
-	pXfer->TotalLen = Length;
-	pXfer->ActualLen = 0U;
-	nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
+	// A short IN data packet may already have armed the OUT status stage.
+	if (USB_ENDPADDR_IS_IN(EpAddr) ||
+		(NRF_USBD->SHORTS & USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk) == 0U)
+	{
+		nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0STATUS);
+	}
 	EnableInterrupt(state);
+	nRFUsbdEmitXfer(EpAddr, 0U);
 	return true;
 }
 
@@ -1725,7 +1678,11 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 
 		nRFEPPkt_t *p = (nRFEPPkt_t*)CFifoPut(s_Usbd.hEp0Que);
 		if (p == NULL)
+		{
+			if (Length == 0)
+				cnt = -1;
 			break;
+		}
 
 		if (l > 0)
 		{

@@ -36,6 +36,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
 #include <string.h>
+#include <initializer_list>
 
 #include "usb/usb.h"
 #include "usb/usbd_epalloc.h"
@@ -116,6 +117,11 @@ static CtrlrState_t s_Ctrlr;
 static FuncState_t s_Class;
 static DescState_t s_Desc;
 static bool s_VbusDetected = true;
+static int s_Ep0Limit = 65535;
+static uint8_t s_OutPacket[64];
+static uint8_t s_LongResponse[1024];
+static uint16_t s_LongLength;
+static bool RecordEp0(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Length);
 
 // One interface: alternate 0 owns EP1 OUT/IN, alternate 1 owns EP2 IN.
 static const uint8_t s_ConfigDesc[] = {
@@ -147,6 +153,9 @@ static void Setup(uint8_t Type, uint8_t Request, uint16_t Value,
 	evt.Setup.wIndex = Index;
 	evt.Setup.wLength = Length;
 	UsbDevProcessEvent(TEST_DEVNO, &evt);
+	// The controller automatically arms an OUT data stage from SETUP.
+	if ((Type & 0x80U) == 0U && Length != 0U)
+		(void)RecordEp0(EP0_OUT, nullptr, Length);
 }
 
 static void Complete(uint8_t EpAddr, uint16_t Length,
@@ -157,6 +166,7 @@ static void Complete(uint8_t EpAddr, uint16_t Length,
 	evt.Xfer.EpAddr = EpAddr;
 	evt.Xfer.Length = Length;
 	evt.Xfer.Result = Result;
+	evt.Xfer.pBuffer = s_OutPacket;
 	UsbDevProcessEvent(TEST_DEVNO, &evt);
 }
 
@@ -178,6 +188,12 @@ static bool Request(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	}
 	if (Stage != USB_CTRL_SETUP)
 	{
+		return true;
+	}
+	if (pSetup->bRequest == 0x42U)
+	{
+		*ppData = s_LongResponse;
+		*pLength = s_LongLength;
 		return true;
 	}
 	if (pSetup->bRequest == CLASS_NO_DATA && pSetup->wLength == 0)
@@ -393,6 +409,76 @@ static bool TestControlZlp(void)
 	CHECK(s_Ctrlr.XferCnt == 3 && LastXfer()->EpAddr == EP0_OUT &&
 		LastXfer()->Length == 0);
 	Complete(EP0_OUT, 0);
+	return true;
+}
+
+static bool TestControlChunks(void)
+{
+	for (int limit : {64, 256})
+	for (uint16_t length : {256, 257, 283, 512, 513, 1024})
+	for (int extra : {0, 1})
+	{
+		CHECK(Fixture());
+		CHECK(SetAddress(2) && SetConfig(1));
+		ClearCtrlrLog();
+		s_Class.StageCnt = 0;
+		s_Ep0Limit = limit;
+		s_LongLength = length;
+		for (int i = 0; i < length; ++i)
+			s_LongResponse[i] = (uint8_t)(i * 17 + (i >> 8));
+		Setup(0xA1U, 0x42U, 0, 0, length + extra);
+		int offset = 0;
+		while (offset < length)
+		{
+			const int copied = length - offset < limit ? length - offset : limit;
+			CHECK(LastXfer()->EpAddr == EP0_IN && LastXfer()->Length == copied);
+			CHECK(LastXfer()->pBuffer == s_LongResponse + offset);
+			CHECK(LastXfer()->Data[0] == s_LongResponse[offset]);
+			CHECK(s_Class.StageCnt == 1);
+			Complete(EP0_IN, copied);
+			offset += copied;
+		}
+		CHECK(s_Class.StageCnt == 2 && s_Class.Stage[1] == USB_CTRL_DATA);
+		CHECK(s_Class.StageLen[1] == length);
+		if (extra && (length % 64U) == 0U)
+		{
+			CHECK(LastXfer()->EpAddr == EP0_IN && LastXfer()->Length == 0);
+			Complete(EP0_IN, 0);
+		}
+		CHECK(LastXfer()->EpAddr == EP0_OUT && LastXfer()->Length == 0);
+		Complete(EP0_OUT, 0);
+		CHECK(!s_Ctrlr.StallCnt && s_Class.StageCnt == 3);
+		CHECK(s_Class.Stage[2] == USB_CTRL_COMPLETE && s_Class.StageLen[2] == length);
+	}
+	s_Ep0Limit = 65535;
+
+	for (uint16_t length : {1, 64, 65, 129})
+	for (bool shortPacket : {false, true})
+	{
+		CHECK(Fixture());
+		CHECK(SetAddress(2) && SetConfig(1));
+		ClearCtrlrLog();s_Class.StageCnt = 0;s_LongLength = length;
+		memset(s_LongResponse, 0, sizeof(s_LongResponse));
+		Setup(CLASS_IF_OUT, 0x42U, 0, 0, length);
+		const int total = shortPacket ? length - 1 : length;
+		int offset = 0;
+		do
+		{
+			const int received = total - offset < 64 ? total - offset : 64;
+			for (int i = 0; i < received; ++i)s_OutPacket[i] = (uint8_t)(offset + i);
+			CHECK(s_Class.StageCnt == 1);
+			Complete(EP0_OUT, received);
+			memset(s_OutPacket, 0xFF, sizeof(s_OutPacket));
+			offset += received;
+			if (received < 64 || offset == length)
+				break;
+		} while (true);
+		CHECK(s_Class.StageCnt == 2 && s_Class.StageLen[1] == total);
+		for (int i = 0; i < total; ++i)CHECK(s_LongResponse[i] == (uint8_t)i);
+		CHECK(LastXfer()->EpAddr == EP0_IN && LastXfer()->Length == 0);
+		Complete(EP0_IN, 0);
+		CHECK(s_Class.StageCnt == 3 && s_Class.Stage[2] == USB_CTRL_COMPLETE);
+	}
 	return true;
 }
 
@@ -881,8 +967,7 @@ extern "C" void UsbCtrlrEpAlloc(int, uint8_t, uint8_t *, bool,
 }
 extern "C" bool UsbCtrlrEpRxArm(int, uint8_t) { return true; }
 extern "C" bool UsbCtrlrEpSend(int, uint8_t, uint16_t) { return true; }
-extern "C" bool UsbCtrlrEp0Xfer(int, uint8_t EpAddr, uint8_t *pBuffer,
-								  uint16_t Length)
+static bool RecordEp0(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Length)
 {
 	if (s_Ctrlr.XferCnt >= XFER_LOG_CNT)
 	{
@@ -899,6 +984,15 @@ extern "C" bool UsbCtrlrEp0Xfer(int, uint8_t EpAddr, uint8_t *pBuffer,
 		memcpy(p->Data, pBuffer, n);
 	}
 	return true;
+}
+extern "C" int UsbCtrlrEp0Send(int, uint8_t *pBuffer, int Length)
+{
+	const int copied = Length < s_Ep0Limit ? Length : s_Ep0Limit;
+	return RecordEp0(EP0_IN, pBuffer, copied) ? copied : -1;
+}
+extern "C" bool UsbCtrlrEp0Status(int, uint8_t EpAddr)
+{
+	return RecordEp0(EpAddr, nullptr, 0);
 }
 extern "C" void UsbCtrlrEpStall(int, uint8_t EpAddr)
 {
@@ -929,6 +1023,7 @@ int main(void)
 		{ "descriptors", TestDescriptors },
 		{ "descriptor validation", TestDescriptorValidation },
 		{ "control terminating ZLP", TestControlZlp },
+		{ "control chunks and direct OUT data", TestControlChunks },
 		{ "SET_ADDRESS", TestAddress },
 		{ "configuration", TestConfiguration },
 		{ "alternate interface and halt", TestInterfaceAndHalt },

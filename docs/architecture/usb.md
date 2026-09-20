@@ -447,6 +447,14 @@ SETUP
 outside `UsbIntrf` and `UsbIsoIntrf` so the reusable data layers do not become
 device-mode specific.
 
+`UsbCtrlrEp0Send()` copies the accepted IN bytes before returning their count.
+The core submits any remaining bytes through the same API on transfer completion.
+The controller arms EP0 OUT from SETUP and reports each received packet through
+the existing EP0 transfer event after DMA completes. Its event buffer is valid
+only during that callback; the core copies it into the control response buffer.
+`UsbCtrlrEp0Status()` starts the status stage. Data completion uses the same EP0
+event path for both directions, without an intermediate application event.
+
 ## Interrupt endpoints
 
 Interrupt endpoints are normally event/notification endpoints rather than

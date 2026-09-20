@@ -127,9 +127,6 @@ bool nRFUsbdIsoFinishDma(uint32_t status){
  isoEnd=0;regs.EPSTATUS=status;return true;
 }
 unsigned ep0Completions,ep0Length;
-void nRFUsbdQueueEp0Complete(bool out,uint16_t length){
- assert(!out);++ep0Completions;ep0Length=length;
-}
 void nRFUsbdHostResumeDetected();
 void nRFUsbdProcessOutData(uint32_t,void*);
 bool isoAtSof;
@@ -140,9 +137,13 @@ UsbCtrlrXferEvt_t controlEvent;
 void nRFUsbdProcessEP0Setup(uint32_t,void*);
 void nRFUsbdQueueEp0Setup();
 void (*setupHandler)(const UsbCtrlrEvt_t*);
+void (*controlHandler)(const UsbCtrlrXferEvt_t*);
 void UsbDevProcessEvent(int,const UsbCtrlrEvt_t *event){
  if(event->Type==USB_CTRLR_EVT_XFER_CMPL){
-  ++controlEvents;controlEvent=event->Xfer;return;
+  ++controlEvents;controlEvent=event->Xfer;
+  if(event->Xfer.EpAddr==0x80U){++ep0Completions;ep0Length=event->Xfer.Length;}
+  if(controlHandler)controlHandler(&event->Xfer);
+  return;
  }
  assert(event->Type==USB_CTRLR_EVT_SETUP);++setups;
  if(setupHandler)setupHandler(event);
@@ -191,11 +192,11 @@ code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
     'nRFUsbdDmaActive', 'nRFUsbdDmaLock', 'nRFUsbdDmaUnlock', 'nRFUsbdDmaStartLocked', 'nRFUsbdRetireDma', 'nRFUsbdDmaWait',
     'nRFUsbdEp0InStart', 'nRFUsbdStartDmaNow', 'nRFUsbdDmaAllowed',
     'nRFUsbdStartQueuedDma',
-    'nRFUsbdResumeQueuedDmaLocked', 'nRFUsbdResumeQueuedDma', 'nRFUsbdQueXferDir', 'UsbCtrlrEpXfer',
+    'nRFUsbdResumeQueuedDmaLocked', 'nRFUsbdQueXferDir', 'UsbCtrlrEpXfer',
     'UsbCtrlrEpInXfer', 'UsbCtrlrEpOutXfer',
     'nRFUsbGetEpReg', 'nRFUsbEpRegisteredEvent',
     'nRFUsbdProcessInComplete', 'nRFUsbdQueueInComplete', 'UsbCtrlrEp0Send',
-    'nRFUsbdNoDmaTask', 'nRFUsbdEmitXfer', 'UsbCtrlrEp0Xfer',
+    'nRFUsbdNoDmaTask', 'nRFUsbdEmitXfer', 'UsbCtrlrEp0Status',
     'UsbCtrlrEpAlloc', 'nRFUsbdProcessOutData', 'UsbCtrlrProcess',
     'UsbdIsForceNormal', 'UsbdForceNormal', 'nRFUsbdTryRemoteWake',
     'nRFUsbdHostResumeDetected', 'nRFUsbdWakeAllowed', 'nRFUsbdSofAcquire',
@@ -226,7 +227,7 @@ void init(){
  dmaLocks=dmaUnlocks=ep0Completions=ep0Length=0;
  controlEvents=0;controlEvent={};
  isoAtSof=false;suspends=resumes=setups=0;s_Usbd.LowPowerSuspend=false;
- setupHandler=nullptr;
+ setupHandler=nullptr;controlHandler=nullptr;
  s_Usbd.Ctrlr={};
  s_Usbd.Flags=USBD_FLAG_MAC_AWAKE;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  assert(AppEvtHandlerInit(nullptr,0));
@@ -281,8 +282,24 @@ void setupResponseHandler(const UsbCtrlrEvt_t *event){
   interrupt();
   assert(dmaBusy && regs.TASKS_STARTEPOUT[1]);
  }
- assert(UsbCtrlrEp0Xfer(0,0x80,setupResponse,sizeof(setupResponse)));
+ assert(UsbCtrlrEp0Send(0,setupResponse,sizeof(setupResponse))==sizeof(setupResponse));
  assert(bool(regs.TASKS_STARTEPIN[0])==!interruptSetup);
+}
+uint8_t chainedResponse[513],outResponse[192];
+unsigned chainedOffset,outOffset,outCallbacks;
+void chainEp0(const UsbCtrlrXferEvt_t *event){
+ assert(event->EpAddr==0x80 && dmaBusy && !regs.EPSTATUS.bits);
+ chainedOffset+=event->Length;
+ if(chainedOffset<sizeof(chainedResponse)){
+  assert(UsbCtrlrEp0Send(0,chainedResponse+chainedOffset,
+   sizeof(chainedResponse)-chainedOffset)>0);
+ }
+}
+void receiveEp0(const UsbCtrlrXferEvt_t *event){
+ assert(event->EpAddr==0 && dmaBusy && !regs.EPSTATUS.bits);
+ assert(!regs.EVENTS_ENDEPOUT[0] && event->pBuffer==s_Usbd.Ep0Bounce);
+ memcpy(outResponse+outOffset,event->pBuffer,event->Length);
+ outOffset+=event->Length;++outCallbacks;
 }
 int main(int argc,char **argv){
  const bool fullAppEvt=argc==2 && !strcmp(argv[1],"--full-appevt");
@@ -292,7 +309,7 @@ int main(int argc,char **argv){
  for(int length:lengths){
   init();assert(UsbCtrlrEpInXfer(0,1,data,9));
   regs.BMREQUESTTYPE=0x80;
-  assert(UsbCtrlrEp0Xfer(0,0x80,data,length));
+  assert(UsbCtrlrEp0Send(0,data,length)==length);
   assert(regs.TASKS_STARTEPIN[0]==0);
   int offset=0,count=std::max(1,(length+63)/64);
   assert(CFifoUsed(s_Usbd.hEp0Que)==count);
@@ -315,7 +332,7 @@ int main(int argc,char **argv){
    assert(CFifoUsed(s_Usbd.hEp0Que)==--count);
   }
   assert(ep0Completions==1 && ep0Length==unsigned(length));
-  nRFUsbdResumeQueuedDmaLocked();assert(isoChecks==1);
+  assert(isoChecks==1);
  }
  puts("PASS: ISR hands regular DMA to queued EP0, then EP0 chains its own packets and status SHORTS");
 
@@ -400,7 +417,7 @@ int main(int argc,char **argv){
   init();irqMask=mask;regs.BMREQUESTTYPE=reqIn;
   regs.SHORTS=shortArmed?USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk:0U;
   const uint8_t address=reqIn?0U:0x80U;
-  assert(UsbCtrlrEp0Xfer(0,address,nullptr,0));
+  assert(UsbCtrlrEp0Status(0,address));
   assert(irqMask==mask && !dmaLocks && !dmaUnlocks && !dmaBusy);
   assert(!CFifoUsed(s_Usbd.hEp0Que) && !CFifoUsed(s_Usbd.hQue));
   assert(!regs.TASKS_EP0RCVOUT && !regs.TASKS_STARTEPIN[0]);
@@ -408,18 +425,95 @@ int main(int argc,char **argv){
   assert(controlEvents==1 && controlEvent.EpAddr==address && controlEvent.Length==0);
   assert(controlEvent.Result==USB_CTRLR_XFER_SUCCESS);
  }
- for(int length:lengths)for(unsigned mask:{0U,1U}){
-  init();irqMask=mask;
-  assert(UsbCtrlrEp0Xfer(0,0,data,length));
-  assert(s_Usbd.Ctrlr.Ep0[0].pBuffer==data);
-  assert(s_Usbd.Ctrlr.Ep0[0].TotalLen==length && !s_Usbd.Ctrlr.Ep0[0].ActualLen);
-  assert(regs.TASKS_EP0RCVOUT==1 && !regs.TASKS_EP0STATUS);
-  assert(irqMask==mask && !dmaBusy && !controlEvents);
-  assert(!CFifoUsed(s_Usbd.hEp0Que) && !CFifoUsed(s_Usbd.hQue));
+ // SETUP owns OUT arming; the upper layer receives no arm request.
+ for(int length:lengths){
+  init();regs.BMREQUESTTYPE=0x21;regs.BREQUEST=0x41;
+  regs.WLENGTHL=length;regs.EVENTS_EP0SETUP=1;
+  interrupt();AppEvtHandlerExec();
+  assert(s_Usbd.Ctrlr.Ep0[0].TotalLen==length);
+  assert(!s_Usbd.Ctrlr.Ep0[0].ActualLen && !s_Usbd.Ctrlr.Ep0[0].pBuffer);
+  assert(regs.TASKS_EP0RCVOUT==unsigned(length!=0));
+  assert(!dmaBusy && !controlEvents && !regs.TASKS_STARTEPOUT[0]);
  }
- init();assert(!UsbCtrlrEp0Xfer(0,0x81,data,9));
- assert(!dmaBusy && !CFifoUsed(s_Usbd.hEp0Que) && !controlEvents);
- puts("PASS: EP0 distinguishes IN data/ZLP, OUT receive, and both status directions");
+ puts("PASS: EP0 separates IN data/ZLP and status; the controller arms OUT from SETUP");
+
+ // The actual completion event can enqueue the next chunk while retaining
+ // DMA ownership, even when the application event queue is saturated.
+ init();controlHandler=chainEp0;chainedOffset=0;
+ for(unsigned i=0;i<sizeof(chainedResponse);++i)chainedResponse[i]=uint8_t(i*17+(i>>8));
+ assert(UsbCtrlrEp0Send(0,chainedResponse,sizeof(chainedResponse))==256);
+ while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
+ dmaLocks=dmaUnlocks=0;
+ for(unsigned offset=0;offset<sizeof(chainedResponse);){
+  auto *packet=(nRFEPPkt_t*)CFifoPeek(s_Usbd.hEp0Que);
+  const unsigned bytes=min(unsigned(sizeof(chainedResponse))-offset,64U);
+  assert(packet && packet->Len==bytes && !memcmp(packet->Payload,chainedResponse+offset,bytes));
+  assert(regs.EPIN[0].PTR==uint32_t(uintptr_t(packet->Payload)));
+  regs.EPSTATUS.bits=1;regs.EVENTS_ENDEPIN[0]=regs.EVENTS_EP0DATADONE=1;
+  regs.TASKS_STARTEPIN[0]=0;interrupt();offset+=bytes;
+  assert(!dmaLocks && dmaUnlocks==unsigned(offset==sizeof(chainedResponse)));
+  assert(bool(regs.TASKS_STARTEPIN[0])==(offset<sizeof(chainedResponse)));
+ }
+ assert(chainedOffset==sizeof(chainedResponse) && ep0Completions==3 && !dmaBusy);
+ assert(!AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){}));
+ puts("PASS: direct EP0 IN completion refills via the upper callback and starts immediately without relocking or AppEvt");
+
+ // SETUP -> controller arms OUT -> data-ready -> DMA -> same EP0 callback.
+ for(unsigned length:{1U,7U,64U,65U,129U})for(bool busy:{false,true})
+ for(bool shortPacket:{false,true}){
+  init();outOffset=outCallbacks=0;memset(outResponse,0xFF,sizeof(outResponse));
+  regs.BMREQUESTTYPE=0x21;regs.BREQUEST=0x41;regs.WLENGTHL=length;
+  regs.EVENTS_EP0SETUP=1;interrupt();AppEvtHandlerExec();
+  controlHandler=receiveEp0;
+  assert(regs.TASKS_EP0RCVOUT && !regs.TASKS_STARTEPOUT[0]);
+  while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
+  const unsigned total=shortPacket?length-1:length;
+  unsigned offset=0;
+  do{
+   if(busy)assert(UsbCtrlrEpInXfer(0,1,data,9));
+   regs.TASKS_STARTEPOUT[0]=regs.TASKS_EP0RCVOUT=0;
+   regs.EVENTS_EP0DATADONE=1;
+   if(busy){
+    regs.EPSTATUS.bits=2;regs.EVENTS_ENDEPIN[1]=0;interrupt();
+    assert(!regs.TASKS_STARTEPOUT[0] && regs.EVENTS_EP0DATADONE);
+    assert(outOffset==offset);
+    regs.EVENTS_ENDEPIN[1]=1;
+   }
+   interrupt();
+   assert(regs.TASKS_STARTEPOUT[0] && !regs.EVENTS_EP0DATADONE && dmaBusy);
+   assert(regs.EPOUT[0].PTR==uint32_t(uintptr_t(s_Usbd.Ep0Bounce)));
+   assert(regs.EPOUT[0].MAXCNT==min(length-offset,64U));
+   const unsigned amount=min(total-offset,64U);
+   for(unsigned i=0;i<amount;++i)s_Usbd.Ep0Bounce[i]=uint8_t(offset+i);
+   regs.EPSTATUS.bits=1U<<16;regs.EPOUT[0].AMOUNT=amount;
+   regs.EVENTS_ENDEPOUT[0]=0;interrupt();assert(outOffset==offset);
+   regs.EVENTS_ENDEPOUT[0]=1;interrupt();
+   offset+=amount;assert(outOffset==offset && !dmaBusy);
+   const bool more=amount==64 && offset<length;
+   assert(bool(regs.TASKS_EP0RCVOUT)==more);
+   memset(s_Usbd.Ep0Bounce,0xEE,sizeof(s_Usbd.Ep0Bounce));
+   if(!more)break;
+  }while(true);
+  assert(outOffset==total && outCallbacks>0);
+  for(unsigned i=0;i<total;++i)assert(outResponse[i]==uint8_t(i));
+  assert(!AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){}));
+ }
+ puts("PASS: EP0 OUT is armed by SETUP, waits for DMA, and reports full/short/ZLP data directly through the same callback");
+
+ // SETUP/reset takes precedence over an OUT packet finishing in the same IRQ.
+ for(bool reset:{false,true}){
+  init();regs.BMREQUESTTYPE=0x21;regs.WLENGTHL=65;
+  regs.EVENTS_EP0SETUP=1;interrupt();AppEvtHandlerExec();
+  regs.EVENTS_EP0DATADONE=1;interrupt();assert(dmaBusy);
+  regs.TASKS_EP0RCVOUT=0;
+  regs.EPSTATUS.bits=1U<<16;regs.EPOUT[0].AMOUNT=64;
+  regs.EVENTS_ENDEPOUT[0]=1;
+  if(reset)regs.EVENTS_USBRESET=1;
+  else {regs.BMREQUESTTYPE=0x80;regs.EVENTS_EP0SETUP=1;}
+  interrupt();
+  assert(!controlEvents && !regs.TASKS_EP0RCVOUT && !dmaBusy);
+ }
+ puts("PASS: SETUP/reset cancels concurrent EP0 OUT completion without a stale callback or rearm");
 
  for(bool preempt:{false,true}){
   init();interruptSetup=preempt;setupOutCompletions=0;
@@ -688,7 +782,7 @@ int main(int argc,char **argv){
   interrupt();
   assert(suspends==1 && CFifoUsed(s_Usbd.hQue)==1 && !regs.LOWPOWER);
   // Deferred completions and new submissions use this same resume gate.
-  nRFUsbdResumeQueuedDma();
+  {const auto mask=DisableInterrupt();nRFUsbdResumeQueuedDmaLocked();EnableInterrupt(mask);}
   assert(bool(dmaBusy)==lowPower);
   if(lowPower){
    regs.EPSTATUS.bits=1U<<2;regs.EVENTS_ENDEPIN[2]=1;interrupt();
@@ -701,7 +795,7 @@ int main(int argc,char **argv){
    regs.EVENTS_USBEVENT=1;regs.EVENTCAUSE.bits=USBD_EVENTCAUSE_USBWUALLOWED_Msk;
    interrupt();
   }else{
-   nRFUsbdResumeQueuedDma();
+   {const auto mask=DisableInterrupt();nRFUsbdResumeQueuedDmaLocked();EnableInterrupt(mask);}
    assert(dmaBusy && regs.TASKS_STARTEPIN[2]);
   }
   assert(resumes==1 && !(s_Usbd.Flags&USBD_FLAG_HOST_RESUME));

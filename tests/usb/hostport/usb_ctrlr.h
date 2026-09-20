@@ -122,6 +122,7 @@ typedef struct __Usb_Ctrlr_Xfer_Evt {
 	uint8_t EpAddr;
 	uint16_t Length;
 	UsbCtrlrXferResult_t Result;
+	const uint8_t *pBuffer;		//!< EP0 OUT bytes, valid during the callback only
 } UsbCtrlrXferEvt_t;
 
 typedef struct __Usb_Ctrlr_Evt {
@@ -197,8 +198,10 @@ static inline bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
 	return UsbCtrlrEpXfer(DevNo, (uint8_t)(EpNum & 0x7FU), Length);
 }
 
-bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-						 uint16_t Length);
+// IN copies accepted bytes before returning; completion reports that chunk.
+// A zero-length send queues a data ZLP; negative means it was not accepted.
+int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
+bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr);
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);

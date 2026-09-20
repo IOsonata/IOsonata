@@ -79,7 +79,6 @@ bool UsbCtrlrEpSend(int, uint8_t, uint16_t Len)
 	if (Len == 0U) { s_Zlp++; }
 	return true;
 }
-bool UsbCtrlrEp0Xfer(int, uint8_t, uint8_t *, uint16_t) { return true; }
 }
 
 alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(SLOTS, BUFFER_SIZE)];

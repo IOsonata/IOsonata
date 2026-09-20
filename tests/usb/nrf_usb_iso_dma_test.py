@@ -124,7 +124,6 @@ bool productionEpInXfer(int,uint8_t,uint8_t*,uint16_t);
 names = ['UsbdSync',
          'nRFUsbGetEpReg','nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaLock','nRFUsbdDmaUnlock',
          'nRFUsbdDmaStartLocked','nRFUsbdEpHwEnable','nRFUsbdSofRelease',
-         'nRFUsbdResumeQueuedDma',
          'nRFIsoHwEnable','nRFUsbdIsoStart',
          'nRFUsbdIsoService','nRFUsbdIsoXfer','nRFUsbdProcessIsoComplete',
          'nRFUsbdRetryIsoComplete','nRFUsbdFinishIsoDma',
