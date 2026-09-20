@@ -486,6 +486,11 @@ static void UsbIntrfCtrlrOutEvent(uint8_t, UsbCtrlrEvtType_t Event,
 
 				UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(
 					CFifoPut(pIntrf->hRxFifo));
+				if (pPacket == nullptr)
+				{
+					pIntrf->RxDropCnt++;
+					return;
+				}
 				pPacket->Hdr.Length = Length;
 				pPacket->Hdr.Reserved = 0U;
 				if (Length > 0U)

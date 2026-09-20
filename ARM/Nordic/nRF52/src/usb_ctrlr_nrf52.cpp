@@ -770,11 +770,16 @@ static void nRFUsbdResumeQueuedDma(void)
  * off because CFifoPut publishes the slot before the caller writes it, and
  * the interrupt is the other producer.
  */
-static __attribute__((noinline)) void nRFUsbdQueXferDir(uint8_t EpNum, bool In, uint16_t Len)
+static __attribute__((noinline)) bool nRFUsbdQueXferDir(uint8_t EpNum, bool In, uint16_t Len)
 {
 	const uint32_t state = DisableInterrupt();
 	hCFifo_t hQue = EpNum == 0U ? s_Usbd.hEp0Que : s_Usbd.hQue;
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(hQue);
+	if (pQue == NULL)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
 
 	pQue->EpNum = EpNum;
 	pQue->Dir = In ? NRFX_USBD_QUE_IN_BUFFER : NRFX_USBD_QUE_OUT;
@@ -785,6 +790,7 @@ static __attribute__((noinline)) void nRFUsbdQueXferDir(uint8_t EpNum, bool In, 
 	nRFUsbdResumeQueuedDmaLocked();
 
 	EnableInterrupt(state);
+	return true;
 }
 
 #if NRFX_USBD_EP0_OUT_QUE
@@ -1075,13 +1081,15 @@ static void nRFUsbdProcessEp0OutData(uint32_t Evt, void *pContext)
 static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 {
 	const uint8_t epNum = (uint8_t)Evt;
-
 	(void)pContext;
 
-	// Only blocking endpoints reach AppEvt. Nonblocking OUT is queued for
-	// EasyDMA directly from EPDATASTATUS in the ISR.
-	nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U,
-		USB_CTRLR_XFER_SUCCESS);
+	const uint16_t len = s_Usbd.EpReg[epNum - 1U][0].MaxPacketSize;
+	if (!nRFUsbdQueXferDir(epNum, false, len))
+	{
+		const uint32_t state = DisableInterrupt();
+		(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
+		EnableInterrupt(state);
+	}
 }
 
 static __attribute__((noinline)) void nRFUsbdQueueEp0Complete(bool Out, uint16_t Amount)
@@ -1373,32 +1381,7 @@ extern "C" void USBD_IRQHandler(void)
 	// it is open; ordinary CDC traffic avoids the ISO service path entirely.
 	if (outEp != 0U)
 	{
-		const uint8_t epNum = outEp;
-		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[epNum - 1U][0];
-		if (pReg->bBlocking)
-		{
-			// EPDATASTATUS is cleared before DRDY may start another DMA.
-			// UsbIntrf checks RX space and sets RxPending when it is full.
-			nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U,
-				USB_CTRLR_XFER_SUCCESS);
-		}
-		else
-		{
-			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
-			if (pQue != NULL)
-			{
-				pQue->EpNum = epNum;
-				pQue->Dir = NRFX_USBD_QUE_OUT;
-				pQue->Len = pReg->MaxPacketSize;
-				// Initialize the destination even when this slot last held IN data.
-				pQue->pBuffer = pReg->pBuffer;
-			}
-			else
-			{
-				(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
-			}
-		}
-		nRFUsbdResumeQueuedDmaLocked();
+		nRFUsbdProcessOutData(outEp, NULL);
 	}
 
 	if ((dmastatus & 0x01000100UL) != 0U &&
@@ -1426,7 +1409,7 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 	s_Usbd.LowPowerSuspend = pCfg->bLowPowerSuspend;
 
 	s_Usbd.hQue = CFifoInit(s_QueMem, sizeof(s_QueMem), sizeof(nRFUsbdQue_t),
-					   false);
+					   true);
 	s_Usbd.hEp0Que = CFifoInit(s_Ep0QueMem, sizeof(s_Ep0QueMem),
 						  sizeof(nRFEPPkt_t), true);
 
@@ -1691,8 +1674,7 @@ bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
 			nRFUsbdIsoXfer(EpAddr, Length);
 	}
 
-	nRFUsbdQueXferDir(epNum, USB_ENDPADDR_IS_IN(EpAddr), Length);
-	return true;
+	return nRFUsbdQueXferDir(epNum, USB_ENDPADDR_IS_IN(EpAddr), Length);
 }
 
 bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
@@ -1711,6 +1693,11 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
+	if (pQue == NULL)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
 	pQue->EpNum = EpNum;
 	pQue->Len = Length;
 

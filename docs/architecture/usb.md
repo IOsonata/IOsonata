@@ -287,11 +287,21 @@ Interrupt OUT/IN endpoints
 ```
 
 DIRECT describes only software storage: one current RX slot, one current TX
-slot and no CFifo. ISO selects the existing non-blocking behavior, so DIRECT
-ignores `USB_CTRLR_EVT_DRDY` while the ISO controller path services scheduled
-opportunities. Interrupt selects the existing blocking behavior, so DIRECT
-services `USB_CTRLR_EVT_DRDY` through the normal controller transfer call.
-There is no separate RX arm or re-arm API.
+slot and no CFifo. The nRF52 controller queues every regular OUT packet for
+DMA, including Interrupt endpoints, without a blocking/DRDY split. DIRECT
+completion replaces any unread RX packet and increments `RxDropCnt` for that
+replacement. ISO also publishes received packets directly from its scheduled
+DMA path. There is no separate RX arm or re-arm API.
+
+The regular DMA queue rejects an enqueue when full, preserving queued and
+active transfers. An OUT request that cannot enter the queue is deferred to
+AppEvt, whose callback retries the enqueue directly without a DRDY callback.
+
+For BYTE/PACKET RX, CFifo owns the full-buffer policy: blocking rejects the
+new packet and non-blocking replaces the oldest. A rejected completion
+increments `RxDropCnt`. Blocking CFifo configuration does not pause regular
+nRF52 OUT reception. The generic DRDY path remains available to controllers
+that request a transfer through the interface before completing it.
 
 `UsbIntIntrf` contains no HID report or descriptor behavior. `UsbdHid` embeds
 it and owns the device-side HID descriptor, class requests and report policy.
