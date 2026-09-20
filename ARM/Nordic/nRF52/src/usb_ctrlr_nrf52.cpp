@@ -1031,12 +1031,6 @@ static void nRFUsbdHandleEp0OutData(void)
 
 
 
-// A full AppEvt queue retains the completion and buffer ownership. The idle
-// hook retries publication after foreground dispatch makes room.
-
-
-
-
 static void nRFUsbdProcessEp0Complete(uint32_t Evt, void *pContext)
 {
 	const uint16_t amount = (uint16_t)(Evt >> 8U);
@@ -1115,11 +1109,14 @@ void nRFUsbdQueueOutComplete(uint8_t EpNum, uint16_t Amount)
 	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessOutComplete);
 }
 
-static inline __attribute__((always_inline))
-void nRFUsbdQueueInComplete(uint8_t EpNum, uint16_t Amount)
+// InData is nonzero. Return only the status bit accepted by AppEvt; a full
+// queue leaves it in EPDATASTATUS for UsbCtrlrProcess to retry.
+static __attribute__((noinline))
+uint32_t nRFUsbdQueueInComplete(uint32_t InData)
 {
-	const uint32_t evt = ((uint32_t)Amount << 8U) | EpNum;
-	(void)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete);
+	const uint32_t epNum = 31U - (uint32_t)__CLZ(InData);
+	const uint32_t evt = (NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum;
+	return (uint32_t)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete) << epNum;
 }
 
 static void nRFUsbdHandleBusEvent(uint32_t EventCause)
@@ -1353,8 +1350,8 @@ extern "C" void USBD_IRQHandler(void)
 		(NRF_USBD->EPDATASTATUS & 0x00FE00FEUL) != 0U)
 	{
 		// Clear the event first so a new endpoint event remains observable.
-		// Service at most one endpoint per direction in this interrupt. Any
-		// remaining status bits are retained and serviced by a pending IRQ.
+		// Service at most one endpoint per direction in this interrupt.
+		// Unaccepted IN completions remain available to the foreground retry.
 		NRF_USBD->EVENTS_EPDATA = 0U;
 		const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
 		uint32_t servicedStatus = dataStatus & 0x00010001UL;
@@ -1370,14 +1367,10 @@ extern "C" void USBD_IRQHandler(void)
 		const uint32_t inData = dataStatus & 0xFEU;
 		if (inData != 0U)
 		{
-			const uint32_t epNum = 31U - (uint32_t)__CLZ(inData);
-			servicedStatus |= 1UL << epNum;
-			nRFUsbdQueueInComplete((uint8_t)epNum,
-				(uint16_t)NRF_USBD->EPIN[epNum].AMOUNT);
+			servicedStatus |= nRFUsbdQueueInComplete(inData);
 		}
 
-		// Remaining status bits are retained in EPDATASTATUS and serviced
-		// by the pending interrupt they keep raised.
+		// Clear only serviced endpoints; keep every other status bit latched.
 		NRF_USBD->EPDATASTATUS = servicedStatus;
 		UsbdSync();
 	}
@@ -1505,6 +1498,16 @@ void UsbCtrlrProcess(int DevNo)
 {
 	(void)DevNo;
 	AppEvtHandlerExec();
+
+	// Share EPDATASTATUS with the ISR without publishing a completion twice.
+	const uint32_t state = DisableInterrupt();
+	const uint32_t inData = NRF_USBD->EPDATASTATUS & 0xFEU;
+	if (inData != 0U)
+	{
+		NRF_USBD->EPDATASTATUS = nRFUsbdQueueInComplete(inData);
+		__DSB();
+	}
+	EnableInterrupt(state);
 }
 
 bool UsbCtrlrVbusDetected(int DevNo)

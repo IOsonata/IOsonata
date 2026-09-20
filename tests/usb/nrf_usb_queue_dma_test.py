@@ -6,8 +6,8 @@ queue header. This register simulation checks that handoff and DMA ownership.
 Packet IN also runs the production UsbIntrf producer/completion and AppEvt
 dispatch, so ENDEP and host-consumption ownership are checked separately.
 
-Use --full-appevt to reproduce the regular IN completion lost when AppEvt is
-full. This currently fails the assertion that host completion releases a packet.
+Use --full-appevt to fill AppEvt before each packet completion and verify
+foreground retry without another USB interrupt.
 """
 from pathlib import Path
 import os
@@ -24,7 +24,7 @@ header = (ROOT / 'ARM/Nordic/include/usb_ctrlr.h').read_text()
 
 
 def function(name, source=source):
-    match = re.search(r'(?:void|bool|int|uint8_t|nRFUsbEpReg_t\s*\*)\s*' +
+    match = re.search(r'(?:void|bool|int|uint8_t|uint32_t|nRFUsbEpReg_t\s*\*)\s*' +
         name + r'\([^;{}]*\)\s*\{', source)
     assert match, name
     end = source.index('{', match.start()) + 1
@@ -43,12 +43,15 @@ code = r'''
 #include <cstring>
 #include "cfifo.h"
 #include "app_evt_handler.h"
-#include "coredev/interrupt.h"
 // Bypass the legacy host adapter; exercise the production directional API.
 #define UsbCtrlrEpInXfer HostUsbCtrlrEpInXfer
 #include "usb/usb_intrf.h"
 #undef UsbCtrlrEpInXfer
 bool UsbCtrlrEpXfer(int,uint8_t,uint16_t){assert(false);return false;}
+uint32_t irqMask;
+uint32_t DisableInterrupt(){auto old=irqMask;irqMask=1;return old;}
+void EnableInterrupt(uint32_t old){irqMask=old;}
+unsigned __CLZ(uint32_t value){assert(value);return __builtin_clz(value);}
 using std::min;
 constexpr int NRFX_USBD_MAX_PACKET_SIZE=64;
 constexpr int NRFX_USBD_ISO_EP_NO=8;
@@ -60,16 +63,21 @@ uint32_t dmaBusy;
 struct Endpoint {uint32_t PTR,MAXCNT,AMOUNT;};
 using USBD_EPIN_Type=Endpoint;
 using USBD_EPOUT_Type=Endpoint;
-struct W1C {uint32_t bits;void operator=(uint32_t value){bits&=~value;}};
+struct W1C {
+ uint32_t bits;
+ operator uint32_t() const{return bits;}
+ void operator=(uint32_t value){bits&=~value;}
+};
 struct {
  Endpoint EPIN[8],EPOUT[8];
  uint32_t TASKS_STARTEPIN[8],TASKS_STARTEPOUT[8];
- uint32_t EVENTS_ENDEPIN[8],EVENTS_ENDEPOUT[8],EVENTS_EP0DATADONE,SHORTS;
+ uint32_t EVENTS_ENDEPIN[8],EVENTS_ENDEPOUT[8],EVENTS_EP0DATADONE,SHORTS,EVENTS_EPDATA;
  struct {uint32_t EPOUT[8];} SIZE;
- W1C EPSTATUS;
+ W1C EPSTATUS,EPDATASTATUS;
 } regs;
 auto *NRF_USBD=&regs;
 void __DSB(){}
+void UsbdSync(){}
 bool isoReady;
 unsigned isoChecks;
 bool nRFUsbdIsoStart(){++isoChecks;return isoReady;}
@@ -101,14 +109,24 @@ code += '\n'.join(function(name) for name in [
     'nRFUsbdEp0InProgram', 'nRFUsbdStartDmaNow', 'nRFUsbdStartQueuedDma',
     'nRFUsbdResumeQueuedDmaLocked', 'UsbCtrlrEpInXfer',
     'nRFUsbEpDir', 'nRFUsbGetEpReg', 'nRFUsbEpRegisteredEvent',
-    'nRFUsbdProcessInComplete', 'nRFUsbdQueueInComplete', 'UsbCtrlrEp0Send'])
+    'nRFUsbdProcessInComplete', 'nRFUsbdQueueInComplete', 'UsbCtrlrEp0Send',
+    'UsbCtrlrProcess'])
 code += '\n'.join(function(name, intrf_source) for name in [
     'UsbIntrfSetTxIdle', 'UsbIntrfTakeTx', 'UsbIntrfDirectClear',
     'UsbIntrfTxFailure', 'UsbIntrfEpSendPktMode', 'UsbIntrfTxPackets',
     'UsbIntrfCtrlrInEvent'])
+# Exercise the actual ISR acknowledgement block, not a hand-coded queue call.
+start = source.index('if (NRF_USBD->EVENTS_EPDATA != 0U ||')
+end = source.index('{', start) + 1
+depth = 1
+while depth:
+    depth += (source[end] == '{') - (source[end] == '}')
+    end += 1
+code += '\nvoid dataEvent(){const auto state=DisableInterrupt();uint8_t outEp=0;\n'
+code += source[start:end] + '\nEnableInterrupt(state);}\n'
 code += r'''
 void init(){
- regs={};dmaBusy=0;isoReady=false;isoChecks=0;
+ regs={};dmaBusy=0;isoReady=false;isoChecks=0;irqMask=0;
  s_Usbd.Flags=0;
  assert(AppEvtHandlerInit(nullptr,0));
  memset(ep0Mem,0xA5,sizeof(ep0Mem));
@@ -230,10 +248,22 @@ int main(int argc,char **argv){
     if(fullAppEvt){
      while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
     }
-    nRFUsbdQueueInComplete(1,len);
+    regs.EPIN[1].AMOUNT=len;
+    regs.EPDATASTATUS.bits=1U<<1;
+    regs.EVENTS_EPDATA=1;
+    dataEvent();
+    assert(!regs.EVENTS_EPDATA);
+    assert(regs.EPDATASTATUS.bits==(fullAppEvt?1U<<1:0U));
+    dataEvent(); // A repeated interrupt must not duplicate accepted completion.
     assert(CFifoPeek(intrf.hTxFifo)==(uint8_t*)packet);
     assert(CFifoUsed(intrf.hTxFifo)==int(3-p));
-    AppEvtHandlerExec();
+    UsbCtrlrProcess(0);
+    assert(!regs.EPDATASTATUS.bits && !irqMask);
+    if(fullAppEvt){
+     // First pass drained AppEvt and published the retained completion.
+     assert(CFifoUsed(intrf.hTxFifo)==int(3-p));
+    }
+    UsbCtrlrProcess(0);
     assert(CFifoUsed(intrf.hTxFifo)==int(2-p));
     assert(CFifoUsed(s_Usbd.hQue)==(p<2?2:1));
     retire(2,true);
@@ -245,6 +275,41 @@ int main(int argc,char **argv){
  }
  puts("PASS: packet IN full/short/ZLP, aligned ring wrap, queued DMA contention,");
  puts("      ENDEP preserves TX data, host completion releases exactly one packet");
+
+ // Seven pending IN endpoints exceed the default AppEvt capacity of four.
+ // A full queue must leave all seven latched, while OUT status is serviced.
+ init();
+ unsigned calls[8]={},amounts[8]={};
+ struct Completion {unsigned *calls,*amounts;} completion={calls,amounts};
+ for(unsigned ep=1;ep<8;++ep){
+  auto &reg=s_Usbd.EpReg[ep-1][1];reg.pContext=&completion;
+  reg.Handler=[](uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
+                UsbCtrlrXferResult_t result,void *context){
+   assert(!irqMask && event==USB_CTRLR_EVT_XFER_CMPL && result==USB_CTRLR_XFER_SUCCESS);
+   assert(USB_ENDPADDR_IS_IN(ep));ep=USB_ENDPADDR_NUM(ep);
+   auto *c=(Completion*)context;++c->calls[ep];c->amounts[ep]=length;
+  };
+  regs.EPIN[ep].AMOUNT=ep==7?0:ep*9;
+ }
+ while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
+ regs.EPDATASTATUS.bits=0xFEU | (1U<<20) | (1U<<18) | 0x10001U;
+ regs.EVENTS_EPDATA=1;dataEvent();
+ assert(regs.EPDATASTATUS.bits==(0xFEU | (1U<<18)));
+ // No further USB interrupt is needed; retry must leave OUT status alone.
+ for(unsigned pass=0;pass<10;++pass)UsbCtrlrProcess(0);
+ assert(regs.EPDATASTATUS.bits==(1U<<18));
+ for(unsigned ep=1;ep<8;++ep){
+  assert(calls[ep]==1 && amounts[ep]==(ep==7?0:ep*9));
+ }
+ // Clear-on-close/reset discards a retained hardware completion.
+ while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
+ regs.EPDATASTATUS.bits=1U<<3;dataEvent();
+ assert(regs.EPDATASTATUS.bits==(1U<<3));
+ regs.EPDATASTATUS=1U<<3;
+ UsbCtrlrProcess(0);UsbCtrlrProcess(0);
+ assert(calls[3]==1 && !regs.EPDATASTATUS.bits);
+ puts("PASS: full AppEvt retry drains all seven IN completions once, preserves OUT status,");
+ puts("      and honors cancellation by clearing the retained hardware status");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='iosonata-queue-') as temp:
