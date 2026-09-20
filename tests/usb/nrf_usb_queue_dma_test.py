@@ -80,6 +80,7 @@ constexpr uint32_t USBD_LOWPOWER_LOWPOWER_ForceNormal=0,USBD_LOWPOWER_LOWPOWER_L
 constexpr uint32_t USBD_LOWPOWER_LOWPOWER_Pos=0,USBD_DPDMVALUE_STATE_Resume=1;
 uint32_t dmaBusy;
 unsigned dmaLocks,dmaUnlocks;
+bool inUsbIsr;
 struct BusyRegister {
  operator uint32_t() const{return dmaBusy;}
  void operator=(uint32_t value){
@@ -184,12 +185,18 @@ uint8_t *checkedDmaQueuePut(hCFifo_t fifo){
  assert(irqMask==1); // Queue publication and initialization exclude the ISR.
  return CFifoPut(fifo);
 }
+uint8_t *checkedEp0QueuePut(hCFifo_t fifo){
+ assert(irqMask==1 || inUsbIsr);
+ return CFifoPut(fifo);
+}
 '''
 code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
-    if name in ('nRFUsbdQueXferDir', 'UsbCtrlrEpInXfer') else function(name)
+    if name in ('nRFUsbdQueXferDir', 'UsbCtrlrEpInXfer') else
+    function(name).replace('CFifoPut(', 'checkedEp0QueuePut(')
+    if name == 'nRFUsbdEp0Fill' else function(name)
     for name in [
     'nRFUsbdDmaActive', 'nRFUsbdDmaLock', 'nRFUsbdDmaUnlock', 'nRFUsbdDmaStartLocked', 'nRFUsbdRetireDma', 'nRFUsbdDmaWait',
-    'nRFUsbdEp0InStart', 'nRFUsbdStartDmaNow', 'nRFUsbdDmaAllowed',
+    'nRFUsbdEp0Fill', 'nRFUsbdEp0InStart', 'nRFUsbdStartDmaNow', 'nRFUsbdDmaAllowed',
     'nRFUsbdStartQueuedDma',
     'nRFUsbdResumeQueuedDmaLocked', 'nRFUsbdResumeQueuedDma', 'nRFUsbdQueXferDir', 'UsbCtrlrEpXfer',
     'UsbCtrlrEpInXfer', 'UsbCtrlrEpOutXfer',
@@ -237,7 +244,10 @@ void init(){
 }
 // Cortex-M exception entry does not set PRIMASK. Queue publication must use
 // its own critical section even when the caller is the controller ISR.
-void interrupt(){const auto state=irqMask;USBD_IRQHandler();assert(irqMask==state);}
+void interrupt(){
+ const auto state=irqMask;inUsbIsr=true;USBD_IRQHandler();inUsbIsr=false;
+ assert(irqMask==state);
+}
 void outComplete(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t len,
  UsbCtrlrXferResult_t result,void *context){
  assert(event==USB_CTRLR_EVT_XFER_CMPL && result==USB_CTRLR_XFER_SUCCESS);
@@ -318,6 +328,78 @@ int main(int argc,char **argv){
   nRFUsbdResumeQueuedDmaLocked();assert(isoChecks==1);
  }
  puts("PASS: ISR hands regular DMA to queued EP0, then EP0 chains its own packets and status SHORTS");
+
+ // Responses larger than the staging queue continue entirely in the ISR.
+ // Use an unaligned source and a non-repeating packet pattern across wraps.
+ uint8_t response[65536];
+ for(unsigned i=0;i<sizeof(response);++i)response[i]=uint8_t(i*17+(i>>8));
+ for(int length:{0,1,63,64,65,255,256,257,283,511,512,513,1024,1025,65535})
+ for(bool busy:{false,true})for(unsigned mask:{0U,1U}){
+  init();irqMask=mask;regs.BMREQUESTTYPE=0x80;
+  if(busy)assert(UsbCtrlrEpInXfer(0,1,data,9));
+  auto *input=length?response+1:nullptr;
+  assert(UsbCtrlrEp0Xfer(0,0x80,input,length) && irqMask==mask);
+  int remaining=std::max(1,(length+63)/64),offset=0;
+  assert(CFifoUsed(s_Usbd.hEp0Que)==min(remaining,4));
+  assert(s_Usbd.Ctrlr.Ep0[1].ActualLen==min(length,256));
+  if(busy){
+   assert(!regs.TASKS_STARTEPIN[0]);
+   regs.EPSTATUS.bits=2;regs.EVENTS_ENDEPIN[1]=1;interrupt();
+  }
+  // Even a saturated AppEvt queue cannot delay intermediate packets.
+  if(fullAppEvt)while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
+  dmaLocks=dmaUnlocks=0;
+  while(remaining){
+   auto *packet=(nRFEPPkt_t*)CFifoPeek(s_Usbd.hEp0Que);
+   const unsigned bytes=min(length-offset,64);
+   assert(packet && packet->Len==bytes && dmaBusy==0x82);
+   assert(regs.EPIN[0].PTR==uint32_t(uintptr_t(packet->Payload)));
+   assert((regs.EPIN[0].PTR&3U)==0U && regs.EPIN[0].MAXCNT==bytes);
+   assert(!bytes || !memcmp(packet->Payload,input+offset,bytes));
+   assert(regs.SHORTS==(bytes<64?USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk:0U));
+   assert(!ep0Completions && CFifoUsed(s_Usbd.hEp0Que)==min(remaining,4));
+   const auto staged=s_Usbd.Ctrlr.Ep0[1].ActualLen;
+   const auto get=s_Usbd.hEp0Que->GetIdx,put=s_Usbd.hEp0Que->PutIdx;
+   regs.TASKS_STARTEPIN[0]=0;
+   regs.EPSTATUS.bits=1;regs.EVENTS_ENDEPIN[0]=1;interrupt();
+   assert(s_Usbd.hEp0Que->GetIdx==get && s_Usbd.hEp0Que->PutIdx==put);
+   assert(s_Usbd.Ctrlr.Ep0[1].ActualLen==staged && !regs.TASKS_STARTEPIN[0]);
+   assert(!dmaLocks && !dmaUnlocks && !ep0Completions);
+   regs.EVENTS_EP0DATADONE=1;interrupt();
+   offset+=bytes;--remaining;
+   assert(CFifoUsed(s_Usbd.hEp0Que)==min(remaining,4));
+   assert(bool(regs.TASKS_STARTEPIN[0])==bool(remaining));
+   assert(bool(dmaBusy)==bool(remaining) && !dmaLocks);
+   assert(dmaUnlocks==unsigned(!remaining) && ep0Completions==unsigned(!remaining));
+   if(fullAppEvt)assert(!AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){}));
+  }
+  assert(ep0Length==unsigned(length) && offset==length);
+  assert(s_Usbd.Ctrlr.Ep0[1].ActualLen==length && !s_Usbd.hEp0Que->DropCnt);
+ }
+ puts("PASS: EP0 streams 0..65535-byte responses through four slots without AppEvt or relocking between packets");
+
+ // A new SETUP or bus reset cancels the unstaged tail as well as the queue.
+ for(bool reset:{false,true}){
+  init();assert(UsbCtrlrEp0Send(0,response+1,1024)==1024);
+  const auto staged=s_Usbd.Ctrlr.Ep0[1].ActualLen;
+  regs.TASKS_STARTEPIN[0]=0;
+  regs.EPSTATUS.bits=1;regs.EVENTS_ENDEPIN[0]=regs.EVENTS_EP0DATADONE=1;
+  if(reset)regs.EVENTS_USBRESET=1;
+  else{
+   regs.BMREQUESTTYPE=0x80;regs.BREQUEST=6;regs.WLENGTHL=18;
+   regs.EVENTS_EP0SETUP=1;
+  }
+  interrupt();
+  assert(!regs.TASKS_STARTEPIN[0] && !dmaBusy && !ep0Completions);
+  if(!reset)assert(s_Usbd.Ctrlr.Ep0[1].ActualLen==staged);
+  AppEvtHandlerExec();
+  assert(!CFifoUsed(s_Usbd.hEp0Que) && !s_Usbd.Ctrlr.Ep0[1].pBuffer);
+  assert(!s_Usbd.Ctrlr.Ep0[1].ActualLen && !s_Usbd.Ctrlr.Ep0[1].TotalLen);
+  assert(UsbCtrlrEp0Send(0,data,9)==9);
+  auto *packet=(nRFEPPkt_t*)CFifoPeek(s_Usbd.hEp0Que);
+  assert(packet->Len==9 && !memcmp(packet->Payload,data,9));
+ }
+ puts("PASS: SETUP and reset cancel a streamed EP0 tail before accepting a new response");
 
  // Status stages complete without DMA. An IN data ZLP follows the SETUP
  // direction and must still be queued.

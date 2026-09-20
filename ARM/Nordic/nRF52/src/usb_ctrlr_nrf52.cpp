@@ -591,6 +591,30 @@ void nRFUsbdDmaWait(void)
 	}
 }
 
+// Stage as much of the response as the EP0 queue can hold. ActualLen tracks
+// bytes staged; the source remains owned until the whole response completes.
+// Called with the USB ISR excluded, or by its EP0 completion case.
+static void nRFUsbdEp0Fill(void)
+{
+	nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Ep0[1];
+	do
+	{
+		nRFEPPkt_t *p = (nRFEPPkt_t *)CFifoPut(s_Usbd.hEp0Que);
+		if (p == NULL)
+			break;
+
+		const int len = min((int)(pXfer->TotalLen - pXfer->ActualLen),
+			NRFX_USBD_MAX_PACKET_SIZE);
+		p->Len = len;
+		if (len > 0)
+		{
+			memcpy(p->Payload, pXfer->pBuffer, len);
+			pXfer->pBuffer += len;
+			pXfer->ActualLen += len;
+		}
+	} while (pXfer->ActualLen < pXfer->TotalLen);
+}
+
 // Program and start one staged EP0 IN packet, arming the status-stage short
 // when the packet is short. The caller already owns EasyDMA.
 static __attribute__((noinline)) void nRFUsbdEp0InStart(const nRFEPPkt_t *p)
@@ -1179,6 +1203,8 @@ extern "C" void USBD_IRQHandler(void)
 				}
 
 				(void)CFifoGet(s_Usbd.hEp0Que);
+				if (s_Usbd.Ctrlr.Ep0[1].ActualLen < s_Usbd.Ctrlr.Ep0[1].TotalLen)
+					nRFUsbdEp0Fill();
 				nRFEPPkt_t *p =
 					(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
 				if (p != NULL)
@@ -1714,26 +1740,13 @@ bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 {
-	const int cnt = Length;
-
 	(void)DevNo;
-	s_Usbd.Ctrlr.Ep0[1].TotalLen = (uint16_t)Length;
-
-	do
-	{
-		const int l = min(Length, NRFX_USBD_MAX_PACKET_SIZE);
-
-		nRFEPPkt_t *p = (nRFEPPkt_t*)CFifoPut(s_Usbd.hEp0Que);
-
-		if (l > 0)
-		{
-			memcpy(p->Payload, pBuffer, l);
-			pBuffer += l;
-		}
-
-		p->Len = l;
-		Length -= l;
-	} while (Length != 0);
+	const uint32_t state = DisableInterrupt();
+	nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Ep0[1];
+	pXfer->pBuffer = pBuffer;
+	pXfer->TotalLen = (uint16_t)Length;
+	pXfer->ActualLen = 0U;
+	nRFUsbdEp0Fill();
 
 	if (NRFX_USBD_EASYDMA_BUSY_REG == NRFX_USBD_EASYDMA_BUSY_REG_CLEAR)
 	{
@@ -1742,8 +1755,9 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 
 		nRFUsbdEp0InStart((nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que));
 	}
+	EnableInterrupt(state);
 
-	return cnt;
+	return Length;
 }
 
 void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr)
