@@ -186,7 +186,7 @@ uint8_t *checkedDmaQueuePut(hCFifo_t fifo){
 }
 '''
 code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
-    if name in ('nRFUsbdQueXferDir', 'UsbCtrlrEpInXfer') else function(name)
+    if name in ('nRFUsbdQueXferDir', 'UsbCtrlrEpInXfer', 'UsbCtrlrEp0Send') else function(name)
     for name in [
     'nRFUsbdDmaActive', 'nRFUsbdDmaLock', 'nRFUsbdDmaUnlock', 'nRFUsbdDmaStartLocked', 'nRFUsbdRetireDma', 'nRFUsbdDmaWait',
     'nRFUsbdEp0InStart', 'nRFUsbdStartDmaNow', 'nRFUsbdDmaAllowed',
@@ -342,6 +342,56 @@ int main(int argc,char **argv){
   assert(!CFifoUsed(s_Usbd.hEp0Que) && !dmaBusy);
  }
  puts("PASS: EP0 queued packets survive immediate caller-buffer reuse after Send returns");
+
+ // The upper layer resubmits after each copied chunk completes. It may
+ // reuse its source immediately; no unstaged source is kept by the controller.
+ uint8_t response[65535];
+ for(int length:{0,1,255,256,257,283,512,513,1024,65535})
+ for(unsigned mask:{0U,1U}){
+  init();irqMask=mask;
+  int offset=0;
+  unsigned chunks=0;
+  do{
+   for(int i=0;i<length-offset;++i)
+    response[i]=uint8_t((offset+i)*17+((offset+i)>>8));
+   assert(UsbCtrlrEpInXfer(0,1,data,9));
+   const int copied=UsbCtrlrEp0Send(0,length?response:nullptr,length-offset);
+   assert(copied==min(length-offset,256) && irqMask==mask);
+   assert(s_Usbd.Ctrlr.Ep0[1].TotalLen==copied);
+   assert(!s_Usbd.Ctrlr.Ep0[1].pBuffer && !s_Usbd.Ctrlr.Ep0[1].ActualLen);
+   memset(response,0xFF,sizeof(response));
+   const int packets=std::max(1,(copied+63)/64);
+   assert(CFifoUsed(s_Usbd.hEp0Que)==packets);
+   if(packets==4){
+    // A full queue accepts nothing and must preserve the pending completion.
+    assert(UsbCtrlrEp0Send(0,data,1)==0 && irqMask==mask);
+    assert(s_Usbd.Ctrlr.Ep0[1].TotalLen==copied);
+   }
+   regs.EPSTATUS.bits=2;regs.EVENTS_ENDEPIN[1]=1;interrupt();
+   dmaLocks=dmaUnlocks=0;
+   int sent=0;
+   for(int packetNo=0;packetNo<packets;++packetNo){
+    auto *packet=(nRFEPPkt_t*)CFifoPeek(s_Usbd.hEp0Que);
+    const int bytes=min(copied-sent,64);
+    assert(packet && packet->Len==bytes && ep0Completions==chunks);
+    assert(regs.EPIN[0].PTR==uint32_t(uintptr_t(packet->Payload)));
+    assert(regs.SHORTS==(bytes<64?USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk:0U));
+    for(int i=0;i<bytes;++i){
+     const int pos=offset+sent+i;
+     assert(packet->Payload[i]==uint8_t(pos*17+(pos>>8)));
+    }
+    regs.EPSTATUS.bits=1;regs.EVENTS_ENDEPIN[0]=1;interrupt();
+    assert(CFifoUsed(s_Usbd.hEp0Que)==packets-packetNo && ep0Completions==chunks);
+    regs.EVENTS_EP0DATADONE=1;interrupt();sent+=bytes;
+   }
+   assert(ep0Completions==++chunks && ep0Length==unsigned(copied));
+   assert(!CFifoUsed(s_Usbd.hEp0Que) && !s_Usbd.hEp0Que->DropCnt);
+   assert(!dmaBusy && !dmaLocks && dmaUnlocks==1 && irqMask==mask);
+   offset+=copied;
+  }while(offset<length);
+  assert(offset==length);
+ }
+ puts("PASS: EP0 Send returns copied counts; caller resubmission handles large responses without retained buffers");
 
  // Status stages complete without DMA. An IN data ZLP follows the SETUP
  // direction and must still be queued.

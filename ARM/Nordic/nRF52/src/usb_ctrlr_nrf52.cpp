@@ -1714,16 +1714,18 @@ bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 {
-	const int cnt = Length;
+	int cnt = 0;
 
 	(void)DevNo;
-	s_Usbd.Ctrlr.Ep0[1].TotalLen = (uint16_t)Length;
+	const uint32_t state = DisableInterrupt();
 
 	do
 	{
 		const int l = min(Length, NRFX_USBD_MAX_PACKET_SIZE);
 
 		nRFEPPkt_t *p = (nRFEPPkt_t*)CFifoPut(s_Usbd.hEp0Que);
+		if (p == NULL)
+			break;
 
 		if (l > 0)
 		{
@@ -1733,6 +1735,9 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 
 		p->Len = l;
 		Length -= l;
+		cnt += l;
+		// Completion covers only the copied chunk. Its caller submits the rest.
+		s_Usbd.Ctrlr.Ep0[1].TotalLen = (uint16_t)cnt;
 	} while (Length != 0);
 
 	if (NRFX_USBD_EASYDMA_BUSY_REG == NRFX_USBD_EASYDMA_BUSY_REG_CLEAR)
@@ -1742,6 +1747,7 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 
 		nRFUsbdEp0InStart((nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que));
 	}
+	EnableInterrupt(state);
 
 	return cnt;
 }
