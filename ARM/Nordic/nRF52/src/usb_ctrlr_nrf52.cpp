@@ -554,6 +554,11 @@ static __attribute__((noinline)) void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t L
 	nRFUsbdEmit(&evt);
 }
 
+static inline __attribute__((always_inline)) void nRFUsbdDmaLock(void)
+{
+	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
+}
+
 __attribute__((noinline))
 void nRFUsbdDmaUnlock(void)
 {
@@ -561,7 +566,7 @@ void nRFUsbdDmaUnlock(void)
 	__DSB();
 }
 
-/** Start EasyDMA while the caller already excludes the USBD interrupt. */
+/** Start EasyDMA with the channel already locked by the caller. */
 __attribute__((noinline))
 void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
 	volatile uint32_t *pEnd)
@@ -569,7 +574,6 @@ void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
 	*pEnd = 0;
 	__DSB();
 
-	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
 	*pTask = 1;
 	__DSB();
 }
@@ -578,6 +582,7 @@ void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
 // Retire one regular-endpoint DMA identified by its EPSTATUS bit index.
 // Returns false while its END event has not fired. Release the queue entry
 // only after DMA has finished reading it, including inline alignment scratch.
+// Keep the channel locked for the caller's next DMA or explicit release.
 static __attribute__((noinline)) bool nRFUsbdRetireDma(uint32_t StatusBit)
 {
 	const uint8_t epNum = (uint8_t)(StatusBit & 7U);
@@ -593,9 +598,8 @@ static __attribute__((noinline)) bool nRFUsbdRetireDma(uint32_t StatusBit)
 	*pEnd = 0U;
 	NRF_USBD->EPSTATUS = 1UL << StatusBit;
 	(void)CFifoGet(epNum == 0U ? s_Usbd.hEp0Que : s_Usbd.hQue);
-	// Unlock's DSB completes END, EPSTATUS and busy-register writes before
-	// the OUT callback or another DMA can use this buffer.
-	nRFUsbdDmaUnlock();
+	// Complete END and EPSTATUS writes before the OUT callback or next DMA.
+	__DSB();
 	return true;
 }
 
@@ -613,14 +617,17 @@ void nRFUsbdDmaWait(void)
 		const uint32_t dmaStatus = NRF_USBD->EPSTATUS & 0x00FF00FFUL;
 		const uint32_t primask = __get_PRIMASK();
 		__disable_irq();
+		bool complete = false;
 		if (dmaStatus != 0U)
 		{
-			(void)nRFUsbdRetireDma(31U - (uint32_t)__CLZ(dmaStatus));
+			complete = nRFUsbdRetireDma(31U - (uint32_t)__CLZ(dmaStatus));
 		}
 		else if (nRFUsbdIsoFinishDma != nullptr)
 		{
-			(void)nRFUsbdIsoFinishDma(0U);
+			complete = nRFUsbdIsoFinishDma(0U);
 		}
+		if (complete)
+			nRFUsbdDmaUnlock();
 		__set_PRIMASK(primask);
 	}
 }
@@ -718,13 +725,12 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 	pEp->PTR = (uint32_t)(uintptr_t)pBuffer;
 	pEp->MAXCNT = len;
-	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
 	*pTask = 1U;
 	__DSB();
 }
 
-// Completion calls this with DMA released; submissions check busy first.
-// Share the suspend gate and queue selection without rechecking DMA here.
+// The caller owns the channel lock. Retain it across a DMA handoff and
+// release it only when no transfer can start.
 static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 {
 	const uint32_t gate = s_Usbd.Flags &
@@ -732,6 +738,7 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 	if ((gate & USBD_FLAG_HOST_RESUME) != 0U ||
 		gate == USBD_FLAG_SUSPENDED)
 	{
+		nRFUsbdDmaUnlock();
 		return;
 	}
 
@@ -748,16 +755,21 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 		return;
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPeek(s_Usbd.hQue);
 	if (pQue != NULL)
+	{
 		nRFUsbdStartDmaNow(pQue);
+		return;
+	}
+	nRFUsbdDmaUnlock();
 }
 
 
-// Submission may find DMA busy; completion already released the channel.
+// Submission acquires an idle channel; completion retains the existing lock.
 __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 {
 	if (nRFUsbdDmaActive())
 		return;
 
+	nRFUsbdDmaLock();
 	nRFUsbdStartQueuedDma();
 }
 static void nRFUsbdResumeQueuedDma(void)
@@ -1316,11 +1328,13 @@ extern "C" void USBD_IRQHandler(void)
 			}
 		}
 		dmaComplete:
-			// Completion released DMA and handled any regular OUT buffer.
+			// Completion retains the lock through the regular OUT callback.
 			// Restart before EPDATA/SOF work; SETUP and bus events take precedence.
 			if (NRF_USBD->EVENTS_EP0SETUP == 0U &&
 				NRF_USBD->EVENTS_USBEVENT == 0U)
 				nRFUsbdStartQueuedDma();
+			else
+				nRFUsbdDmaUnlock();
 			break;
 	}
 
@@ -1833,7 +1847,7 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 
 	if (NRFX_USBD_EASYDMA_BUSY_REG == NRFX_USBD_EASYDMA_BUSY_REG_CLEAR)
 	{
-		NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_BUSY;
+		nRFUsbdDmaLock();
 		NRF_USBD->EVENTS_EP0DATADONE = 0U;
 		NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
 

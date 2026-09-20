@@ -86,6 +86,7 @@ void nRFIsoHwEnable(bool In, bool Enable)
 
 
 
+// The shared scheduler already owns the channel lock.
 static bool nRFUsbdStartIsoNow(void)
 {
 	const uint32_t flags = s_Usbd.Flags;
@@ -136,19 +137,9 @@ static bool nRFUsbdStartIsoNow(void)
 
 static void nRFUsbdServiceIso(void)
 {
-	const uint32_t flags = s_Usbd.Flags;
-	if ((flags & (USBD_FLAG_ISO_IN_READY | USBD_FLAG_ISO_OUT_READY)) == 0U)
+	if ((s_Usbd.Flags & (USBD_FLAG_ISO_IN_READY | USBD_FLAG_ISO_OUT_READY)) != 0U)
 	{
-		return;
-	}
-
-	const uint32_t gate = flags &
-		(USBD_FLAG_HOST_RESUME | USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND);
-	if ((gate & USBD_FLAG_HOST_RESUME) == 0U &&
-		gate != USBD_FLAG_SUSPENDED &&
-		NRFX_USBD_EASYDMA_BUSY_REG != NRFX_USBD_EASYDMA_BUSY_REG_BUSY)
-	{
-		(void)nRFUsbdStartIsoNow();
+		nRFUsbdResumeQueuedDmaLocked();
 	}
 }
 
@@ -252,7 +243,7 @@ static bool nRFUsbdFinishIsoDma(bool In)
 	*pEnd = 0U;
 	NRF_USBD->EPSTATUS = In ? (1UL << 8U) : (1UL << 24U);
 	__DSB();
-	nRFUsbdDmaUnlock();
+	// The completion caller retains the channel for a handoff or releases it.
 	s_Usbd.Flags |= (uint32_t)USBD_FLAG_ISO_OUT_CMPL << dir;
 	nRFUsbdRetryIsoComplete();
 	return true;

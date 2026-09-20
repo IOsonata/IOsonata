@@ -48,7 +48,15 @@ constexpr unsigned NRFX_USBD_EP_COUNT=9;
 constexpr unsigned NRFX_USBD_MAX_PACKET_SIZE=64;
 constexpr unsigned NRFX_USBD_EASYDMA_BUSY_REG_BUSY=0x82, NRFX_USBD_EASYDMA_BUSY_REG_CLEAR=0;
 uint32_t dmaBusy=0;
-#define NRFX_USBD_EASYDMA_BUSY_REG dmaBusy
+unsigned dmaLocks=0,dmaUnlocks=0;
+struct BusyRegister {
+ operator uint32_t() const{return dmaBusy;}
+ void operator=(uint32_t value){
+  if(value==0x82){assert(!dmaBusy);++dmaLocks;}else{assert(value==0);++dmaUnlocks;}
+  dmaBusy=value;
+ }
+} dmaRegister;
+#define NRFX_USBD_EASYDMA_BUSY_REG dmaRegister
 struct W1C {uint32_t bits=0; operator uint32_t()const{return bits;}
  void operator=(uint32_t value){bits&=~value;}};
 struct Task {uint32_t value=0;void operator=(uint32_t);};
@@ -114,7 +122,7 @@ bool nRFUsbdQueXferDir(uint8_t,bool,uint16_t){assert(false);return false;}
 bool productionEpInXfer(int,uint8_t,uint8_t*,uint16_t);
 '''
 names = ['UsbdSync','nRFUsbdDmaEndBit','nRFUsbdDmaEndEvent','nRFUsbdDir','nRFUsbEpDir',
-         'nRFUsbGetEpReg','nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaUnlock',
+         'nRFUsbGetEpReg','nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaLock','nRFUsbdDmaUnlock',
          'nRFUsbdDmaStartLocked','nRFUsbdEpHwEnable','nRFUsbdSofRelease',
          'nRFUsbdResumeQueuedDma',
          'nRFIsoDir','nRFIsoReg','nRFIsoHwEnable','nRFUsbdStartIsoNow',
@@ -138,19 +146,24 @@ code += '\n'.join(function(n) for n in names)
 code += function('UsbCtrlrEpInXfer').replace('UsbCtrlrEpInXfer(', 'productionEpInXfer(')
 code += r'''
 bool nRFUsbRegDataEpXfer(uint8_t ep,uint16_t length){return nRFUsbRegIsoXfer(ep,length);}
-void nRFUsbdDmaWait(){if(dmaBusy)assert(nRFUsbdFinishIsoDma(activeDir!=0));}
+void nRFUsbdDmaWait(){
+ if(dmaBusy){assert(nRFUsbdFinishIsoDma(activeDir!=0));nRFUsbdDmaUnlock();}
+}
 void nRFUsbdResumeQueuedDmaLocked(){
  const uint32_t gate=s_Usbd.Flags&
   (USBD_FLAG_HOST_RESUME|USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND);
  if(dmaBusy||(gate&USBD_FLAG_HOST_RESUME)||gate==USBD_FLAG_SUSPENDED)return;
- if(!nRFUsbdStartIsoNow())++regularStarts;
+ nRFUsbdDmaLock();
+ if(!nRFUsbdStartIsoNow()){++regularStarts;nRFUsbdDmaUnlock();}
 }
 void finish(bool in){
  assert(dmaBusy && activeDir==unsigned(in));
  if(in){regs.ISOIN.AMOUNT=regs.ISOIN.MAXCNT;regs.EVENTS_ENDISOIN=1;}
  else{regs.ISOOUT.AMOUNT=regs.ISOOUT.MAXCNT;regs.EVENTS_ENDISOOUT=1;}
- assert(nRFUsbdFinishIsoDma(in));assert(!dmaBusy && regs.EPSTATUS.bits==0);
- nRFUsbdResumeQueuedDmaLocked();
+ const unsigned locks=dmaLocks,unlocks=dmaUnlocks;
+ assert(nRFUsbdFinishIsoDma(in));assert(dmaBusy && regs.EPSTATUS.bits==0);
+ if(!nRFUsbdStartIsoNow()){++regularStarts;nRFUsbdDmaUnlock();}
+ assert(dmaLocks==locks && dmaUnlocks==unlocks+unsigned(!dmaBusy));
 }
 void frame(uint16_t length=0,bool zero=false){
  ++regs.FRAMECNTR;regs.SIZE.ISOOUT=zero?USBD_SIZE_ISOOUT_ZERO_Msk:length;
@@ -174,7 +187,7 @@ void init(){
  // Both ISO directions open; every other flag (busy, complete, ready,
  // suspend group) cleared, exactly the former per-field init.
  s_Usbd.Flags=USBD_FLAG_ISO_OUT_OPEN|USBD_FLAG_ISO_IN_OPEN;
- dmaBusy=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
+ dmaBusy=0;dmaLocks=dmaUnlocks=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
  ++s_Usbd.IsoGeneration[0];++s_Usbd.IsoGeneration[1];
  s_Usbd.EpReg[7][0]={outBuffer,callback,nullptr,512,false};

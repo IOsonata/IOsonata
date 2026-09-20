@@ -51,18 +51,18 @@ assert "USBD_ISOSPLIT_SPLIT_HalfIN" in open_ep
 assert "USBD_ISOINCONFIG_RESPONSE_ZeroData" in open_ep
 assert "TASKS_STARTISOIN" in start_iso
 assert "TASKS_STARTISOOUT" in start_iso
-assert "nRFUsbdStartIsoNow()" in service_iso
+assert "nRFUsbdResumeQueuedDmaLocked()" in service_iso
 assert "NRF_USBD->SIZE.ISOOUT" in iso_sof
 assert "NRF_USBD->EVENTS_ENDISOIN" in finish_iso
 assert "NRF_USBD->EVENTS_ENDISOOUT" in finish_iso
-# The channel release moved into the shared nRFUsbdDmaUnlock helper; the
-# ordering policy is unchanged: END is checked and EPSTATUS written before
-# the channel is released.
+# Retirement retains the lock for the completion caller. END and EPSTATUS
+# must be acknowledged before completion is published or another DMA starts.
+assert "nRFUsbdDmaUnlock" not in finish_iso
 assert finish_iso.index("if (*pEnd == 0U)") < finish_iso.index(
-    "nRFUsbdDmaUnlock();"
+    "NRF_USBD->EPSTATUS ="
 )
 assert finish_iso.index("NRF_USBD->EPSTATUS =") < finish_iso.index(
-    "nRFUsbdDmaUnlock();"
+    "__DSB();"
 )
 
 assert "extern bool nRFUsbdIsoStart(void) __attribute__((weak));" in base

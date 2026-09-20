@@ -25,6 +25,7 @@ def function_body(source: str, signature: str) -> str:
 
 source = SOURCE.read_text(encoding="utf-8")
 dma_start = function_body(source, "void nRFUsbdDmaStartLocked(")
+dma_lock = function_body(source, "void nRFUsbdDmaLock(void)")
 dma_finish = function_body(source, "void nRFUsbdDmaWait(void)")
 retire = function_body(source, "bool nRFUsbdRetireDma(uint32_t StatusBit)")
 interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
@@ -33,7 +34,9 @@ assert "nRFUsbdDmaReclaim" not in source
 assert "nRFUsbdDmaEndIntEnable" not in source
 assert "s_LazyInMask" not in source
 assert "INTENSET" not in dma_start, "DMA start must not enable ENDEPIN"
-assert "NRFX_USBD_EASYDMA_BUSY_REG_BUSY" in dma_start
+assert "NRFX_USBD_EASYDMA_BUSY_REG_BUSY" in dma_lock
+assert "NRFX_USBD_EASYDMA_BUSY_REG" not in dma_start
+assert "nRFUsbdDmaLock" not in dma_start
 assert "*pTask = 1" in dma_start
 # Retirement is shared by the ISR default case and the foreground wait
 # through nRFUsbdRetireDma; the ordering policy lives in that helper now.
@@ -43,9 +46,10 @@ assert "nRFUsbdStartQueuedDma" not in dma_finish + retire
 assert "nRFUsbdResumeQueuedDma" not in dma_finish + retire
 assert "EVENTS_ENDEPOUT[epNum]" in retire
 assert "EVENTS_ENDEPIN[epNum]" in retire
-assert "nRFUsbdDmaUnlock();" in retire
+assert "nRFUsbdDmaUnlock();" not in retire
+assert "nRFUsbdDmaUnlock();" in dma_finish
 assert retire.index("if (*pEnd == 0U)") < retire.index("*pEnd = 0U;")
-assert retire.index("*pEnd = 0U;") < retire.index("nRFUsbdDmaUnlock();")
+assert retire.index("*pEnd = 0U;") < retire.index("__DSB();")
 regular = interrupt[interrupt.index("default:          // EP1-7 IN/OUT") :]
 regular = regular[:regular.index("if (NRF_USBD->EVENTS_USBEVENT")]
 assert regular.index("nRFUsbdRetireDma(statusBit)") < regular.index(
