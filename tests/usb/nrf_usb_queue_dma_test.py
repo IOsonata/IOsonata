@@ -138,6 +138,7 @@ unsigned resets,suspends,resumes,setups;
 unsigned controlEvents;
 UsbCtrlrXferEvt_t controlEvent;
 void nRFUsbdProcessEP0Setup(uint32_t,void*);
+void nRFUsbdQueueEp0Setup();
 void (*setupHandler)(const UsbCtrlrEvt_t*);
 void UsbDevProcessEvent(int,const UsbCtrlrEvt_t *event){
  if(event->Type==USB_CTRLR_EVT_XFER_CMPL){
@@ -201,7 +202,7 @@ code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
     'nRFUsbdSofRelease', 'nRFUsbdHandleBusEvent', 'nRFUsbdHandleSof',
     'nRFUsbdTryEnterLowPower',
     'nRFUsbdResetState', 'nRFUsbdBusReset', 'nRFUsbdAbortEp0',
-    'nRFUsbdProcessEP0Setup', 'USBD_IRQHandler'])
+    'nRFUsbdProcessEP0Setup', 'nRFUsbdQueueEp0Setup', 'USBD_IRQHandler'])
 code += re.search(r'static constexpr uint16_t USB_INTRF_RX_DRDY[^;]+;', intrf_source).group(0)
 code += '\nvoid UsbIntrfCtrlrOutEvent(uint8_t,UsbCtrlrEvtType_t,uint16_t,UsbCtrlrXferResult_t,void*);\n'
 code += '\n'.join(function(name, intrf_source) for name in [
@@ -573,6 +574,33 @@ int main(int argc,char **argv){
   AppEvtHandlerExec();assert(setups==1);
  }
  puts("PASS: SETUP defers control handling and prevents a premature DMA restart");
+
+ for(bool reset:{false,true}){
+  init();unsigned otherEvents=0;
+  while(AppEvtHandlerQue(0,&otherEvents,[](uint32_t,void *p){++*(unsigned*)p;})){}
+  regs.BMREQUESTTYPE=0x80;regs.BREQUEST=6;regs.WLENGTHL=9;
+  regs.EVENTS_EP0SETUP=regs.EVENTS_EP0DATADONE=1;interrupt();
+  assert(regs.EVENTS_EP0SETUP && !regs.EVENTS_EP0DATADONE && !setups);
+  assert(regs.INTENCLR==USBD_INTEN_EP0SETUP_Msk && !regs.INTENSET);
+  // Other interrupts cannot lose or duplicate the retained request.
+  interrupt();assert(regs.EVENTS_EP0SETUP && !setups);
+  if(reset){
+   regs.EVENTS_USBRESET=1;interrupt();assert(!regs.EVENTS_EP0SETUP);
+   UsbCtrlrProcess(0);UsbCtrlrProcess(0);assert(!setups && resets==1);
+  }else{
+   // A replacement SETUP before acceptance supersedes the retained one.
+   regs.WLENGTHL=18;
+   setupHandler=[](const UsbCtrlrEvt_t *e){
+    assert(e->Setup.bRequest==6 && e->Setup.wLength==18 && !irqMask);
+   };
+   UsbCtrlrProcess(0);
+   assert(otherEvents && !setups && !regs.EVENTS_EP0SETUP);
+   assert(regs.INTENSET==USBD_INTEN_EP0SETUP_Msk);
+   UsbCtrlrProcess(0);UsbCtrlrProcess(0);assert(setups==1);
+   regs.EVENTS_EP0SETUP=1;interrupt();AppEvtHandlerExec();assert(setups==2);
+  }
+ }
+ puts("PASS: full AppEvt retains SETUP, masks its IRQ, retries once, and handles replacement/reset");
 
  // Suspend blocks the early restart. Low-power suspend drains queued DMA
  // before entering LOWPOWER; ordinary suspend retains it.

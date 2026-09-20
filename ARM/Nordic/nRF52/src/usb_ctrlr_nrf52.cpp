@@ -759,6 +759,8 @@ static void nRFUsbdResetState(void)
 	s_Usbd.IsoOutSize = 0U;
 	++s_Usbd.IsoGeneration[0];
 	++s_Usbd.IsoGeneration[1];
+	NRF_USBD->EVENTS_EP0SETUP = 0U;
+	NRF_USBD->EVENTS_EP0DATADONE = 0U;
 	nRFUsbdDmaUnlock();
 }
 
@@ -1124,6 +1126,24 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	UsbDevProcessEvent(0, &evt);
 }
 
+// Callers exclude the USB ISR. Keep SETUP latched until AppEvt accepts it;
+// masking only this source lets the foreground drain a full event queue.
+static void nRFUsbdQueueEp0Setup(void)
+{
+	if (AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEP0Setup))
+	{
+		NRF_USBD->EVENTS_EP0SETUP = 0U;
+		NRF_USBD->INTENSET = USBD_INTEN_EP0SETUP_Msk;
+	}
+	else
+	{
+		NRF_USBD->INTENCLR = USBD_INTEN_EP0SETUP_Msk;
+	}
+	// A new SETUP aborts the old control transfer's completion.
+	NRF_USBD->EVENTS_EP0DATADONE = 0U;
+	UsbdSync();
+}
+
 
 extern "C" void USBD_IRQHandler(void)
 {
@@ -1242,15 +1262,7 @@ extern "C" void USBD_IRQHandler(void)
 
 	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
 	{
-		NRF_USBD->EVENTS_EP0SETUP = 0U;
-
-		// A new SETUP aborts the previous control transfer. Discard any
-		// simultaneously latched completion from that old transfer.
-		NRF_USBD->EVENTS_EP0DATADONE = 0U;
-		UsbdSync();
-
-		(void)AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEP0Setup);
-
+		nRFUsbdQueueEp0Setup();
 		return;
 	}
 	if (NRF_USBD->EVENTS_EPDATA != 0U ||
@@ -1378,6 +1390,8 @@ void UsbCtrlrProcess(int DevNo)
 
 	// Share EPDATASTATUS with the ISR without publishing a completion twice.
 	const uint32_t state = DisableInterrupt();
+	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
+		nRFUsbdQueueEp0Setup();
 	const uint32_t inData = NRF_USBD->EPDATASTATUS & 0xFEU;
 	if (inData != 0U)
 	{

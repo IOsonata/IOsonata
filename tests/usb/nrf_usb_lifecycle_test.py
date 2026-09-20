@@ -38,7 +38,7 @@ bool cable, clockOK, readyOK;
 unsigned requests, releases, clockRefs, starts, resets, waits, dispatches;
 unsigned irqDisables, irqPriority;
 constexpr int USBD_IRQn=7;
-struct {uint32_t INTEN,USBPULLUP,ENABLE,LOWPOWER,EPDATASTATUS;} regs;
+struct {uint32_t INTEN,USBPULLUP,ENABLE,LOWPOWER,EPDATASTATUS,EVENTS_EP0SETUP;} regs;
 auto *NRF_USBD=&regs;
 bool UsbCtrlrVbusDetected(int dev){(void)dev;return cable;}
 bool UsbdXtalRequest(){++requests;if(clockOK)++clockRefs;return clockOK;}
@@ -57,6 +57,7 @@ void EnableInterrupt(uint32_t){}
 uint32_t nRFUsbdQueueInComplete(uint32_t){assert(false);return 0;}
 unsigned __CLZ(uint32_t){assert(false);return 0;}
 void nRFUsbdProcessOutData(uint32_t,void*){assert(false);}
+void nRFUsbdQueueEp0Setup(){assert(false);}
 void init(){
  s_Usbd={6,false};
  cable=clockOK=readyOK=true;
