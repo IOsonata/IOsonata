@@ -284,7 +284,8 @@ typedef struct __nRF_Usbd_Xfer
 
 typedef struct __nRF_Usbd_Ctrlr
 {
-	nRFUsbdXfer_t Ep0[2];
+	// OUT bytes remaining; IN bytes copied for the current completion.
+	uint16_t Ep0Len[2];
 	nRFUsbdXfer_t Iso[2];
 	bool SofEnabled;
 } nRFUsbdCtrlr_t;
@@ -320,7 +321,7 @@ typedef struct __nRF_Usbd_State
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;
 	uint32_t IsoGeneration[2];
-	// Non-control endpoints 1-8; EP0 uses Ctrlr.Ep0 above.
+	// Non-control endpoints 1-8; EP0 uses Ctrlr.Ep0Len above.
 	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT - 1][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
 } nRFUsbdState_t;

@@ -763,7 +763,7 @@ static void nRFUsbdAbortEp0(void)
 	CFifoFlush(s_Usbd.hEp0Que);
 	EnableInterrupt(state);
 
-	memset(&s_Usbd.Ctrlr.Ep0, 0, sizeof(s_Usbd.Ctrlr.Ep0));
+	memset(s_Usbd.Ctrlr.Ep0Len, 0, sizeof(s_Usbd.Ctrlr.Ep0Len));
 
 	NRF_USBD->EVENTS_ENDEPIN[0] = 0;
 	NRF_USBD->EVENTS_ENDEPOUT[0] = 0;
@@ -1071,7 +1071,7 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) == 0U &&
 		evt.Setup.wLength != 0U)
 	{
-		s_Usbd.Ctrlr.Ep0[0].TotalLen = evt.Setup.wLength;
+		s_Usbd.Ctrlr.Ep0Len[0] = evt.Setup.wLength;
 		NRF_USBD->SHORTS = 0U;
 		nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
 	}
@@ -1111,8 +1111,9 @@ extern "C" void USBD_IRQHandler(void)
 		return;
 	}
 
-	// Exactly one endpoint can own EasyDMA.
-	// Handle DMA transfer complete
+	// Exactly one endpoint can own EasyDMA. Completed cases retain its lock
+	// and request the shared handoff immediately below this switch.
+	bool startDma = false;
 	switch (dmastatus)
 	{
 		case 0x00000001U: // EP0 IN
@@ -1139,15 +1140,17 @@ extern "C" void USBD_IRQHandler(void)
 				break;
 			}
 
-			nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, s_Usbd.Ctrlr.Ep0[1].TotalLen);
-			goto dmaComplete;
+			nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, s_Usbd.Ctrlr.Ep0Len[1]);
+			startDma = true;
+			break;
 		}
 		case 0U:
 			// OUT data-ready may arrive while the DMA channel is idle.
 			if (NRF_USBD->EVENTS_EP0DATADONE == 0U || nRFUsbdDmaActive())
 				break;
 			nRFUsbdDmaLock();
-			goto dmaComplete;
+			startDma = true;
+			break;
 
 		case 0x00010000U: // EP0 OUT
 		{
@@ -1158,23 +1161,22 @@ extern "C" void USBD_IRQHandler(void)
 			NRF_USBD->EPSTATUS = dmastatus;
 			__DSB();
 
-			if (NRF_USBD->EVENTS_EP0SETUP != 0U)
-				goto dmaComplete;
-
-			nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Ep0[0];
-			const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
-			pXfer->ActualLen += amount;
-			nRFUsbdEmitXfer(0U, amount);
-			if (amount == NRFX_USBD_MAX_PACKET_SIZE &&
-				pXfer->ActualLen < pXfer->TotalLen)
-				nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
-			goto dmaComplete;
+			if (NRF_USBD->EVENTS_EP0SETUP == 0U)
+			{
+				const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
+				s_Usbd.Ctrlr.Ep0Len[0] -= amount;
+				nRFUsbdEmitXfer(0U, amount);
+				if (amount == NRFX_USBD_MAX_PACKET_SIZE &&
+					s_Usbd.Ctrlr.Ep0Len[0] != 0U)
+					nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
+			}
+			startDma = true;
+			break;
 		}
 		case 0x00000100U: // ISO IN
 		case 0x01000000U: // ISO OUT
-			if (nRFUsbdIsoFinishDma != nullptr &&
-				nRFUsbdIsoFinishDma(dmastatus))
-				goto dmaComplete;
+			startDma = nRFUsbdIsoFinishDma != nullptr &&
+				nRFUsbdIsoFinishDma(dmastatus);
 			break;
 		default:          // EP1-7 IN/OUT
 		{
@@ -1190,27 +1192,31 @@ extern "C" void USBD_IRQHandler(void)
 				nRFUsbEpRegisteredEvent(epNum, 0U, USB_CTRLR_EVT_XFER_CMPL,
 					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 			}
+			startDma = true;
+			break;
 		}
-		dmaComplete:
-			// Completion retains the lock through the regular OUT callback.
-			// Restart before EPDATA/SOF work; SETUP and bus events take precedence.
-			if (NRF_USBD->EVENTS_EP0SETUP == 0U &&
-				NRF_USBD->EVENTS_USBEVENT == 0U && nRFUsbdDmaAllowed())
-			{
-				// EP0DATADONE retains OUT readiness while another endpoint owns DMA.
-				if (NRF_USBD->EVENTS_EP0DATADONE != 0U &&
-					(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
-				{
-					NRF_USBD->EVENTS_EP0DATADONE = 0U;
-					NRF_USBD->EPOUT[0].PTR = (uint32_t)(uintptr_t)s_Usbd.Ep0Bounce;
-					NRF_USBD->EPOUT[0].MAXCNT = min(
-						(int)(s_Usbd.Ctrlr.Ep0[0].TotalLen - s_Usbd.Ctrlr.Ep0[0].ActualLen),
-						NRFX_USBD_MAX_PACKET_SIZE);
-					nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPOUT[0],
-						&NRF_USBD->EVENTS_ENDEPOUT[0]);
-					break;
-				}
+	}
 
+	if (startDma)
+	{
+		// Restart before EPDATA/SOF work; SETUP and bus events take precedence.
+		if (NRF_USBD->EVENTS_EP0SETUP == 0U &&
+			NRF_USBD->EVENTS_USBEVENT == 0U && nRFUsbdDmaAllowed())
+		{
+			// EP0DATADONE retains OUT readiness while another endpoint owns DMA.
+			if (NRF_USBD->EVENTS_EP0DATADONE != 0U &&
+				(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
+			{
+				NRF_USBD->EVENTS_EP0DATADONE = 0U;
+				NRF_USBD->EPOUT[0].PTR = (uint32_t)(uintptr_t)s_Usbd.Ep0Bounce;
+				NRF_USBD->EPOUT[0].MAXCNT = min(
+					(int)(s_Usbd.Ctrlr.Ep0Len[0]),
+					NRFX_USBD_MAX_PACKET_SIZE);
+				nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPOUT[0],
+					&NRF_USBD->EVENTS_ENDEPOUT[0]);
+			}
+			else
+			{
 				// SETUP's idle wait can be interrupted by a data submission.
 				// Give its queued control response the retained channel first.
 				const nRFEPPkt_t *pEp0 =
@@ -1220,9 +1226,9 @@ extern "C" void USBD_IRQHandler(void)
 				else
 					nRFUsbdStartQueuedDma();
 			}
-			else
-				nRFUsbdDmaUnlock();
-			break;
+		}
+		else
+			nRFUsbdDmaUnlock();
 	}
 
 	if (NRF_USBD->EVENTS_USBEVENT != 0U)
@@ -1690,7 +1696,7 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 		Length -= l;
 		cnt += l;
 		// Completion covers only the copied chunk. Its caller submits the rest.
-		s_Usbd.Ctrlr.Ep0[1].TotalLen = (uint16_t)cnt;
+		s_Usbd.Ctrlr.Ep0Len[1] = (uint16_t)cnt;
 	} while (Length != 0);
 
 	if (NRFX_USBD_EASYDMA_BUSY_REG == NRFX_USBD_EASYDMA_BUSY_REG_CLEAR)

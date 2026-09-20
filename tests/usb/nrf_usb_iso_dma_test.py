@@ -84,7 +84,7 @@ QUEUE_TYPES
 struct {
  volatile uint32_t Flags=0;
  uint32_t IsoGeneration[2]={};uint16_t IsoOutSize=0;
- struct {nRFUsbdXfer_t Ep0[2],Iso[2];bool SofEnabled;} Ctrlr;
+ struct {uint16_t Ep0Len[2];nRFUsbdXfer_t Iso[2];bool SofEnabled;} Ctrlr;
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue;
 } s_Usbd;

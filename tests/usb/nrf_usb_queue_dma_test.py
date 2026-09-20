@@ -166,6 +166,8 @@ code += re.search(r'typedef struct __nRF_Usb_Ep_Registration\s*\{.*?\} nRFUsbEpR
     header, re.S).group(0) + '\n'
 code += re.search(r'typedef struct __nRF_Usbd_Xfer\s*\{.*?\} nRFUsbdXfer_t;',
     header, re.S).group(0) + '\n'
+code += re.search(r'typedef struct __nRF_Usbd_Ctrlr\s*\{.*?\} nRFUsbdCtrlr_t;',
+    header, re.S).group(0) + '\n'
 code += re.search(r'enum\s*\{[^}]*USBD_FLAG_SUSPENDED[^}]*\};', header).group(0) + '\n'
 code += r'''
 #pragma pack(pop)
@@ -176,7 +178,7 @@ struct {
  bool LowPowerSuspend;
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue,hEp0Que;
- struct {nRFUsbdXfer_t Ep0[2];bool SofEnabled;} Ctrlr;
+ nRFUsbdCtrlr_t Ctrlr;
  alignas(4) uint8_t Ep0Bounce[64];
 } s_Usbd;
 alignas(8) uint8_t queueMem[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
@@ -374,15 +376,14 @@ int main(int argc,char **argv){
    assert(UsbCtrlrEpInXfer(0,1,data,9));
    const int copied=UsbCtrlrEp0Send(0,length?response:nullptr,length-offset);
    assert(copied==min(length-offset,256) && irqMask==mask);
-   assert(s_Usbd.Ctrlr.Ep0[1].TotalLen==copied);
-   assert(!s_Usbd.Ctrlr.Ep0[1].pBuffer && !s_Usbd.Ctrlr.Ep0[1].ActualLen);
+   assert(s_Usbd.Ctrlr.Ep0Len[1]==copied);
    memset(response,0xFF,sizeof(response));
    const int packets=std::max(1,(copied+63)/64);
    assert(CFifoUsed(s_Usbd.hEp0Que)==packets);
    if(packets==4){
     // A full queue accepts nothing and must preserve the pending completion.
     assert(UsbCtrlrEp0Send(0,data,1)==0 && irqMask==mask);
-    assert(s_Usbd.Ctrlr.Ep0[1].TotalLen==copied);
+    assert(s_Usbd.Ctrlr.Ep0Len[1]==copied);
    }
    regs.EPSTATUS.bits=2;regs.EVENTS_ENDEPIN[1]=1;interrupt();
    dmaLocks=dmaUnlocks=0;
@@ -430,8 +431,7 @@ int main(int argc,char **argv){
   init();regs.BMREQUESTTYPE=0x21;regs.BREQUEST=0x41;
   regs.WLENGTHL=length;regs.EVENTS_EP0SETUP=1;
   interrupt();AppEvtHandlerExec();
-  assert(s_Usbd.Ctrlr.Ep0[0].TotalLen==length);
-  assert(!s_Usbd.Ctrlr.Ep0[0].ActualLen && !s_Usbd.Ctrlr.Ep0[0].pBuffer);
+  assert(s_Usbd.Ctrlr.Ep0Len[0]==length);
   assert(regs.TASKS_EP0RCVOUT==unsigned(length!=0));
   assert(!dmaBusy && !controlEvents && !regs.TASKS_STARTEPOUT[0]);
  }
@@ -489,6 +489,7 @@ int main(int argc,char **argv){
    regs.EVENTS_ENDEPOUT[0]=0;interrupt();assert(outOffset==offset);
    regs.EVENTS_ENDEPOUT[0]=1;interrupt();
    offset+=amount;assert(outOffset==offset && !dmaBusy);
+   assert(s_Usbd.Ctrlr.Ep0Len[0]==length-offset);
    const bool more=amount==64 && offset<length;
    assert(bool(regs.TASKS_EP0RCVOUT)==more);
    memset(s_Usbd.Ep0Bounce,0xEE,sizeof(s_Usbd.Ep0Bounce));
