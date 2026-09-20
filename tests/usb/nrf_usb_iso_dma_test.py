@@ -120,7 +120,7 @@ names = ['UsbdSync','nRFUsbdDmaEndBit','nRFUsbdDmaEndEvent','nRFUsbdDir','nRFUsb
          'nRFIsoDir','nRFIsoReg','nRFIsoHwEnable','nRFUsbdStartIsoNow',
          'nRFUsbdServiceIso','nRFUsbRegIsoXfer','nRFUsbdProcessIsoComplete',
          'nRFUsbdRetryIsoComplete','nRFUsbdFinishIsoDma','nRFUsbdIsoStart',
-         'nRFUsbdIsoService','nRFUsbdIsoFinishDma','nRFUsbdIsoSof',
+         'nRFUsbdIsoFinishDma','nRFUsbdIsoSof',
          'nRFUsbdIsoEpClose','UsbCtrlrEpClose','nRFUsbdHandleSof',
          'nRFUsbdIsoXfer','UsbCtrlrEpXfer']
 import re as _re
@@ -155,6 +155,7 @@ void finish(bool in){
 void frame(uint16_t length=0,bool zero=false){
  ++regs.FRAMECNTR;regs.SIZE.ISOOUT=zero?USBD_SIZE_ISOOUT_ZERO_Msk:length;
  nRFUsbdHandleSof();
+ nRFUsbdResumeQueuedDmaLocked(); // Shared ISR tail schedules after SOF.
 }
 void callback(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,UsbCtrlrXferResult_t,void*){
  assert(event==USB_CTRLR_EVT_XFER_CMPL && !irqMask);

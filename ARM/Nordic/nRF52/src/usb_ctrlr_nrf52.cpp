@@ -176,7 +176,6 @@ alignas(4) static uint8_t s_Ep0QueMem[
 nRFUsbdState_t s_Usbd;
 
 extern bool nRFUsbdIsoStart(void) __attribute__((weak));
-extern void nRFUsbdIsoService(void) __attribute__((weak));
 extern bool nRFUsbdIsoFinishDma(uint32_t DmaStatus) __attribute__((weak));
 extern void nRFUsbdIsoSof(void) __attribute__((weak));
 extern bool nRFUsbdIsoEpOpen(const UsbEndPointDesc_t *pDesc) __attribute__((weak));
@@ -959,7 +958,6 @@ static void nRFUsbdWakeAllowed(void)
 	}
 
 	s_Usbd.Flags = flags;
-	nRFUsbdTryRemoteWake();
 }
 
 
@@ -1082,30 +1080,37 @@ static void nRFUsbdProcessEp0OutData(uint32_t Evt, void *pContext)
 }
 #endif
 
-static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
-{
-	const uint8_t epNum = (uint8_t)Evt;
-	(void)pContext;
+static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext);
 
-	const uint32_t state = DisableInterrupt();
-	const uint32_t bit = 1UL << (epNum + 16U);
+// Caller excludes interrupts. Queue and acknowledge OUT here; the ISR starts
+// DMA once after all pending events, while AppEvt retries use the wrapper below.
+static __attribute__((noinline)) void nRFUsbdQueueOutData(uint8_t EpNum)
+{
+	const uint32_t bit = 1UL << (EpNum + 16U);
 	// A latched OUT bit owns the request until DMA can be queued. AppEvt
 	// retries may overlap; only the first accepted enqueue consumes it.
 	if ((NRF_USBD->EPDATASTATUS & bit) != 0U)
 	{
-		const uint16_t len = s_Usbd.EpReg[epNum - 1U][0].MaxPacketSize;
-		if (nRFUsbdQueXferDir(epNum, false, len))
+		const uint16_t len = s_Usbd.EpReg[EpNum - 1U][0].MaxPacketSize;
+		if (nRFUsbdQueXferDir(EpNum, false, len))
 		{
 			// Acknowledge before starting DMA, which can admit the next packet.
 			NRF_USBD->EPDATASTATUS = bit;
 			__DSB();
-			nRFUsbdResumeQueuedDmaLocked();
 		}
 		else
 		{
-			(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
+			(void)AppEvtHandlerQue(EpNum, NULL, nRFUsbdProcessOutData);
 		}
 	}
+}
+
+static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
+{
+	(void)pContext;
+	const uint32_t state = DisableInterrupt();
+	nRFUsbdQueueOutData((uint8_t)Evt);
+	nRFUsbdResumeQueuedDmaLocked();
 	EnableInterrupt(state);
 }
 
@@ -1174,11 +1179,6 @@ static void nRFUsbdHandleSof(void)
 	}
 
 	nRFUsbdSofRelease();
-
-	if (nRFUsbdIsoService != nullptr)
-	{
-		nRFUsbdIsoService();
-	}
 }
 
 static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
@@ -1315,9 +1315,6 @@ extern "C" void USBD_IRQHandler(void)
 					USB_CTRLR_XFER_SUCCESS);
 			}
 
-			if (NRF_USBD->EVENTS_EP0SETUP == 0U &&
-				NRF_USBD->EVENTS_USBEVENT == 0U)
-				nRFUsbdStartQueuedDma();
 			break;
 		}
 	}
@@ -1392,16 +1389,16 @@ extern "C" void USBD_IRQHandler(void)
 
 	nRFUsbdTryRemoteWake();
 
-	// ENDEP released the shared EasyDMA channel above. ISO has priority when
-	// it is open; ordinary CDC traffic avoids the ISO service path entirely.
+	// Queue OUT after acknowledging EPDATA. The shared scheduler then sees
+	// all work from this interrupt, including ISO readiness from SOF.
 	if (outEp != 0U)
 	{
-		nRFUsbdProcessOutData(outEp, NULL);
+		const uint32_t state = DisableInterrupt();
+		nRFUsbdQueueOutData(outEp);
+		EnableInterrupt(state);
 	}
 
-	if ((dmastatus & 0x01000100UL) != 0U &&
-		(s_Usbd.Flags & (USBD_FLAG_ISO_IN_OPEN | USBD_FLAG_ISO_OUT_OPEN)) != 0U)
-		nRFUsbdResumeQueuedDmaLocked();
+	nRFUsbdResumeQueuedDmaLocked();
 
 	nRFUsbdTryEnterLowPower();
 

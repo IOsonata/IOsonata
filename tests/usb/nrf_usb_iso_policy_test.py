@@ -73,7 +73,10 @@ assert (
 assert "bool UsbCtrlrIsoInit(int DevNo)" in iso
 assert "nRFUsbdIsoFinishDma(dmastatus);" in interrupt
 assert "nRFUsbdIsoSof();" in handle_sof
-assert "nRFUsbdIsoService();" in handle_sof
+assert "nRFUsbdIsoService" not in base and "nRFUsbdIsoService" not in iso
+assert interrupt.index("nRFUsbdHandleSof();") < interrupt.index(
+    "nRFUsbdResumeQueuedDmaLocked();"
+)
 # Regular entries stay queued until DMA retirement, so the scheduler peeks
 # the regular queue; ISO still runs before it and after EP0.
 assert queued.index("nRFUsbdIsoStart()") < queued.index("CFifoPeek(s_Usbd.hQue)")

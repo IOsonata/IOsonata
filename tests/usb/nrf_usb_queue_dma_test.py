@@ -69,6 +69,12 @@ constexpr uint32_t USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk=1;
 constexpr uint32_t USBD_INTEN_USBRESET_Msk=1U,USBD_INTEN_USBEVENT_Msk=1U<<22;
 constexpr uint32_t USBD_INTEN_EPDATA_Msk=1U<<24,USBD_INTEN_EP0SETUP_Msk=1U<<23;
 constexpr uint32_t USBD_INTEN_EP0DATADONE_Msk=1U<<10,USBD_INTEN_ENDEPOUT0_Msk=1U<<12;
+constexpr uint32_t USBD_EVENTCAUSE_SUSPEND_Msk=1U,USBD_EVENTCAUSE_RESUME_Msk=2U;
+constexpr uint32_t USBD_EVENTCAUSE_USBWUALLOWED_Msk=4U;
+constexpr uint32_t USBD_INTEN_SOF_Msk=1U<<21,USBD_INTENSET_SOF_Msk=1U<<21;
+constexpr uint32_t USBD_INTENCLR_SOF_Msk=1U<<21;
+constexpr uint32_t USBD_LOWPOWER_LOWPOWER_ForceNormal=0,USBD_LOWPOWER_LOWPOWER_LowPower=1;
+constexpr uint32_t USBD_LOWPOWER_LOWPOWER_Pos=0,USBD_DPDMVALUE_STATE_Resume=1;
 uint32_t dmaBusy;
 #define NRFX_USBD_EASYDMA_BUSY_REG dmaBusy
 struct Endpoint {uint32_t PTR,MAXCNT,AMOUNT;};
@@ -86,6 +92,7 @@ struct NRF_USBD_Type {
  uint32_t EVENTS_ENDEPIN[8],EVENTS_ENDEPOUT[8],EVENTS_EP0DATADONE,SHORTS,EVENTS_EPDATA;
  uint32_t EVENTS_EP0SETUP,EVENTS_USBEVENT,EVENTS_SOF,EVENTS_USBRESET;
  uint32_t EPOUTEN,EPINEN,INTEN,INTENCLR,INTENSET;
+ uint32_t LOWPOWER,DPDMVALUE,TASKS_DPDMDRIVE,FRAMECNTR;
  struct {uint32_t EPOUT[8];} SIZE;
  W1C EPSTATUS,EPDATASTATUS,EVENTCAUSE;
 } regs;
@@ -97,13 +104,18 @@ unsigned isoChecks;
 bool nRFUsbdIsoStart(){++isoChecks;return isoReady;}
 bool nRFUsbdIsoFinishDma(uint32_t){assert(false);return false;}
 void nRFUsbdQueueEp0Complete(bool,uint16_t){assert(false);}
-void nRFUsbdHandleBusEvent(uint32_t){assert(false);}
-void nRFUsbdProcessEP0Setup(uint32_t,void*){assert(false);}
-void nRFUsbdHandleSof(){assert(false);}
-void nRFUsbdTryRemoteWake(){}
-void nRFUsbdTryEnterLowPower(){}
-unsigned resets;
-void nRFUsbdEmitSimple(UsbCtrlrEvtType_t event){assert(event==USB_CTRLR_EVT_RESET);++resets;}
+void nRFUsbdHostResumeDetected();
+void nRFUsbdProcessOutData(uint32_t,void*);
+bool isoAtSof;
+void nRFUsbdIsoSof(){if(isoAtSof)isoReady=true;}
+unsigned resets,suspends,resumes,setups;
+void nRFUsbdProcessEP0Setup(uint32_t,void*){++setups;}
+void nRFUsbdEmit(const UsbCtrlrEvt_t*){assert(false);}
+void nRFUsbdEmitSimple(UsbCtrlrEvtType_t event){
+ if(event==USB_CTRLR_EVT_RESET)++resets;
+ else if(event==USB_CTRLR_EVT_SUSPEND)++suspends;
+ else {assert(event==USB_CTRLR_EVT_RESUME);++resumes;}
+}
 '''
 queue_enum = re.search(r'enum\s*\{[^}]*NRFX_USBD_QUE_IN_SCRATCH[^}]*\};', source)
 assert queue_enum
@@ -122,9 +134,10 @@ struct {
  uint32_t Flags;
  uint32_t IsoGeneration[2];
  uint16_t IsoOutSize;
+ bool LowPowerSuspend;
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue,hEp0Que;
- struct {struct {uint16_t TotalLen;} Ep0[2];} Ctrlr;
+ struct {struct {uint16_t TotalLen;} Ep0[2];bool SofEnabled;} Ctrlr;
  alignas(4) uint8_t Ep0Bounce[64];
 } s_Usbd;
 alignas(8) uint8_t queueMem[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
@@ -143,7 +156,11 @@ code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
     'UsbCtrlrEpInXfer', 'UsbCtrlrEpOutXfer',
     'nRFUsbEpDir', 'nRFUsbGetEpReg', 'nRFUsbEpRegisteredEvent',
     'nRFUsbdProcessInComplete', 'nRFUsbdQueueInComplete', 'UsbCtrlrEp0Send',
-    'UsbCtrlrEpAlloc', 'nRFUsbdProcessOutData', 'UsbCtrlrProcess',
+    'UsbCtrlrEpAlloc', 'nRFUsbdQueueOutData', 'nRFUsbdProcessOutData', 'UsbCtrlrProcess',
+    'UsbdIsForceNormal', 'UsbdForceNormal', 'nRFUsbdTryRemoteWake',
+    'nRFUsbdHostResumeDetected', 'nRFUsbdWakeAllowed', 'nRFUsbdSofAcquire',
+    'nRFUsbdSofRelease', 'nRFUsbdHandleBusEvent', 'nRFUsbdHandleSof',
+    'nRFUsbdTryEnterLowPower',
     'nRFUsbdResetState', 'nRFUsbdBusReset', 'USBD_IRQHandler'])
 code += re.search(r'static constexpr uint16_t USB_INTRF_RX_DRDY[^;]+;', intrf_source).group(0)
 code += '\nvoid UsbIntrfCtrlrOutEvent(uint8_t,UsbCtrlrEvtType_t,uint16_t,UsbCtrlrXferResult_t,void*);\n'
@@ -165,14 +182,18 @@ code += source[start:end] + '\nEnableInterrupt(state);}\n'
 code += r'''
 void init(){
  regs={};dmaBusy=0;isoReady=false;isoChecks=0;irqMask=0;resets=0;
- s_Usbd.Flags=0;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
+ isoAtSof=false;suspends=resumes=setups=0;s_Usbd.LowPowerSuspend=false;
+ s_Usbd.Ctrlr={};
+ s_Usbd.Flags=USBD_FLAG_MAC_AWAKE;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  assert(AppEvtHandlerInit(nullptr,0));
  memset(ep0Mem,0xA5,sizeof(ep0Mem));
  s_Usbd.hQue=CFifoInit(queueMem,sizeof(queueMem),sizeof(nRFUsbdQue_t),dmaQueueBlocking);
  s_Usbd.hEp0Que=CFifoInit(ep0Mem,sizeof(ep0Mem),sizeof(nRFEPPkt_t),true);
  assert(s_Usbd.hQue && s_Usbd.hEp0Que);
 }
-void interrupt(){const auto state=DisableInterrupt();USBD_IRQHandler();EnableInterrupt(state);}
+// Cortex-M exception entry does not set PRIMASK. Queue publication must use
+// its own critical section even when the caller is the controller ISR.
+void interrupt(){const auto state=irqMask;USBD_IRQHandler();assert(irqMask==state);}
 void outComplete(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t len,
  UsbCtrlrXferResult_t result,void *context){
  assert(event==USB_CTRLR_EVT_XFER_CMPL && result==USB_CTRLR_XFER_SUCCESS);
@@ -261,6 +282,71 @@ int main(int argc,char **argv){
   assert(entry->Len==64 && entry->pBuffer==data+64);
  }
  puts("PASS: public DMA submission holds exclusion and restores the caller's IRQ mask");
+
+ // Collect simultaneous events before selecting the next DMA owner.
+ // One completed IN leaves another queued while a fresh SOF makes ISO ready.
+ init();
+ assert(UsbCtrlrEpInXfer(0,1,data,9));
+ assert(UsbCtrlrEpInXfer(0,2,data+64,9));
+ s_Usbd.EpReg[2][0].pBuffer=data+128;
+ s_Usbd.EpReg[2][0].MaxPacketSize=64;
+ regs.EPSTATUS.bits=1U<<1;regs.EVENTS_ENDEPIN[1]=1;
+ regs.EPDATASTATUS.bits=1U<<19;regs.EVENTS_EPDATA=1;regs.SIZE.EPOUT[3]=9;
+ isoAtSof=true;regs.EVENTS_SOF=1;isoChecks=0;
+ interrupt();
+ assert(isoChecks==1 && isoReady && !regs.TASKS_STARTEPIN[2]);
+ assert(!regs.TASKS_STARTEPOUT[3] && !regs.EPDATASTATUS.bits);
+ assert(CFifoUsed(s_Usbd.hQue)==2 && !regs.EVENTS_SOF);
+ isoReady=false;nRFUsbdResumeQueuedDmaLocked();
+ assert(dmaBusy && regs.TASKS_STARTEPIN[2]);
+ puts("PASS: simultaneous ENDEP, EPDATA and SOF preserve queue order and ISO priority");
+
+ // SETUP must defer control handling without starting another queued DMA.
+ init();
+ assert(UsbCtrlrEpInXfer(0,1,data,9));
+ assert(UsbCtrlrEpInXfer(0,2,data+64,9));
+ regs.EPSTATUS.bits=1U<<1;regs.EVENTS_ENDEPIN[1]=1;
+ regs.EVENTS_EP0SETUP=1;regs.EVENTS_EP0DATADONE=1;isoChecks=0;
+ interrupt();
+ assert(!dmaBusy && !isoChecks && !regs.TASKS_STARTEPIN[2]);
+ assert(!regs.EVENTS_EP0SETUP && !regs.EVENTS_EP0DATADONE && !setups);
+ AppEvtHandlerExec();assert(setups==1);
+ puts("PASS: SETUP defers control handling and prevents a premature DMA restart");
+
+ // Suspend gates the common scheduler until host resume. Low-power suspend
+ // drains queued DMA before entering LOWPOWER; ordinary suspend retains it.
+ for(bool lowPower:{false,true}){
+  init();s_Usbd.LowPowerSuspend=lowPower;
+  assert(UsbCtrlrEpInXfer(0,1,data,9));
+  assert(UsbCtrlrEpInXfer(0,2,data+64,9));
+  regs.EPSTATUS.bits=1U<<1;regs.EVENTS_ENDEPIN[1]=1;
+  regs.EVENTS_USBEVENT=1;regs.EVENTCAUSE.bits=USBD_EVENTCAUSE_SUSPEND_Msk;
+  interrupt();
+  assert(suspends==1 && CFifoUsed(s_Usbd.hQue)==1 && !regs.LOWPOWER);
+  assert(bool(dmaBusy)==lowPower);
+  if(lowPower){
+   regs.EPSTATUS.bits=1U<<2;regs.EVENTS_ENDEPIN[2]=1;interrupt();
+   assert(!dmaBusy && regs.LOWPOWER && CFifoUsed(s_Usbd.hQue)==0);
+  }
+  regs.EVENTS_SOF=1;interrupt();
+  assert(!(s_Usbd.Flags&USBD_FLAG_SUSPENDED) && !regs.LOWPOWER);
+  if(lowPower){
+   assert(!resumes && (s_Usbd.Flags&USBD_FLAG_HOST_RESUME));
+   regs.EVENTS_USBEVENT=1;regs.EVENTCAUSE.bits=USBD_EVENTCAUSE_USBWUALLOWED_Msk;
+   interrupt();
+  }else assert(dmaBusy && regs.TASKS_STARTEPIN[2]);
+  assert(resumes==1 && !(s_Usbd.Flags&USBD_FLAG_HOST_RESUME));
+ }
+ // USBWUALLOWED permits remote wake; a simultaneous SOF means the host has
+ // already resumed, so the device must not drive its own resume signal.
+ for(bool sof:{false,true}){
+  init();s_Usbd.Flags=USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE;
+  regs.EVENTS_USBEVENT=1;regs.EVENTCAUSE.bits=USBD_EVENTCAUSE_USBWUALLOWED_Msk;
+  regs.EVENTS_SOF=sof;interrupt();
+  assert(bool(regs.TASKS_DPDMDRIVE)==!sof && resumes==unsigned(sof));
+  assert(!(s_Usbd.Flags&USBD_FLAG_REMOTE_WAKE));
+ }
+ puts("PASS: suspend drain, host wake and simultaneous SOF/USBWUALLOWED ordering");
 
  // Poison every recycled DMA slot with a different destination. The actual
  // OUT ISR must replace it before DMA starts, including when IN owns DMA.
@@ -473,6 +559,7 @@ int main(int argc,char **argv){
   AppEvtHandlerDispatch(); // One free slot accepts the deferred OUT.
   assert(CFifoUsed(s_Usbd.hQue)==16 && s_Usbd.hQue->PutIdx==put+1);
   assert(!regs.EPDATASTATUS.bits);
+  assert(dmaBusy==0x82 && CFifoUsed(s_Usbd.hQue)==16);
   for(unsigned slot=1;slot<16;++slot){
    auto *q=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
    assert(q && q->EpNum==7 && q->Scratch==0xA5010203+slot);

@@ -49,9 +49,11 @@ regular = regular[:regular.index("if (NRF_USBD->EVENTS_USBEVENT")]
 assert regular.index("nRFUsbdRetireDma(statusBit)") < regular.index(
     "nRFUsbEpRegisteredEvent("
 )
-assert regular.index("nRFUsbEpRegisteredEvent(") < regular.index(
-    "nRFUsbdStartQueuedDma();"
+assert "nRFUsbdStartQueuedDma();" not in regular
+assert interrupt.index("nRFUsbEpRegisteredEvent(") < interrupt.index(
+    "nRFUsbdResumeQueuedDmaLocked();"
 )
+assert interrupt.count("nRFUsbdResumeQueuedDmaLocked();") == 1
 assert "nRFUsbdQueueInComplete" not in regular
 assert interrupt.index("const uint32_t inData = dataStatus & 0xFEU;") < interrupt.index(
     "nRFUsbdQueueInComplete("
