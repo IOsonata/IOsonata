@@ -729,25 +729,37 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 	__DSB();
 }
 
-// The caller owns the channel lock. Retain it across a DMA handoff and
-// release it only when no transfer can start.
-static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
+static inline __attribute__((always_inline)) bool nRFUsbdDmaAllowed(void)
 {
 	const uint32_t gate = s_Usbd.Flags &
 		(USBD_FLAG_HOST_RESUME | USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND);
-	if ((gate & USBD_FLAG_HOST_RESUME) != 0U ||
-		gate == USBD_FLAG_SUSPENDED)
+	return (gate & USBD_FLAG_HOST_RESUME) == 0U &&
+		gate != USBD_FLAG_SUSPENDED;
+}
+
+// Completion owns EasyDMA. A control response may have been queued after
+// SETUP's idle wait was interrupted by a regular or ISO DMA submission.
+static inline __attribute__((always_inline)) bool nRFUsbdEp0StartPending(void)
+{
+	const nRFEPPkt_t *pEp0 = (const nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
+	if (pEp0 == NULL || !nRFUsbdDmaAllowed())
 	{
-		nRFUsbdDmaUnlock();
-		return;
+		return false;
 	}
 
-	const nRFEPPkt_t *pEp0 = (const nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
-	if (pEp0 != NULL)
+	nRFUsbdEp0InProgram(pEp0);
+	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPIN[0],
+		&NRF_USBD->EVENTS_ENDEPIN[0]);
+	return true;
+}
+
+// Schedule non-control endpoints with the channel already locked. EP0
+// starts separately in its submission path or the ISR completion handoff.
+static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
+{
+	if (!nRFUsbdDmaAllowed())
 	{
-		nRFUsbdEp0InProgram(pEp0);
-		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPIN[0],
-			&NRF_USBD->EVENTS_ENDEPIN[0]);
+		nRFUsbdDmaUnlock();
 		return;
 	}
 
@@ -1332,7 +1344,10 @@ extern "C" void USBD_IRQHandler(void)
 			// Restart before EPDATA/SOF work; SETUP and bus events take precedence.
 			if (NRF_USBD->EVENTS_EP0SETUP == 0U &&
 				NRF_USBD->EVENTS_USBEVENT == 0U)
-				nRFUsbdStartQueuedDma();
+			{
+				if (!nRFUsbdEp0StartPending())
+					nRFUsbdStartQueuedDma();
+			}
 			else
 				nRFUsbdDmaUnlock();
 			break;

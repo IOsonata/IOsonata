@@ -29,6 +29,8 @@ dma_lock = function_body(source, "void nRFUsbdDmaLock(void)")
 dma_finish = function_body(source, "void nRFUsbdDmaWait(void)")
 retire = function_body(source, "bool nRFUsbdRetireDma(uint32_t StatusBit)")
 interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
+queued = function_body(source, "void nRFUsbdStartQueuedDma(void)")
+resume = function_body(source, "void nRFUsbdResumeQueuedDmaLocked(void)")
 
 assert "nRFUsbdDmaReclaim" not in source
 assert "nRFUsbdDmaEndIntEnable" not in source
@@ -68,5 +70,10 @@ assert interrupt.index("const uint32_t inData = dataStatus & 0xFEU;") < interrup
 assert "NRF_USBD->EPDATASTATUS" in interrupt
 assert "nRFUsbdResumeQueuedDmaLocked();" not in interrupt, "completion must not wait for the ISR tail"
 assert interrupt.count("nRFUsbdStartQueuedDma();") == 1
+assert "hEp0Que" not in queued + resume
+assert "nRFUsbdEp0" not in queued + resume
+assert regular.index("nRFUsbdEp0StartPending()") < regular.index(
+    "nRFUsbdStartQueuedDma();"
+), "pending EP0 belongs to the ISR handoff, before non-control scheduling"
 
 print("nrf_usb_dma_policy_test: PASS")
