@@ -122,7 +122,7 @@ void nRFUsbdRetryIsoComplete();
 void nRFUsbdResumeQueuedDmaLocked();
 void nRFUsbdDmaWait();
 bool nRFUsbRegDataEpXfer(uint8_t,uint16_t);
-bool nRFUsbdQueXferDir(uint8_t,bool,uint16_t){assert(false);return false;}
+bool nRFUsbdQueXferDir(uint8_t,uint8_t,uint16_t){assert(false);return false;}
 bool productionEpInXfer(int,uint8_t,uint8_t*,uint16_t);
 '''
 names = ['UsbdSync',

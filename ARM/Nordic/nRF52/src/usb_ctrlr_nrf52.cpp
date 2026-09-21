@@ -332,7 +332,7 @@ static inline void UsbdXtalRelease(void)
  *
  * Same sequence as Nordic's own driver.
  */
-static void UsbdErrataWrite(uint32_t Reg, uint32_t Value)
+static __attribute__((noinline)) void UsbdErrataWrite(uint32_t Reg, uint32_t Value)
 {
 	if (NRFX_USBD_REG32(NRFX_USBD_ERRATA_UNLOCK_REG) == 0)
 	{
@@ -706,10 +706,11 @@ __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
  * Put one regular DMA request on the queue with interrupts already excluded by the
  * caller: CFifoPut publishes the slot before the caller writes it. The caller
  * resumes DMA after any required EPDATASTATUS acknowledgement.
+ * In is the 0/1 registration direction and OUT/IN buffer queue mode.
  */
-static __attribute__((noinline)) bool nRFUsbdQueXferDir(uint8_t EpNum, bool In, uint16_t Len)
+static __attribute__((noinline)) bool nRFUsbdQueXferDir(uint8_t EpNum, uint8_t In, uint16_t Len)
 {
-	uint8_t *pBuffer = s_Usbd.EpReg[EpNum - 1U][In ? 1 : 0].pBuffer;
+	uint8_t *pBuffer = s_Usbd.EpReg[EpNum - 1U][In].pBuffer;
 	if (!In && pBuffer == NULL)
 	{
 		return false;
@@ -721,7 +722,7 @@ static __attribute__((noinline)) bool nRFUsbdQueXferDir(uint8_t EpNum, bool In, 
 	}
 
 	pQue->EpNum = EpNum;
-	pQue->Dir = In ? NRFX_USBD_QUE_IN_BUFFER : NRFX_USBD_QUE_OUT;
+	pQue->Dir = In;
 	pQue->Len = Len;
 	pQue->pBuffer = pBuffer;
 
@@ -1566,7 +1567,7 @@ bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
 	}
 
 	const uint32_t state = DisableInterrupt();
-	const bool queued = nRFUsbdQueXferDir(epNum, USB_ENDPADDR_IS_IN(EpAddr), Length);
+	const bool queued = nRFUsbdQueXferDir(epNum, EpAddr >> 7U, Length);
 	nRFUsbdResumeQueuedDmaLocked();
 	EnableInterrupt(state);
 	return queued;
@@ -1603,7 +1604,7 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		const uint32_t misalign = (uint32_t)(uintptr_t)pData & 3U;
 		if (misalign != 0U)
 		{
-			const uint16_t repair = (uint16_t)(4U - misalign);
+			const uint32_t repair = 4U - misalign;
 			if (pQue->Len > repair)
 			{
 				pQue->Len = repair;
