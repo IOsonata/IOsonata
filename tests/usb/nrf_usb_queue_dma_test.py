@@ -200,7 +200,7 @@ code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
     'UsbCtrlrEpInXfer', 'UsbCtrlrEpOutXfer',
     'nRFUsbGetEpReg', 'nRFUsbEpRegisteredEvent',
     'nRFUsbdProcessInComplete', 'nRFUsbdQueueInComplete', 'UsbCtrlrEp0Send',
-    'nRFUsbdNoDmaTask', 'nRFUsbdEmitXfer', 'UsbCtrlrEp0Status',
+    'nRFUsbdEmitXfer', 'UsbCtrlrEp0Status',
     'UsbCtrlrEpAlloc', 'nRFUsbdProcessOutData', 'UsbCtrlrProcess',
     'UsbdIsForceNormal', 'UsbdForceNormal', 'nRFUsbdTryRemoteWake',
     'nRFUsbdHostResumeDetected', 'nRFUsbdWakeAllowed', 'nRFUsbdSofAcquire',

@@ -239,7 +239,7 @@ static bool UsbdSdRunning(void)
 
 // Bounded spin for a status bit shared by the clock, controller and
 // regulator ready waits.
-static __attribute__((noinline)) bool UsbdWaitReady(const volatile uint32_t *pReg, uint32_t Msk,
+static bool UsbdWaitReady(const volatile uint32_t *pReg, uint32_t Msk,
 						  uint32_t Loops)
 {
 	// Include the final readiness read after the requested wait iterations.
@@ -601,12 +601,6 @@ static __attribute__((noinline)) void nRFUsbdEp0InStart(const nRFEPPkt_t *p)
 		USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk : 0U;
 	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPIN[0],
 		&NRF_USBD->EVENTS_ENDEPIN[0]);
-}
-
-static __attribute__((noinline)) void nRFUsbdNoDmaTask(volatile uint32_t *pTask)
-{
-	*pTask = 1;
-	UsbdSync();
 }
 
 // The SOF interrupt is shared: application SOF events, open ISO endpoints
@@ -1055,7 +1049,8 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 		evt.Setup.wLength != 0U)
 	{
 		NRF_USBD->SHORTS = 0U;
-		nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
+		NRF_USBD->TASKS_EP0RCVOUT = 1U;
+		UsbdSync();
 	}
 }
 
@@ -1147,7 +1142,8 @@ extern "C" void USBD_IRQHandler(void)
 			{
 				const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
 				// Re-arm before the core may select status or stall.
-				nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
+				NRF_USBD->TASKS_EP0RCVOUT = 1U;
+				UsbdSync();
 				nRFUsbdEmitXfer(0U, amount);
 			}
 			startDma = true;
@@ -1487,7 +1483,7 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type,
 {
 	(void)Type;
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	const bool in = USB_ENDPADDR_IS_IN(EpAddr);
+	const uint8_t in = EpAddr >> 7U;
 	if (epNum == 0U || epNum >= NRFX_USBD_DATA_EP_COUNT ||
 		MaxPacketSize == 0U || MaxPacketSize > NRFX_USBD_MAX_PACKET_SIZE)
 	{
@@ -1519,7 +1515,7 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 		return;
 	}
 
-	const bool in = USB_ENDPADDR_IS_IN(EpAddr);
+	const uint8_t in = EpAddr >> 7U;
 	nRFUsbdDmaWait();
 
 	nRFUsbdEpHwEnable(epNum, in, false);
@@ -1640,7 +1636,8 @@ bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr)
 	if (USB_ENDPADDR_IS_IN(EpAddr) ||
 		(NRF_USBD->SHORTS & USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk) == 0U)
 	{
-		nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0STATUS);
+		NRF_USBD->TASKS_EP0STATUS = 1U;
+		UsbdSync();
 	}
 	EnableInterrupt(state);
 	nRFUsbdEmitXfer(EpAddr, 0U);
