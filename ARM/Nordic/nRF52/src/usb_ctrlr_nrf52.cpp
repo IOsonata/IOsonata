@@ -944,8 +944,10 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 			__DSB();
 			nRFUsbdResumeQueuedDmaLocked();
 		}
-		else
+		else if (s_Usbd.EpReg[epNum - 1U][0].pBuffer != NULL)
 		{
+			// Retry a full DMA queue. A withheld buffer is retried by
+			// UsbCtrlrProcess; requeuing it here can starve IN completions.
 			(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
 		}
 	}

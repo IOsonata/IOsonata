@@ -1058,6 +1058,10 @@ int main(int argc,char **argv){
   assert((regs.EPDATASTATUS.bits&outBit) && !regs.TASKS_STARTEPOUT[ep]);
   assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==0);
   for(unsigned i=0;i<length;++i)assert(rx[i]==0xE5);
+  // Repeated foreground polls must not fill AppEvt with self-requeuing OUT
+  // retries while this buffer is withheld. IN completion must still drain
+  // TX; a loopback application may be unable to read RX until TX has space.
+  for(unsigned pass=0;pass<APPEVT_HANDLER_QUE_DEFAULT_SIZE;++pass)UsbCtrlrProcess(0);
   // Unrelated OUT and IN endpoints continue while either EP1 or EP7 is held.
   unsigned otherComplete=0;
   UsbCtrlrEpAlloc(0,2,other,true,
@@ -1070,7 +1074,18 @@ int main(int argc,char **argv){
   assert(regs.EPOUT[2].PTR==uint32_t(uintptr_t(other)));
   regs.EPOUT[2].AMOUNT=1;regs.EPSTATUS.bits=1U<<18;regs.EVENTS_ENDEPOUT[2]=1;
   interrupt();assert(otherComplete==1);
+  unsigned inComplete=0;
+  UsbCtrlrEpAlloc(0,0x83,data,true,
+   [](uint8_t ep,UsbCtrlrEvtType_t evt,uint16_t len,void *ctx){
+    assert(ep==0x83 && evt==USB_CTRLR_EVT_XFER_CMPL && len==7);
+    assert(!irqMask);++*(unsigned*)ctx;
+   },&inComplete);
   assert(UsbCtrlrEpInXfer(0,3,data,7));retire(3,true);
+  regs.EPIN[3].AMOUNT=7;regs.EPDATASTATUS.bits|=1U<<3;
+  regs.EVENTS_EPDATA=1;interrupt();
+  for(unsigned pass=0;pass<8;++pass)UsbCtrlrProcess(0);
+  assert(inComplete==1 && !(regs.EPDATASTATUS.bits&(1U<<3)));
+  assert(intrf.RxPending==length+2 && CFifoUsed(intrf.hRxFifo)==4);
   uint8_t output[256]={};
   assert(UsbIntrfRxData(&intrf.DevIntrf,output,64)==64);
   for(unsigned i=0;i<64;++i)assert(output[i]==0xA0);
@@ -1121,6 +1136,7 @@ int main(int argc,char **argv){
  }
  puts("PASS: blocking RX overflow retries full/short/ZLP without loss or buffer overwrite");
  puts("      other endpoints progress; full AppEvt recovers; cancellation and nonblocking rejection");
+ puts("PASS: repeated polls with a withheld OUT buffer cannot starve IN completion in AppEvt");
 
  // Force saturation even though sixteen entries exceed the fourteen regular
  // endpoint directions. Retry must preserve the active inline scratch and
