@@ -212,9 +212,11 @@ code += '\nvoid UsbIntrfCtrlrOutEvent(uint8_t,UsbCtrlrEvtType_t,uint16_t,UsbCtrl
 code += '\n'.join(function(name, intrf_source) for name in [
     'UsbIntrfSetTxIdle', 'UsbIntrfTakeTx', 'UsbIntrfDirectClear',
     'UsbIntrfTxFailure', 'UsbIntrfEpSendPktMode', 'UsbIntrfTxPackets',
+    'UsbIntrfEpSendByteMode', 'UsbIntrfTxBytes',
     'UsbIntrfCtrlrInEvent', 'UsbIntrfDirectReady', 'UsbIntrfDirectRxComplete',
     'UsbIntrfRegisterRx', 'UsbIntrfReleaseRx', 'UsbIntrfCompleteRx', 'UsbIntrfRetryRx',
-    'UsbIntrfCtrlrOutEvent', 'UsbIntrfRxData', 'UsbIntrfRxDirect', 'UsbIntrfUnconfigure'])
+    'UsbIntrfCtrlrOutEvent', 'UsbIntrfRxData', 'UsbIntrfRxDirect', 'UsbIntrfUnconfigure',
+    'UsbIntrfRequestToSend'])
 # Run the core's real submit/accounting function against controller Send too.
 code += 'struct {int DevNo;uint8_t *CtrlData;uint16_t CtrlDataLen,CtrlActual;} s_Core;\n'
 code += function('UsbCoreSendIn', (ROOT / 'src/usb/usb.cpp').read_text())
@@ -428,7 +430,7 @@ int main(int argc,char **argv){
     regs.EVENTS_EP0DATADONE=1;interrupt();sent+=bytes;
    }
    assert(ep0Completions==++chunks && ep0Length==0);
-   assert(!CFifoUsed(s_Usbd.hEp0Que) && !s_Usbd.hEp0Que->DropCnt);
+   assert(!CFifoUsed(s_Usbd.hEp0Que));
    assert(!dmaBusy && !dmaLocks && dmaUnlocks==1 && irqMask==mask);
    offset+=copied;
   }while(offset<length);
@@ -914,7 +916,6 @@ int main(int argc,char **argv){
    for(unsigned i=0;i<64;++i)assert(output[i]==0x80+19);
    assert(!UsbIntrfDirectReady(direct));
   }else{
-   assert(intrf.hRxFifo->DropCnt==(blocking?0:17));
    assert(UsbIntrfRxData(&intrf.DevIntrf,output,sizeof(output))==(blocking?0+1+9:9+63+64));
    unsigned offset=0;
    const unsigned first=blocking?0:17;
@@ -1034,7 +1035,6 @@ int main(int argc,char **argv){
    q->EpNum=7;q->Dir=NRFX_USBD_QUE_IN_SCRATCH;q->Len=3;q->Scratch=0xA5010203+slot;
   }
   auto *head=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
-  const auto get=s_Usbd.hQue->GetIdx,put=s_Usbd.hQue->PutIdx;
   alignas(4) uint8_t out[64]={};
   unsigned completions=0;
   UsbCtrlrEpAlloc(0,1,out,blocking,
@@ -1051,12 +1051,11 @@ int main(int argc,char **argv){
   AppEvtHandlerExec(); // Remains bounded while DMA has not finished.
   assert(!UsbCtrlrEpInXfer(0,2,data,7) && !irqMask);
   assert(!UsbCtrlrEpOutXfer(0,2,64) && !irqMask);
-  assert(s_Usbd.hQue->GetIdx==get && s_Usbd.hQue->PutIdx==put);
+  assert(CFifoUsed(s_Usbd.hQue)==16);
   assert(CFifoPeek(s_Usbd.hQue)==(uint8_t*)head && head->Scratch==0xA5010203);
-  assert(!s_Usbd.hQue->DropCnt && completions==0);
+  assert(completions==0);
   retire(7,true);
   AppEvtHandlerDispatch(); // One free slot accepts the deferred OUT.
-  assert(CFifoUsed(s_Usbd.hQue)==16 && s_Usbd.hQue->PutIdx==put+1);
   assert(!regs.EPDATASTATUS.bits);
   assert(dmaBusy==0x82 && CFifoUsed(s_Usbd.hQue)==16);
   for(unsigned slot=1;slot<16;++slot){
@@ -1098,6 +1097,35 @@ int main(int argc,char **argv){
  assert(s_Usbd.IsoGeneration[0]==5 && s_Usbd.IsoGeneration[1]==9);
  puts("PASS: bus reset clears all regular/ISO start tasks and preserves adjacent registers");
 
+ // Producer acceptance and readiness follow CFifo's configured full policy.
+ // Keep TX busy here to test queue insertion independently of DMA scheduling.
+ for(bool blocking:{false,true})for(auto mode:{USB_INTRF_MODE_BYTE,USB_INTRF_MODE_PACKET}){
+  init();
+  const unsigned block=mode==USB_INTRF_MODE_BYTE?1:USB_INTRF_PKT_BLKSIZE(8);
+  alignas(8) uint8_t memory[CFIFO_TOTAL_MEMSIZE(3,USB_INTRF_PKT_BLKSIZE(8))];
+  alignas(8) uint8_t input[USB_INTRF_PKT_BLKSIZE(8)]={};
+  UsbDevIntrf_t intrf={};
+  intrf.DevIntrf.pDevData=&intrf;intrf.Mps=8;intrf.Mode=mode;
+  intrf.hTxFifo=CFifoInit(memory,CFIFO_TOTAL_MEMSIZE(3,block),block,blocking);
+  atomic_store(&intrf.DevIntrf.bTxReady,false);
+  auto payload=[&](uint8_t *p){
+   return mode==USB_INTRF_MODE_BYTE?p:((UsbPkt_t*)p)->Data;
+  };
+  for(unsigned i=0;i<3;++i)*payload(CFifoPut(intrf.hTxFifo))=0x10+i;
+  assert(UsbIntrfRequestToSend(&intrf,block)==!blocking);
+  if(mode==USB_INTRF_MODE_PACKET)((UsbPkt_t*)input)->Hdr.Length=1;
+  *payload(input)=0x99;
+  const int accepted=mode==USB_INTRF_MODE_BYTE?
+   UsbIntrfTxBytes(&intrf.DevIntrf,input,block):UsbIntrfTxPackets(&intrf.DevIntrf,input,block);
+  assert(accepted==(blocking?0:int(block)) && CFifoUsed(intrf.hTxFifo)==3);
+  for(unsigned i=0;i<3;++i){
+   const unsigned expected=blocking?0x10+i:(i==2?0x99:0x11+i);
+   assert(*payload(CFifoGet(intrf.hTxFifo))==expected);
+  }
+  assert(!CFifoUsed(intrf.hTxFifo) && !CFifoUsed(s_Usbd.hQue));
+ }
+ puts("PASS: byte/packet TX leaves full-FIFO rejection or replacement to CFifo");
+
  // Three TX slots exercise physical wrap; repeated batches wrap hQue too.
  // Packet data stays owned even when ENDEP has freed the DMA queue slot.
  for(bool blocking:{false,true})for(unsigned mps:{9U,63U,64U}){
@@ -1125,8 +1153,9 @@ int main(int argc,char **argv){
    auto *first=(UsbPkt_t*)CFifoPeek(intrf.hTxFifo);
    assert(CFifoUsed(intrf.hTxFifo)==3 && CFifoUsed(s_Usbd.hQue)==2);
    assert(!atomic_load(&intrf.DevIntrf.bTxReady));
-   // Both blocking and nonblocking producers must preserve the in-flight head.
-   assert(UsbIntrfTxPackets(&intrf.DevIntrf,input,block)==0);
+   // Blocking FIFO rejection preserves the in-flight head. The nonblocking
+   // full policy is exercised separately above; this run queues no overflow.
+   if(blocking)assert(UsbIntrfTxPackets(&intrf.DevIntrf,input,block)==0);
    assert(CFifoPeek(intrf.hTxFifo)==(uint8_t*)first);
    retire(2,true);
    nRFUsbdResumeQueuedDmaLocked();

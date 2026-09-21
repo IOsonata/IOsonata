@@ -231,11 +231,11 @@ int main(){
    for(int i=0;i<count;++i)data[i]=uint8_t(i);
    int skip=offset;if(skip)assert(CFifoGetMultiple(fifo,&skip)==data);
    data=CFifoPeek(fifo);assert((uintptr_t(data)&3U)==offset);
-   const auto get=fifo->GetIdx,put=fifo->PutIdx;
+   const int used=CFifoUsed(fifo);
    s_Usbd.EpReg[ep-1][1].pBuffer=(uint8_t*)fifo;
    assert(productionEpInXfer(0,ep,nullptr,length));
    assert(irqMask==masked && CFifoUsed(s_Usbd.hQue)==1);
-   assert(fifo->GetIdx==get && fifo->PutIdx==put && CFifoPeek(fifo)==data);
+   assert(CFifoUsed(fifo)==used && CFifoPeek(fifo)==data);
    entry=(nRFUsbdQue_t*)CFifoGet(s_Usbd.hQue);
    assert(entry->EpNum==ep);
    if(offset){

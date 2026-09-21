@@ -475,7 +475,7 @@ static bool UsbIntrfCompleteRx(UsbDevIntrf_t *pIntrf, uint16_t Length)
 	if (pIntrf->DevIntrf.EvtCB != nullptr)
 	{
 		const int used = CFifoUsed(pIntrf->hRxFifo);
-		if (used >= pIntrf->hRxFifo->MaxIdxCnt)
+		if (CFifoAvail(pIntrf->hRxFifo) == 0)
 		{
 			pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
 				DEVINTRF_EVT_RX_FIFO_FULL, nullptr, used);
@@ -525,7 +525,8 @@ static void UsbIntrfCtrlrOutEvent(uint8_t, UsbCtrlrEvtType_t Event,
 				return;
 			}
 
-			if (CFifoAvail(pIntrf->hRxFifo) <= 0)
+			if (CFifoIsBlocking(pIntrf->hRxFifo) &&
+				CFifoAvail(pIntrf->hRxFifo) <= 0)
 			{
 				pIntrf->RxPending = USB_INTRF_RX_DRDY;
 				return;
@@ -904,7 +905,7 @@ bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes)
 		return false;
 	}
 
-	if (pIntrf->hTxFifo->bBlocking == false)
+	if (!CFifoIsBlocking(pIntrf->hTxFifo))
 	{
 		return true;
 	}

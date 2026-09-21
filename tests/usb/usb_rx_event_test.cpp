@@ -93,6 +93,8 @@ bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
     if (USB_ENDPADDR_IS_IN(EpAddr))
     {
         if (s_InDma) return false;
+        auto *pIntrf = static_cast<UsbDevIntrf_t *>(s_InContext);
+        s_InBuffer = CFifoPeek(pIntrf->hTxFifo);
         s_InDma = true;
         s_InLength = Length;
         s_InSubmit++;
@@ -157,14 +159,14 @@ static bool Setup(bool Blocking)
            UsbIntrfConfigure(&s_Intrf, MPS);
 }
 
-static bool Drdy(const uint8_t *pData, uint16_t Length)
+static bool Drdy(const uint8_t *pData, uint16_t Length, bool Notify = false)
 {
     CHECK(!s_HwOutReady);
     if (s_HwOutReady || Length > sizeof(s_HwOut)) return false;
     if (Length > 0) memcpy(s_HwOut, pData, Length);
     s_HwOutLength = Length;
     s_HwOutReady = true;
-    if (s_OutBlocking)
+    if (s_OutBlocking || Notify)
     {
         s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
                      Length, USB_CTRLR_XFER_SUCCESS, s_OutContext);
@@ -202,7 +204,7 @@ static void TestNoPreArm(void)
 {
     CHECK(Setup(true));
     CHECK(s_OutBuffer == s_RxDma);
-    CHECK(s_InBuffer == s_TxDma);
+    CHECK(s_InBuffer == nullptr);
     CHECK(s_OutSubmit == 0);
     CHECK(!s_OutDma);
 
@@ -263,10 +265,10 @@ static void TestBlocking(void)
     CHECK(s_RxFullEvent == 2);
 }
 
-static void TestNonBlocking(void)
+static void TestNonBlocking(bool Notify)
 {
     CHECK(Setup(false));
-    CHECK(!s_Intrf.hRxFifo->bBlocking);
+    CHECK(!CFifoIsBlocking(s_Intrf.hRxFifo));
     uint8_t p[8] = {};
     for (unsigned i = 0; i < RX_SLOTS; i++)
     {
@@ -274,7 +276,6 @@ static void TestNonBlocking(void)
         Deliver(p, sizeof(p));
     }
     CHECK(CFifoAvail(s_Intrf.hRxFifo) == 0);
-    CHECK(s_Intrf.hRxFifo->DropCnt == 0U);
     CHECK(s_RxFullEvent == 1);
     CHECK(s_RxDataEvent == (int)RX_SLOTS);
     CHECK(s_EventCount >= 2U);
@@ -285,11 +286,11 @@ static void TestNonBlocking(void)
     }
 
     uint8_t newest[8] = {0xA6};
-    CHECK(Drdy(newest, sizeof(newest)));
+    CHECK(Drdy(newest, sizeof(newest), Notify));
     CHECK(s_OutDma);
+    CHECK(!s_Intrf.RxPending);
     CHECK(s_OutSubmit == (int)RX_SLOTS + 1);
     CompleteOut();
-    CHECK(s_Intrf.hRxFifo->DropCnt == 1U);
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == (int)RX_SLOTS);
     CHECK(s_RxFullEvent == 2);
     CHECK(s_RxDataEvent == (int)RX_SLOTS + 1);
@@ -313,7 +314,7 @@ static void TestCancelIsNotCompletion(void)
           (int)sizeof(data));
     CHECK(s_InDma && s_InSubmit == 1);
     const int queued = CFifoUsed(s_Intrf.hTxFifo);
-    CHECK(queued == 3);
+    CHECK(queued == (int)sizeof(data));
 
     // The controller has cancelled the active transfer before delivering CANCEL.
     s_InDma = false;
@@ -384,7 +385,8 @@ int main(void)
 {
     TestNoPreArm();
     TestBlocking();
-    TestNonBlocking();
+    TestNonBlocking(false);
+    TestNonBlocking(true);
     TestCancelIsNotCompletion();
     TestDisableDoesNotGateController();
     TestTxStillChains();
