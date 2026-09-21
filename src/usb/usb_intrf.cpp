@@ -580,6 +580,7 @@ static void UsbIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
 		return;
 	}
 
+#if !defined(NRF52_SERIES)
 	if (pIntrf->Mode == USB_INTRF_MODE_PACKET)
 	{
 		(void)CFifoGet(pIntrf->hTxFifo);
@@ -589,6 +590,7 @@ static void UsbIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
 		int count = Length;
 		(void)CFifoGetMultiple(pIntrf->hTxFifo, &count);
 	}
+#endif
 
 	if (Event == USB_CTRLR_EVT_XFER_FAILED)
 	{
@@ -728,9 +730,14 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	if (pIntrf->EpNo != 0U)
 	{
 		UsbIntrfRegisterRx(pIntrf, pIntrf->pRxBuffer);
+#if defined(NRF52_SERIES)
+		uint8_t *pTxSource = pIntrf->Mode == USB_INTRF_MODE_DIRECT ?
+			nullptr : reinterpret_cast<uint8_t *>(pIntrf->hTxFifo);
+#else
 		uint8_t *pTxSource = pIntrf->Mode == USB_INTRF_MODE_DIRECT &&
 			pIntrf->pTxDirectBuffer != nullptr ? pIntrf->pTxDirectBuffer->Data :
 			nullptr;
+#endif
 		UsbCtrlrEpAlloc(pIntrf->DevNo, pIntrf->EpNo, true, pTxSource,
 			pCfg->bBlocking, UsbIntrfCtrlrInEvent, pIntrf);
 	}

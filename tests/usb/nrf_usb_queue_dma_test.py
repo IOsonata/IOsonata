@@ -43,6 +43,7 @@ def function(name, source=source):
 
 
 code = r'''
+#define NRF52_SERIES 1
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -1262,7 +1263,7 @@ int main(int argc,char **argv){
  puts("PASS: byte/packet TX leaves full-FIFO rejection or replacement to CFifo");
 
  // Three TX slots exercise physical wrap; repeated batches wrap hQue too.
- // Packet data stays owned even when ENDEP has freed the DMA queue slot.
+ // ENDEP releases the packet TX FIFO before deferred host completion.
  for(bool blocking:{false,true})for(unsigned mps:{9U,63U,64U}){
   init();
   const unsigned block=USB_INTRF_PKT_BLKSIZE(mps);
@@ -1275,7 +1276,8 @@ int main(int argc,char **argv){
   intrf.EpSend=UsbIntrfEpSendPktMode;
   UsbIntrfSetTxIdle(&intrf);
   auto &reg=s_Usbd.EpReg[0][1];
-  reg={};reg.Handler=UsbIntrfCtrlrInEvent;reg.pContext=&intrf;
+  reg={};reg.pBuffer=(uint8_t*)intrf.hTxFifo;
+  reg.Handler=UsbIntrfCtrlrInEvent;reg.pContext=&intrf;
   const unsigned lengths[]={mps,mps-1,1,0};
   for(unsigned batch=0;batch<24;++batch){
    // Another endpoint owns DMA while packet submissions fill the TX FIFO.
@@ -1298,16 +1300,16 @@ int main(int argc,char **argv){
     auto *packet=(UsbPkt_t*)CFifoPeek(intrf.hTxFifo);
     const unsigned len=lengths[(batch+p)%4];
     auto *entry=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
-    assert(entry && entry->EpNum==1 && entry->Dir==NRFX_USBD_QUE_IN_BUFFER);
-    assert(entry->pBuffer==packet->Data && entry->Len==len);
+    assert(entry && entry->EpNum==1);
+    assert((entry->Dir&NRFX_USBD_QUE_TYPE_MASK)==NRFX_USBD_QUE_IN_FIFO);
+    assert(entry->hFifo==intrf.hTxFifo && entry->Len==len);
     assert((uintptr_t(packet->Data)&3U)==0 && packet->Hdr.Length==len);
     assert(regs.EPIN[1].PTR==uint32_t(uintptr_t(packet->Data)));
     assert(regs.EPIN[1].MAXCNT==len && dmaBusy==0x82);
     for(unsigned i=0;i<len;++i)assert(packet->Data[i]==uint8_t(0x30+batch+p));
     retire(1,true);
     assert(CFifoUsed(s_Usbd.hQue)==0);
-    assert(CFifoUsed(intrf.hTxFifo)==int(3-p));
-    assert(CFifoPeek(intrf.hTxFifo)==(uint8_t*)packet);
+    assert(CFifoUsed(intrf.hTxFifo)==int(2-p));
     // Reuse the released queue slot and DMA channel before host completion.
     assert(UsbCtrlrEpSend(0,2,data,7));
     if(fullAppEvt){
@@ -1320,13 +1322,12 @@ int main(int argc,char **argv){
     assert(!regs.EVENTS_EPDATA);
     assert(regs.EPDATASTATUS.bits==(fullAppEvt?1U<<1:0U));
     dataEvent(); // A repeated interrupt must not duplicate accepted completion.
-    assert(CFifoPeek(intrf.hTxFifo)==(uint8_t*)packet);
-    assert(CFifoUsed(intrf.hTxFifo)==int(3-p));
+    assert(CFifoUsed(intrf.hTxFifo)==int(2-p));
     UsbCtrlrProcess(0);
     assert(!regs.EPDATASTATUS.bits && !irqMask);
     if(fullAppEvt){
-     // First pass drained AppEvt and published the retained completion.
-     assert(CFifoUsed(intrf.hTxFifo)==int(3-p));
+     // AppEvt backpressure cannot retain a DMA-consumed TX FIFO block.
+     assert(CFifoUsed(intrf.hTxFifo)==int(2-p));
     }
     UsbCtrlrProcess(0);
     assert(CFifoUsed(intrf.hTxFifo)==int(2-p));
