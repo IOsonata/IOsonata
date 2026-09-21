@@ -4,7 +4,7 @@
 EP0 can wait behind regular DMA; its compact packet header is not a regular
 queue header. This register simulation checks that handoff and DMA ownership.
 Packet IN also runs the production UsbIntrf producer/completion and AppEvt
-dispatch, so ENDEP and host-consumption ownership are checked separately.
+dispatch, so ENDEP FIFO release and deferred completion are checked separately.
 OUT runs the production ISR and UsbIntrf RX completion against recycled DMA
 entries with both blocking settings, including FIFO overflow and direct slots.
 
@@ -1340,7 +1340,7 @@ int main(int argc,char **argv){
   }
  }
  puts("PASS: packet IN full/short/ZLP, aligned ring wrap, queued DMA contention,");
- puts("      ENDEP preserves TX data, host completion releases exactly one packet");
+ puts("      ENDEP releases exactly one TX packet before deferred completion");
 
  // Seven pending IN endpoints exceed the default AppEvt capacity of four.
  // A full AppEvt queue must leave all seven latched; OUT retry shares the status register.
