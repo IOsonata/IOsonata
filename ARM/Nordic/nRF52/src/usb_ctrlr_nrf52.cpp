@@ -934,7 +934,10 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 	const uint32_t bit = 1UL << (epNum + 16U);
 	// A latched OUT bit owns the request until DMA can be queued. AppEvt
 	// retries may overlap; only the first accepted enqueue consumes it.
-	if ((NRF_USBD->EPDATASTATUS & bit) != 0U)
+	// Wait for the previous DMA's completion ISR before reusing its buffer.
+	// That callback may need to withhold the buffer when RX is full.
+	if ((NRF_USBD->EPDATASTATUS & bit) != 0U &&
+		(NRF_USBD->EPSTATUS & bit) == 0U)
 	{
 		const uint16_t len = s_Usbd.EpReg[epNum - 1U][0].MaxPacketSize;
 		if (nRFUsbdQueXferDir(epNum, false, len))

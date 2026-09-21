@@ -56,7 +56,12 @@ code = r'''
 #undef UsbCtrlrEpOutXfer
 bool nRFUsbdIsoXfer(uint8_t,uint16_t){assert(false);return false;}
 uint32_t irqMask;
-uint32_t DisableInterrupt(){auto old=irqMask;irqMask=1;return old;}
+void (*onIrqDisable)();
+uint32_t DisableInterrupt(){
+ auto old=irqMask;irqMask=1;
+ if(onIrqDisable){auto hook=onIrqDisable;onIrqDisable=nullptr;hook();}
+ return old;
+}
 void (*onIrqEnable)();
 void EnableInterrupt(uint32_t old){
  irqMask=old;
@@ -248,6 +253,7 @@ code += source[start:end] + '\nEnableInterrupt(state);}\n'
 code += r'''
 void init(){
  regs={};dmaBusy=0;isoReady=false;isoChecks=isoEnd=0;irqMask=0;resets=0;
+ onIrqDisable=nullptr;
  dmaLocks=dmaUnlocks=ep0Completions=ep0Length=0;
  controlEvents=0;controlEvent={};
  isoAtSof=false;suspends=resumes=setups=0;s_Usbd.LowPowerSuspend=false;
@@ -1137,6 +1143,57 @@ int main(int argc,char **argv){
  puts("PASS: blocking RX overflow retries full/short/ZLP without loss or buffer overwrite");
  puts("      other endpoints progress; full AppEvt recovers; cancellation and nonblocking rejection");
  puts("PASS: repeated polls with a withheld OUT buffer cannot starve IN completion in AppEvt");
+
+ // DMA completion and the next host packet can arrive during a foreground
+ // critical section. The ISR must consume the previous DMA buffer before
+ // that same endpoint can be queued again, even though EPDATA is already set.
+ for(bool retry:{false,true}){
+  init();
+  alignas(8) uint8_t rxMem[USB_INTRF_RXMEM_SIZE(4,64)];
+  alignas(4) uint8_t rx[64]={};
+  UsbDevIntrf_t intrf={};
+  intrf.DevIntrf.pDevData=&intrf;intrf.EpNo=1;intrf.Mps=64;
+  intrf.Mode=USB_INTRF_MODE_BYTE;intrf.bBlocking=true;intrf.pRxBuffer=rx;
+  intrf.hRxFifo=CFifoInit(rxMem,sizeof(rxMem),USB_INTRF_PKT_BLKSIZE(64),true);
+  UsbCtrlrEpAlloc(0,1,rx,true,outComplete,&intrf);
+  s_Usbd.EpReg[0][0].MaxPacketSize=64;
+  for(unsigned i=0;i<4;++i){
+   auto *p=(UsbPkt_t*)CFifoPut(intrf.hRxFifo);
+   p->Hdr.Length=64;p->Hdr.Reserved=0;memset(p->Data,0xA0+i,64);
+  }
+  regs.SIZE.EPOUT[1]=9;regs.EPDATASTATUS.bits=1U<<17;
+  regs.EVENTS_EPDATA=1;interrupt();
+  assert(dmaBusy && CFifoUsed(s_Usbd.hQue)==1);
+  regs.TASKS_STARTEPOUT[1]=0;regs.EPSTATUS.bits=1U<<17;
+  memset(rx,0xE5,9);regs.EPOUT[1].AMOUNT=9;
+  onIrqDisable=[](){
+   // IRQ masking does not prevent hardware DMA/bus events from arriving.
+   regs.EVENTS_ENDEPOUT[1]=1;
+   regs.SIZE.EPOUT[1]=64;regs.EPDATASTATUS.bits|=1U<<17;
+  };
+  onIrqEnable=interrupt;
+  if(retry)nRFUsbdProcessOutData(1,nullptr);
+  else UsbCtrlrProcess(0);
+  assert(!onIrqDisable && !onIrqEnable && !irqMask);
+  assert(intrf.RxPending==11 && s_Usbd.EpReg[0][0].pBuffer==nullptr);
+  assert(!regs.TASKS_STARTEPOUT[1] && !dmaBusy && CFifoUsed(s_Usbd.hQue)==0);
+  assert(regs.EPDATASTATUS.bits==(1U<<17));
+  uint8_t output[256]={};
+  assert(UsbIntrfRxData(&intrf.DevIntrf,output,64)==64);
+  for(unsigned i=0;i<64;++i)assert(output[i]==0xA0);
+  UsbCtrlrProcess(0);
+  assert(!intrf.RxPending && regs.TASKS_STARTEPOUT[1]);
+  assert(dmaBusy && CFifoUsed(s_Usbd.hQue)==1 && !regs.EPDATASTATUS.bits);
+  assert(UsbIntrfRxData(&intrf.DevIntrf,output,sizeof(output))==201);
+  for(unsigned p=0;p<3;++p)for(unsigned i=0;i<64;++i)assert(output[64*p+i]==0xA1+p);
+  for(unsigned i=192;i<201;++i)assert(output[i]==0xE5);
+  memset(rx,0xF6,64);regs.EPOUT[1].AMOUNT=64;
+  regs.EPSTATUS.bits=1U<<17;regs.EVENTS_ENDEPOUT[1]=1;interrupt();
+  assert(UsbIntrfRxData(&intrf.DevIntrf,output,64)==64);
+  for(unsigned i=0;i<64;++i)assert(output[i]==0xF6);
+  assert(!intrf.RxPending && !intrf.RxDropCnt && !dmaBusy && !CFifoUsed(s_Usbd.hQue));
+ }
+ puts("PASS: pending OUT DMA completion prevents foreground/retry reuse of its RX buffer");
 
  // Force saturation even though sixteen entries exceed the fourteen regular
  // endpoint directions. Retry must preserve the active inline scratch and
