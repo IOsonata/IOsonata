@@ -1298,7 +1298,7 @@ void UsbCtrlrProcess(int DevNo)
 		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[epNum - 1U][0];
 		if (pReg->pBuffer == NULL && pReg->Handler != NULL)
 		{
-			nRFUsbEpRegisteredEvent(epNum, 0U, USB_CTRLR_EVT_DRDY, 0U);
+			pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
 		}
 	}
 	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
