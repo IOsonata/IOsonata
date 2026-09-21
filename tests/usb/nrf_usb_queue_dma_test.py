@@ -237,13 +237,10 @@ for name in ['nRFUsbValidDevNo', 'nRFUsbEpDir', 'nRFUsbGetEpReg',
     code += function(name, nrf54_source) + '\n'
 code += '}\n'
 # Exercise the actual ISR acknowledgement block, not a hand-coded queue call.
-start = source.index('if (NRF_USBD->EVENTS_EPDATA != 0U ||')
-end = source.index('{', start) + 1
-depth = 1
-while depth:
-    depth += (source[end] == '{') - (source[end] == '}')
-    end += 1
-code += '\nvoid dataEvent(){const auto state=DisableInterrupt();uint8_t outEp=0;\n'
+start = source.index('NRF_USBD->EVENTS_EPDATA = 0U;',
+                     source.index('extern "C" void USBD_IRQHandler'))
+end = source.index('if (NRF_USBD->EVENTS_SOF != 0U)', start)
+code += '\nvoid dataEvent(){const auto state=DisableInterrupt();\n'
 code += source[start:end] + '\nEnableInterrupt(state);}\n'
 code += r'''
 bool receiveOut(uint8_t ep){

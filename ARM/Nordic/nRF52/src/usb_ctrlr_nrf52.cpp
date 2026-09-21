@@ -1045,8 +1045,7 @@ static void nRFUsbdQueueEp0Setup(void)
 
 extern "C" void USBD_IRQHandler(void)
 {
-	uint32_t dmastatus = NRF_USBD->EPSTATUS;
-	uint8_t outEp = 0U;
+	const uint32_t dmastatus = NRF_USBD->EPSTATUS;
 
 	// Reset cancels any active DMA and must not wait for ENDEP.
 	if (NRF_USBD->EVENTS_USBRESET != 0U)
@@ -1188,33 +1187,22 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdQueueEp0Setup();
 		return;
 	}
-	if (NRF_USBD->EVENTS_EPDATA != 0U ||
-		(NRF_USBD->EPDATASTATUS & 0x00FE00FEUL) != 0U)
+	// Clear the event first so a new endpoint event remains observable.
+	// Service at most one endpoint per direction in this interrupt.
+	// Unaccepted IN completions remain available to the foreground retry.
+	NRF_USBD->EVENTS_EPDATA = 0U;
+	const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
+	uint32_t servicedStatus = dataStatus & 0x00010001UL;
+
+	const uint32_t inData = dataStatus & 0xFEU;
+	if (inData != 0U)
 	{
-		// Clear the event first so a new endpoint event remains observable.
-		// Service at most one endpoint per direction in this interrupt.
-		// Unaccepted IN completions remain available to the foreground retry.
-		NRF_USBD->EVENTS_EPDATA = 0U;
-		const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
-		uint32_t servicedStatus = dataStatus & 0x00010001UL;
-
-		const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
-		if (outData != 0U)
-		{
-			outEp = (uint8_t)(31U - (uint32_t)__CLZ(outData));
-		}
-
-		const uint32_t inData = dataStatus & 0xFEU;
-		if (inData != 0U)
-		{
-			servicedStatus |= nRFUsbdQueueInComplete(inData);
-		}
-
-		// Clear only serviced endpoints; keep every other status bit latched.
-		// The following SOF register read completes this write.
-		NRF_USBD->EPDATASTATUS = servicedStatus;
+		servicedStatus |= nRFUsbdQueueInComplete(inData);
 	}
 
+	// Clear only serviced endpoints; keep every other status bit latched.
+	// The following SOF register read completes this write.
+	NRF_USBD->EPDATASTATUS = servicedStatus;
 
 	if (NRF_USBD->EVENTS_SOF != 0U)
 	{
@@ -1228,9 +1216,10 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdTryRemoteWake();
 
 	// Queue newly received OUT data; completion already restarted pending DMA.
-	if (outEp != 0U)
+	const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
+	if (outData != 0U)
 	{
-		nRFUsbdProcessOutData(outEp, NULL);
+		nRFUsbdProcessOutData(31U - (uint32_t)__CLZ(outData), NULL);
 	}
 
 	nRFUsbdTryEnterLowPower();
