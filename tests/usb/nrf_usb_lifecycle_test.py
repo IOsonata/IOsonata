@@ -50,7 +50,6 @@ void NVIC_SetPriority(int irq,uint8_t p){assert(irq==USBD_IRQn);irqPriority=p;}
 void NVIC_DisableIRQ(int irq){assert(irq==USBD_IRQn);++irqDisables;}
 void nRFUsbdDmaWait(){++waits;}
 void nRFUsbdResetState(){++resets;}
-void UsbdSync(){}
 void __ISB(){}
 void __DSB(){}
 void AppEvtHandlerExec(){++dispatches;}

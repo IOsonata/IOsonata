@@ -326,7 +326,6 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 	EnableInterrupt(state);
 
 	nRFUsbdSofAcquire();
-	__ISB();
 	__DSB();
 	return true;
 }

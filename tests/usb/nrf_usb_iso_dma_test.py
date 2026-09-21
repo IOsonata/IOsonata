@@ -127,7 +127,7 @@ bool nRFUsbRegDataEpXfer(uint8_t,uint16_t);
 bool nRFUsbdQueXferDir(uint8_t,uint8_t,uint16_t){assert(false);return false;}
 bool productionEpInXfer(int,uint8_t,uint8_t*,uint16_t);
 '''
-names = ['UsbdSync',
+names = [
          'nRFUsbGetEpReg','nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaLock','nRFUsbdDmaUnlock',
          'nRFUsbdDmaStartLocked','nRFUsbdEpHwEnable','nRFUsbdSofRelease',
          'nRFIsoHwEnable','nRFUsbdIsoStart',

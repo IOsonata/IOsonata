@@ -194,15 +194,6 @@ __attribute__((weak)) bool nRFUsbdIsoXfer(uint8_t, uint16_t)
 	return false;
 }
 
-// Barriers repeat at many sites. One out-of-line copy: a barrier keeps its
-// effect when reached through a call, and the call is half the size of the
-// pair.
-static __attribute__((noinline)) void UsbdSync(void)
-{
-	__ISB();
-	__DSB();
-}
-
 static __attribute__((noinline))
 nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpNum, uint8_t Dir)
 {
@@ -404,7 +395,9 @@ static void UsbdErrataRevert(void)
 	{
 		NRFX_USBD_REG32(NRFX_USBD_ERRATA_166_REG_A) = 0x7E3UL;
 		NRFX_USBD_REG32(NRFX_USBD_ERRATA_166_REG_B) = 0x40UL;
-		UsbdSync();
+		// Preserve Nordic's errata-166 synchronization sequence.
+		__ISB();
+		__DSB();
 	}
 }
 
@@ -421,26 +414,26 @@ static __attribute__((noinline)) void UsbdForceNormal(void)
 	{
 		NRF_USBD->LOWPOWER =
 			USBD_LOWPOWER_LOWPOWER_ForceNormal << USBD_LOWPOWER_LOWPOWER_Pos;
-		UsbdSync();
+		(void)NRF_USBD->LOWPOWER;
 	}
 }
 
 static bool UsbdStartCtrlr(void)
 {
 	NRF_USBD->EVENTCAUSE = USBD_EVENTCAUSE_READY_Msk;
-	UsbdSync();
+	(void)NRF_USBD->EVENTCAUSE;
 
 	UsbdErrataApply();
 
 	NRF_USBD->ENABLE = 1;
-	UsbdSync();
 
+	// The READY poll also completes the preceding ENABLE write.
 	const bool ready = UsbdWaitReady(&NRF_USBD->EVENTCAUSE,
 		USBD_EVENTCAUSE_READY_Msk, NRFX_USBD_READY_WAIT_LOOPS);
 	if (ready)
 	{
 		NRF_USBD->EVENTCAUSE = USBD_EVENTCAUSE_READY_Msk;
-		UsbdSync();
+		(void)NRF_USBD->EVENTCAUSE;
 	}
 
 	UsbdErrataRevert();
@@ -761,7 +754,7 @@ static void nRFUsbdAbortEp0(void)
 	NRF_USBD->EVENTS_ENDEPIN[0] = 0;
 	NRF_USBD->EVENTS_ENDEPOUT[0] = 0;
 	NRF_USBD->EPDATASTATUS = (1UL << 0) | (1UL << 16);
-	UsbdSync();
+	(void)NRF_USBD->EPDATASTATUS;
 }
 
 // ISR context only: this interrupt is the sole mutator of the wake state,
@@ -791,7 +784,6 @@ static void nRFUsbdTryEnterLowPower(void)
 	NRF_USBD->LOWPOWER =
 		USBD_LOWPOWER_LOWPOWER_LowPower << USBD_LOWPOWER_LOWPOWER_Pos;
 	(void)NRF_USBD->LOWPOWER;
-	UsbdSync();
 
 	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
 		NRF_USBD->EVENTS_SOF != 0U)
@@ -824,7 +816,7 @@ static void nRFUsbdTryRemoteWake(void)
 	s_Usbd.Flags = flags & ~(uint32_t)USBD_FLAG_REMOTE_WAKE;
 	NRF_USBD->DPDMVALUE = USBD_DPDMVALUE_STATE_Resume;
 	NRF_USBD->TASKS_DPDMDRIVE = 1;
-	UsbdSync();
+	(void)NRF_USBD->TASKS_DPDMDRIVE;
 	EnableInterrupt(irqState);
 
 	if ((NRF_USBD->INTEN & USBD_INTEN_SOF_Msk) == 0U)
@@ -1046,7 +1038,7 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	{
 		NRF_USBD->SHORTS = 0U;
 		NRF_USBD->TASKS_EP0RCVOUT = 1U;
-		UsbdSync();
+		(void)NRF_USBD->TASKS_EP0RCVOUT;
 	}
 }
 
@@ -1065,7 +1057,7 @@ static void nRFUsbdQueueEp0Setup(void)
 	}
 	// A new SETUP aborts the old control transfer's completion.
 	NRF_USBD->EVENTS_EP0DATADONE = 0U;
-	UsbdSync();
+	(void)NRF_USBD->EVENTS_EP0DATADONE;
 }
 
 
@@ -1078,7 +1070,6 @@ extern "C" void USBD_IRQHandler(void)
 	if (NRF_USBD->EVENTS_USBRESET != 0U)
 	{
 		NRF_USBD->EVENTS_USBRESET = 0U;
-		UsbdSync();
 		nRFUsbdBusReset();
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESET);
 		return;
@@ -1139,7 +1130,7 @@ extern "C" void USBD_IRQHandler(void)
 				const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
 				// Re-arm before the core may select status or stall.
 				NRF_USBD->TASKS_EP0RCVOUT = 1U;
-				UsbdSync();
+				(void)NRF_USBD->TASKS_EP0RCVOUT;
 				nRFUsbdEmitXfer(0U, amount);
 			}
 			startDma = true;
@@ -1205,7 +1196,7 @@ extern "C" void USBD_IRQHandler(void)
 		NRF_USBD->EVENTS_USBEVENT = 0U;
 		const uint32_t eventCause = NRF_USBD->EVENTCAUSE;
 		NRF_USBD->EVENTCAUSE = eventCause;
-		UsbdSync();
+		(void)NRF_USBD->EVENTCAUSE;
 
 		nRFUsbdHandleBusEvent(eventCause);
 	}
@@ -1238,15 +1229,15 @@ extern "C" void USBD_IRQHandler(void)
 		}
 
 		// Clear only serviced endpoints; keep every other status bit latched.
+		// The following SOF register read completes this write.
 		NRF_USBD->EPDATASTATUS = servicedStatus;
-		UsbdSync();
 	}
 
 
 	if (NRF_USBD->EVENTS_SOF != 0U)
 	{
 		NRF_USBD->EVENTS_SOF = 0U;
-		UsbdSync();
+		(void)NRF_USBD->EVENTS_SOF;
 
 		nRFUsbdHandleSof();
 	}
@@ -1326,7 +1317,7 @@ void UsbCtrlrStop(int DevNo)
 	NRF_USBD->INTEN = 0;
 	NRF_USBD->USBPULLUP = 0;
 	NRF_USBD->ENABLE = 0;
-	UsbdSync();
+	(void)NRF_USBD->ENABLE;
 
 	// A successful start owns one clock request; a failed start releases it.
 	UsbdXtalRelease();
@@ -1517,7 +1508,7 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 		NRF_USBD->SIZE.EPOUT[epNum] = 0;
 	}
 	nRFUsbGetEpReg(epNum, in)->MaxPacketSize = 0U;
-	UsbdSync();
+	__DSB();
 }
 
 void UsbCtrlrEpCloseAll(int DevNo)
@@ -1629,7 +1620,7 @@ bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr)
 		(NRF_USBD->SHORTS & USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk) == 0U)
 	{
 		NRF_USBD->TASKS_EP0STATUS = 1U;
-		UsbdSync();
+		(void)NRF_USBD->TASKS_EP0STATUS;
 	}
 	EnableInterrupt(state);
 	nRFUsbdEmitXfer(EpAddr, 0U);
@@ -1691,13 +1682,13 @@ void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr)
 	if (epNum == 0)
 	{
 		NRF_USBD->TASKS_EP0STALL = 1;
+		(void)NRF_USBD->TASKS_EP0STALL;
 	}
 	else
 	{
 		NRF_USBD->EPSTALL =
 			(USBD_EPSTALL_STALL_Stall << USBD_EPSTALL_STALL_Pos) | EpAddr;
 	}
-	UsbdSync();
 }
 
 void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr)
@@ -1719,5 +1710,4 @@ void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr)
 	{
 		NRF_USBD->SIZE.EPOUT[epNum] = 0;
 	}
-	UsbdSync();
 }

@@ -123,7 +123,6 @@ struct NRF_USBD_Type {
 } regs;
 auto *NRF_USBD=&regs;
 void __DSB(){}
-void UsbdSync(){}
 bool isoReady;
 unsigned isoChecks,isoEnd;
 void nRFUsbdDmaLock();
