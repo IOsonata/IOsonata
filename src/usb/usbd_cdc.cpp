@@ -402,7 +402,7 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	pCdc->pData->pClassContext = pCdc;
 
 	UsbCtrlrEpAlloc(pCdc->DevNo, pCdc->NotifyEpNo, true,
-		nullptr, false, UsbdCdcNotifCtrlrEvent, pCdc);
+		UsbdCdcNotifBuffer(pCdc), false, UsbdCdcNotifCtrlrEvent, pCdc);
 
 	const UsbCfg_t *pUsbCfg = UsbGetCfg(pCdc->DevNo);
 	if (!UsbdCdcMakeDesc(&pCdc->FsDesc, pCdc, USB_SPEED_FULL,

@@ -1533,7 +1533,7 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 		return false;
 	}
 	UsbCtrlrEpAlloc(pHci->DevNo, pHci->EventEpNo, true,
-		nullptr, false, BtHciUsbEventComplete, pHci);
+		BtHciUsbEventTxTransfer(pHci), false, BtHciUsbEventComplete, pHci);
 
 	BtHciUsbInitDevIntrf(pHci);
 

@@ -107,10 +107,7 @@ enum
 {
 	NRFX_USBD_QUE_OUT = 0U,
 	NRFX_USBD_QUE_IN_BUFFER = 1U,
-	NRFX_USBD_QUE_IN_FIFO = 2U,
-	NRFX_USBD_QUE_IN_SCRATCH = 3U,
-	NRFX_USBD_QUE_TYPE_MASK = 3U,
-	NRFX_USBD_QUE_FIFO_OFFSET_POS = 2U,
+	NRFX_USBD_QUE_IN_SCRATCH = 2U,
 };
 
 #pragma pack(push, 4)
@@ -120,8 +117,7 @@ typedef struct __nRF_Usbd_Que {
 	uint8_t Dir;					//!< Queue source/direction
 	uint16_t Len;				//!< Bytes this transfer moves
 	union {
-		uint8_t *pBuffer;		//!< OUT or direct IN DMA buffer
-		hCFifo_t hFifo;			//!< FIFO-backed IN ownership
+		uint8_t *pBuffer;		//!< OUT or IN DMA buffer
 		uint32_t Scratch;		//!< Aligned IN repair
 	};
 } nRFUsbdQue_t;
@@ -555,19 +551,6 @@ static __attribute__((noinline)) bool nRFUsbdRetireDma(uint32_t StatusBit)
 
 	*pEnd = 0U;
 	NRF_USBD->EPSTATUS = 1UL << StatusBit;
-
-	if (epNum != 0U && StatusBit < 16U)
-	{
-		nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPeek(s_Usbd.hQue);
-		if ((pQue->Dir & NRFX_USBD_QUE_TYPE_MASK) == NRFX_USBD_QUE_IN_FIFO)
-		{
-			hCFifo_t hFifo = pQue->hFifo;
-			int count = pQue->Len;
-			if (count == 0 || CFifoBlockSize(hFifo) != 1U)
-				count = 1;
-			(void)CFifoGetMultiple(hFifo, &count);
-		}
-	}
 	(void)CFifoGet(epNum == 0U ? s_Usbd.hEp0Que : s_Usbd.hQue);
 	// Complete END and EPSTATUS writes before the OUT callback or next DMA.
 	__DSB();
@@ -643,16 +626,10 @@ static inline __attribute__((always_inline))
 void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 {
 	const uint8_t epNum = pQue->EpNum;
-	const uint8_t type = pQue->Dir & NRFX_USBD_QUE_TYPE_MASK;
-	const bool isIn = type != NRFX_USBD_QUE_OUT;
+	const bool isIn = pQue->Dir != NRFX_USBD_QUE_OUT;
 	const uint8_t *pBuffer;
 
-	if (type == NRFX_USBD_QUE_IN_FIFO)
-	{
-		pBuffer = CFifoPeek(pQue->hFifo) +
-			(pQue->Dir >> NRFX_USBD_QUE_FIFO_OFFSET_POS);
-	}
-	else if (type == NRFX_USBD_QUE_IN_SCRATCH)
+	if (pQue->Dir == NRFX_USBD_QUE_IN_SCRATCH)
 	{
 		pBuffer = (const uint8_t *)&pQue->Scratch;
 	}
@@ -1526,8 +1503,8 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		return false;
 	}
 	pQue->EpNum = EpNum;
-	hCFifo_t hFifo =
-		(hCFifo_t)s_Usbd.EpReg[EpNum - 1U][1].pBuffer;
+	pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
+	pQue->pBuffer = pBuffer;
 
 	const uint32_t misalign = (uint32_t)(uintptr_t)pBuffer & 3U;
 	if (misalign != 0U)
@@ -1539,27 +1516,6 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		}
 		memcpy(&pQue->Scratch, pBuffer, Length);
 		pQue->Dir = NRFX_USBD_QUE_IN_SCRATCH;
-
-		// Scratch owns a copy, so its FIFO source can be released now.
-		if (hFifo != NULL)
-		{
-			int count = Length;
-			if (count == 0 || CFifoBlockSize(hFifo) != 1U)
-				count = 1;
-			(void)CFifoGetMultiple(hFifo, &count);
-		}
-	}
-	else if (hFifo != NULL)
-	{
-		uint8_t *pHead = CFifoPeek(hFifo);
-		pQue->hFifo = hFifo;
-		pQue->Dir = (uint8_t)(NRFX_USBD_QUE_IN_FIFO |
-			((uint32_t)(pBuffer - pHead) << NRFX_USBD_QUE_FIFO_OFFSET_POS));
-	}
-	else
-	{
-		pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
-		pQue->pBuffer = pBuffer;
 	}
 	pQue->Len = Length;
 	nRFUsbdResumeQueuedDmaLocked();
