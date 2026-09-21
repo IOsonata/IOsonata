@@ -50,12 +50,7 @@ code = r'''
 #include <cstring>
 #include "cfifo.h"
 #include "app_evt_handler.h"
-// Bypass the legacy host adapter; exercise the production directional API.
-#define UsbCtrlrEpInXfer HostUsbCtrlrEpInXfer
-#define UsbCtrlrEpOutXfer HostUsbCtrlrEpOutXfer
 #include "usb/usb_intrf.h"
-#undef UsbCtrlrEpInXfer
-#undef UsbCtrlrEpOutXfer
 bool nRFUsbdIsoXfer(uint8_t,uint16_t){assert(false);return false;}
 uint32_t irqMask;
 void (*onIrqDisable)();
@@ -197,13 +192,13 @@ uint8_t *checkedDmaQueuePut(hCFifo_t fifo){
 }
 '''
 code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
-    if name in ('nRFUsbdQueXferDir', 'UsbCtrlrEpInXfer', 'UsbCtrlrEp0Send') else function(name)
+    if name in ('nRFUsbdProcessOutData', 'UsbCtrlrEpSend', 'UsbCtrlrEp0Send') else function(name)
     for name in [
     'nRFUsbdDmaActive', 'nRFUsbdDmaLock', 'nRFUsbdDmaUnlock', 'nRFUsbdDmaStartLocked', 'nRFUsbdRetireDma', 'nRFUsbdDmaWait',
     'nRFUsbdEp0InStart', 'nRFUsbdStartDmaNow', 'nRFUsbdDmaAllowed',
     'nRFUsbdStartQueuedDma',
-    'nRFUsbdResumeQueuedDmaLocked', 'nRFUsbdQueXferDir', 'UsbCtrlrEpXfer',
-    'UsbCtrlrEpInXfer', 'UsbCtrlrEpOutXfer',
+    'nRFUsbdResumeQueuedDmaLocked',
+    'UsbCtrlrEpSend',
     'nRFUsbGetEpReg', 'nRFUsbEpRegisteredEvent',
     'nRFUsbdProcessInComplete', 'nRFUsbdQueueInComplete', 'UsbCtrlrEp0Send',
     'nRFUsbdEmitXfer', 'UsbCtrlrEp0Status',
@@ -227,19 +222,18 @@ code += '\n'.join(function(name, intrf_source) for name in [
 # Run the core's real submit/accounting function against controller Send too.
 code += 'struct {int DevNo;uint8_t *CtrlData;uint16_t CtrlDataLen,CtrlActual;} s_Core;\n'
 code += function('UsbCoreSendIn', (ROOT / 'src/usb/usb.cpp').read_text())
-# The other native controller must also recover a withheld OUT registration
-# without involving an application read or requiring a free AppEvt slot.
+# Check the other native controller callback contract against the same core event.
 nrf54_source = (ROOT / 'ARM/Nordic/nRF54/src/usb_ctrlr_nrf54.cpp').read_text()
 code += r'''
 namespace nrf54 {
 constexpr unsigned NRF_USB_EP_COUNT=16;
 nRFUsbEpReg_t s_EpReg[NRF_USB_EP_COUNT][2];
 alignas(4) uint8_t s_Ep0Bounce[64];
-void nRFUsbPowerProcess(){}
+
 '''
 for name in ['nRFUsbValidDevNo', 'nRFUsbEpDir', 'nRFUsbGetEpReg',
              'nRFUsbEpRegisteredEvent', 'nRF54UsbdEmit',
-             'nRF54UsbdEmitXfer', 'UsbCtrlrProcess']:
+             'nRF54UsbdEmitXfer']:
     code += function(name, nrf54_source) + '\n'
 code += '}\n'
 # Exercise the actual ISR acknowledgement block, not a hand-coded queue call.
@@ -252,6 +246,13 @@ while depth:
 code += '\nvoid dataEvent(){const auto state=DisableInterrupt();uint8_t outEp=0;\n'
 code += source[start:end] + '\nEnableInterrupt(state);}\n'
 code += r'''
+bool receiveOut(uint8_t ep){
+ s_Usbd.EpReg[ep-1][0].MaxPacketSize=64;
+ const uint32_t bit=1U<<(ep+16);
+ regs.EPDATASTATUS.bits|=bit;
+ nRFUsbdProcessOutData(ep,nullptr);
+ return !(regs.EPDATASTATUS.bits&bit);
+}
 void init(){
  regs={};dmaBusy=0;isoReady=false;isoChecks=isoEnd=0;irqMask=0;resets=0;
  onIrqDisable=nullptr;
@@ -291,7 +292,7 @@ void submitFromOut(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
  void *context){
  assert(ep==1 && event==USB_CTRLR_EVT_XFER_CMPL && length==9);
  assert(dmaBusy && !regs.EPSTATUS.bits);
- assert(UsbCtrlrEpInXfer(0,2,(uint8_t*)context,9));
+ assert(UsbCtrlrEpSend(0,2,(uint8_t*)context,9));
  assert(!regs.TASKS_STARTEPIN[2] && !dmaLocks && !dmaUnlocks);
  ++outSubmissions;
 }
@@ -370,37 +371,12 @@ int main(int argc,char **argv){
  };
  nrf54::nRF54UsbdEmitXfer(0,8);
  puts("PASS: nRF54 completion dispatch uses the four-argument endpoint callback and preserves EP0 events");
- // nRF54 foreground retry visits held OUT directions only, with IRQ exclusion.
- for(unsigned masked:{0U,1U}){
-  init();irqMask=masked;
-  uint8_t buffer[64];unsigned calls[16]={};
-  for(unsigned ep=0;ep<16;++ep)for(unsigned dir=0;dir<2;++dir){
-   auto &reg=nrf54::s_EpReg[ep][dir];reg={};
-   reg.pBuffer=ep%2?nullptr:buffer;reg.pContext=&calls[ep];
-   reg.Handler=[](uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
-                  void *context){
-    assert(ep>0 && ep<16 && ep%2 && irqMask);
-    assert(event==USB_CTRLR_EVT_DRDY && !length);
-    ++*(unsigned*)context;
-   };
-  }
-  while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
-  nrf54::UsbCtrlrProcess(1);for(auto count:calls)assert(!count);
-  nrf54::UsbCtrlrProcess(0);assert(irqMask==masked);
-  for(unsigned ep=0;ep<16;++ep){
-   assert(calls[ep]==ep%2);
-   nrf54::s_EpReg[ep][0].pBuffer=buffer;
-  }
-  nrf54::UsbCtrlrProcess(0);
-  for(unsigned ep=0;ep<16;++ep)assert(calls[ep]==ep%2);
- }
- puts("PASS: nRF54 controller processing retries withheld OUT registrations after full AppEvt");
  const bool fullAppEvt=argc==2 && !strcmp(argv[1],"--full-appevt");
  alignas(8) uint8_t data[192];
  for(unsigned i=0;i<sizeof(data);++i)data[i]=uint8_t(i);
  const int lengths[]={0,1,9,63,64,65,129};
  for(int length:lengths){
-  init();assert(UsbCtrlrEpInXfer(0,1,data,9));
+  init();assert(UsbCtrlrEpSend(0,1,data,9));
   regs.BMREQUESTTYPE=0x80;
   assert(UsbCtrlrEp0Send(0,data,length)==length);
   assert(regs.TASKS_STARTEPIN[0]==0);
@@ -432,7 +408,7 @@ int main(int argc,char **argv){
  // EP0 Send copies accepted data before returning. The caller may reuse its
  // buffer while these packets are still waiting for DMA/host consumption.
  for(int length:{1,64,65,256}){
-  init();assert(UsbCtrlrEpInXfer(0,1,data,9));
+  init();assert(UsbCtrlrEpSend(0,1,data,9));
   uint8_t response[256];
   for(unsigned i=0;i<sizeof(response);++i)response[i]=uint8_t(i);
   assert(UsbCtrlrEp0Send(0,response,length)==length);
@@ -464,7 +440,7 @@ int main(int argc,char **argv){
   do{
    for(int i=0;i<length-offset;++i)
     response[i]=uint8_t((offset+i)*17+((offset+i)>>8));
-   assert(UsbCtrlrEpInXfer(0,1,data,9));
+   assert(UsbCtrlrEpSend(0,1,data,9));
    const int copied=UsbCtrlrEp0Send(0,length?response:nullptr,length-offset);
    assert(copied==min(length-offset,256) && irqMask==mask);
    memset(response,0xFF,sizeof(response));
@@ -570,7 +546,7 @@ int main(int argc,char **argv){
   const unsigned total=shortPacket?length-1:length;
   unsigned offset=0;
   do{
-   if(busy)assert(UsbCtrlrEpInXfer(0,1,data,9));
+   if(busy)assert(UsbCtrlrEpSend(0,1,data,9));
    regs.TASKS_STARTEPOUT[0]=regs.TASKS_EP0RCVOUT=0;
    regs.EVENTS_EP0DATADONE=1;
    if(busy){
@@ -639,7 +615,7 @@ int main(int argc,char **argv){
  for(unsigned gate:{0U,unsigned(USBD_FLAG_SUSPENDED),unsigned(USBD_FLAG_HOST_RESUME),
   unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND)}){
   init();
-  if(status==2U)assert(UsbCtrlrEpInXfer(0,1,data,9));
+  if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
   else{
    dmaBusy=0x82;
    s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
@@ -659,7 +635,7 @@ int main(int argc,char **argv){
  // A denied request stays queued without touching the hardware lock.
  for(unsigned gate=0;gate<16;++gate)for(unsigned mask:{0U,1U}){
   init();irqMask=mask;s_Usbd.Flags=USBD_FLAG_MAC_AWAKE|gate;
-  assert(UsbCtrlrEpInXfer(0,1,data,9));
+  assert(UsbCtrlrEpSend(0,1,data,9));
   const bool allowed=!(gate&USBD_FLAG_HOST_RESUME) &&
    (!(gate&USBD_FLAG_SUSPENDED) || (gate&USBD_FLAG_SUSPEND_PEND));
   assert(bool(dmaBusy)==allowed && dmaLocks==unsigned(allowed) && !dmaUnlocks);
@@ -694,7 +670,7 @@ int main(int argc,char **argv){
  // Submission queues it; the completion switch starts it after the callback.
  init();outSubmissions=0;
  UsbCtrlrEpAlloc(0,1,data,false,submitFromOut,data+64);
- regs.SIZE.EPOUT[1]=9;assert(UsbCtrlrEpOutXfer(0,1,64));
+ regs.SIZE.EPOUT[1]=9;assert(receiveOut(1));
  assert(dmaLocks==1 && !dmaUnlocks);
  regs.EPSTATUS.bits=1U<<17;regs.EVENTS_ENDEPOUT[1]=1;regs.EPOUT[1].AMOUNT=9;
  dmaLocks=dmaUnlocks=0;interrupt();
@@ -709,12 +685,12 @@ int main(int argc,char **argv){
  for(unsigned status:{1U,2U,0x20000U,0x100U,0x1000000U})for(unsigned mask:{0U,1U}){
   init();irqMask=mask;
   if(status==1U)assert(UsbCtrlrEp0Send(0,data,9)==9);
-  else if(status==2U)assert(UsbCtrlrEpInXfer(0,1,data,9));
+  else if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
   else if(status==0x20000U){
    UsbCtrlrEpAlloc(0,1,data,false,nullptr,nullptr);
-   assert(UsbCtrlrEpOutXfer(0,1,64));
+   assert(receiveOut(1));
   }else dmaBusy=0x82;
-  assert(UsbCtrlrEpInXfer(0,2,data+64,9));
+  assert(UsbCtrlrEpSend(0,2,data+64,9));
   regs.EPSTATUS.bits=status;isoEnd=1;
   regs.EVENTS_ENDEPIN[0]=regs.EVENTS_ENDEPIN[1]=regs.EVENTS_ENDEPOUT[1]=1;
   dmaLocks=dmaUnlocks=0;nRFUsbdDmaWait();
@@ -754,14 +730,14 @@ int main(int argc,char **argv){
  for(unsigned masked:{0U,1U}){
   init();irqMask=masked;
   s_Usbd.EpReg[1][1].pBuffer=data;
-  assert(UsbCtrlrEpXfer(0,0x82,9) && irqMask==masked && dmaBusy);
+  assert(UsbCtrlrEpSend(0,2,data,9) && irqMask==masked && dmaBusy);
   auto *entry=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
   assert(entry->EpNum==2 && entry->Dir==NRFX_USBD_QUE_IN_BUFFER);
   assert(entry->Len==9 && entry->pBuffer==data);
   s_Usbd.EpReg[0][0].pBuffer=data+64;
-  assert(UsbCtrlrEpOutXfer(0,1,64) && irqMask==masked);
+  assert(receiveOut(1) && irqMask==masked);
   assert(CFifoUsed(s_Usbd.hQue)==2);
-  assert(!UsbCtrlrEpOutXfer(0,3,64) && irqMask==masked);
+  assert(!receiveOut(3) && irqMask==masked);
   assert(CFifoUsed(s_Usbd.hQue)==2); // A withheld buffer publishes no entry.
   retire(2,true);
   entry=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
@@ -773,8 +749,8 @@ int main(int argc,char **argv){
  // Restart an already queued transfer immediately after ENDEP, overlapping
  // it with EPDATA/SOF work. ISO becoming ready later waits for that DMA.
  init();
- assert(UsbCtrlrEpInXfer(0,1,data,9));
- assert(UsbCtrlrEpInXfer(0,2,data+64,9));
+ assert(UsbCtrlrEpSend(0,1,data,9));
+ assert(UsbCtrlrEpSend(0,2,data+64,9));
  s_Usbd.EpReg[2][0].pBuffer=data+128;
  s_Usbd.EpReg[2][0].MaxPacketSize=64;
  regs.EPSTATUS.bits=1U<<1;regs.EVENTS_ENDEPIN[1]=1;
@@ -796,7 +772,7 @@ int main(int argc,char **argv){
  for(unsigned status:{0x100U,0x1000000U}){
   init();dmaBusy=0x82;
   s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
-  assert(UsbCtrlrEpInXfer(0,2,data,9));
+  assert(UsbCtrlrEpSend(0,2,data,9));
   regs.EPSTATUS.bits=status;
   interrupt(); // EPSTATUS alone is not completion.
   assert(dmaBusy && !isoChecks && !regs.TASKS_STARTEPIN[2]);
@@ -817,9 +793,9 @@ int main(int argc,char **argv){
  for(unsigned gate:{0U,unsigned(USBD_FLAG_SUSPENDED),unsigned(USBD_FLAG_HOST_RESUME),
   unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND)}){
   init();dmaBusy=0x82;
-  if(status==2U)assert(UsbCtrlrEpInXfer(0,1,data,9));
+  if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
   else s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
-  assert(UsbCtrlrEpInXfer(0,2,data+64,9));
+  assert(UsbCtrlrEpSend(0,2,data+64,9));
   s_Usbd.Flags|=gate;
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   interrupt();
@@ -832,9 +808,9 @@ int main(int argc,char **argv){
  // SETUP must defer control handling without starting another queued DMA.
  for(unsigned status:{2U,0x100U,0x1000000U}){
   init();dmaBusy=0x82;
-  if(status==2U)assert(UsbCtrlrEpInXfer(0,1,data,9));
+  if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
   else s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
-  assert(UsbCtrlrEpInXfer(0,2,data+64,9));
+  assert(UsbCtrlrEpSend(0,2,data+64,9));
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   regs.EVENTS_EP0SETUP=1;regs.EVENTS_EP0DATADONE=1;isoChecks=0;
   interrupt();
@@ -900,9 +876,9 @@ int main(int argc,char **argv){
  // before entering LOWPOWER; ordinary suspend retains it.
  for(unsigned status:{2U,0x100U,0x1000000U})for(bool lowPower:{false,true}){
   init();dmaBusy=0x82;s_Usbd.LowPowerSuspend=lowPower;
-  if(status==2U)assert(UsbCtrlrEpInXfer(0,1,data,9));
+  if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
   else s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
-  assert(UsbCtrlrEpInXfer(0,2,data+64,9));
+  assert(UsbCtrlrEpSend(0,2,data+64,9));
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   regs.EVENTS_USBEVENT=1;regs.EVENTCAUSE.bits=USBD_EVENTCAUSE_SUSPEND_Msk;
   interrupt();
@@ -964,7 +940,7 @@ int main(int argc,char **argv){
   s_Usbd.EpReg[ep-1][0].MaxPacketSize=64;
   const unsigned received[]={0,1,9,63,64};
   auto receive=[&](unsigned len,unsigned value){
-   assert(UsbCtrlrEpInXfer(0,7,data,7));
+   assert(UsbCtrlrEpSend(0,7,data,7));
    regs.SIZE.EPOUT[ep]=len;regs.EPDATASTATUS.bits=1U<<(ep+16);
    regs.EVENTS_EPDATA=1;interrupt();
    assert(CFifoUsed(s_Usbd.hQue)==2 && !regs.EPDATASTATUS.bits);
@@ -1087,7 +1063,7 @@ int main(int argc,char **argv){
     assert(ep==0x83 && evt==USB_CTRLR_EVT_XFER_CMPL && len==7);
     assert(!irqMask);++*(unsigned*)ctx;
    },&inComplete);
-  assert(UsbCtrlrEpInXfer(0,3,data,7));retire(3,true);
+  assert(UsbCtrlrEpSend(0,3,data,7));retire(3,true);
   regs.EPIN[3].AMOUNT=7;regs.EPDATASTATUS.bits|=1U<<3;
   regs.EVENTS_EPDATA=1;interrupt();
   for(unsigned pass=0;pass<8;++pass)UsbCtrlrProcess(0);
@@ -1220,8 +1196,7 @@ int main(int argc,char **argv){
   assert(regs.EPDATASTATUS.bits==(1U<<17) && !regs.TASKS_STARTEPOUT[1]);
   AppEvtHandlerDispatch(); // Still full: retry must put itself back in AppEvt.
   AppEvtHandlerExec(); // Remains bounded while DMA has not finished.
-  assert(!UsbCtrlrEpInXfer(0,2,data,7) && !irqMask);
-  assert(!UsbCtrlrEpOutXfer(0,2,64) && !irqMask);
+  assert(!UsbCtrlrEpSend(0,2,data,7) && !irqMask);
   assert(CFifoUsed(s_Usbd.hQue)==16);
   assert(CFifoPeek(s_Usbd.hQue)==(uint8_t*)head && head->Scratch==0xA5010203);
   assert(completions==0);
@@ -1315,7 +1290,7 @@ int main(int argc,char **argv){
   const unsigned lengths[]={mps,mps-1,1,0};
   for(unsigned batch=0;batch<24;++batch){
    // Another endpoint owns DMA while packet submissions fill the TX FIFO.
-   assert(UsbCtrlrEpInXfer(0,2,data,7));
+   assert(UsbCtrlrEpSend(0,2,data,7));
    for(unsigned p=0;p<3;++p){
     memset(input,0x30+batch+p,block);
     reinterpret_cast<UsbPkt_t*>(input)->Hdr.Length=lengths[(batch+p)%4];
@@ -1345,7 +1320,7 @@ int main(int argc,char **argv){
     assert(CFifoUsed(intrf.hTxFifo)==int(3-p));
     assert(CFifoPeek(intrf.hTxFifo)==(uint8_t*)packet);
     // Reuse the released queue slot and DMA channel before host completion.
-    assert(UsbCtrlrEpInXfer(0,2,data,7));
+    assert(UsbCtrlrEpSend(0,2,data,7));
     if(fullAppEvt){
      while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
     }

@@ -183,21 +183,10 @@ void UsbCtrlrEpCloseAll(int DevNo);
 void UsbCtrlrEpAlloc(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 					 bool bBlocking,
 					 UsbCtrlrEpHandler_t Handler, void *pContext);
-bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length);
-
-// Adapt the directional production API to the existing fake-controller logs.
-static inline bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum,
-									 uint8_t *pBuffer, uint16_t Length)
-{
-	(void)pBuffer;
-	return UsbCtrlrEpXfer(DevNo, (uint8_t)(EpNum | 0x80U), Length);
-}
-
-static inline bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
-{
-	return UsbCtrlrEpXfer(DevNo, (uint8_t)(EpNum & 0x7FU), Length);
-}
-
+// EpNum is an endpoint number: device IN, host OUT. The controller schedules RX.
+// pBuffer supplies the DMA source. On nRF52, NULL selects the registered
+// TX byte CFifo. The source remains owned until the completion callback.
+bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
 // IN returns bytes copied into the queue; completion notifies that it drained.
 // A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);

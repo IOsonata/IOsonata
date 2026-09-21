@@ -129,7 +129,7 @@ interface lifetime. C++ initialization supplies the inherited storage.
                  RX buffer and FIFO/direct TX source
                     selected RX/TX data policy
                     endpoint registration/callback
-                           UsbCtrlrEpXfer
+                           UsbCtrlrEpSend
                                |
               +----------------+----------------+
               |                |                |
@@ -161,7 +161,7 @@ UsbdCdc
    |
    +-- Bulk OUT/IN ----------> UsbIntrf
    |                              |
-   |                         UsbCtrlrEpXfer
+   |                         UsbCtrlrEpSend
    |
    +-- Interrupt IN ---------> direct class-owned endpoint
        notifications
@@ -243,7 +243,7 @@ UsbIntrf
 Isochronous OUT/IN endpoints
         |
         v
-UsbCtrlrEpXfer / endpoint callback
+UsbCtrlrEpSend / endpoint callback
 ```
 
 Future host-side classes should reuse the same `UsbIsoIntrf` transport layer
@@ -319,7 +319,9 @@ The nRF52 retains the next OUT request in `EPDATASTATUS` until it can enter the
 DMA queue, including while the registered RX buffer is withheld. AppEvt and
 foreground retries consume that status bit once before starting DMA. Other
 endpoints continue to use the shared DMA channel. The generic DRDY path remains
-available to controllers that request a transfer through the interface first.
+available for controllers to ask the interface to release or withhold its RX
+buffer. Returning from DRDY does not submit a transfer; the controller schedules
+receive DMA using the registered buffer.
 
 `UsbIntIntrf` contains no HID report or descriptor behavior. `UsbdHid` inherits
 it and owns the device-side HID descriptor, class requests and report policy.
@@ -367,7 +369,7 @@ The central controller concepts are:
 ```text
 UsbCtrlrInit
 UsbCtrlrEpOpen / UsbCtrlrEpClose
-UsbCtrlrEpXfer
+UsbCtrlrEpSend
 Event callback
 ```
 
@@ -416,14 +418,21 @@ There are no class-specific controller transfer calls such as `CdcXfer()`,
 
 ### Endpoint transfer
 
-Non-control data endpoints use one common operation:
+Non-control data endpoints use one send operation:
 
 ```text
-UsbCtrlrEpXfer(DevNo, EpAddr, Length)
+UsbCtrlrEpSend(DevNo, EpNum, pBuffer, Length)
 ```
 
-The controller already knows the endpoint type because it was established when
-the endpoint was opened/configured.
+`EpNum` is the endpoint number, without a direction bit. Send means device IN
+or host OUT; the current Nordic ports implement device mode. `pBuffer` is the
+DMA source and remains valid until the endpoint completion callback. On nRF52,
+NULL selects the registered TX byte CFifo; packet and direct modes pass their
+payload pointer explicitly. A zero-length send still passes its direct buffer.
+
+The controller already knows the endpoint type from open/configure. It schedules
+receives into the registered RX buffer, and stops while that buffer is withheld.
+There is no public receive-submission or direction-multiplexing transfer API.
 
 Endpoint callbacks are delivered directly to the registered endpoint owner.
 Nonzero endpoint completion is not routed through the USB class table.
@@ -492,7 +501,7 @@ class state changes
 build notification
         |
         v
-UsbCtrlrEpXfer(Interrupt IN)
+UsbCtrlrEpSend(Interrupt IN)
         |
         v
 class endpoint callback
@@ -617,7 +626,7 @@ Internally:
 6. `UsbEnable()` assembles and validates the complete configuration descriptor
    before it connects the controller.
 7. Configuration or alternate-setting selection opens the endpoint descriptors.
-8. Transfers use `UsbCtrlrEpXfer()`.
+8. Sends use `UsbCtrlrEpSend()`; the controller schedules receives.
 9. Reset/unconfiguration closes endpoints and clears active transport state.
 10. VBUS removal calls each device class `Detach()` before the application
     cable event. This permits physical-removal policy, such as reloading a

@@ -15,9 +15,7 @@ static void *s_OutContext;
 static void *s_InContext;
 static bool s_OutBusy;
 static bool s_InBusy;
-static uint16_t s_OutLength;
 static uint16_t s_InLength;
-static uint8_t s_OutData[USB_ISO_INTRF_MAX_MPS];
 static uint8_t s_InData[USB_ISO_INTRF_MAX_MPS];
 static int s_OpenCount;
 static int s_CloseCount;
@@ -63,22 +61,14 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { s_OpenCount++; return true
 void UsbCtrlrEpClose(int, uint8_t) { s_CloseCount++; }
 void UsbCtrlrEpCloseAll(int) {}
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
+bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
-	if (!USB_ENDPADDR_IS_IN(EpAddr))
-	{
-		if (s_OutBusy) return false;
-		s_OutBusy = true;
-		s_OutXferCount++;
-		if (s_OutLength > 0U) memcpy(s_OutBuffer, s_OutData, s_OutLength);
-		return true;
-	}
-	if (s_InBusy || Length > sizeof(s_InData))
-		return false;
+	if ((EpNum & 0x80U) != 0U) return false;
+	if (s_InBusy || Length > sizeof(s_InData)) return false;
+	s_InBuffer = pBuffer;
 	s_InBusy = true;
 	s_InLength = Length;
-	if (Length > 0U)
-		memcpy(s_InData, s_InBuffer, Length);
+	if (Length > 0U) memcpy(s_InData, pBuffer, Length);
 	return true;
 }
 }

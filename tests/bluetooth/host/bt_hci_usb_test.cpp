@@ -100,46 +100,17 @@ void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
     return;
 }
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
+bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
-    const uint8_t epNo = USB_ENDPADDR_NUM(EpAddr);
-    if (epNo >= 16U)
-        return false;
-
-    RegisteredEp_t *pReg = nullptr;
-    for (int i = 0; i < s_RegisteredCount; i++)
-    {
-        if (s_Registered[i].EpAddr == EpAddr)
-        {
-            pReg = &s_Registered[i];
-            break;
-        }
-    }
-    if (pReg == nullptr)
-        return false;
-
-    if (USB_ENDPADDR_IS_IN(EpAddr))
-    {
-        if (s_InBusy[epNo] || s_SendCount >= 64 || Length > sizeof(s_Sent[0].Data))
-            return false;
-        SentPacket_t *pSent = &s_Sent[s_SendCount++];
-        pSent->EpAddr = EpAddr;
-        pSent->Length = Length;
-        // Packet-mode IN uses the current FIFO packet as its DMA source.
-        const auto *pIntrf = static_cast<const UsbDevIntrf_t *>(pReg->pContext);
-        const uint8_t *pSource = pReg->pBuffer;
-        if (pSource == nullptr)
-            pSource = reinterpret_cast<UsbPkt_t *>(CFifoPeek(pIntrf->hTxFifo))->Data;
-        if (Length > 0U) memcpy(pSent->Data, pSource, Length);
-        s_InBusy[epNo] = true;
-        return true;
-    }
-
-    if (!s_HwOutReady[epNo] || s_OutDma[epNo])
-        return false;
-    s_OutDma[epNo] = true;
-    s_OutSubmitCount++;
-    return true;
+	if ((EpNum & 0x80U) != 0U) return false;
+	if (EpNum >= 16U || s_InBusy[EpNum] || s_SendCount >= 64 ||
+		Length > sizeof(s_Sent[0].Data)) return false;
+	SentPacket_t *pSent = &s_Sent[s_SendCount++];
+	pSent->EpAddr = USB_ENDPADDR_DIRIN(EpNum);
+	pSent->Length = Length;
+	if (Length > 0U) memcpy(pSent->Data, pBuffer, Length);
+	s_InBusy[EpNum] = true;
+	return true;
 }
 
 void UsbCtrlrEpStall(int, uint8_t) {}
@@ -268,6 +239,11 @@ static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
     {
         pReg->Handler(USB_ENDPADDR_DIROUT(EpNo), USB_CTRLR_EVT_DRDY,
                       Length, pReg->pContext);
+        if (pReg->pBuffer != nullptr && s_HwOutReady[EpNo] && !s_OutDma[EpNo])
+        {
+            s_OutDma[EpNo] = true;
+            s_OutSubmitCount++;
+        }
         CHECK(s_OutDma[EpNo]);
         if (!s_OutDma[EpNo]) return;
     }

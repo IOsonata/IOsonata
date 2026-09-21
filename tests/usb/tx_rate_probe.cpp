@@ -20,7 +20,6 @@
 static uint8_t *s_InBuf;
 static uint16_t s_InLen;
 static bool s_InBusy;
-static bool s_OutBusy;
 static uint8_t *s_OutBuf;
 static UsbCtrlrEpHandler_t s_InHandler;
 static void *s_InContext;
@@ -65,13 +64,9 @@ void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuf, bool,
 	}
 	return;
 }
-bool UsbCtrlrEpRxArm(int, uint8_t)
+bool UsbCtrlrEpSend(int, uint8_t, uint8_t *pBuffer, uint16_t Len)
 {
-	s_OutBusy = s_OutBuf != nullptr;
-	return s_OutBusy;
-}
-bool UsbCtrlrEpSend(int, uint8_t, uint16_t Len)
-{
+	s_InBuf = pBuffer;
 	s_InLen = Len;
 	s_InBusy = true;
 	s_Packets++;
@@ -102,7 +97,6 @@ static bool Setup(void)
 	cfg.pTxBuffer = s_TxTransfer;
 	memset(static_cast<void *>(&s_Intrf), 0, sizeof(s_Intrf));
 	s_InBusy = false;
-	s_OutBusy = false;
 	s_Packets = 0;
 	s_Bytes = 0;
 	s_Zlp = 0;

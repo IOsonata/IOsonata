@@ -71,20 +71,12 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 void UsbCtrlrEpClose(int, uint8_t) { s_CloseCount++; }
 void UsbCtrlrEpCloseAll(int) {}
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
+bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
-	if (!s_XferOk)
-	{
-		return false;
-	}
-	if (USB_ENDPADDR_IS_IN(EpAddr))
-	{
-		s_InLength = Length;
-	}
-	else
-	{
-		s_OutXferCount++;
-	}
+	if ((EpNum & 0x80U) != 0U) return false;
+	if (!s_XferOk) return false;
+	s_InBuffer = pBuffer;
+	s_InLength = Length;
 	return true;
 }
 }
@@ -231,7 +223,7 @@ static void TestDuplexAndZeroLength(void)
 	Receive(rx, sizeof(rx));
 	CHECK(s_RxCount == 1 && s_LastRxLength == sizeof(rx));
 	CHECK(memcmp(s_LastRx, rx, sizeof(rx)) == 0);
-	CHECK(s_OutXferCount == 1);
+	CHECK(s_OutBuffer != nullptr && s_OutXferCount == 0);
 	CompleteIn();
 	CHECK(s_TxCount == 1 && s_LastTxLength == sizeof(tx));
 	CHECK(UsbIntIntrfTxReady(&intrf));

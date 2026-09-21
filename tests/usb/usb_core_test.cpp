@@ -982,8 +982,7 @@ extern "C" void UsbCtrlrEpAlloc(int, uint8_t, uint8_t *, bool,
 {
 	return;
 }
-extern "C" bool UsbCtrlrEpRxArm(int, uint8_t) { return true; }
-extern "C" bool UsbCtrlrEpSend(int, uint8_t, uint16_t) { return true; }
+extern "C" bool UsbCtrlrEpSend(int, uint8_t, uint8_t *, uint16_t) { return true; }
 static bool RecordEp0(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Length)
 {
 	if (s_Ctrlr.XferCnt >= XFER_LOG_CNT)

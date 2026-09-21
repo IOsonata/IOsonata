@@ -72,19 +72,13 @@ void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
 	}
 }
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
+bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
-	if (USB_ENDPADDR_IS_IN(EpAddr))
-	{
-		if (s_InBusy)
-		{
-			return false;
-		}
-		s_InBusy = true;
-		s_InLength = Length;
-		return true;
-	}
-	s_OutXferCount++;
+	if ((EpNum & 0x80U) != 0U) return false;
+	if (s_InBusy) return false;
+	s_InBuffer = pBuffer;
+	s_InBusy = true;
+	s_InLength = Length;
 	return true;
 }
 
@@ -281,6 +275,8 @@ static void CompleteIn(void)
 static void Receive(const uint8_t *pData, uint16_t Length)
 {
 	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY, Length, s_OutContext);
+	CHECK(s_OutBuffer != nullptr);
+	s_OutXferCount++;
 	if (Length != 0U)
 	{
 		memcpy(s_OutBuffer, pData, Length);

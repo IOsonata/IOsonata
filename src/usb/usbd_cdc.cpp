@@ -120,7 +120,7 @@ static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 
 	pCdc->SerialStatePending = false;
 
-	if (!UsbCtrlrEpXfer(pCdc->DevNo, USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo),
+	if (!UsbCtrlrEpSend(pCdc->DevNo, pCdc->NotifyEpNo, pData,
 						 USBD_CDC_NOTIFY_LEN))
 	{
 		pCdc->SerialStatePending = true;

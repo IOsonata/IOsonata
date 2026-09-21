@@ -50,15 +50,27 @@ static int AppEvent(DevIntrf_t * const, DEVINTRF_EVT Event,
     return Length;
 }
 
+static void ReceiveDma(void)
+{
+	if (s_HwOutReady && !s_OutDma && s_OutBuffer != nullptr)
+	{
+		s_OutDma = true;
+		s_OutSubmit++;
+	}
+}
+
 extern "C" {
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
 bool UsbCtrlrStart(int) { return true; }
 void UsbCtrlrStop(int) {}
 void UsbCtrlrProcess(int)
 {
-    AppEvtHandlerExec();
-    if (s_OutBuffer == nullptr && s_OutHandler != nullptr)
-        s_OutHandler(EP_NO, USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
+	AppEvtHandlerExec();
+	if (s_OutBuffer == nullptr && s_OutHandler != nullptr)
+	{
+		s_OutHandler(EP_NO, USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
+	}
+	ReceiveDma();
 }
 bool UsbCtrlrVbusDetected(int) { return true; }
 bool UsbCtrlrHighSpeed(int) { return false; }
@@ -94,24 +106,15 @@ void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
     }
 }
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
+bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
-    if (USB_ENDPADDR_IS_IN(EpAddr))
-    {
-        if (s_InDma) return false;
-        auto *pIntrf = static_cast<UsbDevIntrf_t *>(s_InContext);
-        s_InBuffer = CFifoPeek(pIntrf->hTxFifo);
-        s_InDma = true;
-        s_InLength = Length;
-        s_InSubmit++;
-        return true;
-    }
-
-    // OUT DMA must only be submitted after DRDY for blocking endpoints.
-    if (!s_HwOutReady || s_OutDma) return false;
-    s_OutDma = true;
-    s_OutSubmit++;
-    return true;
+	if ((EpNum & 0x80U) != 0U) return false;
+	if (s_InDma) return false;
+	s_InBuffer = pBuffer;
+	s_InDma = true;
+	s_InLength = Length;
+	s_InSubmit++;
+	return true;
 }
 
 }
@@ -177,6 +180,7 @@ static bool Drdy(const uint8_t *pData, uint16_t Length, bool Notify = false)
     {
         s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
                      Length, s_OutContext);
+		ReceiveDma();
     }
     else
     {

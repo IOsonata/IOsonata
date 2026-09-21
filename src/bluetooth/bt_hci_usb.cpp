@@ -508,7 +508,8 @@ static bool BtHciUsbSendEventChunk(BtHciUsbDev_t *pHci)
 	memcpy(BtHciUsbEventTxTransfer(pHci),
 		&BtHciUsbEventTxBuffer(pHci)[pHci->EventTxOffset],
 		pHci->EventTxChunkLength);
-	return UsbCtrlrEpXfer(pHci->DevNo, USB_ENDPADDR_DIRIN(pHci->EventEpNo),
+	return UsbCtrlrEpSend(pHci->DevNo, pHci->EventEpNo,
+		BtHciUsbEventTxTransfer(pHci),
 		pHci->EventTxChunkLength);
 }
 
@@ -516,7 +517,8 @@ static bool BtHciUsbSendEventZlp(BtHciUsbDev_t *pHci)
 {
 	pHci->EventTxChunkLength = 0U;
 	pHci->EventTxZlp = true;
-	return UsbCtrlrEpXfer(pHci->DevNo, USB_ENDPADDR_DIRIN(pHci->EventEpNo), 0U);
+	return UsbCtrlrEpSend(pHci->DevNo, pHci->EventEpNo,
+		BtHciUsbEventTxTransfer(pHci), 0U);
 }
 
 static void BtHciUsbEventComplete(uint8_t, UsbCtrlrEvtType_t Event,

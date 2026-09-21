@@ -59,20 +59,12 @@ void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
 	return;
 }
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
+bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
-	if (!s_XferOk)
-	{
-		return false;
-	}
-	if (USB_ENDPADDR_IS_IN(EpAddr))
-	{
-		s_InLength = Length;
-	}
-	else
-	{
-		s_OutXferCount++;
-	}
+	if ((EpNum & 0x80U) != 0U) return false;
+	if (!s_XferOk) return false;
+	s_InBuffer = pBuffer;
+	s_InLength = Length;
 	return true;
 }
 }
@@ -186,7 +178,7 @@ static void TestDrdyPolicy(void)
 	CHECK(Init(&intrf, rx, tx, true));
 	CHECK(UsbIntrfConfigure(&intrf, 8U));
 	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
-	CHECK(s_OutXferCount == 1);
+	CHECK(s_OutBuffer != nullptr && s_OutXferCount == 0);
 	for (bool fullEvents : {false, true})
 	{
 		const uint8_t packet[] = {1, 2, 3};
@@ -203,9 +195,9 @@ static void TestDrdyPolicy(void)
 		CHECK(s_OutXferCount == submits);
 		UsbCtrlrProcess(0);
 		CHECK(!intrf.RxPending && s_OutBuffer == intrf.pRxBuffer);
-		CHECK(s_OutXferCount == submits + 1);
+		CHECK(s_OutXferCount == submits);
 		UsbCtrlrProcess(0);
-		CHECK(s_OutXferCount == submits + 1);
+		CHECK(s_OutXferCount == submits);
 	}
 
 	ResetFake();

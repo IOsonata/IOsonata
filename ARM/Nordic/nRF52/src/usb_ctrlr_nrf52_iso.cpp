@@ -127,14 +127,13 @@ void nRFUsbdIsoService(void)
 	}
 }
 
-bool nRFUsbdIsoXfer(uint8_t EpAddr, uint16_t Length)
+bool nRFUsbdIsoXfer(uint8_t Dir, uint16_t Length)
 {
-	const uint8_t dir = USB_ENDPADDR_IS_IN(EpAddr);
 	const uint32_t openBusy = (uint32_t)(USBD_FLAG_ISO_OUT_OPEN |
-		USBD_FLAG_ISO_OUT_BUSY) << dir;
-	nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir];
+		USBD_FLAG_ISO_OUT_BUSY) << Dir;
+	nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][Dir];
 	const uint32_t state = DisableInterrupt();
-	if ((s_Usbd.Flags & openBusy) != (uint32_t)USBD_FLAG_ISO_OUT_OPEN << dir ||
+	if ((s_Usbd.Flags & openBusy) != (uint32_t)USBD_FLAG_ISO_OUT_OPEN << Dir ||
 		pReg->pBuffer == NULL || pReg->Handler == NULL ||
 		Length > pReg->MaxPacketSize)
 	{
@@ -142,8 +141,8 @@ bool nRFUsbdIsoXfer(uint8_t EpAddr, uint16_t Length)
 		return false;
 	}
 
-	s_Usbd.IsoDmaLen[dir] = (int16_t)Length;
-	s_Usbd.Flags |= (uint32_t)USBD_FLAG_ISO_OUT_BUSY << dir;
+	s_Usbd.IsoDmaLen[Dir] = (int16_t)Length;
+	s_Usbd.Flags |= (uint32_t)USBD_FLAG_ISO_OUT_BUSY << Dir;
 	nRFUsbdIsoService();
 	EnableInterrupt(state);
 	return true;
@@ -272,11 +271,7 @@ void nRFUsbdIsoSof(void)
 						nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, 0U,
 							USB_CTRLR_EVT_DRDY, 0U);
 					}
-					else
-					{
-						(void)nRFUsbdIsoXfer(NRFX_USBD_ISO_EP_NO,
-							pReg->MaxPacketSize);
-					}
+					(void)nRFUsbdIsoXfer(0U, pReg->MaxPacketSize);
 				}
 			}
 			else

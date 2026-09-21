@@ -3,9 +3,9 @@
 
 @brief	Host regression tests for the UsbIntrf endpoint-pair data path.
 
-The fake controller models a packet resident in endpoint hardware before an
-OUT DMA is requested. Blocking endpoints receive DRDY and submit DMA only when
-the RX CFifo has space. IN transfers use the fixed registered staging buffer.
+The fake controller models a packet resident in endpoint hardware before
+the controller starts OUT DMA. DRDY only releases or withholds the registered
+RX buffer. IN transfers use the explicit DMA source supplied to EpSend.
 
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
@@ -42,6 +42,16 @@ static int s_InSubmitCnt;
 static int s_TxTimeoutCnt;
 static bool s_XferOk = true;
 static bool s_HighSpeed;
+
+static void ReceiveDma(void)
+{
+	if (s_HwOutReady && !s_OutDma && s_OutRegBuf != nullptr)
+	{
+		s_OutDma = true;
+		s_OutDmaLen = MPS;
+		s_OutSubmitCnt++;
+	}
+}
 
 extern "C" {
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
@@ -82,31 +92,15 @@ void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuf, bool Blocking,
     }
 }
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Len)
+bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Len)
 {
-    if (!s_XferOk)
-        return false;
-
-    if (USB_ENDPADDR_IS_IN(EpAddr))
-    {
-        if (s_InBusy)
-            return false;
-        UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(s_InContext);
-        uint8_t *pHead = CFifoPeek(pIntrf->hTxFifo);
-        s_InRegBuf = pIntrf->Mode == USB_INTRF_MODE_PACKET ?
-            reinterpret_cast<UsbPkt_t *>(pHead)->Data : pHead;
-        s_InBusy = true;
-        s_InLen = Len;
-        s_InSubmitCnt++;
-        return true;
-    }
-
-    if (!s_HwOutReady || s_OutDma)
-        return false;
-    s_OutDma = true;
-    s_OutDmaLen = Len;
-    s_OutSubmitCnt++;
-    return true;
+	if ((EpNum & 0x80U) != 0U) return false;
+	if (!s_XferOk || s_InBusy) return false;
+	s_InRegBuf = pBuffer;
+	s_InBusy = true;
+	s_InLen = Len;
+	s_InSubmitCnt++;
+	return true;
 }
 
 }
@@ -199,6 +193,7 @@ static bool Drdy(const uint8_t *pData, uint16_t Len)
     {
         s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
                      Len, s_OutContext);
+		ReceiveDma();
     }
     else
     {
@@ -335,6 +330,7 @@ static void TestBackpressure(void)
     // The controller foreground retry, not RxData, schedules held OUT data.
     s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
                  0U, s_OutContext);
+	ReceiveDma();
     CHECK(s_OutDma);
     CHECK(!s_Intrf.RxPending);
     CompleteOut();

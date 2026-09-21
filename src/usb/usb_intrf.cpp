@@ -113,10 +113,10 @@ static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf)
 	}
 
 #if defined(NRF52_SERIES)
-	(void)UsbCtrlrEpInXfer(pIntrf->DevNo, pIntrf->EpNo, nullptr,
+	(void)UsbCtrlrEpSend(pIntrf->DevNo, pIntrf->EpNo, nullptr,
 		(uint16_t)cnt);
 #else
-	(void)UsbCtrlrEpInXfer(pIntrf->DevNo, pIntrf->EpNo, pData,
+	(void)UsbCtrlrEpSend(pIntrf->DevNo, pIntrf->EpNo, pData,
 		(uint16_t)cnt);
 #endif
 	return cnt;
@@ -132,7 +132,7 @@ static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf)
 	}
 
 	const int cnt = pkt->Hdr.Length;
-	(void)UsbCtrlrEpInXfer(pIntrf->DevNo, pIntrf->EpNo, pkt->Data,
+	(void)UsbCtrlrEpSend(pIntrf->DevNo, pIntrf->EpNo, pkt->Data,
 		(uint16_t)cnt);
 	return cnt;
 }
@@ -361,7 +361,7 @@ static int UsbIntrfTxDirect(DevIntrf_t * const pDevIntrf,
 	pPacket->Hdr.Length = (uint16_t)DataLen;
 	pPacket->Hdr.Reserved = USB_INTRF_SLOT_READY;
 
-	if (!UsbCtrlrEpInXfer(pIntrf->DevNo, pIntrf->EpNo, pPacket->Data,
+	if (!UsbCtrlrEpSend(pIntrf->DevNo, pIntrf->EpNo, pPacket->Data,
 		(uint16_t)DataLen))
 	{
 		UsbIntrfDirectClear(pPacket);
@@ -493,10 +493,7 @@ static void UsbIntrfCtrlrOutEvent(uint8_t, UsbCtrlrEvtType_t Event,
 				 CFifoAvail(pIntrf->hRxFifo) > 0))
 			{
 				UsbIntrfReleaseRx(pIntrf);
-				if (UsbCtrlrEpOutXfer(pIntrf->DevNo, pIntrf->EpNo, pIntrf->Mps))
-				{
-					return;
-				}
+				return;
 			}
 
 			if (pIntrf->RxPending == 0U)

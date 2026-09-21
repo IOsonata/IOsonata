@@ -43,6 +43,15 @@ static uint16_t s_InLength;
 static int s_OutSubmitCount;
 static int s_SendCount;
 
+static void ReceiveDma(void)
+{
+	if (s_HwOutReady && !s_OutDma && s_OutBuffer != nullptr)
+	{
+		s_OutDma = true;
+		s_OutSubmitCount++;
+	}
+}
+
 extern "C" {
 const UsbCfg_t *UsbGetCfg(int DevNo)
 {
@@ -79,27 +88,15 @@ void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
     }
 }
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
+bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
-    if (USB_ENDPADDR_IS_IN(EpAddr))
-    {
-        if (s_InBusy)
-            return false;
-        UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(s_InContext);
-        uint8_t *pHead = CFifoPeek(pIntrf->hTxFifo);
-        s_InBuffer = pIntrf->Mode == USB_INTRF_MODE_PACKET ?
-            reinterpret_cast<UsbPkt_t *>(pHead)->Data : pHead;
-        s_InBusy = true;
-        s_InLength = Length;
-        s_SendCount++;
-        return true;
-    }
-
-    if (!s_HwOutReady || s_OutDma)
-        return false;
-    s_OutDma = true;
-    s_OutSubmitCount++;
-    return true;
+	if ((EpNum & 0x80U) != 0U) return false;
+	if (s_InBusy) return false;
+	s_InBuffer = pBuffer;
+	s_InBusy = true;
+	s_InLength = Length;
+	s_SendCount++;
+	return true;
 }
 
 }
@@ -213,6 +210,7 @@ static void DeliverOut(const uint8_t *pData, uint16_t Length)
 
     s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
                  Length, s_OutContext);
+	ReceiveDma();
     CHECK(s_OutDma);
     if (!s_OutDma)
         return;
