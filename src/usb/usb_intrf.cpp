@@ -38,15 +38,75 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "usb/usb_intrf.h"
 
-static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf);
-static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
-
 // Other controllers use DRDY before DMA. A deferred completed packet instead
 // stores Length + 2, including two for a ZLP, in the same pending field.
 static constexpr uint16_t USB_INTRF_RX_DRDY = 1U;
+
+// The fourteen mandatory DevIntrf entries in declaration order, copied in
+// one block from flash instead of fourteen separate stores. RxData/TxData
+// carry the byte-mode defaults; the mode switch overrides them.
+typedef struct
+{
+	void (*Disable)(DevIntrf_t * const);
+	void (*Enable)(DevIntrf_t * const);
+	uint32_t (*GetRate)(DevIntrf_t * const);
+	uint32_t (*SetRate)(DevIntrf_t * const, uint32_t);
+	bool (*StartRx)(DevIntrf_t * const, uint32_t);
+	int (*RxData)(DevIntrf_t * const, uint8_t *, int);
+	void (*StopRx)(DevIntrf_t * const);
+	bool (*StartTx)(DevIntrf_t * const, uint32_t);
+	int (*TxData)(DevIntrf_t * const, const uint8_t *, int);
+	int (*TxSrData)(DevIntrf_t * const, const uint8_t *, int);
+	void (*StopTx)(DevIntrf_t * const);
+	void (*Reset)(DevIntrf_t * const);
+	void (*PowerOff)(DevIntrf_t * const);
+	void *(*GetHandle)(DevIntrf_t * const);
+} UsbIntrfOps_t;
+
+static_assert(sizeof(UsbIntrfOps_t) ==
+	offsetof(DevIntrf_t, GetHandle) - offsetof(DevIntrf_t, Disable) +
+	sizeof(void *), "DevIntrf op block layout");
+static_assert(offsetof(UsbIntrfOps_t, RxData) ==
+	offsetof(DevIntrf_t, RxData) - offsetof(DevIntrf_t, Disable),
+	"DevIntrf RxData position");
+static_assert(offsetof(UsbIntrfOps_t, TxData) ==
+	offsetof(DevIntrf_t, TxData) - offsetof(DevIntrf_t, Disable),
+	"DevIntrf TxData position");
+static_assert(offsetof(UsbIntrfOps_t, GetHandle) ==
+	offsetof(DevIntrf_t, GetHandle) - offsetof(DevIntrf_t, Disable),
+	"DevIntrf GetHandle position");
+
+static void UsbIntrfDisable(DevIntrf_t * const pDevIntrf);
+static void UsbIntrfEnable(DevIntrf_t * const pDevIntrf);
+static uint32_t UsbIntrfGetRate(DevIntrf_t * const pDevIntrf);
+static uint32_t UsbIntrfSetRate(DevIntrf_t * const pDevIntrf, uint32_t);
+static bool UsbIntrfStartRx(DevIntrf_t * const, uint32_t);
+static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
+						 int BufferLen);
+static void UsbIntrfStopRx(DevIntrf_t * const);
+static bool UsbIntrfStartTx(DevIntrf_t * const, uint32_t);
+static int UsbIntrfTxBytes(DevIntrf_t * const pDevIntrf,
+						   const uint8_t *pData, int DataLen);
+static int UsbIntrfTxSrData(DevIntrf_t * const pDevIntrf,
+							 const uint8_t *pData, int DataLen);
+static void UsbIntrfStopTx(DevIntrf_t * const);
+static void UsbIntrfReset(DevIntrf_t * const pDevIntrf);
+static void UsbIntrfPowerOff(DevIntrf_t * const pDevIntrf);
+static void *UsbIntrfGetHandle(DevIntrf_t * const pDevIntrf);
+
+static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf);
+static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
+
 static void UsbIntrfRetryRx(uint32_t Evt, void *pContext);
 static void UsbIntrfCtrlrOutEvent(uint8_t, UsbCtrlrEvtType_t, uint16_t,
 	UsbCtrlrXferResult_t, void *);
+
+static const UsbIntrfOps_t s_UsbIntrfOps = {
+	UsbIntrfDisable, UsbIntrfEnable, UsbIntrfGetRate, UsbIntrfSetRate,
+	UsbIntrfStartRx, UsbIntrfRxData, UsbIntrfStopRx, UsbIntrfStartTx,
+	UsbIntrfTxBytes, UsbIntrfTxSrData, UsbIntrfStopTx, UsbIntrfReset,
+	UsbIntrfPowerOff, UsbIntrfGetHandle,
+};
 
 static void UsbIntrfRegisterRx(UsbDevIntrf_t *pIntrf, uint8_t *pBuffer)
 {
@@ -625,48 +685,6 @@ static void UsbIntrfCtrlrInEvent(uint8_t, UsbCtrlrEvtType_t Event,
 			DEVINTRF_EVT_TX_FIFO_EMPTY, nullptr, 0);
 	}
 }
-
-// The fourteen mandatory DevIntrf entries in declaration order, copied in
-// one block from flash instead of fourteen separate stores. RxData/TxData
-// carry the byte-mode defaults; the mode switch overrides them.
-typedef struct
-{
-	void (*Disable)(DevIntrf_t * const);
-	void (*Enable)(DevIntrf_t * const);
-	uint32_t (*GetRate)(DevIntrf_t * const);
-	uint32_t (*SetRate)(DevIntrf_t * const, uint32_t);
-	bool (*StartRx)(DevIntrf_t * const, uint32_t);
-	int (*RxData)(DevIntrf_t * const, uint8_t *, int);
-	void (*StopRx)(DevIntrf_t * const);
-	bool (*StartTx)(DevIntrf_t * const, uint32_t);
-	int (*TxData)(DevIntrf_t * const, const uint8_t *, int);
-	int (*TxSrData)(DevIntrf_t * const, const uint8_t *, int);
-	void (*StopTx)(DevIntrf_t * const);
-	void (*Reset)(DevIntrf_t * const);
-	void (*PowerOff)(DevIntrf_t * const);
-	void *(*GetHandle)(DevIntrf_t * const);
-} UsbIntrfOps_t;
-
-static const UsbIntrfOps_t s_UsbIntrfOps = {
-	UsbIntrfDisable, UsbIntrfEnable, UsbIntrfGetRate, UsbIntrfSetRate,
-	UsbIntrfStartRx, UsbIntrfRxData, UsbIntrfStopRx, UsbIntrfStartTx,
-	UsbIntrfTxBytes, UsbIntrfTxSrData, UsbIntrfStopTx, UsbIntrfReset,
-	UsbIntrfPowerOff, UsbIntrfGetHandle,
-};
-
-static_assert(sizeof(UsbIntrfOps_t) ==
-	offsetof(DevIntrf_t, GetHandle) - offsetof(DevIntrf_t, Disable) +
-	sizeof(void *), "DevIntrf op block layout");
-static_assert(offsetof(UsbIntrfOps_t, RxData) ==
-	offsetof(DevIntrf_t, RxData) - offsetof(DevIntrf_t, Disable),
-	"DevIntrf RxData position");
-static_assert(offsetof(UsbIntrfOps_t, TxData) ==
-	offsetof(DevIntrf_t, TxData) - offsetof(DevIntrf_t, Disable),
-	"DevIntrf TxData position");
-static_assert(offsetof(UsbIntrfOps_t, GetHandle) ==
-	offsetof(DevIntrf_t, GetHandle) - offsetof(DevIntrf_t, Disable),
-	"DevIntrf GetHandle position");
-
 
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 {

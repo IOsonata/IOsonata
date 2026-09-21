@@ -62,6 +62,10 @@ SOFTWARE.
 #include "nrf_peripherals.h"
 #include "usb/usb_def.h"
 
+#if defined(USBD_PRESENT)
+#include "cfifo.h"
+#endif
+
 /** @addtogroup USB
   * @{
   */
@@ -253,8 +257,6 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);
 
 // Shared nRF52 USBD implementation state used by the base and optional ISO
 // archive members. This is a target-family header; nRF54 USBHS does not see it.
-#include "cfifo.h"
-
 enum
 {
 	NRF_USB_EP_COUNT = 9,

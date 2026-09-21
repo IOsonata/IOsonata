@@ -56,10 +56,6 @@ SOFTWARE.
 
 #include "usb/usb.h"
 
-
-// Bus power, clock and VBUS.
-
-
 // A legacy nRF52 SoftDevice owns HFCLK while it is enabled. Only clock
 // request/release needs the SoftDevice API; USB controller operation does not.
 #if defined(NRF52_SERIES) && \
@@ -95,23 +91,6 @@ SOFTWARE.
 #define NRFX_USBD_ERRATA_166_REG_B			(NRF_USBD_BASE + 0x804UL)
 
 #define NRFX_USBD_REG32(a)					(*(volatile uint32_t *)(a))
-
-// Barriers repeat at many sites. One out-of-line copy: a barrier keeps its
-// effect when reached through a call, and the call is half the size of the
-// pair.
-static __attribute__((noinline)) void UsbdSync(void)
-{
-	__ISB();
-	__DSB();
-}
-
-
-static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
-
-
-//
-// nRF52 USBD constants and types.
-//
 
 // Errata 199's hardware-visible EasyDMA busy register is also the shared DMA
 // ownership flag: 0x82 before STARTEP and zero after ENDEP.
@@ -154,6 +133,24 @@ typedef struct __nRF_Ep_Packet {
 #pragma pack(pop)
 
 
+static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDEPIN) -
+	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
+	USBD_INTEN_ENDEPIN0_Pos * sizeof(uint32_t), "USBD IN event layout");
+static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDEPOUT) -
+	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
+	USBD_INTEN_ENDEPOUT0_Pos * sizeof(uint32_t), "USBD OUT event layout");
+static_assert(offsetof(USBD_EPOUT_Type, PTR) ==
+	offsetof(USBD_EPIN_Type, PTR) &&
+	offsetof(USBD_EPOUT_Type, MAXCNT) ==
+	offsetof(USBD_EPIN_Type, MAXCNT), "EPIN/EPOUT layout");
+static_assert(offsetof(NRF_USBD_Type, TASKS_STARTISOOUT) -
+	offsetof(NRF_USBD_Type, TASKS_STARTEPIN) == 17U * sizeof(uint32_t),
+	"USBD start task layout");
+static_assert(offsetof(NRF_USBD_Type, WLENGTHH) -
+	offsetof(NRF_USBD_Type, BMREQUESTTYPE) == 7U * sizeof(uint32_t),
+	"USBD setup register layout");
+static_assert(sizeof(UsbSetupData_t) == 8, "UsbSetupData_t layout");
+
 //
 // nRF52 USBD state.
 //
@@ -174,8 +171,18 @@ extern bool nRFUsbdIsoEpOpen(const UsbEndPointDesc_t *pDesc) __attribute__((weak
 extern void nRFUsbdIsoEpClose(uint8_t EpAddr) __attribute__((weak));
 extern bool nRFUsbdIsoXfer(uint8_t EpAddr, uint16_t Length) __attribute__((weak));
 
+static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
 static void nRFUsbdHostResumeDetected(void);
 
+
+// Barriers repeat at many sites. One out-of-line copy: a barrier keeps its
+// effect when reached through a call, and the call is half the size of the
+// pair.
+static __attribute__((noinline)) void UsbdSync(void)
+{
+	__ISB();
+	__DSB();
+}
 
 static __attribute__((noinline))
 nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpNum, uint8_t Dir)
@@ -452,13 +459,6 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
 }
 
 
-static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDEPIN) -
-	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
-	USBD_INTEN_ENDEPIN0_Pos * sizeof(uint32_t), "USBD IN event layout");
-static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDEPOUT) -
-	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
-	USBD_INTEN_ENDEPOUT0_Pos * sizeof(uint32_t), "USBD OUT event layout");
-
 // Endpoint interrupt, END event and enable-mask writes shared by open and
 // close.
 static __attribute__((noinline))
@@ -655,10 +655,6 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 	uint16_t len = pQue->Len;
 
-	static_assert(offsetof(USBD_EPOUT_Type, PTR) ==
-		offsetof(USBD_EPIN_Type, PTR) &&
-		offsetof(USBD_EPOUT_Type, MAXCNT) ==
-		offsetof(USBD_EPIN_Type, MAXCNT), "EPIN/EPOUT layout");
 	// Both directions use the same layout, at different register-bank offsets.
 	uintptr_t epReg = (uintptr_t)&NRF_USBD->EPIN[epNum];
 	uintptr_t taskReg = (uintptr_t)&NRF_USBD->TASKS_STARTEPIN[epNum];
@@ -888,9 +884,6 @@ static void nRFUsbdBusReset(void)
 
 	// STARTEPIN[8], STARTISOIN, STARTEPOUT[8] and STARTISOOUT are eighteen
 	// consecutive task registers; clear them in one pass.
-	static_assert(offsetof(NRF_USBD_Type, TASKS_STARTISOOUT) -
-		offsetof(NRF_USBD_Type, TASKS_STARTEPIN) == 17U * sizeof(uint32_t),
-		"USBD start task layout");
 	volatile uint32_t *pTask = &NRF_USBD->TASKS_STARTEPIN[0];
 	for (uint8_t i = 0; i < 18U; i++)
 	{
@@ -1030,10 +1023,6 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	// BMREQUESTTYPE through WLENGTHH are eight consecutive byte-wide
 	// registers whose byte order is exactly the little endian layout of
 	// UsbSetupData_t. Reading them in a loop beats five field combines.
-	static_assert(offsetof(NRF_USBD_Type, WLENGTHH) -
-		offsetof(NRF_USBD_Type, BMREQUESTTYPE) == 7U * sizeof(uint32_t),
-		"USBD setup register layout");
-	static_assert(sizeof(UsbSetupData_t) == 8, "UsbSetupData_t layout");
 	const volatile uint32_t *pReg = &NRF_USBD->BMREQUESTTYPE;
 	uint8_t *pDst = (uint8_t *)&evt.Setup;
 	for (int i = 0; i < 8; i++)

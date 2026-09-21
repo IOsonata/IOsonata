@@ -44,6 +44,9 @@ SOFTWARE.
 
 #include "usb_ctrlr.h"
 
+static_assert(offsetof(USBD_ISOOUT_Type, MAXCNT) ==
+	offsetof(USBD_ISOIN_Type, MAXCNT), "ISO register layout");
+
 static __attribute__((noinline))
 void nRFIsoHwEnable(bool In, bool Enable)
 {
@@ -74,8 +77,6 @@ void nRFIsoHwEnable(bool In, bool Enable)
 bool nRFUsbdIsoStart(void)
 {
 	const uint32_t flags = s_Usbd.Flags;
-	static_assert(offsetof(USBD_ISOOUT_Type, MAXCNT) ==
-		offsetof(USBD_ISOIN_Type, MAXCNT), "ISO register layout");
 
 	for (int8_t dir = 1; dir >= 0; dir--)
 	{

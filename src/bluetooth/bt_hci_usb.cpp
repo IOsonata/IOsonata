@@ -48,6 +48,12 @@ SOFTWARE.
 
 #define BT_HCI_USB_HISTORICAL_COMMAND_REQUEST	0xE0U
 
+static void BtHciUsbClearEventTx(BtHciUsbDev_t *pHci);
+
+static const uint8_t s_BtHciUsbScoMps[BT_HCI_USB_SCO_ALT_COUNT] = {
+	9U, 17U, 25U, 33U, 49U, 63U,
+};
+
 static uint8_t *BtHciUsbCommandBuffer(BtHciUsbDev_t *pHci)
 {
 	return reinterpret_cast<uint8_t *>(pHci->CommandBuffer);
@@ -87,10 +93,6 @@ static uint8_t *BtHciUsbScoTxBuffer(BtHciUsbDev_t *pHci)
 {
 	return reinterpret_cast<uint8_t *>(pHci->ScoTxBuffer);
 }
-
-static const uint8_t s_BtHciUsbScoMps[BT_HCI_USB_SCO_ALT_COUNT] = {
-	9U, 17U, 25U, 33U, 49U, 63U,
-};
 
 static uint8_t BtHciUsbScoMps(uint8_t Alt)
 {
@@ -230,8 +232,6 @@ static void BtHciUsbClearBulkTransport(BtHciUsbDev_t *pHci)
 	pHci->TxType = BT_HCI_USB_PACKET_NONE;
 	BtHciUsbClearBulkRx(pHci);
 }
-
-static void BtHciUsbClearEventTx(BtHciUsbDev_t *pHci);
 
 static bool BtHciUsbResetBulkTransport(BtHciUsbDev_t *pHci)
 {

@@ -44,18 +44,16 @@ SOFTWARE.
 #include "nrf.h"
 #include "nrf_peripherals.h"
 #include "hal/nrf_ficr.h"
-
-#include "istddef.h"
-#include "app_evt_handler.h"
-#include "coredev/interrupt.h"
-#include "usb/usb.h"
-
-
 // Bus power, clock and VBUS.
 // The USBHS clock and VBUS regulator are separate peripherals on this part.
 #include "hal/nrf_clock.h"
 #include "hal/nrf_vregusb.h"
 #include "soc/nrfx_coredep.h"
+
+#include "istddef.h"
+#include "app_evt_handler.h"
+#include "coredev/interrupt.h"
+#include "usb/usb.h"
 
 
 #ifndef NRFX_USBD_XTAL_WAIT_LOOPS
@@ -67,7 +65,6 @@ SOFTWARE.
 #endif
 
 
-
 // Undocumented VREGUSB status register. The events below report the edges and
 // are in the MDK, but the level is not, and something has to answer what the
 // state is at start up before any edge has happened. Offset and bit are as
@@ -76,42 +73,6 @@ SOFTWARE.
 #define NRFX_USBD_VREGUSB_STATUS_OFS		0x400UL
 #define NRFX_USBD_VREGUSB_STATUS_VBUSDET	(1UL << 2)
 
-
-enum
-{
-	NRF_USB_EP_COUNT = USB_EPIN_CNT(0) > USB_EPOUT_CNT(0) ?
-		USB_EPIN_CNT(0) : USB_EPOUT_CNT(0),
-};
-
-typedef struct __nRF_Usb_Ep_Registration
-{
-	uint8_t *pBuffer;
-	UsbCtrlrEpHandler_t Handler;
-	void *pContext;
-	uint16_t Mps;
-	bool bBlocking;
-} nRFUsbEpReg_t;
-
-// Fixed data-endpoint ownership lives outside the active-transfer state so a
-// bus reset can cancel transfers without losing registrations.
-static nRFUsbEpReg_t s_EpReg[NRF_USB_EP_COUNT][2];
-
-// One USB controller per part, so the common power/clock state is file scope.
-// Controller interrupts are owned by the corresponding UsbdCtrlr backend.
-static uint8_t s_UsbdIntPrio;
-static bool s_UsbdLowPowerSuspend;
-static bool s_UsbdInitialized = false;
-static bool s_UsbdStarted = false;
-static bool s_UsbdXtalHeld = false;
-static bool s_UsbdVbusLast = false;
-
-
-// The nRF54 reports VBUS edges, so retain the resulting level here.
-static bool s_UsbdVbusLevel = false;
-
-//
-// nRF54 USBHS constants, types and state.
-//
 
 #ifndef USBHSCORE_PRESENT
 #error "usbd_ctrlr_nrf54: this part has no USBHS core"
@@ -246,6 +207,21 @@ static bool s_UsbdVbusLevel = false;
 #define NRF54_USBD_DOEPMSK_SETUP			(1UL << 3)
 #define NRF54_USBD_DIEPMSK_XFRC			(1UL << 0)
 
+enum
+{
+	NRF_USB_EP_COUNT = USB_EPIN_CNT(0) > USB_EPOUT_CNT(0) ?
+		USB_EPIN_CNT(0) : USB_EPOUT_CNT(0),
+};
+
+typedef struct __nRF_Usb_Ep_Registration
+{
+	uint8_t *pBuffer;
+	UsbCtrlrEpHandler_t Handler;
+	void *pContext;
+	uint16_t Mps;
+	bool bBlocking;
+} nRFUsbEpReg_t;
+
 typedef struct __nRF54_Usbd_Xfer
 {
 	uint8_t *pBuffer;
@@ -268,6 +244,23 @@ typedef struct __nRF54_Usbd_Ctrlr
 	bool AddressPending;
 	uint8_t PendingAddress;
 } nRF54UsbdCtrlr_t;
+
+// Fixed data-endpoint ownership lives outside the active-transfer state so a
+// bus reset can cancel transfers without losing registrations.
+static nRFUsbEpReg_t s_EpReg[NRF_USB_EP_COUNT][2];
+
+// One USB controller per part, so the common power/clock state is file scope.
+// Controller interrupts are owned by the corresponding UsbdCtrlr backend.
+static uint8_t s_UsbdIntPrio;
+static bool s_UsbdLowPowerSuspend;
+static bool s_UsbdInitialized = false;
+static bool s_UsbdStarted = false;
+static bool s_UsbdXtalHeld = false;
+static bool s_UsbdVbusLast = false;
+
+
+// The nRF54 reports VBUS edges, so retain the resulting level here.
+static bool s_UsbdVbusLevel = false;
 
 static nRF54UsbdCtrlr_t s_Ctrlr;
 
@@ -333,7 +326,6 @@ __attribute__((weak)) void UsbdXtalRelease(void)
 	// Left running. Other peripherals take this clock without
 	// counting, so stopping one here would stop it under them.
 }
-
 
 
 /**

@@ -57,15 +57,6 @@ SOFTWARE.
 	 USB_EPIN_CNT(0) : USB_EPOUT_CNT(0))
 #define USB_CORE_INTRF_MAXCNT		16
 
-static_assert(USB_CORE_CLASS_MAXCNT > 0 && USB_CORE_CLASS_MAXCNT <= 16,
-	"USB endpoint count must fit the 16-bit endpoint ownership masks");
-
-/// Chapter 9 settings. Built by UsbInit from UsbCfg_t and usb_ctrlr.h, never
-/// supplied by an application, which is why it is no longer in a header.
-typedef struct __Usb_Core_Config {
-	uint8_t Ep0Mps;					//!< EP0 max packet size
-} UsbCoreCfg_t;
-
 #define USBD_CORE_EP0_MPS_DEFAULT		64U
 #define USBD_CORE_DEVICE_DESC_LEN		((uint16_t)sizeof(UsbDevDesc_t))
 #define USBD_CORE_CONFIG_DESC_LEN		((uint16_t)sizeof(UsbCfgDesc_t))
@@ -75,6 +66,17 @@ typedef struct __Usb_Core_Config {
 #define USB_CORE_STR_SERIAL			3U
 #define USB_CORE_STR_FUNCTION			4U
 
+#define USB_SERIAL_MAXLEN			33	//!< 32 hexadecimal characters and a terminator
+
+static_assert(USB_CORE_CLASS_MAXCNT > 0 && USB_CORE_CLASS_MAXCNT <= 16,
+	"USB endpoint count must fit the 16-bit endpoint ownership masks");
+
+/// Chapter 9 settings. Built by UsbInit from UsbCfg_t and usb_ctrlr.h, never
+/// supplied by an application, which is why it is no longer in a header.
+typedef struct __Usb_Core_Config {
+	uint8_t Ep0Mps;					//!< EP0 max packet size
+} UsbCoreCfg_t;
+
 typedef enum __Usbd_Core_Ctrl_State {
 	USB_CTRL_IDLE,
 	USB_CTRL_DATA_IN,
@@ -83,6 +85,9 @@ typedef enum __Usbd_Core_Ctrl_State {
 	USB_CTRL_STATUS_IN,
 	USB_CTRL_STATUS_OUT,
 } UsbCoreCtrlState_t;
+
+static void UsbCoreAbortControl(void);
+static bool UsbCoreHandleClassRequest(void);
 
 // One state block: every function then addresses its fields from a single
 // literal base instead of one literal per file-scope object.
@@ -124,6 +129,11 @@ static struct
 	uint8_t ConfigDesc[USB_CONFIG_DESC_MAXLEN];
 	uint8_t StringDesc[USB_CORE_STRING_DESC_MAXLEN];
 } s_Core;
+
+static UsbCfg_t s_UsbDevCfg;
+static char s_UsbDevSerial[USB_SERIAL_MAXLEN];
+static bool s_UsbDevInitialized;
+static bool s_UsbDevStarted;
 
 static uint8_t UsbCoreRecipient(const UsbSetupData_t *pSetup)
 {
@@ -730,9 +740,6 @@ static void UsbCoreResetControl(void)
 	s_Core.PendingAddress = 0;
 	s_Core.AddressPending = false;
 }
-
-static void UsbCoreAbortControl(void);
-static bool UsbCoreHandleClassRequest(void);
 
 static void UsbCoreStallControl(void)
 {
@@ -1676,13 +1683,6 @@ static bool UsbCoreRemoteWakeupEnabled(void)
 //
 // Application entry points.
 //
-
-#define USB_SERIAL_MAXLEN			33	//!< 32 hexadecimal characters and a terminator
-
-static UsbCfg_t s_UsbDevCfg;
-static char s_UsbDevSerial[USB_SERIAL_MAXLEN];
-static bool s_UsbDevInitialized;
-static bool s_UsbDevStarted;
 
 static bool UsbDevInit(const UsbCfg_t *pCfg)
 {
