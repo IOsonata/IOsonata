@@ -77,25 +77,26 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
     return true;
 }
 
-void UsbCtrlrEpClose(int, uint8_t EpAddr)
+void UsbCtrlrEpClose(int, uint8_t EpNo, bool bIn)
 {
     s_CloseCount++;
-    const uint8_t epNo = USB_ENDPADDR_NUM(EpAddr);
-    if (epNo < 16U)
+    if (EpNo < 16U)
     {
-        if (USB_ENDPADDR_IS_IN(EpAddr)) s_InBusy[epNo] = false;
-        else s_OutDma[epNo] = false;
+        if (bIn) s_InBusy[EpNo] = false;
+        else s_OutDma[EpNo] = false;
     }
 }
 void UsbCtrlrEpCloseAll(int) {}
 
-void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
-                        UsbCtrlrEpHandler_t Handler, void *pContext)
+void UsbCtrlrEpAlloc(int, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
+                        bool Blocking, UsbCtrlrEpHandler_t Handler,
+                        void *pContext)
 {
     if (Handler == nullptr || s_RegisteredCount >= 5)
         return;
     s_Registered[s_RegisteredCount++] = {
-        EpAddr, pBuffer, Blocking, Handler, pContext
+        (uint8_t)(EpNo | (bIn ? USB_ENDPADDR_DIR_IN : 0U)),
+        pBuffer, Blocking, Handler, pContext
     };
     return;
 }
@@ -113,8 +114,8 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	return true;
 }
 
-void UsbCtrlrEpStall(int, uint8_t) {}
-void UsbCtrlrEpClearStall(int, uint8_t) {}
+void UsbCtrlrEpStall(int, uint8_t, bool) {}
+void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 }
 
@@ -219,7 +220,7 @@ static void CompleteIn(uint8_t EpNo,
         }
     }
     s_InBusy[EpNo] = false;
-    pReg->Handler(USB_ENDPADDR_DIRIN(EpNo), Event,
+    pReg->Handler(Event,
                   length, pReg->pContext);
 }
 
@@ -237,7 +238,7 @@ static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
 
     if (pReg->Blocking)
     {
-        pReg->Handler(USB_ENDPADDR_DIROUT(EpNo), USB_CTRLR_EVT_DRDY,
+        pReg->Handler(USB_CTRLR_EVT_DRDY,
                       Length, pReg->pContext);
         if (pReg->pBuffer != nullptr && s_HwOutReady[EpNo] && !s_OutDma[EpNo])
         {
@@ -256,7 +257,7 @@ static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
     if (Length > 0U) memcpy(pReg->pBuffer, s_HwOut[EpNo], Length);
     s_HwOutReady[EpNo] = false;
     s_OutDma[EpNo] = false;
-    pReg->Handler(USB_ENDPADDR_DIROUT(EpNo), USB_CTRLR_EVT_XFER_CMPL,
+    pReg->Handler(USB_CTRLR_EVT_XFER_CMPL,
                   Length, pReg->pContext);
 }
 

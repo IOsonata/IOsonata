@@ -35,14 +35,14 @@ void UsbCtrlrDisconnect(int) {}
 void UsbCtrlrRemoteWakeup(int) {}
 void UsbCtrlrSofEnable(int, bool) {}
 void UsbCtrlrSetAddress(int, uint8_t) {}
-void UsbCtrlrEpStall(int, uint8_t) {}
-void UsbCtrlrEpClearStall(int, uint8_t) {}
+void UsbCtrlrEpStall(int, uint8_t, bool) {}
+void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
+void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	if (USB_ENDPADDR_IS_IN(EpAddr))
+	if (bIn)
 	{
 		s_InBuffer = pBuffer;
 		s_InHandler = Handler;
@@ -58,7 +58,7 @@ void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
 }
 
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { s_OpenCount++; return true; }
-void UsbCtrlrEpClose(int, uint8_t) { s_CloseCount++; }
+void UsbCtrlrEpClose(int, uint8_t, bool) { s_CloseCount++; }
 void UsbCtrlrEpCloseAll(int) {}
 
 bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
@@ -107,7 +107,7 @@ static void Receive(const uint8_t *pData, uint16_t Length)
 
 	// ISO OUT DMA is controller owned and lands directly in the registered
 	// buffer. UsbIntrf receives only the transfer-complete notification.
-	s_OutHandler(USB_ENDPADDR_DIROUT(8U), USB_CTRLR_EVT_XFER_CMPL,
+	s_OutHandler(USB_CTRLR_EVT_XFER_CMPL,
 		Length, s_OutContext);
 }
 
@@ -116,7 +116,7 @@ static void CompleteIn(void)
 	CHECK(s_InBusy);
 	const uint16_t len = s_InLength;
 	s_InBusy = false;
-	s_InHandler(USB_ENDPADDR_DIRIN(8U), USB_CTRLR_EVT_XFER_CMPL,
+	s_InHandler(USB_CTRLR_EVT_XFER_CMPL,
 		len, s_InContext);
 }
 

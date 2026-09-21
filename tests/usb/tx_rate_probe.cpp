@@ -43,16 +43,16 @@ void UsbCtrlrRemoteWakeup(int) {}
 void UsbCtrlrSofEnable(int, bool) {}
 void UsbCtrlrSetAddress(int, uint8_t) {}
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
-void UsbCtrlrEpClose(int, uint8_t) {}
+void UsbCtrlrEpClose(int, uint8_t, bool) {}
 void UsbCtrlrEpCloseAll(int) {}
-void UsbCtrlrEpStall(int, uint8_t) {}
-void UsbCtrlrEpClearStall(int, uint8_t) {}
+void UsbCtrlrEpStall(int, uint8_t, bool) {}
+void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuf, bool,
+void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuf, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	if (USB_ENDPADDR_IS_IN(EpAddr))
+	if (bIn)
 	{
 		s_InBuf = pBuf;
 		s_InHandler = Handler;
@@ -127,7 +127,7 @@ static void Run(int BusTicks, long Iterations)
 			const uint16_t len = s_InLen;
 			s_InBusy = false;
 			due = -1;
-			s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL, len, s_InContext);
+			s_InHandler(USB_CTRLR_EVT_XFER_CMPL, len, s_InContext);
 			if (s_InBusy) { due = BusTicks; }
 		}
 		else if (due > 0)

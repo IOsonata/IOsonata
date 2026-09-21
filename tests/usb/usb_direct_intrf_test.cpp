@@ -23,7 +23,7 @@ void UsbCtrlrProcess(int)
 {
 	AppEvtHandlerExec();
 	if (s_OutBuffer == nullptr && s_OutHandler != nullptr)
-		s_OutHandler(3U, USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
+		s_OutHandler(USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
 }
 bool UsbCtrlrVbusDetected(int) { return true; }
 bool UsbCtrlrHighSpeed(int) { return false; }
@@ -34,17 +34,17 @@ void UsbCtrlrDisconnect(int) {}
 void UsbCtrlrRemoteWakeup(int) {}
 void UsbCtrlrSofEnable(int, bool) {}
 void UsbCtrlrSetAddress(int, uint8_t) {}
-void UsbCtrlrEpStall(int, uint8_t) {}
-void UsbCtrlrEpClearStall(int, uint8_t) {}
+void UsbCtrlrEpStall(int, uint8_t, bool) {}
+void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
-void UsbCtrlrEpClose(int, uint8_t) {}
+void UsbCtrlrEpClose(int, uint8_t, bool) {}
 void UsbCtrlrEpCloseAll(int) {}
 
-void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
+void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	if (USB_ENDPADDR_IS_IN(EpAddr))
+	if (bIn)
 	{
 		s_InBuffer = pBuffer;
 		s_InHandler = Handler;
@@ -114,7 +114,7 @@ static void RxComplete(const uint8_t *pData, uint16_t Length,
 	{
 		memcpy(s_OutBuffer, pData, Length);
 	}
-	s_OutHandler(USB_ENDPADDR_DIROUT(3U), Event,
+	s_OutHandler(Event,
 		Length, s_OutContext);
 }
 
@@ -177,7 +177,7 @@ static void TestDrdyPolicy(void)
 	alignas(4) uint32_t tx[5] = {};
 	CHECK(Init(&intrf, rx, tx, true));
 	CHECK(UsbIntrfConfigure(&intrf, 8U));
-	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
+	s_OutHandler(USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
 	CHECK(s_OutBuffer != nullptr && s_OutXferCount == 0);
 	for (bool fullEvents : {false, true})
 	{
@@ -185,7 +185,7 @@ static void TestDrdyPolicy(void)
 		RxComplete(packet, sizeof(packet));
 		if (fullEvents)
 			while (AppEvtHandlerQue(0U, nullptr, [](uint32_t, void *) {})) {}
-		s_OutHandler(3U, USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
+		s_OutHandler(USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
 		CHECK(s_OutBuffer == nullptr && intrf.RxPending);
 		const int submits = s_OutXferCount;
 		uint8_t output[3];
@@ -204,7 +204,7 @@ static void TestDrdyPolicy(void)
 	UsbDevIntrf_t nonblocking = {};
 	CHECK(Init(&nonblocking, rx, tx, false));
 	CHECK(UsbIntrfConfigure(&nonblocking, 8U));
-	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
+	s_OutHandler(USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
 	CHECK(s_OutXferCount == 0);
 }
 
@@ -220,11 +220,11 @@ static void TestTx(void)
 	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, data, sizeof(data)) == 3);
 	CHECK(s_InLength == 3U && memcmp(s_InBuffer, data, sizeof(data)) == 0);
 	CHECK(!UsbIntrfRequestToSend(&intrf, 1));
-	s_InHandler(USB_ENDPADDR_DIRIN(3U), USB_CTRLR_EVT_XFER_CMPL, 3U, s_InContext);
+	s_InHandler(USB_CTRLR_EVT_XFER_CMPL, 3U, s_InContext);
 	CHECK(UsbIntrfRequestToSend(&intrf, 0));
 	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, nullptr, 0) == 0);
 	CHECK(!atomic_load(&intrf.DevIntrf.bTxReady));
-	s_InHandler(USB_ENDPADDR_DIRIN(3U), USB_CTRLR_EVT_CANCEL, 0U, s_InContext);
+	s_InHandler(USB_CTRLR_EVT_CANCEL, 0U, s_InContext);
 	CHECK(atomic_load(&intrf.DevIntrf.bTxReady));
 
 	s_XferOk = false;

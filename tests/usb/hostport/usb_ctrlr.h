@@ -138,7 +138,7 @@ typedef struct __Usb_Ctrlr_Evt {
 
 #pragma pack(pop)
 
-typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
+typedef void (*UsbCtrlrEpHandler_t)(UsbCtrlrEvtType_t Event,
 									uint16_t Length, void *pContext);
 
 /// What the generic layer hands the port at UsbCtrlrInit.
@@ -166,21 +166,22 @@ void UsbCtrlrSofEnable(int DevNo, bool Enable);
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
 
-static inline bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr,
+static inline bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn,
 									 uint8_t Type, uint16_t MaxPacketSize)
 {
 	UsbEndPointDesc_t desc = {0};
 	desc.bLength = sizeof(desc);
 	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	desc.bEndpointAddress = EpAddr;
+	desc.bEndpointAddress = (uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
 	desc.bmAttributes = Type;
 	desc.wMaxPacketSize = MaxPacketSize;
 	return UsbCtrlrEpOpen(DevNo, &desc);
 }
 
-void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
+void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn);
 void UsbCtrlrEpCloseAll(int DevNo);
-void UsbCtrlrEpAlloc(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
 					 bool bBlocking,
 					 UsbCtrlrEpHandler_t Handler, void *pContext);
 // EpNum is an endpoint number: device IN, host OUT. The controller schedules RX.
@@ -191,8 +192,8 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 // A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
 bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr);
-void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);
-void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr);
+void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn);
+void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn);
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);
 
 #ifdef __cplusplus

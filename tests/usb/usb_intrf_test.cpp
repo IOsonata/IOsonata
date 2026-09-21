@@ -68,16 +68,16 @@ void UsbCtrlrRemoteWakeup(int) {}
 void UsbCtrlrSofEnable(int, bool) {}
 void UsbCtrlrSetAddress(int, uint8_t) {}
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
-void UsbCtrlrEpClose(int, uint8_t) {}
+void UsbCtrlrEpClose(int, uint8_t, bool) {}
 void UsbCtrlrEpCloseAll(int) {}
-void UsbCtrlrEpStall(int, uint8_t) {}
-void UsbCtrlrEpClearStall(int, uint8_t) {}
+void UsbCtrlrEpStall(int, uint8_t, bool) {}
+void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuf, bool Blocking,
+void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuf, bool Blocking,
                         UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-    if (USB_ENDPADDR_IS_IN(EpAddr))
+    if (bIn)
     {
         s_InRegBuf = pBuf;
         s_InHandler = Handler;
@@ -191,7 +191,7 @@ static bool Drdy(const uint8_t *pData, uint16_t Len)
 
     if (s_OutBlocking)
     {
-        s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
+        s_OutHandler(USB_CTRLR_EVT_DRDY,
                      Len, s_OutContext);
 		ReceiveDma();
     }
@@ -218,7 +218,7 @@ static void CompleteOut(UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 
     s_HwOutReady = false;
     s_OutDma = false;
-    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), Event,
+    s_OutHandler(Event,
                  len, s_OutContext);
 }
 
@@ -236,7 +236,7 @@ static void CompleteIn(uint16_t Len,
     if (!s_InBusy)
         return;
     s_InBusy = false;
-    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), Event,
+    s_InHandler(Event,
                 Len, s_InContext);
 }
 
@@ -328,7 +328,7 @@ static void TestBackpressure(void)
     CHECK(!s_OutDma);
     CHECK(s_Intrf.RxPending);
     // The controller foreground retry, not RxData, schedules held OUT data.
-    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
+    s_OutHandler(USB_CTRLR_EVT_DRDY,
                  0U, s_OutContext);
 	ReceiveDma();
     CHECK(s_OutDma);
@@ -358,7 +358,7 @@ static void TestFailedAndWrongEndpoint(void)
     // through the registered handler, so only the failure event remains
     // observable at this layer.
     const int used = CFifoUsed(s_Intrf.hRxFifo);
-    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_FAILED, 0, s_OutContext);
+    s_OutHandler(USB_CTRLR_EVT_XFER_FAILED, 0, s_OutContext);
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == used);
     CHECK(s_Intrf.RxDropCnt == 1U);
     CHECK(s_OutSubmitCnt == 0);

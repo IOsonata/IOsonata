@@ -107,10 +107,10 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 	return true;
 }
 
-void UsbCtrlrEpClose(int, uint8_t EpAddr) {
+void UsbCtrlrEpClose(int, uint8_t, bool bIn) {
 	s_CloseCount++;
 	s_OpenCount = 0;
-	if (USB_ENDPADDR_IS_IN(EpAddr))
+	if (bIn)
 	{
 		s_InBusy = false;
 		s_InLength = 0U;
@@ -123,10 +123,10 @@ void UsbCtrlrEpClose(int, uint8_t EpAddr) {
 	}
 }
 
-void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
+void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool,
 	UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	if (USB_ENDPADDR_IS_IN(EpAddr))
+	if (bIn)
 	{
 		s_InBuffer = pBuffer;
 		s_InHandler = Handler;
@@ -151,21 +151,20 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 }
 
 
-bool UsbEpSetHalt(int DevNo, uint8_t EpAddr, bool Halt)
+bool UsbEpSetHalt(int DevNo, uint8_t EpNo, bool bIn, bool Halt)
 {
-	if (DevNo != 0 || USB_ENDPADDR_NUM(EpAddr) != EP_NO)
+	if (DevNo != 0 || EpNo != EP_NO)
 		return false;
-	if (USB_ENDPADDR_IS_IN(EpAddr))
+	if (bIn)
 		s_HaltIn = Halt;
 	else
 		s_HaltOut = Halt;
 	return true;
 }
 
-bool UsbEpHalted(int DevNo, uint8_t EpAddr)
+bool UsbEpHalted(int DevNo, uint8_t EpNo, bool bIn)
 {
-	return DevNo == 0 && USB_ENDPADDR_NUM(EpAddr) == EP_NO &&
-		(USB_ENDPADDR_IS_IN(EpAddr) ? s_HaltIn : s_HaltOut);
+	return DevNo == 0 && EpNo == EP_NO && (bIn ? s_HaltIn : s_HaltOut);
 }
 }
 
@@ -250,7 +249,7 @@ static void DeliverOut(const uint8_t *pData, uint16_t Length)
 		memcpy(s_OutData, pData, Length);
 	s_OutLength = Length;
 	s_OutReady = true;
-	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
+	s_OutHandler(USB_CTRLR_EVT_DRDY,
 		Length, s_OutContext);
 	ReceiveDma();
 	if (!s_OutDma)
@@ -259,7 +258,7 @@ static void DeliverOut(const uint8_t *pData, uint16_t Length)
 		memcpy(s_OutBuffer, s_OutData, Length);
 	s_OutReady = false;
 	s_OutDma = false;
-	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
+	s_OutHandler(USB_CTRLR_EVT_XFER_CMPL,
 		s_OutLength, s_OutContext);
 }
 
@@ -276,7 +275,7 @@ static void CompleteIn(void)
 	}
 	const uint16_t length = s_InLength;
 	s_InBusy = false;
-	s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
+	s_InHandler(USB_CTRLR_EVT_XFER_CMPL,
 		length, s_InContext);
 }
 
@@ -538,7 +537,7 @@ static void TestFailuresSenseResidueAndPhase(void)
 	SendCbw(msc, cbw);
 	CHECK(s_HaltIn);
 	CHECK(msc.BotState() == USBD_MSC_BOT_FAILED);
-	CHECK(UsbEpSetHalt(0, USB_ENDPADDR_DIRIN(EP_NO), false));
+	CHECK(UsbEpSetHalt(0, EP_NO, true, false));
 	Pump(msc);
 	pCsw = LastCsw();
 	CHECK(pCsw != nullptr && pCsw->dCSWDataResidue == SECTOR_SIZE);
@@ -572,7 +571,7 @@ static void TestReadOnlyAndStorageFailure(void)
 	s_CaptureLength = 0U;
 	SendCbw(msc, cbw);
 	CHECK(s_HaltOut);
-	CHECK(UsbEpSetHalt(0, USB_ENDPADDR_DIROUT(EP_NO), false));
+	CHECK(UsbEpSetHalt(0, EP_NO, false, false));
 	Pump(msc);
 	const UsbMscCmdStatusWrapper_t *pCsw = LastCsw();
 	CHECK(pCsw != nullptr && pCsw->bCSWStatus == USB_MSC_CMDSTATUS_FAILED);
@@ -587,7 +586,7 @@ static void TestReadOnlyAndStorageFailure(void)
 	SendCbw(msc, cbw);
 	msc.Process();
 	CHECK(s_HaltIn);
-	CHECK(UsbEpSetHalt(0, USB_ENDPADDR_DIRIN(EP_NO), false));
+	CHECK(UsbEpSetHalt(0, EP_NO, true, false));
 	Pump(msc);
 	pCsw = LastCsw();
 	CHECK(pCsw != nullptr && pCsw->bCSWStatus == USB_MSC_CMDSTATUS_FAILED);
@@ -616,7 +615,7 @@ static void TestWriteFailure(void)
 	DeliverOut(&data[USBD_MSC_FS_MPS], USBD_MSC_FS_MPS);
 	msc.Process();
 	CHECK(s_HaltOut);
-	CHECK(UsbEpSetHalt(0, USB_ENDPADDR_DIROUT(EP_NO), false));
+	CHECK(UsbEpSetHalt(0, EP_NO, false, false));
 	Pump(msc);
 	const UsbMscCmdStatusWrapper_t *pCsw = LastCsw();
 	CHECK(pCsw != nullptr && pCsw->bCSWStatus == USB_MSC_CMDSTATUS_FAILED);
@@ -689,7 +688,7 @@ static void TestMediumEjectAndRestart(void)
 	s_CaptureLength = 0U;
 	SendCbw(msc, cbw);
 	CHECK(s_HaltIn);
-	CHECK(UsbEpSetHalt(0, USB_ENDPADDR_DIRIN(EP_NO), false));
+	CHECK(UsbEpSetHalt(0, EP_NO, true, false));
 	Pump(msc);
 	pCsw = LastCsw();
 	CHECK(pCsw != nullptr && pCsw->dCSWDataResidue == 8U);
@@ -754,10 +753,10 @@ static void TestMalformedCbwAndResetRecovery(void)
 	CHECK(s_HaltIn && s_HaltOut);
 	BulkReset(msc);
 	CHECK(msc.BotState() == USBD_MSC_BOT_RESET_RECOVERY);
-	CHECK(UsbEpSetHalt(0, USB_ENDPADDR_DIRIN(EP_NO), false));
+	CHECK(UsbEpSetHalt(0, EP_NO, true, false));
 	msc.Process();
 	CHECK(msc.BotState() == USBD_MSC_BOT_RESET_RECOVERY);
-	CHECK(UsbEpSetHalt(0, USB_ENDPADDR_DIROUT(EP_NO), false));
+	CHECK(UsbEpSetHalt(0, EP_NO, false, false));
 	msc.Process();
 	CHECK(msc.BotState() == USBD_MSC_BOT_WAIT_CBW);
 
@@ -781,8 +780,8 @@ static void TestMalformedCbwAndResetRecovery(void)
 	};
 	for (const MalformedCase &malformed : cases)
 	{
-		CHECK(UsbEpSetHalt(0, USB_ENDPADDR_DIRIN(EP_NO), false));
-		CHECK(UsbEpSetHalt(0, USB_ENDPADDR_DIROUT(EP_NO), false));
+		CHECK(UsbEpSetHalt(0, EP_NO, true, false));
+		CHECK(UsbEpSetHalt(0, EP_NO, false, false));
 		CHECK(msc.SelectConfig(0U));
 		CHECK(msc.SelectConfig(1U));
 		cbw = MakeCbw(41U, 0U, false,
@@ -835,7 +834,7 @@ static void TestResetAcrossPhasesAndReconnect(void)
 	CHECK(msc.BotState() == USBD_MSC_BOT_FAILED);
 	BulkReset(msc);
 	CHECK(msc.BotState() == USBD_MSC_BOT_WAIT_CBW);
-	CHECK(UsbEpSetHalt(0, USB_ENDPADDR_DIRIN(EP_NO), false));
+	CHECK(UsbEpSetHalt(0, EP_NO, true, false));
 
 	cbw = MakeCbw(55U, 8U, false, USB_MSC_SCSI_INQUIRY, 6U);
 	cbw.CBWCB[4] = 8U;
@@ -843,8 +842,8 @@ static void TestResetAcrossPhasesAndReconnect(void)
 	CHECK(msc.BotState() == USBD_MSC_BOT_PHASE_ERROR);
 	BulkReset(msc);
 	CHECK(msc.BotState() == USBD_MSC_BOT_RESET_RECOVERY);
-	CHECK(UsbEpSetHalt(0, USB_ENDPADDR_DIROUT(EP_NO), false));
-	CHECK(UsbEpSetHalt(0, USB_ENDPADDR_DIRIN(EP_NO), false));
+	CHECK(UsbEpSetHalt(0, EP_NO, false, false));
+	CHECK(UsbEpSetHalt(0, EP_NO, true, false));
 	msc.Process();
 	CHECK(msc.BotState() == USBD_MSC_BOT_WAIT_CBW);
 

@@ -564,21 +564,21 @@ static bool TestInterfaceAndHalt(void)
 	Setup(STD_EP_OUT, USB_REQ_SET_FEATURE,
 		  USB_FEATSEL_ENDPOINT_HALT, EP1_IN, 0);
 	CHECK(s_Ctrlr.LastStallEp == EP1_IN);
-	CHECK(UsbEpHalted(TEST_DEVNO, EP1_IN));
-	CHECK(!UsbEpHalted(TEST_DEVNO, EP2_IN));
+	CHECK(UsbEpHalted(TEST_DEVNO, 1U, true));
+	CHECK(!UsbEpHalted(TEST_DEVNO, 2U, true));
 	Complete(EP0_IN, 0);
 	Setup(STD_EP_IN, USB_REQ_GET_STATUS, 0, EP1_IN, 2);
 	CHECK((LastXfer()->Data[0] & USB_ENDPSTATUS_HALT) != 0);
 	Complete(EP0_IN, 2);
 	Complete(EP0_OUT, 0);
 
-	CHECK(UsbEpSetHalt(TEST_DEVNO, EP1_OUT, true));
-	CHECK(UsbEpHalted(TEST_DEVNO, EP1_OUT));
+	CHECK(UsbEpSetHalt(TEST_DEVNO, 1U, false, true));
+	CHECK(UsbEpHalted(TEST_DEVNO, 1U, false));
 	CHECK(s_Ctrlr.LastStallEp == EP1_OUT);
-	CHECK(UsbEpSetHalt(TEST_DEVNO, EP1_OUT, false));
-	CHECK(!UsbEpHalted(TEST_DEVNO, EP1_OUT));
+	CHECK(UsbEpSetHalt(TEST_DEVNO, 1U, false, false));
+	CHECK(!UsbEpHalted(TEST_DEVNO, 1U, false));
 	CHECK(s_Ctrlr.LastClearStallEp == EP1_OUT);
-	CHECK(!UsbEpSetHalt(TEST_DEVNO, EP2_IN, true));
+	CHECK(!UsbEpSetHalt(TEST_DEVNO, 2U, true, true));
 
 	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 1, 0, 0);
 	CHECK(s_Class.SetIfCnt == 1 && s_Class.LastAlt == 1);
@@ -975,9 +975,9 @@ extern "C" void UsbCtrlrSetAddress(int, uint8_t Address)
 	s_Ctrlr.LastAddress = Address;
 }
 extern "C" bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
-extern "C" void UsbCtrlrEpClose(int, uint8_t) {}
+extern "C" void UsbCtrlrEpClose(int, uint8_t, bool) {}
 extern "C" void UsbCtrlrEpCloseAll(int) { s_Ctrlr.CloseAllCnt++; }
-extern "C" void UsbCtrlrEpAlloc(int, uint8_t, uint8_t *, bool,
+extern "C" void UsbCtrlrEpAlloc(int, uint8_t, bool, uint8_t *, bool,
 									 UsbCtrlrEpHandler_t, void *)
 {
 	return;
@@ -1010,15 +1010,17 @@ extern "C" bool UsbCtrlrEp0Status(int, uint8_t EpAddr)
 {
 	return RecordEp0(EpAddr, nullptr, 0);
 }
-extern "C" void UsbCtrlrEpStall(int, uint8_t EpAddr)
+extern "C" void UsbCtrlrEpStall(int, uint8_t EpNo, bool bIn)
 {
 	s_Ctrlr.StallCnt++;
-	s_Ctrlr.LastStallEp = EpAddr;
+	s_Ctrlr.LastStallEp = (uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
 }
-extern "C" void UsbCtrlrEpClearStall(int, uint8_t EpAddr)
+extern "C" void UsbCtrlrEpClearStall(int, uint8_t EpNo, bool bIn)
 {
 	s_Ctrlr.ClearStallCnt++;
-	s_Ctrlr.LastClearStallEp = EpAddr;
+	s_Ctrlr.LastClearStallEp = (uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
 }
 extern "C" size_t UsbCtrlrGetSerial(int, char *pBuff, size_t BuffLen)
 {

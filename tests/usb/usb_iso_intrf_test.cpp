@@ -36,14 +36,14 @@ void UsbCtrlrDisconnect(int) {}
 void UsbCtrlrRemoteWakeup(int) {}
 void UsbCtrlrSofEnable(int, bool) {}
 void UsbCtrlrSetAddress(int, uint8_t) {}
-void UsbCtrlrEpStall(int, uint8_t) {}
-void UsbCtrlrEpClearStall(int, uint8_t) {}
+void UsbCtrlrEpStall(int, uint8_t, bool) {}
+void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
+void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool Blocking,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	if (USB_ENDPADDR_IS_IN(EpAddr))
+	if (bIn)
 	{
 		s_InBuffer = pBuffer;
 		s_InHandler = Handler;
@@ -66,10 +66,10 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 	return true;
 }
 
-void UsbCtrlrEpClose(int, uint8_t EpAddr)
+void UsbCtrlrEpClose(int, uint8_t, bool bIn)
 {
 	s_CloseCount++;
-	if (USB_ENDPADDR_IS_IN(EpAddr))
+	if (bIn)
 		s_InBusy = false;
 	else
 		s_OutBusy = false;
@@ -172,7 +172,7 @@ static void Receive(const uint8_t *pData, uint16_t Length,
 
 	// The controller owns ISO OUT service and DMAs directly into the buffer
 	// registered by UsbIntrfInit. Generic UsbIntrf only receives completion.
-	s_OutHandler(USB_ENDPADDR_DIROUT(8U), Event,
+	s_OutHandler(Event,
 		Length, s_OutContext);
 }
 
@@ -184,7 +184,7 @@ static void CompleteIn(UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 		return;
 	const uint16_t len = s_InLength;
 	s_InBusy = false;
-	s_InHandler(USB_ENDPADDR_DIRIN(8U), Event,
+	s_InHandler(Event,
 		len, s_InContext);
 }
 

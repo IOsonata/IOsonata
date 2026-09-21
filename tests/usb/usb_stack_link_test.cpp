@@ -86,9 +86,9 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *)
 	s_EpOpenCount++;
 	return true;
 }
-void UsbCtrlrEpClose(int, uint8_t) {}
+void UsbCtrlrEpClose(int, uint8_t, bool) {}
 void UsbCtrlrEpCloseAll(int) {}
-void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *, bool,
+void UsbCtrlrEpAlloc(int, uint8_t EpNo, bool bIn, uint8_t *, bool,
 						UsbCtrlrEpHandler_t, void *)
 {
 	if (s_RegisteredEpCount >= (int)sizeof(s_RegisteredEp))
@@ -96,7 +96,8 @@ void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *, bool,
 		return;
 	}
 
-	s_RegisteredEp[s_RegisteredEpCount++] = EpAddr;
+	s_RegisteredEp[s_RegisteredEpCount++] = (uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
 	return;
 }
 bool UsbCtrlrEpSend(int, uint8_t, uint8_t *, uint16_t) { return true; }
@@ -115,8 +116,8 @@ bool UsbCtrlrEp0Status(int, uint8_t EpAddr)
 {
 	return RecordEp0(EpAddr, 0);
 }
-void UsbCtrlrEpStall(int, uint8_t) {}
-void UsbCtrlrEpClearStall(int, uint8_t) {}
+void UsbCtrlrEpStall(int, uint8_t, bool) {}
+void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
 #define RX_MEM_SIZE USB_INTRF_RXMEM_SIZE(4, USB_CTRLR_PKT_LEN_MAX(0, BULK))

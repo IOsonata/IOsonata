@@ -52,12 +52,12 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 	return true;
 }
 
-void UsbCtrlrEpClose(int, uint8_t) { s_CloseCount++; }
+void UsbCtrlrEpClose(int, uint8_t, bool) { s_CloseCount++; }
 
-void UsbCtrlrEpAlloc(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
+void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool Blocking,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	if (USB_ENDPADDR_IS_IN(EpAddr))
+	if (bIn)
 	{
 		s_InBuffer = pBuffer;
 		s_InHandler = Handler;
@@ -268,20 +268,20 @@ static void CompleteIn(void)
 	CHECK(s_InBusy);
 	const uint16_t length = s_InLength;
 	s_InBusy = false;
-	s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
+	s_InHandler(USB_CTRLR_EVT_XFER_CMPL,
 		length, s_InContext);
 }
 
 static void Receive(const uint8_t *pData, uint16_t Length)
 {
-	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY, Length, s_OutContext);
+	s_OutHandler(USB_CTRLR_EVT_DRDY, Length, s_OutContext);
 	CHECK(s_OutBuffer != nullptr);
 	s_OutXferCount++;
 	if (Length != 0U)
 	{
 		memcpy(s_OutBuffer, pData, Length);
 	}
-	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL, Length, s_OutContext);
+	s_OutHandler(USB_CTRLR_EVT_XFER_CMPL, Length, s_OutContext);
 }
 
 static bool Control(UsbdHid &Hid, const UsbSetupData_t *pSetup,
