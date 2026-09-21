@@ -353,8 +353,8 @@ int main(int argc,char **argv){
  // nRF54 data completion uses the endpoint callback; EP0 keeps its core event.
  init();unsigned dataComplete=0;
  auto &dataReg=nrf54::s_EpReg[1][1];dataReg.pContext=&dataComplete;
- dataReg.Handler=[](uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,void *ctx){
-  assert(ep==0x81 && event==USB_CTRLR_EVT_XFER_CMPL && length==9);
+ dataReg.Handler=[](UsbCtrlrEvtType_t event,uint16_t length,void *ctx){
+  assert(event==USB_CTRLR_EVT_XFER_CMPL && length==9);
   ++*(unsigned*)ctx;
  };
  nrf54::nRF54UsbdEmitXfer(0x81,9);assert(dataComplete==1);
@@ -364,7 +364,7 @@ int main(int argc,char **argv){
   assert(event->pBuffer==nrf54::s_Ep0Bounce);
  };
  nrf54::nRF54UsbdEmitXfer(0,8);
- puts("PASS: nRF54 completion dispatch uses the four-argument endpoint callback and preserves EP0 events");
+ puts("PASS: nRF54 completion dispatch uses the endpoint callback and preserves EP0 events");
  const bool fullAppEvt=argc==2 && !strcmp(argv[1],"--full-appevt");
  alignas(8) uint8_t data[192];
  for(unsigned i=0;i<sizeof(data);++i)data[i]=uint8_t(i);
@@ -1346,14 +1346,14 @@ int main(int argc,char **argv){
  // A full AppEvt queue must leave all seven latched; OUT retry shares the status register.
  init();
  unsigned calls[8]={},amounts[8]={};
- struct Completion {unsigned *calls,*amounts;} completion={calls,amounts};
+ struct Completion {unsigned *calls,*amounts,ep;} completion[8]={};
  for(unsigned ep=1;ep<8;++ep){
-  auto &reg=s_Usbd.EpReg[ep-1][1];reg.pContext=&completion;
-  reg.Handler=[](uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
-                void *context){
+  completion[ep]={calls,amounts,ep};
+  auto &reg=s_Usbd.EpReg[ep-1][1];reg.pContext=&completion[ep];
+  reg.Handler=[](UsbCtrlrEvtType_t event,uint16_t length,void *context){
    assert(!irqMask && event==USB_CTRLR_EVT_XFER_CMPL);
-   assert(USB_ENDPADDR_IS_IN(ep));ep=USB_ENDPADDR_NUM(ep);
-   auto *c=(Completion*)context;++c->calls[ep];c->amounts[ep]=length;
+   auto *c=(Completion*)context;
+   ++c->calls[c->ep];c->amounts[c->ep]=length;
   };
   regs.EPIN[ep].AMOUNT=ep==7?0:ep*9;
  }
