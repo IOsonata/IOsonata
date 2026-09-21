@@ -1674,11 +1674,12 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
 
+	nRFEPPkt_t *p;
 	do
 	{
 		const int l = min(Length, NRFX_USBD_MAX_PACKET_SIZE);
 
-		nRFEPPkt_t *p = (nRFEPPkt_t*)CFifoPut(s_Usbd.hEp0Que);
+		p = (nRFEPPkt_t *)CFifoPut(s_Usbd.hEp0Que);
 		if (p == NULL)
 		{
 			if (Length == 0)
@@ -1695,9 +1696,11 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 		p->Len = l;
 		Length -= l;
 		cnt += l;
-		// Completion covers only the copied chunk. Its caller submits the rest.
-		s_Usbd.Ctrlr.Ep0Len[1] = (uint16_t)cnt;
 	} while (Length != 0);
+
+	// Update only when this call copied data or queued a ZLP.
+	if (p != NULL || cnt > 0)
+		s_Usbd.Ctrlr.Ep0Len[1] = (uint16_t)cnt;
 
 	if (NRFX_USBD_EASYDMA_BUSY_REG == NRFX_USBD_EASYDMA_BUSY_REG_CLEAR)
 	{

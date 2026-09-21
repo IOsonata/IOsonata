@@ -384,6 +384,8 @@ int main(int argc,char **argv){
     // A full queue accepts nothing and must preserve the pending completion.
     assert(UsbCtrlrEp0Send(0,data,1)==0 && irqMask==mask);
     assert(s_Usbd.Ctrlr.Ep0Len[1]==copied);
+    assert(UsbCtrlrEp0Send(0,nullptr,0)==-1 && irqMask==mask);
+    assert(s_Usbd.Ctrlr.Ep0Len[1]==copied);
    }
    regs.EPSTATUS.bits=2;regs.EVENTS_ENDEPIN[1]=1;interrupt();
    dmaLocks=dmaUnlocks=0;
