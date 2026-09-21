@@ -362,24 +362,24 @@ static void Usbd171Write(uint32_t Value)
 	}
 }
 
-static void UsbdErrataApply(void)
+static void Usbd187Write(uint32_t Value)
 {
 	if (nrf52_errata_187())
 	{
-		UsbdErrataWrite(NRFX_USBD_ERRATA_187_REG, 0x00000003UL);
+		UsbdErrataWrite(NRFX_USBD_ERRATA_187_REG, Value);
 	}
+}
 
+static void UsbdErrataApply(void)
+{
+	Usbd187Write(0x00000003UL);
 	Usbd171Write(0x000000C0UL);
 }
 
 static void UsbdErrataRevert(void)
 {
 	Usbd171Write(0x00000000UL);
-
-	if (nrf52_errata_187())
-	{
-		UsbdErrataWrite(NRFX_USBD_ERRATA_187_REG, 0x00000000UL);
-	}
+	Usbd187Write(0x00000000UL);
 
 	if (nrf52_errata_166())
 	{
@@ -1664,13 +1664,13 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 			break;
 		}
 
+		p->Len = l;
 		if (l > 0)
 		{
 			memcpy(p->Payload, pBuffer, l);
 			pBuffer += l;
 		}
 
-		p->Len = l;
 		Length -= l;
 		cnt += l;
 	} while (Length != 0);
