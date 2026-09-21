@@ -107,8 +107,7 @@ enum
 {
 	NRFX_USBD_QUE_OUT = 0U,
 	NRFX_USBD_QUE_IN_BUFFER = 1U,
-	NRFX_USBD_QUE_IN_FIFO = 2U,
-	NRFX_USBD_QUE_IN_SCRATCH = 3U,
+	NRFX_USBD_QUE_IN_SCRATCH = 2U,
 };
 
 #pragma pack(push, 4)
@@ -118,8 +117,7 @@ typedef struct __nRF_Usbd_Que {
 	uint8_t Dir;					//!< Queue source/direction
 	uint16_t Len;				//!< Bytes this transfer moves
 	union {
-		uint8_t *pBuffer;		//!< OUT or direct IN DMA buffer
-		hCFifo_t hFifo;			//!< Byte-mode IN source FIFO
+		uint8_t *pBuffer;		//!< OUT or IN DMA buffer
 		uint32_t Scratch;		//!< Aligned byte-mode IN repair
 	};
 } nRFUsbdQue_t;
@@ -631,11 +629,7 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 	const bool isIn = pQue->Dir != NRFX_USBD_QUE_OUT;
 	const uint8_t *pBuffer;
 
-	if (pQue->Dir == NRFX_USBD_QUE_IN_FIFO)
-	{
-		pBuffer = CFifoPeek(pQue->hFifo);
-	}
-	else if (pQue->Dir == NRFX_USBD_QUE_IN_SCRATCH)
+	if (pQue->Dir == NRFX_USBD_QUE_IN_SCRATCH)
 	{
 		pBuffer = (const uint8_t *)&pQue->Scratch;
 	}
@@ -1527,8 +1521,8 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		}
 		else
 		{
-			pQue->hFifo = hFifo;
-			pQue->Dir = NRFX_USBD_QUE_IN_FIFO;
+			pQue->pBuffer = pData;
+			pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
 		}
 	}
 	else

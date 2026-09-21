@@ -276,8 +276,8 @@ int main(){
     assert(entry->Len==(length<4-offset?length:4-offset));
     assert(!memcmp(&entry->Scratch,data,entry->Len));
    }else{
-    assert(entry->Dir==NRFX_USBD_QUE_IN_FIFO);
-    assert(entry->Len==length && entry->hFifo==fifo);
+    assert(entry->Dir==NRFX_USBD_QUE_IN_BUFFER);
+    assert(entry->Len==length && entry->pBuffer==data);
    }
    assert(productionEpSend(0,ep,inBuffer,length));
    entry=(nRFUsbdQue_t*)CFifoGet(s_Usbd.hQue);
