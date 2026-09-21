@@ -33,7 +33,9 @@ code = r'''
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
-struct {uint8_t IntPrio;bool LowPowerSuspend;} s_Usbd;
+struct nRFUsbEpReg_t {uint8_t *pBuffer;void *Handler;void *pContext;uint16_t MaxPacketSize;bool bBlocking;};
+struct UsbdMock {uint8_t IntPrio;bool LowPowerSuspend;
+ nRFUsbEpReg_t EpReg[8][2];} s_Usbd;
 bool cable, clockOK, readyOK;
 unsigned requests, releases, clockRefs, starts, resets, waits, dispatches;
 unsigned irqDisables, irqPriority;
@@ -58,8 +60,13 @@ uint32_t nRFUsbdQueueInComplete(uint32_t){assert(false);return 0;}
 unsigned __CLZ(uint32_t){assert(false);return 0;}
 void nRFUsbdProcessOutData(uint32_t,void*){assert(false);}
 void nRFUsbdQueueEp0Setup(){assert(false);}
+// Foreground OUT sweep support: no endpoint is registered in this harness,
+// so the sweep sees null handlers and emits nothing.
+constexpr unsigned NRFX_USBD_EP_COUNT=9;
+enum UsbCtrlrEvtType_t {USB_CTRLR_EVT_DRDY=2};
+void nRFUsbEpRegisteredEvent(uint8_t,uint8_t,UsbCtrlrEvtType_t,uint16_t){assert(false);}
 void init(){
- s_Usbd={6,false};
+ s_Usbd={6,false,{}};
  cable=clockOK=readyOK=true;
  requests=releases=clockRefs=starts=resets=waits=dispatches=irqDisables=0;
  irqPriority=0;regs={0xFFFF,1,1,0};

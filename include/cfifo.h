@@ -113,25 +113,7 @@ hCFifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkS
  *
  * @return	Pointer to the next FIFO block, or NULL when empty.
  */
-static inline uint8_t *CFifoPeek(hCFifo_t const pFifo)
-{
-	if (pFifo == NULL)
-	{
-		return NULL;
-	}
-
-	uint32_t getIdx = __atomic_load_n(&pFifo->GetIdx, __ATOMIC_RELAXED);
-	uint32_t putIdx = __atomic_load_n(&pFifo->PutIdx, __ATOMIC_ACQUIRE);
-	if (getIdx == putIdx)
-	{
-		return NULL;
-	}
-
-	uint32_t slot = pFifo->Mask ? (getIdx & pFifo->Mask) :
-		(uint32_t)(getIdx % (uint32_t)pFifo->MaxIdxCnt);
-
-	return pFifo->pMemStart + slot * pFifo->BlkSize;
-}
+uint8_t *CFifoPeek(hCFifo_t const hFifo);
 
 /**
  * @brief	Inspect consecutive FIFO blocks without consuming them.
