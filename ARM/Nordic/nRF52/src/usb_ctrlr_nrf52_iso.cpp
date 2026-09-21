@@ -314,10 +314,9 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 	return true;
 }
 
-void nRFUsbdIsoEpClose(uint8_t EpAddr)
+void nRFUsbdIsoEpClose(bool bIn)
 {
-	const bool in = USB_ENDPADDR_IS_IN(EpAddr);
-	const uint8_t dir = in ? 1U : 0U;
+	const uint8_t dir = bIn ? 1U : 0U;
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdDmaWait();
 
@@ -327,7 +326,7 @@ void nRFUsbdIsoEpClose(uint8_t EpAddr)
 		USBD_FLAG_ISO_OUT_READY) << dir);
 	s_Usbd.IsoDmaLen[dir] = -1;
 
-	nRFIsoHwEnable(in, false);
+	nRFIsoHwEnable(bIn, false);
 	nRFUsbdSofRelease();
 
 	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir].MaxPacketSize = 0U;

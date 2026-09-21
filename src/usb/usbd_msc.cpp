@@ -111,31 +111,29 @@ static void UsbdMscCopyInquiry(char *pDest, size_t Length,
 	memcpy(pDest, pSource, length);
 }
 
-static bool UsbdMscOpenEndpoint(UsbdMscDev_t *pMsc, uint8_t EpAddr,
+static bool UsbdMscOpenEndpoint(UsbdMscDev_t *pMsc, bool bIn,
 								uint16_t MaxPacketSize)
 {
-	return UsbCtrlrEpOpenData(pMsc->DevNo, EpAddr,
+	return UsbCtrlrEpOpenData(pMsc->DevNo, pMsc->EpNo, bIn,
 		USB_ENDPATT_TRANS_BULK, MaxPacketSize);
 }
 
 static void UsbdMscCloseEndpoints(UsbdMscDev_t *pMsc)
 {
-	UsbCtrlrEpClose(pMsc->DevNo, USB_ENDPADDR_DIROUT(pMsc->EpNo));
-	UsbCtrlrEpClose(pMsc->DevNo, USB_ENDPADDR_DIRIN(pMsc->EpNo));
+	UsbCtrlrEpClose(pMsc->DevNo, pMsc->EpNo, false);
+	UsbCtrlrEpClose(pMsc->DevNo, pMsc->EpNo, true);
 }
 
 static bool UsbdMscRestartEndpoints(UsbdMscDev_t *pMsc)
 {
-	const uint8_t in = USB_ENDPADDR_DIRIN(pMsc->EpNo);
-	const uint8_t out = USB_ENDPADDR_DIROUT(pMsc->EpNo);
-	const bool haltIn = UsbEpHalted(pMsc->DevNo, in);
-	const bool haltOut = UsbEpHalted(pMsc->DevNo, out);
+	const bool haltIn = UsbEpHalted(pMsc->DevNo, pMsc->EpNo, true);
+	const bool haltOut = UsbEpHalted(pMsc->DevNo, pMsc->EpNo, false);
 	const uint16_t mps = UsbdMscMps(pMsc);
 
 	UsbdMscCloseEndpoints(pMsc);
 	if (!UsbIntrfConfigure(pMsc->pData, mps) ||
-		!UsbdMscOpenEndpoint(pMsc, in, mps) ||
-		!UsbdMscOpenEndpoint(pMsc, out, mps))
+		!UsbdMscOpenEndpoint(pMsc, true, mps) ||
+		!UsbdMscOpenEndpoint(pMsc, false, mps))
 	{
 		UsbdMscCloseEndpoints(pMsc);
 		UsbIntrfUnconfigure(pMsc->pData);
@@ -144,11 +142,11 @@ static bool UsbdMscRestartEndpoints(UsbdMscDev_t *pMsc)
 	}
 	if (haltIn)
 	{
-		(void)UsbEpSetHalt(pMsc->DevNo, in, true);
+		(void)UsbEpSetHalt(pMsc->DevNo, pMsc->EpNo, true, true);
 	}
 	if (haltOut)
 	{
-		(void)UsbEpSetHalt(pMsc->DevNo, out, true);
+		(void)UsbEpSetHalt(pMsc->DevNo, pMsc->EpNo, false, true);
 	}
 	return true;
 }
@@ -263,9 +261,8 @@ static int UsbdMscDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 
 static void UsbdMscStall(UsbdMscDev_t *pMsc, UsbdMscDataDirection_t Direction)
 {
-	const uint8_t epAddr = Direction == USBD_MSC_DATA_IN ?
-		USB_ENDPADDR_DIRIN(pMsc->EpNo) : USB_ENDPADDR_DIROUT(pMsc->EpNo);
-	(void)UsbEpSetHalt(pMsc->DevNo, epAddr, true);
+	(void)UsbEpSetHalt(pMsc->DevNo, pMsc->EpNo,
+		Direction == USBD_MSC_DATA_IN, true);
 }
 
 static void UsbdMscFinishCommand(UsbdMscDev_t *pMsc)
@@ -668,8 +665,8 @@ static bool UsbdMscValidCbw(const UsbMscCmdBlkWrapper_t *pCbw,
 
 static void UsbdMscInvalidCbw(UsbdMscDev_t *pMsc)
 {
-	(void)UsbEpSetHalt(pMsc->DevNo, USB_ENDPADDR_DIROUT(pMsc->EpNo), true);
-	(void)UsbEpSetHalt(pMsc->DevNo, USB_ENDPADDR_DIRIN(pMsc->EpNo), true);
+	(void)UsbEpSetHalt(pMsc->DevNo, pMsc->EpNo, false, true);
+	(void)UsbEpSetHalt(pMsc->DevNo, pMsc->EpNo, true, true);
 	pMsc->bResetSeen = false;
 	pMsc->State = USBD_MSC_BOT_RESET_RECOVERY;
 }
@@ -835,7 +832,7 @@ static void UsbdMscProcessCsw(UsbdMscDev_t *pMsc)
 		return;
 	}
 	if (
-		UsbEpHalted(pMsc->DevNo, USB_ENDPADDR_DIRIN(pMsc->EpNo)))
+		UsbEpHalted(pMsc->DevNo, pMsc->EpNo, true))
 	{
 		return;
 	}
@@ -877,8 +874,8 @@ static void UsbdMscProcessInternal(UsbdMscDev_t *pMsc)
 
 		case USBD_MSC_BOT_RESET_RECOVERY:
 			if (pMsc->bResetSeen &&
-				!UsbEpHalted(pMsc->DevNo, USB_ENDPADDR_DIRIN(pMsc->EpNo)) &&
-				!UsbEpHalted(pMsc->DevNo, USB_ENDPADDR_DIROUT(pMsc->EpNo)))
+				!UsbEpHalted(pMsc->DevNo, pMsc->EpNo, true) &&
+				!UsbEpHalted(pMsc->DevNo, pMsc->EpNo, false))
 			{
 				pMsc->bResetSeen = false;
 				pMsc->State = USBD_MSC_BOT_WAIT_CBW;
@@ -1070,10 +1067,8 @@ bool UsbdMsc::SelectConfig(uint8_t ConfigValue)
 
 	const uint16_t mps = UsbdMscMps(&vUsbdMsc);
 	if (!UsbIntrfConfigure(vUsbdMsc.pData, mps) ||
-		!UsbdMscOpenEndpoint(&vUsbdMsc,
-			USB_ENDPADDR_DIRIN(vUsbdMsc.EpNo), mps) ||
-		!UsbdMscOpenEndpoint(&vUsbdMsc,
-			USB_ENDPADDR_DIROUT(vUsbdMsc.EpNo), mps))
+		!UsbdMscOpenEndpoint(&vUsbdMsc, true, mps) ||
+		!UsbdMscOpenEndpoint(&vUsbdMsc, false, mps))
 	{
 		UsbdMscCloseEndpoints(&vUsbdMsc);
 		UsbIntrfUnconfigure(vUsbdMsc.pData);

@@ -182,7 +182,7 @@ __attribute__((weak)) void nRFUsbdIsoSof(void)
 {
 }
 
-__attribute__((weak)) void nRFUsbdIsoEpClose(uint8_t)
+__attribute__((weak)) void nRFUsbdIsoEpClose(bool)
 {
 }
 
@@ -204,8 +204,7 @@ void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
 	UsbCtrlrEvtType_t Event, uint16_t Length)
 {
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNum, Dir);
-	pReg->Handler(EpNum | (Dir * USB_ENDPADDR_DIR_IN), Event, Length,
-		pReg->pContext);
+	pReg->Handler(Event, Length, pReg->pContext);
 }
 
 #ifdef SOFTDEVICE_PRESENT
@@ -1425,50 +1424,46 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 	return false;
 }
 
-bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type,
+bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 						 uint16_t MaxPacketSize)
 {
 	(void)Type;
-	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	const uint8_t in = EpAddr >> 7U;
-	if (epNum == 0U || epNum >= NRFX_USBD_DATA_EP_COUNT ||
+	if (EpNo == 0U || EpNo >= NRFX_USBD_DATA_EP_COUNT ||
 		MaxPacketSize == 0U || MaxPacketSize > NRFX_USBD_MAX_PACKET_SIZE)
 	{
 		return false;
 	}
 
-	nRFUsbGetEpReg(epNum, in)->MaxPacketSize = MaxPacketSize;
-	nRFUsbdEpHwEnable(epNum, in, true);
+	nRFUsbGetEpReg(EpNo, bIn)->MaxPacketSize = MaxPacketSize;
+	nRFUsbdEpHwEnable(EpNo, bIn, true);
 
-	UsbCtrlrEpClearStall(DevNo, EpAddr);
+	UsbCtrlrEpClearStall(DevNo, EpNo, bIn);
 	return true;
 }
 
-void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
+void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 {
 	(void)DevNo;
-	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	if (epNum == 0U || epNum >= NRFX_USBD_EP_COUNT)
+	if (EpNo == 0U || EpNo >= NRFX_USBD_EP_COUNT)
 	{
 		return;
 	}
 
-	if (epNum == NRFX_USBD_ISO_EP_NO)
+	if (EpNo == NRFX_USBD_ISO_EP_NO)
 	{
-		nRFUsbdIsoEpClose(EpAddr);
+		nRFUsbdIsoEpClose(bIn);
 		return;
 	}
 
-	const uint8_t in = EpAddr >> 7U;
 	nRFUsbdDmaWait();
 
-	nRFUsbdEpHwEnable(epNum, in, false);
-	NRF_USBD->EPDATASTATUS = 1UL << (epNum + (in ? 0U : 16U));
-	if (!in)
+	nRFUsbdEpHwEnable(EpNo, bIn, false);
+	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (bIn ? 0U : 16U));
+	if (!bIn)
 	{
-		NRF_USBD->SIZE.EPOUT[epNum] = 0;
+		NRF_USBD->SIZE.EPOUT[EpNo] = 0;
 	}
-	nRFUsbGetEpReg(epNum, in)->MaxPacketSize = 0U;
+	nRFUsbGetEpReg(EpNo, bIn)->MaxPacketSize = 0U;
 	__DSB();
 }
 
@@ -1476,21 +1471,20 @@ void UsbCtrlrEpCloseAll(int DevNo)
 {
 	for (uint8_t epNum = 1; epNum < NRFX_USBD_EP_COUNT; epNum++)
 	{
-		UsbCtrlrEpClose(DevNo, epNum);
-		UsbCtrlrEpClose(DevNo, (uint8_t)(epNum | USB_ENDPADDR_DIR_IN));
+		UsbCtrlrEpClose(DevNo, epNum, false);
+		UsbCtrlrEpClose(DevNo, epNum, true);
 	}
 
 	NRF_USBD->EPOUTEN = 1UL;
 	NRF_USBD->EPINEN = 1UL;
 }
 
-void UsbCtrlrEpAlloc(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
 					 bool bBlocking,
 					 UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	(void)DevNo;
-	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(USB_ENDPADDR_NUM(EpAddr),
-		USB_ENDPADDR_IS_IN(EpAddr));
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNo, bIn);
 	pReg->pBuffer = pBuffer;
 	pReg->Handler = Handler;
 	pReg->pContext = pContext;
@@ -1608,44 +1602,46 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 	return cnt;
 }
 
-void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr)
+void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
 {
 	(void)DevNo;
-	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	if (epNum >= NRFX_USBD_DATA_EP_COUNT)
+	if (EpNo >= NRFX_USBD_DATA_EP_COUNT)
 	{
 		return;
 	}
 
-	if (epNum == 0)
+	if (EpNo == 0U)
 	{
 		NRF_USBD->TASKS_EP0STALL = 1;
 		(void)NRF_USBD->TASKS_EP0STALL;
 	}
 	else
 	{
+		const uint8_t epAddr = (uint8_t)(EpNo |
+			(bIn ? USB_ENDPADDR_DIR_IN : 0U));
 		NRF_USBD->EPSTALL =
-			(USBD_EPSTALL_STALL_Stall << USBD_EPSTALL_STALL_Pos) | EpAddr;
+			(USBD_EPSTALL_STALL_Stall << USBD_EPSTALL_STALL_Pos) | epAddr;
 	}
 }
 
-void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr)
+void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
 {
 	(void)DevNo;
-	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	if (epNum == 0 || epNum >= NRFX_USBD_DATA_EP_COUNT)
+	if (EpNo == 0U || EpNo >= NRFX_USBD_DATA_EP_COUNT)
 	{
 		return;
 	}
 
-	NRF_USBD->DTOGGLE = EpAddr;
+	const uint8_t epAddr = (uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
+	NRF_USBD->DTOGGLE = epAddr;
 	NRF_USBD->DTOGGLE =
-		(USBD_DTOGGLE_VALUE_Data0 << USBD_DTOGGLE_VALUE_Pos) | EpAddr;
+		(USBD_DTOGGLE_VALUE_Data0 << USBD_DTOGGLE_VALUE_Pos) | epAddr;
 	NRF_USBD->EPSTALL =
-		(USBD_EPSTALL_STALL_UnStall << USBD_EPSTALL_STALL_Pos) | EpAddr;
+		(USBD_EPSTALL_STALL_UnStall << USBD_EPSTALL_STALL_Pos) | epAddr;
 
-	if (!USB_ENDPADDR_IS_IN(EpAddr))
+	if (!bIn)
 	{
-		NRF_USBD->SIZE.EPOUT[epNum] = 0;
+		NRF_USBD->SIZE.EPOUT[EpNo] = 0;
 	}
 }

@@ -127,17 +127,17 @@ static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 	}
 }
 
-static bool UsbdCdcOpenEndpoint(UsbdCdcDev_t *pCdc, uint8_t EpAddr,
-								uint8_t Type, uint16_t MaxPacketSize)
+static bool UsbdCdcOpenEndpoint(UsbdCdcDev_t *pCdc, uint8_t EpNo,
+								bool bIn, uint8_t Type, uint16_t MaxPacketSize)
 {
-	return UsbCtrlrEpOpenData(pCdc->DevNo, EpAddr, Type, MaxPacketSize);
+	return UsbCtrlrEpOpenData(pCdc->DevNo, EpNo, bIn, Type, MaxPacketSize);
 }
 
 static void UsbdCdcCloseEndpoints(UsbdCdcDev_t *pCdc)
 {
-	UsbCtrlrEpClose(pCdc->DevNo, USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo));
-	UsbCtrlrEpClose(pCdc->DevNo, USB_ENDPADDR_DIROUT(pCdc->DataEpNo));
-	UsbCtrlrEpClose(pCdc->DevNo, USB_ENDPADDR_DIRIN(pCdc->DataEpNo));
+	UsbCtrlrEpClose(pCdc->DevNo, pCdc->NotifyEpNo, true);
+	UsbCtrlrEpClose(pCdc->DevNo, pCdc->DataEpNo, false);
+	UsbCtrlrEpClose(pCdc->DevNo, pCdc->DataEpNo, true);
 }
 
 static void UsbdCdcCancelBusState(UsbdCdcDev_t *pCdc)
@@ -179,12 +179,12 @@ static bool UsbdCdcConfig(UsbdCdcDev_t *pCdc, uint8_t Configuration)
 		return false;
 	}
 
-	if (!UsbdCdcOpenEndpoint(pCdc, USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo),
+	if (!UsbdCdcOpenEndpoint(pCdc, pCdc->NotifyEpNo, true,
 							 USB_ENDPATT_TRANS_INT,
 							 USBD_CDC_NOTIF_MPS) ||
-		!UsbdCdcOpenEndpoint(pCdc, USB_ENDPADDR_DIRIN(pCdc->DataEpNo),
+		!UsbdCdcOpenEndpoint(pCdc, pCdc->DataEpNo, true,
 							 USB_ENDPATT_TRANS_BULK, dataMps) ||
-		!UsbdCdcOpenEndpoint(pCdc, USB_ENDPADDR_DIROUT(pCdc->DataEpNo),
+		!UsbdCdcOpenEndpoint(pCdc, pCdc->DataEpNo, false,
 							 USB_ENDPATT_TRANS_BULK, dataMps))
 	{
 		UsbdCdcCloseEndpoints(pCdc);
@@ -306,7 +306,7 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 	}
 }
 
-static void UsbdCdcNotifCtrlrEvent(uint8_t, UsbCtrlrEvtType_t Event,
+static void UsbdCdcNotifCtrlrEvent(UsbCtrlrEvtType_t Event,
 								  uint16_t, void *pContext)
 {
 	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);
@@ -401,8 +401,7 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 
 	pCdc->pData->pClassContext = pCdc;
 
-	UsbCtrlrEpAlloc(pCdc->DevNo,
-		USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo),
+	UsbCtrlrEpAlloc(pCdc->DevNo, pCdc->NotifyEpNo, true,
 		UsbdCdcNotifBuffer(pCdc), false, UsbdCdcNotifCtrlrEvent, pCdc);
 
 	const UsbCfg_t *pUsbCfg = UsbGetCfg(pCdc->DevNo);

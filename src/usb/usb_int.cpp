@@ -41,9 +41,9 @@ static bool UsbIntIntrfEpSupported(int DevNo, uint8_t EpNo)
 		USB_INT_INTRF_MAX_MPS > 0U;
 }
 
-static bool UsbIntIntrfOpenEndpoint(UsbIntIntrf_t *pIntrf, uint8_t EpAddr)
+static bool UsbIntIntrfOpenEndpoint(UsbIntIntrf_t *pIntrf, bool bIn)
 {
-	return UsbCtrlrEpOpenData(pIntrf->pData->DevNo, EpAddr,
+	return UsbCtrlrEpOpenData(pIntrf->pData->DevNo, pIntrf->EpNo, bIn,
 		USB_ENDPATT_TRANS_INT, pIntrf->Mps);
 }
 
@@ -173,13 +173,11 @@ bool UsbIntIntrfOpen(UsbIntIntrf_t *pIntrf, uint16_t MaxPacketSize, uint8_t Inte
 	pIntrf->Interval = Interval;
 	pIntrf->Suspended = false;
 
-	if (!UsbIntIntrfOpenEndpoint(pIntrf, USB_ENDPADDR_DIRIN(pIntrf->EpNo)) ||
-		!UsbIntIntrfOpenEndpoint(pIntrf, USB_ENDPADDR_DIROUT(pIntrf->EpNo)))
+	if (!UsbIntIntrfOpenEndpoint(pIntrf, true) ||
+		!UsbIntIntrfOpenEndpoint(pIntrf, false))
 	{
-		UsbCtrlrEpClose(pIntrf->pData->DevNo,
-			USB_ENDPADDR_DIROUT(pIntrf->EpNo));
-		UsbCtrlrEpClose(pIntrf->pData->DevNo,
-			USB_ENDPADDR_DIRIN(pIntrf->EpNo));
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, false);
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, true);
 		UsbIntrfUnconfigure(pIntrf->pData);
 		pIntrf->Mps = 0U;
 		pIntrf->Interval = 0U;
@@ -199,10 +197,8 @@ void UsbIntIntrfClose(UsbIntIntrf_t *pIntrf)
 
 	if (pIntrf->Opened)
 	{
-		UsbCtrlrEpClose(pIntrf->pData->DevNo,
-			USB_ENDPADDR_DIROUT(pIntrf->EpNo));
-		UsbCtrlrEpClose(pIntrf->pData->DevNo,
-			USB_ENDPADDR_DIRIN(pIntrf->EpNo));
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, false);
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, true);
 	}
 
 	UsbIntrfUnconfigure(pIntrf->pData);

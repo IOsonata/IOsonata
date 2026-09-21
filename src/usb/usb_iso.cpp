@@ -47,12 +47,13 @@ static bool UsbIsoIntrfEpSupported(int DevNo, uint8_t EpNo)
 		(USB_ISO_EPOUT_MASK(DevNo) & bit) != 0U;
 }
 
-static bool UsbIsoIntrfOpenEndpoint(UsbIsoIntrf_t *pIntrf, uint8_t EpAddr)
+static bool UsbIsoIntrfOpenEndpoint(UsbIsoIntrf_t *pIntrf, bool bIn)
 {
 	UsbEndPointDesc_t desc = {};
 	desc.bLength = sizeof(desc);
 	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	desc.bEndpointAddress = EpAddr;
+	desc.bEndpointAddress = (uint8_t)(pIntrf->EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
 	desc.bmAttributes = USB_ENDPATT_TRANS_ISO | pIntrf->Attributes;
 	desc.wMaxPacketSize = pIntrf->Mps;
 	desc.bInterval = pIntrf->Interval;
@@ -188,13 +189,11 @@ bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval)
 	pIntrf->Interval = Interval;
 	pIntrf->Suspended = false;
 
-	if (!UsbIsoIntrfOpenEndpoint(pIntrf, USB_ENDPADDR_DIRIN(pIntrf->EpNo)) ||
-		!UsbIsoIntrfOpenEndpoint(pIntrf, USB_ENDPADDR_DIROUT(pIntrf->EpNo)))
+	if (!UsbIsoIntrfOpenEndpoint(pIntrf, true) ||
+		!UsbIsoIntrfOpenEndpoint(pIntrf, false))
 	{
-		UsbCtrlrEpClose(pIntrf->pData->DevNo,
-			USB_ENDPADDR_DIROUT(pIntrf->EpNo));
-		UsbCtrlrEpClose(pIntrf->pData->DevNo,
-			USB_ENDPADDR_DIRIN(pIntrf->EpNo));
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, false);
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, true);
 		UsbIntrfUnconfigure(pIntrf->pData);
 		pIntrf->Mps = 0U;
 		pIntrf->Interval = 0U;
@@ -214,10 +213,8 @@ void UsbIsoIntrfClose(UsbIsoIntrf_t *pIntrf)
 
 	if (pIntrf->Opened)
 	{
-		UsbCtrlrEpClose(pIntrf->pData->DevNo,
-			USB_ENDPADDR_DIROUT(pIntrf->EpNo));
-		UsbCtrlrEpClose(pIntrf->pData->DevNo,
-			USB_ENDPADDR_DIRIN(pIntrf->EpNo));
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, false);
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, true);
 	}
 
 	UsbIntrfUnconfigure(pIntrf->pData);

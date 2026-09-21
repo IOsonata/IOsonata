@@ -296,7 +296,7 @@ void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 								 uint16_t Length)
 {
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
-	pReg->Handler(EpAddr, Event, Length, pReg->pContext);
+	pReg->Handler(Event, Length, pReg->pContext);
 }
 
 __attribute__((weak)) bool UsbdXtalRequest(void)
@@ -1792,18 +1792,21 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 			pDesc->bmAttributes & 0x03U, pDesc->wMaxPacketSize);
 }
 
-bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type,
+bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 						 uint16_t MaxPacketSize)
 {
+	const uint8_t epAddr = (uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
 	return nRFUsbValidDevNo(DevNo) &&
-		nRFUsbRegEpOpen(EpAddr, Type, MaxPacketSize);
+		nRFUsbRegEpOpen(epAddr, Type, MaxPacketSize);
 }
 
-void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
+void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 {
 	if (nRFUsbValidDevNo(DevNo))
 	{
-		nRFUsbRegEpClose(EpAddr);
+		nRFUsbRegEpClose((uint8_t)(EpNo |
+			(bIn ? USB_ENDPADDR_DIR_IN : 0U)));
 	}
 }
 
@@ -1815,7 +1818,7 @@ void UsbCtrlrEpCloseAll(int DevNo)
 	}
 }
 
-void UsbCtrlrEpAlloc(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
 					 bool bBlocking,
 					 UsbCtrlrEpHandler_t Handler, void *pContext)
 {
@@ -1823,7 +1826,9 @@ void UsbCtrlrEpAlloc(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 	{
 		return;
 	}
-	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
+	const uint8_t epAddr = (uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epAddr);
 	pReg->pBuffer = pBuffer;
 	pReg->Handler = Handler;
 	pReg->pContext = pContext;
@@ -1856,18 +1861,20 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 	return nRFUsbRegEpXfer(USB_ENDPADDR_DIR_IN, pBuffer, copied) ? copied : -1;
 }
 
-void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr)
+void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
 {
 	if (nRFUsbValidDevNo(DevNo))
 	{
-		nRFUsbRegEpStall(EpAddr);
+		nRFUsbRegEpStall((uint8_t)(EpNo |
+			(bIn ? USB_ENDPADDR_DIR_IN : 0U)));
 	}
 }
 
-void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr)
+void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
 {
 	if (nRFUsbValidDevNo(DevNo))
 	{
-		nRFUsbRegEpClearStall(EpAddr);
+		nRFUsbRegEpClearStall((uint8_t)(EpNo |
+			(bIn ? USB_ENDPADDR_DIR_IN : 0U)));
 	}
 }

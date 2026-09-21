@@ -46,17 +46,17 @@ static uint16_t UsbdBulkMps(const UsbdBulkDev_t *pBulk)
 	return UsbCtrlrHighSpeed(pBulk->DevNo) ? pBulk->HsMps : pBulk->FsMps;
 }
 
-static bool UsbdBulkOpenEndpoint(UsbdBulkDev_t *pBulk, uint8_t EpAddr,
+static bool UsbdBulkOpenEndpoint(UsbdBulkDev_t *pBulk, bool bIn,
 								 uint16_t MaxPacketSize)
 {
-	return UsbCtrlrEpOpenData(pBulk->DevNo, EpAddr,
+	return UsbCtrlrEpOpenData(pBulk->DevNo, pBulk->EpNo, bIn,
 		USB_ENDPATT_TRANS_BULK, MaxPacketSize);
 }
 
 static void UsbdBulkCloseEndpoints(UsbdBulkDev_t *pBulk)
 {
-	UsbCtrlrEpClose(pBulk->DevNo, USB_ENDPADDR_DIROUT(pBulk->EpNo));
-	UsbCtrlrEpClose(pBulk->DevNo, USB_ENDPADDR_DIRIN(pBulk->EpNo));
+	UsbCtrlrEpClose(pBulk->DevNo, pBulk->EpNo, false);
+	UsbCtrlrEpClose(pBulk->DevNo, pBulk->EpNo, true);
 }
 
 static bool UsbdBulkConfig(UsbdBulkDev_t *pBulk, uint8_t Configuration)
@@ -82,8 +82,8 @@ static bool UsbdBulkConfig(UsbdBulkDev_t *pBulk, uint8_t Configuration)
 		return false;
 	}
 
-	if (!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIRIN(pBulk->EpNo), mps) ||
-		!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIROUT(pBulk->EpNo), mps))
+	if (!UsbdBulkOpenEndpoint(pBulk, true, mps) ||
+		!UsbdBulkOpenEndpoint(pBulk, false, mps))
 	{
 		UsbdBulkCloseEndpoints(pBulk);
 		UsbIntrfUnconfigure(pBulk->pData);

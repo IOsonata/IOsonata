@@ -203,7 +203,7 @@ typedef struct __Usb_Ctrlr_Evt {
  * delivers DRDY so the handler can retry pending work and restore the buffer.
  * XFER_CMPL reports success; failure and cancellation use their own events.
  */
-typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
+typedef void (*UsbCtrlrEpHandler_t)(UsbCtrlrEvtType_t Event,
 									uint16_t Length, void *pContext);
 
 /// What the generic layer hands the port at UsbCtrlrInit.
@@ -233,10 +233,11 @@ void UsbCtrlrRemoteWakeup(int DevNo);
 void UsbCtrlrSofEnable(int DevNo, bool Enable);
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
-bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type, uint16_t MaxPacketSize);
-void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
+bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
+						 uint16_t MaxPacketSize);
+void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn);
 void UsbCtrlrEpCloseAll(int DevNo);
-void UsbCtrlrEpAlloc(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
 					 bool bBlocking,
 					 UsbCtrlrEpHandler_t Handler, void *pContext);
 // EpNum is an endpoint number: device IN, host OUT. The controller schedules RX.
@@ -247,8 +248,8 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 // A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
 bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr);
-void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);
-void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr);
+void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn);
+void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn);
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);
 
 #ifdef __cplusplus

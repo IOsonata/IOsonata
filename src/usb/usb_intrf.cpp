@@ -46,13 +46,12 @@ static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf);
 static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
 
 static void UsbIntrfRetryRx(uint32_t Evt, void *pContext);
-static void UsbIntrfCtrlrOutEvent(uint8_t, UsbCtrlrEvtType_t, uint16_t,
-	void *);
+static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t, uint16_t, void *);
 
 static void UsbIntrfRegisterRx(UsbDevIntrf_t *pIntrf, uint8_t *pBuffer)
 {
-	UsbCtrlrEpAlloc(pIntrf->DevNo, USB_ENDPADDR_DIROUT(pIntrf->EpNo),
-		pBuffer, pIntrf->bBlocking, UsbIntrfCtrlrOutEvent, pIntrf);
+	UsbCtrlrEpAlloc(pIntrf->DevNo, pIntrf->EpNo, false, pBuffer,
+		pIntrf->bBlocking, UsbIntrfCtrlrOutEvent, pIntrf);
 }
 
 static void UsbIntrfReleaseRx(UsbDevIntrf_t *pIntrf)
@@ -463,13 +462,12 @@ static void UsbIntrfRetryRx(uint32_t, void *pContext)
 	const uint32_t state = DisableInterrupt();
 	if (pIntrf->RxPending != 0U)
 	{
-		UsbIntrfCtrlrOutEvent(pIntrf->EpNo, USB_CTRLR_EVT_DRDY, 0U,
-			pIntrf);
+		UsbIntrfCtrlrOutEvent(USB_CTRLR_EVT_DRDY, 0U, pIntrf);
 	}
 	EnableInterrupt(state);
 }
 
-static void UsbIntrfCtrlrOutEvent(uint8_t, UsbCtrlrEvtType_t Event,
+static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t Event,
 								  uint16_t Length, void *pContext)
 {
 	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pContext);
@@ -547,7 +545,7 @@ static void UsbIntrfCtrlrOutEvent(uint8_t, UsbCtrlrEvtType_t Event,
 	}
 }
 
-static void UsbIntrfCtrlrInEvent(uint8_t, UsbCtrlrEvtType_t Event,
+static void UsbIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
 								 uint16_t Length, void *pContext)
 {
 	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pContext);
@@ -744,8 +742,8 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 			pTxSource = reinterpret_cast<uint8_t *>(pIntrf->hTxFifo);
 		}
 #endif
-		UsbCtrlrEpAlloc(pIntrf->DevNo, USB_ENDPADDR_DIRIN(pIntrf->EpNo),
-			pTxSource, pCfg->bBlocking, UsbIntrfCtrlrInEvent, pIntrf);
+		UsbCtrlrEpAlloc(pIntrf->DevNo, pIntrf->EpNo, true, pTxSource,
+			pCfg->bBlocking, UsbIntrfCtrlrInEvent, pIntrf);
 	}
 
 	DeviceIntrfEnable(&pIntrf->DevIntrf);

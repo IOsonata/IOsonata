@@ -165,17 +165,19 @@ static uint8_t BtHciUsbEventInterval(const BtHciUsbDev_t *pHci)
 		pHci->EventHsInterval : pHci->EventFsInterval;
 }
 
-static bool BtHciUsbOpenEndpoint(BtHciUsbDev_t *pHci, uint8_t EpAddr,
-								 uint8_t TransferType, uint16_t MaxPacketSize)
+static bool BtHciUsbOpenEndpoint(BtHciUsbDev_t *pHci, uint8_t EpNo,
+								 bool bIn, uint8_t TransferType,
+								 uint16_t MaxPacketSize)
 {
-	return UsbCtrlrEpOpenData(pHci->DevNo, EpAddr, TransferType, MaxPacketSize);
+	return UsbCtrlrEpOpenData(pHci->DevNo, EpNo, bIn,
+		TransferType, MaxPacketSize);
 }
 
 static void BtHciUsbCloseEndpoints(BtHciUsbDev_t *pHci)
 {
-	UsbCtrlrEpClose(pHci->DevNo, USB_ENDPADDR_DIRIN(pHci->EventEpNo));
-	UsbCtrlrEpClose(pHci->DevNo, USB_ENDPADDR_DIROUT(pHci->AclEpNo));
-	UsbCtrlrEpClose(pHci->DevNo, USB_ENDPADDR_DIRIN(pHci->AclEpNo));
+	UsbCtrlrEpClose(pHci->DevNo, pHci->EventEpNo, true);
+	UsbCtrlrEpClose(pHci->DevNo, pHci->AclEpNo, false);
+	UsbCtrlrEpClose(pHci->DevNo, pHci->AclEpNo, true);
 }
 
 static void BtHciUsbClearSco(BtHciUsbDev_t *pHci)
@@ -236,8 +238,8 @@ static void BtHciUsbClearBulkTransport(BtHciUsbDev_t *pHci)
 static bool BtHciUsbResetBulkTransport(BtHciUsbDev_t *pHci)
 {
 	const uint16_t mps = BtHciUsbAclMps(pHci);
-	UsbCtrlrEpClose(pHci->DevNo, USB_ENDPADDR_DIROUT(pHci->AclEpNo));
-	UsbCtrlrEpClose(pHci->DevNo, USB_ENDPADDR_DIRIN(pHci->AclEpNo));
+	UsbCtrlrEpClose(pHci->DevNo, pHci->AclEpNo, false);
+	UsbCtrlrEpClose(pHci->DevNo, pHci->AclEpNo, true);
 	UsbIntrfUnconfigure(pHci->pData);
 	BtHciUsbClearBulkTransport(pHci);
 
@@ -246,15 +248,13 @@ static bool BtHciUsbResetBulkTransport(BtHciUsbDev_t *pHci)
 		return false;
 	}
 
-	if (!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIRIN(pHci->AclEpNo),
+	if (!BtHciUsbOpenEndpoint(pHci, pHci->AclEpNo, true,
 			USB_ENDPATT_TRANS_BULK, mps) ||
-		!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIROUT(pHci->AclEpNo),
+		!BtHciUsbOpenEndpoint(pHci, pHci->AclEpNo, false,
 			USB_ENDPATT_TRANS_BULK, mps))
 	{
-		UsbCtrlrEpClose(pHci->DevNo,
-			USB_ENDPADDR_DIROUT(pHci->AclEpNo));
-		UsbCtrlrEpClose(pHci->DevNo,
-			USB_ENDPADDR_DIRIN(pHci->AclEpNo));
+		UsbCtrlrEpClose(pHci->DevNo, pHci->AclEpNo, false);
+		UsbCtrlrEpClose(pHci->DevNo, pHci->AclEpNo, true);
 		UsbIntrfUnconfigure(pHci->pData);
 		return false;
 	}
@@ -270,11 +270,11 @@ static bool BtHciUsbOpenHciAlt(BtHciUsbDev_t *pHci, uint8_t Alt)
 
 	pHci->CommandPending = false;
 	pHci->CommandLength = 0U;
-	UsbCtrlrEpClose(pHci->DevNo, USB_ENDPADDR_DIRIN(pHci->EventEpNo));
+	UsbCtrlrEpClose(pHci->DevNo, pHci->EventEpNo, true);
 	BtHciUsbClearEventTx(pHci);
 
 	if (Alt == 0U &&
-		!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIRIN(pHci->EventEpNo),
+		!BtHciUsbOpenEndpoint(pHci, pHci->EventEpNo, true,
 			USB_ENDPATT_TRANS_INT, BtHciUsbEventMps(pHci)))
 	{
 		return false;
@@ -323,11 +323,11 @@ static bool BtHciUsbConfig(BtHciUsbDev_t *pHci, uint8_t Configuration)
 		return false;
 	}
 
-	if (!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIRIN(pHci->EventEpNo),
+	if (!BtHciUsbOpenEndpoint(pHci, pHci->EventEpNo, true,
 							 USB_ENDPATT_TRANS_INT, eventMps) ||
-		!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIRIN(pHci->AclEpNo),
+		!BtHciUsbOpenEndpoint(pHci, pHci->AclEpNo, true,
 							 USB_ENDPATT_TRANS_BULK, aclMps) ||
-		!BtHciUsbOpenEndpoint(pHci, USB_ENDPADDR_DIROUT(pHci->AclEpNo),
+		!BtHciUsbOpenEndpoint(pHci, pHci->AclEpNo, false,
 							 USB_ENDPATT_TRANS_BULK, aclMps))
 	{
 		BtHciUsbUnconfigure(pHci);
@@ -521,7 +521,7 @@ static bool BtHciUsbSendEventZlp(BtHciUsbDev_t *pHci)
 		BtHciUsbEventTxTransfer(pHci), 0U);
 }
 
-static void BtHciUsbEventComplete(uint8_t, UsbCtrlrEvtType_t Event,
+static void BtHciUsbEventComplete(UsbCtrlrEvtType_t Event,
 								 uint16_t Length, void *pContext)
 {
 	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
@@ -1532,7 +1532,7 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 	{
 		return false;
 	}
-	UsbCtrlrEpAlloc(pHci->DevNo, USB_ENDPADDR_DIRIN(pHci->EventEpNo),
+	UsbCtrlrEpAlloc(pHci->DevNo, pHci->EventEpNo, true,
 		BtHciUsbEventTxTransfer(pHci), false, BtHciUsbEventComplete, pHci);
 
 	BtHciUsbInitDevIntrf(pHci);
