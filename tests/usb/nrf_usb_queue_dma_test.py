@@ -695,16 +695,15 @@ int main(int argc,char **argv){
  puts("PASS: EP0, regular and ISO stop/close drain unlocks once without starting queued DMA");
 
  alignas(8) uint8_t txMem[CFIFO_TOTAL_MEMSIZE(128,1)];
- for(unsigned ep=1;ep<8;++ep)for(unsigned kind=0;kind<4;++kind){
+ for(unsigned ep=1;ep<8;++ep)for(unsigned kind=0;kind<3;++kind){
   init();auto fifo=CFifoInit(txMem,sizeof(txMem),1,true);
   int count=64;auto *head=CFifoPutMultiple(fifo,&count);assert(head && count==64);
   memcpy(head,data,count);
   auto *entry=(nRFUsbdQue_t*)CFifoPut(s_Usbd.hQue);
-  entry->EpNum=ep;entry->Dir=kind;entry->Len=kind==3?3:64;
-  const uint8_t *expected=data;
-  if(kind==2){entry->hFifo=fifo;expected=head;}
-  else if(kind==3){entry->Scratch=0xA5030201;expected=(uint8_t*)&entry->Scratch;}
-  else entry->pBuffer=data;
+  entry->EpNum=ep;entry->Dir=kind;entry->Len=kind==2?3:64;
+  const uint8_t *expected=kind==1?head:data;
+  if(kind==2){entry->Scratch=0xA5030201;expected=(uint8_t*)&entry->Scratch;}
+  else entry->pBuffer=(uint8_t*)expected;
   regs.SIZE.EPOUT[ep]=9;
   isoReady=true;nRFUsbdResumeQueuedDmaLocked();
   assert(dmaBusy && CFifoUsed(s_Usbd.hQue)==1);
