@@ -228,19 +228,8 @@ static bool nRFUsbdFinishIsoDma(bool In)
 
 bool nRFUsbdIsoFinishDma(uint32_t DmaStatus)
 {
-	if (DmaStatus == 0x00000100U)
-	{
-		return nRFUsbdFinishIsoDma(true);
-	}
-	if (DmaStatus == 0x01000000U)
-	{
-		return nRFUsbdFinishIsoDma(false);
-	}
-	if (nRFUsbdFinishIsoDma(true))
-	{
-		return true;
-	}
-	return nRFUsbdFinishIsoDma(false);
+	return (DmaStatus != 0x01000000U && nRFUsbdFinishIsoDma(true)) ||
+		(DmaStatus != 0x00000100U && nRFUsbdFinishIsoDma(false));
 }
 
 void nRFUsbdIsoSof(void)

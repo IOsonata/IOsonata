@@ -150,7 +150,7 @@ code += function('UsbCtrlrEpOpenData').replace('UsbCtrlrEpOpenData(', 'productio
 code += function('UsbCtrlrEpSend').replace('UsbCtrlrEpSend(', 'productionEpSend(')
 code += r'''
 void nRFUsbdDmaWait(){
- if(dmaBusy){assert(nRFUsbdFinishIsoDma(activeDir!=0));nRFUsbdDmaUnlock();}
+ if(dmaBusy){assert(nRFUsbdIsoFinishDma(0U));nRFUsbdDmaUnlock();}
 }
 void nRFUsbdResumeQueuedDmaLocked(){
  const uint32_t gate=s_Usbd.Flags&
@@ -164,7 +164,7 @@ void finish(bool in){
  if(in){regs.ISOIN.AMOUNT=regs.ISOIN.MAXCNT;regs.EVENTS_ENDISOIN=1;}
  else{regs.ISOOUT.AMOUNT=regs.ISOOUT.MAXCNT;regs.EVENTS_ENDISOOUT=1;}
  const unsigned locks=dmaLocks,unlocks=dmaUnlocks;
- assert(nRFUsbdFinishIsoDma(in));assert(dmaBusy && regs.EPSTATUS.bits==0);
+ assert(nRFUsbdIsoFinishDma(regs.EPSTATUS.bits));assert(dmaBusy && regs.EPSTATUS.bits==0);
  if(!nRFUsbdIsoStart()){++regularStarts;nRFUsbdDmaUnlock();}
  assert(dmaLocks==locks && dmaUnlocks==unlocks+unsigned(!dmaBusy));
 }
@@ -202,6 +202,30 @@ void init(){
 }
 void dummy(uint32_t,void*){}
 int main(){
+ // END states and expected retirement use OUT=1, IN=2. A known DMA status
+ // selects only its direction; an unqualified drain checks IN first.
+ const struct {uint32_t status;unsigned retired[4];} completions[]={
+  {0U,{0,1,2,2}},
+  {0x00000100U,{0,0,2,2}},
+  {0x01000000U,{0,1,0,1}}
+ };
+ for(const auto &test:completions)for(unsigned ends=0;ends<4;++ends){
+  init();dmaBusy=0x82;
+  s_Usbd.Flags|=USBD_FLAG_ISO_OUT_BUSY|USBD_FLAG_ISO_IN_BUSY;
+  regs.EVENTS_ENDISOOUT=ends&1;regs.EVENTS_ENDISOIN=(ends>>1)&1;
+  regs.EPSTATUS.bits=(ends&1?0x01000000U:0U)|(ends&2?0x00000100U:0U);
+  const unsigned retired=test.retired[ends],remaining=ends&~retired;
+  assert(nRFUsbdIsoFinishDma(test.status)==(retired!=0));
+  assert(regs.EVENTS_ENDISOOUT==(remaining&1));
+  assert(regs.EVENTS_ENDISOIN==((remaining>>1)&1));
+  assert(regs.EPSTATUS.bits==((remaining&1?0x01000000U:0U)|
+   (remaining&2?0x00000100U:0U)));
+  assert(dmaBusy==0x82 && dmaLocks==0 && dmaUnlocks==0);
+  AppEvtHandlerExec();
+  assert(callbacks[0]==(retired&1) && callbacks[1]==((retired>>1)&1));
+ }
+ puts("PASS: ISO completion dispatch preserves direction, END requirement, IN priority and DMA ownership");
+
  init();unsigned ready=0;
  s_Usbd.EpReg[7][0].bBlocking=true;
  s_Usbd.EpReg[7][0].pContext=&ready;
@@ -296,7 +320,7 @@ int main(){
 
  init();frame();assert(isoStarts[1]==0); // no unsolicited IN ZLP/DMA
  assert(nRFUsbdIsoXfer(1U,9));assert(dmaBusy && isoStarts[1]==1);
- assert(!nRFUsbdFinishIsoDma(true));assert(dmaBusy); // matching END required
+ assert(!nRFUsbdIsoFinishDma(regs.EPSTATUS.bits));assert(dmaBusy); // matching END required
  finish(true);assert(callbacks[1]==0);frame();assert(isoStarts[1]==1);
  AppEvtHandlerExec();assert(callbacks[1]==1 && lengths[1]==9 && !(ISO_BUSY()&2));
  frame();assert(isoStarts[1]==1); // never retransmit previous payload
