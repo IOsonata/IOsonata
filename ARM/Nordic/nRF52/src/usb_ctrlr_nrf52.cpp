@@ -1491,7 +1491,7 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	(void)DevNo;
 	if (EpNum == NRFX_USBD_ISO_EP_NO)
 	{
-		nRFUsbGetEpReg(EpNum, 1U)->pBuffer = pBuffer;
+		s_Usbd.EpReg[EpNum - 1U][1].pBuffer = pBuffer;
 		return nRFUsbdIsoXfer(1U, Length);
 	}
 
@@ -1506,7 +1506,7 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 
 	if (pBuffer == NULL)
 	{
-		hCFifo_t hFifo = (hCFifo_t)nRFUsbGetEpReg(EpNum, 1U)->pBuffer;
+		hCFifo_t hFifo = (hCFifo_t)s_Usbd.EpReg[EpNum - 1U][1].pBuffer;
 		uint8_t *pData = CFifoPeek(hFifo);
 		const uint32_t misalign = (uint32_t)(uintptr_t)pData & 3U;
 		if (misalign != 0U)
