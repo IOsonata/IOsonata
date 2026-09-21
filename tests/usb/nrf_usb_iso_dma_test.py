@@ -77,6 +77,7 @@ struct Registers {
  uint32_t EPSTALL=0,DTOGGLE=0;
  struct {uint32_t ISOOUT=0,EPOUT[8]={};} SIZE;
 } regs;
+using NRF_USBD_Type = Registers;
 auto *NRF_USBD=&regs;
 struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;uint16_t MaxPacketSize;bool bBlocking;};
 typedef Endpoint USBD_ISOIN_Type;

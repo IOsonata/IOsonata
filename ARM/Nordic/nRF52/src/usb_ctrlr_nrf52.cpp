@@ -488,7 +488,9 @@ void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 		USBD_INTEN_ENDEPOUT0_Pos + EpNum;
 	volatile uint32_t *pEnd = (volatile uint32_t *)(
 		(uintptr_t)&NRF_USBD->EVENTS_USBRESET + endBit * sizeof(uint32_t));
-	volatile uint32_t *pEnable = In ? &NRF_USBD->EPINEN : &NRF_USBD->EPOUTEN;
+	volatile uint32_t *pEnable = (volatile uint32_t *)
+		((uintptr_t)&NRF_USBD->EPINEN + (!In) *
+		 (offsetof(NRF_USBD_Type, EPOUTEN) - offsetof(NRF_USBD_Type, EPINEN)));
 	const uint32_t msk = 1UL << EpNum;
 
 	if (Enable)
@@ -1392,19 +1394,16 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 {
 	(void)DevNo;
 	(void)BuffLen;
-	char *p = pBuff;
-
-	for (uint8_t word = 0U; word < 2U; ++word)
+	uint32_t id = 0U;
+	for (unsigned i = 0U; i < 16U; ++i)
 	{
-		uint32_t id = nrf_ficr_deviceid_get(NRF_FICR, word);
-		for (uint8_t digitNo = 0; digitNo < 8U; ++digitNo)
-		{
-			const unsigned digit = id >> 28U;
-			id <<= 4U;
-			*p++ = (char)(digit + (digit < 10U ? '0' : 'A' - 10));
-		}
+		if ((i & 7U) == 0U)
+			id = nrf_ficr_deviceid_get(NRF_FICR, i >> 3U);
+		const unsigned digit = id >> 28U;
+		id <<= 4U;
+		pBuff[i] = (char)(digit + (digit < 10U ? '0' : 'A' - 10));
 	}
-	*p = '\0';
+	pBuff[16] = '\0';
 	return 16U;
 }
 
@@ -1580,10 +1579,11 @@ bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
 bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 						 uint16_t Length)
 {
+	(void)DevNo;
 	if (EpNum == NRFX_USBD_ISO_EP_NO)
 	{
 		s_Usbd.EpReg[EpNum - 1U][1].pBuffer = pBuffer;
-		return UsbCtrlrEpXfer(DevNo, USB_ENDPADDR_DIRIN(EpNum), Length);
+		return nRFUsbdIsoXfer(USB_ENDPADDR_DIRIN(EpNum), Length);
 	}
 
 	const uint32_t state = DisableInterrupt();
@@ -1594,7 +1594,6 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		return false;
 	}
 	pQue->EpNum = EpNum;
-	pQue->Len = Length;
 
 	if (pBuffer == NULL)
 	{
@@ -1604,11 +1603,11 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		if (misalign != 0U)
 		{
 			const uint32_t repair = 4U - misalign;
-			if (pQue->Len > repair)
+			if (Length > repair)
 			{
-				pQue->Len = repair;
+				Length = repair;
 			}
-			memcpy(&pQue->Scratch, pData, pQue->Len);
+			memcpy(&pQue->Scratch, pData, Length);
 			pQue->Dir = NRFX_USBD_QUE_IN_SCRATCH;
 		}
 		else
@@ -1622,6 +1621,7 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
 		pQue->pBuffer = pBuffer;
 	}
+	pQue->Len = Length;
 	nRFUsbdResumeQueuedDmaLocked();
 	EnableInterrupt(state);
 	return true;
