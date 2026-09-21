@@ -655,29 +655,24 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 	uint16_t len = pQue->Len;
 
-	volatile USBD_EPIN_Type *pEp;
-	volatile uint32_t *pTask;
-	if (isIn)
-	{
-		pEp = &NRF_USBD->EPIN[epNum];
-		pTask = &NRF_USBD->TASKS_STARTEPIN[epNum];
-	}
-	else
+	static_assert(offsetof(USBD_EPOUT_Type, PTR) ==
+		offsetof(USBD_EPIN_Type, PTR) &&
+		offsetof(USBD_EPOUT_Type, MAXCNT) ==
+		offsetof(USBD_EPIN_Type, MAXCNT), "EPIN/EPOUT layout");
+	// Both directions use the same layout, at different register-bank offsets.
+	uintptr_t epReg = (uintptr_t)&NRF_USBD->EPIN[epNum];
+	uintptr_t taskReg = (uintptr_t)&NRF_USBD->TASKS_STARTEPIN[epNum];
+	if (!isIn)
 	{
 		const uint16_t received = (uint16_t)NRF_USBD->SIZE.EPOUT[epNum];
 		if (received < len)
-		{
 			len = received;
-		}
-
-		static_assert(offsetof(USBD_EPOUT_Type, PTR) ==
-			offsetof(USBD_EPIN_Type, PTR) &&
-			offsetof(USBD_EPOUT_Type, MAXCNT) ==
-			offsetof(USBD_EPIN_Type, MAXCNT), "EPIN/EPOUT layout");
-		pEp = (volatile USBD_EPIN_Type *)&NRF_USBD->EPOUT[epNum];
-		pTask = &NRF_USBD->TASKS_STARTEPOUT[epNum];
+		epReg += offsetof(NRF_USBD_Type, EPOUT) - offsetof(NRF_USBD_Type, EPIN);
+		taskReg += offsetof(NRF_USBD_Type, TASKS_STARTEPOUT) -
+			offsetof(NRF_USBD_Type, TASKS_STARTEPIN);
 	}
-
+	volatile USBD_EPIN_Type *pEp = (volatile USBD_EPIN_Type *)epReg;
+	volatile uint32_t *pTask = (volatile uint32_t *)taskReg;
 	pEp->PTR = (uint32_t)(uintptr_t)pBuffer;
 	pEp->MAXCNT = len;
 	*pTask = 1U;
@@ -1492,7 +1487,6 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type,
 						 uint16_t MaxPacketSize)
 {
-	(void)DevNo;
 	(void)Type;
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	const bool in = USB_ENDPADDR_IS_IN(EpAddr);
@@ -1505,13 +1499,7 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type,
 	nRFUsbGetEpReg(epNum, in)->MaxPacketSize = MaxPacketSize;
 	nRFUsbdEpHwEnable(epNum, in, true);
 
-	if (!in)
-		NRF_USBD->SIZE.EPOUT[epNum] = 0U;
-	NRF_USBD->EPSTALL =
-		(USBD_EPSTALL_STALL_UnStall << USBD_EPSTALL_STALL_Pos) | EpAddr;
-	NRF_USBD->DTOGGLE =
-		(USBD_DTOGGLE_VALUE_Data0 << USBD_DTOGGLE_VALUE_Pos) | EpAddr;
-	UsbdSync();
+	UsbCtrlrEpClearStall(DevNo, EpAddr);
 	return true;
 }
 

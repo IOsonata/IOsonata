@@ -32,6 +32,7 @@ preamble = r'''
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <cstdio>
 #include "usb/usb.h"
 #include "app_evt_handler.h"
@@ -44,7 +45,9 @@ constexpr uint32_t USBD_INTENCLR_SOF_Msk=1, USBD_INTEN_SOF_Msk=1;
 constexpr unsigned USBD_INTEN_ENDISOIN_Pos=11;
 constexpr uint32_t USBD_INTEN_ENDISOIN_Msk=1U<<11, USBD_INTEN_ENDISOOUT_Msk=1U<<20;
 constexpr unsigned USBD_INTEN_ENDEPIN0_Pos=2, USBD_INTEN_ENDEPOUT0_Pos=12;
-constexpr unsigned NRFX_USBD_EP_COUNT=9;
+constexpr unsigned NRFX_USBD_EP_COUNT=9, NRFX_USBD_DATA_EP_COUNT=8;
+constexpr unsigned USBD_EPSTALL_STALL_UnStall=0, USBD_EPSTALL_STALL_Pos=8;
+constexpr unsigned USBD_DTOGGLE_VALUE_Data0=1, USBD_DTOGGLE_VALUE_Pos=8;
 constexpr unsigned NRFX_USBD_MAX_PACKET_SIZE=64;
 constexpr unsigned NRFX_USBD_EASYDMA_BUSY_REG_BUSY=0x82, NRFX_USBD_EASYDMA_BUSY_REG_CLEAR=0;
 uint32_t dmaBusy=0;
@@ -70,6 +73,7 @@ struct Registers {
  uint32_t TASKS_STARTISOIN=0,TASKS_STARTISOOUT=0;
  Endpoint ISOIN,ISOOUT;W1C EPSTATUS,EPDATASTATUS;
  uint32_t EPINEN=0,EPOUTEN=0,INTENSET=0,INTENCLR=0,FRAMECNTR=0;
+ uint32_t EPSTALL=0,DTOGGLE=0;
  struct {uint32_t ISOOUT=0,EPOUT[8]={};} SIZE;
 } regs;
 auto *NRF_USBD=&regs;
@@ -129,7 +133,7 @@ names = ['UsbdSync',
          'nRFUsbdRetryIsoComplete','nRFUsbdFinishIsoDma',
          'nRFUsbdIsoFinishDma','nRFUsbdIsoSof',
          'nRFUsbdIsoEpClose','UsbCtrlrEpClose','nRFUsbdHandleSof',
-         'UsbCtrlrEpXfer']
+         'UsbCtrlrEpXfer','UsbCtrlrEpClearStall']
 import re as _re
 flag_enum = _re.search(r'enum\s*\{[^}]*USBD_FLAG_ISO_IN_CMPL[^}]*\};', src)
 assert flag_enum, 'USBD_FLAG enum not found in driver source'
@@ -141,6 +145,7 @@ assert queue_enum and queue_type
 code = code.replace('QUEUE_TYPES', queue_enum.group(0) + '\n#pragma pack(push,4)\n' +
                     queue_type.group(0) + '\n#pragma pack(pop)\n')
 code += '\n'.join(function(n) for n in names)
+code += function('UsbCtrlrEpOpenData').replace('UsbCtrlrEpOpenData(', 'productionEpOpenData(')
 # Exercise the production entry point instead of the hostport inline adapter.
 code += function('UsbCtrlrEpInXfer').replace('UsbCtrlrEpInXfer(', 'productionEpInXfer(')
 code += r'''
@@ -324,6 +329,31 @@ int main(){
  s_Usbd.Flags&=~(uint32_t)USBD_FLAG_SUSPENDED;frame();assert(dmaBusy);finish(true);AppEvtHandlerExec();
  assert(callbacks[1]==1);
  puts("PASS: suspended submission waits until resume");
+
+ for(unsigned ep=1;ep<8;++ep)for(unsigned dir=0;dir<2;++dir)
+ for(unsigned mps:{1U,8U,64U}){
+  init();const uint8_t address=ep|(dir?0x80:0);
+  regs.EPINEN=regs.EPOUTEN=1;
+  regs.EVENTS_ENDEPIN[ep]=regs.EVENTS_ENDEPOUT[ep]=1;
+  regs.SIZE.EPOUT[ep]=64;regs.EPSTALL=address|0x100;
+  assert(productionEpOpenData(0,address,USB_ENDPATT_TRANS_BULK,mps));
+  assert(s_Usbd.EpReg[ep-1][dir].MaxPacketSize==mps);
+  assert(regs.EPINEN==(1U|(dir?(1U<<ep):0U)));
+  assert(regs.EPOUTEN==(1U|(!dir?(1U<<ep):0U)));
+  assert(regs.EVENTS_ENDEPIN[ep]==unsigned(!dir));
+  assert(regs.EVENTS_ENDEPOUT[ep]==dir);
+  assert(regs.EPSTALL==address && regs.DTOGGLE==(address|0x100U));
+  assert(regs.SIZE.EPOUT[ep]==(dir?64U:0U));
+ }
+ for(uint8_t ep:{0U,8U,0x80U,0x88U}){
+  init();assert(!productionEpOpenData(0,ep,USB_ENDPATT_TRANS_BULK,64));
+  assert(!regs.EPINEN && !regs.EPOUTEN && !regs.EPSTALL && !regs.DTOGGLE);
+ }
+ for(unsigned mps:{0U,65U}){
+  init();assert(!productionEpOpenData(0,1,USB_ENDPATT_TRANS_BULK,mps));
+  assert(!regs.EPINEN && !regs.EPOUTEN && !regs.EPSTALL && !regs.DTOGGLE);
+ }
+ puts("PASS: regular open clears halt/data toggle, arms OUT and preserves the other direction");
 
  for(unsigned ep=1;ep<8;++ep)for(unsigned dir=0;dir<2;++dir)for(unsigned masked=0;masked<2;++masked){
   init();irqMask=masked;regs.EPINEN=regs.EPOUTEN=0x1FF;
