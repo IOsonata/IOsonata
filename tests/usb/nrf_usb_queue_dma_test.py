@@ -210,7 +210,7 @@ code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
     'nRFUsbdResetState', 'nRFUsbdBusReset', 'nRFUsbdAbortEp0',
     'nRFUsbdProcessEP0Setup', 'nRFUsbdQueueEp0Setup', 'USBD_IRQHandler'])
 code += re.search(r'static constexpr uint16_t USB_INTRF_RX_DRDY[^;]+;', intrf_source).group(0)
-code += '\nvoid UsbIntrfCtrlrOutEvent(uint8_t,UsbCtrlrEvtType_t,uint16_t,void*);\n'
+code += '\nvoid UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t,uint16_t,void*);\n'
 code += '\n'.join(function(name, intrf_source) for name in [
     'UsbIntrfSetTxIdle', 'UsbIntrfTakeTx', 'UsbIntrfDirectClear',
     'UsbIntrfTxFailure', 'UsbIntrfEpSendPktMode', 'UsbIntrfTxPackets',
@@ -269,11 +269,10 @@ void init(){
 // Cortex-M exception entry does not set PRIMASK. Queue publication must use
 // its own critical section even when the caller is the controller ISR.
 void interrupt(){const auto state=irqMask;USBD_IRQHandler();assert(irqMask==state);}
-void outComplete(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t len,
- void *context){
+void outComplete(UsbCtrlrEvtType_t event,uint16_t len,void *context){
  assert(event==USB_CTRLR_EVT_XFER_CMPL);
  assert(dmaBusy && !regs.EPSTATUS.bits); // Retain ownership while handling the buffer.
- UsbIntrfCtrlrOutEvent(ep,event,len,context);
+ UsbIntrfCtrlrOutEvent(event,len,context);
 }
 void retire(unsigned ep,bool in){
  const unsigned bit=ep+(in?0:16);
@@ -285,9 +284,8 @@ void retire(unsigned ep,bool in){
  nRFUsbdDmaUnlock();
 }
 unsigned outSubmissions;
-void submitFromOut(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
- void *context){
- assert(ep==1 && event==USB_CTRLR_EVT_XFER_CMPL && length==9);
+void submitFromOut(UsbCtrlrEvtType_t event,uint16_t length,void *context){
+ assert(event==USB_CTRLR_EVT_XFER_CMPL && length==9);
  assert(dmaBusy && !regs.EPSTATUS.bits);
  assert(UsbCtrlrEpSend(0,2,(uint8_t*)context,9));
  assert(!regs.TASKS_STARTEPIN[2] && !dmaLocks && !dmaUnlocks);
@@ -296,9 +294,8 @@ void submitFromOut(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
 alignas(8) uint8_t setupResponse[18],setupOutBuffer[64];
 bool interruptSetup;
 unsigned setupOutCompletions;
-void setupOutComplete(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
- void*){
- assert(ep==1 && event==USB_CTRLR_EVT_XFER_CMPL && length==9);
+void setupOutComplete(UsbCtrlrEvtType_t event,uint16_t length,void*){
+ assert(event==USB_CTRLR_EVT_XFER_CMPL && length==9);
  ++setupOutCompletions;
 }
 void setupResponseHandler(const UsbCtrlrEvt_t *event){
@@ -592,7 +589,7 @@ int main(int argc,char **argv){
  for(bool preempt:{false,true}){
   init();interruptSetup=preempt;setupOutCompletions=0;
   setupHandler=setupResponseHandler;
-  UsbCtrlrEpAlloc(0,1,setupOutBuffer,true,setupOutComplete,nullptr);
+  UsbCtrlrEpAlloc(0,1,false,setupOutBuffer,true,setupOutComplete,nullptr);
   s_Usbd.EpReg[0][0].MaxPacketSize=64;
   regs.BMREQUESTTYPE=0x80;regs.BREQUEST=6;regs.WLENGTHL=18;
   regs.EVENTS_EP0SETUP=1;interrupt();AppEvtHandlerExec();
@@ -666,7 +663,7 @@ int main(int argc,char **argv){
  // A callback can submit another transfer while completion owns the lock.
  // Submission queues it; the completion switch starts it after the callback.
  init();outSubmissions=0;
- UsbCtrlrEpAlloc(0,1,data,false,submitFromOut,data+64);
+ UsbCtrlrEpAlloc(0,1,false,data,false,submitFromOut,data+64);
  regs.SIZE.EPOUT[1]=9;assert(receiveOut(1));
  assert(dmaLocks==1 && !dmaUnlocks);
  regs.EPSTATUS.bits=1U<<17;regs.EVENTS_ENDEPOUT[1]=1;regs.EPOUT[1].AMOUNT=9;
@@ -684,7 +681,7 @@ int main(int argc,char **argv){
   if(status==1U)assert(UsbCtrlrEp0Send(0,data,9)==9);
   else if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
   else if(status==0x20000U){
-   UsbCtrlrEpAlloc(0,1,data,false,nullptr,nullptr);
+   UsbCtrlrEpAlloc(0,1,false,data,false,nullptr,nullptr);
    assert(receiveOut(1));
   }else dmaBusy=0x82;
   assert(UsbCtrlrEpSend(0,2,data+64,9));
@@ -933,7 +930,7 @@ int main(int argc,char **argv){
   intrf.hRxFifo=CFifoInit(rxMem,sizeof(rxMem),USB_INTRF_PKT_BLKSIZE(64),blocking);
   intrf.pRxBuffer=direct->Data;
   if(mode==USB_INTRF_MODE_DIRECT)intrf.pRxDirectBuffer=direct;
-  UsbCtrlrEpAlloc(0,ep,intrf.pRxBuffer,blocking,outComplete,&intrf);
+  UsbCtrlrEpAlloc(0,ep,false,intrf.pRxBuffer,blocking,outComplete,&intrf);
   s_Usbd.EpReg[ep-1][0].MaxPacketSize=64;
   const unsigned received[]={0,1,9,63,64};
   auto receive=[&](unsigned len,unsigned value){
@@ -1008,7 +1005,7 @@ int main(int argc,char **argv){
   intrf.DevIntrf.pDevData=&intrf;intrf.EpNo=ep;intrf.Mps=64;
   intrf.Mode=mode;intrf.bBlocking=true;intrf.pRxBuffer=rx;
   intrf.hRxFifo=CFifoInit(rxMem,sizeof(rxMem),USB_INTRF_PKT_BLKSIZE(64),true);
-  UsbCtrlrEpAlloc(0,ep,rx,true,outComplete,&intrf);
+  UsbCtrlrEpAlloc(0,ep,false,rx,true,outComplete,&intrf);
   s_Usbd.EpReg[ep-1][0].MaxPacketSize=64;
   const uint32_t outBit=1U<<(ep+16);
   auto finish=[&](unsigned len,unsigned value){
@@ -1044,9 +1041,9 @@ int main(int argc,char **argv){
   for(unsigned pass=0;pass<APPEVT_HANDLER_QUE_DEFAULT_SIZE;++pass)UsbCtrlrProcess(0);
   // Unrelated OUT and IN endpoints continue while either EP1 or EP7 is held.
   unsigned otherComplete=0;
-  UsbCtrlrEpAlloc(0,2,other,true,
-   [](uint8_t ep,UsbCtrlrEvtType_t evt,uint16_t len,void *ctx){
-    assert(ep==2 && evt==USB_CTRLR_EVT_XFER_CMPL && len==1);++*(unsigned*)ctx;
+  UsbCtrlrEpAlloc(0,2,false,other,true,
+   [](UsbCtrlrEvtType_t evt,uint16_t len,void *ctx){
+    assert(evt==USB_CTRLR_EVT_XFER_CMPL && len==1);++*(unsigned*)ctx;
    },&otherComplete);
   s_Usbd.EpReg[1][0].MaxPacketSize=64;
   regs.SIZE.EPOUT[2]=1;regs.EPDATASTATUS.bits|=1U<<18;regs.EVENTS_EPDATA=1;
@@ -1055,9 +1052,9 @@ int main(int argc,char **argv){
   regs.EPOUT[2].AMOUNT=1;regs.EPSTATUS.bits=1U<<18;regs.EVENTS_ENDEPOUT[2]=1;
   interrupt();assert(otherComplete==1);
   unsigned inComplete=0;
-  UsbCtrlrEpAlloc(0,0x83,data,true,
-   [](uint8_t ep,UsbCtrlrEvtType_t evt,uint16_t len,void *ctx){
-    assert(ep==0x83 && evt==USB_CTRLR_EVT_XFER_CMPL && len==7);
+  UsbCtrlrEpAlloc(0,3,true,data,true,
+   [](UsbCtrlrEvtType_t evt,uint16_t len,void *ctx){
+    assert(evt==USB_CTRLR_EVT_XFER_CMPL && len==7);
     assert(!irqMask);++*(unsigned*)ctx;
    },&inComplete);
   assert(UsbCtrlrEpSend(0,3,data,7));retire(3,true);
@@ -1129,7 +1126,7 @@ int main(int argc,char **argv){
   intrf.DevIntrf.pDevData=&intrf;intrf.EpNo=1;intrf.Mps=64;
   intrf.Mode=USB_INTRF_MODE_BYTE;intrf.bBlocking=true;intrf.pRxBuffer=rx;
   intrf.hRxFifo=CFifoInit(rxMem,sizeof(rxMem),USB_INTRF_PKT_BLKSIZE(64),true);
-  UsbCtrlrEpAlloc(0,1,rx,true,outComplete,&intrf);
+  UsbCtrlrEpAlloc(0,1,false,rx,true,outComplete,&intrf);
   s_Usbd.EpReg[0][0].MaxPacketSize=64;
   for(unsigned i=0;i<4;++i){
    auto *p=(UsbPkt_t*)CFifoPut(intrf.hRxFifo);
@@ -1181,10 +1178,9 @@ int main(int argc,char **argv){
   auto *head=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
   alignas(4) uint8_t out[64]={};
   unsigned completions=0;
-  UsbCtrlrEpAlloc(0,1,out,blocking,
-   [](uint8_t ep,UsbCtrlrEvtType_t event,uint16_t,
-      void *context){
-    assert(ep==1 && event==USB_CTRLR_EVT_XFER_CMPL);
+  UsbCtrlrEpAlloc(0,1,false,out,blocking,
+   [](UsbCtrlrEvtType_t event,uint16_t,void *context){
+    assert(event==USB_CTRLR_EVT_XFER_CMPL);
     ++*(unsigned*)context;
    },&completions);
   s_Usbd.EpReg[0][0].MaxPacketSize=64;

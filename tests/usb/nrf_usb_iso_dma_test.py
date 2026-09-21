@@ -172,10 +172,9 @@ void frame(uint16_t length=0,bool zero=false){
  ++regs.FRAMECNTR;regs.SIZE.ISOOUT=zero?USBD_SIZE_ISOOUT_ZERO_Msk:length;
  nRFUsbdHandleSof();
 }
-void callback(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,void*){
+void callback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
  assert(event==USB_CTRLR_EVT_XFER_CMPL && !irqMask);
- assert(USB_ENDPADDR_NUM(ep)==8);
- unsigned dir=USB_ENDPADDR_IS_IN(ep)?1:0;++callbacks[dir];lengths[dir]=length;
+ unsigned dir=(unsigned)(uintptr_t)context;++callbacks[dir];lengths[dir]=length;
  if(!dir){
   assert(ISO_BUSY()&1);uint8_t copy[512];memcpy(copy,outBuffer,length);
   if(interruptCopy){
@@ -195,8 +194,8 @@ void init(){
  dmaBusy=0;dmaLocks=dmaUnlocks=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
  ++s_Usbd.IsoGeneration[0];++s_Usbd.IsoGeneration[1];
- s_Usbd.EpReg[7][0]={outBuffer,callback,nullptr,512,false};
- s_Usbd.EpReg[7][1]={inBuffer,callback,nullptr,512,false};
+ s_Usbd.EpReg[7][0]={outBuffer,callback,(void*)0,512,false};
+ s_Usbd.EpReg[7][1]={inBuffer,callback,(void*)1,512,false};
  memset(inBuffer,0xA5,sizeof(inBuffer));memset(hostOut,0x5A,sizeof(hostOut));
  assert(AppEvtHandlerInit(nullptr,0));assert(AppEvtHandlerIdleRegister(nRFUsbdRetryIsoComplete));
 }
@@ -229,9 +228,9 @@ int main(){
  init();unsigned ready=0;
  s_Usbd.EpReg[7][0].bBlocking=true;
  s_Usbd.EpReg[7][0].pContext=&ready;
- s_Usbd.EpReg[7][0].Handler=[](uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
+ s_Usbd.EpReg[7][0].Handler=[](UsbCtrlrEvtType_t event,uint16_t length,
   void *context){
-  assert(ep==8 && event==USB_CTRLR_EVT_DRDY && length==0);
+  assert(event==USB_CTRLR_EVT_DRDY && length==0);
   ++*(unsigned*)context;
  };
  frame(9);
@@ -240,9 +239,9 @@ int main(){
  init();ready=0;
  s_Usbd.EpReg[7][0].bBlocking=true;
  s_Usbd.EpReg[7][0].pContext=&ready;
- s_Usbd.EpReg[7][0].Handler=[](uint8_t ep,UsbCtrlrEvtType_t event,uint16_t,
+ s_Usbd.EpReg[7][0].Handler=[](UsbCtrlrEvtType_t event,uint16_t,
   void *context){
-  assert(ep==8 && event==USB_CTRLR_EVT_DRDY);
+  assert(event==USB_CTRLR_EVT_DRDY);
   s_Usbd.EpReg[7][0].pBuffer=++*(unsigned*)context==1?nullptr:outBuffer;
  };
  frame(9);assert(ready==1 && !dmaBusy && !isoStarts[0]);
@@ -346,7 +345,7 @@ int main(){
  AppEvtHandlerExec();assert(callbacks[0]==1 && ISO_BUSY()==0);
  puts("PASS: full real AppEvt queue retains completion, retries, and does not retain EasyDMA");
 
- init();frame(17);finish(false);UsbCtrlrEpClose(0,8);
+ init();frame(17);finish(false);UsbCtrlrEpClose(0,8,false);
  s_Usbd.Flags|=USBD_FLAG_ISO_OUT_OPEN;s_Usbd.EpReg[7][0].MaxPacketSize=9;frame(9);finish(false);
  AppEvtHandlerExec();assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
  puts("PASS: close/reopen discards old callback without releasing the new transfer");
@@ -370,7 +369,7 @@ int main(){
   regs.EPINEN=regs.EPOUTEN=1;
   regs.EVENTS_ENDEPIN[ep]=regs.EVENTS_ENDEPOUT[ep]=1;
   regs.SIZE.EPOUT[ep]=64;regs.EPSTALL=address|0x100;
-  assert(productionEpOpenData(0,address,USB_ENDPATT_TRANS_BULK,mps));
+  assert(productionEpOpenData(0,ep,dir,USB_ENDPATT_TRANS_BULK,mps));
   assert(s_Usbd.EpReg[ep-1][dir].MaxPacketSize==mps);
   assert(regs.EPINEN==(1U|(dir?(1U<<ep):0U)));
   assert(regs.EPOUTEN==(1U|(!dir?(1U<<ep):0U)));
@@ -379,12 +378,12 @@ int main(){
   assert(regs.EPSTALL==address && regs.DTOGGLE==(address|0x100U));
   assert(regs.SIZE.EPOUT[ep]==(dir?64U:0U));
  }
- for(uint8_t ep:{0U,8U,0x80U,0x88U}){
-  init();assert(!productionEpOpenData(0,ep,USB_ENDPATT_TRANS_BULK,64));
+ for(uint8_t ep:{0U,8U})for(bool in:{false,true}){
+  init();assert(!productionEpOpenData(0,ep,in,USB_ENDPATT_TRANS_BULK,64));
   assert(!regs.EPINEN && !regs.EPOUTEN && !regs.EPSTALL && !regs.DTOGGLE);
  }
  for(unsigned mps:{0U,65U}){
-  init();assert(!productionEpOpenData(0,1,USB_ENDPATT_TRANS_BULK,mps));
+  init();assert(!productionEpOpenData(0,1,false,USB_ENDPATT_TRANS_BULK,mps));
   assert(!regs.EPINEN && !regs.EPOUTEN && !regs.EPSTALL && !regs.DTOGGLE);
  }
  puts("PASS: regular open clears halt/data toggle, arms OUT and preserves the other direction");
@@ -396,7 +395,7 @@ int main(){
    regs.EVENTS_ENDEPIN[n]=regs.EVENTS_ENDEPOUT[n]=1;
    regs.SIZE.EPOUT[n]=64;s_Usbd.EpReg[n][0].MaxPacketSize=s_Usbd.EpReg[n][1].MaxPacketSize=64;
   }
-  UsbCtrlrEpClose(0,ep|(dir?0x80:0));
+  UsbCtrlrEpClose(0,ep,dir);
   assert(irqMask==masked && ISO_OPEN()==3 && ISO_BUSY()==0);
   assert(regs.EPINEN==(dir?(0x1FFU&~(1U<<ep)):0x1FFU));
   assert(regs.EPOUTEN==(!dir?(0x1FFU&~(1U<<ep)):0x1FFU));

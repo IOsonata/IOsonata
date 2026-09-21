@@ -44,7 +44,8 @@ nRFUsbEpReg_t s_EpReg[16][2];
 nRF54UsbdCtrlr_t s_Ctrlr;
 uint8_t s_Ep0Bounce[64],buffer[1024],other[1024];
 unsigned irqMask,completions,ready;
-bool hold,releaseBuffer,closeOnComplete;
+bool hold,releaseBuffer,closeOnComplete,expectedIn;
+uint8_t expectedEp;
 uint16_t expectedLength;
 uint32_t DisableInterrupt(){auto old=irqMask;irqMask=1;return old;}
 void EnableInterrupt(uint32_t old){irqMask=old;}
@@ -64,27 +65,30 @@ for name in ['nRFUsbValidDevNo', 'nRFUsbEpDir', 'nRFUsbGetEpReg',
              'UsbCtrlrProcess']:
     code += function(name) + '\n'
 code += r'''
-void callback(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,void *context){
+void callback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
  assert(context==buffer);
+ const uint8_t ep=expectedEp;
+ const uint8_t epAddr=ep|(expectedIn?0x80:0);
  if(event==USB_CTRLR_EVT_DRDY){
-  assert(ep<16 && irqMask && !length);++ready;
+  assert(!expectedIn && ep<16 && irqMask && !length);++ready;
   if(releaseBuffer)s_EpReg[ep][0].pBuffer=buffer;
   return;
  }
  assert(event==USB_CTRLR_EVT_XFER_CMPL && length==expectedLength);
- assert(!nRF54UsbdGetXfer(ep)->Started);++completions;
+ assert(!nRF54UsbdGetXfer(epAddr)->Started);++completions;
  if(hold)s_EpReg[ep][0].pBuffer=nullptr;
- if(closeOnComplete)nRFUsbRegEpClose(ep);
+ if(closeOnComplete)nRFUsbRegEpClose(epAddr);
 }
 void init(){
  powered=true;memset(regs,0,sizeof(regs));memset(s_EpReg,0,sizeof(s_EpReg));
  s_Ctrlr={};s_Ctrlr.Started=true;
  irqMask=completions=ready=0;hold=releaseBuffer=closeOnComplete=false;
+ expectedEp=0;expectedIn=false;
 }
 int main(){
  for(unsigned ep=1;ep<16;++ep)for(unsigned amount:{0U,1U,63U,64U}){
-  init();expectedLength=amount;
-  UsbCtrlrEpAlloc(0,ep,buffer,true,callback,buffer);
+  init();expectedEp=ep;expectedIn=false;expectedLength=amount;
+  UsbCtrlrEpAlloc(0,ep,false,buffer,true,callback,buffer);
   assert(nRFUsbRegEpOpen(ep,USB_ENDPATT_TRANS_BULK,64));
   assert(s_Ctrlr.Xfer[ep][0].Started && s_Ctrlr.Xfer[ep][0].TotalLen==64);
   assert(NRF54_USBD_DOEPDMA(ep)==uint32_t(uintptr_t(buffer)));
@@ -108,8 +112,8 @@ int main(){
   UsbCtrlrProcess(0);assert(!s_Ctrlr.Xfer[ep][0].Started && ready==3);
  }
  for(unsigned ep=1;ep<16;++ep)for(unsigned amount:{0U,1U,64U}){
-  init();expectedLength=amount;
-  UsbCtrlrEpAlloc(0,ep|0x80,other,false,callback,buffer);
+  init();expectedEp=ep;expectedIn=true;expectedLength=amount;
+  UsbCtrlrEpAlloc(0,ep,true,other,false,callback,buffer);
   assert(nRFUsbRegEpOpen(ep|0x80,USB_ENDPATT_TRANS_BULK,64));
   assert(UsbCtrlrEpSend(0,ep,buffer,amount));
   assert(NRF54_USBD_DIEPDMA(ep)==uint32_t(uintptr_t(buffer)));
