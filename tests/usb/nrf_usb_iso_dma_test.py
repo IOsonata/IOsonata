@@ -265,8 +265,7 @@ int main(){
    int skip=offset;if(skip)assert(CFifoGetMultiple(fifo,&skip)==data);
    data=CFifoPeek(fifo);assert((uintptr_t(data)&3U)==offset);
    const int used=CFifoUsed(fifo);
-   s_Usbd.EpReg[ep-1][1].pBuffer=(uint8_t*)fifo;
-   assert(productionEpSend(0,ep,nullptr,length));
+   assert(productionEpSend(0,ep,data,length));
    assert(irqMask==masked && CFifoUsed(s_Usbd.hQue)==1);
    assert(CFifoUsed(fifo)==used && CFifoPeek(fifo)==data);
    entry=(nRFUsbdQue_t*)CFifoGet(s_Usbd.hQue);
@@ -285,7 +284,7 @@ int main(){
    assert(entry->Len==length && entry->pBuffer==inBuffer && irqMask==masked);
   }
  }
- puts("PASS: regular IN preserves direct/FIFO/scratch sources, FIFO ownership and IRQ state");
+ puts("PASS: regular IN preserves direct/aligned/scratch sources, FIFO ownership and IRQ state");
 
  const uint16_t inLengths[]={0,9,17,33,512};
  for(uint16_t length : inLengths){

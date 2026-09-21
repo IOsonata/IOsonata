@@ -118,7 +118,7 @@ typedef struct __nRF_Usbd_Que {
 	uint16_t Len;				//!< Bytes this transfer moves
 	union {
 		uint8_t *pBuffer;		//!< OUT or IN DMA buffer
-		uint32_t Scratch;		//!< Aligned byte-mode IN repair
+		uint32_t Scratch;		//!< Aligned IN repair
 	};
 } nRFUsbdQue_t;
 
@@ -1503,32 +1503,19 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		return false;
 	}
 	pQue->EpNum = EpNum;
+	pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
+	pQue->pBuffer = pBuffer;
 
-	if (pBuffer == NULL)
+	const uint32_t misalign = (uint32_t)(uintptr_t)pBuffer & 3U;
+	if (misalign != 0U)
 	{
-		hCFifo_t hFifo = (hCFifo_t)s_Usbd.EpReg[EpNum - 1U][1].pBuffer;
-		uint8_t *pData = CFifoPeek(hFifo);
-		const uint32_t misalign = (uint32_t)(uintptr_t)pData & 3U;
-		if (misalign != 0U)
+		const uint32_t repair = 4U - misalign;
+		if (Length > repair)
 		{
-			const uint32_t repair = 4U - misalign;
-			if (Length > repair)
-			{
-				Length = repair;
-			}
-			memcpy(&pQue->Scratch, pData, Length);
-			pQue->Dir = NRFX_USBD_QUE_IN_SCRATCH;
+			Length = repair;
 		}
-		else
-		{
-			pQue->pBuffer = pData;
-			pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
-		}
-	}
-	else
-	{
-		pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
-		pQue->pBuffer = pBuffer;
+		memcpy(&pQue->Scratch, pBuffer, Length);
+		pQue->Dir = NRFX_USBD_QUE_IN_SCRATCH;
 	}
 	pQue->Len = Length;
 	nRFUsbdResumeQueuedDmaLocked();

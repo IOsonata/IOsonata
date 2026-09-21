@@ -111,13 +111,8 @@ static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf)
 		return -1;
 	}
 
-#if defined(NRF52_SERIES)
-	(void)UsbCtrlrEpSend(pIntrf->DevNo, pIntrf->EpNo, nullptr,
-		(uint16_t)cnt);
-#else
 	(void)UsbCtrlrEpSend(pIntrf->DevNo, pIntrf->EpNo, pData,
 		(uint16_t)cnt);
-#endif
 	return cnt;
 }
 
@@ -736,12 +731,6 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 		uint8_t *pTxSource = pIntrf->Mode == USB_INTRF_MODE_DIRECT &&
 			pIntrf->pTxDirectBuffer != nullptr ? pIntrf->pTxDirectBuffer->Data :
 			nullptr;
-#if defined(NRF52_SERIES)
-		if (pIntrf->Mode == USB_INTRF_MODE_BYTE)
-		{
-			pTxSource = reinterpret_cast<uint8_t *>(pIntrf->hTxFifo);
-		}
-#endif
 		UsbCtrlrEpAlloc(pIntrf->DevNo, pIntrf->EpNo, true, pTxSource,
 			pCfg->bBlocking, UsbIntrfCtrlrInEvent, pIntrf);
 	}
