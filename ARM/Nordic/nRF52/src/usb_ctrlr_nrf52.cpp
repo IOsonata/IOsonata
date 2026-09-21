@@ -883,7 +883,7 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 	if ((NRF_USBD->EPDATASTATUS & bit) != 0U &&
 		(NRF_USBD->EPSTATUS & bit) == 0U)
 	{
-		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[epNum - 1U][0];
+		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 0U);
 		if (pReg->pBuffer != NULL)
 		{
 			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
