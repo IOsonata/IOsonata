@@ -143,9 +143,6 @@ static_assert(offsetof(USBD_EPOUT_Type, PTR) ==
 	offsetof(USBD_EPIN_Type, PTR) &&
 	offsetof(USBD_EPOUT_Type, MAXCNT) ==
 	offsetof(USBD_EPIN_Type, MAXCNT), "EPIN/EPOUT layout");
-static_assert(offsetof(NRF_USBD_Type, TASKS_STARTISOOUT) -
-	offsetof(NRF_USBD_Type, TASKS_STARTEPIN) == 17U * sizeof(uint32_t),
-	"USBD start task layout");
 static_assert(offsetof(NRF_USBD_Type, WLENGTHH) -
 	offsetof(NRF_USBD_Type, BMREQUESTTYPE) == 7U * sizeof(uint32_t),
 	"USBD setup register layout");
@@ -840,14 +837,7 @@ static void nRFUsbdBusReset(void)
 	NRF_USBD->EPOUTEN = 1UL;
 	NRF_USBD->EPINEN = 1UL;
 
-	// STARTEPIN[8], STARTISOIN, STARTEPOUT[8] and STARTISOOUT are eighteen
-	// consecutive task registers; clear them in one pass.
-	volatile uint32_t *pTask = &NRF_USBD->TASKS_STARTEPIN[0];
-	for (uint8_t i = 0; i < 18U; i++)
-	{
-		pTask[i] = 0;
-	}
-
+	// START tasks are write-1 triggers, not state to clear on reset.
 	const uint32_t epStatus = NRF_USBD->EPSTATUS;
 	NRF_USBD->EPSTATUS = epStatus;
 	const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;

@@ -106,8 +106,8 @@ struct W1C {
 struct NRF_USBD_Type {
  Endpoint EPIN[8],EPOUT[8];
  uint32_t BMREQUESTTYPE,BREQUEST,WVALUEL,WVALUEH,WINDEXL,WINDEXH,WLENGTHL,WLENGTHH;
- uint32_t beforeTasks,TASKS_STARTEPIN[8],TASKS_STARTISOIN;
- uint32_t TASKS_STARTEPOUT[8],TASKS_STARTISOOUT,afterTasks;
+ uint32_t TASKS_STARTEPIN[8],TASKS_STARTISOIN;
+ uint32_t TASKS_STARTEPOUT[8],TASKS_STARTISOOUT;
  uint32_t EVENTS_ENDEPIN[8],EVENTS_ENDEPOUT[8],EVENTS_EP0DATADONE,SHORTS,EVENTS_EPDATA;
  uint32_t EVENTS_EP0SETUP,EVENTS_USBEVENT,EVENTS_SOF,EVENTS_USBRESET;
  uint32_t TASKS_EP0STATUS,TASKS_EP0RCVOUT;
@@ -1215,11 +1215,9 @@ int main(int argc,char **argv){
  }
  puts("PASS: full DMA queue preserves active scratch; AppEvt retries OUT once space opens");
 
- // The reset loop must cover all eighteen start tasks and no adjacent task.
+ // Bus reset cancels queued DMA without starting another transfer.
+ // Task fields record trigger writes in this mock, not hardware state.
  init();dmaBusy=0x82;
- for(unsigned ep=0;ep<8;++ep)regs.TASKS_STARTEPIN[ep]=regs.TASKS_STARTEPOUT[ep]=0xFFFFFFFF;
- regs.TASKS_STARTISOIN=regs.TASKS_STARTISOOUT=0xFFFFFFFF;
- regs.beforeTasks=0x12345678;regs.afterTasks=0x87654321;
  regs.EPSTATUS.bits=0x01010101;regs.EPDATASTATUS.bits=0x01FF01FF;
  regs.EVENTCAUSE.bits=0xFFFF;regs.EVENTS_USBEVENT=1;regs.INTEN=0xFFFFFFFF;
  s_Usbd.IsoGeneration[0]=4;s_Usbd.IsoGeneration[1]=8;s_Usbd.IsoOutSize=33;
@@ -1229,7 +1227,6 @@ int main(int argc,char **argv){
  assert(!dmaLocks && dmaUnlocks==1); // ResetState releases once after cancelling queues.
  for(unsigned ep=0;ep<8;++ep)assert(!regs.TASKS_STARTEPIN[ep] && !regs.TASKS_STARTEPOUT[ep]);
  assert(!regs.TASKS_STARTISOIN && !regs.TASKS_STARTISOOUT);
- assert(regs.beforeTasks==0x12345678 && regs.afterTasks==0x87654321);
  assert(!regs.EPSTATUS.bits && !regs.EPDATASTATUS.bits && !regs.EVENTCAUSE.bits);
  assert(!regs.EVENTS_USBEVENT && regs.EPOUTEN==1 && regs.EPINEN==1);
  assert(regs.INTENCLR==0xFFFFFFFF && regs.INTENSET==(USBD_INTEN_USBRESET_Msk |
@@ -1238,7 +1235,7 @@ int main(int argc,char **argv){
  assert(CFifoUsed(s_Usbd.hQue)==0 && CFifoUsed(s_Usbd.hEp0Que)==0);
  assert(s_Usbd.Flags==USBD_FLAG_MAC_AWAKE && !s_Usbd.IsoOutSize);
  assert(s_Usbd.IsoGeneration[0]==5 && s_Usbd.IsoGeneration[1]==9);
- puts("PASS: bus reset clears all regular/ISO start tasks and preserves adjacent registers");
+ puts("PASS: bus reset cancels queues, clears status and releases DMA without starting a transfer");
 
  // Producer acceptance and readiness follow CFifo's configured full policy.
  // Keep TX busy here to test queue insertion independently of DMA scheduling.
