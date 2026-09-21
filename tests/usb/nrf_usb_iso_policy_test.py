@@ -30,7 +30,7 @@ base = BASE.read_text(encoding="utf-8")
 iso = ISO.read_text(encoding="utf-8")
 
 
-open_ep = function_body(iso, "bool nRFUsbdIsoEpOpen(")
+open_ep = function_body(iso, "bool UsbCtrlrEpOpen(")
 start_iso = function_body(iso, "bool nRFUsbdIsoStart(void)")
 service_iso = function_body(iso, "void nRFUsbdIsoService(void)")
 iso_sof = function_body(iso, "void nRFUsbdIsoSof(void)")
@@ -66,10 +66,9 @@ assert finish_iso.index("NRF_USBD->EPSTATUS =") < finish_iso.index(
 )
 
 assert "extern bool nRFUsbdIsoStart(void) __attribute__((weak));" in base
-assert (
-    "extern bool nRFUsbdIsoFinishDma(uint32_t DmaStatus) "
-    "__attribute__((weak));"
-) in base
+assert "__attribute__((weak)) bool nRFUsbdIsoFinishDma(uint32_t)" in base
+assert "return false;" in function_body(base, "bool nRFUsbdIsoFinishDma(")
+assert "return false;" in function_body(base, "bool UsbCtrlrEpOpen(")
 assert "bool UsbCtrlrIsoInit(int DevNo)" in iso
 assert "nRFUsbdIsoFinishDma(dmastatus)" in interrupt
 assert "nRFUsbdIsoSof();" in handle_sof

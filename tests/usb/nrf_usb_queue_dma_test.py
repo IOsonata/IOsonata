@@ -205,7 +205,7 @@ code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
     'UsbdIsForceNormal', 'UsbdForceNormal', 'nRFUsbdTryRemoteWake',
     'nRFUsbdHostResumeDetected', 'nRFUsbdWakeAllowed', 'nRFUsbdSofAcquire',
     'nRFUsbdSofRelease', 'nRFUsbdHandleBusEvent', 'nRFUsbdHandleSof',
-    'nRFUsbdTryEnterLowPower',
+    'nRFUsbdTryEnterLowPower', 'UsbCtrlrRemoteWakeup',
     'nRFUsbdResetState', 'nRFUsbdBusReset', 'nRFUsbdAbortEp0',
     'nRFUsbdProcessEP0Setup', 'nRFUsbdQueueEp0Setup', 'USBD_IRQHandler'])
 code += re.search(r'static constexpr uint16_t USB_INTRF_RX_DRDY[^;]+;', intrf_source).group(0)
@@ -863,6 +863,31 @@ int main(int argc,char **argv){
   }
  }
  puts("PASS: full AppEvt retains SETUP, masks its IRQ, retries once, and handles replacement/reset");
+
+ // Host resume must notify exactly once, after both the MAC and peripheral
+ // are awake, without losing ISO state or changing the caller's IRQ mask.
+ for(bool awake:{false,true})for(bool lowPower:{false,true})
+ for(unsigned mask:{0U,1U}){
+  init();irqMask=mask;regs.LOWPOWER=lowPower;
+  s_Usbd.Flags=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN|
+   USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND|USBD_FLAG_REMOTE_WAKE;
+  if(awake)s_Usbd.Flags|=USBD_FLAG_MAC_AWAKE;
+  nRFUsbdHostResumeDetected();
+  assert(irqMask==mask && !regs.LOWPOWER && resumes==unsigned(awake && !lowPower));
+  assert(!(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND|USBD_FLAG_REMOTE_WAKE)));
+  assert((s_Usbd.Flags&(USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN))==
+   (USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN));
+  nRFUsbdHostResumeDetected();
+  nRFUsbdWakeAllowed();nRFUsbdWakeAllowed();
+  assert(resumes==1 && irqMask==mask && !(s_Usbd.Flags&USBD_FLAG_HOST_RESUME));
+ }
+ // A host resume may preempt the public remote-wake request at IRQ restore.
+ // The protected recheck must then suppress the device's resume signal.
+ init();s_Usbd.Flags=USBD_FLAG_SUSPENDED|USBD_FLAG_MAC_AWAKE;
+ onIrqEnable=nRFUsbdHostResumeDetected;
+ UsbCtrlrRemoteWakeup(0);
+ assert(!onIrqEnable && !irqMask && resumes==1 && !regs.TASKS_DPDMDRIVE);
+ puts("PASS: wake callbacks preserve IRQ/ISO state and host resume cancels a preempted remote-wake request");
 
  // Suspend blocks the early restart. Low-power suspend drains queued DMA
  // before entering LOWPOWER; ordinary suspend retains it.

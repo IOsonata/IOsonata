@@ -164,16 +164,35 @@ alignas(4) static uint8_t s_Ep0QueMem[
 nRFUsbdState_t s_Usbd;
 
 extern bool nRFUsbdIsoStart(void) __attribute__((weak));
-extern void nRFUsbdIsoService(void) __attribute__((weak));
-extern bool nRFUsbdIsoFinishDma(uint32_t DmaStatus) __attribute__((weak));
-extern void nRFUsbdIsoSof(void) __attribute__((weak));
-extern bool nRFUsbdIsoEpOpen(const UsbEndPointDesc_t *pDesc) __attribute__((weak));
-extern void nRFUsbdIsoEpClose(uint8_t EpAddr) __attribute__((weak));
-extern bool nRFUsbdIsoXfer(uint8_t EpAddr, uint16_t Length) __attribute__((weak));
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
 static void nRFUsbdHostResumeDetected(void);
 
+
+// UsbCtrlrIsoInit pulls in the optional ISO archive member, whose strong
+// definitions replace these defaults. Keep IsoStart undefined when absent so
+// regular DMA skips the call entirely.
+__attribute__((weak)) void nRFUsbdIsoService(void)
+{
+}
+
+__attribute__((weak)) bool nRFUsbdIsoFinishDma(uint32_t)
+{
+	return false;
+}
+
+__attribute__((weak)) void nRFUsbdIsoSof(void)
+{
+}
+
+__attribute__((weak)) void nRFUsbdIsoEpClose(uint8_t)
+{
+}
+
+__attribute__((weak)) bool nRFUsbdIsoXfer(uint8_t, uint16_t)
+{
+	return false;
+}
 
 // Barriers repeat at many sites. One out-of-line copy: a barrier keeps its
 // effect when reached through a call, and the call is half the size of the
@@ -581,7 +600,7 @@ void nRFUsbdDmaWait(void)
 		{
 			complete = nRFUsbdRetireDma(31U - (uint32_t)__CLZ(dmaStatus));
 		}
-		else if (nRFUsbdIsoFinishDma != nullptr)
+		else
 		{
 			complete = nRFUsbdIsoFinishDma(0U);
 		}
@@ -767,7 +786,7 @@ static void nRFUsbdTryEnterLowPower(void)
 	if (!s_Usbd.LowPowerSuspend ||
 		(s_Usbd.Flags & entryMask) != entryWant ||
 		nRFUsbdDmaActive() ||
-		CFifoUsed(s_Usbd.hQue) > 0)
+		CFifoPeek(s_Usbd.hQue) != NULL)
 	{
 		return;
 	}
@@ -798,18 +817,14 @@ static void nRFUsbdTryEnterLowPower(void)
 
 static void nRFUsbdTryRemoteWake(void)
 {
-	if ((s_Usbd.Flags & USBD_FLAG_REMOTE_WAKE) == 0U)
-	{
-		return;
-	}
-
 	// Validate the wake request once while interrupts are excluded.
 	const uint32_t wakeMask = USBD_FLAG_REMOTE_WAKE | USBD_FLAG_SUSPENDED |
 		USBD_FLAG_HOST_RESUME | USBD_FLAG_MAC_AWAKE;
 	const uint32_t wakeWant = USBD_FLAG_REMOTE_WAKE | USBD_FLAG_SUSPENDED |
 		USBD_FLAG_MAC_AWAKE;
 	const uint32_t irqState = DisableInterrupt();
-	if ((s_Usbd.Flags & wakeMask) != wakeWant ||
+	const uint32_t flags = s_Usbd.Flags;
+	if ((flags & wakeMask) != wakeWant ||
 		nRFUsbdDmaActive() ||
 		!UsbdIsForceNormal())
 	{
@@ -817,7 +832,7 @@ static void nRFUsbdTryRemoteWake(void)
 		return;
 	}
 
-	s_Usbd.Flags &= ~(uint32_t)USBD_FLAG_REMOTE_WAKE;
+	s_Usbd.Flags = flags & ~(uint32_t)USBD_FLAG_REMOTE_WAKE;
 	NRF_USBD->DPDMVALUE = USBD_DPDMVALUE_STATE_Resume;
 	NRF_USBD->TASKS_DPDMDRIVE = 1;
 	UsbdSync();
@@ -841,35 +856,27 @@ static void nRFUsbdHostResumeDetected(void)
 		return;
 	}
 
+	const bool waking = (flags & USBD_FLAG_MAC_AWAKE) == 0U || !UsbdIsForceNormal();
 	flags &= ~(uint32_t)(USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND |
-		USBD_FLAG_REMOTE_WAKE);
-
-	if ((flags & USBD_FLAG_MAC_AWAKE) == 0U || !UsbdIsForceNormal())
-	{
-		s_Usbd.Flags = flags | USBD_FLAG_HOST_RESUME;
-		EnableInterrupt(irqState);
-		UsbdForceNormal();
-		return;
-	}
-
-	s_Usbd.Flags = flags & ~(uint32_t)USBD_FLAG_HOST_RESUME;
+		USBD_FLAG_REMOTE_WAKE | USBD_FLAG_HOST_RESUME);
+	if (waking)
+		flags |= USBD_FLAG_HOST_RESUME;
+	s_Usbd.Flags = flags;
 	EnableInterrupt(irqState);
-	nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
+
+	if (waking)
+		UsbdForceNormal();
+	else
+		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
 }
 
 // ISR context only.
 static void nRFUsbdWakeAllowed(void)
 {
-	const uint32_t flags = s_Usbd.Flags | USBD_FLAG_MAC_AWAKE;
-
+	const uint32_t flags = s_Usbd.Flags;
+	s_Usbd.Flags = (flags | USBD_FLAG_MAC_AWAKE) & ~(uint32_t)USBD_FLAG_HOST_RESUME;
 	if ((flags & USBD_FLAG_HOST_RESUME) != 0U)
-	{
-		s_Usbd.Flags = flags & ~(uint32_t)USBD_FLAG_HOST_RESUME;
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
-		return;
-	}
-
-	s_Usbd.Flags = flags;
 }
 
 static void nRFUsbdBusReset(void)
@@ -986,10 +993,7 @@ static void nRFUsbdHandleSof(void)
 {
 	nRFUsbdHostResumeDetected();
 
-	if (nRFUsbdIsoSof != nullptr)
-	{
-		nRFUsbdIsoSof();
-	}
+	nRFUsbdIsoSof();
 
 	if (s_Usbd.SofEnabled)
 	{
@@ -1001,10 +1005,7 @@ static void nRFUsbdHandleSof(void)
 
 	nRFUsbdSofRelease();
 
-	if (nRFUsbdIsoService != nullptr)
-	{
-		nRFUsbdIsoService();
-	}
+	nRFUsbdIsoService();
 }
 
 static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
@@ -1152,8 +1153,7 @@ extern "C" void USBD_IRQHandler(void)
 		}
 		case 0x00000100U: // ISO IN
 		case 0x01000000U: // ISO OUT
-			startDma = nRFUsbdIsoFinishDma != nullptr &&
-				nRFUsbdIsoFinishDma(dmastatus);
+			startDma = nRFUsbdIsoFinishDma(dmastatus);
 			break;
 		default:          // EP1-7 IN/OUT
 		{
@@ -1257,7 +1257,8 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdHandleSof();
 	}
 
-	nRFUsbdTryRemoteWake();
+	if ((s_Usbd.Flags & USBD_FLAG_REMOTE_WAKE) != 0U)
+		nRFUsbdTryRemoteWake();
 
 	// Queue newly received OUT data; completion already restarted pending DMA.
 	if (outEp != 0U)
@@ -1473,10 +1474,12 @@ void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 	(void)Address;
 }
 
+__attribute__((weak))
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 {
 	(void)DevNo;
-	return nRFUsbdIsoEpOpen != nullptr && nRFUsbdIsoEpOpen(pDesc);
+	(void)pDesc;
+	return false;
 }
 
 bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type,
@@ -1509,10 +1512,7 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
 
 	if (epNum == NRFX_USBD_ISO_EP_NO)
 	{
-		if (nRFUsbdIsoEpClose != nullptr)
-		{
-			nRFUsbdIsoEpClose(EpAddr);
-		}
+		nRFUsbdIsoEpClose(EpAddr);
 		return;
 	}
 
@@ -1562,8 +1562,7 @@ bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	if (epNum == NRFX_USBD_ISO_EP_NO)
 	{
-		return nRFUsbdIsoXfer != nullptr &&
-			nRFUsbdIsoXfer(EpAddr, Length);
+		return nRFUsbdIsoXfer(EpAddr, Length);
 	}
 
 	const uint32_t state = DisableInterrupt();

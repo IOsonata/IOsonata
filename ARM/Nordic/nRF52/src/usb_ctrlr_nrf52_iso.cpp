@@ -292,8 +292,9 @@ bool UsbCtrlrIsoInit(int DevNo)
 	return DevNo == 0;
 }
 
-bool nRFUsbdIsoEpOpen(const UsbEndPointDesc_t *pDesc)
+bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 {
+	(void)DevNo;
 	const uint8_t epAddr = pDesc->bEndpointAddress;
 	const bool in = USB_ENDPADDR_IS_IN(epAddr);
 	const uint8_t type = pDesc->bmAttributes & 0x03U;
