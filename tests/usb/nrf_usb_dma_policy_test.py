@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 SOURCE = Path(__file__).parents[2] / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp"
+HEADER = Path(__file__).parents[2] / "ARM/Nordic/include/usb_ctrlr.h"
 
 
 def function_body(source: str, signature: str) -> str:
@@ -24,7 +25,7 @@ def function_body(source: str, signature: str) -> str:
 
 
 source = SOURCE.read_text(encoding="utf-8")
-dma_start = function_body(source, "void nRFUsbdDmaStartLocked(")
+dma_start = function_body(HEADER.read_text(encoding="utf-8"), "void nRFUsbdDmaStartLocked(")
 dma_lock = function_body(source, "void nRFUsbdDmaLock(void)")
 dma_finish = function_body(source, "void nRFUsbdDmaWait(void)")
 retire = function_body(source, "bool nRFUsbdRetireDma(uint32_t StatusBit)")

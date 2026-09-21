@@ -29,6 +29,8 @@ queue_blocking = re.search(r's_Usbd.hQue = CFifoInit\(s_QueMem,.*?\b(true|false)
 
 
 def function(name, source=source):
+    if name == 'nRFUsbdDmaStartLocked':
+        source = header
     match = re.search(r'(?:void|bool|int|uint8_t|uint32_t|nRFUsbEpReg_t\s*\*)\s*' +
         name + r'\([^;{}]*\)\s*\{', source)
     assert match, name

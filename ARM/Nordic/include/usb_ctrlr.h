@@ -284,8 +284,9 @@ enum
 	USBD_FLAG_REMOTE_WAKE   = 0x0004U,
 	USBD_FLAG_HOST_RESUME   = 0x0008U,
 	USBD_FLAG_MAC_AWAKE     = 0x0010U,
-	USBD_FLAG_ISO_OUT_READY = 0x0100U,
-	USBD_FLAG_ISO_IN_READY  = 0x0200U,
+	// Suspend clears READY with the wake flags; keep that mask byte-sized.
+	USBD_FLAG_ISO_OUT_READY = 0x0020U,
+	USBD_FLAG_ISO_IN_READY  = 0x0040U,
 	USBD_FLAG_ISO_OUT_OPEN  = 0x0400U,
 	USBD_FLAG_ISO_IN_OPEN   = 0x0800U,
 	USBD_FLAG_ISO_OUT_BUSY  = 0x1000U,
@@ -317,11 +318,22 @@ extern nRFUsbdState_t s_Usbd;
 void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
 							 UsbCtrlrEvtType_t Event, uint16_t Length);
 void nRFUsbdDmaUnlock(void);
-void nRFUsbdDmaStartLocked(volatile uint32_t *pTask, volatile uint32_t *pEnd);
 void nRFUsbdSofAcquire(void);
 void nRFUsbdSofRelease(void);
 void nRFUsbdDmaWait(void);
 void nRFUsbdResumeQueuedDmaLocked(void);
+
+/** Start EasyDMA with the channel already locked by the caller. */
+static inline __attribute__((always_inline))
+void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
+	volatile uint32_t *pEnd)
+{
+	*pEnd = 0;
+	__DSB();
+
+	*pTask = 1;
+	__DSB();
+}
 
 #endif // USBD_PRESENT
 

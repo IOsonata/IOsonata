@@ -546,19 +546,6 @@ void nRFUsbdDmaUnlock(void)
 	__DSB();
 }
 
-/** Start EasyDMA with the channel already locked by the caller. */
-__attribute__((noinline))
-void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
-	volatile uint32_t *pEnd)
-{
-	*pEnd = 0;
-	__DSB();
-
-	*pTask = 1;
-	__DSB();
-}
-
-
 // Retire one regular-endpoint DMA identified by its EPSTATUS bit index.
 // Returns false while its END event has not fired. Release the queue entry
 // only after DMA has finished reading it, including inline alignment scratch.
