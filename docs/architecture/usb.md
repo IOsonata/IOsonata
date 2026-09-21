@@ -427,6 +427,9 @@ the endpoint was opened/configured.
 
 Endpoint callbacks are delivered directly to the registered endpoint owner.
 Nonzero endpoint completion is not routed through the USB class table.
+The callback receives the endpoint address, event, length and registered context.
+`USB_CTRLR_EVT_XFER_CMPL` means success. Failures use
+`USB_CTRLR_EVT_XFER_FAILED`; cancellation uses `USB_CTRLR_EVT_CANCEL`.
 
 ```text
 controller interrupt

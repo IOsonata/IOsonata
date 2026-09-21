@@ -108,12 +108,13 @@ typedef enum __Usb_Ctrlr_Evt_Type {
 	USB_CTRLR_EVT_RESET,		//!< USB bus reset
 	USB_CTRLR_EVT_SETUP,		//!< New EP0 SETUP request
 	USB_CTRLR_EVT_DRDY,		//!< Data is ready in the device to be retrieved
-	USB_CTRLR_EVT_XFER_CMPL,	//!< Endpoint transfer completed
+	USB_CTRLR_EVT_XFER_CMPL,	//!< Endpoint transfer completed successfully
 	USB_CTRLR_EVT_CANCEL,		//!< Endpoint transfer cancelled
 	USB_CTRLR_EVT_SUSPEND,		//!< Bus entered suspend
 	USB_CTRLR_EVT_RESUME,		//!< Bus resumed
 	USB_CTRLR_EVT_SOF,			//!< Start of frame
 	USB_CTRLR_EVT_ADDRESS,		//!< Hardware accepted SET_ADDRESS itself
+	USB_CTRLR_EVT_XFER_FAILED,	//!< Endpoint transfer failed
 } UsbCtrlrEvtType_t;
 
 #pragma pack(push, 4)
@@ -138,8 +139,7 @@ typedef struct __Usb_Ctrlr_Evt {
 #pragma pack(pop)
 
 typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
-									uint16_t Length, UsbCtrlrXferResult_t Result,
-									void *pContext);
+									uint16_t Length, void *pContext);
 
 /// What the generic layer hands the port at UsbCtrlrInit.
 typedef struct __Usb_Ctrlr_Config {

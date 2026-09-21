@@ -158,12 +158,11 @@ static UsbIntIntrfCfg_t MakeCfg(void)
 
 static void Drdy(void)
 {
-	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, 0U,
-		USB_CTRLR_XFER_SUCCESS, s_OutContext);
+	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
 }
 
 static void Receive(const uint8_t *pData, uint16_t Length,
-					UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
+					UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 {
 	Drdy();
 	if (s_OutBuffer == nullptr)
@@ -172,14 +171,14 @@ static void Receive(const uint8_t *pData, uint16_t Length,
 	{
 		memcpy(s_OutBuffer, pData, Length);
 	}
-	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_XFER_CMPL,
-		Length, Result, s_OutContext);
+	s_OutHandler(USB_ENDPADDR_DIROUT(3U), Event,
+		Length, s_OutContext);
 }
 
-static void CompleteIn(UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
+static void CompleteIn(UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 {
-	s_InHandler(USB_ENDPADDR_DIRIN(3U), USB_CTRLR_EVT_XFER_CMPL,
-		s_InLength, Result, s_InContext);
+	s_InHandler(USB_ENDPADDR_DIRIN(3U), Event,
+		s_InLength, s_InContext);
 }
 
 static void TestLifecycleAndValidation(void)
@@ -257,10 +256,10 @@ static void TestErrorsSuspendAndReset(void)
 	CHECK(!UsbIntIntrfSendPacket(&intrf, &data, 1U));
 	CHECK(UsbIntIntrfResume(&intrf));
 	CHECK(UsbIntIntrfSendPacket(&intrf, &data, 1U));
-	CompleteIn(USB_CTRLR_XFER_FAILED);
+	CompleteIn(USB_CTRLR_EVT_XFER_FAILED);
 	CHECK(intrf.TxErrorCnt == 1U);
 	CHECK(s_LastTxResult == USB_CTRLR_XFER_FAILED);
-	Receive(nullptr, 0U, USB_CTRLR_XFER_FAILED);
+	Receive(nullptr, 0U, USB_CTRLR_EVT_XFER_FAILED);
 	CHECK(intrf.RxErrorCnt == 1U);
 	CHECK(s_LastRxResult == USB_CTRLR_XFER_FAILED);
 	UsbIntIntrfReset(&intrf);

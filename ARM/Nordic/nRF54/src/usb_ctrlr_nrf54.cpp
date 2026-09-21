@@ -291,10 +291,10 @@ nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpAddr)
 
 static inline __attribute__((always_inline))
 void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
-								 uint16_t Length, UsbCtrlrXferResult_t Result)
+								 uint16_t Length)
 {
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
-	pReg->Handler(EpAddr, Event, Length, Result, pReg->pContext);
+	pReg->Handler(EpAddr, Event, Length, pReg->pContext);
 }
 
 __attribute__((weak)) bool UsbdXtalRequest(void)
@@ -640,12 +640,11 @@ static void nRF54UsbdEmitSimple(UsbCtrlrEvtType_t Type)
 	nRF54UsbdEmit(&evt);
 }
 
-static void nRF54UsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
-							  UsbCtrlrXferResult_t Result)
+static void nRF54UsbdEmitXfer(uint8_t EpAddr, uint16_t Length)
 {
 	if (USB_ENDPADDR_NUM(EpAddr) != 0U)
 	{
-		nRFUsbEpRegisteredEvent(EpAddr, USB_CTRLR_EVT_XFER_CMPL, Length, Result);
+		nRFUsbEpRegisteredEvent(EpAddr, USB_CTRLR_EVT_XFER_CMPL, Length);
 		return;
 	}
 
@@ -654,7 +653,7 @@ static void nRF54UsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 		.Xfer = {
 			.EpAddr = EpAddr,
 			.Length = Length,
-			.Result = Result,
+			.Result = USB_CTRLR_XFER_SUCCESS,
 			.pBuffer = (const uint8_t *)s_Ep0Bounce,
 		},
 	};
@@ -969,7 +968,7 @@ static void nRF54UsbdCompleteEp0(uint8_t EpAddr)
 		pXfer->ActualLen = (uint16_t)(pXfer->ActualLen + received);
 		const bool more = received == chunk && pXfer->ActualLen < pXfer->TotalLen;
 		pXfer->Started = more;
-		nRF54UsbdEmitXfer(EpAddr, received, USB_CTRLR_XFER_SUCCESS);
+		nRF54UsbdEmitXfer(EpAddr, received);
 		if (more)
 			(void)nRF54UsbdStartEp0Chunk(EpAddr);
 		return;
@@ -996,7 +995,7 @@ static void nRF54UsbdCompleteEp0(uint8_t EpAddr)
 		nRF54UsbdPrimeSetup();
 	}
 
-	nRF54UsbdEmitXfer(EpAddr, total, USB_CTRLR_XFER_SUCCESS);
+	nRF54UsbdEmitXfer(EpAddr, total);
 }
 
 static void nRF54UsbdCompleteData(uint8_t EpAddr)
@@ -1026,7 +1025,7 @@ static void nRF54UsbdCompleteData(uint8_t EpAddr)
 
 	pXfer->ActualLen = actual;
 	pXfer->Started = false;
-	nRF54UsbdEmitXfer(EpAddr, actual, USB_CTRLR_XFER_SUCCESS);
+	nRF54UsbdEmitXfer(EpAddr, actual);
 }
 
 static void nRF54UsbdBusReset(void)
@@ -1696,8 +1695,7 @@ void UsbCtrlrProcess(int DevNo)
 			nRFUsbEpReg_t *pReg = &s_EpReg[epNum][0];
 			if (pReg->pBuffer == NULL && pReg->Handler != NULL)
 			{
-				nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U,
-					USB_CTRLR_XFER_SUCCESS);
+				nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U);
 			}
 		}
 		EnableInterrupt(state);

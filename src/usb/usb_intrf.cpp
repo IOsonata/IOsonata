@@ -47,7 +47,7 @@ static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
 
 static void UsbIntrfRetryRx(uint32_t Evt, void *pContext);
 static void UsbIntrfCtrlrOutEvent(uint8_t, UsbCtrlrEvtType_t, uint16_t,
-	UsbCtrlrXferResult_t, void *);
+	void *);
 
 static void UsbIntrfRegisterRx(UsbDevIntrf_t *pIntrf, uint8_t *pBuffer)
 {
@@ -464,15 +464,13 @@ static void UsbIntrfRetryRx(uint32_t, void *pContext)
 	if (pIntrf->RxPending != 0U)
 	{
 		UsbIntrfCtrlrOutEvent(pIntrf->EpNo, USB_CTRLR_EVT_DRDY, 0U,
-			USB_CTRLR_XFER_SUCCESS, pIntrf);
+			pIntrf);
 	}
 	EnableInterrupt(state);
 }
 
 static void UsbIntrfCtrlrOutEvent(uint8_t, UsbCtrlrEvtType_t Event,
-								  uint16_t Length,
-								  UsbCtrlrXferResult_t Result,
-								  void *pContext)
+								  uint16_t Length, void *pContext)
 {
 	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pContext);
 
@@ -510,41 +508,36 @@ static void UsbIntrfCtrlrOutEvent(uint8_t, UsbCtrlrEvtType_t Event,
 			return;
 
 		case USB_CTRLR_EVT_XFER_CMPL:
-			if (Result == USB_CTRLR_XFER_SUCCESS)
+			if (pIntrf->Mode == USB_INTRF_MODE_DIRECT)
 			{
-				if (pIntrf->Mode == USB_INTRF_MODE_DIRECT)
-				{
-					UsbIntrfDirectRxComplete(pIntrf, Length);
-					return;
-				}
-
-				if (!UsbIntrfCompleteRx(pIntrf, Length))
-				{
-					if (pIntrf->bBlocking)
-					{
-						const uint32_t state = DisableInterrupt();
-						pIntrf->RxPending = Length + 2U;
-						// Withhold this buffer until the deferred copy succeeds.
-						UsbIntrfRegisterRx(pIntrf, nullptr);
-						(void)AppEvtHandlerQue(0U, pIntrf, UsbIntrfRetryRx);
-						EnableInterrupt(state);
-					}
-					else
-					{
-						pIntrf->RxDropCnt++;
-					}
-				}
+				UsbIntrfDirectRxComplete(pIntrf, Length);
 				return;
 			}
 
-			if (Result == USB_CTRLR_XFER_FAILED)
+			if (!UsbIntrfCompleteRx(pIntrf, Length))
 			{
-				pIntrf->RxDropCnt++;
-				if (pIntrf->DevIntrf.EvtCB != nullptr)
+				if (pIntrf->bBlocking)
 				{
-					pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
-						DEVINTRF_EVT_RX_TIMEOUT, nullptr, Length);
+					const uint32_t state = DisableInterrupt();
+					pIntrf->RxPending = Length + 2U;
+					// Withhold this buffer until the deferred copy succeeds.
+					UsbIntrfRegisterRx(pIntrf, nullptr);
+					(void)AppEvtHandlerQue(0U, pIntrf, UsbIntrfRetryRx);
+					EnableInterrupt(state);
 				}
+				else
+				{
+					pIntrf->RxDropCnt++;
+				}
+			}
+			return;
+
+		case USB_CTRLR_EVT_XFER_FAILED:
+			pIntrf->RxDropCnt++;
+			if (pIntrf->DevIntrf.EvtCB != nullptr)
+			{
+				pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
+					DEVINTRF_EVT_RX_TIMEOUT, nullptr, Length);
 			}
 			return;
 
@@ -558,9 +551,7 @@ static void UsbIntrfCtrlrOutEvent(uint8_t, UsbCtrlrEvtType_t Event,
 }
 
 static void UsbIntrfCtrlrInEvent(uint8_t, UsbCtrlrEvtType_t Event,
-								 uint16_t Length,
-								 UsbCtrlrXferResult_t Result,
-								 void *pContext)
+								 uint16_t Length, void *pContext)
 {
 	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pContext);
 
@@ -574,7 +565,7 @@ static void UsbIntrfCtrlrInEvent(uint8_t, UsbCtrlrEvtType_t Event,
 		return;
 	}
 
-	if (Event != USB_CTRLR_EVT_XFER_CMPL)
+	if (Event != USB_CTRLR_EVT_XFER_CMPL && Event != USB_CTRLR_EVT_XFER_FAILED)
 	{
 		return;
 	}
@@ -585,7 +576,7 @@ static void UsbIntrfCtrlrInEvent(uint8_t, UsbCtrlrEvtType_t Event,
 		UsbIntrfDirectClear(pIntrf->pTxDirectBuffer);
 		UsbIntrfSetTxIdle(pIntrf);
 
-		if (Result != USB_CTRLR_XFER_SUCCESS)
+		if (Event == USB_CTRLR_EVT_XFER_FAILED)
 		{
 			UsbIntrfTxFailure(pIntrf, requested);
 			return;
@@ -609,7 +600,7 @@ static void UsbIntrfCtrlrInEvent(uint8_t, UsbCtrlrEvtType_t Event,
 		(void)CFifoGetMultiple(pIntrf->hTxFifo, &count);
 	}
 
-	if (Result == USB_CTRLR_XFER_FAILED)
+	if (Event == USB_CTRLR_EVT_XFER_FAILED)
 	{
 		UsbIntrfTxFailure(pIntrf, Length);
 		return;

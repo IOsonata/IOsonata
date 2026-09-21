@@ -307,21 +307,20 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 }
 
 static void UsbdCdcNotifCtrlrEvent(uint8_t, UsbCtrlrEvtType_t Event,
-								  uint16_t, UsbCtrlrXferResult_t Result,
-								  void *pContext)
+								  uint16_t, void *pContext)
 {
 	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);
 
-	if (pCdc == nullptr || Event != USB_CTRLR_EVT_XFER_CMPL)
+	if (pCdc == nullptr)
 	{
 		return;
 	}
 
-	if (Result == USB_CTRLR_XFER_SUCCESS)
+	if (Event == USB_CTRLR_EVT_XFER_CMPL)
 	{
 		UsbdCdcNotifKick(pCdc);
 	}
-	else if (Result == USB_CTRLR_XFER_FAILED)
+	else if (Event == USB_CTRLR_EVT_XFER_FAILED)
 	{
 		pCdc->SerialStatePending = true;
 	}

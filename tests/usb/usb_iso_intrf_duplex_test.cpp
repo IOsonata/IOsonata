@@ -118,7 +118,7 @@ static void Receive(const uint8_t *pData, uint16_t Length)
 	// ISO OUT DMA is controller owned and lands directly in the registered
 	// buffer. UsbIntrf receives only the transfer-complete notification.
 	s_OutHandler(USB_ENDPADDR_DIROUT(8U), USB_CTRLR_EVT_XFER_CMPL,
-		Length, USB_CTRLR_XFER_SUCCESS, s_OutContext);
+		Length, s_OutContext);
 }
 
 static void CompleteIn(void)
@@ -127,7 +127,7 @@ static void CompleteIn(void)
 	const uint16_t len = s_InLength;
 	s_InBusy = false;
 	s_InHandler(USB_ENDPADDR_DIRIN(8U), USB_CTRLR_EVT_XFER_CMPL,
-		len, USB_CTRLR_XFER_SUCCESS, s_InContext);
+		len, s_InContext);
 }
 
 int main(void)

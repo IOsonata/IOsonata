@@ -191,14 +191,14 @@ nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpNum, uint8_t Dir)
 }
 
 // Internal callers already know endpoint number and direction. Form the USB
-// address only for the registered callback; these events always report success.
+// address only for the registered callback.
 __attribute__((noinline))
 void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
 	UsbCtrlrEvtType_t Event, uint16_t Length)
 {
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNum, Dir);
 	pReg->Handler(EpNum | (Dir * USB_ENDPADDR_DIR_IN), Event, Length,
-		USB_CTRLR_XFER_SUCCESS, pReg->pContext);
+		pReg->pContext);
 }
 
 #ifdef SOFTDEVICE_PRESENT

@@ -520,18 +520,18 @@ static bool BtHciUsbSendEventZlp(BtHciUsbDev_t *pHci)
 }
 
 static void BtHciUsbEventComplete(uint8_t, UsbCtrlrEvtType_t Event,
-								 uint16_t Length,
-								 UsbCtrlrXferResult_t Result, void *pContext)
+								 uint16_t Length, void *pContext)
 {
 	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
-	if (pHci == nullptr || Event != USB_CTRLR_EVT_XFER_CMPL ||
+	if (pHci == nullptr ||
+		(Event != USB_CTRLR_EVT_XFER_CMPL && Event != USB_CTRLR_EVT_XFER_FAILED) ||
 		!pHci->EventTxActive)
 	{
 		return;
 	}
 
 	const uint16_t expected = pHci->EventTxChunkLength;
-	if (Result != USB_CTRLR_XFER_SUCCESS || Length != expected)
+	if (Event == USB_CTRLR_EVT_XFER_FAILED || Length != expected)
 	{
 		BtHciUsbEventTxFailure(pHci, Length);
 		return;

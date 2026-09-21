@@ -176,7 +176,7 @@ static UsbIsoIntrfCfg_t MakeCfg(void)
 }
 
 static void Receive(const uint8_t *pData, uint16_t Length,
-					UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
+					UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 {
 	CHECK(s_OutHandler != nullptr);
 	CHECK(!s_OutBlocking);
@@ -187,11 +187,11 @@ static void Receive(const uint8_t *pData, uint16_t Length,
 
 	// The controller owns ISO OUT service and DMAs directly into the buffer
 	// registered by UsbIntrfInit. Generic UsbIntrf only receives completion.
-	s_OutHandler(USB_ENDPADDR_DIROUT(8U), USB_CTRLR_EVT_XFER_CMPL,
-		Length, Result, s_OutContext);
+	s_OutHandler(USB_ENDPADDR_DIROUT(8U), Event,
+		Length, s_OutContext);
 }
 
-static void CompleteIn(UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
+static void CompleteIn(UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 {
 	CHECK(s_InHandler != nullptr);
 	CHECK(s_InBusy);
@@ -199,8 +199,8 @@ static void CompleteIn(UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
 		return;
 	const uint16_t len = s_InLength;
 	s_InBusy = false;
-	s_InHandler(USB_ENDPADDR_DIRIN(8U), USB_CTRLR_EVT_XFER_CMPL,
-		len, Result, s_InContext);
+	s_InHandler(USB_ENDPADDR_DIRIN(8U), Event,
+		len, s_InContext);
 }
 
 static void TestLifecycle(void)
@@ -253,7 +253,7 @@ static void TestRx(void)
 	CHECK(s_RxCount == 2 && iso.RxEmptyCnt == 1U);
 	CHECK(s_OutXferCount == 0);
 
-	Receive(nullptr, 0U, USB_CTRLR_XFER_FAILED);
+	Receive(nullptr, 0U, USB_CTRLR_EVT_XFER_FAILED);
 	CHECK(s_RxCount == 3);
 	CHECK(s_LastRxResult == USB_CTRLR_XFER_FAILED);
 	CHECK(iso.RxMissCnt == 1U);
@@ -286,7 +286,7 @@ static void TestTx(void)
 	CHECK(iso.TxEmptyCnt == 1U);
 
 	CHECK(UsbIsoIntrfSendFrame(&iso, frame, 1U));
-	CompleteIn(USB_CTRLR_XFER_FAILED);
+	CompleteIn(USB_CTRLR_EVT_XFER_FAILED);
 	CHECK(iso.TxMissCnt == 1U);
 	CHECK(s_LastTxResult == USB_CTRLR_XFER_FAILED);
 	CHECK(UsbIsoIntrfTxReady(&iso));

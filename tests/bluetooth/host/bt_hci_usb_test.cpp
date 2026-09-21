@@ -231,7 +231,7 @@ static RegisteredEp_t *FindRegistered(uint8_t EpAddr)
 }
 
 static void CompleteIn(uint8_t EpNo,
-                       UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
+                       UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 {
     RegisteredEp_t *pReg = FindRegistered(USB_ENDPADDR_DIRIN(EpNo));
     CHECK(pReg != nullptr);
@@ -248,8 +248,8 @@ static void CompleteIn(uint8_t EpNo,
         }
     }
     s_InBusy[EpNo] = false;
-    pReg->Handler(USB_ENDPADDR_DIRIN(EpNo), USB_CTRLR_EVT_XFER_CMPL,
-                  length, Result, pReg->pContext);
+    pReg->Handler(USB_ENDPADDR_DIRIN(EpNo), Event,
+                  length, pReg->pContext);
 }
 
 static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
@@ -267,7 +267,7 @@ static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
     if (pReg->Blocking)
     {
         pReg->Handler(USB_ENDPADDR_DIROUT(EpNo), USB_CTRLR_EVT_DRDY,
-                      Length, USB_CTRLR_XFER_SUCCESS, pReg->pContext);
+                      Length, pReg->pContext);
         CHECK(s_OutDma[EpNo]);
         if (!s_OutDma[EpNo]) return;
     }
@@ -281,7 +281,7 @@ static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
     s_HwOutReady[EpNo] = false;
     s_OutDma[EpNo] = false;
     pReg->Handler(USB_ENDPADDR_DIROUT(EpNo), USB_CTRLR_EVT_XFER_CMPL,
-                  Length, USB_CTRLR_XFER_SUCCESS, pReg->pContext);
+                  Length, pReg->pContext);
 }
 
 static void ResetFake(void)

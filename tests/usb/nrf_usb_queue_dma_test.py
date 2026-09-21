@@ -209,7 +209,7 @@ code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
     'nRFUsbdResetState', 'nRFUsbdBusReset', 'nRFUsbdAbortEp0',
     'nRFUsbdProcessEP0Setup', 'nRFUsbdQueueEp0Setup', 'USBD_IRQHandler'])
 code += re.search(r'static constexpr uint16_t USB_INTRF_RX_DRDY[^;]+;', intrf_source).group(0)
-code += '\nvoid UsbIntrfCtrlrOutEvent(uint8_t,UsbCtrlrEvtType_t,uint16_t,UsbCtrlrXferResult_t,void*);\n'
+code += '\nvoid UsbIntrfCtrlrOutEvent(uint8_t,UsbCtrlrEvtType_t,uint16_t,void*);\n'
 code += '\n'.join(function(name, intrf_source) for name in [
     'UsbIntrfSetTxIdle', 'UsbIntrfTakeTx', 'UsbIntrfDirectClear',
     'UsbIntrfTxFailure', 'UsbIntrfEpSendPktMode', 'UsbIntrfTxPackets',
@@ -228,10 +228,12 @@ code += r'''
 namespace nrf54 {
 constexpr unsigned NRF_USB_EP_COUNT=16;
 nRFUsbEpReg_t s_EpReg[NRF_USB_EP_COUNT][2];
+alignas(4) uint8_t s_Ep0Bounce[64];
 void nRFUsbPowerProcess(){}
 '''
 for name in ['nRFUsbValidDevNo', 'nRFUsbEpDir', 'nRFUsbGetEpReg',
-             'nRFUsbEpRegisteredEvent', 'UsbCtrlrProcess']:
+             'nRFUsbEpRegisteredEvent', 'nRF54UsbdEmit',
+             'nRF54UsbdEmitXfer', 'UsbCtrlrProcess']:
     code += function(name, nrf54_source) + '\n'
 code += '}\n'
 # Exercise the actual ISR acknowledgement block, not a hand-coded queue call.
@@ -263,10 +265,10 @@ void init(){
 // its own critical section even when the caller is the controller ISR.
 void interrupt(){const auto state=irqMask;USBD_IRQHandler();assert(irqMask==state);}
 void outComplete(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t len,
- UsbCtrlrXferResult_t result,void *context){
- assert(event==USB_CTRLR_EVT_XFER_CMPL && result==USB_CTRLR_XFER_SUCCESS);
+ void *context){
+ assert(event==USB_CTRLR_EVT_XFER_CMPL);
  assert(dmaBusy && !regs.EPSTATUS.bits); // Retain ownership while handling the buffer.
- UsbIntrfCtrlrOutEvent(ep,event,len,result,context);
+ UsbIntrfCtrlrOutEvent(ep,event,len,context);
 }
 void retire(unsigned ep,bool in){
  const unsigned bit=ep+(in?0:16);
@@ -279,9 +281,9 @@ void retire(unsigned ep,bool in){
 }
 unsigned outSubmissions;
 void submitFromOut(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
- UsbCtrlrXferResult_t result,void *context){
+ void *context){
  assert(ep==1 && event==USB_CTRLR_EVT_XFER_CMPL && length==9);
- assert(result==USB_CTRLR_XFER_SUCCESS && dmaBusy && !regs.EPSTATUS.bits);
+ assert(dmaBusy && !regs.EPSTATUS.bits);
  assert(UsbCtrlrEpInXfer(0,2,(uint8_t*)context,9));
  assert(!regs.TASKS_STARTEPIN[2] && !dmaLocks && !dmaUnlocks);
  ++outSubmissions;
@@ -290,9 +292,9 @@ alignas(8) uint8_t setupResponse[18],setupOutBuffer[64];
 bool interruptSetup;
 unsigned setupOutCompletions;
 void setupOutComplete(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
- UsbCtrlrXferResult_t result,void*){
+ void*){
  assert(ep==1 && event==USB_CTRLR_EVT_XFER_CMPL && length==9);
- assert(result==USB_CTRLR_XFER_SUCCESS);++setupOutCompletions;
+ ++setupOutCompletions;
 }
 void setupResponseHandler(const UsbCtrlrEvt_t *event){
  assert(event->Setup.bmRequestType==0x80 && event->Setup.wLength==18);
@@ -346,6 +348,21 @@ void preemptCoreSend(){
  }
 }
 int main(int argc,char **argv){
+ // nRF54 data completion uses the endpoint callback; EP0 keeps its core event.
+ init();unsigned dataComplete=0;
+ auto &dataReg=nrf54::s_EpReg[1][1];dataReg.pContext=&dataComplete;
+ dataReg.Handler=[](uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,void *ctx){
+  assert(ep==0x81 && event==USB_CTRLR_EVT_XFER_CMPL && length==9);
+  ++*(unsigned*)ctx;
+ };
+ nrf54::nRF54UsbdEmitXfer(0x81,9);assert(dataComplete==1);
+ controlHandler=[](const UsbCtrlrXferEvt_t *event){
+  assert(event->EpAddr==0 && event->Length==8);
+  assert(event->Result==USB_CTRLR_XFER_SUCCESS);
+  assert(event->pBuffer==nrf54::s_Ep0Bounce);
+ };
+ nrf54::nRF54UsbdEmitXfer(0,8);
+ puts("PASS: nRF54 completion dispatch uses the four-argument endpoint callback and preserves EP0 events");
  // nRF54 foreground retry visits held OUT directions only, with IRQ exclusion.
  for(unsigned masked:{0U,1U}){
   init();irqMask=masked;
@@ -354,9 +371,9 @@ int main(int argc,char **argv){
    auto &reg=nrf54::s_EpReg[ep][dir];reg={};
    reg.pBuffer=ep%2?nullptr:buffer;reg.pContext=&calls[ep];
    reg.Handler=[](uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
-                  UsbCtrlrXferResult_t result,void *context){
+                  void *context){
     assert(ep>0 && ep<16 && ep%2 && irqMask);
-    assert(event==USB_CTRLR_EVT_DRDY && !length && result==USB_CTRLR_XFER_SUCCESS);
+    assert(event==USB_CTRLR_EVT_DRDY && !length);
     ++*(unsigned*)context;
    };
   }
@@ -1019,7 +1036,7 @@ int main(int argc,char **argv){
   // Unrelated OUT and IN endpoints continue while either EP1 or EP7 is held.
   unsigned otherComplete=0;
   UsbCtrlrEpAlloc(0,2,other,true,
-   [](uint8_t ep,UsbCtrlrEvtType_t evt,uint16_t len,UsbCtrlrXferResult_t,void *ctx){
+   [](uint8_t ep,UsbCtrlrEvtType_t evt,uint16_t len,void *ctx){
     assert(ep==2 && evt==USB_CTRLR_EVT_XFER_CMPL && len==1);++*(unsigned*)ctx;
    },&otherComplete);
   s_Usbd.EpReg[1][0].MaxPacketSize=64;
@@ -1094,8 +1111,8 @@ int main(int argc,char **argv){
   unsigned completions=0;
   UsbCtrlrEpAlloc(0,1,out,blocking,
    [](uint8_t ep,UsbCtrlrEvtType_t event,uint16_t,
-      UsbCtrlrXferResult_t result,void *context){
-    assert(ep==1 && event==USB_CTRLR_EVT_XFER_CMPL && result==USB_CTRLR_XFER_SUCCESS);
+      void *context){
+    assert(ep==1 && event==USB_CTRLR_EVT_XFER_CMPL);
     ++*(unsigned*)context;
    },&completions);
   s_Usbd.EpReg[0][0].MaxPacketSize=64;
@@ -1269,8 +1286,8 @@ int main(int argc,char **argv){
  for(unsigned ep=1;ep<8;++ep){
   auto &reg=s_Usbd.EpReg[ep-1][1];reg.pContext=&completion;
   reg.Handler=[](uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
-                UsbCtrlrXferResult_t result,void *context){
-   assert(!irqMask && event==USB_CTRLR_EVT_XFER_CMPL && result==USB_CTRLR_XFER_SUCCESS);
+                void *context){
+   assert(!irqMask && event==USB_CTRLR_EVT_XFER_CMPL);
    assert(USB_ENDPADDR_IS_IN(ep));ep=USB_ENDPADDR_NUM(ep);
    auto *c=(Completion*)context;++c->calls[ep];c->amounts[ep]=length;
   };

@@ -23,8 +23,7 @@ void UsbCtrlrProcess(int)
 {
 	AppEvtHandlerExec();
 	if (s_OutBuffer == nullptr && s_OutHandler != nullptr)
-		s_OutHandler(3U, USB_CTRLR_EVT_DRDY, 0U,
-			USB_CTRLR_XFER_SUCCESS, s_OutContext);
+		s_OutHandler(3U, USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
 }
 bool UsbCtrlrVbusDetected(int) { return true; }
 bool UsbCtrlrHighSpeed(int) { return false; }
@@ -117,14 +116,14 @@ static bool Init(UsbDevIntrf_t *pIntrf, uint32_t *pRx, uint32_t *pTx,
 }
 
 static void RxComplete(const uint8_t *pData, uint16_t Length,
-					   UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
+					   UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 {
 	if (Length > 0U)
 	{
 		memcpy(s_OutBuffer, pData, Length);
 	}
-	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_XFER_CMPL,
-		Length, Result, s_OutContext);
+	s_OutHandler(USB_ENDPADDR_DIROUT(3U), Event,
+		Length, s_OutContext);
 }
 
 static void TestValidation(void)
@@ -174,7 +173,7 @@ static void TestRxOwnershipAndDrop(void)
 	CHECK(DeviceIntrfRxData(&intrf.DevIntrf, nullptr, 0) == 0);
 	CHECK((intrf.pRxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) == 0U);
 
-	RxComplete(nullptr, 0U, USB_CTRLR_XFER_FAILED);
+	RxComplete(nullptr, 0U, USB_CTRLR_EVT_XFER_FAILED);
 	CHECK(intrf.RxDropCnt == 2U);
 }
 
@@ -186,8 +185,7 @@ static void TestDrdyPolicy(void)
 	alignas(4) uint32_t tx[5] = {};
 	CHECK(Init(&intrf, rx, tx, true));
 	CHECK(UsbIntrfConfigure(&intrf, 8U));
-	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, 0U,
-		USB_CTRLR_XFER_SUCCESS, s_OutContext);
+	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
 	CHECK(s_OutXferCount == 1);
 	for (bool fullEvents : {false, true})
 	{
@@ -195,8 +193,7 @@ static void TestDrdyPolicy(void)
 		RxComplete(packet, sizeof(packet));
 		if (fullEvents)
 			while (AppEvtHandlerQue(0U, nullptr, [](uint32_t, void *) {})) {}
-		s_OutHandler(3U, USB_CTRLR_EVT_DRDY, 0U,
-			USB_CTRLR_XFER_SUCCESS, s_OutContext);
+		s_OutHandler(3U, USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
 		CHECK(s_OutBuffer == nullptr && intrf.RxPending);
 		const int submits = s_OutXferCount;
 		uint8_t output[3];
@@ -215,8 +212,7 @@ static void TestDrdyPolicy(void)
 	UsbDevIntrf_t nonblocking = {};
 	CHECK(Init(&nonblocking, rx, tx, false));
 	CHECK(UsbIntrfConfigure(&nonblocking, 8U));
-	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, 0U,
-		USB_CTRLR_XFER_SUCCESS, s_OutContext);
+	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
 	CHECK(s_OutXferCount == 0);
 }
 
@@ -232,13 +228,11 @@ static void TestTx(void)
 	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, data, sizeof(data)) == 3);
 	CHECK(s_InLength == 3U && memcmp(s_InBuffer, data, sizeof(data)) == 0);
 	CHECK(!UsbIntrfRequestToSend(&intrf, 1));
-	s_InHandler(USB_ENDPADDR_DIRIN(3U), USB_CTRLR_EVT_XFER_CMPL, 3U,
-		USB_CTRLR_XFER_SUCCESS, s_InContext);
+	s_InHandler(USB_ENDPADDR_DIRIN(3U), USB_CTRLR_EVT_XFER_CMPL, 3U, s_InContext);
 	CHECK(UsbIntrfRequestToSend(&intrf, 0));
 	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, nullptr, 0) == 0);
 	CHECK(!atomic_load(&intrf.DevIntrf.bTxReady));
-	s_InHandler(USB_ENDPADDR_DIRIN(3U), USB_CTRLR_EVT_CANCEL, 0U,
-		USB_CTRLR_XFER_CANCELLED, s_InContext);
+	s_InHandler(USB_ENDPADDR_DIRIN(3U), USB_CTRLR_EVT_CANCEL, 0U, s_InContext);
 	CHECK(atomic_load(&intrf.DevIntrf.bTxReady));
 
 	s_XferOk = false;

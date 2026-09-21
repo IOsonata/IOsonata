@@ -173,9 +173,9 @@ void frame(uint16_t length=0,bool zero=false){
  ++regs.FRAMECNTR;regs.SIZE.ISOOUT=zero?USBD_SIZE_ISOOUT_ZERO_Msk:length;
  nRFUsbdHandleSof();
 }
-void callback(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,UsbCtrlrXferResult_t result,void*){
+void callback(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,void*){
  assert(event==USB_CTRLR_EVT_XFER_CMPL && !irqMask);
- assert(USB_ENDPADDR_NUM(ep)==8 && result==USB_CTRLR_XFER_SUCCESS);
+ assert(USB_ENDPADDR_NUM(ep)==8);
  unsigned dir=USB_ENDPADDR_IS_IN(ep)?1:0;++callbacks[dir];lengths[dir]=length;
  if(!dir){
   assert(ISO_BUSY()&1);uint8_t copy[512];memcpy(copy,outBuffer,length);
@@ -207,13 +207,13 @@ int main(){
  s_Usbd.EpReg[7][0].bBlocking=true;
  s_Usbd.EpReg[7][0].pContext=&ready;
  s_Usbd.EpReg[7][0].Handler=[](uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
-  UsbCtrlrXferResult_t result,void *context){
+  void *context){
   assert(ep==8 && event==USB_CTRLR_EVT_DRDY && length==0);
-  assert(result==USB_CTRLR_XFER_SUCCESS);++*(unsigned*)context;
+  ++*(unsigned*)context;
  };
  frame(9);
  assert(ready==1 && !isoStarts[0] && !dmaBusy);
- puts("PASS: ISO DRDY dispatch preserves endpoint, event, success and registered context");
+ puts("PASS: ISO DRDY dispatch preserves endpoint, event, length and registered context");
 
  alignas(8) uint8_t txMemory[CFIFO_TOTAL_MEMSIZE(128,1)];
  const uint16_t regularLengths[]={1,2,3,4,9,64};

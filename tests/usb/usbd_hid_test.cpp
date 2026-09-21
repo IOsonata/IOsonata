@@ -275,19 +275,17 @@ static void CompleteIn(void)
 	const uint16_t length = s_InLength;
 	s_InBusy = false;
 	s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
-		length, USB_CTRLR_XFER_SUCCESS, s_InContext);
+		length, s_InContext);
 }
 
 static void Receive(const uint8_t *pData, uint16_t Length)
 {
-	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY, Length,
-		USB_CTRLR_XFER_SUCCESS, s_OutContext);
+	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY, Length, s_OutContext);
 	if (Length != 0U)
 	{
 		memcpy(s_OutBuffer, pData, Length);
 	}
-	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL, Length,
-		USB_CTRLR_XFER_SUCCESS, s_OutContext);
+	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL, Length, s_OutContext);
 }
 
 static bool Control(UsbdHid &Hid, const UsbSetupData_t *pSetup,

@@ -253,7 +253,7 @@ static void DeliverOut(const uint8_t *pData, uint16_t Length)
 	s_OutLength = Length;
 	s_OutReady = true;
 	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
-		Length, USB_CTRLR_XFER_SUCCESS, s_OutContext);
+		Length, s_OutContext);
 	if (!s_OutDma)
 		return;
 	if (Length > 0U)
@@ -261,7 +261,7 @@ static void DeliverOut(const uint8_t *pData, uint16_t Length)
 	s_OutReady = false;
 	s_OutDma = false;
 	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
-		s_OutLength, USB_CTRLR_XFER_SUCCESS, s_OutContext);
+		s_OutLength, s_OutContext);
 }
 
 static void CompleteIn(void)
@@ -278,7 +278,7 @@ static void CompleteIn(void)
 	const uint16_t length = s_InLength;
 	s_InBusy = false;
 	s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
-		length, USB_CTRLR_XFER_SUCCESS, s_InContext);
+		length, s_InContext);
 }
 
 static UsbMscCmdBlkWrapper_t MakeCbw(uint32_t Tag, uint32_t Length,
