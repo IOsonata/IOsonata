@@ -198,7 +198,7 @@ static inline bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
 	return UsbCtrlrEpXfer(DevNo, (uint8_t)(EpNum & 0x7FU), Length);
 }
 
-// IN copies accepted bytes before returning; completion reports that chunk.
+// IN returns bytes copied into the queue; completion notifies that it drained.
 // A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
 bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr);

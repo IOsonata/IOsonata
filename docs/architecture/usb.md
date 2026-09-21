@@ -448,12 +448,21 @@ outside `UsbIntrf` and `UsbIsoIntrf` so the reusable data layers do not become
 device-mode specific.
 
 `UsbCtrlrEp0Send()` copies the accepted IN bytes before returning their count.
-The core submits any remaining bytes through the same API on transfer completion.
+The core advances its IN offset by that return value; IN completion is only a
+notification that the copied chunk finished. It submits any remaining bytes
+through the same API on completion.
 The controller arms EP0 OUT from SETUP and reports each received packet through
 the existing EP0 transfer event after DMA completes. Its event buffer is valid
-only during that callback; the core copies it into the control response buffer.
+only during that callback; the core validates the received length and copies it
+into the control response buffer. The nRF52 controller uses a packet-sized DMA
+buffer and does not count the remaining control request bytes.
 `UsbCtrlrEp0Status()` starts the status stage. Data completion uses the same EP0
 event path for both directions, without an intermediate application event.
+
+The nRF52 ISO controller keeps one pending DMA packet length per direction.
+Zero means a requested ZLP; minus one means no packet is waiting. Completion
+reads the hardware AMOUNT register while the endpoint is still held for its
+callback. There is no second buffer pointer or software actual-length copy.
 
 ## Interrupt endpoints
 

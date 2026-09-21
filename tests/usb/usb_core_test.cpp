@@ -435,7 +435,7 @@ static bool TestControlChunks(void)
 			CHECK(LastXfer()->pBuffer == s_LongResponse + offset);
 			CHECK(LastXfer()->Data[0] == s_LongResponse[offset]);
 			CHECK(s_Class.StageCnt == 1);
-			Complete(EP0_IN, copied);
+			Complete(EP0_IN, 0); // IN progress comes from Send, not this notification.
 			offset += copied;
 		}
 		CHECK(s_Class.StageCnt == 2 && s_Class.Stage[1] == USB_CTRL_DATA);
@@ -479,6 +479,23 @@ static bool TestControlChunks(void)
 		Complete(EP0_IN, 0);
 		CHECK(s_Class.StageCnt == 3 && s_Class.Stage[2] == USB_CTRL_COMPLETE);
 	}
+	for (uint16_t length : {1, 65})
+	{
+		CHECK(Fixture());
+		CHECK(SetAddress(2) && SetConfig(1));
+		ClearCtrlrLog();s_Class.StageCnt = 0;s_LongLength = length;
+		memset(s_LongResponse, 0xCC, sizeof(s_LongResponse));
+		Setup(CLASS_IF_OUT, 0x42U, 0, 0, length);
+		memset(s_OutPacket, 0x55, sizeof(s_OutPacket));
+		if (length > 64)
+			Complete(EP0_OUT, 64);
+		Complete(EP0_OUT, 2);
+		CHECK(s_Ctrlr.StallCnt == 1 && s_Class.StageCnt == 2);
+		CHECK(s_Class.Stage[1] == USB_CTRL_ABORT);
+		for (unsigned n = length - 1; n < sizeof(s_LongResponse); ++n)
+			CHECK(s_LongResponse[n] == 0xCC);
+	}
+
 	return true;
 }
 

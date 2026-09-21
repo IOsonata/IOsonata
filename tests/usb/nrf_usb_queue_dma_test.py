@@ -57,7 +57,11 @@ code = r'''
 bool nRFUsbdIsoXfer(uint8_t,uint16_t){assert(false);return false;}
 uint32_t irqMask;
 uint32_t DisableInterrupt(){auto old=irqMask;irqMask=1;return old;}
-void EnableInterrupt(uint32_t old){irqMask=old;}
+void (*onIrqEnable)();
+void EnableInterrupt(uint32_t old){
+ irqMask=old;
+ if(!old && onIrqEnable){auto hook=onIrqEnable;onIrqEnable=nullptr;hook();}
+}
 uint32_t __get_PRIMASK(){return irqMask;}
 void __disable_irq(){irqMask=1;}
 void __set_PRIMASK(uint32_t old){irqMask=old;}
@@ -164,10 +168,6 @@ for tag, name in [('__nRF_Usbd_Que', 'nRFUsbdQue_t'), ('__nRF_Ep_Packet', 'nRFEP
     code += match.group(0) + '\n'
 code += re.search(r'typedef struct __nRF_Usb_Ep_Registration\s*\{.*?\} nRFUsbEpReg_t;',
     header, re.S).group(0) + '\n'
-code += re.search(r'typedef struct __nRF_Usbd_Xfer\s*\{.*?\} nRFUsbdXfer_t;',
-    header, re.S).group(0) + '\n'
-code += re.search(r'typedef struct __nRF_Usbd_Ctrlr\s*\{.*?\} nRFUsbdCtrlr_t;',
-    header, re.S).group(0) + '\n'
 code += re.search(r'enum\s*\{[^}]*USBD_FLAG_SUSPENDED[^}]*\};', header).group(0) + '\n'
 code += r'''
 #pragma pack(pop)
@@ -178,7 +178,8 @@ struct {
  bool LowPowerSuspend;
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue,hEp0Que;
- nRFUsbdCtrlr_t Ctrlr;
+ bool SofEnabled;
+ int16_t IsoDmaLen[2];
  alignas(4) uint8_t Ep0Bounce[64];
 } s_Usbd;
 alignas(8) uint8_t queueMem[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
@@ -214,6 +215,9 @@ code += '\n'.join(function(name, intrf_source) for name in [
     'UsbIntrfCtrlrInEvent', 'UsbIntrfDirectReady', 'UsbIntrfDirectRxComplete',
     'UsbIntrfRegisterRx', 'UsbIntrfReleaseRx', 'UsbIntrfCompleteRx', 'UsbIntrfRetryRx',
     'UsbIntrfCtrlrOutEvent', 'UsbIntrfRxData', 'UsbIntrfRxDirect', 'UsbIntrfUnconfigure'])
+# Run the core's real submit/accounting function against controller Send too.
+code += 'struct {int DevNo;uint8_t *CtrlData;uint16_t CtrlDataLen,CtrlActual;} s_Core;\n'
+code += function('UsbCoreSendIn', (ROOT / 'src/usb/usb.cpp').read_text())
 # Exercise the actual ISR acknowledgement block, not a hand-coded queue call.
 start = source.index('if (NRF_USBD->EVENTS_EPDATA != 0U ||')
 end = source.index('{', start) + 1
@@ -230,7 +234,8 @@ void init(){
  controlEvents=0;controlEvent={};
  isoAtSof=false;suspends=resumes=setups=0;s_Usbd.LowPowerSuspend=false;
  setupHandler=nullptr;controlHandler=nullptr;
- s_Usbd.Ctrlr={};
+ s_Usbd.SofEnabled=false;
+ s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=-1;
  s_Usbd.Flags=USBD_FLAG_MAC_AWAKE;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  assert(AppEvtHandlerInit(nullptr,0));
  memset(ep0Mem,0xA5,sizeof(ep0Mem));
@@ -288,20 +293,41 @@ void setupResponseHandler(const UsbCtrlrEvt_t *event){
  assert(bool(regs.TASKS_STARTEPIN[0])==!interruptSetup);
 }
 uint8_t chainedResponse[513],outResponse[192];
-unsigned chainedOffset,outOffset,outCallbacks;
+unsigned chainedOffset,outOffset,outCallbacks,outExpected;
 void chainEp0(const UsbCtrlrXferEvt_t *event){
  assert(event->EpAddr==0x80 && dmaBusy && !regs.EPSTATUS.bits);
- chainedOffset+=event->Length;
+ assert(event->Length==0);
  if(chainedOffset<sizeof(chainedResponse)){
-  assert(UsbCtrlrEp0Send(0,chainedResponse+chainedOffset,
-   sizeof(chainedResponse)-chainedOffset)>0);
+  const int copied=UsbCtrlrEp0Send(0,chainedResponse+chainedOffset,
+   sizeof(chainedResponse)-chainedOffset);
+  assert(copied>0);chainedOffset+=copied;
  }
 }
 void receiveEp0(const UsbCtrlrXferEvt_t *event){
+ if(event->EpAddr==0x80)return; // Synchronous status completion.
  assert(event->EpAddr==0 && dmaBusy && !regs.EPSTATUS.bits);
  assert(!regs.EVENTS_ENDEPOUT[0] && event->pBuffer==s_Usbd.Ep0Bounce);
  memcpy(outResponse+outOffset,event->pBuffer,event->Length);
  outOffset+=event->Length;++outCallbacks;
+ assert(regs.TASKS_EP0RCVOUT); // Armed before the core chooses status.
+ if(outOffset==outExpected || event->Length<64)
+  assert(UsbCtrlrEp0Status(0,0x80));
+}
+unsigned coreDone,wireOffset;
+void completeCoreIn(const UsbCtrlrXferEvt_t *event){
+ assert(event->EpAddr==0x80 && event->Length==0);
+ if(s_Core.CtrlActual<s_Core.CtrlDataLen)assert(UsbCoreSendIn());
+ else ++coreDone;
+}
+void preemptCoreSend(){
+ assert(!irqMask && s_Core.CtrlActual>0);
+ while(auto *packet=(nRFEPPkt_t*)CFifoPeek(s_Usbd.hEp0Que)){
+  assert(s_Core.CtrlActual>=wireOffset+packet->Len);
+  assert(!memcmp(packet->Payload,s_Core.CtrlData+wireOffset,packet->Len));
+  wireOffset+=packet->Len;
+  regs.EPSTATUS.bits=1;regs.EVENTS_ENDEPIN[0]=regs.EVENTS_EP0DATADONE=1;
+  interrupt();
+ }
 }
 int main(int argc,char **argv){
  const bool fullAppEvt=argc==2 && !strcmp(argv[1],"--full-appevt");
@@ -333,7 +359,7 @@ int main(int argc,char **argv){
    interrupt();offset+=bytes;
    assert(CFifoUsed(s_Usbd.hEp0Que)==--count);
   }
-  assert(ep0Completions==1 && ep0Length==unsigned(length));
+  assert(ep0Completions==1 && ep0Length==0);
   assert(isoChecks==1);
  }
  puts("PASS: ISR hands regular DMA to queued EP0, then EP0 chains its own packets and status SHORTS");
@@ -357,7 +383,7 @@ int main(int argc,char **argv){
    regs.EPSTATUS.bits=1;regs.EVENTS_ENDEPIN[0]=regs.EVENTS_EP0DATADONE=1;
    interrupt();offset+=bytes;
   }
-  assert(ep0Completions==1 && ep0Length==unsigned(length));
+  assert(ep0Completions==1 && ep0Length==0);
   assert(!CFifoUsed(s_Usbd.hEp0Que) && !dmaBusy);
  }
  puts("PASS: EP0 queued packets survive immediate caller-buffer reuse after Send returns");
@@ -376,16 +402,13 @@ int main(int argc,char **argv){
    assert(UsbCtrlrEpInXfer(0,1,data,9));
    const int copied=UsbCtrlrEp0Send(0,length?response:nullptr,length-offset);
    assert(copied==min(length-offset,256) && irqMask==mask);
-   assert(s_Usbd.Ctrlr.Ep0Len[1]==copied);
    memset(response,0xFF,sizeof(response));
    const int packets=std::max(1,(copied+63)/64);
    assert(CFifoUsed(s_Usbd.hEp0Que)==packets);
    if(packets==4){
     // A full queue accepts nothing and must preserve the pending completion.
     assert(UsbCtrlrEp0Send(0,data,1)==0 && irqMask==mask);
-    assert(s_Usbd.Ctrlr.Ep0Len[1]==copied);
     assert(UsbCtrlrEp0Send(0,nullptr,0)==-1 && irqMask==mask);
-    assert(s_Usbd.Ctrlr.Ep0Len[1]==copied);
    }
    regs.EPSTATUS.bits=2;regs.EVENTS_ENDEPIN[1]=1;interrupt();
    dmaLocks=dmaUnlocks=0;
@@ -404,7 +427,7 @@ int main(int argc,char **argv){
     assert(CFifoUsed(s_Usbd.hEp0Que)==packets-packetNo && ep0Completions==chunks);
     regs.EVENTS_EP0DATADONE=1;interrupt();sent+=bytes;
    }
-   assert(ep0Completions==++chunks && ep0Length==unsigned(copied));
+   assert(ep0Completions==++chunks && ep0Length==0);
    assert(!CFifoUsed(s_Usbd.hEp0Que) && !s_Usbd.hEp0Que->DropCnt);
    assert(!dmaBusy && !dmaLocks && dmaUnlocks==1 && irqMask==mask);
    offset+=copied;
@@ -433,7 +456,6 @@ int main(int argc,char **argv){
   init();regs.BMREQUESTTYPE=0x21;regs.BREQUEST=0x41;
   regs.WLENGTHL=length;regs.EVENTS_EP0SETUP=1;
   interrupt();AppEvtHandlerExec();
-  assert(s_Usbd.Ctrlr.Ep0Len[0]==length);
   assert(regs.TASKS_EP0RCVOUT==unsigned(length!=0));
   assert(!dmaBusy && !controlEvents && !regs.TASKS_STARTEPOUT[0]);
  }
@@ -443,7 +465,8 @@ int main(int argc,char **argv){
  // DMA ownership, even when the application event queue is saturated.
  init();controlHandler=chainEp0;chainedOffset=0;
  for(unsigned i=0;i<sizeof(chainedResponse);++i)chainedResponse[i]=uint8_t(i*17+(i>>8));
- assert(UsbCtrlrEp0Send(0,chainedResponse,sizeof(chainedResponse))==256);
+ chainedOffset=UsbCtrlrEp0Send(0,chainedResponse,sizeof(chainedResponse));
+ assert(chainedOffset==256);
  while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
  dmaLocks=dmaUnlocks=0;
  for(unsigned offset=0;offset<sizeof(chainedResponse);){
@@ -460,13 +483,23 @@ int main(int argc,char **argv){
  assert(!AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){}));
  puts("PASS: direct EP0 IN completion refills via the upper callback and starts immediately without relocking or AppEvt");
 
+ // Deliver completion immediately when Send restores IRQs, before its caller
+ // gets control. The accepted offset must already be visible to the core.
+ init();controlHandler=completeCoreIn;coreDone=wireOffset=0;
+ s_Core={0,chainedResponse,sizeof(chainedResponse),0};
+ onIrqEnable=preemptCoreSend;
+ assert(UsbCoreSendIn());
+ assert(coreDone==1 && wireOffset==sizeof(chainedResponse) && !irqMask);
+ assert(!CFifoUsed(s_Usbd.hEp0Que) && !dmaBusy && !onIrqEnable);
+ puts("PASS: immediate IN completion sees the core's accepted offset before refilling the queue");
+
  // SETUP -> controller arms OUT -> data-ready -> DMA -> same EP0 callback.
  for(unsigned length:{1U,7U,64U,65U,129U})for(bool busy:{false,true})
  for(bool shortPacket:{false,true}){
   init();outOffset=outCallbacks=0;memset(outResponse,0xFF,sizeof(outResponse));
   regs.BMREQUESTTYPE=0x21;regs.BREQUEST=0x41;regs.WLENGTHL=length;
   regs.EVENTS_EP0SETUP=1;interrupt();AppEvtHandlerExec();
-  controlHandler=receiveEp0;
+  controlHandler=receiveEp0;outExpected=length;
   assert(regs.TASKS_EP0RCVOUT && !regs.TASKS_STARTEPOUT[0]);
   while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
   const unsigned total=shortPacket?length-1:length;
@@ -484,16 +517,16 @@ int main(int argc,char **argv){
    interrupt();
    assert(regs.TASKS_STARTEPOUT[0] && !regs.EVENTS_EP0DATADONE && dmaBusy);
    assert(regs.EPOUT[0].PTR==uint32_t(uintptr_t(s_Usbd.Ep0Bounce)));
-   assert(regs.EPOUT[0].MAXCNT==min(length-offset,64U));
+   assert(regs.EPOUT[0].MAXCNT==64U);
    const unsigned amount=min(total-offset,64U);
    for(unsigned i=0;i<amount;++i)s_Usbd.Ep0Bounce[i]=uint8_t(offset+i);
    regs.EPSTATUS.bits=1U<<16;regs.EPOUT[0].AMOUNT=amount;
    regs.EVENTS_ENDEPOUT[0]=0;interrupt();assert(outOffset==offset);
    regs.EVENTS_ENDEPOUT[0]=1;interrupt();
    offset+=amount;assert(outOffset==offset && !dmaBusy);
-   assert(s_Usbd.Ctrlr.Ep0Len[0]==length-offset);
    const bool more=amount==64 && offset<length;
-   assert(bool(regs.TASKS_EP0RCVOUT)==more);
+   assert(regs.TASKS_EP0RCVOUT);
+   assert(bool(regs.TASKS_EP0STATUS)==!more);
    memset(s_Usbd.Ep0Bounce,0xEE,sizeof(s_Usbd.Ep0Bounce));
    if(!more)break;
   }while(true);
@@ -589,7 +622,7 @@ int main(int argc,char **argv){
   assert(CFifoUsed(s_Usbd.hEp0Que)==int(packets-1) && !dmaLocks);
   assert(bool(dmaBusy)==(packets>1) && dmaUnlocks==unsigned(packets==1));
  }
- assert(ep0Completions==1 && ep0Length==129);
+ assert(ep0Completions==1 && ep0Length==0);
  puts("PASS: EP0 packet chaining never relocks, and final completion releases DMA once");
 
  // A callback can submit another transfer while completion owns the lock.

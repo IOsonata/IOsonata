@@ -620,7 +620,7 @@ __attribute__((noinline)) void nRFUsbdSofAcquire(void)
 
 __attribute__((noinline)) void nRFUsbdSofRelease(void)
 {
-	if (!s_Usbd.Ctrlr.SofEnabled &&
+	if (!s_Usbd.SofEnabled &&
 		(s_Usbd.Flags & (USBD_FLAG_ISO_IN_OPEN | USBD_FLAG_ISO_OUT_OPEN |
 			USBD_FLAG_SUSPENDED)) == 0U)
 	{
@@ -744,7 +744,8 @@ static __attribute__((noinline)) bool nRFUsbdQueXferDir(uint8_t EpNum, bool In, 
 }
 static void nRFUsbdResetState(void)
 {
-	memset(&s_Usbd.Ctrlr, 0, sizeof(s_Usbd.Ctrlr));
+	s_Usbd.SofEnabled = false;
+	s_Usbd.IsoDmaLen[0] = s_Usbd.IsoDmaLen[1] = -1;
 
 	CFifoFlush(s_Usbd.hQue);
 	CFifoFlush(s_Usbd.hEp0Que);
@@ -762,8 +763,6 @@ static void nRFUsbdAbortEp0(void)
 	const uint32_t state = DisableInterrupt();
 	CFifoFlush(s_Usbd.hEp0Que);
 	EnableInterrupt(state);
-
-	memset(s_Usbd.Ctrlr.Ep0Len, 0, sizeof(s_Usbd.Ctrlr.Ep0Len));
 
 	NRF_USBD->EVENTS_ENDEPIN[0] = 0;
 	NRF_USBD->EVENTS_ENDEPOUT[0] = 0;
@@ -1009,7 +1008,7 @@ static void nRFUsbdHandleSof(void)
 		nRFUsbdIsoSof();
 	}
 
-	if (s_Usbd.Ctrlr.SofEnabled)
+	if (s_Usbd.SofEnabled)
 	{
 		UsbCtrlrEvt_t evt;
 		evt.Type = USB_CTRLR_EVT_SOF;
@@ -1071,7 +1070,6 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) == 0U &&
 		evt.Setup.wLength != 0U)
 	{
-		s_Usbd.Ctrlr.Ep0Len[0] = evt.Setup.wLength;
 		NRF_USBD->SHORTS = 0U;
 		nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
 	}
@@ -1140,7 +1138,7 @@ extern "C" void USBD_IRQHandler(void)
 				break;
 			}
 
-			nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, s_Usbd.Ctrlr.Ep0Len[1]);
+			nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
 			startDma = true;
 			break;
 		}
@@ -1164,11 +1162,9 @@ extern "C" void USBD_IRQHandler(void)
 			if (NRF_USBD->EVENTS_EP0SETUP == 0U)
 			{
 				const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
-				s_Usbd.Ctrlr.Ep0Len[0] -= amount;
+				// Re-arm before the core may select status or stall.
+				nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
 				nRFUsbdEmitXfer(0U, amount);
-				if (amount == NRFX_USBD_MAX_PACKET_SIZE &&
-					s_Usbd.Ctrlr.Ep0Len[0] != 0U)
-					nRFUsbdNoDmaTask(&NRF_USBD->TASKS_EP0RCVOUT);
 			}
 			startDma = true;
 			break;
@@ -1209,9 +1205,7 @@ extern "C" void USBD_IRQHandler(void)
 			{
 				NRF_USBD->EVENTS_EP0DATADONE = 0U;
 				NRF_USBD->EPOUT[0].PTR = (uint32_t)(uintptr_t)s_Usbd.Ep0Bounce;
-				NRF_USBD->EPOUT[0].MAXCNT = min(
-					(int)(s_Usbd.Ctrlr.Ep0Len[0]),
-					NRFX_USBD_MAX_PACKET_SIZE);
+				NRF_USBD->EPOUT[0].MAXCNT = NRFX_USBD_MAX_PACKET_SIZE;
 				nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPOUT[0],
 					&NRF_USBD->EVENTS_ENDEPOUT[0]);
 			}
@@ -1470,7 +1464,7 @@ void UsbCtrlrRemoteWakeup(int DevNo)
 void UsbCtrlrSofEnable(int DevNo, bool Enable)
 {
 	(void)DevNo;
-	s_Usbd.Ctrlr.SofEnabled = Enable;
+	s_Usbd.SofEnabled = Enable;
 
 	if (Enable)
 	{
@@ -1697,10 +1691,6 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 		Length -= l;
 		cnt += l;
 	} while (Length != 0);
-
-	// Update only when this call copied data or queued a ZLP.
-	if (p != NULL || cnt > 0)
-		s_Usbd.Ctrlr.Ep0Len[1] = (uint16_t)cnt;
 
 	if (NRFX_USBD_EASYDMA_BUSY_REG == NRFX_USBD_EASYDMA_BUSY_REG_CLEAR)
 	{

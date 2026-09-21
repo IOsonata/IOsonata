@@ -236,7 +236,7 @@ void UsbCtrlrEpAlloc(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
 bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length);
 bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length);
 bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
-// IN copies accepted bytes before returning; completion reports that chunk.
+// IN returns bytes copied into the queue; completion notifies that it drained.
 // A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
 bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr);
@@ -273,25 +273,6 @@ typedef struct __nRF_Usb_Ep_Registration
 	bool bBlocking;
 } nRFUsbEpReg_t;
 
-#pragma pack(push, 4)
-
-typedef struct __nRF_Usbd_Xfer
-{
-	uint8_t *pBuffer;
-	uint16_t TotalLen;
-	volatile uint16_t ActualLen;
-} nRFUsbdXfer_t;
-
-typedef struct __nRF_Usbd_Ctrlr
-{
-	// OUT bytes remaining; IN bytes copied for the current completion.
-	uint16_t Ep0Len[2];
-	nRFUsbdXfer_t Iso[2];
-	bool SofEnabled;
-} nRFUsbdCtrlr_t;
-
-#pragma pack(pop)
-
 enum
 {
 	USBD_FLAG_SUSPENDED     = 0x0001U,
@@ -311,17 +292,18 @@ enum
 
 typedef struct __nRF_Usbd_State
 {
-	// Small configuration offsets and a transfer block before queue metadata
-	// let Thumb use shorter loads/stores without adding padding.
+	// Keep queue metadata at small offsets for Thumb loads/stores.
 	uint8_t IntPrio;
 	bool LowPowerSuspend;
+	bool SofEnabled;
+	// One pending DMA packet per ISO direction; -1 means none, 0 is a ZLP.
+	int16_t IsoDmaLen[2];
 	uint16_t IsoOutSize;
-	nRFUsbdCtrlr_t Ctrlr;
 	volatile uint32_t Flags;
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;
 	uint32_t IsoGeneration[2];
-	// Non-control endpoints 1-8; EP0 uses Ctrlr.Ep0Len above.
+	// Non-control endpoints 1-8.
 	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT - 1][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
 } nRFUsbdState_t;

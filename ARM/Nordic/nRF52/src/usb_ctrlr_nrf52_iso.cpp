@@ -81,13 +81,12 @@ bool nRFUsbdIsoStart(void)
 	{
 		const uint32_t need = (uint32_t)(USBD_FLAG_ISO_OUT_OPEN |
 			USBD_FLAG_ISO_OUT_READY) << dir;
-		nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Iso[dir];
-		if ((flags & need) != need || pXfer->pBuffer == NULL)
+		if ((flags & need) != need || s_Usbd.IsoDmaLen[dir] < 0)
 		{
 			continue;
 		}
 
-		uint16_t len = pXfer->TotalLen;
+		uint16_t len = (uint16_t)s_Usbd.IsoDmaLen[dir];
 		volatile USBD_ISOIN_Type *pEp;
 		volatile uint32_t *pTask;
 		volatile uint32_t *pEnd;
@@ -112,7 +111,7 @@ bool nRFUsbdIsoStart(void)
 		pEp->PTR = (uint32_t)(uintptr_t)
 			s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir].pBuffer;
 		pEp->MAXCNT = len;
-		pXfer->pBuffer = NULL;
+		s_Usbd.IsoDmaLen[dir] = -1;
 		nRFUsbdDmaStartLocked(pTask, pEnd);
 		return true;
 	}
@@ -142,10 +141,7 @@ bool nRFUsbdIsoXfer(uint8_t EpAddr, uint16_t Length)
 		return false;
 	}
 
-	nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Iso[dir];
-	pXfer->pBuffer = pReg->pBuffer;
-	pXfer->TotalLen = Length;
-	pXfer->ActualLen = 0U;
+	s_Usbd.IsoDmaLen[dir] = (int16_t)Length;
 	s_Usbd.Flags |= (uint32_t)USBD_FLAG_ISO_OUT_BUSY << dir;
 	nRFUsbdIsoService();
 	EnableInterrupt(state);
@@ -167,7 +163,9 @@ static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 		return;
 	}
 
-	const uint16_t amount = s_Usbd.Ctrlr.Iso[dir].ActualLen;
+	// BUSY prevents another DMA on this endpoint until its callback.
+	const uint16_t amount = (uint16_t)(dir != 0U ?
+		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
 	if (dir != 0U)
 	{
 		s_Usbd.Flags &= ~busyBit;
@@ -219,9 +217,6 @@ static bool nRFUsbdFinishIsoDma(bool In)
 	}
 
 	const uint8_t dir = In ? 1U : 0U;
-	const volatile USBD_ISOIN_Type *pEp = In ? &NRF_USBD->ISOIN :
-		(const volatile USBD_ISOIN_Type *)&NRF_USBD->ISOOUT;
-	s_Usbd.Ctrlr.Iso[dir].ActualLen = (uint16_t)pEp->AMOUNT;
 	*pEnd = 0U;
 	NRF_USBD->EPSTATUS = In ? (1UL << 8U) : (1UL << 24U);
 	__DSB();
@@ -259,8 +254,7 @@ void nRFUsbdIsoSof(void)
 	if ((flags & USBD_FLAG_ISO_OUT_OPEN) != 0U)
 	{
 		const uint32_t size = NRF_USBD->SIZE.ISOOUT;
-		nRFUsbdXfer_t *pOut = &s_Usbd.Ctrlr.Iso[0];
-		const bool waiting = pOut->pBuffer != NULL;
+		const bool waiting = s_Usbd.IsoDmaLen[0] >= 0;
 		if ((flags & USBD_FLAG_ISO_OUT_BUSY) == 0U || waiting)
 		{
 			if (size != 0U)
@@ -342,14 +336,11 @@ void nRFUsbdIsoEpClose(uint8_t EpAddr)
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdDmaWait();
 
-	nRFUsbdXfer_t *pXfer = &s_Usbd.Ctrlr.Iso[dir];
 	++s_Usbd.IsoGeneration[dir];
 	s_Usbd.Flags &= ~((uint32_t)(USBD_FLAG_ISO_OUT_BUSY |
 		USBD_FLAG_ISO_OUT_CMPL | USBD_FLAG_ISO_OUT_OPEN |
 		USBD_FLAG_ISO_OUT_READY) << dir);
-	pXfer->pBuffer = NULL;
-	pXfer->TotalLen = 0U;
-	pXfer->ActualLen = 0U;
+	s_Usbd.IsoDmaLen[dir] = -1;
 
 	nRFIsoHwEnable(in, false);
 	nRFUsbdSofRelease();

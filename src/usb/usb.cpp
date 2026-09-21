@@ -48,6 +48,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "app_evt_handler.h"
+#include "coredev/interrupt.h"
 #include "usb/usb.h"
 
 
@@ -104,7 +105,7 @@ static struct
 	int ActiveClass;
 	uint8_t *CtrlData;
 	uint16_t CtrlDataLen;
-	uint16_t CtrlActual;
+	uint16_t CtrlActual;			//!< IN bytes accepted; OUT bytes received
 	bool CtrlNeedZlp;
 	uint8_t CtrlReply[2];
 	UsbCoreCfg_t Cfg;
@@ -780,6 +781,22 @@ static bool UsbCoreStartStatus(void)
 	return true;
 }
 
+// Publish the accepted offset before an interrupt can complete this chunk.
+static bool UsbCoreSendIn(void)
+{
+	const uint32_t state = DisableInterrupt();
+	const uint16_t remaining = s_Core.CtrlDataLen - s_Core.CtrlActual;
+	uint8_t *pData = s_Core.CtrlData;
+	if (pData != nullptr)
+		pData += s_Core.CtrlActual;
+	const int copied = UsbCtrlrEp0Send(s_Core.DevNo, pData, remaining);
+	const bool accepted = copied > 0 || copied == remaining;
+	if (accepted)
+		s_Core.CtrlActual += copied;
+	EnableInterrupt(state);
+	return accepted;
+}
+
 static bool UsbCoreStartIn(const uint8_t *pData, uint16_t Available)
 {
 	if (s_Core.Setup.wLength == 0)
@@ -806,8 +823,7 @@ static bool UsbCoreStartIn(const uint8_t *pData, uint16_t Available)
 		(sendLen % s_Core.Cfg.Ep0Mps) == 0;
 	s_Core.CtrlState = USB_CTRL_DATA_IN;
 
-	const int copied = UsbCtrlrEp0Send(s_Core.DevNo, s_Core.CtrlData, sendLen);
-	return copied > 0 || copied == sendLen;
+	return UsbCoreSendIn();
 }
 
 static bool UsbCoreStartOut(uint8_t *pData, uint16_t Capacity)
@@ -1346,45 +1362,29 @@ static void UsbCoreProcessEp0Complete(const UsbCtrlrXferEvt_t *pXfer)
 	switch (s_Core.CtrlState)
 	{
 		case USB_CTRL_DATA_OUT:
-			memcpy(s_Core.CtrlData + s_Core.CtrlActual, pXfer->pBuffer, pXfer->Length);
-			[[fallthrough]];
-		case USB_CTRL_DATA_IN:
-			s_Core.CtrlActual += pXfer->Length;
-			if (s_Core.CtrlActual < s_Core.CtrlDataLen)
-			{
-				if (s_Core.CtrlState == USB_CTRL_DATA_IN)
-				{
-					if (UsbCtrlrEp0Send(s_Core.DevNo, s_Core.CtrlData + s_Core.CtrlActual,
-						s_Core.CtrlDataLen - s_Core.CtrlActual) <= 0)
-						UsbCoreStallControl();
-					return;
-				}
-				if (pXfer->Length == s_Core.Cfg.Ep0Mps)
-					return;
-			}
-			if (!UsbCoreInvokeActive(USB_CTRL_DATA, s_Core.CtrlActual))
+			if (pXfer->Length > s_Core.CtrlDataLen - s_Core.CtrlActual)
 			{
 				UsbCoreStallControl();
 				return;
 			}
-
-			if (s_Core.CtrlNeedZlp)
+			memcpy(s_Core.CtrlData + s_Core.CtrlActual, pXfer->pBuffer, pXfer->Length);
+			s_Core.CtrlActual += pXfer->Length;
+			if (s_Core.CtrlActual < s_Core.CtrlDataLen &&
+				pXfer->Length == s_Core.Cfg.Ep0Mps)
+				return;
+			break;
+		case USB_CTRL_DATA_IN:
+			if (s_Core.CtrlActual < s_Core.CtrlDataLen)
 			{
-				s_Core.CtrlNeedZlp = false;
-				s_Core.CtrlState = USB_CTRL_DATA_IN_ZLP;
-				if (UsbCtrlrEp0Send(s_Core.DevNo, nullptr, 0) < 0)
-				{
+				if (!UsbCoreSendIn())
 					UsbCoreStallControl();
-				}
 				return;
 			}
-
-			(void)UsbCoreStartStatus();
 			break;
 
 		case USB_CTRL_DATA_IN_ZLP:
 			(void)UsbCoreStartStatus();
-			break;
+			return;
 
 		case USB_CTRL_STATUS_IN:
 		case USB_CTRL_STATUS_OUT:
@@ -1395,12 +1395,31 @@ static void UsbCoreProcessEp0Complete(const UsbCtrlrXferEvt_t *pXfer)
 			(void)UsbCoreInvokeActive(USB_CTRL_COMPLETE,
 									   s_Core.CtrlActual);
 			UsbCoreResetControl();
-			break;
+			return;
 
 		case USB_CTRL_IDLE:
 		default:
-			break;
+			return;
 	}
+
+	if (!UsbCoreInvokeActive(USB_CTRL_DATA, s_Core.CtrlActual))
+	{
+		UsbCoreStallControl();
+		return;
+	}
+
+	if (s_Core.CtrlNeedZlp)
+	{
+		s_Core.CtrlNeedZlp = false;
+		s_Core.CtrlState = USB_CTRL_DATA_IN_ZLP;
+		if (UsbCtrlrEp0Send(s_Core.DevNo, nullptr, 0) < 0)
+		{
+			UsbCoreStallControl();
+		}
+		return;
+	}
+
+	(void)UsbCoreStartStatus();
 }
 
 static void UsbCoreNotifyReset(void)

@@ -73,7 +73,6 @@ struct Registers {
  struct {uint32_t ISOOUT=0,EPOUT[8]={};} SIZE;
 } regs;
 auto *NRF_USBD=&regs;
-struct nRFUsbdXfer_t {uint8_t *pBuffer;uint16_t TotalLen;volatile uint16_t ActualLen;};
 struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;uint16_t MaxPacketSize;bool bBlocking;};
 typedef Endpoint USBD_ISOIN_Type;
 typedef Endpoint USBD_ISOOUT_Type;
@@ -84,7 +83,8 @@ QUEUE_TYPES
 struct {
  volatile uint32_t Flags=0;
  uint32_t IsoGeneration[2]={};uint16_t IsoOutSize=0;
- struct {uint16_t Ep0Len[2];nRFUsbdXfer_t Iso[2];bool SofEnabled;} Ctrlr;
+ bool SofEnabled=false;
+ int16_t IsoDmaLen[2]={-1,-1};
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue;
 } s_Usbd;
@@ -181,7 +181,8 @@ void callback(uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,UsbCtrlrXferRes
  }else if(chainIn){chainIn=false;assert(productionEpInXfer(0,8,inBuffer,9));}
 }
 void init(){
- regs={};s_Usbd.Ctrlr={};memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
+ regs={};s_Usbd.SofEnabled=false;
+ s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=-1;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  s_Usbd.hQue=CFifoInit(queueMemory,sizeof(queueMemory),sizeof(nRFUsbdQue_t),true);
  assert(s_Usbd.hQue);
  // Both ISO directions open; every other flag (busy, complete, ready,
