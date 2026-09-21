@@ -626,27 +626,34 @@ static inline __attribute__((always_inline))
 void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 {
 	const uint8_t epNum = pQue->EpNum;
-	const bool out = pQue->Dir == NRFX_USBD_QUE_OUT;
-	const uint8_t *pBuffer = pQue->Dir == NRFX_USBD_QUE_IN_SCRATCH ?
-		(const uint8_t *)&pQue->Scratch : pQue->pBuffer;
+	const bool isIn = pQue->Dir != NRFX_USBD_QUE_OUT;
+	const uint8_t *pBuffer;
+
+	if (pQue->Dir == NRFX_USBD_QUE_IN_SCRATCH)
+	{
+		pBuffer = (const uint8_t *)&pQue->Scratch;
+	}
+	else
+	{
+		pBuffer = pQue->pBuffer;
+	}
+
 	uint16_t len = pQue->Len;
 
-	volatile USBD_EPIN_Type *pEp;
-	volatile uint32_t *pTask;
-	if (out)
+	// Both directions use the same layout, at different register-bank offsets.
+	uintptr_t epReg = (uintptr_t)&NRF_USBD->EPIN[epNum];
+	uintptr_t taskReg = (uintptr_t)&NRF_USBD->TASKS_STARTEPIN[epNum];
+	if (!isIn)
 	{
 		const uint16_t received = (uint16_t)NRF_USBD->SIZE.EPOUT[epNum];
 		if (received < len)
 			len = received;
-		pEp = (volatile USBD_EPIN_Type *)&NRF_USBD->EPOUT[epNum];
-		pTask = &NRF_USBD->TASKS_STARTEPOUT[epNum];
+		epReg += offsetof(NRF_USBD_Type, EPOUT) - offsetof(NRF_USBD_Type, EPIN);
+		taskReg += offsetof(NRF_USBD_Type, TASKS_STARTEPOUT) -
+			offsetof(NRF_USBD_Type, TASKS_STARTEPIN);
 	}
-	else
-	{
-		pEp = &NRF_USBD->EPIN[epNum];
-		pTask = &NRF_USBD->TASKS_STARTEPIN[epNum];
-	}
-
+	volatile USBD_EPIN_Type *pEp = (volatile USBD_EPIN_Type *)epReg;
+	volatile uint32_t *pTask = (volatile uint32_t *)taskReg;
 	pEp->PTR = (uint32_t)(uintptr_t)pBuffer;
 	pEp->MAXCNT = len;
 	*pTask = 1U;
