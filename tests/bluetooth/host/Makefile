@@ -136,6 +136,7 @@ bt_hci_usb_test_SOURCES := \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/device_intrf.cpp
 bt_hci_usb_test_EXTRA := $(CFIFO_OBJ)
 bt_hci_usb_test_DEPS := \

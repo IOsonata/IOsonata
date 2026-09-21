@@ -33,6 +33,11 @@ and increments RxDropCnt; ordinary non-blocking CFifo puts replace the oldest
 packet when full. Direct completion publishes the single RX slot instead of
 placing data into a FIFO, replacing any unread packet.
 
+RxData only consumes received FIFO data or the direct RX slot. OUT scheduling
+and retrying a held completion run through endpoint events and UsbProcess.
+A withheld OUT buffer is retried by the controller's foreground DRDY callback,
+including when AppEvt could not accept the initial retry.
+
 For IN, byte and packet modes retain queued TX data until host consumption
 completes the endpoint transfer. Direct TxData copies one current packet into
 the single TX slot and submits the endpoint transfer. The endpoint transfer type

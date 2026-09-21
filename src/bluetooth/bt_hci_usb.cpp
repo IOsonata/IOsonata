@@ -754,25 +754,6 @@ static bool BtHciUsbDevStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
-static void BtHciUsbDropPhysicalAcl(BtHciUsbDev_t *pHci)
-{
-	bool rearm = false;
-	const uint32_t state = DisableInterrupt();
-	if (CFifoGet(pHci->IntrfData.hRxFifo) != nullptr &&
-		pHci->IntrfData.RxPending)
-	{
-		pHci->IntrfData.RxPending = false;
-		rearm = true;
-	}
-	EnableInterrupt(state);
-
-	if (rearm)
-	{
-		(void)UsbCtrlrEpXfer(pHci->DevNo,
-			USB_ENDPADDR_DIROUT(pHci->AclEpNo), pHci->IntrfData.Mps);
-	}
-}
-
 static bool BtHciUsbBulkRxTypeValid(BtHciUsbPacketType_t Type)
 {
 	return Type == BT_HCI_USB_PACKET_COMMAND || Type == BT_HCI_USB_PACKET_ACL ||
@@ -793,7 +774,7 @@ static bool BtHciUsbConsumeAcl(BtHciUsbDev_t *pHci)
 		(size_t)pHci->AclRxLength + length >
 			BT_HCI_USB_PACKET_MAX_SIZE + (pHci->BulkSerialization ? 1U : 0U))
 	{
-		BtHciUsbDropPhysicalAcl(pHci);
+		(void)CFifoGet(pHci->IntrfData.hRxFifo);
 		BtHciUsbClearBulkRx(pHci);
 		return true;
 	}

@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "bluetooth/bt_hci_usb.h"
+#include "app_evt_handler.h"
 
 #define RX_SLOTS 8U
 #define TX_SLOTS 20U
@@ -124,7 +125,12 @@ bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
         SentPacket_t *pSent = &s_Sent[s_SendCount++];
         pSent->EpAddr = EpAddr;
         pSent->Length = Length;
-        if (Length > 0U) memcpy(pSent->Data, pReg->pBuffer, Length);
+        // Packet-mode IN uses the current FIFO packet as its DMA source.
+        const auto *pIntrf = static_cast<const UsbDevIntrf_t *>(pReg->pContext);
+        const uint8_t *pSource = pReg->pBuffer;
+        if (pSource == nullptr)
+            pSource = reinterpret_cast<UsbPkt_t *>(CFifoPeek(pIntrf->hTxFifo))->Data;
+        if (Length > 0U) memcpy(pSent->Data, pSource, Length);
         s_InBusy[epNo] = true;
         return true;
     }
@@ -280,6 +286,7 @@ static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
 
 static void ResetFake(void)
 {
+    CHECK(AppEvtHandlerInit(nullptr, 0));
     memset(&s_UsbCfg, 0, sizeof(s_UsbCfg));
     memset(s_OpenDesc, 0, sizeof(s_OpenDesc));
     memset(s_Registered, 0, sizeof(s_Registered));

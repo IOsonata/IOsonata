@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "usb/usb_intrf.h"
+#include "app_evt_handler.h"
 
 #define MPS 64U
 #define BUFFER_SIZE 128U
@@ -53,7 +54,13 @@ extern "C" {
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
 bool UsbCtrlrStart(int) { return true; }
 void UsbCtrlrStop(int) {}
-void UsbCtrlrProcess(int) {}
+void UsbCtrlrProcess(int)
+{
+    AppEvtHandlerExec();
+    if (s_OutBuffer == nullptr && s_OutHandler != nullptr)
+        s_OutHandler(EP_NO, USB_CTRLR_EVT_DRDY, 0U,
+                     USB_CTRLR_XFER_SUCCESS, s_OutContext);
+}
 bool UsbCtrlrVbusDetected(int) { return true; }
 bool UsbCtrlrHighSpeed(int) { return false; }
 void UsbCtrlrIntEnable(int) {}
@@ -118,6 +125,7 @@ static UsbDevIntrf_t s_Intrf;
 
 static bool Setup(bool Blocking)
 {
+    CHECK(AppEvtHandlerInit(nullptr, 0));
     memset(&s_Intrf, 0, sizeof(s_Intrf));
     memset(s_HwOut, 0, sizeof(s_HwOut));
     memset(s_EventLog, 0, sizeof(s_EventLog));
@@ -223,7 +231,7 @@ static void TestNoPreArm(void)
     CHECK(s_OutSubmit == 1);
 }
 
-static void TestBlocking(void)
+static void TestBlocking(bool FullEvents)
 {
     CHECK(Setup(true));
     uint8_t p[8] = {};
@@ -244,6 +252,8 @@ static void TestBlocking(void)
     }
 
     uint8_t pending[8] = {0xA5};
+    if (FullEvents)
+        while (AppEvtHandlerQue(0U, nullptr, [](uint32_t, void *) {})) {}
     CHECK(!Drdy(pending, sizeof(pending)));
     CHECK(s_HwOutReady);
     CHECK(!s_OutDma);
@@ -255,6 +265,9 @@ static void TestBlocking(void)
     uint8_t out[8] = {};
     CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
     CHECK(out[0] == 0);
+    CHECK(!s_OutDma && s_Intrf.RxPending);
+    CHECK(s_OutSubmit == (int)RX_SLOTS);
+    UsbCtrlrProcess(0);
     CHECK(s_OutDma);
     CHECK(!s_Intrf.RxPending);
     CHECK(s_OutSubmit == (int)RX_SLOTS + 1);
@@ -384,7 +397,8 @@ static void TestTxStillChains(void)
 int main(void)
 {
     TestNoPreArm();
-    TestBlocking();
+    TestBlocking(false);
+    TestBlocking(true);
     TestNonBlocking(false);
     TestNonBlocking(true);
     TestCancelIsNotCompletion();

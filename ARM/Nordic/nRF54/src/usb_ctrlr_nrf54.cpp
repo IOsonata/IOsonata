@@ -1698,6 +1698,17 @@ void UsbCtrlrProcess(int DevNo)
 	{
 		nRFUsbPowerProcess();
 		AppEvtHandlerExec();
+		const uint32_t state = DisableInterrupt();
+		for (uint8_t epNum = 1U; epNum < NRF_USB_EP_COUNT; epNum++)
+		{
+			nRFUsbEpReg_t *pReg = &s_EpReg[epNum][0];
+			if (pReg->pBuffer == NULL && pReg->Handler != NULL)
+			{
+				nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U,
+					USB_CTRLR_XFER_SUCCESS);
+			}
+		}
+		EnableInterrupt(state);
 	}
 }
 

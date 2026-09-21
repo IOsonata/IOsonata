@@ -70,6 +70,7 @@ using std::min;
 constexpr int NRFX_USBD_MAX_PACKET_SIZE=64;
 constexpr int NRFX_USBD_ISO_EP_NO=8;
 constexpr int NRFX_USBD_DATA_EP_COUNT=8;
+constexpr int NRFX_USBD_EP_COUNT=9;
 constexpr uint32_t NRFX_USBD_EASYDMA_BUSY_REG_BUSY=0x82;
 constexpr uint32_t NRFX_USBD_EASYDMA_BUSY_REG_CLEAR=0;
 constexpr uint32_t USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk=1;
@@ -220,6 +221,19 @@ code += '\n'.join(function(name, intrf_source) for name in [
 # Run the core's real submit/accounting function against controller Send too.
 code += 'struct {int DevNo;uint8_t *CtrlData;uint16_t CtrlDataLen,CtrlActual;} s_Core;\n'
 code += function('UsbCoreSendIn', (ROOT / 'src/usb/usb.cpp').read_text())
+# The other native controller must also recover a withheld OUT registration
+# without involving an application read or requiring a free AppEvt slot.
+nrf54_source = (ROOT / 'ARM/Nordic/nRF54/src/usb_ctrlr_nrf54.cpp').read_text()
+code += r'''
+namespace nrf54 {
+constexpr unsigned NRF_USB_EP_COUNT=16;
+nRFUsbEpReg_t s_EpReg[NRF_USB_EP_COUNT][2];
+void nRFUsbPowerProcess(){}
+'''
+for name in ['nRFUsbValidDevNo', 'nRFUsbEpDir', 'nRFUsbGetEpReg',
+             'nRFUsbEpRegisteredEvent', 'UsbCtrlrProcess']:
+    code += function(name, nrf54_source) + '\n'
+code += '}\n'
 # Exercise the actual ISR acknowledgement block, not a hand-coded queue call.
 start = source.index('if (NRF_USBD->EVENTS_EPDATA != 0U ||')
 end = source.index('{', start) + 1
@@ -332,6 +346,31 @@ void preemptCoreSend(){
  }
 }
 int main(int argc,char **argv){
+ // nRF54 foreground retry visits held OUT directions only, with IRQ exclusion.
+ for(unsigned masked:{0U,1U}){
+  init();irqMask=masked;
+  uint8_t buffer[64];unsigned calls[16]={};
+  for(unsigned ep=0;ep<16;++ep)for(unsigned dir=0;dir<2;++dir){
+   auto &reg=nrf54::s_EpReg[ep][dir];reg={};
+   reg.pBuffer=ep%2?nullptr:buffer;reg.pContext=&calls[ep];
+   reg.Handler=[](uint8_t ep,UsbCtrlrEvtType_t event,uint16_t length,
+                  UsbCtrlrXferResult_t result,void *context){
+    assert(ep>0 && ep<16 && ep%2 && irqMask);
+    assert(event==USB_CTRLR_EVT_DRDY && !length && result==USB_CTRLR_XFER_SUCCESS);
+    ++*(unsigned*)context;
+   };
+  }
+  while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
+  nrf54::UsbCtrlrProcess(1);for(auto count:calls)assert(!count);
+  nrf54::UsbCtrlrProcess(0);assert(irqMask==masked);
+  for(unsigned ep=0;ep<16;++ep){
+   assert(calls[ep]==ep%2);
+   nrf54::s_EpReg[ep][0].pBuffer=buffer;
+  }
+  nrf54::UsbCtrlrProcess(0);
+  for(unsigned ep=0;ep<16;++ep)assert(calls[ep]==ep%2);
+ }
+ puts("PASS: nRF54 controller processing retries withheld OUT registrations after full AppEvt");
  const bool fullAppEvt=argc==2 && !strcmp(argv[1],"--full-appevt");
  alignas(8) uint8_t data[192];
  for(unsigned i=0;i<sizeof(data);++i)data[i]=uint8_t(i);
@@ -993,9 +1032,12 @@ int main(int argc,char **argv){
   uint8_t output[256]={};
   assert(UsbIntrfRxData(&intrf.DevIntrf,output,64)==64);
   for(unsigned i=0;i<64;++i)assert(output[i]==0xA0);
+  assert(intrf.RxPending==length+2 && CFifoUsed(intrf.hRxFifo)==3);
+  assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==0);
+  assert(s_Usbd.EpReg[ep-1][0].pBuffer==nullptr);
+  UsbCtrlrProcess(0);
   assert(!intrf.RxPending && !intrf.RxDropCnt && CFifoUsed(intrf.hRxFifo)==4);
   assert(s_Usbd.EpReg[ep-1][0].pBuffer==rx);
-  UsbCtrlrProcess(0);
   assert(!regs.EPDATASTATUS.bits && CFifoUsed(s_Usbd.hQue)==1);
   assert(dmaBusy && regs.TASKS_STARTEPOUT[ep]);
   assert(UsbIntrfRxData(&intrf.DevIntrf,output,sizeof(output))==int(192+length));
@@ -1008,6 +1050,19 @@ int main(int argc,char **argv){
   UsbCtrlrProcess(0);UsbCtrlrProcess(0);
   assert(!intrf.RxDropCnt && !intrf.RxPending && CFifoUsed(intrf.hRxFifo)==0);
   assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==0); // No duplicate AppEvt enqueue/copy.
+
+  // Retry does not require another host packet, an EPDATA bit, or a successful
+  // initial AppEvt enqueue. Reading only frees FIFO space.
+  for(unsigned p=0;p<4;++p)receive(64,0xB0+p);
+  while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
+  receive(length,0xE6);
+  assert(UsbIntrfRxData(&intrf.DevIntrf,output,64)==64);
+  assert(intrf.RxPending==length+2 && CFifoUsed(intrf.hRxFifo)==3);
+  assert(!regs.EPDATASTATUS.bits && !dmaBusy);
+  UsbCtrlrProcess(0);
+  assert(!intrf.RxPending && CFifoUsed(intrf.hRxFifo)==4);
+  assert(UsbIntrfRxData(&intrf.DevIntrf,output,sizeof(output))==int(192+length));
+  for(unsigned i=0;i<length;++i)assert(output[192+i]==0xE6);
 
   // Cancellation releases the held buffer; queued retry callbacks become no-ops.
   for(unsigned p=0;p<4;++p)receive(64,0xB0+p);

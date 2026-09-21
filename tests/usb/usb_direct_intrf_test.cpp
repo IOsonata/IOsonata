@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <string.h>
+#include <initializer_list>
 
 #include "usb/usb_intrf.h"
+#include "app_evt_handler.h"
 
 static uint8_t *s_OutBuffer;
 static uint8_t *s_InBuffer;
@@ -17,7 +19,13 @@ extern "C" {
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
 bool UsbCtrlrStart(int) { return true; }
 void UsbCtrlrStop(int) {}
-void UsbCtrlrProcess(int) {}
+void UsbCtrlrProcess(int)
+{
+	AppEvtHandlerExec();
+	if (s_OutBuffer == nullptr && s_OutHandler != nullptr)
+		s_OutHandler(3U, USB_CTRLR_EVT_DRDY, 0U,
+			USB_CTRLR_XFER_SUCCESS, s_OutContext);
+}
 bool UsbCtrlrVbusDetected(int) { return true; }
 bool UsbCtrlrHighSpeed(int) { return false; }
 void UsbCtrlrIntEnable(int) {}
@@ -81,6 +89,7 @@ static int KeepRx(DevIntrf_t *, DEVINTRF_EVT Event, uint8_t *, int)
 
 static void ResetFake(void)
 {
+	CHECK(AppEvtHandlerInit(nullptr, 0));
 	s_OutBuffer = nullptr;
 	s_InBuffer = nullptr;
 	s_OutHandler = nullptr;
@@ -180,6 +189,27 @@ static void TestDrdyPolicy(void)
 	s_OutHandler(USB_ENDPADDR_DIROUT(3U), USB_CTRLR_EVT_DRDY, 0U,
 		USB_CTRLR_XFER_SUCCESS, s_OutContext);
 	CHECK(s_OutXferCount == 1);
+	for (bool fullEvents : {false, true})
+	{
+		const uint8_t packet[] = {1, 2, 3};
+		RxComplete(packet, sizeof(packet));
+		if (fullEvents)
+			while (AppEvtHandlerQue(0U, nullptr, [](uint32_t, void *) {})) {}
+		s_OutHandler(3U, USB_CTRLR_EVT_DRDY, 0U,
+			USB_CTRLR_XFER_SUCCESS, s_OutContext);
+		CHECK(s_OutBuffer == nullptr && intrf.RxPending);
+		const int submits = s_OutXferCount;
+		uint8_t output[3];
+		CHECK(DeviceIntrfRxData(&intrf.DevIntrf, output, sizeof(output)) == 3);
+		CHECK(memcmp(output, packet, sizeof(packet)) == 0);
+		CHECK(s_OutBuffer == nullptr && intrf.RxPending);
+		CHECK(s_OutXferCount == submits);
+		UsbCtrlrProcess(0);
+		CHECK(!intrf.RxPending && s_OutBuffer == intrf.pRxBuffer);
+		CHECK(s_OutXferCount == submits + 1);
+		UsbCtrlrProcess(0);
+		CHECK(s_OutXferCount == submits + 1);
+	}
 
 	ResetFake();
 	UsbDevIntrf_t nonblocking = {};

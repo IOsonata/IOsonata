@@ -193,8 +193,9 @@ typedef struct __Usb_Ctrlr_Evt {
 /**
  * @brief	Non-control endpoint event callback.
  *
- * Registered once with the endpoint DMA buffer. It is called directly from
- * the controller interrupt, avoiding a function-table search per packet.
+ * Registered with the endpoint DMA buffer. Called from interrupt or deferred
+ * event processing. A NULL OUT buffer withholds reception; controller processing
+ * delivers DRDY so the handler can retry pending work and restore the buffer.
  */
 typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
 									uint16_t Length, UsbCtrlrXferResult_t Result,

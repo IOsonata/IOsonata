@@ -1360,6 +1360,15 @@ void UsbCtrlrProcess(int DevNo)
 
 	// Share EPDATASTATUS with the ISR without publishing a completion twice.
 	const uint32_t state = DisableInterrupt();
+	// Withheld OUT buffers retain receive work even if AppEvt was full.
+	for (uint8_t epNum = 1U; epNum < NRFX_USBD_EP_COUNT; epNum++)
+	{
+		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[epNum - 1U][0];
+		if (pReg->pBuffer == NULL && pReg->Handler != NULL)
+		{
+			nRFUsbEpRegisteredEvent(epNum, 0U, USB_CTRLR_EVT_DRDY, 0U);
+		}
+	}
 	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
 		nRFUsbdQueueEp0Setup();
 	const uint32_t inData = NRF_USBD->EPDATASTATUS & 0xFEU;
