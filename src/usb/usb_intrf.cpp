@@ -296,14 +296,6 @@ static int UsbIntrfTxPackets(DevIntrf_t * const pDevIntrf,
 
 	while (DataLen >= blockSize)
 	{
-		if (!pIntrf->hTxFifo->bBlocking &&
-			!atomic_load_explicit(&pIntrf->DevIntrf.bTxReady,
-				memory_order_acquire) &&
-			CFifoAvail(pIntrf->hTxFifo) <= 0)
-		{
-			break;
-		}
-
 		const UsbPkt_t *pPacket = reinterpret_cast<const UsbPkt_t *>(pData);
 		if (pPacket->Hdr.Length > pIntrf->Mps)
 		{
@@ -342,14 +334,6 @@ static int UsbIntrfTxBytes(DevIntrf_t * const pDevIntrf,
 
 	while (DataLen > 0)
 	{
-		if (!pIntrf->hTxFifo->bBlocking &&
-			!atomic_load_explicit(&pIntrf->DevIntrf.bTxReady,
-				memory_order_acquire) &&
-			CFifoAvail(pIntrf->hTxFifo) <= 0)
-		{
-			break;
-		}
-
 		int length = DataLen;
 		uint8_t *p = CFifoPutMultiple(pIntrf->hTxFifo, &length);
 		if (p == nullptr || length <= 0)
