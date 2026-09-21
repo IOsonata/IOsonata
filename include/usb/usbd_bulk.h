@@ -102,10 +102,9 @@ typedef struct __Usbd_Bulk_Config {
 
 #pragma pack(pop)
 
-// Natural alignment: IntrfData embeds DevIntrf_t whose pointer and atomic
-// members must stay naturally aligned on 64-bit host test builds.
+// Keep pointer members naturally aligned on target and host builds.
 typedef struct __Usbd_Bulk_Dev {
-	UsbDevIntrf_t IntrfData;		//!< Endpoint data path, owned by value
+	UsbDevIntrf_t *pData;		//!< Shared endpoint data path
 	int ItfNo;					//!< Internal allocation
 	int DevNo;
 	uint8_t EpNo;				//!< Internal allocation
@@ -126,12 +125,12 @@ extern "C" {
 
 static inline int UsbdBulkRx(UsbdBulkDev_t * const pBulk, uint8_t *pBuff,
 							 int BuffLen) {
-	return DeviceIntrfRx(&pBulk->IntrfData.DevIntrf, 0, pBuff, BuffLen);
+	return DeviceIntrfRx(&pBulk->pData->DevIntrf, 0, pBuff, BuffLen);
 }
 
 static inline int UsbdBulkTx(UsbdBulkDev_t * const pBulk, const uint8_t *pData,
 							 int DataLen) {
-	return DeviceIntrfTx(&pBulk->IntrfData.DevIntrf, 0, pData, DataLen);
+	return DeviceIntrfTx(&pBulk->pData->DevIntrf, 0, pData, DataLen);
 }
 
 static inline UsbdBulkDev_t *UsbdBulkGetDevHandle(DevIntrf_t * const pDevIntrf) {
@@ -149,53 +148,20 @@ bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 #ifdef __cplusplus
 }
 
-class UsbdBulk : public UsbDeviceClass, public DeviceIntrf {
+class UsbdBulk : public UsbDeviceClass, public UsbIntrf {
 public:
 	UsbdBulk() = default;
 	UsbdBulk(const UsbdBulk &) = delete;
 	UsbdBulk &operator = (const UsbdBulk &) = delete;
 
-	operator DevIntrf_t * () override { return &vUsbdBulk.IntrfData.DevIntrf; }
+	using UsbIntrf::operator DevIntrf_t *;
 	operator UsbdBulkDev_t * () { return &vUsbdBulk; }
-	DevIntrf_t *Data(void) { return &vUsbdBulk.IntrfData.DevIntrf; }
 
 	bool Init(const UsbdBulkCfg_t &Cfg);
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 				 uint8_t **ppData, uint16_t *pLength) override;
 	bool SelectConfig(uint8_t ConfigValue) override;
 	void Reset(void) override;
-
-	uint32_t Rate(uint32_t DataRate) override {
-		return DeviceIntrfSetRate(&vUsbdBulk.IntrfData.DevIntrf, DataRate);
-	}
-
-	uint32_t Rate(void) override {
-		return DeviceIntrfGetRate(&vUsbdBulk.IntrfData.DevIntrf);
-	}
-
-	bool RequestToSend(int NbBytes) override {
-		return UsbIntrfRequestToSend(&vUsbdBulk.IntrfData, NbBytes);
-	}
-
-	__attribute__((always_inline))
-	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
-		return DeviceIntrfTx(&vUsbdBulk.IntrfData.DevIntrf, DevAddr, pData, DataLen);
-	}
-
-	__attribute__((always_inline))
-	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRx(&vUsbdBulk.IntrfData.DevIntrf, DevAddr, pBuff, BuffLen);
-	}
-
-	__attribute__((always_inline))
-	int TxData(const uint8_t *pData, int DataLen) override {
-		return DeviceIntrfTxData(&vUsbdBulk.IntrfData.DevIntrf, pData, DataLen);
-	}
-
-	__attribute__((always_inline))
-	int RxData(uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRxData(&vUsbdBulk.IntrfData.DevIntrf, pBuff, BuffLen);
-	}
 
 private:
 	UsbdBulkDev_t vUsbdBulk = {};

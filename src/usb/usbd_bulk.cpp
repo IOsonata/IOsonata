@@ -66,7 +66,7 @@ static bool UsbdBulkConfig(UsbdBulkDev_t *pBulk, uint8_t Configuration)
 		return false;
 	}
 
-	UsbIntrfUnconfigure(&pBulk->IntrfData);
+	UsbIntrfUnconfigure(pBulk->pData);
 	if (Configuration == 0U)
 	{
 		return true;
@@ -77,7 +77,7 @@ static bool UsbdBulkConfig(UsbdBulkDev_t *pBulk, uint8_t Configuration)
 	}
 
 	const uint16_t mps = UsbdBulkMps(pBulk);
-	if (!UsbIntrfConfigure(&pBulk->IntrfData, mps))
+	if (!UsbIntrfConfigure(pBulk->pData, mps))
 	{
 		return false;
 	}
@@ -86,7 +86,7 @@ static bool UsbdBulkConfig(UsbdBulkDev_t *pBulk, uint8_t Configuration)
 		!UsbdBulkOpenEndpoint(pBulk, USB_ENDPADDR_DIROUT(pBulk->EpNo), mps))
 	{
 		UsbdBulkCloseEndpoints(pBulk);
-		UsbIntrfUnconfigure(&pBulk->IntrfData);
+		UsbIntrfUnconfigure(pBulk->pData);
 		return false;
 	}
 
@@ -97,7 +97,7 @@ static void UsbdBulkReset(UsbdBulkDev_t *pBulk)
 {
 	if (pBulk != nullptr)
 	{
-		UsbIntrfUnconfigure(&pBulk->IntrfData);
+		UsbIntrfUnconfigure(pBulk->pData);
 	}
 }
 
@@ -146,6 +146,7 @@ bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 }
 
 static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
+								 UsbDevIntrf_t *pData,
 								 const UsbdBulkCfg_t *pCfg,
 								 UsbDeviceClass *pClass)
 {
@@ -158,6 +159,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 		return false;
 	}
 
+	pBulk->pData = pData;
 	pBulk->DevNo = pCfg->DevNo;
 	pBulk->SubClass = pCfg->SubClass;
 	pBulk->Protocol = pCfg->Protocol;
@@ -198,12 +200,12 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 	dataCfg.BufferSize = (uint16_t)sizeof(pBulk->RxTransfer);
 	dataCfg.pRxBuffer = UsbdBulkRxBuffer(pBulk);
 
-	if (!UsbIntrfInit(&pBulk->IntrfData, &dataCfg))
+	if (!UsbIntrfInit(pBulk->pData, &dataCfg))
 	{
 		return false;
 	}
 
-	pBulk->IntrfData.pClassContext = pBulk;
+	pBulk->pData->pClassContext = pBulk;
 
 	if (!UsbdBulkMakeDesc(&pBulk->FsDesc, pBulk, USB_SPEED_FULL))
 	{
@@ -228,7 +230,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 
 bool UsbdBulk::Init(const UsbdBulkCfg_t &Cfg)
 {
-	return UsbdBulkInitInternal(&vUsbdBulk, &Cfg, this);
+	return UsbdBulkInitInternal(&vUsbdBulk, &vUsbDevIntrf, &Cfg, this);
 }
 
 bool UsbdBulk::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,

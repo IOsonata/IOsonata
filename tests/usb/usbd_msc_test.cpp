@@ -138,6 +138,10 @@ bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
 	{
 		if (s_InBusy || s_HaltIn)
 			return false;
+		UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(s_InContext);
+		uint8_t *pHead = CFifoPeek(pIntrf->hTxFifo);
+		s_InBuffer = pIntrf->Mode == USB_INTRF_MODE_PACKET ?
+		    reinterpret_cast<UsbPkt_t *>(pHead)->Data : pHead;
 		s_InBusy = true;
 		s_InLength = Length;
 		return true;
@@ -362,6 +366,10 @@ static void TestInitDescriptorAndControl(void)
 	alignas(4) uint8_t sector[SECTOR_SIZE];
 	UsbdMsc msc;
 	CHECK(msc.Init(MakeCfg(disk, sector)));
+	UsbIntrf *pTransport = &msc;
+	DeviceIntrf *pDevice = pTransport;
+	CHECK(pTransport->Data() == &static_cast<UsbdMscDev_t *>(msc)->pData->DevIntrf);
+	CHECK(static_cast<DevIntrf_t *>(*pDevice) == msc.Data());
 	CHECK(s_ClassObject == &msc);
 	CHECK(s_FsDescriptorLength == sizeof(UsbdMscDesc_t));
 	const UsbdMscDesc_t *pDesc =

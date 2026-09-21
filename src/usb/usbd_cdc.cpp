@@ -82,15 +82,15 @@ static uint8_t UsbdCdcNotifInterval(UsbdCdcDev_t *pCdc)
 
 bool UsbdCdcPortIsOpen(const UsbdCdcDev_t * const pCdc)
 {
-	return pCdc != nullptr && pCdc->IntrfData.Mps > 0U &&
+	return pCdc != nullptr && pCdc->pData->Mps > 0U &&
 		   (pCdc->ControlLineState & USB_CDC_CTRL_LINE_STATE_DTR) != 0U;
 }
 
 static void UsbdCdcNotifyPortState(UsbdCdcDev_t *pCdc, bool Open)
 {
-	if (pCdc->IntrfData.DevIntrf.EvtCB != nullptr)
+	if (pCdc->pData->DevIntrf.EvtCB != nullptr)
 	{
-		pCdc->IntrfData.DevIntrf.EvtCB(&pCdc->IntrfData.DevIntrf,
+		pCdc->pData->DevIntrf.EvtCB(&pCdc->pData->DevIntrf,
 								 DEVINTRF_EVT_STATECHG,
 								 nullptr, Open ? 1 : 0);
 	}
@@ -98,7 +98,7 @@ static void UsbdCdcNotifyPortState(UsbdCdcDev_t *pCdc, bool Open)
 
 static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 {
-	if (pCdc == nullptr || pCdc->IntrfData.Mps == 0U ||
+	if (pCdc == nullptr || pCdc->pData->Mps == 0U ||
 		!pCdc->SerialStatePending)
 	{
 		return;
@@ -143,7 +143,7 @@ static void UsbdCdcCloseEndpoints(UsbdCdcDev_t *pCdc)
 static void UsbdCdcCancelBusState(UsbdCdcDev_t *pCdc)
 {
 	pCdc->SerialStatePending = false;
-	UsbIntrfUnconfigure(&pCdc->IntrfData);
+	UsbIntrfUnconfigure(pCdc->pData);
 }
 
 static bool UsbdCdcConfig(UsbdCdcDev_t *pCdc, uint8_t Configuration)
@@ -174,7 +174,7 @@ static bool UsbdCdcConfig(UsbdCdcDev_t *pCdc, uint8_t Configuration)
 
 	const uint16_t dataMps = UsbdCdcMps(pCdc);
 
-	if (!UsbIntrfConfigure(&pCdc->IntrfData, dataMps))
+	if (!UsbIntrfConfigure(pCdc->pData, dataMps))
 	{
 		return false;
 	}
@@ -188,7 +188,7 @@ static bool UsbdCdcConfig(UsbdCdcDev_t *pCdc, uint8_t Configuration)
 							 USB_ENDPATT_TRANS_BULK, dataMps))
 	{
 		UsbdCdcCloseEndpoints(pCdc);
-		UsbIntrfUnconfigure(&pCdc->IntrfData);
+		UsbIntrfUnconfigure(pCdc->pData);
 		return false;
 	}
 
@@ -205,7 +205,7 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 						   UsbdCdcDev_t *pCdc)
 {
 	if (pSetup == nullptr || pCdc == nullptr || pLength == nullptr ||
-		pCdc->IntrfData.Mps == 0U ||
+		pCdc->pData->Mps == 0U ||
 		(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) != USB_REQTYPE_CLASS ||
 		(pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT) !=
 			USB_REQTYPE_INTERFACE ||
@@ -347,6 +347,7 @@ static void UsbdCdcReset(UsbdCdcDev_t *pCdc)
 }
 
 static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
+								UsbDevIntrf_t *pData,
 								const UsbdCdcCfg_t *pCfg,
 								UsbDeviceClass *pClass)
 {
@@ -358,6 +359,7 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 		return false;
 	}
 
+	pCdc->pData = pData;
 	pCdc->DevNo = pCfg->DevNo;
 	pCdc->ControlLineState = 0U;
 	pCdc->PendingControlLineState = 0U;
@@ -393,12 +395,12 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	dataCfg.BufferSize = (uint16_t)sizeof(pCdc->RxTransfer);
 	dataCfg.pRxBuffer = UsbdCdcRxBuffer(pCdc);
 
-	if (!UsbIntrfInit(&pCdc->IntrfData, &dataCfg))
+	if (!UsbIntrfInit(pCdc->pData, &dataCfg))
 	{
 		return false;
 	}
 
-	pCdc->IntrfData.pClassContext = pCdc;
+	pCdc->pData->pClassContext = pCdc;
 
 	UsbCtrlrEpAlloc(pCdc->DevNo,
 		USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo),
@@ -445,7 +447,7 @@ void UsbdCdcProcess(UsbdCdcDev_t * const pCdc)
 
 bool UsbdCdc::Init(const UsbdCdcCfg_t &Cfg)
 {
-	return UsbdCdcInitInternal(&vUsbdCdc, &Cfg, this);
+	return UsbdCdcInitInternal(&vUsbdCdc, &vUsbDevIntrf, &Cfg, this);
 }
 
 void UsbdCdc::Reset(void)

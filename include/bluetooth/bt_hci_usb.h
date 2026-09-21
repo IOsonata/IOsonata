@@ -184,11 +184,10 @@ typedef struct __Bt_Hci_Usb_Config {
 
 #pragma pack(pop)
 
-// Natural alignment: IntrfData and ScoIso embed DevIntrf_t whose pointer and
-// atomic members must stay naturally aligned on 64-bit host test builds.
+// Keep pointer members naturally aligned on target and host builds.
 typedef struct __Bt_Hci_Usb_Dev {
-	UsbDevIntrf_t IntrfData;		//!< ACL endpoint data path, owned by value
-	UsbIsoIntrf_t ScoIso;
+	UsbDevIntrf_t *pData;		//!< Shared endpoint data path
+	UsbIsoIntrf_t *pScoIso;
 	BtHciUsbRxData_t AclRxData;
 	BtHciUsbTxData_t AclTxData;
 	DevIntrfEvtHandler_t EvtCB;
@@ -257,7 +256,7 @@ bool BtHciUsbRequestToSend(BtHciUsbDev_t *pHci, int NbBytes);
 #ifdef __cplusplus
 }
 
-class BtHciUsb : public UsbDeviceClass, public DeviceIntrf {
+class BtHciUsb : public UsbDeviceClass, public UsbIntrf {
 public:
 	BtHciUsb() = default;
 	BtHciUsb(const BtHciUsb &) = delete;
@@ -270,45 +269,15 @@ public:
 	bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) override;
 	void Reset() override;
 
-	operator DevIntrf_t * () override {
-		return &vBtHciUsb.IntrfData.DevIntrf;
-	}
+	using UsbIntrf::operator DevIntrf_t *;
 	operator BtHciUsbDev_t * () { return &vBtHciUsb; }
-	DevIntrf_t *Data(void) { return &vBtHciUsb.IntrfData.DevIntrf; }
-
-	uint32_t Rate(uint32_t DataRate) override {
-		return DeviceIntrfSetRate(&vBtHciUsb.IntrfData.DevIntrf, DataRate);
-	}
-
-	uint32_t Rate(void) override {
-		return DeviceIntrfGetRate(&vBtHciUsb.IntrfData.DevIntrf);
-	}
-
-	__attribute__((always_inline))
-	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
-		return DeviceIntrfTx(&vBtHciUsb.IntrfData.DevIntrf, DevAddr, pData, DataLen);
-	}
-
-	__attribute__((always_inline))
-	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRx(&vBtHciUsb.IntrfData.DevIntrf, DevAddr, pBuff, BuffLen);
-	}
-
-	__attribute__((always_inline))
-	int TxData(const uint8_t *pData, int DataLen) override {
-		return DeviceIntrfTxData(&vBtHciUsb.IntrfData.DevIntrf, pData, DataLen);
-	}
-
-	__attribute__((always_inline))
-	int RxData(uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRxData(&vBtHciUsb.IntrfData.DevIntrf, pBuff, BuffLen);
-	}
 
 	bool RequestToSend(int NbBytes) override {
 		return BtHciUsbRequestToSend(&vBtHciUsb, NbBytes);
 	}
 
 private:
+	UsbIsoIntrf vScoIso;
 	BtHciUsbDev_t vBtHciUsb = {};
 };
 #endif

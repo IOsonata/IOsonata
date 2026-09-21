@@ -346,6 +346,10 @@ static void TestDescriptors(void)
     BtHciUsb hci;
     BtHciUsbCfg_t cfg = MakeCfg();
     CHECK(hci.Init(cfg));
+    UsbIntrf *pTransport = &hci;
+    DeviceIntrf *pDevice = pTransport;
+    CHECK(pTransport->Data() == &static_cast<BtHciUsbDev_t *>(hci)->pData->DevIntrf);
+    CHECK(static_cast<DevIntrf_t *>(*pDevice) == hci.Data());
 	CHECK(s_FsDescriptorLength == sizeof(BtHciUsbDesc_t));
 	const BtHciUsbDesc_t &desc =
 		*reinterpret_cast<const BtHciUsbDesc_t *>(s_FsDescriptor);
@@ -731,8 +735,8 @@ static void TestScoAlternateLifecycle(void)
     s_OpenFailAt = s_OpenCount;
     CHECK(!hci.SelectInterface(1U, 5U));
     CHECK(pHci->ScoAlt == 6U);
-    CHECK(pHci->ScoIso.Opened);
-    CHECK(pHci->ScoIso.Mps == mps[5]);
+    CHECK(pHci->pScoIso->Opened);
+    CHECK(pHci->pScoIso->Mps == mps[5]);
 
     CHECK(hci.SelectInterface(1U, 0U));
     CHECK(pHci->ScoAlt == 0U);

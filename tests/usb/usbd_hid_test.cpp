@@ -308,6 +308,10 @@ static void TestDescriptorAndPlacement(void)
 	TestHid hid;
 	UsbdHidCfg_t cfg = MakeCfg();
 	CHECK(hid.Init(cfg));
+	UsbIntrf *pTransport = &hid;
+	DeviceIntrf *pDevice = pTransport;
+	CHECK(pTransport->Data() == &static_cast<UsbdHidDev_t *>(hid)->pIntIntrf->pData->DevIntrf);
+	CHECK(static_cast<DevIntrf_t *>(*pDevice) == hid.Data());
 	CHECK(s_FsDescriptorLength == sizeof(UsbdHidDesc_t));
 	const UsbdHidDesc_t &desc =
 		*reinterpret_cast<const UsbdHidDesc_t *>(s_FsDescriptor);
@@ -346,7 +350,7 @@ static void TestDataAndLifecycle(void)
 
 	const uint8_t tx[] = { 1U, 2U, 3U };
 	CHECK(hid.RequestToSend(sizeof(tx)));
-	CHECK(hid.TxData(tx, sizeof(tx)) == (int)sizeof(tx));
+	CHECK(static_cast<UsbIntrf *>(&hid)->TxData(tx, sizeof(tx)) == (int)sizeof(tx));
 	CHECK(s_InBusy && s_InLength == sizeof(tx));
 	CHECK(memcmp(s_InBuffer, tx, sizeof(tx)) == 0);
 	CHECK(!hid.SendReport(tx, sizeof(tx)));
@@ -366,7 +370,7 @@ static void TestDataAndLifecycle(void)
 
 	hid.Suspend();
 	CHECK(!hid.SendReport(tx, sizeof(tx)));
-	CHECK(hid.TxData(tx, sizeof(tx)) == 0);
+	CHECK(static_cast<UsbIntrf *>(&hid)->TxData(tx, sizeof(tx)) == 0);
 	CHECK(hid.Resume());
 	CHECK(hid.SendReport(tx, sizeof(tx)));
 	CompleteIn();

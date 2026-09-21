@@ -42,6 +42,21 @@ SOFTWARE.
 
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
+#include <type_traits>
+#include "usb/usbd_bulk.h"
+#include "usb/usbd_hid.h"
+#include "usb/usbd_msc.h"
+#include "bluetooth/bt_hci_usb.h"
+
+static_assert(std::is_base_of<DeviceIntrf, UsbIntrf>::value, "USB transport root");
+static_assert(std::is_base_of<UsbIntrf, UsbdCdc>::value, "CDC transport");
+static_assert(std::is_base_of<UsbIntrf, UsbdBulk>::value, "Bulk transport");
+static_assert(std::is_base_of<UsbIntrf, UsbdMsc>::value, "MSC transport");
+static_assert(std::is_base_of<UsbIntrf, BtHciUsb>::value, "HCI transport");
+static_assert(std::is_base_of<UsbIntrf, UsbIsoIntrf>::value, "ISO transport");
+static_assert(std::is_base_of<UsbIntrf, UsbIntIntrf>::value, "Interrupt transport");
+static_assert(std::is_base_of<UsbIntIntrf, UsbdHid>::value, "HID interrupt transport");
+
 
 static uint8_t s_RegisteredEp[6];
 static int s_RegisteredEpCount;
@@ -241,6 +256,14 @@ int main(void)
 	}
 
 	UsbdCdcDev_t *pCdc0 = s_Cdc0;
+	UsbIntrf *pTransport = &s_Cdc0;
+	DeviceIntrf *pDevice = pTransport;
+	if (pTransport->Data() != &pCdc0->pData->DevIntrf ||
+		static_cast<DevIntrf_t *>(*pDevice) != s_Cdc0.Data())
+	{
+		printf("CDC does not share the UsbIntrf endpoint state\n");
+		return 14;
+	}
 	pCdc0->LineCoding.dwDTERate = 9600U;
 	UsbCtrlrEvt_t reset = {};
 	reset.Type = USB_CTRLR_EVT_RESET;
@@ -268,8 +291,8 @@ int main(void)
 	Setup(USB_REQ_SET_CONFIGURATION, 1U);
 	if (s_Ep0EventCount != 2 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
 		s_LastEp0Length != 0U || !UsbConfigured(0) || s_EpOpenCount != 6 ||
-		pCdc0->IntrfData.Mps != USB_CTRLR_PKT_LEN_MAX(0, BULK) ||
-		((UsbdCdcDev_t *)s_Cdc1)->IntrfData.Mps != USB_CTRLR_PKT_LEN_MAX(0, BULK))
+		pCdc0->pData->Mps != USB_CTRLR_PKT_LEN_MAX(0, BULK) ||
+		((UsbdCdcDev_t *)s_Cdc1)->pData->Mps != USB_CTRLR_PKT_LEN_MAX(0, BULK))
 	{
 		printf("C++ CDC configuration was not applied\n");
 		return 11;

@@ -107,6 +107,7 @@ ISO_SOURCES := \
 	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
 ISO_DUPLEX_TARGET := $(BUILD_DIR)/usb_iso_intrf_duplex_test
@@ -123,6 +124,7 @@ INT_SOURCES := \
 	$(ROOT)/src/usb/usb_int.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
 # Physical hardware validation. The Python runner uses python-libusb1 so it

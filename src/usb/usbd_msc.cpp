@@ -133,12 +133,12 @@ static bool UsbdMscRestartEndpoints(UsbdMscDev_t *pMsc)
 	const uint16_t mps = UsbdMscMps(pMsc);
 
 	UsbdMscCloseEndpoints(pMsc);
-	if (!UsbIntrfConfigure(&pMsc->IntrfData, mps) ||
+	if (!UsbIntrfConfigure(pMsc->pData, mps) ||
 		!UsbdMscOpenEndpoint(pMsc, in, mps) ||
 		!UsbdMscOpenEndpoint(pMsc, out, mps))
 	{
 		UsbdMscCloseEndpoints(pMsc);
-		UsbIntrfUnconfigure(&pMsc->IntrfData);
+		UsbIntrfUnconfigure(pMsc->pData);
 		pMsc->bConfigured = false;
 		return false;
 	}
@@ -196,7 +196,7 @@ bool UsbdMscMakeDesc(UsbdMscDesc_t *pDesc,
 
 static bool UsbdMscTxIdle(const UsbdMscDev_t *pMsc)
 {
-	return atomic_load_explicit(&pMsc->IntrfData.DevIntrf.bTxReady,
+	return atomic_load_explicit(&pMsc->pData->DevIntrf.bTxReady,
 		memory_order_acquire);
 }
 
@@ -231,11 +231,11 @@ static void UsbdMscResetBot(UsbdMscDev_t *pMsc, bool ResetMedium)
 	UsbdMscSetSense(pMsc, USB_MSC_SENSE_NONE, 0U);
 	if (pMsc->bConfigured)
 	{
-		(void)UsbIntrfConfigure(&pMsc->IntrfData, UsbdMscMps(pMsc));
+		(void)UsbIntrfConfigure(pMsc->pData, UsbdMscMps(pMsc));
 	}
 	else
 	{
-		UsbIntrfUnconfigure(&pMsc->IntrfData);
+		UsbIntrfUnconfigure(pMsc->pData);
 	}
 	if (ResetMedium && pMsc->pDisk != nullptr)
 	{
@@ -296,7 +296,7 @@ static bool UsbdMscQueuePacket(UsbdMscDev_t *pMsc, const uint8_t *pData,
 								uint16_t Length, UsbdMscTxKind_t Kind)
 {
 	if (!UsbdMscTxIdle(pMsc) || pMsc->PendingTx != USBD_MSC_TX_NONE ||
-		Length > pMsc->IntrfData.Mps)
+		Length > pMsc->pData->Mps)
 	{
 		return false;
 	}
@@ -308,7 +308,7 @@ static bool UsbdMscQueuePacket(UsbdMscDev_t *pMsc, const uint8_t *pData,
 	{
 		memcpy(pPacket->Data, pData, Length);
 	}
-	if (DeviceIntrfTxData(&pMsc->IntrfData.DevIntrf,
+	if (DeviceIntrfTxData(&pMsc->pData->DevIntrf,
 		reinterpret_cast<uint8_t *>(pPacket), USBD_MSC_PKT_BLKSIZE) !=
 		(int)USBD_MSC_PKT_BLKSIZE)
 	{
@@ -647,7 +647,7 @@ static void UsbdMscStartCommand(UsbdMscDev_t *pMsc)
 	}
 	else if (deviceDirection == USBD_MSC_DATA_IN &&
 		pMsc->HostLength > pMsc->DeviceLength &&
-		(pMsc->DeviceLength % pMsc->IntrfData.Mps) == 0U)
+		(pMsc->DeviceLength % pMsc->pData->Mps) == 0U)
 	{
 		pMsc->bNeedZlp = true;
 	}
@@ -677,8 +677,8 @@ static void UsbdMscInvalidCbw(UsbdMscDev_t *pMsc)
 static void UsbdMscProcessCbw(UsbdMscDev_t *pMsc)
 {
 	uint8_t *pPacket = UsbdMscRxPacket(pMsc);
-	const int length = DeviceIntrfRxData(&pMsc->IntrfData.DevIntrf,
-		pPacket, pMsc->IntrfData.Mps);
+	const int length = DeviceIntrfRxData(&pMsc->pData->DevIntrf,
+		pPacket, pMsc->pData->Mps);
 	if (length <= 0)
 	{
 		return;
@@ -713,7 +713,7 @@ static void UsbdMscProcessDataIn(UsbdMscDev_t *pMsc)
 		pMsc->bTxFailed = false;
 		pMsc->PendingTx = USBD_MSC_TX_NONE;
 		pMsc->PendingTxLength = 0U;
-		(void)UsbIntrfConfigure(&pMsc->IntrfData, UsbdMscMps(pMsc));
+		(void)UsbIntrfConfigure(pMsc->pData, UsbdMscMps(pMsc));
 		UsbdMscFail(pMsc, USB_MSC_SENSE_NOT_READY,
 			USB_MSC_ASC_MEDIUM_NOT_PRESENT);
 		pMsc->bStallAfterData = true;
@@ -739,8 +739,8 @@ static void UsbdMscProcessDataIn(UsbdMscDev_t *pMsc)
 	}
 
 	const uint32_t remaining = pMsc->TransferLimit - pMsc->Transferred;
-	uint16_t length = remaining < pMsc->IntrfData.Mps ?
-		(uint16_t)remaining : pMsc->IntrfData.Mps;
+	uint16_t length = remaining < pMsc->pData->Mps ?
+		(uint16_t)remaining : pMsc->pData->Mps;
 	const uint8_t *pData;
 	if (pMsc->ResponseLength != 0U)
 	{
@@ -777,8 +777,8 @@ static void UsbdMscProcessDataIn(UsbdMscDev_t *pMsc)
 static void UsbdMscProcessDataOut(UsbdMscDev_t *pMsc)
 {
 	uint8_t *pPacket = UsbdMscRxPacket(pMsc);
-	const int received = DeviceIntrfRxData(&pMsc->IntrfData.DevIntrf,
-		pPacket, pMsc->IntrfData.Mps);
+	const int received = DeviceIntrfRxData(&pMsc->pData->DevIntrf,
+		pPacket, pMsc->pData->Mps);
 	if (received <= 0)
 	{
 		return;
@@ -888,6 +888,7 @@ static void UsbdMscProcessInternal(UsbdMscDev_t *pMsc)
 }
 
 static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
+								UsbDevIntrf_t *pData,
 								const UsbdMscCfg_t *pCfg,
 								UsbDeviceClass *pClass)
 {
@@ -910,6 +911,7 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 		return false;
 	}
 
+	pMsc->pData = pData;
 	pMsc->DevNo = pCfg->DevNo;
 	pMsc->pDisk = pCfg->pDisk;
 	pMsc->pSectorBuffer = pCfg->pSectorBuffer;
@@ -962,11 +964,11 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 	intrfCfg.BufferSize = USBD_MSC_MAX_MPS;
 	intrfCfg.pRxBuffer = UsbdMscRxBuffer(pMsc);
 	intrfCfg.EvtCB = UsbdMscDataEvent;
-	if (!UsbIntrfInit(&pMsc->IntrfData, &intrfCfg))
+	if (!UsbIntrfInit(pMsc->pData, &intrfCfg))
 	{
 		return false;
 	}
-	pMsc->IntrfData.pClassContext = pMsc;
+	pMsc->pData->pClassContext = pMsc;
 
 	if (!UsbdMscMakeDesc(&pMsc->FsDesc, pMsc, USB_SPEED_FULL))
 	{
@@ -993,7 +995,7 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 
 bool UsbdMsc::Init(const UsbdMscCfg_t &Cfg)
 {
-	return UsbdMscInitInternal(&vUsbdMsc, &Cfg, this);
+	return UsbdMscInitInternal(&vUsbdMsc, &vUsbDevIntrf, &Cfg, this);
 }
 
 bool UsbdMsc::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
@@ -1055,7 +1057,7 @@ bool UsbdMsc::SelectConfig(uint8_t ConfigValue)
 		UsbdMscCloseEndpoints(&vUsbdMsc);
 		vUsbdMsc.bConfigured = false;
 	}
-	UsbIntrfUnconfigure(&vUsbdMsc.IntrfData);
+	UsbIntrfUnconfigure(vUsbdMsc.pData);
 	if (ConfigValue == 0U)
 	{
 		UsbdMscResetBot(&vUsbdMsc, false);
@@ -1067,14 +1069,14 @@ bool UsbdMsc::SelectConfig(uint8_t ConfigValue)
 	}
 
 	const uint16_t mps = UsbdMscMps(&vUsbdMsc);
-	if (!UsbIntrfConfigure(&vUsbdMsc.IntrfData, mps) ||
+	if (!UsbIntrfConfigure(vUsbdMsc.pData, mps) ||
 		!UsbdMscOpenEndpoint(&vUsbdMsc,
 			USB_ENDPADDR_DIRIN(vUsbdMsc.EpNo), mps) ||
 		!UsbdMscOpenEndpoint(&vUsbdMsc,
 			USB_ENDPADDR_DIROUT(vUsbdMsc.EpNo), mps))
 	{
 		UsbdMscCloseEndpoints(&vUsbdMsc);
-		UsbIntrfUnconfigure(&vUsbdMsc.IntrfData);
+		UsbIntrfUnconfigure(vUsbdMsc.pData);
 		return false;
 	}
 	vUsbdMsc.bConfigured = true;

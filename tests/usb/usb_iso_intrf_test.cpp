@@ -207,26 +207,27 @@ static void TestLifecycle(void)
 {
 	ResetFake();
 	UsbIsoIntrf_t iso = {};
+	UsbDevIntrf_t isoData = {};
 	auto cfg = MakeCfg();
-	CHECK(UsbIsoIntrfInit(&iso, &cfg));
-	CHECK(iso.IntrfData.Mode == USB_INTRF_MODE_DIRECT);
-	CHECK(iso.IntrfData.hRxFifo == nullptr);
-	CHECK(iso.IntrfData.hTxFifo == nullptr);
-	CHECK(iso.IntrfData.pRxDirectBuffer != nullptr);
-	CHECK(iso.IntrfData.pTxDirectBuffer != nullptr);
+	CHECK(UsbIsoIntrfInit(&iso, &isoData, &cfg));
+	CHECK(iso.pData->Mode == USB_INTRF_MODE_DIRECT);
+	CHECK(iso.pData->hRxFifo == nullptr);
+	CHECK(iso.pData->hTxFifo == nullptr);
+	CHECK(iso.pData->pRxDirectBuffer != nullptr);
+	CHECK(iso.pData->pTxDirectBuffer != nullptr);
 	CHECK(!s_OutBlocking);
 	CHECK(s_OutXferCount == 0);
 
 	CHECK(UsbIsoIntrfOpen(&iso, 25U, 1U));
 	CHECK(iso.Opened && iso.Mps == 25U && iso.Interval == 1U);
-	CHECK(iso.IntrfData.Mps == 25U);
+	CHECK(iso.pData->Mps == 25U);
 	CHECK(s_OpenCount == 2);
 	CHECK(s_Open[0].bEndpointAddress == USB_ENDPADDR_DIRIN(8U));
 	CHECK(s_Open[1].bEndpointAddress == USB_ENDPADDR_DIROUT(8U));
 	CHECK(s_Open[0].bmAttributes == USB_ENDPATT_TRANS_ISO);
 
 	UsbIsoIntrfClose(&iso);
-	CHECK(!iso.Opened && iso.IntrfData.Mps == 0U);
+	CHECK(!iso.Opened && iso.pData->Mps == 0U);
 	CHECK(s_CloseCount == 2);
 }
 
@@ -234,8 +235,9 @@ static void TestRx(void)
 {
 	ResetFake();
 	UsbIsoIntrf_t iso = {};
+	UsbDevIntrf_t isoData = {};
 	auto cfg = MakeCfg();
-	CHECK(UsbIsoIntrfInit(&iso, &cfg));
+	CHECK(UsbIsoIntrfInit(&iso, &isoData, &cfg));
 	CHECK(UsbIsoIntrfOpen(&iso, 17U, 1U));
 
 	const uint8_t data[] = {1,2,3,4,5};
@@ -244,7 +246,7 @@ static void TestRx(void)
 	CHECK(s_LastRxLength == sizeof(data));
 	CHECK(s_LastRxResult == USB_CTRLR_XFER_SUCCESS);
 	CHECK(memcmp(s_LastRx, data, sizeof(data)) == 0);
-	CHECK(!((iso.IntrfData.pRxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) != 0U));
+	CHECK(!((iso.pData->pRxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) != 0U));
 	CHECK(s_OutXferCount == 0);
 
 	Receive(nullptr, 0U);
@@ -262,21 +264,22 @@ static void TestTx(void)
 {
 	ResetFake();
 	UsbIsoIntrf_t iso = {};
+	UsbDevIntrf_t isoData = {};
 	auto cfg = MakeCfg();
-	CHECK(UsbIsoIntrfInit(&iso, &cfg));
+	CHECK(UsbIsoIntrfInit(&iso, &isoData, &cfg));
 	CHECK(UsbIsoIntrfOpen(&iso, 9U, 1U));
 
 	const uint8_t frame[] = {0x11,0x22,0x33,0x44};
 	CHECK(UsbIsoIntrfSendFrame(&iso, frame, sizeof(frame)));
 	CHECK(s_InBusy && s_InLength == sizeof(frame));
 	CHECK(memcmp(s_InData, frame, sizeof(frame)) == 0);
-	CHECK((iso.IntrfData.pTxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) != 0U);
+	CHECK((iso.pData->pTxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) != 0U);
 	CHECK(!UsbIsoIntrfSendFrame(&iso, frame, sizeof(frame)));
 	CompleteIn();
 	CHECK(UsbIsoIntrfTxReady(&iso) && s_TxCount == 1);
 	CHECK(s_LastTxLength == sizeof(frame));
 	CHECK(s_LastTxResult == USB_CTRLR_XFER_SUCCESS);
-	CHECK((iso.IntrfData.pTxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) == 0U);
+	CHECK((iso.pData->pTxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) == 0U);
 
 	CHECK(UsbIsoIntrfSendFrame(&iso, nullptr, 0U));
 	CompleteIn();
@@ -293,8 +296,9 @@ static void TestSuspendResume(void)
 {
 	ResetFake();
 	UsbIsoIntrf_t iso = {};
+	UsbDevIntrf_t isoData = {};
 	auto cfg = MakeCfg();
-	CHECK(UsbIsoIntrfInit(&iso, &cfg));
+	CHECK(UsbIsoIntrfInit(&iso, &isoData, &cfg));
 	CHECK(UsbIsoIntrfOpen(&iso, 33U, 1U));
 	UsbIsoIntrfSuspend(&iso);
 	CHECK(iso.Suspended);
@@ -310,18 +314,45 @@ static void TestValidation(void)
 {
 	ResetFake();
 	UsbIsoIntrf_t iso = {};
+	UsbDevIntrf_t isoData = {};
 	auto cfg = MakeCfg();
 	cfg.EpNo = 7U;
-	CHECK(!UsbIsoIntrfInit(&iso, &cfg));
+	CHECK(!UsbIsoIntrfInit(&iso, &isoData, &cfg));
 	cfg = MakeCfg();
-	CHECK(UsbIsoIntrfInit(&iso, &cfg));
+	CHECK(UsbIsoIntrfInit(&iso, &isoData, &cfg));
 	CHECK(!UsbIsoIntrfOpen(&iso, 0U, 1U));
 	CHECK(!UsbIsoIntrfOpen(&iso, USB_ISO_INTRF_MAX_MPS + 1U, 1U));
 	CHECK(!UsbIsoIntrfOpen(&iso, 9U, 0U));
 }
 
+static void TestSharedTransport(void)
+{
+	ResetFake();
+	UsbIsoIntrf intrf;
+	auto cfg = MakeCfg();
+	CHECK(intrf.Init(cfg));
+	UsbIsoIntrf_t *pState = intrf;
+	UsbIntrf *pTransport = &intrf;
+	DeviceIntrf *pDevice = pTransport;
+	CHECK(pTransport->Data() == &pState->pData->DevIntrf);
+	CHECK(static_cast<DevIntrf_t *>(*pDevice) == intrf.Data());
+	CHECK(s_InContext == pState->pData && s_OutContext == pState->pData);
+	CHECK(intrf.Open(9U, 1U));
+	const uint8_t data[] = {2U, 5U, 8U};
+	CHECK(pDevice->TxData(data, sizeof(data)) == (int)sizeof(data));
+	CHECK(memcmp(s_InBuffer, data, sizeof(data)) == 0);
+	CompleteIn();
+	Receive(data, sizeof(data));
+	uint8_t received[sizeof(data)] = {};
+	CHECK(s_RxCount == 1 && s_LastRxLength == sizeof(data));
+	CHECK(memcmp(s_LastRx, data, sizeof(data)) == 0);
+	CHECK(pTransport->RxData(received, sizeof(received)) == 0);
+	intrf.Close();
+}
+
 int main(void)
 {
+	TestSharedTransport();
 	TestLifecycle();
 	TestRx();
 	TestTx();

@@ -90,6 +90,10 @@ bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Len)
     {
         if (s_InBusy)
             return false;
+        UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(s_InContext);
+        uint8_t *pHead = CFifoPeek(pIntrf->hTxFifo);
+        s_InRegBuf = pIntrf->Mode == USB_INTRF_MODE_PACKET ?
+            reinterpret_cast<UsbPkt_t *>(pHead)->Data : pHead;
         s_InBusy = true;
         s_InLen = Len;
         s_InSubmitCnt++;
@@ -252,7 +256,7 @@ static void TestGeometry(void)
     CHECK(CFifoAvail(s_Intrf.hRxFifo) == (int)SLOTS);
     CHECK(CFifoBlockSize(s_Intrf.hRxFifo) == USB_INTRF_PKT_BLKSIZE(BUFFER_SIZE));
     CHECK(s_OutRegBuf == s_RxTransfer);
-    CHECK(s_InRegBuf == s_TxTransfer);
+    CHECK(s_InRegBuf == nullptr);
     CHECK(s_OutSubmitCnt == 0);
     CHECK(!s_OutDma);
 }
@@ -325,6 +329,11 @@ static void TestBackpressure(void)
     uint8_t out[8] = {};
     CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
     CHECK(out[0] == 0U);
+    CHECK(!s_OutDma);
+    CHECK(s_Intrf.RxPending);
+    // The controller foreground retry, not RxData, schedules held OUT data.
+    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
+                 0U, USB_CTRLR_XFER_SUCCESS, s_OutContext);
     CHECK(s_OutDma);
     CHECK(!s_Intrf.RxPending);
     CompleteOut();
@@ -421,7 +430,7 @@ static void TestTxAccumulatesDuringTransfer(void)
     for (int i = 0; i < 40; i++)
         CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, &byte, 1) == 1);
     CHECK(s_InSubmitCnt == 1);
-    CHECK(CFifoUsed(s_Intrf.hTxFifo) == 40);
+    CHECK(CFifoUsed(s_Intrf.hTxFifo) == 41);
     CompleteIn(1U);
     CHECK(s_InBusy && s_InLen == 40U && s_InSubmitCnt == 2);
     CompleteIn(40U);
@@ -489,11 +498,12 @@ static void TestTxPacketFull(void)
         pkt->Hdr.Length = 1U;
         pkt->Data[0] = (uint8_t)(0x20U + i);
     }
-    CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, queued, sizeof(queued)) == (int)sizeof(queued));
+    CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, queued, sizeof(queued)) ==
+          (int)(sizeof(queued) - PACKET_BLOCK_SIZE));
     CHECK(CFifoUsed(s_Intrf.hTxFifo) == (int)PACKET_SLOTS);
     CHECK(!UsbIntrfRequestToSend(&s_Intrf, PACKET_BLOCK_SIZE));
 
-    for (unsigned i = 0; i < PACKET_SLOTS; i++)
+    for (unsigned i = 0; i < PACKET_SLOTS - 1U; i++)
     {
         CompleteIn(1U);
         CHECK(s_InBusy && s_InLen == 1U);

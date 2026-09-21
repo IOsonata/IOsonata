@@ -85,6 +85,10 @@ bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
     {
         if (s_InBusy)
             return false;
+        UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(s_InContext);
+        uint8_t *pHead = CFifoPeek(pIntrf->hTxFifo);
+        s_InBuffer = pIntrf->Mode == USB_INTRF_MODE_PACKET ?
+            reinterpret_cast<UsbPkt_t *>(pHead)->Data : pHead;
         s_InBusy = true;
         s_InLength = Length;
         s_SendCount++;
@@ -239,6 +243,10 @@ static void TestDescriptor(void)
     UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
 
     CHECK(bulk.Init(cfg));
+    UsbIntrf *pTransport = &bulk;
+    DeviceIntrf *pDevice = pTransport;
+    CHECK(pTransport->Data() == &static_cast<UsbdBulkDev_t *>(bulk)->pData->DevIntrf);
+    CHECK(static_cast<DevIntrf_t *>(*pDevice) == bulk.Data());
 	CHECK(s_FsDescriptorLength == sizeof(UsbdBulkDesc_t));
 	const UsbdBulkDesc_t &desc =
 		*reinterpret_cast<const UsbdBulkDesc_t *>(s_FsDescriptor);
@@ -280,7 +288,7 @@ static void TestByteMode(void)
     CHECK(bulk.Init(cfg));
     CHECK(s_ClassRegistered);
     CHECK(s_ClassObject == &bulk);
-    CHECK(s_OutBuffer != nullptr && s_InBuffer != nullptr);
+    CHECK(s_OutBuffer != nullptr && s_InBuffer == nullptr);
     CHECK(s_OutBuffer != s_InBuffer);
     CHECK(s_OutSubmitCount == 0);
 
@@ -295,11 +303,11 @@ static void TestByteMode(void)
     DeliverOut(rx, sizeof(rx));
     CHECK(s_OutSubmitCount == 1);
     uint8_t received[sizeof(rx)] = {};
-    CHECK(bulk.RxData(received, sizeof(received)) == (int)sizeof(received));
+    CHECK(static_cast<UsbIntrf *>(&bulk)->RxData(received, sizeof(received)) == (int)sizeof(received));
     CHECK(memcmp(received, rx, sizeof(rx)) == 0);
 
     const uint8_t tx[] = { 5U, 6U, 7U };
-    CHECK(bulk.TxData(tx, sizeof(tx)) == (int)sizeof(tx));
+    CHECK(static_cast<UsbIntrf *>(&bulk)->TxData(tx, sizeof(tx)) == (int)sizeof(tx));
     CHECK(s_InBusy && s_InLength == sizeof(tx));
     CHECK(memcmp(s_InBuffer, tx, sizeof(tx)) == 0);
     CompleteIn();
@@ -331,7 +339,7 @@ static void TestPacketMode(void)
     pPacket->Hdr.Length = 5U;
     memcpy(pPacket->Data, "bulk!", 5U);
 
-    CHECK(bulk.TxData(block, sizeof(block)) == (int)sizeof(block));
+    CHECK(static_cast<UsbIntrf *>(&bulk)->TxData(block, sizeof(block)) == (int)sizeof(block));
     CHECK(s_InBusy && s_InLength == 5U);
     CHECK(memcmp(s_InBuffer, "bulk!", 5U) == 0);
 }

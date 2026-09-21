@@ -133,16 +133,17 @@ static void CompleteIn(void)
 int main(void)
 {
 	UsbIsoIntrf_t iso = {};
+	UsbDevIntrf_t isoData = {};
 	UsbIsoIntrfCfg_t cfg = {};
 	cfg.DevNo = 0;
 	cfg.EpNo = 8U;
 	cfg.RxHandler = RxFrame;
 	cfg.TxHandler = TxFrame;
 
-	CHECK(UsbIsoIntrfInit(&iso, &cfg));
-	CHECK(iso.IntrfData.Mode == USB_INTRF_MODE_DIRECT);
-	CHECK(iso.IntrfData.hRxFifo == nullptr);
-	CHECK(iso.IntrfData.hTxFifo == nullptr);
+	CHECK(UsbIsoIntrfInit(&iso, &isoData, &cfg));
+	CHECK(iso.pData->Mode == USB_INTRF_MODE_DIRECT);
+	CHECK(iso.pData->hRxFifo == nullptr);
+	CHECK(iso.pData->hTxFifo == nullptr);
 	CHECK(UsbIsoIntrfOpen(&iso, 49U, 1U));
 	CHECK(s_OpenCount == 2);
 
