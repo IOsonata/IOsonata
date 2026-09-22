@@ -584,7 +584,7 @@ static void UsbIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
 	{
 		(void)CFifoGet(pIntrf->hTxFifo);
 	}
-	else
+	else if (pIntrf->Mode == USB_INTRF_MODE_BYTE)
 	{
 		int count = Length;
 		(void)CFifoGetMultiple(pIntrf->hTxFifo, &count);
