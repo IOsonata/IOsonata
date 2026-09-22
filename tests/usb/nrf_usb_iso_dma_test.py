@@ -130,7 +130,7 @@ names = [
          'UsbCtrlrEpClearStall']
 import re as _re
 flag_enum = _re.search(r'enum\s*\{[^}]*USBD_FLAG_SUSPENDED[^}]*\};', src)
-iso_state_enum = _re.search(r'enum\s*\{[^}]*NRFUSBD_ISO_IN_BUSY[^}]*\};', src)
+iso_state_enum = _re.search(r'enum\s*\{[^}]*NRFUSBD_ISO_BUSY[^}]*\};', src)
 assert flag_enum and iso_state_enum, 'USBD state enums not found in driver source'
 code = preamble.replace('FLAG_ENUM', flag_enum.group(0) + '\n' + iso_state_enum.group(0))
 queue_enum = _re.search(r'enum\s*\{[^}]*NRFX_USBD_QUE_IN_SCRATCH[^}]*\};', src)
