@@ -576,9 +576,19 @@ void nRFUsbdDmaWait(void)
 		{
 			complete = nRFUsbdRetireDma(31U - (uint32_t)__CLZ(dmaStatus));
 		}
-		else
+		else if (NRF_USBD->EVENTS_ENDISOIN != 0U)
 		{
-			complete = nRFUsbdIsoFinishDma(0U);
+			NRF_USBD->EVENTS_ENDISOIN = 0U;
+			NRF_USBD->EPSTATUS = 1UL << 8U;
+			__DSB();
+			complete = true;
+		}
+		else if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
+		{
+			NRF_USBD->EVENTS_ENDISOOUT = 0U;
+			NRF_USBD->EPSTATUS = 1UL << 24U;
+			__DSB();
+			complete = true;
 		}
 		if (complete)
 			nRFUsbdDmaUnlock();
