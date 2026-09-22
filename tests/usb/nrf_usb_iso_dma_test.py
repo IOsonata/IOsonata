@@ -84,19 +84,19 @@ typedef Endpoint USBD_ISOIN_Type;
 typedef Endpoint USBD_ISOOUT_Type;
 FLAG_ENUM
 QUEUE_TYPES
-// One state block, as in the driver; the flag word carries the former
-// atomic fields at the same OUT-low/IN-high bit pairing.
 struct {
  volatile uint32_t Flags=0;
  uint16_t IsoOutSize=0;
  bool SofEnabled=false;
+ bool IsoOpen=false;
+ uint8_t IsoBufState=0;
  int16_t IsoDmaLen[2]={-1,-1};
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue;
 } s_Usbd;
 alignas(8) uint8_t queueMemory[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
-#define ISO_OPEN() ((s_Usbd.Flags / USBD_FLAG_ISO_OUT_OPEN) & 3u)
-#define ISO_BUSY() ((s_Usbd.Flags / USBD_FLAG_ISO_OUT_BUSY) & 3u)
+#define ISO_OPEN() unsigned(s_Usbd.IsoOpen)
+#define ISO_BUSY() ((s_Usbd.IsoBufState / NRFUSBD_ISO_OUT_BUSY) & 3u)
 unsigned irqMask=0,isoStarts[2]={},regularStarts=0;
 unsigned activeDir=0;
 uint8_t inBuffer[512],outBuffer[512],wireIn[512],hostOut[512];
@@ -109,7 +109,7 @@ void __DSB(){
  if(regs.TASKS_STARTISOIN || regs.TASKS_STARTISOOUT){
   activeDir=regs.TASKS_STARTISOIN?1:0;
   assert(dmaBusy==0x82);assert(regs.EPSTATUS.bits==0);
-  assert(s_Usbd.Flags & ((uint32_t)USBD_FLAG_ISO_OUT_BUSY<<activeDir));
+  assert(s_Usbd.IsoBufState & ((uint8_t)NRFUSBD_ISO_OUT_BUSY<<activeDir));
   regs.EPSTATUS.bits=1UL<<(activeDir?8:24);
   ++isoStarts[activeDir];
   if(activeDir) memcpy(wireIn,inBuffer,regs.ISOIN.MAXCNT);
@@ -132,9 +132,10 @@ names = [
          'nRFUsbdIsoEpClose','UsbCtrlrEpClose','nRFUsbdHandleSof',
          'UsbCtrlrEpClearStall']
 import re as _re
-flag_enum = _re.search(r'enum\s*\{[^}]*USBD_FLAG_ISO_IN_BUSY[^}]*\};', src)
-assert flag_enum, 'USBD_FLAG enum not found in driver source'
-code = preamble.replace('FLAG_ENUM', flag_enum.group(0))
+flag_enum = _re.search(r'enum\s*\{[^}]*USBD_FLAG_SUSPENDED[^}]*\};', src)
+iso_state_enum = _re.search(r'enum\s*\{[^}]*NRFUSBD_ISO_IN_BUSY[^}]*\};', src)
+assert flag_enum and iso_state_enum, 'USBD state enums not found in driver source'
+code = preamble.replace('FLAG_ENUM', flag_enum.group(0) + '\n' + iso_state_enum.group(0))
 queue_enum = _re.search(r'enum\s*\{[^}]*NRFX_USBD_QUE_IN_SCRATCH[^}]*\};', src)
 queue_type = _re.search(r'typedef struct __nRF_Usbd_Que \{.*?\} nRFUsbdQue_t;',
                         src, _re.S)
@@ -147,13 +148,7 @@ code += function('UsbCtrlrEpOpenData').replace('UsbCtrlrEpOpenData(', 'productio
 code += function('UsbCtrlrEpSend').replace('UsbCtrlrEpSend(', 'productionEpSend(')
 code += r'''
 void nRFUsbdDmaWait(){
- if(!dmaBusy)return;
- if(regs.EVENTS_ENDISOIN){
-  regs.EVENTS_ENDISOIN=0;regs.EPSTATUS.bits&=~(1UL<<8);
- }else if(regs.EVENTS_ENDISOOUT){
-  regs.EVENTS_ENDISOOUT=0;regs.EPSTATUS.bits&=~(1UL<<24);
- }else assert(false);
- nRFUsbdDmaUnlock();
+ if(dmaBusy){assert(nRFUsbdIsoFinishDma(0U));nRFUsbdDmaUnlock();}
 }
 void nRFUsbdResumeQueuedDmaLocked(){
  const uint32_t gate=s_Usbd.Flags&
@@ -192,7 +187,7 @@ void init(){
  s_Usbd.hQue=CFifoInit(queueMemory,sizeof(queueMemory),sizeof(nRFUsbdQue_t),true);
  assert(s_Usbd.hQue);
  // Both ISO directions open; busy/ready and suspend state start clear.
- s_Usbd.Flags=USBD_FLAG_ISO_OUT_OPEN|USBD_FLAG_ISO_IN_OPEN;
+ s_Usbd.Flags=0;s_Usbd.IsoOpen=true;s_Usbd.IsoBufState=0;
  dmaBusy=0;dmaLocks=dmaUnlocks=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
  s_Usbd.EpReg[7][0]={outBuffer,callback,(void*)0,512,false};
@@ -211,7 +206,7 @@ int main(){
  };
  for(const auto &test:completions)for(unsigned ends=0;ends<4;++ends){
   init();dmaBusy=0x82;
-  s_Usbd.Flags|=USBD_FLAG_ISO_OUT_BUSY|USBD_FLAG_ISO_IN_BUSY;
+  s_Usbd.IsoBufState|=NRFUSBD_ISO_OUT_BUSY|NRFUSBD_ISO_IN_BUSY;
   regs.EVENTS_ENDISOOUT=ends&1;regs.EVENTS_ENDISOIN=(ends>>1)&1;
   regs.EPSTATUS.bits=(ends&1?0x01000000U:0U)|(ends&2?0x00000100U:0U);
   const unsigned retired=test.retired[ends],remaining=ends&~retired;
