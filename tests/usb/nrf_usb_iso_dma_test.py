@@ -85,7 +85,7 @@ typedef Endpoint USBD_ISOOUT_Type;
 FLAG_ENUM
 QUEUE_TYPES
 struct {
- volatile uint32_t Flags=0;
+ volatile uint8_t Flags=0;
   bool SofEnabled=false;
  bool IsoOpen=false;
  uint8_t IsoBufState=0;
