@@ -55,26 +55,11 @@ typedef struct __Usbd_EpAlloc_State {
 
 static void EpAllocStore(uint8_t *pEp, unsigned Count, uint16_t Mask)
 {
-	unsigned count = 0;
-
-	for (uint8_t ep = 1U; ep < 16U && count < Count; ep++)
+	while (Count-- != 0U && Mask != 0U)
 	{
-		if ((Mask & (uint16_t)(1U << ep)) != 0U)
-		{
-			pEp[count++] = ep;
-		}
-	}
-}
-
-static unsigned EpAllocMaskCount(uint16_t Mask)
-{
-	unsigned count = 0U;
-	while (Mask != 0U)
-	{
+		*pEp++ = (uint8_t)__builtin_ctz((unsigned)Mask);
 		Mask &= (uint16_t)(Mask - 1U);
-		count++;
 	}
-	return count;
 }
 
 static bool EpAllocTryOut(const UsbdEpAllocState_t *pState, uint8_t Needed,
@@ -196,19 +181,8 @@ bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
 	const uint8_t outLimit = USB_EPOUT_CNT(DevNo) < 16 ?
 		USB_EPOUT_CNT(DevNo) : 16U;
 	const uint8_t pairLimit = inLimit < outLimit ? inLimit : outLimit;
-	const uint16_t inMask = (uint16_t)((1UL << inLimit) - 1UL);
-	const uint16_t outMask = (uint16_t)((1UL << outLimit) - 1UL);
-	const uint16_t fixedInDynamic = pReq->FixedInMask & inMask;
-	const uint16_t fixedOutDynamic = pReq->FixedOutMask & outMask;
-
 	if (inLimit < 1U || outLimit < 1U ||
-		((pReq->FixedInMask | pReq->FixedOutMask) & 1U) != 0U ||
-		EpAllocMaskCount(fixedInDynamic) +
-			(unsigned)pReq->BidirectionalCount + pReq->InCount >
-			(unsigned)inLimit - 1U ||
-		EpAllocMaskCount(fixedOutDynamic) +
-			(unsigned)pReq->BidirectionalCount + pReq->OutCount >
-			(unsigned)outLimit - 1U)
+		((pReq->FixedInMask | pReq->FixedOutMask) & 1U) != 0U)
 	{
 		return false;
 	}
