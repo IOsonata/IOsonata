@@ -789,7 +789,7 @@ int main(int argc,char **argv){
   unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND)}){
   init();dmaBusy=0x82;
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
-  else regs.EPOUTEN|=1U<<8;s_Usbd.EpReg[7][0].MaxPacketSize=s_Usbd.EpReg[7][1].MaxPacketSize=64;
+  else { regs.EPOUTEN|=1U<<8; s_Usbd.EpReg[7][0].MaxPacketSize=s_Usbd.EpReg[7][1].MaxPacketSize=64; }
   assert(UsbCtrlrEpSend(0,2,data+64,9));
   s_Usbd.Flags|=gate;
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
@@ -804,7 +804,7 @@ int main(int argc,char **argv){
  for(unsigned status:{2U,0x100U,0x1000000U}){
   init();dmaBusy=0x82;
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
-  else regs.EPOUTEN|=1U<<8;s_Usbd.EpReg[7][0].MaxPacketSize=s_Usbd.EpReg[7][1].MaxPacketSize=64;
+  else { regs.EPOUTEN|=1U<<8; s_Usbd.EpReg[7][0].MaxPacketSize=s_Usbd.EpReg[7][1].MaxPacketSize=64; }
   assert(UsbCtrlrEpSend(0,2,data+64,9));
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   regs.EVENTS_EP0SETUP=1;regs.EVENTS_EP0DATADONE=1;isoChecks=0;
@@ -853,7 +853,7 @@ int main(int argc,char **argv){
  for(unsigned status:{2U,0x100U,0x1000000U})for(bool lowPower:{false,true}){
   init();dmaBusy=0x82;s_Usbd.LowPowerSuspend=lowPower;
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
-  else regs.EPOUTEN|=1U<<8;s_Usbd.EpReg[7][0].MaxPacketSize=s_Usbd.EpReg[7][1].MaxPacketSize=64;
+  else { regs.EPOUTEN|=1U<<8; s_Usbd.EpReg[7][0].MaxPacketSize=s_Usbd.EpReg[7][1].MaxPacketSize=64; }
   assert(UsbCtrlrEpSend(0,2,data+64,9));
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   regs.EVENTS_USBEVENT=1;regs.EVENTCAUSE.bits=USBD_EVENTCAUSE_SUSPEND_Msk;
