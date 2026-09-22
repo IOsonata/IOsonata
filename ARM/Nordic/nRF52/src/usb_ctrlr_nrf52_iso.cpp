@@ -47,6 +47,8 @@ SOFTWARE.
 static_assert(offsetof(USBD_ISOOUT_Type, MAXCNT) ==
 	offsetof(USBD_ISOIN_Type, MAXCNT), "ISO register layout");
 
+static uint16_t s_IsoDmaLen[2];	//!< Queued lengths while the direction is BUSY.
+
 static __attribute__((noinline))
 void nRFIsoHwEnable(bool In, bool Enable)
 {
@@ -91,7 +93,7 @@ bool nRFUsbdIsoStart(void)
 			continue;
 		}
 
-		uint16_t len = s_Usbd.IsoDmaLen[dir];
+		uint16_t len = s_IsoDmaLen[dir];
 		volatile USBD_ISOIN_Type *pEp;
 		volatile uint32_t *pTask;
 		volatile uint32_t *pEnd;
@@ -141,7 +143,7 @@ bool nRFUsbdIsoXfer(uint8_t Dir, uint16_t Length)
 		return false;
 	}
 
-	s_Usbd.IsoDmaLen[Dir] = Length;
+	s_IsoDmaLen[Dir] = Length;
 	s_Usbd.IsoBufState |= busy;
 	nRFUsbdIsoService();
 	EnableInterrupt(state);
@@ -216,7 +218,7 @@ void nRFUsbdIsoSof(void)
 			s_Usbd.IsoBufState |= NRFUSBD_ISO_OUT_READY;
 			if (waiting)
 			{
-				s_Usbd.IsoDmaLen[0] = len;
+				s_IsoDmaLen[0] = len;
 			}
 			else
 			{
