@@ -1109,12 +1109,12 @@ extern "C" void USBD_IRQHandler(void)
 			// EP0 and ISO were separated above. Retire the one regular DMA
 			// directly; IN application completion still waits for EPDATA.
 			const uint32_t statusBit = 31U - (uint32_t)__CLZ(dmastatus);
-			const uint8_t epNum = (uint8_t)(statusBit & 7U);
 			if (!nRFUsbdRetireDma(statusBit))
 				return;
 
 			if (statusBit >= 16U)
 			{
+				const uint8_t epNum = (uint8_t)(statusBit & 7U);
 				nRFUsbEpRegisteredEvent(epNum, 0U, USB_CTRLR_EVT_XFER_CMPL,
 					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 			}
