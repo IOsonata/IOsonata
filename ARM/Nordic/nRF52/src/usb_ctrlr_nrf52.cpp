@@ -1195,8 +1195,7 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdHandleSof();
 	}
 
-	if ((s_Usbd.Flags & USBD_FLAG_REMOTE_WAKE) != 0U)
-		nRFUsbdTryRemoteWake();
+	nRFUsbdTryRemoteWake();
 
 	// Queue newly received OUT data; completion already restarted pending DMA.
 	const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
