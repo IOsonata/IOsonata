@@ -102,10 +102,6 @@ bool nRFUsbdIsoStart(void)
 		}
 		else
 		{
-			if (s_Usbd.IsoOutSize < len)
-			{
-				len = s_Usbd.IsoOutSize;
-			}
 			pEp = (volatile USBD_ISOIN_Type *)&NRF_USBD->ISOOUT;
 			pTask = &NRF_USBD->TASKS_STARTISOOUT;
 			pEnd = &NRF_USBD->EVENTS_ENDISOOUT;
@@ -215,10 +211,14 @@ void nRFUsbdIsoSof(void)
 	{
 		if (size != 0U)
 		{
-			s_Usbd.IsoBufState |= NRFUSBD_ISO_OUT_READY;
-			s_Usbd.IsoOutSize =
+			const uint16_t len =
 				(size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ? 0U : (uint16_t)size;
-			if (!waiting)
+			s_Usbd.IsoBufState |= NRFUSBD_ISO_OUT_READY;
+			if (waiting)
+			{
+				s_Usbd.IsoDmaLen[0] = (int16_t)len;
+			}
+			else
 			{
 				nRFUsbEpReg_t *pReg =
 					&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
@@ -227,7 +227,7 @@ void nRFUsbdIsoSof(void)
 					nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, 0U,
 						USB_CTRLR_EVT_DRDY, 0U);
 				}
-				(void)nRFUsbdIsoXfer(0U, pReg->MaxPacketSize);
+				(void)nRFUsbdIsoXfer(0U, len);
 			}
 		}
 		else
