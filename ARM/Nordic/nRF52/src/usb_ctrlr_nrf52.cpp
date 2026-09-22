@@ -1165,21 +1165,17 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdHandleBusEvent(eventCause);
 	}
 
-	// Snapshot EPDATA before publishing AppEvt work. DMA completion itself
-	// has already been retired above; only its application completion is
-	// deferred so EP0 SETUP can enter AppEvt first.
-	NRF_USBD->EVENTS_EPDATA = 0U;
-	const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
-	uint32_t servicedStatus = dataStatus & 0x00010001UL;
-
 	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
 	{
 		nRFUsbdQueueEp0Setup();
-		// A full AppEvt queue keeps SETUP latched. Do not publish an IN
-		// completion ahead of it; foreground retry will handle both later.
-		if (NRF_USBD->EVENTS_EP0SETUP != 0U)
-			return;
+		return;
 	}
+	// Clear the event first so a new endpoint event remains observable.
+	// Service at most one endpoint per direction in this interrupt.
+	// Unaccepted IN completions remain available to the foreground retry.
+	NRF_USBD->EVENTS_EPDATA = 0U;
+	const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
+	uint32_t servicedStatus = dataStatus & 0x00010001UL;
 
 	const uint32_t inData = dataStatus & 0xFEU;
 	if (inData != 0U)
