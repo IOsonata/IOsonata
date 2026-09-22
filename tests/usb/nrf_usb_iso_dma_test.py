@@ -89,10 +89,10 @@ struct {
   bool SofEnabled=false;
  bool IsoOpen=false;
  uint8_t IsoBufState=0;
+ uint16_t IsoDmaLen[2]={};
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue;
 } s_Usbd;
-uint16_t s_IsoDmaLen[2]={};
 alignas(8) uint8_t queueMemory[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
 #define ISO_OPEN() unsigned(s_Usbd.IsoOpen)
 #define ISO_BUSY() ((s_Usbd.IsoBufState / NRFUSBD_ISO_OUT_BUSY) & 3u)
@@ -182,7 +182,7 @@ void callback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
 }
 void init(){
  regs={};s_Usbd.SofEnabled=false;
- s_IsoDmaLen[0]=s_IsoDmaLen[1]=0;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
+ s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=0;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  s_Usbd.hQue=CFifoInit(queueMemory,sizeof(queueMemory),sizeof(nRFUsbdQue_t),true);
  assert(s_Usbd.hQue);
  // Both ISO directions open; busy/ready and suspend state start clear.
