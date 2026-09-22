@@ -282,7 +282,18 @@ static bool IsoSelectInterface(uint8_t InterfaceNo, uint8_t Alt)
 
 	IsoClearDiag();
 	const uint8_t interval = UsbCtrlrHighSpeed(USB_DEVNO) ? 4U : 1U;
-	if (!UsbIsoIntrfOpen(&s_Iso, s_IsoMps[Alt - 1U], interval))
+#ifdef ISO_TEST_RX_CLAMP
+	// Hardware test hook: open the endpoint smaller than the descriptor
+	// advertises so a full size host frame is oversized at the controller.
+	// A frame longer than the opened MPS must be dropped for that frame
+	// only; reception resumes on the next fitting frame. Host side test:
+	// Python/usb_iso_oversize_test.py. Never define for normal builds.
+	const uint16_t mps = s_IsoMps[Alt - 1U] > (ISO_TEST_RX_CLAMP) ?
+		(uint16_t)(ISO_TEST_RX_CLAMP) : s_IsoMps[Alt - 1U];
+#else
+	const uint16_t mps = s_IsoMps[Alt - 1U];
+#endif
+	if (!UsbIsoIntrfOpen(&s_Iso, mps, interval))
 	{
 		return false;
 	}
