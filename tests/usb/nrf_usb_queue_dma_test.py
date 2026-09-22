@@ -178,7 +178,6 @@ code += r'''
 #pragma pack(pop)
 struct {
  uint32_t Flags;
- uint16_t IsoOutSize;
  bool LowPowerSuspend;
  bool IsoOpen;
  uint8_t IsoBufState;
@@ -1200,7 +1199,7 @@ int main(int argc,char **argv){
  init();dmaBusy=0x82;
  regs.EPSTATUS.bits=0x01010101;regs.EPDATASTATUS.bits=0x01FF01FF;
  regs.EVENTCAUSE.bits=0xFFFF;regs.EVENTS_USBEVENT=1;regs.INTEN=0xFFFFFFFF;
- s_Usbd.IsoOutSize=33;
+ 
  assert(CFifoPut(s_Usbd.hQue) && CFifoPut(s_Usbd.hEp0Que));
  regs.EVENTS_USBRESET=1;interrupt();
  assert(resets==1 && !dmaBusy && !regs.EVENTS_USBRESET);
