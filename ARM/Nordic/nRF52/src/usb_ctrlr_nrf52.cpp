@@ -763,18 +763,15 @@ static void nRFUsbdTryEnterLowPower(void)
 
 static void nRFUsbdTryRemoteWake(void)
 {
-	// Validate the wake request once while interrupts are excluded.
 	const uint32_t wakeMask = USBD_FLAG_REMOTE_WAKE | USBD_FLAG_SUSPENDED |
 		USBD_FLAG_HOST_RESUME | USBD_FLAG_MAC_AWAKE;
 	const uint32_t wakeWant = USBD_FLAG_REMOTE_WAKE | USBD_FLAG_SUSPENDED |
 		USBD_FLAG_MAC_AWAKE;
-	const uint32_t irqState = DisableInterrupt();
 	const uint32_t flags = s_Usbd.Flags;
 	if ((flags & wakeMask) != wakeWant ||
 		nRFUsbdDmaActive() ||
 		!UsbdIsForceNormal())
 	{
-		EnableInterrupt(irqState);
 		return;
 	}
 
@@ -782,7 +779,6 @@ static void nRFUsbdTryRemoteWake(void)
 	NRF_USBD->DPDMVALUE = USBD_DPDMVALUE_STATE_Resume;
 	NRF_USBD->TASKS_DPDMDRIVE = 1;
 	(void)NRF_USBD->TASKS_DPDMDRIVE;
-	EnableInterrupt(irqState);
 
 	if ((NRF_USBD->INTEN & USBD_INTEN_SOF_Msk) == 0U)
 	{
@@ -1381,10 +1377,10 @@ void UsbCtrlrRemoteWakeup(int DevNo)
 
 	s_Usbd.Flags = (flags & ~(uint32_t)USBD_FLAG_SUSPEND_PEND) |
 		USBD_FLAG_REMOTE_WAKE;
-	EnableInterrupt(state);
 
 	UsbdForceNormal();
 	nRFUsbdTryRemoteWake();
+	EnableInterrupt(state);
 }
 
 void UsbCtrlrSofEnable(int DevNo, bool Enable)
