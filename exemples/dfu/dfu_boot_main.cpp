@@ -234,13 +234,21 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 	.EvtCB = nullptr,
 };
 
-// pid.codes test id, as the USB examples use. A product puts its own
-// vendor and product id here.
+// USB ids, from board.h. The default is the pid.codes test id the USB
+// examples use; a product sets its own. nRF Connect Programmer and nrfutil
+// offer an MCUboot (SMP) upload only to a device they know by its ids.
+#ifndef DFU_BOOT_USB_VID
+#define DFU_BOOT_USB_VID	0x1209
+#endif
+#ifndef DFU_BOOT_USB_PID
+#define DFU_BOOT_USB_PID	0x0001
+#endif
+
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
 	.Mode = USB_MODE_DEVICE,
-	.Vid = 0x1209,
-	.Pid = 0x0001,
+	.Vid = DFU_BOOT_USB_VID,
+	.Pid = DFU_BOOT_USB_PID,
 	.DevVer = 0x0100,
 	.pManufacturer = "I-SYST",
 	.pProduct = "IOsonata DFU",

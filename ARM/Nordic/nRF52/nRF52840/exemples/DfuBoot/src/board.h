@@ -46,6 +46,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // application examples sharing this board file.
 #define DFU_TRANSPORT		DFU_TRANSPORT_CDC
 
+// SMP, as MCUboot serial recovery, so that nRF Connect Programmer and
+// nrfutil can flash it. They find an MCUboot device by the Nordic vendor id
+// and the MCUboot product id; without these they list it as a plain serial
+// port. A product shipping with them needs Nordic's consent for the ids.
+#define DFU_PROTO			DFU_PROTO_SMP
+#define DFU_BOOT_USB_VID	0x1915
+#define DFU_BOOT_USB_PID	0x5300
+
 //#define NORDIC_DK
 
 #ifdef NORDIC_DK

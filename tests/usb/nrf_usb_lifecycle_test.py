@@ -33,7 +33,9 @@ code = r'''
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
-struct nRFUsbEpReg_t {uint8_t *pBuffer;void *Handler;void *pContext;uint16_t MaxPacketSize;bool bBlocking;};
+enum UsbCtrlrEvtType_t {USB_CTRLR_EVT_DRDY=2};
+typedef void (*UsbCtrlrEpHandler_t)(UsbCtrlrEvtType_t, uint16_t, void *);
+struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;uint16_t MaxPacketSize;bool bBlocking;};
 struct UsbdMock {uint8_t IntPrio;bool LowPowerSuspend;
  nRFUsbEpReg_t EpReg[8][2];} s_Usbd;
 bool cable, clockOK, readyOK;
@@ -62,7 +64,6 @@ void nRFUsbdQueueEp0Setup(){assert(false);}
 // Foreground OUT sweep support: no endpoint is registered in this harness,
 // so the sweep sees null handlers and emits nothing.
 constexpr unsigned NRFX_USBD_EP_COUNT=9;
-enum UsbCtrlrEvtType_t {USB_CTRLR_EVT_DRDY=2};
 void nRFUsbEpRegisteredEvent(uint8_t,uint8_t,UsbCtrlrEvtType_t,uint16_t){assert(false);}
 void init(){
  s_Usbd={6,false,{}};
