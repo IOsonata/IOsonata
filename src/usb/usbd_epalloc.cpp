@@ -165,7 +165,7 @@ static bool EpAllocTryIn(const UsbdEpAllocState_t *pState, uint8_t Needed,
 bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
 				 UsbDeviceClass *pClass, UsbdEpAllocRes_t *pRes)
 {
-	if (pReq == nullptr || pClass == nullptr || pRes == nullptr ||
+	if (pReq == nullptr || pRes == nullptr ||
 		DevNo < 0 || DevNo >= USB_CTRLR_CNT ||
 		pReq->InterfaceCount > 16U ||
 		pReq->BidirectionalCount > USBD_EPALLOC_EP_MAXCNT ||
