@@ -93,7 +93,7 @@ struct {
  hCFifo_t hQue;
 } s_Usbd;
 alignas(8) uint8_t queueMemory[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
-#define ISO_OPEN() unsigned(s_Usbd.EpReg[7][0].MaxPacketSize!=0)
+#define ISO_OPEN() unsigned((regs.EPOUTEN & (1U<<8)) != 0U)
 #define ISO_BUSY() ((s_Usbd.IsoBufState / NRFUSBD_ISO_OUT_BUSY) & 3u)
 unsigned irqMask=0,isoStarts[2]={},regularStarts=0;
 unsigned activeDir=0;
@@ -190,6 +190,7 @@ void init(){
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
  s_Usbd.EpReg[7][0]={outBuffer,callback,(void*)0,512,false};
  s_Usbd.EpReg[7][1]={inBuffer,callback,(void*)1,512,false};
+ regs.EPOUTEN=regs.EPINEN=1U<<8;
  memset(inBuffer,0xA5,sizeof(inBuffer));memset(hostOut,0x5A,sizeof(hostOut));
  assert(AppEvtHandlerInit(nullptr,0));
 }
@@ -321,7 +322,7 @@ int main(){
  init();frame(17);regs.ISOOUT.AMOUNT=17;regs.EVENTS_ENDISOOUT=1;
  UsbCtrlrEpClose(0,8,false);
  assert(callbacks[0]==0 && !dmaBusy && !(ISO_BUSY()&1));
- s_Usbd.EpReg[7][0].MaxPacketSize=9;
+ regs.EPOUTEN|=1U<<8;s_Usbd.EpReg[7][0].MaxPacketSize=9;
  frame(9);finish(false);
  assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
  puts("PASS: close drains active ISO silently; reopen completion belongs to new transfer");
@@ -356,11 +357,11 @@ int main(){
  }
  for(uint8_t ep:{0U,8U})for(bool in:{false,true}){
   init();assert(!productionEpOpenData(0,ep,in,USB_ENDPATT_TRANS_BULK,64));
-  assert(!regs.EPINEN && !regs.EPOUTEN && !regs.EPSTALL && !regs.DTOGGLE);
+  assert(regs.EPINEN==(1U<<8) && regs.EPOUTEN==(1U<<8) && !regs.EPSTALL && !regs.DTOGGLE);
  }
  for(unsigned mps:{0U,65U}){
   init();assert(!productionEpOpenData(0,1,false,USB_ENDPATT_TRANS_BULK,mps));
-  assert(!regs.EPINEN && !regs.EPOUTEN && !regs.EPSTALL && !regs.DTOGGLE);
+  assert(regs.EPINEN==(1U<<8) && regs.EPOUTEN==(1U<<8) && !regs.EPSTALL && !regs.DTOGGLE);
  }
  puts("PASS: regular open clears halt/data toggle, arms OUT and preserves the other direction");
 
@@ -372,7 +373,7 @@ int main(){
    regs.SIZE.EPOUT[n]=64;s_Usbd.EpReg[n][0].MaxPacketSize=s_Usbd.EpReg[n][1].MaxPacketSize=64;
   }
   UsbCtrlrEpClose(0,ep,dir);
-  assert(irqMask==masked && ISO_OPEN()==3 && ISO_BUSY()==0);
+  assert(irqMask==masked && ISO_OPEN()==1 && ISO_BUSY()==0);
   assert(regs.EPINEN==(dir?(0x1FFU&~(1U<<ep)):0x1FFU));
   assert(regs.EPOUTEN==(!dir?(0x1FFU&~(1U<<ep)):0x1FFU));
   assert(regs.INTENCLR==(1U<<((dir?USBD_INTEN_ENDEPIN0_Pos:USBD_INTEN_ENDEPOUT0_Pos)+ep)));
