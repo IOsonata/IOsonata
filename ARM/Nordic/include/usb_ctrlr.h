@@ -301,13 +301,12 @@ typedef struct __nRF_Usbd_State
 	uint8_t IntPrio;
 	bool LowPowerSuspend;
 	bool SofEnabled;
-	// ISO DMA state: >=0 queued length, -1 none/started, -2 completion retry.
+	// One pending DMA packet per ISO direction; -1 means none, 0 is a ZLP.
 	int16_t IsoDmaLen[2];
 	uint16_t IsoOutSize;
 	volatile uint32_t Flags;
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;
-	uint32_t IsoGeneration[2];
 	// Non-control endpoints 1-8.
 	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT - 1][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
