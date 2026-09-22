@@ -1447,7 +1447,7 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 
 void UsbCtrlrEpCloseAll(int DevNo)
 {
-	for (uint8_t epNum = 1; epNum < NRFX_USBD_EP_COUNT; epNum++)
+	for (uint8_t epNum = NRFX_USBD_EP_COUNT - 1U; epNum != 0U; epNum--)
 	{
 		UsbCtrlrEpClose(DevNo, epNum, false);
 		UsbCtrlrEpClose(DevNo, epNum, true);
