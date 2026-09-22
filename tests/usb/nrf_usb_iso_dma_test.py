@@ -79,7 +79,7 @@ struct Registers {
 } regs;
 using NRF_USBD_Type = Registers;
 auto *NRF_USBD=&regs;
-struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;uint16_t MaxPacketSize;bool bBlocking;};
+struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;uint16_t MaxPacketSize;bool bBlocking;bool IsoOpen;};
 typedef Endpoint USBD_ISOIN_Type;
 typedef Endpoint USBD_ISOOUT_Type;
 FLAG_ENUM
@@ -93,7 +93,7 @@ struct {
  hCFifo_t hQue;
 } s_Usbd;
 alignas(8) uint8_t queueMemory[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
-#define ISO_OPEN() unsigned((regs.EPOUTEN & (1U<<8)) != 0U)
+#define ISO_OPEN() unsigned(s_Usbd.EpReg[7][0].IsoOpen)
 #define ISO_BUSY() ((s_Usbd.IsoBufState / NRFUSBD_ISO_OUT_BUSY) & 3u)
 unsigned irqMask=0,isoStarts[2]={},regularStarts=0;
 unsigned activeDir=0;
@@ -188,8 +188,8 @@ void init(){
  s_Usbd.Flags=0;s_Usbd.IsoBufState=0;
  dmaBusy=0;dmaLocks=dmaUnlocks=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
- s_Usbd.EpReg[7][0]={outBuffer,callback,(void*)0,512,false};
- s_Usbd.EpReg[7][1]={inBuffer,callback,(void*)1,512,false};
+ s_Usbd.EpReg[7][0]={outBuffer,callback,(void*)0,512,false,true};
+ s_Usbd.EpReg[7][1]={inBuffer,callback,(void*)1,512,false,false};
  regs.EPOUTEN=regs.EPINEN=1U<<8;
  memset(inBuffer,0xA5,sizeof(inBuffer));memset(hostOut,0x5A,sizeof(hostOut));
  assert(AppEvtHandlerInit(nullptr,0));
@@ -322,7 +322,7 @@ int main(){
  init();frame(17);regs.ISOOUT.AMOUNT=17;regs.EVENTS_ENDISOOUT=1;
  UsbCtrlrEpClose(0,8,false);
  assert(callbacks[0]==0 && !dmaBusy && !(ISO_BUSY()&1));
- regs.EPOUTEN|=1U<<8;s_Usbd.EpReg[7][0].MaxPacketSize=9;
+ s_Usbd.EpReg[7][0].IsoOpen=true;s_Usbd.EpReg[7][0].MaxPacketSize=9;
  frame(9);finish(false);
  assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
  puts("PASS: close drains active ISO silently; reopen completion belongs to new transfer");
