@@ -180,8 +180,7 @@ bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
 	const uint8_t outLimit = USB_EPOUT_CNT(DevNo) < 16 ?
 		USB_EPOUT_CNT(DevNo) : 16U;
 	const uint8_t pairLimit = inLimit < outLimit ? inLimit : outLimit;
-	if (inLimit < 1U || outLimit < 1U ||
-		((pReq->FixedInMask | pReq->FixedOutMask) & 1U) != 0U)
+	if (inLimit < 1U || outLimit < 1U)
 	{
 		return false;
 	}
