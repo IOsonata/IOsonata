@@ -576,19 +576,9 @@ void nRFUsbdDmaWait(void)
 		{
 			complete = nRFUsbdRetireDma(31U - (uint32_t)__CLZ(dmaStatus));
 		}
-		else if (NRF_USBD->EVENTS_ENDISOIN != 0U)
+		else
 		{
-			NRF_USBD->EVENTS_ENDISOIN = 0U;
-			NRF_USBD->EPSTATUS = 1UL << 8U;
-			__DSB();
-			complete = true;
-		}
-		else if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
-		{
-			NRF_USBD->EVENTS_ENDISOOUT = 0U;
-			NRF_USBD->EPSTATUS = 1UL << 24U;
-			__DSB();
-			complete = true;
+			complete = nRFUsbdIsoFinishDma(0U);
 		}
 		if (complete)
 			nRFUsbdDmaUnlock();
@@ -619,9 +609,8 @@ __attribute__((noinline)) void nRFUsbdSofAcquire(void)
 
 __attribute__((noinline)) void nRFUsbdSofRelease(void)
 {
-	if (!s_Usbd.SofEnabled &&
-		(s_Usbd.Flags & (USBD_FLAG_ISO_IN_OPEN | USBD_FLAG_ISO_OUT_OPEN |
-			USBD_FLAG_SUSPENDED)) == 0U)
+	if (!s_Usbd.SofEnabled && !s_Usbd.IsoOpen &&
+		(s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U)
 	{
 		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
 	}
@@ -707,6 +696,8 @@ __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 static void nRFUsbdResetState(void)
 {
 	s_Usbd.SofEnabled = false;
+	s_Usbd.IsoOpen = false;
+	s_Usbd.IsoBufState = 0U;
 	s_Usbd.IsoDmaLen[0] = s_Usbd.IsoDmaLen[1] = -1;
 
 	CFifoFlush(s_Usbd.hQue);
@@ -924,11 +915,12 @@ static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 		// When low-power suspend is disabled, retain all endpoint state and
 		// wait for RESUME or SOF without touching USBD LOWPOWER.
 		s_Usbd.Flags = (s_Usbd.Flags & ~(uint32_t)(USBD_FLAG_REMOTE_WAKE |
-			USBD_FLAG_HOST_RESUME | USBD_FLAG_SUSPEND_PEND |
-			USBD_FLAG_ISO_IN_READY | USBD_FLAG_ISO_OUT_READY)) |
+			USBD_FLAG_HOST_RESUME | USBD_FLAG_SUSPEND_PEND)) |
 			USBD_FLAG_SUSPENDED |
 			(s_Usbd.LowPowerSuspend ?
 			 (uint32_t)USBD_FLAG_SUSPEND_PEND : 0U);
+		s_Usbd.IsoBufState &=
+			(uint8_t)~(NRFUSBD_ISO_IN_READY | NRFUSBD_ISO_OUT_READY);
 		nRFUsbdSofAcquire();
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
 	}
