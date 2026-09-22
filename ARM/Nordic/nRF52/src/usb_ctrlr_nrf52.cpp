@@ -661,7 +661,7 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaAllowed(void)
 {
-	const uint32_t gate = s_Usbd.Flags &
+	const uint8_t gate = s_Usbd.Flags &
 		(USBD_FLAG_HOST_RESUME | USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND);
 	return (gate & USBD_FLAG_HOST_RESUME) == 0U &&
 		gate != USBD_FLAG_SUSPENDED;
@@ -723,9 +723,9 @@ static void nRFUsbdAbortEp0(void)
 // so no interrupt exclusion is needed here.
 static void nRFUsbdTryEnterLowPower(void)
 {
-	const uint32_t entryMask = USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND |
+	const uint8_t entryMask = USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND |
 		USBD_FLAG_REMOTE_WAKE | USBD_FLAG_HOST_RESUME;
-	const uint32_t entryWant = USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND;
+	const uint8_t entryWant = USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND;
 
 	if (!s_Usbd.LowPowerSuspend ||
 		(s_Usbd.Flags & entryMask) != entryWant ||
@@ -742,7 +742,7 @@ static void nRFUsbdTryEnterLowPower(void)
 		return;
 	}
 
-	s_Usbd.Flags &= ~(uint32_t)USBD_FLAG_MAC_AWAKE;
+	s_Usbd.Flags &= (uint8_t)~USBD_FLAG_MAC_AWAKE;
 	NRF_USBD->LOWPOWER =
 		USBD_LOWPOWER_LOWPOWER_LowPower << USBD_LOWPOWER_LOWPOWER_Pos;
 	(void)NRF_USBD->LOWPOWER;
@@ -755,16 +755,16 @@ static void nRFUsbdTryEnterLowPower(void)
 	}
 
 	// Hardware resume is handled by the RESUME/SOF check above.
-	s_Usbd.Flags &= ~(uint32_t)USBD_FLAG_SUSPEND_PEND;
+	s_Usbd.Flags &= (uint8_t)~USBD_FLAG_SUSPEND_PEND;
 }
 
 static void nRFUsbdTryRemoteWake(void)
 {
-	const uint32_t wakeMask = USBD_FLAG_REMOTE_WAKE | USBD_FLAG_SUSPENDED |
+	const uint8_t wakeMask = USBD_FLAG_REMOTE_WAKE | USBD_FLAG_SUSPENDED |
 		USBD_FLAG_HOST_RESUME | USBD_FLAG_MAC_AWAKE;
-	const uint32_t wakeWant = USBD_FLAG_REMOTE_WAKE | USBD_FLAG_SUSPENDED |
+	const uint8_t wakeWant = USBD_FLAG_REMOTE_WAKE | USBD_FLAG_SUSPENDED |
 		USBD_FLAG_MAC_AWAKE;
-	const uint32_t flags = s_Usbd.Flags;
+	const uint8_t flags = s_Usbd.Flags;
 	if ((flags & wakeMask) != wakeWant ||
 		nRFUsbdDmaActive() ||
 		!UsbdIsForceNormal())
@@ -772,7 +772,7 @@ static void nRFUsbdTryRemoteWake(void)
 		return;
 	}
 
-	s_Usbd.Flags = flags & ~(uint32_t)USBD_FLAG_REMOTE_WAKE;
+	s_Usbd.Flags = flags & (uint8_t)~USBD_FLAG_REMOTE_WAKE;
 	NRF_USBD->DPDMVALUE = USBD_DPDMVALUE_STATE_Resume;
 	NRF_USBD->TASKS_DPDMDRIVE = 1;
 	(void)NRF_USBD->TASKS_DPDMDRIVE;
@@ -787,7 +787,7 @@ static void nRFUsbdTryRemoteWake(void)
 static void nRFUsbdHostResumeDetected(void)
 {
 	const uint32_t irqState = DisableInterrupt();
-	uint32_t flags = s_Usbd.Flags;
+	uint8_t flags = s_Usbd.Flags;
 
 	if ((flags & USBD_FLAG_SUSPENDED) == 0U)
 	{
@@ -796,7 +796,7 @@ static void nRFUsbdHostResumeDetected(void)
 	}
 
 	const bool waking = (flags & USBD_FLAG_MAC_AWAKE) == 0U || !UsbdIsForceNormal();
-	flags &= ~(uint32_t)(USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND |
+	flags &= (uint8_t)~(USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND |
 		USBD_FLAG_REMOTE_WAKE | USBD_FLAG_HOST_RESUME);
 	if (waking)
 		flags |= USBD_FLAG_HOST_RESUME;
@@ -812,8 +812,9 @@ static void nRFUsbdHostResumeDetected(void)
 // ISR context only.
 static void nRFUsbdWakeAllowed(void)
 {
-	const uint32_t flags = s_Usbd.Flags;
-	s_Usbd.Flags = (flags | USBD_FLAG_MAC_AWAKE) & ~(uint32_t)USBD_FLAG_HOST_RESUME;
+	const uint8_t flags = s_Usbd.Flags;
+	s_Usbd.Flags = (flags | USBD_FLAG_MAC_AWAKE) &
+		(uint8_t)~USBD_FLAG_HOST_RESUME;
 	if ((flags & USBD_FLAG_HOST_RESUME) != 0U)
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
 }
@@ -1354,7 +1355,7 @@ void UsbCtrlrRemoteWakeup(int DevNo)
 {
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
-	const uint32_t flags = s_Usbd.Flags;
+	const uint8_t flags = s_Usbd.Flags;
 	if ((flags & (USBD_FLAG_SUSPENDED | USBD_FLAG_HOST_RESUME)) !=
 		USBD_FLAG_SUSPENDED)
 	{
@@ -1362,7 +1363,7 @@ void UsbCtrlrRemoteWakeup(int DevNo)
 		return;
 	}
 
-	s_Usbd.Flags = (flags & ~(uint32_t)USBD_FLAG_SUSPEND_PEND) |
+	s_Usbd.Flags = (flags & (uint8_t)~USBD_FLAG_SUSPEND_PEND) |
 		USBD_FLAG_REMOTE_WAKE;
 
 	UsbdForceNormal();
