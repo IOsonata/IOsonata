@@ -118,16 +118,11 @@ static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 	pData[sizeof(notification) + 1U] =
 		(uint8_t)(pCdc->SerialState >> 8);
 
-	pCdc->SerialStatePending = false;
-
 	if (UsbCtrlrEpSend(pCdc->DevNo, pCdc->NotifyEpNo, pData,
 						 USBD_CDC_NOTIFY_LEN))
 	{
+		pCdc->SerialStatePending = false;
 		pCdc->SerialStateActive = true;
-	}
-	else
-	{
-		pCdc->SerialStatePending = true;
 	}
 }
 
