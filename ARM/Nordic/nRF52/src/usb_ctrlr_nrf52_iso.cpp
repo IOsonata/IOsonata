@@ -206,15 +206,15 @@ void nRFUsbdIsoSof(void)
 	s_Usbd.IsoBufState = state | NRFUSBD_ISO_IN_READY;
 
 	const uint32_t size = NRF_USBD->SIZE.ISOOUT;
-	const bool waiting = (state & NRFUSBD_ISO_OUT_READY) != 0U;
-	if ((state & NRFUSBD_ISO_OUT_BUSY) == 0U || waiting)
+	const bool busy = (state & NRFUSBD_ISO_OUT_BUSY) != 0U;
+	if (!busy || (state & NRFUSBD_ISO_OUT_READY) != 0U)
 	{
 		if (size != 0U)
 		{
 			const uint16_t len =
 				(size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ? 0U : (uint16_t)size;
 			s_Usbd.IsoBufState |= NRFUSBD_ISO_OUT_READY;
-			if (waiting)
+			if (busy)
 			{
 				s_Usbd.IsoDmaLen[0] = len;
 			}
