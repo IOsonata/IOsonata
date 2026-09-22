@@ -26,6 +26,7 @@ intrf_source = Path(os.environ.get('USB_INTRF_SOURCE',
 header = (ROOT / 'ARM/Nordic/include/usb_ctrlr.h').read_text()
 queue_blocking = re.search(r's_Usbd.hQue = CFifoInit\(s_QueMem,.*?\b(true|false)\);',
     source, re.S).group(1)
+assert 'nRFUsbdQueRemoveEp(EpNo, bIn);' in source
 
 
 def function(name, source=source):
@@ -197,7 +198,7 @@ code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
     'nRFUsbdDmaActive', 'nRFUsbdDmaLock', 'nRFUsbdDmaUnlock', 'nRFUsbdDmaStartLocked', 'nRFUsbdRetireDma', 'nRFUsbdDmaWait',
     'nRFUsbdEp0InStart', 'nRFUsbdStartDmaNow', 'nRFUsbdDmaAllowed',
     'nRFUsbdStartQueuedDma',
-    'nRFUsbdResumeQueuedDmaLocked',
+    'nRFUsbdResumeQueuedDmaLocked', 'nRFUsbdQueRemoveEp',
     'UsbCtrlrEpSend',
     'nRFUsbGetEpReg', 'nRFUsbEpRegisteredEvent',
     'nRFUsbdProcessInComplete', 'nRFUsbdQueueInComplete', 'UsbCtrlrEp0Send',
@@ -693,6 +694,30 @@ int main(int argc,char **argv){
   assert(CFifoUsed(s_Usbd.hQue)==1 && !CFifoUsed(s_Usbd.hEp0Que));
  }
  puts("PASS: EP0, regular and ISO stop/close drain unlocks once without starting queued DMA");
+
+ // Closing one direction must discard only that endpoint/direction from the
+ // regular queue. The opposite direction and unrelated endpoints keep order.
+ init();
+ {
+  auto put=[](uint8_t ep,uint8_t dir,uint16_t len){
+   auto *q=(nRFUsbdQue_t*)CFifoPut(s_Usbd.hQue);
+   assert(q);q->EpNum=ep;q->Dir=dir;q->Len=len;q->pBuffer=data+len;
+  };
+  put(1,NRFX_USBD_QUE_IN_BUFFER,11);
+  put(1,NRFX_USBD_QUE_OUT,12);
+  put(2,NRFX_USBD_QUE_IN_BUFFER,13);
+  nRFUsbdQueRemoveEp(1,true);
+  assert(CFifoUsed(s_Usbd.hQue)==2);
+  auto *q=(nRFUsbdQue_t*)CFifoGet(s_Usbd.hQue);
+  assert(q->EpNum==1 && q->Dir==NRFX_USBD_QUE_OUT && q->Len==12);
+  q=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
+  assert(q->EpNum==2 && q->Dir==NRFX_USBD_QUE_IN_BUFFER && q->Len==13);
+  nRFUsbdQueRemoveEp(1,false);
+  assert(CFifoUsed(s_Usbd.hQue)==1);
+  q=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
+  assert(q->EpNum==2 && q->Dir==NRFX_USBD_QUE_IN_BUFFER && q->Len==13);
+ }
+ puts("PASS: endpoint close removes only its queued DMA direction");
 
  alignas(8) uint8_t txMem[CFIFO_TOTAL_MEMSIZE(128,1)];
  for(unsigned ep=1;ep<8;++ep)for(unsigned kind=0;kind<3;++kind){

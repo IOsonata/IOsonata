@@ -694,6 +694,28 @@ __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 	nRFUsbdStartQueuedDma();
 }
 
+// Remove queued work for one regular endpoint direction without disturbing
+// other endpoints. Call only after the active DMA has been retired.
+static void nRFUsbdQueRemoveEp(uint8_t EpNum, bool In)
+{
+	const uint32_t state = DisableInterrupt();
+	const int count = CFifoUsed(s_Usbd.hQue);
+
+	for (int i = 0; i < count; ++i)
+	{
+		const nRFUsbdQue_t que =
+			*(nRFUsbdQue_t *)CFifoGet(s_Usbd.hQue);
+		if (que.EpNum == EpNum &&
+			((que.Dir != NRFX_USBD_QUE_OUT) == In))
+		{
+			continue;
+		}
+		*(nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue) = que;
+	}
+
+	EnableInterrupt(state);
+}
+
 static void nRFUsbdResetState(void)
 {
 	s_Usbd.SofEnabled = false;
@@ -1450,6 +1472,7 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 	}
 
 	nRFUsbdDmaWait();
+	nRFUsbdQueRemoveEp(EpNo, bIn);
 
 	nRFUsbdEpHwEnable(EpNo, bIn, false);
 	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (bIn ? 0U : 16U));
