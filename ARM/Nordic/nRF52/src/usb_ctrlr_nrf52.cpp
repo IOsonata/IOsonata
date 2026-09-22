@@ -703,8 +703,6 @@ static void nRFUsbdResetState(void)
 	CFifoFlush(s_Usbd.hEp0Que);
 	s_Usbd.Flags = USBD_FLAG_MAC_AWAKE;
 	s_Usbd.IsoOutSize = 0U;
-	++s_Usbd.IsoGeneration[0];
-	++s_Usbd.IsoGeneration[1];
 	NRF_USBD->EVENTS_EP0SETUP = 0U;
 	NRF_USBD->EVENTS_EP0DATADONE = 0U;
 	nRFUsbdDmaUnlock();
