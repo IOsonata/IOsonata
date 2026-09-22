@@ -34,9 +34,12 @@ sof = function_body(source, "static void nRFUsbdHandleSof(void)")
 assert "if (!s_Usbd.LowPowerSuspend ||" in enter_low_power, (
     "USBD low-power entry must be disabled when bLowPowerSuspend is false"
 )
-assert "s_Usbd.LowPowerSuspend ?" in bus_event and (
-    "USBD_FLAG_SUSPEND_PEND : 0U" in bus_event
-), "bus suspend must not request peripheral low-power unconditionally"
+assert "USBD_FLAG_SUSPENDED" in bus_event and "NRF_USBD->LOWPOWER" not in bus_event, (
+    "bus suspend must only mark suspend; peripheral low-power entry stays deferred"
+)
+assert "USBD_FLAG_SUSPEND_PEND" not in source, (
+    "suspend draining must be derived from LowPowerSuspend/MAC_AWAKE, not a shadow flag"
+)
 assert "nRFUsbdHostResumeDetected();" in sof, (
     "SOF handling must retain the anomaly-211 host-resume recovery path"
 )
