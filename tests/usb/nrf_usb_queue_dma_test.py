@@ -173,12 +173,15 @@ for tag, name in [('__nRF_Usbd_Que', 'nRFUsbdQue_t'), ('__nRF_Ep_Packet', 'nRFEP
 code += re.search(r'typedef struct __nRF_Usb_Ep_Registration\s*\{.*?\} nRFUsbEpReg_t;',
     header, re.S).group(0) + '\n'
 code += re.search(r'enum\s*\{[^}]*USBD_FLAG_SUSPENDED[^}]*\};', header).group(0) + '\n'
+code += re.search(r'enum\s*\{[^}]*NRFUSBD_ISO_IN_BUSY[^}]*\};', header).group(0) + '\n'
 code += r'''
 #pragma pack(pop)
 struct {
  uint32_t Flags;
  uint16_t IsoOutSize;
  bool LowPowerSuspend;
+ bool IsoOpen;
+ uint8_t IsoBufState;
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue,hEp0Que;
  bool SofEnabled;
@@ -258,7 +261,7 @@ void init(){
  controlEvents=0;controlEvent={};
  isoAtSof=false;suspends=resumes=setups=0;s_Usbd.LowPowerSuspend=false;
  setupHandler=nullptr;controlHandler=nullptr;
- s_Usbd.SofEnabled=false;
+ s_Usbd.SofEnabled=false;s_Usbd.IsoOpen=false;s_Usbd.IsoBufState=0;
  s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=-1;
  s_Usbd.Flags=USBD_FLAG_MAC_AWAKE;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  assert(AppEvtHandlerInit(nullptr,0));
@@ -613,7 +616,7 @@ int main(int argc,char **argv){
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
   else{
    dmaBusy=0x82;
-   s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
+   s_Usbd.IsoOpen=true;
   }
   assert(UsbCtrlrEp0Send(0,data,18)==18);
   s_Usbd.Flags|=gate;
@@ -765,7 +768,7 @@ int main(int argc,char **argv){
  // this ISR must not postpone an already queued regular transfer.
  for(unsigned status:{0x100U,0x1000000U}){
   init();dmaBusy=0x82;
-  s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
+  s_Usbd.IsoOpen=true;
   assert(UsbCtrlrEpSend(0,2,data,9));
   regs.EPSTATUS.bits=status;
   interrupt(); // EPSTATUS alone is not completion.
@@ -788,7 +791,7 @@ int main(int argc,char **argv){
   unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND)}){
   init();dmaBusy=0x82;
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
-  else s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
+  else s_Usbd.IsoOpen=true;
   assert(UsbCtrlrEpSend(0,2,data+64,9));
   s_Usbd.Flags|=gate;
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
@@ -803,7 +806,7 @@ int main(int argc,char **argv){
  for(unsigned status:{2U,0x100U,0x1000000U}){
   init();dmaBusy=0x82;
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
-  else s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
+  else s_Usbd.IsoOpen=true;
   assert(UsbCtrlrEpSend(0,2,data+64,9));
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   regs.EVENTS_EP0SETUP=1;regs.EVENTS_EP0DATADONE=1;isoChecks=0;
@@ -853,7 +856,7 @@ int main(int argc,char **argv){
  for(unsigned status:{2U,0x100U,0x1000000U})for(bool lowPower:{false,true}){
   init();dmaBusy=0x82;s_Usbd.LowPowerSuspend=lowPower;
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
-  else s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
+  else s_Usbd.IsoOpen=true;
   assert(UsbCtrlrEpSend(0,2,data+64,9));
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   regs.EVENTS_USBEVENT=1;regs.EVENTCAUSE.bits=USBD_EVENTCAUSE_SUSPEND_Msk;
