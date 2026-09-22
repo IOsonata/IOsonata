@@ -93,7 +93,7 @@ struct {
  hCFifo_t hQue;
 } s_Usbd;
 alignas(8) uint8_t queueMemory[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
-#define ISO_OPEN() unsigned(s_Usbd.EpReg[7][0].MaxPacketSize!=0 && s_Usbd.EpReg[7][1].MaxPacketSize!=0)
+#define ISO_OPEN() unsigned(s_Usbd.EpReg[7][0].MaxPacketSize!=0)
 #define ISO_BUSY() ((s_Usbd.IsoBufState / NRFUSBD_ISO_OUT_BUSY) & 3u)
 unsigned irqMask=0,isoStarts[2]={},regularStarts=0;
 unsigned activeDir=0;
