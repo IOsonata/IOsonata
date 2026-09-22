@@ -831,14 +831,13 @@ int main(int argc,char **argv){
  for(bool awake:{false,true})for(bool lowPower:{false,true})
  for(unsigned mask:{0U,1U}){
   init();irqMask=mask;regs.LOWPOWER=lowPower;
-  s_Usbd.Flags=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN|
-   USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND|USBD_FLAG_REMOTE_WAKE;
+  s_Usbd.IsoOpen=true;
+  s_Usbd.Flags=USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND|USBD_FLAG_REMOTE_WAKE;
   if(awake)s_Usbd.Flags|=USBD_FLAG_MAC_AWAKE;
   nRFUsbdHostResumeDetected();
   assert(irqMask==mask && !regs.LOWPOWER && resumes==unsigned(awake && !lowPower));
   assert(!(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND|USBD_FLAG_REMOTE_WAKE)));
-  assert((s_Usbd.Flags&(USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN))==
-   (USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN));
+  assert(s_Usbd.IsoOpen);
   nRFUsbdHostResumeDetected();
   nRFUsbdWakeAllowed();nRFUsbdWakeAllowed();
   assert(resumes==1 && irqMask==mask && !(s_Usbd.Flags&USBD_FLAG_HOST_RESUME));
