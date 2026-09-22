@@ -1003,22 +1003,13 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	}
 }
 
-// Callers exclude the USB ISR. Keep SETUP latched until AppEvt accepts it;
-// masking only this source lets the foreground drain a full event queue.
 static void nRFUsbdQueueEp0Setup(void)
 {
-	if (AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEP0Setup))
-	{
-		NRF_USBD->EVENTS_EP0SETUP = 0U;
-		NRF_USBD->INTENSET = USBD_INTEN_EP0SETUP_Msk;
-	}
-	else
-	{
-		NRF_USBD->INTENCLR = USBD_INTEN_EP0SETUP_Msk;
-	}
+	NRF_USBD->EVENTS_EP0SETUP = 0U;
 	// A new SETUP aborts the old control transfer's completion.
 	NRF_USBD->EVENTS_EP0DATADONE = 0U;
 	(void)NRF_USBD->EVENTS_EP0DATADONE;
+	(void)AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEP0Setup);
 }
 
 
@@ -1290,8 +1281,6 @@ void UsbCtrlrProcess(int DevNo)
 			pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
 		}
 	}
-	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
-		nRFUsbdQueueEp0Setup();
 	const uint32_t inData = NRF_USBD->EPDATASTATUS & 0xFEU;
 	if (inData != 0U)
 	{
