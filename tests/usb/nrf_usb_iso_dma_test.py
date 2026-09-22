@@ -86,7 +86,6 @@ FLAG_ENUM
 QUEUE_TYPES
 struct {
  volatile uint8_t Flags=0;
- bool LowPowerSuspend=false;
   bool SofEnabled=false;
  bool IsoOpen=false;
  uint8_t IsoBufState=0;
@@ -151,12 +150,9 @@ void nRFUsbdDmaWait(){
  if(dmaBusy){assert(nRFUsbdIsoFinishDma(0U));nRFUsbdDmaUnlock();}
 }
 void nRFUsbdResumeQueuedDmaLocked(){
- const uint8_t flags=s_Usbd.Flags;
- const bool allowed=!(flags&USBD_FLAG_HOST_RESUME) &&
-  (!(flags&USBD_FLAG_SUSPENDED) ||
-   (s_Usbd.LowPowerSuspend &&
-    (flags&(USBD_FLAG_REMOTE_WAKE|USBD_FLAG_MAC_AWAKE))==USBD_FLAG_MAC_AWAKE));
- if(dmaBusy||!allowed)return;
+ const uint32_t gate=s_Usbd.Flags&
+  (USBD_FLAG_HOST_RESUME|USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND);
+ if(dmaBusy||(gate&USBD_FLAG_HOST_RESUME)||gate==USBD_FLAG_SUSPENDED)return;
  nRFUsbdDmaLock();
  if(!nRFUsbdIsoStart()){++regularStarts;nRFUsbdDmaUnlock();}
 }
