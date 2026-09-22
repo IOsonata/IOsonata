@@ -609,10 +609,8 @@ __attribute__((noinline)) void nRFUsbdSofAcquire(void)
 
 __attribute__((noinline)) void nRFUsbdSofRelease(void)
 {
-	const nRFUsbEpReg_t *pIso =
-		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
 	if (!s_Usbd.SofEnabled &&
-		(pIso[0].MaxPacketSize == 0U || pIso[1].MaxPacketSize == 0U) &&
+		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].MaxPacketSize == 0U &&
 		(s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U)
 	{
 		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
