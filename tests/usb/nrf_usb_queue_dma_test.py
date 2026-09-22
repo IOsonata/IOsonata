@@ -815,32 +815,14 @@ int main(int argc,char **argv){
  }
  puts("PASS: SETUP defers control handling and prevents a premature DMA restart");
 
- for(bool reset:{false,true}){
-  init();unsigned otherEvents=0;
-  while(AppEvtHandlerQue(0,&otherEvents,[](uint32_t,void *p){++*(unsigned*)p;})){}
-  regs.BMREQUESTTYPE=0x80;regs.BREQUEST=6;regs.WLENGTHL=9;
-  regs.EVENTS_EP0SETUP=regs.EVENTS_EP0DATADONE=1;interrupt();
-  assert(regs.EVENTS_EP0SETUP && !regs.EVENTS_EP0DATADONE && !setups);
-  assert(regs.INTENCLR==USBD_INTEN_EP0SETUP_Msk && !regs.INTENSET);
-  // Other interrupts cannot lose or duplicate the retained request.
-  interrupt();assert(regs.EVENTS_EP0SETUP && !setups);
-  if(reset){
-   regs.EVENTS_USBRESET=1;interrupt();assert(!regs.EVENTS_EP0SETUP);
-   UsbCtrlrProcess(0);UsbCtrlrProcess(0);assert(!setups && resets==1);
-  }else{
-   // A replacement SETUP before acceptance supersedes the retained one.
-   regs.WLENGTHL=18;
-   setupHandler=[](const UsbCtrlrEvt_t *e){
-    assert(e->Setup.bRequest==6 && e->Setup.wLength==18 && !irqMask);
-   };
-   UsbCtrlrProcess(0);
-   assert(otherEvents && !setups && !regs.EVENTS_EP0SETUP);
-   assert(regs.INTENSET==USBD_INTEN_EP0SETUP_Msk);
-   UsbCtrlrProcess(0);UsbCtrlrProcess(0);assert(setups==1);
-   regs.EVENTS_EP0SETUP=1;interrupt();AppEvtHandlerExec();assert(setups==2);
-  }
- }
- puts("PASS: full AppEvt retains SETUP, masks its IRQ, retries once, and handles replacement/reset");
+ // SETUP interrupt is never masked or retained for foreground retry.
+ init();
+ while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
+ regs.BMREQUESTTYPE=0x80;regs.BREQUEST=6;regs.WLENGTHL=9;
+ regs.EVENTS_EP0SETUP=regs.EVENTS_EP0DATADONE=1;interrupt();
+ assert(!regs.EVENTS_EP0SETUP && !regs.EVENTS_EP0DATADONE && !setups);
+ assert((regs.INTENCLR & USBD_INTEN_EP0SETUP_Msk)==0U);
+ puts("PASS: EP0 SETUP never masks its interrupt or waits for foreground retry");
 
  // Host resume must notify exactly once, after both the MAC and peripheral
  // are awake, without losing ISO state or changing the caller's IRQ mask.
