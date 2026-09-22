@@ -86,8 +86,7 @@ FLAG_ENUM
 QUEUE_TYPES
 struct {
  volatile uint32_t Flags=0;
- uint16_t IsoOutSize=0;
- bool SofEnabled=false;
+  bool SofEnabled=false;
  bool IsoOpen=false;
  uint8_t IsoBufState=0;
  int16_t IsoDmaLen[2]={-1,-1};
