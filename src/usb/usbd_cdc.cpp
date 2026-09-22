@@ -80,6 +80,12 @@ static uint8_t UsbdCdcNotifInterval(UsbdCdcDev_t *pCdc)
 	return UsbCtrlrHighSpeed(pCdc->DevNo) ? 8U : 16U;
 }
 
+enum
+{
+	USBD_CDC_NOTIF_PENDING = 1U,
+	USBD_CDC_NOTIF_ACTIVE = 2U,
+};
+
 bool UsbdCdcPortIsOpen(const UsbdCdcDev_t * const pCdc)
 {
 	return pCdc != nullptr && pCdc->pData->Mps > 0U &&
@@ -99,7 +105,7 @@ static void UsbdCdcNotifyPortState(UsbdCdcDev_t *pCdc, bool Open)
 static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 {
 	if (pCdc == nullptr || pCdc->pData->Mps == 0U ||
-		!pCdc->SerialStatePending || pCdc->SerialStateActive)
+		pCdc->SerialStateFlags != USBD_CDC_NOTIF_PENDING)
 	{
 		return;
 	}
@@ -118,16 +124,10 @@ static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 	pData[sizeof(notification) + 1U] =
 		(uint8_t)(pCdc->SerialState >> 8);
 
-	pCdc->SerialStatePending = false;
-
 	if (UsbCtrlrEpSend(pCdc->DevNo, pCdc->NotifyEpNo, pData,
 						 USBD_CDC_NOTIFY_LEN))
 	{
-		pCdc->SerialStateActive = true;
-	}
-	else
-	{
-		pCdc->SerialStatePending = true;
+		pCdc->SerialStateFlags = USBD_CDC_NOTIF_ACTIVE;
 	}
 }
 
@@ -146,8 +146,7 @@ static void UsbdCdcCloseEndpoints(UsbdCdcDev_t *pCdc)
 
 static void UsbdCdcCancelBusState(UsbdCdcDev_t *pCdc)
 {
-	pCdc->SerialStatePending = false;
-	pCdc->SerialStateActive = false;
+	pCdc->SerialStateFlags = 0U;
 	UsbIntrfUnconfigure(pCdc->pData);
 }
 
@@ -197,7 +196,7 @@ static bool UsbdCdcConfig(UsbdCdcDev_t *pCdc, uint8_t Configuration)
 		return false;
 	}
 
-	pCdc->SerialStatePending = true;
+	pCdc->SerialStateFlags = USBD_CDC_NOTIF_PENDING;
 	UsbdCdcNotifKick(pCdc);
 
 	return true;
@@ -323,17 +322,12 @@ static void UsbdCdcNotifCtrlrEvent(UsbCtrlrEvtType_t Event,
 
 	if (Event == USB_CTRLR_EVT_XFER_CMPL)
 	{
-		pCdc->SerialStateActive = false;
+		pCdc->SerialStateFlags &= USBD_CDC_NOTIF_PENDING;
 		UsbdCdcNotifKick(pCdc);
 	}
 	else if (Event == USB_CTRLR_EVT_XFER_FAILED)
 	{
-		pCdc->SerialStateActive = false;
-		pCdc->SerialStatePending = true;
-	}
-	else if (Event == USB_CTRLR_EVT_CANCEL)
-	{
-		pCdc->SerialStateActive = false;
+		pCdc->SerialStateFlags = USBD_CDC_NOTIF_PENDING;
 	}
 }
 
@@ -374,8 +368,7 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	pCdc->ControlLineState = 0U;
 	pCdc->PendingControlLineState = 0U;
 	pCdc->SerialState = 0U;
-	pCdc->SerialStatePending = false;
-	pCdc->SerialStateActive = false;
+	pCdc->SerialStateFlags = 0U;
 	UsbdCdcDefaultLineCoding(pCdc);
 
 	UsbdEpAllocReq_t req = {};
@@ -499,7 +492,7 @@ void UsbdCdcSetSerialState(UsbdCdcDev_t * const pCdc, uint16_t SerialState)
 	}
 
 	pCdc->SerialState = SerialState & UsbdCdcSerialStateMask();
-	pCdc->SerialStatePending = true;
+	pCdc->SerialStateFlags |= USBD_CDC_NOTIF_PENDING;
 	UsbdCdcNotifKick(pCdc);
 }
 
