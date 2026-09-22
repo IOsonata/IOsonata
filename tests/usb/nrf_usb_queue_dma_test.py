@@ -177,7 +177,6 @@ code += r'''
 #pragma pack(pop)
 struct {
  uint32_t Flags;
- uint32_t IsoGeneration[2];
  uint16_t IsoOutSize;
  bool LowPowerSuspend;
  nRFUsbEpReg_t EpReg[8][2];
@@ -1199,7 +1198,7 @@ int main(int argc,char **argv){
  init();dmaBusy=0x82;
  regs.EPSTATUS.bits=0x01010101;regs.EPDATASTATUS.bits=0x01FF01FF;
  regs.EVENTCAUSE.bits=0xFFFF;regs.EVENTS_USBEVENT=1;regs.INTEN=0xFFFFFFFF;
- s_Usbd.IsoGeneration[0]=4;s_Usbd.IsoGeneration[1]=8;s_Usbd.IsoOutSize=33;
+ s_Usbd.IsoOutSize=33;
  assert(CFifoPut(s_Usbd.hQue) && CFifoPut(s_Usbd.hEp0Que));
  regs.EVENTS_USBRESET=1;interrupt();
  assert(resets==1 && !dmaBusy && !regs.EVENTS_USBRESET);
@@ -1213,7 +1212,6 @@ int main(int argc,char **argv){
   USBD_INTEN_EP0DATADONE_Msk | USBD_INTEN_ENDEPOUT0_Msk));
  assert(CFifoUsed(s_Usbd.hQue)==0 && CFifoUsed(s_Usbd.hEp0Que)==0);
  assert(s_Usbd.Flags==USBD_FLAG_MAC_AWAKE && !s_Usbd.IsoOutSize);
- assert(s_Usbd.IsoGeneration[0]==5 && s_Usbd.IsoGeneration[1]==9);
  puts("PASS: bus reset cancels queues, clears status and releases DMA without starting a transfer");
 
  // Producer acceptance and readiness follow CFifo's configured full policy.
