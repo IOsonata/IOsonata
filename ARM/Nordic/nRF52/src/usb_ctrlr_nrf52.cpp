@@ -609,7 +609,8 @@ __attribute__((noinline)) void nRFUsbdSofAcquire(void)
 
 __attribute__((noinline)) void nRFUsbdSofRelease(void)
 {
-	if (!s_Usbd.SofEnabled && !s_Usbd.IsoOpen &&
+	if (!s_Usbd.SofEnabled &&
+		!s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].IsoOpen &&
 		(s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U)
 	{
 		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
@@ -696,8 +697,8 @@ __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 static void nRFUsbdResetState(void)
 {
 	s_Usbd.SofEnabled = false;
-	s_Usbd.IsoOpen = false;
-	s_Usbd.IsoBufState = 0U;
+	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].IsoOpen = false;
+	s_Usbd.IsoDmaState = 0U;
 
 	CFifoFlush(s_Usbd.hQue);
 	CFifoFlush(s_Usbd.hEp0Que);
@@ -918,8 +919,8 @@ static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 			USBD_FLAG_SUSPENDED |
 			(s_Usbd.LowPowerSuspend ?
 			 (uint32_t)USBD_FLAG_SUSPEND_PEND : 0U);
-		s_Usbd.IsoBufState &=
-			(uint8_t)~(NRFUSBD_ISO_IN_READY | NRFUSBD_ISO_OUT_READY);
+		s_Usbd.IsoDmaState &= ~((uint32_t)NRFUSBD_ISO_READY |
+			((uint32_t)NRFUSBD_ISO_READY << 16U));
 		nRFUsbdSofAcquire();
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
 	}
