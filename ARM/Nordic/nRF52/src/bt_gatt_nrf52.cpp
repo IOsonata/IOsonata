@@ -458,7 +458,25 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
 		BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&attrMd.write_perm);
 	}
 
+	// A characteristic with a base of its own, such as SMP's, whose
+	// characteristic and service UUIDs share no base.
+	uint8_t baseidx = pSrvc->Uuid.BaseIdx;
 	uuid.type = SoftDeviceUuidType;
+	if (pChar->pUuidBase != nullptr)
+	{
+		int idx = BtUuidAddBase(pChar->pUuidBase);
+		if (idx < 0)
+		{
+			return NRF_ERROR_NO_MEM;
+		}
+		uint32_t res = sd_ble_uuid_vs_add((ble_uuid128_t const *)pChar->pUuidBase,
+			&uuid.type);
+		if (res != NRF_SUCCESS)
+		{
+			return res;
+		}
+		baseidx = (uint8_t)idx;
+	}
 	uuid.uuid = pChar->Uuid;
 	attrMd.vloc = BLE_GATTS_VLOC_STACK;
 	attrMd.vlen = 1;
@@ -485,7 +503,7 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
 	pChar->DescHdl = handles.user_desc_handle;
 	pChar->CccdHdl = handles.cccd_handle;
 	pChar->SccdHdl = handles.sccd_handle;
-	pChar->BaseUuidIdx = pSrvc->Uuid.BaseIdx;
+	pChar->BaseUuidIdx = baseidx;
 	pChar->pSrvc = pSrvc;
 	return NRF_SUCCESS;
 }

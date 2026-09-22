@@ -248,9 +248,9 @@ static const uint32_t s_Crc32IeeeNibble[16] = {
 	0x9B64C2B0u, 0x86D3D2D4u, 0xA00AE278u, 0xBDBDF21Cu,
 };
 
-uint32_t crc32_ieee(uint8_t *pData, int Len)
+uint32_t crc32_ieee_cont(uint32_t Crc, const uint8_t *pData, int Len)
 {
-	uint32_t crc = 0xFFFFFFFF;
+	uint32_t crc = Crc ^ 0xFFFFFFFF;
 
 	for (int i = 0; i < Len; i++)
 	{
@@ -259,4 +259,9 @@ uint32_t crc32_ieee(uint8_t *pData, int Len)
 	}
 
 	return crc ^ 0xFFFFFFFF;
+}
+
+uint32_t crc32_ieee(uint8_t *pData, int Len)
+{
+	return crc32_ieee_cont(0, pData, Len);
 }

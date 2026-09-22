@@ -52,15 +52,16 @@ SOFTWARE.
   * @{
   */
 
-/// @brief	Software SHA-256 engine implementing HashEngine and HMAC.
+/// @brief	Software SHA-256 engine implementing HashEngine alone.
 ///
-/// Stateless beyond the Device lifecycle: one-shot Hash and HMAC carry no
-/// state between calls; streaming digests live in caller-provided context
-/// storage of HashCtxSize() bytes, so one engine object serves any number of
-/// messages and interleaved streams.
-class CryptoSoftSha256 : public HashEngine, public MacEngine {
+/// Stateless beyond the Device lifecycle: the one-shot Hash carries no state
+/// between calls; streaming digests live in caller-provided context storage
+/// of HashCtxSize() bytes, so one engine object serves any number of messages
+/// and interleaved streams. For a boot loader, which needs the digest and
+/// nothing of HMAC.
+class CryptoSoftSha256Hash : public HashEngine {
 public:
-	CryptoSoftSha256() { vbValid = false; }
+	CryptoSoftSha256Hash() { vbValid = false; }
 
 	// Device lifecycle (software engine).
 	bool Enable() override { vbValid = true; return true; }
@@ -78,6 +79,12 @@ public:
 	CRYPTO_STATUS HashUpdate(void *pHashCtx, const uint8_t *pMsg,
 							 size_t Len) override;
 	CRYPTO_STATUS HashFinal(void *pHashCtx, uint8_t *pDigest) override;
+};
+
+/// @brief	Software SHA-256 engine implementing HashEngine and HMAC.
+class CryptoSoftSha256 : public CryptoSoftSha256Hash, public MacEngine {
+public:
+	CryptoSoftSha256() {}
 
 	// MacEngine: HMAC-SHA-256 (RFC 2104) over the virtual streaming hash.
 	CRYPTO_STATUS Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
@@ -87,6 +94,13 @@ public:
 	// Known-answer self-test: FIPS 180-4 SHA-256 and RFC 4231 HMAC vectors.
 	int SelfTest() override;
 };
+
+/// Bytes of storage CryptoSoftSha256HashCreate needs.
+#define CRYPTO_SOFTSHA256_HASH_MEMSIZE	sizeof(CryptoSoftSha256Hash)
+
+/// @brief	Construct a CryptoSoftSha256Hash in caller-provided storage.
+/// @return	Ready engine pointer, or nullptr on a too-small buffer.
+CryptoSoftSha256Hash *CryptoSoftSha256HashCreate(void *pMem, size_t MemSize);
 
 /// Bytes of storage CryptoSoftSha256Create needs.
 #define CRYPTO_SOFTSHA256_MEMSIZE		sizeof(CryptoSoftSha256)

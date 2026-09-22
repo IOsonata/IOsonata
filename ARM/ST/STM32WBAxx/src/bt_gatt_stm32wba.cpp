@@ -106,10 +106,13 @@ static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc,
 	Char_UUID_t uuid;
 	uint8_t uuidType;
 
-	if (pSrvc->bCustom)
+	// A characteristic with a base of its own, such as SMP's, whose
+	// characteristic and service UUIDs share no base.
+	if (pChar->pUuidBase != nullptr || pSrvc->bCustom)
 	{
 		uuidType = UUID_TYPE_128;
-		memcpy(uuid.Char_UUID_128, pSrvc->UuidBase, 16);
+		memcpy(uuid.Char_UUID_128, pChar->pUuidBase != nullptr ?
+			   pChar->pUuidBase : pSrvc->UuidBase, 16);
 		uuid.Char_UUID_128[12] = (uint8_t)(pChar->Uuid & 0xFF);
 		uuid.Char_UUID_128[13] = (uint8_t)(pChar->Uuid >> 8);
 	}

@@ -170,7 +170,7 @@ static void Sha256Final(Sha256Ctx *c, uint8_t Digest[32])
 	}
 }
 
-CRYPTO_STATUS CryptoSoftSha256::Hash(CRYPTO_HASH_ALG Alg,
+CRYPTO_STATUS CryptoSoftSha256Hash::Hash(CRYPTO_HASH_ALG Alg,
 									 const uint8_t *pMsg, size_t Len,
 									 uint8_t *pDigest)
 {
@@ -192,17 +192,17 @@ CRYPTO_STATUS CryptoSoftSha256::Hash(CRYPTO_HASH_ALG Alg,
 static_assert(sizeof(Sha256Ctx) <= CRYPTO_HASHCTX_MAX,
 			  "SHA-256 context exceeds the common consumer storage");
 
-size_t CryptoSoftSha256::HashCtxSize() const
+size_t CryptoSoftSha256Hash::HashCtxSize() const
 {
 	return sizeof(Sha256Ctx);
 }
 
-size_t CryptoSoftSha256::HashCtxAlign() const
+size_t CryptoSoftSha256Hash::HashCtxAlign() const
 {
 	return alignof(Sha256Ctx);
 }
 
-CRYPTO_STATUS CryptoSoftSha256::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
+CRYPTO_STATUS CryptoSoftSha256Hash::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
 {
 	if (Alg != CRYPTO_HASH_SHA256 || pHashCtx == nullptr ||
 		((uintptr_t)pHashCtx & (alignof(Sha256Ctx) - 1U)) != 0U)
@@ -213,7 +213,7 @@ CRYPTO_STATUS CryptoSoftSha256::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
 	return CRYPTO_STATUS_OK;
 }
 
-CRYPTO_STATUS CryptoSoftSha256::HashUpdate(void *pHashCtx,
+CRYPTO_STATUS CryptoSoftSha256Hash::HashUpdate(void *pHashCtx,
 										   const uint8_t *pMsg, size_t Len)
 {
 	if (!Sha256CtxLive(pHashCtx) || (pMsg == nullptr && Len != 0U))
@@ -227,7 +227,7 @@ CRYPTO_STATUS CryptoSoftSha256::HashUpdate(void *pHashCtx,
 	return CRYPTO_STATUS_OK;
 }
 
-CRYPTO_STATUS CryptoSoftSha256::HashFinal(void *pHashCtx, uint8_t *pDigest)
+CRYPTO_STATUS CryptoSoftSha256Hash::HashFinal(void *pHashCtx, uint8_t *pDigest)
 {
 	if (!Sha256CtxLive(pHashCtx) || pDigest == nullptr)
 	{
@@ -382,6 +382,18 @@ CryptoSoftSha256 *CryptoSoftSha256Create(void *pMem, size_t MemSize)
 		return nullptr;
 	}
 	CryptoSoftSha256 *p = new (pMem) CryptoSoftSha256();
+	p->Enable();
+	return p;
+}
+
+CryptoSoftSha256Hash *CryptoSoftSha256HashCreate(void *pMem, size_t MemSize)
+{
+	if (pMem == nullptr || MemSize < sizeof(CryptoSoftSha256Hash) ||
+		((uintptr_t)pMem & (alignof(CryptoSoftSha256Hash) - 1U)) != 0U)
+	{
+		return nullptr;
+	}
+	CryptoSoftSha256Hash *p = new (pMem) CryptoSoftSha256Hash();
 	p->Enable();
 	return p;
 }

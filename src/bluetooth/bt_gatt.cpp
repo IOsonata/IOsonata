@@ -910,17 +910,30 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 			return BtGattSrvcAddFailed(pSrvc, &mark);
 		}
 
+		// A characteristic with a base of its own, such as SMP's, whose
+		// characteristic and service UUIDs share no base.
+		uint8_t charbase = baseidx;
+		if (c->pUuidBase != nullptr)
+		{
+			int idx = BtUuidAddBase(c->pUuidBase);
+			if (idx < 0)
+			{
+				return BtGattSrvcAddFailed(pSrvc, &mark);
+			}
+			charbase = (uint8_t)idx;
+		}
+
 		BtAttCharDeclar_t *chardec = (BtAttCharDeclar_t*)entry->Data;
-		chardec->Uuid = {baseidx, BT_UUID_TYPE_16, {c->Uuid}};
+		chardec->Uuid = {charbase, BT_UUID_TYPE_16, {c->Uuid}};
 		chardec->pChar = c;
 		c->ValHdl = BT_ATT_HANDLE_INVALID;
 		c->DescHdl = BT_ATT_HANDLE_INVALID;
 		c->CccdHdl = BT_ATT_HANDLE_INVALID;
 		c->SccdHdl = BT_ATT_HANDLE_INVALID;
 		c->pSrvc = pSrvc;
-		c->BaseUuidIdx = pSrvc->Uuid.BaseIdx;
+		c->BaseUuidIdx = charbase;
 
-		typeuuid = {baseidx, BT_UUID_TYPE_16, c->Uuid};
+		typeuuid = {charbase, BT_UUID_TYPE_16, c->Uuid};
 		entry = BtAttDBAddEntry(&typeuuid,
 			c->MaxDataLen + sizeof(BtAttCharValue_t));
 		if (entry == nullptr)
