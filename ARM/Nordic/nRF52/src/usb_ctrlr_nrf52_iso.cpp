@@ -148,7 +148,7 @@ bool nRFUsbdIsoXfer(uint8_t Dir, uint16_t Length)
 	return true;
 }
 
-static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
+static bool nRFUsbdFinishIsoDma(bool In)
 {
 	volatile uint32_t *pEnd = In ?
 		&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
@@ -159,39 +159,34 @@ static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 
 	const uint8_t dir = In ? 1U : 0U;
 	const uint32_t busyBit = (uint32_t)USBD_FLAG_ISO_OUT_BUSY << dir;
+	const uint16_t amount = (uint16_t)(In ?
+		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
+
 	*pEnd = 0U;
 	NRF_USBD->EPSTATUS = In ? (1UL << 8U) : (1UL << 24U);
 	__DSB();
 
-	if (Notify)
+	// IN may queue its next transfer from the callback. OUT keeps BUSY
+	// through the callback so the RX buffer cannot be reused while copied.
+	if (In)
 	{
-		const uint16_t amount = (uint16_t)(In ?
-			NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
-
-		// IN may queue its next transfer from the callback. OUT keeps BUSY
-		// through the callback so the RX buffer cannot be reused while copied.
-		if (In)
-		{
-			s_Usbd.Flags &= ~busyBit;
-		}
-
-		nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, dir,
-			USB_CTRLR_EVT_XFER_CMPL, amount);
-
-		if (!In)
-		{
-			s_Usbd.Flags &= ~busyBit;
-		}
+		s_Usbd.Flags &= ~busyBit;
 	}
 
+	nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, dir,
+		USB_CTRLR_EVT_XFER_CMPL, amount);
+
+	if (!In)
+	{
+		s_Usbd.Flags &= ~busyBit;
+	}
 	return true;
 }
 
 bool nRFUsbdIsoFinishDma(uint32_t DmaStatus)
 {
-	const bool notify = DmaStatus != 0U;
-	return (DmaStatus != 0x01000000U && nRFUsbdFinishIsoDma(true, notify)) ||
-		(DmaStatus != 0x00000100U && nRFUsbdFinishIsoDma(false, notify));
+	return (DmaStatus != 0x01000000U && nRFUsbdFinishIsoDma(true)) ||
+		(DmaStatus != 0x00000100U && nRFUsbdFinishIsoDma(false));
 }
 
 void nRFUsbdIsoSof(void)
