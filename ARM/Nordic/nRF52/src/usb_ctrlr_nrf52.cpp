@@ -1015,75 +1015,24 @@ extern "C" void USBD_IRQHandler(void)
 	}
 
 	// Exactly one endpoint can own EasyDMA. Completed cases retain its lock
-	// and request the shared handoff immediately below this switch.
+	// and request the shared handoff immediately below.
 	bool startDma = false;
-	switch (dmastatus)
+	if (dmastatus == 0U)
 	{
-		case 0x00000001U: // EP0 IN
+		// OUT data-ready may arrive while the DMA channel is idle.
+		if (NRF_USBD->EVENTS_EP0DATADONE != 0U && !nRFUsbdDmaActive())
 		{
-			if (NRF_USBD->EVENTS_EP0DATADONE == 0U)
-				break;
-
-			NRF_USBD->EVENTS_EP0DATADONE = 0U;
-			NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
-			NRF_USBD->EPSTATUS = dmastatus;
-			__DSB();
-
-			if (NRF_USBD->EVENTS_EP0SETUP != 0U)
-			{
-				nRFUsbdDmaUnlock();
-				break;
-			}
-
-			(void)CFifoGet(s_Usbd.hEp0Que);
-			nRFEPPkt_t *p = (nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
-			if (p != NULL)
-			{
-				nRFUsbdEp0InStart(p);
-				break;
-			}
-
-			nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
-			startDma = true;
-			break;
-		}
-		case 0U:
-			// OUT data-ready may arrive while the DMA channel is idle.
-			if (NRF_USBD->EVENTS_EP0DATADONE == 0U || nRFUsbdDmaActive())
-				break;
 			nRFUsbdDmaLock();
 			startDma = true;
-			break;
-
-		case 0x00010000U: // EP0 OUT
-		{
-			if (NRF_USBD->EVENTS_ENDEPOUT[0] == 0U)
-				break;
-
-			NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
-			NRF_USBD->EPSTATUS = dmastatus;
-			__DSB();
-
-			if (NRF_USBD->EVENTS_EP0SETUP == 0U)
-			{
-				const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
-				// Re-arm before the core may select status or stall.
-				NRF_USBD->TASKS_EP0RCVOUT = 1U;
-				(void)NRF_USBD->TASKS_EP0RCVOUT;
-				nRFUsbdEmitXfer(0U, amount);
-			}
-			startDma = true;
-			break;
 		}
-		case 0x00000100U: // ISO IN
-		case 0x01000000U: // ISO OUT
-			startDma = nRFUsbdIsoFinishDma(dmastatus);
-			break;
-		default:          // EP1-7 IN/OUT
+	}
+	else
+	{
+		const uint32_t statusBit = 31U - (uint32_t)__CLZ(dmastatus);
+
+		if ((statusBit & 7U) != 0U) // EP1-7 IN/OUT
 		{
-			// EP0 and ISO were separated above. Retire the one regular DMA
-			// directly; IN application completion still waits for EPDATA.
-			const uint32_t statusBit = 31U - (uint32_t)__CLZ(dmastatus);
+			// IN application completion still waits for EPDATA.
 			if (!nRFUsbdRetireDma(statusBit))
 				return;
 
@@ -1094,7 +1043,56 @@ extern "C" void USBD_IRQHandler(void)
 					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 			}
 			startDma = true;
-			break;
+		}
+		else if ((statusBit & 8U) != 0U) // ISO IN/OUT
+		{
+			startDma = nRFUsbdIsoFinishDma(dmastatus);
+		}
+		else if ((statusBit & 16U) != 0U) // EP0 OUT
+		{
+			if (NRF_USBD->EVENTS_ENDEPOUT[0] != 0U)
+			{
+				NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
+				NRF_USBD->EPSTATUS = dmastatus;
+				__DSB();
+
+				if (NRF_USBD->EVENTS_EP0SETUP == 0U)
+				{
+					const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
+					// Re-arm before the core may select status or stall.
+					NRF_USBD->TASKS_EP0RCVOUT = 1U;
+					(void)NRF_USBD->TASKS_EP0RCVOUT;
+					nRFUsbdEmitXfer(0U, amount);
+				}
+				startDma = true;
+			}
+		}
+		else // EP0 IN
+		{
+			if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
+			{
+				NRF_USBD->EVENTS_EP0DATADONE = 0U;
+				NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
+				NRF_USBD->EPSTATUS = dmastatus;
+				__DSB();
+
+				if (NRF_USBD->EVENTS_EP0SETUP != 0U)
+				{
+					nRFUsbdDmaUnlock();
+				}
+				else
+				{
+					(void)CFifoGet(s_Usbd.hEp0Que);
+					nRFEPPkt_t *p = (nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
+					if (p != NULL)
+						nRFUsbdEp0InStart(p);
+					else
+					{
+						nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
+						startDma = true;
+					}
+				}
+			}
 		}
 	}
 
