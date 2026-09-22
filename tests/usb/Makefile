@@ -54,6 +54,7 @@ BULK_SOURCES := \
 	$(ROOT)/src/usb/usbd_bulk.cpp \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -64,6 +65,7 @@ HID_SOURCES := \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_int.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -73,6 +75,7 @@ MSC_SOURCES := \
 	$(ROOT)/src/usb/usbd_msc.cpp \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/storage/diskio_impl.cpp \
 	$(ROOT)/src/cfifo.c
@@ -81,18 +84,21 @@ INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
 INTRF_SOURCES := \
 	usb_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/cfifo.c
 
 RX_EVENT_TARGET := $(BUILD_DIR)/usb_rx_event_test
 RX_EVENT_SOURCES := \
 	usb_rx_event_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/cfifo.c
 
 DIRECT_TARGET := $(BUILD_DIR)/usb_direct_intrf_test
 DIRECT_SOURCES := \
 	usb_direct_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/cfifo.c
 
 ISO_TARGET := $(BUILD_DIR)/usb_iso_intrf_test
@@ -100,6 +106,8 @@ ISO_SOURCES := \
 	usb_iso_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
 ISO_DUPLEX_TARGET := $(BUILD_DIR)/usb_iso_intrf_duplex_test
@@ -107,6 +115,7 @@ ISO_DUPLEX_SOURCES := \
 	usb_iso_intrf_duplex_test.cpp \
 	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/cfifo.c
 
 INT_TARGET := $(BUILD_DIR)/usb_int_intrf_test
@@ -114,6 +123,8 @@ INT_SOURCES := \
 	usb_int_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_int.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
 # Physical hardware validation. The Python runner uses python-libusb1 so it
@@ -157,6 +168,7 @@ PROBE_TARGET := $(BUILD_DIR)/tx_rate_probe
 PROBE_SOURCES := \
 	tx_rate_probe.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
+	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/cfifo.c
 
 SOF_TICKS ?= 500
@@ -183,7 +195,7 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 TARGETS += $(MSC_TARGET)
 
 .PHONY: all test test-c-header test-gcc test-clang test-matrix \
-	test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma test-nrf-lifecycle \
+	test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma test-nrf-lifecycle test-nrf54-data \
 	iso-hw-build iso-hw int-hw-build int-hw hid-hw-build hid-hw \
 	msc-hw-build msc-hw hid-demo-build probe clean
 
@@ -196,6 +208,7 @@ test: $(TARGETS)
 	$(MAKE) test-nrf-iso-dma
 	$(MAKE) test-nrf-dma-policy
 	$(MAKE) test-nrf-lifecycle
+	$(MAKE) test-nrf54-data
 	$(TEST_ENV) ./$(CORE_TARGET)
 	$(TEST_ENV) ./$(INTRF_TARGET)
 	$(TEST_ENV) ./$(RX_EVENT_TARGET)
@@ -228,6 +241,9 @@ test-nrf-iso-dma:
 
 test-nrf-lifecycle:
 	CXX=$(CXX) python3 ./nrf_usb_lifecycle_test.py
+
+test-nrf54-data:
+	CXX=$(CXX) python3 ./nrf54_usb_data_test.py
 
 test-nrf-dma-policy:
 	python3 ./nrf_usb_dma_policy_test.py

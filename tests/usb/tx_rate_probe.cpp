@@ -20,7 +20,6 @@
 static uint8_t *s_InBuf;
 static uint16_t s_InLen;
 static bool s_InBusy;
-static bool s_OutBusy;
 static uint8_t *s_OutBuf;
 static UsbCtrlrEpHandler_t s_InHandler;
 static void *s_InContext;
@@ -44,16 +43,16 @@ void UsbCtrlrRemoteWakeup(int) {}
 void UsbCtrlrSofEnable(int, bool) {}
 void UsbCtrlrSetAddress(int, uint8_t) {}
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
-void UsbCtrlrEpClose(int, uint8_t) {}
+void UsbCtrlrEpClose(int, uint8_t, bool) {}
 void UsbCtrlrEpCloseAll(int) {}
-void UsbCtrlrEpStall(int, uint8_t) {}
-void UsbCtrlrEpClearStall(int, uint8_t) {}
+void UsbCtrlrEpStall(int, uint8_t, bool) {}
+void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuf, bool,
+void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuf, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	if (USB_ENDPADDR_IS_IN(EpAddr))
+	if (bIn)
 	{
 		s_InBuf = pBuf;
 		s_InHandler = Handler;
@@ -63,15 +62,11 @@ bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuf, bool,
 	{
 		s_OutBuf = pBuf;
 	}
-	return true;
+	return;
 }
-bool UsbCtrlrEpRxArm(int, uint8_t)
+bool UsbCtrlrEpSend(int, uint8_t, uint8_t *pBuffer, uint16_t Len)
 {
-	s_OutBusy = s_OutBuf != nullptr;
-	return s_OutBusy;
-}
-bool UsbCtrlrEpSend(int, uint8_t, uint16_t Len)
-{
+	s_InBuf = pBuffer;
 	s_InLen = Len;
 	s_InBusy = true;
 	s_Packets++;
@@ -79,7 +74,6 @@ bool UsbCtrlrEpSend(int, uint8_t, uint16_t Len)
 	if (Len == 0U) { s_Zlp++; }
 	return true;
 }
-bool UsbCtrlrEp0Xfer(int, uint8_t, uint8_t *, uint16_t) { return true; }
 }
 
 alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(SLOTS, BUFFER_SIZE)];
@@ -103,7 +97,6 @@ static bool Setup(void)
 	cfg.pTxBuffer = s_TxTransfer;
 	memset(static_cast<void *>(&s_Intrf), 0, sizeof(s_Intrf));
 	s_InBusy = false;
-	s_OutBusy = false;
 	s_Packets = 0;
 	s_Bytes = 0;
 	s_Zlp = 0;
@@ -134,8 +127,7 @@ static void Run(int BusTicks, long Iterations)
 			const uint16_t len = s_InLen;
 			s_InBusy = false;
 			due = -1;
-			s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), len,
-						USB_CTRLR_XFER_SUCCESS, s_InContext);
+			s_InHandler(USB_CTRLR_EVT_XFER_CMPL, len, s_InContext);
 			if (s_InBusy) { due = BusTicks; }
 		}
 		else if (due > 0)

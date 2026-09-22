@@ -98,6 +98,7 @@ static_assert(sizeof(IntDiag_t) == 50U,
 	"interrupt diagnostic wire format changed");
 
 static UsbIntIntrf_t s_Int;
+static UsbDevIntrf_t s_IntData;
 static bool s_Configured;
 static uint8_t s_Alt;
 static uint8_t s_InterfaceNo;
@@ -123,7 +124,7 @@ static void IntClearDiag(void)
 	s_LoopbackDropCnt = 0U;
 	s_LastRxLength = 0U;
 	s_LastTxLength = 0U;
-	s_Int.IntrfData.RxDropCnt = 0U;
+	s_Int.pData->RxDropCnt = 0U;
 	s_Int.RxErrorCnt = 0U;
 	s_Int.TxErrorCnt = 0U;
 	s_Int.RxEmptyCnt = 0U;
@@ -138,7 +139,7 @@ static void IntBuildDiag(void)
 	s_DiagReply.TxDoneCnt = s_TxDoneCnt;
 	s_DiagReply.TxFailCnt = s_TxFailCnt;
 	s_DiagReply.LoopbackDropCnt = s_LoopbackDropCnt;
-	s_DiagReply.CoreRxDropCnt = s_Int.IntrfData.RxDropCnt;
+	s_DiagReply.CoreRxDropCnt = s_Int.pData->RxDropCnt;
 	s_DiagReply.RxErrorCnt = s_Int.RxErrorCnt;
 	s_DiagReply.TxErrorCnt = s_Int.TxErrorCnt;
 	s_DiagReply.RxEmptyCnt = s_Int.RxEmptyCnt;
@@ -409,7 +410,7 @@ int main()
 	intCfg.EpNo = s_EpNo;
 	intCfg.RxHandler = IntRxPacket;
 	intCfg.TxHandler = IntTxPacket;
-	if (!UsbIntIntrfInit(&s_Int, &intCfg))
+	if (!UsbIntIntrfInit(&s_Int, &s_IntData, &intCfg))
 	{
 		return -1;
 	}

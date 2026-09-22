@@ -184,6 +184,101 @@ static void TestFullBehaviour(void)
 	CHECK(g2 != nullptr && BlockIs(g2, 1U));
 }
 
+// PeekMultiple returns only the consecutive run and never changes either index.
+static void TestPeekMultiple(void)
+{
+	hCFifo_t h = CFifoInit(s_Pow2Mem, sizeof(s_Pow2Mem), BLK, true);
+	if (h == nullptr) { CHECK(false); return; }
+
+	// Move both logical indices close to the physical end while keeping empty.
+	for (unsigned i = 0; i < POW2_SLOTS - 2U; i++)
+	{
+		uint8_t *p = CFifoPut(h);
+		if (p != nullptr) { FillBlock(p, 0xEEU); }
+		(void)CFifoGet(h);
+	}
+
+	for (unsigned i = 0; i < 4U; i++)
+	{
+		uint8_t *p = CFifoPut(h);
+		CHECK(p != nullptr);
+		if (p != nullptr) { FillBlock(p, (uint8_t)(0x30U + i)); }
+	}
+
+	const uint32_t getIdx = h->GetIdx;
+	const uint32_t putIdx = h->PutIdx;
+	int cnt = 4;
+	const uint8_t *p = CFifoPeekMultiple(h, &cnt);
+	CHECK(p != nullptr);
+	CHECK(cnt == 2);
+	CHECK(h->GetIdx == getIdx);
+	CHECK(h->PutIdx == putIdx);
+	CHECK(CFifoUsed(h) == 4);
+	CHECK(p != nullptr && BlockIs(p, 0x30U));
+	CHECK(p != nullptr && BlockIs(p + BLK, 0x31U));
+
+	// Repeating the peek returns the same span because nothing was consumed.
+	int again = 4;
+	CHECK(CFifoPeekMultiple(h, &again) == p);
+	CHECK(again == 2);
+	CHECK(h->GetIdx == getIdx);
+	CHECK(h->PutIdx == putIdx);
+	CHECK(CFifoUsed(h) == 4);
+	CHECK(p != nullptr && BlockIs(p, 0x30U));
+	CHECK(p != nullptr && BlockIs(p + BLK, 0x31U));
+
+	// Requested count smaller than the span is respected.
+	int one = 1;
+	CHECK(CFifoPeekMultiple(h, &one) == p);
+	CHECK(one == 1);
+	CHECK(h->GetIdx == getIdx);
+
+	// Null count is the single-block Peek form.
+	CHECK(CFifoPeekMultiple(h, nullptr) == p);
+	CHECK(h->GetIdx == getIdx);
+	CHECK(h->PutIdx == putIdx);
+
+	// Invalid counts must also leave a populated FIFO untouched.
+	cnt = 0;
+	CHECK(CFifoPeekMultiple(h, &cnt) == nullptr);
+	CHECK(cnt == 0);
+	cnt = -3;
+	CHECK(CFifoPeekMultiple(h, &cnt) == nullptr);
+	CHECK(cnt == 0);
+	CHECK(h->GetIdx == getIdx);
+	CHECK(h->PutIdx == putIdx);
+	CHECK(CFifoUsed(h) == 4);
+
+	// Consuming the first run exposes the second run at the buffer start.
+	cnt = 2;
+	CHECK(CFifoGetMultiple(h, &cnt) == p);
+	CHECK(cnt == 2);
+	cnt = 2;
+	p = CFifoPeekMultiple(h, &cnt);
+	CHECK(p == h->pMemStart);
+	CHECK(cnt == 2);
+	CHECK(p != nullptr && BlockIs(p, 0x32U));
+	CHECK(p != nullptr && BlockIs(p + BLK, 0x33U));
+
+	// More is requested than is used, with room before the physical end.
+	cnt = 100;
+	CHECK(CFifoPeekMultiple(h, &cnt) == p);
+	CHECK(cnt == 2);
+	CHECK(CFifoUsed(h) == 2);
+	CHECK(h->GetIdx == getIdx + 2U);
+	CHECK(h->PutIdx == putIdx);
+
+	// Empty peeks report zero without resetting the drained FIFO indices.
+	CHECK(CFifoGetMultiple(h, &cnt) == p);
+	cnt = 4;
+	CHECK(CFifoPeekMultiple(h, &cnt) == nullptr);
+	CHECK(cnt == 0);
+	CHECK(CFifoPeekMultiple(h, nullptr) == nullptr);
+	CHECK(CFifoUsed(h) == 0);
+	CHECK(h->GetIdx == putIdx);
+	CHECK(h->PutIdx == putIdx);
+}
+
 // A get of more than one block returns only the run before the wrap.
 static void TestGetMultipleContiguous(void)
 {
@@ -330,7 +425,10 @@ static void TestFlush(void)
 	}
 
 	CHECK(CFifoUsed(h) > 0);
+	CHECK(h->PutIdx != 0U);
 	CFifoFlush(h);
+	CHECK(h->PutIdx == 0U);
+	CHECK(h->GetIdx == 0U);
 	CHECK(CFifoUsed(h) == 0);
 	CHECK(CFifoAvail(h) == (int)POW2_SLOTS);
 	CHECK(CFifoPeek(h) == nullptr);
@@ -470,6 +568,10 @@ static void TestUsedAvailInvariant(void)
 	CHECK(CFifoGet(nullptr) == nullptr);
 	CHECK(CFifoPut(nullptr) == nullptr);
 	CHECK(CFifoPeek(nullptr) == nullptr);
+	int cnt = 4;
+	CHECK(CFifoPeekMultiple(nullptr, &cnt) == nullptr);
+	CHECK(cnt == 0);
+	CHECK(CFifoPeekMultiple(nullptr, nullptr) == nullptr);
 	CFifoFlush(nullptr);
 }
 
@@ -482,6 +584,7 @@ int main(void)
 		{ "geometry and accessors", TestGeometryAndAccessors },
 		{ "single round trip", TestSingleRoundTrip },
 		{ "full behaviour", TestFullBehaviour },
+		{ "peek multiple", TestPeekMultiple },
 		{ "get multiple contiguous", TestGetMultipleContiguous },
 		{ "get multiple stops at wrap", TestGetMultipleStopsAtWrap },
 		{ "put multiple", TestPutMultiple },

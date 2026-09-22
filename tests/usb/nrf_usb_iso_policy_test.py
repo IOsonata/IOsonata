@@ -30,9 +30,9 @@ base = BASE.read_text(encoding="utf-8")
 iso = ISO.read_text(encoding="utf-8")
 
 
-open_ep = function_body(iso, "bool nRFUsbdIsoEpOpen(")
-start_iso = function_body(iso, "static bool nRFUsbdStartIsoNow(void)")
-service_iso = function_body(iso, "static void nRFUsbdServiceIso(void)")
+open_ep = function_body(iso, "bool UsbCtrlrEpOpen(")
+start_iso = function_body(iso, "bool nRFUsbdIsoStart(void)")
+service_iso = function_body(iso, "void nRFUsbdIsoService(void)")
 iso_sof = function_body(iso, "void nRFUsbdIsoSof(void)")
 finish_iso = function_body(iso, "static bool nRFUsbdFinishIsoDma(bool In)")
 interrupt = function_body(base, 'extern "C" void USBD_IRQHandler(void)')
@@ -51,29 +51,30 @@ assert "USBD_ISOSPLIT_SPLIT_HalfIN" in open_ep
 assert "USBD_ISOINCONFIG_RESPONSE_ZeroData" in open_ep
 assert "TASKS_STARTISOIN" in start_iso
 assert "TASKS_STARTISOOUT" in start_iso
-assert "nRFUsbdStartIsoNow()" in service_iso
+assert "nRFUsbdResumeQueuedDmaLocked()" in service_iso
 assert "NRF_USBD->SIZE.ISOOUT" in iso_sof
 assert "NRF_USBD->EVENTS_ENDISOIN" in finish_iso
 assert "NRF_USBD->EVENTS_ENDISOOUT" in finish_iso
-# The channel release moved into the shared nRFUsbdDmaUnlock helper; the
-# ordering policy is unchanged: END is checked and EPSTATUS written before
-# the channel is released.
+# Retirement retains the lock for the completion caller. END and EPSTATUS
+# must be acknowledged before completion is published or another DMA starts.
+assert "nRFUsbdDmaUnlock" not in finish_iso
 assert finish_iso.index("if (*pEnd == 0U)") < finish_iso.index(
-    "nRFUsbdDmaUnlock();"
+    "NRF_USBD->EPSTATUS ="
 )
 assert finish_iso.index("NRF_USBD->EPSTATUS =") < finish_iso.index(
-    "nRFUsbdDmaUnlock();"
+    "__DSB();"
 )
 
 assert "extern bool nRFUsbdIsoStart(void) __attribute__((weak));" in base
-assert (
-    "extern bool nRFUsbdIsoFinishDma(uint32_t DmaStatus) "
-    "__attribute__((weak));"
-) in base
+assert "__attribute__((weak)) bool nRFUsbdIsoFinishDma(uint32_t)" in base
+assert "return false;" in function_body(base, "bool nRFUsbdIsoFinishDma(")
+assert "return false;" in function_body(base, "bool UsbCtrlrEpOpen(")
 assert "bool UsbCtrlrIsoInit(int DevNo)" in iso
-assert "nRFUsbdIsoFinishDma(dmastatus);" in interrupt
+assert "nRFUsbdIsoFinishDma(dmastatus)" in interrupt
 assert "nRFUsbdIsoSof();" in handle_sof
 assert "nRFUsbdIsoService();" in handle_sof
-assert queued.index("nRFUsbdIsoStart()") < queued.index("CFifoGet(s_Usbd.hQue)")
+# Regular entries stay queued until DMA retirement, so the scheduler peeks
+# the regular queue; ISO still runs before it and after EP0.
+assert queued.index("nRFUsbdIsoStart()") < queued.index("CFifoPeek(s_Usbd.hQue)")
 
 print("nrf_usb_iso_policy_test: PASS")

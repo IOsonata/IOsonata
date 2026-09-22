@@ -41,9 +41,9 @@ static bool UsbIntIntrfEpSupported(int DevNo, uint8_t EpNo)
 		USB_INT_INTRF_MAX_MPS > 0U;
 }
 
-static bool UsbIntIntrfOpenEndpoint(UsbIntIntrf_t *pIntrf, uint8_t EpAddr)
+static bool UsbIntIntrfOpenEndpoint(UsbIntIntrf_t *pIntrf, bool bIn)
 {
-	return UsbCtrlrEpOpenData(pIntrf->IntrfData.DevNo, EpAddr,
+	return UsbCtrlrEpOpenData(pIntrf->pData->DevNo, pIntrf->EpNo, bIn,
 		USB_ENDPATT_TRANS_INT, pIntrf->Mps);
 }
 
@@ -116,15 +116,17 @@ static int UsbIntIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 	}
 }
 
-bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, const UsbIntIntrfCfg_t *pCfg)
+bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
+					 const UsbIntIntrfCfg_t *pCfg)
 {
-	if (pIntrf == nullptr || pCfg == nullptr ||
+	if (pIntrf == nullptr || pData == nullptr || pCfg == nullptr ||
 		!UsbIntIntrfEpSupported(pCfg->DevNo, pCfg->EpNo))
 	{
 		return false;
 	}
 
 	memset(pIntrf, 0, sizeof(*pIntrf));
+	pIntrf->pData = pData;
 	pIntrf->pContext = pCfg->pContext;
 	pIntrf->RxHandler = pCfg->RxHandler;
 	pIntrf->TxHandler = pCfg->TxHandler;
@@ -140,29 +142,29 @@ bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, const UsbIntIntrfCfg_t *pCfg)
 	cfg.pTxBuffer = reinterpret_cast<uint8_t *>(pIntrf->TxBuffer);
 	cfg.EvtCB = UsbIntIntrfDataEvent;
 
-	if (!UsbIntrfInit(&pIntrf->IntrfData, &cfg))
+	if (!UsbIntrfInit(pIntrf->pData, &cfg))
 	{
 		return false;
 	}
 
-	pIntrf->IntrfData.pClassContext = pIntrf;
+	pIntrf->pData->pClassContext = pIntrf;
 	return true;
 }
 
 bool UsbIntIntrfOpen(UsbIntIntrf_t *pIntrf, uint16_t MaxPacketSize, uint8_t Interval)
 {
 	if (pIntrf == nullptr ||
-		!UsbIntIntrfEpSupported(pIntrf->IntrfData.DevNo, pIntrf->EpNo) ||
+		!UsbIntIntrfEpSupported(pIntrf->pData->DevNo, pIntrf->EpNo) ||
 		MaxPacketSize == 0U || MaxPacketSize > USB_INT_INTRF_MAX_MPS || Interval == 0U ||
-		(!UsbCtrlrHighSpeed(pIntrf->IntrfData.DevNo) &&
+		(!UsbCtrlrHighSpeed(pIntrf->pData->DevNo) &&
 		 MaxPacketSize > USB_INT_INTRF_FS_MPS) ||
-		(UsbCtrlrHighSpeed(pIntrf->IntrfData.DevNo) && Interval > 16U))
+		(UsbCtrlrHighSpeed(pIntrf->pData->DevNo) && Interval > 16U))
 	{
 		return false;
 	}
 
 	UsbIntIntrfClose(pIntrf);
-	if (!UsbIntrfConfigure(&pIntrf->IntrfData, MaxPacketSize))
+	if (!UsbIntrfConfigure(pIntrf->pData, MaxPacketSize))
 	{
 		return false;
 	}
@@ -171,14 +173,12 @@ bool UsbIntIntrfOpen(UsbIntIntrf_t *pIntrf, uint16_t MaxPacketSize, uint8_t Inte
 	pIntrf->Interval = Interval;
 	pIntrf->Suspended = false;
 
-	if (!UsbIntIntrfOpenEndpoint(pIntrf, USB_ENDPADDR_DIRIN(pIntrf->EpNo)) ||
-		!UsbIntIntrfOpenEndpoint(pIntrf, USB_ENDPADDR_DIROUT(pIntrf->EpNo)))
+	if (!UsbIntIntrfOpenEndpoint(pIntrf, true) ||
+		!UsbIntIntrfOpenEndpoint(pIntrf, false))
 	{
-		UsbCtrlrEpClose(pIntrf->IntrfData.DevNo,
-			USB_ENDPADDR_DIROUT(pIntrf->EpNo));
-		UsbCtrlrEpClose(pIntrf->IntrfData.DevNo,
-			USB_ENDPADDR_DIRIN(pIntrf->EpNo));
-		UsbIntrfUnconfigure(&pIntrf->IntrfData);
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, false);
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, true);
+		UsbIntrfUnconfigure(pIntrf->pData);
 		pIntrf->Mps = 0U;
 		pIntrf->Interval = 0U;
 		return false;
@@ -197,13 +197,11 @@ void UsbIntIntrfClose(UsbIntIntrf_t *pIntrf)
 
 	if (pIntrf->Opened)
 	{
-		UsbCtrlrEpClose(pIntrf->IntrfData.DevNo,
-			USB_ENDPADDR_DIROUT(pIntrf->EpNo));
-		UsbCtrlrEpClose(pIntrf->IntrfData.DevNo,
-			USB_ENDPADDR_DIRIN(pIntrf->EpNo));
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, false);
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, true);
 	}
 
-	UsbIntrfUnconfigure(&pIntrf->IntrfData);
+	UsbIntrfUnconfigure(pIntrf->pData);
 	pIntrf->Opened = false;
 	pIntrf->Suspended = false;
 	pIntrf->Mps = 0U;
@@ -248,18 +246,18 @@ bool UsbIntIntrfSendPacket(UsbIntIntrf_t *pIntrf, const uint8_t *pData,
 {
 	if (pIntrf == nullptr || !pIntrf->Opened || pIntrf->Suspended ||
 		Length > pIntrf->Mps || (Length != 0U && pData == nullptr) ||
-		!UsbIntrfRequestToSend(&pIntrf->IntrfData, Length))
+		!UsbIntrfRequestToSend(pIntrf->pData, Length))
 	{
 		return false;
 	}
 
-	const int sent = DeviceIntrfTxData(&pIntrf->IntrfData.DevIntrf,
+	const int sent = DeviceIntrfTxData(&pIntrf->pData->DevIntrf,
 		pData, (int)Length);
 	if (Length != 0U)
 	{
 		return sent == (int)Length;
 	}
 
-	return !atomic_load_explicit(&pIntrf->IntrfData.DevIntrf.bTxReady,
+	return !atomic_load_explicit(&pIntrf->pData->DevIntrf.bTxReady,
 		memory_order_acquire);
 }

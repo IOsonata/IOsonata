@@ -78,7 +78,7 @@ typedef struct __Usb_Int_Interf_Config {
 #pragma pack(pop)
 
 struct __Usb_Int_Interf {
-	UsbDevIntrf_t IntrfData;
+	UsbDevIntrf_t *pData;		//!< Shared endpoint data path
 	void *pContext;
 	UsbIntIntrfRxHandler_t RxHandler;
 	UsbIntIntrfTxHandler_t TxHandler;
@@ -99,7 +99,8 @@ struct __Usb_Int_Interf {
 extern "C" {
 #endif
 
-bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, const UsbIntIntrfCfg_t *pCfg);
+bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
+					 const UsbIntIntrfCfg_t *pCfg);
 bool UsbIntIntrfOpen(UsbIntIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval);
 void UsbIntIntrfClose(UsbIntIntrf_t *pIntrf);
 void UsbIntIntrfReset(UsbIntIntrf_t *pIntrf);
@@ -111,63 +112,25 @@ bool UsbIntIntrfSendPacket(UsbIntIntrf_t *pIntrf, const uint8_t *pData,
 static inline bool UsbIntIntrfTxReady(const UsbIntIntrf_t *pIntrf)
 {
 	return pIntrf != NULL && pIntrf->Opened && !pIntrf->Suspended &&
-		atomic_load_explicit(&pIntrf->IntrfData.DevIntrf.bTxReady,
+		atomic_load_explicit(&pIntrf->pData->DevIntrf.bTxReady,
 			memory_order_acquire);
 }
 
 #ifdef __cplusplus
 }
 
-class UsbIntIntrf : public DeviceIntrf {
+class UsbIntIntrf : public UsbIntrf {
 public:
 	UsbIntIntrf() = default;
 	UsbIntIntrf(const UsbIntIntrf &) = delete;
 	UsbIntIntrf &operator = (const UsbIntIntrf &) = delete;
 
 	bool Init(const UsbIntIntrfCfg_t &Cfg) {
-		return UsbIntIntrfInit(&vUsbIntIntrf, &Cfg);
+		return UsbIntIntrfInit(&vUsbIntIntrf, &vUsbDevIntrf, &Cfg);
 	}
 
-	operator DevIntrf_t * () override {
-		return &vUsbIntIntrf.IntrfData.DevIntrf;
-	}
+	using UsbIntrf::operator DevIntrf_t *;
 	operator UsbIntIntrf_t * () { return &vUsbIntIntrf; }
-
-	uint32_t Rate(uint32_t DataRate) override {
-		return DeviceIntrfSetRate(&vUsbIntIntrf.IntrfData.DevIntrf, DataRate);
-	}
-
-	uint32_t Rate(void) override {
-		return DeviceIntrfGetRate(&vUsbIntIntrf.IntrfData.DevIntrf);
-	}
-
-	bool RequestToSend(int NbBytes) override {
-		return UsbIntrfRequestToSend(&vUsbIntIntrf.IntrfData, NbBytes);
-	}
-
-	__attribute__((always_inline))
-	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
-		return DeviceIntrfTx(&vUsbIntIntrf.IntrfData.DevIntrf,
-			DevAddr, pData, DataLen);
-	}
-
-	__attribute__((always_inline))
-	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRx(&vUsbIntIntrf.IntrfData.DevIntrf,
-			DevAddr, pBuff, BuffLen);
-	}
-
-	__attribute__((always_inline))
-	int TxData(const uint8_t *pData, int DataLen) override {
-		return DeviceIntrfTxData(&vUsbIntIntrf.IntrfData.DevIntrf,
-			pData, DataLen);
-	}
-
-	__attribute__((always_inline))
-	int RxData(uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRxData(&vUsbIntIntrf.IntrfData.DevIntrf,
-			pBuff, BuffLen);
-	}
 
 	bool Open(uint16_t Mps, uint8_t Interval) {
 		return UsbIntIntrfOpen(&vUsbIntIntrf, Mps, Interval);
@@ -183,9 +146,8 @@ public:
 	}
 
 	bool TxReady(void) const { return UsbIntIntrfTxReady(&vUsbIntIntrf); }
-	DevIntrf_t *Data(void) { return &vUsbIntIntrf.IntrfData.DevIntrf; }
 
-private:
+protected:
 	UsbIntIntrf_t vUsbIntIntrf = {};
 };
 #endif

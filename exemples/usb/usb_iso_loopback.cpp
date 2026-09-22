@@ -102,6 +102,7 @@ typedef struct __Iso_Diag {
 static_assert(sizeof(IsoDiag_t) == 48U, "ISO diagnostic wire format changed");
 
 static UsbIsoIntrf_t s_Iso;
+static UsbDevIntrf_t s_IsoData;
 static bool s_Configured;
 static uint8_t s_Alt;
 static uint8_t s_InterfaceNo;
@@ -452,7 +453,7 @@ int main()
 	isoCfg.EpNo = s_EpNo;
 	isoCfg.RxHandler = IsoRxFrame;
 	isoCfg.TxHandler = IsoTxFrame;
-	if (!UsbIsoIntrfInit(&s_Iso, &isoCfg))
+	if (!UsbIsoIntrfInit(&s_Iso, &s_IsoData, &isoCfg))
 	{
 		return -1;
 	}

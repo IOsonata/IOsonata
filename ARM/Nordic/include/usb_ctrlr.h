@@ -62,6 +62,10 @@ SOFTWARE.
 #include "nrf_peripherals.h"
 #include "usb/usb_def.h"
 
+#if defined(USBD_PRESENT)
+#include "cfifo.h"
+#endif
+
 /** @addtogroup USB
   * @{
   */
@@ -161,12 +165,13 @@ typedef enum __Usb_Ctrlr_Evt_Type {
 	USB_CTRLR_EVT_RESET,		//!< USB bus reset
 	USB_CTRLR_EVT_SETUP,		//!< New EP0 SETUP request
 	USB_CTRLR_EVT_DRDY,			//!< Data is ready in the device to be retrieved
-	USB_CTRLR_EVT_XFER_CMPL,	//!< Endpoint transfer completed
+	USB_CTRLR_EVT_XFER_CMPL,	//!< Endpoint transfer completed successfully
 	USB_CTRLR_EVT_CANCEL,		//!< Endpoint transfer cancelled
 	USB_CTRLR_EVT_SUSPEND,		//!< Bus entered suspend
 	USB_CTRLR_EVT_RESUME,		//!< Bus resumed
 	USB_CTRLR_EVT_SOF,			//!< Start of frame
 	USB_CTRLR_EVT_ADDRESS,		//!< Hardware accepted SET_ADDRESS itself
+	USB_CTRLR_EVT_XFER_FAILED,	//!< Endpoint transfer failed
 } UsbCtrlrEvtType_t;
 
 #pragma pack(push, 4)
@@ -175,6 +180,7 @@ typedef struct __Usb_Ctrlr_Xfer_Evt {
 	uint8_t EpAddr;
 	uint16_t Length;
 	UsbCtrlrXferResult_t Result;
+	const uint8_t *pBuffer;		//!< EP0 OUT bytes, valid during the callback only
 } UsbCtrlrXferEvt_t;
 
 typedef struct __Usb_Ctrlr_Evt {
@@ -192,12 +198,13 @@ typedef struct __Usb_Ctrlr_Evt {
 /**
  * @brief	Non-control endpoint event callback.
  *
- * Registered once with the endpoint DMA buffer. It is called directly from
- * the controller interrupt, avoiding a function-table search per packet.
+ * Registered with the endpoint DMA buffer. Called from interrupt or deferred
+ * event processing. A NULL OUT buffer withholds reception; controller processing
+ * delivers DRDY so the handler can retry pending work and restore the buffer.
+ * XFER_CMPL reports success; failure and cancellation use their own events.
  */
-typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
-									uint16_t Length, UsbCtrlrXferResult_t Result,
-									void *pContext);
+typedef void (*UsbCtrlrEpHandler_t)(UsbCtrlrEvtType_t Event,
+									uint16_t Length, void *pContext);
 
 /// What the generic layer hands the port at UsbCtrlrInit.
 typedef struct __Usb_Ctrlr_Config {
@@ -226,19 +233,23 @@ void UsbCtrlrRemoteWakeup(int DevNo);
 void UsbCtrlrSofEnable(int DevNo, bool Enable);
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
-bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type, uint16_t MaxPacketSize);
-void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
+bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
+						 uint16_t MaxPacketSize);
+void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn);
 void UsbCtrlrEpCloseAll(int DevNo);
-bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext);
-bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length);
-bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length);
-bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length);
-bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-						 uint16_t Length);
+void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
+					 bool bBlocking,
+					 UsbCtrlrEpHandler_t Handler, void *pContext);
+// EpNum is an endpoint number: device IN, host OUT. The controller schedules RX.
+// pBuffer supplies the DMA source and remains owned until the completion callback.
+// It may be NULL only for a zero-length transfer.
+bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
+// IN returns bytes copied into the queue; completion notifies that it drained.
+// A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
-void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);
-void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr);
+bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr);
+void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn);
+void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn);
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);
 
 #ifdef __cplusplus
@@ -249,8 +260,6 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);
 
 // Shared nRF52 USBD implementation state used by the base and optional ISO
 // archive members. This is a target-family header; nRF54 USBHS does not see it.
-#include "cfifo.h"
-
 enum
 {
 	NRF_USB_EP_COUNT = 9,
@@ -270,24 +279,6 @@ typedef struct __nRF_Usb_Ep_Registration
 	bool bBlocking;
 } nRFUsbEpReg_t;
 
-#pragma pack(push, 4)
-
-typedef struct __nRF_Usbd_Xfer
-{
-	uint8_t *pBuffer;
-	uint16_t TotalLen;
-	volatile uint16_t ActualLen;
-} nRFUsbdXfer_t;
-
-typedef struct __nRF_Usbd_Ctrlr
-{
-	nRFUsbdXfer_t Ep0[2];
-	nRFUsbdXfer_t Iso[2];
-	bool SofEnabled;
-} nRFUsbdCtrlr_t;
-
-#pragma pack(pop)
-
 enum
 {
 	USBD_FLAG_SUSPENDED     = 0x0001U,
@@ -295,8 +286,9 @@ enum
 	USBD_FLAG_REMOTE_WAKE   = 0x0004U,
 	USBD_FLAG_HOST_RESUME   = 0x0008U,
 	USBD_FLAG_MAC_AWAKE     = 0x0010U,
-	USBD_FLAG_ISO_OUT_READY = 0x0100U,
-	USBD_FLAG_ISO_IN_READY  = 0x0200U,
+	// Suspend clears READY with the wake flags; keep that mask byte-sized.
+	USBD_FLAG_ISO_OUT_READY = 0x0020U,
+	USBD_FLAG_ISO_IN_READY  = 0x0040U,
 	USBD_FLAG_ISO_OUT_OPEN  = 0x0400U,
 	USBD_FLAG_ISO_IN_OPEN   = 0x0800U,
 	USBD_FLAG_ISO_OUT_BUSY  = 0x1000U,
@@ -307,28 +299,43 @@ enum
 
 typedef struct __nRF_Usbd_State
 {
+	// Keep queue metadata at small offsets for Thumb loads/stores.
+	uint8_t IntPrio;
+	bool LowPowerSuspend;
+	bool SofEnabled;
+	// One pending DMA packet per ISO direction; -1 means none, 0 is a ZLP.
+	int16_t IsoDmaLen[2];
+	uint16_t IsoOutSize;
 	volatile uint32_t Flags;
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;
 	uint32_t IsoGeneration[2];
-	uint16_t IsoOutSize;
-	uint8_t IntPrio;
-	bool LowPowerSuspend;
-	nRFUsbdCtrlr_t Ctrlr;
-	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT][2];
+	// Non-control endpoints 1-8.
+	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT - 1][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
 } nRFUsbdState_t;
 
 extern nRFUsbdState_t s_Usbd;
 
-void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
-							 uint16_t Length, UsbCtrlrXferResult_t Result);
+void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
+							 UsbCtrlrEvtType_t Event, uint16_t Length);
 void nRFUsbdDmaUnlock(void);
-void nRFUsbdDmaStartLocked(volatile uint32_t *pTask, volatile uint32_t *pEnd);
 void nRFUsbdSofAcquire(void);
 void nRFUsbdSofRelease(void);
 void nRFUsbdDmaWait(void);
 void nRFUsbdResumeQueuedDmaLocked(void);
+
+/** Start EasyDMA with the channel already locked by the caller. */
+static inline __attribute__((always_inline))
+void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
+	volatile uint32_t *pEnd)
+{
+	*pEnd = 0;
+	__DSB();
+
+	*pTask = 1;
+	__DSB();
+}
 
 #endif // USBD_PRESENT
 

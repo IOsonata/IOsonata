@@ -52,12 +52,12 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 	return true;
 }
 
-void UsbCtrlrEpClose(int, uint8_t) { s_CloseCount++; }
+void UsbCtrlrEpClose(int, uint8_t, bool) { s_CloseCount++; }
 
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
+void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool Blocking,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	if (USB_ENDPADDR_IS_IN(EpAddr))
+	if (bIn)
 	{
 		s_InBuffer = pBuffer;
 		s_InHandler = Handler;
@@ -70,26 +70,18 @@ bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
 		s_OutContext = pContext;
 		s_OutBlocking = Blocking;
 	}
-	return pBuffer != nullptr && Handler != nullptr;
 }
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
+bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
-	if (USB_ENDPADDR_IS_IN(EpAddr))
-	{
-		if (s_InBusy)
-		{
-			return false;
-		}
-		s_InBusy = true;
-		s_InLength = Length;
-		return true;
-	}
-	s_OutXferCount++;
+	if ((EpNum & 0x80U) != 0U) return false;
+	if (s_InBusy) return false;
+	s_InBuffer = pBuffer;
+	s_InBusy = true;
+	s_InLength = Length;
 	return true;
 }
 
-bool UsbCtrlrEp0Xfer(int, uint8_t, uint8_t *, uint16_t) { return true; }
 }
 
 bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
@@ -276,20 +268,20 @@ static void CompleteIn(void)
 	CHECK(s_InBusy);
 	const uint16_t length = s_InLength;
 	s_InBusy = false;
-	s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
-		length, USB_CTRLR_XFER_SUCCESS, s_InContext);
+	s_InHandler(USB_CTRLR_EVT_XFER_CMPL,
+		length, s_InContext);
 }
 
 static void Receive(const uint8_t *pData, uint16_t Length)
 {
-	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY, Length,
-		USB_CTRLR_XFER_SUCCESS, s_OutContext);
+	s_OutHandler(USB_CTRLR_EVT_DRDY, Length, s_OutContext);
+	CHECK(s_OutBuffer != nullptr);
+	s_OutXferCount++;
 	if (Length != 0U)
 	{
 		memcpy(s_OutBuffer, pData, Length);
 	}
-	s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL, Length,
-		USB_CTRLR_XFER_SUCCESS, s_OutContext);
+	s_OutHandler(USB_CTRLR_EVT_XFER_CMPL, Length, s_OutContext);
 }
 
 static bool Control(UsbdHid &Hid, const UsbSetupData_t *pSetup,
@@ -310,6 +302,10 @@ static void TestDescriptorAndPlacement(void)
 	TestHid hid;
 	UsbdHidCfg_t cfg = MakeCfg();
 	CHECK(hid.Init(cfg));
+	UsbIntrf *pTransport = &hid;
+	DeviceIntrf *pDevice = pTransport;
+	CHECK(pTransport->Data() == &static_cast<UsbdHidDev_t *>(hid)->pIntIntrf->pData->DevIntrf);
+	CHECK(static_cast<DevIntrf_t *>(*pDevice) == hid.Data());
 	CHECK(s_FsDescriptorLength == sizeof(UsbdHidDesc_t));
 	const UsbdHidDesc_t &desc =
 		*reinterpret_cast<const UsbdHidDesc_t *>(s_FsDescriptor);
@@ -348,7 +344,7 @@ static void TestDataAndLifecycle(void)
 
 	const uint8_t tx[] = { 1U, 2U, 3U };
 	CHECK(hid.RequestToSend(sizeof(tx)));
-	CHECK(hid.TxData(tx, sizeof(tx)) == (int)sizeof(tx));
+	CHECK(static_cast<UsbIntrf *>(&hid)->TxData(tx, sizeof(tx)) == (int)sizeof(tx));
 	CHECK(s_InBusy && s_InLength == sizeof(tx));
 	CHECK(memcmp(s_InBuffer, tx, sizeof(tx)) == 0);
 	CHECK(!hid.SendReport(tx, sizeof(tx)));
@@ -368,7 +364,7 @@ static void TestDataAndLifecycle(void)
 
 	hid.Suspend();
 	CHECK(!hid.SendReport(tx, sizeof(tx)));
-	CHECK(hid.TxData(tx, sizeof(tx)) == 0);
+	CHECK(static_cast<UsbIntrf *>(&hid)->TxData(tx, sizeof(tx)) == 0);
 	CHECK(hid.Resume());
 	CHECK(hid.SendReport(tx, sizeof(tx)));
 	CompleteIn();

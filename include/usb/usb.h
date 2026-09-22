@@ -101,7 +101,7 @@ typedef void (*UsbEvtHandler_t)(int DevNo, UsbEvt_t Evt);
 //
 // Device class layer. One registration per class instance.
 // Non-control endpoint events go directly from the controller to the endpoint
-// callback registered with UsbCtrlrEpRegister; they are not class events.
+// binding established by the endpoint allocator; they are not class events.
 //
 
 /// Control transfer stage a request handler is being called for.
@@ -185,10 +185,10 @@ bool UsbRemoteWakeup(int DevNo);
 /// Set or clear a non-control endpoint halt through the core state tracker.
 /// Device classes use this for protocol-defined stalls. The host clears the
 /// halt with the standard CLEAR_FEATURE request.
-bool UsbEpSetHalt(int DevNo, uint8_t EpAddr, bool Halt);
+bool UsbEpSetHalt(int DevNo, uint8_t EpNo, bool bIn, bool Halt);
 
 /// Return the halt state tracked by the generic device core.
-bool UsbEpHalted(int DevNo, uint8_t EpAddr);
+bool UsbEpHalted(int DevNo, uint8_t EpNo, bool bIn);
 
 /** @brief Configuration this controller was initialized with, NULL before init. */
 const UsbCfg_t *UsbGetCfg(int DevNo);

@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "bluetooth/bt_hci_usb.h"
+#include "app_evt_handler.h"
 
 #define RX_SLOTS 8U
 #define TX_SLOTS 20U
@@ -76,69 +77,45 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
     return true;
 }
 
-void UsbCtrlrEpClose(int, uint8_t EpAddr)
+void UsbCtrlrEpClose(int, uint8_t EpNo, bool bIn)
 {
     s_CloseCount++;
-    const uint8_t epNo = USB_ENDPADDR_NUM(EpAddr);
-    if (epNo < 16U)
+    if (EpNo < 16U)
     {
-        if (USB_ENDPADDR_IS_IN(EpAddr)) s_InBusy[epNo] = false;
-        else s_OutDma[epNo] = false;
+        if (bIn) s_InBusy[EpNo] = false;
+        else s_OutDma[EpNo] = false;
     }
 }
 void UsbCtrlrEpCloseAll(int) {}
 
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
-                        UsbCtrlrEpHandler_t Handler, void *pContext)
+void UsbCtrlrEpAlloc(int, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
+                        bool Blocking, UsbCtrlrEpHandler_t Handler,
+                        void *pContext)
 {
-    if (pBuffer == nullptr || Handler == nullptr || s_RegisteredCount >= 5)
-        return false;
+    if (Handler == nullptr || s_RegisteredCount >= 5)
+        return;
     s_Registered[s_RegisteredCount++] = {
-        EpAddr, pBuffer, Blocking, Handler, pContext
+        (uint8_t)(EpNo | (bIn ? USB_ENDPADDR_DIR_IN : 0U)),
+        pBuffer, Blocking, Handler, pContext
     };
-    return true;
+    return;
 }
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
+bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
-    const uint8_t epNo = USB_ENDPADDR_NUM(EpAddr);
-    if (epNo >= 16U)
-        return false;
-
-    RegisteredEp_t *pReg = nullptr;
-    for (int i = 0; i < s_RegisteredCount; i++)
-    {
-        if (s_Registered[i].EpAddr == EpAddr)
-        {
-            pReg = &s_Registered[i];
-            break;
-        }
-    }
-    if (pReg == nullptr)
-        return false;
-
-    if (USB_ENDPADDR_IS_IN(EpAddr))
-    {
-        if (s_InBusy[epNo] || s_SendCount >= 64 || Length > sizeof(s_Sent[0].Data))
-            return false;
-        SentPacket_t *pSent = &s_Sent[s_SendCount++];
-        pSent->EpAddr = EpAddr;
-        pSent->Length = Length;
-        if (Length > 0U) memcpy(pSent->Data, pReg->pBuffer, Length);
-        s_InBusy[epNo] = true;
-        return true;
-    }
-
-    if (!s_HwOutReady[epNo] || s_OutDma[epNo])
-        return false;
-    s_OutDma[epNo] = true;
-    s_OutSubmitCount++;
-    return true;
+	if ((EpNum & 0x80U) != 0U) return false;
+	if (EpNum >= 16U || s_InBusy[EpNum] || s_SendCount >= 64 ||
+		Length > sizeof(s_Sent[0].Data)) return false;
+	SentPacket_t *pSent = &s_Sent[s_SendCount++];
+	pSent->EpAddr = USB_ENDPADDR_DIRIN(EpNum);
+	pSent->Length = Length;
+	if (Length > 0U) memcpy(pSent->Data, pBuffer, Length);
+	s_InBusy[EpNum] = true;
+	return true;
 }
 
-bool UsbCtrlrEp0Xfer(int, uint8_t, uint8_t *, uint16_t) { return true; }
-void UsbCtrlrEpStall(int, uint8_t) {}
-void UsbCtrlrEpClearStall(int, uint8_t) {}
+void UsbCtrlrEpStall(int, uint8_t, bool) {}
+void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 }
 
@@ -226,7 +203,7 @@ static RegisteredEp_t *FindRegistered(uint8_t EpAddr)
 }
 
 static void CompleteIn(uint8_t EpNo,
-                       UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
+                       UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 {
     RegisteredEp_t *pReg = FindRegistered(USB_ENDPADDR_DIRIN(EpNo));
     CHECK(pReg != nullptr);
@@ -243,8 +220,8 @@ static void CompleteIn(uint8_t EpNo,
         }
     }
     s_InBusy[EpNo] = false;
-    pReg->Handler(USB_ENDPADDR_DIRIN(EpNo), USB_CTRLR_EVT_XFER_CMPL,
-                  length, Result, pReg->pContext);
+    pReg->Handler(Event,
+                  length, pReg->pContext);
 }
 
 static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
@@ -261,8 +238,13 @@ static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
 
     if (pReg->Blocking)
     {
-        pReg->Handler(USB_ENDPADDR_DIROUT(EpNo), USB_CTRLR_EVT_DRDY,
-                      Length, USB_CTRLR_XFER_SUCCESS, pReg->pContext);
+        pReg->Handler(USB_CTRLR_EVT_DRDY,
+                      Length, pReg->pContext);
+        if (pReg->pBuffer != nullptr && s_HwOutReady[EpNo] && !s_OutDma[EpNo])
+        {
+            s_OutDma[EpNo] = true;
+            s_OutSubmitCount++;
+        }
         CHECK(s_OutDma[EpNo]);
         if (!s_OutDma[EpNo]) return;
     }
@@ -275,12 +257,13 @@ static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
     if (Length > 0U) memcpy(pReg->pBuffer, s_HwOut[EpNo], Length);
     s_HwOutReady[EpNo] = false;
     s_OutDma[EpNo] = false;
-    pReg->Handler(USB_ENDPADDR_DIROUT(EpNo), USB_CTRLR_EVT_XFER_CMPL,
-                  Length, USB_CTRLR_XFER_SUCCESS, pReg->pContext);
+    pReg->Handler(USB_CTRLR_EVT_XFER_CMPL,
+                  Length, pReg->pContext);
 }
 
 static void ResetFake(void)
 {
+    CHECK(AppEvtHandlerInit(nullptr, 0));
     memset(&s_UsbCfg, 0, sizeof(s_UsbCfg));
     memset(s_OpenDesc, 0, sizeof(s_OpenDesc));
     memset(s_Registered, 0, sizeof(s_Registered));
@@ -340,6 +323,10 @@ static void TestDescriptors(void)
     BtHciUsb hci;
     BtHciUsbCfg_t cfg = MakeCfg();
     CHECK(hci.Init(cfg));
+    UsbIntrf *pTransport = &hci;
+    DeviceIntrf *pDevice = pTransport;
+    CHECK(pTransport->Data() == &static_cast<BtHciUsbDev_t *>(hci)->pData->DevIntrf);
+    CHECK(static_cast<DevIntrf_t *>(*pDevice) == hci.Data());
 	CHECK(s_FsDescriptorLength == sizeof(BtHciUsbDesc_t));
 	const BtHciUsbDesc_t &desc =
 		*reinterpret_cast<const BtHciUsbDesc_t *>(s_FsDescriptor);
@@ -725,8 +712,8 @@ static void TestScoAlternateLifecycle(void)
     s_OpenFailAt = s_OpenCount;
     CHECK(!hci.SelectInterface(1U, 5U));
     CHECK(pHci->ScoAlt == 6U);
-    CHECK(pHci->ScoIso.Opened);
-    CHECK(pHci->ScoIso.Mps == mps[5]);
+    CHECK(pHci->pScoIso->Opened);
+    CHECK(pHci->pScoIso->Mps == mps[5]);
 
     CHECK(hci.SelectInterface(1U, 0U));
     CHECK(pHci->ScoAlt == 0U);

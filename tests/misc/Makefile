@@ -38,6 +38,10 @@ CFIFO_SOURCES := \
 	cfifo_test.cpp \
 	$(ROOT)/src/cfifo.c
 
+APPEVT_TARGET := $(BUILD_DIR)/app_evt_handler_test
+APPEVT_OBJECT := $(BUILD_DIR)/app_evt_handler_preempt.o
+APPEVT_HEADERS := $(ROOT)/include/app_evt_handler.h $(ROOT)/include/cfifo.h
+
 # Concurrency. Thread sanitizer cannot be combined with the address
 # sanitizer, so the race build is its own target.
 THREAD_TARGET := $(BUILD_DIR)/cfifo_thread_test
@@ -72,9 +76,9 @@ HEADERS := \
 	$(ROOT)/include/cfifo.h \
 	$(ROOT)/include/memcpy_fast.h
 
-TARGETS := $(MEMCPY_TARGET) $(CFIFO_TARGET) $(THREAD_TARGET)
+TARGETS := $(MEMCPY_TARGET) $(CFIFO_TARGET) $(APPEVT_TARGET) $(THREAD_TARGET)
 
-.PHONY: all test test-gcc test-clang test-matrix bench compare thread \
+.PHONY: all test test-appevt test-gcc test-clang test-matrix bench compare thread \
 	thread-compare test-tsan bench-memcpy bench-cfifo clean
 
 all: test
@@ -82,7 +86,11 @@ all: test
 test: $(TARGETS)
 	$(TEST_ENV) ./$(MEMCPY_TARGET)
 	$(TEST_ENV) ./$(CFIFO_TARGET)
+	$(TEST_ENV) ./$(APPEVT_TARGET)
 	./$(THREAD_TARGET) $(OPS)
+
+test-appevt: $(APPEVT_TARGET)
+	$(TEST_ENV) ./$(APPEVT_TARGET)
 
 # Race detection. Fewer operations because the sanitizer is slow.
 test-tsan: $(TSAN_TARGET)
@@ -141,6 +149,18 @@ $(CFIFO_TARGET): $(CFIFO_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
 		$(CFIFO_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+# Redirect only AppEvt's calls; the hooks still execute the real CFifo.
+$(APPEVT_OBJECT): $(ROOT)/src/app_evt_handler.cpp $(APPEVT_HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
+		-DCFifoPeek=PreemptCFifoPeek -DCFifoGet=PreemptCFifoGet -c $< -o $@
+
+$(APPEVT_TARGET): app_evt_handler_test.cpp $(ROOT)/src/cfifo.c \
+		$(APPEVT_OBJECT) $(APPEVT_HEADERS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		app_evt_handler_test.cpp $(ROOT)/src/cfifo.c -x none \
+		$(APPEVT_OBJECT) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 # The 2021 sources come straight out of git, so nothing legacy is tracked.
 $(LEGACY_DIR)/cfifo.c $(LEGACY_DIR)/cfifo.h $(LEGACY_DIR)/stdatomic.h: 

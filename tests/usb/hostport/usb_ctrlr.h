@@ -108,12 +108,13 @@ typedef enum __Usb_Ctrlr_Evt_Type {
 	USB_CTRLR_EVT_RESET,		//!< USB bus reset
 	USB_CTRLR_EVT_SETUP,		//!< New EP0 SETUP request
 	USB_CTRLR_EVT_DRDY,		//!< Data is ready in the device to be retrieved
-	USB_CTRLR_EVT_XFER_CMPL,	//!< Endpoint transfer completed
+	USB_CTRLR_EVT_XFER_CMPL,	//!< Endpoint transfer completed successfully
 	USB_CTRLR_EVT_CANCEL,		//!< Endpoint transfer cancelled
 	USB_CTRLR_EVT_SUSPEND,		//!< Bus entered suspend
 	USB_CTRLR_EVT_RESUME,		//!< Bus resumed
 	USB_CTRLR_EVT_SOF,			//!< Start of frame
 	USB_CTRLR_EVT_ADDRESS,		//!< Hardware accepted SET_ADDRESS itself
+	USB_CTRLR_EVT_XFER_FAILED,	//!< Endpoint transfer failed
 } UsbCtrlrEvtType_t;
 
 #pragma pack(push, 4)
@@ -122,6 +123,7 @@ typedef struct __Usb_Ctrlr_Xfer_Evt {
 	uint8_t EpAddr;
 	uint16_t Length;
 	UsbCtrlrXferResult_t Result;
+	const uint8_t *pBuffer;		//!< EP0 OUT bytes, valid during the callback only
 } UsbCtrlrXferEvt_t;
 
 typedef struct __Usb_Ctrlr_Evt {
@@ -136,9 +138,8 @@ typedef struct __Usb_Ctrlr_Evt {
 
 #pragma pack(pop)
 
-typedef void (*UsbCtrlrEpHandler_t)(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
-									uint16_t Length, UsbCtrlrXferResult_t Result,
-									void *pContext);
+typedef void (*UsbCtrlrEpHandler_t)(UsbCtrlrEvtType_t Event,
+									uint16_t Length, void *pContext);
 
 /// What the generic layer hands the port at UsbCtrlrInit.
 typedef struct __Usb_Ctrlr_Config {
@@ -165,39 +166,34 @@ void UsbCtrlrSofEnable(int DevNo, bool Enable);
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
 
-static inline bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr,
+static inline bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn,
 									 uint8_t Type, uint16_t MaxPacketSize)
 {
 	UsbEndPointDesc_t desc = {0};
 	desc.bLength = sizeof(desc);
 	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	desc.bEndpointAddress = EpAddr;
+	desc.bEndpointAddress = (uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
 	desc.bmAttributes = Type;
 	desc.wMaxPacketSize = MaxPacketSize;
 	return UsbCtrlrEpOpen(DevNo, &desc);
 }
 
-void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr);
+void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn);
 void UsbCtrlrEpCloseAll(int DevNo);
-bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext);
-bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length);
-
-// Adapt the directional production API to the existing fake-controller logs.
-static inline bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
-{
-	return UsbCtrlrEpXfer(DevNo, (uint8_t)(EpNum | 0x80U), Length);
-}
-
-static inline bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
-{
-	return UsbCtrlrEpXfer(DevNo, (uint8_t)(EpNum & 0x7FU), Length);
-}
-
-bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-						 uint16_t Length);
-void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr);
-void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr);
+void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
+					 bool bBlocking,
+					 UsbCtrlrEpHandler_t Handler, void *pContext);
+// EpNum is an endpoint number: device IN, host OUT. The controller schedules RX.
+// pBuffer supplies the DMA source and remains owned until the completion callback.
+// It may be NULL only for a zero-length transfer.
+bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
+// IN returns bytes copied into the queue; completion notifies that it drained.
+// A zero-length send queues a data ZLP; negative means it was not accepted.
+int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
+bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr);
+void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn);
+void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn);
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);
 
 #ifdef __cplusplus

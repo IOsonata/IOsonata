@@ -19,20 +19,27 @@ UsbPkt_t whose Hdr.Flags bit USB_INTRF_SLOT_READY publishes whether the slot
 contains a current packet; Hdr.Length remains the actual payload length and may
 be zero.
 
-The derived class supplies one fixed RX and one fixed TX controller buffer sized
-for its transfer type. In byte and packet mode those are DMA staging buffers.
-In direct mode the supplied buffers include UsbPktHdr_t followed by the payload;
+The derived class supplies one fixed RX controller buffer sized for its transfer
+type. Byte and packet modes use the TX CFifo as the transfer source. Direct mode
+supplies both RX and TX buffers, each with UsbPktHdr_t followed by the payload;
 UsbIntrf registers the Data portion with the controller and uses the header as
 the single-slot ownership state.
 
 RX is event driven. USB_CTRLR_EVT_DRDY means data is ready in the controller to
-be retrieved. Byte and packet modes use the existing CFifo blocking/non-blocking
-policy. A direct specialization selects whether the controller uses DRDY or
-services OUT transfers directly. Completion publishes the single RX slot
-instead of placing data into a FIFO.
+be retrieved. Controllers may also service OUT transfers directly. If a byte
+or packet completion cannot enter the RX CFifo, blocking mode retains its DMA
+buffer and retries through AppEvt. Non-blocking mode drops a rejected completion
+and increments RxDropCnt; ordinary non-blocking CFifo puts replace the oldest
+packet when full. Direct completion publishes the single RX slot instead of
+placing data into a FIFO, replacing any unread packet.
 
-For IN, byte and packet modes copy queued TX data into fixed staging before
-submitting the endpoint transfer. Direct TxData copies one current packet into
+RxData only consumes received FIFO data or the direct RX slot. OUT scheduling
+and retrying a held completion run through endpoint events and UsbProcess.
+A withheld OUT buffer is retried by the controller's foreground DRDY callback,
+including when AppEvt could not accept the initial retry.
+
+For IN, byte and packet modes retain queued TX data until host consumption
+completes the endpoint transfer. Direct TxData copies one current packet into
 the single TX slot and submits the endpoint transfer. The endpoint transfer type
 and its scheduling remain properties of the specialization and controller.
 
@@ -128,7 +135,7 @@ typedef struct __Usb_Interf_Config {
 	uint16_t TxFifoBlkSize;
 	uint16_t BufferSize;
 	uint8_t *pRxBuffer;
-	uint8_t *pTxBuffer;
+	uint8_t *pTxBuffer;		//!< Direct-mode TX slot; unused in byte/packet modes
 	DevIntrfEvtHandler_t EvtCB;
 } UsbIntrfCfg_t;
 
@@ -144,14 +151,13 @@ struct __Usb_Dev_Interf {
 	hCFifo_t hRxFifo;
 	uint32_t RxDropCnt;
 	uint8_t *pRxBuffer;
-	uint8_t *pTxBuffer;
 	UsbPkt_t *pRxDirectBuffer;
 	UsbPkt_t *pTxDirectBuffer;
 	uint16_t BufferSize;
 	uint16_t Mps;
-	uint8_t EpNo;
-	bool bBlocking;
-	bool RxPending;
+	uint16_t RxPending;		//!< 0: idle, 1: DRDY, otherwise RX length + 2
+	uint8_t EpNo : 7;
+	bool bBlocking : 1;
 	UsbIntrfMode_t Mode;
 	EpSendFct_t EpSend;
 	void *pClassContext;
@@ -170,6 +176,67 @@ bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);
 }
 #endif
 
+#ifdef __cplusplus
+
+class UsbIntrf : public DeviceIntrf {
+public:
+	operator DevIntrf_t * () override {
+		return &vUsbDevIntrf.DevIntrf;
+	}
+
+	DevIntrf_t *Data(void) { return &vUsbDevIntrf.DevIntrf; }
+
+	/**
+	 * Bring up the endpoint data path. A derived class supplies the endpoint
+	 * number and its buffers; everything after this it does not manage.
+	 */
+	bool Init(const UsbIntrfCfg_t &Cfg) {
+		return UsbIntrfInit(&vUsbDevIntrf, &Cfg);
+	}
+
+	uint32_t Rate(uint32_t DataRate) override {
+		return DeviceIntrfSetRate(&vUsbDevIntrf.DevIntrf, DataRate);
+	}
+
+	uint32_t Rate(void) override {
+		return DeviceIntrfGetRate(&vUsbDevIntrf.DevIntrf);
+	}
+
+	bool RequestToSend(int NbBytes) override {
+		return UsbIntrfRequestToSend(&vUsbDevIntrf, NbBytes);
+	}
+
+	// Use the owned data directly without a virtual conversion on each call.
+	__attribute__((always_inline))
+	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTx(&vUsbDevIntrf.DevIntrf, DevAddr, pData, DataLen);
+	}
+
+	__attribute__((always_inline))
+	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRx(&vUsbDevIntrf.DevIntrf, DevAddr, pBuff, BuffLen);
+	}
+
+	__attribute__((always_inline))
+	int TxData(const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfTxData(&vUsbDevIntrf.DevIntrf, pData, DataLen);
+	}
+
+	__attribute__((always_inline))
+	int RxData(uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRxData(&vUsbDevIntrf.DevIntrf, pBuff, BuffLen);
+	}
+
+protected:
+	UsbIntrf() = default;
+	UsbIntrf(const UsbIntrf &) = delete;
+	UsbIntrf &operator = (const UsbIntrf &) = delete;
+
+	// One endpoint-pair data path, shared by all derived transport operations.
+	UsbDevIntrf_t vUsbDevIntrf = {};
+};
+
+#endif
 
 /** @} End of group USBD */
 

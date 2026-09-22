@@ -42,11 +42,26 @@ SOFTWARE.
 
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
+#include <type_traits>
+#include "usb/usbd_bulk.h"
+#include "usb/usbd_hid.h"
+#include "usb/usbd_msc.h"
+#include "bluetooth/bt_hci_usb.h"
+
+static_assert(std::is_base_of<DeviceIntrf, UsbIntrf>::value, "USB transport root");
+static_assert(std::is_base_of<UsbIntrf, UsbdCdc>::value, "CDC transport");
+static_assert(std::is_base_of<UsbIntrf, UsbdBulk>::value, "Bulk transport");
+static_assert(std::is_base_of<UsbIntrf, UsbdMsc>::value, "MSC transport");
+static_assert(std::is_base_of<UsbIntrf, BtHciUsb>::value, "HCI transport");
+static_assert(std::is_base_of<UsbIntrf, UsbIsoIntrf>::value, "ISO transport");
+static_assert(std::is_base_of<UsbIntrf, UsbIntIntrf>::value, "Interrupt transport");
+static_assert(std::is_base_of<UsbIntIntrf, UsbdHid>::value, "HID interrupt transport");
+
 
 static uint8_t s_RegisteredEp[6];
 static int s_RegisteredEpCount;
 static int s_EpOpenCount;
-static int s_Ep0XferCount;
+static int s_Ep0EventCount;
 static uint8_t s_LastEp0Addr;
 static uint16_t s_LastEp0Length;
 
@@ -71,29 +86,38 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *)
 	s_EpOpenCount++;
 	return true;
 }
-void UsbCtrlrEpClose(int, uint8_t) {}
+void UsbCtrlrEpClose(int, uint8_t, bool) {}
 void UsbCtrlrEpCloseAll(int) {}
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *, bool,
+void UsbCtrlrEpAlloc(int, uint8_t EpNo, bool bIn, uint8_t *, bool,
 						UsbCtrlrEpHandler_t, void *)
 {
 	if (s_RegisteredEpCount >= (int)sizeof(s_RegisteredEp))
 	{
-		return false;
+		return;
 	}
 
-	s_RegisteredEp[s_RegisteredEpCount++] = EpAddr;
-	return true;
+	s_RegisteredEp[s_RegisteredEpCount++] = (uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
+	return;
 }
-bool UsbCtrlrEpXfer(int, uint8_t, uint16_t) { return true; }
-bool UsbCtrlrEp0Xfer(int, uint8_t EpAddr, uint8_t *, uint16_t Length)
+bool UsbCtrlrEpSend(int, uint8_t, uint8_t *, uint16_t) { return true; }
+static bool RecordEp0(uint8_t EpAddr, uint16_t Length)
 {
-	s_Ep0XferCount++;
+	s_Ep0EventCount++;
 	s_LastEp0Addr = EpAddr;
 	s_LastEp0Length = Length;
 	return true;
 }
-void UsbCtrlrEpStall(int, uint8_t) {}
-void UsbCtrlrEpClearStall(int, uint8_t) {}
+int UsbCtrlrEp0Send(int, uint8_t *, int Length)
+{
+	return RecordEp0(USB_ENDPADDR_DIR_IN, Length) ? Length : -1;
+}
+bool UsbCtrlrEp0Status(int, uint8_t EpAddr)
+{
+	return RecordEp0(EpAddr, 0);
+}
+void UsbCtrlrEpStall(int, uint8_t, bool) {}
+void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
 #define RX_MEM_SIZE USB_INTRF_RXMEM_SIZE(4, USB_CTRLR_PKT_LEN_MAX(0, BULK))
@@ -233,6 +257,14 @@ int main(void)
 	}
 
 	UsbdCdcDev_t *pCdc0 = s_Cdc0;
+	UsbIntrf *pTransport = &s_Cdc0;
+	DeviceIntrf *pDevice = pTransport;
+	if (pTransport->Data() != &pCdc0->pData->DevIntrf ||
+		static_cast<DevIntrf_t *>(*pDevice) != s_Cdc0.Data())
+	{
+		printf("CDC does not share the UsbIntrf endpoint state\n");
+		return 14;
+	}
 	pCdc0->LineCoding.dwDTERate = 9600U;
 	UsbCtrlrEvt_t reset = {};
 	reset.Type = USB_CTRLR_EVT_RESET;
@@ -244,7 +276,7 @@ int main(void)
 	}
 
 	Setup(USB_REQ_SET_ADDRESS, 5U);
-	if (s_Ep0XferCount != 1 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
+	if (s_Ep0EventCount != 1 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
 		s_LastEp0Length != 0U || UsbGetAddress(0) != 0U)
 	{
 		printf("CDC SET_ADDRESS setup failed\n");
@@ -258,10 +290,10 @@ int main(void)
 	}
 
 	Setup(USB_REQ_SET_CONFIGURATION, 1U);
-	if (s_Ep0XferCount != 2 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
+	if (s_Ep0EventCount != 2 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
 		s_LastEp0Length != 0U || !UsbConfigured(0) || s_EpOpenCount != 6 ||
-		pCdc0->IntrfData.Mps != USB_CTRLR_PKT_LEN_MAX(0, BULK) ||
-		((UsbdCdcDev_t *)s_Cdc1)->IntrfData.Mps != USB_CTRLR_PKT_LEN_MAX(0, BULK))
+		pCdc0->pData->Mps != USB_CTRLR_PKT_LEN_MAX(0, BULK) ||
+		((UsbdCdcDev_t *)s_Cdc1)->pData->Mps != USB_CTRLR_PKT_LEN_MAX(0, BULK))
 	{
 		printf("C++ CDC configuration was not applied\n");
 		return 11;
@@ -269,7 +301,7 @@ int main(void)
 	CompleteEp0In();
 
 	SetControlLineState(pCdc0->CtrlIfNo, USB_CDC_CTRL_LINE_STATE_DTR);
-	if (s_Ep0XferCount != 3 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
+	if (s_Ep0EventCount != 3 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
 		s_LastEp0Length != 0U || s_Cdc0.IsPortOpen())
 	{
 		printf("C++ CDC Control setup was not dispatched\n");

@@ -80,10 +80,9 @@ typedef enum __Usbd_Msc_Tx_Kind {
 	USBD_MSC_TX_CSW,
 } UsbdMscTxKind_t;
 
-// Natural alignment is required by the embedded DevIntrf_t atomics and by
-// controller DMA buffers.
+// Keep pointer members and controller DMA buffers naturally aligned.
 typedef struct __Usbd_Msc_Dev {
-	UsbDevIntrf_t IntrfData;
+	UsbDevIntrf_t *pData;		//!< Shared endpoint data path
 	DiskIO *pDisk;
 	uint8_t *pSectorBuffer;
 	uint16_t SectorBufferSize;
@@ -137,8 +136,6 @@ typedef struct __Usbd_Msc_Dev {
 					 sizeof(uint32_t)];
 	uint32_t RxTransfer[(USBD_MSC_MAX_MPS + sizeof(uint32_t) - 1U) /
 					 sizeof(uint32_t)];
-	uint32_t TxTransfer[(USBD_MSC_MAX_MPS + sizeof(uint32_t) - 1U) /
-					 sizeof(uint32_t)];
 	uint32_t TxPacket[(USBD_MSC_PKT_BLKSIZE + sizeof(uint32_t) - 1U) /
 					 sizeof(uint32_t)];
 	uint32_t RxPacket[(USBD_MSC_MAX_MPS + sizeof(uint32_t) - 1U) /
@@ -154,15 +151,14 @@ typedef struct __Usbd_Msc_Dev {
 bool UsbdMscMakeDesc(UsbdMscDesc_t *pDesc, const UsbdMscDev_t *pMsc,
 					 UsbSpeed_t Speed);
 
-class UsbdMsc : public UsbDeviceClass, public DeviceIntrf {
+class UsbdMsc : public UsbDeviceClass, public UsbIntrf {
 public:
 	UsbdMsc() = default;
 	UsbdMsc(const UsbdMsc &) = delete;
 	UsbdMsc &operator = (const UsbdMsc &) = delete;
 
-	operator DevIntrf_t * () override { return &vUsbdMsc.IntrfData.DevIntrf; }
+	using UsbIntrf::operator DevIntrf_t *;
 	operator UsbdMscDev_t * () { return &vUsbdMsc; }
-	DevIntrf_t *Data(void) { return &vUsbdMsc.IntrfData.DevIntrf; }
 
 	bool Init(const UsbdMscCfg_t &Cfg);
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
@@ -173,38 +169,6 @@ public:
 	void Process(void) override;
 
 	UsbdMscBotState_t BotState(void) const { return vUsbdMsc.State; }
-
-	uint32_t Rate(uint32_t DataRate) override {
-		return DeviceIntrfSetRate(&vUsbdMsc.IntrfData.DevIntrf, DataRate);
-	}
-
-	uint32_t Rate(void) override {
-		return DeviceIntrfGetRate(&vUsbdMsc.IntrfData.DevIntrf);
-	}
-
-	bool RequestToSend(int NbBytes) override {
-		return UsbIntrfRequestToSend(&vUsbdMsc.IntrfData, NbBytes);
-	}
-
-	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
-		return DeviceIntrfTx(&vUsbdMsc.IntrfData.DevIntrf, DevAddr,
-			pData, DataLen);
-	}
-
-	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRx(&vUsbdMsc.IntrfData.DevIntrf, DevAddr,
-			pBuff, BuffLen);
-	}
-
-	int TxData(const uint8_t *pData, int DataLen) override {
-		return DeviceIntrfTxData(&vUsbdMsc.IntrfData.DevIntrf,
-			pData, DataLen);
-	}
-
-	int RxData(uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRxData(&vUsbdMsc.IntrfData.DevIntrf,
-			pBuff, BuffLen);
-	}
 
 private:
 	UsbdMscDev_t vUsbdMsc = {};

@@ -3,9 +3,9 @@
 
 @brief	Host regression tests for the UsbIntrf endpoint-pair data path.
 
-The fake controller models a packet resident in endpoint hardware before an
-OUT DMA is requested. Blocking endpoints receive DRDY and submit DMA only when
-the RX CFifo has space. IN transfers use the fixed registered staging buffer.
+The fake controller models a packet resident in endpoint hardware before
+the controller starts OUT DMA. DRDY only releases or withholds the registered
+RX buffer. IN transfers use the explicit DMA source supplied to EpSend.
 
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
@@ -39,8 +39,19 @@ static bool s_InBusy;
 static uint16_t s_InLen;
 static int s_OutSubmitCnt;
 static int s_InSubmitCnt;
+static int s_TxTimeoutCnt;
 static bool s_XferOk = true;
 static bool s_HighSpeed;
+
+static void ReceiveDma(void)
+{
+	if (s_HwOutReady && !s_OutDma && s_OutRegBuf != nullptr)
+	{
+		s_OutDma = true;
+		s_OutDmaLen = MPS;
+		s_OutSubmitCnt++;
+	}
+}
 
 extern "C" {
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
@@ -57,16 +68,16 @@ void UsbCtrlrRemoteWakeup(int) {}
 void UsbCtrlrSofEnable(int, bool) {}
 void UsbCtrlrSetAddress(int, uint8_t) {}
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
-void UsbCtrlrEpClose(int, uint8_t) {}
+void UsbCtrlrEpClose(int, uint8_t, bool) {}
 void UsbCtrlrEpCloseAll(int) {}
-void UsbCtrlrEpStall(int, uint8_t) {}
-void UsbCtrlrEpClearStall(int, uint8_t) {}
+void UsbCtrlrEpStall(int, uint8_t, bool) {}
+void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuf, bool Blocking,
+void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuf, bool Blocking,
                         UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-    if (USB_ENDPADDR_IS_IN(EpAddr))
+    if (bIn)
     {
         s_InRegBuf = pBuf;
         s_InHandler = Handler;
@@ -79,33 +90,19 @@ bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuf, bool Blocking,
         s_OutContext = pContext;
         s_OutBlocking = Blocking;
     }
-    return pBuf != nullptr && Handler != nullptr;
 }
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Len)
+bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Len)
 {
-    if (!s_XferOk)
-        return false;
-
-    if (USB_ENDPADDR_IS_IN(EpAddr))
-    {
-        if (s_InBusy)
-            return false;
-        s_InBusy = true;
-        s_InLen = Len;
-        s_InSubmitCnt++;
-        return true;
-    }
-
-    if (!s_HwOutReady || s_OutDma)
-        return false;
-    s_OutDma = true;
-    s_OutDmaLen = Len;
-    s_OutSubmitCnt++;
-    return true;
+	if ((EpNum & 0x80U) != 0U) return false;
+	if (!s_XferOk || s_InBusy) return false;
+	s_InRegBuf = pBuffer;
+	s_InBusy = true;
+	s_InLen = Len;
+	s_InSubmitCnt++;
+	return true;
 }
 
-bool UsbCtrlrEp0Xfer(int, uint8_t, uint8_t *, uint16_t) { return true; }
 }
 
 static int s_Fail;
@@ -194,8 +191,9 @@ static bool Drdy(const uint8_t *pData, uint16_t Len)
 
     if (s_OutBlocking)
     {
-        s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
-                     Len, USB_CTRLR_XFER_SUCCESS, s_OutContext);
+        s_OutHandler(USB_CTRLR_EVT_DRDY,
+                     Len, s_OutContext);
+		ReceiveDma();
     }
     else
     {
@@ -206,7 +204,7 @@ static bool Drdy(const uint8_t *pData, uint16_t Len)
     return s_OutDma;
 }
 
-static void CompleteOut(UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
+static void CompleteOut(UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 {
     CHECK(s_HwOutReady);
     CHECK(s_OutDma);
@@ -215,13 +213,13 @@ static void CompleteOut(UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
         return;
 
     const uint16_t len = s_HwOutLen < s_OutDmaLen ? s_HwOutLen : s_OutDmaLen;
-    if (Result == USB_CTRLR_XFER_SUCCESS && len > 0U)
+    if (Event == USB_CTRLR_EVT_XFER_CMPL && len > 0U)
         memcpy(s_OutRegBuf, s_HwOut, len);
 
     s_HwOutReady = false;
     s_OutDma = false;
-    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
-                 len, Result, s_OutContext);
+    s_OutHandler(Event,
+                 len, s_OutContext);
 }
 
 static void Deliver(const uint8_t *pData, uint16_t Len)
@@ -232,14 +230,14 @@ static void Deliver(const uint8_t *pData, uint16_t Len)
 }
 
 static void CompleteIn(uint16_t Len,
-                       UsbCtrlrXferResult_t Result = USB_CTRLR_XFER_SUCCESS)
+                       UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 {
     CHECK(s_InBusy);
     if (!s_InBusy)
         return;
     s_InBusy = false;
-    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
-                Len, Result, s_InContext);
+    s_InHandler(Event,
+                Len, s_InContext);
 }
 
 static UsbPkt_t *PacketAt(uint8_t *pBlocks, unsigned Index)
@@ -254,7 +252,7 @@ static void TestGeometry(void)
     CHECK(CFifoAvail(s_Intrf.hRxFifo) == (int)SLOTS);
     CHECK(CFifoBlockSize(s_Intrf.hRxFifo) == USB_INTRF_PKT_BLKSIZE(BUFFER_SIZE));
     CHECK(s_OutRegBuf == s_RxTransfer);
-    CHECK(s_InRegBuf == s_TxTransfer);
+    CHECK(s_InRegBuf == nullptr);
     CHECK(s_OutSubmitCnt == 0);
     CHECK(!s_OutDma);
 }
@@ -327,6 +325,12 @@ static void TestBackpressure(void)
     uint8_t out[8] = {};
     CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
     CHECK(out[0] == 0U);
+    CHECK(!s_OutDma);
+    CHECK(s_Intrf.RxPending);
+    // The controller foreground retry, not RxData, schedules held OUT data.
+    s_OutHandler(USB_CTRLR_EVT_DRDY,
+                 0U, s_OutContext);
+	ReceiveDma();
     CHECK(s_OutDma);
     CHECK(!s_Intrf.RxPending);
     CompleteOut();
@@ -351,11 +355,10 @@ static void TestFailedAndWrongEndpoint(void)
 {
     CHECK(Setup());
     // Endpoint routing is the controller's job now: completions arrive only
-    // through the registered handler, so only the failed-result path remains
+    // through the registered handler, so only the failure event remains
     // observable at this layer.
     const int used = CFifoUsed(s_Intrf.hRxFifo);
-    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL, 0,
-                 USB_CTRLR_XFER_FAILED, s_OutContext);
+    s_OutHandler(USB_CTRLR_EVT_XFER_FAILED, 0, s_OutContext);
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == used);
     CHECK(s_Intrf.RxDropCnt == 1U);
     CHECK(s_OutSubmitCnt == 0);
@@ -423,7 +426,7 @@ static void TestTxAccumulatesDuringTransfer(void)
     for (int i = 0; i < 40; i++)
         CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, &byte, 1) == 1);
     CHECK(s_InSubmitCnt == 1);
-    CHECK(CFifoUsed(s_Intrf.hTxFifo) == 40);
+    CHECK(CFifoUsed(s_Intrf.hTxFifo) == 41);
     CompleteIn(1U);
     CHECK(s_InBusy && s_InLen == 40U && s_InSubmitCnt == 2);
     CompleteIn(40U);
@@ -491,11 +494,12 @@ static void TestTxPacketFull(void)
         pkt->Hdr.Length = 1U;
         pkt->Data[0] = (uint8_t)(0x20U + i);
     }
-    CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, queued, sizeof(queued)) == (int)sizeof(queued));
+    CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, queued, sizeof(queued)) ==
+          (int)(sizeof(queued) - PACKET_BLOCK_SIZE));
     CHECK(CFifoUsed(s_Intrf.hTxFifo) == (int)PACKET_SLOTS);
     CHECK(!UsbIntrfRequestToSend(&s_Intrf, PACKET_BLOCK_SIZE));
 
-    for (unsigned i = 0; i < PACKET_SLOTS; i++)
+    for (unsigned i = 0; i < PACKET_SLOTS - 1U; i++)
     {
         CompleteIn(1U);
         CHECK(s_InBusy && s_InLen == 1U);
@@ -519,6 +523,37 @@ static void TestTxPacketMaximumSlot(void)
     CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, block, sizeof(block)) == 0);
 }
 
+static void TestTxFailureEvent(void)
+{
+    // A failed transfer releases its FIFO data, reports a timeout, and does
+    // not chain the next packet or report a successful completion.
+    for (unsigned packetMode = 0; packetMode < 2; packetMode++)
+    {
+        CHECK(packetMode ? SetupPacketMode() : Setup());
+        s_TxTimeoutCnt = 0;
+        s_Intrf.DevIntrf.EvtCB = [](DevIntrf_t *, DEVINTRF_EVT event,
+                                  uint8_t *, int length) -> int {
+            CHECK(event == DEVINTRF_EVT_TX_TIMEOUT);
+            CHECK(length == (int)MPS);
+            s_TxTimeoutCnt++;
+            return length;
+        };
+        alignas(4) uint8_t data[PACKET_BLOCK_SIZE * 2U] = {};
+        int length = MPS * 2U;
+        if (packetMode)
+        {
+            PacketAt(data, 0)->Hdr.Length = MPS;
+            PacketAt(data, 1)->Hdr.Length = MPS;
+            length = sizeof(data);
+        }
+        CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, data, length) == length);
+        CompleteIn(MPS, USB_CTRLR_EVT_XFER_FAILED);
+        CHECK(s_TxTimeoutCnt == 1);
+        CHECK(CFifoUsed(s_Intrf.hTxFifo) == (packetMode ? 1 : (int)MPS));
+        CHECK(!s_InBusy && s_InSubmitCnt == 1);
+    }
+}
+
 struct Case { const char *Name; void (*Fn)(void); };
 
 int main(void)
@@ -540,6 +575,7 @@ int main(void)
         { "tx packet ZLP", TestTxPacketZlp },
         { "tx packet full", TestTxPacketFull },
         { "tx packet maximum slot", TestTxPacketMaximumSlot },
+        { "tx failure event", TestTxFailureEvent },
     };
 
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)

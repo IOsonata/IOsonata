@@ -15,9 +15,7 @@ static void *s_OutContext;
 static void *s_InContext;
 static bool s_OutBusy;
 static bool s_InBusy;
-static uint16_t s_OutLength;
 static uint16_t s_InLength;
-static uint8_t s_OutData[USB_ISO_INTRF_MAX_MPS];
 static uint8_t s_InData[USB_ISO_INTRF_MAX_MPS];
 static int s_OpenCount;
 static int s_CloseCount;
@@ -37,14 +35,14 @@ void UsbCtrlrDisconnect(int) {}
 void UsbCtrlrRemoteWakeup(int) {}
 void UsbCtrlrSofEnable(int, bool) {}
 void UsbCtrlrSetAddress(int, uint8_t) {}
-void UsbCtrlrEpStall(int, uint8_t) {}
-void UsbCtrlrEpClearStall(int, uint8_t) {}
+void UsbCtrlrEpStall(int, uint8_t, bool) {}
+void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
+void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	if (USB_ENDPADDR_IS_IN(EpAddr))
+	if (bIn)
 	{
 		s_InBuffer = pBuffer;
 		s_InHandler = Handler;
@@ -56,32 +54,23 @@ bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool,
 		s_OutHandler = Handler;
 		s_OutContext = pContext;
 	}
-	return true;
+	return;
 }
 
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { s_OpenCount++; return true; }
-void UsbCtrlrEpClose(int, uint8_t) { s_CloseCount++; }
+void UsbCtrlrEpClose(int, uint8_t, bool) { s_CloseCount++; }
 void UsbCtrlrEpCloseAll(int) {}
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
+bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
-	if (!USB_ENDPADDR_IS_IN(EpAddr))
-	{
-		if (s_OutBusy) return false;
-		s_OutBusy = true;
-		s_OutXferCount++;
-		if (s_OutLength > 0U) memcpy(s_OutBuffer, s_OutData, s_OutLength);
-		return true;
-	}
-	if (s_InBusy || Length > sizeof(s_InData))
-		return false;
+	if ((EpNum & 0x80U) != 0U) return false;
+	if (s_InBusy || Length > sizeof(s_InData)) return false;
+	s_InBuffer = pBuffer;
 	s_InBusy = true;
 	s_InLength = Length;
-	if (Length > 0U)
-		memcpy(s_InData, s_InBuffer, Length);
+	if (Length > 0U) memcpy(s_InData, pBuffer, Length);
 	return true;
 }
-bool UsbCtrlrEp0Xfer(int, uint8_t, uint8_t *, uint16_t) { return true; }
 }
 
 static int s_Fail;
@@ -118,8 +107,8 @@ static void Receive(const uint8_t *pData, uint16_t Length)
 
 	// ISO OUT DMA is controller owned and lands directly in the registered
 	// buffer. UsbIntrf receives only the transfer-complete notification.
-	s_OutHandler(USB_ENDPADDR_DIROUT(8U), USB_CTRLR_EVT_XFER_CMPL,
-		Length, USB_CTRLR_XFER_SUCCESS, s_OutContext);
+	s_OutHandler(USB_CTRLR_EVT_XFER_CMPL,
+		Length, s_OutContext);
 }
 
 static void CompleteIn(void)
@@ -127,23 +116,24 @@ static void CompleteIn(void)
 	CHECK(s_InBusy);
 	const uint16_t len = s_InLength;
 	s_InBusy = false;
-	s_InHandler(USB_ENDPADDR_DIRIN(8U), USB_CTRLR_EVT_XFER_CMPL,
-		len, USB_CTRLR_XFER_SUCCESS, s_InContext);
+	s_InHandler(USB_CTRLR_EVT_XFER_CMPL,
+		len, s_InContext);
 }
 
 int main(void)
 {
 	UsbIsoIntrf_t iso = {};
+	UsbDevIntrf_t isoData = {};
 	UsbIsoIntrfCfg_t cfg = {};
 	cfg.DevNo = 0;
 	cfg.EpNo = 8U;
 	cfg.RxHandler = RxFrame;
 	cfg.TxHandler = TxFrame;
 
-	CHECK(UsbIsoIntrfInit(&iso, &cfg));
-	CHECK(iso.IntrfData.Mode == USB_INTRF_MODE_DIRECT);
-	CHECK(iso.IntrfData.hRxFifo == nullptr);
-	CHECK(iso.IntrfData.hTxFifo == nullptr);
+	CHECK(UsbIsoIntrfInit(&iso, &isoData, &cfg));
+	CHECK(iso.pData->Mode == USB_INTRF_MODE_DIRECT);
+	CHECK(iso.pData->hRxFifo == nullptr);
+	CHECK(iso.pData->hTxFifo == nullptr);
 	CHECK(UsbIsoIntrfOpen(&iso, 49U, 1U));
 	CHECK(s_OpenCount == 2);
 

@@ -94,15 +94,16 @@ bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
 	return p != nullptr;
 }
 
-// CFifoGet releases its slot before returning it. Copy the event while IRQ
-// producers are excluded, then invoke the local copy with interrupts restored.
+// Keep the head owned until its event is copied. An IRQ producer can reuse
+// the slot as soon as CFifoGet releases it, before the callback runs.
 static bool AppEvtHandlerGet(AppEvtHandlerQue_t *pEvt)
 {
 	AppEvtHandlerQue_t *p =
-		(AppEvtHandlerQue_t *)CFifoGet(s_hAppEvtHandlerFifo);
+		(AppEvtHandlerQue_t *)CFifoPeek(s_hAppEvtHandlerFifo);
 	if (p != nullptr)
 	{
 		*pEvt = *p;
+		CFifoGet(s_hAppEvtHandlerFifo);
 	}
 
 	return p != nullptr;

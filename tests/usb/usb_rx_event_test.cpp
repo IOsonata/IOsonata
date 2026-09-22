@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "usb/usb_intrf.h"
+#include "app_evt_handler.h"
 
 #define MPS 64U
 #define BUFFER_SIZE 128U
@@ -49,11 +50,28 @@ static int AppEvent(DevIntrf_t * const, DEVINTRF_EVT Event,
     return Length;
 }
 
+static void ReceiveDma(void)
+{
+	if (s_HwOutReady && !s_OutDma && s_OutBuffer != nullptr)
+	{
+		s_OutDma = true;
+		s_OutSubmit++;
+	}
+}
+
 extern "C" {
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
 bool UsbCtrlrStart(int) { return true; }
 void UsbCtrlrStop(int) {}
-void UsbCtrlrProcess(int) {}
+void UsbCtrlrProcess(int)
+{
+	AppEvtHandlerExec();
+	if (s_OutBuffer == nullptr && s_OutHandler != nullptr)
+	{
+		s_OutHandler(USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
+	}
+	ReceiveDma();
+}
 bool UsbCtrlrVbusDetected(int) { return true; }
 bool UsbCtrlrHighSpeed(int) { return false; }
 void UsbCtrlrIntEnable(int) {}
@@ -64,16 +82,16 @@ void UsbCtrlrRemoteWakeup(int) {}
 void UsbCtrlrSofEnable(int, bool) {}
 void UsbCtrlrSetAddress(int, uint8_t) {}
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
-void UsbCtrlrEpClose(int, uint8_t) {}
+void UsbCtrlrEpClose(int, uint8_t, bool) {}
 void UsbCtrlrEpCloseAll(int) {}
-void UsbCtrlrEpStall(int, uint8_t) {}
-void UsbCtrlrEpClearStall(int, uint8_t) {}
+void UsbCtrlrEpStall(int, uint8_t, bool) {}
+void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
+void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool Blocking,
                         UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-    if (USB_ENDPADDR_IS_IN(EpAddr))
+    if (bIn)
     {
         s_InBuffer = pBuffer;
         s_InHandler = Handler;
@@ -86,28 +104,19 @@ bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
         s_OutContext = pContext;
         s_OutBlocking = Blocking;
     }
-    return pBuffer != nullptr && Handler != nullptr;
 }
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
+bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
-    if (USB_ENDPADDR_IS_IN(EpAddr))
-    {
-        if (s_InDma) return false;
-        s_InDma = true;
-        s_InLength = Length;
-        s_InSubmit++;
-        return true;
-    }
-
-    // OUT DMA must only be submitted after DRDY for blocking endpoints.
-    if (!s_HwOutReady || s_OutDma) return false;
-    s_OutDma = true;
-    s_OutSubmit++;
-    return true;
+	if ((EpNum & 0x80U) != 0U) return false;
+	if (s_InDma) return false;
+	s_InBuffer = pBuffer;
+	s_InDma = true;
+	s_InLength = Length;
+	s_InSubmit++;
+	return true;
 }
 
-bool UsbCtrlrEp0Xfer(int, uint8_t, uint8_t *, uint16_t) { return true; }
 }
 
 alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(RX_SLOTS, BUFFER_SIZE)];
@@ -118,6 +127,7 @@ static UsbDevIntrf_t s_Intrf;
 
 static bool Setup(bool Blocking)
 {
+    CHECK(AppEvtHandlerInit(nullptr, 0));
     memset(&s_Intrf, 0, sizeof(s_Intrf));
     memset(s_HwOut, 0, sizeof(s_HwOut));
     memset(s_EventLog, 0, sizeof(s_EventLog));
@@ -159,17 +169,18 @@ static bool Setup(bool Blocking)
            UsbIntrfConfigure(&s_Intrf, MPS);
 }
 
-static bool Drdy(const uint8_t *pData, uint16_t Length)
+static bool Drdy(const uint8_t *pData, uint16_t Length, bool Notify = false)
 {
     CHECK(!s_HwOutReady);
     if (s_HwOutReady || Length > sizeof(s_HwOut)) return false;
     if (Length > 0) memcpy(s_HwOut, pData, Length);
     s_HwOutLength = Length;
     s_HwOutReady = true;
-    if (s_OutBlocking)
+    if (s_OutBlocking || Notify)
     {
-        s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
-                     Length, USB_CTRLR_XFER_SUCCESS, s_OutContext);
+        s_OutHandler(USB_CTRLR_EVT_DRDY,
+                     Length, s_OutContext);
+		ReceiveDma();
     }
     else
     {
@@ -190,8 +201,8 @@ static void CompleteOut(void)
     uint16_t len = s_HwOutLength;
     s_HwOutReady = false;
     s_OutDma = false;
-    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
-                 len, USB_CTRLR_XFER_SUCCESS, s_OutContext);
+    s_OutHandler(USB_CTRLR_EVT_XFER_CMPL,
+                 len, s_OutContext);
 }
 
 static void Deliver(const uint8_t *pData, uint16_t Length)
@@ -204,7 +215,7 @@ static void TestNoPreArm(void)
 {
     CHECK(Setup(true));
     CHECK(s_OutBuffer == s_RxDma);
-    CHECK(s_InBuffer == s_TxDma);
+    CHECK(s_InBuffer == nullptr);
     CHECK(s_OutSubmit == 0);
     CHECK(!s_OutDma);
 
@@ -223,7 +234,7 @@ static void TestNoPreArm(void)
     CHECK(s_OutSubmit == 1);
 }
 
-static void TestBlocking(void)
+static void TestBlocking(bool FullEvents)
 {
     CHECK(Setup(true));
     uint8_t p[8] = {};
@@ -244,6 +255,8 @@ static void TestBlocking(void)
     }
 
     uint8_t pending[8] = {0xA5};
+    if (FullEvents)
+        while (AppEvtHandlerQue(0U, nullptr, [](uint32_t, void *) {})) {}
     CHECK(!Drdy(pending, sizeof(pending)));
     CHECK(s_HwOutReady);
     CHECK(!s_OutDma);
@@ -255,6 +268,9 @@ static void TestBlocking(void)
     uint8_t out[8] = {};
     CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
     CHECK(out[0] == 0);
+    CHECK(!s_OutDma && s_Intrf.RxPending);
+    CHECK(s_OutSubmit == (int)RX_SLOTS);
+    UsbCtrlrProcess(0);
     CHECK(s_OutDma);
     CHECK(!s_Intrf.RxPending);
     CHECK(s_OutSubmit == (int)RX_SLOTS + 1);
@@ -265,10 +281,10 @@ static void TestBlocking(void)
     CHECK(s_RxFullEvent == 2);
 }
 
-static void TestNonBlocking(void)
+static void TestNonBlocking(bool Notify)
 {
     CHECK(Setup(false));
-    CHECK(!s_Intrf.hRxFifo->bBlocking);
+    CHECK(!CFifoIsBlocking(s_Intrf.hRxFifo));
     uint8_t p[8] = {};
     for (unsigned i = 0; i < RX_SLOTS; i++)
     {
@@ -276,7 +292,6 @@ static void TestNonBlocking(void)
         Deliver(p, sizeof(p));
     }
     CHECK(CFifoAvail(s_Intrf.hRxFifo) == 0);
-    CHECK(s_Intrf.hRxFifo->DropCnt == 0U);
     CHECK(s_RxFullEvent == 1);
     CHECK(s_RxDataEvent == (int)RX_SLOTS);
     CHECK(s_EventCount >= 2U);
@@ -287,11 +302,11 @@ static void TestNonBlocking(void)
     }
 
     uint8_t newest[8] = {0xA6};
-    CHECK(Drdy(newest, sizeof(newest)));
+    CHECK(Drdy(newest, sizeof(newest), Notify));
     CHECK(s_OutDma);
+    CHECK(!s_Intrf.RxPending);
     CHECK(s_OutSubmit == (int)RX_SLOTS + 1);
     CompleteOut();
-    CHECK(s_Intrf.hRxFifo->DropCnt == 1U);
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == (int)RX_SLOTS);
     CHECK(s_RxFullEvent == 2);
     CHECK(s_RxDataEvent == (int)RX_SLOTS + 1);
@@ -315,12 +330,12 @@ static void TestCancelIsNotCompletion(void)
           (int)sizeof(data));
     CHECK(s_InDma && s_InSubmit == 1);
     const int queued = CFifoUsed(s_Intrf.hTxFifo);
-    CHECK(queued == 3);
+    CHECK(queued == (int)sizeof(data));
 
     // The controller has cancelled the active transfer before delivering CANCEL.
     s_InDma = false;
-    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_CANCEL,
-                MPS, USB_CTRLR_XFER_CANCELLED, s_InContext);
+    s_InHandler(USB_CTRLR_EVT_CANCEL,
+                MPS, s_InContext);
     CHECK(!s_InDma);
     CHECK(s_InSubmit == 1);
     CHECK(CFifoUsed(s_Intrf.hTxFifo) == queued);
@@ -333,8 +348,8 @@ static void TestCancelIsNotCompletion(void)
     CHECK(s_OutDma);
     s_OutDma = false;
     s_HwOutReady = false;
-    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_CANCEL,
-                 0U, USB_CTRLR_XFER_CANCELLED, s_OutContext);
+    s_OutHandler(USB_CTRLR_EVT_CANCEL,
+                 0U, s_OutContext);
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
     CHECK(!s_Intrf.RxPending);
     CHECK(s_RxDataEvent == 0);
@@ -370,14 +385,14 @@ static void TestTxStillChains(void)
     CHECK(memcmp(s_InBuffer, data, MPS) == 0);
 
     s_InDma = false;
-    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
-                MPS, USB_CTRLR_XFER_SUCCESS, s_InContext);
+    s_InHandler(USB_CTRLR_EVT_XFER_CMPL,
+                MPS, s_InContext);
     CHECK(s_InDma && s_InLength == 3U && s_InSubmit == 2);
     CHECK(memcmp(s_InBuffer, data + MPS, 3U) == 0);
 
     s_InDma = false;
-    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
-                3U, USB_CTRLR_XFER_SUCCESS, s_InContext);
+    s_InHandler(USB_CTRLR_EVT_XFER_CMPL,
+                3U, s_InContext);
     CHECK(!s_InDma);
     CHECK(s_TxEmptyEvent == 1);
 }
@@ -385,8 +400,10 @@ static void TestTxStillChains(void)
 int main(void)
 {
     TestNoPreArm();
-    TestBlocking();
-    TestNonBlocking();
+    TestBlocking(false);
+    TestBlocking(true);
+    TestNonBlocking(false);
+    TestNonBlocking(true);
     TestCancelIsNotCompletion();
     TestDisableDoesNotGateController();
     TestTxStillChains();

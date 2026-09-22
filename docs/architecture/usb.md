@@ -96,30 +96,40 @@ when supported, high-speed configuration fragments and registers them through
 `UsbDescriptorRegister()`. Applications provide identity and strings in
 `UsbCfg_t`; they do not provide descriptor callbacks or descriptor contexts.
 
-The `UsbdCdc` object derives from both `UsbDeviceClass` and `DeviceIntrf`.
+The `UsbdCdc` object derives from both `UsbDeviceClass` and `UsbIntrf`.
 Its control requests, configuration selection, reset and deferred pump run
 through the virtual class API.
 
 The C++ `BtHciUsb` object also derives from `UsbDeviceClass` and
-`DeviceIntrf`. HCI command control transfers, configuration selection, HCI
+`UsbIntrf`. Its separate SCO endpoint pair is owned by a `UsbIsoIntrf` member.
+HCI command control transfers, configuration selection, HCI
 and SCO interface options, and reset run through the virtual class API. The
 underlying request and endpoint logic is reused by its virtual methods.
 
 `UsbdBulk`, `UsbdHid` and `UsbdMsc` follow the same model and register their
-class objects directly.
+class objects directly. HID inherits its transport through `UsbIntIntrf`.
 
 ## Current device-side data-path model
 
 `UsbIntrf` is the common bidirectional endpoint-pair data engine. CDC, custom
-Bulk, Isochronous and Interrupt all reuse it.
+Bulk, MSC, HCI, Isochronous and Interrupt all inherit it. `UsbIntrf` derives
+from `DeviceIntrf`, owns one `UsbDevIntrf_t`, and implements the common RX/TX,
+rate and request-to-send methods. Derived classes keep only their protocol or
+transfer-type behavior. C metadata points to that same base-owned data object;
+it does not contain a second transport implementation.
+
+C callers supply a `UsbDevIntrf_t` alongside their specialization state, for
+example `UsbIsoIntrfInit(&iso, &data, &cfg)` or
+`UsbIntIntrfInit(&intrf, &data, &cfg)`. Both objects must remain alive for the
+interface lifetime. C++ initialization supplies the inherited storage.
 
 ```text
                               UsbIntrf
                     generic endpoint-pair engine
-                 fixed RX/TX controller DMA staging
+                 RX buffer and FIFO/direct TX source
                     selected RX/TX data policy
                     endpoint registration/callback
-                           UsbCtrlrEpXfer
+                           UsbCtrlrEpSend
                                |
               +----------------+----------------+
               |                |                |
@@ -151,7 +161,7 @@ UsbdCdc
    |
    +-- Bulk OUT/IN ----------> UsbIntrf
    |                              |
-   |                         UsbCtrlrEpXfer
+   |                         UsbCtrlrEpSend
    |
    +-- Interrupt IN ---------> direct class-owned endpoint
        notifications
@@ -180,7 +190,7 @@ Bulk OUT/IN endpoints
 ```
 
 `UsbdBulk` owns device-side descriptor policy and static controller buffers.
-`UsbIntrf` owns queuing, staging and endpoint transfer completion.
+`UsbIntrf` owns queuing, data ownership and endpoint transfer completion.
 
 ## Mass Storage
 
@@ -202,7 +212,7 @@ UsbIntrf (PACKET mode)
 Bulk OUT/IN endpoint pair
 ```
 
-The class owns fixed endpoint FIFOs and DMA staging. The application supplies
+The class owns fixed endpoint FIFOs and an OUT DMA buffer. The application supplies
 a statically owned `DiskIO` and a statically allocated sector buffer. Class
 initialization rejects a medium whose reported sector size exceeds that
 buffer. `DiskIO` remains responsible for physical read, write, reset and cache
@@ -233,7 +243,7 @@ UsbIntrf
 Isochronous OUT/IN endpoints
         |
         v
-UsbCtrlrEpXfer / endpoint callback
+UsbCtrlrEpSend / endpoint callback
 ```
 
 Future host-side classes should reuse the same `UsbIsoIntrf` transport layer
@@ -251,11 +261,11 @@ logic.
 
 `UsbIntrf` continues to own the common endpoint transfer machinery:
 
-- fixed RX/TX controller buffers;
+- registration of specialization-owned RX/direct TX buffers;
 - endpoint registration;
 - the endpoint callback;
 - BYTE/PACKET CFifos and DIRECT slots;
-- packet-mode and direct-mode staging;
+- FIFO source lifetime and direct-slot publication;
 - endpoint transfer submission;
 - transfer completion handling.
 
@@ -287,13 +297,33 @@ Interrupt OUT/IN endpoints
 ```
 
 DIRECT describes only software storage: one current RX slot, one current TX
-slot and no CFifo. ISO selects the existing non-blocking behavior, so DIRECT
-ignores `USB_CTRLR_EVT_DRDY` while the ISO controller path services scheduled
-opportunities. Interrupt selects the existing blocking behavior, so DIRECT
-services `USB_CTRLR_EVT_DRDY` through the normal controller transfer call.
-There is no separate RX arm or re-arm API.
+slot and no CFifo. The nRF52 controller queues every regular OUT packet for
+DMA, including Interrupt endpoints, without a blocking/DRDY split. DIRECT
+completion replaces any unread RX packet and increments `RxDropCnt` for that
+replacement. ISO also publishes received packets directly from its scheduled
+DMA path. There is no separate RX arm or re-arm API.
 
-`UsbIntIntrf` contains no HID report or descriptor behavior. `UsbdHid` embeds
+The regular DMA queue rejects an enqueue when full, preserving queued and
+active transfers. An OUT request that cannot enter the queue is deferred to
+AppEvt, whose callback retries the enqueue directly without a DRDY callback.
+
+For BYTE/PACKET RX, a failed CFifo put defers the completion through AppEvt
+when `bBlocking` is true. The completed packet stays in the existing RX DMA
+buffer, which is withheld from the controller until the copy succeeds. The
+pending field retains its length, including zero-length packets. The controller
+retries a withheld OUT buffer through its foreground DRDY callback, including
+when AppEvt was full. Reading RX only consumes received data. A failed put with `bBlocking` false increments `RxDropCnt` and drops
+the packet. Successful non-blocking CFifo puts keep their replace-oldest policy.
+
+The nRF52 retains the next OUT request in `EPDATASTATUS` until it can enter the
+DMA queue, including while the registered RX buffer is withheld. AppEvt and
+foreground retries consume that status bit once before starting DMA. Other
+endpoints continue to use the shared DMA channel. The generic DRDY path remains
+available for controllers to ask the interface to release or withhold its RX
+buffer. Returning from DRDY does not submit a transfer; the controller schedules
+receive DMA using the registered buffer.
+
+`UsbIntIntrf` contains no HID report or descriptor behavior. `UsbdHid` inherits
 it and owns the device-side HID descriptor, class requests and report policy.
 
 The nRF52840 `UsbIntLoopback` project exercises this transport without adding
@@ -339,7 +369,7 @@ The central controller concepts are:
 ```text
 UsbCtrlrInit
 UsbCtrlrEpOpen / UsbCtrlrEpClose
-UsbCtrlrEpXfer
+UsbCtrlrEpSend
 Event callback
 ```
 
@@ -388,17 +418,27 @@ There are no class-specific controller transfer calls such as `CdcXfer()`,
 
 ### Endpoint transfer
 
-Non-control data endpoints use one common operation:
+Non-control data endpoints use one send operation:
 
 ```text
-UsbCtrlrEpXfer(DevNo, EpAddr, Length)
+UsbCtrlrEpSend(DevNo, EpNum, pBuffer, Length)
 ```
 
-The controller already knows the endpoint type because it was established when
-the endpoint was opened/configured.
+`EpNum` is the endpoint number, without a direction bit. Send means device IN
+or host OUT; the current Nordic ports implement device mode. `pBuffer` is the
+DMA source and remains valid until the endpoint completion callback. On nRF52,
+NULL selects the registered TX byte CFifo; packet and direct modes pass their
+payload pointer explicitly. A zero-length send still passes its direct buffer.
+
+The controller already knows the endpoint type from open/configure. It schedules
+receives into the registered RX buffer, and stops while that buffer is withheld.
+There is no public receive-submission or direction-multiplexing transfer API.
 
 Endpoint callbacks are delivered directly to the registered endpoint owner.
 Nonzero endpoint completion is not routed through the USB class table.
+The callback receives the endpoint address, event, length and registered context.
+`USB_CTRLR_EVT_XFER_CMPL` means success. Failures use
+`USB_CTRLR_EVT_XFER_FAILED`; cancellation uses `USB_CTRLR_EVT_CANCEL`.
 
 ```text
 controller interrupt
@@ -429,6 +469,23 @@ SETUP
 outside `UsbIntrf` and `UsbIsoIntrf` so the reusable data layers do not become
 device-mode specific.
 
+`UsbCtrlrEp0Send()` copies the accepted IN bytes before returning their count.
+The core advances its IN offset by that return value; IN completion is only a
+notification that the copied chunk finished. It submits any remaining bytes
+through the same API on completion.
+The controller arms EP0 OUT from SETUP and reports each received packet through
+the existing EP0 transfer event after DMA completes. Its event buffer is valid
+only during that callback; the core validates the received length and copies it
+into the control response buffer. The nRF52 controller uses a packet-sized DMA
+buffer and does not count the remaining control request bytes.
+`UsbCtrlrEp0Status()` starts the status stage. Data completion uses the same EP0
+event path for both directions, without an intermediate application event.
+
+The nRF52 ISO controller keeps one pending DMA packet length per direction.
+Zero means a requested ZLP; minus one means no packet is waiting. Completion
+reads the hardware AMOUNT register while the endpoint is still held for its
+callback. There is no second buffer pointer or software actual-length copy.
+
 ## Interrupt endpoints
 
 Interrupt endpoints are normally event/notification endpoints rather than
@@ -444,7 +501,7 @@ class state changes
 build notification
         |
         v
-UsbCtrlrEpXfer(Interrupt IN)
+UsbCtrlrEpSend(Interrupt IN)
         |
         v
 class endpoint callback
@@ -488,9 +545,9 @@ OUT = receive
 IN  = transmit
 ```
 
-The derived/specialized layer supplies fixed controller RX/TX buffers.
-`UsbIntrf` registers those buffers once and later submits only endpoint address
-and length.
+The derived/specialized layer supplies the RX buffer and, in DIRECT mode, the
+TX slot. BYTE/PACKET TX uses the existing CFifo as its source. `UsbIntrf`
+registers the endpoint context and submits endpoint address and length.
 
 RX packet boundaries are preserved internally with:
 
@@ -526,7 +583,7 @@ The USB data path uses static storage.
 
 ```text
 Derived class / specialization
-    -> RX/TX controller DMA staging
+    -> RX buffer and DIRECT-mode RX/TX slots
 
 UsbIntrf
     -> BYTE/PACKET CFifos or DIRECT slot ownership
@@ -535,9 +592,10 @@ UsbCtrlr port
     -> hardware/DMA transaction state
 ```
 
-CFifo storage and controller DMA staging are intentionally separate so queued
-software storage can be reused without modifying memory currently owned by the
-controller.
+BYTE/PACKET IN DMA reads the TX CFifo without consuming it. Host-consumption
+completion releases that data. The nRF52 regular DMA queue holds its entry until
+ENDEP, including any inline alignment scratch. Controller DMA completion and
+TX FIFO completion remain separate ownership events.
 
 ## Current device lifecycle
 
@@ -568,7 +626,7 @@ Internally:
 6. `UsbEnable()` assembles and validates the complete configuration descriptor
    before it connects the controller.
 7. Configuration or alternate-setting selection opens the endpoint descriptors.
-8. Transfers use `UsbCtrlrEpXfer()`.
+8. Sends use `UsbCtrlrEpSend()`; the controller schedules receives.
 9. Reset/unconfiguration closes endpoints and clears active transport state.
 10. VBUS removal calls each device class `Detach()` before the application
     cable event. This permits physical-removal policy, such as reloading a

@@ -70,7 +70,7 @@ static void UsbdHidTx(UsbIntIntrf_t *, uint16_t Length,
 
 static void UsbdHidUnconfigure(UsbdHidDev_t *pHid)
 {
-	UsbIntIntrfClose(&pHid->IntIntrf);
+	UsbIntIntrfClose(pHid->pIntIntrf);
 	pHid->Configured = false;
 }
 
@@ -87,7 +87,7 @@ static bool UsbdHidConfig(UsbdHidDev_t *pHid, uint8_t Configuration)
 		return true;
 	}
 	if (Configuration != USBD_HID_CONFIG_VALUE ||
-		!UsbIntIntrfOpen(&pHid->IntIntrf, UsbdHidMps(pHid),
+		!UsbIntIntrfOpen(pHid->pIntIntrf, UsbdHidMps(pHid),
 			UsbdHidInterval(pHid)))
 	{
 		return false;
@@ -101,7 +101,7 @@ static void UsbdHidReset(UsbdHidDev_t *pHid)
 {
 	if (pHid != nullptr)
 	{
-		UsbIntIntrfReset(&pHid->IntIntrf);
+		UsbIntIntrfReset(pHid->pIntIntrf);
 		pHid->Configured = false;
 		pHid->Idle = 0U;
 		pHid->ActiveProtocol = USBD_HID_PROTOCOL_REPORT;
@@ -325,6 +325,7 @@ bool UsbdHidMakeDesc(UsbdHidDesc_t *pDesc,
 }
 
 static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
+								UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 								const UsbdHidCfg_t *pCfg,
 								UsbDeviceClass *pClass)
 {
@@ -342,6 +343,7 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	}
 
 	memset(pHid, 0, sizeof(*pHid));
+	pHid->pIntIntrf = pIntrf;
 	pHid->DevNo = pCfg->DevNo;
 	pHid->pReportDesc = pCfg->pReportDesc;
 	pHid->ReportDescLength = pCfg->ReportDescLength;
@@ -396,7 +398,7 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	intCfg.RxHandler = UsbdHidRx;
 	intCfg.TxHandler = UsbdHidTx;
 	intCfg.pContext = pHid;
-	if (!UsbIntIntrfInit(&pHid->IntIntrf, &intCfg))
+	if (!UsbIntIntrfInit(pHid->pIntIntrf, pData, &intCfg))
 	{
 		return false;
 	}
@@ -424,7 +426,8 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 
 bool UsbdHid::Init(const UsbdHidCfg_t &Cfg)
 {
-	return UsbdHidInitInternal(&vUsbdHid, &Cfg, this);
+	return UsbdHidInitInternal(&vUsbdHid, &vUsbIntIntrf,
+		&vUsbDevIntrf, &Cfg, this);
 }
 
 bool UsbdHid::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
@@ -447,19 +450,19 @@ bool UsbdHidSendReport(UsbdHidDev_t *pHid, const uint8_t *pData,
 					   uint16_t Length)
 {
 	return pHid != nullptr && pHid->Configured &&
-		UsbIntIntrfSendPacket(&pHid->IntIntrf, pData, Length);
+		UsbIntIntrfSendPacket(pHid->pIntIntrf, pData, Length);
 }
 
 void UsbdHidSuspend(UsbdHidDev_t *pHid)
 {
 	if (pHid != nullptr && pHid->Configured)
 	{
-		UsbIntIntrfSuspend(&pHid->IntIntrf);
+		UsbIntIntrfSuspend(pHid->pIntIntrf);
 	}
 }
 
 bool UsbdHidResume(UsbdHidDev_t *pHid)
 {
 	return pHid != nullptr && pHid->Configured &&
-		UsbIntIntrfResume(&pHid->IntIntrf);
+		UsbIntIntrfResume(pHid->pIntIntrf);
 }

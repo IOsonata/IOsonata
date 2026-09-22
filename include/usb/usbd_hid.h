@@ -4,7 +4,7 @@
 @brief	Generic USB HID device class.
 
 UsbdHid owns HID descriptors and class requests. Interrupt report transport is
-provided by the embedded UsbIntIntrf. The application supplies the report
+provided by the inherited UsbIntIntrf. The application supplies the report
 descriptor and handles GET_REPORT and SET_REPORT payloads.
 
 @author	Hoang Nguyen Hoan
@@ -104,7 +104,7 @@ typedef struct __Usbd_Hid_Config {
 struct __Usbd_Hid_Dev {
 	int DevNo;
 	int ItfNo;					//!< Internal allocation
-	UsbIntIntrf_t IntIntrf;
+	UsbIntIntrf_t *pIntIntrf;
 	const uint8_t *pReportDesc;
 	UsbdHidRxHandler_t RxHandler;
 	UsbdHidTxHandler_t TxHandler;
@@ -150,13 +150,13 @@ bool UsbdHidMakeDesc(UsbdHidDesc_t *pDesc, const UsbdHidDev_t *pHid,
 
 static inline bool UsbdHidTxReady(const UsbdHidDev_t *pHid)
 {
-	return pHid != NULL && UsbIntIntrfTxReady(&pHid->IntIntrf);
+	return pHid != NULL && UsbIntIntrfTxReady(pHid->pIntIntrf);
 }
 
 #ifdef __cplusplus
 }
 
-class UsbdHid : public UsbDeviceClass, public DeviceIntrf {
+class UsbdHid : public UsbDeviceClass, public UsbIntIntrf {
 public:
 	UsbdHid() = default;
 	UsbdHid(const UsbdHid &) = delete;
@@ -168,19 +168,11 @@ public:
 	bool SelectConfig(uint8_t ConfigValue) override;
 	void Reset(void) override;
 
-	operator DevIntrf_t * () override {
-		return &vUsbdHid.IntIntrf.IntrfData.DevIntrf;
-	}
+	using UsbIntIntrf::operator DevIntrf_t *;
 	operator UsbdHidDev_t * () { return &vUsbdHid; }
-	DevIntrf_t *Data(void) { return &vUsbdHid.IntIntrf.IntrfData.DevIntrf; }
-
-	uint32_t Rate(uint32_t DataRate) override {
-		return DeviceIntrfSetRate(Data(), DataRate);
-	}
-	uint32_t Rate(void) override { return DeviceIntrfGetRate(Data()); }
 
 	bool RequestToSend(int NbBytes) override {
-		return NbBytes >= 0 && NbBytes <= (int)vUsbdHid.IntIntrf.Mps &&
+		return NbBytes >= 0 && NbBytes <= (int)vUsbIntIntrf.Mps &&
 			UsbdHidTxReady(&vUsbdHid);
 	}
 
@@ -188,16 +180,10 @@ public:
 		(void)DevAddr;
 		return TxData(pData, DataLen);
 	}
-	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRx(Data(), DevAddr, pBuff, BuffLen);
-	}
 	int TxData(const uint8_t *pData, int DataLen) override {
 		return DataLen >= 0 && DataLen <= UINT16_MAX &&
 			UsbdHidSendReport(&vUsbdHid, pData, (uint16_t)DataLen) ?
 			DataLen : 0;
-	}
-	int RxData(uint8_t *pBuff, int BuffLen) override {
-		return DeviceIntrfRxData(Data(), pBuff, BuffLen);
 	}
 
 	bool SendReport(const uint8_t *pData, uint16_t Length) {

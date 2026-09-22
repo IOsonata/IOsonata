@@ -43,6 +43,15 @@ static uint16_t s_InLength;
 static int s_OutSubmitCount;
 static int s_SendCount;
 
+static void ReceiveDma(void)
+{
+	if (s_HwOutReady && !s_OutDma && s_OutBuffer != nullptr)
+	{
+		s_OutDma = true;
+		s_OutSubmitCount++;
+	}
+}
+
 extern "C" {
 const UsbCfg_t *UsbGetCfg(int DevNo)
 {
@@ -59,12 +68,12 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
     return true;
 }
 
-void UsbCtrlrEpClose(int, uint8_t) { s_CloseCount++; }
+void UsbCtrlrEpClose(int, uint8_t, bool) { s_CloseCount++; }
 
-bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
+void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool Blocking,
                         UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-    if (USB_ENDPADDR_IS_IN(EpAddr))
+    if (bIn)
     {
         s_InBuffer = pBuffer;
         s_InHandler = Handler;
@@ -77,29 +86,19 @@ bool UsbCtrlrEpRegister(int, uint8_t EpAddr, uint8_t *pBuffer, bool Blocking,
         s_OutContext = pContext;
         s_OutBlocking = Blocking;
     }
-    return pBuffer != nullptr && Handler != nullptr;
 }
 
-bool UsbCtrlrEpXfer(int, uint8_t EpAddr, uint16_t Length)
+bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
-    if (USB_ENDPADDR_IS_IN(EpAddr))
-    {
-        if (s_InBusy)
-            return false;
-        s_InBusy = true;
-        s_InLength = Length;
-        s_SendCount++;
-        return true;
-    }
-
-    if (!s_HwOutReady || s_OutDma)
-        return false;
-    s_OutDma = true;
-    s_OutSubmitCount++;
-    return true;
+	if ((EpNum & 0x80U) != 0U) return false;
+	if (s_InBusy) return false;
+	s_InBuffer = pBuffer;
+	s_InBusy = true;
+	s_InLength = Length;
+	s_SendCount++;
+	return true;
 }
 
-bool UsbCtrlrEp0Xfer(int, uint8_t, uint8_t *, uint16_t) { return true; }
 }
 
 bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
@@ -209,8 +208,9 @@ static void DeliverOut(const uint8_t *pData, uint16_t Length)
     s_HwOutLength = Length;
     s_HwOutReady = true;
 
-    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_DRDY,
-                 Length, USB_CTRLR_XFER_SUCCESS, s_OutContext);
+    s_OutHandler(USB_CTRLR_EVT_DRDY,
+                 Length, s_OutContext);
+	ReceiveDma();
     CHECK(s_OutDma);
     if (!s_OutDma)
         return;
@@ -219,8 +219,8 @@ static void DeliverOut(const uint8_t *pData, uint16_t Length)
         memcpy(s_OutBuffer, s_HwOut, Length);
     s_HwOutReady = false;
     s_OutDma = false;
-    s_OutHandler(USB_ENDPADDR_DIROUT(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
-                 s_HwOutLength, USB_CTRLR_XFER_SUCCESS, s_OutContext);
+    s_OutHandler(USB_CTRLR_EVT_XFER_CMPL,
+                 s_HwOutLength, s_OutContext);
 }
 
 static void CompleteIn(void)
@@ -230,8 +230,8 @@ static void CompleteIn(void)
         return;
     const uint16_t length = s_InLength;
     s_InBusy = false;
-    s_InHandler(USB_ENDPADDR_DIRIN(EP_NO), USB_CTRLR_EVT_XFER_CMPL,
-                length, USB_CTRLR_XFER_SUCCESS, s_InContext);
+    s_InHandler(USB_CTRLR_EVT_XFER_CMPL,
+                length, s_InContext);
 }
 
 static void TestDescriptor(void)
@@ -241,6 +241,10 @@ static void TestDescriptor(void)
     UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
 
     CHECK(bulk.Init(cfg));
+    UsbIntrf *pTransport = &bulk;
+    DeviceIntrf *pDevice = pTransport;
+    CHECK(pTransport->Data() == &static_cast<UsbdBulkDev_t *>(bulk)->pData->DevIntrf);
+    CHECK(static_cast<DevIntrf_t *>(*pDevice) == bulk.Data());
 	CHECK(s_FsDescriptorLength == sizeof(UsbdBulkDesc_t));
 	const UsbdBulkDesc_t &desc =
 		*reinterpret_cast<const UsbdBulkDesc_t *>(s_FsDescriptor);
@@ -282,7 +286,7 @@ static void TestByteMode(void)
     CHECK(bulk.Init(cfg));
     CHECK(s_ClassRegistered);
     CHECK(s_ClassObject == &bulk);
-    CHECK(s_OutBuffer != nullptr && s_InBuffer != nullptr);
+    CHECK(s_OutBuffer != nullptr && s_InBuffer == nullptr);
     CHECK(s_OutBuffer != s_InBuffer);
     CHECK(s_OutSubmitCount == 0);
 
@@ -297,11 +301,11 @@ static void TestByteMode(void)
     DeliverOut(rx, sizeof(rx));
     CHECK(s_OutSubmitCount == 1);
     uint8_t received[sizeof(rx)] = {};
-    CHECK(bulk.RxData(received, sizeof(received)) == (int)sizeof(received));
+    CHECK(static_cast<UsbIntrf *>(&bulk)->RxData(received, sizeof(received)) == (int)sizeof(received));
     CHECK(memcmp(received, rx, sizeof(rx)) == 0);
 
     const uint8_t tx[] = { 5U, 6U, 7U };
-    CHECK(bulk.TxData(tx, sizeof(tx)) == (int)sizeof(tx));
+    CHECK(static_cast<UsbIntrf *>(&bulk)->TxData(tx, sizeof(tx)) == (int)sizeof(tx));
     CHECK(s_InBusy && s_InLength == sizeof(tx));
     CHECK(memcmp(s_InBuffer, tx, sizeof(tx)) == 0);
     CompleteIn();
@@ -333,7 +337,7 @@ static void TestPacketMode(void)
     pPacket->Hdr.Length = 5U;
     memcpy(pPacket->Data, "bulk!", 5U);
 
-    CHECK(bulk.TxData(block, sizeof(block)) == (int)sizeof(block));
+    CHECK(static_cast<UsbIntrf *>(&bulk)->TxData(block, sizeof(block)) == (int)sizeof(block));
     CHECK(s_InBusy && s_InLength == 5U);
     CHECK(memcmp(s_InBuffer, "bulk!", 5U) == 0);
 }

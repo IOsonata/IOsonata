@@ -44,17 +44,16 @@ SOFTWARE.
 #include "nrf.h"
 #include "nrf_peripherals.h"
 #include "hal/nrf_ficr.h"
-
-#include "istddef.h"
-#include "coredev/interrupt.h"
-#include "usb/usb.h"
-
-
 // Bus power, clock and VBUS.
 // The USBHS clock and VBUS regulator are separate peripherals on this part.
 #include "hal/nrf_clock.h"
 #include "hal/nrf_vregusb.h"
 #include "soc/nrfx_coredep.h"
+
+#include "istddef.h"
+#include "app_evt_handler.h"
+#include "coredev/interrupt.h"
+#include "usb/usb.h"
 
 
 #ifndef NRFX_USBD_XTAL_WAIT_LOOPS
@@ -66,7 +65,6 @@ SOFTWARE.
 #endif
 
 
-
 // Undocumented VREGUSB status register. The events below report the edges and
 // are in the MDK, but the level is not, and something has to answer what the
 // state is at start up before any edge has happened. Offset and bit are as
@@ -75,42 +73,6 @@ SOFTWARE.
 #define NRFX_USBD_VREGUSB_STATUS_OFS		0x400UL
 #define NRFX_USBD_VREGUSB_STATUS_VBUSDET	(1UL << 2)
 
-
-enum
-{
-	NRF_USB_EP_COUNT = USB_EPIN_CNT(0) > USB_EPOUT_CNT(0) ?
-		USB_EPIN_CNT(0) : USB_EPOUT_CNT(0),
-};
-
-typedef struct __nRF_Usb_Ep_Registration
-{
-	uint8_t *pBuffer;
-	UsbCtrlrEpHandler_t Handler;
-	void *pContext;
-	uint16_t Mps;
-	bool bBlocking;
-} nRFUsbEpReg_t;
-
-// Fixed data-endpoint ownership lives outside the active-transfer state so a
-// bus reset can cancel transfers without losing registrations.
-static nRFUsbEpReg_t s_EpReg[NRF_USB_EP_COUNT][2];
-
-// One USB controller per part, so the common power/clock state is file scope.
-// Controller interrupts are owned by the corresponding UsbdCtrlr backend.
-static uint8_t s_UsbdIntPrio;
-static bool s_UsbdLowPowerSuspend;
-static bool s_UsbdInitialized = false;
-static bool s_UsbdStarted = false;
-static bool s_UsbdXtalHeld = false;
-static bool s_UsbdVbusLast = false;
-
-
-// The nRF54 reports VBUS edges, so retain the resulting level here.
-static bool s_UsbdVbusLevel = false;
-
-//
-// nRF54 USBHS constants, types and state.
-//
 
 #ifndef USBHSCORE_PRESENT
 #error "usbd_ctrlr_nrf54: this part has no USBHS core"
@@ -245,6 +207,21 @@ static bool s_UsbdVbusLevel = false;
 #define NRF54_USBD_DOEPMSK_SETUP			(1UL << 3)
 #define NRF54_USBD_DIEPMSK_XFRC			(1UL << 0)
 
+enum
+{
+	NRF_USB_EP_COUNT = USB_EPIN_CNT(0) > USB_EPOUT_CNT(0) ?
+		USB_EPIN_CNT(0) : USB_EPOUT_CNT(0),
+};
+
+typedef struct __nRF_Usb_Ep_Registration
+{
+	uint8_t *pBuffer;
+	UsbCtrlrEpHandler_t Handler;
+	void *pContext;
+	uint16_t Mps;
+	bool bBlocking;
+} nRFUsbEpReg_t;
+
 typedef struct __nRF54_Usbd_Xfer
 {
 	uint8_t *pBuffer;
@@ -268,6 +245,23 @@ typedef struct __nRF54_Usbd_Ctrlr
 	uint8_t PendingAddress;
 } nRF54UsbdCtrlr_t;
 
+// Fixed data-endpoint ownership lives outside the active-transfer state so a
+// bus reset can cancel transfers without losing registrations.
+static nRFUsbEpReg_t s_EpReg[NRF_USB_EP_COUNT][2];
+
+// One USB controller per part, so the common power/clock state is file scope.
+// Controller interrupts are owned by the corresponding UsbdCtrlr backend.
+static uint8_t s_UsbdIntPrio;
+static bool s_UsbdLowPowerSuspend;
+static bool s_UsbdInitialized = false;
+static bool s_UsbdStarted = false;
+static bool s_UsbdXtalHeld = false;
+static bool s_UsbdVbusLast = false;
+
+
+// The nRF54 reports VBUS edges, so retain the resulting level here.
+static bool s_UsbdVbusLevel = false;
+
 static nRF54UsbdCtrlr_t s_Ctrlr;
 
 static uint32_t s_SetupBuffer[(NRF54_USBD_SETUP_COUNT * NRF54_USBD_SETUP_SIZE) /
@@ -275,6 +269,8 @@ static uint32_t s_SetupBuffer[(NRF54_USBD_SETUP_COUNT * NRF54_USBD_SETUP_SIZE) /
 static uint32_t s_Ep0Bounce[NRF54_USBD_EP0_MPS / sizeof(uint32_t)]
 	__attribute__((aligned(4)));
 
+
+static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalBytes);
 
 /// Only DevNo 0 exists on every nRF part shipped so far.
 static inline __attribute__((always_inline))
@@ -297,10 +293,10 @@ nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpAddr)
 
 static inline __attribute__((always_inline))
 void nRFUsbEpRegisteredEvent(uint8_t EpAddr, UsbCtrlrEvtType_t Event,
-								 uint16_t Length, UsbCtrlrXferResult_t Result)
+								 uint16_t Length)
 {
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
-	pReg->Handler(EpAddr, Event, Length, Result, pReg->pContext);
+	pReg->Handler(Event, Length, pReg->pContext);
 }
 
 __attribute__((weak)) bool UsbdXtalRequest(void)
@@ -332,7 +328,6 @@ __attribute__((weak)) void UsbdXtalRelease(void)
 	// Left running. Other peripherals take this clock without
 	// counting, so stopping one here would stop it under them.
 }
-
 
 
 /**
@@ -647,12 +642,11 @@ static void nRF54UsbdEmitSimple(UsbCtrlrEvtType_t Type)
 	nRF54UsbdEmit(&evt);
 }
 
-static void nRF54UsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
-							  UsbCtrlrXferResult_t Result)
+static void nRF54UsbdEmitXfer(uint8_t EpAddr, uint16_t Length)
 {
 	if (USB_ENDPADDR_NUM(EpAddr) != 0U)
 	{
-		nRFUsbEpRegisteredEvent(EpAddr, USB_CTRLR_EVT_XFER_CMPL, Length, Result);
+		nRFUsbEpRegisteredEvent(EpAddr, USB_CTRLR_EVT_XFER_CMPL, Length);
 		return;
 	}
 
@@ -661,7 +655,8 @@ static void nRF54UsbdEmitXfer(uint8_t EpAddr, uint16_t Length,
 		.Xfer = {
 			.EpAddr = EpAddr,
 			.Length = Length,
-			.Result = Result,
+			.Result = USB_CTRLR_XFER_SUCCESS,
+			.pBuffer = (const uint8_t *)s_Ep0Bounce,
 		},
 	};
 
@@ -936,6 +931,7 @@ static bool nRF54UsbdStartEp0Chunk(uint8_t EpAddr)
 			memcpy(s_Ep0Bounce, pXfer->pBuffer + pXfer->ActualLen, chunk);
 		}
 
+		pXfer->pBuffer = NULL;
 		NRF54_USBD_DIEPDMA(0) = (uint32_t)(uintptr_t)s_Ep0Bounce;
 		NRF54_USBD_DIEPTSIZ(0) =
 			chunk | (1UL << NRF54_USBD_DIEPTSIZ0_PKTCNT_Pos);
@@ -971,32 +967,16 @@ static void nRF54UsbdCompleteEp0(uint8_t EpAddr)
 						   NRF54_USBD_DOEPTSIZ0_XFERSIZE_Msk);
 		const uint16_t received = left < chunk ?
 			(uint16_t)(chunk - left) : 0U;
-
-		if (received > 0U)
-		{
-			memcpy(pXfer->pBuffer + pXfer->ActualLen,
-				   s_Ep0Bounce, received);
-		}
 		pXfer->ActualLen = (uint16_t)(pXfer->ActualLen + received);
-
-		if (received < chunk)
-		{
-			pXfer->Started = false;
-			nRF54UsbdEmitXfer(EpAddr, pXfer->ActualLen,
-							 USB_CTRLR_XFER_SUCCESS);
-			return;
-		}
-	}
-	else
-	{
-		pXfer->ActualLen = (uint16_t)(pXfer->ActualLen + chunk);
-	}
-
-	if (pXfer->ActualLen < pXfer->TotalLen)
-	{
-		(void)nRF54UsbdStartEp0Chunk(EpAddr);
+		const bool more = received == chunk && pXfer->ActualLen < pXfer->TotalLen;
+		pXfer->Started = more;
+		nRF54UsbdEmitXfer(EpAddr, received);
+		if (more)
+			(void)nRF54UsbdStartEp0Chunk(EpAddr);
 		return;
 	}
+
+	pXfer->ActualLen = (uint16_t)(pXfer->ActualLen + chunk);
 
 	const uint16_t total = pXfer->ActualLen;
 	const bool zeroLength = pXfer->TotalLen == 0U;
@@ -1017,7 +997,7 @@ static void nRF54UsbdCompleteEp0(uint8_t EpAddr)
 		nRF54UsbdPrimeSetup();
 	}
 
-	nRF54UsbdEmitXfer(EpAddr, total, USB_CTRLR_XFER_SUCCESS);
+	nRF54UsbdEmitXfer(EpAddr, total);
 }
 
 static void nRF54UsbdCompleteData(uint8_t EpAddr)
@@ -1047,7 +1027,12 @@ static void nRF54UsbdCompleteData(uint8_t EpAddr)
 
 	pXfer->ActualLen = actual;
 	pXfer->Started = false;
-	nRF54UsbdEmitXfer(EpAddr, actual, USB_CTRLR_XFER_SUCCESS);
+	nRF54UsbdEmitXfer(EpAddr, actual);
+	if (!USB_ENDPADDR_IS_IN(EpAddr) &&
+		(NRF54_USBD_DAINTMSK & NRF54_USBD_DAINT_OUT(epNum)) != 0U)
+	{
+		(void)nRFUsbRegEpXfer(epNum, NULL, pXfer->Mps);
+	}
 }
 
 static void nRF54UsbdBusReset(void)
@@ -1107,6 +1092,15 @@ static void nRF54UsbdSetupEvent(void)
 	UsbCtrlrEvt_t evt = { .Type = USB_CTRLR_EVT_SETUP };
 	memcpy(&evt.Setup, (const void *)setupAddr, sizeof(evt.Setup));
 	nRF54UsbdEmit(&evt);
+	if ((evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) == 0U &&
+		evt.Setup.wLength != 0U)
+	{
+		nRF54UsbdXfer_t *pXfer = &s_Ctrlr.Xfer[0][0];
+		pXfer->TotalLen = evt.Setup.wLength;
+		pXfer->ActualLen = 0U;
+		pXfer->Started = true;
+		(void)nRF54UsbdStartEp0Chunk(USB_ENDPADDR_DIR_OUT);
+	}
 }
 
 static void nRF54UsbdInInterrupt(void)
@@ -1420,6 +1414,7 @@ static bool nRFUsbRegEpOpen(uint8_t epAddr, uint8_t type, uint16_t mps)
 			   NRF54_USBD_DEPCTL_SETD0PID;
 		NRF54_USBD_DOEPCTL(epNum) = ctl;
 		NRF54_USBD_DAINTMSK |= NRF54_USBD_DAINT_OUT(epNum);
+		(void)nRFUsbRegEpXfer(epNum, NULL, mps);
 	}
 
 	return true;
@@ -1468,6 +1463,10 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
 	uint8_t *pDmaBuffer = epNum == 0U ? pBuffer :
 		nRFUsbGetEpReg(EpAddr)->pBuffer;
+	if (epNum != 0U && !USB_ENDPADDR_IS_IN(EpAddr) && pDmaBuffer == NULL)
+	{
+		return false;
+	}
 	nRF54UsbdXfer_t *pXfer = nRF54UsbdGetXfer(EpAddr);
 
 	pXfer->pBuffer = epNum == 0U ? pBuffer : NULL;
@@ -1510,12 +1509,6 @@ static bool nRFUsbRegEpXfer(uint8_t EpAddr, uint8_t *pBuffer, uint16_t TotalByte
 	}
 
 	return true;
-}
-
-static inline __attribute__((always_inline))
-bool nRFUsbRegDataEpXfer(uint8_t EpAddr, uint16_t Length)
-{
-	return nRFUsbRegEpXfer(EpAddr, NULL, Length);
 }
 
 static uint16_t nRFUsbRegEpMps(uint8_t EpAddr)
@@ -1697,6 +1690,27 @@ void UsbCtrlrProcess(int DevNo)
 	if (nRFUsbValidDevNo(DevNo))
 	{
 		nRFUsbPowerProcess();
+		AppEvtHandlerExec();
+		if (!s_Ctrlr.Started)
+		{
+			return;
+		}
+		const uint32_t state = DisableInterrupt();
+		for (uint8_t epNum = 1U; epNum < NRF_USB_EP_COUNT; epNum++)
+		{
+			if ((NRF54_USBD_DAINTMSK & NRF54_USBD_DAINT_OUT(epNum)) == 0U ||
+				s_Ctrlr.Xfer[epNum][0].Started)
+			{
+				continue;
+			}
+			nRFUsbEpReg_t *pReg = &s_EpReg[epNum][0];
+			if (pReg->pBuffer == NULL && pReg->Handler != NULL)
+			{
+				nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U);
+			}
+			(void)nRFUsbRegEpXfer(epNum, NULL, s_Ctrlr.Xfer[epNum][0].Mps);
+		}
+		EnableInterrupt(state);
 	}
 }
 
@@ -1778,18 +1792,21 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 			pDesc->bmAttributes & 0x03U, pDesc->wMaxPacketSize);
 }
 
-bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpAddr, uint8_t Type,
+bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 						 uint16_t MaxPacketSize)
 {
+	const uint8_t epAddr = (uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
 	return nRFUsbValidDevNo(DevNo) &&
-		nRFUsbRegEpOpen(EpAddr, Type, MaxPacketSize);
+		nRFUsbRegEpOpen(epAddr, Type, MaxPacketSize);
 }
 
-void UsbCtrlrEpClose(int DevNo, uint8_t EpAddr)
+void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 {
 	if (nRFUsbValidDevNo(DevNo))
 	{
-		nRFUsbRegEpClose(EpAddr);
+		nRFUsbRegEpClose((uint8_t)(EpNo |
+			(bIn ? USB_ENDPADDR_DIR_IN : 0U)));
 	}
 }
 
@@ -1801,71 +1818,63 @@ void UsbCtrlrEpCloseAll(int DevNo)
 	}
 }
 
-bool UsbCtrlrEpRegister(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
-						bool bBlocking, UsbCtrlrEpHandler_t Handler, void *pContext)
+void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
+					 bool bBlocking,
+					 UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	const uint8_t epNum = USB_ENDPADDR_NUM(EpAddr);
-	if (!nRFUsbValidDevNo(DevNo) || epNum == 0U ||
-		epNum >= NRF_USB_EP_COUNT ||
-		(EpAddr & ~(USB_ENDPADDR_DIR_MASK | USB_ENDPADDR_NUM_MASK)) != 0U ||
-		pBuffer == NULL || Handler == NULL)
+	if (!nRFUsbValidDevNo(DevNo))
 	{
-		return false;
+		return;
 	}
-
-	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpAddr);
+	const uint8_t epAddr = (uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epAddr);
 	pReg->pBuffer = pBuffer;
 	pReg->Handler = Handler;
 	pReg->pContext = pContext;
 	pReg->bBlocking = bBlocking;
-	return true;
 }
 
-bool UsbCtrlrEpXfer(int DevNo, uint8_t EpAddr, uint16_t Length)
-{
-	(void)DevNo;
-	return nRFUsbRegDataEpXfer(EpAddr, Length);
-}
-
-bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
-{
-	(void)DevNo;
-	return nRFUsbRegDataEpXfer(EpNum, Length);
-}
-
-bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
-{
-	(void)DevNo;
-	return nRFUsbRegDataEpXfer(USB_ENDPADDR_DIRIN(EpNum), Length);
-}
-
-
-bool UsbCtrlrEp0Xfer(int DevNo, uint8_t EpAddr, uint8_t *pBuffer,
+bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 						 uint16_t Length)
 {
-	return nRFUsbValidDevNo(DevNo) && USB_ENDPADDR_NUM(EpAddr) == 0U &&
-		nRFUsbRegEpXfer(EpAddr, pBuffer, Length);
+	(void)DevNo;
+	nRFUsbGetEpReg(USB_ENDPADDR_DIRIN(EpNum))->pBuffer = pBuffer;
+	return nRFUsbRegEpXfer(USB_ENDPADDR_DIRIN(EpNum), NULL, Length);
+}
+
+
+bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr)
+{
+	return nRFUsbValidDevNo(DevNo) && nRFUsbRegEpXfer(EpAddr, NULL, 0U);
 }
 
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 {
-	return Length >= 0 && Length <= UINT16_MAX &&
-		UsbCtrlrEp0Xfer(DevNo, USB_ENDPADDR_DIR_IN,
-		pBuffer, (uint16_t)Length) ? Length : 0;
+	if (!nRFUsbValidDevNo(DevNo) || Length < 0 || Length > UINT16_MAX)
+		return -1;
+
+	// The upper layer submits the remainder on completion. Copy this packet
+	// into the existing bounce buffer before returning to its source owner.
+	const uint16_t copied = Length < (int)NRF54_USBD_EP0_MPS ?
+		(uint16_t)Length : NRF54_USBD_EP0_MPS;
+	return nRFUsbRegEpXfer(USB_ENDPADDR_DIR_IN, pBuffer, copied) ? copied : -1;
 }
 
-void UsbCtrlrEpStall(int DevNo, uint8_t EpAddr)
+void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
 {
 	if (nRFUsbValidDevNo(DevNo))
 	{
-		nRFUsbRegEpStall(EpAddr);
+		nRFUsbRegEpStall((uint8_t)(EpNo |
+			(bIn ? USB_ENDPADDR_DIR_IN : 0U)));
 	}
 }
 
-void UsbCtrlrEpClearStall(int DevNo, uint8_t EpAddr)
+void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
 {
 	if (nRFUsbValidDevNo(DevNo))
 	{
-		nRFUsbRegEpClearStall(EpAddr);
+		nRFUsbRegEpClearStall((uint8_t)(EpNo |
+			(bIn ? USB_ENDPADDR_DIR_IN : 0U)));
 	}
 }
