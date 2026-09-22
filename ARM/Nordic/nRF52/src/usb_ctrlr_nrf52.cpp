@@ -609,7 +609,10 @@ __attribute__((noinline)) void nRFUsbdSofAcquire(void)
 
 __attribute__((noinline)) void nRFUsbdSofRelease(void)
 {
-	if (!s_Usbd.SofEnabled && !s_Usbd.IsoOpen &&
+	const nRFUsbEpReg_t *pIso =
+		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
+	if (!s_Usbd.SofEnabled &&
+		(pIso[0].MaxPacketSize == 0U || pIso[1].MaxPacketSize == 0U) &&
 		(s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U)
 	{
 		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
@@ -696,7 +699,6 @@ __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 static void nRFUsbdResetState(void)
 {
 	s_Usbd.SofEnabled = false;
-	s_Usbd.IsoOpen = false;
 	s_Usbd.IsoBufState = 0U;
 
 	CFifoFlush(s_Usbd.hQue);
