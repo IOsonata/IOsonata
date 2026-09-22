@@ -179,7 +179,6 @@ code += r'''
 struct {
  uint32_t Flags;
  bool LowPowerSuspend;
- bool IsoOpen;
  uint8_t IsoBufState;
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue,hEp0Que;
@@ -260,7 +259,7 @@ void init(){
  controlEvents=0;controlEvent={};
  isoAtSof=false;suspends=resumes=setups=0;s_Usbd.LowPowerSuspend=false;
  setupHandler=nullptr;controlHandler=nullptr;
- s_Usbd.SofEnabled=false;s_Usbd.IsoOpen=false;s_Usbd.IsoBufState=0;
+ s_Usbd.SofEnabled=false;s_Usbd.IsoBufState=0;
  s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=0;
  s_Usbd.Flags=USBD_FLAG_MAC_AWAKE;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  assert(AppEvtHandlerInit(nullptr,0));
@@ -615,7 +614,7 @@ int main(int argc,char **argv){
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
   else{
    dmaBusy=0x82;
-   s_Usbd.IsoOpen=true;
+   s_Usbd.EpReg[7][0].MaxPacketSize=s_Usbd.EpReg[7][1].MaxPacketSize=64;
   }
   assert(UsbCtrlrEp0Send(0,data,18)==18);
   s_Usbd.Flags|=gate;
@@ -767,7 +766,7 @@ int main(int argc,char **argv){
  // this ISR must not postpone an already queued regular transfer.
  for(unsigned status:{0x100U,0x1000000U}){
   init();dmaBusy=0x82;
-  s_Usbd.IsoOpen=true;
+  s_Usbd.EpReg[7][0].MaxPacketSize=s_Usbd.EpReg[7][1].MaxPacketSize=64;
   assert(UsbCtrlrEpSend(0,2,data,9));
   regs.EPSTATUS.bits=status;
   interrupt(); // EPSTATUS alone is not completion.
@@ -790,7 +789,7 @@ int main(int argc,char **argv){
   unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND)}){
   init();dmaBusy=0x82;
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
-  else s_Usbd.IsoOpen=true;
+  else s_Usbd.EpReg[7][0].MaxPacketSize=s_Usbd.EpReg[7][1].MaxPacketSize=64;
   assert(UsbCtrlrEpSend(0,2,data+64,9));
   s_Usbd.Flags|=gate;
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
@@ -805,7 +804,7 @@ int main(int argc,char **argv){
  for(unsigned status:{2U,0x100U,0x1000000U}){
   init();dmaBusy=0x82;
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
-  else s_Usbd.IsoOpen=true;
+  else s_Usbd.EpReg[7][0].MaxPacketSize=s_Usbd.EpReg[7][1].MaxPacketSize=64;
   assert(UsbCtrlrEpSend(0,2,data+64,9));
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   regs.EVENTS_EP0SETUP=1;regs.EVENTS_EP0DATADONE=1;isoChecks=0;
@@ -830,7 +829,7 @@ int main(int argc,char **argv){
  for(bool awake:{false,true})for(bool lowPower:{false,true})
  for(unsigned mask:{0U,1U}){
   init();irqMask=mask;regs.LOWPOWER=lowPower;
-  s_Usbd.IsoOpen=true;
+  s_Usbd.EpReg[7][0].MaxPacketSize=s_Usbd.EpReg[7][1].MaxPacketSize=64;
   s_Usbd.Flags=USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND|USBD_FLAG_REMOTE_WAKE;
   if(awake)s_Usbd.Flags|=USBD_FLAG_MAC_AWAKE;
   nRFUsbdHostResumeDetected();
@@ -854,7 +853,7 @@ int main(int argc,char **argv){
  for(unsigned status:{2U,0x100U,0x1000000U})for(bool lowPower:{false,true}){
   init();dmaBusy=0x82;s_Usbd.LowPowerSuspend=lowPower;
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
-  else s_Usbd.IsoOpen=true;
+  else s_Usbd.EpReg[7][0].MaxPacketSize=s_Usbd.EpReg[7][1].MaxPacketSize=64;
   assert(UsbCtrlrEpSend(0,2,data+64,9));
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   regs.EVENTS_USBEVENT=1;regs.EVENTCAUSE.bits=USBD_EVENTCAUSE_SUSPEND_Msk;
