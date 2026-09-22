@@ -197,8 +197,6 @@ static bool UsbdCdcConfig(UsbdCdcDev_t *pCdc, uint8_t Configuration)
 	}
 
 	pCdc->SerialStateFlags = USBD_CDC_NOTIF_PENDING;
-	UsbdCdcNotifKick(pCdc);
-
 	return true;
 }
 
