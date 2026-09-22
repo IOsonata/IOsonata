@@ -190,7 +190,7 @@ static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 
 bool nRFUsbdIsoFinishDma(uint32_t DmaStatus)
 {
-	const bool notify = DmaStatus != 0U;
+	const bool notify = DmaStatus != 0U || s_Usbd.IsoOpen;
 	return (DmaStatus != 0x01000000U && nRFUsbdFinishIsoDma(true, notify)) ||
 		(DmaStatus != 0x00000100U && nRFUsbdFinishIsoDma(false, notify));
 }
@@ -281,12 +281,13 @@ void nRFUsbdIsoEpClose(bool bIn)
 {
 	const uint8_t dir = bIn ? 1U : 0U;
 	const uint32_t state = DisableInterrupt();
-	nRFUsbdDmaWait();
 
+	// ISO is one bidirectional path. Closing either side stops scheduling and
+	// makes a polled END a cancellation rather than a normal completion.
 	s_Usbd.IsoOpen = false;
-	s_Usbd.IsoBufState &= (uint8_t)~(((uint8_t)NRFUSBD_ISO_OUT_BUSY |
-		NRFUSBD_ISO_OUT_READY) << dir);
-	s_Usbd.IsoDmaLen[dir] = -1;
+	nRFUsbdDmaWait();
+	s_Usbd.IsoBufState = 0U;
+	s_Usbd.IsoDmaLen[0] = s_Usbd.IsoDmaLen[1] = -1;
 
 	nRFIsoHwEnable(bIn, false);
 	nRFUsbdSofRelease();
