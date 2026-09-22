@@ -835,7 +835,7 @@ int main(int argc,char **argv){
   nRFUsbdHostResumeDetected();
   assert(irqMask==mask && !regs.LOWPOWER && resumes==unsigned(awake && !lowPower));
   assert(!(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND|USBD_FLAG_REMOTE_WAKE)));
-  assert(s_Usbd.IsoOpen);
+  assert(s_Usbd.EpReg[7][0].MaxPacketSize && s_Usbd.EpReg[7][1].MaxPacketSize);
   nRFUsbdHostResumeDetected();
   nRFUsbdWakeAllowed();nRFUsbdWakeAllowed();
   assert(resumes==1 && irqMask==mask && !(s_Usbd.Flags&USBD_FLAG_HOST_RESUME));
