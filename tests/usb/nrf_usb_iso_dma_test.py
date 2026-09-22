@@ -150,9 +150,7 @@ void nRFUsbdDmaWait(){
  if(dmaBusy){assert(nRFUsbdIsoFinishDma(0U));nRFUsbdDmaUnlock();}
 }
 void nRFUsbdResumeQueuedDmaLocked(){
- const uint32_t gate=s_Usbd.Flags&
-  (USBD_FLAG_HOST_RESUME|USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND);
- if(dmaBusy||(gate&USBD_FLAG_HOST_RESUME)||gate==USBD_FLAG_SUSPENDED)return;
+ if(dmaBusy||(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_HOST_RESUME)))return;
  nRFUsbdDmaLock();
  if(!nRFUsbdIsoStart()){++regularStarts;nRFUsbdDmaUnlock();}
 }
