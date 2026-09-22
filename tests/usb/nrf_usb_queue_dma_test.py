@@ -844,13 +844,15 @@ int main(int argc,char **argv){
   nRFUsbdWakeAllowed();nRFUsbdWakeAllowed();
   assert(resumes==1 && irqMask==mask && !(s_Usbd.Flags&USBD_FLAG_HOST_RESUME));
  }
- // A host resume may preempt the public remote-wake request at IRQ restore.
- // The protected recheck must then suppress the device's resume signal.
+ // Remote wake is serialized at the caller: the drive commits inside the
+ // caller's critical section, so a host resume arriving at IRQ restore is
+ // processed after it and still notifies exactly once with clean state.
  init();s_Usbd.Flags=USBD_FLAG_SUSPENDED|USBD_FLAG_MAC_AWAKE;
  onIrqEnable=nRFUsbdHostResumeDetected;
  UsbCtrlrRemoteWakeup(0);
- assert(!onIrqEnable && !irqMask && resumes==1 && !regs.TASKS_DPDMDRIVE);
- puts("PASS: wake callbacks preserve IRQ/ISO state and host resume cancels a preempted remote-wake request");
+ assert(!onIrqEnable && !irqMask && resumes==1 && regs.TASKS_DPDMDRIVE);
+ assert(!(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE|USBD_FLAG_HOST_RESUME)));
+ puts("PASS: wake callbacks preserve IRQ/ISO state and a preempting host resume settles after the committed wake drive");
 
  // Suspend blocks new DMA immediately. Queued work is retained across
  // both ordinary and low-power suspend; only an active EasyDMA is allowed to finish.
@@ -1323,7 +1325,8 @@ int main(int argc,char **argv){
  puts("      ENDEP preserves TX data, host completion releases exactly one packet");
 
  // SETUP and an IN host-completion may be latched in the same IRQ.
- // SETUP must enter AppEvt first; the IN completion callback follows it.
+ // SETUP must enter AppEvt first; the ISR returns with EPDATA still set,
+ // so the pended interrupt re-enters and queues the IN completion second.
  init();
  {
   static unsigned order,setupOrder,inOrder;
@@ -1343,9 +1346,10 @@ int main(int argc,char **argv){
   regs.EVENTS_EPDATA=1;
   regs.EVENTS_EP0SETUP=1;
   interrupt();
-  assert(!regs.EVENTS_EP0SETUP);
+  assert(!regs.EVENTS_EP0SETUP && regs.EVENTS_EPDATA);
   AppEvtHandlerDispatch();
   assert(setupOrder==1 && inOrder==0);
+  interrupt(); // EPDATA left set keeps the IRQ pended; hardware re-enters.
   AppEvtHandlerDispatch();
   assert(inOrder==2);
  }

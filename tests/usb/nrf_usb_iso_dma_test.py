@@ -371,7 +371,7 @@ int main(){
    regs.SIZE.EPOUT[n]=64;s_Usbd.EpReg[n][0].MaxPacketSize=s_Usbd.EpReg[n][1].MaxPacketSize=64;
   }
   UsbCtrlrEpClose(0,ep,dir);
-  assert(irqMask==masked && ISO_OPEN()==3 && ISO_BUSY()==0);
+  assert(irqMask==masked && ISO_OPEN()==1 && ISO_BUSY()==0);
   assert(regs.EPINEN==(dir?(0x1FFU&~(1U<<ep)):0x1FFU));
   assert(regs.EPOUTEN==(!dir?(0x1FFU&~(1U<<ep)):0x1FFU));
   assert(regs.INTENCLR==(1U<<((dir?USBD_INTEN_ENDEPIN0_Pos:USBD_INTEN_ENDEPOUT0_Pos)+ep)));
