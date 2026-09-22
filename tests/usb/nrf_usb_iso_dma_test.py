@@ -79,21 +79,23 @@ struct Registers {
 } regs;
 using NRF_USBD_Type = Registers;
 auto *NRF_USBD=&regs;
-struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;uint16_t MaxPacketSize;bool bBlocking;bool IsoOpen;};
+struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;uint16_t MaxPacketSize;bool bBlocking;};
 typedef Endpoint USBD_ISOIN_Type;
 typedef Endpoint USBD_ISOOUT_Type;
 FLAG_ENUM
 QUEUE_TYPES
 struct {
  volatile uint8_t Flags=0;
- bool SofEnabled=false;
- union { uint16_t IsoDma[2]; uint32_t IsoDmaState; };
+  bool SofEnabled=false;
+ bool IsoOpen=false;
+ uint8_t IsoBufState=0;
+ uint16_t IsoDmaLen[2]={};
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue;
 } s_Usbd;
 alignas(8) uint8_t queueMemory[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
-#define ISO_OPEN() unsigned(s_Usbd.EpReg[7][0].IsoOpen)
-#define ISO_BUSY() unsigned(((s_Usbd.IsoDma[0]&NRFUSBD_ISO_BUSY)?1U:0U)|((s_Usbd.IsoDma[1]&NRFUSBD_ISO_BUSY)?2U:0U))
+#define ISO_OPEN() unsigned(s_Usbd.IsoOpen)
+#define ISO_BUSY() ((s_Usbd.IsoBufState / NRFUSBD_ISO_OUT_BUSY) & 3u)
 unsigned irqMask=0,isoStarts[2]={},regularStarts=0;
 unsigned activeDir=0;
 uint8_t inBuffer[512],outBuffer[512],wireIn[512],hostOut[512];
@@ -106,7 +108,7 @@ void __DSB(){
  if(regs.TASKS_STARTISOIN || regs.TASKS_STARTISOOUT){
   activeDir=regs.TASKS_STARTISOIN?1:0;
   assert(dmaBusy==0x82);assert(regs.EPSTATUS.bits==0);
-  assert(s_Usbd.IsoDma[activeDir] & NRFUSBD_ISO_BUSY);
+  assert(s_Usbd.IsoBufState & ((uint8_t)NRFUSBD_ISO_OUT_BUSY<<activeDir));
   regs.EPSTATUS.bits=1UL<<(activeDir?8:24);
   ++isoStarts[activeDir];
   if(activeDir) memcpy(wireIn,inBuffer,regs.ISOIN.MAXCNT);
@@ -130,7 +132,7 @@ names = [
          'UsbCtrlrEpClearStall']
 import re as _re
 flag_enum = _re.search(r'enum\s*\{[^}]*USBD_FLAG_SUSPENDED[^}]*\};', src)
-iso_state_enum = _re.search(r'enum\s*\{[^}]*NRFUSBD_ISO_BUSY[^}]*\};', src)
+iso_state_enum = _re.search(r'enum\s*\{[^}]*NRFUSBD_ISO_IN_BUSY[^}]*\};', src)
 assert flag_enum and iso_state_enum, 'USBD state enums not found in driver source'
 code = preamble.replace('FLAG_ENUM', flag_enum.group(0) + '\n' + iso_state_enum.group(0))
 queue_enum = _re.search(r'enum\s*\{[^}]*NRFX_USBD_QUE_IN_SCRATCH[^}]*\};', src)
@@ -179,15 +181,16 @@ void callback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
  }else if(chainIn){chainIn=false;assert(productionEpSend(0,8,inBuffer,9));}
 }
 void init(){
- regs={};s_Usbd.SofEnabled=false;s_Usbd.IsoDmaState=0;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
+ regs={};s_Usbd.SofEnabled=false;
+ s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=0;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  s_Usbd.hQue=CFifoInit(queueMemory,sizeof(queueMemory),sizeof(nRFUsbdQue_t),true);
  assert(s_Usbd.hQue);
  // Both ISO directions open; busy/ready and suspend state start clear.
- s_Usbd.Flags=0;s_Usbd.EpReg[7][0].IsoOpen=true;
+ s_Usbd.Flags=0;s_Usbd.IsoOpen=true;s_Usbd.IsoBufState=0;
  dmaBusy=0;dmaLocks=dmaUnlocks=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
- s_Usbd.EpReg[7][0]={outBuffer,callback,(void*)0,512,false,true};
- s_Usbd.EpReg[7][1]={inBuffer,callback,(void*)1,512,false,false};
+ s_Usbd.EpReg[7][0]={outBuffer,callback,(void*)0,512,false};
+ s_Usbd.EpReg[7][1]={inBuffer,callback,(void*)1,512,false};
  memset(inBuffer,0xA5,sizeof(inBuffer));memset(hostOut,0x5A,sizeof(hostOut));
  assert(AppEvtHandlerInit(nullptr,0));
 }
@@ -202,7 +205,7 @@ int main(){
  };
  for(const auto &test:completions)for(unsigned ends=0;ends<4;++ends){
   init();dmaBusy=0x82;
-  s_Usbd.IsoDma[0]|=NRFUSBD_ISO_BUSY;s_Usbd.IsoDma[1]|=NRFUSBD_ISO_BUSY;
+  s_Usbd.IsoBufState|=NRFUSBD_ISO_OUT_BUSY|NRFUSBD_ISO_IN_BUSY;
   regs.EVENTS_ENDISOOUT=ends&1;regs.EVENTS_ENDISOIN=(ends>>1)&1;
   regs.EPSTATUS.bits=(ends&1?0x01000000U:0U)|(ends&2?0x00000100U:0U);
   const unsigned retired=test.retired[ends],remaining=ends&~retired;
@@ -319,7 +322,7 @@ int main(){
  init();frame(17);regs.ISOOUT.AMOUNT=17;regs.EVENTS_ENDISOOUT=1;
  UsbCtrlrEpClose(0,8,false);
  assert(callbacks[0]==0 && !dmaBusy && !(ISO_BUSY()&1));
- s_Usbd.EpReg[7][0].IsoOpen=true;s_Usbd.EpReg[7][0].MaxPacketSize=9;
+ s_Usbd.IsoOpen=true;s_Usbd.EpReg[7][0].MaxPacketSize=9;
  frame(9);finish(false);
  assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
  puts("PASS: close drains active ISO silently; reopen completion belongs to new transfer");
