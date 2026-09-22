@@ -610,7 +610,7 @@ __attribute__((noinline)) void nRFUsbdSofAcquire(void)
 __attribute__((noinline)) void nRFUsbdSofRelease(void)
 {
 	if (!s_Usbd.SofEnabled &&
-		(NRF_USBD->EPOUTEN & (1UL << NRFX_USBD_ISO_EP_NO)) == 0U &&
+		!s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].IsoOpen &&
 		(s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U)
 	{
 		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
