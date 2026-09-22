@@ -87,14 +87,13 @@ QUEUE_TYPES
 struct {
  volatile uint32_t Flags=0;
   bool SofEnabled=false;
- bool IsoOpen=false;
  uint8_t IsoBufState=0;
  uint16_t IsoDmaLen[2]={};
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue;
 } s_Usbd;
 alignas(8) uint8_t queueMemory[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
-#define ISO_OPEN() unsigned(s_Usbd.IsoOpen)
+#define ISO_OPEN() unsigned(s_Usbd.EpReg[7][0].MaxPacketSize!=0 && s_Usbd.EpReg[7][1].MaxPacketSize!=0)
 #define ISO_BUSY() ((s_Usbd.IsoBufState / NRFUSBD_ISO_OUT_BUSY) & 3u)
 unsigned irqMask=0,isoStarts[2]={},regularStarts=0;
 unsigned activeDir=0;
@@ -186,7 +185,7 @@ void init(){
  s_Usbd.hQue=CFifoInit(queueMemory,sizeof(queueMemory),sizeof(nRFUsbdQue_t),true);
  assert(s_Usbd.hQue);
  // Both ISO directions open; busy/ready and suspend state start clear.
- s_Usbd.Flags=0;s_Usbd.IsoOpen=true;s_Usbd.IsoBufState=0;
+ s_Usbd.Flags=0;s_Usbd.IsoBufState=0;
  dmaBusy=0;dmaLocks=dmaUnlocks=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
  s_Usbd.EpReg[7][0]={outBuffer,callback,(void*)0,512,false};
@@ -322,7 +321,7 @@ int main(){
  init();frame(17);regs.ISOOUT.AMOUNT=17;regs.EVENTS_ENDISOOUT=1;
  UsbCtrlrEpClose(0,8,false);
  assert(callbacks[0]==0 && !dmaBusy && !(ISO_BUSY()&1));
- s_Usbd.IsoOpen=true;s_Usbd.EpReg[7][0].MaxPacketSize=9;
+ s_Usbd.EpReg[7][0].MaxPacketSize=9;
  frame(9);finish(false);
  assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
  puts("PASS: close drains active ISO silently; reopen completion belongs to new transfer");
