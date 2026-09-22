@@ -73,7 +73,7 @@ void nRFIsoHwEnable(bool In, bool Enable)
 
 static inline __attribute__((always_inline)) bool nRFIsoOpen(void)
 {
-	return (NRF_USBD->EPOUTEN & (1UL << NRFX_USBD_ISO_EP_NO)) != 0U;
+	return s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].IsoOpen;
 }
 
 
@@ -268,8 +268,11 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 
 	const uint8_t dir = in ? 1U : 0U;
 	const uint32_t state = DisableInterrupt();
-	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir].MaxPacketSize =
-		pDesc->wMaxPacketSize;
+	nRFUsbEpReg_t *pIso =
+		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
+	pIso[dir].MaxPacketSize = pDesc->wMaxPacketSize;
+	pIso[0].IsoOpen =
+		pIso[0].MaxPacketSize != 0U && pIso[1].MaxPacketSize != 0U;
 	s_Usbd.IsoBufState &=
 		(uint8_t)~((uint8_t)NRFUSBD_ISO_OUT_READY << dir);
 	EnableInterrupt(state);
@@ -286,7 +289,10 @@ void nRFUsbdIsoEpClose(bool bIn)
 
 	// ISO is one bidirectional path. Closing either side clears endpoint
 	// state first so a polled END is cancellation, not normal completion.
-	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir].MaxPacketSize = 0U;
+	nRFUsbEpReg_t *pIso =
+		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
+	pIso[0].IsoOpen = false;
+	pIso[dir].MaxPacketSize = 0U;
 	nRFUsbdDmaWait();
 	s_Usbd.IsoBufState = 0U;
 
