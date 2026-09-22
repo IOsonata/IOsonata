@@ -1347,16 +1347,16 @@ int main(int argc,char **argv){
  // SETUP must enter AppEvt first; the IN completion callback follows it.
  init();
  {
-  unsigned order=0,setupOrder=0,inOrder=0;
-  setupHandler=[&](const UsbCtrlrEvt_t *){
+  static unsigned order,setupOrder,inOrder;
+  order=setupOrder=inOrder=0;
+  setupHandler=[](const UsbCtrlrEvt_t *){
    setupOrder=++order;
   };
   auto &reg=s_Usbd.EpReg[0][1];
-  reg.pContext=&inOrder;
-  reg.Handler=[](UsbCtrlrEvtType_t event,uint16_t,void *context){
+  reg.pContext=nullptr;
+  reg.Handler=[](UsbCtrlrEvtType_t event,uint16_t,void *){
    assert(event==USB_CTRLR_EVT_XFER_CMPL);
-   auto *p=(unsigned*)context;
-   *p=2;
+   inOrder=++order;
   };
   regs.EPIN[1].AMOUNT=9;
   regs.BMREQUESTTYPE=0x80;regs.BREQUEST=6;regs.WLENGTHL=18;
