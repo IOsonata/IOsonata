@@ -89,8 +89,7 @@ static bool EpAllocTryOut(const UsbdEpAllocState_t *pState, uint8_t Needed,
 	{
 		const uint16_t bit = (uint16_t)(1U << ep);
 
-		if ((PairMask & bit) != 0U ||
-			(pState->pReq->FixedOutMask & bit) != 0U)
+		if (((PairMask | OutMask) & bit) != 0U)
 		{
 			continue;
 		}
