@@ -73,7 +73,7 @@ void nRFIsoHwEnable(bool In, bool Enable)
 
 static inline __attribute__((always_inline)) bool nRFIsoOpen(void)
 {
-	return s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].MaxPacketSize != 0U;
+	return (NRF_USBD->EPOUTEN & (1UL << NRFX_USBD_ISO_EP_NO)) != 0U;
 }
 
 
