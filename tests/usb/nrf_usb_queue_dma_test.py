@@ -173,7 +173,7 @@ for tag, name in [('__nRF_Usbd_Que', 'nRFUsbdQue_t'), ('__nRF_Ep_Packet', 'nRFEP
 code += re.search(r'typedef struct __nRF_Usb_Ep_Registration\s*\{.*?\} nRFUsbEpReg_t;',
     header, re.S).group(0) + '\n'
 code += re.search(r'enum\s*\{[^}]*USBD_FLAG_SUSPENDED[^}]*\};', header).group(0) + '\n'
-code += re.search(r'enum\s*\{[^}]*NRFUSBD_ISO_IN_BUSY[^}]*\};', header).group(0) + '\n'
+code += re.search(r'enum\s*\{[^}]*NRFUSBD_ISO_BUSY[^}]*\};', header).group(0) + '\n'
 code += r'''
 #pragma pack(pop)
 struct {
