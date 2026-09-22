@@ -88,7 +88,7 @@ QUEUE_TYPES
 // atomic fields at the same OUT-low/IN-high bit pairing.
 struct {
  volatile uint32_t Flags=0;
- uint32_t IsoGeneration[2]={};uint16_t IsoOutSize=0;
+ uint16_t IsoOutSize=0;
  bool SofEnabled=false;
  int16_t IsoDmaLen[2]={-1,-1};
  nRFUsbEpReg_t EpReg[8][2];
@@ -97,7 +97,6 @@ struct {
 alignas(8) uint8_t queueMemory[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
 #define ISO_OPEN() ((s_Usbd.Flags / USBD_FLAG_ISO_OUT_OPEN) & 3u)
 #define ISO_BUSY() ((s_Usbd.Flags / USBD_FLAG_ISO_OUT_BUSY) & 3u)
-#define ISO_CMPL() ((s_Usbd.Flags / USBD_FLAG_ISO_OUT_CMPL) & 3u)
 unsigned irqMask=0,isoStarts[2]={},regularStarts=0;
 unsigned activeDir=0;
 uint8_t inBuffer[512],outBuffer[512],wireIn[512],hostOut[512];
@@ -120,7 +119,6 @@ void __DSB(){
 }
 void nRFUsbdHostResumeDetected(){}
 void UsbDevProcessEvent(int,const UsbCtrlrEvt_t*){}
-void nRFUsbdRetryIsoComplete();
 void nRFUsbdResumeQueuedDmaLocked();
 void nRFUsbdDmaWait();
 bool productionEpSend(int,uint8_t,uint8_t*,uint16_t);
@@ -129,13 +127,12 @@ names = [
          'nRFUsbGetEpReg','nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaLock','nRFUsbdDmaUnlock',
          'nRFUsbdDmaStartLocked','nRFUsbdEpHwEnable','nRFUsbdSofRelease',
          'nRFIsoHwEnable','nRFUsbdIsoStart',
-         'nRFUsbdIsoService','nRFUsbdIsoXfer','nRFUsbdProcessIsoComplete',
-         'nRFUsbdRetryIsoComplete','nRFUsbdFinishIsoDma',
+         'nRFUsbdIsoService','nRFUsbdIsoXfer','nRFUsbdFinishIsoDma',
          'nRFUsbdIsoFinishDma','nRFUsbdIsoSof',
          'nRFUsbdIsoEpClose','UsbCtrlrEpClose','nRFUsbdHandleSof',
          'UsbCtrlrEpClearStall']
 import re as _re
-flag_enum = _re.search(r'enum\s*\{[^}]*USBD_FLAG_ISO_IN_CMPL[^}]*\};', src)
+flag_enum = _re.search(r'enum\s*\{[^}]*USBD_FLAG_ISO_IN_BUSY[^}]*\};', src)
 assert flag_enum, 'USBD_FLAG enum not found in driver source'
 code = preamble.replace('FLAG_ENUM', flag_enum.group(0))
 queue_enum = _re.search(r'enum\s*\{[^}]*NRFX_USBD_QUE_IN_SCRATCH[^}]*\};', src)
@@ -150,7 +147,13 @@ code += function('UsbCtrlrEpOpenData').replace('UsbCtrlrEpOpenData(', 'productio
 code += function('UsbCtrlrEpSend').replace('UsbCtrlrEpSend(', 'productionEpSend(')
 code += r'''
 void nRFUsbdDmaWait(){
- if(dmaBusy){assert(nRFUsbdIsoFinishDma(0U));nRFUsbdDmaUnlock();}
+ if(!dmaBusy)return;
+ if(regs.EVENTS_ENDISOIN){
+  regs.EVENTS_ENDISOIN=0;regs.EPSTATUS.bits&=~(1UL<<8);
+ }else if(regs.EVENTS_ENDISOOUT){
+  regs.EVENTS_ENDISOOUT=0;regs.EPSTATUS.bits&=~(1UL<<24);
+ }else assert(false);
+ nRFUsbdDmaUnlock();
 }
 void nRFUsbdResumeQueuedDmaLocked(){
  const uint32_t gate=s_Usbd.Flags&
@@ -188,16 +191,14 @@ void init(){
  s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=-1;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  s_Usbd.hQue=CFifoInit(queueMemory,sizeof(queueMemory),sizeof(nRFUsbdQue_t),true);
  assert(s_Usbd.hQue);
- // Both ISO directions open; every other flag (busy, complete, ready,
- // suspend group) cleared, exactly the former per-field init.
+ // Both ISO directions open; busy/ready and suspend state start clear.
  s_Usbd.Flags=USBD_FLAG_ISO_OUT_OPEN|USBD_FLAG_ISO_IN_OPEN;
  dmaBusy=0;dmaLocks=dmaUnlocks=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
- ++s_Usbd.IsoGeneration[0];++s_Usbd.IsoGeneration[1];
  s_Usbd.EpReg[7][0]={outBuffer,callback,(void*)0,512,false};
  s_Usbd.EpReg[7][1]={inBuffer,callback,(void*)1,512,false};
  memset(inBuffer,0xA5,sizeof(inBuffer));memset(hostOut,0x5A,sizeof(hostOut));
- assert(AppEvtHandlerInit(nullptr,0));assert(AppEvtHandlerIdleRegister(nRFUsbdRetryIsoComplete));
+ assert(AppEvtHandlerInit(nullptr,0));
 }
 void dummy(uint32_t,void*){}
 int main(){
@@ -220,7 +221,6 @@ int main(){
   assert(regs.EPSTATUS.bits==((remaining&1?0x01000000U:0U)|
    (remaining&2?0x00000100U:0U)));
   assert(dmaBusy==0x82 && dmaLocks==0 && dmaUnlocks==0);
-  AppEvtHandlerExec();
   assert(callbacks[0]==(retired&1) && callbacks[1]==((retired>>1)&1));
  }
  puts("PASS: ISO completion dispatch preserves direction, END requirement, IN priority and DMA ownership");
@@ -295,70 +295,54 @@ int main(){
   frame();assert(isoStarts[1]==1 && regs.ISOIN.MAXCNT==length);
   assert(regs.ISOIN.PTR==uint32_t(uintptr_t(inBuffer)));
   assert(!memcmp(wireIn,inBuffer,length));
-  finish(true);AppEvtHandlerExec();
+  finish(true);
   assert(callbacks[1]==1 && lengths[1]==length && ISO_BUSY()==0);
  }
  puts("PASS: public IN entry point routes EP8 through ISO DMA without using the regular queue");
 
- for(unsigned queued=0;queued<=4;++queued)for(unsigned masked=0;masked<2;++masked){
-  init();for(unsigned n=0;n<queued;++n)assert(AppEvtHandlerQue(n,nullptr,dummy));
-  // Both END events retired while publication was deferred.
-  s_Usbd.Flags|=USBD_FLAG_ISO_OUT_BUSY|USBD_FLAG_ISO_IN_BUSY|
-   USBD_FLAG_ISO_OUT_CMPL|USBD_FLAG_ISO_IN_CMPL;
-  irqMask=masked;
-  nRFUsbdRetryIsoComplete();
-  assert(irqMask==masked && ISO_BUSY()==3);
-  assert(ISO_CMPL()==(queued==4?3U:queued==3?2U:0U));
-  assert(callbacks[0]==0 && callbacks[1]==0);
-  irqMask=0;AppEvtHandlerExec();AppEvtHandlerExec();
-  assert(callbacks[0]==1 && callbacks[1]==1);
-  assert(ISO_BUSY()==0 && ISO_CMPL()==0);
- }
- puts("PASS: paired ISO completion retry preserves partial/full queue state and delivers each callback once");
-
  init();frame();assert(isoStarts[1]==0); // no unsolicited IN ZLP/DMA
  assert(nRFUsbdIsoXfer(1U,9));assert(dmaBusy && isoStarts[1]==1);
  assert(!nRFUsbdIsoFinishDma(regs.EPSTATUS.bits));assert(dmaBusy); // matching END required
- finish(true);assert(callbacks[1]==0);frame();assert(isoStarts[1]==1);
- AppEvtHandlerExec();assert(callbacks[1]==1 && lengths[1]==9 && !(ISO_BUSY()&2));
+ finish(true);assert(callbacks[1]==1 && lengths[1]==9 && !(ISO_BUSY()&2));
+ frame();assert(isoStarts[1]==1);
  frame();assert(isoStarts[1]==1); // never retransmit previous payload
  puts("PASS: ISO IN requires a request, retires only at END, completes once, never repeats old data");
 
  init();assert(nRFUsbdIsoXfer(1U,33));assert(!dmaBusy);
  frame(17);assert(activeDir==1 && isoStarts[1]==1 && isoStarts[0]==0);
  finish(true);assert(dmaBusy && activeDir==0);finish(false);
- AppEvtHandlerExec();assert(callbacks[0]==1 && callbacks[1]==1);
+ assert(callbacks[0]==1 && callbacks[1]==1);
  assert(lengths[0]==17 && lengths[1]==33 && ISO_BUSY()==0 && regularStarts>0);
  puts("PASS: duplex ISO uses one DMA; both completions delivered; shared scheduler resumes");
 
- init();frame(17);finish(false);interruptCopy=true;
- for(int i=0;i<3;++i)frame(17);
- assert(isoStarts[0]==1 && callbacks[0]==0);
- AppEvtHandlerExec();assert(callbacks[0]==1 && ISO_BUSY()==0 && isoStarts[0]==1);
- frame(9);assert(isoStarts[0]==2);finish(false);interruptCopy=false;AppEvtHandlerExec();
- puts("PASS: delayed OUT callback and SOF during copy cannot overwrite the RX buffer");
+ init();interruptCopy=true;frame(17);finish(false);
+ assert(callbacks[0]==1 && ISO_BUSY()==0 && isoStarts[0]==1);
+ frame(9);assert(isoStarts[0]==2);finish(false);interruptCopy=false;
+ puts("PASS: direct OUT completion keeps BUSY through callback buffer copy");
 
  init();for(int i=0;i<4;++i)assert(AppEvtHandlerQue(i,nullptr,dummy));
- frame(25);finish(false);assert(ISO_CMPL()==1 && ISO_BUSY()==1 && !dmaBusy);
- AppEvtHandlerExec();assert(callbacks[0]==0 && ISO_CMPL()==0 && ISO_BUSY()==1);
- AppEvtHandlerExec();assert(callbacks[0]==1 && ISO_BUSY()==0);
- puts("PASS: full real AppEvt queue retains completion, retries, and does not retain EasyDMA");
+ frame(25);finish(false);
+ assert(callbacks[0]==1 && ISO_BUSY()==0 && !dmaBusy);
+ puts("PASS: full AppEvt queue does not delay ISO completion");
 
- init();frame(17);finish(false);UsbCtrlrEpClose(0,8,false);
- s_Usbd.Flags|=USBD_FLAG_ISO_OUT_OPEN;s_Usbd.EpReg[7][0].MaxPacketSize=9;frame(9);finish(false);
- AppEvtHandlerExec();assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
- puts("PASS: close/reopen discards old callback without releasing the new transfer");
+ init();frame(17);regs.ISOOUT.AMOUNT=17;regs.EVENTS_ENDISOOUT=1;
+ UsbCtrlrEpClose(0,8,false);
+ assert(callbacks[0]==0 && !dmaBusy && !(ISO_BUSY()&1));
+ s_Usbd.Flags|=USBD_FLAG_ISO_OUT_OPEN;s_Usbd.EpReg[7][0].MaxPacketSize=9;
+ frame(9);finish(false);
+ assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
+ puts("PASS: close drains active ISO silently; reopen completion belongs to new transfer");
 
  init();assert(nRFUsbdIsoXfer(1U,0));frame(0,true);
- finish(true);finish(false);AppEvtHandlerExec();
+ finish(true);finish(false);
  assert(callbacks[0]==1 && callbacks[1]==1 && lengths[0]==0 && lengths[1]==0);
- init();assert(nRFUsbdIsoXfer(1U,512));frame();finish(true);
- chainIn=true;AppEvtHandlerExec();assert(ISO_BUSY()&2);frame();finish(true);AppEvtHandlerExec();
+ init();assert(nRFUsbdIsoXfer(1U,512));frame();chainIn=true;finish(true);
+ assert(ISO_BUSY()&2);frame();finish(true);
  assert(callbacks[1]==2 && lengths[1]==9);
  puts("PASS: explicit ZLPs, 512-byte IN and callback submission are supported");
 
  init();s_Usbd.Flags|=USBD_FLAG_SUSPENDED;assert(nRFUsbdIsoXfer(1U,17));frame();assert(!dmaBusy);
- s_Usbd.Flags&=~(uint32_t)USBD_FLAG_SUSPENDED;frame();assert(dmaBusy);finish(true);AppEvtHandlerExec();
+ s_Usbd.Flags&=~(uint32_t)USBD_FLAG_SUSPENDED;frame();assert(dmaBusy);finish(true);
  assert(callbacks[1]==1);
  puts("PASS: suspended submission waits until resume");
 
