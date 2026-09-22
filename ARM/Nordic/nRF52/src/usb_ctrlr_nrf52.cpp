@@ -1126,8 +1126,8 @@ extern "C" void USBD_IRQHandler(void)
 	if (startDma)
 	{
 		// Restart before EPDATA/SOF work; SETUP and bus events take precedence.
-		if (NRF_USBD->EVENTS_EP0SETUP == 0U &&
-			NRF_USBD->EVENTS_USBEVENT == 0U && nRFUsbdDmaAllowed())
+		if ((NRF_USBD->EVENTS_EP0SETUP | NRF_USBD->EVENTS_USBEVENT) == 0U &&
+			nRFUsbdDmaAllowed())
 		{
 			// EP0DATADONE retains OUT readiness while another endpoint owns DMA.
 			if (NRF_USBD->EVENTS_EP0DATADONE != 0U &&
