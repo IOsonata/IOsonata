@@ -27,6 +27,7 @@ header = (ROOT / 'ARM/Nordic/include/usb_ctrlr.h').read_text()
 queue_blocking = re.search(r's_Usbd.hQue = CFifoInit\(s_QueMem,.*?\b(true|false)\);',
     source, re.S).group(1)
 assert 'CFifoFlush(s_Usbd.hQue);' in source
+assert 'NRF_USBD->EVENTS_EP0SETUP == 0U' in source
 
 
 def function(name, source=source):
@@ -301,17 +302,17 @@ void setupOutComplete(UsbCtrlrEvtType_t event,uint16_t length,void*){
 }
 void setupResponseHandler(const UsbCtrlrEvt_t *event){
  assert(event->Setup.bmRequestType==0x80 && event->Setup.wLength==18);
+ // Production SETUP has already waited for idle. A later interrupt can
+ // acquire DMA before the core finishes preparing its control response.
  assert(!irqMask && !dmaBusy && !CFifoUsed(s_Usbd.hEp0Que));
- assert((s_Usbd.Flags & USBD_FLAG_EP0_SETUP)!=0U);
  if(interruptSetup){
   regs.SIZE.EPOUT[1]=9;
   regs.EPDATASTATUS.bits=1U<<17;regs.EVENTS_EPDATA=1;
   interrupt();
-  assert(!dmaBusy && !regs.TASKS_STARTEPOUT[1]);
-  assert(CFifoUsed(s_Usbd.hQue)==1);
+  assert(dmaBusy && regs.TASKS_STARTEPOUT[1]);
  }
  assert(UsbCtrlrEp0Send(0,setupResponse,sizeof(setupResponse))==sizeof(setupResponse));
- assert(regs.TASKS_STARTEPIN[0] && dmaBusy);
+ assert(bool(regs.TASKS_STARTEPIN[0])==!interruptSetup);
 }
 uint8_t chainedResponse[513],outResponse[192];
 unsigned chainedOffset,outOffset,outCallbacks,outExpected;
@@ -604,7 +605,7 @@ int main(int argc,char **argv){
   }
   assert(regs.TASKS_STARTEPIN[0] && dmaBusy && regs.EPIN[0].MAXCNT==18);
  }
- puts("PASS: EP0 SETUP owns EasyDMA priority over regular endpoint work");
+ puts("PASS: an OUT interrupt after SETUP's idle wait cannot strand the EP0 response");
 
  for(unsigned status:{2U,0x100U,0x1000000U})
  for(unsigned gate:{0U,unsigned(USBD_FLAG_SUSPENDED),unsigned(USBD_FLAG_HOST_RESUME),
@@ -1341,6 +1342,35 @@ int main(int argc,char **argv){
  }
  puts("PASS: packet IN full/short/ZLP, aligned ring wrap, queued DMA contention,");
  puts("      ENDEP preserves TX data, host completion releases exactly one packet");
+
+ // SETUP and an IN host-completion may be latched in the same IRQ.
+ // SETUP must enter AppEvt first; the IN completion callback follows it.
+ init();
+ {
+  unsigned order=0,setupOrder=0,inOrder=0;
+  setupHandler=[&](const UsbCtrlrEvt_t *){
+   setupOrder=++order;
+  };
+  auto &reg=s_Usbd.EpReg[0][1];
+  reg.pContext=&inOrder;
+  reg.Handler=[](UsbCtrlrEvtType_t event,uint16_t,void *context){
+   assert(event==USB_CTRLR_EVT_XFER_CMPL);
+   auto *p=(unsigned*)context;
+   *p=2;
+  };
+  regs.EPIN[1].AMOUNT=9;
+  regs.BMREQUESTTYPE=0x80;regs.BREQUEST=6;regs.WLENGTHL=18;
+  regs.EPDATASTATUS.bits=1U<<1;
+  regs.EVENTS_EPDATA=1;
+  regs.EVENTS_EP0SETUP=1;
+  interrupt();
+  assert(!regs.EVENTS_EP0SETUP);
+  AppEvtHandlerDispatch();
+  assert(setupOrder==1 && inOrder==0);
+  AppEvtHandlerDispatch();
+  assert(inOrder==2);
+ }
+ puts("PASS: same-IRQ SETUP AppEvt precedes regular IN completion AppEvt");
 
  // Seven pending IN endpoints exceed the default AppEvt capacity of four.
  // A full AppEvt queue must leave all seven latched; OUT retry shares the status register.

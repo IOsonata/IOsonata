@@ -289,7 +289,6 @@ enum
 	// Suspend clears READY with the wake flags; keep that mask byte-sized.
 	USBD_FLAG_ISO_OUT_READY = 0x0020U,
 	USBD_FLAG_ISO_IN_READY  = 0x0040U,
-	USBD_FLAG_EP0_SETUP     = 0x0080U,
 	USBD_FLAG_ISO_OUT_OPEN  = 0x0400U,
 	USBD_FLAG_ISO_IN_OPEN   = 0x0800U,
 	USBD_FLAG_ISO_OUT_BUSY  = 0x1000U,
