@@ -99,7 +99,7 @@ static void UsbdCdcNotifyPortState(UsbdCdcDev_t *pCdc, bool Open)
 static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 {
 	if (pCdc == nullptr || pCdc->pData->Mps == 0U ||
-		!pCdc->SerialStatePending)
+		!pCdc->SerialStatePending || pCdc->SerialStateActive)
 	{
 		return;
 	}
@@ -120,8 +120,12 @@ static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 
 	pCdc->SerialStatePending = false;
 
-	if (!UsbCtrlrEpSend(pCdc->DevNo, pCdc->NotifyEpNo, pData,
+	if (UsbCtrlrEpSend(pCdc->DevNo, pCdc->NotifyEpNo, pData,
 						 USBD_CDC_NOTIFY_LEN))
+	{
+		pCdc->SerialStateActive = true;
+	}
+	else
 	{
 		pCdc->SerialStatePending = true;
 	}
@@ -143,6 +147,7 @@ static void UsbdCdcCloseEndpoints(UsbdCdcDev_t *pCdc)
 static void UsbdCdcCancelBusState(UsbdCdcDev_t *pCdc)
 {
 	pCdc->SerialStatePending = false;
+	pCdc->SerialStateActive = false;
 	UsbIntrfUnconfigure(pCdc->pData);
 }
 
@@ -318,11 +323,17 @@ static void UsbdCdcNotifCtrlrEvent(UsbCtrlrEvtType_t Event,
 
 	if (Event == USB_CTRLR_EVT_XFER_CMPL)
 	{
+		pCdc->SerialStateActive = false;
 		UsbdCdcNotifKick(pCdc);
 	}
 	else if (Event == USB_CTRLR_EVT_XFER_FAILED)
 	{
+		pCdc->SerialStateActive = false;
 		pCdc->SerialStatePending = true;
+	}
+	else if (Event == USB_CTRLR_EVT_CANCEL)
+	{
+		pCdc->SerialStateActive = false;
 	}
 }
 
@@ -364,6 +375,7 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	pCdc->PendingControlLineState = 0U;
 	pCdc->SerialState = 0U;
 	pCdc->SerialStatePending = false;
+	pCdc->SerialStateActive = false;
 	UsbdCdcDefaultLineCoding(pCdc);
 
 	UsbdEpAllocReq_t req = {};

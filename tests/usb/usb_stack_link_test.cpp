@@ -62,6 +62,9 @@ static uint8_t s_RegisteredEp[6];
 static int s_RegisteredEpCount;
 static int s_EpOpenCount;
 static int s_Ep0EventCount;
+static UsbCtrlrEpHandler_t s_EpHandler[16];
+static void *s_EpContext[16];
+static unsigned s_EpSendCount[8];
 static uint8_t s_LastEp0Addr;
 static uint16_t s_LastEp0Length;
 
@@ -89,18 +92,22 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *)
 void UsbCtrlrEpClose(int, uint8_t, bool) {}
 void UsbCtrlrEpCloseAll(int) {}
 void UsbCtrlrEpAlloc(int, uint8_t EpNo, bool bIn, uint8_t *, bool,
-						UsbCtrlrEpHandler_t, void *)
+						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	if (s_RegisteredEpCount >= (int)sizeof(s_RegisteredEp))
+	if (s_RegisteredEpCount < (int)sizeof(s_RegisteredEp))
 	{
-		return;
+		s_RegisteredEp[s_RegisteredEpCount++] = (uint8_t)(EpNo |
+			(bIn ? USB_ENDPADDR_DIR_IN : 0U));
 	}
-
-	s_RegisteredEp[s_RegisteredEpCount++] = (uint8_t)(EpNo |
-		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
-	return;
+	const unsigned index = EpNo + (bIn ? 8U : 0U);
+	s_EpHandler[index] = Handler;
+	s_EpContext[index] = pContext;
 }
-bool UsbCtrlrEpSend(int, uint8_t, uint8_t *, uint16_t) { return true; }
+bool UsbCtrlrEpSend(int, uint8_t EpNo, uint8_t *, uint16_t)
+{
+	s_EpSendCount[EpNo]++;
+	return true;
+}
 static bool RecordEp0(uint8_t EpAddr, uint16_t Length)
 {
 	s_Ep0EventCount++;
@@ -299,6 +306,37 @@ int main(void)
 		return 11;
 	}
 	CompleteEp0In();
+
+	// CDC notification owns one transfer buffer. Multiple state changes while
+	// the initial notification is in flight must coalesce, not queue that
+	// same buffer more than once.
+	if (s_EpSendCount[pCdc0->NotifyEpNo] != 1U)
+	{
+		printf("CDC initial notification was not submitted exactly once\n");
+		return 15;
+	}
+	UsbdCdcSetSerialState(pCdc0, 1U);
+	UsbdCdcSetSerialState(pCdc0, 2U);
+	if (s_EpSendCount[pCdc0->NotifyEpNo] != 1U)
+	{
+		printf("CDC notification buffer was submitted while already active\n");
+		return 16;
+	}
+	const unsigned notifyIndex = pCdc0->NotifyEpNo + 8U;
+	s_EpHandler[notifyIndex](USB_CTRLR_EVT_XFER_CMPL,
+		USBD_CDC_NOTIFY_LEN, s_EpContext[notifyIndex]);
+	if (s_EpSendCount[pCdc0->NotifyEpNo] != 2U)
+	{
+		printf("CDC pending notification was not chained after completion\n");
+		return 17;
+	}
+	s_EpHandler[notifyIndex](USB_CTRLR_EVT_XFER_CMPL,
+		USBD_CDC_NOTIFY_LEN, s_EpContext[notifyIndex]);
+	if (s_EpSendCount[pCdc0->NotifyEpNo] != 2U)
+	{
+		printf("CDC notification completion duplicated a transfer\n");
+		return 18;
+	}
 
 	SetControlLineState(pCdc0->CtrlIfNo, USB_CDC_CTRL_LINE_STATE_DTR);
 	if (s_Ep0EventCount != 3 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||

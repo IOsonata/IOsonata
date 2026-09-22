@@ -124,6 +124,7 @@ typedef struct __Usbd_Cdc_Dev {
 	UsbdCdcDesc_t FsDesc;
 	UsbdCdcDesc_t HsDesc;
 	bool SerialStatePending;
+	bool SerialStateActive;
 	uint32_t RxTransfer[USBD_CDC_TRANS_WORDS];
 	uint32_t NotifTransfer[USBD_CDC_NOTIFY_WORDS];
 } UsbdCdcDev_t;
