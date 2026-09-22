@@ -79,7 +79,7 @@ struct Registers {
 } regs;
 using NRF_USBD_Type = Registers;
 auto *NRF_USBD=&regs;
-struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;uint16_t MaxPacketSize;bool bBlocking;bool IsoOpen;};
+struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;uint16_t MaxPacketSize;bool bBlocking;};
 typedef Endpoint USBD_ISOIN_Type;
 typedef Endpoint USBD_ISOOUT_Type;
 FLAG_ENUM
@@ -87,13 +87,14 @@ QUEUE_TYPES
 struct {
  volatile uint32_t Flags=0;
   bool SofEnabled=false;
+ bool IsoOpen=false;
  uint8_t IsoBufState=0;
  uint16_t IsoDmaLen[2]={};
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue;
 } s_Usbd;
 alignas(8) uint8_t queueMemory[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
-#define ISO_OPEN() unsigned(s_Usbd.EpReg[7][0].IsoOpen)
+#define ISO_OPEN() unsigned(s_Usbd.IsoOpen)
 #define ISO_BUSY() ((s_Usbd.IsoBufState / NRFUSBD_ISO_OUT_BUSY) & 3u)
 unsigned irqMask=0,isoStarts[2]={},regularStarts=0;
 unsigned activeDir=0;
@@ -185,12 +186,11 @@ void init(){
  s_Usbd.hQue=CFifoInit(queueMemory,sizeof(queueMemory),sizeof(nRFUsbdQue_t),true);
  assert(s_Usbd.hQue);
  // Both ISO directions open; busy/ready and suspend state start clear.
- s_Usbd.Flags=0;s_Usbd.IsoBufState=0;
+ s_Usbd.Flags=0;s_Usbd.IsoOpen=true;s_Usbd.IsoBufState=0;
  dmaBusy=0;dmaLocks=dmaUnlocks=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
- s_Usbd.EpReg[7][0]={outBuffer,callback,(void*)0,512,false,true};
- s_Usbd.EpReg[7][1]={inBuffer,callback,(void*)1,512,false,false};
- regs.EPOUTEN=regs.EPINEN=1U<<8;
+ s_Usbd.EpReg[7][0]={outBuffer,callback,(void*)0,512,false};
+ s_Usbd.EpReg[7][1]={inBuffer,callback,(void*)1,512,false};
  memset(inBuffer,0xA5,sizeof(inBuffer));memset(hostOut,0x5A,sizeof(hostOut));
  assert(AppEvtHandlerInit(nullptr,0));
 }
@@ -322,7 +322,7 @@ int main(){
  init();frame(17);regs.ISOOUT.AMOUNT=17;regs.EVENTS_ENDISOOUT=1;
  UsbCtrlrEpClose(0,8,false);
  assert(callbacks[0]==0 && !dmaBusy && !(ISO_BUSY()&1));
- s_Usbd.EpReg[7][0].IsoOpen=true;s_Usbd.EpReg[7][0].MaxPacketSize=9;
+ s_Usbd.IsoOpen=true;s_Usbd.EpReg[7][0].MaxPacketSize=9;
  frame(9);finish(false);
  assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
  puts("PASS: close drains active ISO silently; reopen completion belongs to new transfer");
@@ -357,11 +357,11 @@ int main(){
  }
  for(uint8_t ep:{0U,8U})for(bool in:{false,true}){
   init();assert(!productionEpOpenData(0,ep,in,USB_ENDPATT_TRANS_BULK,64));
-  assert(regs.EPINEN==(1U<<8) && regs.EPOUTEN==(1U<<8) && !regs.EPSTALL && !regs.DTOGGLE);
+  assert(!regs.EPINEN && !regs.EPOUTEN && !regs.EPSTALL && !regs.DTOGGLE);
  }
  for(unsigned mps:{0U,65U}){
   init();assert(!productionEpOpenData(0,1,false,USB_ENDPATT_TRANS_BULK,mps));
-  assert(regs.EPINEN==(1U<<8) && regs.EPOUTEN==(1U<<8) && !regs.EPSTALL && !regs.DTOGGLE);
+  assert(!regs.EPINEN && !regs.EPOUTEN && !regs.EPSTALL && !regs.DTOGGLE);
  }
  puts("PASS: regular open clears halt/data toggle, arms OUT and preserves the other direction");
 
@@ -373,7 +373,7 @@ int main(){
    regs.SIZE.EPOUT[n]=64;s_Usbd.EpReg[n][0].MaxPacketSize=s_Usbd.EpReg[n][1].MaxPacketSize=64;
   }
   UsbCtrlrEpClose(0,ep,dir);
-  assert(irqMask==masked && ISO_OPEN()==1 && ISO_BUSY()==0);
+  assert(irqMask==masked && ISO_OPEN()==3 && ISO_BUSY()==0);
   assert(regs.EPINEN==(dir?(0x1FFU&~(1U<<ep)):0x1FFU));
   assert(regs.EPOUTEN==(!dir?(0x1FFU&~(1U<<ep)):0x1FFU));
   assert(regs.INTENCLR==(1U<<((dir?USBD_INTEN_ENDEPIN0_Pos:USBD_INTEN_ENDEPOUT0_Pos)+ep)));
