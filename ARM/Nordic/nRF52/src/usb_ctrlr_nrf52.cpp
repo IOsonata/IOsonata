@@ -698,7 +698,6 @@ static void nRFUsbdResetState(void)
 	s_Usbd.SofEnabled = false;
 	s_Usbd.IsoOpen = false;
 	s_Usbd.IsoBufState = 0U;
-	s_Usbd.IsoDmaLen[0] = s_Usbd.IsoDmaLen[1] = -1;
 
 	CFifoFlush(s_Usbd.hQue);
 	CFifoFlush(s_Usbd.hEp0Que);
