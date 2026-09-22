@@ -75,7 +75,6 @@ static bool EpAllocTryOut(const UsbdEpAllocState_t *pState, uint8_t Needed,
 			return false;
 		}
 
-		memset(pState->pRes, 0, sizeof(*pState->pRes));
 		pState->pRes->FirstInterface = pState->FirstInterface;
 		EpAllocStore(pState->pRes->Bidirectional,
 			pState->pReq->BidirectionalCount, PairMask);
