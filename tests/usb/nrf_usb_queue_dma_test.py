@@ -609,7 +609,8 @@ int main(int argc,char **argv){
  puts("PASS: an OUT interrupt after SETUP's idle wait cannot strand the EP0 response");
 
  for(unsigned status:{2U,0x100U,0x1000000U})
- for(unsigned mode=0;mode<4;++mode){
+ for(unsigned gate:{0U,unsigned(USBD_FLAG_SUSPENDED),unsigned(USBD_FLAG_HOST_RESUME),
+  unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND)}){
   init();
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
   else{
@@ -617,36 +618,28 @@ int main(int argc,char **argv){
    s_Usbd.IsoOpen=true;
   }
   assert(UsbCtrlrEp0Send(0,data,18)==18);
-  if(mode==1)s_Usbd.Flags|=USBD_FLAG_SUSPENDED;
-  else if(mode==2)s_Usbd.Flags|=USBD_FLAG_HOST_RESUME;
-  else if(mode==3){s_Usbd.Flags|=USBD_FLAG_SUSPENDED;s_Usbd.LowPowerSuspend=true;}
+  s_Usbd.Flags|=gate;
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   isoReady=true;isoChecks=0;dmaLocks=dmaUnlocks=0;interrupt();
-  const bool allowed=mode==0 || mode==3;
+  const bool allowed=gate==0U || gate==unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND);
   assert(bool(regs.TASKS_STARTEPIN[0])==allowed && bool(dmaBusy)==allowed);
   assert(!dmaLocks && dmaUnlocks==unsigned(!allowed) && !isoChecks);
   assert(CFifoUsed(s_Usbd.hEp0Que)==1 && !CFifoUsed(s_Usbd.hQue));
  }
  puts("PASS: regular/ISO handoff to EP0 preserves suspend and host-resume gates without relocking");
 
- // Exercise every suspend/wake combination at submission.
+ // Exercise every combination of the four power flags at submission.
  // A denied request stays queued without touching the hardware lock.
- for(unsigned combo=0;combo<16;++combo)for(bool lowPower:{false,true})for(unsigned mask:{0U,1U}){
-  init();irqMask=mask;s_Usbd.LowPowerSuspend=lowPower;s_Usbd.Flags=0;
-  if(combo&1)s_Usbd.Flags|=USBD_FLAG_SUSPENDED;
-  if(combo&2)s_Usbd.Flags|=USBD_FLAG_REMOTE_WAKE;
-  if(combo&4)s_Usbd.Flags|=USBD_FLAG_HOST_RESUME;
-  if(combo&8)s_Usbd.Flags|=USBD_FLAG_MAC_AWAKE;
+ for(unsigned gate=0;gate<16;++gate)for(unsigned mask:{0U,1U}){
+  init();irqMask=mask;s_Usbd.Flags=USBD_FLAG_MAC_AWAKE|gate;
   assert(UsbCtrlrEpSend(0,1,data,9));
-  const bool allowed=!(s_Usbd.Flags&USBD_FLAG_HOST_RESUME) &&
-   (!(s_Usbd.Flags&USBD_FLAG_SUSPENDED) ||
-    (lowPower &&
-     (s_Usbd.Flags&(USBD_FLAG_REMOTE_WAKE|USBD_FLAG_MAC_AWAKE))==USBD_FLAG_MAC_AWAKE));
+  const bool allowed=!(gate&USBD_FLAG_HOST_RESUME) &&
+   (!(gate&USBD_FLAG_SUSPENDED) || (gate&USBD_FLAG_SUSPEND_PEND));
   assert(bool(dmaBusy)==allowed && dmaLocks==unsigned(allowed) && !dmaUnlocks);
   assert(CFifoUsed(s_Usbd.hQue)==1 && irqMask==mask);
   assert(bool(regs.TASKS_STARTEPIN[1])==allowed);
   if(!allowed){
-   s_Usbd.Flags=USBD_FLAG_MAC_AWAKE;s_Usbd.LowPowerSuspend=false;
+   s_Usbd.Flags=USBD_FLAG_MAC_AWAKE;
    const unsigned state=DisableInterrupt();nRFUsbdResumeQueuedDmaLocked();EnableInterrupt(state);
    assert(dmaBusy && dmaLocks==1 && !dmaUnlocks && regs.TASKS_STARTEPIN[1]);
    assert(CFifoUsed(s_Usbd.hQue)==1 && irqMask==mask);
@@ -793,17 +786,16 @@ int main(int argc,char **argv){
  // later. Completion may drain low-power suspend, but must not bypass an
  // ordinary suspend or a host resume still waiting for USBWUALLOWED.
  for(unsigned status:{2U,0x100U,0x1000000U})
- for(unsigned mode=0;mode<4;++mode){
+ for(unsigned gate:{0U,unsigned(USBD_FLAG_SUSPENDED),unsigned(USBD_FLAG_HOST_RESUME),
+  unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND)}){
   init();dmaBusy=0x82;
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
   else s_Usbd.IsoOpen=true;
   assert(UsbCtrlrEpSend(0,2,data+64,9));
-  if(mode==1)s_Usbd.Flags|=USBD_FLAG_SUSPENDED;
-  else if(mode==2)s_Usbd.Flags|=USBD_FLAG_HOST_RESUME;
-  else if(mode==3){s_Usbd.Flags|=USBD_FLAG_SUSPENDED;s_Usbd.LowPowerSuspend=true;}
+  s_Usbd.Flags|=gate;
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   interrupt();
-  const bool allowed=mode==0 || mode==3;
+  const bool allowed=gate==0U || gate==unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND);
   assert(bool(dmaBusy)==allowed && bool(regs.TASKS_STARTEPIN[2])==allowed);
   assert(isoChecks==unsigned(allowed) && CFifoUsed(s_Usbd.hQue)==1);
  }
@@ -839,11 +831,11 @@ int main(int argc,char **argv){
  for(unsigned mask:{0U,1U}){
   init();irqMask=mask;regs.LOWPOWER=lowPower;
   s_Usbd.IsoOpen=true;
-  s_Usbd.Flags=USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE;
+  s_Usbd.Flags=USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND|USBD_FLAG_REMOTE_WAKE;
   if(awake)s_Usbd.Flags|=USBD_FLAG_MAC_AWAKE;
   nRFUsbdHostResumeDetected();
   assert(irqMask==mask && !regs.LOWPOWER && resumes==unsigned(awake && !lowPower));
-  assert(!(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE)));
+  assert(!(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND|USBD_FLAG_REMOTE_WAKE)));
   assert(s_Usbd.IsoOpen);
   nRFUsbdHostResumeDetected();
   nRFUsbdWakeAllowed();nRFUsbdWakeAllowed();
