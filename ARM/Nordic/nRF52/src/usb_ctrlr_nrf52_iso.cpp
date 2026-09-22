@@ -71,12 +71,18 @@ void nRFIsoHwEnable(bool In, bool Enable)
 	}
 }
 
+static inline __attribute__((always_inline)) bool nRFIsoOpen(void)
+{
+	const nRFUsbEpReg_t *pReg =
+		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
+	return pReg[0].MaxPacketSize != 0U && pReg[1].MaxPacketSize != 0U;
+}
 
 
 // The shared scheduler already owns the channel lock.
 bool nRFUsbdIsoStart(void)
 {
-	if (!s_Usbd.IsoOpen)
+	if (!nRFIsoOpen())
 	{
 		return false;
 	}
@@ -133,7 +139,7 @@ bool nRFUsbdIsoXfer(uint8_t Dir, uint16_t Length)
 	nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][Dir];
 	const uint8_t busy = (uint8_t)NRFUSBD_ISO_OUT_BUSY << Dir;
 	const uint32_t state = DisableInterrupt();
-	if (!s_Usbd.IsoOpen || (s_Usbd.IsoBufState & busy) != 0U ||
+	if (!nRFIsoOpen() || (s_Usbd.IsoBufState & busy) != 0U ||
 		pReg->pBuffer == NULL || pReg->Handler == NULL ||
 		Length > pReg->MaxPacketSize)
 	{
@@ -190,14 +196,14 @@ static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 
 bool nRFUsbdIsoFinishDma(uint32_t DmaStatus)
 {
-	const bool notify = DmaStatus != 0U || s_Usbd.IsoOpen;
+	const bool notify = DmaStatus != 0U || nRFIsoOpen();
 	return (DmaStatus != 0x01000000U && nRFUsbdFinishIsoDma(true, notify)) ||
 		(DmaStatus != 0x00000100U && nRFUsbdFinishIsoDma(false, notify));
 }
 
 void nRFUsbdIsoSof(void)
 {
-	if (!s_Usbd.IsoOpen)
+	if (!nRFIsoOpen())
 	{
 		return;
 	}
@@ -255,7 +261,6 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 		return false;
 	}
 
-	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][in].MaxPacketSize = pDesc->wMaxPacketSize;
 	NRF_USBD->ISOSPLIT =
 		USBD_ISOSPLIT_SPLIT_HalfIN << USBD_ISOSPLIT_SPLIT_Pos;
 	NRF_USBD->ISOINCONFIG =
@@ -265,11 +270,10 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 
 	const uint8_t dir = in ? 1U : 0U;
 	const uint32_t state = DisableInterrupt();
+	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir].MaxPacketSize =
+		pDesc->wMaxPacketSize;
 	s_Usbd.IsoBufState &=
 		(uint8_t)~((uint8_t)NRFUSBD_ISO_OUT_READY << dir);
-	s_Usbd.IsoOpen =
-		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].MaxPacketSize != 0U &&
-		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1].MaxPacketSize != 0U;
 	EnableInterrupt(state);
 
 	nRFUsbdSofAcquire();
@@ -282,16 +286,15 @@ void nRFUsbdIsoEpClose(bool bIn)
 	const uint8_t dir = bIn ? 1U : 0U;
 	const uint32_t state = DisableInterrupt();
 
-	// ISO is one bidirectional path. Closing either side stops scheduling and
-	// makes a polled END a cancellation rather than a normal completion.
-	s_Usbd.IsoOpen = false;
+	// ISO is one bidirectional path. Closing either side clears endpoint
+	// state first so a polled END is cancellation, not normal completion.
+	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir].MaxPacketSize = 0U;
 	nRFUsbdDmaWait();
 	s_Usbd.IsoBufState = 0U;
 
 	nRFIsoHwEnable(bIn, false);
 	nRFUsbdSofRelease();
 
-	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir].MaxPacketSize = 0U;
 	__DSB();
 	EnableInterrupt(state);
 }
