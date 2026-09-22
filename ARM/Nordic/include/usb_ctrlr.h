@@ -277,6 +277,7 @@ typedef struct __nRF_Usb_Ep_Registration
 	void *pContext;
 	uint16_t MaxPacketSize;
 	bool bBlocking;
+	bool IsoOpen;                 //!< OUT EP8 marks the bidirectional ISO path open.
 } nRFUsbEpReg_t;
 
 enum
