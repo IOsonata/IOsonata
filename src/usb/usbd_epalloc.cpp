@@ -55,7 +55,7 @@ typedef struct __Usbd_EpAlloc_State {
 
 static void EpAllocStore(uint8_t *pEp, unsigned Count, uint16_t Mask)
 {
-	while (Count-- != 0U && Mask != 0U)
+	while (Count-- != 0U)
 	{
 		*pEp++ = (uint8_t)__builtin_ctz((unsigned)Mask);
 		Mask &= (uint16_t)(Mask - 1U);
