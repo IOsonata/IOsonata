@@ -293,8 +293,6 @@ enum
 	USBD_FLAG_ISO_IN_OPEN   = 0x0800U,
 	USBD_FLAG_ISO_OUT_BUSY  = 0x1000U,
 	USBD_FLAG_ISO_IN_BUSY   = 0x2000U,
-	USBD_FLAG_ISO_OUT_CMPL  = 0x4000U,
-	USBD_FLAG_ISO_IN_CMPL   = 0x8000U,
 };
 
 typedef struct __nRF_Usbd_State
@@ -303,7 +301,7 @@ typedef struct __nRF_Usbd_State
 	uint8_t IntPrio;
 	bool LowPowerSuspend;
 	bool SofEnabled;
-	// One pending DMA packet per ISO direction; -1 means none, 0 is a ZLP.
+	// ISO DMA state: >=0 queued length, -1 none/started, -2 completion retry.
 	int16_t IsoDmaLen[2];
 	uint16_t IsoOutSize;
 	volatile uint32_t Flags;
