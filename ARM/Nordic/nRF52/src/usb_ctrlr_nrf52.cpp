@@ -661,10 +661,8 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaAllowed(void)
 {
-	const uint8_t gate = s_Usbd.Flags &
-		(USBD_FLAG_HOST_RESUME | USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND);
-	return (gate & USBD_FLAG_HOST_RESUME) == 0U &&
-		gate != USBD_FLAG_SUSPENDED;
+	return (s_Usbd.Flags &
+		(USBD_FLAG_SUSPENDED | USBD_FLAG_HOST_RESUME)) == 0U;
 }
 
 // Callers check the power gate and own the channel lock. EP0 starts
@@ -723,14 +721,11 @@ static void nRFUsbdAbortEp0(void)
 // so no interrupt exclusion is needed here.
 static void nRFUsbdTryEnterLowPower(void)
 {
-	const uint8_t entryMask = USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND |
-		USBD_FLAG_REMOTE_WAKE | USBD_FLAG_HOST_RESUME;
-	const uint8_t entryWant = USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND;
-
+	const uint8_t entryMask = USBD_FLAG_SUSPENDED | USBD_FLAG_REMOTE_WAKE |
+		USBD_FLAG_HOST_RESUME;
 	if (!s_Usbd.LowPowerSuspend ||
-		(s_Usbd.Flags & entryMask) != entryWant ||
-		nRFUsbdDmaActive() ||
-		CFifoPeek(s_Usbd.hQue) != NULL)
+		(s_Usbd.Flags & entryMask) != USBD_FLAG_SUSPENDED ||
+		nRFUsbdDmaActive())
 	{
 		return;
 	}
@@ -751,11 +746,7 @@ static void nRFUsbdTryEnterLowPower(void)
 		NRF_USBD->EVENTS_SOF != 0U)
 	{
 		nRFUsbdHostResumeDetected();
-		return;
 	}
-
-	// Hardware resume is handled by the RESUME/SOF check above.
-	s_Usbd.Flags &= (uint8_t)~USBD_FLAG_SUSPEND_PEND;
 }
 
 static void nRFUsbdTryRemoteWake(void)
@@ -796,8 +787,8 @@ static void nRFUsbdHostResumeDetected(void)
 	}
 
 	const bool waking = (flags & USBD_FLAG_MAC_AWAKE) == 0U || !UsbdIsForceNormal();
-	flags &= (uint8_t)~(USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND |
-		USBD_FLAG_REMOTE_WAKE | USBD_FLAG_HOST_RESUME);
+	flags &= (uint8_t)~(USBD_FLAG_SUSPENDED | USBD_FLAG_REMOTE_WAKE |
+		USBD_FLAG_HOST_RESUME);
 	if (waking)
 		flags |= USBD_FLAG_HOST_RESUME;
 	s_Usbd.Flags = flags;
@@ -913,11 +904,9 @@ static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 		// A bus suspend and a peripheral low-power transition are separate.
 		// When low-power suspend is disabled, retain all endpoint state and
 		// wait for RESUME or SOF without touching USBD LOWPOWER.
-		s_Usbd.Flags = (s_Usbd.Flags & ~(uint32_t)(USBD_FLAG_REMOTE_WAKE |
-			USBD_FLAG_HOST_RESUME | USBD_FLAG_SUSPEND_PEND)) |
-			USBD_FLAG_SUSPENDED |
-			(s_Usbd.LowPowerSuspend ?
-			 (uint32_t)USBD_FLAG_SUSPEND_PEND : 0U);
+		s_Usbd.Flags = (s_Usbd.Flags &
+			(uint8_t)~(USBD_FLAG_REMOTE_WAKE | USBD_FLAG_HOST_RESUME)) |
+			USBD_FLAG_SUSPENDED;
 		s_Usbd.IsoBufState &=
 			(uint8_t)~(NRFUSBD_ISO_IN_READY | NRFUSBD_ISO_OUT_READY);
 		nRFUsbdSofAcquire();
@@ -1363,8 +1352,7 @@ void UsbCtrlrRemoteWakeup(int DevNo)
 		return;
 	}
 
-	s_Usbd.Flags = (flags & (uint8_t)~USBD_FLAG_SUSPEND_PEND) |
-		USBD_FLAG_REMOTE_WAKE;
+	s_Usbd.Flags = flags | USBD_FLAG_REMOTE_WAKE;
 
 	UsbdForceNormal();
 	nRFUsbdTryRemoteWake();
