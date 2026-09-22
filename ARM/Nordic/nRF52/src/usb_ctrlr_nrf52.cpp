@@ -856,10 +856,9 @@ static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
 {
 	(void)pContext;
 
-	const uint8_t epNum = (uint8_t)Evt;
-	nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[epNum - 1U][1];
-	pReg->Handler(USB_CTRLR_EVT_XFER_CMPL,
-		(uint16_t)(Evt >> 8U), pReg->pContext);
+	// This callback handles IN; the event carries only the endpoint number.
+	nRFUsbEpRegisteredEvent((uint8_t)Evt, 1U,
+		USB_CTRLR_EVT_XFER_CMPL, (uint16_t)(Evt >> 8U));
 }
 
 
