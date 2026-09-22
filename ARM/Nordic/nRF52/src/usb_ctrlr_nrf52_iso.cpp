@@ -187,8 +187,7 @@ static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
 
 static void nRFUsbdRetryIsoComplete(void)
 {
-	if ((s_Usbd.Flags &
-		(USBD_FLAG_ISO_OUT_CMPL | USBD_FLAG_ISO_IN_CMPL)) == 0U)
+	if (s_Usbd.IsoDmaLen[0] != -2 && s_Usbd.IsoDmaLen[1] != -2)
 	{
 		return;
 	}
@@ -196,12 +195,11 @@ static void nRFUsbdRetryIsoComplete(void)
 	const uint32_t state = DisableInterrupt();
 	for (uint8_t dir = 0U; dir < 2U; ++dir)
 	{
-		const uint32_t bit = (uint32_t)USBD_FLAG_ISO_OUT_CMPL << dir;
-		if ((s_Usbd.Flags & bit) != 0U &&
+		if (s_Usbd.IsoDmaLen[dir] == -2 &&
 			AppEvtHandlerQue((s_Usbd.IsoGeneration[dir] << 1U) | dir,
 				NULL, nRFUsbdProcessIsoComplete))
 		{
-			s_Usbd.Flags &= ~bit;
+			s_Usbd.IsoDmaLen[dir] = -1;
 		}
 	}
 	EnableInterrupt(state);
@@ -220,8 +218,8 @@ static bool nRFUsbdFinishIsoDma(bool In)
 	*pEnd = 0U;
 	NRF_USBD->EPSTATUS = In ? (1UL << 8U) : (1UL << 24U);
 	__DSB();
-	// The completion caller retains the channel for a handoff or releases it.
-	s_Usbd.Flags |= (uint32_t)USBD_FLAG_ISO_OUT_CMPL << dir;
+	// Retain only AppEvt publication state; DMA handoff is already independent.
+	s_Usbd.IsoDmaLen[dir] = -2;
 	nRFUsbdRetryIsoComplete();
 	return true;
 }
@@ -322,8 +320,7 @@ void nRFUsbdIsoEpClose(bool bIn)
 
 	++s_Usbd.IsoGeneration[dir];
 	s_Usbd.Flags &= ~((uint32_t)(USBD_FLAG_ISO_OUT_BUSY |
-		USBD_FLAG_ISO_OUT_CMPL | USBD_FLAG_ISO_OUT_OPEN |
-		USBD_FLAG_ISO_OUT_READY) << dir);
+		USBD_FLAG_ISO_OUT_OPEN | USBD_FLAG_ISO_OUT_READY) << dir);
 	s_Usbd.IsoDmaLen[dir] = -1;
 
 	nRFIsoHwEnable(bIn, false);
