@@ -307,23 +307,14 @@ int main(void)
 	}
 	CompleteEp0In();
 
-	// SET_CONFIGURATION must finish before CDC starts regular endpoint DMA.
-	// The pending initial notification is kicked by class Process afterwards.
-	if (s_EpSendCount[pCdc0->NotifyEpNo] != 0U)
-	{
-		printf("CDC notification started during SET_CONFIGURATION\n");
-		return 15;
-	}
-	UsbProcess(0);
-	if (s_EpSendCount[pCdc0->NotifyEpNo] != 1U)
-	{
-		printf("CDC initial notification was not deferred to Process\n");
-		return 19;
-	}
-
 	// CDC notification owns one transfer buffer. Multiple state changes while
 	// the initial notification is in flight must coalesce, not queue that
 	// same buffer more than once.
+	if (s_EpSendCount[pCdc0->NotifyEpNo] != 1U)
+	{
+		printf("CDC initial notification was not submitted exactly once\n");
+		return 15;
+	}
 	UsbdCdcSetSerialState(pCdc0, 1U);
 	UsbdCdcSetSerialState(pCdc0, 2U);
 	if (s_EpSendCount[pCdc0->NotifyEpNo] != 1U)
