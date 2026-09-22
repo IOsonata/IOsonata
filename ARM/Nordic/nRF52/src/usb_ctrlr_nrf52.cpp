@@ -663,8 +663,9 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 static inline __attribute__((always_inline)) bool nRFUsbdDmaAllowed(void)
 {
 	const uint32_t gate = s_Usbd.Flags &
-		(USBD_FLAG_HOST_RESUME | USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND);
-	return (gate & USBD_FLAG_HOST_RESUME) == 0U &&
+		(USBD_FLAG_EP0_SETUP | USBD_FLAG_HOST_RESUME |
+		 USBD_FLAG_SUSPENDED | USBD_FLAG_SUSPEND_PEND);
+	return (gate & (USBD_FLAG_EP0_SETUP | USBD_FLAG_HOST_RESUME)) == 0U &&
 		gate != USBD_FLAG_SUSPENDED;
 }
 
@@ -1005,12 +1006,18 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 		NRF_USBD->TASKS_EP0RCVOUT = 1U;
 		(void)NRF_USBD->TASKS_EP0RCVOUT;
 	}
+
+	const uint32_t state = DisableInterrupt();
+	s_Usbd.Flags &= ~(uint32_t)USBD_FLAG_EP0_SETUP;
+	nRFUsbdResumeQueuedDmaLocked();
+	EnableInterrupt(state);
 }
 
 // Callers exclude the USB ISR. Keep SETUP latched until AppEvt accepts it;
 // masking only this source lets the foreground drain a full event queue.
 static void nRFUsbdQueueEp0Setup(void)
 {
+	s_Usbd.Flags |= USBD_FLAG_EP0_SETUP;
 	if (AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEP0Setup))
 	{
 		NRF_USBD->EVENTS_EP0SETUP = 0U;

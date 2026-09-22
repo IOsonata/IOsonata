@@ -301,17 +301,17 @@ void setupOutComplete(UsbCtrlrEvtType_t event,uint16_t length,void*){
 }
 void setupResponseHandler(const UsbCtrlrEvt_t *event){
  assert(event->Setup.bmRequestType==0x80 && event->Setup.wLength==18);
- // Production SETUP has already waited for idle. A later interrupt can
- // acquire DMA before the core finishes preparing its control response.
  assert(!irqMask && !dmaBusy && !CFifoUsed(s_Usbd.hEp0Que));
+ assert((s_Usbd.Flags & USBD_FLAG_EP0_SETUP)!=0U);
  if(interruptSetup){
   regs.SIZE.EPOUT[1]=9;
   regs.EPDATASTATUS.bits=1U<<17;regs.EVENTS_EPDATA=1;
   interrupt();
-  assert(dmaBusy && regs.TASKS_STARTEPOUT[1]);
+  assert(!dmaBusy && !regs.TASKS_STARTEPOUT[1]);
+  assert(CFifoUsed(s_Usbd.hQue)==1);
  }
  assert(UsbCtrlrEp0Send(0,setupResponse,sizeof(setupResponse))==sizeof(setupResponse));
- assert(bool(regs.TASKS_STARTEPIN[0])==!interruptSetup);
+ assert(regs.TASKS_STARTEPIN[0] && dmaBusy);
 }
 uint8_t chainedResponse[513],outResponse[192];
 unsigned chainedOffset,outOffset,outCallbacks,outExpected;
@@ -604,7 +604,7 @@ int main(int argc,char **argv){
   }
   assert(regs.TASKS_STARTEPIN[0] && dmaBusy && regs.EPIN[0].MAXCNT==18);
  }
- puts("PASS: an OUT interrupt after SETUP's idle wait cannot strand the EP0 response");
+ puts("PASS: EP0 SETUP owns EasyDMA priority over regular endpoint work");
 
  for(unsigned status:{2U,0x100U,0x1000000U})
  for(unsigned gate:{0U,unsigned(USBD_FLAG_SUSPENDED),unsigned(USBD_FLAG_HOST_RESUME),
