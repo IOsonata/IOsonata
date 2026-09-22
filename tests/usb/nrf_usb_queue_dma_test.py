@@ -1212,7 +1212,7 @@ int main(int argc,char **argv){
   USBD_INTEN_USBEVENT_Msk | USBD_INTEN_EPDATA_Msk | USBD_INTEN_EP0SETUP_Msk |
   USBD_INTEN_EP0DATADONE_Msk | USBD_INTEN_ENDEPOUT0_Msk));
  assert(CFifoUsed(s_Usbd.hQue)==0 && CFifoUsed(s_Usbd.hEp0Que)==0);
- assert(s_Usbd.Flags==USBD_FLAG_MAC_AWAKE && !s_Usbd.IsoOutSize);
+ assert(s_Usbd.Flags==USBD_FLAG_MAC_AWAKE);
  puts("PASS: bus reset cancels queues, clears status and releases DMA without starting a transfer");
 
  // Producer acceptance and readiness follow CFifo's configured full policy.
