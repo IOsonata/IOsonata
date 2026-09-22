@@ -148,64 +148,7 @@ bool nRFUsbdIsoXfer(uint8_t Dir, uint16_t Length)
 	return true;
 }
 
-static void nRFUsbdProcessIsoComplete(uint32_t Evt, void *pContext)
-{
-	(void)pContext;
-	const uint8_t dir = (uint8_t)(Evt & 1U);
-	const uint32_t busyBit = (uint32_t)USBD_FLAG_ISO_OUT_BUSY << dir;
-	const uint32_t openBusy = ((uint32_t)USBD_FLAG_ISO_OUT_OPEN << dir) | busyBit;
-	const uint32_t generation = Evt >> 1U;
-	uint32_t state = DisableInterrupt();
-	if (generation != (s_Usbd.IsoGeneration[dir] & 0x7FFFFFFFUL) ||
-		(s_Usbd.Flags & openBusy) != openBusy)
-	{
-		EnableInterrupt(state);
-		return;
-	}
-
-	// BUSY prevents another DMA on this endpoint until its callback.
-	const uint16_t amount = (uint16_t)(dir != 0U ?
-		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
-	if (dir != 0U)
-	{
-		s_Usbd.Flags &= ~busyBit;
-	}
-	EnableInterrupt(state);
-
-	nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, dir,
-		USB_CTRLR_EVT_XFER_CMPL, amount);
-
-	state = DisableInterrupt();
-	if (dir == 0U &&
-		generation == (s_Usbd.IsoGeneration[dir] & 0x7FFFFFFFUL))
-	{
-		s_Usbd.Flags &= ~busyBit;
-	}
-	nRFUsbdResumeQueuedDmaLocked();
-	EnableInterrupt(state);
-}
-
-static void nRFUsbdRetryIsoComplete(void)
-{
-	if (s_Usbd.IsoDmaLen[0] != -2 && s_Usbd.IsoDmaLen[1] != -2)
-	{
-		return;
-	}
-
-	const uint32_t state = DisableInterrupt();
-	for (uint8_t dir = 0U; dir < 2U; ++dir)
-	{
-		if (s_Usbd.IsoDmaLen[dir] == -2 &&
-			AppEvtHandlerQue((s_Usbd.IsoGeneration[dir] << 1U) | dir,
-				NULL, nRFUsbdProcessIsoComplete))
-		{
-			s_Usbd.IsoDmaLen[dir] = -1;
-		}
-	}
-	EnableInterrupt(state);
-}
-
-static bool nRFUsbdFinishIsoDma(bool In)
+static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 {
 	volatile uint32_t *pEnd = In ?
 		&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
@@ -215,19 +158,40 @@ static bool nRFUsbdFinishIsoDma(bool In)
 	}
 
 	const uint8_t dir = In ? 1U : 0U;
+	const uint32_t busyBit = (uint32_t)USBD_FLAG_ISO_OUT_BUSY << dir;
 	*pEnd = 0U;
 	NRF_USBD->EPSTATUS = In ? (1UL << 8U) : (1UL << 24U);
 	__DSB();
-	// Retain only AppEvt publication state; DMA handoff is already independent.
-	s_Usbd.IsoDmaLen[dir] = -2;
-	nRFUsbdRetryIsoComplete();
+
+	if (Notify)
+	{
+		const uint16_t amount = (uint16_t)(In ?
+			NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
+
+		// IN may queue its next transfer from the callback. OUT keeps BUSY
+		// through the callback so the RX buffer cannot be reused while copied.
+		if (In)
+		{
+			s_Usbd.Flags &= ~busyBit;
+		}
+
+		nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, dir,
+			USB_CTRLR_EVT_XFER_CMPL, amount);
+
+		if (!In)
+		{
+			s_Usbd.Flags &= ~busyBit;
+		}
+	}
+
 	return true;
 }
 
 bool nRFUsbdIsoFinishDma(uint32_t DmaStatus)
 {
-	return (DmaStatus != 0x01000000U && nRFUsbdFinishIsoDma(true)) ||
-		(DmaStatus != 0x00000100U && nRFUsbdFinishIsoDma(false));
+	const bool notify = DmaStatus != 0U;
+	return (DmaStatus != 0x01000000U && nRFUsbdFinishIsoDma(true, notify)) ||
+		(DmaStatus != 0x00000100U && nRFUsbdFinishIsoDma(false, notify));
 }
 
 void nRFUsbdIsoSof(void)
@@ -288,11 +252,6 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 	}
 
 	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][in].MaxPacketSize = pDesc->wMaxPacketSize;
-	if (!AppEvtHandlerIdleRegister(nRFUsbdRetryIsoComplete))
-	{
-		return false;
-	}
-
 	NRF_USBD->ISOSPLIT =
 		USBD_ISOSPLIT_SPLIT_HalfIN << USBD_ISOSPLIT_SPLIT_Pos;
 	NRF_USBD->ISOINCONFIG =
@@ -318,7 +277,6 @@ void nRFUsbdIsoEpClose(bool bIn)
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdDmaWait();
 
-	++s_Usbd.IsoGeneration[dir];
 	s_Usbd.Flags &= ~((uint32_t)(USBD_FLAG_ISO_OUT_BUSY |
 		USBD_FLAG_ISO_OUT_OPEN | USBD_FLAG_ISO_OUT_READY) << dir);
 	s_Usbd.IsoDmaLen[dir] = -1;
