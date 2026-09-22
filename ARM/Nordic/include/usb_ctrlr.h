@@ -277,7 +277,6 @@ typedef struct __nRF_Usb_Ep_Registration
 	void *pContext;
 	uint16_t MaxPacketSize;
 	bool bBlocking;
-	bool IsoOpen;                 //!< OUT EP8 marks the bidirectional ISO path open.
 } nRFUsbEpReg_t;
 
 enum
@@ -303,9 +302,10 @@ typedef struct __nRF_Usbd_State
 	uint8_t IntPrio;
 	bool LowPowerSuspend;
 	bool SofEnabled;
-	uint8_t IsoBufState;          //!< READY/BUSY state of the ISO DMA buffers.
+	bool IsoOpen;                 //!< EP8 participates in ISO DMA scheduling.
 	// Queued ISO buffer lengths; meaningful while the direction is BUSY.
 	uint16_t IsoDmaLen[2];
+	uint8_t IsoBufState;          //!< READY/BUSY state of the ISO DMA buffers.
 	volatile uint32_t Flags;      //!< Controller power/wake state only.
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;
