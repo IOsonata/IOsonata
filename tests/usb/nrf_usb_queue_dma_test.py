@@ -177,7 +177,7 @@ code += re.search(r'enum\s*\{[^}]*NRFUSBD_ISO_IN_BUSY[^}]*\};', header).group(0)
 code += r'''
 #pragma pack(pop)
 struct {
- uint32_t Flags;
+ uint8_t Flags;
  bool LowPowerSuspend;
  bool IsoOpen;
  uint8_t IsoBufState;
