@@ -1207,18 +1207,116 @@ bool BtHciUsbRequestToSend(BtHciUsbDev_t *pHci, int NbBytes)
 		blocks * (int)BT_HCI_USB_ACL_PKT_BLKSIZE);
 }
 
-static bool BtHciUsbMakeDesc(BtHciUsbDesc_t *pDesc, const BtHciUsbDev_t *pHci,
-					 UsbSpeed_t Speed)
+static constexpr BtHciUsbDesc_t BtHciUsbLegacyTemplate(void)
 {
-	if (pDesc == nullptr || pHci == nullptr ||
-		pHci->HciItfNo < 0 || pHci->HciItfNo > UINT8_MAX - 1 ||
-		pHci->SyncItfNo != pHci->HciItfNo + 1 ||
-		pHci->EventEpNo == 0U || pHci->EventEpNo > 15U ||
-		pHci->AclEpNo == 0U || pHci->AclEpNo > 15U)
-	{
-		return false;
-	}
+	BtHciUsbDesc_t desc = {};
 
+	desc.Association.bLength = sizeof(desc.Association);
+	desc.Association.bDescriptorType = USB_DESCTYPE_IA;
+	desc.Association.bInterfaceCount = 2U;
+	desc.Association.bFunctionClass = USB_INTRFCLASS_WIRELESS;
+	desc.Association.bFunctionSubClass = BT_HCI_USB_SUBCLASS_RF;
+	desc.Association.bFunctionProtocol = BT_HCI_USB_PROTOCOL_BT;
+
+	desc.Hci.bLength = sizeof(desc.Hci);
+	desc.Hci.bDescriptorType = USB_DESCTYPE_INTERFACE;
+	desc.Hci.bNumEndpoints = 3U;
+	desc.Hci.bInterfaceClass = USB_INTRFCLASS_WIRELESS;
+	desc.Hci.bInterfaceSubClass = BT_HCI_USB_SUBCLASS_RF;
+	desc.Hci.bInterfaceProtocol = BT_HCI_USB_PROTOCOL_BT;
+
+	desc.EventIn.bLength = sizeof(desc.EventIn);
+	desc.EventIn.bDescriptorType = USB_DESCTYPE_ENDPOINT;
+	desc.EventIn.bmAttributes = USB_ENDPATT_TRANS_INT;
+
+	desc.AclOut.bLength = sizeof(desc.AclOut);
+	desc.AclOut.bDescriptorType = USB_DESCTYPE_ENDPOINT;
+	desc.AclOut.bmAttributes = USB_ENDPATT_TRANS_BULK;
+	desc.AclIn = desc.AclOut;
+
+	desc.Sync.bLength = sizeof(desc.Sync);
+	desc.Sync.bDescriptorType = USB_DESCTYPE_INTERFACE;
+	desc.Sync.bInterfaceClass = USB_INTRFCLASS_WIRELESS;
+	desc.Sync.bInterfaceSubClass = BT_HCI_USB_SUBCLASS_RF;
+	desc.Sync.bInterfaceProtocol = BT_HCI_USB_PROTOCOL_BT;
+	return desc;
+}
+
+static constexpr BtHciUsbSerialDesc_t BtHciUsbSerialTemplate(void)
+{
+	const BtHciUsbDesc_t legacy = BtHciUsbLegacyTemplate();
+	BtHciUsbSerialDesc_t desc = {};
+	desc.Association = legacy.Association;
+	desc.Hci = legacy.Hci;
+	desc.EventIn = legacy.EventIn;
+	desc.AclOut = legacy.AclOut;
+	desc.AclIn = legacy.AclIn;
+	desc.Serialized.Interface = legacy.Hci;
+	desc.Serialized.Interface.bAlternateSetting = 1U;
+	desc.Serialized.Interface.bNumEndpoints = 2U;
+	desc.Serialized.Out = legacy.AclOut;
+	desc.Serialized.In = legacy.AclIn;
+	desc.Sync = legacy.Sync;
+	return desc;
+}
+
+static constexpr BtHciUsbScoAltDesc_t BtHciUsbScoAltTemplate(unsigned Index)
+{
+	BtHciUsbScoAltDesc_t desc = {};
+	desc.Interface.bLength = sizeof(desc.Interface);
+	desc.Interface.bDescriptorType = USB_DESCTYPE_INTERFACE;
+	desc.Interface.bAlternateSetting = (uint8_t)(Index + 1U);
+	desc.Interface.bNumEndpoints = 2U;
+	desc.Interface.bInterfaceClass = USB_INTRFCLASS_WIRELESS;
+	desc.Interface.bInterfaceSubClass = BT_HCI_USB_SUBCLASS_RF;
+	desc.Interface.bInterfaceProtocol = BT_HCI_USB_PROTOCOL_BT;
+	desc.Out.bLength = sizeof(desc.Out);
+	desc.Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
+	desc.Out.bmAttributes = USB_ENDPATT_TRANS_ISO;
+	desc.Out.wMaxPacketSize = Index == 0U ? 9U :
+		Index == 1U ? 17U : Index == 2U ? 25U :
+		Index == 3U ? 33U : Index == 4U ? 49U : 63U;
+	desc.In = desc.Out;
+	return desc;
+}
+
+static constexpr BtHciUsbScoDesc_t BtHciUsbScoTemplate(void)
+{
+	BtHciUsbScoDesc_t desc = {};
+	desc.Legacy = BtHciUsbLegacyTemplate();
+	for (unsigned i = 0U; i < BT_HCI_USB_SCO_ALT_COUNT; i++)
+	{
+		desc.Alt[i] = BtHciUsbScoAltTemplate(i);
+	}
+	return desc;
+}
+
+static constexpr BtHciUsbFullDesc_t BtHciUsbFullTemplate(void)
+{
+	BtHciUsbFullDesc_t desc = {};
+	desc.Base = BtHciUsbSerialTemplate();
+	for (unsigned i = 0U; i < BT_HCI_USB_SCO_ALT_COUNT; i++)
+	{
+		desc.Alt[i] = BtHciUsbScoAltTemplate(i);
+	}
+	return desc;
+}
+
+static constexpr BtHciUsbScoDesc_t s_BtHciUsbScoDescTemplate =
+	BtHciUsbScoTemplate();
+static constexpr BtHciUsbFullDesc_t s_BtHciUsbFullDescTemplate =
+	BtHciUsbFullTemplate();
+
+static inline __attribute__((always_inline))
+void BtHciUsbPatchBase(UsbInrtfAssDesc_t &Association,
+					   UsbIntrfDesc_t &Hci,
+					   UsbEndPointDesc_t &EventIn,
+					   UsbEndPointDesc_t &AclOut,
+					   UsbEndPointDesc_t &AclIn,
+					   UsbIntrfDesc_t &Sync,
+					   const BtHciUsbDev_t *pHci,
+					   UsbSpeed_t Speed)
+{
 	const uint16_t eventMps = Speed == USB_SPEED_HIGH ?
 		pHci->EventHsMps : pHci->EventFsMps;
 	const uint16_t aclMps = Speed == USB_SPEED_HIGH ?
@@ -1226,192 +1324,91 @@ static bool BtHciUsbMakeDesc(BtHciUsbDesc_t *pDesc, const BtHciUsbDev_t *pHci,
 	const uint8_t eventInterval = Speed == USB_SPEED_HIGH ?
 		pHci->EventHsInterval : pHci->EventFsInterval;
 
-	if (eventMps == 0U || eventMps > USB_CTRLR_PKT_LEN_MAX(pHci->DevNo, INT) ||
-		aclMps == 0U || aclMps > USB_CTRLR_PKT_LEN_MAX(pHci->DevNo, BULK) ||
-		eventInterval == 0U)
-	{
-		return false;
-	}
-
-	memset(pDesc, 0, sizeof(*pDesc));
-
-	pDesc->Association.bLength = sizeof(pDesc->Association);
-	pDesc->Association.bDescriptorType = USB_DESCTYPE_IA;
-	pDesc->Association.bFirstInterface = (uint8_t)pHci->HciItfNo;
-	pDesc->Association.bInterfaceCount = 2U;
-	pDesc->Association.bFunctionClass = USB_INTRFCLASS_WIRELESS;
-	pDesc->Association.bFunctionSubClass = BT_HCI_USB_SUBCLASS_RF;
-	pDesc->Association.bFunctionProtocol = BT_HCI_USB_PROTOCOL_BT;
-	pDesc->Association.iFunction = pHci->InterfaceString;
-
-	pDesc->Hci.bLength = sizeof(pDesc->Hci);
-	pDesc->Hci.bDescriptorType = USB_DESCTYPE_INTERFACE;
-	pDesc->Hci.bInterfaceNumber = (uint8_t)pHci->HciItfNo;
-	pDesc->Hci.bAlternateSetting = 0U;
-	pDesc->Hci.bNumEndpoints = 3U;
-	pDesc->Hci.bInterfaceClass = USB_INTRFCLASS_WIRELESS;
-	pDesc->Hci.bInterfaceSubClass = BT_HCI_USB_SUBCLASS_RF;
-	pDesc->Hci.bInterfaceProtocol = BT_HCI_USB_PROTOCOL_BT;
-	pDesc->Hci.iInterface = pHci->InterfaceString;
-
-	pDesc->EventIn.bLength = sizeof(pDesc->EventIn);
-	pDesc->EventIn.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	pDesc->EventIn.bEndpointAddress = USB_ENDPADDR_DIRIN(pHci->EventEpNo);
-	pDesc->EventIn.bmAttributes = USB_ENDPATT_TRANS_INT;
-	pDesc->EventIn.wMaxPacketSize = eventMps;
-	pDesc->EventIn.bInterval = eventInterval;
-
-	pDesc->AclOut.bLength = sizeof(pDesc->AclOut);
-	pDesc->AclOut.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	pDesc->AclOut.bEndpointAddress = USB_ENDPADDR_DIROUT(pHci->AclEpNo);
-	pDesc->AclOut.bmAttributes = USB_ENDPATT_TRANS_BULK;
-	pDesc->AclOut.wMaxPacketSize = aclMps;
-	pDesc->AclOut.bInterval = 0U;
-
-	pDesc->AclIn = pDesc->AclOut;
-	pDesc->AclIn.bEndpointAddress = USB_ENDPADDR_DIRIN(pHci->AclEpNo);
-
-	pDesc->Sync.bLength = sizeof(pDesc->Sync);
-	pDesc->Sync.bDescriptorType = USB_DESCTYPE_INTERFACE;
-	pDesc->Sync.bInterfaceNumber = (uint8_t)pHci->SyncItfNo;
-	pDesc->Sync.bAlternateSetting = 0U;
-	pDesc->Sync.bNumEndpoints = 0U;
-	pDesc->Sync.bInterfaceClass = USB_INTRFCLASS_WIRELESS;
-	pDesc->Sync.bInterfaceSubClass = BT_HCI_USB_SUBCLASS_RF;
-	pDesc->Sync.bInterfaceProtocol = BT_HCI_USB_PROTOCOL_BT;
-	pDesc->Sync.iInterface = pHci->InterfaceString;
-
-	return true;
+	Association.bFirstInterface = (uint8_t)pHci->HciItfNo;
+	Association.iFunction = pHci->InterfaceString;
+	Hci.bInterfaceNumber = (uint8_t)pHci->HciItfNo;
+	Hci.iInterface = pHci->InterfaceString;
+	EventIn.bEndpointAddress = USB_ENDPADDR_DIRIN(pHci->EventEpNo);
+	EventIn.wMaxPacketSize = eventMps;
+	EventIn.bInterval = eventInterval;
+	AclOut.bEndpointAddress = USB_ENDPADDR_DIROUT(pHci->AclEpNo);
+	AclOut.wMaxPacketSize = aclMps;
+	AclIn.bEndpointAddress = USB_ENDPADDR_DIRIN(pHci->AclEpNo);
+	AclIn.wMaxPacketSize = aclMps;
+	Sync.bInterfaceNumber = (uint8_t)pHci->SyncItfNo;
+	Sync.iInterface = pHci->InterfaceString;
 }
 
-static bool BtHciUsbMakeScoDesc(BtHciUsbScoDesc_t *pDesc,
-						const BtHciUsbDev_t *pHci, UsbSpeed_t Speed)
+static inline __attribute__((always_inline))
+void BtHciUsbPatchSerial(BtHciUsbSerialDesc_t *pDesc,
+						 const BtHciUsbDev_t *pHci,
+						 UsbSpeed_t Speed)
 {
-	if (pDesc == nullptr || pHci == nullptr || !pHci->ScoEnabled ||
-		pHci->ScoEpNo == 0U || pHci->ScoEpNo > 15U ||
-		!BtHciUsbMakeDesc(&pDesc->Legacy, pHci, Speed))
-	{
-		return false;
-	}
+	BtHciUsbPatchBase(pDesc->Association, pDesc->Hci, pDesc->EventIn,
+		pDesc->AclOut, pDesc->AclIn, pDesc->Sync, pHci, Speed);
+	const uint16_t aclMps = Speed == USB_SPEED_HIGH ?
+		pHci->AclHsMps : pHci->AclFsMps;
+	pDesc->Serialized.Interface.bInterfaceNumber = (uint8_t)pHci->HciItfNo;
+	pDesc->Serialized.Interface.iInterface = pHci->InterfaceString;
+	pDesc->Serialized.Out.bEndpointAddress = USB_ENDPADDR_DIROUT(pHci->AclEpNo);
+	pDesc->Serialized.Out.wMaxPacketSize = aclMps;
+	pDesc->Serialized.In.bEndpointAddress = USB_ENDPADDR_DIRIN(pHci->AclEpNo);
+	pDesc->Serialized.In.wMaxPacketSize = aclMps;
+}
 
+static inline __attribute__((always_inline))
+void BtHciUsbPatchSco(BtHciUsbScoAltDesc_t *pAlt,
+					  const BtHciUsbDev_t *pHci, UsbSpeed_t Speed)
+{
 	const uint8_t interval = Speed == USB_SPEED_HIGH ?
 		BT_HCI_USB_SCO_HS_INTERVAL : BT_HCI_USB_SCO_FS_INTERVAL;
-	for (uint8_t i = 0U; i < BT_HCI_USB_SCO_ALT_COUNT; i++)
+	for (unsigned i = 0U; i < BT_HCI_USB_SCO_ALT_COUNT; i++)
 	{
-		BtHciUsbScoAltDesc_t *pAlt = &pDesc->Alt[i];
-		memset(pAlt, 0, sizeof(*pAlt));
-		pAlt->Interface.bLength = sizeof(pAlt->Interface);
-		pAlt->Interface.bDescriptorType = USB_DESCTYPE_INTERFACE;
-		pAlt->Interface.bInterfaceNumber = (uint8_t)pHci->SyncItfNo;
-		pAlt->Interface.bAlternateSetting = (uint8_t)(i + 1U);
-		pAlt->Interface.bNumEndpoints = 2U;
-		pAlt->Interface.bInterfaceClass = USB_INTRFCLASS_WIRELESS;
-		pAlt->Interface.bInterfaceSubClass = BT_HCI_USB_SUBCLASS_RF;
-		pAlt->Interface.bInterfaceProtocol = BT_HCI_USB_PROTOCOL_BT;
-		pAlt->Interface.iInterface = pHci->InterfaceString;
-
-		pAlt->Out.bLength = sizeof(pAlt->Out);
-		pAlt->Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-		pAlt->Out.bEndpointAddress = USB_ENDPADDR_DIROUT(pHci->ScoEpNo);
-		pAlt->Out.bmAttributes = USB_ENDPATT_TRANS_ISO;
-		pAlt->Out.wMaxPacketSize = s_BtHciUsbScoMps[i];
-		pAlt->Out.bInterval = interval;
-
-		pAlt->In = pAlt->Out;
-		pAlt->In.bEndpointAddress = USB_ENDPADDR_DIRIN(pHci->ScoEpNo);
+		pAlt[i].Interface.bInterfaceNumber = (uint8_t)pHci->SyncItfNo;
+		pAlt[i].Interface.iInterface = pHci->InterfaceString;
+		pAlt[i].Out.bEndpointAddress = USB_ENDPADDR_DIROUT(pHci->ScoEpNo);
+		pAlt[i].Out.bInterval = interval;
+		pAlt[i].In.bEndpointAddress = USB_ENDPADDR_DIRIN(pHci->ScoEpNo);
+		pAlt[i].In.bInterval = interval;
 	}
-	return true;
 }
 
-static void BtHciUsbMakeSerialAlt(BtHciUsbSerialAltDesc_t *pAlt,
-								 const BtHciUsbDesc_t *pLegacy)
+static void BtHciUsbPatchRegistered(const UsbDeviceClass *pClass,
+									uint8_t *pData, UsbSpeed_t Speed)
 {
-	memset(pAlt, 0, sizeof(*pAlt));
-	pAlt->Interface = pLegacy->Hci;
-	pAlt->Interface.bAlternateSetting = 1U;
-	pAlt->Interface.bNumEndpoints = 2U;
-	pAlt->Out = pLegacy->AclOut;
-	pAlt->In = pLegacy->AclIn;
-}
-
-static bool BtHciUsbMakeSerialDesc(BtHciUsbSerialDesc_t *pDesc,
-						   const BtHciUsbDev_t *pHci, UsbSpeed_t Speed)
-{
-	if (pDesc == nullptr || pHci == nullptr ||
-		!pHci->BulkSerializationSupported)
-	{
-		return false;
-	}
-
-	BtHciUsbDesc_t legacy = {};
-	if (!BtHciUsbMakeDesc(&legacy, pHci, Speed))
-	{
-		return false;
-	}
-
-	memset(pDesc, 0, sizeof(*pDesc));
-	pDesc->Association = legacy.Association;
-	pDesc->Hci = legacy.Hci;
-	pDesc->EventIn = legacy.EventIn;
-	pDesc->AclOut = legacy.AclOut;
-	pDesc->AclIn = legacy.AclIn;
-	BtHciUsbMakeSerialAlt(&pDesc->Serialized, &legacy);
-	pDesc->Sync = legacy.Sync;
-	return true;
-}
-
-static bool BtHciUsbMakeFullDesc(BtHciUsbFullDesc_t *pDesc,
-						 const BtHciUsbDev_t *pHci, UsbSpeed_t Speed)
-{
-	if (pDesc == nullptr || pHci == nullptr || !pHci->ScoEnabled ||
-		!BtHciUsbMakeSerialDesc(&pDesc->Base, pHci, Speed))
-	{
-		return false;
-	}
-
-	BtHciUsbScoDesc_t sco = {};
-	if (!BtHciUsbMakeScoDesc(&sco, pHci, Speed))
-	{
-		return false;
-	}
-	memcpy(pDesc->Alt, sco.Alt, sizeof(pDesc->Alt));
-	return true;
-}
-
-static bool BtHciUsbMakeRegisteredDesc(BtHciUsbDescBuffer_t *pDesc,
-									   const BtHciUsbDev_t *pHci,
-									   UsbSpeed_t Speed,
-									   const void **ppData,
-									   uint16_t *pLength)
-{
-	if (pDesc == nullptr || pHci == nullptr || ppData == nullptr ||
-		pLength == nullptr)
-	{
-		return false;
-	}
-
-	if (pHci->ScoEnabled && pHci->BulkSerializationSupported)
-	{
-		*ppData = &pDesc->Full;
-		*pLength = sizeof(pDesc->Full);
-		return BtHciUsbMakeFullDesc(&pDesc->Full, pHci, Speed);
-	}
-	if (pHci->ScoEnabled)
-	{
-		*ppData = &pDesc->Sco;
-		*pLength = sizeof(pDesc->Sco);
-		return BtHciUsbMakeScoDesc(&pDesc->Sco, pHci, Speed);
-	}
+	const BtHciUsbDev_t *pHci = *static_cast<const BtHciUsb *>(pClass);
 	if (pHci->BulkSerializationSupported)
 	{
-		*ppData = &pDesc->Serial;
-		*pLength = sizeof(pDesc->Serial);
-		return BtHciUsbMakeSerialDesc(&pDesc->Serial, pHci, Speed);
+		BtHciUsbSerialDesc_t *pDesc;
+		if (pHci->ScoEnabled)
+		{
+			BtHciUsbFullDesc_t *pFull =
+				reinterpret_cast<BtHciUsbFullDesc_t *>(pData);
+			pDesc = &pFull->Base;
+			BtHciUsbPatchSco(pFull->Alt, pHci, Speed);
+		}
+		else
+		{
+			pDesc = reinterpret_cast<BtHciUsbSerialDesc_t *>(pData);
+		}
+		BtHciUsbPatchSerial(pDesc, pHci, Speed);
+		return;
 	}
 
-	*ppData = &pDesc->Legacy;
-	*pLength = sizeof(pDesc->Legacy);
-	return BtHciUsbMakeDesc(&pDesc->Legacy, pHci, Speed);
+	BtHciUsbDesc_t *pDesc;
+	if (pHci->ScoEnabled)
+	{
+		BtHciUsbScoDesc_t *pSco =
+			reinterpret_cast<BtHciUsbScoDesc_t *>(pData);
+		pDesc = &pSco->Legacy;
+		BtHciUsbPatchSco(pSco->Alt, pHci, Speed);
+	}
+	else
+	{
+		pDesc = reinterpret_cast<BtHciUsbDesc_t *>(pData);
+	}
+	BtHciUsbPatchBase(pDesc->Association, pDesc->Hci, pDesc->EventIn,
+		pDesc->AclOut, pDesc->AclIn, pDesc->Sync, pHci, Speed);
 }
 
 static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
@@ -1537,25 +1534,23 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 
 	BtHciUsbInitDevIntrf(pHci);
 
-	const void *pFsDesc = nullptr;
-	uint16_t fsDescLength = 0U;
-	if (!BtHciUsbMakeRegisteredDesc(&pHci->FsDesc, pHci, USB_SPEED_FULL,
-		&pFsDesc, &fsDescLength))
+	const void *pTemplate;
+	uint16_t descLength;
+	if (pHci->BulkSerializationSupported)
 	{
-		return false;
+		pTemplate = &s_BtHciUsbFullDescTemplate;
+		descLength = pHci->ScoEnabled ?
+			sizeof(BtHciUsbFullDesc_t) : sizeof(BtHciUsbSerialDesc_t);
+	}
+	else
+	{
+		pTemplate = &s_BtHciUsbScoDescTemplate;
+		descLength = pHci->ScoEnabled ?
+			sizeof(BtHciUsbScoDesc_t) : sizeof(BtHciUsbDesc_t);
 	}
 
-	const void *pHsDesc = nullptr;
-	uint16_t hsDescLength = 0U;
-	if (USB_HIGHSPEED_CAPABLE(pHci->DevNo) &&
-		!BtHciUsbMakeRegisteredDesc(&pHci->HsDesc, pHci, USB_SPEED_HIGH,
-			&pHsDesc, &hsDescLength))
-	{
-		return false;
-	}
-
-	return UsbDescriptorRegister(pHci->DevNo, pClass,
-		pFsDesc, fsDescLength, pHsDesc, hsDescLength);
+	return UsbDescriptorRegisterTemplate(pHci->DevNo, pClass,
+		pTemplate, descLength, BtHciUsbPatchRegistered);
 }
 
 bool BtHciUsb::Init(const BtHciUsbCfg_t &Cfg)
