@@ -131,6 +131,13 @@ static void UsbdBulkPatchDesc(UsbdBulkDesc_t *pDesc,
 	pDesc->In.wMaxPacketSize = mps;
 }
 
+static void UsbdBulkPatchRegistered(const UsbDeviceClass *pClass,
+									  uint8_t *pDesc, UsbSpeed_t Speed)
+{
+	const UsbdBulkDev_t *pBulk = *static_cast<const UsbdBulk *>(pClass);
+	UsbdBulkPatchDesc(reinterpret_cast<UsbdBulkDesc_t *>(pDesc), pBulk, Speed);
+}
+
 // Weak so an application can replace runtime fragment building with a static
 // fragment. When overridden, this default is dropped by unused-section removal.
 // Pair a replacement with a strong UsbGetDescriptor for fully static
@@ -218,14 +225,9 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 
 	pBulk->pData->pClassContext = pBulk;
 
-	const void *pHsDesc = USB_HIGHSPEED_CAPABLE(pBulk->DevNo) ?
-		&s_BulkDescTemplate : nullptr;
-	const uint16_t hsDescLength = pHsDesc != nullptr ?
-		sizeof(s_BulkDescTemplate) : 0U;
-
-	return UsbDescriptorRegister(pBulk->DevNo, pClass,
+	return UsbDescriptorRegisterTemplate(pBulk->DevNo, pClass,
 		&s_BulkDescTemplate, sizeof(s_BulkDescTemplate),
-		pHsDesc, hsDescLength);
+		UsbdBulkPatchRegistered);
 }
 
 bool UsbdBulk::Init(const UsbdBulkCfg_t &Cfg)
@@ -246,12 +248,6 @@ bool UsbdBulk::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 bool UsbdBulk::SelectConfig(uint8_t ConfigValue)
 {
 	return UsbdBulkConfig(&vUsbdBulk, ConfigValue);
-}
-
-void UsbdBulk::PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const
-{
-	UsbdBulkPatchDesc(reinterpret_cast<UsbdBulkDesc_t *>(pDesc),
-		&vUsbdBulk, Speed);
 }
 
 void UsbdBulk::Reset(void)
