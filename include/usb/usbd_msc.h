@@ -124,8 +124,6 @@ typedef struct __Usbd_Msc_Dev {
 	uint16_t ResponseOffset;
 	UsbMscCmdBlkWrapper_t Cbw;
 	UsbMscCmdStatusWrapper_t Csw;
-	UsbdMscDesc_t FsDesc;
-	UsbdMscDesc_t HsDesc;
 	char Vendor[8];
 	char Product[16];
 	char Revision[4];
@@ -164,6 +162,7 @@ public:
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 				 uint8_t **ppData, uint16_t *pLength) override;
 	bool SelectConfig(uint8_t ConfigValue) override;
+	void PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const override;
 	void Detach(void) override;
 	void Reset(void) override;
 	void Process(void) override;
