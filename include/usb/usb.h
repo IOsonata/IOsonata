@@ -235,7 +235,7 @@ protected:
 };
 
 class UsbDeviceClass;
-typedef void (*UsbDescriptorPatch_t)(const UsbDeviceClass *pClass,
+typedef void (*UsbDescBuild_t)(const UsbDeviceClass *pClass,
 									 uint8_t *pDesc, UsbSpeed_t Speed);
 
 /// Base for a class implemented by the local USB device.
@@ -280,10 +280,10 @@ public:
 			(Speed == USB_SPEED_HIGH ? vHsDescriptorLength :
 			 vFsDescriptorLength);
 	}
-	void PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const {
-		if (vHsDescriptorLength == 0U && vDescriptor.Patch != nullptr)
+	void BuildDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const {
+		if (vHsDescriptorLength == 0U && vDescriptor.Build != nullptr)
 		{
-			vDescriptor.Patch(this, pDesc, Speed);
+			vDescriptor.Build(this, pDesc, Speed);
 		}
 	}
 
@@ -300,11 +300,11 @@ private:
 									 uint16_t FsDescriptorLength,
 									 const void *pHsDescriptor,
 									 uint16_t HsDescriptorLength);
-	friend bool UsbDescriptorRegisterTemplate(int DevNo,
+	friend bool UsbDescRegister(int DevNo,
 										 UsbDeviceClass *pClass,
 										 const void *pDescriptor,
 										 uint16_t DescriptorLength,
-										 UsbDescriptorPatch_t Patch);
+										 UsbDescBuild_t Patch);
 
 	uint8_t vFirstInterface = 0;
 	uint8_t vInterfaceCount = 0;
@@ -313,7 +313,7 @@ private:
 	const uint8_t *vFsDescriptor = nullptr;
 	union {
 		const uint8_t *Hs;
-		UsbDescriptorPatch_t Patch;
+		UsbDescBuild_t Build;
 	} vDescriptor = { nullptr };
 	uint16_t vFsDescriptorLength = 0;
 	// Zero selects shared-template mode; otherwise vDescriptor.Hs is active.
@@ -342,12 +342,13 @@ bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
 						   const void *pHsDescriptor = nullptr,
 						   uint16_t HsDescriptorLength = 0);
 
-/// Register a shared descriptor template. pDescriptor may be NULL when Patch
-/// generates the complete fragment directly in the core configuration buffer.
-bool UsbDescriptorRegisterTemplate(int DevNo, UsbDeviceClass *pClass,
-								   const void *pDescriptor,
-								   uint16_t DescriptorLength,
-								   UsbDescriptorPatch_t Patch);
+/// Register one configuration-descriptor fragment.
+/// pTemplate != NULL, Build == NULL: immutable descriptor.
+/// pTemplate != NULL, Build != NULL: copy template then patch variable fields.
+/// pTemplate == NULL, Build != NULL: generate directly in the core buffer.
+bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
+					 const void *pTemplate, uint16_t Length,
+					 UsbDescBuild_t Build);
 #endif
 
 /** @} End of group USB */
