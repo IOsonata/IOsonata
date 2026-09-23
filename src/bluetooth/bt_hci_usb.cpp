@@ -159,12 +159,6 @@ static uint16_t BtHciUsbAclMps(const BtHciUsbDev_t *pHci)
 	return UsbCtrlrHighSpeed(pHci->DevNo) ? pHci->AclHsMps : pHci->AclFsMps;
 }
 
-static uint8_t BtHciUsbEventInterval(const BtHciUsbDev_t *pHci)
-{
-	return UsbCtrlrHighSpeed(pHci->DevNo) ?
-		pHci->EventHsInterval : pHci->EventFsInterval;
-}
-
 static bool BtHciUsbOpenEndpoint(BtHciUsbDev_t *pHci, uint8_t EpNo,
 								 bool bIn, uint8_t TransferType,
 								 uint16_t MaxPacketSize)
