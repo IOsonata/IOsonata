@@ -43,6 +43,15 @@ extern const UsbdCdcDesc_t g_UsbdCdcDescTemplate;
 void UsbdCdcPatchDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
 					 UsbSpeed_t Speed, bool HasFunctionString);
 
+static void UsbdCdcPatchRegistered(const UsbDeviceClass *pClass,
+									 uint8_t *pDesc, UsbSpeed_t Speed)
+{
+	const UsbdCdcDev_t *pCdc = *static_cast<const UsbdCdc *>(pClass);
+	const UsbCfg_t *pCfg = UsbGetCfg(pCdc->DevNo);
+	UsbdCdcPatchDesc(reinterpret_cast<UsbdCdcDesc_t *>(pDesc), pCdc,
+		Speed, pCfg != nullptr && pCfg->pFuncName != nullptr);
+}
+
 static uint8_t *UsbdCdcRxBuffer(UsbdCdcDev_t *pCdc)
 {
 	return reinterpret_cast<uint8_t *>(pCdc->RxTransfer);
@@ -415,14 +424,9 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	UsbCtrlrEpAlloc(pCdc->DevNo, pCdc->NotifyEpNo, true,
 		UsbdCdcNotifBuffer(pCdc), false, UsbdCdcNotifCtrlrEvent, pCdc);
 
-	const void *pHsDesc = USB_HIGHSPEED_CAPABLE(pCdc->DevNo) ?
-		&g_UsbdCdcDescTemplate : nullptr;
-	const uint16_t hsDescLength = pHsDesc != nullptr ?
-		sizeof(g_UsbdCdcDescTemplate) : 0U;
-
-	return UsbDescriptorRegister(pCdc->DevNo, pClass,
+	return UsbDescriptorRegisterTemplate(pCdc->DevNo, pClass,
 		&g_UsbdCdcDescTemplate, sizeof(g_UsbdCdcDescTemplate),
-		pHsDesc, hsDescLength);
+		UsbdCdcPatchRegistered);
 }
 
 void UsbdCdcProcess(UsbdCdcDev_t * const pCdc)
@@ -459,13 +463,6 @@ bool UsbdCdc::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 bool UsbdCdc::SelectConfig(uint8_t ConfigValue)
 {
 	return UsbdCdcConfig(&vUsbdCdc, ConfigValue);
-}
-
-void UsbdCdc::PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const
-{
-	const UsbCfg_t *pCfg = UsbGetCfg(vUsbdCdc.DevNo);
-	UsbdCdcPatchDesc(reinterpret_cast<UsbdCdcDesc_t *>(pDesc), &vUsbdCdc,
-		Speed, pCfg != nullptr && pCfg->pFuncName != nullptr);
 }
 
 const UsbCdcLineCoding_t *UsbdCdcLineCoding(const UsbdCdcDev_t * const pCdc)
