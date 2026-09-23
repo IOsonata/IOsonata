@@ -313,6 +313,13 @@ static void UsbdHidPatchDesc(UsbdHidDesc_t *pDesc,
 	pDesc->In.bInterval = interval;
 }
 
+static void UsbdHidPatchRegistered(const UsbDeviceClass *pClass,
+									 uint8_t *pDesc, UsbSpeed_t Speed)
+{
+	const UsbdHidDev_t *pHid = *static_cast<const UsbdHid *>(pClass);
+	UsbdHidPatchDesc(reinterpret_cast<UsbdHidDesc_t *>(pDesc), pHid, Speed);
+}
+
 // Weak so an application can replace runtime fragment building with a static
 // fragment. When overridden, this default is dropped by unused-section removal.
 // Pair a replacement with a strong UsbGetDescriptor for fully static
@@ -421,14 +428,9 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 		return false;
 	}
 
-	const void *pHsDesc = USB_HIGHSPEED_CAPABLE(pHid->DevNo) ?
-		&s_HidDescTemplate : nullptr;
-	const uint16_t hsDescLength = pHsDesc != nullptr ?
-		sizeof(s_HidDescTemplate) : 0U;
-
-	return UsbDescriptorRegister(pHid->DevNo, pClass,
+	return UsbDescriptorRegisterTemplate(pHid->DevNo, pClass,
 		&s_HidDescTemplate, sizeof(s_HidDescTemplate),
-		pHsDesc, hsDescLength);
+		UsbdHidPatchRegistered);
 }
 
 bool UsbdHid::Init(const UsbdHidCfg_t &Cfg)
@@ -448,11 +450,6 @@ bool UsbdHid::SelectConfig(uint8_t ConfigValue)
 	return UsbdHidConfig(&vUsbdHid, ConfigValue);
 }
 
-void UsbdHid::PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const
-{
-	UsbdHidPatchDesc(reinterpret_cast<UsbdHidDesc_t *>(pDesc),
-		&vUsbdHid, Speed);
-}
 
 void UsbdHid::Reset(void)
 {
