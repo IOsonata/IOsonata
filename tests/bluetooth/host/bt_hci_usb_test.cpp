@@ -148,32 +148,19 @@ bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
     return true;
 }
 
-bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
-						   const void *pFsDescriptor,
-						   uint16_t FsDescriptorLength,
-						   const void *, uint16_t)
-{
-	if (DevNo != 0 || pClass != s_ClassObject || pFsDescriptor == nullptr ||
-		FsDescriptorLength == 0U)
-		return false;
-	s_FsDescriptor = static_cast<const uint8_t *>(pFsDescriptor);
-	s_FsDescriptorLength = FsDescriptorLength;
-	return true;
-}
-
 bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
 								   const void *pDescriptor,
 								   uint16_t DescriptorLength,
-								   UsbDescBuild_t Patch)
+								   UsbDescBuild_t Build)
 {
 	if (DevNo != 0 || pClass != s_ClassObject || pDescriptor == nullptr ||
 		DescriptorLength == 0U ||
-		DescriptorLength > sizeof(s_FsDescriptorStorage) || Patch == nullptr)
+		DescriptorLength > sizeof(s_FsDescriptorStorage) || Build == nullptr)
 	{
 		return false;
 	}
 	memcpy(s_FsDescriptorStorage, pDescriptor, DescriptorLength);
-	Patch(pClass, s_FsDescriptorStorage, USB_SPEED_FULL);
+	Build(pClass, s_FsDescriptorStorage, USB_SPEED_FULL);
 	s_FsDescriptor = s_FsDescriptorStorage;
 	s_FsDescriptorLength = DescriptorLength;
 	return true;
