@@ -119,7 +119,9 @@ __attribute__((weak))
 bool UsbdCdcMakeDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
 					 UsbSpeed_t Speed, bool HasFunctionString)
 {
-	if (pDesc == nullptr || pCdc == nullptr)
+	if (pDesc == nullptr || pCdc == nullptr || pCdc->CtrlIfNo > 14U ||
+		pCdc->NotifyEpNo == 0U || pCdc->NotifyEpNo > 15U ||
+		pCdc->DataEpNo == 0U || pCdc->DataEpNo > 15U)
 	{
 		return false;
 	}
