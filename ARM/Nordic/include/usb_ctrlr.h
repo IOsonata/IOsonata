@@ -305,7 +305,8 @@ typedef struct __nRF_Usbd_State
 	bool LowPowerSuspend;
 	bool SofEnabled;
 	bool IsoOpen;                 //!< Both EP8 directions are open.
-	// -1 means no staged/admitted frame; BUSY owns an admitted DMA buffer.
+	// IN may be staged with BUSY clear. BUSY means admitted work waiting for
+	// EasyDMA; START consumes it and EPSTATUS/END owns the active DMA.
 	int16_t IsoDmaLen[2];
 	uint8_t IsoBusy;
 	volatile uint8_t Flags;       //!< Controller power/wake state only.

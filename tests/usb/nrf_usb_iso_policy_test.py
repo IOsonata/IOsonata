@@ -60,6 +60,8 @@ for source in (header, base, iso):
 assert "uint8_t IsoBusy;" in header
 assert "NRFUSBD_ISO_OUT_BUSY" in start_iso
 assert "NRFUSBD_ISO_IN_BUSY" in in_xfer
+assert start_iso.index("s_Usbd.IsoBusy &=") < start_iso.index("nRFUsbdDmaStartLocked")
+assert start_iso.index("s_Usbd.IsoDmaLen[dir] = -1") < start_iso.index("nRFUsbdDmaStartLocked")
 
 assert "nRFUsbdIsoSof" not in base + iso
 assert "nRFUsbdIsoService" not in base + iso
@@ -98,6 +100,8 @@ assert "UsbCtrlrEpOutXfer" in iso_event
 assert "NRF_USBD->EVENTS_ENDISOIN" in finish_iso
 assert "NRF_USBD->EVENTS_ENDISOOUT" in finish_iso
 assert "nRFUsbdDmaUnlock" not in finish_iso
+assert "IsoBusy" not in finish_iso
+assert "IsoDmaLen" not in finish_iso
 assert finish_iso.index("NRF_USBD->EPSTATUS =") < finish_iso.index("__DSB();")
 
 dma = interrupt.index("const uint32_t dmastatus")

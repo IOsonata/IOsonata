@@ -1470,6 +1470,7 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[EpNum - 1U][1];
 		if (!s_Usbd.IsoOpen ||
 			(s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) != 0U ||
+			(NRF_USBD->EPSTATUS & (1UL << NRFX_USBD_ISO_EP_NO)) != 0U ||
 			s_Usbd.IsoDmaLen[1] >= 0 || pReg->Handler == NULL ||
 			(pBuffer == NULL && Length != 0U) ||
 			Length > pReg->MaxPacketSize)

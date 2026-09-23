@@ -108,7 +108,8 @@ void __DSB(){
  if(regs.TASKS_STARTISOIN || regs.TASKS_STARTISOOUT){
   activeDir=regs.TASKS_STARTISOIN?1:0;
   assert(dmaBusy==0x82);assert(regs.EPSTATUS.bits==0);
-  assert(s_Usbd.IsoBusy & ((uint8_t)NRFUSBD_ISO_OUT_BUSY<<activeDir));
+  assert(!(s_Usbd.IsoBusy & ((uint8_t)NRFUSBD_ISO_OUT_BUSY<<activeDir)));
+  assert(s_Usbd.IsoDmaLen[activeDir]<0);
   regs.EPSTATUS.bits=1UL<<(activeDir?8:24);
   ++isoStarts[activeDir];
   if(activeDir) memcpy(wireIn,inBuffer,regs.ISOIN.MAXCNT);
@@ -179,7 +180,7 @@ void callback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
  assert(event==USB_CTRLR_EVT_XFER_CMPL && !irqMask);
  unsigned dir=(unsigned)(uintptr_t)context;++callbacks[dir];lengths[dir]=length;
  if(!dir){
-  assert(ISO_BUSY()&1);uint8_t copy[512];memcpy(copy,outBuffer,length);
+  uint8_t copy[512];memcpy(copy,outBuffer,length);
   if(interruptCopy){
    auto before=isoStarts[0];memset(hostOut,0xDD,sizeof(hostOut));frame(17);
    assert(isoStarts[0]==before && !memcmp(copy,outBuffer,length));
@@ -191,7 +192,7 @@ void init(){
  s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=-1;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  s_Usbd.hQue=CFifoInit(queueMemory,sizeof(queueMemory),sizeof(nRFUsbdQue_t),true);
  assert(s_Usbd.hQue);
- // Both ISO directions open; BUSY ownership and suspend state start clear.
+ // Both ISO directions open; software-pending state starts clear.
  s_Usbd.Flags=0;s_Usbd.IsoOpen=true;s_Usbd.IsoBusy=0;
  dmaBusy=0;dmaLocks=dmaUnlocks=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
@@ -317,10 +318,14 @@ int main(){
  assert(lengths[0]==17 && lengths[1]==33 && ISO_BUSY()==0 && regularStarts>0);
  puts("PASS: duplex ISO uses one DMA; both completions delivered; shared scheduler resumes");
 
- init();interruptCopy=true;frame(17);finish(false);
- assert(callbacks[0]==1 && ISO_BUSY()==0 && isoStarts[0]==1);
- frame(9);assert(isoStarts[0]==2);finish(false);interruptCopy=false;
- puts("PASS: direct OUT completion keeps BUSY through callback buffer copy");
+ init();interruptCopy=true;frame(17);
+ memset(hostOut,0xDD,sizeof(hostOut));frame(9);
+ assert((ISO_BUSY()&1) && s_Usbd.IsoDmaLen[0]==9 && isoStarts[0]==1);
+ finish(false);
+ assert(callbacks[0]==1 && isoStarts[0]==2 && activeDir==0);
+ finish(false);interruptCopy=false;
+ assert(callbacks[0]==2 && ISO_BUSY()==0);
+ puts("PASS: active ISO DMA accepts one queued next-frame request without buffer overwrite");
 
  init();for(int i=0;i<4;++i)assert(AppEvtHandlerQue(i,nullptr,dummy));
  frame(25);finish(false);

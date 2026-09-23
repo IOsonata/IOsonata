@@ -101,9 +101,16 @@ bool nRFUsbdIsoStart(void)
 			pEnd = &NRF_USBD->EVENTS_ENDISOOUT;
 		}
 
+		const uint16_t len = (uint16_t)s_Usbd.IsoDmaLen[dir];
 		pEp->PTR = (uint32_t)(uintptr_t)
 			s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir].pBuffer;
-		pEp->MAXCNT = (uint16_t)s_Usbd.IsoDmaLen[dir];
+		pEp->MAXCNT = len;
+
+		// Pending software work is consumed at START. From here until END,
+		// hardware EPSTATUS owns the active DMA, so a later SOF may queue one
+		// frame behind it.
+		s_Usbd.IsoBusy &= (uint8_t)~busy;
+		s_Usbd.IsoDmaLen[dir] = -1;
 		nRFUsbdDmaStartLocked(pTask, pEnd);
 		return true;
 	}
@@ -174,7 +181,6 @@ static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 		return false;
 
 	const uint8_t dir = In ? 1U : 0U;
-	const uint8_t busy = (uint8_t)NRFUSBD_ISO_OUT_BUSY << dir;
 	const uint16_t amount = (uint16_t)(In ?
 		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
 
@@ -185,22 +191,10 @@ static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 	if (!Notify)
 		return true;
 
-	// IN may stage its next buffer from the callback. OUT keeps ownership
-	// through the callback so its buffer cannot be reused while copied.
-	if (In)
-	{
-		s_Usbd.IsoBusy &= (uint8_t)~busy;
-		s_Usbd.IsoDmaLen[1] = -1;
-	}
-
+	// START already consumed the software queue slot. Completion owns only
+	// the active hardware transfer and must not erase work queued by a later SOF.
 	nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, dir,
 		USB_CTRLR_EVT_XFER_CMPL, amount);
-
-	if (!In)
-	{
-		s_Usbd.IsoBusy &= (uint8_t)~busy;
-		s_Usbd.IsoDmaLen[0] = -1;
-	}
 	return true;
 }
 
