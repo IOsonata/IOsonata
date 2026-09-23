@@ -98,10 +98,12 @@ assert "NRF_USBD->EVENTS_ENDISOOUT" in finish_iso
 assert "nRFUsbdDmaUnlock" not in finish_iso
 assert finish_iso.index("NRF_USBD->EPSTATUS =") < finish_iso.index("__DSB();")
 
-start_handoff = interrupt.index("if (startDma)")
-early_sof = interrupt.index("if (NRF_USBD->EVENTS_SOF != 0U)", start_handoff)
-start_next = interrupt.index("nRFUsbdStartQueuedDma();", early_sof)
-assert start_handoff < early_sof < start_next
+dma = interrupt.index("const uint32_t dmastatus")
+reset = interrupt.index("if (NRF_USBD->EVENTS_USBRESET != 0U)")
+sof = interrupt.index("if (NRF_USBD->EVENTS_SOF != 0U)")
+handoff = interrupt.index("bool startDma")
+assert dma < reset < sof < handoff
+assert interrupt.count("nRFUsbdHandleSof();") == 1
 assert queued.index("nRFUsbdIsoStart()") < queued.index("CFifoPeek(s_Usbd.hQue)")
 
 print("nrf_usb_iso_policy_test: PASS")

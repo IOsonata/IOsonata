@@ -1004,6 +1004,13 @@ extern "C" void USBD_IRQHandler(void)
 		return;
 	}
 
+	if (NRF_USBD->EVENTS_SOF != 0U)
+	{
+		NRF_USBD->EVENTS_SOF = 0U;
+		(void)NRF_USBD->EVENTS_SOF;
+		nRFUsbdHandleSof();
+	}
+
 	// Exactly one endpoint can own EasyDMA. Completed cases retain its lock
 	// and request the shared handoff immediately below.
 	bool startDma = false;
@@ -1088,15 +1095,6 @@ extern "C" void USBD_IRQHandler(void)
 
 	if (startDma)
 	{
-		// Publish a latched bus SOF before handing the retained channel on.
-		// The core may admit ISO work, which the shared scheduler sees first.
-		if (NRF_USBD->EVENTS_SOF != 0U)
-		{
-			NRF_USBD->EVENTS_SOF = 0U;
-			(void)NRF_USBD->EVENTS_SOF;
-			nRFUsbdHandleSof();
-		}
-
 		// SETUP and bus events still take precedence over starting a new DMA.
 		if ((NRF_USBD->EVENTS_EP0SETUP | NRF_USBD->EVENTS_USBEVENT) == 0U &&
 			nRFUsbdDmaAllowed())
@@ -1158,14 +1156,6 @@ extern "C" void USBD_IRQHandler(void)
 	// Clear only serviced endpoints; keep every other status bit latched.
 	// The following SOF register read completes this write.
 	NRF_USBD->EPDATASTATUS = servicedStatus;
-
-	if (NRF_USBD->EVENTS_SOF != 0U)
-	{
-		NRF_USBD->EVENTS_SOF = 0U;
-		(void)NRF_USBD->EVENTS_SOF;
-
-		nRFUsbdHandleSof();
-	}
 
 	nRFUsbdTryRemoteWake();
 
