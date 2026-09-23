@@ -131,10 +131,10 @@ bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
 	return true;
 }
 
-bool UsbDescriptorRegisterTemplate(int DevNo, UsbDeviceClass *pClass,
+bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
 								   const void *pDescriptor,
 								   uint16_t DescriptorLength,
-								   UsbDescriptorPatch_t Patch)
+								   UsbDescBuild_t Patch)
 {
 	if (DevNo != 0 || pClass != s_ClassObject || pDescriptor == nullptr ||
 		DescriptorLength != sizeof(s_FsDescriptorStorage) || Patch == nullptr)
