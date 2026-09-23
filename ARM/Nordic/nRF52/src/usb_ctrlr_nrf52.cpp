@@ -1032,9 +1032,20 @@ extern "C" void USBD_IRQHandler(void)
 
 		if ((statusBit & 7U) != 0U) // EP1-7 IN/OUT
 		{
-			// IN application completion still waits for EPDATA.
+			// ISO is the same priority tier as EP0. A SOF must publish ISO
+			// readiness even when the current regular DMA has not reached END;
+			// that DMA finishes first, then the shared handoff selects ISO
+			// before another EP1-7 transfer.
 			if (!nRFUsbdRetireDma(statusBit))
+			{
+				if (s_Usbd.IsoOpen && NRF_USBD->EVENTS_SOF != 0U)
+				{
+					NRF_USBD->EVENTS_SOF = 0U;
+					(void)NRF_USBD->EVENTS_SOF;
+					nRFUsbdHandleSof();
+				}
 				return;
+			}
 
 			if (statusBit >= 16U)
 			{
