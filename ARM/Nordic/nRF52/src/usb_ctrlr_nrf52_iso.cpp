@@ -85,32 +85,54 @@ bool nRFUsbdIsoStart(void)
 		if ((s_Usbd.IsoBusy & busy) == 0U)
 			continue;
 
+		nRFUsbEpReg_t *pReg =
+			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir];
+		uint16_t len;
 		volatile USBD_ISOIN_Type *pEp;
 		volatile uint32_t *pTask;
 		volatile uint32_t *pEnd;
+
 		if (dir != 0)
 		{
+			if (s_Usbd.IsoDmaLen[1] < 0)
+			{
+				s_Usbd.IsoBusy &= (uint8_t)~busy;
+				continue;
+			}
+			len = (uint16_t)s_Usbd.IsoDmaLen[1];
 			pEp = &NRF_USBD->ISOIN;
 			pTask = &NRF_USBD->TASKS_STARTISOIN;
 			pEnd = &NRF_USBD->EVENTS_ENDISOIN;
 		}
 		else
 		{
+			// SIZE.ISOOUT is read only while the shared EasyDMA channel is idle
+			// and locked by this scheduler.
+			const uint32_t size = NRF_USBD->SIZE.ISOOUT;
+			if (size == 0U || pReg->pBuffer == nullptr ||
+				pReg->Handler == nullptr)
+			{
+				s_Usbd.IsoBusy &= (uint8_t)~busy;
+				s_Usbd.IsoDmaLen[0] = -1;
+				continue;
+			}
+
+			len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
+				0U : (uint16_t)size;
+			if (len > pReg->MaxPacketSize)
+			{
+				s_Usbd.IsoBusy &= (uint8_t)~busy;
+				s_Usbd.IsoDmaLen[0] = -1;
+				continue;
+			}
+			s_Usbd.IsoDmaLen[0] = (int16_t)len;
 			pEp = (volatile USBD_ISOIN_Type *)&NRF_USBD->ISOOUT;
 			pTask = &NRF_USBD->TASKS_STARTISOOUT;
 			pEnd = &NRF_USBD->EVENTS_ENDISOOUT;
 		}
 
-		const uint16_t len = (uint16_t)s_Usbd.IsoDmaLen[dir];
-		pEp->PTR = (uint32_t)(uintptr_t)
-			s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir].pBuffer;
+		pEp->PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
 		pEp->MAXCNT = len;
-
-		// Pending software work is consumed at START. From here until END,
-		// hardware EPSTATUS owns the active DMA, so a later SOF may queue one
-		// frame behind it.
-		s_Usbd.IsoBusy &= (uint8_t)~busy;
-		s_Usbd.IsoDmaLen[dir] = -1;
 		nRFUsbdDmaStartLocked(pTask, pEnd);
 		return true;
 	}
@@ -124,18 +146,34 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
 		return false;
 
 	const uint32_t state = DisableInterrupt();
-	const int16_t len = s_Usbd.IsoDmaLen[1];
-	if (!s_Usbd.IsoOpen || (s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) != 0U ||
-		len < 0 || (uint16_t)len > Length)
+	if (!s_Usbd.IsoOpen)
 	{
 		EnableInterrupt(state);
 		return false;
 	}
 
-	s_Usbd.IsoBusy |= NRFUSBD_ISO_IN_BUSY;
-	nRFUsbdResumeQueuedDmaLocked();
+	bool service = false;
+	nRFUsbEpReg_t *pOut =
+		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
+	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_OUT_BUSY) == 0U &&
+		pOut->pBuffer != nullptr && pOut->Handler != nullptr)
+	{
+		s_Usbd.IsoBusy |= NRFUSBD_ISO_OUT_BUSY;
+		service = true;
+	}
+
+	const int16_t len = s_Usbd.IsoDmaLen[1];
+	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) == 0U &&
+		len >= 0 && (uint16_t)len <= Length)
+	{
+		s_Usbd.IsoBusy |= NRFUSBD_ISO_IN_BUSY;
+		service = true;
+	}
+
+	if (service)
+		nRFUsbdResumeQueuedDmaLocked();
 	EnableInterrupt(state);
-	return true;
+	return service;
 }
 
 static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
@@ -146,6 +184,7 @@ static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 		return false;
 
 	const uint8_t dir = In ? 1U : 0U;
+	const uint8_t busy = (uint8_t)NRFUSBD_ISO_OUT_BUSY << dir;
 	const uint16_t amount = (uint16_t)(In ?
 		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
 
@@ -156,18 +195,27 @@ static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 	if (!Notify)
 		return true;
 
-	// START already consumed the software queue slot. Completion owns only
-	// the active hardware transfer and must not erase work queued by a later SOF.
+	if (In)
+	{
+		s_Usbd.IsoBusy &= (uint8_t)~busy;
+		s_Usbd.IsoDmaLen[1] = -1;
+	}
+
 	nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, dir,
 		USB_CTRLR_EVT_XFER_CMPL, amount);
+
+	if (!In)
+	{
+		s_Usbd.IsoBusy &= (uint8_t)~busy;
+		s_Usbd.IsoDmaLen[0] = -1;
+	}
 	return true;
 }
 
-bool nRFUsbdIsoFinishDma(uint32_t DmaStatus)
+bool nRFUsbdIsoFinishDma(void)
 {
-	const bool notify = DmaStatus != 0U || s_Usbd.IsoOpen;
-	return (DmaStatus != 0x01000000U && nRFUsbdFinishIsoDma(true, notify)) ||
-		(DmaStatus != 0x00000100U && nRFUsbdFinishIsoDma(false, notify));
+	return nRFUsbdFinishIsoDma(true, s_Usbd.IsoOpen) ||
+		nRFUsbdFinishIsoDma(false, s_Usbd.IsoOpen);
 }
 
 bool UsbCtrlrIsoInit(int DevNo)

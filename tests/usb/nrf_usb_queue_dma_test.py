@@ -110,6 +110,7 @@ struct NRF_USBD_Type {
  uint32_t TASKS_STARTEPIN[8],TASKS_STARTISOIN;
  uint32_t TASKS_STARTEPOUT[8],TASKS_STARTISOOUT;
  uint32_t EVENTS_ENDEPIN[8],EVENTS_ENDEPOUT[8],EVENTS_EP0DATADONE,SHORTS,EVENTS_EPDATA;
+ uint32_t EVENTS_ENDISOIN,EVENTS_ENDISOOUT;
  uint32_t EVENTS_EP0SETUP,EVENTS_USBEVENT,EVENTS_SOF,EVENTS_USBRESET;
  uint32_t TASKS_EP0STATUS,TASKS_EP0RCVOUT;
  uint32_t EPOUTEN,EPINEN,INTEN,INTENCLR,INTENSET;
@@ -124,11 +125,18 @@ unsigned isoChecks,isoEnd;
 void nRFUsbdDmaLock();
 void nRFUsbdDmaUnlock();
 bool nRFUsbdIsoStart(){assert(dmaBusy);++isoChecks;return isoReady;}
-bool nRFUsbdIsoFinishDma(uint32_t status){
- if(!status)status=regs.EPSTATUS.bits;
- assert(status==0x100U || status==0x1000000U);
+bool nRFUsbdIsoFinishDma(){
  if(!isoEnd)return false;
+ uint32_t status=0;
+ if(regs.EVENTS_ENDISOIN){regs.EVENTS_ENDISOIN=0;status=0x100U;}
+ else if(regs.EVENTS_ENDISOOUT){regs.EVENTS_ENDISOOUT=0;status=0x1000000U;}
+ else return false;
  isoEnd=0;regs.EPSTATUS=status;return true;
+}
+void setIsoEnd(uint32_t status){
+ isoEnd=1;
+ if(status==0x100U)regs.EVENTS_ENDISOIN=1;
+ else {assert(status==0x1000000U);regs.EVENTS_ENDISOOUT=1;}
 }
 unsigned ep0Completions,ep0Length;
 void nRFUsbdHostResumeDetected();
@@ -242,7 +250,7 @@ code += '}\n'
 # Exercise the actual ISR acknowledgement block, not a hand-coded queue call.
 start = source.index('NRF_USBD->EVENTS_EPDATA = 0U;',
                      source.index('extern "C" void USBD_IRQHandler'))
-end = source.index('if (NRF_USBD->EVENTS_SOF != 0U)', start)
+end = source.index('nRFUsbdTryRemoteWake();', start)
 code += '\nvoid dataEvent(){const auto state=DisableInterrupt();\n'
 code += source[start:end] + '\nEnableInterrupt(state);}\n'
 code += r'''
@@ -619,7 +627,8 @@ int main(int argc,char **argv){
   }
   assert(UsbCtrlrEp0Send(0,data,18)==18);
   s_Usbd.Flags|=gate;
-  regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
+  regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;
+   if(status==0x100U||status==0x1000000U)setIsoEnd(status);
   isoReady=true;isoChecks=0;dmaLocks=dmaUnlocks=0;interrupt();
   const bool allowed=gate==0U;
   assert(bool(regs.TASKS_STARTEPIN[0])==allowed && bool(dmaBusy)==allowed);
@@ -691,7 +700,8 @@ int main(int argc,char **argv){
    assert(receiveOut(1));
   }else dmaBusy=0x82;
   assert(UsbCtrlrEpSend(0,2,data+64,9));
-  regs.EPSTATUS.bits=status;isoEnd=1;
+  regs.EPSTATUS.bits=status;
+   if(status==0x100U||status==0x1000000U)setIsoEnd(status);
   regs.EVENTS_ENDEPIN[0]=regs.EVENTS_ENDEPIN[1]=regs.EVENTS_ENDEPOUT[1]=1;
   dmaLocks=dmaUnlocks=0;nRFUsbdDmaWait();
   assert(!dmaBusy && !regs.EPSTATUS.bits && irqMask==mask);
@@ -774,7 +784,7 @@ int main(int argc,char **argv){
   interrupt(); // EPSTATUS alone is not completion.
   assert(dmaBusy && !isoChecks && !regs.TASKS_STARTEPIN[2]);
   assert(CFifoUsed(s_Usbd.hQue)==1);
-  isoEnd=1;isoAtSof=true;regs.EVENTS_SOF=1;dmaLocks=dmaUnlocks=0;
+  setIsoEnd(status);isoAtSof=true;regs.EVENTS_SOF=1;dmaLocks=dmaUnlocks=0;
   interrupt();
   assert(!dmaLocks && !dmaUnlocks);
   assert(!isoEnd && !regs.EPSTATUS.bits && !regs.EVENTS_SOF);

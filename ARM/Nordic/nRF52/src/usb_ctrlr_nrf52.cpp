@@ -167,7 +167,7 @@ static void nRFUsbdHostResumeDetected(void);
 // UsbCtrlrIsoInit pulls in the optional ISO archive member, whose strong
 // definitions replace these defaults. Keep IsoStart undefined when absent so
 // regular DMA skips the call entirely.
-__attribute__((weak)) bool nRFUsbdIsoFinishDma(uint32_t)
+__attribute__((weak)) bool nRFUsbdIsoFinishDma(void)
 {
 	return false;
 }
@@ -570,7 +570,7 @@ void nRFUsbdDmaWait(void)
 		}
 		else
 		{
-			complete = nRFUsbdIsoFinishDma(0U);
+			complete = nRFUsbdIsoFinishDma();
 		}
 		if (complete)
 			nRFUsbdDmaUnlock();
@@ -1000,6 +1000,15 @@ extern "C" void USBD_IRQHandler(void)
 		return;
 	}
 
+	// ISO EasyDMA completion belongs to the preceding frame. Retire it before
+	// publishing the new SOF so that frame sees released ISO ownership.
+	bool startDma = false;
+	if (NRF_USBD->EVENTS_ENDISOIN != 0U ||
+		NRF_USBD->EVENTS_ENDISOOUT != 0U)
+	{
+		startDma = nRFUsbdIsoFinishDma();
+	}
+
 	if (NRF_USBD->EVENTS_SOF != 0U)
 	{
 		NRF_USBD->EVENTS_SOF = 0U;
@@ -1009,8 +1018,7 @@ extern "C" void USBD_IRQHandler(void)
 
 	// Exactly one endpoint can own EasyDMA. Completed cases retain its lock
 	// and request the shared handoff immediately below.
-	bool startDma = false;
-	if (dmastatus == 0U)
+	if (!startDma && dmastatus == 0U)
 	{
 		// OUT data-ready may arrive while the DMA channel is idle.
 		if (NRF_USBD->EVENTS_EP0DATADONE != 0U && !nRFUsbdDmaActive())
@@ -1019,7 +1027,7 @@ extern "C" void USBD_IRQHandler(void)
 			startDma = true;
 		}
 	}
-	else
+	else if (!startDma)
 	{
 		const uint32_t statusBit = 31U - (uint32_t)__CLZ(dmastatus);
 
@@ -1039,7 +1047,7 @@ extern "C" void USBD_IRQHandler(void)
 		}
 		else if ((statusBit & 8U) != 0U) // ISO IN/OUT
 		{
-			startDma = nRFUsbdIsoFinishDma(dmastatus);
+			// ENDISOIN/ENDISOOUT above are the ISO DMA completion events.
 		}
 		else if ((statusBit & 16U) != 0U) // EP0 OUT
 		{
@@ -1465,7 +1473,6 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[EpNum - 1U][1];
 		if (!s_Usbd.IsoOpen ||
 			(s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) != 0U ||
-			(NRF_USBD->EPSTATUS & (1UL << NRFX_USBD_ISO_EP_NO)) != 0U ||
 			s_Usbd.IsoDmaLen[1] >= 0 || pReg->Handler == NULL ||
 			(pBuffer == NULL && Length != 0U) ||
 			Length > pReg->MaxPacketSize)

@@ -108,8 +108,8 @@ void __DSB(){
  if(regs.TASKS_STARTISOIN || regs.TASKS_STARTISOOUT){
   activeDir=regs.TASKS_STARTISOIN?1:0;
   assert(dmaBusy==0x82);assert(regs.EPSTATUS.bits==0);
-  assert(!(s_Usbd.IsoBusy & ((uint8_t)NRFUSBD_ISO_OUT_BUSY<<activeDir)));
-  assert(s_Usbd.IsoDmaLen[activeDir]<0);
+  assert(s_Usbd.IsoBusy & ((uint8_t)NRFUSBD_ISO_OUT_BUSY<<activeDir));
+  assert(s_Usbd.IsoDmaLen[activeDir]>=0);
   regs.EPSTATUS.bits=1UL<<(activeDir?8:24);
   ++isoStarts[activeDir];
   if(activeDir) memcpy(wireIn,inBuffer,regs.ISOIN.MAXCNT);
@@ -154,7 +154,7 @@ code += function('UsbCtrlrEpOpenData').replace('UsbCtrlrEpOpenData(', 'productio
 code += function('UsbCtrlrEpSend').replace('UsbCtrlrEpSend(', 'productionEpSend(')
 code += r'''
 void nRFUsbdDmaWait(){
- if(dmaBusy){assert(nRFUsbdIsoFinishDma(0U));nRFUsbdDmaUnlock();}
+ if(dmaBusy){assert(nRFUsbdIsoFinishDma());nRFUsbdDmaUnlock();}
 }
 void nRFUsbdResumeQueuedDmaLocked(){
  if(dmaBusy||(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_HOST_RESUME)))return;
@@ -166,7 +166,7 @@ void finish(bool in){
  if(in){regs.ISOIN.AMOUNT=regs.ISOIN.MAXCNT;regs.EVENTS_ENDISOIN=1;}
  else{regs.ISOOUT.AMOUNT=regs.ISOOUT.MAXCNT;regs.EVENTS_ENDISOOUT=1;}
  const unsigned locks=dmaLocks,unlocks=dmaUnlocks;
- assert(nRFUsbdIsoFinishDma(regs.EPSTATUS.bits));assert(dmaBusy && regs.EPSTATUS.bits==0);
+ assert(nRFUsbdIsoFinishDma());assert(dmaBusy && regs.EPSTATUS.bits==0);
  if(!nRFUsbdIsoStart()){++regularStarts;nRFUsbdDmaUnlock();}
  assert(dmaLocks==locks && dmaUnlocks==unlocks+unsigned(!dmaBusy));
 }
@@ -186,11 +186,11 @@ void callback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
  }else if(chainIn){chainIn=false;assert(productionEpSend(0,8,inBuffer,9));}
 }
 void init(){
- regs={};s_Usbd.SofEnabled=false;
+ regs={};s_Usbd.SofEnabled=true;
  s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=-1;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  s_Usbd.hQue=CFifoInit(queueMemory,sizeof(queueMemory),sizeof(nRFUsbdQue_t),true);
  assert(s_Usbd.hQue);
- // Both ISO directions open; software-pending state starts clear.
+ // Both ISO directions open; admitted/active ownership starts clear.
  s_Usbd.Flags=0;s_Usbd.IsoOpen=true;s_Usbd.IsoBusy=0;
  dmaBusy=0;dmaLocks=dmaUnlocks=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
@@ -201,51 +201,34 @@ void init(){
 }
 void dummy(uint32_t,void*){}
 int main(){
- // END states and expected retirement use OUT=1, IN=2. A known DMA status
- // selects only its direction; an unqualified drain checks IN first.
- const struct {uint32_t status;unsigned retired[4];} completions[]={
-  {0U,{0,1,2,2}},
-  {0x00000100U,{0,0,2,2}},
-  {0x01000000U,{0,1,0,1}}
- };
- for(const auto &test:completions)for(unsigned ends=0;ends<4;++ends){
+ // END events, not EPSTATUS, select ISO completion. If both are latched,
+ // IN retires first and OUT remains for the following pass.
+ for(unsigned ends=0;ends<4;++ends){
   init();dmaBusy=0x82;
   s_Usbd.IsoBusy|=NRFUSBD_ISO_OUT_BUSY|NRFUSBD_ISO_IN_BUSY;
+  s_Usbd.IsoDmaLen[0]=17;s_Usbd.IsoDmaLen[1]=9;
   regs.EVENTS_ENDISOOUT=ends&1;regs.EVENTS_ENDISOIN=(ends>>1)&1;
   regs.EPSTATUS.bits=(ends&1?0x01000000U:0U)|(ends&2?0x00000100U:0U);
-  const unsigned retired=test.retired[ends],remaining=ends&~retired;
-  assert(nRFUsbdIsoFinishDma(test.status)==(retired!=0));
-  assert(regs.EVENTS_ENDISOOUT==(remaining&1));
-  assert(regs.EVENTS_ENDISOIN==((remaining>>1)&1));
-  assert(regs.EPSTATUS.bits==((remaining&1?0x01000000U:0U)|
-   (remaining&2?0x00000100U:0U)));
-  assert(dmaBusy==0x82 && dmaLocks==0 && dmaUnlocks==0);
-  assert(callbacks[0]==(retired&1) && callbacks[1]==((retired>>1)&1));
+  const bool retired=nRFUsbdIsoFinishDma();
+  assert(retired==(ends!=0));
+  if(ends==3){
+   assert(!regs.EVENTS_ENDISOIN && regs.EVENTS_ENDISOOUT);
+   assert(callbacks[1]==1 && callbacks[0]==0);
+   assert(nRFUsbdIsoFinishDma());
+  }
+  assert(!regs.EVENTS_ENDISOIN && !regs.EVENTS_ENDISOOUT);
+  assert(!regs.EPSTATUS.bits);
+  assert(callbacks[0]==unsigned((ends&1)!=0));
+  assert(callbacks[1]==unsigned((ends&2)!=0));
  }
- puts("PASS: ISO completion dispatch preserves direction, END requirement, IN priority and DMA ownership");
+ puts("PASS: ISO completion is selected by ENDISOIN/ENDISOOUT and retires IN first");
 
- init();unsigned ready=0;
- s_Usbd.EpReg[7][0].bBlocking=true;
- s_Usbd.EpReg[7][0].pContext=&ready;
- s_Usbd.EpReg[7][0].Handler=[](UsbCtrlrEvtType_t event,uint16_t length,
-  void *context){
-  assert(event==USB_CTRLR_EVT_DRDY && length==0);
-  ++*(unsigned*)context;
- };
- frame(9);
- assert(ready==1 && isoStarts[0]==1 && dmaBusy);
- puts("PASS: ISO DRDY dispatch preserves endpoint, event, length and registered context");
- init();ready=0;
- s_Usbd.EpReg[7][0].bBlocking=true;
- s_Usbd.EpReg[7][0].pContext=&ready;
- s_Usbd.EpReg[7][0].Handler=[](UsbCtrlrEvtType_t event,uint16_t,
-  void *context){
-  assert(event==USB_CTRLR_EVT_DRDY);
-  s_Usbd.EpReg[7][0].pBuffer=++*(unsigned*)context==1?nullptr:outBuffer;
- };
- frame(9);assert(ready==1 && !dmaBusy && !isoStarts[0]);
- frame(17);assert(ready==2 && dmaBusy && isoStarts[0]==1 && regs.ISOOUT.MAXCNT==17);
- puts("PASS: ISO controller waits for a withheld RX buffer and starts the current frame after release");
+ init();frame(17);
+ assert(dmaBusy && isoStarts[0]==1 && activeDir==0);
+ assert(regs.ISOOUT.MAXCNT==17 && regs.ISOOUT.PTR==uint32_t(uintptr_t(outBuffer)));
+ finish(false);
+ assert(callbacks[0]==1 && lengths[0]==17 && ISO_BUSY()==0);
+ puts("PASS: due SOF services registered ISO OUT buffer and ENDISOOUT completes it");
 
  alignas(8) uint8_t txMemory[CFIFO_TOTAL_MEMSIZE(128,1)];
  const uint16_t regularLengths[]={1,2,3,4,9,64};
@@ -303,7 +286,7 @@ int main(){
  init();frame();assert(isoStarts[1]==0); // no unsolicited IN ZLP/DMA
  assert(productionEpSend(0,8,inBuffer,9));assert(!dmaBusy && ISO_BUSY()==0);
  frame();assert(dmaBusy && isoStarts[1]==1);
- assert(!nRFUsbdIsoFinishDma(regs.EPSTATUS.bits));assert(dmaBusy); // matching END required
+ assert(!nRFUsbdIsoFinishDma());assert(dmaBusy); // matching END required
  finish(true);assert(callbacks[1]==1 && lengths[1]==9 && !(ISO_BUSY()&2));
  frame();assert(isoStarts[1]==1);
  frame();assert(isoStarts[1]==1); // never retransmit previous payload
@@ -316,14 +299,10 @@ int main(){
  assert(lengths[0]==17 && lengths[1]==33 && ISO_BUSY()==0 && regularStarts>0);
  puts("PASS: duplex ISO uses one DMA; both completions delivered; shared scheduler resumes");
 
- init();interruptCopy=true;frame(17);
- memset(hostOut,0xDD,sizeof(hostOut));frame(9);
- assert((ISO_BUSY()&1) && s_Usbd.IsoDmaLen[0]==9 && isoStarts[0]==1);
- finish(false);
- assert(callbacks[0]==1 && isoStarts[0]==2 && activeDir==0);
- finish(false);interruptCopy=false;
- assert(callbacks[0]==2 && ISO_BUSY()==0);
- puts("PASS: active ISO DMA accepts one queued next-frame request without buffer overwrite");
+ init();interruptCopy=true;frame(17);finish(false);
+ assert(callbacks[0]==1 && ISO_BUSY()==0 && isoStarts[0]==1);
+ frame(9);assert(isoStarts[0]==2);finish(false);interruptCopy=false;
+ puts("PASS: ISO OUT BUSY remains owned through callback and a later SOF starts the next frame");
 
  init();for(int i=0;i<4;++i)assert(AppEvtHandlerQue(i,nullptr,dummy));
  frame(25);finish(false);
