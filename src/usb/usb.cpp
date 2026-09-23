@@ -366,6 +366,7 @@ static const uint8_t *UsbDescConfiguration(int DevNo, uint8_t Index,
 		const uint16_t fragmentLength = pClass->DescriptorLength(Speed);
 		memcpy(&s_Core.ConfigDesc[offset], pClass->Descriptor(Speed),
 			fragmentLength);
+		pClass->PatchDescriptor(&s_Core.ConfigDesc[offset], Speed);
 		offset = (uint16_t)(offset + fragmentLength);
 	}
 
