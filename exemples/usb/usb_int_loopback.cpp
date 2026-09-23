@@ -352,7 +352,7 @@ static bool IntRegisterFunction(void)
 
 	s_InterfaceNo = alloc.FirstInterface;
 	s_EpNo = alloc.Bidirectional[0];
-	return UsbDescriptorRegisterTemplate(USB_DEVNO, &s_Class,
+	return UsbDescRegister(USB_DEVNO, &s_Class,
 		nullptr, sizeof(IntFunctionDesc_t), IntPatchFunctionDesc);
 }
 
