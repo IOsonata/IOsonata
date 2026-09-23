@@ -59,7 +59,7 @@ SOFTWARE.
 
 #define INT_STR_INTERFACE	4U
 
-static const uint8_t s_IntIntervals[INT_ALT_COUNT] = { 1U, 4U, 16U };
+static constexpr uint8_t s_IntIntervals[INT_ALT_COUNT] = { 1U, 4U, 16U };
 
 #pragma pack(push, 1)
 typedef struct __Int_Alt_Descriptor {
