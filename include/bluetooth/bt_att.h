@@ -551,6 +551,7 @@ struct __Bt_Characteristic {
 	void *pValue;						//!< Characteristic data value
 	uint16_t ValueLen;					//!< Current length in bytes of data value
 	uint8_t SecType;					//!< Per-characteristic security, a BT_GAP_SECTYPE_* value. NONE inherits the service SecType.
+	const uint8_t *pUuidBase;			//!< 128-bit base UUID of this characteristic, same byte order as UuidBase. Null uses the service base.
 	// Bellow are private data. Do not modify
 	// bNotify/bIndic are an advisory OR-aggregate across all connected peers
 	// (true if any peer has subscribed), kept for the CccVal mirror and legacy

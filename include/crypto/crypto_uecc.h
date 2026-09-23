@@ -85,6 +85,32 @@ static_assert(sizeof(CryptoUecc::KeyCtx) <= CRYPTO_KEYCTX_MAX,
 
 CryptoUecc *CryptoUeccCreate(void *pMem, size_t MemSize, RngEngine *pRng);
 
+/// P-256 signature check alone, for a boot loader: nothing of key
+/// generation, key agreement or signing is linked in with it.
+class CryptoUeccVerify : public SignEngine {
+public:
+	CryptoUeccVerify() { vbValid = false; }
+
+	bool Enable() override { vbValid = true; return true; }
+	void Disable() override {}
+	void Reset() override {}
+
+	CRYPTO_STATUS Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
+					   const uint8_t *pHash, size_t HashLen,
+					   uint8_t *pSig) override
+	{
+		(void)Curve; (void)Key; (void)pHash; (void)HashLen; (void)pSig;
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	CRYPTO_STATUS Verify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
+						 const uint8_t *pHash, size_t HashLen,
+						 const uint8_t *pSig) override;
+};
+
+#define CRYPTO_UECC_VERIFY_MEMSIZE	sizeof(CryptoUeccVerify)
+
+CryptoUeccVerify *CryptoUeccVerifyCreate(void *pMem, size_t MemSize);
+
 /** @} */
 
 #endif // __CRYPTO_UECC_H__

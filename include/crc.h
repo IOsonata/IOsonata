@@ -137,6 +137,20 @@ uint32_t crc32(uint8_t *pData, int Len);
  */
 uint32_t crc32_ieee(uint8_t *pData, int Len);
 
+/**
+ * @brief	Continue an IEEE 802.3 CRC-32 over more data.
+ *
+ * Same result as crc32_ieee over all the data at once when Crc is the value
+ * returned for the data before, 0 to start. Same use as zlib crc32().
+ *
+ * @param	Crc		: Value so far, 0 to start
+ * @param	pData 	: Pointer to data buffer to calculate
+ * @param	Len		: Data length in bytes
+ *
+ * @return	32 bits CRC value
+ */
+uint32_t crc32_ieee_cont(uint32_t Crc, const uint8_t *pData, int Len);
+
 #ifdef __cplusplus
 }
 #endif

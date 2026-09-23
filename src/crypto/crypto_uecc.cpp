@@ -240,9 +240,9 @@ CRYPTO_STATUS CryptoUecc::Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
 		CRYPTO_STATUS_FAIL;
 }
 
-CRYPTO_STATUS CryptoUecc::Verify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
-								 const uint8_t *pHash, size_t HashLen,
-								 const uint8_t *pSig)
+static CRYPTO_STATUS UeccVerify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
+								const uint8_t *pHash, size_t HashLen,
+								const uint8_t *pSig)
 {
 	if (Curve != CRYPTO_CURVE_P256 || pPubKey == nullptr ||
 		pHash == nullptr || pSig == nullptr)
@@ -258,6 +258,21 @@ CRYPTO_STATUS CryptoUecc::Verify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
 						 uECC_secp256r1());
 	(void)UeccEnd();
 	return ok == 1 ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+}
+
+CRYPTO_STATUS CryptoUecc::Verify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
+								 const uint8_t *pHash, size_t HashLen,
+								 const uint8_t *pSig)
+{
+	return UeccVerify(Curve, pPubKey, pHash, HashLen, pSig);
+}
+
+CRYPTO_STATUS CryptoUeccVerify::Verify(CRYPTO_CURVE Curve,
+									   const uint8_t *pPubKey,
+									   const uint8_t *pHash, size_t HashLen,
+									   const uint8_t *pSig)
+{
+	return UeccVerify(Curve, pPubKey, pHash, HashLen, pSig);
 }
 
 int CryptoUecc::SelfTest()
@@ -295,6 +310,18 @@ CryptoUecc *CryptoUeccCreate(void *pMem, size_t MemSize, RngEngine *pRng)
 	}
 	CryptoUecc *p = new (pMem) CryptoUecc();
 	p->SetRng(pRng);
+	p->Enable();
+	return p;
+}
+
+CryptoUeccVerify *CryptoUeccVerifyCreate(void *pMem, size_t MemSize)
+{
+	if (pMem == nullptr || MemSize < sizeof(CryptoUeccVerify) ||
+		((uintptr_t)pMem & (alignof(CryptoUeccVerify) - 1U)) != 0U)
+	{
+		return nullptr;
+	}
+	CryptoUeccVerify *p = new (pMem) CryptoUeccVerify();
 	p->Enable();
 	return p;
 }

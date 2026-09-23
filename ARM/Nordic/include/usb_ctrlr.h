@@ -281,20 +281,18 @@ typedef struct __nRF_Usb_Ep_Registration
 
 enum
 {
-	USBD_FLAG_SUSPENDED     = 0x0001U,
-	USBD_FLAG_SUSPEND_PEND  = 0x0002U,
-	USBD_FLAG_REMOTE_WAKE   = 0x0004U,
-	USBD_FLAG_HOST_RESUME   = 0x0008U,
-	USBD_FLAG_MAC_AWAKE     = 0x0010U,
-	// Suspend clears READY with the wake flags; keep that mask byte-sized.
-	USBD_FLAG_ISO_OUT_READY = 0x0020U,
-	USBD_FLAG_ISO_IN_READY  = 0x0040U,
-	USBD_FLAG_ISO_OUT_OPEN  = 0x0400U,
-	USBD_FLAG_ISO_IN_OPEN   = 0x0800U,
-	USBD_FLAG_ISO_OUT_BUSY  = 0x1000U,
-	USBD_FLAG_ISO_IN_BUSY   = 0x2000U,
-	USBD_FLAG_ISO_OUT_CMPL  = 0x4000U,
-	USBD_FLAG_ISO_IN_CMPL   = 0x8000U,
+	USBD_FLAG_SUSPENDED   = 0x01U,
+	USBD_FLAG_REMOTE_WAKE = 0x04U,
+	USBD_FLAG_HOST_RESUME = 0x08U,
+	USBD_FLAG_MAC_AWAKE   = 0x10U,
+};
+
+enum
+{
+	NRFUSBD_ISO_OUT_READY = 0x01U,
+	NRFUSBD_ISO_IN_READY  = 0x02U,
+	NRFUSBD_ISO_OUT_BUSY  = 0x04U,
+	NRFUSBD_ISO_IN_BUSY   = 0x08U,
 };
 
 typedef struct __nRF_Usbd_State
@@ -303,13 +301,13 @@ typedef struct __nRF_Usbd_State
 	uint8_t IntPrio;
 	bool LowPowerSuspend;
 	bool SofEnabled;
-	// One pending DMA packet per ISO direction; -1 means none, 0 is a ZLP.
-	int16_t IsoDmaLen[2];
-	uint16_t IsoOutSize;
-	volatile uint32_t Flags;
+	bool IsoOpen;                 //!< EP8 participates in ISO DMA scheduling.
+	// Queued ISO buffer lengths; meaningful while the direction is BUSY.
+	uint16_t IsoDmaLen[2];
+	uint8_t IsoBufState;          //!< READY/BUSY state of the ISO DMA buffers.
+	volatile uint8_t Flags;       //!< Controller power/wake state only.
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;
-	uint32_t IsoGeneration[2];
 	// Non-control endpoints 1-8.
 	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT - 1][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];

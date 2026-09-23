@@ -53,7 +53,7 @@ assert "nRFUsbdDmaUnlock();" not in retire
 assert "nRFUsbdDmaUnlock();" in dma_finish
 assert retire.index("if (*pEnd == 0U)") < retire.index("*pEnd = 0U;")
 assert retire.index("*pEnd = 0U;") < retire.index("__DSB();")
-regular = interrupt[interrupt.index("default:          // EP1-7 IN/OUT") :]
+regular = interrupt[interrupt.index("if ((statusBit & 7U) != 0U) // EP1-7 IN/OUT") :]
 regular = regular[:regular.index("if (NRF_USBD->EVENTS_USBEVENT")]
 assert regular.index("nRFUsbdRetireDma(statusBit)") < regular.index(
     "nRFUsbEpRegisteredEvent("

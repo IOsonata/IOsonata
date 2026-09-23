@@ -191,6 +191,62 @@ void TestSrvcAddRollsBackOnFailure()
 	}
 }
 
+// ---- a characteristic with a base UUID of its own -------------------------
+
+BtGattSrvc_t s_BaseSrvc;
+BtGattChar_t s_BaseChars[2];
+
+// SMP: service 8D53DC1D-1DB7-4CD3-868B-8A527460AA84, characteristic
+// DA2E7828-FBCE-4E01-AE9E-261174997C48, least significant byte first.
+const uint8_t s_SrvcBase[16] = {
+	0x84, 0xAA, 0x60, 0x74, 0x52, 0x8A, 0x8B, 0x86,
+	0xD3, 0x4C, 0xB7, 0x1D, 0x00, 0x00, 0x53, 0x8D,
+};
+const uint8_t s_CharBase[16] = {
+	0x48, 0x7C, 0x99, 0x74, 0x11, 0x26, 0x9E, 0xAE,
+	0x01, 0x4E, 0xCE, 0xFB, 0x00, 0x00, 0x2E, 0xDA,
+};
+
+void TestCharOwnBase()
+{
+	BtAttDBInit(2048);
+
+	BtGattSrvc_t &srvc = s_BaseSrvc;
+	BtGattChar_t *chars = s_BaseChars;
+	BuildSrvc(&srvc, chars, 2, 16);
+	srvc.bCustom = true;
+	std::memcpy(srvc.UuidBase, s_SrvcBase, 16);
+	srvc.UuidSrvc = 0xDC1D;
+	chars[1].Uuid = 0x7828;
+	chars[1].pUuidBase = s_CharBase;
+
+	CHECK(BtGattSrvcAdd(&srvc));
+
+	int sb = BtUuidFindBase(s_SrvcBase);
+	int cb = BtUuidFindBase(s_CharBase);
+	CHECK(sb > 0 && cb > 0 && sb != cb);
+	CHECK(srvc.Uuid.BaseIdx == sb);
+
+	// The first keeps the service base, the second has its own, in the
+	// characteristic record and in the value attribute a client reads.
+	CHECK(chars[0].BaseUuidIdx == sb);
+	CHECK(chars[1].BaseUuidIdx == cb);
+
+	BtAttDBEntry_t *v0 = BtAttDBFindHandle(chars[0].ValHdl);
+	BtAttDBEntry_t *v1 = BtAttDBFindHandle(chars[1].ValHdl);
+	CHECK(v0 != nullptr && v0->TypeUuid.BaseIdx == sb);
+	CHECK(v1 != nullptr && v1->TypeUuid.BaseIdx == cb &&
+		  v1->TypeUuid.Uuid == 0x7828);
+
+	BtAttDBEntry_t *d1 = BtAttDBFindHandle((uint16_t)(chars[1].ValHdl - 1));
+	CHECK(d1 != nullptr);
+	if (d1 != nullptr)
+	{
+		BtAttCharDeclar_t *dec = (BtAttCharDeclar_t *)d1->Data;
+		CHECK(dec->pChar == &chars[1] && dec->Uuid.BaseIdx == cb);
+	}
+}
+
 // ---- the mark API on its own ----------------------------------------------
 
 void TestMarkAndUnwind()
@@ -259,6 +315,7 @@ int main()
 	TestMarkAndUnwind();
 	TestSrvcAddSucceeds();
 	TestSrvcAddRollsBackOnFailure();
+	TestCharOwnBase();
 
 	if (s_Failures != 0)
 	{

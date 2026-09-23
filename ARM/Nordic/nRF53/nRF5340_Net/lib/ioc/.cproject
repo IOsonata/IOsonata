@@ -72,6 +72,7 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.2139048229" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
@@ -84,6 +85,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk/nrf53&quot;"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/hal"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/drivers/include"/>
@@ -110,6 +112,7 @@
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.936348891" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.234324751" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.2056925696" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
@@ -122,6 +125,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk/nrf53&quot;"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/hal"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/drivers/include"/>
@@ -228,6 +232,7 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.1951349456" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
@@ -240,6 +245,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk/nrf53&quot;"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/hal"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/drivers/include"/>
@@ -266,6 +272,7 @@
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1144636694" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.1424187410" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.853127311" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
@@ -278,6 +285,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk/nrf53&quot;"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/hal"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/drivers/include"/>

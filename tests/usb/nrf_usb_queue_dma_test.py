@@ -26,6 +26,8 @@ intrf_source = Path(os.environ.get('USB_INTRF_SOURCE',
 header = (ROOT / 'ARM/Nordic/include/usb_ctrlr.h').read_text()
 queue_blocking = re.search(r's_Usbd.hQue = CFifoInit\(s_QueMem,.*?\b(true|false)\);',
     source, re.S).group(1)
+assert 'CFifoFlush(s_Usbd.hQue);' in source
+assert 'NRF_USBD->EVENTS_EP0SETUP == 0U' in source
 
 
 def function(name, source=source):
@@ -171,17 +173,18 @@ for tag, name in [('__nRF_Usbd_Que', 'nRFUsbdQue_t'), ('__nRF_Ep_Packet', 'nRFEP
 code += re.search(r'typedef struct __nRF_Usb_Ep_Registration\s*\{.*?\} nRFUsbEpReg_t;',
     header, re.S).group(0) + '\n'
 code += re.search(r'enum\s*\{[^}]*USBD_FLAG_SUSPENDED[^}]*\};', header).group(0) + '\n'
+code += re.search(r'enum\s*\{[^}]*NRFUSBD_ISO_IN_BUSY[^}]*\};', header).group(0) + '\n'
 code += r'''
 #pragma pack(pop)
 struct {
- uint32_t Flags;
- uint32_t IsoGeneration[2];
- uint16_t IsoOutSize;
+ uint8_t Flags;
  bool LowPowerSuspend;
+ bool IsoOpen;
+ uint8_t IsoBufState;
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue,hEp0Que;
  bool SofEnabled;
- int16_t IsoDmaLen[2];
+ uint16_t IsoDmaLen[2];
  alignas(4) uint8_t Ep0Bounce[64];
 } s_Usbd;
 alignas(8) uint8_t queueMem[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
@@ -257,8 +260,8 @@ void init(){
  controlEvents=0;controlEvent={};
  isoAtSof=false;suspends=resumes=setups=0;s_Usbd.LowPowerSuspend=false;
  setupHandler=nullptr;controlHandler=nullptr;
- s_Usbd.SofEnabled=false;
- s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=-1;
+ s_Usbd.SofEnabled=false;s_Usbd.IsoOpen=false;s_Usbd.IsoBufState=0;
+ s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=0;
  s_Usbd.Flags=USBD_FLAG_MAC_AWAKE;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  assert(AppEvtHandlerInit(nullptr,0));
  memset(ep0Mem,0xA5,sizeof(ep0Mem));
@@ -607,31 +610,34 @@ int main(int argc,char **argv){
 
  for(unsigned status:{2U,0x100U,0x1000000U})
  for(unsigned gate:{0U,unsigned(USBD_FLAG_SUSPENDED),unsigned(USBD_FLAG_HOST_RESUME),
-  unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND)}){
+  unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE)}){
   init();
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
   else{
    dmaBusy=0x82;
-   s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
+   s_Usbd.IsoOpen=true;
   }
   assert(UsbCtrlrEp0Send(0,data,18)==18);
   s_Usbd.Flags|=gate;
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   isoReady=true;isoChecks=0;dmaLocks=dmaUnlocks=0;interrupt();
-  const bool allowed=gate==0U || gate==unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND);
+  const bool allowed=gate==0U;
   assert(bool(regs.TASKS_STARTEPIN[0])==allowed && bool(dmaBusy)==allowed);
   assert(!dmaLocks && dmaUnlocks==unsigned(!allowed) && !isoChecks);
   assert(CFifoUsed(s_Usbd.hEp0Que)==1 && !CFifoUsed(s_Usbd.hQue));
  }
  puts("PASS: regular/ISO handoff to EP0 preserves suspend and host-resume gates without relocking");
 
- // Exercise every combination of the four power flags at submission.
+ // Exercise every combination of suspend, remote-wake and host-resume flags.
  // A denied request stays queued without touching the hardware lock.
- for(unsigned gate=0;gate<16;++gate)for(unsigned mask:{0U,1U}){
-  init();irqMask=mask;s_Usbd.Flags=USBD_FLAG_MAC_AWAKE|gate;
+ for(unsigned combo=0;combo<8;++combo)for(unsigned mask:{0U,1U}){
+  init();irqMask=mask;s_Usbd.Flags=USBD_FLAG_MAC_AWAKE;
+  if(combo&1)s_Usbd.Flags|=USBD_FLAG_SUSPENDED;
+  if(combo&2)s_Usbd.Flags|=USBD_FLAG_REMOTE_WAKE;
+  if(combo&4)s_Usbd.Flags|=USBD_FLAG_HOST_RESUME;
   assert(UsbCtrlrEpSend(0,1,data,9));
-  const bool allowed=!(gate&USBD_FLAG_HOST_RESUME) &&
-   (!(gate&USBD_FLAG_SUSPENDED) || (gate&USBD_FLAG_SUSPEND_PEND));
+  const bool allowed=(s_Usbd.Flags&
+   (USBD_FLAG_SUSPENDED|USBD_FLAG_HOST_RESUME))==0U;
   assert(bool(dmaBusy)==allowed && dmaLocks==unsigned(allowed) && !dmaUnlocks);
   assert(CFifoUsed(s_Usbd.hQue)==1 && irqMask==mask);
   assert(bool(regs.TASKS_STARTEPIN[1])==allowed);
@@ -764,7 +770,7 @@ int main(int argc,char **argv){
  // this ISR must not postpone an already queued regular transfer.
  for(unsigned status:{0x100U,0x1000000U}){
   init();dmaBusy=0x82;
-  s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
+  s_Usbd.IsoOpen=true;
   assert(UsbCtrlrEpSend(0,2,data,9));
   regs.EPSTATUS.bits=status;
   interrupt(); // EPSTATUS alone is not completion.
@@ -784,15 +790,15 @@ int main(int argc,char **argv){
  // ordinary suspend or a host resume still waiting for USBWUALLOWED.
  for(unsigned status:{2U,0x100U,0x1000000U})
  for(unsigned gate:{0U,unsigned(USBD_FLAG_SUSPENDED),unsigned(USBD_FLAG_HOST_RESUME),
-  unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND)}){
+  unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE)}){
   init();dmaBusy=0x82;
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
-  else s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
+  else s_Usbd.IsoOpen=true;
   assert(UsbCtrlrEpSend(0,2,data+64,9));
   s_Usbd.Flags|=gate;
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   interrupt();
-  const bool allowed=gate==0U || gate==unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND);
+  const bool allowed=gate==0U;
   assert(bool(dmaBusy)==allowed && bool(regs.TASKS_STARTEPIN[2])==allowed);
   assert(isoChecks==unsigned(allowed) && CFifoUsed(s_Usbd.hQue)==1);
  }
@@ -802,7 +808,7 @@ int main(int argc,char **argv){
  for(unsigned status:{2U,0x100U,0x1000000U}){
   init();dmaBusy=0x82;
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
-  else s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
+  else s_Usbd.IsoOpen=true;
   assert(UsbCtrlrEpSend(0,2,data+64,9));
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   regs.EVENTS_EP0SETUP=1;regs.EVENTS_EP0DATADONE=1;isoChecks=0;
@@ -813,87 +819,65 @@ int main(int argc,char **argv){
  }
  puts("PASS: SETUP defers control handling and prevents a premature DMA restart");
 
- for(bool reset:{false,true}){
-  init();unsigned otherEvents=0;
-  while(AppEvtHandlerQue(0,&otherEvents,[](uint32_t,void *p){++*(unsigned*)p;})){}
-  regs.BMREQUESTTYPE=0x80;regs.BREQUEST=6;regs.WLENGTHL=9;
-  regs.EVENTS_EP0SETUP=regs.EVENTS_EP0DATADONE=1;interrupt();
-  assert(regs.EVENTS_EP0SETUP && !regs.EVENTS_EP0DATADONE && !setups);
-  assert(regs.INTENCLR==USBD_INTEN_EP0SETUP_Msk && !regs.INTENSET);
-  // Other interrupts cannot lose or duplicate the retained request.
-  interrupt();assert(regs.EVENTS_EP0SETUP && !setups);
-  if(reset){
-   regs.EVENTS_USBRESET=1;interrupt();assert(!regs.EVENTS_EP0SETUP);
-   UsbCtrlrProcess(0);UsbCtrlrProcess(0);assert(!setups && resets==1);
-  }else{
-   // A replacement SETUP before acceptance supersedes the retained one.
-   regs.WLENGTHL=18;
-   setupHandler=[](const UsbCtrlrEvt_t *e){
-    assert(e->Setup.bRequest==6 && e->Setup.wLength==18 && !irqMask);
-   };
-   UsbCtrlrProcess(0);
-   assert(otherEvents && !setups && !regs.EVENTS_EP0SETUP);
-   assert(regs.INTENSET==USBD_INTEN_EP0SETUP_Msk);
-   UsbCtrlrProcess(0);UsbCtrlrProcess(0);assert(setups==1);
-   regs.EVENTS_EP0SETUP=1;interrupt();AppEvtHandlerExec();assert(setups==2);
-  }
- }
- puts("PASS: full AppEvt retains SETUP, masks its IRQ, retries once, and handles replacement/reset");
+ // SETUP interrupt is never masked or retained for foreground retry.
+ init();
+ while(AppEvtHandlerQue(0,nullptr,[](uint32_t,void*){})){}
+ regs.BMREQUESTTYPE=0x80;regs.BREQUEST=6;regs.WLENGTHL=9;
+ regs.EVENTS_EP0SETUP=regs.EVENTS_EP0DATADONE=1;interrupt();
+ assert(!regs.EVENTS_EP0SETUP && !regs.EVENTS_EP0DATADONE && !setups);
+ assert((regs.INTENCLR & USBD_INTEN_EP0SETUP_Msk)==0U);
+ puts("PASS: EP0 SETUP never masks its interrupt or waits for foreground retry");
 
  // Host resume must notify exactly once, after both the MAC and peripheral
  // are awake, without losing ISO state or changing the caller's IRQ mask.
  for(bool awake:{false,true})for(bool lowPower:{false,true})
  for(unsigned mask:{0U,1U}){
   init();irqMask=mask;regs.LOWPOWER=lowPower;
-  s_Usbd.Flags=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN|
-   USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND|USBD_FLAG_REMOTE_WAKE;
+  s_Usbd.IsoOpen=true;
+  s_Usbd.Flags=USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE;
   if(awake)s_Usbd.Flags|=USBD_FLAG_MAC_AWAKE;
   nRFUsbdHostResumeDetected();
   assert(irqMask==mask && !regs.LOWPOWER && resumes==unsigned(awake && !lowPower));
-  assert(!(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_SUSPEND_PEND|USBD_FLAG_REMOTE_WAKE)));
-  assert((s_Usbd.Flags&(USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN))==
-   (USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN));
+  assert(!(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE)));
+  assert(s_Usbd.IsoOpen);
   nRFUsbdHostResumeDetected();
   nRFUsbdWakeAllowed();nRFUsbdWakeAllowed();
   assert(resumes==1 && irqMask==mask && !(s_Usbd.Flags&USBD_FLAG_HOST_RESUME));
  }
- // A host resume may preempt the public remote-wake request at IRQ restore.
- // The protected recheck must then suppress the device's resume signal.
+ // Remote wake is serialized at the caller: the drive commits inside the
+ // caller's critical section, so a host resume arriving at IRQ restore is
+ // processed after it and still notifies exactly once with clean state.
  init();s_Usbd.Flags=USBD_FLAG_SUSPENDED|USBD_FLAG_MAC_AWAKE;
  onIrqEnable=nRFUsbdHostResumeDetected;
  UsbCtrlrRemoteWakeup(0);
- assert(!onIrqEnable && !irqMask && resumes==1 && !regs.TASKS_DPDMDRIVE);
- puts("PASS: wake callbacks preserve IRQ/ISO state and host resume cancels a preempted remote-wake request");
+ assert(!onIrqEnable && !irqMask && resumes==1 && regs.TASKS_DPDMDRIVE);
+ assert(!(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE|USBD_FLAG_HOST_RESUME)));
+ puts("PASS: wake callbacks preserve IRQ/ISO state and a preempting host resume settles after the committed wake drive");
 
- // Suspend blocks the early restart. Low-power suspend drains queued DMA
- // before entering LOWPOWER; ordinary suspend retains it.
+ // Suspend blocks new DMA immediately. Queued work is retained across
+ // both ordinary and low-power suspend; only an active EasyDMA is allowed to finish.
  for(unsigned status:{2U,0x100U,0x1000000U})for(bool lowPower:{false,true}){
   init();dmaBusy=0x82;s_Usbd.LowPowerSuspend=lowPower;
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
-  else s_Usbd.Flags|=USBD_FLAG_ISO_IN_OPEN|USBD_FLAG_ISO_OUT_OPEN;
+  else s_Usbd.IsoOpen=true;
   assert(UsbCtrlrEpSend(0,2,data+64,9));
   regs.EPSTATUS.bits=status;regs.EVENTS_ENDEPIN[1]=1;isoEnd=1;
   regs.EVENTS_USBEVENT=1;regs.EVENTCAUSE.bits=USBD_EVENTCAUSE_SUSPEND_Msk;
   interrupt();
-  assert(suspends==1 && CFifoUsed(s_Usbd.hQue)==1 && !regs.LOWPOWER);
-  // Deferred completions and new submissions use this same resume gate.
+  assert(suspends==1 && CFifoUsed(s_Usbd.hQue)==1);
+  assert(!dmaBusy && bool(regs.LOWPOWER)==lowPower);
   {const auto mask=DisableInterrupt();nRFUsbdResumeQueuedDmaLocked();EnableInterrupt(mask);}
-  assert(bool(dmaBusy)==lowPower);
-  if(lowPower){
-   regs.EPSTATUS.bits=1U<<2;regs.EVENTS_ENDEPIN[2]=1;interrupt();
-   assert(!dmaBusy && regs.LOWPOWER && CFifoUsed(s_Usbd.hQue)==0);
-  }
+  assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==1);
   regs.EVENTS_SOF=1;interrupt();
   assert(!(s_Usbd.Flags&USBD_FLAG_SUSPENDED) && !regs.LOWPOWER);
   if(lowPower){
    assert(!resumes && (s_Usbd.Flags&USBD_FLAG_HOST_RESUME));
    regs.EVENTS_USBEVENT=1;regs.EVENTCAUSE.bits=USBD_EVENTCAUSE_USBWUALLOWED_Msk;
    interrupt();
-  }else{
-   {const auto mask=DisableInterrupt();nRFUsbdResumeQueuedDmaLocked();EnableInterrupt(mask);}
-   assert(dmaBusy && regs.TASKS_STARTEPIN[2]);
   }
   assert(resumes==1 && !(s_Usbd.Flags&USBD_FLAG_HOST_RESUME));
+  {const auto mask=DisableInterrupt();nRFUsbdResumeQueuedDmaLocked();EnableInterrupt(mask);}
+  assert(dmaBusy && regs.TASKS_STARTEPIN[2] && CFifoUsed(s_Usbd.hQue)==1);
  }
  // USBWUALLOWED permits remote wake; a simultaneous SOF means the host has
  // already resumed, so the device must not drive its own resume signal.
@@ -904,7 +888,7 @@ int main(int argc,char **argv){
   assert(bool(regs.TASKS_DPDMDRIVE)==!sof && resumes==unsigned(sof));
   assert(!(s_Usbd.Flags&USBD_FLAG_REMOTE_WAKE));
  }
- puts("PASS: suspend drain, host wake and simultaneous SOF/USBWUALLOWED ordering");
+ puts("PASS: suspend retention, host wake and simultaneous SOF/USBWUALLOWED ordering");
 
  // Poison every recycled DMA slot with a different destination. The actual
  // OUT ISR must replace it before DMA starts, including when IN owns DMA.
@@ -1215,7 +1199,7 @@ int main(int argc,char **argv){
  init();dmaBusy=0x82;
  regs.EPSTATUS.bits=0x01010101;regs.EPDATASTATUS.bits=0x01FF01FF;
  regs.EVENTCAUSE.bits=0xFFFF;regs.EVENTS_USBEVENT=1;regs.INTEN=0xFFFFFFFF;
- s_Usbd.IsoGeneration[0]=4;s_Usbd.IsoGeneration[1]=8;s_Usbd.IsoOutSize=33;
+ 
  assert(CFifoPut(s_Usbd.hQue) && CFifoPut(s_Usbd.hEp0Que));
  regs.EVENTS_USBRESET=1;interrupt();
  assert(resets==1 && !dmaBusy && !regs.EVENTS_USBRESET);
@@ -1228,8 +1212,7 @@ int main(int argc,char **argv){
   USBD_INTEN_USBEVENT_Msk | USBD_INTEN_EPDATA_Msk | USBD_INTEN_EP0SETUP_Msk |
   USBD_INTEN_EP0DATADONE_Msk | USBD_INTEN_ENDEPOUT0_Msk));
  assert(CFifoUsed(s_Usbd.hQue)==0 && CFifoUsed(s_Usbd.hEp0Que)==0);
- assert(s_Usbd.Flags==USBD_FLAG_MAC_AWAKE && !s_Usbd.IsoOutSize);
- assert(s_Usbd.IsoGeneration[0]==5 && s_Usbd.IsoGeneration[1]==9);
+ assert(s_Usbd.Flags==USBD_FLAG_MAC_AWAKE);
  puts("PASS: bus reset cancels queues, clears status and releases DMA without starting a transfer");
 
  // Producer acceptance and readiness follow CFifo's configured full policy.
@@ -1340,6 +1323,37 @@ int main(int argc,char **argv){
  }
  puts("PASS: packet IN full/short/ZLP, aligned ring wrap, queued DMA contention,");
  puts("      ENDEP preserves TX data, host completion releases exactly one packet");
+
+ // SETUP and an IN host-completion may be latched in the same IRQ.
+ // SETUP must enter AppEvt first; the ISR returns with EPDATA still set,
+ // so the pended interrupt re-enters and queues the IN completion second.
+ init();
+ {
+  static unsigned order,setupOrder,inOrder;
+  order=setupOrder=inOrder=0;
+  setupHandler=[](const UsbCtrlrEvt_t *){
+   setupOrder=++order;
+  };
+  auto &reg=s_Usbd.EpReg[0][1];
+  reg.pContext=nullptr;
+  reg.Handler=[](UsbCtrlrEvtType_t event,uint16_t,void *){
+   assert(event==USB_CTRLR_EVT_XFER_CMPL);
+   inOrder=++order;
+  };
+  regs.EPIN[1].AMOUNT=9;
+  regs.BMREQUESTTYPE=0x80;regs.BREQUEST=6;regs.WLENGTHL=18;
+  regs.EPDATASTATUS.bits=1U<<1;
+  regs.EVENTS_EPDATA=1;
+  regs.EVENTS_EP0SETUP=1;
+  interrupt();
+  assert(!regs.EVENTS_EP0SETUP && regs.EVENTS_EPDATA);
+  AppEvtHandlerDispatch();
+  assert(setupOrder==1 && inOrder==0);
+  interrupt(); // EPDATA left set keeps the IRQ pended; hardware re-enters.
+  AppEvtHandlerDispatch();
+  assert(inOrder==2);
+ }
+ puts("PASS: same-IRQ SETUP AppEvt precedes regular IN completion AppEvt");
 
  // Seven pending IN endpoints exceed the default AppEvt capacity of four.
  // A full AppEvt queue must leave all seven latched; OUT retry shares the status register.
