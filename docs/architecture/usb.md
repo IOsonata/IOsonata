@@ -98,9 +98,7 @@ a generated fragment built directly in the core configuration buffer. The same
 builder receives the negotiated speed, so classes do not keep duplicate
 full-speed and high-speed descriptor buffers in RAM. Descriptor metadata remains
 one record per registered `UsbDeviceClass`; it does not scale with the USB
-interface-number space. `UsbDescriptorRegister()` remains only as a
-compatibility path for callers that already own separate immutable FS/HS
-fragments. Applications provide identity and strings in `UsbCfg_t`.
+interface-number space. Applications provide identity and strings in `UsbCfg_t`.
 
 The `UsbdCdc` object derives from both `UsbDeviceClass` and `UsbIntrf`.
 Its control requests, configuration selection, reset and deferred pump run
