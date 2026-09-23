@@ -66,7 +66,7 @@ SOFTWARE.
 
 //#define ISO_TEST_RX_CLAMP		9
 
-static const uint16_t s_IsoMps[ISO_ALT_COUNT] = {
+static constexpr uint16_t s_IsoMps[ISO_ALT_COUNT] = {
 	9U, 17U, 25U, 33U, 49U, 63U,
 };
 
