@@ -164,11 +164,11 @@ public:
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 				 uint8_t **ppData, uint16_t *pLength) override;
 	bool SelectConfig(uint8_t ConfigValue) override;
-	void PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const override;
 	void Reset(void) override;
 
 	using UsbIntIntrf::operator DevIntrf_t *;
 	operator UsbdHidDev_t * () { return &vUsbdHid; }
+	operator const UsbdHidDev_t * () const { return &vUsbdHid; }
 
 	bool RequestToSend(int NbBytes) override {
 		return NbBytes >= 0 && NbBytes <= (int)vUsbIntIntrf.Mps &&
