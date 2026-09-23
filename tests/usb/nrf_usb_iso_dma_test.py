@@ -117,7 +117,7 @@ void __DSB(){
   regs.TASKS_STARTISOIN=regs.TASKS_STARTISOOUT=0;
  }
 }
-void nRFUsbdHostResumeDetected(){}
+void nRFUsbdHostResume(){}
 void nRFUsbdResumeQueuedDmaLocked();
 void nRFUsbdDmaWait();
 bool productionEpSend(int,uint8_t,uint8_t*,uint16_t);
@@ -157,7 +157,7 @@ void nRFUsbdDmaWait(){
  if(dmaBusy){assert(nRFUsbdIsoFinishDma());nRFUsbdDmaUnlock();}
 }
 void nRFUsbdResumeQueuedDmaLocked(){
- if(dmaBusy||(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_HOST_RESUME)))return;
+ if(dmaBusy||(s_Usbd.Flags&USBD_FLAG_SUSPENDED))return;
  nRFUsbdDmaLock();
  if(!nRFUsbdIsoStart()){++regularStarts;nRFUsbdDmaUnlock();}
 }

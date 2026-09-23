@@ -161,7 +161,7 @@ nRFUsbdState_t s_Usbd;
 extern bool nRFUsbdIsoStart(void) __attribute__((weak));
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
-static void nRFUsbdHostResumeDetected(void);
+static void nRFUsbdHostResume(void);
 
 
 // UsbCtrlrIsoInit pulls in the optional ISO archive member, whose strong
@@ -653,8 +653,7 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaAllowed(void)
 {
-	return (s_Usbd.Flags &
-		(USBD_FLAG_SUSPENDED | USBD_FLAG_HOST_RESUME)) == 0U;
+	return (s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U;
 }
 
 // Callers check the power gate and own the channel lock. EP0 starts
@@ -715,9 +714,10 @@ static void nRFUsbdAbortEp0(void)
 static void nRFUsbdTryEnterLowPower(void)
 {
 	const uint8_t entryMask = USBD_FLAG_SUSPENDED | USBD_FLAG_REMOTE_WAKE |
-		USBD_FLAG_HOST_RESUME;
+		USBD_FLAG_MAC_AWAKE;
+	const uint8_t entryWant = USBD_FLAG_SUSPENDED | USBD_FLAG_MAC_AWAKE;
 	if (!s_Usbd.LowPowerSuspend ||
-		(s_Usbd.Flags & entryMask) != USBD_FLAG_SUSPENDED ||
+		(s_Usbd.Flags & entryMask) != entryWant ||
 		nRFUsbdDmaActive())
 	{
 		return;
@@ -726,7 +726,7 @@ static void nRFUsbdTryEnterLowPower(void)
 	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
 		NRF_USBD->EVENTS_SOF != 0U)
 	{
-		nRFUsbdHostResumeDetected();
+		nRFUsbdHostResume();
 		return;
 	}
 
@@ -738,16 +738,15 @@ static void nRFUsbdTryEnterLowPower(void)
 	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
 		NRF_USBD->EVENTS_SOF != 0U)
 	{
-		nRFUsbdHostResumeDetected();
+		nRFUsbdHostResume();
 	}
 }
 
 static void nRFUsbdTryRemoteWake(void)
 {
 	const uint8_t wakeMask = USBD_FLAG_REMOTE_WAKE | USBD_FLAG_SUSPENDED |
-		USBD_FLAG_HOST_RESUME | USBD_FLAG_MAC_AWAKE;
-	const uint8_t wakeWant = USBD_FLAG_REMOTE_WAKE | USBD_FLAG_SUSPENDED |
 		USBD_FLAG_MAC_AWAKE;
+	const uint8_t wakeWant = wakeMask;
 	const uint8_t flags = s_Usbd.Flags;
 	if ((flags & wakeMask) != wakeWant ||
 		nRFUsbdDmaActive() ||
@@ -768,7 +767,7 @@ static void nRFUsbdTryRemoteWake(void)
 	NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
 }
 
-static void nRFUsbdHostResumeDetected(void)
+static void nRFUsbdHostResume(void)
 {
 	const uint32_t irqState = DisableInterrupt();
 	uint8_t flags = s_Usbd.Flags;
@@ -779,28 +778,35 @@ static void nRFUsbdHostResumeDetected(void)
 		return;
 	}
 
-	const bool waking = (flags & USBD_FLAG_MAC_AWAKE) == 0U || !UsbdIsForceNormal();
-	flags &= (uint8_t)~(USBD_FLAG_SUSPENDED | USBD_FLAG_REMOTE_WAKE |
-		USBD_FLAG_HOST_RESUME);
-	if (waking)
-		flags |= USBD_FLAG_HOST_RESUME;
+	// A host resume cancels any device-initiated wake request. Keep SUSPENDED
+	// set until the peripheral is actually awake; that state alone gates DMA.
+	flags &= (uint8_t)~USBD_FLAG_REMOTE_WAKE;
+	if ((flags & USBD_FLAG_MAC_AWAKE) != 0U && UsbdIsForceNormal())
+	{
+		s_Usbd.Flags = flags & (uint8_t)~USBD_FLAG_SUSPENDED;
+		EnableInterrupt(irqState);
+		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
+		return;
+	}
+
 	s_Usbd.Flags = flags;
 	EnableInterrupt(irqState);
-
-	if (waking)
-		UsbdForceNormal();
-	else
-		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
+	UsbdForceNormal();
 }
 
-// ISR context only.
+// ISR context only. USBWUALLOWED completes a pending host resume, or wakes the
+// peripheral far enough for a pending remote wake to drive DP/DM afterwards.
 static void nRFUsbdWakeAllowed(void)
 {
 	const uint8_t flags = s_Usbd.Flags;
-	s_Usbd.Flags = (flags | USBD_FLAG_MAC_AWAKE) &
-		(uint8_t)~USBD_FLAG_HOST_RESUME;
-	if ((flags & USBD_FLAG_HOST_RESUME) != 0U)
+	s_Usbd.Flags = flags | USBD_FLAG_MAC_AWAKE;
+
+	if ((flags & USBD_FLAG_SUSPENDED) != 0U &&
+		(flags & USBD_FLAG_REMOTE_WAKE) == 0U)
+	{
+		s_Usbd.Flags &= (uint8_t)~USBD_FLAG_SUSPENDED;
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
+	}
 }
 
 static void nRFUsbdBusReset(void)
@@ -898,15 +904,14 @@ static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 		// When low-power suspend is disabled, retain all endpoint state and
 		// wait for RESUME or SOF without touching USBD LOWPOWER.
 		s_Usbd.Flags = (s_Usbd.Flags &
-			(uint8_t)~(USBD_FLAG_REMOTE_WAKE | USBD_FLAG_HOST_RESUME)) |
-			USBD_FLAG_SUSPENDED;
+			(uint8_t)~USBD_FLAG_REMOTE_WAKE) | USBD_FLAG_SUSPENDED;
 		nRFUsbdSofAcquire();
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
 	}
 
 	if ((EventCause & USBD_EVENTCAUSE_RESUME_Msk) != 0)
 	{
-		nRFUsbdHostResumeDetected();
+		nRFUsbdHostResume();
 	}
 
 	if ((EventCause & USBD_EVENTCAUSE_USBWUALLOWED_Msk) != 0)
@@ -917,7 +922,7 @@ static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 
 static void nRFUsbdHandleSof(void)
 {
-	nRFUsbdHostResumeDetected();
+	nRFUsbdHostResume();
 
 	if (s_Usbd.SofEnabled)
 	{
@@ -950,7 +955,7 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	{
 	}
 
-	nRFUsbdHostResumeDetected();
+	nRFUsbdHostResume();
 	nRFUsbdAbortEp0();
 
 	if ((evt.Setup.bmRequestType &
@@ -1335,7 +1340,7 @@ void UsbCtrlrRemoteWakeup(int DevNo)
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
 	const uint8_t flags = s_Usbd.Flags;
-	if ((flags & (USBD_FLAG_SUSPENDED | USBD_FLAG_HOST_RESUME)) !=
+	if ((flags & (USBD_FLAG_SUSPENDED | USBD_FLAG_REMOTE_WAKE)) !=
 		USBD_FLAG_SUSPENDED)
 	{
 		EnableInterrupt(state);

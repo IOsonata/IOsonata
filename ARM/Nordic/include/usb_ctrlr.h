@@ -287,9 +287,8 @@ typedef struct __nRF_Usb_Ep_Registration
 enum
 {
 	USBD_FLAG_SUSPENDED   = 0x01U,
-	USBD_FLAG_REMOTE_WAKE = 0x04U,
-	USBD_FLAG_HOST_RESUME = 0x08U,
-	USBD_FLAG_MAC_AWAKE   = 0x10U,
+	USBD_FLAG_REMOTE_WAKE = 0x02U,
+	USBD_FLAG_MAC_AWAKE   = 0x04U,
 };
 
 enum

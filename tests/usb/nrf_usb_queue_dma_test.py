@@ -139,7 +139,7 @@ void setIsoEnd(uint32_t status){
  else {assert(status==0x1000000U);regs.EVENTS_ENDISOOUT=1;}
 }
 unsigned ep0Completions,ep0Length;
-void nRFUsbdHostResumeDetected();
+void nRFUsbdHostResume();
 void nRFUsbdProcessOutData(uint32_t,void*);
 bool isoAtSof;
 unsigned resets,suspends,resumes,setups;
@@ -215,7 +215,7 @@ code += '\n'.join(function(name).replace('CFifoPut(', 'checkedDmaQueuePut(')
     'nRFUsbdEmitXfer', 'UsbCtrlrEp0Status',
     'UsbCtrlrEpAlloc', 'nRFUsbdProcessOutData', 'UsbCtrlrProcess',
     'UsbdIsForceNormal', 'UsbdForceNormal', 'nRFUsbdTryRemoteWake',
-    'nRFUsbdHostResumeDetected', 'nRFUsbdWakeAllowed', 'nRFUsbdSofAcquire',
+    'nRFUsbdHostResume', 'nRFUsbdWakeAllowed', 'nRFUsbdSofAcquire',
     'nRFUsbdSofRelease', 'nRFUsbdHandleBusEvent', 'nRFUsbdHandleSof',
     'nRFUsbdTryEnterLowPower', 'UsbCtrlrRemoteWakeup',
     'nRFUsbdResetState', 'nRFUsbdBusReset', 'nRFUsbdAbortEp0',
@@ -617,7 +617,7 @@ int main(int argc,char **argv){
  puts("PASS: an OUT interrupt after SETUP's idle wait cannot strand the EP0 response");
 
  for(unsigned status:{2U,0x100U,0x1000000U})
- for(unsigned gate:{0U,unsigned(USBD_FLAG_SUSPENDED),unsigned(USBD_FLAG_HOST_RESUME),
+ for(unsigned gate:{0U,unsigned(USBD_FLAG_SUSPENDED),
   unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE)}){
   init();
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
@@ -635,18 +635,16 @@ int main(int argc,char **argv){
   assert(!dmaLocks && dmaUnlocks==unsigned(!allowed) && !isoChecks);
   assert(CFifoUsed(s_Usbd.hEp0Que)==1 && !CFifoUsed(s_Usbd.hQue));
  }
- puts("PASS: regular/ISO handoff to EP0 preserves suspend and host-resume gates without relocking");
+ puts("PASS: regular/ISO handoff to EP0 preserves suspend gates without relocking");
 
- // Exercise every combination of suspend, remote-wake and host-resume flags.
- // A denied request stays queued without touching the hardware lock.
- for(unsigned combo=0;combo<8;++combo)for(unsigned mask:{0U,1U}){
+ // Exercise every combination of suspend and remote-wake flags.
+ // SUSPENDED alone gates DMA; a denied request stays queued.
+ for(unsigned combo=0;combo<4;++combo)for(unsigned mask:{0U,1U}){
   init();irqMask=mask;s_Usbd.Flags=USBD_FLAG_MAC_AWAKE;
   if(combo&1)s_Usbd.Flags|=USBD_FLAG_SUSPENDED;
   if(combo&2)s_Usbd.Flags|=USBD_FLAG_REMOTE_WAKE;
-  if(combo&4)s_Usbd.Flags|=USBD_FLAG_HOST_RESUME;
   assert(UsbCtrlrEpSend(0,1,data,9));
-  const bool allowed=(s_Usbd.Flags&
-   (USBD_FLAG_SUSPENDED|USBD_FLAG_HOST_RESUME))==0U;
+  const bool allowed=(s_Usbd.Flags&USBD_FLAG_SUSPENDED)==0U;
   assert(bool(dmaBusy)==allowed && dmaLocks==unsigned(allowed) && !dmaUnlocks);
   assert(CFifoUsed(s_Usbd.hQue)==1 && irqMask==mask);
   assert(bool(regs.TASKS_STARTEPIN[1])==allowed);
@@ -795,9 +793,9 @@ int main(int argc,char **argv){
 
  // A previously processed suspend/wake gate still applies when END arrives
  // later. Completion may drain low-power suspend, but must not bypass an
- // ordinary suspend or a host resume still waiting for USBWUALLOWED.
+ // ordinary or remote-wake suspend.
  for(unsigned status:{2U,0x100U,0x1000000U})
- for(unsigned gate:{0U,unsigned(USBD_FLAG_SUSPENDED),unsigned(USBD_FLAG_HOST_RESUME),
+ for(unsigned gate:{0U,unsigned(USBD_FLAG_SUSPENDED),
   unsigned(USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE)}){
   init();dmaBusy=0x82;
   if(status==2U)assert(UsbCtrlrEpSend(0,1,data,9));
@@ -810,7 +808,7 @@ int main(int argc,char **argv){
   assert(bool(dmaBusy)==allowed && bool(regs.TASKS_STARTEPIN[2])==allowed);
   assert(isoChecks==unsigned(allowed) && CFifoUsed(s_Usbd.hQue)==1);
  }
- puts("PASS: immediate completion handoff preserves suspend and host-resume gates");
+ puts("PASS: immediate completion handoff preserves suspend gates");
 
  // SETUP must defer control handling without starting another queued DMA.
  for(unsigned status:{2U,0x100U,0x1000000U}){
@@ -836,30 +834,31 @@ int main(int argc,char **argv){
  assert((regs.INTENCLR & USBD_INTEN_EP0SETUP_Msk)==0U);
  puts("PASS: EP0 SETUP never masks its interrupt or waits for foreground retry");
 
- // Host resume must notify exactly once, after both the MAC and peripheral
- // are awake, without losing ISO state or changing the caller's IRQ mask.
+ // Host resume keeps SUSPENDED as the DMA gate until the peripheral is awake.
+ // REMOTE_WAKE is cancelled immediately because the host resumed first.
  for(bool awake:{false,true})for(bool lowPower:{false,true})
  for(unsigned mask:{0U,1U}){
   init();irqMask=mask;regs.LOWPOWER=lowPower;
   s_Usbd.IsoOpen=true;
   s_Usbd.Flags=USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE;
   if(awake)s_Usbd.Flags|=USBD_FLAG_MAC_AWAKE;
-  nRFUsbdHostResumeDetected();
-  assert(irqMask==mask && !regs.LOWPOWER && resumes==unsigned(awake && !lowPower));
-  assert(!(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE)));
+  nRFUsbdHostResume();
+  const bool immediate=awake && !lowPower;
+  assert(irqMask==mask && !regs.LOWPOWER && resumes==unsigned(immediate));
+  assert(!(s_Usbd.Flags&USBD_FLAG_REMOTE_WAKE));
+  assert(bool(s_Usbd.Flags&USBD_FLAG_SUSPENDED)==!immediate);
   assert(s_Usbd.IsoOpen);
-  nRFUsbdHostResumeDetected();
   nRFUsbdWakeAllowed();nRFUsbdWakeAllowed();
-  assert(resumes==1 && irqMask==mask && !(s_Usbd.Flags&USBD_FLAG_HOST_RESUME));
+  assert(resumes==1 && irqMask==mask && !(s_Usbd.Flags&USBD_FLAG_SUSPENDED));
  }
  // Remote wake is serialized at the caller: the drive commits inside the
  // caller's critical section, so a host resume arriving at IRQ restore is
  // processed after it and still notifies exactly once with clean state.
  init();s_Usbd.Flags=USBD_FLAG_SUSPENDED|USBD_FLAG_MAC_AWAKE;
- onIrqEnable=nRFUsbdHostResumeDetected;
+ onIrqEnable=nRFUsbdHostResume;
  UsbCtrlrRemoteWakeup(0);
  assert(!onIrqEnable && !irqMask && resumes==1 && regs.TASKS_DPDMDRIVE);
- assert(!(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE|USBD_FLAG_HOST_RESUME)));
+ assert(!(s_Usbd.Flags&(USBD_FLAG_SUSPENDED|USBD_FLAG_REMOTE_WAKE)));
  puts("PASS: wake callbacks preserve IRQ/ISO state and a preempting host resume settles after the committed wake drive");
 
  // Suspend blocks new DMA immediately. Queued work is retained across
@@ -877,13 +876,15 @@ int main(int argc,char **argv){
   {const auto mask=DisableInterrupt();nRFUsbdResumeQueuedDmaLocked();EnableInterrupt(mask);}
   assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==1);
   regs.EVENTS_SOF=1;interrupt();
-  assert(!(s_Usbd.Flags&USBD_FLAG_SUSPENDED) && !regs.LOWPOWER);
+  assert(!regs.LOWPOWER);
   if(lowPower){
-   assert(!resumes && (s_Usbd.Flags&USBD_FLAG_HOST_RESUME));
+   assert(!resumes && (s_Usbd.Flags&USBD_FLAG_SUSPENDED));
    regs.EVENTS_USBEVENT=1;regs.EVENTCAUSE.bits=USBD_EVENTCAUSE_USBWUALLOWED_Msk;
    interrupt();
+  }else{
+   assert(resumes==1 && !(s_Usbd.Flags&USBD_FLAG_SUSPENDED));
   }
-  assert(resumes==1 && !(s_Usbd.Flags&USBD_FLAG_HOST_RESUME));
+  assert(resumes==1 && !(s_Usbd.Flags&USBD_FLAG_SUSPENDED));
   {const auto mask=DisableInterrupt();nRFUsbdResumeQueuedDmaLocked();EnableInterrupt(mask);}
   assert(dmaBusy && regs.TASKS_STARTEPIN[2] && CFifoUsed(s_Usbd.hQue)==1);
  }
