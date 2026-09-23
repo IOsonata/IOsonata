@@ -113,8 +113,6 @@ typedef struct __Usbd_Bulk_Dev {
 	uint8_t InterfaceString;
 	uint16_t FsMps;
 	uint16_t HsMps;
-	UsbdBulkDesc_t FsDesc;
-	UsbdBulkDesc_t HsDesc;
 	uint32_t RxTransfer[(USBD_BULK_MAX_MPS + sizeof(uint32_t) - 1U) /
 						 sizeof(uint32_t)];
 } UsbdBulkDev_t;
@@ -161,6 +159,7 @@ public:
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 				 uint8_t **ppData, uint16_t *pLength) override;
 	bool SelectConfig(uint8_t ConfigValue) override;
+	void PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const override;
 	void Reset(void) override;
 
 private:
