@@ -1098,7 +1098,18 @@ extern "C" void USBD_IRQHandler(void)
 
 	if (startDma)
 	{
-		// Restart before EPDATA/SOF work; SETUP and bus events take precedence.
+		// A completed transfer retains the shared EasyDMA lock. If ISO SOF is
+		// already pending, publish its IN/OUT readiness before choosing the next
+		// transfer so nRFUsbdStartQueuedDma() can honor its ISO-first policy.
+		// Otherwise a continuously populated regular queue can chain EP1-7 DMA
+		// across the ISO service point and lose an unhandshaked ISO frame.
+		if (s_Usbd.IsoOpen && NRF_USBD->EVENTS_SOF != 0U)
+		{
+			NRF_USBD->EVENTS_SOF = 0U;
+			(void)NRF_USBD->EVENTS_SOF;
+			nRFUsbdHandleSof();
+		}
+
 		if ((NRF_USBD->EVENTS_EP0SETUP | NRF_USBD->EVENTS_USBEVENT) == 0U &&
 			nRFUsbdDmaAllowed())
 		{
