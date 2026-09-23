@@ -291,8 +291,7 @@ bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 {
 	if (pIntrf == nullptr ||
 		!pIntrf->Opened || pIntrf->Suspended || Length > pIntrf->Mps ||
-		(Length != 0U && pData == nullptr) ||
-		!UsbIntrfRequestToSend(pIntrf->pData, Length))
+		(Length != 0U && pData == nullptr))
 	{
 		return false;
 	}
