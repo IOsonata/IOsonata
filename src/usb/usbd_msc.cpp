@@ -992,7 +992,7 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 	pMsc->MaxLun = 0U;
 	pMsc->bConfigured = false;
 	UsbdMscResetBot(pMsc, false);
-	return UsbDescriptorRegisterTemplate(pMsc->DevNo, pClass,
+	return UsbDescRegister(pMsc->DevNo, pClass,
 		&s_MscDescTemplate, sizeof(s_MscDescTemplate),
 		UsbdMscPatchRegistered);
 }
