@@ -300,11 +300,9 @@ private:
 									 uint16_t FsDescriptorLength,
 									 const void *pHsDescriptor,
 									 uint16_t HsDescriptorLength);
-	friend bool UsbDescRegister(int DevNo,
-										 UsbDeviceClass *pClass,
-										 const void *pDescriptor,
-										 uint16_t DescriptorLength,
-										 UsbDescBuild_t Patch);
+	friend bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
+								 const void *pTemplate, uint16_t Length,
+								 UsbDescBuild_t Build);
 
 	uint8_t vFirstInterface = 0;
 	uint8_t vInterfaceCount = 0;
@@ -332,10 +330,9 @@ bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
 					  uint8_t FirstInterface, uint8_t InterfaceCount,
 					  uint16_t EpInMask, uint16_t EpOutMask);
 
-/// Register the static configuration descriptor fragment owned by pClass.
-/// Full-speed data is required. High-speed data is required only on a
-/// high-speed-capable controller. The generic layer supplies the configuration
-/// descriptor header and concatenates fragments in class registration order.
+/// Compatibility path for callers with separate immutable FS/HS fragments.
+/// New classes should use UsbDescRegister() so one template/builder serves both
+/// speeds without persistent per-speed descriptor copies.
 bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
 						   const void *pFsDescriptor,
 						   uint16_t FsDescriptorLength,
