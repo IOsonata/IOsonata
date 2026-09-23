@@ -62,8 +62,8 @@ static void EpAllocStore(uint8_t *pEp, unsigned Count, uint32_t Mask)
 	}
 }
 
-static bool EpAllocTryOut(const UsbdEpAllocState_t *pState, uint8_t Needed,
-						  uint8_t StartEp, uint32_t InMask,
+static bool EpAllocTryOut(const UsbdEpAllocState_t *pState, unsigned Needed,
+						  unsigned StartEp, uint32_t InMask,
 						  uint32_t PairMask, uint32_t OutMask)
 {
 	if (Needed == 0U)
@@ -85,7 +85,7 @@ static bool EpAllocTryOut(const UsbdEpAllocState_t *pState, uint8_t Needed,
 		return true;
 	}
 
-	for (uint8_t ep = StartEp; ep < pState->OutLimit; ep++)
+	for (unsigned ep = StartEp; ep < pState->OutLimit; ep++)
 	{
 		const uint32_t bit = 1UL << ep;
 
@@ -94,8 +94,8 @@ static bool EpAllocTryOut(const UsbdEpAllocState_t *pState, uint8_t Needed,
 			continue;
 		}
 
-		if (EpAllocTryOut(pState, (uint8_t)(Needed - 1U),
-						  (uint8_t)(ep + 1U), InMask, PairMask,
+		if (EpAllocTryOut(pState, Needed - 1U,
+						  ep + 1U, InMask, PairMask,
 						  OutMask | bit))
 		{
 			return true;
@@ -105,8 +105,8 @@ static bool EpAllocTryOut(const UsbdEpAllocState_t *pState, uint8_t Needed,
 	return false;
 }
 
-static bool EpAllocTryPair(const UsbdEpAllocState_t *pState, uint8_t Needed,
-						   uint8_t StartEp, uint32_t InMask,
+static bool EpAllocTryPair(const UsbdEpAllocState_t *pState, unsigned Needed,
+						   unsigned StartEp, uint32_t InMask,
 						   uint32_t PairMask)
 {
 	if (Needed == 0U)
@@ -115,7 +115,7 @@ static bool EpAllocTryPair(const UsbdEpAllocState_t *pState, uint8_t Needed,
 							 InMask, PairMask, pState->pReq->FixedOutMask);
 	}
 
-	for (uint8_t ep = StartEp; ep < pState->PairLimit; ep++)
+	for (unsigned ep = StartEp; ep < pState->PairLimit; ep++)
 	{
 		const uint32_t bit = 1UL << ep;
 
@@ -124,8 +124,8 @@ static bool EpAllocTryPair(const UsbdEpAllocState_t *pState, uint8_t Needed,
 			continue;
 		}
 
-		if (EpAllocTryPair(pState, (uint8_t)(Needed - 1U),
-						   (uint8_t)(ep + 1U), InMask, PairMask | bit))
+		if (EpAllocTryPair(pState, Needed - 1U,
+						   ep + 1U, InMask, PairMask | bit))
 		{
 			return true;
 		}
@@ -134,8 +134,8 @@ static bool EpAllocTryPair(const UsbdEpAllocState_t *pState, uint8_t Needed,
 	return false;
 }
 
-static bool EpAllocTryIn(const UsbdEpAllocState_t *pState, uint8_t Needed,
-						 uint8_t StartEp, uint32_t InMask)
+static bool EpAllocTryIn(const UsbdEpAllocState_t *pState, unsigned Needed,
+						 unsigned StartEp, uint32_t InMask)
 {
 	if (Needed == 0U)
 	{
@@ -143,7 +143,7 @@ static bool EpAllocTryIn(const UsbdEpAllocState_t *pState, uint8_t Needed,
 							  1U, InMask, 0U);
 	}
 
-	for (uint8_t ep = StartEp; ep < pState->InLimit; ep++)
+	for (unsigned ep = StartEp; ep < pState->InLimit; ep++)
 	{
 		const uint32_t bit = 1UL << ep;
 		if ((InMask & bit) != 0U)
@@ -151,8 +151,8 @@ static bool EpAllocTryIn(const UsbdEpAllocState_t *pState, uint8_t Needed,
 			continue;
 		}
 
-		if (EpAllocTryIn(pState, (uint8_t)(Needed - 1U),
-						 (uint8_t)(ep + 1U), InMask | bit))
+		if (EpAllocTryIn(pState, Needed - 1U,
+						 ep + 1U, InMask | bit))
 		{
 			return true;
 		}
