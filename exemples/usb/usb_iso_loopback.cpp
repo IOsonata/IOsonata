@@ -328,34 +328,69 @@ static void IsoProcess(void)
 	}
 }
 
+static constexpr UsbIntrfDesc_t s_IsoAlt0Desc = {
+	.bLength = sizeof(UsbIntrfDesc_t),
+	.bDescriptorType = USB_DESCTYPE_INTERFACE,
+	.bInterfaceNumber = 0U,
+	.bAlternateSetting = 0U,
+	.bNumEndpoints = 0U,
+	.bInterfaceClass = USB_INTRFCLASS_VENDOR,
+	.bInterfaceSubClass = 0U,
+	.bInterfaceProtocol = 0U,
+	.iInterface = ISO_STR_INTERFACE,
+};
+
+static constexpr IsoAltDesc_t s_IsoAltDesc = {
+	.Interface = {
+		.bLength = sizeof(UsbIntrfDesc_t),
+		.bDescriptorType = USB_DESCTYPE_INTERFACE,
+		.bInterfaceNumber = 0U,
+		.bAlternateSetting = 0U,
+		.bNumEndpoints = 2U,
+		.bInterfaceClass = USB_INTRFCLASS_VENDOR,
+		.bInterfaceSubClass = 0U,
+		.bInterfaceProtocol = 0U,
+		.iInterface = ISO_STR_INTERFACE,
+	},
+	.Out = {
+		.bLength = sizeof(UsbEndPointDesc_t),
+		.bDescriptorType = USB_DESCTYPE_ENDPOINT,
+		.bEndpointAddress = 0U,
+		.bmAttributes = USB_ENDPATT_TRANS_ISO,
+		.wMaxPacketSize = 0U,
+		.bInterval = 0U,
+	},
+	.In = {
+		.bLength = sizeof(UsbEndPointDesc_t),
+		.bDescriptorType = USB_DESCTYPE_ENDPOINT,
+		.bEndpointAddress = 0U,
+		.bmAttributes = USB_ENDPATT_TRANS_ISO,
+		.wMaxPacketSize = 0U,
+		.bInterval = 0U,
+	},
+};
+
 static void IsoPatchFunctionDesc(const UsbDeviceClass *, uint8_t *pData,
 								 UsbSpeed_t Speed)
 {
 	IsoFunctionDesc_t *pDesc =
 		reinterpret_cast<IsoFunctionDesc_t *>(pData);
-	memset(pDesc, 0, sizeof(*pDesc));
-
-	pDesc->Alt0.bLength = sizeof(pDesc->Alt0);
-	pDesc->Alt0.bDescriptorType = USB_DESCTYPE_INTERFACE;
+	pDesc->Alt0 = s_IsoAlt0Desc;
 	pDesc->Alt0.bInterfaceNumber = s_InterfaceNo;
-	pDesc->Alt0.bInterfaceClass = USB_INTRFCLASS_VENDOR;
-	pDesc->Alt0.iInterface = ISO_STR_INTERFACE;
 
 	const uint8_t interval = Speed == USB_SPEED_HIGH ? 4U : 1U;
 	for (unsigned i = 0U; i < ISO_ALT_COUNT; i++)
 	{
 		IsoAltDesc_t &alt = pDesc->Alt[i];
-		alt.Interface = pDesc->Alt0;
+		alt = s_IsoAltDesc;
+		alt.Interface.bInterfaceNumber = s_InterfaceNo;
 		alt.Interface.bAlternateSetting = (uint8_t)(i + 1U);
-		alt.Interface.bNumEndpoints = 2U;
-		alt.Out.bLength = sizeof(alt.Out);
-		alt.Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
 		alt.Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_EpNo);
-		alt.Out.bmAttributes = USB_ENDPATT_TRANS_ISO;
 		alt.Out.wMaxPacketSize = s_IsoMps[i];
 		alt.Out.bInterval = interval;
-		alt.In = alt.Out;
 		alt.In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_EpNo);
+		alt.In.wMaxPacketSize = s_IsoMps[i];
+		alt.In.bInterval = interval;
 	}
 }
 
