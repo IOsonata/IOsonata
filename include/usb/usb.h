@@ -234,6 +234,10 @@ protected:
 	~UsbClass() = default;
 };
 
+class UsbDeviceClass;
+typedef void (*UsbDescriptorPatch_t)(const UsbDeviceClass *pClass,
+									 uint8_t *pDesc, UsbSpeed_t Speed);
+
 /// Base for a class implemented by the local USB device.
 class UsbDeviceClass : public UsbClass {
 public:
@@ -263,23 +267,24 @@ public:
 		return false;
 	}
 
-	/// Patch one copied configuration fragment with per-instance/speed values.
-	/// The registered descriptor remains immutable and may be shared by classes.
-	virtual void PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const {
-		(void)pDesc;
-		(void)Speed;
-	}
-
 	uint8_t FirstInterface(void) const { return vFirstInterface; }
 	uint8_t InterfaceCount(void) const { return vInterfaceCount; }
 	uint16_t EpInMask(void) const { return vEpInMask; }
 	uint16_t EpOutMask(void) const { return vEpOutMask; }
 	const uint8_t *Descriptor(UsbSpeed_t Speed) const {
-		return Speed == USB_SPEED_HIGH ? vHsDescriptor : vFsDescriptor;
+		return vHsDescriptorLength == 0U ? vFsDescriptor :
+			(Speed == USB_SPEED_HIGH ? vDescriptor.Hs : vFsDescriptor);
 	}
 	uint16_t DescriptorLength(UsbSpeed_t Speed) const {
-		return Speed == USB_SPEED_HIGH ? vHsDescriptorLength :
-			vFsDescriptorLength;
+		return vHsDescriptorLength == 0U ? vFsDescriptorLength :
+			(Speed == USB_SPEED_HIGH ? vHsDescriptorLength :
+			 vFsDescriptorLength);
+	}
+	void PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const {
+		if (vHsDescriptorLength == 0U && vDescriptor.Patch != nullptr)
+		{
+			vDescriptor.Patch(this, pDesc, Speed);
+		}
 	}
 
 protected:
@@ -295,14 +300,23 @@ private:
 									 uint16_t FsDescriptorLength,
 									 const void *pHsDescriptor,
 									 uint16_t HsDescriptorLength);
+	friend bool UsbDescriptorRegisterTemplate(int DevNo,
+										 UsbDeviceClass *pClass,
+										 const void *pDescriptor,
+										 uint16_t DescriptorLength,
+										 UsbDescriptorPatch_t Patch);
 
 	uint8_t vFirstInterface = 0;
 	uint8_t vInterfaceCount = 0;
 	uint16_t vEpInMask = 0;
 	uint16_t vEpOutMask = 0;
 	const uint8_t *vFsDescriptor = nullptr;
-	const uint8_t *vHsDescriptor = nullptr;
+	union {
+		const uint8_t *Hs;
+		UsbDescriptorPatch_t Patch;
+	} vDescriptor = { nullptr };
 	uint16_t vFsDescriptorLength = 0;
+	// Zero selects shared-template mode; otherwise vDescriptor.Hs is active.
 	uint16_t vHsDescriptorLength = 0;
 };
 
@@ -327,6 +341,11 @@ bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
 						   uint16_t FsDescriptorLength,
 						   const void *pHsDescriptor = nullptr,
 						   uint16_t HsDescriptorLength = 0);
+
+bool UsbDescriptorRegisterTemplate(int DevNo, UsbDeviceClass *pClass,
+								   const void *pDescriptor,
+								   uint16_t DescriptorLength,
+								   UsbDescriptorPatch_t Patch);
 #endif
 
 /** @} End of group USB */
