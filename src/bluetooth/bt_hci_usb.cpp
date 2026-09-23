@@ -1543,7 +1543,7 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 			sizeof(BtHciUsbScoDesc_t) : sizeof(BtHciUsbDesc_t);
 	}
 
-	return UsbDescriptorRegisterTemplate(pHci->DevNo, pClass,
+	return UsbDescRegister(pHci->DevNo, pClass,
 		pTemplate, descLength, BtHciUsbPatchRegistered);
 }
 
