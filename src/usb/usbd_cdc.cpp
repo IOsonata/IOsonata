@@ -88,11 +88,6 @@ static uint16_t UsbdCdcMps(UsbdCdcDev_t *pCdc)
 		   USBD_CDC_BULK_HS_MPS : USBD_CDC_BULK_FS_MPS;
 }
 
-static uint8_t UsbdCdcNotifInterval(UsbdCdcDev_t *pCdc)
-{
-	return UsbCtrlrHighSpeed(pCdc->DevNo) ? 8U : 16U;
-}
-
 bool UsbdCdcPortIsOpen(const UsbdCdcDev_t * const pCdc)
 {
 	return pCdc != nullptr && pCdc->pData->Mps > 0U &&
