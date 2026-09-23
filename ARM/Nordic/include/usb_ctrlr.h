@@ -304,7 +304,7 @@ typedef struct __nRF_Usbd_State
 	bool IsoOpen;                 //!< EP8 participates in ISO DMA scheduling.
 	// Queued ISO buffer lengths; meaningful while the direction is BUSY.
 	uint16_t IsoDmaLen[2];
-	uint8_t IsoBufState;          //!< READY/BUSY state of the ISO DMA buffers.
+	uint8_t IsoBufState;          //!< READY=buffer free; BUSY=request pending/active.
 	volatile uint8_t Flags;       //!< Controller power/wake state only.
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;

@@ -907,8 +907,6 @@ static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 		s_Usbd.Flags = (s_Usbd.Flags &
 			(uint8_t)~(USBD_FLAG_REMOTE_WAKE | USBD_FLAG_HOST_RESUME)) |
 			USBD_FLAG_SUSPENDED;
-		s_Usbd.IsoBufState &=
-			(uint8_t)~(NRFUSBD_ISO_IN_READY | NRFUSBD_ISO_OUT_READY);
 		nRFUsbdSofAcquire();
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
 	}
@@ -1032,20 +1030,9 @@ extern "C" void USBD_IRQHandler(void)
 
 		if ((statusBit & 7U) != 0U) // EP1-7 IN/OUT
 		{
-			// ISO is the same priority tier as EP0. A SOF must publish ISO
-			// readiness even when the current regular DMA has not reached END;
-			// that DMA finishes first, then the shared handoff selects ISO
-			// before another EP1-7 transfer.
+			// IN application completion still waits for EPDATA.
 			if (!nRFUsbdRetireDma(statusBit))
-			{
-				if (s_Usbd.IsoOpen && NRF_USBD->EVENTS_SOF != 0U)
-				{
-					NRF_USBD->EVENTS_SOF = 0U;
-					(void)NRF_USBD->EVENTS_SOF;
-					nRFUsbdHandleSof();
-				}
 				return;
-			}
 
 			if (statusBit >= 16U)
 			{
@@ -1109,18 +1096,7 @@ extern "C" void USBD_IRQHandler(void)
 
 	if (startDma)
 	{
-		// A completed transfer retains the shared EasyDMA lock. If ISO SOF is
-		// already pending, publish its IN/OUT readiness before choosing the next
-		// transfer so nRFUsbdStartQueuedDma() can honor its ISO-first policy.
-		// Otherwise a continuously populated regular queue can chain EP1-7 DMA
-		// across the ISO service point and lose an unhandshaked ISO frame.
-		if (s_Usbd.IsoOpen && NRF_USBD->EVENTS_SOF != 0U)
-		{
-			NRF_USBD->EVENTS_SOF = 0U;
-			(void)NRF_USBD->EVENTS_SOF;
-			nRFUsbdHandleSof();
-		}
-
+		// Restart before EPDATA/SOF work; SETUP and bus events take precedence.
 		if ((NRF_USBD->EVENTS_EP0SETUP | NRF_USBD->EVENTS_USBEVENT) == 0U &&
 			nRFUsbdDmaAllowed())
 		{

@@ -37,6 +37,7 @@ iso_sof = function_body(iso, "void nRFUsbdIsoSof(void)")
 finish_iso = function_body(iso, "static bool nRFUsbdFinishIsoDma(bool In, bool Notify)")
 interrupt = function_body(base, 'extern "C" void USBD_IRQHandler(void)')
 handle_sof = function_body(base, "static void nRFUsbdHandleSof(void)")
+bus_event = function_body(base, "static void nRFUsbdHandleBusEvent(uint32_t EventCause)")
 queued = function_body(base, "void nRFUsbdStartQueuedDma(void)")
 
 assert "USB_EPIN_CNT_0 = 8" in header and "USB_EPOUT_CNT_0 = 8" in header
@@ -53,6 +54,13 @@ assert "TASKS_STARTISOIN" in start_iso
 assert "TASKS_STARTISOOUT" in start_iso
 assert "nRFUsbdResumeQueuedDmaLocked()" in service_iso
 assert "NRF_USBD->SIZE.ISOOUT" in iso_sof
+# READY describes DMA-buffer ownership. SOF may queue/cancel OUT work but must
+# never manufacture IN readiness or change OUT buffer readiness.
+assert "NRFUSBD_ISO_IN_READY" not in iso_sof
+assert "|= NRFUSBD_ISO_OUT_READY" not in iso_sof
+assert "~NRFUSBD_ISO_OUT_READY" not in iso_sof
+assert "NRFUSBD_ISO_IN_READY" not in bus_event
+assert "NRFUSBD_ISO_OUT_READY" not in bus_event
 assert "NRF_USBD->EVENTS_ENDISOIN" in finish_iso
 assert "NRF_USBD->EVENTS_ENDISOOUT" in finish_iso
 # Retirement retains the lock for the completion caller. END and EPSTATUS

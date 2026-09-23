@@ -183,8 +183,9 @@ void init(){
  s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=0;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  s_Usbd.hQue=CFifoInit(queueMemory,sizeof(queueMemory),sizeof(nRFUsbdQue_t),true);
  assert(s_Usbd.hQue);
- // Both ISO directions open; busy/ready and suspend state start clear.
- s_Usbd.Flags=0;s_Usbd.IsoOpen=true;s_Usbd.IsoBufState=0;
+ // Both registered DMA buffers start free; BUSY is clear.
+ s_Usbd.Flags=0;s_Usbd.IsoOpen=true;
+ s_Usbd.IsoBufState=NRFUSBD_ISO_OUT_READY|NRFUSBD_ISO_IN_READY;
  dmaBusy=0;dmaLocks=dmaUnlocks=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
  s_Usbd.EpReg[7][0]={outBuffer,callback,(void*)0,512,false};
@@ -203,7 +204,7 @@ int main(){
  };
  for(const auto &test:completions)for(unsigned ends=0;ends<4;++ends){
   init();dmaBusy=0x82;
-  s_Usbd.IsoBufState|=NRFUSBD_ISO_OUT_BUSY|NRFUSBD_ISO_IN_BUSY;
+  s_Usbd.IsoBufState=NRFUSBD_ISO_OUT_BUSY|NRFUSBD_ISO_IN_BUSY;
   regs.EVENTS_ENDISOOUT=ends&1;regs.EVENTS_ENDISOIN=(ends>>1)&1;
   regs.EPSTATUS.bits=(ends&1?0x01000000U:0U)|(ends&2?0x00000100U:0U);
   const unsigned retired=test.retired[ends],remaining=ends&~retired;
@@ -283,8 +284,8 @@ int main(){
   init();s_Usbd.EpReg[7][1].pBuffer=nullptr;
   assert(productionEpSend(0,8,inBuffer,length));
   assert(CFifoUsed(s_Usbd.hQue)==0 && (ISO_BUSY()&2));
-  assert(s_Usbd.EpReg[7][1].pBuffer==inBuffer && !dmaBusy);
-  frame();assert(isoStarts[1]==1 && regs.ISOIN.MAXCNT==length);
+  assert(s_Usbd.EpReg[7][1].pBuffer==inBuffer && dmaBusy);
+  assert(isoStarts[1]==1 && regs.ISOIN.MAXCNT==length);
   assert(regs.ISOIN.PTR==uint32_t(uintptr_t(inBuffer)));
   assert(!memcmp(wireIn,inBuffer,length));
   finish(true);
@@ -300,8 +301,8 @@ int main(){
  frame();assert(isoStarts[1]==1); // never retransmit previous payload
  puts("PASS: ISO IN requires a request, retires only at END, completes once, never repeats old data");
 
- init();assert(nRFUsbdIsoXfer(1U,33));assert(!dmaBusy);
- frame(17);assert(activeDir==1 && isoStarts[1]==1 && isoStarts[0]==0);
+ init();assert(nRFUsbdIsoXfer(1U,33));assert(dmaBusy && activeDir==1);
+ frame(17);assert(isoStarts[1]==1 && isoStarts[0]==0);
  finish(true);assert(dmaBusy && activeDir==0);finish(false);
  assert(callbacks[0]==1 && callbacks[1]==1);
  assert(lengths[0]==17 && lengths[1]==33 && ISO_BUSY()==0 && regularStarts>0);
@@ -312,6 +313,27 @@ int main(){
  frame(9);assert(isoStarts[0]==2);finish(false);interruptCopy=false;
  puts("PASS: direct OUT completion keeps BUSY through callback buffer copy");
 
+ init();const auto freeState=s_Usbd.IsoBufState;frame();
+ assert(s_Usbd.IsoBufState==freeState);
+ puts("PASS: SOF does not change free ISO DMA-buffer ownership");
+
+ init();dmaBusy=0x82;frame(9);
+ assert((s_Usbd.IsoBufState&(NRFUSBD_ISO_OUT_READY|NRFUSBD_ISO_OUT_BUSY))==
+  (NRFUSBD_ISO_OUT_READY|NRFUSBD_ISO_OUT_BUSY));
+ assert(isoStarts[0]==0 && s_Usbd.IsoDmaLen[0]==9);
+ frame(17);assert(s_Usbd.IsoDmaLen[0]==17 && isoStarts[0]==0);
+ nRFUsbdDmaUnlock();nRFUsbdResumeQueuedDmaLocked();
+ assert(isoStarts[0]==1 && regs.ISOOUT.MAXCNT==17);
+ finish(false);
+ puts("PASS: queued ISO OUT retargets to the newest SOF without changing READY");
+
+ init();dmaBusy=0x82;frame(9);frame();
+ assert((s_Usbd.IsoBufState&NRFUSBD_ISO_OUT_BUSY)==0);
+ assert((s_Usbd.IsoBufState&NRFUSBD_ISO_OUT_READY)!=0);
+ nRFUsbdDmaUnlock();nRFUsbdResumeQueuedDmaLocked();
+ assert(isoStarts[0]==0);
+ puts("PASS: stale queued ISO OUT is cancelled when the next SOF has no packet");
+
  init();for(int i=0;i<4;++i)assert(AppEvtHandlerQue(i,nullptr,dummy));
  frame(25);finish(false);
  assert(callbacks[0]==1 && ISO_BUSY()==0 && !dmaBusy);
@@ -321,6 +343,7 @@ int main(){
  UsbCtrlrEpClose(0,8,false);
  assert(callbacks[0]==0 && !dmaBusy && !(ISO_BUSY()&1));
  s_Usbd.IsoOpen=true;s_Usbd.EpReg[7][0].MaxPacketSize=9;
+ s_Usbd.IsoBufState=NRFUSBD_ISO_OUT_READY|NRFUSBD_ISO_IN_READY;
  frame(9);finish(false);
  assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
  puts("PASS: close drains active ISO silently; reopen completion belongs to new transfer");

@@ -121,8 +121,10 @@ bool nRFUsbdIsoStart(void)
 
 void nRFUsbdIsoService(void)
 {
-	if ((s_Usbd.IsoBufState &
-		(NRFUSBD_ISO_IN_READY | NRFUSBD_ISO_OUT_READY)) != 0U)
+	const uint8_t state = s_Usbd.IsoBufState;
+	const uint8_t out = NRFUSBD_ISO_OUT_READY | NRFUSBD_ISO_OUT_BUSY;
+	const uint8_t in = NRFUSBD_ISO_IN_READY | NRFUSBD_ISO_IN_BUSY;
+	if ((state & out) == out || (state & in) == in)
 	{
 		nRFUsbdResumeQueuedDmaLocked();
 	}
@@ -131,9 +133,11 @@ void nRFUsbdIsoService(void)
 bool nRFUsbdIsoXfer(uint8_t Dir, uint16_t Length)
 {
 	nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][Dir];
+	const uint8_t ready = (uint8_t)NRFUSBD_ISO_OUT_READY << Dir;
 	const uint8_t busy = (uint8_t)NRFUSBD_ISO_OUT_BUSY << Dir;
 	const uint32_t state = DisableInterrupt();
-	if (!s_Usbd.IsoOpen || (s_Usbd.IsoBufState & busy) != 0U ||
+	if (!s_Usbd.IsoOpen ||
+		(s_Usbd.IsoBufState & (ready | busy)) != ready ||
 		pReg->pBuffer == NULL || pReg->Handler == NULL ||
 		Length > pReg->MaxPacketSize)
 	{
@@ -158,6 +162,7 @@ static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 	}
 
 	const uint8_t dir = In ? 1U : 0U;
+	const uint8_t ready = (uint8_t)NRFUSBD_ISO_OUT_READY << dir;
 	const uint8_t busy = (uint8_t)NRFUSBD_ISO_OUT_BUSY << dir;
 	const uint16_t amount = (uint16_t)(In ?
 		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
@@ -171,11 +176,13 @@ static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 		return true;
 	}
 
-	// IN may queue its next buffer from the callback. OUT keeps ownership
-	// through the callback so its buffer cannot be reused while copied.
+	// READY follows DMA-buffer ownership, not SOF. IN releases before its
+	// callback so it may queue the next buffer. OUT stays owned until its
+	// callback has finished copying the received bytes.
 	if (In)
 	{
-		s_Usbd.IsoBufState &= (uint8_t)~busy;
+		s_Usbd.IsoBufState =
+			(s_Usbd.IsoBufState | ready) & (uint8_t)~busy;
 	}
 
 	nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, dir,
@@ -183,7 +190,8 @@ static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 
 	if (!In)
 	{
-		s_Usbd.IsoBufState &= (uint8_t)~busy;
+		s_Usbd.IsoBufState =
+			(s_Usbd.IsoBufState | ready) & (uint8_t)~busy;
 	}
 	return true;
 }
@@ -203,40 +211,47 @@ void nRFUsbdIsoSof(void)
 	}
 
 	const uint8_t state = s_Usbd.IsoBufState;
-	s_Usbd.IsoBufState = state | NRFUSBD_ISO_IN_READY;
-
 	const uint32_t size = NRF_USBD->SIZE.ISOOUT;
-	const bool busy = (state & NRFUSBD_ISO_OUT_BUSY) != 0U;
-	if (!busy || (state & NRFUSBD_ISO_OUT_READY) != 0U)
+
+	// A queued OUT request belongs to the preceding frame. At the next SOF,
+	// either retarget it to the newly received frame or cancel it when the
+	// host sent nothing. READY itself is buffer ownership and is never
+	// changed by SOF.
+	if ((state & NRFUSBD_ISO_OUT_BUSY) != 0U)
 	{
-		if (size != 0U)
+		if ((state & NRFUSBD_ISO_OUT_READY) != 0U)
 		{
-			const uint16_t len =
-				(size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ? 0U : (uint16_t)size;
-			s_Usbd.IsoBufState |= NRFUSBD_ISO_OUT_READY;
-			if (busy)
+			if (size != 0U)
 			{
-				s_Usbd.IsoDmaLen[0] = len;
+				s_Usbd.IsoDmaLen[0] =
+					(size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
+						0U : (uint16_t)size;
 			}
 			else
 			{
-				nRFUsbEpReg_t *pReg =
-					&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
-				if (pReg->bBlocking)
-				{
-					nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, 0U,
-						USB_CTRLR_EVT_DRDY, 0U);
-				}
-				(void)nRFUsbdIsoXfer(0U, len);
+				s_Usbd.IsoBufState &=
+					(uint8_t)~NRFUSBD_ISO_OUT_BUSY;
 			}
 		}
-		else
-		{
-			s_Usbd.IsoBufState &= (uint8_t)~NRFUSBD_ISO_OUT_READY;
-		}
+		return;
 	}
-}
 
+	if (size == 0U || (state & NRFUSBD_ISO_OUT_READY) == 0U)
+	{
+		return;
+	}
+
+	const uint16_t len =
+		(size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ? 0U : (uint16_t)size;
+	nRFUsbEpReg_t *pReg =
+		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
+	if (pReg->bBlocking)
+	{
+		nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, 0U,
+			USB_CTRLR_EVT_DRDY, 0U);
+	}
+	(void)nRFUsbdIsoXfer(0U, len);
+}
 bool UsbCtrlrIsoInit(int DevNo)
 {
 	return DevNo == 0;
@@ -265,8 +280,10 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 
 	const uint8_t dir = in ? 1U : 0U;
 	const uint32_t state = DisableInterrupt();
-	s_Usbd.IsoBufState &=
-		(uint8_t)~((uint8_t)NRFUSBD_ISO_OUT_READY << dir);
+	const uint8_t ready = (uint8_t)NRFUSBD_ISO_OUT_READY << dir;
+	const uint8_t busy = (uint8_t)NRFUSBD_ISO_OUT_BUSY << dir;
+	s_Usbd.IsoBufState =
+		(s_Usbd.IsoBufState & (uint8_t)~busy) | ready;
 	s_Usbd.IsoOpen =
 		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].MaxPacketSize != 0U &&
 		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1].MaxPacketSize != 0U;
