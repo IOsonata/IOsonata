@@ -87,7 +87,7 @@ typedef struct {
 	int DisconnectCnt;
 	int RemoteWakeCnt;
 	int SofEnableCnt;
-	int IsoInXferCnt;
+	int IsoServiceCnt;
 	int SetAddressCnt;
 	int CloseAllCnt;
 	int StallCnt;
@@ -96,7 +96,7 @@ typedef struct {
 	uint8_t LastStallEp;
 	uint8_t LastClearStallEp;
 	bool SofEnabled;
-	uint16_t LastIsoInLength;
+	uint16_t LastIsoServiceValue;
 } CtrlrState_t;
 
 typedef struct {
@@ -967,18 +967,18 @@ static bool TestIsoSofScheduling(void)
 	Complete(EP0_IN, 0);
 
 	Sof(10U);
-	CHECK(s_Ctrlr.IsoInXferCnt == 1 && s_Ctrlr.LastIsoInLength == 10U);
+	CHECK(s_Ctrlr.IsoServiceCnt == 1 && s_Ctrlr.LastIsoServiceValue == 10U);
 	Sof(11U);
-	CHECK(s_Ctrlr.IsoInXferCnt == 2 && s_Ctrlr.LastIsoInLength == 11U);
+	CHECK(s_Ctrlr.IsoServiceCnt == 2 && s_Ctrlr.LastIsoServiceValue == 11U);
 
 	Event(USB_CTRLR_EVT_SUSPEND);
 	CHECK(!s_Ctrlr.SofEnabled);
 	Sof(12U);
-	CHECK(s_Ctrlr.IsoInXferCnt == 2);
+	CHECK(s_Ctrlr.IsoServiceCnt == 2);
 	Event(USB_CTRLR_EVT_RESUME);
 	CHECK(s_Ctrlr.SofEnabled);
 	Sof(13U);
-	CHECK(s_Ctrlr.IsoInXferCnt == 3 && s_Ctrlr.LastIsoInLength == 13U);
+	CHECK(s_Ctrlr.IsoServiceCnt == 3 && s_Ctrlr.LastIsoServiceValue == 13U);
 
 	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 0, 0, 0);
 	CHECK(!s_Ctrlr.SofEnabled);
@@ -1057,15 +1057,15 @@ extern "C" void UsbCtrlrEpProcessEvent(int, uint8_t EpNo, bool bIn,
 {
 	if (EpNo == 8U && bIn && Event == USB_CTRLR_EVT_SOF)
 	{
-		s_Ctrlr.IsoInXferCnt++;
-		s_Ctrlr.LastIsoInLength = Value;
+		s_Ctrlr.IsoServiceCnt++;
+		s_Ctrlr.LastIsoServiceValue = Value;
 	}
 }
 extern "C" bool UsbCtrlrEpSend(int, uint8_t, uint8_t *, uint16_t) { return true; }
-extern "C" bool UsbCtrlrEpInXfer(int, uint8_t, uint16_t Length)
+extern "C" bool UsbCtrlrIsoService(int, uint8_t, uint16_t Length)
 {
-	s_Ctrlr.IsoInXferCnt++;
-	s_Ctrlr.LastIsoInLength = Length;
+	s_Ctrlr.IsoServiceCnt++;
+	s_Ctrlr.LastIsoServiceValue = Length;
 	return true;
 }
 static bool RecordEp0(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Length)

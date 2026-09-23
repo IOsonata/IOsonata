@@ -192,7 +192,7 @@ struct {
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue,hEp0Que;
  bool SofEnabled;
- int16_t IsoDmaLen[2];
+ int16_t IsoInDmaLen;
  alignas(4) uint8_t Ep0Bounce[64];
 } s_Usbd;
 alignas(8) uint8_t queueMem[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
@@ -269,7 +269,7 @@ void init(){
  isoAtSof=false;suspends=resumes=setups=0;s_Usbd.LowPowerSuspend=false;
  setupHandler=nullptr;controlHandler=nullptr;
  s_Usbd.SofEnabled=false;s_Usbd.IsoOpen=false;s_Usbd.IsoBusy=0;
- s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=-1;
+ s_Usbd.IsoInDmaLen=-1;
  s_Usbd.Flags=USBD_FLAG_MAC_AWAKE;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  assert(AppEvtHandlerInit(nullptr,0));
  memset(ep0Mem,0xA5,sizeof(ep0Mem));

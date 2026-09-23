@@ -176,7 +176,7 @@ __attribute__((weak)) void nRFUsbdIsoEpClose(bool)
 {
 }
 
-__attribute__((weak)) bool UsbCtrlrEpInXfer(int, uint8_t, uint16_t)
+__attribute__((weak)) bool UsbCtrlrIsoService(int, uint8_t, uint16_t)
 {
 	return false;
 }
@@ -688,8 +688,7 @@ static void nRFUsbdResetState(void)
 	s_Usbd.SofEnabled = false;
 	s_Usbd.IsoOpen = false;
 	s_Usbd.IsoBusy = 0U;
-	s_Usbd.IsoDmaLen[0] = -1;
-	s_Usbd.IsoDmaLen[1] = -1;
+	s_Usbd.IsoInDmaLen = -1;
 
 	CFifoFlush(s_Usbd.hQue);
 	CFifoFlush(s_Usbd.hEp0Que);
@@ -1473,7 +1472,7 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[EpNum - 1U][1];
 		if (!s_Usbd.IsoOpen ||
 			(s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) != 0U ||
-			s_Usbd.IsoDmaLen[1] >= 0 || pReg->Handler == NULL ||
+			s_Usbd.IsoInDmaLen >= 0 || pReg->Handler == NULL ||
 			(pBuffer == NULL && Length != 0U) ||
 			Length > pReg->MaxPacketSize)
 		{
@@ -1482,7 +1481,7 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		}
 
 		pReg->pBuffer = pBuffer;
-		s_Usbd.IsoDmaLen[1] = (int16_t)Length;
+		s_Usbd.IsoInDmaLen = (int16_t)Length;
 		EnableInterrupt(state);
 		return true;
 	}

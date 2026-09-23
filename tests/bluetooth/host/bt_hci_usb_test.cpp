@@ -114,7 +114,7 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	s_InBusy[EpNum] = true;
 	return true;
 }
-bool UsbCtrlrEpInXfer(int, uint8_t, uint16_t) { return true; }
+bool UsbCtrlrIsoService(int, uint8_t, uint16_t) { return true; }
 
 void UsbCtrlrEpStall(int, uint8_t, bool) {}
 void UsbCtrlrEpClearStall(int, uint8_t, bool) {}

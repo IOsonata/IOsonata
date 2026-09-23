@@ -248,7 +248,7 @@ void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
 // Core-owned ISO service opportunity. IN uses a staged send; OUT uses the
 // registered receive buffer and is scheduled internally by the controller.
-bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length);
+bool UsbCtrlrIsoService(int DevNo, uint8_t EpNum, uint16_t Length);
 // IN returns bytes copied into the queue; completion notifies that it drained.
 // A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
@@ -307,7 +307,7 @@ typedef struct __nRF_Usbd_State
 	bool IsoOpen;                 //!< Both EP8 directions are open.
 	// IN may be staged with BUSY clear. BUSY owns one admitted ISO service
 	// from the SOF opportunity until its END event retires the EasyDMA.
-	int16_t IsoDmaLen[2];
+	int16_t IsoInDmaLen;
 	uint8_t IsoBusy;
 	volatile uint8_t Flags;       //!< Controller power/wake state only.
 	hCFifo_t hQue;

@@ -149,7 +149,7 @@ void UsbIsoIntrfProcessEvent(UsbDevIntrf_t *pData,
 		return;
 	}
 
-	(void)UsbCtrlrEpInXfer(pData->DevNo, pIntrf->EpNo, pIntrf->Mps);
+	(void)UsbCtrlrIsoService(pData->DevNo, pIntrf->EpNo, pIntrf->Mps);
 }
 
 bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,

@@ -94,12 +94,12 @@ bool nRFUsbdIsoStart(void)
 
 		if (dir != 0)
 		{
-			if (s_Usbd.IsoDmaLen[1] < 0)
+			if (s_Usbd.IsoInDmaLen < 0)
 			{
 				s_Usbd.IsoBusy &= (uint8_t)~busy;
 				continue;
 			}
-			len = (uint16_t)s_Usbd.IsoDmaLen[1];
+			len = (uint16_t)s_Usbd.IsoInDmaLen;
 			pEp = &NRF_USBD->ISOIN;
 			pTask = &NRF_USBD->TASKS_STARTISOIN;
 			pEnd = &NRF_USBD->EVENTS_ENDISOIN;
@@ -113,7 +113,6 @@ bool nRFUsbdIsoStart(void)
 				pReg->Handler == nullptr)
 			{
 				s_Usbd.IsoBusy &= (uint8_t)~busy;
-				s_Usbd.IsoDmaLen[0] = -1;
 				continue;
 			}
 
@@ -122,10 +121,8 @@ bool nRFUsbdIsoStart(void)
 			if (len > pReg->MaxPacketSize)
 			{
 				s_Usbd.IsoBusy &= (uint8_t)~busy;
-				s_Usbd.IsoDmaLen[0] = -1;
 				continue;
 			}
-			s_Usbd.IsoDmaLen[0] = (int16_t)len;
 			pEp = (volatile USBD_ISOIN_Type *)&NRF_USBD->ISOOUT;
 			pTask = &NRF_USBD->TASKS_STARTISOOUT;
 			pEnd = &NRF_USBD->EVENTS_ENDISOOUT;
@@ -139,7 +136,7 @@ bool nRFUsbdIsoStart(void)
 	return false;
 }
 
-bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
+bool UsbCtrlrIsoService(int DevNo, uint8_t EpNum, uint16_t Length)
 {
 	(void)DevNo;
 	if (EpNum != NRFX_USBD_ISO_EP_NO)
@@ -162,7 +159,7 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
 		service = true;
 	}
 
-	const int16_t len = s_Usbd.IsoDmaLen[1];
+	const int16_t len = s_Usbd.IsoInDmaLen;
 	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) == 0U &&
 		len >= 0 && (uint16_t)len <= Length)
 	{
@@ -198,7 +195,7 @@ static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 	if (In)
 	{
 		s_Usbd.IsoBusy &= (uint8_t)~busy;
-		s_Usbd.IsoDmaLen[1] = -1;
+		s_Usbd.IsoInDmaLen = -1;
 	}
 
 	nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, dir,
@@ -207,7 +204,6 @@ static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 	if (!In)
 	{
 		s_Usbd.IsoBusy &= (uint8_t)~busy;
-		s_Usbd.IsoDmaLen[0] = -1;
 	}
 	return true;
 }
@@ -248,7 +244,8 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 	const uint32_t state = DisableInterrupt();
 	s_Usbd.IsoBusy &=
 		(uint8_t)~((uint8_t)NRFUSBD_ISO_OUT_BUSY << dir);
-	s_Usbd.IsoDmaLen[dir] = -1;
+	if (in)
+		s_Usbd.IsoInDmaLen = -1;
 	s_Usbd.IsoOpen =
 		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].MaxPacketSize != 0U &&
 		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1].MaxPacketSize != 0U;
@@ -268,8 +265,7 @@ void nRFUsbdIsoEpClose(bool bIn)
 	s_Usbd.IsoOpen = false;
 	nRFUsbdDmaWait();
 	s_Usbd.IsoBusy = 0U;
-	s_Usbd.IsoDmaLen[0] = -1;
-	s_Usbd.IsoDmaLen[1] = -1;
+	s_Usbd.IsoInDmaLen = -1;
 
 	nRFIsoHwEnable(bIn, false);
 
