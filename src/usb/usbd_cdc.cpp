@@ -39,6 +39,10 @@ SOFTWARE.
 #include "usb/usbd_epalloc.h"
 #include "usb/usbd_cdc.h"
 
+extern const UsbdCdcDesc_t g_UsbdCdcDescTemplate;
+void UsbdCdcPatchDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
+					 UsbSpeed_t Speed, bool HasFunctionString);
+
 static uint8_t *UsbdCdcRxBuffer(UsbdCdcDev_t *pCdc)
 {
 	return reinterpret_cast<uint8_t *>(pCdc->RxTransfer);
@@ -411,33 +415,14 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	UsbCtrlrEpAlloc(pCdc->DevNo, pCdc->NotifyEpNo, true,
 		UsbdCdcNotifBuffer(pCdc), false, UsbdCdcNotifCtrlrEvent, pCdc);
 
-	const UsbCfg_t *pUsbCfg = UsbGetCfg(pCdc->DevNo);
-	if (!UsbdCdcMakeDesc(&pCdc->FsDesc, pCdc, USB_SPEED_FULL,
-		pUsbCfg != nullptr && pUsbCfg->pFuncName != nullptr))
-	{
-		return false;
-	}
+	const void *pHsDesc = USB_HIGHSPEED_CAPABLE(pCdc->DevNo) ?
+		&g_UsbdCdcDescTemplate : nullptr;
+	const uint16_t hsDescLength = pHsDesc != nullptr ?
+		sizeof(g_UsbdCdcDescTemplate) : 0U;
 
-	const void *pHsDesc = nullptr;
-	uint16_t hsDescLength = 0U;
-	if (USB_HIGHSPEED_CAPABLE(pCdc->DevNo))
-	{
-		if (!UsbdCdcMakeDesc(&pCdc->HsDesc, pCdc, USB_SPEED_HIGH,
-			pUsbCfg != nullptr && pUsbCfg->pFuncName != nullptr))
-		{
-			return false;
-		}
-		pHsDesc = &pCdc->HsDesc;
-		hsDescLength = sizeof(pCdc->HsDesc);
-	}
-
-	if (!UsbDescriptorRegister(pCdc->DevNo, pClass,
-		&pCdc->FsDesc, sizeof(pCdc->FsDesc), pHsDesc, hsDescLength))
-	{
-		return false;
-	}
-
-	return true;
+	return UsbDescriptorRegister(pCdc->DevNo, pClass,
+		&g_UsbdCdcDescTemplate, sizeof(g_UsbdCdcDescTemplate),
+		pHsDesc, hsDescLength);
 }
 
 void UsbdCdcProcess(UsbdCdcDev_t * const pCdc)
@@ -474,6 +459,13 @@ bool UsbdCdc::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 bool UsbdCdc::SelectConfig(uint8_t ConfigValue)
 {
 	return UsbdCdcConfig(&vUsbdCdc, ConfigValue);
+}
+
+void UsbdCdc::PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const
+{
+	const UsbCfg_t *pCfg = UsbGetCfg(vUsbdCdc.DevNo);
+	UsbdCdcPatchDesc(reinterpret_cast<UsbdCdcDesc_t *>(pDesc), &vUsbdCdc,
+		Speed, pCfg != nullptr && pCfg->pFuncName != nullptr);
 }
 
 const UsbCdcLineCoding_t *UsbdCdcLineCoding(const UsbdCdcDev_t * const pCdc)
