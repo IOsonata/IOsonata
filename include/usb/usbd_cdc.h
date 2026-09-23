@@ -121,8 +121,6 @@ typedef struct __Usbd_Cdc_Dev {
 	uint8_t NotifyEpNo;			//!< Internal allocation
 	uint8_t DataEpNo;				//!< Internal allocation
 	int DevNo;
-	UsbdCdcDesc_t FsDesc;
-	UsbdCdcDesc_t HsDesc;
 	bool SerialStatePending;
 	bool SerialStateActive;
 	uint32_t RxTransfer[USBD_CDC_TRANS_WORDS];
@@ -190,6 +188,7 @@ public:
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 				 uint8_t **ppData, uint16_t *pLength) override;
 	bool SelectConfig(uint8_t ConfigValue) override;
+	void PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const override;
 
 	bool IsPortOpen(void);
 	const UsbCdcLineCoding_t *LineCoding(void);
