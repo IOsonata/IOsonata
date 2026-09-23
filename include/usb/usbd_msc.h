@@ -157,12 +157,12 @@ public:
 
 	using UsbIntrf::operator DevIntrf_t *;
 	operator UsbdMscDev_t * () { return &vUsbdMsc; }
+	operator const UsbdMscDev_t * () const { return &vUsbdMsc; }
 
 	bool Init(const UsbdMscCfg_t &Cfg);
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 				 uint8_t **ppData, uint16_t *pLength) override;
 	bool SelectConfig(uint8_t ConfigValue) override;
-	void PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const override;
 	void Detach(void) override;
 	void Reset(void) override;
 	void Process(void) override;
