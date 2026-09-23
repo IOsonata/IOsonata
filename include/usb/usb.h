@@ -342,6 +342,8 @@ bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
 						   const void *pHsDescriptor = nullptr,
 						   uint16_t HsDescriptorLength = 0);
 
+/// Register a shared descriptor template. pDescriptor may be NULL when Patch
+/// generates the complete fragment directly in the core configuration buffer.
 bool UsbDescriptorRegisterTemplate(int DevNo, UsbDeviceClass *pClass,
 								   const void *pDescriptor,
 								   uint16_t DescriptorLength,
