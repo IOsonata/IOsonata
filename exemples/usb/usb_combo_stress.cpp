@@ -49,6 +49,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #define INT_MPS					64U
 
 #define ISO_ALT_COUNT			6U
+#define ISO_REQ_GET_DIAG		0x5AU
 
 alignas(4) static uint8_t s_LoopbackRxFifoMem[CDC_RXFIFO_MEMSIZE];
 alignas(4) static uint8_t s_LoopbackTxFifoMem[LOOPBACK_TXFIFO_MEMSIZE];
@@ -412,6 +413,19 @@ static bool s_IsoConfigured;
 static uint8_t s_IsoAlt;
 static uint8_t s_IsoInterfaceNo;
 static uint8_t s_IsoEpNo;
+static uint32_t s_IsoLoopbackDropCnt;
+
+#pragma pack(push, 1)
+typedef struct __Combo_Iso_Diag {
+	uint32_t RxMissCnt;
+	uint32_t TxMissCnt;
+	uint32_t LoopbackDropCnt;
+	uint32_t RxEmptyCnt;
+	uint32_t TxEmptyCnt;
+} ComboIsoDiag_t;
+#pragma pack(pop)
+
+static ComboIsoDiag_t s_IsoDiag;
 
 static uint8_t IsoFirstEndpoint(uint16_t Mask)
 {
@@ -428,10 +442,43 @@ static uint8_t IsoFirstEndpoint(uint16_t Mask)
 static void IsoRxFrame(UsbIsoIntrf_t *, const uint8_t *pData,
 	uint16_t Length, UsbCtrlrXferResult_t Result, void *)
 {
-	if (Result == USB_CTRLR_XFER_SUCCESS)
+	if (Result == USB_CTRLR_XFER_SUCCESS &&
+		!UsbIsoIntrfSendFrame(&s_Iso, pData, Length))
 	{
-		(void)UsbIsoIntrfSendFrame(&s_Iso, pData, Length);
+		s_IsoLoopbackDropCnt++;
 	}
+}
+
+static bool IsoControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+	uint8_t **ppData, uint16_t *pLength)
+{
+	if (pSetup == nullptr ||
+		pSetup->bmRequestType !=
+			(USB_REQTYPE_DIRHOST | USB_REQTYPE_VEND | USB_REQTYPE_INTERFACE) ||
+		pSetup->bRequest != ISO_REQ_GET_DIAG ||
+		pSetup->wValue != 0U ||
+		pSetup->wIndex != s_IsoInterfaceNo ||
+		pSetup->wLength != sizeof(s_IsoDiag))
+	{
+		return false;
+	}
+	if (Stage != USB_CTRL_SETUP)
+	{
+		return true;
+	}
+	if (ppData == nullptr || pLength == nullptr)
+	{
+		return false;
+	}
+
+	s_IsoDiag.RxMissCnt = s_Iso.RxMissCnt;
+	s_IsoDiag.TxMissCnt = s_Iso.TxMissCnt;
+	s_IsoDiag.LoopbackDropCnt = s_IsoLoopbackDropCnt;
+	s_IsoDiag.RxEmptyCnt = s_Iso.RxEmptyCnt;
+	s_IsoDiag.TxEmptyCnt = s_Iso.TxEmptyCnt;
+	*ppData = reinterpret_cast<uint8_t *>(&s_IsoDiag);
+	*pLength = sizeof(s_IsoDiag);
+	return true;
 }
 
 static bool IsoSelectConfig(uint8_t Configuration)
@@ -466,6 +513,7 @@ static bool IsoSelectInterface(uint8_t InterfaceNo, uint8_t Alt)
 		return true;
 	}
 
+	s_IsoLoopbackDropCnt = 0U;
 	const uint8_t interval = UsbCtrlrHighSpeed(USB_DEVNO) ? 4U : 1U;
 	if (!UsbIsoIntrfOpen(&s_Iso, s_IsoMps[Alt - 1U], interval))
 	{
@@ -567,6 +615,10 @@ static void IsoBuildFunctionDesc(const UsbDeviceClass *, uint8_t *pData,
 
 class IsoLoopbackClass final : public UsbDeviceClass {
 public:
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+				 uint8_t **ppData, uint16_t *pLength) override {
+		return IsoControl(pSetup, Stage, ppData, pLength);
+	}
 	bool SelectConfig(uint8_t ConfigValue) override {
 		return IsoSelectConfig(ConfigValue);
 	}
