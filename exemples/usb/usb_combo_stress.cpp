@@ -514,6 +514,10 @@ static bool IsoSelectInterface(uint8_t InterfaceNo, uint8_t Alt)
 	}
 
 	s_IsoLoopbackDropCnt = 0U;
+	s_Iso.RxMissCnt = 0U;
+	s_Iso.TxMissCnt = 0U;
+	s_Iso.RxEmptyCnt = 0U;
+	s_Iso.TxEmptyCnt = 0U;
 	const uint8_t interval = UsbCtrlrHighSpeed(USB_DEVNO) ? 4U : 1U;
 	if (!UsbIsoIntrfOpen(&s_Iso, s_IsoMps[Alt - 1U], interval))
 	{
