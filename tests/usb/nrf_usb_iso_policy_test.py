@@ -32,12 +32,10 @@ iso = ISO.read_text(encoding="utf-8")
 
 open_ep = function_body(iso, "bool UsbCtrlrEpOpen(")
 start_iso = function_body(iso, "bool nRFUsbdIsoStart(void)")
-service_iso = function_body(iso, "void nRFUsbdIsoService(void)")
 iso_sof = function_body(iso, "void nRFUsbdIsoSof(void)")
 finish_iso = function_body(iso, "static bool nRFUsbdFinishIsoDma(bool In, bool Notify)")
 interrupt = function_body(base, 'extern "C" void USBD_IRQHandler(void)')
 handle_sof = function_body(base, "static void nRFUsbdHandleSof(void)")
-bus_event = function_body(base, "static void nRFUsbdHandleBusEvent(uint32_t EventCause)")
 queued = function_body(base, "void nRFUsbdStartQueuedDma(void)")
 
 assert "USB_EPIN_CNT_0 = 8" in header and "USB_EPOUT_CNT_0 = 8" in header
@@ -52,15 +50,11 @@ assert "USBD_ISOSPLIT_SPLIT_HalfIN" in open_ep
 assert "USBD_ISOINCONFIG_RESPONSE_ZeroData" in open_ep
 assert "TASKS_STARTISOIN" in start_iso
 assert "TASKS_STARTISOOUT" in start_iso
-assert "nRFUsbdResumeQueuedDmaLocked()" in service_iso
+assert "nRFUsbdIsoService" not in iso
+assert "nRFUsbdResumeQueuedDmaLocked()" in function_body(
+    iso, "bool nRFUsbdIsoXfer(uint8_t Dir, uint16_t Length)"
+)
 assert "NRF_USBD->SIZE.ISOOUT" in iso_sof
-# READY describes DMA-buffer ownership. SOF may queue/cancel OUT work but must
-# never manufacture IN readiness or change OUT buffer readiness.
-assert "NRFUSBD_ISO_IN_READY" not in iso_sof
-assert "|= NRFUSBD_ISO_OUT_READY" not in iso_sof
-assert "~NRFUSBD_ISO_OUT_READY" not in iso_sof
-assert "NRFUSBD_ISO_IN_READY" not in bus_event
-assert "NRFUSBD_ISO_OUT_READY" not in bus_event
 assert "NRF_USBD->EVENTS_ENDISOIN" in finish_iso
 assert "NRF_USBD->EVENTS_ENDISOOUT" in finish_iso
 # Retirement retains the lock for the completion caller. END and EPSTATUS
@@ -80,7 +74,8 @@ assert "return false;" in function_body(base, "bool UsbCtrlrEpOpen(")
 assert "bool UsbCtrlrIsoInit(int DevNo)" in iso
 assert "nRFUsbdIsoFinishDma(dmastatus)" in interrupt
 assert "nRFUsbdIsoSof();" in handle_sof
-assert "nRFUsbdIsoService();" in handle_sof
+assert "nRFUsbdIsoService" not in base
+assert "nRFUsbdResumeQueuedDmaLocked();" in handle_sof
 # Regular entries stay queued until DMA retirement, so the scheduler peeks
 # the regular queue; ISO still runs before it and after EP0.
 assert queued.index("nRFUsbdIsoStart()") < queued.index("CFifoPeek(s_Usbd.hQue)")

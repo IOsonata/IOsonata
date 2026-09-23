@@ -125,9 +125,6 @@ unsigned isoChecks,isoEnd;
 void nRFUsbdDmaLock();
 void nRFUsbdDmaUnlock();
 bool nRFUsbdIsoStart(){assert(dmaBusy);++isoChecks;return isoReady;}
-void nRFUsbdIsoService(){
- if(!dmaBusy && isoReady){nRFUsbdDmaLock();(void)nRFUsbdIsoStart();}
-}
 bool nRFUsbdIsoFinishDma(uint32_t status){
  if(!status)status=regs.EPSTATUS.bits;
  assert(status==0x100U || status==0x1000000U);

@@ -167,10 +167,6 @@ static void nRFUsbdHostResumeDetected(void);
 // UsbCtrlrIsoInit pulls in the optional ISO archive member, whose strong
 // definitions replace these defaults. Keep IsoStart undefined when absent so
 // regular DMA skips the call entirely.
-__attribute__((weak)) void nRFUsbdIsoService(void)
-{
-}
-
 __attribute__((weak)) bool nRFUsbdIsoFinishDma(uint32_t)
 {
 	return false;
@@ -907,6 +903,8 @@ static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 		s_Usbd.Flags = (s_Usbd.Flags &
 			(uint8_t)~(USBD_FLAG_REMOTE_WAKE | USBD_FLAG_HOST_RESUME)) |
 			USBD_FLAG_SUSPENDED;
+		s_Usbd.IsoBufState &=
+			(uint8_t)~(NRFUSBD_ISO_IN_READY | NRFUSBD_ISO_OUT_READY);
 		nRFUsbdSofAcquire();
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
 	}
@@ -938,7 +936,7 @@ static void nRFUsbdHandleSof(void)
 
 	nRFUsbdSofRelease();
 
-	nRFUsbdIsoService();
+	nRFUsbdResumeQueuedDmaLocked();
 }
 
 static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)

@@ -29,7 +29,7 @@ def main():
     parser.add_argument('--iso-object', required=True, type=Path)
     parser.add_argument('--tool-prefix', default='arm-none-eabi-')
     args = parser.parse_args()
-    hooks = ('nRFUsbdIsoService', 'nRFUsbdIsoFinishDma', 'nRFUsbdIsoSof',
+    hooks = ('nRFUsbdIsoFinishDma', 'nRFUsbdIsoSof',
              'nRFUsbdIsoEpClose', 'nRFUsbdIsoXfer', 'UsbCtrlrEpOpen')
 
     with tempfile.TemporaryDirectory() as directory:
@@ -50,6 +50,7 @@ def main():
                 found = symbols(args.tool_prefix, linked)
                 assert ('UsbCtrlrIsoInit' in found) == iso, found
                 assert found['nRFUsbdIsoStart'] == ('T' if iso else 'w'), found
+                assert 'nRFUsbdIsoService' not in found, found
                 for hook in hooks:
                     assert found[hook] == ('T' if iso else 'W'), (hook, found)
                 assert 'nRFUsbdIsoEpOpen' not in found, 'obsolete forwarding helper'
