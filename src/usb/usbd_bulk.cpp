@@ -225,7 +225,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 
 	pBulk->pData->pClassContext = pBulk;
 
-	return UsbDescriptorRegisterTemplate(pBulk->DevNo, pClass,
+	return UsbDescRegister(pBulk->DevNo, pClass,
 		&s_BulkDescTemplate, sizeof(s_BulkDescTemplate),
 		UsbdBulkPatchRegistered);
 }
