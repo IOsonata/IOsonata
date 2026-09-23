@@ -192,11 +192,16 @@ static void xact_out_dma(uint8_t epnum) {
   }
   if (epnum == EP_ISO_NUM) {
     xact_len = NRF_USBD->SIZE.ISOOUT;
-    // If ZERO bit is set, ignore ISOOUT length
-    if (xact_len & USBD_SIZE_ISOOUT_ZERO_Msk) {
-      xact_len = 0;
+
+    // SIZE == 0 means no ISO OUT packet was present for the previous frame.
+    // A real zero-length ISO packet is reported with the dedicated ZERO bit.
+    if (xact_len == 0) {
       atomic_flag_clear(&_dcd.dma_running);
     } else {
+      if (xact_len & USBD_SIZE_ISOOUT_ZERO_Msk) {
+        xact_len = 0;
+      }
+
       if (xfer->started) {
         // Trigger DMA move data from Endpoint -> SRAM
         NRF_USBD->ISOOUT.PTR = (uint32_t) xfer->buffer;
@@ -764,7 +769,9 @@ void dcd_int_handler(uint8_t rhport) {
   for (uint8_t epnum = 0; epnum < EP_CBI_COUNT + 1; epnum++) {
     if (tu_bit_test(int_status, USBD_INTEN_ENDEPOUT0_Pos + epnum)) {
       xfer_td_t* xfer = get_td(epnum, TUSB_DIR_OUT);
-      uint16_t const xact_len = NRF_USBD->EPOUT[epnum].AMOUNT;
+      uint16_t const xact_len = (epnum == EP_ISO_NUM) ?
+        (uint16_t) NRF_USBD->ISOOUT.AMOUNT :
+        (uint16_t) NRF_USBD->EPOUT[epnum].AMOUNT;
 
       xfer->buffer += xact_len;
       xfer->actual_len += xact_len;
