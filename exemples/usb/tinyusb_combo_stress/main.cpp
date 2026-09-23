@@ -393,14 +393,14 @@ static bool IsoFindAlt(uint8_t Alt,
 	return *ppOut != nullptr && *ppIn != nullptr;
 }
 
-static void IsoKickIn(void)
+static void IsoKickIn(bool InIsr)
 {
 	if (s_Iso.InBusy || s_Iso.Count == 0U || s_Iso.Alt == 0U)
 		return;
 
 	IsoFrame_t &frame = s_Iso.Queue[s_Iso.Get];
 	if (usbd_edpt_xfer(s_Iso.RhPort, ISO_IN_EP,
-			frame.Len != 0U ? frame.Data : nullptr, frame.Len, false))
+			frame.Len != 0U ? frame.Data : nullptr, frame.Len, InIsr))
 	{
 		s_Iso.InBusy = true;
 	}
@@ -410,13 +410,13 @@ static void IsoKickIn(void)
 	}
 }
 
-static bool IsoArmOut(void)
+static bool IsoArmOut(bool InIsr)
 {
 	if (s_Iso.Alt == 0U || s_Iso.Mps == 0U)
 		return false;
 
 	if (!usbd_edpt_xfer(s_Iso.RhPort, ISO_OUT_EP,
-			s_Iso.RxBuffer, s_Iso.Mps, false))
+			s_Iso.RxBuffer, s_Iso.Mps, InIsr))
 	{
 		s_Iso.Diag.RxMissCnt++;
 		return false;
@@ -460,7 +460,7 @@ static bool IsoSetAlt(uint8_t Alt)
 	s_Iso.pInDesc = in;
 	s_Iso.Alt = Alt;
 	s_Iso.Mps = static_cast<uint8_t>(tu_edpt_packet_size(out));
-	return IsoArmOut();
+	return IsoArmOut(false);
 }
 
 static void IsoDriverInit(void)
@@ -560,9 +560,11 @@ static bool IsoDriverControl(uint8_t RhPort, uint8_t Stage,
 	return false;
 }
 
-static bool IsoDriverXfer(uint8_t RhPort, uint8_t EpAddr,
-	xfer_result_t Result, uint32_t Length)
+static bool IsoDriverTransfer(uint8_t RhPort, uint8_t EpAddr,
+	xfer_result_t Result, uint32_t Length, bool InIsr)
 {
+	(void)RhPort;
+
 	if (EpAddr == ISO_OUT_EP)
 	{
 		if (Result == XFER_RESULT_SUCCESS)
@@ -587,8 +589,8 @@ static bool IsoDriverXfer(uint8_t RhPort, uint8_t EpAddr,
 			s_Iso.Diag.RxMissCnt++;
 		}
 
-		IsoKickIn();
-		(void)IsoArmOut();
+		IsoKickIn(InIsr);
+		(void)IsoArmOut(InIsr);
 		return true;
 	}
 
@@ -604,12 +606,23 @@ static bool IsoDriverXfer(uint8_t RhPort, uint8_t EpAddr,
 			s_Iso.Count--;
 		}
 		s_Iso.InBusy = false;
-		IsoKickIn();
+		IsoKickIn(InIsr);
 		return true;
 	}
 
-	(void)RhPort;
 	return false;
+}
+
+static bool IsoDriverXfer(uint8_t RhPort, uint8_t EpAddr,
+	xfer_result_t Result, uint32_t Length)
+{
+	return IsoDriverTransfer(RhPort, EpAddr, Result, Length, false);
+}
+
+static bool IsoDriverXferIsr(uint8_t RhPort, uint8_t EpAddr,
+	xfer_result_t Result, uint32_t Length)
+{
+	return IsoDriverTransfer(RhPort, EpAddr, Result, Length, true);
 }
 
 static const usbd_class_driver_t s_IsoDriver = {
@@ -620,7 +633,7 @@ static const usbd_class_driver_t s_IsoDriver = {
 	.open = IsoDriverOpen,
 	.control_xfer_cb = IsoDriverControl,
 	.xfer_cb = IsoDriverXfer,
-	.xfer_isr = nullptr,
+	.xfer_isr = IsoDriverXferIsr,
 	.sof = nullptr,
 };
 
@@ -791,7 +804,6 @@ int main()
 		if (tud_vendor_n_alt(VENDOR_INT) != 0U)
 			(void)tud_vendor_n_int_read_xfer(VENDOR_INT);
 
-		IsoKickIn();
 	}
 
 	return 0;

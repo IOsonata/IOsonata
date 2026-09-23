@@ -621,6 +621,13 @@ void dcd_int_handler(uint8_t rhport) {
     dcd_event_bus_reset(0, TUSB_SPEED_FULL, true);
   }
 
+  // Release the shared EasyDMA channel before processing ENDISOIN and SOF.
+  // This allows an ISO class xfer_isr() callback to stage the next IN frame,
+  // then lets the same IRQ's SOF admit it immediately.
+  if (int_status & EDPT_END_ALL_MASK) {
+    edpt_dma_end();
+  }
+
   // ISOIN: EasyDMA finished moving the staged frame into the endpoint
   // buffer. The RAM buffer is now reusable, so retire this submission now;
   // any next submission remains staged until the next SOF.
@@ -722,12 +729,6 @@ void dcd_int_handler(uint8_t rhport) {
           TUSB_REQ_SET_ADDRESS == request->bRequest)) {
       dcd_event_setup_received(0, setup, true);
     }
-  }
-
-  if (int_status & EDPT_END_ALL_MASK) {
-    // DMA complete move data from SRAM <-> Endpoint
-    // Must before endpoint transfer handling
-    edpt_dma_end();
   }
 
   //--------------------------------------------------------------------+
