@@ -1062,10 +1062,8 @@ extern "C" void UsbCtrlrEpProcessEvent(int, uint8_t EpNo, bool bIn,
 	}
 }
 extern "C" bool UsbCtrlrEpSend(int, uint8_t, uint8_t *, uint16_t) { return true; }
-extern "C" bool UsbCtrlrIsoService(int, uint8_t, uint16_t Length)
+extern "C" bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *, uint16_t)
 {
-	s_Ctrlr.IsoServiceCnt++;
-	s_Ctrlr.LastIsoServiceValue = Length;
 	return true;
 }
 static bool RecordEp0(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Length)

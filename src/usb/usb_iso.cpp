@@ -149,7 +149,15 @@ void UsbIsoIntrfProcessEvent(UsbDevIntrf_t *pData,
 		return;
 	}
 
-	(void)UsbCtrlrIsoService(pData->DevNo, pIntrf->EpNo, pIntrf->Mps);
+	UsbPkt_t *pPacket = pData->pTxDirectBuffer;
+	uint8_t *pBuffer = nullptr;
+	uint16_t length = 0U;
+	if ((pPacket->Hdr.Reserved & USB_INTRF_SLOT_READY) != 0U)
+	{
+		pBuffer = pPacket->Data;
+		length = pPacket->Hdr.Length;
+	}
+	(void)UsbCtrlrIsoSend(pData->DevNo, pIntrf->EpNo, pBuffer, length);
 }
 
 bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
@@ -289,16 +297,17 @@ bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 		return false;
 	}
 
-	const int sent = DeviceIntrfTxData(&pIntrf->pData->DevIntrf,
-		pData, (int)Length);
-	if (Length != 0U)
+	UsbDevIntrf_t *pDataIntrf = pIntrf->pData;
+	if (!atomic_exchange_explicit(&pDataIntrf->DevIntrf.bTxReady, false,
+			memory_order_acquire))
 	{
-		return sent == (int)Length;
+		return false;
 	}
 
-	// A successful zero-length ISO packet returns zero bytes by definition.
-	// bTxReady was claimed by UsbIntrfTxIso and is restored on failure or
-	// completion, so false here means the ZLP is pending in the current slot.
-	return !atomic_load_explicit(&pIntrf->pData->DevIntrf.bTxReady,
-		memory_order_acquire);
+	UsbPkt_t *pPacket = pDataIntrf->pTxDirectBuffer;
+	if (Length != 0U)
+		memcpy(pPacket->Data, pData, Length);
+	pPacket->Hdr.Length = Length;
+	pPacket->Hdr.Reserved = USB_INTRF_SLOT_READY;
+	return true;
 }

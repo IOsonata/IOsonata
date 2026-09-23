@@ -114,7 +114,11 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	s_InBusy[EpNum] = true;
 	return true;
 }
-bool UsbCtrlrIsoService(int, uint8_t, uint16_t) { return true; }
+bool UsbCtrlrIsoSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
+{
+	if (pBuffer == nullptr) return true;
+	return UsbCtrlrEpSend(0, EpNum, pBuffer, Length);
+}
 
 void UsbCtrlrEpStall(int, uint8_t, bool) {}
 void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
@@ -207,6 +211,14 @@ static RegisteredEp_t *FindRegistered(uint8_t EpAddr)
     for (int i = 0; i < s_RegisteredCount; i++)
         if (s_Registered[i].EpAddr == EpAddr) return &s_Registered[i];
     return nullptr;
+}
+
+static void IsoSof(uint8_t EpNo, uint16_t Frame = 0U)
+{
+    RegisteredEp_t *pReg = FindRegistered(USB_ENDPADDR_DIRIN(EpNo));
+    CHECK(pReg != nullptr);
+    if (pReg != nullptr)
+        pReg->Handler(USB_CTRLR_EVT_SOF, Frame, pReg->pContext);
 }
 
 static void CompleteIn(uint8_t EpNo,
@@ -644,6 +656,7 @@ static void TestScoTransport(void)
     CHECK(hci.Data()->TxData(hci.Data(), packet, sizeof(packet)) ==
           (int)sizeof(packet));
     DeviceIntrfStopTx(hci.Data());
+    IsoSof(8U);
     CHECK(s_SendCount > 0);
     if (s_SendCount > 0)
     {
@@ -651,8 +664,10 @@ static void TestScoTransport(void)
         CHECK(s_Sent[s_SendCount - 1].Length == 9U);
     }
     CompleteIn(8U);
+    IsoSof(8U, 1U);
     CHECK(s_SendCount > 0 && s_Sent[s_SendCount - 1].Length == 9U);
     CompleteIn(8U);
+    IsoSof(8U, 2U);
     CHECK(s_SendCount > 0 && s_Sent[s_SendCount - 1].Length == 2U);
     CompleteIn(8U);
     CHECK(s_LastEvent == DEVINTRF_EVT_TX_READY);

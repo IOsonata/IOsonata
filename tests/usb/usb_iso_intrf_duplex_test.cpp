@@ -70,7 +70,16 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	if (Length > 0U) memcpy(s_InData, pBuffer, Length);
 	return true;
 }
-bool UsbCtrlrIsoService(int, uint8_t, uint16_t) { return true; }
+bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *pBuffer, uint16_t Length)
+{
+	if (pBuffer == nullptr) return true;
+	if (s_InBusy || Length > sizeof(s_InData)) return false;
+	s_InBuffer = pBuffer;
+	s_InBusy = true;
+	s_InLength = Length;
+	if (Length > 0U) memcpy(s_InData, pBuffer, Length);
+	return true;
+}
 }
 
 static int s_Fail;
@@ -111,6 +120,12 @@ static void Receive(const uint8_t *pData, uint16_t Length)
 		Length, s_OutContext);
 }
 
+static void Sof(uint16_t Frame = 0U)
+{
+	CHECK(s_InHandler != nullptr);
+	s_InHandler(USB_CTRLR_EVT_SOF, Frame, s_InContext);
+}
+
 static void CompleteIn(void)
 {
 	CHECK(s_InBusy);
@@ -140,6 +155,7 @@ int main(void)
 	const uint8_t tx[] = {0x10,0x20,0x30,0x40,0x50};
 	const uint8_t rx[] = {0xA1,0xA2,0xA3};
 	CHECK(UsbIsoIntrfSendFrame(&iso, tx, sizeof(tx)));
+	Sof();
 	CHECK(s_InBusy);
 	CHECK(memcmp(s_InData, tx, sizeof(tx)) == 0);
 
@@ -157,6 +173,7 @@ int main(void)
 
 	// Zero-length traffic is a valid frame, not an idle/free-slot marker.
 	CHECK(UsbIsoIntrfSendFrame(&iso, nullptr, 0U));
+	Sof();
 	CHECK(s_InBusy);
 	CHECK(s_InLength == 0U);
 	Receive(nullptr, 0U);

@@ -36,7 +36,7 @@ iso_intrf = ISO_INTRF.read_text(encoding="utf-8")
 
 open_ep = function_body(iso, "bool UsbCtrlrEpOpen(")
 start_iso = function_body(iso, "bool nRFUsbdIsoStart(void)")
-in_xfer = function_body(iso, "bool UsbCtrlrIsoService(")
+iso_send = function_body(iso, "bool UsbCtrlrIsoSend(")
 finish_iso = function_body(iso, "static bool nRFUsbdFinishIsoDma(bool In, bool Notify)")
 interrupt = function_body(base, 'extern "C" void USBD_IRQHandler(void)')
 handle_sof = function_body(base, "static void nRFUsbdHandleSof(void)")
@@ -51,7 +51,8 @@ assert "USB_ISO_EPOUT_MASK_0 = (1U << 8)" in header
 assert "USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)" in header
 assert "NRF_USB_EP_COUNT = 9" in header
 assert "UsbCtrlrEpOutXfer" not in header + base + iso + iso_intrf
-assert "UsbCtrlrIsoService" in header
+assert "UsbCtrlrIsoSend" in header
+assert "UsbCtrlrIsoService" not in header + base + iso + iso_intrf
 
 for source in (header, base, iso):
     assert "NRFUSBD_ISO_OUT_READY" not in source
@@ -59,10 +60,10 @@ for source in (header, base, iso):
     assert "IsoBufState" not in source
 assert "uint8_t IsoBusy;" in header
 assert "NRFUSBD_ISO_OUT_BUSY" in start_iso
-assert "NRFUSBD_ISO_IN_BUSY" in in_xfer
-assert "NRFUSBD_ISO_OUT_BUSY" in in_xfer
+assert "NRFUSBD_ISO_IN_BUSY" in iso_send
+assert "NRFUSBD_ISO_OUT_BUSY" in iso_send
 assert "NRF_USBD->SIZE.ISOOUT" in start_iso
-assert "NRF_USBD->SIZE.ISOOUT" not in in_xfer
+assert "NRF_USBD->SIZE.ISOOUT" not in iso_send
 
 assert "nRFUsbdIsoSof" not in base + iso
 assert "nRFUsbdIsoService" not in base + iso
@@ -94,7 +95,7 @@ assert "pIntrf->Suspended" in iso_event
 assert "pIntrf->Interval" in iso_event
 assert "pIntrf->Mps" in iso_event
 assert "pIntrf->EpNo" in iso_event
-assert "UsbCtrlrIsoService" in iso_event
+assert "UsbCtrlrIsoSend" in iso_event
 assert "UsbCtrlrEpOutXfer" not in iso_event
 
 assert "NRF_USBD->EVENTS_ENDISOIN" in finish_iso

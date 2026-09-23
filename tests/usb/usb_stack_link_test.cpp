@@ -110,7 +110,7 @@ bool UsbCtrlrEpSend(int, uint8_t EpNo, uint8_t *, uint16_t)
 	s_EpSendCount[EpNo]++;
 	return true;
 }
-bool UsbCtrlrIsoService(int, uint8_t, uint16_t) { return false; }
+bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *, uint16_t) { return false; }
 static bool RecordEp0(uint8_t EpAddr, uint16_t Length)
 {
 	s_Ep0EventCount++;

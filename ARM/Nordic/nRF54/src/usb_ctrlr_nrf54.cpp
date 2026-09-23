@@ -1859,7 +1859,7 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	return nRFUsbRegEpXfer(USB_ENDPADDR_DIRIN(EpNum), NULL, Length);
 }
 
-bool UsbCtrlrIsoService(int, uint8_t, uint16_t)
+bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *, uint16_t)
 {
 	return false;
 }

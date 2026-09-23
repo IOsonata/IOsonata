@@ -89,7 +89,7 @@ struct {
   bool SofEnabled=false;
  bool IsoOpen=false;
  uint8_t IsoBusy=0;
- int16_t IsoInDmaLen=-1;
+ uint16_t IsoInDmaLen=0;
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue;
 } s_Usbd;
@@ -109,7 +109,6 @@ void __DSB(){
   activeDir=regs.TASKS_STARTISOIN?1:0;
   assert(dmaBusy==0x82);assert(regs.EPSTATUS.bits==0);
   assert(s_Usbd.IsoBusy & ((uint8_t)NRFUSBD_ISO_OUT_BUSY<<activeDir));
-  if(activeDir)assert(s_Usbd.IsoInDmaLen>=0);
   regs.EPSTATUS.bits=1UL<<(activeDir?8:24);
   ++isoStarts[activeDir];
   if(activeDir) memcpy(wireIn,inBuffer,regs.ISOIN.MAXCNT);
@@ -121,11 +120,18 @@ void nRFUsbdHostResume(){}
 void nRFUsbdResumeQueuedDmaLocked();
 void nRFUsbdDmaWait();
 bool productionEpSend(int,uint8_t,uint8_t*,uint16_t);
-bool UsbCtrlrIsoService(int,uint8_t,uint16_t);
+bool UsbCtrlrIsoSend(int,uint8_t,uint8_t*,uint16_t);
+uint8_t *pendingIn=nullptr;
+uint16_t pendingInLen=0;
+void stageIn(uint8_t *pBuffer,uint16_t length){
+ pendingIn=pBuffer;pendingInLen=length;
+}
 void UsbDevProcessEvent(int,const UsbCtrlrEvt_t *evt){
  if(evt->Type==USB_CTRLR_EVT_SOF &&
     !(s_Usbd.Flags&USBD_FLAG_SUSPENDED)){
-  (void)UsbCtrlrIsoService(0,8,512);
+  uint8_t *pBuffer=pendingIn;
+  (void)UsbCtrlrIsoSend(0,8,pBuffer,pBuffer?pendingInLen:0);
+  if(pBuffer && (s_Usbd.IsoBusy&NRFUSBD_ISO_IN_BUSY))pendingIn=nullptr;
  }
 }
 '''
@@ -133,7 +139,7 @@ names = [
          'nRFUsbGetEpReg','nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaLock','nRFUsbdDmaUnlock',
          'nRFUsbdDmaStartLocked','nRFUsbdEpHwEnable','nRFUsbdSofRelease',
          'nRFIsoHwEnable','nRFUsbdIsoStart',
-         'UsbCtrlrIsoService','nRFUsbdFinishIsoDma',
+         'UsbCtrlrIsoSend','nRFUsbdFinishIsoDma',
          'nRFUsbdIsoFinishDma',
          'nRFUsbdIsoEpClose','UsbCtrlrEpClose','nRFUsbdHandleSof',
          'UsbCtrlrEpClearStall']
@@ -183,17 +189,18 @@ void callback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
    auto before=isoStarts[0];memset(hostOut,0xDD,sizeof(hostOut));frame(17);
    assert(isoStarts[0]==before && !memcmp(copy,outBuffer,length));
   }
- }else if(chainIn){chainIn=false;assert(productionEpSend(0,8,inBuffer,9));}
+ }else if(chainIn){chainIn=false;stageIn(inBuffer,9);}
 }
 void init(){
  regs={};s_Usbd.SofEnabled=true;
- s_Usbd.IsoInDmaLen=-1;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
+ s_Usbd.IsoInDmaLen=0;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  s_Usbd.hQue=CFifoInit(queueMemory,sizeof(queueMemory),sizeof(nRFUsbdQue_t),true);
  assert(s_Usbd.hQue);
  // Both ISO directions open; admitted/active ownership starts clear.
  s_Usbd.Flags=0;s_Usbd.IsoOpen=true;s_Usbd.IsoBusy=0;
  dmaBusy=0;dmaLocks=dmaUnlocks=0;irqMask=0;isoStarts[0]=isoStarts[1]=regularStarts=0;
  callbacks[0]=callbacks[1]=0;chainIn=interruptCopy=false;
+ pendingIn=nullptr;pendingInLen=0;
  s_Usbd.EpReg[7][0]={outBuffer,callback,(void*)0,512,false};
  s_Usbd.EpReg[7][1]={inBuffer,callback,(void*)1,512,false};
  memset(inBuffer,0xA5,sizeof(inBuffer));memset(hostOut,0x5A,sizeof(hostOut));
@@ -271,7 +278,7 @@ int main(){
  const uint16_t inLengths[]={0,9,17,33,512};
  for(uint16_t length : inLengths){
   init();s_Usbd.EpReg[7][1].pBuffer=nullptr;
-  assert(productionEpSend(0,8,inBuffer,length));
+  stageIn(inBuffer,length);
   assert(CFifoUsed(s_Usbd.hQue)==0 && ISO_BUSY()==0);
   assert(s_Usbd.IsoInDmaLen==(int16_t)length);
   assert(s_Usbd.EpReg[7][1].pBuffer==inBuffer && !dmaBusy);
@@ -281,10 +288,10 @@ int main(){
   finish(true);
   assert(callbacks[1]==1 && lengths[1]==length && ISO_BUSY()==0);
  }
- puts("PASS: public IN entry point routes EP8 through ISO DMA without using the regular queue");
+ puts("PASS: due ISO send routes EP8 through ISO DMA without using the regular queue");
 
  init();frame();assert(isoStarts[1]==0); // no unsolicited IN ZLP/DMA
- assert(productionEpSend(0,8,inBuffer,9));assert(!dmaBusy && ISO_BUSY()==0);
+ stageIn(inBuffer,9);assert(!dmaBusy && ISO_BUSY()==0);
  frame();assert(dmaBusy && isoStarts[1]==1);
  assert(!nRFUsbdIsoFinishDma());assert(dmaBusy); // matching END required
  finish(true);assert(callbacks[1]==1 && lengths[1]==9 && !(ISO_BUSY()&2));
@@ -292,7 +299,7 @@ int main(){
  frame();assert(isoStarts[1]==1); // never retransmit previous payload
  puts("PASS: ISO IN requires a request, retires only at END, completes once, never repeats old data");
 
- init();assert(productionEpSend(0,8,inBuffer,33));assert(!dmaBusy);
+ init();stageIn(inBuffer,33);assert(!dmaBusy);
  frame(17);assert(activeDir==1 && isoStarts[1]==1 && isoStarts[0]==0);
  finish(true);assert(dmaBusy && activeDir==0);finish(false);
  assert(callbacks[0]==1 && callbacks[1]==1);
@@ -317,15 +324,15 @@ int main(){
  assert(callbacks[0]==1 && lengths[0]==9 && ISO_BUSY()==0);
  puts("PASS: close drains active ISO silently; reopen completion belongs to new transfer");
 
- init();assert(productionEpSend(0,8,inBuffer,0));frame(0,true);
+ init();stageIn(inBuffer,0);frame(0,true);
  finish(true);finish(false);
  assert(callbacks[0]==1 && callbacks[1]==1 && lengths[0]==0 && lengths[1]==0);
- init();assert(productionEpSend(0,8,inBuffer,512));frame();chainIn=true;finish(true);
+ init();stageIn(inBuffer,512);frame();chainIn=true;finish(true);
  assert(ISO_BUSY()==0 && s_Usbd.IsoInDmaLen==9);frame();finish(true);
  assert(callbacks[1]==2 && lengths[1]==9);
  puts("PASS: explicit ZLPs, 512-byte IN and callback submission are supported");
 
- init();s_Usbd.Flags|=USBD_FLAG_SUSPENDED;assert(productionEpSend(0,8,inBuffer,17));frame();assert(!dmaBusy && ISO_BUSY()==0);
+ init();s_Usbd.Flags|=USBD_FLAG_SUSPENDED;stageIn(inBuffer,17);frame();assert(!dmaBusy && ISO_BUSY()==0);
  s_Usbd.Flags&=~(uint32_t)USBD_FLAG_SUSPENDED;frame();assert(dmaBusy);finish(true);
  assert(callbacks[1]==1);
  puts("PASS: suspended submission waits until resume");

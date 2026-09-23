@@ -83,13 +83,18 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	s_InBuffer = pBuffer;
 	s_InBusy = true;
 	s_InLength = Length;
-	s_InXferCount++;
 	if (Length > 0U) memcpy(s_InData, pBuffer, Length);
 	return true;
 }
-bool UsbCtrlrIsoService(int, uint8_t, uint16_t)
+bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *pBuffer, uint16_t Length)
 {
 	s_InXferCount++;
+	if (pBuffer == nullptr) return true;
+	if (!s_XferOk || s_InBusy || Length > sizeof(s_InData)) return false;
+	s_InBuffer = pBuffer;
+	s_InBusy = true;
+	s_InLength = Length;
+	if (Length > 0U) memcpy(s_InData, pBuffer, Length);
 	return true;
 }
 
@@ -179,6 +184,12 @@ static void Receive(const uint8_t *pData, uint16_t Length,
 		Length, s_OutContext);
 }
 
+static void Sof(uint16_t Frame = 0U)
+{
+	CHECK(s_InHandler != nullptr);
+	s_InHandler(USB_CTRLR_EVT_SOF, Frame, s_InContext);
+}
+
 static void CompleteIn(UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 {
 	CHECK(s_InHandler != nullptr);
@@ -255,6 +266,7 @@ static void TestTx(void)
 
 	const uint8_t frame[] = {0x11,0x22,0x33,0x44};
 	CHECK(UsbIsoIntrfSendFrame(&iso, frame, sizeof(frame)));
+	Sof();
 	CHECK(s_InBusy && s_InLength == sizeof(frame));
 	CHECK(memcmp(s_InData, frame, sizeof(frame)) == 0);
 	CHECK((iso.pData->pTxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) != 0U);
@@ -266,10 +278,12 @@ static void TestTx(void)
 	CHECK((iso.pData->pTxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) == 0U);
 
 	CHECK(UsbIsoIntrfSendFrame(&iso, nullptr, 0U));
+	Sof();
 	CompleteIn();
 	CHECK(iso.TxEmptyCnt == 1U);
 
 	CHECK(UsbIsoIntrfSendFrame(&iso, frame, 1U));
+	Sof();
 	CompleteIn(USB_CTRLR_EVT_XFER_FAILED);
 	CHECK(iso.TxMissCnt == 1U);
 	CHECK(s_LastTxResult == USB_CTRLR_XFER_FAILED);
@@ -291,6 +305,7 @@ static void TestSuspendResume(void)
 	CHECK(UsbIsoIntrfResume(&iso));
 	CHECK(!iso.Suspended);
 	CHECK(UsbIsoIntrfSendFrame(&iso, &b, 1U));
+	Sof();
 	CompleteIn();
 }
 
@@ -323,7 +338,8 @@ static void TestSharedTransport(void)
 	CHECK(s_InContext == pState->pData && s_OutContext == pState->pData);
 	CHECK(intrf.Open(9U, 1U));
 	const uint8_t data[] = {2U, 5U, 8U};
-	CHECK(pDevice->TxData(data, sizeof(data)) == (int)sizeof(data));
+	CHECK(intrf.SendFrame(data, sizeof(data)));
+	Sof();
 	CHECK(memcmp(s_InBuffer, data, sizeof(data)) == 0);
 	CompleteIn();
 	Receive(data, sizeof(data));
