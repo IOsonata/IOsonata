@@ -181,6 +181,7 @@ public:
 
 	using UsbIntrf::operator DevIntrf_t *;
 	operator UsbdCdcDev_t * () { return &vUsbdCdc; }
+	operator const UsbdCdcDev_t * () const { return &vUsbdCdc; }
 
 	bool Init(const UsbdCdcCfg_t &Cfg);
 	void Reset(void) override;
@@ -188,7 +189,6 @@ public:
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 				 uint8_t **ppData, uint16_t *pLength) override;
 	bool SelectConfig(uint8_t ConfigValue) override;
-	void PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const override;
 
 	bool IsPortOpen(void);
 	const UsbCdcLineCoding_t *LineCoding(void);
