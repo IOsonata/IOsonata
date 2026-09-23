@@ -5,7 +5,7 @@
 
 Runs dual CDC, HID, raw interrupt and bidirectional isochronous loopback on the
 nRF52840 using TinyUSB. Python/usb_combo_stress.py drives the same workload;
-use PID 0x0009 and product "TinyUSB USB Combo Stress".
+uses the same VID/PID/product identity as usb_combo_stress.cpp.
 
 The raw interrupt function uses TinyUSB's Vendor class. The ISO interface uses
 a small application class driver because the benchmark intentionally reuses
@@ -31,7 +31,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "device/usbd_pvt.h"
 
 #define TINYUSB_COMBO_VID			0x1209U
-#define TINYUSB_COMBO_PID			0x0009U
+#define TINYUSB_COMBO_PID			0x0008U
 #define CDC_NOTIFY_MPS				8U
 #define DATA_MPS					64U
 #define HID_REPORT_SIZE				64U
@@ -154,7 +154,7 @@ static_assert(sizeof(s_ConfigDesc) == CONFIG_TOTAL_LEN,
 static const char * const s_Strings[] = {
 	nullptr,
 	"I-SYST",
-	"TinyUSB USB Combo Stress",
+	"IOsonata USB Combo Stress",
 	nullptr,
 	"TinyUSB Loopback CDC",
 	"TinyUSB PRBS CDC",
