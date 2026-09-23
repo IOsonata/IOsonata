@@ -108,6 +108,8 @@ bool UsbCtrlrEpSend(int, uint8_t EpNo, uint8_t *, uint16_t)
 	s_EpSendCount[EpNo]++;
 	return true;
 }
+bool UsbCtrlrEpOutXfer(int, uint8_t, uint16_t) { return false; }
+bool UsbCtrlrEpInXfer(int, uint8_t, uint16_t) { return false; }
 static bool RecordEp0(uint8_t EpAddr, uint16_t Length)
 {
 	s_Ep0EventCount++;

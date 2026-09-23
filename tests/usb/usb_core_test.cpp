@@ -86,6 +86,9 @@ typedef struct {
 	int ConnectCnt;
 	int DisconnectCnt;
 	int RemoteWakeCnt;
+	int SofEnableCnt;
+	int IsoInXferCnt;
+	int IsoOutXferCnt;
 	int SetAddressCnt;
 	int CloseAllCnt;
 	int StallCnt;
@@ -93,6 +96,9 @@ typedef struct {
 	uint8_t LastAddress;
 	uint8_t LastStallEp;
 	uint8_t LastClearStallEp;
+	bool SofEnabled;
+	uint16_t LastIsoInLength;
+	uint16_t LastIsoOutLength;
 } CtrlrState_t;
 
 typedef struct {
@@ -130,6 +136,13 @@ static const uint8_t s_ConfigDesc[] = {
 	7, USB_DESCTYPE_ENDPOINT, EP1_IN, 2, 64, 0, 0,
 	9, USB_DESCTYPE_INTERFACE, 0, 1, 1, USB_INTRFCLASS_VENDOR, 0, 0, 0,
 	7, USB_DESCTYPE_ENDPOINT, EP2_IN, 2, 64, 0, 0
+};
+
+static const uint8_t s_IsoConfigDesc[] = {
+	9, USB_DESCTYPE_INTERFACE, 0, 0, 0, USB_INTRFCLASS_VENDOR, 0, 0, 0,
+	9, USB_DESCTYPE_INTERFACE, 0, 1, 2, USB_INTRFCLASS_VENDOR, 0, 0, 0,
+	7, USB_DESCTYPE_ENDPOINT, 0x08U, USB_ENDPATT_TRANS_ISO, 63, 0, 2,
+	7, USB_DESCTYPE_ENDPOINT, 0x88U, USB_ENDPATT_TRANS_ISO, 63, 0, 2
 };
 
 static const XferLog_t *LastXfer(void)
@@ -175,6 +188,11 @@ static void Event(UsbCtrlrEvtType_t Type)
 	UsbCtrlrEvt_t evt = {};
 	evt.Type = Type;
 	UsbDevProcessEvent(TEST_DEVNO, &evt);
+}
+
+static void Sof(void)
+{
+	Event(USB_CTRLR_EVT_SOF);
 }
 
 static bool Request(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
@@ -921,6 +939,55 @@ static bool TestClassObjectConfigRollback(void)
 	return true;
 }
 
+static bool TestIsoSofScheduling(void)
+{
+	memset(&s_Ctrlr, 0, sizeof(s_Ctrlr));
+	memset(&s_Class, 0, sizeof(s_Class));
+	memset(&s_Desc, 0, sizeof(s_Desc));
+	s_VbusDetected = true;
+
+	UsbCfg_t cfg = {};
+	cfg.DevNo = TEST_DEVNO;
+	cfg.Vid = 0x1209;
+	cfg.Pid = 0x0001;
+	CHECK(UsbInit(&cfg));
+
+	s_FixtureClass.vWithSetInterface = true;
+	CHECK(UsbClassRegister(TEST_DEVNO, &s_FixtureClass, 0, 1,
+		(uint16_t)(1U << 8), (uint16_t)(1U << 8)));
+	CHECK(UsbDescRegister(TEST_DEVNO, &s_FixtureClass,
+		s_IsoConfigDesc, sizeof(s_IsoConfigDesc), nullptr));
+	CHECK(UsbEnable(TEST_DEVNO));
+	CHECK(SetConfig(1));
+	CHECK(!s_Ctrlr.SofEnabled);
+
+	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 1, 0, 0);
+	CHECK(s_Ctrlr.SofEnabled);
+	Complete(EP0_IN, 0);
+
+	Sof();
+	CHECK(s_Ctrlr.IsoInXferCnt == 1 && s_Ctrlr.IsoOutXferCnt == 1);
+	Sof();
+	CHECK(s_Ctrlr.IsoInXferCnt == 1 && s_Ctrlr.IsoOutXferCnt == 1);
+	Sof();
+	CHECK(s_Ctrlr.IsoInXferCnt == 2 && s_Ctrlr.IsoOutXferCnt == 2);
+	CHECK(s_Ctrlr.LastIsoInLength == 63U && s_Ctrlr.LastIsoOutLength == 63U);
+
+	Event(USB_CTRLR_EVT_SUSPEND);
+	CHECK(!s_Ctrlr.SofEnabled);
+	Sof();
+	CHECK(s_Ctrlr.IsoInXferCnt == 2 && s_Ctrlr.IsoOutXferCnt == 2);
+	Event(USB_CTRLR_EVT_RESUME);
+	CHECK(s_Ctrlr.SofEnabled);
+	Sof();
+	CHECK(s_Ctrlr.IsoInXferCnt == 3 && s_Ctrlr.IsoOutXferCnt == 3);
+
+	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 0, 0, 0);
+	CHECK(!s_Ctrlr.SofEnabled);
+	Complete(EP0_IN, 0);
+	return true;
+}
+
 static bool TestResetSuspendAndDispatch(void)
 {
 	CHECK(Fixture());
@@ -969,6 +1036,11 @@ extern "C" void UsbCtrlrIntDisable(int) { s_Ctrlr.IntDisableCnt++; }
 extern "C" void UsbCtrlrConnect(int) { s_Ctrlr.ConnectCnt++; }
 extern "C" void UsbCtrlrDisconnect(int) { s_Ctrlr.DisconnectCnt++; }
 extern "C" void UsbCtrlrRemoteWakeup(int) { s_Ctrlr.RemoteWakeCnt++; }
+extern "C" void UsbCtrlrSofEnable(int, bool Enable)
+{
+	s_Ctrlr.SofEnableCnt++;
+	s_Ctrlr.SofEnabled = Enable;
+}
 extern "C" void UsbCtrlrSetAddress(int, uint8_t Address)
 {
 	s_Ctrlr.SetAddressCnt++;
@@ -983,6 +1055,18 @@ extern "C" void UsbCtrlrEpAlloc(int, uint8_t, bool, uint8_t *, bool,
 	return;
 }
 extern "C" bool UsbCtrlrEpSend(int, uint8_t, uint8_t *, uint16_t) { return true; }
+extern "C" bool UsbCtrlrEpOutXfer(int, uint8_t, uint16_t Length)
+{
+	s_Ctrlr.IsoOutXferCnt++;
+	s_Ctrlr.LastIsoOutLength = Length;
+	return true;
+}
+extern "C" bool UsbCtrlrEpInXfer(int, uint8_t, uint16_t Length)
+{
+	s_Ctrlr.IsoInXferCnt++;
+	s_Ctrlr.LastIsoInLength = Length;
+	return true;
+}
 static bool RecordEp0(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Length)
 {
 	if (s_Ctrlr.XferCnt >= XFER_LOG_CNT)
@@ -1051,6 +1135,7 @@ int main(void)
 		{ "common class base", TestCommonClassBase },
 		{ "class object registry", TestClassObjectRegistry },
 		{ "class object configuration rollback", TestClassObjectConfigRollback },
+		{ "ISO SOF scheduling", TestIsoSofScheduling },
 		{ "reset suspend and dispatch", TestResetSuspendAndDispatch },
 	};
 

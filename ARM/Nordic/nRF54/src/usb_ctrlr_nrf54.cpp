@@ -1843,6 +1843,16 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	return nRFUsbRegEpXfer(USB_ENDPADDR_DIRIN(EpNum), NULL, Length);
 }
 
+bool UsbCtrlrEpOutXfer(int, uint8_t, uint16_t)
+{
+	return false;
+}
+
+bool UsbCtrlrEpInXfer(int, uint8_t, uint16_t)
+{
+	return false;
+}
+
 
 bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr)
 {

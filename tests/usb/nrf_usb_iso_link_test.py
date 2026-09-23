@@ -29,8 +29,8 @@ def main():
     parser.add_argument('--iso-object', required=True, type=Path)
     parser.add_argument('--tool-prefix', default='arm-none-eabi-')
     args = parser.parse_args()
-    hooks = ('nRFUsbdIsoFinishDma', 'nRFUsbdIsoSof',
-             'nRFUsbdIsoEpClose', 'nRFUsbdIsoXfer', 'UsbCtrlrEpOpen')
+    hooks = ('nRFUsbdIsoFinishDma', 'nRFUsbdIsoEpClose',
+             'UsbCtrlrEpOutXfer', 'UsbCtrlrEpInXfer', 'UsbCtrlrEpOpen')
 
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)

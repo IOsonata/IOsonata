@@ -172,15 +172,16 @@ __attribute__((weak)) bool nRFUsbdIsoFinishDma(uint32_t)
 	return false;
 }
 
-__attribute__((weak)) void nRFUsbdIsoSof(void)
-{
-}
-
 __attribute__((weak)) void nRFUsbdIsoEpClose(bool)
 {
 }
 
-__attribute__((weak)) bool nRFUsbdIsoXfer(uint8_t, uint16_t)
+__attribute__((weak)) bool UsbCtrlrEpOutXfer(int, uint8_t, uint16_t)
+{
+	return false;
+}
+
+__attribute__((weak)) bool UsbCtrlrEpInXfer(int, uint8_t, uint16_t)
 {
 	return false;
 }
@@ -594,9 +595,9 @@ static __attribute__((noinline)) void nRFUsbdEp0InStart(const nRFEPPkt_t *p)
 		&NRF_USBD->EVENTS_ENDEPIN[0]);
 }
 
-// The SOF interrupt is shared: application SOF events, open ISO endpoints
-// and suspend-time resume detection all need it. Acquire clears a stale
-// event first; release drops it only when nothing needs it anymore.
+// The SOF interrupt is shared by core protocol timing and suspend-time resume
+// detection. Acquire clears a stale event first; release drops it only when
+// neither needs it anymore.
 __attribute__((noinline)) void nRFUsbdSofAcquire(void)
 {
 	NRF_USBD->EVENTS_SOF = 0U;
@@ -605,7 +606,7 @@ __attribute__((noinline)) void nRFUsbdSofAcquire(void)
 
 __attribute__((noinline)) void nRFUsbdSofRelease(void)
 {
-	if (!s_Usbd.SofEnabled && !s_Usbd.IsoOpen &&
+	if (!s_Usbd.SofEnabled &&
 		(s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U)
 	{
 		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
@@ -691,7 +692,9 @@ static void nRFUsbdResetState(void)
 {
 	s_Usbd.SofEnabled = false;
 	s_Usbd.IsoOpen = false;
-	s_Usbd.IsoBufState = 0U;
+	s_Usbd.IsoBusy = 0U;
+	s_Usbd.IsoDmaLen[0] = -1;
+	s_Usbd.IsoDmaLen[1] = -1;
 
 	CFifoFlush(s_Usbd.hQue);
 	CFifoFlush(s_Usbd.hEp0Que);
@@ -903,8 +906,6 @@ static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 		s_Usbd.Flags = (s_Usbd.Flags &
 			(uint8_t)~(USBD_FLAG_REMOTE_WAKE | USBD_FLAG_HOST_RESUME)) |
 			USBD_FLAG_SUSPENDED;
-		s_Usbd.IsoBufState &=
-			(uint8_t)~(NRFUSBD_ISO_IN_READY | NRFUSBD_ISO_OUT_READY);
 		nRFUsbdSofAcquire();
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
 	}
@@ -924,19 +925,12 @@ static void nRFUsbdHandleSof(void)
 {
 	nRFUsbdHostResumeDetected();
 
-	nRFUsbdIsoSof();
-
-	if (s_Usbd.SofEnabled)
-	{
-		UsbCtrlrEvt_t evt;
-		evt.Type = USB_CTRLR_EVT_SOF;
-		evt.FrameNo = (uint16_t)NRF_USBD->FRAMECNTR;
-		UsbDevProcessEvent(0, &evt);
-	}
+	UsbCtrlrEvt_t evt;
+	evt.Type = USB_CTRLR_EVT_SOF;
+	evt.FrameNo = (uint16_t)NRF_USBD->FRAMECNTR;
+	UsbDevProcessEvent(0, &evt);
 
 	nRFUsbdSofRelease();
-
-	nRFUsbdResumeQueuedDmaLocked();
 }
 
 static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
@@ -1094,9 +1088,9 @@ extern "C" void USBD_IRQHandler(void)
 
 	if (startDma)
 	{
-		// Like EP0 readiness, ISO frame work must be visible before the
-		// retained EasyDMA channel is handed to the next transfer.
-		if (s_Usbd.IsoOpen && NRF_USBD->EVENTS_SOF != 0U)
+		// Publish a latched bus SOF before handing the retained channel on.
+		// The core may admit ISO work, which the shared scheduler sees first.
+		if (NRF_USBD->EVENTS_SOF != 0U)
 		{
 			NRF_USBD->EVENTS_SOF = 0U;
 			(void)NRF_USBD->EVENTS_SOF;
@@ -1466,8 +1460,22 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	(void)DevNo;
 	if (EpNum == NRFX_USBD_ISO_EP_NO)
 	{
-		s_Usbd.EpReg[EpNum - 1U][1].pBuffer = pBuffer;
-		return nRFUsbdIsoXfer(1U, Length);
+		const uint32_t state = DisableInterrupt();
+		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[EpNum - 1U][1];
+		if (!s_Usbd.IsoOpen ||
+			(s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) != 0U ||
+			s_Usbd.IsoDmaLen[1] >= 0 || pReg->Handler == NULL ||
+			(pBuffer == NULL && Length != 0U) ||
+			Length > pReg->MaxPacketSize)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+
+		pReg->pBuffer = pBuffer;
+		s_Usbd.IsoDmaLen[1] = (int16_t)Length;
+		EnableInterrupt(state);
+		return true;
 	}
 
 	bool retval = false;

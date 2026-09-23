@@ -53,7 +53,6 @@ code = r'''
 #include "cfifo.h"
 #include "app_evt_handler.h"
 #include "usb/usb_intrf.h"
-bool nRFUsbdIsoXfer(uint8_t,uint16_t){assert(false);return false;}
 uint32_t irqMask;
 void (*onIrqDisable)();
 uint32_t DisableInterrupt(){
@@ -135,12 +134,12 @@ unsigned ep0Completions,ep0Length;
 void nRFUsbdHostResumeDetected();
 void nRFUsbdProcessOutData(uint32_t,void*);
 bool isoAtSof;
-void nRFUsbdIsoSof(){if(isoAtSof)isoReady=true;}
 unsigned resets,suspends,resumes,setups;
 unsigned controlEvents;
 UsbCtrlrXferEvt_t controlEvent;
 void nRFUsbdProcessEP0Setup(uint32_t,void*);
 void nRFUsbdQueueEp0Setup();
+void nRFUsbdResumeQueuedDmaLocked();
 void (*setupHandler)(const UsbCtrlrEvt_t*);
 void (*controlHandler)(const UsbCtrlrXferEvt_t*);
 void UsbDevProcessEvent(int,const UsbCtrlrEvt_t *event){
@@ -148,6 +147,10 @@ void UsbDevProcessEvent(int,const UsbCtrlrEvt_t *event){
   ++controlEvents;controlEvent=event->Xfer;
   if(event->Xfer.EpAddr==0x80U){++ep0Completions;ep0Length=event->Xfer.Length;}
   if(controlHandler)controlHandler(&event->Xfer);
+  return;
+ }
+ if(event->Type==USB_CTRLR_EVT_SOF){
+  if(isoAtSof){isoReady=true;nRFUsbdResumeQueuedDmaLocked();}
   return;
  }
  assert(event->Type==USB_CTRLR_EVT_SETUP);++setups;
@@ -177,11 +180,11 @@ struct {
  uint8_t Flags;
  bool LowPowerSuspend;
  bool IsoOpen;
- uint8_t IsoBufState;
+ uint8_t IsoBusy;
  nRFUsbEpReg_t EpReg[8][2];
  hCFifo_t hQue,hEp0Que;
  bool SofEnabled;
- uint16_t IsoDmaLen[2];
+ int16_t IsoDmaLen[2];
  alignas(4) uint8_t Ep0Bounce[64];
 } s_Usbd;
 alignas(8) uint8_t queueMem[CFIFO_TOTAL_MEMSIZE(16,sizeof(nRFUsbdQue_t))];
@@ -257,8 +260,8 @@ void init(){
  controlEvents=0;controlEvent={};
  isoAtSof=false;suspends=resumes=setups=0;s_Usbd.LowPowerSuspend=false;
  setupHandler=nullptr;controlHandler=nullptr;
- s_Usbd.SofEnabled=false;s_Usbd.IsoOpen=false;s_Usbd.IsoBufState=0;
- s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=0;
+ s_Usbd.SofEnabled=false;s_Usbd.IsoOpen=false;s_Usbd.IsoBusy=0;
+ s_Usbd.IsoDmaLen[0]=s_Usbd.IsoDmaLen[1]=-1;
  s_Usbd.Flags=USBD_FLAG_MAC_AWAKE;memset(s_Usbd.EpReg,0,sizeof(s_Usbd.EpReg));
  assert(AppEvtHandlerInit(nullptr,0));
  memset(ep0Mem,0xA5,sizeof(ep0Mem));

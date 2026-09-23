@@ -188,6 +188,8 @@ void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
 // pBuffer supplies the DMA source and remains owned until the completion callback.
 // It may be NULL only for a zero-length transfer.
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
+bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length);
+bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length);
 // IN returns bytes copied into the queue; completion notifies that it drained.
 // A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard nRF52 endpoint-8 ISO support and link-time separation."""
+"""Guard nRF52 endpoint-8 ISO transport and core-owned SOF scheduling."""
 
 from pathlib import Path
 
@@ -8,7 +8,7 @@ ROOT = Path(__file__).parents[2]
 HEADER = ROOT / "ARM/Nordic/include/usb_ctrlr.h"
 BASE = ROOT / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp"
 ISO = ROOT / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52_iso.cpp"
-
+CORE = ROOT / "src/usb/usb.cpp"
 
 
 def function_body(source: str, signature: str) -> str:
@@ -28,15 +28,19 @@ def function_body(source: str, signature: str) -> str:
 header = HEADER.read_text(encoding="utf-8")
 base = BASE.read_text(encoding="utf-8")
 iso = ISO.read_text(encoding="utf-8")
-
+core = CORE.read_text(encoding="utf-8")
 
 open_ep = function_body(iso, "bool UsbCtrlrEpOpen(")
 start_iso = function_body(iso, "bool nRFUsbdIsoStart(void)")
-iso_sof = function_body(iso, "void nRFUsbdIsoSof(void)")
+in_xfer = function_body(iso, "bool UsbCtrlrEpInXfer(")
+out_xfer = function_body(iso, "bool UsbCtrlrEpOutXfer(")
 finish_iso = function_body(iso, "static bool nRFUsbdFinishIsoDma(bool In, bool Notify)")
 interrupt = function_body(base, 'extern "C" void USBD_IRQHandler(void)')
 handle_sof = function_body(base, "static void nRFUsbdHandleSof(void)")
 queued = function_body(base, "void nRFUsbdStartQueuedDma(void)")
+process = function_body(core, "void UsbDevProcessEvent(")
+service = function_body(core, "static void UsbCoreServiceIso(bool In)")
+update_sof = function_body(core, "static void UsbCoreUpdateSof(void)")
 
 assert "USB_EPIN_CNT_0 = 8" in header and "USB_EPOUT_CNT_0 = 8" in header
 assert "USB_CTRLR0_ISO_PKT_LEN_MAX = 512" in header
@@ -44,47 +48,48 @@ assert "USB_ISO_EPIN_MASK_0 = (1U << 8)" in header
 assert "USB_ISO_EPOUT_MASK_0 = (1U << 8)" in header
 assert "USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)" in header
 assert "NRF_USB_EP_COUNT = 9" in header
-assert "#if defined(USBD_PRESENT)" in header
+assert "UsbCtrlrEpOutXfer" in header and "UsbCtrlrEpInXfer" in header
 
-assert "USBD_ISOSPLIT_SPLIT_HalfIN" in open_ep
-assert "USBD_ISOINCONFIG_RESPONSE_ZeroData" in open_ep
+for source in (header, base, iso):
+    assert "NRFUSBD_ISO_OUT_READY" not in source
+    assert "NRFUSBD_ISO_IN_READY" not in source
+    assert "IsoBufState" not in source
+assert "uint8_t IsoBusy;" in header
+assert "NRFUSBD_ISO_OUT_BUSY" in start_iso
+assert "NRFUSBD_ISO_IN_BUSY" in in_xfer
+
+assert "nRFUsbdIsoSof" not in base + iso
+assert "nRFUsbdIsoService" not in base + iso
+assert "nRFUsbdSofAcquire" not in open_ep
+assert "nRFUsbdSofRelease" not in open_ep
+assert "nRFUsbdSofRelease" not in function_body(iso, "void nRFUsbdIsoEpClose(")
+assert "NRF_USBD->SIZE.ISOOUT" in out_xfer
 assert "TASKS_STARTISOIN" in start_iso
 assert "TASKS_STARTISOOUT" in start_iso
-assert "nRFUsbdIsoService" not in iso
-assert "nRFUsbdResumeQueuedDmaLocked()" in function_body(
-    iso, "bool nRFUsbdIsoXfer(uint8_t Dir, uint16_t Length)"
-)
-assert "NRF_USBD->SIZE.ISOOUT" in iso_sof
+
+assert "USB_CTRLR_EVT_SOF" in handle_sof
+assert "UsbDevProcessEvent(0, &evt)" in handle_sof
+assert "nRFUsbdIso" not in handle_sof
+assert "if (s_Usbd.SofEnabled)" not in handle_sof
+
+assert "case USB_CTRLR_EVT_SOF:" in process
+assert "UsbCoreServiceIso(true)" in process
+assert "UsbCoreServiceIso(false)" in process
+assert "USB_ENDPATT_TRANS_ISO" in service
+assert "s_Core.Alternate" in service
+assert "interval" in service and "s_Core.SofCount" in service
+assert "UsbCtrlrEpInXfer" in service and "UsbCtrlrEpOutXfer" in service
+assert "UsbCtrlrSofEnable" in update_sof
+
 assert "NRF_USBD->EVENTS_ENDISOIN" in finish_iso
 assert "NRF_USBD->EVENTS_ENDISOOUT" in finish_iso
-# Retirement retains the lock for the completion caller. END and EPSTATUS
-# must be acknowledged before completion is published or another DMA starts.
 assert "nRFUsbdDmaUnlock" not in finish_iso
-assert finish_iso.index("if (*pEnd == 0U)") < finish_iso.index(
-    "NRF_USBD->EPSTATUS ="
-)
-assert finish_iso.index("NRF_USBD->EPSTATUS =") < finish_iso.index(
-    "__DSB();"
-)
+assert finish_iso.index("NRF_USBD->EPSTATUS =") < finish_iso.index("__DSB();")
 
-assert "extern bool nRFUsbdIsoStart(void) __attribute__((weak));" in base
-assert "__attribute__((weak)) bool nRFUsbdIsoFinishDma(uint32_t)" in base
-assert "return false;" in function_body(base, "bool nRFUsbdIsoFinishDma(")
-assert "return false;" in function_body(base, "bool UsbCtrlrEpOpen(")
-assert "bool UsbCtrlrIsoInit(int DevNo)" in iso
-assert "nRFUsbdIsoFinishDma(dmastatus)" in interrupt
-assert "nRFUsbdIsoSof();" in handle_sof
-assert "nRFUsbdIsoService" not in base
-assert "nRFUsbdResumeQueuedDmaLocked();" in handle_sof
-# A latched ISO SOF is consumed before the retained ENDEP handoff chooses
-# another transfer, matching EP0's handoff priority without another state flag.
 start_handoff = interrupt.index("if (startDma)")
-early_sof = interrupt.index("if (s_Usbd.IsoOpen && NRF_USBD->EVENTS_SOF != 0U)",
-                            start_handoff)
+early_sof = interrupt.index("if (NRF_USBD->EVENTS_SOF != 0U)", start_handoff)
 start_next = interrupt.index("nRFUsbdStartQueuedDma();", early_sof)
 assert start_handoff < early_sof < start_next
-# Regular entries stay queued until DMA retirement, so the scheduler peeks
-# the regular queue; ISO still runs before it and after EP0.
 assert queued.index("nRFUsbdIsoStart()") < queued.index("CFifoPeek(s_Usbd.hQue)")
 
 print("nrf_usb_iso_policy_test: PASS")

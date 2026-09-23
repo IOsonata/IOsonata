@@ -244,6 +244,9 @@ void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
 // pBuffer supplies the DMA source and remains owned until the completion callback.
 // It may be NULL only for a zero-length transfer.
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
+// Core-owned service opportunity. Endpoint number and direction stay separate.
+bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length);
+bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length);
 // IN returns bytes copied into the queue; completion notifies that it drained.
 // A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
@@ -289,10 +292,8 @@ enum
 
 enum
 {
-	NRFUSBD_ISO_OUT_READY = 0x01U,
-	NRFUSBD_ISO_IN_READY  = 0x02U,
-	NRFUSBD_ISO_OUT_BUSY  = 0x04U,
-	NRFUSBD_ISO_IN_BUSY   = 0x08U,
+	NRFUSBD_ISO_OUT_BUSY = 0x01U,
+	NRFUSBD_ISO_IN_BUSY  = 0x02U,
 };
 
 typedef struct __nRF_Usbd_State
@@ -301,10 +302,10 @@ typedef struct __nRF_Usbd_State
 	uint8_t IntPrio;
 	bool LowPowerSuspend;
 	bool SofEnabled;
-	bool IsoOpen;                 //!< EP8 participates in ISO DMA scheduling.
-	// Queued ISO buffer lengths; meaningful while the direction is BUSY.
-	uint16_t IsoDmaLen[2];
-	uint8_t IsoBufState;          //!< READY/BUSY state of the ISO DMA buffers.
+	bool IsoOpen;                 //!< Both EP8 directions are open.
+	// -1 means no staged/admitted frame; BUSY owns an admitted DMA buffer.
+	int16_t IsoDmaLen[2];
+	uint8_t IsoBusy;
 	volatile uint8_t Flags;       //!< Controller power/wake state only.
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;
