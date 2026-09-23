@@ -181,6 +181,13 @@ static void UsbdMscPatchDesc(UsbdMscDesc_t *pDesc,
 	pDesc->In.wMaxPacketSize = mps;
 }
 
+static void UsbdMscPatchRegistered(const UsbDeviceClass *pClass,
+									 uint8_t *pDesc, UsbSpeed_t Speed)
+{
+	const UsbdMscDev_t *pMsc = *static_cast<const UsbdMsc *>(pClass);
+	UsbdMscPatchDesc(reinterpret_cast<UsbdMscDesc_t *>(pDesc), pMsc, Speed);
+}
+
 // Weak so an application can replace runtime fragment building with a static
 // fragment. When overridden, this default is dropped by unused-section removal.
 // Pair a replacement with a strong UsbGetDescriptor for fully static
@@ -982,17 +989,12 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 	}
 	pMsc->pData->pClassContext = pMsc;
 
-	const void *pHsDesc = USB_HIGHSPEED_CAPABLE(pMsc->DevNo) ?
-		&s_MscDescTemplate : nullptr;
-	const uint16_t hsDescLength = pHsDesc != nullptr ?
-		sizeof(s_MscDescTemplate) : 0U;
-
 	pMsc->MaxLun = 0U;
 	pMsc->bConfigured = false;
 	UsbdMscResetBot(pMsc, false);
-	return UsbDescriptorRegister(pMsc->DevNo, pClass,
+	return UsbDescriptorRegisterTemplate(pMsc->DevNo, pClass,
 		&s_MscDescTemplate, sizeof(s_MscDescTemplate),
-		pHsDesc, hsDescLength);
+		UsbdMscPatchRegistered);
 }
 
 bool UsbdMsc::Init(const UsbdMscCfg_t &Cfg)
@@ -1084,11 +1086,6 @@ bool UsbdMsc::SelectConfig(uint8_t ConfigValue)
 	return true;
 }
 
-void UsbdMsc::PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const
-{
-	UsbdMscPatchDesc(reinterpret_cast<UsbdMscDesc_t *>(pDesc),
-		&vUsbdMsc, Speed);
-}
 
 void UsbdMsc::Detach(void)
 {
