@@ -8,6 +8,7 @@ Python-side lock contention.
 
 import argparse
 import sys
+import struct
 import threading
 import time
 
@@ -41,6 +42,10 @@ ISO_MPS = 63
 
 USB_ENDPOINT_TRANSFER_TYPE_MASK = 0x03
 USB_ENDPOINT_TRANSFER_TYPE_INT = 0x03
+
+ISO_DIAG_REQUEST = 0x5A
+ISO_DIAG_FORMAT = "<5I"
+ISO_DIAG_SIZE = struct.calcsize(ISO_DIAG_FORMAT)
 
 BANNER = b"IOsonata USB Combo Stress"
 
@@ -100,6 +105,28 @@ def int_payload(sequence):
     )
     data[0:4] = sequence.to_bytes(4, "little")
     return bytes(data)
+
+
+def read_iso_diag(handle, interface, timeout_ms):
+    raw = bytes(
+        handle.controlRead(
+            0xC1,
+            ISO_DIAG_REQUEST,
+            0,
+            interface,
+            ISO_DIAG_SIZE,
+            timeout=timeout_ms,
+        )
+    )
+    if len(raw) != ISO_DIAG_SIZE:
+        return f"diag length {len(raw)}/{ISO_DIAG_SIZE}"
+    rx_miss, tx_miss, loop_drop, rx_empty, tx_empty = struct.unpack(
+        ISO_DIAG_FORMAT, raw
+    )
+    return (
+        f"rx_miss={rx_miss} tx_miss={tx_miss} "
+        f"loop_drop={loop_drop} rx_empty={rx_empty} tx_empty={tx_empty}"
+    )
 
 
 class Stats:
@@ -391,7 +418,13 @@ def iso_worker(vid, pid, start, stop, stats, timeout_ms, rounds):
                             sequence,
                         )
                         if error is not None:
-                            raise RuntimeError(error)
+                            try:
+                                diag = read_iso_diag(
+                                    handle, interface, timeout_ms
+                                )
+                            except Exception as diag_exc:
+                                diag = f"diag read failed: {diag_exc}"
+                            raise RuntimeError(f"{error}; {diag}")
                         stats.add("iso", result["matched"] * ISO_MPS)
                         sequence += rounds + (
                             2 * iso_test.BURST_GUARD_FRAMES
