@@ -428,7 +428,7 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 		return false;
 	}
 
-	return UsbDescriptorRegisterTemplate(pHid->DevNo, pClass,
+	return UsbDescRegister(pHid->DevNo, pClass,
 		&s_HidDescTemplate, sizeof(s_HidDescTemplate),
 		UsbdHidPatchRegistered);
 }
