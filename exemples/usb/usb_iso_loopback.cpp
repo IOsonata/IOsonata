@@ -443,7 +443,7 @@ static bool IsoRegisterFunction(void)
 
 	s_InterfaceNo = alloc.FirstInterface;
 	s_EpNo = epNo;
-	return UsbDescriptorRegisterTemplate(USB_DEVNO, &s_Class,
+	return UsbDescRegister(USB_DEVNO, &s_Class,
 		nullptr, sizeof(IsoFunctionDesc_t), IsoPatchFunctionDesc);
 }
 
