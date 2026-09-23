@@ -312,7 +312,7 @@ static const uint8_t *UsbDescConfiguration(int DevNo, uint8_t Index,
 		Speed = Speed == USB_SPEED_HIGH ? USB_SPEED_FULL : USB_SPEED_HIGH;
 	}
 
-	uint16_t totalLength = sizeof(UsbCfgDesc_t);
+	uint16_t offset = sizeof(UsbCfgDesc_t);
 	uint8_t interfaceCount = 0U;
 	for (int i = 0; i < s_Core.ObjectCnt; i++)
 	{
@@ -321,11 +321,15 @@ static const uint8_t *UsbDescConfiguration(int DevNo, uint8_t Index,
 		const uint16_t fragmentLength = pClass->DescriptorLength(Speed);
 		const uint8_t *pFragment = pClass->Descriptor(Speed);
 		if (pFragment == nullptr || fragmentLength == 0U ||
-			(uint32_t)totalLength + fragmentLength > sizeof(s_Core.ConfigDesc))
+			(uint32_t)offset + fragmentLength > sizeof(s_Core.ConfigDesc))
 		{
 			return nullptr;
 		}
-		totalLength = (uint16_t)(totalLength + fragmentLength);
+
+		memcpy(&s_Core.ConfigDesc[offset], pFragment, fragmentLength);
+		pClass->PatchDescriptor(&s_Core.ConfigDesc[offset], Speed);
+		offset = (uint16_t)(offset + fragmentLength);
+
 		const uint8_t last = (uint8_t)(pClass->FirstInterface() +
 			pClass->InterfaceCount());
 		if (last > interfaceCount)
@@ -343,7 +347,7 @@ static const uint8_t *UsbDescConfiguration(int DevNo, uint8_t Index,
 	config.bLength = sizeof(config);
 	config.bDescriptorType = OtherSpeed ?
 		USB_DESCTYPE_OSC : USB_DESCTYPE_CONFIGURATION;
-	config.wTotalLength = totalLength;
+	config.wTotalLength = offset;
 	config.bNumInterfaces = interfaceCount;
 	config.bConfigurationValue = 1U;
 	config.bmAttributes = USB_CONFATT_RESERVED;
@@ -358,19 +362,7 @@ static const uint8_t *UsbDescConfiguration(int DevNo, uint8_t Index,
 	config.bMaxPower = UsbDescMaxPower(pCfg);
 
 	memcpy(s_Core.ConfigDesc, &config, sizeof(config));
-	uint16_t offset = sizeof(config);
-	for (int i = 0; i < s_Core.ObjectCnt; i++)
-	{
-		const UsbDeviceClass *pClass =
-			static_cast<const UsbDeviceClass *>(s_Core.Object[i]);
-		const uint16_t fragmentLength = pClass->DescriptorLength(Speed);
-		memcpy(&s_Core.ConfigDesc[offset], pClass->Descriptor(Speed),
-			fragmentLength);
-		pClass->PatchDescriptor(&s_Core.ConfigDesc[offset], Speed);
-		offset = (uint16_t)(offset + fragmentLength);
-	}
-
-	*pLength = totalLength;
+	*pLength = offset;
 	return s_Core.ConfigDesc;
 }
 
@@ -1845,7 +1837,7 @@ bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
 	pClass->vEpInMask = EpInMask;
 	pClass->vEpOutMask = EpOutMask;
 	pClass->vFsDescriptor = nullptr;
-	pClass->vHsDescriptor = nullptr;
+	pClass->vDescriptor.Hs = nullptr;
 	pClass->vFsDescriptorLength = 0U;
 	pClass->vHsDescriptorLength = 0U;
 	return true;
@@ -1875,7 +1867,7 @@ bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
 		}
 	}
 	if (!registered || pClass->vFsDescriptor != nullptr ||
-		pClass->vHsDescriptor != nullptr)
+		pClass->vDescriptor.Hs != nullptr)
 	{
 		return false;
 	}
@@ -1884,14 +1876,46 @@ bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
 	pClass->vFsDescriptorLength = FsDescriptorLength;
 	if (USB_HIGHSPEED_CAPABLE(DevNo))
 	{
-		pClass->vHsDescriptor = static_cast<const uint8_t *>(pHsDescriptor);
+		pClass->vDescriptor.Hs = static_cast<const uint8_t *>(pHsDescriptor);
 		pClass->vHsDescriptorLength = HsDescriptorLength;
 	}
 	else
 	{
-		pClass->vHsDescriptor = pClass->vFsDescriptor;
+		pClass->vDescriptor.Hs = pClass->vFsDescriptor;
 		pClass->vHsDescriptorLength = pClass->vFsDescriptorLength;
 	}
+	return true;
+}
+
+bool UsbDescriptorRegisterTemplate(int DevNo, UsbDeviceClass *pClass,
+								   const void *pDescriptor,
+								   uint16_t DescriptorLength,
+								   UsbDescriptorPatch_t Patch)
+{
+	if (DevNo != s_Core.DevNo || pClass == nullptr || s_Core.Started ||
+		pDescriptor == nullptr || DescriptorLength == 0U)
+	{
+		return false;
+	}
+
+	bool registered = false;
+	for (int i = 0; i < s_Core.ObjectCnt; i++)
+	{
+		if (s_Core.Object[i] == pClass)
+		{
+			registered = true;
+			break;
+		}
+	}
+	if (!registered || pClass->vFsDescriptor != nullptr)
+	{
+		return false;
+	}
+
+	pClass->vFsDescriptor = static_cast<const uint8_t *>(pDescriptor);
+	pClass->vDescriptor.Patch = Patch;
+	pClass->vFsDescriptorLength = DescriptorLength;
+	pClass->vHsDescriptorLength = 0U;
 	return true;
 }
 
