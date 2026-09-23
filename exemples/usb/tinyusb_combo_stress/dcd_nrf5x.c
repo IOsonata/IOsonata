@@ -233,6 +233,16 @@ static void xact_in_dma(uint8_t epnum) {
   edpt_dma_start(&NRF_USBD->TASKS_STARTEPIN[epnum]);
 }
 
+static void xact_iso_in_dma(void) {
+  xfer_td_t* xfer = get_td(EP_ISO_NUM, TUSB_DIR_IN);
+  uint16_t const xact_len = tu_min16(xfer->total_len - xfer->actual_len, xfer->mps);
+
+  NRF_USBD->ISOIN.PTR = (uint32_t) xfer->buffer;
+  NRF_USBD->ISOIN.MAXCNT = xact_len;
+
+  edpt_dma_start(&NRF_USBD->TASKS_STARTISOIN);
+}
+
 //--------------------------------------------------------------------+
 // Controller API
 //--------------------------------------------------------------------+
@@ -630,7 +640,7 @@ void dcd_int_handler(uint8_t rhport) {
       xfer_td_t* xfer = get_td(EP_ISO_NUM, TUSB_DIR_IN);
       if (xfer->started && !xfer->iso_in_transfer_ready) {
         xfer->iso_in_transfer_ready = true;
-        xact_in_dma(EP_ISO_NUM);
+        xact_iso_in_dma();
       }
     }
 
