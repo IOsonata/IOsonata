@@ -263,6 +263,13 @@ public:
 		return false;
 	}
 
+	/// Patch one copied configuration fragment with per-instance/speed values.
+	/// The registered descriptor remains immutable and may be shared by classes.
+	virtual void PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const {
+		(void)pDesc;
+		(void)Speed;
+	}
+
 	uint8_t FirstInterface(void) const { return vFirstInterface; }
 	uint8_t InterfaceCount(void) const { return vInterfaceCount; }
 	uint16_t EpInMask(void) const { return vEpInMask; }
