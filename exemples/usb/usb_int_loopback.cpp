@@ -291,44 +291,32 @@ static void IntProcess(void)
 	}
 }
 
-static constexpr IntFunctionDesc_t IntFunctionDescTemplate(void)
-{
-	IntFunctionDesc_t desc = {};
-	desc.Alt0.bLength = sizeof(desc.Alt0);
-	desc.Alt0.bDescriptorType = USB_DESCTYPE_INTERFACE;
-	desc.Alt0.bInterfaceClass = USB_INTRFCLASS_VENDOR;
-	desc.Alt0.iInterface = INT_STR_INTERFACE;
-
-	for (unsigned i = 0U; i < INT_ALT_COUNT; i++)
-	{
-		IntAltDesc_t &alt = desc.Alt[i];
-		alt.Interface = desc.Alt0;
-		alt.Interface.bAlternateSetting = (uint8_t)(i + 1U);
-		alt.Interface.bNumEndpoints = 2U;
-		alt.Out.bLength = sizeof(alt.Out);
-		alt.Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-		alt.Out.bmAttributes = USB_ENDPATT_TRANS_INT;
-		alt.Out.wMaxPacketSize = INT_MPS;
-		alt.Out.bInterval = s_IntIntervals[i];
-		alt.In = alt.Out;
-	}
-	return desc;
-}
-
-static constexpr IntFunctionDesc_t s_IntFunctionDesc =
-	IntFunctionDescTemplate();
-
 static void IntPatchFunctionDesc(const UsbDeviceClass *, uint8_t *pData,
 								 UsbSpeed_t)
 {
 	IntFunctionDesc_t *pDesc =
 		reinterpret_cast<IntFunctionDesc_t *>(pData);
+	memset(pDesc, 0, sizeof(*pDesc));
+
+	pDesc->Alt0.bLength = sizeof(pDesc->Alt0);
+	pDesc->Alt0.bDescriptorType = USB_DESCTYPE_INTERFACE;
 	pDesc->Alt0.bInterfaceNumber = s_InterfaceNo;
+	pDesc->Alt0.bInterfaceClass = USB_INTRFCLASS_VENDOR;
+	pDesc->Alt0.iInterface = INT_STR_INTERFACE;
+
 	for (unsigned i = 0U; i < INT_ALT_COUNT; i++)
 	{
 		IntAltDesc_t &alt = pDesc->Alt[i];
-		alt.Interface.bInterfaceNumber = s_InterfaceNo;
+		alt.Interface = pDesc->Alt0;
+		alt.Interface.bAlternateSetting = (uint8_t)(i + 1U);
+		alt.Interface.bNumEndpoints = 2U;
+		alt.Out.bLength = sizeof(alt.Out);
+		alt.Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
 		alt.Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_EpNo);
+		alt.Out.bmAttributes = USB_ENDPATT_TRANS_INT;
+		alt.Out.wMaxPacketSize = INT_MPS;
+		alt.Out.bInterval = s_IntIntervals[i];
+		alt.In = alt.Out;
 		alt.In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_EpNo);
 	}
 }
@@ -365,7 +353,7 @@ static bool IntRegisterFunction(void)
 	s_InterfaceNo = alloc.FirstInterface;
 	s_EpNo = alloc.Bidirectional[0];
 	return UsbDescriptorRegisterTemplate(USB_DEVNO, &s_Class,
-		&s_IntFunctionDesc, sizeof(s_IntFunctionDesc), IntPatchFunctionDesc);
+		nullptr, sizeof(IntFunctionDesc_t), IntPatchFunctionDesc);
 }
 
 static const UsbCfg_t s_UsbCfg = {
