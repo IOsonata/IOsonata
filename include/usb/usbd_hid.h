@@ -110,8 +110,6 @@ struct __Usbd_Hid_Dev {
 	UsbdHidTxHandler_t TxHandler;
 	void *pContext;
 	UsbHidDesc_t HidDesc;
-	UsbdHidDesc_t FsDesc;
-	UsbdHidDesc_t HsDesc;
 	uint16_t ReportDescLength;
 	uint16_t BcdHid;
 	uint16_t FsMps;
@@ -166,6 +164,7 @@ public:
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 				 uint8_t **ppData, uint16_t *pLength) override;
 	bool SelectConfig(uint8_t ConfigValue) override;
+	void PatchDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const override;
 	void Reset(void) override;
 
 	using UsbIntIntrf::operator DevIntrf_t *;
