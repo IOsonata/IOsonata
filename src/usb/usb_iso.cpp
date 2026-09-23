@@ -131,6 +131,28 @@ static int UsbIsoIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 	}
 }
 
+void UsbIsoIntrfProcessEvent(UsbDevIntrf_t *pData,
+	UsbCtrlrEvtType_t Event, uint16_t FrameNo)
+{
+	if (Event != USB_CTRLR_EVT_SOF || pData == nullptr)
+	{
+		return;
+	}
+
+	UsbIsoIntrf_t *pIntrf =
+		static_cast<UsbIsoIntrf_t *>(pData->pClassContext);
+	if (pIntrf == nullptr || !pIntrf->Opened || pIntrf->Suspended ||
+		pIntrf->Interval == 0U || pIntrf->Interval > 16U ||
+		pIntrf->Mps == 0U ||
+		(FrameNo & ((1U << (pIntrf->Interval - 1U)) - 1U)) != 0U)
+	{
+		return;
+	}
+
+	(void)UsbCtrlrEpInXfer(pData->DevNo, pIntrf->EpNo, pIntrf->Mps);
+	(void)UsbCtrlrEpOutXfer(pData->DevNo, pIntrf->EpNo, pIntrf->Mps);
+}
+
 bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 					 const UsbIsoIntrfCfg_t *pCfg)
 {

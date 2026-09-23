@@ -71,6 +71,12 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	if (Length > 0U) memcpy(s_InData, pBuffer, Length);
 	return true;
 }
+bool UsbCtrlrEpOutXfer(int, uint8_t, uint16_t)
+{
+	s_OutXferCount++;
+	return true;
+}
+bool UsbCtrlrEpInXfer(int, uint8_t, uint16_t) { return true; }
 }
 
 static int s_Fail;

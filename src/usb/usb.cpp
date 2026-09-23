@@ -104,7 +104,6 @@ static struct
 	bool AddressPending;
 	uint8_t Configuration;
 	uint8_t NumInterfaces;
-	uint16_t SofCount;
 	uint16_t HaltIn;
 	uint16_t HaltOut;
 	UsbCoreCtrlState_t CtrlState;
@@ -572,49 +571,9 @@ static bool UsbCoreIsoActive(void)
 
 static void UsbCoreUpdateSof(void)
 {
-	s_Core.SofCount = 0U;
 	if (s_Core.Initialized)
 		UsbCtrlrSofEnable(s_Core.DevNo,
 			!s_Core.Suspended && UsbCoreIsoActive());
-}
-
-static void UsbCoreServiceIso(bool In)
-{
-	uint16_t len;
-	const uint8_t *pDesc = UsbCoreActiveConfig(&len);
-	bool activeInterface = false;
-	uint16_t ofs = 0;
-	const uint8_t *p;
-
-	while ((p = UsbCoreNextDescriptor(pDesc, len, &ofs)) != nullptr)
-	{
-		if (p[1] == USB_DESCTYPE_INTERFACE)
-		{
-			activeInterface = p[0] >= sizeof(UsbIntrfDesc_t) &&
-				p[2] < USB_CORE_INTRF_MAXCNT &&
-				s_Core.Alternate[p[2]] == p[3];
-			continue;
-		}
-		if (!activeInterface || p[1] != USB_DESCTYPE_ENDPOINT ||
-			p[0] < sizeof(UsbEndPointDesc_t) ||
-			(p[3] & 0x03U) != USB_ENDPATT_TRANS_ISO ||
-			(bool)USB_ENDPADDR_IS_IN(p[2]) != In)
-			continue;
-
-		const uint8_t epNum = USB_ENDPADDR_NUM(p[2]);
-		const uint8_t interval = p[6];
-		if (epNum == 0U || epNum >= 16U ||
-			s_Core.EpClass[In ? 1U : 0U][epNum] < 0 ||
-			interval == 0U || interval > 16U ||
-			(s_Core.SofCount & ((1U << (interval - 1U)) - 1U)) != 0U)
-			continue;
-
-		const uint16_t mps = (uint16_t)p[4] | ((uint16_t)p[5] << 8U);
-		if (In)
-			(void)UsbCtrlrEpInXfer(s_Core.DevNo, epNum, mps);
-		else
-			(void)UsbCtrlrEpOutXfer(s_Core.DevNo, epNum, mps);
-	}
 }
 
 static bool UsbCoreInterfaceAlternateExists(uint8_t InterfaceNo,
@@ -1544,9 +1503,20 @@ void UsbDevProcessEvent(int DevNo, const UsbCtrlrEvt_t *pEvt)
 		case USB_CTRLR_EVT_SOF:
 			if (!s_Core.Suspended && s_Core.Configuration != 0U)
 			{
-				UsbCoreServiceIso(true);
-				UsbCoreServiceIso(false);
-				s_Core.SofCount++;
+				uint16_t mask = (uint16_t)(USB_ISO_EPIN_MASK(s_Core.DevNo) &
+					USB_ISO_EPOUT_MASK(s_Core.DevNo));
+				while (mask != 0U)
+				{
+					const uint8_t epNum = (uint8_t)__builtin_ctz(mask);
+					const uint16_t bit = (uint16_t)(1U << epNum);
+					if (s_Core.EpClass[0][epNum] >= 0 &&
+						s_Core.EpClass[1][epNum] >= 0)
+					{
+						UsbCtrlrEpProcessEvent(s_Core.DevNo, epNum, true,
+							USB_CTRLR_EVT_SOF, pEvt->FrameNo);
+					}
+					mask &= (uint16_t)~bit;
+				}
 			}
 			break;
 

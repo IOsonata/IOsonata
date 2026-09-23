@@ -190,9 +190,12 @@ static void Event(UsbCtrlrEvtType_t Type)
 	UsbDevProcessEvent(TEST_DEVNO, &evt);
 }
 
-static void Sof(void)
+static void Sof(uint16_t FrameNo)
 {
-	Event(USB_CTRLR_EVT_SOF);
+	UsbCtrlrEvt_t evt = {};
+	evt.Type = USB_CTRLR_EVT_SOF;
+	evt.FrameNo = FrameNo;
+	UsbDevProcessEvent(TEST_DEVNO, &evt);
 }
 
 static bool Request(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
@@ -965,22 +968,19 @@ static bool TestIsoSofScheduling(void)
 	CHECK(s_Ctrlr.SofEnabled);
 	Complete(EP0_IN, 0);
 
-	Sof();
-	CHECK(s_Ctrlr.IsoInXferCnt == 1 && s_Ctrlr.IsoOutXferCnt == 1);
-	Sof();
-	CHECK(s_Ctrlr.IsoInXferCnt == 1 && s_Ctrlr.IsoOutXferCnt == 1);
-	Sof();
-	CHECK(s_Ctrlr.IsoInXferCnt == 2 && s_Ctrlr.IsoOutXferCnt == 2);
-	CHECK(s_Ctrlr.LastIsoInLength == 63U && s_Ctrlr.LastIsoOutLength == 63U);
+	Sof(10U);
+	CHECK(s_Ctrlr.IsoInXferCnt == 1 && s_Ctrlr.LastIsoInLength == 10U);
+	Sof(11U);
+	CHECK(s_Ctrlr.IsoInXferCnt == 2 && s_Ctrlr.LastIsoInLength == 11U);
 
 	Event(USB_CTRLR_EVT_SUSPEND);
 	CHECK(!s_Ctrlr.SofEnabled);
-	Sof();
-	CHECK(s_Ctrlr.IsoInXferCnt == 2 && s_Ctrlr.IsoOutXferCnt == 2);
+	Sof(12U);
+	CHECK(s_Ctrlr.IsoInXferCnt == 2);
 	Event(USB_CTRLR_EVT_RESUME);
 	CHECK(s_Ctrlr.SofEnabled);
-	Sof();
-	CHECK(s_Ctrlr.IsoInXferCnt == 3 && s_Ctrlr.IsoOutXferCnt == 3);
+	Sof(13U);
+	CHECK(s_Ctrlr.IsoInXferCnt == 3 && s_Ctrlr.LastIsoInLength == 13U);
 
 	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 0, 0, 0);
 	CHECK(!s_Ctrlr.SofEnabled);
@@ -1053,6 +1053,15 @@ extern "C" void UsbCtrlrEpAlloc(int, uint8_t, bool, uint8_t *, bool,
 									 UsbCtrlrEpHandler_t, void *)
 {
 	return;
+}
+extern "C" void UsbCtrlrEpProcessEvent(int, uint8_t EpNo, bool bIn,
+	UsbCtrlrEvtType_t Event, uint16_t Value)
+{
+	if (EpNo == 8U && bIn && Event == USB_CTRLR_EVT_SOF)
+	{
+		s_Ctrlr.IsoInXferCnt++;
+		s_Ctrlr.LastIsoInLength = Value;
+	}
 }
 extern "C" bool UsbCtrlrEpSend(int, uint8_t, uint8_t *, uint16_t) { return true; }
 extern "C" bool UsbCtrlrEpOutXfer(int, uint8_t, uint16_t Length)

@@ -48,6 +48,9 @@ static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
 static void UsbIntrfRetryRx(uint32_t Evt, void *pContext);
 static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t, uint16_t, void *);
 
+extern void UsbIsoIntrfProcessEvent(UsbDevIntrf_t *, UsbCtrlrEvtType_t,
+	uint16_t) __attribute__((weak));
+
 static void UsbIntrfRegisterRx(UsbDevIntrf_t *pIntrf, uint8_t *pBuffer)
 {
 	UsbCtrlrEpAlloc(pIntrf->DevNo, pIntrf->EpNo, false, pBuffer,
@@ -544,6 +547,15 @@ static void UsbIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
 								 uint16_t Length, void *pContext)
 {
 	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pContext);
+
+	if (Event == USB_CTRLR_EVT_SOF)
+	{
+		if (UsbIsoIntrfProcessEvent != nullptr)
+		{
+			UsbIsoIntrfProcessEvent(pIntrf, Event, Length);
+		}
+		return;
+	}
 
 	if (Event == USB_CTRLR_EVT_CANCEL)
 	{

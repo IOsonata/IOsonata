@@ -9,6 +9,8 @@ HEADER = ROOT / "ARM/Nordic/include/usb_ctrlr.h"
 BASE = ROOT / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp"
 ISO = ROOT / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52_iso.cpp"
 CORE = ROOT / "src/usb/usb.cpp"
+INTRF = ROOT / "src/usb/usb_intrf.cpp"
+ISO_INTRF = ROOT / "src/usb/usb_iso.cpp"
 
 
 def function_body(source: str, signature: str) -> str:
@@ -29,6 +31,8 @@ header = HEADER.read_text(encoding="utf-8")
 base = BASE.read_text(encoding="utf-8")
 iso = ISO.read_text(encoding="utf-8")
 core = CORE.read_text(encoding="utf-8")
+intrf = INTRF.read_text(encoding="utf-8")
+iso_intrf = ISO_INTRF.read_text(encoding="utf-8")
 
 open_ep = function_body(iso, "bool UsbCtrlrEpOpen(")
 start_iso = function_body(iso, "bool nRFUsbdIsoStart(void)")
@@ -39,7 +43,6 @@ interrupt = function_body(base, 'extern "C" void USBD_IRQHandler(void)')
 handle_sof = function_body(base, "static void nRFUsbdHandleSof(void)")
 queued = function_body(base, "void nRFUsbdStartQueuedDma(void)")
 process = function_body(core, "void UsbDevProcessEvent(")
-service = function_body(core, "static void UsbCoreServiceIso(bool In)")
 update_sof = function_body(core, "static void UsbCoreUpdateSof(void)")
 
 assert "USB_EPIN_CNT_0 = 8" in header and "USB_EPOUT_CNT_0 = 8" in header
@@ -73,13 +76,22 @@ assert "nRFUsbdIso" not in handle_sof
 assert "if (s_Usbd.SofEnabled)" not in handle_sof
 
 assert "case USB_CTRLR_EVT_SOF:" in process
-assert "UsbCoreServiceIso(true)" in process
-assert "UsbCoreServiceIso(false)" in process
-assert "USB_ENDPATT_TRANS_ISO" in service
-assert "s_Core.Alternate" in service
-assert "interval" in service and "s_Core.SofCount" in service
-assert "UsbCtrlrEpInXfer" in service and "UsbCtrlrEpOutXfer" in service
+assert "UsbCtrlrEpProcessEvent" in process
+assert "UsbCoreServiceIso" not in core
+assert "SofCount" not in core
 assert "UsbCtrlrSofEnable" in update_sof
+
+in_event = function_body(intrf, "static void UsbIntrfCtrlrInEvent(")
+iso_event = function_body(iso_intrf, "void UsbIsoIntrfProcessEvent(")
+assert "USB_CTRLR_EVT_SOF" in in_event
+assert "UsbIsoIntrfProcessEvent" in in_event
+assert "pIntrf->Opened" in iso_event
+assert "pIntrf->Suspended" in iso_event
+assert "pIntrf->Interval" in iso_event
+assert "pIntrf->Mps" in iso_event
+assert "pIntrf->EpNo" in iso_event
+assert "UsbCtrlrEpInXfer" in iso_event
+assert "UsbCtrlrEpOutXfer" in iso_event
 
 assert "NRF_USBD->EVENTS_ENDISOIN" in finish_iso
 assert "NRF_USBD->EVENTS_ENDISOOUT" in finish_iso

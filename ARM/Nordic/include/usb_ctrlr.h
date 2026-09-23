@@ -240,6 +240,8 @@ void UsbCtrlrEpCloseAll(int DevNo);
 void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
 					 bool bBlocking,
 					 UsbCtrlrEpHandler_t Handler, void *pContext);
+void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
+						 UsbCtrlrEvtType_t Event, uint16_t Value);
 // EpNum is an endpoint number: device IN, host OUT. The controller schedules RX.
 // pBuffer supplies the DMA source and remains owned until the completion callback.
 // It may be NULL only for a zero-length transfer.

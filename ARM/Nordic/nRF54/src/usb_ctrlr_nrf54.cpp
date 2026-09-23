@@ -1835,6 +1835,22 @@ void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
 	pReg->bBlocking = bBlocking;
 }
 
+void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
+						 UsbCtrlrEvtType_t Event, uint16_t Value)
+{
+	if (!nRFUsbValidDevNo(DevNo) || EpNo == 0U || EpNo >= NRF_USB_EP_COUNT)
+	{
+		return;
+	}
+
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg((uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U)));
+	if (pReg->Handler != nullptr)
+	{
+		pReg->Handler(Event, Value, pReg->pContext);
+	}
+}
+
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 						 uint16_t Length)
 {

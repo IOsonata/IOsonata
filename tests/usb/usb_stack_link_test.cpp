@@ -103,6 +103,8 @@ void UsbCtrlrEpAlloc(int, uint8_t EpNo, bool bIn, uint8_t *, bool,
 	s_EpHandler[index] = Handler;
 	s_EpContext[index] = pContext;
 }
+void UsbCtrlrEpProcessEvent(int, uint8_t, bool,
+	UsbCtrlrEvtType_t, uint16_t) {}
 bool UsbCtrlrEpSend(int, uint8_t EpNo, uint8_t *, uint16_t)
 {
 	s_EpSendCount[EpNo]++;
