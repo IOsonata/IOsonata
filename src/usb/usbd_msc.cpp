@@ -151,6 +151,43 @@ static bool UsbdMscRestartEndpoints(UsbdMscDev_t *pMsc)
 	return true;
 }
 
+static constexpr UsbdMscDesc_t UsbdMscDescTemplate(void)
+{
+	UsbdMscDesc_t desc = {};
+	desc.Interface.bLength = sizeof(desc.Interface);
+	desc.Interface.bDescriptorType = USB_DESCTYPE_INTERFACE;
+	desc.Interface.bNumEndpoints = 2U;
+	desc.Interface.bInterfaceClass = USB_INTRFCLASS_MSC;
+	desc.Interface.bInterfaceSubClass = USB_MSC_SUBCLASS_SCSI;
+	desc.Interface.bInterfaceProtocol = USB_MSC_PROT_BULK;
+	desc.Out.bLength = sizeof(desc.Out);
+	desc.Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
+	desc.Out.bmAttributes = USB_ENDPATT_TRANS_BULK;
+	desc.In = desc.Out;
+	return desc;
+}
+
+static constexpr UsbdMscDesc_t s_MscDescTemplate = UsbdMscDescTemplate();
+
+static void UsbdMscPatchDesc(UsbdMscDesc_t *pDesc,
+							 const UsbdMscDev_t *pMsc, UsbSpeed_t Speed)
+{
+	const uint16_t mps = Speed == USB_SPEED_HIGH ? pMsc->HsMps : pMsc->FsMps;
+	pDesc->Interface.bInterfaceNumber = (uint8_t)pMsc->ItfNo;
+	pDesc->Interface.iInterface = pMsc->InterfaceString;
+	pDesc->Out.bEndpointAddress = USB_ENDPADDR_DIROUT(pMsc->EpNo);
+	pDesc->Out.wMaxPacketSize = mps;
+	pDesc->In.bEndpointAddress = USB_ENDPADDR_DIRIN(pMsc->EpNo);
+	pDesc->In.wMaxPacketSize = mps;
+}
+
+static void UsbdMscPatchRegistered(const UsbDeviceClass *pClass,
+									 uint8_t *pDesc, UsbSpeed_t Speed)
+{
+	const UsbdMscDev_t *pMsc = *static_cast<const UsbdMsc *>(pClass);
+	UsbdMscPatchDesc(reinterpret_cast<UsbdMscDesc_t *>(pDesc), pMsc, Speed);
+}
+
 // Weak so an application can replace runtime fragment building with a static
 // fragment. When overridden, this default is dropped by unused-section removal.
 // Pair a replacement with a strong UsbGetDescriptor for fully static
@@ -172,23 +209,8 @@ bool UsbdMscMakeDesc(UsbdMscDesc_t *pDesc,
 		return false;
 	}
 
-	memset(pDesc, 0, sizeof(*pDesc));
-	pDesc->Interface.bLength = sizeof(pDesc->Interface);
-	pDesc->Interface.bDescriptorType = USB_DESCTYPE_INTERFACE;
-	pDesc->Interface.bInterfaceNumber = (uint8_t)pMsc->ItfNo;
-	pDesc->Interface.bNumEndpoints = 2U;
-	pDesc->Interface.bInterfaceClass = USB_INTRFCLASS_MSC;
-	pDesc->Interface.bInterfaceSubClass = USB_MSC_SUBCLASS_SCSI;
-	pDesc->Interface.bInterfaceProtocol = USB_MSC_PROT_BULK;
-	pDesc->Interface.iInterface = pMsc->InterfaceString;
-
-	pDesc->Out.bLength = sizeof(pDesc->Out);
-	pDesc->Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	pDesc->Out.bEndpointAddress = USB_ENDPADDR_DIROUT(pMsc->EpNo);
-	pDesc->Out.bmAttributes = USB_ENDPATT_TRANS_BULK;
-	pDesc->Out.wMaxPacketSize = mps;
-	pDesc->In = pDesc->Out;
-	pDesc->In.bEndpointAddress = USB_ENDPADDR_DIRIN(pMsc->EpNo);
+	memcpy(pDesc, &s_MscDescTemplate, sizeof(*pDesc));
+	UsbdMscPatchDesc(pDesc, pMsc, Speed);
 	return true;
 }
 
@@ -967,27 +989,12 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 	}
 	pMsc->pData->pClassContext = pMsc;
 
-	if (!UsbdMscMakeDesc(&pMsc->FsDesc, pMsc, USB_SPEED_FULL))
-	{
-		return false;
-	}
-	const void *pHsDesc = nullptr;
-	uint16_t hsDescLength = 0U;
-	if (USB_HIGHSPEED_CAPABLE(pMsc->DevNo))
-	{
-		if (!UsbdMscMakeDesc(&pMsc->HsDesc, pMsc, USB_SPEED_HIGH))
-		{
-			return false;
-		}
-		pHsDesc = &pMsc->HsDesc;
-		hsDescLength = sizeof(pMsc->HsDesc);
-	}
-
 	pMsc->MaxLun = 0U;
 	pMsc->bConfigured = false;
 	UsbdMscResetBot(pMsc, false);
-	return UsbDescriptorRegister(pMsc->DevNo, pClass, &pMsc->FsDesc,
-		sizeof(pMsc->FsDesc), pHsDesc, hsDescLength);
+	return UsbDescRegister(pMsc->DevNo, pClass,
+		&s_MscDescTemplate, sizeof(s_MscDescTemplate),
+		UsbdMscPatchRegistered);
 }
 
 bool UsbdMsc::Init(const UsbdMscCfg_t &Cfg)
@@ -1078,6 +1085,7 @@ bool UsbdMsc::SelectConfig(uint8_t ConfigValue)
 	UsbdMscResetBot(&vUsbdMsc, false);
 	return true;
 }
+
 
 void UsbdMsc::Detach(void)
 {

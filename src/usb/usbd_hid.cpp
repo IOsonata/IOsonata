@@ -277,6 +277,49 @@ static bool UsbdHidRequest(const UsbSetupData_t *pSetup,
 	return false;
 }
 
+static constexpr UsbdHidDesc_t UsbdHidDescTemplate(void)
+{
+	UsbdHidDesc_t desc = {};
+	desc.Interface.bLength = sizeof(desc.Interface);
+	desc.Interface.bDescriptorType = USB_DESCTYPE_INTERFACE;
+	desc.Interface.bNumEndpoints = 2U;
+	desc.Interface.bInterfaceClass = USB_INTRFCLASS_HID;
+	desc.Out.bLength = sizeof(desc.Out);
+	desc.Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
+	desc.Out.bmAttributes = USB_ENDPATT_TRANS_INT;
+	desc.In = desc.Out;
+	return desc;
+}
+
+static constexpr UsbdHidDesc_t s_HidDescTemplate = UsbdHidDescTemplate();
+
+static void UsbdHidPatchDesc(UsbdHidDesc_t *pDesc,
+							 const UsbdHidDev_t *pHid, UsbSpeed_t Speed)
+{
+	const uint16_t mps = Speed == USB_SPEED_HIGH ? pHid->HsMps : pHid->FsMps;
+	const uint8_t interval = Speed == USB_SPEED_HIGH ?
+		pHid->HsInterval : pHid->FsInterval;
+
+	pDesc->Interface.bInterfaceNumber = (uint8_t)pHid->ItfNo;
+	pDesc->Interface.bInterfaceSubClass = pHid->SubClass;
+	pDesc->Interface.bInterfaceProtocol = pHid->Protocol;
+	pDesc->Interface.iInterface = pHid->InterfaceString;
+	pDesc->Hid = pHid->HidDesc;
+	pDesc->Out.bEndpointAddress = USB_ENDPADDR_DIROUT(pHid->EpNo);
+	pDesc->Out.wMaxPacketSize = mps;
+	pDesc->Out.bInterval = interval;
+	pDesc->In.bEndpointAddress = USB_ENDPADDR_DIRIN(pHid->EpNo);
+	pDesc->In.wMaxPacketSize = mps;
+	pDesc->In.bInterval = interval;
+}
+
+static void UsbdHidPatchRegistered(const UsbDeviceClass *pClass,
+									 uint8_t *pDesc, UsbSpeed_t Speed)
+{
+	const UsbdHidDev_t *pHid = *static_cast<const UsbdHid *>(pClass);
+	UsbdHidPatchDesc(reinterpret_cast<UsbdHidDesc_t *>(pDesc), pHid, Speed);
+}
+
 // Weak so an application can replace runtime fragment building with a static
 // fragment. When overridden, this default is dropped by unused-section removal.
 // Pair a replacement with a strong UsbGetDescriptor for fully static
@@ -301,26 +344,8 @@ bool UsbdHidMakeDesc(UsbdHidDesc_t *pDesc,
 		return false;
 	}
 
-	memset(pDesc, 0, sizeof(*pDesc));
-	pDesc->Interface.bLength = sizeof(pDesc->Interface);
-	pDesc->Interface.bDescriptorType = USB_DESCTYPE_INTERFACE;
-	pDesc->Interface.bInterfaceNumber = (uint8_t)pHid->ItfNo;
-	pDesc->Interface.bAlternateSetting = 0U;
-	pDesc->Interface.bNumEndpoints = 2U;
-	pDesc->Interface.bInterfaceClass = USB_INTRFCLASS_HID;
-	pDesc->Interface.bInterfaceSubClass = pHid->SubClass;
-	pDesc->Interface.bInterfaceProtocol = pHid->Protocol;
-	pDesc->Interface.iInterface = pHid->InterfaceString;
-	pDesc->Hid = pHid->HidDesc;
-
-	pDesc->Out.bLength = sizeof(pDesc->Out);
-	pDesc->Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	pDesc->Out.bEndpointAddress = USB_ENDPADDR_DIROUT(pHid->EpNo);
-	pDesc->Out.bmAttributes = USB_ENDPATT_TRANS_INT;
-	pDesc->Out.wMaxPacketSize = mps;
-	pDesc->Out.bInterval = interval;
-	pDesc->In = pDesc->Out;
-	pDesc->In.bEndpointAddress = USB_ENDPADDR_DIRIN(pHid->EpNo);
+	memcpy(pDesc, &s_HidDescTemplate, sizeof(*pDesc));
+	UsbdHidPatchDesc(pDesc, pHid, Speed);
 	return true;
 }
 
@@ -403,25 +428,9 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 		return false;
 	}
 
-	if (!UsbdHidMakeDesc(&pHid->FsDesc, pHid, USB_SPEED_FULL))
-	{
-		return false;
-	}
-
-	const void *pHsDesc = nullptr;
-	uint16_t hsDescLength = 0U;
-	if (USB_HIGHSPEED_CAPABLE(pHid->DevNo))
-	{
-		if (!UsbdHidMakeDesc(&pHid->HsDesc, pHid, USB_SPEED_HIGH))
-		{
-			return false;
-		}
-		pHsDesc = &pHid->HsDesc;
-		hsDescLength = sizeof(pHid->HsDesc);
-	}
-
-	return UsbDescriptorRegister(pHid->DevNo, pClass,
-		&pHid->FsDesc, sizeof(pHid->FsDesc), pHsDesc, hsDescLength);
+	return UsbDescRegister(pHid->DevNo, pClass,
+		&s_HidDescTemplate, sizeof(s_HidDescTemplate),
+		UsbdHidPatchRegistered);
 }
 
 bool UsbdHid::Init(const UsbdHidCfg_t &Cfg)
@@ -440,6 +449,7 @@ bool UsbdHid::SelectConfig(uint8_t ConfigValue)
 {
 	return UsbdHidConfig(&vUsbdHid, ConfigValue);
 }
+
 
 void UsbdHid::Reset(void)
 {

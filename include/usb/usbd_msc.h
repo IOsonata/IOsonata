@@ -124,8 +124,6 @@ typedef struct __Usbd_Msc_Dev {
 	uint16_t ResponseOffset;
 	UsbMscCmdBlkWrapper_t Cbw;
 	UsbMscCmdStatusWrapper_t Csw;
-	UsbdMscDesc_t FsDesc;
-	UsbdMscDesc_t HsDesc;
 	char Vendor[8];
 	char Product[16];
 	char Revision[4];
@@ -159,6 +157,7 @@ public:
 
 	using UsbIntrf::operator DevIntrf_t *;
 	operator UsbdMscDev_t * () { return &vUsbdMsc; }
+	operator const UsbdMscDev_t * () const { return &vUsbdMsc; }
 
 	bool Init(const UsbdMscCfg_t &Cfg);
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,

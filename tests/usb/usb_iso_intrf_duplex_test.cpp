@@ -19,7 +19,6 @@ static uint16_t s_InLength;
 static uint8_t s_InData[USB_ISO_INTRF_MAX_MPS];
 static int s_OpenCount;
 static int s_CloseCount;
-static int s_OutXferCount;
 
 extern "C" {
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
@@ -71,6 +70,7 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	if (Length > 0U) memcpy(s_InData, pBuffer, Length);
 	return true;
 }
+bool UsbCtrlrIsoService(int, uint8_t, uint16_t) { return true; }
 }
 
 static int s_Fail;
@@ -150,7 +150,6 @@ int main(void)
 	CHECK(s_LastRxLen == sizeof(rx));
 	CHECK(memcmp(s_LastRx, rx, sizeof(rx)) == 0);
 	CHECK(s_InBusy);
-	CHECK(s_OutXferCount == 0);
 
 	CompleteIn();
 	CHECK(s_TxCount == 1);

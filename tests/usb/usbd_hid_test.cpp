@@ -20,6 +20,7 @@ static uint16_t s_ReservedIn;
 static uint16_t s_ReservedOut;
 static const uint8_t *s_FsDescriptor;
 static uint16_t s_FsDescriptorLength;
+static uint8_t s_FsDescriptorStorage[sizeof(UsbdHidDesc_t)];
 static UsbEndPointDesc_t s_Open[2];
 static int s_OpenCount;
 static int s_CloseCount;
@@ -115,18 +116,20 @@ bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
 	return true;
 }
 
-bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
-						   const void *pFsDescriptor,
-						   uint16_t FsDescriptorLength,
-						   const void *, uint16_t)
+bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
+								   const void *pDescriptor,
+								   uint16_t DescriptorLength,
+								   UsbDescBuild_t Build)
 {
-	if (DevNo != 0 || pClass != s_ClassObject || pFsDescriptor == nullptr ||
-		FsDescriptorLength == 0U)
+	if (DevNo != 0 || pClass != s_ClassObject || pDescriptor == nullptr ||
+		DescriptorLength != sizeof(s_FsDescriptorStorage) || Build == nullptr)
 	{
 		return false;
 	}
-	s_FsDescriptor = static_cast<const uint8_t *>(pFsDescriptor);
-	s_FsDescriptorLength = FsDescriptorLength;
+	memcpy(s_FsDescriptorStorage, pDescriptor, DescriptorLength);
+	Build(pClass, s_FsDescriptorStorage, USB_SPEED_FULL);
+	s_FsDescriptor = s_FsDescriptorStorage;
+	s_FsDescriptorLength = DescriptorLength;
 	return true;
 }
 

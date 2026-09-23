@@ -161,30 +161,22 @@ nRFUsbdState_t s_Usbd;
 extern bool nRFUsbdIsoStart(void) __attribute__((weak));
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
-static void nRFUsbdHostResumeDetected(void);
+static void nRFUsbdHostResume(void);
 
 
 // UsbCtrlrIsoInit pulls in the optional ISO archive member, whose strong
 // definitions replace these defaults. Keep IsoStart undefined when absent so
 // regular DMA skips the call entirely.
-__attribute__((weak)) void nRFUsbdIsoService(void)
-{
-}
-
-__attribute__((weak)) bool nRFUsbdIsoFinishDma(uint32_t)
+__attribute__((weak)) bool nRFUsbdIsoFinishDma(void)
 {
 	return false;
-}
-
-__attribute__((weak)) void nRFUsbdIsoSof(void)
-{
 }
 
 __attribute__((weak)) void nRFUsbdIsoEpClose(bool)
 {
 }
 
-__attribute__((weak)) bool nRFUsbdIsoXfer(uint8_t, uint16_t)
+__attribute__((weak)) bool UsbCtrlrIsoService(int, uint8_t, uint16_t)
 {
 	return false;
 }
@@ -578,7 +570,7 @@ void nRFUsbdDmaWait(void)
 		}
 		else
 		{
-			complete = nRFUsbdIsoFinishDma(0U);
+			complete = nRFUsbdIsoFinishDma();
 		}
 		if (complete)
 			nRFUsbdDmaUnlock();
@@ -598,9 +590,9 @@ static __attribute__((noinline)) void nRFUsbdEp0InStart(const nRFEPPkt_t *p)
 		&NRF_USBD->EVENTS_ENDEPIN[0]);
 }
 
-// The SOF interrupt is shared: application SOF events, open ISO endpoints
-// and suspend-time resume detection all need it. Acquire clears a stale
-// event first; release drops it only when nothing needs it anymore.
+// The SOF interrupt is shared by core protocol timing and suspend-time resume
+// detection. Acquire clears a stale event first; release drops it only when
+// neither needs it anymore.
 __attribute__((noinline)) void nRFUsbdSofAcquire(void)
 {
 	NRF_USBD->EVENTS_SOF = 0U;
@@ -609,7 +601,7 @@ __attribute__((noinline)) void nRFUsbdSofAcquire(void)
 
 __attribute__((noinline)) void nRFUsbdSofRelease(void)
 {
-	if (!s_Usbd.SofEnabled && !s_Usbd.IsoOpen &&
+	if (!s_Usbd.SofEnabled &&
 		(s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U)
 	{
 		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
@@ -661,8 +653,7 @@ void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 
 static inline __attribute__((always_inline)) bool nRFUsbdDmaAllowed(void)
 {
-	return (s_Usbd.Flags &
-		(USBD_FLAG_SUSPENDED | USBD_FLAG_HOST_RESUME)) == 0U;
+	return (s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U;
 }
 
 // Callers check the power gate and own the channel lock. EP0 starts
@@ -695,7 +686,8 @@ static void nRFUsbdResetState(void)
 {
 	s_Usbd.SofEnabled = false;
 	s_Usbd.IsoOpen = false;
-	s_Usbd.IsoBufState = 0U;
+	s_Usbd.IsoBusy = 0U;
+	s_Usbd.IsoInDmaLen = -1;
 
 	CFifoFlush(s_Usbd.hQue);
 	CFifoFlush(s_Usbd.hEp0Que);
@@ -722,9 +714,10 @@ static void nRFUsbdAbortEp0(void)
 static void nRFUsbdTryEnterLowPower(void)
 {
 	const uint8_t entryMask = USBD_FLAG_SUSPENDED | USBD_FLAG_REMOTE_WAKE |
-		USBD_FLAG_HOST_RESUME;
+		USBD_FLAG_MAC_AWAKE;
+	const uint8_t entryWant = USBD_FLAG_SUSPENDED | USBD_FLAG_MAC_AWAKE;
 	if (!s_Usbd.LowPowerSuspend ||
-		(s_Usbd.Flags & entryMask) != USBD_FLAG_SUSPENDED ||
+		(s_Usbd.Flags & entryMask) != entryWant ||
 		nRFUsbdDmaActive())
 	{
 		return;
@@ -733,7 +726,7 @@ static void nRFUsbdTryEnterLowPower(void)
 	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
 		NRF_USBD->EVENTS_SOF != 0U)
 	{
-		nRFUsbdHostResumeDetected();
+		nRFUsbdHostResume();
 		return;
 	}
 
@@ -745,16 +738,15 @@ static void nRFUsbdTryEnterLowPower(void)
 	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
 		NRF_USBD->EVENTS_SOF != 0U)
 	{
-		nRFUsbdHostResumeDetected();
+		nRFUsbdHostResume();
 	}
 }
 
 static void nRFUsbdTryRemoteWake(void)
 {
 	const uint8_t wakeMask = USBD_FLAG_REMOTE_WAKE | USBD_FLAG_SUSPENDED |
-		USBD_FLAG_HOST_RESUME | USBD_FLAG_MAC_AWAKE;
-	const uint8_t wakeWant = USBD_FLAG_REMOTE_WAKE | USBD_FLAG_SUSPENDED |
 		USBD_FLAG_MAC_AWAKE;
+	const uint8_t wakeWant = wakeMask;
 	const uint8_t flags = s_Usbd.Flags;
 	if ((flags & wakeMask) != wakeWant ||
 		nRFUsbdDmaActive() ||
@@ -775,7 +767,7 @@ static void nRFUsbdTryRemoteWake(void)
 	NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
 }
 
-static void nRFUsbdHostResumeDetected(void)
+static void nRFUsbdHostResume(void)
 {
 	const uint32_t irqState = DisableInterrupt();
 	uint8_t flags = s_Usbd.Flags;
@@ -786,28 +778,35 @@ static void nRFUsbdHostResumeDetected(void)
 		return;
 	}
 
-	const bool waking = (flags & USBD_FLAG_MAC_AWAKE) == 0U || !UsbdIsForceNormal();
-	flags &= (uint8_t)~(USBD_FLAG_SUSPENDED | USBD_FLAG_REMOTE_WAKE |
-		USBD_FLAG_HOST_RESUME);
-	if (waking)
-		flags |= USBD_FLAG_HOST_RESUME;
+	// A host resume cancels any device-initiated wake request. Keep SUSPENDED
+	// set until the peripheral is actually awake; that state alone gates DMA.
+	flags &= (uint8_t)~USBD_FLAG_REMOTE_WAKE;
+	if ((flags & USBD_FLAG_MAC_AWAKE) != 0U && UsbdIsForceNormal())
+	{
+		s_Usbd.Flags = flags & (uint8_t)~USBD_FLAG_SUSPENDED;
+		EnableInterrupt(irqState);
+		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
+		return;
+	}
+
 	s_Usbd.Flags = flags;
 	EnableInterrupt(irqState);
-
-	if (waking)
-		UsbdForceNormal();
-	else
-		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
+	UsbdForceNormal();
 }
 
-// ISR context only.
+// ISR context only. USBWUALLOWED completes a pending host resume, or wakes the
+// peripheral far enough for a pending remote wake to drive DP/DM afterwards.
 static void nRFUsbdWakeAllowed(void)
 {
 	const uint8_t flags = s_Usbd.Flags;
-	s_Usbd.Flags = (flags | USBD_FLAG_MAC_AWAKE) &
-		(uint8_t)~USBD_FLAG_HOST_RESUME;
-	if ((flags & USBD_FLAG_HOST_RESUME) != 0U)
+	s_Usbd.Flags = flags | USBD_FLAG_MAC_AWAKE;
+
+	if ((flags & USBD_FLAG_SUSPENDED) != 0U &&
+		(flags & USBD_FLAG_REMOTE_WAKE) == 0U)
+	{
+		s_Usbd.Flags &= (uint8_t)~USBD_FLAG_SUSPENDED;
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
+	}
 }
 
 static void nRFUsbdBusReset(void)
@@ -905,17 +904,14 @@ static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 		// When low-power suspend is disabled, retain all endpoint state and
 		// wait for RESUME or SOF without touching USBD LOWPOWER.
 		s_Usbd.Flags = (s_Usbd.Flags &
-			(uint8_t)~(USBD_FLAG_REMOTE_WAKE | USBD_FLAG_HOST_RESUME)) |
-			USBD_FLAG_SUSPENDED;
-		s_Usbd.IsoBufState &=
-			(uint8_t)~(NRFUSBD_ISO_IN_READY | NRFUSBD_ISO_OUT_READY);
+			(uint8_t)~USBD_FLAG_REMOTE_WAKE) | USBD_FLAG_SUSPENDED;
 		nRFUsbdSofAcquire();
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_SUSPEND);
 	}
 
 	if ((EventCause & USBD_EVENTCAUSE_RESUME_Msk) != 0)
 	{
-		nRFUsbdHostResumeDetected();
+		nRFUsbdHostResume();
 	}
 
 	if ((EventCause & USBD_EVENTCAUSE_USBWUALLOWED_Msk) != 0)
@@ -926,9 +922,7 @@ static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 
 static void nRFUsbdHandleSof(void)
 {
-	nRFUsbdHostResumeDetected();
-
-	nRFUsbdIsoSof();
+	nRFUsbdHostResume();
 
 	if (s_Usbd.SofEnabled)
 	{
@@ -937,10 +931,6 @@ static void nRFUsbdHandleSof(void)
 		evt.FrameNo = (uint16_t)NRF_USBD->FRAMECNTR;
 		UsbDevProcessEvent(0, &evt);
 	}
-
-	nRFUsbdSofRelease();
-
-	nRFUsbdIsoService();
 }
 
 static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
@@ -965,7 +955,7 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	{
 	}
 
-	nRFUsbdHostResumeDetected();
+	nRFUsbdHostResume();
 	nRFUsbdAbortEp0();
 
 	if ((evt.Setup.bmRequestType &
@@ -1014,10 +1004,25 @@ extern "C" void USBD_IRQHandler(void)
 		return;
 	}
 
+	// ISO EasyDMA completion belongs to the preceding frame. Retire it before
+	// publishing the new SOF so that frame sees released ISO ownership.
+	bool startDma = false;
+	if (NRF_USBD->EVENTS_ENDISOIN != 0U ||
+		NRF_USBD->EVENTS_ENDISOOUT != 0U)
+	{
+		startDma = nRFUsbdIsoFinishDma();
+	}
+
+	if (NRF_USBD->EVENTS_SOF != 0U)
+	{
+		NRF_USBD->EVENTS_SOF = 0U;
+		(void)NRF_USBD->EVENTS_SOF;
+		nRFUsbdHandleSof();
+	}
+
 	// Exactly one endpoint can own EasyDMA. Completed cases retain its lock
 	// and request the shared handoff immediately below.
-	bool startDma = false;
-	if (dmastatus == 0U)
+	if (!startDma && dmastatus == 0U)
 	{
 		// OUT data-ready may arrive while the DMA channel is idle.
 		if (NRF_USBD->EVENTS_EP0DATADONE != 0U && !nRFUsbdDmaActive())
@@ -1026,7 +1031,7 @@ extern "C" void USBD_IRQHandler(void)
 			startDma = true;
 		}
 	}
-	else
+	else if (!startDma)
 	{
 		const uint32_t statusBit = 31U - (uint32_t)__CLZ(dmastatus);
 
@@ -1046,7 +1051,7 @@ extern "C" void USBD_IRQHandler(void)
 		}
 		else if ((statusBit & 8U) != 0U) // ISO IN/OUT
 		{
-			startDma = nRFUsbdIsoFinishDma(dmastatus);
+			// ENDISOIN/ENDISOOUT above are the ISO DMA completion events.
 		}
 		else if ((statusBit & 16U) != 0U) // EP0 OUT
 		{
@@ -1098,7 +1103,7 @@ extern "C" void USBD_IRQHandler(void)
 
 	if (startDma)
 	{
-		// Restart before EPDATA/SOF work; SETUP and bus events take precedence.
+		// SETUP and bus events still take precedence over starting a new DMA.
 		if ((NRF_USBD->EVENTS_EP0SETUP | NRF_USBD->EVENTS_USBEVENT) == 0U &&
 			nRFUsbdDmaAllowed())
 		{
@@ -1159,14 +1164,6 @@ extern "C" void USBD_IRQHandler(void)
 	// Clear only serviced endpoints; keep every other status bit latched.
 	// The following SOF register read completes this write.
 	NRF_USBD->EPDATASTATUS = servicedStatus;
-
-	if (NRF_USBD->EVENTS_SOF != 0U)
-	{
-		NRF_USBD->EVENTS_SOF = 0U;
-		(void)NRF_USBD->EVENTS_SOF;
-
-		nRFUsbdHandleSof();
-	}
 
 	nRFUsbdTryRemoteWake();
 
@@ -1343,7 +1340,7 @@ void UsbCtrlrRemoteWakeup(int DevNo)
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
 	const uint8_t flags = s_Usbd.Flags;
-	if ((flags & (USBD_FLAG_SUSPENDED | USBD_FLAG_HOST_RESUME)) !=
+	if ((flags & (USBD_FLAG_SUSPENDED | USBD_FLAG_REMOTE_WAKE)) !=
 		USBD_FLAG_SUSPENDED)
 	{
 		EnableInterrupt(state);
@@ -1455,14 +1452,43 @@ void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
 	pReg->bBlocking = bBlocking;
 }
 
+void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
+						 UsbCtrlrEvtType_t Event, uint16_t Value)
+{
+	if (DevNo != 0 || EpNo == 0U || EpNo >= NRFX_USBD_EP_COUNT)
+	{
+		return;
+	}
+
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNo, bIn);
+	if (pReg->Handler != nullptr)
+	{
+		pReg->Handler(Event, Value, pReg->pContext);
+	}
+}
+
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 						 uint16_t Length)
 {
 	(void)DevNo;
 	if (EpNum == NRFX_USBD_ISO_EP_NO)
 	{
-		s_Usbd.EpReg[EpNum - 1U][1].pBuffer = pBuffer;
-		return nRFUsbdIsoXfer(1U, Length);
+		const uint32_t state = DisableInterrupt();
+		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[EpNum - 1U][1];
+		if (!s_Usbd.IsoOpen ||
+			(s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) != 0U ||
+			s_Usbd.IsoInDmaLen >= 0 || pReg->Handler == NULL ||
+			(pBuffer == NULL && Length != 0U) ||
+			Length > pReg->MaxPacketSize)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+
+		pReg->pBuffer = pBuffer;
+		s_Usbd.IsoInDmaLen = (int16_t)Length;
+		EnableInterrupt(state);
+		return true;
 	}
 
 	bool retval = false;

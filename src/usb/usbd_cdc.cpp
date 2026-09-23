@@ -39,6 +39,19 @@ SOFTWARE.
 #include "usb/usbd_epalloc.h"
 #include "usb/usbd_cdc.h"
 
+extern const UsbdCdcDesc_t g_UsbdCdcDescTemplate;
+void UsbdCdcPatchDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
+					 UsbSpeed_t Speed, bool HasFunctionString);
+
+static void UsbdCdcPatchRegistered(const UsbDeviceClass *pClass,
+									 uint8_t *pDesc, UsbSpeed_t Speed)
+{
+	const UsbdCdcDev_t *pCdc = *static_cast<const UsbdCdc *>(pClass);
+	const UsbCfg_t *pCfg = UsbGetCfg(pCdc->DevNo);
+	UsbdCdcPatchDesc(reinterpret_cast<UsbdCdcDesc_t *>(pDesc), pCdc,
+		Speed, pCfg != nullptr && pCfg->pFuncName != nullptr);
+}
+
 static uint8_t *UsbdCdcRxBuffer(UsbdCdcDev_t *pCdc)
 {
 	return reinterpret_cast<uint8_t *>(pCdc->RxTransfer);
@@ -73,11 +86,6 @@ static uint16_t UsbdCdcMps(UsbdCdcDev_t *pCdc)
 {
 	return UsbCtrlrHighSpeed(pCdc->DevNo) ?
 		   USBD_CDC_BULK_HS_MPS : USBD_CDC_BULK_FS_MPS;
-}
-
-static uint8_t UsbdCdcNotifInterval(UsbdCdcDev_t *pCdc)
-{
-	return UsbCtrlrHighSpeed(pCdc->DevNo) ? 8U : 16U;
 }
 
 bool UsbdCdcPortIsOpen(const UsbdCdcDev_t * const pCdc)
@@ -411,33 +419,9 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	UsbCtrlrEpAlloc(pCdc->DevNo, pCdc->NotifyEpNo, true,
 		UsbdCdcNotifBuffer(pCdc), false, UsbdCdcNotifCtrlrEvent, pCdc);
 
-	const UsbCfg_t *pUsbCfg = UsbGetCfg(pCdc->DevNo);
-	if (!UsbdCdcMakeDesc(&pCdc->FsDesc, pCdc, USB_SPEED_FULL,
-		pUsbCfg != nullptr && pUsbCfg->pFuncName != nullptr))
-	{
-		return false;
-	}
-
-	const void *pHsDesc = nullptr;
-	uint16_t hsDescLength = 0U;
-	if (USB_HIGHSPEED_CAPABLE(pCdc->DevNo))
-	{
-		if (!UsbdCdcMakeDesc(&pCdc->HsDesc, pCdc, USB_SPEED_HIGH,
-			pUsbCfg != nullptr && pUsbCfg->pFuncName != nullptr))
-		{
-			return false;
-		}
-		pHsDesc = &pCdc->HsDesc;
-		hsDescLength = sizeof(pCdc->HsDesc);
-	}
-
-	if (!UsbDescriptorRegister(pCdc->DevNo, pClass,
-		&pCdc->FsDesc, sizeof(pCdc->FsDesc), pHsDesc, hsDescLength))
-	{
-		return false;
-	}
-
-	return true;
+	return UsbDescRegister(pCdc->DevNo, pClass,
+		&g_UsbdCdcDescTemplate, sizeof(g_UsbdCdcDescTemplate),
+		UsbdCdcPatchRegistered);
 }
 
 void UsbdCdcProcess(UsbdCdcDev_t * const pCdc)

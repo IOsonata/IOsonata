@@ -110,8 +110,6 @@ struct __Usbd_Hid_Dev {
 	UsbdHidTxHandler_t TxHandler;
 	void *pContext;
 	UsbHidDesc_t HidDesc;
-	UsbdHidDesc_t FsDesc;
-	UsbdHidDesc_t HsDesc;
 	uint16_t ReportDescLength;
 	uint16_t BcdHid;
 	uint16_t FsMps;
@@ -170,6 +168,7 @@ public:
 
 	using UsbIntIntrf::operator DevIntrf_t *;
 	operator UsbdHidDev_t * () { return &vUsbdHid; }
+	operator const UsbdHidDev_t * () const { return &vUsbdHid; }
 
 	bool RequestToSend(int NbBytes) override {
 		return NbBytes >= 0 && NbBytes <= (int)vUsbIntIntrf.Mps &&

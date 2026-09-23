@@ -34,14 +34,19 @@ sof = function_body(source, "static void nRFUsbdHandleSof(void)")
 assert "if (!s_Usbd.LowPowerSuspend ||" in enter_low_power, (
     "USBD low-power entry must be disabled when bLowPowerSuspend is false"
 )
-assert "USBD_FLAG_SUSPEND_PEND" not in source, (
-    "suspend must be represented by USBD_FLAG_SUSPENDED only"
-)
+assert "USBD_FLAG_SUSPEND_PEND" not in source
+assert "USBD_FLAG_HOST_RESUME" not in source
 assert "CFifoPeek(s_Usbd.hQue)" not in enter_low_power, (
     "low-power entry must not drain the software DMA queue before sleep"
 )
-assert "nRFUsbdHostResumeDetected();" in sof, (
+assert "USBD_FLAG_MAC_AWAKE" in enter_low_power, (
+    "low-power entry must require the awake state so host-resume recovery cannot re-enter sleep"
+)
+assert "nRFUsbdHostResume();" in sof, (
     "SOF handling must retain the anomaly-211 host-resume recovery path"
+)
+assert "nRFUsbdSofRelease();" not in sof, (
+    "SOF processing must not change SOF interrupt-enable ownership"
 )
 
 print("nrf_usb_suspend_policy_test: PASS")

@@ -121,8 +121,6 @@ typedef struct __Usbd_Cdc_Dev {
 	uint8_t NotifyEpNo;			//!< Internal allocation
 	uint8_t DataEpNo;				//!< Internal allocation
 	int DevNo;
-	UsbdCdcDesc_t FsDesc;
-	UsbdCdcDesc_t HsDesc;
 	bool SerialStatePending;
 	bool SerialStateActive;
 	uint32_t RxTransfer[USBD_CDC_TRANS_WORDS];
@@ -183,6 +181,7 @@ public:
 
 	using UsbIntrf::operator DevIntrf_t *;
 	operator UsbdCdcDev_t * () { return &vUsbdCdc; }
+	operator const UsbdCdcDev_t * () const { return &vUsbdCdc; }
 
 	bool Init(const UsbdCdcCfg_t &Cfg);
 	void Reset(void) override;

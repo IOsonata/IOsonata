@@ -240,10 +240,15 @@ void UsbCtrlrEpCloseAll(int DevNo);
 void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
 					 bool bBlocking,
 					 UsbCtrlrEpHandler_t Handler, void *pContext);
+void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
+						 UsbCtrlrEvtType_t Event, uint16_t Value);
 // EpNum is an endpoint number: device IN, host OUT. The controller schedules RX.
 // pBuffer supplies the DMA source and remains owned until the completion callback.
 // It may be NULL only for a zero-length transfer.
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
+// Core-owned ISO service opportunity. IN uses a staged send; OUT uses the
+// registered receive buffer and is scheduled internally by the controller.
+bool UsbCtrlrIsoService(int DevNo, uint8_t EpNum, uint16_t Length);
 // IN returns bytes copied into the queue; completion notifies that it drained.
 // A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
@@ -282,17 +287,14 @@ typedef struct __nRF_Usb_Ep_Registration
 enum
 {
 	USBD_FLAG_SUSPENDED   = 0x01U,
-	USBD_FLAG_REMOTE_WAKE = 0x04U,
-	USBD_FLAG_HOST_RESUME = 0x08U,
-	USBD_FLAG_MAC_AWAKE   = 0x10U,
+	USBD_FLAG_REMOTE_WAKE = 0x02U,
+	USBD_FLAG_MAC_AWAKE   = 0x04U,
 };
 
 enum
 {
-	NRFUSBD_ISO_OUT_READY = 0x01U,
-	NRFUSBD_ISO_IN_READY  = 0x02U,
-	NRFUSBD_ISO_OUT_BUSY  = 0x04U,
-	NRFUSBD_ISO_IN_BUSY   = 0x08U,
+	NRFUSBD_ISO_OUT_BUSY = 0x01U,
+	NRFUSBD_ISO_IN_BUSY  = 0x02U,
 };
 
 typedef struct __nRF_Usbd_State
@@ -301,10 +303,11 @@ typedef struct __nRF_Usbd_State
 	uint8_t IntPrio;
 	bool LowPowerSuspend;
 	bool SofEnabled;
-	bool IsoOpen;                 //!< EP8 participates in ISO DMA scheduling.
-	// Queued ISO buffer lengths; meaningful while the direction is BUSY.
-	uint16_t IsoDmaLen[2];
-	uint8_t IsoBufState;          //!< READY/BUSY state of the ISO DMA buffers.
+	bool IsoOpen;                 //!< Both EP8 directions are open.
+	// IN may be staged with BUSY clear. BUSY owns one admitted ISO service
+	// from the SOF opportunity until its END event retires the EasyDMA.
+	int16_t IsoInDmaLen;
+	uint8_t IsoBusy;
 	volatile uint8_t Flags;       //!< Controller power/wake state only.
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;

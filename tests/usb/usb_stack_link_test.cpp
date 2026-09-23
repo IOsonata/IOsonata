@@ -103,11 +103,14 @@ void UsbCtrlrEpAlloc(int, uint8_t EpNo, bool bIn, uint8_t *, bool,
 	s_EpHandler[index] = Handler;
 	s_EpContext[index] = pContext;
 }
+void UsbCtrlrEpProcessEvent(int, uint8_t, bool,
+	UsbCtrlrEvtType_t, uint16_t) {}
 bool UsbCtrlrEpSend(int, uint8_t EpNo, uint8_t *, uint16_t)
 {
 	s_EpSendCount[EpNo]++;
 	return true;
 }
+bool UsbCtrlrIsoService(int, uint8_t, uint16_t) { return false; }
 static bool RecordEp0(uint8_t EpAddr, uint16_t Length)
 {
 	s_Ep0EventCount++;

@@ -204,8 +204,6 @@ typedef struct __Bt_Hci_Usb_Dev {
 	uint16_t AclHsMps;
 	uint8_t EventFsInterval;
 	uint8_t EventHsInterval;
-	BtHciUsbDescBuffer_t FsDesc;
-	BtHciUsbDescBuffer_t HsDesc;
 	BtHciUsbPacketType_t RxType;
 	BtHciUsbPacketType_t TxType;
 	BtHciUsbPacketType_t BulkRxType;
@@ -271,6 +269,7 @@ public:
 
 	using UsbIntrf::operator DevIntrf_t *;
 	operator BtHciUsbDev_t * () { return &vBtHciUsb; }
+	operator const BtHciUsbDev_t * () const { return &vBtHciUsb; }
 
 	bool RequestToSend(int NbBytes) override {
 		return BtHciUsbRequestToSend(&vBtHciUsb, NbBytes);

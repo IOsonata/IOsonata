@@ -234,6 +234,10 @@ protected:
 	~UsbClass() = default;
 };
 
+class UsbDeviceClass;
+typedef void (*UsbDescBuild_t)(const UsbDeviceClass *pClass,
+									 uint8_t *pDesc, UsbSpeed_t Speed);
+
 /// Base for a class implemented by the local USB device.
 class UsbDeviceClass : public UsbClass {
 public:
@@ -267,12 +271,13 @@ public:
 	uint8_t InterfaceCount(void) const { return vInterfaceCount; }
 	uint16_t EpInMask(void) const { return vEpInMask; }
 	uint16_t EpOutMask(void) const { return vEpOutMask; }
-	const uint8_t *Descriptor(UsbSpeed_t Speed) const {
-		return Speed == USB_SPEED_HIGH ? vHsDescriptor : vFsDescriptor;
-	}
-	uint16_t DescriptorLength(UsbSpeed_t Speed) const {
-		return Speed == USB_SPEED_HIGH ? vHsDescriptorLength :
-			vFsDescriptorLength;
+	const uint8_t *Descriptor(void) const { return vDescTemplate; }
+	uint16_t DescriptorLength(void) const { return vDescLength; }
+	void BuildDescriptor(uint8_t *pDesc, UsbSpeed_t Speed) const {
+		if (vDescBuild != nullptr)
+		{
+			vDescBuild(this, pDesc, Speed);
+		}
 	}
 
 protected:
@@ -283,20 +288,17 @@ private:
 	friend bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
 								 uint8_t FirstInterface, uint8_t InterfaceCount,
 								 uint16_t EpInMask, uint16_t EpOutMask);
-	friend bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
-									 const void *pFsDescriptor,
-									 uint16_t FsDescriptorLength,
-									 const void *pHsDescriptor,
-									 uint16_t HsDescriptorLength);
+	friend bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
+								 const void *pTemplate, uint16_t Length,
+								 UsbDescBuild_t Build);
 
 	uint8_t vFirstInterface = 0;
 	uint8_t vInterfaceCount = 0;
 	uint16_t vEpInMask = 0;
 	uint16_t vEpOutMask = 0;
-	const uint8_t *vFsDescriptor = nullptr;
-	const uint8_t *vHsDescriptor = nullptr;
-	uint16_t vFsDescriptorLength = 0;
-	uint16_t vHsDescriptorLength = 0;
+	uint16_t vDescLength = 0;
+	const uint8_t *vDescTemplate = nullptr;
+	UsbDescBuild_t vDescBuild = nullptr;
 };
 
 /// Base for a class driver used by the local USB host.
@@ -311,15 +313,13 @@ bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
 					  uint8_t FirstInterface, uint8_t InterfaceCount,
 					  uint16_t EpInMask, uint16_t EpOutMask);
 
-/// Register the static configuration descriptor fragment owned by pClass.
-/// Full-speed data is required. High-speed data is required only on a
-/// high-speed-capable controller. The generic layer supplies the configuration
-/// descriptor header and concatenates fragments in class registration order.
-bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
-						   const void *pFsDescriptor,
-						   uint16_t FsDescriptorLength,
-						   const void *pHsDescriptor = nullptr,
-						   uint16_t HsDescriptorLength = 0);
+/// Register one configuration-descriptor fragment.
+/// pTemplate != NULL, Build == NULL: immutable descriptor.
+/// pTemplate != NULL, Build != NULL: copy template then patch variable fields.
+/// pTemplate == NULL, Build != NULL: generate directly in the core buffer.
+bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
+					 const void *pTemplate, uint16_t Length,
+					 UsbDescBuild_t Build);
 #endif
 
 /** @} End of group USB */

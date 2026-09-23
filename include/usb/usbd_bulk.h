@@ -113,8 +113,6 @@ typedef struct __Usbd_Bulk_Dev {
 	uint8_t InterfaceString;
 	uint16_t FsMps;
 	uint16_t HsMps;
-	UsbdBulkDesc_t FsDesc;
-	UsbdBulkDesc_t HsDesc;
 	uint32_t RxTransfer[(USBD_BULK_MAX_MPS + sizeof(uint32_t) - 1U) /
 						 sizeof(uint32_t)];
 } UsbdBulkDev_t;
@@ -156,6 +154,7 @@ public:
 
 	using UsbIntrf::operator DevIntrf_t *;
 	operator UsbdBulkDev_t * () { return &vUsbdBulk; }
+	operator const UsbdBulkDev_t * () const { return &vUsbdBulk; }
 
 	bool Init(const UsbdBulkCfg_t &Cfg);
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
