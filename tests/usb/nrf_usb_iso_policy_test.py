@@ -73,7 +73,9 @@ assert "TASKS_STARTISOOUT" in start_iso
 assert "USB_CTRLR_EVT_SOF" in handle_sof
 assert "UsbDevProcessEvent(0, &evt)" in handle_sof
 assert "nRFUsbdIso" not in handle_sof
-assert "if (s_Usbd.SofEnabled)" not in handle_sof
+assert "if (s_Usbd.SofEnabled)" in handle_sof
+assert "nRFUsbdSofAcquire" not in handle_sof
+assert "nRFUsbdSofRelease" not in handle_sof
 
 assert "case USB_CTRLR_EVT_SOF:" in process
 assert "UsbCtrlrEpProcessEvent" in process

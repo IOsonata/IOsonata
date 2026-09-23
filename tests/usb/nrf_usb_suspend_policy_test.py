@@ -43,5 +43,8 @@ assert "CFifoPeek(s_Usbd.hQue)" not in enter_low_power, (
 assert "nRFUsbdHostResumeDetected();" in sof, (
     "SOF handling must retain the anomaly-211 host-resume recovery path"
 )
+assert "nRFUsbdSofRelease();" not in sof, (
+    "SOF processing must not change SOF interrupt-enable ownership"
+)
 
 print("nrf_usb_suspend_policy_test: PASS")

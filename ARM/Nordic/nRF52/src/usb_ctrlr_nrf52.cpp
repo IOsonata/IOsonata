@@ -925,12 +925,13 @@ static void nRFUsbdHandleSof(void)
 {
 	nRFUsbdHostResumeDetected();
 
-	UsbCtrlrEvt_t evt;
-	evt.Type = USB_CTRLR_EVT_SOF;
-	evt.FrameNo = (uint16_t)NRF_USBD->FRAMECNTR;
-	UsbDevProcessEvent(0, &evt);
-
-	nRFUsbdSofRelease();
+	if (s_Usbd.SofEnabled)
+	{
+		UsbCtrlrEvt_t evt;
+		evt.Type = USB_CTRLR_EVT_SOF;
+		evt.FrameNo = (uint16_t)NRF_USBD->FRAMECNTR;
+		UsbDevProcessEvent(0, &evt);
+	}
 }
 
 static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
