@@ -328,48 +328,34 @@ static void IsoProcess(void)
 	}
 }
 
-static constexpr IsoFunctionDesc_t IsoFunctionDescTemplate(void)
-{
-	IsoFunctionDesc_t desc = {};
-	desc.Alt0.bLength = sizeof(desc.Alt0);
-	desc.Alt0.bDescriptorType = USB_DESCTYPE_INTERFACE;
-	desc.Alt0.bInterfaceClass = USB_INTRFCLASS_VENDOR;
-	desc.Alt0.iInterface = ISO_STR_INTERFACE;
-
-	for (unsigned i = 0U; i < ISO_ALT_COUNT; i++)
-	{
-		IsoAltDesc_t &alt = desc.Alt[i];
-		alt.Interface = desc.Alt0;
-		alt.Interface.bAlternateSetting = (uint8_t)(i + 1U);
-		alt.Interface.bNumEndpoints = 2U;
-		alt.Out.bLength = sizeof(alt.Out);
-		alt.Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-		alt.Out.bmAttributes = USB_ENDPATT_TRANS_ISO;
-		alt.Out.wMaxPacketSize = s_IsoMps[i];
-		alt.In = alt.Out;
-	}
-	return desc;
-}
-
-static constexpr IsoFunctionDesc_t s_IsoFunctionDesc =
-	IsoFunctionDescTemplate();
-
 static void IsoPatchFunctionDesc(const UsbDeviceClass *, uint8_t *pData,
 								 UsbSpeed_t Speed)
 {
 	IsoFunctionDesc_t *pDesc =
 		reinterpret_cast<IsoFunctionDesc_t *>(pData);
-	const uint8_t interval = Speed == USB_SPEED_HIGH ? 4U : 1U;
+	memset(pDesc, 0, sizeof(*pDesc));
 
+	pDesc->Alt0.bLength = sizeof(pDesc->Alt0);
+	pDesc->Alt0.bDescriptorType = USB_DESCTYPE_INTERFACE;
 	pDesc->Alt0.bInterfaceNumber = s_InterfaceNo;
+	pDesc->Alt0.bInterfaceClass = USB_INTRFCLASS_VENDOR;
+	pDesc->Alt0.iInterface = ISO_STR_INTERFACE;
+
+	const uint8_t interval = Speed == USB_SPEED_HIGH ? 4U : 1U;
 	for (unsigned i = 0U; i < ISO_ALT_COUNT; i++)
 	{
 		IsoAltDesc_t &alt = pDesc->Alt[i];
-		alt.Interface.bInterfaceNumber = s_InterfaceNo;
+		alt.Interface = pDesc->Alt0;
+		alt.Interface.bAlternateSetting = (uint8_t)(i + 1U);
+		alt.Interface.bNumEndpoints = 2U;
+		alt.Out.bLength = sizeof(alt.Out);
+		alt.Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
 		alt.Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_EpNo);
+		alt.Out.bmAttributes = USB_ENDPATT_TRANS_ISO;
+		alt.Out.wMaxPacketSize = s_IsoMps[i];
 		alt.Out.bInterval = interval;
+		alt.In = alt.Out;
 		alt.In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_EpNo);
-		alt.In.bInterval = interval;
 	}
 }
 
@@ -423,7 +409,7 @@ static bool IsoRegisterFunction(void)
 	s_InterfaceNo = alloc.FirstInterface;
 	s_EpNo = epNo;
 	return UsbDescriptorRegisterTemplate(USB_DEVNO, &s_Class,
-		&s_IsoFunctionDesc, sizeof(s_IsoFunctionDesc), IsoPatchFunctionDesc);
+		nullptr, sizeof(IsoFunctionDesc_t), IsoPatchFunctionDesc);
 }
 
 static const UsbCfg_t s_UsbCfg = {
