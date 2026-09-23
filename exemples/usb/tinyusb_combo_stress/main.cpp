@@ -587,8 +587,8 @@ static bool IsoDriverXfer(uint8_t RhPort, uint8_t EpAddr,
 			s_Iso.Diag.RxMissCnt++;
 		}
 
-		(void)IsoArmOut();
 		IsoKickIn();
+		(void)IsoArmOut();
 		return true;
 	}
 
