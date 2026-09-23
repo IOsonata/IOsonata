@@ -91,10 +91,16 @@ through `UsbClassRegister()`. The core has no device-class callback
 registration API or callback adapter.
 
 Device, configuration, qualifier and string descriptors are assembled by the
-procedural generic layer. Each registered class owns static full-speed and,
-when supported, high-speed configuration fragments and registers them through
-`UsbDescriptorRegister()`. Applications provide identity and strings in
-`UsbCfg_t`; they do not provide descriptor callbacks or descriptor contexts.
+procedural generic layer. Device classes register one configuration fragment
+through `UsbDescRegister()`. The descriptor manager supports three forms:
+an immutable fragment, a shared const template plus a build/patch function, or
+a generated fragment built directly in the core configuration buffer. The same
+builder receives the negotiated speed, so classes do not keep duplicate
+full-speed and high-speed descriptor buffers in RAM. Descriptor metadata remains
+one record per registered `UsbDeviceClass`; it does not scale with the USB
+interface-number space. `UsbDescriptorRegister()` remains only as a
+compatibility path for callers that already own separate immutable FS/HS
+fragments. Applications provide identity and strings in `UsbCfg_t`.
 
 The `UsbdCdc` object derives from both `UsbDeviceClass` and `UsbIntrf`.
 Its control requests, configuration selection, reset and deferred pump run
