@@ -111,8 +111,6 @@ static uint32_t s_LoopbackDropCnt;
 static uint16_t s_LastRxLength;
 static uint16_t s_LastTxLength;
 
-static IntFunctionDesc_t s_FsFunctionDesc;
-static IntFunctionDesc_t s_HsFunctionDesc;
 static IntDiag_t s_DiagReply;
 
 static void IntClearDiag(void)
@@ -293,38 +291,46 @@ static void IntProcess(void)
 	}
 }
 
-static bool IntBuildFunctionDesc(IntFunctionDesc_t *pDesc)
+static constexpr IntFunctionDesc_t IntFunctionDescTemplate(void)
 {
-	if (pDesc == nullptr || s_EpNo == 0U)
-	{
-		return false;
-	}
+	IntFunctionDesc_t desc = {};
+	desc.Alt0.bLength = sizeof(desc.Alt0);
+	desc.Alt0.bDescriptorType = USB_DESCTYPE_INTERFACE;
+	desc.Alt0.bInterfaceClass = USB_INTRFCLASS_VENDOR;
+	desc.Alt0.iInterface = INT_STR_INTERFACE;
 
-	memset(pDesc, 0, sizeof(*pDesc));
-	pDesc->Alt0.bLength = sizeof(pDesc->Alt0);
-	pDesc->Alt0.bDescriptorType = USB_DESCTYPE_INTERFACE;
+	for (unsigned i = 0U; i < INT_ALT_COUNT; i++)
+	{
+		IntAltDesc_t &alt = desc.Alt[i];
+		alt.Interface = desc.Alt0;
+		alt.Interface.bAlternateSetting = (uint8_t)(i + 1U);
+		alt.Interface.bNumEndpoints = 2U;
+		alt.Out.bLength = sizeof(alt.Out);
+		alt.Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
+		alt.Out.bmAttributes = USB_ENDPATT_TRANS_INT;
+		alt.Out.wMaxPacketSize = INT_MPS;
+		alt.Out.bInterval = s_IntIntervals[i];
+		alt.In = alt.Out;
+	}
+	return desc;
+}
+
+static constexpr IntFunctionDesc_t s_IntFunctionDesc =
+	IntFunctionDescTemplate();
+
+static void IntPatchFunctionDesc(const UsbDeviceClass *, uint8_t *pData,
+								 UsbSpeed_t)
+{
+	IntFunctionDesc_t *pDesc =
+		reinterpret_cast<IntFunctionDesc_t *>(pData);
 	pDesc->Alt0.bInterfaceNumber = s_InterfaceNo;
-	pDesc->Alt0.bAlternateSetting = 0U;
-	pDesc->Alt0.bNumEndpoints = 0U;
-	pDesc->Alt0.bInterfaceClass = USB_INTRFCLASS_VENDOR;
-	pDesc->Alt0.iInterface = INT_STR_INTERFACE;
-
-	for (uint8_t i = 0U; i < INT_ALT_COUNT; i++)
+	for (unsigned i = 0U; i < INT_ALT_COUNT; i++)
 	{
-		IntAltDesc_t *pAlt = &pDesc->Alt[i];
-		pAlt->Interface = pDesc->Alt0;
-		pAlt->Interface.bAlternateSetting = (uint8_t)(i + 1U);
-		pAlt->Interface.bNumEndpoints = 2U;
-		pAlt->Out.bLength = sizeof(pAlt->Out);
-		pAlt->Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-		pAlt->Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_EpNo);
-		pAlt->Out.bmAttributes = USB_ENDPATT_TRANS_INT;
-		pAlt->Out.wMaxPacketSize = INT_MPS;
-		pAlt->Out.bInterval = s_IntIntervals[i];
-		pAlt->In = pAlt->Out;
-		pAlt->In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_EpNo);
+		IntAltDesc_t &alt = pDesc->Alt[i];
+		alt.Interface.bInterfaceNumber = s_InterfaceNo;
+		alt.Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_EpNo);
+		alt.In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_EpNo);
 	}
-	return true;
 }
 
 static bool IntRegisterFunction(void)
@@ -358,23 +364,8 @@ static bool IntRegisterFunction(void)
 
 	s_InterfaceNo = alloc.FirstInterface;
 	s_EpNo = alloc.Bidirectional[0];
-	if (!IntBuildFunctionDesc(&s_FsFunctionDesc))
-	{
-		return false;
-	}
-	const void *pHsDesc = nullptr;
-	uint16_t hsDescLength = 0U;
-	if (USB_HIGHSPEED_CAPABLE(USB_DEVNO))
-	{
-		if (!IntBuildFunctionDesc(&s_HsFunctionDesc))
-		{
-			return false;
-		}
-		pHsDesc = &s_HsFunctionDesc;
-		hsDescLength = sizeof(s_HsFunctionDesc);
-	}
-	return UsbDescriptorRegister(USB_DEVNO, &s_Class,
-		&s_FsFunctionDesc, sizeof(s_FsFunctionDesc), pHsDesc, hsDescLength);
+	return UsbDescriptorRegisterTemplate(USB_DEVNO, &s_Class,
+		&s_IntFunctionDesc, sizeof(s_IntFunctionDesc), IntPatchFunctionDesc);
 }
 
 static const UsbCfg_t s_UsbCfg = {
