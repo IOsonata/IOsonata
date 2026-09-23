@@ -122,12 +122,10 @@ void nRFUsbdResumeQueuedDmaLocked();
 void nRFUsbdDmaWait();
 bool productionEpSend(int,uint8_t,uint8_t*,uint16_t);
 bool UsbCtrlrEpInXfer(int,uint8_t,uint16_t);
-bool UsbCtrlrEpOutXfer(int,uint8_t,uint16_t);
 void UsbDevProcessEvent(int,const UsbCtrlrEvt_t *evt){
  if(evt->Type==USB_CTRLR_EVT_SOF &&
     !(s_Usbd.Flags&USBD_FLAG_SUSPENDED)){
   (void)UsbCtrlrEpInXfer(0,8,512);
-  (void)UsbCtrlrEpOutXfer(0,8,512);
  }
 }
 '''
@@ -135,7 +133,7 @@ names = [
          'nRFUsbGetEpReg','nRFUsbEpRegisteredEvent','nRFUsbdDmaActive','nRFUsbdDmaLock','nRFUsbdDmaUnlock',
          'nRFUsbdDmaStartLocked','nRFUsbdEpHwEnable','nRFUsbdSofRelease',
          'nRFIsoHwEnable','nRFUsbdIsoStart',
-         'UsbCtrlrEpInXfer','UsbCtrlrEpOutXfer','nRFUsbdFinishIsoDma',
+         'UsbCtrlrEpInXfer','nRFUsbdFinishIsoDma',
          'nRFUsbdIsoFinishDma',
          'nRFUsbdIsoEpClose','UsbCtrlrEpClose','nRFUsbdHandleSof',
          'UsbCtrlrEpClearStall']

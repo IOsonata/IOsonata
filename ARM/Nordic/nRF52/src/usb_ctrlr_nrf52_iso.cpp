@@ -138,41 +138,6 @@ bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length)
 	return true;
 }
 
-bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length)
-{
-	(void)DevNo;
-	if (EpNum != NRFX_USBD_ISO_EP_NO || !s_Usbd.IsoOpen ||
-		(s_Usbd.IsoBusy & NRFUSBD_ISO_OUT_BUSY) != 0U)
-		return false;
-
-	const uint32_t size = NRF_USBD->SIZE.ISOOUT;
-	if (size == 0U)
-		return false;
-
-	const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
-		0U : (uint16_t)size;
-	nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
-	if (len > Length || len > pReg->MaxPacketSize)
-		return false;
-
-	if (pReg->pBuffer == NULL && pReg->bBlocking)
-		nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, 0U,
-			USB_CTRLR_EVT_DRDY, 0U);
-
-	const uint32_t state = DisableInterrupt();
-	if (pReg->pBuffer == NULL || pReg->Handler == NULL)
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-
-	s_Usbd.IsoDmaLen[0] = (int16_t)len;
-	s_Usbd.IsoBusy |= NRFUSBD_ISO_OUT_BUSY;
-	nRFUsbdResumeQueuedDmaLocked();
-	EnableInterrupt(state);
-	return true;
-}
-
 static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 {
 	volatile uint32_t *pEnd = In ?

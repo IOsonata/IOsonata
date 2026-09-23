@@ -88,7 +88,6 @@ typedef struct {
 	int RemoteWakeCnt;
 	int SofEnableCnt;
 	int IsoInXferCnt;
-	int IsoOutXferCnt;
 	int SetAddressCnt;
 	int CloseAllCnt;
 	int StallCnt;
@@ -98,7 +97,6 @@ typedef struct {
 	uint8_t LastClearStallEp;
 	bool SofEnabled;
 	uint16_t LastIsoInLength;
-	uint16_t LastIsoOutLength;
 } CtrlrState_t;
 
 typedef struct {
@@ -1064,12 +1062,6 @@ extern "C" void UsbCtrlrEpProcessEvent(int, uint8_t EpNo, bool bIn,
 	}
 }
 extern "C" bool UsbCtrlrEpSend(int, uint8_t, uint8_t *, uint16_t) { return true; }
-extern "C" bool UsbCtrlrEpOutXfer(int, uint8_t, uint16_t Length)
-{
-	s_Ctrlr.IsoOutXferCnt++;
-	s_Ctrlr.LastIsoOutLength = Length;
-	return true;
-}
 extern "C" bool UsbCtrlrEpInXfer(int, uint8_t, uint16_t Length)
 {
 	s_Ctrlr.IsoInXferCnt++;

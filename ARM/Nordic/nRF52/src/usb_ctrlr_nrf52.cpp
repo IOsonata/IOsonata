@@ -176,11 +176,6 @@ __attribute__((weak)) void nRFUsbdIsoEpClose(bool)
 {
 }
 
-__attribute__((weak)) bool UsbCtrlrEpOutXfer(int, uint8_t, uint16_t)
-{
-	return false;
-}
-
 __attribute__((weak)) bool UsbCtrlrEpInXfer(int, uint8_t, uint16_t)
 {
 	return false;

@@ -18,7 +18,6 @@ static uint8_t s_InData[USB_ISO_INTRF_MAX_MPS];
 static UsbEndPointDesc_t s_Open[4];
 static int s_OpenCount;
 static int s_CloseCount;
-static int s_OutXferCount;
 static int s_InXferCount;
 static bool s_XferOk = true;
 
@@ -88,11 +87,6 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	if (Length > 0U) memcpy(s_InData, pBuffer, Length);
 	return true;
 }
-bool UsbCtrlrEpOutXfer(int, uint8_t, uint16_t)
-{
-	s_OutXferCount++;
-	return true;
-}
 bool UsbCtrlrEpInXfer(int, uint8_t, uint16_t)
 {
 	s_InXferCount++;
@@ -149,7 +143,6 @@ static void ResetFake(void)
 	memset(s_LastRx, 0, sizeof(s_LastRx));
 	s_OpenCount = 0;
 	s_CloseCount = 0;
-	s_OutXferCount = 0;
 	s_InXferCount = 0;
 	s_XferOk = true;
 	s_RxCount = 0;
@@ -211,7 +204,6 @@ static void TestLifecycle(void)
 	CHECK(iso.pData->pRxDirectBuffer != nullptr);
 	CHECK(iso.pData->pTxDirectBuffer != nullptr);
 	CHECK(!s_OutBlocking);
-	CHECK(s_OutXferCount == 0);
 
 	CHECK(UsbIsoIntrfOpen(&iso, 25U, 1U));
 	CHECK(iso.Opened && iso.Mps == 25U && iso.Interval == 1U);
@@ -242,17 +234,14 @@ static void TestRx(void)
 	CHECK(s_LastRxResult == USB_CTRLR_XFER_SUCCESS);
 	CHECK(memcmp(s_LastRx, data, sizeof(data)) == 0);
 	CHECK(!((iso.pData->pRxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) != 0U));
-	CHECK(s_OutXferCount == 0);
 
 	Receive(nullptr, 0U);
 	CHECK(s_RxCount == 2 && iso.RxEmptyCnt == 1U);
-	CHECK(s_OutXferCount == 0);
 
 	Receive(nullptr, 0U, USB_CTRLR_EVT_XFER_FAILED);
 	CHECK(s_RxCount == 3);
 	CHECK(s_LastRxResult == USB_CTRLR_XFER_FAILED);
 	CHECK(iso.RxMissCnt == 1U);
-	CHECK(s_OutXferCount == 0);
 }
 
 static void TestTx(void)

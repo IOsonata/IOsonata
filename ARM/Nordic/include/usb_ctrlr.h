@@ -246,8 +246,7 @@ void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 // pBuffer supplies the DMA source and remains owned until the completion callback.
 // It may be NULL only for a zero-length transfer.
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
-// Core-owned service opportunity. Endpoint number and direction stay separate.
-bool UsbCtrlrEpOutXfer(int DevNo, uint8_t EpNum, uint16_t Length);
+// Core-owned ISO IN service opportunity.
 bool UsbCtrlrEpInXfer(int DevNo, uint8_t EpNum, uint16_t Length);
 // IN returns bytes copied into the queue; completion notifies that it drained.
 // A zero-length send queues a data ZLP; negative means it was not accepted.
