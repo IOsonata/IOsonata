@@ -641,6 +641,20 @@ void dcd_int_handler(uint8_t rhport) {
                             xfer->actual_len, XFER_RESULT_SUCCESS, true);
   }
 
+  // Retire ISO OUT before SOF as well. If ENDISOOUT and the next SOF are
+  // latched together, the class must consume/re-arm the previous frame before
+  // SOF is allowed to schedule another EP8 OUT DMA.
+  if (int_status & USBD_INTEN_ENDISOOUT_Msk) {
+    xfer_td_t* xfer = get_td(EP_ISO_NUM, TUSB_DIR_OUT);
+    uint16_t const xact_len = (uint16_t) NRF_USBD->ISOOUT.AMOUNT;
+
+    xfer->actual_len = xact_len;
+    xfer->total_len = xact_len;
+    xfer->started = false;
+    dcd_event_xfer_complete(0, EP_ISO_NUM,
+                            xact_len, XFER_RESULT_SUCCESS, true);
+  }
+
   if (int_status & USBD_INTEN_SOF_Msk) {
     bool iso_enabled = false;
 
@@ -767,7 +781,7 @@ void dcd_int_handler(uint8_t rhport) {
    * len if Host decides to sent fewer bytes, it this case transaction is also
    * complete and next transfer is not initiated here like for CBI.
    */
-  for (uint8_t epnum = 0; epnum < EP_CBI_COUNT + 1; epnum++) {
+  for (uint8_t epnum = 0; epnum < EP_CBI_COUNT; epnum++) {
     if (tu_bit_test(int_status, USBD_INTEN_ENDEPOUT0_Pos + epnum)) {
       xfer_td_t* xfer = get_td(epnum, TUSB_DIR_OUT);
       uint16_t const xact_len = (epnum == EP_ISO_NUM) ?
