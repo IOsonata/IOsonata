@@ -70,7 +70,7 @@
 		<link>
 			<name>src/dcd_nrf5x.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb/src/portable/nordic/nrf5x/dcd_nrf5x.c</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/tinyusb_combo_stress/dcd_nrf5x.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

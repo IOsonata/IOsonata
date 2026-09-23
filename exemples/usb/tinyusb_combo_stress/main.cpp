@@ -456,12 +456,6 @@ static bool IsoSetAlt(uint8_t Alt)
 		return false;
 	}
 
-	// nRF52 otherwise reports an ISO IN error when no payload has been staged
-	// for a service interval. The IOsonata controller uses the same hardware
-	// setting so idle slots are successful zero-data responses.
-	NRF_USBD->ISOINCONFIG =
-		USBD_ISOINCONFIG_RESPONSE_ZeroData << USBD_ISOINCONFIG_RESPONSE_Pos;
-
 	s_Iso.pOutDesc = out;
 	s_Iso.pInDesc = in;
 	s_Iso.Alt = Alt;
