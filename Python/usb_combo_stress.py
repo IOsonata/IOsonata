@@ -139,6 +139,7 @@ class Stats:
         self.loop_errors = 0
         self.prbs_errors = 0
         self.target_errors = 0
+        self.path_errors = {"hid": 0, "int": 0, "iso": 0}
         self.failure = None
 
     def add(self, name, count, errors=0, target_errors=0):
@@ -153,6 +154,9 @@ class Stats:
 
     def fail(self, name, error):
         with self.lock:
+            key = name.lower()
+            if key in self.path_errors:
+                self.path_errors[key] += 1
             if self.failure is None:
                 self.failure = f"{name}: {error}"
 
@@ -164,6 +168,7 @@ class Stats:
                 self.loop_errors,
                 self.prbs_errors,
                 self.target_errors,
+                dict(self.path_errors),
                 self.failure,
             )
 
@@ -561,7 +566,7 @@ def main():
         while not stop.is_set() and time.monotonic() - test_start < args.duration:
             time.sleep(0.02)
             now = time.monotonic()
-            count, last, loop_errors, prbs_errors, target_errors, failure = (
+            count, last, loop_errors, prbs_errors, target_errors, path_errors, failure = (
                 stats.snapshot()
             )
 
@@ -586,7 +591,8 @@ def main():
                 report_start = now
                 print(
                     "CDC loop %.0f/%.0f B/s err %d | PRBS %.0f B/s err %d/%d | "
-                    "HID %.0f B/s | INT %.0f B/s | ISO %.0f B/s"
+                    "HID %.0f B/s err %d | INT %.0f B/s err %d | "
+                    "ISO %.0f B/s err %d"
                     % (
                         rates["loop_tx"],
                         rates["loop_rx"],
@@ -595,8 +601,11 @@ def main():
                         prbs_errors,
                         target_errors,
                         rates["hid"],
+                        path_errors["hid"],
                         rates["int"],
+                        path_errors["int"],
                         rates["iso"],
+                        path_errors["iso"],
                     ),
                     flush=True,
                 )
@@ -605,7 +614,7 @@ def main():
         for worker in workers:
             worker.join(timeout=2.0)
 
-        count, _, loop_errors, prbs_errors, target_errors, failure = (
+        count, _, loop_errors, prbs_errors, target_errors, path_errors, failure = (
             stats.snapshot()
         )
         pending = count["loop_tx"] - count["loop_rx"]
@@ -619,8 +628,11 @@ def main():
         print(f"PRBS errors     : {prbs_errors}")
         print(f"Target RX errors: {target_errors}")
         print(f"HID bytes       : {count['hid']}")
+        print(f"HID errors      : {path_errors['hid']}")
         print(f"INT bytes       : {count['int']}")
+        print(f"INT errors      : {path_errors['int']}")
         print(f"ISO bytes       : {count['iso']}")
+        print(f"ISO errors      : {path_errors['iso']}")
         if failure is not None:
             print(f"Failure         : {failure}")
 
@@ -629,6 +641,7 @@ def main():
             and loop_errors == 0
             and prbs_errors == 0
             and target_errors == 0
+            and all(value == 0 for value in path_errors.values())
             and pending >= 0
             and count["loop_rx"] > 0
             and count["prbs_rx"] > 0
