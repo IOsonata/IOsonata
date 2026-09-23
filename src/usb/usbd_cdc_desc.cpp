@@ -82,23 +82,11 @@ static constexpr UsbdCdcDesc_t UsbdCdcDescTemplate(void)
 	return desc;
 }
 
-static constexpr UsbdCdcDesc_t s_CdcDescTemplate = UsbdCdcDescTemplate();
+extern const UsbdCdcDesc_t g_UsbdCdcDescTemplate = UsbdCdcDescTemplate();
 
-// Weak so an application can replace runtime fragment building with a static
-// fragment. When overridden, this default is dropped by unused-section removal.
-// Pair a replacement here with a strong UsbGetDescriptor when building fully
-// static descriptors, otherwise the assembled configuration will not match.
-__attribute__((weak))
-bool UsbdCdcMakeDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
+void UsbdCdcPatchDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
 					 UsbSpeed_t Speed, bool HasFunctionString)
 {
-	if (pDesc == nullptr || pCdc == nullptr || pCdc->CtrlIfNo > 14U ||
-		pCdc->NotifyEpNo == 0U || pCdc->NotifyEpNo > 15U ||
-		pCdc->DataEpNo == 0U || pCdc->DataEpNo > 15U)
-	{
-		return false;
-	}
-
 	const uint8_t control = pCdc->CtrlIfNo;
 	const uint8_t data = (uint8_t)(control + 1U);
 	const uint16_t bulkMps = Speed == USB_SPEED_HIGH ?
@@ -106,8 +94,6 @@ bool UsbdCdcMakeDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
 	const uint8_t interval = Speed == USB_SPEED_HIGH ?
 		USBD_CDC_NOTIF_INTERVAL_HS : USBD_CDC_NOTIF_INTERVAL_FS;
 	const uint8_t stringIndex = HasFunctionString ? 4U : 0U;
-
-	memcpy(pDesc, &s_CdcDescTemplate, sizeof(*pDesc));
 
 	pDesc->Association.bFirstInterface = control;
 	pDesc->Association.iFunction = stringIndex;
@@ -123,5 +109,22 @@ bool UsbdCdcMakeDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
 	pDesc->Out.wMaxPacketSize = bulkMps;
 	pDesc->In.bEndpointAddress = USB_ENDPADDR_DIRIN(pCdc->DataEpNo);
 	pDesc->In.wMaxPacketSize = bulkMps;
+}
+
+// Weak so an application can replace runtime fragment building with a static
+// fragment. When overridden, this default is dropped by unused-section removal.
+// Pair a replacement here with a strong UsbGetDescriptor when building fully
+// static descriptors, otherwise the assembled configuration will not match.
+__attribute__((weak))
+bool UsbdCdcMakeDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
+					 UsbSpeed_t Speed, bool HasFunctionString)
+{
+	if (pDesc == nullptr || pCdc == nullptr)
+	{
+		return false;
+	}
+
+	memcpy(pDesc, &g_UsbdCdcDescTemplate, sizeof(*pDesc));
+	UsbdCdcPatchDesc(pDesc, pCdc, Speed, HasFunctionString);
 	return true;
 }
