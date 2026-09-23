@@ -330,7 +330,7 @@ static const uint8_t *UsbDescConfiguration(int DevNo, uint8_t Index,
 		{
 			memcpy(&s_Core.ConfigDesc[offset], pFragment, fragmentLength);
 		}
-		pClass->PatchDescriptor(&s_Core.ConfigDesc[offset], Speed);
+		pClass->BuildDescriptor(&s_Core.ConfigDesc[offset], Speed);
 		offset = (uint16_t)(offset + fragmentLength);
 
 		const uint8_t last = (uint8_t)(pClass->FirstInterface() +
@@ -1890,13 +1890,12 @@ bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
 	return true;
 }
 
-bool UsbDescriptorRegisterTemplate(int DevNo, UsbDeviceClass *pClass,
-								   const void *pDescriptor,
-								   uint16_t DescriptorLength,
-								   UsbDescriptorPatch_t Patch)
+bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
+					 const void *pTemplate, uint16_t Length,
+					 UsbDescBuild_t Build)
 {
 	if (DevNo != s_Core.DevNo || pClass == nullptr || s_Core.Started ||
-		DescriptorLength == 0U || Patch == nullptr)
+		Length == 0U || (pTemplate == nullptr && Build == nullptr))
 	{
 		return false;
 	}
@@ -1911,14 +1910,14 @@ bool UsbDescriptorRegisterTemplate(int DevNo, UsbDeviceClass *pClass,
 		}
 	}
 	if (!registered || pClass->vFsDescriptor != nullptr ||
-		pClass->vDescriptor.Patch != nullptr)
+		pClass->vDescriptor.Build != nullptr)
 	{
 		return false;
 	}
 
-	pClass->vFsDescriptor = static_cast<const uint8_t *>(pDescriptor);
-	pClass->vDescriptor.Patch = Patch;
-	pClass->vFsDescriptorLength = DescriptorLength;
+	pClass->vFsDescriptor = static_cast<const uint8_t *>(pTemplate);
+	pClass->vDescriptor.Build = Build;
+	pClass->vFsDescriptorLength = Length;
 	pClass->vHsDescriptorLength = 0U;
 	return true;
 }
