@@ -1094,7 +1094,16 @@ extern "C" void USBD_IRQHandler(void)
 
 	if (startDma)
 	{
-		// Restart before EPDATA/SOF work; SETUP and bus events take precedence.
+		// Like EP0 readiness, ISO frame work must be visible before the
+		// retained EasyDMA channel is handed to the next transfer.
+		if (s_Usbd.IsoOpen && NRF_USBD->EVENTS_SOF != 0U)
+		{
+			NRF_USBD->EVENTS_SOF = 0U;
+			(void)NRF_USBD->EVENTS_SOF;
+			nRFUsbdHandleSof();
+		}
+
+		// SETUP and bus events still take precedence over starting a new DMA.
 		if ((NRF_USBD->EVENTS_EP0SETUP | NRF_USBD->EVENTS_USBEVENT) == 0U &&
 			nRFUsbdDmaAllowed())
 		{

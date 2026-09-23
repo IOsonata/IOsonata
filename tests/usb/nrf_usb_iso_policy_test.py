@@ -76,6 +76,13 @@ assert "nRFUsbdIsoFinishDma(dmastatus)" in interrupt
 assert "nRFUsbdIsoSof();" in handle_sof
 assert "nRFUsbdIsoService" not in base
 assert "nRFUsbdResumeQueuedDmaLocked();" in handle_sof
+# A latched ISO SOF is consumed before the retained ENDEP handoff chooses
+# another transfer, matching EP0's handoff priority without another state flag.
+start_handoff = interrupt.index("if (startDma)")
+early_sof = interrupt.index("if (s_Usbd.IsoOpen && NRF_USBD->EVENTS_SOF != 0U)",
+                            start_handoff)
+start_next = interrupt.index("nRFUsbdStartQueuedDma();", early_sof)
+assert start_handoff < early_sof < start_next
 # Regular entries stay queued until DMA retirement, so the scheduler peeks
 # the regular queue; ISO still runs before it and after EP0.
 assert queued.index("nRFUsbdIsoStart()") < queued.index("CFifoPeek(s_Usbd.hQue)")

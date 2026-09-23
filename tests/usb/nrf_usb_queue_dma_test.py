@@ -742,8 +742,8 @@ int main(int argc,char **argv){
  }
  puts("PASS: public DMA submission holds exclusion and restores the caller's IRQ mask");
 
- // Restart an already queued transfer immediately after ENDEP, overlapping
- // it with EPDATA/SOF work. ISO becoming ready later waits for that DMA.
+ // A latched ISO SOF is published before the ENDEP handoff. ISO therefore
+ // wins the retained channel ahead of already queued regular endpoint work.
  init();
  assert(UsbCtrlrEpSend(0,1,data,9));
  assert(UsbCtrlrEpSend(0,2,data+64,9));
@@ -754,17 +754,15 @@ int main(int argc,char **argv){
  isoAtSof=true;regs.EVENTS_SOF=1;isoChecks=0;dmaLocks=dmaUnlocks=0;
  interrupt();
  assert(!dmaLocks && !dmaUnlocks);
- assert(isoChecks==1 && isoReady && regs.TASKS_STARTEPIN[2] && dmaBusy);
+ assert(isoChecks==1 && isoReady && !regs.TASKS_STARTEPIN[2] && dmaBusy);
  assert(!regs.TASKS_STARTEPOUT[3] && !regs.EPDATASTATUS.bits);
  assert(CFifoUsed(s_Usbd.hQue)==2 && !regs.EVENTS_SOF);
- retire(2,true);nRFUsbdResumeQueuedDmaLocked();
- assert(isoChecks==2 && !regs.TASKS_STARTEPOUT[3]);
  nRFUsbdDmaUnlock();isoReady=false;nRFUsbdResumeQueuedDmaLocked();
- assert(dmaBusy && regs.TASKS_STARTEPOUT[3]);
- puts("PASS: ENDEP restarts queued DMA before EPDATA/SOF; ready ISO wins the next handoff");
+ assert(dmaBusy && regs.TASKS_STARTEPIN[2]);
+ puts("PASS: latched SOF publishes ISO before ENDEP handoff; ISO wins over queued regular DMA");
 
- // ISO END shares the immediate handoff. A frame becoming ready later in
- // this ISR must not postpone an already queued regular transfer.
+ // ISO END retains the channel too. A simultaneously latched SOF must
+ // publish the new ISO frame before that channel can go to regular traffic.
  for(unsigned status:{0x100U,0x1000000U}){
   init();dmaBusy=0x82;
   s_Usbd.IsoOpen=true;
@@ -777,10 +775,10 @@ int main(int argc,char **argv){
   interrupt();
   assert(!dmaLocks && !dmaUnlocks);
   assert(!isoEnd && !regs.EPSTATUS.bits && !regs.EVENTS_SOF);
-  assert(isoChecks==1 && isoReady && regs.TASKS_STARTEPIN[2] && dmaBusy);
+  assert(isoChecks==1 && isoReady && !regs.TASKS_STARTEPIN[2] && dmaBusy);
   assert(CFifoUsed(s_Usbd.hQue)==1); // ISO did not dequeue regular data.
  }
- puts("PASS: ISO IN/OUT END immediately hands off DMA before SOF, without dequeuing regular data");
+ puts("PASS: ISO IN/OUT END publishes latched SOF before handing DMA to regular data");
 
  // A previously processed suspend/wake gate still applies when END arrives
  // later. Completion may drain low-power suspend, but must not bypass an
