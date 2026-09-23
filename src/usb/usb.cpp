@@ -318,8 +318,8 @@ static const uint8_t *UsbDescConfiguration(int DevNo, uint8_t Index,
 	{
 		const UsbDeviceClass *pClass =
 			static_cast<const UsbDeviceClass *>(s_Core.Object[i]);
-		const uint16_t fragmentLength = pClass->DescriptorLength(Speed);
-		const uint8_t *pFragment = pClass->Descriptor(Speed);
+		const uint16_t fragmentLength = pClass->DescriptorLength();
+		const uint8_t *pFragment = pClass->Descriptor();
 		if (fragmentLength == 0U ||
 			(uint32_t)offset + fragmentLength > sizeof(s_Core.ConfigDesc))
 		{
@@ -1839,54 +1839,9 @@ bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
 	pClass->vInterfaceCount = InterfaceCount;
 	pClass->vEpInMask = EpInMask;
 	pClass->vEpOutMask = EpOutMask;
-	pClass->vFsDescriptor = nullptr;
-	pClass->vDescriptor.Hs = nullptr;
-	pClass->vFsDescriptorLength = 0U;
-	pClass->vHsDescriptorLength = 0U;
-	return true;
-}
-
-bool UsbDescriptorRegister(int DevNo, UsbDeviceClass *pClass,
-						   const void *pFsDescriptor,
-						   uint16_t FsDescriptorLength,
-						   const void *pHsDescriptor,
-						   uint16_t HsDescriptorLength)
-{
-	if (DevNo != s_Core.DevNo || pClass == nullptr || s_Core.Started ||
-		pFsDescriptor == nullptr || FsDescriptorLength == 0U ||
-		(USB_HIGHSPEED_CAPABLE(DevNo) &&
-		 (pHsDescriptor == nullptr || HsDescriptorLength == 0U)))
-	{
-		return false;
-	}
-
-	bool registered = false;
-	for (int i = 0; i < s_Core.ObjectCnt; i++)
-	{
-		if (s_Core.Object[i] == pClass)
-		{
-			registered = true;
-			break;
-		}
-	}
-	if (!registered || pClass->vFsDescriptor != nullptr ||
-		pClass->vDescriptor.Hs != nullptr)
-	{
-		return false;
-	}
-
-	pClass->vFsDescriptor = static_cast<const uint8_t *>(pFsDescriptor);
-	pClass->vFsDescriptorLength = FsDescriptorLength;
-	if (USB_HIGHSPEED_CAPABLE(DevNo))
-	{
-		pClass->vDescriptor.Hs = static_cast<const uint8_t *>(pHsDescriptor);
-		pClass->vHsDescriptorLength = HsDescriptorLength;
-	}
-	else
-	{
-		pClass->vDescriptor.Hs = pClass->vFsDescriptor;
-		pClass->vHsDescriptorLength = pClass->vFsDescriptorLength;
-	}
+	pClass->vDescLength = 0U;
+	pClass->vDescTemplate = nullptr;
+	pClass->vDescBuild = nullptr;
 	return true;
 }
 
@@ -1909,16 +1864,14 @@ bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
 			break;
 		}
 	}
-	if (!registered || pClass->vFsDescriptor != nullptr ||
-		pClass->vDescriptor.Build != nullptr)
+	if (!registered || pClass->vDescLength != 0U)
 	{
 		return false;
 	}
 
-	pClass->vFsDescriptor = static_cast<const uint8_t *>(pTemplate);
-	pClass->vDescriptor.Build = Build;
-	pClass->vFsDescriptorLength = Length;
-	pClass->vHsDescriptorLength = 0U;
+	pClass->vDescLength = Length;
+	pClass->vDescTemplate = static_cast<const uint8_t *>(pTemplate);
+	pClass->vDescBuild = Build;
 	return true;
 }
 
