@@ -424,7 +424,7 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	UsbCtrlrEpAlloc(pCdc->DevNo, pCdc->NotifyEpNo, true,
 		UsbdCdcNotifBuffer(pCdc), false, UsbdCdcNotifCtrlrEvent, pCdc);
 
-	return UsbDescriptorRegisterTemplate(pCdc->DevNo, pClass,
+	return UsbDescRegister(pCdc->DevNo, pClass,
 		&g_UsbdCdcDescTemplate, sizeof(g_UsbdCdcDescTemplate),
 		UsbdCdcPatchRegistered);
 }
