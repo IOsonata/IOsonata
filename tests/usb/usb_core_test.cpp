@@ -299,8 +299,8 @@ static bool Fixture(bool WithSetInterface = true,
 	{
 		return false;
 	}
-	if (!UsbDescriptorRegister(TEST_DEVNO, pObject,
-		s_Desc.Config, s_Desc.ConfigLen) || !UsbEnable(TEST_DEVNO))
+	if (!UsbDescRegister(TEST_DEVNO, pObject,
+		s_Desc.Config, s_Desc.ConfigLen, nullptr) || !UsbEnable(TEST_DEVNO))
 	{
 		return false;
 	}
