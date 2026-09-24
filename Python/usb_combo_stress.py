@@ -57,6 +57,7 @@ ISO_DCD_DIAG_NAMES = (
     "cbi_held"
 )
 
+
 BANNER = b"IOsonata USB Combo Stress"
 
 
@@ -156,6 +157,8 @@ def read_iso_diag(handle, interface, timeout_ms):
     return text + "; dcd " + " ".join(
         f"{name}={value}" for name, value in zip(ISO_DCD_DIAG_NAMES, values)
     )
+
+
 
 
 class Stats:
@@ -640,6 +643,7 @@ def main():
                 )
 
         stop.set()
+        test_end = time.monotonic()
         for worker in workers:
             worker.join(timeout=2.0)
 
@@ -647,21 +651,37 @@ def main():
             stats.snapshot()
         )
         pending = count["loop_tx"] - count["loop_rx"]
+        elapsed = test_end - test_start
+        rates = {
+            name: count[name] / elapsed
+            for name in Stats.NAMES
+        }
+        total_bytes = sum(count.values())
+        total_rate = total_bytes / elapsed
 
         print()
+        print(f"Elapsed sec     : {elapsed:.2f}")
         print(f"Loop TX bytes   : {count['loop_tx']}")
+        print(f"Loop TX B/sec   : {rates['loop_tx']:.2f}")
         print(f"Loop RX bytes   : {count['loop_rx']}")
+        print(f"Loop RX B/sec   : {rates['loop_rx']:.2f}")
         print(f"Loop pending    : {pending}")
         print(f"Loop errors     : {loop_errors}")
         print(f"PRBS RX bytes   : {count['prbs_rx']}")
+        print(f"PRBS RX B/sec   : {rates['prbs_rx']:.2f}")
         print(f"PRBS errors     : {prbs_errors}")
         print(f"Target RX errors: {target_errors}")
         print(f"HID bytes       : {count['hid']}")
+        print(f"HID B/sec       : {rates['hid']:.2f}")
         print(f"HID errors      : {path_errors['hid']}")
         print(f"INT bytes       : {count['int']}")
+        print(f"INT B/sec       : {rates['int']:.2f}")
         print(f"INT errors      : {path_errors['int']}")
         print(f"ISO bytes       : {count['iso']}")
+        print(f"ISO B/sec       : {rates['iso']:.2f}")
         print(f"ISO errors      : {path_errors['iso']}")
+        print(f"Total bytes     : {total_bytes}")
+        print(f"Total B/sec     : {total_rate:.2f}")
         if failure is not None:
             print(f"Failure         : {failure}")
 
