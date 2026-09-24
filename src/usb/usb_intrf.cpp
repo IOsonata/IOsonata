@@ -739,7 +739,7 @@ bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes)
 			!UsbIntrfDirectReady(pIntrf->pTxDirectBuffer);
 	}
 
-	if (pIntrf->hTxFifo == nullptr || NbBytes <= 0)
+	if (NbBytes <= 0)
 	{
 		return false;
 	}
