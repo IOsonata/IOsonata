@@ -1245,39 +1245,12 @@ void UsbCtrlrStop(int DevNo)
 	UsbdXtalRelease();
 }
 
-// Suspend and wake are owned by the USBEVENT/SOF handlers. With low-power
-// suspend disabled, this driver never enters peripheral low-power mode.
+// Deferred endpoint/application work. Hardware completion discovery and
+// EPDATASTATUS ownership stay in USBD_IRQHandler().
 void UsbCtrlrProcess(int DevNo)
 {
 	(void)DevNo;
 	AppEvtHandlerExec();
-
-	// Share EPDATASTATUS with the ISR without publishing a completion twice.
-	const uint32_t state = DisableInterrupt();
-	// Withheld OUT buffers retain receive work even if AppEvt was full.
-	for (uint8_t epNum = 1U; epNum < NRFX_USBD_EP_COUNT; epNum++)
-	{
-		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[epNum - 1U][0];
-		if (pReg->pBuffer == NULL && pReg->Handler != NULL)
-		{
-			pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
-		}
-	}
-	const uint32_t inData = NRF_USBD->EPDATASTATUS & 0xFEU;
-	if (inData != 0U)
-	{
-		NRF_USBD->EPDATASTATUS = nRFUsbdQueueInComplete(inData);
-		__DSB();
-	}
-	uint32_t outData = (NRF_USBD->EPDATASTATUS >> 16U) & 0xFEU;
-	while (outData != 0U)
-	{
-		const uint8_t epNum = (uint8_t)(31U - (uint32_t)__CLZ(outData));
-		outData &= ~(1UL << epNum);
-		// A held RX buffer must not starve another pending endpoint.
-		nRFUsbdProcessOutData(epNum, NULL);
-	}
-	EnableInterrupt(state);
 }
 
 bool UsbCtrlrVbusDetected(int DevNo)
