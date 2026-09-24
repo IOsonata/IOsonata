@@ -462,32 +462,30 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
 static __attribute__((noinline))
 void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 {
-	// Interrupt bits index the event registers from EVENTS_USBRESET.
-	const uint8_t endBit = In ? USBD_INTEN_ENDEPIN0_Pos + EpNum :
-		USBD_INTEN_ENDEPOUT0_Pos + EpNum;
-	volatile uint32_t *pEnd = (volatile uint32_t *)(
-		(uintptr_t)&NRF_USBD->EVENTS_USBRESET + endBit * sizeof(uint32_t));
-	volatile uint32_t *pEnable = (volatile uint32_t *)
-		((uintptr_t)&NRF_USBD->EPINEN + (!In) *
-		 (offsetof(NRF_USBD_Type, EPOUTEN) - offsetof(NRF_USBD_Type, EPINEN)));
 	const uint32_t msk = 1UL << EpNum;
 
-	*pEnd = 0U;
-
-	// Regular IN completion is host-consumed EPDATA, so only OUT needs
-	// an END interrupt.
-	if (!In)
+	if (In)
 	{
+		NRF_USBD->EVENTS_ENDEPIN[EpNum] = 0U;
 		if (Enable)
-			NRF_USBD->INTENSET = 1UL << endBit;
+			NRF_USBD->EPINEN |= msk;
 		else
-			NRF_USBD->INTENCLR = 1UL << endBit;
+			NRF_USBD->EPINEN &= ~msk;
+		return;
 	}
 
+	NRF_USBD->EVENTS_ENDEPOUT[EpNum] = 0U;
+	const uint32_t endMsk = 1UL << (USBD_INTEN_ENDEPOUT0_Pos + EpNum);
 	if (Enable)
-		*pEnable |= msk;
+	{
+		NRF_USBD->INTENSET = endMsk;
+		NRF_USBD->EPOUTEN |= msk;
+	}
 	else
-		*pEnable &= ~msk;
+	{
+		NRF_USBD->INTENCLR = endMsk;
+		NRF_USBD->EPOUTEN &= ~msk;
+	}
 }
 
 // Initialize the active event fields; UsbDevProcessEvent reads only that
