@@ -462,22 +462,19 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
 static __attribute__((noinline))
 void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 {
-	// Interrupt bits index the event registers from EVENTS_USBRESET.
-	const uint8_t endBit = In ? USBD_INTEN_ENDEPIN0_Pos + EpNum :
-		USBD_INTEN_ENDEPOUT0_Pos + EpNum;
-	volatile uint32_t *pEnd = (volatile uint32_t *)(
-		(uintptr_t)&NRF_USBD->EVENTS_USBRESET + endBit * sizeof(uint32_t));
 	volatile uint32_t *pEnable = (volatile uint32_t *)
 		((uintptr_t)&NRF_USBD->EPINEN + (!In) *
 		 (offsetof(NRF_USBD_Type, EPOUTEN) - offsetof(NRF_USBD_Type, EPINEN)));
 	const uint32_t msk = 1UL << EpNum;
 
-	*pEnd = 0U;
-
 	// Regular IN completion is host-consumed EPDATA, so only OUT needs
-	// an END interrupt.
+	// an END event or interrupt.
 	if (!In)
 	{
+		const uint8_t endBit = USBD_INTEN_ENDEPOUT0_Pos + EpNum;
+		volatile uint32_t *pEnd = (volatile uint32_t *)(
+			(uintptr_t)&NRF_USBD->EVENTS_USBRESET + endBit * sizeof(uint32_t));
+		*pEnd = 0U;
 		if (Enable)
 			NRF_USBD->INTENSET = 1UL << endBit;
 		else
