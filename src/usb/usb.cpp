@@ -492,11 +492,6 @@ static bool UsbCoreInterfaceMatch(uint8_t InterfaceNo, uint16_t Alternate)
 	return false;
 }
 
-static bool UsbCoreInterfaceExists(uint8_t InterfaceNo)
-{
-	return UsbCoreInterfaceMatch(InterfaceNo, USB_CORE_ANY_ALTERNATE);
-}
-
 static bool UsbCoreIsoActive(void)
 {
 	if (s_Core.Configuration == 0U)
@@ -993,7 +988,7 @@ static bool UsbCoreHandleGetStatus(void)
 
 		case USB_REQTYPE_INTERFACE:
 			if (s_Core.Configuration == 0 || s_Core.Setup.wIndex > 0xFFU ||
-				!UsbCoreInterfaceExists((uint8_t)s_Core.Setup.wIndex))
+				UsbCoreFindClass((uint8_t)s_Core.Setup.wIndex) < 0)
 			{
 				return false;
 			}
@@ -1095,8 +1090,7 @@ static bool UsbCoreHandleGetInterface(void)
 	}
 
 	const uint8_t interfaceNo = (uint8_t)s_Core.Setup.wIndex;
-	if (interfaceNo >= USB_CORE_INTRF_MAXCNT ||
-		!UsbCoreInterfaceExists(interfaceNo))
+	if (UsbCoreFindClass(interfaceNo) < 0)
 	{
 		return false;
 	}
@@ -1245,14 +1239,7 @@ static bool UsbCoreHandleClassRequest(void)
 			return false;
 		}
 
-		const uint8_t interfaceNo = (uint8_t)s_Core.Setup.wIndex;
-		if (interfaceNo >= USB_CORE_INTRF_MAXCNT ||
-			!UsbCoreInterfaceExists(interfaceNo))
-		{
-			return false;
-		}
-
-		const int cls = UsbCoreFindClass(interfaceNo);
+		const int cls = UsbCoreFindClass((uint8_t)s_Core.Setup.wIndex);
 		return cls >= 0 && UsbCoreCallClassSetup(cls);
 	}
 
