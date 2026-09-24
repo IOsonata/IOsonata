@@ -75,6 +75,9 @@ void nRFIsoHwEnable(bool In, bool Enable)
 // The shared scheduler already owns the channel lock.
 bool nRFUsbdIsoStart(void)
 {
+	if (!s_Usbd.IsoOpen)
+		return false;
+
 	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) != 0U)
 	{
 		nRFUsbEpReg_t *pReg =
