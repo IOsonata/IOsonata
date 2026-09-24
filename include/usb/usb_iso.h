@@ -80,6 +80,9 @@ typedef void (*UsbIsoIntrfTxHandler_t)(UsbIsoIntrf_t *pIntrf,
 typedef struct __Usb_Iso_Interf_Config {
 	int DevNo;
 	uint8_t EpNo;					//!< Internally allocated ISO endpoint number
+	uint16_t BufferSize;			//!< Maximum ISO payload bytes
+	uint8_t *pRxBuffer;			//!< Word-aligned USB_INTRF_PKT_BLKSIZE(BufferSize)
+	uint8_t *pTxBuffer;			//!< Word-aligned USB_INTRF_PKT_BLKSIZE(BufferSize)
 	UsbIsoIntrfRxHandler_t RxHandler;
 	UsbIsoIntrfTxHandler_t TxHandler;
 	void *pContext;
@@ -102,10 +105,6 @@ struct __Usb_Iso_Interf {
 	bool Opened;
 	bool Suspended;
 
-	// One current packet per direction. UsbIntrf DIRECT mode uses the packet
-	// header as ownership state and registers the Data portion for DMA.
-	uint32_t RxBuffer[USB_ISO_INTRF_PACKET_WORDS];
-	uint32_t TxBuffer[USB_ISO_INTRF_PACKET_WORDS];
 };
 
 #ifdef __cplusplus
@@ -145,7 +144,14 @@ public:
 	UsbIsoIntrf &operator = (const UsbIsoIntrf &) = delete;
 
 	bool Init(const UsbIsoIntrfCfg_t &Cfg) {
-		return UsbIsoIntrfInit(&vUsbIsoIntrf, &vUsbDevIntrf, &Cfg);
+		UsbIsoIntrfCfg_t cfg = Cfg;
+		if (cfg.pRxBuffer == nullptr && cfg.pTxBuffer == nullptr)
+		{
+			cfg.BufferSize = USB_ISO_INTRF_MAX_MPS;
+			cfg.pRxBuffer = reinterpret_cast<uint8_t *>(vRxBuffer);
+			cfg.pTxBuffer = reinterpret_cast<uint8_t *>(vTxBuffer);
+		}
+		return UsbIsoIntrfInit(&vUsbIsoIntrf, &vUsbDevIntrf, &cfg);
 	}
 
 	using UsbIntrf::operator DevIntrf_t *;
@@ -168,6 +174,8 @@ public:
 
 private:
 	UsbIsoIntrf_t vUsbIsoIntrf = {};
+	uint32_t vRxBuffer[USB_ISO_INTRF_PACKET_WORDS] = {};
+	uint32_t vTxBuffer[USB_ISO_INTRF_PACKET_WORDS] = {};
 };
 #endif
 
