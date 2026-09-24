@@ -1274,8 +1274,7 @@ void UsbCtrlrRemoteWakeup(int DevNo)
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
 	const uint8_t flags = s_Usbd.Flags;
-	if ((flags & (USBD_FLAG_SUSPENDED | USBD_FLAG_REMOTE_WAKE)) !=
-		USBD_FLAG_SUSPENDED)
+	if ((flags & USBD_FLAG_REMOTE_WAKE) != 0U)
 	{
 		EnableInterrupt(state);
 		return;
