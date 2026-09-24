@@ -323,7 +323,6 @@ void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
 							 UsbCtrlrEvtType_t Event, uint16_t Length);
 void nRFUsbdDmaUnlock(void);
 void nRFUsbdSofAcquire(void);
-void nRFUsbdSofRelease(void);
 void nRFUsbdDmaWait(void);
 void nRFUsbdResumeQueuedDmaLocked(void);
 
