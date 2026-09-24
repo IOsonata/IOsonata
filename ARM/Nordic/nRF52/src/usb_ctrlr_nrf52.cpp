@@ -1200,14 +1200,10 @@ bool UsbCtrlrStart(int DevNo)
 void UsbCtrlrStop(int DevNo)
 {
 	(void)DevNo;
-	nRFUsbdDmaWait();
+	// UsbCoreStop already disconnected, disabled NVIC and closed endpoints.
 	nRFUsbdResetState();
 
-	// Stop the controller interrupt before powering down the wrapper.
-	NVIC_DisableIRQ(USBD_IRQn);
-
 	NRF_USBD->INTEN = 0;
-	NRF_USBD->USBPULLUP = 0;
 	NRF_USBD->ENABLE = 0;
 	(void)NRF_USBD->ENABLE;
 
