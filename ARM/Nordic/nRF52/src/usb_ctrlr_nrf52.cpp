@@ -1423,36 +1423,28 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 						 uint16_t Length)
 {
 	(void)DevNo;
-	bool retval = false;
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
+	pQue->EpNum = EpNum;
+	pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
+	pQue->pBuffer = pBuffer;
 
-	if (pQue != nullptr)
+	const uint32_t misalign = (uint32_t)(uintptr_t)pBuffer & 3U;
+	if (misalign != 0U)
 	{
-		pQue->EpNum = EpNum;
-		pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
-		pQue->pBuffer = pBuffer;
-
-		const uint32_t misalign = (uint32_t)(uintptr_t)pBuffer & 3U;
-		if (misalign != 0U)
+		const uint32_t repair = 4U - misalign;
+		if (Length > repair)
 		{
-			const uint32_t repair = 4U - misalign;
-			if (Length > repair)
-			{
-				Length = repair;
-			}
-			memcpy(&pQue->Scratch, pBuffer, Length);
-			pQue->Dir = NRFX_USBD_QUE_IN_SCRATCH;
+			Length = repair;
 		}
-		pQue->Len = Length;
-		nRFUsbdResumeQueuedDmaLocked();
-
-		retval = true;
+		memcpy(&pQue->Scratch, pBuffer, Length);
+		pQue->Dir = NRFX_USBD_QUE_IN_SCRATCH;
 	}
-
+	pQue->Len = Length;
+	nRFUsbdResumeQueuedDmaLocked();
 	EnableInterrupt(state);
 
-	return retval;
+	return true;
 }
 
 
