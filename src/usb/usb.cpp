@@ -50,6 +50,7 @@ SOFTWARE.
 #include "app_evt_handler.h"
 #include "coredev/interrupt.h"
 #include "usb/usb.h"
+#include "usb/usbd_epalloc.h"
 
 
 #define USB_CORE_CLASS_MAXCNT \
@@ -1886,7 +1887,12 @@ bool UsbInit(const UsbCfg_t *pCfg)
 	s_Core.DevNo = pCfg->DevNo;
 	s_Core.VbusLast = false;
 
-	return UsbDevInit(pCfg);
+	if (!UsbDevInit(pCfg))
+	{
+		return false;
+	}
+	UsbdEpAllocReset(pCfg->DevNo);
+	return true;
 }
 
 bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
