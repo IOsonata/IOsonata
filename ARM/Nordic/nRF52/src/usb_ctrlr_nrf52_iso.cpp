@@ -79,55 +79,42 @@ bool nRFUsbdIsoStart(void)
 	if (!s_Usbd.IsoOpen)
 		return false;
 
-	for (int8_t dir = 1; dir >= 0; dir--)
+	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) != 0U)
 	{
-		const uint8_t busy = (uint8_t)NRFUSBD_ISO_OUT_BUSY << dir;
-		if ((s_Usbd.IsoBusy & busy) == 0U)
-			continue;
-
 		nRFUsbEpReg_t *pReg =
-			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir];
-		uint16_t len;
-		volatile USBD_ISOIN_Type *pEp;
-		volatile uint32_t *pTask;
-		volatile uint32_t *pEnd;
-
-		if (dir != 0)
-		{
-			len = s_Usbd.IsoInDmaLen;
-			pEp = &NRF_USBD->ISOIN;
-			pTask = &NRF_USBD->TASKS_STARTISOIN;
-			pEnd = &NRF_USBD->EVENTS_ENDISOIN;
-		}
-		else
-		{
-			// SIZE.ISOOUT is read only while the shared EasyDMA channel is idle
-			// and locked by this scheduler.
-			const uint32_t size = NRF_USBD->SIZE.ISOOUT;
-			if (size == 0U)
-			{
-				s_Usbd.IsoBusy &= (uint8_t)~busy;
-				continue;
-			}
-
-			len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
-				0U : (uint16_t)size;
-			if (len > pReg->MaxPacketSize)
-			{
-				s_Usbd.IsoBusy &= (uint8_t)~busy;
-				continue;
-			}
-			pEp = (volatile USBD_ISOIN_Type *)&NRF_USBD->ISOOUT;
-			pTask = &NRF_USBD->TASKS_STARTISOOUT;
-			pEnd = &NRF_USBD->EVENTS_ENDISOOUT;
-		}
-
-		pEp->PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
-		pEp->MAXCNT = len;
-		nRFUsbdDmaStartLocked(pTask, pEnd);
+			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1];
+		NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
+		NRF_USBD->ISOIN.MAXCNT = s_Usbd.IsoInDmaLen;
+		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOIN,
+			&NRF_USBD->EVENTS_ENDISOIN);
 		return true;
 	}
-	return false;
+
+	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_OUT_BUSY) == 0U)
+		return false;
+
+	const uint32_t size = NRF_USBD->SIZE.ISOOUT;
+	if (size == 0U)
+	{
+		s_Usbd.IsoBusy &= (uint8_t)~NRFUSBD_ISO_OUT_BUSY;
+		return false;
+	}
+
+	nRFUsbEpReg_t *pReg =
+		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
+	const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
+		0U : (uint16_t)size;
+	if (len > pReg->MaxPacketSize)
+	{
+		s_Usbd.IsoBusy &= (uint8_t)~NRFUSBD_ISO_OUT_BUSY;
+		return false;
+	}
+
+	NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
+	NRF_USBD->ISOOUT.MAXCNT = len;
+	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
+		&NRF_USBD->EVENTS_ENDISOOUT);
+	return true;
 }
 
 bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
