@@ -125,27 +125,24 @@ bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	if (!s_Usbd.IsoOpen)
 		return false;
 
-	bool send = false;
-	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_OUT_BUSY) == 0U)
-	{
-		s_Usbd.IsoBusy |= NRFUSBD_ISO_OUT_BUSY;
-		send = true;
-	}
+	const uint8_t busy = s_Usbd.IsoBusy;
+	uint8_t next = busy | NRFUSBD_ISO_OUT_BUSY;
 
-	if (pBuffer != nullptr &&
-		(s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) == 0U)
+	if (pBuffer != nullptr && (busy & NRFUSBD_ISO_IN_BUSY) == 0U)
 	{
 		nRFUsbEpReg_t *pIn =
 			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1];
 		pIn->pBuffer = pBuffer;
 		s_Usbd.IsoInDmaLen = Length;
-		s_Usbd.IsoBusy |= NRFUSBD_ISO_IN_BUSY;
-		send = true;
+		next |= NRFUSBD_ISO_IN_BUSY;
 	}
 
-	if (send)
-		nRFUsbdResumeQueuedDmaLocked();
-	return send;
+	if (next == busy)
+		return false;
+
+	s_Usbd.IsoBusy = next;
+	nRFUsbdResumeQueuedDmaLocked();
+	return true;
 }
 
 static bool nRFUsbdFinishIsoDma(bool In)
