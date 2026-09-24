@@ -209,17 +209,13 @@ bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 
 void nRFUsbdIsoEpClose(bool bIn)
 {
-	const uint32_t state = DisableInterrupt();
-
-	// ISO is one bidirectional path. Closing either side stops scheduling and
-	// makes a polled END a cancellation rather than a normal completion.
+	// Once closed, ISR completion is a cancellation and no new ISO DMA can
+	// start. nRFUsbdDmaWait owns the exclusion while retiring active DMA.
 	s_Usbd.IsoOpen = false;
 	nRFUsbdDmaWait();
 	s_Usbd.IsoBusy = 0U;
 
 	nRFIsoHwEnable(bIn, false);
-
 	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][bIn].MaxPacketSize = 0U;
 	__DSB();
-	EnableInterrupt(state);
 }
