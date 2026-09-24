@@ -850,7 +850,6 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 	const uint8_t epNum = (uint8_t)Evt;
 	(void)pContext;
 
-	const uint32_t state = DisableInterrupt();
 	const uint32_t bit = 1UL << (epNum + 16U);
 	// Wait for the previous DMA completion before reusing this endpoint buffer.
 	if ((NRF_USBD->EPDATASTATUS & bit) != 0U &&
@@ -870,7 +869,6 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 			nRFUsbdResumeQueuedDmaLocked();
 		}
 	}
-	EnableInterrupt(state);
 }
 
 // InData is nonzero. Return only the status bit accepted by AppEvt; a full
