@@ -163,9 +163,9 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	cfg.EpNo = pCfg->EpNo;
 	cfg.bBlocking = false;
 	cfg.Mode = USB_INTRF_MODE_DIRECT;
-	cfg.BufferSize = USB_ISO_INTRF_MAX_MPS;
-	cfg.pRxBuffer = reinterpret_cast<uint8_t *>(pIntrf->RxBuffer);
-	cfg.pTxBuffer = reinterpret_cast<uint8_t *>(pIntrf->TxBuffer);
+	cfg.BufferSize = pCfg->BufferSize;
+	cfg.pRxBuffer = pCfg->pRxBuffer;
+	cfg.pTxBuffer = pCfg->pTxBuffer;
 	cfg.EvtCB = UsbIsoIntrfDataEvent;
 
 	if (!UsbIntrfInit(pIntrf->pData, &cfg))
