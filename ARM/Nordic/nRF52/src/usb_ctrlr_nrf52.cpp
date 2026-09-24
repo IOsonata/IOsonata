@@ -537,7 +537,7 @@ void nRFUsbdDmaUnlock(void)
 // Keep the channel locked for the caller's next DMA or explicit release.
 static __attribute__((noinline)) bool nRFUsbdRetireDma(uint32_t StatusBit)
 {
-	const uint32_t epNum = StatusBit & 7U;
+	const uint8_t epNum = (uint8_t)(StatusBit & 7U);
 	volatile uint32_t *pEnd = StatusBit >= 16U ?
 		&NRF_USBD->EVENTS_ENDEPOUT[epNum] :
 		&NRF_USBD->EVENTS_ENDEPIN[epNum];
