@@ -216,14 +216,6 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 	(void)DevNo;
 	const uint8_t epAddr = pDesc->bEndpointAddress;
 	const bool in = USB_ENDPADDR_IS_IN(epAddr);
-	const uint8_t type = pDesc->bmAttributes & 0x03U;
-	if (type != USB_ENDPATT_TRANS_ISO ||
-		pDesc->wMaxPacketSize == 0U ||
-		pDesc->wMaxPacketSize > NRFX_USBD_ISO_MAX_PACKET_SIZE)
-	{
-		return false;
-	}
-
 	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][in].MaxPacketSize = pDesc->wMaxPacketSize;
 	NRF_USBD->ISOSPLIT =
 		USBD_ISOSPLIT_SPLIT_HalfIN << USBD_ISOSPLIT_SPLIT_Pos;
