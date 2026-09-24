@@ -71,6 +71,7 @@ typedef struct __Usbd_EpAlloc_Res {
 /// Find the lowest free interface/endpoint placement satisfying pReq,
 /// atomically register pClass with that topology and return the assigned
 /// numbers in pRes. Returns false when no placement fits.
+void UsbdEpAllocReset(int DevNo);
 bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
 				 UsbDeviceClass *pClass, UsbdEpAllocRes_t *pRes);
 #endif
