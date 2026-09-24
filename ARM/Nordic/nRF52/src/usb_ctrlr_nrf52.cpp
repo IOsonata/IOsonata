@@ -459,7 +459,7 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
 
 // Endpoint interrupt, END event and enable-mask writes shared by open and
 // close.
-static inline __attribute__((always_inline))
+static __attribute__((noinline))
 void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 {
 	// Interrupt bits index the event registers from EVENTS_USBRESET.
