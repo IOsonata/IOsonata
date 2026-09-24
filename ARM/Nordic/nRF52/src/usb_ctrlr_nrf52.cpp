@@ -852,10 +852,7 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 
 	const uint32_t state = DisableInterrupt();
 	const uint32_t bit = 1UL << (epNum + 16U);
-	// A latched OUT bit owns the request until DMA can be queued. AppEvt
-	// retries may overlap; only the first accepted enqueue consumes it.
-	// Wait for the previous DMA's completion ISR before reusing its buffer.
-	// That callback may need to withhold the buffer when RX is full.
+	// Wait for the previous DMA completion before reusing this endpoint buffer.
 	if ((NRF_USBD->EPDATASTATUS & bit) != 0U &&
 		(NRF_USBD->EPSTATUS & bit) == 0U)
 	{
@@ -863,22 +860,14 @@ static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
 		if (pReg->pBuffer != NULL)
 		{
 			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
-			if (pQue != NULL)
-			{
-				pQue->EpNum = epNum;
-				pQue->Dir = NRFX_USBD_QUE_OUT;
-				pQue->Len = pReg->MaxPacketSize;
-				pQue->pBuffer = pReg->pBuffer;
-				// Acknowledge before DMA can admit the next packet.
-				NRF_USBD->EPDATASTATUS = bit;
-				__DSB();
-				nRFUsbdResumeQueuedDmaLocked();
-			}
-			else
-			{
-				// Retry queue pressure, not a withheld RX buffer.
-				(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
-			}
+			pQue->EpNum = epNum;
+			pQue->Dir = NRFX_USBD_QUE_OUT;
+			pQue->Len = pReg->MaxPacketSize;
+			pQue->pBuffer = pReg->pBuffer;
+			// Acknowledge before DMA can admit the next packet.
+			NRF_USBD->EPDATASTATUS = bit;
+			__DSB();
+			nRFUsbdResumeQueuedDmaLocked();
 		}
 	}
 	EnableInterrupt(state);
