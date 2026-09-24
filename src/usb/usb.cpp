@@ -537,29 +537,16 @@ static bool UsbCoreInterfaceAlternateExists(uint8_t InterfaceNo,
 	return UsbCoreInterfaceMatch(InterfaceNo, Alternate);
 }
 
-static bool UsbCoreInterfaceEndpointMasks(uint8_t InterfaceNo,
-										   uint8_t Alternate,
-										   uint16_t *pInMask,
-										   uint16_t *pOutMask)
+static void UsbCoreClearInterfaceHalt(uint8_t InterfaceNo,
+									  uint8_t OldAlternate,
+									  uint8_t NewAlternate)
 {
-	if (pInMask == nullptr || pOutMask == nullptr)
-	{
-		return false;
-	}
-
-	*pInMask = 0;
-	*pOutMask = 0;
-
+	uint16_t clearIn = 0U;
+	uint16_t clearOut = 0U;
 	uint16_t len;
 	const uint8_t *pDesc = UsbCoreActiveConfig(&len);
-	if (pDesc == nullptr)
-	{
-		return false;
-	}
-
 	bool targetInterface = false;
-	bool found = false;
-	uint16_t ofs = 0;
+	uint16_t ofs = 0U;
 	const uint8_t *p;
 
 	while ((p = UsbCoreNextDescriptor(pDesc, len, &ofs)) != nullptr)
@@ -567,43 +554,25 @@ static bool UsbCoreInterfaceEndpointMasks(uint8_t InterfaceNo,
 		if (p[1] == USB_DESCTYPE_INTERFACE)
 		{
 			targetInterface = p[0] >= sizeof(UsbIntrfDesc_t) &&
-				p[2] == InterfaceNo && p[3] == Alternate;
-			found = found || targetInterface;
+				p[2] == InterfaceNo &&
+				(p[3] == OldAlternate || p[3] == NewAlternate);
 		}
 		else if (targetInterface && p[1] == USB_DESCTYPE_ENDPOINT &&
 				 p[0] >= sizeof(UsbEndPointDesc_t))
 		{
 			const uint8_t epAddr = p[2];
 			const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
-
 			if (epNum != 0U && (epAddr & 0x70U) == 0U)
 			{
 				uint16_t *pMask = USB_ENDPADDR_IS_IN(epAddr) ?
-					pInMask : pOutMask;
+					&clearIn : &clearOut;
 				*pMask |= (uint16_t)(1U << epNum);
 			}
 		}
 	}
 
-	return found;
-}
-
-static void UsbCoreClearInterfaceHalt(uint8_t InterfaceNo,
-									  uint8_t OldAlternate,
-									  uint8_t NewAlternate)
-{
-	uint16_t oldIn = 0;
-	uint16_t oldOut = 0;
-	uint16_t newIn = 0;
-	uint16_t newOut = 0;
-
-	(void)UsbCoreInterfaceEndpointMasks(InterfaceNo, OldAlternate,
-										&oldIn, &oldOut);
-	(void)UsbCoreInterfaceEndpointMasks(InterfaceNo, NewAlternate,
-										&newIn, &newOut);
-
-	s_Core.HaltIn &= (uint16_t)~(oldIn | newIn);
-	s_Core.HaltOut &= (uint16_t)~(oldOut | newOut);
+	s_Core.HaltIn &= (uint16_t)~clearIn;
+	s_Core.HaltOut &= (uint16_t)~clearOut;
 }
 
 static bool UsbCoreEndpointExists(uint8_t EpNo, bool bIn)
