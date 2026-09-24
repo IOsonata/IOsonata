@@ -107,6 +107,8 @@ static struct
 	uint8_t NumInterfaces;
 	uint16_t HaltIn;
 	uint16_t HaltOut;
+	uint16_t ActiveIn;
+	uint16_t ActiveOut;
 	UsbCoreCtrlState_t CtrlState;
 	int ActiveClass;
 	uint8_t *CtrlData;
@@ -494,34 +496,10 @@ static bool UsbCoreInterfaceMatch(uint8_t InterfaceNo, uint16_t Alternate)
 
 static bool UsbCoreIsoActive(void)
 {
-	if (s_Core.Configuration == 0U)
-		return false;
-
-	uint16_t len;
-	const uint8_t *pDesc = UsbCoreActiveConfig(&len);
-	bool activeInterface = false;
-	uint16_t ofs = 0;
-	const uint8_t *p;
-
-	while ((p = UsbCoreNextDescriptor(pDesc, len, &ofs)) != nullptr)
-	{
-		if (p[1] == USB_DESCTYPE_INTERFACE)
-		{
-			activeInterface = p[0] >= sizeof(UsbIntrfDesc_t) &&
-				p[2] < USB_CORE_INTRF_MAXCNT &&
-				s_Core.Alternate[p[2]] == p[3];
-		}
-		else if (activeInterface && p[1] == USB_DESCTYPE_ENDPOINT &&
-				 p[0] >= sizeof(UsbEndPointDesc_t) &&
-				 (p[3] & 0x03U) == USB_ENDPATT_TRANS_ISO)
-		{
-			const uint8_t epNum = USB_ENDPADDR_NUM(p[2]);
-			const uint8_t dir = USB_ENDPADDR_IS_IN(p[2]) ? 1U : 0U;
-			if (epNum != 0U && epNum < 16U && s_Core.EpClass[dir][epNum] >= 0)
-				return true;
-		}
-	}
-	return false;
+	const uint16_t isoMask = (uint16_t)(
+		USB_ISO_EPIN_MASK(s_Core.DevNo) & USB_ISO_EPOUT_MASK(s_Core.DevNo));
+	return s_Core.Configuration != 0U &&
+		(s_Core.ActiveIn & s_Core.ActiveOut & isoMask) != 0U;
 }
 
 static void UsbCoreUpdateSof(void)
@@ -541,11 +519,13 @@ static void UsbCoreClearInterfaceHalt(uint8_t InterfaceNo,
 									  uint8_t OldAlternate,
 									  uint8_t NewAlternate)
 {
-	uint16_t clearIn = 0U;
-	uint16_t clearOut = 0U;
+	uint16_t oldIn = 0U;
+	uint16_t oldOut = 0U;
+	uint16_t newIn = 0U;
+	uint16_t newOut = 0U;
 	uint16_t len;
 	const uint8_t *pDesc = UsbCoreActiveConfig(&len);
-	bool targetInterface = false;
+	int selected = 0;
 	uint16_t ofs = 0U;
 	const uint8_t *p;
 
@@ -553,26 +533,31 @@ static void UsbCoreClearInterfaceHalt(uint8_t InterfaceNo,
 	{
 		if (p[1] == USB_DESCTYPE_INTERFACE)
 		{
-			targetInterface = p[0] >= sizeof(UsbIntrfDesc_t) &&
-				p[2] == InterfaceNo &&
-				(p[3] == OldAlternate || p[3] == NewAlternate);
+			selected = p[0] >= sizeof(UsbIntrfDesc_t) &&
+				p[2] == InterfaceNo ?
+				(p[3] == OldAlternate ? 1 : p[3] == NewAlternate ? 2 : 0) : 0;
 		}
-		else if (targetInterface && p[1] == USB_DESCTYPE_ENDPOINT &&
+		else if (selected != 0 && p[1] == USB_DESCTYPE_ENDPOINT &&
 				 p[0] >= sizeof(UsbEndPointDesc_t))
 		{
 			const uint8_t epAddr = p[2];
 			const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
 			if (epNum != 0U && (epAddr & 0x70U) == 0U)
 			{
-				uint16_t *pMask = USB_ENDPADDR_IS_IN(epAddr) ?
-					&clearIn : &clearOut;
+				uint16_t *pMask;
+				if (USB_ENDPADDR_IS_IN(epAddr))
+					pMask = selected == 1 ? &oldIn : &newIn;
+				else
+					pMask = selected == 1 ? &oldOut : &newOut;
 				*pMask |= (uint16_t)(1U << epNum);
 			}
 		}
 	}
 
-	s_Core.HaltIn &= (uint16_t)~clearIn;
-	s_Core.HaltOut &= (uint16_t)~clearOut;
+	s_Core.HaltIn &= (uint16_t)~(oldIn | newIn);
+	s_Core.HaltOut &= (uint16_t)~(oldOut | newOut);
+	s_Core.ActiveIn = (uint16_t)((s_Core.ActiveIn & ~oldIn) | newIn);
+	s_Core.ActiveOut = (uint16_t)((s_Core.ActiveOut & ~oldOut) | newOut);
 }
 
 static bool UsbCoreEndpointExists(uint8_t EpNo, bool bIn)
@@ -581,40 +566,10 @@ static bool UsbCoreEndpointExists(uint8_t EpNo, bool bIn)
 	{
 		return true;
 	}
-
-	uint16_t len;
-	const uint8_t *pDesc = UsbCoreActiveConfig(&len);
-
-	if (pDesc == nullptr)
-	{
-		return false;
-	}
-
-	bool activeInterface = false;
-	uint16_t ofs = 0;
-	const uint8_t *p;
-	while ((p = UsbCoreNextDescriptor(pDesc, len, &ofs)) != nullptr)
-	{
-		if (p[1] == USB_DESCTYPE_INTERFACE)
-		{
-			activeInterface = p[0] >= sizeof(UsbIntrfDesc_t) &&
-				p[2] < USB_CORE_INTRF_MAXCNT &&
-				s_Core.Alternate[p[2]] == p[3];
-		}
-		else if (activeInterface && p[1] == USB_DESCTYPE_ENDPOINT &&
-				 p[0] >= sizeof(UsbEndPointDesc_t))
-		{
-			const uint8_t epAddr = p[2];
-			if (USB_ENDPADDR_NUM(epAddr) == EpNo &&
-				(bool)USB_ENDPADDR_IS_IN(epAddr) == bIn)
-			{
-				return true;
-			}
-		}
-	}
-
-	return false;
+	const uint16_t mask = bIn ? s_Core.ActiveIn : s_Core.ActiveOut;
+	return (mask & (uint16_t)(1U << EpNo)) != 0U;
 }
+
 
 static int UsbCoreFindClass(uint8_t InterfaceNo)
 {
@@ -782,10 +737,46 @@ static bool UsbCoreConfigSelfPowered(void)
 	return s_UsbDevCfg.bSelfPowered;
 }
 
+static void UsbCoreRefreshActiveEndpoints(void)
+{
+	s_Core.ActiveIn = 0U;
+	s_Core.ActiveOut = 0U;
+
+	uint16_t len;
+	const uint8_t *pDesc = UsbCoreActiveConfig(&len);
+	bool activeInterface = false;
+	uint16_t ofs = 0U;
+	const uint8_t *p;
+
+	while ((p = UsbCoreNextDescriptor(pDesc, len, &ofs)) != nullptr)
+	{
+		if (p[1] == USB_DESCTYPE_INTERFACE)
+		{
+			activeInterface = p[0] >= sizeof(UsbIntrfDesc_t) &&
+				p[2] < USB_CORE_INTRF_MAXCNT &&
+				s_Core.Alternate[p[2]] == p[3];
+		}
+		else if (activeInterface && p[1] == USB_DESCTYPE_ENDPOINT &&
+				 p[0] >= sizeof(UsbEndPointDesc_t))
+		{
+			const uint8_t epAddr = p[2];
+			const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
+			if (epNum != 0U && epNum < 16U)
+			{
+				uint16_t *pMask = USB_ENDPADDR_IS_IN(epAddr) ?
+					&s_Core.ActiveIn : &s_Core.ActiveOut;
+				*pMask |= (uint16_t)(1U << epNum);
+			}
+		}
+	}
+}
+
 static void UsbCoreClearEndpointState(void)
 {
 	s_Core.HaltIn = 0;
 	s_Core.HaltOut = 0;
+	s_Core.ActiveIn = 0;
+	s_Core.ActiveOut = 0;
 	s_Core.RemoteWakeup = false;
 	memset(s_Core.Alternate, 0, sizeof(s_Core.Alternate));
 }
@@ -854,6 +845,7 @@ static bool UsbCoreApplyConfiguration(uint8_t Configuration)
 
 	s_Core.Configuration = Configuration;
 	s_Core.NumInterfaces = pConfigDesc[4];
+	UsbCoreRefreshActiveEndpoints();
 	UsbCoreUpdateSof();
 
 	return true;
