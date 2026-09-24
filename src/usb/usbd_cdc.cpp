@@ -154,13 +154,10 @@ static void UsbdCdcCancelBusState(UsbdCdcDev_t *pCdc)
 	UsbIntrfUnconfigure(pCdc->pData);
 }
 
-static bool UsbdCdcConfig(UsbdCdcDev_t *pCdc, uint8_t Configuration)
+// Drop the data path and the control line state, telling the application
+// when this closes an open port. Shared by configuration and bus reset.
+static void UsbdCdcClosePort(UsbdCdcDev_t *pCdc)
 {
-	if (pCdc == nullptr)
-	{
-		return false;
-	}
-
 	const bool wasOpen = UsbdCdcPortIsOpen(pCdc);
 	pCdc->ControlLineState = 0U;
 	pCdc->PendingControlLineState = 0U;
@@ -169,6 +166,19 @@ static bool UsbdCdcConfig(UsbdCdcDev_t *pCdc, uint8_t Configuration)
 	{
 		UsbdCdcNotifyPortState(pCdc, false);
 	}
+}
+
+// Out of line: the class wrapper becomes a tail call and the body addresses
+// the device state with short offsets.
+__attribute__((noinline))
+static bool UsbdCdcConfig(UsbdCdcDev_t *pCdc, uint8_t Configuration)
+{
+	if (pCdc == nullptr)
+	{
+		return false;
+	}
+
+	UsbdCdcClosePort(pCdc);
 
 	if (Configuration == 0U)
 	{
@@ -217,8 +227,7 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 		(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) != USB_REQTYPE_CLASS ||
 		(pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT) !=
 			USB_REQTYPE_INTERFACE ||
-		(pSetup->wIndex & 0xFF00U) != 0U ||
-		(uint8_t)pSetup->wIndex != pCdc->CtrlIfNo)
+		pSetup->wIndex != pCdc->CtrlIfNo)
 	{
 		return false;
 	}
@@ -340,6 +349,8 @@ static void UsbdCdcNotifCtrlrEvent(UsbCtrlrEvtType_t Event,
 	}
 }
 
+// Out of line for the same reason as UsbdCdcConfig.
+__attribute__((noinline))
 static void UsbdCdcReset(UsbdCdcDev_t *pCdc)
 {
 	if (pCdc == nullptr)
@@ -347,18 +358,13 @@ static void UsbdCdcReset(UsbdCdcDev_t *pCdc)
 		return;
 	}
 
-	const bool wasOpen = UsbdCdcPortIsOpen(pCdc);
-	pCdc->ControlLineState = 0U;
-	pCdc->PendingControlLineState = 0U;
 	pCdc->SerialState = 0U;
-	UsbdCdcCancelBusState(pCdc);
-	if (wasOpen)
-	{
-		UsbdCdcNotifyPortState(pCdc, false);
-	}
+	UsbdCdcClosePort(pCdc);
 	UsbdCdcDefaultLineCoding(pCdc);
 }
 
+// Out of line for the same reason as UsbdCdcConfig.
+__attribute__((noinline))
 static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 								UsbDevIntrf_t *pData,
 								const UsbdCdcCfg_t *pCfg,

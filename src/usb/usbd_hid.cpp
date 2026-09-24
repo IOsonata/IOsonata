@@ -36,17 +36,6 @@ SOFTWARE.
 #include "usb/usbd_epalloc.h"
 #include "usb/usbd_hid.h"
 
-static uint16_t UsbdHidMps(const UsbdHidDev_t *pHid)
-{
-	return UsbCtrlrHighSpeed(pHid->DevNo) ? pHid->HsMps : pHid->FsMps;
-}
-
-static uint8_t UsbdHidInterval(const UsbdHidDev_t *pHid)
-{
-	return UsbCtrlrHighSpeed(pHid->DevNo) ?
-		pHid->HsInterval : pHid->FsInterval;
-}
-
 static void UsbdHidRx(UsbIntIntrf_t *, const uint8_t *pData,
 					  uint16_t Length, UsbCtrlrXferResult_t Result,
 					  void *pContext)
@@ -86,9 +75,15 @@ static bool UsbdHidConfig(UsbdHidDev_t *pHid, uint8_t Configuration)
 	{
 		return true;
 	}
-	if (Configuration != USBD_HID_CONFIG_VALUE ||
-		!UsbIntIntrfOpen(pHid->pIntIntrf, UsbdHidMps(pHid),
-			UsbdHidInterval(pHid)))
+	if (Configuration != USBD_HID_CONFIG_VALUE)
+	{
+		return false;
+	}
+
+	const bool highSpeed = UsbCtrlrHighSpeed(pHid->DevNo);
+	if (!UsbIntIntrfOpen(pHid->pIntIntrf,
+			highSpeed ? pHid->HsMps : pHid->FsMps,
+			highSpeed ? pHid->HsInterval : pHid->FsInterval))
 	{
 		return false;
 	}
@@ -114,8 +109,7 @@ static bool UsbdHidInterfaceRequest(const UsbdHidDev_t *pHid,
 	return pSetup != nullptr &&
 		(pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT) ==
 			USB_REQTYPE_INTERFACE &&
-		(pSetup->wIndex & 0xFF00U) == 0U &&
-		(uint8_t)pSetup->wIndex == (uint8_t)pHid->ItfNo;
+		pSetup->wIndex == (uint8_t)pHid->ItfNo;
 }
 
 static bool UsbdHidGetDescriptor(UsbdHidDev_t *pHid,
@@ -161,6 +155,11 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 {
 	const bool dirIn =
 		(pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) == USB_REQTYPE_DIRHOST;
+	// Get requests reply with *pActive. Set requests stage the new value in
+	// *pPending and commit it to *pActive on completion.
+	uint8_t *pActive;
+	uint8_t *pPending = nullptr;
+	uint8_t value = 0U;
 
 	switch (pSetup->bRequest)
 	{
@@ -174,39 +173,18 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 			{
 				return false;
 			}
-			if (Stage == USB_CTRL_SETUP)
-			{
-				if (ppData == nullptr)
-				{
-					return false;
-				}
-				pHid->CtrlReply = pHid->Idle;
-				*ppData = &pHid->CtrlReply;
-				*pLength = 1U;
-			}
-			return true;
+			pActive = &pHid->Idle;
+			break;
 
 		case USB_HID_REQ_SET_IDLE:
 			if (dirIn || pSetup->wLength != 0U)
 			{
 				return false;
 			}
-			if (Stage == USB_CTRL_SETUP)
-			{
-				pHid->PendingIdle = (uint8_t)(pSetup->wValue >> 8);
-				pHid->PendingRequest = USB_HID_REQ_SET_IDLE;
-			}
-			else if (Stage == USB_CTRL_COMPLETE &&
-				pHid->PendingRequest == USB_HID_REQ_SET_IDLE)
-			{
-				pHid->Idle = pHid->PendingIdle;
-				pHid->PendingRequest = 0U;
-			}
-			else if (Stage == USB_CTRL_ABORT)
-			{
-				pHid->PendingRequest = 0U;
-			}
-			return true;
+			pActive = &pHid->Idle;
+			pPending = &pHid->PendingIdle;
+			value = (uint8_t)(pSetup->wValue >> 8);
+			break;
 
 		case USB_HID_REQ_GET_PROTOCOL:
 			if (!dirIn || pHid->SubClass != USB_HID_SUBCLASS_BOOT ||
@@ -214,17 +192,8 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 			{
 				return false;
 			}
-			if (Stage == USB_CTRL_SETUP)
-			{
-				if (ppData == nullptr)
-				{
-					return false;
-				}
-				pHid->CtrlReply = pHid->ActiveProtocol;
-				*ppData = &pHid->CtrlReply;
-				*pLength = 1U;
-			}
-			return true;
+			pActive = &pHid->ActiveProtocol;
+			break;
 
 		case USB_HID_REQ_SET_PROTOCOL:
 			if (dirIn || pHid->SubClass != USB_HID_SUBCLASS_BOOT ||
@@ -233,26 +202,46 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 			{
 				return false;
 			}
-			if (Stage == USB_CTRL_SETUP)
-			{
-				pHid->PendingProtocol = (uint8_t)pSetup->wValue;
-				pHid->PendingRequest = USB_HID_REQ_SET_PROTOCOL;
-			}
-			else if (Stage == USB_CTRL_COMPLETE &&
-				pHid->PendingRequest == USB_HID_REQ_SET_PROTOCOL)
-			{
-				pHid->ActiveProtocol = pHid->PendingProtocol;
-				pHid->PendingRequest = 0U;
-			}
-			else if (Stage == USB_CTRL_ABORT)
-			{
-				pHid->PendingRequest = 0U;
-			}
-			return true;
+			pActive = &pHid->ActiveProtocol;
+			pPending = &pHid->PendingProtocol;
+			value = (uint8_t)pSetup->wValue;
+			break;
 
 		default:
 			return false;
 	}
+
+	if (pPending == nullptr)
+	{
+		if (Stage == USB_CTRL_SETUP)
+		{
+			if (ppData == nullptr)
+			{
+				return false;
+			}
+			pHid->CtrlReply = *pActive;
+			*ppData = &pHid->CtrlReply;
+			*pLength = 1U;
+		}
+		return true;
+	}
+
+	if (Stage == USB_CTRL_SETUP)
+	{
+		*pPending = value;
+		pHid->PendingRequest = pSetup->bRequest;
+	}
+	else if (Stage == USB_CTRL_COMPLETE &&
+		pHid->PendingRequest == pSetup->bRequest)
+	{
+		*pActive = *pPending;
+		pHid->PendingRequest = 0U;
+	}
+	else if (Stage == USB_CTRL_ABORT)
+	{
+		pHid->PendingRequest = 0U;
+	}
+	return true;
 }
 
 static bool UsbdHidRequest(const UsbSetupData_t *pSetup,
@@ -293,6 +282,8 @@ static constexpr UsbdHidDesc_t UsbdHidDescTemplate(void)
 
 static constexpr UsbdHidDesc_t s_HidDescTemplate = UsbdHidDescTemplate();
 
+// Out of line: shared by the registered build hook and UsbdHidMakeDesc.
+__attribute__((noinline))
 static void UsbdHidPatchDesc(UsbdHidDesc_t *pDesc,
 							 const UsbdHidDev_t *pHid, UsbSpeed_t Speed)
 {

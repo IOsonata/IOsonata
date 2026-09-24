@@ -94,6 +94,7 @@ void UsbdCdcPatchDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
 	const uint8_t interval = Speed == USB_SPEED_HIGH ?
 		USBD_CDC_NOTIF_INTERVAL_HS : USBD_CDC_NOTIF_INTERVAL_FS;
 	const uint8_t stringIndex = HasFunctionString ? 4U : 0U;
+	const uint8_t dataOut = USB_ENDPADDR_DIROUT(pCdc->DataEpNo);
 
 	pDesc->Association.bFirstInterface = control;
 	pDesc->Association.iFunction = stringIndex;
@@ -105,9 +106,9 @@ void UsbdCdcPatchDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
 	pDesc->Notification.bEndpointAddress = USB_ENDPADDR_DIRIN(pCdc->NotifyEpNo);
 	pDesc->Notification.bInterval = interval;
 	pDesc->Data.bInterfaceNumber = data;
-	pDesc->Out.bEndpointAddress = USB_ENDPADDR_DIROUT(pCdc->DataEpNo);
+	pDesc->Out.bEndpointAddress = dataOut;
 	pDesc->Out.wMaxPacketSize = bulkMps;
-	pDesc->In.bEndpointAddress = USB_ENDPADDR_DIRIN(pCdc->DataEpNo);
+	pDesc->In.bEndpointAddress = USB_ENDPADDR_DIRIN(dataOut);
 	pDesc->In.wMaxPacketSize = bulkMps;
 }
 

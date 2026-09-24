@@ -59,6 +59,9 @@ static void UsbdBulkCloseEndpoints(UsbdBulkDev_t *pBulk)
 	UsbCtrlrEpClose(pBulk->DevNo, pBulk->EpNo, true);
 }
 
+// Out of line: the class wrapper becomes a tail call and the body addresses
+// the device state with short offsets.
+__attribute__((noinline))
 static bool UsbdBulkConfig(UsbdBulkDev_t *pBulk, uint8_t Configuration)
 {
 	if (pBulk == nullptr)
@@ -117,6 +120,8 @@ static constexpr UsbdBulkDesc_t UsbdBulkDescTemplate(void)
 
 static constexpr UsbdBulkDesc_t s_BulkDescTemplate = UsbdBulkDescTemplate();
 
+// Out of line: shared by the registered build hook and UsbdBulkMakeDesc.
+__attribute__((noinline))
 static void UsbdBulkPatchDesc(UsbdBulkDesc_t *pDesc,
 							  const UsbdBulkDev_t *pBulk, UsbSpeed_t Speed)
 {
@@ -163,6 +168,8 @@ bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 	return true;
 }
 
+// Out of line for the same reason as UsbdBulkConfig.
+__attribute__((noinline))
 static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 								 UsbDevIntrf_t *pData,
 								 const UsbdBulkCfg_t *pCfg,

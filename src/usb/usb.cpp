@@ -147,7 +147,8 @@ static bool UsbCoreDirIn(const UsbSetupData_t *pSetup)
 
 static bool UsbCoreValidEp0Mps(uint8_t Mps)
 {
-	return Mps == 8U || Mps == 16U || Mps == 32U || Mps == 64U;
+	// 8, 16, 32 or 64: one bit set within that range.
+	return Mps >= 8U && Mps <= 64U && (Mps & (Mps - 1U)) == 0U;
 }
 
 static const uint8_t *UsbCoreGetDescriptor(uint8_t Type, uint8_t Index,
@@ -168,11 +169,12 @@ static uint8_t UsbDescMaxPower(const UsbCfg_t *pCfg)
 	return units > 255U ? 255U : (uint8_t)units;
 }
 
-static const uint8_t *UsbDescDevice(int DevNo, uint8_t Index,
-									uint16_t *pLength)
+// The descriptor builders below run from UsbGetDescriptor only, which has
+// already resolved pCfg for this DevNo and checked pLength.
+static const uint8_t *UsbDescDevice(int DevNo, const UsbCfg_t *pCfg,
+									uint8_t Index, uint16_t *pLength)
 {
-	const UsbCfg_t *pCfg = UsbGetCfg(DevNo);
-	if (pCfg == nullptr || pLength == nullptr || Index != 0U)
+	if (Index != 0U)
 	{
 		return nullptr;
 	}
@@ -200,12 +202,10 @@ static const uint8_t *UsbDescDevice(int DevNo, uint8_t Index,
 	return reinterpret_cast<const uint8_t *>(&s_Core.DeviceDesc);
 }
 
-static const uint8_t *UsbDescQualifier(int DevNo, uint8_t Index,
-									   uint16_t *pLength)
+static const uint8_t *UsbDescQualifier(int DevNo, const UsbCfg_t *pCfg,
+									   uint8_t Index, uint16_t *pLength)
 {
-	const UsbCfg_t *pCfg = UsbGetCfg(DevNo);
-	if (pCfg == nullptr || pLength == nullptr || Index != 0U ||
-		!USB_HIGHSPEED_CAPABLE(DevNo))
+	if (Index != 0U || !USB_HIGHSPEED_CAPABLE(DevNo))
 	{
 		return nullptr;
 	}
@@ -224,14 +224,10 @@ static const uint8_t *UsbDescQualifier(int DevNo, uint8_t Index,
 	return reinterpret_cast<const uint8_t *>(&s_Core.QualifierDesc);
 }
 
-static const uint8_t *UsbDescString(int DevNo, uint8_t Index,
-								 uint16_t LangId, uint16_t *pLength)
+static const uint8_t *UsbDescString(int DevNo, const UsbCfg_t *pCfg,
+								 uint8_t Index, uint16_t LangId,
+								 uint16_t *pLength)
 {
-	if (pLength == nullptr)
-	{
-		return nullptr;
-	}
-
 	if (Index == 0U)
 	{
 		s_Core.StringDesc[0] = 4U;
@@ -243,12 +239,6 @@ static const uint8_t *UsbDescString(int DevNo, uint8_t Index,
 	}
 
 	if (LangId != 0U && LangId != 0x0409U)
-	{
-		return nullptr;
-	}
-
-	const UsbCfg_t *pCfg = UsbGetCfg(DevNo);
-	if (pCfg == nullptr)
 	{
 		return nullptr;
 	}
@@ -296,13 +286,11 @@ static const uint8_t *UsbDescString(int DevNo, uint8_t Index,
 	return s_Core.StringDesc;
 }
 
-static const uint8_t *UsbDescConfiguration(int DevNo, uint8_t Index,
-										UsbSpeed_t Speed, bool OtherSpeed,
-										uint16_t *pLength)
+static const uint8_t *UsbDescConfiguration(int DevNo, const UsbCfg_t *pCfg,
+										uint8_t Index, UsbSpeed_t Speed,
+										bool OtherSpeed, uint16_t *pLength)
 {
-	const UsbCfg_t *pCfg = UsbGetCfg(DevNo);
-	if (pCfg == nullptr || pLength == nullptr || Index != 0U ||
-		(OtherSpeed && !USB_HIGHSPEED_CAPABLE(DevNo)))
+	if (Index != 0U || (OtherSpeed && !USB_HIGHSPEED_CAPABLE(DevNo)))
 	{
 		return nullptr;
 	}
@@ -341,30 +329,33 @@ static const uint8_t *UsbDescConfiguration(int DevNo, uint8_t Index,
 		}
 	}
 
-	if (s_Core.ObjectCnt == 0 || interfaceCount == 0U)
+	// No registered class leaves interfaceCount at zero as well.
+	if (interfaceCount == 0U)
 	{
 		return nullptr;
 	}
 
-	UsbCfgDesc_t config = {};
-	config.bLength = sizeof(config);
-	config.bDescriptorType = OtherSpeed ?
-		USB_DESCTYPE_OSC : USB_DESCTYPE_CONFIGURATION;
-	config.wTotalLength = offset;
-	config.bNumInterfaces = interfaceCount;
-	config.bConfigurationValue = 1U;
-	config.bmAttributes = USB_CONFATT_RESERVED;
+	uint8_t attributes = USB_CONFATT_RESERVED;
 	if (pCfg->bSelfPowered)
 	{
-		config.bmAttributes |= USB_CONFATT_SELF_POWERED;
+		attributes |= USB_CONFATT_SELF_POWERED;
 	}
 	if (pCfg->bRemoteWakeup)
 	{
-		config.bmAttributes |= USB_CONFATT_REMOTE_WAKEUP;
+		attributes |= USB_CONFATT_REMOTE_WAKEUP;
 	}
-	config.bMaxPower = UsbDescMaxPower(pCfg);
 
-	memcpy(s_Core.ConfigDesc, &config, sizeof(config));
+	// Header written in place, after the class fragments.
+	UsbCfgDesc_t *pConfig = reinterpret_cast<UsbCfgDesc_t *>(s_Core.ConfigDesc);
+	pConfig->bLength = sizeof(UsbCfgDesc_t);
+	pConfig->bDescriptorType = OtherSpeed ?
+		USB_DESCTYPE_OSC : USB_DESCTYPE_CONFIGURATION;
+	pConfig->wTotalLength = offset;
+	pConfig->bNumInterfaces = interfaceCount;
+	pConfig->bConfigurationValue = 1U;
+	pConfig->iConfiguration = 0U;
+	pConfig->bmAttributes = attributes;
+	pConfig->bMaxPower = UsbDescMaxPower(pCfg);
 	*pLength = offset;
 	return s_Core.ConfigDesc;
 }
@@ -411,15 +402,11 @@ static bool UsbCoreValidateConfigDescriptor(const uint8_t *pDesc,
 	return true;
 }
 
+// Type is USB_DESCTYPE_CONFIGURATION or USB_DESCTYPE_OSC, which both callers
+// have already settled, and the validator refuses a null pLength.
 static const uint8_t *UsbCoreGetConfigDescriptor(uint8_t Type, uint8_t Index,
 												uint16_t *pLength)
 {
-	if (pLength == nullptr ||
-		(Type != USB_DESCTYPE_CONFIGURATION && Type != USB_DESCTYPE_OSC))
-	{
-		return nullptr;
-	}
-
 	uint16_t providerLength;
 	const uint8_t *pDesc = UsbCoreGetDescriptor(Type, Index, 0,
 												&providerLength);
@@ -532,9 +519,60 @@ static bool UsbCoreInterfaceMatch(uint8_t InterfaceNo, uint16_t Alternate)
 	return false;
 }
 
-static bool UsbCoreInterfaceExists(uint8_t InterfaceNo)
+// Interface-recipient wIndex of the current SETUP: an interface below
+// MaxIntrf that the active configuration advertises, with the given alternate
+// or USB_CORE_ANY_ALTERNATE. Returns the interface number, or -1 when the
+// request is refused.
+static int UsbCoreInterfaceRecipient(uint16_t MaxIntrf, uint16_t Alternate)
 {
-	return UsbCoreInterfaceMatch(InterfaceNo, USB_CORE_ANY_ALTERNATE);
+	const uint16_t wIndex = s_Core.Setup.wIndex;
+
+	if (s_Core.Configuration == 0 || wIndex >= MaxIntrf ||
+		!UsbCoreInterfaceMatch((uint8_t)wIndex, Alternate))
+	{
+		return -1;
+	}
+
+	return wIndex;
+}
+
+// Walk over the endpoint descriptors of the active configuration that sit in
+// an interface at its selected alternate setting. Interface descriptors turn
+// Active on or off; endpoint descriptors are reported only while it is on.
+typedef struct __Usb_Core_Walk {
+	const uint8_t *pDesc;
+	uint16_t Len;
+	uint16_t Ofs;
+	bool Active;
+} UsbCoreWalk_t;
+
+static bool UsbCoreWalkStart(UsbCoreWalk_t *pWalk)
+{
+	pWalk->pDesc = UsbCoreActiveConfig(&pWalk->Len);
+	pWalk->Ofs = 0;
+	pWalk->Active = false;
+	return pWalk->pDesc != nullptr;
+}
+
+static const uint8_t *UsbCoreNextActiveEndpoint(UsbCoreWalk_t *pWalk)
+{
+	const uint8_t *p;
+	while ((p = UsbCoreNextDescriptor(pWalk->pDesc, pWalk->Len,
+									  &pWalk->Ofs)) != nullptr)
+	{
+		if (p[1] == USB_DESCTYPE_INTERFACE)
+		{
+			pWalk->Active = p[0] >= sizeof(UsbIntrfDesc_t) &&
+				p[2] < USB_CORE_INTRF_MAXCNT &&
+				s_Core.Alternate[p[2]] == p[3];
+		}
+		else if (pWalk->Active && p[1] == USB_DESCTYPE_ENDPOINT &&
+				 p[0] >= sizeof(UsbEndPointDesc_t))
+		{
+			return p;
+		}
+	}
+	return nullptr;
 }
 
 static bool UsbCoreIsoActive(void)
@@ -542,23 +580,15 @@ static bool UsbCoreIsoActive(void)
 	if (s_Core.Configuration == 0U)
 		return false;
 
-	uint16_t len;
-	const uint8_t *pDesc = UsbCoreActiveConfig(&len);
-	bool activeInterface = false;
-	uint16_t ofs = 0;
+	UsbCoreWalk_t walk;
 	const uint8_t *p;
 
-	while ((p = UsbCoreNextDescriptor(pDesc, len, &ofs)) != nullptr)
+	if (!UsbCoreWalkStart(&walk))
+		return false;
+
+	while ((p = UsbCoreNextActiveEndpoint(&walk)) != nullptr)
 	{
-		if (p[1] == USB_DESCTYPE_INTERFACE)
-		{
-			activeInterface = p[0] >= sizeof(UsbIntrfDesc_t) &&
-				p[2] < USB_CORE_INTRF_MAXCNT &&
-				s_Core.Alternate[p[2]] == p[3];
-		}
-		else if (activeInterface && p[1] == USB_DESCTYPE_ENDPOINT &&
-				 p[0] >= sizeof(UsbEndPointDesc_t) &&
-				 (p[3] & 0x03U) == USB_ENDPATT_TRANS_ISO)
+		if ((p[3] & 0x03U) == USB_ENDPATT_TRANS_ISO)
 		{
 			const uint8_t epNum = USB_ENDPADDR_NUM(p[2]);
 			const uint8_t dir = USB_ENDPADDR_IS_IN(p[2]) ? 1U : 0U;
@@ -576,12 +606,8 @@ static void UsbCoreUpdateSof(void)
 			!s_Core.Suspended && UsbCoreIsoActive());
 }
 
-static bool UsbCoreInterfaceAlternateExists(uint8_t InterfaceNo,
-												 uint8_t Alternate)
-{
-	return UsbCoreInterfaceMatch(InterfaceNo, Alternate);
-}
-
+// Endpoints of one interface alternate, OR-ed into the two masks. Returns
+// whether the alternate was found at all.
 static bool UsbCoreInterfaceEndpointMasks(uint8_t InterfaceNo,
 										   uint8_t Alternate,
 										   uint16_t *pInMask,
@@ -591,9 +617,6 @@ static bool UsbCoreInterfaceEndpointMasks(uint8_t InterfaceNo,
 	{
 		return false;
 	}
-
-	*pInMask = 0;
-	*pOutMask = 0;
 
 	uint16_t len;
 	const uint8_t *pDesc = UsbCoreActiveConfig(&len);
@@ -637,18 +660,15 @@ static void UsbCoreClearInterfaceHalt(uint8_t InterfaceNo,
 									  uint8_t OldAlternate,
 									  uint8_t NewAlternate)
 {
-	uint16_t oldIn = 0;
-	uint16_t oldOut = 0;
-	uint16_t newIn = 0;
-	uint16_t newOut = 0;
+	uint16_t in = 0;
+	uint16_t out = 0;
 
-	(void)UsbCoreInterfaceEndpointMasks(InterfaceNo, OldAlternate,
-										&oldIn, &oldOut);
-	(void)UsbCoreInterfaceEndpointMasks(InterfaceNo, NewAlternate,
-										&newIn, &newOut);
+	// The masks accumulate, so both alternates land in the same pair.
+	(void)UsbCoreInterfaceEndpointMasks(InterfaceNo, OldAlternate, &in, &out);
+	(void)UsbCoreInterfaceEndpointMasks(InterfaceNo, NewAlternate, &in, &out);
 
-	s_Core.HaltIn &= (uint16_t)~(oldIn | newIn);
-	s_Core.HaltOut &= (uint16_t)~(oldOut | newOut);
+	s_Core.HaltIn &= (uint16_t)~in;
+	s_Core.HaltOut &= (uint16_t)~out;
 }
 
 static bool UsbCoreEndpointExists(uint8_t EpNo, bool bIn)
@@ -658,38 +678,45 @@ static bool UsbCoreEndpointExists(uint8_t EpNo, bool bIn)
 		return true;
 	}
 
-	uint16_t len;
-	const uint8_t *pDesc = UsbCoreActiveConfig(&len);
+	UsbCoreWalk_t walk;
+	const uint8_t *p;
 
-	if (pDesc == nullptr)
+	if (!UsbCoreWalkStart(&walk))
 	{
 		return false;
 	}
 
-	bool activeInterface = false;
-	uint16_t ofs = 0;
-	const uint8_t *p;
-	while ((p = UsbCoreNextDescriptor(pDesc, len, &ofs)) != nullptr)
+	while ((p = UsbCoreNextActiveEndpoint(&walk)) != nullptr)
 	{
-		if (p[1] == USB_DESCTYPE_INTERFACE)
+		const uint8_t epAddr = p[2];
+		if (USB_ENDPADDR_NUM(epAddr) == EpNo &&
+			(bool)USB_ENDPADDR_IS_IN(epAddr) == bIn)
 		{
-			activeInterface = p[0] >= sizeof(UsbIntrfDesc_t) &&
-				p[2] < USB_CORE_INTRF_MAXCNT &&
-				s_Core.Alternate[p[2]] == p[3];
-		}
-		else if (activeInterface && p[1] == USB_DESCTYPE_ENDPOINT &&
-				 p[0] >= sizeof(UsbEndPointDesc_t))
-		{
-			const uint8_t epAddr = p[2];
-			if (USB_ENDPADDR_NUM(epAddr) == EpNo &&
-				(bool)USB_ENDPADDR_IS_IN(epAddr) == bIn)
-			{
-				return true;
-			}
+			return true;
 		}
 	}
 
 	return false;
+}
+
+// Endpoint-recipient wIndex of the current SETUP: an endpoint address with no
+// reserved bits that exists in the active configuration. Endpoint zero is
+// accepted only when AllowEp0 is set; any other endpoint needs a configured
+// device. Returns the endpoint address, or -1 when the request is refused.
+static int UsbCoreEndpointRecipient(bool AllowEp0)
+{
+	const uint16_t wIndex = s_Core.Setup.wIndex;
+	const uint8_t epAddr = (uint8_t)wIndex;
+	const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
+
+	if ((wIndex & 0xFF70U) != 0U ||
+		(epNum == 0U ? !AllowEp0 : s_Core.Configuration == 0U) ||
+		!UsbCoreEndpointExists(epNum, USB_ENDPADDR_IS_IN(epAddr)))
+	{
+		return -1;
+	}
+
+	return epAddr;
 }
 
 static int UsbCoreFindClass(uint8_t InterfaceNo)
@@ -711,13 +738,10 @@ static int UsbCoreFindClass(uint8_t InterfaceNo)
 	return -1;
 }
 
+// EpNo is a data endpoint number, 1 to 15, as UsbCoreEndpointRecipient
+// returns it.
 static int UsbCoreFindEndpointClass(uint8_t EpNo, bool bIn)
 {
-	if (EpNo == 0U || EpNo >= 16U)
-	{
-		return -1;
-	}
-
 	return s_Core.EpClass[bIn ? 1 : 0][EpNo];
 }
 
@@ -755,11 +779,8 @@ static bool UsbCoreInvokeActive(UsbCtrlStage_t Stage,
 
 static void UsbCoreAbortControl(void)
 {
-	if (s_Core.ActiveClass >= 0 && s_Core.ActiveClass < s_Core.ObjectCnt)
-	{
-		(void)UsbCoreInvokeActive(USB_CTRL_ABORT, s_Core.CtrlActual);
-	}
-
+	// UsbCoreInvokeActive does nothing without an active class.
+	(void)UsbCoreInvokeActive(USB_CTRL_ABORT, s_Core.CtrlActual);
 	UsbCoreResetControl();
 }
 
@@ -817,9 +838,10 @@ static bool UsbCoreStartIn(const uint8_t *pData, uint16_t Available)
 	s_Core.CtrlData = const_cast<uint8_t *>(pData);
 	s_Core.CtrlDataLen = sendLen;
 	s_Core.CtrlActual = 0;
+	// Ep0Mps is a power of two, every writer runs UsbCoreValidEp0Mps.
 	s_Core.CtrlNeedZlp =
 		sendLen > 0 && sendLen < s_Core.Setup.wLength &&
-		(sendLen % s_Core.Cfg.Ep0Mps) == 0;
+		(sendLen & (s_Core.Cfg.Ep0Mps - 1U)) == 0;
 	s_Core.CtrlState = USB_CTRL_DATA_IN;
 
 	return UsbCoreSendIn();
@@ -1036,8 +1058,7 @@ static bool UsbCoreHandleGetStatus(void)
 			break;
 
 		case USB_REQTYPE_INTERFACE:
-			if (s_Core.Configuration == 0 || s_Core.Setup.wIndex > 0xFFU ||
-				!UsbCoreInterfaceExists((uint8_t)s_Core.Setup.wIndex))
+			if (UsbCoreInterfaceRecipient(0x100U, USB_CORE_ANY_ALTERNATE) < 0)
 			{
 				return false;
 			}
@@ -1045,17 +1066,13 @@ static bool UsbCoreHandleGetStatus(void)
 
 		case USB_REQTYPE_ENDPOINT:
 		{
-			const uint8_t epAddr = (uint8_t)s_Core.Setup.wIndex;
-			const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
-			const bool in = USB_ENDPADDR_IS_IN(epAddr);
-			if ((s_Core.Setup.wIndex & 0xFF00U) != 0 ||
-				(epAddr & 0x70U) != 0U ||
-				(epNum != 0U && s_Core.Configuration == 0U) ||
-				!UsbCoreEndpointExists(epNum, in))
+			const int epAddr = UsbCoreEndpointRecipient(true);
+			if (epAddr < 0)
 			{
 				return false;
 			}
-			if (UsbCoreEndpointHalted(epNum, in))
+			if (UsbCoreEndpointHalted(USB_ENDPADDR_NUM(epAddr),
+									  USB_ENDPADDR_IS_IN(epAddr)))
 			{
 				status = USB_ENDPSTATUS_HALT;
 			}
@@ -1090,20 +1107,16 @@ static bool UsbCoreHandleFeature(bool Set)
 	}
 
 	if (recipient == USB_REQTYPE_ENDPOINT &&
-		s_Core.Setup.wValue == USB_FEATSEL_ENDPOINT_HALT &&
-		(s_Core.Setup.wIndex & 0xFF00U) == 0)
+		s_Core.Setup.wValue == USB_FEATSEL_ENDPOINT_HALT)
 	{
-		const uint8_t epAddr = (uint8_t)s_Core.Setup.wIndex;
-		const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
-		const bool in = USB_ENDPADDR_IS_IN(epAddr);
-
-		if ((epAddr & 0x70U) != 0U || epNum == 0U ||
-			s_Core.Configuration == 0 || !UsbCoreEndpointExists(epNum, in))
+		const int epAddr = UsbCoreEndpointRecipient(false);
+		if (epAddr < 0)
 		{
 			return false;
 		}
 
-		UsbCoreSetEndpointHalt(epNum, in, Set);
+		UsbCoreSetEndpointHalt(USB_ENDPADDR_NUM(epAddr),
+							   USB_ENDPADDR_IS_IN(epAddr), Set);
 		return UsbCoreStartStatus();
 	}
 
@@ -1132,15 +1145,14 @@ static bool UsbCoreHandleGetInterface(void)
 {
 	if (!UsbCoreDirIn(&s_Core.Setup) ||
 		UsbCoreRecipient(&s_Core.Setup) != USB_REQTYPE_INTERFACE ||
-		s_Core.Setup.wValue != 0 || s_Core.Setup.wLength != 1 ||
-		s_Core.Setup.wIndex > 0xFFU || s_Core.Configuration == 0)
+		s_Core.Setup.wValue != 0 || s_Core.Setup.wLength != 1)
 	{
 		return false;
 	}
 
-	const uint8_t interfaceNo = (uint8_t)s_Core.Setup.wIndex;
-	if (interfaceNo >= USB_CORE_INTRF_MAXCNT ||
-		!UsbCoreInterfaceExists(interfaceNo))
+	const int interfaceNo = UsbCoreInterfaceRecipient(USB_CORE_INTRF_MAXCNT,
+													  USB_CORE_ANY_ALTERNATE);
+	if (interfaceNo < 0)
 	{
 		return false;
 	}
@@ -1153,17 +1165,15 @@ static bool UsbCoreHandleSetInterface(void)
 {
 	if (UsbCoreDirIn(&s_Core.Setup) ||
 		UsbCoreRecipient(&s_Core.Setup) != USB_REQTYPE_INTERFACE ||
-		s_Core.Setup.wLength != 0 || s_Core.Setup.wIndex > 0xFFU ||
-		s_Core.Setup.wValue > 0xFFU || s_Core.Configuration == 0)
+		s_Core.Setup.wLength != 0 || s_Core.Setup.wValue > 0xFFU)
 	{
 		return false;
 	}
 
-	const uint8_t interfaceNo = (uint8_t)s_Core.Setup.wIndex;
 	const uint8_t alternate = (uint8_t)s_Core.Setup.wValue;
-
-	if (interfaceNo >= USB_CORE_INTRF_MAXCNT ||
-		!UsbCoreInterfaceAlternateExists(interfaceNo, alternate))
+	const int interfaceNo = UsbCoreInterfaceRecipient(USB_CORE_INTRF_MAXCNT,
+													  alternate);
+	if (interfaceNo < 0)
 	{
 		return false;
 	}
@@ -1284,14 +1294,9 @@ static bool UsbCoreHandleClassRequest(void)
 
 	if (recipient == USB_REQTYPE_INTERFACE)
 	{
-		if (s_Core.Configuration == 0 || s_Core.Setup.wIndex > 0xFFU)
-		{
-			return false;
-		}
-
-		const uint8_t interfaceNo = (uint8_t)s_Core.Setup.wIndex;
-		if (interfaceNo >= USB_CORE_INTRF_MAXCNT ||
-			!UsbCoreInterfaceExists(interfaceNo))
+		const int interfaceNo = UsbCoreInterfaceRecipient(
+			USB_CORE_INTRF_MAXCNT, USB_CORE_ANY_ALTERNATE);
+		if (interfaceNo < 0)
 		{
 			return false;
 		}
@@ -1302,21 +1307,14 @@ static bool UsbCoreHandleClassRequest(void)
 
 	if (recipient == USB_REQTYPE_ENDPOINT)
 	{
-		if (s_Core.Configuration == 0 || (s_Core.Setup.wIndex & 0xFF00U) != 0)
+		const int epAddr = UsbCoreEndpointRecipient(false);
+		if (epAddr < 0)
 		{
 			return false;
 		}
 
-		const uint8_t epAddr = (uint8_t)s_Core.Setup.wIndex;
-		const uint8_t epNum = USB_ENDPADDR_NUM(epAddr);
-		const bool in = USB_ENDPADDR_IS_IN(epAddr);
-		if ((epAddr & 0x70U) != 0U || epNum == 0U ||
-			!UsbCoreEndpointExists(epNum, in))
-		{
-			return false;
-		}
-
-		const int cls = UsbCoreFindEndpointClass(epNum, in);
+		const int cls = UsbCoreFindEndpointClass(USB_ENDPADDR_NUM(epAddr),
+												 USB_ENDPADDR_IS_IN(epAddr));
 		return cls >= 0 && UsbCoreCallClassSetup(cls);
 	}
 
@@ -1577,40 +1575,27 @@ static bool UsbCoreRegisterObject(UsbDeviceClass *pClass,
 		return false;
 	}
 
-	if (InterfaceCount != 0)
+	// Interface range of the new class, empty when it has no interface.
+	const uint16_t lastA = (uint16_t)FirstInterface + (uint16_t)InterfaceCount;
+	if (InterfaceCount != 0 && lastA > USB_CORE_INTRF_MAXCNT)
 	{
-		const uint16_t last = (uint16_t)FirstInterface +
-			(uint16_t)InterfaceCount;
-		if (last > USB_CORE_INTRF_MAXCNT)
-		{
-			return false;
-		}
-
-		for (int i = 0; i < s_Core.ObjectCnt; i++)
-		{
-			const UsbDeviceClass *pRegistered =
-				static_cast<const UsbDeviceClass *>(s_Core.Object[i]);
-			const uint16_t firstA = FirstInterface;
-			const uint16_t lastA = last;
-			const uint16_t firstB = pRegistered->FirstInterface();
-			const uint16_t lastB =
-				firstB + pRegistered->InterfaceCount();
-
-			if (pRegistered->InterfaceCount() != 0 &&
-				firstA < lastB && firstB < lastA)
-			{
-				return false;
-			}
-		}
+		return false;
 	}
 
+	// One pass over the registered classes: the same object, an interface
+	// range overlap or an endpoint ownership overlap each refuse the request.
 	for (int i = 0; i < s_Core.ObjectCnt; i++)
 	{
 		const UsbDeviceClass *pRegistered =
 			static_cast<const UsbDeviceClass *>(s_Core.Object[i]);
+		const uint16_t firstB = pRegistered->FirstInterface();
+		const uint16_t lastB = firstB + pRegistered->InterfaceCount();
+
 		if (pRegistered == pClass ||
 			(EpInMask & pRegistered->EpInMask()) != 0 ||
-			(EpOutMask & pRegistered->EpOutMask()) != 0)
+			(EpOutMask & pRegistered->EpOutMask()) != 0 ||
+			(InterfaceCount != 0 && pRegistered->InterfaceCount() != 0 &&
+			 FirstInterface < lastB && firstB < lastA))
 		{
 			return false;
 		}
@@ -1772,8 +1757,8 @@ static bool UsbDevEnable(void)
 	}
 
 	uint16_t descriptorLength = 0U;
-	if (UsbGetDescriptor(s_Core.DevNo, USB_DESCTYPE_CONFIGURATION, 0U, 0U,
-		UsbGetSpeed(s_Core.DevNo), &descriptorLength) == nullptr)
+	if (UsbCoreGetDescriptor(USB_DESCTYPE_CONFIGURATION, 0U, 0U,
+							 &descriptorLength) == nullptr)
 	{
 		return false;
 	}
@@ -1951,8 +1936,8 @@ const uint8_t *UsbGetDescriptor(int DevNo, uint8_t Type, uint8_t Index,
 								 uint16_t LangId, UsbSpeed_t Speed,
 								 uint16_t *pLength)
 {
-	if (pLength == nullptr || DevNo != s_Core.DevNo ||
-		UsbGetCfg(DevNo) == nullptr)
+	const UsbCfg_t *pCfg = UsbGetCfg(DevNo);
+	if (pLength == nullptr || DevNo != s_Core.DevNo || pCfg == nullptr)
 	{
 		return nullptr;
 	}
@@ -1961,15 +1946,17 @@ const uint8_t *UsbGetDescriptor(int DevNo, uint8_t Type, uint8_t Index,
 	switch (Type)
 	{
 		case USB_DESCTYPE_DEVICE:
-			return UsbDescDevice(DevNo, Index, pLength);
+			return UsbDescDevice(DevNo, pCfg, Index, pLength);
 		case USB_DESCTYPE_CONFIGURATION:
-			return UsbDescConfiguration(DevNo, Index, Speed, false, pLength);
+			return UsbDescConfiguration(DevNo, pCfg, Index, Speed, false,
+										pLength);
 		case USB_DESCTYPE_STRING:
-			return UsbDescString(DevNo, Index, LangId, pLength);
+			return UsbDescString(DevNo, pCfg, Index, LangId, pLength);
 		case USB_DESCTYPE_DEVICE_QUALIFIER:
-			return UsbDescQualifier(DevNo, Index, pLength);
+			return UsbDescQualifier(DevNo, pCfg, Index, pLength);
 		case USB_DESCTYPE_OSC:
-			return UsbDescConfiguration(DevNo, Index, Speed, true, pLength);
+			return UsbDescConfiguration(DevNo, pCfg, Index, Speed, true,
+										pLength);
 		default:
 			return nullptr;
 	}

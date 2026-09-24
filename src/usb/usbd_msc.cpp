@@ -21,12 +21,17 @@ static uint16_t UsbdMscGetBe16(const uint8_t *pData)
 	return (uint16_t)(((uint16_t)pData[0] << 8) | pData[1]);
 }
 
-static uint32_t UsbdMscGetBe32(const uint8_t *pData)
+// Inlined: the compiler turns this into one load and a byte reverse, which
+// is smaller than a call.
+static inline __attribute__((always_inline))
+uint32_t UsbdMscGetBe32(const uint8_t *pData)
 {
 	return ((uint32_t)pData[0] << 24) | ((uint32_t)pData[1] << 16) |
 		((uint32_t)pData[2] << 8) | pData[3];
 }
 
+// Kept out of line: the byte stores are larger than a call at each use.
+__attribute__((noinline))
 static void UsbdMscPutBe32(uint8_t *pData, uint32_t Value)
 {
 	pData[0] = (uint8_t)(Value >> 24);
@@ -55,6 +60,19 @@ static UsbPkt_t *UsbdMscTxPacket(UsbdMscDev_t *pMsc)
 	return reinterpret_cast<UsbPkt_t *>(pMsc->TxPacket);
 }
 
+static void UsbdMscStall(UsbdMscDev_t *pMsc, UsbdMscDataDirection_t Direction)
+{
+	(void)UsbEpSetHalt(pMsc->DevNo, pMsc->EpNo,
+		Direction == USBD_MSC_DATA_IN, true);
+}
+
+// Kept out of line: the call sites are smaller than the inlined argument setup.
+__attribute__((noinline))
+static bool UsbdMscHalted(const UsbdMscDev_t *pMsc, bool bIn)
+{
+	return UsbEpHalted(pMsc->DevNo, pMsc->EpNo, bIn);
+}
+
 static void UsbdMscSetSense(UsbdMscDev_t *pMsc, uint8_t Key,
 							 uint8_t Asc, uint8_t Ascq = 0U)
 {
@@ -63,14 +81,11 @@ static void UsbdMscSetSense(UsbdMscDev_t *pMsc, uint8_t Key,
 	pMsc->SenseAscq = Ascq;
 }
 
-static void UsbdMscFail(UsbdMscDev_t *pMsc, uint8_t Key, uint8_t Asc)
-{
-	pMsc->bCommandFailed = true;
-	UsbdMscSetSense(pMsc, Key, Asc);
-}
-
+// Kept out of line: one copy of the failed flag and sense stores for all
+// SCSI failure paths.
+__attribute__((noinline))
 static void UsbdMscFail(UsbdMscDev_t *pMsc, uint8_t Key, uint8_t Asc,
-							 uint8_t Ascq)
+							 uint8_t Ascq = 0U)
 {
 	pMsc->bCommandFailed = true;
 	UsbdMscSetSense(pMsc, Key, Asc, Ascq);
@@ -95,12 +110,16 @@ static bool UsbdMscMediumReady(UsbdMscDev_t *pMsc)
 }
 
 static void UsbdMscCopyInquiry(char *pDest, size_t Length,
-							const char *pSource)
+							const char *pSource, const char *pDefault)
 {
 	memset(pDest, ' ', Length);
 	if (pSource == nullptr)
 	{
-		return;
+		pSource = pDefault;
+		if (pSource == nullptr)
+		{
+			return;
+		}
 	}
 
 	size_t length = 0U;
@@ -124,29 +143,51 @@ static void UsbdMscCloseEndpoints(UsbdMscDev_t *pMsc)
 	UsbCtrlrEpClose(pMsc->DevNo, pMsc->EpNo, true);
 }
 
-static bool UsbdMscRestartEndpoints(UsbdMscDev_t *pMsc)
+// Close the bulk endpoints when they are open.
+static void UsbdMscDeconfigure(UsbdMscDev_t *pMsc)
 {
-	const bool haltIn = UsbEpHalted(pMsc->DevNo, pMsc->EpNo, true);
-	const bool haltOut = UsbEpHalted(pMsc->DevNo, pMsc->EpNo, false);
+	if (pMsc->bConfigured)
+	{
+		UsbdMscCloseEndpoints(pMsc);
+		pMsc->bConfigured = false;
+	}
+}
+
+// Configure the data path and open both bulk endpoints at the current bus
+// speed. On failure everything opened so far is closed again.
+static bool UsbdMscOpenEndpoints(UsbdMscDev_t *pMsc)
+{
 	const uint16_t mps = UsbdMscMps(pMsc);
 
-	UsbdMscCloseEndpoints(pMsc);
 	if (!UsbIntrfConfigure(pMsc->pData, mps) ||
 		!UsbdMscOpenEndpoint(pMsc, true, mps) ||
 		!UsbdMscOpenEndpoint(pMsc, false, mps))
 	{
 		UsbdMscCloseEndpoints(pMsc);
 		UsbIntrfUnconfigure(pMsc->pData);
+		return false;
+	}
+	return true;
+}
+
+static bool UsbdMscRestartEndpoints(UsbdMscDev_t *pMsc)
+{
+	const bool haltIn = UsbdMscHalted(pMsc, true);
+	const bool haltOut = UsbdMscHalted(pMsc, false);
+
+	UsbdMscCloseEndpoints(pMsc);
+	if (!UsbdMscOpenEndpoints(pMsc))
+	{
 		pMsc->bConfigured = false;
 		return false;
 	}
 	if (haltIn)
 	{
-		(void)UsbEpSetHalt(pMsc->DevNo, pMsc->EpNo, true, true);
+		UsbdMscStall(pMsc, USBD_MSC_DATA_IN);
 	}
 	if (haltOut)
 	{
-		(void)UsbEpSetHalt(pMsc->DevNo, pMsc->EpNo, false, true);
+		UsbdMscStall(pMsc, USBD_MSC_DATA_OUT);
 	}
 	return true;
 }
@@ -169,6 +210,9 @@ static constexpr UsbdMscDesc_t UsbdMscDescTemplate(void)
 
 static constexpr UsbdMscDesc_t s_MscDescTemplate = UsbdMscDescTemplate();
 
+// Kept out of line: shared by the registered patch callback and the weak
+// UsbdMscMakeDesc.
+__attribute__((noinline))
 static void UsbdMscPatchDesc(UsbdMscDesc_t *pDesc,
 							 const UsbdMscDev_t *pMsc, UsbSpeed_t Speed)
 {
@@ -230,17 +274,18 @@ static void UsbdMscClearCommand(UsbdMscDev_t *pMsc)
 	pMsc->bTxFailed = false;
 	pMsc->PendingTx = USBD_MSC_TX_NONE;
 	pMsc->PendingTxLength = 0U;
-	pMsc->HostLength = 0U;
-	pMsc->DeviceLength = 0U;
-	pMsc->TransferLimit = 0U;
-	pMsc->Transferred = 0U;
-	pMsc->Lba = 0U;
-	pMsc->BlocksRemaining = 0U;
-	pMsc->SectorOffset = 0U;
-	pMsc->ResponseLength = 0U;
-	pMsc->ResponseOffset = 0U;
-	memset(&pMsc->Cbw, 0, sizeof(pMsc->Cbw));
-	memset(&pMsc->Csw, 0, sizeof(pMsc->Csw));
+	// HostLength, DeviceLength, TransferLimit, Transferred, Lba,
+	// BlocksRemaining, SectorOffset, ResponseLength, ResponseOffset, Cbw and
+	// Csw are adjacent: one clear covers the whole transfer state.
+	static_assert(offsetof(UsbdMscDev_t, Csw) + sizeof(pMsc->Csw) -
+		offsetof(UsbdMscDev_t, HostLength) ==
+		6U * sizeof(uint32_t) + 3U * sizeof(uint16_t) +
+		sizeof(pMsc->Cbw) + sizeof(pMsc->Csw),
+		"MSC transfer state must be contiguous");
+	memset(reinterpret_cast<uint8_t *>(pMsc) +
+		offsetof(UsbdMscDev_t, HostLength), 0,
+		offsetof(UsbdMscDev_t, Csw) + sizeof(pMsc->Csw) -
+		offsetof(UsbdMscDev_t, HostLength));
 }
 
 static void UsbdMscResetBot(UsbdMscDev_t *pMsc, bool ResetMedium)
@@ -281,15 +326,13 @@ static int UsbdMscDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 	return 0;
 }
 
-static void UsbdMscStall(UsbdMscDev_t *pMsc, UsbdMscDataDirection_t Direction)
-{
-	(void)UsbEpSetHalt(pMsc->DevNo, pMsc->EpNo,
-		Direction == USBD_MSC_DATA_IN, true);
-}
-
 static void UsbdMscFinishCommand(UsbdMscDev_t *pMsc)
 {
-	pMsc->Csw.dCSWSignature = USB_MSC_CSW_SIGNATURE;
+	// Copied as a word: a constant assigned to the packed field is expanded
+	// into byte stores.
+	const uint32_t signature = USB_MSC_CSW_SIGNATURE;
+
+	memcpy(&pMsc->Csw.dCSWSignature, &signature, sizeof(signature));
 	pMsc->Csw.dCSWTag = pMsc->Cbw.dCBWTag;
 	pMsc->Csw.dCSWDataResidue = pMsc->HostLength - pMsc->Transferred;
 	pMsc->Csw.bCSWStatus = pMsc->bPhaseError ?
@@ -338,6 +381,16 @@ static bool UsbdMscQueuePacket(UsbdMscDev_t *pMsc, const uint8_t *pData,
 	return true;
 }
 
+// One sector fully transferred: step to the next block. Kept out of line
+// for the data-in and data-out paths.
+__attribute__((noinline))
+static void UsbdMscNextSector(UsbdMscDev_t *pMsc)
+{
+	pMsc->SectorOffset = 0U;
+	pMsc->Lba++;
+	pMsc->BlocksRemaining--;
+}
+
 static void UsbdMscCompletePendingTx(UsbdMscDev_t *pMsc)
 {
 	if (pMsc->PendingTx == USBD_MSC_TX_NONE || !UsbdMscTxIdle(pMsc))
@@ -362,9 +415,7 @@ static void UsbdMscCompletePendingTx(UsbdMscDev_t *pMsc)
 			pMsc->SectorOffset = (uint16_t)(pMsc->SectorOffset + length);
 			if (pMsc->SectorOffset == pMsc->SectorSize)
 			{
-				pMsc->SectorOffset = 0U;
-				pMsc->Lba++;
-				pMsc->BlocksRemaining--;
+				UsbdMscNextSector(pMsc);
 			}
 		}
 	}
@@ -384,22 +435,47 @@ static void UsbdMscCompletePendingTx(UsbdMscDev_t *pMsc)
 	}
 }
 
-static void UsbdMscPrepareInquiry(UsbdMscDev_t *pMsc)
+// Start a data-in response of Length bytes built in pMsc->Response.
+__attribute__((noinline))
+static void UsbdMscStartResponse(UsbdMscDev_t *pMsc, uint8_t Length)
 {
 	memset(pMsc->Response, 0, sizeof(pMsc->Response));
-	pMsc->Response[0] = 0x00U;
+	pMsc->ResponseLength = Length;
+	pMsc->DeviceLength = Length;
+}
+
+// Allocation length from CDB byte 4 capped at the size of the response.
+static uint8_t UsbdMscAllocLength(const UsbdMscDev_t *pMsc, uint8_t MaxLength)
+{
+	const uint8_t alloc = pMsc->Cbw.CBWCB[4];
+
+	return alloc < MaxLength ? alloc : MaxLength;
+}
+
+static void UsbdMscPrepareInquiry(UsbdMscDev_t *pMsc)
+{
+	UsbdMscStartResponse(pMsc,
+		UsbdMscAllocLength(pMsc, sizeof(pMsc->Response)));
+	// Response[0] stays 0x00 from the clear: direct access block device.
 	pMsc->Response[1] = pMsc->bRemovable ? 0x80U : 0x00U;
 	pMsc->Response[2] = 0x06U;
 	pMsc->Response[3] = 0x02U;
 	pMsc->Response[4] = 31U;
-	memcpy(&pMsc->Response[8], pMsc->Vendor, sizeof(pMsc->Vendor));
-	memcpy(&pMsc->Response[16], pMsc->Product, sizeof(pMsc->Product));
-	memcpy(&pMsc->Response[32], pMsc->Revision, sizeof(pMsc->Revision));
+	// Vendor, product and revision are adjacent in both the device state and
+	// the INQUIRY response, so one copy covers all three.
+	static_assert(offsetof(UsbdMscDev_t, Product) ==
+		offsetof(UsbdMscDev_t, Vendor) + sizeof(pMsc->Vendor) &&
+		offsetof(UsbdMscDev_t, Revision) ==
+		offsetof(UsbdMscDev_t, Product) + sizeof(pMsc->Product),
+		"INQUIRY identity strings must be contiguous");
+	memcpy(&pMsc->Response[8], reinterpret_cast<const uint8_t *>(pMsc) +
+		offsetof(UsbdMscDev_t, Vendor),
+		sizeof(pMsc->Vendor) + sizeof(pMsc->Product) + sizeof(pMsc->Revision));
 }
 
 static void UsbdMscPrepareSense(UsbdMscDev_t *pMsc)
 {
-	memset(pMsc->Response, 0, sizeof(pMsc->Response));
+	UsbdMscStartResponse(pMsc, UsbdMscAllocLength(pMsc, 18U));
 	pMsc->Response[0] = 0x70U;
 	pMsc->Response[2] = pMsc->SenseKey;
 	pMsc->Response[7] = 10U;
@@ -412,6 +488,23 @@ static bool UsbdMscRangeValid(const UsbdMscDev_t *pMsc, uint32_t Lba,
 {
 	return Blocks == 0U ||
 		(Lba < pMsc->SectorCount && Blocks <= pMsc->SectorCount - Lba);
+}
+
+// Medium check followed by the LBA range check for the block commands. Both
+// failures set the command failed with their own sense code.
+static bool UsbdMscReadyRange(UsbdMscDev_t *pMsc, uint32_t Blocks)
+{
+	if (!UsbdMscMediumReady(pMsc))
+	{
+		return false;
+	}
+	if (!UsbdMscRangeValid(pMsc, pMsc->Lba, Blocks))
+	{
+		UsbdMscFail(pMsc, USB_MSC_SENSE_ILLEGAL_REQUEST,
+			USB_MSC_ASC_LBA_OUT_OF_RANGE);
+		return false;
+	}
+	return true;
 }
 
 static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
@@ -430,9 +523,6 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 				return USBD_MSC_DATA_NONE;
 			}
 			UsbdMscPrepareInquiry(pMsc);
-			pMsc->ResponseLength = cdb[4] < sizeof(pMsc->Response) ?
-				cdb[4] : sizeof(pMsc->Response);
-			pMsc->DeviceLength = pMsc->ResponseLength;
 			return USBD_MSC_DATA_IN;
 
 		case USB_MSC_SCSI_TEST_UNIT_READY:
@@ -455,8 +545,6 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 				return USBD_MSC_DATA_NONE;
 			}
 			UsbdMscPrepareSense(pMsc);
-			pMsc->ResponseLength = cdb[4] < 18U ? cdb[4] : 18U;
-			pMsc->DeviceLength = pMsc->ResponseLength;
 			UsbdMscSetSense(pMsc, USB_MSC_SENSE_NONE, 0U);
 			return USBD_MSC_DATA_IN;
 
@@ -473,10 +561,9 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 			{
 				return USBD_MSC_DATA_IN;
 			}
-			memset(pMsc->Response, 0, sizeof(pMsc->Response));
+			UsbdMscStartResponse(pMsc, 8U);
 			UsbdMscPutBe32(&pMsc->Response[0], pMsc->SectorCount - 1U);
 			UsbdMscPutBe32(&pMsc->Response[4], pMsc->SectorSize);
-			pMsc->ResponseLength = 8U;
 			return USBD_MSC_DATA_IN;
 
 		case USB_MSC_SCSI_MODE_SENSE_6:
@@ -486,11 +573,9 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 					USB_MSC_ASC_INVALID_FIELD);
 				return USBD_MSC_DATA_NONE;
 			}
-			memset(pMsc->Response, 0, sizeof(pMsc->Response));
+			UsbdMscStartResponse(pMsc, UsbdMscAllocLength(pMsc, 4U));
 			pMsc->Response[0] = 3U;
 			pMsc->Response[2] = pMsc->bReadOnly ? 0x80U : 0x00U;
-			pMsc->ResponseLength = cdb[4] < 4U ? cdb[4] : 4U;
-			pMsc->DeviceLength = pMsc->ResponseLength;
 			return USBD_MSC_DATA_IN;
 
 		case USB_MSC_SCSI_READ_10:
@@ -505,15 +590,8 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 			blocks = UsbdMscGetBe16(&cdb[7]);
 			pMsc->BlocksRemaining = blocks;
 			pMsc->DeviceLength = blocks * (uint32_t)pMsc->SectorSize;
-			if (!UsbdMscMediumReady(pMsc))
+			if (!UsbdMscReadyRange(pMsc, blocks))
 			{
-				return cdb[0] == USB_MSC_SCSI_READ_10 ?
-					USBD_MSC_DATA_IN : USBD_MSC_DATA_OUT;
-			}
-			if (!UsbdMscRangeValid(pMsc, pMsc->Lba, blocks))
-			{
-				UsbdMscFail(pMsc, USB_MSC_SENSE_ILLEGAL_REQUEST,
-					USB_MSC_ASC_LBA_OUT_OF_RANGE);
 				return cdb[0] == USB_MSC_SCSI_READ_10 ?
 					USBD_MSC_DATA_IN : USBD_MSC_DATA_OUT;
 			}
@@ -580,15 +658,7 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 			}
 			pMsc->Lba = UsbdMscGetBe32(&cdb[2]);
 			blocks = UsbdMscGetBe16(&cdb[7]);
-			if (!UsbdMscMediumReady(pMsc))
-			{
-				return USBD_MSC_DATA_NONE;
-			}
-			if (!UsbdMscRangeValid(pMsc, pMsc->Lba, blocks))
-			{
-				UsbdMscFail(pMsc, USB_MSC_SENSE_ILLEGAL_REQUEST,
-					USB_MSC_ASC_LBA_OUT_OF_RANGE);
-			}
+			(void)UsbdMscReadyRange(pMsc, blocks);
 			return USBD_MSC_DATA_NONE;
 
 		case USB_MSC_SCSI_SYNCHRONIZE_CACHE:
@@ -687,8 +757,8 @@ static bool UsbdMscValidCbw(const UsbMscCmdBlkWrapper_t *pCbw,
 
 static void UsbdMscInvalidCbw(UsbdMscDev_t *pMsc)
 {
-	(void)UsbEpSetHalt(pMsc->DevNo, pMsc->EpNo, false, true);
-	(void)UsbEpSetHalt(pMsc->DevNo, pMsc->EpNo, true, true);
+	UsbdMscStall(pMsc, USBD_MSC_DATA_OUT);
+	UsbdMscStall(pMsc, USBD_MSC_DATA_IN);
 	pMsc->bResetSeen = false;
 	pMsc->State = USBD_MSC_BOT_RESET_RECOVERY;
 }
@@ -834,9 +904,7 @@ static void UsbdMscProcessDataOut(UsbdMscDev_t *pMsc)
 				UsbdMscFinishCommand(pMsc);
 				return;
 			}
-			pMsc->SectorOffset = 0U;
-			pMsc->Lba++;
-			pMsc->BlocksRemaining--;
+			UsbdMscNextSector(pMsc);
 		}
 	}
 
@@ -853,8 +921,7 @@ static void UsbdMscProcessCsw(UsbdMscDev_t *pMsc)
 		UsbdMscCompletePendingTx(pMsc);
 		return;
 	}
-	if (
-		UsbEpHalted(pMsc->DevNo, pMsc->EpNo, true))
+	if (UsbdMscHalted(pMsc, true))
 	{
 		return;
 	}
@@ -895,9 +962,8 @@ static void UsbdMscProcessInternal(UsbdMscDev_t *pMsc)
 			break;
 
 		case USBD_MSC_BOT_RESET_RECOVERY:
-			if (pMsc->bResetSeen &&
-				!UsbEpHalted(pMsc->DevNo, pMsc->EpNo, true) &&
-				!UsbEpHalted(pMsc->DevNo, pMsc->EpNo, false))
+			if (pMsc->bResetSeen && !UsbdMscHalted(pMsc, true) &&
+				!UsbdMscHalted(pMsc, false))
 			{
 				pMsc->bResetSeen = false;
 				pMsc->State = USBD_MSC_BOT_WAIT_CBW;
@@ -952,12 +1018,12 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 		return false;
 	}
 
-	UsbdMscCopyInquiry(pMsc->Vendor, sizeof(pMsc->Vendor),
-		pCfg->pVendor != nullptr ? pCfg->pVendor : "I-SYST");
-	UsbdMscCopyInquiry(pMsc->Product, sizeof(pMsc->Product),
-		pCfg->pProduct != nullptr ? pCfg->pProduct : "IOsonata MSC");
+	UsbdMscCopyInquiry(pMsc->Vendor, sizeof(pMsc->Vendor), pCfg->pVendor,
+		"I-SYST");
+	UsbdMscCopyInquiry(pMsc->Product, sizeof(pMsc->Product), pCfg->pProduct,
+		"IOsonata MSC");
 	UsbdMscCopyInquiry(pMsc->Revision, sizeof(pMsc->Revision),
-		pCfg->pRevision != nullptr ? pCfg->pRevision : "1.00");
+		pCfg->pRevision, "1.00");
 
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 1U;
@@ -1056,11 +1122,7 @@ bool UsbdMsc::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 
 bool UsbdMsc::SelectConfig(uint8_t ConfigValue)
 {
-	if (vUsbdMsc.bConfigured)
-	{
-		UsbdMscCloseEndpoints(&vUsbdMsc);
-		vUsbdMsc.bConfigured = false;
-	}
+	UsbdMscDeconfigure(&vUsbdMsc);
 	UsbIntrfUnconfigure(vUsbdMsc.pData);
 	if (ConfigValue == 0U)
 	{
@@ -1072,13 +1134,8 @@ bool UsbdMsc::SelectConfig(uint8_t ConfigValue)
 		return false;
 	}
 
-	const uint16_t mps = UsbdMscMps(&vUsbdMsc);
-	if (!UsbIntrfConfigure(vUsbdMsc.pData, mps) ||
-		!UsbdMscOpenEndpoint(&vUsbdMsc, true, mps) ||
-		!UsbdMscOpenEndpoint(&vUsbdMsc, false, mps))
+	if (!UsbdMscOpenEndpoints(&vUsbdMsc))
 	{
-		UsbdMscCloseEndpoints(&vUsbdMsc);
-		UsbIntrfUnconfigure(vUsbdMsc.pData);
 		return false;
 	}
 	vUsbdMsc.bConfigured = true;
@@ -1101,11 +1158,7 @@ void UsbdMsc::Detach(void)
 
 void UsbdMsc::Reset(void)
 {
-	if (vUsbdMsc.bConfigured)
-	{
-		UsbdMscCloseEndpoints(&vUsbdMsc);
-		vUsbdMsc.bConfigured = false;
-	}
+	UsbdMscDeconfigure(&vUsbdMsc);
 	UsbdMscResetBot(&vUsbdMsc, true);
 }
 
