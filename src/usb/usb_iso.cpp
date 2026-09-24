@@ -67,17 +67,13 @@ static int UsbIsoIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 								uint8_t *pBuffer, int Length)
 {
 	UsbDevIntrf_t *pData = static_cast<UsbDevIntrf_t *>(pDev->pDevData);
-	UsbIsoIntrf_t *pIntrf = pData != nullptr ?
-		static_cast<UsbIsoIntrf_t *>(pData->pClassContext) : nullptr;
-	if (pIntrf == nullptr)
-	{
-		return 0;
-	}
+	UsbIsoIntrf_t *pIntrf =
+		static_cast<UsbIsoIntrf_t *>(pData->pClassContext);
 
 	switch (Event)
 	{
 		case DEVINTRF_EVT_RX_DATA:
-			if (Length < 0 || Length > (int)pIntrf->Mps)
+			if (Length > (int)pIntrf->Mps)
 			{
 				pIntrf->RxMissCnt++;
 				return 0;
@@ -98,7 +94,7 @@ static int UsbIsoIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 			if (pIntrf->RxHandler != nullptr)
 			{
 				pIntrf->RxHandler(pIntrf, pData->pRxBuffer,
-					Length > 0 ? (uint16_t)Length : 0U,
+					(uint16_t)Length,
 					USB_CTRLR_XFER_FAILED, pIntrf->pContext);
 			}
 			return 0;
@@ -111,7 +107,7 @@ static int UsbIsoIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 			if (pIntrf->TxHandler != nullptr)
 			{
 				pIntrf->TxHandler(pIntrf,
-					Length > 0 ? (uint16_t)Length : 0U,
+					(uint16_t)Length,
 					USB_CTRLR_XFER_SUCCESS, pIntrf->pContext);
 			}
 			return Length;
@@ -121,7 +117,7 @@ static int UsbIsoIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 			if (pIntrf->TxHandler != nullptr)
 			{
 				pIntrf->TxHandler(pIntrf,
-					Length > 0 ? (uint16_t)Length : 0U,
+					(uint16_t)Length,
 					USB_CTRLR_XFER_FAILED, pIntrf->pContext);
 			}
 			return 0;
@@ -136,7 +132,6 @@ void UsbIsoIntrfProcessEvent(UsbDevIntrf_t *pData, uint16_t FrameNo)
 	UsbIsoIntrf_t *pIntrf =
 		static_cast<UsbIsoIntrf_t *>(pData->pClassContext);
 	if (!pIntrf->Opened || pIntrf->Suspended ||
-		pIntrf->Interval > 16U ||
 		(FrameNo & ((1U << (pIntrf->Interval - 1U)) - 1U)) != 0U)
 	{
 		return;
@@ -196,7 +191,8 @@ bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval)
 {
 	if (pIntrf == nullptr ||
 		!UsbIsoIntrfEpSupported(pIntrf->pData->DevNo, pIntrf->EpNo) ||
-		Mps == 0U || Mps > USB_ISO_INTRF_MAX_MPS || Interval == 0U)
+		Mps == 0U || Mps > USB_ISO_INTRF_MAX_MPS ||
+		Interval == 0U || Interval > 16U)
 	{
 		return false;
 	}
