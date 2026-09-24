@@ -551,30 +551,26 @@ static __attribute__((noinline)) bool nRFUsbdRetireDma(uint32_t StatusBit)
 /** Retire active DMA before a foreground stop or endpoint close. */
 void nRFUsbdDmaWait(void)
 {
+	const uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+
 	while (nRFUsbdDmaActive())
 	{
 		if (NRF_USBD->EVENTS_USBRESET != 0U)
 		{
 			nRFUsbdDmaUnlock();
-			return;
+			break;
 		}
 
 		const uint32_t dmaStatus = NRF_USBD->EPSTATUS & 0x00FF00FFUL;
-		const uint32_t primask = __get_PRIMASK();
-		__disable_irq();
-		bool complete = false;
-		if (dmaStatus != 0U)
-		{
-			complete = nRFUsbdRetireDma(31U - (uint32_t)__CLZ(dmaStatus));
-		}
-		else
-		{
-			complete = nRFUsbdIsoFinishDma();
-		}
+		const bool complete = dmaStatus != 0U ?
+			nRFUsbdRetireDma(31U - (uint32_t)__CLZ(dmaStatus)) :
+			nRFUsbdIsoFinishDma();
 		if (complete)
 			nRFUsbdDmaUnlock();
-		__set_PRIMASK(primask);
 	}
+
+	__set_PRIMASK(primask);
 }
 
 // Program and start one staged EP0 IN packet, arming the status-stage short
