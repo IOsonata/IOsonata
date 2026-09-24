@@ -83,17 +83,10 @@ typedef enum __Usbd_Msc_Tx_Kind {
 // Keep pointer members and controller DMA buffers naturally aligned.
 typedef struct __Usbd_Msc_Dev {
 	UsbDevIntrf_t *pData;		//!< Shared endpoint data path
-	DiskIO *pDisk;
-	uint8_t *pSectorBuffer;
-	uint16_t SectorBufferSize;
-	uint16_t SectorSize;
-	uint32_t SectorCount;
-	int ItfNo;
-	int DevNo;
+	// Byte-sized command state first so the BOT paths reach it with short
+	// load and store offsets.
 	uint8_t EpNo;
 	uint8_t InterfaceString;
-	uint16_t FsMps;
-	uint16_t HsMps;
 	bool bReadOnly;
 	bool bRemovable;
 	bool bMediumPresent;
@@ -109,10 +102,20 @@ typedef struct __Usbd_Msc_Dev {
 	bool bTxFailed;
 	UsbdMscBotState_t State;
 	UsbdMscTxKind_t PendingTx;
-	uint16_t PendingTxLength;
 	uint8_t SenseKey;
 	uint8_t SenseAsc;
 	uint8_t SenseAscq;
+	uint8_t MaxLun;
+	uint16_t PendingTxLength;
+	uint16_t SectorBufferSize;
+	uint16_t SectorSize;
+	uint16_t FsMps;
+	uint16_t HsMps;
+	DiskIO *pDisk;
+	uint8_t *pSectorBuffer;
+	uint32_t SectorCount;
+	int ItfNo;
+	int DevNo;
 	uint32_t HostLength;
 	uint32_t DeviceLength;
 	uint32_t TransferLimit;
@@ -138,7 +141,6 @@ typedef struct __Usbd_Msc_Dev {
 					 sizeof(uint32_t)];
 	uint32_t RxPacket[(USBD_MSC_MAX_MPS + sizeof(uint32_t) - 1U) /
 					 sizeof(uint32_t)];
-	uint8_t MaxLun;
 } UsbdMscDev_t;
 
 // Builds the MSC configuration fragment at run time. Weak: an application

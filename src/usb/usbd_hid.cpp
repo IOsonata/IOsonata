@@ -63,6 +63,8 @@ static void UsbdHidUnconfigure(UsbdHidDev_t *pHid)
 	pHid->Configured = false;
 }
 
+// Out of line for the same reason as UsbdHidInitInternal.
+__attribute__((noinline))
 static bool UsbdHidConfig(UsbdHidDev_t *pHid, uint8_t Configuration)
 {
 	if (pHid == nullptr)
@@ -340,6 +342,9 @@ bool UsbdHidMakeDesc(UsbdHidDesc_t *pDesc,
 	return true;
 }
 
+// Out of line: the class wrapper becomes a tail call and the body addresses
+// the device state with short offsets.
+__attribute__((noinline))
 static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 								UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 								const UsbdHidCfg_t *pCfg,

@@ -972,6 +972,9 @@ static void UsbdMscProcessInternal(UsbdMscDev_t *pMsc)
 	}
 }
 
+// Out of line: the class wrapper becomes a tail call and the body addresses
+// the device state with short offsets.
+__attribute__((noinline))
 static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 								UsbDevIntrf_t *pData,
 								const UsbdMscCfg_t *pCfg,

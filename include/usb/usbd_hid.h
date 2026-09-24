@@ -105,11 +105,6 @@ struct __Usbd_Hid_Dev {
 	int DevNo;
 	int ItfNo;					//!< Internal allocation
 	UsbIntIntrf_t *pIntIntrf;
-	const uint8_t *pReportDesc;
-	UsbdHidRxHandler_t RxHandler;
-	UsbdHidTxHandler_t TxHandler;
-	void *pContext;
-	UsbHidDesc_t HidDesc;
 	uint16_t ReportDescLength;
 	uint16_t BcdHid;
 	uint16_t FsMps;
@@ -128,6 +123,11 @@ struct __Usbd_Hid_Dev {
 	uint8_t PendingRequest;
 	uint8_t CtrlReply;
 	bool Configured;
+	const uint8_t *pReportDesc;
+	UsbdHidRxHandler_t RxHandler;
+	UsbdHidTxHandler_t TxHandler;
+	void *pContext;
+	UsbHidDesc_t HidDesc;
 };
 
 #ifdef __cplusplus

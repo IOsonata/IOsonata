@@ -93,7 +93,8 @@ static bool UsbCoreHandleClassRequest(void);
 // literal base instead of one literal per file-scope object.
 static struct
 {
-	int DevNo;					//!< Controller this instance drives
+	// Byte and halfword members first so the control path reaches them with
+	// short load and store offsets; word members follow.
 	bool VbusLast;				//!< Bus power at the previous UsbProcess pass
 	bool Initialized;
 	bool Started;
@@ -104,16 +105,18 @@ static struct
 	bool AddressPending;
 	uint8_t Configuration;
 	uint8_t NumInterfaces;
-	uint16_t HaltIn;
-	uint16_t HaltOut;
-	UsbCoreCtrlState_t CtrlState;
-	int ActiveClass;
-	uint8_t *CtrlData;
-	uint16_t CtrlDataLen;
-	uint16_t CtrlActual;			//!< IN bytes accepted; OUT bytes received
 	bool CtrlNeedZlp;
 	uint8_t CtrlReply[2];
 	UsbCoreCfg_t Cfg;
+	UsbSetupData_t Setup;
+	UsbCoreCtrlState_t CtrlState;
+	uint16_t HaltIn;
+	uint16_t HaltOut;
+	uint16_t CtrlDataLen;
+	uint16_t CtrlActual;			//!< IN bytes accepted; OUT bytes received
+	int DevNo;					//!< Controller this instance drives
+	int ActiveClass;
+	uint8_t *CtrlData;
 	int ObjectCnt;
 	UsbClass *Object[USB_CORE_CLASS_MAXCNT];
 	// Endpoint to class index, [0] OUT and [1] IN. Ownership masks are
@@ -123,7 +126,6 @@ static struct
 	// endpoint.
 	int8_t EpClass[2][16];
 	uint8_t Alternate[USB_CORE_INTRF_MAXCNT];
-	UsbSetupData_t Setup;
 	UsbDevDesc_t DeviceDesc;
 	UsbDevQualDesc_t QualifierDesc;
 	uint8_t ConfigDesc[USB_CONFIG_DESC_MAXLEN];

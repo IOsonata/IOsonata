@@ -92,6 +92,11 @@ typedef struct __Usb_Iso_Interf_Config {
 
 struct __Usb_Iso_Interf {
 	UsbDevIntrf_t *pData;		//!< Shared endpoint data path
+	uint16_t Mps;
+	uint8_t EpNo;
+	uint8_t Interval;
+	bool Opened;
+	bool Suspended;
 	void *pContext;
 	UsbIsoIntrfRxHandler_t RxHandler;
 	UsbIsoIntrfTxHandler_t TxHandler;
@@ -99,11 +104,6 @@ struct __Usb_Iso_Interf {
 	uint32_t TxMissCnt;
 	uint32_t RxEmptyCnt;
 	uint32_t TxEmptyCnt;
-	uint16_t Mps;
-	uint8_t EpNo;
-	uint8_t Interval;
-	bool Opened;
-	bool Suspended;
 
 };
 

@@ -79,6 +79,11 @@ typedef struct __Usb_Int_Interf_Config {
 
 struct __Usb_Int_Interf {
 	UsbDevIntrf_t *pData;		//!< Shared endpoint data path
+	uint16_t Mps;
+	uint8_t EpNo;
+	uint8_t Interval;
+	bool Opened;
+	bool Suspended;
 	void *pContext;
 	UsbIntIntrfRxHandler_t RxHandler;
 	UsbIntIntrfTxHandler_t TxHandler;
@@ -86,11 +91,6 @@ struct __Usb_Int_Interf {
 	uint32_t TxErrorCnt;
 	uint32_t RxEmptyCnt;
 	uint32_t TxEmptyCnt;
-	uint16_t Mps;
-	uint8_t EpNo;
-	uint8_t Interval;
-	bool Opened;
-	bool Suspended;
 	uint32_t RxBuffer[USB_INT_INTRF_PACKET_WORDS];
 	uint32_t TxBuffer[USB_INT_INTRF_PACKET_WORDS];
 };

@@ -145,22 +145,24 @@ typedef struct __Usb_Dev_Interf		UsbDevIntrf_t;
 typedef int (*EpSendFct_t)(UsbDevIntrf_t *pIntrf);
 
 struct __Usb_Dev_Interf {
+	// Endpoint state ahead of the DevIntrf block so the transfer paths
+	// address it with short load and store offsets.
 	int DevNo;
-	DevIntrf_t DevIntrf;
-	hCFifo_t hTxFifo;
-	hCFifo_t hRxFifo;
-	uint32_t RxDropCnt;
-	uint8_t *pRxBuffer;
-	UsbPkt_t *pRxDirectBuffer;
-	UsbPkt_t *pTxDirectBuffer;
 	uint16_t BufferSize;
 	uint16_t Mps;
 	uint16_t RxPending;		//!< 0: idle, 1: DRDY, otherwise RX length + 2
 	uint8_t EpNo : 7;
 	bool bBlocking : 1;
 	UsbIntrfMode_t Mode;
+	hCFifo_t hTxFifo;
+	hCFifo_t hRxFifo;
+	uint32_t RxDropCnt;
+	uint8_t *pRxBuffer;
+	UsbPkt_t *pRxDirectBuffer;
+	UsbPkt_t *pTxDirectBuffer;
 	EpSendFct_t EpSend;
 	void *pClassContext;
+	DevIntrf_t DevIntrf;
 };
 
 #ifdef __cplusplus
