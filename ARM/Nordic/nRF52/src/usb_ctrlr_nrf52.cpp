@@ -598,7 +598,7 @@ static __attribute__((noinline)) void nRFUsbdEp0InStart(const nRFEPPkt_t *p)
 // The SOF interrupt is shared by core protocol timing and suspend-time resume
 // detection. Acquire clears a stale event first; release drops it only when
 // neither needs it anymore.
-__attribute__((noinline)) void nRFUsbdSofAcquire(void)
+static void nRFUsbdSofAcquire(void)
 {
 	NRF_USBD->EVENTS_SOF = 0U;
 	NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
