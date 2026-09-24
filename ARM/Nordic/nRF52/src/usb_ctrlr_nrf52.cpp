@@ -1392,8 +1392,7 @@ void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 						 UsbCtrlrEvtType_t Event, uint16_t Value)
 {
 	(void)DevNo;
-	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNo, bIn);
-	pReg->Handler(Event, Value, pReg->pContext);
+	nRFUsbEpRegisteredEvent(EpNo, bIn, Event, Value);
 }
 
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
