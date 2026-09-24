@@ -1350,6 +1350,17 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 	return true;
 }
 
+static __attribute__((noinline))
+void nRFUsbdEpCloseHw(uint8_t EpNo, bool bIn)
+{
+	nRFUsbdEpHwEnable(EpNo, bIn, false);
+	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (bIn ? 0U : 16U));
+	if (!bIn)
+		NRF_USBD->SIZE.EPOUT[EpNo] = 0;
+	nRFUsbGetEpReg(EpNo, bIn)->MaxPacketSize = 0U;
+	__DSB();
+}
+
 void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 {
 	(void)DevNo;
@@ -1361,23 +1372,21 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 
 	nRFUsbdDmaWait();
 	CFifoFlush(s_Usbd.hQue);
-
-	nRFUsbdEpHwEnable(EpNo, bIn, false);
-	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (bIn ? 0U : 16U));
-	if (!bIn)
-	{
-		NRF_USBD->SIZE.EPOUT[EpNo] = 0;
-	}
-	nRFUsbGetEpReg(EpNo, bIn)->MaxPacketSize = 0U;
-	__DSB();
+	nRFUsbdEpCloseHw(EpNo, bIn);
 }
 
 void UsbCtrlrEpCloseAll(int DevNo)
 {
-	for (uint8_t epNum = NRFX_USBD_EP_COUNT - 1U; epNum != 0U; epNum--)
+	(void)DevNo;
+	nRFUsbdIsoEpClose(false);
+	nRFUsbdIsoEpClose(true);
+
+	nRFUsbdDmaWait();
+	CFifoFlush(s_Usbd.hQue);
+	for (uint8_t epNum = NRFX_USBD_ISO_EP_NO; --epNum != 0U;)
 	{
-		UsbCtrlrEpClose(DevNo, epNum, false);
-		UsbCtrlrEpClose(DevNo, epNum, true);
+		nRFUsbdEpCloseHw(epNum, false);
+		nRFUsbdEpCloseHw(epNum, true);
 	}
 
 	NRF_USBD->EPOUTEN = 1UL;
