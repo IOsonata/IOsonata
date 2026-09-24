@@ -160,9 +160,14 @@ static void ResetFake(void)
 
 static UsbIsoIntrfCfg_t MakeCfg(void)
 {
+	alignas(4) static uint8_t rx[USB_INTRF_PKT_BLKSIZE(USB_ISO_INTRF_MAX_MPS)];
+	alignas(4) static uint8_t tx[USB_INTRF_PKT_BLKSIZE(USB_ISO_INTRF_MAX_MPS)];
 	UsbIsoIntrfCfg_t cfg = {};
 	cfg.DevNo = 0;
 	cfg.EpNo = 8U;
+	cfg.BufferSize = USB_ISO_INTRF_MAX_MPS;
+	cfg.pRxBuffer = rx;
+	cfg.pTxBuffer = tx;
 	cfg.RxHandler = RxFrame;
 	cfg.TxHandler = TxFrame;
 	return cfg;
