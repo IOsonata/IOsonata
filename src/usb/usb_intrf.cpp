@@ -205,11 +205,6 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 		cnt += len;
 	}
 
-	if (cnt > 0 && pIntrf->RxPending != 0U)
-	{
-		UsbIntrfRetryRx(0U, pIntrf);
-	}
-
 	return cnt;
 }
 
