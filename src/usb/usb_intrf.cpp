@@ -43,8 +43,8 @@ static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
 
 static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t, uint16_t, void *);
 
-extern void UsbIsoIntrfProcessEvent(UsbDevIntrf_t *, UsbCtrlrEvtType_t,
-	uint16_t) __attribute__((weak));
+extern void UsbIsoIntrfProcessEvent(UsbDevIntrf_t *, uint16_t)
+	__attribute__((weak));
 
 static void UsbIntrfRegisterRx(UsbDevIntrf_t *pIntrf, uint8_t *pBuffer)
 {
@@ -483,7 +483,7 @@ static void UsbIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
 	{
 		if (UsbIsoIntrfProcessEvent != nullptr)
 		{
-			UsbIsoIntrfProcessEvent(pIntrf, Event, Length);
+			UsbIsoIntrfProcessEvent(pIntrf, Length);
 		}
 		return;
 	}
