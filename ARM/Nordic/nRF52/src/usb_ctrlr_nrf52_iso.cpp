@@ -212,5 +212,4 @@ void nRFUsbdIsoEpClose(bool bIn)
 
 	nRFIsoHwEnable(bIn, false);
 	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][bIn].MaxPacketSize = 0U;
-	__DSB();
 }
