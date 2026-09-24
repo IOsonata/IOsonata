@@ -700,14 +700,11 @@ bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps)
 		return false;
 	}
 
-	if (pIntrf->Mode != USB_INTRF_MODE_DIRECT)
+	if (pIntrf->Mode != USB_INTRF_MODE_DIRECT &&
+		CFifoBlockSize(pIntrf->hTxFifo) != 1U &&
+		CFifoBlockSize(pIntrf->hTxFifo) < sizeof(UsbPktHdr_t) + Mps)
 	{
-		if (pIntrf->hRxFifo == nullptr || pIntrf->hTxFifo == nullptr ||
-			(CFifoBlockSize(pIntrf->hTxFifo) != 1U &&
-			 CFifoBlockSize(pIntrf->hTxFifo) < sizeof(UsbPktHdr_t) + Mps))
-		{
-			return false;
-		}
+		return false;
 	}
 
 	pIntrf->Mps = Mps;
