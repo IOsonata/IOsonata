@@ -208,7 +208,8 @@ bool nRFUsbdIsoFinishDma(void)
 
 bool UsbCtrlrIsoInit(int DevNo)
 {
-	return DevNo == 0;
+	(void)DevNo;
+	return true;
 }
 
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
