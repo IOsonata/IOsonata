@@ -235,8 +235,7 @@ static bool UsbdSdRunning(void)
 
 // Bounded spin for a status bit shared by the clock, controller and
 // regulator ready waits.
-static __attribute__((noinline))
-bool UsbdWaitReady(const volatile uint32_t *pReg, uint32_t Msk,
+static bool UsbdWaitReady(const volatile uint32_t *pReg, uint32_t Msk,
 						  uint32_t Loops)
 {
 	// Include the final readiness read after the requested wait iterations.
@@ -351,27 +350,32 @@ static __attribute__((noinline)) void UsbdErrataWrite(uint32_t Reg, uint32_t Val
  * Nordic's own driver does exactly this and the order matters : the writes
  * before the enable are what make the enable work.
  */
-static __attribute__((noinline))
-void UsbdErrataWriteIf(bool Apply, uint32_t Reg, uint32_t Value)
+static void Usbd171Write(uint32_t Value)
 {
-	if (Apply)
-		UsbdErrataWrite(Reg, Value);
+	if (nrf52_errata_171())
+	{
+		UsbdErrataWrite(NRFX_USBD_ERRATA_171_REG, Value);
+	}
+}
+
+static void Usbd187Write(uint32_t Value)
+{
+	if (nrf52_errata_187())
+	{
+		UsbdErrataWrite(NRFX_USBD_ERRATA_187_REG, Value);
+	}
 }
 
 static void UsbdErrataApply(void)
 {
-	UsbdErrataWriteIf(nrf52_errata_187(),
-		NRFX_USBD_ERRATA_187_REG, 0x00000003UL);
-	UsbdErrataWriteIf(nrf52_errata_171(),
-		NRFX_USBD_ERRATA_171_REG, 0x000000C0UL);
+	Usbd187Write(0x00000003UL);
+	Usbd171Write(0x000000C0UL);
 }
 
 static void UsbdErrataRevert(void)
 {
-	UsbdErrataWriteIf(nrf52_errata_171(),
-		NRFX_USBD_ERRATA_171_REG, 0x00000000UL);
-	UsbdErrataWriteIf(nrf52_errata_187(),
-		NRFX_USBD_ERRATA_187_REG, 0x00000000UL);
+	Usbd171Write(0x00000000UL);
+	Usbd187Write(0x00000000UL);
 
 	if (nrf52_errata_166())
 	{
@@ -1274,7 +1278,8 @@ void UsbCtrlrRemoteWakeup(int DevNo)
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
 	const uint8_t flags = s_Usbd.Flags;
-	if ((flags & USBD_FLAG_REMOTE_WAKE) != 0U)
+	if ((flags & (USBD_FLAG_SUSPENDED | USBD_FLAG_REMOTE_WAKE)) !=
+		USBD_FLAG_SUSPENDED)
 	{
 		EnableInterrupt(state);
 		return;
