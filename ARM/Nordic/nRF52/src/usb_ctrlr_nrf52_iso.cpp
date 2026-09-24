@@ -148,15 +148,13 @@ bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	return send;
 }
 
-static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
+static bool nRFUsbdFinishIsoDma(bool In)
 {
 	volatile uint32_t *pEnd = In ?
 		&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
 	if (*pEnd == 0U)
 		return false;
 
-	const uint8_t dir = In ? 1U : 0U;
-	const uint8_t busy = (uint8_t)NRFUSBD_ISO_OUT_BUSY << dir;
 	const uint16_t amount = (uint16_t)(In ?
 		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
 
@@ -164,28 +162,24 @@ static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
 	NRF_USBD->EPSTATUS = In ? (1UL << 8U) : (1UL << 24U);
 	__DSB();
 
-	if (!Notify)
+	if (!s_Usbd.IsoOpen)
 		return true;
 
 	if (In)
-	{
-		s_Usbd.IsoBusy &= (uint8_t)~busy;
-	}
+		s_Usbd.IsoBusy &= (uint8_t)~NRFUSBD_ISO_IN_BUSY;
 
-	nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, dir,
+	nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, In ? 1U : 0U,
 		USB_CTRLR_EVT_XFER_CMPL, amount);
 
 	if (!In)
-	{
-		s_Usbd.IsoBusy &= (uint8_t)~busy;
-	}
+		s_Usbd.IsoBusy &= (uint8_t)~NRFUSBD_ISO_OUT_BUSY;
+
 	return true;
 }
 
 bool nRFUsbdIsoFinishDma(void)
 {
-	return nRFUsbdFinishIsoDma(true, s_Usbd.IsoOpen) ||
-		nRFUsbdFinishIsoDma(false, s_Usbd.IsoOpen);
+	return nRFUsbdFinishIsoDma(true) || nRFUsbdFinishIsoDma(false);
 }
 
 bool UsbCtrlrIsoInit(int DevNo)
