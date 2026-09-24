@@ -235,8 +235,7 @@ static bool UsbdSdRunning(void)
 
 // Bounded spin for a status bit shared by the clock, controller and
 // regulator ready waits.
-static __attribute__((noinline))
-bool UsbdWaitReady(const volatile uint32_t *pReg, uint32_t Msk,
+static bool UsbdWaitReady(const volatile uint32_t *pReg, uint32_t Msk,
 						  uint32_t Loops)
 {
 	// Include the final readiness read after the requested wait iterations.
@@ -463,30 +462,32 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
 static __attribute__((noinline))
 void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 {
+	// Interrupt bits index the event registers from EVENTS_USBRESET.
+	const uint8_t endBit = In ? USBD_INTEN_ENDEPIN0_Pos + EpNum :
+		USBD_INTEN_ENDEPOUT0_Pos + EpNum;
+	volatile uint32_t *pEnd = (volatile uint32_t *)(
+		(uintptr_t)&NRF_USBD->EVENTS_USBRESET + endBit * sizeof(uint32_t));
+	volatile uint32_t *pEnable = (volatile uint32_t *)
+		((uintptr_t)&NRF_USBD->EPINEN + (!In) *
+		 (offsetof(NRF_USBD_Type, EPOUTEN) - offsetof(NRF_USBD_Type, EPINEN)));
 	const uint32_t msk = 1UL << EpNum;
 
-	if (In)
+	*pEnd = 0U;
+
+	// Regular IN completion is host-consumed EPDATA, so only OUT needs
+	// an END interrupt.
+	if (!In)
 	{
-		NRF_USBD->EVENTS_ENDEPIN[EpNum] = 0U;
 		if (Enable)
-			NRF_USBD->EPINEN |= msk;
+			NRF_USBD->INTENSET = 1UL << endBit;
 		else
-			NRF_USBD->EPINEN &= ~msk;
-		return;
+			NRF_USBD->INTENCLR = 1UL << endBit;
 	}
 
-	NRF_USBD->EVENTS_ENDEPOUT[EpNum] = 0U;
-	const uint32_t endMsk = 1UL << (USBD_INTEN_ENDEPOUT0_Pos + EpNum);
 	if (Enable)
-	{
-		NRF_USBD->INTENSET = endMsk;
-		NRF_USBD->EPOUTEN |= msk;
-	}
+		*pEnable |= msk;
 	else
-	{
-		NRF_USBD->INTENCLR = endMsk;
-		NRF_USBD->EPOUTEN &= ~msk;
-	}
+		*pEnable &= ~msk;
 }
 
 // Initialize the active event fields; UsbDevProcessEvent reads only that
@@ -1351,17 +1352,6 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 	return true;
 }
 
-static __attribute__((noinline))
-void nRFUsbdEpCloseHw(uint8_t EpNo, bool bIn)
-{
-	nRFUsbdEpHwEnable(EpNo, bIn, false);
-	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (bIn ? 0U : 16U));
-	if (!bIn)
-		NRF_USBD->SIZE.EPOUT[EpNo] = 0;
-	nRFUsbGetEpReg(EpNo, bIn)->MaxPacketSize = 0U;
-	__DSB();
-}
-
 void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 {
 	(void)DevNo;
@@ -1373,21 +1363,23 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 
 	nRFUsbdDmaWait();
 	CFifoFlush(s_Usbd.hQue);
-	nRFUsbdEpCloseHw(EpNo, bIn);
+
+	nRFUsbdEpHwEnable(EpNo, bIn, false);
+	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (bIn ? 0U : 16U));
+	if (!bIn)
+	{
+		NRF_USBD->SIZE.EPOUT[EpNo] = 0;
+	}
+	nRFUsbGetEpReg(EpNo, bIn)->MaxPacketSize = 0U;
+	__DSB();
 }
 
 void UsbCtrlrEpCloseAll(int DevNo)
 {
-	(void)DevNo;
-	nRFUsbdIsoEpClose(false);
-	nRFUsbdIsoEpClose(true);
-
-	nRFUsbdDmaWait();
-	CFifoFlush(s_Usbd.hQue);
-	for (uint8_t epNum = NRFX_USBD_ISO_EP_NO; --epNum != 0U;)
+	for (uint8_t epNum = NRFX_USBD_EP_COUNT - 1U; epNum != 0U; epNum--)
 	{
-		nRFUsbdEpCloseHw(epNum, false);
-		nRFUsbdEpCloseHw(epNum, true);
+		UsbCtrlrEpClose(DevNo, epNum, false);
+		UsbCtrlrEpClose(DevNo, epNum, true);
 	}
 
 	NRF_USBD->EPOUTEN = 1UL;
