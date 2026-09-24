@@ -75,10 +75,8 @@ void nRFIsoHwEnable(bool In, bool Enable)
 // The shared scheduler already owns the channel lock.
 bool nRFUsbdIsoStart(void)
 {
-	if (!s_Usbd.IsoOpen)
-		return false;
-
-	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) != 0U)
+	const uint8_t busy = s_Usbd.IsoBusy;
+	if ((busy & NRFUSBD_ISO_IN_BUSY) != 0U)
 	{
 		nRFUsbEpReg_t *pReg =
 			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1];
@@ -89,7 +87,7 @@ bool nRFUsbdIsoStart(void)
 		return true;
 	}
 
-	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_OUT_BUSY) == 0U)
+	if (busy == 0U)
 		return false;
 
 	const uint32_t size = NRF_USBD->SIZE.ISOOUT;
