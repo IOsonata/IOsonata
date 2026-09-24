@@ -1332,6 +1332,16 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 	return false;
 }
 
+__attribute__((weak))
+bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn, uint16_t MaxPacketSize)
+{
+	(void)DevNo;
+	(void)EpNo;
+	(void)bIn;
+	(void)MaxPacketSize;
+	return false;
+}
+
 bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 						 uint16_t MaxPacketSize)
 {
