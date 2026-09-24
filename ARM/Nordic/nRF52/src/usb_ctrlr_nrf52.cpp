@@ -181,7 +181,8 @@ __attribute__((weak)) bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *, uint16_t)
 	return false;
 }
 
-static nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpNum, uint8_t Dir)
+static __attribute__((noinline))
+nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpNum, uint8_t Dir)
 {
 	return &s_Usbd.EpReg[EpNum - 1U][Dir];
 }
