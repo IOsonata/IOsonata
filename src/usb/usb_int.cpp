@@ -150,10 +150,10 @@ bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 bool UsbIntIntrfOpen(UsbIntIntrf_t *pIntrf, uint16_t MaxPacketSize, uint8_t Interval)
 {
 	if (pIntrf == nullptr ||
-		MaxPacketSize == 0U || MaxPacketSize > USB_INT_INTRF_MAX_MPS || Interval == 0U ||
-		(!UsbCtrlrHighSpeed(pIntrf->pData->DevNo) &&
-		 MaxPacketSize > USB_INT_INTRF_FS_MPS) ||
-		(UsbCtrlrHighSpeed(pIntrf->pData->DevNo) && Interval > 16U))
+		MaxPacketSize == 0U || MaxPacketSize > USB_INT_INTRF_MAX_MPS ||
+		Interval == 0U ||
+		(UsbCtrlrHighSpeed(pIntrf->pData->DevNo) ?
+		 Interval > 16U : MaxPacketSize > USB_INT_INTRF_FS_MPS))
 	{
 		return false;
 	}
