@@ -472,13 +472,11 @@ void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 	if (!In)
 	{
 		const uint8_t endBit = USBD_INTEN_ENDEPOUT0_Pos + EpNum;
+		volatile uint32_t *pEnd = (volatile uint32_t *)(
+			(uintptr_t)&NRF_USBD->EVENTS_USBRESET + endBit * sizeof(uint32_t));
+		*pEnd = 0U;
 		if (Enable)
-		{
-			volatile uint32_t *pEnd = (volatile uint32_t *)(
-				(uintptr_t)&NRF_USBD->EVENTS_USBRESET + endBit * sizeof(uint32_t));
-			*pEnd = 0U;
 			NRF_USBD->INTENSET = 1UL << endBit;
-		}
 		else
 			NRF_USBD->INTENCLR = 1UL << endBit;
 	}
