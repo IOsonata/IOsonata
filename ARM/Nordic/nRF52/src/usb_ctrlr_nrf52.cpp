@@ -1161,10 +1161,7 @@ extern "C" void USBD_IRQHandler(void)
 
 bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 {
-	if (DevNo != 0 || pCfg == NULL)
-	{
-		return false;
-	}
+	(void)DevNo;
 
 	// Registrations, transfer state and flags all restart from zero;
 	// ResetState below rebuilds what must not be zero.
