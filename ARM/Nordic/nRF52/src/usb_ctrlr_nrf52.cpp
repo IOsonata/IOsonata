@@ -471,16 +471,14 @@ void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 	// an END event or interrupt.
 	if (!In)
 	{
-		const uint8_t endBit = USBD_INTEN_ENDEPOUT0_Pos + EpNum;
+		const uint32_t endMsk = USBD_INTEN_ENDEPOUT0_Msk << EpNum;
 		if (Enable)
 		{
-			volatile uint32_t *pEnd = (volatile uint32_t *)(
-				(uintptr_t)&NRF_USBD->EVENTS_USBRESET + endBit * sizeof(uint32_t));
-			*pEnd = 0U;
-			NRF_USBD->INTENSET = 1UL << endBit;
+			NRF_USBD->EVENTS_ENDEPOUT[EpNum] = 0U;
+			NRF_USBD->INTENSET = endMsk;
 		}
 		else
-			NRF_USBD->INTENCLR = 1UL << endBit;
+			NRF_USBD->INTENCLR = endMsk;
 	}
 
 	if (Enable)
@@ -1118,7 +1116,8 @@ extern "C" void USBD_IRQHandler(void)
 	const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
 	if (outData != 0U)
 	{
-		const uint8_t epNum = (uint8_t)(31U - (uint32_t)__CLZ(outData));
+		// outData is nonzero and below 0x100, so epNum is 1 through 7.
+		const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
 		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 0U);
 		if (pReg->bBlocking)
 		{
@@ -1356,7 +1355,7 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 
 void UsbCtrlrEpCloseAll(int DevNo)
 {
-	for (uint8_t epNum = NRFX_USBD_EP_COUNT - 1U; epNum != 0U; epNum--)
+	for (uint32_t epNum = NRFX_USBD_EP_COUNT - 1U; epNum != 0U; epNum--)
 	{
 		UsbCtrlrEpClose(DevNo, epNum, false);
 		UsbCtrlrEpClose(DevNo, epNum, true);
@@ -1481,8 +1480,7 @@ void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
 	}
 	else
 	{
-		const uint8_t epAddr = (uint8_t)(EpNo |
-			(bIn ? USB_ENDPADDR_DIR_IN : 0U));
+		const uint32_t epAddr = EpNo | (bIn ? USB_ENDPADDR_DIR_IN : 0U);
 		NRF_USBD->EPSTALL =
 			(USBD_EPSTALL_STALL_Stall << USBD_EPSTALL_STALL_Pos) | epAddr;
 	}
@@ -1491,8 +1489,7 @@ void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
 void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
 {
 	(void)DevNo;
-	const uint8_t epAddr = (uint8_t)(EpNo |
-		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
+	const uint32_t epAddr = EpNo | (bIn ? USB_ENDPADDR_DIR_IN : 0U);
 	NRF_USBD->DTOGGLE = epAddr;
 	NRF_USBD->DTOGGLE =
 		(USBD_DTOGGLE_VALUE_Data0 << USBD_DTOGGLE_VALUE_Pos) | epAddr;

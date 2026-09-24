@@ -47,6 +47,17 @@ static bool UsbIsoIntrfEpSupported(int DevNo, uint8_t EpNo)
 		(USB_ISO_EPOUT_MASK(DevNo) & bit) != 0U;
 }
 
+// Close both directions of the endpoint pair, then drop the data path.
+static void UsbIsoIntrfRelease(UsbIsoIntrf_t *pIntrf, bool bCloseEp)
+{
+	if (bCloseEp)
+	{
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, false);
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, true);
+	}
+	UsbIntrfUnconfigure(pIntrf->pData);
+}
+
 static bool UsbIsoIntrfOpenEndpoint(UsbIsoIntrf_t *pIntrf, bool bIn)
 {
 	return UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, bIn,
@@ -199,9 +210,7 @@ bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval)
 	if (!UsbIsoIntrfOpenEndpoint(pIntrf, true) ||
 		!UsbIsoIntrfOpenEndpoint(pIntrf, false))
 	{
-		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, false);
-		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, true);
-		UsbIntrfUnconfigure(pIntrf->pData);
+		UsbIsoIntrfRelease(pIntrf, true);
 		pIntrf->Mps = 0U;
 		pIntrf->Interval = 0U;
 		return false;
@@ -218,13 +227,7 @@ void UsbIsoIntrfClose(UsbIsoIntrf_t *pIntrf)
 		return;
 	}
 
-	if (pIntrf->Opened)
-	{
-		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, false);
-		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, true);
-	}
-
-	UsbIntrfUnconfigure(pIntrf->pData);
+	UsbIsoIntrfRelease(pIntrf, pIntrf->Opened);
 	pIntrf->Opened = false;
 	pIntrf->Suspended = false;
 	pIntrf->Mps = 0U;
