@@ -56,6 +56,7 @@ SOFTWARE.
 #define USB_DEVNO			0
 #define ISO_CONFIG_VALUE	1U
 #define ISO_ALT_COUNT		6U
+#define ISO_MAX_MPS		63U
 #define ISO_REQ_GET_DIAG	0x5AU
 
 #define ISO_DIAG_FLAG_OPENED		(1U << 0)
@@ -105,6 +106,8 @@ static_assert(sizeof(IsoDiag_t) == 48U, "ISO diagnostic wire format changed");
 
 static UsbIsoIntrf_t s_Iso;
 static UsbDevIntrf_t s_IsoData;
+alignas(4) static uint8_t s_IsoRxBuffer[USB_INTRF_PKT_BLKSIZE(ISO_MAX_MPS)];
+alignas(4) static uint8_t s_IsoTxBuffer[USB_INTRF_PKT_BLKSIZE(ISO_MAX_MPS)];
 static bool s_Configured;
 static uint8_t s_Alt;
 static uint8_t s_InterfaceNo;
@@ -478,6 +481,9 @@ int main()
 	UsbIsoIntrfCfg_t isoCfg = {};
 	isoCfg.DevNo = USB_DEVNO;
 	isoCfg.EpNo = s_EpNo;
+	isoCfg.BufferSize = ISO_MAX_MPS;
+	isoCfg.pRxBuffer = s_IsoRxBuffer;
+	isoCfg.pTxBuffer = s_IsoTxBuffer;
 	isoCfg.RxHandler = IsoRxFrame;
 	isoCfg.TxHandler = IsoTxFrame;
 	if (!UsbIsoIntrfInit(&s_Iso, &s_IsoData, &isoCfg))
