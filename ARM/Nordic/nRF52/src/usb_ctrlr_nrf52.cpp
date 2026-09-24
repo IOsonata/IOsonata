@@ -1148,30 +1148,29 @@ extern "C" void USBD_IRQHandler(void)
 		return;
 	}
 	// Clear the event first so a new endpoint event remains observable.
+	// Service at most one endpoint per direction in this interrupt.
+	// Unaccepted IN completions remain available to the foreground retry.
 	NRF_USBD->EVENTS_EPDATA = 0U;
 	const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
 	uint32_t servicedStatus = dataStatus & 0x00010001UL;
 
-	uint32_t inData = dataStatus & 0xFEU;
-	while (inData != 0U)
+	const uint32_t inData = dataStatus & 0xFEU;
+	if (inData != 0U)
 	{
-		const uint32_t bit = 1UL << (31U - (uint32_t)__CLZ(inData));
-		servicedStatus |= nRFUsbdQueueInComplete(bit);
-		inData &= ~bit;
+		servicedStatus |= nRFUsbdQueueInComplete(inData);
 	}
 
 	// Clear only serviced endpoints; keep every other status bit latched.
+	// The following SOF register read completes this write.
 	NRF_USBD->EPDATASTATUS = servicedStatus;
 
 	nRFUsbdTryRemoteWake();
 
-	// Queue every newly received regular OUT endpoint from this snapshot.
-	uint32_t outData = (dataStatus >> 16U) & 0xFEU;
-	while (outData != 0U)
+	// Queue newly received OUT data; completion already restarted pending DMA.
+	const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
+	if (outData != 0U)
 	{
-		const uint8_t epNum = (uint8_t)(31U - (uint32_t)__CLZ(outData));
-		outData &= ~(1UL << epNum);
-		nRFUsbdProcessOutData(epNum, NULL);
+		nRFUsbdProcessOutData(31U - (uint32_t)__CLZ(outData), NULL);
 	}
 
 	nRFUsbdTryEnterLowPower();
