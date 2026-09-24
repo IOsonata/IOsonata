@@ -720,7 +720,7 @@ static void nRFUsbdTryEnterLowPower(void)
 	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
 		NRF_USBD->EVENTS_SOF != 0U)
 	{
-		nRFUsbdHostResumeLocked();
+		nRFUsbdHostResume();
 		return;
 	}
 
@@ -732,7 +732,7 @@ static void nRFUsbdTryEnterLowPower(void)
 	if ((NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_RESUME_Msk) != 0U ||
 		NRF_USBD->EVENTS_SOF != 0U)
 	{
-		nRFUsbdHostResumeLocked();
+		nRFUsbdHostResume();
 	}
 }
 
@@ -761,11 +761,16 @@ static void nRFUsbdTryRemoteWake(void)
 	NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
 }
 
-static void nRFUsbdHostResumeLocked(void)
+static void nRFUsbdHostResume(void)
 {
+	const uint32_t irqState = DisableInterrupt();
 	uint8_t flags = s_Usbd.Flags;
+
 	if ((flags & USBD_FLAG_SUSPENDED) == 0U)
+	{
+		EnableInterrupt(irqState);
 		return;
+	}
 
 	// A host resume cancels any device-initiated wake request. Keep SUSPENDED
 	// set until the peripheral is actually awake; that state alone gates DMA.
@@ -773,19 +778,14 @@ static void nRFUsbdHostResumeLocked(void)
 	if ((flags & USBD_FLAG_MAC_AWAKE) != 0U && UsbdIsForceNormal())
 	{
 		s_Usbd.Flags = flags & (uint8_t)~USBD_FLAG_SUSPENDED;
+		EnableInterrupt(irqState);
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
 		return;
 	}
 
 	s_Usbd.Flags = flags;
-	UsbdForceNormal();
-}
-
-static void nRFUsbdHostResume(void)
-{
-	const uint32_t irqState = DisableInterrupt();
-	nRFUsbdHostResumeLocked();
 	EnableInterrupt(irqState);
+	UsbdForceNormal();
 }
 
 // ISR context only. USBWUALLOWED completes a pending host resume, or wakes the
@@ -866,7 +866,7 @@ static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 
 	if ((EventCause & USBD_EVENTCAUSE_RESUME_Msk) != 0)
 	{
-		nRFUsbdHostResumeLocked();
+		nRFUsbdHostResume();
 	}
 
 	if ((EventCause & USBD_EVENTCAUSE_USBWUALLOWED_Msk) != 0)
@@ -877,7 +877,7 @@ static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 
 static void nRFUsbdHandleSof(void)
 {
-	nRFUsbdHostResumeLocked();
+	nRFUsbdHostResume();
 
 	if (s_Usbd.SofEnabled)
 	{
