@@ -57,9 +57,9 @@ void nRFIsoHwEnable(bool In, bool Enable)
 	const uint32_t endMsk = In ?
 		USBD_INTEN_ENDISOIN_Msk : USBD_INTEN_ENDISOOUT_Msk;
 
+	*pEnd = 0U;
 	if (Enable)
 	{
-		*pEnd = 0U;
 		NRF_USBD->INTENSET = endMsk;
 		*pEnable |= msk;
 	}
