@@ -1132,8 +1132,7 @@ extern "C" void USBD_IRQHandler(void)
 
 		const uint32_t bit = 1UL << (epNum + 16U);
 		// Wait for the previous DMA completion before reusing this endpoint buffer.
-		if ((NRF_USBD->EPDATASTATUS & bit) != 0U &&
-			(NRF_USBD->EPSTATUS & bit) == 0U && pReg->pBuffer != NULL)
+		if ((NRF_USBD->EPSTATUS & bit) == 0U && pReg->pBuffer != NULL)
 		{
 			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
 			pQue->EpNum = epNum;
