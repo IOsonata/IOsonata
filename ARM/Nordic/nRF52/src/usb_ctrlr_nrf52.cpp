@@ -845,32 +845,6 @@ static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
 }
 
 
-static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
-{
-	const uint8_t epNum = (uint8_t)Evt;
-	(void)pContext;
-
-	const uint32_t bit = 1UL << (epNum + 16U);
-	// Wait for the previous DMA completion before reusing this endpoint buffer.
-	if ((NRF_USBD->EPDATASTATUS & bit) != 0U &&
-		(NRF_USBD->EPSTATUS & bit) == 0U)
-	{
-		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 0U);
-		if (pReg->pBuffer != NULL)
-		{
-			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
-			pQue->EpNum = epNum;
-			pQue->Dir = NRFX_USBD_QUE_OUT;
-			pQue->Len = pReg->MaxPacketSize;
-			pQue->pBuffer = pReg->pBuffer;
-			// Acknowledge before DMA can admit the next packet.
-			NRF_USBD->EPDATASTATUS = bit;
-			__DSB();
-			nRFUsbdResumeQueuedDmaLocked();
-		}
-	}
-}
-
 // InData is nonzero. Return only the status bit accepted by AppEvt; a full
 // queue leaves it in EPDATASTATUS for UsbCtrlrProcess to retry.
 static __attribute__((noinline))
@@ -1161,7 +1135,22 @@ extern "C" void USBD_IRQHandler(void)
 		{
 			pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
 		}
-		nRFUsbdProcessOutData(epNum, NULL);
+
+		const uint32_t bit = 1UL << (epNum + 16U);
+		// Wait for the previous DMA completion before reusing this endpoint buffer.
+		if ((NRF_USBD->EPDATASTATUS & bit) != 0U &&
+			(NRF_USBD->EPSTATUS & bit) == 0U && pReg->pBuffer != NULL)
+		{
+			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
+			pQue->EpNum = epNum;
+			pQue->Dir = NRFX_USBD_QUE_OUT;
+			pQue->Len = pReg->MaxPacketSize;
+			pQue->pBuffer = pReg->pBuffer;
+			// Acknowledge before DMA can admit the next packet.
+			NRF_USBD->EPDATASTATUS = bit;
+			__DSB();
+			nRFUsbdResumeQueuedDmaLocked();
+		}
 	}
 
 	nRFUsbdTryEnterLowPower();
