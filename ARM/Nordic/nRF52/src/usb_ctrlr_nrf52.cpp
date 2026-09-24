@@ -462,9 +462,8 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
 static __attribute__((noinline))
 void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 {
-	volatile uint32_t *pEnable = (volatile uint32_t *)
-		((uintptr_t)&NRF_USBD->EPINEN + (!In) *
-		 (offsetof(NRF_USBD_Type, EPOUTEN) - offsetof(NRF_USBD_Type, EPINEN)));
+	volatile uint32_t *pEnable = In ?
+		&NRF_USBD->EPINEN : &NRF_USBD->EPOUTEN;
 	const uint32_t msk = 1UL << EpNum;
 
 	// Regular IN completion is host-consumed EPDATA, so only OUT needs
