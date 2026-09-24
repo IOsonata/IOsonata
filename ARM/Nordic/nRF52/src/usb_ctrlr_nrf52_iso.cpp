@@ -208,13 +208,11 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 	nRFIsoHwEnable(in, true);
 
 	const uint8_t dir = in ? 1U : 0U;
-	const uint32_t state = DisableInterrupt();
 	s_Usbd.IsoBusy &=
 		(uint8_t)~((uint8_t)NRFUSBD_ISO_OUT_BUSY << dir);
 	s_Usbd.IsoOpen =
 		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].MaxPacketSize != 0U &&
 		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1].MaxPacketSize != 0U;
-	EnableInterrupt(state);
 
 	__DSB();
 	return true;
