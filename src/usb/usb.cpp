@@ -554,6 +554,12 @@ static void UsbCoreClearInterfaceHalt(uint8_t InterfaceNo,
 		}
 	}
 
+	if (OldAlternate == NewAlternate)
+	{
+		newIn = oldIn;
+		newOut = oldOut;
+	}
+
 	s_Core.HaltIn &= (uint16_t)~(oldIn | newIn);
 	s_Core.HaltOut &= (uint16_t)~(oldOut | newOut);
 	s_Core.ActiveIn = (uint16_t)((s_Core.ActiveIn & ~oldIn) | newIn);
