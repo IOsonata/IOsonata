@@ -166,6 +166,17 @@ void UsbCtrlrSofEnable(int DevNo, bool Enable);
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
 
+static inline bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
+								 uint16_t MaxPacketSize)
+{
+	UsbEndPointDesc_t desc = {0};
+	desc.bEndpointAddress = (uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
+	desc.bmAttributes = USB_ENDPATT_TRANS_ISO;
+	desc.wMaxPacketSize = MaxPacketSize;
+	return UsbCtrlrEpOpen(DevNo, &desc);
+}
+
 static inline bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn,
 									 uint8_t Type, uint16_t MaxPacketSize)
 {
