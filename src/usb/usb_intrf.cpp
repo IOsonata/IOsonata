@@ -394,14 +394,10 @@ static void UsbIntrfDirectRxComplete(UsbDevIntrf_t *pIntrf, uint16_t Length)
 	}
 }
 
-static bool UsbIntrfCompleteRx(UsbDevIntrf_t *pIntrf, uint16_t Length)
+static void UsbIntrfCompleteRx(UsbDevIntrf_t *pIntrf, uint16_t Length)
 {
 	UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(
 		CFifoPut(pIntrf->hRxFifo));
-	if (pPacket == nullptr)
-	{
-		return false;
-	}
 	pPacket->Hdr.Length = Length;
 	pPacket->Hdr.Reserved = 0U;
 	if (Length > 0U)
@@ -422,7 +418,6 @@ static bool UsbIntrfCompleteRx(UsbDevIntrf_t *pIntrf, uint16_t Length)
 		pIntrf->DevIntrf.EvtCB(&pIntrf->DevIntrf,
 			DEVINTRF_EVT_RX_DATA, nullptr, used);
 	}
-	return true;
 }
 
 static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t Event,
@@ -458,10 +453,7 @@ static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t Event,
 				return;
 			}
 
-			if (!UsbIntrfCompleteRx(pIntrf, Length) && !pIntrf->bBlocking)
-			{
-				pIntrf->RxDropCnt++;
-			}
+			UsbIntrfCompleteRx(pIntrf, Length);
 			return;
 
 		case USB_CTRLR_EVT_XFER_FAILED:
