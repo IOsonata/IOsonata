@@ -80,7 +80,6 @@ typedef void (*UsbIsoIntrfTxHandler_t)(UsbIsoIntrf_t *pIntrf,
 typedef struct __Usb_Iso_Interf_Config {
 	int DevNo;
 	uint8_t EpNo;					//!< Internally allocated ISO endpoint number
-	uint8_t Attributes;			//!< ISO sync/usage bits; zero = no-sync data
 	UsbIsoIntrfRxHandler_t RxHandler;
 	UsbIsoIntrfTxHandler_t TxHandler;
 	void *pContext;
@@ -100,7 +99,6 @@ struct __Usb_Iso_Interf {
 	uint16_t Mps;
 	uint8_t EpNo;
 	uint8_t Interval;
-	uint8_t Attributes;
 	bool Opened;
 	bool Suspended;
 
