@@ -518,6 +518,16 @@ static inline __attribute__((always_inline)) void nRFUsbdDmaLock(void)
 }
 
 __attribute__((noinline))
+void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
+	volatile uint32_t *pEnd)
+{
+	*pEnd = 0U;
+	__DSB();
+	*pTask = 1U;
+	__DSB();
+}
+
+__attribute__((noinline))
 void nRFUsbdDmaUnlock(void)
 {
 	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
