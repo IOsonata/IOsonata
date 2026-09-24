@@ -1340,15 +1340,8 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 						 uint16_t MaxPacketSize)
 {
 	(void)Type;
-	if (EpNo == 0U || EpNo >= NRFX_USBD_DATA_EP_COUNT ||
-		MaxPacketSize == 0U || MaxPacketSize > NRFX_USBD_MAX_PACKET_SIZE)
-	{
-		return false;
-	}
-
 	nRFUsbGetEpReg(EpNo, bIn)->MaxPacketSize = MaxPacketSize;
 	nRFUsbdEpHwEnable(EpNo, bIn, true);
-
 	UsbCtrlrEpClearStall(DevNo, EpNo, bIn);
 	return true;
 }
