@@ -687,14 +687,8 @@ static void UsbIntrfDrain(UsbDevIntrf_t *pIntrf)
 	}
 	else
 	{
-		if (pIntrf->hRxFifo != nullptr)
-		{
-			CFifoFlush(pIntrf->hRxFifo);
-		}
-		if (pIntrf->hTxFifo != nullptr)
-		{
-			CFifoFlush(pIntrf->hTxFifo);
-		}
+		CFifoFlush(pIntrf->hRxFifo);
+		CFifoFlush(pIntrf->hTxFifo);
 	}
 	UsbIntrfSetTxIdle(pIntrf);
 }
