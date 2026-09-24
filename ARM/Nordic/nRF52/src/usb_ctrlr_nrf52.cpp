@@ -1377,8 +1377,6 @@ void UsbCtrlrEpCloseAll(int DevNo)
 		UsbCtrlrEpClose(DevNo, epNum, true);
 	}
 
-	NRF_USBD->EPOUTEN = 1UL;
-	NRF_USBD->EPINEN = 1UL;
 }
 
 void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
