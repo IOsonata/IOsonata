@@ -46,6 +46,16 @@ USB_ENDPOINT_TRANSFER_TYPE_INT = 0x03
 ISO_DIAG_REQUEST = 0x5A
 ISO_DIAG_FORMAT = "<5I"
 ISO_DIAG_SIZE = struct.calcsize(ISO_DIAG_FORMAT)
+# Controller-level ISO scheduling counters. Only the TinyUSB comparison
+# firmware answers this request; the IOsonata firmware stalls it.
+ISO_DCD_DIAG_REQUEST = 0x5B
+ISO_DCD_DIAG_FORMAT = "<11I"
+ISO_DCD_DIAG_SIZE = struct.calcsize(ISO_DCD_DIAG_FORMAT)
+ISO_DCD_DIAG_NAMES = (
+    "in_idle", "in_wait", "in_carry", "out_idle", "out_carry", "out_unarmed",
+    "in_spin_out", "in_start_max_us", "in_end_max_us", "in_end_slow",
+    "cbi_held"
+)
 
 BANNER = b"IOsonata USB Combo Stress"
 
@@ -123,9 +133,28 @@ def read_iso_diag(handle, interface, timeout_ms):
     rx_miss, tx_miss, loop_drop, rx_empty, tx_empty = struct.unpack(
         ISO_DIAG_FORMAT, raw
     )
-    return (
+    text = (
         f"rx_miss={rx_miss} tx_miss={tx_miss} "
         f"loop_drop={loop_drop} rx_empty={rx_empty} tx_empty={tx_empty}"
+    )
+    try:
+        raw = bytes(
+            handle.controlRead(
+                0xC1,
+                ISO_DCD_DIAG_REQUEST,
+                0,
+                interface,
+                ISO_DCD_DIAG_SIZE,
+                timeout=timeout_ms,
+            )
+        )
+    except usb1.USBError:
+        return text
+    if len(raw) != ISO_DCD_DIAG_SIZE:
+        return text
+    values = struct.unpack(ISO_DCD_DIAG_FORMAT, raw)
+    return text + "; dcd " + " ".join(
+        f"{name}={value}" for name, value in zip(ISO_DCD_DIAG_NAMES, values)
     )
 
 
@@ -611,7 +640,6 @@ def main():
                 )
 
         stop.set()
-        test_end = time.monotonic()
         for worker in workers:
             worker.join(timeout=2.0)
 
@@ -619,37 +647,21 @@ def main():
             stats.snapshot()
         )
         pending = count["loop_tx"] - count["loop_rx"]
-        elapsed = test_end - test_start
-        rates = {
-            name: count[name] / elapsed
-            for name in Stats.NAMES
-        }
-        total_bytes = sum(count.values())
-        total_rate = total_bytes / elapsed
 
         print()
-        print(f"Elapsed sec     : {elapsed:.2f}")
         print(f"Loop TX bytes   : {count['loop_tx']}")
-        print(f"Loop TX B/sec   : {rates['loop_tx']:.2f}")
         print(f"Loop RX bytes   : {count['loop_rx']}")
-        print(f"Loop RX B/sec   : {rates['loop_rx']:.2f}")
         print(f"Loop pending    : {pending}")
         print(f"Loop errors     : {loop_errors}")
         print(f"PRBS RX bytes   : {count['prbs_rx']}")
-        print(f"PRBS RX B/sec   : {rates['prbs_rx']:.2f}")
         print(f"PRBS errors     : {prbs_errors}")
         print(f"Target RX errors: {target_errors}")
         print(f"HID bytes       : {count['hid']}")
-        print(f"HID B/sec       : {rates['hid']:.2f}")
         print(f"HID errors      : {path_errors['hid']}")
         print(f"INT bytes       : {count['int']}")
-        print(f"INT B/sec       : {rates['int']:.2f}")
         print(f"INT errors      : {path_errors['int']}")
         print(f"ISO bytes       : {count['iso']}")
-        print(f"ISO B/sec       : {rates['iso']:.2f}")
         print(f"ISO errors      : {path_errors['iso']}")
-        print(f"Total bytes     : {total_bytes}")
-        print(f"Total B/sec     : {total_rate:.2f}")
         if failure is not None:
             print(f"Failure         : {failure}")
 

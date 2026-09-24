@@ -40,6 +40,11 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #define ISO_ALT_COUNT				6U
 #define ISO_QUEUE_DEPTH				8U
 #define ISO_REQ_GET_DIAG			0x5AU
+#define ISO_REQ_GET_DCD_DIAG		0x5BU
+#define ISO_DCD_DIAG_COUNT			11U
+
+// ISO scheduling counters of the modified nRF52 port (dcd_nrf5x.c).
+extern "C" void dcd_nrf5x_iso_diag_get(uint32_t Counts[ISO_DCD_DIAG_COUNT]);
 
 #define CDC0_NOTIFY_EP				0x81U
 #define CDC0_OUT_EP				0x02U
@@ -344,6 +349,7 @@ typedef struct __IsoState {
 	uint8_t Get;
 	uint8_t Count;
 	TinyUsbIsoDiag_t Diag;
+	uint32_t DcdDiag[ISO_DCD_DIAG_COUNT];
 } IsoState_t;
 
 static IsoState_t s_Iso;
@@ -549,12 +555,37 @@ static bool IsoDriverControl(uint8_t RhPort, uint8_t Stage,
 	if (pRequest->bmRequestType_bit.type == TUSB_REQ_TYPE_VENDOR &&
 		pRequest->bmRequestType_bit.recipient == TUSB_REQ_RCPT_INTERFACE &&
 		pRequest->bmRequestType_bit.direction == TUSB_DIR_IN &&
-		pRequest->bRequest == ISO_REQ_GET_DIAG &&
-		pRequest->wValue == 0U &&
-		pRequest->wLength == sizeof(s_Iso.Diag))
+		pRequest->wValue == 0U)
 	{
-		return tud_control_xfer(RhPort, pRequest,
-			&s_Iso.Diag, sizeof(s_Iso.Diag));
+		if (pRequest->bRequest == ISO_REQ_GET_DIAG &&
+			pRequest->wLength == sizeof(s_Iso.Diag))
+		{
+			return tud_control_xfer(RhPort, pRequest,
+				&s_Iso.Diag, sizeof(s_Iso.Diag));
+		}
+		if (pRequest->bRequest == ISO_REQ_GET_DCD_DIAG &&
+			pRequest->wLength == sizeof(s_Iso.DcdDiag))
+		{
+			dcd_nrf5x_iso_diag_get(s_Iso.DcdDiag);
+			return tud_control_xfer(RhPort, pRequest,
+				s_Iso.DcdDiag, sizeof(s_Iso.DcdDiag));
+		}
+	}
+
+	return false;
+}
+
+// TinyUSB hands every vendor-type control request to this callback before
+// looking at the recipient, so a vendor request addressed to the ISO
+// interface never reaches IsoDriverControl on its own. Route it there; the
+// default weak implementation returns false and stalls the diag request.
+extern "C" bool tud_vendor_control_xfer_cb(uint8_t RhPort, uint8_t Stage,
+	const tusb_control_request_t *pRequest)
+{
+	if (pRequest->bmRequestType_bit.recipient == TUSB_REQ_RCPT_INTERFACE &&
+		tu_u16_low(pRequest->wIndex) == ITF_ISO)
+	{
+		return IsoDriverControl(RhPort, Stage, pRequest);
 	}
 
 	return false;
