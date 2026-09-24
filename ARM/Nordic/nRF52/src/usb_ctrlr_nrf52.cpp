@@ -608,7 +608,7 @@ static void nRFUsbdSofAcquire(void)
  */
 static void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 {
-	const uint32_t epNum = pQue->EpNum;
+	const uint8_t epNum = pQue->EpNum;
 	const bool isIn = pQue->Dir != NRFX_USBD_QUE_OUT;
 	const uint8_t *pBuffer;
 
