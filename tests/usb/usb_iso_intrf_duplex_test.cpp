@@ -139,9 +139,14 @@ int main(void)
 {
 	UsbIsoIntrf_t iso = {};
 	UsbDevIntrf_t isoData = {};
+	alignas(4) uint8_t rxBuffer[USB_INTRF_PKT_BLKSIZE(49U)] = {};
+	alignas(4) uint8_t txBuffer[USB_INTRF_PKT_BLKSIZE(49U)] = {};
 	UsbIsoIntrfCfg_t cfg = {};
 	cfg.DevNo = 0;
 	cfg.EpNo = 8U;
+	cfg.BufferSize = 49U;
+	cfg.pRxBuffer = rxBuffer;
+	cfg.pTxBuffer = txBuffer;
 	cfg.RxHandler = RxFrame;
 	cfg.TxHandler = TxFrame;
 
