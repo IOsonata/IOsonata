@@ -235,7 +235,8 @@ static bool UsbdSdRunning(void)
 
 // Bounded spin for a status bit shared by the clock, controller and
 // regulator ready waits.
-static bool UsbdWaitReady(const volatile uint32_t *pReg, uint32_t Msk,
+static __attribute__((noinline))
+bool UsbdWaitReady(const volatile uint32_t *pReg, uint32_t Msk,
 						  uint32_t Loops)
 {
 	// Include the final readiness read after the requested wait iterations.
