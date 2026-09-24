@@ -65,6 +65,7 @@ SOFTWARE.
 #define USB_CORE_STR_PRODUCT			2U
 #define USB_CORE_STR_SERIAL			3U
 #define USB_CORE_STR_FUNCTION			4U
+#define USB_CORE_CONFIG_VALUE			1U
 
 #define USB_SERIAL_MAXLEN			33	//!< 32 hexadecimal characters and a terminator
 
@@ -352,7 +353,7 @@ static const uint8_t *UsbDescConfiguration(int DevNo, uint8_t Index,
 		USB_DESCTYPE_OSC : USB_DESCTYPE_CONFIGURATION;
 	config.wTotalLength = offset;
 	config.bNumInterfaces = interfaceCount;
-	config.bConfigurationValue = 1U;
+	config.bConfigurationValue = USB_CORE_CONFIG_VALUE;
 	config.bmAttributes = USB_CONFATT_RESERVED;
 	if (pCfg->bSelfPowered)
 	{
@@ -435,40 +436,14 @@ static const uint8_t *UsbCoreGetConfigByIndex(uint8_t Index,
 												   pLength);
 }
 
-static uint8_t UsbCoreConfigurationCount(void)
-{
-	uint16_t len;
-	const uint8_t *pDesc = UsbCoreGetDescriptor(USB_DESCTYPE_DEVICE,
-												0, 0, &len);
-
-	if (pDesc == nullptr || len < USBD_CORE_DEVICE_DESC_LEN ||
-		pDesc[0] < USBD_CORE_DEVICE_DESC_LEN ||
-		pDesc[1] != USB_DESCTYPE_DEVICE)
-	{
-		return 0;
-	}
-
-	return pDesc[17];
-}
-
 static const uint8_t *UsbCoreGetConfigByValue(uint8_t Value,
 										uint16_t *pLength)
 {
-	const uint8_t count = UsbCoreConfigurationCount();
-
-	for (uint8_t i = 0; i < count; i++)
+	if (Value != USB_CORE_CONFIG_VALUE)
 	{
-		uint16_t len;
-		const uint8_t *pDesc = UsbCoreGetConfigByIndex(i, &len);
-
-		if (pDesc != nullptr && pDesc[5] == Value)
-		{
-			*pLength = len;
-			return pDesc;
-		}
+		return nullptr;
 	}
-
-	return nullptr;
+	return UsbCoreGetConfigByIndex(0U, pLength);
 }
 
 static const uint8_t *UsbCoreActiveConfig(uint16_t *pLength)
