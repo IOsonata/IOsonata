@@ -609,8 +609,7 @@ __attribute__((noinline)) void nRFUsbdSofAcquire(void)
  * direction stay separate in the scheduler; what an OUT endpoint actually
  * holds is only known now, so that is read here.
  */
-static inline __attribute__((always_inline))
-void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
+static void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 {
 	const uint8_t epNum = pQue->EpNum;
 	const bool isIn = pQue->Dir != NRFX_USBD_QUE_OUT;
