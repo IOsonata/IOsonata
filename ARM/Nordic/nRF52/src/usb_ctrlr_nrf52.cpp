@@ -833,8 +833,7 @@ static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
 
 // InData is nonzero. Return only the status bit accepted by AppEvt; a full
 // queue leaves it in EPDATASTATUS for UsbCtrlrProcess to retry.
-static __attribute__((noinline))
-uint32_t nRFUsbdQueueInComplete(uint32_t InData)
+static uint32_t nRFUsbdQueueInComplete(uint32_t InData)
 {
 	const uint32_t epNum = 31U - (uint32_t)__CLZ(InData);
 	const uint32_t evt = (NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum;
