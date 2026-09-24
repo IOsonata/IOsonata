@@ -1792,6 +1792,15 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 			pDesc->bmAttributes & 0x03U, pDesc->wMaxPacketSize);
 }
 
+bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
+	uint16_t MaxPacketSize)
+{
+	const uint8_t epAddr = (uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
+	return nRFUsbValidDevNo(DevNo) &&
+		nRFUsbRegEpOpen(epAddr, USB_ENDPATT_TRANS_ISO, MaxPacketSize);
+}
+
 bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 						 uint16_t MaxPacketSize)
 {
