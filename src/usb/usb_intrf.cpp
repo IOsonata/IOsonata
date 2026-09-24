@@ -38,14 +38,9 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "usb/usb_intrf.h"
 
-// Other controllers use DRDY before DMA. A deferred completed packet instead
-// stores Length + 2, including two for a ZLP, in the same pending field.
-static constexpr uint16_t USB_INTRF_RX_DRDY = 1U;
-
 static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf);
 static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
 
-static void UsbIntrfRetryRx(uint32_t Evt, void *pContext);
 static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t, uint16_t, void *);
 
 extern void UsbIsoIntrfProcessEvent(UsbDevIntrf_t *, UsbCtrlrEvtType_t,
@@ -207,7 +202,7 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 
 	if (cnt > 0 && pIntrf->RxPending != 0U)
 	{
-		UsbIntrfRetryRx(0U, pIntrf);
+		UsbIntrfReleaseRx(pIntrf);
 	}
 
 	return cnt;
@@ -242,6 +237,7 @@ static int UsbIntrfRxDirect(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 		memcpy(pBuffer, pPacket->Data, len);
 	}
 	UsbIntrfDirectClear(pPacket);
+	UsbIntrfReleaseRx(pIntrf);
 	EnableInterrupt(state);
 	return len;
 }
@@ -459,17 +455,6 @@ static bool UsbIntrfCompleteRx(UsbDevIntrf_t *pIntrf, uint16_t Length)
 	return true;
 }
 
-static void UsbIntrfRetryRx(uint32_t, void *pContext)
-{
-	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pContext);
-	const uint32_t state = DisableInterrupt();
-	if (pIntrf->RxPending != 0U)
-	{
-		UsbIntrfCtrlrOutEvent(USB_CTRLR_EVT_DRDY, 0U, pIntrf);
-	}
-	EnableInterrupt(state);
-}
-
 static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t Event,
 								  uint16_t Length, void *pContext)
 {
@@ -478,11 +463,6 @@ static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t Event,
 	switch (Event)
 	{
 		case USB_CTRLR_EVT_DRDY:
-			if (pIntrf->RxPending > USB_INTRF_RX_DRDY)
-			{
-				(void)UsbIntrfCompleteRx(pIntrf, pIntrf->RxPending - 2U);
-				return;
-			}
 			if (pIntrf->Mode == USB_INTRF_MODE_DIRECT && !pIntrf->bBlocking)
 			{
 				return;
@@ -497,12 +477,8 @@ static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t Event,
 				return;
 			}
 
-			if (pIntrf->RxPending == 0U)
-			{
-				pIntrf->RxPending = USB_INTRF_RX_DRDY;
-				UsbIntrfRegisterRx(pIntrf, nullptr);
-				(void)AppEvtHandlerQue(0U, pIntrf, UsbIntrfRetryRx);
-			}
+			pIntrf->RxPending = 1U;
+			UsbIntrfRegisterRx(pIntrf, nullptr);
 			return;
 
 		case USB_CTRLR_EVT_XFER_CMPL:
@@ -512,21 +488,9 @@ static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t Event,
 				return;
 			}
 
-			if (!UsbIntrfCompleteRx(pIntrf, Length))
+			if (!UsbIntrfCompleteRx(pIntrf, Length) && !pIntrf->bBlocking)
 			{
-				if (pIntrf->bBlocking)
-				{
-					const uint32_t state = DisableInterrupt();
-					pIntrf->RxPending = Length + 2U;
-					// Withhold this buffer until the deferred copy succeeds.
-					UsbIntrfRegisterRx(pIntrf, nullptr);
-					(void)AppEvtHandlerQue(0U, pIntrf, UsbIntrfRetryRx);
-					EnableInterrupt(state);
-				}
-				else
-				{
-					pIntrf->RxDropCnt++;
-				}
+				pIntrf->RxDropCnt++;
 			}
 			return;
 
