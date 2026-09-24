@@ -1196,7 +1196,6 @@ void UsbCtrlrStop(int DevNo)
 	// UsbCoreStop already disconnected, disabled NVIC and closed endpoints.
 	nRFUsbdResetState();
 
-	NRF_USBD->INTEN = 0;
 	NRF_USBD->ENABLE = 0;
 	(void)NRF_USBD->ENABLE;
 
