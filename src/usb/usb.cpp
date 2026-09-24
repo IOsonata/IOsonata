@@ -596,16 +596,6 @@ static int UsbCoreFindClass(uint8_t InterfaceNo)
 	return -1;
 }
 
-static int UsbCoreFindEndpointClass(uint8_t EpNo, bool bIn)
-{
-	if (EpNo == 0U || EpNo >= 16U)
-	{
-		return -1;
-	}
-
-	return s_Core.EpClass[bIn ? 1 : 0][EpNo];
-}
-
 static void UsbCoreResetControl(void)
 {
 	s_Core.CtrlState = USB_CTRL_IDLE;
@@ -1226,7 +1216,7 @@ static bool UsbCoreHandleClassRequest(void)
 			return false;
 		}
 
-		const int cls = UsbCoreFindEndpointClass(epNum, in);
+		const int cls = s_Core.EpClass[in ? 1 : 0][epNum];
 		return cls >= 0 && UsbCoreCallClassSetup(cls);
 	}
 
