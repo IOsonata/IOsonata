@@ -188,12 +188,13 @@ bool UsbCtrlrIsoInit(int DevNo)
 	return true;
 }
 
-bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
+bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
+	uint16_t MaxPacketSize)
 {
 	(void)DevNo;
-	const uint8_t epAddr = pDesc->bEndpointAddress;
-	const bool in = USB_ENDPADDR_IS_IN(epAddr);
-	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][in].MaxPacketSize = pDesc->wMaxPacketSize;
+	(void)EpNo;
+	const bool in = bIn;
+	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][in].MaxPacketSize = MaxPacketSize;
 	NRF_USBD->ISOSPLIT =
 		USBD_ISOSPLIT_SPLIT_HalfIN << USBD_ISOSPLIT_SPLIT_Pos;
 	NRF_USBD->ISOINCONFIG =
