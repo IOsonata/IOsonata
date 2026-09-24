@@ -198,8 +198,6 @@ bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 
 	nRFIsoHwEnable(bIn, true);
 
-	s_Usbd.IsoBusy &=
-		(uint8_t)~((uint8_t)NRFUSBD_ISO_OUT_BUSY << bIn);
 	s_Usbd.IsoOpen =
 		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][!bIn].MaxPacketSize != 0U;
 
