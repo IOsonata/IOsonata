@@ -679,10 +679,6 @@ __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 
 static void nRFUsbdResetState(void)
 {
-	s_Usbd.SofEnabled = false;
-	s_Usbd.IsoOpen = false;
-	s_Usbd.IsoBusy = 0U;
-
 	CFifoFlush(s_Usbd.hQue);
 	CFifoFlush(s_Usbd.hEp0Que);
 	s_Usbd.Flags = USBD_FLAG_MAC_AWAKE;
