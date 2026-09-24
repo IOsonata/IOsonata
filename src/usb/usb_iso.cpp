@@ -157,8 +157,6 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	pIntrf->RxHandler = pCfg->RxHandler;
 	pIntrf->TxHandler = pCfg->TxHandler;
 	pIntrf->EpNo = pCfg->EpNo;
-	pIntrf->Attributes = pCfg->Attributes &
-		(USB_ENDPATT_ISO_SYNC_MASK | USB_ENDPATT_ISO_USAGE_MASK);
 
 	UsbIntrfCfg_t cfg = {};
 	cfg.DevNo = pCfg->DevNo;
