@@ -472,23 +472,22 @@ void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 		 (offsetof(NRF_USBD_Type, EPOUTEN) - offsetof(NRF_USBD_Type, EPINEN)));
 	const uint32_t msk = 1UL << EpNum;
 
-	if (Enable)
+	*pEnd = 0U;
+
+	// Regular IN completion is host-consumed EPDATA, so only OUT needs
+	// an END interrupt.
+	if (!In)
 	{
-		*pEnd = 0U;
-		// Regular IN completion is host-consumed EPDATA, so only OUT needs
-		// an END interrupt.
-		if (!In)
-		{
+		if (Enable)
 			NRF_USBD->INTENSET = 1UL << endBit;
-		}
+		else
+			NRF_USBD->INTENCLR = 1UL << endBit;
+	}
+
+	if (Enable)
 		*pEnable |= msk;
-	}
 	else
-	{
-		NRF_USBD->INTENCLR = 1UL << endBit;
 		*pEnable &= ~msk;
-		*pEnd = 0U;
-	}
 }
 
 // Initialize the active event fields; UsbDevProcessEvent reads only that
