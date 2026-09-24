@@ -49,16 +49,8 @@ static bool UsbIsoIntrfEpSupported(int DevNo, uint8_t EpNo)
 
 static bool UsbIsoIntrfOpenEndpoint(UsbIsoIntrf_t *pIntrf, bool bIn)
 {
-	UsbEndPointDesc_t desc = {};
-	desc.bLength = sizeof(desc);
-	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-	desc.bEndpointAddress = (uint8_t)(pIntrf->EpNo |
-		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
-	desc.bmAttributes = USB_ENDPATT_TRANS_ISO | pIntrf->Attributes;
-	desc.wMaxPacketSize = pIntrf->Mps;
-	desc.bInterval = pIntrf->Interval;
-
-	return UsbCtrlrEpOpen(pIntrf->pData->DevNo, &desc);
+	return UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, bIn,
+		pIntrf->Mps);
 }
 
 // UsbIntrf owns DeviceIntrf and the controller endpoint callback. ISO events
