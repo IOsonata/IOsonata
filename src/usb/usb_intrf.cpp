@@ -356,12 +356,6 @@ static int UsbIntrfTxDirect(DevIntrf_t * const pDevIntrf,
 	return DataLen;
 }
 
-static int UsbIntrfTxSrData(DevIntrf_t * const pDevIntrf,
-							 const uint8_t *pData, int DataLen)
-{
-	return pDevIntrf->TxData(pDevIntrf, pData, DataLen);
-}
-
 static void UsbIntrfReset(DevIntrf_t * const pDevIntrf)
 {
 	UsbIntrfUnconfigure(static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData));
@@ -651,7 +645,6 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	pIntrf->DevIntrf.StopRx = UsbIntrfNoop;
 	pIntrf->DevIntrf.StartTx = UsbIntrfStart;
 	pIntrf->DevIntrf.TxData = UsbIntrfTxBytes;
-	pIntrf->DevIntrf.TxSrData = UsbIntrfTxSrData;
 	pIntrf->DevIntrf.StopTx = UsbIntrfNoop;
 	pIntrf->DevIntrf.Reset = UsbIntrfReset;
 	pIntrf->DevIntrf.PowerOff = UsbIntrfNoop;
@@ -676,6 +669,8 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 		default:
 			return false;
 	}
+
+	pIntrf->DevIntrf.TxSrData = pIntrf->DevIntrf.TxData;
 
 	atomic_flag_clear(&pIntrf->DevIntrf.bBusy);
 	atomic_store(&pIntrf->DevIntrf.EnCnt, 0);
