@@ -49,6 +49,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #define INT_MPS					64U
 
 #define ISO_ALT_COUNT			6U
+#define ISO_MAX_MPS			63U
 #define ISO_REQ_GET_DIAG		0x5AU
 
 alignas(4) static uint8_t s_LoopbackRxFifoMem[CDC_RXFIFO_MEMSIZE];
@@ -409,6 +410,8 @@ typedef struct __Combo_Iso_Function_Descriptor {
 
 static UsbIsoIntrf_t s_Iso;
 static UsbDevIntrf_t s_IsoData;
+alignas(4) static uint8_t s_IsoRxBuffer[USB_INTRF_PKT_BLKSIZE(ISO_MAX_MPS)];
+alignas(4) static uint8_t s_IsoTxBuffer[USB_INTRF_PKT_BLKSIZE(ISO_MAX_MPS)];
 static bool s_IsoConfigured;
 static uint8_t s_IsoAlt;
 static uint8_t s_IsoInterfaceNo;
@@ -666,6 +669,9 @@ static bool IsoInit(void)
 	UsbIsoIntrfCfg_t cfg = {};
 	cfg.DevNo = USB_DEVNO;
 	cfg.EpNo = s_IsoEpNo;
+	cfg.BufferSize = ISO_MAX_MPS;
+	cfg.pRxBuffer = s_IsoRxBuffer;
+	cfg.pTxBuffer = s_IsoTxBuffer;
 	cfg.RxHandler = IsoRxFrame;
 	if (!UsbIsoIntrfInit(&s_Iso, &s_IsoData, &cfg))
 	{
