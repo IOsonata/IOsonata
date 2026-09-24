@@ -233,6 +233,7 @@ void UsbCtrlrRemoteWakeup(int DevNo);
 void UsbCtrlrSofEnable(int DevNo, bool Enable);
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
+bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn, uint16_t MaxPacketSize);
 bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 						 uint16_t MaxPacketSize);
 void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn);
