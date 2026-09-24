@@ -1488,11 +1488,6 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
 {
 	(void)DevNo;
-	if (EpNo >= NRFX_USBD_DATA_EP_COUNT)
-	{
-		return;
-	}
-
 	if (EpNo == 0U)
 	{
 		NRF_USBD->TASKS_EP0STALL = 1;
@@ -1510,11 +1505,6 @@ void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
 void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
 {
 	(void)DevNo;
-	if (EpNo == 0U || EpNo >= NRFX_USBD_DATA_EP_COUNT)
-	{
-		return;
-	}
-
 	const uint8_t epAddr = (uint8_t)(EpNo |
 		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
 	NRF_USBD->DTOGGLE = epAddr;
