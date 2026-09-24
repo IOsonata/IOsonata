@@ -190,7 +190,6 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval)
 {
 	if (pIntrf == nullptr ||
-		!UsbIsoIntrfEpSupported(pIntrf->pData->DevNo, pIntrf->EpNo) ||
 		Mps == 0U || Mps > USB_ISO_INTRF_MAX_MPS ||
 		Interval == 0U || Interval > 16U)
 	{
