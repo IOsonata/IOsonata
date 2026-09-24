@@ -3,12 +3,10 @@
 
 @brief	Internal USB device interface/endpoint allocator.
 
-Recursive backtracking search over the endpoint space, lowest numbers
-first, IN only endpoints placed before bidirectional pairs, pairs before
-OUT only. Controller-constrained endpoints requested through the fixed
-masks are excluded from the search and merged into the registered masks.
-Each complete candidate is offered to the core; the first placement the
-core accepts is returned to the caller.
+Classes register once before the controller starts. Resource ownership is
+therefore monotonic for one UsbInit() lifetime: keep compact masks for the
+already assigned interfaces and endpoint directions, select the lowest free
+resources once, then register that topology with the core.
 
 @author	Nguyen Hoan Hoang
 @date	Sep. 6, 2026
@@ -17,7 +15,7 @@ core accepts is returned to the caller.
 
 MIT License
 
-Copyright (c) 2026, I-SYST inc., all rights reserved
+Copyright (c) 2026, I-SYST inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -43,118 +41,63 @@ SOFTWARE.
 #include "usb/usbd_epalloc.h"
 
 typedef struct __Usbd_EpAlloc_State {
-	int DevNo;
-	const UsbdEpAllocReq_t *pReq;
-	UsbDeviceClass *pClass;
-	UsbdEpAllocRes_t *pRes;
-	uint8_t FirstInterface;
-	uint8_t InLimit;
-	uint8_t OutLimit;
-	uint8_t PairLimit;
+	uint16_t InterfaceMask;
+	uint16_t InMask;
+	uint16_t OutMask;
 } UsbdEpAllocState_t;
 
-static void EpAllocStore(uint8_t *pEp, unsigned Count, uint32_t Mask)
+static UsbdEpAllocState_t s_State[USB_CTRLR_CNT];
+
+static bool EpAllocInterfaces(uint8_t Count, uint16_t Used,
+							 uint8_t *pFirst, uint16_t *pMask)
 {
-	while (Count-- != 0U)
+	if (Count == 0U)
 	{
-		*pEp++ = (uint8_t)__builtin_ctz((unsigned)Mask);
-		Mask &= Mask - 1U;
-	}
-}
-
-enum
-{
-	EPALLOC_OUT,
-	EPALLOC_PAIR,
-	EPALLOC_IN,
-};
-
-static bool EpAllocTry(const UsbdEpAllocState_t *pState, unsigned Phase,
-					   unsigned Needed, unsigned StartEp,
-					   uint32_t InMask, uint32_t PairMask, uint32_t OutMask)
-{
-	if (Needed == 0U)
-	{
-		if (Phase != EPALLOC_OUT)
-		{
-			const unsigned next = Phase == EPALLOC_IN ?
-				pState->pReq->BidirectionalCount : pState->pReq->OutCount;
-			return EpAllocTry(pState, Phase - 1U, next, 1U,
-				InMask, PairMask, OutMask);
-		}
-
-		if (!UsbClassRegister(pState->DevNo, pState->pClass,
-			pState->FirstInterface, pState->pReq->InterfaceCount,
-			InMask | PairMask, OutMask | PairMask))
-		{
-			return false;
-		}
-
-		pState->pRes->FirstInterface = pState->FirstInterface;
-		EpAllocStore(pState->pRes->Bidirectional,
-			pState->pReq->BidirectionalCount, PairMask);
-		EpAllocStore(pState->pRes->In, pState->pReq->InCount,
-			InMask & ~pState->pReq->FixedInMask);
-		EpAllocStore(pState->pRes->Out, pState->pReq->OutCount,
-			OutMask & ~pState->pReq->FixedOutMask);
+		*pFirst = 0U;
+		*pMask = 0U;
 		return true;
 	}
 
-	unsigned limit;
-	uint32_t used;
-	if (Phase == EPALLOC_IN)
+	const uint32_t width = (1UL << Count) - 1UL;
+	for (uint8_t first = 0U; first <= 16U - Count; first++)
 	{
-		limit = pState->InLimit;
-		used = InMask;
-	}
-	else if (Phase == EPALLOC_PAIR)
-	{
-		limit = pState->PairLimit;
-		used = InMask | OutMask;
-	}
-	else
-	{
-		limit = pState->OutLimit;
-		used = PairMask | OutMask;
-	}
-
-	for (unsigned ep = StartEp; ep < limit; ep++)
-	{
-		const uint32_t bit = 1UL << ep;
-		if ((used & bit) != 0U)
+		const uint16_t mask = (uint16_t)(width << first);
+		if ((Used & mask) == 0U)
 		{
-			continue;
-		}
-
-		bool accepted;
-		if (Phase == EPALLOC_IN)
-		{
-			accepted = EpAllocTry(pState, Phase, Needed - 1U, ep + 1U,
-				InMask | bit, PairMask, OutMask);
-		}
-		else if (Phase == EPALLOC_PAIR)
-		{
-			accepted = EpAllocTry(pState, Phase, Needed - 1U, ep + 1U,
-				InMask, PairMask | bit, OutMask);
-		}
-		else
-		{
-			accepted = EpAllocTry(pState, Phase, Needed - 1U, ep + 1U,
-				InMask, PairMask, OutMask | bit);
-		}
-		if (accepted)
-		{
+			*pFirst = first;
+			*pMask = mask;
 			return true;
 		}
 	}
-
 	return false;
+}
+
+static bool EpAllocOne(uint16_t Used, uint8_t Limit, uint8_t *pEp)
+{
+	uint16_t mask = (uint16_t)((1UL << Limit) - 1UL);
+	mask &= (uint16_t)~Used;
+	mask &= (uint16_t)~1U;
+	if (mask == 0U)
+	{
+		return false;
+	}
+	*pEp = (uint8_t)__builtin_ctz((unsigned)mask);
+	return true;
+}
+
+void UsbdEpAllocReset(int DevNo)
+{
+	if (DevNo >= 0 && DevNo < USB_CTRLR_CNT)
+	{
+		memset(&s_State[DevNo], 0, sizeof(s_State[DevNo]));
+	}
 }
 
 bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
 				 UsbDeviceClass *pClass, UsbdEpAllocRes_t *pRes)
 {
-	if (pReq == nullptr || pRes == nullptr ||
+	if (DevNo < 0 || DevNo >= USB_CTRLR_CNT ||
+		pReq == nullptr || pClass == nullptr || pRes == nullptr ||
 		pReq->InterfaceCount > 16U ||
 		pReq->BidirectionalCount > USBD_EPALLOC_EP_MAXCNT ||
 		pReq->InCount > USBD_EPALLOC_EP_MAXCNT ||
@@ -163,35 +106,76 @@ bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
 		return false;
 	}
 
-	const uint8_t inLimit = USB_EPIN_CNT(DevNo) < 16 ?
-		USB_EPIN_CNT(DevNo) : 16U;
-	const uint8_t outLimit = USB_EPOUT_CNT(DevNo) < 16 ?
-		USB_EPOUT_CNT(DevNo) : 16U;
-	const uint8_t pairLimit = inLimit < outLimit ? inLimit : outLimit;
-	if (inLimit < 1U || outLimit < 1U)
+	UsbdEpAllocState_t &state = s_State[DevNo];
+	uint16_t inMask = pReq->FixedInMask;
+	uint16_t outMask = pReq->FixedOutMask;
+	if ((inMask & state.InMask) != 0U || (outMask & state.OutMask) != 0U)
 	{
 		return false;
 	}
 
-	UsbdEpAllocState_t state = {};
-	state.DevNo = DevNo;
-	state.pReq = pReq;
-	state.pClass = pClass;
-	state.pRes = pRes;
-	state.InLimit = inLimit;
-	state.OutLimit = outLimit;
-	state.PairLimit = pairLimit;
+	const uint8_t inLimit = USB_EPIN_CNT(DevNo) < 16U ?
+		USB_EPIN_CNT(DevNo) : 16U;
+	const uint8_t outLimit = USB_EPOUT_CNT(DevNo) < 16U ?
+		USB_EPOUT_CNT(DevNo) : 16U;
+	const uint8_t pairLimit = inLimit < outLimit ? inLimit : outLimit;
 
-	const unsigned lastFirst = 16U - pReq->InterfaceCount;
-	for (unsigned first = 0; first <= lastFirst; first++)
+	uint8_t firstInterface;
+	uint16_t interfaceMask;
+	if (!EpAllocInterfaces(pReq->InterfaceCount, state.InterfaceMask,
+		&firstInterface, &interfaceMask))
 	{
-		state.FirstInterface = (uint8_t)first;
-		if (EpAllocTry(&state, EPALLOC_IN, pReq->InCount, 1U,
-			pReq->FixedInMask, 0U, pReq->FixedOutMask))
-		{
-			return true;
-		}
+		return false;
 	}
 
-	return false;
+	memset(pRes, 0, sizeof(*pRes));
+	pRes->FirstInterface = firstInterface;
+
+	for (uint8_t i = 0U; i < pReq->InCount; i++)
+	{
+		uint8_t ep;
+		if (!EpAllocOne((uint16_t)(state.InMask | inMask), inLimit, &ep))
+		{
+			return false;
+		}
+		inMask |= (uint16_t)(1U << ep);
+		pRes->In[i] = ep;
+	}
+
+	for (uint8_t i = 0U; i < pReq->BidirectionalCount; i++)
+	{
+		uint8_t ep;
+		const uint16_t used = (uint16_t)(
+			state.InMask | state.OutMask | inMask | outMask);
+		if (!EpAllocOne(used, pairLimit, &ep))
+		{
+			return false;
+		}
+		const uint16_t bit = (uint16_t)(1U << ep);
+		inMask |= bit;
+		outMask |= bit;
+		pRes->Bidirectional[i] = ep;
+	}
+
+	for (uint8_t i = 0U; i < pReq->OutCount; i++)
+	{
+		uint8_t ep;
+		if (!EpAllocOne((uint16_t)(state.OutMask | outMask), outLimit, &ep))
+		{
+			return false;
+		}
+		outMask |= (uint16_t)(1U << ep);
+		pRes->Out[i] = ep;
+	}
+
+	if (!UsbClassRegister(DevNo, pClass, firstInterface,
+		pReq->InterfaceCount, inMask, outMask))
+	{
+		return false;
+	}
+
+	state.InterfaceMask |= interfaceMask;
+	state.InMask |= inMask;
+	state.OutMask |= outMask;
+	return true;
 }
