@@ -160,7 +160,7 @@ static const uint8_t *UsbCoreGetDescriptor(uint8_t Type, uint8_t Index,
 
 static uint8_t UsbDescMaxPower(const UsbCfg_t *pCfg)
 {
-	if (pCfg == nullptr || pCfg->bSelfPowered)
+	if (pCfg->bSelfPowered)
 	{
 		return 0U;
 	}
@@ -810,20 +810,12 @@ static bool UsbCoreStartOut(uint8_t *pData, uint16_t Capacity)
 
 static bool UsbCoreConfigRemoteWakeupCapable(void)
 {
-	uint16_t len;
-	const uint8_t *pDesc = UsbCoreActiveConfig(&len);
-
-	return pDesc != nullptr && len >= USBD_CORE_CONFIG_DESC_LEN &&
-		(pDesc[7] & USB_CONFATT_REMOTE_WAKEUP) != 0;
+	return s_UsbDevCfg.bRemoteWakeup;
 }
 
 static bool UsbCoreConfigSelfPowered(void)
 {
-	uint16_t len;
-	const uint8_t *pDesc = UsbCoreActiveConfig(&len);
-
-	return pDesc != nullptr && len >= USBD_CORE_CONFIG_DESC_LEN &&
-		(pDesc[7] & USB_CONFATT_SELF_POWERED) != 0;
+	return s_UsbDevCfg.bSelfPowered;
 }
 
 static void UsbCoreClearEndpointState(void)
