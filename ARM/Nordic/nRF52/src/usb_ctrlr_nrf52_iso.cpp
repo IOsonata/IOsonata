@@ -47,7 +47,7 @@ SOFTWARE.
 static_assert(offsetof(USBD_ISOOUT_Type, MAXCNT) ==
 	offsetof(USBD_ISOIN_Type, MAXCNT), "ISO register layout");
 
-static inline __attribute__((always_inline))
+static __attribute__((noinline))
 void nRFIsoHwEnable(bool In, bool Enable)
 {
 	volatile uint32_t *pEnd = In ?
