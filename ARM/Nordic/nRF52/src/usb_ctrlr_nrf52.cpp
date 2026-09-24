@@ -1407,16 +1407,9 @@ void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
 void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 						 UsbCtrlrEvtType_t Event, uint16_t Value)
 {
-	if (DevNo != 0 || EpNo == 0U || EpNo >= NRFX_USBD_EP_COUNT)
-	{
-		return;
-	}
-
+	(void)DevNo;
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNo, bIn);
-	if (pReg->Handler != nullptr)
-	{
-		pReg->Handler(Event, Value, pReg->pContext);
-	}
+	pReg->Handler(Event, Value, pReg->pContext);
 }
 
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
