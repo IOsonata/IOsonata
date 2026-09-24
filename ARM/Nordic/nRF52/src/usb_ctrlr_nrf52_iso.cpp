@@ -104,8 +104,7 @@ bool nRFUsbdIsoStart(void)
 			// SIZE.ISOOUT is read only while the shared EasyDMA channel is idle
 			// and locked by this scheduler.
 			const uint32_t size = NRF_USBD->SIZE.ISOOUT;
-			if (size == 0U || pReg->pBuffer == nullptr ||
-				pReg->Handler == nullptr)
+			if (size == 0U)
 			{
 				s_Usbd.IsoBusy &= (uint8_t)~busy;
 				continue;
@@ -141,10 +140,7 @@ bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		return false;
 
 	bool send = false;
-	nRFUsbEpReg_t *pOut =
-		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
-	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_OUT_BUSY) == 0U &&
-		pOut->pBuffer != nullptr && pOut->Handler != nullptr)
+	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_OUT_BUSY) == 0U)
 	{
 		s_Usbd.IsoBusy |= NRFUSBD_ISO_OUT_BUSY;
 		send = true;
