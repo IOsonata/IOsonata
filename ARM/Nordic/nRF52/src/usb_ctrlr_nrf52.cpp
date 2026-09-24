@@ -594,15 +594,6 @@ __attribute__((noinline)) void nRFUsbdSofAcquire(void)
 	NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
 }
 
-__attribute__((noinline)) void nRFUsbdSofRelease(void)
-{
-	if (!s_Usbd.SofEnabled &&
-		(s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U)
-	{
-		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
-	}
-}
-
 /**
  * Start EasyDMA for one regular queued request. Endpoint number and
  * direction stay separate in the scheduler; what an OUT endpoint actually
@@ -1307,9 +1298,9 @@ void UsbCtrlrSofEnable(int DevNo, bool Enable)
 	{
 		nRFUsbdSofAcquire();
 	}
-	else
+	else if ((s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U)
 	{
-		nRFUsbdSofRelease();
+		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
 	}
 }
 
