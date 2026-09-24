@@ -1349,11 +1349,6 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 {
 	(void)DevNo;
-	if (EpNo == 0U || EpNo >= NRFX_USBD_EP_COUNT)
-	{
-		return;
-	}
-
 	if (EpNo == NRFX_USBD_ISO_EP_NO)
 	{
 		nRFUsbdIsoEpClose(bIn);
