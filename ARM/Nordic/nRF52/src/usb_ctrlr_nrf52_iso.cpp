@@ -145,8 +145,7 @@ bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	return true;
 }
 
-static __attribute__((noinline))
-bool nRFUsbdFinishIsoDma(bool In)
+static bool nRFUsbdFinishIsoDma(bool In)
 {
 	volatile uint32_t *pEnd = In ?
 		&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
