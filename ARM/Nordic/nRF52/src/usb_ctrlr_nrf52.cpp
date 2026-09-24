@@ -165,8 +165,8 @@ static void nRFUsbdHostResume(void);
 
 
 // UsbCtrlrIsoInit pulls in the optional ISO archive member, whose strong
-// definitions replace these defaults. Keep IsoStart undefined when absent so
-// regular DMA skips the call entirely.
+// definitions replace these defaults. IsoStart stays undefined when absent;
+// IsoOpen remains false, so the scheduler never calls the unresolved weak hook.
 __attribute__((weak)) bool nRFUsbdIsoFinishDma(void)
 {
 	return false;
@@ -655,7 +655,7 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaAllowed(void)
 // separately in its submission path or the ISR completion handoff.
 static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 {
-	if (nRFUsbdIsoStart != nullptr && nRFUsbdIsoStart())
+	if (s_Usbd.IsoOpen && nRFUsbdIsoStart())
 		return;
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPeek(s_Usbd.hQue);
 	if (pQue != NULL)
