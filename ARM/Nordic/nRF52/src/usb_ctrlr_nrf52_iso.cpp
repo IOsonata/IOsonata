@@ -190,21 +190,18 @@ bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 {
 	(void)DevNo;
 	(void)EpNo;
-	const bool in = bIn;
-	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][in].MaxPacketSize = MaxPacketSize;
+	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][bIn].MaxPacketSize = MaxPacketSize;
 	NRF_USBD->ISOSPLIT =
 		USBD_ISOSPLIT_SPLIT_HalfIN << USBD_ISOSPLIT_SPLIT_Pos;
 	NRF_USBD->ISOINCONFIG =
 		USBD_ISOINCONFIG_RESPONSE_ZeroData << USBD_ISOINCONFIG_RESPONSE_Pos;
 
-	nRFIsoHwEnable(in, true);
+	nRFIsoHwEnable(bIn, true);
 
-	const uint8_t dir = in ? 1U : 0U;
 	s_Usbd.IsoBusy &=
-		(uint8_t)~((uint8_t)NRFUSBD_ISO_OUT_BUSY << dir);
+		(uint8_t)~((uint8_t)NRFUSBD_ISO_OUT_BUSY << bIn);
 	s_Usbd.IsoOpen =
-		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].MaxPacketSize != 0U &&
-		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1].MaxPacketSize != 0U;
+		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][!bIn].MaxPacketSize != 0U;
 
 	__DSB();
 	return true;
@@ -212,7 +209,6 @@ bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 
 void nRFUsbdIsoEpClose(bool bIn)
 {
-	const uint8_t dir = bIn ? 1U : 0U;
 	const uint32_t state = DisableInterrupt();
 
 	// ISO is one bidirectional path. Closing either side stops scheduling and
@@ -223,7 +219,7 @@ void nRFUsbdIsoEpClose(bool bIn)
 
 	nRFIsoHwEnable(bIn, false);
 
-	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir].MaxPacketSize = 0U;
+	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][bIn].MaxPacketSize = 0U;
 	__DSB();
 	EnableInterrupt(state);
 }
