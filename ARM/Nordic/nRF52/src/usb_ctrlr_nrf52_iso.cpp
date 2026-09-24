@@ -47,7 +47,7 @@ SOFTWARE.
 static_assert(offsetof(USBD_ISOOUT_Type, MAXCNT) ==
 	offsetof(USBD_ISOIN_Type, MAXCNT), "ISO register layout");
 
-static inline __attribute__((always_inline))
+static __attribute__((noinline))
 void nRFIsoHwEnable(bool In, bool Enable)
 {
 	volatile uint32_t *pEnd = In ?
@@ -75,8 +75,10 @@ void nRFIsoHwEnable(bool In, bool Enable)
 // The shared scheduler already owns the channel lock.
 bool nRFUsbdIsoStart(void)
 {
-	const uint8_t busy = s_Usbd.IsoBusy;
-	if ((busy & NRFUSBD_ISO_IN_BUSY) != 0U)
+	if (!s_Usbd.IsoOpen)
+		return false;
+
+	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) != 0U)
 	{
 		nRFUsbEpReg_t *pReg =
 			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1];
@@ -87,7 +89,7 @@ bool nRFUsbdIsoStart(void)
 		return true;
 	}
 
-	if (busy == 0U)
+	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_OUT_BUSY) == 0U)
 		return false;
 
 	const uint32_t size = NRF_USBD->SIZE.ISOOUT;
@@ -146,49 +148,38 @@ bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	return send;
 }
 
-bool nRFUsbdIsoFinishDma(void)
+static bool nRFUsbdFinishIsoDma(bool In)
 {
-	bool in;
-	volatile uint32_t *pEnd;
-	uint16_t amount;
-	uint32_t status;
-
-	if (NRF_USBD->EVENTS_ENDISOIN != 0U)
-	{
-		in = true;
-		pEnd = &NRF_USBD->EVENTS_ENDISOIN;
-		amount = (uint16_t)NRF_USBD->ISOIN.AMOUNT;
-		status = 1UL << 8U;
-	}
-	else if (NRF_USBD->EVENTS_ENDISOOUT != 0U)
-	{
-		in = false;
-		pEnd = &NRF_USBD->EVENTS_ENDISOOUT;
-		amount = (uint16_t)NRF_USBD->ISOOUT.AMOUNT;
-		status = 1UL << 24U;
-	}
-	else
-	{
+	volatile uint32_t *pEnd = In ?
+		&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
+	if (*pEnd == 0U)
 		return false;
-	}
+
+	const uint16_t amount = (uint16_t)(In ?
+		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
 
 	*pEnd = 0U;
-	NRF_USBD->EPSTATUS = status;
+	NRF_USBD->EPSTATUS = In ? (1UL << 8U) : (1UL << 24U);
 	__DSB();
 
 	if (!s_Usbd.IsoOpen)
 		return true;
 
-	if (in)
+	if (In)
 		s_Usbd.IsoBusy &= (uint8_t)~NRFUSBD_ISO_IN_BUSY;
 
-	nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, in ? 1U : 0U,
+	nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, In ? 1U : 0U,
 		USB_CTRLR_EVT_XFER_CMPL, amount);
 
-	if (!in)
+	if (!In)
 		s_Usbd.IsoBusy &= (uint8_t)~NRFUSBD_ISO_OUT_BUSY;
 
 	return true;
+}
+
+bool nRFUsbdIsoFinishDma(void)
+{
+	return nRFUsbdFinishIsoDma(true) || nRFUsbdFinishIsoDma(false);
 }
 
 bool UsbCtrlrIsoInit(int DevNo)
@@ -202,16 +193,18 @@ bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 {
 	(void)DevNo;
 	(void)EpNo;
-	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][bIn].MaxPacketSize = MaxPacketSize;
+	const bool in = bIn;
+	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][in].MaxPacketSize = MaxPacketSize;
 	NRF_USBD->ISOSPLIT =
 		USBD_ISOSPLIT_SPLIT_HalfIN << USBD_ISOSPLIT_SPLIT_Pos;
 	NRF_USBD->ISOINCONFIG =
 		USBD_ISOINCONFIG_RESPONSE_ZeroData << USBD_ISOINCONFIG_RESPONSE_Pos;
 
-	nRFIsoHwEnable(bIn, true);
+	nRFIsoHwEnable(in, true);
 
+	const uint8_t dir = in ? 1U : 0U;
 	s_Usbd.IsoBusy &=
-		(uint8_t)~((uint8_t)NRFUSBD_ISO_OUT_BUSY << bIn);
+		(uint8_t)~((uint8_t)NRFUSBD_ISO_OUT_BUSY << dir);
 	s_Usbd.IsoOpen =
 		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].MaxPacketSize != 0U &&
 		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1].MaxPacketSize != 0U;
