@@ -1152,11 +1152,18 @@ extern "C" void USBD_IRQHandler(void)
 
 	nRFUsbdTryRemoteWake();
 
-	// Queue newly received OUT data; completion already restarted pending DMA.
+	// Queue newly received OUT data. Blocking endpoints ask the interface
+	// for buffer ownership before the request enters the DMA queue.
 	const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
 	if (outData != 0U)
 	{
-		nRFUsbdProcessOutData(31U - (uint32_t)__CLZ(outData), NULL);
+		const uint8_t epNum = (uint8_t)(31U - (uint32_t)__CLZ(outData));
+		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 0U);
+		if (pReg->bBlocking)
+		{
+			pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
+		}
+		nRFUsbdProcessOutData(epNum, NULL);
 	}
 
 	nRFUsbdTryEnterLowPower();
