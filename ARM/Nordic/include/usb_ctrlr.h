@@ -327,16 +327,8 @@ void nRFUsbdDmaWait(void);
 void nRFUsbdResumeQueuedDmaLocked(void);
 
 /** Start EasyDMA with the channel already locked by the caller. */
-static inline __attribute__((always_inline))
 void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
-	volatile uint32_t *pEnd)
-{
-	*pEnd = 0;
-	__DSB();
-
-	*pTask = 1;
-	__DSB();
-}
+	volatile uint32_t *pEnd);
 
 #endif // USBD_PRESENT
 
