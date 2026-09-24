@@ -99,6 +99,11 @@ static void UsbIntrfNotify(UsbDevIntrf_t *pIntrf, DEVINTRF_EVT Event,
 	}
 }
 
+static void UsbIntrfTxFailure(UsbDevIntrf_t *pIntrf, uint16_t Length)
+{
+	UsbIntrfNotify(pIntrf, DEVINTRF_EVT_TX_TIMEOUT, Length);
+}
+
 static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf)
 {
 	int cnt = (int)pIntrf->Mps;
@@ -349,7 +354,7 @@ static int UsbIntrfTxDirect(DevIntrf_t * const pDevIntrf,
 	{
 		UsbIntrfDirectClear(pPacket);
 		UsbIntrfSetTxIdle(pIntrf);
-		UsbIntrfNotify(pIntrf, DEVINTRF_EVT_TX_TIMEOUT, DataLen);
+		UsbIntrfTxFailure(pIntrf, (uint16_t)DataLen);
 		return 0;
 	}
 
@@ -505,7 +510,7 @@ static void UsbIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
 
 		if (Event == USB_CTRLR_EVT_XFER_FAILED)
 		{
-			UsbIntrfNotify(pIntrf, DEVINTRF_EVT_TX_TIMEOUT, requested);
+			UsbIntrfTxFailure(pIntrf, requested);
 			return;
 		}
 
@@ -525,7 +530,7 @@ static void UsbIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
 
 	if (Event == USB_CTRLR_EVT_XFER_FAILED)
 	{
-		UsbIntrfNotify(pIntrf, DEVINTRF_EVT_TX_TIMEOUT, Length);
+		UsbIntrfTxFailure(pIntrf, Length);
 		return;
 	}
 
