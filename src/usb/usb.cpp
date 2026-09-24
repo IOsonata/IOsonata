@@ -436,24 +436,9 @@ static const uint8_t *UsbCoreGetConfigByIndex(uint8_t Index,
 												   pLength);
 }
 
-static const uint8_t *UsbCoreGetConfigByValue(uint8_t Value,
-										uint16_t *pLength)
-{
-	if (Value != USB_CORE_CONFIG_VALUE)
-	{
-		return nullptr;
-	}
-	return UsbCoreGetConfigByIndex(0U, pLength);
-}
-
 static const uint8_t *UsbCoreActiveConfig(uint16_t *pLength)
 {
-	if (s_Core.Configuration != 0)
-	{
-		return UsbCoreGetConfigByValue(s_Core.Configuration, pLength);
-	}
-
-	return UsbCoreGetConfigByIndex(0, pLength);
+	return UsbCoreGetConfigByIndex(0U, pLength);
 }
 
 // Step through one descriptor of the active configuration. *pOfs advances
@@ -875,7 +860,11 @@ static bool UsbCoreApplyConfiguration(uint8_t Configuration)
 
 	if (Configuration != 0)
 	{
-		pConfigDesc = UsbCoreGetConfigByValue(Configuration, &descLen);
+		if (Configuration != USB_CORE_CONFIG_VALUE)
+		{
+			return false;
+		}
+		pConfigDesc = UsbCoreGetConfigByIndex(0U, &descLen);
 		if (pConfigDesc == nullptr || descLen < USBD_CORE_CONFIG_DESC_LEN)
 		{
 			return false;
