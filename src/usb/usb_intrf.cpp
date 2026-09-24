@@ -129,14 +129,8 @@ static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf)
 	return cnt;
 }
 
-static void UsbIntrfDisable(DevIntrf_t * const pDevIntrf)
+static void UsbIntrfNoop(DevIntrf_t * const)
 {
-	(void)pDevIntrf;
-}
-
-static void UsbIntrfEnable(DevIntrf_t * const pDevIntrf)
-{
-	(void)pDevIntrf;
 }
 
 static uint32_t UsbIntrfGetRate(DevIntrf_t * const pDevIntrf)
@@ -157,7 +151,7 @@ static uint32_t UsbIntrfSetRate(DevIntrf_t * const pDevIntrf, uint32_t)
 	return UsbIntrfGetRate(pDevIntrf);
 }
 
-static bool UsbIntrfStartRx(DevIntrf_t * const, uint32_t)
+static bool UsbIntrfStart(DevIntrf_t * const, uint32_t)
 {
 	return true;
 }
@@ -240,15 +234,6 @@ static int UsbIntrfRxDirect(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 	UsbIntrfReleaseRx(pIntrf);
 	EnableInterrupt(state);
 	return len;
-}
-
-static void UsbIntrfStopRx(DevIntrf_t * const)
-{
-}
-
-static bool UsbIntrfStartTx(DevIntrf_t * const, uint32_t)
-{
-	return true;
 }
 
 static int UsbIntrfTxPackets(DevIntrf_t * const pDevIntrf,
@@ -377,18 +362,9 @@ static int UsbIntrfTxSrData(DevIntrf_t * const pDevIntrf,
 	return pDevIntrf->TxData(pDevIntrf, pData, DataLen);
 }
 
-static void UsbIntrfStopTx(DevIntrf_t * const)
-{
-}
-
 static void UsbIntrfReset(DevIntrf_t * const pDevIntrf)
 {
 	UsbIntrfUnconfigure(static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData));
-}
-
-static void UsbIntrfPowerOff(DevIntrf_t * const pDevIntrf)
-{
-	UsbIntrfDisable(pDevIntrf);
 }
 
 static void *UsbIntrfGetHandle(DevIntrf_t * const pDevIntrf)
@@ -666,19 +642,19 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	pIntrf->DevIntrf.Type = DEVINTRF_TYPE_USB;
 	pIntrf->DevIntrf.bDma = true;
 	pIntrf->DevIntrf.bIntEn = true;
-	pIntrf->DevIntrf.Disable = UsbIntrfDisable;
-	pIntrf->DevIntrf.Enable = UsbIntrfEnable;
+	pIntrf->DevIntrf.Disable = UsbIntrfNoop;
+	pIntrf->DevIntrf.Enable = UsbIntrfNoop;
 	pIntrf->DevIntrf.GetRate = UsbIntrfGetRate;
 	pIntrf->DevIntrf.SetRate = UsbIntrfSetRate;
-	pIntrf->DevIntrf.StartRx = UsbIntrfStartRx;
+	pIntrf->DevIntrf.StartRx = UsbIntrfStart;
 	pIntrf->DevIntrf.RxData = UsbIntrfRxData;
-	pIntrf->DevIntrf.StopRx = UsbIntrfStopRx;
-	pIntrf->DevIntrf.StartTx = UsbIntrfStartTx;
+	pIntrf->DevIntrf.StopRx = UsbIntrfNoop;
+	pIntrf->DevIntrf.StartTx = UsbIntrfStart;
 	pIntrf->DevIntrf.TxData = UsbIntrfTxBytes;
 	pIntrf->DevIntrf.TxSrData = UsbIntrfTxSrData;
-	pIntrf->DevIntrf.StopTx = UsbIntrfStopTx;
+	pIntrf->DevIntrf.StopTx = UsbIntrfNoop;
 	pIntrf->DevIntrf.Reset = UsbIntrfReset;
-	pIntrf->DevIntrf.PowerOff = UsbIntrfPowerOff;
+	pIntrf->DevIntrf.PowerOff = UsbIntrfNoop;
 	pIntrf->DevIntrf.GetHandle = UsbIntrfGetHandle;
 
 	switch (mode)
