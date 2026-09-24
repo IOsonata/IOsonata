@@ -1356,7 +1356,6 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 
 	nRFUsbdEpHwEnable(EpNo, bIn, false);
 	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (bIn ? 0U : 16U));
-	nRFUsbGetEpReg(EpNo, bIn)->MaxPacketSize = 0U;
 	__DSB();
 }
 
