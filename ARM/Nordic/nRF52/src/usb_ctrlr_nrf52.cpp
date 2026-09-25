@@ -1413,8 +1413,7 @@ void UsbCtrlrEpCloseAll(int DevNo)
 	const uint32_t state = DisableInterrupt();
 
 	// Mark ISO closed before waiting so an active ISO DMA is cancellation, not
-	// a normal completion. Closing the whole device then discards all regular
-	// queued work at once.
+	// a normal completion. Regular endpoints are then removed in BOTH directions.
 	UsbCtrlrEpClose(DevNo, NRFX_USBD_ISO_EP_NO, false);
 	UsbCtrlrEpClose(DevNo, NRFX_USBD_ISO_EP_NO, true);
 	nRFUsbdDmaWait();
