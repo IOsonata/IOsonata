@@ -1404,19 +1404,18 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 
 void UsbCtrlrEpCloseAll(int DevNo)
 {
-	// Closing the whole device intentionally discards every regular request.
 	const uint32_t state = DisableInterrupt();
+
+	// Mark ISO closed before waiting so an active ISO DMA is cancellation, not
+	// a normal completion. Closing the whole device then discards all regular
+	// queued work at once.
+	UsbCtrlrEpClose(DevNo, NRFX_USBD_ISO_EP_NO, false);
+	UsbCtrlrEpClose(DevNo, NRFX_USBD_ISO_EP_NO, true);
 	nRFUsbdDmaWait();
 	CFifoFlush(s_Usbd.hQue);
 
-	for (uint32_t epNum = NRFX_USBD_EP_COUNT - 1U; epNum != 0U; epNum--)
+	for (uint32_t epNum = NRFX_USBD_ISO_EP_NO - 1U; epNum != 0U; epNum--)
 	{
-		if (epNum == NRFX_USBD_ISO_EP_NO)
-		{
-			UsbCtrlrEpClose(DevNo, epNum, false);
-			UsbCtrlrEpClose(DevNo, epNum, true);
-			continue;
-		}
 		nRFUsbdEpHwEnable((uint8_t)epNum, false, false);
 		nRFUsbdEpHwEnable((uint8_t)epNum, true, false);
 		NRF_USBD->EPDATASTATUS =
