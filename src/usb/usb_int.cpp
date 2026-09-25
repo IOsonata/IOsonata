@@ -248,13 +248,15 @@ bool UsbIntIntrfSendPacket(UsbIntIntrf_t *pIntrf, const uint8_t *pData,
 		return false;
 	}
 
-	const int sent = DeviceIntrfTxData(&pIntrf->pData->DevIntrf,
-		pData, (int)Length);
-	if (Length != 0U)
+	DevIntrf_t *pDev = &pIntrf->pData->DevIntrf;
+	if (!DeviceIntrfStartTx(pDev, 0U))
 	{
-		return sent == (int)Length;
+		return false;
 	}
 
-	return !atomic_load_explicit(&pIntrf->pData->DevIntrf.bTxReady,
-		memory_order_acquire);
+	const int sent = DeviceIntrfTxData(pDev, pData, (int)Length);
+	const bool accepted = Length != 0U ? sent == (int)Length :
+		!atomic_load_explicit(&pDev->bTxReady, memory_order_acquire);
+	DeviceIntrfStopTx(pDev);
+	return accepted;
 }
