@@ -989,7 +989,9 @@ static int BtHciUsbQueueAcl(BtHciUsbDev_t *pHci, const uint8_t *pData,
 	const bool needZlp = (wireLength % mps) == 0U;
 	const size_t blocks = packetCount + (needZlp ? 1U : 0U);
 
-	if (blocks > INT_MAX || pData == nullptr || DataLen <= 0)
+	if (blocks > INT_MAX || pData == nullptr || DataLen <= 0 ||
+		(pHci->pData->bBlocking &&
+		 CFifoAvail(pHci->pData->hTxFifo) < (int)blocks))
 	{
 		return 0;
 	}
