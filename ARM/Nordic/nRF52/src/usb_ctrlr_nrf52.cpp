@@ -561,6 +561,12 @@ void nRFUsbdDmaWait(void)
 	const uint32_t primask = __get_PRIMASK();
 	__disable_irq();
 
+	if (!nRFUsbdDmaActive())
+	{
+		__set_PRIMASK(primask);
+		return;
+	}
+
 	const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
 	if (dmaStatus != 0U)
 	{
