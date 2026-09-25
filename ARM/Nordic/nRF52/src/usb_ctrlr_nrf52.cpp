@@ -867,7 +867,8 @@ static bool nRFUsbdQueueOutData(uint32_t EpNum)
 
 	pQue->EpNum = (uint8_t)EpNum;
 	pQue->Dir = NRFX_USBD_QUE_OUT;
-	pQue->Len = pReg->MaxPacketSize;
+	// EPDATASTATUS owns this packet now; snapshot SIZE before acknowledging it.
+	pQue->Len = (uint16_t)NRF_USBD->SIZE.EPOUT[EpNum];
 	pQue->pBuffer = pReg->pBuffer;
 	// Acknowledge before DMA can admit the next packet.
 	NRF_USBD->EPDATASTATUS = bit;
