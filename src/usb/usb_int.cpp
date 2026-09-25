@@ -49,18 +49,17 @@ static bool UsbIntIntrfOpenEndpoint(UsbIntIntrf_t *pIntrf, bool bIn)
 
 static void UsbIntIntrfDeactivate(UsbIntIntrf_t *pIntrf)
 {
-	if (pIntrf->Opened)
+	if (pIntrf->pData->Mps != 0U)
 	{
 		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->pData->EpNo, false);
 		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->pData->EpNo, true);
-		pIntrf->Opened = false;
 	}
 	UsbIntrfUnconfigure(pIntrf->pData);
 }
 
 static bool UsbIntIntrfActivate(UsbIntIntrf_t *pIntrf)
 {
-	if (pIntrf->Opened)
+	if (pIntrf->pData->Mps != 0U)
 	{
 		return true;
 	}
@@ -79,7 +78,6 @@ static bool UsbIntIntrfActivate(UsbIntIntrf_t *pIntrf)
 		UsbIntrfUnconfigure(pIntrf->pData);
 		return false;
 	}
-	pIntrf->Opened = true;
 	return true;
 }
 

@@ -148,7 +148,7 @@ static void IntBuildDiag(void)
 	s_DiagReply.Interval = s_Int.Interval;
 	s_DiagReply.Alt = s_Alt;
 
-	if (s_Int.Opened)
+	if (s_IntData.Mps != 0U)
 	{
 		s_DiagReply.Flags |= INT_DIAG_FLAG_OPENED;
 	}
@@ -156,7 +156,7 @@ static void IntBuildDiag(void)
 	{
 		s_DiagReply.Flags |= INT_DIAG_FLAG_SUSPENDED;
 	}
-	if (s_Int.Opened &&
+	if (s_IntData.Mps != 0U &&
 		atomic_load_explicit(&s_IntData.DevIntrf.bTxReady,
 			memory_order_acquire))
 	{

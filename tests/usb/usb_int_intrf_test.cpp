@@ -191,14 +191,14 @@ static void TestLifecycleAndValidation(void)
 	CHECK(!UsbIntIntrfOpen(&intrf, 8U, 17U));
 	s_HighSpeed = false;
 	CHECK(UsbIntIntrfOpen(&intrf, 16U, 4U));
-	CHECK(intrf.Opened && intrf.Interval == 4U && intrf.Mps == 16U);
+	CHECK(intrfData.Mps != 0U && intrf.Interval == 4U && intrf.Mps == 16U);
 	CHECK(s_OpenCount == 2);
 	CHECK(s_Open[0].bmAttributes == USB_ENDPATT_TRANS_INT);
 	CHECK(s_Open[1].bmAttributes == USB_ENDPATT_TRANS_INT);
 	CHECK(s_Open[0].bEndpointAddress == USB_ENDPADDR_DIRIN(3U));
 	CHECK(s_Open[1].bEndpointAddress == USB_ENDPADDR_DIROUT(3U));
 	UsbIntIntrfClose(&intrf);
-	CHECK(!intrf.Opened && intrf.pData->Mps == 0U && s_CloseCount == 2);
+	CHECK(!intrfData.Mps != 0U && intrf.pData->Mps == 0U && s_CloseCount == 2);
 
 	cfg.EpNo = 0U;
 	CHECK(!UsbIntIntrfInit(&intrf, &intrfData, &cfg));
@@ -249,9 +249,9 @@ static void TestErrorsDisableEnableAndReset(void)
 	DeviceIntrfDisable(&intrfData.DevIntrf);
 	const uint8_t data = 9U;
 	CHECK(DeviceIntrfTx(&intrfData.DevIntrf, 0, &data, 1) == 0);
-	CHECK(!intrf.Opened && intrf.Mps == 8U && intrfData.Mps == 0U);
+	CHECK(!intrfData.Mps != 0U && intrf.Mps == 8U && intrfData.Mps == 0U);
 	DeviceIntrfEnable(&intrfData.DevIntrf);
-	CHECK(intrf.Opened && intrfData.Mps == 8U);
+	CHECK(intrfData.Mps != 0U && intrfData.Mps == 8U);
 	CHECK(DeviceIntrfTx(&intrfData.DevIntrf, 0, &data, 1) == 1);
 	CompleteIn(USB_CTRLR_EVT_XFER_FAILED);
 	CHECK(intrf.TxErrorCnt == 1U);
@@ -260,7 +260,7 @@ static void TestErrorsDisableEnableAndReset(void)
 	CHECK(intrf.RxErrorCnt == 1U);
 	CHECK(s_LastRxResult == USB_CTRLR_XFER_FAILED);
 	UsbIntIntrfReset(&intrf);
-	CHECK(!intrf.Opened && intrf.RxErrorCnt == 0U && intrf.TxErrorCnt == 0U);
+	CHECK(!intrfData.Mps != 0U && intrf.RxErrorCnt == 0U && intrf.TxErrorCnt == 0U);
 }
 
 static void TestPolledRxOwnership(void)

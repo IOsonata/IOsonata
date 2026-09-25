@@ -81,7 +81,6 @@ struct __Usb_Int_Interf {
 	UsbDevIntrf_t *pData;		//!< Shared endpoint data path
 	uint16_t Mps;
 	uint8_t Interval;
-	bool Opened;
 	void *pContext;
 	UsbIntIntrfRxHandler_t RxHandler;
 	UsbIntIntrfTxHandler_t TxHandler;
