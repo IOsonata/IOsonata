@@ -370,7 +370,7 @@ static bool UsbdMscQueuePacket(UsbdMscDev_t *pMsc, const uint8_t *pData,
 	{
 		memcpy(pPacket->Data, pData, Length);
 	}
-	if (DeviceIntrfTxData(&pMsc->pData->DevIntrf,
+	if (DeviceIntrfTx(&pMsc->pData->DevIntrf, 0,
 		reinterpret_cast<uint8_t *>(pPacket), USBD_MSC_PKT_BLKSIZE) !=
 		(int)USBD_MSC_PKT_BLKSIZE)
 	{
@@ -766,7 +766,7 @@ static void UsbdMscInvalidCbw(UsbdMscDev_t *pMsc)
 static void UsbdMscProcessCbw(UsbdMscDev_t *pMsc)
 {
 	uint8_t *pPacket = UsbdMscRxPacket(pMsc);
-	const int length = DeviceIntrfRxData(&pMsc->pData->DevIntrf,
+	const int length = DeviceIntrfRx(&pMsc->pData->DevIntrf, 0,
 		pPacket, pMsc->pData->Mps);
 	if (length <= 0)
 	{
@@ -866,7 +866,7 @@ static void UsbdMscProcessDataIn(UsbdMscDev_t *pMsc)
 static void UsbdMscProcessDataOut(UsbdMscDev_t *pMsc)
 {
 	uint8_t *pPacket = UsbdMscRxPacket(pMsc);
-	const int received = DeviceIntrfRxData(&pMsc->pData->DevIntrf,
+	const int received = DeviceIntrfRx(&pMsc->pData->DevIntrf, 0,
 		pPacket, pMsc->pData->Mps);
 	if (received <= 0)
 	{
