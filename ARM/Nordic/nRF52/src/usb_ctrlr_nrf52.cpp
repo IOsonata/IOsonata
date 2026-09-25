@@ -663,19 +663,14 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 	nRFUsbdDmaUnlock();
 }
 
-// Remove queued work for one regular endpoint/direction without disturbing
-// unrelated endpoints. Only entries present on entry are visited, so retained
-// entries keep FIFO order.
 static void nRFUsbdQueRemove(uint8_t EpNum, bool In)
 {
 	int count = CFifoUsed(s_Usbd.hQue);
 	while (count-- > 0)
 	{
 		nRFUsbdQue_t que = *(nRFUsbdQue_t *)CFifoGet(s_Usbd.hQue);
-		const bool isIn = que.Dir != NRFX_USBD_QUE_OUT;
-		if (que.EpNum == EpNum && isIn == In)
-			continue;
-		*(nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue) = que;
+		if (que.EpNum != EpNum || (que.Dir != NRFX_USBD_QUE_OUT) != In)
+			*(nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue) = que;
 	}
 }
 
