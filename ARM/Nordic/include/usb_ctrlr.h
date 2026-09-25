@@ -306,8 +306,9 @@ typedef struct __nRF_Usbd_State
 	bool LowPowerSuspend;
 	bool SofEnabled;
 	bool IsoOpen;                 //!< Both EP8 directions are open.
-	// Valid while NRFUSBD_ISO_IN_BUSY owns the current service interval.
+	// Valid while the corresponding ISO busy bit owns a service interval.
 	uint16_t IsoInDmaLen;
+	uint16_t IsoOutDmaLen;
 	uint8_t IsoBusy;
 	volatile uint8_t Flags;       //!< Controller power/wake state only.
 	hCFifo_t hQue;

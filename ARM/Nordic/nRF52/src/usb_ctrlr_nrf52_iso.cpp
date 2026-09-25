@@ -98,7 +98,7 @@ bool nRFUsbdIsoStart(void)
 		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
 
 	NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
-	NRF_USBD->ISOOUT.MAXCNT = pReg->MaxPacketSize;
+	NRF_USBD->ISOOUT.MAXCNT = s_Usbd.IsoOutDmaLen;
 	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
 		&NRF_USBD->EVENTS_ENDISOOUT);
 	return true;
@@ -113,6 +113,9 @@ bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	if (!s_Usbd.IsoOpen)
 		return false;
 
+	// SOF owns the ISO OUT packet now. Snapshot SIZE before any callback or DMA
+	// can advance the endpoint state; the shared channel may service IN first.
+	const uint32_t outSize = NRF_USBD->SIZE.ISOOUT;
 	uint8_t busy = s_Usbd.IsoBusy;
 
 	// OUT_BUSY now means queued only. If it survives to the next SOF, that
@@ -126,7 +129,19 @@ bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 		busy = s_Usbd.IsoBusy;
 	}
 
-	uint8_t next = busy | NRFUSBD_ISO_OUT_BUSY;
+	uint8_t next = busy;
+	if (outSize != 0U)
+	{
+		const uint16_t len = (outSize & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
+			0U : (uint16_t)outSize;
+		nRFUsbEpReg_t *pOut =
+			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
+		if (len <= pOut->MaxPacketSize)
+		{
+			s_Usbd.IsoOutDmaLen = len;
+			next |= NRFUSBD_ISO_OUT_BUSY;
+		}
+	}
 
 	if (pBuffer != nullptr && (busy & NRFUSBD_ISO_IN_BUSY) == 0U)
 	{
