@@ -1376,7 +1376,6 @@ void UsbCtrlrEpCloseAll(int DevNo)
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdDmaWait();
 	CFifoFlush(s_Usbd.hQue);
-	EnableInterrupt(state);
 
 	for (uint32_t epNum = NRFX_USBD_EP_COUNT - 1U; epNum != 0U; epNum--)
 	{
@@ -1392,6 +1391,7 @@ void UsbCtrlrEpCloseAll(int DevNo)
 			(1UL << (epNum + 16U)) | (1UL << epNum);
 	}
 	__DSB();
+	EnableInterrupt(state);
 }
 
 void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
