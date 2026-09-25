@@ -94,22 +94,11 @@ bool nRFUsbdIsoStart(void)
 	// still active; completion must not clear a newer queued OUT request.
 	s_Usbd.IsoBusy &= (uint8_t)~NRFUSBD_ISO_OUT_BUSY;
 
-	const uint32_t size = NRF_USBD->SIZE.ISOOUT;
-	if (size == 0U)
-		return false;
-
 	nRFUsbEpReg_t *pReg =
 		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
-	const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
-		0U : (uint16_t)size;
-	if (len > pReg->MaxPacketSize)
-	{
-		s_Usbd.IsoBusy &= (uint8_t)~NRFUSBD_ISO_OUT_BUSY;
-		return false;
-	}
 
 	NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
-	NRF_USBD->ISOOUT.MAXCNT = len;
+	NRF_USBD->ISOOUT.MAXCNT = pReg->MaxPacketSize;
 	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
 		&NRF_USBD->EVENTS_ENDISOOUT);
 	return true;

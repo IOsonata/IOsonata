@@ -621,16 +621,14 @@ static void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 		pBuffer = pQue->pBuffer;
 	}
 
-	uint16_t len = pQue->Len;
+	const uint16_t len = pQue->Len;
 
 	// Both directions use the same layout, at different register-bank offsets.
+	// MAXCNT is the RAM buffer capacity; AMOUNT reports the actual transfer.
 	uintptr_t epReg = (uintptr_t)&NRF_USBD->EPIN[epNum];
 	uintptr_t taskReg = (uintptr_t)&NRF_USBD->TASKS_STARTEPIN[epNum];
 	if (!isIn)
 	{
-		const uint16_t received = (uint16_t)NRF_USBD->SIZE.EPOUT[epNum];
-		if (received < len)
-			len = received;
 		epReg += offsetof(NRF_USBD_Type, EPOUT) - offsetof(NRF_USBD_Type, EPIN);
 		taskReg += offsetof(NRF_USBD_Type, TASKS_STARTEPOUT) -
 			offsetof(NRF_USBD_Type, TASKS_STARTEPIN);
@@ -1553,8 +1551,4 @@ void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
 	NRF_USBD->EPSTALL =
 		(USBD_EPSTALL_STALL_UnStall << USBD_EPSTALL_STALL_Pos) | epAddr;
 
-	if (!bIn && EpNo < NRFX_USBD_DATA_EP_COUNT)
-	{
-		NRF_USBD->SIZE.EPOUT[EpNo] = 0;
-	}
 }
