@@ -293,26 +293,6 @@ static void IntReset(void)
 	IntClearDiag();
 }
 
-static void IntProcess(void)
-{
-	if (!s_Configured || s_Alt == 0U)
-	{
-		return;
-	}
-
-	const bool suspended = UsbSuspended(USB_DEVNO);
-	const bool enabled = atomic_load_explicit(&s_IntData.DevIntrf.EnCnt,
-		memory_order_acquire) > 0;
-	if (suspended && enabled)
-	{
-		DeviceIntrfDisable(&s_IntData.DevIntrf);
-	}
-	else if (!suspended && !enabled)
-	{
-		DeviceIntrfEnable(&s_IntData.DevIntrf);
-	}
-}
-
 static constexpr IntFunctionDesc_t IntFunctionDescTemplate(void)
 {
 	IntFunctionDesc_t desc = {};
@@ -370,7 +350,6 @@ static bool IntRegisterFunction(void)
 			return IntSelectInterface(InterfaceNo, Option);
 		}
 		void Reset(void) override { IntReset(); }
-		void Process(void) override { IntProcess(); }
 	};
 	static IntLoopbackClass s_Class;
 

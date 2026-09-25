@@ -188,17 +188,9 @@ int main()
 		return -1;
 	}
 	(void)UsbEnable(USB_DEVNO);
-	bool suspended = false;
 	while (1)
 	{
 		UsbProcess(USB_DEVNO);
-		const bool nowSuspended = UsbSuspended(USB_DEVNO);
-		if (nowSuspended != suspended)
-		{
-			suspended = nowSuspended;
-			if (suspended) g_Hid.Disable();
-			else g_Hid.Enable();
-		}
 	}
 	return 0;
 }

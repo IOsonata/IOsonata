@@ -292,12 +292,7 @@ int main()
 	{
 		UsbProcess(USB_DEVNO);
 		const bool nowSuspended = UsbSuspended(USB_DEVNO);
-		if (nowSuspended != suspended)
-		{
-			suspended = nowSuspended;
-			if (suspended) g_Hid.Disable();
-			else g_Hid.Enable();
-		}
+		suspended = nowSuspended;
 
 		const bool aPressed = IOPinRead(HID_BUTTON_PORT,
 			HID_BUTTON_PIN) == 0;

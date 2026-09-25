@@ -289,25 +289,6 @@ static void IntReset(void)
 	UsbIntIntrfReset(&s_Int);
 }
 
-static void IntProcess(void)
-{
-	if (!s_IntConfigured || s_IntAlt == 0U)
-	{
-		return;
-	}
-	const bool suspended = UsbSuspended(USB_DEVNO);
-	const bool enabled = atomic_load_explicit(&s_IntData.DevIntrf.EnCnt,
-		memory_order_acquire) > 0;
-	if (suspended && enabled)
-	{
-		DeviceIntrfDisable(&s_IntData.DevIntrf);
-	}
-	else if (!suspended && !enabled)
-	{
-		DeviceIntrfEnable(&s_IntData.DevIntrf);
-	}
-}
-
 static constexpr ComboIntFunctionDesc_t IntFunctionDescTemplate(void)
 {
 	ComboIntFunctionDesc_t desc = {};
@@ -359,7 +340,6 @@ public:
 		return IntSelectInterface(InterfaceNo, Option);
 	}
 	void Reset(void) override { IntReset(); }
-	void Process(void) override { IntProcess(); }
 };
 
 static IntLoopbackClass s_IntClass;
@@ -727,25 +707,10 @@ int main()
 	}
 
 	(void)UsbEnable(USB_DEVNO);
-	bool hidSuspended = false;
 
 	while (1)
 	{
 		UsbProcess(USB_DEVNO);
-
-		const bool suspended = UsbSuspended(USB_DEVNO);
-		if (suspended != hidSuspended)
-		{
-			hidSuspended = suspended;
-			if (suspended)
-			{
-				g_Hid.Disable();
-			}
-			else
-			{
-				g_Hid.Enable();
-			}
-		}
 
 		if (loopbackPending > 0)
 		{
