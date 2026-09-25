@@ -35,16 +35,22 @@ Modified by          Date              Description
 ----------------------------------------------------------------------------*/
 
 #include <stdlib.h>
+#include <reent.h>
 #include <string.h>
 
+// Through _malloc_r rather than malloc: newlib's atexit registrar holds a
+// weak reference to malloc, and a strong malloc in this member, selected
+// for operator delete by every C++ firmware, would keep the whole
+// allocator linked. With no malloc symbol the weak reference stays null
+// and the allocator is discarded unless an application uses new.
 void* operator new[](size_t count ) throw()
 {
-	return malloc(count);
+	return _malloc_r(_REENT, count);
 }
 
 void *operator new(size_t size) throw()
 {
-	return malloc(size);
+	return _malloc_r(_REENT, size);
 }
 
 // Every class with a virtual destructor references operator delete from
