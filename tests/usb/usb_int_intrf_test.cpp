@@ -198,7 +198,7 @@ static void TestLifecycleAndValidation(void)
 	CHECK(s_Open[0].bEndpointAddress == USB_ENDPADDR_DIRIN(3U));
 	CHECK(s_Open[1].bEndpointAddress == USB_ENDPADDR_DIROUT(3U));
 	UsbIntIntrfClose(&intrf);
-	CHECK(!intrfData.Mps != 0U && intrf.pData->Mps == 0U && s_CloseCount == 2);
+	CHECK(intrfData.Mps == 0U && s_CloseCount == 2);
 
 	cfg.EpNo = 0U;
 	CHECK(!UsbIntIntrfInit(&intrf, &intrfData, &cfg));
@@ -219,7 +219,7 @@ static void TestDuplexAndZeroLength(void)
 	const uint8_t rx[] = {4U, 5U};
 	CHECK(DeviceIntrfTx(&intrfData.DevIntrf, 0, tx, sizeof(tx)) == (int)sizeof(tx));
 	CHECK(memcmp(s_InBuffer, tx, sizeof(tx)) == 0);
-	CHECK(!DeviceIntrfTx(&intrfData.DevIntrf, 0, tx, sizeof(tx)) == (int)sizeof(tx));
+	CHECK(DeviceIntrfTx(&intrfData.DevIntrf, 0, tx, sizeof(tx)) == 0);
 	Receive(rx, sizeof(rx));
 	CHECK(s_RxCount == 1 && s_LastRxLength == sizeof(rx));
 	CHECK(memcmp(s_LastRx, rx, sizeof(rx)) == 0);
@@ -249,9 +249,9 @@ static void TestErrorsDisableEnableAndReset(void)
 	DeviceIntrfDisable(&intrfData.DevIntrf);
 	const uint8_t data = 9U;
 	CHECK(DeviceIntrfTx(&intrfData.DevIntrf, 0, &data, 1) == 0);
-	CHECK(!intrfData.Mps != 0U && intrf.Mps == 8U && intrfData.Mps == 0U);
+	CHECK(intrfData.Mps == 0U && intrf.Mps == 8U);
 	DeviceIntrfEnable(&intrfData.DevIntrf);
-	CHECK(intrfData.Mps != 0U && intrfData.Mps == 8U);
+	CHECK(intrfData.Mps == 8U);
 	CHECK(DeviceIntrfTx(&intrfData.DevIntrf, 0, &data, 1) == 1);
 	CompleteIn(USB_CTRLR_EVT_XFER_FAILED);
 	CHECK(intrf.TxErrorCnt == 1U);
@@ -260,7 +260,7 @@ static void TestErrorsDisableEnableAndReset(void)
 	CHECK(intrf.RxErrorCnt == 1U);
 	CHECK(s_LastRxResult == USB_CTRLR_XFER_FAILED);
 	UsbIntIntrfReset(&intrf);
-	CHECK(!intrfData.Mps != 0U && intrf.RxErrorCnt == 0U && intrf.TxErrorCnt == 0U);
+	CHECK(intrfData.Mps == 0U && intrf.RxErrorCnt == 0U && intrf.TxErrorCnt == 0U);
 }
 
 static void TestPolledRxOwnership(void)
@@ -281,11 +281,11 @@ static void TestPolledRxOwnership(void)
 	CHECK(intrf.pData->RxDropCnt == 0U);
 	CHECK(s_OutBuffer == nullptr);
 	uint8_t out[3] = {};
-	CHECK(DeviceIntrfRxData(&intrf.pData->DevIntrf, out, sizeof(out)) == 2);
+	CHECK(DeviceIntrfRx(&intrf.pData->DevIntrf, 0, out, sizeof(out)) == 2);
 	CHECK(memcmp(out, first, sizeof(first)) == 0);
 	CHECK(s_OutBuffer == nullptr);
 	Receive(second, sizeof(second));
-	CHECK(DeviceIntrfRxData(&intrf.pData->DevIntrf, out, sizeof(out)) == 3);
+	CHECK(DeviceIntrfRx(&intrf.pData->DevIntrf, 0, out, sizeof(out)) == 3);
 	CHECK(memcmp(out, second, sizeof(second)) == 0);
 }
 
