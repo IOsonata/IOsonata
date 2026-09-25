@@ -852,6 +852,9 @@ static uint32_t nRFUsbdQueueInComplete(uint32_t InData)
 
 static bool nRFUsbdQueueOutData(uint32_t EpNum)
 {
+	// EPDATASTATUS owns this packet now. Snapshot SIZE before any callback can
+	// alter endpoint state; the queued length remains valid until DMA starts.
+	const uint16_t len = (uint16_t)NRF_USBD->SIZE.EPOUT[EpNum];
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg((uint8_t)EpNum, 0U);
 	if (pReg->bBlocking)
 		pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
@@ -868,8 +871,7 @@ static bool nRFUsbdQueueOutData(uint32_t EpNum)
 
 	pQue->EpNum = (uint8_t)EpNum;
 	pQue->Dir = NRFX_USBD_QUE_OUT;
-	// EPDATASTATUS owns this packet now; snapshot SIZE before acknowledging it.
-	pQue->Len = (uint16_t)NRF_USBD->SIZE.EPOUT[EpNum];
+	pQue->Len = len;
 	pQue->pBuffer = pReg->pBuffer;
 	// Acknowledge before DMA can admit the next packet.
 	NRF_USBD->EPDATASTATUS = bit;
