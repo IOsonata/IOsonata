@@ -723,46 +723,6 @@ void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf)
 	UsbIntrfDrain(pIntrf);
 }
 
-bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes)
-{
-	if (pIntrf == nullptr || NbBytes < 0)
-	{
-		return false;
-	}
-
-	if (pIntrf->Mode == USB_INTRF_MODE_DIRECT)
-	{
-		return pIntrf->Mps > 0U && NbBytes <= (int)pIntrf->Mps &&
-			pIntrf->pTxDirectBuffer != nullptr &&
-			atomic_load_explicit(&pIntrf->DevIntrf.bTxReady,
-				memory_order_acquire) &&
-			!UsbIntrfDirectReady(pIntrf->pTxDirectBuffer);
-	}
-
-	if (NbBytes <= 0)
-	{
-		return false;
-	}
-
-	if (!CFifoIsBlocking(pIntrf->hTxFifo))
-	{
-		return true;
-	}
-
-	const uint32_t blockSize = CFifoBlockSize(pIntrf->hTxFifo);
-	int blocks = NbBytes;
-	if (blockSize != 1U)
-	{
-		if ((NbBytes % (int)blockSize) != 0)
-		{
-			return false;
-		}
-		blocks = NbBytes / (int)blockSize;
-	}
-
-	return CFifoAvail(pIntrf->hTxFifo) >= blocks;
-}
-
 int UsbIntrfTxUsed(UsbDevIntrf_t *pIntrf)
 {
 	if (pIntrf == nullptr)

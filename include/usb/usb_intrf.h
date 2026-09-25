@@ -172,7 +172,6 @@ extern "C" {
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg);
 bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps);
 void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf);
-bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);
 
 #ifdef __cplusplus
 }
@@ -202,10 +201,6 @@ public:
 
 	uint32_t Rate(void) override {
 		return DeviceIntrfGetRate(&vUsbDevIntrf.DevIntrf);
-	}
-
-	bool RequestToSend(int NbBytes) override {
-		return UsbIntrfRequestToSend(&vUsbDevIntrf, NbBytes);
 	}
 
 	// Use the owned data directly without a virtual conversion on each call.

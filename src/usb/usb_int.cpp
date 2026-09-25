@@ -242,20 +242,18 @@ bool UsbIntIntrfResume(UsbIntIntrf_t *pIntrf)
 bool UsbIntIntrfSendPacket(UsbIntIntrf_t *pIntrf, const uint8_t *pData,
 						   uint16_t Length)
 {
-	if (pIntrf == nullptr || !pIntrf->Opened || pIntrf->Suspended ||
-		Length > pIntrf->Mps || (Length != 0U && pData == nullptr) ||
-		!UsbIntrfRequestToSend(pIntrf->pData, Length))
+	if (!pIntrf->Opened || pIntrf->Suspended ||
+		Length > pIntrf->Mps || (Length != 0U && pData == nullptr))
 	{
 		return false;
 	}
 
-	const int sent = DeviceIntrfTxData(&pIntrf->pData->DevIntrf,
-		pData, (int)Length);
+	const int sent = DeviceIntrfTx(&pIntrf->pData->DevIntrf, 0, pData, (int)Length);
+
 	if (Length != 0U)
 	{
 		return sent == (int)Length;
 	}
 
-	return !atomic_load_explicit(&pIntrf->pData->DevIntrf.bTxReady,
-		memory_order_acquire);
+	return false;
 }

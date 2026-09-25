@@ -249,8 +249,6 @@ typedef struct __Bt_Hci_Usb_Dev {
 extern "C" {
 #endif
 
-bool BtHciUsbRequestToSend(BtHciUsbDev_t *pHci, int NbBytes);
-
 #ifdef __cplusplus
 }
 
@@ -270,10 +268,6 @@ public:
 	using UsbIntrf::operator DevIntrf_t *;
 	operator BtHciUsbDev_t * () { return &vBtHciUsb; }
 	operator const BtHciUsbDev_t * () const { return &vBtHciUsb; }
-
-	bool RequestToSend(int NbBytes) override {
-		return BtHciUsbRequestToSend(&vBtHciUsb, NbBytes);
-	}
 
 private:
 	UsbIsoIntrf vScoIso;

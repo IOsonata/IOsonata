@@ -988,9 +988,8 @@ static int BtHciUsbQueueAcl(BtHciUsbDev_t *pHci, const uint8_t *pData,
 	const size_t packetCount = (wireLength + mps - 1U) / mps;
 	const bool needZlp = (wireLength % mps) == 0U;
 	const size_t blocks = packetCount + (needZlp ? 1U : 0U);
-	if (blocks > INT_MAX ||
-		!UsbIntrfRequestToSend(pHci->pData,
-			(int)(blocks * BT_HCI_USB_ACL_PKT_BLKSIZE)))
+
+	if (blocks > INT_MAX || pData == nullptr || DataLen <= 0)
 	{
 		return 0;
 	}
@@ -1152,53 +1151,6 @@ static void BtHciUsbInitDevIntrf(BtHciUsbDev_t *pHci)
 	pDev->TxSrData = BtHciUsbDevTxSrData;
 	pDev->Reset = BtHciUsbDevReset;
 	pDev->GetHandle = BtHciUsbDevGetHandle;
-}
-
-bool BtHciUsbRequestToSend(BtHciUsbDev_t *pHci, int NbBytes)
-{
-	if (pHci == nullptr || !pHci->Configured || NbBytes <= 0)
-	{
-		return false;
-	}
-	if (pHci->BulkSerialization)
-	{
-		if ((pHci->TxType != BT_HCI_USB_PACKET_EVENT &&
-			 pHci->TxType != BT_HCI_USB_PACKET_ACL &&
-			 pHci->TxType != BT_HCI_USB_PACKET_SCO &&
-			 pHci->TxType != BT_HCI_USB_PACKET_ISO) ||
-			NbBytes > (int)BT_HCI_USB_PACKET_MAX_SIZE)
-		{
-			return false;
-		}
-		const int wireBytes = NbBytes + 1;
-		const uint16_t mps = pHci->pData->Mps;
-		const int packets = (wireBytes + mps - 1) / mps;
-		const int blocks = packets + ((wireBytes % mps) == 0 ? 1 : 0);
-		return UsbIntrfRequestToSend(pHci->pData,
-			blocks * (int)BT_HCI_USB_ACL_PKT_BLKSIZE);
-	}
-	if (pHci->TxType == BT_HCI_USB_PACKET_EVENT)
-	{
-		return !pHci->EventTxActive &&
-			NbBytes <= (int)BT_HCI_USB_EVENT_MAX_SIZE;
-	}
-	if (pHci->TxType == BT_HCI_USB_PACKET_SCO)
-	{
-		return pHci->ScoAlt != 0U && !pHci->ScoTxActive &&
-			UsbIsoIntrfTxReady(pHci->pScoIso) &&
-			NbBytes <= (int)BT_HCI_USB_SCO_MAX_SIZE;
-	}
-	if (pHci->TxType != BT_HCI_USB_PACKET_ACL ||
-		NbBytes > (int)BT_HCI_USB_PACKET_MAX_SIZE)
-	{
-		return false;
-	}
-
-	const uint16_t mps = pHci->pData->Mps;
-	const int packets = (NbBytes + mps - 1) / mps;
-	const int blocks = packets + ((NbBytes % mps) == 0 ? 1 : 0);
-	return UsbIntrfRequestToSend(pHci->pData,
-		blocks * (int)BT_HCI_USB_ACL_PKT_BLKSIZE);
 }
 
 static constexpr BtHciUsbDesc_t BtHciUsbLegacyTemplate(void)
