@@ -663,17 +663,6 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 	nRFUsbdDmaUnlock();
 }
 
-static void nRFUsbdQueRemove(uint8_t EpNum, bool In)
-{
-	int count = CFifoUsed(s_Usbd.hQue);
-	while (count-- > 0)
-	{
-		nRFUsbdQue_t que = *(nRFUsbdQue_t *)CFifoGet(s_Usbd.hQue);
-		if (que.EpNum != EpNum || (que.Dir != NRFX_USBD_QUE_OUT) != In)
-			*(nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue) = que;
-	}
-}
-
 
 // Submission acquires an idle channel; completion retains the existing lock.
 __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
@@ -1390,7 +1379,13 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 	// Quiesce the shared channel before rotating hQue. The active regular DMA
 	// owns the FIFO head, and scratch IN may DMA directly from that entry.
 	nRFUsbdDmaWait();
-	nRFUsbdQueRemove(EpNo, bIn);
+	int count = CFifoUsed(s_Usbd.hQue);
+	while (count-- > 0)
+	{
+		nRFUsbdQue_t que = *(nRFUsbdQue_t *)CFifoGet(s_Usbd.hQue);
+		if (que.EpNum != EpNo || (que.Dir != NRFX_USBD_QUE_OUT) != bIn)
+			*(nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue) = que;
+	}
 	nRFUsbdEpHwEnable(EpNo, bIn, false);
 	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (bIn ? 0U : 16U));
 	__DSB();
