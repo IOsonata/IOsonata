@@ -110,6 +110,13 @@ enum
 	NRFX_USBD_QUE_IN_SCRATCH = 2U,
 };
 
+enum
+{
+	NRFUSBD_DIR_OUT = 1U,
+	NRFUSBD_DIR_IN = 2U,
+	NRFUSBD_DIR_BOTH = NRFUSBD_DIR_OUT | NRFUSBD_DIR_IN,
+};
+
 #pragma pack(push, 4)
 
 typedef struct __nRF_Usbd_Que {
@@ -661,6 +668,21 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 		return;
 	}
 	nRFUsbdDmaUnlock();
+}
+
+static void nRFUsbdQueRemove(uint8_t EpNum, uint8_t Dir)
+{
+	int count = CFifoUsed(s_Usbd.hQue);
+	while (count-- > 0)
+	{
+		nRFUsbdQue_t que = *(nRFUsbdQue_t *)CFifoGet(s_Usbd.hQue);
+		if (que.EpNum == EpNum &&
+			(Dir == NRFUSBD_DIR_BOTH ||
+			 (que.Dir == NRFX_USBD_QUE_OUT ?
+				Dir == NRFUSBD_DIR_OUT : Dir == NRFUSBD_DIR_IN)))
+			continue;
+		*(nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue) = que;
+	}
 }
 
 
@@ -1379,13 +1401,7 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 	// Quiesce the shared channel before rotating hQue. The active regular DMA
 	// owns the FIFO head, and scratch IN may DMA directly from that entry.
 	nRFUsbdDmaWait();
-	int count = CFifoUsed(s_Usbd.hQue);
-	while (count-- > 0)
-	{
-		nRFUsbdQue_t que = *(nRFUsbdQue_t *)CFifoGet(s_Usbd.hQue);
-		if (que.EpNum != EpNo || (que.Dir != NRFX_USBD_QUE_OUT) != bIn)
-			*(nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue) = que;
-	}
+	nRFUsbdQueRemove(EpNo, bIn ? NRFUSBD_DIR_IN : NRFUSBD_DIR_OUT);
 	nRFUsbdEpHwEnable(EpNo, bIn, false);
 	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (bIn ? 0U : 16U));
 	__DSB();
@@ -1402,10 +1418,10 @@ void UsbCtrlrEpCloseAll(int DevNo)
 	UsbCtrlrEpClose(DevNo, NRFX_USBD_ISO_EP_NO, false);
 	UsbCtrlrEpClose(DevNo, NRFX_USBD_ISO_EP_NO, true);
 	nRFUsbdDmaWait();
-	CFifoFlush(s_Usbd.hQue);
 
 	for (uint32_t epNum = NRFX_USBD_ISO_EP_NO - 1U; epNum != 0U; epNum--)
 	{
+		nRFUsbdQueRemove((uint8_t)epNum, NRFUSBD_DIR_BOTH);
 		nRFUsbdEpHwEnable((uint8_t)epNum, false, false);
 		nRFUsbdEpHwEnable((uint8_t)epNum, true, false);
 		NRF_USBD->EPDATASTATUS =
