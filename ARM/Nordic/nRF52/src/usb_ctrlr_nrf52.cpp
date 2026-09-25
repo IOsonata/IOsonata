@@ -1392,14 +1392,12 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 	}
 
 	const uint32_t state = DisableInterrupt();
-	const uint32_t bit = 1UL << (EpNo + (bIn ? 0U : 16U));
-	// Do not disturb another endpoint that currently owns the shared DMA.
-	// Only the endpoint being closed needs its active transfer retired here.
-	if ((NRF_USBD->EPSTATUS & bit) != 0U)
-		nRFUsbdDmaWait();
+	// Quiesce the shared channel before rotating hQue. The active regular DMA
+	// owns the FIFO head, and scratch IN may DMA directly from that entry.
+	nRFUsbdDmaWait();
 	nRFUsbdQueRemove(EpNo, bIn);
 	nRFUsbdEpHwEnable(EpNo, bIn, false);
-	NRF_USBD->EPDATASTATUS = bit;
+	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (bIn ? 0U : 16U));
 	__DSB();
 	EnableInterrupt(state);
 }
