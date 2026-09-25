@@ -47,6 +47,8 @@ SOFTWARE.
 static_assert(offsetof(USBD_ISOOUT_Type, MAXCNT) ==
 	offsetof(USBD_ISOIN_Type, MAXCNT), "ISO register layout");
 
+static uint16_t s_IsoOutDmaLen;
+
 static __attribute__((noinline))
 void nRFIsoHwEnable(bool In, bool Enable)
 {
@@ -98,7 +100,7 @@ bool nRFUsbdIsoStart(void)
 		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
 
 	NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
-	NRF_USBD->ISOOUT.MAXCNT = s_Usbd.IsoOutDmaLen;
+	NRF_USBD->ISOOUT.MAXCNT = s_IsoOutDmaLen;
 	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
 		&NRF_USBD->EVENTS_ENDISOOUT);
 	return true;
@@ -138,7 +140,7 @@ bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
 		if (len <= pOut->MaxPacketSize)
 		{
-			s_Usbd.IsoOutDmaLen = len;
+			s_IsoOutDmaLen = len;
 			next |= NRFUSBD_ISO_OUT_BUSY;
 		}
 	}
