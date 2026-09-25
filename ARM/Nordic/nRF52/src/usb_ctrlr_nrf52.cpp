@@ -663,6 +663,22 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 	nRFUsbdDmaUnlock();
 }
 
+// Remove queued work for one regular endpoint/direction without disturbing
+// unrelated endpoints. Only entries present on entry are visited, so retained
+// entries keep FIFO order.
+static void nRFUsbdQueRemove(uint8_t EpNum, bool In)
+{
+	int count = CFifoUsed(s_Usbd.hQue);
+	while (count-- > 0)
+	{
+		nRFUsbdQue_t que = *(nRFUsbdQue_t *)CFifoGet(s_Usbd.hQue);
+		const bool isIn = que.Dir != NRFX_USBD_QUE_OUT;
+		if (que.EpNum == EpNum && isIn == In)
+			continue;
+		*(nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue) = que;
+	}
+}
+
 
 // Submission acquires an idle channel; completion retains the existing lock.
 __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
@@ -1345,22 +1361,37 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 		return;
 	}
 
+	const uint32_t state = DisableInterrupt();
 	nRFUsbdDmaWait();
-	CFifoFlush(s_Usbd.hQue);
-
+	nRFUsbdQueRemove(EpNo, bIn);
 	nRFUsbdEpHwEnable(EpNo, bIn, false);
 	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (bIn ? 0U : 16U));
 	__DSB();
+	EnableInterrupt(state);
 }
 
 void UsbCtrlrEpCloseAll(int DevNo)
 {
+	// Closing the whole device intentionally discards every regular request.
+	const uint32_t state = DisableInterrupt();
+	nRFUsbdDmaWait();
+	CFifoFlush(s_Usbd.hQue);
+	EnableInterrupt(state);
+
 	for (uint32_t epNum = NRFX_USBD_EP_COUNT - 1U; epNum != 0U; epNum--)
 	{
-		UsbCtrlrEpClose(DevNo, epNum, false);
-		UsbCtrlrEpClose(DevNo, epNum, true);
+		if (epNum == NRFX_USBD_ISO_EP_NO)
+		{
+			UsbCtrlrEpClose(DevNo, epNum, false);
+			UsbCtrlrEpClose(DevNo, epNum, true);
+			continue;
+		}
+		nRFUsbdEpHwEnable((uint8_t)epNum, false, false);
+		nRFUsbdEpHwEnable((uint8_t)epNum, true, false);
+		NRF_USBD->EPDATASTATUS =
+			(1UL << (epNum + 16U)) | (1UL << epNum);
 	}
-
+	__DSB();
 }
 
 void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
