@@ -624,7 +624,8 @@ static void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 	const uint16_t len = pQue->Len;
 
 	// Both directions use the same layout, at different register-bank offsets.
-	// MAXCNT is the RAM buffer capacity; AMOUNT reports the actual transfer.
+	// OUT Len was captured from SIZE while EPDATASTATUS owned the packet.
+	// AMOUNT reports the actual bytes moved.
 	uintptr_t epReg = (uintptr_t)&NRF_USBD->EPIN[epNum];
 	uintptr_t taskReg = (uintptr_t)&NRF_USBD->TASKS_STARTEPIN[epNum];
 	if (!isIn)
