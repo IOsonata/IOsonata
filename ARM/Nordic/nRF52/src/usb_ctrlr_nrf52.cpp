@@ -1553,7 +1553,7 @@ void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
 	NRF_USBD->EPSTALL =
 		(USBD_EPSTALL_STALL_UnStall << USBD_EPSTALL_STALL_Pos) | epAddr;
 
-	if (!bIn)
+	if (!bIn && EpNo < NRFX_USBD_DATA_EP_COUNT)
 	{
 		NRF_USBD->SIZE.EPOUT[EpNo] = 0;
 	}
