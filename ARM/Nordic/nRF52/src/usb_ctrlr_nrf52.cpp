@@ -1392,10 +1392,14 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 	}
 
 	const uint32_t state = DisableInterrupt();
-	nRFUsbdDmaWait();
+	const uint32_t bit = 1UL << (EpNo + (bIn ? 0U : 16U));
+	// Do not disturb another endpoint that currently owns the shared DMA.
+	// Only the endpoint being closed needs its active transfer retired here.
+	if ((NRF_USBD->EPSTATUS & bit) != 0U)
+		nRFUsbdDmaWait();
 	nRFUsbdQueRemove(EpNo, bIn);
 	nRFUsbdEpHwEnable(EpNo, bIn, false);
-	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (bIn ? 0U : 16U));
+	NRF_USBD->EPDATASTATUS = bit;
 	__DSB();
 	EnableInterrupt(state);
 }
