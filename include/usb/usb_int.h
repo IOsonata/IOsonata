@@ -141,6 +141,12 @@ public:
 	void Suspend(void) { UsbIntIntrfSuspend(&vUsbIntIntrf); }
 	bool Resume(void) { return UsbIntIntrfResume(&vUsbIntIntrf); }
 
+	int TxData(const uint8_t *pData, int DataLen) override {
+		return DataLen >= 0 && DataLen <= UINT16_MAX &&
+			UsbIntIntrfSendPacket(&vUsbIntIntrf, pData, (uint16_t)DataLen) ?
+			DataLen : 0;
+	}
+
 	bool SendPacket(const uint8_t *pData, uint16_t Length) {
 		return UsbIntIntrfSendPacket(&vUsbIntIntrf, pData, Length);
 	}
