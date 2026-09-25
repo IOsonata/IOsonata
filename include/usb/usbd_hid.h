@@ -134,22 +134,12 @@ struct __Usbd_Hid_Dev {
 extern "C" {
 #endif
 
-bool UsbdHidSendReport(UsbdHidDev_t *pHid, const uint8_t *pData,
-					   uint16_t Length);
-void UsbdHidSuspend(UsbdHidDev_t *pHid);
-bool UsbdHidResume(UsbdHidDev_t *pHid);
-
 // Builds the HID configuration fragment at run time. Weak: an application
 // building fully static descriptors may define a strong replacement, which the
 // linker then substitutes and the default is removed. Pair with a strong
 // UsbGetDescriptor so the assembled configuration matches the static fragment.
 bool UsbdHidMakeDesc(UsbdHidDesc_t *pDesc, const UsbdHidDev_t *pHid,
 					 UsbSpeed_t Speed);
-
-static inline bool UsbdHidTxReady(const UsbdHidDev_t *pHid)
-{
-	return pHid != NULL && UsbIntIntrfTxReady(pHid->pIntIntrf);
-}
 
 #ifdef __cplusplus
 }
@@ -169,28 +159,6 @@ public:
 	using UsbIntIntrf::operator DevIntrf_t *;
 	operator UsbdHidDev_t * () { return &vUsbdHid; }
 	operator const UsbdHidDev_t * () const { return &vUsbdHid; }
-
-	bool RequestToSend(int NbBytes) override {
-		return NbBytes >= 0 && NbBytes <= (int)vUsbIntIntrf.Mps &&
-			UsbdHidTxReady(&vUsbdHid);
-	}
-
-	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
-		(void)DevAddr;
-		return TxData(pData, DataLen);
-	}
-	int TxData(const uint8_t *pData, int DataLen) override {
-		return DataLen >= 0 && DataLen <= UINT16_MAX &&
-			UsbdHidSendReport(&vUsbdHid, pData, (uint16_t)DataLen) ?
-			DataLen : 0;
-	}
-
-	bool SendReport(const uint8_t *pData, uint16_t Length) {
-		return UsbdHidSendReport(&vUsbdHid, pData, Length);
-	}
-	bool TxReady(void) const { return UsbdHidTxReady(&vUsbdHid); }
-	void Suspend(void) { UsbdHidSuspend(&vUsbdHid); }
-	bool Resume(void) { return UsbdHidResume(&vUsbdHid); }
 
 private:
 	UsbdHidDev_t vUsbdHid = {};

@@ -80,10 +80,8 @@ typedef struct __Usb_Int_Interf_Config {
 struct __Usb_Int_Interf {
 	UsbDevIntrf_t *pData;		//!< Shared endpoint data path
 	uint16_t Mps;
-	uint8_t EpNo;
 	uint8_t Interval;
 	bool Opened;
-	bool Suspended;
 	void *pContext;
 	UsbIntIntrfRxHandler_t RxHandler;
 	UsbIntIntrfTxHandler_t TxHandler;
@@ -104,17 +102,6 @@ bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 bool UsbIntIntrfOpen(UsbIntIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval);
 void UsbIntIntrfClose(UsbIntIntrf_t *pIntrf);
 void UsbIntIntrfReset(UsbIntIntrf_t *pIntrf);
-void UsbIntIntrfSuspend(UsbIntIntrf_t *pIntrf);
-bool UsbIntIntrfResume(UsbIntIntrf_t *pIntrf);
-bool UsbIntIntrfSendPacket(UsbIntIntrf_t *pIntrf, const uint8_t *pData,
-						   uint16_t Length);
-
-static inline bool UsbIntIntrfTxReady(const UsbIntIntrf_t *pIntrf)
-{
-	return pIntrf != NULL && pIntrf->Opened && !pIntrf->Suspended &&
-		atomic_load_explicit(&pIntrf->pData->DevIntrf.bTxReady,
-			memory_order_acquire);
-}
 
 #ifdef __cplusplus
 }
@@ -137,15 +124,7 @@ public:
 	}
 
 	void Close(void) { UsbIntIntrfClose(&vUsbIntIntrf); }
-	void Reset(void) { UsbIntIntrfReset(&vUsbIntIntrf); }
-	void Suspend(void) { UsbIntIntrfSuspend(&vUsbIntIntrf); }
-	bool Resume(void) { return UsbIntIntrfResume(&vUsbIntIntrf); }
-
-	bool SendPacket(const uint8_t *pData, uint16_t Length) {
-		return UsbIntIntrfSendPacket(&vUsbIntIntrf, pData, Length);
-	}
-
-	bool TxReady(void) const { return UsbIntIntrfTxReady(&vUsbIntIntrf); }
+	void Reset(void) override { UsbIntIntrfReset(&vUsbIntIntrf); }
 
 protected:
 	UsbIntIntrf_t vUsbIntIntrf = {};

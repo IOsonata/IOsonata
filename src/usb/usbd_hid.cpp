@@ -451,24 +451,3 @@ void UsbdHid::Reset(void)
 {
 	UsbdHidReset(&vUsbdHid);
 }
-
-bool UsbdHidSendReport(UsbdHidDev_t *pHid, const uint8_t *pData,
-					   uint16_t Length)
-{
-	return pHid != nullptr && pHid->Configured &&
-		UsbIntIntrfSendPacket(pHid->pIntIntrf, pData, Length);
-}
-
-void UsbdHidSuspend(UsbdHidDev_t *pHid)
-{
-	if (pHid != nullptr && pHid->Configured)
-	{
-		UsbIntIntrfSuspend(pHid->pIntIntrf);
-	}
-}
-
-bool UsbdHidResume(UsbdHidDev_t *pHid)
-{
-	return pHid != nullptr && pHid->Configured &&
-		UsbIntIntrfResume(pHid->pIntIntrf);
-}

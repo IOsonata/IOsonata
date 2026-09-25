@@ -41,21 +41,59 @@ static bool UsbIntIntrfEpSupported(int DevNo, uint8_t EpNo)
 		USB_INT_INTRF_MAX_MPS > 0U;
 }
 
-// Close both directions of the endpoint pair, then drop the data path.
-static void UsbIntIntrfRelease(UsbIntIntrf_t *pIntrf, bool bCloseEp)
+static bool UsbIntIntrfOpenEndpoint(UsbIntIntrf_t *pIntrf, bool bIn)
 {
-	if (bCloseEp)
+	return UsbCtrlrEpOpenData(pIntrf->pData->DevNo, pIntrf->pData->EpNo, bIn,
+		USB_ENDPATT_TRANS_INT, pIntrf->Mps);
+}
+
+static void UsbIntIntrfDeactivate(UsbIntIntrf_t *pIntrf)
+{
+	if (pIntrf->Opened)
 	{
-		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, false);
-		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, true);
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->pData->EpNo, false);
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->pData->EpNo, true);
+		pIntrf->Opened = false;
 	}
 	UsbIntrfUnconfigure(pIntrf->pData);
 }
 
-static bool UsbIntIntrfOpenEndpoint(UsbIntIntrf_t *pIntrf, bool bIn)
+static bool UsbIntIntrfActivate(UsbIntIntrf_t *pIntrf)
 {
-	return UsbCtrlrEpOpenData(pIntrf->pData->DevNo, pIntrf->EpNo, bIn,
-		USB_ENDPATT_TRANS_INT, pIntrf->Mps);
+	if (pIntrf->Opened)
+	{
+		return true;
+	}
+	if (pIntrf->Mps == 0U || !UsbIntrfConfigure(pIntrf->pData, pIntrf->Mps))
+	{
+		return false;
+	}
+	if (!UsbIntIntrfOpenEndpoint(pIntrf, true))
+	{
+		UsbIntrfUnconfigure(pIntrf->pData);
+		return false;
+	}
+	if (!UsbIntIntrfOpenEndpoint(pIntrf, false))
+	{
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->pData->EpNo, true);
+		UsbIntrfUnconfigure(pIntrf->pData);
+		return false;
+	}
+	pIntrf->Opened = true;
+	return true;
+}
+
+static void UsbIntIntrfDisable(DevIntrf_t * const pDev)
+{
+	UsbDevIntrf_t *pData = static_cast<UsbDevIntrf_t *>(pDev->pDevData);
+	UsbIntIntrfDeactivate(static_cast<UsbIntIntrf_t *>(pData->pClassContext));
+}
+
+static void UsbIntIntrfEnable(DevIntrf_t * const pDev)
+{
+	UsbDevIntrf_t *pData = static_cast<UsbDevIntrf_t *>(pDev->pDevData);
+	(void)UsbIntIntrfActivate(
+		static_cast<UsbIntIntrf_t *>(pData->pClassContext));
 }
 
 static int UsbIntIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
@@ -137,7 +175,6 @@ bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	pIntrf->pContext = pCfg->pContext;
 	pIntrf->RxHandler = pCfg->RxHandler;
 	pIntrf->TxHandler = pCfg->TxHandler;
-	pIntrf->EpNo = pCfg->EpNo;
 
 	UsbIntrfCfg_t cfg = {};
 	cfg.DevNo = pCfg->DevNo;
@@ -155,10 +192,13 @@ bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	}
 
 	pIntrf->pData->pClassContext = pIntrf;
+	pIntrf->pData->DevIntrf.Disable = UsbIntIntrfDisable;
+	pIntrf->pData->DevIntrf.Enable = UsbIntIntrfEnable;
 	return true;
 }
 
-bool UsbIntIntrfOpen(UsbIntIntrf_t *pIntrf, uint16_t MaxPacketSize, uint8_t Interval)
+bool UsbIntIntrfOpen(UsbIntIntrf_t *pIntrf, uint16_t MaxPacketSize,
+					  uint8_t Interval)
 {
 	if (pIntrf == nullptr ||
 		MaxPacketSize == 0U || MaxPacketSize > USB_INT_INTRF_MAX_MPS ||
@@ -170,25 +210,17 @@ bool UsbIntIntrfOpen(UsbIntIntrf_t *pIntrf, uint16_t MaxPacketSize, uint8_t Inte
 	}
 
 	UsbIntIntrfClose(pIntrf);
-	if (!UsbIntrfConfigure(pIntrf->pData, MaxPacketSize))
-	{
-		return false;
-	}
-
 	pIntrf->Mps = MaxPacketSize;
 	pIntrf->Interval = Interval;
-	pIntrf->Suspended = false;
 
-	if (!UsbIntIntrfOpenEndpoint(pIntrf, true) ||
-		!UsbIntIntrfOpenEndpoint(pIntrf, false))
+	if (atomic_load_explicit(&pIntrf->pData->DevIntrf.EnCnt,
+			memory_order_acquire) > 0 &&
+		!UsbIntIntrfActivate(pIntrf))
 	{
-		UsbIntIntrfRelease(pIntrf, true);
 		pIntrf->Mps = 0U;
 		pIntrf->Interval = 0U;
 		return false;
 	}
-
-	pIntrf->Opened = true;
 	return true;
 }
 
@@ -199,9 +231,7 @@ void UsbIntIntrfClose(UsbIntIntrf_t *pIntrf)
 		return;
 	}
 
-	UsbIntIntrfRelease(pIntrf, pIntrf->Opened);
-	pIntrf->Opened = false;
-	pIntrf->Suspended = false;
+	UsbIntIntrfDeactivate(pIntrf);
 	pIntrf->Mps = 0U;
 	pIntrf->Interval = 0U;
 }
@@ -218,42 +248,4 @@ void UsbIntIntrfReset(UsbIntIntrf_t *pIntrf)
 	pIntrf->TxErrorCnt = 0U;
 	pIntrf->RxEmptyCnt = 0U;
 	pIntrf->TxEmptyCnt = 0U;
-}
-
-void UsbIntIntrfSuspend(UsbIntIntrf_t *pIntrf)
-{
-	if (pIntrf != nullptr && pIntrf->Opened)
-	{
-		pIntrf->Suspended = true;
-	}
-}
-
-bool UsbIntIntrfResume(UsbIntIntrf_t *pIntrf)
-{
-	if (pIntrf == nullptr || !pIntrf->Opened)
-	{
-		return false;
-	}
-
-	pIntrf->Suspended = false;
-	return true;
-}
-
-bool UsbIntIntrfSendPacket(UsbIntIntrf_t *pIntrf, const uint8_t *pData,
-						   uint16_t Length)
-{
-	if (!pIntrf->Opened || pIntrf->Suspended ||
-		Length > pIntrf->Mps || (Length != 0U && pData == nullptr))
-	{
-		return false;
-	}
-
-	const int sent = DeviceIntrfTx(&pIntrf->pData->DevIntrf, 0, pData, (int)Length);
-
-	if (Length != 0U)
-	{
-		return sent == (int)Length;
-	}
-
-	return false;
 }

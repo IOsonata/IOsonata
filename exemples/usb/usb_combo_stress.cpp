@@ -142,7 +142,7 @@ static void HidRx(UsbdHidDev_t *, const uint8_t *pData, uint16_t Length,
 	{
 		return;
 	}
-	if (!g_Hid.SendReport(pData, Length))
+	if (g_Hid.Tx(0, pData, Length) != (int)Length)
 	{
 		memcpy(s_HidPending, pData, Length);
 		s_HidPendingLength = Length;
@@ -156,7 +156,7 @@ static void HidTx(UsbdHidDev_t *, uint16_t, UsbCtrlrXferResult_t Result,
 	{
 		const uint16_t length = s_HidPendingLength;
 		s_HidPendingLength = 0U;
-		if (!g_Hid.SendReport(s_HidPending, length))
+		if (g_Hid.Tx(0, s_HidPending, length) != (int)length)
 		{
 			s_HidPendingLength = length;
 		}
@@ -187,7 +187,7 @@ static bool HidReportRequest(const UsbSetupData_t *pSetup,
 	if (Stage == USB_CTRL_COMPLETE &&
 		pSetup->bRequest == USB_HID_REQ_SET_REPORT)
 	{
-		return g_Hid.SendReport(s_HidControlReport, *pLength);
+		return g_Hid.Tx(0, s_HidControlReport, *pLength) == (int)*pLength;
 	}
 	return true;
 }
@@ -239,7 +239,7 @@ static void IntRxPacket(UsbIntIntrf_t *, const uint8_t *pData,
 {
 	if (Result == USB_CTRLR_XFER_SUCCESS)
 	{
-		(void)UsbIntIntrfSendPacket(&s_Int, pData, Length);
+		(void)DeviceIntrfTx(&s_IntData.DevIntrf, 0, pData, Length);
 	}
 }
 
@@ -296,13 +296,15 @@ static void IntProcess(void)
 		return;
 	}
 	const bool suspended = UsbSuspended(USB_DEVNO);
-	if (suspended && !s_Int.Suspended)
+	const bool enabled = atomic_load_explicit(&s_IntData.DevIntrf.EnCnt,
+		memory_order_acquire) > 0;
+	if (suspended && enabled)
 	{
-		UsbIntIntrfSuspend(&s_Int);
+		DeviceIntrfDisable(&s_IntData.DevIntrf);
 	}
-	else if (!suspended && s_Int.Suspended)
+	else if (!suspended && !enabled)
 	{
-		(void)UsbIntIntrfResume(&s_Int);
+		DeviceIntrfEnable(&s_IntData.DevIntrf);
 	}
 }
 
@@ -737,11 +739,11 @@ int main()
 			hidSuspended = suspended;
 			if (suspended)
 			{
-				g_Hid.Suspend();
+				g_Hid.Disable();
 			}
 			else
 			{
-				(void)g_Hid.Resume();
+				g_Hid.Enable();
 			}
 		}
 
