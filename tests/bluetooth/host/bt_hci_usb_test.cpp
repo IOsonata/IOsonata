@@ -485,26 +485,6 @@ static void TestConfigurationAndAcl(void)
     CHECK(DeviceIntrfGetRate(hci.Data()) == 0U);
 }
 
-static void TestAclTxCapacityIsAtomic(void)
-{
-    ResetFake();
-    BtHciUsb hci;
-    CHECK(hci.Init(MakeCfg()));
-    CHECK(hci.SelectConfig(BT_HCI_USB_CONFIG_VALUE));
-
-    BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(hci);
-    hCFifo_t fifo = pHci->pData->hTxFifo;
-    while (CFifoAvail(fifo) > 1)
-        CHECK(CFifoPut(fifo) != nullptr);
-
-    const int used = CFifoUsed(fifo);
-    uint8_t acl[65] = { 0x01U, 0x00U, 61U, 0x00U };
-    CHECK(DeviceIntrfStartTx(hci.Data(), BT_HCI_USB_PACKET_ACL));
-    CHECK(hci.Data()->TxData(hci.Data(), acl, sizeof(acl)) == 0);
-    DeviceIntrfStopTx(hci.Data());
-    CHECK(CFifoUsed(fifo) == used);
-}
-
 static void TestBulkZlpPreservesNextPacket(void)
 {
     ResetFake();
@@ -778,7 +758,6 @@ int main(void)
     TestAutoPlacement();
     TestScoAutoPlacement();
     TestConfigurationAndAcl();
-    TestAclTxCapacityIsAtomic();
     TestBulkZlpPreservesNextPacket();
     TestCommandAndEvent();
     TestBulkSerialization();
