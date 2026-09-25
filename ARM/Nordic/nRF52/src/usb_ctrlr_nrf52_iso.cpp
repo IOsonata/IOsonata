@@ -89,12 +89,14 @@ bool nRFUsbdIsoStart(void)
 	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_OUT_BUSY) == 0U)
 		return false;
 
+	// OUT ownership moves from the software queue to hardware at STARTISOOUT.
+	// A new SOF can then queue the following service interval while this DMA is
+	// still active; completion must not clear a newer queued OUT request.
+	s_Usbd.IsoBusy &= (uint8_t)~NRFUSBD_ISO_OUT_BUSY;
+
 	const uint32_t size = NRF_USBD->SIZE.ISOOUT;
 	if (size == 0U)
-	{
-		s_Usbd.IsoBusy &= (uint8_t)~NRFUSBD_ISO_OUT_BUSY;
 		return false;
-	}
 
 	nRFUsbEpReg_t *pReg =
 		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
@@ -122,7 +124,19 @@ bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	if (!s_Usbd.IsoOpen)
 		return false;
 
-	const uint8_t busy = s_Usbd.IsoBusy;
+	uint8_t busy = s_Usbd.IsoBusy;
+
+	// OUT_BUSY now means queued only. If it survives to the next SOF, that
+	// interval missed the shared DMA channel. Report it and replace it with the
+	// fresh interval instead of carrying stale work forward.
+	if ((busy & NRFUSBD_ISO_OUT_BUSY) != 0U)
+	{
+		s_Usbd.IsoBusy = busy & (uint8_t)~NRFUSBD_ISO_OUT_BUSY;
+		nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, 0U,
+			USB_CTRLR_EVT_XFER_FAILED, 0U);
+		busy = s_Usbd.IsoBusy;
+	}
+
 	uint8_t next = busy | NRFUSBD_ISO_OUT_BUSY;
 
 	if (pBuffer != nullptr && (busy & NRFUSBD_ISO_IN_BUSY) == 0U)
@@ -164,9 +178,6 @@ static bool nRFUsbdFinishIsoDma(bool In)
 
 	nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, In ? 1U : 0U,
 		USB_CTRLR_EVT_XFER_CMPL, amount);
-
-	if (!In)
-		s_Usbd.IsoBusy &= (uint8_t)~NRFUSBD_ISO_OUT_BUSY;
 
 	return true;
 }
