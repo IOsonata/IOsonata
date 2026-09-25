@@ -849,13 +849,49 @@ static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
 }
 
 
-// InData is nonzero. Return only the status bit accepted by AppEvt; a full
-// queue leaves it in EPDATASTATUS for UsbCtrlrProcess to retry.
+// Queue every latched regular IN completion that AppEvt can accept. Bits not
+// accepted remain in EPDATASTATUS and are retried from UsbCtrlrProcess.
 static uint32_t nRFUsbdQueueInComplete(uint32_t InData)
 {
-	const uint32_t epNum = 31U - (uint32_t)__CLZ(InData);
-	const uint32_t evt = (NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum;
-	return (uint32_t)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete) << epNum;
+	uint32_t serviced = 0U;
+	while (InData != 0U)
+	{
+		const uint32_t epNum = 31U - (uint32_t)__CLZ(InData);
+		const uint32_t bit = 1UL << epNum;
+		const uint32_t evt = (NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum;
+		if (!AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete))
+			break;
+		serviced |= bit;
+		InData &= ~bit;
+	}
+	return serviced;
+}
+
+static bool nRFUsbdQueueOutData(uint32_t EpNum)
+{
+	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg((uint8_t)EpNum, 0U);
+	if (pReg->bBlocking)
+		pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
+
+	const uint32_t bit = 1UL << (EpNum + 16U);
+	// Do not reuse a buffer still owned by an active DMA, or one withheld by
+	// the interface. Leaving EPDATASTATUS latched preserves the receive request.
+	if ((NRF_USBD->EPSTATUS & bit) != 0U || pReg->pBuffer == NULL)
+		return false;
+
+	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
+	if (pQue == NULL)
+		return false;
+
+	pQue->EpNum = (uint8_t)EpNum;
+	pQue->Dir = NRFX_USBD_QUE_OUT;
+	pQue->Len = pReg->MaxPacketSize;
+	pQue->pBuffer = pReg->pBuffer;
+	// Acknowledge before DMA can admit the next packet.
+	NRF_USBD->EPDATASTATUS = bit;
+	__DSB();
+	nRFUsbdResumeQueuedDmaLocked();
+	return true;
 }
 
 static void nRFUsbdHandleBusEvent(uint32_t EventCause)
@@ -1109,51 +1145,26 @@ extern "C" void USBD_IRQHandler(void)
 		return;
 	}
 	// Clear the event first so a new endpoint event remains observable.
-	// Service at most one endpoint per direction in this interrupt.
-	// Unaccepted IN completions remain available to the foreground retry.
+	// Process every latched regular endpoint; unaccepted work remains latched.
 	NRF_USBD->EVENTS_EPDATA = 0U;
 	const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
 	uint32_t servicedStatus = dataStatus & 0x00010001UL;
 
 	const uint32_t inData = dataStatus & 0xFEU;
 	if (inData != 0U)
-	{
 		servicedStatus |= nRFUsbdQueueInComplete(inData);
-	}
 
 	// Clear only serviced endpoints; keep every other status bit latched.
-	// The following SOF register read completes this write.
 	NRF_USBD->EPDATASTATUS = servicedStatus;
 
 	nRFUsbdTryRemoteWake();
 
-	// Queue newly received OUT data. Blocking endpoints ask the interface
-	// for buffer ownership before the request enters the DMA queue.
-	const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
-	if (outData != 0U)
+	uint32_t outData = (dataStatus >> 16U) & 0xFEU;
+	while (outData != 0U)
 	{
-		// outData is nonzero and below 0x100, so epNum is 1 through 7.
 		const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
-		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 0U);
-		if (pReg->bBlocking)
-		{
-			pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
-		}
-
-		const uint32_t bit = 1UL << (epNum + 16U);
-		// Wait for the previous DMA completion before reusing this endpoint buffer.
-		if ((NRF_USBD->EPSTATUS & bit) == 0U && pReg->pBuffer != NULL)
-		{
-			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
-			pQue->EpNum = epNum;
-			pQue->Dir = NRFX_USBD_QUE_OUT;
-			pQue->Len = pReg->MaxPacketSize;
-			pQue->pBuffer = pReg->pBuffer;
-			// Acknowledge before DMA can admit the next packet.
-			NRF_USBD->EPDATASTATUS = bit;
-			__DSB();
-			nRFUsbdResumeQueuedDmaLocked();
-		}
+		outData &= ~(1UL << epNum);
+		(void)nRFUsbdQueueOutData(epNum);
 	}
 
 	nRFUsbdTryEnterLowPower();
@@ -1227,6 +1238,25 @@ void UsbCtrlrProcess(int DevNo)
 {
 	(void)DevNo;
 	AppEvtHandlerExec();
+
+	// Retry latched work that could not enter AppEvt or the DMA queue in ISR.
+	const uint32_t state = DisableInterrupt();
+	const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
+	const uint32_t inData = dataStatus & 0xFEU;
+	if (inData != 0U)
+	{
+		NRF_USBD->EPDATASTATUS = nRFUsbdQueueInComplete(inData);
+		__DSB();
+	}
+
+	uint32_t outData = (dataStatus >> 16U) & 0xFEU;
+	while (outData != 0U)
+	{
+		const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
+		outData &= ~(1UL << epNum);
+		(void)nRFUsbdQueueOutData(epNum);
+	}
+	EnableInterrupt(state);
 }
 
 bool UsbCtrlrVbusDetected(int DevNo)
@@ -1419,6 +1449,11 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
+	if (pQue == NULL)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
 	pQue->EpNum = EpNum;
 	pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
 	pQue->pBuffer = pBuffer;
