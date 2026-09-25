@@ -141,10 +141,6 @@ public:
 	void Suspend(void) { UsbIntIntrfSuspend(&vUsbIntIntrf); }
 	bool Resume(void) { return UsbIntIntrfResume(&vUsbIntIntrf); }
 
-	int TxData(const uint8_t *pData, int DataLen) override {
-		return UsbIntrf::TxData(pData, DataLen);
-	}
-
 	bool SendPacket(const uint8_t *pData, uint16_t Length) {
 		return UsbIntIntrfSendPacket(&vUsbIntIntrf, pData, Length);
 	}
