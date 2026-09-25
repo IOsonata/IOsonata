@@ -356,12 +356,12 @@ int main()
 		if (nowSuspended != suspended)
 		{
 			suspended = nowSuspended;
-			if (suspended) g_Hid.Suspend();
-			else (void)g_Hid.Resume();
+			if (suspended) g_Hid.Disable();
+			else g_Hid.Enable();
 		}
-		if (!suspended && g_Hid.TxReady() && HidReportUpdate())
+		if (!suspended && HidReportUpdate())
 		{
-			(void)g_Hid.SendReport(
+			(void)g_Hid.Tx(0,
 				reinterpret_cast<const uint8_t *>(&s_Report), sizeof(s_Report));
 		}
 		msDelay(1U);

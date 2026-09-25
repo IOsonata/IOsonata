@@ -346,14 +346,18 @@ static void TestDataAndLifecycle(void)
 	CHECK(s_Open[0].bmAttributes == USB_ENDPATT_TRANS_INT);
 
 	const uint8_t tx[] = { 1U, 2U, 3U };
-	CHECK(hid.RequestToSend(sizeof(tx)));
-	CHECK(static_cast<UsbIntrf *>(&hid)->TxData(tx, sizeof(tx)) == (int)sizeof(tx));
+	CHECK(hid.Tx(0, tx, sizeof(tx)) == (int)sizeof(tx));
 	CHECK(s_InBusy && s_InLength == sizeof(tx));
 	CHECK(memcmp(s_InBuffer, tx, sizeof(tx)) == 0);
-	CHECK(!hid.SendReport(tx, sizeof(tx)));
+	CHECK(hid.Tx(0, tx, sizeof(tx)) == 0);
 	CompleteIn();
 	CHECK(s_TxCount == 1 && s_LastTxLength == sizeof(tx));
-	CHECK(hid.SendReport(nullptr, 0U));
+
+	DevIntrf_t *pDev = hid.Data();
+	CHECK(DeviceIntrfStartTx(pDev, 0));
+	CHECK(DeviceIntrfTxData(pDev, nullptr, 0) == 0);
+	CHECK(!atomic_load(&pDev->bTxReady));
+	DeviceIntrfStopTx(pDev);
 	CompleteIn();
 	CHECK(s_TxCount == 2 && s_LastTxLength == 0U);
 
@@ -365,16 +369,16 @@ static void TestDataAndLifecycle(void)
 	Receive(nullptr, 0U);
 	CHECK(s_RxCount == 2 && s_LastRxLength == 0U);
 
-	hid.Suspend();
-	CHECK(!hid.SendReport(tx, sizeof(tx)));
-	CHECK(static_cast<UsbIntrf *>(&hid)->TxData(tx, sizeof(tx)) == 0);
-	CHECK(hid.Resume());
-	CHECK(hid.SendReport(tx, sizeof(tx)));
+	hid.Disable();
+	CHECK(hid.Tx(0, tx, sizeof(tx)) == 0);
+	CHECK(static_cast<UsbdHidDev_t *>(hid)->pIntIntrf->Mps != 0U);
+	CHECK(static_cast<UsbdHidDev_t *>(hid)->pIntIntrf->pData->Mps == 0U);
+	hid.Enable();
+	CHECK(hid.Tx(0, tx, sizeof(tx)) == (int)sizeof(tx));
 	CompleteIn();
 
 	CHECK(hid.SelectConfig(0U));
-	CHECK(!hid.SendReport(tx, sizeof(tx)));
-	CHECK(s_CloseCount == 2);
+	CHECK(hid.Tx(0, tx, sizeof(tx)) == 0);
 }
 
 static void TestControlRequests(void)
@@ -457,7 +461,7 @@ static void TestControlRequests(void)
 	CHECK(!Control(hid, &setup, USB_CTRL_SETUP, &pData, &length));
 
 	hid.Reset();
-	CHECK(!hid.Resume());
+	CHECK(hid.Tx(0, s_ControlReport, 1) == 0);
 }
 
 static void TestValidation(void)

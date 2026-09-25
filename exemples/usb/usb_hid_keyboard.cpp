@@ -295,8 +295,8 @@ int main()
 		if (nowSuspended != suspended)
 		{
 			suspended = nowSuspended;
-			if (suspended) g_Hid.Suspend();
-			else (void)g_Hid.Resume();
+			if (suspended) g_Hid.Disable();
+			else g_Hid.Enable();
 		}
 
 		const bool aPressed = IOPinRead(HID_BUTTON_PORT,
@@ -313,8 +313,8 @@ int main()
 		}
 
 		if (!suspended && s_ReportPending &&
-			g_Hid.SendReport(reinterpret_cast<const uint8_t *>(&s_Report),
-				sizeof(s_Report)))
+			g_Hid.Tx(0, reinterpret_cast<const uint8_t *>(&s_Report),
+				sizeof(s_Report)) == (int)sizeof(s_Report))
 		{
 			s_ReportPending = false;
 		}

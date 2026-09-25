@@ -225,9 +225,7 @@ test-c-header:
 	@printf '%s\n' '#include "usb/usb_iso.h"' '#include "usb/usb_int.h"' \
 		'#include "usb/usbd_hid.h"' '#include "usb/usb_mscdef.h"' \
 		'int main(void) {' \
-		' return UsbIsoIntrfTxReady((const UsbIsoIntrf_t *)0) ||' \
-		'  UsbIntIntrfTxReady((const UsbIntIntrf_t *)0) ||' \
-		'  UsbdHidTxReady((const UsbdHidDev_t *)0) ? 1 : 0;' '}' | \
+		' return UsbIsoIntrfTxReady((const UsbIsoIntrf_t *)0) ? 1 : 0;' '}' | \
 		$(CC) $(CPPFLAGS) $(CFLAGS) -x c -fsyntax-only -
 
 test-nrf-suspend-policy:

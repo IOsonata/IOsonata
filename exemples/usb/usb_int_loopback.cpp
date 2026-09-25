@@ -152,14 +152,34 @@ static void IntBuildDiag(void)
 	{
 		s_DiagReply.Flags |= INT_DIAG_FLAG_OPENED;
 	}
-	if (s_Int.Suspended)
+	if (UsbSuspended(USB_DEVNO))
 	{
 		s_DiagReply.Flags |= INT_DIAG_FLAG_SUSPENDED;
 	}
-	if (UsbIntIntrfTxReady(&s_Int))
+	if (s_Int.Opened &&
+		atomic_load_explicit(&s_IntData.DevIntrf.bTxReady,
+			memory_order_acquire))
 	{
 		s_DiagReply.Flags |= INT_DIAG_FLAG_TX_READY;
 	}
+}
+
+static bool IntSend(const uint8_t *pData, uint16_t Length)
+{
+	DevIntrf_t *pDev = &s_IntData.DevIntrf;
+	if (Length != 0U)
+	{
+		return DeviceIntrfTx(pDev, 0, pData, Length) == (int)Length;
+	}
+	if (!DeviceIntrfStartTx(pDev, 0))
+	{
+		return false;
+	}
+	(void)DeviceIntrfTxData(pDev, nullptr, 0);
+	const bool accepted = !atomic_load_explicit(&pDev->bTxReady,
+		memory_order_acquire);
+	DeviceIntrfStopTx(pDev);
+	return accepted;
 }
 
 static void IntRxPacket(UsbIntIntrf_t *, const uint8_t *pData,
@@ -172,7 +192,7 @@ static void IntRxPacket(UsbIntIntrf_t *, const uint8_t *pData,
 
 	s_RxCnt++;
 	s_LastRxLength = Length;
-	if (UsbIntIntrfSendPacket(&s_Int, pData, Length))
+	if (IntSend(pData, Length))
 	{
 		s_TxSubmitCnt++;
 	}
@@ -281,13 +301,15 @@ static void IntProcess(void)
 	}
 
 	const bool suspended = UsbSuspended(USB_DEVNO);
-	if (suspended && !s_Int.Suspended)
+	const bool enabled = atomic_load_explicit(&s_IntData.DevIntrf.EnCnt,
+		memory_order_acquire) > 0;
+	if (suspended && enabled)
 	{
-		UsbIntIntrfSuspend(&s_Int);
+		DeviceIntrfDisable(&s_IntData.DevIntrf);
 	}
-	else if (!suspended && s_Int.Suspended)
+	else if (!suspended && !enabled)
 	{
-		(void)UsbIntIntrfResume(&s_Int);
+		DeviceIntrfEnable(&s_IntData.DevIntrf);
 	}
 }
 

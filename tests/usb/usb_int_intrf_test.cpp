@@ -217,25 +217,28 @@ static void TestDuplexAndZeroLength(void)
 
 	const uint8_t tx[] = {1U, 2U, 3U};
 	const uint8_t rx[] = {4U, 5U};
-	CHECK(UsbIntIntrfSendPacket(&intrf, tx, sizeof(tx)));
+	CHECK(DeviceIntrfTx(&intrfData.DevIntrf, 0, tx, sizeof(tx)) == (int)sizeof(tx));
 	CHECK(memcmp(s_InBuffer, tx, sizeof(tx)) == 0);
-	CHECK(!UsbIntIntrfSendPacket(&intrf, tx, sizeof(tx)));
+	CHECK(!DeviceIntrfTx(&intrfData.DevIntrf, 0, tx, sizeof(tx)) == (int)sizeof(tx));
 	Receive(rx, sizeof(rx));
 	CHECK(s_RxCount == 1 && s_LastRxLength == sizeof(rx));
 	CHECK(memcmp(s_LastRx, rx, sizeof(rx)) == 0);
 	CHECK(s_OutBuffer != nullptr && s_OutXferCount == 0);
 	CompleteIn();
 	CHECK(s_TxCount == 1 && s_LastTxLength == sizeof(tx));
-	CHECK(UsbIntIntrfTxReady(&intrf));
+	CHECK(atomic_load(&intrfData.DevIntrf.bTxReady));
 
-	CHECK(UsbIntIntrfSendPacket(&intrf, nullptr, 0U));
+	CHECK(DeviceIntrfStartTx(&intrfData.DevIntrf, 0));
+	CHECK(DeviceIntrfTxData(&intrfData.DevIntrf, nullptr, 0) == 0);
+	CHECK(!atomic_load(&intrfData.DevIntrf.bTxReady));
+	DeviceIntrfStopTx(&intrfData.DevIntrf);
 	CompleteIn();
 	CHECK(intrf.TxEmptyCnt == 1U);
 	Receive(nullptr, 0U);
 	CHECK(intrf.RxEmptyCnt == 1U && s_LastRxLength == 0U);
 }
 
-static void TestErrorsSuspendAndReset(void)
+static void TestErrorsDisableEnableAndReset(void)
 {
 	ResetFake();
 	UsbIntIntrf_t intrf = {};
@@ -243,11 +246,13 @@ static void TestErrorsSuspendAndReset(void)
 	auto cfg = MakeCfg();
 	CHECK(UsbIntIntrfInit(&intrf, &intrfData, &cfg));
 	CHECK(UsbIntIntrfOpen(&intrf, 8U, 1U));
-	UsbIntIntrfSuspend(&intrf);
+	DeviceIntrfDisable(&intrfData.DevIntrf);
 	const uint8_t data = 9U;
-	CHECK(!UsbIntIntrfSendPacket(&intrf, &data, 1U));
-	CHECK(UsbIntIntrfResume(&intrf));
-	CHECK(UsbIntIntrfSendPacket(&intrf, &data, 1U));
+	CHECK(DeviceIntrfTx(&intrfData.DevIntrf, 0, &data, 1) == 0);
+	CHECK(!intrf.Opened && intrf.Mps == 8U && intrfData.Mps == 0U);
+	DeviceIntrfEnable(&intrfData.DevIntrf);
+	CHECK(intrf.Opened && intrfData.Mps == 8U);
+	CHECK(DeviceIntrfTx(&intrfData.DevIntrf, 0, &data, 1) == 1);
 	CompleteIn(USB_CTRLR_EVT_XFER_FAILED);
 	CHECK(intrf.TxErrorCnt == 1U);
 	CHECK(s_LastTxResult == USB_CTRLR_XFER_FAILED);
@@ -299,12 +304,12 @@ static void TestSharedTransport(void)
 	CHECK(s_InContext == pState->pData && s_OutContext == pState->pData);
 	CHECK(intrf.Open(9U, 1U));
 	const uint8_t data[] = {2U, 5U, 8U};
-	CHECK(pDevice->TxData(data, sizeof(data)) == (int)sizeof(data));
+	CHECK(pDevice->Tx(0, data, sizeof(data)) == (int)sizeof(data));
 	CHECK(memcmp(s_InBuffer, data, sizeof(data)) == 0);
 	CompleteIn();
 	Receive(data, sizeof(data));
 	uint8_t received[sizeof(data)] = {};
-	CHECK(pTransport->RxData(received, sizeof(received)) == (int)sizeof(data));
+	CHECK(pTransport->Rx(0, received, sizeof(received)) == (int)sizeof(data));
 	CHECK(memcmp(received, data, sizeof(data)) == 0);
 	intrf.Close();
 }
@@ -314,7 +319,7 @@ int main(void)
 	TestSharedTransport();
 	TestLifecycleAndValidation();
 	TestDuplexAndZeroLength();
-	TestErrorsSuspendAndReset();
+	TestErrorsDisableEnableAndReset();
 	TestPolledRxOwnership();
 	printf("%s\n", s_Fail == 0 ? "usb_int_intrf_test: PASS" :
 		"usb_int_intrf_test: FAIL");
