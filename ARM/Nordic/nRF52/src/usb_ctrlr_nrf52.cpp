@@ -561,21 +561,39 @@ void nRFUsbdDmaWait(void)
 	const uint32_t primask = __get_PRIMASK();
 	__disable_irq();
 
-	while (nRFUsbdDmaActive())
+	const uint32_t dmaStatus = NRF_USBD->EPSTATUS;
+	if (dmaStatus != 0U)
 	{
-		if (NRF_USBD->EVENTS_USBRESET != 0U)
+		const uint32_t statusBit = 31U - (uint32_t)__CLZ(dmaStatus);
+		volatile uint32_t *pEnd;
+
+		if (statusBit == 8U)
+			pEnd = &NRF_USBD->EVENTS_ENDISOIN;
+		else if (statusBit == 24U)
+			pEnd = &NRF_USBD->EVENTS_ENDISOOUT;
+		else
 		{
-			nRFUsbdDmaUnlock();
-			break;
+			const uint8_t epNum = (uint8_t)(statusBit & 7U);
+			pEnd = statusBit >= 16U ?
+				&NRF_USBD->EVENTS_ENDEPOUT[epNum] :
+				&NRF_USBD->EVENTS_ENDEPIN[epNum];
 		}
 
-		const uint32_t dmaStatus = NRF_USBD->EPSTATUS & 0x00FF00FFUL;
-		const bool complete = dmaStatus != 0U ?
-			nRFUsbdRetireDma(31U - (uint32_t)__CLZ(dmaStatus)) :
-			nRFUsbdIsoFinishDma();
-		if (complete)
-			nRFUsbdDmaUnlock();
+		while (*pEnd == 0U && NRF_USBD->EVENTS_USBRESET == 0U)
+		{
+		}
+
+		if (NRF_USBD->EVENTS_USBRESET == 0U)
+		{
+			if (statusBit == 8U || statusBit == 24U)
+				(void)nRFUsbdIsoFinishDma();
+			else
+				(void)nRFUsbdRetireDma(statusBit);
+		}
 	}
+
+	if (nRFUsbdDmaActive())
+		nRFUsbdDmaUnlock();
 
 	__set_PRIMASK(primask);
 }
