@@ -1062,7 +1062,27 @@ extern "C" void USBD_IRQHandler(void){
 	}
 
 	// Only a software-owned channel can have a transfer to retire.
-	const int completed = nRFUsbdDmaActive() ? nRFUsbdGetCompletedXfer() : -1;
+	int completed = nRFUsbdDmaActive() ? nRFUsbdGetCompletedXfer() : -1;
+
+	// ISO must get the shared EasyDMA channel within this service interval.
+	// Regular IN normally retires lazily on host-consumed EPDATA, so if SOF
+	// catches its memory DMA still in flight there may be no interrupt when
+	// ENDEPIN arrives. Wait only for that bounded EP1-7 EasyDMA copy, then
+	// retire it below and hand the channel to ISO in this same ISR pass.
+	if (completed < 0 && s_Usbd.IsoOpen &&
+		NRF_USBD->EVENTS_SOF != 0U && nRFUsbdDmaActive())
+	{
+		const uint32_t dmastatus = NRF_USBD->EPSTATUS;
+		if ((dmastatus & 0xFEU) != 0U && (dmastatus & ~0xFEU) == 0U)
+		{
+			const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
+			while (NRF_USBD->EVENTS_ENDEPIN[epno] == 0U &&
+				NRF_USBD->EVENTS_USBRESET == 0U)
+			{
+			}
+			completed = nRFUsbdGetCompletedXfer();
+		}
+	}
 
 	// A completed transfer keeps software DMA ownership for immediate handoff.
 	// EP0 IN reaches this point only after ENDEPIN0 and EP0DATADONE.
