@@ -542,15 +542,7 @@ static int nRFUsbdGetCompletedXfer(void)
 		const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
 		volatile uint32_t *pend;
 
-		if (epno == 0U)
-		{
-			// EP0 IN advances only after both EasyDMA and the host data stage
-			// are complete. ENDEPIN0 alone is not enough to reuse the channel.
-			if (NRF_USBD->EVENTS_EP0DATADONE == 0U)
-				return -1;
-			pend = &NRF_USBD->EVENTS_ENDEPIN[0];
-		}
-		else if (epno == 8U)
+		if (epno == 8U)
 			pend = &NRF_USBD->EVENTS_ENDISOIN;
 		else if (epno == 24U)
 			pend = &NRF_USBD->EVENTS_ENDISOOUT;
@@ -562,8 +554,6 @@ static int nRFUsbdGetCompletedXfer(void)
 		if (*pend != 0U)
 		{
 			*pend = 0U;
-			if (epno == 0U)
-				NRF_USBD->EVENTS_EP0DATADONE = 0U;
 			NRF_USBD->EPSTATUS = dmastatus;
 			__DSB();
 			retval = (int)epno;
@@ -1081,12 +1071,18 @@ extern "C" void USBD_IRQHandler(void)
 		return;
 	}
 
-	// EP0DATADONE means EP0 OUT data is ready. Leave it latched until the
-	// priority scheduler starts EP0 OUT DMA.
-	if (NRF_USBD->EVENTS_EP0DATADONE != 0U &&
-		(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
+	// EP0DATADONE is separate from EasyDMA completion. Clear acknowledged
+	// IN transactions here; for OUT leave it latched until the scheduler starts
+	// EPOUT0 DMA.
+	if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
 	{
-		newDmaWork = true;
+		if ((NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) != 0U)
+		{
+			NRF_USBD->EVENTS_EP0DATADONE = 0U;
+			(void)NRF_USBD->EVENTS_EP0DATADONE;
+		}
+		else
+			newDmaWork = true;
 	}
 
 	// EPDATASTATUS describes regular endpoint host-consumption / OUT readiness.
