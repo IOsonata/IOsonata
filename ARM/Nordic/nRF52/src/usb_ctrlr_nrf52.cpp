@@ -988,38 +988,31 @@ extern "C" void USBD_IRQHandler(void)
 	const bool dmaOwned = nRFUsbdDmaActive();
 	const int completed = dmaOwned ? nRFUsbdGetCompletedXfer() : -1;
 
-	// A completed DMA keeps the software channel ownership. EP0 IN consumes
-	// its own queue first; only an empty EP0 queue releases that ownership to
-	// the common EP0 -> ISO -> regular scheduler.
-	bool reuseDma = false;
+	// EPSTATUS bit encoding already carries endpoint class and direction:
+	// bit 3 selects ISO, bit 4 selects OUT and bits 0..2 are EP0..7.
+	bool reuseDma = completed >= 0;
 	bool newDmaWork = false;
 
 	if (completed >= 0)
 	{
-		if (completed == 0)
+		const uint8_t epnum = (uint8_t)completed & 7U;
+		const bool out = ((uint8_t)completed & 16U) != 0U;
+
+		if (((uint8_t)completed & 8U) != 0U)
 		{
-			if (NRF_USBD->EVENTS_EP0SETUP == 0U)
+			nRFUsbdIsoComplete(!out);
+		}
+		else if (epnum != 0U)
+		{
+			(void)CFifoGet(s_Usbd.hQue);
+			if (out)
 			{
-				(void)CFifoGet(s_Usbd.hEp0Que);
-				nRFEPPkt_t *pep0 =
-					(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
-				if (pep0 != NULL)
-					nRFUsbdEp0InStart(pep0);
-				else
-				{
-					nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
-					reuseDma = true;
-				}
+				nRFUsbEpRegisteredEvent(epnum, 0U,
+					USB_CTRLR_EVT_XFER_CMPL,
+					(uint16_t)NRF_USBD->EPOUT[epnum].AMOUNT);
 			}
-			else
-				reuseDma = true;
 		}
-		else if (completed == 8 || completed == 24)
-		{
-			nRFUsbdIsoComplete(completed == 8);
-			reuseDma = true;
-		}
-		else if (completed == 16)
+		else if (out)
 		{
 			if (NRF_USBD->EVENTS_EP0SETUP == 0U)
 			{
@@ -1028,20 +1021,19 @@ extern "C" void USBD_IRQHandler(void)
 				(void)NRF_USBD->TASKS_EP0RCVOUT;
 				nRFUsbdEmitXfer(0U, amount);
 			}
-			reuseDma = true;
 		}
-		else if ((completed > 0 && completed < 8) ||
-			(completed > 16 && completed < 24))
+		else if (NRF_USBD->EVENTS_EP0SETUP == 0U)
 		{
-			const uint8_t epNum = (uint8_t)completed & 7U;
-			(void)CFifoGet(s_Usbd.hQue);
-			if (completed >= 16)
+			(void)CFifoGet(s_Usbd.hEp0Que);
+			nRFEPPkt_t *pep0 =
+				(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
+			if (pep0 != NULL)
 			{
-				nRFUsbEpRegisteredEvent(epNum, 0U,
-					USB_CTRLR_EVT_XFER_CMPL,
-					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
+				nRFUsbdEp0InStart(pep0);
+				reuseDma = false;
 			}
-			reuseDma = true;
+			else
+				nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
 		}
 	}
 
