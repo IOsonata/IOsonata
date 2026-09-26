@@ -551,23 +551,11 @@ static int nRFUsbdGetCompletedXfer(void)
 				&NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
 				&NRF_USBD->EVENTS_ENDEPIN[epno];
 
-		// ENDEPIN0 releases the DMA buffer, but the control IN packet advances
-		// only after the host has acknowledged it.
-		if (*pend != 0U &&
-			(epno != 0U || NRF_USBD->EVENTS_EP0DATADONE != 0U))
+		if (*pend != 0U)
 		{
 			*pend = 0U;
-			if (epno == 0U)
-				NRF_USBD->EVENTS_EP0DATADONE = 0U;
 			NRF_USBD->EPSTATUS = dmastatus;
 			__DSB();
-
-			if (epno == 0U)
-				(void)CFifoGet(s_Usbd.hEp0Que);
-			else if ((epno > 0U && epno < 8U) ||
-				(epno > 16U && epno < 24U))
-				(void)CFifoGet(s_Usbd.hQue);
-
 			retval = (int)epno;
 		}
 	}
@@ -1036,15 +1024,35 @@ extern "C" void USBD_IRQHandler(void){
 	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
 	{
 		nRFUsbdQueueEp0Setup();
-		return;
 	}
 
 	const bool dmaOwned = nRFUsbdDmaActive();
-	const int completed = dmaOwned ? nRFUsbdGetCompletedXfer() : -1;
+	int completed = -1;
 
-	// A completed DMA keeps the software channel ownership. EP0 IN consumes
-	// its own queue first; only an empty EP0 queue releases that ownership to
-	// the common EP0 -> ISO -> regular scheduler.
+	if (dmaOwned)
+	{
+		// EP0 IN EasyDMA may finish before the host consumes the packet.
+		// Keep ownership until both hardware stages are complete so the
+		// current EP0 queue head cannot be scheduled a second time.
+		if (NRF_USBD->EPSTATUS == (1UL << 0))
+		{
+			if (NRF_USBD->EVENTS_ENDEPIN[0] != 0U &&
+				NRF_USBD->EVENTS_EP0DATADONE != 0U)
+			{
+				NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
+				NRF_USBD->EVENTS_EP0DATADONE = 0U;
+				NRF_USBD->EPSTATUS = 1UL << 0;
+				__DSB();
+				(void)CFifoGet(s_Usbd.hEp0Que);
+				completed = 0;
+			}
+		}
+		else
+			completed = nRFUsbdGetCompletedXfer();
+	}
+
+	// A completed transfer keeps software DMA ownership for immediate handoff.
+	// EP0 IN reaches this point only after ENDEPIN0 and EP0DATADONE.
 	bool reuseDma = false;
 	bool newDmaWork = false;
 
@@ -1079,7 +1087,7 @@ extern "C" void USBD_IRQHandler(void){
 			(completed > 16 && completed < 24))
 		{
 			const uint8_t epNum = (uint8_t)completed & 7U;
-			//(void)CFifoGet(s_Usbd.hQue);
+			(void)CFifoGet(s_Usbd.hQue);
 			if (completed >= 16)
 			{
 				nRFUsbEpRegisteredEvent(epNum, 0U,
@@ -1119,9 +1127,8 @@ extern "C" void USBD_IRQHandler(void){
 		nRFUsbdHandleBusEvent(eventCause);
 	}
 
-	// EP0 IN consumes EP0DATADONE together with ENDEPIN0 in
-	// nRFUsbdGetCompletedXfer(). For OUT it means a received packet is ready
-	// for EPOUT0 EasyDMA.
+	// EP0 IN consumes EP0DATADONE together with ENDEPIN0 above. For OUT it
+	// means a received packet is ready for EPOUT0 EasyDMA.
 	if (NRF_USBD->EVENTS_EP0DATADONE != 0U &&
 		(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
 	{
