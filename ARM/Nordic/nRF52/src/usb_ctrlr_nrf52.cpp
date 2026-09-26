@@ -1004,8 +1004,8 @@ static void nRFUsbdQueueEp0Setup(void)
 
 	nRFUsbdAbortEp0();
 
-	(void)AppEvtHandlerQue(setup[0], (void *)(uintptr_t)setup[1],
-		nRFUsbdProcessEP0Setup);
+	//(void)AppEvtHandlerQue(setup[0], (void *)(uintptr_t)setup[1],
+	nRFUsbdProcessEP0Setup(setup[0], (void *)(uintptr_t)setup[1]);
 }
 
 
