@@ -542,6 +542,7 @@ static int nRFUsbdGetCompletedXfer(void)
 		const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
 		volatile uint32_t *pend;
 
+#if 0
 		if (epno == 8U)
 			pend = &NRF_USBD->EVENTS_ENDISOIN;
 		else if (epno == 24U)
@@ -550,6 +551,28 @@ static int nRFUsbdGetCompletedXfer(void)
 			pend = epno > 8U ?
 				&NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
 				&NRF_USBD->EVENTS_ENDEPIN[epno];
+#else
+		switch (epno)
+		{
+			case 0:	// EP0 IN
+				pend = &NRF_USBD->EVENTS_ENDEPIN[0];
+				(void)CFifoGet(s_Usbd.hEp0Que);
+				break;
+			case 16U: // EP0 OUT
+				pend = &NRF_USBD->EVENTS_ENDEPOUT[0];
+				break;
+			case 8U:
+				pend = &NRF_USBD->EVENTS_ENDISOIN;
+				break;
+			case 24U:
+				pend = &NRF_USBD->EVENTS_ENDISOOUT;
+				break;
+			default:
+				pend = epno > 8U ? &NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
+						&NRF_USBD->EVENTS_ENDEPIN[epno];
+				(void)CFifoGet(s_Usbd.hQue);
+		}
+#endif
 
 		if (*pend != 0U)
 		{
@@ -571,36 +594,21 @@ void nRFUsbdDmaWait(void)
 
 	if (nRFUsbdDmaActive())
 	{
-		const uint32_t dmastatus = NRF_USBD->EPSTATUS;
-		if (dmastatus != 0U)
+		int xfer = -1;
+		if (NRF_USBD->EPSTATUS != 0U)
 		{
-			const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
-			volatile uint32_t *pend;
-
-			if (epno == 8U)
-				pend = &NRF_USBD->EVENTS_ENDISOIN;
-			else if (epno == 24U)
-				pend = &NRF_USBD->EVENTS_ENDISOOUT;
-			else
-				pend = epno > 8U ?
-					&NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
-					&NRF_USBD->EVENTS_ENDEPIN[epno];
-
-			while (*pend == 0U && NRF_USBD->EVENTS_USBRESET == 0U)
+			while ((xfer = nRFUsbdGetCompletedXfer()) < 0 &&
+				NRF_USBD->EVENTS_USBRESET == 0U)
 			{
-			}
-
-			if (*pend != 0U)
-			{
-				*pend = 0U;
-				NRF_USBD->EPSTATUS = dmastatus;
-				__DSB();
-
-				if ((epno > 0U && epno < 8U) ||
-					(epno > 16U && epno < 24U))
-					(void)CFifoGet(s_Usbd.hQue);
 			}
 		}
+
+		// Close/stop owns the queued software state. Remove only the active
+		// regular/EP0 IN request here; ISO has no entry in either DMA FIFO.
+		if (xfer >= 0 && xfer < 8)
+			(void)CFifoGet(xfer == 0 ? s_Usbd.hEp0Que : s_Usbd.hQue);
+		else if (xfer > 16 && xfer < 24)
+			(void)CFifoGet(s_Usbd.hQue);
 
 		nRFUsbdDmaUnlock();
 	}
@@ -737,37 +745,14 @@ static void nRFUsbdResetState(void)
 
 static void nRFUsbdAbortEp0(void)
 {
-	const uint32_t dmastatus = NRF_USBD->EPSTATUS;
-	volatile uint32_t *pend = NULL;
-
-	// EPSTATUS tells whether an EP0 EasyDMA transfer actually started.
-	// Ignore any regular or ISO owner of the shared DMA channel.
-	if (dmastatus == (1UL << 0))
-		pend = &NRF_USBD->EVENTS_ENDEPIN[0];
-	else if (dmastatus == (1UL << 16))
-		pend = &NRF_USBD->EVENTS_ENDEPOUT[0];
-
-	if (pend != NULL)
-	{
-		while (*pend == 0U && NRF_USBD->EVENTS_USBRESET == 0U)
-		{
-		}
-
-		if (*pend != 0U)
-		{
-			*pend = 0U;
-			NRF_USBD->EPSTATUS = dmastatus;
-			__DSB();
-			nRFUsbdDmaUnlock();
-		}
-	}
-
-	// Hardware DMA is now either unrelated to EP0 or retired. Drop only the
-	// superseded control-transfer software state.
+	const uint32_t state = DisableInterrupt();
 	CFifoFlush(s_Usbd.hEp0Que);
-	NRF_USBD->SHORTS = 0U;
-	NRF_USBD->EVENTS_EP0DATADONE = 0U;
-	(void)NRF_USBD->EVENTS_EP0DATADONE;
+	EnableInterrupt(state);
+
+	NRF_USBD->EVENTS_ENDEPIN[0] = 0;
+	NRF_USBD->EVENTS_ENDEPOUT[0] = 0;
+	NRF_USBD->EPDATASTATUS = (1UL << 0) | (1UL << 16);
+	(void)NRF_USBD->EPDATASTATUS;
 }
 
 // ISR context only: this interrupt is the sole mutator of the wake state,
@@ -956,20 +941,35 @@ static void nRFUsbdHandleSof(void)
 
 static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 {
+	(void)Evt;
+	(void)pContext;
+
 	UsbCtrlrEvt_t evt;
 	evt.Type = USB_CTRLR_EVT_SETUP;
 
-	const uint32_t setup[2] = {
-		Evt, (uint32_t)(uintptr_t)pContext
-	};
-	memcpy(&evt.Setup, setup, sizeof(evt.Setup));
+	// BMREQUESTTYPE through WLENGTHH are eight consecutive byte-wide
+	// registers whose byte order is exactly the little endian layout of
+	// UsbSetupData_t. Reading them in a loop beats five field combines.
+	const volatile uint32_t *pReg = &NRF_USBD->BMREQUESTTYPE;
+	uint8_t *pDst = (uint8_t *)&evt.Setup;
+	for (int i = 0; i < 8; i++)
+	{
+		pDst[i] = (uint8_t)pReg[i];
+	}
+
+	while (nRFUsbdDmaActive())
+	{
+	}
 
 	nRFUsbdHostResume();
+	nRFUsbdAbortEp0();
 
 	if ((evt.Setup.bmRequestType &
 		 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0U &&
 		evt.Setup.bRequest == USB_REQ_SET_ADDRESS)
 	{
+		// Address and Setup share the event union; wValue is read before
+		// the union is repurposed.
 		const uint8_t addr = (uint8_t)(evt.Setup.wValue & 0x7FU);
 		evt.Type = USB_CTRLR_EVT_ADDRESS;
 		evt.Address = addr;
@@ -981,31 +981,19 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) == 0U &&
 		evt.Setup.wLength != 0U)
 	{
+		NRF_USBD->SHORTS = 0U;
 		NRF_USBD->TASKS_EP0RCVOUT = 1U;
 		(void)NRF_USBD->TASKS_EP0RCVOUT;
 	}
-
-	// If the request itself did not start EP0 DMA, resume any older regular
-	// or ISO work now that the aborted EP0 channel has been retired.
-	nRFUsbdResumeQueuedDmaLocked();
 }
 
 static void nRFUsbdQueueEp0Setup(void)
 {
-	// Snapshot before clearing EP0SETUP; the next SETUP overwrites these eight
-	// hardware registers.
-	const volatile uint32_t *preg = &NRF_USBD->BMREQUESTTYPE;
-	uint32_t setup[2] = {0U, 0U};
-	for (uint32_t i = 0U; i < 8U; i++)
-		setup[i >> 2U] |= (uint32_t)(uint8_t)preg[i] << ((i & 3U) * 8U);
-
 	NRF_USBD->EVENTS_EP0SETUP = 0U;
-	(void)NRF_USBD->EVENTS_EP0SETUP;
-
-	nRFUsbdAbortEp0();
-
-	//(void)AppEvtHandlerQue(setup[0], (void *)(uintptr_t)setup[1],
-	nRFUsbdProcessEP0Setup(setup[0], (void *)(uintptr_t)setup[1]);
+	// A new SETUP aborts the old control transfer's completion.
+	NRF_USBD->EVENTS_EP0DATADONE = 0U;
+	(void)NRF_USBD->EVENTS_EP0DATADONE;
+	(void)AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEP0Setup);
 }
 
 
@@ -1019,41 +1007,12 @@ extern "C" void USBD_IRQHandler(void){
 		return;
 	}
 
-	// A new SETUP supersedes the old EP0 transaction before any normal
-	// completion is interpreted.
-	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
-	{
-		nRFUsbdQueueEp0Setup();
-		return;
-	}
-
 	const bool dmaOwned = nRFUsbdDmaActive();
-	int completed = -1;
+	const int completed = dmaOwned ? nRFUsbdGetCompletedXfer() : -1;
 
-	if (dmaOwned)
-	{
-		// EP0 IN EasyDMA may finish before the host consumes the packet.
-		// Keep ownership until both hardware stages are complete so the
-		// current EP0 queue head cannot be scheduled a second time.
-		if (NRF_USBD->EPSTATUS == (1UL << 0))
-		{
-			if (NRF_USBD->EVENTS_ENDEPIN[0] != 0U &&
-				NRF_USBD->EVENTS_EP0DATADONE != 0U)
-			{
-				NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
-				NRF_USBD->EVENTS_EP0DATADONE = 0U;
-				NRF_USBD->EPSTATUS = 1UL << 0;
-				__DSB();
-				(void)CFifoGet(s_Usbd.hEp0Que);
-				completed = 0;
-			}
-		}
-		else
-			completed = nRFUsbdGetCompletedXfer();
-	}
-
-	// A completed transfer keeps software DMA ownership for immediate handoff.
-	// EP0 IN reaches this point only after ENDEPIN0 and EP0DATADONE.
+	// A completed DMA keeps the software channel ownership. EP0 IN consumes
+	// its own queue first; only an empty EP0 queue releases that ownership to
+	// the common EP0 -> ISO -> regular scheduler.
 	bool reuseDma = false;
 	bool newDmaWork = false;
 
@@ -1061,15 +1020,21 @@ extern "C" void USBD_IRQHandler(void){
 	{
 		if (completed == 0)
 		{
-			nRFEPPkt_t *pep0 =
-				(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
-			if (pep0 != NULL)
-				nRFUsbdEp0InStart(pep0);
-			else
+			if (NRF_USBD->EVENTS_EP0SETUP == 0U)
 			{
-				nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
-				reuseDma = true;
+				//(void)CFifoGet(s_Usbd.hEp0Que);
+				nRFEPPkt_t *pep0 =
+					(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
+				if (pep0 != NULL)
+					nRFUsbdEp0InStart(pep0);
+				else
+				{
+					nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
+					reuseDma = true;
+				}
 			}
+			else
+				reuseDma = true;
 		}
 		else if (completed == 8 || completed == 24)
 		{
@@ -1078,17 +1043,20 @@ extern "C" void USBD_IRQHandler(void){
 		}
 		else if (completed == 16)
 		{
-			const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
-			NRF_USBD->TASKS_EP0RCVOUT = 1U;
-			(void)NRF_USBD->TASKS_EP0RCVOUT;
-			nRFUsbdEmitXfer(0U, amount);
+			if (NRF_USBD->EVENTS_EP0SETUP == 0U)
+			{
+				const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
+				NRF_USBD->TASKS_EP0RCVOUT = 1U;
+				(void)NRF_USBD->TASKS_EP0RCVOUT;
+				nRFUsbdEmitXfer(0U, amount);
+			}
 			reuseDma = true;
 		}
 		else if ((completed > 0 && completed < 8) ||
 			(completed > 16 && completed < 24))
 		{
 			const uint8_t epNum = (uint8_t)completed & 7U;
-			(void)CFifoGet(s_Usbd.hQue);
+			//(void)CFifoGet(s_Usbd.hQue);
 			if (completed >= 16)
 			{
 				nRFUsbEpRegisteredEvent(epNum, 0U,
@@ -1112,7 +1080,8 @@ extern "C" void USBD_IRQHandler(void){
 	// SETUP and bus events retain priority by preventing a new start here.
 	if (reuseDma)
 	{
-		if (NRF_USBD->EVENTS_USBEVENT == 0U && nRFUsbdDmaAllowed())
+		if ((NRF_USBD->EVENTS_EP0SETUP | NRF_USBD->EVENTS_USBEVENT) == 0U &&
+			nRFUsbdDmaAllowed())
 			nRFUsbdStartQueuedDma();
 		else
 			nRFUsbdDmaUnlock();
@@ -1128,12 +1097,24 @@ extern "C" void USBD_IRQHandler(void){
 		nRFUsbdHandleBusEvent(eventCause);
 	}
 
-	// EP0 IN consumes EP0DATADONE together with ENDEPIN0 above. For OUT it
-	// means a received packet is ready for EPOUT0 EasyDMA.
-	if (NRF_USBD->EVENTS_EP0DATADONE != 0U &&
-		(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
+	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
 	{
-		newDmaWork = true;
+		nRFUsbdQueueEp0Setup();
+		return;
+	}
+
+	// EP0DATADONE is separate from EasyDMA completion. Clear acknowledged
+	// IN transactions here; for OUT leave it latched until the scheduler starts
+	// EPOUT0 DMA.
+	if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
+	{
+		if ((NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) != 0U)
+		{
+			NRF_USBD->EVENTS_EP0DATADONE = 0U;
+			(void)NRF_USBD->EVENTS_EP0DATADONE;
+		}
+		else
+			newDmaWork = true;
 	}
 
 	// EPDATASTATUS describes regular endpoint host-consumption / OUT readiness.
