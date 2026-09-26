@@ -583,12 +583,34 @@ void nRFUsbdDmaWait(void)
 
 	if (nRFUsbdDmaActive())
 	{
-		int xfer = -1;
-		if (NRF_USBD->EPSTATUS != 0U)
+		const uint32_t dmastatus = NRF_USBD->EPSTATUS;
+		if (dmastatus != 0U)
 		{
-			while ((xfer = nRFUsbdGetCompletedXfer()) < 0 &&
-				NRF_USBD->EVENTS_USBRESET == 0U)
+			const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
+			volatile uint32_t *pend;
+
+			if (epno == 8U)
+				pend = &NRF_USBD->EVENTS_ENDISOIN;
+			else if (epno == 24U)
+				pend = &NRF_USBD->EVENTS_ENDISOOUT;
+			else
+				pend = epno > 8U ?
+					&NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
+					&NRF_USBD->EVENTS_ENDEPIN[epno];
+
+			while (*pend == 0U && NRF_USBD->EVENTS_USBRESET == 0U)
 			{
+			}
+
+			if (*pend != 0U)
+			{
+				*pend = 0U;
+				NRF_USBD->EPSTATUS = dmastatus;
+				__DSB();
+
+				if ((epno > 0U && epno < 8U) ||
+					(epno > 16U && epno < 24U))
+					(void)CFifoGet(s_Usbd.hQue);
 			}
 		}
 
@@ -1097,18 +1119,13 @@ extern "C" void USBD_IRQHandler(void){
 		nRFUsbdHandleBusEvent(eventCause);
 	}
 
-	// EP0DATADONE is separate from EasyDMA completion. Clear acknowledged
-	// IN transactions here; for OUT leave it latched until the scheduler starts
-	// EPOUT0 DMA.
-	if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
+	// EP0 IN consumes EP0DATADONE together with ENDEPIN0 in
+	// nRFUsbdGetCompletedXfer(). For OUT it means a received packet is ready
+	// for EPOUT0 EasyDMA.
+	if (NRF_USBD->EVENTS_EP0DATADONE != 0U &&
+		(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
 	{
-		if ((NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) != 0U)
-		{
-			NRF_USBD->EVENTS_EP0DATADONE = 0U;
-			(void)NRF_USBD->EVENTS_EP0DATADONE;
-		}
-		else
-			newDmaWork = true;
+		newDmaWork = true;
 	}
 
 	// EPDATASTATUS describes regular endpoint host-consumption / OUT readiness.
