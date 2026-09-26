@@ -93,7 +93,19 @@ bool nRFUsbdIsoStart(void)
 		const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
 			0U : (uint16_t)size;
 
-		if (size == 0U || len > pReg->MaxPacketSize)
+		if (size == 0U)
+		{
+			// OUT may not have reached hardware yet. If IN can use the channel,
+			// keep OUT pending and retry it immediately after IN completes.
+			xferFlag = dataFlag & NRFUSBD_ISO_IN_READY;
+			if (xferFlag == 0U)
+			{
+				s_Usbd.IsoDataFlag &=
+					(uint8_t)~NRFUSBD_ISO_OUT_READY;
+				return false;
+			}
+		}
+		else if (len > pReg->MaxPacketSize)
 		{
 			s_Usbd.IsoDataFlag &=
 				(uint8_t)~NRFUSBD_ISO_OUT_READY;
