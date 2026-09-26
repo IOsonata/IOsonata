@@ -763,17 +763,11 @@ static void nRFUsbdAbortEp0(void)
 	}
 
 	// Hardware DMA is now either unrelated to EP0 or retired. Drop only the
-	// superseded control-transfer state.
+	// superseded control-transfer software state.
 	CFifoFlush(s_Usbd.hEp0Que);
 	NRF_USBD->SHORTS = 0U;
 	NRF_USBD->EVENTS_EP0DATADONE = 0U;
-	NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
-	NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
-
-	// Clear only EP0 data-status bits. Leave EVENTS_EPDATA itself alone so
-	// simultaneous regular endpoint status remains observable after we return.
-	NRF_USBD->EPDATASTATUS = (1UL << 0) | (1UL << 16);
-	(void)NRF_USBD->EPDATASTATUS;
+	(void)NRF_USBD->EVENTS_EP0DATADONE;
 }
 
 // ISR context only: this interrupt is the sole mutator of the wake state,
