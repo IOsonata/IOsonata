@@ -745,30 +745,14 @@ static void nRFUsbdResetState(void)
 
 static void nRFUsbdAbortEp0(void)
 {
+	const uint32_t state = DisableInterrupt();
 	CFifoFlush(s_Usbd.hEp0Que);
+	EnableInterrupt(state);
 
-	// A new SETUP owns EP0 immediately. Drop all state belonging to the
-	// superseded control transfer before the new request reaches the core.
-	NRF_USBD->SHORTS = 0U;
-	NRF_USBD->EVENTS_EP0DATADONE = 0U;
-	NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
-	NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
+	NRF_USBD->EVENTS_ENDEPIN[0] = 0;
+	NRF_USBD->EVENTS_ENDEPOUT[0] = 0;
 	NRF_USBD->EPDATASTATUS = (1UL << 0) | (1UL << 16);
-
-	// A superseding SETUP may already have dropped EP0 from EPSTATUS while
-	// the software EasyDMA ownership latch is still set. Keep that latch only
-	// when EPSTATUS identifies an unrelated regular or ISO DMA owner.
-	const uint32_t dmastatus = NRF_USBD->EPSTATUS;
-	const uint32_t ep0status = dmastatus & ((1UL << 0) | (1UL << 16));
-	if (ep0status != 0U)
-		NRF_USBD->EPSTATUS = ep0status;
-	__DSB();
-
-	if (nRFUsbdDmaActive() &&
-		(dmastatus == 0U || ep0status != 0U))
-	{
-		nRFUsbdDmaUnlock();
-	}
+	(void)NRF_USBD->EPDATASTATUS;
 }
 
 // ISR context only: this interrupt is the sole mutator of the wake state,
@@ -955,23 +939,25 @@ static void nRFUsbdHandleSof(void)
 	}
 }
 
-static void nRFUsbdProcessEP0Setup(void)
+static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 {
 	UsbCtrlrEvt_t evt;
 	evt.Type = USB_CTRLR_EVT_SETUP;
 
-	// The next SETUP overwrites these registers. Snapshot all eight bytes
-	// before clearing the event or touching any state from the old request.
-	const volatile uint32_t *preg = &NRF_USBD->BMREQUESTTYPE;
-	uint8_t *pdst = (uint8_t *)&evt.Setup;
-	for (int i = 0; i < 8; i++)
-		pdst[i] = (uint8_t)preg[i];
+	// SETUP was snapshotted in the ISR before EP0SETUP was cleared.
+	const uint32_t setup[2] = {
+		Evt, (uint32_t)(uintptr_t)pContext
+	};
+	memcpy(&evt.Setup, setup, sizeof(evt.Setup));
 
-	NRF_USBD->EVENTS_EP0SETUP = 0U;
-	(void)NRF_USBD->EVENTS_EP0SETUP;
+	// Do not mix the new EP0 software state with the old active DMA. IRQs are
+	// enabled here, so its END interrupt can retire the shared channel.
+	while (nRFUsbdDmaActive())
+	{
+	}
 
-	nRFUsbdAbortEp0();
 	nRFUsbdHostResume();
+	nRFUsbdAbortEp0();
 
 	if ((evt.Setup.bmRequestType &
 		 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0U &&
@@ -988,9 +974,28 @@ static void nRFUsbdProcessEP0Setup(void)
 		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) == 0U &&
 		evt.Setup.wLength != 0U)
 	{
+		NRF_USBD->SHORTS = 0U;
 		NRF_USBD->TASKS_EP0RCVOUT = 1U;
 		(void)NRF_USBD->TASKS_EP0RCVOUT;
 	}
+}
+
+static void nRFUsbdQueueEp0Setup(void)
+{
+	// BMREQUESTTYPE..WLENGTHH are overwritten by the next SETUP. Carry the
+	// eight bytes in the deferred event itself instead of reading them later.
+	const volatile uint32_t *preg = &NRF_USBD->BMREQUESTTYPE;
+	uint32_t setup[2] = {0U, 0U};
+	for (uint32_t i = 0U; i < 8U; i++)
+	{
+		setup[i >> 2U] |= (uint32_t)(uint8_t)preg[i] << ((i & 3U) * 8U);
+	}
+
+	NRF_USBD->EVENTS_EP0SETUP = 0U;
+	NRF_USBD->EVENTS_EP0DATADONE = 0U;
+	(void)NRF_USBD->EVENTS_EP0DATADONE;
+	(void)AppEvtHandlerQue(setup[0], (void *)(uintptr_t)setup[1],
+		nRFUsbdProcessEP0Setup);
 }
 
 
@@ -1001,14 +1006,6 @@ extern "C" void USBD_IRQHandler(void){
 		NRF_USBD->EVENTS_USBRESET = 0U;
 		nRFUsbdBusReset();
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESET);
-		return;
-	}
-
-	// A new SETUP supersedes every old EP0 transaction. Resolve it before
-	// interpreting any stale EP0 DMA completion.
-	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
-	{
-		nRFUsbdProcessEP0Setup();
 		return;
 	}
 
@@ -1100,6 +1097,12 @@ extern "C" void USBD_IRQHandler(void){
 		NRF_USBD->EVENTCAUSE = eventCause;
 		(void)NRF_USBD->EVENTCAUSE;
 		nRFUsbdHandleBusEvent(eventCause);
+	}
+
+	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
+	{
+		nRFUsbdQueueEp0Setup();
+		return;
 	}
 
 	// EP0DATADONE is separate from EasyDMA completion. Clear acknowledged
