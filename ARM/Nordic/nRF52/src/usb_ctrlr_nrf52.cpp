@@ -540,20 +540,30 @@ static int nRFUsbdGetCompletedXfer(void)
 	if (dmastatus != 0U)
 	{
 		const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
-		volatile uint32_t *pEnd;
+		volatile uint32_t *pend;
 
-		if (epno == 8U)
-			pEnd = &NRF_USBD->EVENTS_ENDISOIN;
+		if (epno == 0U)
+		{
+			// EP0 IN advances only after both EasyDMA and the host data stage
+			// are complete. ENDEPIN0 alone is not enough to reuse the channel.
+			if (NRF_USBD->EVENTS_EP0DATADONE == 0U)
+				return -1;
+			pend = &NRF_USBD->EVENTS_ENDEPIN[0];
+		}
+		else if (epno == 8U)
+			pend = &NRF_USBD->EVENTS_ENDISOIN;
 		else if (epno == 24U)
-			pEnd = &NRF_USBD->EVENTS_ENDISOOUT;
+			pend = &NRF_USBD->EVENTS_ENDISOOUT;
 		else
-			pEnd = epno > 8U ?
+			pend = epno > 8U ?
 				&NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
 				&NRF_USBD->EVENTS_ENDEPIN[epno];
 
-		if (*pEnd != 0U)
+		if (*pend != 0U)
 		{
-			*pEnd = 0U;
+			*pend = 0U;
+			if (epno == 0U)
+				NRF_USBD->EVENTS_EP0DATADONE = 0U;
 			NRF_USBD->EPSTATUS = dmastatus;
 			__DSB();
 			retval = (int)epno;
