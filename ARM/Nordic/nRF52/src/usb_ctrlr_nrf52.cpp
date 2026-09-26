@@ -755,16 +755,20 @@ static void nRFUsbdAbortEp0(void)
 	NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
 	NRF_USBD->EPDATASTATUS = (1UL << 0) | (1UL << 16);
 
-	// Abort the shared DMA ownership only when EP0 owns it. An unrelated
-	// regular or ISO DMA keeps running across the new SETUP.
+	// A superseding SETUP may already have dropped EP0 from EPSTATUS while
+	// the software EasyDMA ownership latch is still set. Keep that latch only
+	// when EPSTATUS identifies an unrelated regular or ISO DMA owner.
 	const uint32_t dmastatus = NRF_USBD->EPSTATUS;
 	const uint32_t ep0status = dmastatus & ((1UL << 0) | (1UL << 16));
 	if (ep0status != 0U)
 		NRF_USBD->EPSTATUS = ep0status;
 	__DSB();
 
-	if (ep0status != 0U && nRFUsbdDmaActive())
+	if (nRFUsbdDmaActive() &&
+		(dmastatus == 0U || ep0status != 0U))
+	{
 		nRFUsbdDmaUnlock();
+	}
 }
 
 // ISR context only: this interrupt is the sole mutator of the wake state,
