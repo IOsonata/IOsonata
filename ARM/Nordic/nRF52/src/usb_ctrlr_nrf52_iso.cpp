@@ -75,7 +75,36 @@ void nRFIsoHwEnable(bool In, bool Enable)
 // The shared scheduler already owns the channel lock.
 bool nRFUsbdIsoStart(void)
 {
-	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) != 0U)
+	uint8_t dataFlag = s_Usbd.IsoDataFlag;
+	if (dataFlag == 0U)
+		return false;
+
+	// SIZE.ISOOUT is meaningful only while the shared DMA channel is idle.
+	uint16_t outLen = 0U;
+	if ((dataFlag & NRFUSBD_ISO_OUT_READY) != 0U)
+	{
+		const uint32_t size = NRF_USBD->SIZE.ISOOUT;
+		if (size == 0U)
+		{
+			s_Usbd.IsoDataFlag &=
+				(uint8_t)~NRFUSBD_ISO_OUT_READY;
+			dataFlag &= (uint8_t)~NRFUSBD_ISO_OUT_READY;
+		}
+		else
+		{
+			outLen = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
+				0U : (uint16_t)size;
+		}
+	}
+
+	if (dataFlag == 0U)
+		return false;
+
+	uint8_t xferFlag = dataFlag & s_Usbd.IsoXferFlag;
+	if (xferFlag == 0U)
+		xferFlag = dataFlag & (uint8_t)(s_Usbd.IsoXferFlag ^ 0x03U);
+
+	if (xferFlag == NRFUSBD_ISO_IN_READY)
 	{
 		nRFUsbEpReg_t *pReg =
 			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1];
@@ -83,35 +112,25 @@ bool nRFUsbdIsoStart(void)
 		NRF_USBD->ISOIN.MAXCNT = s_Usbd.IsoInDmaLen;
 		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOIN,
 			&NRF_USBD->EVENTS_ENDISOIN);
-		return true;
 	}
-
-	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_OUT_BUSY) == 0U)
-		return false;
-
-	// OUT ownership moves from the software queue to hardware at STARTISOOUT.
-	// A new SOF can then queue the following service interval while this DMA is
-	// still active; completion must not clear a newer queued OUT request.
-	s_Usbd.IsoBusy &= (uint8_t)~NRFUSBD_ISO_OUT_BUSY;
-
-	const uint32_t size = NRF_USBD->SIZE.ISOOUT;
-	if (size == 0U)
-		return false;
-
-	nRFUsbEpReg_t *pReg =
-		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
-	const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
-		0U : (uint16_t)size;
-	if (len > pReg->MaxPacketSize)
+	else
 	{
-		s_Usbd.IsoBusy &= (uint8_t)~NRFUSBD_ISO_OUT_BUSY;
-		return false;
+		nRFUsbEpReg_t *pReg =
+			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
+		if (outLen > pReg->MaxPacketSize)
+		{
+			s_Usbd.IsoDataFlag &=
+				(uint8_t)~NRFUSBD_ISO_OUT_READY;
+			return false;
+		}
+		NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
+		NRF_USBD->ISOOUT.MAXCNT = outLen;
+		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
+			&NRF_USBD->EVENTS_ENDISOOUT);
 	}
 
-	NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
-	NRF_USBD->ISOOUT.MAXCNT = len;
-	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
-		&NRF_USBD->EVENTS_ENDISOOUT);
+	// IN and OUT are peers. Rotate preference only after a DMA actually starts.
+	s_Usbd.IsoXferFlag = xferFlag ^ 0x03U;
 	return true;
 }
 
@@ -124,72 +143,46 @@ bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	if (!s_Usbd.IsoOpen)
 		return false;
 
-	uint8_t busy = s_Usbd.IsoBusy;
+	uint8_t dataFlag = s_Usbd.IsoDataFlag | NRFUSBD_ISO_OUT_READY;
 
-	// OUT_BUSY now means queued only. If it survives to the next SOF, that
-	// interval missed the shared DMA channel. Report it and replace it with the
-	// fresh interval instead of carrying stale work forward.
-	if ((busy & NRFUSBD_ISO_OUT_BUSY) != 0U)
-	{
-		s_Usbd.IsoBusy = busy & (uint8_t)~NRFUSBD_ISO_OUT_BUSY;
-		nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, 0U,
-			USB_CTRLR_EVT_XFER_FAILED, 0U);
-		busy = s_Usbd.IsoBusy;
-	}
-
-	uint8_t next = busy | NRFUSBD_ISO_OUT_BUSY;
-
-	if (pBuffer != nullptr && (busy & NRFUSBD_ISO_IN_BUSY) == 0U)
+	if (pBuffer != nullptr &&
+		(dataFlag & NRFUSBD_ISO_IN_READY) == 0U)
 	{
 		nRFUsbEpReg_t *pIn =
 			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1];
 		pIn->pBuffer = pBuffer;
 		s_Usbd.IsoInDmaLen = Length;
-		next |= NRFUSBD_ISO_IN_BUSY;
+		dataFlag |= NRFUSBD_ISO_IN_READY;
 	}
 
-	if (next == busy)
+	if (dataFlag == s_Usbd.IsoDataFlag)
 		return false;
 
-	s_Usbd.IsoBusy = next;
+	s_Usbd.IsoDataFlag = dataFlag;
 	nRFUsbdResumeQueuedDmaLocked();
 	return true;
 }
 
-static bool nRFUsbdFinishIsoDma(bool In)
+void nRFUsbdIsoComplete(uint8_t In)
 {
-	volatile uint32_t *pEnd = In ?
-		&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
-	if (*pEnd == 0U)
-		return false;
-
+	const uint8_t flag = In ?
+		NRFUSBD_ISO_IN_READY : NRFUSBD_ISO_OUT_READY;
 	const uint16_t amount = (uint16_t)(In ?
 		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
 
-	*pEnd = 0U;
-	NRF_USBD->EPSTATUS = In ? (1UL << 8U) : (1UL << 24U);
-	__DSB();
+	s_Usbd.IsoDataFlag &= (uint8_t)~flag;
 
-	if (!s_Usbd.IsoOpen)
-		return true;
-
-	if (In)
-		s_Usbd.IsoBusy &= (uint8_t)~NRFUSBD_ISO_IN_BUSY;
-
-	nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, In ? 1U : 0U,
-		USB_CTRLR_EVT_XFER_CMPL, amount);
-
-	return true;
-}
-
-bool nRFUsbdIsoFinishDma(void)
-{
-	return nRFUsbdFinishIsoDma(true) || nRFUsbdFinishIsoDma(false);
+	if (s_Usbd.IsoOpen)
+	{
+		nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, In,
+			USB_CTRLR_EVT_XFER_CMPL, amount);
+	}
 }
 
 bool UsbCtrlrIsoInit(int DevNo)
 {
 	(void)DevNo;
+	s_Usbd.IsoXferFlag = NRFUSBD_ISO_IN_READY;
 	return true;
 }
 
@@ -219,7 +212,8 @@ void nRFUsbdIsoEpClose(bool bIn)
 	// start. nRFUsbdDmaWait owns the exclusion while retiring active DMA.
 	s_Usbd.IsoOpen = false;
 	nRFUsbdDmaWait();
-	s_Usbd.IsoBusy = 0U;
+	s_Usbd.IsoDataFlag = 0U;
+	s_Usbd.IsoXferFlag = NRFUSBD_ISO_IN_READY;
 
 	nRFIsoHwEnable(bIn, false);
 	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][bIn].MaxPacketSize = 0U;

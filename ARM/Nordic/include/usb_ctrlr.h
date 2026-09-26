@@ -295,8 +295,8 @@ enum
 
 enum
 {
-	NRFUSBD_ISO_OUT_BUSY = 0x01U,
-	NRFUSBD_ISO_IN_BUSY  = 0x02U,
+	NRFUSBD_ISO_IN_READY  = 0x01U,
+	NRFUSBD_ISO_OUT_READY = 0x02U,
 };
 
 typedef struct __nRF_Usbd_State
@@ -306,9 +306,9 @@ typedef struct __nRF_Usbd_State
 	bool LowPowerSuspend;
 	bool SofEnabled;
 	bool IsoOpen;                 //!< Both EP8 directions are open.
-	// Valid while NRFUSBD_ISO_IN_BUSY owns the current service interval.
 	uint16_t IsoInDmaLen;
-	uint8_t IsoBusy;
+	uint8_t IsoDataFlag;          //!< ISO directions with data ready for DMA.
+	uint8_t IsoXferFlag;          //!< Preferred next ISO direction, one-hot.
 	volatile uint8_t Flags;       //!< Controller power/wake state only.
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;
@@ -324,6 +324,7 @@ void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
 void nRFUsbdDmaUnlock(void);
 void nRFUsbdDmaWait(void);
 void nRFUsbdResumeQueuedDmaLocked(void);
+void nRFUsbdIsoComplete(uint8_t In);
 
 /** Start EasyDMA with the channel already locked by the caller. */
 void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
