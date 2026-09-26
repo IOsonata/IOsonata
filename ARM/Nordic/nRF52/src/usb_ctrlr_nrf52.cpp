@@ -542,7 +542,6 @@ static int nRFUsbdGetCompletedXfer(void)
 		const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
 		volatile uint32_t *pend;
 
-#if 0
 		if (epno == 8U)
 			pend = &NRF_USBD->EVENTS_ENDISOIN;
 		else if (epno == 24U)
@@ -551,34 +550,24 @@ static int nRFUsbdGetCompletedXfer(void)
 			pend = epno > 8U ?
 				&NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
 				&NRF_USBD->EVENTS_ENDEPIN[epno];
-#else
-		switch (epno)
-		{
-			case 0:	// EP0 IN
-				pend = &NRF_USBD->EVENTS_ENDEPIN[0];
-				(void)CFifoGet(s_Usbd.hEp0Que);
-				break;
-			case 16U: // EP0 OUT
-				pend = &NRF_USBD->EVENTS_ENDEPOUT[0];
-				break;
-			case 8U:
-				pend = &NRF_USBD->EVENTS_ENDISOIN;
-				break;
-			case 24U:
-				pend = &NRF_USBD->EVENTS_ENDISOOUT;
-				break;
-			default:
-				pend = epno > 8U ? &NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
-						&NRF_USBD->EVENTS_ENDEPIN[epno];
-				(void)CFifoGet(s_Usbd.hQue);
-		}
-#endif
 
-		if (*pend != 0U)
+		// ENDEPIN0 releases the DMA buffer, but the control IN packet advances
+		// only after the host has acknowledged it.
+		if (*pend != 0U &&
+			(epno != 0U || NRF_USBD->EVENTS_EP0DATADONE != 0U))
 		{
 			*pend = 0U;
+			if (epno == 0U)
+				NRF_USBD->EVENTS_EP0DATADONE = 0U;
 			NRF_USBD->EPSTATUS = dmastatus;
 			__DSB();
+
+			if (epno == 0U)
+				(void)CFifoGet(s_Usbd.hEp0Que);
+			else if ((epno > 0U && epno < 8U) ||
+				(epno > 16U && epno < 24U))
+				(void)CFifoGet(s_Usbd.hQue);
+
 			retval = (int)epno;
 		}
 	}
@@ -602,13 +591,6 @@ void nRFUsbdDmaWait(void)
 			{
 			}
 		}
-
-		// Close/stop owns the queued software state. Remove only the active
-		// regular/EP0 IN request here; ISO has no entry in either DMA FIFO.
-		if (xfer >= 0 && xfer < 8)
-			(void)CFifoGet(xfer == 0 ? s_Usbd.hEp0Que : s_Usbd.hQue);
-		else if (xfer > 16 && xfer < 24)
-			(void)CFifoGet(s_Usbd.hQue);
 
 		nRFUsbdDmaUnlock();
 	}
@@ -748,8 +730,8 @@ static void nRFUsbdAbortEp0(void)
 	const uint32_t dmastatus = NRF_USBD->EPSTATUS;
 	volatile uint32_t *pend = NULL;
 
-	// Only EP0 DMA belongs to the superseded control transfer. Ignore any
-	// regular or ISO DMA using the shared channel.
+	// EPSTATUS tells whether an EP0 EasyDMA transfer actually started.
+	// Ignore any regular or ISO owner of the shared DMA channel.
 	if (dmastatus == (1UL << 0))
 		pend = &NRF_USBD->EVENTS_ENDEPIN[0];
 	else if (dmastatus == (1UL << 16))
@@ -770,13 +752,12 @@ static void nRFUsbdAbortEp0(void)
 		}
 	}
 
+	// Hardware DMA is now either unrelated to EP0 or retired. Drop only the
+	// superseded control-transfer state.
 	CFifoFlush(s_Usbd.hEp0Que);
 	NRF_USBD->SHORTS = 0U;
 	NRF_USBD->EVENTS_EP0DATADONE = 0U;
-	NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
-	NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
-	NRF_USBD->EPDATASTATUS = (1UL << 0) | (1UL << 16);
-	(void)NRF_USBD->EPDATASTATUS;
+	(void)NRF_USBD->EVENTS_EP0DATADONE;
 }
 
 // ISR context only: this interrupt is the sole mutator of the wake state,
