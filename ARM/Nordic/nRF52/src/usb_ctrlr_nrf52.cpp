@@ -745,21 +745,37 @@ static void nRFUsbdResetState(void)
 
 static void nRFUsbdAbortEp0(void)
 {
+	const uint32_t dmastatus = NRF_USBD->EPSTATUS;
+	volatile uint32_t *pend = NULL;
+
+	// Only EP0 DMA belongs to the superseded control transfer. Ignore any
+	// regular or ISO DMA using the shared channel.
+	if (dmastatus == (1UL << 0))
+		pend = &NRF_USBD->EVENTS_ENDEPIN[0];
+	else if (dmastatus == (1UL << 16))
+		pend = &NRF_USBD->EVENTS_ENDEPOUT[0];
+
+	if (pend != NULL)
+	{
+		while (*pend == 0U && NRF_USBD->EVENTS_USBRESET == 0U)
+		{
+		}
+
+		if (*pend != 0U)
+		{
+			*pend = 0U;
+			NRF_USBD->EPSTATUS = dmastatus;
+			__DSB();
+			nRFUsbdDmaUnlock();
+		}
+	}
+
 	CFifoFlush(s_Usbd.hEp0Que);
 	NRF_USBD->SHORTS = 0U;
 	NRF_USBD->EVENTS_EP0DATADONE = 0U;
+	NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
+	NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
 	NRF_USBD->EPDATASTATUS = (1UL << 0) | (1UL << 16);
-
-	// SETUP invalidates the old EP0 transaction, but an already started
-	// EasyDMA transfer still retires through its END event. Remember only that
-	// its EP0 completion must be discarded.
-	if (nRFUsbdDmaActive())
-	{
-		const uint32_t dmastatus = NRF_USBD->EPSTATUS;
-		if (dmastatus == (1UL << 0) || dmastatus == (1UL << 16))
-			s_Usbd.Flags |= USBD_FLAG_EP0_ABORT;
-	}
-
 	(void)NRF_USBD->EPDATASTATUS;
 }
 
@@ -957,12 +973,6 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	};
 	memcpy(&evt.Setup, setup, sizeof(evt.Setup));
 
-	// If SETUP superseded an EP0 DMA, its END interrupt retires the channel
-	// and clears this flag. Other endpoint DMA does not delay SETUP processing.
-	while ((s_Usbd.Flags & USBD_FLAG_EP0_ABORT) != 0U)
-	{
-	}
-
 	nRFUsbdHostResume();
 
 	if ((evt.Setup.bmRequestType &
@@ -1039,22 +1049,14 @@ extern "C" void USBD_IRQHandler(void){
 	{
 		if (completed == 0)
 		{
-			if ((s_Usbd.Flags & USBD_FLAG_EP0_ABORT) != 0U)
-			{
-				s_Usbd.Flags &= (uint8_t)~USBD_FLAG_EP0_ABORT;
-				nRFUsbdDmaUnlock();
-			}
+			nRFEPPkt_t *pep0 =
+				(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
+			if (pep0 != NULL)
+				nRFUsbdEp0InStart(pep0);
 			else
 			{
-				nRFEPPkt_t *pep0 =
-					(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
-				if (pep0 != NULL)
-					nRFUsbdEp0InStart(pep0);
-				else
-				{
-					nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
-					reuseDma = true;
-				}
+				nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
+				reuseDma = true;
 			}
 		}
 		else if (completed == 8 || completed == 24)
@@ -1064,19 +1066,11 @@ extern "C" void USBD_IRQHandler(void){
 		}
 		else if (completed == 16)
 		{
-			if ((s_Usbd.Flags & USBD_FLAG_EP0_ABORT) != 0U)
-			{
-				s_Usbd.Flags &= (uint8_t)~USBD_FLAG_EP0_ABORT;
-				nRFUsbdDmaUnlock();
-			}
-			else
-			{
-				const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
-				NRF_USBD->TASKS_EP0RCVOUT = 1U;
-				(void)NRF_USBD->TASKS_EP0RCVOUT;
-				nRFUsbdEmitXfer(0U, amount);
-				reuseDma = true;
-			}
+			const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
+			NRF_USBD->TASKS_EP0RCVOUT = 1U;
+			(void)NRF_USBD->TASKS_EP0RCVOUT;
+			nRFUsbdEmitXfer(0U, amount);
+			reuseDma = true;
 		}
 		else if ((completed > 0 && completed < 8) ||
 			(completed > 16 && completed < 24))
