@@ -767,7 +767,13 @@ static void nRFUsbdAbortEp0(void)
 	CFifoFlush(s_Usbd.hEp0Que);
 	NRF_USBD->SHORTS = 0U;
 	NRF_USBD->EVENTS_EP0DATADONE = 0U;
-	(void)NRF_USBD->EVENTS_EP0DATADONE;
+	NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
+	NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
+
+	// Clear only EP0 data-status bits. Leave EVENTS_EPDATA itself alone so
+	// simultaneous regular endpoint status remains observable after we return.
+	NRF_USBD->EPDATASTATUS = (1UL << 0) | (1UL << 16);
+	(void)NRF_USBD->EPDATASTATUS;
 }
 
 // ISR context only: this interrupt is the sole mutator of the wake state,
@@ -1024,6 +1030,7 @@ extern "C" void USBD_IRQHandler(void){
 	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
 	{
 		nRFUsbdQueueEp0Setup();
+		return;
 	}
 
 	const bool dmaOwned = nRFUsbdDmaActive();
