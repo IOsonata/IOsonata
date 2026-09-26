@@ -1028,6 +1028,14 @@ extern "C" void USBD_IRQHandler(void){
 		return;
 	}
 
+	// A new SETUP supersedes the old EP0 transaction before any normal
+	// completion is interpreted.
+	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
+	{
+		nRFUsbdQueueEp0Setup();
+		return;
+	}
+
 	const bool dmaOwned = nRFUsbdDmaActive();
 	const int completed = dmaOwned ? nRFUsbdGetCompletedXfer() : -1;
 
@@ -1106,12 +1114,6 @@ extern "C" void USBD_IRQHandler(void){
 		NRF_USBD->EVENTCAUSE = eventCause;
 		(void)NRF_USBD->EVENTCAUSE;
 		nRFUsbdHandleBusEvent(eventCause);
-	}
-
-	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
-	{
-		nRFUsbdQueueEp0Setup();
-		return;
 	}
 
 	// EP0DATADONE is separate from EasyDMA completion. Clear acknowledged
