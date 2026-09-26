@@ -43,7 +43,6 @@ SOFTWARE.
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
-#include <stdio.h>
 
 #include "nrf.h"
 #include "nrf_peripherals.h"
@@ -158,81 +157,6 @@ alignas(4) static uint8_t s_Ep0QueMem[
 	CFIFO_TOTAL_MEMSIZE(NRFUSBD_EP0_QUE_DEPTH, sizeof(nRFEPPkt_t))];
 
 nRFUsbdState_t s_Usbd;
-
-// EP0 event trace for bench debugging. Read s_Ep0Trace in the debugger
-// after a failed enumeration; s_Ep0TraceIdx is the next slot (oldest entry).
-// Tags: R reset, S setup seen, A after abort, P after core, C completion
-// (Val = completed index, 0xFF none), X xfer emitted (Val = EpAddr),
-// D EP0 OUT data ready, Q EP0 IN start (Val = length), T EP0STATUS task.
-// Evts bits: 0 EP0DATADONE, 1 ENDEPIN0, 2 ENDEPOUT0, 3 EP0SETUP, 4 DMA busy,
-// 7 request direction IN.
-#ifndef NRFUSBD_EP0_TRACE
-#define NRFUSBD_EP0_TRACE			1
-#endif
-
-#if NRFUSBD_EP0_TRACE
-typedef struct __nRF_Ep0_Trace {
-	uint8_t Tag;
-	uint8_t Val;
-	uint8_t Req;
-	uint8_t Evts;
-	uint32_t EpStatus;
-} nRFEp0Trace_t;
-
-// One-shot: records from boot until full, then stops, so a dump taken later
-// shows the whole enumeration without being overwritten by later traffic.
-#define NRFUSBD_EP0_TRACE_DEPTH		512U
-
-static volatile nRFEp0Trace_t s_Ep0Trace[NRFUSBD_EP0_TRACE_DEPTH];
-static volatile uint16_t s_Ep0TraceIdx;
-
-static void nRFUsbdEp0Trace(uint8_t Tag, uint8_t Val)
-{
-	const uint32_t state = DisableInterrupt();
-	const uint16_t idx = s_Ep0TraceIdx;
-	if (idx >= NRFUSBD_EP0_TRACE_DEPTH)
-	{
-		EnableInterrupt(state);
-		return;
-	}
-	s_Ep0TraceIdx = (uint16_t)(idx + 1U);
-	volatile nRFEp0Trace_t *p = &s_Ep0Trace[idx];
-	p->Tag = Tag;
-	p->Val = Val;
-	p->Req = (uint8_t)NRF_USBD->BREQUEST;
-	p->Evts = (uint8_t)((NRF_USBD->EVENTS_EP0DATADONE != 0U) |
-		((NRF_USBD->EVENTS_ENDEPIN[0] != 0U) << 1) |
-		((NRF_USBD->EVENTS_ENDEPOUT[0] != 0U) << 2) |
-		((NRF_USBD->EVENTS_EP0SETUP != 0U) << 3) |
-		((NRFX_USBD_EASYDMA_BUSY_REG == NRFX_USBD_EASYDMA_BUSY_REG_BUSY) << 4) |
-		(NRF_USBD->BMREQUESTTYPE & 0x80U));
-	p->EpStatus = NRF_USBD->EPSTATUS;
-	EnableInterrupt(state);
-}
-#define EP0_TRACE(t, v)		nRFUsbdEp0Trace((t), (uint8_t)(v))
-
-// Print the recorded entries in order, from thread context (never from the
-// ISR). Call it from main a few seconds after UsbEnable, once the host has
-// given up. Columns: seq tag val req evts epstatus.
-void nRFUsbdEp0TraceDump(void)
-{
-	const uint16_t cnt = s_Ep0TraceIdx;
-	printf("EP0 trace, %u entries%s\r\n", (unsigned)cnt,
-		cnt >= NRFUSBD_EP0_TRACE_DEPTH ? " (full)" : "");
-	for (uint32_t i = 0U; i < cnt; i++)
-	{
-		const volatile nRFEp0Trace_t *p = &s_Ep0Trace[i];
-		printf("%3u %c %3u req %02x evts %02x eps %08lx\r\n", (unsigned)i,
-			p->Tag, (unsigned)p->Val, (unsigned)p->Req, (unsigned)p->Evts,
-			(unsigned long)p->EpStatus);
-	}
-}
-#else
-#define EP0_TRACE(t, v)
-void nRFUsbdEp0TraceDump(void)
-{
-}
-#endif
 
 extern bool nRFUsbdIsoStart(void) __attribute__((weak));
 
@@ -581,7 +505,6 @@ static __attribute__((noinline)) void nRFUsbdEmitXfer(uint8_t EpAddr, uint16_t L
 	evt.Xfer.Length = Length;
 	evt.Xfer.Result = USB_CTRLR_XFER_SUCCESS;
 	evt.Xfer.pBuffer = s_Usbd.Ep0Bounce;
-	EP0_TRACE('X', EpAddr);
 	UsbDevProcessEvent(0, &evt);
 }
 
@@ -709,7 +632,6 @@ void nRFUsbdDmaWait(void)
 // when the packet is short. The caller already owns EasyDMA.
 static __attribute__((noinline)) void nRFUsbdEp0InStart(const nRFEPPkt_t *p)
 {
-	EP0_TRACE('Q', p->Len);
 	NRF_USBD->EPIN[0].PTR = (uint32_t)(uintptr_t)p->Payload;
 	NRF_USBD->EPIN[0].MAXCNT = p->Len;
 	NRF_USBD->SHORTS = p->Len < NRFX_USBD_MAX_PACKET_SIZE ?
@@ -833,10 +755,9 @@ static void nRFUsbdResetState(void)
 	nRFUsbdDmaUnlock();
 }
 
-// A new SETUP supersedes whatever control transfer was in flight. This is
-// the nrfx usbd_ep_abort model: retire the EP0 DMA from its END event, free
-// the channel, disarm an IN packet the host never fetched, drop the software
-// state. Nothing here waits for the host.
+// A new SETUP supersedes whatever control transfer was in flight. Retire
+// any active EP0 DMA, disarm a staged IN packet the host never fetched, then
+// drop the old EP0 software state.
 static void nRFUsbdAbortEp0(void)
 {
 	const uint32_t dmastatus = NRF_USBD->EPSTATUS & 0x00010001UL;
@@ -1113,13 +1034,9 @@ static void nRFUsbdQueueEp0Setup(void)
 	NRF_USBD->EVENTS_EP0SETUP = 0U;
 	(void)NRF_USBD->EVENTS_EP0SETUP;
 
-	EP0_TRACE('S', setup[0] >> 8);
 	nRFUsbdAbortEp0();
-	EP0_TRACE('A', 0);
 
-	//(void)AppEvtHandlerQue(setup[0], (void *)(uintptr_t)setup[1],
 	nRFUsbdProcessEP0Setup(setup[0], (void *)(uintptr_t)setup[1]);
-	EP0_TRACE('P', 0);
 }
 
 
@@ -1128,7 +1045,6 @@ extern "C" void USBD_IRQHandler(void){
 	if (NRF_USBD->EVENTS_USBRESET != 0U)
 	{
 		NRF_USBD->EVENTS_USBRESET = 0U;
-		EP0_TRACE('R', 0);
 		nRFUsbdBusReset();
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESET);
 		return;
@@ -1147,7 +1063,6 @@ extern "C" void USBD_IRQHandler(void){
 
 	// Only a software-owned channel can have a transfer to retire.
 	const int completed = nRFUsbdDmaActive() ? nRFUsbdGetCompletedXfer() : -1;
-	EP0_TRACE('C', (uint8_t)completed);
 
 	// A completed transfer keeps software DMA ownership for immediate handoff.
 	// EP0 IN reaches this point only after ENDEPIN0 and EP0DATADONE.
@@ -1231,7 +1146,6 @@ extern "C" void USBD_IRQHandler(void){
 	{
 		if ((NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
 		{
-			EP0_TRACE('D', 0);
 			newDmaWork = true;
 		}
 		else if ((NRF_USBD->EPSTATUS & 1UL) == 0U)
@@ -1239,7 +1153,6 @@ extern "C" void USBD_IRQHandler(void){
 			// IN direction with no EP0 IN DMA captured: nothing to retire
 			// (status handshake or stray). Clear it or the interrupt
 			// re-enters until the next SETUP.
-			EP0_TRACE('Z', 0);
 			NRF_USBD->EVENTS_EP0DATADONE = 0U;
 			(void)NRF_USBD->EVENTS_EP0DATADONE;
 		}
@@ -1576,7 +1489,6 @@ bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr)
 	if (USB_ENDPADDR_IS_IN(EpAddr) ||
 		(NRF_USBD->SHORTS & USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk) == 0U)
 	{
-		EP0_TRACE('T', EpAddr);
 		NRF_USBD->TASKS_EP0STATUS = 1U;
 		(void)NRF_USBD->TASKS_EP0STATUS;
 	}
