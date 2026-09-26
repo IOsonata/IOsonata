@@ -79,58 +79,50 @@ bool nRFUsbdIsoStart(void)
 	if (dataFlag == 0U)
 		return false;
 
-	// SIZE.ISOOUT is meaningful only while the shared DMA channel is idle.
-	uint16_t outLen = 0U;
-	if ((dataFlag & NRFUSBD_ISO_OUT_READY) != 0U)
-	{
-		const uint32_t size = NRF_USBD->SIZE.ISOOUT;
-		if (size == 0U)
-		{
-			s_Usbd.IsoDataFlag &=
-				(uint8_t)~NRFUSBD_ISO_OUT_READY;
-			dataFlag &= (uint8_t)~NRFUSBD_ISO_OUT_READY;
-		}
-		else
-		{
-			outLen = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
-				0U : (uint16_t)size;
-		}
-	}
-
-	if (dataFlag == 0U)
-		return false;
-
 	uint8_t xferFlag = dataFlag & s_Usbd.IsoXferFlag;
 	if (xferFlag == 0U)
 		xferFlag = dataFlag & (uint8_t)(s_Usbd.IsoXferFlag ^ 0x03U);
 
-	if (xferFlag == NRFUSBD_ISO_IN_READY)
+	if (xferFlag == NRFUSBD_ISO_OUT_READY)
 	{
-		nRFUsbEpReg_t *pReg =
-			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1];
-		NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
-		NRF_USBD->ISOIN.MAXCNT = s_Usbd.IsoInDmaLen;
-		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOIN,
-			&NRF_USBD->EVENTS_ENDISOIN);
-	}
-	else
-	{
+		// Only inspect OUT hardware after OUT wins arbitration. If IN runs
+		// first, OUT remains pending and its packet may arrive during IN DMA.
+		const uint32_t size = NRF_USBD->SIZE.ISOOUT;
 		nRFUsbEpReg_t *pReg =
 			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
-		if (outLen > pReg->MaxPacketSize)
+		const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
+			0U : (uint16_t)size;
+
+		if (size == 0U || len > pReg->MaxPacketSize)
 		{
 			s_Usbd.IsoDataFlag &=
 				(uint8_t)~NRFUSBD_ISO_OUT_READY;
-			return false;
+			dataFlag &= (uint8_t)~NRFUSBD_ISO_OUT_READY;
+			xferFlag = dataFlag & NRFUSBD_ISO_IN_READY;
+			if (xferFlag == 0U)
+				return false;
 		}
-		NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
-		NRF_USBD->ISOOUT.MAXCNT = outLen;
-		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
-			&NRF_USBD->EVENTS_ENDISOOUT);
+		else
+		{
+			NRF_USBD->ISOOUT.PTR =
+				(uint32_t)(uintptr_t)pReg->pBuffer;
+			NRF_USBD->ISOOUT.MAXCNT = len;
+			nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
+				&NRF_USBD->EVENTS_ENDISOOUT);
+			s_Usbd.IsoXferFlag = NRFUSBD_ISO_IN_READY;
+			return true;
+		}
 	}
 
-	// IN and OUT are peers. Rotate preference only after a DMA actually starts.
-	s_Usbd.IsoXferFlag = xferFlag ^ 0x03U;
+	// IN is the selected transfer, either directly or because OUT was not
+	// ready in hardware yet.
+	nRFUsbEpReg_t *pReg =
+		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1];
+	NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
+	NRF_USBD->ISOIN.MAXCNT = s_Usbd.IsoInDmaLen;
+	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOIN,
+		&NRF_USBD->EVENTS_ENDISOIN);
+	s_Usbd.IsoXferFlag = NRFUSBD_ISO_OUT_READY;
 	return true;
 }
 
