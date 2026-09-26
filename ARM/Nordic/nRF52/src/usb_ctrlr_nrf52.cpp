@@ -988,16 +988,28 @@ extern "C" void USBD_IRQHandler(void)
 	const bool dmaOwned = nRFUsbdDmaActive();
 	const int completed = dmaOwned ? nRFUsbdGetCompletedXfer() : -1;
 
-	// A completed DMA keeps the software channel ownership and hands it
-	// directly to the next transfer. EP0 IN is the only exception: its DMA is
-	// finished at ENDEPIN0, but ownership stays reserved until EP0DATADONE
-	// advances the control transfer.
-	bool reuseDma = completed > 0;
+	// A completed DMA keeps the software channel ownership. EP0 IN consumes
+	// its own queue first; only an empty EP0 queue releases that ownership to
+	// the common EP0 -> ISO -> regular scheduler.
+	bool reuseDma = false;
 	bool newDmaWork = false;
 
 	if (completed >= 0)
 	{
-		if (completed == 8 || completed == 24)
+		if (completed == 0)
+		{
+			(void)CFifoGet(s_Usbd.hEp0Que);
+			nRFEPPkt_t *pEp0 =
+				(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
+			if (pEp0 != NULL)
+				nRFUsbdEp0InStart(pEp0);
+			else
+			{
+				nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
+				reuseDma = true;
+			}
+		}
+		else if (completed == 8 || completed == 24)
 		{
 			nRFUsbdIsoComplete(completed == 8);
 		}
@@ -1010,6 +1022,7 @@ extern "C" void USBD_IRQHandler(void)
 				(void)NRF_USBD->TASKS_EP0RCVOUT;
 				nRFUsbdEmitXfer(0U, amount);
 			}
+			reuseDma = true;
 		}
 		else if ((completed > 0 && completed < 8) ||
 			(completed > 16 && completed < 24))
@@ -1022,6 +1035,7 @@ extern "C" void USBD_IRQHandler(void)
 					USB_CTRLR_EVT_XFER_CMPL,
 					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 			}
+			reuseDma = true;
 		}
 	}
 
@@ -1053,28 +1067,12 @@ extern "C" void USBD_IRQHandler(void)
 		return;
 	}
 
-	// EP0DATADONE is protocol/data readiness, not DMA completion.
-	if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
+	// EP0DATADONE means EP0 OUT data is ready. Leave it latched until the
+	// priority scheduler starts EP0 OUT DMA.
+	if (NRF_USBD->EVENTS_EP0DATADONE != 0U &&
+		(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
 	{
-		if ((NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) != 0U)
-		{
-			// Host acknowledged the EP0 IN packet. Its ENDEPIN0 already freed
-			// the hardware channel; now the retained software ownership is reusable.
-			NRF_USBD->EVENTS_EP0DATADONE = 0U;
-			(void)CFifoGet(s_Usbd.hEp0Que);
-			if (CFifoPeek(s_Usbd.hEp0Que) == NULL)
-				nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
-			if (dmaOwned)
-				reuseDma = true;
-			else
-				newDmaWork = true;
-		}
-		else
-		{
-			// Host OUT packet is ready. Leave the event latched until the
-			// priority scheduler actually starts EP0 OUT DMA.
-			newDmaWork = true;
-		}
+		newDmaWork = true;
 	}
 
 	// EPDATASTATUS describes regular endpoint host-consumption / OUT readiness.
