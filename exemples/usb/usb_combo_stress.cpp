@@ -24,7 +24,6 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include <stdint.h>
 #include <string.h>
 
-#include "idelay.h"
 #include "cfifo.h"
 #include "prbs.h"
 #include "usb/usb.h"
@@ -33,9 +32,6 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "usb/usbd_cdc.h"
 #include "usb/usbd_epalloc.h"
 #include "usb/usbd_hid.h"
-
-extern void nRFUsbdEp0TraceDump(void);
-
 
 #define USB_DEVNO			0
 
@@ -711,19 +707,9 @@ int main()
 	}
 
 	(void)UsbEnable(USB_DEVNO);
-	uint32_t dumpTick = 0;
-
 	while (1)
 	{
 		UsbProcess(USB_DEVNO);
-		// Enumeration debug only: print the EP0 trace once, ~8 s after start.
-		if (dumpTick < 8000U)
-		{
-			msDelay(1);
-			if (++dumpTick == 8000U)
-				nRFUsbdEp0TraceDump();
-		}
-
 		if (loopbackPending > 0)
 		{
 			const int length = g_LoopbackCdc.Tx(
