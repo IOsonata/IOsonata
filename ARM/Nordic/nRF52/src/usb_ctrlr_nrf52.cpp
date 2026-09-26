@@ -1001,16 +1001,18 @@ extern "C" void USBD_IRQHandler(void)
 			if (NRF_USBD->EVENTS_EP0SETUP == 0U)
 			{
 				(void)CFifoGet(s_Usbd.hEp0Que);
-				nRFEPPkt_t *pEp0 =
+				nRFEPPkt_t *pep0 =
 					(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
-				if (pEp0 != NULL)
-					nRFUsbdEp0InStart(pEp0);
+				if (pep0 != NULL)
+					nRFUsbdEp0InStart(pep0);
 				else
 				{
 					nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
 					reuseDma = true;
 				}
 			}
+			else
+				reuseDma = true;
 		}
 		else if (completed == 8 || completed == 24)
 		{
@@ -1052,6 +1054,18 @@ extern "C" void USBD_IRQHandler(void)
 		nRFUsbdHandleSof();
 	}
 
+	// Keep the hot DMA-to-DMA handoff ahead of bus and EPDATA processing.
+	// SETUP and bus events retain priority by preventing a new start here.
+	if (reuseDma)
+	{
+		if ((NRF_USBD->EVENTS_EP0SETUP | NRF_USBD->EVENTS_USBEVENT) == 0U &&
+			nRFUsbdDmaAllowed())
+			nRFUsbdStartQueuedDma();
+		else
+			nRFUsbdDmaUnlock();
+		reuseDma = false;
+	}
+
 	if (NRF_USBD->EVENTS_USBEVENT != 0U)
 	{
 		NRF_USBD->EVENTS_USBEVENT = 0U;
@@ -1063,10 +1077,6 @@ extern "C" void USBD_IRQHandler(void)
 
 	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
 	{
-		// A completed DMA can be released before SETUP is deferred. An active
-		// DMA remains owned and its later completion interrupt will resolve it.
-		if (dmaOwned && completed >= 0)
-			nRFUsbdDmaUnlock();
 		nRFUsbdQueueEp0Setup();
 		return;
 	}
@@ -1133,21 +1143,10 @@ extern "C" void USBD_IRQHandler(void)
 	__DSB();
 	nRFUsbdTryRemoteWake();
 
-	// Completion answers the only handoff question: can the existing DMA
-	// ownership be reused? If yes, the priority scheduler either starts EP0,
-	// ISO or regular DMA immediately, or releases the ownership when empty.
-	if (reuseDma)
-	{
-		if (nRFUsbdDmaAllowed())
-			nRFUsbdStartQueuedDma();
-		else
-			nRFUsbdDmaUnlock();
-	}
-	else if (!dmaOwned && newDmaWork && nRFUsbdDmaAllowed())
-	{
-		nRFUsbdDmaLock();
-		nRFUsbdStartQueuedDma();
-	}
+	// Work discovered after the fast completion handoff may acquire an idle
+	// channel. If another DMA is already active this is a no-op.
+	if (newDmaWork)
+		nRFUsbdResumeQueuedDmaLocked();
 
 	nRFUsbdTryEnterLowPower();
 }
