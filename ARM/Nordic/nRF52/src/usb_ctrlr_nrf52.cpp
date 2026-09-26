@@ -998,20 +998,24 @@ extern "C" void USBD_IRQHandler(void)
 	{
 		if (completed == 0)
 		{
-			(void)CFifoGet(s_Usbd.hEp0Que);
-			nRFEPPkt_t *pEp0 =
-				(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
-			if (pEp0 != NULL)
-				nRFUsbdEp0InStart(pEp0);
-			else
+			if (NRF_USBD->EVENTS_EP0SETUP == 0U)
 			{
-				nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
-				reuseDma = true;
+				(void)CFifoGet(s_Usbd.hEp0Que);
+				nRFEPPkt_t *pEp0 =
+					(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
+				if (pEp0 != NULL)
+					nRFUsbdEp0InStart(pEp0);
+				else
+				{
+					nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
+					reuseDma = true;
+				}
 			}
 		}
 		else if (completed == 8 || completed == 24)
 		{
 			nRFUsbdIsoComplete(completed == 8);
+			reuseDma = true;
 		}
 		else if (completed == 16)
 		{
