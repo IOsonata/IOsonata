@@ -987,19 +987,19 @@ extern "C" void USBD_IRQHandler(void)
 
 	const bool dmaOwned = nRFUsbdDmaActive();
 	const int completed = dmaOwned ? nRFUsbdGetCompletedXfer() : -1;
-	bool scheduleDma = false;
+
+	// A completed DMA keeps the software channel ownership and hands it
+	// directly to the next transfer. EP0 IN is the only exception: its DMA is
+	// finished at ENDEPIN0, but ownership stays reserved until EP0DATADONE
+	// advances the control transfer.
+	bool reuseDma = completed > 0;
+	bool newDmaWork = false;
 
 	if (completed >= 0)
 	{
-		if (completed == 0)
-		{
-			// EP0 IN DMA is loaded, but the control packet remains current until
-			// EP0DATADONE acknowledges it. Keep DMA ownership until then.
-		}
-		else if (completed == 8 || completed == 24)
+		if (completed == 8 || completed == 24)
 		{
 			nRFUsbdIsoComplete(completed == 8);
-			scheduleDma = true;
 		}
 		else if (completed == 16)
 		{
@@ -1010,7 +1010,6 @@ extern "C" void USBD_IRQHandler(void)
 				(void)NRF_USBD->TASKS_EP0RCVOUT;
 				nRFUsbdEmitXfer(0U, amount);
 			}
-			scheduleDma = true;
 		}
 		else if ((completed > 0 && completed < 8) ||
 			(completed > 16 && completed < 24))
@@ -1023,12 +1022,11 @@ extern "C" void USBD_IRQHandler(void)
 					USB_CTRLR_EVT_XFER_CMPL,
 					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
 			}
-			scheduleDma = true;
 		}
 	}
 
-	// SOF is a generic core event only. Any resulting ISO transfer request is
-	// published through UsbCtrlrIsoSend like any other DMA source.
+	// SOF belongs to the generic USB core. The controller only sees any ISO
+	// work that core publishes back through UsbCtrlrIsoSend().
 	if (NRF_USBD->EVENTS_SOF != 0U)
 	{
 		NRF_USBD->EVENTS_SOF = 0U;
@@ -1047,41 +1045,39 @@ extern "C" void USBD_IRQHandler(void)
 
 	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
 	{
-		// A completed transfer retained scheduler ownership. SETUP takes over
-		// EP0 asynchronously, so release an idle channel before deferring it.
-		if (nRFUsbdDmaActive() && NRF_USBD->EPSTATUS == 0U)
+		// A completed DMA can be released before SETUP is deferred. An active
+		// DMA remains owned and its later completion interrupt will resolve it.
+		if (dmaOwned && completed >= 0)
 			nRFUsbdDmaUnlock();
 		nRFUsbdQueueEp0Setup();
 		return;
 	}
 
-	// EP0DATADONE is protocol/data readiness, not EasyDMA completion.
-	bool ep0InWait = nRFUsbdDmaActive() &&
-		NRF_USBD->EPSTATUS == 0U &&
-		(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) != 0U &&
-		CFifoPeek(s_Usbd.hEp0Que) != NULL;
-
+	// EP0DATADONE is protocol/data readiness, not DMA completion.
 	if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
 	{
 		if ((NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) != 0U)
 		{
-			// Host acknowledged the EP0 IN packet whose DMA already ended.
+			// Host acknowledged the EP0 IN packet. Its ENDEPIN0 already freed
+			// the hardware channel; now the retained software ownership is reusable.
 			NRF_USBD->EVENTS_EP0DATADONE = 0U;
 			(void)CFifoGet(s_Usbd.hEp0Que);
-			ep0InWait = false;
 			if (CFifoPeek(s_Usbd.hEp0Que) == NULL)
 				nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
-			scheduleDma = true;
+			if (dmaOwned)
+				reuseDma = true;
+			else
+				newDmaWork = true;
 		}
 		else
 		{
-			// Host OUT packet is ready. Leave EP0DATADONE latched until the
+			// Host OUT packet is ready. Leave the event latched until the
 			// priority scheduler actually starts EP0 OUT DMA.
-			scheduleDma = true;
+			newDmaWork = true;
 		}
 	}
 
-	// EPDATASTATUS is regular endpoint readiness/host-consumption state.
+	// EPDATASTATUS describes regular endpoint host-consumption / OUT readiness.
 	NRF_USBD->EVENTS_EPDATA = 0U;
 	const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
 	uint32_t servicedStatus = dataStatus & 0x00010001UL;
@@ -1119,7 +1115,7 @@ extern "C" void USBD_IRQHandler(void)
 				pQue->Len = pReg->MaxPacketSize;
 				pQue->pBuffer = pReg->pBuffer;
 				servicedStatus |= statusBit;
-				scheduleDma = true;
+				newDmaWork = true;
 			}
 		}
 		outData &= ~dataBit;
@@ -1129,25 +1125,20 @@ extern "C" void USBD_IRQHandler(void)
 	__DSB();
 	nRFUsbdTryRemoteWake();
 
-	// A completed transfer keeps scheduler ownership. Hand it directly to
-	// EP0, then ISO, then the regular FIFO without an unlock/relock window.
-	if (scheduleDma && !ep0InWait)
+	// Completion answers the only handoff question: can the existing DMA
+	// ownership be reused? If yes, the priority scheduler either starts EP0,
+	// ISO or regular DMA immediately, or releases the ownership when empty.
+	if (reuseDma)
 	{
-		if (nRFUsbdDmaActive())
-		{
-			if (NRF_USBD->EPSTATUS == 0U)
-			{
-				if (nRFUsbdDmaAllowed())
-					nRFUsbdStartQueuedDma();
-				else
-					nRFUsbdDmaUnlock();
-			}
-		}
-		else if (nRFUsbdDmaAllowed())
-		{
-			nRFUsbdDmaLock();
+		if (nRFUsbdDmaAllowed())
 			nRFUsbdStartQueuedDma();
-		}
+		else
+			nRFUsbdDmaUnlock();
+	}
+	else if (!dmaOwned && newDmaWork && nRFUsbdDmaAllowed())
+	{
+		nRFUsbdDmaLock();
+		nRFUsbdStartQueuedDma();
 	}
 
 	nRFUsbdTryEnterLowPower();
