@@ -268,7 +268,9 @@ static void TestBlocking(bool FullEvents)
     uint8_t out[8] = {};
     CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
     CHECK(out[0] == 0);
-    CHECK(!s_OutDma && s_Intrf.RxPending);
+    // Consuming a packet re-arms the held OUT buffer at once (0397e5d6);
+    // the transfer itself starts when the controller services the endpoint.
+    CHECK(!s_OutDma && !s_Intrf.RxPending);
     CHECK(s_OutSubmit == (int)RX_SLOTS);
     UsbCtrlrProcess(0);
     CHECK(s_OutDma);

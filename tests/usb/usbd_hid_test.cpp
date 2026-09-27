@@ -43,13 +43,19 @@ const UsbCfg_t *UsbGetCfg(int DevNo)
 
 bool UsbCtrlrHighSpeed(int) { return false; }
 
+// Opens are counted without limit, as the controller allows a pair to be
+// closed and opened again; the first two descriptors are kept for checks.
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 {
-	if (pDesc == nullptr || s_OpenCount >= 2)
+	if (pDesc == nullptr)
 	{
 		return false;
 	}
-	s_Open[s_OpenCount++] = *pDesc;
+	if (s_OpenCount < 2)
+	{
+		s_Open[s_OpenCount] = *pDesc;
+	}
+	s_OpenCount++;
 	return true;
 }
 

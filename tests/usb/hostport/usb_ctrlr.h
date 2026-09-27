@@ -169,7 +169,7 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
 static inline bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 								 uint16_t MaxPacketSize)
 {
-	UsbEndPointDesc_t desc = {0};
+	UsbEndPointDesc_t desc = {};
 	desc.bEndpointAddress = (uint8_t)(EpNo |
 		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
 	desc.bmAttributes = USB_ENDPATT_TRANS_ISO;
@@ -180,7 +180,7 @@ static inline bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 static inline bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn,
 									 uint8_t Type, uint16_t MaxPacketSize)
 {
-	UsbEndPointDesc_t desc = {0};
+	UsbEndPointDesc_t desc = {};
 	desc.bLength = sizeof(desc);
 	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
 	desc.bEndpointAddress = (uint8_t)(EpNo |
@@ -204,13 +204,8 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 					 uint16_t Length);
 // The controller owns the ISO OUT DMA buffer, sized to the port's ISO packet
-// limit. The hosted port hands out one shared buffer.
-static inline uint8_t *UsbCtrlrIsoRxBuffer(int DevNo)
-{
-	(void)DevNo;
-	static uint32_t s_IsoRxBuffer[(USB_CTRLR0_ISO_PKT_LEN_MAX + 3U) / 4U];
-	return (uint8_t *)s_IsoRxBuffer;
-}
+// limit. Each hosted test defines it with its other controller stubs.
+uint8_t *UsbCtrlrIsoRxBuffer(int DevNo);
 // IN returns bytes copied into the queue; completion notifies that it drained.
 // A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);

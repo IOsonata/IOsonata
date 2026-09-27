@@ -283,7 +283,8 @@ static void TestPolledRxOwnership(void)
 	uint8_t out[3] = {};
 	CHECK(DeviceIntrfRx(&intrf.pData->DevIntrf, 0, out, sizeof(out)) == 2);
 	CHECK(memcmp(out, first, sizeof(first)) == 0);
-	CHECK(s_OutBuffer == nullptr);
+	// Reading the slot frees it, so the held OUT buffer is re-armed at once.
+	CHECK(s_OutBuffer == intrf.pData->pRxBuffer);
 	Receive(second, sizeof(second));
 	CHECK(DeviceIntrfRx(&intrf.pData->DevIntrf, 0, out, sizeof(out)) == 3);
 	CHECK(memcmp(out, second, sizeof(second)) == 0);

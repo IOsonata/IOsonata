@@ -228,8 +228,7 @@ code += '\n'.join(function(name, intrf_source) for name in [
     'UsbIntrfEpSendByteMode', 'UsbIntrfTxBytes',
     'UsbIntrfCtrlrInEvent', 'UsbIntrfDirectReady', 'UsbIntrfDirectRxComplete',
     'UsbIntrfRegisterRx', 'UsbIntrfReleaseRx', 'UsbIntrfCompleteRx', 'UsbIntrfRetryRx',
-    'UsbIntrfCtrlrOutEvent', 'UsbIntrfRxData', 'UsbIntrfRxDirect', 'UsbIntrfUnconfigure',
-    'UsbIntrfRequestToSend'])
+    'UsbIntrfCtrlrOutEvent', 'UsbIntrfRxData', 'UsbIntrfRxDirect', 'UsbIntrfUnconfigure'])
 # Run the core's real submit/accounting function against controller Send too.
 code += 'struct {int DevNo;uint8_t *CtrlData;uint16_t CtrlDataLen,CtrlActual;} s_Core;\n'
 code += function('UsbCoreSendIn', (ROOT / 'src/usb/usb.cpp').read_text())
@@ -1239,7 +1238,6 @@ int main(int argc,char **argv){
    return mode==USB_INTRF_MODE_BYTE?p:((UsbPkt_t*)p)->Data;
   };
   for(unsigned i=0;i<3;++i)*payload(CFifoPut(intrf.hTxFifo))=0x10+i;
-  assert(UsbIntrfRequestToSend(&intrf,block)==!blocking);
   if(mode==USB_INTRF_MODE_PACKET)((UsbPkt_t*)input)->Hdr.Length=1;
   *payload(input)=0x99;
   const int accepted=mode==USB_INTRF_MODE_BYTE?

@@ -123,6 +123,8 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	s_InBusy[EpNum] = true;
 	return true;
 }
+static uint32_t s_IsoRxDma[(USB_CTRLR0_ISO_PKT_LEN_MAX + 3U) / 4U];
+uint8_t *UsbCtrlrIsoRxBuffer(int) { return (uint8_t *)s_IsoRxDma; }
 bool UsbCtrlrIsoSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
 	if (pBuffer == nullptr) return true;

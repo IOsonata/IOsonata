@@ -70,6 +70,8 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	if (Length > 0U) memcpy(s_InData, pBuffer, Length);
 	return true;
 }
+static uint32_t s_IsoRxDma[(USB_CTRLR0_ISO_PKT_LEN_MAX + 3U) / 4U];
+uint8_t *UsbCtrlrIsoRxBuffer(int) { return (uint8_t *)s_IsoRxDma; }
 bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *pBuffer, uint16_t Length)
 {
 	if (pBuffer == nullptr) return true;
@@ -88,24 +90,39 @@ static int s_Fail;
 
 static int s_RxCount;
 static int s_TxCount;
+static int s_TxEmptyEvents;
 static uint8_t s_LastRx[USB_ISO_INTRF_MAX_MPS];
 static uint16_t s_LastRxLen;
 
-static void RxFrame(UsbIsoIntrf_t *, const uint8_t *pData, uint16_t Length,
-					UsbCtrlrXferResult_t Result, void *)
+// Application callback, the DeviceIntrf model: pull frames with RxData on
+// RX_DATA, count sent frames on TX_READY / TX_FIFO_EMPTY.
+static int IsoEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
+					uint8_t *, int Length)
 {
-	if (Result == USB_CTRLR_XFER_SUCCESS)
+	switch (Event)
 	{
-		s_RxCount++;
-		s_LastRxLen = Length;
-		if (Length > 0U) memcpy(s_LastRx, pData, Length);
+		case DEVINTRF_EVT_RX_DATA:
+		{
+			int len;
+			int total = 0;
+			while ((len = DeviceIntrfRxData(pDev, s_LastRx, sizeof(s_LastRx))) > 0)
+			{
+				s_RxCount++;
+				s_LastRxLen = (uint16_t)len;
+				total += len;
+			}
+			return total;
+		}
+		case DEVINTRF_EVT_TX_FIFO_EMPTY:
+			s_TxEmptyEvents++;
+			s_TxCount++;
+			return Length;
+		case DEVINTRF_EVT_TX_READY:
+			s_TxCount++;
+			return Length;
+		default:
+			return 0;
 	}
-}
-
-static void TxFrame(UsbIsoIntrf_t *, uint16_t,
-					UsbCtrlrXferResult_t Result, void *)
-{
-	if (Result == USB_CTRLR_XFER_SUCCESS) s_TxCount++;
 }
 
 static void Receive(const uint8_t *pData, uint16_t Length)
@@ -139,21 +156,20 @@ int main(void)
 {
 	UsbIsoIntrf_t iso = {};
 	UsbDevIntrf_t isoData = {};
-	alignas(4) uint8_t rxBuffer[USB_INTRF_PKT_BLKSIZE(49U)] = {};
-	alignas(4) uint8_t txBuffer[USB_INTRF_PKT_BLKSIZE(49U)] = {};
+	alignas(4) uint8_t rxFifo[USB_ISO_INTRF_FIFO_MEMSIZE(49U)] = {};
+	alignas(4) uint8_t txFifo[USB_ISO_INTRF_FIFO_MEMSIZE(49U)] = {};
 	UsbIsoIntrfCfg_t cfg = {};
 	cfg.DevNo = 0;
 	cfg.EpNo = 8U;
 	cfg.BufferSize = 49U;
-	cfg.pRxBuffer = rxBuffer;
-	cfg.pTxBuffer = txBuffer;
-	cfg.RxHandler = RxFrame;
-	cfg.TxHandler = TxFrame;
+	cfg.pRxFifoMem = rxFifo;
+	cfg.pTxFifoMem = txFifo;
+	cfg.EvtCB = IsoEvent;
 
 	CHECK(UsbIsoIntrfInit(&iso, &isoData, &cfg));
-	CHECK(iso.pData->Mode == USB_INTRF_MODE_DIRECT);
-	CHECK(iso.pData->hRxFifo == nullptr);
-	CHECK(iso.pData->hTxFifo == nullptr);
+	CHECK(iso.pData->Mode == USB_INTRF_MODE_PACKET);
+	CHECK(iso.pData->hRxFifo != nullptr && iso.pData->hTxFifo != nullptr);
+	CHECK(s_OutBuffer == UsbCtrlrIsoRxBuffer(0));
 	CHECK(UsbIsoIntrfOpen(&iso, 49U, 1U));
 	CHECK(s_OpenCount == 2);
 
@@ -176,16 +192,19 @@ int main(void)
 	CHECK(s_TxCount == 1);
 	CHECK(UsbIsoIntrfTxReady(&iso));
 
-	// Zero-length traffic is a valid frame, not an idle/free-slot marker.
+	// Zero-length traffic is a valid frame on the wire. Sent, it is
+	// offered and completed like any other; received, RxData skips it and
+	// counts it.
 	CHECK(UsbIsoIntrfSendFrame(&iso, nullptr, 0U));
 	Sof();
 	CHECK(s_InBusy);
 	CHECK(s_InLength == 0U);
 	Receive(nullptr, 0U);
-	CHECK(s_RxCount == 2);
-	CHECK(s_LastRxLen == 0U);
+	CHECK(s_RxCount == 1);
+	CHECK(iso.RxEmptyCnt == 1U);
 	CompleteIn();
-	CHECK(s_TxCount == 2);
+	CHECK(s_TxCount == 2 && s_TxEmptyEvents == 2);
+	CHECK(iso.TxEmptyCnt == 1U);
 	CHECK(UsbIsoIntrfTxReady(&iso));
 
 	UsbIsoIntrfClose(&iso);

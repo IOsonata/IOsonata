@@ -959,6 +959,8 @@ static bool TestIsoSofScheduling(void)
 	CHECK(UsbDescRegister(TEST_DEVNO, &s_FixtureClass,
 		s_IsoConfigDesc, sizeof(s_IsoConfigDesc), nullptr));
 	CHECK(UsbEnable(TEST_DEVNO));
+	// SET_CONFIGURATION is refused in the Default state (USB 2.0 9.4.7).
+	CHECK(SetAddress(5));
 	CHECK(SetConfig(1));
 	CHECK(!s_Ctrlr.SofEnabled);
 

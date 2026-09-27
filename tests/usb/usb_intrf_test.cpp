@@ -325,9 +325,11 @@ static void TestBackpressure(void)
     uint8_t out[8] = {};
     CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
     CHECK(out[0] == 0U);
+    // Consuming a packet frees FIFO space, so RxData re-arms the held OUT
+    // buffer right away (0397e5d6). No DMA runs until the controller
+    // services the endpoint again.
     CHECK(!s_OutDma);
-    CHECK(s_Intrf.RxPending);
-    // The controller foreground retry, not RxData, schedules held OUT data.
+    CHECK(!s_Intrf.RxPending);
     s_OutHandler(USB_CTRLR_EVT_DRDY,
                  0U, s_OutContext);
 	ReceiveDma();
@@ -436,7 +438,7 @@ static void TestTxAccumulatesDuringTransfer(void)
 static void TestTxPacketMode(void)
 {
     CHECK(SetupPacketMode());
-    CHECK(UsbIntrfRequestToSend(&s_Intrf, PACKET_BLOCK_SIZE));
+    CHECK(CFifoAvail(s_Intrf.hTxFifo) > 0);
     alignas(4) uint8_t packets[PACKET_BLOCK_SIZE * 2U] = {};
     UsbPkt_t *p1 = PacketAt(packets, 0);
     UsbPkt_t *p2 = PacketAt(packets, 1);
@@ -497,7 +499,7 @@ static void TestTxPacketFull(void)
     CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, queued, sizeof(queued)) ==
           (int)(sizeof(queued) - PACKET_BLOCK_SIZE));
     CHECK(CFifoUsed(s_Intrf.hTxFifo) == (int)PACKET_SLOTS);
-    CHECK(!UsbIntrfRequestToSend(&s_Intrf, PACKET_BLOCK_SIZE));
+    CHECK(CFifoAvail(s_Intrf.hTxFifo) == 0);
 
     for (unsigned i = 0; i < PACKET_SLOTS - 1U; i++)
     {

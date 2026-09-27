@@ -17,6 +17,24 @@ assert 'if (s_UsbDevStarted)' in core
 assert 'if (!s_UsbDevStarted)' in core
 assert core.index('UsbCtrlrStart(') < core.index('s_UsbDevStarted = true;')
 
+# Stop is split: the core quiets the bus and the endpoints, then the
+# controller releases the peripheral and its clock.
+def body(source, signature):
+    start = source.index(signature)
+    brace = source.index('{', start)
+    end, depth = brace + 1, 1
+    while depth:
+        depth += (source[end] == '{') - (source[end] == '}')
+        end += 1
+    return source[brace + 1:end - 1]
+
+
+core_stop = body(core, 'static void UsbCoreStop(void)')
+dev_disable = body(core, 'static void UsbDevDisable(void)')
+assert (core_stop.index('UsbCtrlrDisconnect(') < core_stop.index('UsbCtrlrIntDisable(')
+        < core_stop.index('UsbCtrlrEpCloseAll('))
+assert dev_disable.index('UsbCoreStop();') < dev_disable.index('UsbCtrlrStop(')
+
 
 def function(name):
     match = re.search(r'(?:bool|void)\s+' + name + r'\([^;{}]*\)\s*\{', src)
@@ -167,9 +185,11 @@ int main(){
   if(success){
    assert(irqPriority==6);
    UsbCtrlrStop(0);
-   assert(clockRefs==0 && releases==1 && irqDisables==1);
-   assert(waits==1 && resets==1);
-   assert(regs.INTEN==0 && regs.USBPULLUP==0 && regs.ENABLE==0);
+   // The controller's part: state, interrupt enables, peripheral, clock.
+   assert(clockRefs==0 && releases==1 && resets==1);
+   assert(regs.INTEN==0 && regs.ENABLE==0);
+   // Pull-up, NVIC and endpoint DMA were the core's, before this call.
+   assert(irqDisables==0 && waits==0 && regs.USBPULLUP==1);
   }
  }
  init();

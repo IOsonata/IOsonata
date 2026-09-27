@@ -191,7 +191,9 @@ static void TestDrdyPolicy(void)
 		uint8_t output[3];
 		CHECK(DeviceIntrfRxData(&intrf.DevIntrf, output, sizeof(output)) == 3);
 		CHECK(memcmp(output, packet, sizeof(packet)) == 0);
-		CHECK(s_OutBuffer == nullptr && intrf.RxPending);
+		// Reading the slot re-arms the held OUT buffer at once (0397e5d6);
+		// no transfer starts until the controller services the endpoint.
+		CHECK(!intrf.RxPending && s_OutBuffer == intrf.pRxBuffer);
 		CHECK(s_OutXferCount == submits);
 		UsbCtrlrProcess(0);
 		CHECK(!intrf.RxPending && s_OutBuffer == intrf.pRxBuffer);
@@ -219,9 +221,9 @@ static void TestTx(void)
 	const uint8_t data[] = {9U, 8U, 7U};
 	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, data, sizeof(data)) == 3);
 	CHECK(s_InLength == 3U && memcmp(s_InBuffer, data, sizeof(data)) == 0);
-	CHECK(!UsbIntrfRequestToSend(&intrf, 1));
+	CHECK((intrf.pTxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) != 0U);
 	s_InHandler(USB_CTRLR_EVT_XFER_CMPL, 3U, s_InContext);
-	CHECK(UsbIntrfRequestToSend(&intrf, 0));
+	CHECK((intrf.pTxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) == 0U);
 	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, nullptr, 0) == 0);
 	CHECK(!atomic_load(&intrf.DevIntrf.bTxReady));
 	s_InHandler(USB_CTRLR_EVT_CANCEL, 0U, s_InContext);
