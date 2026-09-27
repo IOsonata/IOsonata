@@ -94,6 +94,12 @@ static void UsbIntIntrfEnable(DevIntrf_t * const pDev)
 		static_cast<UsbIntIntrf_t *>(pData->pClassContext));
 }
 
+static void UsbIntIntrfResetDev(DevIntrf_t * const pDev)
+{
+	UsbDevIntrf_t *pData = static_cast<UsbDevIntrf_t *>(pDev->pDevData);
+	UsbIntIntrfReset(static_cast<UsbIntIntrf_t *>(pData->pClassContext));
+}
+
 static int UsbIntIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 								uint8_t *pBuffer, int Length)
 {
@@ -192,6 +198,7 @@ bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	pIntrf->pData->pClassContext = pIntrf;
 	pIntrf->pData->DevIntrf.Disable = UsbIntIntrfDisable;
 	pIntrf->pData->DevIntrf.Enable = UsbIntIntrfEnable;
+	pIntrf->pData->DevIntrf.Reset = UsbIntIntrfResetDev;
 	return true;
 }
 

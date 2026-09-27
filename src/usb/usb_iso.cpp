@@ -51,12 +51,51 @@ static bool UsbIsoIntrfEpSupported(int DevNo, uint8_t EpNo)
 // Close both directions of the endpoint pair, then drop the data path.
 static void UsbIsoIntrfRelease(UsbIsoIntrf_t *pIntrf, bool bCloseEp)
 {
+	pIntrf->Opened = false;
 	if (bCloseEp)
 	{
 		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, false);
 		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, true);
 	}
 	UsbIntrfUnconfigure(pIntrf->pData);
+}
+
+static bool UsbIsoIntrfActivate(UsbIsoIntrf_t *pIntrf)
+{
+	if (pIntrf->Opened)
+	{
+		return true;
+	}
+	if (pIntrf->Mps == 0U || !UsbIntrfConfigure(pIntrf->pData, pIntrf->Mps))
+	{
+		return false;
+	}
+	if (!UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, true,
+			pIntrf->Mps) ||
+		!UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, false,
+			pIntrf->Mps))
+	{
+		UsbIsoIntrfRelease(pIntrf, true);
+		return false;
+	}
+	pIntrf->Opened = true;
+	return true;
+}
+
+static void UsbIsoIntrfDisable(DevIntrf_t * const pDev)
+{
+	UsbIsoIntrf_t *pIntrf = UsbIsoIntrfFromDev(pDev);
+	UsbIsoIntrfRelease(pIntrf, pIntrf->Opened);
+}
+
+static void UsbIsoIntrfEnable(DevIntrf_t * const pDev)
+{
+	(void)UsbIsoIntrfActivate(UsbIsoIntrfFromDev(pDev));
+}
+
+static void UsbIsoIntrfResetDev(DevIntrf_t * const pDev)
+{
+	UsbIsoIntrfReset(UsbIsoIntrfFromDev(pDev));
 }
 
 static void UsbIsoIntrfNotify(UsbIsoIntrf_t *pIntrf, DEVINTRF_EVT Event,
@@ -178,6 +217,9 @@ static void UsbIsoIntrfTxComplete(UsbIsoIntrf_t *pIntrf,
 
 	const uint16_t length = pPacket->Hdr.Length;
 	(void)CFifoGet(hTx);
+	const bool empty = CFifoUsed(hTx) == 0;
+	atomic_store_explicit(&pIntrf->pData->DevIntrf.bTxReady, empty,
+		memory_order_release);
 
 	if (Result != USB_CTRLR_XFER_SUCCESS)
 	{
@@ -189,8 +231,8 @@ static void UsbIsoIntrfTxComplete(UsbIsoIntrf_t *pIntrf,
 	{
 		pIntrf->TxEmptyCnt++;
 	}
-	UsbIsoIntrfNotify(pIntrf, CFifoUsed(hTx) > 0 ?
-		DEVINTRF_EVT_TX_READY : DEVINTRF_EVT_TX_FIFO_EMPTY, length);
+	UsbIsoIntrfNotify(pIntrf, empty ?
+		DEVINTRF_EVT_TX_FIFO_EMPTY : DEVINTRF_EVT_TX_READY, length);
 }
 
 // Controller callback for the ISO IN endpoint. The interval and the IN
@@ -293,38 +335,35 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	pIntrf->pData->DevIntrf.TxData = UsbIsoIntrfTxData;
 	pIntrf->pData->DevIntrf.TxSrData = UsbIsoIntrfTxData;
 	pIntrf->pData->pClassContext = pIntrf;
+	pIntrf->pData->DevIntrf.Disable = UsbIsoIntrfDisable;
+	pIntrf->pData->DevIntrf.Enable = UsbIsoIntrfEnable;
+	pIntrf->pData->DevIntrf.Reset = UsbIsoIntrfResetDev;
 	return true;
 }
 
 bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval)
 {
-	if (pIntrf == nullptr ||
+	if (pIntrf == nullptr || pIntrf->pData == nullptr ||
 		Mps == 0U || Mps > USB_ISO_INTRF_MAX_MPS ||
+		Mps > pIntrf->pData->BufferSize ||
 		Interval == 0U || Interval > 16U)
 	{
 		return false;
 	}
 
 	UsbIsoIntrfClose(pIntrf);
-	if (!UsbIntrfConfigure(pIntrf->pData, Mps))
-	{
-		return false;
-	}
-
 	pIntrf->Mps = Mps;
 	pIntrf->Interval = Interval;
-	pIntrf->Suspended = false;
 
-	if (!UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, true, Mps) ||
-		!UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, false, Mps))
+	if (atomic_load_explicit(&pIntrf->pData->DevIntrf.EnCnt,
+			memory_order_acquire) > 0 &&
+		!UsbIsoIntrfActivate(pIntrf))
 	{
-		UsbIsoIntrfRelease(pIntrf, true);
 		pIntrf->Mps = 0U;
 		pIntrf->Interval = 0U;
 		return false;
 	}
 
-	pIntrf->Opened = true;
 	return true;
 }
 
@@ -336,7 +375,6 @@ void UsbIsoIntrfClose(UsbIsoIntrf_t *pIntrf)
 	}
 
 	UsbIsoIntrfRelease(pIntrf, pIntrf->Opened);
-	pIntrf->Opened = false;
 	pIntrf->Suspended = false;
 	pIntrf->Mps = 0U;
 	pIntrf->Interval = 0U;
@@ -358,7 +396,7 @@ void UsbIsoIntrfReset(UsbIsoIntrf_t *pIntrf)
 
 void UsbIsoIntrfSuspend(UsbIsoIntrf_t *pIntrf)
 {
-	if (pIntrf != nullptr && pIntrf->Opened)
+	if (pIntrf != nullptr && pIntrf->Mps != 0U)
 	{
 		pIntrf->Suspended = true;
 	}
@@ -366,7 +404,7 @@ void UsbIsoIntrfSuspend(UsbIsoIntrf_t *pIntrf)
 
 bool UsbIsoIntrfResume(UsbIsoIntrf_t *pIntrf)
 {
-	if (pIntrf == nullptr || !pIntrf->Opened)
+	if (pIntrf == nullptr || pIntrf->Mps == 0U)
 	{
 		return false;
 	}
@@ -378,16 +416,17 @@ bool UsbIsoIntrfResume(UsbIsoIntrf_t *pIntrf)
 bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 						  uint16_t Length)
 {
+	// Check state and fill under interrupt exclusion: a lifecycle event
+	// must not close the interface between accepting and queuing the frame.
+	const uint32_t state = DisableInterrupt();
 	if (pIntrf == nullptr ||
 		!pIntrf->Opened || pIntrf->Suspended || Length > pIntrf->Mps ||
 		(Length != 0U && pData == nullptr))
 	{
+		EnableInterrupt(state);
 		return false;
 	}
 
-	// Fill under interrupt exclusion: the completion path reads the head
-	// slot, the service interval offers it, both from interrupt context.
-	const uint32_t state = DisableInterrupt();
 	UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(
 		CFifoPut(pIntrf->pData->hTxFifo));
 	if (pPacket == nullptr)
@@ -401,6 +440,8 @@ bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 	{
 		memcpy(pPacket->Data, pData, Length);
 	}
+	atomic_store_explicit(&pIntrf->pData->DevIntrf.bTxReady, false,
+		memory_order_release);
 	EnableInterrupt(state);
 	return true;
 }

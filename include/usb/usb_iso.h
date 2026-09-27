@@ -95,10 +95,10 @@ typedef struct __Usb_Iso_Interf_Config {
 
 struct __Usb_Iso_Interf {
 	UsbDevIntrf_t *pData;		//!< Shared endpoint data path
-	uint16_t Mps;
+	uint16_t Mps;			//!< Requested packet size, retained while disabled
 	uint8_t EpNo;
 	uint8_t Interval;
-	bool Opened;
+	bool Opened;			//!< Endpoint pair is active
 	bool Suspended;
 	void *pContext;
 	uint32_t RxMissCnt;			//!< Frames larger than the packet size
@@ -115,7 +115,11 @@ extern "C" {
 bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 					 const UsbIsoIntrfCfg_t *pCfg);
 
-/** Open the internally assigned endpoint pair as isochronous. */
+/**
+ * Configure the endpoint pair as isochronous and open it when enabled.
+ * DeviceIntrfDisable closes the endpoints and discards queued frames;
+ * DeviceIntrfEnable restores this configuration. Close and Reset discard it.
+ */
 bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval);
 void UsbIsoIntrfClose(UsbIsoIntrf_t *pIntrf);
 void UsbIsoIntrfReset(UsbIsoIntrf_t *pIntrf);
@@ -124,13 +128,14 @@ bool UsbIsoIntrfResume(UsbIsoIntrf_t *pIntrf);
 
 /**
  * Queue one IN frame for a later service interval. This is what TxData does
- * for one call. Returns false when the interface is closed or suspended,
- * the frame is oversize, or the queue already holds
+ * for one call. Returns false when the interface is closed, disabled or
+ * suspended, the frame is oversize, or the queue already holds
  * USB_ISO_INTRF_FIFO_PKTCNT frames.
  */
 bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 						  uint16_t Length);
 
+/** Queue space is available; DevIntrf.bTxReady instead means TX has drained. */
 static inline bool UsbIsoIntrfTxReady(const UsbIsoIntrf_t *pIntrf)
 {
 	return pIntrf != NULL &&

@@ -18,8 +18,9 @@ static bool s_OutBusy;
 static bool s_InBusy;
 static uint16_t s_InLength;
 static uint8_t s_InData[USB_ISO_INTRF_MAX_MPS];
-static UsbEndPointDesc_t s_Open[4];
+static UsbEndPointDesc_t s_Open[16];
 static int s_OpenCount;
+static int s_OpenFailAt = -1;
 static int s_CloseCount;
 static int s_InXferCount;
 static bool s_XferOk = true;
@@ -63,7 +64,8 @@ void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool Blocking,
 
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 {
-	if (DevNo != 0 || pDesc == nullptr || s_OpenCount >= 4)
+	if (DevNo != 0 || pDesc == nullptr || s_OpenCount == s_OpenFailAt ||
+		s_OpenCount >= (int)(sizeof(s_Open) / sizeof(s_Open[0])))
 		return false;
 	s_Open[s_OpenCount++] = *pDesc;
 	return true;
@@ -123,6 +125,7 @@ static uint16_t s_LastRxLength;
 static uint16_t s_LastTxLength;
 static uint8_t s_LastRx[USB_ISO_INTRF_MAX_MPS];
 static void *s_LastContext;
+static bool s_RequeueTx;
 
 static int IsoEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 					uint8_t *, int Length)
@@ -156,6 +159,13 @@ static int IsoEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 			s_TxCount++;
 			s_TxEmptyCount++;
 			s_LastTxLength = (uint16_t)Length;
+			if (s_RequeueTx)
+			{
+				s_RequeueTx = false;
+				CHECK(atomic_load(&pDev->bTxReady));
+				const uint8_t data = 0xA5;
+				CHECK(DeviceIntrfTx(pDev, 0, &data, 1) == 1);
+			}
 			return Length;
 		case DEVINTRF_EVT_TX_TIMEOUT:
 			s_TxTimeoutCount++;
@@ -183,6 +193,7 @@ static void ResetFake(void)
 	memset(s_Open, 0, sizeof(s_Open));
 	memset(s_LastRx, 0, sizeof(s_LastRx));
 	s_OpenCount = 0;
+	s_OpenFailAt = -1;
 	s_CloseCount = 0;
 	s_InXferCount = 0;
 	s_XferOk = true;
@@ -196,6 +207,7 @@ static void ResetFake(void)
 	s_LastRxLength = 0U;
 	s_LastTxLength = 0U;
 	s_LastContext = nullptr;
+	s_RequeueTx = false;
 }
 
 static int s_Context;
@@ -280,6 +292,136 @@ static void TestLifecycle(void)
 	CHECK(s_CloseCount == 2);
 }
 
+static void TestDeviceReset(void)
+{
+	ResetFake();
+	UsbIsoIntrf_t iso = {};
+	UsbDevIntrf_t data = {};
+	auto cfg = MakeCfg();
+	CHECK(UsbIsoIntrfInit(&iso, &data, &cfg));
+	CHECK(UsbIsoIntrfOpen(&iso, 25U, 1U));
+	CHECK(UsbIsoIntrfSendFrame(&iso, nullptr, 0U));
+	Sof();
+	CHECK(s_InBusy);
+	iso.RxMissCnt = iso.TxMissCnt = iso.RxEmptyCnt = iso.TxEmptyCnt = 1U;
+	UsbIsoIntrfSuspend(&iso);
+	DeviceIntrfReset(&data.DevIntrf);
+	CHECK(!iso.Opened && !iso.Suspended && !s_InBusy);
+	CHECK(iso.Mps == 0U && iso.Interval == 0U && data.Mps == 0U);
+	CHECK(s_CloseCount == 2 && CFifoUsed(data.hTxFifo) == 0);
+	CHECK(iso.RxMissCnt == 0U && iso.TxMissCnt == 0U);
+	CHECK(iso.RxEmptyCnt == 0U && iso.TxEmptyCnt == 0U);
+	CHECK(atomic_load(&data.DevIntrf.bTxReady));
+	DeviceIntrfDisable(&data.DevIntrf);
+	DeviceIntrfEnable(&data.DevIntrf);
+	CHECK(!iso.Opened && s_OpenCount == 2 && s_CloseCount == 2);
+}
+
+static void TestDisableEnable(void)
+{
+	ResetFake();
+	UsbIsoIntrf_t iso = {};
+	UsbDevIntrf_t data = {};
+	auto cfg = MakeCfg();
+	CHECK(UsbIsoIntrfInit(&iso, &data, &cfg));
+	CHECK(UsbIsoIntrfOpen(&iso, 25U, 2U));
+	const uint8_t frame = 0x5A;
+	CHECK(DeviceIntrfTx(&data.DevIntrf, 0, &frame, 1) == 1);
+	Sof();
+	CHECK(s_InBusy);
+	s_Drain = false;
+	Receive(&frame, 1U);
+	CHECK(CFifoUsed(data.hRxFifo) == 1);
+
+	// Only the last shared-interface release closes the endpoint pair.
+	DeviceIntrfEnable(&data.DevIntrf);
+	CHECK(atomic_load(&data.DevIntrf.EnCnt) == 2 && s_OpenCount == 2);
+	DeviceIntrfDisable(&data.DevIntrf);
+	CHECK(iso.Opened && s_InBusy && s_CloseCount == 0);
+	DeviceIntrfDisable(&data.DevIntrf);
+	CHECK(!iso.Opened && !s_InBusy && s_CloseCount == 2);
+	CHECK(data.Mps == 0U && iso.Mps == 25U && iso.Interval == 2U);
+	CHECK(CFifoUsed(data.hRxFifo) == 0 && CFifoUsed(data.hTxFifo) == 0);
+	CHECK(atomic_load(&data.DevIntrf.bTxReady));
+	CHECK(DeviceIntrfTx(&data.DevIntrf, 0, &frame, 1) == 0);
+	CHECK(!UsbIsoIntrfSendFrame(&iso, nullptr, 0U));
+	CHECK(!UsbIsoIntrfTxReady(&iso));
+	Sof();
+	CHECK(s_InXferCount == 1);
+
+	// USB suspend/resume and DeviceIntrf enable ownership are independent.
+	UsbIsoIntrfSuspend(&iso);
+	CHECK(iso.Suspended);
+	CHECK(UsbIsoIntrfResume(&iso));
+	CHECK(!iso.Opened && !UsbIsoIntrfTxReady(&iso));
+	UsbIsoIntrfSuspend(&iso);
+	DeviceIntrfEnable(&data.DevIntrf);
+	CHECK(iso.Opened && data.Mps == 25U && s_OpenCount == 4);
+	CHECK(iso.Suspended && !UsbIsoIntrfTxReady(&iso));
+	Sof();
+	CHECK(s_InXferCount == 1);
+	CHECK(UsbIsoIntrfResume(&iso));
+	CHECK(DeviceIntrfTx(&data.DevIntrf, 0, &frame, 1) == 1);
+	Sof(1U);
+	CHECK(!s_InBusy);
+	Sof(2U);
+	CHECK(s_InBusy);
+	CompleteIn();
+	CHECK(s_TxCount == 1 && atomic_load(&data.DevIntrf.bTxReady));
+	UsbIsoIntrfClose(&iso);
+}
+
+static void TestOpenWhileDisabled(void)
+{
+	ResetFake();
+	UsbIsoIntrf_t iso = {};
+	UsbDevIntrf_t data = {};
+	auto cfg = MakeCfg();
+	cfg.BufferSize = 25U;
+	CHECK(UsbIsoIntrfInit(&iso, &data, &cfg));
+	DeviceIntrfDisable(&data.DevIntrf);
+	CHECK(!UsbIsoIntrfOpen(&iso, 26U, 1U));
+	CHECK(UsbIsoIntrfOpen(&iso, 25U, 1U));
+	CHECK(!iso.Opened && data.Mps == 0U && s_OpenCount == 0);
+	CHECK(!UsbIsoIntrfSendFrame(&iso, nullptr, 0U));
+	DeviceIntrfEnable(&data.DevIntrf);
+	CHECK(iso.Opened && data.Mps == 25U && s_OpenCount == 2);
+	DeviceIntrfDisable(&data.DevIntrf);
+	DeviceIntrfReset(&data.DevIntrf);
+	DeviceIntrfEnable(&data.DevIntrf);
+	CHECK(!iso.Opened && iso.Mps == 0U && s_OpenCount == 2);
+	CHECK(s_CloseCount == 2);
+}
+
+static void TestOpenFailure(void)
+{
+	// An IN or OUT open failure must leave the data path inactive.
+	for (int fail = 0; fail < 2; fail++)
+	{
+		ResetFake();
+		UsbIsoIntrf_t iso = {};
+		UsbDevIntrf_t data = {};
+		auto cfg = MakeCfg();
+		CHECK(UsbIsoIntrfInit(&iso, &data, &cfg));
+		s_OpenFailAt = fail;
+		CHECK(!UsbIsoIntrfOpen(&iso, 25U, 1U));
+		CHECK(!iso.Opened && iso.Mps == 0U && data.Mps == 0U);
+		CHECK(s_CloseCount == 2);
+		DeviceIntrfDisable(&data.DevIntrf);
+		CHECK(UsbIsoIntrfOpen(&iso, 25U, 1U));
+		DeviceIntrfEnable(&data.DevIntrf);
+		CHECK(!iso.Opened && iso.Mps == 25U && data.Mps == 0U);
+		CHECK(s_CloseCount == 4);
+		CHECK(!UsbIsoIntrfTxReady(&iso));
+		CHECK(!UsbIsoIntrfSendFrame(&iso, nullptr, 0U));
+		DeviceIntrfDisable(&data.DevIntrf);
+		s_OpenFailAt = -1;
+		DeviceIntrfEnable(&data.DevIntrf);
+		CHECK(iso.Opened && data.Mps == 25U);
+		UsbIsoIntrfClose(&iso);
+	}
+}
+
 static void TestRx(void)
 {
 	ResetFake();
@@ -343,17 +485,20 @@ static void TestTx(void)
 	auto cfg = MakeCfg();
 	CHECK(UsbIsoIntrfInit(&iso, &isoData, &cfg));
 	CHECK(UsbIsoIntrfOpen(&iso, 9U, 1U));
+	CHECK(atomic_load(&isoData.DevIntrf.bTxReady));
 
 	// Two frames fit, the third is refused; the head goes out at SOF and
 	// stays queued until its completion pops it.
 	const uint8_t frame[] = {0x11,0x22,0x33,0x44};
 	const uint8_t second[] = {0x55,0x66};
 	CHECK(DeviceIntrfTxData(&iso.pData->DevIntrf, frame, sizeof(frame)) == (int)sizeof(frame));
+	CHECK(!atomic_load(&isoData.DevIntrf.bTxReady));
 	CHECK(UsbIsoIntrfSendFrame(&iso, second, sizeof(second)));
 	CHECK(!UsbIsoIntrfSendFrame(&iso, frame, sizeof(frame)));
 	CHECK(!UsbIsoIntrfTxReady(&iso));
 	Sof();
 	CHECK(s_InBusy && s_InLength == sizeof(frame));
+	CHECK(!atomic_load(&isoData.DevIntrf.bTxReady));
 	CHECK(memcmp(s_InData, frame, sizeof(frame)) == 0);
 	CHECK(CFifoUsed(iso.pData->hTxFifo) == 2);
 
@@ -368,6 +513,7 @@ static void TestTx(void)
 	CHECK(s_LastTxLength == sizeof(frame));
 	CHECK(CFifoUsed(iso.pData->hTxFifo) == 1);
 	CHECK(UsbIsoIntrfTxReady(&iso));
+	CHECK(!atomic_load(&isoData.DevIntrf.bTxReady));
 
 	// Second frame: TX_FIFO_EMPTY when the queue drains.
 	Sof(2U);
@@ -376,19 +522,23 @@ static void TestTx(void)
 	CHECK(s_TxCount == 2 && s_TxEmptyCount == 1);
 	CHECK(s_LastTxLength == sizeof(second));
 	CHECK(CFifoUsed(iso.pData->hTxFifo) == 0);
+	CHECK(atomic_load(&isoData.DevIntrf.bTxReady));
 
 	// A zero-length frame is a frame.
 	CHECK(UsbIsoIntrfSendFrame(&iso, nullptr, 0U));
+	CHECK(!atomic_load(&isoData.DevIntrf.bTxReady));
 	Sof(3U);
 	CHECK(s_InBusy && s_InLength == 0U);
 	CompleteIn();
 	CHECK(iso.TxEmptyCnt == 1U && s_TxCount == 3);
+	CHECK(atomic_load(&isoData.DevIntrf.bTxReady));
 
 	// A failed frame is TX_TIMEOUT and is still popped.
 	CHECK(UsbIsoIntrfSendFrame(&iso, frame, 1U));
 	Sof(4U);
 	CompleteIn(USB_CTRLR_EVT_XFER_FAILED);
 	CHECK(iso.TxMissCnt == 1U && s_TxTimeoutCount == 1);
+	CHECK(atomic_load(&isoData.DevIntrf.bTxReady));
 	CHECK(s_LastTxLength == 1U);
 	CHECK(CFifoUsed(iso.pData->hTxFifo) == 0);
 	CHECK(UsbIsoIntrfTxReady(&iso));
@@ -402,6 +552,18 @@ static void TestTx(void)
 	Sof(2U);
 	CHECK(s_InXferCount == before + 1 && s_InBusy);
 	CompleteIn();
+
+	// The callback may queue the next frame as soon as TX drains.
+	s_RequeueTx = true;
+	CHECK(UsbIsoIntrfSendFrame(&iso, frame, 1U));
+	Sof(4U);
+	CompleteIn();
+	CHECK(CFifoUsed(isoData.hTxFifo) == 1);
+	CHECK(!atomic_load(&isoData.DevIntrf.bTxReady));
+	Sof(6U);
+	CHECK(s_InData[0] == 0xA5 && s_InLength == 1U);
+	CompleteIn();
+	CHECK(atomic_load(&isoData.DevIntrf.bTxReady));
 }
 
 static void TestSuspendResume(void)
@@ -433,6 +595,7 @@ static void TestValidation(void)
 	ResetFake();
 	UsbIsoIntrf_t iso = {};
 	UsbDevIntrf_t isoData = {};
+	CHECK(!UsbIsoIntrfOpen(&iso, 9U, 1U));
 	auto cfg = MakeCfg();
 	cfg.EpNo = 7U;
 	CHECK(!UsbIsoIntrfInit(&iso, &isoData, &cfg));
@@ -482,13 +645,19 @@ static void TestSharedTransport(void)
 	CHECK(memcmp(received, data, sizeof(data)) == 0);
 	CHECK(pTransport->RxData(received, sizeof(received)) == 0);
 	s_Drain = true;
-	intrf.Close();
+	pDevice->Reset();
+	CHECK(!pState->Opened && pState->Mps == 0U && pState->pData->Mps == 0U);
+	CHECK(s_CloseCount == 2);
 }
 
 int main(void)
 {
 	TestSharedTransport();
 	TestLifecycle();
+	TestDeviceReset();
+	TestDisableEnable();
+	TestOpenWhileDisabled();
+	TestOpenFailure();
 	TestRx();
 	TestTx();
 	TestSuspendResume();

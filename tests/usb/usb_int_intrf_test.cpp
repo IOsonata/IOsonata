@@ -259,8 +259,13 @@ static void TestErrorsDisableEnableAndReset(void)
 	Receive(nullptr, 0U, USB_CTRLR_EVT_XFER_FAILED);
 	CHECK(intrf.RxErrorCnt == 1U);
 	CHECK(s_LastRxResult == USB_CTRLR_XFER_FAILED);
-	UsbIntIntrfReset(&intrf);
+	DeviceIntrfReset(&intrfData.DevIntrf);
 	CHECK(intrfData.Mps == 0U && intrf.RxErrorCnt == 0U && intrf.TxErrorCnt == 0U);
+	CHECK(intrf.Mps == 0U && intrf.Interval == 0U && s_CloseCount == 4);
+	CHECK(atomic_load(&intrfData.DevIntrf.bTxReady));
+	DeviceIntrfDisable(&intrfData.DevIntrf);
+	DeviceIntrfEnable(&intrfData.DevIntrf);
+	CHECK(intrfData.Mps == 0U && s_OpenCount == 4);
 }
 
 static void TestPolledRxOwnership(void)
@@ -312,7 +317,9 @@ static void TestSharedTransport(void)
 	uint8_t received[sizeof(data)] = {};
 	CHECK(pTransport->Rx(0, received, sizeof(received)) == (int)sizeof(data));
 	CHECK(memcmp(received, data, sizeof(data)) == 0);
-	intrf.Close();
+	pDevice->Reset();
+	CHECK(pState->Mps == 0U && pState->pData->Mps == 0U);
+	CHECK(s_CloseCount == 2);
 }
 
 int main(void)
