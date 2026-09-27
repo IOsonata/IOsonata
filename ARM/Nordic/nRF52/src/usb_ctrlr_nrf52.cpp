@@ -1068,6 +1068,17 @@ extern "C" void USBD_IRQHandler(void){
 		nRFUsbdQueueEp0Setup();
 	}
 
+	// SOF is a bus event like SETUP and is handed to the core before any
+	// completion is interpreted. The core passes it to the classes; an ISO
+	// class answers with UsbCtrlrIsoSend, which starts on an idle channel or
+	// waits in the scheduler for the hand-off below.
+	if (NRF_USBD->EVENTS_SOF != 0U)
+	{
+		NRF_USBD->EVENTS_SOF = 0U;
+		(void)NRF_USBD->EVENTS_SOF;
+		nRFUsbdHandleSof();
+	}
+
 	// Only a software-owned channel can have a transfer to retire.
 	const int completed = nRFUsbdDmaActive() ? nRFUsbdGetCompletedXfer() : -1;
 
@@ -1116,15 +1127,6 @@ extern "C" void USBD_IRQHandler(void){
 			}
 			reuseDma = true;
 		}
-	}
-
-	// SOF belongs to the generic USB core. The controller only sees any ISO
-	// work that core publishes back through UsbCtrlrIsoSend().
-	if (NRF_USBD->EVENTS_SOF != 0U)
-	{
-		NRF_USBD->EVENTS_SOF = 0U;
-		(void)NRF_USBD->EVENTS_SOF;
-		nRFUsbdHandleSof();
 	}
 
 	// Keep the hot DMA-to-DMA handoff ahead of bus and EPDATA processing.
