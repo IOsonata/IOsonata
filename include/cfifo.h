@@ -185,8 +185,8 @@ uint8_t *CFifoPutMultiple(hCFifo_t const hFifo, int *pCnt);
  * until the producer publishes it with CFifoPut, which returns this same
  * block. Lets a DMA fill the block in place before it is published.
  * Single producer only: two callers reserving at once receive the same block.
- * Full behavior is that of CFifoPut: blocking returns NULL, non-blocking
- * discards the oldest block first.
+ * A full FIFO returns NULL in either mode, leaving existing data untouched.
+ * CFifoPut still discards the oldest block when the FIFO is non-blocking.
  *
  * @param	hFifo : CFIFO handle
  *
@@ -200,6 +200,7 @@ uint8_t *CFifoResv(hCFifo_t const hFifo);
  * Put-side counterpart of CFifoPeekMultiple. Reserve the most that could be
  * written, fill some or all of it, then publish the count actually written
  * with CFifoPutMultiple, which returns this same address. Single producer only.
+ * A full FIFO returns NULL in either mode without discarding data.
  *
  * @param	hFifo : CFIFO handle
  * @param	pCnt  : Number of blocks wanted\n

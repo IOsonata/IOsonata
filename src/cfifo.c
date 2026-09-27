@@ -221,7 +221,7 @@ uint8_t *CFifoGetMultiple(hCFifo_t const pFifo, int *pCnt)
 	return cfifo_addr(pFifo, cfifo_slot(pFifo, getIdx));
 }
 
-uint8_t *CFifoResv(hCFifo_t const pFifo)
+static uint8_t *cfifo_reserve(hCFifo_t const pFifo, bool bPublish)
 {
 	if (pFifo == NULL)
 	{
@@ -235,7 +235,7 @@ uint8_t *CFifoResv(hCFifo_t const pFifo)
 
 	if (used >= max)
 	{
-		if (pFifo->bBlocking)
+		if (!bPublish || pFifo->bBlocking)
 		{
 			return NULL;
 		}
@@ -251,12 +251,14 @@ uint8_t *CFifoResv(hCFifo_t const pFifo)
 	return cfifo_addr(pFifo, cfifo_slot(pFifo, putIdx));
 }
 
-uint8_t *CFifoResvMultiple(hCFifo_t const pFifo, int *pCnt)
+uint8_t *CFifoResv(hCFifo_t const pFifo)
 {
-	if (pCnt == NULL)
-	{
-		return CFifoResv(pFifo);
-	}
+	return cfifo_reserve(pFifo, false);
+}
+
+static uint8_t *cfifo_reserve_multiple(hCFifo_t const pFifo, int *pCnt,
+		bool bPublish)
+{
 	if (pFifo == NULL || *pCnt <= 0)
 	{
 		*pCnt = 0;
@@ -271,7 +273,7 @@ uint8_t *CFifoResvMultiple(hCFifo_t const pFifo, int *pCnt)
 
 	if (avail == 0U)
 	{
-		if (pFifo->bBlocking)
+		if (!bPublish || pFifo->bBlocking)
 		{
 			*pCnt = 0;
 			return NULL;
@@ -312,10 +314,19 @@ uint8_t *CFifoResvMultiple(hCFifo_t const pFifo, int *pCnt)
 	return cfifo_addr(pFifo, slot);
 }
 
-// Put is Resv plus publish. Single producer: PutIdx is the value Resv read.
+uint8_t *CFifoResvMultiple(hCFifo_t const pFifo, int *pCnt)
+{
+	if (pCnt == NULL)
+	{
+		return CFifoResv(pFifo);
+	}
+	return cfifo_reserve_multiple(pFifo, pCnt, false);
+}
+
+// Put permits dropping when full, then publishes. Only one producer owns PutIdx.
 uint8_t *CFifoPut(hCFifo_t const pFifo)
 {
-	uint8_t *p = CFifoResv(pFifo);
+	uint8_t *p = cfifo_reserve(pFifo, true);
 	if (p != NULL)
 	{
 		CFIFO_ATOMIC_STORE(&pFifo->PutIdx,
@@ -333,7 +344,7 @@ uint8_t *CFifoPutMultiple(hCFifo_t const pFifo, int *pCnt)
 		return CFifoPut(pFifo);
 	}
 
-	uint8_t *p = CFifoResvMultiple(pFifo, pCnt);
+	uint8_t *p = cfifo_reserve_multiple(pFifo, pCnt, true);
 	if (p != NULL)
 	{
 		CFIFO_ATOMIC_STORE(&pFifo->PutIdx,
