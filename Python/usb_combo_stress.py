@@ -8,6 +8,7 @@ Python-side lock contention.
 
 import argparse
 import sys
+import re
 import struct
 import threading
 import time
@@ -138,16 +139,10 @@ def int_payload(sequence):
     return bytes(data)
 
 
-def read_iso_trace(handle, interface, timeout_ms):
-    """Controller per-frame ISO trace, oldest first, one text line per frame.
+def fetch_iso_trace(handle, interface, timeout_ms):
+    """Controller per-frame ISO trace as a list of dicts, oldest first.
 
-    Columns: bus frame number, microseconds since the previous SOF mark
-    (about 1000; 2000 means the device saw no SOF for one frame, more than
-    that means the interrupt was held off past the next SOF), SOF to
-    STARTISOIN in us, SOF to ENDISOIN in us (0 when it did not happen in
-    that frame), IN bytes offered, OUT bytes read, flags (see
-    ISO_TRACE_FLAGS, '-' when clear). A line ending in '<< gap' follows a
-    jump in the frame number.
+    Returns (entries, None) or (None, reason).
     """
     try:
         raw = bytes(
@@ -161,37 +156,117 @@ def read_iso_trace(handle, interface, timeout_ms):
             )
         )
     except usb1.USBError as exc:
-        return [f"trace read failed: {exc}"]
+        return None, f"trace read failed: {exc}"
     if len(raw) != ISO_TRACE_SIZE:
-        return [f"trace length {len(raw)}/{ISO_TRACE_SIZE}"]
+        return None, f"trace length {len(raw)}/{ISO_TRACE_SIZE}"
 
     hdr_size = struct.calcsize(ISO_TRACE_HDR_FORMAT)
     nxt, count, entry_size, version = struct.unpack(
         ISO_TRACE_HDR_FORMAT, raw[:hdr_size]
     )
     if version != 2 or entry_size != ISO_TRACE_ENTRY_SIZE or count != ISO_TRACE_COUNT:
-        return [f"trace layout v{version} entry {entry_size} count {count}"]
+        return None, f"trace layout v{version} entry {entry_size} count {count}"
 
-    lines = ["frame sof_us start_us end_us in out flags"]
-    previous = None
+    entries = []
     for i in range(count):
         index = (nxt + i) % count
         offset = hdr_size + index * entry_size
         frame, sof_us, start_us, end_us, in_len, flags, out_len, _ = struct.unpack(
             ISO_TRACE_ENTRY_FORMAT, raw[offset:offset + entry_size]
         )
+        entries.append({
+            "frame": frame, "sof_us": sof_us, "start_us": start_us,
+            "end_us": end_us, "in": in_len, "out": out_len, "flags": flags,
+        })
+    return entries, None
+
+
+def format_iso_trace(entries):
+    """One text line per frame.
+
+    Columns: bus frame number, microseconds since the previous SOF mark
+    (about 1000; 2000 means the device saw no SOF for one frame, more than
+    that means the interrupt was held off past the next SOF), SOF to
+    STARTISOIN in us, SOF to ENDISOIN in us (0 when it did not happen in
+    that frame), IN bytes offered, OUT bytes read, flags (see
+    ISO_TRACE_FLAGS, '-' when clear). A line ending in '<< gap' follows a
+    jump in the frame number.
+    """
+    lines = ["frame sof_us start_us end_us in out flags"]
+    previous = None
+    for e in entries:
         text = "".join(
-            letter if flags & bit else "-" for bit, letter in ISO_TRACE_FLAGS
+            letter if e["flags"] & bit else "-" for bit, letter in ISO_TRACE_FLAGS
         )
         gap = ""
-        if previous is not None and ((frame - previous) & 0x7FF) != 1:
+        if previous is not None and ((e["frame"] - previous) & 0x7FF) != 1:
             gap = "  << gap"
-        previous = frame
+        previous = e["frame"]
         lines.append(
-            f"{frame:5d} {sof_us:6d} {start_us:8d} {end_us:6d} "
-            f"{in_len:3d} {out_len:3d} {text}{gap}"
+            f"{e['frame']:5d} {e['sof_us']:6d} {e['start_us']:8d} "
+            f"{e['end_us']:6d} {e['in']:3d} {e['out']:3d} {text}{gap}"
         )
     return lines
+
+
+MISSING_RE = re.compile(r"^missing validation frame\(s\) \[([0-9, ]*)\]")
+
+
+def link_loss_frames(error, entries, guard, mps):
+    """Classify every missing validation frame of a failed burst as a link
+    loss, or return None when any one of them is not explained that way.
+
+    The failed burst is the last run of trace entries that read OUT data.
+    OUT packet k of the burst is read at the SOF of frame first + k, so a
+    missing validation index m belongs to frame first + guard + m. That
+    frame is a link loss when either:
+      "no SOF":    it has no trace entry, the device raised no SOF for it and
+                   the packet was replaced by the next one unread;
+      "no packet": the device saw the SOF and read the OUT buffer, and the
+                   hardware reported no full packet, while the burst
+                   around it carried full packets. ISO OUT has no
+                   handshake, so the host reports these as sent.
+    Returns a list of (frame, kind).
+    """
+    match = MISSING_RE.match(error or "")
+    if match is None or not entries:
+        return None
+    missing = [int(v) for v in match.group(1).split(",") if v.strip()]
+    if not missing or len(missing) >= 16:
+        return None     # empty, or the list may have been truncated
+
+    # The burst: from the first entry that read a full packet to the last,
+    # allowing single entries inside it that read nothing.
+    last = None
+    for i in range(len(entries) - 1, -1, -1):
+        if entries[i]["out"] == mps:
+            last = i
+            break
+    if last is None:
+        return None
+    first = last
+    while first > 0 and (entries[first - 1]["out"] == mps or (
+            first > 1 and entries[first - 2]["out"] == mps)):
+        first -= 1
+    while entries[first]["out"] != mps:
+        first += 1
+    start = entries[first]["frame"]
+    span = (entries[last]["frame"] - start) & 0x7FF
+    by_frame = {e["frame"]: e for e in entries[first:last + 1]}
+
+    result = []
+    for m in missing:
+        frame = (start + guard + m) & 0x7FF
+        if ((frame - start) & 0x7FF) > span:
+            return None
+        entry = by_frame.get(frame)
+        if entry is None:
+            result.append((frame, "no SOF"))
+        elif entry["out"] == 0 and 900 <= entry["sof_us"] <= 1100:
+            result.append((frame, "no packet"))
+        else:
+            return None
+    return result
 
 
 def read_iso_diag(handle, interface, timeout_ms):
@@ -249,6 +324,8 @@ class Stats:
         self.target_errors = 0
         self.path_errors = {"hid": 0, "int": 0, "iso": 0}
         self.iso_host_misses = 0
+        self.iso_sof_losses = 0
+        self.iso_out_losses = 0
         self.failure = None
 
     def add_iso_host_miss(self):
@@ -259,6 +336,23 @@ class Stats:
     def iso_host_miss_count(self):
         with self.lock:
             return self.iso_host_misses
+
+    def add_iso_link_loss(self, losses):
+        with self.lock:
+            for _, kind in losses:
+                if kind == "no SOF":
+                    self.iso_sof_losses += 1
+                else:
+                    self.iso_out_losses += 1
+            return self.iso_sof_losses + self.iso_out_losses
+
+    def iso_sof_loss_count(self):
+        with self.lock:
+            return self.iso_sof_losses
+
+    def iso_out_loss_count(self):
+        with self.lock:
+            return self.iso_out_losses
 
     def add(self, name, count, errors=0, target_errors=0):
         with self.lock:
@@ -565,18 +659,46 @@ def iso_worker(vid, pid, start, stop, stats, timeout_ms, rounds):
                         else:
                             misses = 0
                         if error is not None:
+                            # The controller's last 128 frames, oldest
+                            # first; the failed burst is inside them.
+                            entries, trace_error = fetch_iso_trace(
+                                handle, interface, timeout_ms
+                            )
+                            lost = link_loss_frames(
+                                error, entries, iso_test.BURST_GUARD_FRAMES,
+                                ISO_MPS
+                            )
+                            if lost is not None:
+                                # The device never saw the SOF, or never
+                                # received the packet, for those frames. A
+                                # link-level loss, not a stack failure.
+                                total = stats.add_iso_link_loss(lost)
+                                text = ", ".join(
+                                    f"{frame} {kind}" for frame, kind in lost
+                                )
+                                print(
+                                    f"ISO link loss: frame(s) {text} "
+                                    f"(#{total}, {time.strftime('%H:%M:%S')})",
+                                    file=sys.stderr,
+                                    flush=True,
+                                )
+                                stats.add(
+                                    "iso", (rounds - len(lost)) * ISO_MPS
+                                )
+                                sequence += rounds + (
+                                    2 * iso_test.BURST_GUARD_FRAMES
+                                )
+                                continue
                             try:
                                 diag = read_iso_diag(
                                     handle, interface, timeout_ms
                                 )
                             except Exception as diag_exc:
                                 diag = f"diag read failed: {diag_exc}"
-                            # The controller's last 128 frames, oldest
-                            # first; the failed burst is inside them.
                             print("ISO controller frame trace:", file=sys.stderr)
-                            for line in read_iso_trace(
-                                handle, interface, timeout_ms
-                            ):
+                            lines = (format_iso_trace(entries)
+                                     if entries is not None else [trace_error])
+                            for line in lines:
                                 print("  " + line, file=sys.stderr)
                             sys.stderr.flush()
                             raise RuntimeError(f"{error}; {diag}")
@@ -799,6 +921,8 @@ def main():
         print(f"ISO B/sec       : {rates['iso']:.2f}")
         print(f"ISO errors      : {path_errors['iso']}")
         print(f"ISO host misses : {stats.iso_host_miss_count()}")
+        print(f"ISO SOF losses  : {stats.iso_sof_loss_count()}")
+        print(f"ISO OUT losses  : {stats.iso_out_loss_count()}")
         print(f"Total bytes     : {total_bytes}")
         print(f"Total B/sec     : {total_rate:.2f}")
         if failure is not None:
