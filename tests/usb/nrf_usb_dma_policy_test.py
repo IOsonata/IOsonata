@@ -106,6 +106,13 @@ assert interrupt.index("if (newDmaWork)") < interrupt.index("nRFUsbdResumeQueued
 assert interrupt.index("NRF_USBD->EPDATASTATUS = servicedStatus;") < interrupt.index(
     "nRFUsbdResumeQueuedDmaLocked();"
 )
+# A bus event that held back the handoff restarts the queue at the tail
+# once handled; the resume itself is gated by the suspend state.
+bus = interrupt[interrupt.index("if (NRF_USBD->EVENTS_USBEVENT != 0U)\n\t{\n\t\tNRF_USBD->EVENTS_USBEVENT = 0U;"):]
+bus = bus[:bus.index("\n\t}\n") + 3]
+assert bus.index("nRFUsbdHandleBusEvent(eventCause);") < bus.index("newDmaWork = true;")
+assert "!nRFUsbdDmaAllowed()" in resume
+
 # Regular IN completion goes through EPDATA to AppEvt.
 assert interrupt.index("NRF_USBD->EVENTS_EPDATA = 0U;") < interrupt.index(
     "nRFUsbdQueueInComplete("

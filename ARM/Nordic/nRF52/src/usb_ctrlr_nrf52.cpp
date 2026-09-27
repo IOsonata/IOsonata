@@ -1155,6 +1155,10 @@ extern "C" void USBD_IRQHandler(void){
 		NRF_USBD->EVENTCAUSE = eventCause;
 		(void)NRF_USBD->EVENTCAUSE;
 		nRFUsbdHandleBusEvent(eventCause);
+		// A pending USBEVENT held back the handoff above, and a resume may
+		// have just lifted the suspend gate. Queued work restarts at the
+		// tail; it stays parked if the event was a suspend.
+		newDmaWork = true;
 	}
 
 	// EP0 IN consumes EP0DATADONE together with ENDEPIN0 above. For OUT it
