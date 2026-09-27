@@ -1062,27 +1062,7 @@ extern "C" void USBD_IRQHandler(void){
 	}
 
 	// Only a software-owned channel can have a transfer to retire.
-	int completed = nRFUsbdDmaActive() ? nRFUsbdGetCompletedXfer() : -1;
-
-	// Regular IN normally retires lazily when host-consumed EPDATA wakes the
-	// ISR. ISO cannot wait that long: if SOF catches a regular IN EasyDMA still
-	// running, arm its END interrupt only for this transfer. ENDEPIN will then
-	// wake us as soon as the memory DMA finishes and the normal completion path
-	// below can hand the shared channel to the queued ISO work.
-	if (completed < 0 && s_Usbd.IsoOpen &&
-		NRF_USBD->EVENTS_SOF != 0U && nRFUsbdDmaActive())
-	{
-		const uint32_t dmastatus = NRF_USBD->EPSTATUS;
-		if ((dmastatus & 0xFEU) != 0U && (dmastatus & ~0xFEU) == 0U)
-		{
-			const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
-			const uint32_t endMsk = USBD_INTEN_ENDEPIN0_Msk << epno;
-			NRF_USBD->INTENSET = endMsk;
-			completed = nRFUsbdGetCompletedXfer();
-			if (completed >= 0)
-				NRF_USBD->INTENCLR = endMsk;
-		}
-	}
+	const int completed = nRFUsbdDmaActive() ? nRFUsbdGetCompletedXfer() : -1;
 
 	// A completed transfer keeps software DMA ownership for immediate handoff.
 	// EP0 IN reaches this point only after ENDEPIN0 and EP0DATADONE.
@@ -1120,8 +1100,6 @@ extern "C" void USBD_IRQHandler(void){
 			(completed > 16 && completed < 24))
 		{
 			const uint8_t epNum = (uint8_t)completed & 7U;
-			if (completed < 8)
-				NRF_USBD->INTENCLR = USBD_INTEN_ENDEPIN0_Msk << epNum;
 			(void)CFifoGet(s_Usbd.hQue);
 			if (completed >= 16)
 			{
