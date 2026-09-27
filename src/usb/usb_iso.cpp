@@ -32,6 +32,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
+#include "coredev/interrupt.h"
 #include "usb/usb_iso.h"
 
 static bool UsbIsoIntrfEpSupported(int DevNo, uint8_t EpNo)
@@ -58,97 +59,167 @@ static void UsbIsoIntrfRelease(UsbIsoIntrf_t *pIntrf, bool bCloseEp)
 	UsbIntrfUnconfigure(pIntrf->pData);
 }
 
-static bool UsbIsoIntrfOpenEndpoint(UsbIsoIntrf_t *pIntrf, bool bIn)
+static void UsbIsoIntrfNotify(UsbIsoIntrf_t *pIntrf, DEVINTRF_EVT Event,
+							  int Length)
 {
-	return UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, bIn,
-		pIntrf->Mps);
+	DevIntrf_t *pDev = &pIntrf->pData->DevIntrf;
+	if (pDev->EvtCB != nullptr)
+	{
+		pDev->EvtCB(pDev, Event, nullptr, Length);
+	}
 }
 
-// UsbIntrf owns DeviceIntrf and the controller endpoint callback. ISO events
-// carry the current transfer buffer directly because DIRECT mode has no CFifo.
-static int UsbIsoIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
-								uint8_t *pBuffer, int Length)
+// One frame per call from the RX FIFO. A frame larger than the caller's
+// buffer stays queued; zero-length frames are counted and skipped, as the
+// packet RxData in UsbIntrf does.
+static int UsbIsoIntrfRxData(DevIntrf_t * const pDev, uint8_t *pBuffer,
+							 int BufferLen)
 {
 	UsbDevIntrf_t *pData = static_cast<UsbDevIntrf_t *>(pDev->pDevData);
 	UsbIsoIntrf_t *pIntrf =
 		static_cast<UsbIsoIntrf_t *>(pData->pClassContext);
 
-	switch (Event)
+	if (pBuffer == nullptr || BufferLen <= 0)
 	{
-		case DEVINTRF_EVT_RX_DATA:
-			if (Length > (int)pIntrf->Mps)
-			{
-				pIntrf->RxMissCnt++;
-				return 0;
-			}
-			if (Length == 0)
-			{
-				pIntrf->RxEmptyCnt++;
-			}
-			if (pIntrf->RxHandler != nullptr)
-			{
-				pIntrf->RxHandler(pIntrf, pBuffer, (uint16_t)Length,
-					USB_CTRLR_XFER_SUCCESS, pIntrf->pContext);
-			}
-			return Length;
-
-		case DEVINTRF_EVT_RX_TIMEOUT:
-			pIntrf->RxMissCnt++;
-			if (pIntrf->RxHandler != nullptr)
-			{
-				pIntrf->RxHandler(pIntrf, pData->pRxBuffer,
-					(uint16_t)Length,
-					USB_CTRLR_XFER_FAILED, pIntrf->pContext);
-			}
-			return 0;
-
-		case DEVINTRF_EVT_TX_FIFO_EMPTY:
-			if (Length == 0)
-			{
-				pIntrf->TxEmptyCnt++;
-			}
-			if (pIntrf->TxHandler != nullptr)
-			{
-				pIntrf->TxHandler(pIntrf,
-					(uint16_t)Length,
-					USB_CTRLR_XFER_SUCCESS, pIntrf->pContext);
-			}
-			return Length;
-
-		case DEVINTRF_EVT_TX_TIMEOUT:
-			pIntrf->TxMissCnt++;
-			if (pIntrf->TxHandler != nullptr)
-			{
-				pIntrf->TxHandler(pIntrf,
-					(uint16_t)Length,
-					USB_CTRLR_XFER_FAILED, pIntrf->pContext);
-			}
-			return 0;
-
-		default:
-			return 0;
+		return 0;
 	}
+
+	// The RX FIFO drops its oldest frame when the application falls behind
+	// (there is no back-pressure on an isochronous endpoint), so the copy
+	// runs under interrupt exclusion or a completion could reclaim the frame
+	// being read. A frame is at most the packet size.
+	int count = 0;
+	const uint32_t state = DisableInterrupt();
+	UsbPkt_t *pkt;
+	while ((pkt = reinterpret_cast<UsbPkt_t *>(
+				CFifoPeek(pData->hRxFifo))) != nullptr)
+	{
+		const uint16_t len = pkt->Hdr.Length;
+		if (len == 0U)
+		{
+			pIntrf->RxEmptyCnt++;
+			(void)CFifoGet(pData->hRxFifo);
+			continue;
+		}
+		if (len > pIntrf->Mps)
+		{
+			pIntrf->RxMissCnt++;
+			(void)CFifoGet(pData->hRxFifo);
+			continue;
+		}
+		if (BufferLen >= (int)len)
+		{
+			memcpy(pBuffer, pkt->Data, len);
+			(void)CFifoGet(pData->hRxFifo);
+			count = len;
+		}
+		break;
+	}
+	EnableInterrupt(state);
+
+	return count;
 }
 
-void UsbIsoIntrfProcessEvent(UsbDevIntrf_t *pData, uint16_t FrameNo)
+// One frame per call into the TX FIFO.
+static int UsbIsoIntrfTxData(DevIntrf_t * const pDev,
+							 const uint8_t *pData, int DataLen)
 {
+	UsbDevIntrf_t *pIntrfData = static_cast<UsbDevIntrf_t *>(pDev->pDevData);
 	UsbIsoIntrf_t *pIntrf =
-		static_cast<UsbIsoIntrf_t *>(pData->pClassContext);
+		static_cast<UsbIsoIntrf_t *>(pIntrfData->pClassContext);
+	if (DataLen < 0 || DataLen > 0xFFFF ||
+		!UsbIsoIntrfSendFrame(pIntrf, pData, (uint16_t)DataLen))
+	{
+		return 0;
+	}
+	return DataLen;
+}
+
+// Service interval: offer the head of the TX FIFO. The controller keeps the
+// slot until the frame's DMA has ended (the IN completion releases it), and
+// refuses the offer while the previous frame is still in flight, in which
+// case the same head is offered again next interval. With no frame queued
+// the call still services the OUT direction.
+static void UsbIsoIntrfProcessEvent(UsbIsoIntrf_t *pIntrf, uint16_t FrameNo)
+{
 	if (!pIntrf->Opened || pIntrf->Suspended ||
 		(FrameNo & ((1U << (pIntrf->Interval - 1U)) - 1U)) != 0U)
 	{
 		return;
 	}
 
-	UsbPkt_t *pPacket = pData->pTxDirectBuffer;
+	const UsbPkt_t *pPacket =
+		reinterpret_cast<const UsbPkt_t *>(CFifoPeek(pIntrf->pData->hTxFifo));
 	uint8_t *pBuffer = nullptr;
 	uint16_t length = 0U;
-	if ((pPacket->Hdr.Reserved & USB_INTRF_SLOT_READY) != 0U)
+	if (pPacket != nullptr)
 	{
-		pBuffer = pPacket->Data;
+		pBuffer = const_cast<uint8_t *>(pPacket->Data);
 		length = pPacket->Hdr.Length;
 	}
-	(void)UsbCtrlrIsoSend(pData->DevNo, pIntrf->EpNo, pBuffer, length);
+	(void)UsbCtrlrIsoSend(pIntrf->pData->DevNo, pIntrf->EpNo, pBuffer, length);
+}
+
+// IN completion: the head of the TX FIFO is the frame whose DMA has ended.
+// Pop it and tell the application, with the frame length: TX_READY while
+// more frames wait, TX_FIFO_EMPTY when the queue drained, TX_TIMEOUT when
+// the controller failed the frame. Nothing is started here; the next frame
+// leaves at its own service interval.
+static void UsbIsoIntrfTxComplete(UsbIsoIntrf_t *pIntrf,
+								  UsbCtrlrXferResult_t Result)
+{
+	hCFifo_t hTx = pIntrf->pData->hTxFifo;
+	const UsbPkt_t *pPacket =
+		reinterpret_cast<const UsbPkt_t *>(CFifoPeek(hTx));
+	if (pPacket == nullptr)
+	{
+		return;
+	}
+
+	const uint16_t length = pPacket->Hdr.Length;
+	(void)CFifoGet(hTx);
+
+	if (Result != USB_CTRLR_XFER_SUCCESS)
+	{
+		pIntrf->TxMissCnt++;
+		UsbIsoIntrfNotify(pIntrf, DEVINTRF_EVT_TX_TIMEOUT, length);
+		return;
+	}
+	if (length == 0U)
+	{
+		pIntrf->TxEmptyCnt++;
+	}
+	UsbIsoIntrfNotify(pIntrf, CFifoUsed(hTx) > 0 ?
+		DEVINTRF_EVT_TX_READY : DEVINTRF_EVT_TX_FIFO_EMPTY, length);
+}
+
+// Controller callback for the ISO IN endpoint. The interval and the IN
+// completion are isochronous concerns, separate from the bulk and interrupt
+// send path in UsbIntrf, the same way EP0 has its own send path in the
+// controller. The OUT endpoint stays with UsbIntrf.
+static void UsbIsoIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
+									uint16_t Length, void *pContext)
+{
+	UsbIsoIntrf_t *pIntrf = static_cast<UsbIsoIntrf_t *>(pContext);
+
+	switch (Event)
+	{
+		case USB_CTRLR_EVT_SOF:
+			UsbIsoIntrfProcessEvent(pIntrf, Length);
+			return;
+
+		case USB_CTRLR_EVT_XFER_CMPL:
+			UsbIsoIntrfTxComplete(pIntrf, USB_CTRLR_XFER_SUCCESS);
+			return;
+
+		case USB_CTRLR_EVT_XFER_FAILED:
+			UsbIsoIntrfTxComplete(pIntrf, USB_CTRLR_XFER_FAILED);
+			return;
+
+		default:
+			// CANCEL: the close path flushes the queue.
+			return;
+	}
 }
 
 bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
@@ -162,28 +233,65 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 		return false;
 	}
 
+	// The OUT DMA destination belongs to the controller; the peripheral's ISO
+	// packet limit sizes it. UsbIntrf copies each frame from there into the
+	// RX FIFO, so the FIFO block must hold what the controller can deliver.
+	uint8_t *pRxBuffer = UsbCtrlrIsoRxBuffer(pCfg->DevNo);
+	if (pRxBuffer == nullptr || pCfg->BufferSize == 0U ||
+		pCfg->BufferSize > USB_ISO_INTRF_MAX_MPS)
+	{
+		return false;
+	}
+
 	memset(pIntrf, 0, sizeof(*pIntrf));
 	pIntrf->pData = pData;
 	pIntrf->pContext = pCfg->pContext;
-	pIntrf->RxHandler = pCfg->RxHandler;
-	pIntrf->TxHandler = pCfg->TxHandler;
 	pIntrf->EpNo = pCfg->EpNo;
 
 	UsbIntrfCfg_t cfg = {};
 	cfg.DevNo = pCfg->DevNo;
 	cfg.EpNo = pCfg->EpNo;
-	cfg.bBlocking = false;
-	cfg.Mode = USB_INTRF_MODE_DIRECT;
+	// Blocking: the controller reads the TX head in place (peek at the
+	// service interval, get at completion), so a put must never reclaim it;
+	// a full TX queue refuses the frame at SendFrame.
+	cfg.bBlocking = true;
+	cfg.Mode = USB_INTRF_MODE_PACKET;
 	cfg.BufferSize = pCfg->BufferSize;
-	cfg.pRxBuffer = pCfg->pRxBuffer;
-	cfg.pTxBuffer = pCfg->pTxBuffer;
-	cfg.EvtCB = UsbIsoIntrfDataEvent;
+	cfg.pRxBuffer = pRxBuffer;
+	cfg.RxFifoMemSize = (int)USB_ISO_INTRF_FIFO_MEMSIZE(pCfg->BufferSize);
+	cfg.pRxFifoMem = pCfg->pRxFifoMem;
+	cfg.TxFifoMemSize = (int)USB_ISO_INTRF_FIFO_MEMSIZE(pCfg->BufferSize);
+	cfg.pTxFifoMem = pCfg->pTxFifoMem;
+	cfg.TxFifoBlkSize = (uint16_t)USB_INTRF_PKT_BLKSIZE(pCfg->BufferSize);
+	// The application's callback, as for every other UsbIntrf user.
+	cfg.EvtCB = pCfg->EvtCB;
 
 	if (!UsbIntrfInit(pIntrf->pData, &cfg))
 	{
 		return false;
 	}
 
+	// An isochronous OUT endpoint cannot hold the host off, so the RX FIFO
+	// must drop its oldest frame when full rather than refuse the completion
+	// the way the blocking bulk path does through DRDY. The TX FIFO stays
+	// blocking. Same memory, same geometry, dropping policy.
+	pIntrf->pData->hRxFifo = CFifoInit(pCfg->pRxFifoMem,
+		(uint32_t)cfg.RxFifoMemSize, USB_INTRF_PKT_BLKSIZE(pCfg->BufferSize),
+		false);
+	if (pIntrf->pData->hRxFifo == nullptr)
+	{
+		return false;
+	}
+
+	// UsbIntrf keeps the OUT direction, the FIFOs and DeviceIntrf. The IN
+	// direction is isochronous: frames leave at the service interval, not
+	// from the previous completion, so the endpoint callback is ours.
+	UsbCtrlrEpAlloc(pCfg->DevNo, pCfg->EpNo, true, nullptr, true,
+		UsbIsoIntrfCtrlrInEvent, pIntrf);
+	// The DeviceIntrf data calls map onto one frame per call.
+	pIntrf->pData->DevIntrf.RxData = UsbIsoIntrfRxData;
+	pIntrf->pData->DevIntrf.TxData = UsbIsoIntrfTxData;
+	pIntrf->pData->DevIntrf.TxSrData = UsbIsoIntrfTxData;
 	pIntrf->pData->pClassContext = pIntrf;
 	return true;
 }
@@ -207,8 +315,8 @@ bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval)
 	pIntrf->Interval = Interval;
 	pIntrf->Suspended = false;
 
-	if (!UsbIsoIntrfOpenEndpoint(pIntrf, true) ||
-		!UsbIsoIntrfOpenEndpoint(pIntrf, false))
+	if (!UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, true, Mps) ||
+		!UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, false, Mps))
 	{
 		UsbIsoIntrfRelease(pIntrf, true);
 		pIntrf->Mps = 0U;
@@ -277,17 +385,22 @@ bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 		return false;
 	}
 
-	UsbDevIntrf_t *pDataIntrf = pIntrf->pData;
-	if (!atomic_exchange_explicit(&pDataIntrf->DevIntrf.bTxReady, false,
-			memory_order_acquire))
+	// Fill under interrupt exclusion: the completion path reads the head
+	// slot, the service interval offers it, both from interrupt context.
+	const uint32_t state = DisableInterrupt();
+	UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(
+		CFifoPut(pIntrf->pData->hTxFifo));
+	if (pPacket == nullptr)
 	{
+		EnableInterrupt(state);
 		return false;
 	}
-
-	UsbPkt_t *pPacket = pDataIntrf->pTxDirectBuffer;
-	if (Length != 0U)
-		memcpy(pPacket->Data, pData, Length);
 	pPacket->Hdr.Length = Length;
-	pPacket->Hdr.Reserved = USB_INTRF_SLOT_READY;
+	pPacket->Hdr.Reserved = 0U;
+	if (Length != 0U)
+	{
+		memcpy(pPacket->Data, pData, Length);
+	}
+	EnableInterrupt(state);
 	return true;
 }

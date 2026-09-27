@@ -52,6 +52,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #define ISO_ALT_COUNT			6U
 #define ISO_MAX_MPS			63U
 #define ISO_REQ_GET_DIAG		0x5AU
+#define ISO_REQ_GET_TRACE		0x5CU
 
 alignas(4) static uint8_t s_LoopbackRxFifoMem[CDC_RXFIFO_MEMSIZE];
 alignas(4) static uint8_t s_LoopbackTxFifoMem[LOOPBACK_TXFIFO_MEMSIZE];
@@ -415,8 +416,8 @@ typedef struct __Combo_Iso_Function_Descriptor {
 
 static UsbIsoIntrf_t s_Iso;
 static UsbDevIntrf_t s_IsoData;
-alignas(4) static uint8_t s_IsoRxBuffer[USB_INTRF_PKT_BLKSIZE(ISO_MAX_MPS)];
-alignas(4) static uint8_t s_IsoTxBuffer[USB_INTRF_PKT_BLKSIZE(ISO_MAX_MPS)];
+alignas(4) static uint8_t s_IsoRxFifoMem[USB_ISO_INTRF_FIFO_MEMSIZE(ISO_MAX_MPS)];
+alignas(4) static uint8_t s_IsoTxFifoMem[USB_ISO_INTRF_FIFO_MEMSIZE(ISO_MAX_MPS)];
 static bool s_IsoConfigured;
 static uint8_t s_IsoAlt;
 static uint8_t s_IsoInterfaceNo;
@@ -447,14 +448,30 @@ static uint8_t IsoFirstEndpoint(uint16_t Mask)
 	return 0U;
 }
 
-static void IsoRxFrame(UsbIsoIntrf_t *, const uint8_t *pData,
-	uint16_t Length, UsbCtrlrXferResult_t Result, void *)
+// ISO loopback: every received frame goes back out on the next interval.
+// Frames are pulled from the RX FIFO with RxData and queued with TxData,
+// the same way any DeviceIntrf user moves data.
+static int IsoEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
+	uint8_t *, int Length)
 {
-	if (Result == USB_CTRLR_XFER_SUCCESS &&
-		!UsbIsoIntrfSendFrame(&s_Iso, pData, Length))
+	if (Event != DEVINTRF_EVT_RX_DATA)
 	{
-		s_IsoLoopbackDropCnt++;
+		return 0;
 	}
+
+	uint8_t frame[ISO_MAX_MPS];
+	int total = 0;
+	int len;
+	while ((len = DeviceIntrfRxData(pDev, frame, sizeof(frame))) > 0)
+	{
+		if (DeviceIntrfTxData(pDev, frame, len) != len)
+		{
+			s_IsoLoopbackDropCnt++;
+		}
+		total += len;
+	}
+	(void)Length;
+	return total;
 }
 
 static bool IsoControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
@@ -463,9 +480,36 @@ static bool IsoControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	if (pSetup == nullptr ||
 		pSetup->bmRequestType !=
 			(USB_REQTYPE_DIRHOST | USB_REQTYPE_VEND | USB_REQTYPE_INTERFACE) ||
-		pSetup->bRequest != ISO_REQ_GET_DIAG ||
 		pSetup->wValue != 0U ||
-		pSetup->wIndex != s_IsoInterfaceNo ||
+		pSetup->wIndex != s_IsoInterfaceNo)
+	{
+		return false;
+	}
+
+	if (pSetup->bRequest == ISO_REQ_GET_TRACE)
+	{
+		// Controller per-frame ISO trace for the bench. The snapshot is
+		// taken at SETUP so the frames keep running while it is read.
+		if (Stage != USB_CTRL_SETUP)
+		{
+			return true;
+		}
+		if (ppData == nullptr || pLength == nullptr)
+		{
+			return false;
+		}
+		uint8_t *pTrace = nullptr;
+		const uint16_t len = UsbCtrlrIsoTraceSnapshot(USB_DEVNO, &pTrace);
+		if (len == 0U || pTrace == nullptr)
+		{
+			return false;
+		}
+		*ppData = pTrace;
+		*pLength = len < pSetup->wLength ? len : pSetup->wLength;
+		return true;
+	}
+
+	if (pSetup->bRequest != ISO_REQ_GET_DIAG ||
 		pSetup->wLength != sizeof(s_IsoDiag))
 	{
 		return false;
@@ -675,9 +719,9 @@ static bool IsoInit(void)
 	cfg.DevNo = USB_DEVNO;
 	cfg.EpNo = s_IsoEpNo;
 	cfg.BufferSize = ISO_MAX_MPS;
-	cfg.pRxBuffer = s_IsoRxBuffer;
-	cfg.pTxBuffer = s_IsoTxBuffer;
-	cfg.RxHandler = IsoRxFrame;
+	cfg.pRxFifoMem = s_IsoRxFifoMem;
+	cfg.pTxFifoMem = s_IsoTxFifoMem;
+	cfg.EvtCB = IsoEvent;
 	if (!UsbIsoIntrfInit(&s_Iso, &s_IsoData, &cfg))
 	{
 		return false;

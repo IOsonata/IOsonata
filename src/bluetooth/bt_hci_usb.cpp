@@ -53,6 +53,8 @@ static void BtHciUsbClearEventTx(BtHciUsbDev_t *pHci);
 static const uint8_t s_BtHciUsbScoMps[BT_HCI_USB_SCO_ALT_COUNT] = {
 	9U, 17U, 25U, 33U, 49U, 63U,
 };
+// Largest SCO frame any alternate carries; RxData buffer size.
+#define BT_HCI_USB_SCO_FRAME_MAX		63U
 
 static uint8_t *BtHciUsbCommandBuffer(BtHciUsbDev_t *pHci)
 {
@@ -602,19 +604,17 @@ static void BtHciUsbScoPublish(BtHciUsbDev_t *pHci)
 	(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_RX_DATA, length);
 }
 
-static void BtHciUsbScoReceiveFrame(UsbIsoIntrf_t *, const uint8_t *pData,
-									uint16_t Length,
-									UsbCtrlrXferResult_t Result,
-									void *pContext)
+// One received SCO frame, pulled from the ISO interface's RX FIFO.
+static void BtHciUsbScoReceiveFrame(BtHciUsbDev_t *pHci, const uint8_t *pData,
+									uint16_t Length)
 {
-	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
-	if (pHci == nullptr || pHci->ScoAlt == 0U)
+	if (pHci->ScoAlt == 0U)
 	{
 		return;
 	}
 
 	const uint16_t mps = BtHciUsbScoMps(pHci->ScoAlt);
-	if (Result != USB_CTRLR_XFER_SUCCESS || Length > mps ||
+	if (Length > mps ||
 		(size_t)pHci->ScoRxLength + Length > BT_HCI_USB_SCO_MAX_SIZE)
 	{
 		pHci->ScoRxLength = 0U;
@@ -665,17 +665,15 @@ static bool BtHciUsbSendScoChunk(BtHciUsbDev_t *pHci)
 		pHci->ScoTxChunkLength);
 }
 
-static void BtHciUsbScoSendFrameComplete(UsbIsoIntrf_t *, uint16_t Length,
-										UsbCtrlrXferResult_t Result,
-										void *pContext)
+// One SCO frame left the device (Failed: the controller gave up on it).
+static void BtHciUsbScoSendFrameComplete(BtHciUsbDev_t *pHci, uint16_t Length,
+										bool Failed)
 {
-	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
-	if (pHci == nullptr || !pHci->ScoTxActive)
+	if (!pHci->ScoTxActive)
 	{
 		return;
 	}
-	if (Result != USB_CTRLR_XFER_SUCCESS ||
-		Length != pHci->ScoTxChunkLength)
+	if (Failed || Length != pHci->ScoTxChunkLength)
 	{
 		pHci->ScoTxActive = false;
 		(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_TX_TIMEOUT, Length);
@@ -698,6 +696,48 @@ static void BtHciUsbScoSendFrameComplete(UsbIsoIntrf_t *, uint16_t Length,
 	pHci->ScoTxOffset = 0U;
 	pHci->ScoTxChunkLength = 0U;
 	(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_TX_READY, 0);
+}
+
+// Event callback of the SCO ISO interface, the DeviceIntrf model: received
+// frames are pulled with RxData when RX_DATA is raised; each sent frame is
+// reported with TX_READY or TX_FIFO_EMPTY, a failed one with TX_TIMEOUT.
+static int BtHciUsbScoEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
+							uint8_t *, int Length)
+{
+	BtHciUsbDev_t *pHci =
+		static_cast<BtHciUsbDev_t *>(UsbIsoIntrfContext(pDev));
+	if (pHci == nullptr)
+	{
+		return 0;
+	}
+
+	switch (Event)
+	{
+		case DEVINTRF_EVT_RX_DATA:
+		{
+			uint8_t frame[BT_HCI_USB_SCO_FRAME_MAX];
+			int total = 0;
+			int len;
+			while ((len = DeviceIntrfRxData(pDev, frame, sizeof(frame))) > 0)
+			{
+				BtHciUsbScoReceiveFrame(pHci, frame, (uint16_t)len);
+				total += len;
+			}
+			return total;
+		}
+
+		case DEVINTRF_EVT_TX_READY:
+		case DEVINTRF_EVT_TX_FIFO_EMPTY:
+			BtHciUsbScoSendFrameComplete(pHci, (uint16_t)Length, false);
+			return Length;
+
+		case DEVINTRF_EVT_TX_TIMEOUT:
+			BtHciUsbScoSendFrameComplete(pHci, (uint16_t)Length, true);
+			return 0;
+
+		default:
+			return 0;
+	}
 }
 
 static void BtHciUsbReset(BtHciUsbDev_t *pHci)
@@ -1473,8 +1513,7 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 	UsbIsoIntrfCfg_t isoCfg = {};
 	isoCfg.DevNo = pHci->DevNo;
 	isoCfg.EpNo = pHci->ScoEpNo;
-	isoCfg.RxHandler = BtHciUsbScoReceiveFrame;
-	isoCfg.TxHandler = BtHciUsbScoSendFrameComplete;
+	isoCfg.EvtCB = BtHciUsbScoEvent;
 	isoCfg.pContext = pHci;
 
 	if (!UsbIntrfInit(pHci->pData, &dataCfg) ||

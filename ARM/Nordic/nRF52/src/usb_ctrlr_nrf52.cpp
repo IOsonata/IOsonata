@@ -175,6 +175,10 @@ __attribute__((weak)) void nRFUsbdIsoEpClose(bool)
 {
 }
 
+__attribute__((weak)) void nRFUsbdIsoSofMark(uint16_t)
+{
+}
+
 __attribute__((weak)) bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *, uint16_t)
 {
 	return false;
@@ -707,7 +711,14 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaAllowed(void)
 // separately in its submission path or the ISR completion handoff.
 static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 {
-	// EP0 OUT data-ready has highest priority.
+	// ISO first: it is the only transfer with a deadline. The IN data must
+	// be in the endpoint buffer before the host's IN token, which follows
+	// SOF by tens of microseconds, and the OUT data must be read before the
+	// next SOF. An EP0 packet that yields here is delayed by one ISO DMA.
+	if (s_Usbd.IsoOpen && nRFUsbdIsoStart())
+		return;
+
+	// EP0 OUT data-ready next.
 	if (NRF_USBD->EVENTS_EP0DATADONE != 0U &&
 		(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
 	{
@@ -727,9 +738,6 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 		nRFUsbdEp0InStart(pEp0);
 		return;
 	}
-
-	if (s_Usbd.IsoOpen && nRFUsbdIsoStart())
-		return;
 
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPeek(s_Usbd.hQue);
 	if (pQue != NULL)
@@ -1069,13 +1077,13 @@ extern "C" void USBD_IRQHandler(void){
 	}
 
 	// SOF is a bus event like SETUP and is handed to the core before any
-	// completion is interpreted. The core passes it to the classes; an ISO
-	// class answers with UsbCtrlrIsoSend, which starts on an idle channel or
-	// waits in the scheduler for the hand-off below.
+	// completion is interpreted. The controller only sees any ISO work the
+	// core publishes back through UsbCtrlrIsoSend().
 	if (NRF_USBD->EVENTS_SOF != 0U)
 	{
 		NRF_USBD->EVENTS_SOF = 0U;
 		(void)NRF_USBD->EVENTS_SOF;
+		nRFUsbdIsoSofMark((uint16_t)NRF_USBD->FRAMECNTR);
 		nRFUsbdHandleSof();
 	}
 

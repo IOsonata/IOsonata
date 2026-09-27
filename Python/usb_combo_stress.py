@@ -48,6 +48,26 @@ ISO_DIAG_FORMAT = "<5I"
 ISO_DIAG_SIZE = struct.calcsize(ISO_DIAG_FORMAT)
 # Controller-level ISO scheduling counters. Only the TinyUSB comparison
 # firmware answers this request; the IOsonata firmware stalls it.
+ISO_TRACE_REQUEST = 0x5C
+ISO_TRACE_HDR_FORMAT = "<4H"
+ISO_TRACE_ENTRY_FORMAT = "<HHBBBBHH"
+ISO_TRACE_ENTRY_SIZE = struct.calcsize(ISO_TRACE_ENTRY_FORMAT)
+ISO_TRACE_COUNT = 128
+ISO_TRACE_SIZE = (
+    struct.calcsize(ISO_TRACE_HDR_FORMAT) + ISO_TRACE_COUNT * ISO_TRACE_ENTRY_SIZE
+)
+# Flag bits of a trace entry, in the order they print. Lower case marks the
+# OUT direction.
+ISO_TRACE_FLAGS = (
+    (0x01, "O"),  # IN frame offered at SOF
+    (0x02, "R"),  # offer refused, previous IN still pending
+    (0x04, "B"),  # DMA channel busy at the offer
+    (0x08, "E"),  # ... held by EP0
+    (0x10, "S"),  # STARTISOIN issued
+    (0x20, "D"),  # ENDISOIN retired
+    (0x40, "s"),  # STARTISOOUT issued
+    (0x80, "d"),  # ENDISOOUT retired
+)
 ISO_DCD_DIAG_REQUEST = 0x5B
 ISO_DCD_DIAG_FORMAT = "<11I"
 ISO_DCD_DIAG_SIZE = struct.calcsize(ISO_DCD_DIAG_FORMAT)
@@ -118,6 +138,62 @@ def int_payload(sequence):
     return bytes(data)
 
 
+def read_iso_trace(handle, interface, timeout_ms):
+    """Controller per-frame ISO trace, oldest first, one text line per frame.
+
+    Columns: bus frame number, microseconds since the previous SOF mark
+    (about 1000; 2000 means the device saw no SOF for one frame, more than
+    that means the interrupt was held off past the next SOF), SOF to
+    STARTISOIN in us, SOF to ENDISOIN in us (0 when it did not happen in
+    that frame), IN bytes offered, OUT bytes read, flags (see
+    ISO_TRACE_FLAGS, '-' when clear). A line ending in '<< gap' follows a
+    jump in the frame number.
+    """
+    try:
+        raw = bytes(
+            handle.controlRead(
+                0xC1,
+                ISO_TRACE_REQUEST,
+                0,
+                interface,
+                ISO_TRACE_SIZE,
+                timeout=timeout_ms,
+            )
+        )
+    except usb1.USBError as exc:
+        return [f"trace read failed: {exc}"]
+    if len(raw) != ISO_TRACE_SIZE:
+        return [f"trace length {len(raw)}/{ISO_TRACE_SIZE}"]
+
+    hdr_size = struct.calcsize(ISO_TRACE_HDR_FORMAT)
+    nxt, count, entry_size, version = struct.unpack(
+        ISO_TRACE_HDR_FORMAT, raw[:hdr_size]
+    )
+    if version != 2 or entry_size != ISO_TRACE_ENTRY_SIZE or count != ISO_TRACE_COUNT:
+        return [f"trace layout v{version} entry {entry_size} count {count}"]
+
+    lines = ["frame sof_us start_us end_us in out flags"]
+    previous = None
+    for i in range(count):
+        index = (nxt + i) % count
+        offset = hdr_size + index * entry_size
+        frame, sof_us, start_us, end_us, in_len, flags, out_len, _ = struct.unpack(
+            ISO_TRACE_ENTRY_FORMAT, raw[offset:offset + entry_size]
+        )
+        text = "".join(
+            letter if flags & bit else "-" for bit, letter in ISO_TRACE_FLAGS
+        )
+        gap = ""
+        if previous is not None and ((frame - previous) & 0x7FF) != 1:
+            gap = "  << gap"
+        previous = frame
+        lines.append(
+            f"{frame:5d} {sof_us:6d} {start_us:8d} {end_us:6d} "
+            f"{in_len:3d} {out_len:3d} {text}{gap}"
+        )
+    return lines
+
+
 def read_iso_diag(handle, interface, timeout_ms):
     raw = bytes(
         handle.controlRead(
@@ -172,7 +248,17 @@ class Stats:
         self.prbs_errors = 0
         self.target_errors = 0
         self.path_errors = {"hid": 0, "int": 0, "iso": 0}
+        self.iso_host_misses = 0
         self.failure = None
+
+    def add_iso_host_miss(self):
+        with self.lock:
+            self.iso_host_misses += 1
+            return self.iso_host_misses
+
+    def iso_host_miss_count(self):
+        with self.lock:
+            return self.iso_host_misses
 
     def add(self, name, count, errors=0, target_errors=0):
         with self.lock:
@@ -442,6 +528,7 @@ def iso_worker(vid, pid, start, stop, stats, timeout_ms, rounds):
                     handle.setInterfaceAltSetting(interface, ISO_ALT)
                     sequence = 0
                     start.wait()
+                    misses = 0
                     while not stop.is_set():
                         error, result = iso_test.run_burst(
                             context,
@@ -454,6 +541,29 @@ def iso_worker(vid, pid, start, stop, stats, timeout_ms, rounds):
                             timeout_ms,
                             sequence,
                         )
+                        if iso_test.is_host_sched_miss_error(error):
+                            # The host never ran the request; nothing was
+                            # on the bus. Count it, move the sequence on so
+                            # any queued echoes read as stale, and resubmit.
+                            misses += 1
+                            total = stats.add_iso_host_miss()
+                            print(
+                                f"ISO {error} (#{total}, "
+                                f"{time.strftime('%H:%M:%S')}); resubmitting",
+                                file=sys.stderr,
+                                flush=True,
+                            )
+                            sequence += rounds + (
+                                2 * iso_test.BURST_GUARD_FRAMES
+                            )
+                            if misses <= iso_test.HOST_SCHED_MISS_RETRIES:
+                                continue
+                            error = (
+                                f"{misses} consecutive host scheduling "
+                                f"misses; last: {error}"
+                            )
+                        else:
+                            misses = 0
                         if error is not None:
                             try:
                                 diag = read_iso_diag(
@@ -461,6 +571,14 @@ def iso_worker(vid, pid, start, stop, stats, timeout_ms, rounds):
                                 )
                             except Exception as diag_exc:
                                 diag = f"diag read failed: {diag_exc}"
+                            # The controller's last 128 frames, oldest
+                            # first; the failed burst is inside them.
+                            print("ISO controller frame trace:", file=sys.stderr)
+                            for line in read_iso_trace(
+                                handle, interface, timeout_ms
+                            ):
+                                print("  " + line, file=sys.stderr)
+                            sys.stderr.flush()
                             raise RuntimeError(f"{error}; {diag}")
                         stats.add("iso", result["matched"] * ISO_MPS)
                         sequence += rounds + (
@@ -680,6 +798,7 @@ def main():
         print(f"ISO bytes       : {count['iso']}")
         print(f"ISO B/sec       : {rates['iso']:.2f}")
         print(f"ISO errors      : {path_errors['iso']}")
+        print(f"ISO host misses : {stats.iso_host_miss_count()}")
         print(f"Total bytes     : {total_bytes}")
         print(f"Total B/sec     : {total_rate:.2f}")
         if failure is not None:

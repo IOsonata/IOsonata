@@ -248,9 +248,18 @@ void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 // It may be NULL only for a zero-length transfer.
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
 // Isochronous service-interval transfer. A non-NULL IN buffer sends one
-// frame (Length may be zero for a ZLP); OUT uses the registered RX buffer.
+// frame (Length may be zero for a ZLP); OUT lands in the controller's ISO
+// receive buffer.
 bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 					 uint16_t Length);
+// The controller owns the ISO OUT DMA buffer; its size is the hardware's
+// ISO OUT packet limit (USB_CTRLR_PKT_LEN_MAX(DevNo, ISO)). A completed
+// ISO OUT transfer leaves its bytes here until the next one starts.
+uint8_t *UsbCtrlrIsoRxBuffer(int DevNo);
+// Bench diagnostics: copy of the controller's per-frame ISO trace ring.
+// Returns the byte count and points *ppData at it; zero when the build has
+// no trace (NRFUSBD_ISO_TRACE 0).
+uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData);
 // IN returns bytes copied into the queue; completion notifies that it drained.
 // A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
@@ -325,6 +334,7 @@ void nRFUsbdDmaUnlock(void);
 void nRFUsbdDmaWait(void);
 void nRFUsbdResumeQueuedDmaLocked(void);
 void nRFUsbdIsoComplete(uint8_t In);
+void nRFUsbdIsoSofMark(uint16_t FrameNo);
 
 /** Start EasyDMA with the channel already locked by the caller. */
 void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
