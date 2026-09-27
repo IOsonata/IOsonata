@@ -248,10 +248,11 @@ bool nRFUsbdIsoStart(void)
 	const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
 		0U : (uint16_t)size;
 
-	if (size == 0U || len > pReg->MaxPacketSize)
+	if (len == 0U || len > pReg->MaxPacketSize)
 	{
-		// Nothing arrived for this interval, or it does not fit. Drop the
-		// request; the next SOF service queues a fresh one.
+		// Nothing arrived for this interval, a zero-length packet (ZERO set,
+		// no data to move), or it does not fit. Drop the request; the next
+		// SOF service queues a fresh one.
 		s_Usbd.IsoDataFlag &= (uint8_t)~NRFUSBD_ISO_OUT_READY;
 		return false;
 	}

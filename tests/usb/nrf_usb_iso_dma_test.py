@@ -284,7 +284,10 @@ int main(){
  // A packet larger than the endpoint is not read.
  init();s_Usbd.EpReg[7][0].MaxPacketSize=9;frame(17);
  assert(!dmaBusy && isoStarts[0]==0 && s_Usbd.IsoDataFlag==0);
- puts("PASS: an empty or oversize OUT frame starts no DMA and holds no channel");
+ // Zero-length packet (SIZE.ISOOUT ZERO set): no data, no DMA.
+ init();frame(0);
+ assert(!dmaBusy && isoStarts[0]==0 && s_Usbd.IsoDataFlag==0 && dmaLocks==dmaUnlocks);
+ puts("PASS: an empty, zero-length or oversize OUT frame starts no DMA and holds no channel");
 
  // IN: an offered frame is moved at SOF, IN before OUT, one DMA at a time.
  for(uint16_t length:{0,9,63,512}){
