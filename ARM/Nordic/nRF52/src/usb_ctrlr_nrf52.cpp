@@ -466,14 +466,21 @@ void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 		 (offsetof(NRF_USBD_Type, EPOUTEN) - offsetof(NRF_USBD_Type, EPINEN)));
 	const uint32_t msk = 1UL << EpNum;
 
-	// Regular IN completion is host-consumed EPDATA, so only OUT needs
-	// an END event or interrupt.
-	if (!In)
+	// Both directions interrupt on their END event. The application-level
+	// IN completion still rides EPDATA (host consumed), but the shared
+	// EasyDMA channel must be released the moment the DMA finishes: a
+	// regular DMA in flight at SOF otherwise holds the channel until the
+	// next EPDATA, and the ISO frame staged at that SOF misses its token.
+	// Same reason a control response could sit behind it during
+	// enumeration. nrfx and TinyUSB both enable ENDEPIN0-7.
 	{
-		const uint32_t endMsk = USBD_INTEN_ENDEPOUT0_Msk << EpNum;
+		volatile uint32_t *pEnd = In ?
+			&NRF_USBD->EVENTS_ENDEPIN[EpNum] : &NRF_USBD->EVENTS_ENDEPOUT[EpNum];
+		const uint32_t endMsk = (In ? USBD_INTEN_ENDEPIN0_Msk :
+			USBD_INTEN_ENDEPOUT0_Msk) << EpNum;
 		if (Enable)
 		{
-			NRF_USBD->EVENTS_ENDEPOUT[EpNum] = 0U;
+			*pEnd = 0U;
 			NRF_USBD->INTENSET = endMsk;
 		}
 		else

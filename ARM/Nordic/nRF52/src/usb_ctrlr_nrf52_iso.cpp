@@ -73,68 +73,51 @@ void nRFIsoHwEnable(bool In, bool Enable)
 
 
 // The shared scheduler already owns the channel lock.
+//
+// IN goes first whenever it is ready. The host schedules its periodic
+// transactions at the start of the frame, and the ISOIN buffer answers the
+// IN token with whatever EasyDMA has delivered by then (ZeroData otherwise),
+// so the IN staging has a hard deadline a few tens of microseconds after
+// SOF. Putting the OUT DMA and its ISR completion round trip ahead of it on
+// alternate frames pushes IN past that deadline under load; those frames are
+// the empty IN slots the combo stress reports. OUT follows as soon as the IN
+// DMA ends, still well inside the frame.
 bool nRFUsbdIsoStart(void)
 {
-	uint8_t dataFlag = s_Usbd.IsoDataFlag;
+	const uint8_t dataFlag = s_Usbd.IsoDataFlag;
 	if (dataFlag == 0U)
 		return false;
 
-	uint8_t xferFlag = dataFlag & s_Usbd.IsoXferFlag;
-	if (xferFlag == 0U)
-		xferFlag = dataFlag & (uint8_t)(s_Usbd.IsoXferFlag ^ 0x03U);
-
-	if (xferFlag == NRFUSBD_ISO_OUT_READY)
+	if ((dataFlag & NRFUSBD_ISO_IN_READY) != 0U)
 	{
-		// Only inspect OUT hardware after OUT wins arbitration. If IN runs
-		// first, OUT remains pending and its packet may arrive during IN DMA.
-		const uint32_t size = NRF_USBD->SIZE.ISOOUT;
 		nRFUsbEpReg_t *pReg =
-			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
-		const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
-			0U : (uint16_t)size;
-
-		if (size == 0U)
-		{
-			// OUT may not have reached hardware yet. If IN can use the channel,
-			// keep OUT pending and retry it immediately after IN completes.
-			xferFlag = dataFlag & NRFUSBD_ISO_IN_READY;
-			if (xferFlag == 0U)
-			{
-				s_Usbd.IsoDataFlag &=
-					(uint8_t)~NRFUSBD_ISO_OUT_READY;
-				return false;
-			}
-		}
-		else if (len > pReg->MaxPacketSize)
-		{
-			s_Usbd.IsoDataFlag &=
-				(uint8_t)~NRFUSBD_ISO_OUT_READY;
-			dataFlag &= (uint8_t)~NRFUSBD_ISO_OUT_READY;
-			xferFlag = dataFlag & NRFUSBD_ISO_IN_READY;
-			if (xferFlag == 0U)
-				return false;
-		}
-		else
-		{
-			NRF_USBD->ISOOUT.PTR =
-				(uint32_t)(uintptr_t)pReg->pBuffer;
-			NRF_USBD->ISOOUT.MAXCNT = len;
-			nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
-				&NRF_USBD->EVENTS_ENDISOOUT);
-			s_Usbd.IsoXferFlag = NRFUSBD_ISO_IN_READY;
-			return true;
-		}
+			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1];
+		NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
+		NRF_USBD->ISOIN.MAXCNT = s_Usbd.IsoInDmaLen;
+		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOIN,
+			&NRF_USBD->EVENTS_ENDISOIN);
+		return true;
 	}
 
-	// IN is the selected transfer, either directly or because OUT was not
-	// ready in hardware yet.
+	// OUT: only inspect the hardware once OUT is the selected transfer.
+	const uint32_t size = NRF_USBD->SIZE.ISOOUT;
 	nRFUsbEpReg_t *pReg =
-		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1];
-	NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
-	NRF_USBD->ISOIN.MAXCNT = s_Usbd.IsoInDmaLen;
-	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOIN,
-		&NRF_USBD->EVENTS_ENDISOIN);
-	s_Usbd.IsoXferFlag = NRFUSBD_ISO_OUT_READY;
+		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
+	const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
+		0U : (uint16_t)size;
+
+	if (size == 0U || len > pReg->MaxPacketSize)
+	{
+		// Nothing arrived for this interval, or it does not fit. Drop the
+		// request; the next SOF service queues a fresh one.
+		s_Usbd.IsoDataFlag &= (uint8_t)~NRFUSBD_ISO_OUT_READY;
+		return false;
+	}
+
+	NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
+	NRF_USBD->ISOOUT.MAXCNT = len;
+	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
+		&NRF_USBD->EVENTS_ENDISOOUT);
 	return true;
 }
 
@@ -186,7 +169,6 @@ void nRFUsbdIsoComplete(uint8_t In)
 bool UsbCtrlrIsoInit(int DevNo)
 {
 	(void)DevNo;
-	s_Usbd.IsoXferFlag = NRFUSBD_ISO_IN_READY;
 	return true;
 }
 
@@ -217,7 +199,6 @@ void nRFUsbdIsoEpClose(bool bIn)
 	s_Usbd.IsoOpen = false;
 	nRFUsbdDmaWait();
 	s_Usbd.IsoDataFlag = 0U;
-	s_Usbd.IsoXferFlag = NRFUSBD_ISO_IN_READY;
 
 	nRFIsoHwEnable(bIn, false);
 	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][bIn].MaxPacketSize = 0U;
