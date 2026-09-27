@@ -48,7 +48,6 @@ SOFTWARE.
 alignas(4) static uint8_t s_Pow2Mem[CFIFO_TOTAL_MEMSIZE(POW2_SLOTS, BLK)];
 alignas(4) static uint8_t s_OddMem[CFIFO_TOTAL_MEMSIZE(ODD_SLOTS, BLK)];
 alignas(4) static uint8_t s_BigMem[CFIFO_TOTAL_MEMSIZE(BIG_SLOTS, BLK)];
-alignas(4) static uint8_t s_ByteMem[CFIFO_MEMSIZE(64)];
 
 static int s_Fail;
 #define CHECK(c) do { if (!(c)) { \
@@ -441,51 +440,86 @@ static void TestFlush(void)
 	CHECK(g != nullptr && BlockIs(g, 0x99U));
 }
 
-// Read and write walk whole blocks. A length that is not a block multiple
-// must copy only what the caller asked for.
-static void TestReadWrite(void)
+// Resv hands out the block Put will hand out, without publishing it. The
+// reader must not see it until Put, and Put after Resv must not skip a block.
+static void TestResv(void)
 {
-	hCFifo_t h = CFifoInit(s_ByteMem, sizeof(s_ByteMem), 1U, true);
+	hCFifo_t h = CFifoInit(s_Pow2Mem, sizeof(s_Pow2Mem), BLK, true);
 	if (h == nullptr) { CHECK(false); return; }
 
-	uint8_t src[40];
-	uint8_t dst[40];
-
-	for (unsigned i = 0; i < sizeof(src); i++)
-	{
-		src[i] = (uint8_t)(i * 3U + 1U);
-	}
-
-	CHECK(CFifoWrite(h, src, (int)sizeof(src)) == (int)sizeof(src));
-	memset(dst, 0, sizeof(dst));
-	CHECK(CFifoRead(h, dst, (int)sizeof(dst)) == (int)sizeof(dst));
-	CHECK(memcmp(src, dst, sizeof(src)) == 0);
+	uint8_t *r = CFifoResv(h);
+	CHECK(r != nullptr);
 	CHECK(CFifoUsed(h) == 0);
+	CHECK(CFifoPeek(h) == nullptr);
+	CHECK(CFifoResv(h) == r);
+	if (r != nullptr) { FillBlock(r, 0x11U); }
 
-	// Block size larger than one, with a length that is not a multiple of it.
+	uint8_t *p = CFifoPut(h);
+	CHECK(p == r);
+	CHECK(CFifoUsed(h) == 1);
+	const uint8_t *g = CFifoGet(h);
+	CHECK(g == r && BlockIs(g, 0x11U));
+
+	// Blocking and full: Resv refuses like Put.
+	for (unsigned i = 0; i < POW2_SLOTS; i++)
+	{
+		CHECK(CFifoPut(h) != nullptr);
+	}
+	CHECK(CFifoResv(h) == nullptr);
+	CHECK(CFifoUsed(h) == (int)POW2_SLOTS);
+
+	// Dropping and full: Resv discards the oldest, as Put would, and the
+	// following Put does not discard a second one.
+	hCFifo_t nb = CFifoInit(s_OddMem, sizeof(s_OddMem), BLK, false);
+	if (nb == nullptr) { CHECK(false); return; }
+
+	for (unsigned i = 0; i < ODD_SLOTS; i++)
+	{
+		uint8_t *q = CFifoPut(nb);
+		if (q != nullptr) { FillBlock(q, (uint8_t)i); }
+	}
+	r = CFifoResv(nb);
+	CHECK(r != nullptr);
+	CHECK(CFifoUsed(nb) == (int)ODD_SLOTS - 1);
+	CHECK(CFifoPut(nb) == r);
+	CHECK(CFifoUsed(nb) == (int)ODD_SLOTS);
+	g = CFifoGet(nb);
+	CHECK(g != nullptr && BlockIs(g, 1U));
+
+	// Multiple: reserve the most that fits, publish fewer. The run stops at
+	// the wrap exactly as PutMultiple does, and PutMultiple returns the same
+	// address for any count up to the reserved one.
 	hCFifo_t b = CFifoInit(s_BigMem, sizeof(s_BigMem), BLK, true);
 	if (b == nullptr) { CHECK(false); return; }
 
-	// Guard bytes catch a read that copies whole blocks past the request.
-	uint8_t guarded[64];
-	memset(guarded, 0xC3U, sizeof(guarded));
+	int cnt = (int)BIG_SLOTS - 3;
+	CHECK(CFifoPutMultiple(b, &cnt) != nullptr && cnt == (int)BIG_SLOTS - 3);
+	cnt = (int)BIG_SLOTS - 3;
+	CHECK(CFifoGetMultiple(b, &cnt) != nullptr && cnt == (int)BIG_SLOTS - 3);
 
-	const int odd = (int)BLK * 3 + 5;
-	CHECK(CFifoWrite(b, src, odd) == odd);
-	CHECK(CFifoRead(b, guarded, odd) == odd);
-	CHECK(memcmp(guarded, src, (size_t)odd) == 0);
-	for (unsigned i = (unsigned)odd; i < sizeof(guarded); i++)
+	cnt = 10;
+	r = CFifoResvMultiple(b, &cnt);
+	CHECK(r != nullptr && cnt == 3);
+	CHECK(CFifoUsed(b) == 0);
+	if (r != nullptr)
 	{
-		CHECK(guarded[i] == 0xC3U);
+		for (int i = 0; i < cnt; i++) { FillBlock(r + (unsigned)i * BLK, (uint8_t)(0x50 + i)); }
 	}
 
+	int actual = 2;
+	CHECK(CFifoPutMultiple(b, &actual) == r && actual == 2);
+	CHECK(CFifoUsed(b) == 2);
+	g = CFifoGet(b);
+	CHECK(g == r && BlockIs(g, 0x50U));
+	g = CFifoGet(b);
+	CHECK(g != nullptr && BlockIs(g, 0x51U));
+	CHECK(CFifoUsed(b) == 0);
+
 	// Null and non positive arguments.
-	CHECK(CFifoRead(nullptr, dst, 4) == 0);
-	CHECK(CFifoRead(b, nullptr, 4) == 0);
-	CHECK(CFifoRead(b, dst, 0) == 0);
-	CHECK(CFifoWrite(nullptr, src, 4) == 0);
-	CHECK(CFifoWrite(b, nullptr, 4) == 0);
-	CHECK(CFifoWrite(b, src, 0) == 0);
+	CHECK(CFifoResv(nullptr) == nullptr);
+	cnt = 0;
+	CHECK(CFifoResvMultiple(b, &cnt) == nullptr && cnt == 0);
+	CHECK(CFifoResvMultiple(nullptr, &cnt) == nullptr && cnt == 0);
 }
 
 // Many cycles through the ring, so every slot is used at every position and
@@ -589,7 +623,7 @@ int main(void)
 		{ "get multiple stops at wrap", TestGetMultipleStopsAtWrap },
 		{ "put multiple", TestPutMultiple },
 		{ "flush", TestFlush },
-		{ "read and write", TestReadWrite },
+		{ "resv", TestResv },
 		{ "used avail invariant", TestUsedAvailInvariant },
 		{ "long run wrap", TestLongRunWrap },
 	};

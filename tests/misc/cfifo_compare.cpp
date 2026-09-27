@@ -7,9 +7,8 @@ Compiled twice. Without CFIFO_LEGACY it links the current src/cfifo.c. With
 CFIFO_LEGACY it links the 2021 implementation, which the Makefile extracts
 from git rather than keeping a copy in the tree.
 
-The 2021 version has no CFifoPeek and no CFifoIsBlocking, and its
-CFifoRead/CFifoWrite were never finished, so those cases report skip there
-instead of failing. Everything else runs on both.
+The 2021 version has no CFifoPeek and no CFifoIsBlocking, so those cases
+report skip there instead of failing. Everything else runs on both.
 
 Correctness comes first, then timing. Timing repeats each measurement and
 reports the median with the spread between the fastest and slowest repeat.
@@ -64,12 +63,10 @@ SOFTWARE.
 typedef HCFIFO					hCFifo_t;
 #define HAS_PEEK				0
 #define HAS_ISBLOCKING			0
-#define HAS_READWRITE			0
 #else
 #define VERSION_NAME			"current"
 #define HAS_PEEK				1
 #define HAS_ISBLOCKING			1
-#define HAS_READWRITE			1
 #endif
 
 #define BLK						8U
@@ -81,9 +78,6 @@ typedef HCFIFO					hCFifo_t;
 alignas(4) static uint8_t s_Pow2Mem[CFIFO_TOTAL_MEMSIZE(POW2_SLOTS, BLK)];
 alignas(4) static uint8_t s_OddMem[CFIFO_TOTAL_MEMSIZE(ODD_SLOTS, BLK)];
 alignas(4) static uint8_t s_OneMem[CFIFO_TOTAL_MEMSIZE(ONE_SLOT, BLK)];
-#if HAS_READWRITE
-alignas(4) static uint8_t s_ByteMem[CFIFO_MEMSIZE(256)];
-#endif
 
 static int s_Fail;
 static int s_Skip;
@@ -437,54 +431,6 @@ static void TestFlush(void)
 	CFifoFlush(h);
 	CHECK(CFifoUsed(h) == 0);
 	CHECK(CFifoAvail(h) == (int)POW2_SLOTS);
-}
-
-static void TestReadWrite(void)
-{
-#if HAS_READWRITE
-	hCFifo_t h = CFifoInit(s_ByteMem, sizeof(s_ByteMem), 1U, true);
-	if (h == nullptr) { CHECK(false); return; }
-
-	uint8_t src[40];
-	uint8_t dst[40];
-
-	for (unsigned i = 0; i < sizeof(src); i++)
-	{
-		src[i] = (uint8_t)(i * 3U + 1U);
-	}
-
-	CHECK(CFifoWrite(h, src, (int)sizeof(src)) == (int)sizeof(src));
-	memset(dst, 0, sizeof(dst));
-	CHECK(CFifoRead(h, dst, (int)sizeof(dst)) == (int)sizeof(dst));
-	CHECK(memcmp(src, dst, sizeof(src)) == 0);
-	CHECK(CFifoUsed(h) == 0);
-
-	// Block size above one with a length that is not a multiple of it. The
-	// guard bytes catch a read that copies whole blocks past the request.
-	hCFifo_t b = CFifoInit(s_Pow2Mem, sizeof(s_Pow2Mem), BLK, true);
-	if (b == nullptr) { CHECK(false); return; }
-
-	uint8_t guarded[64];
-	memset(guarded, 0xC3U, sizeof(guarded));
-
-	const int odd = (int)BLK * 3 + 5;
-	CHECK(CFifoWrite(b, src, odd) == odd);
-	CHECK(CFifoRead(b, guarded, odd) == odd);
-	CHECK(memcmp(guarded, src, (size_t)odd) == 0);
-	for (unsigned i = (unsigned)odd; i < sizeof(guarded); i++)
-	{
-		CHECK(guarded[i] == 0xC3U);
-	}
-
-	CHECK(CFifoRead(nullptr, dst, 4) == 0);
-	CHECK(CFifoRead(b, nullptr, 4) == 0);
-	CHECK(CFifoRead(b, dst, 0) == 0);
-	CHECK(CFifoWrite(nullptr, src, 4) == 0);
-	CHECK(CFifoWrite(b, nullptr, 4) == 0);
-	CHECK(CFifoWrite(b, src, 0) == 0);
-#else
-	s_Skip++;
-#endif
 }
 
 // Used and avail must always add up to the slot count, whatever sequence of
@@ -889,7 +835,6 @@ int main(int argc, char **argv)
 		{ "put multiple", TestPutMultiple },
 		{ "put multiple, dropping", TestPutMultipleDropping },
 		{ "flush", TestFlush },
-		{ "read and write", TestReadWrite },
 		{ "used avail invariant", TestUsedAvailInvariant },
 		{ "null handle", TestNullHandle },
 		{ "random against model", TestAgainstModel },

@@ -57,6 +57,8 @@ static int s_LastEventLength;
 static DEVINTRF_EVT s_LastEvent;
 static DevIntrf_t *s_LastEventDev;
 
+static RegisteredEp_t *FindRegistered(uint8_t EpAddr);
+
 extern "C" {
 const UsbCfg_t *UsbGetCfg(int DevNo)
 {
@@ -89,17 +91,24 @@ void UsbCtrlrEpClose(int, uint8_t EpNo, bool bIn)
 }
 void UsbCtrlrEpCloseAll(int) {}
 
+// One registration per endpoint direction, as the controller keeps it: a
+// second call for the same address replaces the first. The ISO class uses
+// this to take over its IN endpoint after UsbIntrf registered it.
 void UsbCtrlrEpAlloc(int, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
                         bool Blocking, UsbCtrlrEpHandler_t Handler,
                         void *pContext)
 {
-    if (Handler == nullptr || s_RegisteredCount >= 5)
+    if (Handler == nullptr)
         return;
-    s_Registered[s_RegisteredCount++] = {
-        (uint8_t)(EpNo | (bIn ? USB_ENDPADDR_DIR_IN : 0U)),
-        pBuffer, Blocking, Handler, pContext
-    };
-    return;
+    const uint8_t addr = (uint8_t)(EpNo | (bIn ? USB_ENDPADDR_DIR_IN : 0U));
+    RegisteredEp_t *pReg = FindRegistered(addr);
+    if (pReg == nullptr)
+    {
+        if (s_RegisteredCount >= 5)
+            return;
+        pReg = &s_Registered[s_RegisteredCount++];
+    }
+    *pReg = { addr, pBuffer, Blocking, Handler, pContext };
 }
 
 bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
@@ -620,8 +629,10 @@ static void TestScoTransport(void)
     BtHciUsb hci;
     CHECK(hci.Init(MakeCfg(true)));
     CHECK(s_RegisteredCount == 5);
+    // SCO rides the ISO class's blocking two-frame FIFOs, so its OUT
+    // endpoint is registered blocking like the bulk ones.
     RegisteredEp_t *scoOut = FindRegistered(USB_ENDPADDR_DIROUT(8U));
-    CHECK(scoOut != nullptr && !scoOut->Blocking);
+    CHECK(scoOut != nullptr && scoOut->Blocking);
     CHECK(hci.SelectConfig(1U));
     CHECK(hci.SelectInterface(1U, 1U));
 
@@ -643,7 +654,7 @@ static void TestScoTransport(void)
     ReceiveOut(8U, packet, 9U);
     ReceiveOut(8U, &packet[9], 9U);
     ReceiveOut(8U, &packet[18], 2U);
-    CHECK(s_OutSubmitCount == beforeOutSubmit); // non-blocking: no DRDY round trip
+    CHECK(s_OutSubmitCount == beforeOutSubmit + 3); // one DRDY round trip per frame
     CHECK(s_RxEventCount == 1);
     uint8_t received[sizeof(packet)] = {};
     CHECK(hci.Data()->RxData(hci.Data(), received, sizeof(received)) ==

@@ -179,26 +179,35 @@ uint8_t *CFifoPut(hCFifo_t const hFifo);
 uint8_t *CFifoPutMultiple(hCFifo_t const hFifo, int *pCnt);
 
 /**
- * @brief	Retrieve FIFO data into provided buffer
+ * @brief	Reserve the next FIFO block for writing without publishing it.
+ *
+ * Put-side counterpart of CFifoPeek. The block is not visible to the reader
+ * until the producer publishes it with CFifoPut, which returns this same
+ * block. Lets a DMA fill the block in place before it is published.
+ * Single producer only: two callers reserving at once receive the same block.
+ * Full behavior is that of CFifoPut: blocking returns NULL, non-blocking
+ * discards the oldest block first.
  *
  * @param	hFifo : CFIFO handle
- * @param	pBuff : Pointer to buffer container for returned data
- * @param	BuffLen : Size of container in bytes
  *
- * @return	Number of bytes copied into pBuff
+ * @return	pointer to the reserved FIFO block, NULL if none.
  */
-//int CFifoPop(hCFifo_t const hFifo, uint8_t *pBuff, int BuffLen);
+uint8_t *CFifoResv(hCFifo_t const hFifo);
 
 /**
- * @brief	Insert FIFO data with provided data
+ * @brief	Reserve consecutive FIFO blocks for writing without publishing them.
+ *
+ * Put-side counterpart of CFifoPeekMultiple. Reserve the most that could be
+ * written, fill some or all of it, then publish the count actually written
+ * with CFifoPutMultiple, which returns this same address. Single producer only.
  *
  * @param	hFifo : CFIFO handle
- * @param	pData : Pointer to data to be inserted
- * @param	DataLen : Size of data in bytes
+ * @param	pCnt  : Number of blocks wanted\n
+ * 					On return the number of consecutive blocks reserved
  *
- * @return	Number of bytes inserted into FIFO
+ * @return	pointer to the first reserved block, NULL if none.
  */
-//int CFifoPush(hCFifo_t const hFifo, uint8_t *pData, int DataLen);
+uint8_t *CFifoResvMultiple(hCFifo_t const hFifo, int *pCnt);
 
 /**
  * @brief	Reset FIFO
@@ -243,10 +252,6 @@ static inline uint32_t CFifoBlockSize(hCFifo_t const hFifo) { return hFifo->BlkS
  * 			wait, false when a full FIFO pushes out the oldest data instead
  */
 static inline bool CFifoIsBlocking(hCFifo_t const hFifo) { return hFifo->bBlocking; }
-
-int CFifoRead(hCFifo_t const pFifo, uint8_t *pBuff, int BuffLen);
-int CFifoWrite(hCFifo_t const pFifo, uint8_t *pData, int DataLen);
-
 
 #ifdef __cplusplus
 }
