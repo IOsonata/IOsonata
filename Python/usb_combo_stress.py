@@ -324,6 +324,7 @@ class Stats:
         self.target_errors = 0
         self.path_errors = {"hid": 0, "int": 0, "iso": 0}
         self.iso_host_misses = 0
+        self.iso_host_skews = 0
         self.iso_sof_losses = 0
         self.iso_out_losses = 0
         self.failure = None
@@ -336,6 +337,15 @@ class Stats:
     def iso_host_miss_count(self):
         with self.lock:
             return self.iso_host_misses
+
+    def add_iso_host_skew(self):
+        with self.lock:
+            self.iso_host_skews += 1
+            return self.iso_host_skews
+
+    def iso_host_skew_count(self):
+        with self.lock:
+            return self.iso_host_skews
 
     def add_iso_link_loss(self, losses):
         with self.lock:
@@ -635,12 +645,17 @@ def iso_worker(vid, pid, start, stop, stats, timeout_ms, rounds):
                             timeout_ms,
                             sequence,
                         )
-                        if iso_test.is_host_sched_miss_error(error):
-                            # The host never ran the request; nothing was
-                            # on the bus. Count it, move the sequence on so
-                            # any queued echoes read as stale, and resubmit.
+                        if iso_test.is_host_sched_error(error):
+                            # The host never ran the request (miss), or ran
+                            # OUT late against IN so the IN window closed
+                            # before the last echoes (skew). Count it, move
+                            # the sequence on so any queued echoes read as
+                            # stale, and resubmit.
                             misses += 1
-                            total = stats.add_iso_host_miss()
+                            if iso_test.is_host_sched_skew_error(error):
+                                total = stats.add_iso_host_skew()
+                            else:
+                                total = stats.add_iso_host_miss()
                             print(
                                 f"ISO {error} (#{total}, "
                                 f"{time.strftime('%H:%M:%S')}); resubmitting",
@@ -921,6 +936,7 @@ def main():
         print(f"ISO B/sec       : {rates['iso']:.2f}")
         print(f"ISO errors      : {path_errors['iso']}")
         print(f"ISO host misses : {stats.iso_host_miss_count()}")
+        print(f"ISO host skews  : {stats.iso_host_skew_count()}")
         print(f"ISO SOF losses  : {stats.iso_sof_loss_count()}")
         print(f"ISO OUT losses  : {stats.iso_out_loss_count()}")
         print(f"Total bytes     : {total_bytes}")

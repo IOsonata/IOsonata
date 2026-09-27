@@ -25,6 +25,7 @@ USB_ENDPOINT_TRANSFER_TYPE_ISO = 0x01
 # many times before it counts as a failure.
 HOST_SCHED_MISS_RETRIES = 3
 HOST_SCHED_MISS_PREFIX = "host scheduling miss: "
+HOST_SCHED_SKEW_PREFIX = "host scheduling skew: "
 
 
 def parse_int(value):
@@ -99,6 +100,39 @@ def is_host_sched_miss(status, setup):
 
 def is_host_sched_miss_error(error):
     return error is not None and error.startswith(HOST_SCHED_MISS_PREFIX)
+
+
+def host_sched_skew_ms(state, missing, rounds):
+    """How late the host ran the OUT transfer against IN, or None.
+
+    IN and OUT are submitted back to back, and the OUT burst is shorter, so
+    when the host starts both at the same frame OUT finishes about 16 ms
+    before IN. The host picks each endpoint's start frame on its own; when
+    it starts OUT later, the IN window closes before the last OUT frames
+    are echoed. The device still echoes every frame it receives (it offers
+    the TX FIFO head at every SOF whether or not an IN token comes), so the
+    echoes past the end of the IN window are simply not fetched.
+
+    That case is recognized only when both hold: OUT finished after IN, and
+    the missing validation frames are one block running to the end of the
+    window. A frame lost anywhere else is not this.
+    """
+    t_in = state.get("t_in_done")
+    t_out = state.get("t_out_done")
+    if t_in is None or t_out is None or not missing:
+        return None
+    if missing != list(range(missing[0], rounds)):
+        return None
+    skew = (t_out - t_in) * 1000.0
+    return skew if skew > 0.0 else None
+
+
+def is_host_sched_skew_error(error):
+    return error is not None and error.startswith(HOST_SCHED_SKEW_PREFIX)
+
+
+def is_host_sched_error(error):
+    return is_host_sched_miss_error(error) or is_host_sched_skew_error(error)
 
 
 def submit_timing(state):
@@ -451,6 +485,15 @@ def run_burst(
             for index in range(first_test, last_test)
             if index not in matched
         ]
+        skew = host_sched_skew_ms(state, missing, rounds)
+        if skew is not None:
+            return (
+                f"{HOST_SCHED_SKEW_PREFIX}OUT finished {skew:.1f} ms after "
+                f"IN, validation frames {missing[0]}-{rounds - 1} past the "
+                f"IN window; {packet_summary(state['in_setup'])}; "
+                f"{submit_timing(state)}",
+                None,
+            )
         if missing:
             return (
                 f"missing validation frame(s) {missing[:16]}; "
@@ -498,7 +541,7 @@ def run_alt(context, handle, interface, ep, alt, mps, rounds, timeout_ms):
                 timeout_ms,
                 sequence_base=mode * 512 + attempt * 64,
             )
-            if not is_host_sched_miss_error(error):
+            if not is_host_sched_error(error):
                 break
             print(
                 f"alt {alt} MPS {mps} length {length}: {error}; resubmitting",
