@@ -72,7 +72,7 @@ names = [
     ('nRFUsbdDmaActive', None), ('nRFUsbdDmaLock', None),
     ('nRFUsbdDmaUnlock', None), ('nRFUsbdDmaStartLocked', None),
     ('nRFUsbdDmaAllowed', None), ('nRFUsbdEpHwEnable', None),
-    ('nRFUsbdGetCompletedXfer', None), ('nRFUsbdDmaWait', None),
+    ('nRFUsbdDmaEndEvent', None), ('nRFUsbdGetCompletedXfer', None), ('nRFUsbdDmaWait', None),
     ('nRFUsbdEp0InStart', None), ('nRFUsbdStartDmaNow', None),
     ('nRFUsbdStartQueuedDma', None), ('nRFUsbdResumeQueuedDmaLocked', None),
     ('nRFUsbdHandleSof', None),
@@ -224,7 +224,7 @@ unsigned drdyCnt=0;bool drdyGives=false;
 void isoCallback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
  unsigned dir=(unsigned)(uintptr_t)context;
  if(event==USB_CTRLR_EVT_DRDY){
-  assert(dir==0 && s_Usbd.EpReg[7][0].pBuffer==nullptr);
+  assert(dir==0 && s_Usbd.pIsoBuffer[0]==nullptr);
   ++drdyCnt;if(drdyGives)assert(productionEpReceive(0,8,outSlot,512));return;}
  assert(event==USB_CTRLR_EVT_XFER_CMPL);
  ++callbacks[dir];lengths[dir]=length;
@@ -242,8 +242,8 @@ void init(){
  callbacks[0]=callbacks[1]=0;lengths[0]=lengths[1]=0;
  pendingIn=nullptr;pendingInLen=0;
  drdyCnt=0;drdyGives=true;
- s_Usbd.EpReg[7][0]={nullptr,isoCallback,(void*)0,512,false};
- s_Usbd.EpReg[7][1]={nullptr,isoCallback,(void*)1,512,false};
+ s_Usbd.EpReg[7][0]={isoCallback,(void*)0};
+ s_Usbd.EpReg[7][1]={isoCallback,(void*)1};
  assert(productionIsoOpen(0,8,true,512) && productionIsoOpen(0,8,false,512));
  assert(s_Usbd.IsoOpen);
  memset(inBuffer,0xA5,sizeof(inBuffer));memset(inBuffer2,0x3C,sizeof(inBuffer2));
@@ -284,6 +284,43 @@ void regularCallback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
  ++regularCompletions;regularLength=length;
 }
 int main(){
+ // Check every hardware END mapping independently of the decoder. A stale
+ // END from another direction must not release the active transfer.
+ for(unsigned ep=0;ep<=8;++ep)for(unsigned out=0;out<2;++out){
+  init();dmaBusy=0x82;
+  const unsigned bit=ep+out*16;
+  regs.EPSTATUS.bits=1U<<bit;
+  for(unsigned i=0;i<8;++i)regs.EVENTS_ENDEPIN[i]=regs.EVENTS_ENDEPOUT[i]=1;
+  regs.EVENTS_ENDISOIN=regs.EVENTS_ENDISOOUT=1;
+  uint32_t *end=ep==8?(out?&regs.EVENTS_ENDISOOUT:&regs.EVENTS_ENDISOIN):
+   (out?&regs.EVENTS_ENDEPOUT[ep]:&regs.EVENTS_ENDEPIN[ep]);
+  *end=0;regs.EVENTS_EP0DATADONE=1;
+  assert(nRFUsbdGetCompletedXfer()==-1 && regs.EPSTATUS.bits==(1U<<bit));
+  *end=1;
+  if(bit==0){
+   regs.EVENTS_EP0DATADONE=0;
+   assert(nRFUsbdGetCompletedXfer()==-1 && *end==1);
+   regs.EVENTS_EP0DATADONE=1;
+  }
+  assert(nRFUsbdGetCompletedXfer()==int(bit) && *end==0 && !regs.EPSTATUS.bits);
+  assert(dmaBusy && !callbacks[0] && !callbacks[1]);
+ }
+ puts("PASS: all 18 DMA directions retire only on their own END; EP0 IN also waits for its handshake");
+ // Foreground close waits for DMA END, including EP0 IN before its host
+ // handshake, and discards only regular queue entries without starting work.
+ for(unsigned ep=0;ep<=8;++ep)for(unsigned out=0;out<2;++out)
+ for(unsigned masked=0;masked<2;++masked){
+  init();irqMask=masked;dmaBusy=0x82;regs.EPSTATUS.bits=1U<<(ep+out*16);
+  assert(CFifoPut(s_Usbd.hQue));
+  if(ep==8){if(out)regs.EVENTS_ENDISOOUT=1;else regs.EVENTS_ENDISOIN=1;}
+  else{if(out)regs.EVENTS_ENDEPOUT[ep]=1;else regs.EVENTS_ENDEPIN[ep]=1;}
+  regs.EVENTS_EP0DATADONE=0;
+  nRFUsbdDmaWait();
+  assert(!dmaBusy && !regs.EPSTATUS.bits && irqMask==masked);
+  assert(CFifoUsed(s_Usbd.hQue)==(ep>0 && ep<8?0:1));
+  assert(!regularStarts && !ep0InStarts && !isoStarts[0] && !isoStarts[1]);
+ }
+ puts("PASS: close retires all 18 DMA directions without waiting for EP0 protocol completion or starting another DMA");
  // OUT: the SOF offer starts a DMA into the controller's own buffer, sized
  // by the received packet; its END completes it with the byte count.
  init();frame(17);
@@ -292,13 +329,13 @@ int main(){
  finish();
  assert(callbacks[0]==1 && lengths[0]==17 && !memcmp(lastOut,hostOut,17));
  assert(!dmaBusy && s_Usbd.IsoDataFlag==0);
- assert(drdyCnt==1 && s_Usbd.EpReg[7][0].pBuffer==nullptr);
+ assert(drdyCnt==1 && s_Usbd.pIsoBuffer[0]==nullptr);
  puts("PASS: ISO OUT lands in the submitted destination and completes at ENDISOOUT");
 
  // No destination submitted: the owner is asked once (DRDY) with a packet
  // waiting. If it submits one the frame is read into it; if not the
  // frame is dropped and the channel released.
- init();s_Usbd.EpReg[7][0].pBuffer=nullptr;drdyGives=true;frame(17);
+ init();s_Usbd.pIsoBuffer[0]=nullptr;drdyGives=true;frame(17);
  assert(drdyCnt==1 && activeBit==24 && regs.ISOOUT.PTR==uint32_t(uintptr_t(outSlot)));
  finish();
  assert(callbacks[0]==1 && lengths[0]==17 && !memcmp(lastOut,hostOut,17) && !dmaBusy);
@@ -306,7 +343,7 @@ int main(){
  assert(drdyCnt==1 && !dmaBusy && isoStarts[0]==0 && s_Usbd.IsoDataFlag==0 &&
   dmaLocks==dmaUnlocks);
  // No packet: the owner is not asked.
- init();s_Usbd.EpReg[7][0].pBuffer=nullptr;frame(-1);frame(0);
+ init();s_Usbd.pIsoBuffer[0]=nullptr;frame(-1);frame(0);
  assert(drdyCnt==0 && isoStarts[0]==0);
  puts("PASS: DRDY requests an OUT destination; without a submission the frame is dropped");
 
@@ -315,7 +352,7 @@ int main(){
  init();frame(-1);
  assert(!dmaBusy && isoStarts[0]==0 && s_Usbd.IsoDataFlag==0 && dmaLocks==dmaUnlocks);
  // A packet larger than the endpoint is not read.
- init();s_Usbd.EpReg[7][0].MaxPacketSize=9;frame(17);
+ init();s_Usbd.IsoMaxPacketSize[0]=9;frame(17);
  assert(!dmaBusy && isoStarts[0]==0 && s_Usbd.IsoDataFlag==0);
  // Zero-length packet (SIZE.ISOOUT ZERO set): no data, no DMA.
  init();frame(0);
@@ -342,7 +379,7 @@ int main(){
  auto *q=(nRFUsbdQue_t*)CFifoPut(s_Usbd.hQue);*q={3,NRFX_USBD_QUE_IN_BUFFER,8,{inBuffer}};
  pendingIn=inBuffer;pendingInLen=9;frame(-1);
  pendingIn=inBuffer2;pendingInLen=5;frame(-1);
- assert(s_Usbd.EpReg[7][1].pBuffer==inBuffer && s_Usbd.IsoInDmaLen==9);
+ assert(s_Usbd.pIsoBuffer[1]==inBuffer && s_Usbd.IsoInDmaLen==9);
  finish();
  assert(activeBit==8 && regs.ISOIN.PTR==uint32_t(uintptr_t(inBuffer)) && regs.ISOIN.MAXCNT==9);
  finish();
@@ -411,7 +448,7 @@ int main(){
  for(uint16_t length:{0U,1U,17U,64U}){
   init();irqMask=masked;s_Usbd.Flags|=USBD_FLAG_SUSPENDED;
   const uint32_t bit=1U<<(ep+16),otherBit=1U<<23;
-  s_Usbd.EpReg[ep-1][0]={nullptr,regularCallback,outSlot,64,true};
+  s_Usbd.EpReg[ep-1][0]={regularCallback,outSlot};
   regs.SIZE.EPOUT[ep]=length;regs.EPDATASTATUS.bits=bit|otherBit;
   regularCompletions=0;regularLength=999;
   assert(productionEpReceive(0,ep,outSlot,64));
@@ -424,7 +461,7 @@ int main(){
   assert(!productionEpReceive(0,ep,inBuffer,64));
   assert(CFifoUsed(s_Usbd.hQue)==1 && entry->pBuffer==outSlot);
   assert(s_Usbd.EpReg[ep-1][0].Handler==regularCallback);
-  assert(s_Usbd.EpReg[ep-1][0].pContext==outSlot && s_Usbd.EpReg[ep-1][0].bBlocking);
+  assert(s_Usbd.EpReg[ep-1][0].pContext==outSlot);
   s_Usbd.Flags&=(uint8_t)~USBD_FLAG_SUSPENDED;
   nRFUsbdResumeQueuedDmaLocked();assert(activeBit==ep+16 && !regularCompletions);
   assert(regs.EPOUT[ep].PTR==uint32_t(uintptr_t(outSlot)) && regs.EPOUT[ep].MAXCNT==length);
@@ -476,7 +513,6 @@ int main(){
   regs.EVENTS_ENDEPIN[ep]=regs.EVENTS_ENDEPOUT[ep]=1;
   regs.SIZE.EPOUT[ep]=64;regs.EPSTALL=address|0x100;
   assert(productionEpOpenData(0,ep,dir,USB_ENDPATT_TRANS_BULK,mps));
-  assert(s_Usbd.EpReg[ep-1][dir].MaxPacketSize==mps);
   assert(regs.EPINEN==(1U|(dir?(1U<<ep):0U)));
   assert(regs.EPOUTEN==(1U|(!dir?(1U<<ep):0U)));
   assert(regs.EVENTS_ENDEPIN[ep]==unsigned(!dir));

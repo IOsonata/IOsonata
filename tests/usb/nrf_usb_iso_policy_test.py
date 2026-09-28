@@ -86,9 +86,9 @@ assert "IsoBufState" not in header + base + iso
 
 # OUT lands in the submitted destination; without one the owner is
 # asked for one (DRDY) and the frame is dropped if it still has none.
-assert "ISOOUT.PTR = (uint32_t)(uintptr_t)pReg->pBuffer" in start_iso
+assert "ISOOUT.PTR = (uint32_t)(uintptr_t)s_Usbd.pIsoBuffer[0]" in start_iso
 assert start_iso.index("USB_CTRLR_EVT_DRDY") < start_iso.index("TASKS_STARTISOOUT")
-assert "pReg->pBuffer == NULL)" in start_iso
+assert "s_Usbd.pIsoBuffer[0] == NULL)" in start_iso
 assert "MaxPacketSize > NRFX_USBD_ISO_MAX_PACKET_SIZE" in iso_open
 assert "USBD_ISOSPLIT_SPLIT_HalfIN" in iso_open
 assert "USBD_ISOINCONFIG_RESPONSE_ZeroData" in iso_open
@@ -136,8 +136,10 @@ assert interrupt.count("nRFUsbdHandleSof();") == 1
 assert "nRFUsbdIsoComplete(completed == 8);" in interrupt
 
 # Completion recognizes both ISO directions by their EPSTATUS bit.
-assert "case 8U:" in completed and "NRF_USBD->EVENTS_ENDISOIN" in completed
-assert "case 24U:" in completed and "NRF_USBD->EVENTS_ENDISOOUT" in completed
+decoder = function_body(base, "volatile uint32_t *nRFUsbdDmaEndEvent(")
+assert "nRFUsbdDmaEndEvent(epno)" in completed
+assert "EpBit == 8U" in decoder and "NRF_USBD->EVENTS_ENDISOIN" in decoder
+assert "EpBit == 24U" in decoder and "NRF_USBD->EVENTS_ENDISOOUT" in decoder
 
 # Scheduler: ISO first, then EP0 OUT data, EP0 IN, the regular queue.
 iso_pos = queued.index("nRFUsbdIsoStart()")

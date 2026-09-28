@@ -541,57 +541,42 @@ void nRFUsbdDmaUnlock(void)
 	__DSB();
 }
 
+// EPSTATUS uses one bit per direction. Both retirement paths decode the
+// same END register; EP0 protocol completion is checked separately below.
+static __attribute__((noinline))
+volatile uint32_t *nRFUsbdDmaEndEvent(uint32_t EpBit)
+{
+	if (EpBit == 8U)
+		return &NRF_USBD->EVENTS_ENDISOIN;
+	if (EpBit == 24U)
+		return &NRF_USBD->EVENTS_ENDISOOUT;
+	return EpBit >= 16U ? &NRF_USBD->EVENTS_ENDEPOUT[EpBit - 16U] :
+		&NRF_USBD->EVENTS_ENDEPIN[EpBit];
+}
+
 // Return the completed EasyDMA transfer encoded as its EPSTATUS bit index.
 // -1 means the active transfer has not reached its matching END event yet.
 static int nRFUsbdGetCompletedXfer(void)
 {
-	int retval = -1;
 	const uint32_t dmastatus = NRF_USBD->EPSTATUS;
+	if (dmastatus == 0U)
+		return -1;
 
-	if (dmastatus != 0U)
-	{
-		const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
-		volatile uint32_t *pend;
+	const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
+	volatile uint32_t *pend = nRFUsbdDmaEndEvent(epno);
+	// EP0 IN must also wait for the host to consume the staged packet.
+	if (*pend == 0U ||
+		(epno == 0U && NRF_USBD->EVENTS_EP0DATADONE == 0U))
+		return -1;
 
-		switch (epno)
-		{
-			case 0U:	// EP0 IN
-				// ENDEPIN0 only means the bytes reached the endpoint buffer.
-				// The packet is consumed, and the next STARTEPIN0 allowed,
-				// at EP0DATADONE (nRF52840 PS, control read sequence).
-				if (NRF_USBD->EVENTS_ENDEPIN[0] == 0U ||
-					NRF_USBD->EVENTS_EP0DATADONE == 0U)
-					return -1;
-				NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
-				NRF_USBD->EVENTS_EP0DATADONE = 0U;
-				NRF_USBD->EPSTATUS = dmastatus;
-				__DSB();
-				(void)CFifoGet(s_Usbd.hEp0Que);
-				return 0;
-			case 16U:	// EP0 OUT
-				pend = &NRF_USBD->EVENTS_ENDEPOUT[0];
-				break;
-			case 8U:
-				pend = &NRF_USBD->EVENTS_ENDISOIN;
-				break;
-			case 24U:
-				pend = &NRF_USBD->EVENTS_ENDISOOUT;
-				break;
-			default:
-				pend = epno > 8U ? &NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
-						&NRF_USBD->EVENTS_ENDEPIN[epno];
-		}
-
-		if (*pend != 0U)
-		{
-			*pend = 0U;
-			NRF_USBD->EPSTATUS = dmastatus;
-			__DSB();
-			retval = (int)epno;
-		}
-	}
-
-	return retval;
+	*pend = 0U;
+	if (epno == 0U)
+		NRF_USBD->EVENTS_EP0DATADONE = 0U;
+	NRF_USBD->EPSTATUS = dmastatus;
+	__DSB();
+	if (epno == 0U)
+		(void)CFifoGet(s_Usbd.hEp0Que);
+	return (int)epno;
 }
 
 /** Finish the hardware DMA, if any, before a foreground stop or close. */
@@ -606,16 +591,7 @@ void nRFUsbdDmaWait(void)
 		if (dmastatus != 0U)
 		{
 			const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
-			volatile uint32_t *pend;
-
-			if (epno == 8U)
-				pend = &NRF_USBD->EVENTS_ENDISOIN;
-			else if (epno == 24U)
-				pend = &NRF_USBD->EVENTS_ENDISOOUT;
-			else
-				pend = epno > 8U ?
-					&NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
-					&NRF_USBD->EVENTS_ENDEPIN[epno];
+			volatile uint32_t *pend = nRFUsbdDmaEndEvent(epno);
 
 			while (*pend == 0U && NRF_USBD->EVENTS_USBRESET == 0U)
 			{
@@ -627,8 +603,7 @@ void nRFUsbdDmaWait(void)
 				NRF_USBD->EPSTATUS = dmastatus;
 				__DSB();
 
-				if ((epno > 0U && epno < 8U) ||
-					(epno > 16U && epno < 24U))
+				if ((epno & 7U) != 0U)
 					(void)CFifoGet(s_Usbd.hQue);
 			}
 		}
@@ -954,13 +929,12 @@ static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
 }
 
 
-// InData is nonzero. Return only the status bit accepted by AppEvt; a full
-// queue leaves it in EPDATASTATUS for UsbCtrlrProcess to retry.
-static uint32_t nRFUsbdQueueInComplete(uint32_t InData)
+// The ISR has decoded the endpoint. A full AppEvt queue leaves its bit
+// in EPDATASTATUS for a later interrupt to retry.
+static bool nRFUsbdQueueInComplete(uint32_t epNum)
 {
-	const uint32_t epNum = 31U - (uint32_t)__CLZ(InData);
 	const uint32_t evt = (NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum;
-	return (uint32_t)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete) << epNum;
+	return AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete);
 }
 
 static void nRFUsbdHandleBusEvent(uint32_t EventCause)
@@ -1122,8 +1096,7 @@ extern "C" void USBD_IRQHandler(void){
 			nRFUsbdEmitXfer(0U, amount);
 			reuseDma = true;
 		}
-		else if ((completed > 0 && completed < 8) ||
-			(completed > 16 && completed < 24))
+		else // The remaining EPSTATUS bits are regular endpoints 1-7.
 		{
 			const uint8_t epNum = (uint8_t)completed & 7U;
 			(void)CFifoGet(s_Usbd.hQue);
@@ -1189,7 +1162,7 @@ extern "C" void USBD_IRQHandler(void){
 	{
 		const uint32_t epNum = 31U - (uint32_t)__CLZ(inData);
 		const uint32_t bit = 1UL << epNum;
-		if (nRFUsbdQueueInComplete(bit) == 0U)
+		if (!nRFUsbdQueueInComplete(epNum))
 			break;
 		servicedStatus |= bit;
 		inData &= ~bit;
@@ -1409,7 +1382,7 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 						 uint16_t MaxPacketSize)
 {
 	(void)Type;
-	nRFUsbGetEpReg(EpNo, bIn)->MaxPacketSize = MaxPacketSize;
+	(void)MaxPacketSize;
 	nRFUsbdEpHwEnable(EpNo, bIn, true);
 	UsbCtrlrEpClearStall(DevNo, EpNo, bIn);
 	return true;
@@ -1446,11 +1419,10 @@ void UsbCtrlrEpBind(int DevNo, uint8_t EpNo, bool bIn, bool bBlocking,
 					 UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	(void)DevNo;
+	(void)bBlocking;
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNo, bIn);
-	pReg->pBuffer = nullptr;
 	pReg->Handler = Handler;
 	pReg->pContext = pContext;
-	pReg->bBlocking = bBlocking;
 }
 
 bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
@@ -1465,13 +1437,13 @@ bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
 	{
 		// ISO has one deadline-scheduled OUT slot, serviced ahead of the
 		// regular queue. DRDY is raised when that interval needs a buffer.
-		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNo, false);
 		if (s_Usbd.IsoOpen &&
 			(s_Usbd.IsoDataFlag & NRFUSBD_ISO_OUT_READY) != 0U &&
 			(NRF_USBD->EPSTATUS & statusBit) == 0U &&
-			pReg->pBuffer == nullptr && Capacity >= pReg->MaxPacketSize)
+			s_Usbd.pIsoBuffer[0] == nullptr &&
+			Capacity >= s_Usbd.IsoMaxPacketSize[0])
 		{
-			pReg->pBuffer = pBuffer;
+			s_Usbd.pIsoBuffer[0] = pBuffer;
 			accepted = true;
 		}
 	}

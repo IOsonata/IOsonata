@@ -217,9 +217,7 @@ bool nRFUsbdIsoStart(void)
 
 	if ((dataFlag & NRFUSBD_ISO_IN_READY) != 0U)
 	{
-		nRFUsbEpReg_t *pReg =
-			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1];
-		NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
+		NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)s_Usbd.pIsoBuffer[1];
 		NRF_USBD->ISOIN.MAXCNT = s_Usbd.IsoInDmaLen;
 		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOIN,
 			&NRF_USBD->EVENTS_ENDISOIN);
@@ -239,11 +237,12 @@ bool nRFUsbdIsoStart(void)
 
 	// Ask the owner to submit this frame's destination through EpReceive.
 	// Completion releases the destination before the next interval.
-	if (len != 0U && len <= pReg->MaxPacketSize && pReg->pBuffer == NULL &&
-		pReg->Handler != NULL)
+	if (len != 0U && len <= s_Usbd.IsoMaxPacketSize[0] &&
+		s_Usbd.pIsoBuffer[0] == NULL && pReg->Handler != NULL)
 		pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
 
-	if (len == 0U || len > pReg->MaxPacketSize || pReg->pBuffer == NULL)
+	if (len == 0U || len > s_Usbd.IsoMaxPacketSize[0] ||
+		s_Usbd.pIsoBuffer[0] == NULL)
 	{
 		// Nothing arrived for this interval, a zero-length packet (ZERO set,
 		// no data to move), it does not fit, or there is nowhere to put it.
@@ -252,7 +251,7 @@ bool nRFUsbdIsoStart(void)
 		return false;
 	}
 
-	NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
+	NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)s_Usbd.pIsoBuffer[0];
 	NRF_USBD->ISOOUT.MAXCNT = len;
 	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
 		&NRF_USBD->EVENTS_ENDISOOUT);
@@ -294,9 +293,7 @@ bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	if (pBuffer != nullptr &&
 		(dataFlag & NRFUSBD_ISO_IN_READY) == 0U)
 	{
-		nRFUsbEpReg_t *pIn =
-			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1];
-		pIn->pBuffer = pBuffer;
+		s_Usbd.pIsoBuffer[1] = pBuffer;
 		s_Usbd.IsoInDmaLen = Length;
 		dataFlag |= NRFUSBD_ISO_IN_READY;
 	}
@@ -318,7 +315,7 @@ void nRFUsbdIsoComplete(uint8_t In)
 
 	s_Usbd.IsoDataFlag &= (uint8_t)~flag;
 	if (!In)
-		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].pBuffer = nullptr;
+		s_Usbd.pIsoBuffer[0] = nullptr;
 
 #if NRFUSBD_ISO_TRACE
 	if (In)
@@ -358,7 +355,7 @@ bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 	(void)EpNo;
 	if (MaxPacketSize > NRFX_USBD_ISO_MAX_PACKET_SIZE)
 		return false;
-	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][bIn].MaxPacketSize = MaxPacketSize;
+	s_Usbd.IsoMaxPacketSize[bIn] = MaxPacketSize;
 	NRF_USBD->ISOSPLIT =
 		USBD_ISOSPLIT_SPLIT_HalfIN << USBD_ISOSPLIT_SPLIT_Pos;
 	NRF_USBD->ISOINCONFIG =
@@ -367,7 +364,7 @@ bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 	nRFIsoHwEnable(bIn, true);
 
 	s_Usbd.IsoOpen =
-		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][!bIn].MaxPacketSize != 0U;
+		s_Usbd.IsoMaxPacketSize[!bIn] != 0U;
 
 	__DSB();
 	return true;
@@ -380,8 +377,8 @@ void nRFUsbdIsoEpClose(bool bIn)
 	s_Usbd.IsoOpen = false;
 	nRFUsbdDmaWait();
 	s_Usbd.IsoDataFlag = 0U;
-	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].pBuffer = nullptr;
+	s_Usbd.pIsoBuffer[0] = nullptr;
 
 	nRFIsoHwEnable(bIn, false);
-	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][bIn].MaxPacketSize = 0U;
+	s_Usbd.IsoMaxPacketSize[bIn] = 0U;
 }

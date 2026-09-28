@@ -53,7 +53,7 @@ code = r'''
 #include <cstdio>
 enum UsbCtrlrEvtType_t {USB_CTRLR_EVT_DRDY=2};
 typedef void (*UsbCtrlrEpHandler_t)(UsbCtrlrEvtType_t, uint16_t, void *);
-struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;uint16_t MaxPacketSize;bool bBlocking;};
+struct nRFUsbEpReg_t {UsbCtrlrEpHandler_t Handler;void *pContext;};
 struct UsbdMock {uint8_t IntPrio;bool LowPowerSuspend;
  nRFUsbEpReg_t EpReg[8][2];} s_Usbd;
 bool cable, clockOK, readyOK;
@@ -181,9 +181,8 @@ int main(){
   UsbCtrlrEpBind(0,ep,false,true,endpointCallback,&calls);
   UsbCtrlrEpBind(0,ep,true,false,endpointCallback,&calls);
   auto *out=nRFUsbGetEpReg(ep,0);auto *in=nRFUsbGetEpReg(ep,1);
-  assert(out->pBuffer==nullptr && in->pBuffer==nullptr);
-  assert(out->Handler==endpointCallback && out->pContext==&calls && out->bBlocking);
-  assert(in->Handler==endpointCallback && in->pContext==&calls && !in->bBlocking);
+  assert(out->Handler==endpointCallback && out->pContext==&calls);
+  assert(in->Handler==endpointCallback && in->pContext==&calls);
   out->Handler(USB_CTRLR_EVT_DRDY,17,out->pContext);assert(calls==1);
  }
  puts("PASS: nRF52 endpoint binding does not submit a DMA buffer");

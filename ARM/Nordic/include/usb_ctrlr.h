@@ -292,11 +292,8 @@ enum
 
 typedef struct __nRF_Usb_Ep_Registration
 {
-	uint8_t *pBuffer;
 	UsbCtrlrEpHandler_t Handler;
 	void *pContext;
-	uint16_t MaxPacketSize;
-	bool bBlocking;
 } nRFUsbEpReg_t;
 
 enum
@@ -321,10 +318,12 @@ typedef struct __nRF_Usbd_State
 	bool IsoOpen;                 //!< Both EP8 directions are open.
 	uint16_t IsoInDmaLen;
 	uint8_t IsoDataFlag;          //!< ISO directions with data ready for DMA.
-	uint8_t IsoXferFlag;          //!< Preferred next ISO direction, one-hot.
 	volatile uint8_t Flags;       //!< Controller power/wake state only.
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;
+	// Regular DMA buffers and lengths live in hQue; only ISO retains slots.
+	uint8_t *pIsoBuffer[2];
+	uint16_t IsoMaxPacketSize[2];
 	// Non-control endpoints 1-8.
 	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT - 1][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
