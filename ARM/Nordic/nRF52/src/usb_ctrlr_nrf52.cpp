@@ -921,6 +921,8 @@ static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 	}
 }
 
+// Allocate event storage only when the SETUP or SOF handler runs.
+__attribute__((noinline))
 static void nRFUsbdHandleSof(void)
 {
 	nRFUsbdHostResume();
@@ -934,6 +936,7 @@ static void nRFUsbdHandleSof(void)
 	}
 }
 
+__attribute__((noinline))
 static void nRFUsbdProcessEP0Setup(void)
 {
 	UsbCtrlrEvt_t evt;
