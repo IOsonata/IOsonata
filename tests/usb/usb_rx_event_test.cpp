@@ -19,6 +19,7 @@ static void *s_InContext;
 static bool s_HwOutReady;
 static bool s_OutBlocking;
 static bool s_OutDma;
+static uint8_t *s_OutDmaBuf;
 static bool s_InDma;
 static uint16_t s_HwOutLength;
 static uint16_t s_InLength;
@@ -55,6 +56,7 @@ static void ReceiveDma(void)
 	if (s_HwOutReady && !s_OutDma && s_OutBuffer != nullptr)
 	{
 		s_OutDma = true;
+		s_OutDmaBuf = s_OutBuffer;
 		s_OutSubmit++;
 	}
 }
@@ -121,7 +123,6 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 
 alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(RX_SLOTS, BUFFER_SIZE)];
 alignas(4) static uint8_t s_TxMem[CFIFO_MEMSIZE(256)];
-alignas(4) static uint8_t s_RxDma[BUFFER_SIZE];
 alignas(4) static uint8_t s_TxDma[BUFFER_SIZE];
 static UsbDevIntrf_t s_Intrf;
 
@@ -140,6 +141,7 @@ static bool Setup(bool Blocking)
     s_HwOutReady = false;
     s_OutBlocking = true;
     s_OutDma = false;
+    s_OutDmaBuf = nullptr;
     s_InDma = false;
     s_HwOutLength = 0;
     s_InLength = 0;
@@ -161,7 +163,6 @@ static bool Setup(bool Blocking)
     cfg.pTxFifoMem = s_TxMem;
     cfg.TxFifoBlkSize = 1U;
     cfg.BufferSize = BUFFER_SIZE;
-    cfg.pRxBuffer = s_RxDma;
     cfg.pTxBuffer = s_TxDma;
     cfg.EvtCB = AppEvent;
 
@@ -176,28 +177,30 @@ static bool Drdy(const uint8_t *pData, uint16_t Length, bool Notify = false)
     if (Length > 0) memcpy(s_HwOut, pData, Length);
     s_HwOutLength = Length;
     s_HwOutReady = true;
-    if (s_OutBlocking || Notify)
+    // DRDY goes to a blocking owner, or to one with no buffer registered;
+    // otherwise EPDATA goes straight to controller DMA.
+    if (s_OutBlocking || Notify || s_OutBuffer == nullptr)
     {
         s_OutHandler(USB_CTRLR_EVT_DRDY,
                      Length, s_OutContext);
-		ReceiveDma();
     }
-    else
-    {
-        // Non-blocking EPDATA goes straight to controller DMA; there is no DRDY callback.
-        s_OutDma = true;
-        s_OutSubmit++;
-    }
+    ReceiveDma();
     return s_OutDma;
+}
+
+// The OUT DMA destination is a block of the RX FIFO memory.
+static bool InRxFifo(const uint8_t *p)
+{
+    return p != nullptr && p > s_RxMem && p < s_RxMem + sizeof(s_RxMem);
 }
 
 static void CompleteOut(void)
 {
     CHECK(s_HwOutReady && s_OutDma);
-    CHECK(s_OutBuffer == s_RxDma);
+    CHECK(InRxFifo(s_OutDmaBuf));
     if (!s_HwOutReady || !s_OutDma) return;
     if (s_HwOutLength > 0)
-        memcpy(s_OutBuffer, s_HwOut, s_HwOutLength);
+        memcpy(s_OutDmaBuf, s_HwOut, s_HwOutLength);
     uint16_t len = s_HwOutLength;
     s_HwOutReady = false;
     s_OutDma = false;
@@ -214,7 +217,7 @@ static void Deliver(const uint8_t *pData, uint16_t Length)
 static void TestNoPreArm(void)
 {
     CHECK(Setup(true));
-    CHECK(s_OutBuffer == s_RxDma);
+    CHECK(InRxFifo(s_OutBuffer));
     CHECK(s_InBuffer == nullptr);
     CHECK(s_OutSubmit == 0);
     CHECK(!s_OutDma);

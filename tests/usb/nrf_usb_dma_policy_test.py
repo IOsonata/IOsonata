@@ -113,6 +113,12 @@ bus = bus[:bus.index("\n\t}\n") + 3]
 assert bus.index("nRFUsbdHandleBusEvent(eventCause);") < bus.index("newDmaWork = true;")
 assert "!nRFUsbdDmaAllowed()" in resume
 
+# OUT at EPDATA: DRDY goes to a blocking owner or to one with no buffer
+# registered (byte and packet modes register the reserved RX FIFO block, or
+# nothing when the FIFO is full), before the DMA is queued with that buffer.
+out_drdy = interrupt.index("(pReg->bBlocking || pReg->pBuffer == NULL)")
+assert out_drdy < interrupt.index("pQue->pBuffer = pReg->pBuffer;")
+
 # Regular IN completion goes through EPDATA to AppEvt.
 assert interrupt.index("NRF_USBD->EVENTS_EPDATA = 0U;") < interrupt.index(
     "nRFUsbdQueueInComplete("

@@ -48,17 +48,6 @@ SOFTWARE.
 static_assert(offsetof(USBD_ISOOUT_Type, MAXCNT) ==
 	offsetof(USBD_ISOIN_Type, MAXCNT), "ISO register layout");
 
-// ISO OUT EasyDMA destination. The size is set by the peripheral, not by a
-// class: with ISOSPLIT HalfIN the OUT half of the 1 kB ISO buffer holds 512
-// bytes, so no ISO OUT packet larger than that can be received.
-alignas(4) static uint8_t s_IsoRxBuffer[NRFX_USBD_ISO_MAX_PACKET_SIZE];
-
-uint8_t *UsbCtrlrIsoRxBuffer(int DevNo)
-{
-	(void)DevNo;
-	return s_IsoRxBuffer;
-}
-
 #ifndef NRFUSBD_ISO_TRACE
 #define NRFUSBD_ISO_TRACE			1
 #endif
@@ -248,16 +237,24 @@ bool nRFUsbdIsoStart(void)
 	const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
 		0U : (uint16_t)size;
 
-	if (len == 0U || len > pReg->MaxPacketSize)
+	// The destination is the buffer the endpoint owner registered, the
+	// reserved RX FIFO block. None registered means the owner had no free
+	// block when the last frame completed; a packet is waiting now, so ask
+	// for one (DRDY), as the regular OUT path does.
+	if (len != 0U && len <= pReg->MaxPacketSize && pReg->pBuffer == NULL &&
+		pReg->Handler != NULL)
+		pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
+
+	if (len == 0U || len > pReg->MaxPacketSize || pReg->pBuffer == NULL)
 	{
 		// Nothing arrived for this interval, a zero-length packet (ZERO set,
-		// no data to move), or it does not fit. Drop the request; the next
-		// SOF service queues a fresh one.
+		// no data to move), it does not fit, or there is nowhere to put it.
+		// Drop the request; the next SOF service queues a fresh one.
 		s_Usbd.IsoDataFlag &= (uint8_t)~NRFUSBD_ISO_OUT_READY;
 		return false;
 	}
 
-	NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)s_IsoRxBuffer;
+	NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
 	NRF_USBD->ISOOUT.MAXCNT = len;
 	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
 		&NRF_USBD->EVENTS_ENDISOOUT);

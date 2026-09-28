@@ -123,8 +123,6 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	s_InBusy[EpNum] = true;
 	return true;
 }
-static uint32_t s_IsoRxDma[(USB_CTRLR0_ISO_PKT_LEN_MAX + 3U) / 4U];
-uint8_t *UsbCtrlrIsoRxBuffer(int) { return (uint8_t *)s_IsoRxDma; }
 bool UsbCtrlrIsoSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
 	if (pBuffer == nullptr) return true;
@@ -266,7 +264,8 @@ static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
     s_HwOutLength[EpNo] = Length;
     s_HwOutReady[EpNo] = true;
 
-    if (pReg->Blocking)
+    // DRDY goes to a blocking owner, or to one with no buffer registered.
+    if (pReg->Blocking || pReg->pBuffer == nullptr)
     {
         pReg->Handler(USB_CTRLR_EVT_DRDY,
                       Length, pReg->pContext);

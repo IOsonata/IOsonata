@@ -19,19 +19,25 @@ UsbPkt_t whose Hdr.Flags bit USB_INTRF_SLOT_READY publishes whether the slot
 contains a current packet; Hdr.Length remains the actual payload length and may
 be zero.
 
-The derived class supplies one fixed RX controller buffer sized for its transfer
-type. Byte and packet modes use the TX CFifo as the transfer source. Direct mode
-supplies both RX and TX buffers, each with UsbPktHdr_t followed by the payload;
-UsbIntrf registers the Data portion with the controller and uses the header as
-the single-slot ownership state.
+Byte and packet modes have no separate RX buffer: the RX CFifo is the DMA
+destination. UsbIntrf reserves the next RX block (CFifoResv) and registers its
+Data portion with the controller as the endpoint's OUT buffer; the controller
+moves the packet there, and the completion writes the header and publishes the
+block (CFifoPut), then reserves the next one. Only this producer moves PutIdx,
+so the registered block is always the one published. BufferSize sizes the RX
+blocks and must cover the endpoint MPS. Byte and packet modes use the TX CFifo
+as the transfer source. Direct mode supplies both RX and TX buffers, each with
+UsbPktHdr_t followed by the payload; UsbIntrf registers the Data portion with
+the controller and uses the header as the single-slot ownership state.
 
 RX is event driven. USB_CTRLR_EVT_DRDY means data is ready in the controller to
-be retrieved. Controllers may also service OUT transfers directly. If a byte
-or packet completion cannot enter the RX CFifo, blocking mode retains its DMA
-buffer and retries through AppEvt. Non-blocking mode drops a rejected completion
-and increments RxDropCnt; ordinary non-blocking CFifo puts replace the oldest
-packet when full. Direct completion publishes the single RX slot instead of
-placing data into a FIFO, replacing any unread packet.
+be retrieved. Controllers may also service OUT transfers directly. When no RX
+block is free the endpoint is registered without a buffer and marked pending.
+Blocking mode keeps it that way until RxData frees a block, which holds the
+host off. Non-blocking mode gives up its oldest packet at the next DRDY, when a
+packet is actually waiting, the same packet a non-blocking put would replace.
+Direct completion publishes the single RX slot instead of placing data into a
+FIFO, replacing any unread packet.
 
 RxData only consumes received FIFO data or the direct RX slot. OUT scheduling
 and retrying a held completion run through endpoint events and UsbProcess.
@@ -134,7 +140,7 @@ typedef struct __Usb_Interf_Config {
 	uint8_t *pTxFifoMem;
 	uint16_t TxFifoBlkSize;
 	uint16_t BufferSize;
-	uint8_t *pRxBuffer;
+	uint8_t *pRxBuffer;		//!< Direct-mode RX slot; unused in byte/packet modes
 	uint8_t *pTxBuffer;		//!< Direct-mode TX slot; unused in byte/packet modes
 	DevIntrfEvtHandler_t EvtCB;
 } UsbIntrfCfg_t;
@@ -150,14 +156,14 @@ struct __Usb_Dev_Interf {
 	int DevNo;
 	uint16_t BufferSize;
 	uint16_t Mps;
-	uint16_t RxPending;		//!< 0: idle, 1: DRDY, otherwise RX length + 2
+	uint16_t RxPending;		//!< 1: OUT endpoint registered without a buffer
 	uint8_t EpNo : 7;
 	bool bBlocking : 1;
 	UsbIntrfMode_t Mode;
 	hCFifo_t hTxFifo;
 	hCFifo_t hRxFifo;
 	uint32_t RxDropCnt;
-	uint8_t *pRxBuffer;
+	uint8_t *pRxBuffer;		//!< Direct mode: Data of the RX slot
 	UsbPkt_t *pRxDirectBuffer;
 	UsbPkt_t *pTxDirectBuffer;
 	EpSendFct_t EpSend;

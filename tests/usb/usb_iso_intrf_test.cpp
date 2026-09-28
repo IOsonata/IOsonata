@@ -92,8 +92,6 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	if (Length > 0U) memcpy(s_InData, pBuffer, Length);
 	return true;
 }
-static uint32_t s_IsoRxDma[(USB_CTRLR0_ISO_PKT_LEN_MAX + 3U) / 4U];
-uint8_t *UsbCtrlrIsoRxBuffer(int) { return (uint8_t *)s_IsoRxDma; }
 bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *pBuffer, uint16_t Length)
 {
 	s_InXferCount++;
@@ -227,15 +225,20 @@ static UsbIsoIntrfCfg_t MakeCfg(void)
 	return cfg;
 }
 
-// The controller DMAs ISO OUT into its own buffer, the one it registered
-// through UsbIntrfInit, and reports the completion.
+// The controller DMAs ISO OUT into the buffer registered for the endpoint,
+// the RX FIFO block UsbIntrf reserved, and reports the completion. With no
+// buffer registered it asks for one (DRDY) and drops the frame if none
+// comes, as the nRF52 ISO path does.
 static void Receive(const uint8_t *pData, uint16_t Length,
 					UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 {
 	CHECK(s_OutHandler != nullptr);
-	CHECK(s_OutBuffer == UsbCtrlrIsoRxBuffer(0));
 	CHECK(!s_OutBusy);
-	if (Length > 0U)
+	if (s_OutBuffer == nullptr)
+		s_OutHandler(USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
+	if (s_OutBuffer == nullptr)
+		return;
+	if (Length > 0U && Event == USB_CTRLR_EVT_XFER_CMPL)
 		memcpy(s_OutBuffer, pData, Length);
 	s_OutHandler(Event, Length, s_OutContext);
 }

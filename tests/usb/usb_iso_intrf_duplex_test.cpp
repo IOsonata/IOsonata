@@ -70,8 +70,6 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	if (Length > 0U) memcpy(s_InData, pBuffer, Length);
 	return true;
 }
-static uint32_t s_IsoRxDma[(USB_CTRLR0_ISO_PKT_LEN_MAX + 3U) / 4U];
-uint8_t *UsbCtrlrIsoRxBuffer(int) { return (uint8_t *)s_IsoRxDma; }
 bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *pBuffer, uint16_t Length)
 {
 	if (pBuffer == nullptr) return true;
@@ -129,10 +127,13 @@ static void Receive(const uint8_t *pData, uint16_t Length)
 {
 	CHECK(s_OutHandler != nullptr);
 	CHECK(!s_OutBusy);
+	CHECK(s_OutBuffer != nullptr);
+	if (s_OutBuffer == nullptr) return;
 	if (Length > 0U) memcpy(s_OutBuffer, pData, Length);
 
-	// ISO OUT DMA is controller owned and lands directly in the registered
-	// buffer. UsbIntrf receives only the transfer-complete notification.
+	// ISO OUT DMA lands directly in the registered buffer, the RX FIFO block
+	// UsbIntrf reserved. UsbIntrf receives only the transfer-complete
+	// notification.
 	s_OutHandler(USB_CTRLR_EVT_XFER_CMPL,
 		Length, s_OutContext);
 }
@@ -169,7 +170,8 @@ int main(void)
 	CHECK(UsbIsoIntrfInit(&iso, &isoData, &cfg));
 	CHECK(iso.pData->Mode == USB_INTRF_MODE_PACKET);
 	CHECK(iso.pData->hRxFifo != nullptr && iso.pData->hTxFifo != nullptr);
-	CHECK(s_OutBuffer == UsbCtrlrIsoRxBuffer(0));
+	// The OUT buffer is a block of the application's RX FIFO memory.
+	CHECK(s_OutBuffer > rxFifo && s_OutBuffer < rxFifo + sizeof(rxFifo));
 	CHECK(UsbIsoIntrfOpen(&iso, 49U, 1U));
 	CHECK(s_OpenCount == 2);
 

@@ -76,7 +76,7 @@ names = [
     ('nRFUsbdEp0InStart', None), ('nRFUsbdStartDmaNow', None),
     ('nRFUsbdStartQueuedDma', None), ('nRFUsbdResumeQueuedDmaLocked', None),
     ('nRFUsbdHandleSof', None),
-    ('UsbCtrlrIsoRxBuffer', None), ('nRFIsoHwEnable', None),
+    ('nRFIsoHwEnable', None),
     ('nRFUsbdIsoStart', None), ('UsbCtrlrIsoSend', None),
     ('nRFUsbdIsoComplete', None), ('nRFUsbdIsoEpClose', None),
     ('UsbCtrlrIsoOpen', 'productionIsoOpen'),
@@ -88,8 +88,6 @@ names = [
 extracted = [function(n, r) for n, r in names]
 prototypes = '\n'.join(p for p, _ in extracted)
 bodies = '\n\n'.join(b for _, b in extracted)
-# The static buffer the ISO member owns.
-iso_rx = block(iso, r'alignas\(4\) static uint8_t s_IsoRxBuffer\[[^\]]*\];', 's_IsoRxBuffer')
 
 preamble = r'''
 #include <atomic>
@@ -199,7 +197,8 @@ void nRFUsbdHostResume(){}
 nRFUsbdState_t s_Usbd;
 alignas(4) uint8_t s_QueMem[CFIFO_TOTAL_MEMSIZE(NRFUSBD_QUE_DEPTH, sizeof(nRFUsbdQue_t))];
 alignas(4) uint8_t s_Ep0QueMem[CFIFO_TOTAL_MEMSIZE(NRFUSBD_EP0_QUE_DEPTH, sizeof(nRFEPPkt_t))];
-@@ISO_RX@@
+// The OUT endpoint owner's buffer (a reserved RX FIFO block in UsbIntrf).
+alignas(4) uint8_t outSlot[512];
 
 // Core stand-in: at SOF offer whatever IN frame the test staged.
 uint8_t *pendingIn=nullptr;
@@ -218,14 +217,21 @@ tests = r'''
 // Harness -----------------------------------------------------------------
 unsigned callbacks[2]={};uint16_t lengths[2]={};
 uint8_t lastOut[512];
+// DRDY: the owner has no buffer registered; drdyGives says whether it
+// registers one when asked.
+unsigned drdyCnt=0;bool drdyGives=false;
 void isoCallback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
+ unsigned dir=(unsigned)(uintptr_t)context;
+ if(event==USB_CTRLR_EVT_DRDY){
+  assert(dir==0 && s_Usbd.EpReg[7][0].pBuffer==nullptr);
+  ++drdyCnt;if(drdyGives)s_Usbd.EpReg[7][0].pBuffer=outSlot;return;}
  assert(event==USB_CTRLR_EVT_XFER_CMPL);
- unsigned dir=(unsigned)(uintptr_t)context;++callbacks[dir];lengths[dir]=length;
- if(!dir)memcpy(lastOut,UsbCtrlrIsoRxBuffer(0),length);
+ ++callbacks[dir];lengths[dir]=length;
+ if(!dir)memcpy(lastOut,outSlot,length);
 }
 uint8_t inBuffer[512],inBuffer2[512];
 void init(){
- if(!dmaBufferCnt){dmaBuffer(UsbCtrlrIsoRxBuffer(0));dmaBuffer(inBuffer);dmaBuffer(inBuffer2);}
+ if(!dmaBufferCnt){dmaBuffer(outSlot);dmaBuffer(inBuffer);dmaBuffer(inBuffer2);}
  regs={};memset(&s_Usbd,0,sizeof(s_Usbd));
  s_Usbd.hQue=CFifoInit(s_QueMem,sizeof(s_QueMem),sizeof(nRFUsbdQue_t),true);
  s_Usbd.hEp0Que=CFifoInit(s_Ep0QueMem,sizeof(s_Ep0QueMem),sizeof(nRFEPPkt_t),true);
@@ -234,7 +240,8 @@ void init(){
  isoStarts[0]=isoStarts[1]=ep0InStarts=regularStarts=0;
  callbacks[0]=callbacks[1]=0;lengths[0]=lengths[1]=0;
  pendingIn=nullptr;pendingInLen=0;
- s_Usbd.EpReg[7][0]={nullptr,isoCallback,(void*)0,512,false};
+ drdyCnt=0;drdyGives=false;
+ s_Usbd.EpReg[7][0]={outSlot,isoCallback,(void*)0,512,false};
  s_Usbd.EpReg[7][1]={nullptr,isoCallback,(void*)1,512,false};
  assert(productionIsoOpen(0,8,true,512) && productionIsoOpen(0,8,false,512));
  assert(s_Usbd.IsoOpen);
@@ -271,11 +278,27 @@ int main(){
  // by the received packet; its END completes it with the byte count.
  init();frame(17);
  assert(dmaBusy && activeBit==24 && isoStarts[0]==1);
- assert(regs.ISOOUT.PTR==uint32_t(uintptr_t(UsbCtrlrIsoRxBuffer(0))) && regs.ISOOUT.MAXCNT==17);
+ assert(regs.ISOOUT.PTR==uint32_t(uintptr_t(outSlot)) && regs.ISOOUT.MAXCNT==17);
  finish();
  assert(callbacks[0]==1 && lengths[0]==17 && !memcmp(lastOut,hostOut,17));
  assert(!dmaBusy && s_Usbd.IsoDataFlag==0);
- puts("PASS: ISO OUT lands in the controller buffer and completes at ENDISOOUT");
+ assert(drdyCnt==0);
+ puts("PASS: ISO OUT lands in the registered buffer and completes at ENDISOOUT");
+
+ // No buffer registered: the owner is asked once (DRDY) with a packet
+ // waiting. If it registers one the frame is read into it; if not the
+ // frame is dropped and the channel released.
+ init();s_Usbd.EpReg[7][0].pBuffer=nullptr;drdyGives=true;frame(17);
+ assert(drdyCnt==1 && activeBit==24 && regs.ISOOUT.PTR==uint32_t(uintptr_t(outSlot)));
+ finish();
+ assert(callbacks[0]==1 && lengths[0]==17 && !memcmp(lastOut,hostOut,17) && !dmaBusy);
+ init();s_Usbd.EpReg[7][0].pBuffer=nullptr;frame(17);
+ assert(drdyCnt==1 && !dmaBusy && isoStarts[0]==0 && s_Usbd.IsoDataFlag==0 &&
+  dmaLocks==dmaUnlocks);
+ // No packet: the owner is not asked.
+ init();s_Usbd.EpReg[7][0].pBuffer=nullptr;frame(-1);frame(0);
+ assert(drdyCnt==0 && isoStarts[0]==0);
+ puts("PASS: an unregistered OUT buffer is requested through DRDY, else the frame is dropped");
 
  // No OUT packet this frame: nothing starts, the request is dropped, the
  // channel is released.
@@ -433,7 +456,7 @@ int main(){
 }
 '''
 
-code = (preamble.replace('@@DRIVER_TYPES@@', types).replace('@@ISO_RX@@', iso_rx)
+code = (preamble.replace('@@DRIVER_TYPES@@', types)
         .replace('@@PROTOTYPES@@', prototypes) + '\n' + bodies + '\n' + tests)
 
 with tempfile.TemporaryDirectory(prefix='iosonata-iso-') as temp:

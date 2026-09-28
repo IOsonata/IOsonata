@@ -45,11 +45,6 @@ static uint16_t UsbdMscMps(const UsbdMscDev_t *pMsc)
 	return UsbCtrlrHighSpeed(pMsc->DevNo) ? pMsc->HsMps : pMsc->FsMps;
 }
 
-static uint8_t *UsbdMscRxBuffer(UsbdMscDev_t *pMsc)
-{
-	return reinterpret_cast<uint8_t *>(pMsc->RxTransfer);
-}
-
 static uint8_t *UsbdMscRxPacket(UsbdMscDev_t *pMsc)
 {
 	return reinterpret_cast<uint8_t *>(pMsc->RxPacket);
@@ -1050,7 +1045,6 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 	intrfCfg.pTxFifoMem = reinterpret_cast<uint8_t *>(pMsc->TxFifo);
 	intrfCfg.TxFifoBlkSize = USBD_MSC_PKT_BLKSIZE;
 	intrfCfg.BufferSize = USBD_MSC_MAX_MPS;
-	intrfCfg.pRxBuffer = UsbdMscRxBuffer(pMsc);
 	intrfCfg.EvtCB = UsbdMscDataEvent;
 	if (!UsbIntrfInit(pMsc->pData, &intrfCfg))
 	{

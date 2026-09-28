@@ -78,7 +78,6 @@ bool UsbCtrlrEpSend(int, uint8_t, uint8_t *pBuffer, uint16_t Len)
 
 alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(SLOTS, BUFFER_SIZE)];
 alignas(4) static uint8_t s_TxMem[CFIFO_MEMSIZE(2048)];
-alignas(4) static uint8_t s_RxTransfer[BUFFER_SIZE];
 alignas(4) static uint8_t s_TxTransfer[BUFFER_SIZE];
 static UsbDevIntrf_t s_Intrf;
 
@@ -93,7 +92,6 @@ static bool Setup(void)
 	cfg.TxFifoMemSize = (int)sizeof(s_TxMem);
 	cfg.TxFifoBlkSize = 1U;
 	cfg.BufferSize = BUFFER_SIZE;
-	cfg.pRxBuffer = s_RxTransfer;
 	cfg.pTxBuffer = s_TxTransfer;
 	memset(static_cast<void *>(&s_Intrf), 0, sizeof(s_Intrf));
 	s_InBusy = false;

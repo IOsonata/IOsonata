@@ -52,11 +52,6 @@ static void UsbdCdcPatchRegistered(const UsbDeviceClass *pClass,
 		Speed, pCfg != nullptr && pCfg->pFuncName != nullptr);
 }
 
-static uint8_t *UsbdCdcRxBuffer(UsbdCdcDev_t *pCdc)
-{
-	return reinterpret_cast<uint8_t *>(pCdc->RxTransfer);
-}
-
 static uint8_t *UsbdCdcNotifBuffer(UsbdCdcDev_t *pCdc)
 {
 	return reinterpret_cast<uint8_t *>(pCdc->NotifTransfer);
@@ -412,8 +407,8 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	dataCfg.DevNo = pCdc->DevNo;
 	dataCfg.EvtCB = pCfg->EvtCB;
 	dataCfg.EpNo = pCdc->DataEpNo;
-	dataCfg.BufferSize = (uint16_t)sizeof(pCdc->RxTransfer);
-	dataCfg.pRxBuffer = UsbdCdcRxBuffer(pCdc);
+	dataCfg.BufferSize =
+		(uint16_t)(USBD_CDC_TRANS_WORDS * sizeof(uint32_t));
 
 	if (!UsbIntrfInit(pCdc->pData, &dataCfg))
 	{

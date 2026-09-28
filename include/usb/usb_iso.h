@@ -20,10 +20,10 @@ ended, pops it and raises DEVINTRF_EVT_TX_READY (more frames queued) or
 DEVINTRF_EVT_TX_FIFO_EMPTY (queue drained) to the application callback with
 the frame length. A failed frame raises DEVINTRF_EVT_TX_TIMEOUT.
 
-The OUT DMA destination belongs to the controller (UsbCtrlrIsoRxBuffer),
-sized by its hardware; the controller reports each received frame and
-UsbIntrf copies it into the RX FIFO. Zero-length frames are counted in
-RxEmptyCnt and skipped by RxData, as UsbIntrf's packet RxData does.
+The controller moves each received OUT frame straight into the RX FIFO
+block UsbIntrf reserved and registered as the endpoint's DMA buffer, and
+reports the frame length; UsbIntrf publishes the block. Zero-length frames
+are counted in RxEmptyCnt and skipped by RxData.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 8, 2026

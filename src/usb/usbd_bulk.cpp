@@ -36,11 +36,6 @@ SOFTWARE.
 #include "usb/usbd_epalloc.h"
 #include "usb/usbd_bulk.h"
 
-static uint8_t *UsbdBulkRxBuffer(UsbdBulkDev_t *pBulk)
-{
-	return reinterpret_cast<uint8_t *>(pBulk->RxTransfer);
-}
-
 static uint16_t UsbdBulkMps(const UsbdBulkDev_t *pBulk)
 {
 	return UsbCtrlrHighSpeed(pBulk->DevNo) ? pBulk->HsMps : pBulk->FsMps;
@@ -222,8 +217,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 	dataCfg.DevNo = pBulk->DevNo;
 	dataCfg.EvtCB = pCfg->EvtCB;
 	dataCfg.EpNo = pBulk->EpNo;
-	dataCfg.BufferSize = (uint16_t)sizeof(pBulk->RxTransfer);
-	dataCfg.pRxBuffer = UsbdBulkRxBuffer(pBulk);
+	dataCfg.BufferSize = (uint16_t)USBD_BULK_MAX_MPS;
 
 	if (!UsbIntrfInit(pBulk->pData, &dataCfg))
 	{

@@ -203,9 +203,6 @@ void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
 bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 					 uint16_t Length);
-// The controller owns the ISO OUT DMA buffer, sized to the port's ISO packet
-// limit. Each hosted test defines it with its other controller stubs.
-uint8_t *UsbCtrlrIsoRxBuffer(int DevNo);
 // IN returns bytes copied into the queue; completion notifies that it drained.
 // A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);

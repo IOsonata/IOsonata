@@ -4,8 +4,11 @@
 @brief	Host regression tests for the UsbIntrf endpoint-pair data path.
 
 The fake controller models a packet resident in endpoint hardware before
-the controller starts OUT DMA. DRDY only releases or withholds the registered
-RX buffer. IN transfers use the explicit DMA source supplied to EpSend.
+the controller starts OUT DMA. The OUT DMA destination is the buffer
+registered when the DMA starts, which in byte and packet modes is the
+reserved RX FIFO block. DRDY is raised for a blocking endpoint, or for one
+with no buffer registered. IN transfers use the explicit DMA source supplied
+to EpSend.
 
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
@@ -34,6 +37,7 @@ static uint16_t s_HwOutLen;
 static uint8_t s_HwOut[BUFFER_SIZE];
 static bool s_OutDma;
 static uint16_t s_OutDmaLen;
+static uint8_t *s_OutDmaBuf;
 
 static bool s_InBusy;
 static uint16_t s_InLen;
@@ -45,12 +49,13 @@ static bool s_HighSpeed;
 
 static void ReceiveDma(void)
 {
-	if (s_HwOutReady && !s_OutDma && s_OutRegBuf != nullptr)
-	{
-		s_OutDma = true;
-		s_OutDmaLen = MPS;
-		s_OutSubmitCnt++;
-	}
+    if (s_HwOutReady && !s_OutDma && s_OutRegBuf != nullptr)
+    {
+        s_OutDma = true;
+        s_OutDmaBuf = s_OutRegBuf;
+        s_OutDmaLen = MPS;
+        s_OutSubmitCnt++;
+    }
 }
 
 extern "C" {
@@ -115,7 +120,6 @@ alignas(4) static uint8_t s_TxPacketMem[
     CFIFO_TOTAL_MEMSIZE(PACKET_SLOTS, PACKET_BLOCK_SIZE)];
 alignas(4) static uint8_t s_TxMaxPacketMem[
     CFIFO_TOTAL_MEMSIZE(PACKET_SLOTS, MAX_PACKET_BLOCK_SIZE)];
-alignas(4) static uint8_t s_RxTransfer[BUFFER_SIZE];
 alignas(4) static uint8_t s_TxTransfer[BUFFER_SIZE];
 static UsbDevIntrf_t s_Intrf;
 
@@ -133,6 +137,7 @@ static void ResetFake(void)
     memset(s_HwOut, 0, sizeof(s_HwOut));
     s_OutDma = false;
     s_OutDmaLen = 0U;
+    s_OutDmaBuf = nullptr;
     s_InBusy = false;
     s_InLen = 0U;
     s_OutSubmitCnt = 0;
@@ -141,19 +146,19 @@ static void ResetFake(void)
     s_HighSpeed = false;
 }
 
-static bool SetupWithTx(uint8_t *pTxMem, int TxMemSize, uint16_t TxBlkSize)
+static bool SetupWithTx(uint8_t *pTxMem, int TxMemSize, uint16_t TxBlkSize,
+                        bool bBlocking = true)
 {
     UsbIntrfCfg_t cfg = {};
     cfg.DevNo = 0;
     cfg.EpNo = EP_NO;
-    cfg.bBlocking = true;
+    cfg.bBlocking = bBlocking;
     cfg.pRxFifoMem = s_RxMem;
     cfg.RxFifoMemSize = (int)sizeof(s_RxMem);
     cfg.pTxFifoMem = pTxMem;
     cfg.TxFifoMemSize = TxMemSize;
     cfg.TxFifoBlkSize = TxBlkSize;
     cfg.BufferSize = BUFFER_SIZE;
-    cfg.pRxBuffer = s_RxTransfer;
     cfg.pTxBuffer = s_TxTransfer;
     memset(static_cast<void *>(&s_Intrf), 0, sizeof(s_Intrf));
     ResetFake();
@@ -189,32 +194,39 @@ static bool Drdy(const uint8_t *pData, uint16_t Len)
     s_HwOutLen = Len;
     s_HwOutReady = true;
 
-    if (s_OutBlocking)
+    if (s_OutBlocking || s_OutRegBuf == nullptr)
     {
         s_OutHandler(USB_CTRLR_EVT_DRDY,
                      Len, s_OutContext);
-		ReceiveDma();
     }
-    else
-    {
-        s_OutDma = true;
-        s_OutDmaLen = MPS;
-        s_OutSubmitCnt++;
-    }
+    ReceiveDma();
     return s_OutDma;
+}
+
+// The OUT DMA destination is a block of the RX FIFO memory.
+static bool InRxFifo(const uint8_t *p)
+{
+    return p != nullptr && p > s_RxMem && p < s_RxMem + sizeof(s_RxMem);
+}
+
+// Data of the block the next completion publishes.
+static uint8_t *NextRxSlot(void)
+{
+    UsbPkt_t *pSlot = reinterpret_cast<UsbPkt_t *>(CFifoResv(s_Intrf.hRxFifo));
+    return pSlot != nullptr ? pSlot->Data : nullptr;
 }
 
 static void CompleteOut(UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 {
     CHECK(s_HwOutReady);
     CHECK(s_OutDma);
-    CHECK(s_OutRegBuf == s_RxTransfer);
+    CHECK(InRxFifo(s_OutDmaBuf));
     if (!s_HwOutReady || !s_OutDma)
         return;
 
     const uint16_t len = s_HwOutLen < s_OutDmaLen ? s_HwOutLen : s_OutDmaLen;
     if (Event == USB_CTRLR_EVT_XFER_CMPL && len > 0U)
-        memcpy(s_OutRegBuf, s_HwOut, len);
+        memcpy(s_OutDmaBuf, s_HwOut, len);
 
     s_HwOutReady = false;
     s_OutDma = false;
@@ -251,22 +263,27 @@ static void TestGeometry(void)
     CHECK(s_Intrf.EpNo == EP_NO);
     CHECK(CFifoAvail(s_Intrf.hRxFifo) == (int)SLOTS);
     CHECK(CFifoBlockSize(s_Intrf.hRxFifo) == USB_INTRF_PKT_BLKSIZE(BUFFER_SIZE));
-    CHECK(s_OutRegBuf == s_RxTransfer);
+    // The OUT buffer is the first RX FIFO block, reserved, not published.
+    CHECK(s_OutRegBuf != nullptr && s_OutRegBuf == NextRxSlot());
+    CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
     CHECK(s_InRegBuf == nullptr);
     CHECK(s_OutSubmitCnt == 0);
     CHECK(!s_OutDma);
 }
 
-static void TestStagingBuffer(void)
+static void TestInPlaceReceive(void)
 {
     CHECK(Setup());
+    uint8_t *pArmed = s_OutRegBuf;
     const uint8_t in[3] = { 1, 2, 3 };
     Deliver(in, sizeof(in));
     CHECK(s_OutSubmitCnt == 1);
     CHECK(!s_OutDma);
+    // The published packet is the block the DMA wrote; the next block is
+    // now registered.
     UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(CFifoPeek(s_Intrf.hRxFifo));
-    CHECK(pPacket != nullptr);
-    CHECK(pPacket != reinterpret_cast<UsbPkt_t *>(s_RxTransfer));
+    CHECK(pPacket != nullptr && pPacket->Data == pArmed);
+    CHECK(s_OutRegBuf != pArmed && s_OutRegBuf == NextRxSlot());
     CHECK(pPacket != nullptr && pPacket->Hdr.Length == sizeof(in));
     CHECK(pPacket != nullptr && memcmp(pPacket->Data, in, sizeof(in)) == 0);
     uint8_t out[sizeof(in)] = {};
@@ -313,8 +330,9 @@ static void TestBackpressure(void)
         in[0] = (uint8_t)i;
         Deliver(in, sizeof(in));
     }
+    // The last completion found no free block: registered without one.
     CHECK(CFifoAvail(s_Intrf.hRxFifo) == 0);
-    CHECK(!s_Intrf.RxPending);
+    CHECK(s_Intrf.RxPending && s_OutRegBuf == nullptr);
 
     uint8_t pending[8] = { 0xA5 };
     CHECK(!Drdy(pending, sizeof(pending)));
@@ -329,7 +347,7 @@ static void TestBackpressure(void)
     // buffer right away (0397e5d6). No DMA runs until the controller
     // services the endpoint again.
     CHECK(!s_OutDma);
-    CHECK(!s_Intrf.RxPending);
+    CHECK(!s_Intrf.RxPending && InRxFifo(s_OutRegBuf));
     s_OutHandler(USB_CTRLR_EVT_DRDY,
                  0U, s_OutContext);
 	ReceiveDma();
@@ -337,6 +355,67 @@ static void TestBackpressure(void)
     CHECK(!s_Intrf.RxPending);
     CompleteOut();
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == (int)SLOTS);
+    for (uint32_t i = 1; i < SLOTS; i++)
+    {
+        CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
+        CHECK(out[0] == (uint8_t)i);
+    }
+    CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
+    CHECK(out[0] == 0xA5U);
+    CHECK(s_Intrf.hRxFifo->DropCnt == 0U);
+}
+
+// Non-blocking: the full FIFO registers no buffer; the next packet takes the
+// oldest one's block when it arrives, the same packet a non-blocking put
+// would have replaced. Every block holds a packet until then.
+static void TestNonBlockingDropOldest(void)
+{
+    CHECK(SetupWithTx(s_TxMem, (int)sizeof(s_TxMem), 1U, false));
+    uint8_t in[8] = {};
+    for (uint32_t i = 0; i < SLOTS; i++)
+    {
+        in[0] = (uint8_t)i;
+        Deliver(in, sizeof(in));
+    }
+    CHECK(CFifoUsed(s_Intrf.hRxFifo) == (int)SLOTS);
+    CHECK(s_Intrf.RxPending && s_OutRegBuf == nullptr);
+    CHECK(s_Intrf.hRxFifo->DropCnt == 0U);
+
+    in[0] = 0x5AU;
+    Deliver(in, sizeof(in));
+    CHECK(s_Intrf.hRxFifo->DropCnt == 1U);
+    CHECK(CFifoUsed(s_Intrf.hRxFifo) == (int)SLOTS);
+
+    uint8_t out[8] = {};
+    for (uint32_t i = 1; i < SLOTS; i++)
+    {
+        CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
+        CHECK(out[0] == (uint8_t)i);
+    }
+    CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
+    CHECK(out[0] == 0x5AU);
+}
+
+// Configure drains the RX FIFO from the read side only, so an OUT DMA
+// already running into the reserved block completes into the block that is
+// published.
+static void TestReconfigureDuringDma(void)
+{
+    CHECK(Setup());
+    uint8_t in[8] = { 1 };
+    Deliver(in, sizeof(in));
+    in[0] = 2;
+    CHECK(Drdy(in, sizeof(in)));
+    uint8_t *pArmed = s_OutDmaBuf;
+    CHECK(UsbIntrfConfigure(&s_Intrf, MPS));
+    CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
+    CHECK(s_OutRegBuf == pArmed);
+    CompleteOut();
+    UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(CFifoPeek(s_Intrf.hRxFifo));
+    CHECK(pPacket != nullptr && pPacket->Data == pArmed);
+    uint8_t out[8] = {};
+    CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
+    CHECK(out[0] == 2U);
 }
 
 static void TestWrap(void)
@@ -562,10 +641,12 @@ int main(void)
 {
     static const Case cases[] = {
         { "geometry", TestGeometry },
-        { "staging buffer", TestStagingBuffer },
+        { "in-place receive", TestInPlaceReceive },
         { "whole packets", TestWholePackets },
         { "zero length packet", TestZlp },
         { "backpressure", TestBackpressure },
+        { "non-blocking drop", TestNonBlockingDropOldest },
+        { "reconfigure during DMA", TestReconfigureDuringDma },
         { "ring wrap", TestWrap },
         { "failed and wrong ep", TestFailedAndWrongEndpoint },
         { "rate", TestRate },

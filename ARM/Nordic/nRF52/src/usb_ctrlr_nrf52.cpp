@@ -1203,7 +1203,10 @@ extern "C" void USBD_IRQHandler(void){
 		const uint32_t statusBit = 1UL << (epNum + 16U);
 		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg((uint8_t)epNum, 0U);
 
-		if (pReg->bBlocking)
+		// A blocking owner decides whether to take the packet now; an owner
+		// with no buffer registered gets the chance to provide one.
+		if ((pReg->bBlocking || pReg->pBuffer == NULL) &&
+			pReg->Handler != NULL)
 			pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
 
 		if ((NRF_USBD->EPSTATUS & statusBit) == 0U &&

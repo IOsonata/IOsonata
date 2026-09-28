@@ -248,14 +248,10 @@ void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 // It may be NULL only for a zero-length transfer.
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
 // Isochronous service-interval transfer. A non-NULL IN buffer sends one
-// frame (Length may be zero for a ZLP); OUT lands in the controller's ISO
-// receive buffer.
+// frame (Length may be zero for a ZLP); OUT lands in the buffer registered
+// for the ISO OUT endpoint with UsbCtrlrEpAlloc.
 bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 					 uint16_t Length);
-// The controller owns the ISO OUT DMA buffer; its size is the hardware's
-// ISO OUT packet limit (USB_CTRLR_PKT_LEN_MAX(DevNo, ISO)). A completed
-// ISO OUT transfer leaves its bytes here until the next one starts.
-uint8_t *UsbCtrlrIsoRxBuffer(int DevNo);
 // Bench diagnostics: copy of the controller's per-frame ISO trace ring.
 // Returns the byte count and points *ppData at it; zero when the build has
 // no trace (NRFUSBD_ISO_TRACE 0).

@@ -69,10 +69,12 @@ assert "USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)" in header
 assert "NRF_USB_EP_COUNT = 9" in header
 assert "NRFX_USBD_ISO_MAX_PACKET_SIZE = 512" in header
 
-# Controller API: one send entry for the service interval, and the
-# controller's own OUT buffer. No separate OUT transfer or service call.
+# Controller API: one send entry for the service interval. OUT lands in
+# the buffer registered for the endpoint (the reserved RX FIFO block), not a
+# controller-owned buffer. No separate OUT transfer or service call.
 assert "UsbCtrlrIsoSend" in header
-assert "uint8_t *UsbCtrlrIsoRxBuffer(int DevNo);" in header
+assert "UsbCtrlrIsoRxBuffer" not in header + base + iso + iso_intrf
+assert "s_IsoRxBuffer" not in iso
 assert "UsbCtrlrEpOutXfer" not in header + base + iso + iso_intrf
 assert "UsbCtrlrIsoService" not in header + base + iso + iso_intrf
 
@@ -82,10 +84,11 @@ assert "uint8_t IsoDataFlag;" in header
 assert "IsoBusy" not in header + base + iso
 assert "IsoBufState" not in header + base + iso
 
-# OUT lands in the controller buffer, sized by the peripheral.
-assert "s_IsoRxBuffer[NRFX_USBD_ISO_MAX_PACKET_SIZE]" in iso
-assert "return s_IsoRxBuffer;" in function_body(iso, "uint8_t *UsbCtrlrIsoRxBuffer(")
-assert "ISOOUT.PTR = (uint32_t)(uintptr_t)s_IsoRxBuffer" in start_iso
+# OUT lands in the registered buffer; with none registered the owner is
+# asked for one (DRDY) and the frame is dropped if it still has none.
+assert "ISOOUT.PTR = (uint32_t)(uintptr_t)pReg->pBuffer" in start_iso
+assert start_iso.index("USB_CTRLR_EVT_DRDY") < start_iso.index("TASKS_STARTISOOUT")
+assert "pReg->pBuffer == NULL)" in start_iso
 assert "MaxPacketSize > NRFX_USBD_ISO_MAX_PACKET_SIZE" in iso_open
 assert "USBD_ISOSPLIT_SPLIT_HalfIN" in iso_open
 assert "USBD_ISOINCONFIG_RESPONSE_ZeroData" in iso_open
@@ -171,7 +174,6 @@ assert "CFifoGet" not in iso_event
 assert "UsbCtrlrEpAlloc(pCfg->DevNo, pCfg->EpNo, true" in init
 assert "UsbIsoIntrfCtrlrInEvent" in init
 assert "cfg.EvtCB = pCfg->EvtCB;" in init
-assert "UsbCtrlrIsoRxBuffer(pCfg->DevNo)" in init
 assert "RxHandler" not in iso_intrf and "TxHandler" not in iso_intrf
 
 print("nrf_usb_iso_policy_test: PASS")

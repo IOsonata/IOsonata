@@ -275,12 +275,10 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 		return false;
 	}
 
-	// The OUT DMA destination belongs to the controller; the peripheral's ISO
-	// packet limit sizes it. UsbIntrf copies each frame from there into the
-	// RX FIFO, so the FIFO block must hold what the controller can deliver.
-	uint8_t *pRxBuffer = UsbCtrlrIsoRxBuffer(pCfg->DevNo);
-	if (pRxBuffer == nullptr || pCfg->BufferSize == 0U ||
-		pCfg->BufferSize > USB_ISO_INTRF_MAX_MPS)
+	// The controller moves each OUT frame straight into the RX FIFO block
+	// UsbIntrf reserved for it, so a block holds one frame of up to
+	// BufferSize bytes, within the controller's ISO packet limit.
+	if (pCfg->BufferSize == 0U || pCfg->BufferSize > USB_ISO_INTRF_MAX_MPS)
 	{
 		return false;
 	}
@@ -299,7 +297,6 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	cfg.bBlocking = true;
 	cfg.Mode = USB_INTRF_MODE_PACKET;
 	cfg.BufferSize = pCfg->BufferSize;
-	cfg.pRxBuffer = pRxBuffer;
 	cfg.RxFifoMemSize = (int)USB_ISO_INTRF_FIFO_MEMSIZE(pCfg->BufferSize);
 	cfg.pRxFifoMem = pCfg->pRxFifoMem;
 	cfg.TxFifoMemSize = (int)USB_ISO_INTRF_FIFO_MEMSIZE(pCfg->BufferSize);
@@ -316,7 +313,9 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	// An isochronous OUT endpoint cannot hold the host off, so the RX FIFO
 	// must drop its oldest frame when full rather than refuse the completion
 	// the way the blocking bulk path does through DRDY. The TX FIFO stays
-	// blocking. Same memory, same geometry, dropping policy.
+	// blocking. Same memory, same geometry, dropping policy. PutIdx starts
+	// at the first block again, the block UsbIntrfInit reserved and
+	// registered as the OUT DMA buffer, so the registration stays valid.
 	pIntrf->pData->hRxFifo = CFifoInit(pCfg->pRxFifoMem,
 		(uint32_t)cfg.RxFifoMemSize, USB_INTRF_PKT_BLKSIZE(pCfg->BufferSize),
 		false);
