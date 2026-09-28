@@ -109,14 +109,12 @@ static inline nRFUsbdIsoTrace_t *nRFUsbdIsoTraceCur(void)
 }
 
 // Called from the USBD interrupt at SOF, before the core sees the frame.
-// FrameNo is ignored: FRAMECNTR read in the pass where the SOF event
-// asserts is not stable, so it is read here until two reads agree. The
-// delta to the previous mark separates a SOF the device never received
+// FRAMECNTR can still be changing when SOF asserts; read until two reads
+// agree. The delta to the previous mark separates a SOF never received
 // (2000 us, FRAMECNTR skips one) from an interrupt held off past the next
 // SOF (2000 us plus the delay, the two events serviced as one).
-void nRFUsbdIsoSofMark(uint16_t FrameNo)
+void nRFUsbdIsoSofMark(void)
 {
-	(void)FrameNo;
 	const uint32_t now = DWT->CYCCNT;
 	const uint32_t delta = (now - s_IsoSofCyc) / NRFUSBD_ISO_CYC_PER_US;
 	s_IsoSofCyc = now;
@@ -161,9 +159,8 @@ uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData)
 #else
 #define ISO_TRACE_FLAG(f)		((void)0)
 
-void nRFUsbdIsoSofMark(uint16_t FrameNo)
+void nRFUsbdIsoSofMark(void)
 {
-	(void)FrameNo;
 }
 
 uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData)
@@ -230,33 +227,33 @@ bool nRFUsbdIsoStart(void)
 
 	// OUT: only inspect the hardware once OUT is the selected transfer.
 	const uint32_t size = NRF_USBD->SIZE.ISOOUT;
-	nRFUsbEpReg_t *pReg =
-		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
 	const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
 		0U : (uint16_t)size;
 
-	// Ask the owner to submit this frame's destination through EpReceive.
-	// Completion releases the destination before the next interval.
-	if (len != 0U && len <= s_Usbd.IsoMaxPacketSize[0] &&
-		s_Usbd.pIsoBuffer[0] == NULL && pReg->Handler != NULL)
-		pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
-
-	if (len == 0U || len > s_Usbd.IsoMaxPacketSize[0] ||
-		s_Usbd.pIsoBuffer[0] == NULL)
+	if (len != 0U && len <= s_Usbd.IsoMaxPacketSize[0])
 	{
-		// Nothing arrived for this interval, a zero-length packet (ZERO set,
-		// no data to move), it does not fit, or there is nowhere to put it.
-		// Drop the request; the next SOF service queues a fresh one.
-		s_Usbd.IsoDataFlag &= (uint8_t)~NRFUSBD_ISO_OUT_READY;
-		return false;
+		// Ask the owner to submit this frame's destination through EpReceive.
+		// Completion releases the destination before the next interval.
+		nRFUsbEpReg_t *pReg =
+			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
+		if (s_Usbd.pIsoBuffer[0] == NULL && pReg->Handler != NULL)
+			pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
+
+		if (s_Usbd.pIsoBuffer[0] != NULL)
+		{
+			NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)s_Usbd.pIsoBuffer[0];
+			NRF_USBD->ISOOUT.MAXCNT = len;
+			nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
+				&NRF_USBD->EVENTS_ENDISOOUT);
+			ISO_TRACE_FLAG(ISO_TRACE_OUT_START);
+			return true;
+		}
 	}
 
-	NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)s_Usbd.pIsoBuffer[0];
-	NRF_USBD->ISOOUT.MAXCNT = len;
-	nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
-		&NRF_USBD->EVENTS_ENDISOOUT);
-	ISO_TRACE_FLAG(ISO_TRACE_OUT_START);
-	return true;
+	// Empty, zero-length, oversize, or no destination: drop this request.
+	// The next SOF service queues a fresh one.
+	s_Usbd.IsoDataFlag &= (uint8_t)~NRFUSBD_ISO_OUT_READY;
+	return false;
 }
 
 bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,

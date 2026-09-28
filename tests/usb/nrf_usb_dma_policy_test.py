@@ -133,7 +133,7 @@ assert receive.index("NRF_USBD->EPDATASTATUS = statusBit;") < receive.index("nRF
 
 # Regular IN completion goes through EPDATA to AppEvt.
 assert interrupt.index("NRF_USBD->EVENTS_EPDATA = 0U;") < interrupt.index(
-    "nRFUsbdQueueInComplete("
+    "AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete)"
 )
 
 # Scheduler: one place decides the order; it ends by releasing the lock

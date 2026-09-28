@@ -88,7 +88,8 @@ assert "IsoBufState" not in header + base + iso
 # asked for one (DRDY) and the frame is dropped if it still has none.
 assert "ISOOUT.PTR = (uint32_t)(uintptr_t)s_Usbd.pIsoBuffer[0]" in start_iso
 assert start_iso.index("USB_CTRLR_EVT_DRDY") < start_iso.index("TASKS_STARTISOOUT")
-assert "s_Usbd.pIsoBuffer[0] == NULL)" in start_iso
+assert "TASKS_STARTISOOUT" in function_body(start_iso, "if (s_Usbd.pIsoBuffer[0] != NULL)")
+assert "len != 0U && len <= s_Usbd.IsoMaxPacketSize[0]" in start_iso
 assert "MaxPacketSize > NRFX_USBD_ISO_MAX_PACKET_SIZE" in iso_open
 assert "USBD_ISOSPLIT_SPLIT_HalfIN" in iso_open
 assert "USBD_ISOINCONFIG_RESPONSE_ZeroData" in iso_open

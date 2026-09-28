@@ -337,7 +337,7 @@ void nRFUsbdDmaUnlock(void);
 void nRFUsbdDmaWait(void);
 void nRFUsbdResumeQueuedDmaLocked(void);
 void nRFUsbdIsoComplete(uint8_t In);
-void nRFUsbdIsoSofMark(uint16_t FrameNo);
+void nRFUsbdIsoSofMark(void);
 
 /** Start EasyDMA with the channel already locked by the caller. */
 void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,

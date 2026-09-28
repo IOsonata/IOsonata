@@ -72,11 +72,11 @@ names = [
     ('nRFUsbdDmaActive', None), ('nRFUsbdDmaLock', None),
     ('nRFUsbdDmaUnlock', None), ('nRFUsbdDmaStartLocked', None),
     ('nRFUsbdDmaAllowed', None), ('nRFUsbdEpHwEnable', None),
-    ('nRFUsbdDmaEndEvent', None), ('nRFUsbdDmaWait', None),
+    ('nRFUsbdDmaWait', None),
     ('nRFUsbdEp0InStart', None), ('nRFUsbdStartDmaNow', None),
     ('nRFUsbdStartQueuedDma', None), ('nRFUsbdResumeQueuedDmaLocked', None),
     ('nRFUsbdHandleSof', None), ('USBD_IRQHandler', None),
-    ('nRFUsbdProcessInComplete', None), ('nRFUsbdQueueInComplete', None),
+    ('nRFUsbdProcessInComplete', None),
     ('nRFIsoHwEnable', None),
     ('nRFUsbdIsoStart', None), ('UsbCtrlrIsoSend', None),
     ('nRFUsbdIsoComplete', None), ('nRFUsbdIsoEpClose', None),
@@ -221,9 +221,9 @@ void nRFUsbdEmitXfer(uint8_t address,uint16_t length){
 }
 // Unchanged reset/setup/power hooks are outside this completion test.
 void nRFUsbdBusReset(){assert(!"unexpected bus reset in DMA test");}
-void nRFUsbdQueueEp0Setup(){assert(!"unexpected setup in DMA test");}
+void nRFUsbdProcessEP0Setup(){assert(!"unexpected setup in DMA test");}
 void nRFUsbdEmitSimple(UsbCtrlrEvtType_t){assert(!"unexpected bus event");}
-void nRFUsbdIsoSofMark(uint16_t){}
+void nRFUsbdIsoSofMark(){}
 void nRFUsbdHandleBusEvent(uint32_t){++busEventCalls;}
 void nRFUsbdTryRemoteWake(){}
 void nRFUsbdTryEnterLowPower(){++tailVisits;}

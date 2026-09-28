@@ -175,7 +175,7 @@ __attribute__((weak)) void nRFUsbdIsoEpClose(bool)
 {
 }
 
-__attribute__((weak)) void nRFUsbdIsoSofMark(uint16_t)
+__attribute__((weak)) void nRFUsbdIsoSofMark(void)
 {
 }
 
@@ -184,14 +184,13 @@ __attribute__((weak)) bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *, uint16_t)
 	return false;
 }
 
-static __attribute__((noinline))
+static inline
 nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpNum, uint8_t Dir)
 {
 	return &s_Usbd.EpReg[EpNum - 1U][Dir];
 }
 
-// Internal callers already know endpoint number and direction. Form the USB
-// address only for the registered callback.
+// Internal callers already know endpoint number and direction.
 __attribute__((noinline))
 void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
 	UsbCtrlrEvtType_t Event, uint16_t Length)
@@ -541,18 +540,6 @@ void nRFUsbdDmaUnlock(void)
 	__DSB();
 }
 
-// Decode the active DMA END register for foreground stop and close.
-static __attribute__((noinline))
-volatile uint32_t *nRFUsbdDmaEndEvent(uint32_t EpBit)
-{
-	if (EpBit == 8U)
-		return &NRF_USBD->EVENTS_ENDISOIN;
-	if (EpBit == 24U)
-		return &NRF_USBD->EVENTS_ENDISOOUT;
-	return EpBit >= 16U ? &NRF_USBD->EVENTS_ENDEPOUT[EpBit - 16U] :
-		&NRF_USBD->EVENTS_ENDEPIN[EpBit];
-}
-
 /** Finish the hardware DMA, if any, before a foreground stop or close. */
 void nRFUsbdDmaWait(void)
 {
@@ -565,7 +552,14 @@ void nRFUsbdDmaWait(void)
 		if (dmastatus != 0U)
 		{
 			const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
-			volatile uint32_t *pend = nRFUsbdDmaEndEvent(epno);
+			volatile uint32_t *pend;
+			if (epno == 8U)
+				pend = &NRF_USBD->EVENTS_ENDISOIN;
+			else if (epno == 24U)
+				pend = &NRF_USBD->EVENTS_ENDISOOUT;
+			else
+				pend = epno >= 16U ? &NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
+					&NRF_USBD->EVENTS_ENDEPIN[epno];
 
 			while (*pend == 0U && NRF_USBD->EVENTS_USBRESET == 0U)
 			{
@@ -824,16 +818,15 @@ static void nRFUsbdTryRemoteWake(void)
 	NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
 }
 
+// Called from the USBD ISR. Only this ISR changes SUSPENDED, so the normal
+// awake SOF path needs no critical section. Keep wake-state updates protected.
 static void nRFUsbdHostResume(void)
 {
+	if ((s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U)
+		return;
+
 	const uint32_t irqState = DisableInterrupt();
 	uint8_t flags = s_Usbd.Flags;
-
-	if ((flags & USBD_FLAG_SUSPENDED) == 0U)
-	{
-		EnableInterrupt(irqState);
-		return;
-	}
 
 	// A host resume cancels any device-initiated wake request. Keep SUSPENDED
 	// set until the peripheral is actually awake; that state alone gates DMA.
@@ -903,14 +896,6 @@ static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
 }
 
 
-// The ISR has decoded the endpoint. A full AppEvt queue leaves its bit
-// in EPDATASTATUS for a later interrupt to retry.
-static bool nRFUsbdQueueInComplete(uint32_t epNum)
-{
-	const uint32_t evt = (NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum;
-	return AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete);
-}
-
 static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 {
 	if ((EventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0U &&
@@ -949,15 +934,21 @@ static void nRFUsbdHandleSof(void)
 	}
 }
 
-static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
+static void nRFUsbdProcessEP0Setup(void)
 {
 	UsbCtrlrEvt_t evt;
 	evt.Type = USB_CTRLR_EVT_SETUP;
 
-	const uint32_t setup[2] = {
-		Evt, (uint32_t)(uintptr_t)pContext
-	};
-	memcpy(&evt.Setup, setup, sizeof(evt.Setup));
+	// Snapshot before clearing EP0SETUP; the next SETUP overwrites these eight
+	// hardware registers. Each register holds one byte of the setup packet.
+	const volatile uint32_t *preg = &NRF_USBD->BMREQUESTTYPE;
+	uint8_t *pSetup = (uint8_t *)&evt.Setup;
+	for (uint32_t i = 0U; i < sizeof(evt.Setup); i++)
+		pSetup[i] = (uint8_t)preg[i];
+
+	NRF_USBD->EVENTS_EP0SETUP = 0U;
+	(void)NRF_USBD->EVENTS_EP0SETUP;
+	nRFUsbdAbortEp0();
 
 	nRFUsbdHostResume();
 
@@ -984,24 +975,6 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 	// or ISO work now that the aborted EP0 channel has been retired.
 	nRFUsbdResumeQueuedDmaLocked();
 }
-
-static void nRFUsbdQueueEp0Setup(void)
-{
-	// Snapshot before clearing EP0SETUP; the next SETUP overwrites these eight
-	// hardware registers.
-	const volatile uint32_t *preg = &NRF_USBD->BMREQUESTTYPE;
-	uint32_t setup[2] = {0U, 0U};
-	for (uint32_t i = 0U; i < 8U; i++)
-		setup[i >> 2U] |= (uint32_t)(uint8_t)preg[i] << ((i & 3U) * 8U);
-
-	NRF_USBD->EVENTS_EP0SETUP = 0U;
-	(void)NRF_USBD->EVENTS_EP0SETUP;
-
-	nRFUsbdAbortEp0();
-
-	nRFUsbdProcessEP0Setup(setup[0], (void *)(uintptr_t)setup[1]);
-}
-
 
 extern "C" void USBD_IRQHandler(void){
 	// Reset cancels any active DMA and must not wait for END events.
@@ -1032,7 +1005,7 @@ extern "C" void USBD_IRQHandler(void){
 	// retires it and hands the channel to the EP0 packet in the same pass.
 	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
 	{
-		nRFUsbdQueueEp0Setup();
+		nRFUsbdProcessEP0Setup();
 	}
 
 	// SOF is a bus event like SETUP and is handed to the core before any
@@ -1042,14 +1015,12 @@ extern "C" void USBD_IRQHandler(void){
 	{
 		NRF_USBD->EVENTS_SOF = 0U;
 		(void)NRF_USBD->EVENTS_SOF;
-		nRFUsbdIsoSofMark((uint16_t)NRF_USBD->FRAMECNTR);
+		nRFUsbdIsoSofMark();
 		nRFUsbdHandleSof();
 	}
 
 	// A completed transfer keeps software DMA ownership for immediate handoff.
 	bool reuseDma = false;
-//	bool newDmaWork = false;
-
 
 	// Only a software-owned channel can have a transfer to retire.
 	if (nRFUsbdDmaActive())
@@ -1140,7 +1111,6 @@ extern "C" void USBD_IRQHandler(void){
 			nRFUsbdStartQueuedDma();
 		else
 			nRFUsbdDmaUnlock();
-		reuseDma = false;
 	}
 
 	// EP0 IN consumes EP0DATADONE together with ENDEPIN0 above. For OUT it
@@ -1149,7 +1119,6 @@ extern "C" void USBD_IRQHandler(void){
 	{
 		if ((NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
 		{
-			//newDmaWork = true;
 			nRFUsbdResumeQueuedDmaLocked();
 		}
 		else if ((NRF_USBD->EPSTATUS & 1UL) == 0U)
@@ -1172,7 +1141,9 @@ extern "C" void USBD_IRQHandler(void){
 	{
 		const uint32_t epNum = 31U - (uint32_t)__CLZ(inData);
 		const uint32_t bit = 1UL << epNum;
-		if (!nRFUsbdQueueInComplete(epNum))
+		// Leave the status bit set when AppEvt is full so the next IRQ retries.
+		const uint32_t evt = (NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum;
+		if (!AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete))
 			break;
 		servicedStatus |= bit;
 		inData &= ~bit;
@@ -1197,11 +1168,6 @@ extern "C" void USBD_IRQHandler(void){
 	NRF_USBD->EPDATASTATUS = servicedStatus;
 	__DSB();
 	nRFUsbdTryRemoteWake();
-
-	// Work discovered after the fast completion handoff may acquire an idle
-	// channel. If another DMA is already active this is a no-op.
-	//if (newDmaWork)
-//		nRFUsbdResumeQueuedDmaLocked();
 
 	nRFUsbdTryEnterLowPower();
 }
