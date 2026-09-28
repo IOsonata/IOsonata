@@ -10,10 +10,16 @@ the driver shows up here as a compile error rather than a silent mismatch.
 This is a host ownership and ordering test, not a model of USB timing.
 """
 from pathlib import Path
+import argparse
 import os
 import re
 import subprocess
 import tempfile
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--regular-out', action='store_true',
+                    help='run only deferred regular endpoint completion tests')
+args = parser.parse_args()
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE_SOURCE = ROOT / 'ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp'
@@ -77,6 +83,8 @@ names = [
     ('nRFUsbdStartQueuedDma', None), ('nRFUsbdResumeQueuedDmaLocked', None),
     ('nRFUsbdHandleSof', None), ('USBD_IRQHandler', None),
     ('nRFUsbdProcessInComplete', None),
+    ('nRFUsbdProcessOutComplete', None), ('nRFUsbdQueueOutComplete', None),
+    ('nRFUsbdResetState', None), ('UsbCtrlrProcess', None),
     ('nRFIsoHwEnable', None),
     ('nRFUsbdIsoStart', None), ('UsbCtrlrIsoSend', None),
     ('nRFUsbdIsoComplete', None), ('nRFUsbdIsoEpClose', None),
@@ -167,7 +175,7 @@ static void capture(int bit){
 }
 // The driver writes PTR as a 32-bit address, right for the target and
 // truncated on a 64-bit host. Map it back to the buffer it came from.
-uint8_t *dmaBuffers[8];unsigned dmaBufferCnt=0;
+uint8_t *dmaBuffers[20];unsigned dmaBufferCnt=0;
 void dmaBuffer(uint8_t *p){dmaBuffers[dmaBufferCnt++]=p;}
 uint8_t *resolve(uint32_t ptr){
  for(unsigned i=0;i<dmaBufferCnt;++i)
@@ -190,6 +198,7 @@ void __DSB(){
 void __ISB(){}
 static inline uint32_t __CLZ(uint32_t v){return v?__builtin_clz(v):32;}
 unsigned irqMask=0;
+bool inIsr=false;
 uint32_t DisableInterrupt(){auto old=irqMask;irqMask=1;return old;}
 void EnableInterrupt(uint32_t old){irqMask=old;}
 uint32_t __get_PRIMASK(){return irqMask;}
@@ -274,7 +283,9 @@ void init(){
 }
 void interrupt(){
  const unsigned savedMask=irqMask;
+ assert(!inIsr);inIsr=true;
  USBD_IRQHandler();
+ inIsr=false;
  assert(irqMask==savedMask);
  if(!regs.EPSTATUS.bits)activeBit=-1;
 }
@@ -300,7 +311,140 @@ void regularCallback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
  assert(context==outSlot && event==USB_CTRLR_EVT_XFER_CMPL);
  ++regularCompletions;regularLength=length;
 }
-int main(){
+// Exercise the actual CFifo reservation/publication contract used by UsbIntrf.
+struct RxPacket {uint32_t length;uint8_t data[64];};
+struct RxEndpoint {
+ unsigned ep,completions,drdy;
+ alignas(8) uint8_t memory[CFIFO_TOTAL_MEMSIZE(2,sizeof(RxPacket))];
+ hCFifo_t fifo;
+} receivers[7];
+void (*duringCompletion)()=nullptr;
+void deferredCallback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
+ auto &rx=*static_cast<RxEndpoint*>(context);
+ auto *packet=reinterpret_cast<RxPacket*>(CFifoResv(rx.fifo));
+ if(event==USB_CTRLR_EVT_DRDY){
+  ++rx.drdy;
+  if(packet)assert(productionEpReceive(0,rx.ep,packet->data,sizeof(packet->data)));
+  return;
+ }
+ assert(event==USB_CTRLR_EVT_XFER_CMPL && !inIsr && !irqMask && packet);
+ assert(CFifoUsed(rx.fifo)==0 && "RX slot was published before AppEvt");
+ packet->length=length;
+ assert(CFifoPut(rx.fifo)==reinterpret_cast<uint8_t*>(packet));
+ ++rx.completions;
+ if(duringCompletion){auto hook=duringCompletion;duringCompletion=nullptr;hook();}
+}
+void deferredInit(){
+ init();dmaBufferCnt=3;duringCompletion=nullptr;
+ for(unsigned i=0;i<7;++i){
+  auto &rx=receivers[i];rx.ep=i+1;rx.completions=rx.drdy=0;
+  rx.fifo=CFifoInit(rx.memory,sizeof(rx.memory),sizeof(RxPacket),true);
+  auto *first=reinterpret_cast<RxPacket*>(CFifoPut(rx.fifo));dmaBuffer(first->data);
+  auto *second=reinterpret_cast<RxPacket*>(CFifoPut(rx.fifo));dmaBuffer(second->data);
+  CFifoFlush(rx.fifo);
+  s_Usbd.EpReg[i][0]={deferredCallback,&rx};
+ }
+}
+void receive(unsigned ep,uint16_t length){
+ regs.SIZE.EPOUT[ep]=length;regs.EPDATASTATUS.bits|=1U<<(ep+16);
+ interrupt();
+ assert(activeBit==int(ep+16));
+}
+void checkPacket(unsigned ep,uint16_t length){
+ auto &rx=receivers[ep-1];
+ auto *packet=reinterpret_cast<RxPacket*>(CFifoGet(rx.fifo));
+ assert(packet && packet->length==length && !memcmp(packet->data,hostOut,length));
+}
+unsigned dummyCalls=0;
+void dummyEvent(uint32_t,void*){++dummyCalls;}
+void closeEp1(){productionEpClose(0,1,false);}
+void completeEp2(){receive(2,13);finish();assert(!receivers[1].completions);}
+void testDeferredOut(){
+ // Every regular OUT length is deferred; DMA is released in the ISR.
+ for(unsigned ep=1;ep<8;++ep)for(uint16_t length:{0U,1U,17U,64U}){
+  deferredInit();receive(ep,length);finish();
+  auto &rx=receivers[ep-1];
+  assert(!dmaBusy && !CFifoUsed(s_Usbd.hQue) && !rx.completions);
+  assert(!CFifoUsed(rx.fifo));
+  AppEvtHandlerDispatch();assert(rx.completions==1);checkPacket(ep,length);
+  AppEvtHandlerExec();assert(rx.completions==1);
+ }
+ puts("PASS: regular OUT callbacks publish reserved RX slots only through AppEvt, outside ISR");
+
+ // Another queued DMA starts before the OUT callback; its host-consumed IN
+ // notification remains deferred through the existing EPDATA AppEvt path.
+ deferredInit();receive(1,17);
+ s_Usbd.EpReg[1][1]={regularCallback,outSlot};
+ assert(productionEpSend(0,2,inBuffer,11));
+ finish();assert(activeBit==2 && dmaBusy && !dmaUnlocks && !receivers[0].completions);
+ assert(!regularCompletions);finish();assert(!regularCompletions);
+ regs.EPDATASTATUS.bits=1U<<2;interrupt();assert(!regularCompletions);
+ AppEvtHandlerExec();assert(receivers[0].completions==1 && regularCompletions==1);
+ assert(regularLength==11);checkPacket(1,17);
+ puts("PASS: DMA handoff stays in the ISR; IN and OUT notifications run through AppEvt");
+
+ // A second packet on the same endpoint must not overwrite its reserved
+ // slot or AMOUNT. Once the first is published, DRDY reserves the next slot.
+ deferredInit();receive(1,17);finish();
+ regs.SIZE.EPOUT[1]=31;regs.EPDATASTATUS.bits=1U<<17;
+ interrupt();assert(regularStarts==1 && receivers[0].drdy==1);
+ assert(!productionEpReceive(0,1,outSlot,64));
+ assert(regs.EPOUT[1].AMOUNT==17 && !dmaBusy);
+ AppEvtHandlerDispatch();assert(receivers[0].completions==1 && activeBit==17);
+ assert(receivers[0].drdy==2 && regularStarts==2 && !regs.EPDATASTATUS.bits);
+ checkPacket(1,17);
+ finish();assert(receivers[0].completions==1);
+ AppEvtHandlerDispatch();assert(receivers[0].completions==2);checkPacket(1,31);
+ puts("PASS: next OUT DMA waits for publication and uses a different reserved RX slot");
+
+ // More endpoints than the default AppEvt queue capacity can complete.
+ deferredInit();
+ for(unsigned ep=1;ep<8;++ep){receive(ep,ep*7);finish();}
+ for(auto &rx:receivers)assert(!rx.completions);
+ AppEvtHandlerDispatch();
+ for(unsigned ep=1;ep<8;++ep){assert(receivers[ep-1].completions==1);checkPacket(ep,ep*7);}
+ AppEvtHandlerExec();for(auto &rx:receivers)assert(rx.completions==1);
+ puts("PASS: one AppEvt delivers multiple OUT completions with each endpoint's actual length");
+
+ // Queue exhaustion must retain completion ownership, release shared DMA,
+ // and retry from UsbCtrlrProcess after the older events have drained.
+ deferredInit();dummyCalls=0;unsigned queued=0;
+ while(AppEvtHandlerQue(0,nullptr,dummyEvent))++queued;
+ assert(queued>0);
+ receive(1,9);finish();assert(!dmaBusy && !receivers[0].completions);
+ regs.SIZE.EPOUT[1]=19;regs.EPDATASTATUS.bits=1U<<17;interrupt();
+ assert(regularStarts==1);
+ receive(2,23);finish();assert(!dmaBusy && !receivers[1].completions);
+ UsbCtrlrProcess(0);assert(dummyCalls==queued && !receivers[0].completions);
+ UsbCtrlrProcess(0);
+ assert(receivers[0].completions==1 && receivers[1].completions==1);
+ checkPacket(1,9);checkPacket(2,23);
+ assert(activeBit==17);finish();UsbCtrlrProcess(0);
+ assert(receivers[0].completions==2);checkPacket(1,19);
+ puts("PASS: full AppEvt queue retains completions and retries without holding shared DMA");
+
+ // An ISR can finish another endpoint while a foreground callback runs.
+ deferredInit();receive(1,5);finish();duringCompletion=completeEp2;
+ UsbCtrlrProcess(0);assert(receivers[0].completions==1 && !receivers[1].completions);
+ UsbCtrlrProcess(0);assert(receivers[1].completions==1);
+ checkPacket(1,5);checkPacket(2,13);
+ puts("PASS: completion arriving during AppEvt processing is retained for the next dispatch");
+
+ // Close/reset cancel pending OUT delivery. Closing IN must preserve OUT.
+ for(bool in:{false,true}){
+  deferredInit();receive(1,7);finish();productionEpClose(0,1,in);
+  AppEvtHandlerExec();assert(receivers[0].completions==unsigned(in));
+ }
+ deferredInit();receive(1,7);finish();nRFUsbdResetState();
+ AppEvtHandlerExec();assert(!receivers[0].completions);
+ deferredInit();receive(1,7);finish();receive(7,49);finish();
+ duringCompletion=closeEp1;AppEvtHandlerExec();
+ assert(receivers[6].completions==1 && !receivers[0].completions);
+ puts("PASS: close/reset cancel deferred OUT callbacks, including cancellation within a batch");
+}
+int main(int argc,char **argv){
+ testDeferredOut();
+ if(argc==2 && !strcmp(argv[1],"--regular-out"))return 0;
  // Check every hardware END mapping independently of the decoder. A stale
  // END from another direction must not release the active transfer.
  for(unsigned ep=0;ep<=8;++ep)for(unsigned out=0;out<2;++out){
@@ -334,6 +478,8 @@ int main(){
   assert(!CFifoUsed(s_Usbd.hQue) && !CFifoUsed(s_Usbd.hEp0Que));
   assert(callbacks[!out]==unsigned(ep==8));
   assert(ep0Callbacks[!out]==unsigned(ep==0));
+  assert(!regularCompletions);
+  if(ep>0 && ep<8 && out)AppEvtHandlerDispatch();
   assert(regularCompletions==unsigned(ep>0 && ep<8 && out));
   if(ep>0 && ep<8 && !out){
    regs.EPDATASTATUS.bits=1U<<ep;
@@ -579,7 +725,8 @@ int main(){
   s_Usbd.Flags&=(uint8_t)~USBD_FLAG_SUSPENDED;
   nRFUsbdResumeQueuedDmaLocked();assert(activeBit==ep+16 && !regularCompletions);
   assert(regs.EPOUT[ep].PTR==uint32_t(uintptr_t(outSlot)) && regs.EPOUT[ep].MAXCNT==length);
-  finish();assert(regularCompletions==1 && regularLength==length && !dmaBusy);
+  finish();assert(!regularCompletions && !dmaBusy);
+  AppEvtHandlerDispatch();assert(regularCompletions==1 && regularLength==length);
   assert(!memcmp(outSlot,hostOut,length));
  }
  // Failed queue admission retains readiness so the same packet can retry.
@@ -664,4 +811,5 @@ with tempfile.TemporaryDirectory(prefix='iosonata-iso-') as temp:
                     '-I' + str(ROOT / 'include'), '-I' + str(ROOT / 'tests/usb/hostport'),
                     '-x', 'c++', str(path), str(ROOT / 'src/app_evt_handler.cpp'),
                     str(ROOT / 'src/cfifo.c'), '-o', str(Path(temp) / 'iso_test')], check=True)
-    subprocess.run([str(Path(temp) / 'iso_test')], check=True)
+    subprocess.run([str(Path(temp) / 'iso_test')] +
+                   (['--regular-out'] if args.regular_out else []), check=True)

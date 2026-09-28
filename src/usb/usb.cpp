@@ -48,6 +48,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "app_evt_handler.h"
+#include "cfifo.h"
 #include "coredev/interrupt.h"
 #include "usb/usb.h"
 
@@ -1865,7 +1866,8 @@ bool UsbInit(const UsbCfg_t *pCfg)
 		return false;
 	}
 
-	if (!AppEvtHandlerInit(nullptr, 0U))
+	alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+	if (!AppEvtHandlerInit(s_AppEvtQueMem, sizeof(s_AppEvtQueMem)))
 	{
 		return false;
 	}

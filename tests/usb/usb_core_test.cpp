@@ -38,6 +38,7 @@ SOFTWARE.
 #include <string.h>
 #include <initializer_list>
 
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_epalloc.h"
 
@@ -324,6 +325,25 @@ static bool Fixture(bool WithSetInterface = true,
 		return false;
 	}
 	return s_Ctrlr.IntEnableCnt == 1 && s_Ctrlr.ConnectCnt == 1;
+}
+
+static void QueueTestEvent(uint32_t Event, void *pContext)
+{
+	*static_cast<uint32_t *>(pContext) |= 1UL << Event;
+}
+
+static bool TestAppEvtQueue(void)
+{
+	CHECK(Fixture());
+	uint32_t events = 0U;
+	for (uint32_t i = 0U; i < 16U; i++)
+	{
+		CHECK(AppEvtHandlerQue(i, &events, QueueTestEvent));
+	}
+	CHECK(!AppEvtHandlerQue(16U, &events, QueueTestEvent));
+	AppEvtHandlerExec();
+	CHECK(events == 0xFFFFU);
+	return true;
 }
 
 static bool SetAddress(uint8_t Address)
@@ -1125,6 +1145,7 @@ typedef struct { const char *pName; TestHandler_t Handler; } TestCase_t;
 int main(void)
 {
 	static const TestCase_t tests[] = {
+		{ "USB AppEvt queue holds 16 events", TestAppEvtQueue },
 		{ "enable requires descriptor", TestEnableRequiresDescriptor },
 		{ "descriptors", TestDescriptors },
 		{ "descriptor validation", TestDescriptorValidation },

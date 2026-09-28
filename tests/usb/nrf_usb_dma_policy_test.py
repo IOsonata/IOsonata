@@ -10,8 +10,8 @@ errata-199 busy word as a software lock:
   the event), and the channel is handed straight to the next queued DMA
   inside the interrupt, before the EPDATA and bus event work.
 - EP0 IN retires only once the host has taken the packet (EP0DATADONE).
-- Regular IN completion to the class rides EPDATA (host consumed), queued
-  to AppEvt; OUT completion is reported as soon as its DMA ends.
+- Regular IN completion to the class rides EPDATA (host consumed); OUT
+  completion is recorded at DMA END. Both notifications run through AppEvt.
 - The foreground wait retires a running DMA and unlocks; it never starts
   another.
 """
@@ -99,12 +99,13 @@ assert "CFifoGet(s_Usbd.hQue)" in dma_wait
 assert "nRFUsbdStartQueuedDma" not in dma_wait
 assert "nRFUsbdResumeQueuedDma" not in dma_wait
 
-# Interrupt: a completed regular transfer is popped and, for OUT, reported
+# Interrupt: a completed regular transfer is popped and, for OUT, queued
 # before the channel is handed on; the hand-off comes before EPDATA and
 # before the bus event work, so the next DMA overlaps that processing.
 hand_off = interrupt.index("nRFUsbdStartQueuedDma();")
 assert interrupt.index("(void)CFifoGet(s_Usbd.hQue);") < hand_off
-assert interrupt.index("nRFUsbEpRegisteredEvent(epNum, 0U,") < hand_off
+assert interrupt.index("nRFUsbdQueueOutComplete();") < hand_off
+assert "USB_CTRLR_EVT_XFER_CMPL" not in completed
 assert hand_off < interrupt.index("NRF_USBD->EVENTS_EPDATA = 0U;")
 assert hand_off < interrupt.index("if (NRF_USBD->EVENTS_USBEVENT != 0U)\n\t{\n\t\tNRF_USBD->EVENTS_USBEVENT = 0U;")
 assert interrupt.count("nRFUsbdStartQueuedDma();") == 1

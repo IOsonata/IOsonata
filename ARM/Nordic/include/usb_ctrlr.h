@@ -327,6 +327,8 @@ typedef struct __nRF_Usbd_State
 	// Non-control endpoints 1-8.
 	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT - 1][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
+	// Bits 1-7 hold regular OUT completions; bit 0 marks a queued AppEvt.
+	volatile uint8_t OutComplete;
 } nRFUsbdState_t;
 
 extern nRFUsbdState_t s_Usbd;
