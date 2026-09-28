@@ -49,20 +49,27 @@ void UsbCtrlrEpStall(int, uint8_t, bool) {}
 void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuf, bool,
+void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (bIn)
 	{
-		s_InBuf = pBuf;
+		s_InBuf = nullptr;
 		s_InHandler = Handler;
 		s_InContext = pContext;
 	}
 	else
 	{
-		s_OutBuf = pBuf;
+		s_OutBuf = nullptr;
 	}
 	return;
+}
+
+bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+{
+	if (s_OutBuf != nullptr || pBuffer == nullptr || Capacity == 0U) return false;
+	s_OutBuf = pBuffer;
+	return true;
 }
 bool UsbCtrlrEpSend(int, uint8_t, uint8_t *pBuffer, uint16_t Len)
 {

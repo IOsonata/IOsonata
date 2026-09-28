@@ -5,9 +5,8 @@
 
 The fake controller models a packet resident in endpoint hardware before
 the controller starts OUT DMA. The OUT DMA destination is the buffer
-registered when the DMA starts, which in byte and packet modes is the
-reserved RX FIFO block. DRDY is raised for a blocking endpoint, or for one
-with no buffer registered. IN transfers use the explicit DMA source supplied
+submitted at DRDY through EpReceive. Byte and packet modes submit the
+reserved RX FIFO block. IN transfers use the explicit DMA source supplied
 to EpSend.
 
 ----------------------------------------------------------------------------*/
@@ -58,6 +57,10 @@ static void ReceiveDma(void)
     }
 }
 
+static int s_Fail;
+#define CHECK(c) do { if (!(c)) { \
+    printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; } } while (0)
+
 extern "C" {
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
 bool UsbCtrlrStart(int) { return true; }
@@ -79,22 +82,32 @@ void UsbCtrlrEpStall(int, uint8_t, bool) {}
 void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuf, bool Blocking,
+void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool Blocking,
                         UsbCtrlrEpHandler_t Handler, void *pContext)
 {
     if (bIn)
     {
-        s_InRegBuf = pBuf;
+        s_InRegBuf = nullptr;
+        CHECK(s_InHandler == nullptr);
         s_InHandler = Handler;
         s_InContext = pContext;
     }
     else
     {
-        s_OutRegBuf = pBuf;
+        s_OutRegBuf = nullptr;
+        CHECK(s_OutHandler == nullptr);
         s_OutHandler = Handler;
         s_OutContext = pContext;
         s_OutBlocking = Blocking;
     }
+}
+
+bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+{
+	if (!s_HwOutReady || s_OutDma || pBuffer == nullptr || Capacity == 0U) return false;
+	s_OutRegBuf = pBuffer;
+	ReceiveDma();
+	return s_OutDma;
 }
 
 bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Len)
@@ -109,10 +122,6 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Len)
 }
 
 }
-
-static int s_Fail;
-#define CHECK(c) do { if (!(c)) { \
-    printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; } } while (0)
 
 alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(SLOTS, BUFFER_SIZE)];
 alignas(4) static uint8_t s_TxMem[CFIFO_MEMSIZE(256)];
@@ -194,7 +203,7 @@ static bool Drdy(const uint8_t *pData, uint16_t Len)
     s_HwOutLen = Len;
     s_HwOutReady = true;
 
-    if (s_OutBlocking || s_OutRegBuf == nullptr)
+    if (!s_OutDma)
     {
         s_OutHandler(USB_CTRLR_EVT_DRDY,
                      Len, s_OutContext);
@@ -230,6 +239,7 @@ static void CompleteOut(UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 
     s_HwOutReady = false;
     s_OutDma = false;
+    s_OutRegBuf = nullptr;
     s_OutHandler(Event,
                  len, s_OutContext);
 }
@@ -263,8 +273,8 @@ static void TestGeometry(void)
     CHECK(s_Intrf.EpNo == EP_NO);
     CHECK(CFifoAvail(s_Intrf.hRxFifo) == (int)SLOTS);
     CHECK(CFifoBlockSize(s_Intrf.hRxFifo) == USB_INTRF_PKT_BLKSIZE(BUFFER_SIZE));
-    // The OUT buffer is the first RX FIFO block, reserved, not published.
-    CHECK(s_OutRegBuf != nullptr && s_OutRegBuf == NextRxSlot());
+    // Init binds callbacks; the first DRDY will submit the first RX block.
+    CHECK(s_OutRegBuf == nullptr);
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
     CHECK(s_InRegBuf == nullptr);
     CHECK(s_OutSubmitCnt == 0);
@@ -274,16 +284,16 @@ static void TestGeometry(void)
 static void TestInPlaceReceive(void)
 {
     CHECK(Setup());
-    uint8_t *pArmed = s_OutRegBuf;
+    uint8_t *pArmed = NextRxSlot();
     const uint8_t in[3] = { 1, 2, 3 };
     Deliver(in, sizeof(in));
     CHECK(s_OutSubmitCnt == 1);
     CHECK(!s_OutDma);
-    // The published packet is the block the DMA wrote; the next block is
-    // now registered.
+    // The published packet is the block the DMA wrote. Another DRDY is
+    // required before the next block is submitted.
     UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(CFifoPeek(s_Intrf.hRxFifo));
     CHECK(pPacket != nullptr && pPacket->Data == pArmed);
-    CHECK(s_OutRegBuf != pArmed && s_OutRegBuf == NextRxSlot());
+    CHECK(s_OutRegBuf == nullptr && NextRxSlot() != pArmed);
     CHECK(pPacket != nullptr && pPacket->Hdr.Length == sizeof(in));
     CHECK(pPacket != nullptr && memcmp(pPacket->Data, in, sizeof(in)) == 0);
     uint8_t out[sizeof(in)] = {};
@@ -321,6 +331,21 @@ static void TestZlp(void)
     CHECK(memcmp(out + sizeof(full), in, sizeof(in)) == 0);
 }
 
+static void TestZlpReleasesPendingReceive(void)
+{
+	CHECK(Setup());
+	for (unsigned i = 0; i < SLOTS; i++) Deliver(nullptr, 0U);
+	const uint8_t pending = 0xA7;
+	CHECK(!Drdy(&pending, 1U) && s_Intrf.RxPending);
+	uint8_t out = 0;
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, &out, 1) == 0);
+	CHECK(s_OutDma && !s_Intrf.RxPending);
+	CHECK(s_OutSubmitCnt == (int)SLOTS + 1);
+	CompleteOut();
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, &out, 1) == 1);
+	CHECK(out == pending);
+}
+
 static void TestBackpressure(void)
 {
     CHECK(Setup());
@@ -330,9 +355,9 @@ static void TestBackpressure(void)
         in[0] = (uint8_t)i;
         Deliver(in, sizeof(in));
     }
-    // The last completion found no free block: registered without one.
+    // The FIFO is full, but no further packet has requested a destination.
     CHECK(CFifoAvail(s_Intrf.hRxFifo) == 0);
-    CHECK(s_Intrf.RxPending && s_OutRegBuf == nullptr);
+    CHECK(!s_Intrf.RxPending && s_OutRegBuf == nullptr);
 
     uint8_t pending[8] = { 0xA5 };
     CHECK(!Drdy(pending, sizeof(pending)));
@@ -343,16 +368,9 @@ static void TestBackpressure(void)
     uint8_t out[8] = {};
     CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
     CHECK(out[0] == 0U);
-    // Consuming a packet frees FIFO space, so RxData re-arms the held OUT
-    // buffer right away (0397e5d6). No DMA runs until the controller
-    // services the endpoint again.
-    CHECK(!s_OutDma);
-    CHECK(!s_Intrf.RxPending && InRxFifo(s_OutRegBuf));
-    s_OutHandler(USB_CTRLR_EVT_DRDY,
-                 0U, s_OutContext);
-	ReceiveDma();
+    // Freeing space submits the held packet to the controller immediately.
     CHECK(s_OutDma);
-    CHECK(!s_Intrf.RxPending);
+    CHECK(!s_Intrf.RxPending && InRxFifo(s_OutRegBuf));
     CompleteOut();
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == (int)SLOTS);
     for (uint32_t i = 1; i < SLOTS; i++)
@@ -365,7 +383,7 @@ static void TestBackpressure(void)
     CHECK(s_Intrf.hRxFifo->DropCnt == 0U);
 }
 
-// Non-blocking: the full FIFO registers no buffer; the next packet takes the
+// Non-blocking: the next packet arriving at a full FIFO takes the
 // oldest one's block when it arrives, the same packet a non-blocking put
 // would have replaced. Every block holds a packet until then.
 static void TestNonBlockingDropOldest(void)
@@ -378,7 +396,7 @@ static void TestNonBlockingDropOldest(void)
         Deliver(in, sizeof(in));
     }
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == (int)SLOTS);
-    CHECK(s_Intrf.RxPending && s_OutRegBuf == nullptr);
+    CHECK(!s_Intrf.RxPending && s_OutRegBuf == nullptr);
     CHECK(s_Intrf.hRxFifo->DropCnt == 0U);
 
     in[0] = 0x5AU;
@@ -416,6 +434,31 @@ static void TestReconfigureDuringDma(void)
     uint8_t out[8] = {};
     CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
     CHECK(out[0] == 2U);
+}
+
+// Reset shares cleanup with configuration but preserves the controller binding
+// and the reserved DMA block, including when called inside a serialized RX.
+static void TestResetDuringDma(void)
+{
+	CHECK(Setup());
+	const uint8_t in[] = { 7, 8, 9 };
+	Deliver(in, sizeof(in));
+	CHECK(Drdy(in, sizeof(in)));
+	uint8_t *pArmed = s_OutDmaBuf;
+	const auto enabled = atomic_load(&s_Intrf.DevIntrf.EnCnt);
+	CHECK(DeviceIntrfStartRx(&s_Intrf.DevIntrf, 0));
+	DeviceIntrfReset(&s_Intrf.DevIntrf);
+	CHECK(s_Intrf.Mps == 0U);
+	CHECK(atomic_load(&s_Intrf.DevIntrf.EnCnt) == enabled);
+	CHECK(atomic_flag_test_and_set(&s_Intrf.DevIntrf.bBusy));
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
+	CHECK(s_OutRegBuf == pArmed);
+	DeviceIntrfStopRx(&s_Intrf.DevIntrf);
+	CHECK(UsbIntrfConfigure(&s_Intrf, MPS));
+	CompleteOut();
+	uint8_t out[sizeof(in)] = {};
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == (int)sizeof(out));
+	CHECK(memcmp(out, in, sizeof(in)) == 0);
 }
 
 static void TestWrap(void)
@@ -644,9 +687,11 @@ int main(void)
         { "in-place receive", TestInPlaceReceive },
         { "whole packets", TestWholePackets },
         { "zero length packet", TestZlp },
+        { "ZLP pending receive", TestZlpReleasesPendingReceive },
         { "backpressure", TestBackpressure },
         { "non-blocking drop", TestNonBlockingDropOldest },
         { "reconfigure during DMA", TestReconfigureDuringDma },
+        { "reset during DMA", TestResetDuringDma },
         { "ring wrap", TestWrap },
         { "failed and wrong ep", TestFailedAndWrongEndpoint },
         { "rate", TestRate },

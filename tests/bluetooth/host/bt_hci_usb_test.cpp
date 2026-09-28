@@ -94,7 +94,7 @@ void UsbCtrlrEpCloseAll(int) {}
 // One registration per endpoint direction, as the controller keeps it: a
 // second call for the same address replaces the first. The ISO class uses
 // this to take over its IN endpoint after UsbIntrf registered it.
-void UsbCtrlrEpAlloc(int, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
+void UsbCtrlrEpBind(int, uint8_t EpNo, bool bIn,
                         bool Blocking, UsbCtrlrEpHandler_t Handler,
                         void *pContext)
 {
@@ -108,7 +108,18 @@ void UsbCtrlrEpAlloc(int, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
             return;
         pReg = &s_Registered[s_RegisteredCount++];
     }
-    *pReg = { addr, pBuffer, Blocking, Handler, pContext };
+    *pReg = { addr, nullptr, Blocking, Handler, pContext };
+}
+
+bool UsbCtrlrEpReceive(int, uint8_t EpNo, uint8_t *pBuffer, uint16_t Capacity)
+{
+	RegisteredEp_t *pReg = FindRegistered(EpNo);
+	if (pReg == nullptr || !s_HwOutReady[EpNo] || s_OutDma[EpNo] ||
+		Capacity < s_HwOutLength[EpNo]) return false;
+	pReg->pBuffer = pBuffer;
+	s_OutDma[EpNo] = true;
+	s_OutSubmitCount++;
+	return true;
 }
 
 bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
@@ -264,28 +275,14 @@ static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
     s_HwOutLength[EpNo] = Length;
     s_HwOutReady[EpNo] = true;
 
-    // DRDY goes to a blocking owner, or to one with no buffer registered.
-    if (pReg->Blocking || pReg->pBuffer == nullptr)
-    {
-        pReg->Handler(USB_CTRLR_EVT_DRDY,
-                      Length, pReg->pContext);
-        if (pReg->pBuffer != nullptr && s_HwOutReady[EpNo] && !s_OutDma[EpNo])
-        {
-            s_OutDma[EpNo] = true;
-            s_OutSubmitCount++;
-        }
-        CHECK(s_OutDma[EpNo]);
-        if (!s_OutDma[EpNo]) return;
-    }
-    else
-    {
-        // Non-blocking endpoint data goes directly to controller DMA.
-        s_OutDma[EpNo] = true;
-    }
+    pReg->Handler(USB_CTRLR_EVT_DRDY, Length, pReg->pContext);
+    CHECK(s_OutDma[EpNo]);
+    if (!s_OutDma[EpNo]) return;
 
     if (Length > 0U) memcpy(pReg->pBuffer, s_HwOut[EpNo], Length);
     s_HwOutReady[EpNo] = false;
     s_OutDma[EpNo] = false;
+    pReg->pBuffer = nullptr;
     pReg->Handler(USB_CTRLR_EVT_XFER_CMPL,
                   Length, pReg->pContext);
 }

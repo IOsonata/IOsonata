@@ -1203,26 +1203,11 @@ extern "C" void USBD_IRQHandler(void){
 		const uint32_t statusBit = 1UL << (epNum + 16U);
 		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg((uint8_t)epNum, 0U);
 
-		// A blocking owner decides whether to take the packet now; an owner
-		// with no buffer registered gets the chance to provide one.
-		if ((pReg->bBlocking || pReg->pBuffer == NULL) &&
-			pReg->Handler != NULL)
+		// The owner submits the destination through EpReceive. That call
+		// consumes EPDATASTATUS only after accepting the queued transfer.
+		if ((NRF_USBD->EPSTATUS & statusBit) == 0U && pReg->Handler != NULL)
 			pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
 
-		if ((NRF_USBD->EPSTATUS & statusBit) == 0U &&
-			pReg->pBuffer != NULL)
-		{
-			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
-			if (pQue != NULL)
-			{
-				pQue->EpNum = (uint8_t)epNum;
-				pQue->Dir = NRFX_USBD_QUE_OUT;
-				pQue->Len = pReg->MaxPacketSize;
-				pQue->pBuffer = pReg->pBuffer;
-				servicedStatus |= statusBit;
-				newDmaWork = true;
-			}
-		}
 		outData &= ~dataBit;
 	}
 
@@ -1457,16 +1442,59 @@ void UsbCtrlrEpCloseAll(int DevNo)
 
 }
 
-void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
-					 bool bBlocking,
+void UsbCtrlrEpBind(int DevNo, uint8_t EpNo, bool bIn, bool bBlocking,
 					 UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	(void)DevNo;
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNo, bIn);
-	pReg->pBuffer = pBuffer;
+	pReg->pBuffer = nullptr;
 	pReg->Handler = Handler;
 	pReg->pContext = pContext;
 	pReg->bBlocking = bBlocking;
+}
+
+bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
+						  uint16_t Capacity)
+{
+	(void)DevNo;
+	const uint32_t state = DisableInterrupt();
+	const uint32_t statusBit = 1UL << (EpNo + 16U);
+	bool accepted = false;
+
+	if (EpNo == NRFX_USBD_ISO_EP_NO)
+	{
+		// ISO has one deadline-scheduled OUT slot, serviced ahead of the
+		// regular queue. DRDY is raised when that interval needs a buffer.
+		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNo, false);
+		if (s_Usbd.IsoOpen &&
+			(s_Usbd.IsoDataFlag & NRFUSBD_ISO_OUT_READY) != 0U &&
+			(NRF_USBD->EPSTATUS & statusBit) == 0U &&
+			pReg->pBuffer == nullptr && Capacity >= pReg->MaxPacketSize)
+		{
+			pReg->pBuffer = pBuffer;
+			accepted = true;
+		}
+	}
+	else if ((NRF_USBD->EPDATASTATUS & statusBit) != 0U &&
+		(NRF_USBD->EPSTATUS & statusBit) == 0U)
+	{
+		nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
+		if (pQue != nullptr)
+		{
+			pQue->EpNum = EpNo;
+			pQue->Dir = NRFX_USBD_QUE_OUT;
+			pQue->Len = Capacity;
+			pQue->pBuffer = pBuffer;
+			// Clear readiness before a START can allow another host packet.
+			NRF_USBD->EPDATASTATUS = statusBit;
+			__DSB();
+			accepted = true;
+		}
+	}
+	if (accepted)
+		nRFUsbdResumeQueuedDmaLocked();
+	EnableInterrupt(state);
+	return accepted;
 }
 
 void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,

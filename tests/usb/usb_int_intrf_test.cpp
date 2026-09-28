@@ -40,22 +40,29 @@ void UsbCtrlrEpStall(int, uint8_t, bool) {}
 void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool Blocking,
+void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool Blocking,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (bIn)
 	{
-		s_InBuffer = pBuffer;
+		s_InBuffer = nullptr;
 		s_InHandler = Handler;
 		s_InContext = pContext;
 	}
 	else
 	{
-		s_OutBuffer = pBuffer;
+		s_OutBuffer = nullptr;
 		s_OutHandler = Handler;
 		s_OutContext = pContext;
 		s_OutBlocking = Blocking;
 	}
+}
+
+bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+{
+	if (s_OutBuffer != nullptr || pBuffer == nullptr || Capacity == 0U) return false;
+	s_OutBuffer = pBuffer;
+	return true;
 }
 
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
@@ -163,6 +170,7 @@ static void Receive(const uint8_t *pData, uint16_t Length,
 	{
 		memcpy(s_OutBuffer, pData, Length);
 	}
+	s_OutBuffer = nullptr;
 	s_OutHandler(Event,
 		Length, s_OutContext);
 }
@@ -223,7 +231,7 @@ static void TestDuplexAndZeroLength(void)
 	Receive(rx, sizeof(rx));
 	CHECK(s_RxCount == 1 && s_LastRxLength == sizeof(rx));
 	CHECK(memcmp(s_LastRx, rx, sizeof(rx)) == 0);
-	CHECK(s_OutBuffer != nullptr && s_OutXferCount == 0);
+	CHECK(s_OutBuffer == nullptr && s_OutXferCount == 0);
 	CompleteIn();
 	CHECK(s_TxCount == 1 && s_LastTxLength == sizeof(tx));
 	CHECK(atomic_load(&intrfData.DevIntrf.bTxReady));
@@ -288,7 +296,7 @@ static void TestPolledRxOwnership(void)
 	uint8_t out[3] = {};
 	CHECK(DeviceIntrfRx(&intrf.pData->DevIntrf, 0, out, sizeof(out)) == 2);
 	CHECK(memcmp(out, first, sizeof(first)) == 0);
-	// Reading the slot frees it, so the held OUT buffer is re-armed at once.
+	// Reading the slot frees it, so the pending receive is submitted at once.
 	CHECK(s_OutBuffer == intrf.pData->pRxBuffer);
 	Receive(second, sizeof(second));
 	CHECK(DeviceIntrfRx(&intrf.pData->DevIntrf, 0, out, sizeof(out)) == 3);

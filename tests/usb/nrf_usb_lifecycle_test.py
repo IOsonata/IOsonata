@@ -37,7 +37,7 @@ assert dev_disable.index('UsbCoreStop();') < dev_disable.index('UsbCtrlrStop(')
 
 
 def function(name):
-    match = re.search(r'(?:bool|void)\s+' + name + r'\([^;{}]*\)\s*\{', src)
+    match = re.search(r'(?:bool|void|nRFUsbEpReg_t\s*\*)\s*' + name + r'\([^;{}]*\)\s*\{', src)
     assert match, name
     brace = src.index('{', match.start())
     end, depth = brace + 1, 1
@@ -90,7 +90,8 @@ void init(){
  irqPriority=0;regs={0xFFFF,1,1,0};
 }
 '''
-code += '\n'.join(function(n) for n in ['UsbCtrlrStart', 'UsbCtrlrStop', 'UsbCtrlrProcess'])
+code += '\n'.join(function(n) for n in ['nRFUsbGetEpReg', 'UsbCtrlrEpBind',
+                                        'UsbCtrlrStart', 'UsbCtrlrStop', 'UsbCtrlrProcess'])
 code += r'''
 namespace startup {
 constexpr uint32_t USBD_EVENTCAUSE_READY_Msk=1,POWER_USBREGSTATUS_OUTPUTRDY_Msk=2;
@@ -167,8 +168,25 @@ void check(){
 }
 '''
 code += r'''
+void endpointCallback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
+ assert(event==USB_CTRLR_EVT_DRDY && length==17);
+ ++*static_cast<unsigned *>(context);
+}
 int main(){
  startup::check();clock_request::check();
+ init();
+ // Endpoint ownership is bound independently of transfer storage.
+ for(uint8_t ep=1;ep<NRFX_USBD_EP_COUNT;++ep){
+  unsigned calls=0;
+  UsbCtrlrEpBind(0,ep,false,true,endpointCallback,&calls);
+  UsbCtrlrEpBind(0,ep,true,false,endpointCallback,&calls);
+  auto *out=nRFUsbGetEpReg(ep,0);auto *in=nRFUsbGetEpReg(ep,1);
+  assert(out->pBuffer==nullptr && in->pBuffer==nullptr);
+  assert(out->Handler==endpointCallback && out->pContext==&calls && out->bBlocking);
+  assert(in->Handler==endpointCallback && in->pContext==&calls && !in->bBlocking);
+  out->Handler(USB_CTRLR_EVT_DRDY,17,out->pContext);assert(calls==1);
+ }
+ puts("PASS: nRF52 endpoint binding does not submit a DMA buffer");
  // Start/stop pairing and DevNo validation moved to the usb core
  // (s_UsbDevStarted); the controller owns only clock and peripheral state.
  for(unsigned attached=0;attached<2;++attached)

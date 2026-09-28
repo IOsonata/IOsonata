@@ -113,11 +113,15 @@ bus = bus[:bus.index("\n\t}\n") + 3]
 assert bus.index("nRFUsbdHandleBusEvent(eventCause);") < bus.index("newDmaWork = true;")
 assert "!nRFUsbdDmaAllowed()" in resume
 
-# OUT at EPDATA: DRDY goes to a blocking owner or to one with no buffer
-# registered (byte and packet modes register the reserved RX FIFO block, or
-# nothing when the FIFO is full), before the DMA is queued with that buffer.
-out_drdy = interrupt.index("(pReg->bBlocking || pReg->pBuffer == NULL)")
-assert out_drdy < interrupt.index("pQue->pBuffer = pReg->pBuffer;")
+# OUT at EPDATA asks the owner to submit. EpReceive alone queues the
+# destination and consumes readiness, so a held hardware packet is not lost.
+out = interrupt[interrupt.index("uint32_t outData ="):]
+assert "USB_CTRLR_EVT_DRDY" in out
+assert "CFifoPut" not in out
+receive = function_body(source, "bool UsbCtrlrEpReceive(")
+assert receive.index("CFifoPut(s_Usbd.hQue)") < receive.index("NRF_USBD->EPDATASTATUS = statusBit;")
+assert receive.index("pQue->pBuffer = pBuffer;") < receive.index("NRF_USBD->EPDATASTATUS = statusBit;")
+assert receive.index("NRF_USBD->EPDATASTATUS = statusBit;") < receive.index("nRFUsbdResumeQueuedDmaLocked();")
 
 # Regular IN completion goes through EPDATA to AppEvt.
 assert interrupt.index("NRF_USBD->EVENTS_EPDATA = 0U;") < interrupt.index(

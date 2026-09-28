@@ -61,22 +61,29 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 
 void UsbCtrlrEpClose(int, uint8_t, bool) { s_CloseCount++; }
 
-void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool Blocking,
+void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool Blocking,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (bIn)
 	{
-		s_InBuffer = pBuffer;
+		s_InBuffer = nullptr;
 		s_InHandler = Handler;
 		s_InContext = pContext;
 	}
 	else
 	{
-		s_OutBuffer = pBuffer;
+		s_OutBuffer = nullptr;
 		s_OutHandler = Handler;
 		s_OutContext = pContext;
 		s_OutBlocking = Blocking;
 	}
+}
+
+bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+{
+	if (s_OutBuffer != nullptr || pBuffer == nullptr || Capacity == 0U) return false;
+	s_OutBuffer = pBuffer;
+	return true;
 }
 
 bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
@@ -290,6 +297,7 @@ static void Receive(const uint8_t *pData, uint16_t Length)
 	{
 		memcpy(s_OutBuffer, pData, Length);
 	}
+	s_OutBuffer = nullptr;
 	s_OutHandler(USB_CTRLR_EVT_XFER_CMPL, Length, s_OutContext);
 }
 

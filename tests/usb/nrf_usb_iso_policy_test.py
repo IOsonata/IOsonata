@@ -70,8 +70,8 @@ assert "NRF_USB_EP_COUNT = 9" in header
 assert "NRFX_USBD_ISO_MAX_PACKET_SIZE = 512" in header
 
 # Controller API: one send entry for the service interval. OUT lands in
-# the buffer registered for the endpoint (the reserved RX FIFO block), not a
-# controller-owned buffer. No separate OUT transfer or service call.
+# the destination submitted with EpReceive (the reserved RX FIFO block).
+# The existing ISO scheduler owns the transfer deadline.
 assert "UsbCtrlrIsoSend" in header
 assert "UsbCtrlrIsoRxBuffer" not in header + base + iso + iso_intrf
 assert "s_IsoRxBuffer" not in iso
@@ -84,7 +84,7 @@ assert "uint8_t IsoDataFlag;" in header
 assert "IsoBusy" not in header + base + iso
 assert "IsoBufState" not in header + base + iso
 
-# OUT lands in the registered buffer; with none registered the owner is
+# OUT lands in the submitted destination; without one the owner is
 # asked for one (DRDY) and the frame is dropped if it still has none.
 assert "ISOOUT.PTR = (uint32_t)(uintptr_t)pReg->pBuffer" in start_iso
 assert start_iso.index("USB_CTRLR_EVT_DRDY") < start_iso.index("TASKS_STARTISOOUT")
@@ -171,7 +171,7 @@ assert "pIntrf->EpNo" in iso_event
 assert "UsbCtrlrIsoSend" in iso_event
 assert "CFifoPeek(pIntrf->pData->hTxFifo)" in iso_event
 assert "CFifoGet" not in iso_event
-assert "UsbCtrlrEpAlloc(pCfg->DevNo, pCfg->EpNo, true" in init
+assert "UsbCtrlrEpBind(pCfg->DevNo, pCfg->EpNo, true" in init
 assert "UsbIsoIntrfCtrlrInEvent" in init
 assert "cfg.EvtCB = pCfg->EvtCB;" in init
 assert "RxHandler" not in iso_intrf and "TxHandler" not in iso_intrf

@@ -124,21 +124,29 @@ void UsbCtrlrEpClose(int, uint8_t, bool bIn) {
 	}
 }
 
-void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool,
+void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool,
 	UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (bIn)
 	{
-		s_InBuffer = pBuffer;
+		s_InBuffer = nullptr;
 		s_InHandler = Handler;
 		s_InContext = pContext;
 	}
 	else
 	{
-		s_OutBuffer = pBuffer;
+		s_OutBuffer = nullptr;
 		s_OutHandler = Handler;
 		s_OutContext = pContext;
 	}
+}
+
+bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+{
+	if (!s_OutReady || s_OutDma || pBuffer == nullptr || Capacity == 0U) return false;
+	s_OutBuffer = pBuffer;
+	ReceiveDma();
+	return s_OutDma;
 }
 
 bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
@@ -265,6 +273,7 @@ static void DeliverOut(const uint8_t *pData, uint16_t Length)
 		memcpy(s_OutBuffer, s_OutData, Length);
 	s_OutReady = false;
 	s_OutDma = false;
+	s_OutBuffer = nullptr;
 	s_OutHandler(USB_CTRLR_EVT_XFER_CMPL,
 		s_OutLength, s_OutContext);
 }

@@ -237,10 +237,8 @@ bool nRFUsbdIsoStart(void)
 	const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
 		0U : (uint16_t)size;
 
-	// The destination is the buffer the endpoint owner registered, the
-	// reserved RX FIFO block. None registered means the owner had no free
-	// block when the last frame completed; a packet is waiting now, so ask
-	// for one (DRDY), as the regular OUT path does.
+	// Ask the owner to submit this frame's destination through EpReceive.
+	// Completion releases the destination before the next interval.
 	if (len != 0U && len <= pReg->MaxPacketSize && pReg->pBuffer == NULL &&
 		pReg->Handler != NULL)
 		pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
@@ -319,6 +317,8 @@ void nRFUsbdIsoComplete(uint8_t In)
 		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
 
 	s_Usbd.IsoDataFlag &= (uint8_t)~flag;
+	if (!In)
+		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].pBuffer = nullptr;
 
 #if NRFUSBD_ISO_TRACE
 	if (In)
@@ -380,6 +380,7 @@ void nRFUsbdIsoEpClose(bool bIn)
 	s_Usbd.IsoOpen = false;
 	nRFUsbdDmaWait();
 	s_Usbd.IsoDataFlag = 0U;
+	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].pBuffer = nullptr;
 
 	nRFIsoHwEnable(bIn, false);
 	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][bIn].MaxPacketSize = 0U;

@@ -1049,11 +1049,14 @@ extern "C" void UsbCtrlrSetAddress(int, uint8_t Address)
 extern "C" bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
 extern "C" void UsbCtrlrEpClose(int, uint8_t, bool) {}
 extern "C" void UsbCtrlrEpCloseAll(int) { s_Ctrlr.CloseAllCnt++; }
-extern "C" void UsbCtrlrEpAlloc(int, uint8_t, bool, uint8_t *, bool,
+extern "C" void UsbCtrlrEpBind(int, uint8_t, bool, bool,
 									 UsbCtrlrEpHandler_t, void *)
 {
 	return;
 }
+
+extern "C" bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *, uint16_t)
+{ return false; }
 extern "C" void UsbCtrlrEpProcessEvent(int, uint8_t EpNo, bool bIn,
 	UsbCtrlrEvtType_t Event, uint16_t Value)
 {

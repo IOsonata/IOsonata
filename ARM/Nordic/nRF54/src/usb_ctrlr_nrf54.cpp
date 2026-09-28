@@ -1031,7 +1031,8 @@ static void nRF54UsbdCompleteData(uint8_t EpAddr)
 	if (!USB_ENDPADDR_IS_IN(EpAddr) &&
 		(NRF54_USBD_DAINTMSK & NRF54_USBD_DAINT_OUT(epNum)) != 0U)
 	{
-		(void)nRFUsbRegEpXfer(epNum, NULL, pXfer->Mps);
+		if (!pXfer->Started)
+			nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U);
 	}
 }
 
@@ -1414,7 +1415,7 @@ static bool nRFUsbRegEpOpen(uint8_t epAddr, uint8_t type, uint16_t mps)
 			   NRF54_USBD_DEPCTL_SETD0PID;
 		NRF54_USBD_DOEPCTL(epNum) = ctl;
 		NRF54_USBD_DAINTMSK |= NRF54_USBD_DAINT_OUT(epNum);
-		(void)nRFUsbRegEpXfer(epNum, NULL, mps);
+		nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U);
 	}
 
 	return true;
@@ -1703,12 +1704,7 @@ void UsbCtrlrProcess(int DevNo)
 			{
 				continue;
 			}
-			nRFUsbEpReg_t *pReg = &s_EpReg[epNum][0];
-			if (pReg->pBuffer == NULL && pReg->Handler != NULL)
-			{
-				nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U);
-			}
-			(void)nRFUsbRegEpXfer(epNum, NULL, s_Ctrlr.Xfer[epNum][0].Mps);
+			nRFUsbEpRegisteredEvent(epNum, USB_CTRLR_EVT_DRDY, 0U);
 		}
 		EnableInterrupt(state);
 	}
@@ -1827,8 +1823,7 @@ void UsbCtrlrEpCloseAll(int DevNo)
 	}
 }
 
-void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
-					 bool bBlocking,
+void UsbCtrlrEpBind(int DevNo, uint8_t EpNo, bool bIn, bool bBlocking,
 					 UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (!nRFUsbValidDevNo(DevNo))
@@ -1838,10 +1833,28 @@ void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
 	const uint8_t epAddr = (uint8_t)(EpNo |
 		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epAddr);
-	pReg->pBuffer = pBuffer;
+	pReg->pBuffer = nullptr;
 	pReg->Handler = Handler;
 	pReg->pContext = pContext;
 	pReg->bBlocking = bBlocking;
+}
+
+bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
+						  uint16_t Capacity)
+{
+	if (!nRFUsbValidDevNo(DevNo))
+		return false;
+	const uint32_t state = DisableInterrupt();
+	nRF54UsbdXfer_t *pXfer = nRF54UsbdGetXfer(EpNo);
+	bool accepted = false;
+	if (!pXfer->Started && Capacity >= pXfer->Mps &&
+		(NRF54_USBD_DAINTMSK & NRF54_USBD_DAINT_OUT(EpNo)) != 0U)
+	{
+		nRFUsbGetEpReg(EpNo)->pBuffer = pBuffer;
+		accepted = nRFUsbRegEpXfer(EpNo, NULL, pXfer->Mps);
+	}
+	EnableInterrupt(state);
+	return accepted;
 }
 
 void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,

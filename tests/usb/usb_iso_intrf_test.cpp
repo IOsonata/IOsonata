@@ -43,23 +43,30 @@ void UsbCtrlrEpStall(int, uint8_t, bool) {}
 void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool Blocking,
+void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool Blocking,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (bIn)
 	{
-		s_InBuffer = pBuffer;
+		s_InBuffer = nullptr;
 		s_InHandler = Handler;
 		s_InContext = pContext;
 		s_InBlocking = Blocking;
 	}
 	else
 	{
-		s_OutBuffer = pBuffer;
+		s_OutBuffer = nullptr;
 		s_OutHandler = Handler;
 		s_OutContext = pContext;
 		s_OutBlocking = Blocking;
 	}
+}
+
+bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+{
+	if (s_OutBuffer != nullptr || pBuffer == nullptr || Capacity == 0U) return false;
+	s_OutBuffer = pBuffer;
+	return true;
 }
 
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
@@ -225,9 +232,9 @@ static UsbIsoIntrfCfg_t MakeCfg(void)
 	return cfg;
 }
 
-// The controller DMAs ISO OUT into the buffer registered for the endpoint,
+// The controller DMAs ISO OUT into the destination submitted for the endpoint,
 // the RX FIFO block UsbIntrf reserved, and reports the completion. With no
-// buffer registered it asks for one (DRDY) and drops the frame if none
+// destination submitted it asks for one (DRDY) and drops the frame if none
 // comes, as the nRF52 ISO path does.
 static void Receive(const uint8_t *pData, uint16_t Length,
 					UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
@@ -240,6 +247,7 @@ static void Receive(const uint8_t *pData, uint16_t Length,
 		return;
 	if (Length > 0U && Event == USB_CTRLR_EVT_XFER_CMPL)
 		memcpy(s_OutBuffer, pData, Length);
+	s_OutBuffer = nullptr;
 	s_OutHandler(Event, Length, s_OutContext);
 }
 

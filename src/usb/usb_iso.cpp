@@ -327,7 +327,7 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	// UsbIntrf keeps the OUT direction, the FIFOs and DeviceIntrf. The IN
 	// direction is isochronous: frames leave at the service interval, not
 	// from the previous completion, so the endpoint callback is ours.
-	UsbCtrlrEpAlloc(pCfg->DevNo, pCfg->EpNo, true, nullptr, true,
+	UsbCtrlrEpBind(pCfg->DevNo, pCfg->EpNo, true, true,
 		UsbIsoIntrfCtrlrInEvent, pIntrf);
 	// The DeviceIntrf data calls map onto one frame per call.
 	pIntrf->pData->DevIntrf.RxData = UsbIsoIntrfRxData;

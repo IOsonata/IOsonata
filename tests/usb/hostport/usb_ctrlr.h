@@ -192,9 +192,17 @@ static inline bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn,
 
 void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn);
 void UsbCtrlrEpCloseAll(int DevNo);
-void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
-					 bool bBlocking,
+// Bind a non-control endpoint's owner and callback during interface Init.
+// Transfer buffers are supplied separately by EpReceive and EpSend.
+void UsbCtrlrEpBind(int DevNo, uint8_t EpNo, bool bIn, bool bBlocking,
 					 UsbCtrlrEpHandler_t Handler, void *pContext);
+// Submit a non-NULL OUT DMA destination in response to DRDY. Capacity is
+// writable payload space and must cover the configured endpoint MPS.
+// A successful submission owns the buffer until completion or cancellation; it does not publish data to the application. One outstanding
+// receive per endpoint. Returns false when the request cannot be accepted.
+// Regular OUT shares the transfer queue with IN; ISO retains interval scheduling.
+bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
+						  uint16_t Capacity);
 void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 						 UsbCtrlrEvtType_t Event, uint16_t Value);
 // EpNum is an endpoint number: device IN, host OUT. The controller schedules RX.

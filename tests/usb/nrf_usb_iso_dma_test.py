@@ -81,6 +81,7 @@ names = [
     ('nRFUsbdIsoComplete', None), ('nRFUsbdIsoEpClose', None),
     ('UsbCtrlrIsoOpen', 'productionIsoOpen'),
     ('UsbCtrlrEpSend', 'productionEpSend'),
+    ('UsbCtrlrEpReceive', 'productionEpReceive'),
     ('UsbCtrlrEpOpenData', 'productionEpOpenData'),
     ('UsbCtrlrEpClose', 'productionEpClose'),
     ('UsbCtrlrEpClearStall', None),
@@ -180,7 +181,7 @@ void __DSB(){
   if(regs.TASKS_STARTEPIN[n]){regs.TASKS_STARTEPIN[n]=0;capture(n);
    if(n==0)++ep0InStarts;else ++regularStarts;}
   if(regs.TASKS_STARTEPOUT[n]){regs.TASKS_STARTEPOUT[n]=0;capture(16+n);
-   if(n)++regularStarts;}
+   if(n){++regularStarts;memcpy(resolve(regs.EPOUT[n].PTR),hostOut,regs.EPOUT[n].MAXCNT);}}
  }
 }
 void __ISB(){}
@@ -217,14 +218,14 @@ tests = r'''
 // Harness -----------------------------------------------------------------
 unsigned callbacks[2]={};uint16_t lengths[2]={};
 uint8_t lastOut[512];
-// DRDY: the owner has no buffer registered; drdyGives says whether it
-// registers one when asked.
+// DRDY: the owner has no destination submitted; drdyGives says whether it
+// submits one when asked.
 unsigned drdyCnt=0;bool drdyGives=false;
 void isoCallback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
  unsigned dir=(unsigned)(uintptr_t)context;
  if(event==USB_CTRLR_EVT_DRDY){
   assert(dir==0 && s_Usbd.EpReg[7][0].pBuffer==nullptr);
-  ++drdyCnt;if(drdyGives)s_Usbd.EpReg[7][0].pBuffer=outSlot;return;}
+  ++drdyCnt;if(drdyGives)assert(productionEpReceive(0,8,outSlot,512));return;}
  assert(event==USB_CTRLR_EVT_XFER_CMPL);
  ++callbacks[dir];lengths[dir]=length;
  if(!dir)memcpy(lastOut,outSlot,length);
@@ -240,8 +241,8 @@ void init(){
  isoStarts[0]=isoStarts[1]=ep0InStarts=regularStarts=0;
  callbacks[0]=callbacks[1]=0;lengths[0]=lengths[1]=0;
  pendingIn=nullptr;pendingInLen=0;
- drdyCnt=0;drdyGives=false;
- s_Usbd.EpReg[7][0]={outSlot,isoCallback,(void*)0,512,false};
+ drdyCnt=0;drdyGives=true;
+ s_Usbd.EpReg[7][0]={nullptr,isoCallback,(void*)0,512,false};
  s_Usbd.EpReg[7][1]={nullptr,isoCallback,(void*)1,512,false};
  assert(productionIsoOpen(0,8,true,512) && productionIsoOpen(0,8,false,512));
  assert(s_Usbd.IsoOpen);
@@ -269,10 +270,19 @@ void finish(){
  assert(done==bit && regs.EPSTATUS.bits==0);
  activeBit=-1;
  if(done==8||done==24)nRFUsbdIsoComplete(done==8);
- else if(done>0&&done<8)(void)CFifoGet(s_Usbd.hQue);
+ else if((done>0&&done<8)||(done>16&&done<24)){
+  (void)CFifoGet(s_Usbd.hQue);
+  if(done>16)nRFUsbEpRegisteredEvent(done-16,0,USB_CTRLR_EVT_XFER_CMPL,regs.EPOUT[done-16].AMOUNT);
+ }
  nRFUsbdStartQueuedDma();
 }
 
+unsigned regularCompletions=0;
+uint16_t regularLength=0;
+void regularCallback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
+ assert(context==outSlot && event==USB_CTRLR_EVT_XFER_CMPL);
+ ++regularCompletions;regularLength=length;
+}
 int main(){
  // OUT: the SOF offer starts a DMA into the controller's own buffer, sized
  // by the received packet; its END completes it with the byte count.
@@ -282,23 +292,23 @@ int main(){
  finish();
  assert(callbacks[0]==1 && lengths[0]==17 && !memcmp(lastOut,hostOut,17));
  assert(!dmaBusy && s_Usbd.IsoDataFlag==0);
- assert(drdyCnt==0);
- puts("PASS: ISO OUT lands in the registered buffer and completes at ENDISOOUT");
+ assert(drdyCnt==1 && s_Usbd.EpReg[7][0].pBuffer==nullptr);
+ puts("PASS: ISO OUT lands in the submitted destination and completes at ENDISOOUT");
 
- // No buffer registered: the owner is asked once (DRDY) with a packet
- // waiting. If it registers one the frame is read into it; if not the
+ // No destination submitted: the owner is asked once (DRDY) with a packet
+ // waiting. If it submits one the frame is read into it; if not the
  // frame is dropped and the channel released.
  init();s_Usbd.EpReg[7][0].pBuffer=nullptr;drdyGives=true;frame(17);
  assert(drdyCnt==1 && activeBit==24 && regs.ISOOUT.PTR==uint32_t(uintptr_t(outSlot)));
  finish();
  assert(callbacks[0]==1 && lengths[0]==17 && !memcmp(lastOut,hostOut,17) && !dmaBusy);
- init();s_Usbd.EpReg[7][0].pBuffer=nullptr;frame(17);
+ init();drdyGives=false;frame(17);
  assert(drdyCnt==1 && !dmaBusy && isoStarts[0]==0 && s_Usbd.IsoDataFlag==0 &&
   dmaLocks==dmaUnlocks);
  // No packet: the owner is not asked.
  init();s_Usbd.EpReg[7][0].pBuffer=nullptr;frame(-1);frame(0);
  assert(drdyCnt==0 && isoStarts[0]==0);
- puts("PASS: an unregistered OUT buffer is requested through DRDY, else the frame is dropped");
+ puts("PASS: DRDY requests an OUT destination; without a submission the frame is dropped");
 
  // No OUT packet this frame: nothing starts, the request is dropped, the
  // channel is released.
@@ -393,6 +403,41 @@ int main(){
  init();assert(!productionIsoOpen(0,8,true,513) && productionIsoOpen(0,8,true,512));
  assert(regs.ISOSPLIT==USBD_ISOSPLIT_SPLIT_HalfIN && regs.ISOINCONFIG==USBD_ISOINCONFIG_RESPONSE_ZeroData);
  puts("PASS: ISO open is bounded by the 512-byte half buffer");
+
+ // Receive captures a pointer in the shared queue, consumes readiness once,
+ // and preserves another endpoint's status. A blocked channel retains the
+ // buffer until DMA actually runs; completion reports the actual byte count.
+ for(unsigned masked=0;masked<2;++masked)for(uint8_t ep=1;ep<8;++ep)
+ for(uint16_t length:{0U,1U,17U,64U}){
+  init();irqMask=masked;s_Usbd.Flags|=USBD_FLAG_SUSPENDED;
+  const uint32_t bit=1U<<(ep+16),otherBit=1U<<23;
+  s_Usbd.EpReg[ep-1][0]={nullptr,regularCallback,outSlot,64,true};
+  regs.SIZE.EPOUT[ep]=length;regs.EPDATASTATUS.bits=bit|otherBit;
+  regularCompletions=0;regularLength=999;
+  assert(productionEpReceive(0,ep,outSlot,64));
+  assert(irqMask==masked && CFifoUsed(s_Usbd.hQue)==1 && !dmaBusy);
+  assert(!(regs.EPDATASTATUS.bits&bit));
+  if(ep!=7)assert(regs.EPDATASTATUS.bits&otherBit);
+  auto *entry=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
+  assert(entry->EpNum==ep && entry->Dir==NRFX_USBD_QUE_OUT);
+  assert(entry->pBuffer==outSlot && entry->Len==64);
+  assert(!productionEpReceive(0,ep,inBuffer,64));
+  assert(CFifoUsed(s_Usbd.hQue)==1 && entry->pBuffer==outSlot);
+  assert(s_Usbd.EpReg[ep-1][0].Handler==regularCallback);
+  assert(s_Usbd.EpReg[ep-1][0].pContext==outSlot && s_Usbd.EpReg[ep-1][0].bBlocking);
+  s_Usbd.Flags&=(uint8_t)~USBD_FLAG_SUSPENDED;
+  nRFUsbdResumeQueuedDmaLocked();assert(activeBit==ep+16 && !regularCompletions);
+  assert(regs.EPOUT[ep].PTR==uint32_t(uintptr_t(outSlot)) && regs.EPOUT[ep].MAXCNT==length);
+  finish();assert(regularCompletions==1 && regularLength==length && !dmaBusy);
+  assert(!memcmp(outSlot,hostOut,length));
+ }
+ // Failed queue admission retains readiness so the same packet can retry.
+ init();s_Usbd.Flags|=USBD_FLAG_SUSPENDED;regs.EPDATASTATUS.bits=1U<<17;
+ while(CFifoPut(s_Usbd.hQue)!=nullptr){}
+ assert(!productionEpReceive(0,1,outSlot,64) && (regs.EPDATASTATUS.bits&(1U<<17)));
+ (void)CFifoGet(s_Usbd.hQue);
+ assert(productionEpReceive(0,1,outSlot,64) && !(regs.EPDATASTATUS.bits&(1U<<17)));
+ puts("PASS: OUT queues one destination, preserves pending packets and completes after DMA");
 
  // Regular IN keeps word-aligned sources and repairs a misaligned head
  // through the scratch word, under interrupt exclusion.

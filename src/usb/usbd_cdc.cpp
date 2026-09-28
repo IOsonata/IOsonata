@@ -417,8 +417,8 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 
 	pCdc->pData->pClassContext = pCdc;
 
-	UsbCtrlrEpAlloc(pCdc->DevNo, pCdc->NotifyEpNo, true,
-		UsbdCdcNotifBuffer(pCdc), false, UsbdCdcNotifCtrlrEvent, pCdc);
+	UsbCtrlrEpBind(pCdc->DevNo, pCdc->NotifyEpNo, true, false,
+		UsbdCdcNotifCtrlrEvent, pCdc);
 
 	return UsbDescRegister(pCdc->DevNo, pClass,
 		&g_UsbdCdcDescTemplate, sizeof(g_UsbdCdcDescTemplate),

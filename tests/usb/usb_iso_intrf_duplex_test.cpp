@@ -38,22 +38,29 @@ void UsbCtrlrEpStall(int, uint8_t, bool) {}
 void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool,
+void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (bIn)
 	{
-		s_InBuffer = pBuffer;
+		s_InBuffer = nullptr;
 		s_InHandler = Handler;
 		s_InContext = pContext;
 	}
 	else
 	{
-		s_OutBuffer = pBuffer;
+		s_OutBuffer = nullptr;
 		s_OutHandler = Handler;
 		s_OutContext = pContext;
 	}
 	return;
+}
+
+bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+{
+	if (s_OutBuffer != nullptr || pBuffer == nullptr || Capacity == 0U) return false;
+	s_OutBuffer = pBuffer;
+	return true;
 }
 
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { s_OpenCount++; return true; }
@@ -127,13 +134,15 @@ static void Receive(const uint8_t *pData, uint16_t Length)
 {
 	CHECK(s_OutHandler != nullptr);
 	CHECK(!s_OutBusy);
+	s_OutHandler(USB_CTRLR_EVT_DRDY, Length, s_OutContext);
 	CHECK(s_OutBuffer != nullptr);
 	if (s_OutBuffer == nullptr) return;
 	if (Length > 0U) memcpy(s_OutBuffer, pData, Length);
 
-	// ISO OUT DMA lands directly in the registered buffer, the RX FIFO block
+	// ISO OUT DMA lands directly in the submitted destination, the RX FIFO block
 	// UsbIntrf reserved. UsbIntrf receives only the transfer-complete
 	// notification.
+	s_OutBuffer = nullptr;
 	s_OutHandler(USB_CTRLR_EVT_XFER_CMPL,
 		Length, s_OutContext);
 }
@@ -171,7 +180,7 @@ int main(void)
 	CHECK(iso.pData->Mode == USB_INTRF_MODE_PACKET);
 	CHECK(iso.pData->hRxFifo != nullptr && iso.pData->hTxFifo != nullptr);
 	// The OUT buffer is a block of the application's RX FIFO memory.
-	CHECK(s_OutBuffer > rxFifo && s_OutBuffer < rxFifo + sizeof(rxFifo));
+	CHECK(s_OutBuffer == nullptr);
 	CHECK(UsbIsoIntrfOpen(&iso, 49U, 1U));
 	CHECK(s_OpenCount == 2);
 
