@@ -17,7 +17,7 @@ import subprocess
 import tempfile
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--regular-out', action='store_true',
+parser.add_argument('--regular-out', '--regular', dest='regular', action='store_true',
                     help='run only deferred regular endpoint completion tests')
 args = parser.parse_args()
 
@@ -82,8 +82,7 @@ names = [
     ('nRFUsbdEp0InStart', None), ('nRFUsbdStartDmaNow', None),
     ('nRFUsbdStartQueuedDma', None), ('nRFUsbdResumeQueuedDmaLocked', None),
     ('nRFUsbdHandleSof', None), ('USBD_IRQHandler', None),
-    ('nRFUsbdProcessInComplete', None),
-    ('nRFUsbdProcessOutComplete', None), ('nRFUsbdQueueOutComplete', None),
+    ('nRFUsbdProcessComplete', None), ('nRFUsbdQueueComplete', None),
     ('nRFUsbdResetState', None), ('UsbCtrlrProcess', None),
     ('nRFIsoHwEnable', None),
     ('nRFUsbdIsoStart', None), ('UsbCtrlrIsoSend', None),
@@ -176,6 +175,7 @@ static void capture(int bit){
 // The driver writes PTR as a 32-bit address, right for the target and
 // truncated on a 64-bit host. Map it back to the buffer it came from.
 uint8_t *dmaBuffers[20];unsigned dmaBufferCnt=0;
+bool checkInBuffer=false,inUsbBusy[8]={};
 void dmaBuffer(uint8_t *p){dmaBuffers[dmaBufferCnt++]=p;}
 uint8_t *resolve(uint32_t ptr){
  for(unsigned i=0;i<dmaBufferCnt;++i)
@@ -189,7 +189,11 @@ void __DSB(){
   memcpy(resolve(regs.ISOOUT.PTR),hostOut,regs.ISOOUT.MAXCNT);}
  for(unsigned n=0;n<8;++n){
   if(regs.TASKS_STARTEPIN[n]){regs.TASKS_STARTEPIN[n]=0;capture(n);
-   if(n==0)++ep0InStarts;else ++regularStarts;}
+   if(n==0)++ep0InStarts;else{
+    if(checkInBuffer)assert(!inUsbBusy[n] && "IN endpoint still contains the preceding packet");
+    inUsbBusy[n]=true;++regularStarts;
+    if(regs.EPIN[n].MAXCNT)memcpy(wireIn,resolve(regs.EPIN[n].PTR),regs.EPIN[n].MAXCNT);
+   }}
   if(regs.TASKS_STARTEPOUT[n]){regs.TASKS_STARTEPOUT[n]=0;capture(16+n);
    if(n){++regularStarts;memcpy(resolve(regs.EPOUT[n].PTR),hostOut,regs.EPOUT[n].MAXCNT);}
    else ++ep0OutStarts;}
@@ -269,6 +273,7 @@ void init(){
  s_Usbd.hEp0Que=CFifoInit(s_Ep0QueMem,sizeof(s_Ep0QueMem),sizeof(nRFEPPkt_t),true);
  s_Usbd.SofEnabled=true;
  dmaBusy=0;dmaLocks=dmaUnlocks=0;irqMask=0;activeBit=-1;
+ checkInBuffer=false;memset(inUsbBusy,0,sizeof(inUsbBusy));
  isoStarts[0]=isoStarts[1]=ep0InStarts=ep0OutStarts=regularStarts=0;
  callbacks[0]=callbacks[1]=0;lengths[0]=lengths[1]=0;
  pendingIn=nullptr;pendingInLen=0;
@@ -371,8 +376,8 @@ void testDeferredOut(){
  }
  puts("PASS: regular OUT callbacks publish reserved RX slots only through AppEvt, outside ISR");
 
- // Another queued DMA starts before the OUT callback; its host-consumed IN
- // notification remains deferred through the existing EPDATA AppEvt path.
+ // Another queued DMA starts before the OUT callback. Both notifications
+ // are deferred from END through the same AppEvt dispatch.
  deferredInit();receive(1,17);
  s_Usbd.EpReg[1][1]={regularCallback,outSlot};
  assert(productionEpSend(0,2,inBuffer,11));
@@ -442,9 +447,155 @@ void testDeferredOut(){
  assert(receivers[6].completions==1 && !receivers[0].completions);
  puts("PASS: close/reset cancel deferred OUT callbacks, including cancellation within a batch");
 }
+void ackIn(unsigned ep){
+ assert(inUsbBusy[ep]);inUsbBusy[ep]=false;
+ regs.EPDATASTATUS.bits|=1U<<ep;interrupt();
+}
+alignas(8) uint8_t txMemory[CFIFO_TOTAL_MEMSIZE(128,1)];
+hCFifo_t txFifo;
+unsigned txCompletions=0;bool ackDuringCallback=false,finishDuringCallback=false;
+void txCallback(UsbCtrlrEvtType_t event,uint16_t length,void*){
+ assert(!inIsr && !irqMask && event==USB_CTRLR_EVT_XFER_CMPL);
+ ++txCompletions;
+ int consumed=length;assert(CFifoGetMultiple(txFifo,&consumed) && consumed==length);
+ if(auto *next=CFifoPeek(txFifo)){
+  const bool available=!inUsbBusy[1];
+  assert(productionEpSend(0,1,next,64));
+  assert(CFifoUsed(s_Usbd.hQue)==1 && bool(dmaBusy)==available);
+  if(ackDuringCallback){ackDuringCallback=false;ackIn(1);assert(dmaBusy);}
+  if(finishDuringCallback){finishDuringCallback=false;finish();}
+ }
+}
+void txInit(){
+ deferredInit();checkInBuffer=true;txCompletions=0;ackDuringCallback=finishDuringCallback=false;
+ txFifo=CFifoInit(txMemory,sizeof(txMemory),1,true);
+ int count=128;auto *data=CFifoPutMultiple(txFifo,&count);assert(data && count==128);
+ for(int i=0;i<count;++i)data[i]=uint8_t(i+3);
+ dmaBuffer(data);dmaBuffer(data+64);
+ s_Usbd.EpReg[0][1]={txCallback,nullptr};
+ assert(productionEpSend(0,1,data,64));
+}
+void testDeferredIn(){
+ // END releases DMA and the RAM source. AppEvt consumes that source and
+ // puts the next IN packet in hQue, even though EPDATA has not occurred.
+ txInit();uint8_t first[64];memcpy(first,wireIn,64);
+ finish();assert(!dmaBusy && !txCompletions && !CFifoUsed(s_Usbd.hQue));
+ AppEvtHandlerDispatch();
+ assert(txCompletions==1 && CFifoUsed(txFifo)==64 && CFifoUsed(s_Usbd.hQue)==1);
+ assert(!dmaBusy && regularStarts==1 && !memcmp(first,wireIn,64));
+ auto *next=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
+ assert(next->EpNum==1 && next->Dir==NRFX_USBD_QUE_IN_BUFFER);
+ assert(next->pBuffer==CFifoPeek(txFifo) && next->Len==64);
+ for(unsigned i=0;i<3;++i){interrupt();UsbCtrlrProcess(0);}
+ assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==1 && txCompletions==1);
+ ackIn(1);assert(activeBit==1 && dmaBusy && regularStarts==2);
+ assert(!memcmp(wireIn,CFifoPeek(txFifo),64));
+ finish();assert(!dmaBusy && txCompletions==1);
+ AppEvtHandlerDispatch();assert(txCompletions==2 && !CFifoUsed(txFifo));
+ ackIn(1);AppEvtHandlerExec();assert(txCompletions==2);
+ puts("PASS: IN END queues AppEvt; its callback queues the next IN buffer before ACK; EPDATA starts it once");
+
+ // A held IN at the queue head cannot block regular OUT or another IN.
+ txInit();finish();AppEvtHandlerDispatch();
+ receive(2,17);assert(activeBit==18 && CFifoUsed(s_Usbd.hQue)==2);
+ s_Usbd.EpReg[2][1]={regularCallback,outSlot};
+ assert(productionEpSend(0,3,inBuffer,9));
+ finish();assert(activeBit==3 && CFifoUsed(s_Usbd.hQue)==2);
+ finish();assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==1);
+ AppEvtHandlerExec();checkPacket(2,17);
+ ackIn(1);assert(activeBit==1);finish();AppEvtHandlerExec();
+ assert(txCompletions==2);
+ puts("PASS: queued IN awaiting ACK does not hold shared DMA or block other regular endpoints");
+
+ // Rotating a held request must preserve its inline alignment-repair word.
+ txInit();finish();AppEvtHandlerDispatch();
+ (void)CFifoGet(s_Usbd.hQue);
+ assert(productionEpSend(0,1,inBuffer+1,17));
+ receive(2,11);finish();AppEvtHandlerExec();
+ next=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
+ assert(next->Dir==NRFX_USBD_QUE_IN_SCRATCH && next->Len==3);
+ assert(!memcmp(&next->Scratch,inBuffer+1,3));
+ dmaBuffer(reinterpret_cast<uint8_t*>(&next->Scratch));
+ ackIn(1);assert(activeBit==1 && !memcmp(wireIn,inBuffer+1,3));
+ // All seven IN endpoints can be held at once. An unsuccessful sweep
+ // preserves every queued request and yields shared DMA to another OUT.
+ deferredInit();checkInBuffer=true;
+ for(unsigned ep=1;ep<8;++ep){
+  s_Usbd.EpReg[ep-1][1]={regularCallback,outSlot};
+  assert(productionEpSend(0,ep,inBuffer,ep));finish();
+ }
+ AppEvtHandlerExec();assert(regularCompletions==7);
+ for(unsigned ep=1;ep<8;++ep)assert(productionEpSend(0,ep,inBuffer2,ep+1));
+ nRFUsbdQue_t before[7];
+ for(auto &entry:before){entry=*(nRFUsbdQue_t*)CFifoGet(s_Usbd.hQue);}
+ for(auto &entry:before)*(nRFUsbdQue_t*)CFifoPut(s_Usbd.hQue)=entry;
+ nRFUsbdResumeQueuedDmaLocked();assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==7);
+ for(auto &entry:before){
+  auto actual=*(nRFUsbdQue_t*)CFifoGet(s_Usbd.hQue);
+  assert(actual.EpNum==entry.EpNum && actual.Dir==entry.Dir && actual.Len==entry.Len);
+  assert(actual.pBuffer==entry.pBuffer);
+ }
+ for(auto &entry:before)*(nRFUsbdQue_t*)CFifoPut(s_Usbd.hQue)=entry;
+ receive(2,7);assert(activeBit==18 && CFifoUsed(s_Usbd.hQue)==8);
+ finish();assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==7);
+ puts("PASS: held queue rotation preserves inline data and terminates with all seven IN endpoints held");
+
+ // ISO and EP0 keep their existing scheduler priority over the held IN.
+ txInit();finish();AppEvtHandlerDispatch();
+ pendingIn=inBuffer;pendingInLen=17;frame();assert(activeBit==8);finish();
+ assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==1);
+ regs.BMREQUESTTYPE=0;regs.EVENTS_EP0DATADONE=1;interrupt();assert(activeBit==16);
+ finish();assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==1);
+ puts("PASS: held regular IN leaves ISO and EP0 DMA available");
+
+ // ACK before callback, during callback, or with END must not lose the
+ // next request. If the endpoint is free, EpSend can start it immediately.
+ for(unsigned timing=0;timing<3;++timing){
+  txInit();
+  if(timing==2){inUsbBusy[1]=false;regs.EPDATASTATUS.bits=1U<<1;}
+  finish();
+  if(timing==0)ackIn(1);
+  if(timing==1)ackDuringCallback=true;
+  AppEvtHandlerDispatch();assert(txCompletions==1 && activeBit==1 && regularStarts==2);
+  finish();AppEvtHandlerDispatch();assert(txCompletions==2);
+ }
+ puts("PASS: ACK before, during or with END preserves exactly one queued IN continuation");
+ txInit();finish();ackDuringCallback=finishDuringCallback=true;
+ UsbCtrlrProcess(0);assert(txCompletions==1 && !dmaBusy);
+ UsbCtrlrProcess(0);assert(txCompletions==2 && !CFifoUsed(txFifo));
+ puts("PASS: next IN DMA completing inside the previous callback retains its own completion");
+
+ // Full AppEvt queue keeps the completed source owned, while unrelated
+ // DMA remains usable. Foreground retry eventually queues the next IN.
+ txInit();dummyCalls=0;unsigned queued=0;
+ while(AppEvtHandlerQue(0,nullptr,dummyEvent))++queued;
+ finish();assert(!dmaBusy && !txCompletions && CFifoUsed(txFifo)==128);
+ ackIn(1);receive(2,23);finish();
+ UsbCtrlrProcess(0);assert(dummyCalls==queued && !txCompletions);
+ UsbCtrlrProcess(0);assert(txCompletions==1 && activeBit==1);
+ checkPacket(2,23);finish();UsbCtrlrProcess(0);assert(txCompletions==2);
+ puts("PASS: full AppEvt queue retains IN completion and retries without holding DMA");
+
+ // A single completed IN (including ZLP) needs no EPDATA to notify its
+ // owner. Close/reset cancel deferred notifications before dispatch.
+ for(unsigned ep=1;ep<8;++ep)for(uint16_t length:{0U,1U,17U,64U}){
+  deferredInit();checkInBuffer=true;s_Usbd.EpReg[ep-1][1]={regularCallback,outSlot};
+  assert(productionEpSend(0,ep,inBuffer,length));finish();
+  assert(!regularCompletions);AppEvtHandlerDispatch();
+  assert(regularCompletions==1 && regularLength==length);
+  ackIn(ep);AppEvtHandlerExec();assert(regularCompletions==1);
+ }
+ for(unsigned cancel=0;cancel<3;++cancel){
+  txInit();finish();
+  if(cancel==2)nRFUsbdResetState();else productionEpClose(0,1,cancel==1);
+  AppEvtHandlerExec();assert(txCompletions==unsigned(cancel==0));
+ }
+ puts("PASS: all IN endpoints/ZLP complete at END; IN close/reset cancel pending callbacks");
+}
 int main(int argc,char **argv){
  testDeferredOut();
- if(argc==2 && !strcmp(argv[1],"--regular-out"))return 0;
+ testDeferredIn();
+ if(argc==2 && !strcmp(argv[1],"--regular"))return 0;
  // Check every hardware END mapping independently of the decoder. A stale
  // END from another direction must not release the active transfer.
  for(unsigned ep=0;ep<=8;++ep)for(unsigned out=0;out<2;++out){
@@ -479,11 +630,11 @@ int main(int argc,char **argv){
   assert(callbacks[!out]==unsigned(ep==8));
   assert(ep0Callbacks[!out]==unsigned(ep==0));
   assert(!regularCompletions);
-  if(ep>0 && ep<8 && out)AppEvtHandlerDispatch();
-  assert(regularCompletions==unsigned(ep>0 && ep<8 && out));
+  if(ep>0 && ep<8)AppEvtHandlerDispatch();
+  assert(regularCompletions==unsigned(ep>0 && ep<8));
   if(ep>0 && ep<8 && !out){
    regs.EPDATASTATUS.bits=1U<<ep;
-   interrupt();assert(!regs.EPDATASTATUS.bits && !regularCompletions);
+   interrupt();assert(!regs.EPDATASTATUS.bits && regularCompletions==1);
    AppEvtHandlerDispatch();assert(regularCompletions==1);
   }
  }
@@ -812,4 +963,4 @@ with tempfile.TemporaryDirectory(prefix='iosonata-iso-') as temp:
                     '-x', 'c++', str(path), str(ROOT / 'src/app_evt_handler.cpp'),
                     str(ROOT / 'src/cfifo.c'), '-o', str(Path(temp) / 'iso_test')], check=True)
     subprocess.run([str(Path(temp) / 'iso_test')] +
-                   (['--regular-out'] if args.regular_out else []), check=True)
+                   (['--regular'] if args.regular else []), check=True)

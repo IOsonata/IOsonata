@@ -55,7 +55,7 @@ enum UsbCtrlrEvtType_t {USB_CTRLR_EVT_DRDY=2};
 typedef void (*UsbCtrlrEpHandler_t)(UsbCtrlrEvtType_t, uint16_t, void *);
 struct nRFUsbEpReg_t {UsbCtrlrEpHandler_t Handler;void *pContext;};
 struct UsbdMock {uint8_t IntPrio;bool LowPowerSuspend;
- nRFUsbEpReg_t EpReg[8][2];uint8_t OutComplete;} s_Usbd;
+ nRFUsbEpReg_t EpReg[8][2];uint16_t Complete;} s_Usbd;
 bool cable, clockOK, readyOK;
 unsigned requests, releases, clockRefs, starts, resets, waits, dispatches;
 unsigned irqDisables, irqPriority;
@@ -73,7 +73,7 @@ void nRFUsbdResetState(){++resets;}
 void __ISB(){}
 void __DSB(){}
 void AppEvtHandlerExec(){++dispatches;}
-void nRFUsbdQueueOutComplete(){assert(false);}
+void nRFUsbdQueueComplete(){assert(false);}
 uint32_t DisableInterrupt(){return 0;}
 void EnableInterrupt(uint32_t){}
 uint32_t nRFUsbdQueueInComplete(uint32_t){assert(false);return 0;}

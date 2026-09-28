@@ -10,8 +10,8 @@ errata-199 busy word as a software lock:
   the event), and the channel is handed straight to the next queued DMA
   inside the interrupt, before the EPDATA and bus event work.
 - EP0 IN retires only once the host has taken the packet (EP0DATADONE).
-- Regular IN completion to the class rides EPDATA (host consumed); OUT
-  completion is recorded at DMA END. Both notifications run through AppEvt.
+- Regular IN and OUT completion is recorded at DMA END. Both notifications
+  run through AppEvt; IN EPDATA releases the endpoint for the next packet.
 - The foreground wait retires a running DMA and unlocks; it never starts
   another.
 """
@@ -104,7 +104,7 @@ assert "nRFUsbdResumeQueuedDma" not in dma_wait
 # before the bus event work, so the next DMA overlaps that processing.
 hand_off = interrupt.index("nRFUsbdStartQueuedDma();")
 assert interrupt.index("(void)CFifoGet(s_Usbd.hQue);") < hand_off
-assert interrupt.index("nRFUsbdQueueOutComplete();") < hand_off
+assert interrupt.index("nRFUsbdQueueComplete();") < hand_off
 assert "USB_CTRLR_EVT_XFER_CMPL" not in completed
 assert hand_off < interrupt.index("NRF_USBD->EVENTS_EPDATA = 0U;")
 assert hand_off < interrupt.index("if (NRF_USBD->EVENTS_USBEVENT != 0U)\n\t{\n\t\tNRF_USBD->EVENTS_USBEVENT = 0U;")
@@ -132,10 +132,11 @@ assert receive.index("CFifoPut(s_Usbd.hQue)") < receive.index("NRF_USBD->EPDATAS
 assert receive.index("pQue->pBuffer = pBuffer;") < receive.index("NRF_USBD->EPDATASTATUS = statusBit;")
 assert receive.index("NRF_USBD->EPDATASTATUS = statusBit;") < receive.index("nRFUsbdResumeQueuedDmaLocked();")
 
-# Regular IN completion goes through EPDATA to AppEvt.
-assert interrupt.index("NRF_USBD->EVENTS_EPDATA = 0U;") < interrupt.index(
-    "AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete)"
-)
+# Both regular directions queue completion at END. EPDATA releases IN
+# endpoint storage; it must not generate a second completion notification.
+assert "nRFUsbdQueueComplete();" in completed
+assert "s_Usbd.InBusy &=" in interrupt
+assert "AppEvtHandlerQue" not in interrupt[interrupt.index("const uint32_t dataStatus ="):]
 
 # Scheduler: one place decides the order; it ends by releasing the lock
 # when there is nothing to start.
