@@ -56,7 +56,7 @@ iso_close = function_body(iso, "void nRFUsbdIsoEpClose(")
 interrupt = function_body(base, 'extern "C" void USBD_IRQHandler(void)')
 handle_sof = function_body(base, "static void nRFUsbdHandleSof(void)")
 queued = function_body(base, "void nRFUsbdStartQueuedDma(void)")
-completed = function_body(interrupt, "if (nRFUsbdDmaActive())")
+completed = function_body(interrupt, "switch (epno)")
 process = function_body(core, "void UsbDevProcessEvent(")
 update_sof = function_body(core, "static void UsbCoreUpdateSof(void)")
 
@@ -130,7 +130,7 @@ assert "UsbCtrlrIsoSend" not in handle_sof
 reset = interrupt.index("if (NRF_USBD->EVENTS_USBRESET != 0U)")
 setup = interrupt.index("if (NRF_USBD->EVENTS_EP0SETUP != 0U)")
 sof = interrupt.index("if (NRF_USBD->EVENTS_SOF != 0U)")
-done = interrupt.index("if (nRFUsbdDmaActive())")
+done = interrupt.index("switch (epno)")
 assert reset < setup < sof < done
 assert interrupt.count("nRFUsbdHandleSof();") == 1
 assert "nRFUsbdIsoComplete(epno == 8U);" in interrupt

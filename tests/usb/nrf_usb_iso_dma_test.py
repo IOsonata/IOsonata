@@ -156,7 +156,7 @@ auto *NRF_USBD=&regs;
 // Memory the simulated EasyDMA copies from or into.
 uint8_t hostOut[512];
 uint8_t wireIn[512];
-unsigned isoStarts[2]={},ep0InStarts=0,regularStarts=0;
+unsigned isoStarts[2]={},ep0InStarts=0,ep0OutStarts=0,regularStarts=0;
 int activeBit=-1;
 // The barrier after a START task is where the hardware takes the transfer:
 // it captures EPSTATUS and moves the data. One DMA at a time.
@@ -183,7 +183,8 @@ void __DSB(){
   if(regs.TASKS_STARTEPIN[n]){regs.TASKS_STARTEPIN[n]=0;capture(n);
    if(n==0)++ep0InStarts;else ++regularStarts;}
   if(regs.TASKS_STARTEPOUT[n]){regs.TASKS_STARTEPOUT[n]=0;capture(16+n);
-   if(n){++regularStarts;memcpy(resolve(regs.EPOUT[n].PTR),hostOut,regs.EPOUT[n].MAXCNT);}}
+   if(n){++regularStarts;memcpy(resolve(regs.EPOUT[n].PTR),hostOut,regs.EPOUT[n].MAXCNT);}
+   else ++ep0OutStarts;}
  }
 }
 void __ISB(){}
@@ -259,7 +260,7 @@ void init(){
  s_Usbd.hEp0Que=CFifoInit(s_Ep0QueMem,sizeof(s_Ep0QueMem),sizeof(nRFEPPkt_t),true);
  s_Usbd.SofEnabled=true;
  dmaBusy=0;dmaLocks=dmaUnlocks=0;irqMask=0;activeBit=-1;
- isoStarts[0]=isoStarts[1]=ep0InStarts=regularStarts=0;
+ isoStarts[0]=isoStarts[1]=ep0InStarts=ep0OutStarts=regularStarts=0;
  callbacks[0]=callbacks[1]=0;lengths[0]=lengths[1]=0;
  pendingIn=nullptr;pendingInLen=0;
  drdyCnt=0;drdyGives=true;
@@ -372,6 +373,53 @@ int main(){
  assert(!dmaBusy && !regs.EPSTATUS.bits && ep0Callbacks[1]==1);
  assert(!CFifoUsed(s_Usbd.hEp0Que));
  puts("PASS: EP0 IN chains packets without releasing DMA ownership or reporting an early completion");
+ // EP0 OUT readiness exists before any EPOUT0 DMA is captured. It starts
+ // from idle, or stays latched behind an active regular/ISO DMA.
+ init();regs.BMREQUESTTYPE=0;regs.EVENTS_EP0DATADONE=1;
+ interrupt();
+ assert(activeBit==16 && ep0OutStarts==1 && !regs.EVENTS_EP0DATADONE);
+ assert(regs.EPOUT[0].PTR==uint32_t(uintptr_t(s_Usbd.Ep0Bounce)));
+ assert(regs.EPOUT[0].MAXCNT==NRFX_USBD_MAX_PACKET_SIZE);
+ regs.EPOUT[0].AMOUNT=17;regs.EVENTS_ENDEPOUT[0]=1;interrupt();
+ assert(!dmaBusy && ep0Callbacks[0]==1 && ep0Lengths[0]==17);
+ assert(regs.TASKS_EP0RCVOUT==1);
+ for(unsigned held:{2U,8U,18U,24U}){
+  init();regs.BMREQUESTTYPE=0;regs.EVENTS_EP0DATADONE=1;
+  dmaBusy=0x82;regs.EPSTATUS.bits=1U<<held;activeBit=int(held);
+  if(held==2 || held==18){
+   auto *entry=(nRFUsbdQue_t*)CFifoPut(s_Usbd.hQue);
+   *entry={2,NRFX_USBD_QUE_IN_BUFFER,0,{inBuffer}};
+   s_Usbd.EpReg[1][0]={regularCallback,outSlot};
+  }else s_Usbd.IsoDataFlag=held==8?NRFUSBD_ISO_IN_READY:NRFUSBD_ISO_OUT_READY;
+  interrupt();
+  assert(regs.EPSTATUS.bits==(1U<<held) && regs.EVENTS_EP0DATADONE==1);
+  assert(!ep0OutStarts && dmaBusy);
+  finish();assert(activeBit==16 && ep0OutStarts==1 && !regs.EVENTS_EP0DATADONE);
+ }
+ puts("PASS: EP0 OUT data starts from idle and remains latched behind regular or ISO DMA");
+
+ // IN status/stray handshakes clear even when a different DMA owns the
+ // channel. They must not retire that DMA or dequeue its request.
+ for(int held:{-1,2,8,16,18,24}){
+  init();regs.EVENTS_EP0DATADONE=1;
+  if(held>=0){dmaBusy=0x82;regs.EPSTATUS.bits=1U<<held;}
+  const uint32_t before=regs.EPSTATUS.bits;
+  interrupt();
+  assert(!regs.EVENTS_EP0DATADONE && regs.EPSTATUS.bits==before);
+  assert(dmaBusy==(held<0?0U:0x82U));
+  assert(!ep0Callbacks[0] && !ep0Callbacks[1] && !ep0OutStarts);
+ }
+ // Pending EP0 IN keeps the handshake until its matching END arrives.
+ init();dmaBusy=0x82;regs.EPSTATUS.bits=1;regs.EVENTS_EP0DATADONE=1;
+ interrupt();assert(regs.EVENTS_EP0DATADONE==1 && regs.EPSTATUS.bits==1 && dmaBusy);
+ // A suspend holds an OUT-ready packet; the existing bus-event retry
+ // starts it when the suspend gate has been lifted.
+ init();regs.BMREQUESTTYPE=0;regs.EVENTS_EP0DATADONE=1;s_Usbd.Flags|=USBD_FLAG_SUSPENDED;
+ interrupt();assert(!dmaBusy && !ep0OutStarts && regs.EVENTS_EP0DATADONE==1);
+ s_Usbd.Flags&=(uint8_t)~USBD_FLAG_SUSPENDED;regs.EVENTS_USBEVENT=1;
+ interrupt();assert(activeBit==16 && ep0OutStarts==1 && busEventCalls==1);
+ puts("PASS: EP0 IN status clears independently; pending IN and suspended OUT retain their handshake");
+
  // Foreground close waits for DMA END, including EP0 IN before its host
  // handshake, and discards only regular queue entries without starting work.
  for(unsigned ep=0;ep<=8;++ep)for(unsigned out=0;out<2;++out)

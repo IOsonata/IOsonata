@@ -44,7 +44,7 @@ dma_lock = function_body(source, "void nRFUsbdDmaLock(void)")
 dma_unlock = function_body(source, "void nRFUsbdDmaUnlock(void)")
 dma_wait = function_body(source, "void nRFUsbdDmaWait(void)")
 interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
-completed = function_body(interrupt, "if (nRFUsbdDmaActive())")
+completed = function_body(interrupt, "switch (epno)")
 queued = function_body(source, "void nRFUsbdStartQueuedDma(void)")
 resume = function_body(source, "void nRFUsbdResumeQueuedDmaLocked(void)")
 ep_enable = function_body(source, "void nRFUsbdEpHwEnable(")
@@ -68,10 +68,10 @@ assert "NRFX_USBD_EASYDMA_BUSY_REG_BUSY" in dma_lock
 assert "NRFX_USBD_EASYDMA_BUSY_REG_CLEAR" in dma_unlock
 
 # The ISR retires and handles each endpoint in one dispatch. A missing END
-# breaks out of the switch so the other interrupt events still get serviced.
+# leaves DMA state untouched and still services independent EP0/other events.
 assert "nRFUsbdGetCompletedXfer" not in source
 assert "nRFUsbdDmaEndEvent" not in completed
-assert completed.count("switch (epno)") == 1
+assert interrupt.count("switch (epno)") == 1
 for marker, following, end_clear in (
     ("case 0U:", "case 16U:", "NRF_USBD->EVENTS_EP0DATADONE = 0U;"),
     ("case 16U:", "case 8U:", "NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;"),

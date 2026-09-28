@@ -1039,90 +1039,106 @@ extern "C" void USBD_IRQHandler(void){
 	bool reuseDma = false;
 	bool newDmaWork = false;
 
-	// Only a software-owned channel can have a transfer to retire.
-	if (nRFUsbdDmaActive())
+	// EPSTATUS identifies DMA completion. EP0DATADONE can also arrive
+	// without DMA, or while another endpoint owns the channel.
+	const uint32_t dmastatus = nRFUsbdDmaActive() ? NRF_USBD->EPSTATUS : 0U;
+	// Bit zero selects the EP0 protocol case when there is no captured DMA.
+	const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus | 1U);
+	switch (epno)
 	{
-		const uint32_t dmastatus = NRF_USBD->EPSTATUS;
-		if (dmastatus != 0U)
+		case 0U:	// EP0 IN completion or independent EP0 protocol event.
 		{
-			const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
-			switch (epno)
+			if (dmastatus != 0U)
 			{
-				case 0U:	// EP0 IN
+				// END only stages the packet. Wait for the host to take
+				// it before starting another EP0 IN packet.
+				if (NRF_USBD->EVENTS_ENDEPIN[0] == 0U ||
+					NRF_USBD->EVENTS_EP0DATADONE == 0U)
+					break;
+				NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
+				NRF_USBD->EVENTS_EP0DATADONE = 0U;
+				NRF_USBD->EPSTATUS = dmastatus;
+				__DSB();
+				(void)CFifoGet(s_Usbd.hEp0Que);
+
+				nRFEPPkt_t *pep0 =
+					(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
+				if (pep0 != NULL)
+					nRFUsbdEp0InStart(pep0);
+				else
 				{
-					// END only stages the packet. Wait for the host to take
-					// it before starting another EP0 IN packet.
-					if (NRF_USBD->EVENTS_ENDEPIN[0] == 0U ||
-						NRF_USBD->EVENTS_EP0DATADONE == 0U)
-						break;
-					NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
+					nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
+					reuseDma = true;
+				}
+				break;
+			}
+		ep0DataDone:
+			if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
+			{
+				if ((NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
+				{
+					// OUT data can wait behind any DMA. Leave the event
+					// latched until the scheduler starts EPOUT0.
+					newDmaWork = !reuseDma;
+				}
+				else if ((NRF_USBD->EPSTATUS & 1UL) == 0U)
+				{
+					// IN status handshake with no captured EP0 IN DMA.
 					NRF_USBD->EVENTS_EP0DATADONE = 0U;
-					NRF_USBD->EPSTATUS = dmastatus;
-					__DSB();
-					(void)CFifoGet(s_Usbd.hEp0Que);
-
-					nRFEPPkt_t *pep0 =
-						(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
-					if (pep0 != NULL)
-						nRFUsbdEp0InStart(pep0);
-					else
-					{
-						nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
-						reuseDma = true;
-					}
-					break;
-				}
-				case 16U:	// EP0 OUT
-				{
-					if (NRF_USBD->EVENTS_ENDEPOUT[0] == 0U)
-						break;
-					NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
-					NRF_USBD->EPSTATUS = dmastatus;
-					__DSB();
-
-					const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
-					NRF_USBD->TASKS_EP0RCVOUT = 1U;
-					(void)NRF_USBD->TASKS_EP0RCVOUT;
-					nRFUsbdEmitXfer(0U, amount);
-					reuseDma = true;
-					break;
-				}
-				case 8U:	// ISO IN
-				case 24U:	// ISO OUT
-				{
-					volatile uint32_t *pend = epno == 8U ?
-						&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
-					if (*pend == 0U)
-						break;
-					*pend = 0U;
-					NRF_USBD->EPSTATUS = dmastatus;
-					__DSB();
-					nRFUsbdIsoComplete(epno == 8U);
-					reuseDma = true;
-					break;
-				}
-				default:	// Regular endpoints 1-7.
-				{
-					const uint8_t epNum = (uint8_t)epno & 7U;
-					volatile uint32_t *pend = epno >= 16U ?
-						&NRF_USBD->EVENTS_ENDEPOUT[epNum] :
-						&NRF_USBD->EVENTS_ENDEPIN[epNum];
-					if (*pend == 0U)
-						break;
-					*pend = 0U;
-					NRF_USBD->EPSTATUS = dmastatus;
-					__DSB();
-					(void)CFifoGet(s_Usbd.hQue);
-					if (epno >= 16U)
-					{
-						nRFUsbEpRegisteredEvent(epNum, 0U,
-							USB_CTRLR_EVT_XFER_CMPL,
-							(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
-					}
-					reuseDma = true;
-					break;
+					(void)NRF_USBD->EVENTS_EP0DATADONE;
 				}
 			}
+			break;
+		}
+		case 16U:	// EP0 OUT
+		{
+			if (NRF_USBD->EVENTS_ENDEPOUT[0] == 0U)
+				goto ep0DataDone;
+			NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
+			NRF_USBD->EPSTATUS = dmastatus;
+			__DSB();
+
+			const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
+			NRF_USBD->TASKS_EP0RCVOUT = 1U;
+			(void)NRF_USBD->TASKS_EP0RCVOUT;
+			nRFUsbdEmitXfer(0U, amount);
+			reuseDma = true;
+			goto ep0DataDone;
+		}
+		case 8U:	// ISO IN
+		case 24U:	// ISO OUT
+		{
+			volatile uint32_t *pend = epno == 8U ?
+				&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
+			if (*pend == 0U)
+				goto ep0DataDone;
+			*pend = 0U;
+			NRF_USBD->EPSTATUS = dmastatus;
+			__DSB();
+			nRFUsbdIsoComplete(epno == 8U);
+			reuseDma = true;
+			goto ep0DataDone;
+		}
+		default:	// Regular endpoints 1-7.
+		{
+			const uint8_t epNum = (uint8_t)epno & 7U;
+			volatile uint32_t *pend = epno >= 16U ?
+				&NRF_USBD->EVENTS_ENDEPOUT[epNum] :
+				&NRF_USBD->EVENTS_ENDEPIN[epNum];
+			if (*pend == 0U)
+				goto ep0DataDone;
+			*pend = 0U;
+			NRF_USBD->EPSTATUS = dmastatus;
+			__DSB();
+			(void)CFifoGet(s_Usbd.hQue);
+			if (epno >= 16U)
+			{
+				nRFUsbEpRegisteredEvent(epNum, 0U,
+					USB_CTRLR_EVT_XFER_CMPL,
+					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
+			}
+			reuseDma = true;
+			goto ep0DataDone;
 		}
 	}
 
@@ -1134,7 +1150,6 @@ extern "C" void USBD_IRQHandler(void){
 			nRFUsbdStartQueuedDma();
 		else
 			nRFUsbdDmaUnlock();
-		reuseDma = false;
 	}
 
 	if (NRF_USBD->EVENTS_USBEVENT != 0U)
@@ -1148,24 +1163,6 @@ extern "C" void USBD_IRQHandler(void){
 		// have just lifted the suspend gate. Queued work restarts at the
 		// tail; it stays parked if the event was a suspend.
 		newDmaWork = true;
-	}
-
-	// EP0 IN consumes EP0DATADONE together with ENDEPIN0 above. For OUT it
-	// means a received packet is ready for EPOUT0 EasyDMA.
-	if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
-	{
-		if ((NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
-		{
-			newDmaWork = true;
-		}
-		else if ((NRF_USBD->EPSTATUS & 1UL) == 0U)
-		{
-			// IN direction with no EP0 IN DMA captured: nothing to retire
-			// (status handshake or stray). Clear it or the interrupt
-			// re-enters until the next SETUP.
-			NRF_USBD->EVENTS_EP0DATADONE = 0U;
-			(void)NRF_USBD->EVENTS_EP0DATADONE;
-		}
 	}
 
 	// EPDATASTATUS describes regular endpoint host-consumption / OUT readiness.
