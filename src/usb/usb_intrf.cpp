@@ -43,47 +43,20 @@ static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
 
 static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t, uint16_t, void *);
 
-static void UsbIntrfRegisterRx(UsbDevIntrf_t *pIntrf, uint8_t *pBuffer)
+// OUT counterpart of EpSend: give the controller the next RX FIFO block
+// (CFifoResv) as the OUT DMA buffer, or the direct slot. The completion
+// publishes that same block with CFifoPut. NULL when the FIFO is full.
+static void UsbIntrfRegisterRx(UsbDevIntrf_t *pIntrf)
 {
+	uint8_t *pBuffer = pIntrf->pRxBuffer;
+	if (pIntrf->Mode != USB_INTRF_MODE_DIRECT)
+	{
+		UsbPkt_t *pkt = reinterpret_cast<UsbPkt_t *>(CFifoResv(pIntrf->hRxFifo));
+		pBuffer = pkt != nullptr ? pkt->Data : nullptr;
+	}
+	pIntrf->RxPending = pBuffer == nullptr ? 1U : 0U;
 	UsbCtrlrEpAlloc(pIntrf->DevNo, pIntrf->EpNo, false, pBuffer,
 		pIntrf->bBlocking, UsbIntrfCtrlrOutEvent, pIntrf);
-}
-
-// Byte and packet modes: the controller moves each OUT packet straight into
-// the next RX FIFO block, reserved here and registered as the endpoint's DMA
-// buffer. The block stays invisible to RxData until the completion publishes
-// it. Only this producer moves PutIdx, so the reserved block is the one the
-// completion publishes. With no free block the endpoint is registered without
-// a buffer and marked pending. bDrop is set when the controller has a packet
-// waiting (DRDY): a non-blocking FIFO then gives up its oldest packet for it,
-// the same packet a non-blocking put would have replaced.
-static void UsbIntrfArmRx(UsbDevIntrf_t *pIntrf, bool bDrop)
-{
-	hCFifo_t hFifo = pIntrf->hRxFifo;
-	UsbPkt_t *pSlot = reinterpret_cast<UsbPkt_t *>(CFifoResv(hFifo));
-	if (pSlot == nullptr && bDrop && !CFifoIsBlocking(hFifo))
-	{
-		(void)CFifoGet(hFifo);
-		hFifo->DropCnt++;
-		pSlot = reinterpret_cast<UsbPkt_t *>(CFifoResv(hFifo));
-	}
-	pIntrf->RxPending = pSlot == nullptr ? 1U : 0U;
-	UsbIntrfRegisterRx(pIntrf, pSlot != nullptr ? pSlot->Data : nullptr);
-}
-
-static void UsbIntrfReleaseRx(UsbDevIntrf_t *pIntrf)
-{
-	if (pIntrf->RxPending == 0U)
-	{
-		return;
-	}
-	if (pIntrf->Mode == USB_INTRF_MODE_DIRECT)
-	{
-		pIntrf->RxPending = 0U;
-		UsbIntrfRegisterRx(pIntrf, pIntrf->pRxBuffer);
-		return;
-	}
-	UsbIntrfArmRx(pIntrf, false);
 }
 
 static inline __attribute__((always_inline))
@@ -223,9 +196,13 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 		cnt += len;
 	}
 
+	// Masked so the endpoint interrupt cannot fill and publish the block
+	// between CFifoResv and its registration.
 	if (cnt > 0 && pIntrf->RxPending != 0U)
 	{
-		UsbIntrfReleaseRx(pIntrf);
+		const uint32_t state = DisableInterrupt();
+		UsbIntrfRegisterRx(pIntrf);
+		EnableInterrupt(state);
 	}
 
 	return cnt;
@@ -260,7 +237,7 @@ static int UsbIntrfRxDirect(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 		memcpy(pBuffer, pPacket->Data, len);
 	}
 	UsbIntrfDirectClear(pPacket);
-	UsbIntrfReleaseRx(pIntrf);
+	UsbIntrfRegisterRx(pIntrf);
 	EnableInterrupt(state);
 	return len;
 }
@@ -423,38 +400,6 @@ static void UsbIntrfDirectRxComplete(UsbDevIntrf_t *pIntrf, uint16_t Length)
 	}
 }
 
-// The packet is already in the reserved block. Write its header, publish
-// it, and reserve the next block for the following packet.
-static void UsbIntrfCompleteRx(UsbDevIntrf_t *pIntrf, uint16_t Length)
-{
-	UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(
-		CFifoResv(pIntrf->hRxFifo));
-	if (pPacket != nullptr)
-	{
-		pPacket->Hdr.Length = Length;
-		pPacket->Hdr.Reserved = 0U;
-		(void)CFifoPut(pIntrf->hRxFifo);
-	}
-	else
-	{
-		// No block was reserved, so the controller had no buffer to move
-		// this packet into.
-		pIntrf->RxDropCnt++;
-	}
-
-	UsbIntrfArmRx(pIntrf, false);
-
-	if (pIntrf->DevIntrf.EvtCB != nullptr)
-	{
-		const int used = CFifoUsed(pIntrf->hRxFifo);
-		if (CFifoAvail(pIntrf->hRxFifo) == 0)
-		{
-			UsbIntrfNotify(pIntrf, DEVINTRF_EVT_RX_FIFO_FULL, used);
-		}
-		UsbIntrfNotify(pIntrf, DEVINTRF_EVT_RX_DATA, used);
-	}
-}
-
 static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t Event,
 								  uint16_t Length, void *pContext)
 {
@@ -463,40 +408,61 @@ static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t Event,
 	switch (Event)
 	{
 		case USB_CTRLR_EVT_DRDY:
-			if (pIntrf->Mode == USB_INTRF_MODE_DIRECT && !pIntrf->bBlocking)
+			if (pIntrf->Mode == USB_INTRF_MODE_DIRECT)
 			{
-				return;
-			}
-
-			if (pIntrf->Mode != USB_INTRF_MODE_DIRECT)
-			{
-				// A reserved block is free space already registered. Only a
-				// pending endpoint needs one, taken now that a packet waits.
-				if (pIntrf->RxPending != 0U)
+				if (!pIntrf->bBlocking)
 				{
-					UsbIntrfArmRx(pIntrf, true);
+					return;
 				}
-				return;
+				if (UsbIntrfDirectReady(pIntrf->pRxDirectBuffer))
+				{
+					pIntrf->RxPending = 1U;
+					UsbCtrlrEpAlloc(pIntrf->DevNo, pIntrf->EpNo, false, nullptr,
+						pIntrf->bBlocking, UsbIntrfCtrlrOutEvent, pIntrf);
+					return;
+				}
 			}
-
-			if (!UsbIntrfDirectReady(pIntrf->pRxDirectBuffer))
+			else
 			{
-				UsbIntrfReleaseRx(pIntrf);
-				return;
+				// A block is already registered. Only a pending endpoint
+				// needs one; non-blocking and full, the oldest makes room.
+				if (pIntrf->RxPending == 0U)
+				{
+					return;
+				}
+				if (!CFifoIsBlocking(pIntrf->hRxFifo) &&
+					CFifoAvail(pIntrf->hRxFifo) == 0)
+				{
+					(void)CFifoGet(pIntrf->hRxFifo);
+					pIntrf->hRxFifo->DropCnt++;
+				}
 			}
-
-			pIntrf->RxPending = 1U;
-			UsbIntrfRegisterRx(pIntrf, nullptr);
+			UsbIntrfRegisterRx(pIntrf);
 			return;
 
 		case USB_CTRLR_EVT_XFER_CMPL:
 			if (pIntrf->Mode == USB_INTRF_MODE_DIRECT)
 			{
 				UsbIntrfDirectRxComplete(pIntrf, Length);
-				return;
 			}
+			else
+			{
+				UsbPkt_t *pkt = reinterpret_cast<UsbPkt_t *>(
+					CFifoPut(pIntrf->hRxFifo));
+				pkt->Hdr.Length = Length;
+				pkt->Hdr.Reserved = 0U;
+				UsbIntrfRegisterRx(pIntrf);
 
-			UsbIntrfCompleteRx(pIntrf, Length);
+				if (pIntrf->DevIntrf.EvtCB != nullptr)
+				{
+					const int used = CFifoUsed(pIntrf->hRxFifo);
+					if (CFifoAvail(pIntrf->hRxFifo) == 0)
+					{
+						UsbIntrfNotify(pIntrf, DEVINTRF_EVT_RX_FIFO_FULL, used);
+					}
+					UsbIntrfNotify(pIntrf, DEVINTRF_EVT_RX_DATA, used);
+				}
+			}
 			return;
 
 		case USB_CTRLR_EVT_XFER_FAILED:
@@ -505,7 +471,7 @@ static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t Event,
 			return;
 
 		case USB_CTRLR_EVT_CANCEL:
-			UsbIntrfReleaseRx(pIntrf);
+			UsbIntrfRegisterRx(pIntrf);
 			return;
 
 		default:
@@ -690,14 +656,7 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 
 	if (pIntrf->EpNo != 0U)
 	{
-		if (pIntrf->Mode == USB_INTRF_MODE_DIRECT)
-		{
-			UsbIntrfRegisterRx(pIntrf, pIntrf->pRxBuffer);
-		}
-		else
-		{
-			UsbIntrfArmRx(pIntrf, false);
-		}
+		UsbIntrfRegisterRx(pIntrf);
 		uint8_t *pTxSource = pIntrf->Mode == USB_INTRF_MODE_DIRECT &&
 			pIntrf->pTxDirectBuffer != nullptr ? pIntrf->pTxDirectBuffer->Data :
 			nullptr;
@@ -709,27 +668,27 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	return true;
 }
 
-// Release the held RX buffer, empty both directions and mark TX idle.
-// Shared by configure and unconfigure. The RX FIFO is emptied from the read
-// side only: PutIdx stays where it is, so the block reserved and registered
-// with the controller, possibly already armed for DMA, remains the one the
-// next completion publishes.
+// Empty both directions, register the OUT buffer again and mark TX idle.
+// Shared by configure and unconfigure.
 static void UsbIntrfDrain(UsbDevIntrf_t *pIntrf)
 {
 	if (pIntrf->Mode == USB_INTRF_MODE_DIRECT)
 	{
-		UsbIntrfReleaseRx(pIntrf);
 		UsbIntrfDirectClear(pIntrf->pRxDirectBuffer);
 		UsbIntrfDirectClear(pIntrf->pTxDirectBuffer);
 	}
 	else
 	{
+		// Emptied from the read side: PutIdx stays on the block registered
+		// for OUT DMA, which may already be receiving.
 		while (CFifoGet(pIntrf->hRxFifo) != nullptr)
 		{
 		}
-		UsbIntrfReleaseRx(pIntrf);
 		CFifoFlush(pIntrf->hTxFifo);
 	}
+	const uint32_t state = DisableInterrupt();
+	UsbIntrfRegisterRx(pIntrf);
+	EnableInterrupt(state);
 	UsbIntrfSetTxIdle(pIntrf);
 }
 
