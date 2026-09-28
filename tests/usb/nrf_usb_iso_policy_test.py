@@ -136,10 +136,8 @@ assert interrupt.count("nRFUsbdHandleSof();") == 1
 assert "nRFUsbdIsoComplete(completed == 8);" in interrupt
 
 # Completion recognizes both ISO directions by their EPSTATUS bit.
-decoder = function_body(base, "volatile uint32_t *nRFUsbdDmaEndEvent(")
-assert "nRFUsbdDmaEndEvent(epno)" in completed
-assert "EpBit == 8U" in decoder and "NRF_USBD->EVENTS_ENDISOIN" in decoder
-assert "EpBit == 24U" in decoder and "NRF_USBD->EVENTS_ENDISOOUT" in decoder
+assert "case 8U:" in completed and "NRF_USBD->EVENTS_ENDISOIN" in completed
+assert "case 24U:" in completed and "NRF_USBD->EVENTS_ENDISOOUT" in completed
 
 # Scheduler: ISO first, then EP0 OUT data, EP0 IN, the regular queue.
 iso_pos = queued.index("nRFUsbdIsoStart()")

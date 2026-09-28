@@ -541,8 +541,7 @@ void nRFUsbdDmaUnlock(void)
 	__DSB();
 }
 
-// EPSTATUS uses one bit per direction. Both retirement paths decode the
-// same END register; EP0 protocol completion is checked separately below.
+// Decode the active DMA END register for foreground stop and close.
 static __attribute__((noinline))
 volatile uint32_t *nRFUsbdDmaEndEvent(uint32_t EpBit)
 {
@@ -558,25 +557,53 @@ volatile uint32_t *nRFUsbdDmaEndEvent(uint32_t EpBit)
 // -1 means the active transfer has not reached its matching END event yet.
 static int nRFUsbdGetCompletedXfer(void)
 {
+	int retval = -1;
 	const uint32_t dmastatus = NRF_USBD->EPSTATUS;
-	if (dmastatus == 0U)
-		return -1;
 
-	const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
-	volatile uint32_t *pend = nRFUsbdDmaEndEvent(epno);
-	// EP0 IN must also wait for the host to consume the staged packet.
-	if (*pend == 0U ||
-		(epno == 0U && NRF_USBD->EVENTS_EP0DATADONE == 0U))
-		return -1;
+	if (dmastatus != 0U)
+	{
+		const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
+		volatile uint32_t *pend;
 
-	*pend = 0U;
-	if (epno == 0U)
-		NRF_USBD->EVENTS_EP0DATADONE = 0U;
-	NRF_USBD->EPSTATUS = dmastatus;
-	__DSB();
-	if (epno == 0U)
-		(void)CFifoGet(s_Usbd.hEp0Que);
-	return (int)epno;
+		switch (epno)
+		{
+			case 0U:	// EP0 IN
+				// ENDEPIN0 only means the bytes reached the endpoint buffer.
+				// The packet is consumed, and the next STARTEPIN0 allowed,
+				// at EP0DATADONE (nRF52840 PS, control read sequence).
+				if (NRF_USBD->EVENTS_ENDEPIN[0] == 0U ||
+					NRF_USBD->EVENTS_EP0DATADONE == 0U)
+					return -1;
+				NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
+				NRF_USBD->EVENTS_EP0DATADONE = 0U;
+				NRF_USBD->EPSTATUS = dmastatus;
+				__DSB();
+				(void)CFifoGet(s_Usbd.hEp0Que);
+				return 0;
+			case 16U:	// EP0 OUT
+				pend = &NRF_USBD->EVENTS_ENDEPOUT[0];
+				break;
+			case 8U:
+				pend = &NRF_USBD->EVENTS_ENDISOIN;
+				break;
+			case 24U:
+				pend = &NRF_USBD->EVENTS_ENDISOOUT;
+				break;
+			default:
+				pend = epno > 8U ? &NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
+						&NRF_USBD->EVENTS_ENDEPIN[epno];
+		}
+
+		if (*pend != 0U)
+		{
+			*pend = 0U;
+			NRF_USBD->EPSTATUS = dmastatus;
+			__DSB();
+			retval = (int)epno;
+		}
+	}
+
+	return retval;
 }
 
 /** Finish the hardware DMA, if any, before a foreground stop or close. */

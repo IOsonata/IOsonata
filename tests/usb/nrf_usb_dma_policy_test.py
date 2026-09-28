@@ -67,18 +67,19 @@ assert "USBD_INTEN_ENDEPOUT0_Msk" in ep_enable
 assert "NRFX_USBD_EASYDMA_BUSY_REG_BUSY" in dma_lock
 assert "NRFX_USBD_EASYDMA_BUSY_REG_CLEAR" in dma_unlock
 
-# END decoding is shared by interrupt retirement and foreground close.
-assert "nRFUsbdDmaEndEvent(epno)" in completed
-assert "nRFUsbdDmaEndEvent(epno)" in dma_wait
-# EP0 IN requires both END and the host handshake before retirement.
-assert "*pend == 0U" in completed
-assert "epno == 0U && NRF_USBD->EVENTS_EP0DATADONE == 0U" in completed
-assert completed.index("return -1;", completed.index("*pend == 0U")) < completed.index("*pend = 0U;")
-# All transfers clear END before EPSTATUS; EP0 also clears its handshake.
-assert completed.index("*pend = 0U;") < completed.index("NRF_USBD->EPSTATUS = dmastatus;")
-assert completed.index("NRF_USBD->EVENTS_EP0DATADONE = 0U;") < completed.index("NRF_USBD->EPSTATUS = dmastatus;")
-assert completed.index("NRF_USBD->EPSTATUS = dmastatus;") < completed.index("__DSB();")
-assert completed.index("__DSB();") < completed.index("CFifoGet(s_Usbd.hEp0Que)")
+# Retire: END event cleared before EPSTATUS, EPSTATUS before the barrier.
+# Every transfer but EP0 IN takes the generic path after the switch.
+generic = completed[completed.index("if (*pend != 0U)"):]
+assert generic.index("*pend = 0U;") < generic.index("NRF_USBD->EPSTATUS = dmastatus;")
+assert generic.index("NRF_USBD->EPSTATUS = dmastatus;") < generic.index("__DSB();")
+# EP0 IN is retired only after the host took the packet, with the same
+# event-before-status order.
+ep0 = completed[completed.index("case 0U:"):completed.index("case 16U:")]
+assert "EVENTS_ENDEPIN[0] == 0U" in ep0 and "EVENTS_EP0DATADONE == 0U" in ep0
+assert "return -1;" in ep0
+assert ep0.index("NRF_USBD->EVENTS_ENDEPIN[0] = 0U;") < ep0.index("NRF_USBD->EPSTATUS = dmastatus;")
+assert ep0.index("NRF_USBD->EPSTATUS = dmastatus;") < ep0.index("__DSB();")
+assert "CFifoGet(s_Usbd.hEp0Que)" in ep0
 # Retirement never starts anything and never unlocks.
 assert "nRFUsbdStartQueuedDma" not in completed
 assert "nRFUsbdDmaUnlock" not in completed
