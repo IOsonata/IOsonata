@@ -330,6 +330,7 @@ class Stats:
         self.host_pauses = 0
         self.host_pause_sec = 0.0
         self.failure = None
+        self.failure_at = None
 
     def add_host_pause(self, seconds):
         """The host process was not scheduled for `seconds`.
@@ -402,6 +403,11 @@ class Stats:
                 self.path_errors[key] += 1
             if self.failure is None:
                 self.failure = f"{name}: {error}"
+                self.failure_at = time.monotonic()
+
+    def failure_timestamp(self):
+        with self.lock:
+            return self.failure_at
 
     def snapshot(self):
         with self.lock:
@@ -518,12 +524,12 @@ def discover_interrupt_loopback(device):
     return matches[0]
 
 
-def loop_tx_worker(comm, start, stop, stats, block_size):
+def loop_tx_worker(comm, start, stop, stats, block_size, tx_stop):
     state = 0xFF
     pending = b""
     start.wait()
     try:
-        while not stop.is_set():
+        while not stop.is_set() and not tx_stop.is_set():
             if not pending:
                 pending, state = make_prbs_block(state, block_size)
             written = comm.write(pending)
@@ -750,6 +756,24 @@ def iso_worker(vid, pid, start, stop, stats, timeout_ms, rounds):
         stop.set()
 
 
+def stop_workers(workers, tx_stop, stop, stats):
+    # Like the dual-CDC test, keep RX and the other interfaces running until
+    # the final CDC write returns. Stopping RX first can block that write
+    # through loopback backpressure and manufacture a shutdown timeout.
+    stop_started = time.monotonic()
+    tx_stop.set()
+    workers[0].join(timeout=1.5)  # Longer than the serial write timeout.
+    if workers[0].is_alive():
+        stats.fail("CDC loop TX", "writer did not stop")
+    test_end = time.monotonic()
+    stop.set()
+    for worker in workers[1:]:
+        worker.join(timeout=2.0)
+        if worker.is_alive():
+            stats.fail(worker.name, "worker did not stop")
+    return stop_started, test_end
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Stress all IOsonata USB combo functions concurrently"
@@ -796,6 +820,7 @@ def main():
     loop_comm = None
     prbs_comm = None
     stop = threading.Event()
+    tx_stop = threading.Event()
     start = threading.Event()
     stats = Stats()
 
@@ -808,7 +833,7 @@ def main():
             threading.Thread(
                 name="CDC-loop-TX",
                 target=loop_tx_worker,
-                args=(loop_comm, start, stop, stats, args.block),
+                args=(loop_comm, start, stop, stats, args.block, tx_stop),
                 daemon=True,
             ),
             threading.Thread(
@@ -946,10 +971,7 @@ def main():
                     flush=True,
                 )
 
-        stop.set()
-        test_end = time.monotonic()
-        for worker in workers:
-            worker.join(timeout=2.0)
+        stop_started, test_end = stop_workers(workers, tx_stop, stop, stats)
 
         count, _, loop_errors, prbs_errors, target_errors, path_errors, failure = (
             stats.snapshot()
@@ -994,6 +1016,11 @@ def main():
         print(f"Total B/sec     : {total_rate:.2f}")
         if failure is not None:
             print(f"Failure         : {failure}")
+            failure_at = stats.failure_timestamp()
+            phase = ("traffic" if failure_at < stop_started else
+                     "final CDC write" if failure_at < test_end else
+                     "interface shutdown")
+            print(f"Failure time    : {failure_at - test_start:.2f} s ({phase})")
 
         passed = (
             failure is None

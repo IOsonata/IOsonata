@@ -194,7 +194,7 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 
 TARGETS += $(MSC_TARGET)
 
-.PHONY: all test test-c-header test-gcc test-clang test-matrix \
+.PHONY: all test test-combo-shutdown test-c-header test-gcc test-clang test-matrix \
 	test-nrf-control-event test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma test-nrf-lifecycle test-nrf54-data \
 	iso-hw-build iso-hw int-hw-build int-hw hid-hw-build hid-hw \
 	msc-hw-build msc-hw hid-demo-build probe clean
@@ -202,6 +202,7 @@ TARGETS += $(MSC_TARGET)
 all: test
 
 test: $(TARGETS)
+	$(MAKE) test-combo-shutdown
 	$(MAKE) test-c-header
 	$(MAKE) test-nrf-suspend-policy
 	$(MAKE) test-nrf-iso-policy
@@ -221,6 +222,9 @@ test: $(TARGETS)
 	$(TEST_ENV) ./$(HID_TARGET)
 	$(TEST_ENV) ./$(MSC_TARGET)
 	$(TEST_ENV) ./$(LINK_TARGET)
+
+test-combo-shutdown:
+	python3 ./combo_shutdown_test.py
 
 test-c-header:
 	@printf '%s\n' '#include "usb/usb_iso.h"' '#include "usb/usb_int.h"' \
