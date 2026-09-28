@@ -553,59 +553,6 @@ volatile uint32_t *nRFUsbdDmaEndEvent(uint32_t EpBit)
 		&NRF_USBD->EVENTS_ENDEPIN[EpBit];
 }
 
-// Return the completed EasyDMA transfer encoded as its EPSTATUS bit index.
-// -1 means the active transfer has not reached its matching END event yet.
-static int nRFUsbdGetCompletedXfer(void)
-{
-	int retval = -1;
-	const uint32_t dmastatus = NRF_USBD->EPSTATUS;
-
-	if (dmastatus != 0U)
-	{
-		const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
-		volatile uint32_t *pend;
-
-		switch (epno)
-		{
-			case 0U:	// EP0 IN
-				// ENDEPIN0 only means the bytes reached the endpoint buffer.
-				// The packet is consumed, and the next STARTEPIN0 allowed,
-				// at EP0DATADONE (nRF52840 PS, control read sequence).
-				if (NRF_USBD->EVENTS_ENDEPIN[0] == 0U ||
-					NRF_USBD->EVENTS_EP0DATADONE == 0U)
-					return -1;
-				NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
-				NRF_USBD->EVENTS_EP0DATADONE = 0U;
-				NRF_USBD->EPSTATUS = dmastatus;
-				__DSB();
-				(void)CFifoGet(s_Usbd.hEp0Que);
-				return 0;
-			case 16U:	// EP0 OUT
-				pend = &NRF_USBD->EVENTS_ENDEPOUT[0];
-				break;
-			case 8U:
-				pend = &NRF_USBD->EVENTS_ENDISOIN;
-				break;
-			case 24U:
-				pend = &NRF_USBD->EVENTS_ENDISOOUT;
-				break;
-			default:
-				pend = epno > 8U ? &NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
-						&NRF_USBD->EVENTS_ENDEPIN[epno];
-		}
-
-		if (*pend != 0U)
-		{
-			*pend = 0U;
-			NRF_USBD->EPSTATUS = dmastatus;
-			__DSB();
-			retval = (int)epno;
-		}
-	}
-
-	return retval;
-}
-
 /** Finish the hardware DMA, if any, before a foreground stop or close. */
 void nRFUsbdDmaWait(void)
 {
@@ -1088,52 +1035,94 @@ extern "C" void USBD_IRQHandler(void){
 		nRFUsbdHandleSof();
 	}
 
-	// Only a software-owned channel can have a transfer to retire.
-	const int completed = nRFUsbdDmaActive() ? nRFUsbdGetCompletedXfer() : -1;
-
 	// A completed transfer keeps software DMA ownership for immediate handoff.
-	// EP0 IN reaches this point only after ENDEPIN0 and EP0DATADONE.
 	bool reuseDma = false;
 	bool newDmaWork = false;
 
-	if (completed >= 0)
+	// Only a software-owned channel can have a transfer to retire.
+	if (nRFUsbdDmaActive())
 	{
-		if (completed == 0)
+		const uint32_t dmastatus = NRF_USBD->EPSTATUS;
+		if (dmastatus != 0U)
 		{
-			nRFEPPkt_t *pep0 =
-				(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
-			if (pep0 != NULL)
-				nRFUsbdEp0InStart(pep0);
-			else
+			const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
+			switch (epno)
 			{
-				nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
-				reuseDma = true;
+				case 0U:	// EP0 IN
+				{
+					// END only stages the packet. Wait for the host to take
+					// it before starting another EP0 IN packet.
+					if (NRF_USBD->EVENTS_ENDEPIN[0] == 0U ||
+						NRF_USBD->EVENTS_EP0DATADONE == 0U)
+						break;
+					NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
+					NRF_USBD->EVENTS_EP0DATADONE = 0U;
+					NRF_USBD->EPSTATUS = dmastatus;
+					__DSB();
+					(void)CFifoGet(s_Usbd.hEp0Que);
+
+					nRFEPPkt_t *pep0 =
+						(nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
+					if (pep0 != NULL)
+						nRFUsbdEp0InStart(pep0);
+					else
+					{
+						nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
+						reuseDma = true;
+					}
+					break;
+				}
+				case 16U:	// EP0 OUT
+				{
+					if (NRF_USBD->EVENTS_ENDEPOUT[0] == 0U)
+						break;
+					NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
+					NRF_USBD->EPSTATUS = dmastatus;
+					__DSB();
+
+					const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
+					NRF_USBD->TASKS_EP0RCVOUT = 1U;
+					(void)NRF_USBD->TASKS_EP0RCVOUT;
+					nRFUsbdEmitXfer(0U, amount);
+					reuseDma = true;
+					break;
+				}
+				case 8U:	// ISO IN
+				case 24U:	// ISO OUT
+				{
+					volatile uint32_t *pend = epno == 8U ?
+						&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
+					if (*pend == 0U)
+						break;
+					*pend = 0U;
+					NRF_USBD->EPSTATUS = dmastatus;
+					__DSB();
+					nRFUsbdIsoComplete(epno == 8U);
+					reuseDma = true;
+					break;
+				}
+				default:	// Regular endpoints 1-7.
+				{
+					const uint8_t epNum = (uint8_t)epno & 7U;
+					volatile uint32_t *pend = epno >= 16U ?
+						&NRF_USBD->EVENTS_ENDEPOUT[epNum] :
+						&NRF_USBD->EVENTS_ENDEPIN[epNum];
+					if (*pend == 0U)
+						break;
+					*pend = 0U;
+					NRF_USBD->EPSTATUS = dmastatus;
+					__DSB();
+					(void)CFifoGet(s_Usbd.hQue);
+					if (epno >= 16U)
+					{
+						nRFUsbEpRegisteredEvent(epNum, 0U,
+							USB_CTRLR_EVT_XFER_CMPL,
+							(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
+					}
+					reuseDma = true;
+					break;
+				}
 			}
-		}
-		else if (completed == 8 || completed == 24)
-		{
-			nRFUsbdIsoComplete(completed == 8);
-			reuseDma = true;
-		}
-		else if (completed == 16)
-		{
-			const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
-			NRF_USBD->TASKS_EP0RCVOUT = 1U;
-			(void)NRF_USBD->TASKS_EP0RCVOUT;
-			nRFUsbdEmitXfer(0U, amount);
-			reuseDma = true;
-		}
-		else // The remaining EPSTATUS bits are regular endpoints 1-7.
-		{
-			const uint8_t epNum = (uint8_t)completed & 7U;
-			(void)CFifoGet(s_Usbd.hQue);
-			if (completed >= 16)
-			{
-				nRFUsbEpRegisteredEvent(epNum, 0U,
-					USB_CTRLR_EVT_XFER_CMPL,
-					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
-			}
-			reuseDma = true;
 		}
 	}
 

@@ -72,10 +72,11 @@ names = [
     ('nRFUsbdDmaActive', None), ('nRFUsbdDmaLock', None),
     ('nRFUsbdDmaUnlock', None), ('nRFUsbdDmaStartLocked', None),
     ('nRFUsbdDmaAllowed', None), ('nRFUsbdEpHwEnable', None),
-    ('nRFUsbdDmaEndEvent', None), ('nRFUsbdGetCompletedXfer', None), ('nRFUsbdDmaWait', None),
+    ('nRFUsbdDmaEndEvent', None), ('nRFUsbdDmaWait', None),
     ('nRFUsbdEp0InStart', None), ('nRFUsbdStartDmaNow', None),
     ('nRFUsbdStartQueuedDma', None), ('nRFUsbdResumeQueuedDmaLocked', None),
-    ('nRFUsbdHandleSof', None),
+    ('nRFUsbdHandleSof', None), ('USBD_IRQHandler', None),
+    ('nRFUsbdProcessInComplete', None), ('nRFUsbdQueueInComplete', None),
     ('nRFIsoHwEnable', None),
     ('nRFUsbdIsoStart', None), ('UsbCtrlrIsoSend', None),
     ('nRFUsbdIsoComplete', None), ('nRFUsbdIsoEpClose', None),
@@ -143,7 +144,8 @@ struct Registers {
  uint32_t EVENTS_ENDEPOUT[8]={},EVENTS_ENDISOOUT=0,EVENTS_SOF=0,EVENTS_USBEVENT=0;
  uint32_t TASKS_STARTEPIN[8]={},TASKS_STARTISOIN=0,TASKS_STARTEPOUT[8]={},TASKS_STARTISOOUT=0;
  USBD_EPIN_Type EPIN[8];USBD_ISOIN_Type ISOIN;USBD_EPOUT_Type EPOUT[8];USBD_ISOOUT_Type ISOOUT;
- W1C EPSTATUS,EPDATASTATUS;
+ W1C EPSTATUS,EPDATASTATUS,EVENTCAUSE;
+ uint32_t EVENTS_EP0SETUP=0,EVENTS_EPDATA=0,TASKS_EP0RCVOUT=0;
  uint32_t EPINEN=0,EPOUTEN=0,INTEN=0,INTENSET=0,INTENCLR=0,FRAMECNTR=0;
  uint32_t EPSTALL=0,DTOGGLE=0,SHORTS=0,BMREQUESTTYPE=0,ISOSPLIT=0,ISOINCONFIG=0;
  struct {uint32_t EPOUT[8]={},ISOOUT=0;} SIZE;
@@ -209,7 +211,21 @@ void UsbDevProcessEvent(int,const UsbCtrlrEvt_t *evt){
  if(evt->Type==USB_CTRLR_EVT_SOF)
   (void)UsbCtrlrIsoSend(0,8,pendingIn,pendingIn?pendingInLen:0);
 }
-void nRFUsbdEmitXfer(uint8_t,uint16_t){}
+unsigned ep0Callbacks[2]={},busEventCalls=0,tailVisits=0;
+uint16_t ep0Lengths[2]={};
+void nRFUsbdEmitXfer(uint8_t address,uint16_t length){
+ assert(!regs.EPSTATUS.bits && dmaBusy);
+ const unsigned dir=(address&USB_ENDPADDR_DIR_IN)!=0;
+ ++ep0Callbacks[dir];ep0Lengths[dir]=length;
+}
+// Unchanged reset/setup/power hooks are outside this completion test.
+void nRFUsbdBusReset(){assert(!"unexpected bus reset in DMA test");}
+void nRFUsbdQueueEp0Setup(){assert(!"unexpected setup in DMA test");}
+void nRFUsbdEmitSimple(UsbCtrlrEvtType_t){assert(!"unexpected bus event");}
+void nRFUsbdIsoSofMark(uint16_t){}
+void nRFUsbdHandleBusEvent(uint32_t){++busEventCalls;}
+void nRFUsbdTryRemoteWake(){}
+void nRFUsbdTryEnterLowPower(){++tailVisits;}
 
 @@PROTOTYPES@@
 '''
@@ -217,6 +233,8 @@ void nRFUsbdEmitXfer(uint8_t,uint16_t){}
 tests = r'''
 // Harness -----------------------------------------------------------------
 unsigned callbacks[2]={};uint16_t lengths[2]={};
+unsigned regularCompletions=0;
+uint16_t regularLength=0;
 uint8_t lastOut[512];
 // DRDY: the owner has no destination submitted; drdyGives says whether it
 // submits one when asked.
@@ -234,6 +252,9 @@ uint8_t inBuffer[512],inBuffer2[512];
 void init(){
  if(!dmaBufferCnt){dmaBuffer(outSlot);dmaBuffer(inBuffer);dmaBuffer(inBuffer2);}
  regs={};memset(&s_Usbd,0,sizeof(s_Usbd));
+ regs.BMREQUESTTYPE=USB_REQTYPE_MASK_DIR;
+ ep0Callbacks[0]=ep0Callbacks[1]=busEventCalls=tailVisits=0;
+ ep0Lengths[0]=ep0Lengths[1]=0;regularCompletions=0;regularLength=0;
  s_Usbd.hQue=CFifoInit(s_QueMem,sizeof(s_QueMem),sizeof(nRFUsbdQue_t),true);
  s_Usbd.hEp0Que=CFifoInit(s_Ep0QueMem,sizeof(s_Ep0QueMem),sizeof(nRFEPPkt_t),true);
  s_Usbd.SofEnabled=true;
@@ -250,14 +271,19 @@ void init(){
  for(unsigned i=0;i<sizeof(hostOut);++i)hostOut[i]=uint8_t(i*7+1);
  assert(AppEvtHandlerInit(nullptr,0));
 }
+void interrupt(){
+ const unsigned savedMask=irqMask;
+ USBD_IRQHandler();
+ assert(irqMask==savedMask);
+ if(!regs.EPSTATUS.bits)activeBit=-1;
+}
 // Host sends OUT (length, or nothing when negative) and the SOF follows.
 void frame(int outLength=-1){
  ++regs.FRAMECNTR;
  regs.SIZE.ISOOUT=outLength<0?0:(outLength==0?USBD_SIZE_ISOOUT_ZERO_Msk:uint32_t(outLength));
- nRFUsbdHandleSof();
+ regs.EVENTS_SOF=1;interrupt();
 }
-// END event for the running DMA, then what the interrupt does with it:
-// retire, report, hand the channel on.
+// END event for the running DMA, then run the production interrupt handler.
 void finish(){
  assert(dmaBusy && activeBit>=0);
  const int bit=activeBit;
@@ -266,19 +292,9 @@ void finish(){
  else if(bit==0){regs.EVENTS_ENDEPIN[0]=1;regs.EVENTS_EP0DATADONE=1;}
  else if(bit<16){regs.EPIN[bit].AMOUNT=regs.EPIN[bit].MAXCNT;regs.EVENTS_ENDEPIN[bit]=1;}
  else{regs.EPOUT[bit-16].AMOUNT=regs.EPOUT[bit-16].MAXCNT;regs.EVENTS_ENDEPOUT[bit-16]=1;}
- const int done=nRFUsbdGetCompletedXfer();
- assert(done==bit && regs.EPSTATUS.bits==0);
- activeBit=-1;
- if(done==8||done==24)nRFUsbdIsoComplete(done==8);
- else if((done>0&&done<8)||(done>16&&done<24)){
-  (void)CFifoGet(s_Usbd.hQue);
-  if(done>16)nRFUsbEpRegisteredEvent(done-16,0,USB_CTRLR_EVT_XFER_CMPL,regs.EPOUT[done-16].AMOUNT);
- }
- nRFUsbdStartQueuedDma();
+ interrupt();
 }
 
-unsigned regularCompletions=0;
-uint16_t regularLength=0;
 void regularCallback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
  assert(context==outSlot && event==USB_CTRLR_EVT_XFER_CMPL);
  ++regularCompletions;regularLength=length;
@@ -294,18 +310,68 @@ int main(){
   regs.EVENTS_ENDISOIN=regs.EVENTS_ENDISOOUT=1;
   uint32_t *end=ep==8?(out?&regs.EVENTS_ENDISOOUT:&regs.EVENTS_ENDISOIN):
    (out?&regs.EVENTS_ENDEPOUT[ep]:&regs.EVENTS_ENDEPIN[ep]);
-  *end=0;regs.EVENTS_EP0DATADONE=1;
-  assert(nRFUsbdGetCompletedXfer()==-1 && regs.EPSTATUS.bits==(1U<<bit));
+  if(ep==0 && !out)assert(CFifoPut(s_Usbd.hEp0Que));
+  if(ep>0 && ep<8){
+   auto *queued=(nRFUsbdQue_t*)CFifoPut(s_Usbd.hQue);
+   *queued={uint8_t(ep),NRFX_USBD_QUE_IN_BUFFER,0,{inBuffer}};
+   s_Usbd.EpReg[ep-1][!out]={regularCallback,outSlot};
+  }
+  if(ep==8)s_Usbd.IsoDataFlag=out?NRFUSBD_ISO_OUT_READY:NRFUSBD_ISO_IN_READY;
+  *end=0;regs.EVENTS_EP0DATADONE=bit==0;
+  interrupt();
+  assert(regs.EPSTATUS.bits==(1U<<bit) && dmaBusy);
+  assert(!callbacks[0] && !callbacks[1] && !regularCompletions);
+  assert(!ep0Callbacks[0] && !ep0Callbacks[1] && tailVisits==1);
   *end=1;
   if(bit==0){
    regs.EVENTS_EP0DATADONE=0;
-   assert(nRFUsbdGetCompletedXfer()==-1 && *end==1);
+   interrupt();assert(regs.EPSTATUS.bits==1 && *end==1 && CFifoUsed(s_Usbd.hEp0Que)==1);
    regs.EVENTS_EP0DATADONE=1;
   }
-  assert(nRFUsbdGetCompletedXfer()==int(bit) && *end==0 && !regs.EPSTATUS.bits);
-  assert(dmaBusy && !callbacks[0] && !callbacks[1]);
+  interrupt();
+  assert(*end==0 && !regs.EPSTATUS.bits && !dmaBusy);
+  assert(!CFifoUsed(s_Usbd.hQue) && !CFifoUsed(s_Usbd.hEp0Que));
+  assert(callbacks[!out]==unsigned(ep==8));
+  assert(ep0Callbacks[!out]==unsigned(ep==0));
+  assert(regularCompletions==unsigned(ep>0 && ep<8 && out));
+  if(ep>0 && ep<8 && !out){
+   regs.EPDATASTATUS.bits=1U<<ep;
+   interrupt();assert(!regs.EPDATASTATUS.bits && !regularCompletions);
+   AppEvtHandlerDispatch();assert(regularCompletions==1);
+  }
  }
  puts("PASS: all 18 DMA directions retire only on their own END; EP0 IN also waits for its handshake");
+ // A pending EP0 handshake must not skip EPDATA, bus events, or the ISR
+ // tail. IN completion still reaches the owner through AppEvt.
+ init();dmaBusy=0x82;regs.EPSTATUS.bits=1;regs.EVENTS_ENDEPIN[0]=1;
+ assert(CFifoPut(s_Usbd.hEp0Que));
+ regs.EVENTS_USBEVENT=1;
+ s_Usbd.EpReg[1][1]={regularCallback,outSlot};
+ regs.EPIN[2].AMOUNT=11;regs.EPDATASTATUS.bits=1U<<2;
+ interrupt();
+ assert(regs.EPSTATUS.bits==1 && regs.EVENTS_ENDEPIN[0]==1 && dmaBusy);
+ assert(!regs.EPDATASTATUS.bits && busEventCalls==1 && tailVisits==1);
+ assert(CFifoUsed(s_Usbd.hEp0Que)==1 && !ep0Callbacks[1] && !regularCompletions);
+ AppEvtHandlerDispatch();assert(regularCompletions==1 && regularLength==11);
+ // Hardware status without software ownership is not retired.
+ init();regs.EPSTATUS.bits=1U<<2;regs.EVENTS_ENDEPIN[2]=1;
+ interrupt();assert(regs.EPSTATUS.bits==(1U<<2) && regs.EVENTS_ENDEPIN[2]==1);
+ puts("PASS: pending completion still services EPDATA/bus events; retirement requires software DMA ownership");
+
+ // EP0 IN chains its next packet under the same ownership and reports only
+ // after the last packet's host handshake.
+ init();dmaBusy=0x82;
+ auto *first=(nRFEPPkt_t*)CFifoPut(s_Usbd.hEp0Que);first->Len=64;
+ auto *second=(nRFEPPkt_t*)CFifoPut(s_Usbd.hEp0Que);second->Len=9;
+ nRFUsbdEp0InStart(first);
+ finish();
+ assert(activeBit==0 && dmaBusy && ep0InStarts==2 && !dmaUnlocks);
+ assert(CFifoUsed(s_Usbd.hEp0Que)==1 && !ep0Callbacks[1]);
+ assert(regs.EPIN[0].MAXCNT==9);
+ finish();
+ assert(!dmaBusy && !regs.EPSTATUS.bits && ep0Callbacks[1]==1);
+ assert(!CFifoUsed(s_Usbd.hEp0Que));
+ puts("PASS: EP0 IN chains packets without releasing DMA ownership or reporting an early completion");
  // Foreground close waits for DMA END, including EP0 IN before its host
  // handshake, and discards only regular queue entries without starting work.
  for(unsigned ep=0;ep<=8;++ep)for(unsigned out=0;out<2;++out)
@@ -404,15 +470,15 @@ int main(){
  // Retirement needs the matching END event; EPSTATUS alone is not enough.
  init();pendingIn=inBuffer;pendingInLen=9;frame(-1);
  assert(activeBit==8);
- assert(nRFUsbdGetCompletedXfer()==-1 && regs.EPSTATUS.bits==(1U<<8) && dmaBusy);
+ interrupt();assert(regs.EPSTATUS.bits==(1U<<8) && dmaBusy && !callbacks[1]);
  finish();assert(callbacks[1]==1);
  // EP0 IN retires only once the host took the packet as well.
  init();dmaBusy=0x82;pkt=(nRFEPPkt_t*)CFifoPut(s_Usbd.hEp0Que);pkt->Len=8;
  nRFUsbdEp0InStart(pkt);assert(activeBit==0);
  regs.EVENTS_ENDEPIN[0]=1;
- assert(nRFUsbdGetCompletedXfer()==-1 && dmaBusy);
+ interrupt();assert(regs.EPSTATUS.bits==1 && dmaBusy && !ep0Callbacks[1]);
  regs.EVENTS_EP0DATADONE=1;
- assert(nRFUsbdGetCompletedXfer()==0 && regs.EPSTATUS.bits==0);
+ interrupt();assert(regs.EPSTATUS.bits==0 && !dmaBusy && ep0Callbacks[1]==1);
  assert(CFifoUsed(s_Usbd.hEp0Que)==0);
  puts("PASS: a DMA retires only at its END event, EP0 IN also at EP0DATADONE");
 
