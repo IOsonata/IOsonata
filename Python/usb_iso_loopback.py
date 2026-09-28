@@ -102,8 +102,8 @@ def is_host_sched_miss_error(error):
     return error is not None and error.startswith(HOST_SCHED_MISS_PREFIX)
 
 
-def host_sched_skew_ms(state, missing, rounds):
-    """How late the host ran the OUT transfer against IN, or None.
+def host_sched_skew_ms(state, missing, rounds, matched, first_test):
+    """Callback delay consistent with an IN capture ending early, or None.
 
     IN and OUT are submitted back to back, and the OUT burst is shorter, so
     when the host starts both at the same frame OUT finishes about 16 ms
@@ -113,15 +113,23 @@ def host_sched_skew_ms(state, missing, rounds):
     the TX FIFO head at every SOF whether or not an IN token comes), so the
     echoes past the end of the IN window are simply not fetched.
 
-    That case is recognized only when both hold: OUT finished after IN, and
-    the missing validation frames are one block running to the end of the
-    window. A frame lost anywhere else is not this.
+    Both transfers must complete successfully, the OUT callback must follow
+    IN, and the missing validation frames must be one suffix with no later
+    echo received. Matching includes the trailing guard frames: a guard
+    echo after a missing frame disproves capture ending at that frame.
+    Callback times are observations, not bus-frame timestamps.
     """
+    if (state.get("in_status") != usb1.TRANSFER_COMPLETED
+            or state.get("out_status") != usb1.TRANSFER_COMPLETED):
+        return None
     t_in = state.get("t_in_done")
     t_out = state.get("t_out_done")
     if t_in is None or t_out is None or not missing:
         return None
     if missing != list(range(missing[0], rounds)):
+        return None
+    first_missing = first_test + missing[0]
+    if any(index > first_missing for index in matched):
         return None
     skew = (t_out - t_in) * 1000.0
     return skew if skew > 0.0 else None
@@ -485,12 +493,12 @@ def run_burst(
             for index in range(first_test, last_test)
             if index not in matched
         ]
-        skew = host_sched_skew_ms(state, missing, rounds)
+        skew = host_sched_skew_ms(state, missing, rounds, matched, first_test)
         if skew is not None:
             return (
-                f"{HOST_SCHED_SKEW_PREFIX}OUT finished {skew:.1f} ms after "
-                f"IN, validation frames {missing[0]}-{rounds - 1} past the "
-                f"IN window; {packet_summary(state['in_setup'])}; "
+                f"{HOST_SCHED_SKEW_PREFIX}OUT callback {skew:.1f} ms after "
+                f"IN; missing validation tail {missing[0]}-{rounds - 1}; "
+                f"{packet_summary(state['in_setup'])}; "
                 f"{submit_timing(state)}",
                 None,
             )
