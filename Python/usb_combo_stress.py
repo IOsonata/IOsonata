@@ -327,7 +327,28 @@ class Stats:
         self.iso_host_skews = 0
         self.iso_sof_losses = 0
         self.iso_out_losses = 0
+        self.host_pauses = 0
+        self.host_pause_sec = 0.0
         self.failure = None
+
+    def add_host_pause(self, seconds):
+        """The host process was not scheduled for `seconds`.
+
+        No path could make progress during that time, so the pause is not
+        counted against any of them: every progress timestamp moves forward
+        by the pause.
+        """
+        with self.lock:
+            self.host_pauses += 1
+            self.host_pause_sec += seconds
+            for name, when in self.last.items():
+                if when is not None:
+                    self.last[name] = when + seconds
+            return self.host_pauses
+
+    def host_pause_summary(self):
+        with self.lock:
+            return self.host_pauses, self.host_pause_sec
 
     def add_iso_host_miss(self):
         with self.lock:
@@ -850,9 +871,26 @@ def main():
         previous = {name: 0 for name in Stats.NAMES}
         start.set()
 
+        tick = time.monotonic()
         while not stop.is_set() and time.monotonic() - test_start < args.duration:
             time.sleep(0.02)
             now = time.monotonic()
+            # This loop only sleeps 20 ms per pass. A pass that took the
+            # stall timeout or longer means the host process itself was not
+            # running (system sleep, App Nap, scheduler); no path could move,
+            # device or not.
+            gap = now - tick
+            tick = now
+            if gap >= args.stall_timeout:
+                total = stats.add_host_pause(gap)
+                print(
+                    f"Host paused {gap:.1f} s (#{total}, "
+                    f"{time.strftime('%H:%M:%S')}); not counted as a stall",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                continue
+
             count, last, loop_errors, prbs_errors, target_errors, path_errors, failure = (
                 stats.snapshot()
             )
@@ -864,6 +902,17 @@ def main():
                 for name in Stats.NAMES:
                     when = last[name]
                     if when is None or now - when >= args.stall_timeout:
+                        ages = ", ".join(
+                            f"{other} "
+                            + ("never" if last[other] is None
+                               else f"{now - last[other]:.1f} s")
+                            for other in Stats.NAMES
+                        )
+                        print(
+                            f"Stall: {name}; time since last progress: {ages}",
+                            file=sys.stderr,
+                            flush=True,
+                        )
                         stats.fail(name, "stalled")
                         stop.set()
                         break
@@ -939,6 +988,8 @@ def main():
         print(f"ISO host skews  : {stats.iso_host_skew_count()}")
         print(f"ISO SOF losses  : {stats.iso_sof_loss_count()}")
         print(f"ISO OUT losses  : {stats.iso_out_loss_count()}")
+        pauses, pause_sec = stats.host_pause_summary()
+        print(f"Host pauses     : {pauses} ({pause_sec:.1f} s)")
         print(f"Total bytes     : {total_bytes}")
         print(f"Total B/sec     : {total_rate:.2f}")
         if failure is not None:
