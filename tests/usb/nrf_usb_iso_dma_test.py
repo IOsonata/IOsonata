@@ -205,6 +205,7 @@ void __DSB(){
 }
 void __ISB(){}
 static inline uint32_t __CLZ(uint32_t v){return v?__builtin_clz(v):32;}
+static inline uint32_t __ROR(uint32_t v,uint32_t n){n&=31U;return n?(v>>n)|(v<<(32U-n)):v;}
 unsigned irqMask=0;
 bool inIsr=false;
 uint32_t DisableInterrupt(){auto old=irqMask;irqMask=1;return old;}

@@ -45,7 +45,7 @@ dma_start = function_body(source, "void nRFUsbdDmaStartLocked(")
 dma_lock = function_body(source, "void nRFUsbdDmaLock(void)")
 dma_unlock = function_body(source, "void nRFUsbdDmaUnlock(void)")
 dma_wait = function_body(source, "static void nRFUsbdDmaWait(uint32_t mask)")
-acquire = function_body(source, "static inline bool nRFUsbdAcquireDma(void)")
+acquire = function_body(source, "bool nRFUsbdAcquireDma(void)")
 interrupt = function_body(source, 'extern "C" void USBD_IRQHandler(void)')
 completed = function_body(interrupt, "switch (epno)")
 queued = function_body(source, "void nRFUsbdStartQueuedDma(bool ep0out)")
@@ -121,7 +121,7 @@ assert "nRFUsbdDmaUnlock" not in completed
 assert interrupt.count("nRFUsbdStartQueuedDma(") == 1
 hand_off = interrupt.index("nRFUsbdStartQueuedDma(ep0out);")
 assert interrupt.index("switch (epno)") < hand_off
-assert hand_off < interrupt.index("uint32_t indata = datastatus & 0xFEU;")
+assert hand_off < interrupt.index("uint32_t pending = __ROR(datastatus & 0x00FE00FEUL, 16U);")
 assert "if (reuseDma || ((ep0out || resumed) && nRFUsbdAcquireDma()))" in interrupt
 assert interrupt.index("NRF_USBD->EPDATASTATUS = servicedstatus;") > hand_off
 
@@ -133,15 +133,17 @@ assert "resumed" in interrupt[hand_off - 200:hand_off]
 
 # EPDATA: IN completion and OUT DRDY go through AppEvt. The OUT readiness
 # latch is consumed only when the enqueue succeeds; IN stops on a full queue.
-epdata = interrupt[interrupt.index("uint32_t indata = datastatus & 0xFEU;"):]
-out = epdata[epdata.index("uint32_t outdata ="):]
-inp = epdata[:epdata.index("uint32_t outdata =")]
-assert "AppEvtHandlerQue(evt | (1UL << 16U)" in inp and "break;" in inp
-assert "AppEvtHandlerQue(epnum | (1UL << 17U)" in out
-assert out.index("AppEvtHandlerQue(epnum | (1UL << 17U)") < \
-    out.index("servicedstatus |= statusbit;")
-assert "CFifoPut" not in out
-assert "EPSTATUS & statusbit" in out
+epdata = interrupt[interrupt.index("uint32_t pending = __ROR(datastatus & 0x00FE00FEUL, 16U);"):]
+# One pass in the original order: IN highest endpoint first, then OUT.
+assert "31U - (uint32_t)__CLZ(pending)" in epdata
+assert "evt = (NRF_USBD->EPIN[epnum].AMOUNT << 8U) | epnum | (1UL << 16U);" in epdata
+assert "uint32_t evt = epnum | (1UL << 17U);" in epdata
+# OUT readiness waits while its DMA is captured, and is consumed only when
+# the enqueue succeeds; a full queue stops the pass with the bit latched.
+assert epdata.index("(NRF_USBD->EPSTATUS & bit) != 0U") < epdata.index("AppEvtHandlerQue(evt,")
+assert epdata.index("AppEvtHandlerQue(evt,") < epdata.index("servicedstatus |= bit;")
+assert "break;" in epdata
+assert "CFifoPut" not in epdata
 
 # EpReceive queues the destination and resumes an idle channel. The ISR
 # already consumed readiness, so it does not touch EPDATASTATUS.

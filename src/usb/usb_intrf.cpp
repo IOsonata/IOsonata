@@ -661,10 +661,12 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 
 	pIntrf->DevIntrf.TxSrData = pIntrf->DevIntrf.TxData;
 
-	atomic_flag_clear(&pIntrf->DevIntrf.bBusy);
-	atomic_store(&pIntrf->DevIntrf.EnCnt, 0);
-	atomic_store(&pIntrf->DevIntrf.bTxReady, true);
-	atomic_store(&pIntrf->DevIntrf.bNoStop, false);
+	// Endpoint callbacks are not bound yet: no other context can observe
+	// these, so plain ordering is enough.
+	atomic_flag_clear_explicit(&pIntrf->DevIntrf.bBusy, memory_order_relaxed);
+	atomic_store_explicit(&pIntrf->DevIntrf.EnCnt, 0, memory_order_relaxed);
+	atomic_store_explicit(&pIntrf->DevIntrf.bTxReady, true, memory_order_relaxed);
+	atomic_store_explicit(&pIntrf->DevIntrf.bNoStop, false, memory_order_relaxed);
 
 	if (pIntrf->EpNo != 0U)
 	{
