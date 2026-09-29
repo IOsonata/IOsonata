@@ -1426,7 +1426,6 @@ bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
 {
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
-	const uint32_t statusBit = 1UL << (EpNo + 16U);
 	bool accepted = false;
 
 	if (EpNo == NRFX_USBD_ISO_EP_NO)
@@ -1435,7 +1434,6 @@ bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
 		// regular queue. DRDY is raised when that interval needs a buffer.
 		if (s_Usbd.IsoOpen &&
 			(s_Usbd.IsoDataFlag & NRFUSBD_ISO_OUT_READY) != 0U &&
-			(NRF_USBD->EPSTATUS & statusBit) == 0U &&
 			s_Usbd.pIsoBuffer[0] == nullptr &&
 			Capacity >= s_Usbd.IsoMaxPacketSize[0])
 		{
@@ -1445,7 +1443,7 @@ bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
 	}
 	// ISR already consumed readiness when it queued DRDY. The owner may
 	// supply this buffer later, after RX FIFO space becomes available.
-	else if ((NRF_USBD->EPSTATUS & statusBit) == 0U)
+	else
 	{
 		nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
 		if (pQue != nullptr)
