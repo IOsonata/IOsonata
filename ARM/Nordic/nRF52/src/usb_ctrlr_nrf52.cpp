@@ -1093,7 +1093,8 @@ extern "C" void USBD_IRQHandler(void){
 					{
 						const uint32_t amount = NRF_USBD->EPOUT[epNum].AMOUNT;
 						nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 0U);
-						nRFUsbdProcessEpEvent((amount << 24U) | dmastatus, pReg);
+						AppEvtHandlerQue((amount << 24U) | dmastatus,
+							pReg, nRFUsbdProcessEpEvent);
 					}
 					reuseDma = true;
 					break;
@@ -1140,14 +1141,14 @@ extern "C" void USBD_IRQHandler(void){
 		const uint32_t statusBit = 1UL << (epNum + 16U);
 		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 0U);
 
-		// Experiment: run regular callbacks directly in the ISR.
-		// Clear before DRDY can start DMA and admit another host packet.
+		// Queue completion before the following DRDY on this endpoint.
+		// Keep readiness latched if AppEvt cannot accept the event.
 		if ((NRF_USBD->EPSTATUS & statusBit) == 0U &&
-			pReg->Handler != NULL)
+			pReg->Handler != NULL &&
+			AppEvtHandlerQue(statusBit | 1U, pReg, nRFUsbdProcessEpEvent))
 		{
 			NRF_USBD->EPDATASTATUS = statusBit;
 			__DSB();
-			nRFUsbdProcessEpEvent(statusBit | 1U, pReg);
 		}
 
 		outData &= ~(1UL << epNum);
@@ -1155,8 +1156,7 @@ extern "C" void USBD_IRQHandler(void){
 
 	// END already released shared DMA. Notify IN owners only after the host
 	// consumes the packet, so their callbacks can submit the next buffer.
-	// Experiment: invoke the registered IN callback directly, without AppEvt
-	// or the packed-event adapter. Clear before the callback can submit again.
+	// Keep the acknowledgement latched if AppEvt cannot accept it.
 	uint32_t inData = dataStatus & 0xFEU;
 	while (inData != 0U)
 	{
@@ -1164,10 +1164,11 @@ extern "C" void USBD_IRQHandler(void){
 		const uint32_t statusBit = 1UL << epNum;
 		const uint32_t amount = NRF_USBD->EPIN[epNum].AMOUNT;
 		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 1U);
+		if (!AppEvtHandlerQue((amount << 24U) | statusBit,
+			pReg, nRFUsbdProcessEpEvent))
+			break;
 		NRF_USBD->EPDATASTATUS = statusBit;
 		__DSB();
-		pReg->Handler(USB_CTRLR_EVT_XFER_CMPL, (uint16_t)amount,
-			pReg->pContext);
 		inData &= ~statusBit;
 	}
 	__DSB();
