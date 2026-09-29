@@ -231,7 +231,7 @@ public:
 
 protected:
 	UsbClass() = default;
-	~UsbClass() = default;
+	virtual ~UsbClass() = default;
 };
 
 class UsbDeviceClass;
@@ -282,7 +282,7 @@ public:
 
 protected:
 	UsbDeviceClass() = default;
-	~UsbDeviceClass() = default;
+	virtual ~UsbDeviceClass() = default;
 
 private:
 	friend bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
@@ -305,7 +305,7 @@ private:
 class UsbHostClass : public UsbClass {
 protected:
 	UsbHostClass() = default;
-	~UsbHostClass() = default;
+	virtual ~UsbHostClass() = default;
 };
 
 /// Atomically register one statically owned device class and its ownership.
