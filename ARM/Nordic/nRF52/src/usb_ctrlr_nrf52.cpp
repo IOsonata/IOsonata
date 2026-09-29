@@ -650,15 +650,15 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaAllowed(void)
 	return (s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U;
 }
 
-// Callers check the power gate and own the channel lock. EP0 starts
-// separately in its submission path or the ISR completion handoff.
+// The caller owns the DMA channel. Submission checks busy/suspend before
+// acquiring it; ISR retirement retains ownership for immediate handoff.
 static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 {
 	// ISO first: it is the only transfer with a deadline. The IN data must
 	// be in the endpoint buffer before the host's IN token, which follows
 	// SOF by tens of microseconds, and the OUT data must be read before the
 	// next SOF. An EP0 packet that yields here is delayed by one ISO DMA.
-	if (s_Usbd.IsoOpen && nRFUsbdIsoStart())
+	if (s_Usbd.IsoOpen && s_Usbd.IsoDataFlag != 0U && nRFUsbdIsoStart())
 		return;
 
 	// EP0 OUT data-ready next.
@@ -693,7 +693,8 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
 }
 
 
-// Submission acquires an idle channel; completion retains the existing lock.
+// Called with interrupts excluded or from the USB ISR. Acquire an idle
+// channel for submission; completion hands off through StartQueuedDma directly.
 __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 {
 	if (nRFUsbdDmaActive() || !nRFUsbdDmaAllowed())
@@ -1136,7 +1137,9 @@ extern "C" void USBD_IRQHandler(void){
 	{
 		if ((NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
 		{
-			nRFUsbdResumeQueuedDmaLocked();
+			// A completed DMA already handed the channel to the scheduler.
+			if (!reuseDma)
+				nRFUsbdResumeQueuedDmaLocked();
 		}
 		else if ((NRF_USBD->EPSTATUS & 1UL) == 0U)
 		{
