@@ -416,6 +416,32 @@ static bool TestDescriptors(void)
 	return true;
 }
 
+static bool TestStringDescriptorBounds(void)
+{
+	// Reuse the descriptor buffer with both growing and shrinking strings.
+	for (unsigned count : {0U, 1U, 31U, 32U, 33U, 64U, 1U, 0U})
+	{
+		char text[65];
+		memset(text, 'A', count);
+		text[count] = '\0';
+		UsbCfg_t cfg = {};
+		cfg.Vid = 0x1209U;
+		cfg.Pid = 1U;
+		cfg.pManufacturer = text;
+		CHECK(UsbInit(&cfg));
+
+		uint16_t len = 0U;
+		const uint8_t *desc = UsbGetDescriptor(TEST_DEVNO,
+			USB_DESCTYPE_STRING, 1U, 0x0409U, USB_SPEED_FULL, &len);
+		const unsigned used = count < 32U ? count : 32U;
+		CHECK(desc != nullptr && len == 2U + used * 2U);
+		CHECK(desc[0] == len && desc[1] == USB_DESCTYPE_STRING);
+		for (unsigned i = 0; i < used; ++i)
+			CHECK(desc[2U + i * 2U] == 'A' && desc[3U + i * 2U] == 0U);
+	}
+	return true;
+}
+
 static bool TestDescriptorValidation(void)
 {
 	CHECK(Fixture());
@@ -1148,6 +1174,7 @@ int main(void)
 		{ "USB AppEvt queue holds 16 events", TestAppEvtQueue },
 		{ "enable requires descriptor", TestEnableRequiresDescriptor },
 		{ "descriptors", TestDescriptors },
+		{ "string descriptor bounds", TestStringDescriptorBounds },
 		{ "descriptor validation", TestDescriptorValidation },
 		{ "control terminating ZLP", TestControlZlp },
 		{ "control chunks and direct OUT data", TestControlChunks },
