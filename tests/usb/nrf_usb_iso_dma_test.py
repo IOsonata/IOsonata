@@ -481,6 +481,29 @@ void testDeferredOut(){
  regs.EPINEN=regs.EPOUTEN=0; // USB reset disables the data endpoints in hardware.
  nRFUsbdResetState();AppEvtHandlerExec();assert(!receivers[0].completions);
  puts("PASS: close/hardware reset suppress queued endpoint callbacks without completion bookkeeping");
+
+ // Route each direction to its registered owner and capture its DMA length.
+ // EP0, ISO and the opposite direction staying enabled must not keep a
+ // closed regular endpoint's event deliverable, including ZLP/odd lengths.
+ for(unsigned ep=1;ep<8;++ep)for(bool in:{false,true})
+ for(uint16_t length:{0U,1U,17U,64U})for(bool closed:{false,true}){
+  deferredInit();regs.EPINEN|=0x101U;regs.EPOUTEN|=0x101U;
+  if(!in)receive(ep,length);
+  s_Usbd.EpReg[ep-1][in]={regularCallback,outSlot};
+  if(in)assert(productionEpSend(0,ep,inBuffer,length));
+  finish();assert(!regularCompletions && !dmaBusy);
+  if(closed)productionEpClose(0,ep,in);
+  regs.EPIN[ep].AMOUNT=regs.EPOUT[ep].AMOUNT=99;
+  AppEvtHandlerExec();assert(regularCompletions==unsigned(!closed));
+  if(!closed)assert(regularLength==length);
+ }
+ for(unsigned ep=1;ep<8;++ep){
+  deferredInit();regs.EPINEN|=0x101U;regs.EPOUTEN|=0x101U;
+  regs.SIZE.EPOUT[ep]=7;regs.EPDATASTATUS.bits=1U<<(ep+16);interrupt();
+  productionEpClose(0,ep,false);AppEvtHandlerExec();
+  assert(!receivers[ep-1].drdy && !dmaBusy);
+ }
+ puts("PASS: IN/OUT owner routing preserves captured lengths and closed-endpoint suppression with EP0/ISO enabled");
 }
 void ackIn(unsigned ep){
  assert(inUsbBusy[ep]);inUsbBusy[ep]=false;

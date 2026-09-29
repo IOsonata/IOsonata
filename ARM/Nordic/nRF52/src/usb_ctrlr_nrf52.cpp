@@ -880,18 +880,18 @@ static void nRFUsbdBusReset(void)
 	nRFUsbdResetState();
 }
 
-// Event holds the captured length and hardware endpoint index. Bit 7
-// distinguishes DRDY from completion; both use the same AppEvt FIFO.
-static void nRFUsbdProcessEpEvent(uint32_t Event, void *)
+// The ISR selects the registration. Event keeps the hardware endpoint mask,
+// the regular endpoint length (0..64) in bits 24..31, and DRDY in bit 0.
+static void nRFUsbdProcessEpEvent(uint32_t Event, void *pContext)
 {
-	const uint8_t epNum = Event & 7U;
-	const bool in = (Event & 16U) == 0U;
-	const uint32_t enabled = in ? NRF_USBD->EPINEN : NRF_USBD->EPOUTEN;
-	if ((enabled & (1UL << epNum)) == 0U)
+	const uint32_t enabled = (NRF_USBD->EPINEN |
+		(NRF_USBD->EPOUTEN << 16U)) & 0x00FE00FEUL;
+	if ((enabled & Event) == 0U)
 		return;
 
-	nRFUsbEpRegisteredEvent(epNum, in, (Event & 0x80U) != 0U ?
-		USB_CTRLR_EVT_DRDY : USB_CTRLR_EVT_XFER_CMPL, Event >> 8U);
+	nRFUsbEpReg_t *pReg = static_cast<nRFUsbEpReg_t *>(pContext);
+	pReg->Handler((Event & 1U) != 0U ? USB_CTRLR_EVT_DRDY :
+		USB_CTRLR_EVT_XFER_CMPL, Event >> 24U, pReg->pContext);
 }
 
 static void nRFUsbdHandleBusEvent(uint32_t EventCause)
@@ -1080,18 +1080,29 @@ extern "C" void USBD_IRQHandler(void){
 				default:	// Regular endpoints 1-7.
 				{
 					const uint8_t epNum = (uint8_t)epno & 7U;
-					volatile uint32_t *pend = epno >= 16U ?
-						&NRF_USBD->EVENTS_ENDEPOUT[epNum] :
-						&NRF_USBD->EVENTS_ENDEPIN[epNum];
+					const bool in = epno < 16U;
+					volatile uint32_t *pend = in ?
+						&NRF_USBD->EVENTS_ENDEPIN[epNum] :
+						&NRF_USBD->EVENTS_ENDEPOUT[epNum];
 					if (*pend == 0U)
 						break;
 					*pend = 0U;
 					NRF_USBD->EPSTATUS = dmastatus;
 					(void)CFifoGet(s_Usbd.hQue);
-					const uint16_t amount = epno < 16U ? NRF_USBD->EPIN[epNum].AMOUNT :
-						NRF_USBD->EPOUT[epNum].AMOUNT;
-					AppEvtHandlerQue(((uint32_t)amount << 8U) | epno, NULL,
-						nRFUsbdProcessEpEvent);
+					nRFUsbEpReg_t *pReg;
+					uint32_t amount;
+					if (in)
+					{
+						amount = NRF_USBD->EPIN[epNum].AMOUNT;
+						pReg = nRFUsbGetEpReg(epNum, 1U);
+					}
+					else
+					{
+						amount = NRF_USBD->EPOUT[epNum].AMOUNT;
+						pReg = nRFUsbGetEpReg(epNum, 0U);
+					}
+					AppEvtHandlerQue((amount << 24U) | dmastatus,
+						pReg, nRFUsbdProcessEpEvent);
 					reuseDma = true;
 					break;
 				}
@@ -1135,12 +1146,13 @@ extern "C" void USBD_IRQHandler(void){
 	{
 		const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
 		const uint32_t statusBit = 1UL << (epNum + 16U);
+		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 0U);
 
 		// Completion is queued above before a following DRDY on that endpoint.
 		// Clear readiness only after queuing it, so later IRQs cannot duplicate it.
 		if ((NRF_USBD->EPSTATUS & statusBit) == 0U &&
-			nRFUsbGetEpReg(epNum, 0U)->Handler != NULL &&
-			AppEvtHandlerQue(0x80U | 16U | epNum, NULL, nRFUsbdProcessEpEvent))
+			pReg->Handler != NULL &&
+			AppEvtHandlerQue(statusBit | 1U, pReg, nRFUsbdProcessEpEvent))
 			servicedStatus |= statusBit;
 
 		outData &= ~(1UL << epNum);
