@@ -26,7 +26,6 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 
 #include "cfifo.h"
 #include "prbs.h"
-#include <stdio.h>
 #include "usb/usb.h"
 #include "usb/usb_int.h"
 #include "usb/usb_iso.h"
@@ -67,7 +66,6 @@ UsbdCdc g_PrbsCdc;
 // may not) have restarted its generator, so the checker allows exactly one
 // uncounted resynchronisation after it. Every other discontinuity counts.
 static atomic_bool s_LoopbackSessionStart = true;
-static volatile uint32_t s_LoopbackOpenCnt;
 
 static int LoopbackEvtHandler(DevIntrf_t * const, DEVINTRF_EVT EvtId,
 							  uint8_t *, int Len)
@@ -75,28 +73,11 @@ static int LoopbackEvtHandler(DevIntrf_t * const, DEVINTRF_EVT EvtId,
 	if (EvtId == DEVINTRF_EVT_STATECHG && Len)
 	{
 		static const char msg[] = "\r\nIOsonata USB Combo Stress\r\n";
-		s_LoopbackOpenCnt++;
 		atomic_store(&s_LoopbackSessionStart, true);
 		g_LoopbackCdc.Tx(0, reinterpret_cast<const uint8_t *>(msg),
 			(int)sizeof(msg) - 1);
 	}
 	return 0;
-}
-
-// Distance in PRBS8 steps from Expected to Received: how far the stream
-// jumped at a mismatch. 64 means one full packet was skipped; a negative
-// value is the same distance backwards (bytes repeated); -128 means the
-// received value is not on the sequence at all (a corrupted byte).
-static int LoopbackPrbsStep(uint8_t Expected, uint8_t Received)
-{
-	uint8_t v = Expected;
-	for (int i = 0; i < 127; i++)
-	{
-		if (v == Received)
-			return i < 64 ? i : i - 127;
-		v = Prbs8(v);
-	}
-	return -128;
 }
 
 static const UsbdCdcCfg_t s_LoopbackCfg = {
@@ -761,7 +742,6 @@ int main()
 	uint8_t loopbackGrace = 0;
 	uint8_t prbs = 0xff;
 	uint32_t loopbackRxErrorNotify = 0;
-	uint32_t loopbackRxErrorTotal = 0;
 	int loopbackPending = 0;
 	int loopbackOffset = 0;
 
@@ -810,19 +790,6 @@ int main()
 						else
 						{
 							loopbackRxErrorNotify++;
-							loopbackRxErrorTotal++;
-							// Bench report: what kind of break, where in
-							// the chunk, and whether DTR moved recently.
-#if 0
-							printf("loop rx mismatch %lu: exp %02x got %02x"
-								" step %d at %d/%d opens %lu\r\n",
-								(unsigned long)loopbackRxErrorTotal,
-								loopbackExpected, loopbackBuffer[i],
-								LoopbackPrbsStep(loopbackExpected,
-									loopbackBuffer[i]),
-								i, length,
-								(unsigned long)s_LoopbackOpenCnt);
-#endif
 						}
 					}
 					loopbackExpected = Prbs8(loopbackBuffer[i]);
