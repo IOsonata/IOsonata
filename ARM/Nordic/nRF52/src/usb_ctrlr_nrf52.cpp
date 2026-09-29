@@ -1036,7 +1036,7 @@ extern "C" void USBD_IRQHandler(void){
 	// Snapshot both status registers before retiring DMA or starting its successor.
 	NRF_USBD->EVENTS_EPDATA = 0U;
 	const uint32_t dmastatus = NRF_USBD->EPSTATUS;
-	const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
+	const uint32_t datastatus = NRF_USBD->EPDATASTATUS;
 
 	// Only a software-owned channel can have a transfer to retire.
 	if (nRFUsbdDmaActive())
@@ -1144,9 +1144,9 @@ extern "C" void USBD_IRQHandler(void){
 
 	// EPDATASTATUS describes regular endpoint host-consumption / OUT readiness.
 
-	uint32_t servicedStatus = dataStatus & 0x00010001UL;
+	uint32_t servicedStatus = datastatus & 0x00010001UL;
 
-	uint32_t inData = dataStatus & 0xFEU;
+	uint32_t inData = datastatus & 0xFEU;
 	while (inData != 0U)
 	{
 		const uint32_t epNum = 31U - (uint32_t)__CLZ(inData);
@@ -1159,7 +1159,7 @@ extern "C" void USBD_IRQHandler(void){
 		inData &= ~bit;
 	}
 
-	uint32_t outData = (dataStatus >> 16U) & 0xFEU;
+	uint32_t outData = (datastatus >> 16U) & 0xFEU;
 	while (outData != 0U)
 	{
 		const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
