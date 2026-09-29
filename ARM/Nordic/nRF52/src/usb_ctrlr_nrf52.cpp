@@ -1033,10 +1033,14 @@ extern "C" void USBD_IRQHandler(void){
 	// A completed transfer keeps software DMA ownership for immediate handoff.
 	bool reuseDma = false;
 
+	// Snapshot both status registers before retiring DMA or starting its successor.
+	NRF_USBD->EVENTS_EPDATA = 0U;
+	const uint32_t dmastatus = NRF_USBD->EPSTATUS;
+	const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
+
 	// Only a software-owned channel can have a transfer to retire.
 	if (nRFUsbdDmaActive())
 	{
-		const uint32_t dmastatus = NRF_USBD->EPSTATUS;
 		if (dmastatus != 0U)
 		{
 			const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
@@ -1139,8 +1143,7 @@ extern "C" void USBD_IRQHandler(void){
 	}
 
 	// EPDATASTATUS describes regular endpoint host-consumption / OUT readiness.
-	NRF_USBD->EVENTS_EPDATA = 0U;
-	const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
+
 	uint32_t servicedStatus = dataStatus & 0x00010001UL;
 
 	uint32_t inData = dataStatus & 0xFEU;
