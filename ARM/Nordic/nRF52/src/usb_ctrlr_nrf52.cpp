@@ -1106,10 +1106,10 @@ extern "C" void USBD_IRQHandler(void){
 	// SETUP and bus events retain priority by preventing a new start here.
 	if (reuseDma)
 	{
-		if (NRF_USBD->EVENTS_USBEVENT == 0U && nRFUsbdDmaAllowed())
+		//if (NRF_USBD->EVENTS_USBEVENT == 0U && nRFUsbdDmaAllowed())
 			nRFUsbdStartQueuedDma();
-		else
-			nRFUsbdDmaUnlock();
+		//else
+		//	nRFUsbdDmaUnlock();
 	}
 
 	// EP0 IN consumes EP0DATADONE together with ENDEPIN0 above. For OUT it
