@@ -540,11 +540,9 @@ void nRFUsbdDmaUnlock(void)
 	__DSB();
 }
 
-/** Finish the hardware DMA, if any, before a foreground stop or close. */
-void nRFUsbdDmaWait(void)
+// Close paths already exclude interrupts through retirement and shutdown.
+static void nRFUsbdDmaWait(void)
 {
-	const uint32_t primask = __get_PRIMASK();
-	__disable_irq();
 
 	if (nRFUsbdDmaActive())
 	{
@@ -579,7 +577,6 @@ void nRFUsbdDmaWait(void)
 		nRFUsbdDmaUnlock();
 	}
 
-	__set_PRIMASK(primask);
 }
 
 // Program and start one staged EP0 IN packet, arming the status-stage short
