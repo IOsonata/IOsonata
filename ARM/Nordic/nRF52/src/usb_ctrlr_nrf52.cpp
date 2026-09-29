@@ -469,7 +469,7 @@ void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 		 (offsetof(NRF_USBD_Type, EPOUTEN) - offsetof(NRF_USBD_Type, EPINEN)));
 	const uint32_t msk = 1UL << EpNum;
 
-	// Both directions retire DMA and queue their completion at END.
+	// Both directions retire DMA at END. IN notifies its owner at EPDATA.
 	{
 		volatile uint32_t *pEnd = In ?
 			&NRF_USBD->EVENTS_ENDEPIN[EpNum] : &NRF_USBD->EVENTS_ENDEPOUT[EpNum];
@@ -1089,20 +1089,13 @@ extern "C" void USBD_IRQHandler(void){
 					*pend = 0U;
 					NRF_USBD->EPSTATUS = dmastatus;
 					(void)CFifoGet(s_Usbd.hQue);
-					nRFUsbEpReg_t *pReg;
-					uint32_t amount;
-					if (in)
+					if (!in)
 					{
-						amount = NRF_USBD->EPIN[epNum].AMOUNT;
-						pReg = nRFUsbGetEpReg(epNum, 1U);
+						const uint32_t amount = NRF_USBD->EPOUT[epNum].AMOUNT;
+						nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 0U);
+						AppEvtHandlerQue((amount << 24U) | dmastatus,
+							pReg, nRFUsbdProcessEpEvent);
 					}
-					else
-					{
-						amount = NRF_USBD->EPOUT[epNum].AMOUNT;
-						pReg = nRFUsbGetEpReg(epNum, 0U);
-					}
-					AppEvtHandlerQue((amount << 24U) | dmastatus,
-						pReg, nRFUsbdProcessEpEvent);
 					reuseDma = true;
 					break;
 				}
@@ -1140,7 +1133,7 @@ extern "C" void USBD_IRQHandler(void){
 
 	NRF_USBD->EVENTS_EPDATA = 0U;
 	const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
-	uint32_t servicedStatus = dataStatus & 0x000100FFUL;
+	uint32_t servicedStatus = dataStatus & 0x00010001UL;
 	uint32_t outData = (dataStatus >> 16U) & 0xFEU;
 	while (outData != 0U)
 	{
@@ -1156,6 +1149,23 @@ extern "C" void USBD_IRQHandler(void){
 			servicedStatus |= statusBit;
 
 		outData &= ~(1UL << epNum);
+	}
+
+	// END already released shared DMA. Notify IN owners only after the host
+	// consumes the packet, so their callbacks can submit the next buffer.
+	// A full AppEvt queue leaves the acknowledgement latched for a later IRQ.
+	uint32_t inData = dataStatus & 0xFEU;
+	while (inData != 0U)
+	{
+		const uint32_t epNum = 31U - (uint32_t)__CLZ(inData);
+		const uint32_t statusBit = 1UL << epNum;
+		const uint32_t amount = NRF_USBD->EPIN[epNum].AMOUNT;
+		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 1U);
+		if (!AppEvtHandlerQue((amount << 24U) | statusBit,
+			pReg, nRFUsbdProcessEpEvent))
+			break;
+		servicedStatus |= statusBit;
+		inData &= ~statusBit;
 	}
 	NRF_USBD->EPDATASTATUS = servicedStatus;
 	__DSB();

@@ -366,6 +366,7 @@ void checkPacket(unsigned ep,uint16_t length){
  auto *packet=reinterpret_cast<RxPacket*>(CFifoGet(rx.fifo));
  assert(packet && packet->length==length && !memcmp(packet->data,hostOut,length));
 }
+void ackIn(unsigned ep);
 unsigned dummyCalls=0;
 void dummyEvent(uint32_t,void*){++dummyCalls;}
 void closeEp1(){productionEpClose(0,1,false);}
@@ -395,6 +396,7 @@ void testDeferredOut(){
  assert(productionEpSend(0,2,inBuffer,11));
  finish();assert(activeBit==2 && dmaBusy && !dmaUnlocks && !receivers[0].completions);
  finish();assert(!dmaBusy && !regularCompletions);
+ ackIn(2);
  AppEvtHandlerDispatch();assert(receivers[0].completions==1 && !regularCompletions);
  AppEvtHandlerDispatch();assert(regularCompletions==1 && regularLength==11);checkPacket(1,17);
  puts("PASS: ISR hands DMA directly to the next queued request; each AppEvt delivers one callback");
@@ -432,6 +434,7 @@ void testDeferredOut(){
  interrupt();assert(!dmaBusy);AppEvtHandlerExec();
  for(unsigned ep=1;ep<8;++ep)assert(productionEpSend(0,ep,inBuffer,ep));
  for(unsigned i=0;i<14;++i)finish();
+ for(unsigned ep=1;ep<8;++ep)ackIn(ep);
  for(auto &rx:receivers)assert(rx.drdy==1 && !rx.completions);
  assert(!regularCompletions && !dmaBusy);dummyCalls=0;
  assert(AppEvtHandlerQue(0,nullptr,dummyEvent));
@@ -492,6 +495,7 @@ void testDeferredOut(){
   s_Usbd.EpReg[ep-1][in]={regularCallback,outSlot};
   if(in)assert(productionEpSend(0,ep,inBuffer,length));
   finish();assert(!regularCompletions && !dmaBusy);
+  if(in)ackIn(ep);
   if(closed)productionEpClose(0,ep,in);
   regs.EPIN[ep].AMOUNT=regs.EPOUT[ep].AMOUNT=99;
   AppEvtHandlerExec();assert(regularCompletions==unsigned(!closed));
@@ -511,21 +515,20 @@ void ackIn(unsigned ep){
 }
 alignas(8) uint8_t txMemory[CFIFO_TOTAL_MEMSIZE(128,1)];
 hCFifo_t txFifo;
-unsigned txCompletions=0;bool ackDuringCallback=false,finishDuringCallback=false;
+unsigned txCompletions=0;bool completeDuringCallback=false;
 void txCallback(UsbCtrlrEvtType_t event,uint16_t length,void*){
  assert(!inIsr && !irqMask && event==USB_CTRLR_EVT_XFER_CMPL);
  ++txCompletions;
  int consumed=length;assert(CFifoGetMultiple(txFifo,&consumed) && consumed==length);
  if(auto *next=CFifoPeek(txFifo)){
-  const bool available=!inUsbBusy[1];
+  assert(!inUsbBusy[1]);
   assert(productionEpSend(0,1,next,64));
-  assert(CFifoUsed(s_Usbd.hQue)==1 && bool(dmaBusy)==available);
-  if(ackDuringCallback){ackDuringCallback=false;ackIn(1);assert(dmaBusy);}
-  if(finishDuringCallback){finishDuringCallback=false;finish();}
+  assert(CFifoUsed(s_Usbd.hQue)==1 && dmaBusy);
+  if(completeDuringCallback){completeDuringCallback=false;finish();ackIn(1);}
  }
 }
 void txInit(){
- deferredInit();checkInBuffer=true;txCompletions=0;ackDuringCallback=finishDuringCallback=false;
+ deferredInit();checkInBuffer=true;txCompletions=0;completeDuringCallback=false;
  txFifo=CFifoInit(txMemory,sizeof(txMemory),1,true);
  int count=128;auto *data=CFifoPutMultiple(txFifo,&count);assert(data && count==128);
  for(int i=0;i<count;++i)data[i]=uint8_t(i+3);
@@ -534,121 +537,82 @@ void txInit(){
  assert(productionEpSend(0,1,data,64));
 }
 void testDeferredIn(){
- // END releases DMA and the RAM source. AppEvt consumes that source and
- // puts the next IN packet in hQue, even though EPDATA has not occurred.
+ // Regression: dispatching after END, before EPDATA, must not consume TX
+ // data or submit another packet to the same IN endpoint.
  txInit();uint8_t first[64];memcpy(first,wireIn,64);
  finish();assert(!dmaBusy && !txCompletions && !CFifoUsed(s_Usbd.hQue));
- AppEvtHandlerDispatch();
- assert(txCompletions==1 && CFifoUsed(txFifo)==64 && CFifoUsed(s_Usbd.hQue)==1);
- assert(!dmaBusy && regularStarts==1 && !memcmp(first,wireIn,64));
- auto *next=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
- assert(next->EpNum==1 && next->Dir==NRFX_USBD_QUE_IN_BUFFER);
- assert(next->pBuffer==CFifoPeek(txFifo) && next->Len==64);
  for(unsigned i=0;i<3;++i){interrupt();UsbCtrlrProcess(0);}
- assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==1 && txCompletions==1);
- ackIn(1);assert(activeBit==1 && dmaBusy && regularStarts==2);
+ assert(!txCompletions && CFifoUsed(txFifo)==128 && regularStarts==1);
+ assert(!memcmp(first,wireIn,64));
+ ackIn(1);assert(!dmaBusy && !txCompletions);
+ AppEvtHandlerDispatch();
+ assert(txCompletions==1 && CFifoUsed(txFifo)==64 && activeBit==1 && regularStarts==2);
  assert(!memcmp(wireIn,CFifoPeek(txFifo),64));
- finish();assert(!dmaBusy && txCompletions==1);
- AppEvtHandlerDispatch();assert(txCompletions==2 && !CFifoUsed(txFifo));
- ackIn(1);AppEvtHandlerExec();assert(txCompletions==2);
- puts("PASS: IN END queues AppEvt; its callback queues the next IN buffer before ACK; EPDATA starts it once");
+ finish();AppEvtHandlerExec();assert(txCompletions==1);
+ ackIn(1);AppEvtHandlerExec();assert(txCompletions==2 && !CFifoUsed(txFifo));
+ for(unsigned i=0;i<3;++i){interrupt();AppEvtHandlerExec();}
+ assert(txCompletions==2);
+ puts("PASS: IN END frees DMA without callback; EPDATA queues exactly one continuation through AppEvt");
 
- // A held IN at the queue head cannot block regular OUT or another IN.
- txInit();finish();AppEvtHandlerDispatch();
- receive(2,17);assert(activeBit==18 && CFifoUsed(s_Usbd.hQue)==2);
+ // Queued OUT starts in the IN END ISR even while that IN packet awaits
+ // consumption. A different IN endpoint can also use shared DMA.
+ txInit();
+ regs.SIZE.EPOUT[2]=17;regs.EPDATASTATUS.bits=1U<<18;interrupt();AppEvtHandlerDispatch();
+ assert(CFifoUsed(s_Usbd.hQue)==2 && activeBit==1);
  s_Usbd.EpReg[2][1]={regularCallback,outSlot};
  assert(productionEpSend(0,3,inBuffer,9));
- finish();assert(activeBit==3 && CFifoUsed(s_Usbd.hQue)==2);
- finish();assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==1);
- AppEvtHandlerExec();checkPacket(2,17);
- ackIn(1);assert(activeBit==1);finish();AppEvtHandlerExec();
- assert(txCompletions==2);
- puts("PASS: queued IN awaiting ACK does not hold shared DMA or block other regular endpoints");
+ finish();assert(activeBit==18 && !txCompletions && !dmaUnlocks);
+ finish();assert(activeBit==3 && !receivers[1].completions);
+ finish();AppEvtHandlerExec();checkPacket(2,17);
+ assert(!txCompletions && !regularCompletions && !dmaBusy);
+ ackIn(3);AppEvtHandlerExec();assert(regularCompletions==1 && regularLength==9);
+ ackIn(1);AppEvtHandlerExec();assert(txCompletions==1 && activeBit==1);
+ finish();ackIn(1);AppEvtHandlerExec();assert(txCompletions==2);
+ puts("PASS: IN END immediately hands DMA to queued OUT; unrelated IN progresses without queue rotation");
 
- // Rotating a held request must preserve its inline alignment-repair word.
- txInit();finish();AppEvtHandlerDispatch();
- (void)CFifoGet(s_Usbd.hQue);
- assert(productionEpSend(0,1,inBuffer+1,17));
- receive(2,11);finish();AppEvtHandlerExec();
- next=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
- assert(next->Dir==NRFX_USBD_QUE_IN_SCRATCH && next->Len==3);
- assert(!memcmp(&next->Scratch,inBuffer+1,3));
- dmaBuffer(reinterpret_cast<uint8_t*>(&next->Scratch));
- ackIn(1);assert(activeBit==1 && !memcmp(wireIn,inBuffer+1,3));
- // All seven IN endpoints can be held at once. An unsuccessful sweep
- // preserves every queued request and yields shared DMA to another OUT.
- deferredInit();checkInBuffer=true;
- for(unsigned ep=1;ep<8;++ep){
-  s_Usbd.EpReg[ep-1][1]={regularCallback,outSlot};
-  assert(productionEpSend(0,ep,inBuffer,ep));finish();
- }
- AppEvtHandlerExec();assert(regularCompletions==7);
- for(unsigned ep=1;ep<8;++ep)assert(productionEpSend(0,ep,inBuffer2,ep+1));
- nRFUsbdQue_t before[7];
- for(auto &entry:before){entry=*(nRFUsbdQue_t*)CFifoGet(s_Usbd.hQue);}
- for(auto &entry:before)*(nRFUsbdQue_t*)CFifoPut(s_Usbd.hQue)=entry;
- nRFUsbdResumeQueuedDmaLocked();assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==7);
- for(auto &entry:before){
-  auto actual=*(nRFUsbdQue_t*)CFifoGet(s_Usbd.hQue);
-  assert(actual.EpNum==entry.EpNum && actual.Dir==entry.Dir && actual.Len==entry.Len);
-  assert(actual.pBuffer==entry.pBuffer);
- }
- for(auto &entry:before)*(nRFUsbdQue_t*)CFifoPut(s_Usbd.hQue)=entry;
- receive(2,7);assert(activeBit==18 && CFifoUsed(s_Usbd.hQue)==8);
- finish();assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==7);
- puts("PASS: held queue rotation preserves inline data and terminates with all seven IN endpoints held");
-
- // ISO and EP0 keep their existing scheduler priority over the held IN.
- txInit();finish();AppEvtHandlerDispatch();
- pendingIn=inBuffer;pendingInLen=17;frame();assert(activeBit==8);finish();
- assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==1);
- regs.BMREQUESTTYPE=0;regs.EVENTS_EP0DATADONE=1;interrupt();assert(activeBit==16);
- finish();assert(!dmaBusy && CFifoUsed(s_Usbd.hQue)==1);
- puts("PASS: held regular IN leaves ISO and EP0 DMA available");
-
- // ACK before callback, during callback, or with END must not lose the
- // next request. If the endpoint is free, EpSend can start it immediately.
- for(unsigned timing=0;timing<3;++timing){
+ // Host consumption can be latched when END is serviced, or later.
+ for(bool together:{false,true}){
   txInit();
-  if(timing==2){inUsbBusy[1]=false;regs.EPDATASTATUS.bits=1U<<1;}
+  if(together){inUsbBusy[1]=false;regs.EPDATASTATUS.bits=1U<<1;}
   finish();
-  if(timing==0)ackIn(1);
-  if(timing==1)ackDuringCallback=true;
+  if(!together)ackIn(1);
+  assert(!txCompletions && !dmaBusy);
   AppEvtHandlerDispatch();assert(txCompletions==1 && activeBit==1 && regularStarts==2);
-  finish();AppEvtHandlerDispatch();assert(txCompletions==2);
+  finish();ackIn(1);AppEvtHandlerExec();assert(txCompletions==2);
  }
- puts("PASS: ACK before, during or with END preserves exactly one queued IN continuation");
- txInit();finish();ackDuringCallback=finishDuringCallback=true;
- UsbCtrlrProcess(0);assert(txCompletions==1 && !dmaBusy);
- UsbCtrlrProcess(0);assert(txCompletions==2 && !CFifoUsed(txFifo));
- puts("PASS: next IN DMA completing inside the previous callback retains its own completion");
+ txInit();finish();ackIn(1);completeDuringCallback=true;
+ AppEvtHandlerDispatch();assert(txCompletions==1 && !dmaBusy);
+ AppEvtHandlerDispatch();assert(txCompletions==2 && !CFifoUsed(txFifo));
+ puts("PASS: END/EPDATA together or separate, and completion during callback, preserve one continuation");
 
- // Full AppEvt queue keeps the completed source owned, while unrelated
- // DMA remains usable. Foreground retry eventually queues the next IN.
- txInit();dummyCalls=0;unsigned queued=0;
- while(AppEvtHandlerQue(0,nullptr,dummyEvent))++queued;
- finish();assert(!dmaBusy && !txCompletions && CFifoUsed(txFifo)==128);
- ackIn(1);receive(2,23);finish();
- UsbCtrlrProcess(0);assert(dummyCalls==queued && !txCompletions);
- UsbCtrlrProcess(0);assert(txCompletions==1 && activeBit==1);
- checkPacket(2,23);finish();UsbCtrlrProcess(0);assert(txCompletions==2);
- puts("PASS: full AppEvt queue retains IN completion and retries without holding DMA");
+ // Full AppEvt storage must leave the acknowledgement latched. A later
+ // interrupt retries after the foreground has drained the older events.
+ txInit();dummyCalls=0;
+ for(unsigned i=0;i<16;++i)assert(AppEvtHandlerQue(0,nullptr,dummyEvent));
+ finish();ackIn(1);
+ assert(!dmaBusy && !txCompletions && CFifoUsed(txFifo)==128);
+ assert(regs.EPDATASTATUS.bits==(1U<<1));
+ UsbCtrlrProcess(0);assert(dummyCalls==16 && !txCompletions);
+ interrupt();assert(!regs.EPDATASTATUS.bits);
+ AppEvtHandlerDispatch();assert(txCompletions==1 && activeBit==1);
+ finish();ackIn(1);AppEvtHandlerExec();assert(txCompletions==2);
+ puts("PASS: full AppEvt queue retains IN acknowledgement in hardware until a later ISR queues it");
 
- // A single completed IN (including ZLP) needs no EPDATA to notify its
- // owner. Close/reset cancel deferred notifications before dispatch.
+ // Actual lengths, including ZLP, are captured at EPDATA before dispatch.
  for(unsigned ep=1;ep<8;++ep)for(uint16_t length:{0U,1U,17U,64U}){
   deferredInit();checkInBuffer=true;s_Usbd.EpReg[ep-1][1]={regularCallback,outSlot};
-  assert(productionEpSend(0,ep,inBuffer,length));finish();
-  assert(!regularCompletions);AppEvtHandlerDispatch();
-  assert(regularCompletions==1 && regularLength==length);
-  ackIn(ep);AppEvtHandlerExec();assert(regularCompletions==1);
+  assert(productionEpSend(0,ep,inBuffer,length));finish();AppEvtHandlerExec();
+  assert(!regularCompletions);ackIn(ep);regs.EPIN[ep].AMOUNT=99;
+  AppEvtHandlerDispatch();assert(regularCompletions==1 && regularLength==length);
+  interrupt();AppEvtHandlerExec();assert(regularCompletions==1);
  }
  for(unsigned cancel=0;cancel<3;++cancel){
-  txInit();finish();
-  if(cancel==2)nRFUsbdResetState();else productionEpClose(0,1,cancel==1);
+  txInit();finish();ackIn(1);
+  if(cancel==2){regs.EPINEN=regs.EPOUTEN=0;nRFUsbdResetState();}
+  else productionEpClose(0,1,cancel==1);
   AppEvtHandlerExec();assert(txCompletions==unsigned(cancel==0));
  }
- puts("PASS: all IN endpoints/ZLP complete at END; IN close/reset cancel pending callbacks");
+ puts("PASS: EP1-7/ZLP preserve captured IN length and suppress closed/reset endpoint delivery");
 }
 int main(int argc,char **argv){
  testDeferredOut();
