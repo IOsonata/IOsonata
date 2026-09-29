@@ -370,10 +370,8 @@ bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 
 void nRFUsbdIsoEpClose(bool bIn)
 {
-	// Once closed, ISR completion is a cancellation and no new ISO DMA can
-	// start. nRFUsbdDmaWait owns the exclusion while retiring active DMA.
-	s_Usbd.IsoOpen = false;
-	nRFUsbdDmaWait();
+	// The base close path has stopped ISO scheduling and retired DMA with
+	// interrupts excluded. Only direction-specific hardware/state remains.
 	s_Usbd.IsoDataFlag = 0U;
 	s_Usbd.pIsoBuffer[0] = nullptr;
 

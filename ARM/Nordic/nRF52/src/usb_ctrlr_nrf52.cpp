@@ -1385,31 +1385,52 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 	return true;
 }
 
-void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
+// DMA is retired and interrupts remain excluded through endpoint shutdown.
+static void nRFUsbdEpDisable(uint8_t EpNo, bool In)
 {
-	(void)DevNo;
 	if (EpNo == NRFX_USBD_ISO_EP_NO)
 	{
-		nRFUsbdIsoEpClose(bIn);
+		nRFUsbdIsoEpClose(In);
 		return;
 	}
 
-	nRFUsbdDmaWait();
-	CFifoFlush(s_Usbd.hQue);
+	nRFUsbdEpHwEnable(EpNo, In, false);
+	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (In ? 0U : 16U));
+}
 
-	nRFUsbdEpHwEnable(EpNo, bIn, false);
-	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (bIn ? 0U : 16U));
+void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
+{
+	(void)DevNo;
+	const uint32_t state = DisableInterrupt();
+	if (EpNo == NRFX_USBD_ISO_EP_NO)
+		s_Usbd.IsoOpen = false;
+	nRFUsbdDmaWait();
+	if (EpNo != NRFX_USBD_ISO_EP_NO)
+		CFifoFlush(s_Usbd.hQue);
+
+	nRFUsbdEpDisable(EpNo, bIn);
 	__DSB();
+	EnableInterrupt(state);
 }
 
 void UsbCtrlrEpCloseAll(int DevNo)
 {
-	for (uint32_t epNum = NRFX_USBD_EP_COUNT - 1U; epNum != 0U; epNum--)
-	{
-		UsbCtrlrEpClose(DevNo, epNum, false);
-		UsbCtrlrEpClose(DevNo, epNum, true);
-	}
+	(void)DevNo;
+	const uint32_t state = DisableInterrupt();
+	s_Usbd.IsoOpen = false;
+	nRFUsbdDmaWait();
+	CFifoFlush(s_Usbd.hQue);
 
+	nRFUsbdIsoEpClose(false);
+	nRFUsbdIsoEpClose(true);
+	// Disable regular directions together, preserving EP0.
+	NRF_USBD->INTENCLR = (0xFEUL << USBD_INTEN_ENDEPIN0_Pos) |
+		(0xFEUL << USBD_INTEN_ENDEPOUT0_Pos);
+	NRF_USBD->EPINEN &= ~0xFEUL;
+	NRF_USBD->EPOUTEN &= ~0xFEUL;
+	NRF_USBD->EPDATASTATUS = 0x00FE00FEUL;
+	__DSB();
+	EnableInterrupt(state);
 }
 
 void UsbCtrlrEpBind(int DevNo, uint8_t EpNo, bool bIn, bool bBlocking,
