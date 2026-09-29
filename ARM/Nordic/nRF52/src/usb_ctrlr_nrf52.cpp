@@ -1146,17 +1146,18 @@ extern "C" void USBD_IRQHandler(void){
 
 	uint32_t servicedStatus = datastatus & 0x00010001UL;
 
-	uint32_t inData = datastatus & 0xFEU;
-	while (inData != 0U)
+	// Experiment: complete IN only when both snapshots contain the endpoint.
+	uint32_t indata = dmastatus & datastatus & 0xFEU;
+	while (indata != 0U)
 	{
-		const uint32_t epNum = 31U - (uint32_t)__CLZ(inData);
+		const uint32_t epNum = 31U - (uint32_t)__CLZ(indata);
 		const uint32_t bit = 1UL << epNum;
 		// Leave the status bit set when AppEvt is full so the next IRQ retries.
 		const uint32_t evt = (NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum;
 		if (!AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete))
 			break;
 		servicedStatus |= bit;
-		inData &= ~bit;
+		indata &= ~bit;
 	}
 
 	uint32_t outData = (datastatus >> 16U) & 0xFEU;
