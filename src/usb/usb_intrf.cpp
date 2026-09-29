@@ -364,11 +364,10 @@ static int UsbIntrfTxDirect(DevIntrf_t * const pDevIntrf,
 	return DataLen;
 }
 
-static void UsbIntrfReset(DevIntrf_t * const pDevIntrf)
+static void UsbIntrfResetState(UsbDevIntrf_t *pIntrf, uint16_t mps)
 {
-	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
 	const uint32_t state = DisableInterrupt();
-	pIntrf->Mps = 0U;
+	pIntrf->Mps = mps;
 	if (pIntrf->Mode == USB_INTRF_MODE_DIRECT)
 	{
 		UsbIntrfDirectClear(pIntrf->pRxDirectBuffer);
@@ -386,6 +385,11 @@ static void UsbIntrfReset(DevIntrf_t * const pDevIntrf)
 	pIntrf->RxPending = 0U;
 	UsbIntrfSetTxIdle(pIntrf);
 	EnableInterrupt(state);
+}
+
+static void UsbIntrfReset(DevIntrf_t * const pDevIntrf)
+{
+	UsbIntrfResetState(static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData), 0U);
 }
 
 static void *UsbIntrfGetHandle(DevIntrf_t * const pDevIntrf)
@@ -688,10 +692,7 @@ bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps)
 		return false;
 	}
 
-	const uint32_t state = DisableInterrupt();
-	UsbIntrfReset(&pIntrf->DevIntrf);
-	pIntrf->Mps = Mps;
-	EnableInterrupt(state);
+	UsbIntrfResetState(pIntrf, Mps);
 	return true;
 }
 
