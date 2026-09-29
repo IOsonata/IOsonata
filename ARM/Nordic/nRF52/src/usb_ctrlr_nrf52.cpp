@@ -1093,8 +1093,7 @@ extern "C" void USBD_IRQHandler(void){
 					{
 						const uint32_t amount = NRF_USBD->EPOUT[epNum].AMOUNT;
 						nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 0U);
-						AppEvtHandlerQue((amount << 24U) | dmastatus,
-							pReg, nRFUsbdProcessEpEvent);
+						nRFUsbdProcessEpEvent((amount << 24U) | dmastatus, pReg);
 					}
 					reuseDma = true;
 					break;
@@ -1133,7 +1132,7 @@ extern "C" void USBD_IRQHandler(void){
 
 	NRF_USBD->EVENTS_EPDATA = 0U;
 	const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
-	uint32_t servicedStatus = dataStatus & 0x00010001UL;
+	NRF_USBD->EPDATASTATUS = dataStatus & 0x00010001UL;
 	uint32_t outData = (dataStatus >> 16U) & 0xFEU;
 	while (outData != 0U)
 	{
@@ -1141,19 +1140,22 @@ extern "C" void USBD_IRQHandler(void){
 		const uint32_t statusBit = 1UL << (epNum + 16U);
 		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 0U);
 
-		// Completion is queued above before a following DRDY on that endpoint.
-		// Clear readiness only after queuing it, so later IRQs cannot duplicate it.
+		// Experiment: run regular callbacks directly in the ISR.
+		// Clear before DRDY can start DMA and admit another host packet.
 		if ((NRF_USBD->EPSTATUS & statusBit) == 0U &&
-			pReg->Handler != NULL &&
-			AppEvtHandlerQue(statusBit | 1U, pReg, nRFUsbdProcessEpEvent))
-			servicedStatus |= statusBit;
+			pReg->Handler != NULL)
+		{
+			NRF_USBD->EPDATASTATUS = statusBit;
+			__DSB();
+			nRFUsbdProcessEpEvent(statusBit | 1U, pReg);
+		}
 
 		outData &= ~(1UL << epNum);
 	}
 
 	// END already released shared DMA. Notify IN owners only after the host
 	// consumes the packet, so their callbacks can submit the next buffer.
-	// A full AppEvt queue leaves the acknowledgement latched for a later IRQ.
+	// Clear the acknowledgement before the direct callback can submit again.
 	uint32_t inData = dataStatus & 0xFEU;
 	while (inData != 0U)
 	{
@@ -1161,13 +1163,11 @@ extern "C" void USBD_IRQHandler(void){
 		const uint32_t statusBit = 1UL << epNum;
 		const uint32_t amount = NRF_USBD->EPIN[epNum].AMOUNT;
 		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 1U);
-		if (!AppEvtHandlerQue((amount << 24U) | statusBit,
-			pReg, nRFUsbdProcessEpEvent))
-			break;
-		servicedStatus |= statusBit;
+		NRF_USBD->EPDATASTATUS = statusBit;
+		__DSB();
+		nRFUsbdProcessEpEvent((amount << 24U) | statusBit, pReg);
 		inData &= ~statusBit;
 	}
-	NRF_USBD->EPDATASTATUS = servicedStatus;
 	__DSB();
 
 	nRFUsbdTryRemoteWake();
