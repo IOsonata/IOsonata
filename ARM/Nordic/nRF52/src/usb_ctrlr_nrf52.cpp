@@ -1155,7 +1155,8 @@ extern "C" void USBD_IRQHandler(void){
 
 	// END already released shared DMA. Notify IN owners only after the host
 	// consumes the packet, so their callbacks can submit the next buffer.
-	// Leave the acknowledgement latched if AppEvt cannot accept it.
+	// Experiment: invoke the registered IN callback directly, without AppEvt
+	// or the packed-event adapter. Clear before the callback can submit again.
 	uint32_t inData = dataStatus & 0xFEU;
 	while (inData != 0U)
 	{
@@ -1163,10 +1164,10 @@ extern "C" void USBD_IRQHandler(void){
 		const uint32_t statusBit = 1UL << epNum;
 		const uint32_t amount = NRF_USBD->EPIN[epNum].AMOUNT;
 		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 1U);
-		if (!AppEvtHandlerQue((amount << 24U) | statusBit,
-			pReg, nRFUsbdProcessEpEvent))
-			break;
 		NRF_USBD->EPDATASTATUS = statusBit;
+		__DSB();
+		pReg->Handler(USB_CTRLR_EVT_XFER_CMPL, (uint16_t)amount,
+			pReg->pContext);
 		inData &= ~statusBit;
 	}
 	__DSB();
