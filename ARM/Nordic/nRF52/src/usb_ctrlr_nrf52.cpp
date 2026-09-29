@@ -1097,24 +1097,20 @@ extern "C" void USBD_IRQHandler(void){
 				default:	// Regular endpoints 1-7.
 				{
 					const uint8_t epnum = (uint8_t)epno & 7U;
-					const bool in = epno < 16U;
-					volatile uint32_t *pend = in ?
-						&NRF_USBD->EVENTS_ENDEPIN[epnum] :
-						&NRF_USBD->EVENTS_ENDEPOUT[epnum];
-					if (*pend == 0U ||
-						(in && (dmastatus & datastatus) == 0U))
+					volatile uint32_t *pend = epno >= 16U ?
+						&NRF_USBD->EVENTS_ENDEPOUT[epnum] :
+						&NRF_USBD->EVENTS_ENDEPIN[epnum];
+					if (*pend == 0U)
 						break;
-
 					*pend = 0U;
 					NRF_USBD->EPSTATUS = dmastatus;
 					(void)CFifoGet(s_Usbd.hQue);
-					const uint32_t amount = in ?
-						NRF_USBD->EPIN[epnum].AMOUNT :
-						NRF_USBD->EPOUT[epnum].AMOUNT;
-					if (in)
-						NRF_USBD->EPDATASTATUS = dmastatus;
-					AppEvtHandlerQue((amount << 8U) | epnum, NULL,
-						in ? nRFUsbdProcessInComplete : nRFUsbdProcessOutComplete);
+					if (epno >= 16U)
+					{
+						const uint32_t evt =
+							(NRF_USBD->EPOUT[epnum].AMOUNT << 8U) | epnum;
+						AppEvtHandlerQue(evt, NULL, nRFUsbdProcessOutComplete);
+					}
 					reuseDma = true;
 					break;
 				}
@@ -1148,6 +1144,21 @@ extern "C" void USBD_IRQHandler(void){
 
 	// EPDATASTATUS describes regular endpoint host-consumption / OUT readiness.
 
+	uint32_t servicedstatus = datastatus & 0x00010001UL;
+
+	uint32_t indata = datastatus & 0xFEU;
+	while (indata != 0U)
+	{
+		const uint32_t epnum = 31U - (uint32_t)__CLZ(indata);
+		const uint32_t bit = 1UL << epnum;
+		// Leave the status bit set when AppEvt is full so the next IRQ retries.
+		const uint32_t evt = (NRF_USBD->EPIN[epnum].AMOUNT << 8U) | epnum;
+		if (!AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete))
+			break;
+		servicedstatus |= bit;
+		indata &= ~bit;
+	}
+
 	uint32_t outData = (datastatus >> 16U) & 0xFEU;
 	while (outData != 0U)
 	{
@@ -1164,7 +1175,7 @@ extern "C" void USBD_IRQHandler(void){
 		outData &= ~dataBit;
 	}
 
-	NRF_USBD->EPDATASTATUS = datastatus & 0x00010001UL;
+	NRF_USBD->EPDATASTATUS = servicedstatus;
 	__DSB();
 	nRFUsbdTryRemoteWake();
 
