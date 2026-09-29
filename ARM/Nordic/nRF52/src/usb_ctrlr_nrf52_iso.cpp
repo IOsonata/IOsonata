@@ -177,12 +177,9 @@ uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData)
 static __attribute__((noinline))
 void nRFIsoHwEnable(bool In, bool Enable)
 {
-	volatile uint32_t *pEnd = (volatile uint32_t *)
-		((uintptr_t)&NRF_USBD->EVENTS_ENDISOOUT - In *
-		 (offsetof(NRF_USBD_Type, EVENTS_ENDISOOUT) - offsetof(NRF_USBD_Type, EVENTS_ENDISOIN)));
-	volatile uint32_t *pEnable = (volatile uint32_t *)
-		((uintptr_t)&NRF_USBD->EPOUTEN - In *
-		 (offsetof(NRF_USBD_Type, EPOUTEN) - offsetof(NRF_USBD_Type, EPINEN)));
+	volatile uint32_t *pEnd = In ?
+		&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
+	volatile uint32_t *pEnable = In ? &NRF_USBD->EPINEN : &NRF_USBD->EPOUTEN;
 	const uint32_t msk = 1UL << NRFX_USBD_ISO_EP_NO;
 	const uint32_t endMsk = In ?
 		USBD_INTEN_ENDISOIN_Msk : USBD_INTEN_ENDISOOUT_Msk;
