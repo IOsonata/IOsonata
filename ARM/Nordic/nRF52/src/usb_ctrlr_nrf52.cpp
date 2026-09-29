@@ -541,12 +541,14 @@ void nRFUsbdDmaUnlock(void)
 }
 
 // Close paths already exclude interrupts through retirement and shutdown.
-static void nRFUsbdDmaWait(void)
+static void nRFUsbdDmaWait(uint32_t mask)
 {
 
 	if (nRFUsbdDmaActive())
 	{
 		const uint32_t dmastatus = NRF_USBD->EPSTATUS;
+		if ((dmastatus & mask) == 0U)
+			return;
 		if (dmastatus != 0U)
 		{
 			const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
@@ -678,7 +680,10 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(bool ep0out)
 		return;
 	}
 
-	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPeek(s_Usbd.hQue);
+	nRFUsbdQue_t *pQue;
+	while ((pQue = (nRFUsbdQue_t *)CFifoPeek(s_Usbd.hQue)) != NULL &&
+		pQue->EpNum == 0U)
+		(void)CFifoGet(s_Usbd.hQue);
 	if (pQue != NULL)
 	{
 		nRFUsbdStartDmaNow(pQue);
@@ -711,6 +716,9 @@ __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 
 static void nRFUsbdResetState(void)
 {
+	for (auto &endpoint : s_Usbd.EpReg)
+		for (auto &registration : endpoint)
+			++registration.Generation;
 	CFifoFlush(s_Usbd.hQue);
 	CFifoFlush(s_Usbd.hEp0Que);
 	s_Usbd.Flags = USBD_FLAG_MAC_AWAKE;
@@ -892,29 +900,17 @@ static void nRFUsbdBusReset(void)
 	nRFUsbdResetState();
 }
 
-static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
+// The queued generation identifies the endpoint lifetime, including events
+// already copied out of AppEvt when an ISR closes or resets the endpoint.
+static void nRFUsbdProcessQueuedEvent(uint32_t Evt, void *pContext)
 {
-	(void)pContext;
-
-	// The event carries the IN endpoint number and completed length.
-	nRFUsbEpRegisteredEvent((uint8_t)Evt, 1U,
-		USB_CTRLR_EVT_XFER_CMPL, (uint16_t)(Evt >> 8U));
-}
-
-
-// DRDY and completion share AppEvt ordering; this callback never reads EPDATA.
-static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
-{
-	(void)pContext;
-	nRFUsbEpRegisteredEvent((uint8_t)Evt, 0U, USB_CTRLR_EVT_DRDY, 0U);
-}
-
-// Experiment: carry each OUT completion in AppEvt without a pending mask.
-static void nRFUsbdProcessOutComplete(uint32_t Evt, void *pContext)
-{
-	(void)pContext;
-	nRFUsbEpRegisteredEvent((uint8_t)Evt, 0U,
-		USB_CTRLR_EVT_XFER_CMPL, (uint16_t)(Evt >> 8U));
+	const uint8_t epnum = (uint8_t)Evt;
+	const uint8_t in = (uint8_t)((Evt >> 16U) & 1U);
+	nRFUsbEpReg_t *preg = nRFUsbGetEpReg(epnum, in);
+	if (preg->Generation != (uint32_t)(uintptr_t)pContext)
+		return;
+	preg->Handler((Evt & (1UL << 17U)) != 0U ? USB_CTRLR_EVT_DRDY :
+		USB_CTRLR_EVT_XFER_CMPL, (uint8_t)(Evt >> 8U), preg->pContext);
 }
 
 static void nRFUsbdHandleBusEvent(uint32_t EventCause)
@@ -1105,7 +1101,9 @@ extern "C" void USBD_IRQHandler(void){
 					{
 						const uint32_t evt =
 							(NRF_USBD->EPOUT[epnum].AMOUNT << 8U) | epnum;
-						AppEvtHandlerQue(evt, NULL, nRFUsbdProcessOutComplete);
+						AppEvtHandlerQue(evt,
+							(void *)(uintptr_t)nRFUsbGetEpReg(epnum, 0U)->Generation,
+							nRFUsbdProcessQueuedEvent);
 					}
 					break;
 			}
@@ -1140,7 +1138,9 @@ extern "C" void USBD_IRQHandler(void){
 		const uint32_t bit = 1UL << epnum;
 		// Leave the status bit set when AppEvt is full so the next IRQ retries.
 		const uint32_t evt = (NRF_USBD->EPIN[epnum].AMOUNT << 8U) | epnum;
-		if (!AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete))
+		if (!AppEvtHandlerQue(evt | (1UL << 16U),
+			(void *)(uintptr_t)nRFUsbGetEpReg(epnum, 1U)->Generation,
+			nRFUsbdProcessQueuedEvent))
 			break;
 		servicedstatus |= bit;
 		indata &= ~bit;
@@ -1158,7 +1158,8 @@ extern "C" void USBD_IRQHandler(void){
 		// readiness latch only after enqueue succeeds to prevent duplicates.
 		if ((NRF_USBD->EPSTATUS & statusbit) == 0U &&
 			preg->Handler != NULL &&
-			AppEvtHandlerQue(epnum, NULL, nRFUsbdProcessOutData))
+			AppEvtHandlerQue(epnum | (1UL << 17U),
+				(void *)(uintptr_t)preg->Generation, nRFUsbdProcessQueuedEvent))
 			servicedstatus |= statusbit;
 
 		outdata &= ~bit;
@@ -1380,14 +1381,29 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 {
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
+	++nRFUsbGetEpReg(EpNo, bIn)->Generation;
 	if (EpNo == NRFX_USBD_ISO_EP_NO)
+	{
 		s_Usbd.IsoOpen = false;
-	nRFUsbdDmaWait();
-	if (EpNo != NRFX_USBD_ISO_EP_NO)
-		CFifoFlush(s_Usbd.hQue);
-
+		nRFUsbdDmaWait(0x01000100UL);
+	}
+	else
+	{
+		nRFUsbdDmaWait(1UL << (EpNo + (bIn ? 0U : 16U)));
+		// Mark matching requests in place; FIFO order and ownership stay intact.
+		// Unused slots are harmless: insertion overwrites the entire request.
+		nRFUsbdQue_t *requests =
+			(nRFUsbdQue_t *)s_Usbd.hQue->pMemStart;
+		for (uint32_t i = 0U; i < NRFUSBD_QUE_DEPTH; ++i)
+		{
+			if (requests[i].EpNum == EpNo &&
+				(requests[i].Dir != NRFX_USBD_QUE_OUT) == bIn)
+				requests[i].EpNum = 0U;
+		}
+	}
 	nRFUsbdEpDisable(EpNo, bIn);
 	__DSB();
+	nRFUsbdResumeQueuedDmaLocked();
 	EnableInterrupt(state);
 }
 
@@ -1396,7 +1412,10 @@ void UsbCtrlrEpCloseAll(int DevNo)
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
 	s_Usbd.IsoOpen = false;
-	nRFUsbdDmaWait();
+	for (auto &endpoint : s_Usbd.EpReg)
+		for (auto &registration : endpoint)
+			++registration.Generation;
+	nRFUsbdDmaWait(0x01FE01FEUL);
 	CFifoFlush(s_Usbd.hQue);
 
 	nRFUsbdIsoEpClose(false);

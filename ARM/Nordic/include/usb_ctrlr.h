@@ -294,6 +294,7 @@ typedef struct __nRF_Usb_Ep_Registration
 {
 	UsbCtrlrEpHandler_t Handler;
 	void *pContext;
+	uint32_t Generation;         //!< Invalidates deferred events on close/reset.
 } nRFUsbEpReg_t;
 
 enum
