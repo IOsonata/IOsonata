@@ -714,11 +714,17 @@ __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 	nRFUsbdStartQueuedDma(false);
 }
 
-static void nRFUsbdResetState(void)
+// Reset and close-all invalidate the same endpoint lifetimes.
+static __attribute__((noinline)) void nRFUsbdInvalidateEvents(void)
 {
 	for (auto &endpoint : s_Usbd.EpReg)
 		for (auto &registration : endpoint)
 			++registration.Generation;
+}
+
+static void nRFUsbdResetState(void)
+{
+	nRFUsbdInvalidateEvents();
 	CFifoFlush(s_Usbd.hQue);
 	CFifoFlush(s_Usbd.hEp0Que);
 	s_Usbd.Flags = USBD_FLAG_MAC_AWAKE;
@@ -1036,7 +1042,9 @@ extern "C" void USBD_IRQHandler(void){
 	{
 		NRF_USBD->EVENTS_SOF = 0U;
 		(void)NRF_USBD->EVENTS_SOF;
+#if defined(NRFUSBD_ISO_TRACE) && NRFUSBD_ISO_TRACE
 		nRFUsbdIsoSofMark();
+#endif
 		nRFUsbdHandleSof();
 	}
 
@@ -1436,9 +1444,7 @@ void UsbCtrlrEpCloseAll(int DevNo)
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
 	s_Usbd.IsoOpen = false;
-	for (auto &endpoint : s_Usbd.EpReg)
-		for (auto &registration : endpoint)
-			++registration.Generation;
+	nRFUsbdInvalidateEvents();
 	nRFUsbdDmaWait(0x01FE01FEUL);
 	CFifoFlush(s_Usbd.hQue);
 

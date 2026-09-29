@@ -197,7 +197,7 @@ void nRFIsoHwEnable(bool In, bool Enable)
 
 
 
-// The shared scheduler already owns the channel lock.
+// The shared scheduler owns the channel lock and has pending ISO work.
 //
 // IN goes first whenever it is ready. The host schedules its periodic
 // transactions at the start of the frame, and the ISOIN buffer answers the
@@ -210,8 +210,6 @@ void nRFIsoHwEnable(bool In, bool Enable)
 bool nRFUsbdIsoStart(void)
 {
 	const uint8_t dataFlag = s_Usbd.IsoDataFlag;
-	if (dataFlag == 0U)
-		return false;
 
 	if ((dataFlag & NRFUSBD_ISO_IN_READY) != 0U)
 	{
