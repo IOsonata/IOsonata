@@ -66,6 +66,10 @@ SOFTWARE.
 #include "cfifo.h"
 #endif
 
+#ifndef NRFUSBD_ISO_TRACE
+#define NRFUSBD_ISO_TRACE			0
+#endif
+
 /** @addtogroup USB
   * @{
   */

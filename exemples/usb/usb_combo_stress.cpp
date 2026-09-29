@@ -813,6 +813,7 @@ int main()
 							loopbackRxErrorTotal++;
 							// Bench report: what kind of break, where in
 							// the chunk, and whether DTR moved recently.
+#if 0
 							printf("loop rx mismatch %lu: exp %02x got %02x"
 								" step %d at %d/%d opens %lu\r\n",
 								(unsigned long)loopbackRxErrorTotal,
@@ -821,6 +822,7 @@ int main()
 									loopbackBuffer[i]),
 								i, length,
 								(unsigned long)s_LoopbackOpenCnt);
+#endif
 						}
 					}
 					loopbackExpected = Prbs8(loopbackBuffer[i]);
