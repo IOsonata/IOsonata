@@ -1017,10 +1017,9 @@ extern "C" void USBD_IRQHandler(void){
 
 	// A new SETUP supersedes the old EP0 transaction before any normal
 	// completion is interpreted. Do not return here: the response the core
-	// just queued may sit behind a regular DMA whose END event fired without
-	// an interrupt (regular IN retires on EPDATA, which a host that is not
-	// polling that endpoint yet never produces). The completion path below
-	// retires it and hands the channel to the EP0 packet in the same pass.
+	// just queued may sit behind a regular DMA whose END is also pending.
+	// Retire that DMA below and hand the channel to queued work in this pass.
+	// Regular IN callback delivery separately waits for EPDATA.
 	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
 	{
 		nRFUsbdProcessEP0Setup();

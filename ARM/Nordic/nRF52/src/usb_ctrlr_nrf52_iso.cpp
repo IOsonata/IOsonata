@@ -4,7 +4,7 @@
 @brief	Optional nRF52 USBD isochronous endpoint support.
 
 This implementation is kept in its own archive member so applications without
-UsbIsoIntrf do not pull the ISO scheduler, SOF processing or deferred
+UsbIsoIntrf do not pull the ISO scheduler, SOF processing or ISR
 completion path.
 
 @author	Hoang Nguyen Hoan
@@ -48,8 +48,9 @@ SOFTWARE.
 static_assert(offsetof(USBD_ISOOUT_Type, MAXCNT) ==
 	offsetof(USBD_ISOIN_Type, MAXCNT), "ISO register layout");
 
+// Enable explicitly in the library build for bench diagnostics.
 #ifndef NRFUSBD_ISO_TRACE
-#define NRFUSBD_ISO_TRACE			1
+#define NRFUSBD_ISO_TRACE			0
 #endif
 
 #if NRFUSBD_ISO_TRACE
@@ -88,7 +89,7 @@ typedef struct __nRF_Usbd_Iso_Trace_Snap {
 	uint16_t Next;			// index of the entry the next SOF will write
 	uint16_t Count;			// NRFUSBD_ISO_TRACE_CNT
 	uint16_t EntrySize;		// sizeof(nRFUsbdIsoTrace_t)
-	uint16_t Version;		// layout, 1
+	uint16_t Version;		// layout version
 	nRFUsbdIsoTrace_t Entry[NRFUSBD_ISO_TRACE_CNT];
 } nRFUsbdIsoTraceSnap_t;
 

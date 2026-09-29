@@ -313,9 +313,8 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	// An isochronous OUT endpoint cannot hold the host off, so the RX FIFO
 	// must drop its oldest frame when full rather than refuse the completion
 	// the way the blocking bulk path does through DRDY. The TX FIFO stays
-	// blocking. Same memory, same geometry, dropping policy. PutIdx starts
-	// at the first block again, the block UsbIntrfInit reserved and
-	// registered as the OUT DMA buffer, so the registration stays valid.
+	// blocking. Reuse the same memory and geometry with the dropping policy.
+	// The OUT callback reserves a destination when the controller sends DRDY.
 	pIntrf->pData->hRxFifo = CFifoInit(pCfg->pRxFifoMem,
 		(uint32_t)cfg.RxFifoMemSize, USB_INTRF_PKT_BLKSIZE(pCfg->BufferSize),
 		false);
