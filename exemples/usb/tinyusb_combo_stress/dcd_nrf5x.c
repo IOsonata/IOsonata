@@ -94,11 +94,60 @@ typedef struct {
   volatile bool data_received;
   volatile bool started;
 
-  // ISO IN transfer has been admitted for this SOF and its EasyDMA is
-  // running or deferred. The next payload may be staged after ENDISOIN.
+  // ISO IN: the staged payload has been handed to EasyDMA for this frame.
+  // The next payload may be staged after ENDISOIN.
   bool iso_in_transfer_ready;
 
 } xfer_td_t;
+
+// ISO EasyDMA requests raised at SOF. They are serviced from the interrupt
+// handler only, never through usbd_defer_func(): a deferred start can be
+// dropped when the usbd event queue is full, which leaves the ISO IN stage
+// armed forever, and a task-context start lands at an arbitrary point in the
+// frame, after the host's IN token has already been answered with ZeroData.
+enum {
+  ISO_DMA_REQ_OUT = 1u << 0,
+  ISO_DMA_REQ_IN  = 1u << 1,
+};
+
+// ISO scheduling counters read back by the application through
+// dcd_nrf5x_iso_diag_get(). They tell a lost frame apart by cause: a frame
+// the class never staged, an IN start delayed past the SOF interrupt, a
+// request carried into the next frame, an OUT interval with no packet.
+enum {
+  ISO_DIAG_IN_IDLE = 0,   // SOF with ISO IN enabled and nothing staged
+  ISO_DIAG_IN_WAIT,       // IN request not started inside the SOF interrupt
+  ISO_DIAG_IN_CARRY,      // IN request still pending at the next SOF
+  ISO_DIAG_OUT_IDLE,      // OUT request found SIZE.ISOOUT == 0
+  ISO_DIAG_OUT_CARRY,     // OUT request still pending at the next SOF
+  ISO_DIAG_OUT_UNARMED,   // OUT request dropped, class had not re-armed
+  ISO_DIAG_IN_SPIN_OUT,   // channel still busy after the bounded SOF spin
+  ISO_DIAG_IN_START_MAX,  // worst SOF to ISO IN DMA start, microseconds
+  ISO_DIAG_IN_END_MAX,    // worst SOF to ENDISOIN, microseconds
+  ISO_DIAG_IN_END_SLOW,   // frames whose ENDISOIN came later than 25 us
+  ISO_DIAG_CBI_HELD,      // CBI starts deferred by the pre-SOF guard
+  ISO_DIAG_COUNT
+};
+
+// A CBI EasyDMA transfer of one 64-byte packet runs for tens of
+// microseconds on this controller. One started just before SOF still holds
+// the channel when the ISO IN payload must be moved, and the payload then
+// misses the host's IN token. While an ISO IN payload is staged, CBI starts
+// are deferred inside the last ISO_SOF_GUARD_US of the frame; the hold
+// lapses ISO_SOF_GUARD_SLACK_US past the expected SOF so a missing SOF
+// (suspend, disconnect) cannot block CBI traffic.
+#define USB_FRAME_US           1000u
+#define ISO_SOF_GUARD_US       45u
+#define ISO_SOF_GUARD_SLACK_US 30u
+
+// Bound for the SOF spin that waits for the running CBI transfer to end.
+// One 64-byte EasyDMA transfer is a few microseconds; the bound only guards
+// against a transfer whose END never comes and stays well inside one frame.
+#define ISO_DMA_SPIN_LIMIT 200u
+#define ISO_IN_END_SLOW_US 25u
+
+// DWT cycle counter for the ISO latency figures (64 MHz core clock).
+#define CYC_TO_US(_cyc) ((_cyc) / 64u)
 
 // Data for managing dcd
 static struct {
@@ -109,9 +158,22 @@ static struct {
   // nRF can only carry one DMA at a time, this is used to guard the access to EasyDMA
   atomic_flag dma_running;
 
+  // Pending ISO_DMA_REQ_* bits, owned by the interrupt handler.
+  volatile uint8_t iso_dma_req;
+
+  // ISO scheduling counters, see dcd_nrf5x_iso_diag_get().
+  uint32_t iso_diag[ISO_DIAG_COUNT];
+
+  // DWT cycle count at the SOF that raised the current ISO IN request, and
+  // whether that request is still to be timed.
+  uint32_t iso_sof_cyc;
+  bool iso_in_timed;
+
   // Track whether sof has been manually enabled
   bool sof_enabled;
 } _dcd;
+
+static void iso_dma_service(void);
 
 /*------------------------------------------------------------------*/
 /* Control / Bulk / Interrupt (CBI) Transfer
@@ -147,14 +209,48 @@ static void start_dma(volatile uint32_t* reg_startep) {
   // Therefore dma_pending is corrected right away
   if (no_dma) {
     atomic_flag_clear(&_dcd.dma_running);
+
+    // No END event follows, so an ISO request waiting for the channel would
+    // otherwise sit until the next SOF. Service it here instead. Callers run
+    // in the interrupt or with the USBD interrupt masked.
+    if (_dcd.iso_dma_req) {
+      iso_dma_service();
+    }
   }
 }
 
+// True in the stretch just before the next SOF while an ISO IN payload is
+// staged; a CBI transfer started now would push that payload past the IN
+// token. Reads only interrupt-owned state that a stale value cannot break.
+static bool cbi_dma_hold(void) {
+  if ((NRF_USBD->EPINEN & USBD_EPINEN_ISOIN_Msk) == 0) return false;
+
+  xfer_td_t const* xfer = &_dcd.xfer[EP_ISO_NUM][TUSB_DIR_IN];
+  if (!xfer->started || xfer->iso_in_transfer_ready) return false;
+
+  uint32_t const us = CYC_TO_US(DWT->CYCCNT - _dcd.iso_sof_cyc);
+  if (us < USB_FRAME_US - ISO_SOF_GUARD_US || us >= USB_FRAME_US + ISO_SOF_GUARD_SLACK_US) {
+    return false;
+  }
+  _dcd.iso_diag[ISO_DIAG_CBI_HELD]++;
+  return true;
+}
+
+// The channel claim and the task write stay together. In task context the
+// USBD interrupt is masked across both, otherwise the SOF handler can find
+// the channel claimed with no transfer running and wait for an END event
+// that is not coming while the claimer sits preempted.
 static void edpt_dma_start(volatile uint32_t* reg_startep) {
-  if (atomic_flag_test_and_set(&_dcd.dma_running)) {
-    usbd_defer_func((osal_task_func_t)(uintptr_t ) edpt_dma_start, (void*) (uintptr_t) reg_startep, is_in_isr());
+  bool const in_isr = is_in_isr();
+  bool const no_dma = (reg_startep == &NRF_USBD->TASKS_EP0STATUS) || (reg_startep == &NRF_USBD->TASKS_EP0RCVOUT);
+
+  if (!in_isr) NVIC_DisableIRQ(USBD_IRQn);
+  if ((!no_dma && cbi_dma_hold()) || atomic_flag_test_and_set(&_dcd.dma_running)) {
+    if (!in_isr) NVIC_EnableIRQ(USBD_IRQn);
+    usbd_defer_func((osal_task_func_t)(uintptr_t ) edpt_dma_start, (void*) (uintptr_t) reg_startep, in_isr);
   } else {
     start_dma(reg_startep);
+    if (!in_isr) NVIC_EnableIRQ(USBD_IRQn);
   }
 }
 
@@ -179,49 +275,32 @@ static void xact_out_dma_wrapper(void* epnum) {
   xact_out_dma((uint8_t) ((uintptr_t) epnum));
 }
 
-// Start DMA to move data from Endpoint -> RAM
+// Start DMA to move data from Endpoint -> RAM (CBI endpoints only; ISO OUT is
+// scheduled by iso_dma_service)
 static void xact_out_dma(uint8_t epnum) {
   xfer_td_t* xfer = get_td(epnum, TUSB_DIR_OUT);
   uint32_t xact_len;
+  bool const in_isr = is_in_isr();
 
   // DMA can't be active during read of SIZE.EPOUT or SIZE.ISOOUT, so try to lock,
   // If already running defer call regardless if it was called from ISR or task,
-  if (atomic_flag_test_and_set(&_dcd.dma_running)) {
-    usbd_defer_func((osal_task_func_t) xact_out_dma_wrapper, (void*) (uint32_t) epnum, is_in_isr());
+  // Same claim-to-start masking as edpt_dma_start() in task context.
+  if (!in_isr) NVIC_DisableIRQ(USBD_IRQn);
+  if (cbi_dma_hold() || atomic_flag_test_and_set(&_dcd.dma_running)) {
+    if (!in_isr) NVIC_EnableIRQ(USBD_IRQn);
+    usbd_defer_func((osal_task_func_t) xact_out_dma_wrapper, (void*) (uint32_t) epnum, in_isr);
     return;
   }
-  if (epnum == EP_ISO_NUM) {
-    xact_len = NRF_USBD->SIZE.ISOOUT;
 
-    // SIZE == 0 means no ISO OUT packet was present for the previous frame.
-    // A real zero-length ISO packet is reported with the dedicated ZERO bit.
-    if (xact_len == 0) {
-      atomic_flag_clear(&_dcd.dma_running);
-    } else {
-      if (xact_len & USBD_SIZE_ISOOUT_ZERO_Msk) {
-        xact_len = 0;
-      }
+  // limit xact len to remaining length
+  xact_len = tu_min16((uint16_t) NRF_USBD->SIZE.EPOUT[epnum], xfer->total_len - xfer->actual_len);
 
-      if (xfer->started) {
-        // Trigger DMA move data from Endpoint -> SRAM
-        NRF_USBD->ISOOUT.PTR = (uint32_t) xfer->buffer;
-        NRF_USBD->ISOOUT.MAXCNT = xact_len;
+  // Trigger DMA move data from Endpoint -> SRAM
+  NRF_USBD->EPOUT[epnum].PTR = (uint32_t) xfer->buffer;
+  NRF_USBD->EPOUT[epnum].MAXCNT = xact_len;
 
-        start_dma(&NRF_USBD->TASKS_STARTISOOUT);
-      } else {
-        atomic_flag_clear(&_dcd.dma_running);
-      }
-    }
-  } else {
-    // limit xact len to remaining length
-    xact_len = tu_min16((uint16_t) NRF_USBD->SIZE.EPOUT[epnum], xfer->total_len - xfer->actual_len);
-
-    // Trigger DMA move data from Endpoint -> SRAM
-    NRF_USBD->EPOUT[epnum].PTR = (uint32_t) xfer->buffer;
-    NRF_USBD->EPOUT[epnum].MAXCNT = xact_len;
-
-    start_dma(&NRF_USBD->TASKS_STARTEPOUT[epnum]);
-  }
+  start_dma(&NRF_USBD->TASKS_STARTEPOUT[epnum]);
+  if (!in_isr) NVIC_EnableIRQ(USBD_IRQn);
 }
 
 // Prepare for a CBI transaction IN, call at the start
@@ -238,14 +317,90 @@ static void xact_in_dma(uint8_t epnum) {
   edpt_dma_start(&NRF_USBD->TASKS_STARTEPIN[epnum]);
 }
 
-static void xact_iso_in_dma(void) {
-  xfer_td_t* xfer = get_td(EP_ISO_NUM, TUSB_DIR_IN);
-  uint16_t const xact_len = tu_min16(xfer->total_len - xfer->actual_len, xfer->mps);
+// True while some EasyDMA END event is latched and not yet handled, which is
+// the moment the shared channel is about to be released.
+static bool dma_end_pending(void) {
+  for (unsigned i = 0; i < 8; i++) {
+    if (NRF_USBD->EVENTS_ENDEPIN[i] || NRF_USBD->EVENTS_ENDEPOUT[i]) return true;
+  }
+  return NRF_USBD->EVENTS_ENDISOIN || NRF_USBD->EVENTS_ENDISOOUT;
+}
 
-  NRF_USBD->ISOIN.PTR = (uint32_t) xfer->buffer;
-  NRF_USBD->ISOIN.MAXCNT = xact_len;
+// Start the pending ISO EasyDMA requests, IN before OUT, as soon as the shared
+// channel is free. Called with the USBD interrupt active or masked, whenever
+// the channel may have become free: after an END event, at SOF, and after an
+// EP0 task that holds the channel without producing an END event. A request
+// that cannot be started yet stays pending and is retried at the next call.
+static void iso_dma_service(void) {
+  while (_dcd.iso_dma_req != 0) {
+    if (atomic_flag_test_and_set(&_dcd.dma_running)) {
+      // Channel busy: the END event of the running transfer retries.
+      return;
+    }
 
-  edpt_dma_start(&NRF_USBD->TASKS_STARTISOIN);
+    if (_dcd.iso_dma_req & ISO_DMA_REQ_IN) {
+      xfer_td_t* xfer = get_td(EP_ISO_NUM, TUSB_DIR_IN);
+      _dcd.iso_dma_req &= (uint8_t) ~ISO_DMA_REQ_IN;
+
+      if (xfer->started && !xfer->iso_in_transfer_ready) {
+        uint16_t const xact_len = tu_min16(xfer->total_len - xfer->actual_len, xfer->mps);
+
+        xfer->iso_in_transfer_ready = true;
+        NRF_USBD->ISOIN.PTR = (uint32_t) xfer->buffer;
+        NRF_USBD->ISOIN.MAXCNT = xact_len;
+        start_dma(&NRF_USBD->TASKS_STARTISOIN);
+
+        if (_dcd.iso_in_timed) {
+          uint32_t const us = CYC_TO_US(DWT->CYCCNT - _dcd.iso_sof_cyc);
+          if (us > _dcd.iso_diag[ISO_DIAG_IN_START_MAX]) _dcd.iso_diag[ISO_DIAG_IN_START_MAX] = us;
+        }
+        return;
+      }
+
+      // Stage was withdrawn (alternate setting change) since the request.
+      atomic_flag_clear(&_dcd.dma_running);
+      continue;
+    }
+
+    // ISO_DMA_REQ_OUT: move the frame received in the previous interval from
+    // the endpoint buffer to RAM. SIZE.ISOOUT is read only while the channel is
+    // idle and held here. SIZE == 0 means no ISO OUT packet was present in the
+    // previous frame; a real zero-length packet is reported with the ZERO bit.
+    {
+      xfer_td_t* xfer = get_td(EP_ISO_NUM, TUSB_DIR_OUT);
+      uint32_t xact_len = NRF_USBD->SIZE.ISOOUT;
+
+      _dcd.iso_dma_req &= (uint8_t) ~ISO_DMA_REQ_OUT;
+
+      if (xact_len == 0 || !xfer->started) {
+        _dcd.iso_diag[xact_len == 0 ? ISO_DIAG_OUT_IDLE : ISO_DIAG_OUT_UNARMED]++;
+        atomic_flag_clear(&_dcd.dma_running);
+        continue;
+      }
+
+      if (xact_len & USBD_SIZE_ISOOUT_ZERO_Msk) {
+        xact_len = 0;
+      }
+      if (xact_len > xfer->total_len) {
+        // Host frame larger than the armed buffer: keep the copy inside it.
+        xact_len = xfer->total_len;
+      }
+
+      NRF_USBD->ISOOUT.PTR = (uint32_t) xfer->buffer;
+      NRF_USBD->ISOOUT.MAXCNT = xact_len;
+      start_dma(&NRF_USBD->TASKS_STARTISOOUT);
+      return;
+    }
+  }
+}
+
+// Copy the ISO scheduling counters for the application diag request.
+void dcd_nrf5x_iso_diag_get(uint32_t counts[ISO_DIAG_COUNT]) {
+  NVIC_DisableIRQ(USBD_IRQn);
+  for (unsigned i = 0; i < ISO_DIAG_COUNT; i++) {
+    counts[i] = _dcd.iso_diag[i];
+  }
+  NVIC_EnableIRQ(USBD_IRQn);
 }
 
 //--------------------------------------------------------------------+
@@ -255,6 +410,11 @@ bool dcd_init(uint8_t rhport, const tusb_rhport_init_t* rh_init) {
   (void) rhport;
   (void) rh_init;
   TU_LOG2("dcd init\r\n");
+
+  // Free-running cycle counter for the ISO latency figures.
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
   return true;
 }
 
@@ -402,6 +562,7 @@ void dcd_edpt_close_all(uint8_t rhport) {
   NRF_USBD->TASKS_STARTISOOUT = 0;
 
   tu_memclr(_dcd.xfer[EP_ISO_NUM], 2 * sizeof(xfer_td_t));
+  _dcd.iso_dma_req = 0;
 
   // de-activate all non-control
   NRF_USBD->EPOUTEN = 1UL;
@@ -427,11 +588,15 @@ bool dcd_edpt_iso_activate(uint8_t rhport, const tusb_desc_endpoint_t *desc_ep) 
   TU_ASSERT(epnum == EP_ISO_NUM);
 
   // A transfer armed before SET_INTERFACE survives to here (this port has no dcd close); usbd has
-  // just reset the endpoint's claim/busy state, so drop the stale descriptor too — otherwise the
-  // class's next arm trips TU_ASSERT(!xfer->started) in dcd_edpt_xfer().
+  // just reset the endpoint's claim/busy state, so drop the stale descriptor too - otherwise the
+  // class's next arm trips TU_ASSERT(!xfer->started) in dcd_edpt_xfer(). The pending DMA request
+  // for this direction goes with it; the interrupt handler owns that byte, so mask it here.
+  NVIC_DisableIRQ(USBD_IRQn);
+  _dcd.iso_dma_req &= (uint8_t) ~(dir == TUSB_DIR_OUT ? ISO_DMA_REQ_OUT : ISO_DMA_REQ_IN);
   _dcd.xfer[epnum][dir].started               = false;
   _dcd.xfer[epnum][dir].data_received         = false;
   _dcd.xfer[epnum][dir].iso_in_transfer_ready = false;
+  NVIC_EnableIRQ(USBD_IRQn);
 
   _dcd.xfer[epnum][dir].mps = tu_edpt_packet_size(desc_ep);
 
@@ -537,6 +702,14 @@ void dcd_edpt_stall(uint8_t rhport, uint8_t ep_addr) {
       xfer->data_received = false;
       xact_out_dma(epnum);
     }
+
+    // Stall aborts the transfer armed on this endpoint. The class drivers rely
+    // on that for SET_INTERFACE (stall then clear stall, then re-arm): usbd
+    // drops its busy state on the clear, and dcd_edpt_xfer() rejects an
+    // endpoint that still reports a transfer in flight. Without this an OUT
+    // transfer left waiting for a packet across an alternate setting change
+    // trips TU_ASSERT(!xfer->started) on the next arm.
+    xfer->started = false;
   }
 
   __ISB();
@@ -605,8 +778,154 @@ void dcd_int_handler(uint8_t rhport) {
 
   volatile uint32_t* regevt = &NRF_USBD->EVENTS_USBRESET;
 
+  enum {
+    ISO_EVT_MASK = USBD_INTEN_ENDISOIN_Msk | USBD_INTEN_ENDISOOUT_Msk | USBD_INTEN_SOF_Msk
+  };
+
+  // ISO is frame timed: the ISO IN payload must be in the endpoint buffer
+  // before the host's IN token, which can follow SOF closely. Pick up the
+  // three ISO events ahead of the generic scan and finish the whole ISO turn
+  // (retire, stage, request, start DMA) before anything else runs. A bus
+  // reset takes precedence and the generic path handles that interrupt.
+  if ((inten & ISO_EVT_MASK) != 0 && NRF_USBD->EVENTS_USBRESET == 0) {
+    uint32_t iso_status = 0;
+
+    if ((inten & USBD_INTEN_ENDISOIN_Msk) && NRF_USBD->EVENTS_ENDISOIN) {
+      NRF_USBD->EVENTS_ENDISOIN = 0;
+      iso_status |= USBD_INTEN_ENDISOIN_Msk;
+    }
+    if ((inten & USBD_INTEN_ENDISOOUT_Msk) && NRF_USBD->EVENTS_ENDISOOUT) {
+      NRF_USBD->EVENTS_ENDISOOUT = 0;
+      iso_status |= USBD_INTEN_ENDISOOUT_Msk;
+    }
+    if ((inten & USBD_INTEN_SOF_Msk) && NRF_USBD->EVENTS_SOF) {
+      NRF_USBD->EVENTS_SOF = 0;
+      iso_status |= USBD_INTEN_SOF_Msk;
+      _dcd.iso_sof_cyc = DWT->CYCCNT;
+    }
+    __ISB();
+    __DSB();
+
+    // Release the shared EasyDMA channel before the ISO retirements and SOF.
+    // The ISO transfers are retired first so their AMOUNT registers are read
+    // before iso_dma_service() can start the next EP8 transfer, and so the ISO
+    // class xfer_isr() callback can stage the next IN frame and re-arm OUT
+    // before a SOF latched in the same interrupt raises the new requests.
+    if (iso_status & (USBD_INTEN_ENDISOIN_Msk | USBD_INTEN_ENDISOOUT_Msk)) {
+      edpt_dma_end();
+    }
+
+    // ISOIN: EasyDMA finished moving the staged frame into the endpoint
+    // buffer. The RAM buffer is now reusable, so retire this submission now;
+    // any next submission remains staged until the next SOF.
+    if (iso_status & USBD_INTEN_ENDISOIN_Msk) {
+      xfer_td_t* xfer = get_td(EP_ISO_NUM, TUSB_DIR_IN);
+
+      xfer->actual_len = NRF_USBD->ISOIN.AMOUNT;
+      xfer->iso_in_transfer_ready = false;
+      xfer->started = false;
+
+      if (_dcd.iso_in_timed) {
+        uint32_t const us = CYC_TO_US(DWT->CYCCNT - _dcd.iso_sof_cyc);
+        _dcd.iso_in_timed = false;
+        if (us > _dcd.iso_diag[ISO_DIAG_IN_END_MAX]) _dcd.iso_diag[ISO_DIAG_IN_END_MAX] = us;
+        if (us > ISO_IN_END_SLOW_US) _dcd.iso_diag[ISO_DIAG_IN_END_SLOW]++;
+      }
+
+      dcd_event_xfer_complete(0, EP_ISO_NUM | TUSB_DIR_IN_MASK,
+                              xfer->actual_len, XFER_RESULT_SUCCESS, true);
+    }
+
+    // ISOOUT: the previous frame is in RAM. Retire it before SOF so the class
+    // consumes and re-arms the buffer before another EP8 OUT DMA is requested.
+    if (iso_status & USBD_INTEN_ENDISOOUT_Msk) {
+      xfer_td_t* xfer = get_td(EP_ISO_NUM, TUSB_DIR_OUT);
+      uint16_t const xact_len = (uint16_t) NRF_USBD->ISOOUT.AMOUNT;
+
+      xfer->actual_len = xact_len;
+      xfer->total_len = xact_len;
+      xfer->started = false;
+      dcd_event_xfer_complete(0, EP_ISO_NUM,
+                              xact_len, XFER_RESULT_SUCCESS, true);
+    }
+
+    if (iso_status & USBD_INTEN_SOF_Msk) {
+      bool iso_enabled = false;
+      uint8_t iso_req = 0;
+
+      // A request left over from the previous frame means that frame was
+      // not serviced in time: count it, the new request supersedes it.
+      if (_dcd.iso_dma_req & ISO_DMA_REQ_IN)  _dcd.iso_diag[ISO_DIAG_IN_CARRY]++;
+      if (_dcd.iso_dma_req & ISO_DMA_REQ_OUT) _dcd.iso_diag[ISO_DIAG_OUT_CARRY]++;
+
+      // ISOIN gets first claim on the single EasyDMA channel at each service
+      // interval. A staged payload was provided by the class before this SOF.
+      if (NRF_USBD->EPINEN & USBD_EPINEN_ISOIN_Msk) {
+        iso_enabled = true;
+
+        xfer_td_t* xfer = get_td(EP_ISO_NUM, TUSB_DIR_IN);
+        if (xfer->started && !xfer->iso_in_transfer_ready) {
+          iso_req |= ISO_DMA_REQ_IN;
+        } else if (!xfer->started) {
+          _dcd.iso_diag[ISO_DIAG_IN_IDLE]++;
+        }
+      }
+
+      // ISOOUT: transfer the data gathered in the previous frame from the
+      // endpoint buffer to RAM, unless that frame failed its CRC check.
+      if (NRF_USBD->EPOUTEN & USBD_EPOUTEN_ISOOUT_Msk) {
+        iso_enabled = true;
+        if (NRF_USBD->EVENTS_USBEVENT == 0 ||
+            (NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_ISOOUTCRC_Msk) == 0) {
+          iso_req |= ISO_DMA_REQ_OUT;
+        }
+      }
+
+      _dcd.iso_dma_req |= iso_req;
+      _dcd.iso_in_timed = (iso_req & ISO_DMA_REQ_IN) != 0;
+
+      // Start the IN transfer now; OUT follows at its ENDISOIN.
+      iso_dma_service();
+      if (_dcd.iso_dma_req & ISO_DMA_REQ_IN) {
+        // A CBI transfer holds the channel. Its END is a few microseconds
+        // away; wait for it here instead of taking the interrupt round trip,
+        // so the ISO IN payload is in the endpoint buffer before the host's
+        // IN token. The END event itself is handled by the generic scan
+        // below (or the next interrupt for an ISO END), which releases the
+        // channel and starts the request.
+        unsigned n = 0;
+        _dcd.iso_diag[ISO_DIAG_IN_WAIT]++;
+        while ((_dcd.iso_dma_req & ISO_DMA_REQ_IN) && !dma_end_pending() &&
+               NRF_USBD->EVENTS_USBRESET == 0) {
+          if (++n >= ISO_DMA_SPIN_LIMIT) {
+            _dcd.iso_diag[ISO_DIAG_IN_SPIN_OUT]++;
+            break;
+          }
+          // The channel may also be released without an END event (EP0
+          // status tasks); retry the start each pass.
+          iso_dma_service();
+        }
+      }
+
+      if (!iso_enabled && !_dcd.sof_enabled) {
+        // SOF interrupt not manually enabled and ISO endpoint is not used,
+        // SOF is only enabled one-time for remote wakeup so we disable it now
+
+        NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
+      }
+
+      const uint32_t frame = NRF_USBD->FRAMECNTR;
+      dcd_event_sof(0, frame, true);
+      //dcd_event_bus_signal(0, DCD_EVENT_SOF, true);
+    } else {
+      // An ISO END without SOF: the channel just freed, start the request
+      // that was waiting for it (normally the OUT read behind the IN write).
+      iso_dma_service();
+    }
+  }
+
   for (uint8_t i = 0; i < USBD_INTEN_EPDATA_Pos + 1; i++) {
-    if (tu_bit_test(inten, i) && regevt[i]) {
+    if (tu_bit_test(inten, i) && !tu_bit_test(ISO_EVT_MASK, i) && regevt[i]) {
       int_status |= TU_BIT(i);
 
       // event clear
@@ -621,76 +940,11 @@ void dcd_int_handler(uint8_t rhport) {
     dcd_event_bus_reset(0, TUSB_SPEED_FULL, true);
   }
 
-  // Release the shared EasyDMA channel before processing ENDISOIN and SOF.
-  // This allows an ISO class xfer_isr() callback to stage the next IN frame,
-  // then lets the same IRQ's SOF admit it immediately.
+  // A CBI transfer ended: release the channel and hand it to a waiting ISO
+  // request before the CBI paths below can defer their own start to the task.
   if (int_status & EDPT_END_ALL_MASK) {
     edpt_dma_end();
-  }
-
-  // ISOIN: EasyDMA finished moving the staged frame into the endpoint
-  // buffer. The RAM buffer is now reusable, so retire this submission now;
-  // any next submission remains staged until the next SOF.
-  if (int_status & USBD_INTEN_ENDISOIN_Msk) {
-    xfer_td_t* xfer = get_td(EP_ISO_NUM, TUSB_DIR_IN);
-
-    xfer->actual_len = NRF_USBD->ISOIN.AMOUNT;
-    xfer->iso_in_transfer_ready = false;
-    xfer->started = false;
-    dcd_event_xfer_complete(0, EP_ISO_NUM | TUSB_DIR_IN_MASK,
-                            xfer->actual_len, XFER_RESULT_SUCCESS, true);
-  }
-
-  // Retire ISO OUT before SOF as well. If ENDISOOUT and the next SOF are
-  // latched together, the class must consume/re-arm the previous frame before
-  // SOF is allowed to schedule another EP8 OUT DMA.
-  if (int_status & USBD_INTEN_ENDISOOUT_Msk) {
-    xfer_td_t* xfer = get_td(EP_ISO_NUM, TUSB_DIR_OUT);
-    uint16_t const xact_len = (uint16_t) NRF_USBD->ISOOUT.AMOUNT;
-
-    xfer->actual_len = xact_len;
-    xfer->total_len = xact_len;
-    xfer->started = false;
-    dcd_event_xfer_complete(0, EP_ISO_NUM,
-                            xact_len, XFER_RESULT_SUCCESS, true);
-  }
-
-  if (int_status & USBD_INTEN_SOF_Msk) {
-    bool iso_enabled = false;
-
-    // ISOIN gets first claim on the single EasyDMA channel at each service
-    // interval. A staged payload was provided by the class before this SOF.
-    if (NRF_USBD->EPINEN & USBD_EPINEN_ISOIN_Msk) {
-      iso_enabled = true;
-
-      xfer_td_t* xfer = get_td(EP_ISO_NUM, TUSB_DIR_IN);
-      if (xfer->started && !xfer->iso_in_transfer_ready) {
-        xfer->iso_in_transfer_ready = true;
-        xact_iso_in_dma();
-      }
-    }
-
-    // ISOOUT: Transfer data gathered in previous frame from buffer to RAM.
-    // If IN owns EasyDMA above, xact_out_dma() defers through TinyUSB's
-    // existing single-channel scheduler.
-    if (NRF_USBD->EPOUTEN & USBD_EPOUTEN_ISOOUT_Msk) {
-      iso_enabled = true;
-      if ((int_status & USBD_INTEN_USBEVENT_Msk) == 0 ||
-          (NRF_USBD->EVENTCAUSE & USBD_EVENTCAUSE_ISOOUTCRC_Msk) == 0) {
-        xact_out_dma(EP_ISO_NUM);
-      }
-    }
-
-    if (!iso_enabled && !_dcd.sof_enabled) {
-      // SOF interrupt not manually enabled and ISO endpoint is not used,
-      // SOF is only enabled one-time for remote wakeup so we disable it now
-
-      NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
-    }
-
-    const uint32_t frame = NRF_USBD->FRAMECNTR;
-    dcd_event_sof(0, frame, true);
-    //dcd_event_bus_signal(0, DCD_EVENT_SOF, true);
+    iso_dma_service();
   }
 
   if (int_status & USBD_INTEN_USBEVENT_Msk) {
@@ -800,13 +1054,15 @@ void dcd_int_handler(uint8_t rhport) {
           // nRF auto accept next Bulk/Interrupt OUT packet
           // nothing to do
         }
-      } else {
-        TU_ASSERT(xfer->started,);
+      } else if (xfer->started) {
         xfer->total_len = xfer->actual_len;
         xfer->started = false;
 
         // CBI OUT complete
         dcd_event_xfer_complete(0, epnum, xfer->actual_len, XFER_RESULT_SUCCESS, true);
+      } else {
+        // Transfer aborted by a stall while its DMA was in flight: nothing
+        // to report, the class re-arms after clear stall.
       }
     }
 

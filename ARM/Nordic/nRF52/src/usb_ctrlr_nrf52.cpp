@@ -165,30 +165,32 @@ static void nRFUsbdHostResume(void);
 
 
 // UsbCtrlrIsoInit pulls in the optional ISO archive member, whose strong
-// definitions replace these defaults. Keep IsoStart undefined when absent so
-// regular DMA skips the call entirely.
-__attribute__((weak)) bool nRFUsbdIsoFinishDma(void)
+// definitions replace these defaults. IsoStart stays undefined when absent;
+// IsoOpen remains false, so the scheduler never calls the unresolved weak hook.
+__attribute__((weak)) void nRFUsbdIsoComplete(uint8_t)
 {
-	return false;
 }
 
 __attribute__((weak)) void nRFUsbdIsoEpClose(bool)
 {
 }
 
-__attribute__((weak)) bool UsbCtrlrIsoService(int, uint8_t, uint16_t)
+__attribute__((weak)) void nRFUsbdIsoSofMark(void)
+{
+}
+
+__attribute__((weak)) bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *, uint16_t)
 {
 	return false;
 }
 
-static __attribute__((noinline))
+static inline
 nRFUsbEpReg_t *nRFUsbGetEpReg(uint8_t EpNum, uint8_t Dir)
 {
 	return &s_Usbd.EpReg[EpNum - 1U][Dir];
 }
 
-// Internal callers already know endpoint number and direction. Form the USB
-// address only for the registered callback.
+// Internal callers already know endpoint number and direction.
 __attribute__((noinline))
 void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
 	UsbCtrlrEvtType_t Event, uint16_t Length)
@@ -462,33 +464,36 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void)
 static __attribute__((noinline))
 void nRFUsbdEpHwEnable(uint8_t EpNum, bool In, bool Enable)
 {
-	// Interrupt bits index the event registers from EVENTS_USBRESET.
-	const uint8_t endBit = In ? USBD_INTEN_ENDEPIN0_Pos + EpNum :
-		USBD_INTEN_ENDEPOUT0_Pos + EpNum;
-	volatile uint32_t *pEnd = (volatile uint32_t *)(
-		(uintptr_t)&NRF_USBD->EVENTS_USBRESET + endBit * sizeof(uint32_t));
 	volatile uint32_t *pEnable = (volatile uint32_t *)
 		((uintptr_t)&NRF_USBD->EPINEN + (!In) *
 		 (offsetof(NRF_USBD_Type, EPOUTEN) - offsetof(NRF_USBD_Type, EPINEN)));
 	const uint32_t msk = 1UL << EpNum;
 
-	if (Enable)
+	// Both directions interrupt on their END event. The application-level
+	// IN completion still rides EPDATA (host consumed), but the shared
+	// EasyDMA channel must be released the moment the DMA finishes: a
+	// regular DMA in flight at SOF otherwise holds the channel until the
+	// next EPDATA, and the ISO frame staged at that SOF misses its token.
+	// Same reason a control response could sit behind it during
+	// enumeration. nrfx and TinyUSB both enable ENDEPIN0-7.
 	{
-		*pEnd = 0U;
-		// Regular IN completion is host-consumed EPDATA, so only OUT needs
-		// an END interrupt.
-		if (!In)
+		volatile uint32_t *pEnd = In ?
+			&NRF_USBD->EVENTS_ENDEPIN[EpNum] : &NRF_USBD->EVENTS_ENDEPOUT[EpNum];
+		const uint32_t endMsk = (In ? USBD_INTEN_ENDEPIN0_Msk :
+			USBD_INTEN_ENDEPOUT0_Msk) << EpNum;
+		if (Enable)
 		{
-			NRF_USBD->INTENSET = 1UL << endBit;
+			*pEnd = 0U;
+			NRF_USBD->INTENSET = endMsk;
 		}
+		else
+			NRF_USBD->INTENCLR = endMsk;
+	}
+
+	if (Enable)
 		*pEnable |= msk;
-	}
 	else
-	{
-		NRF_USBD->INTENCLR = 1UL << endBit;
 		*pEnable &= ~msk;
-		*pEnd = 0U;
-	}
 }
 
 // Initialize the active event fields; UsbDevProcessEvent reads only that
@@ -519,63 +524,61 @@ static inline __attribute__((always_inline)) void nRFUsbdDmaLock(void)
 }
 
 __attribute__((noinline))
+void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
+	volatile uint32_t *pEnd)
+{
+	*pEnd = 0U;
+	__DSB();
+	*pTask = 1U;
+	__DSB();
+}
+
+__attribute__((noinline))
 void nRFUsbdDmaUnlock(void)
 {
 	NRFX_USBD_EASYDMA_BUSY_REG = NRFX_USBD_EASYDMA_BUSY_REG_CLEAR;
 	__DSB();
 }
 
-// Retire one regular-endpoint DMA identified by its EPSTATUS bit index.
-// Returns false while its END event has not fired. Release the queue entry
-// only after DMA has finished reading it, including inline alignment scratch.
-// Keep the channel locked for the caller's next DMA or explicit release.
-static __attribute__((noinline)) bool nRFUsbdRetireDma(uint32_t StatusBit)
+// Close paths already exclude interrupts through retirement and shutdown.
+static void nRFUsbdDmaWait(uint32_t mask)
 {
-	const uint8_t epNum = (uint8_t)(StatusBit & 7U);
-	volatile uint32_t *pEnd = StatusBit >= 16U ?
-		&NRF_USBD->EVENTS_ENDEPOUT[epNum] :
-		&NRF_USBD->EVENTS_ENDEPIN[epNum];
 
-	if (*pEnd == 0U)
+	if (nRFUsbdDmaActive())
 	{
-		return false;
-	}
-
-	*pEnd = 0U;
-	NRF_USBD->EPSTATUS = 1UL << StatusBit;
-	(void)CFifoGet(epNum == 0U ? s_Usbd.hEp0Que : s_Usbd.hQue);
-	// Complete END and EPSTATUS writes before the OUT callback or next DMA.
-	__DSB();
-	return true;
-}
-
-/** Retire active DMA before a foreground stop or endpoint close. */
-void nRFUsbdDmaWait(void)
-{
-	while (nRFUsbdDmaActive())
-	{
-		if (NRF_USBD->EVENTS_USBRESET != 0U)
-		{
-			nRFUsbdDmaUnlock();
+		const uint32_t dmastatus = NRF_USBD->EPSTATUS;
+		if ((dmastatus & mask) == 0U)
 			return;
+		if (dmastatus != 0U)
+		{
+			const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
+			volatile uint32_t *pend;
+			if (epno == 8U)
+				pend = &NRF_USBD->EVENTS_ENDISOIN;
+			else if (epno == 24U)
+				pend = &NRF_USBD->EVENTS_ENDISOOUT;
+			else
+				pend = epno >= 16U ? &NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
+					&NRF_USBD->EVENTS_ENDEPIN[epno];
+
+			while (*pend == 0U && NRF_USBD->EVENTS_USBRESET == 0U)
+			{
+			}
+
+			if (*pend != 0U)
+			{
+				*pend = 0U;
+				NRF_USBD->EPSTATUS = dmastatus;
+				__DSB();
+
+				if ((epno & 7U) != 0U)
+					(void)CFifoGet(s_Usbd.hQue);
+			}
 		}
 
-		const uint32_t dmaStatus = NRF_USBD->EPSTATUS & 0x00FF00FFUL;
-		const uint32_t primask = __get_PRIMASK();
-		__disable_irq();
-		bool complete = false;
-		if (dmaStatus != 0U)
-		{
-			complete = nRFUsbdRetireDma(31U - (uint32_t)__CLZ(dmaStatus));
-		}
-		else
-		{
-			complete = nRFUsbdIsoFinishDma();
-		}
-		if (complete)
-			nRFUsbdDmaUnlock();
-		__set_PRIMASK(primask);
+		nRFUsbdDmaUnlock();
 	}
+
 }
 
 // Program and start one staged EP0 IN packet, arming the status-stage short
@@ -593,19 +596,10 @@ static __attribute__((noinline)) void nRFUsbdEp0InStart(const nRFEPPkt_t *p)
 // The SOF interrupt is shared by core protocol timing and suspend-time resume
 // detection. Acquire clears a stale event first; release drops it only when
 // neither needs it anymore.
-__attribute__((noinline)) void nRFUsbdSofAcquire(void)
+static void nRFUsbdSofAcquire(void)
 {
 	NRF_USBD->EVENTS_SOF = 0U;
 	NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
-}
-
-__attribute__((noinline)) void nRFUsbdSofRelease(void)
-{
-	if (!s_Usbd.SofEnabled &&
-		(s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U)
-	{
-		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
-	}
 }
 
 /**
@@ -613,8 +607,7 @@ __attribute__((noinline)) void nRFUsbdSofRelease(void)
  * direction stay separate in the scheduler; what an OUT endpoint actually
  * holds is only known now, so that is read here.
  */
-static inline __attribute__((always_inline))
-void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
+static void nRFUsbdStartDmaNow(const nRFUsbdQue_t *pQue)
 {
 	const uint8_t epNum = pQue->EpNum;
 	const bool isIn = pQue->Dir != NRFX_USBD_QUE_OUT;
@@ -656,39 +649,76 @@ static inline __attribute__((always_inline)) bool nRFUsbdDmaAllowed(void)
 	return (s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U;
 }
 
-// Callers check the power gate and own the channel lock. EP0 starts
-// separately in its submission path or the ISR completion handoff.
-static __attribute__((noinline)) void nRFUsbdStartQueuedDma(void)
+// The caller owns the DMA channel. Submission checks busy/suspend before
+// acquiring it; ISR retirement retains ownership for immediate handoff.
+static __attribute__((noinline)) void nRFUsbdStartQueuedDma(bool ep0out)
 {
-	if (nRFUsbdIsoStart != nullptr && nRFUsbdIsoStart())
+	// ISO first: it is the only transfer with a deadline. The IN data must
+	// be in the endpoint buffer before the host's IN token, which follows
+	// SOF by tens of microseconds, and the OUT data must be read before the
+	// next SOF. An EP0 packet that yields here is delayed by one ISO DMA.
+	if (s_Usbd.IsoOpen && s_Usbd.IsoDataFlag != 0U && nRFUsbdIsoStart())
 		return;
-	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPeek(s_Usbd.hQue);
+
+	// EP0 OUT data-ready next.
+	if (ep0out)
+	{
+		NRF_USBD->EVENTS_EP0DATADONE = 0U;
+		NRF_USBD->EPOUT[0].PTR = (uint32_t)(uintptr_t)s_Usbd.Ep0Bounce;
+		NRF_USBD->EPOUT[0].MAXCNT = NRFX_USBD_MAX_PACKET_SIZE;
+		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPOUT[0],
+			&NRF_USBD->EVENTS_ENDEPOUT[0]);
+		return;
+	}
+
+	// An EP0 IN response queued behind another DMA is next.
+	const nRFEPPkt_t *pEp0 =
+		(const nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
+	if (pEp0 != NULL)
+	{
+		nRFUsbdEp0InStart(pEp0);
+		return;
+	}
+
+	nRFUsbdQue_t *pQue;
+	while ((pQue = (nRFUsbdQue_t *)CFifoPeek(s_Usbd.hQue)) != NULL &&
+		pQue->EpNum == 0U)
+		(void)CFifoGet(s_Usbd.hQue);
 	if (pQue != NULL)
 	{
 		nRFUsbdStartDmaNow(pQue);
 		return;
 	}
+
 	nRFUsbdDmaUnlock();
 }
 
 
-// Submission acquires an idle channel; completion retains the existing lock.
-__attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
+// Callers exclude interrupts or run in the USB ISR. Retirement already
+// owns the channel and bypasses this acquisition path.
+static inline bool nRFUsbdAcquireDma(void)
 {
 	if (nRFUsbdDmaActive() || !nRFUsbdDmaAllowed())
+		return false;
+	nRFUsbdDmaLock();
+	return true;
+}
+
+__attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
+{
+	if (!nRFUsbdAcquireDma())
 		return;
 
-	nRFUsbdDmaLock();
-	nRFUsbdStartQueuedDma();
+	// EP0 OUT readiness is classified only by the ISR. Foreground buffer
+	// submission never consumes an endpoint event.
+	nRFUsbdStartQueuedDma(false);
 }
 
 static void nRFUsbdResetState(void)
 {
-	s_Usbd.SofEnabled = false;
-	s_Usbd.IsoOpen = false;
-	s_Usbd.IsoBusy = 0U;
-	s_Usbd.IsoInDmaLen = -1;
-
+	for (auto &endpoint : s_Usbd.EpReg)
+		for (auto &registration : endpoint)
+			++registration.Generation;
 	CFifoFlush(s_Usbd.hQue);
 	CFifoFlush(s_Usbd.hEp0Que);
 	s_Usbd.Flags = USBD_FLAG_MAC_AWAKE;
@@ -697,16 +727,51 @@ static void nRFUsbdResetState(void)
 	nRFUsbdDmaUnlock();
 }
 
+// A new SETUP supersedes whatever control transfer was in flight. Retire
+// any active EP0 DMA, disarm a staged IN packet the host never fetched, then
+// drop the old EP0 software state.
 static void nRFUsbdAbortEp0(void)
 {
-	const uint32_t state = DisableInterrupt();
-	CFifoFlush(s_Usbd.hEp0Que);
-	EnableInterrupt(state);
+	const uint32_t dmastatus = NRF_USBD->EPSTATUS & 0x00010001UL;
 
-	NRF_USBD->EVENTS_ENDEPIN[0] = 0;
-	NRF_USBD->EVENTS_ENDEPOUT[0] = 0;
-	NRF_USBD->EPDATASTATUS = (1UL << 0) | (1UL << 16);
-	(void)NRF_USBD->EPDATASTATUS;
+	if (dmastatus != 0U)
+	{
+		const bool in = dmastatus == 1UL;
+		volatile uint32_t *pend = in ?
+			&NRF_USBD->EVENTS_ENDEPIN[0] : &NRF_USBD->EVENTS_ENDEPOUT[0];
+
+		// The host has already sent a whole SETUP transaction since this
+		// DMA started, so END has fired in every real case. The loop only
+		// covers a SETUP racing the last microseconds of the transfer.
+		while (*pend == 0U && NRF_USBD->EVENTS_USBRESET == 0U)
+		{
+		}
+
+		if (*pend != 0U)
+		{
+			// IN packet staged but never acknowledged: it is still armed in
+			// the endpoint buffer and would answer the new request's first
+			// IN token. Disarm it the way nrfx usbd_ep_abort does for EPIN0.
+			if (in && NRF_USBD->EVENTS_EP0DATADONE == 0U)
+			{
+				NRFX_USBD_REG32(NRFX_USBD_ERRATA_166_REG_A) = 0x7B4UL;
+				NRFX_USBD_REG32(NRFX_USBD_ERRATA_166_REG_B) |= 1UL << 2;
+				(void)NRFX_USBD_REG32(NRFX_USBD_ERRATA_166_REG_B);
+			}
+
+			*pend = 0U;
+			NRF_USBD->EPSTATUS = dmastatus;
+			__DSB();
+			nRFUsbdDmaUnlock();
+		}
+	}
+
+	// Hardware DMA is now either unrelated to EP0 or retired. Drop only the
+	// superseded control-transfer software state.
+	CFifoFlush(s_Usbd.hEp0Que);
+	NRF_USBD->SHORTS = 0U;
+	NRF_USBD->EVENTS_EP0DATADONE = 0U;
+	(void)NRF_USBD->EVENTS_EP0DATADONE;
 }
 
 // ISR context only: this interrupt is the sole mutator of the wake state,
@@ -767,16 +832,14 @@ static void nRFUsbdTryRemoteWake(void)
 	NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
 }
 
+// Called only from the USB ISR. Foreground remote-wake updates already
+// exclude interrupts, so this transition needs no nested critical section.
 static void nRFUsbdHostResume(void)
 {
-	const uint32_t irqState = DisableInterrupt();
-	uint8_t flags = s_Usbd.Flags;
-
-	if ((flags & USBD_FLAG_SUSPENDED) == 0U)
-	{
-		EnableInterrupt(irqState);
+	if ((s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U)
 		return;
-	}
+
+	uint8_t flags = s_Usbd.Flags;
 
 	// A host resume cancels any device-initiated wake request. Keep SUSPENDED
 	// set until the peripheral is actually awake; that state alone gates DMA.
@@ -784,13 +847,11 @@ static void nRFUsbdHostResume(void)
 	if ((flags & USBD_FLAG_MAC_AWAKE) != 0U && UsbdIsForceNormal())
 	{
 		s_Usbd.Flags = flags & (uint8_t)~USBD_FLAG_SUSPENDED;
-		EnableInterrupt(irqState);
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
 		return;
 	}
 
 	s_Usbd.Flags = flags;
-	EnableInterrupt(irqState);
 	UsbdForceNormal();
 }
 
@@ -836,63 +897,17 @@ static void nRFUsbdBusReset(void)
 	nRFUsbdResetState();
 }
 
-static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
+// The queued generation identifies the endpoint lifetime, including events
+// already copied out of AppEvt when an ISR closes or resets the endpoint.
+static void nRFUsbdProcessQueuedEvent(uint32_t Evt, void *pContext)
 {
-	(void)pContext;
-
-	// This callback handles IN; the event carries only the endpoint number.
-	nRFUsbEpRegisteredEvent((uint8_t)Evt, 1U,
-		USB_CTRLR_EVT_XFER_CMPL, (uint16_t)(Evt >> 8U));
-}
-
-
-static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
-{
-	const uint8_t epNum = (uint8_t)Evt;
-	(void)pContext;
-
-	const uint32_t state = DisableInterrupt();
-	const uint32_t bit = 1UL << (epNum + 16U);
-	// A latched OUT bit owns the request until DMA can be queued. AppEvt
-	// retries may overlap; only the first accepted enqueue consumes it.
-	// Wait for the previous DMA's completion ISR before reusing its buffer.
-	// That callback may need to withhold the buffer when RX is full.
-	if ((NRF_USBD->EPDATASTATUS & bit) != 0U &&
-		(NRF_USBD->EPSTATUS & bit) == 0U)
-	{
-		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(epNum, 0U);
-		if (pReg->pBuffer != NULL)
-		{
-			nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
-			if (pQue != NULL)
-			{
-				pQue->EpNum = epNum;
-				pQue->Dir = NRFX_USBD_QUE_OUT;
-				pQue->Len = pReg->MaxPacketSize;
-				pQue->pBuffer = pReg->pBuffer;
-				// Acknowledge before DMA can admit the next packet.
-				NRF_USBD->EPDATASTATUS = bit;
-				__DSB();
-				nRFUsbdResumeQueuedDmaLocked();
-			}
-			else
-			{
-				// Retry queue pressure, not a withheld RX buffer.
-				(void)AppEvtHandlerQue(epNum, NULL, nRFUsbdProcessOutData);
-			}
-		}
-	}
-	EnableInterrupt(state);
-}
-
-// InData is nonzero. Return only the status bit accepted by AppEvt; a full
-// queue leaves it in EPDATASTATUS for UsbCtrlrProcess to retry.
-static __attribute__((noinline))
-uint32_t nRFUsbdQueueInComplete(uint32_t InData)
-{
-	const uint32_t epNum = 31U - (uint32_t)__CLZ(InData);
-	const uint32_t evt = (NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum;
-	return (uint32_t)AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete) << epNum;
+	const uint8_t epnum = (uint8_t)Evt;
+	const uint8_t in = (uint8_t)((Evt >> 16U) & 1U);
+	nRFUsbEpReg_t *preg = nRFUsbGetEpReg(epnum, in);
+	if (preg->Generation != (uint32_t)(uintptr_t)pContext)
+		return;
+	preg->Handler((Evt & (1UL << 17U)) != 0U ? USB_CTRLR_EVT_DRDY :
+		USB_CTRLR_EVT_XFER_CMPL, (uint8_t)(Evt >> 8U), preg->pContext);
 }
 
 static void nRFUsbdHandleBusEvent(uint32_t EventCause)
@@ -920,6 +935,8 @@ static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 	}
 }
 
+// Allocate event storage only when the SETUP or SOF handler runs.
+__attribute__((noinline))
 static void nRFUsbdHandleSof(void)
 {
 	nRFUsbdHostResume();
@@ -933,37 +950,29 @@ static void nRFUsbdHandleSof(void)
 	}
 }
 
-static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
+__attribute__((noinline))
+static void nRFUsbdProcessEP0Setup(void)
 {
-	(void)Evt;
-	(void)pContext;
-
 	UsbCtrlrEvt_t evt;
 	evt.Type = USB_CTRLR_EVT_SETUP;
 
-	// BMREQUESTTYPE through WLENGTHH are eight consecutive byte-wide
-	// registers whose byte order is exactly the little endian layout of
-	// UsbSetupData_t. Reading them in a loop beats five field combines.
-	const volatile uint32_t *pReg = &NRF_USBD->BMREQUESTTYPE;
-	uint8_t *pDst = (uint8_t *)&evt.Setup;
-	for (int i = 0; i < 8; i++)
-	{
-		pDst[i] = (uint8_t)pReg[i];
-	}
+	// Snapshot before clearing EP0SETUP; the next SETUP overwrites these eight
+	// hardware registers. Each register holds one byte of the setup packet.
+	const volatile uint32_t *preg = &NRF_USBD->BMREQUESTTYPE;
+	uint8_t *pSetup = (uint8_t *)&evt.Setup;
+	for (uint32_t i = 0U; i < sizeof(evt.Setup); i++)
+		pSetup[i] = (uint8_t)preg[i];
 
-	while (nRFUsbdDmaActive())
-	{
-	}
+	NRF_USBD->EVENTS_EP0SETUP = 0U;
+	(void)NRF_USBD->EVENTS_EP0SETUP;
+	nRFUsbdAbortEp0();
 
 	nRFUsbdHostResume();
-	nRFUsbdAbortEp0();
 
 	if ((evt.Setup.bmRequestType &
 		 (USB_REQTYPE_MASK_RECEIPT | USB_REQTYPE_MASK_TYPE)) == 0U &&
 		evt.Setup.bRequest == USB_REQ_SET_ADDRESS)
 	{
-		// Address and Setup share the event union; wValue is read before
-		// the union is repurposed.
 		const uint8_t addr = (uint8_t)(evt.Setup.wValue & 0x7FU);
 		evt.Type = USB_CTRLR_EVT_ADDRESS;
 		evt.Address = addr;
@@ -975,27 +984,17 @@ static void nRFUsbdProcessEP0Setup(uint32_t Evt, void *pContext)
 		(evt.Setup.bmRequestType & USB_REQTYPE_MASK_DIR) == 0U &&
 		evt.Setup.wLength != 0U)
 	{
-		NRF_USBD->SHORTS = 0U;
 		NRF_USBD->TASKS_EP0RCVOUT = 1U;
 		(void)NRF_USBD->TASKS_EP0RCVOUT;
 	}
+
+	// If the request itself did not start EP0 DMA, resume any older regular
+	// or ISO work now that the aborted EP0 channel has been retired.
+	nRFUsbdResumeQueuedDmaLocked();
 }
 
-static void nRFUsbdQueueEp0Setup(void)
-{
-	NRF_USBD->EVENTS_EP0SETUP = 0U;
-	// A new SETUP aborts the old control transfer's completion.
-	NRF_USBD->EVENTS_EP0DATADONE = 0U;
-	(void)NRF_USBD->EVENTS_EP0DATADONE;
-	(void)AppEvtHandlerQue(0U, NULL, nRFUsbdProcessEP0Setup);
-}
-
-
-extern "C" void USBD_IRQHandler(void)
-{
-	const uint32_t dmastatus = NRF_USBD->EPSTATUS;
-
-	// Reset cancels any active DMA and must not wait for ENDEP.
+extern "C" void USBD_IRQHandler(void){
+	// Reset cancels any active DMA and must not wait for END events.
 	if (NRF_USBD->EVENTS_USBRESET != 0U)
 	{
 		NRF_USBD->EVENTS_USBRESET = 0U;
@@ -1004,134 +1003,7 @@ extern "C" void USBD_IRQHandler(void)
 		return;
 	}
 
-	// ISO EasyDMA completion belongs to the preceding frame. Retire it before
-	// publishing the new SOF so that frame sees released ISO ownership.
-	bool startDma = false;
-	if (NRF_USBD->EVENTS_ENDISOIN != 0U ||
-		NRF_USBD->EVENTS_ENDISOOUT != 0U)
-	{
-		startDma = nRFUsbdIsoFinishDma();
-	}
-
-	if (NRF_USBD->EVENTS_SOF != 0U)
-	{
-		NRF_USBD->EVENTS_SOF = 0U;
-		(void)NRF_USBD->EVENTS_SOF;
-		nRFUsbdHandleSof();
-	}
-
-	// Exactly one endpoint can own EasyDMA. Completed cases retain its lock
-	// and request the shared handoff immediately below.
-	if (!startDma && dmastatus == 0U)
-	{
-		// OUT data-ready may arrive while the DMA channel is idle.
-		if (NRF_USBD->EVENTS_EP0DATADONE != 0U && !nRFUsbdDmaActive())
-		{
-			nRFUsbdDmaLock();
-			startDma = true;
-		}
-	}
-	else if (!startDma)
-	{
-		const uint32_t statusBit = 31U - (uint32_t)__CLZ(dmastatus);
-
-		if ((statusBit & 7U) != 0U) // EP1-7 IN/OUT
-		{
-			// IN application completion still waits for EPDATA.
-			if (!nRFUsbdRetireDma(statusBit))
-				return;
-
-			if (statusBit >= 16U)
-			{
-				const uint8_t epNum = (uint8_t)(statusBit & 7U);
-				nRFUsbEpRegisteredEvent(epNum, 0U, USB_CTRLR_EVT_XFER_CMPL,
-					(uint16_t)NRF_USBD->EPOUT[epNum].AMOUNT);
-			}
-			startDma = true;
-		}
-		else if ((statusBit & 8U) != 0U) // ISO IN/OUT
-		{
-			// ENDISOIN/ENDISOOUT above are the ISO DMA completion events.
-		}
-		else if ((statusBit & 16U) != 0U) // EP0 OUT
-		{
-			if (NRF_USBD->EVENTS_ENDEPOUT[0] != 0U)
-			{
-				NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
-				NRF_USBD->EPSTATUS = dmastatus;
-				__DSB();
-
-				if (NRF_USBD->EVENTS_EP0SETUP == 0U)
-				{
-					const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
-					// Re-arm before the core may select status or stall.
-					NRF_USBD->TASKS_EP0RCVOUT = 1U;
-					(void)NRF_USBD->TASKS_EP0RCVOUT;
-					nRFUsbdEmitXfer(0U, amount);
-				}
-				startDma = true;
-			}
-		}
-		else // EP0 IN
-		{
-			if (NRF_USBD->EVENTS_EP0DATADONE != 0U)
-			{
-				NRF_USBD->EVENTS_EP0DATADONE = 0U;
-				NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
-				NRF_USBD->EPSTATUS = dmastatus;
-				__DSB();
-
-				if (NRF_USBD->EVENTS_EP0SETUP != 0U)
-				{
-					nRFUsbdDmaUnlock();
-				}
-				else
-				{
-					(void)CFifoGet(s_Usbd.hEp0Que);
-					nRFEPPkt_t *p = (nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
-					if (p != NULL)
-						nRFUsbdEp0InStart(p);
-					else
-					{
-						nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
-						startDma = true;
-					}
-				}
-			}
-		}
-	}
-
-	if (startDma)
-	{
-		// SETUP and bus events still take precedence over starting a new DMA.
-		if ((NRF_USBD->EVENTS_EP0SETUP | NRF_USBD->EVENTS_USBEVENT) == 0U &&
-			nRFUsbdDmaAllowed())
-		{
-			// EP0DATADONE retains OUT readiness while another endpoint owns DMA.
-			if (NRF_USBD->EVENTS_EP0DATADONE != 0U &&
-				(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U)
-			{
-				NRF_USBD->EVENTS_EP0DATADONE = 0U;
-				NRF_USBD->EPOUT[0].PTR = (uint32_t)(uintptr_t)s_Usbd.Ep0Bounce;
-				NRF_USBD->EPOUT[0].MAXCNT = NRFX_USBD_MAX_PACKET_SIZE;
-				nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTEPOUT[0],
-					&NRF_USBD->EVENTS_ENDEPOUT[0]);
-			}
-			else
-			{
-				// SETUP's idle wait can be interrupted by a data submission.
-				// Give its queued control response the retained channel first.
-				const nRFEPPkt_t *pEp0 =
-					(const nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
-				if (pEp0 != NULL)
-					nRFUsbdEp0InStart(pEp0);
-				else
-					nRFUsbdStartQueuedDma();
-			}
-		}
-		else
-			nRFUsbdDmaUnlock();
-	}
+	const bool suspended = (s_Usbd.Flags & USBD_FLAG_SUSPENDED) != 0U;
 
 	if (NRF_USBD->EVENTS_USBEVENT != 0U)
 	{
@@ -1139,53 +1011,196 @@ extern "C" void USBD_IRQHandler(void)
 		const uint32_t eventCause = NRF_USBD->EVENTCAUSE;
 		NRF_USBD->EVENTCAUSE = eventCause;
 		(void)NRF_USBD->EVENTCAUSE;
-
 		nRFUsbdHandleBusEvent(eventCause);
+
+		// A completed resume must reach the scheduler even without another
+		// submission, SOF, or DMA completion to restart queued work.
+		if (!suspended || (s_Usbd.Flags & USBD_FLAG_SUSPENDED) != 0U)
+			return;
 	}
 
+	// A new SETUP supersedes the old EP0 transaction before any normal
+	// completion is interpreted. Do not return here: the response the core
+	// just queued may sit behind a regular DMA whose END is also pending.
+	// Retire that DMA below and hand the channel to queued work in this pass.
+	// Regular IN callback delivery separately waits for EPDATA.
 	if (NRF_USBD->EVENTS_EP0SETUP != 0U)
 	{
-		nRFUsbdQueueEp0Setup();
-		return;
+		nRFUsbdProcessEP0Setup();
 	}
-	// Clear the event first so a new endpoint event remains observable.
-	// Service at most one endpoint per direction in this interrupt.
-	// Unaccepted IN completions remain available to the foreground retry.
-	NRF_USBD->EVENTS_EPDATA = 0U;
-	const uint32_t dataStatus = NRF_USBD->EPDATASTATUS;
-	uint32_t servicedStatus = dataStatus & 0x00010001UL;
 
-	const uint32_t inData = dataStatus & 0xFEU;
-	if (inData != 0U)
+	// SOF is a bus event like SETUP and is handed to the core before any
+	// completion is interpreted. The controller only sees any ISO work the
+	// core publishes back through UsbCtrlrIsoSend().
+	if (NRF_USBD->EVENTS_SOF != 0U)
 	{
-		servicedStatus |= nRFUsbdQueueInComplete(inData);
+		NRF_USBD->EVENTS_SOF = 0U;
+		(void)NRF_USBD->EVENTS_SOF;
+		nRFUsbdIsoSofMark();
+		nRFUsbdHandleSof();
 	}
 
-	// Clear only serviced endpoints; keep every other status bit latched.
-	// The following SOF register read completes this write.
-	NRF_USBD->EPDATASTATUS = servicedStatus;
+	// A completed transfer keeps software DMA ownership for immediate handoff.
+	bool reuseDma = false;
 
+	// Snapshot both status registers before retiring DMA or starting its successor.
+	NRF_USBD->EVENTS_EPDATA = 0U;
+	const uint32_t dmastatus = NRF_USBD->EPSTATUS;
+	const uint32_t datastatus = NRF_USBD->EPDATASTATUS;
+
+	// Decode the active DMA once; each case retires its own END event.
+	if (nRFUsbdDmaActive() && dmastatus != 0U)
+	{
+		const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
+		switch (epno)
+		{
+			case 0U: // EP0 IN keeps its continuous packet chain.
+			{
+				if (NRF_USBD->EVENTS_ENDEPIN[0] == 0U)
+					break;
+				NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
+				NRF_USBD->EPSTATUS = dmastatus;
+				reuseDma = true;
+				NRF_USBD->EVENTS_EP0DATADONE = 0U;
+				(void)CFifoGet(s_Usbd.hEp0Que);
+				const nRFEPPkt_t *pep0 =
+					(const nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
+				if (pep0 != NULL)
+				{
+					nRFUsbdEp0InStart(pep0);
+					reuseDma = false;
+				}
+				else
+					nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
+				break;
+			}
+			case 16U: // EP0 OUT
+			{
+				if (NRF_USBD->EVENTS_ENDEPOUT[0] == 0U)
+					break;
+				NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
+				NRF_USBD->EPSTATUS = dmastatus;
+				reuseDma = true;
+				const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
+				NRF_USBD->TASKS_EP0RCVOUT = 1U;
+				(void)NRF_USBD->TASKS_EP0RCVOUT;
+				nRFUsbdEmitXfer(0U, amount);
+				break;
+			}
+			case 8U:
+				if (NRF_USBD->EVENTS_ENDISOIN == 0U)
+					break;
+				NRF_USBD->EVENTS_ENDISOIN = 0U;
+				NRF_USBD->EPSTATUS = dmastatus;
+				reuseDma = true;
+				nRFUsbdIsoComplete(true);
+				break;
+			case 24U:
+				if (NRF_USBD->EVENTS_ENDISOOUT == 0U)
+					break;
+				NRF_USBD->EVENTS_ENDISOOUT = 0U;
+				NRF_USBD->EPSTATUS = dmastatus;
+				reuseDma = true;
+				nRFUsbdIsoComplete(false);
+				break;
+			case 1U: case 2U: case 3U: case 4U:
+			case 5U: case 6U: case 7U:
+				if (NRF_USBD->EVENTS_ENDEPIN[epno] == 0U)
+					break;
+				NRF_USBD->EVENTS_ENDEPIN[epno] = 0U;
+				NRF_USBD->EPSTATUS = dmastatus;
+				reuseDma = true;
+				(void)CFifoGet(s_Usbd.hQue);
+				break;
+			case 17U: case 18U: case 19U: case 20U:
+			case 21U: case 22U: case 23U:
+			{
+				const uint32_t epnum = epno - 16U;
+				if (NRF_USBD->EVENTS_ENDEPOUT[epnum] == 0U)
+					break;
+				NRF_USBD->EVENTS_ENDEPOUT[epnum] = 0U;
+				NRF_USBD->EPSTATUS = dmastatus;
+				reuseDma = true;
+				(void)CFifoGet(s_Usbd.hQue);
+				const uint32_t evt =
+					(NRF_USBD->EPOUT[epnum].AMOUNT << 8U) | epnum;
+				AppEvtHandlerQue(evt,
+					(void *)(uintptr_t)nRFUsbGetEpReg(epnum, 0U)->Generation,
+					nRFUsbdProcessQueuedEvent);
+				break;
+			}
+		}
+	}
+
+	// Classify EP0DATADONE once, after EP0 IN may have consumed it above.
+	const bool ep0done = NRF_USBD->EVENTS_EP0DATADONE != 0U;
+	const bool ep0in = ep0done &&
+		(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) != 0U;
+	const bool ep0out = ep0done && !ep0in;
+
+	const bool resumed = suspended &&
+		(s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U;
+	// Retirement retains ownership; readiness or resume can acquire idle DMA.
+	if (reuseDma || ((ep0out || resumed) && nRFUsbdAcquireDma()))
+		nRFUsbdStartQueuedDma(ep0out);
+
+	// Keep the live status check: the handoff may have started EP0 IN.
+	if (ep0in && (NRF_USBD->EPSTATUS & 1UL) == 0U)
+	{
+		NRF_USBD->EVENTS_EP0DATADONE = 0U;
+		(void)NRF_USBD->EVENTS_EP0DATADONE;
+	}
+
+	// EPDATASTATUS describes regular endpoint host-consumption / OUT readiness.
+
+	uint32_t servicedstatus = 0U;
+
+	uint32_t indata = datastatus & 0xFEU;
+	while (indata != 0U)
+	{
+		const uint32_t epnum = 31U - (uint32_t)__CLZ(indata);
+		const uint32_t bit = 1UL << epnum;
+		// Leave the status bit set when AppEvt is full so the next IRQ retries.
+		const uint32_t evt = (NRF_USBD->EPIN[epnum].AMOUNT << 8U) | epnum;
+		if (!AppEvtHandlerQue(evt | (1UL << 16U),
+			(void *)(uintptr_t)nRFUsbGetEpReg(epnum, 1U)->Generation,
+			nRFUsbdProcessQueuedEvent))
+			break;
+		servicedstatus |= bit;
+		indata &= ~bit;
+	}
+
+	uint32_t outdata = (datastatus >> 16U) & 0xFEU;
+	while (outdata != 0U)
+	{
+		const uint32_t epnum = 31U - (uint32_t)__CLZ(outdata);
+		const uint32_t bit = 1UL << epnum;
+		const uint32_t statusbit = bit << 16U;
+		nRFUsbEpReg_t *preg = nRFUsbGetEpReg((uint8_t)epnum, 0U);
+
+		// END queues completion above before a following DRDY. Consume the
+		// readiness latch only after enqueue succeeds to prevent duplicates.
+		if ((NRF_USBD->EPSTATUS & statusbit) == 0U &&
+			preg->Handler != NULL &&
+			AppEvtHandlerQue(epnum | (1UL << 17U),
+				(void *)(uintptr_t)preg->Generation, nRFUsbdProcessQueuedEvent))
+			servicedstatus |= statusbit;
+
+		outdata &= ~bit;
+	}
+
+	NRF_USBD->EPDATASTATUS = servicedstatus;
+	__DSB();
 	nRFUsbdTryRemoteWake();
 
-	// Queue newly received OUT data; completion already restarted pending DMA.
-	const uint32_t outData = (dataStatus >> 16U) & 0xFEU;
-	if (outData != 0U)
-	{
-		nRFUsbdProcessOutData(31U - (uint32_t)__CLZ(outData), NULL);
-	}
-
 	nRFUsbdTryEnterLowPower();
-
 }
 
 // Public controller API.
 
 bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 {
-	if (DevNo != 0 || pCfg == NULL)
-	{
-		return false;
-	}
+	(void)DevNo;
 
 	// Registrations, transfer state and flags all restart from zero;
 	// ResetState below rebuilds what must not be zero.
@@ -1231,14 +1246,10 @@ bool UsbCtrlrStart(int DevNo)
 void UsbCtrlrStop(int DevNo)
 {
 	(void)DevNo;
-	nRFUsbdDmaWait();
+	// UsbCoreStop already disconnected, disabled NVIC and closed endpoints.
 	nRFUsbdResetState();
 
-	// Stop the controller interrupt before powering down the wrapper.
-	NVIC_DisableIRQ(USBD_IRQn);
-
 	NRF_USBD->INTEN = 0;
-	NRF_USBD->USBPULLUP = 0;
 	NRF_USBD->ENABLE = 0;
 	(void)NRF_USBD->ENABLE;
 
@@ -1246,39 +1257,12 @@ void UsbCtrlrStop(int DevNo)
 	UsbdXtalRelease();
 }
 
-// Suspend and wake are owned by the USBEVENT/SOF handlers. With low-power
-// suspend disabled, this driver never enters peripheral low-power mode.
+// Deferred endpoint/application work. DMA retirement and immediate handoff
+// stay in USBD_IRQHandler().
 void UsbCtrlrProcess(int DevNo)
 {
 	(void)DevNo;
 	AppEvtHandlerExec();
-
-	// Share EPDATASTATUS with the ISR without publishing a completion twice.
-	const uint32_t state = DisableInterrupt();
-	// Withheld OUT buffers retain receive work even if AppEvt was full.
-	for (uint8_t epNum = 1U; epNum < NRFX_USBD_EP_COUNT; epNum++)
-	{
-		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[epNum - 1U][0];
-		if (pReg->pBuffer == NULL && pReg->Handler != NULL)
-		{
-			pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
-		}
-	}
-	const uint32_t inData = NRF_USBD->EPDATASTATUS & 0xFEU;
-	if (inData != 0U)
-	{
-		NRF_USBD->EPDATASTATUS = nRFUsbdQueueInComplete(inData);
-		__DSB();
-	}
-	uint32_t outData = (NRF_USBD->EPDATASTATUS >> 16U) & 0xFEU;
-	while (outData != 0U)
-	{
-		const uint8_t epNum = (uint8_t)(31U - (uint32_t)__CLZ(outData));
-		outData &= ~(1UL << epNum);
-		// A held RX buffer must not starve another pending endpoint.
-		nRFUsbdProcessOutData(epNum, NULL);
-	}
-	EnableInterrupt(state);
 }
 
 bool UsbCtrlrVbusDetected(int DevNo)
@@ -1363,9 +1347,9 @@ void UsbCtrlrSofEnable(int DevNo, bool Enable)
 	{
 		nRFUsbdSofAcquire();
 	}
-	else
+	else if ((s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U)
 	{
-		nRFUsbdSofRelease();
+		NRF_USBD->INTENCLR = USBD_INTENCLR_SOF_Msk;
 	}
 }
 
@@ -1384,143 +1368,175 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 	return false;
 }
 
+__attribute__((weak))
+bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn, uint16_t MaxPacketSize)
+{
+	(void)DevNo;
+	(void)EpNo;
+	(void)bIn;
+	(void)MaxPacketSize;
+	return false;
+}
+
 bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 						 uint16_t MaxPacketSize)
 {
 	(void)Type;
-	if (EpNo == 0U || EpNo >= NRFX_USBD_DATA_EP_COUNT ||
-		MaxPacketSize == 0U || MaxPacketSize > NRFX_USBD_MAX_PACKET_SIZE)
-	{
-		return false;
-	}
-
-	nRFUsbGetEpReg(EpNo, bIn)->MaxPacketSize = MaxPacketSize;
+	(void)MaxPacketSize;
 	nRFUsbdEpHwEnable(EpNo, bIn, true);
-
 	UsbCtrlrEpClearStall(DevNo, EpNo, bIn);
 	return true;
+}
+
+// DMA is retired and interrupts remain excluded through endpoint shutdown.
+static void nRFUsbdEpDisable(uint8_t EpNo, bool In)
+{
+	if (EpNo == NRFX_USBD_ISO_EP_NO)
+	{
+		nRFUsbdIsoEpClose(In);
+		return;
+	}
+
+	nRFUsbdEpHwEnable(EpNo, In, false);
+	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (In ? 0U : 16U));
 }
 
 void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 {
 	(void)DevNo;
-	if (EpNo == 0U || EpNo >= NRFX_USBD_EP_COUNT)
-	{
-		return;
-	}
-
+	const uint32_t state = DisableInterrupt();
+	++nRFUsbGetEpReg(EpNo, bIn)->Generation;
 	if (EpNo == NRFX_USBD_ISO_EP_NO)
 	{
-		nRFUsbdIsoEpClose(bIn);
-		return;
+		s_Usbd.IsoOpen = false;
+		nRFUsbdDmaWait(0x01000100UL);
 	}
-
-	nRFUsbdDmaWait();
-	CFifoFlush(s_Usbd.hQue);
-
-	nRFUsbdEpHwEnable(EpNo, bIn, false);
-	NRF_USBD->EPDATASTATUS = 1UL << (EpNo + (bIn ? 0U : 16U));
-	if (!bIn)
+	else
 	{
-		NRF_USBD->SIZE.EPOUT[EpNo] = 0;
+		nRFUsbdDmaWait(1UL << (EpNo + (bIn ? 0U : 16U)));
+		// Mark matching requests in place; FIFO order and ownership stay intact.
+		// Unused slots are harmless: insertion overwrites the entire request.
+		nRFUsbdQue_t *requests =
+			(nRFUsbdQue_t *)s_Usbd.hQue->pMemStart;
+		for (uint32_t i = 0U; i < NRFUSBD_QUE_DEPTH; ++i)
+		{
+			if (requests[i].EpNum == EpNo &&
+				(requests[i].Dir != NRFX_USBD_QUE_OUT) == bIn)
+				requests[i].EpNum = 0U;
+		}
 	}
-	nRFUsbGetEpReg(EpNo, bIn)->MaxPacketSize = 0U;
+	nRFUsbdEpDisable(EpNo, bIn);
 	__DSB();
+	nRFUsbdResumeQueuedDmaLocked();
+	EnableInterrupt(state);
 }
 
 void UsbCtrlrEpCloseAll(int DevNo)
 {
-	for (uint8_t epNum = NRFX_USBD_EP_COUNT - 1U; epNum != 0U; epNum--)
-	{
-		UsbCtrlrEpClose(DevNo, epNum, false);
-		UsbCtrlrEpClose(DevNo, epNum, true);
-	}
+	(void)DevNo;
+	const uint32_t state = DisableInterrupt();
+	s_Usbd.IsoOpen = false;
+	for (auto &endpoint : s_Usbd.EpReg)
+		for (auto &registration : endpoint)
+			++registration.Generation;
+	nRFUsbdDmaWait(0x01FE01FEUL);
+	CFifoFlush(s_Usbd.hQue);
 
-	NRF_USBD->EPOUTEN = 1UL;
-	NRF_USBD->EPINEN = 1UL;
+	nRFUsbdIsoEpClose(false);
+	nRFUsbdIsoEpClose(true);
+	// Disable regular directions together, preserving EP0.
+	NRF_USBD->INTENCLR = (0xFEUL << USBD_INTEN_ENDEPIN0_Pos) |
+		(0xFEUL << USBD_INTEN_ENDEPOUT0_Pos);
+	NRF_USBD->EPINEN &= ~0xFEUL;
+	NRF_USBD->EPOUTEN &= ~0xFEUL;
+	NRF_USBD->EPDATASTATUS = 0x00FE00FEUL;
+	__DSB();
+	EnableInterrupt(state);
 }
 
-void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
-					 bool bBlocking,
+void UsbCtrlrEpBind(int DevNo, uint8_t EpNo, bool bIn, bool bBlocking,
 					 UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	(void)DevNo;
+	(void)bBlocking;
 	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNo, bIn);
-	pReg->pBuffer = pBuffer;
 	pReg->Handler = Handler;
 	pReg->pContext = pContext;
-	pReg->bBlocking = bBlocking;
+}
+
+bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
+						  uint16_t Capacity)
+{
+	(void)DevNo;
+	const uint32_t state = DisableInterrupt();
+	bool accepted = false;
+
+	if (EpNo == NRFX_USBD_ISO_EP_NO)
+	{
+		// ISO has one deadline-scheduled OUT slot, serviced ahead of the
+		// regular queue. DRDY is raised when that interval needs a buffer.
+		if (s_Usbd.IsoOpen &&
+			(s_Usbd.IsoDataFlag & NRFUSBD_ISO_OUT_READY) != 0U &&
+			s_Usbd.pIsoBuffer[0] == nullptr &&
+			Capacity >= s_Usbd.IsoMaxPacketSize[0])
+		{
+			s_Usbd.pIsoBuffer[0] = pBuffer;
+			accepted = true;
+		}
+	}
+	// ISR already consumed readiness when it queued DRDY. The owner may
+	// supply this buffer later, after RX FIFO space becomes available.
+	else
+	{
+		nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
+		if (pQue != nullptr)
+		{
+			pQue->EpNum = EpNo;
+			pQue->Dir = NRFX_USBD_QUE_OUT;
+			pQue->Len = Capacity;
+			pQue->pBuffer = pBuffer;
+			accepted = true;
+		}
+	}
+	if (accepted)
+		nRFUsbdResumeQueuedDmaLocked();
+	EnableInterrupt(state);
+	return accepted;
 }
 
 void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 						 UsbCtrlrEvtType_t Event, uint16_t Value)
 {
-	if (DevNo != 0 || EpNo == 0U || EpNo >= NRFX_USBD_EP_COUNT)
-	{
-		return;
-	}
-
-	nRFUsbEpReg_t *pReg = nRFUsbGetEpReg(EpNo, bIn);
-	if (pReg->Handler != nullptr)
-	{
-		pReg->Handler(Event, Value, pReg->pContext);
-	}
+	(void)DevNo;
+	nRFUsbEpRegisteredEvent(EpNo, bIn, Event, Value);
 }
 
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 						 uint16_t Length)
 {
 	(void)DevNo;
-	if (EpNum == NRFX_USBD_ISO_EP_NO)
-	{
-		const uint32_t state = DisableInterrupt();
-		nRFUsbEpReg_t *pReg = &s_Usbd.EpReg[EpNum - 1U][1];
-		if (!s_Usbd.IsoOpen ||
-			(s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) != 0U ||
-			s_Usbd.IsoInDmaLen >= 0 || pReg->Handler == NULL ||
-			(pBuffer == NULL && Length != 0U) ||
-			Length > pReg->MaxPacketSize)
-		{
-			EnableInterrupt(state);
-			return false;
-		}
-
-		pReg->pBuffer = pBuffer;
-		s_Usbd.IsoInDmaLen = (int16_t)Length;
-		EnableInterrupt(state);
-		return true;
-	}
-
-	bool retval = false;
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
+	pQue->EpNum = EpNum;
+	pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
+	pQue->pBuffer = pBuffer;
 
-	if (pQue != nullptr)
+	const uint32_t misalign = (uint32_t)(uintptr_t)pBuffer & 3U;
+	if (misalign != 0U)
 	{
-		pQue->EpNum = EpNum;
-		pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
-		pQue->pBuffer = pBuffer;
-
-		const uint32_t misalign = (uint32_t)(uintptr_t)pBuffer & 3U;
-		if (misalign != 0U)
+		const uint32_t repair = 4U - misalign;
+		if (Length > repair)
 		{
-			const uint32_t repair = 4U - misalign;
-			if (Length > repair)
-			{
-				Length = repair;
-			}
-			memcpy(&pQue->Scratch, pBuffer, Length);
-			pQue->Dir = NRFX_USBD_QUE_IN_SCRATCH;
+			Length = repair;
 		}
-		pQue->Len = Length;
-		nRFUsbdResumeQueuedDmaLocked();
-
-		retval = true;
+		memcpy(&pQue->Scratch, pBuffer, Length);
+		pQue->Dir = NRFX_USBD_QUE_IN_SCRATCH;
 	}
-
+	pQue->Len = Length;
+	nRFUsbdResumeQueuedDmaLocked();
 	EnableInterrupt(state);
 
-	return retval;
+	return true;
 }
 
 
@@ -1586,11 +1602,6 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
 {
 	(void)DevNo;
-	if (EpNo >= NRFX_USBD_DATA_EP_COUNT)
-	{
-		return;
-	}
-
 	if (EpNo == 0U)
 	{
 		NRF_USBD->TASKS_EP0STALL = 1;
@@ -1598,8 +1609,7 @@ void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
 	}
 	else
 	{
-		const uint8_t epAddr = (uint8_t)(EpNo |
-			(bIn ? USB_ENDPADDR_DIR_IN : 0U));
+		const uint32_t epAddr = EpNo | (bIn ? USB_ENDPADDR_DIR_IN : 0U);
 		NRF_USBD->EPSTALL =
 			(USBD_EPSTALL_STALL_Stall << USBD_EPSTALL_STALL_Pos) | epAddr;
 	}
@@ -1608,13 +1618,7 @@ void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
 void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
 {
 	(void)DevNo;
-	if (EpNo == 0U || EpNo >= NRFX_USBD_DATA_EP_COUNT)
-	{
-		return;
-	}
-
-	const uint8_t epAddr = (uint8_t)(EpNo |
-		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
+	const uint32_t epAddr = EpNo | (bIn ? USB_ENDPADDR_DIR_IN : 0U);
 	NRF_USBD->DTOGGLE = epAddr;
 	NRF_USBD->DTOGGLE =
 		(USBD_DTOGGLE_VALUE_Data0 << USBD_DTOGGLE_VALUE_Pos) | epAddr;

@@ -57,6 +57,8 @@ static int s_LastEventLength;
 static DEVINTRF_EVT s_LastEvent;
 static DevIntrf_t *s_LastEventDev;
 
+static RegisteredEp_t *FindRegistered(uint8_t EpAddr);
+
 extern "C" {
 const UsbCfg_t *UsbGetCfg(int DevNo)
 {
@@ -89,17 +91,35 @@ void UsbCtrlrEpClose(int, uint8_t EpNo, bool bIn)
 }
 void UsbCtrlrEpCloseAll(int) {}
 
-void UsbCtrlrEpAlloc(int, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
+// One registration per endpoint direction, as the controller keeps it: a
+// second call for the same address replaces the first. The ISO class uses
+// this to take over its IN endpoint after UsbIntrf registered it.
+void UsbCtrlrEpBind(int, uint8_t EpNo, bool bIn,
                         bool Blocking, UsbCtrlrEpHandler_t Handler,
                         void *pContext)
 {
-    if (Handler == nullptr || s_RegisteredCount >= 5)
+    if (Handler == nullptr)
         return;
-    s_Registered[s_RegisteredCount++] = {
-        (uint8_t)(EpNo | (bIn ? USB_ENDPADDR_DIR_IN : 0U)),
-        pBuffer, Blocking, Handler, pContext
-    };
-    return;
+    const uint8_t addr = (uint8_t)(EpNo | (bIn ? USB_ENDPADDR_DIR_IN : 0U));
+    RegisteredEp_t *pReg = FindRegistered(addr);
+    if (pReg == nullptr)
+    {
+        if (s_RegisteredCount >= 5)
+            return;
+        pReg = &s_Registered[s_RegisteredCount++];
+    }
+    *pReg = { addr, nullptr, Blocking, Handler, pContext };
+}
+
+bool UsbCtrlrEpReceive(int, uint8_t EpNo, uint8_t *pBuffer, uint16_t Capacity)
+{
+	RegisteredEp_t *pReg = FindRegistered(EpNo);
+	if (pReg == nullptr || !s_HwOutReady[EpNo] || s_OutDma[EpNo] ||
+		Capacity < s_HwOutLength[EpNo]) return false;
+	pReg->pBuffer = pBuffer;
+	s_OutDma[EpNo] = true;
+	s_OutSubmitCount++;
+	return true;
 }
 
 bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
@@ -114,7 +134,11 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	s_InBusy[EpNum] = true;
 	return true;
 }
-bool UsbCtrlrIsoService(int, uint8_t, uint16_t) { return true; }
+bool UsbCtrlrIsoSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
+{
+	if (pBuffer == nullptr) return true;
+	return UsbCtrlrEpSend(0, EpNum, pBuffer, Length);
+}
 
 void UsbCtrlrEpStall(int, uint8_t, bool) {}
 void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
@@ -209,6 +233,14 @@ static RegisteredEp_t *FindRegistered(uint8_t EpAddr)
     return nullptr;
 }
 
+static void IsoSof(uint8_t EpNo, uint16_t Frame = 0U)
+{
+    RegisteredEp_t *pReg = FindRegistered(USB_ENDPADDR_DIRIN(EpNo));
+    CHECK(pReg != nullptr);
+    if (pReg != nullptr)
+        pReg->Handler(USB_CTRLR_EVT_SOF, Frame, pReg->pContext);
+}
+
 static void CompleteIn(uint8_t EpNo,
                        UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 {
@@ -243,27 +275,14 @@ static void ReceiveOut(uint8_t EpNo, const uint8_t *pData, uint16_t Length)
     s_HwOutLength[EpNo] = Length;
     s_HwOutReady[EpNo] = true;
 
-    if (pReg->Blocking)
-    {
-        pReg->Handler(USB_CTRLR_EVT_DRDY,
-                      Length, pReg->pContext);
-        if (pReg->pBuffer != nullptr && s_HwOutReady[EpNo] && !s_OutDma[EpNo])
-        {
-            s_OutDma[EpNo] = true;
-            s_OutSubmitCount++;
-        }
-        CHECK(s_OutDma[EpNo]);
-        if (!s_OutDma[EpNo]) return;
-    }
-    else
-    {
-        // Non-blocking endpoint data goes directly to controller DMA.
-        s_OutDma[EpNo] = true;
-    }
+    pReg->Handler(USB_CTRLR_EVT_DRDY, Length, pReg->pContext);
+    CHECK(s_OutDma[EpNo]);
+    if (!s_OutDma[EpNo]) return;
 
     if (Length > 0U) memcpy(pReg->pBuffer, s_HwOut[EpNo], Length);
     s_HwOutReady[EpNo] = false;
     s_OutDma[EpNo] = false;
+    pReg->pBuffer = nullptr;
     pReg->Handler(USB_CTRLR_EVT_XFER_CMPL,
                   Length, pReg->pContext);
 }
@@ -608,8 +627,10 @@ static void TestScoTransport(void)
     BtHciUsb hci;
     CHECK(hci.Init(MakeCfg(true)));
     CHECK(s_RegisteredCount == 5);
+    // SCO rides the ISO class's blocking two-frame FIFOs, so its OUT
+    // endpoint is registered blocking like the bulk ones.
     RegisteredEp_t *scoOut = FindRegistered(USB_ENDPADDR_DIROUT(8U));
-    CHECK(scoOut != nullptr && !scoOut->Blocking);
+    CHECK(scoOut != nullptr && scoOut->Blocking);
     CHECK(hci.SelectConfig(1U));
     CHECK(hci.SelectInterface(1U, 1U));
 
@@ -631,7 +652,7 @@ static void TestScoTransport(void)
     ReceiveOut(8U, packet, 9U);
     ReceiveOut(8U, &packet[9], 9U);
     ReceiveOut(8U, &packet[18], 2U);
-    CHECK(s_OutSubmitCount == beforeOutSubmit); // non-blocking: no DRDY round trip
+    CHECK(s_OutSubmitCount == beforeOutSubmit + 3); // one DRDY round trip per frame
     CHECK(s_RxEventCount == 1);
     uint8_t received[sizeof(packet)] = {};
     CHECK(hci.Data()->RxData(hci.Data(), received, sizeof(received)) ==
@@ -644,6 +665,7 @@ static void TestScoTransport(void)
     CHECK(hci.Data()->TxData(hci.Data(), packet, sizeof(packet)) ==
           (int)sizeof(packet));
     DeviceIntrfStopTx(hci.Data());
+    IsoSof(8U);
     CHECK(s_SendCount > 0);
     if (s_SendCount > 0)
     {
@@ -651,8 +673,10 @@ static void TestScoTransport(void)
         CHECK(s_Sent[s_SendCount - 1].Length == 9U);
     }
     CompleteIn(8U);
+    IsoSof(8U, 1U);
     CHECK(s_SendCount > 0 && s_Sent[s_SendCount - 1].Length == 9U);
     CompleteIn(8U);
+    IsoSof(8U, 2U);
     CHECK(s_SendCount > 0 && s_Sent[s_SendCount - 1].Length == 2U);
     CompleteIn(8U);
     CHECK(s_LastEvent == DEVINTRF_EVT_TX_READY);

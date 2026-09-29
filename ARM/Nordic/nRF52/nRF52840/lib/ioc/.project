@@ -31,51 +31,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_dfu_smp.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dfu_smp.h</locationURI>
-		</link>
-		<link>
-			<name>include/cbor.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/cbor.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_boot.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_boot.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_image.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_image.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_smp.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_smp.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_serial.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_serial.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_target.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_target.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_writer.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_writer.h</locationURI>
-		</link>
-		<link>
 			<name>src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -114,6 +69,11 @@
 			<name>include/blyst840_boards.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/blyst840_boards.h</locationURI>
+		</link>
+		<link>
+			<name>include/cbor.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/cbor.h</locationURI>
 		</link>
 		<link>
 			<name>include/cfifo.h</name>
@@ -164,6 +124,11 @@
 			<name>include/device_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/device_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/display</name>
@@ -406,11 +371,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_dfu_smp.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dfu_smp.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/cbor.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/cbor.c</locationURI>
@@ -459,56 +419,6 @@
 			<name>src/dfu</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_boot.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_boot.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_image.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_image.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_layout.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_layout.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_mgr.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_mgr.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_wire.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_wire.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_smp.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_smp.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_serial.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_serial.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_store_nvm.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_store_nvm.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/src/dfu_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_writer.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_writer.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display</name>
@@ -729,6 +639,11 @@
 			<name>include/bluetooth/bt_dev.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dev.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_dfu_smp.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dfu_smp.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bt_ead.h</name>
@@ -959,6 +874,36 @@
 			<name>include/crypto/icrypto.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/icrypto.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_boot.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_boot.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_image.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_image.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_serial.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_serial.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_smp.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_smp.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_target.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_target.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_writer.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_writer.h</locationURI>
 		</link>
 		<link>
 			<name>include/display/display.h</name>
@@ -1601,6 +1546,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/bt_crypto_ctlr_sdc.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_dfu_smp.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dfu_smp.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_ead.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_ead.cpp</locationURI>
@@ -1909,6 +1859,56 @@
 			<name>src/crypto/rng_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_boot.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_boot.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_image.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_image.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_layout.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_layout.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_mgr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_mgr.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/src/dfu_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_serial.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_serial.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_smp.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_smp.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_store_nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_store_nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_wire.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_wire.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_writer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_writer.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/display.cpp</name>
@@ -2504,6 +2504,11 @@
 			<name>src/usb/usb_ctrlr_nrf52_iso.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/usb_ctrlr_nrf52_iso.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usb_int.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_int.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usb_intrf.cpp</name>

@@ -3,20 +3,27 @@
 
 @brief	Reusable USB isochronous interface.
 
-UsbIsoIntrf is the isochronous specialization of UsbIntrf. UsbIntrf remains the
-single endpoint-pair DeviceIntrf implementation, but ISO selects a different
-data policy from byte/packet traffic: one statically reserved RX slot and one
-TX slot, no CFifo queue.
+UsbIsoIntrf is the isochronous specialization of UsbIntrf and follows the
+DeviceIntrf model the other USB classes use. UsbIntrf owns the endpoint pair
+data path: packet mode with FIFOs of two frames per direction (the TX FIFO
+blocking, since the controller reads its head in place; the RX FIFO dropping
+its oldest frame, since an isochronous endpoint cannot hold the host off),
+the OUT endpoint, the RX FIFO and DeviceIntrf itself. The application owns the
+event callback (EvtCB in the configuration) and pulls received frames with
+RxData, one frame per call, when UsbIntrf raises DEVINTRF_EVT_RX_DATA. It
+queues frames to send with TxData, one frame per call up to the packet size.
 
-The layering is therefore:
+What is isochronous is the IN side timing, and that is all this file adds:
+the IN endpoint callback offers the head of the TX FIFO to the controller
+once per service interval (UsbCtrlrIsoSend) and, when the frame's DMA has
+ended, pops it and raises DEVINTRF_EVT_TX_READY (more frames queued) or
+DEVINTRF_EVT_TX_FIFO_EMPTY (queue drained) to the application callback with
+the frame length. A failed frame raises DEVINTRF_EVT_TX_TIMEOUT.
 
-    UsbIsoIntrf
-        -> UsbIntrf (DIRECT mode)
-            -> registered endpoint callback / controller ISO scheduling
-
-Each ISO slot is one UsbPkt_t-sized block. Hdr.Reserved carries the
-USB_INTRF_SLOT_READY flag and Hdr.Length carries the current payload length.
-Length zero is therefore a valid ISO packet and is distinct from a free slot.
+The controller moves each received OUT frame straight into the RX FIFO
+block UsbIntrf reserved and registered as the endpoint's DMA buffer, and
+reports the frame length; UsbIntrf publishes the block. Zero-length frames
+are counted in RxEmptyCnt and skipped by RxData.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 8, 2026
@@ -44,6 +51,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
 ----------------------------------------------------------------------------*/
 #ifndef __USB_ISO_H__
 #define __USB_ISO_H__
@@ -59,55 +67,44 @@ SOFTWARE.
   */
 
 #define USB_ISO_INTRF_MAX_MPS		((uint16_t)USB_CTRLR_PKT_LEN_MAX(0, ISO))
-#define USB_ISO_INTRF_PKT_BLKSIZE \
-	USB_INTRF_PKT_BLKSIZE(USB_ISO_INTRF_MAX_MPS)
-#define USB_ISO_INTRF_PACKET_WORDS \
-	((USB_ISO_INTRF_PKT_BLKSIZE + 3U) / 4U)
+
+// Frames queued per direction. Full speed carries one packet per direction
+// per frame, so two slots hold the frame the controller is sending and the
+// one the application has already prepared; more only adds latency.
+#define USB_ISO_INTRF_FIFO_PKTCNT	2U
+#define USB_ISO_INTRF_FIFO_MEMSIZE(Mps) \
+	USB_INTRF_RXMEM_SIZE(USB_ISO_INTRF_FIFO_PKTCNT, Mps)
+#define USB_ISO_INTRF_FIFO_WORDS \
+	((USB_ISO_INTRF_FIFO_MEMSIZE(USB_ISO_INTRF_MAX_MPS) + 3U) / 4U)
 
 typedef struct __Usb_Iso_Interf UsbIsoIntrf_t;
-
-typedef void (*UsbIsoIntrfRxHandler_t)(UsbIsoIntrf_t *pIntrf,
-									 const uint8_t *pData, uint16_t Length,
-									 UsbCtrlrXferResult_t Result,
-									 void *pContext);
-typedef void (*UsbIsoIntrfTxHandler_t)(UsbIsoIntrf_t *pIntrf,
-									 uint16_t Length,
-									 UsbCtrlrXferResult_t Result,
-									 void *pContext);
 
 #pragma pack(push, 4)
 
 typedef struct __Usb_Iso_Interf_Config {
 	int DevNo;
 	uint8_t EpNo;					//!< Internally allocated ISO endpoint number
-	uint8_t Attributes;			//!< ISO sync/usage bits; zero = no-sync data
-	UsbIsoIntrfRxHandler_t RxHandler;
-	UsbIsoIntrfTxHandler_t TxHandler;
-	void *pContext;
+	uint16_t BufferSize;			//!< Maximum ISO payload bytes, up to USB_ISO_INTRF_MAX_MPS
+	uint8_t *pRxFifoMem;			//!< Word-aligned USB_ISO_INTRF_FIFO_MEMSIZE(BufferSize)
+	uint8_t *pTxFifoMem;			//!< Word-aligned USB_ISO_INTRF_FIFO_MEMSIZE(BufferSize)
+	DevIntrfEvtHandler_t EvtCB;		//!< Application event callback
+	void *pContext;					//!< Application context, see UsbIsoIntrfContext
 } UsbIsoIntrfCfg_t;
 
 #pragma pack(pop)
 
 struct __Usb_Iso_Interf {
 	UsbDevIntrf_t *pData;		//!< Shared endpoint data path
-	void *pContext;
-	UsbIsoIntrfRxHandler_t RxHandler;
-	UsbIsoIntrfTxHandler_t TxHandler;
-	uint32_t RxMissCnt;
-	uint32_t TxMissCnt;
-	uint32_t RxEmptyCnt;
-	uint32_t TxEmptyCnt;
-	uint16_t Mps;
+	uint16_t Mps;			//!< Requested packet size, retained while disabled
 	uint8_t EpNo;
 	uint8_t Interval;
-	uint8_t Attributes;
-	bool Opened;
+	bool Opened;			//!< Endpoint pair is active
 	bool Suspended;
-
-	// One current packet per direction. UsbIntrf DIRECT mode uses the packet
-	// header as ownership state and registers the Data portion for DMA.
-	uint32_t RxBuffer[USB_ISO_INTRF_PACKET_WORDS];
-	uint32_t TxBuffer[USB_ISO_INTRF_PACKET_WORDS];
+	void *pContext;
+	uint32_t RxMissCnt;			//!< Frames larger than the packet size
+	uint32_t TxMissCnt;			//!< Frames the controller failed
+	uint32_t RxEmptyCnt;		//!< Zero-length frames received
+	uint32_t TxEmptyCnt;		//!< Zero-length frames sent
 };
 
 #ifdef __cplusplus
@@ -118,23 +115,45 @@ extern "C" {
 bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 					 const UsbIsoIntrfCfg_t *pCfg);
 
-/** Open the internally assigned endpoint pair as isochronous. */
+/**
+ * Configure the endpoint pair as isochronous and open it when enabled.
+ * DeviceIntrfDisable closes the endpoints and discards queued frames;
+ * DeviceIntrfEnable restores this configuration. Close and Reset discard it.
+ */
 bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval);
 void UsbIsoIntrfClose(UsbIsoIntrf_t *pIntrf);
 void UsbIsoIntrfReset(UsbIsoIntrf_t *pIntrf);
 void UsbIsoIntrfSuspend(UsbIsoIntrf_t *pIntrf);
 bool UsbIsoIntrfResume(UsbIsoIntrf_t *pIntrf);
 
-/** Publish one ISO IN frame into the current TX slot. */
+/**
+ * Queue one IN frame for a later service interval. This is what TxData does
+ * for one call. Returns false when the interface is closed, disabled or
+ * suspended, the frame is oversize, or the queue already holds
+ * USB_ISO_INTRF_FIFO_PKTCNT frames.
+ */
 bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 						  uint16_t Length);
 
+/** Queue space is available; DevIntrf.bTxReady instead means TX has drained. */
 static inline bool UsbIsoIntrfTxReady(const UsbIsoIntrf_t *pIntrf)
 {
 	return pIntrf != NULL &&
 		pIntrf->Opened && !pIntrf->Suspended &&
-		atomic_load_explicit(&pIntrf->pData->DevIntrf.bTxReady,
-			memory_order_acquire);
+		CFifoAvail(pIntrf->pData->hTxFifo) > 0;
+}
+
+/** The ISO interface behind the DevIntrf_t handed to the event callback. */
+static inline UsbIsoIntrf_t *UsbIsoIntrfFromDev(DevIntrf_t * const pDev)
+{
+	UsbDevIntrf_t *pData = (UsbDevIntrf_t *)pDev->pDevData;
+	return (UsbIsoIntrf_t *)pData->pClassContext;
+}
+
+/** The application context given at Init, from the event callback. */
+static inline void *UsbIsoIntrfContext(DevIntrf_t * const pDev)
+{
+	return UsbIsoIntrfFromDev(pDev)->pContext;
 }
 
 #ifdef __cplusplus
@@ -147,7 +166,14 @@ public:
 	UsbIsoIntrf &operator = (const UsbIsoIntrf &) = delete;
 
 	bool Init(const UsbIsoIntrfCfg_t &Cfg) {
-		return UsbIsoIntrfInit(&vUsbIsoIntrf, &vUsbDevIntrf, &Cfg);
+		UsbIsoIntrfCfg_t cfg = Cfg;
+		if (cfg.pRxFifoMem == nullptr && cfg.pTxFifoMem == nullptr)
+		{
+			cfg.BufferSize = USB_ISO_INTRF_MAX_MPS;
+			cfg.pRxFifoMem = reinterpret_cast<uint8_t *>(vRxFifo);
+			cfg.pTxFifoMem = reinterpret_cast<uint8_t *>(vTxFifo);
+		}
+		return UsbIsoIntrfInit(&vUsbIsoIntrf, &vUsbDevIntrf, &cfg);
 	}
 
 	using UsbIntrf::operator DevIntrf_t *;
@@ -162,14 +188,12 @@ public:
 	void Suspend(void) { UsbIsoIntrfSuspend(&vUsbIsoIntrf); }
 	bool Resume(void) { return UsbIsoIntrfResume(&vUsbIsoIntrf); }
 
-	bool SendFrame(const uint8_t *pData, uint16_t Length) {
-		return UsbIsoIntrfSendFrame(&vUsbIsoIntrf, pData, Length);
-	}
-
 	bool TxReady(void) const { return UsbIsoIntrfTxReady(&vUsbIsoIntrf); }
 
 private:
 	UsbIsoIntrf_t vUsbIsoIntrf = {};
+	uint32_t vRxFifo[USB_ISO_INTRF_FIFO_WORDS] = {};
+	uint32_t vTxFifo[USB_ISO_INTRF_FIFO_WORDS] = {};
 };
 #endif
 

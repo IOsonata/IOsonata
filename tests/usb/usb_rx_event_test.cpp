@@ -19,6 +19,7 @@ static void *s_InContext;
 static bool s_HwOutReady;
 static bool s_OutBlocking;
 static bool s_OutDma;
+static uint8_t *s_OutDmaBuf;
 static bool s_InDma;
 static uint16_t s_HwOutLength;
 static uint16_t s_InLength;
@@ -55,6 +56,7 @@ static void ReceiveDma(void)
 	if (s_HwOutReady && !s_OutDma && s_OutBuffer != nullptr)
 	{
 		s_OutDma = true;
+		s_OutDmaBuf = s_OutBuffer;
 		s_OutSubmit++;
 	}
 }
@@ -66,7 +68,7 @@ void UsbCtrlrStop(int) {}
 void UsbCtrlrProcess(int)
 {
 	AppEvtHandlerExec();
-	if (s_OutBuffer == nullptr && s_OutHandler != nullptr)
+	if (s_HwOutReady && !s_OutDma && s_OutHandler != nullptr)
 	{
 		s_OutHandler(USB_CTRLR_EVT_DRDY, 0U, s_OutContext);
 	}
@@ -88,22 +90,32 @@ void UsbCtrlrEpStall(int, uint8_t, bool) {}
 void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool Blocking,
+void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool Blocking,
                         UsbCtrlrEpHandler_t Handler, void *pContext)
 {
     if (bIn)
     {
-        s_InBuffer = pBuffer;
+        s_InBuffer = nullptr;
+        CHECK(s_InHandler == nullptr);
         s_InHandler = Handler;
         s_InContext = pContext;
     }
     else
     {
-        s_OutBuffer = pBuffer;
+        s_OutBuffer = nullptr;
+        CHECK(s_OutHandler == nullptr);
         s_OutHandler = Handler;
         s_OutContext = pContext;
         s_OutBlocking = Blocking;
     }
+}
+
+bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+{
+	if (!s_HwOutReady || s_OutDma || pBuffer == nullptr || Capacity == 0U) return false;
+	s_OutBuffer = pBuffer;
+	ReceiveDma();
+	return s_OutDma;
 }
 
 bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
@@ -121,7 +133,6 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 
 alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(RX_SLOTS, BUFFER_SIZE)];
 alignas(4) static uint8_t s_TxMem[CFIFO_MEMSIZE(256)];
-alignas(4) static uint8_t s_RxDma[BUFFER_SIZE];
 alignas(4) static uint8_t s_TxDma[BUFFER_SIZE];
 static UsbDevIntrf_t s_Intrf;
 
@@ -140,6 +151,7 @@ static bool Setup(bool Blocking)
     s_HwOutReady = false;
     s_OutBlocking = true;
     s_OutDma = false;
+    s_OutDmaBuf = nullptr;
     s_InDma = false;
     s_HwOutLength = 0;
     s_InLength = 0;
@@ -161,7 +173,6 @@ static bool Setup(bool Blocking)
     cfg.pTxFifoMem = s_TxMem;
     cfg.TxFifoBlkSize = 1U;
     cfg.BufferSize = BUFFER_SIZE;
-    cfg.pRxBuffer = s_RxDma;
     cfg.pTxBuffer = s_TxDma;
     cfg.EvtCB = AppEvent;
 
@@ -171,36 +182,40 @@ static bool Setup(bool Blocking)
 
 static bool Drdy(const uint8_t *pData, uint16_t Length, bool Notify = false)
 {
+    (void)Notify;
     CHECK(!s_HwOutReady);
     if (s_HwOutReady || Length > sizeof(s_HwOut)) return false;
     if (Length > 0) memcpy(s_HwOut, pData, Length);
     s_HwOutLength = Length;
     s_HwOutReady = true;
-    if (s_OutBlocking || Notify)
+    // Each ready packet requests a destination through DRDY.
+    // The owner submits that destination with UsbCtrlrEpReceive.
+    if (!s_OutDma)
     {
         s_OutHandler(USB_CTRLR_EVT_DRDY,
                      Length, s_OutContext);
-		ReceiveDma();
     }
-    else
-    {
-        // Non-blocking EPDATA goes straight to controller DMA; there is no DRDY callback.
-        s_OutDma = true;
-        s_OutSubmit++;
-    }
+    ReceiveDma();
     return s_OutDma;
+}
+
+// The OUT DMA destination is a block of the RX FIFO memory.
+static bool InRxFifo(const uint8_t *p)
+{
+    return p != nullptr && p > s_RxMem && p < s_RxMem + sizeof(s_RxMem);
 }
 
 static void CompleteOut(void)
 {
     CHECK(s_HwOutReady && s_OutDma);
-    CHECK(s_OutBuffer == s_RxDma);
+    CHECK(InRxFifo(s_OutDmaBuf));
     if (!s_HwOutReady || !s_OutDma) return;
     if (s_HwOutLength > 0)
-        memcpy(s_OutBuffer, s_HwOut, s_HwOutLength);
+        memcpy(s_OutDmaBuf, s_HwOut, s_HwOutLength);
     uint16_t len = s_HwOutLength;
     s_HwOutReady = false;
     s_OutDma = false;
+    s_OutBuffer = nullptr;
     s_OutHandler(USB_CTRLR_EVT_XFER_CMPL,
                  len, s_OutContext);
 }
@@ -214,13 +229,16 @@ static void Deliver(const uint8_t *pData, uint16_t Length)
 static void TestNoPreArm(void)
 {
     CHECK(Setup(true));
-    CHECK(s_OutBuffer == s_RxDma);
+    CHECK(s_OutBuffer == nullptr);
     CHECK(s_InBuffer == nullptr);
     CHECK(s_OutSubmit == 0);
     CHECK(!s_OutDma);
 
     const uint8_t p[] = {1,2,3};
-    Deliver(p, sizeof(p));
+    CHECK(Drdy(p, sizeof(p)));
+    CHECK(s_OutDma && s_RxDataEvent == 0);
+    CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
+    CompleteOut();
     CHECK(s_OutSubmit == 1);
     CHECK(!s_OutDma);
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == 1);
@@ -268,11 +286,10 @@ static void TestBlocking(bool FullEvents)
     uint8_t out[8] = {};
     CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
     CHECK(out[0] == 0);
-    CHECK(!s_OutDma && s_Intrf.RxPending);
-    CHECK(s_OutSubmit == (int)RX_SLOTS);
+    // RxData submits the waiting packet as soon as a block is free.
+    CHECK(s_OutDma && !s_Intrf.RxPending);
+    CHECK(s_OutSubmit == (int)RX_SLOTS + 1);
     UsbCtrlrProcess(0);
-    CHECK(s_OutDma);
-    CHECK(!s_Intrf.RxPending);
     CHECK(s_OutSubmit == (int)RX_SLOTS + 1);
 
     CompleteOut();
@@ -348,6 +365,7 @@ static void TestCancelIsNotCompletion(void)
     CHECK(s_OutDma);
     s_OutDma = false;
     s_HwOutReady = false;
+    s_OutBuffer = nullptr;
     s_OutHandler(USB_CTRLR_EVT_CANCEL,
                  0U, s_OutContext);
     CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);

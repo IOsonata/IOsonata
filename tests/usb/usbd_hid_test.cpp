@@ -43,34 +43,47 @@ const UsbCfg_t *UsbGetCfg(int DevNo)
 
 bool UsbCtrlrHighSpeed(int) { return false; }
 
+// Opens are counted without limit, as the controller allows a pair to be
+// closed and opened again; the first two descriptors are kept for checks.
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 {
-	if (pDesc == nullptr || s_OpenCount >= 2)
+	if (pDesc == nullptr)
 	{
 		return false;
 	}
-	s_Open[s_OpenCount++] = *pDesc;
+	if (s_OpenCount < 2)
+	{
+		s_Open[s_OpenCount] = *pDesc;
+	}
+	s_OpenCount++;
 	return true;
 }
 
 void UsbCtrlrEpClose(int, uint8_t, bool) { s_CloseCount++; }
 
-void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool Blocking,
+void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool Blocking,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (bIn)
 	{
-		s_InBuffer = pBuffer;
+		s_InBuffer = nullptr;
 		s_InHandler = Handler;
 		s_InContext = pContext;
 	}
 	else
 	{
-		s_OutBuffer = pBuffer;
+		s_OutBuffer = nullptr;
 		s_OutHandler = Handler;
 		s_OutContext = pContext;
 		s_OutBlocking = Blocking;
 	}
+}
+
+bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+{
+	if (s_OutBuffer != nullptr || pBuffer == nullptr || Capacity == 0U) return false;
+	s_OutBuffer = pBuffer;
+	return true;
 }
 
 bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
@@ -284,6 +297,7 @@ static void Receive(const uint8_t *pData, uint16_t Length)
 	{
 		memcpy(s_OutBuffer, pData, Length);
 	}
+	s_OutBuffer = nullptr;
 	s_OutHandler(USB_CTRLR_EVT_XFER_CMPL, Length, s_OutContext);
 }
 
@@ -346,14 +360,18 @@ static void TestDataAndLifecycle(void)
 	CHECK(s_Open[0].bmAttributes == USB_ENDPATT_TRANS_INT);
 
 	const uint8_t tx[] = { 1U, 2U, 3U };
-	CHECK(hid.RequestToSend(sizeof(tx)));
-	CHECK(static_cast<UsbIntrf *>(&hid)->TxData(tx, sizeof(tx)) == (int)sizeof(tx));
+	CHECK(hid.Tx(0, tx, sizeof(tx)) == (int)sizeof(tx));
 	CHECK(s_InBusy && s_InLength == sizeof(tx));
 	CHECK(memcmp(s_InBuffer, tx, sizeof(tx)) == 0);
-	CHECK(!hid.SendReport(tx, sizeof(tx)));
+	CHECK(hid.Tx(0, tx, sizeof(tx)) == 0);
 	CompleteIn();
 	CHECK(s_TxCount == 1 && s_LastTxLength == sizeof(tx));
-	CHECK(hid.SendReport(nullptr, 0U));
+
+	DevIntrf_t *pDev = hid.Data();
+	CHECK(DeviceIntrfStartTx(pDev, 0));
+	CHECK(DeviceIntrfTxData(pDev, nullptr, 0) == 0);
+	CHECK(!atomic_load(&pDev->bTxReady));
+	DeviceIntrfStopTx(pDev);
 	CompleteIn();
 	CHECK(s_TxCount == 2 && s_LastTxLength == 0U);
 
@@ -365,16 +383,16 @@ static void TestDataAndLifecycle(void)
 	Receive(nullptr, 0U);
 	CHECK(s_RxCount == 2 && s_LastRxLength == 0U);
 
-	hid.Suspend();
-	CHECK(!hid.SendReport(tx, sizeof(tx)));
-	CHECK(static_cast<UsbIntrf *>(&hid)->TxData(tx, sizeof(tx)) == 0);
-	CHECK(hid.Resume());
-	CHECK(hid.SendReport(tx, sizeof(tx)));
+	hid.Disable();
+	CHECK(hid.Tx(0, tx, sizeof(tx)) == 0);
+	CHECK(static_cast<UsbdHidDev_t *>(hid)->pIntIntrf->Mps != 0U);
+	CHECK(static_cast<UsbdHidDev_t *>(hid)->pIntIntrf->pData->Mps == 0U);
+	hid.Enable();
+	CHECK(hid.Tx(0, tx, sizeof(tx)) == (int)sizeof(tx));
 	CompleteIn();
 
 	CHECK(hid.SelectConfig(0U));
-	CHECK(!hid.SendReport(tx, sizeof(tx)));
-	CHECK(s_CloseCount == 2);
+	CHECK(hid.Tx(0, tx, sizeof(tx)) == 0);
 }
 
 static void TestControlRequests(void)
@@ -457,7 +475,7 @@ static void TestControlRequests(void)
 	CHECK(!Control(hid, &setup, USB_CTRL_SETUP, &pData, &length));
 
 	hid.Reset();
-	CHECK(!hid.Resume());
+	CHECK(hid.Tx(0, s_ControlReport, 1) == 0);
 }
 
 static void TestValidation(void)

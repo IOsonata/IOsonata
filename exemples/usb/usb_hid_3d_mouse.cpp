@@ -353,15 +353,10 @@ int main()
 	{
 		UsbProcess(USB_DEVNO);
 		const bool nowSuspended = UsbSuspended(USB_DEVNO);
-		if (nowSuspended != suspended)
+		suspended = nowSuspended;
+		if (!suspended && HidReportUpdate())
 		{
-			suspended = nowSuspended;
-			if (suspended) g_Hid.Suspend();
-			else (void)g_Hid.Resume();
-		}
-		if (!suspended && g_Hid.TxReady() && HidReportUpdate())
-		{
-			(void)g_Hid.SendReport(
+			(void)g_Hid.Tx(0,
 				reinterpret_cast<const uint8_t *>(&s_Report), sizeof(s_Report));
 		}
 		msDelay(1U);

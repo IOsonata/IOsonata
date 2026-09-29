@@ -233,22 +233,37 @@ void UsbCtrlrRemoteWakeup(int DevNo);
 void UsbCtrlrSofEnable(int DevNo, bool Enable);
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
+bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn, uint16_t MaxPacketSize);
 bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 						 uint16_t MaxPacketSize);
 void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn);
 void UsbCtrlrEpCloseAll(int DevNo);
-void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
-					 bool bBlocking,
+// Bind a non-control endpoint's owner and callback during interface Init.
+// Transfer buffers are supplied separately by EpReceive and EpSend.
+void UsbCtrlrEpBind(int DevNo, uint8_t EpNo, bool bIn, bool bBlocking,
 					 UsbCtrlrEpHandler_t Handler, void *pContext);
+// Submit a non-NULL OUT DMA destination in response to DRDY. Capacity is
+// writable payload space and must cover the configured endpoint MPS.
+// A successful submission owns the buffer until completion or cancellation; it does not publish data to the application. One outstanding
+// receive per endpoint. Returns false when the request cannot be accepted.
+// Regular OUT shares the transfer queue with IN; ISO retains interval scheduling.
+bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
+						  uint16_t Capacity);
 void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 						 UsbCtrlrEvtType_t Event, uint16_t Value);
 // EpNum is an endpoint number: device IN, host OUT. The controller schedules RX.
 // pBuffer supplies the DMA source and remains owned until the completion callback.
 // It may be NULL only for a zero-length transfer.
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
-// Core-owned ISO service opportunity. IN uses a staged send; OUT uses the
-// registered receive buffer and is scheduled internally by the controller.
-bool UsbCtrlrIsoService(int DevNo, uint8_t EpNum, uint16_t Length);
+// Isochronous service-interval transfer. A non-NULL IN buffer sends one
+// frame (Length may be zero for a ZLP); OUT lands in the buffer supplied
+// for the ISO OUT endpoint with UsbCtrlrEpReceive.
+bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
+					 uint16_t Length);
+// Bench diagnostics: copy of the controller's per-frame ISO trace ring.
+// Returns the byte count and points *ppData at it; zero when the build has
+// no trace (NRFUSBD_ISO_TRACE 0).
+uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData);
 // IN returns bytes copied into the queue; completion notifies that it drained.
 // A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
@@ -277,11 +292,9 @@ enum
 
 typedef struct __nRF_Usb_Ep_Registration
 {
-	uint8_t *pBuffer;
 	UsbCtrlrEpHandler_t Handler;
 	void *pContext;
-	uint16_t MaxPacketSize;
-	bool bBlocking;
+	uint32_t Generation;         //!< Invalidates deferred events on close/reset.
 } nRFUsbEpReg_t;
 
 enum
@@ -293,8 +306,8 @@ enum
 
 enum
 {
-	NRFUSBD_ISO_OUT_BUSY = 0x01U,
-	NRFUSBD_ISO_IN_BUSY  = 0x02U,
+	NRFUSBD_ISO_IN_READY  = 0x01U,
+	NRFUSBD_ISO_OUT_READY = 0x02U,
 };
 
 typedef struct __nRF_Usbd_State
@@ -304,13 +317,14 @@ typedef struct __nRF_Usbd_State
 	bool LowPowerSuspend;
 	bool SofEnabled;
 	bool IsoOpen;                 //!< Both EP8 directions are open.
-	// IN may be staged with BUSY clear. BUSY owns one admitted ISO service
-	// from the SOF opportunity until its END event retires the EasyDMA.
-	int16_t IsoInDmaLen;
-	uint8_t IsoBusy;
+	uint16_t IsoInDmaLen;
+	uint8_t IsoDataFlag;          //!< ISO directions with data ready for DMA.
 	volatile uint8_t Flags;       //!< Controller power/wake state only.
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;
+	// Regular DMA buffers and lengths live in hQue; only ISO retains slots.
+	uint8_t *pIsoBuffer[2];
+	uint16_t IsoMaxPacketSize[2];
 	// Non-control endpoints 1-8.
 	nRFUsbEpReg_t EpReg[NRF_USB_EP_COUNT - 1][2];
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
@@ -321,22 +335,13 @@ extern nRFUsbdState_t s_Usbd;
 void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
 							 UsbCtrlrEvtType_t Event, uint16_t Length);
 void nRFUsbdDmaUnlock(void);
-void nRFUsbdSofAcquire(void);
-void nRFUsbdSofRelease(void);
-void nRFUsbdDmaWait(void);
 void nRFUsbdResumeQueuedDmaLocked(void);
+void nRFUsbdIsoComplete(uint8_t In);
+void nRFUsbdIsoSofMark(void);
 
 /** Start EasyDMA with the channel already locked by the caller. */
-static inline __attribute__((always_inline))
 void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
-	volatile uint32_t *pEnd)
-{
-	*pEnd = 0;
-	__DSB();
-
-	*pTask = 1;
-	__DSB();
-}
+	volatile uint32_t *pEnd);
 
 #endif // USBD_PRESENT
 

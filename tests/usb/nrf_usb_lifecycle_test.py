@@ -17,9 +17,27 @@ assert 'if (s_UsbDevStarted)' in core
 assert 'if (!s_UsbDevStarted)' in core
 assert core.index('UsbCtrlrStart(') < core.index('s_UsbDevStarted = true;')
 
+# Stop is split: the core quiets the bus and the endpoints, then the
+# controller releases the peripheral and its clock.
+def body(source, signature):
+    start = source.index(signature)
+    brace = source.index('{', start)
+    end, depth = brace + 1, 1
+    while depth:
+        depth += (source[end] == '{') - (source[end] == '}')
+        end += 1
+    return source[brace + 1:end - 1]
+
+
+core_stop = body(core, 'static void UsbCoreStop(void)')
+dev_disable = body(core, 'static void UsbDevDisable(void)')
+assert (core_stop.index('UsbCtrlrDisconnect(') < core_stop.index('UsbCtrlrIntDisable(')
+        < core_stop.index('UsbCtrlrEpCloseAll('))
+assert dev_disable.index('UsbCoreStop();') < dev_disable.index('UsbCtrlrStop(')
+
 
 def function(name):
-    match = re.search(r'(?:bool|void)\s+' + name + r'\([^;{}]*\)\s*\{', src)
+    match = re.search(r'(?:bool|void|nRFUsbEpReg_t\s*\*)\s*' + name + r'\([^;{}]*\)\s*\{', src)
     assert match, name
     brace = src.index('{', match.start())
     end, depth = brace + 1, 1
@@ -35,9 +53,9 @@ code = r'''
 #include <cstdio>
 enum UsbCtrlrEvtType_t {USB_CTRLR_EVT_DRDY=2};
 typedef void (*UsbCtrlrEpHandler_t)(UsbCtrlrEvtType_t, uint16_t, void *);
-struct nRFUsbEpReg_t {uint8_t *pBuffer;UsbCtrlrEpHandler_t Handler;void *pContext;uint16_t MaxPacketSize;bool bBlocking;};
+struct nRFUsbEpReg_t {UsbCtrlrEpHandler_t Handler;void *pContext;};
 struct UsbdMock {uint8_t IntPrio;bool LowPowerSuspend;
- nRFUsbEpReg_t EpReg[8][2];} s_Usbd;
+ nRFUsbEpReg_t EpReg[8][2];uint16_t Complete;} s_Usbd;
 bool cable, clockOK, readyOK;
 unsigned requests, releases, clockRefs, starts, resets, waits, dispatches;
 unsigned irqDisables, irqPriority;
@@ -55,6 +73,7 @@ void nRFUsbdResetState(){++resets;}
 void __ISB(){}
 void __DSB(){}
 void AppEvtHandlerExec(){++dispatches;}
+void nRFUsbdQueueComplete(){assert(false);}
 uint32_t DisableInterrupt(){return 0;}
 void EnableInterrupt(uint32_t){}
 uint32_t nRFUsbdQueueInComplete(uint32_t){assert(false);return 0;}
@@ -72,7 +91,8 @@ void init(){
  irqPriority=0;regs={0xFFFF,1,1,0};
 }
 '''
-code += '\n'.join(function(n) for n in ['UsbCtrlrStart', 'UsbCtrlrStop', 'UsbCtrlrProcess'])
+code += '\n'.join(function(n) for n in ['nRFUsbGetEpReg', 'UsbCtrlrEpBind',
+                                        'UsbCtrlrStart', 'UsbCtrlrStop', 'UsbCtrlrProcess'])
 code += r'''
 namespace startup {
 constexpr uint32_t USBD_EVENTCAUSE_READY_Msk=1,POWER_USBREGSTATUS_OUTPUTRDY_Msk=2;
@@ -149,8 +169,24 @@ void check(){
 }
 '''
 code += r'''
+void endpointCallback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
+ assert(event==USB_CTRLR_EVT_DRDY && length==17);
+ ++*static_cast<unsigned *>(context);
+}
 int main(){
  startup::check();clock_request::check();
+ init();
+ // Endpoint ownership is bound independently of transfer storage.
+ for(uint8_t ep=1;ep<NRFX_USBD_EP_COUNT;++ep){
+  unsigned calls=0;
+  UsbCtrlrEpBind(0,ep,false,true,endpointCallback,&calls);
+  UsbCtrlrEpBind(0,ep,true,false,endpointCallback,&calls);
+  auto *out=nRFUsbGetEpReg(ep,0);auto *in=nRFUsbGetEpReg(ep,1);
+  assert(out->Handler==endpointCallback && out->pContext==&calls);
+  assert(in->Handler==endpointCallback && in->pContext==&calls);
+  out->Handler(USB_CTRLR_EVT_DRDY,17,out->pContext);assert(calls==1);
+ }
+ puts("PASS: nRF52 endpoint binding does not submit a DMA buffer");
  // Start/stop pairing and DevNo validation moved to the usb core
  // (s_UsbDevStarted); the controller owns only clock and peripheral state.
  for(unsigned attached=0;attached<2;++attached)
@@ -167,9 +203,11 @@ int main(){
   if(success){
    assert(irqPriority==6);
    UsbCtrlrStop(0);
-   assert(clockRefs==0 && releases==1 && irqDisables==1);
-   assert(waits==1 && resets==1);
-   assert(regs.INTEN==0 && regs.USBPULLUP==0 && regs.ENABLE==0);
+   // The controller's part: state, interrupt enables, peripheral, clock.
+   assert(clockRefs==0 && releases==1 && resets==1);
+   assert(regs.INTEN==0 && regs.ENABLE==0);
+   // Pull-up, NVIC and endpoint DMA were the core's, before this call.
+   assert(irqDisables==0 && waits==0 && regs.USBPULLUP==1);
   }
  }
  init();

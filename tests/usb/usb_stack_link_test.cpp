@@ -91,7 +91,7 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *)
 }
 void UsbCtrlrEpClose(int, uint8_t, bool) {}
 void UsbCtrlrEpCloseAll(int) {}
-void UsbCtrlrEpAlloc(int, uint8_t EpNo, bool bIn, uint8_t *, bool,
+void UsbCtrlrEpBind(int, uint8_t EpNo, bool bIn, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (s_RegisteredEpCount < (int)sizeof(s_RegisteredEp))
@@ -103,6 +103,9 @@ void UsbCtrlrEpAlloc(int, uint8_t EpNo, bool bIn, uint8_t *, bool,
 	s_EpHandler[index] = Handler;
 	s_EpContext[index] = pContext;
 }
+
+bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *, uint16_t)
+{ return false; }
 void UsbCtrlrEpProcessEvent(int, uint8_t, bool,
 	UsbCtrlrEvtType_t, uint16_t) {}
 bool UsbCtrlrEpSend(int, uint8_t EpNo, uint8_t *, uint16_t)
@@ -110,7 +113,7 @@ bool UsbCtrlrEpSend(int, uint8_t EpNo, uint8_t *, uint16_t)
 	s_EpSendCount[EpNo]++;
 	return true;
 }
-bool UsbCtrlrIsoService(int, uint8_t, uint16_t) { return false; }
+bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *, uint16_t) { return false; }
 static bool RecordEp0(uint8_t EpAddr, uint16_t Length)
 {
 	s_Ep0EventCount++;

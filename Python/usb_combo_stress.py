@@ -8,6 +8,7 @@ Python-side lock contention.
 
 import argparse
 import sys
+import re
 import struct
 import threading
 import time
@@ -46,6 +47,37 @@ USB_ENDPOINT_TRANSFER_TYPE_INT = 0x03
 ISO_DIAG_REQUEST = 0x5A
 ISO_DIAG_FORMAT = "<5I"
 ISO_DIAG_SIZE = struct.calcsize(ISO_DIAG_FORMAT)
+# Controller-level ISO scheduling counters. Only the TinyUSB comparison
+# firmware answers this request; the IOsonata firmware stalls it.
+ISO_TRACE_REQUEST = 0x5C
+ISO_TRACE_HDR_FORMAT = "<4H"
+ISO_TRACE_ENTRY_FORMAT = "<HHBBBBHH"
+ISO_TRACE_ENTRY_SIZE = struct.calcsize(ISO_TRACE_ENTRY_FORMAT)
+ISO_TRACE_COUNT = 128
+ISO_TRACE_SIZE = (
+    struct.calcsize(ISO_TRACE_HDR_FORMAT) + ISO_TRACE_COUNT * ISO_TRACE_ENTRY_SIZE
+)
+# Flag bits of a trace entry, in the order they print. Lower case marks the
+# OUT direction.
+ISO_TRACE_FLAGS = (
+    (0x01, "O"),  # IN frame offered at SOF
+    (0x02, "R"),  # offer refused, previous IN still pending
+    (0x04, "B"),  # DMA channel busy at the offer
+    (0x08, "E"),  # ... held by EP0
+    (0x10, "S"),  # STARTISOIN issued
+    (0x20, "D"),  # ENDISOIN retired
+    (0x40, "s"),  # STARTISOOUT issued
+    (0x80, "d"),  # ENDISOOUT retired
+)
+ISO_DCD_DIAG_REQUEST = 0x5B
+ISO_DCD_DIAG_FORMAT = "<11I"
+ISO_DCD_DIAG_SIZE = struct.calcsize(ISO_DCD_DIAG_FORMAT)
+ISO_DCD_DIAG_NAMES = (
+    "in_idle", "in_wait", "in_carry", "out_idle", "out_carry", "out_unarmed",
+    "in_spin_out", "in_start_max_us", "in_end_max_us", "in_end_slow",
+    "cbi_held"
+)
+
 
 BANNER = b"IOsonata USB Combo Stress"
 
@@ -107,6 +139,136 @@ def int_payload(sequence):
     return bytes(data)
 
 
+def fetch_iso_trace(handle, interface, timeout_ms):
+    """Controller per-frame ISO trace as a list of dicts, oldest first.
+
+    Returns (entries, None) or (None, reason).
+    """
+    try:
+        raw = bytes(
+            handle.controlRead(
+                0xC1,
+                ISO_TRACE_REQUEST,
+                0,
+                interface,
+                ISO_TRACE_SIZE,
+                timeout=timeout_ms,
+            )
+        )
+    except usb1.USBError as exc:
+        return None, f"trace read failed: {exc}"
+    if len(raw) != ISO_TRACE_SIZE:
+        return None, f"trace length {len(raw)}/{ISO_TRACE_SIZE}"
+
+    hdr_size = struct.calcsize(ISO_TRACE_HDR_FORMAT)
+    nxt, count, entry_size, version = struct.unpack(
+        ISO_TRACE_HDR_FORMAT, raw[:hdr_size]
+    )
+    if version != 2 or entry_size != ISO_TRACE_ENTRY_SIZE or count != ISO_TRACE_COUNT:
+        return None, f"trace layout v{version} entry {entry_size} count {count}"
+
+    entries = []
+    for i in range(count):
+        index = (nxt + i) % count
+        offset = hdr_size + index * entry_size
+        frame, sof_us, start_us, end_us, in_len, flags, out_len, _ = struct.unpack(
+            ISO_TRACE_ENTRY_FORMAT, raw[offset:offset + entry_size]
+        )
+        entries.append({
+            "frame": frame, "sof_us": sof_us, "start_us": start_us,
+            "end_us": end_us, "in": in_len, "out": out_len, "flags": flags,
+        })
+    return entries, None
+
+
+def format_iso_trace(entries):
+    """One text line per frame.
+
+    Columns: bus frame number, microseconds since the previous SOF mark
+    (about 1000; 2000 means the device saw no SOF for one frame, more than
+    that means the interrupt was held off past the next SOF), SOF to
+    STARTISOIN in us, SOF to ENDISOIN in us (0 when it did not happen in
+    that frame), IN bytes offered, OUT bytes read, flags (see
+    ISO_TRACE_FLAGS, '-' when clear). A line ending in '<< gap' follows a
+    jump in the frame number.
+    """
+    lines = ["frame sof_us start_us end_us in out flags"]
+    previous = None
+    for e in entries:
+        text = "".join(
+            letter if e["flags"] & bit else "-" for bit, letter in ISO_TRACE_FLAGS
+        )
+        gap = ""
+        if previous is not None and ((e["frame"] - previous) & 0x7FF) != 1:
+            gap = "  << gap"
+        previous = e["frame"]
+        lines.append(
+            f"{e['frame']:5d} {e['sof_us']:6d} {e['start_us']:8d} "
+            f"{e['end_us']:6d} {e['in']:3d} {e['out']:3d} {text}{gap}"
+        )
+    return lines
+
+
+MISSING_RE = re.compile(r"^missing validation frame\(s\) \[([0-9, ]*)\]")
+
+
+def link_loss_frames(error, entries, guard, mps):
+    """Classify every missing validation frame of a failed burst as a link
+    loss, or return None when any one of them is not explained that way.
+
+    The failed burst is the last run of trace entries that read OUT data.
+    OUT packet k of the burst is read at the SOF of frame first + k, so a
+    missing validation index m belongs to frame first + guard + m. That
+    frame is a link loss when either:
+      "no SOF":    it has no trace entry, the device raised no SOF for it and
+                   the packet was replaced by the next one unread;
+      "no packet": the device saw the SOF and read the OUT buffer, and the
+                   hardware reported no full packet, while the burst
+                   around it carried full packets. ISO OUT has no
+                   handshake, so the host reports these as sent.
+    Returns a list of (frame, kind).
+    """
+    match = MISSING_RE.match(error or "")
+    if match is None or not entries:
+        return None
+    missing = [int(v) for v in match.group(1).split(",") if v.strip()]
+    if not missing or len(missing) >= 16:
+        return None     # empty, or the list may have been truncated
+
+    # The burst: from the first entry that read a full packet to the last,
+    # allowing single entries inside it that read nothing.
+    last = None
+    for i in range(len(entries) - 1, -1, -1):
+        if entries[i]["out"] == mps:
+            last = i
+            break
+    if last is None:
+        return None
+    first = last
+    while first > 0 and (entries[first - 1]["out"] == mps or (
+            first > 1 and entries[first - 2]["out"] == mps)):
+        first -= 1
+    while entries[first]["out"] != mps:
+        first += 1
+    start = entries[first]["frame"]
+    span = (entries[last]["frame"] - start) & 0x7FF
+    by_frame = {e["frame"]: e for e in entries[first:last + 1]}
+
+    result = []
+    for m in missing:
+        frame = (start + guard + m) & 0x7FF
+        if ((frame - start) & 0x7FF) > span:
+            return None
+        entry = by_frame.get(frame)
+        if entry is None:
+            result.append((frame, "no SOF"))
+        elif entry["out"] == 0 and 900 <= entry["sof_us"] <= 1100:
+            result.append((frame, "no packet"))
+        else:
+            return None
+    return result
+
+
 def read_iso_diag(handle, interface, timeout_ms):
     raw = bytes(
         handle.controlRead(
@@ -123,10 +285,31 @@ def read_iso_diag(handle, interface, timeout_ms):
     rx_miss, tx_miss, loop_drop, rx_empty, tx_empty = struct.unpack(
         ISO_DIAG_FORMAT, raw
     )
-    return (
+    text = (
         f"rx_miss={rx_miss} tx_miss={tx_miss} "
         f"loop_drop={loop_drop} rx_empty={rx_empty} tx_empty={tx_empty}"
     )
+    try:
+        raw = bytes(
+            handle.controlRead(
+                0xC1,
+                ISO_DCD_DIAG_REQUEST,
+                0,
+                interface,
+                ISO_DCD_DIAG_SIZE,
+                timeout=timeout_ms,
+            )
+        )
+    except usb1.USBError:
+        return text
+    if len(raw) != ISO_DCD_DIAG_SIZE:
+        return text
+    values = struct.unpack(ISO_DCD_DIAG_FORMAT, raw)
+    return text + "; dcd " + " ".join(
+        f"{name}={value}" for name, value in zip(ISO_DCD_DIAG_NAMES, values)
+    )
+
+
 
 
 class Stats:
@@ -140,7 +323,68 @@ class Stats:
         self.prbs_errors = 0
         self.target_errors = 0
         self.path_errors = {"hid": 0, "int": 0, "iso": 0}
+        self.iso_host_misses = 0
+        self.iso_host_skews = 0
+        self.iso_sof_losses = 0
+        self.iso_out_losses = 0
+        self.host_pauses = 0
+        self.host_pause_sec = 0.0
         self.failure = None
+        self.failure_at = None
+
+    def add_host_pause(self, seconds):
+        """The host process was not scheduled for `seconds`.
+
+        No path could make progress during that time, so the pause is not
+        counted against any of them: every progress timestamp moves forward
+        by the pause.
+        """
+        with self.lock:
+            self.host_pauses += 1
+            self.host_pause_sec += seconds
+            for name, when in self.last.items():
+                if when is not None:
+                    self.last[name] = when + seconds
+            return self.host_pauses
+
+    def host_pause_summary(self):
+        with self.lock:
+            return self.host_pauses, self.host_pause_sec
+
+    def add_iso_host_miss(self):
+        with self.lock:
+            self.iso_host_misses += 1
+            return self.iso_host_misses
+
+    def iso_host_miss_count(self):
+        with self.lock:
+            return self.iso_host_misses
+
+    def add_iso_host_skew(self):
+        with self.lock:
+            self.iso_host_skews += 1
+            return self.iso_host_skews
+
+    def iso_host_skew_count(self):
+        with self.lock:
+            return self.iso_host_skews
+
+    def add_iso_link_loss(self, losses):
+        with self.lock:
+            for _, kind in losses:
+                if kind == "no SOF":
+                    self.iso_sof_losses += 1
+                else:
+                    self.iso_out_losses += 1
+            return self.iso_sof_losses + self.iso_out_losses
+
+    def iso_sof_loss_count(self):
+        with self.lock:
+            return self.iso_sof_losses
+
+    def iso_out_loss_count(self):
+        with self.lock:
+            return self.iso_out_losses
 
     def add(self, name, count, errors=0, target_errors=0):
         with self.lock:
@@ -159,6 +403,11 @@ class Stats:
                 self.path_errors[key] += 1
             if self.failure is None:
                 self.failure = f"{name}: {error}"
+                self.failure_at = time.monotonic()
+
+    def failure_timestamp(self):
+        with self.lock:
+            return self.failure_at
 
     def snapshot(self):
         with self.lock:
@@ -275,12 +524,12 @@ def discover_interrupt_loopback(device):
     return matches[0]
 
 
-def loop_tx_worker(comm, start, stop, stats, block_size):
+def loop_tx_worker(comm, start, stop, stats, block_size, tx_stop):
     state = 0xFF
     pending = b""
     start.wait()
     try:
-        while not stop.is_set():
+        while not stop.is_set() and not tx_stop.is_set():
             if not pending:
                 pending, state = make_prbs_block(state, block_size)
             written = comm.write(pending)
@@ -410,6 +659,7 @@ def iso_worker(vid, pid, start, stop, stats, timeout_ms, rounds):
                     handle.setInterfaceAltSetting(interface, ISO_ALT)
                     sequence = 0
                     start.wait()
+                    misses = 0
                     while not stop.is_set():
                         error, result = iso_test.run_burst(
                             context,
@@ -422,13 +672,77 @@ def iso_worker(vid, pid, start, stop, stats, timeout_ms, rounds):
                             timeout_ms,
                             sequence,
                         )
+                        if iso_test.is_host_sched_error(error):
+                            # The host never ran the request (miss), or ran
+                            # OUT late against IN so the IN window closed
+                            # before the last echoes (skew). Count it, move
+                            # the sequence on so any queued echoes read as
+                            # stale, and resubmit.
+                            misses += 1
+                            if iso_test.is_host_sched_skew_error(error):
+                                total = stats.add_iso_host_skew()
+                            else:
+                                total = stats.add_iso_host_miss()
+                            print(
+                                f"ISO {error} (#{total}, "
+                                f"{time.strftime('%H:%M:%S')}); resubmitting",
+                                file=sys.stderr,
+                                flush=True,
+                            )
+                            sequence += rounds + (
+                                2 * iso_test.BURST_GUARD_FRAMES
+                            )
+                            if misses <= iso_test.HOST_SCHED_MISS_RETRIES:
+                                continue
+                            error = (
+                                f"{misses} consecutive host scheduling "
+                                f"misses; last: {error}"
+                            )
+                        else:
+                            misses = 0
                         if error is not None:
+                            # The controller's last 128 frames, oldest
+                            # first; the failed burst is inside them.
+                            entries, trace_error = fetch_iso_trace(
+                                handle, interface, timeout_ms
+                            )
+                            lost = link_loss_frames(
+                                error, entries, iso_test.BURST_GUARD_FRAMES,
+                                ISO_MPS
+                            )
+                            if lost is not None:
+                                # The device never saw the SOF, or never
+                                # received the packet, for those frames. A
+                                # link-level loss, not a stack failure.
+                                total = stats.add_iso_link_loss(lost)
+                                text = ", ".join(
+                                    f"{frame} {kind}" for frame, kind in lost
+                                )
+                                print(
+                                    f"ISO link loss: frame(s) {text} "
+                                    f"(#{total}, {time.strftime('%H:%M:%S')})",
+                                    file=sys.stderr,
+                                    flush=True,
+                                )
+                                stats.add(
+                                    "iso", (rounds - len(lost)) * ISO_MPS
+                                )
+                                sequence += rounds + (
+                                    2 * iso_test.BURST_GUARD_FRAMES
+                                )
+                                continue
                             try:
                                 diag = read_iso_diag(
                                     handle, interface, timeout_ms
                                 )
                             except Exception as diag_exc:
                                 diag = f"diag read failed: {diag_exc}"
+                            print("ISO controller frame trace:", file=sys.stderr)
+                            lines = (format_iso_trace(entries)
+                                     if entries is not None else [trace_error])
+                            for line in lines:
+                                print("  " + line, file=sys.stderr)
+                            sys.stderr.flush()
                             raise RuntimeError(f"{error}; {diag}")
                         stats.add("iso", result["matched"] * ISO_MPS)
                         sequence += rounds + (
@@ -440,6 +754,24 @@ def iso_worker(vid, pid, start, stop, stats, timeout_ms, rounds):
     except Exception as exc:
         stats.fail("ISO", exc)
         stop.set()
+
+
+def stop_workers(workers, tx_stop, stop, stats):
+    # Like the dual-CDC test, keep RX and the other interfaces running until
+    # the final CDC write returns. Stopping RX first can block that write
+    # through loopback backpressure and manufacture a shutdown timeout.
+    stop_started = time.monotonic()
+    tx_stop.set()
+    workers[0].join(timeout=1.5)  # Longer than the serial write timeout.
+    if workers[0].is_alive():
+        stats.fail("CDC loop TX", "writer did not stop")
+    test_end = time.monotonic()
+    stop.set()
+    for worker in workers[1:]:
+        worker.join(timeout=2.0)
+        if worker.is_alive():
+            stats.fail(worker.name, "worker did not stop")
+    return stop_started, test_end
 
 
 def main():
@@ -488,6 +820,7 @@ def main():
     loop_comm = None
     prbs_comm = None
     stop = threading.Event()
+    tx_stop = threading.Event()
     start = threading.Event()
     stats = Stats()
 
@@ -500,7 +833,7 @@ def main():
             threading.Thread(
                 name="CDC-loop-TX",
                 target=loop_tx_worker,
-                args=(loop_comm, start, stop, stats, args.block),
+                args=(loop_comm, start, stop, stats, args.block, tx_stop),
                 daemon=True,
             ),
             threading.Thread(
@@ -563,9 +896,26 @@ def main():
         previous = {name: 0 for name in Stats.NAMES}
         start.set()
 
+        tick = time.monotonic()
         while not stop.is_set() and time.monotonic() - test_start < args.duration:
             time.sleep(0.02)
             now = time.monotonic()
+            # This loop only sleeps 20 ms per pass. A pass that took the
+            # stall timeout or longer means the host process itself was not
+            # running (system sleep, App Nap, scheduler); no path could move,
+            # device or not.
+            gap = now - tick
+            tick = now
+            if gap >= args.stall_timeout:
+                total = stats.add_host_pause(gap)
+                print(
+                    f"Host paused {gap:.1f} s (#{total}, "
+                    f"{time.strftime('%H:%M:%S')}); not counted as a stall",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                continue
+
             count, last, loop_errors, prbs_errors, target_errors, path_errors, failure = (
                 stats.snapshot()
             )
@@ -577,6 +927,17 @@ def main():
                 for name in Stats.NAMES:
                     when = last[name]
                     if when is None or now - when >= args.stall_timeout:
+                        ages = ", ".join(
+                            f"{other} "
+                            + ("never" if last[other] is None
+                               else f"{now - last[other]:.1f} s")
+                            for other in Stats.NAMES
+                        )
+                        print(
+                            f"Stall: {name}; time since last progress: {ages}",
+                            file=sys.stderr,
+                            flush=True,
+                        )
                         stats.fail(name, "stalled")
                         stop.set()
                         break
@@ -610,31 +971,56 @@ def main():
                     flush=True,
                 )
 
-        stop.set()
-        for worker in workers:
-            worker.join(timeout=2.0)
+        stop_started, test_end = stop_workers(workers, tx_stop, stop, stats)
 
         count, _, loop_errors, prbs_errors, target_errors, path_errors, failure = (
             stats.snapshot()
         )
         pending = count["loop_tx"] - count["loop_rx"]
+        elapsed = test_end - test_start
+        rates = {
+            name: count[name] / elapsed
+            for name in Stats.NAMES
+        }
+        total_bytes = sum(count.values())
+        total_rate = total_bytes / elapsed
 
         print()
+        print(f"Elapsed sec     : {elapsed:.2f}")
         print(f"Loop TX bytes   : {count['loop_tx']}")
+        print(f"Loop TX B/sec   : {rates['loop_tx']:.2f}")
         print(f"Loop RX bytes   : {count['loop_rx']}")
+        print(f"Loop RX B/sec   : {rates['loop_rx']:.2f}")
         print(f"Loop pending    : {pending}")
         print(f"Loop errors     : {loop_errors}")
         print(f"PRBS RX bytes   : {count['prbs_rx']}")
+        print(f"PRBS RX B/sec   : {rates['prbs_rx']:.2f}")
         print(f"PRBS errors     : {prbs_errors}")
         print(f"Target RX errors: {target_errors}")
         print(f"HID bytes       : {count['hid']}")
+        print(f"HID B/sec       : {rates['hid']:.2f}")
         print(f"HID errors      : {path_errors['hid']}")
         print(f"INT bytes       : {count['int']}")
+        print(f"INT B/sec       : {rates['int']:.2f}")
         print(f"INT errors      : {path_errors['int']}")
         print(f"ISO bytes       : {count['iso']}")
+        print(f"ISO B/sec       : {rates['iso']:.2f}")
         print(f"ISO errors      : {path_errors['iso']}")
+        print(f"ISO host misses : {stats.iso_host_miss_count()}")
+        print(f"ISO host skews  : {stats.iso_host_skew_count()}")
+        print(f"ISO SOF losses  : {stats.iso_sof_loss_count()}")
+        print(f"ISO OUT losses  : {stats.iso_out_loss_count()}")
+        pauses, pause_sec = stats.host_pause_summary()
+        print(f"Host pauses     : {pauses} ({pause_sec:.1f} s)")
+        print(f"Total bytes     : {total_bytes}")
+        print(f"Total B/sec     : {total_rate:.2f}")
         if failure is not None:
             print(f"Failure         : {failure}")
+            failure_at = stats.failure_timestamp()
+            phase = ("traffic" if failure_at < stop_started else
+                     "final CDC write" if failure_at < test_end else
+                     "interface shutdown")
+            print(f"Failure time    : {failure_at - test_start:.2f} s ({phase})")
 
         passed = (
             failure is None

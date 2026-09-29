@@ -41,7 +41,15 @@ SOFTWARE.
 #include <stdint.h>
 
 #ifdef __cplusplus
-#if __cplusplus > 202002L
+// C++23 gives <stdatomic.h> as a C++ header whose names live in std. Only a
+// library that reports __cpp_lib_stdatomic_h has it; on an older library the
+// same include resolves to the C header, whose global atomic_* types then
+// clash with std:: under the using-directive below once anything drags
+// <atomic> in. Gate on the library, not on the language version.
+#if __has_include(<version>)
+	#include <version>
+#endif
+#if defined(__cpp_lib_stdatomic_h)
 	#include <stdatomic.h>
 #else
 	#include <atomic>

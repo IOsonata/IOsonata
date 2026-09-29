@@ -236,7 +236,6 @@ typedef struct __Bt_Hci_Usb_Dev {
 	uint16_t ScoTxChunkLength;
 	uint32_t CommandBuffer[(BT_HCI_USB_COMMAND_MAX_SIZE + 3U) / 4U];
 	uint32_t AclRxBuffer[(BT_HCI_USB_PACKET_MAX_SIZE + 4U) / 4U];
-	uint32_t AclRxTransfer[(BT_HCI_USB_ACL_MAX_MPS + 3U) / 4U];
 	uint32_t AclTxPacket[(BT_HCI_USB_ACL_PKT_BLKSIZE + 3U) / 4U];
 	uint32_t EventTxBuffer[(BT_HCI_USB_EVENT_MAX_SIZE + 3U) / 4U];
 	uint32_t EventTxTransfer[(BT_HCI_USB_EVENT_MAX_MPS + 3U) / 4U];
@@ -248,8 +247,6 @@ typedef struct __Bt_Hci_Usb_Dev {
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-bool BtHciUsbRequestToSend(BtHciUsbDev_t *pHci, int NbBytes);
 
 #ifdef __cplusplus
 }
@@ -270,10 +267,6 @@ public:
 	using UsbIntrf::operator DevIntrf_t *;
 	operator BtHciUsbDev_t * () { return &vBtHciUsb; }
 	operator const BtHciUsbDev_t * () const { return &vBtHciUsb; }
-
-	bool RequestToSend(int NbBytes) override {
-		return BtHciUsbRequestToSend(&vBtHciUsb, NbBytes);
-	}
 
 private:
 	UsbIsoIntrf vScoIso;

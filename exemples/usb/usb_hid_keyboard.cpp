@@ -292,12 +292,7 @@ int main()
 	{
 		UsbProcess(USB_DEVNO);
 		const bool nowSuspended = UsbSuspended(USB_DEVNO);
-		if (nowSuspended != suspended)
-		{
-			suspended = nowSuspended;
-			if (suspended) g_Hid.Suspend();
-			else (void)g_Hid.Resume();
-		}
+		suspended = nowSuspended;
 
 		const bool aPressed = IOPinRead(HID_BUTTON_PORT,
 			HID_BUTTON_PIN) == 0;
@@ -313,8 +308,8 @@ int main()
 		}
 
 		if (!suspended && s_ReportPending &&
-			g_Hid.SendReport(reinterpret_cast<const uint8_t *>(&s_Report),
-				sizeof(s_Report)))
+			g_Hid.Tx(0, reinterpret_cast<const uint8_t *>(&s_Report),
+				sizeof(s_Report)) == (int)sizeof(s_Report))
 		{
 			s_ReportPending = false;
 		}

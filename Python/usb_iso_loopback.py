@@ -21,6 +21,12 @@ BURST_EXTRA_IN_FRAMES = 16
 USB_ENDPOINT_TRANSFER_TYPE_MASK = 0x03
 USB_ENDPOINT_TRANSFER_TYPE_ISO = 0x01
 
+# A burst whose transfer failed at the request level is resubmitted this
+# many times before it counts as a failure.
+HOST_SCHED_MISS_RETRIES = 3
+HOST_SCHED_MISS_PREFIX = "host scheduling miss: "
+HOST_SCHED_SKEW_PREFIX = "host scheduling skew: "
+
 
 def parse_int(value):
     return int(value, 0)
@@ -69,6 +75,95 @@ def build_payload(alt, length, seq):
         data[2] = (seq >> 8) & 0xFF
         data[3] = length
     return bytes(data)
+
+
+def is_host_sched_miss(status, setup):
+    """True when the host failed the ISO request without running any frame.
+
+    On macOS libusb copies per-packet status and actual_length from the
+    IOKit frame list only when the request itself succeeded. A request
+    failed as a whole (frame number outside the controller window, for
+    example) completes with transfer status ERROR while every packet
+    descriptor keeps its initial COMPLETED/0. Nothing was on the bus for
+    those frames, so the device cannot have produced or missed anything.
+    A device that answers with zero-length packets yields a COMPLETED
+    transfer instead, which this test does not match.
+    """
+    if status != usb1.TRANSFER_ERROR or not setup:
+        return False
+    return all(
+        packet["status"] == usb1.TRANSFER_COMPLETED
+        and packet["actual_length"] == 0
+        for packet in setup
+    )
+
+
+def is_host_sched_miss_error(error):
+    return error is not None and error.startswith(HOST_SCHED_MISS_PREFIX)
+
+
+def host_sched_skew_ms(state, missing, rounds, matched, first_test):
+    """Callback delay consistent with an IN capture ending early, or None.
+
+    IN and OUT are submitted back to back, and the OUT burst is shorter, so
+    when the host starts both at the same frame OUT finishes about 16 ms
+    before IN. The host picks each endpoint's start frame on its own; when
+    it starts OUT later, the IN window closes before the last OUT frames
+    are echoed. The device still echoes every frame it receives (it offers
+    the TX FIFO head at every SOF whether or not an IN token comes), so the
+    echoes past the end of the IN window are simply not fetched.
+
+    Both transfers must complete successfully, the OUT callback must follow
+    IN, and the missing validation frames must be one suffix with no later
+    echo received. Matching includes the trailing guard frames: a guard
+    echo after a missing frame disproves capture ending at that frame.
+    Callback times are observations, not bus-frame timestamps.
+    """
+    if (state.get("in_status") != usb1.TRANSFER_COMPLETED
+            or state.get("out_status") != usb1.TRANSFER_COMPLETED):
+        return None
+    t_in = state.get("t_in_done")
+    t_out = state.get("t_out_done")
+    if t_in is None or t_out is None or not missing:
+        return None
+    if missing != list(range(missing[0], rounds)):
+        return None
+    first_missing = first_test + missing[0]
+    if any(index > first_missing for index in matched):
+        return None
+    skew = (t_out - t_in) * 1000.0
+    return skew if skew > 0.0 else None
+
+
+def is_host_sched_skew_error(error):
+    return error is not None and error.startswith(HOST_SCHED_SKEW_PREFIX)
+
+
+def is_host_sched_error(error):
+    return is_host_sched_miss_error(error) or is_host_sched_skew_error(error)
+
+
+def submit_timing(state):
+    """When the burst's two transfers were submitted and finished, in ms.
+
+    IN is submitted first, OUT right after. Submitted together, the 48-frame
+    OUT finishes about 16 ms before the 64-frame IN; if OUT only started
+    after IN had run, it finishes well after it. The submit gap shows whether
+    the host process stalled between the two calls.
+    """
+    t0 = state.get("t_in_submit")
+    if t0 is None:
+        return "timing n/a"
+
+    def ms(key):
+        value = state.get(key)
+        return "n/a" if value is None else f"{(value - t0) * 1000.0:.1f}"
+
+    return (
+        f"timing ms: in_submit_call={ms('t_in_submitted')} "
+        f"out_submitted={ms('t_out_submitted')} "
+        f"in_done={ms('t_in_done')} out_done={ms('t_out_done')}"
+    )
 
 
 def packet_summary(setup):
@@ -208,6 +303,7 @@ def run_burst(
             state["error"] = message
 
     def in_complete(transfer):
+        state["t_in_done"] = time.monotonic()
         state["in_status"] = transfer.getStatus()
         state["in_setup"] = list(transfer.getISOSetupList())
         state["in_packets"] = [
@@ -217,6 +313,7 @@ def run_burst(
         state["in_done"] = True
 
     def out_complete(transfer):
+        state["t_out_done"] = time.monotonic()
         state["out_status"] = transfer.getStatus()
         state["out_setup"] = list(transfer.getISOSetupList())
         state["out_done"] = True
@@ -243,9 +340,12 @@ def run_burst(
     try:
         # Keep IN service scheduled before OUT. ISO has no retry, so a
         # one-transfer-at-a-time bulk-style request/echo test is invalid.
+        state["t_in_submit"] = time.monotonic()
         in_transfer.submit()
+        state["t_in_submitted"] = time.monotonic()
         if not zlp:
             out_transfer.submit()
+        state["t_out_submitted"] = time.monotonic()
 
         deadline = time.monotonic() + max(
             3.0,
@@ -273,6 +373,22 @@ def run_burst(
 
         if state["error"] is not None:
             return state["error"], None
+
+        # Request-level host failures first: the other direction's result is
+        # meaningless for that burst (no OUT data reached the device, or no
+        # IN token fetched the echoes). The caller resubmits the burst.
+        if not zlp and is_host_sched_miss(state["out_status"], state["out_setup"]):
+            return (
+                f"{HOST_SCHED_MISS_PREFIX}OUT transfer ERROR, "
+                f"{len(state['out_setup'])} packets untouched",
+                None,
+            )
+        if is_host_sched_miss(state["in_status"], state["in_setup"]):
+            return (
+                f"{HOST_SCHED_MISS_PREFIX}IN transfer ERROR, "
+                f"{len(state['in_setup'])} packets untouched",
+                None,
+            )
 
         if not zlp:
             if len(state["out_setup"]) != out_count:
@@ -307,7 +423,8 @@ def run_burst(
                     f"zero-length echo count {len(completed_zero)}, "
                     f"expected at least {rounds}; "
                     f"IN transfer={status_name(state['in_status'])}; "
-                    f"{packet_summary(state['in_setup'])}",
+                    f"{packet_summary(state['in_setup'])}; "
+                    f"{submit_timing(state)}",
                     None,
                 )
 
@@ -340,17 +457,25 @@ def run_burst(
         # Match non-empty echoes in order. Guard frames absorb the normal
         # host/device phase offset; every frame in the validation window must
         # survive or the test reports a drop/corruption.
+        # Echoes of an earlier burst whose IN request the host never ran are
+        # still queued in the device and come out first. They can only appear
+        # ahead of the first match and inside the leading guard window; there
+        # they are stale, not corruption.
         matched = set()
         next_tx = 0
         unknown = []
-        for packet_data in received:
+        stale = 0
+        for rx_index, packet_data in enumerate(received):
             found = None
             for tx_index in range(next_tx, len(payloads)):
                 if payloads[tx_index] == packet_data:
                     found = tx_index
                     break
             if found is None:
-                unknown.append(packet_data.hex())
+                if not matched and rx_index < guard:
+                    stale += 1
+                else:
+                    unknown.append(packet_data.hex())
                 continue
             matched.add(found)
             next_tx = found + 1
@@ -368,11 +493,21 @@ def run_burst(
             for index in range(first_test, last_test)
             if index not in matched
         ]
+        skew = host_sched_skew_ms(state, missing, rounds, matched, first_test)
+        if skew is not None:
+            return (
+                f"{HOST_SCHED_SKEW_PREFIX}OUT callback {skew:.1f} ms after "
+                f"IN; missing validation tail {missing[0]}-{rounds - 1}; "
+                f"{packet_summary(state['in_setup'])}; "
+                f"{submit_timing(state)}",
+                None,
+            )
         if missing:
             return (
                 f"missing validation frame(s) {missing[:16]}; "
                 f"IN transfer={status_name(state['in_status'])}; "
-                f"{packet_summary(state['in_setup'])}",
+                f"{packet_summary(state['in_setup'])}; "
+                f"{submit_timing(state)}",
                 None,
             )
 
@@ -382,6 +517,7 @@ def run_burst(
             "matched": len(matched),
             "out_packets": out_count,
             "in_status": status_name(state["in_status"]),
+            "stale": stale,
         }
         return None, stats
 
@@ -401,17 +537,24 @@ def run_alt(context, handle, interface, ep, alt, mps, rounds, timeout_ms):
         handle.setInterfaceAltSetting(interface, alt)
         time.sleep(0.005)
 
-        error, stats = run_burst(
-            context,
-            handle,
-            ep,
-            alt,
-            mps,
-            length,
-            rounds,
-            timeout_ms,
-            sequence_base=mode * 512,
-        )
+        for attempt in range(HOST_SCHED_MISS_RETRIES + 1):
+            error, stats = run_burst(
+                context,
+                handle,
+                ep,
+                alt,
+                mps,
+                length,
+                rounds,
+                timeout_ms,
+                sequence_base=mode * 512 + attempt * 64,
+            )
+            if not is_host_sched_error(error):
+                break
+            print(
+                f"alt {alt} MPS {mps} length {length}: {error}; resubmitting",
+                file=sys.stderr,
+            )
         if error is not None:
             print(
                 f"FAIL alt {alt} MPS {mps} length {length}: {error}",

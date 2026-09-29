@@ -45,7 +45,6 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <limits.h>
 #include <stdint.h>
-#include <string.h>
 
 #include "cfifo.h"
 
@@ -222,7 +221,7 @@ uint8_t *CFifoGetMultiple(hCFifo_t const pFifo, int *pCnt)
 	return cfifo_addr(pFifo, cfifo_slot(pFifo, getIdx));
 }
 
-uint8_t *CFifoPut(hCFifo_t const pFifo)
+static uint8_t *cfifo_reserve(hCFifo_t const pFifo, bool bPublish)
 {
 	if (pFifo == NULL)
 	{
@@ -236,7 +235,7 @@ uint8_t *CFifoPut(hCFifo_t const pFifo)
 
 	if (used >= max)
 	{
-		if (pFifo->bBlocking)
+		if (!bPublish || pFifo->bBlocking)
 		{
 			return NULL;
 		}
@@ -249,17 +248,17 @@ uint8_t *CFifoPut(hCFifo_t const pFifo)
 		CFIFO_ATOMIC_FETCH_ADD(&pFifo->DropCnt, 1U, __ATOMIC_RELAXED);
 	}
 
-	uint32_t slot = cfifo_slot(pFifo, putIdx);
-	CFIFO_ATOMIC_STORE(&pFifo->PutIdx, putIdx + 1U, __ATOMIC_RELEASE);
-	return cfifo_addr(pFifo, slot);
+	return cfifo_addr(pFifo, cfifo_slot(pFifo, putIdx));
 }
 
-uint8_t *CFifoPutMultiple(hCFifo_t const pFifo, int *pCnt)
+uint8_t *CFifoResv(hCFifo_t const pFifo)
 {
-	if (pCnt == NULL)
-	{
-		return CFifoPut(pFifo);
-	}
+	return cfifo_reserve(pFifo, false);
+}
+
+static uint8_t *cfifo_reserve_multiple(hCFifo_t const pFifo, int *pCnt,
+		bool bPublish)
+{
 	if (pFifo == NULL || *pCnt <= 0)
 	{
 		*pCnt = 0;
@@ -274,7 +273,7 @@ uint8_t *CFifoPutMultiple(hCFifo_t const pFifo, int *pCnt)
 
 	if (avail == 0U)
 	{
-		if (pFifo->bBlocking)
+		if (!bPublish || pFifo->bBlocking)
 		{
 			*pCnt = 0;
 			return NULL;
@@ -311,9 +310,49 @@ uint8_t *CFifoPutMultiple(hCFifo_t const pFifo, int *pCnt)
 		return NULL;
 	}
 
-	CFIFO_ATOMIC_STORE(&pFifo->PutIdx, putIdx + count, __ATOMIC_RELEASE);
 	*pCnt = (int)count;
 	return cfifo_addr(pFifo, slot);
+}
+
+uint8_t *CFifoResvMultiple(hCFifo_t const pFifo, int *pCnt)
+{
+	if (pCnt == NULL)
+	{
+		return CFifoResv(pFifo);
+	}
+	return cfifo_reserve_multiple(pFifo, pCnt, false);
+}
+
+// Put permits dropping when full, then publishes. Only one producer owns PutIdx.
+uint8_t *CFifoPut(hCFifo_t const pFifo)
+{
+	uint8_t *p = cfifo_reserve(pFifo, true);
+	if (p != NULL)
+	{
+		CFIFO_ATOMIC_STORE(&pFifo->PutIdx,
+			CFIFO_ATOMIC_LOAD(&pFifo->PutIdx, __ATOMIC_RELAXED) + 1U,
+			__ATOMIC_RELEASE);
+	}
+
+	return p;
+}
+
+uint8_t *CFifoPutMultiple(hCFifo_t const pFifo, int *pCnt)
+{
+	if (pCnt == NULL)
+	{
+		return CFifoPut(pFifo);
+	}
+
+	uint8_t *p = cfifo_reserve_multiple(pFifo, pCnt, true);
+	if (p != NULL)
+	{
+		CFIFO_ATOMIC_STORE(&pFifo->PutIdx,
+			CFIFO_ATOMIC_LOAD(&pFifo->PutIdx, __ATOMIC_RELAXED) +
+			(uint32_t)*pCnt, __ATOMIC_RELEASE);
+	}
+
+	return p;
 }
 
 void CFifoFlush(hCFifo_t const pFifo)
@@ -353,66 +392,4 @@ int CFifoUsed(hCFifo_t const pFifo)
 	uint32_t used = putIdx - getIdx;
 	uint32_t max = (uint32_t)pFifo->MaxIdxCnt;
 	return (int)(used < max ? used : max);
-}
-
-int CFifoRead(hCFifo_t const pFifo, uint8_t *pBuff, int BuffLen)
-{
-	if (pFifo == NULL || pBuff == NULL || BuffLen <= 0)
-	{
-		return 0;
-	}
-
-	int count = 0;
-	while (BuffLen > 0)
-	{
-		uint32_t blockSize = pFifo->BlkSize;
-		int blocks = (int)(((uint32_t)BuffLen + blockSize - 1U) / blockSize);
-		uint8_t *pData = CFifoGetMultiple(pFifo, &blocks);
-		if (pData == NULL || blocks <= 0)
-		{
-			break;
-		}
-
-		uint32_t capacity = (uint32_t)blocks * blockSize;
-		int bytes = BuffLen < (int)capacity ? BuffLen : (int)capacity;
-		memcpy(pBuff, pData, (size_t)bytes);
-		pBuff += bytes;
-		BuffLen -= bytes;
-		count += bytes;
-	}
-
-	return count;
-}
-
-int CFifoWrite(hCFifo_t const pFifo, uint8_t *pData, int DataLen)
-{
-	if (pFifo == NULL || pData == NULL || DataLen <= 0)
-	{
-		return 0;
-	}
-
-	int count = 0;
-	while (DataLen > 0)
-	{
-		uint32_t blockSize = pFifo->BlkSize;
-		int blocks = (int)(((uint32_t)DataLen + blockSize - 1U) / blockSize);
-		uint8_t *pDest = CFifoPutMultiple(pFifo, &blocks);
-		if (pDest == NULL || blocks <= 0)
-		{
-			break;
-		}
-
-		uint32_t capacity = (uint32_t)blocks * blockSize;
-		int bytes = DataLen < (int)capacity ? DataLen : (int)capacity;
-		memcpy(pDest, pData, (size_t)bytes);
-		if ((uint32_t)bytes < capacity)
-		{
-			memset(pDest + bytes, 0, capacity - (uint32_t)bytes);
-		}
-		pData += bytes;
-		DataLen -= bytes;
-		count += bytes;
-	}
-
-	return count;
 }

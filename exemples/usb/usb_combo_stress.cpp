@@ -26,6 +26,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 
 #include "cfifo.h"
 #include "prbs.h"
+#include <stdio.h>
 #include "usb/usb.h"
 #include "usb/usb_int.h"
 #include "usb/usb_iso.h"
@@ -49,7 +50,9 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #define INT_MPS					64U
 
 #define ISO_ALT_COUNT			6U
+#define ISO_MAX_MPS			63U
 #define ISO_REQ_GET_DIAG		0x5AU
+#define ISO_REQ_GET_TRACE		0x5CU
 
 alignas(4) static uint8_t s_LoopbackRxFifoMem[CDC_RXFIFO_MEMSIZE];
 alignas(4) static uint8_t s_LoopbackTxFifoMem[LOOPBACK_TXFIFO_MEMSIZE];
@@ -59,7 +62,12 @@ alignas(4) static uint8_t s_PrbsTxFifoMem[PRBS_TXFIFO_MEMSIZE];
 UsbdCdc g_LoopbackCdc;
 UsbdCdc g_PrbsCdc;
 
+// DTR is a modem control line the host may toggle at any time; it is not
+// a reset of the data stream. A DTR open only marks that the host may (or
+// may not) have restarted its generator, so the checker allows exactly one
+// uncounted resynchronisation after it. Every other discontinuity counts.
 static atomic_bool s_LoopbackSessionStart = true;
+static volatile uint32_t s_LoopbackOpenCnt;
 
 static int LoopbackEvtHandler(DevIntrf_t * const, DEVINTRF_EVT EvtId,
 							  uint8_t *, int Len)
@@ -67,11 +75,28 @@ static int LoopbackEvtHandler(DevIntrf_t * const, DEVINTRF_EVT EvtId,
 	if (EvtId == DEVINTRF_EVT_STATECHG && Len)
 	{
 		static const char msg[] = "\r\nIOsonata USB Combo Stress\r\n";
+		s_LoopbackOpenCnt++;
 		atomic_store(&s_LoopbackSessionStart, true);
 		g_LoopbackCdc.Tx(0, reinterpret_cast<const uint8_t *>(msg),
 			(int)sizeof(msg) - 1);
 	}
 	return 0;
+}
+
+// Distance in PRBS8 steps from Expected to Received: how far the stream
+// jumped at a mismatch. 64 means one full packet was skipped; a negative
+// value is the same distance backwards (bytes repeated); -128 means the
+// received value is not on the sequence at all (a corrupted byte).
+static int LoopbackPrbsStep(uint8_t Expected, uint8_t Received)
+{
+	uint8_t v = Expected;
+	for (int i = 0; i < 127; i++)
+	{
+		if (v == Received)
+			return i < 64 ? i : i - 127;
+		v = Prbs8(v);
+	}
+	return -128;
 }
 
 static const UsbdCdcCfg_t s_LoopbackCfg = {
@@ -141,7 +166,7 @@ static void HidRx(UsbdHidDev_t *, const uint8_t *pData, uint16_t Length,
 	{
 		return;
 	}
-	if (!g_Hid.SendReport(pData, Length))
+	if (g_Hid.Tx(0, pData, Length) != (int)Length)
 	{
 		memcpy(s_HidPending, pData, Length);
 		s_HidPendingLength = Length;
@@ -155,7 +180,7 @@ static void HidTx(UsbdHidDev_t *, uint16_t, UsbCtrlrXferResult_t Result,
 	{
 		const uint16_t length = s_HidPendingLength;
 		s_HidPendingLength = 0U;
-		if (!g_Hid.SendReport(s_HidPending, length))
+		if (g_Hid.Tx(0, s_HidPending, length) != (int)length)
 		{
 			s_HidPendingLength = length;
 		}
@@ -186,7 +211,7 @@ static bool HidReportRequest(const UsbSetupData_t *pSetup,
 	if (Stage == USB_CTRL_COMPLETE &&
 		pSetup->bRequest == USB_HID_REQ_SET_REPORT)
 	{
-		return g_Hid.SendReport(s_HidControlReport, *pLength);
+		return g_Hid.Tx(0, s_HidControlReport, *pLength) == (int)*pLength;
 	}
 	return true;
 }
@@ -238,7 +263,7 @@ static void IntRxPacket(UsbIntIntrf_t *, const uint8_t *pData,
 {
 	if (Result == USB_CTRLR_XFER_SUCCESS)
 	{
-		(void)UsbIntIntrfSendPacket(&s_Int, pData, Length);
+		(void)DeviceIntrfTx(&s_IntData.DevIntrf, 0, pData, Length);
 	}
 }
 
@@ -286,23 +311,6 @@ static void IntReset(void)
 	s_IntConfigured = false;
 	s_IntAlt = 0U;
 	UsbIntIntrfReset(&s_Int);
-}
-
-static void IntProcess(void)
-{
-	if (!s_IntConfigured || s_IntAlt == 0U)
-	{
-		return;
-	}
-	const bool suspended = UsbSuspended(USB_DEVNO);
-	if (suspended && !s_Int.Suspended)
-	{
-		UsbIntIntrfSuspend(&s_Int);
-	}
-	else if (!suspended && s_Int.Suspended)
-	{
-		(void)UsbIntIntrfResume(&s_Int);
-	}
 }
 
 static constexpr ComboIntFunctionDesc_t IntFunctionDescTemplate(void)
@@ -356,7 +364,6 @@ public:
 		return IntSelectInterface(InterfaceNo, Option);
 	}
 	void Reset(void) override { IntReset(); }
-	void Process(void) override { IntProcess(); }
 };
 
 static IntLoopbackClass s_IntClass;
@@ -409,6 +416,8 @@ typedef struct __Combo_Iso_Function_Descriptor {
 
 static UsbIsoIntrf_t s_Iso;
 static UsbDevIntrf_t s_IsoData;
+alignas(4) static uint8_t s_IsoRxFifoMem[USB_ISO_INTRF_FIFO_MEMSIZE(ISO_MAX_MPS)];
+alignas(4) static uint8_t s_IsoTxFifoMem[USB_ISO_INTRF_FIFO_MEMSIZE(ISO_MAX_MPS)];
 static bool s_IsoConfigured;
 static uint8_t s_IsoAlt;
 static uint8_t s_IsoInterfaceNo;
@@ -439,14 +448,30 @@ static uint8_t IsoFirstEndpoint(uint16_t Mask)
 	return 0U;
 }
 
-static void IsoRxFrame(UsbIsoIntrf_t *, const uint8_t *pData,
-	uint16_t Length, UsbCtrlrXferResult_t Result, void *)
+// ISO loopback: every received frame goes back out on the next interval.
+// Frames are pulled from the RX FIFO with RxData and queued with TxData,
+// the same way any DeviceIntrf user moves data.
+static int IsoEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
+	uint8_t *, int Length)
 {
-	if (Result == USB_CTRLR_XFER_SUCCESS &&
-		!UsbIsoIntrfSendFrame(&s_Iso, pData, Length))
+	if (Event != DEVINTRF_EVT_RX_DATA)
 	{
-		s_IsoLoopbackDropCnt++;
+		return 0;
 	}
+
+	uint8_t frame[ISO_MAX_MPS];
+	int total = 0;
+	int len;
+	while ((len = DeviceIntrfRxData(pDev, frame, sizeof(frame))) > 0)
+	{
+		if (DeviceIntrfTxData(pDev, frame, len) != len)
+		{
+			s_IsoLoopbackDropCnt++;
+		}
+		total += len;
+	}
+	(void)Length;
+	return total;
 }
 
 static bool IsoControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
@@ -455,9 +480,36 @@ static bool IsoControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	if (pSetup == nullptr ||
 		pSetup->bmRequestType !=
 			(USB_REQTYPE_DIRHOST | USB_REQTYPE_VEND | USB_REQTYPE_INTERFACE) ||
-		pSetup->bRequest != ISO_REQ_GET_DIAG ||
 		pSetup->wValue != 0U ||
-		pSetup->wIndex != s_IsoInterfaceNo ||
+		pSetup->wIndex != s_IsoInterfaceNo)
+	{
+		return false;
+	}
+
+	if (pSetup->bRequest == ISO_REQ_GET_TRACE)
+	{
+		// Controller per-frame ISO trace for the bench. The snapshot is
+		// taken at SETUP so the frames keep running while it is read.
+		if (Stage != USB_CTRL_SETUP)
+		{
+			return true;
+		}
+		if (ppData == nullptr || pLength == nullptr)
+		{
+			return false;
+		}
+		uint8_t *pTrace = nullptr;
+		const uint16_t len = UsbCtrlrIsoTraceSnapshot(USB_DEVNO, &pTrace);
+		if (len == 0U || pTrace == nullptr)
+		{
+			return false;
+		}
+		*ppData = pTrace;
+		*pLength = len < pSetup->wLength ? len : pSetup->wLength;
+		return true;
+	}
+
+	if (pSetup->bRequest != ISO_REQ_GET_DIAG ||
 		pSetup->wLength != sizeof(s_IsoDiag))
 	{
 		return false;
@@ -666,7 +718,10 @@ static bool IsoInit(void)
 	UsbIsoIntrfCfg_t cfg = {};
 	cfg.DevNo = USB_DEVNO;
 	cfg.EpNo = s_IsoEpNo;
-	cfg.RxHandler = IsoRxFrame;
+	cfg.BufferSize = ISO_MAX_MPS;
+	cfg.pRxFifoMem = s_IsoRxFifoMem;
+	cfg.pTxFifoMem = s_IsoTxFifoMem;
+	cfg.EvtCB = IsoEvent;
 	if (!UsbIsoIntrfInit(&s_Iso, &s_IsoData, &cfg))
 	{
 		return false;
@@ -703,8 +758,10 @@ int main()
 {
 	uint8_t loopbackBuffer[CDC_BUFFER_SIZE];
 	uint8_t loopbackExpected = Prbs8(0xff);
+	uint8_t loopbackGrace = 0;
 	uint8_t prbs = 0xff;
 	uint32_t loopbackRxErrorNotify = 0;
+	uint32_t loopbackRxErrorTotal = 0;
 	int loopbackPending = 0;
 	int loopbackOffset = 0;
 
@@ -719,26 +776,9 @@ int main()
 	}
 
 	(void)UsbEnable(USB_DEVNO);
-	bool hidSuspended = false;
-
 	while (1)
 	{
 		UsbProcess(USB_DEVNO);
-
-		const bool suspended = UsbSuspended(USB_DEVNO);
-		if (suspended != hidSuspended)
-		{
-			hidSuspended = suspended;
-			if (suspended)
-			{
-				g_Hid.Suspend();
-			}
-			else
-			{
-				(void)g_Hid.Resume();
-			}
-		}
-
 		if (loopbackPending > 0)
 		{
 			const int length = g_LoopbackCdc.Tx(
@@ -757,13 +797,31 @@ int main()
 			{
 				if (atomic_exchange(&s_LoopbackSessionStart, false))
 				{
-					loopbackExpected = Prbs8(0xff);
+					loopbackGrace = 1U;
 				}
 				for (int i = 0; i < length; i++)
 				{
 					if (loopbackBuffer[i] != loopbackExpected)
 					{
-						loopbackRxErrorNotify++;
+						if (loopbackGrace != 0U)
+						{
+							loopbackGrace = 0U;
+						}
+						else
+						{
+							loopbackRxErrorNotify++;
+							loopbackRxErrorTotal++;
+							// Bench report: what kind of break, where in
+							// the chunk, and whether DTR moved recently.
+							printf("loop rx mismatch %lu: exp %02x got %02x"
+								" step %d at %d/%d opens %lu\r\n",
+								(unsigned long)loopbackRxErrorTotal,
+								loopbackExpected, loopbackBuffer[i],
+								LoopbackPrbsStep(loopbackExpected,
+									loopbackBuffer[i]),
+								i, length,
+								(unsigned long)s_LoopbackOpenCnt);
+						}
 					}
 					loopbackExpected = Prbs8(loopbackBuffer[i]);
 				}

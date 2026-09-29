@@ -43,25 +43,74 @@ static bool UsbIntIntrfEpSupported(int DevNo, uint8_t EpNo)
 
 static bool UsbIntIntrfOpenEndpoint(UsbIntIntrf_t *pIntrf, bool bIn)
 {
-	return UsbCtrlrEpOpenData(pIntrf->pData->DevNo, pIntrf->EpNo, bIn,
+	return UsbCtrlrEpOpenData(pIntrf->pData->DevNo, pIntrf->pData->EpNo, bIn,
 		USB_ENDPATT_TRANS_INT, pIntrf->Mps);
+}
+
+static void UsbIntIntrfDeactivate(UsbIntIntrf_t *pIntrf)
+{
+	if (pIntrf->pData->Mps != 0U)
+	{
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->pData->EpNo, false);
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->pData->EpNo, true);
+	}
+	UsbIntrfUnconfigure(pIntrf->pData);
+}
+
+static bool UsbIntIntrfActivate(UsbIntIntrf_t *pIntrf)
+{
+	if (pIntrf->pData->Mps != 0U)
+	{
+		return true;
+	}
+	if (pIntrf->Mps == 0U || !UsbIntrfConfigure(pIntrf->pData, pIntrf->Mps))
+	{
+		return false;
+	}
+	if (!UsbIntIntrfOpenEndpoint(pIntrf, true))
+	{
+		UsbIntrfUnconfigure(pIntrf->pData);
+		return false;
+	}
+	if (!UsbIntIntrfOpenEndpoint(pIntrf, false))
+	{
+		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->pData->EpNo, true);
+		UsbIntrfUnconfigure(pIntrf->pData);
+		return false;
+	}
+	return true;
+}
+
+static void UsbIntIntrfDisable(DevIntrf_t * const pDev)
+{
+	UsbDevIntrf_t *pData = static_cast<UsbDevIntrf_t *>(pDev->pDevData);
+	UsbIntIntrfDeactivate(static_cast<UsbIntIntrf_t *>(pData->pClassContext));
+}
+
+static void UsbIntIntrfEnable(DevIntrf_t * const pDev)
+{
+	UsbDevIntrf_t *pData = static_cast<UsbDevIntrf_t *>(pDev->pDevData);
+	(void)UsbIntIntrfActivate(
+		static_cast<UsbIntIntrf_t *>(pData->pClassContext));
+}
+
+static void UsbIntIntrfResetDev(DevIntrf_t * const pDev)
+{
+	UsbDevIntrf_t *pData = static_cast<UsbDevIntrf_t *>(pDev->pDevData);
+	UsbIntIntrfReset(static_cast<UsbIntIntrf_t *>(pData->pClassContext));
 }
 
 static int UsbIntIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 								uint8_t *pBuffer, int Length)
 {
 	UsbDevIntrf_t *pData = static_cast<UsbDevIntrf_t *>(pDev->pDevData);
-	UsbIntIntrf_t *pIntrf = pData != nullptr ?
-		static_cast<UsbIntIntrf_t *>(pData->pClassContext) : nullptr;
-	if (pIntrf == nullptr)
-	{
-		return 0;
-	}
+	UsbIntIntrf_t *pIntrf =
+		static_cast<UsbIntIntrf_t *>(pData->pClassContext);
 
 	switch (Event)
 	{
 		case DEVINTRF_EVT_RX_DATA:
-			if (Length < 0 || Length > (int)pIntrf->Mps)
+			if (Length > (int)pIntrf->Mps)
 			{
 				pIntrf->RxErrorCnt++;
 				return 0;
@@ -83,7 +132,7 @@ static int UsbIntIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 			if (pIntrf->RxHandler != nullptr)
 			{
 				pIntrf->RxHandler(pIntrf, pData->pRxBuffer,
-					Length > 0 ? (uint16_t)Length : 0U,
+					(uint16_t)Length,
 					USB_CTRLR_XFER_FAILED, pIntrf->pContext);
 			}
 			return 0;
@@ -96,7 +145,7 @@ static int UsbIntIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 			if (pIntrf->TxHandler != nullptr)
 			{
 				pIntrf->TxHandler(pIntrf,
-					Length > 0 ? (uint16_t)Length : 0U,
+					(uint16_t)Length,
 					USB_CTRLR_XFER_SUCCESS, pIntrf->pContext);
 			}
 			return Length;
@@ -106,7 +155,7 @@ static int UsbIntIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 			if (pIntrf->TxHandler != nullptr)
 			{
 				pIntrf->TxHandler(pIntrf,
-					Length > 0 ? (uint16_t)Length : 0U,
+					(uint16_t)Length,
 					USB_CTRLR_XFER_FAILED, pIntrf->pContext);
 			}
 			return 0;
@@ -130,7 +179,6 @@ bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	pIntrf->pContext = pCfg->pContext;
 	pIntrf->RxHandler = pCfg->RxHandler;
 	pIntrf->TxHandler = pCfg->TxHandler;
-	pIntrf->EpNo = pCfg->EpNo;
 
 	UsbIntrfCfg_t cfg = {};
 	cfg.DevNo = pCfg->DevNo;
@@ -148,43 +196,36 @@ bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	}
 
 	pIntrf->pData->pClassContext = pIntrf;
+	pIntrf->pData->DevIntrf.Disable = UsbIntIntrfDisable;
+	pIntrf->pData->DevIntrf.Enable = UsbIntIntrfEnable;
+	pIntrf->pData->DevIntrf.Reset = UsbIntIntrfResetDev;
 	return true;
 }
 
-bool UsbIntIntrfOpen(UsbIntIntrf_t *pIntrf, uint16_t MaxPacketSize, uint8_t Interval)
+bool UsbIntIntrfOpen(UsbIntIntrf_t *pIntrf, uint16_t MaxPacketSize,
+					  uint8_t Interval)
 {
 	if (pIntrf == nullptr ||
-		!UsbIntIntrfEpSupported(pIntrf->pData->DevNo, pIntrf->EpNo) ||
-		MaxPacketSize == 0U || MaxPacketSize > USB_INT_INTRF_MAX_MPS || Interval == 0U ||
-		(!UsbCtrlrHighSpeed(pIntrf->pData->DevNo) &&
-		 MaxPacketSize > USB_INT_INTRF_FS_MPS) ||
-		(UsbCtrlrHighSpeed(pIntrf->pData->DevNo) && Interval > 16U))
+		MaxPacketSize == 0U || MaxPacketSize > USB_INT_INTRF_MAX_MPS ||
+		Interval == 0U ||
+		(UsbCtrlrHighSpeed(pIntrf->pData->DevNo) ?
+		 Interval > 16U : MaxPacketSize > USB_INT_INTRF_FS_MPS))
 	{
 		return false;
 	}
 
 	UsbIntIntrfClose(pIntrf);
-	if (!UsbIntrfConfigure(pIntrf->pData, MaxPacketSize))
-	{
-		return false;
-	}
-
 	pIntrf->Mps = MaxPacketSize;
 	pIntrf->Interval = Interval;
-	pIntrf->Suspended = false;
 
-	if (!UsbIntIntrfOpenEndpoint(pIntrf, true) ||
-		!UsbIntIntrfOpenEndpoint(pIntrf, false))
+	if (atomic_load_explicit(&pIntrf->pData->DevIntrf.EnCnt,
+			memory_order_acquire) > 0 &&
+		!UsbIntIntrfActivate(pIntrf))
 	{
-		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, false);
-		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, true);
-		UsbIntrfUnconfigure(pIntrf->pData);
 		pIntrf->Mps = 0U;
 		pIntrf->Interval = 0U;
 		return false;
 	}
-
-	pIntrf->Opened = true;
 	return true;
 }
 
@@ -195,15 +236,7 @@ void UsbIntIntrfClose(UsbIntIntrf_t *pIntrf)
 		return;
 	}
 
-	if (pIntrf->Opened)
-	{
-		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, false);
-		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->EpNo, true);
-	}
-
-	UsbIntrfUnconfigure(pIntrf->pData);
-	pIntrf->Opened = false;
-	pIntrf->Suspended = false;
+	UsbIntIntrfDeactivate(pIntrf);
 	pIntrf->Mps = 0U;
 	pIntrf->Interval = 0U;
 }
@@ -220,44 +253,4 @@ void UsbIntIntrfReset(UsbIntIntrf_t *pIntrf)
 	pIntrf->TxErrorCnt = 0U;
 	pIntrf->RxEmptyCnt = 0U;
 	pIntrf->TxEmptyCnt = 0U;
-}
-
-void UsbIntIntrfSuspend(UsbIntIntrf_t *pIntrf)
-{
-	if (pIntrf != nullptr && pIntrf->Opened)
-	{
-		pIntrf->Suspended = true;
-	}
-}
-
-bool UsbIntIntrfResume(UsbIntIntrf_t *pIntrf)
-{
-	if (pIntrf == nullptr || !pIntrf->Opened)
-	{
-		return false;
-	}
-
-	pIntrf->Suspended = false;
-	return true;
-}
-
-bool UsbIntIntrfSendPacket(UsbIntIntrf_t *pIntrf, const uint8_t *pData,
-						   uint16_t Length)
-{
-	if (pIntrf == nullptr || !pIntrf->Opened || pIntrf->Suspended ||
-		Length > pIntrf->Mps || (Length != 0U && pData == nullptr) ||
-		!UsbIntrfRequestToSend(pIntrf->pData, Length))
-	{
-		return false;
-	}
-
-	const int sent = DeviceIntrfTxData(&pIntrf->pData->DevIntrf,
-		pData, (int)Length);
-	if (Length != 0U)
-	{
-		return sent == (int)Length;
-	}
-
-	return !atomic_load_explicit(&pIntrf->pData->DevIntrf.bTxReady,
-		memory_order_acquire);
 }

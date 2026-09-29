@@ -49,20 +49,27 @@ void UsbCtrlrEpStall(int, uint8_t, bool) {}
 void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuf, bool,
+void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (bIn)
 	{
-		s_InBuf = pBuf;
+		s_InBuf = nullptr;
 		s_InHandler = Handler;
 		s_InContext = pContext;
 	}
 	else
 	{
-		s_OutBuf = pBuf;
+		s_OutBuf = nullptr;
 	}
 	return;
+}
+
+bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+{
+	if (s_OutBuf != nullptr || pBuffer == nullptr || Capacity == 0U) return false;
+	s_OutBuf = pBuffer;
+	return true;
 }
 bool UsbCtrlrEpSend(int, uint8_t, uint8_t *pBuffer, uint16_t Len)
 {
@@ -78,7 +85,6 @@ bool UsbCtrlrEpSend(int, uint8_t, uint8_t *pBuffer, uint16_t Len)
 
 alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(SLOTS, BUFFER_SIZE)];
 alignas(4) static uint8_t s_TxMem[CFIFO_MEMSIZE(2048)];
-alignas(4) static uint8_t s_RxTransfer[BUFFER_SIZE];
 alignas(4) static uint8_t s_TxTransfer[BUFFER_SIZE];
 static UsbDevIntrf_t s_Intrf;
 
@@ -93,7 +99,6 @@ static bool Setup(void)
 	cfg.TxFifoMemSize = (int)sizeof(s_TxMem);
 	cfg.TxFifoBlkSize = 1U;
 	cfg.BufferSize = BUFFER_SIZE;
-	cfg.pRxBuffer = s_RxTransfer;
 	cfg.pTxBuffer = s_TxTransfer;
 	memset(static_cast<void *>(&s_Intrf), 0, sizeof(s_Intrf));
 	s_InBusy = false;

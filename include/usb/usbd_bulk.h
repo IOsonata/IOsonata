@@ -113,8 +113,6 @@ typedef struct __Usbd_Bulk_Dev {
 	uint8_t InterfaceString;
 	uint16_t FsMps;
 	uint16_t HsMps;
-	uint32_t RxTransfer[(USBD_BULK_MAX_MPS + sizeof(uint32_t) - 1U) /
-						 sizeof(uint32_t)];
 } UsbdBulkDev_t;
 
 #ifdef __cplusplus

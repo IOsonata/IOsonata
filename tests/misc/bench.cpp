@@ -249,12 +249,21 @@ static void BenchCFifo(void)
 	Result rw = Measure(rwIters, [&]() {
 		for (unsigned n = 0; n < rwIters; n++)
 		{
-			(void)CFifoWrite(b, buf, (int)sizeof(buf));
-			(void)CFifoRead(b, buf, (int)sizeof(buf));
-			s_Sink += buf[0];
+			int cnt = (int)sizeof(buf);
+			uint8_t *p = CFifoPutMultiple(b, &cnt);
+			if (p != nullptr)
+			{
+				memcpy(p, buf, (size_t)cnt);
+			}
+			cnt = (int)sizeof(buf);
+			p = CFifoGetMultiple(b, &cnt);
+			if (p != nullptr)
+			{
+				s_Sink += p[0];
+			}
 		}
 	});
-	printf("%-28s %7.2f %8.0f%%\n", "write + read, 64 bytes",
+	printf("%-28s %7.2f %8.0f%%\n", "put + get multiple, 64 bytes",
 		   rw.Median, rw.Spread);
 }
 

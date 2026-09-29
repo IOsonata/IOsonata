@@ -35,21 +35,35 @@ Modified by          Date              Description
 ----------------------------------------------------------------------------*/
 
 #include <stdlib.h>
+#include <reent.h>
 #include <string.h>
 
+// Through _malloc_r rather than malloc: newlib's atexit registrar holds a
+// weak reference to malloc, and a strong malloc in this member, selected
+// for operator delete by every C++ firmware, would keep the whole
+// allocator linked. With no malloc symbol the weak reference stays null
+// and the allocator is discarded unless an application uses new.
 void* operator new[](size_t count ) throw()
 {
-	return malloc(count);
+	return _malloc_r(_REENT, count);
 }
 
 void *operator new(size_t size) throw()
 {
-	return malloc(size);
+	return _malloc_r(_REENT, size);
 }
 
-void operator delete(void *p) throw()
+// Every class with a virtual destructor references operator delete from
+// its vtable whether or not delete is ever called. Objects in IOsonata
+// firmware are static, so both forms resolve here and keep newlib's free
+// and malloc out of the link. The sized form is the one the deleting
+// destructor calls since C++14.
+void operator delete(void *) throw()
 {
-	free(p);
+}
+
+void operator delete(void *, size_t) throw()
+{
 }
 
 extern "C" void __cxa_pure_virtual()

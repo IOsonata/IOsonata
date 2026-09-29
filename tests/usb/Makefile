@@ -194,17 +194,20 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 
 TARGETS += $(MSC_TARGET)
 
-.PHONY: all test test-c-header test-gcc test-clang test-matrix \
-	test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma test-nrf-lifecycle test-nrf54-data \
+.PHONY: all test test-combo-shutdown test-c-header test-gcc test-clang test-matrix test-nrf-out-appevt test-nrf-appevt \
+	test-nrf-control-event test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma test-nrf-lifecycle test-nrf54-data \
 	iso-hw-build iso-hw int-hw-build int-hw hid-hw-build hid-hw \
 	msc-hw-build msc-hw hid-demo-build probe clean
 
 all: test
 
 test: $(TARGETS)
+	$(MAKE) test-combo-shutdown
 	$(MAKE) test-c-header
 	$(MAKE) test-nrf-suspend-policy
 	$(MAKE) test-nrf-iso-policy
+	$(MAKE) test-nrf-control-event
+	$(MAKE) test-nrf-appevt
 	$(MAKE) test-nrf-iso-dma
 	$(MAKE) test-nrf-dma-policy
 	$(MAKE) test-nrf-lifecycle
@@ -221,13 +224,14 @@ test: $(TARGETS)
 	$(TEST_ENV) ./$(MSC_TARGET)
 	$(TEST_ENV) ./$(LINK_TARGET)
 
+test-combo-shutdown:
+	python3 ./combo_shutdown_test.py
+
 test-c-header:
 	@printf '%s\n' '#include "usb/usb_iso.h"' '#include "usb/usb_int.h"' \
 		'#include "usb/usbd_hid.h"' '#include "usb/usb_mscdef.h"' \
 		'int main(void) {' \
-		' return UsbIsoIntrfTxReady((const UsbIsoIntrf_t *)0) ||' \
-		'  UsbIntIntrfTxReady((const UsbIntIntrf_t *)0) ||' \
-		'  UsbdHidTxReady((const UsbdHidDev_t *)0) ? 1 : 0;' '}' | \
+		' return UsbIsoIntrfTxReady((const UsbIsoIntrf_t *)0) ? 1 : 0;' '}' | \
 		$(CC) $(CPPFLAGS) $(CFLAGS) -x c -fsyntax-only -
 
 test-nrf-suspend-policy:
@@ -238,6 +242,15 @@ test-nrf-iso-policy:
 
 test-nrf-iso-dma:
 	CXX=$(CXX) python3 ./nrf_usb_iso_dma_test.py
+
+test-nrf-out-appevt:
+	CXX=$(CXX) python3 ./nrf_usb_iso_dma_test.py --regular-out
+
+test-nrf-appevt:
+	CXX=$(CXX) python3 ./nrf_usb_iso_dma_test.py --regular
+
+test-nrf-control-event:
+	CXX=$(CXX) python3 ./nrf_usb_control_event_test.py
 
 test-nrf-lifecycle:
 	CXX=$(CXX) python3 ./nrf_usb_lifecycle_test.py

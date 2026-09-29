@@ -4,7 +4,7 @@
 @brief	Optional nRF52 USBD isochronous endpoint support.
 
 This implementation is kept in its own archive member so applications without
-UsbIsoIntrf do not pull the ISO scheduler, SOF processing or deferred
+UsbIsoIntrf do not pull the ISO scheduler, SOF processing or ISR
 completion path.
 
 @author	Hoang Nguyen Hoan
@@ -37,6 +37,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "nrf.h"
 #include "app_evt_handler.h"
@@ -46,6 +47,130 @@ SOFTWARE.
 
 static_assert(offsetof(USBD_ISOOUT_Type, MAXCNT) ==
 	offsetof(USBD_ISOIN_Type, MAXCNT), "ISO register layout");
+
+// Enable explicitly in the library build for bench diagnostics.
+#ifndef NRFUSBD_ISO_TRACE
+#define NRFUSBD_ISO_TRACE			0
+#endif
+
+#if NRFUSBD_ISO_TRACE
+// Per-frame trace. One entry per SOF: when the IN DMA started and ended
+// relative to SOF, what the scheduler saw when the frame was offered, and
+// what came in on OUT. Read by the bench through the application's vendor
+// request; the application copies UsbCtrlrIsoTraceSnapshot().
+#define NRFUSBD_ISO_TRACE_CNT		128U
+#define NRFUSBD_ISO_TRACE_MASK		(NRFUSBD_ISO_TRACE_CNT - 1U)
+#define NRFUSBD_ISO_CYC_PER_US		64U
+
+enum
+{
+	ISO_TRACE_IN_OFFERED	= 0x01U,	// IsoSend called with an IN buffer
+	ISO_TRACE_IN_REFUSED	= 0x02U,	// previous IN still pending at offer
+	ISO_TRACE_DMA_BUSY		= 0x04U,	// channel held by another DMA at offer
+	ISO_TRACE_EP0_HELD		= 0x08U,	// that DMA was EP0
+	ISO_TRACE_IN_START		= 0x10U,	// STARTISOIN issued this frame
+	ISO_TRACE_IN_END		= 0x20U,	// ENDISOIN retired this frame
+	ISO_TRACE_OUT_START		= 0x40U,	// STARTISOOUT issued this frame
+	ISO_TRACE_OUT_END		= 0x80U,	// ENDISOOUT retired this frame
+};
+
+typedef struct __nRF_Usbd_Iso_Trace {
+	uint16_t Frame;			// FRAMECNTR at SOF
+	uint16_t SofDeltaUs;	// time since the previous SOF mark, 65535 = more
+	uint8_t StartUs;		// SOF to STARTISOIN, 255 = later than that
+	uint8_t EndUs;			// SOF to ENDISOIN retire
+	uint8_t InLen;			// bytes offered for IN
+	uint8_t Flags;			// ISO_TRACE_*
+	uint16_t OutLen;		// bytes read on OUT
+	uint16_t Reserved;
+} nRFUsbdIsoTrace_t;
+
+typedef struct __nRF_Usbd_Iso_Trace_Snap {
+	uint16_t Next;			// index of the entry the next SOF will write
+	uint16_t Count;			// NRFUSBD_ISO_TRACE_CNT
+	uint16_t EntrySize;		// sizeof(nRFUsbdIsoTrace_t)
+	uint16_t Version;		// layout version
+	nRFUsbdIsoTrace_t Entry[NRFUSBD_ISO_TRACE_CNT];
+} nRFUsbdIsoTraceSnap_t;
+
+static nRFUsbdIsoTrace_t s_IsoTrace[NRFUSBD_ISO_TRACE_CNT];
+static nRFUsbdIsoTraceSnap_t s_IsoTraceSnap;
+static uint32_t s_IsoSofCyc;
+static uint16_t s_IsoTraceIdx;
+
+static inline uint8_t nRFUsbdIsoUsSinceSof(void)
+{
+	const uint32_t us = (DWT->CYCCNT - s_IsoSofCyc) / NRFUSBD_ISO_CYC_PER_US;
+	return us > 255U ? 255U : (uint8_t)us;
+}
+
+static inline nRFUsbdIsoTrace_t *nRFUsbdIsoTraceCur(void)
+{
+	return &s_IsoTrace[s_IsoTraceIdx];
+}
+
+// Called from the USBD interrupt at SOF, before the core sees the frame.
+// FRAMECNTR can still be changing when SOF asserts; read until two reads
+// agree. The delta to the previous mark separates a SOF never received
+// (2000 us, FRAMECNTR skips one) from an interrupt held off past the next
+// SOF (2000 us plus the delay, the two events serviced as one).
+void nRFUsbdIsoSofMark(void)
+{
+	const uint32_t now = DWT->CYCCNT;
+	const uint32_t delta = (now - s_IsoSofCyc) / NRFUSBD_ISO_CYC_PER_US;
+	s_IsoSofCyc = now;
+
+	uint32_t frame = NRF_USBD->FRAMECNTR;
+	for (uint32_t i = 0U; i < 4U; i++)
+	{
+		const uint32_t again = NRF_USBD->FRAMECNTR;
+		if (again == frame)
+			break;
+		frame = again;
+	}
+
+	s_IsoTraceIdx = (uint16_t)((s_IsoTraceIdx + 1U) & NRFUSBD_ISO_TRACE_MASK);
+	nRFUsbdIsoTrace_t *p = &s_IsoTrace[s_IsoTraceIdx];
+	p->Frame = (uint16_t)frame;
+	p->SofDeltaUs = delta > 65535U ? 65535U : (uint16_t)delta;
+	p->StartUs = 0U;
+	p->EndUs = 0U;
+	p->InLen = 0U;
+	p->Flags = 0U;
+	p->OutLen = 0U;
+	p->Reserved = 0U;
+}
+
+uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData)
+{
+	(void)DevNo;
+	const uint32_t state = DisableInterrupt();
+	s_IsoTraceSnap.Next =
+		(uint16_t)((s_IsoTraceIdx + 1U) & NRFUSBD_ISO_TRACE_MASK);
+	s_IsoTraceSnap.Count = NRFUSBD_ISO_TRACE_CNT;
+	s_IsoTraceSnap.EntrySize = sizeof(nRFUsbdIsoTrace_t);
+	s_IsoTraceSnap.Version = 2U;
+	memcpy(s_IsoTraceSnap.Entry, s_IsoTrace, sizeof(s_IsoTrace));
+	EnableInterrupt(state);
+	*ppData = (uint8_t *)&s_IsoTraceSnap;
+	return (uint16_t)sizeof(s_IsoTraceSnap);
+}
+
+#define ISO_TRACE_FLAG(f)		(nRFUsbdIsoTraceCur()->Flags |= (uint8_t)(f))
+#else
+#define ISO_TRACE_FLAG(f)		((void)0)
+
+void nRFUsbdIsoSofMark(void)
+{
+}
+
+uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData)
+{
+	(void)DevNo;
+	*ppData = nullptr;
+	return 0U;
+}
+#endif
 
 static __attribute__((noinline))
 void nRFIsoHwEnable(bool In, bool Enable)
@@ -57,9 +182,9 @@ void nRFIsoHwEnable(bool In, bool Enable)
 	const uint32_t endMsk = In ?
 		USBD_INTEN_ENDISOIN_Msk : USBD_INTEN_ENDISOOUT_Msk;
 
+	*pEnd = 0U;
 	if (Enable)
 	{
-		*pEnd = 0U;
 		NRF_USBD->INTENSET = endMsk;
 		*pEnable |= msk;
 	}
@@ -67,189 +192,177 @@ void nRFIsoHwEnable(bool In, bool Enable)
 	{
 		NRF_USBD->INTENCLR = endMsk;
 		*pEnable &= ~msk;
-		*pEnd = 0U;
 	}
 }
 
 
 
 // The shared scheduler already owns the channel lock.
+//
+// IN goes first whenever it is ready. The host schedules its periodic
+// transactions at the start of the frame, and the ISOIN buffer answers the
+// IN token with whatever EasyDMA has delivered by then (ZeroData otherwise),
+// so the IN staging has a hard deadline a few tens of microseconds after
+// SOF. Putting the OUT DMA and its ISR completion round trip ahead of it on
+// alternate frames pushes IN past that deadline under load; those frames are
+// the empty IN slots the combo stress reports. OUT follows as soon as the IN
+// DMA ends, still well inside the frame.
 bool nRFUsbdIsoStart(void)
 {
-	if (!s_Usbd.IsoOpen)
+	const uint8_t dataFlag = s_Usbd.IsoDataFlag;
+	if (dataFlag == 0U)
 		return false;
 
-	for (int8_t dir = 1; dir >= 0; dir--)
+	if ((dataFlag & NRFUSBD_ISO_IN_READY) != 0U)
 	{
-		const uint8_t busy = (uint8_t)NRFUSBD_ISO_OUT_BUSY << dir;
-		if ((s_Usbd.IsoBusy & busy) == 0U)
-			continue;
-
-		nRFUsbEpReg_t *pReg =
-			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir];
-		uint16_t len;
-		volatile USBD_ISOIN_Type *pEp;
-		volatile uint32_t *pTask;
-		volatile uint32_t *pEnd;
-
-		if (dir != 0)
-		{
-			if (s_Usbd.IsoInDmaLen < 0)
-			{
-				s_Usbd.IsoBusy &= (uint8_t)~busy;
-				continue;
-			}
-			len = (uint16_t)s_Usbd.IsoInDmaLen;
-			pEp = &NRF_USBD->ISOIN;
-			pTask = &NRF_USBD->TASKS_STARTISOIN;
-			pEnd = &NRF_USBD->EVENTS_ENDISOIN;
-		}
-		else
-		{
-			// SIZE.ISOOUT is read only while the shared EasyDMA channel is idle
-			// and locked by this scheduler.
-			const uint32_t size = NRF_USBD->SIZE.ISOOUT;
-			if (size == 0U || pReg->pBuffer == nullptr ||
-				pReg->Handler == nullptr)
-			{
-				s_Usbd.IsoBusy &= (uint8_t)~busy;
-				continue;
-			}
-
-			len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
-				0U : (uint16_t)size;
-			if (len > pReg->MaxPacketSize)
-			{
-				s_Usbd.IsoBusy &= (uint8_t)~busy;
-				continue;
-			}
-			pEp = (volatile USBD_ISOIN_Type *)&NRF_USBD->ISOOUT;
-			pTask = &NRF_USBD->TASKS_STARTISOOUT;
-			pEnd = &NRF_USBD->EVENTS_ENDISOOUT;
-		}
-
-		pEp->PTR = (uint32_t)(uintptr_t)pReg->pBuffer;
-		pEp->MAXCNT = len;
-		nRFUsbdDmaStartLocked(pTask, pEnd);
+		NRF_USBD->ISOIN.PTR = (uint32_t)(uintptr_t)s_Usbd.pIsoBuffer[1];
+		NRF_USBD->ISOIN.MAXCNT = s_Usbd.IsoInDmaLen;
+		nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOIN,
+			&NRF_USBD->EVENTS_ENDISOIN);
+#if NRFUSBD_ISO_TRACE
+		nRFUsbdIsoTraceCur()->StartUs = nRFUsbdIsoUsSinceSof();
+		ISO_TRACE_FLAG(ISO_TRACE_IN_START);
+#endif
 		return true;
 	}
+
+	// OUT: only inspect the hardware once OUT is the selected transfer.
+	const uint32_t size = NRF_USBD->SIZE.ISOOUT;
+	const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
+		0U : (uint16_t)size;
+
+	if (len != 0U && len <= s_Usbd.IsoMaxPacketSize[0])
+	{
+		// Ask the owner to submit this frame's destination through EpReceive.
+		// Completion releases the destination before the next interval.
+		nRFUsbEpReg_t *pReg =
+			&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
+		if (s_Usbd.pIsoBuffer[0] == NULL && pReg->Handler != NULL)
+			pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
+
+		if (s_Usbd.pIsoBuffer[0] != NULL)
+		{
+			NRF_USBD->ISOOUT.PTR = (uint32_t)(uintptr_t)s_Usbd.pIsoBuffer[0];
+			NRF_USBD->ISOOUT.MAXCNT = len;
+			nRFUsbdDmaStartLocked(&NRF_USBD->TASKS_STARTISOOUT,
+				&NRF_USBD->EVENTS_ENDISOOUT);
+			ISO_TRACE_FLAG(ISO_TRACE_OUT_START);
+			return true;
+		}
+	}
+
+	// Empty, zero-length, oversize, or no destination: drop this request.
+	// The next SOF service queues a fresh one.
+	s_Usbd.IsoDataFlag &= (uint8_t)~NRFUSBD_ISO_OUT_READY;
 	return false;
 }
 
-bool UsbCtrlrIsoService(int DevNo, uint8_t EpNum, uint16_t Length)
+bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
+	uint16_t Length)
 {
 	(void)DevNo;
-	if (EpNum != NRFX_USBD_ISO_EP_NO)
-		return false;
+	(void)EpNum;
 
-	const uint32_t state = DisableInterrupt();
 	if (!s_Usbd.IsoOpen)
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-
-	bool service = false;
-	nRFUsbEpReg_t *pOut =
-		&s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0];
-	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_OUT_BUSY) == 0U &&
-		pOut->pBuffer != nullptr && pOut->Handler != nullptr)
-	{
-		s_Usbd.IsoBusy |= NRFUSBD_ISO_OUT_BUSY;
-		service = true;
-	}
-
-	const int16_t len = s_Usbd.IsoInDmaLen;
-	if ((s_Usbd.IsoBusy & NRFUSBD_ISO_IN_BUSY) == 0U &&
-		len >= 0 && (uint16_t)len <= Length)
-	{
-		s_Usbd.IsoBusy |= NRFUSBD_ISO_IN_BUSY;
-		service = true;
-	}
-
-	if (service)
-		nRFUsbdResumeQueuedDmaLocked();
-	EnableInterrupt(state);
-	return service;
-}
-
-static bool nRFUsbdFinishIsoDma(bool In, bool Notify)
-{
-	volatile uint32_t *pEnd = In ?
-		&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
-	if (*pEnd == 0U)
 		return false;
 
-	const uint8_t dir = In ? 1U : 0U;
-	const uint8_t busy = (uint8_t)NRFUSBD_ISO_OUT_BUSY << dir;
-	const uint16_t amount = (uint16_t)(In ?
-		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
-
-	*pEnd = 0U;
-	NRF_USBD->EPSTATUS = In ? (1UL << 8U) : (1UL << 24U);
-	__DSB();
-
-	if (!Notify)
-		return true;
-
-	if (In)
+#if NRFUSBD_ISO_TRACE
+	if (pBuffer != nullptr)
 	{
-		s_Usbd.IsoBusy &= (uint8_t)~busy;
-		s_Usbd.IsoInDmaLen = -1;
+		nRFUsbdIsoTrace_t *pt = nRFUsbdIsoTraceCur();
+		pt->InLen = Length > 255U ? 255U : (uint8_t)Length;
+		pt->Flags |= ISO_TRACE_IN_OFFERED;
+		if ((s_Usbd.IsoDataFlag & NRFUSBD_ISO_IN_READY) != 0U)
+			pt->Flags |= ISO_TRACE_IN_REFUSED;
+		// EPSTATUS holds the captured DMA until software retires it, so a
+		// nonzero value is a channel the scheduler cannot take yet.
+		const uint32_t epstatus = NRF_USBD->EPSTATUS;
+		if (epstatus != 0U)
+		{
+			pt->Flags |= ISO_TRACE_DMA_BUSY;
+			if ((epstatus & 0x00010001UL) != 0U)
+				pt->Flags |= ISO_TRACE_EP0_HELD;
+		}
+	}
+#endif
+
+	uint8_t dataFlag = s_Usbd.IsoDataFlag | NRFUSBD_ISO_OUT_READY;
+
+	if (pBuffer != nullptr &&
+		(dataFlag & NRFUSBD_ISO_IN_READY) == 0U)
+	{
+		s_Usbd.pIsoBuffer[1] = pBuffer;
+		s_Usbd.IsoInDmaLen = Length;
+		dataFlag |= NRFUSBD_ISO_IN_READY;
 	}
 
-	nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, dir,
-		USB_CTRLR_EVT_XFER_CMPL, amount);
+	if (dataFlag == s_Usbd.IsoDataFlag)
+		return false;
 
-	if (!In)
-	{
-		s_Usbd.IsoBusy &= (uint8_t)~busy;
-	}
+	s_Usbd.IsoDataFlag = dataFlag;
+	nRFUsbdResumeQueuedDmaLocked();
 	return true;
 }
 
-bool nRFUsbdIsoFinishDma(void)
+void nRFUsbdIsoComplete(uint8_t In)
 {
-	return nRFUsbdFinishIsoDma(true, s_Usbd.IsoOpen) ||
-		nRFUsbdFinishIsoDma(false, s_Usbd.IsoOpen);
+	const uint8_t flag = In ?
+		NRFUSBD_ISO_IN_READY : NRFUSBD_ISO_OUT_READY;
+	const uint16_t amount = (uint16_t)(In ?
+		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
+
+	s_Usbd.IsoDataFlag &= (uint8_t)~flag;
+	if (!In)
+		s_Usbd.pIsoBuffer[0] = nullptr;
+
+#if NRFUSBD_ISO_TRACE
+	if (In)
+	{
+		nRFUsbdIsoTraceCur()->EndUs = nRFUsbdIsoUsSinceSof();
+		ISO_TRACE_FLAG(ISO_TRACE_IN_END);
+	}
+	else
+	{
+		nRFUsbdIsoTraceCur()->OutLen = amount;
+		ISO_TRACE_FLAG(ISO_TRACE_OUT_END);
+	}
+#endif
+
+	if (s_Usbd.IsoOpen)
+	{
+		nRFUsbEpRegisteredEvent(NRFX_USBD_ISO_EP_NO, In,
+			USB_CTRLR_EVT_XFER_CMPL, amount);
+	}
 }
 
 bool UsbCtrlrIsoInit(int DevNo)
 {
-	return DevNo == 0;
+	(void)DevNo;
+#if NRFUSBD_ISO_TRACE
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	DWT->CYCCNT = 0U;
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+#endif
+	return true;
 }
 
-bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
+bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
+	uint16_t MaxPacketSize)
 {
 	(void)DevNo;
-	const uint8_t epAddr = pDesc->bEndpointAddress;
-	const bool in = USB_ENDPADDR_IS_IN(epAddr);
-	const uint8_t type = pDesc->bmAttributes & 0x03U;
-	if (type != USB_ENDPATT_TRANS_ISO ||
-		pDesc->wMaxPacketSize == 0U ||
-		pDesc->wMaxPacketSize > NRFX_USBD_ISO_MAX_PACKET_SIZE)
-	{
+	(void)EpNo;
+	if (MaxPacketSize > NRFX_USBD_ISO_MAX_PACKET_SIZE)
 		return false;
-	}
-
-	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][in].MaxPacketSize = pDesc->wMaxPacketSize;
+	s_Usbd.IsoMaxPacketSize[bIn] = MaxPacketSize;
 	NRF_USBD->ISOSPLIT =
 		USBD_ISOSPLIT_SPLIT_HalfIN << USBD_ISOSPLIT_SPLIT_Pos;
 	NRF_USBD->ISOINCONFIG =
 		USBD_ISOINCONFIG_RESPONSE_ZeroData << USBD_ISOINCONFIG_RESPONSE_Pos;
 
-	nRFIsoHwEnable(in, true);
+	nRFIsoHwEnable(bIn, true);
 
-	const uint8_t dir = in ? 1U : 0U;
-	const uint32_t state = DisableInterrupt();
-	s_Usbd.IsoBusy &=
-		(uint8_t)~((uint8_t)NRFUSBD_ISO_OUT_BUSY << dir);
-	if (in)
-		s_Usbd.IsoInDmaLen = -1;
 	s_Usbd.IsoOpen =
-		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][0].MaxPacketSize != 0U &&
-		s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][1].MaxPacketSize != 0U;
-	EnableInterrupt(state);
+		s_Usbd.IsoMaxPacketSize[!bIn] != 0U;
 
 	__DSB();
 	return true;
@@ -257,19 +370,11 @@ bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 
 void nRFUsbdIsoEpClose(bool bIn)
 {
-	const uint8_t dir = bIn ? 1U : 0U;
-	const uint32_t state = DisableInterrupt();
-
-	// ISO is one bidirectional path. Closing either side stops scheduling and
-	// makes a polled END a cancellation rather than a normal completion.
-	s_Usbd.IsoOpen = false;
-	nRFUsbdDmaWait();
-	s_Usbd.IsoBusy = 0U;
-	s_Usbd.IsoInDmaLen = -1;
+	// The base close path has stopped ISO scheduling and retired DMA with
+	// interrupts excluded. Only direction-specific hardware/state remains.
+	s_Usbd.IsoDataFlag = 0U;
+	s_Usbd.pIsoBuffer[0] = nullptr;
 
 	nRFIsoHwEnable(bIn, false);
-
-	s_Usbd.EpReg[NRFX_USBD_ISO_EP_NO - 1U][dir].MaxPacketSize = 0U;
-	__DSB();
-	EnableInterrupt(state);
+	s_Usbd.IsoMaxPacketSize[bIn] = 0U;
 }

@@ -19,24 +19,26 @@ UsbPkt_t whose Hdr.Flags bit USB_INTRF_SLOT_READY publishes whether the slot
 contains a current packet; Hdr.Length remains the actual payload length and may
 be zero.
 
-The derived class supplies one fixed RX controller buffer sized for its transfer
-type. Byte and packet modes use the TX CFifo as the transfer source. Direct mode
-supplies both RX and TX buffers, each with UsbPktHdr_t followed by the payload;
-UsbIntrf registers the Data portion with the controller and uses the header as
-the single-slot ownership state.
+Byte and packet modes have no separate RX buffer: the RX CFifo is the DMA
+destination. Init binds each endpoint's callback and context. On DRDY,
+UsbIntrf reserves the next RX block (CFifoResv) and calls UsbCtrlrEpReceive
+with its Data portion and capacity. The controller accepts one OUT transfer
+and schedules DMA. At completion, UsbIntrf writes the packet header, publishes
+the block with CFifoPut, then reports DEVINTRF_EVT_RX_DATA to the application.
+Only this producer moves PutIdx; the reserved block remains owned until DMA
+completes. BufferSize sizes the RX blocks and must cover the endpoint MPS.
+Byte and packet modes use the TX CFifo as the transfer source.
 
-RX is event driven. USB_CTRLR_EVT_DRDY means data is ready in the controller to
-be retrieved. Controllers may also service OUT transfers directly. If a byte
-or packet completion cannot enter the RX CFifo, blocking mode retains its DMA
-buffer and retries through AppEvt. Non-blocking mode drops a rejected completion
-and increments RxDropCnt; ordinary non-blocking CFifo puts replace the oldest
-packet when full. Direct completion publishes the single RX slot instead of
-placing data into a FIFO, replacing any unread packet.
+Direct mode supplies RX and TX slots, each with UsbPktHdr_t followed by the
+payload. The header records single-slot ownership. Direct RX completion
+publishes the received slot and invokes the application callback.
 
-RxData only consumes received FIFO data or the direct RX slot. OUT scheduling
-and retrying a held completion run through endpoint events and UsbProcess.
-A withheld OUT buffer is retried by the controller's foreground DRDY callback,
-including when AppEvt could not accept the initial retry.
+USB_CTRLR_EVT_DRDY requests an OUT destination. A full blocking FIFO or occupied
+blocking direct slot leaves the receive pending. RxData retries submission
+when it releases space, including when consuming a zero-length packet.
+Non-blocking FIFO mode gives up its oldest packet at DRDY when space is needed.
+The controller owns DMA arbitration and prevents duplicate submissions for a
+packet already queued or active. ISO retains the controller's interval scheduler.
 
 For IN, byte and packet modes retain queued TX data until host consumption
 completes the endpoint transfer. Direct TxData copies one current packet into
@@ -134,7 +136,7 @@ typedef struct __Usb_Interf_Config {
 	uint8_t *pTxFifoMem;
 	uint16_t TxFifoBlkSize;
 	uint16_t BufferSize;
-	uint8_t *pRxBuffer;
+	uint8_t *pRxBuffer;		//!< Direct-mode RX slot; unused in byte/packet modes
 	uint8_t *pTxBuffer;		//!< Direct-mode TX slot; unused in byte/packet modes
 	DevIntrfEvtHandler_t EvtCB;
 } UsbIntrfCfg_t;
@@ -145,22 +147,24 @@ typedef struct __Usb_Dev_Interf		UsbDevIntrf_t;
 typedef int (*EpSendFct_t)(UsbDevIntrf_t *pIntrf);
 
 struct __Usb_Dev_Interf {
+	// Endpoint state ahead of the DevIntrf block so the transfer paths
+	// address it with short load and store offsets.
 	int DevNo;
-	DevIntrf_t DevIntrf;
-	hCFifo_t hTxFifo;
-	hCFifo_t hRxFifo;
-	uint32_t RxDropCnt;
-	uint8_t *pRxBuffer;
-	UsbPkt_t *pRxDirectBuffer;
-	UsbPkt_t *pTxDirectBuffer;
 	uint16_t BufferSize;
 	uint16_t Mps;
-	uint16_t RxPending;		//!< 0: idle, 1: DRDY, otherwise RX length + 2
+	uint16_t RxPending;		//!< 1: DRDY waiting for RX space or controller admission
 	uint8_t EpNo : 7;
 	bool bBlocking : 1;
 	UsbIntrfMode_t Mode;
+	hCFifo_t hTxFifo;
+	hCFifo_t hRxFifo;
+	uint32_t RxDropCnt;
+	uint8_t *pRxBuffer;		//!< Direct mode: Data of the RX slot
+	UsbPkt_t *pRxDirectBuffer;
+	UsbPkt_t *pTxDirectBuffer;
 	EpSendFct_t EpSend;
 	void *pClassContext;
+	DevIntrf_t DevIntrf;
 };
 
 #ifdef __cplusplus
@@ -170,7 +174,6 @@ extern "C" {
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg);
 bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps);
 void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf);
-bool UsbIntrfRequestToSend(UsbDevIntrf_t *pIntrf, int NbBytes);
 
 #ifdef __cplusplus
 }
@@ -200,10 +203,6 @@ public:
 
 	uint32_t Rate(void) override {
 		return DeviceIntrfGetRate(&vUsbDevIntrf.DevIntrf);
-	}
-
-	bool RequestToSend(int NbBytes) override {
-		return UsbIntrfRequestToSend(&vUsbDevIntrf, NbBytes);
 	}
 
 	// Use the owned data directly without a virtual conversion on each call.

@@ -36,11 +36,6 @@ SOFTWARE.
 #include "usb/usbd_epalloc.h"
 #include "usb/usbd_bulk.h"
 
-static uint8_t *UsbdBulkRxBuffer(UsbdBulkDev_t *pBulk)
-{
-	return reinterpret_cast<uint8_t *>(pBulk->RxTransfer);
-}
-
 static uint16_t UsbdBulkMps(const UsbdBulkDev_t *pBulk)
 {
 	return UsbCtrlrHighSpeed(pBulk->DevNo) ? pBulk->HsMps : pBulk->FsMps;
@@ -59,6 +54,9 @@ static void UsbdBulkCloseEndpoints(UsbdBulkDev_t *pBulk)
 	UsbCtrlrEpClose(pBulk->DevNo, pBulk->EpNo, true);
 }
 
+// Out of line: the class wrapper becomes a tail call and the body addresses
+// the device state with short offsets.
+__attribute__((noinline))
 static bool UsbdBulkConfig(UsbdBulkDev_t *pBulk, uint8_t Configuration)
 {
 	if (pBulk == nullptr)
@@ -117,6 +115,8 @@ static constexpr UsbdBulkDesc_t UsbdBulkDescTemplate(void)
 
 static constexpr UsbdBulkDesc_t s_BulkDescTemplate = UsbdBulkDescTemplate();
 
+// Out of line: shared by the registered build hook and UsbdBulkMakeDesc.
+__attribute__((noinline))
 static void UsbdBulkPatchDesc(UsbdBulkDesc_t *pDesc,
 							  const UsbdBulkDev_t *pBulk, UsbSpeed_t Speed)
 {
@@ -163,6 +163,8 @@ bool UsbdBulkMakeDesc(UsbdBulkDesc_t *pDesc, const UsbdBulkDev_t *pBulk,
 	return true;
 }
 
+// Out of line for the same reason as UsbdBulkConfig.
+__attribute__((noinline))
 static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 								 UsbDevIntrf_t *pData,
 								 const UsbdBulkCfg_t *pCfg,
@@ -215,8 +217,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 	dataCfg.DevNo = pBulk->DevNo;
 	dataCfg.EvtCB = pCfg->EvtCB;
 	dataCfg.EpNo = pBulk->EpNo;
-	dataCfg.BufferSize = (uint16_t)sizeof(pBulk->RxTransfer);
-	dataCfg.pRxBuffer = UsbdBulkRxBuffer(pBulk);
+	dataCfg.BufferSize = (uint16_t)USBD_BULK_MAX_MPS;
 
 	if (!UsbIntrfInit(pBulk->pData, &dataCfg))
 	{

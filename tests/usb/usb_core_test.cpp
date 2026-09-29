@@ -38,6 +38,7 @@ SOFTWARE.
 #include <string.h>
 #include <initializer_list>
 
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_epalloc.h"
 
@@ -324,6 +325,25 @@ static bool Fixture(bool WithSetInterface = true,
 		return false;
 	}
 	return s_Ctrlr.IntEnableCnt == 1 && s_Ctrlr.ConnectCnt == 1;
+}
+
+static void QueueTestEvent(uint32_t Event, void *pContext)
+{
+	*static_cast<uint32_t *>(pContext) |= 1UL << Event;
+}
+
+static bool TestAppEvtQueue(void)
+{
+	CHECK(Fixture());
+	uint32_t events = 0U;
+	for (uint32_t i = 0U; i < 16U; i++)
+	{
+		CHECK(AppEvtHandlerQue(i, &events, QueueTestEvent));
+	}
+	CHECK(!AppEvtHandlerQue(16U, &events, QueueTestEvent));
+	AppEvtHandlerExec();
+	CHECK(events == 0xFFFFU);
+	return true;
 }
 
 static bool SetAddress(uint8_t Address)
@@ -959,6 +979,8 @@ static bool TestIsoSofScheduling(void)
 	CHECK(UsbDescRegister(TEST_DEVNO, &s_FixtureClass,
 		s_IsoConfigDesc, sizeof(s_IsoConfigDesc), nullptr));
 	CHECK(UsbEnable(TEST_DEVNO));
+	// SET_CONFIGURATION is refused in the Default state (USB 2.0 9.4.7).
+	CHECK(SetAddress(5));
 	CHECK(SetConfig(1));
 	CHECK(!s_Ctrlr.SofEnabled);
 
@@ -1047,11 +1069,14 @@ extern "C" void UsbCtrlrSetAddress(int, uint8_t Address)
 extern "C" bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
 extern "C" void UsbCtrlrEpClose(int, uint8_t, bool) {}
 extern "C" void UsbCtrlrEpCloseAll(int) { s_Ctrlr.CloseAllCnt++; }
-extern "C" void UsbCtrlrEpAlloc(int, uint8_t, bool, uint8_t *, bool,
+extern "C" void UsbCtrlrEpBind(int, uint8_t, bool, bool,
 									 UsbCtrlrEpHandler_t, void *)
 {
 	return;
 }
+
+extern "C" bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *, uint16_t)
+{ return false; }
 extern "C" void UsbCtrlrEpProcessEvent(int, uint8_t EpNo, bool bIn,
 	UsbCtrlrEvtType_t Event, uint16_t Value)
 {
@@ -1062,10 +1087,8 @@ extern "C" void UsbCtrlrEpProcessEvent(int, uint8_t EpNo, bool bIn,
 	}
 }
 extern "C" bool UsbCtrlrEpSend(int, uint8_t, uint8_t *, uint16_t) { return true; }
-extern "C" bool UsbCtrlrIsoService(int, uint8_t, uint16_t Length)
+extern "C" bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *, uint16_t)
 {
-	s_Ctrlr.IsoServiceCnt++;
-	s_Ctrlr.LastIsoServiceValue = Length;
 	return true;
 }
 static bool RecordEp0(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Length)
@@ -1122,6 +1145,7 @@ typedef struct { const char *pName; TestHandler_t Handler; } TestCase_t;
 int main(void)
 {
 	static const TestCase_t tests[] = {
+		{ "USB AppEvt queue holds 16 events", TestAppEvtQueue },
 		{ "enable requires descriptor", TestEnableRequiresDescriptor },
 		{ "descriptors", TestDescriptors },
 		{ "descriptor validation", TestDescriptorValidation },

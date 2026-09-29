@@ -15,6 +15,10 @@ static bool s_XferOk = true;
 static uint16_t s_InLength;
 static int s_OutXferCount;
 
+static int s_Fail;
+#define CHECK(c) do { if (!(c)) { \
+	printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; } } while (0)
+
 extern "C" {
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
 bool UsbCtrlrStart(int) { return true; }
@@ -41,22 +45,31 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
 void UsbCtrlrEpClose(int, uint8_t, bool) {}
 void UsbCtrlrEpCloseAll(int) {}
 
-void UsbCtrlrEpAlloc(int, uint8_t, bool bIn, uint8_t *pBuffer, bool,
+void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (bIn)
 	{
-		s_InBuffer = pBuffer;
+		s_InBuffer = nullptr;
+		CHECK(s_InHandler == nullptr);
 		s_InHandler = Handler;
 		s_InContext = pContext;
 	}
 	else
 	{
-		s_OutBuffer = pBuffer;
+		s_OutBuffer = nullptr;
+		CHECK(s_OutHandler == nullptr);
 		s_OutHandler = Handler;
 		s_OutContext = pContext;
 	}
 	return;
+}
+
+bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+{
+	if (s_OutBuffer != nullptr || pBuffer == nullptr || Capacity == 0U) return false;
+	s_OutBuffer = pBuffer;
+	return true;
 }
 
 bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
@@ -68,10 +81,6 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	return true;
 }
 }
-
-static int s_Fail;
-#define CHECK(c) do { if (!(c)) { \
-	printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; } } while (0)
 
 static int KeepRx(DevIntrf_t *, DEVINTRF_EVT Event, uint8_t *, int)
 {
@@ -110,10 +119,15 @@ static bool Init(UsbDevIntrf_t *pIntrf, uint32_t *pRx, uint32_t *pTx,
 static void RxComplete(const uint8_t *pData, uint16_t Length,
 					   UsbCtrlrEvtType_t Event = USB_CTRLR_EVT_XFER_CMPL)
 {
+	if (s_OutBuffer == nullptr)
+		s_OutHandler(USB_CTRLR_EVT_DRDY, Length, s_OutContext);
+	CHECK(s_OutBuffer != nullptr);
+	if (s_OutBuffer == nullptr) return;
 	if (Length > 0U)
 	{
 		memcpy(s_OutBuffer, pData, Length);
 	}
+	s_OutBuffer = nullptr;
 	s_OutHandler(Event,
 		Length, s_OutContext);
 }
@@ -191,7 +205,9 @@ static void TestDrdyPolicy(void)
 		uint8_t output[3];
 		CHECK(DeviceIntrfRxData(&intrf.DevIntrf, output, sizeof(output)) == 3);
 		CHECK(memcmp(output, packet, sizeof(packet)) == 0);
-		CHECK(s_OutBuffer == nullptr && intrf.RxPending);
+		// Reading the slot submits the pending receive; later controller
+		// polls do not submit the same destination again.
+		CHECK(!intrf.RxPending && s_OutBuffer == intrf.pRxBuffer);
 		CHECK(s_OutXferCount == submits);
 		UsbCtrlrProcess(0);
 		CHECK(!intrf.RxPending && s_OutBuffer == intrf.pRxBuffer);
@@ -219,9 +235,9 @@ static void TestTx(void)
 	const uint8_t data[] = {9U, 8U, 7U};
 	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, data, sizeof(data)) == 3);
 	CHECK(s_InLength == 3U && memcmp(s_InBuffer, data, sizeof(data)) == 0);
-	CHECK(!UsbIntrfRequestToSend(&intrf, 1));
+	CHECK((intrf.pTxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) != 0U);
 	s_InHandler(USB_CTRLR_EVT_XFER_CMPL, 3U, s_InContext);
-	CHECK(UsbIntrfRequestToSend(&intrf, 0));
+	CHECK((intrf.pTxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) == 0U);
 	CHECK(DeviceIntrfTxData(&intrf.DevIntrf, nullptr, 0) == 0);
 	CHECK(!atomic_load(&intrf.DevIntrf.bTxReady));
 	s_InHandler(USB_CTRLR_EVT_CANCEL, 0U, s_InContext);

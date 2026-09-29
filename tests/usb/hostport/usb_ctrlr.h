@@ -166,10 +166,21 @@ void UsbCtrlrSofEnable(int DevNo, bool Enable);
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
 
+static inline bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
+								 uint16_t MaxPacketSize)
+{
+	UsbEndPointDesc_t desc = {};
+	desc.bEndpointAddress = (uint8_t)(EpNo |
+		(bIn ? USB_ENDPADDR_DIR_IN : 0U));
+	desc.bmAttributes = USB_ENDPATT_TRANS_ISO;
+	desc.wMaxPacketSize = MaxPacketSize;
+	return UsbCtrlrEpOpen(DevNo, &desc);
+}
+
 static inline bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn,
 									 uint8_t Type, uint16_t MaxPacketSize)
 {
-	UsbEndPointDesc_t desc = {0};
+	UsbEndPointDesc_t desc = {};
 	desc.bLength = sizeof(desc);
 	desc.bDescriptorType = USB_DESCTYPE_ENDPOINT;
 	desc.bEndpointAddress = (uint8_t)(EpNo |
@@ -181,16 +192,25 @@ static inline bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn,
 
 void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn);
 void UsbCtrlrEpCloseAll(int DevNo);
-void UsbCtrlrEpAlloc(int DevNo, uint8_t EpNo, bool bIn, uint8_t *pBuffer,
-					 bool bBlocking,
+// Bind a non-control endpoint's owner and callback during interface Init.
+// Transfer buffers are supplied separately by EpReceive and EpSend.
+void UsbCtrlrEpBind(int DevNo, uint8_t EpNo, bool bIn, bool bBlocking,
 					 UsbCtrlrEpHandler_t Handler, void *pContext);
+// Submit a non-NULL OUT DMA destination in response to DRDY. Capacity is
+// writable payload space and must cover the configured endpoint MPS.
+// A successful submission owns the buffer until completion or cancellation; it does not publish data to the application. One outstanding
+// receive per endpoint. Returns false when the request cannot be accepted.
+// Regular OUT shares the transfer queue with IN; ISO retains interval scheduling.
+bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
+						  uint16_t Capacity);
 void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 						 UsbCtrlrEvtType_t Event, uint16_t Value);
 // EpNum is an endpoint number: device IN, host OUT. The controller schedules RX.
 // pBuffer supplies the DMA source and remains owned until the completion callback.
 // It may be NULL only for a zero-length transfer.
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
-bool UsbCtrlrIsoService(int DevNo, uint8_t EpNum, uint16_t Length);
+bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
+					 uint16_t Length);
 // IN returns bytes copied into the queue; completion notifies that it drained.
 // A zero-length send queues a data ZLP; negative means it was not accepted.
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
