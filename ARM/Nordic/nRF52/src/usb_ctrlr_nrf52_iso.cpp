@@ -46,7 +46,9 @@ SOFTWARE.
 #include "usb_ctrlr.h"
 
 static_assert(offsetof(USBD_ISOOUT_Type, MAXCNT) ==
-	offsetof(USBD_ISOIN_Type, MAXCNT), "ISO register layout");
+	offsetof(USBD_ISOIN_Type, MAXCNT) &&
+	offsetof(USBD_ISOOUT_Type, AMOUNT) ==
+	offsetof(USBD_ISOIN_Type, AMOUNT), "ISO register layout");
 
 // Enable explicitly in the library build for bench diagnostics.
 #ifndef NRFUSBD_ISO_TRACE
@@ -306,8 +308,10 @@ void nRFUsbdIsoComplete(uint8_t In)
 {
 	const uint8_t flag = In ?
 		NRFUSBD_ISO_IN_READY : NRFUSBD_ISO_OUT_READY;
-	const uint16_t amount = (uint16_t)(In ?
-		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
+	// In is 0 or 1 from the ISR endpoint cases; both banks share the layout.
+	const uintptr_t amountreg = (uintptr_t)&NRF_USBD->ISOOUT.AMOUNT -
+		In * (offsetof(NRF_USBD_Type, ISOOUT) - offsetof(NRF_USBD_Type, ISOIN));
+	const uint16_t amount = (uint16_t)*(volatile uint32_t *)amountreg;
 
 	s_Usbd.IsoDataFlag &= (uint8_t)~flag;
 	if (!In)
