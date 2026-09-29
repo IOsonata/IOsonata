@@ -696,7 +696,7 @@ static __attribute__((noinline)) void nRFUsbdStartQueuedDma(bool ep0out)
 
 // Callers exclude interrupts or run in the USB ISR. Retirement already
 // owns the channel and bypasses this acquisition path.
-static inline bool nRFUsbdAcquireDma(void)
+static inline __attribute__((always_inline)) bool nRFUsbdAcquireDma(void)
 {
 	if (nRFUsbdDmaActive() || !nRFUsbdDmaAllowed())
 		return false;
@@ -1163,38 +1163,30 @@ extern "C" void USBD_IRQHandler(void){
 
 	uint32_t servicedstatus = 0U;
 
-	uint32_t indata = datastatus & 0xFEU;
-	while (indata != 0U)
+	// IN host consumption (bits 1-7) and OUT readiness (bits 17-23) both go
+	// to AppEvt in one pass. Rotating the halves keeps the original order:
+	// IN highest endpoint first, then OUT highest endpoint first. A bit stays
+	// set when it cannot be queued and the next IRQ retries it. OUT readiness
+	// waits while its DMA is captured.
+	uint32_t pending = __ROR(datastatus & 0x00FE00FEUL, 16U);
+	while (pending != 0U)
 	{
-		const uint32_t epnum = 31U - (uint32_t)__CLZ(indata);
-		const uint32_t bit = 1UL << epnum;
-		// Leave the status bit set when AppEvt is full so the next IRQ retries.
-		const uint32_t evt = (NRF_USBD->EPIN[epnum].AMOUNT << 8U) | epnum;
-		if (!AppEvtHandlerQue(evt | (1UL << 16U),
-			(void *)(uintptr_t)nRFUsbGetEpReg(epnum, 1U)->Generation,
+		const uint32_t pos = 31U - (uint32_t)__CLZ(pending);
+		const uint32_t epnum = pos & 7U;
+		const uint32_t in = pos >= 16U;
+		const uint32_t bit = __ROR(1UL << pos, 16U);
+		nRFUsbEpReg_t *preg = nRFUsbGetEpReg((uint8_t)epnum, (uint8_t)in);
+		pending &= ~(1UL << pos);
+
+		uint32_t evt = epnum | (1UL << 17U);
+		if (in)
+			evt = (NRF_USBD->EPIN[epnum].AMOUNT << 8U) | epnum | (1UL << 16U);
+		else if ((NRF_USBD->EPSTATUS & bit) != 0U || preg->Handler == NULL)
+			continue;
+		if (!AppEvtHandlerQue(evt, (void *)(uintptr_t)preg->Generation,
 			nRFUsbdProcessQueuedEvent))
 			break;
 		servicedstatus |= bit;
-		indata &= ~bit;
-	}
-
-	uint32_t outdata = (datastatus >> 16U) & 0xFEU;
-	while (outdata != 0U)
-	{
-		const uint32_t epnum = 31U - (uint32_t)__CLZ(outdata);
-		const uint32_t bit = 1UL << epnum;
-		const uint32_t statusbit = bit << 16U;
-		nRFUsbEpReg_t *preg = nRFUsbGetEpReg((uint8_t)epnum, 0U);
-
-		// END queues completion above before a following DRDY. Consume the
-		// readiness latch only after enqueue succeeds to prevent duplicates.
-		if ((NRF_USBD->EPSTATUS & statusbit) == 0U &&
-			preg->Handler != NULL &&
-			AppEvtHandlerQue(epnum | (1UL << 17U),
-				(void *)(uintptr_t)preg->Generation, nRFUsbdProcessQueuedEvent))
-			servicedstatus |= statusbit;
-
-		outdata &= ~bit;
 	}
 
 	NRF_USBD->EPDATASTATUS = servicedstatus;
