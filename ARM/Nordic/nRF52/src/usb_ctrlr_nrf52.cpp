@@ -1151,7 +1151,7 @@ extern "C" void USBD_IRQHandler(void){
 
 	// EPDATASTATUS describes regular endpoint host-consumption / OUT readiness.
 
-	uint32_t servicedstatus = datastatus & 0x00010001UL;
+	uint32_t servicedstatus = 0U;
 
 	uint32_t indata = datastatus & 0xFEU;
 	while (indata != 0U)
