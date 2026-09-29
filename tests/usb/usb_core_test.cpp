@@ -611,6 +611,40 @@ static bool TestConfiguration(void)
 	return true;
 }
 
+static bool TestStandardRequestTypes(void)
+{
+	const struct {
+		uint8_t request;
+		uint8_t type;
+		uint16_t value;
+		uint16_t length;
+	} requests[] = {
+		{ USB_REQ_GET_DESCRIPTOR, STD_DEV_IN, USB_DESCTYPE_DEVICE << 8, 18 },
+		{ USB_REQ_SET_ADDRESS, STD_DEV_OUT, 5, 0 },
+		{ USB_REQ_GET_CONFIGURATION, STD_DEV_IN, 0, 1 },
+		{ USB_REQ_SET_CONFIGURATION, STD_DEV_OUT, 1, 0 },
+		{ USB_REQ_GET_INTERFACE, STD_IF_IN, 0, 1 },
+		{ USB_REQ_SET_INTERFACE, STD_IF_OUT, 0, 0 },
+	};
+
+	for (const auto &request : requests)
+	{
+		for (unsigned type = 0; type < 256U; ++type)
+		{
+			if ((type & USB_REQTYPE_MASK_TYPE) != USB_REQTYPE_STANDARD)
+				continue;
+			CHECK(Fixture());
+			CHECK(SetAddress(3));
+			if (request.request != USB_REQ_SET_ADDRESS)
+				CHECK(SetConfig(1));
+			ClearCtrlrLog();
+			Setup((uint8_t)type, request.request, request.value, 0, request.length);
+			CHECK(s_Ctrlr.StallCnt == (type == request.type ? 0 : 1));
+		}
+	}
+	return true;
+}
+
 static bool TestInterfaceAndHalt(void)
 {
 	CHECK(Fixture());
@@ -1181,6 +1215,7 @@ int main(void)
 		{ "SET_ADDRESS", TestAddress },
 		{ "configuration", TestConfiguration },
 		{ "alternate interface and halt", TestInterfaceAndHalt },
+		{ "standard request directions and recipients", TestStandardRequestTypes },
 		{ "SET_INTERFACE requires handler", TestInterfaceRequiresHandler },
 		{ "class control lifecycle", TestClassControl },
 		{ "endpoint allocator exhaustion", TestEndpointAllocatorExhaustion },

@@ -945,8 +945,7 @@ static bool UsbCoreEndpointHalted(uint8_t EpNo, bool bIn)
 
 static bool UsbCoreHandleGetDescriptor(void)
 {
-	if (!UsbCoreDirIn(&s_Core.Setup) ||
-		UsbCoreRecipient(&s_Core.Setup) != USB_REQTYPE_DEVICE)
+	if (s_Core.Setup.bmRequestType != (USB_REQTYPE_DIRHOST | USB_REQTYPE_DEVICE))
 	{
 		return false;
 	}
@@ -1082,8 +1081,7 @@ static bool UsbCoreHandleFeature(bool Set)
 
 static bool UsbCoreHandleSetConfiguration(void)
 {
-	if (UsbCoreDirIn(&s_Core.Setup) ||
-		UsbCoreRecipient(&s_Core.Setup) != USB_REQTYPE_DEVICE ||
+	if (s_Core.Setup.bmRequestType != USB_REQTYPE_DEVICE ||
 		s_Core.Setup.wIndex != 0 || s_Core.Setup.wLength != 0 ||
 		s_Core.Setup.wValue > 0xFFU || s_Core.Address == 0)
 	{
@@ -1100,8 +1098,7 @@ static bool UsbCoreHandleSetConfiguration(void)
 
 static bool UsbCoreHandleGetInterface(void)
 {
-	if (!UsbCoreDirIn(&s_Core.Setup) ||
-		UsbCoreRecipient(&s_Core.Setup) != USB_REQTYPE_INTERFACE ||
+	if (s_Core.Setup.bmRequestType != (USB_REQTYPE_DIRHOST | USB_REQTYPE_INTERFACE) ||
 		s_Core.Setup.wValue != 0 || s_Core.Setup.wLength != 1)
 	{
 		return false;
@@ -1120,8 +1117,7 @@ static bool UsbCoreHandleGetInterface(void)
 
 static bool UsbCoreHandleSetInterface(void)
 {
-	if (UsbCoreDirIn(&s_Core.Setup) ||
-		UsbCoreRecipient(&s_Core.Setup) != USB_REQTYPE_INTERFACE ||
+	if (s_Core.Setup.bmRequestType != USB_REQTYPE_INTERFACE ||
 		s_Core.Setup.wLength != 0 || s_Core.Setup.wValue > 0xFFU)
 	{
 		return false;
@@ -1170,8 +1166,7 @@ static bool UsbCoreHandleStandard(void)
 			return UsbCoreHandleFeature(true);
 
 		case USB_REQ_SET_ADDRESS:
-			if (UsbCoreDirIn(&s_Core.Setup) ||
-				UsbCoreRecipient(&s_Core.Setup) != USB_REQTYPE_DEVICE ||
+			if (s_Core.Setup.bmRequestType != USB_REQTYPE_DEVICE ||
 				s_Core.Setup.wIndex != 0 || s_Core.Setup.wLength != 0 ||
 				s_Core.Setup.wValue > 127U || s_Core.Configuration != 0)
 			{
@@ -1191,8 +1186,7 @@ static bool UsbCoreHandleStandard(void)
 				UsbCoreHandleClassRequest();
 
 		case USB_REQ_GET_CONFIGURATION:
-			if (!UsbCoreDirIn(&s_Core.Setup) ||
-				UsbCoreRecipient(&s_Core.Setup) != USB_REQTYPE_DEVICE ||
+			if (s_Core.Setup.bmRequestType != (USB_REQTYPE_DIRHOST | USB_REQTYPE_DEVICE) ||
 				s_Core.Setup.wValue != 0 || s_Core.Setup.wIndex != 0 ||
 				s_Core.Setup.wLength != 1)
 			{
