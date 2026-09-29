@@ -329,7 +329,6 @@ typedef struct __nRF_Usbd_State
 	alignas(4) uint8_t Ep0Bounce[NRFX_USBD_MAX_PACKET_SIZE];
 	// OUT bits 1-7, IN bits 9-15; bit 0 marks a queued completion AppEvt.
 	volatile uint16_t Complete;
-	volatile uint8_t InBusy;      //!< IN packets awaiting host acknowledgement.
 } nRFUsbdState_t;
 
 extern nRFUsbdState_t s_Usbd;
