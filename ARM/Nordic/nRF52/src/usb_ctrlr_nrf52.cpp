@@ -709,9 +709,9 @@ __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 	if (!nRFUsbdAcquireDma())
 		return;
 
-	const bool ep0out = NRF_USBD->EVENTS_EP0DATADONE != 0U &&
-		(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) == 0U;
-	nRFUsbdStartQueuedDma(ep0out);
+	// EP0 OUT readiness is classified only by the ISR. Foreground buffer
+	// submission never consumes an endpoint event.
+	nRFUsbdStartQueuedDma(false);
 }
 
 static void nRFUsbdResetState(void)
@@ -832,14 +832,13 @@ static void nRFUsbdTryRemoteWake(void)
 	NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
 }
 
-// Called from the USBD ISR. Only this ISR changes SUSPENDED, so the normal
-// awake SOF path needs no critical section. Keep wake-state updates protected.
+// Called only from the USB ISR. Foreground remote-wake updates already
+// exclude interrupts, so this transition needs no nested critical section.
 static void nRFUsbdHostResume(void)
 {
 	if ((s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U)
 		return;
 
-	const uint32_t irqState = DisableInterrupt();
 	uint8_t flags = s_Usbd.Flags;
 
 	// A host resume cancels any device-initiated wake request. Keep SUSPENDED
@@ -848,13 +847,11 @@ static void nRFUsbdHostResume(void)
 	if ((flags & USBD_FLAG_MAC_AWAKE) != 0U && UsbdIsForceNormal())
 	{
 		s_Usbd.Flags = flags & (uint8_t)~USBD_FLAG_SUSPENDED;
-		EnableInterrupt(irqState);
 		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
 		return;
 	}
 
 	s_Usbd.Flags = flags;
-	EnableInterrupt(irqState);
 	UsbdForceNormal();
 }
 
@@ -1006,6 +1003,8 @@ extern "C" void USBD_IRQHandler(void){
 		return;
 	}
 
+	const bool suspended = (s_Usbd.Flags & USBD_FLAG_SUSPENDED) != 0U;
+
 	if (NRF_USBD->EVENTS_USBEVENT != 0U)
 	{
 		NRF_USBD->EVENTS_USBEVENT = 0U;
@@ -1014,7 +1013,10 @@ extern "C" void USBD_IRQHandler(void){
 		(void)NRF_USBD->EVENTCAUSE;
 		nRFUsbdHandleBusEvent(eventCause);
 
-		return;
+		// A completed resume must reach the scheduler even without another
+		// submission, SOF, or DMA completion to restart queued work.
+		if (!suspended || (s_Usbd.Flags & USBD_FLAG_SUSPENDED) != 0U)
+			return;
 	}
 
 	// A new SETUP supersedes the old EP0 transaction before any normal
@@ -1116,8 +1118,10 @@ extern "C" void USBD_IRQHandler(void){
 		(NRF_USBD->BMREQUESTTYPE & USB_REQTYPE_MASK_DIR) != 0U;
 	const bool ep0out = ep0done && !ep0in;
 
-	// Retirement retains ownership; otherwise only ready EP0 OUT needs a kick.
-	if (reuseDma || (ep0out && nRFUsbdAcquireDma()))
+	const bool resumed = suspended &&
+		(s_Usbd.Flags & USBD_FLAG_SUSPENDED) == 0U;
+	// Retirement retains ownership; readiness or resume can acquire idle DMA.
+	if (reuseDma || ((ep0out || resumed) && nRFUsbdAcquireDma()))
 		nRFUsbdStartQueuedDma(ep0out);
 
 	// Keep the live status check: the handoff may have started EP0 IN.
