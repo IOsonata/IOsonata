@@ -243,7 +243,8 @@ test-nrf-iso-policy:
 test-nrf-iso-dma:
 	CXX=$(CXX) python3 ./nrf_usb_iso_dma_test.py
 
-test-nrf-out-appevt: test-nrf-appevt
+test-nrf-out-appevt:
+	CXX=$(CXX) python3 ./nrf_usb_iso_dma_test.py --regular-out
 
 test-nrf-appevt:
 	CXX=$(CXX) python3 ./nrf_usb_iso_dma_test.py --regular
