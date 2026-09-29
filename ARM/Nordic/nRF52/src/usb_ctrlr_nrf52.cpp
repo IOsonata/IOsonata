@@ -1096,21 +1096,25 @@ extern "C" void USBD_IRQHandler(void){
 				}
 				default:	// Regular endpoints 1-7.
 				{
-					const uint8_t epNum = (uint8_t)epno & 7U;
-					volatile uint32_t *pend = epno >= 16U ?
-						&NRF_USBD->EVENTS_ENDEPOUT[epNum] :
-						&NRF_USBD->EVENTS_ENDEPIN[epNum];
-					if (*pend == 0U)
+					const uint8_t epnum = (uint8_t)epno & 7U;
+					const bool in = epno < 16U;
+					volatile uint32_t *pend = in ?
+						&NRF_USBD->EVENTS_ENDEPIN[epnum] :
+						&NRF_USBD->EVENTS_ENDEPOUT[epnum];
+					if (*pend == 0U ||
+						(in && (dmastatus & datastatus) == 0U))
 						break;
+
 					*pend = 0U;
 					NRF_USBD->EPSTATUS = dmastatus;
 					(void)CFifoGet(s_Usbd.hQue);
-					if (epno >= 16U)
-					{
-						const uint32_t evt =
-							(NRF_USBD->EPOUT[epNum].AMOUNT << 8U) | epNum;
-						AppEvtHandlerQue(evt, NULL, nRFUsbdProcessOutComplete);
-					}
+					const uint32_t amount = in ?
+						NRF_USBD->EPIN[epnum].AMOUNT :
+						NRF_USBD->EPOUT[epnum].AMOUNT;
+					if (in)
+						NRF_USBD->EPDATASTATUS = dmastatus;
+					AppEvtHandlerQue((amount << 8U) | epnum, NULL,
+						in ? nRFUsbdProcessInComplete : nRFUsbdProcessOutComplete);
 					reuseDma = true;
 					break;
 				}
@@ -1144,22 +1148,6 @@ extern "C" void USBD_IRQHandler(void){
 
 	// EPDATASTATUS describes regular endpoint host-consumption / OUT readiness.
 
-	uint32_t servicedStatus = datastatus & 0x00010001UL;
-
-	// Experiment: complete IN only when both snapshots contain the endpoint.
-	uint32_t indata = dmastatus & datastatus & 0xFEU;
-	while (indata != 0U)
-	{
-		const uint32_t epNum = 31U - (uint32_t)__CLZ(indata);
-		const uint32_t bit = 1UL << epNum;
-		// Leave the status bit set when AppEvt is full so the next IRQ retries.
-		const uint32_t evt = (NRF_USBD->EPIN[epNum].AMOUNT << 8U) | epNum;
-		if (!AppEvtHandlerQue(evt, NULL, nRFUsbdProcessInComplete))
-			break;
-		servicedStatus |= bit;
-		indata &= ~bit;
-	}
-
 	uint32_t outData = (datastatus >> 16U) & 0xFEU;
 	while (outData != 0U)
 	{
@@ -1176,7 +1164,7 @@ extern "C" void USBD_IRQHandler(void){
 		outData &= ~dataBit;
 	}
 
-	NRF_USBD->EPDATASTATUS = servicedStatus;
+	NRF_USBD->EPDATASTATUS = datastatus & 0x00010001UL;
 	__DSB();
 	nRFUsbdTryRemoteWake();
 
