@@ -896,6 +896,13 @@ static void nRFUsbdProcessInComplete(uint32_t Evt, void *pContext)
 }
 
 
+// DRDY and completion share AppEvt ordering; this callback never reads EPDATA.
+static void nRFUsbdProcessOutData(uint32_t Evt, void *pContext)
+{
+	(void)pContext;
+	nRFUsbEpRegisteredEvent((uint8_t)Evt, 0U, USB_CTRLR_EVT_DRDY, 0U);
+}
+
 // Experiment: carry each OUT completion in AppEvt without a pending mask.
 static void nRFUsbdProcessOutComplete(uint32_t Evt, void *pContext)
 {
@@ -1159,20 +1166,22 @@ extern "C" void USBD_IRQHandler(void){
 		indata &= ~bit;
 	}
 
-	uint32_t outData = (datastatus >> 16U) & 0xFEU;
-	while (outData != 0U)
+	uint32_t outdata = (datastatus >> 16U) & 0xFEU;
+	while (outdata != 0U)
 	{
-		const uint32_t epNum = 31U - (uint32_t)__CLZ(outData);
-		const uint32_t dataBit = 1UL << epNum;
-		const uint32_t statusBit = 1UL << (epNum + 16U);
-		nRFUsbEpReg_t *pReg = nRFUsbGetEpReg((uint8_t)epNum, 0U);
+		const uint32_t epnum = 31U - (uint32_t)__CLZ(outdata);
+		const uint32_t bit = 1UL << epnum;
+		const uint32_t statusbit = bit << 16U;
+		nRFUsbEpReg_t *preg = nRFUsbGetEpReg((uint8_t)epnum, 0U);
 
-		// The owner submits the destination through EpReceive. That call
-		// consumes EPDATASTATUS only after accepting the queued transfer.
-		if ((NRF_USBD->EPSTATUS & statusBit) == 0U && pReg->Handler != NULL)
-			pReg->Handler(USB_CTRLR_EVT_DRDY, 0U, pReg->pContext);
+		// END queues completion above before a following DRDY. Consume the
+		// readiness latch only after enqueue succeeds to prevent duplicates.
+		if ((NRF_USBD->EPSTATUS & statusbit) == 0U &&
+			preg->Handler != NULL &&
+			AppEvtHandlerQue(epnum, NULL, nRFUsbdProcessOutData))
+			servicedstatus |= statusbit;
 
-		outData &= ~dataBit;
+		outdata &= ~bit;
 	}
 
 	NRF_USBD->EPDATASTATUS = servicedstatus;
@@ -1433,8 +1442,9 @@ bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
 			accepted = true;
 		}
 	}
-	else if ((NRF_USBD->EPDATASTATUS & statusBit) != 0U &&
-		(NRF_USBD->EPSTATUS & statusBit) == 0U)
+	// ISR already consumed readiness when it queued DRDY. The owner may
+	// supply this buffer later, after RX FIFO space becomes available.
+	else if ((NRF_USBD->EPSTATUS & statusBit) == 0U)
 	{
 		nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
 		if (pQue != nullptr)
@@ -1443,9 +1453,6 @@ bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
 			pQue->Dir = NRFX_USBD_QUE_OUT;
 			pQue->Len = Capacity;
 			pQue->pBuffer = pBuffer;
-			// Clear readiness before a START can allow another host packet.
-			NRF_USBD->EPDATASTATUS = statusBit;
-			__DSB();
 			accepted = true;
 		}
 	}
