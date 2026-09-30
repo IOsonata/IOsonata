@@ -372,7 +372,12 @@ int main(void)
 		return 13;
 	}
 
-	SetControlLineState(pCdc0->CtrlIfNo, 0U);
+	// RTS alone does not change whether the port is open.
+	SetControlLineState(pCdc0->CtrlIfNo,
+		USB_CDC_CTRL_LINE_STATE_DTR | USB_CDC_CTRL_LINE_STATE_RTS);
+	CompleteEp0In();
+	if (!s_Cdc0.IsPortOpen() || s_PortEvents != 1U) return 22;
+	SetControlLineState(pCdc0->CtrlIfNo, USB_CDC_CTRL_LINE_STATE_RTS);
 	if (!s_Cdc0.IsPortOpen() || s_PortEvents != 1U) return 19;
 	CompleteEp0In();
 	if (s_Cdc0.IsPortOpen() || s_PortEvents != 2U || s_LastPortState != 0)
@@ -382,6 +387,8 @@ int main(void)
 	CompleteEp0In();
 	if (s_PortEvents != 2U) return 21;
 
+	UsbdCdcProcess(nullptr);
+	UsbdCdcSetSerialState(nullptr, 1U);
 	UsbProcess(0);
 	printf("UsbInit, dual UsbdCdc Init, UsbEnable, UsbProcess all completed\n");
 	return UsbConfigured(0) ? 0 : 4;

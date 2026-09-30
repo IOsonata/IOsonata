@@ -92,7 +92,8 @@ bool UsbdCdcPortIsOpen(const UsbdCdcDev_t * const pCdc)
 
 static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 {
-	if (pCdc == nullptr || pCdc->pData->Mps == 0U ||
+	// Callers supply registered state or validate the public handle.
+	if (pCdc->pData->Mps == 0U ||
 		!pCdc->SerialStatePending || pCdc->SerialStateActive)
 	{
 		return;
@@ -278,10 +279,12 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 
 			if (Stage == USB_CTRL_COMPLETE)
 			{
-				const bool wasOpen = UsbdCdcPortIsOpen(pCdc);
+				const uint16_t changed = (pCdc->ControlLineState ^
+					pCdc->PendingControlLineState) & USB_CDC_CTRL_LINE_STATE_DTR;
 				pCdc->ControlLineState = pCdc->PendingControlLineState;
-				const bool open = UsbdCdcPortIsOpen(pCdc);
-				if (open != wasOpen)
+				const bool open = (pCdc->ControlLineState &
+					USB_CDC_CTRL_LINE_STATE_DTR) != 0U;
+				if (changed != 0U)
 				{
 					UsbIntrfNotify(pCdc->pData, DEVINTRF_EVT_STATECHG, open ? 1 : 0);
 				}
@@ -331,8 +334,8 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 								const UsbdCdcCfg_t *pCfg,
 								UsbDeviceClass *pClass)
 {
-	if (pCdc == nullptr || pCfg == nullptr || pClass == nullptr ||
-		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
+	// Called only by Init with member addresses, a configuration reference and this.
+	if (pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
 		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
 		UsbGetCfg(pCfg->DevNo) == nullptr)
 	{
