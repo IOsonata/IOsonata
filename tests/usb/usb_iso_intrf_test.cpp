@@ -663,8 +663,35 @@ static void TestSharedTransport(void)
 	CHECK(s_CloseCount == 2);
 }
 
+static void TestCapturedTxLength(void)
+{
+	ResetFake();
+	UsbIsoIntrf_t iso = {};
+	UsbDevIntrf_t data = {};
+	auto cfg = MakeCfg();
+	CHECK(UsbIsoIntrfInit(&iso, &data, &cfg));
+	CHECK(UsbIsoIntrfOpen(&iso, 9U, 1U));
+	const uint8_t first[] = {1U, 2U, 3U, 4U};
+	const uint8_t next[] = {5U, 6U, 7U};
+	CHECK(UsbIsoIntrfSendFrame(&iso, first, sizeof(first)));
+	CHECK(UsbIsoIntrfSendFrame(&iso, next, sizeof(next)));
+	Sof();
+	// The callback length is the captured amount, not the queued request.
+	s_InLength = 2U;
+	CompleteIn();
+	CHECK(s_LastTxLength == 2U && s_TxCount == 1);
+	CHECK(CFifoUsed(data.hTxFifo) == 1);
+	Sof(1U);
+	CHECK(s_InLength == sizeof(next));
+	CHECK(memcmp(s_InBuffer, next, sizeof(next)) == 0);
+	CompleteIn();
+	CHECK(s_LastTxLength == sizeof(next) && s_TxCount == 2);
+	CHECK(CFifoUsed(data.hTxFifo) == 0);
+}
+
 int main(void)
 {
+	TestCapturedTxLength();
 	TestSharedTransport();
 	TestLifecycle();
 	TestDeviceReset();

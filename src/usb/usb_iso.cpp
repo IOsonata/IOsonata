@@ -60,6 +60,14 @@ static void UsbIsoIntrfRelease(UsbIsoIntrf_t *pIntrf, bool bCloseEp)
 	UsbIntrfUnconfigure(pIntrf->pData);
 }
 
+// Share the ISO endpoint-open setup between the two directions.
+static __attribute__((noinline)) bool UsbIsoIntrfOpenEndpoint(
+	UsbIsoIntrf_t *pIntrf, bool in)
+{
+	return UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, in,
+		pIntrf->Mps);
+}
+
 static bool UsbIsoIntrfActivate(UsbIsoIntrf_t *pIntrf)
 {
 	if (pIntrf->Opened)
@@ -70,10 +78,8 @@ static bool UsbIsoIntrfActivate(UsbIsoIntrf_t *pIntrf)
 	{
 		return false;
 	}
-	if (!UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, true,
-			pIntrf->Mps) ||
-		!UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, false,
-			pIntrf->Mps))
+	if (!UsbIsoIntrfOpenEndpoint(pIntrf, true) ||
+		!UsbIsoIntrfOpenEndpoint(pIntrf, false))
 	{
 		UsbIsoIntrfRelease(pIntrf, true);
 		return false;
@@ -189,23 +195,19 @@ static void UsbIsoIntrfProcessEvent(UsbIsoIntrf_t *pIntrf, uint16_t FrameNo)
 }
 
 // IN completion: the head of the TX FIFO is the frame whose DMA has ended.
-// Pop it and tell the application, with the frame length: TX_READY while
+// Release it and report the captured DMA length: TX_READY while
 // more frames wait, TX_FIFO_EMPTY when the queue drained, TX_TIMEOUT when
 // the controller failed the frame. Nothing is started here; the next frame
 // leaves at its own service interval.
 static void UsbIsoIntrfTxComplete(UsbIsoIntrf_t *pIntrf,
-								  UsbCtrlrXferResult_t Result)
+								  UsbCtrlrXferResult_t Result, uint16_t length)
 {
 	hCFifo_t hTx = pIntrf->pData->hTxFifo;
-	const UsbPkt_t *pPacket =
-		reinterpret_cast<const UsbPkt_t *>(CFifoPeek(hTx));
-	if (pPacket == nullptr)
+	if (CFifoGet(hTx) == nullptr)
 	{
 		return;
 	}
 
-	const uint16_t length = pPacket->Hdr.Length;
-	(void)CFifoGet(hTx);
 	const bool empty = CFifoUsed(hTx) == 0;
 	atomic_store_explicit(&pIntrf->pData->DevIntrf.bTxReady, empty,
 		memory_order_release);
@@ -239,7 +241,7 @@ static void UsbIsoIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
 		case USB_CTRLR_EVT_XFER_CMPL:
 		case USB_CTRLR_EVT_XFER_FAILED:
 			UsbIsoIntrfTxComplete(pIntrf, Event == USB_CTRLR_EVT_XFER_CMPL ?
-				USB_CTRLR_XFER_SUCCESS : USB_CTRLR_XFER_FAILED);
+				USB_CTRLR_XFER_SUCCESS : USB_CTRLR_XFER_FAILED, Length);
 			return;
 
 		default:

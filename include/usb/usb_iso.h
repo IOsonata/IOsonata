@@ -18,7 +18,7 @@ the IN endpoint callback offers the head of the TX FIFO to the controller
 once per service interval (UsbCtrlrIsoSend) and, when the frame's DMA has
 ended, pops it and raises DEVINTRF_EVT_TX_READY (more frames queued) or
 DEVINTRF_EVT_TX_FIFO_EMPTY (queue drained) to the application callback with
-the frame length. A failed frame raises DEVINTRF_EVT_TX_TIMEOUT.
+the captured DMA length. A failed frame raises DEVINTRF_EVT_TX_TIMEOUT.
 
 The controller moves each received OUT frame straight into the RX FIFO
 block UsbIntrf reserved and registered as the endpoint's DMA buffer, and
