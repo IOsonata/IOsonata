@@ -68,6 +68,7 @@ static uint16_t UsbdCdcSerialStateMask(void)
 		   USB_CDC_SERIAL_STATE_OVERRUN;
 }
 
+__attribute__((noinline))
 static void UsbdCdcDefaultLineCoding(UsbdCdcDev_t *pCdc)
 {
 	pCdc->LineCoding.dwDTERate = 115200U;
