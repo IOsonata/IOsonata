@@ -123,34 +123,26 @@ static HidLoopback g_Hid;
 static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
 	uint8_t *pData, int Length)
 {
-	const UsbCtrlrXferResult_t result =
-		(event == DEVINTRF_EVT_RX_TIMEOUT || event == DEVINTRF_EVT_TX_TIMEOUT) ?
-		USB_CTRLR_XFER_FAILED : USB_CTRLR_XFER_SUCCESS;
-	if (event == DEVINTRF_EVT_RX_DATA || event == DEVINTRF_EVT_RX_TIMEOUT)
+	// Only RX_DATA uses the return value: returning Length frees the slot.
+	if (event == DEVINTRF_EVT_RX_DATA)
 	{
-		if (result != USB_CTRLR_XFER_SUCCESS || Length > sizeof(s_HidPending))
-		{
-			return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
-		}
-		if (g_Hid.Tx(0, pData, Length) != (int)Length)
+		if (Length <= (int)sizeof(s_HidPending) &&
+			g_Hid.Tx(0, pData, Length) != Length)
 		{
 			memcpy(s_HidPending, pData, Length);
 			s_HidPendingLength = Length;
 		}
 	}
-	else if (event == DEVINTRF_EVT_TX_FIFO_EMPTY || event == DEVINTRF_EVT_TX_TIMEOUT)
+	else if (event == DEVINTRF_EVT_TX_FIFO_EMPTY && s_HidPendingLength != 0U)
 	{
-		if (result == USB_CTRLR_XFER_SUCCESS && s_HidPendingLength != 0U)
+		const uint16_t length = s_HidPendingLength;
+		s_HidPendingLength = 0U;
+		if (g_Hid.Tx(0, s_HidPending, length) != (int)length)
 		{
-			const uint16_t length = s_HidPendingLength;
-			s_HidPendingLength = 0U;
-			if (g_Hid.Tx(0, s_HidPending, length) != (int)length)
-			{
-				s_HidPendingLength = length;
-			}
+			s_HidPendingLength = length;
 		}
 	}
-	return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
+	return Length;
 }
 
 static bool HidReportRequest(const UsbSetupData_t *pSetup,
@@ -231,19 +223,12 @@ static struct {
 static int IntEvent(DevIntrf_t *, DEVINTRF_EVT event,
 	uint8_t *pData, int Length)
 {
-	const UsbCtrlrXferResult_t result =
-		(event == DEVINTRF_EVT_RX_TIMEOUT || event == DEVINTRF_EVT_TX_TIMEOUT) ?
-		USB_CTRLR_XFER_FAILED : USB_CTRLR_XFER_SUCCESS;
-	if (event == DEVINTRF_EVT_RX_DATA || event == DEVINTRF_EVT_RX_TIMEOUT)
+	if (event == DEVINTRF_EVT_RX_DATA)
 	{
-		if (result == USB_CTRLR_XFER_SUCCESS)
-		{
-			(void)DeviceIntrfTx(&s_IntData.DevIntrf, 0, pData, Length);
-		}
+		(void)DeviceIntrfTx(&s_IntData.DevIntrf, 0, pData, Length);
 	}
-	return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
+	return Length;
 }
-
 
 static bool IntSelectConfig(uint8_t Configuration)
 {
