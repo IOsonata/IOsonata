@@ -60,6 +60,13 @@ SOFTWARE.
 #include <stdatomic.h>
 #endif
 
+// Start and stop are on the transfer path: keep them inlined in every caller.
+#if defined(__GNUC__)
+#define DEVINTRF_INLINE		static inline __attribute__((always_inline))
+#else
+#define DEVINTRF_INLINE		static inline
+#endif
+
 /** @addtogroup device_intrf	Device Interface
   * @{
   */
@@ -460,7 +467,20 @@ int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *p
  * @return 	true - Success\n
  * 			false - failed.
  */
-bool DeviceIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr);
+DEVINTRF_INLINE bool DeviceIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr) {
+	if (atomic_flag_test_and_set(&pDev->bBusy))
+		return false;
+
+    bool retval = pDev->StartRx(pDev, DevAddr);
+
+    // In case of returned false, app would not call Stop to release busy flag
+    // so we need to do that here before returning
+    if (retval == false) {
+    	atomic_flag_clear(&pDev->bBusy);
+    }
+
+    return retval;
+}
 
 /**
  * @brief	Receive data into pBuff passed in parameter.
@@ -489,7 +509,10 @@ static inline int DeviceIntrfRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int
  *
  * @param	pDev : Pointer to an instance of the Device Interface
  */
-void DeviceIntrfStopRx(DevIntrf_t * const pDev);
+DEVINTRF_INLINE void DeviceIntrfStopRx(DevIntrf_t * const pDev) {
+    pDev->StopRx(pDev);
+	atomic_flag_clear(&pDev->bBusy);
+}
 
 // Initiate receive
 // WARNING this function must be used in pair with StopTx
@@ -510,7 +533,20 @@ void DeviceIntrfStopRx(DevIntrf_t * const pDev);
  * @return 	true - Success\n
  * 			false - failed
  */
-bool DeviceIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr);
+DEVINTRF_INLINE bool DeviceIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr) {
+    if (atomic_flag_test_and_set(&pDev->bBusy))
+        return false;
+
+    bool retval =  pDev->StartTx(pDev, DevAddr);
+
+    // In case of returned false, app would not call Stop to release busy flag
+    // so we need to do that here before returning
+    if (retval == false) {
+    	atomic_flag_clear(&pDev->bBusy);
+    }
+
+    return retval;
+}
 
 /**
  * @brief	Transfer data from pData passed in parameter.  Assuming StartTx was
@@ -535,7 +571,10 @@ static inline int DeviceIntrfTxData(DevIntrf_t * const pDev, const uint8_t *pDat
  *
  * @param	pDev : Pointer to an instance of the Device Interface
  */
-void DeviceIntrfStopTx(DevIntrf_t * const pDev);
+DEVINTRF_INLINE void DeviceIntrfStopTx(DevIntrf_t * const pDev) {
+    pDev->StopTx(pDev);
+	atomic_flag_clear(&pDev->bBusy);
+}
 
 /**
  * @brief	This function perform a reset of interface.

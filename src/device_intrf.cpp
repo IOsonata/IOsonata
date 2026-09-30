@@ -218,8 +218,8 @@ int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *p
     return count;
 }
 
-// Start, stop, enable and disable: one copy here instead of one inlined
-// into every caller and every DeviceIntrf default virtual.
+// Enable and disable: one copy here instead of one inlined into every
+// caller and every DeviceIntrf default virtual.
 
 void DeviceIntrfDisable(DevIntrf_t * const pDev) {
 //	if (atomic_exchange(&pDev->EnCnt, pDev->EnCnt - 1) < 1)	{
@@ -236,44 +236,4 @@ void DeviceIntrfEnable(DevIntrf_t * const pDev) {
 	if (atomic_fetch_add(&pDev->EnCnt, 1) == 0) {
     	pDev->Enable(pDev);
     }
-}
-
-bool DeviceIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr) {
-	if (atomic_flag_test_and_set(&pDev->bBusy))
-		return false;
-
-    bool retval = pDev->StartRx(pDev, DevAddr);
-
-    // In case of returned false, app would not call Stop to release busy flag
-    // so we need to do that here before returning
-    if (retval == false) {
-    	atomic_flag_clear(&pDev->bBusy);
-    }
-
-    return retval;
-}
-
-void DeviceIntrfStopRx(DevIntrf_t * const pDev) {
-    pDev->StopRx(pDev);
-	atomic_flag_clear(&pDev->bBusy);
-}
-
-bool DeviceIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr) {
-    if (atomic_flag_test_and_set(&pDev->bBusy))
-        return false;
-
-    bool retval =  pDev->StartTx(pDev, DevAddr);
-
-    // In case of returned false, app would not call Stop to release busy flag
-    // so we need to do that here before returning
-    if (retval == false) {
-    	atomic_flag_clear(&pDev->bBusy);
-    }
-
-    return retval;
-}
-
-void DeviceIntrfStopTx(DevIntrf_t * const pDev) {
-    pDev->StopTx(pDev);
-	atomic_flag_clear(&pDev->bBusy);
 }
