@@ -208,23 +208,20 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 
 	if (dirIn || pSetup->wLength != 0U)
 		return false;
-	switch (Stage)
+	if (Stage == USB_CTRL_SETUP)
 	{
-		case USB_CTRL_SETUP:
-			*pPending = value;
-			pHid->PendingRequest = pSetup->bRequest;
-			break;
-		case USB_CTRL_COMPLETE:
-			if (pHid->PendingRequest != pSetup->bRequest)
-				break;
-			*pActive = *pPending;
-			// Fall through: the staged request is no longer pending.
-			[[fallthrough]];
-		case USB_CTRL_ABORT:
-			pHid->PendingRequest = 0U;
-			break;
-		default:
-			break;
+		*pPending = value;
+		pHid->PendingRequest = pSetup->bRequest;
+	}
+	else if (Stage == USB_CTRL_COMPLETE &&
+		pHid->PendingRequest == pSetup->bRequest)
+	{
+		*pActive = *pPending;
+		pHid->PendingRequest = 0U;
+	}
+	else if (Stage == USB_CTRL_ABORT)
+	{
+		pHid->PendingRequest = 0U;
 	}
 	return true;
 }
@@ -336,11 +333,12 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 {
 	if (UsbGetCfg(pCfg->DevNo) == nullptr || pCfg->pReportDesc == nullptr ||
 		pCfg->ReportDescLength == 0U ||
-		(pCfg->SubClass == USB_HID_SUBCLASS_BOOT ?
-		 (pCfg->Protocol != USB_HID_PROT_KEYBOARD &&
-		  pCfg->Protocol != USB_HID_PROT_MOUSE) :
-		 (pCfg->SubClass != USB_HID_SUBCLASS_NONE ||
-		  pCfg->Protocol != USB_HID_PROT_NONE)))
+		pCfg->SubClass > USB_HID_SUBCLASS_BOOT ||
+		(pCfg->SubClass == USB_HID_SUBCLASS_NONE &&
+		 pCfg->Protocol != USB_HID_PROT_NONE) ||
+		(pCfg->SubClass == USB_HID_SUBCLASS_BOOT &&
+		 pCfg->Protocol != USB_HID_PROT_KEYBOARD &&
+		 pCfg->Protocol != USB_HID_PROT_MOUSE))
 	{
 		return false;
 	}

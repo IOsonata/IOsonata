@@ -65,7 +65,7 @@ static bool UsbIntIntrfActivate(UsbIntIntrf_t *pIntrf)
 	{
 		return true;
 	}
-	if (!UsbIntrfConfigure(pIntrf->pData, pIntrf->Mps))
+	if (pIntrf->Mps == 0U || !UsbIntrfConfigure(pIntrf->pData, pIntrf->Mps))
 	{
 		return false;
 	}
