@@ -268,18 +268,15 @@ static const uint8_t *UsbDescString(const UsbCfg_t *pCfg,
 		return nullptr;
 	}
 
-	size_t length = 0U;
-	const size_t maxLength = (sizeof(s_Core.StringDesc) - 2U) / 2U;
-	while (length < maxLength && pString[length] != '\0')
+	size_t length = 2U;
+	while (length < sizeof(s_Core.StringDesc) && *pString != '\0')
 	{
-		s_Core.StringDesc[2U + length * 2U] = (uint8_t)pString[length];
-		s_Core.StringDesc[3U + length * 2U] = 0U;
-		length++;
+		s_Core.StringDesc[length++] = (uint8_t)*pString++;
+		s_Core.StringDesc[length++] = 0U;
 	}
-	s_Core.StringDesc[0] = (uint8_t)(2U + length * 2U);
+	s_Core.StringDesc[0] = (uint8_t)length;
 	s_Core.StringDesc[1] = USB_DESCTYPE_STRING;
-
-	*pLength = s_Core.StringDesc[0];
+	*pLength = (uint16_t)length;
 	return s_Core.StringDesc;
 }
 
@@ -2003,5 +2000,3 @@ uint8_t UsbGetAlternate(int DevNo, uint8_t InterfaceNo)
 {
 	return DevNo == s_Core.DevNo ? UsbCoreAlternate(InterfaceNo) : 0;
 }
-
-
