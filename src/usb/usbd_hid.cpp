@@ -97,14 +97,6 @@ static void UsbdHidReset(UsbdHidDev_t *pHid)
 	pHid->ActiveProtocol = USBD_HID_PROTOCOL_REPORT;
 }
 
-static bool UsbdHidInterfaceRequest(const UsbdHidDev_t *pHid,
-									const UsbSetupData_t *pSetup)
-{
-	return (pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT) ==
-			USB_REQTYPE_INTERFACE &&
-		pSetup->wIndex == (uint8_t)pHid->ItfNo;
-}
-
 static bool UsbdHidGetDescriptor(UsbdHidDev_t *pHid,
 								 const UsbSetupData_t *pSetup,
 								 UsbCtrlStage_t Stage, uint8_t **ppData,
@@ -240,17 +232,18 @@ static bool UsbdHidRequest(const UsbSetupData_t *pSetup,
 						   uint16_t *pLength, UsbdHidDev_t *pHid)
 {
 	// The core passes its own setup copy and length; pHid is the class member.
-	if (!UsbdHidInterfaceRequest(pHid, pSetup))
+	if (pSetup->wIndex != (uint8_t)pHid->ItfNo)
 	{
 		return false;
 	}
 
-	const uint8_t type = pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE;
-	if (type == USB_REQTYPE_STANDARD)
+	const uint8_t type = pSetup->bmRequestType &
+		(USB_REQTYPE_MASK_TYPE | USB_REQTYPE_MASK_RECIPIENT);
+	if (type == (USB_REQTYPE_STANDARD | USB_REQTYPE_INTERFACE))
 	{
 		return UsbdHidGetDescriptor(pHid, pSetup, Stage, ppData, pLength);
 	}
-	if (type == USB_REQTYPE_CLASS)
+	if (type == (USB_REQTYPE_CLASS | USB_REQTYPE_INTERFACE))
 	{
 		return UsbdHidClassRequest(pHid, pSetup, Stage, ppData, pLength);
 	}

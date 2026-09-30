@@ -429,6 +429,31 @@ static void TestClassRequestDirectionAndLength(void)
 	}
 }
 
+static void TestRequestRecipientAndType(void)
+{
+	ResetFake();
+	UsbdHid hid;
+	CHECK(hid.Init(MakeCfg()));
+	for (unsigned requestType = 0U; requestType <= 255U; requestType++)
+	{
+		UsbSetupData_t setup = {};
+		setup.bmRequestType = requestType;
+		setup.wIndex = ITF_NO;
+		setup.wLength = 1U;
+		uint8_t *data = nullptr;
+		uint16_t length = 0U;
+		setup.bRequest = USB_HID_REQ_GET_IDLE;
+		CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length) ==
+			(requestType == (USB_REQTYPE_DIRHOST | USB_REQTYPE_CLASS |
+			 USB_REQTYPE_INTERFACE)));
+		setup.bRequest = USB_REQ_GET_DESCRIPTOR;
+		setup.wValue = USB_DESCTYPE_HID_REPORT << 8;
+		CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length) ==
+			(requestType == (USB_REQTYPE_DIRHOST | USB_REQTYPE_STANDARD |
+			 USB_REQTYPE_INTERFACE)));
+	}
+}
+
 static void TestControlRequests(void)
 {
 	ResetFake();
@@ -536,6 +561,7 @@ int main(void)
 	TestDescriptorAndPlacement();
 	TestDataAndLifecycle();
 	TestClassRequestDirectionAndLength();
+	TestRequestRecipientAndType();
 	TestControlRequests();
 	TestValidation();
 	printf("%s\n", s_Fail == 0 ? "usbd_hid_test: PASS" :
