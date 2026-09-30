@@ -556,8 +556,61 @@ static void TestValidation(void)
 	CHECK(!hid.Init(cfg));
 }
 
+static void TestSubclassProtocolValidation(void)
+{
+	// Only non-boot/none and boot/keyboard or boot/mouse are supported.
+	for (unsigned subclass = 0; subclass <= 255; subclass++)
+	for (unsigned protocol = 0; protocol <= 255; protocol++)
+	{
+		ResetFake();
+		TestHid hid;
+		auto cfg = MakeCfg();
+		cfg.SubClass = subclass;
+		cfg.Protocol = protocol;
+		const bool valid = (subclass == 0 && protocol == 0) ||
+			(subclass == 1 && (protocol == 1 || protocol == 2));
+		CHECK(hid.Init(cfg) == valid);
+	}
+}
+
+static void TestPendingControlLifetime(void)
+{
+	ResetFake();
+	UsbdHid hid;
+	CHECK(hid.Init(MakeCfg()));
+	UsbdHidDev_t *state = hid;
+	UsbSetupData_t setup = {};
+	setup.bmRequestType = USB_REQTYPE_DIRDEV | USB_REQTYPE_CLASS |
+		USB_REQTYPE_INTERFACE;
+	setup.bRequest = USB_HID_REQ_SET_IDLE;
+	setup.wValue = 7U << 8;
+	uint8_t *data = nullptr;
+	uint16_t length = 0U;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(state->Idle == 0U && state->PendingIdle == 7U);
+	CHECK(hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(state->Idle == 0U && state->PendingRequest == USB_HID_REQ_SET_IDLE);
+	CHECK(hid.Control(&setup, USB_CTRL_ABORT, &data, &length));
+	CHECK(state->Idle == 0U && state->PendingRequest == 0U);
+	CHECK(hid.Control(&setup, USB_CTRL_COMPLETE, &data, &length));
+	CHECK(state->Idle == 0U);
+
+	setup.bRequest = USB_HID_REQ_SET_PROTOCOL;
+	setup.wValue = USBD_HID_PROTOCOL_BOOT;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	setup.bRequest = USB_HID_REQ_SET_IDLE;
+	CHECK(hid.Control(&setup, USB_CTRL_COMPLETE, &data, &length));
+	CHECK(state->PendingRequest == USB_HID_REQ_SET_PROTOCOL);
+	CHECK(state->Idle == 0U && state->ActiveProtocol == USBD_HID_PROTOCOL_REPORT);
+	setup.bRequest = USB_HID_REQ_SET_PROTOCOL;
+	CHECK(hid.Control(&setup, USB_CTRL_COMPLETE, &data, &length));
+	CHECK(state->ActiveProtocol == USBD_HID_PROTOCOL_BOOT && state->PendingRequest == 0U);
+}
+
 int main(void)
 {
+	TestSubclassProtocolValidation();
+	TestPendingControlLifetime();
 	TestDescriptorAndPlacement();
 	TestDataAndLifecycle();
 	TestClassRequestDirectionAndLength();
@@ -568,4 +621,5 @@ int main(void)
 		"usbd_hid_test: FAIL");
 	return s_Fail == 0 ? 0 : 1;
 }
+
 
