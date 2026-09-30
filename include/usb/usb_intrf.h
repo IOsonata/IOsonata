@@ -177,6 +177,9 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg);
 bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps);
 void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf);
 
+// Internal buffer-less status notification shared by USB specializations.
+void UsbIntrfNotify(UsbDevIntrf_t *pIntrf, DEVINTRF_EVT Event, int Length);
+
 #ifdef __cplusplus
 }
 #endif

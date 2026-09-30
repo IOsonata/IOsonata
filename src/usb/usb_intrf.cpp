@@ -83,7 +83,7 @@ void UsbIntrfDirectClear(UsbPkt_t *pPacket)
 }
 
 // Buffer-less event notification shared by every status callback site.
-static void UsbIntrfNotify(UsbDevIntrf_t *pIntrf, DEVINTRF_EVT Event,
+void UsbIntrfNotify(UsbDevIntrf_t *pIntrf, DEVINTRF_EVT Event,
 						   int Length)
 {
 	if (pIntrf->DevIntrf.EvtCB != nullptr)

@@ -98,16 +98,6 @@ static void UsbIsoIntrfResetDev(DevIntrf_t * const pDev)
 	UsbIsoIntrfReset(UsbIsoIntrfFromDev(pDev));
 }
 
-static void UsbIsoIntrfNotify(UsbIsoIntrf_t *pIntrf, DEVINTRF_EVT Event,
-							  int Length)
-{
-	DevIntrf_t *pDev = &pIntrf->pData->DevIntrf;
-	if (pDev->EvtCB != nullptr)
-	{
-		pDev->EvtCB(pDev, Event, nullptr, Length);
-	}
-}
-
 // One frame per call from the RX FIFO. A frame larger than the caller's
 // buffer stays queued; zero-length frames are counted and skipped, as the
 // packet RxData in UsbIntrf does.
@@ -223,14 +213,14 @@ static void UsbIsoIntrfTxComplete(UsbIsoIntrf_t *pIntrf,
 	if (Result != USB_CTRLR_XFER_SUCCESS)
 	{
 		pIntrf->TxMissCnt++;
-		UsbIsoIntrfNotify(pIntrf, DEVINTRF_EVT_TX_TIMEOUT, length);
+		UsbIntrfNotify(pIntrf->pData, DEVINTRF_EVT_TX_TIMEOUT, length);
 		return;
 	}
 	if (length == 0U)
 	{
 		pIntrf->TxEmptyCnt++;
 	}
-	UsbIsoIntrfNotify(pIntrf, empty ?
+	UsbIntrfNotify(pIntrf->pData, empty ?
 		DEVINTRF_EVT_TX_FIFO_EMPTY : DEVINTRF_EVT_TX_READY, length);
 }
 
@@ -431,3 +421,4 @@ bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 	EnableInterrupt(state);
 	return true;
 }
+
