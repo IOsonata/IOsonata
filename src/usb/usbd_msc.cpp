@@ -118,6 +118,8 @@ static void UsbdMscCopyInquiry(char *pDest, size_t Length,
 	}
 }
 
+// Share endpoint-open argument setup between this class's endpoints.
+__attribute__((noinline))
 static bool UsbdMscOpenEndpoint(UsbdMscDev_t *pMsc, bool bIn,
 								uint16_t MaxPacketSize)
 {

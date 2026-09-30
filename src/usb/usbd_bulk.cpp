@@ -41,6 +41,8 @@ static uint16_t UsbdBulkMps(const UsbdBulkDev_t *pBulk)
 	return UsbCtrlrHighSpeed(pBulk->DevNo) ? pBulk->HsMps : pBulk->FsMps;
 }
 
+// Share endpoint-open argument setup between this class's endpoints.
+__attribute__((noinline))
 static bool UsbdBulkOpenEndpoint(UsbdBulkDev_t *pBulk, bool bIn,
 								 uint16_t MaxPacketSize)
 {
