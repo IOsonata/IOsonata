@@ -131,7 +131,7 @@ static int UsbIntIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 			pIntrf->RxErrorCnt++;
 			if (pIntrf->RxHandler != nullptr)
 			{
-				pIntrf->RxHandler(pIntrf, pData->pRxBuffer,
+				pIntrf->RxHandler(pIntrf, pData->pRxDirectBuffer->Data,
 					(uint16_t)Length,
 					USB_CTRLR_XFER_FAILED, pIntrf->pContext);
 			}
@@ -254,3 +254,4 @@ void UsbIntIntrfReset(UsbIntIntrf_t *pIntrf)
 	pIntrf->RxEmptyCnt = 0U;
 	pIntrf->TxEmptyCnt = 0U;
 }
+

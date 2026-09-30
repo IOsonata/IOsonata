@@ -297,7 +297,7 @@ static void TestPolledRxOwnership(void)
 	CHECK(DeviceIntrfRx(&intrf.pData->DevIntrf, 0, out, sizeof(out)) == 2);
 	CHECK(memcmp(out, first, sizeof(first)) == 0);
 	// Reading the slot frees it, so the pending receive is submitted at once.
-	CHECK(s_OutBuffer == intrf.pData->pRxBuffer);
+	CHECK(s_OutBuffer == intrf.pData->pRxDirectBuffer->Data);
 	Receive(second, sizeof(second));
 	CHECK(DeviceIntrfRx(&intrf.pData->DevIntrf, 0, out, sizeof(out)) == 3);
 	CHECK(memcmp(out, second, sizeof(second)) == 0);
@@ -341,3 +341,4 @@ int main(void)
 		"usb_int_intrf_test: FAIL");
 	return s_Fail == 0 ? 0 : 1;
 }
+

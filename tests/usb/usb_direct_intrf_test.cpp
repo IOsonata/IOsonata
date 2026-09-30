@@ -207,10 +207,10 @@ static void TestDrdyPolicy(void)
 		CHECK(memcmp(output, packet, sizeof(packet)) == 0);
 		// Reading the slot submits the pending receive; later controller
 		// polls do not submit the same destination again.
-		CHECK(!intrf.RxPending && s_OutBuffer == intrf.pRxBuffer);
+		CHECK(!intrf.RxPending && s_OutBuffer == intrf.pRxDirectBuffer->Data);
 		CHECK(s_OutXferCount == submits);
 		UsbCtrlrProcess(0);
-		CHECK(!intrf.RxPending && s_OutBuffer == intrf.pRxBuffer);
+		CHECK(!intrf.RxPending && s_OutBuffer == intrf.pRxDirectBuffer->Data);
 		CHECK(s_OutXferCount == submits);
 		UsbCtrlrProcess(0);
 		CHECK(s_OutXferCount == submits);
@@ -258,3 +258,4 @@ int main(void)
 		"usb_direct_intrf_test: FAIL");
 	return s_Fail == 0 ? 0 : 1;
 }
+

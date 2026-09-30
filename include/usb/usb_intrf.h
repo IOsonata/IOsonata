@@ -158,7 +158,6 @@ struct __Usb_Dev_Interf {
 	hCFifo_t hTxFifo;
 	hCFifo_t hRxFifo;
 	uint32_t RxDropCnt;
-	uint8_t *pRxBuffer;		//!< Direct mode: Data of the RX slot
 	UsbPkt_t *pRxDirectBuffer;
 	UsbPkt_t *pTxDirectBuffer;
 	void *pClassContext;

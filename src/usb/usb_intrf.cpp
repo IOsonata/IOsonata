@@ -46,14 +46,12 @@ static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t, uint16_t, void *);
 // The block stays unpublished until the DMA completion callback.
 static void UsbIntrfEpReceive(UsbDevIntrf_t *pIntrf)
 {
-	uint8_t *pBuffer = pIntrf->pRxBuffer;
+	UsbPkt_t *packet = pIntrf->pRxDirectBuffer;
 	if (pIntrf->Mode != USB_INTRF_MODE_DIRECT)
-	{
-		UsbPkt_t *pkt = reinterpret_cast<UsbPkt_t *>(CFifoResv(pIntrf->hRxFifo));
-		pBuffer = pkt != nullptr ? pkt->Data : nullptr;
-	}
-	pIntrf->RxPending = pBuffer == nullptr ||
-		!UsbCtrlrEpReceive(pIntrf->DevNo, pIntrf->EpNo, pBuffer,
+		packet = reinterpret_cast<UsbPkt_t *>(CFifoResv(pIntrf->hRxFifo));
+	uint8_t *buffer = packet != nullptr ? packet->Data : nullptr;
+	pIntrf->RxPending = buffer == nullptr ||
+		!UsbCtrlrEpReceive(pIntrf->DevNo, pIntrf->EpNo, buffer,
 			pIntrf->BufferSize);
 }
 
@@ -579,7 +577,6 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 		pIntrf->pTxDirectBuffer = reinterpret_cast<UsbPkt_t *>(pCfg->pTxBuffer);
 		UsbIntrfDirectClear(pIntrf->pRxDirectBuffer);
 		UsbIntrfDirectClear(pIntrf->pTxDirectBuffer);
-		pIntrf->pRxBuffer = pIntrf->pRxDirectBuffer->Data;
 	}
 	else
 	{
