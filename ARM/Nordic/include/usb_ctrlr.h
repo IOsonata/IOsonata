@@ -244,7 +244,16 @@ void UsbCtrlrConnect(int DevNo);
 void UsbCtrlrDisconnect(int DevNo);
 void UsbCtrlrRemoteWakeup(int DevNo);
 void UsbCtrlrSofEnable(int DevNo, bool Enable);
+#if defined(USBD_PRESENT)
+// USBD applies SET_ADDRESS in hardware.
+static inline void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
+{
+	(void)DevNo;
+	(void)Address;
+}
+#else
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
+#endif
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
 bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn, uint16_t MaxPacketSize);
 bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
@@ -262,8 +271,10 @@ void UsbCtrlrEpBind(int DevNo, uint8_t EpNo, bool bIn, bool bBlocking,
 // Regular OUT shares the transfer queue with IN; ISO retains interval scheduling.
 bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
 						  uint16_t Capacity);
+#if !defined(USBD_PRESENT)
 void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 						 UsbCtrlrEvtType_t Event, uint16_t Value);
+#endif
 // EpNum is an endpoint number: device IN, host OUT. The controller schedules RX.
 // pBuffer supplies the DMA source and remains owned until the completion callback.
 // It may be NULL only for a zero-length transfer.
@@ -347,6 +358,13 @@ extern nRFUsbdState_t s_Usbd;
 
 void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
 							 UsbCtrlrEvtType_t Event, uint16_t Length);
+// Deliver an event to a bound endpoint; used by the core for ISO SOF.
+static inline void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
+						 UsbCtrlrEvtType_t Event, uint16_t Value)
+{
+	(void)DevNo;
+	nRFUsbEpRegisteredEvent(EpNo, bIn, Event, Value);
+}
 void nRFUsbdDmaUnlock(void);
 void nRFUsbdResumeQueuedDmaLocked(void);
 void nRFUsbdIsoComplete(uint8_t In);

@@ -1357,13 +1357,6 @@ void UsbCtrlrSofEnable(int DevNo, bool Enable)
 	}
 }
 
-void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
-{
-	// USBD applies SET_ADDRESS in hardware.
-	(void)DevNo;
-	(void)Address;
-}
-
 __attribute__((weak))
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 {
@@ -1504,13 +1497,6 @@ bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
 		nRFUsbdResumeQueuedDmaLocked();
 	EnableInterrupt(state);
 	return accepted;
-}
-
-void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
-						 UsbCtrlrEvtType_t Event, uint16_t Value)
-{
-	(void)DevNo;
-	nRFUsbEpRegisteredEvent(EpNo, bIn, Event, Value);
 }
 
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
