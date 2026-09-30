@@ -1282,12 +1282,6 @@ bool UsbCtrlrVbusDetected(int DevNo)
 		POWER_USBREGSTATUS_VBUSDETECT_Msk) != 0;
 }
 
-bool UsbCtrlrHighSpeed(int DevNo)
-{
-	(void)DevNo;
-	return false;
-}
-
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 {
 	(void)DevNo;

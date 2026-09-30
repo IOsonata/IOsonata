@@ -225,7 +225,16 @@ bool UsbCtrlrStart(int DevNo);
 void UsbCtrlrStop(int DevNo);
 void UsbCtrlrProcess(int DevNo);
 bool UsbCtrlrVbusDetected(int DevNo);
+#if defined(USBD_PRESENT)
+// This controller is full-speed only; expose that fact to USB callers.
+static inline bool UsbCtrlrHighSpeed(int DevNo)
+{
+	(void)DevNo;
+	return false;
+}
+#else
 bool UsbCtrlrHighSpeed(int DevNo);
+#endif
 #if defined(USBD_PRESENT)
 bool UsbCtrlrIsoInit(int DevNo);
 #endif
