@@ -1156,23 +1156,10 @@ static int BtHciUsbDevTxData(DevIntrf_t * const pDev, const uint8_t *pData,
 	return 0;
 }
 
-static int BtHciUsbDevTxSrData(DevIntrf_t * const pDev,
-							   const uint8_t *pData, int DataLen)
-{
-	return BtHciUsbDevTxData(pDev, pData, DataLen);
-}
-
 static void BtHciUsbDevReset(DevIntrf_t * const pDev)
 {
 	BtHciUsbDev_t *pHci = BtHciUsbFromDev(pDev);
-	if (pHci != nullptr)
-	{
-		BtHciUsbUnconfigure(pHci);
-		if (pHci->ScoEnabled)
-		{
-			UsbIsoIntrfReset(pHci->pScoIso);
-		}
-	}
+	BtHciUsbReset(pHci);
 }
 
 static void *BtHciUsbDevGetHandle(DevIntrf_t * const pDev)
@@ -1190,7 +1177,7 @@ static void BtHciUsbInitDevIntrf(BtHciUsbDev_t *pHci)
 	pDev->RxData = BtHciUsbDevRxData;
 	pDev->StartTx = BtHciUsbDevStartTx;
 	pDev->TxData = BtHciUsbDevTxData;
-	pDev->TxSrData = BtHciUsbDevTxSrData;
+	pDev->TxSrData = BtHciUsbDevTxData;
 	pDev->Reset = BtHciUsbDevReset;
 	pDev->GetHandle = BtHciUsbDevGetHandle;
 }

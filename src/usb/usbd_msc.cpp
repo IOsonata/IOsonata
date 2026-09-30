@@ -354,7 +354,8 @@ static bool UsbdMscQueuePacket(UsbdMscDev_t *pMsc, const uint8_t *pData,
 	}
 
 	UsbPkt_t *pPacket = UsbdMscTxPacket(pMsc);
-	memset(pPacket, 0, USBD_MSC_PKT_BLKSIZE);
+	// Only the header and Length payload bytes are consumed by UsbIntrf.
+	pPacket->Hdr.Reserved = 0U;
 	pPacket->Hdr.Length = Length;
 	if (Length > 0U)
 	{
