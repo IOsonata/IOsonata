@@ -166,23 +166,21 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 			break;
 
 		case USB_HID_REQ_GET_PROTOCOL:
-			if (pHid->SubClass != USB_HID_SUBCLASS_BOOT ||
-				pSetup->wValue != 0U)
-			{
-				return false;
-			}
-			pActive = &pHid->ActiveProtocol;
-			break;
-
 		case USB_HID_REQ_SET_PROTOCOL:
 			if (pHid->SubClass != USB_HID_SUBCLASS_BOOT ||
 				pSetup->wValue > USBD_HID_PROTOCOL_REPORT)
-			{
 				return false;
-			}
 			pActive = &pHid->ActiveProtocol;
-			pPending = &pHid->PendingProtocol;
-			value = (uint8_t)pSetup->wValue;
+			if (pSetup->bRequest == USB_HID_REQ_GET_PROTOCOL)
+			{
+				if (pSetup->wValue != 0U)
+					return false;
+			}
+			else
+			{
+				pPending = &pHid->PendingProtocol;
+				value = (uint8_t)pSetup->wValue;
+			}
 			break;
 
 		default:

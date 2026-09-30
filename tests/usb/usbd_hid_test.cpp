@@ -607,8 +607,41 @@ static void TestPendingControlLifetime(void)
 	CHECK(state->ActiveProtocol == USBD_HID_PROTOCOL_BOOT && state->PendingRequest == 0U);
 }
 
+static void TestProtocolValues(void)
+{
+	for (unsigned boot = 0; boot < 2; boot++)
+	{
+		ResetFake();
+		UsbdHid hid;
+		auto cfg = MakeCfg();
+		cfg.SubClass = boot ? USB_HID_SUBCLASS_BOOT : USB_HID_SUBCLASS_NONE;
+		cfg.Protocol = boot ? USB_HID_PROT_KEYBOARD : USB_HID_PROT_NONE;
+		CHECK(hid.Init(cfg));
+		UsbSetupData_t setup = {};
+		uint8_t *data = nullptr;
+		uint16_t length = 0U;
+		for (unsigned value = 0; value <= 65535; value++)
+		{
+			setup.wValue = value;
+			setup.bmRequestType = USB_REQTYPE_DIRHOST | USB_REQTYPE_CLASS |
+				USB_REQTYPE_INTERFACE;
+			setup.bRequest = USB_HID_REQ_GET_PROTOCOL;
+			setup.wLength = 1U;
+			CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length) ==
+				(boot != 0 && value == 0));
+			setup.bmRequestType = USB_REQTYPE_DIRDEV | USB_REQTYPE_CLASS |
+				USB_REQTYPE_INTERFACE;
+			setup.bRequest = USB_HID_REQ_SET_PROTOCOL;
+			setup.wLength = 0U;
+			CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length) ==
+				(boot != 0 && value <= USBD_HID_PROTOCOL_REPORT));
+		}
+	}
+}
+
 int main(void)
 {
+	TestProtocolValues();
 	TestSubclassProtocolValidation();
 	TestPendingControlLifetime();
 	TestDescriptorAndPlacement();
