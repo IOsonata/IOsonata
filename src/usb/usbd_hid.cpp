@@ -41,7 +41,7 @@ static void UsbdHidRx(UsbIntIntrf_t *, const uint8_t *pData,
 					  void *pContext)
 {
 	UsbdHidDev_t *pHid = static_cast<UsbdHidDev_t *>(pContext);
-	if (pHid != nullptr && pHid->RxHandler != nullptr)
+	if (pHid->RxHandler != nullptr)
 	{
 		pHid->RxHandler(pHid, pData, Length, Result, pHid->pContext);
 	}
@@ -51,7 +51,7 @@ static void UsbdHidTx(UsbIntIntrf_t *, uint16_t Length,
 					  UsbCtrlrXferResult_t Result, void *pContext)
 {
 	UsbdHidDev_t *pHid = static_cast<UsbdHidDev_t *>(pContext);
-	if (pHid != nullptr && pHid->TxHandler != nullptr)
+	if (pHid->TxHandler != nullptr)
 	{
 		pHid->TxHandler(pHid, Length, Result, pHid->pContext);
 	}
@@ -67,11 +67,6 @@ static void UsbdHidUnconfigure(UsbdHidDev_t *pHid)
 __attribute__((noinline))
 static bool UsbdHidConfig(UsbdHidDev_t *pHid, uint8_t Configuration)
 {
-	if (pHid == nullptr)
-	{
-		return false;
-	}
-
 	UsbdHidUnconfigure(pHid);
 	if (Configuration == 0U)
 	{
@@ -96,20 +91,16 @@ static bool UsbdHidConfig(UsbdHidDev_t *pHid, uint8_t Configuration)
 
 static void UsbdHidReset(UsbdHidDev_t *pHid)
 {
-	if (pHid != nullptr)
-	{
-		UsbIntIntrfReset(pHid->pIntIntrf);
-		pHid->Configured = false;
-		pHid->Idle = 0U;
-		pHid->ActiveProtocol = USBD_HID_PROTOCOL_REPORT;
-	}
+	UsbIntIntrfReset(pHid->pIntIntrf);
+	pHid->Configured = false;
+	pHid->Idle = 0U;
+	pHid->ActiveProtocol = USBD_HID_PROTOCOL_REPORT;
 }
 
 static bool UsbdHidInterfaceRequest(const UsbdHidDev_t *pHid,
 									const UsbSetupData_t *pSetup)
 {
-	return pSetup != nullptr &&
-		(pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT) ==
+	return (pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT) ==
 			USB_REQTYPE_INTERFACE &&
 		pSetup->wIndex == (uint8_t)pHid->ItfNo;
 }
@@ -250,8 +241,8 @@ static bool UsbdHidRequest(const UsbSetupData_t *pSetup,
 						   UsbCtrlStage_t Stage, uint8_t **ppData,
 						   uint16_t *pLength, UsbdHidDev_t *pHid)
 {
-	if (pHid == nullptr || pLength == nullptr ||
-		!UsbdHidInterfaceRequest(pHid, pSetup))
+	// The core passes its own setup copy and length; pHid is the class member.
+	if (!UsbdHidInterfaceRequest(pHid, pSetup))
 	{
 		return false;
 	}

@@ -137,6 +137,14 @@ static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDEPIN) -
 static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDEPOUT) -
 	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
 	USBD_INTEN_ENDEPOUT0_Pos * sizeof(uint32_t), "USBD OUT event layout");
+static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDISOIN) -
+	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
+	USBD_INTEN_ENDISOIN_Pos * sizeof(uint32_t) &&
+	offsetof(NRF_USBD_Type, EVENTS_ENDISOOUT) -
+	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
+	USBD_INTEN_ENDISOOUT_Pos * sizeof(uint32_t) &&
+	USBD_INTEN_ENDEPOUT0_Pos == 16U - 4U &&
+	USBD_INTEN_ENDISOOUT_Pos == 24U - 4U, "USBD ISO event layout");
 static_assert(offsetof(USBD_EPOUT_Type, PTR) ==
 	offsetof(USBD_EPIN_Type, PTR) &&
 	offsetof(USBD_EPOUT_Type, MAXCNT) ==
@@ -540,6 +548,16 @@ void nRFUsbdDmaUnlock(void)
 	__DSB();
 }
 
+// END event of the DMA named by an EPSTATUS bit: 0-7 EPIN, 8 ISOIN, 16-23
+// EPOUT, 24 ISOOUT. Events sit at their INTEN bit position from USBRESET.
+__attribute__((noinline))
+static volatile uint32_t *nRFUsbdEndEvent(uint32_t Pos)
+{
+	const uint32_t bit = Pos >= 16U ? Pos - 4U : (Pos == 8U ?
+		USBD_INTEN_ENDISOIN_Pos : Pos + USBD_INTEN_ENDEPIN0_Pos);
+	return &NRF_USBD->EVENTS_USBRESET + bit;
+}
+
 // Close paths already exclude interrupts through retirement and shutdown.
 static void nRFUsbdDmaWait(uint32_t mask)
 {
@@ -552,14 +570,7 @@ static void nRFUsbdDmaWait(uint32_t mask)
 		if (dmastatus != 0U)
 		{
 			const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
-			volatile uint32_t *pend;
-			if (epno == 8U)
-				pend = &NRF_USBD->EVENTS_ENDISOIN;
-			else if (epno == 24U)
-				pend = &NRF_USBD->EVENTS_ENDISOOUT;
-			else
-				pend = epno >= 16U ? &NRF_USBD->EVENTS_ENDEPOUT[epno - 16U] :
-					&NRF_USBD->EVENTS_ENDEPIN[epno];
+			volatile uint32_t *pend = nRFUsbdEndEvent(epno);
 
 			while (*pend == 0U && NRF_USBD->EVENTS_USBRESET == 0U)
 			{
@@ -1060,82 +1071,53 @@ extern "C" void USBD_IRQHandler(void){
 	if (nRFUsbdDmaActive() && dmastatus != 0U)
 	{
 		const uint32_t epno = 31U - (uint32_t)__CLZ(dmastatus);
-		switch (epno)
+		volatile uint32_t *pend = nRFUsbdEndEvent(epno);
+		if (*pend != 0U)
 		{
-			case 0U: // EP0 IN keeps its continuous packet chain.
+			*pend = 0U;
+			NRF_USBD->EPSTATUS = dmastatus;
+			reuseDma = true;
+			switch (epno)
 			{
-				if (NRF_USBD->EVENTS_ENDEPIN[0] == 0U)
-					break;
-				NRF_USBD->EVENTS_ENDEPIN[0] = 0U;
-				NRF_USBD->EPSTATUS = dmastatus;
-				reuseDma = true;
-				NRF_USBD->EVENTS_EP0DATADONE = 0U;
-				(void)CFifoGet(s_Usbd.hEp0Que);
-				const nRFEPPkt_t *pep0 =
-					(const nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
-				if (pep0 != NULL)
+				case 0U: // EP0 IN keeps its continuous packet chain.
 				{
-					nRFUsbdEp0InStart(pep0);
-					reuseDma = false;
+					NRF_USBD->EVENTS_EP0DATADONE = 0U;
+					(void)CFifoGet(s_Usbd.hEp0Que);
+					const nRFEPPkt_t *pep0 =
+						(const nRFEPPkt_t *)CFifoPeek(s_Usbd.hEp0Que);
+					if (pep0 != NULL)
+					{
+						nRFUsbdEp0InStart(pep0);
+						reuseDma = false;
+					}
+					else
+						nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
+					break;
 				}
-				else
-					nRFUsbdEmitXfer(USB_ENDPADDR_DIR_IN, 0U);
-				break;
-			}
-			case 16U: // EP0 OUT
-			{
-				if (NRF_USBD->EVENTS_ENDEPOUT[0] == 0U)
+				case 16U: // EP0 OUT
+				{
+					const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
+					NRF_USBD->TASKS_EP0RCVOUT = 1U;
+					(void)NRF_USBD->TASKS_EP0RCVOUT;
+					nRFUsbdEmitXfer(0U, amount);
 					break;
-				NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;
-				NRF_USBD->EPSTATUS = dmastatus;
-				reuseDma = true;
-				const uint16_t amount = (uint16_t)NRF_USBD->EPOUT[0].AMOUNT;
-				NRF_USBD->TASKS_EP0RCVOUT = 1U;
-				(void)NRF_USBD->TASKS_EP0RCVOUT;
-				nRFUsbdEmitXfer(0U, amount);
-				break;
-			}
-			case 8U:
-				if (NRF_USBD->EVENTS_ENDISOIN == 0U)
+				}
+				case 8U:
+				case 24U:
+					nRFUsbdIsoComplete(epno == 8U);
 					break;
-				NRF_USBD->EVENTS_ENDISOIN = 0U;
-				NRF_USBD->EPSTATUS = dmastatus;
-				reuseDma = true;
-				nRFUsbdIsoComplete(true);
-				break;
-			case 24U:
-				if (NRF_USBD->EVENTS_ENDISOOUT == 0U)
+				default: // EP1-7 IN or OUT
+					(void)CFifoGet(s_Usbd.hQue);
+					if (epno > 16U)
+					{
+						const uint32_t epnum = epno - 16U;
+						const uint32_t evt =
+							(NRF_USBD->EPOUT[epnum].AMOUNT << 8U) | epnum;
+						AppEvtHandlerQue(evt,
+							(void *)(uintptr_t)nRFUsbGetEpReg(epnum, 0U)->Generation,
+							nRFUsbdProcessQueuedEvent);
+					}
 					break;
-				NRF_USBD->EVENTS_ENDISOOUT = 0U;
-				NRF_USBD->EPSTATUS = dmastatus;
-				reuseDma = true;
-				nRFUsbdIsoComplete(false);
-				break;
-			case 1U: case 2U: case 3U: case 4U:
-			case 5U: case 6U: case 7U:
-				if (NRF_USBD->EVENTS_ENDEPIN[epno] == 0U)
-					break;
-				NRF_USBD->EVENTS_ENDEPIN[epno] = 0U;
-				NRF_USBD->EPSTATUS = dmastatus;
-				reuseDma = true;
-				(void)CFifoGet(s_Usbd.hQue);
-				break;
-			case 17U: case 18U: case 19U: case 20U:
-			case 21U: case 22U: case 23U:
-			{
-				const uint32_t epnum = epno - 16U;
-				if (NRF_USBD->EVENTS_ENDEPOUT[epnum] == 0U)
-					break;
-				NRF_USBD->EVENTS_ENDEPOUT[epnum] = 0U;
-				NRF_USBD->EPSTATUS = dmastatus;
-				reuseDma = true;
-				(void)CFifoGet(s_Usbd.hQue);
-				const uint32_t evt =
-					(NRF_USBD->EPOUT[epnum].AMOUNT << 8U) | epnum;
-				AppEvtHandlerQue(evt,
-					(void *)(uintptr_t)nRFUsbGetEpReg(epnum, 0U)->Generation,
-					nRFUsbdProcessQueuedEvent);
-				break;
 			}
 		}
 	}

@@ -579,8 +579,7 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	}
 
 	// Every zeroed field in one clear; only the nonzero fields are
-	// assigned below. The atomic members are re-initialized with their
-	// proper atomic stores at the end of this function.
+	// assigned below.
 	memset(static_cast<void *>(pIntrf), 0, sizeof(*pIntrf));
 
 	if (mode == USB_INTRF_MODE_DIRECT)
@@ -662,11 +661,9 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	pIntrf->DevIntrf.TxSrData = pIntrf->DevIntrf.TxData;
 
 	// Endpoint callbacks are not bound yet: no other context can observe
-	// these, so plain ordering is enough.
-	atomic_flag_clear_explicit(&pIntrf->DevIntrf.bBusy, memory_order_relaxed);
-	atomic_store_explicit(&pIntrf->DevIntrf.EnCnt, 0, memory_order_relaxed);
+	// this, so plain ordering is enough. bBusy, EnCnt and bNoStop are clear
+	// from the memset above.
 	atomic_store_explicit(&pIntrf->DevIntrf.bTxReady, true, memory_order_relaxed);
-	atomic_store_explicit(&pIntrf->DevIntrf.bNoStop, false, memory_order_relaxed);
 
 	if (pIntrf->EpNo != 0U)
 	{

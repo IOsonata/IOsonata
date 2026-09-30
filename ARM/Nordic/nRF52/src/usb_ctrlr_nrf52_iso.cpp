@@ -174,30 +174,31 @@ uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData)
 }
 #endif
 
+// END events sit at their INTEN bit position from USBRESET; INTENCLR follows
+// INTENSET and EPOUTEN follows EPINEN.
+static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDISOIN) -
+	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
+	USBD_INTEN_ENDISOIN_Pos * sizeof(uint32_t) &&
+	offsetof(NRF_USBD_Type, EVENTS_ENDISOOUT) -
+	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
+	USBD_INTEN_ENDISOOUT_Pos * sizeof(uint32_t) &&
+	offsetof(NRF_USBD_Type, INTENCLR) ==
+	offsetof(NRF_USBD_Type, INTENSET) + sizeof(uint32_t) &&
+	offsetof(NRF_USBD_Type, EPOUTEN) ==
+	offsetof(NRF_USBD_Type, EPINEN) + sizeof(uint32_t), "USBD ISO layout");
+
 static __attribute__((noinline))
 void nRFIsoHwEnable(bool In, bool Enable)
 {
-	volatile uint32_t *pEnd = In ?
-		&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
-	volatile uint32_t *pEnable = In ? &NRF_USBD->EPINEN : &NRF_USBD->EPOUTEN;
+	const uint32_t endBit = In ?
+		USBD_INTEN_ENDISOIN_Pos : USBD_INTEN_ENDISOOUT_Pos;
+	volatile uint32_t *pEnable = &NRF_USBD->EPINEN + !In;
 	const uint32_t msk = 1UL << NRFX_USBD_ISO_EP_NO;
-	const uint32_t endMsk = In ?
-		USBD_INTEN_ENDISOIN_Msk : USBD_INTEN_ENDISOOUT_Msk;
 
-	*pEnd = 0U;
-	if (Enable)
-	{
-		NRF_USBD->INTENSET = endMsk;
-		*pEnable |= msk;
-	}
-	else
-	{
-		NRF_USBD->INTENCLR = endMsk;
-		*pEnable &= ~msk;
-	}
+	(&NRF_USBD->EVENTS_USBRESET)[endBit] = 0U;
+	(&NRF_USBD->INTENSET)[!Enable] = 1UL << endBit;
+	*pEnable = Enable ? *pEnable | msk : *pEnable & ~msk;
 }
-
-
 
 // The shared scheduler owns the channel lock and has pending ISO work.
 //

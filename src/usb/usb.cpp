@@ -99,6 +99,8 @@ static struct
 	bool VbusLast;				//!< Bus power at the previous UsbProcess pass
 	bool Initialized;
 	bool Started;
+	bool DevInitialized;			//!< UsbInit completed
+	bool DevStarted;				//!< Controller started by UsbEnable
 	bool Suspended;
 	bool RemoteWakeup;
 	uint8_t Address;
@@ -131,12 +133,9 @@ static struct
 	UsbDevQualDesc_t QualifierDesc;
 	uint8_t ConfigDesc[USB_CONFIG_DESC_MAXLEN];
 	uint8_t StringDesc[USB_CORE_STRING_DESC_MAXLEN];
+	UsbCfg_t DevCfg;				//!< Copy of the UsbInit configuration
+	char Serial[USB_SERIAL_MAXLEN];	//!< Serial from the controller unique id
 } s_Core;
-
-static UsbCfg_t s_UsbDevCfg;
-static char s_UsbDevSerial[USB_SERIAL_MAXLEN];
-static bool s_UsbDevInitialized;
-static bool s_UsbDevStarted;
 
 static uint8_t UsbCoreRecipient(const UsbSetupData_t *pSetup)
 {
@@ -196,7 +195,7 @@ static const uint8_t *UsbDescDevice(int DevNo, const UsbCfg_t *pCfg,
 		USB_CORE_STR_MANUFACTURER : 0U;
 	s_Core.DeviceDesc.iProduct = pCfg->pProduct != nullptr ?
 		USB_CORE_STR_PRODUCT : 0U;
-	s_Core.DeviceDesc.iSerialNumber = UsbGetSerial(DevNo) != nullptr ?
+	s_Core.DeviceDesc.iSerialNumber = pCfg->pSerial != nullptr ?
 		USB_CORE_STR_SERIAL : 0U;
 	s_Core.DeviceDesc.bNumConfigurations = 1U;
 
@@ -226,7 +225,7 @@ static const uint8_t *UsbDescQualifier(int DevNo, const UsbCfg_t *pCfg,
 	return reinterpret_cast<const uint8_t *>(&s_Core.QualifierDesc);
 }
 
-static const uint8_t *UsbDescString(int DevNo, const UsbCfg_t *pCfg,
+static const uint8_t *UsbDescString(const UsbCfg_t *pCfg,
 								 uint8_t Index, uint16_t LangId,
 								 uint16_t *pLength)
 {
@@ -255,7 +254,7 @@ static const uint8_t *UsbDescString(int DevNo, const UsbCfg_t *pCfg,
 			pString = pCfg->pProduct;
 			break;
 		case USB_CORE_STR_SERIAL:
-			pString = UsbGetSerial(DevNo);
+			pString = pCfg->pSerial;
 			break;
 		case USB_CORE_STR_FUNCTION:
 			pString = pCfg->pFuncName;
@@ -1495,7 +1494,7 @@ static bool UsbCoreInit(const UsbCoreCfg_t *pCfg)
 		return false;
 	}
 
-	memset(s_Core.Object, 0, sizeof(s_Core.Object));
+	// Object[] is only read below ObjectCnt, which restarts at zero below.
 	// Minus one is no owner. Zero would claim class zero owns every
 	// endpoint, so this cannot be left to static initialization.
 	memset(s_Core.EpClass, -1, sizeof(s_Core.EpClass));
@@ -1651,31 +1650,27 @@ static bool UsbDevInit(const UsbCfg_t *pCfg)
 		return false;
 	}
 
-	s_UsbDevInitialized = false;
-	s_UsbDevStarted = false;
-	memcpy(&s_UsbDevCfg, pCfg, sizeof(s_UsbDevCfg));
+	s_Core.DevInitialized = false;
+	s_Core.DevStarted = false;
+	memcpy(&s_Core.DevCfg, pCfg, sizeof(s_Core.DevCfg));
 
-	if (s_UsbDevCfg.MaxPower == 0)
+	if (s_Core.DevCfg.MaxPower == 0)
 	{
-		s_UsbDevCfg.MaxPower = 100;
+		s_Core.DevCfg.MaxPower = 100;
 	}
 
-	if (s_UsbDevCfg.pSerial != nullptr)
+	// A supplied serial is used in place, like the other UsbCfg_t strings.
+	// The string descriptor caps the length it reports.
+	if (s_Core.DevCfg.pSerial == nullptr)
 	{
-		strncpy(s_UsbDevSerial, s_UsbDevCfg.pSerial,
-				sizeof(s_UsbDevSerial) - 1U);
-		s_UsbDevSerial[sizeof(s_UsbDevSerial) - 1U] = '\0';
+		UsbCtrlrGetSerial(s_Core.DevNo, s_Core.Serial,
+						  sizeof(s_Core.Serial));
+		s_Core.DevCfg.pSerial = s_Core.Serial;
 	}
-	else
-	{
-		UsbCtrlrGetSerial(s_Core.DevNo, s_UsbDevSerial,
-						  sizeof(s_UsbDevSerial));
-	}
-	s_UsbDevCfg.pSerial = s_UsbDevSerial;
 
 	UsbCtrlrCfg_t ctrlrCfg = {};
-	ctrlrCfg.IntPrio = s_UsbDevCfg.IntPrio;
-	ctrlrCfg.bLowPowerSuspend = s_UsbDevCfg.bLowPowerSuspend;
+	ctrlrCfg.IntPrio = s_Core.DevCfg.IntPrio;
+	ctrlrCfg.bLowPowerSuspend = s_Core.DevCfg.bLowPowerSuspend;
 
 	if (!UsbCtrlrInit(s_Core.DevNo, &ctrlrCfg))
 	{
@@ -1690,19 +1685,19 @@ static bool UsbDevInit(const UsbCfg_t *pCfg)
 		return false;
 	}
 
-	s_UsbDevInitialized = true;
+	s_Core.DevInitialized = true;
 	return true;
 }
 
 
 static bool UsbDevEnable(void)
 {
-	if (!s_UsbDevInitialized)
+	if (!s_Core.DevInitialized)
 	{
 		return false;
 	}
 
-	if (s_UsbDevStarted)
+	if (s_Core.DevStarted)
 	{
 		return true;
 	}
@@ -1721,33 +1716,33 @@ static bool UsbDevEnable(void)
 	}
 
 	UsbCoreStart();
-	s_UsbDevStarted = true;
+	s_Core.DevStarted = true;
 
 	return true;
 }
 
 static void UsbDevDisable(void)
 {
-	if (!s_UsbDevStarted)
+	if (!s_Core.DevStarted)
 	{
 		return;
 	}
 
 	UsbCoreStop();
 	UsbCtrlrStop(s_Core.DevNo);
-	s_UsbDevStarted = false;
+	s_Core.DevStarted = false;
 }
 
 static void UsbDevProcess(void)
 {
-	if (!s_UsbDevInitialized)
+	if (!s_Core.DevInitialized)
 	{
 		return;
 	}
 
 	UsbCtrlrProcess(s_Core.DevNo);
 
-	if (!s_UsbDevStarted)
+	if (!s_Core.DevStarted)
 	{
 		//
 		// Retry on the level, not only on the attach edge. A board already on
@@ -1762,7 +1757,7 @@ static void UsbDevProcess(void)
 			(void)UsbDevEnable();
 		}
 
-		if (!s_UsbDevStarted)
+		if (!s_Core.DevStarted)
 		{
 			return;
 		}
@@ -1776,22 +1771,22 @@ static void UsbDevProcess(void)
 
 static bool UsbDevMounted(void)
 {
-	return s_UsbDevStarted && UsbCoreConfigured();
+	return s_Core.DevStarted && UsbCoreConfigured();
 }
 
 static bool UsbDevSuspended(void)
 {
-	return s_UsbDevStarted && UsbCoreSuspended();
+	return s_Core.DevStarted && UsbCoreSuspended();
 }
 
 static const UsbCfg_t *UsbDevGetCfg(void)
 {
-	return s_UsbDevInitialized ? &s_UsbDevCfg : nullptr;
+	return s_Core.DevInitialized ? &s_Core.DevCfg : nullptr;
 }
 
 static const char *UsbDevGetSerial(void)
 {
-	return s_UsbDevSerial;
+	return s_Core.DevCfg.pSerial;
 }
 
 //
@@ -1903,7 +1898,7 @@ const uint8_t *UsbGetDescriptor(int DevNo, uint8_t Type, uint8_t Index,
 			return UsbDescConfiguration(DevNo, pCfg, Index, Speed, false,
 										pLength);
 		case USB_DESCTYPE_STRING:
-			return UsbDescString(DevNo, pCfg, Index, LangId, pLength);
+			return UsbDescString(pCfg, Index, LangId, pLength);
 		case USB_DESCTYPE_DEVICE_QUALIFIER:
 			return UsbDescQualifier(DevNo, pCfg, Index, pLength);
 		case USB_DESCTYPE_OSC:
@@ -1949,9 +1944,9 @@ void UsbProcess(int DevNo)
 			UsbCoreNotifyDetach();
 		}
 
-		if (s_UsbDevCfg.EvtHandler != nullptr)
+		if (s_Core.DevCfg.EvtHandler != nullptr)
 		{
-			s_UsbDevCfg.EvtHandler(s_Core.DevNo,
+			s_Core.DevCfg.EvtHandler(s_Core.DevNo,
 								   vbus ? USB_EVT_ATTACHED : USB_EVT_DETACHED);
 		}
 	}

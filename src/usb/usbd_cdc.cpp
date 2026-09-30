@@ -168,11 +168,6 @@ static void UsbdCdcClosePort(UsbdCdcDev_t *pCdc)
 __attribute__((noinline))
 static bool UsbdCdcConfig(UsbdCdcDev_t *pCdc, uint8_t Configuration)
 {
-	if (pCdc == nullptr)
-	{
-		return false;
-	}
-
 	UsbdCdcClosePort(pCdc);
 
 	if (Configuration == 0U)
@@ -217,8 +212,8 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 						   uint16_t *pLength,
 						   UsbdCdcDev_t *pCdc)
 {
-	if (pSetup == nullptr || pCdc == nullptr || pLength == nullptr ||
-		pCdc->pData->Mps == 0U ||
+	// The core passes its own setup copy and length; pCdc is the class member.
+	if (pCdc->pData->Mps == 0U ||
 		(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) != USB_REQTYPE_CLASS ||
 		(pSetup->bmRequestType & USB_REQTYPE_MASK_RECIPIENT) !=
 			USB_REQTYPE_INTERFACE ||
@@ -313,11 +308,6 @@ static void UsbdCdcNotifCtrlrEvent(UsbCtrlrEvtType_t Event,
 {
 	UsbdCdcDev_t *pCdc = static_cast<UsbdCdcDev_t *>(pContext);
 
-	if (pCdc == nullptr)
-	{
-		return;
-	}
-
 	if (Event == USB_CTRLR_EVT_XFER_CMPL)
 	{
 		pCdc->SerialStateActive = false;
@@ -338,11 +328,6 @@ static void UsbdCdcNotifCtrlrEvent(UsbCtrlrEvtType_t Event,
 __attribute__((noinline))
 static void UsbdCdcReset(UsbdCdcDev_t *pCdc)
 {
-	if (pCdc == nullptr)
-	{
-		return;
-	}
-
 	pCdc->SerialState = 0U;
 	UsbdCdcClosePort(pCdc);
 	UsbdCdcDefaultLineCoding(pCdc);

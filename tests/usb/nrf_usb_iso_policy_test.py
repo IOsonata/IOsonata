@@ -134,12 +134,15 @@ sof = interrupt.index("if (NRF_USBD->EVENTS_SOF != 0U)")
 done = interrupt.index("switch (epno)")
 assert reset < setup < sof < done
 assert interrupt.count("nRFUsbdHandleSof();") == 1
-assert "nRFUsbdIsoComplete(true);" in completed
-assert "nRFUsbdIsoComplete(false);" in completed
-
-# Completion recognizes both ISO directions by their EPSTATUS bit.
-assert "case 8U:" in completed and "NRF_USBD->EVENTS_ENDISOIN" in completed
-assert "case 24U:" in completed and "NRF_USBD->EVENTS_ENDISOOUT" in completed
+# Completion recognizes both ISO directions by their EPSTATUS bit; the END
+# event of either comes from the shared EPSTATUS bit to event mapping.
+iso_case = completed[completed.index("case 8U:"):completed.index("default:")]
+assert "case 24U:" in iso_case
+assert "nRFUsbdIsoComplete(epno == 8U);" in iso_case
+end_event = function_body(base, "static volatile uint32_t *nRFUsbdEndEvent(")
+assert "USBD_INTEN_ENDISOIN_Pos" in end_event
+assert "Pos >= 16U ? Pos - 4U" in end_event
+assert "USBD_INTEN_ENDISOOUT_Pos == 24U - 4U" in base
 
 # Scheduler: ISO first, then EP0 OUT data, EP0 IN, the regular queue.
 iso_pos = queued.index("nRFUsbdIsoStart()")

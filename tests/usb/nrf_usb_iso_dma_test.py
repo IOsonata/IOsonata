@@ -80,7 +80,7 @@ names = [
     ('nRFUsbdDmaActive', None), ('nRFUsbdDmaLock', None),
     ('nRFUsbdDmaUnlock', None), ('nRFUsbdDmaStartLocked', None),
     ('nRFUsbdDmaAllowed', None), ('nRFUsbdEpHwEnable', None),
-    ('nRFUsbdDmaWait', None),
+    ('nRFUsbdEndEvent', None), ('nRFUsbdDmaWait', None),
     ('nRFUsbdEp0InStart', None), ('nRFUsbdStartDmaNow', None),
     ('nRFUsbdStartQueuedDma', None), ('nRFUsbdResumeQueuedDmaLocked', None),
     ('nRFUsbdHandleSof', None), ('USBD_IRQHandler', None),
@@ -121,6 +121,7 @@ constexpr uint32_t USBD_INTENCLR_SOF_Msk=1, USBD_INTEN_SOF_Msk=1;
 constexpr uint32_t USBD_INTEN_ENDISOIN_Msk=1U<<11, USBD_INTEN_ENDISOOUT_Msk=1U<<20;
 constexpr uint32_t USBD_INTEN_ENDEPIN0_Msk=1U<<2, USBD_INTEN_ENDEPOUT0_Msk=1U<<12;
 constexpr unsigned USBD_INTEN_ENDEPIN0_Pos=2, USBD_INTEN_ENDEPOUT0_Pos=12;
+constexpr unsigned USBD_INTEN_ENDISOIN_Pos=11, USBD_INTEN_ENDISOOUT_Pos=20;
 constexpr uint32_t USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk=1;
 constexpr unsigned USBD_EPSTALL_STALL_UnStall=0, USBD_EPSTALL_STALL_Pos=8;
 constexpr unsigned USBD_DTOGGLE_VALUE_Data0=1, USBD_DTOGGLE_VALUE_Pos=8;
@@ -151,7 +152,9 @@ typedef USBD_EPIN_Type USBD_EPOUT_Type;
 typedef USBD_EPIN_Type USBD_ISOIN_Type;
 typedef USBD_EPIN_Type USBD_ISOOUT_Type;
 struct Registers {
- uint32_t EVENTS_USBRESET=0,EVENTS_ENDEPIN[8]={},EVENTS_EP0DATADONE=0,EVENTS_ENDISOIN=0;
+ // Event order and spacing as in the USBD block: END events are addressed
+ // by their INTEN bit position from USBRESET.
+ uint32_t EVENTS_USBRESET=0,EVENTS_STARTED=0,EVENTS_ENDEPIN[8]={},EVENTS_EP0DATADONE=0,EVENTS_ENDISOIN=0;
  uint32_t EVENTS_ENDEPOUT[8]={},EVENTS_ENDISOOUT=0,EVENTS_SOF=0,EVENTS_USBEVENT=0;
  uint32_t TASKS_STARTEPIN[8]={},TASKS_STARTISOIN=0,TASKS_STARTEPOUT[8]={},TASKS_STARTISOOUT=0;
  USBD_EPIN_Type EPIN[8];USBD_ISOIN_Type ISOIN;USBD_EPOUT_Type EPOUT[8];USBD_ISOOUT_Type ISOOUT;

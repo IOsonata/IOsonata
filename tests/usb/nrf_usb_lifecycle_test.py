@@ -13,9 +13,9 @@ src = (ROOT / 'ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp').read_text()
 # idempotent and UsbCtrlrStop pairs with one successful start, so the core
 # must guard both behind its started flag.
 core = (ROOT / 'src/usb/usb.cpp').read_text()
-assert 'if (s_UsbDevStarted)' in core
-assert 'if (!s_UsbDevStarted)' in core
-assert core.index('UsbCtrlrStart(') < core.index('s_UsbDevStarted = true;')
+assert 'if (s_Core.DevStarted)' in core
+assert 'if (!s_Core.DevStarted)' in core
+assert core.index('UsbCtrlrStart(') < core.index('s_Core.DevStarted = true;')
 
 # Stop is split: the core quiets the bus and the endpoints, then the
 # controller releases the peripheral and its clock.
@@ -188,7 +188,7 @@ int main(){
  }
  puts("PASS: nRF52 endpoint binding does not submit a DMA buffer");
  // Start/stop pairing and DevNo validation moved to the usb core
- // (s_UsbDevStarted); the controller owns only clock and peripheral state.
+ // (s_Core.DevStarted); the controller owns only clock and peripheral state.
  for(unsigned attached=0;attached<2;++attached)
  for(unsigned clock=0;clock<2;++clock)
  for(unsigned ready=0;ready<2;++ready){

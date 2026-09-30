@@ -78,41 +78,33 @@ assert acquire.index("nRFUsbdDmaActive()") < acquire.index("nRFUsbdDmaLock();")
 assert "nRFUsbdAcquireDma()" in resume
 assert resume.index("nRFUsbdAcquireDma()") < resume.index("nRFUsbdStartQueuedDma(false);")
 
-# The ISR decodes the active DMA once and retires it in the endpoint case.
-# Each case clears its END event before EPSTATUS and returns nothing.
+# The ISR decodes the active DMA once, retires its END event before
+# EPSTATUS in one place, then dispatches on the endpoint. Nothing returns.
 assert interrupt.count("switch (epno)") == 1
-assert interrupt.index("if (nRFUsbdDmaActive() && dmastatus != 0U)") < \
-    interrupt.index("switch (epno)")
-cases = (
-    ("case 0U:", "case 16U:", "NRF_USBD->EVENTS_ENDEPIN[0] = 0U;"),
-    ("case 16U:", "case 8U:", "NRF_USBD->EVENTS_ENDEPOUT[0] = 0U;"),
-    ("case 8U:", "case 24U:", "NRF_USBD->EVENTS_ENDISOIN = 0U;"),
-    ("case 24U:", "case 1U:", "NRF_USBD->EVENTS_ENDISOOUT = 0U;"),
-    ("case 1U:", "case 17U:", "NRF_USBD->EVENTS_ENDEPIN[epno] = 0U;"),
-    ("case 17U:", None, "NRF_USBD->EVENTS_ENDEPOUT[epnum] = 0U;"),
-)
-for marker, following, end_clear in cases:
-    part = completed[completed.index(marker):]
-    if following:
-        part = part[:part.index(following)]
-    assert part.index(end_clear) < part.index("NRF_USBD->EPSTATUS = dmastatus;"), marker
-    assert "reuseDma = true;" in part, marker
-    assert "return" not in part, marker
+active = interrupt.index("if (nRFUsbdDmaActive() && dmastatus != 0U)")
+retire = interrupt[active:interrupt.index("switch (epno)")]
+assert "volatile uint32_t *pend = nRFUsbdEndEvent(epno);" in retire
+assert "if (*pend != 0U)" in retire
+assert retire.index("*pend = 0U;") < retire.index("NRF_USBD->EPSTATUS = dmastatus;")
+assert retire.index("NRF_USBD->EPSTATUS = dmastatus;") < retire.index("reuseDma = true;")
+assert "return" not in completed
+assert "EPSTATUS" not in completed
+end_event = function_body(source, "static volatile uint32_t *nRFUsbdEndEvent(")
+assert "&NRF_USBD->EVENTS_USBRESET + bit" in end_event
+wait = function_body(source, "static void nRFUsbdDmaWait(uint32_t mask)")
+assert "nRFUsbdEndEvent(epno)" in wait
 
 # EP0 IN pops its packet and chains the next one while holding the channel.
 ep0 = completed[completed.index("case 0U:"):completed.index("case 16U:")]
 assert ep0.index("CFifoGet(s_Usbd.hEp0Que)") < ep0.index("nRFUsbdEp0InStart(pep0);")
 assert ep0.index("nRFUsbdEp0InStart(pep0);") < ep0.index("reuseDma = false;")
 
-# Regular IN pops its request; completion is reported later from EPDATA.
-reg_in = completed[completed.index("case 1U:"):completed.index("case 17U:")]
-assert "(void)CFifoGet(s_Usbd.hQue);" in reg_in
-assert "AppEvtHandlerQue" not in reg_in
-
-# Regular OUT pops its request and queues its completion at END.
-reg_out = completed[completed.index("case 17U:"):]
-assert reg_out.index("(void)CFifoGet(s_Usbd.hQue);") < reg_out.index("AppEvtHandlerQue(evt,")
-assert "nRFUsbdProcessQueuedEvent" in reg_out
+# Regular endpoints pop their request. IN completion is reported later from
+# EPDATA; OUT queues its completion at END.
+regular = completed[completed.index("default:"):]
+assert regular.index("(void)CFifoGet(s_Usbd.hQue);") < regular.index("if (epno > 16U)")
+assert regular.index("if (epno > 16U)") < regular.index("AppEvtHandlerQue(evt,")
+assert "nRFUsbdProcessQueuedEvent" in regular
 assert "USB_CTRLR_EVT_XFER_CMPL" not in completed
 assert "nRFUsbdStartQueuedDma" not in completed
 assert "nRFUsbdDmaUnlock" not in completed
